@@ -44,6 +44,8 @@ type
     tkTrue, tkFalse,
     tkWriteln, tkWrite, tkReadln, tkRead,
     tkHalt, tkInc, tkDec, tkLength, tkOrd, tkChr, tkExit,
+    tkSysOpen, tkSysRead, tkSysWrite, tkSysClose, tkSysFchmod,
+    tkArgCount, tkArgStr,
     tkInteger_T, tkBoolean_T, tkChar_T, tkString_T, tkReal_T, tkLongWord_T,
     tkAssign, tkEq, tkNeq, tkLt, tkLe, tkGt, tkGe,
     tkPlus, tkMinus, tkStar, tkSlash,
@@ -88,6 +90,9 @@ type
     Kind     : TSymKind;
     Offset   : Integer;   { skLocal/skParam: rbp-relative; skGlobal: BSS offset }
     ConstVal : Int64;     { skConst }
+    IsArray  : Boolean;
+    ArrLen   : Integer;   { number of elements (IsArray=True) }
+    ElemType : TTypeKind; { element type when IsArray }
   end;
 
   TParam = record
@@ -141,6 +146,9 @@ var
   Procs     : array[0..MAX_PROCS-1] of TProc;
   ProcCount : Integer;
   CurProc   : Integer;   { -1 = main }
+
+  { Reserved BSS slot 0: initial rsp (for argv access) }
+  BSS_INITIAL_RSP : Integer;  { always 0; set in ParseProgram init }
 
 { ===== Error ===== }
 
@@ -238,6 +246,13 @@ begin
     'ord':       Result := tkOrd;
     'chr':       Result := tkChr;
     'exit':      Result := tkExit;
+    'sysopen':   Result := tkSysOpen;
+    'sysread':   Result := tkSysRead;
+    'syswrite':  Result := tkSysWrite;
+    'sysclose':  Result := tkSysClose;
+    'sysfchmod': Result := tkSysFchmod;
+    'argcount':  Result := tkArgCount;
+    'argstr':    Result := tkArgStr;
     'integer':   Result := tkInteger_T;
     'boolean':   Result := tkBoolean_T;
     'char':      Result := tkChar_T;
@@ -461,6 +476,9 @@ begin
   Syms[SymCount].Name     := LowerCase(name);
   Syms[SymCount].TypeKind := tk;
   Syms[SymCount].ConstVal := 0;
+  Syms[SymCount].IsArray  := False;
+  Syms[SymCount].ArrLen   := 0;
+  Syms[SymCount].ElemType := tyInteger;
   if CurProc < 0 then
   begin
     Syms[SymCount].Kind   := skGlobal;
@@ -474,6 +492,29 @@ begin
     Syms[SymCount].Kind   := skLocal;
     Syms[SymCount].Offset := -FrameSize;
   end;
+  Result := SymCount; Inc(SymCount);
+end;
+
+function AllocArray(const name: AnsiString; elemType: TTypeKind; lo, hi: Integer): Integer;
+var elemSize, totalSize: Integer;
+begin
+  if SymCount >= MAX_SYMS then Error('too many symbols');
+  elemSize := 1;
+  if elemType in [tyInteger, tyBoolean] then elemSize := 8;
+  totalSize := (hi - lo + 1) * elemSize;
+  Syms[SymCount].Name     := LowerCase(name);
+  Syms[SymCount].TypeKind := elemType;
+  Syms[SymCount].ConstVal := lo;   { lo bound stored in ConstVal }
+  Syms[SymCount].IsArray  := True;
+  Syms[SymCount].ArrLen   := hi - lo + 1;
+  Syms[SymCount].ElemType := elemType;
+  if CurProc < 0 then
+  begin
+    Syms[SymCount].Kind   := skGlobal;
+    Syms[SymCount].Offset := BSSSize;
+    Inc(BSSSize, totalSize);
+  end
+  else Error('local arrays not yet supported');
   Result := SymCount; Inc(SymCount);
 end;
 
@@ -609,6 +650,49 @@ begin
   Patch32(skipJmp, CodeLen - (skipJmp + 4));
 end;
 
+{ ===== Array element access ===== }
+
+procedure EmitArrElemAddr(arrIdx: Integer);
+{ On entry: rax = array index. On exit: rax = element address. }
+var elemSize: Integer;
+begin
+  elemSize := 1;
+  if Syms[arrIdx].ElemType in [tyInteger, tyBoolean] then elemSize := 8;
+  if elemSize > 1 then
+  begin
+    { shl rax, 3  (multiply by 8) }
+    EmitB($48); EmitB($C1); EmitB($E0); EmitB($03);
+  end;
+  { Subtract lower bound * elemSize (if non-zero) }
+  if (Syms[arrIdx].ConstVal <> 0) and (elemSize > 1) then
+  begin
+    EmitB($48); EmitB($2D); EmitI32(Syms[arrIdx].ConstVal * elemSize);
+  end;
+  { add eax, bss_arr_base  (32-bit add, zero-extends to rax) }
+  EmitB($05); EmitGlobRef(Syms[arrIdx].Offset);
+end;
+
+procedure EmitArrLoad(arrIdx: Integer);
+{ rax = index → rax = element value }
+begin
+  EmitArrElemAddr(arrIdx);
+  if Syms[arrIdx].ElemType in [tyInteger, tyBoolean] then
+    begin EmitB($48); EmitB($8B); EmitB($00); end  { mov rax, [rax] }
+  else
+    begin EmitB($48); EmitB($0F); EmitB($B6); EmitB($00); end; { movzx rax, byte [rax] }
+end;
+
+procedure EmitArrStore(arrIdx: Integer);
+{ Stack: [..., addr]. rax = value. Store value at addr. }
+begin
+  { addr was pushed before RHS eval }
+  EmitB($59);                   { pop rcx -- element address }
+  if Syms[arrIdx].ElemType in [tyInteger, tyBoolean] then
+    begin EmitB($48); EmitB($89); EmitB($01); end  { mov [rcx], rax }
+  else
+    begin EmitB($88); EmitB($01); end;              { mov [rcx], al }
+end;
+
 { ===== Procedure table ===== }
 
 function FindProc(const name: AnsiString): Integer;
@@ -671,6 +755,15 @@ begin
   EmitB($48); EmitB($89); EmitB($FE);
   EmitB($48); EmitB($89); EmitB($CA);
   MovRaxImm(SYS_WRITE); MovRdiImm(STDOUT); EmitSyscall;
+end;
+
+procedure EmitWriteChar;
+{ rax = char byte value → write 1 byte to stdout }
+begin
+  { Store byte to INTBUF[0] in data section }
+  EmitB($48); EmitB($BE); EmitDataRef(INTBUF_OFFSET);  { mov rsi, &intbuf }
+  EmitB($88); EmitB($06);                               { mov [rsi], al }
+  MovRaxImm(SYS_WRITE); MovRdiImm(STDOUT); MovRdxImm(1); EmitSyscall;
 end;
 
 { ===== Prologue/Epilogue ===== }
@@ -740,6 +833,12 @@ begin
     tkInteger: begin MovRaxImm(CurTok.IVal); Next; end;
     tkTrue:    begin MovRaxImm(1); Next; end;
     tkFalse:   begin MovRaxImm(0); Next; end;
+    tkString:
+    begin
+      { Single-char literal → ordinal value }
+      if Length(CurTok.SVal) = 1 then begin MovRaxImm(Ord(CurTok.SVal[1])); Next; end
+      else Error('string literal not valid in expression (use writeln)');
+    end;
     tkLParen:  begin Next; ParseExpr; Expect(tkRParen, ')'); end;
     tkMinus:
     begin
@@ -764,6 +863,63 @@ begin
         Error('Length: not a string variable');
       EmitLoadVar(idx);   { loads int64 length from BSS[Offset] }
       Next; Expect(tkRParen, ')');
+    end;
+    tkSysOpen:
+    begin
+      { SysOpen(path_str_var, flags): Integer = fd }
+      Next; Expect(tkLParen, '(');
+      if CurTok.Kind <> tkIdent then Error('SysOpen: expected string var');
+      idx := FindSym(CurTok.SVal);
+      if (idx < 0) or (Syms[idx].TypeKind <> tyString) then Error('SysOpen: not a string var');
+      { lea rdi, [bss+str.Offset+8] (path data, NUL-terminated) }
+      EmitB($48); EmitB($8D); EmitB($3C); EmitB($25); EmitGlobRef(Syms[idx].Offset + 8);
+      Next; Expect(tkComma, ',');
+      ParseExpr;   { flags → rax }
+      EmitB($48); EmitB($89); EmitB($C6);               { mov rsi, rax }
+      MovRaxImm(0); EmitB($48); EmitB($89); EmitB($C2); { rdx=0 (mode ignored for open) }
+      MovRaxImm(2); EmitSyscall;                         { SYS_OPEN=2 }
+      Expect(tkRParen, ')');
+    end;
+    tkSysRead:
+    begin
+      { SysRead(fd, buf_array, maxn): Integer = bytes read }
+      Next; Expect(tkLParen, '(');
+      ParseExpr; EmitB($48); EmitB($89); EmitB($C7);     { mov rdi, rax (fd) }
+      Expect(tkComma, ',');
+      if CurTok.Kind <> tkIdent then Error('SysRead: expected array var');
+      idx := FindSym(CurTok.SVal);
+      if (idx < 0) or not Syms[idx].IsArray then Error('SysRead: not an array var');
+      { lea rsi, [bss+arr.Offset] }
+      EmitB($48); EmitB($8D); EmitB($34); EmitB($25); EmitGlobRef(Syms[idx].Offset);
+      Next; Expect(tkComma, ',');
+      ParseExpr; EmitB($48); EmitB($89); EmitB($C2);     { mov rdx, rax (count) }
+      MovRaxImm(0); EmitSyscall;                          { SYS_READ=0 }
+      Expect(tkRParen, ')');
+    end;
+    tkSysWrite:
+    begin
+      { SysWrite(fd, buf_array, n): Integer = bytes written }
+      Next; Expect(tkLParen, '(');
+      ParseExpr; EmitB($48); EmitB($89); EmitB($C7);     { mov rdi, rax (fd) }
+      Expect(tkComma, ',');
+      if CurTok.Kind <> tkIdent then Error('SysWrite: expected array var');
+      idx := FindSym(CurTok.SVal);
+      if (idx < 0) or not Syms[idx].IsArray then Error('SysWrite: not an array var');
+      { lea rsi, [bss+arr.Offset] }
+      EmitB($48); EmitB($8D); EmitB($34); EmitB($25); EmitGlobRef(Syms[idx].Offset);
+      Next; Expect(tkComma, ',');
+      ParseExpr; EmitB($48); EmitB($89); EmitB($C2);     { mov rdx, rax (count) }
+      MovRaxImm(1); EmitSyscall;                          { SYS_WRITE=1 }
+      Expect(tkRParen, ')');
+    end;
+    tkArgCount:
+    begin
+      { ArgCount(): Integer = argc }
+      Next;
+      if CurTok.Kind = tkLParen then begin Next; Expect(tkRParen, ')'); end;
+      { mov rax, [bss_initial_rsp]; load argc from [initial_rsp] }
+      EmitB($48); EmitB($8B); EmitB($04); EmitB($25); EmitGlobRef(BSS_INITIAL_RSP);
+      EmitB($48); EmitB($8B); EmitB($00);               { mov rax, [rax] }
     end;
     tkIdent:
     begin
@@ -801,6 +957,15 @@ begin
           end;
         EmitCallProc(pi);
         { rax = return value }
+      end
+      else if (idx >= 0) and Syms[idx].IsArray then
+      begin
+        Next;
+        { arr[index] load }
+        Expect(tkLBrack, '[');
+        ParseExpr;        { index in rax }
+        Expect(tkRBrack, ']');
+        EmitArrLoad(idx);
       end
       else if idx >= 0 then
       begin
@@ -928,6 +1093,12 @@ begin
         if (vidx >= 0) and (Syms[vidx].TypeKind = tyString) and (Syms[vidx].Kind = skGlobal) then
         begin
           EmitWriteStrVar(vidx); Next;
+        end
+        else if (vidx >= 0) and Syms[vidx].IsArray and (Syms[vidx].ElemType = tyChar) then
+        begin
+          { char array element: writeln(arr[i]) writes as character }
+          ParseExpr;
+          EmitWriteChar;
         end
         else begin ParseExpr; EmitWriteInt; end;
       end
@@ -1148,6 +1319,66 @@ begin
       Expect(tkRParen, ')');
     end;
 
+    { ---- File I/O and argv builtins ---- }
+    tkSysClose:
+    begin
+      { SysClose(fd) }
+      Next; Expect(tkLParen, '(');
+      ParseExpr;  { fd → rax }
+      EmitB($48); EmitB($89); EmitB($C7);   { mov rdi, rax }
+      MovRaxImm(3); EmitSyscall;             { SYS_CLOSE=3 }
+      Expect(tkRParen, ')');
+    end;
+    tkSysFchmod:
+    begin
+      { SysFchmod(fd, mode): SYS_FCHMOD=91 }
+      Next; Expect(tkLParen, '(');
+      ParseExpr; EmitB($48); EmitB($89); EmitB($C7);   { mov rdi, rax (fd) }
+      Expect(tkComma, ',');
+      ParseExpr; EmitB($48); EmitB($89); EmitB($C6);   { mov rsi, rax (mode) }
+      MovRaxImm(91); EmitSyscall;
+      Expect(tkRParen, ')');
+    end;
+    tkArgStr:
+    begin
+      { ArgStr(n, s): copy argv[n] bytes into string var s (global) }
+      Next; Expect(tkLParen, '(');
+      ParseExpr;  { n → rax }
+      Expect(tkComma, ',');
+      { compute argv[n] address: [rsp_initial + 8 + n*8] }
+      { rax = n; multiply by 8; add initial_rsp+8 }
+      EmitB($48); EmitB($C1); EmitB($E0); EmitB($03);   { shl rax, 3 }
+      { add rax, [bss_initial_rsp] + 8 }
+      { mov rcx, [bss_initial_rsp]; add rcx, 8; add rax, rcx }
+      EmitB($48); EmitB($8B); EmitB($0C); EmitB($25); EmitGlobRef(BSS_INITIAL_RSP);
+      EmitB($48); EmitB($83); EmitB($C1); EmitB($08);   { add rcx, 8 }
+      EmitB($48); EmitB($01); EmitB($C8);               { add rax, rcx }
+      { rax = address of argv[n] pointer }
+      EmitB($48); EmitB($8B); EmitB($00);               { mov rax, [rax] }
+      { rax = pointer to argument C-string }
+      EmitB($48); EmitB($89); EmitB($C6);               { mov rsi, rax (src) }
+      { target string var: }
+      if CurTok.Kind <> tkIdent then Error('ArgStr: expected string var');
+      idx := FindSym(CurTok.SVal);
+      if (idx < 0) or (Syms[idx].TypeKind <> tyString) then Error('ArgStr: not a string var');
+      { Count length: scan rsi for NUL, store length + copy }
+      { Use rcx as length counter }
+      EmitB($48); EmitB($31); EmitB($C9);               { xor rcx, rcx }
+      { NUL scan: cmp byte [rsi+rcx], 0; je +5; inc rcx; jmp -11 }
+      EmitB($80); EmitB($3C); EmitB($0E); EmitB($00);   { cmp byte [rsi+rcx], 0  -- 4 bytes }
+      EmitB($74); EmitB($05);                            { je +5 (over inc+jmp)   -- 2 bytes }
+      EmitB($48); EmitB($FF); EmitB($C1);               { inc rcx                -- 3 bytes }
+      EmitB($EB); EmitB($F5);                            { jmp -11 (back to cmp) -- 2 bytes }
+      { rcx = length; store length }
+      EmitB($48); EmitB($89); EmitB($0C); EmitB($25); EmitGlobRef(Syms[idx].Offset);
+      { lea rdi, [bss+str.Offset+8] }
+      EmitB($48); EmitB($8D); EmitB($3C); EmitB($25); EmitGlobRef(Syms[idx].Offset + 8);
+      { rep movsb }
+      EmitB($F3); EmitB($A4);
+      Next;
+      Expect(tkRParen, ')');
+    end;
+
     tkIf:     begin Next; ParseIfStatement;    end;
     tkWhile:  begin Next; ParseWhileStatement; end;
     tkFor:    begin Next; ParseForStatement;   end;
@@ -1200,6 +1431,21 @@ begin
 
       { Variable assignment }
       Next;
+      if CurTok.Kind = tkLBrack then
+      begin
+        { arr[index] := expr }
+        idx := FindSym(name);
+        if (idx < 0) or not Syms[idx].IsArray then Error('not an array: ' + name);
+        Next;   { consume [ }
+        ParseExpr;  { index → rax }
+        Expect(tkRBrack, ']');
+        EmitArrElemAddr(idx);
+        EmitB($50);  { push element address }
+        Expect(tkAssign, ':=');
+        ParseExpr;   { value → rax }
+        EmitArrStore(idx);
+        Exit;
+      end;
       if CurTok.Kind = tkAssign then
       begin
         Next;
@@ -1258,6 +1504,7 @@ end;
 
 procedure ParseVarSection;
 var names: array[0..63] of AnsiString; n, i: Integer; tk: TTypeKind;
+    isArr: Boolean; arrLo, arrHi: Integer; elemTk: TTypeKind;
 begin
   Next;
   while CurTok.Kind = tkIdent do
@@ -1267,15 +1514,37 @@ begin
       names[n] := CurTok.SVal; Inc(n); Next;
     until not Eat(tkComma);
     Expect(tkColon, ':');
-    { Skip qualifiers like array[...] of, pointer, etc. }
-    while not (CurTok.Kind in [tkSemicolon, tkBegin, tkVar, tkConst, tkType,
-               tkProcedure, tkFunction, tkEOF]) do
+    isArr := False; arrLo := 0; arrHi := 0; elemTk := tyInteger;
+    if CurTok.Kind = tkArray then
     begin
-      tk := ParseTypeKind;
-      if CurTok.Kind in [tkSemicolon, tkBegin, tkVar, tkConst, tkType,
-                         tkProcedure, tkFunction, tkEOF] then Break;
+      isArr := True; Next;
+      if CurTok.Kind = tkLBrack then
+      begin
+        Next;
+        arrLo := ConstEval;
+        Expect(tkDotDot, '..');
+        arrHi := ConstEval;
+        Expect(tkRBrack, ']');
+      end;
+      Expect(tkOf, 'of');
+      elemTk := ParseTypeKind;
+      tk := elemTk;
+    end
+    else
+    begin
+      { Skip qualifiers like pointer, ^, etc. }
+      while not (CurTok.Kind in [tkSemicolon, tkBegin, tkVar, tkConst, tkType,
+                 tkProcedure, tkFunction, tkEOF]) do
+      begin
+        tk := ParseTypeKind;
+        if CurTok.Kind in [tkSemicolon, tkBegin, tkVar, tkConst, tkType,
+                           tkProcedure, tkFunction, tkEOF] then Break;
+      end;
     end;
-    for i := 0 to n-1 do AllocVar(names[i], tk);
+    if isArr then
+      for i := 0 to n-1 do AllocArray(names[i], elemTk, arrLo, arrHi)
+    else
+      for i := 0 to n-1 do AllocVar(names[i], tk);
     Eat(tkSemicolon);
   end;
 end;
@@ -1470,13 +1739,18 @@ procedure ParseProgram;
 var jmpPatch: Integer;
 begin
   Expect(tkProgram, 'program');
-  if CurTok.Kind <> tkIdent then Error('expected program name');
-  Next;
+  if CurTok.Kind = tkEOF then Error('expected program name');
+  Next;  { program name can be any identifier (even keyword) }
   if CurTok.Kind = tkLParen then
     begin Next; while CurTok.Kind <> tkRParen do Next; Next; end;
   Eat(tkSemicolon);
 
-  { Emit jmp stub at code[0] so entry always lands on main body }
+  { Reserve BSS[0..7] for initial rsp (argv access) }
+  BSS_INITIAL_RSP := BSSSize; Inc(BSSSize, 8);
+
+  { Emit entry stub: save rsp then jmp to main body }
+  { mov [bss_initial_rsp], rsp: 48 89 24 25 <GlobRef(0)> }
+  EmitB($48); EmitB($89); EmitB($24); EmitB($25); EmitGlobRef(BSS_INITIAL_RSP);
   EmitB($E9); jmpPatch := CodeLen; EmitI32(0);
 
   while CurTok.Kind in
