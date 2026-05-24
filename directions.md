@@ -1,13 +1,38 @@
-goal: create a self hosting pascal compiler.
-- do not use any external libraries, we should craft all code ourself
-- we are allowed to bootstrap using another pascal compiler, ex. gnu pascal
-- we aim freepascal compatibility 
-- one of the research goals is to show we can craft a compiler without any complicated or cumbersome lexer, or linking steps. hence optimizing performance by doing everything in-memory and just spitting out an executable
-- we target ELF and x64, with ARM64 and 32 bit as secondary. for now, we do not care for non-posix platforms. but we should have a decent level of abstraction to accomodate 'any platform, any cpu' but in particular embedded devices (ex. ESP32) of interest. 
-- goals: have something better than the 'mixed bag of stuff' that arduino provides, or 'let's have a VM (micropython). Obviously RTOS a very good project. Such is not yet our target, yet also compiling c-code would be good feature. Yet we steer away a bit from C on purpose and put pascal first
-- so self hosting, but cross-compiler and direct built build in right from the start
-- self hosting as soon as possible. we keep the bootstrap for historic reference once we succeed.
-- goal: self hosting pascal compiler that can be improved.
-- git init,  and commit at each step
+goal: create a self hosting pascal compiler, evolving into a "frankenstein" multi-language compiler.
+
+## bootstrap
+- bootstrap using fpc (Free Pascal) and gpc (GNU Pascal) — both available
+- keep bootstrap binaries for historic reference once self-hosting achieved
+- self-hosting as soon as possible
+
+## language targets (priority order)
+1. Pascal (Free Pascal compatible) — primary
+2. Object Pascal — primary
+3. C — primary (interop + library use is core value)
+4. C++ — limited/partial support
+5. Python, JavaScript, C# — limited/experimental
+
+## killer feature: multi-language
+- libraries usable at will across languages (e.g. call a C lib from Pascal, a Pascal unit from C)
+- .mix files: mix languages in a single source file (experimental, complex, high potential)
+- "frankenstein" philosophy: best tool for the job, not ideological purity
+
+## compiler design
+- no complicated lexer, no cumbersome linking steps
+- everything in-memory: build ELF binary in RAM, write executable directly
+- no external assembler, no linker
+- no external libraries in the compiler itself (compiler is self-contained)
+
+## targets
+- primary: ELF x86-64 Linux
+- secondary: ARM64, 32-bit
+- non-POSIX: not yet, but architecture abstraction from the start
+- embedded of interest: ESP32 and similar (no OS, bare metal)
+- aim: better than Arduino's mixed bag, better than MicroPython VM overhead
+
+## process
+- git commit at each step
+- cross-compiler capability from the start
+- direct (native) build also from the start
 
 
