@@ -20,6 +20,8 @@ test: $(COMPILER)
 	/tmp/hello26
 	./$(COMPILER) test/bootstrap_features.pas /tmp/bootstrap_features26
 	/tmp/bootstrap_features26
+	./$(COMPILER) test/paramcount_if.pas /tmp/paramcount_if26
+	/tmp/paramcount_if26
 
 clean:
 	rm -f $(COMPILER) compiler/*.o compiler/*.ppu

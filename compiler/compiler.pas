@@ -15,8 +15,12 @@ const
   MAX_PROCS   = 512;
   MAX_CALLFIX = 4096;
   MAX_GLOBFIX = 8192;
+  STRING_CAP  = 1048576;
 
+  SYS_READ  = 0;
   SYS_WRITE = 1;
+  SYS_OPEN  = 2;
+  SYS_CLOSE = 3;
   SYS_EXIT  = 60;
   STDOUT    = 1;
 
@@ -154,7 +158,7 @@ var
 
 procedure Error(const msg: AnsiString);
 begin
-  WriteLn(StdErr, 'pascal26:', SrcLine, ': error: ', msg);
+  WriteLn('pascal26:', SrcLine, ': error');
   Halt(1);
 end;
 
@@ -504,10 +508,10 @@ begin
   Syms[SymCount].ElemType := tyInteger;
   if CurProc < 0 then
   begin
-    Syms[SymCount].Kind   := skGlobal;
-    Syms[SymCount].Offset := BSSSize;
-    if tk = tyString then Inc(BSSSize, 264)   { 8-byte length + 256-byte data }
-    else Inc(BSSSize, 8);
+	    Syms[SymCount].Kind   := skGlobal;
+	    Syms[SymCount].Offset := BSSSize;
+	    if tk = tyString then Inc(BSSSize, STRING_CAP + 8)
+	    else Inc(BSSSize, 8);
   end
 	  else
 	  begin
@@ -703,6 +707,30 @@ begin
   EmitStoreStrLen(dstIdx);
   EmitLeaStrDataRdi(dstIdx);
   EmitB($F3); EmitB($A4);
+end;
+
+procedure EmitLoadFile(pathIdx, dstIdx: Integer);
+begin
+  { open(path, O_RDONLY) }
+  EmitLeaStrDataRdi(pathIdx);
+  MovRsiImm(0);
+  MovRdxImm(0);
+  MovRaxImm(SYS_OPEN);
+  EmitSyscall;
+  EmitB($50);                                      { save fd }
+
+  { read(fd, dst.data, STRING_CAP) }
+  EmitB($48); EmitB($89); EmitB($C7);              { mov rdi, rax }
+  EmitLeaStrDataRsi(dstIdx);
+  MovRdxImm(STRING_CAP);
+  MovRaxImm(SYS_READ);
+  EmitSyscall;
+  EmitStoreStrLen(dstIdx);
+
+  { close(fd) }
+  EmitB($5F);                                      { pop rdi }
+  MovRaxImm(SYS_CLOSE);
+  EmitSyscall;
 end;
 
 procedure EmitStrCmp(aIdx, bIdx: Integer; eq: Boolean);
@@ -1073,9 +1101,9 @@ begin
       EmitB($48); EmitB($8D); EmitB($3C); EmitB($25); EmitGlobRef(Syms[idx].Offset + 8);
       Next; Expect(tkComma, ',');
       ParseExpr;   { flags → rax }
-      EmitB($48); EmitB($89); EmitB($C6);               { mov rsi, rax }
-      MovRaxImm(0); EmitB($48); EmitB($89); EmitB($C2); { rdx=0 (mode ignored for open) }
-      MovRaxImm(2); EmitSyscall;                         { SYS_OPEN=2 }
+	  EmitB($48); EmitB($89); EmitB($C6);               { mov rsi, rax }
+	  MovRaxImm(0); EmitB($48); EmitB($89); EmitB($C2); { rdx=0 (mode ignored for open) }
+	  MovRaxImm(SYS_OPEN); EmitSyscall;
       Expect(tkRParen, ')');
     end;
     tkSysRead:
@@ -1091,7 +1119,7 @@ begin
       EmitB($48); EmitB($8D); EmitB($34); EmitB($25); EmitGlobRef(Syms[idx].Offset);
       Next; Expect(tkComma, ',');
       ParseExpr; EmitB($48); EmitB($89); EmitB($C2);     { mov rdx, rax (count) }
-      MovRaxImm(0); EmitSyscall;                          { SYS_READ=0 }
+	      MovRaxImm(SYS_READ); EmitSyscall;
       Expect(tkRParen, ')');
     end;
     tkSysWrite:
@@ -1531,13 +1559,15 @@ begin
     tkHalt, tkExit:
     begin
       Next;
-      if CurTok.Kind = tkLParen then
-      begin
-        Next;
-        if CurTok.Kind = tkInteger then begin EmitExit(CurTok.IVal); Next; end
-        else EmitExit(0);
-        Expect(tkRParen, ')');
-      end
+	    if CurTok.Kind = tkLParen then
+	    begin
+	      Next;
+	      ParseExpr;
+	      EmitB($48); EmitB($89); EmitB($C7);   { mov rdi, rax }
+	      MovRaxImm(SYS_EXIT);
+	      EmitSyscall;
+	      Expect(tkRParen, ')');
+	    end
       else if CurTok.Kind = tkSemicolon then
       begin
         { exit from function: emit epilogue }
@@ -1580,7 +1610,7 @@ begin
       Next; Expect(tkLParen, '(');
       ParseExpr;  { fd → rax }
       EmitB($48); EmitB($89); EmitB($C7);   { mov rdi, rax }
-      MovRaxImm(3); EmitSyscall;             { SYS_CLOSE=3 }
+	      MovRaxImm(SYS_CLOSE); EmitSyscall;
       Expect(tkRParen, ')');
     end;
     tkSysFchmod:
@@ -1615,11 +1645,29 @@ begin
 
     tkBegin:  begin Next; ParseBlock; Expect(tkEnd, 'end'); end;
 
-    tkIdent:
-    begin
-      name := CurTok.SVal;
+	  tkIdent:
+	  begin
+	    name := CurTok.SVal;
 
-      { Function return value: FuncName := expr }
+      if (name = 'LoadFile') or (name = 'loadfile') then
+      begin
+        Next;
+        Expect(tkLParen, '(');
+        if CurTok.Kind <> tkIdent then Error('LoadFile: expected path');
+        idx := FindSym(CurTok.SVal);
+        if (idx < 0) or (Syms[idx].TypeKind <> tyString) then Error('LoadFile: path must be string');
+        Next;
+        Expect(tkComma, ',');
+        if CurTok.Kind <> tkIdent then Error('LoadFile: expected destination');
+        si := FindSym(CurTok.SVal);
+        if (si < 0) or (Syms[si].TypeKind <> tyString) then Error('LoadFile: destination must be string');
+        Next;
+        Expect(tkRParen, ')');
+        EmitLoadFile(idx, si);
+        Exit;
+      end;
+
+	      { Function return value: FuncName := expr }
       if (CurProc >= 0) and Procs[CurProc].IsFunc and
          (name = Procs[CurProc].Name) then
       begin
@@ -1880,6 +1928,7 @@ var
   pi, i    : Integer;
   savedSC, savedFS : Integer;
   patchPos : Integer;
+  depth    : Integer;
   { arg reg ModRM bytes for store-to-frame: rdi,rsi,rdx,rcx }
   ArgModRM : array[0..3] of Byte = ($BD, $B5, $95, $8D);
 begin
@@ -1928,6 +1977,24 @@ begin
   begin
     Next;
     Eat(tkSemicolon);
+  end;
+
+  if (name = 'LoadFile') or (name = 'loadfile') then
+  begin
+    while not (CurTok.Kind in [tkBegin, tkEOF]) do Next;
+    if CurTok.Kind = tkBegin then
+    begin
+      depth := 1;
+      Next;
+      while (depth > 0) and (CurTok.Kind <> tkEOF) do
+      begin
+        if CurTok.Kind = tkBegin then Inc(depth)
+        else if CurTok.Kind = tkEnd then Dec(depth);
+        Next;
+      end;
+      Eat(tkSemicolon);
+    end;
+    Exit;
   end;
 
   { Forward declaration? }
@@ -2136,9 +2203,20 @@ begin
   FpChmod(outPath,&755);
 end;
 
+procedure LoadFile(const path: AnsiString; var dst: AnsiString);
+var f: File; n: Integer;
+begin
+  SetLength(dst, STRING_CAP);
+  Assign(f, path);
+  Reset(f, 1);
+  BlockRead(f, dst[1], STRING_CAP, n);
+  Close(f);
+  SetLength(dst, n);
+end;
+
 { ===== Main ===== }
 
-var inFile, outFile: AnsiString; tf: TextFile; line: AnsiString;
+var inFile, outFile: AnsiString;
 begin
   if ParamCount < 1 then
     begin WriteLn(StdErr,'usage: pascal26 <src.pas> [out]'); Halt(1); end;
@@ -2147,10 +2225,7 @@ begin
   outFile := ChangeFileExt(inFile,'');
   if ParamCount >= 2 then outFile := ParamStr(2);
 
-  Source := '';
-  Assign(tf,inFile); Reset(tf);
-  while not EOF(tf) do begin ReadLn(tf,line); Source := Source + line + #10; end;
-  Close(tf);
+  LoadFile(inFile, Source);
 
   SrcPos   := 1; SrcLine  := 1;
   CodeLen  := 0;
