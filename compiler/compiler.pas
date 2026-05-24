@@ -1,18 +1,20 @@
 {$mode objfpc}{$H+}
-{ Pascal26 Compiler - Stage 2
-  Adds: integer variables, arithmetic, if/while/for/repeat, writeln(int), inc/dec.
-  Bootstrap: fpc }
+{ Pascal26 Compiler - Stage 3
+  Adds: procedures/functions, global vars (BSS), constants, enum types, case. }
 
 program Pascal26;
 
 uses SysUtils, BaseUnix;
 
 const
-  MAX_CODE   = 1048576;
-  MAX_DATA   = 1048576;
-  MAX_STRS   = 4096;
-  MAX_FIXUPS = 16384;
-  MAX_SYMS   = 4096;
+  MAX_CODE    = 1048576;
+  MAX_DATA    = 1048576;
+  MAX_STRS    = 4096;
+  MAX_FIXUPS  = 65536;
+  MAX_SYMS    = 8192;
+  MAX_PROCS   = 512;
+  MAX_CALLFIX = 4096;
+  MAX_GLOBFIX = 8192;
 
   SYS_WRITE = 1;
   SYS_EXIT  = 60;
@@ -23,21 +25,21 @@ const
   PROG_HEADER_SIZE = 56;
   CODE_OFFSET      = ELF_HEADER_SIZE + PROG_HEADER_SIZE;
 
-  { Data section layout }
-  INTBUF_OFFSET   = 0;   { 24 bytes: int-to-string workspace }
+  INTBUF_OFFSET   = 0;
   INTBUF_SIZE     = 24;
-  MINUS_OFFSET    = 24;  { 1 byte: '-' }
-  NEWLINE_OFFSET  = 25;  { 1 byte: #10 }
-  STR_INIT_OFFSET = 26;  { string literals start here }
+  MINUS_OFFSET    = 24;
+  NEWLINE_OFFSET  = 25;
+  STR_INIT_OFFSET = 26;
 
 type
   TTokenKind = (
     tkEOF, tkIdent, tkInteger, tkString,
     tkProgram, tkBegin, tkEnd, tkVar, tkConst, tkType,
-    tkProcedure, tkFunction, tkUses, tkUnit,
+    tkProcedure, tkFunction, tkUses, tkUnit, tkForward,
     tkIf, tkThen, tkElse,
     tkWhile, tkDo, tkFor, tkTo, tkDownto, tkRepeat, tkUntil,
-    tkArray, tkOf, tkRecord,
+    tkCase, tkOf,
+    tkArray, tkRecord,
     tkAnd, tkOr, tkNot, tkDiv, tkMod,
     tkTrue, tkFalse,
     tkWriteln, tkWrite, tkReadln, tkRead,
@@ -67,12 +69,43 @@ type
     DataOff : Integer;
   end;
 
+  TGlobFix = record
+    CodePos : Integer;
+    BSSoff  : Integer;
+  end;
+
+  TCallFix = record
+    CodePos  : Integer;
+    ProcIdx  : Integer;
+  end;
+
   TTypeKind = (tyUnknown, tyInteger, tyBoolean, tyChar);
+  TSymKind  = (skLocal, skGlobal, skParam, skConst);
 
   TSymbol = record
     Name     : AnsiString;
     TypeKind : TTypeKind;
-    Offset   : Integer;  { rbp-relative, negative: -8, -16, ... }
+    Kind     : TSymKind;
+    Offset   : Integer;   { skLocal/skParam: rbp-relative; skGlobal: BSS offset }
+    ConstVal : Int64;     { skConst }
+  end;
+
+  TParam = record
+    Name    : AnsiString;
+    TypeKind: TTypeKind;
+    SymIdx  : Integer;
+  end;
+
+  TProc = record
+    Name       : AnsiString;
+    IsFunc     : Boolean;
+    RetType    : TTypeKind;
+    ParamCount : Integer;
+    Params     : array[0..7] of TParam;
+    BodyAddr   : Integer;   { -1 = forward declared }
+    FramePatch : Integer;   { code position of sub rsp imm32 }
+    RetSymIdx  : Integer;   { Syms[] index for return value; -1 if proc }
+    ScopeBase  : Integer;   { Syms[] index at start of this proc's locals }
   end;
 
 var
@@ -87,16 +120,27 @@ var
   Data    : array[0..MAX_DATA-1] of Byte;
   DataLen : Integer;
 
-  Strs     : array[0..MAX_STRS-1]  of TStrEntry;
+  BSSSize : Integer;
+
+  Strs     : array[0..MAX_STRS-1]    of TStrEntry;
   StrCount : Integer;
 
-  Fixups   : array[0..MAX_FIXUPS-1] of TFixup;
+  Fixups   : array[0..MAX_FIXUPS-1]  of TFixup;
   FixCount : Integer;
 
-  Syms      : array[0..MAX_SYMS-1] of TSymbol;
+  GlobFix  : array[0..MAX_GLOBFIX-1] of TGlobFix;
+  GlobFixCount : Integer;
+
+  CallFix  : array[0..MAX_CALLFIX-1] of TCallFix;
+  CallFixCount : Integer;
+
+  Syms      : array[0..MAX_SYMS-1]  of TSymbol;
   SymCount  : Integer;
   FrameSize : Integer;
-  ProloguePatchPos : Integer;
+
+  Procs     : array[0..MAX_PROCS-1] of TProc;
+  ProcCount : Integer;
+  CurProc   : Integer;   { -1 = main }
 
 { ===== Error ===== }
 
@@ -161,6 +205,7 @@ begin
     'function':  Result := tkFunction;
     'uses':      Result := tkUses;
     'unit':      Result := tkUnit;
+    'forward':   Result := tkForward;
     'if':        Result := tkIf;
     'then':      Result := tkThen;
     'else':      Result := tkElse;
@@ -171,8 +216,9 @@ begin
     'downto':    Result := tkDownto;
     'repeat':    Result := tkRepeat;
     'until':     Result := tkUntil;
-    'array':     Result := tkArray;
+    'case':      Result := tkCase;
     'of':        Result := tkOf;
+    'array':     Result := tkArray;
     'record':    Result := tkRecord;
     'and':       Result := tkAnd;
     'or':        Result := tkOr;
@@ -206,8 +252,7 @@ procedure Next;
 var c: Char; s: AnsiString; n: Int64;
 begin
   SkipSpace;
-  CurTok.Line := SrcLine;
-  CurTok.SVal := '';
+  CurTok.Line := SrcLine; CurTok.SVal := '';
   if SrcPos > Length(Source) then begin CurTok.Kind := tkEOF; Exit; end;
   c := Source[SrcPos];
 
@@ -278,21 +323,6 @@ begin
         begin n := n*10 + (Ord(Source[SrcPos])-48); Inc(SrcPos); end;
       s := s + Chr(n);
     end;
-    while (SrcPos <= Length(Source)) and (Source[SrcPos] = '''') do
-    begin
-      Inc(SrcPos);
-      while SrcPos <= Length(Source) do
-      begin
-        if Source[SrcPos] = '''' then
-        begin
-          Inc(SrcPos);
-          if (SrcPos <= Length(Source)) and (Source[SrcPos] = '''') then
-            begin s := s + ''''; Inc(SrcPos); end
-          else Break;
-        end
-        else begin s := s + Source[SrcPos]; Inc(SrcPos); end;
-      end;
-    end;
     CurTok.Kind := tkString; CurTok.SVal := s; Exit;
   end;
 
@@ -351,10 +381,8 @@ end;
 
 procedure EmitI32(v: Int64);
 begin
-  EmitB(Byte(v         and $FF));
-  EmitB(Byte((v shr 8)  and $FF));
-  EmitB(Byte((v shr 16) and $FF));
-  EmitB(Byte((v shr 24) and $FF));
+  EmitB(Byte(v and $FF)); EmitB(Byte((v shr 8) and $FF));
+  EmitB(Byte((v shr 16) and $FF)); EmitB(Byte((v shr 24) and $FF));
 end;
 
 procedure EmitI64(v: Int64);
@@ -362,39 +390,39 @@ begin EmitI32(v and $FFFFFFFF); EmitI32((v shr 32) and $FFFFFFFF); end;
 
 procedure Patch32(pos: Integer; v: Int64);
 begin
-  Code[pos]   := Byte(v         and $FF);
-  Code[pos+1] := Byte((v shr 8)  and $FF);
-  Code[pos+2] := Byte((v shr 16) and $FF);
-  Code[pos+3] := Byte((v shr 24) and $FF);
+  Code[pos]   := Byte(v and $FF); Code[pos+1] := Byte((v shr 8) and $FF);
+  Code[pos+2] := Byte((v shr 16) and $FF); Code[pos+3] := Byte((v shr 24) and $FF);
 end;
 
-{ REX.W + B8+r: mov reg, imm64 }
 procedure MovRaxImm(v: Int64); begin EmitB($48); EmitB($B8); EmitI64(v); end;
 procedure MovRbxImm(v: Int64); begin EmitB($48); EmitB($BB); EmitI64(v); end;
-procedure MovRcxImm(v: Int64); begin EmitB($48); EmitB($B9); EmitI64(v); end;
-procedure MovRdxImm(v: Int64); begin EmitB($48); EmitB($BA); EmitI64(v); end;
-procedure MovRsiImm(v: Int64); begin EmitB($48); EmitB($BE); EmitI64(v); end;
 procedure MovRdiImm(v: Int64); begin EmitB($48); EmitB($BF); EmitI64(v); end;
+procedure MovRsiImm(v: Int64); begin EmitB($48); EmitB($BE); EmitI64(v); end;
+procedure MovRdxImm(v: Int64); begin EmitB($48); EmitB($BA); EmitI64(v); end;
 
 procedure EmitSyscall; begin EmitB($0F); EmitB($05); end;
 
 procedure EmitDataRef(dataOff: Integer);
-{ Emit 8-byte placeholder; record fixup to patch with data_base+dataOff }
 begin
   if FixCount >= MAX_FIXUPS then Error('fixup overflow');
-  Fixups[FixCount].CodePos := CodeLen;
-  Fixups[FixCount].DataOff := dataOff;
-  Inc(FixCount);
-  EmitI64(0);
+  Fixups[FixCount].CodePos := CodeLen; Fixups[FixCount].DataOff := dataOff;
+  Inc(FixCount); EmitI64(0);
+end;
+
+procedure EmitGlobRef(bssOff: Integer);
+{ Emit 4-byte placeholder for absolute BSS address }
+begin
+  if GlobFixCount >= MAX_GLOBFIX then Error('global fixup overflow');
+  GlobFix[GlobFixCount].CodePos := CodeLen;
+  GlobFix[GlobFixCount].BSSoff  := bssOff;
+  Inc(GlobFixCount); EmitI32(0);
 end;
 
 procedure EmitWriteSyscall(dataOff, len: Integer);
 begin
-  MovRaxImm(SYS_WRITE);
-  MovRdiImm(STDOUT);
-  EmitB($48); EmitB($BE); EmitDataRef(dataOff); { mov rsi, data_base+off }
-  MovRdxImm(len);
-  EmitSyscall;
+  MovRaxImm(SYS_WRITE); MovRdiImm(STDOUT);
+  EmitB($48); EmitB($BE); EmitDataRef(dataOff);
+  MovRdxImm(len); EmitSyscall;
 end;
 
 procedure EmitExit(code: Int64);
@@ -412,10 +440,7 @@ begin
   Strs[StrCount].Offset := DataLen;
   Strs[StrCount].Len    := Length(s);
   for j := 1 to Length(s) do
-  begin
-    if DataLen >= MAX_DATA then Error('data overflow');
-    Data[DataLen] := Ord(s[j]); Inc(DataLen);
-  end;
+    begin if DataLen >= MAX_DATA then Error('data overflow'); Data[DataLen] := Ord(s[j]); Inc(DataLen); end;
   Result := StrCount; Inc(StrCount);
 end;
 
@@ -425,7 +450,7 @@ function FindSym(const name: AnsiString): Integer;
 var i: Integer; lo: AnsiString;
 begin
   lo := LowerCase(name);
-  for i := 0 to SymCount-1 do
+  for i := SymCount-1 downto 0 do
     if Syms[i].Name = lo then begin Result := i; Exit; end;
   Result := -1;
 end;
@@ -433,134 +458,268 @@ end;
 function AllocVar(const name: AnsiString; tk: TTypeKind): Integer;
 begin
   if SymCount >= MAX_SYMS then Error('too many symbols');
-  Inc(FrameSize, 8);
   Syms[SymCount].Name     := LowerCase(name);
   Syms[SymCount].TypeKind := tk;
-  Syms[SymCount].Offset   := -FrameSize;
+  Syms[SymCount].ConstVal := 0;
+  if CurProc < 0 then
+  begin
+    Syms[SymCount].Kind   := skGlobal;
+    Syms[SymCount].Offset := BSSSize;
+    Inc(BSSSize, 8);
+  end
+  else
+  begin
+    Inc(FrameSize, 8);
+    Syms[SymCount].Kind   := skLocal;
+    Syms[SymCount].Offset := -FrameSize;
+  end;
   Result := SymCount; Inc(SymCount);
 end;
 
 function AllocTemp: Integer;
-{ Anonymous compiler-generated temporary (e.g., for-loop limit) }
+begin Result := AllocVar('', tyInteger); end;
+
+function AddConst(const name: AnsiString; tk: TTypeKind; v: Int64): Integer;
 begin
-  Result := AllocVar('', tyInteger);
+  if SymCount >= MAX_SYMS then Error('too many symbols');
+  Syms[SymCount].Name     := LowerCase(name);
+  Syms[SymCount].TypeKind := tk;
+  Syms[SymCount].Kind     := skConst;
+  Syms[SymCount].ConstVal := v;
+  Syms[SymCount].Offset   := 0;
+  Result := SymCount; Inc(SymCount);
 end;
 
+{ ===== Variable load/store ===== }
+
 procedure EmitLoadVar(idx: Integer);
-{ mov rax, [rbp + offset] (offset is negative) }
 begin
-  EmitB($48); EmitB($8B); EmitB($85); EmitI32(Syms[idx].Offset);
+  case Syms[idx].Kind of
+    skLocal, skParam:
+      begin EmitB($48); EmitB($8B); EmitB($85); EmitI32(Syms[idx].Offset); end;
+    skGlobal:
+      begin EmitB($48); EmitB($8B); EmitB($04); EmitB($25); EmitGlobRef(Syms[idx].Offset); end;
+    skConst:
+      MovRaxImm(Syms[idx].ConstVal);
+  end;
 end;
 
 procedure EmitStoreVar(idx: Integer);
-{ mov [rbp + offset], rax }
 begin
-  EmitB($48); EmitB($89); EmitB($85); EmitI32(Syms[idx].Offset);
+  case Syms[idx].Kind of
+    skLocal, skParam:
+      begin EmitB($48); EmitB($89); EmitB($85); EmitI32(Syms[idx].Offset); end;
+    skGlobal:
+      begin EmitB($48); EmitB($89); EmitB($04); EmitB($25); EmitGlobRef(Syms[idx].Offset); end;
+    skConst: Error('cannot assign to constant');
+  end;
 end;
 
-{ ===== Stack frame ===== }
-
-procedure EmitPrologue;
-{ push rbp; mov rbp,rsp; sub rsp,<patched later> }
+procedure EmitCmpRaxVar(idx: Integer);
+{ cmp rax, var }
 begin
-  EmitB($55);                          { push rbp }
-  EmitB($48); EmitB($89); EmitB($E5); { mov rbp, rsp }
-  EmitB($48); EmitB($81); EmitB($EC); { sub rsp, imm32 }
-  ProloguePatchPos := CodeLen;
-  EmitI32(0);
+  case Syms[idx].Kind of
+    skLocal, skParam:
+      begin EmitB($48); EmitB($3B); EmitB($85); EmitI32(Syms[idx].Offset); end;
+    skGlobal:
+      begin EmitB($48); EmitB($3B); EmitB($04); EmitB($25); EmitGlobRef(Syms[idx].Offset); end;
+    skConst:
+      begin
+        { cmp rax, imm32 }
+        EmitB($48); EmitB($3D); EmitI32(Syms[idx].ConstVal);
+      end;
+  end;
 end;
 
-procedure PatchPrologue;
-var aligned: Integer;
+{ ===== Procedure table ===== }
+
+function FindProc(const name: AnsiString): Integer;
+var i: Integer; lo: AnsiString;
 begin
-  aligned := (FrameSize + 15) and (not 15);
-  Patch32(ProloguePatchPos, aligned);
+  lo := LowerCase(name);
+  for i := 0 to ProcCount-1 do
+    if Procs[i].Name = lo then begin Result := i; Exit; end;
+  Result := -1;
 end;
 
-{ ===== int-to-string + write ===== }
+function RegisterProc(const name: AnsiString; isFunc: Boolean;
+  retType: TTypeKind; nParams: Integer;
+  const pnames: array of AnsiString; const ptypes: array of TTypeKind;
+  bodyAddr: Integer): Integer;
+var i: Integer;
+begin
+  if ProcCount >= MAX_PROCS then Error('too many procedures');
+  Procs[ProcCount].Name       := LowerCase(name);
+  Procs[ProcCount].IsFunc     := isFunc;
+  Procs[ProcCount].RetType    := retType;
+  Procs[ProcCount].ParamCount := nParams;
+  Procs[ProcCount].BodyAddr   := bodyAddr;
+  Procs[ProcCount].FramePatch := -1;
+  Procs[ProcCount].RetSymIdx  := -1;
+  Procs[ProcCount].ScopeBase  := 0;
+  for i := 0 to nParams-1 do
+  begin
+    Procs[ProcCount].Params[i].Name     := LowerCase(pnames[i]);
+    Procs[ProcCount].Params[i].TypeKind := ptypes[i];
+    Procs[ProcCount].Params[i].SymIdx   := -1;
+  end;
+  Result := ProcCount; Inc(ProcCount);
+end;
+
+{ ===== int-to-string write ===== }
 
 procedure EmitWriteInt;
-{ Input: rax = integer value. Writes decimal representation to stdout. }
-{ Clobbers: rax, rbx, rcx, rdx, rdi, rsi }
-var jnsOff: Integer; loopStart: Integer;
+var jnsOff, loopStart: Integer;
 begin
-  { Handle sign: if rax < 0, negate and write '-' first }
-  EmitB($48); EmitB($85); EmitB($C0);   { test rax, rax }
-  EmitB($79); jnsOff := CodeLen; EmitB(0);  { jns rel8 (patch below) }
-
-  { Negative branch }
-  EmitB($48); EmitB($F7); EmitB($D8);   { neg rax }
-  EmitB($50);                            { push rax (save absolute value) }
-  EmitWriteSyscall(MINUS_OFFSET, 1);     { write '-' }
-  EmitB($58);                            { pop rax }
-
-  { Patch jns to here }
+  EmitB($48); EmitB($85); EmitB($C0);
+  EmitB($79); jnsOff := CodeLen; EmitB(0);
+  EmitB($48); EmitB($F7); EmitB($D8);
+  EmitB($50);
+  EmitWriteSyscall(MINUS_OFFSET, 1);
+  EmitB($58);
   Code[jnsOff] := Byte(CodeLen - (jnsOff + 1));
-
-  { Digit conversion loop:
-    rcx = digit count; rbx = 10; rdi = end of temp buffer }
-  EmitB($48); EmitB($31); EmitB($C9);   { xor rcx, rcx }
+  EmitB($48); EmitB($31); EmitB($C9);
   MovRbxImm(10);
-  EmitB($48); EmitB($BF);               { mov rdi, imm64 }
-  EmitDataRef(INTBUF_OFFSET + INTBUF_SIZE); { = one past end of temp buffer }
-
+  EmitB($48); EmitB($BF); EmitDataRef(INTBUF_OFFSET + INTBUF_SIZE);
   loopStart := CodeLen;
-  EmitB($48); EmitB($31); EmitB($D2);   { xor rdx, rdx }
-  EmitB($48); EmitB($F7); EmitB($F3);   { div rbx }
-  EmitB($80); EmitB($C2); EmitB($30);   { add dl, '0' }
-  EmitB($48); EmitB($FF); EmitB($CF);   { dec rdi }
-  EmitB($88); EmitB($17);               { mov [rdi], dl }
-  EmitB($48); EmitB($FF); EmitB($C1);   { inc rcx }
-  EmitB($48); EmitB($85); EmitB($C0);   { test rax, rax }
-  EmitB($75); EmitB(Byte(loopStart - (CodeLen + 1))); { jnz loopStart }
+  EmitB($48); EmitB($31); EmitB($D2);
+  EmitB($48); EmitB($F7); EmitB($F3);
+  EmitB($80); EmitB($C2); EmitB($30);
+  EmitB($48); EmitB($FF); EmitB($CF);
+  EmitB($88); EmitB($17);
+  EmitB($48); EmitB($FF); EmitB($C1);
+  EmitB($48); EmitB($85); EmitB($C0);
+  EmitB($75); EmitB(Byte(loopStart - (CodeLen + 1)));
+  EmitB($48); EmitB($89); EmitB($FE);
+  EmitB($48); EmitB($89); EmitB($CA);
+  MovRaxImm(SYS_WRITE); MovRdiImm(STDOUT); EmitSyscall;
+end;
 
-  { rsi = rdi (start of digits); rdx = rcx (length) }
-  EmitB($48); EmitB($89); EmitB($FE);   { mov rsi, rdi }
-  EmitB($48); EmitB($89); EmitB($CA);   { mov rdx, rcx }
-  MovRaxImm(SYS_WRITE);
-  MovRdiImm(STDOUT);
-  EmitSyscall;
+{ ===== Prologue/Epilogue ===== }
+
+function EmitProcPrologue: Integer;
+{ Returns patch position for sub rsp imm32 }
+begin
+  EmitB($55);
+  EmitB($48); EmitB($89); EmitB($E5);
+  EmitB($48); EmitB($81); EmitB($EC);
+  Result := CodeLen; EmitI32(0);
+end;
+
+procedure PatchProcPrologue(patchPos, size: Integer);
+var aligned: Integer;
+begin
+  aligned := (size + 15) and (not 15);
+  Patch32(patchPos, aligned);
+end;
+
+procedure EmitProcEpilog(retSymIdx: Integer);
+begin
+  if retSymIdx >= 0 then
+  begin
+    EmitB($48); EmitB($8B); EmitB($85); EmitI32(Syms[retSymIdx].Offset);
+  end;
+  EmitB($C9); EmitB($C3);
+end;
+
+{ ===== Call emission ===== }
+
+procedure EmitCallProc(pi: Integer);
+begin
+  EmitB($E8);
+  if Procs[pi].BodyAddr >= 0 then
+    EmitI32(Procs[pi].BodyAddr - (CodeLen + 4))
+  else
+  begin
+    if CallFixCount >= MAX_CALLFIX then Error('call fixup overflow');
+    CallFix[CallFixCount].CodePos := CodeLen;
+    CallFix[CallFixCount].ProcIdx := pi;
+    Inc(CallFixCount);
+    EmitI32(0);
+  end;
+end;
+
+procedure ApplyCallFixups;
+var i, pi: Integer;
+begin
+  for i := 0 to CallFixCount-1 do
+  begin
+    pi := CallFix[i].ProcIdx;
+    if Procs[pi].BodyAddr < 0 then
+      Error('unresolved forward: ' + Procs[pi].Name);
+    Patch32(CallFix[i].CodePos, Procs[pi].BodyAddr - (CallFix[i].CodePos + 4));
+  end;
 end;
 
 { ===== Expression parser ===== }
-{ Result always in rax. Binary ops: push left, eval right -> rcx, pop left -> rax, apply. }
 
 procedure ParseExpr; forward;
 
 procedure ParseFactor;
-var si, idx: Integer;
+var name: AnsiString; idx, pi, i: Integer;
 begin
   case CurTok.Kind of
-    tkInteger:
-    begin
-      MovRaxImm(CurTok.IVal); Next;
-    end;
-    tkTrue:  begin MovRaxImm(1); Next; end;
-    tkFalse: begin MovRaxImm(0); Next; end;
-    tkIdent:
-    begin
-      idx := FindSym(CurTok.SVal);
-      if idx < 0 then Error('undefined identifier: ' + CurTok.SVal);
-      EmitLoadVar(idx); Next;
-    end;
-    tkLParen:
-    begin
-      Next; ParseExpr; Expect(tkRParen, ')');
-    end;
+    tkInteger: begin MovRaxImm(CurTok.IVal); Next; end;
+    tkTrue:    begin MovRaxImm(1); Next; end;
+    tkFalse:   begin MovRaxImm(0); Next; end;
+    tkLParen:  begin Next; ParseExpr; Expect(tkRParen, ')'); end;
     tkMinus:
     begin
       Next; ParseFactor;
-      EmitB($48); EmitB($F7); EmitB($D8); { neg rax }
+      EmitB($48); EmitB($F7); EmitB($D8);
     end;
     tkNot:
     begin
       Next; ParseFactor;
-      EmitB($48); EmitB($83); EmitB($F0); EmitB($01); { xor rax, 1 }
+      EmitB($48); EmitB($83); EmitB($F0); EmitB($01);
     end;
     tkOrd:
     begin
       Next; Expect(tkLParen, '('); ParseExpr; Expect(tkRParen, ')');
-      { ord() = identity for integer/char }
+    end;
+    tkIdent:
+    begin
+      name := CurTok.SVal;
+      idx  := FindSym(name);
+      pi   := FindProc(name);
+      if (idx >= 0) and (Syms[idx].Kind = skConst) then
+      begin
+        MovRaxImm(Syms[idx].ConstVal); Next;
+      end
+      else if (pi >= 0) and Procs[pi].IsFunc then
+      begin
+        { Function call in expression }
+        Next;
+        { Push args left to right }
+        if CurTok.Kind = tkLParen then
+        begin
+          Next;
+          for i := 0 to Procs[pi].ParamCount-1 do
+          begin
+            ParseExpr; EmitB($50);
+            if i < Procs[pi].ParamCount-1 then Expect(tkComma, ',');
+          end;
+          Expect(tkRParen, ')');
+        end;
+        { Pop into registers right to left }
+        for i := Procs[pi].ParamCount-1 downto 0 do
+          case i of
+            0: EmitB($5F);
+            1: EmitB($5E);
+            2: EmitB($5A);
+            3: EmitB($59);
+            4: begin EmitB($41); EmitB($58); end;
+            5: begin EmitB($41); EmitB($59); end;
+          end;
+        EmitCallProc(pi);
+        { rax = return value }
+      end
+      else if idx >= 0 then
+      begin
+        EmitLoadVar(idx); Next;
+      end
+      else
+        Error('undefined: ' + name);
     end;
     else Error('expected expression, got ''' + CurTok.SVal + '''');
   end;
@@ -573,26 +732,16 @@ begin
   while CurTok.Kind in [tkStar, tkDiv, tkMod, tkAnd] do
   begin
     op := CurTok.Kind; Next;
-    EmitB($50);                           { push rax (left) }
+    EmitB($50);
     ParseFactor;
-    EmitB($48); EmitB($89); EmitB($C1);  { mov rcx, rax (right) }
-    EmitB($58);                           { pop rax (left) }
+    EmitB($48); EmitB($89); EmitB($C1);
+    EmitB($58);
     case op of
-      tkStar: begin
-        EmitB($48); EmitB($0F); EmitB($AF); EmitB($C1); { imul rax, rcx }
-      end;
-      tkDiv: begin
-        EmitB($48); EmitB($99);           { cqo }
-        EmitB($48); EmitB($F7); EmitB($F9); { idiv rcx }
-      end;
-      tkMod: begin
-        EmitB($48); EmitB($99);           { cqo }
-        EmitB($48); EmitB($F7); EmitB($F9); { idiv rcx }
-        EmitB($48); EmitB($89); EmitB($D0); { mov rax, rdx (remainder) }
-      end;
-      tkAnd: begin
-        EmitB($48); EmitB($21); EmitB($C8); { and rax, rcx }
-      end;
+      tkStar: begin EmitB($48); EmitB($0F); EmitB($AF); EmitB($C1); end;
+      tkDiv:  begin EmitB($48); EmitB($99); EmitB($48); EmitB($F7); EmitB($F9); end;
+      tkMod:  begin EmitB($48); EmitB($99); EmitB($48); EmitB($F7); EmitB($F9);
+                    EmitB($48); EmitB($89); EmitB($D0); end;
+      tkAnd:  begin EmitB($48); EmitB($21); EmitB($C8); end;
     end;
   end;
 end;
@@ -600,21 +749,17 @@ end;
 procedure ParseSimpleExpr;
 var op: TTokenKind; neg: Boolean;
 begin
-  neg := (CurTok.Kind = tkMinus);
-  Eat(tkMinus); Eat(tkPlus);
+  neg := CurTok.Kind = tkMinus; Eat(tkMinus); Eat(tkPlus);
   ParseTerm;
-  if neg then begin EmitB($48); EmitB($F7); EmitB($D8); end; { neg rax }
+  if neg then begin EmitB($48); EmitB($F7); EmitB($D8); end;
   while CurTok.Kind in [tkPlus, tkMinus, tkOr] do
   begin
-    op := CurTok.Kind; Next;
-    EmitB($50);                           { push rax }
-    ParseTerm;
-    EmitB($48); EmitB($89); EmitB($C1);  { mov rcx, rax }
-    EmitB($58);                           { pop rax }
+    op := CurTok.Kind; Next; EmitB($50); ParseTerm;
+    EmitB($48); EmitB($89); EmitB($C1); EmitB($58);
     case op of
-      tkPlus:  begin EmitB($48); EmitB($01); EmitB($C8); end; { add rax, rcx }
-      tkMinus: begin EmitB($48); EmitB($29); EmitB($C8); end; { sub rax, rcx }
-      tkOr:    begin EmitB($48); EmitB($09); EmitB($C8); end; { or rax, rcx }
+      tkPlus:  begin EmitB($48); EmitB($01); EmitB($C8); end;
+      tkMinus: begin EmitB($48); EmitB($29); EmitB($C8); end;
+      tkOr:    begin EmitB($48); EmitB($09); EmitB($C8); end;
     end;
   end;
 end;
@@ -625,22 +770,51 @@ begin
   ParseSimpleExpr;
   if CurTok.Kind in [tkEq, tkNeq, tkLt, tkLe, tkGt, tkGe] then
   begin
-    op := CurTok.Kind; Next;
-    EmitB($50);                           { push rax (left) }
-    ParseSimpleExpr;
-    EmitB($48); EmitB($89); EmitB($C1);  { mov rcx, rax (right) }
-    EmitB($58);                           { pop rax (left) }
-    EmitB($48); EmitB($3B); EmitB($C1);  { cmp rax, rcx }
+    op := CurTok.Kind; Next; EmitB($50); ParseSimpleExpr;
+    EmitB($48); EmitB($89); EmitB($C1); EmitB($58);
+    EmitB($48); EmitB($3B); EmitB($C1);
     case op of
-      tkEq:  begin EmitB($0F); EmitB($94); EmitB($C0); end; { sete  al }
-      tkNeq: begin EmitB($0F); EmitB($95); EmitB($C0); end; { setne al }
-      tkLt:  begin EmitB($0F); EmitB($9C); EmitB($C0); end; { setl  al }
-      tkLe:  begin EmitB($0F); EmitB($9E); EmitB($C0); end; { setle al }
-      tkGt:  begin EmitB($0F); EmitB($9F); EmitB($C0); end; { setg  al }
-      tkGe:  begin EmitB($0F); EmitB($9D); EmitB($C0); end; { setge al }
+      tkEq:  begin EmitB($0F); EmitB($94); EmitB($C0); end;
+      tkNeq: begin EmitB($0F); EmitB($95); EmitB($C0); end;
+      tkLt:  begin EmitB($0F); EmitB($9C); EmitB($C0); end;
+      tkLe:  begin EmitB($0F); EmitB($9E); EmitB($C0); end;
+      tkGt:  begin EmitB($0F); EmitB($9F); EmitB($C0); end;
+      tkGe:  begin EmitB($0F); EmitB($9D); EmitB($C0); end;
     end;
-    EmitB($48); EmitB($0F); EmitB($B6); EmitB($C0); { movzx rax, al }
+    EmitB($48); EmitB($0F); EmitB($B6); EmitB($C0);
   end;
+end;
+
+function ConstEval: Int64;
+{ Evaluate a compile-time constant expression (no code emitted) }
+var r, v: Int64; idx: Integer; op: TTokenKind;
+begin
+  r := 0;
+  if CurTok.Kind = tkInteger then begin r := CurTok.IVal; Next; end
+  else if CurTok.Kind = tkMinus then begin Next; r := -ConstEval; end
+  else if CurTok.Kind = tkIdent then
+  begin
+    idx := FindSym(CurTok.SVal);
+    if (idx >= 0) and (Syms[idx].Kind = skConst) then
+      r := Syms[idx].ConstVal
+    else Error('not a constant: ' + CurTok.SVal);
+    Next;
+  end
+  else if CurTok.Kind = tkLParen then
+  begin
+    Next; r := ConstEval; Expect(tkRParen, ')');
+  end;
+  while CurTok.Kind in [tkPlus, tkMinus, tkStar, tkDiv] do
+  begin
+    op := CurTok.Kind; Next; v := ConstEval;
+    case op of
+      tkPlus:  r := r + v;
+      tkMinus: r := r - v;
+      tkStar:  r := r * v;
+      tkDiv:   r := r div v;
+    end;
+  end;
+  Result := r;
 end;
 
 { ===== Statement parser ===== }
@@ -648,7 +822,7 @@ end;
 procedure ParseStatement; forward;
 
 procedure ParseWriteArgs(newline: Boolean);
-var si: Integer = 0;
+var si: Integer;
 begin
   if CurTok.Kind = tkLParen then
   begin
@@ -660,11 +834,7 @@ begin
         si := InternStr(CurTok.SVal); Next;
         if Strs[si].Len > 0 then EmitWriteSyscall(Strs[si].Offset, Strs[si].Len);
       end
-      else
-      begin
-        ParseExpr;
-        EmitWriteInt;
-      end;
+      else begin ParseExpr; EmitWriteInt; end;
       if not Eat(tkComma) then Break;
     end;
     Expect(tkRParen, ')');
@@ -676,17 +846,15 @@ procedure ParseIfStatement;
 var elseJmp, thenJmp: Integer;
 begin
   ParseExpr;
-  EmitB($48); EmitB($85); EmitB($C0);    { test rax, rax }
-  EmitB($0F); EmitB($84);                { jz rel32 (false -> else/end) }
-  thenJmp := CodeLen; EmitI32(0);
+  EmitB($48); EmitB($85); EmitB($C0);
+  EmitB($0F); EmitB($84); thenJmp := CodeLen; EmitI32(0);
   Expect(tkThen, 'then');
   ParseStatement;
   if CurTok.Kind = tkElse then
   begin
-    EmitB($E9); elseJmp := CodeLen; EmitI32(0); { jmp past else }
+    EmitB($E9); elseJmp := CodeLen; EmitI32(0);
     Patch32(thenJmp, CodeLen - (thenJmp + 4));
-    Next; { consume 'else' }
-    ParseStatement;
+    Next; ParseStatement;
     Patch32(elseJmp, CodeLen - (elseJmp + 4));
   end
   else
@@ -698,53 +866,39 @@ var loopTop, condJmp: Integer;
 begin
   loopTop := CodeLen;
   ParseExpr;
-  EmitB($48); EmitB($85); EmitB($C0);    { test rax, rax }
-  EmitB($0F); EmitB($84);                { jz exit }
-  condJmp := CodeLen; EmitI32(0);
+  EmitB($48); EmitB($85); EmitB($C0);
+  EmitB($0F); EmitB($84); condJmp := CodeLen; EmitI32(0);
   Expect(tkDo, 'do');
   ParseStatement;
-  EmitB($E9); EmitI32(loopTop - (CodeLen + 4)); { jmp loopTop }
+  EmitB($E9); EmitI32(loopTop - (CodeLen + 4));
   Patch32(condJmp, CodeLen - (condJmp + 4));
 end;
 
 procedure ParseForStatement;
-var varIdx, limitIdx: Integer;
-    loopTop, exitJmp: Integer;
-    down: Boolean;
+var varIdx, limitIdx, loopTop, exitJmp: Integer; down: Boolean;
 begin
   if CurTok.Kind <> tkIdent then Error('for: expected variable');
   varIdx := FindSym(CurTok.SVal);
-  if varIdx < 0 then Error('for: undefined variable: ' + CurTok.SVal);
+  if varIdx < 0 then Error('for: undefined: ' + CurTok.SVal);
   Next;
   Expect(tkAssign, ':=');
-  ParseExpr;
-  EmitStoreVar(varIdx);              { i := start }
-
+  ParseExpr; EmitStoreVar(varIdx);
   down := CurTok.Kind = tkDownto;
   if down then Next else Expect(tkTo, 'to');
-
   ParseExpr;
-  limitIdx := AllocTemp;            { allocate stack slot for limit }
-  EmitStoreVar(limitIdx);           { limit := expr }
-
+  limitIdx := AllocTemp; EmitStoreVar(limitIdx);
   loopTop := CodeLen;
-  EmitLoadVar(varIdx);              { rax = i }
-  { cmp rax, [rbp + limitOff] }
-  EmitB($48); EmitB($3B); EmitB($85); EmitI32(Syms[limitIdx].Offset);
-  { exit if i > limit (to) or i < limit (downto) }
-  EmitB($0F);
-  if down then EmitB($8C) else EmitB($8F); { jl / jg }
+  EmitLoadVar(varIdx);
+  EmitCmpRaxVar(limitIdx);
+  EmitB($0F); if down then EmitB($8C) else EmitB($8F);
   exitJmp := CodeLen; EmitI32(0);
-
   Expect(tkDo, 'do');
   ParseStatement;
-
-  { increment / decrement loop variable }
   EmitLoadVar(varIdx);
-  if down then begin EmitB($48); EmitB($FF); EmitB($C8); end  { dec rax }
-           else begin EmitB($48); EmitB($FF); EmitB($C0); end; { inc rax }
+  if down then begin EmitB($48); EmitB($FF); EmitB($C8); end
+           else begin EmitB($48); EmitB($FF); EmitB($C0); end;
   EmitStoreVar(varIdx);
-  EmitB($E9); EmitI32(loopTop - (CodeLen + 4)); { jmp loopTop }
+  EmitB($E9); EmitI32(loopTop - (CodeLen + 4));
   Patch32(exitJmp, CodeLen - (exitJmp + 4));
 end;
 
@@ -756,9 +910,88 @@ begin
     begin ParseStatement; Eat(tkSemicolon); end;
   Expect(tkUntil, 'until');
   ParseExpr;
-  EmitB($48); EmitB($85); EmitB($C0);    { test rax, rax }
-  EmitB($0F); EmitB($84);                { jz loopTop (loop again if false) }
-  EmitI32(loopTop - (CodeLen + 4));
+  EmitB($48); EmitB($85); EmitB($C0);
+  EmitB($0F); EmitB($84); EmitI32(loopTop - (CodeLen + 4));
+end;
+
+procedure ParseCaseStatement;
+{ case expr of val1,val2: stmt; ... else stmt; end }
+const MAX_BRANCHES = 64;
+var
+  jePositions : array[0..MAX_BRANCHES-1] of Integer;
+  jeCount     : Integer;
+  jmpPositions: array[0..MAX_BRANCHES-1] of Integer;
+  jmpCount    : Integer;
+  elseJmp, i, branchJeStart, si: Integer;
+  hasElse     : Boolean;
+  cv          : Int64;
+begin
+  { Save expression in rcx (rax gets clobbered by comparisons) }
+  ParseExpr;
+  EmitB($48); EmitB($89); EmitB($C1);  { mov rcx, rax }
+
+  Expect(tkOf, 'of');
+  jeCount  := 0;
+  jmpCount := 0;
+  hasElse  := False;
+
+  while not (CurTok.Kind in [tkEnd, tkEOF]) do
+  begin
+    if CurTok.Kind = tkElse then
+    begin
+      hasElse := True;
+      Next;
+      ParseStatement;
+      Eat(tkSemicolon);
+      Break;
+    end;
+
+    { Collect label values and emit comparisons }
+    branchJeStart := jeCount;
+    repeat
+      { Parse label value }
+      if CurTok.Kind = tkInteger then cv := CurTok.IVal
+      else if CurTok.Kind = tkIdent then
+      begin
+        si := FindSym(CurTok.SVal);
+        if (si >= 0) and (Syms[si].Kind = skConst) then cv := Syms[si].ConstVal
+        else Error('case label must be constant: ' + CurTok.SVal);
+      end
+      else Error('expected case label');
+      Next;
+      { cmp rcx, imm32; je (forward) }
+      EmitB($48); EmitB($81); EmitB($F9); EmitI32(cv); { cmp rcx, imm32 }
+      EmitB($0F); EmitB($84);
+      if jeCount >= MAX_BRANCHES then Error('too many case branches');
+      jePositions[jeCount] := CodeLen; Inc(jeCount);
+      EmitI32(0);
+    until not Eat(tkComma);
+    Expect(tkColon, ':');
+
+    { This branch's code starts here: patch all its je targets }
+    for i := branchJeStart to jeCount-1 do
+      Patch32(jePositions[i], CodeLen - (jePositions[i] + 4));
+
+    ParseStatement;
+    Eat(tkSemicolon);
+
+    { jmp end_case }
+    EmitB($E9);
+    if jmpCount >= MAX_BRANCHES then Error('too many case branches');
+    jmpPositions[jmpCount] := CodeLen; Inc(jmpCount);
+    EmitI32(0);
+  end;
+
+  if not hasElse then
+  begin
+    { Patch unmatched case: skip to end }
+  end;
+
+  Expect(tkEnd, 'end');
+
+  { Patch all jmp end_case to here }
+  for i := 0 to jmpCount-1 do
+    Patch32(jmpPositions[i], CodeLen - (jmpPositions[i] + 4));
 end;
 
 procedure ParseBlock;
@@ -768,7 +1001,7 @@ begin
 end;
 
 procedure ParseStatement;
-var idx: Integer; name: AnsiString;
+var name: AnsiString; idx, pi, i: Integer;
 begin
   case CurTok.Kind of
     tkWriteln: begin Next; ParseWriteArgs(True);  end;
@@ -780,10 +1013,15 @@ begin
       if CurTok.Kind = tkLParen then
       begin
         Next;
-        if CurTok.Kind = tkInteger then
-          begin EmitExit(CurTok.IVal); Next; end
+        if CurTok.Kind = tkInteger then begin EmitExit(CurTok.IVal); Next; end
         else EmitExit(0);
         Expect(tkRParen, ')');
+      end
+      else if CurTok.Kind = tkSemicolon then
+      begin
+        { exit from function: emit epilogue }
+        if CurProc >= 0 then EmitProcEpilog(Procs[CurProc].RetSymIdx)
+        else EmitExit(0);
       end
       else EmitExit(0);
     end;
@@ -799,20 +1037,15 @@ begin
       EmitLoadVar(idx);
       if Eat(tkComma) then
       begin
-        EmitB($50); ParseExpr;           { push old val, get amount in rax }
-        EmitB($48); EmitB($89); EmitB($C1); { mov rcx, rax (amount) }
-        EmitB($58);                      { pop rax (var) }
-        if name = 'inc' then
-          begin EmitB($48); EmitB($01); EmitB($C8); end  { add rax, rcx }
-        else
-          begin EmitB($48); EmitB($29); EmitB($C8); end; { sub rax, rcx }
+        EmitB($50); ParseExpr;
+        EmitB($48); EmitB($89); EmitB($C1); EmitB($58);
+        if name = 'inc' then begin EmitB($48); EmitB($01); EmitB($C8); end
+        else begin EmitB($48); EmitB($29); EmitB($C8); end;
       end
       else
       begin
-        if name = 'inc' then
-          begin EmitB($48); EmitB($FF); EmitB($C0); end  { inc rax }
-        else
-          begin EmitB($48); EmitB($FF); EmitB($C8); end; { dec rax }
+        if name = 'inc' then begin EmitB($48); EmitB($FF); EmitB($C0); end
+        else begin EmitB($48); EmitB($FF); EmitB($C8); end;
       end;
       EmitStoreVar(idx);
       Expect(tkRParen, ')');
@@ -822,107 +1055,300 @@ begin
     tkWhile:  begin Next; ParseWhileStatement; end;
     tkFor:    begin Next; ParseForStatement;   end;
     tkRepeat: begin Next; ParseRepeatStatement; end;
+    tkCase:   begin Next; ParseCaseStatement;  end;
 
-    tkBegin:
-    begin
-      Next; ParseBlock; Expect(tkEnd, 'end');
-    end;
+    tkBegin:  begin Next; ParseBlock; Expect(tkEnd, 'end'); end;
 
     tkIdent:
     begin
-      { Assignment: ident := expr }
-      name := CurTok.SVal; Next;
+      name := CurTok.SVal;
+
+      { Function return value: FuncName := expr }
+      if (CurProc >= 0) and Procs[CurProc].IsFunc and
+         (LowerCase(name) = Procs[CurProc].Name) then
+      begin
+        Next; Expect(tkAssign, ':=');
+        ParseExpr;
+        EmitStoreVar(Procs[CurProc].RetSymIdx);
+        Exit;
+      end;
+
+      { Procedure call }
+      pi := FindProc(name);
+      if pi >= 0 then
+      begin
+        Next;
+        if CurTok.Kind = tkLParen then
+        begin
+          Next;
+          for i := 0 to Procs[pi].ParamCount-1 do
+          begin
+            ParseExpr; EmitB($50);
+            if i < Procs[pi].ParamCount-1 then Expect(tkComma, ',');
+          end;
+          Expect(tkRParen, ')');
+        end;
+        for i := Procs[pi].ParamCount-1 downto 0 do
+          case i of
+            0: EmitB($5F);
+            1: EmitB($5E);
+            2: EmitB($5A);
+            3: EmitB($59);
+            4: begin EmitB($41); EmitB($58); end;
+            5: begin EmitB($41); EmitB($59); end;
+          end;
+        EmitCallProc(pi);
+        Exit;
+      end;
+
+      { Variable assignment }
+      Next;
       if CurTok.Kind = tkAssign then
       begin
         Next;
         idx := FindSym(name);
         if idx < 0 then Error('undefined variable: ' + name);
-        ParseExpr;
-        EmitStoreVar(idx);
+        ParseExpr; EmitStoreVar(idx);
       end
       else
-      begin
-        { Unknown call/statement: skip to semicolon }
-        while not (CurTok.Kind in
-          [tkSemicolon, tkEnd, tkElse, tkUntil, tkEOF]) do Next;
-      end;
+        while not (CurTok.Kind in [tkSemicolon,tkEnd,tkElse,tkUntil,tkEOF]) do Next;
     end;
 
-    tkSemicolon, tkEnd, tkElse, tkUntil, tkEOF: { empty }  ;
-
+    tkSemicolon, tkEnd, tkElse, tkUntil, tkEOF: ;
     else
-    begin
-      while not (CurTok.Kind in
-        [tkSemicolon, tkEnd, tkElse, tkUntil, tkEOF]) do Next;
-    end;
+      while not (CurTok.Kind in [tkSemicolon,tkEnd,tkElse,tkUntil,tkEOF]) do Next;
   end;
 end;
 
 { ===== Declaration parsing ===== }
 
-function ParseType: TTypeKind;
+function ParseTypeKind: TTypeKind;
 begin
   case CurTok.Kind of
     tkInteger_T, tkLongWord_T: Result := tyInteger;
     tkBoolean_T: Result := tyBoolean;
     tkChar_T:    Result := tyChar;
-    else Result := tyUnknown;
+    else
+    begin
+      { Maybe an enum type name — look up as tyInteger }
+      Result := tyInteger;
+    end;
   end;
   Next;
 end;
 
 procedure ParseVarSection;
-var
-  names: array[0..63] of AnsiString;
-  n: Integer; tk: TTypeKind; i: Integer;
+var names: array[0..63] of AnsiString; n, i: Integer; tk: TTypeKind;
 begin
-  Next; { consume 'var' }
+  Next;
   while CurTok.Kind = tkIdent do
   begin
     n := 0;
     repeat
-      if CurTok.Kind <> tkIdent then Error('expected identifier');
       names[n] := CurTok.SVal; Inc(n); Next;
     until not Eat(tkComma);
     Expect(tkColon, ':');
-    { skip array/record qualifiers for stage 2 }
-    while not (CurTok.Kind in [tkSemicolon, tkBegin, tkVar,
-               tkConst, tkType, tkProcedure, tkFunction, tkEOF]) do
+    { Skip qualifiers like array[...] of, pointer, etc. }
+    while not (CurTok.Kind in [tkSemicolon, tkBegin, tkVar, tkConst, tkType,
+               tkProcedure, tkFunction, tkEOF]) do
     begin
-      tk := ParseType;
-      if CurTok.Kind in [tkSemicolon, tkBegin, tkVar,
-                         tkConst, tkType, tkProcedure, tkFunction, tkEOF] then Break;
+      tk := ParseTypeKind;
+      if CurTok.Kind in [tkSemicolon, tkBegin, tkVar, tkConst, tkType,
+                         tkProcedure, tkFunction, tkEOF] then Break;
     end;
     for i := 0 to n-1 do AllocVar(names[i], tk);
     Eat(tkSemicolon);
   end;
 end;
 
-procedure SkipSection;
+procedure ParseConstSection;
+var name: AnsiString; v: Int64;
 begin
   Next;
-  while not (CurTok.Kind in
-    [tkBegin, tkVar, tkConst, tkType, tkProcedure, tkFunction, tkEOF]) do Next;
+  while CurTok.Kind = tkIdent do
+  begin
+    name := CurTok.SVal; Next;
+    Expect(tkEq, '=');
+    v := ConstEval;
+    AddConst(name, tyInteger, v);
+    Eat(tkSemicolon);
+  end;
 end;
 
-procedure SkipSubroutine;
-var depth: Integer;
+procedure ParseTypeSection;
+{ Handles enum types: type TFoo = (a, b, c); }
+var ord: Int64; tname: AnsiString;
 begin
-  while not (CurTok.Kind in [tkBegin, tkEOF]) do Next;
-  if CurTok.Kind = tkEOF then Exit;
-  Next; depth := 1;
-  while (depth > 0) and (CurTok.Kind <> tkEOF) do
+  Next;
+  while CurTok.Kind = tkIdent do
   begin
-    case CurTok.Kind of
-      tkBegin: Inc(depth);
-      tkEnd:   begin Dec(depth); if depth = 0 then begin Next; Break; end; end;
+    tname := CurTok.SVal; Next;
+    Expect(tkEq, '=');
+    if CurTok.Kind = tkLParen then
+    begin
+      Next; ord := 0;
+      while CurTok.Kind = tkIdent do
+      begin
+        AddConst(CurTok.SVal, tyInteger, ord);
+        Inc(ord); Next;
+        if not Eat(tkComma) then Break;
+      end;
+      Expect(tkRParen, ')');
+    end
+    else
+    begin
+      { Skip non-enum type defs }
+      while not (CurTok.Kind in [tkSemicolon,tkIdent,tkEOF]) do Next;
     end;
-    Next;
+    Eat(tkSemicolon);
   end;
-  Eat(tkSemicolon);
 end;
+
+{ ===== Procedure/function parser ===== }
+
+procedure ParseSubroutine;
+var
+  isFunc   : Boolean;
+  name     : AnsiString;
+  retType  : TTypeKind;
+  tk       : TTypeKind;
+  pnames   : array[0..7] of AnsiString;
+  ptypes   : array[0..7] of TTypeKind;
+  nparams  : Integer;
+  pi, i    : Integer;
+  savedSC, savedFS : Integer;
+  patchPos : Integer;
+  { arg reg ModRM bytes for store-to-frame: rdi,rsi,rdx,rcx }
+  ArgModRM : array[0..3] of Byte = ($BD, $B5, $95, $8D);
+begin
+  isFunc := CurTok.Kind = tkFunction;
+  Next;
+  if CurTok.Kind <> tkIdent then Error('expected name');
+  name := CurTok.SVal; Next;
+
+  nparams := 0; retType := tyInteger;
+
+  if CurTok.Kind = tkLParen then
+  begin
+    Next;
+    while CurTok.Kind <> tkRParen do
+    begin
+      if CurTok.Kind in [tkVar, tkConst] then Next;
+      while CurTok.Kind = tkIdent do
+      begin
+        pnames[nparams] := CurTok.SVal; Inc(nparams); Next;
+        if not Eat(tkComma) then Break;
+        if CurTok.Kind = tkColon then Break;
+      end;
+      Expect(tkColon, ':');
+      tk := ParseTypeKind;
+      for i := 0 to nparams-1 do ptypes[i] := tk;
+      if not Eat(tkSemicolon) then Break;
+    end;
+    Expect(tkRParen, ')');
+  end;
+
+  if isFunc then
+  begin
+    Expect(tkColon, ':');
+    retType := ParseTypeKind;
+  end;
+
+  { Forward declaration? }
+  if CurTok.Kind = tkForward then
+  begin
+    Next; Eat(tkSemicolon);
+    if FindProc(name) < 0 then
+      RegisterProc(name, isFunc, retType, nparams, pnames, ptypes, -1);
+    Exit;
+  end;
+
+  Eat(tkSemicolon);
+
+  { Register or resolve }
+  pi := FindProc(name);
+  if pi < 0 then
+    pi := RegisterProc(name, isFunc, retType, nparams, pnames, ptypes, CodeLen)
+  else
+    Procs[pi].BodyAddr := CodeLen;
+
+  { Save scope }
+  savedSC := SymCount;
+  savedFS := FrameSize;
+  FrameSize := 0;
+  CurProc := pi;
+  Procs[pi].ScopeBase := SymCount;
+
+  { Allocate param slots }
+  for i := 0 to nparams-1 do
+  begin
+    AllocVar(pnames[i], ptypes[i]);
+    Procs[pi].Params[i].SymIdx := SymCount - 1;
+    Syms[SymCount-1].Kind := skParam;
+  end;
+
+  { Return value slot }
+  if isFunc then
+  begin
+    AllocVar('', tyInteger);
+    Procs[pi].RetSymIdx := SymCount - 1;
+    Syms[SymCount-1].Kind := skLocal;
+  end;
+
+  { Prologue }
+  patchPos := EmitProcPrologue;
+  Procs[pi].FramePatch := patchPos;
+
+  { Copy params from registers to stack }
+  for i := 0 to nparams-1 do
+  begin
+    if i < 4 then
+    begin
+      EmitB($48); EmitB($89); EmitB(ArgModRM[i]);
+      EmitI32(Syms[Procs[pi].Params[i].SymIdx].Offset);
+    end
+    else if i = 4 then
+    begin
+      EmitB($4C); EmitB($89); EmitB($85);
+      EmitI32(Syms[Procs[pi].Params[i].SymIdx].Offset);
+    end
+    else if i = 5 then
+    begin
+      EmitB($4C); EmitB($89); EmitB($8D);
+      EmitI32(Syms[Procs[pi].Params[i].SymIdx].Offset);
+    end;
+  end;
+
+  { Optional var section }
+  while CurTok.Kind in [tkVar, tkConst, tkType] do
+    case CurTok.Kind of
+      tkVar:   ParseVarSection;
+      tkConst: ParseConstSection;
+      tkType:  ParseTypeSection;
+    end;
+
+  { Body }
+  Expect(tkBegin, 'begin');
+  ParseBlock;
+  Expect(tkEnd, 'end');
+  Eat(tkSemicolon);
+
+  { Epilogue }
+  EmitProcEpilog(Procs[pi].RetSymIdx);
+
+  { Patch frame size }
+  PatchProcPrologue(patchPos, FrameSize);
+
+  { Restore scope }
+  SymCount  := savedSC;
+  FrameSize := savedFS;
+  CurProc   := -1;
+end;
+
+{ ===== Program ===== }
 
 procedure ParseProgram;
+var jmpPatch: Integer;
 begin
   Expect(tkProgram, 'program');
   if CurTok.Kind <> tkIdent then Error('expected program name');
@@ -931,7 +1357,11 @@ begin
     begin Next; while CurTok.Kind <> tkRParen do Next; Next; end;
   Eat(tkSemicolon);
 
-  while CurTok.Kind in [tkUses, tkVar, tkConst, tkType, tkProcedure, tkFunction] do
+  { Emit jmp stub at code[0] so entry always lands on main body }
+  EmitB($E9); jmpPatch := CodeLen; EmitI32(0);
+
+  while CurTok.Kind in
+    [tkUses, tkVar, tkConst, tkType, tkProcedure, tkFunction] do
     case CurTok.Kind of
       tkUses:
       begin
@@ -939,12 +1369,15 @@ begin
         while CurTok.Kind = tkIdent do begin Next; if not Eat(tkComma) then Break; end;
         Eat(tkSemicolon);
       end;
-      tkVar: ParseVarSection;
-      tkConst, tkType: SkipSection;
-      tkProcedure, tkFunction: SkipSubroutine;
+      tkVar:      ParseVarSection;
+      tkConst:    ParseConstSection;
+      tkType:     ParseTypeSection;
+      tkProcedure,
+      tkFunction: ParseSubroutine;
     end;
 
-  EmitPrologue;      { push rbp; mov rbp,rsp; sub rsp, <patch> }
+  { Patch jmp to point here (start of main body) }
+  Patch32(jmpPatch, CodeLen - (jmpPatch + 4));
 
   Expect(tkBegin, 'begin');
   ParseBlock;
@@ -952,15 +1385,15 @@ begin
   Eat(tkDot);
 
   EmitExit(0);
-  PatchPrologue;     { fill in actual frame size }
+  ApplyCallFixups;
 end;
 
 { ===== ELF writer ===== }
 
-procedure PatchAddr(pos: Integer; addr: Int64);
+procedure PatchAddr8(pos: Integer; addr: Int64);
 begin
-  Code[pos+0] := Byte(addr          and $FF);
-  Code[pos+1] := Byte((addr shr  8) and $FF);
+  Code[pos+0] := Byte(addr and $FF);
+  Code[pos+1] := Byte((addr shr 8) and $FF);
   Code[pos+2] := Byte((addr shr 16) and $FF);
   Code[pos+3] := Byte((addr shr 24) and $FF);
   Code[pos+4] := Byte((addr shr 32) and $FF);
@@ -969,52 +1402,59 @@ begin
   Code[pos+7] := Byte((addr shr 56) and $FF);
 end;
 
-procedure WriteU8(var f: File; v: Byte);  begin BlockWrite(f, v, 1); end;
-procedure WriteU16(var f: File; v: Word);
-var b: array[0..1] of Byte;
-begin b[0]:=v and $FF; b[1]:=(v shr 8) and $FF; BlockWrite(f,b,2); end;
-procedure WriteU32(var f: File; v: LongWord);
-var b: array[0..3] of Byte;
-begin b[0]:=v and $FF; b[1]:=(v shr 8) and $FF;
-      b[2]:=(v shr 16) and $FF; b[3]:=(v shr 24) and $FF; BlockWrite(f,b,4); end;
-procedure WriteU64(var f: File; v: Int64);
-begin WriteU32(f,LongWord(v and $FFFFFFFF)); WriteU32(f,LongWord((v shr 32) and $FFFFFFFF)); end;
+procedure WriteU8(var f:File;v:Byte);   begin BlockWrite(f,v,1); end;
+procedure WriteU16(var f:File;v:Word);
+var b:array[0..1]of Byte;
+begin b[0]:=v and $FF;b[1]:=(v shr 8)and $FF;BlockWrite(f,b,2);end;
+procedure WriteU32(var f:File;v:LongWord);
+var b:array[0..3]of Byte;
+begin b[0]:=v and $FF;b[1]:=(v shr 8)and $FF;b[2]:=(v shr 16)and $FF;b[3]:=(v shr 24)and $FF;BlockWrite(f,b,4);end;
+procedure WriteU64(var f:File;v:Int64);
+begin WriteU32(f,LongWord(v and $FFFFFFFF));WriteU32(f,LongWord((v shr 32)and $FFFFFFFF));end;
 
 procedure WriteELF(const outPath: AnsiString);
-var f: File; i: Integer; dataBase, entry, fsize, addr: Int64;
+var f: File; i: Integer;
+    dataBase, bssBase, entry, filesz, memsz, addr: Int64;
 begin
   dataBase := LOAD_ADDR + CODE_OFFSET + CodeLen;
+  bssBase  := dataBase + DataLen;
   entry    := LOAD_ADDR + CODE_OFFSET;
-  fsize    := CODE_OFFSET + CodeLen + DataLen;
+  filesz   := CODE_OFFSET + CodeLen + DataLen;
+  memsz    := filesz + BSSSize;
 
+  { Apply data fixups (8-byte absolute) }
   for i := 0 to FixCount-1 do
   begin
     addr := dataBase + Fixups[i].DataOff;
-    PatchAddr(Fixups[i].CodePos, addr);
+    PatchAddr8(Fixups[i].CodePos, addr);
+  end;
+
+  { Apply global fixups (4-byte absolute) }
+  for i := 0 to GlobFixCount-1 do
+  begin
+    addr := bssBase + GlobFix[i].BSSoff;
+    Patch32(GlobFix[i].CodePos, addr);
   end;
 
   Assign(f, outPath); Rewrite(f, 1);
 
-  { ELF64 header }
-  WriteU8(f,$7F); WriteU8(f,$45); WriteU8(f,$4C); WriteU8(f,$46); { magic }
-  WriteU8(f,2); WriteU8(f,1); WriteU8(f,1); WriteU8(f,0);
-  WriteU8(f,0); WriteU8(f,0); WriteU8(f,0); WriteU8(f,0);
-  WriteU8(f,0); WriteU8(f,0); WriteU8(f,0); WriteU8(f,0);
-  WriteU16(f,2); WriteU16(f,62); WriteU32(f,1);
-  WriteU64(f,entry); WriteU64(f,64); WriteU64(f,0);
-  WriteU32(f,0); WriteU16(f,64); WriteU16(f,56);
-  WriteU16(f,1); WriteU16(f,64); WriteU16(f,0); WriteU16(f,0);
+  WriteU8(f,$7F);WriteU8(f,$45);WriteU8(f,$4C);WriteU8(f,$46);
+  WriteU8(f,2);WriteU8(f,1);WriteU8(f,1);WriteU8(f,0);
+  WriteU8(f,0);WriteU8(f,0);WriteU8(f,0);WriteU8(f,0);
+  WriteU8(f,0);WriteU8(f,0);WriteU8(f,0);WriteU8(f,0);
+  WriteU16(f,2);WriteU16(f,62);WriteU32(f,1);
+  WriteU64(f,entry);WriteU64(f,64);WriteU64(f,0);
+  WriteU32(f,0);WriteU16(f,64);WriteU16(f,56);
+  WriteU16(f,1);WriteU16(f,64);WriteU16(f,0);WriteU16(f,0);
 
-  { PT_LOAD program header — RWX: int-to-str writes into data section }
-  { TODO: split into separate R+X text and R+W data segments }
-  WriteU32(f,1); WriteU32(f,7);
-  WriteU64(f,0); WriteU64(f,LOAD_ADDR); WriteU64(f,LOAD_ADDR);
-  WriteU64(f,fsize); WriteU64(f,fsize); WriteU64(f,$200000);
+  WriteU32(f,1);WriteU32(f,7);  { PT_LOAD, RWX }
+  WriteU64(f,0);WriteU64(f,LOAD_ADDR);WriteU64(f,LOAD_ADDR);
+  WriteU64(f,filesz);WriteU64(f,memsz);WriteU64(f,$200000);
 
-  if CodeLen > 0 then BlockWrite(f, Code[0], CodeLen);
-  if DataLen > 0 then BlockWrite(f, Data[0], DataLen);
+  if CodeLen > 0 then BlockWrite(f,Code[0],CodeLen);
+  if DataLen > 0 then BlockWrite(f,Data[0],DataLen);
   Close(f);
-  FpChmod(outPath, &755);
+  FpChmod(outPath,&755);
 end;
 
 { ===== Main ===== }
@@ -1025,29 +1465,29 @@ begin
     begin WriteLn(StdErr,'usage: pascal26 <src.pas> [out]'); Halt(1); end;
 
   inFile  := ParamStr(1);
-  outFile := ChangeFileExt(inFile, '');
+  outFile := ChangeFileExt(inFile,'');
   if ParamCount >= 2 then outFile := ParamStr(2);
 
   Source := '';
-  Assign(tf, inFile); Reset(tf);
-  while not EOF(tf) do begin ReadLn(tf, line); Source := Source + line + #10; end;
+  Assign(tf,inFile); Reset(tf);
+  while not EOF(tf) do begin ReadLn(tf,line); Source := Source + line + #10; end;
   Close(tf);
 
-  SrcPos   := 1;
-  SrcLine  := 1;
+  SrcPos   := 1; SrcLine  := 1;
   CodeLen  := 0;
   DataLen  := STR_INIT_OFFSET;
   Data[MINUS_OFFSET]   := Ord('-');
   Data[NEWLINE_OFFSET] := 10;
-  StrCount := 0;
-  FixCount := 0;
-  SymCount := 0;
-  FrameSize := 0;
+  BSSSize  := 0;
+  StrCount := 0; FixCount := 0;
+  GlobFixCount := 0; CallFixCount := 0;
+  SymCount := 0; ProcCount := 0;
+  FrameSize := 0; CurProc := -1;
 
   Next;
   ParseProgram;
   WriteELF(outFile);
 
-  WriteLn('ok: ', outFile, '  [code=', CodeLen, 'B  data=', DataLen,
-          'B  vars=', SymCount, '  frame=', FrameSize, 'B]');
+  WriteLn('ok: ',outFile,'  [code=',CodeLen,'B  data=',DataLen,
+          'B  bss=',BSSSize,'B  procs=',ProcCount,']');
 end.
