@@ -18,6 +18,8 @@ $(COMPILER): $(COMPILER_SRC)
 test: $(COMPILER)
 	./$(COMPILER) test/hello.pas /tmp/hello26
 	/tmp/hello26
+	./$(COMPILER) test/bootstrap_features.pas /tmp/bootstrap_features26
+	/tmp/bootstrap_features26
 
 clean:
 	rm -f $(COMPILER) compiler/*.o compiler/*.ppu

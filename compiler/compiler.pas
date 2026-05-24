@@ -154,7 +154,7 @@ var
 
 procedure Error(const msg: AnsiString);
 begin
-  WriteLn(StdErr, ParamStr(1), ':', SrcLine, ': error: ', msg);
+  WriteLn(StdErr, 'pascal26:', SrcLine, ': error: ', msg);
   Halt(1);
 end;
 
@@ -253,6 +253,8 @@ begin
     'sysfchmod': Result := tkSysFchmod;
     'argcount':  Result := tkArgCount;
     'argstr':    Result := tkArgStr;
+    'paramcount': Result := tkArgCount;
+    'paramstr':   Result := tkArgStr;
     'integer':   Result := tkInteger_T;
     'boolean':   Result := tkBoolean_T;
     'char':      Result := tkChar_T;
@@ -382,7 +384,8 @@ begin Result := CurTok.Kind = k; if Result then Next; end;
 procedure Expect(k: TTokenKind; const name: AnsiString);
 begin
   if CurTok.Kind <> k then
-    Error('expected ' + name + ', got ''' + CurTok.SVal + '''');
+    Error('expected ' + name + ', got token ' + IntToStr(Ord(CurTok.Kind)) +
+          ' ''' + CurTok.SVal + '''');
   Next;
 end;
 
@@ -621,6 +624,25 @@ begin
   EmitB($F3); EmitB($A4);
 end;
 
+procedure EmitArgvToString(dstIdx: Integer);
+begin
+  { On entry: rax = argv index. Copy argv[rax] C-string to global string dstIdx. }
+  EmitB($48); EmitB($C1); EmitB($E0); EmitB($03);   { shl rax, 3 }
+  EmitB($48); EmitB($8B); EmitB($0C); EmitB($25); EmitGlobRef(BSS_INITIAL_RSP);
+  EmitB($48); EmitB($83); EmitB($C1); EmitB($08);   { add rcx, 8 }
+  EmitB($48); EmitB($01); EmitB($C8);               { add rax, rcx }
+  EmitB($48); EmitB($8B); EmitB($00);               { mov rax, [rax] }
+  EmitB($48); EmitB($89); EmitB($C6);               { mov rsi, rax }
+  EmitB($48); EmitB($31); EmitB($C9);               { xor rcx, rcx }
+  EmitB($80); EmitB($3C); EmitB($0E); EmitB($00);   { cmp byte [rsi+rcx], 0 }
+  EmitB($74); EmitB($05);                           { je +5 }
+  EmitB($48); EmitB($FF); EmitB($C1);               { inc rcx }
+  EmitB($EB); EmitB($F5);                           { jmp -11 }
+  EmitB($48); EmitB($89); EmitB($0C); EmitB($25); EmitGlobRef(Syms[dstIdx].Offset);
+  EmitB($48); EmitB($8D); EmitB($3C); EmitB($25); EmitGlobRef(Syms[dstIdx].Offset + 8);
+  EmitB($F3); EmitB($A4);
+end;
+
 procedure EmitStrCmp(aIdx, bIdx: Integer; eq: Boolean);
 { rax = 1 if (a=b), 0 otherwise.  eq=False → rax = 1 if (a<>b). }
 var skipJmp, okJmp: Integer;
@@ -680,6 +702,14 @@ begin
     begin EmitB($48); EmitB($8B); EmitB($00); end  { mov rax, [rax] }
   else
     begin EmitB($48); EmitB($0F); EmitB($B6); EmitB($00); end; { movzx rax, byte [rax] }
+end;
+
+procedure EmitStringCharLoad(strIdx: Integer);
+begin
+  { On entry: rax = Pascal string index (1-based). On exit: rax = byte value. }
+  EmitB($48); EmitB($FF); EmitB($C8);                 { dec rax }
+  EmitB($48); EmitB($05); EmitGlobRef(Syms[strIdx].Offset + 8);
+  EmitB($48); EmitB($0F); EmitB($B6); EmitB($00);     { movzx rax, byte [rax] }
 end;
 
 procedure EmitArrStore(arrIdx: Integer);
@@ -958,10 +988,23 @@ begin
         EmitCallProc(pi);
         { rax = return value }
       end
-      else if (idx >= 0) and Syms[idx].IsArray then
+      else if (idx >= 0) and (Syms[idx].TypeKind = tyString) and (Syms[idx].Kind = skGlobal) then
       begin
         Next;
-        { arr[index] load }
+        if CurTok.Kind = tkLBrack then
+        begin
+          Next;
+          ParseExpr;
+          Expect(tkRBrack, ']');
+          EmitStringCharLoad(idx);
+        end
+        else
+          EmitLoadVar(idx);
+      end
+      else if (idx >= 0) and Syms[idx].IsArray then
+	      begin
+	        Next;
+	        { arr[index] load }
         Expect(tkLBrack, '[');
         ParseExpr;        { index in rax }
         Expect(tkRBrack, ']');
@@ -1044,7 +1087,7 @@ var r, v: Int64; idx: Integer; op: TTokenKind;
 begin
   r := 0;
   if CurTok.Kind = tkInteger then begin r := CurTok.IVal; Next; end
-  else if CurTok.Kind = tkMinus then begin Next; r := -ConstEval; end
+  else if CurTok.Kind = tkMinus then begin Next; r := -ConstEval(); end
   else if CurTok.Kind = tkIdent then
   begin
     idx := FindSym(CurTok.SVal);
@@ -1059,7 +1102,7 @@ begin
   end;
   while CurTok.Kind in [tkPlus, tkMinus, tkStar, tkDiv] do
   begin
-    op := CurTok.Kind; Next; v := ConstEval;
+    op := CurTok.Kind; Next; v := ConstEval();
     case op of
       tkPlus:  r := r + v;
       tkMinus: r := r - v;
@@ -1219,6 +1262,11 @@ begin
     repeat
       { Parse label value }
       if CurTok.Kind = tkInteger then cv := CurTok.IVal
+      else if CurTok.Kind = tkString then
+      begin
+        if Length(CurTok.SVal) <> 1 then Error('case string label must be one character');
+        cv := Ord(CurTok.SVal[1]);
+      end
       else if CurTok.Kind = tkIdent then
       begin
         si := FindSym(CurTok.SVal);
@@ -1345,36 +1393,10 @@ begin
       Next; Expect(tkLParen, '(');
       ParseExpr;  { n → rax }
       Expect(tkComma, ',');
-      { compute argv[n] address: [rsp_initial + 8 + n*8] }
-      { rax = n; multiply by 8; add initial_rsp+8 }
-      EmitB($48); EmitB($C1); EmitB($E0); EmitB($03);   { shl rax, 3 }
-      { add rax, [bss_initial_rsp] + 8 }
-      { mov rcx, [bss_initial_rsp]; add rcx, 8; add rax, rcx }
-      EmitB($48); EmitB($8B); EmitB($0C); EmitB($25); EmitGlobRef(BSS_INITIAL_RSP);
-      EmitB($48); EmitB($83); EmitB($C1); EmitB($08);   { add rcx, 8 }
-      EmitB($48); EmitB($01); EmitB($C8);               { add rax, rcx }
-      { rax = address of argv[n] pointer }
-      EmitB($48); EmitB($8B); EmitB($00);               { mov rax, [rax] }
-      { rax = pointer to argument C-string }
-      EmitB($48); EmitB($89); EmitB($C6);               { mov rsi, rax (src) }
-      { target string var: }
       if CurTok.Kind <> tkIdent then Error('ArgStr: expected string var');
       idx := FindSym(CurTok.SVal);
       if (idx < 0) or (Syms[idx].TypeKind <> tyString) then Error('ArgStr: not a string var');
-      { Count length: scan rsi for NUL, store length + copy }
-      { Use rcx as length counter }
-      EmitB($48); EmitB($31); EmitB($C9);               { xor rcx, rcx }
-      { NUL scan: cmp byte [rsi+rcx], 0; je +5; inc rcx; jmp -11 }
-      EmitB($80); EmitB($3C); EmitB($0E); EmitB($00);   { cmp byte [rsi+rcx], 0  -- 4 bytes }
-      EmitB($74); EmitB($05);                            { je +5 (over inc+jmp)   -- 2 bytes }
-      EmitB($48); EmitB($FF); EmitB($C1);               { inc rcx                -- 3 bytes }
-      EmitB($EB); EmitB($F5);                            { jmp -11 (back to cmp) -- 2 bytes }
-      { rcx = length; store length }
-      EmitB($48); EmitB($89); EmitB($0C); EmitB($25); EmitGlobRef(Syms[idx].Offset);
-      { lea rdi, [bss+str.Offset+8] }
-      EmitB($48); EmitB($8D); EmitB($3C); EmitB($25); EmitGlobRef(Syms[idx].Offset + 8);
-      { rep movsb }
-      EmitB($F3); EmitB($A4);
+      EmitArgvToString(idx);
       Next;
       Expect(tkRParen, ')');
     end;
@@ -1459,6 +1481,14 @@ begin
             EmitStrAssignLiteral(idx, Strs[si].Offset, Strs[si].Len);
           end
           else
+          if CurTok.Kind = tkArgStr then
+          begin
+            Next; Expect(tkLParen, '(');
+            ParseExpr;
+            Expect(tkRParen, ')');
+            EmitArgvToString(idx);
+          end
+          else
           begin
             { string := string_var }
             si2 := FindSym(CurTok.SVal);
@@ -1487,6 +1517,7 @@ end;
 { ===== Declaration parsing ===== }
 
 function ParseTypeKind: TTypeKind;
+var lo: AnsiString;
 begin
   case CurTok.Kind of
     tkInteger_T, tkLongWord_T: Result := tyInteger;
@@ -1495,8 +1526,10 @@ begin
     tkString_T:  Result := tyString;
     else
     begin
-      { Maybe an enum type name — look up as tyInteger }
-      Result := tyInteger;
+      lo := LowerCase(CurTok.SVal);
+      if lo = 'ansistring' then Result := tyString
+      else if lo = 'byte' then Result := tyInteger
+      else Result := tyInteger;
     end;
   end;
   Next;
@@ -1565,7 +1598,7 @@ end;
 
 procedure ParseTypeSection;
 { Handles enum types: type TFoo = (a, b, c); }
-var ord: Int64; tname: AnsiString;
+var ord: Int64; tname: AnsiString; depth: Integer;
 begin
   Next;
   while CurTok.Kind = tkIdent do
@@ -1583,10 +1616,21 @@ begin
       end;
       Expect(tkRParen, ')');
     end
+    else if CurTok.Kind = tkRecord then
+    begin
+      depth := 1;
+      Next;
+      while (depth > 0) and (CurTok.Kind <> tkEOF) do
+      begin
+        if CurTok.Kind = tkRecord then Inc(depth)
+        else if CurTok.Kind = tkEnd then Dec(depth);
+        Next;
+      end;
+    end
     else
     begin
       { Skip non-enum type defs }
-      while not (CurTok.Kind in [tkSemicolon,tkIdent,tkEOF]) do Next;
+      while not (CurTok.Kind in [tkSemicolon,tkEOF]) do Next;
     end;
     Eat(tkSemicolon);
   end;
@@ -1876,6 +1920,7 @@ begin
   GlobFixCount := 0; CallFixCount := 0;
   SymCount := 0; ProcCount := 0;
   FrameSize := 0; CurProc := -1;
+  AddConst('StdErr', tyInteger, 2);
 
   Next;
   ParseProgram;
