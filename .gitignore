@@ -1,0 +1,5 @@
+compiler/pascal26
+compiler/*.o
+compiler/*.ppu
+test/hello
+/tmp/
