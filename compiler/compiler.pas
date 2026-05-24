@@ -79,7 +79,7 @@ type
     ProcIdx  : Integer;
   end;
 
-  TTypeKind = (tyUnknown, tyInteger, tyBoolean, tyChar);
+  TTypeKind = (tyUnknown, tyInteger, tyBoolean, tyChar, tyString);
   TSymKind  = (skLocal, skGlobal, skParam, skConst);
 
   TSymbol = record
@@ -465,7 +465,8 @@ begin
   begin
     Syms[SymCount].Kind   := skGlobal;
     Syms[SymCount].Offset := BSSSize;
-    Inc(BSSSize, 8);
+    if tk = tyString then Inc(BSSSize, 264)   { 8-byte length + 256-byte data }
+    else Inc(BSSSize, 8);
   end
   else
   begin
@@ -529,6 +530,83 @@ begin
         EmitB($48); EmitB($3D); EmitI32(Syms[idx].ConstVal);
       end;
   end;
+end;
+
+{ ===== String helpers ===== }
+
+procedure EmitWriteStrVar(idx: Integer);
+{ sys_write the string variable at Syms[idx] (global only) }
+begin
+  { mov rdx, [bss+Offset] -- length }
+  EmitB($48); EmitB($8B); EmitB($14); EmitB($25); EmitGlobRef(Syms[idx].Offset);
+  { lea rsi, [bss+Offset+8] -- data ptr }
+  EmitB($48); EmitB($8D); EmitB($34); EmitB($25); EmitGlobRef(Syms[idx].Offset + 8);
+  MovRaxImm(SYS_WRITE); MovRdiImm(STDOUT); EmitSyscall;
+end;
+
+procedure EmitStrAssignLiteral(dstIdx, litOff, litLen: Integer);
+{ s := 'literal': store length, rep movsb the literal bytes }
+begin
+  { Store length into [bss+Offset] }
+  MovRaxImm(litLen);
+  EmitB($48); EmitB($89); EmitB($04); EmitB($25); EmitGlobRef(Syms[dstIdx].Offset);
+  if litLen > 0 then
+  begin
+    { mov rcx, litLen }
+    EmitB($48); EmitB($B9); EmitI64(litLen);
+    { lea rdi, [bss+Offset+8] }
+    EmitB($48); EmitB($8D); EmitB($3C); EmitB($25); EmitGlobRef(Syms[dstIdx].Offset + 8);
+    { mov rsi, data_addr (literal bytes in data section) }
+    EmitB($48); EmitB($BE); EmitDataRef(litOff);
+    { rep movsb }
+    EmitB($F3); EmitB($A4);
+  end;
+end;
+
+procedure EmitStrAssignVar(dstIdx, srcIdx: Integer);
+{ s := t: copy length then rep movsb the data }
+begin
+  { rax = src length }
+  EmitLoadVar(srcIdx);
+  { store length to dst }
+  EmitB($48); EmitB($89); EmitB($04); EmitB($25); EmitGlobRef(Syms[dstIdx].Offset);
+  { rcx = length (for rep) }
+  EmitB($48); EmitB($89); EmitB($C1);   { mov rcx, rax }
+  { lea rdi, [bss+dst.Offset+8] }
+  EmitB($48); EmitB($8D); EmitB($3C); EmitB($25); EmitGlobRef(Syms[dstIdx].Offset + 8);
+  { lea rsi, [bss+src.Offset+8] }
+  EmitB($48); EmitB($8D); EmitB($34); EmitB($25); EmitGlobRef(Syms[srcIdx].Offset + 8);
+  { rep movsb }
+  EmitB($F3); EmitB($A4);
+end;
+
+procedure EmitStrCmp(aIdx, bIdx: Integer; eq: Boolean);
+{ rax = 1 if (a=b), 0 otherwise.  eq=False → rax = 1 if (a<>b). }
+var skipJmp, okJmp: Integer;
+begin
+  { Compare lengths first }
+  EmitLoadVar(aIdx);
+  EmitB($48); EmitB($3B); EmitB($04); EmitB($25); EmitGlobRef(Syms[bIdx].Offset);
+  { jne → not equal }
+  EmitB($0F); EmitB($85); skipJmp := CodeLen; EmitI32(0);
+  { Lengths equal — compare bytes; rcx = length }
+  EmitLoadVar(aIdx);
+  EmitB($48); EmitB($89); EmitB($C1);
+  { lea rdi, [a_data] }
+  EmitB($48); EmitB($8D); EmitB($3C); EmitB($25); EmitGlobRef(Syms[aIdx].Offset + 8);
+  { lea rsi, [b_data] }
+  EmitB($48); EmitB($8D); EmitB($34); EmitB($25); EmitGlobRef(Syms[bIdx].Offset + 8);
+  { repe cmpsb }
+  EmitB($F3); EmitB($A6);
+  { je → bytes equal }
+  EmitB($0F); EmitB($84); okJmp := CodeLen; EmitI32(0);
+  { Not equal }
+  Patch32(skipJmp, CodeLen - (skipJmp + 4));
+  if eq then MovRaxImm(0) else MovRaxImm(1);
+  EmitB($E9); skipJmp := CodeLen; EmitI32(0);
+  Patch32(okJmp, CodeLen - (okJmp + 4));
+  if eq then MovRaxImm(1) else MovRaxImm(0);
+  Patch32(skipJmp, CodeLen - (skipJmp + 4));
 end;
 
 { ===== Procedure table ===== }
@@ -677,6 +755,16 @@ begin
     begin
       Next; Expect(tkLParen, '('); ParseExpr; Expect(tkRParen, ')');
     end;
+    tkLength:
+    begin
+      Next; Expect(tkLParen, '(');
+      if CurTok.Kind <> tkIdent then Error('Length: expected string variable');
+      idx := FindSym(CurTok.SVal);
+      if (idx < 0) or (Syms[idx].TypeKind <> tyString) then
+        Error('Length: not a string variable');
+      EmitLoadVar(idx);   { loads int64 length from BSS[Offset] }
+      Next; Expect(tkRParen, ')');
+    end;
     tkIdent:
     begin
       name := CurTok.SVal;
@@ -822,7 +910,7 @@ end;
 procedure ParseStatement; forward;
 
 procedure ParseWriteArgs(newline: Boolean);
-var si: Integer;
+var si, vidx: Integer;
 begin
   if CurTok.Kind = tkLParen then
   begin
@@ -833,6 +921,15 @@ begin
       begin
         si := InternStr(CurTok.SVal); Next;
         if Strs[si].Len > 0 then EmitWriteSyscall(Strs[si].Offset, Strs[si].Len);
+      end
+      else if CurTok.Kind = tkIdent then
+      begin
+        vidx := FindSym(CurTok.SVal);
+        if (vidx >= 0) and (Syms[vidx].TypeKind = tyString) and (Syms[vidx].Kind = skGlobal) then
+        begin
+          EmitWriteStrVar(vidx); Next;
+        end
+        else begin ParseExpr; EmitWriteInt; end;
       end
       else begin ParseExpr; EmitWriteInt; end;
       if not Eat(tkComma) then Break;
@@ -1001,7 +1098,7 @@ begin
 end;
 
 procedure ParseStatement;
-var name: AnsiString; idx, pi, i: Integer;
+var name: AnsiString; idx, pi, i, si, si2: Integer;
 begin
   case CurTok.Kind of
     tkWriteln: begin Next; ParseWriteArgs(True);  end;
@@ -1108,7 +1205,28 @@ begin
         Next;
         idx := FindSym(name);
         if idx < 0 then Error('undefined variable: ' + name);
-        ParseExpr; EmitStoreVar(idx);
+        if (Syms[idx].TypeKind = tyString) and (Syms[idx].Kind = skGlobal) then
+        begin
+          if CurTok.Kind = tkString then
+          begin
+            si := InternStr(CurTok.SVal); Next;
+            EmitStrAssignLiteral(idx, Strs[si].Offset, Strs[si].Len);
+          end
+          else
+          begin
+            { string := string_var }
+            si2 := FindSym(CurTok.SVal);
+            if (si2 >= 0) and (Syms[si2].TypeKind = tyString) and (Syms[si2].Kind = skGlobal) then
+            begin
+              EmitStrAssignVar(idx, si2); Next;
+            end
+            else Error('string assignment: literal or string var required');
+          end;
+        end
+        else
+        begin
+          ParseExpr; EmitStoreVar(idx);
+        end;
       end
       else
         while not (CurTok.Kind in [tkSemicolon,tkEnd,tkElse,tkUntil,tkEOF]) do Next;
@@ -1128,6 +1246,7 @@ begin
     tkInteger_T, tkLongWord_T: Result := tyInteger;
     tkBoolean_T: Result := tyBoolean;
     tkChar_T:    Result := tyChar;
+    tkString_T:  Result := tyString;
     else
     begin
       { Maybe an enum type name — look up as tyInteger }
