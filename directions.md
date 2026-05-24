@@ -9,8 +9,13 @@ goal: create a self hosting pascal compiler, evolving into a "frankenstein" mult
 1. Pascal (Free Pascal compatible) — primary
 2. Object Pascal — primary
 3. C — primary (interop + library use is core value)
-4. C++ — limited/partial support
-5. Python, JavaScript, C# — limited/experimental
+4. Basic — high interest
+5. Ada — high interest
+6. C++ — partial/limited
+7. Fortran — partial/limited
+8. COBOL — partial/limited
+9. Java — partial/limited (JVM-less native compilation goal)
+10. C#, JavaScript, Python — experimental
 
 ## killer feature: multi-language
 - libraries usable at will across languages (e.g. call a C lib from Pascal, a Pascal unit from C)
@@ -18,10 +23,16 @@ goal: create a self hosting pascal compiler, evolving into a "frankenstein" mult
 - "frankenstein" philosophy: best tool for the job, not ideological purity
 
 ## compiler design
-- no complicated lexer, no cumbersome linking steps
-- everything in-memory: build ELF binary in RAM, write executable directly
+- no lex/yacc/ANTLR or any external grammar tools — hand-rolled recursive descent parsers only
+- no cumbersome linking steps — everything in-memory, write ELF directly
 - no external assembler, no linker
-- no external libraries in the compiler itself (compiler is self-contained)
+- compiler itself: zero external dependencies, zero licensing issues — 100% own code
+- architecture: per-language frontend → common IR → shared backend
+  - each language gets its own lexer + recursive-descent parser
+  - all frontends emit into one common IR
+  - one backend: x64 codegen → ELF writer (ARM64 etc. added later)
+- "avoid complicated lexer" means: no generator tools, no grammar files, no table-driven DFAs
+  hand-written scanners are fine and encouraged (simple, fast, no deps)
 
 ## targets
 - primary: ELF x86-64 Linux
