@@ -85,7 +85,7 @@ type
     ProcIdx  : Integer;
   end;
 
-  TTypeKind = (tyUnknown, tyInteger, tyBoolean, tyChar, tyString);
+  TTypeKind = (tyUnknown, tyInteger, tyBoolean, tyChar, tyString, tyRecord);
   TSymKind  = (skLocal, skGlobal, skParam, skConst);
 
   TSymbol = record
@@ -97,6 +97,8 @@ type
     IsArray  : Boolean;
     ArrLen   : Integer;   { number of elements (IsArray=True) }
     ElemType : TTypeKind; { element type when IsArray }
+    RecName  : AnsiString;
+    ElemRecName: AnsiString;
   end;
 
   TParam = record

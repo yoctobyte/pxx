@@ -46,4 +46,15 @@ goal: create a self hosting pascal compiler, evolving into a "frankenstein" mult
 - cross-compiler capability from the start
 - direct (native) build also from the start
 
+## At the horizon
+- Frankenstein compiler. a bunch of useful (yet compatible languages) in the same code base. including stuff like Rust. Now, we don't have to be accurate as rust, we just have to compile the code. Other suggestions are SQL (!), bash??, etc. For names we are considering like "Frankenpile" or "Francompiler" or. But Fran is a name and a common known youtube personality. Other names always open for suggestion. Yet for now we keep our implementation in pascal, as that ought to be universal enough and sortof makes sense to build a frankstein compiler out of a single language. although surely we hope the day will come that we say 'if we write this in this other language, it gets 50% shorter. or more readable'. etc.
+- 1-step compile. internally we still would have our tools. but keeping it all in-memory should make it fast. Rust compiler good example for how we can be fast. Maybe see what their approach is and steal ideas. 
+- JIT compiling another thing. not for the JIT. but for how to combine multiple language/data/memory/namespace barriers. 
 
+## Other notes
+- We would like to keep the moment we reached self-compiling. for historic record.
+- We would like to keep the main project in pascal. And target fpc compatibility (as in: fpc should be able to compile our pascal source dialect).
+- For self-hosted. For the moment we will rely on pascal source only. Any other language only as tests. This may or may not change in the future. Since the nature of the project, it may change. For now, all source code would be in valid/semistandard Pascal.
+
+
+.
