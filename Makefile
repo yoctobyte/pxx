@@ -46,6 +46,23 @@ test: $(COMPILER)
 	test "$$(/tmp/self_record_string_field26)" = "$$(printf '1\n4')"
 	/tmp/pascal26-self test/fileio.pas /tmp/self-fileio26
 	test "$$(/tmp/self-fileio26 test/hello.pas | sed -n '1,3p')" = "$$(printf 'test/hello.pas\n14\n54')"
+	/tmp/pascal26-self $(COMPILER_SRC) /tmp/pascal26-next
+	/tmp/pascal26-next test/hello.pas /tmp/next-hello26
+	test "$$(/tmp/next-hello26)" = "Hello, World!"
+	/tmp/pascal26-next test/bootstrap_features.pas /tmp/next-bootstrap_features26
+	test "$$(/tmp/next-bootstrap_features26)" = "$$(printf '120\n98\ncase-ok\n0')"
+	/tmp/pascal26-next test/records.pas /tmp/next-records26
+	test "$$(/tmp/next-records26)" = "$$(printf '42\n7\n11\n22')"
+	/tmp/pascal26-next test/procs.pas /tmp/next-procs26
+	test "$$(/tmp/next-procs26 | tail -9)" = "$$(printf '0\n1\n1\n2\n3\n5\n8\n13\n21')"
+	/tmp/pascal26-next test/string_compare.pas /tmp/next-string_compare26
+	test "$$(/tmp/next-string_compare26)" = "$$(printf '1\n1\n1')"
+	/tmp/pascal26-next test/record_string_field.pas /tmp/next_record_string_field26
+	test "$$(/tmp/next_record_string_field26)" = "$$(printf '1\n4')"
+	/tmp/pascal26-next test/fileio.pas /tmp/next-fileio26
+	test "$$(/tmp/next-fileio26 test/hello.pas | sed -n '1,3p')" = "$$(printf 'test/hello.pas\n14\n54')"
+	/tmp/pascal26-next $(COMPILER_SRC) /tmp/pascal26-fixedpoint
+	cmp /tmp/pascal26-next /tmp/pascal26-fixedpoint
 
 clean:
 	rm -f $(COMPILER) compiler/*.o compiler/*.ppu

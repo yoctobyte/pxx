@@ -744,7 +744,7 @@ end;
 procedure PatchProcPrologue(patchPos, size: Integer);
 var aligned: Integer;
 begin
-  aligned := (size + 15) and (not 15);
+  aligned := ((size + 15) div 16) * 16;
   Patch32(patchPos, aligned);
 end;
 
