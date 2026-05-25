@@ -12,6 +12,34 @@ const
   MAX_GLOBFIX = 8192;
   STRING_CAP  = 1048576;
   MAX_TOKENS  = 131072;
+  MAX_AST     = 65536;
+
+  { AST node kinds }
+  AN_NONE      = 0;
+  AN_INT_LIT   = 1;
+  AN_STR_LIT   = 2;
+  AN_IDENT     = 3;
+  AN_BOOL_LIT  = 4;
+  AN_BINOP     = 5;   { IVal = token kind of operator }
+  AN_NEG       = 6;   { unary minus; Left = operand }
+  AN_NOT       = 7;   { unary not;   Left = operand }
+  AN_CALL      = 8;   { IVal = proc index; Left = first arg (AN_ARG chain) }
+  AN_ARG       = 9;   { Left = value; Right = next arg or -1 }
+  AN_INDEX     = 10;  { Left = base sym idx; Right = index expr }
+  AN_FIELD     = 11;  { Left = base sym idx; SOffset/SLen = field name }
+  AN_ASSIGN    = 12;
+  AN_IF        = 13;  { Left = cond; Right = AN_PAIR(then, else) }
+  AN_WHILE     = 14;  { Left = cond; Right = body }
+  AN_FOR       = 15;
+  AN_REPEAT    = 16;
+  AN_CASE      = 17;
+  AN_BLOCK     = 18;  { Left = first stmt (AN_SEQ chain) }
+  AN_SEQ       = 19;  { Left = stmt; Right = next or -1 }
+  AN_PAIR      = 20;  { Left = first; Right = second }
+  AN_WRITELN   = 21;
+  AN_WRITE     = 22;
+  AN_HALT      = 23;
+  AN_EXIT      = 24;
 
   SYS_READ  = 0;
   SYS_WRITE = 1;
@@ -176,6 +204,16 @@ var
   Tokens     : array[0..MAX_TOKENS-1] of TRawToken;
   TokCount   : Integer;
   TokPos     : Integer;
+
+  { AST node pool — struct-of-arrays, 8 bytes per field }
+  ASTKind    : array[0..MAX_AST-1] of Integer;
+  ASTIVal    : array[0..MAX_AST-1] of Integer;
+  ASTSOffset : array[0..MAX_AST-1] of Integer;
+  ASTSLen    : array[0..MAX_AST-1] of Integer;
+  ASTLeft    : array[0..MAX_AST-1] of Integer;
+  ASTRight   : array[0..MAX_AST-1] of Integer;
+  ASTTk      : array[0..MAX_AST-1] of Integer;  { TTypeKind of expression }
+  ASTNodeCount : Integer;
 
 {$ifdef FPC}
 function sysopen(const path: AnsiString; flags: Integer): Integer;

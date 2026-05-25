@@ -1,4 +1,18 @@
 
+function AllocNode(kind: Integer): Integer;
+begin
+  if ASTNodeCount >= MAX_AST then Error('AST node overflow');
+  ASTKind[ASTNodeCount]    := kind;
+  ASTIVal[ASTNodeCount]    := 0;
+  ASTSOffset[ASTNodeCount] := 0;
+  ASTSLen[ASTNodeCount]    := 0;
+  ASTLeft[ASTNodeCount]    := -1;
+  ASTRight[ASTNodeCount]   := -1;
+  ASTTk[ASTNodeCount]      := 0;
+  Result := ASTNodeCount;
+  Inc(ASTNodeCount);
+end;
+
 procedure ParseExpr; forward;
 
 procedure SkipSelectors;
