@@ -1,5 +1,9 @@
 FPC     ?= fpc
 FPCFLAGS = -O2 -Tlinux -Px86_64
+HYPERFINE ?= hyperfine
+BENCH_RUNS ?= 30
+BENCH_HELLO_RUNS ?= 10
+BENCH_BATCH ?= 20
 
 COMPILER     := compiler/pascal26
 COMPILER_SRC := compiler/compiler.pas
@@ -8,7 +12,7 @@ FPC_COMPILER := /tmp/pascal26-fpc
 BUILD_COMPILER := /tmp/pascal26-build
 VERIFY_COMPILER := /tmp/pascal26-verify
 
-.PHONY: all bootstrap bootstrap-check fpc-check test clean distclean
+.PHONY: all bootstrap bootstrap-check fpc-check test benchmark benchmark-check clean distclean
 
 all: $(COMPILER)
 
@@ -35,6 +39,27 @@ fpc-check: bootstrap-check $(COMPILER)
 	$(FPC) $(FPCFLAGS) -o$(FPC_COMPILER) $(COMPILER_SRC)
 	$(FPC_COMPILER) $(COMPILER_SRC) /tmp/pascal26-from-fpc
 	cmp $(COMPILER) /tmp/pascal26-from-fpc
+
+benchmark-check: bootstrap-check
+	@which $(HYPERFINE) > /dev/null 2>&1 || \
+	  (echo "hyperfine not found. Install: sudo apt install hyperfine"; exit 1)
+
+benchmark: $(COMPILER) benchmark-check
+	rm -rf /tmp/frankonpiler-bench-fpc-units /tmp/frankonpiler-bench-hello-fpc-units
+	mkdir -p /tmp/frankonpiler-bench-fpc-units /tmp/frankonpiler-bench-hello-fpc-units
+	$(HYPERFINE) --warmup 3 --runs $(BENCH_RUNS) \
+	  --export-markdown /tmp/frankonpiler-compiler-bench.md \
+	  --command-name 'FPC' '$(FPC) $(FPCFLAGS) -FU/tmp/frankonpiler-bench-fpc-units -o/tmp/pascal26-bench-fpc $(COMPILER_SRC) >/dev/null' \
+	  --command-name 'self-hosted pascal26' './$(COMPILER) $(COMPILER_SRC) /tmp/pascal26-bench-self >/dev/null'
+	$(HYPERFINE) --warmup 1 --runs $(BENCH_HELLO_RUNS) \
+	  --export-markdown /tmp/frankonpiler-hello-bench.md \
+	  --command-name 'FPC: $(BENCH_BATCH) x hello' 'for i in $$(seq 1 $(BENCH_BATCH)); do $(FPC) $(FPCFLAGS) -FU/tmp/frankonpiler-bench-hello-fpc-units -o/tmp/hello-bench-fpc test/hello.pas >/dev/null; done' \
+	  --command-name 'self-hosted pascal26: $(BENCH_BATCH) x hello' 'for i in $$(seq 1 $(BENCH_BATCH)); do ./$(COMPILER) test/hello.pas /tmp/hello-bench-self >/dev/null; done'
+	stat -c '%n %s bytes' /tmp/pascal26-bench-fpc /tmp/pascal26-bench-self /tmp/hello-bench-fpc /tmp/hello-bench-self
+	test "$$(/tmp/hello-bench-fpc)" = "Hello, World!"
+	test "$$(/tmp/hello-bench-self)" = "Hello, World!"
+	/tmp/pascal26-bench-self test/hello.pas /tmp/bench-compiler-hello >/dev/null
+	test "$$(/tmp/bench-compiler-hello)" = "Hello, World!"
 
 test: $(COMPILER) fpc-check
 	./$(COMPILER) test/hello.pas /tmp/hello26
