@@ -10,6 +10,7 @@ const
   REC_TSYMBOL = 6;
   REC_TPARAM = 7;
   REC_TPROC = 8;
+  REC_TRAWTOKEN = 9;
 
 function IsRecordType(const lo: AnsiString): Integer;
 begin
@@ -21,7 +22,8 @@ begin
   else if lo = 'TCallFix' then Result := REC_TCALLFIX
   else if lo = 'TSymbol' then Result := REC_TSYMBOL
   else if lo = 'TParam' then Result := REC_TPARAM
-  else if lo = 'TProc' then Result := REC_TPROC;
+  else if lo = 'TProc' then Result := REC_TPROC
+  else if lo = 'TRawToken' then Result := REC_TRAWTOKEN;
 end;
 
 function RecSize(rec: Integer): Integer;
@@ -34,7 +36,8 @@ begin
   else if rec = REC_TCALLFIX then Result := 16
   else if rec = REC_TSYMBOL then Result := 344
   else if rec = REC_TPARAM then Result := 296
-  else if rec = REC_TPROC then Result := 2688;
+  else if rec = REC_TPROC then Result := 2688
+  else if rec = REC_TRAWTOKEN then Result := 40;
 end;
 
 function RecFieldOffset(rec: Integer; const field: AnsiString): Integer;
@@ -101,6 +104,14 @@ begin
     else if field = 'FramePatch' then Result := 2664
     else if field = 'RetSymIdx' then Result := 2672
     else if field = 'ScopeBase' then Result := 2680;
+  end
+  else if rec = REC_TRAWTOKEN then
+  begin
+    if field = 'Kind'    then Result := 0
+    else if field = 'IVal'    then Result := 8
+    else if field = 'Line'    then Result := 16
+    else if field = 'SOffset' then Result := 24
+    else if field = 'SLen'    then Result := 32;
   end;
 end;
 

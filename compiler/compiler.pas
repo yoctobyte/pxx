@@ -42,8 +42,11 @@ begin
   GlobFixCount := 0; CallFixCount := 0;
   SymCount := 0; ProcCount := 0;
   FrameSize := 0; CurProc := -1;
+  TokCount := 0; TokPos := 0; TokCharLen := 0;
   AddConst('StdErr', tyInteger, 2);
 
+  LexAll;
+  TokPos := 0;
   Next;
   ParseProgram;
   writeELF(outFile);

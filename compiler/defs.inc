@@ -11,6 +11,7 @@ const
   MAX_CALLFIX = 4096;
   MAX_GLOBFIX = 8192;
   STRING_CAP  = 1048576;
+  MAX_TOKENS  = 131072;
 
   SYS_READ  = 0;
   SYS_WRITE = 1;
@@ -57,6 +58,14 @@ type
     SVal : AnsiString;
     IVal : Int64;
     Line : Integer;
+  end;
+
+  TRawToken = record
+    Kind    : TTokenKind;
+    IVal    : Int64;
+    Line    : Integer;
+    SOffset : Integer;
+    SLen    : Integer;
   end;
 
   TStrEntry = record
@@ -161,6 +170,12 @@ var
 
   { Reserved BSS slot 0: initial rsp (for argv access) }
   BSS_INITIAL_RSP : Integer;  { always 0; set in ParseProgram init }
+
+  TokChars   : array[0..STRING_CAP-1] of Char;
+  TokCharLen : Integer;
+  Tokens     : array[0..MAX_TOKENS-1] of TRawToken;
+  TokCount   : Integer;
+  TokPos     : Integer;
 
 {$ifdef FPC}
 function sysopen(const path: AnsiString; flags: Integer): Integer;

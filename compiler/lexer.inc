@@ -296,7 +296,7 @@ begin
 end;
 {$endif}
 
-procedure Next;
+procedure LexOne;
 var c: Char; s: AnsiString; n: Int64;
 begin
   if VERBOSE then writeln('Entering Next. SrcPos = ', SrcPos);
@@ -421,6 +421,52 @@ begin
          else CurTok.Kind := tkGt;
     else Error('unexpected character');
   end;
+end;
+
+procedure LexAll;
+var len, i: Integer; sval: AnsiString;
+begin
+  TokCharLen := 0;
+  TokCount   := 0;
+  repeat
+    LexOne;
+    if TokCount >= MAX_TOKENS then Error('token buffer overflow');
+    Tokens[TokCount].Kind    := CurTok.Kind;
+    Tokens[TokCount].IVal    := CurTok.IVal;
+    Tokens[TokCount].Line    := CurTok.Line;
+    sval := CurTok.SVal;
+    len  := Length(sval);
+    Tokens[TokCount].SOffset := TokCharLen;
+    Tokens[TokCount].SLen    := len;
+    i := 1;
+    while i <= len do
+    begin
+      TokChars[TokCharLen] := sval[i];
+      Inc(TokCharLen);
+      Inc(i);
+    end;
+    Inc(TokCount);
+  until CurTok.Kind = tkEOF;
+end;
+
+procedure Next;
+var i, off, len, j: Integer;
+begin
+  if TokPos >= TokCount then begin CurTok.Kind := tkEOF; Exit; end;
+  CurTok.Kind := Tokens[TokPos].Kind;
+  CurTok.IVal := Tokens[TokPos].IVal;
+  CurTok.Line := Tokens[TokPos].Line;
+  CurTok.SVal := '';
+  off := Tokens[TokPos].SOffset;
+  len := Tokens[TokPos].SLen;
+  i := 0;
+  while i < len do
+  begin
+    j := off + i;
+    AppendChar(CurTok.SVal, TokChars[j]);
+    Inc(i);
+  end;
+  Inc(TokPos);
 end;
 
 function Eat(k: TTokenKind): Boolean;
