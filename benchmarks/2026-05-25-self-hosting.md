@@ -7,9 +7,16 @@ made the normal build path.
 
 The project owner described this result as making his day, particularly
 because FPC is already regarded as a very fast compiler compared with many
-development environments. This reaction is part of the historical record:
-recursive self-hosting did not merely work; its first measured build path was
-immediately fast enough to feel significant.
+development environments.
+
+The accomplishment is objectively notable as well as personally satisfying.
+The repository began with the stage-1 scaffold commit at
+`2026-05-24 16:50:46 +0200` and reached deterministic recursive self-hosting
+at `2026-05-25 17:46:30 +0200`: `24h 55m 44s`, less than 25 hours from
+scaffold to a compiler that reproduces itself byte-for-byte. At that point
+the self-hosted compiler had no optimization pipeline, yet it compiled its
+own source more than twenty times faster than the FPC comparison measured
+below. That combination is a project milestone in its own right.
 
 ## Subject
 
@@ -76,8 +83,8 @@ cheap enough to use as the default development path while FPC remains a
 compatibility and recovery compiler.
 
 This lead is not assumed to be permanent. As the compiler grows beyond its
-current subset, stronger semantic analysis, diagnostics, optimizations,
-additional language frontends, and runtime support may add real compilation
-cost. Keep this baseline as the starting point, and rerun `make benchmark`
-after substantial compiler-capability changes so future speed comparisons
-remain honest.
+current subset, stronger semantic analysis, diagnostics, future optimization
+passes, additional language frontends, and runtime support may add real
+compilation cost. Keep this baseline as the starting point, and rerun
+`make benchmark` after substantial compiler-capability changes so future
+speed comparisons remain honest.
