@@ -4,19 +4,39 @@ FPCFLAGS = -O2 -Tlinux -Px86_64
 COMPILER     := compiler/pascal26
 COMPILER_SRC := compiler/compiler.pas
 COMPILER_INC := $(wildcard compiler/*.inc)
+FPC_COMPILER := /tmp/pascal26-fpc
+BUILD_COMPILER := /tmp/pascal26-build
+VERIFY_COMPILER := /tmp/pascal26-verify
 
-.PHONY: all test clean bootstrap-check
+.PHONY: all bootstrap bootstrap-check fpc-check test clean distclean
 
-all: bootstrap-check $(COMPILER)
+all: $(COMPILER)
 
 bootstrap-check:
 	@which $(FPC) > /dev/null 2>&1 || \
 	  (echo "fpc not found. Install: sudo apt install fpc"; exit 1)
 
-$(COMPILER): $(COMPILER_SRC) $(COMPILER_INC)
-	$(FPC) $(FPCFLAGS) -o$(COMPILER) $(COMPILER_SRC)
+bootstrap: bootstrap-check
+	$(FPC) $(FPCFLAGS) -o$(FPC_COMPILER) $(COMPILER_SRC)
+	$(FPC_COMPILER) $(COMPILER_SRC) $(BUILD_COMPILER)
+	$(BUILD_COMPILER) $(COMPILER_SRC) $(VERIFY_COMPILER)
+	cmp $(BUILD_COMPILER) $(VERIFY_COMPILER)
+	mv $(BUILD_COMPILER) $(COMPILER)
 
-test: $(COMPILER)
+$(COMPILER): $(COMPILER_SRC) $(COMPILER_INC)
+	@test -x $(COMPILER) || \
+	  (echo "self-hosted compiler seed missing. Run: make bootstrap"; exit 1)
+	./$(COMPILER) $(COMPILER_SRC) $(BUILD_COMPILER)
+	$(BUILD_COMPILER) $(COMPILER_SRC) $(VERIFY_COMPILER)
+	cmp $(BUILD_COMPILER) $(VERIFY_COMPILER)
+	mv $(BUILD_COMPILER) $(COMPILER)
+
+fpc-check: bootstrap-check $(COMPILER)
+	$(FPC) $(FPCFLAGS) -o$(FPC_COMPILER) $(COMPILER_SRC)
+	$(FPC_COMPILER) $(COMPILER_SRC) /tmp/pascal26-from-fpc
+	cmp $(COMPILER) /tmp/pascal26-from-fpc
+
+test: $(COMPILER) fpc-check
 	./$(COMPILER) test/hello.pas /tmp/hello26
 	test "$$(/tmp/hello26)" = "Hello, World!"
 	./$(COMPILER) test/bootstrap_features.pas /tmp/bootstrap_features26
@@ -31,6 +51,12 @@ test: $(COMPILER)
 	test "$$(/tmp/string_compare26)" = "$$(printf '1\n1\n1')"
 	./$(COMPILER) test/record_string_field.pas /tmp/record_string_field26
 	test "$$(/tmp/record_string_field26)" = "$$(printf '1\n4')"
+	./$(COMPILER) test/vars.pas /tmp/vars26
+	test "$$(/tmp/vars26)" = "$$(printf 'Sum: 42\nCountdown:\n5\n4\n3\n2\n1\nSquares:\n1\n4\n9\n16\n25\nbig\nloop 0\nloop 1\nloop 2')"
+	./$(COMPILER) test/arrays.pas /tmp/arrays26
+	test "$$(/tmp/arrays26)" = "$$(printf 'Squares:\n0\n1\n4\n9\n16\n25\n36\n49\n64\n81\nH\ni\n!')"
+	./$(COMPILER) test/strings.pas /tmp/strings26
+	test "$$(/tmp/strings26)" = "$$(printf 'Hello, World!\nPascal26\n13\nPascal26\n8')"
 	./$(COMPILER) $(COMPILER_SRC) /tmp/pascal26-self
 	/tmp/pascal26-self test/hello.pas /tmp/self-hello26
 	test "$$(/tmp/self-hello26)" = "Hello, World!"
@@ -65,4 +91,7 @@ test: $(COMPILER)
 	cmp /tmp/pascal26-next /tmp/pascal26-fixedpoint
 
 clean:
-	rm -f $(COMPILER) compiler/*.o compiler/*.ppu
+	rm -f compiler/*.o compiler/*.ppu
+
+distclean: clean
+	rm -f $(COMPILER)

@@ -45,6 +45,10 @@ goal: create a self hosting pascal compiler, evolving into a "frankenstein" mult
 - git commit at each step
 - cross-compiler capability from the start
 - direct (native) build also from the start
+- normal development builds are self-hosted: `make` rebuilds through the existing `compiler/pascal26` seed and checks a recursive fixed point before installing it
+- `make bootstrap` is the recovery path: FPC creates a seed, which must still reach the same recursive fixed point before it replaces the working compiler
+- `make test` also runs `make fpc-check` coverage so the compiler source remains FPC-compatible
+- compiler source uses only stable language features: a feature is stable for self-hosting after it passes the recursive bootstrap checks; new features remain in tests until then
 
 ## At the horizon
 - Frankenstein compiler. a bunch of useful (yet compatible languages) in the same code base. including stuff like Rust. Now, we don't have to be accurate as rust, we just have to compile the code. Other suggestions are SQL (!), bash??, etc. For names we are considering like "Frankenpile" or "Francompiler" or. But Fran is a name and a common known youtube personality. Other names always open for suggestion. Yet for now we keep our implementation in pascal, as that ought to be universal enough and sortof makes sense to build a frankstein compiler out of a single language. although surely we hope the day will come that we say 'if we write this in this other language, it gets 50% shorter. or more readable'. etc.
