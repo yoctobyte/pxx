@@ -171,14 +171,12 @@ begin
   for i := SymCount-1 downto 0 do
     if StrEqual(Syms[i].Name, lo) then begin Result := i; Exit; end;
   
-  if StrEqual(lo, 'ELF_HEADER_SIZE') then
+  if VERBOSE and StrEqual(lo, 'ELF_HEADER_SIZE') then
   begin
     writeln('FindSym failed for ELF_HEADER_SIZE. lo = ', lo);
     writeln('SymCount = ', SymCount);
     for i := 0 to SymCount-1 do
-    begin
       writeln('  Sym ', i, ': ', Syms[i].Name);
-    end;
   end;
   Result := -1;
 end;

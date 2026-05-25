@@ -28,7 +28,7 @@ begin
   if ParamCount >= 2 then outFile := ParamStr(2);
 
   LoadFile(inFile, Source);
-  writeln('Loaded file length: ', Length(Source));
+  if VERBOSE then writeln('Loaded file length: ', Length(Source));
 
   SrcPos   := 1; SrcLine  := 1;
   CodeLen  := 0;

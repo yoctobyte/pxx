@@ -12,7 +12,7 @@ end;
 procedure SkipSpace;
 var doneSkip: Boolean;
 begin
-  writeln('Entering SkipSpace. SrcPos = ', SrcPos, ' Length(Source) = ', Length(Source));
+  if VERBOSE then writeln('Entering SkipSpace. SrcPos = ', SrcPos, ' Length(Source) = ', Length(Source));
   while SrcPos <= Length(Source) do
     case Source[SrcPos] of
       ' ', #9, #13: Inc(SrcPos);
@@ -294,7 +294,7 @@ end;
 procedure Next;
 var c: Char; s: AnsiString; n: Int64;
 begin
-  writeln('Entering Next. SrcPos = ', SrcPos);
+  if VERBOSE then writeln('Entering Next. SrcPos = ', SrcPos);
   SkipSpace;
   CurTok.Line := SrcLine; CurTok.SVal := '';
   if SrcPos > Length(Source) then begin CurTok.Kind := tkEOF; Exit; end;
@@ -309,7 +309,7 @@ begin
       AppendChar(s, Source[SrcPos]);
       Inc(SrcPos);
     end;
-    writeln('Scanned token s: ', s, ' len: ', Length(s));
+    if VERBOSE then writeln('Scanned token s: ', s, ' len: ', Length(s));
     CurTok.Kind := Keyword(s); CurTok.SVal := s; Exit;
   end;
 

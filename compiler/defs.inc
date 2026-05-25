@@ -1,4 +1,6 @@
 const
+  VERBOSE     = False;   { set True to enable debug trace output }
+
   MAX_CODE    = 1048576;
   MAX_DATA    = 1048576;
   MAX_STRS    = 4096;
