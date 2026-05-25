@@ -27,14 +27,14 @@ end;
 function RecSize(rec: Integer): Integer;
 begin
   Result := 8;
-  if rec = REC_TTOKEN then Result := 32
-  else if rec = REC_TSTRENTRY then Result := 24
+  if rec = REC_TTOKEN then Result := 288
+  else if rec = REC_TSTRENTRY then Result := 280
   else if rec = REC_TFIXUP then Result := 16
   else if rec = REC_TGLOBFIX then Result := 16
   else if rec = REC_TCALLFIX then Result := 16
-  else if rec = REC_TSYMBOL then Result := 80
-  else if rec = REC_TPARAM then Result := 24
-  else if rec = REC_TPROC then Result := 256;
+  else if rec = REC_TSYMBOL then Result := 336
+  else if rec = REC_TPARAM then Result := 280
+  else if rec = REC_TPROC then Result := 2560;
 end;
 
 function RecFieldOffset(rec: Integer; const field: AnsiString): Integer;
@@ -44,14 +44,14 @@ begin
   begin
     if field = 'Kind' then Result := 0
     else if field = 'SVal' then Result := 8
-    else if field = 'IVal' then Result := 16
-    else if field = 'Line' then Result := 24;
+    else if field = 'IVal' then Result := 272
+    else if field = 'Line' then Result := 280;
   end
   else if rec = REC_TSTRENTRY then
   begin
     if field = 'Text' then Result := 0
-    else if field = 'Offset' then Result := 8
-    else if field = 'Len' then Result := 16;
+    else if field = 'Offset' then Result := 264
+    else if field = 'Len' then Result := 272;
   end
   else if rec = REC_TFIXUP then
   begin
@@ -71,33 +71,33 @@ begin
   else if rec = REC_TSYMBOL then
   begin
     if field = 'Name' then Result := 0
-    else if field = 'TypeKind' then Result := 8
-    else if field = 'Kind' then Result := 16
-    else if field = 'Offset' then Result := 24
-    else if field = 'ConstVal' then Result := 32
-    else if field = 'IsArray' then Result := 40
-    else if field = 'ArrLen' then Result := 48
-    else if field = 'ElemType' then Result := 56
-    else if field = 'RecName' then Result := 64
-    else if field = 'ElemRecName' then Result := 72;
+    else if field = 'TypeKind' then Result := 264
+    else if field = 'Kind' then Result := 272
+    else if field = 'Offset' then Result := 280
+    else if field = 'ConstVal' then Result := 288
+    else if field = 'IsArray' then Result := 296
+    else if field = 'ArrLen' then Result := 304
+    else if field = 'ElemType' then Result := 312
+    else if field = 'RecName' then Result := 320
+    else if field = 'ElemRecName' then Result := 328;
   end
   else if rec = REC_TPARAM then
   begin
     if field = 'Name' then Result := 0
-    else if field = 'TypeKind' then Result := 8
-    else if field = 'SymIdx' then Result := 16;
+    else if field = 'TypeKind' then Result := 264
+    else if field = 'SymIdx' then Result := 272;
   end
   else if rec = REC_TPROC then
   begin
     if field = 'Name' then Result := 0
-    else if field = 'IsFunc' then Result := 8
-    else if field = 'RetType' then Result := 16
-    else if field = 'ParamCount' then Result := 24
-    else if field = 'Params' then Result := 32
-    else if field = 'BodyAddr' then Result := 224
-    else if field = 'FramePatch' then Result := 232
-    else if field = 'RetSymIdx' then Result := 240
-    else if field = 'ScopeBase' then Result := 248;
+    else if field = 'IsFunc' then Result := 264
+    else if field = 'RetType' then Result := 272
+    else if field = 'ParamCount' then Result := 280
+    else if field = 'Params' then Result := 288
+    else if field = 'BodyAddr' then Result := 2528
+    else if field = 'FramePatch' then Result := 2536
+    else if field = 'RetSymIdx' then Result := 2544
+    else if field = 'ScopeBase' then Result := 2552;
   end;
 end;
 
@@ -170,7 +170,7 @@ begin
   lo := name;
   for i := SymCount-1 downto 0 do
     if StrEqual(Syms[i].Name, lo) then begin Result := i; Exit; end;
-  
+
   if VERBOSE and StrEqual(lo, 'ELF_HEADER_SIZE') then
   begin
     writeln('FindSym failed for ELF_HEADER_SIZE. lo = ', lo);
@@ -192,11 +192,15 @@ begin
   Syms[SymCount].ArrLen   := 0;
   Syms[SymCount].ElemType := tyInteger;
   Syms[SymCount].RecName  := LastTypeRecId;
-  
+
   sz := 8;
-  if tk = tyString then sz := STRING_CAP + 8
+  if tk = tyString then
+  begin
+    if CurProc < 0 then sz := STRING_CAP + 8
+    else sz := LOCAL_STR_CAP + 8;
+  end
   else if tk = tyRecord then sz := RecSize(LastTypeRecId);
-  
+
   if CurProc < 0 then
   begin
     Syms[SymCount].Kind   := skGlobal;
@@ -219,9 +223,13 @@ begin
   elemSize := 1;
   if elemType in [tyInteger, tyBoolean] then elemSize := 8
   else if elemType = tyChar then elemSize := 1
-  else if elemType = tyString then elemSize := STRING_CAP + 8
+  else if elemType = tyString then
+  begin
+    if CurProc < 0 then elemSize := STRING_CAP + 8
+    else elemSize := LOCAL_STR_CAP + 8;
+  end
   else if elemType = tyRecord then elemSize := RecSize(LastTypeRecId);
-  
+
   totalSize := (hi - lo + 1) * elemSize;
   Syms[SymCount].Name     := name;
   Syms[SymCount].TypeKind := elemType;
@@ -230,7 +238,7 @@ begin
   Syms[SymCount].ArrLen   := hi - lo + 1;
   Syms[SymCount].ElemType := elemType;
   Syms[SymCount].ElemRecName := LastTypeRecId;
-  
+
   if CurProc < 0 then
   begin
     Syms[SymCount].Kind   := skGlobal;
@@ -266,12 +274,9 @@ procedure EmitLoadVar(idx: Integer);
 begin
   if (Syms[idx].Kind = skParam) and (Syms[idx].TypeKind = tyString) then
   begin
-    { Load string pointer pointer: mov rax, [rbp + Offset] }
-    EmitB($48); EmitB($8B); EmitB($85); EmitI32(Syms[idx].Offset);
-    { Load string pointer: mov rax, [rax] }
-    EmitB($48); EmitB($8B); EmitB($00);
-    { Load length: mov rax, [rax] }
-    EmitB($48); EmitB($8B); EmitB($00);
+    { param slot holds pointer P to string struct; load P then deref for length }
+    EmitB($48); EmitB($8B); EmitB($85); EmitI32(Syms[idx].Offset); { mov rax, [rbp+off] = P }
+    EmitB($48); EmitB($8B); EmitB($00);                              { mov rax, [P] = length }
   end
   else
   begin
@@ -319,12 +324,9 @@ procedure EmitStoreStrLen(idx: Integer);
 begin
   if (Syms[idx].Kind = skParam) and (Syms[idx].TypeKind = tyString) then
   begin
-    { Load string pointer pointer: mov rcx, [rbp + Offset] }
-    EmitB($48); EmitB($8B); EmitB($8D); EmitI32(Syms[idx].Offset);
-    { Load string pointer: mov rcx, [rcx] }
-    EmitB($48); EmitB($8B); EmitB($09);
-    { Store rax (length) into [rcx]: mov [rcx], rax }
-    EmitB($48); EmitB($89); EmitB($01);
+    { param slot holds pointer P; store rax (length) into [P] }
+    EmitB($48); EmitB($8B); EmitB($8D); EmitI32(Syms[idx].Offset); { mov rcx, [rbp+off] = P }
+    EmitB($48); EmitB($89); EmitB($01);                              { mov [P], rax }
   end
   else
   begin
@@ -341,12 +343,9 @@ procedure EmitLeaStrDataRdi(idx: Integer);
 begin
   if (Syms[idx].Kind = skParam) and (Syms[idx].TypeKind = tyString) then
   begin
-    { Load string pointer pointer: mov rdi, [rbp + Offset] }
-    EmitB($48); EmitB($8B); EmitB($BD); EmitI32(Syms[idx].Offset);
-    { Load string pointer: mov rdi, [rdi] }
-    EmitB($48); EmitB($8B); EmitB($3F);
-    { Add 8: add rdi, 8 }
-    EmitB($48); EmitB($83); EmitB($C7); EmitB($08);
+    { param slot holds pointer P; data at P+8 }
+    EmitB($48); EmitB($8B); EmitB($BD); EmitI32(Syms[idx].Offset); { mov rdi, [rbp+off] = P }
+    EmitB($48); EmitB($83); EmitB($C7); EmitB($08);                  { add rdi, 8 → P+8 }
   end
   else
   begin
@@ -363,12 +362,9 @@ procedure EmitLeaStrDataRsi(idx: Integer);
 begin
   if (Syms[idx].Kind = skParam) and (Syms[idx].TypeKind = tyString) then
   begin
-    { Load string pointer pointer: mov rsi, [rbp + Offset] }
-    EmitB($48); EmitB($8B); EmitB($B5); EmitI32(Syms[idx].Offset);
-    { Load string pointer: mov rsi, [rsi] }
-    EmitB($48); EmitB($8B); EmitB($36);
-    { Add 8: add rsi, 8 }
-    EmitB($48); EmitB($83); EmitB($C6); EmitB($08);
+    { param slot holds pointer P; data at P+8 }
+    EmitB($48); EmitB($8B); EmitB($B5); EmitI32(Syms[idx].Offset); { mov rsi, [rbp+off] = P }
+    EmitB($48); EmitB($83); EmitB($C6); EmitB($08);                  { add rsi, 8 → P+8 }
   end
   else
   begin
@@ -386,14 +382,10 @@ procedure EmitwriteStrVar(idx: Integer);
 begin
   if (Syms[idx].Kind = skParam) and (Syms[idx].TypeKind = tyString) then
   begin
-    { Load string pointer pointer: mov rsi, [rbp + Offset] }
-    EmitB($48); EmitB($8B); EmitB($B5); EmitI32(Syms[idx].Offset);
-    { Load string pointer: mov rsi, [rsi] }
-    EmitB($48); EmitB($8B); EmitB($36);
-    { Load length: mov rdx, [rsi] }
-    EmitB($48); EmitB($8B); EmitB($16);
-    { Load data pointer: add rsi, 8 }
-    EmitB($48); EmitB($83); EmitB($C6); EmitB($08);
+    { param slot holds pointer P; length at [P], data at P+8 }
+    EmitB($48); EmitB($8B); EmitB($B5); EmitI32(Syms[idx].Offset); { mov rsi, [rbp+off] = P }
+    EmitB($48); EmitB($8B); EmitB($16);                              { mov rdx, [P] = length }
+    EmitB($48); EmitB($83); EmitB($C6); EmitB($08);                  { add rsi, 8 → P+8 }
   end
   else
   begin
@@ -421,7 +413,7 @@ begin
     { lea rdi, [bss+Offset+8] }
     EmitLeaStrDataRdi(dstIdx);
     { mov rsi, data_addr (literal bytes in data section) }
-    EmitB($48); EmitB($BE); EmitDataRef(litOff);
+    EmitB($48); EmitB($BE); EmitDataRef(litOff + 8);
     { rep movsb }
     EmitB($F3); EmitB($A4);
   end;
@@ -517,6 +509,44 @@ begin
   Patch32(skipJmp, CodeLen - (skipJmp + 4));
 end;
 
+procedure EmitStrCmpReg(eq: Boolean);
+var skipJmp, okJmp: Integer;
+begin
+  { mov rsi, rcx }
+  EmitB($48); EmitB($89); EmitB($CE);
+  { add rsi, 8 }
+  EmitB($48); EmitB($83); EmitB($C6); EmitB($08);
+  { mov rdi, rax }
+  EmitB($48); EmitB($89); EmitB($C7);
+  { add rdi, 8 }
+  EmitB($48); EmitB($83); EmitB($C7); EmitB($08);
+  { mov rcx, [rcx] }
+  EmitB($48); EmitB($8B); EmitB($09);
+  { cmp rcx, [rax] }
+  EmitB($48); EmitB($3B); EmitB($08);
+
+  { jne not_equal }
+  EmitB($0F); EmitB($85); skipJmp := CodeLen; EmitI32(0);
+
+  { repe cmpsb }
+  EmitB($F3); EmitB($A6);
+
+  { je equal }
+  EmitB($0F); EmitB($84); okJmp := CodeLen; EmitI32(0);
+
+  { not_equal: }
+  Patch32(skipJmp, CodeLen - (skipJmp + 4));
+  if eq then MovRaxImm(0) else MovRaxImm(1);
+  EmitB($E9); skipJmp := CodeLen; EmitI32(0);
+
+  { equal: }
+  Patch32(okJmp, CodeLen - (okJmp + 4));
+  if eq then MovRaxImm(1) else MovRaxImm(0);
+
+  { end: }
+  Patch32(skipJmp, CodeLen - (skipJmp + 4));
+end;
+
 { ===== Array element access ===== }
 
 procedure EmitArrElemAddr(arrIdx: Integer);
@@ -525,7 +555,11 @@ var elemSize: Integer;
 begin
   elemSize := 1;
   if Syms[arrIdx].ElemType in [tyInteger, tyBoolean] then elemSize := 8
-  else if Syms[arrIdx].ElemType = tyString then elemSize := STRING_CAP + 8
+  else if Syms[arrIdx].ElemType = tyString then
+  begin
+    if Syms[arrIdx].Kind = skGlobal then elemSize := STRING_CAP + 8
+    else elemSize := LOCAL_STR_CAP + 8;
+  end
   else if Syms[arrIdx].ElemType = tyRecord then elemSize := RecSize(Syms[arrIdx].ElemRecName);
   
   if elemSize = 8 then
@@ -683,7 +717,31 @@ procedure EmitProcEpilog(retSymIdx: Integer);
 begin
   if retSymIdx >= 0 then
   begin
-    EmitB($48); EmitB($8B); EmitB($85); EmitI32(Syms[retSymIdx].Offset);
+    if Syms[retSymIdx].TypeKind = tyString then
+    begin
+      if Syms[retSymIdx].Kind = skGlobal then
+      begin
+        { Return BSS address of global string structure }
+        EmitB($48); EmitB($C7); EmitB($C0); EmitGlobRef(Syms[retSymIdx].Offset);
+      end
+      else
+      begin
+        { Return address of the local string structure on the stack }
+        EmitB($48); EmitB($8D); EmitB($85); EmitI32(Syms[retSymIdx].Offset);
+      end;
+    end
+    else
+    begin
+      if Syms[retSymIdx].Kind = skGlobal then
+      begin
+        EmitB($48); EmitB($8B); EmitB($04); EmitB($25); EmitGlobRef(Syms[retSymIdx].Offset);
+      end
+      else
+      begin
+        { Return contents of integer/char/boolean }
+        EmitB($48); EmitB($8B); EmitB($85); EmitI32(Syms[retSymIdx].Offset);
+      end;
+    end;
   end;
   EmitB($C9); EmitB($C3);
 end;

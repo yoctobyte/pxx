@@ -140,13 +140,8 @@ begin
     { Local variable or parameter base address }
     if (Syms[idx].Kind = skParam) and (Syms[idx].IsArray or (Syms[idx].TypeKind = tyString)) then
     begin
-      { Load pointer value from parameter slot: mov rax, [rbp + Offset] }
-      EmitB($48); EmitB($8B); EmitB($85); EmitI32(Syms[idx].Offset);
-      if Syms[idx].TypeKind = tyString then
-      begin
-        { Load ptr: mov rax, [rax] }
-        EmitB($48); EmitB($8B); EmitB($00);
-      end;
+      { param slot holds pointer P; address of string/array struct = P }
+      EmitB($48); EmitB($8B); EmitB($85); EmitI32(Syms[idx].Offset); { mov rax, [rbp+off] = P }
     end
     else
     begin
@@ -173,8 +168,18 @@ begin
         elemSize := 1;
         if curTk in [tyInteger, tyBoolean] then elemSize := 8
         else if curTk = tyChar then elemSize := 1
-        else if curTk = tyString then elemSize := STRING_CAP + 8
-        else if curTk = tyRecord then elemSize := RecSize(curRec);
+        else if curTk = tyString then
+        begin
+          if Syms[idx].Kind = skGlobal then elemSize := STRING_CAP + 8
+          else elemSize := LOCAL_STR_CAP + 8;
+        end
+        else if curTk = tyRecord then
+        begin
+          if curRec = REC_NONE then
+            elemSize := RecSize(Syms[idx].ElemRecName)
+          else
+            elemSize := RecSize(curRec);
+        end;
         
         if elemSize = 8 then
         begin
@@ -391,20 +396,22 @@ end;
 procedure ParseFactor;
 var name: AnsiString; recName: Integer; idx, pi, i: Integer; tk: TTypeKind;
 begin
+  LastExprTk := tyInteger;
   case CurTok.Kind of
     tkInteger: begin MovRaxImm(CurTok.IVal); Next; end;
-    tkTrue:    begin MovRaxImm(1); Next; end;
-    tkFalse:   begin MovRaxImm(0); Next; end;
-	    tkString:
-	    begin
-	      { Single-char literal → ordinal value }
-	      if Length(CurTok.SVal) = 1 then begin MovRaxImm(Ord(CurTok.SVal[1])); Next; end
-	      else
-	      begin
-	        idx := InternStr(CurTok.SVal); Next;
-	        EmitB($48); EmitB($B8); EmitDataRef(Strs[idx].Offset);
-	      end;
-	    end;
+    tkTrue:    begin MovRaxImm(1); Next; LastExprTk := tyBoolean; end;
+    tkFalse:   begin MovRaxImm(0); Next; LastExprTk := tyBoolean; end;
+    tkString:
+    begin
+      { Single-char literal → ordinal value }
+      if Length(CurTok.SVal) = 1 then begin MovRaxImm(Ord(CurTok.SVal[1])); Next; LastExprTk := tyChar; end
+      else
+      begin
+        idx := InternStr(CurTok.SVal); Next;
+        EmitB($48); EmitB($B8); EmitDataRef(Strs[idx].Offset);
+        LastExprTk := tyString;
+      end;
+    end;
     tkLParen:  begin Next; ParseExpr; Expect(tkRParen, ')'); end;
     tkMinus:
     begin
@@ -415,11 +422,13 @@ begin
     begin
       Next; ParseFactor;
       EmitB($48); EmitB($83); EmitB($F0); EmitB($01);
+      LastExprTk := tyBoolean;
     end;
-	    tkOrd, tkChr:
-	    begin
-	      Next; Expect(tkLParen, '('); ParseExpr; Expect(tkRParen, ')');
-	    end;
+    tkOrd, tkChr:
+    begin
+      Next; Expect(tkLParen, '('); ParseExpr; Expect(tkRParen, ')');
+      if CurTok.Kind = tkChr then LastExprTk := tyChar else LastExprTk := tyInteger;
+    end;
     tkInteger_T, tkLongWord_T:
     begin
       Next; Expect(tkLParen, '('); ParseExpr; Expect(tkRParen, ')');
@@ -448,9 +457,9 @@ begin
       EmitB($48); EmitB($8D); EmitB($3C); EmitB($25); EmitGlobRef(Syms[idx].Offset + 8);
       Next; Expect(tkComma, ',');
       ParseExpr;   { flags → rax }
-	  EmitB($48); EmitB($89); EmitB($C6);               { mov rsi, rax }
-	  MovRaxImm(0); EmitB($48); EmitB($89); EmitB($C2); { rdx=0 (mode ignored for open) }
-	  MovRaxImm(SYS_OPEN); EmitSyscall;
+      EmitB($48); EmitB($89); EmitB($C6);               { mov rsi, rax }
+      MovRaxImm(0); EmitB($48); EmitB($89); EmitB($C2); { rdx=0 (mode ignored for open) }
+      MovRaxImm(SYS_OPEN); EmitSyscall;
       Expect(tkRParen, ')');
     end;
     tkSysRead:
@@ -466,7 +475,7 @@ begin
       EmitB($48); EmitB($8D); EmitB($34); EmitB($25); EmitGlobRef(Syms[idx].Offset);
       Next; Expect(tkComma, ',');
       ParseExpr; EmitB($48); EmitB($89); EmitB($C2);     { mov rdx, rax (count) }
-	      MovRaxImm(SYS_READ); EmitSyscall;
+      MovRaxImm(SYS_READ); EmitSyscall;
       Expect(tkRParen, ')');
     end;
     tkSyswrite:
@@ -487,12 +496,12 @@ begin
     end;
     tkArgCount:
     begin
-      { ArgCount(): Integer = argc }
+      { ArgCount(): Integer = argc - 1  (Pascal ParamCount semantics) }
       Next;
       if CurTok.Kind = tkLParen then begin Next; Expect(tkRParen, ')'); end;
-      { mov rax, [bss_initial_rsp]; load argc from [initial_rsp] }
       EmitB($48); EmitB($8B); EmitB($04); EmitB($25); EmitGlobRef(BSS_INITIAL_RSP);
-      EmitB($48); EmitB($8B); EmitB($00);               { mov rax, [rax] }
+      EmitB($48); EmitB($8B); EmitB($00);               { mov rax, [rax] = argc }
+      EmitB($48); EmitB($FF); EmitB($C8);               { dec rax → argc-1 }
     end;
     tkIdent:
     begin
@@ -530,6 +539,7 @@ begin
           end;
         EmitCallProc(pi);
         { rax = return value }
+        LastExprTk := Procs[pi].RetType;
       end
       else if idx >= 0 then
       begin
@@ -537,6 +547,7 @@ begin
         if CurTok.Kind in [tkLBrack, tkDot] then
         begin
           CompileLValueAddressInternal(idx, tk, recName);
+          LastExprTk := tk;
           if tk = tyString then
             begin { leave address in rax } end
           else if tk in [tyInteger, tyBoolean] then
@@ -546,6 +557,7 @@ begin
         end
         else
         begin
+          LastExprTk := Syms[idx].TypeKind;
           if (Syms[idx].TypeKind = tyString) and not Syms[idx].IsArray then
             CompileLValueAddressInternal(idx, tk, recName)
           else
@@ -602,9 +614,10 @@ begin
 end;
 
 procedure ParseExpr;
-var op: TTokenKind;
+var op: TTokenKind; lhsTk: TTypeKind;
 begin
   ParseSimpleExpr;
+  lhsTk := LastExprTk;
   if (CurTok.Kind = tkIdent) and ((CurTok.SVal = 'in') or (CurTok.SVal = 'In')) then
   begin
     Next;
@@ -614,17 +627,25 @@ begin
   if CurTok.Kind in [tkEq, tkNeq, tkLt, tkLe, tkGt, tkGe] then
   begin
     op := CurTok.Kind; Next; EmitB($50); ParseSimpleExpr;
-    EmitB($48); EmitB($89); EmitB($C1); EmitB($58);
-    EmitB($48); EmitB($3B); EmitB($C1);
-    case op of
-      tkEq:  begin EmitB($0F); EmitB($94); EmitB($C0); end;
-      tkNeq: begin EmitB($0F); EmitB($95); EmitB($C0); end;
-      tkLt:  begin EmitB($0F); EmitB($9C); EmitB($C0); end;
-      tkLe:  begin EmitB($0F); EmitB($9E); EmitB($C0); end;
-      tkGt:  begin EmitB($0F); EmitB($9F); EmitB($C0); end;
-      tkGe:  begin EmitB($0F); EmitB($9D); EmitB($C0); end;
+    if (lhsTk = tyString) or (LastExprTk = tyString) then
+    begin
+      EmitB($48); EmitB($89); EmitB($C1); EmitB($58);  { mov rcx, rax; pop rax }
+      EmitStrCmpReg(op = tkEq);
+    end
+    else
+    begin
+      EmitB($48); EmitB($89); EmitB($C1); EmitB($58);
+      EmitB($48); EmitB($3B); EmitB($C1);
+      case op of
+        tkEq:  begin EmitB($0F); EmitB($94); EmitB($C0); end;
+        tkNeq: begin EmitB($0F); EmitB($95); EmitB($C0); end;
+        tkLt:  begin EmitB($0F); EmitB($9C); EmitB($C0); end;
+        tkLe:  begin EmitB($0F); EmitB($9E); EmitB($C0); end;
+        tkGt:  begin EmitB($0F); EmitB($9F); EmitB($C0); end;
+        tkGe:  begin EmitB($0F); EmitB($9D); EmitB($C0); end;
+      end;
+      EmitB($48); EmitB($0F); EmitB($B6); EmitB($C0);
     end;
-    EmitB($48); EmitB($0F); EmitB($B6); EmitB($C0);
   end;
 end;
 
@@ -634,6 +655,8 @@ var r, v: Int64; idx: Integer; op: TTokenKind;
 begin
   r := 0;
   if CurTok.Kind = tkInteger then begin r := CurTok.IVal; Next; end
+  else if CurTok.Kind = tkTrue  then begin r := 1; Next; end
+  else if CurTok.Kind = tkFalse then begin r := 0; Next; end
   else if CurTok.Kind = tkMinus then begin Next; r := -ConstEval(); end
   else if CurTok.Kind = tkIdent then
   begin
@@ -675,6 +698,18 @@ begin
   if CurTok.Kind = tkLParen then
   begin
     Next;
+    { Skip the predefined diagnostic output descriptor: writeln(StdErr, ...) }
+    if CurTok.Kind = tkIdent then
+    begin
+      vidx := FindSym(CurTok.SVal);
+      if (vidx >= 0) and (Syms[vidx].Kind = skConst) and
+         (Syms[vidx].TypeKind = tyInteger) and
+         (Syms[vidx].Name = 'StdErr') then
+      begin
+        Next;  { skip fd identifier }
+        Eat(tkComma);
+      end;
+    end;
     done := False;
     while (CurTok.Kind <> tkRParen) and not done do
     begin
@@ -949,6 +984,21 @@ begin
     end;
 
     { ---- File I/O and argv builtins ---- }
+    tkSyswrite:
+    begin
+      { syswrite(fd, buf_array, n) as statement — discard return value }
+      Next; Expect(tkLParen, '(');
+      ParseExpr; EmitB($48); EmitB($89); EmitB($C7);     { mov rdi, rax (fd) }
+      Expect(tkComma, ',');
+      if CurTok.Kind <> tkIdent then Error('Syswrite: expected array var');
+      idx := FindSym(CurTok.SVal);
+      if (idx < 0) or not Syms[idx].IsArray then Error('Syswrite: not an array var');
+      EmitB($48); EmitB($8D); EmitB($34); EmitB($25); EmitGlobRef(Syms[idx].Offset);
+      Next; Expect(tkComma, ',');
+      ParseExpr; EmitB($48); EmitB($89); EmitB($C2);     { mov rdx, rax (count) }
+      MovRaxImm(1); EmitSyscall;
+      Expect(tkRParen, ')');
+    end;
     tkSysClose:
     begin
       { SysClose(fd) }
@@ -1082,7 +1132,14 @@ var lo: AnsiString;
 begin
   LastTypeRecId := REC_NONE;
   case CurTok.Kind of
-    tkInteger_T, tkLongWord_T: Result := tyInteger;
+    tkInteger_T:
+    begin
+      if (CurTok.SVal = 'byte') or (CurTok.SVal = 'Byte') then
+        Result := tyChar
+      else
+        Result := tyInteger;
+    end;
+    tkLongWord_T: Result := tyInteger;
     tkBoolean_T: Result := tyBoolean;
     tkChar_T:    Result := tyChar;
     tkString_T:  Result := tyString;
@@ -1090,7 +1147,7 @@ begin
     begin
       lo := CurTok.SVal;
       if (lo = 'ansistring') or (lo = 'AnsiString') then Result := tyString
-      else if (lo = 'byte') or (lo = 'Byte') then Result := tyInteger
+      else if (lo = 'byte') or (lo = 'Byte') then Result := tyChar
       else
       begin
         LastTypeRecId := IsRecordType(lo);
@@ -1231,11 +1288,9 @@ var
   parr     : array[0..7] of Boolean;
   nparams  : Integer;
   pi, i    : Integer;
-  savedSC, savedFS : Integer;
+  savedSC, savedFS, savedCurProc : Integer;
   patchPos : Integer;
   depth    : Integer;
-  { arg reg ModRM bytes for store-to-frame: rdi,rsi,rdx,rcx }
-  ArgModRM : array[0..3] of Byte = ($BD, $B5, $95, $8D);
   doneArgs, doneParam, isArr: Boolean;
   startIdx, idx: Integer;
   tokKindOrd: Integer;
@@ -1356,21 +1411,39 @@ begin
   { Return value slot }
   if isFunc then
   begin
-    AllocVar('Result', retType);
-    Procs[pi].RetSymIdx := SymCount - 1;
-    Syms[SymCount-1].Kind := skLocal;
+    if retType = tyString then
+    begin
+      savedCurProc := CurProc;
+      CurProc := -1;
+      AllocVar('Result', retType);
+      CurProc := savedCurProc;
+      Procs[pi].RetSymIdx := SymCount - 1;
+      Syms[SymCount-1].Kind := skGlobal;
+    end
+    else
+    begin
+      AllocVar('Result', retType);
+      Procs[pi].RetSymIdx := SymCount - 1;
+      Syms[SymCount-1].Kind := skLocal;
+    end;
   end;
 
   { Prologue }
   patchPos := EmitProcPrologue;
   Procs[pi].FramePatch := patchPos;
 
-  { Copy params from registers to stack }
+  { Copy params from registers to stack: mov [rbp+off], rdi/rsi/rdx/rcx/r8/r9 }
   for i := 0 to nparams-1 do
   begin
     if i < 4 then
     begin
-      EmitB($48); EmitB($89); EmitB(ArgModRM[i]);
+      EmitB($48); EmitB($89);
+      case i of
+        0: EmitB($BD);   { rdi }
+        1: EmitB($B5);   { rsi }
+        2: EmitB($95);   { rdx }
+        3: EmitB($8D);   { rcx }
+      end;
       EmitI32(Syms[Procs[pi].Params[i].SymIdx].Offset);
     end
     else if i = 4 then
@@ -1463,4 +1536,3 @@ begin
   EmitExit(0);
   ApplyCallFixups;
 end;
-

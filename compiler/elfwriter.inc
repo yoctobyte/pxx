@@ -149,21 +149,96 @@ begin
 end;
 {$endif}
 
-{$ifdef FPC}
 procedure LoadFile(const path: AnsiString; var dst: AnsiString);
-var f: File; n: Integer;
+var f, n: Integer;
 begin
+  LoadPath := path;
   SetLength(dst, STRING_CAP);
-  Assign(f, path);
-  Reset(f, 1);
-  BlockRead(f, dst[1], STRING_CAP, n);
-  Close(f);
-  SetLength(dst, n);
+  f := sysopen(LoadPath, 0);
+  if f >= 0 then
+  begin
+    n := sysread(f, dst[1], STRING_CAP);
+    if n < 0 then n := 0;
+    sysclose(f);
+    SetLength(dst, n);
+  end
+  else
+    SetLength(dst, 0);
 end;
-{$else}
-procedure LoadFile(const path: AnsiString; var dst: AnsiString);
+
+function GetFilePath(const path: AnsiString): AnsiString;
+var i, lastSlash: Integer;
 begin
-  { LoadFile is parsed as built-in instead }
+  lastSlash := 0;
+  for i := 1 to Length(path) do
+  begin
+    if path[i] = '/' then
+      lastSlash := i;
+  end;
+  Result := '';
+  if lastSlash > 0 then
+  begin
+    SetLength(Result, lastSlash);
+    for i := 1 to lastSlash do
+      Result[i] := path[i];
+  end;
 end;
-{$endif}
+
+procedure ExpandIncludes(var src: AnsiString; const baseDir: AnsiString);
+{ Replace dollar-include directives with file contents, one level deep }
+var
+  i, j, k: Integer;
+  fname: AnsiString;
+  c: Char;
+  fullPath: AnsiString;
+begin
+  SetLength(IncExpanded, 0);
+  i := 1;
+  while i <= Length(src) do
+  begin
+    if (i <= Length(src) - 9) and
+       (src[i] = '{') and (src[i+1] = '$') and
+       ((src[i+2] = 'i') or (src[i+2] = 'I')) and
+       ((src[i+3] = 'n') or (src[i+3] = 'N')) and
+       ((src[i+4] = 'c') or (src[i+4] = 'C')) and
+       ((src[i+5] = 'l') or (src[i+5] = 'L')) and
+       ((src[i+6] = 'u') or (src[i+6] = 'U')) and
+       ((src[i+7] = 'd') or (src[i+7] = 'D')) and
+       ((src[i+8] = 'e') or (src[i+8] = 'E')) and
+       (src[i+9] = ' ') then
+    begin
+      j := i + 10;
+      fname := '';
+      while (j <= Length(src)) and (src[j] <> '}') and (src[j] <> #10) do
+      begin
+        c := src[j];
+        if (c <> '''') and (c <> '"') and (c <> ' ') then
+          AppendChar(fname, c);
+        Inc(j);
+      end;
+      if (Length(fname) > 0) and (j <= Length(src)) then
+      begin
+        fullPath := baseDir;
+        for k := 1 to Length(fname) do
+          AppendChar(fullPath, fname[k]);
+        LoadFile(fullPath, IncIncluded);
+        { Append all characters of included to dst }
+        for k := 1 to Length(IncIncluded) do
+          AppendChar(IncExpanded, IncIncluded[k]);
+        i := j + 1;
+      end
+      else
+      begin
+        AppendChar(IncExpanded, src[i]);
+        Inc(i);
+      end;
+    end
+    else
+    begin
+      AppendChar(IncExpanded, src[i]);
+      Inc(i);
+    end;
+  end;
+  src := IncExpanded;
+end;
 

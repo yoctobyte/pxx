@@ -1,7 +1,8 @@
 const
-  VERBOSE     = False;   { set True to enable debug trace output }
+  VERBOSE       = False;  { set True to enable debug trace output }
 
-  MAX_CODE    = 1048576;
+  MAX_CODE      = 1048576;
+  LOCAL_STR_CAP = 256;     { max string length for local/stack variables }
   MAX_DATA    = 1048576;
   MAX_STRS    = 4096;
   MAX_FIXUPS  = 65536;
@@ -148,11 +149,39 @@ var
   CurProc   : Integer;   { -1 = main }
   LastTypeRecId : Integer;
   ErrorIdent : AnsiString;
-{$ifdef FPC}
-{$else}
+  LastExprTk : TTypeKind;
   AssignPath : AnsiString;
+  IncExpanded : AnsiString;
+  IncIncluded : AnsiString;
+  LoadPath : AnsiString;
   sysbuf : array[0..7] of Byte;
-{$endif}
 
   { Reserved BSS slot 0: initial rsp (for argv access) }
   BSS_INITIAL_RSP : Integer;  { always 0; set in ParseProgram init }
+
+{$ifdef FPC}
+function sysopen(const path: AnsiString; flags: Integer): Integer;
+begin
+  Result := fpOpen(path, flags, &644);
+end;
+
+function syswrite(fd: Integer; const buf; count: Integer): Integer;
+begin
+  Result := fpWrite(fd, buf, count);
+end;
+
+function sysread(fd: Integer; var buf; count: Integer): Integer;
+begin
+  Result := fpRead(fd, buf, count);
+end;
+
+function sysclose(fd: Integer): Integer;
+begin
+  Result := fpClose(fd);
+end;
+
+procedure sysfchmod(fd: Integer; mode: Integer);
+begin
+  fpChmod(AssignPath, mode);
+end;
+{$endif}

@@ -29,6 +29,8 @@ begin
 
   LoadFile(inFile, Source);
   if VERBOSE then writeln('Loaded file length: ', Length(Source));
+  ExpandIncludes(Source, GetFilePath(inFile));
+  if VERBOSE then writeln('After include expansion: ', Length(Source));
 
   SrcPos   := 1; SrcLine  := 1;
   CodeLen  := 0;
