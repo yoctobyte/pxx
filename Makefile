@@ -12,7 +12,9 @@ FPC_COMPILER := /tmp/pascal26-fpc
 BUILD_COMPILER := /tmp/pascal26-build
 VERIFY_COMPILER := /tmp/pascal26-verify
 
-.PHONY: all bootstrap bootstrap-check fpc-check test benchmark benchmark-check clean distclean
+STABLE_DIR := stable
+
+.PHONY: all bootstrap bootstrap-check fpc-check test stabilize check-stable benchmark benchmark-check clean distclean
 
 all: $(COMPILER)
 
@@ -114,6 +116,31 @@ test: $(COMPILER) fpc-check
 	test "$$(/tmp/next-fileio26 test/hello.pas | sed -n '1,3p')" = "$$(printf 'test/hello.pas\n14\n54')"
 	/tmp/pascal26-next $(COMPILER_SRC) /tmp/pascal26-fixedpoint
 	cmp /tmp/pascal26-next /tmp/pascal26-fixedpoint
+
+stabilize: test
+	@echo "=== stabilize: 4-iteration fixedpoint check ==="
+	/tmp/pascal26-fixedpoint $(COMPILER_SRC) /tmp/pascal26-s4
+	cmp /tmp/pascal26-next /tmp/pascal26-s4
+	/tmp/pascal26-s4 $(COMPILER_SRC) /tmp/pascal26-s5
+	cmp /tmp/pascal26-next /tmp/pascal26-s5
+	@echo "=== recording stable binary ==="
+	@mkdir -p $(STABLE_DIR)
+	@cp /tmp/pascal26-s5 $(STABLE_DIR)/pascal26-stable
+	@sha256sum $(STABLE_DIR)/pascal26-stable | sed 's|$(STABLE_DIR)/||' > $(STABLE_DIR)/last.sha256
+	@printf '%s  %s  %s  %s\n' \
+	  "$$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+	  "$$(awk '{print $$1}' $(STABLE_DIR)/last.sha256)" \
+	  "$$(git log -1 --format='%H')" \
+	  "$$(git log -1 --format='%s')" \
+	  >> $(STABLE_DIR)/history.log
+	@echo "STABLE OK: $$(cat $(STABLE_DIR)/last.sha256)"
+
+check-stable:
+	@test -f $(STABLE_DIR)/pascal26-stable || \
+	  (echo "No stable binary. Run: make stabilize"; exit 1)
+	@(cd $(STABLE_DIR) && sha256sum -c last.sha256) && \
+	  echo "Stable binary OK: $$(cat $(STABLE_DIR)/last.sha256)" || \
+	  (echo "MISMATCH: stable binary does not match last.sha256"; exit 1)
 
 clean:
 	rm -f compiler/*.o compiler/*.ppu
