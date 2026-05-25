@@ -14,7 +14,7 @@ VERIFY_COMPILER := /tmp/pascal26-verify
 
 STABLE_DIR := stable
 
-.PHONY: all bootstrap bootstrap-check fpc-check test stabilize check-stable benchmark benchmark-check clean distclean
+.PHONY: all bootstrap bootstrap-check fpc-check test stabilize check-stable revert benchmark benchmark-check clean distclean
 
 all: $(COMPILER)
 
@@ -125,22 +125,36 @@ stabilize: test
 	cmp /tmp/pascal26-next /tmp/pascal26-s5
 	@echo "=== recording stable binary ==="
 	@mkdir -p $(STABLE_DIR)
-	@cp /tmp/pascal26-s5 $(STABLE_DIR)/pascal26-stable
-	@sha256sum $(STABLE_DIR)/pascal26-stable | sed 's|$(STABLE_DIR)/||' > $(STABLE_DIR)/last.sha256
-	@printf '%s  %s  %s  %s\n' \
-	  "$$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-	  "$$(awk '{print $$1}' $(STABLE_DIR)/last.sha256)" \
-	  "$$(git log -1 --format='%H')" \
-	  "$$(git log -1 --format='%s')" \
-	  >> $(STABLE_DIR)/history.log
-	@echo "STABLE OK: $$(cat $(STABLE_DIR)/last.sha256)"
+	@NV=$$(( $$(cat $(STABLE_DIR)/VERSION) + 1 )); \
+	 echo $$NV > $(STABLE_DIR)/VERSION; \
+	 cp /tmp/pascal26-s5 $(STABLE_DIR)/pascal26-v$$NV; \
+	 cp /tmp/pascal26-s5 $(STABLE_DIR)/pascal26-stable; \
+	 SHA=$$(sha256sum $(STABLE_DIR)/pascal26-stable | awk '{print $$1}'); \
+	 echo "$$SHA  pascal26-stable" > $(STABLE_DIR)/last.sha256; \
+	 printf '%s  v%s  %s  %s  %s\n' \
+	   "$$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$$NV" "$$SHA" \
+	   "$$(git log -1 --format='%H')" \
+	   "$$(git log -1 --format='%s')" \
+	   >> $(STABLE_DIR)/history.log; \
+	 echo "STABLE v$$NV OK: $$SHA"
 
 check-stable:
 	@test -f $(STABLE_DIR)/pascal26-stable || \
 	  (echo "No stable binary. Run: make stabilize"; exit 1)
 	@(cd $(STABLE_DIR) && sha256sum -c last.sha256) && \
-	  echo "Stable binary OK: $$(cat $(STABLE_DIR)/last.sha256)" || \
+	  echo "Stable v$$(cat $(STABLE_DIR)/VERSION) OK: $$(cat $(STABLE_DIR)/last.sha256)" || \
 	  (echo "MISMATCH: stable binary does not match last.sha256"; exit 1)
+
+revert:
+	@V=$$(cat $(STABLE_DIR)/VERSION); \
+	 TV=$${VERSION:-$$((V-1))}; \
+	 test "$$TV" -ge 1 2>/dev/null || (echo "Usage: make revert VERSION=N"; exit 1); \
+	 test "$$TV" -le "$$V" || (echo "v$$TV does not exist (current is v$$V)"; exit 1); \
+	 test -f $(STABLE_DIR)/pascal26-v$$TV || \
+	   (echo "Binary stable/pascal26-v$$TV missing — may need to rebuild from that commit"; exit 1); \
+	 cp $(STABLE_DIR)/pascal26-v$$TV $(COMPILER); \
+	 echo "Reverted $(COMPILER) to stable v$$TV (was v$$V)"; \
+	 echo "Run 'make test' to verify, or 'make stabilize' to record as new stable."
 
 clean:
 	rm -f compiler/*.o compiler/*.ppu
