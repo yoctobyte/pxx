@@ -1,3 +1,4 @@
 2026-05-25T00:00:00Z  v1  09a67b12adda862179ac8a6d203150ecb62f3b224f072a1479b87e972999b409  113f50df2e2363dea03867bd27e53601cb9d15af  initial stabilize baseline
 2026-05-25T18:21:12Z  v2  09a67b12adda862179ac8a6d203150ecb62f3b224f072a1479b87e972999b409  6f82fd2e2e3581f4ef2ca2afc0771e8ec327d87b  Add stabilize target and stable binary registry
 2026-05-25T18:25:57Z  v3  09a67b12adda862179ac8a6d203150ecb62f3b224f072a1479b87e972999b409  2bca4e82cdb54ae80551fe2fb56492faec53f2b8  Track versioned stable binaries in git
+2026-05-25T19:23:07Z  v4  bbe5785af8cf6f94a3ccfb880f89f5fc59943b2a885a2302d723d0d919d56e4e  d75a6a423f555a65a8c0d490d3e922f330195b42  Stage 2b: wire expression AST building (parallel with direct emit)
