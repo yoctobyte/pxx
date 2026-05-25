@@ -29,9 +29,23 @@ test: $(COMPILER)
 	test "$$(/tmp/fileio26 test/hello.pas | sed -n '1,3p')" = "$$(printf 'test/hello.pas\n14\n54')"
 	./$(COMPILER) test/string_compare.pas /tmp/string_compare26
 	test "$$(/tmp/string_compare26)" = "$$(printf '1\n1\n1')"
+	./$(COMPILER) test/record_string_field.pas /tmp/record_string_field26
+	test "$$(/tmp/record_string_field26)" = "$$(printf '1\n4')"
 	./$(COMPILER) $(COMPILER_SRC) /tmp/pascal26-self
 	/tmp/pascal26-self test/hello.pas /tmp/self-hello26
 	test "$$(/tmp/self-hello26)" = "Hello, World!"
+	/tmp/pascal26-self test/bootstrap_features.pas /tmp/self-bootstrap_features26
+	test "$$(/tmp/self-bootstrap_features26)" = "$$(printf '120\n98\ncase-ok\n0')"
+	/tmp/pascal26-self test/records.pas /tmp/self-records26
+	test "$$(/tmp/self-records26)" = "$$(printf '42\n7\n11\n22')"
+	/tmp/pascal26-self test/procs.pas /tmp/self-procs26
+	test "$$(/tmp/self-procs26 | tail -9)" = "$$(printf '0\n1\n1\n2\n3\n5\n8\n13\n21')"
+	/tmp/pascal26-self test/string_compare.pas /tmp/self-string_compare26
+	test "$$(/tmp/self-string_compare26)" = "$$(printf '1\n1\n1')"
+	/tmp/pascal26-self test/record_string_field.pas /tmp/self_record_string_field26
+	test "$$(/tmp/self_record_string_field26)" = "$$(printf '1\n4')"
+	/tmp/pascal26-self test/fileio.pas /tmp/self-fileio26
+	test "$$(/tmp/self-fileio26 test/hello.pas | sed -n '1,3p')" = "$$(printf 'test/hello.pas\n14\n54')"
 
 clean:
 	rm -f $(COMPILER) compiler/*.o compiler/*.ppu

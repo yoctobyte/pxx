@@ -32,9 +32,9 @@ begin
   else if rec = REC_TFIXUP then Result := 16
   else if rec = REC_TGLOBFIX then Result := 16
   else if rec = REC_TCALLFIX then Result := 16
-  else if rec = REC_TSYMBOL then Result := 336
-  else if rec = REC_TPARAM then Result := 280
-  else if rec = REC_TPROC then Result := 2560;
+  else if rec = REC_TSYMBOL then Result := 344
+  else if rec = REC_TPARAM then Result := 296
+  else if rec = REC_TPROC then Result := 2688;
 end;
 
 function RecFieldOffset(rec: Integer; const field: AnsiString): Integer;
@@ -79,13 +79,16 @@ begin
     else if field = 'ArrLen' then Result := 304
     else if field = 'ElemType' then Result := 312
     else if field = 'RecName' then Result := 320
-    else if field = 'ElemRecName' then Result := 328;
+    else if field = 'ElemRecName' then Result := 328
+    else if field = 'IsRef' then Result := 336;
   end
   else if rec = REC_TPARAM then
   begin
     if field = 'Name' then Result := 0
     else if field = 'TypeKind' then Result := 264
-    else if field = 'SymIdx' then Result := 272;
+    else if field = 'SymIdx' then Result := 272
+    else if field = 'IsRef' then Result := 280
+    else if field = 'IsArray' then Result := 288;
   end
   else if rec = REC_TPROC then
   begin
@@ -94,10 +97,10 @@ begin
     else if field = 'RetType' then Result := 272
     else if field = 'ParamCount' then Result := 280
     else if field = 'Params' then Result := 288
-    else if field = 'BodyAddr' then Result := 2528
-    else if field = 'FramePatch' then Result := 2536
-    else if field = 'RetSymIdx' then Result := 2544
-    else if field = 'ScopeBase' then Result := 2552;
+    else if field = 'BodyAddr' then Result := 2656
+    else if field = 'FramePatch' then Result := 2664
+    else if field = 'RetSymIdx' then Result := 2672
+    else if field = 'ScopeBase' then Result := 2680;
   end;
 end;
 
@@ -115,11 +118,12 @@ begin
   else if rec = REC_TSYMBOL then
   begin
     if field = 'Name' then Result := tyString
-    else if field = 'IsArray' then Result := tyBoolean;
+    else if (field = 'IsArray') or (field = 'IsRef') then Result := tyBoolean;
   end
   else if rec = REC_TPARAM then
   begin
-    if field = 'Name' then Result := tyString;
+    if field = 'Name' then Result := tyString
+    else if (field = 'IsRef') or (field = 'IsArray') then Result := tyBoolean;
   end
   else if rec = REC_TPROC then
   begin
@@ -192,6 +196,7 @@ begin
   Syms[SymCount].ArrLen   := 0;
   Syms[SymCount].ElemType := tyInteger;
   Syms[SymCount].RecName  := LastTypeRecId;
+  Syms[SymCount].IsRef    := False;
 
   sz := 8;
   if tk = tyString then
@@ -238,6 +243,7 @@ begin
   Syms[SymCount].ArrLen   := hi - lo + 1;
   Syms[SymCount].ElemType := elemType;
   Syms[SymCount].ElemRecName := LastTypeRecId;
+  Syms[SymCount].IsRef    := False;
 
   if CurProc < 0 then
   begin
@@ -265,6 +271,7 @@ begin
   Syms[SymCount].Kind     := skConst;
   Syms[SymCount].ConstVal := v;
   Syms[SymCount].Offset   := 0;
+  Syms[SymCount].IsRef    := False;
   Result := SymCount; Inc(SymCount);
 end;
 
@@ -272,7 +279,17 @@ end;
 
 procedure EmitLoadVar(idx: Integer);
 begin
-  if (Syms[idx].Kind = skParam) and (Syms[idx].TypeKind = tyString) then
+  if (Syms[idx].Kind = skParam) and Syms[idx].IsRef and
+     (Syms[idx].TypeKind <> tyString) then
+  begin
+    { by-reference scalar: load pointer from slot, then load pointed value }
+    EmitB($48); EmitB($8B); EmitB($85); EmitI32(Syms[idx].Offset);
+    if Syms[idx].TypeKind = tyChar then
+      begin EmitB($48); EmitB($0F); EmitB($B6); EmitB($00); end
+    else
+      begin EmitB($48); EmitB($8B); EmitB($00); end;
+  end
+  else if (Syms[idx].Kind = skParam) and (Syms[idx].TypeKind = tyString) then
   begin
     { param slot holds pointer P to string struct; load P then deref for length }
     EmitB($48); EmitB($8B); EmitB($85); EmitI32(Syms[idx].Offset); { mov rax, [rbp+off] = P }
@@ -293,7 +310,15 @@ end;
 
 procedure EmitStoreVar(idx: Integer);
 begin
-  case Syms[idx].Kind of
+  if (Syms[idx].Kind = skParam) and Syms[idx].IsRef then
+  begin
+    EmitB($48); EmitB($8B); EmitB($8D); EmitI32(Syms[idx].Offset);
+    if Syms[idx].TypeKind = tyChar then
+      begin EmitB($88); EmitB($01); end
+    else
+      begin EmitB($48); EmitB($89); EmitB($01); end;
+  end
+  else case Syms[idx].Kind of
     skLocal, skParam:
       begin EmitB($48); EmitB($89); EmitB($85); EmitI32(Syms[idx].Offset); end;
     skGlobal:
@@ -456,9 +481,18 @@ begin
   EmitB($F3); EmitB($A4);
 end;
 
+procedure EmitTerminateString(idx: Integer);
+begin
+  { Linux path syscalls need a trailing NUL beyond the Pascal length. }
+  EmitLoadVar(idx);
+  EmitLeaStrDataRdi(idx);
+  EmitB($C6); EmitB($04); EmitB($07); EmitB($00); { mov byte [rdi+rax], 0 }
+end;
+
 procedure EmitLoadFile(pathIdx, dstIdx: Integer);
 begin
   { open(path, O_RDONLY) }
+  EmitTerminateString(pathIdx);
   EmitLeaStrDataRdi(pathIdx);
   MovRsiImm(0);
   MovRdxImm(0);
@@ -635,8 +669,7 @@ end;
 
 function RegisterProc(const name: AnsiString; isFunc: Boolean;
   retType: TTypeKind; nParams: Integer;
-  const pnames: array of AnsiString; const ptypes: array of TTypeKind;
-  bodyAddr: Integer): Integer;
+  const pnames: array of AnsiString; const ptypes: array of TTypeKind): Integer;
 var i: Integer;
 begin
   if ProcCount >= MAX_PROCS then Error('too many procedures');
@@ -644,7 +677,7 @@ begin
   Procs[ProcCount].IsFunc     := isFunc;
   Procs[ProcCount].RetType    := retType;
   Procs[ProcCount].ParamCount := nParams;
-  Procs[ProcCount].BodyAddr   := bodyAddr;
+  Procs[ProcCount].BodyAddr   := -1;
   Procs[ProcCount].FramePatch := -1;
   Procs[ProcCount].RetSymIdx  := -1;
   Procs[ProcCount].ScopeBase  := 0;
@@ -653,6 +686,8 @@ begin
     Procs[ProcCount].Params[i].Name     := pnames[i];
     Procs[ProcCount].Params[i].TypeKind := ptypes[i];
     Procs[ProcCount].Params[i].SymIdx   := -1;
+    Procs[ProcCount].Params[i].IsArray  := False;
+    Procs[ProcCount].Params[i].IsRef    := False;
   end;
   Result := ProcCount; Inc(ProcCount);
 end;

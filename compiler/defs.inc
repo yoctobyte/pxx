@@ -94,12 +94,15 @@ type
     ElemType : TTypeKind; { element type when IsArray }
     RecName  : Integer;
     ElemRecName: Integer;
+    IsRef    : Boolean;   { parameter passed by reference }
   end;
 
   TParam = record
     Name    : AnsiString;
     TypeKind: TTypeKind;
     SymIdx  : Integer;
+    IsRef   : Boolean;
+    IsArray : Boolean;
   end;
 
   TProc = record

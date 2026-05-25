@@ -138,7 +138,8 @@ begin
   else
   begin
     { Local variable or parameter base address }
-    if (Syms[idx].Kind = skParam) and (Syms[idx].IsArray or (Syms[idx].TypeKind = tyString)) then
+    if (Syms[idx].Kind = skParam) and
+       (Syms[idx].IsRef or Syms[idx].IsArray or (Syms[idx].TypeKind = tyString)) then
     begin
       { param slot holds pointer P; address of string/array struct = P }
       EmitB($48); EmitB($8B); EmitB($85); EmitI32(Syms[idx].Offset); { mov rax, [rbp+off] = P }
@@ -393,6 +394,22 @@ begin
   end;
 end;
 
+procedure ParseCallArg(pi, argNo: Integer);
+var idx: Integer; tk: TTypeKind; recName: Integer;
+begin
+  if Procs[pi].Params[argNo].IsRef or Procs[pi].Params[argNo].IsArray then
+  begin
+    if CurTok.Kind <> tkIdent then Error('by-reference argument must be a variable');
+    idx := FindSym(CurTok.SVal);
+    if idx < 0 then Error('undefined by-reference argument');
+    Next;
+    CompileLValueAddressInternal(idx, tk, recName);
+  end
+  else
+    ParseExpr;
+  EmitB($50);
+end;
+
 procedure ParseFactor;
 var name: AnsiString; recName: Integer; idx, pi, i: Integer; tk: TTypeKind;
 begin
@@ -438,12 +455,11 @@ begin
       Next; Expect(tkLParen, '(');
       if CurTok.Kind <> tkIdent then Error('Length: expected string variable');
       idx := FindSym(CurTok.SVal);
-      if (idx >= 0) and (Syms[idx].TypeKind = tyString) then
-        EmitLoadVar(idx)
-      else
-        MovRaxImm(0);
       Next;
-      SkipSelectors;
+      if idx < 0 then Error('Length: undefined variable');
+      CompileLValueAddressInternal(idx, tk, recName);
+      if tk <> tyString then Error('Length: not a string value');
+      EmitB($48); EmitB($8B); EmitB($00); { mov rax, [string address] }
       Expect(tkRParen, ')');
     end;
     tkSysOpen:
@@ -453,8 +469,8 @@ begin
       if CurTok.Kind <> tkIdent then Error('SysOpen: expected string var');
       idx := FindSym(CurTok.SVal);
       if (idx < 0) or (Syms[idx].TypeKind <> tyString) then Error('SysOpen: not a string var');
-      { lea rdi, [bss+str.Offset+8] (path data, NUL-terminated) }
-      EmitB($48); EmitB($8D); EmitB($3C); EmitB($25); EmitGlobRef(Syms[idx].Offset + 8);
+      EmitTerminateString(idx);
+      EmitLeaStrDataRdi(idx);
       Next; Expect(tkComma, ',');
       ParseExpr;   { flags → rax }
       EmitB($48); EmitB($89); EmitB($C6);               { mov rsi, rax }
@@ -522,7 +538,7 @@ begin
           Next;
           for i := 0 to Procs[pi].ParamCount-1 do
           begin
-            ParseExpr; EmitB($50);
+            ParseCallArg(pi, i);
             if i < Procs[pi].ParamCount-1 then Expect(tkComma, ',');
           end;
           Expect(tkRParen, ')');
@@ -1097,7 +1113,7 @@ begin
           Next;
           for i := 0 to Procs[pi].ParamCount-1 do
           begin
-            ParseExpr; EmitB($50);
+            ParseCallArg(pi, i);
             if i < Procs[pi].ParamCount-1 then Expect(tkComma, ',');
           end;
           Expect(tkRParen, ')');
@@ -1286,12 +1302,13 @@ var
   pnames   : array[0..7] of AnsiString;
   ptypes   : array[0..7] of TTypeKind;
   parr     : array[0..7] of Boolean;
+  pbyref   : array[0..7] of Boolean;
   nparams  : Integer;
   pi, i    : Integer;
   savedSC, savedFS, savedCurProc : Integer;
   patchPos : Integer;
   depth    : Integer;
-  doneArgs, doneParam, isArr: Boolean;
+  doneArgs, doneParam, isArr, isByRef: Boolean;
   startIdx, idx: Integer;
   tokKindOrd: Integer;
 begin
@@ -1308,7 +1325,14 @@ begin
     doneArgs := False;
     while (CurTok.Kind <> tkRParen) and not doneArgs do
     begin
-      if CurTok.Kind in [tkVar, tkConst] then Next;
+      isByRef := False;
+      if CurTok.Kind = tkVar then
+      begin
+        isByRef := True;
+        Next;
+      end
+      else if CurTok.Kind = tkConst then
+        Next;
       startIdx := nparams;
       doneParam := False;
       while (CurTok.Kind = tkIdent) and not doneParam do
@@ -1334,6 +1358,7 @@ begin
       begin
         ptypes[i] := tk;
         parr[i] := isArr;
+        pbyref[i] := isByRef;
       end;
       if not Eat(tkSemicolon) then doneArgs := True;
     end;
@@ -1376,16 +1401,28 @@ begin
   begin
     Next; Eat(tkSemicolon);
     if FindProc(name) < 0 then
-      RegisterProc(name, isFunc, retType, nparams, pnames, ptypes, -1);
+    begin
+      pi := RegisterProc(name, isFunc, retType, nparams, pnames, ptypes);
+      Procs[pi].BodyAddr := -1;
+      for i := 0 to nparams-1 do
+      begin
+        Procs[pi].Params[i].IsArray := parr[i];
+        Procs[pi].Params[i].IsRef := pbyref[i];
+      end;
+    end;
     Exit;
   end;
 
   { Register or resolve }
   pi := FindProc(name);
   if pi < 0 then
-    pi := RegisterProc(name, isFunc, retType, nparams, pnames, ptypes, CodeLen)
-  else
-    Procs[pi].BodyAddr := CodeLen;
+    pi := RegisterProc(name, isFunc, retType, nparams, pnames, ptypes);
+  Procs[pi].BodyAddr := CodeLen;
+  for i := 0 to nparams-1 do
+  begin
+    Procs[pi].Params[i].IsArray := parr[i];
+    Procs[pi].Params[i].IsRef := pbyref[i];
+  end;
 
   { Save scope }
   savedSC := SymCount;
@@ -1400,6 +1437,7 @@ begin
     idx := AllocVar(pnames[i], ptypes[i]);
     Procs[pi].Params[i].SymIdx := idx;
     Syms[idx].Kind := skParam;
+    Syms[idx].IsRef := pbyref[i];
     if parr[i] then
     begin
       Syms[idx].IsArray := True;
