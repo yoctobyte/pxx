@@ -3,6 +3,14 @@
 This records the first performance baseline after recursive self-hosting was
 made the normal build path.
 
+## Milestone Note
+
+The project owner described this result as making his day, particularly
+because FPC is already regarded as a very fast compiler compared with many
+development environments. This reaction is part of the historical record:
+recursive self-hosting did not merely work; its first measured build path was
+immediately fast enough to feel significant.
+
 ## Subject
 
 - Source revision: `de8c297` (`build: make self-hosting the default`)
@@ -66,3 +74,10 @@ the self-hosted compiler emits the currently supported direct ELF subset. The
 meaningful result for the project is that recursive self-builds are already
 cheap enough to use as the default development path while FPC remains a
 compatibility and recovery compiler.
+
+This lead is not assumed to be permanent. As the compiler grows beyond its
+current subset, stronger semantic analysis, diagnostics, optimizations,
+additional language frontends, and runtime support may add real compilation
+cost. Keep this baseline as the starting point, and rerun `make benchmark`
+after substantial compiler-capability changes so future speed comparisons
+remain honest.
