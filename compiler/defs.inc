@@ -190,6 +190,7 @@ var
   LastTypeRecId : Integer;
   ErrorIdent : AnsiString;
   LastExprTk : TTypeKind;
+  CurASTNode : Integer;
   AssignPath : AnsiString;
   IncExpanded : AnsiString;
   IncIncluded : AnsiString;

@@ -43,7 +43,7 @@ begin
   SymCount := 0; ProcCount := 0;
   FrameSize := 0; CurProc := -1;
   TokCount := 0; TokPos := 0; TokCharLen := 0;
-  ASTNodeCount := 0;
+  ASTNodeCount := 0; CurASTNode := -1;
   AddConst('StdErr', tyInteger, 2);
 
   LexAll;

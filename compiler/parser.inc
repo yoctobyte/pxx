@@ -425,44 +425,70 @@ begin
 end;
 
 procedure ParseFactor;
-var name: AnsiString; recName: Integer; idx, pi, i: Integer; tk: TTypeKind;
+var name: AnsiString; recName: Integer; idx, pi, i, node, left, prevTok: Integer; tk: TTypeKind;
 begin
   LastExprTk := tyInteger;
   case CurTok.Kind of
-    tkInteger: begin MovRaxImm(CurTok.IVal); Next; end;
-    tkTrue:    begin MovRaxImm(1); Next; LastExprTk := tyBoolean; end;
-    tkFalse:   begin MovRaxImm(0); Next; LastExprTk := tyBoolean; end;
+    tkInteger:
+    begin
+      node := AllocNode(AN_INT_LIT); ASTIVal[node] := CurTok.IVal; CurASTNode := node;
+      MovRaxImm(CurTok.IVal); Next;
+    end;
+    tkTrue:
+    begin
+      node := AllocNode(AN_BOOL_LIT); ASTIVal[node] := 1; ASTTk[node] := Ord(tyBoolean); CurASTNode := node;
+      MovRaxImm(1); Next; LastExprTk := tyBoolean;
+    end;
+    tkFalse:
+    begin
+      node := AllocNode(AN_BOOL_LIT); ASTIVal[node] := 0; ASTTk[node] := Ord(tyBoolean); CurASTNode := node;
+      MovRaxImm(0); Next; LastExprTk := tyBoolean;
+    end;
     tkString:
     begin
       { Single-char literal → ordinal value }
-      if Length(CurTok.SVal) = 1 then begin MovRaxImm(Ord(CurTok.SVal[1])); Next; LastExprTk := tyChar; end
+      if Length(CurTok.SVal) = 1 then
+      begin
+        node := AllocNode(AN_INT_LIT); ASTIVal[node] := Ord(CurTok.SVal[1]); ASTTk[node] := Ord(tyChar); CurASTNode := node;
+        MovRaxImm(Ord(CurTok.SVal[1])); Next; LastExprTk := tyChar;
+      end
       else
       begin
+        prevTok := TokPos - 1;
         idx := InternStr(CurTok.SVal); Next;
+        node := AllocNode(AN_STR_LIT);
+        ASTSOffset[node] := Tokens[prevTok].SOffset; ASTSLen[node] := Tokens[prevTok].SLen;
+        ASTTk[node] := Ord(tyString); CurASTNode := node;
         EmitB($48); EmitB($B8); EmitDataRef(Strs[idx].Offset);
         LastExprTk := tyString;
       end;
     end;
-    tkLParen:  begin Next; ParseExpr; Expect(tkRParen, ')'); end;
+    tkLParen:  begin Next; ParseExpr; Expect(tkRParen, ')'); end; { CurASTNode set by ParseExpr }
     tkMinus:
     begin
       Next; ParseFactor;
+      left := CurASTNode;
       EmitB($48); EmitB($F7); EmitB($D8);
+      node := AllocNode(AN_NEG); ASTLeft[node] := left; CurASTNode := node;
     end;
     tkNot:
     begin
       Next; ParseFactor;
+      left := CurASTNode;
       EmitB($48); EmitB($83); EmitB($F0); EmitB($01);
       LastExprTk := tyBoolean;
+      node := AllocNode(AN_NOT); ASTLeft[node] := left; ASTTk[node] := Ord(tyBoolean); CurASTNode := node;
     end;
     tkOrd, tkChr:
     begin
       Next; Expect(tkLParen, '('); ParseExpr; Expect(tkRParen, ')');
       if CurTok.Kind = tkChr then LastExprTk := tyChar else LastExprTk := tyInteger;
+      node := AllocNode(AN_CALL); ASTIVal[node] := -1; ASTLeft[node] := CurASTNode; CurASTNode := node;
     end;
     tkInteger_T, tkLongWord_T:
     begin
       Next; Expect(tkLParen, '('); ParseExpr; Expect(tkRParen, ')');
+      node := AllocNode(AN_CALL); ASTIVal[node] := -1; ASTLeft[node] := CurASTNode; CurASTNode := node;
     end;
     tkLength:
     begin
@@ -475,6 +501,7 @@ begin
       if tk <> tyString then Error('Length: not a string value');
       EmitB($48); EmitB($8B); EmitB($00); { mov rax, [string address] }
       Expect(tkRParen, ')');
+      CurASTNode := AllocNode(AN_CALL); ASTIVal[CurASTNode] := -1;
     end;
     tkSysOpen:
     begin
@@ -491,6 +518,7 @@ begin
       MovRaxImm(0); EmitB($48); EmitB($89); EmitB($C2); { rdx=0 (mode ignored for open) }
       MovRaxImm(SYS_OPEN); EmitSyscall;
       Expect(tkRParen, ')');
+      CurASTNode := AllocNode(AN_CALL); ASTIVal[CurASTNode] := -1;
     end;
     tkSysRead:
     begin
@@ -507,6 +535,7 @@ begin
       ParseExpr; EmitB($48); EmitB($89); EmitB($C2);     { mov rdx, rax (count) }
       MovRaxImm(SYS_READ); EmitSyscall;
       Expect(tkRParen, ')');
+      CurASTNode := AllocNode(AN_CALL); ASTIVal[CurASTNode] := -1;
     end;
     tkSyswrite:
     begin
@@ -523,6 +552,7 @@ begin
       ParseExpr; EmitB($48); EmitB($89); EmitB($C2);     { mov rdx, rax (count) }
       MovRaxImm(1); EmitSyscall;                          { SYS_WRITE=1 }
       Expect(tkRParen, ')');
+      CurASTNode := AllocNode(AN_CALL); ASTIVal[CurASTNode] := -1;
     end;
     tkArgCount:
     begin
@@ -532,14 +562,17 @@ begin
       EmitB($48); EmitB($8B); EmitB($04); EmitB($25); EmitGlobRef(BSS_INITIAL_RSP);
       EmitB($48); EmitB($8B); EmitB($00);               { mov rax, [rax] = argc }
       EmitB($48); EmitB($FF); EmitB($C8);               { dec rax → argc-1 }
+      CurASTNode := AllocNode(AN_CALL); ASTIVal[CurASTNode] := -1;
     end;
     tkIdent:
     begin
       name := CurTok.SVal;
+      prevTok := TokPos - 1;
       idx  := FindSym(name);
       pi   := FindProc(name);
       if (idx >= 0) and (Syms[idx].Kind = skConst) then
       begin
+        node := AllocNode(AN_INT_LIT); ASTIVal[node] := Syms[idx].ConstVal; CurASTNode := node;
         MovRaxImm(Syms[idx].ConstVal); Next;
       end
       else if (pi >= 0) and Procs[pi].IsFunc then
@@ -568,8 +601,8 @@ begin
             5: begin EmitB($41); EmitB($59); end;
           end;
         EmitCallProc(pi);
-        { rax = return value }
         LastExprTk := Procs[pi].RetType;
+        node := AllocNode(AN_CALL); ASTIVal[node] := pi; ASTTk[node] := Ord(LastExprTk); CurASTNode := node;
       end
       else if idx >= 0 then
       begin
@@ -584,6 +617,7 @@ begin
             begin EmitB($48); EmitB($8B); EmitB($00); end
           else if tk = tyChar then
             begin EmitB($48); EmitB($0F); EmitB($B6); EmitB($00); end;
+          node := AllocNode(AN_INDEX); ASTIVal[node] := idx; ASTTk[node] := Ord(LastExprTk); CurASTNode := node;
         end
         else
         begin
@@ -592,6 +626,9 @@ begin
             CompileLValueAddressInternal(idx, tk, recName)
           else
             EmitLoadVar(idx);
+          node := AllocNode(AN_IDENT);
+          ASTSOffset[node] := Tokens[prevTok].SOffset; ASTSLen[node] := Tokens[prevTok].SLen;
+          ASTIVal[node] := idx; ASTTk[node] := Ord(LastExprTk); CurASTNode := node;
         end;
       end
     end;
@@ -600,7 +637,7 @@ begin
 end;
 
 procedure ParseTerm;
-var op: TTokenKind; isShr: Boolean;
+var op: TTokenKind; isShr: Boolean; left, right, node: Integer;
 begin
   ParseFactor;
   while (CurTok.Kind in [tkStar, tkDiv, tkMod, tkAnd]) or
@@ -608,8 +645,10 @@ begin
   begin
     isShr := (CurTok.Kind = tkIdent) and (CurTok.SVal = 'shr');
     op := CurTok.Kind; Next;
+    left := CurASTNode;
     EmitB($50);
     ParseFactor;
+    right := CurASTNode;
     EmitB($48); EmitB($89); EmitB($C1);
     EmitB($58);
     if isShr then
@@ -622,29 +661,38 @@ begin
                       EmitB($48); EmitB($89); EmitB($D0); end;
         tkAnd:  begin EmitB($48); EmitB($21); EmitB($C8); end;
       end;
+    node := AllocNode(AN_BINOP); ASTIVal[node] := Ord(op); ASTLeft[node] := left; ASTRight[node] := right; CurASTNode := node;
   end;
 end;
 
 procedure ParseSimpleExpr;
-var op: TTokenKind; neg: Boolean;
+var op: TTokenKind; neg: Boolean; left, right, node: Integer;
 begin
   neg := CurTok.Kind = tkMinus; Eat(tkMinus); Eat(tkPlus);
   ParseTerm;
-  if neg then begin EmitB($48); EmitB($F7); EmitB($D8); end;
+  if neg then
+  begin
+    EmitB($48); EmitB($F7); EmitB($D8);
+    node := AllocNode(AN_NEG); ASTLeft[node] := CurASTNode; CurASTNode := node;
+  end;
   while CurTok.Kind in [tkPlus, tkMinus, tkOr] do
   begin
-    op := CurTok.Kind; Next; EmitB($50); ParseTerm;
+    op := CurTok.Kind; Next;
+    left := CurASTNode;
+    EmitB($50); ParseTerm;
+    right := CurASTNode;
     EmitB($48); EmitB($89); EmitB($C1); EmitB($58);
     case op of
       tkPlus:  begin EmitB($48); EmitB($01); EmitB($C8); end;
       tkMinus: begin EmitB($48); EmitB($29); EmitB($C8); end;
       tkOr:    begin EmitB($48); EmitB($09); EmitB($C8); end;
     end;
+    node := AllocNode(AN_BINOP); ASTIVal[node] := Ord(op); ASTLeft[node] := left; ASTRight[node] := right; CurASTNode := node;
   end;
 end;
 
 procedure ParseExpr;
-var op: TTokenKind; lhsTk: TTypeKind;
+var op: TTokenKind; lhsTk: TTypeKind; left, right, node: Integer;
 begin
   ParseSimpleExpr;
   lhsTk := LastExprTk;
@@ -652,11 +700,15 @@ begin
   begin
     Next;
     ParseSetMembership;
+    CurASTNode := AllocNode(AN_CALL); ASTIVal[CurASTNode] := -1;
     Exit;
   end;
   if CurTok.Kind in [tkEq, tkNeq, tkLt, tkLe, tkGt, tkGe] then
   begin
-    op := CurTok.Kind; Next; EmitB($50); ParseSimpleExpr;
+    op := CurTok.Kind; Next;
+    left := CurASTNode;
+    EmitB($50); ParseSimpleExpr;
+    right := CurASTNode;
     if (lhsTk = tyString) or (LastExprTk = tyString) then
     begin
       EmitB($48); EmitB($89); EmitB($C1); EmitB($58);  { mov rcx, rax; pop rax }
@@ -676,6 +728,8 @@ begin
       end;
       EmitB($48); EmitB($0F); EmitB($B6); EmitB($C0);
     end;
+    node := AllocNode(AN_BINOP); ASTIVal[node] := Ord(op); ASTLeft[node] := left; ASTRight[node] := right;
+    ASTTk[node] := Ord(tyBoolean); CurASTNode := node;
   end;
 end;
 
