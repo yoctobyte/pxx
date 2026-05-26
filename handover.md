@@ -7,6 +7,7 @@
 Relevant commits on `master`:
 
 ```text
+4c21e86 feat(c): add preprocessing stage
 4e33759 feat(debug): add runtime compiler tracing
 e7f8b2a docs: document shared C library loading
 8fcc080 feat(elf): load external C functions
@@ -128,11 +129,10 @@ corrupted the stack.
 
 ## Verification
 
-Passed after `8fcc080`:
+Passed after `4c21e86`:
 
 ```sh
 make bootstrap
-make fpc-check
 make test
 ```
 
@@ -140,6 +140,9 @@ make test
 
 - shared-object `ctype` import returns `97`
 - local C import returns `42`
+- preprocessing import with conditionals and macros returns `42`
+- `--debug` reports compiler and C-preprocessor trace events while preserving
+  compiled program output
 - normal Pascal regressions and recursive fixed-point self compilation
 
 ## Parked Workstreams
@@ -172,9 +175,13 @@ work, not a passing baseline. The class-method target source remains in
 
 ## Suggested Next Interop Steps
 
-1. Replace the hardcoded header-to-soname special case with explicit import
+1. Add ELF symbol or map output if generated-program debugging becomes the
+   next priority; `--debug` traces compiler execution only.
+2. Replace the hardcoded header-to-soname special case with explicit import
    syntax or a small mapping table.
-2. Exercise another simple installed library header whose ABI fits the current
+3. Exercise another simple installed library header whose ABI fits the current
    parser, then add it to `make test`.
-3. Grow C type handling only as demanded by real library calls: pointer
+4. Extend preprocessing only against real headers: token pasting,
+   stringification, variadic macros, or fuller rescanning as required.
+5. Grow C type handling only as demanded by real library calls: pointer
    arguments, buffers, typedef aliases, then structs/callbacks.
