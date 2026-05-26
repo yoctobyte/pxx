@@ -231,8 +231,8 @@ begin
     GenAST(ASTLeft[arg1]);
     EmitB($48); EmitB($89); EmitB($C7); { mov rdi, rax }
     
-    idx := ASTIVal[ASTLeft[arg2]];
-    EmitB($48); EmitB($8D); EmitB($34); EmitB($25); EmitGlobRef(Syms[idx].Offset);
+    GenLValueAddress(ASTLeft[arg2], tk, recName, False);
+    EmitB($48); EmitB($89); EmitB($C6); { mov rsi, rax }
     
     GenAST(ASTLeft[arg3]);
     EmitB($48); EmitB($89); EmitB($C2);
@@ -248,8 +248,8 @@ begin
     GenAST(ASTLeft[arg1]);
     EmitB($48); EmitB($89); EmitB($C7); { mov rdi, rax }
     
-    idx := ASTIVal[ASTLeft[arg2]];
-    EmitB($48); EmitB($8D); EmitB($34); EmitB($25); EmitGlobRef(Syms[idx].Offset);
+    GenLValueAddress(ASTLeft[arg2], tk, recName, False);
+    EmitB($48); EmitB($89); EmitB($C6); { mov rsi, rax }
     
     GenAST(ASTLeft[arg3]);
     EmitB($48); EmitB($89); EmitB($C2);

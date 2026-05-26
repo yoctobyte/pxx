@@ -141,7 +141,11 @@ function ParseBlockAST: Integer; forward;
 procedure CompileAST(node: Integer); forward;
 
 function ParseLValueAST(idx: Integer): Integer;
-var node, indexNode, fieldNode, prevTok, recName, i: Integer; tk: TTypeKind; fieldName: AnsiString;
+var
+  node, indexNode, fieldNode, prevTok, recName, i: Integer;
+  tk: TTypeKind;
+  fieldName: AnsiString;
+  mci, mmi, mpi, mcallNode, mselfArg, mlastArg, margSeq, margIdx, mexprNode, mai: Integer;
 begin
   prevTok := TokPos - 1;
   if idx < 0 then Error('undefined variable');
@@ -181,6 +185,50 @@ begin
       fieldName := '';
       for i := Tokens[prevTok].SOffset to Tokens[prevTok].SOffset + Tokens[prevTok].SLen - 1 do
         AppendChar(fieldName, TokChars[i]);
+      { Check if this is a method call on a user class }
+      mci := -1; mmi := -1; mpi := -1;
+      if recName >= REC_UCLASS_BASE then
+      begin
+        mci := recName - REC_UCLASS_BASE;
+        mmi := FindUMeth(mci, fieldName);
+      end;
+      if mmi >= 0 then
+      begin
+        mpi := UMthProc_[mmi];
+        Next; { consume method name }
+        mcallNode := AllocNode(AN_CALL);
+        ASTIVal[mcallNode] := mpi;
+        ASTTk[mcallNode] := Ord(Procs[mpi].RetType);
+        mselfArg := AllocNode(AN_ARG);
+        ASTLeft[mselfArg] := node;
+        ASTLeft[mcallNode] := mselfArg;
+        mlastArg := mselfArg;
+        if CurTok.Kind = tkLParen then
+        begin
+          Next;
+          mai := 1;
+          while mai <= Procs[mpi].ParamCount-1 do
+          begin
+            if Procs[mpi].Params[mai].IsRef or Procs[mpi].Params[mai].IsArray then
+            begin
+              if CurTok.Kind <> tkIdent then Error('expected variable');
+              margIdx := FindSym(CurTok.SVal); Next;
+              mexprNode := ParseLValueAST(margIdx);
+            end
+            else
+            begin
+              ParseExpr; mexprNode := CurASTNode;
+            end;
+            margSeq := AllocNode(AN_ARG); ASTLeft[margSeq] := mexprNode;
+            ASTRight[mlastArg] := margSeq; mlastArg := margSeq;
+            if mai < Procs[mpi].ParamCount-1 then Expect(tkComma, ',');
+            Inc(mai);
+          end;
+          Expect(tkRParen, ')');
+        end;
+        node := mcallNode;
+        Result := node; Exit;
+      end;
       fieldNode := AllocNode(AN_FIELD);
       ASTLeft[fieldNode] := node;
       ASTSOffset[fieldNode] := Tokens[prevTok].SOffset;
@@ -1418,11 +1466,16 @@ begin
         begin
           idx := FindSym(name); Next;
           valNode := ParseLValueAST(idx);
-          Expect(tkAssign, ':=');
-          ParseExpr;
-          node := AllocNode(AN_ASSIGN);
-          ASTLeft[node] := valNode;
-          ASTRight[node] := CurASTNode;
+          if ASTKind[valNode] = AN_CALL then
+            node := valNode
+          else
+          begin
+            Expect(tkAssign, ':=');
+            ParseExpr;
+            node := AllocNode(AN_ASSIGN);
+            ASTLeft[node] := valNode;
+            ASTRight[node] := CurASTNode;
+          end;
         end;
       end;
     end;
@@ -1566,12 +1619,19 @@ begin
 end;
 
 procedure ParseTypeSection;
-{ Handles enum types: type TFoo = (a, b, c); }
-var ordinal: Int64; tname: AnsiString; depth: Integer; done: Boolean;
+{ Handles enum types, record/class type declarations }
+var
+  ordinal: Int64;
+  tname: AnsiString;
+  done: Boolean;
+  tnOff, tnLen, ci, fnOff, fnLen, curFieldOff, fRec, fSize, depth: Integer;
+  fTk: TTypeKind;
 begin
   Next;
   while CurTok.Kind = tkIdent do
   begin
+    tnOff := Tokens[TokPos-1].SOffset;
+    tnLen := Tokens[TokPos-1].SLen;
     tname := CurTok.SVal; Next;
     Expect(tkEq, '=');
     if CurTok.Kind = tkLParen then
@@ -1586,7 +1646,40 @@ begin
       end;
       Expect(tkRParen, ')');
     end
-    else if (CurTok.Kind = tkRecord) or (CurTok.Kind = tkClass) then
+    else if CurTok.Kind = tkClass then
+    begin
+      Next;
+      ci := AddUClass(tnOff, tnLen);
+      curFieldOff := 0;
+      while (CurTok.Kind <> tkEnd) and (CurTok.Kind <> tkEOF) do
+      begin
+        if (CurTok.Kind = tkProcedure) or (CurTok.Kind = tkFunction) then
+        begin
+          while (CurTok.Kind <> tkSemicolon) and (CurTok.Kind <> tkEnd) and (CurTok.Kind <> tkEOF) do Next;
+          Eat(tkSemicolon);
+        end
+        else if CurTok.Kind = tkIdent then
+        begin
+          fnOff := Tokens[TokPos-1].SOffset;
+          fnLen := Tokens[TokPos-1].SLen;
+          Next;
+          Expect(tkColon, ':');
+          fTk := ParseTypeKind;
+          fRec := LastTypeRecId;
+          if fTk = tyString then fSize := LOCAL_STR_CAP + 8
+          else if fTk = tyRecord then fSize := RecSize(fRec)
+          else fSize := 8;
+          AddUField(ci, fnOff, fnLen, curFieldOff, Ord(fTk), fRec);
+          curFieldOff := curFieldOff + fSize;
+          Eat(tkSemicolon);
+        end
+        else
+          Next;
+      end;
+      UClsSize_[ci] := curFieldOff;
+      Expect(tkEnd, 'end');
+    end
+    else if CurTok.Kind = tkRecord then
     begin
       depth := 1;
       Next;
@@ -1626,11 +1719,31 @@ var
   doneArgs, doneParam, isArr, isByRef: Boolean;
   startIdx, idx: Integer;
   tokKindOrd: Integer;
+  methOwnerCi, methOwnerRec, methSNOff, methSNLen: Integer;
 begin
   isFunc := CurTok.Kind = tkFunction;
   Next;
   if CurTok.Kind <> tkIdent then Error('expected name');
   name := CurTok.SVal; Next;
+
+  { Check for ClassName.MethodName pattern }
+  methOwnerCi := -1;
+  methOwnerRec := REC_NONE;
+  methSNOff := 0; methSNLen := 0;
+  if CurTok.Kind = tkDot then
+  begin
+    methOwnerCi := FindUClass(name);
+    if methOwnerCi >= 0 then
+    begin
+      methOwnerRec := REC_UCLASS_BASE + methOwnerCi;
+      Next; { consume dot }
+      if CurTok.Kind <> tkIdent then Error('expected method name');
+      methSNOff := Tokens[TokPos-1].SOffset;
+      methSNLen := Tokens[TokPos-1].SLen;
+      name := name + '.' + CurTok.SVal;
+      Next; { consume method name }
+    end;
+  end;
 
   nparams := 0; retType := tyInteger;
 
@@ -1693,6 +1806,23 @@ begin
     Eat(tkSemicolon);
   end;
 
+  { Inject implicit Self parameter at index 0 for methods }
+  if methOwnerCi >= 0 then
+  begin
+    for i := nparams downto 1 do
+    begin
+      pnames[i] := pnames[i-1];
+      ptypes[i] := ptypes[i-1];
+      parr[i]   := parr[i-1];
+      pbyref[i] := pbyref[i-1];
+    end;
+    pnames[0] := 'Self';
+    ptypes[0] := tyClass;
+    parr[0]   := False;
+    pbyref[0] := False;
+    nparams := nparams + 1;
+  end;
+
   if (name = 'LoadFile') or (name = 'loadfile') then
   begin
     while not (CurTok.Kind in [tkBegin, tkEOF]) do Next;
@@ -1746,6 +1876,13 @@ begin
   CurProc := pi;
   Procs[pi].ScopeBase := SymCount;
 
+  { Set method context before allocating params }
+  if methOwnerCi >= 0 then
+  begin
+    CurSelfClass := methOwnerRec;
+    AddUMeth(methOwnerCi, methSNOff, methSNLen, pi);
+  end;
+
   { Allocate param slots }
   for i := 0 to nparams-1 do
   begin
@@ -1760,6 +1897,9 @@ begin
       Syms[idx].ElemType := ptypes[i];
     end;
   end;
+  { Wire Self's RecName so field lookups resolve against the owner class }
+  if methOwnerCi >= 0 then
+    Syms[Procs[pi].Params[0].SymIdx].RecName := methOwnerRec;
 
   { Return value slot }
   if isFunc then
@@ -1835,6 +1975,7 @@ begin
   SymCount  := savedSC;
   FrameSize := savedFS;
   CurProc   := -1;
+  CurSelfClass := REC_NONE;
 end;
 
 function LowerCase(const s: AnsiString): AnsiString;
@@ -1853,11 +1994,30 @@ end;
 
 procedure ParseUnit; forward;
 
+procedure ConcatThree(const s1, s2, s3: AnsiString; var dst: AnsiString);
+var
+  i, len1, len2, len3: Integer;
+begin
+  len1 := Length(s1);
+  len2 := Length(s2);
+  len3 := Length(s3);
+  SetLength(dst, len1 + len2 + len3);
+  for i := 1 to len1 do
+    dst[i] := s1[i];
+  for i := 1 to len2 do
+    dst[len1 + i] := s2[i];
+  for i := 1 to len3 do
+    dst[len1 + len2 + i] := s3[i];
+end;
+
 procedure ParseUsesUnit(const name: AnsiString);
 var
   lo, path, content: AnsiString;
   startPos, savedTokPos, strIdx, i: Integer;
-  savedCurTok: TToken;
+  savedCurTokKind: TTokenKind;
+  savedCurTokSVal: AnsiString;
+  savedCurTokIVal: Int64;
+  savedCurTokLine: Integer;
   isCompiled, isCUnit: Boolean;
 begin
   lo := LowerCase(name);
@@ -1882,22 +2042,22 @@ begin
 
   isCUnit := False;
   content := '';
-  path := SourceFileDir + lo + '.pas';
+  ConcatThree(SourceFileDir, lo, '.pas', path);
   LoadFile(path, content);
   if Length(content) = 0 then
   begin
-    path := SourceFileDir + lo + '.pp';
+    ConcatThree(SourceFileDir, lo, '.pp', path);
     LoadFile(path, content);
   end;
   if Length(content) = 0 then
   begin
-    path := SourceFileDir + lo + '.c';
+    ConcatThree(SourceFileDir, lo, '.c', path);
     LoadFile(path, content);
     if Length(content) > 0 then isCUnit := True;
   end;
   if Length(content) = 0 then
   begin
-    path := SourceFileDir + lo + '.h';
+    ConcatThree(SourceFileDir, lo, '.h', path);
     LoadFile(path, content);
     if Length(content) > 0 then isCUnit := True;
   end;
@@ -1905,22 +2065,22 @@ begin
   if Length(content) = 0 then
   begin
     { If not found in base dir, try compiler's local directory or common locations }
-    path := 'compiler/' + lo + '.pas';
+    ConcatThree('compiler/', lo, '.pas', path);
     LoadFile(path, content);
     if Length(content) = 0 then
     begin
-      path := 'compiler/' + lo + '.pp';
+      ConcatThree('compiler/', lo, '.pp', path);
       LoadFile(path, content);
     end;
     if Length(content) = 0 then
     begin
-      path := 'compiler/' + lo + '.c';
+      ConcatThree('compiler/', lo, '.c', path);
       LoadFile(path, content);
       if Length(content) > 0 then isCUnit := True;
     end;
     if Length(content) = 0 then
     begin
-      path := 'compiler/' + lo + '.h';
+      ConcatThree('compiler/', lo, '.h', path);
       LoadFile(path, content);
       if Length(content) > 0 then isCUnit := True;
     end;
@@ -1928,7 +2088,7 @@ begin
 
   if Length(content) = 0 then
   begin
-    Error('uses: unit source not found: ' + lo);
+    Error('uses: unit source not found');
   end;
 
   if isCUnit then
@@ -1937,7 +2097,10 @@ begin
     startPos := CLexAppend(content);
 
     savedTokPos := TokPos;
-    savedCurTok := CurTok;
+    savedCurTokKind := CurTok.Kind;
+    savedCurTokSVal := CurTok.SVal;
+    savedCurTokIVal := CurTok.IVal;
+    savedCurTokLine := CurTok.Line;
 
     TokPos := startPos;
     Next;
@@ -1945,7 +2108,10 @@ begin
     ParseCUnit;
 
     TokPos := savedTokPos;
-    CurTok := savedCurTok;
+    CurTok.Kind := savedCurTokKind;
+    CurTok.SVal := savedCurTokSVal;
+    CurTok.IVal := savedCurTokIVal;
+    CurTok.Line := savedCurTokLine;
   end
   else
   begin
@@ -1956,7 +2122,10 @@ begin
 
     { Save current main program parser position }
     savedTokPos := TokPos;
-    savedCurTok := CurTok;
+    savedCurTokKind := CurTok.Kind;
+    savedCurTokSVal := CurTok.SVal;
+    savedCurTokIVal := CurTok.IVal;
+    savedCurTokLine := CurTok.Line;
 
     { Point parser to first token of the unit }
     TokPos := startPos;
@@ -1967,7 +2136,10 @@ begin
 
     { Restore parser position }
     TokPos := savedTokPos;
-    CurTok := savedCurTok;
+    CurTok.Kind := savedCurTokKind;
+    CurTok.SVal := savedCurTokSVal;
+    CurTok.IVal := savedCurTokIVal;
+    CurTok.Line := savedCurTokLine;
   end;
 end;
 

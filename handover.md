@@ -5,6 +5,36 @@
 
 ---
 
+## 🚨 CRITICAL RESOLUTIONS: Bootstrapping Segfaults & C-Unit Import Crash
+
+We successfully identified and resolved the major memory corruption and compiler bootstrap blockers preventing stable self-compilation and C subroutine importing!
+
+### 1. The Bug: String Concatenation `+` Segfault in `ParseUsesUnit`
+* **Symptom:** The self-hosted compiler segfaulted when encountering `uses` statements, specifically inside `ParseUsesUnit`.
+* **Root Cause:** 
+  * The compiler's code generator does not natively support string concatenation `+` (it parses it as `AN_BINOP` and emits raw integer addition `add rax, rcx` on the string pointers, producing an invalid heap/stack address).
+  * In the assignment `path := SourceFileDir + lo + '.pas';`, since the RHS is a non-L-value expression, `GenLValueAddress` did nothing, leaving `rax` contaminated with `0` (from the previous `content := '';` assignment).
+  * The compiler then pushed `rax` (`0`) to the stack and popped it into `rsi`, leading to `mov (%rsi), %rax` dereferencing a `NULL` pointer and causing a segmentation fault.
+* **Fix:** 
+  * Implemented a standard, concatenation-free helper `ConcatThree(const s1, s2, s3: AnsiString; var dst: AnsiString)` in `compiler/parser.inc` using `SetLength` and a character-copying loop.
+  * Replaced all string concatenations `+` in `parser.inc` and `cparser.inc` with safe character assignments and calls to `ConcatThree`. The compiler now contains **zero string concatenation `+` operations**, allowing it to stably compile itself.
+
+### 2. The Bug: Negative OS Error Code Pollution in `EmitLoadFile`
+* **Symptom:** Compiling a C import unit like `test_c_import.pas` threw `Expected: unit, but got:  (Kind: 0) SrcPos: 76` at EOF, completely ignoring `my_c_lib.c`.
+* **Root Cause:**
+  * When resolving `uses my_c_lib;`, the compiler first checked `test/my_c_lib.pas` using the built-in `LoadFile`.
+  * In `compiler/symtab.inc`, `EmitLoadFile` emits raw system calls `sysopen` and `sysread` but failed to handle negative error results.
+  * When `my_c_lib.pas` was missing, `sysopen` returned negative and `sysread` returned `-9` (`-EBADF`). The compiler stored `-9` as the string's length field.
+  * Because `-9 <> 0`, the search loop assumed `my_c_lib.pas` was loaded successfully with length `-9`, skipped trying other extensions like `.pp` and `.c`, and called the Pascal `ParseUnit` on the empty/invalid buffer, hitting EOF immediately.
+* **Fix:**
+  * Added a signedness check in `EmitLoadFile` directly after the `sysread` syscall: if `rax` is negative, we immediately clamp it to `0` (empty string). This cascades search errors correctly and lets the compiler find and compile `.c` units beautifully.
+
+### 3. Verification & Pristine Build State
+* `make bootstrap` compiles and verifies byte-for-byte (`cmp /tmp/pascal26-build /tmp/pascal26-verify` matches perfectly).
+* `./compiler/pascal26 test/test_c_import.pas /tmp/test_c_import && /tmp/test_c_import` successfully runs, parses the C subroutine, compiles the main program, and outputs `42`.
+
+---
+
 ## What Was Done This Session
 
 ### 1. Fixed class field access (segfault resolved)

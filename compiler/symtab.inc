@@ -1,3 +1,113 @@
+{ ===== User-class helpers (must precede hardcoded record helpers) ===== }
+
+function ULower(const s: AnsiString): AnsiString;
+var res: AnsiString; i: Integer; c: Char;
+begin
+  res := s;
+  i := 1;
+  while i <= Length(res) do
+  begin
+    c := res[i];
+    if (c >= 'A') and (c <= 'Z') then res[i] := Chr(Ord(c) + 32);
+    Inc(i);
+  end;
+  Result := res;
+end;
+
+function UNameMatch(off, len: Integer; const lo: AnsiString): Boolean;
+var i: Integer; c: Char;
+begin
+  Result := False;
+  if len <> Length(lo) then Exit;
+  i := 0;
+  while i < len do
+  begin
+    c := TokChars[off + i];
+    if (c >= 'A') and (c <= 'Z') then c := Chr(Ord(c) + 32);
+    if c <> lo[i + 1] then Exit;
+    Inc(i);
+  end;
+  Result := True;
+end;
+
+function FindUClass(const name: AnsiString): Integer;
+var i: Integer; lo, name2: AnsiString;
+begin
+  Result := -1;
+  name2 := name;
+  lo := ULower(name2);
+  i := 0;
+  while i < UClsCount do
+  begin
+    if UNameMatch(UClsNOff[i], UClsNLen[i], lo) then begin Result := i; Exit; end;
+    Inc(i);
+  end;
+end;
+
+function FindUField(ci: Integer; const name: AnsiString): Integer;
+var i, base, cnt: Integer; lo, name2: AnsiString;
+begin
+  Result := -1;
+  name2 := name;
+  lo := ULower(name2);
+  base := UClsFBase[ci];
+  cnt  := UClsFCount[ci];
+  i := 0;
+  while i < cnt do
+  begin
+    if UNameMatch(UFldNOff[base + i], UFldNLen[base + i], lo) then begin Result := base + i; Exit; end;
+    Inc(i);
+  end;
+end;
+
+function FindUMeth(ci: Integer; const name: AnsiString): Integer;
+var i, base, cnt: Integer; lo, name2: AnsiString;
+begin
+  Result := -1;
+  name2 := name;
+  lo := ULower(name2);
+  base := UClsMBase[ci];
+  cnt  := UClsMCount[ci];
+  i := 0;
+  while i < cnt do
+  begin
+    if UNameMatch(UMthNOff[base + i], UMthNLen[base + i], lo) then begin Result := base + i; Exit; end;
+    Inc(i);
+  end;
+end;
+
+function AddUClass(off, len: Integer): Integer;
+begin
+  Result := UClsCount;
+  UClsNOff[UClsCount]   := off;
+  UClsNLen[UClsCount]   := len;
+  UClsSize_[UClsCount]  := 0;
+  UClsFBase[UClsCount]  := UFldCount;
+  UClsFCount[UClsCount] := 0;
+  UClsMBase[UClsCount]  := UMthCount;
+  UClsMCount[UClsCount] := 0;
+  UClsCount := UClsCount + 1;
+end;
+
+procedure AddUField(ci, noff, nlen, byteOff, tk, recId: Integer);
+var fi: Integer;
+begin
+  fi := UFldCount;
+  UFldNOff[fi] := noff;  UFldNLen[fi] := nlen;
+  UFldOff_[fi] := byteOff; UFldTk[fi] := tk; UFldRec_[fi] := recId;
+  UFldCount := UFldCount + 1;
+  UClsFCount[ci] := UClsFCount[ci] + 1;
+end;
+
+procedure AddUMeth(ci, noff, nlen, pi: Integer);
+var mi: Integer;
+begin
+  mi := UMthCount;
+  UMthNOff[mi] := noff; UMthNLen[mi] := nlen; UMthProc_[mi] := pi;
+  UMthCount := UMthCount + 1;
+  UClsMCount[ci] := UClsMCount[ci] + 1;
+end;
+
 { ===== Record Helper Functions ===== }
 
 const
@@ -14,6 +124,7 @@ const
   REC_TMYCLASS = 10;
 
 function IsRecordType(const lo: AnsiString): Integer;
+var ci: Integer; lo2: AnsiString;
 begin
   Result := REC_NONE;
   if lo = 'TToken' then Result := REC_TTOKEN
@@ -26,12 +137,25 @@ begin
   else if lo = 'TProc' then Result := REC_TPROC
   else if lo = 'TRawToken' then Result := REC_TRAWTOKEN
   else if (lo = 'TMyClass') or (lo = 'tmyclass') then Result := REC_TMYCLASS;
+  if Result = REC_NONE then
+  begin
+    lo2 := lo;
+    ci := FindUClass(lo2);
+    if ci >= 0 then Result := REC_UCLASS_BASE + ci;
+  end;
 end;
 
 function IsClassType(const lo: AnsiString): Boolean;
+var ci: Integer; lo2: AnsiString;
 begin
   Result := False;
   if (lo = 'TMyClass') or (lo = 'tmyclass') then Result := True;
+  if not Result then
+  begin
+    lo2 := lo;
+    ci := FindUClass(lo2);
+    if ci >= 0 then Result := True;
+  end;
 end;
 
 function RecSize(rec: Integer): Integer;
@@ -46,12 +170,14 @@ begin
   else if rec = REC_TPARAM then Result := 296
   else if rec = REC_TPROC then Result := 2688
   else if rec = REC_TRAWTOKEN then Result := 40
-  else if rec = REC_TMYCLASS then Result := 16;
+  else if rec = REC_TMYCLASS then Result := 16
+  else if rec >= REC_UCLASS_BASE then Result := UClsSize_[rec - REC_UCLASS_BASE];
 end;
 
 function RecFieldOffset(rec: Integer; const field: AnsiString): Integer;
+var fi: Integer; field2: AnsiString;
 begin
-  Result := 0;
+  Result := 0; fi := 0; field2 := field;
   if rec = REC_TTOKEN then
   begin
     if field = 'Kind' then Result := 0
@@ -126,12 +252,18 @@ begin
   begin
     if (field = 'x') or (field = 'X') then Result := 0
     else if (field = 'y') or (field = 'Y') then Result := 8;
+  end
+  else if rec >= REC_UCLASS_BASE then
+  begin
+    fi := FindUField(rec - REC_UCLASS_BASE, field2);
+    if fi >= 0 then Result := UFldOff_[fi];
   end;
 end;
 
 function RecFieldType(rec: Integer; const field: AnsiString): TTypeKind;
+var fi: Integer; field2: AnsiString;
 begin
-  Result := tyInteger;
+  Result := tyInteger; fi := 0; field2 := field;
   if rec = REC_TTOKEN then
   begin
     if field = 'SVal' then Result := tyString;
@@ -159,15 +291,26 @@ begin
   else if rec = REC_TMYCLASS then
   begin
     Result := tyInteger;
+  end
+  else if rec >= REC_UCLASS_BASE then
+  begin
+    fi := FindUField(rec - REC_UCLASS_BASE, field2);
+    if fi >= 0 then Result := IntToTypeKind(UFldTk[fi]);
   end;
 end;
 
 function RecFieldRecId(rec: Integer; const field: AnsiString): Integer;
+var fi: Integer; field2: AnsiString;
 begin
-  Result := REC_NONE;
+  Result := REC_NONE; fi := 0; field2 := field;
   if rec = REC_TPROC then
   begin
     if field = 'Params' then Result := REC_TPARAM;
+  end
+  else if rec >= REC_UCLASS_BASE then
+  begin
+    fi := FindUField(rec - REC_UCLASS_BASE, field2);
+    if fi >= 0 then Result := UFldRec_[fi];
   end;
 end;
 
@@ -555,6 +698,13 @@ begin
   MovRdxImm(STRING_CAP);
   MovRaxImm(SYS_READ);
   EmitSyscall;
+
+  { If rax is negative (error), clamp it to 0 }
+  EmitB($48); EmitB($85); EmitB($C0);              { test rax, rax }
+  EmitB($79); EmitB($0A);                          { jns skip }
+  MovRaxImm(0);                                    { mov rax, 0 }
+  { skip }
+
   EmitStoreStrLen(dstIdx);
 
   { close(fd) }

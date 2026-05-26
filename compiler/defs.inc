@@ -15,6 +15,11 @@ const
   MAX_AST     = 65536;
   SPECIAL_IN  = 999;
 
+  MAX_UCLASS      = 32;    { user-defined class slots }
+  MAX_UFIELD      = 256;   { field slots across all user classes }
+  MAX_UMETH       = 256;   { method slots across all user classes }
+  REC_UCLASS_BASE = 11;    { user class recIds start here }
+
   { AST node kinds }
   AN_NONE      = 0;
   AN_INT_LIT   = 1;
@@ -225,6 +230,30 @@ var
   ASTTk      : array[0..MAX_AST-1] of Integer;  { TTypeKind of expression }
   ASTNodeCount : Integer;
 
+  { User-defined class/field/method tables - integer-only for fixedpoint safety }
+  UClsNOff   : array[0..MAX_UCLASS-1] of Integer;
+  UClsNLen   : array[0..MAX_UCLASS-1] of Integer;
+  UClsSize_  : array[0..MAX_UCLASS-1] of Integer;
+  UClsFBase  : array[0..MAX_UCLASS-1] of Integer;
+  UClsFCount : array[0..MAX_UCLASS-1] of Integer;
+  UClsMBase  : array[0..MAX_UCLASS-1] of Integer;
+  UClsMCount : array[0..MAX_UCLASS-1] of Integer;
+  UClsCount  : Integer;
+
+  UFldNOff   : array[0..MAX_UFIELD-1] of Integer;
+  UFldNLen   : array[0..MAX_UFIELD-1] of Integer;
+  UFldOff_   : array[0..MAX_UFIELD-1] of Integer;
+  UFldTk     : array[0..MAX_UFIELD-1] of Integer;
+  UFldRec_   : array[0..MAX_UFIELD-1] of Integer;
+  UFldCount  : Integer;
+
+  UMthNOff   : array[0..MAX_UMETH-1] of Integer;
+  UMthNLen   : array[0..MAX_UMETH-1] of Integer;
+  UMthProc_  : array[0..MAX_UMETH-1] of Integer;
+  UMthCount  : Integer;
+
+  CurSelfClass : Integer;
+
 {$ifdef FPC}
 function sysopen(const path: AnsiString; flags: Integer): Integer;
 begin
@@ -256,6 +285,15 @@ function IntToTokenKind(val: Integer): TTokenKind;
 begin
   {$ifdef FPC}
   Result := TTokenKind(val);
+  {$else}
+  Result := val;
+  {$endif}
+end;
+
+function IntToTypeKind(val: Integer): TTypeKind;
+begin
+  {$ifdef FPC}
+  Result := TTypeKind(val);
   {$else}
   Result := val;
   {$endif}

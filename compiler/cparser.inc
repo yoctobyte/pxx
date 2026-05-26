@@ -189,7 +189,10 @@ begin
         Next;
       end
       else
-        pnames[nparams] := 'arg' + Chr(Ord('0') + nparams);
+      begin
+        pnames[nparams] := 'arg0';
+        pnames[nparams][4] := Chr(Ord('0') + nparams);
+      end;
       Inc(nparams);
     end
     else

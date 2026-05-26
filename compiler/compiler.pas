@@ -54,6 +54,7 @@ begin
   FrameSize := 0; CurProc := -1;
   TokCount := 0; TokPos := 0; TokCharLen := 0;
   ASTNodeCount := 0; CurASTNode := -1;
+  UClsCount := 0; UFldCount := 0; UMthCount := 0; CurSelfClass := REC_NONE;
   AddConst('StdErr', tyInteger, 2);
 
   if isC then
