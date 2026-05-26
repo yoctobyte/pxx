@@ -10,6 +10,7 @@ uses SysUtils, BaseUnix;
 {$include emit.inc}
 {$include symtab.inc}
 {$include parser.inc}
+{$include codegen.inc}
 {$include elfwriter.inc}
 
 { ===== Main ===== }

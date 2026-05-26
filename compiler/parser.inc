@@ -116,6 +116,114 @@ procedure CompileLValueAddress(const name: AnsiString; var tk: TTypeKind; var re
 procedure ParseLValue(const name: AnsiString); forward;
 procedure EmitArgvToAddr; forward;
 
+function ParseLValueAST(idx: Integer): Integer; forward;
+function ParseSetMembershipAST(leftExpr: Integer): Integer; forward;
+function ParseStatementAST: Integer; forward;
+function ParseBlockAST: Integer; forward;
+procedure CompileAST(node: Integer); forward;
+
+function ParseLValueAST(idx: Integer): Integer;
+var node, indexNode, fieldNode, prevTok, recName, i: Integer; tk: TTypeKind; fieldName: AnsiString;
+begin
+  prevTok := TokPos - 1;
+  if idx < 0 then Error('undefined variable');
+  node := AllocNode(AN_IDENT);
+  ASTIVal[node] := idx;
+  ASTSOffset[node] := Tokens[prevTok].SOffset;
+  ASTSLen[node] := Tokens[prevTok].SLen;
+  tk := Syms[idx].TypeKind;
+  recName := Syms[idx].RecName;
+  ASTTk[node] := Ord(tk);
+  
+  while CurTok.Kind in [tkLBrack, tkDot] do
+  begin
+    if CurTok.Kind = tkLBrack then
+    begin
+      Next;
+      indexNode := AllocNode(AN_INDEX);
+      ASTLeft[indexNode] := node;
+      ParseExpr;
+      ASTRight[indexNode] := CurASTNode;
+      Expect(tkRBrack, ']');
+      if tk = tyString then
+        tk := tyChar
+      else
+      begin
+        tk := Syms[idx].ElemType;
+        recName := Syms[idx].ElemRecName;
+      end;
+      ASTTk[indexNode] := Ord(tk);
+      node := indexNode;
+    end
+    else
+    begin
+      Next;
+      if CurTok.Kind in [tkEOF, tkSemicolon, tkAssign, tkRBrack, tkRParen] then Error('expected field name');
+      prevTok := TokPos - 1;
+      fieldName := '';
+      for i := Tokens[prevTok].SOffset to Tokens[prevTok].SOffset + Tokens[prevTok].SLen - 1 do
+        AppendChar(fieldName, TokChars[i]);
+      fieldNode := AllocNode(AN_FIELD);
+      ASTLeft[fieldNode] := node;
+      ASTSOffset[fieldNode] := Tokens[prevTok].SOffset;
+      ASTSLen[fieldNode] := Tokens[prevTok].SLen;
+      tk := RecFieldType(recName, fieldName);
+      recName := RecFieldRecId(recName, fieldName);
+      ASTTk[fieldNode] := Ord(tk);
+      Next;
+      node := fieldNode;
+    end;
+  end;
+  Result := node;
+end;
+
+function ParseSetMembershipAST(leftExpr: Integer): Integer;
+var node, argNode, lastArg, loVal, hiVal, itemNode: Integer; done: Boolean;
+begin
+  node := AllocNode(AN_CALL);
+  ASTIVal[node] := -SPECIAL_IN;
+  
+  argNode := AllocNode(AN_ARG);
+  ASTLeft[argNode] := leftExpr;
+  ASTLeft[node] := argNode;
+  lastArg := argNode;
+  
+  Expect(tkLBrack, '[');
+  if CurTok.Kind <> tkRBrack then
+  begin
+    done := False;
+    while not done do
+    begin
+      loVal := ParseSetConst;
+      if Eat(tkDotDot) then
+      begin
+        hiVal := ParseSetConst;
+        itemNode := AllocNode(AN_PAIR);
+        ASTLeft[itemNode] := AllocNode(AN_INT_LIT);
+        ASTIVal[ASTLeft[itemNode]] := loVal;
+        ASTRight[itemNode] := AllocNode(AN_INT_LIT);
+        ASTIVal[ASTRight[itemNode]] := hiVal;
+      end
+      else
+      begin
+        itemNode := AllocNode(AN_INT_LIT);
+        ASTIVal[itemNode] := loVal;
+      end;
+      
+      argNode := AllocNode(AN_ARG);
+      ASTLeft[argNode] := itemNode;
+      ASTRight[lastArg] := argNode;
+      lastArg := argNode;
+      
+      if not Eat(tkComma) then done := True;
+    end;
+  end;
+  Expect(tkRBrack, ']');
+  Result := node;
+end;
+
+
+
 procedure EmitArgvToAddr;
 begin
   { On entry: rax = argv index, rdi = destination address. }
@@ -425,144 +533,163 @@ begin
 end;
 
 procedure ParseFactor;
-var name: AnsiString; recName: Integer; idx, pi, i, node, left, prevTok: Integer; tk: TTypeKind;
+var name: AnsiString; recName: Integer; idx, pi, i, node, left, prevTok, valNode: Integer; tk: TTypeKind; op, argSeq, argSeq2, argSeq3, lastArg, argIdx, exprNode: Integer;
 begin
   LastExprTk := tyInteger;
   case CurTok.Kind of
     tkInteger:
     begin
-      node := AllocNode(AN_INT_LIT); ASTIVal[node] := CurTok.IVal; CurASTNode := node;
-      MovRaxImm(CurTok.IVal); Next;
+      node := AllocNode(AN_INT_LIT); ASTIVal[node] := CurTok.IVal; CurASTNode := node; Next;
     end;
     tkTrue:
     begin
-      node := AllocNode(AN_BOOL_LIT); ASTIVal[node] := 1; ASTTk[node] := Ord(tyBoolean); CurASTNode := node;
-      MovRaxImm(1); Next; LastExprTk := tyBoolean;
+      node := AllocNode(AN_BOOL_LIT); ASTIVal[node] := 1; ASTTk[node] := Ord(tyBoolean); CurASTNode := node; Next; LastExprTk := tyBoolean;
     end;
     tkFalse:
     begin
-      node := AllocNode(AN_BOOL_LIT); ASTIVal[node] := 0; ASTTk[node] := Ord(tyBoolean); CurASTNode := node;
-      MovRaxImm(0); Next; LastExprTk := tyBoolean;
+      node := AllocNode(AN_BOOL_LIT); ASTIVal[node] := 0; ASTTk[node] := Ord(tyBoolean); CurASTNode := node; Next; LastExprTk := tyBoolean;
     end;
     tkString:
     begin
-      { Single-char literal → ordinal value }
       if Length(CurTok.SVal) = 1 then
       begin
-        node := AllocNode(AN_INT_LIT); ASTIVal[node] := Ord(CurTok.SVal[1]); ASTTk[node] := Ord(tyChar); CurASTNode := node;
-        MovRaxImm(Ord(CurTok.SVal[1])); Next; LastExprTk := tyChar;
+        node := AllocNode(AN_INT_LIT); ASTIVal[node] := Ord(CurTok.SVal[1]); ASTTk[node] := Ord(tyChar); CurASTNode := node; Next; LastExprTk := tyChar;
       end
       else
       begin
-        prevTok := TokPos - 1;
-        idx := InternStr(CurTok.SVal); Next;
+        prevTok := TokPos - 1; Next;
         node := AllocNode(AN_STR_LIT);
         ASTSOffset[node] := Tokens[prevTok].SOffset; ASTSLen[node] := Tokens[prevTok].SLen;
         ASTTk[node] := Ord(tyString); CurASTNode := node;
-        EmitB($48); EmitB($B8); EmitDataRef(Strs[idx].Offset);
         LastExprTk := tyString;
       end;
     end;
-    tkLParen:  begin Next; ParseExpr; Expect(tkRParen, ')'); end; { CurASTNode set by ParseExpr }
+    tkLParen:  begin Next; ParseExpr; Expect(tkRParen, ')'); end;
     tkMinus:
     begin
       Next; ParseFactor;
       left := CurASTNode;
-      EmitB($48); EmitB($F7); EmitB($D8);
       node := AllocNode(AN_NEG); ASTLeft[node] := left; CurASTNode := node;
     end;
     tkNot:
     begin
       Next; ParseFactor;
       left := CurASTNode;
-      EmitB($48); EmitB($83); EmitB($F0); EmitB($01);
       LastExprTk := tyBoolean;
       node := AllocNode(AN_NOT); ASTLeft[node] := left; ASTTk[node] := Ord(tyBoolean); CurASTNode := node;
     end;
     tkOrd, tkChr:
     begin
-      Next; Expect(tkLParen, '('); ParseExpr; Expect(tkRParen, ')');
       if CurTok.Kind = tkChr then LastExprTk := tyChar else LastExprTk := tyInteger;
-      node := AllocNode(AN_CALL); ASTIVal[node] := -1; ASTLeft[node] := CurASTNode; CurASTNode := node;
+      op := Ord(CurTok.Kind);
+      Next; Expect(tkLParen, '('); ParseExpr; Expect(tkRParen, ')');
+      node := AllocNode(AN_CALL); ASTIVal[node] := -op;
+      argSeq := AllocNode(AN_ARG); ASTLeft[argSeq] := CurASTNode;
+      ASTLeft[node] := argSeq;
+      CurASTNode := node;
     end;
     tkInteger_T, tkLongWord_T:
     begin
+      op := Ord(CurTok.Kind);
       Next; Expect(tkLParen, '('); ParseExpr; Expect(tkRParen, ')');
-      node := AllocNode(AN_CALL); ASTIVal[node] := -1; ASTLeft[node] := CurASTNode; CurASTNode := node;
+      node := AllocNode(AN_CALL); ASTIVal[node] := -op;
+      argSeq := AllocNode(AN_ARG); ASTLeft[argSeq] := CurASTNode;
+      ASTLeft[node] := argSeq;
+      CurASTNode := node;
     end;
     tkLength:
     begin
       Next; Expect(tkLParen, '(');
       if CurTok.Kind <> tkIdent then Error('Length: expected string variable');
-      idx := FindSym(CurTok.SVal);
-      Next;
+      idx := FindSym(CurTok.SVal); Next;
+      valNode := ParseLValueAST(idx);
       if idx < 0 then Error('Length: undefined variable');
-      CompileLValueAddressInternal(idx, tk, recName);
-      if tk <> tyString then Error('Length: not a string value');
-      EmitB($48); EmitB($8B); EmitB($00); { mov rax, [string address] }
       Expect(tkRParen, ')');
-      CurASTNode := AllocNode(AN_CALL); ASTIVal[CurASTNode] := -1;
+      node := AllocNode(AN_CALL); ASTIVal[node] := -Ord(tkLength);
+      argSeq := AllocNode(AN_ARG); ASTLeft[argSeq] := valNode;
+      ASTLeft[node] := argSeq;
+      CurASTNode := node;
     end;
     tkSysOpen:
     begin
-      { SysOpen(path_str_var, flags): Integer = fd }
       Next; Expect(tkLParen, '(');
       if CurTok.Kind <> tkIdent then Error('SysOpen: expected string var');
-      idx := FindSym(CurTok.SVal);
+      idx := FindSym(CurTok.SVal); Next;
+      valNode := ParseLValueAST(idx);
       if (idx < 0) or (Syms[idx].TypeKind <> tyString) then Error('SysOpen: not a string var');
-      EmitTerminateString(idx);
-      EmitLeaStrDataRdi(idx);
-      Next; Expect(tkComma, ',');
-      ParseExpr;   { flags → rax }
-      EmitB($48); EmitB($89); EmitB($C6);               { mov rsi, rax }
-      MovRaxImm(0); EmitB($48); EmitB($89); EmitB($C2); { rdx=0 (mode ignored for open) }
-      MovRaxImm(SYS_OPEN); EmitSyscall;
+      Expect(tkComma, ',');
+      
+      argSeq := AllocNode(AN_ARG); ASTLeft[argSeq] := valNode;
+      ParseExpr;
+      argSeq2 := AllocNode(AN_ARG); ASTLeft[argSeq2] := CurASTNode;
+      ASTRight[argSeq] := argSeq2;
       Expect(tkRParen, ')');
-      CurASTNode := AllocNode(AN_CALL); ASTIVal[CurASTNode] := -1;
+      
+      node := AllocNode(AN_CALL); ASTIVal[node] := -Ord(tkSysOpen);
+      ASTLeft[node] := argSeq;
+      CurASTNode := node;
     end;
     tkSysRead:
     begin
-      { SysRead(fd, buf_array, maxn): Integer = bytes read }
       Next; Expect(tkLParen, '(');
-      ParseExpr; EmitB($48); EmitB($89); EmitB($C7);     { mov rdi, rax (fd) }
+      ParseExpr;
+      argSeq := AllocNode(AN_ARG); ASTLeft[argSeq] := CurASTNode;
       Expect(tkComma, ',');
       if CurTok.Kind <> tkIdent then Error('SysRead: expected array var');
-      idx := FindSym(CurTok.SVal);
+      idx := FindSym(CurTok.SVal); Next;
+      valNode := ParseLValueAST(idx);
       if (idx < 0) or not Syms[idx].IsArray then Error('SysRead: not an array var');
-      { lea rsi, [bss+arr.Offset] }
-      EmitB($48); EmitB($8D); EmitB($34); EmitB($25); EmitGlobRef(Syms[idx].Offset);
-      Next; Expect(tkComma, ',');
-      ParseExpr; EmitB($48); EmitB($89); EmitB($C2);     { mov rdx, rax (count) }
-      MovRaxImm(SYS_READ); EmitSyscall;
+      Expect(tkComma, ',');
+      
+      argSeq2 := AllocNode(AN_ARG); ASTLeft[argSeq2] := valNode;
+      ASTRight[argSeq] := argSeq2;
+      ParseExpr;
+      argSeq3 := AllocNode(AN_ARG); ASTLeft[argSeq3] := CurASTNode;
+      ASTRight[argSeq2] := argSeq3;
       Expect(tkRParen, ')');
-      CurASTNode := AllocNode(AN_CALL); ASTIVal[CurASTNode] := -1;
+      
+      node := AllocNode(AN_CALL); ASTIVal[node] := -Ord(tkSysRead);
+      ASTLeft[node] := argSeq;
+      CurASTNode := node;
     end;
     tkSyswrite:
     begin
-      { Syswrite(fd, buf_array, n): Integer = bytes written }
       Next; Expect(tkLParen, '(');
-      ParseExpr; EmitB($48); EmitB($89); EmitB($C7);     { mov rdi, rax (fd) }
+      ParseExpr;
+      argSeq := AllocNode(AN_ARG); ASTLeft[argSeq] := CurASTNode;
       Expect(tkComma, ',');
       if CurTok.Kind <> tkIdent then Error('Syswrite: expected array var');
-      idx := FindSym(CurTok.SVal);
+      idx := FindSym(CurTok.SVal); Next;
+      valNode := ParseLValueAST(idx);
       if (idx < 0) or not Syms[idx].IsArray then Error('Syswrite: not an array var');
-      { lea rsi, [bss+arr.Offset] }
-      EmitB($48); EmitB($8D); EmitB($34); EmitB($25); EmitGlobRef(Syms[idx].Offset);
-      Next; Expect(tkComma, ',');
-      ParseExpr; EmitB($48); EmitB($89); EmitB($C2);     { mov rdx, rax (count) }
-      MovRaxImm(1); EmitSyscall;                          { SYS_WRITE=1 }
+      Expect(tkComma, ',');
+      
+      argSeq2 := AllocNode(AN_ARG); ASTLeft[argSeq2] := valNode;
+      ASTRight[argSeq] := argSeq2;
+      ParseExpr;
+      argSeq3 := AllocNode(AN_ARG); ASTLeft[argSeq3] := CurASTNode;
+      ASTRight[argSeq2] := argSeq3;
       Expect(tkRParen, ')');
-      CurASTNode := AllocNode(AN_CALL); ASTIVal[CurASTNode] := -1;
+      
+      node := AllocNode(AN_CALL); ASTIVal[node] := -Ord(tkSyswrite);
+      ASTLeft[node] := argSeq;
+      CurASTNode := node;
     end;
     tkArgCount:
     begin
-      { ArgCount(): Integer = argc - 1  (Pascal ParamCount semantics) }
       Next;
       if CurTok.Kind = tkLParen then begin Next; Expect(tkRParen, ')'); end;
-      EmitB($48); EmitB($8B); EmitB($04); EmitB($25); EmitGlobRef(BSS_INITIAL_RSP);
-      EmitB($48); EmitB($8B); EmitB($00);               { mov rax, [rax] = argc }
-      EmitB($48); EmitB($FF); EmitB($C8);               { dec rax → argc-1 }
-      CurASTNode := AllocNode(AN_CALL); ASTIVal[CurASTNode] := -1;
+      node := AllocNode(AN_CALL); ASTIVal[node] := -Ord(tkArgCount); CurASTNode := node;
+    end;
+    tkArgStr:
+    begin
+      Next; Expect(tkLParen, '(');
+      ParseExpr;
+      Expect(tkRParen, ')');
+      node := AllocNode(AN_CALL); ASTIVal[node] := -Ord(tkArgStr);
+      argSeq := AllocNode(AN_ARG); ASTLeft[argSeq] := CurASTNode;
+      ASTLeft[node] := argSeq;
+      CurASTNode := node;
     end;
     tkIdent:
     begin
@@ -572,96 +699,70 @@ begin
       pi   := FindProc(name);
       if (idx >= 0) and (Syms[idx].Kind = skConst) then
       begin
-        node := AllocNode(AN_INT_LIT); ASTIVal[node] := Syms[idx].ConstVal; CurASTNode := node;
-        MovRaxImm(Syms[idx].ConstVal); Next;
+        node := AllocNode(AN_INT_LIT); ASTIVal[node] := Syms[idx].ConstVal; CurASTNode := node; Next;
       end
       else if (pi >= 0) and Procs[pi].IsFunc then
       begin
-        { Function call in expression }
         Next;
-        { Push args left to right }
+        node := AllocNode(AN_CALL); ASTIVal[node] := pi; ASTTk[node] := Ord(Procs[pi].RetType);
+        lastArg := -1;
         if CurTok.Kind = tkLParen then
         begin
           Next;
           for i := 0 to Procs[pi].ParamCount-1 do
           begin
-            ParseCallArg(pi, i);
+            if Procs[pi].Params[i].IsRef or Procs[pi].Params[i].IsArray then
+            begin
+              if CurTok.Kind <> tkIdent then Error('by-reference argument must be a variable');
+              argIdx := FindSym(CurTok.SVal); Next;
+              exprNode := ParseLValueAST(argIdx);
+            end
+            else
+            begin
+              ParseExpr;
+              exprNode := CurASTNode;
+            end;
+            
+            argSeq := AllocNode(AN_ARG);
+            ASTLeft[argSeq] := exprNode;
+            if lastArg = -1 then
+              ASTLeft[node] := argSeq
+            else
+              ASTRight[lastArg] := argSeq;
+            lastArg := argSeq;
+            
             if i < Procs[pi].ParamCount-1 then Expect(tkComma, ',');
           end;
           Expect(tkRParen, ')');
         end;
-        { Pop into registers right to left }
-        for i := Procs[pi].ParamCount-1 downto 0 do
-          case i of
-            0: EmitB($5F);
-            1: EmitB($5E);
-            2: EmitB($5A);
-            3: EmitB($59);
-            4: begin EmitB($41); EmitB($58); end;
-            5: begin EmitB($41); EmitB($59); end;
-          end;
-        EmitCallProc(pi);
-        LastExprTk := Procs[pi].RetType;
-        node := AllocNode(AN_CALL); ASTIVal[node] := pi; ASTTk[node] := Ord(LastExprTk); CurASTNode := node;
+        CurASTNode := node;
       end
       else if idx >= 0 then
       begin
         Next;
-        if CurTok.Kind in [tkLBrack, tkDot] then
-        begin
-          CompileLValueAddressInternal(idx, tk, recName);
-          LastExprTk := tk;
-          if tk = tyString then
-            begin { leave address in rax } end
-          else if tk in [tyInteger, tyBoolean] then
-            begin EmitB($48); EmitB($8B); EmitB($00); end
-          else if tk = tyChar then
-            begin EmitB($48); EmitB($0F); EmitB($B6); EmitB($00); end;
-          node := AllocNode(AN_INDEX); ASTIVal[node] := idx; ASTTk[node] := Ord(LastExprTk); CurASTNode := node;
-        end
-        else
-        begin
-          LastExprTk := Syms[idx].TypeKind;
-          if (Syms[idx].TypeKind = tyString) and not Syms[idx].IsArray then
-            CompileLValueAddressInternal(idx, tk, recName)
-          else
-            EmitLoadVar(idx);
-          node := AllocNode(AN_IDENT);
-          ASTSOffset[node] := Tokens[prevTok].SOffset; ASTSLen[node] := Tokens[prevTok].SLen;
-          ASTIVal[node] := idx; ASTTk[node] := Ord(LastExprTk); CurASTNode := node;
-        end;
-      end
+        CurASTNode := ParseLValueAST(idx);
+      end;
     end;
     else Error('expected expression');
   end;
 end;
 
 procedure ParseTerm;
-var op: TTokenKind; isShr: Boolean; left, right, node: Integer;
+var op: TTokenKind; left, right, node, opSOffset, opSLen: Integer;
 begin
   ParseFactor;
   while (CurTok.Kind in [tkStar, tkDiv, tkMod, tkAnd]) or
         ((CurTok.Kind = tkIdent) and (CurTok.SVal = 'shr')) do
   begin
-    isShr := (CurTok.Kind = tkIdent) and (CurTok.SVal = 'shr');
+    opSOffset := Tokens[TokPos - 1].SOffset;
+    opSLen := Tokens[TokPos - 1].SLen;
     op := CurTok.Kind; Next;
     left := CurASTNode;
-    EmitB($50);
     ParseFactor;
     right := CurASTNode;
-    EmitB($48); EmitB($89); EmitB($C1);
-    EmitB($58);
-    if isShr then
-      begin EmitB($48); EmitB($D3); EmitB($E8); end
-    else
-      case op of
-        tkStar: begin EmitB($48); EmitB($0F); EmitB($AF); EmitB($C1); end;
-        tkDiv:  begin EmitB($48); EmitB($99); EmitB($48); EmitB($F7); EmitB($F9); end;
-        tkMod:  begin EmitB($48); EmitB($99); EmitB($48); EmitB($F7); EmitB($F9);
-                      EmitB($48); EmitB($89); EmitB($D0); end;
-        tkAnd:  begin EmitB($48); EmitB($21); EmitB($C8); end;
-      end;
-    node := AllocNode(AN_BINOP); ASTIVal[node] := Ord(op); ASTLeft[node] := left; ASTRight[node] := right; CurASTNode := node;
+    node := AllocNode(AN_BINOP); ASTIVal[node] := Ord(op); ASTLeft[node] := left; ASTRight[node] := right;
+    ASTSOffset[node] := opSOffset; ASTSLen[node] := opSLen;
+    CurASTNode := node;
   end;
 end;
 
@@ -672,62 +773,34 @@ begin
   ParseTerm;
   if neg then
   begin
-    EmitB($48); EmitB($F7); EmitB($D8);
     node := AllocNode(AN_NEG); ASTLeft[node] := CurASTNode; CurASTNode := node;
   end;
   while CurTok.Kind in [tkPlus, tkMinus, tkOr] do
   begin
     op := CurTok.Kind; Next;
     left := CurASTNode;
-    EmitB($50); ParseTerm;
+    ParseTerm;
     right := CurASTNode;
-    EmitB($48); EmitB($89); EmitB($C1); EmitB($58);
-    case op of
-      tkPlus:  begin EmitB($48); EmitB($01); EmitB($C8); end;
-      tkMinus: begin EmitB($48); EmitB($29); EmitB($C8); end;
-      tkOr:    begin EmitB($48); EmitB($09); EmitB($C8); end;
-    end;
     node := AllocNode(AN_BINOP); ASTIVal[node] := Ord(op); ASTLeft[node] := left; ASTRight[node] := right; CurASTNode := node;
   end;
 end;
 
 procedure ParseExpr;
-var op: TTokenKind; lhsTk: TTypeKind; left, right, node: Integer;
+var op: TTokenKind; left, right, node: Integer;
 begin
   ParseSimpleExpr;
-  lhsTk := LastExprTk;
   if (CurTok.Kind = tkIdent) and ((CurTok.SVal = 'in') or (CurTok.SVal = 'In')) then
   begin
     Next;
-    ParseSetMembership;
-    CurASTNode := AllocNode(AN_CALL); ASTIVal[CurASTNode] := -1;
+    CurASTNode := ParseSetMembershipAST(CurASTNode);
     Exit;
   end;
   if CurTok.Kind in [tkEq, tkNeq, tkLt, tkLe, tkGt, tkGe] then
   begin
     op := CurTok.Kind; Next;
     left := CurASTNode;
-    EmitB($50); ParseSimpleExpr;
+    ParseSimpleExpr;
     right := CurASTNode;
-    if (lhsTk = tyString) or (LastExprTk = tyString) then
-    begin
-      EmitB($48); EmitB($89); EmitB($C1); EmitB($58);  { mov rcx, rax; pop rax }
-      EmitStrCmpReg(op = tkEq);
-    end
-    else
-    begin
-      EmitB($48); EmitB($89); EmitB($C1); EmitB($58);
-      EmitB($48); EmitB($3B); EmitB($C1);
-      case op of
-        tkEq:  begin EmitB($0F); EmitB($94); EmitB($C0); end;
-        tkNeq: begin EmitB($0F); EmitB($95); EmitB($C0); end;
-        tkLt:  begin EmitB($0F); EmitB($9C); EmitB($C0); end;
-        tkLe:  begin EmitB($0F); EmitB($9E); EmitB($C0); end;
-        tkGt:  begin EmitB($0F); EmitB($9F); EmitB($C0); end;
-        tkGe:  begin EmitB($0F); EmitB($9D); EmitB($C0); end;
-      end;
-      EmitB($48); EmitB($0F); EmitB($B6); EmitB($C0);
-    end;
     node := AllocNode(AN_BINOP); ASTIVal[node] := Ord(op); ASTLeft[node] := left; ASTRight[node] := right;
     ASTTk[node] := Ord(tyBoolean); CurASTNode := node;
   end;
@@ -735,7 +808,7 @@ end;
 
 function ConstEval: Int64;
 { Evaluate a compile-time constant expression (no code emitted) }
-var r, v: Int64; idx: Integer; op: TTokenKind;
+var r, v: Int64; idx, i: Integer; op: TTokenKind; s: AnsiString;
 begin
   r := 0;
   if CurTok.Kind = tkInteger then begin r := CurTok.IVal; Next; end
@@ -749,8 +822,15 @@ begin
       r := Syms[idx].ConstVal
     else
     begin
-      if VERBOSE then writeln('ConstEval error: SVal = ', CurTok.SVal, ' idx = ', idx);
-      if VERBOSE and (idx >= 0) then writeln('Sym Kind = ', Ord(Syms[idx].Kind));
+      writeln('ConstEval error at SrcLine ', SrcLine, ': SVal = ', CurTok.SVal, ' Kind = ', Ord(CurTok.Kind), ' TokPos = ', TokPos);
+      writeln('Tokens nearby:');
+      for idx := TokPos - 5 to TokPos + 5 do
+      begin
+        if (idx >= 0) and (idx < TokCount) then
+        begin
+          writeln('  Token ', idx, ': Line = ', Tokens[idx].Line, ' Kind = ', Ord(Tokens[idx].Kind), ' SOffset = ', Tokens[idx].SOffset, ' SLen = ', Tokens[idx].SLen);
+        end;
+      end;
       Error('not a constant');
     end;
     Next;
@@ -775,180 +855,148 @@ end;
 { ===== Statement parser ===== }
 
 procedure ParseStatement; forward;
+procedure ParseBlock; forward;
 
-procedure ParsewriteArgs(newline: Boolean);
-var si, vidx: Integer; done: Boolean;
+function ParseIfStatementAST: Integer;
+var condNode, thenNode, elseNode, pairNode, node: Integer;
 begin
-  if CurTok.Kind = tkLParen then
-  begin
-    Next;
-    { Skip the predefined diagnostic output descriptor: writeln(StdErr, ...) }
-    if CurTok.Kind = tkIdent then
-    begin
-      vidx := FindSym(CurTok.SVal);
-      if (vidx >= 0) and (Syms[vidx].Kind = skConst) and
-         (Syms[vidx].TypeKind = tyInteger) and
-         (Syms[vidx].Name = 'StdErr') then
-      begin
-        Next;  { skip fd identifier }
-        Eat(tkComma);
-      end;
-    end;
-    done := False;
-    while (CurTok.Kind <> tkRParen) and not done do
-    begin
-      if CurTok.Kind = tkString then
-      begin
-        si := InternStr(CurTok.SVal); Next;
-        if Strs[si].Len > 0 then EmitwriteSyscall(Strs[si].Offset + 8, Strs[si].Len);
-      end
-      else if CurTok.Kind = tkIdent then
-      begin
-        vidx := FindSym(CurTok.SVal);
-        if (vidx >= 0) and (Syms[vidx].TypeKind = tyString) then
-        begin
-          EmitwriteStrVar(vidx); Next;
-        end
-        else if (vidx >= 0) and Syms[vidx].IsArray and (Syms[vidx].ElemType = tyChar) then
-        begin
-          { char array element: writeln(arr[i]) writes as character }
-          ParseExpr;
-          EmitwriteChar;
-        end
-        else begin ParseExpr; EmitwriteInt; end;
-      end
-      else begin ParseExpr; EmitwriteInt; end;
-      if not Eat(tkComma) then done := True;
-    end;
-    Expect(tkRParen, ')');
-  end;
-  if newline then EmitwriteSyscall(NEWLINE_OFFSET, 1);
-end;
-
-procedure ParseIfStatement;
-var elseJmp, thenJmp: Integer;
-begin
-  ParseExpr;
-  EmitB($48); EmitB($85); EmitB($C0);
-  EmitB($0F); EmitB($84); thenJmp := CodeLen; EmitI32(0);
+  ParseExpr; condNode := CurASTNode;
   Expect(tkThen, 'then');
-  ParseStatement;
-  if CurTok.Kind = tkElse then
-  begin
-    EmitB($E9); elseJmp := CodeLen; EmitI32(0);
-    Patch32(thenJmp, CodeLen - (thenJmp + 4));
-    Next; ParseStatement;
-    Patch32(elseJmp, CodeLen - (elseJmp + 4));
-  end
-  else
-    Patch32(thenJmp, CodeLen - (thenJmp + 4));
+  thenNode := ParseStatementAST;
+  elseNode := -1;
+  if Eat(tkElse) then
+    elseNode := ParseStatementAST;
+  
+  node := AllocNode(AN_IF);
+  ASTLeft[node] := condNode;
+  pairNode := AllocNode(AN_PAIR);
+  ASTLeft[pairNode] := thenNode;
+  ASTRight[pairNode] := elseNode;
+  ASTRight[node] := pairNode;
+  Result := node;
 end;
 
-procedure ParseWhileStatement;
-var loopTop, condJmp: Integer;
+function ParseWhileStatementAST: Integer;
+var condNode, bodyNode, node: Integer;
 begin
-  loopTop := CodeLen;
-  ParseExpr;
-  EmitB($48); EmitB($85); EmitB($C0);
-  EmitB($0F); EmitB($84); condJmp := CodeLen; EmitI32(0);
+  ParseExpr; condNode := CurASTNode;
   Expect(tkDo, 'do');
-  ParseStatement;
-  EmitB($E9); EmitI32(loopTop - (CodeLen + 4));
-  Patch32(condJmp, CodeLen - (condJmp + 4));
+  bodyNode := ParseStatementAST;
+  node := AllocNode(AN_WHILE);
+  ASTLeft[node] := condNode;
+  ASTRight[node] := bodyNode;
+  Result := node;
 end;
 
-procedure ParseForStatement;
-var varIdx, limitIdx, loopTop, exitJmp: Integer; down: Boolean;
+function ParseForStatementAST: Integer;
+var
+  varIdx, initNode, limitNode, bodyNode, node: Integer;
+  pair1, pair2, pair3, isDownNode: Integer;
+  down: Boolean;
 begin
   if CurTok.Kind <> tkIdent then Error('for: expected variable');
   varIdx := FindSym(CurTok.SVal);
   if varIdx < 0 then Error('for: undefined');
   Next;
   Expect(tkAssign, ':=');
-  ParseExpr; EmitStoreVar(varIdx);
+  ParseExpr; initNode := CurASTNode;
   down := CurTok.Kind = tkDownto;
   if down then Next else Expect(tkTo, 'to');
-  ParseExpr;
-  limitIdx := AllocTemp; EmitStoreVar(limitIdx);
-  loopTop := CodeLen;
-  EmitLoadVar(varIdx);
-  EmitCmpRaxVar(limitIdx);
-  EmitB($0F); if down then EmitB($8C) else EmitB($8F);
-  exitJmp := CodeLen; EmitI32(0);
+  ParseExpr; limitNode := CurASTNode;
   Expect(tkDo, 'do');
-  ParseStatement;
-  EmitLoadVar(varIdx);
-  if down then begin EmitB($48); EmitB($FF); EmitB($C8); end
-           else begin EmitB($48); EmitB($FF); EmitB($C0); end;
-  EmitStoreVar(varIdx);
-  EmitB($E9); EmitI32(loopTop - (CodeLen + 4));
-  Patch32(exitJmp, CodeLen - (exitJmp + 4));
+  bodyNode := ParseStatementAST;
+  
+  node := AllocNode(AN_FOR);
+  ASTLeft[node] := AllocNode(AN_IDENT);
+  ASTIVal[ASTLeft[node]] := varIdx;
+  
+  pair1 := AllocNode(AN_PAIR);
+  ASTLeft[pair1] := initNode;
+  ASTRight[pair1] := limitNode;
+  
+  isDownNode := AllocNode(AN_INT_LIT);
+  if down then ASTIVal[isDownNode] := 1 else ASTIVal[isDownNode] := 0;
+  
+  pair2 := AllocNode(AN_PAIR);
+  ASTLeft[pair2] := isDownNode;
+  ASTRight[pair2] := bodyNode;
+  
+  pair3 := AllocNode(AN_PAIR);
+  ASTLeft[pair3] := pair1;
+  ASTRight[pair3] := pair2;
+  
+  ASTRight[node] := pair3;
+  Result := node;
 end;
 
-procedure ParseRepeatStatement;
-var loopTop: Integer;
-begin
-  loopTop := CodeLen;
-  while not (CurTok.Kind in [tkUntil, tkEOF]) do
-    begin ParseStatement; Eat(tkSemicolon); end;
-  Expect(tkUntil, 'until');
-  ParseExpr;
-  EmitB($48); EmitB($85); EmitB($C0);
-  EmitB($0F); EmitB($84); EmitI32(loopTop - (CodeLen + 4));
-end;
-
-procedure ParseCaseStatement;
-{ case expr of val1,val2: stmt; ... else stmt; end }
-const MAX_BRANCHES = 256;
+function ParseRepeatStatementAST: Integer;
 var
-  jePositions : array[0..MAX_BRANCHES-1] of Integer;
-  jeCount     : Integer;
-  jmpPositions: array[0..MAX_BRANCHES-1] of Integer;
-  jmpCount    : Integer;
-  elseJmp, i, branchJeStart, si: Integer;
-  hasElse     : Boolean;
-  cv          : Int64;
-  nextJmpPositions: array[0..MAX_BRANCHES-1] of Integer;
-  nextJmpCount    : Integer;
+  seqNode, lastSeq, condNode, stmtNode, node: Integer;
 begin
-  { Save expression in rcx (rax gets clobbered by comparisons) }
-  ParseExpr;
-  EmitB($48); EmitB($89); EmitB($C1);  { mov rcx, rax }
+  seqNode := AllocNode(AN_SEQ);
+  lastSeq := seqNode;
+  while not (CurTok.Kind in [tkUntil, tkEOF]) do
+  begin
+    stmtNode := ParseStatementAST;
+    Eat(tkSemicolon);
+    if ASTLeft[lastSeq] = -1 then
+      ASTLeft[lastSeq] := stmtNode
+    else
+    begin
+      ASTRight[lastSeq] := AllocNode(AN_SEQ);
+      lastSeq := ASTRight[lastSeq];
+      ASTLeft[lastSeq] := stmtNode;
+    end;
+  end;
+  Expect(tkUntil, 'until');
+  ParseExpr; condNode := CurASTNode;
+  node := AllocNode(AN_REPEAT);
+  ASTLeft[node] := seqNode;
+  ASTRight[node] := condNode;
+  Result := node;
+end;
 
+function ParseCaseStatementAST: Integer;
+var
+  condNode, branchSeq, lastBranch, branchPair, labelsHead, lastLabel, labelValNode: Integer;
+  stmtNode, node, si: Integer;
+  hasElse: Boolean;
+  cv: Int64;
+begin
+  ParseExpr; condNode := CurASTNode;
   Expect(tkOf, 'of');
-  jeCount  := 0;
-  jmpCount := 0;
-  hasElse  := False;
-  nextJmpCount := 0;
-
+  
+  branchSeq := AllocNode(AN_SEQ);
+  lastBranch := branchSeq;
+  hasElse := False;
+  
   while (not (CurTok.Kind in [tkEnd, tkEOF])) and not hasElse do
   begin
     if CurTok.Kind = tkElse then
     begin
       hasElse := True;
       Next;
-      { Patch the last branch's jump-to-next to point here }
-      if nextJmpCount > 0 then
-      begin
-        Patch32(nextJmpPositions[nextJmpCount-1], CodeLen - (nextJmpPositions[nextJmpCount-1] + 4));
-        Dec(nextJmpCount);
-      end;
-      ParseStatement;
+      stmtNode := ParseStatementAST;
       Eat(tkSemicolon);
+      
+      branchPair := AllocNode(AN_PAIR);
+      ASTLeft[branchPair] := -1;
+      ASTRight[branchPair] := stmtNode;
+      
+      if ASTLeft[lastBranch] = -1 then
+        ASTLeft[lastBranch] := branchPair
+      else
+      begin
+        ASTRight[lastBranch] := AllocNode(AN_SEQ);
+        lastBranch := ASTRight[lastBranch];
+        ASTLeft[lastBranch] := branchPair;
+      end;
     end
     else
     begin
-      { Patch the previous branch's jump-to-next to point here }
-      if nextJmpCount > 0 then
-      begin
-        Patch32(nextJmpPositions[nextJmpCount-1], CodeLen - (nextJmpPositions[nextJmpCount-1] + 4));
-        Dec(nextJmpCount);
-      end;
-
-      { Collect label values and emit comparisons }
-      branchJeStart := jeCount;
+      labelsHead := AllocNode(AN_ARG);
+      lastLabel := labelsHead;
       repeat
-        { Parse label value }
         if CurTok.Kind = tkInteger then cv := CurTok.IVal
         else if CurTok.Kind = tkString then
         begin
@@ -963,250 +1011,364 @@ begin
         end
         else Error('expected case label');
         Next;
-        { cmp rcx, imm32; je (forward) }
-        EmitB($48); EmitB($81); EmitB($F9); EmitI32(cv); { cmp rcx, imm32 }
-        EmitB($0F); EmitB($84);
-        if jeCount >= MAX_BRANCHES then Error('too many case branches');
-        jePositions[jeCount] := CodeLen; Inc(jeCount);
-        EmitI32(0);
+        
+        labelValNode := AllocNode(AN_INT_LIT);
+        ASTIVal[labelValNode] := cv;
+        
+        if ASTLeft[lastLabel] = -1 then
+          ASTLeft[lastLabel] := labelValNode
+        else
+        begin
+          ASTRight[lastLabel] := AllocNode(AN_ARG);
+          lastLabel := ASTRight[lastLabel];
+          ASTLeft[lastLabel] := labelValNode;
+        end;
       until not Eat(tkComma);
       Expect(tkColon, ':');
-
-      { Emit jump to next comparison (if none of this branch's labels match) }
-      EmitB($E9);
-      if nextJmpCount >= MAX_BRANCHES then Error('too many case branches');
-      nextJmpPositions[nextJmpCount] := CodeLen; Inc(nextJmpCount);
-      EmitI32(0);
-
-      { This branch's code starts here: patch all its je targets }
-      for i := branchJeStart to jeCount-1 do
-        Patch32(jePositions[i], CodeLen - (jePositions[i] + 4));
-
-      ParseStatement;
+      
+      stmtNode := ParseStatementAST;
       Eat(tkSemicolon);
-
-      { jmp end_case }
-      EmitB($E9);
-      if jmpCount >= MAX_BRANCHES then Error('too many case branches');
-      jmpPositions[jmpCount] := CodeLen; Inc(jmpCount);
-      EmitI32(0);
+      
+      branchPair := AllocNode(AN_PAIR);
+      ASTLeft[branchPair] := labelsHead;
+      ASTRight[branchPair] := stmtNode;
+      
+      if ASTLeft[lastBranch] = -1 then
+        ASTLeft[lastBranch] := branchPair
+      else
+      begin
+        ASTRight[lastBranch] := AllocNode(AN_SEQ);
+        lastBranch := ASTRight[lastBranch];
+        ASTLeft[lastBranch] := branchPair;
+      end;
     end;
   end;
-
   Expect(tkEnd, 'end');
+  
+  node := AllocNode(AN_CASE);
+  ASTLeft[node] := condNode;
+  ASTRight[node] := branchSeq;
+  Result := node;
+end;
 
-  { If there was no else, the last branch's jump-to-next jumps here (end of case) }
-  if nextJmpCount > 0 then
+function ParsewriteArgsAST(isLn: Boolean): Integer;
+var
+  node, argNode, lastArg, exprNode, vidx: Integer;
+begin
+  node := AllocNode(AN_WRITE);
+  if isLn then ASTKind[node] := AN_WRITELN;
+  
+  if CurTok.Kind = tkLParen then
   begin
-    Patch32(nextJmpPositions[nextJmpCount-1], CodeLen - (nextJmpPositions[nextJmpCount-1] + 4));
-    Dec(nextJmpCount);
+    Next;
+    lastArg := -1;
+    if CurTok.Kind = tkIdent then
+    begin
+      vidx := FindSym(CurTok.SVal);
+      if (vidx >= 0) and (Syms[vidx].Kind = skConst) and (Syms[vidx].TypeKind = tyInteger) and (Syms[vidx].Name = 'StdErr') then
+      begin
+        Next; Eat(tkComma);
+      end;
+    end;
+    repeat
+      ParseExpr; exprNode := CurASTNode;
+      argNode := AllocNode(AN_ARG);
+      ASTLeft[argNode] := exprNode;
+      
+      if lastArg = -1 then
+        ASTLeft[node] := argNode
+      else
+        ASTRight[lastArg] := argNode;
+      lastArg := argNode;
+    until not Eat(tkComma);
+    Expect(tkRParen, ')');
   end;
-
-  { Patch all jmp end_case to here }
-  for i := 0 to jmpCount-1 do
-    Patch32(jmpPositions[i], CodeLen - (jmpPositions[i] + 4));
+  Result := node;
 end;
 
-procedure ParseBlock;
+function ParseBlockAST: Integer;
+var
+  seqNode, lastSeq, stmtNode: Integer;
 begin
+  seqNode := AllocNode(AN_SEQ);
+  lastSeq := seqNode;
   while not (CurTok.Kind in [tkEnd, tkEOF, tkUntil]) do
-    begin ParseStatement; Eat(tkSemicolon); end;
+  begin
+    stmtNode := ParseStatementAST;
+    Eat(tkSemicolon);
+    if ASTLeft[lastSeq] = -1 then
+      ASTLeft[lastSeq] := stmtNode
+    else
+    begin
+      ASTRight[lastSeq] := AllocNode(AN_SEQ);
+      lastSeq := ASTRight[lastSeq];
+      ASTLeft[lastSeq] := stmtNode;
+    end;
+  end;
+  Result := seqNode;
 end;
 
-procedure ParseStatement;
-var name: AnsiString; idx, pi, i, si, si2: Integer;
+function ParseStatementAST: Integer;
+var
+  name: AnsiString;
+  idx, pi, i, si, node, valNode, stepsNode, opNode, argSeq, argIdx, exprNode, lastArg: Integer;
+  isLn: Boolean;
 begin
+  node := -1;
   case CurTok.Kind of
-    tkwriteln: begin Next; ParsewriteArgs(True);  end;
-    tkwrite:   begin Next; ParsewriteArgs(False); end;
-
+    tkwriteln, tkwrite:
+    begin
+      isLn := CurTok.Kind = tkwriteln; Next;
+      node := ParsewriteArgsAST(isLn);
+    end;
+    
     tkHalt, tkExit:
     begin
-      Next;
-	    if CurTok.Kind = tkLParen then
-	    begin
-	      Next;
-	      ParseExpr;
-	      EmitB($48); EmitB($89); EmitB($C7);   { mov rdi, rax }
-	      MovRaxImm(SYS_EXIT);
-	      EmitSyscall;
-	      Expect(tkRParen, ')');
-	    end
-      else if CurTok.Kind = tkSemicolon then
+      idx := Ord(CurTok.Kind); Next;
+      if idx = Ord(tkHalt) then
+        node := AllocNode(AN_HALT)
+      else
+        node := AllocNode(AN_EXIT);
+      
+      if CurTok.Kind = tkLParen then
       begin
-        { exit from function: emit epilogue }
-        if CurProc >= 0 then EmitProcEpilog(Procs[CurProc].RetSymIdx)
-        else EmitExit(0);
-      end
-      else EmitExit(0);
+        Next; ParseExpr; Expect(tkRParen, ')');
+        ASTLeft[node] := CurASTNode;
+      end;
     end;
-
+    
     tkInc, tkDec:
     begin
-      if CurTok.Kind = tkInc then name := 'inc' else name := 'dec';
-      Next;
+      idx := Ord(CurTok.Kind); Next;
       Expect(tkLParen, '(');
       if CurTok.Kind <> tkIdent then Error('expected variable');
-      idx := FindSym(CurTok.SVal);
-      if idx < 0 then Error('undefined');
-      Next;
-      EmitLoadVar(idx);
+      argIdx := FindSym(CurTok.SVal); Next;
+      if argIdx < 0 then Error('undefined');
+      
       if Eat(tkComma) then
       begin
-        EmitB($50); ParseExpr;
-        EmitB($48); EmitB($89); EmitB($C1); EmitB($58);
-        if name = 'inc' then begin EmitB($48); EmitB($01); EmitB($C8); end
-        else begin EmitB($48); EmitB($29); EmitB($C8); end;
+        ParseExpr; stepsNode := CurASTNode;
       end
       else
       begin
-        if name = 'inc' then begin EmitB($48); EmitB($FF); EmitB($C0); end
-        else begin EmitB($48); EmitB($FF); EmitB($C8); end;
+        stepsNode := AllocNode(AN_INT_LIT);
+        ASTIVal[stepsNode] := 1;
       end;
-      EmitStoreVar(idx);
       Expect(tkRParen, ')');
+      
+      valNode := ParseLValueAST(argIdx);
+      opNode := AllocNode(AN_BINOP);
+      if idx = Ord(tkInc) then ASTIVal[opNode] := Ord(tkPlus) else ASTIVal[opNode] := Ord(tkMinus);
+      ASTLeft[opNode] := valNode;
+      ASTRight[opNode] := stepsNode;
+      
+      node := AllocNode(AN_ASSIGN);
+      ASTLeft[node] := valNode;
+      ASTRight[node] := opNode;
     end;
-
-    { ---- File I/O and argv builtins ---- }
+    
     tkSyswrite:
     begin
-      { syswrite(fd, buf_array, n) as statement — discard return value }
       Next; Expect(tkLParen, '(');
-      ParseExpr; EmitB($48); EmitB($89); EmitB($C7);     { mov rdi, rax (fd) }
-      Expect(tkComma, ',');
+      ParseExpr; argSeq := AllocNode(AN_ARG); ASTLeft[argSeq] := CurASTNode; Expect(tkComma, ',');
       if CurTok.Kind <> tkIdent then Error('Syswrite: expected array var');
-      idx := FindSym(CurTok.SVal);
-      if (idx < 0) or not Syms[idx].IsArray then Error('Syswrite: not an array var');
-      EmitB($48); EmitB($8D); EmitB($34); EmitB($25); EmitGlobRef(Syms[idx].Offset);
-      Next; Expect(tkComma, ',');
-      ParseExpr; EmitB($48); EmitB($89); EmitB($C2);     { mov rdx, rax (count) }
-      MovRaxImm(1); EmitSyscall;
+      argIdx := FindSym(CurTok.SVal); Next;
+      valNode := ParseLValueAST(argIdx);
+      if (argIdx < 0) or not Syms[argIdx].IsArray then Error('Syswrite: not an array var');
+      Expect(tkComma, ',');
+      
+      ASTRight[argSeq] := AllocNode(AN_ARG);
+      ASTLeft[ASTRight[argSeq]] := valNode;
+      
+      ParseExpr;
+      ASTRight[ASTRight[argSeq]] := AllocNode(AN_ARG);
+      ASTLeft[ASTRight[ASTRight[argSeq]]] := CurASTNode;
       Expect(tkRParen, ')');
+      
+      node := AllocNode(AN_CALL);
+      ASTIVal[node] := -Ord(tkSyswrite);
+      ASTLeft[node] := argSeq;
     end;
+    
     tkSysClose:
     begin
-      { SysClose(fd) }
       Next; Expect(tkLParen, '(');
-      ParseExpr;  { fd → rax }
-      EmitB($48); EmitB($89); EmitB($C7);   { mov rdi, rax }
-	      MovRaxImm(SYS_CLOSE); EmitSyscall;
-      Expect(tkRParen, ')');
+      ParseExpr; Expect(tkRParen, ')');
+      node := AllocNode(AN_CALL);
+      ASTIVal[node] := -Ord(tkSysClose);
+      ASTLeft[node] := CurASTNode;
     end;
+    
     tkSysFchmod:
     begin
-      { SysFchmod(fd, mode): SYS_FCHMOD=91 }
       Next; Expect(tkLParen, '(');
-      ParseExpr; EmitB($48); EmitB($89); EmitB($C7);   { mov rdi, rax (fd) }
-      Expect(tkComma, ',');
-      ParseExpr; EmitB($48); EmitB($89); EmitB($C6);   { mov rsi, rax (mode) }
-      MovRaxImm(91); EmitSyscall;
+      ParseExpr; argSeq := AllocNode(AN_ARG); ASTLeft[argSeq] := CurASTNode; Expect(tkComma, ',');
+      ParseExpr;
+      ASTRight[argSeq] := AllocNode(AN_ARG);
+      ASTLeft[ASTRight[argSeq]] := CurASTNode;
       Expect(tkRParen, ')');
+      
+      node := AllocNode(AN_CALL);
+      ASTIVal[node] := -Ord(tkSysFchmod);
+      ASTLeft[node] := argSeq;
     end;
+    
     tkArgStr:
     begin
-      { ArgStr(n, s): copy argv[n] bytes into string var s (global) }
       Next; Expect(tkLParen, '(');
-      ParseExpr;  { n → rax }
-      Expect(tkComma, ',');
+      ParseExpr; argSeq := AllocNode(AN_ARG); ASTLeft[argSeq] := CurASTNode; Expect(tkComma, ',');
       if CurTok.Kind <> tkIdent then Error('ArgStr: expected string var');
-      idx := FindSym(CurTok.SVal);
-      if (idx < 0) or (Syms[idx].TypeKind <> tyString) then Error('ArgStr: not a string var');
-      EmitArgvToString(idx);
-      Next;
+      argIdx := FindSym(CurTok.SVal); Next;
+      valNode := ParseLValueAST(argIdx);
+      if (argIdx < 0) or (Syms[argIdx].TypeKind <> tyString) then Error('ArgStr: not a string var');
       Expect(tkRParen, ')');
+      
+      ASTRight[argSeq] := AllocNode(AN_ARG);
+      ASTLeft[ASTRight[argSeq]] := valNode;
+      
+      node := AllocNode(AN_CALL);
+      ASTIVal[node] := -Ord(tkArgStr);
+      ASTLeft[node] := argSeq;
     end;
-
-    tkIf:     begin Next; ParseIfStatement;    end;
-    tkWhile:  begin Next; ParseWhileStatement; end;
-    tkFor:    begin Next; ParseForStatement;   end;
-    tkRepeat: begin Next; ParseRepeatStatement; end;
-    tkCase:   begin Next; ParseCaseStatement;  end;
-
-    tkBegin:  begin Next; ParseBlock; Expect(tkEnd, 'end'); end;
-
-	  tkIdent:
-	  begin
-	    name := CurTok.SVal;
-
+    
+    tkIf:     begin Next; node := ParseIfStatementAST;    end;
+    tkWhile:  begin Next; node := ParseWhileStatementAST; end;
+    tkFor:    begin Next; node := ParseForStatementAST;   end;
+    tkRepeat: begin Next; node := ParseRepeatStatementAST; end;
+    tkCase:   begin Next; node := ParseCaseStatementAST;  end;
+    
+    tkBegin:
+    begin
+      Next;
+      node := ParseBlockAST;
+      Expect(tkEnd, 'end');
+    end;
+    
+    tkIdent:
+    begin
+      name := CurTok.SVal;
       if (name = 'LoadFile') or (name = 'loadfile') then
       begin
-        Next;
-        Expect(tkLParen, '(');
+        Next; Expect(tkLParen, '(');
         if CurTok.Kind <> tkIdent then Error('LoadFile: expected path');
-        idx := FindSym(CurTok.SVal);
-        if (idx < 0) or (Syms[idx].TypeKind <> tyString) then Error('LoadFile: path must be string');
-        Next;
+        idx := FindSym(CurTok.SVal); Next;
+        valNode := ParseLValueAST(idx);
         Expect(tkComma, ',');
+        
         if CurTok.Kind <> tkIdent then Error('LoadFile: expected destination');
-        si := FindSym(CurTok.SVal);
-        if (si < 0) or (Syms[si].TypeKind <> tyString) then Error('LoadFile: destination must be string');
-        Next;
+        si := FindSym(CurTok.SVal); Next;
+        stepsNode := ParseLValueAST(si);
         Expect(tkRParen, ')');
-        EmitLoadFile(idx, si);
-        Exit;
-      end;
-
-      if (name = 'SetLength') or (name = 'setlength') then
+        
+        argSeq := AllocNode(AN_ARG); ASTLeft[argSeq] := valNode;
+        ASTRight[argSeq] := AllocNode(AN_ARG);
+        ASTLeft[ASTRight[argSeq]] := stepsNode;
+        
+        node := AllocNode(AN_CALL);
+        ASTIVal[node] := -100;
+        ASTLeft[node] := argSeq;
+      end
+      else if (name = 'SetLength') or (name = 'setlength') then
       begin
-        Next;
-        Expect(tkLParen, '(');
+        Next; Expect(tkLParen, '(');
         if CurTok.Kind <> tkIdent then Error('SetLength: expected string variable');
-        idx := FindSym(CurTok.SVal);
-        if (idx < 0) or (Syms[idx].TypeKind <> tyString) then Error('SetLength: not a string var');
-        Next;
+        idx := FindSym(CurTok.SVal); Next;
+        valNode := ParseLValueAST(idx);
         Expect(tkComma, ',');
-        ParseExpr; { new length -> rax }
-        EmitStoreStrLen(idx);
-        Expect(tkRParen, ')');
-        Exit;
-      end;
-
-	      { Function return value: FuncName := expr }
-      if (CurProc >= 0) and Procs[CurProc].IsFunc and
-         (name = Procs[CurProc].Name) then
+        
+        ParseExpr; Expect(tkRParen, ')');
+        
+        argSeq := AllocNode(AN_ARG); ASTLeft[argSeq] := valNode;
+        ASTRight[argSeq] := AllocNode(AN_ARG);
+        ASTLeft[ASTRight[argSeq]] := CurASTNode;
+        
+        node := AllocNode(AN_CALL);
+        ASTIVal[node] := -101;
+        ASTLeft[node] := argSeq;
+      end
+      else if (CurProc >= 0) and Procs[CurProc].IsFunc and (name = Procs[CurProc].Name) then
       begin
         Next; Expect(tkAssign, ':=');
+        valNode := AllocNode(AN_IDENT);
+        ASTIVal[valNode] := Procs[CurProc].RetSymIdx;
+        
         ParseExpr;
-        EmitStoreVar(Procs[CurProc].RetSymIdx);
-        Exit;
-      end;
-
-      { Procedure call }
-      pi := FindProc(name);
-      if pi >= 0 then
+        node := AllocNode(AN_ASSIGN);
+        ASTLeft[node] := valNode;
+        ASTRight[node] := CurASTNode;
+      end
+      else
       begin
-        Next;
-        if CurTok.Kind = tkLParen then
+        pi := FindProc(name);
+        if pi >= 0 then
         begin
           Next;
-          for i := 0 to Procs[pi].ParamCount-1 do
+          node := AllocNode(AN_CALL);
+          ASTIVal[node] := pi;
+          lastArg := -1;
+          if CurTok.Kind = tkLParen then
           begin
-            ParseCallArg(pi, i);
-            if i < Procs[pi].ParamCount-1 then Expect(tkComma, ',');
+            Next;
+            for i := 0 to Procs[pi].ParamCount-1 do
+            begin
+              if Procs[pi].Params[i].IsRef or Procs[pi].Params[i].IsArray then
+              begin
+                if CurTok.Kind <> tkIdent then Error('by-reference argument must be a variable');
+                argIdx := FindSym(CurTok.SVal); Next;
+                exprNode := ParseLValueAST(argIdx);
+              end
+              else
+              begin
+                ParseExpr;
+                exprNode := CurASTNode;
+              end;
+              
+              argSeq := AllocNode(AN_ARG);
+              ASTLeft[argSeq] := exprNode;
+              if lastArg = -1 then
+                ASTLeft[node] := argSeq
+              else
+                ASTRight[lastArg] := argSeq;
+              lastArg := argSeq;
+              
+              if i < Procs[pi].ParamCount-1 then Expect(tkComma, ',');
+            end;
+            Expect(tkRParen, ')');
           end;
-          Expect(tkRParen, ')');
         end;
-        for i := Procs[pi].ParamCount-1 downto 0 do
-          case i of
-            0: EmitB($5F);
-            1: EmitB($5E);
-            2: EmitB($5A);
-            3: EmitB($59);
-            4: begin EmitB($41); EmitB($58); end;
-            5: begin EmitB($41); EmitB($59); end;
-          end;
-        EmitCallProc(pi);
-        Exit;
+        
+        if node = -1 then
+        begin
+          idx := FindSym(name); Next;
+          valNode := ParseLValueAST(idx);
+          Expect(tkAssign, ':=');
+          ParseExpr;
+          node := AllocNode(AN_ASSIGN);
+          ASTLeft[node] := valNode;
+          ASTRight[node] := CurASTNode;
+        end;
       end;
-
-      { Variable assignment }
-      ParseLValue(name);
     end;
-
+    
     tkSemicolon, tkEnd, tkElse, tkUntil, tkEOF: ;
     else
       while not (CurTok.Kind in [tkSemicolon,tkEnd,tkElse,tkUntil,tkEOF]) do Next;
   end;
+  Result := node;
+end;
+
+procedure ParseStatement;
+var node: Integer;
+begin
+  node := ParseStatementAST;
+  CompileAST(node);
+end;
+
+procedure ParseBlock;
+var node: Integer;
+begin
+  node := ParseBlockAST;
+  CompileAST(node);
 end;
 
 { ===== Declaration parsing ===== }

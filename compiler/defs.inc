@@ -13,6 +13,7 @@ const
   STRING_CAP  = 1048576;
   MAX_TOKENS  = 131072;
   MAX_AST     = 65536;
+  SPECIAL_IN  = 999;
 
   { AST node kinds }
   AN_NONE      = 0;
@@ -208,7 +209,7 @@ var
 
   { AST node pool — struct-of-arrays, 8 bytes per field }
   ASTKind    : array[0..MAX_AST-1] of Integer;
-  ASTIVal    : array[0..MAX_AST-1] of Integer;
+  ASTIVal    : array[0..MAX_AST-1] of Int64;
   ASTSOffset : array[0..MAX_AST-1] of Integer;
   ASTSLen    : array[0..MAX_AST-1] of Integer;
   ASTLeft    : array[0..MAX_AST-1] of Integer;
@@ -242,3 +243,12 @@ begin
   fpChmod(AssignPath, mode);
 end;
 {$endif}
+
+function IntToTokenKind(val: Integer): TTokenKind;
+begin
+  {$ifdef FPC}
+  Result := TTokenKind(val);
+  {$else}
+  Result := val;
+  {$endif}
+end;

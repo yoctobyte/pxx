@@ -812,11 +812,15 @@ end;
 procedure ApplyCallFixups;
 var i, pi: Integer;
 begin
-	  for i := 0 to CallFixCount-1 do
-	  begin
-	    pi := CallFix[i].ProcIdx;
-	    if Procs[pi].BodyAddr < 0 then
-	      Error('unresolved forward');
+  for i := 0 to ProcCount-1 do
+  begin
+    writeln('Proc ', i, ': ', Procs[i].Name, ' at CodePos ', Procs[i].BodyAddr);
+  end;
+  for i := 0 to CallFixCount-1 do
+  begin
+    pi := CallFix[i].ProcIdx;
+    if Procs[pi].BodyAddr < 0 then
+      Error('unresolved forward');
     Patch32(CallFix[i].CodePos, Procs[pi].BodyAddr - (CallFix[i].CodePos + 4));
   end;
 end;
