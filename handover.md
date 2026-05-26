@@ -1,179 +1,145 @@
-# Frankonpiler — Class Methods Handover
+# Frankonpiler Handover
 
-**Date:** 2026-05-26  
-**Commits this session:** `f6ed3a4`, `ac034ec`
+**Date:** 2026-05-26
 
----
+## Current Git State
 
-## 🚨 CRITICAL RESOLUTIONS: Bootstrapping Segfaults & C-Unit Import Crash
+Relevant commits on `master`:
 
-We successfully identified and resolved the major memory corruption and compiler bootstrap blockers preventing stable self-compilation and C subroutine importing!
-
-### 1. The Bug: String Concatenation `+` Segfault in `ParseUsesUnit`
-* **Symptom:** The self-hosted compiler segfaulted when encountering `uses` statements, specifically inside `ParseUsesUnit`.
-* **Root Cause:** 
-  * The compiler's code generator does not natively support string concatenation `+` (it parses it as `AN_BINOP` and emits raw integer addition `add rax, rcx` on the string pointers, producing an invalid heap/stack address).
-  * In the assignment `path := SourceFileDir + lo + '.pas';`, since the RHS is a non-L-value expression, `GenLValueAddress` did nothing, leaving `rax` contaminated with `0` (from the previous `content := '';` assignment).
-  * The compiler then pushed `rax` (`0`) to the stack and popped it into `rsi`, leading to `mov (%rsi), %rax` dereferencing a `NULL` pointer and causing a segmentation fault.
-* **Fix:** 
-  * Implemented a standard, concatenation-free helper `ConcatThree(const s1, s2, s3: AnsiString; var dst: AnsiString)` in `compiler/parser.inc` using `SetLength` and a character-copying loop.
-  * Replaced all string concatenations `+` in `parser.inc` and `cparser.inc` with safe character assignments and calls to `ConcatThree`. The compiler now contains **zero string concatenation `+` operations**, allowing it to stably compile itself.
-
-### 2. The Bug: Negative OS Error Code Pollution in `EmitLoadFile`
-* **Symptom:** Compiling a C import unit like `test_c_import.pas` threw `Expected: unit, but got:  (Kind: 0) SrcPos: 76` at EOF, completely ignoring `my_c_lib.c`.
-* **Root Cause:**
-  * When resolving `uses my_c_lib;`, the compiler first checked `test/my_c_lib.pas` using the built-in `LoadFile`.
-  * In `compiler/symtab.inc`, `EmitLoadFile` emits raw system calls `sysopen` and `sysread` but failed to handle negative error results.
-  * When `my_c_lib.pas` was missing, `sysopen` returned negative and `sysread` returned `-9` (`-EBADF`). The compiler stored `-9` as the string's length field.
-  * Because `-9 <> 0`, the search loop assumed `my_c_lib.pas` was loaded successfully with length `-9`, skipped trying other extensions like `.pp` and `.c`, and called the Pascal `ParseUnit` on the empty/invalid buffer, hitting EOF immediately.
-* **Fix:**
-  * Added a signedness check in `EmitLoadFile` directly after the `sysread` syscall: if `rax` is negative, we immediately clamp it to `0` (empty string). This cascades search errors correctly and lets the compiler find and compile `.c` units beautifully.
-
-### 3. Verification & Pristine Build State
-* `make bootstrap` compiles and verifies byte-for-byte (`cmp /tmp/pascal26-build /tmp/pascal26-verify` matches perfectly).
-* `./compiler/pascal26 test/test_c_import.pas /tmp/test_c_import && /tmp/test_c_import` successfully runs, parses the C subroutine, compiles the main program, and outputs `42`.
-
----
-
-## What Was Done This Session
-
-### 1. Fixed class field access (segfault resolved)
-
-`GenLValueAddress` in `compiler/codegen.inc` was extended with a `derefClass: Boolean` parameter:
-- **`True`** → emit `mov rax, [GlobRef]` — load heap pointer (for field access / method dispatch)
-- **`False`** → emit `lea rax, [GlobRef]` — address of the pointer slot (for assignment targets, pass-by-ref)
-
-All call sites updated. `test/test_class.pas` compiles and runs correctly:
-```
-1  (obj1 <> 0)
-1  (obj2 <> 0)
-1  (obj1 <> obj2)
-42 (obj1.x)
-100 (obj1.y)
-999 (obj2.x)
-888 (obj2.y)
+```text
+8fcc080 feat(elf): load external C functions
+ce2da9a chore: checkpoint parser work in progress
 ```
 
-### 2. Dynamic record/class table — plumbing for class methods
+`ce2da9a` deliberately preserves unfinished BASIC/AST parser and Pascal
+class/method work before the shared-object track started. Do not interpret
+that checkpoint as feature completion.
 
-Replaced all hardcoded field/size/type lookup chains in `compiler/symtab.inc` with a proper runtime table.
+## Shared Object Loading: Working
 
-**Files changed:**
-
-| File | What changed |
-|---|---|
-| `compiler/defs.inc` | Added `TField`, `TRecord` types; `Records[]`, `RecordCount` globals; `MAX_RECORDS=64`, `MAX_FIELDS=64` |
-| `compiler/symtab.inc` | `IsRecordType`, `IsClassType`, `RecSize`, `RecFieldOffset`, `RecFieldType`, `RecFieldRecId`, `RecFieldIsArray` now do generic table lookups; added `InitRecords`, `AddRecord`, `AddField`, `AddRecordManual`, `AddFieldManual`, `FieldNameEqual`, `GetFieldSize` |
-| `compiler/compiler.pas` | Calls `InitRecords` at startup |
-
-The 10 compiler-internal records (TToken, TSymbol, TProc, etc.) are seeded by `InitRecords` so self-hosting is unaffected. Any record declared by the user in Pascal source will be registered dynamically into the same table.
-
----
-
-## Where to Pick Up Next: Full Class Method Support
-
-The plumbing is in place. Four steps remain.
-
-### Step 1 — Parse `type` class declarations
-
-**File:** `compiler/parser.inc` → `ParseTypeSection` (~line 1568)
-
-Currently skips class bodies with a depth counter. Must instead:
-1. `AddRecord(name, 0, isClass)` → get `recId`
-2. Parse field lines: `FieldName : TypeKind;` → `AddField(recId, name, tk, ...)`
-3. Parse method signatures inside the class body: `procedure Foo;` / `function Bar: Integer;` — store the method name bound to the class (see step 2), skip body
+The compiler can now compile a Pascal program that imports a simple installed
+C header and calls a function supplied by a Linux shared object:
 
 ```pascal
-{ What to parse: }
-type
-  TAnimal = class
-    Name : AnsiString;     { → AddField }
-    Age  : Integer;        { → AddField }
-    procedure Speak;       { → register method declaration }
-    function  GetAge: Integer;
-  end;
-```
-
-### Step 2 — Bind method implementations to their class
-
-**File:** `compiler/parser.inc` → `ParseSubroutine` (~line 1611)  
-**File:** `compiler/defs.inc` → `TProc`
-
-Add `OwnerClass: Integer` to `TProc` (default `REC_NONE`).  
-When the parser encounters `procedure TAnimal.Speak;` (dot-qualified name), look up `TAnimal` in `Records[]`, bind the `TProc.OwnerClass` field, and map back to the method's earlier declaration in the class body.
-
-### Step 3 — Inject implicit `Self` parameter
-
-When entering a bound method body:
-- Add `CurSelfClass: Integer` global (like `CurProc`; `REC_NONE` when outside a method)
-- Inject a hidden first parameter `Self: TAnimal` (`tyClass`, same mechanics as any other param)
-- In the expression parser, when resolving a bare identifier: if `CurSelfClass <> REC_NONE` and the name matches a field of the owner class → treat as `Self.fieldname`
-
-### Step 4 — `obj.Method(args)` call syntax
-
-**File:** `compiler/parser.inc` → expression parser / field access (~line 393)
-
-When `obj.Ident(` is seen:
-- Check if `Ident` is a method name in `obj`'s class (via `Records[recId]`)
-- If yes → emit `AN_CALL` with `obj` prepended as the first implicit `Self` argument
-
-No changes needed in `codegen.inc` — `Self` is just another pushed argument.
-
-### Step 5 — `TAnimal.Create` constructor (optional, can come after step 4)
-
-Treat `Create` as a built-in class method: allocate `RecSize(recId)` bytes via `GetMem`, zero-init optional, return pointer.
-
----
-
-## Target Test
-
-Create `test/test_class_methods.pas` and make it pass:
-
-```pascal
-program test_class_methods;
-type
-  TCounter = class
-    Value : Integer;
-    procedure Reset;
-    procedure Increment;
-    function  Get: Integer;
-  end;
-
-procedure TCounter.Reset;
+program test_shared_object;
+uses ctype;
 begin
-  Self.Value := 0;
-end;
-
-procedure TCounter.Increment;
-begin
-  Self.Value := Self.Value + 1;
-end;
-
-function TCounter.Get: Integer;
-begin
-  Result := Self.Value;
-end;
-
-var c: TCounter;
-begin
-  c := TCounter.Create;
-  c.Reset;
-  c.Increment;
-  c.Increment;
-  c.Increment;
-  writeln(c.Get);   { expect: 3 }
+  writeln(tolower(65));
 end.
 ```
 
----
+The checked-in regression is `test/test_shared_object.pas`. On this system:
 
-## Quick File Map
+```text
+header:  /usr/include/ctype.h
+soname:  libc.so.6
+result:  tolower(65) = 97
+```
 
-| File | Role |
+The generated executable is dynamically loadable ELF output with:
+
+- `PT_INTERP` naming `/lib64/ld-linux-x86-64.so.2`
+- `PT_DYNAMIC`
+- `DT_NEEDED` for `libc.so.6`
+- string, symbol, SysV hash, and `R_X86_64_GLOB_DAT` relocation data
+
+Ordinary programs with no external calls remain in the prior static-style
+single-load-segment format.
+
+## Header And Library Resolution
+
+`ParseUsesUnit` searches for `uses name;` as:
+
+```text
+<source dir>/name.pas, .pp, .c, .h
+compiler/name.pas, .pp, .c, .h
+/usr/include/name.h
+```
+
+For C input:
+
+- A local `.c` function body is compiled into the executable.
+- A `.h` prototype is registered as external and is dynamically resolved only
+  if called.
+- A later local definition clears external status, so a prototype followed by
+  a definition continues to use the embedded implementation.
+- `ctype` is specially mapped to `libc.so.6`.
+- Other headers currently default to `lib<unit>.so`; add mappings as system
+  library coverage expands.
+
+The header parser is deliberately small. Simple prototypes such as
+`int tolower(int)` work; full C header/ABI coverage does not yet exist.
+
+## Implementation Notes
+
+Changed areas for the shared-object feature:
+
+| File | Purpose |
 |---|---|
-| `compiler/defs.inc` | All types, constants, global variables |
-| `compiler/symtab.inc` | Symbol table + `Records[]` table + all field helpers |
-| `compiler/parser.inc` | Recursive-descent parser — `ParseTypeSection`, `ParseSubroutine`, expression parser |
-| `compiler/codegen.inc` | AST → x86-64 bytes — `GenLValueAddress` (`derefClass`), `GenAST` |
-| `compiler/elfwriter.inc` | ELF output |
-| `test/test_class.pas` | Currently passing class field test |
+| `compiler/parser.inc` | unit/header lookup, system header fallback, library mapping |
+| `compiler/cparser.inc` | external prototype registration and local-body override |
+| `compiler/clexer.inc` | skip continued preprocessor directives in system headers |
+| `compiler/symtab.inc` | emit indirect calls through external GOT-style slots |
+| `compiler/elfwriter.inc` | emit dynamic ELF metadata and relocations |
+| `compiler/defs.inc` | external/dynamic bookkeeping and large unit scratch buffer |
+| `test/test_shared_object.pas` | installed `ctype.h` / `libc.so.6` regression |
+| `test/my_c_lib.c` | local prototype plus definition regression |
+
+An important fix made during this work is `UnitContent`: imported source/header
+contents are now loaded into a global string buffer. A local `AnsiString` in a
+self-hosted generated procedure only has the small local-string capacity, so
+reading the approximately 11 KB `/usr/include/ctype.h` into that local buffer
+corrupted the stack.
+
+## Verification
+
+Passed after `8fcc080`:
+
+```sh
+make bootstrap
+make fpc-check
+make test
+```
+
+`make test` now checks:
+
+- shared-object `ctype` import returns `97`
+- local C import returns `42`
+- normal Pascal regressions and recursive fixed-point self compilation
+
+## Parked Workstreams
+
+Two concurrent feature streams were intentionally checkpointed and left for
+later resumption:
+
+1. BASIC lexer/parser/AST work in `compiler/blexer.inc`,
+   `compiler/bparser.inc`, and `test/test_basic_comprehensive.bas`.
+2. Pascal classes/methods/interface parsing work in `compiler/parser.inc`,
+   `compiler/defs.inc`, and related class tests.
+
+The shared-object feature touched some common compiler modules, so a resumed
+branch should start from current `master` rather than replaying older source
+over the ELF/import changes.
+
+Checked directly after the shared-object work, these parked tests currently
+segfault the compiler during compilation (`SIGSEGV`, exit status 139):
+
+```text
+test/test_class.pas
+test/test_class_methods.pas
+test/test_basic_comprehensive.bas
+```
+
+They are not included in `make test` at this stage; this is expected unfinished
+work, not a passing baseline. The class-method target source remains in
+`test/test_class_methods.pas`, and the BASIC cross-language/import target is in
+`test/test_basic_comprehensive.bas`.
+
+## Suggested Next Interop Steps
+
+1. Replace the hardcoded header-to-soname special case with explicit import
+   syntax or a small mapping table.
+2. Exercise another simple installed library header whose ABI fits the current
+   parser, then add it to `make test`.
+3. Grow C type handling only as demanded by real library calls: pointer
+   arguments, buffers, typedef aliases, then structs/callbacks.
