@@ -482,7 +482,47 @@ begin
           
           tkEq, tkNeq, tkLt, tkLe, tkGt, tkGe:
           begin
-            if (ASTTk[ASTLeft[node]] = Ord(tyString)) or (ASTTk[ASTRight[node]] = Ord(tyString)) then
+            if (ASTTk[ASTLeft[node]] = Ord(tyString)) and (ASTTk[ASTRight[node]] = Ord(tyChar)) then
+            begin
+              { String = Char: check len==1 and first byte matches }
+              { rax = string struct, rcx = char ordinal }
+              EmitB($51);                                                    { push rcx }
+              EmitB($48); EmitB($8B); EmitB($08);                           { mov rcx, [rax] }
+              EmitB($48); EmitB($83); EmitB($F9); EmitB($01);               { cmp rcx, 1 }
+              EmitB($0F); EmitB($85); condJmp := CodeLen; EmitI32(0);       { jne not_equal }
+              EmitB($48); EmitB($0F); EmitB($B6); EmitB($48); EmitB($08);   { movzx rcx, byte [rax+8] }
+              EmitB($58);                                                    { pop rax }
+              EmitB($48); EmitB($39); EmitB($C1);                           { cmp rcx, rax }
+              if op = tkEq then begin EmitB($0F); EmitB($94); EmitB($C0); end
+              else begin EmitB($0F); EmitB($95); EmitB($C0); end;
+              EmitB($48); EmitB($0F); EmitB($B6); EmitB($C0);               { movzx rax, al }
+              EmitB($E9); exitJmp := CodeLen; EmitI32(0);                   { jmp end }
+              Patch32(condJmp, CodeLen - (condJmp + 4));
+              EmitB($59);                                                    { pop rcx }
+              if op = tkNeq then MovRaxImm(1) else MovRaxImm(0);
+              Patch32(exitJmp, CodeLen - (exitJmp + 4));
+            end
+            else if (ASTTk[ASTLeft[node]] = Ord(tyChar)) and (ASTTk[ASTRight[node]] = Ord(tyString)) then
+            begin
+              { Char = String: check len==1 and first byte matches }
+              { rax = char ordinal, rcx = string struct }
+              EmitB($50);                                                    { push rax }
+              EmitB($48); EmitB($8B); EmitB($01);                           { mov rax, [rcx] }
+              EmitB($48); EmitB($83); EmitB($F8); EmitB($01);               { cmp rax, 1 }
+              EmitB($0F); EmitB($85); condJmp := CodeLen; EmitI32(0);       { jne not_equal }
+              EmitB($48); EmitB($0F); EmitB($B6); EmitB($41); EmitB($08);   { movzx rax, byte [rcx+8] }
+              EmitB($5A);                                                    { pop rdx }
+              EmitB($48); EmitB($39); EmitB($D0);                           { cmp rax, rdx }
+              if op = tkEq then begin EmitB($0F); EmitB($94); EmitB($C0); end
+              else begin EmitB($0F); EmitB($95); EmitB($C0); end;
+              EmitB($48); EmitB($0F); EmitB($B6); EmitB($C0);               { movzx rax, al }
+              EmitB($E9); exitJmp := CodeLen; EmitI32(0);                   { jmp end }
+              Patch32(condJmp, CodeLen - (condJmp + 4));
+              EmitB($5A);                                                    { pop rdx }
+              if op = tkNeq then MovRaxImm(1) else MovRaxImm(0);
+              Patch32(exitJmp, CodeLen - (exitJmp + 4));
+            end
+            else if (ASTTk[ASTLeft[node]] = Ord(tyString)) or (ASTTk[ASTRight[node]] = Ord(tyString)) then
             begin
               EmitStrCmpReg(op = tkEq);
             end

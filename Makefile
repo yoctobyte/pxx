@@ -98,6 +98,10 @@ test: $(COMPILER) fpc-check
 	test "$$(/tmp/strings26)" = "$$(printf 'Hello, World!\nPascal26\n13\nPascal26\n8')"
 	./$(COMPILER) test/test_heap.pas /tmp/test_heap26
 	test "$$(/tmp/test_heap26)" = "$$(printf '1\n1\n1\n1\n1\n1')"
+	./$(COMPILER) test/test_class.pas /tmp/test_class26
+	test "$$(/tmp/test_class26)" = "$$(printf '1\n1\n1\n42\n100\n999\n888')"
+	./$(COMPILER) test/test_class_methods.pas /tmp/test_class_methods26
+	test "$$(/tmp/test_class_methods26)" = "3"
 	./$(COMPILER) $(COMPILER_SRC) /tmp/pascal26-self
 	/tmp/pascal26-self test/hello.pas /tmp/self-hello26
 	test "$$(/tmp/self-hello26)" = "Hello, World!"

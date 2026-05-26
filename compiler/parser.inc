@@ -1744,7 +1744,9 @@ begin
       if CurTok.Kind <> tkIdent then Error('expected method name');
       methSNOff := Tokens[TokPos-1].SOffset;
       methSNLen := Tokens[TokPos-1].SLen;
-      name := name + '.' + CurTok.SVal;
+      AppendChar(name, '.');
+      i := 1;
+      while i <= Length(CurTok.SVal) do begin AppendChar(name, CurTok.SVal[i]); Inc(i); end;
       Next; { consume method name }
     end;
   end;
