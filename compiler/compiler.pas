@@ -8,6 +8,7 @@ uses SysUtils, BaseUnix;
 {$include defs.inc}
 {$include lexer.inc}
 {$include clexer.inc}
+{$include blexer.inc}
 {$include emit.inc}
 {$include symtab.inc}
 {$include parser.inc}
@@ -17,7 +18,7 @@ uses SysUtils, BaseUnix;
 
 { ===== Main ===== }
 
-var inFile, outFile: AnsiString; isC: Boolean; n: Integer;
+var inFile, outFile: AnsiString; isC, isBasic: Boolean; n, i: Integer;
 begin
   if ParamCount < 1 then
     begin writeln(StdErr,'usage: pascal26 <src> [out]'); Halt(1); end;
@@ -32,13 +33,14 @@ begin
 
   n := Length(inFile);
   isC := (n >= 2) and (inFile[n] = 'c') and (inFile[n-1] = '.');
+  isBasic := (n >= 4) and (inFile[n] = 's') and (inFile[n-1] = 'a') and (inFile[n-2] = 'b') and (inFile[n-3] = '.');
 
   LoadFile(inFile, Source);
   if VERBOSE then writeln('Loaded file length: ', Length(Source));
   SourceFileDir := GetFilePath(inFile);
   CompiledUnitCount := 0;
   InInterface := False;
-  if not isC then
+  if (not isC) and (not isBasic) then
     ExpandIncludes(Source, SourceFileDir);
   if VERBOSE then writeln('After include expansion: ', Length(Source));
 
@@ -56,6 +58,27 @@ begin
   ASTNodeCount := 0; CurASTNode := -1;
   UClsCount := 0; UFldCount := 0; UMthCount := 0; CurSelfClass := REC_NONE;
   AddConst('StdErr', tyInteger, 2);
+
+  if isBasic then
+  begin
+    BLexAll(True);
+    writeln('--- BASIC Token Dump (Proof of Concept) ---');
+    for n := 0 to TokCount - 1 do
+    begin
+      write('Token ', n, ': Kind=', Ord(Tokens[n].Kind), ' Line=', Tokens[n].Line);
+      if Tokens[n].SLen > 0 then
+      begin
+        write(' SVal=');
+        for i := 0 to Tokens[n].SLen - 1 do
+          write(TokChars[Tokens[n].SOffset + i]);
+      end;
+      if Tokens[n].Kind = tkInteger then
+        write(' IVal=', Tokens[n].IVal);
+      writeln;
+    end;
+    writeln('------------------------------------------');
+    Exit;
+  end;
 
   if isC then
   begin
