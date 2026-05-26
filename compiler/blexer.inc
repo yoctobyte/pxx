@@ -19,12 +19,16 @@ begin
     2: begin
       if lower = 'if' then Result := tkIf;
       if lower = 'to' then Result := tkTo;
+      if lower = 'or' then Result := tkOr;
     end;
     3: begin
       if lower = 'let' then Result := tkVar;
       if lower = 'dim' then Result := tkVar;
       if lower = 'sub' then Result := tkProcedure;
       if lower = 'end' then Result := tkEnd;
+      if lower = 'for' then Result := tkFor;
+      if lower = 'and' then Result := tkAnd;
+      if lower = 'not' then Result := tkNot;
     end;
     4: begin
       if lower = 'then' then Result := tkThen;
@@ -32,10 +36,15 @@ begin
       if lower = 'goto' then Result := tkHalt;
       if lower = 'next' then Result := tkEnd;
       if lower = 'wend' then Result := tkEnd;
+      if lower = 'step' then Result := tkTo;
     end;
     5: begin
       if lower = 'print' then Result := tkwriteln;
       if lower = 'while' then Result := tkWhile;
+      if lower = 'gosub' then Result := tkHalt;
+    end;
+    6: begin
+      if lower = 'return' then Result := tkExit;
     end;
     8: begin
       if lower = 'function' then Result := tkFunction;
