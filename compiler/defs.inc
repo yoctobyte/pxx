@@ -219,6 +219,16 @@ var
   Tokens     : array[0..MAX_TOKENS-1] of TRawToken;
   TokCount   : Integer;
   TokPos     : Integer;
+  MainProgramTokCount : Integer;
+
+  BLabelLineNums : array[0..255] of Int64;
+  BLabelCodePoss : array[0..255] of Integer;
+  BLabelCount    : Integer;
+
+  BFixupTargetLines : array[0..255] of Int64;
+  BFixupCodePoss    : array[0..255] of Integer;
+  BFixupIsGOSUBs    : array[0..255] of Boolean;
+  BFixupCount       : Integer;
 
   { AST node pool — struct-of-arrays, 8 bytes per field }
   ASTKind    : array[0..MAX_AST-1] of Integer;

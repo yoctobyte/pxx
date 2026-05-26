@@ -148,7 +148,11 @@ var
   mci, mmi, mpi, mcallNode, mselfArg, mlastArg, margSeq, margIdx, mexprNode, mai: Integer;
 begin
   prevTok := TokPos - 1;
-  if idx < 0 then Error('undefined variable');
+  if idx < 0 then
+  begin
+    ErrorIdent := GetTokenStr(prevTok);
+    Error('undefined variable');
+  end;
   node := AllocNode(AN_IDENT);
   ASTIVal[node] := idx;
   ASTSOffset[node] := Tokens[prevTok].SOffset;
@@ -1841,10 +1845,13 @@ begin
     Exit;
   end;
 
-  { Forward declaration? }
-  if CurTok.Kind = tkForward then
+  { Forward declaration or interface declaration? }
+  if (CurTok.Kind = tkForward) or InInterface then
   begin
-    Next; Eat(tkSemicolon);
+    if CurTok.Kind = tkForward then
+    begin
+      Next; Eat(tkSemicolon);
+    end;
     if FindProc(name) < 0 then
     begin
       pi := RegisterProc(name, isFunc, retType, nparams, pnames, ptypes);
@@ -2093,14 +2100,14 @@ begin
 
   if isCUnit then
   begin
-    { Append tokens using C Lexer }
-    startPos := CLexAppend(content);
-
     savedTokPos := TokPos;
     savedCurTokKind := CurTok.Kind;
     savedCurTokSVal := CurTok.SVal;
     savedCurTokIVal := CurTok.IVal;
     savedCurTokLine := CurTok.Line;
+
+    { Append tokens using C Lexer }
+    startPos := CLexAppend(content);
 
     TokPos := startPos;
     Next;
@@ -2115,17 +2122,16 @@ begin
   end
   else
   begin
-    ExpandIncludes(content, GetFilePath(path));
-
-    { Append tokens to global Token stream }
-    startPos := LexAppend(content);
-
-    { Save current main program parser position }
     savedTokPos := TokPos;
     savedCurTokKind := CurTok.Kind;
     savedCurTokSVal := CurTok.SVal;
     savedCurTokIVal := CurTok.IVal;
     savedCurTokLine := CurTok.Line;
+
+    ExpandIncludes(content, GetFilePath(path));
+
+    { Append tokens to global Token stream }
+    startPos := LexAppend(content);
 
     { Point parser to first token of the unit }
     TokPos := startPos;

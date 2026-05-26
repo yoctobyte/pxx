@@ -14,6 +14,7 @@ uses SysUtils, BaseUnix;
 {$include parser.inc}
 {$include codegen.inc}
 {$include cparser.inc}
+{$include bparser.inc}
 {$include elfwriter.inc}
 
 { ===== Main ===== }
@@ -55,6 +56,9 @@ begin
   SymCount := 0; ProcCount := 0;
   FrameSize := 0; CurProc := -1;
   TokCount := 0; TokPos := 0; TokCharLen := 0;
+  MainProgramTokCount := MAX_TOKENS;
+  BLabelCount := 0;
+  BFixupCount := 0;
   ASTNodeCount := 0; CurASTNode := -1;
   UClsCount := 0; UFldCount := 0; UMthCount := 0; CurSelfClass := REC_NONE;
   AddConst('StdErr', tyInteger, 2);
@@ -62,25 +66,12 @@ begin
   if isBasic then
   begin
     BLexAll(True);
-    writeln('--- BASIC Token Dump (Proof of Concept) ---');
-    for n := 0 to TokCount - 1 do
-    begin
-      write('Token ', n, ': Kind=', Ord(Tokens[n].Kind), ' Line=', Tokens[n].Line);
-      if Tokens[n].SLen > 0 then
-      begin
-        write(' SVal=');
-        for i := 0 to Tokens[n].SLen - 1 do
-          write(TokChars[Tokens[n].SOffset + i]);
-      end;
-      if Tokens[n].Kind = tkInteger then
-        write(' IVal=', Tokens[n].IVal);
-      writeln;
-    end;
-    writeln('------------------------------------------');
-    Exit;
-  end;
-
-  if isC then
+    MainProgramTokCount := TokCount;
+    TokPos := 0;
+    Next;
+    ParseBProgram;
+  end
+  else if isC then
   begin
     CLexAll;
     TokPos := 0;

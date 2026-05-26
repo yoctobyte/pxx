@@ -2,6 +2,9 @@
 20 REM   Comprehensive BASIC Test Suite (Frankenpile)
 30 REM ==================================================
 
+USES my_pas_lib
+USES my_c_lib
+
 40 LET X = 1
 50 PRINT "--- Starting traditional GOTO / GOSUB loops ---"
 
@@ -35,6 +38,13 @@ WHILE count > 0
   PRINT "WHILE count =", count
   count = count - 1
 WEND
+
+' Testing cross-language imports
+PRINT "--- Testing cross-language imports ---"
+DIM mulRes = pascal_mul(6, 7)
+PRINT "Imported Pascal function result (6 * 7) =", mulRes
+DIM addRes = my_add(40, 2)
+PRINT "Imported C function result (40 + 2) =", addRes
 
 PRINT "--- Finished Comprehensive BASIC Test ---"
 END

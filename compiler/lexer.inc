@@ -476,7 +476,7 @@ begin
   SrcPos := 1;
   SrcLine := 1;
 
-  if (TokCount > 0) and (Tokens[TokCount-1].Kind = tkEOF) then
+  if (MainProgramTokCount = MAX_TOKENS) and (TokCount > 0) and (Tokens[TokCount-1].Kind = tkEOF) then
   begin
     Dec(TokCount);
     unitStart := TokCount;

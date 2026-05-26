@@ -37,6 +37,7 @@ begin
       if lower = 'next' then Result := tkEnd;
       if lower = 'wend' then Result := tkEnd;
       if lower = 'step' then Result := tkTo;
+      if lower = 'uses' then Result := tkUses;
     end;
     5: begin
       if lower = 'print' then Result := tkwriteln;
