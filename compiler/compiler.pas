@@ -7,18 +7,20 @@ uses SysUtils, BaseUnix;
 
 {$include defs.inc}
 {$include lexer.inc}
+{$include clexer.inc}
 {$include emit.inc}
 {$include symtab.inc}
 {$include parser.inc}
 {$include codegen.inc}
+{$include cparser.inc}
 {$include elfwriter.inc}
 
 { ===== Main ===== }
 
-var inFile, outFile: AnsiString;
+var inFile, outFile: AnsiString; isC: Boolean; n: Integer;
 begin
   if ParamCount < 1 then
-    begin writeln(StdErr,'usage: pascal26 <src.pas> [out]'); Halt(1); end;
+    begin writeln(StdErr,'usage: pascal26 <src> [out]'); Halt(1); end;
 
   inFile  := ParamStr(1);
 {$ifdef FPC}
@@ -28,9 +30,13 @@ begin
 {$endif}
   if ParamCount >= 2 then outFile := ParamStr(2);
 
+  n := Length(inFile);
+  isC := (n >= 2) and (inFile[n] = 'c') and (inFile[n-1] = '.');
+
   LoadFile(inFile, Source);
   if VERBOSE then writeln('Loaded file length: ', Length(Source));
-  ExpandIncludes(Source, GetFilePath(inFile));
+  if not isC then
+    ExpandIncludes(Source, GetFilePath(inFile));
   if VERBOSE then writeln('After include expansion: ', Length(Source));
 
   SrcPos   := 1; SrcLine  := 1;
@@ -47,10 +53,20 @@ begin
   ASTNodeCount := 0; CurASTNode := -1;
   AddConst('StdErr', tyInteger, 2);
 
-  LexAll;
-  TokPos := 0;
-  Next;
-  ParseProgram;
+  if isC then
+  begin
+    CLexAll;
+    TokPos := 0;
+    Next;
+    ParseCProgram;
+  end
+  else
+  begin
+    LexAll;
+    TokPos := 0;
+    Next;
+    ParseProgram;
+  end;
   writeELF(outFile);
 
   writeln('ok: ',outFile,'  [code=',CodeLen,'B  data=',DataLen,
