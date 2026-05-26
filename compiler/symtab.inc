@@ -850,10 +850,9 @@ end;
 procedure ApplyCallFixups;
 var i, pi: Integer;
 begin
-  for i := 0 to ProcCount-1 do
-  begin
-    writeln('Proc ', i, ': ', Procs[i].Name, ' at CodePos ', Procs[i].BodyAddr);
-  end;
+  if VERBOSE then
+    for i := 0 to ProcCount-1 do
+      writeln('Proc ', i, ': ', Procs[i].Name, ' at CodePos ', Procs[i].BodyAddr);
   for i := 0 to CallFixCount-1 do
   begin
     pi := CallFix[i].ProcIdx;
