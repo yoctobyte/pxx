@@ -347,7 +347,7 @@ begin
   for i := SymCount-1 downto 0 do
     if StrEqual(Syms[i].Name, lo) then begin Result := i; Exit; end;
 
-  if VERBOSE and StrEqual(lo, 'ELF_HEADER_SIZE') then
+  if DebugTrace and StrEqual(lo, 'ELF_HEADER_SIZE') then
   begin
     writeln('FindSym failed for ELF_HEADER_SIZE. lo = ', lo);
     writeln('SymCount = ', SymCount);
@@ -1029,7 +1029,7 @@ end;
 procedure ApplyCallFixups;
 var i, pi: Integer;
 begin
-  if VERBOSE then
+  if DebugTrace then
     for i := 0 to ProcCount-1 do
       writeln('Proc ', i, ': ', Procs[i].Name, ' at CodePos ', Procs[i].BodyAddr);
   for i := 0 to CallFixCount-1 do

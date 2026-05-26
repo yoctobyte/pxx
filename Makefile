@@ -66,6 +66,9 @@ benchmark: $(COMPILER) benchmark-check
 test: $(COMPILER) fpc-check
 	./$(COMPILER) test/hello.pas /tmp/hello26
 	test "$$(/tmp/hello26)" = "Hello, World!"
+	./$(COMPILER) --debug test/hello.pas /tmp/hello_debug26 > /tmp/hello_debug26.log
+	grep -q "Loaded file length:" /tmp/hello_debug26.log
+	test "$$(/tmp/hello_debug26)" = "Hello, World!"
 	./$(COMPILER) test/test_shared_object.pas /tmp/shared_object26
 	test "$$(/tmp/shared_object26)" = "97"
 	./$(COMPILER) test/test_c_import.pas /tmp/c_import26

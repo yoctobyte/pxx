@@ -441,7 +441,7 @@ begin
     begin
       Next;
       if CurTok.Kind in [tkEOF, tkSemicolon, tkAssign, tkRBrack, tkRParen] then Error('expected field name');
-      if VERBOSE then writeln('Dot selector: curRec = ', curRec, ', field = ', CurTok.SVal);
+      if DebugTrace then writeln('Dot selector: curRec = ', curRec, ', field = ', CurTok.SVal);
       offset := RecFieldOffset(curRec, CurTok.SVal);
       EmitB($48); EmitB($05); EmitI32(offset); { add rax, offset }
       
@@ -476,7 +476,7 @@ var
   recName, rhsRecName: Integer;
   rhsName: AnsiString;
 begin
-  if VERBOSE then writeln('Parsing LValue: ', name);
+  if DebugTrace then writeln('Parsing LValue: ', name);
   idx := FindSym(name);
   if idx < 0 then
   begin
@@ -520,7 +520,7 @@ begin
             CompileLValueAddress(rhsName, rhsTk, rhsRecName);
             if rhsTk <> tyString then
             begin
-              if VERBOSE then writeln('rhsTk: ', Ord(rhsTk));
+              if DebugTrace then writeln('rhsTk: ', Ord(rhsTk));
               Error('type mismatch: expected string');
             end;
             EmitLeaStrDataRdi(idx);
@@ -577,7 +577,7 @@ begin
         CompileLValueAddress(rhsName, rhsTk, rhsRecName);
         if rhsTk <> tyString then
         begin
-          if VERBOSE then writeln('rhsTk: ', Ord(rhsTk));
+          if DebugTrace then writeln('rhsTk: ', Ord(rhsTk));
           Error('type mismatch: expected string');
         end;
         EmitB($5F); { pop rdi -- LHS address }
@@ -1776,7 +1776,7 @@ begin
       Expect(tkColon, ':');
       isArr := False;
       tokKindOrd := Ord(CurTok.Kind);
-      if VERBOSE then writeln('After colon, CurTok.Kind = ', tokKindOrd, ', CurTok.SVal = ', CurTok.SVal);
+      if DebugTrace then writeln('After colon, CurTok.Kind = ', tokKindOrd, ', CurTok.SVal = ', CurTok.SVal);
       if CurTok.Kind = tkArray then
       begin
         Next;

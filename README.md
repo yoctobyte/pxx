@@ -102,3 +102,15 @@ marshalling, and arbitrary platform header layouts are not yet promised.
 - `test/test_c_import.pas`: compiles a local C definition from
   `test/my_c_lib.c` and expects `42`, including a preceding prototype to
   ensure a local body wins over external resolution.
+
+## Compiler Tracing
+
+Use `--debug` before the source path to enable compiler tracing:
+
+```sh
+./compiler/pascal26 --debug test/hello.pas /tmp/hello
+```
+
+The trace reports lexer/parser diagnostics already present in the compiler.
+It is intended for diagnosing compiler execution; ELF debug symbols for
+stepping through generated executables are a separate future enhancement.

@@ -21,29 +21,37 @@ uses SysUtils, BaseUnix;
 
 var inFile, outFile: AnsiString; isC, isBasic: Boolean; n, i: Integer;
 begin
-  if ParamCount < 1 then
-    begin writeln(StdErr,'usage: pascal26 <src> [out]'); Halt(1); end;
+  DebugTrace := False;
+  i := 1;
+  if ParamCount >= 1 then inFile := ParamStr(1);
+  if (ParamCount >= 1) and (inFile = '--debug') then
+  begin
+    DebugTrace := True;
+    i := 2;
+  end;
+  if ParamCount < i then
+    begin writeln(StdErr,'usage: pascal26 [--debug] <src> [out]'); Halt(1); end;
 
-  inFile  := ParamStr(1);
+  inFile  := ParamStr(i);
 {$ifdef FPC}
   outFile := ChangeFileExt(inFile,'');
 {$else}
   outFile := inFile;
 {$endif}
-  if ParamCount >= 2 then outFile := ParamStr(2);
+  if ParamCount >= i + 1 then outFile := ParamStr(i + 1);
 
   n := Length(inFile);
   isC := (n >= 2) and (inFile[n] = 'c') and (inFile[n-1] = '.');
   isBasic := (n >= 4) and (inFile[n] = 's') and (inFile[n-1] = 'a') and (inFile[n-2] = 'b') and (inFile[n-3] = '.');
 
   LoadFile(inFile, Source);
-  if VERBOSE then writeln('Loaded file length: ', Length(Source));
+  if DebugTrace then writeln('Loaded file length: ', Length(Source));
   SourceFileDir := GetFilePath(inFile);
   CompiledUnitCount := 0;
   InInterface := False;
   if (not isC) and (not isBasic) then
     ExpandIncludes(Source, SourceFileDir);
-  if VERBOSE then writeln('After include expansion: ', Length(Source));
+  if DebugTrace then writeln('After include expansion: ', Length(Source));
 
   SrcPos   := 1; SrcLine  := 1;
   CodeLen  := 0;

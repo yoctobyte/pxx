@@ -1,6 +1,4 @@
 const
-  VERBOSE       = False;  { set True to enable debug trace output }
-
   MAX_CODE      = 1048576;
   LOCAL_STR_CAP = 256;     { max string length for local/stack variables }
   MAX_DATA    = 1048576;
@@ -166,6 +164,7 @@ type
   end;
 
 var
+  DebugTrace : Boolean;
   Source  : AnsiString;
   SrcPos  : Integer;
   SrcLine : Integer;
