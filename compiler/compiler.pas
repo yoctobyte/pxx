@@ -11,11 +11,13 @@ uses SysUtils, BaseUnix;
 {$include blexer.inc}
 {$include emit.inc}
 {$include symtab.inc}
+procedure CPreprocess(var src: AnsiString; const baseDir: AnsiString); forward;
 {$include parser.inc}
 {$include codegen.inc}
 {$include cparser.inc}
 {$include bparser.inc}
 {$include elfwriter.inc}
+{$include cpreproc.inc}
 
 { ===== Main ===== }
 
@@ -82,6 +84,7 @@ begin
   end
   else if isC then
   begin
+    CPreprocess(Source, SourceFileDir);
     CLexAll;
     TokPos := 0;
     Next;

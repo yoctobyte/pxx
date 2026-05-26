@@ -90,8 +90,16 @@ where sufficient for declaration recognition. It tolerates unsupported
 declarations in system headers so usable simple prototypes can still be
 found.
 
-Complex typedefs, structs, macros, callbacks, variadic functions, full pointer
-marshalling, and arbitrary platform header layouts are not yet promised.
+Before C lexing, a preprocessing phase now rewrites imported C input. Its
+current supported subset includes comment removal, continued directive lines,
+`#include`, common include guards, `#define`/`#undef`, `#if`/`#ifdef`/
+`#ifndef`/`#elif`/`#else`/`#endif`, object-like macros, and parameter
+substitution for function-like macros.
+
+This is not full C preprocessor or ABI coverage. Token pasting (`##`),
+stringification (`#`), variadic macros, complete macro rescanning, complex
+typedefs and structs, callbacks, variadic functions, full pointer marshalling,
+and arbitrary platform header layouts are not yet promised.
 
 ### Regression Coverage
 
@@ -102,6 +110,9 @@ marshalling, and arbitrary platform header layouts are not yet promised.
 - `test/test_c_import.pas`: compiles a local C definition from
   `test/my_c_lib.c` and expects `42`, including a preceding prototype to
   ensure a local body wins over external resolution.
+- `test/test_c_preprocess.pas`: imports a local C file using includes,
+  guards, conditionals, and function-like macro substitution, and expects
+  `42`.
 
 ## Compiler Tracing
 
@@ -111,6 +122,8 @@ Use `--debug` before the source path to enable compiler tracing:
 ./compiler/pascal26 --debug test/hello.pas /tmp/hello
 ```
 
-The trace reports lexer/parser diagnostics already present in the compiler.
-It is intended for diagnosing compiler execution; ELF debug symbols for
-stepping through generated executables are a separate future enhancement.
+The trace reports lexer/parser diagnostics already present in the compiler and
+C preprocessing events such as selected includes, macro definitions, active
+conditional branches, and expansions. It is intended for diagnosing compiler
+execution; ELF debug symbols for stepping through generated executables are a
+separate future enhancement.

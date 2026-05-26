@@ -37,7 +37,7 @@ begin
 end;
 
 procedure CSkipSpace;
-var done, directiveDone: Boolean;
+var done: Boolean;
 begin
   done := False;
   while (SrcPos <= Length(Source)) and not done do
@@ -63,22 +63,6 @@ begin
           if SrcPos < Length(Source) then begin Inc(SrcPos); Inc(SrcPos); end;
         end
         else done := True;
-      end;
-      '#':
-      begin
-        directiveDone := False;
-        while (SrcPos <= Length(Source)) and not directiveDone do
-        begin
-          while (SrcPos <= Length(Source)) and (Source[SrcPos] <> #10) do Inc(SrcPos);
-          if (SrcPos <= Length(Source)) and (SrcPos > 1) and
-             (Source[SrcPos-1] = '\') then
-          begin
-            Inc(SrcLine);
-            Inc(SrcPos);
-          end
-          else
-            directiveDone := True;
-        end;
       end;
       else done := True;
     end;

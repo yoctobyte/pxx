@@ -9,6 +9,12 @@ const
   MAX_CALLFIX = 4096;
   MAX_GLOBFIX = 8192;
   MAX_EXTERNAL = 256;
+  MAX_CPREP_MACROS = 1024;
+  MAX_CPREP_PARAMS = 4096;
+  MAX_CPREP_CONDS = 64;
+  MAX_CPREP_INCLUDES = 16;
+  MAX_CPREP_CHARS = 1048576;
+  MAX_CPREP_ARGS = 544; { 34 macro-expansion levels, 16 arguments each }
   STRING_CAP  = 1048576;
   MAX_TOKENS  = 131072;
   MAX_AST     = 65536;
@@ -229,6 +235,49 @@ var
   UnitContent : AnsiString;
   LoadPath : AnsiString;
   sysbuf : array[0..7] of Byte;
+
+  { C preprocessor state. Macro text is pooled to avoid string-array BSS cost. }
+  CPrepOut      : AnsiString;
+  CPrepLine     : AnsiString;
+  CPrepPath     : AnsiString;
+  CPrepInclude0 : AnsiString;
+  CPrepInclude1 : AnsiString;
+  CPrepInclude2 : AnsiString;
+  CPrepInclude3 : AnsiString;
+  CPrepInclude4 : AnsiString;
+  CPrepInclude5 : AnsiString;
+  CPrepInclude6 : AnsiString;
+  CPrepInclude7 : AnsiString;
+  CPrepInclude8 : AnsiString;
+  CPrepInclude9 : AnsiString;
+  CPrepInclude10: AnsiString;
+  CPrepInclude11: AnsiString;
+  CPrepInclude12: AnsiString;
+  CPrepInclude13: AnsiString;
+  CPrepInclude14: AnsiString;
+  CPrepInclude15: AnsiString;
+  CPrepChars    : array[0..MAX_CPREP_CHARS-1] of Char;
+  CPrepCharLen  : Integer;
+  CPMNameOff    : array[0..MAX_CPREP_MACROS-1] of Integer;
+  CPMNameLen    : array[0..MAX_CPREP_MACROS-1] of Integer;
+  CPMValueOff   : array[0..MAX_CPREP_MACROS-1] of Integer;
+  CPMValueLen   : array[0..MAX_CPREP_MACROS-1] of Integer;
+  CPMParamBase  : array[0..MAX_CPREP_MACROS-1] of Integer;
+  CPMParamCount : array[0..MAX_CPREP_MACROS-1] of Integer;
+  CPMFunction   : array[0..MAX_CPREP_MACROS-1] of Boolean;
+  CPMCount      : Integer;
+  CPPNameOff    : array[0..MAX_CPREP_PARAMS-1] of Integer;
+  CPPNameLen    : array[0..MAX_CPREP_PARAMS-1] of Integer;
+  CPPCount      : Integer;
+  CPArgStart    : array[0..MAX_CPREP_ARGS-1] of Integer;
+  CPArgEnd      : array[0..MAX_CPREP_ARGS-1] of Integer;
+  CPCondParent  : array[0..MAX_CPREP_CONDS-1] of Boolean;
+  CPCondActive  : array[0..MAX_CPREP_CONDS-1] of Boolean;
+  CPCondTaken   : array[0..MAX_CPREP_CONDS-1] of Boolean;
+  CPCondCount   : Integer;
+  CPExprText    : AnsiString;
+  CPExprPos     : Integer;
+  CPExprEnd     : Integer;
 
   { Reserved BSS slot 0: initial rsp (for argv access) }
   BSS_INITIAL_RSP : Integer;  { always 0; set in ParseProgram init }

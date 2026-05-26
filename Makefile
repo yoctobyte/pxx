@@ -73,6 +73,11 @@ test: $(COMPILER) fpc-check
 	test "$$(/tmp/shared_object26)" = "97"
 	./$(COMPILER) test/test_c_import.pas /tmp/c_import26
 	test "$$(/tmp/c_import26)" = "42"
+	./$(COMPILER) test/test_c_preprocess.pas /tmp/c_preprocess26
+	test "$$(/tmp/c_preprocess26)" = "42"
+	./$(COMPILER) --debug test/test_c_preprocess.pas /tmp/c_preprocess_debug26 > /tmp/c_preprocess_debug26.log
+	grep -q "C preprocessor: expand function" /tmp/c_preprocess_debug26.log
+	test "$$(/tmp/c_preprocess_debug26)" = "42"
 	./$(COMPILER) test/bootstrap_features.pas /tmp/bootstrap_features26
 	test "$$(/tmp/bootstrap_features26)" = "$$(printf '120\n98\ncase-ok\n0')"
 	./$(COMPILER) test/paramcount_if.pas /tmp/paramcount_if26

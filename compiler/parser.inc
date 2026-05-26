@@ -2122,7 +2122,9 @@ begin
     savedCurTokIVal := CurTok.IVal;
     savedCurTokLine := CurTok.Line;
 
-    { Append tokens using C Lexer }
+    CPreprocess(UnitContent, GetFilePath(path));
+
+    { Append preprocessed tokens using C Lexer }
     startPos := CLexAppend(UnitContent);
 
     TokPos := startPos;

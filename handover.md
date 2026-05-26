@@ -7,6 +7,8 @@
 Relevant commits on `master`:
 
 ```text
+4e33759 feat(debug): add runtime compiler tracing
+e7f8b2a docs: document shared C library loading
 8fcc080 feat(elf): load external C functions
 ce2da9a chore: checkpoint parser work in progress
 ```
@@ -70,6 +72,37 @@ For C input:
 The header parser is deliberately small. Simple prototypes such as
 `int tolower(int)` work; full C header/ABI coverage does not yet exist.
 
+## C Preprocessing
+
+The compiler includes `compiler/cpreproc.inc`, a preprocessing stage run
+before C lexing for direct `.c` inputs and imported `.c`/`.h` units. It
+supports:
+
+- comment removal and backslash-continued directive lines
+- local and installed-header `#include`
+- common include guards and conditional selection
+- `#define`/`#undef`, object macros, and basic function-like parameter
+  substitution
+
+`test/test_c_preprocess.pas` exercises a local include, include guard,
+conditional selection, undefinition, and function-like expansion; it now
+returns `42` under the self-hosted compiler.
+
+The implementation deliberately does not claim complete C preprocessing:
+stringification, token pasting, variadic macros, and full rescanning remain
+future work.
+
+## Debug Tracing
+
+`pascal26 --debug <src> [out]` now enables the existing lexer/parser traces
+and new C-preprocessor event traces. This immediately diagnosed the
+self-hosted preprocessor failure: passing local open arrays through
+`CPExpandFunction` corrupted the expansion-level argument. Macro arguments
+are now kept in depth-indexed fixed storage instead.
+
+This is compiler tracing, not ELF symbolic debugging. Generated executables
+still do not carry section-based debug symbols or DWARF data.
+
 ## Implementation Notes
 
 Changed areas for the shared-object feature:
@@ -78,12 +111,14 @@ Changed areas for the shared-object feature:
 |---|---|
 | `compiler/parser.inc` | unit/header lookup, system header fallback, library mapping |
 | `compiler/cparser.inc` | external prototype registration and local-body override |
-| `compiler/clexer.inc` | skip continued preprocessor directives in system headers |
+| `compiler/cpreproc.inc` | rewrite C preprocessing constructs before C lexing |
+| `compiler/clexer.inc` | tokenize rewritten C input |
 | `compiler/symtab.inc` | emit indirect calls through external GOT-style slots |
 | `compiler/elfwriter.inc` | emit dynamic ELF metadata and relocations |
 | `compiler/defs.inc` | external/dynamic bookkeeping and large unit scratch buffer |
 | `test/test_shared_object.pas` | installed `ctype.h` / `libc.so.6` regression |
 | `test/my_c_lib.c` | local prototype plus definition regression |
+| `test/test_c_preprocess.pas` | include/condition/macro preprocessing regression |
 
 An important fix made during this work is `UnitContent`: imported source/header
 contents are now loaded into a global string buffer. A local `AnsiString` in a
