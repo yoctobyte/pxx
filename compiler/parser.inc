@@ -2019,13 +2019,13 @@ end;
 
 procedure ParseUsesUnit(const name: AnsiString);
 var
-  lo, path, content: AnsiString;
+  lo, path: AnsiString;
   startPos, savedTokPos, strIdx, i: Integer;
   savedCurTokKind: TTokenKind;
   savedCurTokSVal: AnsiString;
   savedCurTokIVal: Int64;
   savedCurTokLine: Integer;
-  isCompiled, isCUnit: Boolean;
+  isCompiled, isCUnit, isCHeader: Boolean;
 begin
   lo := LowerCase(name);
   if (lo = 'sysutils') or (lo = 'baseunix') or (lo = 'unix') then Exit;
@@ -2048,58 +2048,74 @@ begin
   end;
 
   isCUnit := False;
-  content := '';
+  isCHeader := False;
+  CurrentCLibrary := '';
+  UnitContent := '';
   ConcatThree(SourceFileDir, lo, '.pas', path);
-  LoadFile(path, content);
-  if Length(content) = 0 then
+  LoadFile(path, UnitContent);
+  if Length(UnitContent) = 0 then
   begin
     ConcatThree(SourceFileDir, lo, '.pp', path);
-    LoadFile(path, content);
+    LoadFile(path, UnitContent);
   end;
-  if Length(content) = 0 then
+  if Length(UnitContent) = 0 then
   begin
     ConcatThree(SourceFileDir, lo, '.c', path);
-    LoadFile(path, content);
-    if Length(content) > 0 then isCUnit := True;
+    LoadFile(path, UnitContent);
+    if Length(UnitContent) > 0 then isCUnit := True;
   end;
-  if Length(content) = 0 then
+  if Length(UnitContent) = 0 then
   begin
     ConcatThree(SourceFileDir, lo, '.h', path);
-    LoadFile(path, content);
-    if Length(content) > 0 then isCUnit := True;
+    LoadFile(path, UnitContent);
+    if Length(UnitContent) > 0 then begin isCUnit := True; isCHeader := True; end;
   end;
 
-  if Length(content) = 0 then
+  if Length(UnitContent) = 0 then
   begin
     { If not found in base dir, try compiler's local directory or common locations }
     ConcatThree('compiler/', lo, '.pas', path);
-    LoadFile(path, content);
-    if Length(content) = 0 then
+    LoadFile(path, UnitContent);
+    if Length(UnitContent) = 0 then
     begin
       ConcatThree('compiler/', lo, '.pp', path);
-      LoadFile(path, content);
+      LoadFile(path, UnitContent);
     end;
-    if Length(content) = 0 then
+    if Length(UnitContent) = 0 then
     begin
       ConcatThree('compiler/', lo, '.c', path);
-      LoadFile(path, content);
-      if Length(content) > 0 then isCUnit := True;
+      LoadFile(path, UnitContent);
+      if Length(UnitContent) > 0 then isCUnit := True;
     end;
-    if Length(content) = 0 then
+    if Length(UnitContent) = 0 then
     begin
       ConcatThree('compiler/', lo, '.h', path);
-      LoadFile(path, content);
-      if Length(content) > 0 then isCUnit := True;
+      LoadFile(path, UnitContent);
+      if Length(UnitContent) > 0 then begin isCUnit := True; isCHeader := True; end;
     end;
   end;
 
-  if Length(content) = 0 then
+  if Length(UnitContent) = 0 then
+  begin
+    ConcatThree('/usr/include/', lo, '.h', path);
+    LoadFile(path, UnitContent);
+    if Length(UnitContent) > 0 then begin isCUnit := True; isCHeader := True; end;
+  end;
+
+  if Length(UnitContent) = 0 then
   begin
     Error('uses: unit source not found');
   end;
 
   if isCUnit then
   begin
+    if isCHeader then
+    begin
+      if lo = 'ctype' then
+        CurrentCLibrary := 'libc.so.6'
+      else
+        ConcatThree('lib', lo, '.so', CurrentCLibrary);
+    end;
     savedTokPos := TokPos;
     savedCurTokKind := CurTok.Kind;
     savedCurTokSVal := CurTok.SVal;
@@ -2107,7 +2123,7 @@ begin
     savedCurTokLine := CurTok.Line;
 
     { Append tokens using C Lexer }
-    startPos := CLexAppend(content);
+    startPos := CLexAppend(UnitContent);
 
     TokPos := startPos;
     Next;
@@ -2128,10 +2144,10 @@ begin
     savedCurTokIVal := CurTok.IVal;
     savedCurTokLine := CurTok.Line;
 
-    ExpandIncludes(content, GetFilePath(path));
+    ExpandIncludes(UnitContent, GetFilePath(path));
 
     { Append tokens to global Token stream }
-    startPos := LexAppend(content);
+    startPos := LexAppend(UnitContent);
 
     { Point parser to first token of the unit }
     TokPos := startPos;

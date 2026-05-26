@@ -880,6 +880,8 @@ begin
   Procs[ProcCount].FramePatch := -1;
   Procs[ProcCount].RetSymIdx  := -1;
   Procs[ProcCount].ScopeBase  := 0;
+  ProcExternal[ProcCount]     := False;
+  ProcLibrary[ProcCount]      := -1;
   for i := 0 to nParams-1 do
   begin
     Procs[ProcCount].Params[i].Name     := pnames[i];
@@ -983,7 +985,34 @@ end;
 { ===== Call emission ===== }
 
 procedure EmitCallProc(pi: Integer);
+var i, extIdx: Integer;
 begin
+  if ProcExternal[pi] then
+  begin
+    extIdx := -1;
+    for i := 0 to ExternalCount-1 do
+      if ExternalProc[i] = pi then extIdx := i;
+    if extIdx < 0 then
+    begin
+      if ExternalCount >= MAX_EXTERNAL then Error('external function overflow');
+      extIdx := ExternalCount;
+      ExternalProc[extIdx] := pi;
+      ExternalGotOff[extIdx] := DataLen;
+      for i := 0 to 7 do
+      begin
+        Data[DataLen] := 0;
+        Inc(DataLen);
+      end;
+      Inc(ExternalCount);
+    end;
+    if DynCallCount >= MAX_CALLFIX then Error('external call fixup overflow');
+    EmitB($FF); EmitB($14); EmitB($25); { call qword ptr [absolute address] }
+    DynCallCodePos[DynCallCount] := CodeLen;
+    DynCallExtIdx[DynCallCount] := extIdx;
+    Inc(DynCallCount);
+    EmitI32(0);
+    Exit;
+  end;
   EmitB($E8);
   if Procs[pi].BodyAddr >= 0 then
     EmitI32(Procs[pi].BodyAddr - (CodeLen + 4))

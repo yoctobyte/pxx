@@ -539,7 +539,8 @@ begin
   if CurTok.Kind <> k then
   begin
     s2 := CurTok.SVal;
-    writeln('Expected: ', name, ', but got: ', s2, ' (Kind: ', Ord(CurTok.Kind), ')');
+    writeln('Expected: ', name, ', but got: ', s2, ' (Kind: ', Ord(CurTok.Kind),
+            ', Line: ', CurTok.Line, ')');
     writeln('SrcPos: ', SrcPos);
     writeln('Ords around SrcPos: ', Ord(Source[SrcPos-2]), ' ', Ord(Source[SrcPos-1]), ' [', Ord(Source[SrcPos]), '] ', Ord(Source[SrcPos+1]), ' ', Ord(Source[SrcPos+2]));
     Error('unexpected token');

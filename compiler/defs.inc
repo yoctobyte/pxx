@@ -10,6 +10,7 @@ const
   MAX_PROCS   = 512;
   MAX_CALLFIX = 4096;
   MAX_GLOBFIX = 8192;
+  MAX_EXTERNAL = 256;
   STRING_CAP  = 1048576;
   MAX_TOKENS  = 131072;
   MAX_AST     = 65536;
@@ -59,6 +60,8 @@ const
   ELF_HEADER_SIZE  = 64;
   PROG_HEADER_SIZE = 56;
   CODE_OFFSET      = ELF_HEADER_SIZE + PROG_HEADER_SIZE;
+  DYNAMIC_CODE_OFFSET = ELF_HEADER_SIZE + PROG_HEADER_SIZE +
+                        PROG_HEADER_SIZE + PROG_HEADER_SIZE;
 
   INTBUF_OFFSET   = 0;
   INTBUF_SIZE     = 24;
@@ -195,6 +198,24 @@ var
   Procs     : array[0..MAX_PROCS-1] of TProc;
   ProcCount : Integer;
   CurProc   : Integer;   { -1 = main }
+  ProcExternal : array[0..MAX_PROCS-1] of Boolean;
+  ProcLibrary  : array[0..MAX_PROCS-1] of Integer; { Strs[] entry for DT_NEEDED name }
+  CurrentCLibrary : AnsiString;
+  ExternalProc   : array[0..MAX_EXTERNAL-1] of Integer;
+  ExternalGotOff : array[0..MAX_EXTERNAL-1] of Integer;
+  ExternalCount  : Integer;
+  DynCallCodePos : array[0..MAX_CALLFIX-1] of Integer;
+  DynCallExtIdx  : array[0..MAX_CALLFIX-1] of Integer;
+  DynCallCount   : Integer;
+  DynamicInterpOff : Integer;
+  DynamicInterpSize: Integer;
+  DynamicStrOff    : Integer;
+  DynamicStrSize   : Integer;
+  DynamicSymOff    : Integer;
+  DynamicHashOff   : Integer;
+  DynamicRelaOff   : Integer;
+  DynamicOff       : Integer;
+  DynamicSize      : Integer;
   LastTypeRecId : Integer;
   ErrorIdent : AnsiString;
   LastExprTk : TTypeKind;
@@ -206,6 +227,7 @@ var
   AssignPath : AnsiString;
   IncExpanded : AnsiString;
   IncIncluded : AnsiString;
+  UnitContent : AnsiString;
   LoadPath : AnsiString;
   sysbuf : array[0..7] of Byte;
 

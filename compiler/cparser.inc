@@ -167,10 +167,21 @@ begin
   
   if CurTok.Kind = tkStar then Next; { skip pointer type like int* }
   
-  if CurTok.Kind <> tkIdent then Error('expected identifier in C declaration');
+  if CurTok.Kind <> tkIdent then
+  begin
+    while (CurTok.Kind <> tkSemicolon) and (CurTok.Kind <> tkEOF) do Next;
+    Eat(tkSemicolon);
+    Exit;
+  end;
   name := CurTok.SVal;
   Next;
-  
+
+  if CurTok.Kind <> tkLParen then
+  begin
+    while (CurTok.Kind <> tkSemicolon) and (CurTok.Kind <> tkEOF) do Next;
+    Eat(tkSemicolon);
+    Exit;
+  end;
   Expect(tkLParen, '(');
   nparams := 0;
   while (CurTok.Kind <> tkRParen) and (CurTok.Kind <> tkEOF) do
@@ -209,13 +220,18 @@ begin
     pi := RegisterProc(name, isFunc, retType, nparams, pnames, ptypes);
   
   { If it is just a declaration (ends with ';'), we are done! }
+  while (CurTok.Kind <> tkSemicolon) and (CurTok.Kind <> tkBegin) and
+        (CurTok.Kind <> tkEOF) do Next;
   if CurTok.Kind = tkSemicolon then
   begin
+    ProcExternal[pi] := True;
+    ProcLibrary[pi] := InternStr(CurrentCLibrary);
     Next;
     Exit;
   end;
   
   { Otherwise, it has a body! }
+  ProcExternal[pi] := False;
   Procs[pi].BodyAddr := CodeLen;
   
   { Save scope }

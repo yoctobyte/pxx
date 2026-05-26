@@ -12,6 +12,139 @@ begin
   Code[pos+7] := Byte((addr shr 56) and $FF);
 end;
 
+procedure DataPutB(v: Byte);
+begin
+  if DataLen >= MAX_DATA then Error('data overflow');
+  Data[DataLen] := v;
+  Inc(DataLen);
+end;
+
+procedure DataPutU16(v: Integer);
+begin
+  DataPutB(Byte(v and $FF));
+  DataPutB(Byte((v shr 8) and $FF));
+end;
+
+procedure DataPutU32(v: Int64);
+begin
+  DataPutB(Byte(v and $FF));
+  DataPutB(Byte((v shr 8) and $FF));
+  DataPutB(Byte((v shr 16) and $FF));
+  DataPutB(Byte((v shr 24) and $FF));
+end;
+
+procedure DataPutU64(v: Int64);
+begin
+  DataPutU32(v and $FFFFFFFF);
+  DataPutU32((v shr 32) and $FFFFFFFF);
+end;
+
+procedure PatchDataU64(pos: Integer; v: Int64);
+begin
+  Data[pos+0] := Byte(v and $FF);
+  Data[pos+1] := Byte((v shr 8) and $FF);
+  Data[pos+2] := Byte((v shr 16) and $FF);
+  Data[pos+3] := Byte((v shr 24) and $FF);
+  Data[pos+4] := Byte((v shr 32) and $FF);
+  Data[pos+5] := Byte((v shr 40) and $FF);
+  Data[pos+6] := Byte((v shr 48) and $FF);
+  Data[pos+7] := Byte((v shr 56) and $FF);
+end;
+
+procedure DataPutZ(const s: AnsiString);
+var i: Integer;
+begin
+  for i := 1 to Length(s) do DataPutB(Ord(s[i]));
+  DataPutB(0);
+end;
+
+procedure DataPutDyn(tag, value: Int64);
+begin
+  DataPutU64(tag);
+  DataPutU64(value);
+end;
+
+procedure PrepareDynamicData;
+var
+  i: Integer;
+  nameOff: array[0..MAX_EXTERNAL-1] of Integer;
+  libOff : array[0..MAX_EXTERNAL-1] of Integer;
+begin
+  DynamicInterpOff := DataLen;
+  DataPutZ('/lib64/ld-linux-x86-64.so.2');
+  DynamicInterpSize := DataLen - DynamicInterpOff;
+
+  DynamicStrOff := DataLen;
+  DataPutB(0);
+  for i := 0 to ExternalCount-1 do
+  begin
+    libOff[i] := DataLen - DynamicStrOff;
+    DataPutZ(Strs[ProcLibrary[ExternalProc[i]]].Text);
+    nameOff[i] := DataLen - DynamicStrOff;
+    DataPutZ(Procs[ExternalProc[i]].Name);
+  end;
+  DynamicStrSize := DataLen - DynamicStrOff;
+  while (DataLen mod 8) <> 0 do DataPutB(0);
+
+  DynamicSymOff := DataLen;
+  for i := 1 to 24 do DataPutB(0);
+  for i := 0 to ExternalCount-1 do
+  begin
+    DataPutU32(nameOff[i]);
+    DataPutB($12); { STB_GLOBAL, STT_FUNC }
+    DataPutB(0);
+    DataPutU16(0);
+    DataPutU64(0);
+    DataPutU64(0);
+  end;
+
+  DynamicHashOff := DataLen;
+  DataPutU32(1); { one hash bucket }
+  DataPutU32(ExternalCount + 1);
+  if ExternalCount > 0 then DataPutU32(1) else DataPutU32(0);
+  DataPutU32(0); { null symbol chain }
+  for i := 1 to ExternalCount do
+  begin
+    if i < ExternalCount then DataPutU32(i + 1) else DataPutU32(0);
+  end;
+
+  DynamicRelaOff := DataLen;
+  for i := 0 to ExternalCount-1 do
+  begin
+    DataPutU64(0); { patched to the GOT slot address below }
+    DataPutU64(((i + 1) * 4294967296) + 6); { R_X86_64_GLOB_DAT }
+    DataPutU64(0);
+  end;
+
+  DynamicOff := DataLen;
+  for i := 0 to ExternalCount-1 do DataPutDyn(1, libOff[i]); { DT_NEEDED }
+  DataPutDyn(5, 0);                         { DT_STRTAB }
+  DataPutDyn(10, DynamicStrSize);           { DT_STRSZ }
+  DataPutDyn(6, 0);                         { DT_SYMTAB }
+  DataPutDyn(11, 24);                       { DT_SYMENT }
+  DataPutDyn(4, 0);                         { DT_HASH }
+  DataPutDyn(7, 0);                         { DT_RELA }
+  DataPutDyn(8, ExternalCount * 24);        { DT_RELASZ }
+  DataPutDyn(9, 24);                        { DT_RELAENT }
+  DataPutDyn(0, 0);                         { DT_NULL }
+  DynamicSize := DataLen - DynamicOff;
+end;
+
+procedure PatchDynamicData(dataBase: Int64);
+var i, p: Integer;
+begin
+  for i := 0 to ExternalCount-1 do
+    PatchDataU64(DynamicRelaOff + (i * 24), dataBase + ExternalGotOff[i]);
+  p := DynamicOff + (ExternalCount * 16);
+  PatchDataU64(p + 8, dataBase + DynamicStrOff);
+  Inc(p, 32);
+  PatchDataU64(p + 8, dataBase + DynamicSymOff);
+  Inc(p, 32);
+  PatchDataU64(p + 8, dataBase + DynamicHashOff);
+  Inc(p, 16);
+  PatchDataU64(p + 8, dataBase + DynamicRelaOff);
+end;
+
 {$ifdef FPC}
 procedure writeU8(var f:File;v:Byte);   begin Blockwrite(f,v,1); end;
 procedure writeU16(var f:File;v:Word);
@@ -59,12 +192,21 @@ end;
 {$ifdef FPC}
 procedure writeELF(const outPath: AnsiString);
 var f: File; i: Integer;
+    phCount, codeOffset: Integer;
     dataBase, bssBase, entry, filesz, memsz, addr: Int64;
 begin
-  dataBase := LOAD_ADDR + CODE_OFFSET + CodeLen;
+  phCount := 1;
+  codeOffset := CODE_OFFSET;
+  if ExternalCount > 0 then
+  begin
+    PrepareDynamicData;
+    phCount := 3;
+    codeOffset := DYNAMIC_CODE_OFFSET;
+  end;
+  dataBase := LOAD_ADDR + codeOffset + CodeLen;
   bssBase  := dataBase + DataLen;
-  entry    := LOAD_ADDR + CODE_OFFSET;
-  filesz   := CODE_OFFSET + CodeLen + DataLen;
+  entry    := LOAD_ADDR + codeOffset;
+  filesz   := codeOffset + CodeLen + DataLen;
   memsz    := filesz + BSSSize;
 
   { Apply data fixups (8-byte absolute) }
@@ -79,6 +221,12 @@ begin
   begin
     addr := bssBase + GlobFix[i].BSSoff;
     Patch32(GlobFix[i].CodePos, addr);
+  end;
+  if ExternalCount > 0 then
+  begin
+    for i := 0 to DynCallCount-1 do
+      Patch32(DynCallCodePos[i], dataBase + ExternalGotOff[DynCallExtIdx[i]]);
+    PatchDynamicData(dataBase);
   end;
 
   Assign(f, outPath); Rewrite(f, 1);
@@ -90,11 +238,22 @@ begin
   writeU16(f,2);writeU16(f,62);writeU32(f,1);
   writeU64(f,entry);writeU64(f,64);writeU64(f,0);
   writeU32(f,0);writeU16(f,64);writeU16(f,56);
-  writeU16(f,1);writeU16(f,64);writeU16(f,0);writeU16(f,0);
+  writeU16(f,phCount);writeU16(f,64);writeU16(f,0);writeU16(f,0);
 
   writeU32(f,1);writeU32(f,7);  { PT_LOAD, RWX }
   writeU64(f,0);writeU64(f,LOAD_ADDR);writeU64(f,LOAD_ADDR);
   writeU64(f,filesz);writeU64(f,memsz);writeU64(f,$200000);
+  if ExternalCount > 0 then
+  begin
+    writeU32(f,3);writeU32(f,4); { PT_INTERP, R }
+    writeU64(f,codeOffset + CodeLen + DynamicInterpOff);
+    writeU64(f,dataBase + DynamicInterpOff);writeU64(f,dataBase + DynamicInterpOff);
+    writeU64(f,DynamicInterpSize);writeU64(f,DynamicInterpSize);writeU64(f,1);
+    writeU32(f,2);writeU32(f,6); { PT_DYNAMIC, RW }
+    writeU64(f,codeOffset + CodeLen + DynamicOff);
+    writeU64(f,dataBase + DynamicOff);writeU64(f,dataBase + DynamicOff);
+    writeU64(f,DynamicSize);writeU64(f,DynamicSize);writeU64(f,8);
+  end;
 
   if CodeLen > 0 then Blockwrite(f,Code[0],CodeLen);
   if DataLen > 0 then Blockwrite(f,Data[0],DataLen);
@@ -104,12 +263,21 @@ end;
 {$else}
 procedure writeELF(const outPath: AnsiString);
 var f: Integer; i: Integer;
+    phCount, codeOffset: Integer;
     dataBase, bssBase, entry, filesz, memsz, addr: Int64;
 begin
-  dataBase := LOAD_ADDR + CODE_OFFSET + CodeLen;
+  phCount := 1;
+  codeOffset := CODE_OFFSET;
+  if ExternalCount > 0 then
+  begin
+    PrepareDynamicData;
+    phCount := 3;
+    codeOffset := DYNAMIC_CODE_OFFSET;
+  end;
+  dataBase := LOAD_ADDR + codeOffset + CodeLen;
   bssBase  := dataBase + DataLen;
-  entry    := LOAD_ADDR + CODE_OFFSET;
-  filesz   := CODE_OFFSET + CodeLen + DataLen;
+  entry    := LOAD_ADDR + codeOffset;
+  filesz   := codeOffset + CodeLen + DataLen;
   memsz    := filesz + BSSSize;
 
   { Apply data fixups (8-byte absolute) }
@@ -124,6 +292,12 @@ begin
   begin
     addr := bssBase + GlobFix[i].BSSoff;
     Patch32(GlobFix[i].CodePos, addr);
+  end;
+  if ExternalCount > 0 then
+  begin
+    for i := 0 to DynCallCount-1 do
+      Patch32(DynCallCodePos[i], dataBase + ExternalGotOff[DynCallExtIdx[i]]);
+    PatchDynamicData(dataBase);
   end;
 
   AssignPath := outPath;
@@ -136,11 +310,22 @@ begin
   writeU16(f,2);writeU16(f,62);writeU32(f,1);
   writeU64(f,entry);writeU64(f,64);writeU64(f,0);
   writeU32(f,0);writeU16(f,64);writeU16(f,56);
-  writeU16(f,1);writeU16(f,64);writeU16(f,0);writeU16(f,0);
+  writeU16(f,phCount);writeU16(f,64);writeU16(f,0);writeU16(f,0);
 
   writeU32(f,1);writeU32(f,7);  { PT_LOAD, RWX }
   writeU64(f,0);writeU64(f,LOAD_ADDR);writeU64(f,LOAD_ADDR);
   writeU64(f,filesz);writeU64(f,memsz);writeU64(f,$200000);
+  if ExternalCount > 0 then
+  begin
+    writeU32(f,3);writeU32(f,4); { PT_INTERP, R }
+    writeU64(f,codeOffset + CodeLen + DynamicInterpOff);
+    writeU64(f,dataBase + DynamicInterpOff);writeU64(f,dataBase + DynamicInterpOff);
+    writeU64(f,DynamicInterpSize);writeU64(f,DynamicInterpSize);writeU64(f,1);
+    writeU32(f,2);writeU32(f,6); { PT_DYNAMIC, RW }
+    writeU64(f,codeOffset + CodeLen + DynamicOff);
+    writeU64(f,dataBase + DynamicOff);writeU64(f,dataBase + DynamicOff);
+    writeU64(f,DynamicSize);writeU64(f,DynamicSize);writeU64(f,8);
+  end;
 
   if CodeLen > 0 then syswrite(f,Code,CodeLen);
   if DataLen > 0 then syswrite(f,Data,DataLen);
@@ -250,4 +435,3 @@ begin
   end;
   src := IncExpanded;
 end;
-
