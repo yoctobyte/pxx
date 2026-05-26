@@ -47,6 +47,7 @@ const
   SYS_OPEN  = 2;
   SYS_CLOSE = 3;
   SYS_EXIT  = 60;
+  SYS_BRK   = 12;
   STDOUT    = 1;
 
   LOAD_ADDR        = $400000;
@@ -68,11 +69,11 @@ type
     tkIf, tkThen, tkElse,
     tkWhile, tkDo, tkFor, tkTo, tkDownto, tkRepeat, tkUntil,
     tkCase, tkOf,
-    tkArray, tkRecord,
+    tkArray, tkRecord, tkClass,
     tkAnd, tkOr, tkNot, tkDiv, tkMod,
     tkTrue, tkFalse,
     tkwriteln, tkwrite, tkReadln, tkRead,
-    tkHalt, tkInc, tkDec, tkLength, tkOrd, tkChr, tkExit,
+    tkHalt, tkInc, tkDec, tkLength, tkGetMem, tkOrd, tkChr, tkExit,
     tkSysOpen, tkSysRead, tkSyswrite, tkSysClose, tkSysFchmod,
     tkArgCount, tkArgStr,
     tkInteger_T, tkBoolean_T, tkChar_T, tkString_T, tkReal_T, tkLongWord_T,
@@ -118,7 +119,7 @@ type
     ProcIdx  : Integer;
   end;
 
-  TTypeKind = (tyUnknown, tyInteger, tyBoolean, tyChar, tyString, tyRecord);
+  TTypeKind = (tyUnknown, tyInteger, tyBoolean, tyChar, tyString, tyRecord, tyClass);
   TSymKind  = (skLocal, skGlobal, skParam, skConst);
 
   TSymbol = record
@@ -191,6 +192,10 @@ var
   LastTypeRecId : Integer;
   ErrorIdent : AnsiString;
   LastExprTk : TTypeKind;
+  InInterface : Boolean;
+  CompiledUnits : array[0..255] of Integer;
+  CompiledUnitCount : Integer;
+  SourceFileDir : AnsiString;
   CurASTNode : Integer;
   AssignPath : AnsiString;
   IncExpanded : AnsiString;
@@ -200,6 +205,8 @@ var
 
   { Reserved BSS slot 0: initial rsp (for argv access) }
   BSS_INITIAL_RSP : Integer;  { always 0; set in ParseProgram init }
+  BSS_HEAP_PTR    : Integer;
+  BSS_HEAP_END    : Integer;
 
   TokChars   : array[0..STRING_CAP-1] of Char;
   TokCharLen : Integer;

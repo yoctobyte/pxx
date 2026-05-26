@@ -1,78 +1,101 @@
 { ===== C Parser ===== }
 
-procedure ParseCBlock; forward;
+function ParseCBlockAST: Integer; forward;
+function ParseCStatementAST: Integer; forward;
 
 function IsCTypeTok: Boolean;
 begin
   Result := CurTok.Kind in [tkInteger_T, tkChar_T];
 end;
 
-procedure ParseCPrintf;
-{ printf("literal") — hardcoded intrinsic, no format parsing yet }
-var strIdx: Integer; s: AnsiString;
+function ParseCPrintfAST: Integer;
+var node, argNode, strNode: Integer;
 begin
   Next; { skip 'printf' }
   Expect(tkLParen, '(');
+  node := AllocNode(AN_WRITE);
   if CurTok.Kind = tkString then
   begin
-    s := CurTok.SVal;
-    strIdx := InternStr(s);
+    strNode := AllocNode(AN_STR_LIT);
+    ASTSOffset[strNode] := Tokens[TokPos - 1].SOffset;
+    ASTSLen[strNode] := Tokens[TokPos - 1].SLen;
+    ASTTk[strNode] := Ord(tyString);
     Next;
-    if Strs[strIdx].Len > 0 then
-      EmitwriteSyscall(Strs[strIdx].Offset + 8, Strs[strIdx].Len);
+    argNode := AllocNode(AN_ARG);
+    ASTLeft[argNode] := strNode;
+    ASTLeft[node] := argNode;
   end;
   { skip any remaining args }
   while (CurTok.Kind <> tkRParen) and (CurTok.Kind <> tkEOF) do Next;
   Expect(tkRParen, ')');
   Eat(tkSemicolon);
+  Result := node;
 end;
 
-procedure ParseCStatement;
-var retVal: Int64; name: AnsiString;
+function ParseCStatementAST: Integer;
+var node, exprNode: Integer;
 begin
+  Result := -1;
   if CurTok.Kind = tkEOF then Exit;
 
   { return expr; }
   if CurTok.Kind = tkExit then
   begin
     Next;
-    retVal := 0;
-    if CurTok.Kind = tkInteger then begin retVal := CurTok.IVal; Next; end;
+    node := AllocNode(AN_EXIT);
+    ParseExpr;
+    ASTLeft[node] := CurASTNode;
     Eat(tkSemicolon);
-    EmitExit(retVal);
+    Result := node;
     Exit;
   end;
 
   { printf(...) }
   if (CurTok.Kind = tkIdent) and (CurTok.SVal = 'printf') then
   begin
-    ParseCPrintf;
+    Result := ParseCPrintfAST;
     Exit;
   end;
 
   { nested block }
   if CurTok.Kind = tkBegin then
   begin
-    ParseCBlock;
+    Result := ParseCBlockAST;
     Exit;
   end;
 
-  { skip type declarations and unknown statements to } ; { }
+  { skip type declarations and unknown statements }
   while (CurTok.Kind <> tkSemicolon) and (CurTok.Kind <> tkEnd) and
         (CurTok.Kind <> tkEOF) do Next;
   Eat(tkSemicolon);
 end;
 
-procedure ParseCBlock;
+function ParseCBlockAST: Integer;
+var blockNode, seqNode, stmtNode, lastSeq: Integer;
 begin
   Expect(tkBegin, '{');
+  blockNode := AllocNode(AN_BLOCK);
+  lastSeq := -1;
   while (CurTok.Kind <> tkEnd) and (CurTok.Kind <> tkEOF) do
-    ParseCStatement;
+  begin
+    stmtNode := ParseCStatementAST;
+    if stmtNode <> -1 then
+    begin
+      seqNode := AllocNode(AN_SEQ);
+      ASTLeft[seqNode] := stmtNode;
+      if lastSeq = -1 then
+        ASTLeft[blockNode] := seqNode
+      else
+        ASTRight[lastSeq] := seqNode;
+      lastSeq := seqNode;
+    end;
+  end;
   Expect(tkEnd, '}');
+  Result := blockNode;
 end;
 
 procedure ParseCProgram;
-var jmpPatch: Integer; name: AnsiString;
+var jmpPatch, node: Integer; name: AnsiString;
 begin
   BSS_INITIAL_RSP := BSSSize; Inc(BSSSize, 8);
 
@@ -100,7 +123,8 @@ begin
             if name = 'main' then
             begin
               Patch32(jmpPatch, CodeLen - (jmpPatch + 4));
-              ParseCBlock;
+              node := ParseCBlockAST;
+              CompileAST(node);
               EmitExit(0);
               ApplyCallFixups;
               Exit;
@@ -108,7 +132,7 @@ begin
             else
             begin
               { skip non-main function bodies for now }
-              ParseCBlock;
+              node := ParseCBlockAST;
             end;
           end;
         end
@@ -124,4 +148,143 @@ begin
       Next;
   end;
   Error('main function not found');
+end;
+
+procedure ParseCSubroutine;
+var
+  retType: TTypeKind;
+  name: AnsiString;
+  isFunc: Boolean;
+  nparams, pi, i, idx, patchPos: Integer;
+  ptypes: array[0..15] of TTypeKind;
+  pnames: array[0..15] of AnsiString;
+  savedSC, savedFS, node, savedCurProc: Integer;
+begin
+  retType := tyInteger;
+  if CurTok.Kind = tkInteger_T then retType := tyInteger
+  else if CurTok.Kind = tkChar_T then retType := tyChar;
+  Next;
+  
+  if CurTok.Kind = tkStar then Next; { skip pointer type like int* }
+  
+  if CurTok.Kind <> tkIdent then Error('expected identifier in C declaration');
+  name := CurTok.SVal;
+  Next;
+  
+  Expect(tkLParen, '(');
+  nparams := 0;
+  while (CurTok.Kind <> tkRParen) and (CurTok.Kind <> tkEOF) do
+  begin
+    if IsCTypeTok then
+    begin
+      ptypes[nparams] := tyInteger;
+      if CurTok.Kind = tkChar_T then ptypes[nparams] := tyChar;
+      Next;
+      
+      if CurTok.Kind = tkStar then Next;
+      
+      if CurTok.Kind = tkIdent then
+      begin
+        pnames[nparams] := CurTok.SVal;
+        Next;
+      end
+      else
+        pnames[nparams] := 'arg' + Chr(Ord('0') + nparams);
+      Inc(nparams);
+    end
+    else
+      Next;
+    Eat(tkComma);
+  end;
+  Expect(tkRParen, ')');
+  
+  isFunc := True; { In C, everything is a function }
+  
+  { Register or locate Proc }
+  pi := FindProc(name);
+  if pi < 0 then
+    pi := RegisterProc(name, isFunc, retType, nparams, pnames, ptypes);
+  
+  { If it is just a declaration (ends with ';'), we are done! }
+  if CurTok.Kind = tkSemicolon then
+  begin
+    Next;
+    Exit;
+  end;
+  
+  { Otherwise, it has a body! }
+  Procs[pi].BodyAddr := CodeLen;
+  
+  { Save scope }
+  savedSC := SymCount;
+  savedFS := FrameSize;
+  FrameSize := 0;
+  CurProc := pi;
+  Procs[pi].ScopeBase := SymCount;
+  
+  { Allocate parameter slots }
+  for i := 0 to nparams-1 do
+  begin
+    idx := AllocVar(pnames[i], ptypes[i]);
+    Procs[pi].Params[i].SymIdx := idx;
+    Syms[idx].Kind := skParam;
+  end;
+  
+  { Return value slot }
+  AllocVar('Result', retType);
+  Procs[pi].RetSymIdx := SymCount - 1;
+  Syms[SymCount-1].Kind := skLocal;
+  
+  { Prologue }
+  patchPos := EmitProcPrologue;
+  Procs[pi].FramePatch := patchPos;
+  
+  { Copy registers to stack params }
+  for i := 0 to nparams-1 do
+  begin
+    if i < 4 then
+    begin
+      EmitB($48); EmitB($89);
+      case i of
+        0: EmitB($BD); { rdi }
+        1: EmitB($B5); { rsi }
+        2: EmitB($95); { rdx }
+        3: EmitB($8D); { rcx }
+      end;
+      EmitI32(Syms[Procs[pi].Params[i].SymIdx].Offset);
+    end
+    else if i = 4 then
+    begin
+      EmitB($4C); EmitB($89); EmitB($85);
+      EmitI32(Syms[Procs[pi].Params[i].SymIdx].Offset);
+    end
+    else if i = 5 then
+    begin
+      EmitB($4C); EmitB($89); EmitB($8D);
+      EmitI32(Syms[Procs[pi].Params[i].SymIdx].Offset);
+    end;
+  end;
+  
+  { Parse & Compile Body }
+  node := ParseCBlockAST;
+  CompileAST(node);
+  
+  { Epilogue }
+  EmitProcEpilog(Procs[pi].RetSymIdx);
+  
+  { Restore scope }
+  SymCount := savedSC;
+  FrameSize := savedFS;
+  CurProc := -1;
+end;
+
+procedure ParseCUnit;
+begin
+  while CurTok.Kind <> tkEOF do
+  begin
+    if IsCTypeTok then
+      ParseCSubroutine
+    else
+      Next;
+  end;
 end;

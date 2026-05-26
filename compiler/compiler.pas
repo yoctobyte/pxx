@@ -35,8 +35,11 @@ begin
 
   LoadFile(inFile, Source);
   if VERBOSE then writeln('Loaded file length: ', Length(Source));
+  SourceFileDir := GetFilePath(inFile);
+  CompiledUnitCount := 0;
+  InInterface := False;
   if not isC then
-    ExpandIncludes(Source, GetFilePath(inFile));
+    ExpandIncludes(Source, SourceFileDir);
   if VERBOSE then writeln('After include expansion: ', Length(Source));
 
   SrcPos   := 1; SrcLine  := 1;

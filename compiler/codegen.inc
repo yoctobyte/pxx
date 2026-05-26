@@ -61,10 +61,10 @@ begin
 end;
 
 procedure GenAST(node: Integer); forward;
-procedure GenLValueAddress(node: Integer; var tk: TTypeKind; var recName: Integer); forward;
+procedure GenLValueAddress(node: Integer; var tk: TTypeKind; var recName: Integer; derefClass: Boolean); forward;
 procedure GenSpecialCall(specialId: Integer; argHead: Integer); forward;
 
-procedure GenLValueAddress(node: Integer; var tk: TTypeKind; var recName: Integer);
+procedure GenLValueAddress(node: Integer; var tk: TTypeKind; var recName: Integer; derefClass: Boolean);
 var
   idx, offset, elemSize, lo, baseNode: Integer;
   fieldName: AnsiString;
@@ -75,12 +75,20 @@ begin
     idx := ASTIVal[node];
     if Syms[idx].Kind = skGlobal then
     begin
-      EmitB($48); EmitB($8D); EmitB($04); EmitB($25); EmitGlobRef(Syms[idx].Offset);
+      if (Syms[idx].TypeKind = tyClass) and derefClass then
+      begin
+        EmitB($48); EmitB($8B); EmitB($04); EmitB($25); EmitGlobRef(Syms[idx].Offset);
+      end
+      else
+      begin
+        EmitB($48); EmitB($8D); EmitB($04); EmitB($25); EmitGlobRef(Syms[idx].Offset);
+      end;
     end
     else
     begin
-      if (Syms[idx].Kind = skParam) and
-         (Syms[idx].IsRef or Syms[idx].IsArray or (Syms[idx].TypeKind = tyString)) then
+      if ((Syms[idx].TypeKind = tyClass) and derefClass) or
+         ((Syms[idx].Kind = skParam) and
+          (Syms[idx].IsRef or Syms[idx].IsArray or (Syms[idx].TypeKind = tyString))) then
       begin
         EmitB($48); EmitB($8B); EmitB($85); EmitI32(Syms[idx].Offset);
       end
@@ -95,7 +103,7 @@ begin
   else if ASTKind[node] = AN_INDEX then
   begin
     baseNode := ASTLeft[node];
-    GenLValueAddress(baseNode, tk, recName);
+    GenLValueAddress(baseNode, tk, recName, True);
     EmitB($50); { push rax -- base address }
     
     GenAST(ASTRight[node]); { rax = index }
@@ -131,7 +139,7 @@ begin
       else
       begin
         elemSize := 1;
-        if tk in [tyInteger, tyBoolean] then elemSize := 8
+        if tk in [tyInteger, tyBoolean, tyClass] then elemSize := 8
         else if tk = tyChar then elemSize := 1
         else if tk = tyString then
         begin
@@ -177,7 +185,7 @@ begin
   else if ASTKind[node] = AN_FIELD then
   begin
     baseNode := ASTLeft[node];
-    GenLValueAddress(baseNode, tk, recName);
+    GenLValueAddress(baseNode, tk, recName, True);
     
     fieldName := GetASTIdentName(node);
     offset := RecFieldOffset(recName, fieldName);
@@ -190,14 +198,14 @@ end;
 
 procedure GenSpecialCall(specialId: Integer; argHead: Integer);
 var
-  arg1, arg2, arg3, idx, pathIdx, dstIdx, lo, hi, nextJmp, falseJmp, trueCount, i: Integer;
+  arg1, arg2, arg3, idx, pathIdx, dstIdx, lo, hi, nextJmp, falseJmp, trueCount, i, jbePatch: Integer;
   tk: TTypeKind; recName: Integer;
   trueJumps: array[0..127] of Integer;
   argNode, itemNode: Integer;
 begin
   if specialId = Ord(tkLength) then
   begin
-    GenLValueAddress(ASTLeft[argHead], tk, recName);
+    GenLValueAddress(ASTLeft[argHead], tk, recName, False);
     EmitB($48); EmitB($8B); EmitB($00); { mov rax, [rax] }
   end
   else if specialId = Ord(tkSysOpen) then
@@ -340,6 +348,49 @@ begin
   else if (specialId = Ord(tkOrd)) or (specialId = Ord(tkChr)) or (specialId = Ord(tkInteger_T)) or (specialId = Ord(tkLongWord_T)) then
   begin
     GenAST(ASTLeft[argHead]);
+  end
+  else if specialId = Ord(tkGetMem) then
+  begin
+    { Evaluates size expression into rax and runs the bump allocator }
+    GenAST(ASTLeft[argHead]);
+    
+    { Round size up to multiple of 8 for alignment }
+    EmitB($48); EmitB($83); EmitB($C0); EmitB($07); { add rax, 7 }
+    EmitB($48); EmitB($83); EmitB($E0); EmitB($F8); { and rax, -8 }
+    
+    { mov rbx, [BSS_HEAP_PTR] }
+    EmitB($48); EmitB($8B); EmitB($1C); EmitB($25); EmitGlobRef(BSS_HEAP_PTR);
+    
+    { add rbx, rax }
+    EmitB($48); EmitB($01); EmitB($C3);
+    
+    { cmp rbx, [BSS_HEAP_END] }
+    EmitB($48); EmitB($3B); EmitB($1C); EmitB($25); EmitGlobRef(BSS_HEAP_END);
+    
+    { jbe skip_brk }
+    EmitB($76); jbePatch := CodeLen; EmitB(0);
+    
+    { push rbx }
+    EmitB($53);
+    { mov rdi, rbx }
+    EmitB($48); EmitB($89); EmitB($DF);
+    { mov rax, SYS_BRK }
+    MovRaxImm(SYS_BRK);
+    { syscall }
+    EmitSyscall;
+    { pop rbx }
+    EmitB($5B);
+    { mov [BSS_HEAP_END], rax }
+    EmitB($48); EmitB($89); EmitB($04); EmitB($25); EmitGlobRef(BSS_HEAP_END);
+    
+    { Patch short jump offset }
+    Code[jbePatch] := Byte(CodeLen - (jbePatch + 1));
+    
+    { mov rax, [BSS_HEAP_PTR] }
+    EmitB($48); EmitB($8B); EmitB($04); EmitB($25); EmitGlobRef(BSS_HEAP_PTR);
+    
+    { mov [BSS_HEAP_PTR], rbx }
+    EmitB($48); EmitB($89); EmitB($1C); EmitB($25); EmitGlobRef(BSS_HEAP_PTR);
   end;
 end;
 
@@ -396,10 +447,10 @@ begin
     end;
     AN_INDEX, AN_FIELD:
     begin
-      GenLValueAddress(node, dummyTk, dummyRec);
+      GenLValueAddress(node, dummyTk, dummyRec, False);
       if dummyTk = tyString then
         begin { address stays in rax } end
-      else if dummyTk in [tyInteger, tyBoolean] then
+      else if dummyTk in [tyInteger, tyBoolean, tyClass] then
         begin EmitB($48); EmitB($8B); EmitB($00); end
       else if dummyTk = tyChar then
         begin EmitB($48); EmitB($0F); EmitB($B6); EmitB($00); end;
@@ -473,7 +524,7 @@ begin
         begin
           if Procs[pi].Params[pathIdx].IsRef then
           begin
-            GenLValueAddress(ASTLeft[argNode], dummyTk, dummyRec);
+            GenLValueAddress(ASTLeft[argNode], dummyTk, dummyRec, False);
           end
           else
           begin
@@ -527,7 +578,7 @@ begin
           if ASTKind[rhsNode] = AN_CALL then
             GenAST(rhsNode)
           else
-            GenLValueAddress(rhsNode, rhsTk, dummyRec);
+            GenLValueAddress(rhsNode, rhsTk, dummyRec, False);
           EmitB($50);
           CompileLValueAddressInternal(dstIdx, dummyTk, dummyRec);
           EmitB($48); EmitB($89); EmitB($C7);
@@ -542,7 +593,7 @@ begin
       end
       else
       begin
-        GenLValueAddress(lhsNode, lhsTk, dummyRec);
+        GenLValueAddress(lhsNode, lhsTk, dummyRec, False);
         EmitB($50); { push rax }
         
         if lhsTk = tyString then
@@ -571,7 +622,7 @@ begin
             if ASTKind[rhsNode] = AN_CALL then
               GenAST(rhsNode)
             else
-              GenLValueAddress(rhsNode, rhsTk, dummyRec);
+              GenLValueAddress(rhsNode, rhsTk, dummyRec, False);
             EmitB($5F);
             EmitB($48); EmitB($89); EmitB($C6);
             EmitB($48); EmitB($8B); EmitB($06);
@@ -586,7 +637,7 @@ begin
         begin
           GenAST(rhsNode);
           EmitB($59); { pop rcx }
-          if lhsTk in [tyInteger, tyBoolean] then
+          if lhsTk in [tyInteger, tyBoolean, tyClass] then
             begin EmitB($48); EmitB($89); EmitB($01); end
           else if lhsTk = tyChar then
             begin EmitB($88); EmitB($01); end;
@@ -823,7 +874,12 @@ begin
         end
         else
         begin
-          if CurProc >= 0 then EmitProcEpilog(Procs[CurProc].RetSymIdx)
+          if CurProc >= 0 then
+          begin
+            if Procs[CurProc].RetSymIdx >= 0 then
+              EmitStoreVar(Procs[CurProc].RetSymIdx);
+            EmitProcEpilog(Procs[CurProc].RetSymIdx);
+          end
           else EmitExit(0);
         end;
       end

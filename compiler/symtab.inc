@@ -11,6 +11,7 @@ const
   REC_TPARAM = 7;
   REC_TPROC = 8;
   REC_TRAWTOKEN = 9;
+  REC_TMYCLASS = 10;
 
 function IsRecordType(const lo: AnsiString): Integer;
 begin
@@ -23,7 +24,14 @@ begin
   else if lo = 'TSymbol' then Result := REC_TSYMBOL
   else if lo = 'TParam' then Result := REC_TPARAM
   else if lo = 'TProc' then Result := REC_TPROC
-  else if lo = 'TRawToken' then Result := REC_TRAWTOKEN;
+  else if lo = 'TRawToken' then Result := REC_TRAWTOKEN
+  else if (lo = 'TMyClass') or (lo = 'tmyclass') then Result := REC_TMYCLASS;
+end;
+
+function IsClassType(const lo: AnsiString): Boolean;
+begin
+  Result := False;
+  if (lo = 'TMyClass') or (lo = 'tmyclass') then Result := True;
 end;
 
 function RecSize(rec: Integer): Integer;
@@ -37,7 +45,8 @@ begin
   else if rec = REC_TSYMBOL then Result := 344
   else if rec = REC_TPARAM then Result := 296
   else if rec = REC_TPROC then Result := 2688
-  else if rec = REC_TRAWTOKEN then Result := 40;
+  else if rec = REC_TRAWTOKEN then Result := 40
+  else if rec = REC_TMYCLASS then Result := 16;
 end;
 
 function RecFieldOffset(rec: Integer; const field: AnsiString): Integer;
@@ -112,6 +121,11 @@ begin
     else if field = 'Line'    then Result := 16
     else if field = 'SOffset' then Result := 24
     else if field = 'SLen'    then Result := 32;
+  end
+  else if rec = REC_TMYCLASS then
+  begin
+    if (field = 'x') or (field = 'X') then Result := 0
+    else if (field = 'y') or (field = 'Y') then Result := 8;
   end;
 end;
 
@@ -141,6 +155,10 @@ begin
     if field = 'Name' then Result := tyString
     else if field = 'IsFunc' then Result := tyBoolean
     else if field = 'Params' then Result := tyRecord;
+  end
+  else if rec = REC_TMYCLASS then
+  begin
+    Result := tyInteger;
   end;
 end;
 
@@ -237,7 +255,7 @@ var elemSize, totalSize: Integer;
 begin
   if SymCount >= MAX_SYMS then Error('too many symbols');
   elemSize := 1;
-  if elemType in [tyInteger, tyBoolean] then elemSize := 8
+  if elemType in [tyInteger, tyBoolean, tyClass] then elemSize := 8
   else if elemType = tyChar then elemSize := 1
   else if elemType = tyString then
   begin
@@ -310,9 +328,19 @@ begin
   begin
     case Syms[idx].Kind of
       skLocal, skParam:
-        begin EmitB($48); EmitB($8B); EmitB($85); EmitI32(Syms[idx].Offset); end;
+        begin
+          if Syms[idx].TypeKind = tyChar then
+            begin EmitB($48); EmitB($0F); EmitB($B6); EmitB($85); EmitI32(Syms[idx].Offset); end
+          else
+            begin EmitB($48); EmitB($8B); EmitB($85); EmitI32(Syms[idx].Offset); end;
+        end;
       skGlobal:
-        begin EmitB($48); EmitB($8B); EmitB($04); EmitB($25); EmitGlobRef(Syms[idx].Offset); end;
+        begin
+          if Syms[idx].TypeKind = tyChar then
+            begin EmitB($48); EmitB($0F); EmitB($B6); EmitB($04); EmitB($25); EmitGlobRef(Syms[idx].Offset); end
+          else
+            begin EmitB($48); EmitB($8B); EmitB($04); EmitB($25); EmitGlobRef(Syms[idx].Offset); end;
+        end;
       skConst:
         MovRaxImm(Syms[idx].ConstVal);
     end;
@@ -331,9 +359,19 @@ begin
   end
   else case Syms[idx].Kind of
     skLocal, skParam:
-      begin EmitB($48); EmitB($89); EmitB($85); EmitI32(Syms[idx].Offset); end;
+      begin
+        if Syms[idx].TypeKind = tyChar then
+          begin EmitB($88); EmitB($85); EmitI32(Syms[idx].Offset); end
+        else
+          begin EmitB($48); EmitB($89); EmitB($85); EmitI32(Syms[idx].Offset); end;
+      end;
     skGlobal:
-      begin EmitB($48); EmitB($89); EmitB($04); EmitB($25); EmitGlobRef(Syms[idx].Offset); end;
+      begin
+        if Syms[idx].TypeKind = tyChar then
+          begin EmitB($88); EmitB($04); EmitB($25); EmitGlobRef(Syms[idx].Offset); end
+        else
+          begin EmitB($48); EmitB($89); EmitB($04); EmitB($25); EmitGlobRef(Syms[idx].Offset); end;
+      end;
     skConst: Error('cannot assign to constant');
   end;
 end;
@@ -599,7 +637,7 @@ procedure EmitArrElemAddr(arrIdx: Integer);
 var elemSize: Integer;
 begin
   elemSize := 1;
-  if Syms[arrIdx].ElemType in [tyInteger, tyBoolean] then elemSize := 8
+  if Syms[arrIdx].ElemType in [tyInteger, tyBoolean, tyClass] then elemSize := 8
   else if Syms[arrIdx].ElemType = tyString then
   begin
     if Syms[arrIdx].Kind = skGlobal then elemSize := STRING_CAP + 8
@@ -642,7 +680,7 @@ procedure EmitArrLoad(arrIdx: Integer);
 { rax = index → rax = element value }
 begin
   EmitArrElemAddr(arrIdx);
-  if Syms[arrIdx].ElemType in [tyInteger, tyBoolean] then
+  if Syms[arrIdx].ElemType in [tyInteger, tyBoolean, tyClass] then
     begin EmitB($48); EmitB($8B); EmitB($00); end  { mov rax, [rax] }
   else
     begin EmitB($48); EmitB($0F); EmitB($B6); EmitB($00); end; { movzx rax, byte [rax] }
@@ -661,7 +699,7 @@ procedure EmitArrStore(arrIdx: Integer);
 begin
   { addr was pushed before RHS eval }
   EmitB($59);                   { pop rcx -- element address }
-  if Syms[arrIdx].ElemType in [tyInteger, tyBoolean] then
+  if Syms[arrIdx].ElemType in [tyInteger, tyBoolean, tyClass] then
     begin EmitB($48); EmitB($89); EmitB($01); end  { mov [rcx], rax }
   else
     begin EmitB($88); EmitB($01); end;              { mov [rcx], al }

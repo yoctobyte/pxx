@@ -74,7 +74,15 @@ begin
 end;
 
 procedure CLexOne;
-var c: Char; s: AnsiString; n: Int64; done: Boolean;
+var
+{$ifdef FPC}
+  c: Char;
+{$else}
+  c: Integer;
+{$endif}
+  s: AnsiString;
+  n: Int64;
+  done: Boolean;
 begin
   CSkipSpace;
   CurTok.Line := SrcLine; CurTok.SVal := ''; CurTok.IVal := 0;
@@ -277,4 +285,55 @@ begin
     end;
     Inc(TokCount);
   until k = tkEOF;
+end;
+
+function CLexAppend(const srcText: AnsiString): Integer;
+var
+  savedSource: AnsiString;
+  savedSrcPos, savedSrcLine: Integer;
+  unitStart, len, i, off: Integer;
+  sval: AnsiString;
+  k: TTokenKind;
+begin
+  savedSource := Source;
+  savedSrcPos := SrcPos;
+  savedSrcLine := SrcLine;
+
+  Source := srcText;
+  SrcPos := 1;
+  SrcLine := 1;
+
+  if (TokCount > 0) and (Tokens[TokCount-1].Kind = tkEOF) then
+  begin
+    Dec(TokCount);
+    unitStart := TokCount;
+  end
+  else
+    unitStart := TokCount;
+
+  repeat
+    CLexOne;
+    k := CurTok.Kind;
+    if TokCount >= MAX_TOKENS then Error('token buffer overflow');
+    Tokens[TokCount].Kind    := k;
+    Tokens[TokCount].IVal    := CurTok.IVal;
+    Tokens[TokCount].Line    := CurTok.Line;
+    sval := CurTok.SVal;
+    len  := Length(sval);
+    Tokens[TokCount].SOffset := TokCharLen;
+    Tokens[TokCount].SLen    := len;
+    i := 1;
+    while i <= len do
+    begin
+      TokChars[TokCharLen] := sval[i];
+      Inc(TokCharLen);
+      Inc(i);
+    end;
+    Inc(TokCount);
+  until k = tkEOF;
+
+  Source := savedSource;
+  SrcPos := savedSrcPos;
+  SrcLine := savedSrcLine;
+  Result := unitStart;
 end;

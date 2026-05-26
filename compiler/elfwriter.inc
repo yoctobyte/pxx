@@ -189,7 +189,11 @@ procedure ExpandIncludes(var src: AnsiString; const baseDir: AnsiString);
 var
   i, j, k: Integer;
   fname: AnsiString;
+{$ifdef FPC}
   c: Char;
+{$else}
+  c: Integer;
+{$endif}
   fullPath: AnsiString;
 begin
   SetLength(IncExpanded, 0);
@@ -212,8 +216,13 @@ begin
       while (j <= Length(src)) and (src[j] <> '}') and (src[j] <> #10) do
       begin
         c := src[j];
+{$ifdef FPC}
         if (c <> '''') and (c <> '"') and (c <> ' ') then
           AppendChar(fname, c);
+{$else}
+        if (c <> 39) and (c <> 34) and (c <> 32) then
+          AppendChar(fname, Chr(c));
+{$endif}
         Inc(j);
       end;
       if (Length(fname) > 0) and (j <= Length(src)) then

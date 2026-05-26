@@ -227,6 +227,8 @@ begin
     if (s[1]='f') and (s[2]='a') and (s[3]='l') and (s[4]='s') and (s[5]='e') then Result := tkFalse;
     if (s[1]='F') and (s[2]='a') and (s[3]='l') and (s[4]='s') and (s[5]='e') then Result := tkFalse;
     if (s[1]='w') and (s[2]='r') and (s[3]='i') and (s[4]='t') and (s[5]='e') then Result := tkwrite;
+    if (s[1]='c') and (s[2]='l') and (s[3]='a') and (s[4]='s') and (s[5]='s') then Result := tkClass;
+    if (s[1]='C') and (s[2]='l') and (s[3]='a') and (s[4]='s') and (s[5]='s') then Result := tkClass;
   end
   else if Length(s) = 6 then
   begin
@@ -236,6 +238,8 @@ begin
     if (s[1]='r') and (s[2]='e') and (s[3]='a') and (s[4]='d') and (s[5]='l') and (s[6]='n') then Result := tkReadln;
     if (s[1]='l') and (s[2]='e') and (s[3]='n') and (s[4]='g') and (s[5]='t') and (s[6]='h') then Result := tkLength;
     if (s[1]='L') and (s[2]='e') and (s[3]='n') and (s[4]='g') and (s[5]='t') and (s[6]='h') then Result := tkLength;
+    if (s[1]='g') and (s[2]='e') and (s[3]='t') and (s[4]='m') and (s[5]='e') and (s[6]='m') then Result := tkGetMem;
+    if (s[1]='G') and (s[2]='e') and (s[3]='t') and (s[4]='M') and (s[5]='e') and (s[6]='m') then Result := tkGetMem;
     if (s[1]='a') and (s[2]='r') and (s[3]='g') and (s[4]='s') and (s[5]='t') and (s[6]='r') then Result := tkArgStr;
     if (s[1]='A') and (s[2]='r') and (s[3]='g') and (s[4]='S') and (s[5]='t') and (s[6]='r') then Result := tkArgStr;
     if (s[1]='s') and (s[2]='t') and (s[3]='r') and (s[4]='i') and (s[5]='n') and (s[6]='g') then Result := tkString_T;
@@ -297,7 +301,15 @@ end;
 {$endif}
 
 procedure LexOne;
-var c: Char; s: AnsiString; n: Int64;
+var
+{$ifdef FPC}
+  c: Char;
+{$else}
+  c: Integer;
+{$endif}
+  s: AnsiString;
+  n: Int64;
+  i: Integer;
 begin
   if VERBOSE then writeln('Entering Next. SrcPos = ', SrcPos);
   SkipSpace;
@@ -447,6 +459,55 @@ begin
     end;
     Inc(TokCount);
   until CurTok.Kind = tkEOF;
+end;
+
+function LexAppend(const srcText: AnsiString): Integer;
+var
+  savedSource: AnsiString;
+  savedSrcPos, savedSrcLine: Integer;
+  len, i, unitStart: Integer;
+  sval: AnsiString;
+begin
+  savedSource := Source;
+  savedSrcPos := SrcPos;
+  savedSrcLine := SrcLine;
+
+  Source := srcText;
+  SrcPos := 1;
+  SrcLine := 1;
+
+  if (TokCount > 0) and (Tokens[TokCount-1].Kind = tkEOF) then
+  begin
+    Dec(TokCount);
+    unitStart := TokCount;
+  end
+  else
+    unitStart := TokCount;
+
+  repeat
+    LexOne;
+    if TokCount >= MAX_TOKENS then Error('token buffer overflow');
+    Tokens[TokCount].Kind    := CurTok.Kind;
+    Tokens[TokCount].IVal    := CurTok.IVal;
+    Tokens[TokCount].Line    := CurTok.Line;
+    sval := CurTok.SVal;
+    len  := Length(sval);
+    Tokens[TokCount].SOffset := TokCharLen;
+    Tokens[TokCount].SLen    := len;
+    i := 1;
+    while i <= len do
+    begin
+      TokChars[TokCharLen] := sval[i];
+      Inc(TokCharLen);
+      Inc(i);
+    end;
+    Inc(TokCount);
+  until CurTok.Kind = tkEOF;
+
+  Source := savedSource;
+  SrcPos := savedSrcPos;
+  SrcLine := savedSrcLine;
+  Result := unitStart;
 end;
 
 procedure Next;

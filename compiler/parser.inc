@@ -1,3 +1,9 @@
+{$ifdef FPC}
+procedure LoadFile(const path: AnsiString; var dst: AnsiString); forward;
+{$endif}
+function GetFilePath(const path: AnsiString): AnsiString; forward;
+procedure ExpandIncludes(var src: AnsiString; const baseDir: AnsiString); forward;
+procedure ParseCUnit; forward;
 
 function AllocNode(kind: Integer): Integer;
 begin
@@ -11,6 +17,18 @@ begin
   ASTTk[ASTNodeCount]      := 0;
   Result := ASTNodeCount;
   Inc(ASTNodeCount);
+end;
+
+function GetTokenStr(idx: Integer): AnsiString;
+var s: AnsiString; i: Integer;
+begin
+  s := '';
+  if (idx >= 0) and (idx < TokCount) then
+  begin
+    for i := Tokens[idx].SOffset to Tokens[idx].SOffset + Tokens[idx].SLen - 1 do
+      AppendChar(s, TokChars[i]);
+  end;
+  Result := s;
 end;
 
 procedure ParseExpr; forward;
@@ -255,7 +273,15 @@ begin
   if Syms[idx].Kind = skGlobal then
   begin
     { Global variable base address }
-    EmitB($48); EmitB($8D); EmitB($04); EmitB($25); EmitGlobRef(Syms[idx].Offset);
+    if Syms[idx].TypeKind = tyClass then
+    begin
+      { Global class pointer: load value from BSS variable }
+      EmitB($48); EmitB($8B); EmitB($04); EmitB($25); EmitGlobRef(Syms[idx].Offset);
+    end
+    else
+    begin
+      EmitB($48); EmitB($8D); EmitB($04); EmitB($25); EmitGlobRef(Syms[idx].Offset);
+    end;
   end
   else
   begin
@@ -268,8 +294,16 @@ begin
     end
     else
     begin
-      { Local variable or regular parameter address: lea rax, [rbp + Offset] }
-      EmitB($48); EmitB($8D); EmitB($85); EmitI32(Syms[idx].Offset);
+      { Local variable or regular parameter address }
+      if Syms[idx].TypeKind = tyClass then
+      begin
+        { Local class pointer: load the heap address value }
+        EmitB($48); EmitB($8B); EmitB($85); EmitI32(Syms[idx].Offset);
+      end
+      else
+      begin
+        EmitB($48); EmitB($8D); EmitB($85); EmitI32(Syms[idx].Offset);
+      end;
     end;
   end;
   
@@ -289,7 +323,7 @@ begin
       if isArr then
       begin
         elemSize := 1;
-        if curTk in [tyInteger, tyBoolean] then elemSize := 8
+        if curTk in [tyInteger, tyBoolean, tyClass] then elemSize := 8
         else if curTk = tyChar then elemSize := 1
         else if curTk = tyString then
         begin
@@ -508,7 +542,7 @@ begin
     begin
       ParseExpr;
       EmitB($59); { pop rcx -- LHS address }
-      if tk in [tyInteger, tyBoolean] then
+      if tk in [tyInteger, tyBoolean, tyClass] then
         begin EmitB($48); EmitB($89); EmitB($01); end
       else if tk = tyChar then
         begin EmitB($88); EmitB($01); end;
@@ -610,6 +644,17 @@ begin
       ASTLeft[node] := argSeq;
       CurASTNode := node;
     end;
+    tkGetMem:
+    begin
+      Next; Expect(tkLParen, '(');
+      ParseExpr;
+      valNode := CurASTNode;
+      Expect(tkRParen, ')');
+      node := AllocNode(AN_CALL); ASTIVal[node] := -Ord(tkGetMem);
+      argSeq := AllocNode(AN_ARG); ASTLeft[argSeq] := valNode;
+      ASTLeft[node] := argSeq;
+      CurASTNode := node;
+    end;
     tkSysOpen:
     begin
       Next; Expect(tkLParen, '(');
@@ -697,6 +742,38 @@ begin
       prevTok := TokPos - 1;
       idx  := FindSym(name);
       pi   := FindProc(name);
+      if (idx < 0) and (pi < 0) and IsClassType(name) and
+         (CurTok.Kind = tkIdent) and (Tokens[TokPos].Kind = tkDot) and
+         (Tokens[TokPos+1].Kind = tkIdent) and
+         ((GetTokenStr(TokPos+1) = 'Create') or (GetTokenStr(TokPos+1) = 'create')) then
+      begin
+        Next; { Eat class name }
+        Next; { Eat dot }
+        Next; { Eat 'Create' }
+        if CurTok.Kind = tkLParen then
+        begin
+          Next; Expect(tkRParen, ')');
+        end;
+        
+        idx := IsRecordType(name);
+        prevTok := RecSize(idx);
+        
+        { Construct GetMem(sz) AST node }
+        node := AllocNode(AN_CALL);
+        ASTIVal[node] := -Ord(tkGetMem);
+        ASTTk[node] := Ord(tyClass);
+        
+        exprNode := AllocNode(AN_INT_LIT);
+        ASTIVal[exprNode] := prevTok;
+        ASTTk[exprNode] := Ord(tyInteger);
+        
+        argSeq := AllocNode(AN_ARG);
+        ASTLeft[argSeq] := exprNode;
+        ASTLeft[node] := argSeq;
+        
+        CurASTNode := node;
+        Exit;
+      end;
       if (idx >= 0) and (Syms[idx].Kind = skConst) then
       begin
         node := AllocNode(AN_INT_LIT); ASTIVal[node] := Syms[idx].ConstVal; CurASTNode := node; Next;
@@ -1396,11 +1473,19 @@ begin
       else if (lo = 'byte') or (lo = 'Byte') then Result := tyChar
       else
       begin
-        LastTypeRecId := IsRecordType(lo);
-        if LastTypeRecId <> REC_NONE then
-          Result := tyRecord
+        if IsClassType(lo) then
+        begin
+          LastTypeRecId := IsRecordType(lo);
+          Result := tyClass;
+        end
         else
-          Result := tyInteger;
+        begin
+          LastTypeRecId := IsRecordType(lo);
+          if LastTypeRecId <> REC_NONE then
+            Result := tyRecord
+          else
+            Result := tyInteger;
+        end;
       end;
     end;
   end;
@@ -1455,7 +1540,7 @@ begin
 	      for i := 0 to n-1 do
 	      begin
 	        idx := AllocVar(names[i], tk);
-	        if tk = tyRecord then
+	        if (tk = tyRecord) or (tk = tyClass) then
 	          Syms[idx].RecName := LastTypeRecId;
 	      end;
 	    if Eat(tkEq) then
@@ -1501,13 +1586,13 @@ begin
       end;
       Expect(tkRParen, ')');
     end
-    else if CurTok.Kind = tkRecord then
+    else if (CurTok.Kind = tkRecord) or (CurTok.Kind = tkClass) then
     begin
       depth := 1;
       Next;
       while (depth > 0) and (CurTok.Kind <> tkEOF) do
       begin
-        if CurTok.Kind = tkRecord then Inc(depth)
+        if (CurTok.Kind = tkRecord) or (CurTok.Kind = tkClass) then Inc(depth)
         else if CurTok.Kind = tkEnd then Dec(depth);
         Next;
       end;
@@ -1752,6 +1837,233 @@ begin
   CurProc   := -1;
 end;
 
+function LowerCase(const s: AnsiString): AnsiString;
+var
+  i: Integer;
+  res: AnsiString;
+begin
+  res := s;
+  for i := 1 to Length(res) do
+  begin
+    if res[i] in ['A'..'Z'] then
+      res[i] := Chr(Ord(res[i]) + 32);
+  end;
+  Result := res;
+end;
+
+procedure ParseUnit; forward;
+
+procedure ParseUsesUnit(const name: AnsiString);
+var
+  lo, path, content: AnsiString;
+  startPos, savedTokPos, strIdx, i: Integer;
+  savedCurTok: TToken;
+  isCompiled, isCUnit: Boolean;
+begin
+  lo := LowerCase(name);
+  if (lo = 'sysutils') or (lo = 'baseunix') or (lo = 'unix') then Exit;
+
+  { Check if already compiled }
+  strIdx := InternStr(lo);
+  isCompiled := False;
+  for i := 0 to CompiledUnitCount - 1 do
+  begin
+    if CompiledUnits[i] = strIdx then
+      isCompiled := True;
+  end;
+  if isCompiled then Exit;
+
+  { Mark as compiled }
+  if CompiledUnitCount < 256 then
+  begin
+    CompiledUnits[CompiledUnitCount] := strIdx;
+    Inc(CompiledUnitCount);
+  end;
+
+  isCUnit := False;
+  content := '';
+  path := SourceFileDir + lo + '.pas';
+  LoadFile(path, content);
+  if Length(content) = 0 then
+  begin
+    path := SourceFileDir + lo + '.pp';
+    LoadFile(path, content);
+  end;
+  if Length(content) = 0 then
+  begin
+    path := SourceFileDir + lo + '.c';
+    LoadFile(path, content);
+    if Length(content) > 0 then isCUnit := True;
+  end;
+  if Length(content) = 0 then
+  begin
+    path := SourceFileDir + lo + '.h';
+    LoadFile(path, content);
+    if Length(content) > 0 then isCUnit := True;
+  end;
+
+  if Length(content) = 0 then
+  begin
+    { If not found in base dir, try compiler's local directory or common locations }
+    path := 'compiler/' + lo + '.pas';
+    LoadFile(path, content);
+    if Length(content) = 0 then
+    begin
+      path := 'compiler/' + lo + '.pp';
+      LoadFile(path, content);
+    end;
+    if Length(content) = 0 then
+    begin
+      path := 'compiler/' + lo + '.c';
+      LoadFile(path, content);
+      if Length(content) > 0 then isCUnit := True;
+    end;
+    if Length(content) = 0 then
+    begin
+      path := 'compiler/' + lo + '.h';
+      LoadFile(path, content);
+      if Length(content) > 0 then isCUnit := True;
+    end;
+  end;
+
+  if Length(content) = 0 then
+  begin
+    Error('uses: unit source not found: ' + lo);
+  end;
+
+  if isCUnit then
+  begin
+    { Append tokens using C Lexer }
+    startPos := CLexAppend(content);
+
+    savedTokPos := TokPos;
+    savedCurTok := CurTok;
+
+    TokPos := startPos;
+    Next;
+
+    ParseCUnit;
+
+    TokPos := savedTokPos;
+    CurTok := savedCurTok;
+  end
+  else
+  begin
+    ExpandIncludes(content, GetFilePath(path));
+
+    { Append tokens to global Token stream }
+    startPos := LexAppend(content);
+
+    { Save current main program parser position }
+    savedTokPos := TokPos;
+    savedCurTok := CurTok;
+
+    { Point parser to first token of the unit }
+    TokPos := startPos;
+    Next;
+
+    { Parse the unit }
+    ParseUnit;
+
+    { Restore parser position }
+    TokPos := savedTokPos;
+    CurTok := savedCurTok;
+  end;
+end;
+
+procedure ParseUnit;
+var
+  uname: AnsiString;
+  doneUses, savedInterface, doneImp: Boolean;
+begin
+  Expect(tkUnit, 'unit');
+  if CurTok.Kind <> tkIdent then Error('expected unit name');
+  uname := CurTok.SVal; Next;
+  Expect(tkSemicolon, ';');
+
+  if CurTok.Kind <> tkIdent then Error('expected interface section');
+  if (CurTok.SVal <> 'interface') and (CurTok.SVal <> 'Interface') then
+    Error('expected interface section');
+  Next;
+
+  savedInterface := InInterface;
+  InInterface := True;
+
+  while (CurTok.Kind <> tkEOF) and not ((CurTok.Kind = tkIdent) and ((CurTok.SVal = 'implementation') or (CurTok.SVal = 'Implementation'))) do
+  begin
+    case CurTok.Kind of
+      tkUses:
+      begin
+        Next;
+        doneUses := False;
+        while (CurTok.Kind = tkIdent) and not doneUses do
+        begin
+          ParseUsesUnit(CurTok.SVal);
+          Next;
+          if not Eat(tkComma) then doneUses := True;
+        end;
+        Eat(tkSemicolon);
+      end;
+      tkVar:      ParseVarSection;
+      tkConst:    ParseConstSection;
+      tkType:     ParseTypeSection;
+      tkProcedure,
+      tkFunction: ParseSubroutine;
+      else
+        Next;
+    end;
+  end;
+
+  if CurTok.Kind = tkEOF then Error('expected implementation section');
+  Next; { Skip 'implementation' }
+
+  InInterface := False;
+
+  doneImp := False;
+  while (CurTok.Kind <> tkEOF) and not doneImp do
+  begin
+    if CurTok.Kind = tkEnd then
+    begin
+      { Could be 'end.' or end of a case/begin inside a subroutine. }
+      { However, at top level of implementation, a standalone 'end' is the end of the unit. }
+      { Let's see if the next token is tkDot. }
+      if (TokPos < TokCount) and (Tokens[TokPos].Kind = tkDot) then
+        doneImp := True
+      else
+        Next;
+    end
+    else
+    begin
+      case CurTok.Kind of
+        tkUses:
+        begin
+          Next;
+          doneUses := False;
+          while (CurTok.Kind = tkIdent) and not doneUses do
+          begin
+            ParseUsesUnit(CurTok.SVal);
+            Next;
+            if not Eat(tkComma) then doneUses := True;
+          end;
+          Eat(tkSemicolon);
+        end;
+        tkVar:      ParseVarSection;
+        tkConst:    ParseConstSection;
+        tkType:     ParseTypeSection;
+        tkProcedure,
+        tkFunction: ParseSubroutine;
+        else
+          Next;
+      end;
+    end;
+  end;
+
+  InInterface := savedInterface;
+
+  Expect(tkEnd, 'end');
+  Expect(tkDot, '.');
+end;
+
 { ===== Program ===== }
 
 procedure ParseProgram;
@@ -1766,10 +2078,21 @@ begin
 
   { Reserve BSS[0..7] for initial rsp (argv access) }
   BSS_INITIAL_RSP := BSSSize; Inc(BSSSize, 8);
+  BSS_HEAP_PTR    := BSSSize; Inc(BSSSize, 8);
+  BSS_HEAP_END    := BSSSize; Inc(BSSSize, 8);
 
   { Emit entry stub: save rsp then jmp to main body }
   { mov [bss_initial_rsp], rsp: 48 89 24 25 <GlobRef(0)> }
   EmitB($48); EmitB($89); EmitB($24); EmitB($25); EmitGlobRef(BSS_INITIAL_RSP);
+
+  { Initialize heap: calling sys_brk(0) }
+  MovRdiImm(0);
+  MovRaxImm(SYS_BRK);
+  EmitSyscall;
+  { Store returned start of heap in BSS_HEAP_PTR and BSS_HEAP_END }
+  EmitB($48); EmitB($89); EmitB($04); EmitB($25); EmitGlobRef(BSS_HEAP_PTR);
+  EmitB($48); EmitB($89); EmitB($04); EmitB($25); EmitGlobRef(BSS_HEAP_END);
+
   EmitB($E9); jmpPatch := CodeLen; EmitI32(0);
 
   while CurTok.Kind in
@@ -1781,6 +2104,7 @@ begin
         doneUses := False;
         while (CurTok.Kind = tkIdent) and not doneUses do
         begin
+          ParseUsesUnit(CurTok.SVal);
           Next;
           if not Eat(tkComma) then doneUses := True;
         end;
