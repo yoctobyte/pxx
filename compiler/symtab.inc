@@ -1,3 +1,5 @@
+{ ===== Record Helper Functions ===== }
+
 const
   REC_NONE = 0;
   REC_TTOKEN = 1;
@@ -11,274 +13,170 @@ const
   REC_TRAWTOKEN = 9;
   REC_TMYCLASS = 10;
 
-function FieldNameEqual(const f1, f2: AnsiString): Boolean;
-var len, i: Integer; c1, c2: Char;
-begin
-  Result := False;
-  len := Length(f1);
-  if len = Length(f2) then
-  begin
-    Result := True;
-    for i := 1 to len do
-    begin
-      c1 := f1[i]; c2 := f2[i];
-      if (c1 >= 'a') and (c1 <= 'z') then Dec(c1, 32);
-      if (c2 >= 'a') and (c2 <= 'z') then Dec(c2, 32);
-      if c1 <> c2 then Result := False;
-    end;
-  end;
-end;
-
-function GetFieldSize(tk: TTypeKind; recId: Integer): Integer;
-begin
-  if tk = tyString then
-    Result := 264
-  else if tk = tyRecord then
-    Result := Records[recId].Size
-  else
-    Result := 8;
-end;
-
-function AddRecord(const name: AnsiString; size: Integer; isClass: Boolean): Integer;
-begin
-  Inc(RecordCount);
-  Records[RecordCount].Name := name;
-  Records[RecordCount].Size := size;
-  Records[RecordCount].IsClass := isClass;
-  Records[RecordCount].FieldCount := 0;
-  Result := RecordCount;
-end;
-
-procedure AddField(recId: Integer; const name: AnsiString; tk: TTypeKind; elemRec: Integer; isArray: Boolean; arrLo, arrHi: Integer);
-var
-  fSize, fc: Integer;
-begin
-  fc := Records[recId].FieldCount;
-  Records[recId].Fields[fc].Name := name;
-  Records[recId].Fields[fc].TypeKind := tk;
-  Records[recId].Fields[fc].RecId := elemRec;
-  Records[recId].Fields[fc].IsArray := isArray;
-  
-  if isArray then
-  begin
-    Records[recId].Fields[fc].ArrLen := arrHi - arrLo + 1;
-    fSize := Records[recId].Fields[fc].ArrLen * GetFieldSize(tk, elemRec);
-  end
-  else
-  begin
-    Records[recId].Fields[fc].ArrLen := 0;
-    fSize := GetFieldSize(tk, elemRec);
-  end;
-  
-  Records[recId].Fields[fc].Offset := Records[recId].Size;
-  Inc(Records[recId].Size, fSize);
-  Inc(Records[recId].FieldCount);
-end;
-
-function AddRecordManual(const name: AnsiString; size: Integer; isClass: Boolean): Integer;
-begin
-  Inc(RecordCount);
-  Records[RecordCount].Name := name;
-  Records[RecordCount].Size := size;
-  Records[RecordCount].IsClass := isClass;
-  Records[RecordCount].FieldCount := 0;
-  Result := RecordCount;
-end;
-
-procedure AddFieldManual(rec: Integer; const name: AnsiString; offset: Integer; tk: TTypeKind; elemRec: Integer; isArray: Boolean; arrLen: Integer);
-var fc: Integer;
-begin
-  fc := Records[rec].FieldCount;
-  Records[rec].Fields[fc].Name := name;
-  Records[rec].Fields[fc].Offset := offset;
-  Records[rec].Fields[fc].TypeKind := tk;
-  Records[rec].Fields[fc].RecId := elemRec;
-  Records[rec].Fields[fc].IsArray := isArray;
-  Records[rec].Fields[fc].ArrLen := arrLen;
-  Inc(Records[rec].FieldCount);
-end;
-
-procedure InitRecords;
-begin
-  RecordCount := 0;
-  
-  { 1. TToken }
-  AddRecordManual('TToken', 288, False);
-  AddFieldManual(REC_TTOKEN, 'Kind', 0, tyInteger, REC_NONE, False, 0);
-  AddFieldManual(REC_TTOKEN, 'SVal', 8, tyString, REC_NONE, False, 0);
-  AddFieldManual(REC_TTOKEN, 'IVal', 272, tyInteger, REC_NONE, False, 0);
-  AddFieldManual(REC_TTOKEN, 'Line', 280, tyInteger, REC_NONE, False, 0);
-
-  { 2. TStrEntry }
-  AddRecordManual('TStrEntry', 280, False);
-  AddFieldManual(REC_TSTRENTRY, 'Text', 0, tyString, REC_NONE, False, 0);
-  AddFieldManual(REC_TSTRENTRY, 'Offset', 264, tyInteger, REC_NONE, False, 0);
-  AddFieldManual(REC_TSTRENTRY, 'Len', 272, tyInteger, REC_NONE, False, 0);
-
-  { 3. TFixup }
-  AddRecordManual('TFixup', 16, False);
-  AddFieldManual(REC_TFIXUP, 'CodePos', 0, tyInteger, REC_NONE, False, 0);
-  AddFieldManual(REC_TFIXUP, 'DataOff', 8, tyInteger, REC_NONE, False, 0);
-
-  { 4. TGlobFix }
-  AddRecordManual('TGlobFix', 16, False);
-  AddFieldManual(REC_TGLOBFIX, 'CodePos', 0, tyInteger, REC_NONE, False, 0);
-  AddFieldManual(REC_TGLOBFIX, 'BSSoff', 8, tyInteger, REC_NONE, False, 0);
-
-  { 5. TCallFix }
-  AddRecordManual('TCallFix', 16, False);
-  AddFieldManual(REC_TCALLFIX, 'CodePos', 0, tyInteger, REC_NONE, False, 0);
-  AddFieldManual(REC_TCALLFIX, 'ProcIdx', 8, tyInteger, REC_NONE, False, 0);
-
-  { 6. TSymbol }
-  AddRecordManual('TSymbol', 344, False);
-  AddFieldManual(REC_TSYMBOL, 'Name', 0, tyString, REC_NONE, False, 0);
-  AddFieldManual(REC_TSYMBOL, 'TypeKind', 264, tyInteger, REC_NONE, False, 0);
-  AddFieldManual(REC_TSYMBOL, 'Kind', 272, tyInteger, REC_NONE, False, 0);
-  AddFieldManual(REC_TSYMBOL, 'Offset', 280, tyInteger, REC_NONE, False, 0);
-  AddFieldManual(REC_TSYMBOL, 'ConstVal', 288, tyInteger, REC_NONE, False, 0);
-  AddFieldManual(REC_TSYMBOL, 'IsArray', 296, tyBoolean, REC_NONE, False, 0);
-  AddFieldManual(REC_TSYMBOL, 'ArrLen', 304, tyInteger, REC_NONE, False, 0);
-  AddFieldManual(REC_TSYMBOL, 'ElemType', 312, tyInteger, REC_NONE, False, 0);
-  AddFieldManual(REC_TSYMBOL, 'RecName', 320, tyInteger, REC_NONE, False, 0);
-  AddFieldManual(REC_TSYMBOL, 'ElemRecName', 328, tyInteger, REC_NONE, False, 0);
-  AddFieldManual(REC_TSYMBOL, 'IsRef', 336, tyBoolean, REC_NONE, False, 0);
-
-  { 7. TParam }
-  AddRecordManual('TParam', 296, False);
-  AddFieldManual(REC_TPARAM, 'Name', 0, tyString, REC_NONE, False, 0);
-  AddFieldManual(REC_TPARAM, 'TypeKind', 264, tyInteger, REC_NONE, False, 0);
-  AddFieldManual(REC_TPARAM, 'SymIdx', 272, tyInteger, REC_NONE, False, 0);
-  AddFieldManual(REC_TPARAM, 'IsRef', 280, tyBoolean, REC_NONE, False, 0);
-  AddFieldManual(REC_TPARAM, 'IsArray', 288, tyBoolean, REC_NONE, False, 0);
-
-  { 8. TProc }
-  AddRecordManual('TProc', 2688, False);
-  AddFieldManual(REC_TPROC, 'Name', 0, tyString, REC_NONE, False, 0);
-  AddFieldManual(REC_TPROC, 'IsFunc', 264, tyBoolean, REC_NONE, False, 0);
-  AddFieldManual(REC_TPROC, 'RetType', 272, tyInteger, REC_NONE, False, 0);
-  AddFieldManual(REC_TPROC, 'ParamCount', 280, tyInteger, REC_NONE, False, 0);
-  AddFieldManual(REC_TPROC, 'Params', 288, tyRecord, REC_TPARAM, True, 8);
-  AddFieldManual(REC_TPROC, 'BodyAddr', 2656, tyInteger, REC_NONE, False, 0);
-  AddFieldManual(REC_TPROC, 'FramePatch', 2664, tyInteger, REC_NONE, False, 0);
-  AddFieldManual(REC_TPROC, 'RetSymIdx', 2672, tyInteger, REC_NONE, False, 0);
-  AddFieldManual(REC_TPROC, 'ScopeBase', 2680, tyInteger, REC_NONE, False, 0);
-
-  { 9. TRawToken }
-  AddRecordManual('TRawToken', 40, False);
-  AddFieldManual(REC_TRAWTOKEN, 'Kind', 0, tyInteger, REC_NONE, False, 0);
-  AddFieldManual(REC_TRAWTOKEN, 'IVal', 8, tyInteger, REC_NONE, False, 0);
-  AddFieldManual(REC_TRAWTOKEN, 'Line', 16, tyInteger, REC_NONE, False, 0);
-  AddFieldManual(REC_TRAWTOKEN, 'SOffset', 24, tyInteger, REC_NONE, False, 0);
-  AddFieldManual(REC_TRAWTOKEN, 'SLen', 32, tyInteger, REC_NONE, False, 0);
-
-  { 10. TMyClass }
-  AddRecordManual('TMyClass', 16, True);
-  AddFieldManual(REC_TMYCLASS, 'x', 0, tyInteger, REC_NONE, False, 0);
-  AddFieldManual(REC_TMYCLASS, 'y', 8, tyInteger, REC_NONE, False, 0);
-end;
-
 function IsRecordType(const lo: AnsiString): Integer;
-var i: Integer;
 begin
   Result := REC_NONE;
-  for i := 1 to RecordCount do
-  begin
-    if FieldNameEqual(Records[i].Name, lo) then
-    begin
-      Result := i;
-      Exit;
-    end;
-  end;
+  if lo = 'TToken' then Result := REC_TTOKEN
+  else if lo = 'TStrEntry' then Result := REC_TSTRENTRY
+  else if lo = 'TFixup' then Result := REC_TFIXUP
+  else if lo = 'TGlobFix' then Result := REC_TGLOBFIX
+  else if lo = 'TCallFix' then Result := REC_TCALLFIX
+  else if lo = 'TSymbol' then Result := REC_TSYMBOL
+  else if lo = 'TParam' then Result := REC_TPARAM
+  else if lo = 'TProc' then Result := REC_TPROC
+  else if lo = 'TRawToken' then Result := REC_TRAWTOKEN
+  else if (lo = 'TMyClass') or (lo = 'tmyclass') then Result := REC_TMYCLASS;
 end;
 
 function IsClassType(const lo: AnsiString): Boolean;
-var i: Integer;
 begin
   Result := False;
-  for i := 1 to RecordCount do
-  begin
-    if FieldNameEqual(Records[i].Name, lo) then
-    begin
-      Result := Records[i].IsClass;
-      Exit;
-    end;
-  end;
+  if (lo = 'TMyClass') or (lo = 'tmyclass') then Result := True;
 end;
 
 function RecSize(rec: Integer): Integer;
 begin
-  if (rec > 0) and (rec <= RecordCount) then
-    Result := Records[rec].Size
-  else
-    Result := 8;
+  Result := 8;
+  if rec = REC_TTOKEN then Result := 288
+  else if rec = REC_TSTRENTRY then Result := 280
+  else if rec = REC_TFIXUP then Result := 16
+  else if rec = REC_TGLOBFIX then Result := 16
+  else if rec = REC_TCALLFIX then Result := 16
+  else if rec = REC_TSYMBOL then Result := 344
+  else if rec = REC_TPARAM then Result := 296
+  else if rec = REC_TPROC then Result := 2688
+  else if rec = REC_TRAWTOKEN then Result := 40
+  else if rec = REC_TMYCLASS then Result := 16;
 end;
 
 function RecFieldOffset(rec: Integer; const field: AnsiString): Integer;
-var i: Integer;
 begin
   Result := 0;
-  if (rec > 0) and (rec <= RecordCount) then
+  if rec = REC_TTOKEN then
   begin
-    for i := 0 to Records[rec].FieldCount-1 do
-    begin
-      if FieldNameEqual(Records[rec].Fields[i].Name, field) then
-      begin
-        Result := Records[rec].Fields[i].Offset;
-        Exit;
-      end;
-    end;
+    if field = 'Kind' then Result := 0
+    else if field = 'SVal' then Result := 8
+    else if field = 'IVal' then Result := 272
+    else if field = 'Line' then Result := 280;
+  end
+  else if rec = REC_TSTRENTRY then
+  begin
+    if field = 'Text' then Result := 0
+    else if field = 'Offset' then Result := 264
+    else if field = 'Len' then Result := 272;
+  end
+  else if rec = REC_TFIXUP then
+  begin
+    if field = 'CodePos' then Result := 0
+    else if field = 'DataOff' then Result := 8;
+  end
+  else if rec = REC_TGLOBFIX then
+  begin
+    if field = 'CodePos' then Result := 0
+    else if field = 'BSSoff' then Result := 8;
+  end
+  else if rec = REC_TCALLFIX then
+  begin
+    if field = 'CodePos' then Result := 0
+    else if field = 'ProcIdx' then Result := 8;
+  end
+  else if rec = REC_TSYMBOL then
+  begin
+    if field = 'Name' then Result := 0
+    else if field = 'TypeKind' then Result := 264
+    else if field = 'Kind' then Result := 272
+    else if field = 'Offset' then Result := 280
+    else if field = 'ConstVal' then Result := 288
+    else if field = 'IsArray' then Result := 296
+    else if field = 'ArrLen' then Result := 304
+    else if field = 'ElemType' then Result := 312
+    else if field = 'RecName' then Result := 320
+    else if field = 'ElemRecName' then Result := 328
+    else if field = 'IsRef' then Result := 336;
+  end
+  else if rec = REC_TPARAM then
+  begin
+    if field = 'Name' then Result := 0
+    else if field = 'TypeKind' then Result := 264
+    else if field = 'SymIdx' then Result := 272
+    else if field = 'IsRef' then Result := 280
+    else if field = 'IsArray' then Result := 288;
+  end
+  else if rec = REC_TPROC then
+  begin
+    if field = 'Name' then Result := 0
+    else if field = 'IsFunc' then Result := 264
+    else if field = 'RetType' then Result := 272
+    else if field = 'ParamCount' then Result := 280
+    else if field = 'Params' then Result := 288
+    else if field = 'BodyAddr' then Result := 2656
+    else if field = 'FramePatch' then Result := 2664
+    else if field = 'RetSymIdx' then Result := 2672
+    else if field = 'ScopeBase' then Result := 2680;
+  end
+  else if rec = REC_TRAWTOKEN then
+  begin
+    if field = 'Kind'    then Result := 0
+    else if field = 'IVal'    then Result := 8
+    else if field = 'Line'    then Result := 16
+    else if field = 'SOffset' then Result := 24
+    else if field = 'SLen'    then Result := 32;
+  end
+  else if rec = REC_TMYCLASS then
+  begin
+    if (field = 'x') or (field = 'X') then Result := 0
+    else if (field = 'y') or (field = 'Y') then Result := 8;
   end;
 end;
 
 function RecFieldType(rec: Integer; const field: AnsiString): TTypeKind;
-var i: Integer;
 begin
   Result := tyInteger;
-  if (rec > 0) and (rec <= RecordCount) then
+  if rec = REC_TTOKEN then
   begin
-    for i := 0 to Records[rec].FieldCount-1 do
-    begin
-      if FieldNameEqual(Records[rec].Fields[i].Name, field) then
-      begin
-        Result := Records[rec].Fields[i].TypeKind;
-        Exit;
-      end;
-    end;
+    if field = 'SVal' then Result := tyString;
+  end
+  else if rec = REC_TSTRENTRY then
+  begin
+    if field = 'Text' then Result := tyString;
+  end
+  else if rec = REC_TSYMBOL then
+  begin
+    if field = 'Name' then Result := tyString
+    else if (field = 'IsArray') or (field = 'IsRef') then Result := tyBoolean;
+  end
+  else if rec = REC_TPARAM then
+  begin
+    if field = 'Name' then Result := tyString
+    else if (field = 'IsRef') or (field = 'IsArray') then Result := tyBoolean;
+  end
+  else if rec = REC_TPROC then
+  begin
+    if field = 'Name' then Result := tyString
+    else if field = 'IsFunc' then Result := tyBoolean
+    else if field = 'Params' then Result := tyRecord;
+  end
+  else if rec = REC_TMYCLASS then
+  begin
+    Result := tyInteger;
   end;
 end;
 
 function RecFieldRecId(rec: Integer; const field: AnsiString): Integer;
-var i: Integer;
 begin
   Result := REC_NONE;
-  if (rec > 0) and (rec <= RecordCount) then
+  if rec = REC_TPROC then
   begin
-    for i := 0 to Records[rec].FieldCount-1 do
-    begin
-      if FieldNameEqual(Records[rec].Fields[i].Name, field) then
-      begin
-        Result := Records[rec].Fields[i].RecId;
-        Exit;
-      end;
-    end;
+    if field = 'Params' then Result := REC_TPARAM;
   end;
 end;
 
 function RecFieldIsArray(rec: Integer; const field: AnsiString): Boolean;
-var i: Integer;
 begin
   Result := False;
-  if (rec > 0) and (rec <= RecordCount) then
+  if rec = REC_TPROC then
   begin
-    for i := 0 to Records[rec].FieldCount-1 do
-    begin
-      if FieldNameEqual(Records[rec].Fields[i].Name, field) then
-      begin
-        Result := Records[rec].Fields[i].IsArray;
-        Exit;
-      end;
-    end;
+    if field = 'Params' then Result := True;
   end;
 end;
 

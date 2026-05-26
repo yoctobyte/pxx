@@ -14,8 +14,6 @@ const
   MAX_TOKENS  = 131072;
   MAX_AST     = 65536;
   SPECIAL_IN  = 999;
-  MAX_RECORDS = 64;
-  MAX_FIELDS  = 64;
 
   { AST node kinds }
   AN_NONE      = 0;
@@ -123,22 +121,6 @@ type
 
   TTypeKind = (tyUnknown, tyInteger, tyBoolean, tyChar, tyString, tyRecord, tyClass);
 
-  TField = record
-    Name     : AnsiString;
-    Offset   : Integer;
-    TypeKind : TTypeKind;
-    RecId    : Integer;
-    IsArray  : Boolean;
-    ArrLen   : Integer;
-  end;
-
-  TRecord = record
-    Name       : AnsiString;
-    Size       : Integer;
-    IsClass    : Boolean;
-    FieldCount : Integer;
-    Fields     : array[0..MAX_FIELDS-1] of TField;
-  end;
   TSymKind  = (skLocal, skGlobal, skParam, skConst);
 
   TSymbol = record
@@ -209,8 +191,6 @@ var
   ProcCount : Integer;
   CurProc   : Integer;   { -1 = main }
   LastTypeRecId : Integer;
-  Records       : array[0..MAX_RECORDS-1] of TRecord;
-  RecordCount   : Integer;
   ErrorIdent : AnsiString;
   LastExprTk : TTypeKind;
   InInterface : Boolean;

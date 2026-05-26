@@ -51,7 +51,6 @@ begin
   StrCount := 0; FixCount := 0;
   GlobFixCount := 0; CallFixCount := 0;
   SymCount := 0; ProcCount := 0;
-  InitRecords;
   FrameSize := 0; CurProc := -1;
   TokCount := 0; TokPos := 0; TokCharLen := 0;
   ASTNodeCount := 0; CurASTNode := -1;
