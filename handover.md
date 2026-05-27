@@ -327,3 +327,16 @@ both converge again.
 3. **C interop depth** — pointer args/returns, C strings, `size_t`, typedef
    aliases, and simple struct layout, driven by real header needs.
 4. **Exercise more stdlib headers** — `string.h`, `stdio.h`, add to `make test`.
+
+## Pre-Publish Verification (2026-05-27)
+
+Verified before first push to `yoctobyte/pxx`:
+
+| Check | Result |
+|---|---|
+| `make test` — full regression suite | pass (58 ok) |
+| Fixedpoint — gen2 == gen3 bit-identical | pass |
+| `make fpc-check` — FPC compiles compiler source | pass (0 errors, 3 warnings, 34 notes) |
+| FPC output == self-hosted seed (`cmp`) | pass (bit-identical) |
+
+Platform: Linux 6.17.0-23-generic x86_64, FPC 3.2.2, self-hosted `compiler/pascal26`.
