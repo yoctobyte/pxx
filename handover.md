@@ -7,12 +7,16 @@
 Relevant commits on `master`:
 
 ```text
+553dcdc docs: split README; move C interop to C_INTEROP.md
+7f72746 docs: note 2026-05-27 FPC bootstrap for generic function record types
+7cce611 feat(generics): implement generic functions (B1 syntax)
+7c96277 design: generic functions + dialect switches + operator overloading notes
+a5cf0a3 generics: fix bootstrap - no Continue, fix for-loop cur clobbering, insert after template method
+5079039 Stabilize overloading and achieve full 3-stage self-hosting convergence
+546cfd2 feat(interop): add math user library with C imports, fix recursive lexer stack overflow segfault
+144e13d feat(map): implement Map File generation (.map) and fix dynamic string concatenation
+f907626 docs: update handover for class/method completion
 0ecbca7 feat(class): fix class field offsets and method compilation
-b4c9e4f docs: update C interop handover
-4c21e86 feat(c): add preprocessing stage
-4e33759 feat(debug): add runtime compiler tracing
-e7f8b2a docs: document shared C library loading
-8fcc080 feat(elf): load external C functions
 ```
 
 ## What Works
@@ -20,48 +24,69 @@ e7f8b2a docs: document shared C library loading
 ### Self-hosting fixedpoint
 `make bootstrap` and `make test` both pass. `gen2 == gen3`, bit-identical.
 
+### Generic functions (NEW — B1 syntax)
+```pascal
+generic function Max<T>(A, B: T): T;
+begin
+  if A < B then Result := B else Result := A;
+end;
+
+specialize Max<Integer> as MaxInt;
+specialize Max<Char>    as MaxChar;
+
+begin
+  writeln(MaxInt(3, 7));    { 7 }
+  writeln(MaxChar('a','z')); { z }
+end.
+```
+Also: generic procedures, `var` params (Swap), multi-param generics (Clamp).
+`test/test_generic_func.pas` passes: `7 10 3 4 5 1 10 99 42`.
+
+Implementation reuses `TemplateTokens`/`SpecializeStream` (same engine as class generics).
+`TGenericFunc` buffered at parse time; `ParseTopLevelSpecialize` injects specialization
+into token stream and calls `ParseSubroutine` immediately.
+
+### Class generics
+Previously implemented. `specialize TList<Integer>` etc.
+
+### User-defined classes with fields and methods
+```pascal
+type TCounter = class Value: Integer; procedure Increment; function Get: Integer; end;
+```
+`test/test_class.pas` → `1 1 1 42 100 999 888`.
+`test/test_class_methods.pas` → `3`.
+
 ### Shared object loading
-`uses ctype;` parses `/usr/include/ctype.h`, emits dynamic ELF with `DT_NEEDED libc.so.6`,
-resolves symbols via GOT-style `R_X86_64_GLOB_DAT`. Tested: `tolower(65)=97`.
+`uses ctype;` parses `/usr/include/ctype.h`, emits dynamic ELF with `DT_NEEDED libc.so.6`.
+Tested: `tolower(65)=97`.
 
 ### Local C import
-`uses my_c_lib;` compiles local `.c` body into executable. `test/test_c_import.pas` passes.
+`uses my_c_lib;` compiles local `.c` body into executable.
 
 ### C preprocessing (`cpreproc.inc`)
 `#include`, include guards, `#define`/`#undef`, object macros, basic function-like macros,
 `#if/#ifdef/#ifndef/#else/#endif`. `test/test_c_preprocess.pas` returns 42.
 
-### User-defined classes with fields (NEW)
-```pascal
-type TCounter = class Value: Integer; end;
-var c: TCounter;
-begin
-  c := TCounter.Create;
-  c.Value := 42;
-  writeln(c.Value);
-end.
-```
-`test/test_class.pas` passes: `TMyClass.Create` allocates via `GetMem`, field access
-via `R_UCLASS_BASE` dynamic record system, correct byte offsets.
+### Math user library (`compiler/math.pas`)
+Pure Pascal (`Min`, `Max`, `Power`, `Gcd`, `Lcm`) + C import bridge (`abs`, `labs`).
+`test/test_math_unit.pas` → `42 999 10 20 256 6 144`.
 
-### User-defined class methods (NEW)
-```pascal
-type TCounter = class Value: Integer; procedure Reset; procedure Increment; function Get: Integer; end;
-procedure TCounter.Reset; begin Self.Value := 0; end;
-procedure TCounter.Increment; begin Self.Value := Self.Value + 1; end;
-function TCounter.Get: Integer; begin Result := Self.Value; end;
-```
-`test/test_class_methods.pas` passes, output: `3`. Method dispatch via `FindUMeth`, implicit
-`Self` parameter injection at index 0, `Self.Value` resolved through `UClsFBase`/`UFldOff_`.
+### Map file output
+`<outPath>.map` lists absolute virtual addresses for `_start` and all procedures/methods.
 
 ### Debug tracing
 `pascal26 --debug <src>` enables lexer/parser/preprocessor event traces.
 
-### BASIC frontend (`blexer.inc` + `bparser.inc`)
-Parked, partially working.
+### Benchmarks (2026-05-27)
+Compiler self-compilation (30 runs):
+- pascal26: 68.4 ms ± 11.5 ms
+- FPC: 598.5 ms ± 85.4 ms — **8.75× faster**
 
-### Benchmarks
-12× faster than FPC; 287-byte hello vs 191KB FPC.
+Hello world ×20 batch (10 runs):
+- pascal26: 17.3 ms ± 7.4 ms
+- FPC: 1.201 s ± 0.069 s — **~70× faster**
+
+Binary sizes: hello world = **325 bytes** (FPC: 191 KB).
 
 ## Architecture
 
@@ -75,6 +100,18 @@ Parked, partially working.
 - Dynamic programs (any external call): emit PT_INTERP, PT_DYNAMIC, DT_NEEDED, GOT,
   plt-style indirect calls
 
+## Token Stream / Generic Machinery
+
+- `TemplateTokens`: flat `TRawToken` array; templates (classes and functions) stored by
+  index range `[TokStart, TokStart+TokCount)`.
+- `SpecializeStream(templateName, param, concreteName, concreteKind)`: substitutes template
+  param with concrete type, inserts at `TokPos`, shifts existing tokens right.
+- `InsertTokens(insertPos, src, count)`: core insert primitive; TokPos unchanged.
+- `ParseGenericFunctionDef`: `generic function/procedure Name<T>` — prepends synthetic
+  `tkFunction`/`tkProcedure` + `tkIdent` tokens, buffers rest into TemplateTokens.
+- `ParseTopLevelSpecialize`: does NOT consume `;` before inserting — insert while
+  CurTok=`;` so after `ParseSubroutine` returns, CurTok lands on next top-level token.
+
 ## Header / Library Resolution
 
 `uses name;` searches: local dir, `compiler/`, `/usr/include/`. `.h` → external
@@ -87,19 +124,25 @@ prototype + dynamic resolve. `ctype` hardcoded → `libc.so.6`. Other headers de
 - **`ASTIVal` must be `Int64`** — `Integer` truncates $FFFFFFFF in shr codegen.
 - **`shr` binop**: save `Tokens[TokPos-1].SOffset/SLen` BEFORE `Next`, then set on AST node.
 - **String data layout**: `Strs[i].Offset` = 8-byte length prefix; actual bytes at `+8`.
-- **`UnitContent` buffer**: must be global — local `AnsiString` can't hold ~11KB
-  `/usr/include/ctype.h`, corrupts stack.
-- **`CPExpandFunction` args**: kept in depth-indexed fixed storage, not local open arrays
+- **`UnitContent` buffer**: must be global — local `AnsiString` can't hold ~11KB headers.
+- **`CPExpandFunction` args**: depth-indexed fixed storage, not local open arrays
   (self-hosted stack limitation).
-- **Single-char string literals**: `'x'` in source → `AN_INT_LIT` with `ASTTk=Ord(tyChar)`.
-  Any code that compares an `AnsiString` against a single-char literal must go through the
-  string-vs-char path in codegen.inc (fixed 2026-05-27). Comparisons like `field = 'x'` work
-  correctly now.
-- **String `+` concatenation**: Now fully supported and implemented! Correct type propagation has been added, and the emitter generates a stack-based temporary concatenation buffer (272 bytes) safely evaluating `a + b` for variables, literals, and chars without register clobbering.
-- **Self-evolution bootstrap rule**: Avoid bootstrapping using FPC by default. The compiler should evolve directly using its own built self-hosted seed (`compiler/pascal26`). FPC remains a secondary tool to verify compatibility.
-- **Map File (.map) Output**: Implemented robust map file generation (`<outPath>.map`) listing absolute virtual addresses for the executable entry point (`_start`) and all procedures, functions, and class methods. Resolved self-hosted untyped parameter write limitations via the shared `TokChars` buffer and dynamic permissions via `sysfchmod` with decimal `420` (chmod 644).
-- **Nested/Recursive Lexer Stack Fix**: Solved a stack overflow segfault in self-hosted mode where local string variable `savedSource` inside `LexAppend` and `CLexAppend` was assigned the entire input `Source` string (e.g. ~280KB) exceeding the 256-byte stack limit (`LOCAL_STR_CAP`). Replaced with a dedicated global string variable `SavedLexSource` (1MB capacity) in `defs.inc`.
-- **C Interop / Math User Library (`math.pas`)**: Created a dual-purpose Pascal `math` unit that incorporates both pure Pascal implementations (e.g. `Min`, `Max`, `Power`, `Gcd`, `Lcm`) and transparent C standard library dynamic imports (e.g. `abs`, `labs`) declared via `compiler/math_ext.h` and mapped cleanly to `libc.so.6`.
+- **Single-char string literals**: `'x'` → `AN_INT_LIT` with `ASTTk=Ord(tyChar)`.
+  String-vs-char path in codegen.inc handles comparisons like `field = 'x'`.
+- **String `+` concatenation**: emitter generates 272-byte stack temp buffer; correct
+  type propagation across variables, literals, and chars.
+- **Nested/Recursive Lexer Stack Fix**: `SavedLexSource` is a 1 MB global in `defs.inc`.
+  Local `AnsiString` for saved source caused stack overflow (256-byte `LOCAL_STR_CAP` limit).
+- **New record types require FPC bootstrap**: `symtab.inc` hardcodes all record types.
+  `TGenericFunc` and `TPendingGFSpec` were added 2026-05-27; old seed didn't know them,
+  requiring bootstrap. After bootstrap, self-hosting resumed at fixedpoint.
+- **`ParseTopLevelSpecialize` semicolon**: do NOT call `Eat(tkSemicolon)` before
+  `SpecializeStream`. Insert must happen while CurTok=`;`; otherwise CurTok after
+  `ParseSubroutine` lands inside the next `specialize` statement.
+- **Self-evolution bootstrap rule**: evolve using self-hosted seed by default. FPC is
+  recovery path only. Note any use of FPC bootstrap in `compiler/usernotes.md`.
+- **Map File output**: uses shared `TokChars` buffer; `sysfchmod` with decimal `420`
+  (chmod 644) for permissions.
 
 ## Class / Method Implementation Details
 
@@ -107,41 +150,31 @@ prototype + dynamic resolve. `ctype` hardcoded → `libc.so.6`. Other headers de
 - `REC_TMYCLASS = 10` is a HARDCODED legacy class; `TMyClass` still routes to it via
   `IsRecordType`. All other user-defined classes use the dynamic UClass system.
 - `ParseTypeSection` registers every `class` type via `AddUClass`/`AddUField`.
-- Method implementations (`procedure ClassName.MethodName`) are registered via `AddUMeth`
-  called from `ParseSubroutine` when `FindUClass(name) >= 0`.
-- `Self` is injected as implicit param 0 of type `tyClass`; its `RecName` is set to the
-  owner class's recId so `Self.Field` resolves via `FindUField`.
-- `TMyClass.Create` / `TCounter.Create` etc.: detected in `ParseFactor`; maps to
-  `GetMem(UClsSize_[ci])`.
+- Method implementations (`procedure ClassName.MethodName`) registered via `AddUMeth`
+  from `ParseSubroutine` when `FindUClass(name) >= 0`.
+- `Self` injected as implicit param 0 of type `tyClass`; `RecName` set to owner class
+  recId so `Self.Field` resolves via `FindUField`.
+- `.Create` detected in `ParseFactor`; maps to `GetMem(UClsSize_[ci])`.
+
+## Dialect / Compiler Switches (planned)
+
+Documented in `compiler/usernotes.md`. Key planned switches:
+- `strict_overload` (default off): require explicit `overload` directive on overloaded procs.
+- `generic_syntax` (default b1): b1=top-level `generic function`+`specialize as`, a=type-section style.
 
 ## Parked Workstreams
 
-1. **BASIC comprehensive** — `test/test_basic_comprehensive.bas` segfaults the compiler.
-2. **Pascal classes** — `test/test_class.pas` and `test/test_class_methods.pas` now PASS
-   and are in `make test`. This workstream is complete.
-
-## Verification
-
-After `0ecbca7`, `make test` checks (abbreviated):
-
-```sh
-make bootstrap   # FPC → gen1 → gen2, cmp gen1==gen2
-make test        # all regressions including class tests
-```
-
-New in `make test` after this session:
-- `test_class.pas` → `1 1 1 42 100 999 888`
-- `test_class_methods.pas` → `3`
-- `test_math_unit.pas` → `42 999 10 20 256 6 144` (validating both external C math imports and pure Pascal functions across all bootstrap stages)
+1. **BASIC frontend** (`blexer.inc` + `bparser.inc`) — partially working, parked.
+2. **Operator overloading** — needed for generic functions to work on user-defined types.
+   Design in `compiler/usernotes.md`. Not yet started.
+3. **B2 call-site generic sugar** — `Max<Integer>(a, b)` desugars to B1. After B1 stable.
 
 ## Suggested Next Steps
 
-Per `directions.md`:
-
-1. C interop depth: explicit library import syntax, pointer args/returns, mutable buffers,
-   C strings, `size_t`, typedef aliases, simple struct layout.
-2. Preprocessing breadth driven by real headers (token pasting, stringification, variadic
-   macros — only as real headers demand).
-3. Exercise additional simple installed library headers (`string.h`, `stdio.h`, etc.) and add
-   to `make test`.
-4. Protect bootstrappable Pascal core.
+1. **Operator overloading** — `operator <(a, b: TVector): Boolean`. Required for generic
+   functions to be useful beyond built-in types. Design already documented.
+2. **Compiler switches** — pragma `{$SWITCH value}` and `--switch=value` CLI flag.
+   `strict_overload` as first concrete switch.
+3. **C interop depth** — pointer args/returns, C strings, `size_t`, typedef aliases,
+   simple struct layout. Driven by real header needs.
+4. **Exercise more stdlib headers** — `string.h`, `stdio.h`, add to `make test`.
