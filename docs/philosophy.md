@@ -99,6 +99,14 @@ the compiler source is valuable. Extensions to the *target* Pascal dialect
 - **Interest:** Bare-metal / embedded (ESP32-class), no OS.
 - **Non-POSIX:** Not yet, but architecture abstraction is the plan from the start.
 
+## A Note On Writing
+
+Most of this document was drafted by AI and edited by a human. AI produces
+more words than any human wants to read. Good writing is not adding — it is
+cutting. The human's job in this collaboration was mostly deletion.
+
+This applies to code too.
+
 ## What This Is Not
 
 - Not an FPC replacement. FPC has decades of RTL, package ecosystem, and
