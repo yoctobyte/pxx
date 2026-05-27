@@ -54,7 +54,7 @@ On Debian/Ubuntu: `sudo apt install fpc`
 Uses the checked-in self-hosted seed binary. No FPC required.
 
 ```sh
-git clone <repo-url>
+git clone https://github.com/yoctobyte/pxx
 cd frankonpiler
 make        # rebuild compiler from the existing seed
 make test   # full regression suite + fixedpoint check
