@@ -96,8 +96,8 @@ active `try`. Unhandled raises print `Unhandled exception` and exit with
 status 1; `--no-unhandled-handler` and `-fno-unhandled-handler` suppress that
 message. Typed `on` handlers, `finally`, bare `raise;`, and exception classes
 remain subsequent phases from `docs/exceptions-plan.md`. `Exit` unlinks active
-frames; `break` and `continue` inside a protected body are rejected pending
-loop-target unwinding support.
+frames; `break` and `continue` track the nearest loop target's exception depth
+and pop only the protected frames crossed by the jump.
 
 ### User-defined classes with fields and methods
 ```pascal

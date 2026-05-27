@@ -28,9 +28,7 @@ specific compatibility statement covers it.
   dispatch, and related class semantics are not covered as supported.
 - Exception handling is at Phase 1: untyped `try/except` and `raise <expr>`
   are supported. Typed handlers, `finally`, bare re-raise, exception classes,
-  and class/message unhandled reports are not implemented. `break` and
-  `continue` in a protected body are rejected until loop-target unwinding is
-  implemented.
+  and class/message unhandled reports are not implemented.
 - Floating-point support is not implemented.
 - Integer arithmetic is intentionally unchecked for now: no mixed-sign
   warning or overflow/range-check switch is emitted, and narrowing or

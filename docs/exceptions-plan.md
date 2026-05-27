@@ -8,8 +8,8 @@ No DWARF unwind tables. No destructors. Correct Pascal semantics.
 `raise <expr>`, generic unhandled diagnostics, and
 `--no-unhandled-handler` / `-fno-unhandled-handler`. Typed `on` handlers,
 `finally`, `raise;`, exception classes, and class/message diagnostics remain
-planned below. `Exit` unlinks active Phase 1 frames; `break` and `continue`
-inside a protected body are rejected until loop-target unwinding is added.
+planned below. `Exit`, `break`, and `continue` remove any protected frames
+crossed by their control-flow destination.
 
 ---
 

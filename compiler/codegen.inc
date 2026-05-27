@@ -131,6 +131,17 @@ begin
   end;
 end;
 
+procedure EmitLeaveExceptionFrames(count: Integer);
+var i: Integer;
+begin
+  for i := 1 to count do
+  begin
+    EmitB($48); EmitB($8B); EmitB($04); EmitB($24); { mov rax, [rsp] }
+    EmitB($48); EmitB($89); EmitB($04); EmitB($25); EmitGlobRef(BSS_EXC_TOP);
+    EmitB($48); EmitB($83); EmitB($C4); EmitB(EXC_FRAME_SIZE); { add rsp, frame }
+  end;
+end;
+
 procedure GenLValueAddress(node: Integer; var tk: TTypeKind; var recName: Integer; derefClass: Boolean);
 var
   idx, offset, elemSize, lo, baseNode: Integer;
@@ -911,6 +922,8 @@ begin
     begin
       breakBase := LoopBreakFixCount;
       continueBase := LoopContinueFixCount;
+      if LoopNestDepth >= MAX_LOOP_FIXUPS then Error('loop nesting overflow');
+      LoopExceptionDepth[LoopNestDepth] := ExceptionCodegenDepth;
       Inc(LoopNestDepth);
       loopTop := CodeLen;
       GenAST(ASTLeft[node]);
@@ -932,6 +945,8 @@ begin
     begin
       breakBase := LoopBreakFixCount;
       continueBase := LoopContinueFixCount;
+      if LoopNestDepth >= MAX_LOOP_FIXUPS then Error('loop nesting overflow');
+      LoopExceptionDepth[LoopNestDepth] := ExceptionCodegenDepth;
       Inc(LoopNestDepth);
       lhsNode := ASTLeft[node];
       pair3 := ASTRight[node];
@@ -987,6 +1002,8 @@ begin
     begin
       breakBase := LoopBreakFixCount;
       continueBase := LoopContinueFixCount;
+      if LoopNestDepth >= MAX_LOOP_FIXUPS then Error('loop nesting overflow');
+      LoopExceptionDepth[LoopNestDepth] := ExceptionCodegenDepth;
       Inc(LoopNestDepth);
       loopTop := CodeLen;
       GenAST(ASTLeft[node]);
@@ -1188,6 +1205,7 @@ begin
     begin
       if LoopNestDepth = 0 then Error('break outside loop');
       if LoopBreakFixCount >= MAX_LOOP_FIXUPS then Error('too many break statements');
+      EmitLeaveExceptionFrames(ExceptionCodegenDepth - LoopExceptionDepth[LoopNestDepth - 1]);
       EmitB($E9);
       LoopBreakFixPos[LoopBreakFixCount] := CodeLen;
       Inc(LoopBreakFixCount);
@@ -1197,6 +1215,7 @@ begin
     begin
       if LoopNestDepth = 0 then Error('continue outside loop');
       if LoopContinueFixCount >= MAX_LOOP_FIXUPS then Error('too many continue statements');
+      EmitLeaveExceptionFrames(ExceptionCodegenDepth - LoopExceptionDepth[LoopNestDepth - 1]);
       EmitB($E9);
       LoopContinueFixPos[LoopContinueFixCount] := CodeLen;
       Inc(LoopContinueFixCount);

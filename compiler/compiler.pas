@@ -122,7 +122,7 @@ begin
   BFixupCount := 0;
   ASTNodeCount := 0; CurASTNode := -1;
   LoopNestDepth := 0; LoopBreakFixCount := 0; LoopContinueFixCount := 0;
-  ExceptionParseDepth := 0; ExceptionCodegenDepth := 0;
+  ExceptionCodegenDepth := 0;
   UClsCount := 0; UFldCount := 0; UMthCount := 0; CurSelfClass := REC_NONE;
   AddConst('StdErr', tyInteger, 2);
 

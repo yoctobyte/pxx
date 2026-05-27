@@ -139,8 +139,8 @@ end;
 `except else` is also accepted as an explicit catch-all form. A raised
 expression can cross procedure and unit boundaries. Typed `on E: EClass do`
 handlers, `try/finally`, bare `raise;`, and exception class/message objects
-are not implemented yet. `Exit` correctly removes active handler frames;
-`break` and `continue` in a protected body are rejected in this phase.
+are not implemented yet. `Exit`, `break`, and `continue` correctly remove
+active handler frames only when their destination leaves protected code.
 
 ## Compatibility Claim
 

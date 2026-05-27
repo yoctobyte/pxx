@@ -1888,7 +1888,6 @@ var
 begin
   trySeq := AllocNode(AN_SEQ);
   tryLast := trySeq;
-  Inc(ExceptionParseDepth);
   while not (CurTok.Kind in [tkExcept, tkFinally, tkEnd, tkEOF]) do
   begin
     stmtNode := ParseStatementAST;
@@ -1902,7 +1901,6 @@ begin
       ASTLeft[tryLast] := stmtNode;
     end;
   end;
-  Dec(ExceptionParseDepth);
 
   if CurTok.Kind = tkFinally then
     Error('try/finally is not implemented yet');
@@ -1951,16 +1949,12 @@ begin
 
     tkBreak:
     begin
-      if ExceptionParseDepth > 0 then
-        Error('break inside try block is not implemented yet');
       Next;
       node := AllocNode(AN_BREAK);
     end;
 
     tkContinue:
     begin
-      if ExceptionParseDepth > 0 then
-        Error('continue inside try block is not implemented yet');
       Next;
       node := AllocNode(AN_CONTINUE);
     end;

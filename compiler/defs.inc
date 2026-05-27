@@ -346,7 +346,7 @@ var
   LoopBreakFixCount   : Integer;
   LoopContinueFixPos  : array[0..MAX_LOOP_FIXUPS-1] of Integer;
   LoopContinueFixCount: Integer;
-  ExceptionParseDepth : Integer;
+  LoopExceptionDepth  : array[0..MAX_LOOP_FIXUPS-1] of Integer;
   ExceptionCodegenDepth: Integer;
   AssignPath : AnsiString;
   IncExpanded : AnsiString;
