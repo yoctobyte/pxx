@@ -102,8 +102,10 @@ the compiler source is valuable. Extensions to the *target* Pascal dialect
 ## A Note On Writing
 
 Most of this document was drafted by AI and edited by a human. AI produces
-more words than any human wants to read. Good writing is not adding — it is
-cutting. The human's job in this collaboration was mostly deletion.
+more words than any human wants to read. Good writing is cutting, not adding.
+The human's job in this collaboration was mostly deletion.
+
+> *Schrijven is schrappen.* — "Writing is crossing out." (Dutch)
 
 This applies to code too.
 
