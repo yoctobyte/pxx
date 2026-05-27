@@ -463,12 +463,11 @@ end;
 
 function LexAppend(const srcText: AnsiString): Integer;
 var
-  savedSource: AnsiString;
   savedSrcPos, savedSrcLine: Integer;
   len, i, unitStart: Integer;
   sval: AnsiString;
 begin
-  savedSource := Source;
+  SavedLexSource := Source;
   savedSrcPos := SrcPos;
   savedSrcLine := SrcLine;
 
@@ -504,7 +503,7 @@ begin
     Inc(TokCount);
   until CurTok.Kind = tkEOF;
 
-  Source := savedSource;
+  Source := SavedLexSource;
   SrcPos := savedSrcPos;
   SrcLine := savedSrcLine;
   Result := unitStart;

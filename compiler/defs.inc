@@ -234,6 +234,7 @@ var
   IncIncluded : AnsiString;
   UnitContent : AnsiString;
   LoadPath : AnsiString;
+  SavedLexSource : AnsiString;
   sysbuf : array[0..7] of Byte;
 
   { C preprocessor state. Macro text is pooled to avoid string-array BSS cost. }

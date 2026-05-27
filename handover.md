@@ -97,6 +97,9 @@ prototype + dynamic resolve. `ctype` hardcoded → `libc.so.6`. Other headers de
   correctly now.
 - **String `+` concatenation**: Now fully supported and implemented! Correct type propagation has been added, and the emitter generates a stack-based temporary concatenation buffer (272 bytes) safely evaluating `a + b` for variables, literals, and chars without register clobbering.
 - **Self-evolution bootstrap rule**: Avoid bootstrapping using FPC by default. The compiler should evolve directly using its own built self-hosted seed (`compiler/pascal26`). FPC remains a secondary tool to verify compatibility.
+- **Map File (.map) Output**: Implemented robust map file generation (`<outPath>.map`) listing absolute virtual addresses for the executable entry point (`_start`) and all procedures, functions, and class methods. Resolved self-hosted untyped parameter write limitations via the shared `TokChars` buffer and dynamic permissions via `sysfchmod` with decimal `420` (chmod 644).
+- **Nested/Recursive Lexer Stack Fix**: Solved a stack overflow segfault in self-hosted mode where local string variable `savedSource` inside `LexAppend` and `CLexAppend` was assigned the entire input `Source` string (e.g. ~280KB) exceeding the 256-byte stack limit (`LOCAL_STR_CAP`). Replaced with a dedicated global string variable `SavedLexSource` (1MB capacity) in `defs.inc`.
+- **C Interop / Math User Library (`math.pas`)**: Created a dual-purpose Pascal `math` unit that incorporates both pure Pascal implementations (e.g. `Min`, `Max`, `Power`, `Gcd`, `Lcm`) and transparent C standard library dynamic imports (e.g. `abs`, `labs`) declared via `compiler/math_ext.h` and mapped cleanly to `libc.so.6`.
 
 ## Class / Method Implementation Details
 
@@ -129,6 +132,7 @@ make test        # all regressions including class tests
 New in `make test` after this session:
 - `test_class.pas` → `1 1 1 42 100 999 888`
 - `test_class_methods.pas` → `3`
+- `test_math_unit.pas` → `42 999 10 20 256 6 144` (validating both external C math imports and pure Pascal functions across all bootstrap stages)
 
 ## Suggested Next Steps
 
@@ -138,7 +142,6 @@ Per `directions.md`:
    C strings, `size_t`, typedef aliases, simple struct layout.
 2. Preprocessing breadth driven by real headers (token pasting, stringification, variadic
    macros — only as real headers demand).
-3. ELF symbol table / map file output for generated-program debugging.
-4. Exercise another simple installed library header (`string.h`, `math.h`, etc.) and add
+3. Exercise additional simple installed library headers (`string.h`, `stdio.h`, etc.) and add
    to `make test`.
-5. Protect bootstrappable Pascal core.
+4. Protect bootstrappable Pascal core.

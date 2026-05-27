@@ -2116,7 +2116,7 @@ begin
   begin
     if isCHeader then
     begin
-      if lo = 'ctype' then
+      if (lo = 'ctype') or (lo = 'math_ext') then
         CurrentCLibrary := 'libc.so.6'
       else
         ConcatThree('lib', lo, '.so', CurrentCLibrary);

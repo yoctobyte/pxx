@@ -285,13 +285,12 @@ end;
 
 function CLexAppend(const srcText: AnsiString): Integer;
 var
-  savedSource: AnsiString;
   savedSrcPos, savedSrcLine: Integer;
   unitStart, len, i, off: Integer;
   sval: AnsiString;
   k: TTokenKind;
 begin
-  savedSource := Source;
+  SavedLexSource := Source;
   savedSrcPos := SrcPos;
   savedSrcLine := SrcLine;
 
@@ -328,7 +327,7 @@ begin
     Inc(TokCount);
   until k = tkEOF;
 
-  Source := savedSource;
+  Source := SavedLexSource;
   SrcPos := savedSrcPos;
   SrcLine := savedSrcLine;
   Result := unitStart;

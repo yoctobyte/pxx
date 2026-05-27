@@ -102,6 +102,8 @@ test: $(COMPILER) fpc-check
 	test "$$(/tmp/test_class26)" = "$$(printf '1\n1\n1\n42\n100\n999\n888')"
 	./$(COMPILER) test/test_class_methods.pas /tmp/test_class_methods26
 	test "$$(/tmp/test_class_methods26)" = "3"
+	./$(COMPILER) test/test_math_unit.pas /tmp/test_math_unit26
+	test "$$(/tmp/test_math_unit26)" = "$$(printf '42\n999\n10\n20\n256\n6\n144')"
 	./$(COMPILER) $(COMPILER_SRC) /tmp/pascal26-self
 	/tmp/pascal26-self test/hello.pas /tmp/self-hello26
 	test "$$(/tmp/self-hello26)" = "Hello, World!"
@@ -117,6 +119,8 @@ test: $(COMPILER) fpc-check
 	test "$$(/tmp/self_record_string_field26)" = "$$(printf '1\n4')"
 	/tmp/pascal26-self test/test_heap.pas /tmp/self-test_heap26
 	test "$$(/tmp/self-test_heap26)" = "$$(printf '1\n1\n1\n1\n1\n1')"
+	/tmp/pascal26-self test/test_math_unit.pas /tmp/self-test_math_unit26
+	test "$$(/tmp/self-test_math_unit26)" = "$$(printf '42\n999\n10\n20\n256\n6\n144')"
 	/tmp/pascal26-self test/fileio.pas /tmp/self-fileio26
 	test "$$(/tmp/self-fileio26 test/hello.pas | sed -n '1,3p')" = "$$(printf 'test/hello.pas\n14\n54')"
 	/tmp/pascal26-self $(COMPILER_SRC) /tmp/pascal26-next
@@ -134,6 +138,8 @@ test: $(COMPILER) fpc-check
 	test "$$(/tmp/next_record_string_field26)" = "$$(printf '1\n4')"
 	/tmp/pascal26-next test/test_heap.pas /tmp/next-test_heap26
 	test "$$(/tmp/next-test_heap26)" = "$$(printf '1\n1\n1\n1\n1\n1')"
+	/tmp/pascal26-next test/test_math_unit.pas /tmp/next-test_math_unit26
+	test "$$(/tmp/next-test_math_unit26)" = "$$(printf '42\n999\n10\n20\n256\n6\n144')"
 	/tmp/pascal26-next test/fileio.pas /tmp/next-fileio26
 	test "$$(/tmp/next-fileio26 test/hello.pas | sed -n '1,3p')" = "$$(printf 'test/hello.pas\n14\n54')"
 	/tmp/pascal26-next $(COMPILER_SRC) /tmp/pascal26-fixedpoint
