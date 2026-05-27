@@ -15,11 +15,8 @@ naming is open).
 
 ## Design Constraints
 
-These are not preferences. They are hard rules that keep the project tractable:
-
 - **No external grammar tools.** No lex, yacc, ANTLR, or table-driven DFAs.
-  Every frontend is a hand-rolled recursive-descent parser. Simple, fast,
-  zero dependencies.
+  Every frontend is a hand-rolled recursive-descent parser.
 - **No external toolchain at runtime.** The compiler writes ELF directly.
   No intermediate assembler invocation, no linker step.
 - **Zero external dependencies in compiler source.** No licensed libraries,
@@ -27,12 +24,7 @@ These are not preferences. They are hard rules that keep the project tractable:
   standards-conforming Pascal compiler and nothing else.
 - **In-memory pipeline.** Lex → parse → codegen → ELF write, all in one
   process, all in RAM. No intermediate files, no assembler round-trip, no
-  linker invocation. The classic toolchain split — preprocessor, compiler,
-  assembler, linker — made sense when a C source file might not fit in memory
-  alongside the compiler. That constraint is long gone. Today's machines have
-  gigabytes of RAM; an entire project's source, symbol tables, and generated
-  code fit comfortably in one process. We do not recreate splits that exist
-  only for historical reasons.
+  linker invocation.
 
 ## Language Priority
 
@@ -44,45 +36,39 @@ Languages planned for the shared compiler, roughly in priority order:
 | 2 | C | Core interop. C header import already works. |
 | 3 | BASIC | Early frontend present. Not yet a complete implementation. |
 | 4 | Ada | High interest. |
-| 5 | Rust | High interest — cleaner than C++. Borrow checker will not be implemented; heap ownership handled by reference counting (last reference freed frees the memory). Rust syntax is no harder to parse than Pascal. |
+| 5 | Rust | High interest. Borrow checker will not be implemented; heap ownership handled by reference counting. |
 | 6 | C++ | Partial/limited. |
 | 7 | Fortran, COBOL | Partial/limited. |
 | 8 | Java (JVM-less) | Interesting native-compilation goal, low priority. |
 | – | C# | Experimental / exploratory. |
-| – | JavaScript | More tractable than it looks. The language is well-defined and machine-independent — no manual memory, no pointers, clear semantics. A strict subset (no eval, no dynamic require) compiles to native straightforwardly. Priority lower than Rust for now, but not a hard problem. |
+| – | JavaScript | A strict subset compiles to native without too many surprises. Priority lower than Rust for now. |
 | – | Python | Experimental / exploratory. |
 
 Subsets of each language are acceptable. The goal is not spec compliance —
 it is useful real-world code compiled natively.
 
-## RAM Is No Longer The Constraint
+## In-Memory Pipeline
 
-When C was designed, a computer's RAM could easily be smaller than a project's
-total source. Compilers were built to process one file at a time and hand off
-to the next tool — preprocessor, compiler, assembler, linker — each reading
-and writing disk because keeping everything in memory was not an option.
+When C was designed, a computer's RAM could easily be smaller than a
+project's total source. Compilers were built to process one file at a time
+and hand off to the next tool — preprocessor, compiler, assembler, linker —
+each reading and writing disk because keeping everything in memory was not
+always an option.
 
-That world is gone. A modern machine has gigabytes of RAM. An entire project's
-source, all symbol tables, all generated code, the output binary — everything
-fits in one process without breaking a sweat. The multi-tool pipeline is a
-historical artifact, not a technical requirement.
-
-PXX takes the obvious conclusion: load it all, do it all in one pass, write
-the ELF, exit. No temp files, no hand-offs, no linker. The constraint that
-forced the old design no longer exists, so we don't carry it forward.
+On modern hardware, an entire project's source, all symbol tables, all
+generated code, and the output binary fit in one process without issue.
+PXX loads it all, does it all in one pass, writes the ELF, and exits.
 
 ## The Frankenstein Principle
 
 Pick the best tool for the job. A library written in C should be callable
 from Pascal without ceremony. A module where Ada's type system gives the
-clearest code should be writable in Ada. The compiler does not enforce
-ideological purity about language choice.
+clearest code should be writable in Ada.
 
-This extends to the compiler source itself: the project starts in Pascal
-because it is universal enough and makes for an interesting bootstrap story.
-If a future component is significantly clearer or shorter in another language,
-that conversation is open — but only after the target/host is stable enough
-to justify it.
+The project starts in Pascal because it is a reasonable host language for
+a bootstrap story. If a future component is significantly clearer or shorter
+in another language, that conversation is open — but only after the
+target/host is stable enough to justify it.
 
 ## The Self-Hosting Commitment
 
