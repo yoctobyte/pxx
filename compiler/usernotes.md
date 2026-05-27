@@ -109,7 +109,7 @@ distinguish without `FindGenericFunc` lookup. Implement after B1 is stable.
 
 ---
 
-## Operator Overloading (future, needed for generics to be useful)
+## Operator Overloading (implemented 2026-05-27)
 
 Generic functions like `Max<T>` use `<` and `>` on `T`. For built-in types
 (Integer, Char) this works because codegen knows those operators. For user-defined
@@ -119,7 +119,7 @@ an unknown type.
 Operator overloading solves this: user defines `operator <(a, b: TMyType): Boolean`
 and the compiler emits a call to it wherever `<` is used on that type.
 
-**Proposed syntax** (Delphi-style):
+**Supported syntax** (Delphi-style):
 ```pascal
 operator < (a, b: TVector): Boolean;
 begin
@@ -127,13 +127,20 @@ begin
 end;
 ```
 
-**Scope:** large feature. Needs:
-1. New token/keyword: `operator` (or treat as identifier like `generic`).
-2. Operator-to-proc mapping table in symtab: `(tkLt, tyRecord/tyClass, recId) → procIdx`.
-3. Codegen: before emitting raw compare, check operator table.
-4. Interaction with generics: `Max<TVector>` works once `<` is overloaded for `TVector`.
+Implementation uses an operator-to-procedure table keyed by operator token,
+operand type and class/record id. Binary AST code generation checks this table
+before built-in emission and generates a normal call when matched.
+`test/test_op_overload.pas` covers `<`, `>`, `=`, and `+`.
 
-**Priority:** implement after B1 generic functions are stable and tested.
+Routine overload declarations now also accept Delphi/FPC-style `overload;`.
+Until `strict_overload` is implemented, this directive is optional.
+
+## Loop Control (implemented 2026-05-27)
+
+`break` and `continue` are supported for Pascal `while`, `for`, and `repeat`
+loops. Code generation maintains nested-loop jump fixups; `continue` targets
+the `for` update step and the `repeat` condition. Coverage is in
+`test/test_loop_control.pas`.
 
 ---
 
@@ -347,6 +354,16 @@ Or detect context automatically: `generic` inside `type` → A-style;
 Added TGenericFunc and TPendingGFSpec record types to defs.inc. Old seed
 didn't know them (symtab.inc hardcodes all record types). Same situation as
 2026-05-25. Bootstrap completed: FPC → gen1 → gen2 → gen3 fixedpoint. All tests pass.
+
+---
+
+2026-05-27 — FPC BOOTSTRAP USED for overload and loop-control stabilization
+
+Operator overloading initially introduced `Break` into compiler source before
+the self-hosted seed supported it. Recovery replaced those internal uses with
+Boolean termination, stabilized generic specialization through global scratch
+tokens, and added routine `overload;`, `break`, and `continue` support.
+Bootstrap completed: FPC → gen1 → gen2 fixedpoint. `make test` passes.
 
 ---
 

@@ -106,8 +106,12 @@ test: $(COMPILER) fpc-check
 	test "$$(/tmp/test_math_unit26)" = "$$(printf '42\n999\n10\n20\n256\n6\n144')"
 	./$(COMPILER) test/test_generic_func.pas /tmp/test_generic_func26
 	test "$$(/tmp/test_generic_func26)" = "$$(printf '7\n10\n3\n4\n5\n1\n10\n99\n42')"
+	./$(COMPILER) test/test_overloading.pas /tmp/test_overloading26
+	test "$$(/tmp/test_overloading26)" = "$$(printf 'Integer: 42\nChar: 65\nTwo Integers: 10, 20\nAdd integers: 12\nChar addition: XY')"
 	./$(COMPILER) test/test_op_overload.pas /tmp/test_op_overload26
 	test "$$(/tmp/test_op_overload26)" = "$$(printf '1\n0\n1\n0\n1\n0\n10\n6')"
+	./$(COMPILER) test/test_loop_control.pas /tmp/test_loop_control26
+	test "$$(/tmp/test_loop_control26)" = "$$(printf '8\n5\n8\n7\n3')"
 	./$(COMPILER) $(COMPILER_SRC) /tmp/pascal26-self
 	/tmp/pascal26-self test/hello.pas /tmp/self-hello26
 	test "$$(/tmp/self-hello26)" = "Hello, World!"

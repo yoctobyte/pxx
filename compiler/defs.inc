@@ -18,6 +18,7 @@ const
   STRING_CAP  = 1048576;
   MAX_TOKENS  = 131072;
   MAX_AST     = 65536;
+  MAX_LOOP_FIXUPS = 256;
   SPECIAL_IN  = 999;
 
   MAX_UCLASS      = 32;    { user-defined class slots }
@@ -51,6 +52,8 @@ const
   AN_WRITE     = 22;
   AN_HALT      = 23;
   AN_EXIT      = 24;
+  AN_BREAK     = 25;
+  AN_CONTINUE  = 26;
 
   SYS_READ  = 0;
   SYS_WRITE = 1;
@@ -92,7 +95,8 @@ type
     tkAssign, tkEq, tkNeq, tkLt, tkLe, tkGt, tkGe,
     tkPlus, tkMinus, tkStar, tkSlash,
     tkLParen, tkRParen, tkLBrack, tkRBrack,
-    tkSemicolon, tkColon, tkComma, tkDot, tkDotDot, tkAt, tkCaret
+    tkSemicolon, tkColon, tkComma, tkDot, tkDotDot, tkAt, tkCaret,
+    tkBreak, tkContinue, tkOverload
   );
 
   TToken = record
@@ -213,6 +217,8 @@ var
   Specializations    : array[0..MAX_SPECIALIZATIONS-1] of TSpecialization;
   SpecializationCount: Integer;
   TemplateTokens     : array[0..MAX_TEMPLATE_TOKENS-1] of TRawToken;
+  SpecializeTemplateName: AnsiString;
+  SpecializeTokens   : array[0..MAX_TEMPLATE_TOKENS-1] of TRawToken;
   TemplateTokenCount : Integer;
   GenericFuncs       : array[0..MAX_GENERIC_FUNCS-1] of TGenericFunc;
   GenericFuncCount   : Integer;
@@ -289,6 +295,11 @@ var
   CompiledUnitCount : Integer;
   SourceFileDir : AnsiString;
   CurASTNode : Integer;
+  LoopNestDepth       : Integer;
+  LoopBreakFixPos     : array[0..MAX_LOOP_FIXUPS-1] of Integer;
+  LoopBreakFixCount   : Integer;
+  LoopContinueFixPos  : array[0..MAX_LOOP_FIXUPS-1] of Integer;
+  LoopContinueFixCount: Integer;
   AssignPath : AnsiString;
   IncExpanded : AnsiString;
   IncIncluded : AnsiString;

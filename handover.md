@@ -1,6 +1,6 @@
 # Frankonpiler Handover
 
-**Date:** 2026-05-27 (updated same day, session 2)
+**Date:** 2026-05-27 (updated same day, session 3)
 
 ## Current Git State
 
@@ -48,6 +48,25 @@ into token stream and calls `ParseSubroutine` immediately.
 
 ### Class generics
 Previously implemented. `specialize TList<Integer>` etc.
+
+### Overloading
+Routine declarations accept `overload;`, while overload resolution remains
+permissive when it is omitted. Operator implementations are supported for
+class operands:
+
+```pascal
+procedure PrintVal(x: Integer); overload;
+operator + (a, b: TPoint): TPoint;
+```
+
+`test/test_overloading.pas` and `test/test_op_overload.pas` pass under the
+self-hosted compiler.
+
+### Loop control
+`break` and `continue` are supported in `while`, `for`, and `repeat` loops.
+`continue` targets the condition for `while`, the update step for `for`, and
+the `until` condition for `repeat`. Nested-loop behavior is covered by
+`test/test_loop_control.pas`.
 
 ### User-defined classes with fields and methods
 ```pascal
@@ -104,8 +123,8 @@ Binary sizes: hello world = **325 bytes** (FPC: 191 KB).
 
 - `TemplateTokens`: flat `TRawToken` array; templates (classes and functions) stored by
   index range `[TokStart, TokStart+TokCount)`.
-- `SpecializeStream(templateName, param, concreteName, concreteKind)`: substitutes template
-  param with concrete type, inserts at `TokPos`, shifts existing tokens right.
+- `SpecializeStream(...)`: substitutes template parameters through global
+  `SpecializeTokens` scratch storage, inserts at `TokPos`, and shifts tokens right.
 - `InsertTokens(insertPos, src, count)`: core insert primitive; TokPos unchanged.
 - `ParseGenericFunctionDef`: `generic function/procedure Name<T>` — prepends synthetic
   `tkFunction`/`tkProcedure` + `tkIdent` tokens, buffers rest into TemplateTokens.
@@ -120,7 +139,8 @@ prototype + dynamic resolve. `ctype` hardcoded → `libc.so.6`. Other headers de
 
 ## Key Gotchas
 
-- **`break` not supported** — use `done: Boolean` idiom.
+- **Append new token kinds**: inserting token kinds in the existing enum changes
+  ordinals and can destabilize bootstrapped code.
 - **`ASTIVal` must be `Int64`** — `Integer` truncates $FFFFFFFF in shr codegen.
 - **`shr` binop**: save `Tokens[TokPos-1].SOffset/SLen` BEFORE `Next`, then set on AST node.
 - **String data layout**: `Strs[i].Offset` = 8-byte length prefix; actual bytes at `+8`.
@@ -139,6 +159,9 @@ prototype + dynamic resolve. `ctype` hardcoded → `libc.so.6`. Other headers de
 - **`ParseTopLevelSpecialize` semicolon**: do NOT call `Eat(tkSemicolon)` before
   `SpecializeStream`. Insert must happen while CurTok=`;`; otherwise CurTok after
   `ParseSubroutine` lands inside the next `specialize` statement.
+- **Generic specialization scratch storage**: `SpecializeTokens` and
+  `SpecializeTemplateName` are globals. A local temporary token array corrupted
+  self-hosted generic specialization.
 - **`REC_UCLASS_BASE` must exceed all hardcoded type IDs**: hardcoded types 1–14 live in
   `symtab.inc` (`REC_TTEMPLATE=11` … `REC_TPENDINGGFSPEC=14`). `REC_UCLASS_BASE` was 11
   — user class 0 got recId=11, hitting the `if rec=REC_TTEMPLATE` branch in
@@ -170,7 +193,7 @@ Documented in `compiler/usernotes.md`. Key planned switches:
 - `strict_overload` (default off): require explicit `overload` directive on overloaded procs.
 - `generic_syntax` (default b1): b1=top-level `generic function`+`specialize as`, a=type-section style.
 
-## Operator Overloading (NEW — implemented but bootstrap pending)
+## Operator Overloading
 
 Syntax:
 ```pascal
@@ -182,7 +205,7 @@ var r: TPoint;
 begin r := TPoint.Create; r.X := a.X + b.X; r.Y := a.Y + b.Y; Result := r; end;
 ```
 
-`test/test_op_overload.pas` passes with FPC-compiled binary:
+`test/test_op_overload.pas` passes with the self-hosted compiler:
 ```
 1 0 1 0 1 0 10 6
 ```
@@ -195,39 +218,22 @@ begin r := TPoint.Create; r.X := a.X + b.X; r.Y := a.Y + b.Y; Result := r; end;
   `FindOpOverload(opKind, typeKind, recId) → procIdx`.
 - `parser.inc`: `ParseOperatorDef` — called from `ParseProgram` when `CurTok='operator'`.
   Lookahead inside `()` to find first `:` at depth=1, reads type name via
-  `GetTokenStrFromRaw(Tokens[i])`. Injects `function __op__NN (` into token stream,
+  `GetTokenStrFromRaw(SOffset, SLen)`. Injects `function __op__NN (` into token stream,
   calls `ParseSubroutine`, then `RegisterOpOverload`.
-- `parser.inc`/`ParseTypeSection`: `else if CaseEqual(CurTok.SVal,'operator') then Break`
-  prevents type section loop consuming `operator` as a type name.
+- `parser.inc`/`ParseTypeSection`: Boolean termination prevents the type section
+  loop consuming `operator` as a type name without relying on `break`.
 - `parser.inc`/`ParseSubroutine`: `ptypesRec[i] := LastTypeRecId` after `ParseTypeKind`;
   sets `Syms[idx].RecName := ptypesRec[i]` for class/record params so field lookups work.
 - `codegen.inc`/`AN_BINOP`: before all other binop handling, call `FindOpOverload`; if
   found, emit `mov rdi,rax; mov rsi,rcx; call proc` (SysV AMD64 ABI).
 
-### Bootstrap still broken
+### Bootstrap resolution
 
-`make bootstrap` fails: FPC-compiled binary compiles user programs fine but crashes on
-`compiler.pas` itself with `error: undefined variable ()` at line ~8944.
-
-**Debug state** (session ended mid-investigation):
-- Debug prints added to `ParseLValueAST` (parser.inc line ~597) and `CompileLValueAddress`
-  (line ~909) — **REMOVE these before committing**.
-- Output: `DBG ParseLValueAST prevTok=26836 name=[] TokPos=26837 kind=77 CurKind=77`
-- `kind=77` = `tkSemicolon` (counted from enum: tkSemicolon is 77th in `TTokenKind`).
-- Two consecutive semicolons at token positions 26836–26837, empty name.
-- `ParseLValueAST` is called with `idx=-1`; `prevTok=TokPos-1` unexpectedly points to
-  a semicolon, not an identifier. Parser consumed `;` token BEFORE arriving at a point
-  that tried to look up a variable name.
-- Hypothesis: something in compiler.pas (near the end — token 26836 is near EOF of the
-  ~27K-token stream) causes the parser to misparse a statement. Likely a construct in the
-  new operator-overloading code or in the `OvrlCount`/`OvrlOpKind` initialization section
-  of the main `begin` block that the self-hosted compiler doesn't handle.
-- **Candidate constructs to check**: does compiler.pas `begin` block initialize `OvrlCount`?
-  (It doesn't — should be fine as globals zero-init.) Check if parser.inc debug prints
-  themselves cause issues (they reference `StdErr` which may not be in scope).
-- Most likely next step: remove debug prints, binary-search the issue by temporarily
-  commenting out sections of the new code in defs.inc/parser.inc/symtab.inc to find which
-  new construct the self-hosted compiler chokes on.
+The initial bootstrap failure came from `Break` statements used before loop-control
+support existed in the self-hosted compiler. Those internal loops now use Boolean
+termination. Generic specialization was also stabilized through global scratch
+token storage and field-by-field token copies. `make bootstrap` and `make test`
+both converge again.
 
 ## Parked Workstreams
 
@@ -236,11 +242,8 @@ begin r := TPoint.Create; r.X := a.X + b.X; r.Y := a.Y + b.Y; Result := r; end;
 
 ## Suggested Next Steps
 
-1. **Fix bootstrap** — remove debug prints from `parser.inc`, then binary-search the
-   `error: undefined variable ()` at token 26836. See debug state above.
-2. **Add test_op_overload to Makefile** — `make test` should run it.
-3. **Compiler switches** — pragma `{$SWITCH value}` and `--switch=value` CLI flag.
+1. **Compiler switches** — pragma `{$SWITCH value}` and `--switch=value` CLI flag.
    `strict_overload` as first concrete switch.
-4. **C interop depth** — pointer args/returns, C strings, `size_t`, typedef aliases,
+2. **C interop depth** — pointer args/returns, C strings, `size_t`, typedef aliases,
    simple struct layout. Driven by real header needs.
-5. **Exercise more stdlib headers** — `string.h`, `stdio.h`, add to `make test`.
+3. **Exercise more stdlib headers** — `string.h`, `stdio.h`, add to `make test`.

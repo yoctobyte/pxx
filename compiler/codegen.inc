@@ -401,6 +401,7 @@ var
   thenJmp, elseJmp, pairNode, elseNode, lhsNode, pair3, pair1, pair2: Integer;
   initNode, limitNode, isDownNode, bodyNode, seqNode, argNode, exprNode: Integer;
   si, vidx, specialId, arg1, arg2, arg3, pathIdx, dstIdx, srcIdx, rhsNode, branchJeStart: Integer;
+  breakBase, continueBase, continueTarget: Integer;
   lhsTk, rhsTk, dummyTk: TTypeKind;
   recName, rhsRecName, opOvrlIdx: Integer;
   down: Boolean;
@@ -789,17 +790,30 @@ begin
     end;
     AN_WHILE:
     begin
+      breakBase := LoopBreakFixCount;
+      continueBase := LoopContinueFixCount;
+      Inc(LoopNestDepth);
       loopTop := CodeLen;
       GenAST(ASTLeft[node]);
       EmitB($48); EmitB($85); EmitB($C0);
       EmitB($0F); EmitB($84); condJmp := CodeLen; EmitI32(0);
       
       GenAST(ASTRight[node]);
+      Dec(LoopNestDepth);
+      for i := continueBase to LoopContinueFixCount - 1 do
+        Patch32(LoopContinueFixPos[i], loopTop - (LoopContinueFixPos[i] + 4));
+      LoopContinueFixCount := continueBase;
       EmitB($E9); EmitI32(loopTop - (CodeLen + 4));
       Patch32(condJmp, CodeLen - (condJmp + 4));
+      for i := breakBase to LoopBreakFixCount - 1 do
+        Patch32(LoopBreakFixPos[i], CodeLen - (LoopBreakFixPos[i] + 4));
+      LoopBreakFixCount := breakBase;
     end;
     AN_FOR:
     begin
+      breakBase := LoopBreakFixCount;
+      continueBase := LoopContinueFixCount;
+      Inc(LoopNestDepth);
       lhsNode := ASTLeft[node];
       pair3 := ASTRight[node];
       pair1 := ASTLeft[pair3];
@@ -830,6 +844,11 @@ begin
       
       GenAST(bodyNode);
       
+      continueTarget := CodeLen;
+      Dec(LoopNestDepth);
+      for i := continueBase to LoopContinueFixCount - 1 do
+        Patch32(LoopContinueFixPos[i], continueTarget - (LoopContinueFixPos[i] + 4));
+      LoopContinueFixCount := continueBase;
       EmitLoadVar(idx);
       if down then
         begin EmitB($48); EmitB($FF); EmitB($C8); end
@@ -839,14 +858,28 @@ begin
       
       EmitB($E9); EmitI32(loopTop - (CodeLen + 4));
       Patch32(exitJmp, CodeLen - (exitJmp + 4));
+      for i := breakBase to LoopBreakFixCount - 1 do
+        Patch32(LoopBreakFixPos[i], CodeLen - (LoopBreakFixPos[i] + 4));
+      LoopBreakFixCount := breakBase;
     end;
     AN_REPEAT:
     begin
+      breakBase := LoopBreakFixCount;
+      continueBase := LoopContinueFixCount;
+      Inc(LoopNestDepth);
       loopTop := CodeLen;
       GenAST(ASTLeft[node]);
+      continueTarget := CodeLen;
+      Dec(LoopNestDepth);
+      for i := continueBase to LoopContinueFixCount - 1 do
+        Patch32(LoopContinueFixPos[i], continueTarget - (LoopContinueFixPos[i] + 4));
+      LoopContinueFixCount := continueBase;
       GenAST(ASTRight[node]);
       EmitB($48); EmitB($85); EmitB($C0);
       EmitB($0F); EmitB($84); EmitI32(loopTop - (CodeLen + 4));
+      for i := breakBase to LoopBreakFixCount - 1 do
+        Patch32(LoopBreakFixPos[i], CodeLen - (LoopBreakFixPos[i] + 4));
+      LoopBreakFixCount := breakBase;
     end;
     AN_CASE:
     begin
@@ -1016,6 +1049,24 @@ begin
           else EmitExit(0);
         end;
       end;
+    end;
+    AN_BREAK:
+    begin
+      if LoopNestDepth = 0 then Error('break outside loop');
+      if LoopBreakFixCount >= MAX_LOOP_FIXUPS then Error('too many break statements');
+      EmitB($E9);
+      LoopBreakFixPos[LoopBreakFixCount] := CodeLen;
+      Inc(LoopBreakFixCount);
+      EmitI32(0);
+    end;
+    AN_CONTINUE:
+    begin
+      if LoopNestDepth = 0 then Error('continue outside loop');
+      if LoopContinueFixCount >= MAX_LOOP_FIXUPS then Error('too many continue statements');
+      EmitB($E9);
+      LoopContinueFixPos[LoopContinueFixCount] := CodeLen;
+      Inc(LoopContinueFixCount);
+      EmitI32(0);
     end;
   end;
 end;

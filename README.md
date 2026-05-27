@@ -5,7 +5,7 @@ directly — no assembler, no linker, no external libraries required.
 
 The compiler itself is written in plain standard Pascal (no OOP). It compiles
 Object Pascal: classes, inheritance, generics (both class generics and generic
-functions), operator overloading (planned), and more. The goal is a
+functions), routine and operator overloading, loop control, and more. The goal is a
 Pascal superset / dialect that extends the language where it makes sense.
 
 Focus: Linux / POSIX. Single target for now: x86-64.
@@ -18,6 +18,8 @@ Focus: Linux / POSIX. Single target for now: x86-64.
   linked in.
 - **Generic functions** — `generic function Max<T>` + `specialize Max<Integer>
   as MaxInt` — and class generics.
+- **Overloading** — routine dispatch with optional `overload;`, plus class
+  operator implementations such as `operator +(a, b: TPoint): TPoint`.
 - **C interop** — `uses ctype;` imports a C header; the compiler reads it,
   links the shared object. See [C_INTEROP.md](C_INTEROP.md).
 - **Fast** — compiles itself in ~68 ms. FPC takes ~600 ms on the same source.

@@ -143,59 +143,87 @@ procedure ParseSubroutine; forward;
 procedure ParseGenericFunctionDef; forward;
 procedure ParseOperatorDef; forward;
 
-function GetTokenStrFromRaw(const tok: TRawToken): AnsiString;
+function GetTokenStrFromRaw(off, len: Integer): AnsiString;
 var s: AnsiString; i: Integer;
 begin
   s := '';
-  for i := 0 to tok.SLen - 1 do
-    AppendChar(s, TokChars[tok.SOffset + i]);
+  for i := 0 to len - 1 do
+    AppendChar(s, TokChars[off + i]);
   Result := s;
 end;
 
-procedure SpecializeStream(const templateName: AnsiString; tokStart, count: Integer; const specName, paramName, concreteName: AnsiString; concreteType: TTokenKind);
+procedure SpecializeStream(tokStart, count: Integer; const specName, paramName, concreteName: AnsiString; concreteType: TTokenKind);
 var
   i, j: Integer;
-  tok: TRawToken;
-  subTokens: array[0..MAX_TEMPLATE_TOKENS-1] of TRawToken;
   subCount: Integer;
   s: AnsiString;
 begin
   subCount := 0;
-  for i := 0 to count - 1 do
+  i := 0;
+  while i < count do
   begin
-    tok := TemplateTokens[tokStart + i];
+    SpecializeTokens[subCount].Kind := TemplateTokens[tokStart + i].Kind;
+    SpecializeTokens[subCount].IVal := TemplateTokens[tokStart + i].IVal;
+    SpecializeTokens[subCount].Line := TemplateTokens[tokStart + i].Line;
+    SpecializeTokens[subCount].SOffset := TemplateTokens[tokStart + i].SOffset;
+    SpecializeTokens[subCount].SLen := TemplateTokens[tokStart + i].SLen;
 
-    if tok.Kind = tkIdent then
+    if SpecializeTokens[subCount].Kind = tkIdent then
     begin
-      s := GetTokenStrFromRaw(tok);
-      if CaseEqual(s, templateName) then
+      s := GetTokenStrFromRaw(SpecializeTokens[subCount].SOffset, SpecializeTokens[subCount].SLen);
+      if CaseEqual(s, SpecializeTemplateName) then
       begin
-        tok.SOffset := TokCharLen;
-        tok.SLen := Length(specName);
-        for j := 1 to Length(specName) do
+        SpecializeTokens[subCount].SOffset := TokCharLen;
+        SpecializeTokens[subCount].SLen := Length(specName);
+        j := 1;
+        while j <= Length(specName) do
         begin
           TokChars[TokCharLen] := specName[j];
           Inc(TokCharLen);
+          Inc(j);
         end;
       end
       else if CaseEqual(s, paramName) then
       begin
-        tok.Kind := concreteType;
-        tok.SOffset := TokCharLen;
-        tok.SLen := Length(concreteName);
-        for j := 1 to Length(concreteName) do
+        SpecializeTokens[subCount].Kind := concreteType;
+        SpecializeTokens[subCount].SOffset := TokCharLen;
+        SpecializeTokens[subCount].SLen := Length(concreteName);
+        j := 1;
+        while j <= Length(concreteName) do
         begin
           TokChars[TokCharLen] := concreteName[j];
           Inc(TokCharLen);
+          Inc(j);
         end;
       end;
     end;
-    
-    subTokens[subCount] := tok;
+
     Inc(subCount);
+    Inc(i);
   end;
-  
-  InsertTokens(TokPos, subTokens, subCount);
+
+  if TokCount + subCount >= MAX_TOKENS then Error('token buffer overflow');
+  i := TokCount - 1;
+  while i >= TokPos do
+  begin
+    Tokens[i + subCount].Kind := Tokens[i].Kind;
+    Tokens[i + subCount].IVal := Tokens[i].IVal;
+    Tokens[i + subCount].Line := Tokens[i].Line;
+    Tokens[i + subCount].SOffset := Tokens[i].SOffset;
+    Tokens[i + subCount].SLen := Tokens[i].SLen;
+    Dec(i);
+  end;
+  i := 0;
+  while i < subCount do
+  begin
+    Tokens[TokPos + i].Kind := SpecializeTokens[i].Kind;
+    Tokens[TokPos + i].IVal := SpecializeTokens[i].IVal;
+    Tokens[TokPos + i].Line := SpecializeTokens[i].Line;
+    Tokens[TokPos + i].SOffset := SpecializeTokens[i].SOffset;
+    Tokens[TokPos + i].SLen := SpecializeTokens[i].SLen;
+    Inc(i);
+  end;
+  Inc(TokCount, subCount);
 end;
 
 procedure ParseGenericTemplate;
@@ -241,7 +269,11 @@ begin
   begin
     if TemplateTokenCount >= MAX_TEMPLATE_TOKENS then
       Error('generic template tokens overflow');
-    TemplateTokens[TemplateTokenCount] := Tokens[cur];
+    TemplateTokens[TemplateTokenCount].Kind := Tokens[cur].Kind;
+    TemplateTokens[TemplateTokenCount].IVal := Tokens[cur].IVal;
+    TemplateTokens[TemplateTokenCount].Line := Tokens[cur].Line;
+    TemplateTokens[TemplateTokenCount].SOffset := Tokens[cur].SOffset;
+    TemplateTokens[TemplateTokenCount].SLen := Tokens[cur].SLen;
     Inc(TemplateTokenCount);
     Templates[TemplateCount].TokCount := Templates[TemplateCount].TokCount + 1;
   end;
@@ -284,7 +316,8 @@ begin
   Specializations[SpecializationCount].ConcreteName := concreteName;
   Inc(SpecializationCount);
   
-  SpecializeStream(Templates[ti].Name, Templates[ti].TokStart, Templates[ti].TokCount, specName, Templates[ti].Param, concreteName, concreteType);
+  SpecializeTemplateName := Templates[ti].Name;
+  SpecializeStream(Templates[ti].TokStart, Templates[ti].TokCount, specName, Templates[ti].Param, concreteName, concreteType);
   Next;
 end;
 
@@ -321,7 +354,11 @@ begin
   begin
     if TemplateTokenCount >= MAX_TEMPLATE_TOKENS then
       Error('generic template tokens overflow');
-    TemplateTokens[TemplateTokenCount] := Tokens[cur];
+    TemplateTokens[TemplateTokenCount].Kind := Tokens[cur].Kind;
+    TemplateTokens[TemplateTokenCount].IVal := Tokens[cur].IVal;
+    TemplateTokens[TemplateTokenCount].Line := Tokens[cur].Line;
+    TemplateTokens[TemplateTokenCount].SOffset := Tokens[cur].SOffset;
+    TemplateTokens[TemplateTokenCount].SLen := Tokens[cur].SLen;
     Inc(TemplateTokenCount);
     mCount := mCount + 1;
   end;
@@ -332,7 +369,8 @@ begin
   begin
     if CaseEqual(Specializations[si].TemplateName, Templates[ti].Name) then
     begin
-      SpecializeStream(Templates[ti].Name, mStart, mCount, Specializations[si].Name, Templates[ti].Param, Specializations[si].ConcreteName, Specializations[si].ConcreteType);
+      SpecializeTemplateName := Templates[ti].Name;
+      SpecializeStream(mStart, mCount, Specializations[si].Name, Templates[ti].Param, Specializations[si].ConcreteName, Specializations[si].ConcreteType);
     end;
   end;
   
@@ -353,7 +391,6 @@ end;
 procedure ParseGenericFunctionDef;
 var isFunc: Boolean; funcName, paramName: AnsiString;
     gfi, j, cur, finalCur, depth: Integer;
-    synTok: TRawToken;
 begin
   Next; { consume 'generic' }
   if (CurTok.Kind <> tkFunction) and (CurTok.Kind <> tkProcedure) then
@@ -379,22 +416,25 @@ begin
   GenericFuncs[gfi].TokCount := 0;
 
   { Prepend synthetic 'function/procedure funcName' tokens into template buffer }
-  synTok.IVal := 0; synTok.Line := 0;
-  if isFunc then synTok.Kind := tkFunction else synTok.Kind := tkProcedure;
-  synTok.SOffset := TokCharLen; synTok.SLen := 0;
-  TemplateTokens[TemplateTokenCount] := synTok;
+  TemplateTokens[TemplateTokenCount].IVal := 0;
+  TemplateTokens[TemplateTokenCount].Line := 0;
+  if isFunc then TemplateTokens[TemplateTokenCount].Kind := tkFunction
+  else TemplateTokens[TemplateTokenCount].Kind := tkProcedure;
+  TemplateTokens[TemplateTokenCount].SOffset := TokCharLen;
+  TemplateTokens[TemplateTokenCount].SLen := 0;
   Inc(TemplateTokenCount);
   GenericFuncs[gfi].TokCount := GenericFuncs[gfi].TokCount + 1;
 
-  synTok.Kind := tkIdent;
-  synTok.SOffset := TokCharLen;
-  synTok.SLen := Length(funcName);
+  TemplateTokens[TemplateTokenCount].Kind := tkIdent;
+  TemplateTokens[TemplateTokenCount].IVal := 0;
+  TemplateTokens[TemplateTokenCount].Line := 0;
+  TemplateTokens[TemplateTokenCount].SOffset := TokCharLen;
+  TemplateTokens[TemplateTokenCount].SLen := Length(funcName);
   for j := 1 to Length(funcName) do
   begin
     TokChars[TokCharLen] := funcName[j];
     Inc(TokCharLen);
   end;
-  TemplateTokens[TemplateTokenCount] := synTok;
   Inc(TemplateTokenCount);
   GenericFuncs[gfi].TokCount := GenericFuncs[gfi].TokCount + 1;
 
@@ -415,7 +455,11 @@ begin
   for cur := TokPos - 1 to finalCur - 1 do
   begin
     if TemplateTokenCount >= MAX_TEMPLATE_TOKENS then Error('generic template tokens overflow');
-    TemplateTokens[TemplateTokenCount] := Tokens[cur];
+    TemplateTokens[TemplateTokenCount].Kind := Tokens[cur].Kind;
+    TemplateTokens[TemplateTokenCount].IVal := Tokens[cur].IVal;
+    TemplateTokens[TemplateTokenCount].Line := Tokens[cur].Line;
+    TemplateTokens[TemplateTokenCount].SOffset := Tokens[cur].SOffset;
+    TemplateTokens[TemplateTokenCount].SLen := Tokens[cur].SLen;
     Inc(TemplateTokenCount);
     GenericFuncs[gfi].TokCount := GenericFuncs[gfi].TokCount + 1;
   end;
@@ -470,7 +514,8 @@ begin
   gfi := FindGenericFunc(templateName);
   if gfi < 0 then Error('generic function ' + templateName + ' not found');
 
-  SpecializeStream(GenericFuncs[gfi].Name, GenericFuncs[gfi].TokStart, GenericFuncs[gfi].TokCount,
+  SpecializeTemplateName := GenericFuncs[gfi].Name;
+  SpecializeStream(GenericFuncs[gfi].TokStart, GenericFuncs[gfi].TokCount,
     specName, GenericFuncs[gfi].Param, concreteName, concreteKind);
   Next;
   ParseSubroutine;
@@ -486,7 +531,7 @@ var
   recId: Integer;
   ci: Integer;
   depth, i, j: Integer;
-  isFunc: Boolean;
+  isFunc, foundClose: Boolean;
   nameOff, nameLen: Integer;
   procIdx: Integer;
 begin
@@ -510,7 +555,7 @@ begin
       if i < TokCount then
       begin
         if Tokens[i].Kind = tkIdent then
-          typeName := GetTokenStrFromRaw(Tokens[i])
+          typeName := GetTokenStrFromRaw(Tokens[i].SOffset, Tokens[i].SLen)
         else if Tokens[i].Kind = tkInteger_T then typeName := 'Integer'
         else if Tokens[i].Kind = tkBoolean_T then typeName := 'Boolean'
         else if Tokens[i].Kind = tkChar_T then typeName := 'Char'
@@ -534,15 +579,16 @@ begin
   { Determine function vs procedure: find matching ')' then check for ':' }
   depth := 0;
   i := TokPos;
-  while i < TokCount do
+  foundClose := False;
+  while (i < TokCount) and not foundClose do
   begin
     if Tokens[i].Kind = tkLParen then Inc(depth)
     else if Tokens[i].Kind = tkRParen then
     begin
       Dec(depth);
-      if depth = 0 then begin Inc(i); Break; end;
+      if depth = 0 then begin Inc(i); foundClose := True; end;
     end;
-    Inc(i);
+    if not foundClose then Inc(i);
   end;
   isFunc := (i < TokCount) and (Tokens[i].Kind = tkColon);
 
@@ -554,7 +600,13 @@ begin
   { Insert 'function/procedure synName' at TokPos (before '(') }
   if TokCount + 2 >= MAX_TOKENS then Error('token buffer overflow in operator def');
   for j := TokCount - 1 downto TokPos do
-    Tokens[j + 2] := Tokens[j];
+  begin
+    Tokens[j + 2].Kind := Tokens[j].Kind;
+    Tokens[j + 2].IVal := Tokens[j].IVal;
+    Tokens[j + 2].Line := Tokens[j].Line;
+    Tokens[j + 2].SOffset := Tokens[j].SOffset;
+    Tokens[j + 2].SLen := Tokens[j].SLen;
+  end;
   Inc(TokCount, 2);
 
   if isFunc then Tokens[TokPos].Kind := tkFunction
@@ -1748,6 +1800,18 @@ begin
         ASTLeft[node] := CurASTNode;
       end;
     end;
+
+    tkBreak:
+    begin
+      Next;
+      node := AllocNode(AN_BREAK);
+    end;
+
+    tkContinue:
+    begin
+      Next;
+      node := AllocNode(AN_CONTINUE);
+    end;
     
     tkInc, tkDec:
     begin
@@ -2133,19 +2197,20 @@ procedure ParseTypeSection;
 var
   ordinal: Int64;
   tname: AnsiString;
-  done: Boolean;
+  done, stopTypes: Boolean;
   tnOff, tnLen, ci, fnOff, fnLen, curFieldOff, fRec, fSize, depth: Integer;
   fTk: TTypeKind;
 begin
   Next;
-  while CurTok.Kind = tkIdent do
+  stopTypes := False;
+  while (CurTok.Kind = tkIdent) and not stopTypes do
   begin
     if CaseEqual(CurTok.SVal, 'generic') then
     begin
       ParseGenericTemplate;
     end
     else if CaseEqual(CurTok.SVal, 'operator') then
-      Break  { top-level operator def follows type section }
+      stopTypes := True  { top-level operator def follows type section }
     else
     begin
       tnOff := Tokens[TokPos-1].SOffset;
@@ -2336,7 +2401,8 @@ begin
   end;
 
   Eat(tkSemicolon);
-  while (CurTok.Kind = tkIdent) and ((CurTok.SVal = 'inline') or (CurTok.SVal = 'Inline')) do
+  while ((CurTok.Kind = tkIdent) and ((CurTok.SVal = 'inline') or (CurTok.SVal = 'Inline'))) or
+        (CurTok.Kind = tkOverload) do
   begin
     Next;
     Eat(tkSemicolon);
