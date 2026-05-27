@@ -7,6 +7,10 @@ public naming/API commitment. Existing executable and stable-seed paths remain
 `compiler/pascal26` for now to avoid mixing a branding experiment with
 bootstrap history.
 
+This is a dated compatibility snapshot. Implementation may change faster than
+the documentation; current source and regression tests take precedence where
+the snapshot has not yet been refreshed.
+
 ## Identity And Mode Policy
 
 PXX aims to compile a useful FPC/Object Pascal-compatible dialect. Compiler
@@ -97,7 +101,7 @@ coverage:
 | Pascal mode semantics | Only the current objfpc-like subset exists; Delphi/FPC/ISO mode differences are not modeled. |
 | Directive expression language and switch state | Missing beyond simple named conditional definitions. |
 | Broader Object Pascal model | Properties, interfaces, exceptions, virtual dispatch and related FPC class semantics are not covered by current regressions. |
-| Numeric/type breadth | Floating-point, advanced ordinal/set behavior, pointers and richer type aliases require inventory and tests before compatibility claims. |
+| Numeric/type breadth | Fixed-width integer and pointer-sized layout are covered for x86-64. Floating-point, `WideChar`/broader ordinal behavior, and general pointer expressions require further implementation and tests. |
 | FPC RTL/packages | Not provided as an FPC-compatible library layer. |
 | Cross-target output | Current target is Linux x86-64 only. |
 

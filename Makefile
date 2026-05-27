@@ -113,9 +113,9 @@ test: $(COMPILER) fpc-check
 	./$(COMPILER) test/test_loop_control.pas /tmp/test_loop_control26
 	test "$$(/tmp/test_loop_control26)" = "$$(printf '8\n5\n8\n7\n3')"
 	./$(COMPILER) test/test_pascal_directives.pas /tmp/test_pascal_directives26
-	test "$$(/tmp/test_pascal_directives26)" = "$$(printf '1\n0\n1\n1\n1\n0')"
+	test "$$(/tmp/test_pascal_directives26)" = "$$(printf '1\n0\n1\n1\n1\n0\n1\n1\n1')"
 	./$(COMPILER) -dCLI_FLAG test/test_pascal_directives.pas /tmp/test_pascal_directives_defined26
-	test "$$(/tmp/test_pascal_directives_defined26)" = "$$(printf '1\n0\n1\n1\n1\n1')"
+	test "$$(/tmp/test_pascal_directives_defined26)" = "$$(printf '1\n0\n1\n1\n1\n1\n1\n1\n1')"
 	./$(COMPILER) test/test_strict_overload.pas /tmp/test_strict_overload26
 	test "$$(/tmp/test_strict_overload26)" = "$$(printf '5\n65')"
 	! ./$(COMPILER) test/test_strict_overload_error.pas /tmp/test_strict_overload_error26 > /tmp/test_strict_overload_error.log 2>&1
@@ -124,6 +124,10 @@ test: $(COMPILER) fpc-check
 	test "$$(/tmp/test_overloading_strict26)" = "$$(printf 'Integer: 42\nChar: 65\nTwo Integers: 10, 20\nAdd integers: 12\nChar addition: XY')"
 	./$(COMPILER) test/test_sizeof.pas /tmp/test_sizeof26
 	test "$$(/tmp/test_sizeof26)" = "$$(printf '1\n1\n2\n2\n4\n4\n4\n4\n8\n8\n8\n8\n8\n8\n8\n1\n1')"
+	! ./$(COMPILER) test/test_sizeof_error.pas /tmp/test_sizeof_error26 > /tmp/test_sizeof_error.log 2>&1
+	grep -q "SizeOf: unknown type" /tmp/test_sizeof_error.log
+	./$(COMPILER) test/test_type_runtime.pas /tmp/test_type_runtime26
+	test "$$(/tmp/test_type_runtime26)" = "$$(printf '1\n1\n1\n0\n1\n18446744065119617025\n18446744073709551615\n9223372036854775807\n1\n-1\n-1\n-1\n18446744073709551615\n-1\n0\n2\n7\n123456\n9\n12')"
 	./$(COMPILER) $(COMPILER_SRC) /tmp/pascal26-self
 	/tmp/pascal26-self test/hello.pas /tmp/self-hello26
 	test "$$(/tmp/self-hello26)" = "Hello, World!"

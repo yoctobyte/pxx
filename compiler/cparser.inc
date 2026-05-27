@@ -155,7 +155,7 @@ var
   retType: TTypeKind;
   name: AnsiString;
   isFunc: Boolean;
-  nparams, pi, i, idx, patchPos: Integer;
+  nparams, pi, i, idx, patchPos, sz: Integer;
   ptypes: array[0..15] of TTypeKind;
   pnames: array[0..15] of AnsiString;
   savedSC, savedFS, node, savedCurProc: Integer;
@@ -191,9 +191,9 @@ begin
       ptypes[nparams] := tyInteger;
       if CurTok.Kind = tkChar_T then ptypes[nparams] := tyChar;
       Next;
-      
+
       if CurTok.Kind = tkStar then Next;
-      
+
       if CurTok.Kind = tkIdent then
       begin
         pnames[nparams] := CurTok.SVal;
@@ -244,9 +244,8 @@ begin
   { Allocate parameter slots }
   for i := 0 to nparams-1 do
   begin
-    idx := AllocVar(pnames[i], ptypes[i]);
+    idx := AllocParam(pnames[i], ptypes[i], False, False);
     Procs[pi].Params[i].SymIdx := idx;
-    Syms[idx].Kind := skParam;
   end;
   
   { Return value slot }
@@ -261,26 +260,75 @@ begin
   { Copy registers to stack params }
   for i := 0 to nparams-1 do
   begin
+    idx := Procs[pi].Params[i].SymIdx;
+    sz := ParamSize(idx);
     if i < 4 then
     begin
-      EmitB($48); EmitB($89);
-      case i of
-        0: EmitB($BD); { rdi }
-        1: EmitB($B5); { rsi }
-        2: EmitB($95); { rdx }
-        3: EmitB($8D); { rcx }
+      if sz = 1 then
+      begin
+        if (i = 0) or (i = 1) then EmitB($40); { REX prefix for dil, sil }
+        EmitB($88);
+      end
+      else if sz = 2 then
+      begin
+        EmitB($66); EmitB($89);
+      end
+      else if sz = 4 then
+      begin
+        EmitB($89);
+      end
+      else
+      begin
+        EmitB($48); EmitB($89);
       end;
-      EmitI32(Syms[Procs[pi].Params[i].SymIdx].Offset);
+
+      case i of
+        0: EmitB($BD);   { rdi }
+        1: EmitB($B5);   { rsi }
+        2: EmitB($95);   { rdx }
+        3: EmitB($8D);   { rcx }
+      end;
+      EmitI32(Syms[idx].Offset);
     end
     else if i = 4 then
     begin
-      EmitB($4C); EmitB($89); EmitB($85);
-      EmitI32(Syms[Procs[pi].Params[i].SymIdx].Offset);
+      if sz = 1 then
+      begin
+        EmitB($44); EmitB($88); EmitB($85);
+      end
+      else if sz = 2 then
+      begin
+        EmitB($66); EmitB($44); EmitB($89); EmitB($85);
+      end
+      else if sz = 4 then
+      begin
+        EmitB($44); EmitB($89); EmitB($85);
+      end
+      else
+      begin
+        EmitB($4C); EmitB($89); EmitB($85);
+      end;
+      EmitI32(Syms[idx].Offset);
     end
     else if i = 5 then
     begin
-      EmitB($4C); EmitB($89); EmitB($8D);
-      EmitI32(Syms[Procs[pi].Params[i].SymIdx].Offset);
+      if sz = 1 then
+      begin
+        EmitB($44); EmitB($88); EmitB($8D);
+      end
+      else if sz = 2 then
+      begin
+        EmitB($66); EmitB($44); EmitB($89); EmitB($8D);
+      end
+      else if sz = 4 then
+      begin
+        EmitB($44); EmitB($89); EmitB($8D);
+      end
+      else
+      begin
+        EmitB($4C); EmitB($89); EmitB($8D);
+      end;
+      EmitI32(Syms[idx].Offset);
     end;
   end;
   
@@ -290,6 +338,7 @@ begin
   
   { Epilogue }
   EmitProcEpilog(Procs[pi].RetSymIdx);
+  PatchProcPrologue(patchPos, FrameSize);
   
   { Restore scope }
   SymCount := savedSC;

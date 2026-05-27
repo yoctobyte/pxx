@@ -138,10 +138,7 @@ begin
       end
       else
       begin
-        elemSize := 1;
-        if tk in [tyInteger, tyBoolean, tyClass] then elemSize := 8
-        else if tk = tyChar then elemSize := 1
-        else if tk = tyString then
+        if tk = tyString then
         begin
           if (ASTKind[baseNode] = AN_IDENT) and (Syms[ASTIVal[baseNode]].Kind = skGlobal) then
             elemSize := STRING_CAP + 8
@@ -151,6 +148,10 @@ begin
         else if tk = tyRecord then
         begin
           elemSize := RecSize(recName);
+        end
+        else
+        begin
+          elemSize := TypeSize(tk);
         end;
         
         if elemSize = 8 then
@@ -451,10 +452,33 @@ begin
       GenLValueAddress(node, dummyTk, dummyRec, False);
       if dummyTk = tyString then
         begin { address stays in rax } end
-      else if dummyTk in [tyInteger, tyBoolean, tyClass] then
-        begin EmitB($48); EmitB($8B); EmitB($00); end
-      else if dummyTk = tyChar then
-        begin EmitB($48); EmitB($0F); EmitB($B6); EmitB($00); end;
+      else
+      begin
+        i := TypeSize(dummyTk);
+        if i = 1 then
+        begin
+          if TypeSigned(dummyTk) then
+            begin EmitB($48); EmitB($0F); EmitB($BE); EmitB($00); end { movsx rax, byte [rax] }
+          else
+            begin EmitB($48); EmitB($0F); EmitB($B6); EmitB($00); end;{ movzx rax, byte [rax] }
+        end
+        else if i = 2 then
+        begin
+          if TypeSigned(dummyTk) then
+            begin EmitB($48); EmitB($0F); EmitB($BF); EmitB($00); end { movsx rax, word [rax] }
+          else
+            begin EmitB($48); EmitB($0F); EmitB($B7); EmitB($00); end;{ movzx rax, word [rax] }
+        end
+        else if i = 4 then
+        begin
+          if TypeSigned(dummyTk) then
+            begin EmitB($48); EmitB($63); EmitB($00); end { movsxd rax, dword [rax] }
+          else
+            begin EmitB($8B); EmitB($00); end;{ mov eax, dword [rax] }
+        end
+        else
+          begin EmitB($48); EmitB($8B); EmitB($00); end; { mov rax, [rax] }
+      end;
     end;
     AN_BINOP:
     begin
@@ -556,9 +580,21 @@ begin
       begin
         case op of
           tkStar: begin EmitB($48); EmitB($0F); EmitB($AF); EmitB($C1); end;
-          tkDiv:  begin EmitB($48); EmitB($99); EmitB($48); EmitB($F7); EmitB($F9); end;
-          tkMod:  begin EmitB($48); EmitB($99); EmitB($48); EmitB($F7); EmitB($F9);
-                        EmitB($48); EmitB($89); EmitB($D0); end;
+          tkDiv:
+          begin
+            if TypeDivideUnsigned(IntToTypeKind(ASTTk[ASTLeft[node]])) then
+              begin EmitB($48); EmitB($31); EmitB($D2); EmitB($48); EmitB($F7); EmitB($F1); end
+            else
+              begin EmitB($48); EmitB($99); EmitB($48); EmitB($F7); EmitB($F9); end;
+          end;
+          tkMod:
+          begin
+            if TypeDivideUnsigned(IntToTypeKind(ASTTk[ASTLeft[node]])) then
+              begin EmitB($48); EmitB($31); EmitB($D2); EmitB($48); EmitB($F7); EmitB($F1); end
+            else
+              begin EmitB($48); EmitB($99); EmitB($48); EmitB($F7); EmitB($F9); end;
+            EmitB($48); EmitB($89); EmitB($D0);
+          end;
           tkAnd:  begin EmitB($48); EmitB($21); EmitB($C8); end;
           tkPlus:  begin EmitB($48); EmitB($01); EmitB($C8); end;
           tkMinus: begin EmitB($48); EmitB($29); EmitB($C8); end;
@@ -613,14 +649,25 @@ begin
             else
             begin
               EmitB($48); EmitB($3B); EmitB($C1); { cmp rax, rcx }
-              case op of
-                tkEq:  begin EmitB($0F); EmitB($94); EmitB($C0); end;
-                tkNeq: begin EmitB($0F); EmitB($95); EmitB($C0); end;
-                tkLt:  begin EmitB($0F); EmitB($9C); EmitB($C0); end;
-                tkLe:  begin EmitB($0F); EmitB($9E); EmitB($C0); end;
-                tkGt:  begin EmitB($0F); EmitB($9F); EmitB($C0); end;
-                tkGe:  begin EmitB($0F); EmitB($9D); EmitB($C0); end;
-              end;
+              if TypeCompareUnsigned(IntToTypeKind(ASTTk[ASTLeft[node]]),
+                                     IntToTypeKind(ASTTk[ASTRight[node]])) then
+                case op of
+                  tkEq:  begin EmitB($0F); EmitB($94); EmitB($C0); end;
+                  tkNeq: begin EmitB($0F); EmitB($95); EmitB($C0); end;
+                  tkLt:  begin EmitB($0F); EmitB($92); EmitB($C0); end;
+                  tkLe:  begin EmitB($0F); EmitB($96); EmitB($C0); end;
+                  tkGt:  begin EmitB($0F); EmitB($97); EmitB($C0); end;
+                  tkGe:  begin EmitB($0F); EmitB($93); EmitB($C0); end;
+                end
+              else
+                case op of
+                  tkEq:  begin EmitB($0F); EmitB($94); EmitB($C0); end;
+                  tkNeq: begin EmitB($0F); EmitB($95); EmitB($C0); end;
+                  tkLt:  begin EmitB($0F); EmitB($9C); EmitB($C0); end;
+                  tkLe:  begin EmitB($0F); EmitB($9E); EmitB($C0); end;
+                  tkGt:  begin EmitB($0F); EmitB($9F); EmitB($C0); end;
+                  tkGe:  begin EmitB($0F); EmitB($9D); EmitB($C0); end;
+                end;
               EmitB($48); EmitB($0F); EmitB($B6); EmitB($C0);
             end;
           end;
@@ -761,10 +808,15 @@ begin
         begin
           GenAST(rhsNode);
           EmitB($59); { pop rcx }
-          if lhsTk in [tyInteger, tyBoolean, tyClass] then
-            begin EmitB($48); EmitB($89); EmitB($01); end
-          else if lhsTk = tyChar then
-            begin EmitB($88); EmitB($01); end;
+          i := TypeSize(lhsTk);
+          if i = 1 then
+            begin EmitB($88); EmitB($01); end
+          else if i = 2 then
+            begin EmitB($66); EmitB($89); EmitB($01); end
+          else if i = 4 then
+            begin EmitB($89); EmitB($01); end
+          else
+            begin EmitB($48); EmitB($89); EmitB($01); end;
         end;
       end;
     end;
@@ -834,8 +886,10 @@ begin
       EmitStoreVar(limitIdx);
       
       loopTop := CodeLen;
+      EmitLoadVar(limitIdx);
+      EmitB($48); EmitB($89); EmitB($C1); { mov rcx, rax }
       EmitLoadVar(idx);
-      EmitCmpRaxVar(limitIdx);
+      EmitB($48); EmitB($39); EmitB($C8); { cmp rax, rcx }
       
       down := ASTIVal[isDownNode] = 1;
       EmitB($0F);
@@ -993,7 +1047,12 @@ begin
           else
           begin
             GenAST(exprNode);
-            EmitwriteInt;
+            if TypeIsOrdinal(Syms[vidx].TypeKind) and
+               (not TypeSigned(Syms[vidx].TypeKind)) and
+               (TypeSize(Syms[vidx].TypeKind) = 8) then
+              EmitwriteUInt
+            else
+              EmitwriteInt;
           end;
         end
         else
@@ -1008,6 +1067,10 @@ begin
             EmitB($48); EmitB($83); EmitB($C6); EmitB($08); { add rsi, 8 }
             MovRaxImm(SYS_WRITE); MovRdiImm(STDOUT); EmitSyscall;
           end
+          else if TypeIsOrdinal(IntToTypeKind(ASTTk[exprNode])) and
+                  (not TypeSigned(IntToTypeKind(ASTTk[exprNode]))) and
+                  (TypeSize(IntToTypeKind(ASTTk[exprNode])) = 8) then
+            EmitwriteUInt
           else
             EmitwriteInt;
         end;

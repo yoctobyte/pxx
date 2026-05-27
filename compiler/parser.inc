@@ -870,10 +870,7 @@ begin
       
       if isArr then
       begin
-        elemSize := 1;
-        if curTk in [tyInteger, tyBoolean, tyClass] then elemSize := 8
-        else if curTk = tyChar then elemSize := 1
-        else if curTk = tyString then
+        if curTk = tyString then
         begin
           if Syms[idx].Kind = skGlobal then elemSize := STRING_CAP + 8
           else elemSize := LOCAL_STR_CAP + 8;
@@ -884,7 +881,9 @@ begin
             elemSize := RecSize(Syms[idx].ElemRecName)
           else
             elemSize := RecSize(curRec);
-        end;
+        end
+        else
+          elemSize := TypeSize(curTk);
         
         if elemSize = 8 then
         begin
@@ -966,7 +965,7 @@ end;
 
 procedure ParseLValue(const name: AnsiString);
 var
-  idx, si, si2, rhsIdx: Integer;
+  idx, si, si2, rhsIdx, i: Integer;
   isComplex: Boolean;
   tk, rhsTk: TTypeKind;
   recName, rhsRecName: Integer;
@@ -1090,10 +1089,15 @@ begin
     begin
       ParseExpr;
       EmitB($59); { pop rcx -- LHS address }
-      if tk in [tyInteger, tyBoolean, tyClass] then
-        begin EmitB($48); EmitB($89); EmitB($01); end
-      else if tk = tyChar then
-        begin EmitB($88); EmitB($01); end;
+      i := TypeSize(tk);
+      if i = 1 then
+        begin EmitB($88); EmitB($01); end
+      else if i = 2 then
+        begin EmitB($66); EmitB($89); EmitB($01); end
+      else if i = 4 then
+        begin EmitB($89); EmitB($01); end
+      else
+        begin EmitB($48); EmitB($89); EmitB($01); end;
     end;
   end;
 end;
@@ -1364,13 +1368,16 @@ begin
               prevTok := RecSize(idx)
             else
             begin
-              { Fall back: size of a known constant symbol if it is a type synonym }
-              prevTok := TARGET_PTR_SIZE;
+              Error('SizeOf: unknown type');
+              prevTok := 0;
             end;
           end;
         end
         else
-          prevTok := TARGET_PTR_SIZE;  { unknown token kind in SizeOf }
+        begin
+          Error('SizeOf: expected type name');
+          prevTok := 0;
+        end;
         Next; { consume type token }
         Expect(tkRParen, ')');
         node := AllocNode(AN_INT_LIT);
@@ -1507,7 +1514,18 @@ begin
     right := CurASTNode;
     node := AllocNode(AN_BINOP); ASTIVal[node] := Ord(op); ASTLeft[node] := left; ASTRight[node] := right;
     ASTSOffset[node] := opSOffset; ASTSLen[node] := opSLen;
-    if op = tkAnd then ASTTk[node] := ASTTk[left] else ASTTk[node] := Ord(tyInteger);
+    if (op = tkAnd) and (ASTTk[left] = Ord(tyBoolean)) and (ASTTk[right] = Ord(tyBoolean)) then
+      ASTTk[node] := Ord(tyBoolean)
+    else if op = tkDiv then
+      ASTTk[node] := Ord(TypeDivideResult(IntToTypeKind(ASTTk[left])))
+    else if op = tkMod then
+      ASTTk[node] := Ord(TypeDivideResult(IntToTypeKind(ASTTk[left])))
+    else if op = tkIdent then
+      ASTTk[node] := ASTTk[left]
+    else if TypeIsOrdinal(IntToTypeKind(ASTTk[left])) and TypeIsOrdinal(IntToTypeKind(ASTTk[right])) then
+      ASTTk[node] := Ord(TypeArithmeticResult(IntToTypeKind(ASTTk[left]), IntToTypeKind(ASTTk[right])))
+    else
+      ASTTk[node] := Ord(tyInteger);
     CurASTNode := node;
   end;
 end;
@@ -1530,8 +1548,10 @@ begin
     node := AllocNode(AN_BINOP); ASTIVal[node] := Ord(op); ASTLeft[node] := left; ASTRight[node] := right;
     if (op = tkPlus) and ((ASTTk[left] = Ord(tyString)) or (ASTTk[right] = Ord(tyString))) then
       ASTTk[node] := Ord(tyString)
-    else if op = tkOr then
-      ASTTk[node] := ASTTk[left]
+    else if (op = tkOr) and (ASTTk[left] = Ord(tyBoolean)) and (ASTTk[right] = Ord(tyBoolean)) then
+      ASTTk[node] := Ord(tyBoolean)
+    else if TypeIsOrdinal(IntToTypeKind(ASTTk[left])) and TypeIsOrdinal(IntToTypeKind(ASTTk[right])) then
+      ASTTk[node] := Ord(TypeArithmeticResult(IntToTypeKind(ASTTk[left]), IntToTypeKind(ASTTk[right])))
     else
       ASTTk[node] := Ord(tyInteger);
     CurASTNode := node;
@@ -2174,20 +2194,34 @@ begin
   case CurTok.Kind of
     tkInteger_T:
     begin
-      if (CurTok.SVal = 'byte') or (CurTok.SVal = 'Byte') then
-        Result := tyChar
-      else
-        Result := tyInteger;
+      lo := CurTok.SVal;
+      if CaseEqual(lo, 'shortint') then Result := tyInt8
+      else if CaseEqual(lo, 'byte') then Result := tyUInt8
+      else if CaseEqual(lo, 'smallint') then Result := tyInt16
+      else if CaseEqual(lo, 'word') then Result := tyUInt16
+      else if CaseEqual(lo, 'longint') then Result := tyInt32
+      else if CaseEqual(lo, 'cardinal') then Result := tyUInt32
+      else Result := tyInteger; { Integer }
     end;
-    tkLongWord_T: Result := tyInteger;
+    tkLongWord_T: Result := tyUInt32;
     tkBoolean_T: Result := tyBoolean;
     tkChar_T:    Result := tyChar;
     tkString_T:  Result := tyString;
     else
     begin
       lo := CurTok.SVal;
-      if (lo = 'ansistring') or (lo = 'AnsiString') then Result := tyString
-      else if (lo = 'byte') or (lo = 'Byte') then Result := tyChar
+      if CaseEqual(lo, 'ansistring') then Result := tyString
+      else if CaseEqual(lo, 'shortint') then Result := tyInt8
+      else if CaseEqual(lo, 'byte') then Result := tyUInt8
+      else if CaseEqual(lo, 'smallint') then Result := tyInt16
+      else if CaseEqual(lo, 'word') then Result := tyUInt16
+      else if CaseEqual(lo, 'longint') then Result := tyInt32
+      else if CaseEqual(lo, 'cardinal') or CaseEqual(lo, 'longword') then Result := tyUInt32
+      else if CaseEqual(lo, 'int64') then Result := tyInt64
+      else if CaseEqual(lo, 'qword') then Result := tyUInt64
+      else if CaseEqual(lo, 'nativeint') or CaseEqual(lo, 'ptrint') then Result := tyNativeInt
+      else if CaseEqual(lo, 'nativeuint') or CaseEqual(lo, 'ptruint') then Result := tyNativeUInt
+      else if CaseEqual(lo, 'pointer') then Result := tyPointer
       else
       begin
         if IsClassType(lo) then
@@ -2288,7 +2322,7 @@ var
   ordinal: Int64;
   tname: AnsiString;
   done, stopTypes: Boolean;
-  tnOff, tnLen, ci, fnOff, fnLen, curFieldOff, fRec, fSize, depth: Integer;
+  tnOff, tnLen, ci, fnOff, fnLen, curFieldOff, fRec, fSize, fAlign, classAlign, depth: Integer;
   fTk: TTypeKind;
 begin
   Next;
@@ -2328,6 +2362,7 @@ begin
         Next;
         ci := AddUClass(tnOff, tnLen);
         curFieldOff := 0;
+        classAlign := 1;
         while (CurTok.Kind <> tkEnd) and (CurTok.Kind <> tkEOF) do
         begin
           if (CurTok.Kind = tkProcedure) or (CurTok.Kind = tkFunction) then
@@ -2343,17 +2378,31 @@ begin
             Expect(tkColon, ':');
             fTk := ParseTypeKind;
             fRec := LastTypeRecId;
-            if fTk = tyString then fSize := LOCAL_STR_CAP + 8
-            else if fTk = tyRecord then fSize := RecSize(fRec)
-            else fSize := 8;
+            if fTk = tyString then
+            begin
+              fSize := LOCAL_STR_CAP + 8;
+              fAlign := TARGET_PTR_SIZE;
+            end
+            else if fTk = tyRecord then
+            begin
+              fSize := RecSize(fRec);
+              fAlign := TARGET_PTR_SIZE;
+            end
+            else
+            begin
+              fSize := TypeSize(fTk);
+              fAlign := TypeAlign(fTk);
+            end;
+            curFieldOff := AlignTo(curFieldOff, fAlign);
             AddUField(ci, fnOff, fnLen, curFieldOff, Ord(fTk), fRec);
             curFieldOff := curFieldOff + fSize;
+            if fAlign > classAlign then classAlign := fAlign;
             Eat(tkSemicolon);
           end
           else
             Next;
         end;
-        UClsSize_[ci] := curFieldOff;
+        UClsSize_[ci] := AlignTo(curFieldOff, classAlign);
         Expect(tkEnd, 'end');
       end
       else if CurTok.Kind = tkRecord then
@@ -2391,7 +2440,7 @@ var
   parr      : array[0..7] of Boolean;
   pbyref    : array[0..7] of Boolean;
   nparams  : Integer;
-  pi, i    : Integer;
+  pi, i, sz: Integer;
   savedSC, savedFS, savedCurProc : Integer;
   patchPos : Integer;
   depth    : Integer;
@@ -2602,18 +2651,10 @@ begin
   { Allocate param slots }
   for i := 0 to nparams-1 do
   begin
-    idx := AllocVar(pnames[i], ptypes[i]);
+    idx := AllocParam(pnames[i], ptypes[i], pbyref[i], parr[i]);
     Procs[pi].Params[i].SymIdx := idx;
-    Syms[idx].Kind := skParam;
-    Syms[idx].IsRef := pbyref[i];
     if (ptypes[i] = tyClass) or (ptypes[i] = tyRecord) then
       Syms[idx].RecName := ptypesRec[i];
-    if parr[i] then
-    begin
-      Syms[idx].IsArray := True;
-      Syms[idx].ArrLen := 1000;
-      Syms[idx].ElemType := ptypes[i];
-    end;
   end;
   { Wire Self's RecName so field lookups resolve against the owner class }
   if methOwnerCi >= 0 then
@@ -2646,26 +2687,75 @@ begin
   { Copy params from registers to stack: mov [rbp+off], rdi/rsi/rdx/rcx/r8/r9 }
   for i := 0 to nparams-1 do
   begin
+    idx := Procs[pi].Params[i].SymIdx;
+    sz := ParamSize(idx);
     if i < 4 then
     begin
-      EmitB($48); EmitB($89);
+      if sz = 1 then
+      begin
+        if (i = 0) or (i = 1) then EmitB($40); { REX prefix for dil, sil }
+        EmitB($88);
+      end
+      else if sz = 2 then
+      begin
+        EmitB($66); EmitB($89);
+      end
+      else if sz = 4 then
+      begin
+        EmitB($89);
+      end
+      else
+      begin
+        EmitB($48); EmitB($89);
+      end;
+
       case i of
         0: EmitB($BD);   { rdi }
         1: EmitB($B5);   { rsi }
         2: EmitB($95);   { rdx }
         3: EmitB($8D);   { rcx }
       end;
-      EmitI32(Syms[Procs[pi].Params[i].SymIdx].Offset);
+      EmitI32(Syms[idx].Offset);
     end
     else if i = 4 then
     begin
-      EmitB($4C); EmitB($89); EmitB($85);
-      EmitI32(Syms[Procs[pi].Params[i].SymIdx].Offset);
+      if sz = 1 then
+      begin
+        EmitB($44); EmitB($88); EmitB($85);
+      end
+      else if sz = 2 then
+      begin
+        EmitB($66); EmitB($44); EmitB($89); EmitB($85);
+      end
+      else if sz = 4 then
+      begin
+        EmitB($44); EmitB($89); EmitB($85);
+      end
+      else
+      begin
+        EmitB($4C); EmitB($89); EmitB($85);
+      end;
+      EmitI32(Syms[idx].Offset);
     end
     else if i = 5 then
     begin
-      EmitB($4C); EmitB($89); EmitB($8D);
-      EmitI32(Syms[Procs[pi].Params[i].SymIdx].Offset);
+      if sz = 1 then
+      begin
+        EmitB($44); EmitB($88); EmitB($8D);
+      end
+      else if sz = 2 then
+      begin
+        EmitB($66); EmitB($44); EmitB($89); EmitB($8D);
+      end
+      else if sz = 4 then
+      begin
+        EmitB($44); EmitB($89); EmitB($8D);
+      end
+      else
+      begin
+        EmitB($4C); EmitB($89); EmitB($8D);
+      end;
+      EmitI32(Syms[idx].Offset);
     end;
   end;
 

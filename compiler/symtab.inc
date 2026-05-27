@@ -307,7 +307,12 @@ begin
   Result := tyInteger; fi := 0; field2 := field;
   if rec = REC_TTOKEN then
   begin
-    if field = 'SVal' then Result := tyString;
+    if field = 'SVal' then Result := tyString
+    else if field = 'IVal' then Result := tyInt64;
+  end
+  else if rec = REC_TRAWTOKEN then
+  begin
+    if field = 'IVal' then Result := tyInt64;
   end
   else if rec = REC_TSTRENTRY then
   begin
@@ -316,7 +321,8 @@ begin
   else if rec = REC_TSYMBOL then
   begin
     if field = 'Name' then Result := tyString
-    else if (field = 'IsArray') or (field = 'IsRef') then Result := tyBoolean;
+    else if (field = 'IsArray') or (field = 'IsRef') then Result := tyBoolean
+    else if field = 'ConstVal' then Result := tyInt64;
   end
   else if rec = REC_TPARAM then
   begin
@@ -383,8 +389,7 @@ end;
 
 { ===== Central type-query helpers ===== }
 { These are the single authoritative source for size, alignment, and signedness.
-  All new code must call these instead of hard-coding numbers.
-  Phase 3 migration: update TypeSize/TypeAlign here to change behaviour globally. }
+  All new code must call these instead of hard-coding numbers. }
 
 function TypeSize(tk: TTypeKind): Integer;
 { Returns byte count needed to store one value of type tk.
@@ -392,10 +397,10 @@ function TypeSize(tk: TTypeKind): Integer;
 begin
   Result := 8; { default / legacy path — pointer-width slot }
   case Ord(tk) of
-    { Legacy kinds (0-6): keep existing sizes during migration }
+    { Bootstrap-stable kinds (0-6) }
     0: Result := 8;  { tyUnknown }
-    1: Result := 8;  { tyInteger  — legacy, will migrate to 4 via tyInt32 }
-    2: Result := 8;  { tyBoolean  — legacy, will migrate to 1 via tyUInt8 }
+    1: Result := 4;  { tyInteger  — signed 32-bit }
+    2: Result := 1;  { tyBoolean  — unsigned 8-bit }
     3: Result := 1;  { tyChar }
     4: Result := 8;  { tyString   — struct pointer / inline; caller manages actual buffer }
     5: Result := 8;  { tyRecord   — caller must use RecSize() for full record size }
@@ -427,6 +432,14 @@ begin
   else Result := 8;
 end;
 
+function AlignTo(value, alignment: Integer): Integer;
+begin
+  if alignment <= 1 then
+    Result := value
+  else
+    Result := ((value + alignment - 1) div alignment) * alignment;
+end;
+
 function TypeSigned(tk: TTypeKind): Boolean;
 { True for signed integer types. }
 begin
@@ -452,6 +465,43 @@ begin
     15, 16, 17:      { tyNativeInt, tyNativeUInt, tyPointer }
       Result := True;
   end;
+end;
+
+function TypeCompareUnsigned(lhs, rhs: TTypeKind): Boolean;
+{ The wider operand determines the comparison domain; at equal width a signed
+  operand wins. Values are still evaluated in 64-bit registers. }
+begin
+  Result := False;
+  if not (TypeIsOrdinal(lhs) and TypeIsOrdinal(rhs)) then Exit;
+  if TypeSize(lhs) > TypeSize(rhs) then
+    Result := not TypeSigned(lhs)
+  else if TypeSize(rhs) > TypeSize(lhs) then
+    Result := not TypeSigned(rhs)
+  else
+    Result := (not TypeSigned(lhs)) and (not TypeSigned(rhs));
+end;
+
+function TypeArithmeticResult(lhs, rhs: TTypeKind): TTypeKind;
+{ Integer arithmetic is evaluated as an 8-byte value. Signedness follows the
+  same widening rule as relational comparisons. }
+begin
+  if TypeCompareUnsigned(lhs, rhs) then
+    Result := tyUInt64
+  else
+    Result := tyInt64;
+end;
+
+function TypeDivideUnsigned(dividend: TTypeKind): Boolean;
+begin
+  Result := TypeIsOrdinal(dividend) and not TypeSigned(dividend);
+end;
+
+function TypeDivideResult(dividend: TTypeKind): TTypeKind;
+begin
+  if TypeDivideUnsigned(dividend) then
+    Result := tyUInt64
+  else
+    Result := tyInt64;
 end;
 
 function TypeIsPointerSized(tk: TTypeKind): Boolean;
@@ -502,7 +552,7 @@ begin
 end;
 
 function AllocVar(const name: AnsiString; tk: TTypeKind): Integer;
-var sz: Integer;
+var sz, align: Integer;
 begin
   if SymCount >= MAX_SYMS then Error('too many symbols');
   Syms[SymCount].Name     := name;
@@ -514,42 +564,84 @@ begin
   Syms[SymCount].RecName  := LastTypeRecId;
   Syms[SymCount].IsRef    := False;
 
-  sz := 8;
+  sz := TypeSize(tk);
   if tk = tyString then
   begin
     if CurProc < 0 then sz := STRING_CAP + 8
     else sz := LOCAL_STR_CAP + 8;
   end
   else if tk = tyRecord then sz := RecSize(LastTypeRecId);
+  align := TypeAlign(tk);
 
   if CurProc < 0 then
   begin
+    BSSSize := AlignTo(BSSSize, align);
     Syms[SymCount].Kind   := skGlobal;
     Syms[SymCount].Offset := BSSSize;
     Inc(BSSSize, sz);
   end
   else
   begin
-    Inc(FrameSize, sz);
+    FrameSize := AlignTo(FrameSize + sz, align);
     Syms[SymCount].Kind   := skLocal;
     Syms[SymCount].Offset := -FrameSize;
   end;
   Result := SymCount; Inc(SymCount);
 end;
 
-function AllocArray(const name: AnsiString; elemType: TTypeKind; lo, hi: Integer): Integer;
-var elemSize, totalSize: Integer;
+function ParamSize(idx: Integer): Integer;
+begin
+  if Syms[idx].IsRef or Syms[idx].IsArray or (Syms[idx].TypeKind = tyString) or
+     (Syms[idx].TypeKind = tyRecord) or (Syms[idx].TypeKind = tyClass) or (Syms[idx].TypeKind = tyPointer) then
+    Result := TARGET_PTR_SIZE
+  else
+    Result := TypeSize(Syms[idx].TypeKind);
+end;
+
+function AllocParam(const name: AnsiString; tk: TTypeKind; isRef, isArray: Boolean): Integer;
+var sz, align: Integer;
 begin
   if SymCount >= MAX_SYMS then Error('too many symbols');
-  elemSize := 1;
-  if elemType in [tyInteger, tyBoolean, tyClass] then elemSize := 8
-  else if elemType = tyChar then elemSize := 1
-  else if elemType = tyString then
+  Syms[SymCount].Name     := name;
+  Syms[SymCount].TypeKind := tk;
+  Syms[SymCount].ConstVal := 0;
+  Syms[SymCount].IsArray  := isArray;
+  Syms[SymCount].ArrLen   := 0;
+  if isArray then Syms[SymCount].ArrLen := 1000;
+  Syms[SymCount].ElemType := tk;
+  Syms[SymCount].RecName  := LastTypeRecId;
+  Syms[SymCount].IsRef    := isRef;
+  Syms[SymCount].Kind     := skParam;
+
+  if isRef or isArray or (tk = tyString) or (tk = tyRecord) or (tk = tyClass) or (tk = tyPointer) then
+    sz := TARGET_PTR_SIZE
+  else
+    sz := TypeSize(tk);
+
+  if isRef or isArray or (tk = tyString) or (tk = tyRecord) or (tk = tyClass) or (tk = tyPointer) then
+    align := TARGET_PTR_SIZE
+  else
+    align := TypeAlign(tk);
+  FrameSize := AlignTo(FrameSize + sz, align);
+  Syms[SymCount].Offset := -FrameSize;
+  Result := SymCount; Inc(SymCount);
+end;
+
+function AllocArray(const name: AnsiString; elemType: TTypeKind; lo, hi: Integer): Integer;
+var elemSize, totalSize, align: Integer;
+begin
+  if SymCount >= MAX_SYMS then Error('too many symbols');
+  if elemType = tyString then
   begin
     if CurProc < 0 then elemSize := STRING_CAP + 8
     else elemSize := LOCAL_STR_CAP + 8;
   end
-  else if elemType = tyRecord then elemSize := RecSize(LastTypeRecId);
+  else if elemType = tyRecord then elemSize := RecSize(LastTypeRecId)
+  else elemSize := TypeSize(elemType);
+  if (elemType = tyString) or (elemType = tyRecord) then
+    align := TARGET_PTR_SIZE
+  else
+    align := TypeAlign(elemType);
 
   totalSize := (hi - lo + 1) * elemSize;
   Syms[SymCount].Name     := name;
@@ -563,13 +655,14 @@ begin
 
   if CurProc < 0 then
   begin
+    BSSSize := AlignTo(BSSSize, align);
     Syms[SymCount].Kind   := skGlobal;
     Syms[SymCount].Offset := BSSSize;
     Inc(BSSSize, totalSize);
   end
   else
   begin
-    Inc(FrameSize, totalSize);
+    FrameSize := AlignTo(FrameSize + totalSize, align);
     Syms[SymCount].Kind   := skLocal;
     Syms[SymCount].Offset := -FrameSize;
   end;
@@ -594,18 +687,42 @@ end;
 { ===== Variable load/store ===== }
 
 procedure EmitLoadVar(idx: Integer);
+var tk: TTypeKind; sz: Integer; sgn: Boolean;
 begin
+  tk := Syms[idx].TypeKind;
+  sz := TypeSize(tk);
+  sgn := TypeSigned(tk);
+
   if (Syms[idx].Kind = skParam) and Syms[idx].IsRef and
-     (Syms[idx].TypeKind <> tyString) then
+     (tk <> tyString) then
   begin
     { by-reference scalar: load pointer from slot, then load pointed value }
     EmitB($48); EmitB($8B); EmitB($85); EmitI32(Syms[idx].Offset);
-    if Syms[idx].TypeKind = tyChar then
-      begin EmitB($48); EmitB($0F); EmitB($B6); EmitB($00); end
+    if sz = 1 then
+    begin
+      if sgn then
+        begin EmitB($48); EmitB($0F); EmitB($BE); EmitB($00); end { movsx rax, byte [rax] }
+      else
+        begin EmitB($48); EmitB($0F); EmitB($B6); EmitB($00); end;{ movzx rax, byte [rax] }
+    end
+    else if sz = 2 then
+    begin
+      if sgn then
+        begin EmitB($48); EmitB($0F); EmitB($BF); EmitB($00); end { movsx rax, word [rax] }
+      else
+        begin EmitB($48); EmitB($0F); EmitB($B7); EmitB($00); end;{ movzx rax, word [rax] }
+    end
+    else if sz = 4 then
+    begin
+      if sgn then
+        begin EmitB($48); EmitB($63); EmitB($00); end { movsxd rax, dword [rax] }
+      else
+        begin EmitB($8B); EmitB($00); end;{ mov eax, dword [rax] (zero-extends to rax) }
+    end
     else
-      begin EmitB($48); EmitB($8B); EmitB($00); end;
+      begin EmitB($48); EmitB($8B); EmitB($00); end; { mov rax, [rax] }
   end
-  else if (Syms[idx].Kind = skParam) and (Syms[idx].TypeKind = tyString) then
+  else if (Syms[idx].Kind = skParam) and (tk = tyString) then
   begin
     { param slot holds pointer P to string struct; load P then deref for length }
     EmitB($48); EmitB($8B); EmitB($85); EmitI32(Syms[idx].Offset); { mov rax, [rbp+off] = P }
@@ -616,15 +733,53 @@ begin
     case Syms[idx].Kind of
       skLocal, skParam:
         begin
-          if Syms[idx].TypeKind = tyChar then
-            begin EmitB($48); EmitB($0F); EmitB($B6); EmitB($85); EmitI32(Syms[idx].Offset); end
+          if sz = 1 then
+          begin
+            if sgn then
+              begin EmitB($48); EmitB($0F); EmitB($BE); EmitB($85); EmitI32(Syms[idx].Offset); end
+            else
+              begin EmitB($48); EmitB($0F); EmitB($B6); EmitB($85); EmitI32(Syms[idx].Offset); end;
+          end
+          else if sz = 2 then
+          begin
+            if sgn then
+              begin EmitB($48); EmitB($0F); EmitB($BF); EmitB($85); EmitI32(Syms[idx].Offset); end
+            else
+              begin EmitB($48); EmitB($0F); EmitB($B7); EmitB($85); EmitI32(Syms[idx].Offset); end;
+          end
+          else if sz = 4 then
+          begin
+            if sgn then
+              begin EmitB($48); EmitB($63); EmitB($85); EmitI32(Syms[idx].Offset); end
+            else
+              begin EmitB($8B); EmitB($85); EmitI32(Syms[idx].Offset); end;
+          end
           else
             begin EmitB($48); EmitB($8B); EmitB($85); EmitI32(Syms[idx].Offset); end;
         end;
       skGlobal:
         begin
-          if Syms[idx].TypeKind = tyChar then
-            begin EmitB($48); EmitB($0F); EmitB($B6); EmitB($04); EmitB($25); EmitGlobRef(Syms[idx].Offset); end
+          if sz = 1 then
+          begin
+            if sgn then
+              begin EmitB($48); EmitB($0F); EmitB($BE); EmitB($04); EmitB($25); EmitGlobRef(Syms[idx].Offset); end
+            else
+              begin EmitB($48); EmitB($0F); EmitB($B6); EmitB($04); EmitB($25); EmitGlobRef(Syms[idx].Offset); end;
+          end
+          else if sz = 2 then
+          begin
+            if sgn then
+              begin EmitB($48); EmitB($0F); EmitB($BF); EmitB($04); EmitB($25); EmitGlobRef(Syms[idx].Offset); end
+            else
+              begin EmitB($48); EmitB($0F); EmitB($B7); EmitB($04); EmitB($25); EmitGlobRef(Syms[idx].Offset); end;
+          end
+          else if sz = 4 then
+          begin
+            if sgn then
+              begin EmitB($48); EmitB($63); EmitB($04); EmitB($25); EmitGlobRef(Syms[idx].Offset); end
+            else
+              begin EmitB($8B); EmitB($04); EmitB($25); EmitGlobRef(Syms[idx].Offset); end;
+          end
           else
             begin EmitB($48); EmitB($8B); EmitB($04); EmitB($25); EmitGlobRef(Syms[idx].Offset); end;
         end;
@@ -635,27 +790,43 @@ begin
 end;
 
 procedure EmitStoreVar(idx: Integer);
+var tk: TTypeKind; sz: Integer;
 begin
+  tk := Syms[idx].TypeKind;
+  sz := TypeSize(tk);
+
   if (Syms[idx].Kind = skParam) and Syms[idx].IsRef then
   begin
     EmitB($48); EmitB($8B); EmitB($8D); EmitI32(Syms[idx].Offset);
-    if Syms[idx].TypeKind = tyChar then
+    if sz = 1 then
       begin EmitB($88); EmitB($01); end
+    else if sz = 2 then
+      begin EmitB($66); EmitB($89); EmitB($01); end
+    else if sz = 4 then
+      begin EmitB($89); EmitB($01); end
     else
       begin EmitB($48); EmitB($89); EmitB($01); end;
   end
   else case Syms[idx].Kind of
     skLocal, skParam:
       begin
-        if Syms[idx].TypeKind = tyChar then
+        if sz = 1 then
           begin EmitB($88); EmitB($85); EmitI32(Syms[idx].Offset); end
+        else if sz = 2 then
+          begin EmitB($66); EmitB($89); EmitB($85); EmitI32(Syms[idx].Offset); end
+        else if sz = 4 then
+          begin EmitB($89); EmitB($85); EmitI32(Syms[idx].Offset); end
         else
           begin EmitB($48); EmitB($89); EmitB($85); EmitI32(Syms[idx].Offset); end;
       end;
     skGlobal:
       begin
-        if Syms[idx].TypeKind = tyChar then
+        if sz = 1 then
           begin EmitB($88); EmitB($04); EmitB($25); EmitGlobRef(Syms[idx].Offset); end
+        else if sz = 2 then
+          begin EmitB($66); EmitB($89); EmitB($04); EmitB($25); EmitGlobRef(Syms[idx].Offset); end
+        else if sz = 4 then
+          begin EmitB($89); EmitB($04); EmitB($25); EmitGlobRef(Syms[idx].Offset); end
         else
           begin EmitB($48); EmitB($89); EmitB($04); EmitB($25); EmitGlobRef(Syms[idx].Offset); end;
       end;
@@ -930,15 +1101,14 @@ procedure EmitArrElemAddr(arrIdx: Integer);
 { On entry: rax = array index. On exit: rax = element address. }
 var elemSize: Integer;
 begin
-  elemSize := 1;
-  if Syms[arrIdx].ElemType in [tyInteger, tyBoolean, tyClass] then elemSize := 8
-  else if Syms[arrIdx].ElemType = tyString then
+  if Syms[arrIdx].ElemType = tyString then
   begin
     if Syms[arrIdx].Kind = skGlobal then elemSize := STRING_CAP + 8
     else elemSize := LOCAL_STR_CAP + 8;
   end
-  else if Syms[arrIdx].ElemType = tyRecord then elemSize := RecSize(Syms[arrIdx].ElemRecName);
-  
+  else if Syms[arrIdx].ElemType = tyRecord then elemSize := RecSize(Syms[arrIdx].ElemRecName)
+  else elemSize := TypeSize(Syms[arrIdx].ElemType);
+
   if elemSize = 8 then
   begin
     { shl rax, 3  (multiply by 8) }
@@ -951,13 +1121,13 @@ begin
     { imul rax, rcx }
     EmitB($48); EmitB($0F); EmitB($AF); EmitB($C1);
   end;
-  
+
   { Subtract lower bound * elemSize (if non-zero) }
   if Syms[arrIdx].ConstVal <> 0 then
   begin
     EmitB($48); EmitB($2D); EmitI32(Syms[arrIdx].ConstVal * elemSize);
   end;
-  
+
   if Syms[arrIdx].Kind = skGlobal then
   begin
     { add eax, bss_arr_base  (32-bit add, zero-extends to rax) }
@@ -972,12 +1142,34 @@ end;
 
 procedure EmitArrLoad(arrIdx: Integer);
 { rax = index → rax = element value }
+var sz: Integer; sgn: Boolean;
 begin
   EmitArrElemAddr(arrIdx);
-  if Syms[arrIdx].ElemType in [tyInteger, tyBoolean, tyClass] then
-    begin EmitB($48); EmitB($8B); EmitB($00); end  { mov rax, [rax] }
+  sz := TypeSize(Syms[arrIdx].ElemType);
+  sgn := TypeSigned(Syms[arrIdx].ElemType);
+  if sz = 1 then
+  begin
+    if sgn then
+      begin EmitB($48); EmitB($0F); EmitB($BE); EmitB($00); end { movsx rax, byte [rax] }
+    else
+      begin EmitB($48); EmitB($0F); EmitB($B6); EmitB($00); end;{ movzx rax, byte [rax] }
+  end
+  else if sz = 2 then
+  begin
+    if sgn then
+      begin EmitB($48); EmitB($0F); EmitB($BF); EmitB($00); end { movsx rax, word [rax] }
+    else
+      begin EmitB($48); EmitB($0F); EmitB($B7); EmitB($00); end;{ movzx rax, word [rax] }
+  end
+  else if sz = 4 then
+  begin
+    if sgn then
+      begin EmitB($48); EmitB($63); EmitB($00); end { movsxd rax, dword [rax] }
+    else
+      begin EmitB($8B); EmitB($00); end;{ mov eax, dword [rax] }
+  end
   else
-    begin EmitB($48); EmitB($0F); EmitB($B6); EmitB($00); end; { movzx rax, byte [rax] }
+    begin EmitB($48); EmitB($8B); EmitB($00); end; { mov rax, [rax] }
 end;
 
 procedure EmitStringCharLoad(strIdx: Integer);
@@ -990,13 +1182,19 @@ end;
 
 procedure EmitArrStore(arrIdx: Integer);
 { Stack: [..., addr]. rax = value. Store value at addr. }
+var sz: Integer;
 begin
   { addr was pushed before RHS eval }
   EmitB($59);                   { pop rcx -- element address }
-  if Syms[arrIdx].ElemType in [tyInteger, tyBoolean, tyClass] then
-    begin EmitB($48); EmitB($89); EmitB($01); end  { mov [rcx], rax }
+  sz := TypeSize(Syms[arrIdx].ElemType);
+  if sz = 1 then
+    begin EmitB($88); EmitB($01); end
+  else if sz = 2 then
+    begin EmitB($66); EmitB($89); EmitB($01); end
+  else if sz = 4 then
+    begin EmitB($89); EmitB($01); end
   else
-    begin EmitB($88); EmitB($01); end;              { mov [rcx], al }
+    begin EmitB($48); EmitB($89); EmitB($01); end;
 end;
 
 { ===== Operator overload table ===== }
@@ -1085,8 +1283,7 @@ begin
     Result := True;
     Exit;
   end;
-  if (pType in [tyInteger, tyBoolean, tyChar]) and
-     (aType in [tyInteger, tyBoolean, tyChar]) then
+  if TypeIsOrdinal(pType) and TypeIsOrdinal(aType) then
   begin
     Result := True;
     Exit;
@@ -1220,6 +1417,26 @@ begin
   MovRaxImm(SYS_WRITE); MovRdiImm(STDOUT); EmitSyscall;
 end;
 
+procedure EmitwriteUInt;
+var loopStart: Integer;
+begin
+  EmitB($48); EmitB($31); EmitB($C9);
+  MovRbxImm(10);
+  EmitB($48); EmitB($BF); EmitDataRef(INTBUF_OFFSET + INTBUF_SIZE);
+  loopStart := CodeLen;
+  EmitB($48); EmitB($31); EmitB($D2);
+  EmitB($48); EmitB($F7); EmitB($F3);
+  EmitB($80); EmitB($C2); EmitB($30);
+  EmitB($48); EmitB($FF); EmitB($CF);
+  EmitB($88); EmitB($17);
+  EmitB($48); EmitB($FF); EmitB($C1);
+  EmitB($48); EmitB($85); EmitB($C0);
+  EmitB($75); EmitB(Byte(loopStart - (CodeLen + 1)));
+  EmitB($48); EmitB($89); EmitB($FE);
+  EmitB($48); EmitB($89); EmitB($CA);
+  MovRaxImm(SYS_WRITE); MovRdiImm(STDOUT); EmitSyscall;
+end;
+
 procedure EmitwriteChar;
 { rax = char byte value → write 1 byte to stdout }
 begin
@@ -1266,15 +1483,7 @@ begin
     end
     else
     begin
-      if Syms[retSymIdx].Kind = skGlobal then
-      begin
-        EmitB($48); EmitB($8B); EmitB($04); EmitB($25); EmitGlobRef(Syms[retSymIdx].Offset);
-      end
-      else
-      begin
-        { Return contents of integer/char/boolean }
-        EmitB($48); EmitB($8B); EmitB($85); EmitI32(Syms[retSymIdx].Offset);
-      end;
+      EmitLoadVar(retSymIdx);
     end;
   end;
   EmitB($C9); EmitB($C3);

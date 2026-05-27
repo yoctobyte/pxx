@@ -46,6 +46,24 @@ const CommandLineDefine = 1;
 const CommandLineDefine = 0;
 {$endif}
 
+{$ifdef CPU64}
+const Cpu64Target = 1;
+{$else}
+const Cpu64Target = 0;
+{$endif}
+
+{$ifdef CPUX86_64}
+const CpuX8664Target = 1;
+{$else}
+const CpuX8664Target = 0;
+{$endif}
+
+{$ifdef LINUX}
+const LinuxTarget = 1;
+{$else}
+const LinuxTarget = 0;
+{$endif}
+
 begin
   writeln(NativeCompiler);
   writeln(FreePascalIdentity);
@@ -53,4 +71,7 @@ begin
   writeln(LocalUndefine);
   writeln(NestedConditional);
   writeln(CommandLineDefine);
+  writeln(Cpu64Target);
+  writeln(CpuX8664Target);
+  writeln(LinuxTarget);
 end.

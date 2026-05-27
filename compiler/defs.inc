@@ -143,8 +143,8 @@ type
   TTypeKind = (
     { Ordinals 0–6: fixed since first bootstrap — DO NOT reorder }
     tyUnknown,   { 0: unresolved/error }
-    tyInteger,   { 1: legacy 8-byte alias; migrating to tyInt32 }
-    tyBoolean,   { 2: legacy 8-byte alias; migrating to tyUInt8 }
+    tyInteger,   { 1: Integer, kept at its bootstrap ordinal; 4-byte signed }
+    tyBoolean,   { 2: Boolean, kept at its bootstrap ordinal; 1-byte unsigned }
     tyChar,      { 3: 1-byte unsigned character/Byte alias }
     tyString,    { 4: Pascal string with inline length prefix }
     tyRecord,    { 5: record/struct }

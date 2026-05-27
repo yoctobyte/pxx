@@ -409,6 +409,12 @@ begin
   StrictOverload := False;
   name := 'PXX';
   PasDefine(name);
+  name := 'CPU64';
+  PasDefine(name);
+  name := 'CPUX86_64';
+  PasDefine(name);
+  name := 'LINUX';
+  PasDefine(name);
 end;
 
 procedure PasDefineCommandOption(first: Integer);
@@ -569,7 +575,6 @@ var
 {$endif}
   s: AnsiString;
   n: Int64;
-  i: Integer;
 begin
   if DebugTrace then writeln('Entering Next. SrcPos = ', SrcPos);
   SkipSpace;

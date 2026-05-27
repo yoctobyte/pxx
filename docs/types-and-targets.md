@@ -1,6 +1,7 @@
 # PXX Type System and Target Policy
 
-**Status:** Phase 1 — Specify and test.  
+**Status:** Scalar integer storage and x86-64 target contract implemented.
+**Documentation snapshot:** 2026-05-27. Implementation may change faster than this document.
 **Reference:** [FPC ordinal/integer types](https://www.freepascal.org/daily/doc/ref/refsu4.html),
 [NativeInt](https://www.freepascal.org/docs-html/rtl/system/nativeint.html)
 
@@ -27,10 +28,12 @@ The sizes below are **source-language sizes**, not target-word sizes.
 
 | Pascal type(s) | PXX internal kind | Bytes | Signed | Notes |
 |---|---|---|---|---|
-| `Byte` | `tyUInt8` | 1 | No | Also `tyChar` alias for character context |
+| `Byte` | `tyUInt8` | 1 | No | Same storage/range as `Char`; numeric context |
 | `ShortInt` | `tyInt8` | 1 | Yes | |
-| `Char`, `Boolean` | `tyUInt8` | 1 | No | Boolean stored as 0/1 in 1 byte |
+| `Char` | `tyChar` | 1 | No | Ansi character context |
+| `Boolean` | `tyBoolean` | 1 | No | Stored as 0/1 |
 | `Word` | `tyUInt16` | 2 | No | |
+| `WideChar` | future | 2 | No | Distinct character type; not implemented |
 | `SmallInt` | `tyInt16` | 2 | Yes | |
 | `Integer`, `LongInt` | `tyInt32` | 4 | Yes | **Not pointer-sized** |
 | `Cardinal`, `LongWord` | `tyUInt32` | 4 | No | |
@@ -38,7 +41,8 @@ The sizes below are **source-language sizes**, not target-word sizes.
 | `QWord` | `tyUInt64` | 8 | No | |
 | `NativeInt`, `PtrInt` | `tyNativeInt` | target ptr | Yes | 4 on i386, 8 on x86-64 |
 | `NativeUInt`, `PtrUInt` | `tyNativeUInt` | target ptr | No | |
-| `Pointer`, class reference | `tyPointer` | target ptr | No | |
+| `Pointer` | `tyPointer` | target ptr | No | |
+| class reference | `tyClass` | target ptr | No | |
 | `Single` | `tySingle` | 4 | — | Floating point (future) |
 | `Double` | `tyDouble` | 8 | — | Floating point (future) |
 | `AnsiString` | `tyString` | varies | — | Heap/inline; see String Layout |
@@ -87,8 +91,8 @@ New kinds are always appended after existing ones.
 | Ordinal | Name | Meaning |
 |---|---|---|
 | 0 | `tyUnknown` | Unresolved / error |
-| 1 | `tyInteger` | **Legacy:** currently 8-byte on x86-64. Migrating to 4-byte `tyInt32`. |
-| 2 | `tyBoolean` | **Legacy:** currently 8-byte. Migrating to 1-byte `tyUInt8`. |
+| 1 | `tyInteger` | Bootstrap-stable ordinal used for `Integer`; stored as 4-byte signed. |
+| 2 | `tyBoolean` | Bootstrap-stable ordinal used for `Boolean`; stored as 1-byte unsigned. |
 | 3 | `tyChar` | 1-byte unsigned character / `Byte` alias |
 | 4 | `tyString` | Pascal string with inline length prefix |
 | 5 | `tyRecord` | Struct / record type |
@@ -133,6 +137,15 @@ function TypeIsOrdinal(tk: TTypeKind): Boolean;
 
 function TypeIsPointerSized(tk: TTypeKind): Boolean;
 { Returns true for Pointer, NativeInt, NativeUInt, tyClass. }
+
+function TypeCompareUnsigned(lhs, rhs: TTypeKind): Boolean;
+{ Selects unsigned relational code generation for ordinal comparisons. }
+
+function TypeArithmeticResult(lhs, rhs: TTypeKind): TTypeKind;
+{ Promotes integer arithmetic to signed or unsigned 64-bit evaluation. }
+
+function TypeDivideResult(dividend: TTypeKind): TTypeKind;
+{ Selects signed or unsigned division/modulo from the dividend type. }
 ```
 
 ---
@@ -141,7 +154,7 @@ function TypeIsPointerSized(tk: TTypeKind): Boolean;
 
 `SizeOf(TypeName)` is a compile-time constant expression that returns the byte
 size of a type according to the table above. It is evaluated at parse time and
-produces an `AN_INT_LIT` AST node.
+produces an `AN_INT_LIT` AST node. An unknown type is a compile error.
 
 ```pascal
 { Examples }
@@ -168,21 +181,33 @@ String representation is PXX-internal and not guaranteed to match FPC's AnsiStri
 
 ---
 
-## Migration Strategy
+## Implementation Status
 
-The current bootstrap binary treats `Integer` as 8 bytes and `Boolean` as 8 bytes.
-Migration is deliberate and phased to preserve fixedpoint:
+Implemented for the current x86-64 Linux target:
 
-1. **Phase 1** (this document): Specify the contract. Add `SizeOf` intrinsic.
-   Add scalar-size regression tests that will currently fail for `Integer`.
-2. **Phase 2**: Expand `TTypeKind` with new fine-grained kinds. Add helper functions.
-   `ParseTypeKind` maps Pascal type names to the correct new kind.
-3. **Phase 3**: Fix AMD64 load/store to emit correct-width instructions based on `TypeSize`.
-   Update `AllocVar`/`AllocArray` to use `TypeSize` for BSS/frame allocation.
-   Rerun bootstrap fixedpoint after each layout change.
-4. **Phase 4**: Add `Pointer`, `PChar`, `NativeInt`, `PtrInt`. Prerequisite for C interop.
-5. **Phase 5**: Explicit target configuration (`--target=`).
-6. **Phase 6**: i386 output (only after type system is stable).
+- Fixed-width scalar kinds and `SizeOf(TypeName)`.
+- Width-correct scalar variable, parameter, array-element, and class-field loads/stores.
+- Natural scalar alignment for variables, parameters, arrays, and class fields.
+- Widened 64-bit integer arithmetic, with signed/unsigned relational and division code generation.
+- Unsigned decimal output for eight-byte unsigned integer values.
+- C `int` function bodies and Pascal calls under the four-byte `Integer` model.
+- Predefined `PXX`, `CPU64`, `CPUX86_64`, and `LINUX` conditional symbols.
+
+Remaining target/type work:
+
+1. Floating point types and operations (`Single`, `Double`).
+2. Optional integer diagnostics and checking modes are deferred; for now,
+   arithmetic wraps when a value is stored back into a narrower or overflowed
+   machine-sized result, and mixed-sign expressions do not warn.
+3. Additional ordinal surface: `WideChar`, explicit ordinal/range conformance,
+   and associated compatibility tests. `Ord` is implemented as a compiler
+   intrinsic today and may later be presented through the System/RTL builtin
+   surface; it does not need ordinary external-library calling semantics.
+4. General pointer syntax and semantics (`^T`, `@value`, dereference, `nil`,
+   casts and checks). Pointer-sized storage and `SizeOf(Pointer)` are already
+   established independently of that syntax work.
+5. Explicit target selection (`--target=`).
+6. i386 output after the type system and ABI surface are stable.
 
 ---
 
@@ -191,6 +216,8 @@ Migration is deliberate and phased to preserve fixedpoint:
 - `Integer` = 32-bit signed (matches FPC ObjFPC behavior)
 - `Pointer`/class references = pointer-sized (8 bytes on x86-64)
 - `NativeInt`/`PtrInt` for pointer-sized arithmetic
+- `Char` is the current one-byte character type; `WideChar` remains future
+  work rather than being treated as an alias for `Word`
 - Source compatibility with FPC is a goal; FPC runtime/binary ABI is a separate, later question
 - Default mode: ObjFPC-oriented
 
@@ -199,6 +226,9 @@ Migration is deliberate and phased to preserve fixedpoint:
 ## What Is NOT Addressed Here
 
 - Float/real types (`Single`, `Double`): future work
+- Full ordinal surface, including `WideChar`: future work
+- General pointer expressions and typed pointer syntax: future work; pointer
+  size/layout is already part of the implemented target contract
 - Dynamic arrays: future work
 - Interface types: future work
 - FPC runtime library compatibility: separate policy document needed

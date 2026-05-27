@@ -8,7 +8,7 @@ The existing executable remains `compiler/pascal26` until that rename is
 worth carrying through bootstrap/stable artifacts.
 
 The compiler itself is written in plain standard Pascal (no OOP). It compiles
-Object Pascal: classes, inheritance, generics (both class generics and generic
+Object Pascal: classes, generics (both class generics and generic
 functions), routine and operator overloading, loop control, and more. The goal is a
 Pascal superset / dialect that extends the language where it makes sense.
 
@@ -67,6 +67,9 @@ Reports lexer/parser diagnostics and C preprocessing events.
 
 ## Project Notes
 
+Start with the [documentation index](docs/README.md) for the command line,
+Pascal dialect, supported features, and explicit limitations.
+
 Design decisions, dialect proposals, and bootstrap history live in
-`compiler/usernotes.md`. Current FPC-compatibility claims and missing-language
-inventory are tracked in [COMPATIBILITY.md](COMPATIBILITY.md).
+`compiler/usernotes.md`. The dated compatibility inventory is tracked in
+[COMPATIBILITY.md](COMPATIBILITY.md).
