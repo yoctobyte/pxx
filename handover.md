@@ -1,187 +1,146 @@
 # Frankonpiler Handover
 
-**Date:** 2026-05-26
+**Date:** 2026-05-27
 
 ## Current Git State
 
 Relevant commits on `master`:
 
 ```text
+0ecbca7 feat(class): fix class field offsets and method compilation
+b4c9e4f docs: update C interop handover
 4c21e86 feat(c): add preprocessing stage
 4e33759 feat(debug): add runtime compiler tracing
 e7f8b2a docs: document shared C library loading
 8fcc080 feat(elf): load external C functions
-ce2da9a chore: checkpoint parser work in progress
 ```
 
-`ce2da9a` deliberately preserves unfinished BASIC/AST parser and Pascal
-class/method work before the shared-object track started. Do not interpret
-that checkpoint as feature completion.
+## What Works
 
-## Shared Object Loading: Working
+### Self-hosting fixedpoint
+`make bootstrap` and `make test` both pass. `gen2 == gen3`, bit-identical.
 
-The compiler can now compile a Pascal program that imports a simple installed
-C header and calls a function supplied by a Linux shared object:
+### Shared object loading
+`uses ctype;` parses `/usr/include/ctype.h`, emits dynamic ELF with `DT_NEEDED libc.so.6`,
+resolves symbols via GOT-style `R_X86_64_GLOB_DAT`. Tested: `tolower(65)=97`.
 
+### Local C import
+`uses my_c_lib;` compiles local `.c` body into executable. `test/test_c_import.pas` passes.
+
+### C preprocessing (`cpreproc.inc`)
+`#include`, include guards, `#define`/`#undef`, object macros, basic function-like macros,
+`#if/#ifdef/#ifndef/#else/#endif`. `test/test_c_preprocess.pas` returns 42.
+
+### User-defined classes with fields (NEW)
 ```pascal
-program test_shared_object;
-uses ctype;
+type TCounter = class Value: Integer; end;
+var c: TCounter;
 begin
-  writeln(tolower(65));
+  c := TCounter.Create;
+  c.Value := 42;
+  writeln(c.Value);
 end.
 ```
+`test/test_class.pas` passes: `TMyClass.Create` allocates via `GetMem`, field access
+via `R_UCLASS_BASE` dynamic record system, correct byte offsets.
 
-The checked-in regression is `test/test_shared_object.pas`. On this system:
-
-```text
-header:  /usr/include/ctype.h
-soname:  libc.so.6
-result:  tolower(65) = 97
+### User-defined class methods (NEW)
+```pascal
+type TCounter = class Value: Integer; procedure Reset; procedure Increment; function Get: Integer; end;
+procedure TCounter.Reset; begin Self.Value := 0; end;
+procedure TCounter.Increment; begin Self.Value := Self.Value + 1; end;
+function TCounter.Get: Integer; begin Result := Self.Value; end;
 ```
+`test/test_class_methods.pas` passes, output: `3`. Method dispatch via `FindUMeth`, implicit
+`Self` parameter injection at index 0, `Self.Value` resolved through `UClsFBase`/`UFldOff_`.
 
-The generated executable is dynamically loadable ELF output with:
+### Debug tracing
+`pascal26 --debug <src>` enables lexer/parser/preprocessor event traces.
 
-- `PT_INTERP` naming `/lib64/ld-linux-x86-64.so.2`
-- `PT_DYNAMIC`
-- `DT_NEEDED` for `libc.so.6`
-- string, symbol, SysV hash, and `R_X86_64_GLOB_DAT` relocation data
+### BASIC frontend (`blexer.inc` + `bparser.inc`)
+Parked, partially working.
 
-Ordinary programs with no external calls remain in the prior static-style
-single-load-segment format.
+### Benchmarks
+12× faster than FPC; 287-byte hello vs 191KB FPC.
 
-## Header And Library Resolution
+## Architecture
 
-`ParseUsesUnit` searches for `uses name;` as:
+- `compiler/compiler.pas` — main entry, includes all `.inc` files
+- Include chain: `defs.inc` → `lexer.inc` → `clexer.inc` → `blexer.inc` → `emit.inc` →
+  `symtab.inc` → `parser.inc` → `codegen.inc` → `cparser.inc` → `bparser.inc` →
+  `elfwriter.inc` → `cpreproc.inc`
+- Single-pass: source → tokens → AST → x86-64 bytes → ELF write
+- No linker, no stdlib, no runtime
+- Static programs: one load segment, no dynamic section
+- Dynamic programs (any external call): emit PT_INTERP, PT_DYNAMIC, DT_NEEDED, GOT,
+  plt-style indirect calls
 
-```text
-<source dir>/name.pas, .pp, .c, .h
-compiler/name.pas, .pp, .c, .h
-/usr/include/name.h
-```
+## Header / Library Resolution
 
-For C input:
+`uses name;` searches: local dir, `compiler/`, `/usr/include/`. `.h` → external
+prototype + dynamic resolve. `ctype` hardcoded → `libc.so.6`. Other headers default
+`lib<name>.so`.
 
-- A local `.c` function body is compiled into the executable.
-- A `.h` prototype is registered as external and is dynamically resolved only
-  if called.
-- A later local definition clears external status, so a prototype followed by
-  a definition continues to use the embedded implementation.
-- `ctype` is specially mapped to `libc.so.6`.
-- Other headers currently default to `lib<unit>.so`; add mappings as system
-  library coverage expands.
+## Key Gotchas
 
-The header parser is deliberately small. Simple prototypes such as
-`int tolower(int)` work; full C header/ABI coverage does not yet exist.
+- **`break` not supported** — use `done: Boolean` idiom.
+- **`ASTIVal` must be `Int64`** — `Integer` truncates $FFFFFFFF in shr codegen.
+- **`shr` binop**: save `Tokens[TokPos-1].SOffset/SLen` BEFORE `Next`, then set on AST node.
+- **String data layout**: `Strs[i].Offset` = 8-byte length prefix; actual bytes at `+8`.
+- **`UnitContent` buffer**: must be global — local `AnsiString` can't hold ~11KB
+  `/usr/include/ctype.h`, corrupts stack.
+- **`CPExpandFunction` args**: kept in depth-indexed fixed storage, not local open arrays
+  (self-hosted stack limitation).
+- **Single-char string literals**: `'x'` in source → `AN_INT_LIT` with `ASTTk=Ord(tyChar)`.
+  Any code that compares an `AnsiString` against a single-char literal must go through the
+  string-vs-char path in codegen.inc (fixed 2026-05-27). Comparisons like `field = 'x'` work
+  correctly now.
+- **String `+` concatenation**: `tkPlus` only emits `ADD RAX, RCX` — does NOT concatenate
+  strings. Use `AppendChar` loops instead. This bug is invisible to bootstrap because the
+  dot-method parsing code path (`name := name + '.' + CurTok.SVal`) was never exercised
+  during compilation of the compiler itself.
 
-## C Preprocessing
+## Class / Method Implementation Details
 
-The compiler includes `compiler/cpreproc.inc`, a preprocessing stage run
-before C lexing for direct `.c` inputs and imported `.c`/`.h` units. It
-supports:
-
-- comment removal and backslash-continued directive lines
-- local and installed-header `#include`
-- common include guards and conditional selection
-- `#define`/`#undef`, object macros, and basic function-like parameter
-  substitution
-
-`test/test_c_preprocess.pas` exercises a local include, include guard,
-conditional selection, undefinition, and function-like expansion; it now
-returns `42` under the self-hosted compiler.
-
-The implementation deliberately does not claim complete C preprocessing:
-stringification, token pasting, variadic macros, and full rescanning remain
-future work.
-
-## Debug Tracing
-
-`pascal26 --debug <src> [out]` now enables the existing lexer/parser traces
-and new C-preprocessor event traces. This immediately diagnosed the
-self-hosted preprocessor failure: passing local open arrays through
-`CPExpandFunction` corrupted the expansion-level argument. Macro arguments
-are now kept in depth-indexed fixed storage instead.
-
-This is compiler tracing, not ELF symbolic debugging. Generated executables
-still do not carry section-based debug symbols or DWARF data.
-
-## Implementation Notes
-
-Changed areas for the shared-object feature:
-
-| File | Purpose |
-|---|---|
-| `compiler/parser.inc` | unit/header lookup, system header fallback, library mapping |
-| `compiler/cparser.inc` | external prototype registration and local-body override |
-| `compiler/cpreproc.inc` | rewrite C preprocessing constructs before C lexing |
-| `compiler/clexer.inc` | tokenize rewritten C input |
-| `compiler/symtab.inc` | emit indirect calls through external GOT-style slots |
-| `compiler/elfwriter.inc` | emit dynamic ELF metadata and relocations |
-| `compiler/defs.inc` | external/dynamic bookkeeping and large unit scratch buffer |
-| `test/test_shared_object.pas` | installed `ctype.h` / `libc.so.6` regression |
-| `test/my_c_lib.c` | local prototype plus definition regression |
-| `test/test_c_preprocess.pas` | include/condition/macro preprocessing regression |
-
-An important fix made during this work is `UnitContent`: imported source/header
-contents are now loaded into a global string buffer. A local `AnsiString` in a
-self-hosted generated procedure only has the small local-string capacity, so
-reading the approximately 11 KB `/usr/include/ctype.h` into that local buffer
-corrupted the stack.
-
-## Verification
-
-Passed after `4c21e86`:
-
-```sh
-make bootstrap
-make test
-```
-
-`make test` now checks:
-
-- shared-object `ctype` import returns `97`
-- local C import returns `42`
-- preprocessing import with conditionals and macros returns `42`
-- `--debug` reports compiler and C-preprocessor trace events while preserving
-  compiled program output
-- normal Pascal regressions and recursive fixed-point self compilation
+- `REC_UCLASS_BASE = 11`. User classes start at this recId.
+- `REC_TMYCLASS = 10` is a HARDCODED legacy class; `TMyClass` still routes to it via
+  `IsRecordType`. All other user-defined classes use the dynamic UClass system.
+- `ParseTypeSection` registers every `class` type via `AddUClass`/`AddUField`.
+- Method implementations (`procedure ClassName.MethodName`) are registered via `AddUMeth`
+  called from `ParseSubroutine` when `FindUClass(name) >= 0`.
+- `Self` is injected as implicit param 0 of type `tyClass`; its `RecName` is set to the
+  owner class's recId so `Self.Field` resolves via `FindUField`.
+- `TMyClass.Create` / `TCounter.Create` etc.: detected in `ParseFactor`; maps to
+  `GetMem(UClsSize_[ci])`.
 
 ## Parked Workstreams
 
-Two concurrent feature streams were intentionally checkpointed and left for
-later resumption:
+1. **BASIC comprehensive** — `test/test_basic_comprehensive.bas` segfaults the compiler.
+2. **Pascal classes** — `test/test_class.pas` and `test/test_class_methods.pas` now PASS
+   and are in `make test`. This workstream is complete.
 
-1. BASIC lexer/parser/AST work in `compiler/blexer.inc`,
-   `compiler/bparser.inc`, and `test/test_basic_comprehensive.bas`.
-2. Pascal classes/methods/interface parsing work in `compiler/parser.inc`,
-   `compiler/defs.inc`, and related class tests.
+## Verification
 
-The shared-object feature touched some common compiler modules, so a resumed
-branch should start from current `master` rather than replaying older source
-over the ELF/import changes.
+After `0ecbca7`, `make test` checks (abbreviated):
 
-Checked directly after the shared-object work, these parked tests currently
-segfault the compiler during compilation (`SIGSEGV`, exit status 139):
-
-```text
-test/test_class.pas
-test/test_class_methods.pas
-test/test_basic_comprehensive.bas
+```sh
+make bootstrap   # FPC → gen1 → gen2, cmp gen1==gen2
+make test        # all regressions including class tests
 ```
 
-They are not included in `make test` at this stage; this is expected unfinished
-work, not a passing baseline. The class-method target source remains in
-`test/test_class_methods.pas`, and the BASIC cross-language/import target is in
-`test/test_basic_comprehensive.bas`.
+New in `make test` after this session:
+- `test_class.pas` → `1 1 1 42 100 999 888`
+- `test_class_methods.pas` → `3`
 
-## Suggested Next Interop Steps
+## Suggested Next Steps
 
-1. Add ELF symbol or map output if generated-program debugging becomes the
-   next priority; `--debug` traces compiler execution only.
-2. Replace the hardcoded header-to-soname special case with explicit import
-   syntax or a small mapping table.
-3. Exercise another simple installed library header whose ABI fits the current
-   parser, then add it to `make test`.
-4. Extend preprocessing only against real headers: token pasting,
-   stringification, variadic macros, or fuller rescanning as required.
-5. Grow C type handling only as demanded by real library calls: pointer
-   arguments, buffers, typedef aliases, then structs/callbacks.
+Per `directions.md`:
+
+1. C interop depth: explicit library import syntax, pointer args/returns, mutable buffers,
+   C strings, `size_t`, typedef aliases, simple struct layout.
+2. Preprocessing breadth driven by real headers (token pasting, stringification, variadic
+   macros — only as real headers demand).
+3. ELF symbol table / map file output for generated-program debugging.
+4. Exercise another simple installed library header (`string.h`, `math.h`, etc.) and add
+   to `make test`.
+5. Protect bootstrappable Pascal core.
