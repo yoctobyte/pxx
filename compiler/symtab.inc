@@ -866,6 +866,119 @@ begin
   Result := -1;
 end;
 
+function FindProcOverload(const name: AnsiString; nParams: Integer; const ptypes: array of TTypeKind; const parr: array of Boolean; const pbyref: array of Boolean): Integer;
+var i, j: Integer; match: Boolean;
+begin
+  for i := 0 to ProcCount-1 do
+  begin
+    if Procs[i].Name = name then
+    begin
+      if Procs[i].ParamCount = nParams then
+      begin
+        match := True;
+        for j := 0 to nParams-1 do
+        begin
+          if (Procs[i].Params[j].TypeKind <> ptypes[j]) or
+             (Procs[i].Params[j].IsArray <> parr[j]) or
+             (Procs[i].Params[j].IsRef <> pbyref[j]) then
+            match := False;
+        end;
+        if match then
+        begin
+          Result := i;
+          Exit;
+        end;
+      end;
+    end;
+  end;
+  Result := -1;
+end;
+
+function TypesCompatible(pType, aType: TTypeKind): Boolean;
+begin
+  if pType = aType then
+  begin
+    Result := True;
+    Exit;
+  end;
+  if (pType in [tyInteger, tyBoolean, tyChar]) and
+     (aType in [tyInteger, tyBoolean, tyChar]) then
+  begin
+    Result := True;
+    Exit;
+  end;
+  if (pType = tyString) and (aType = tyChar) then
+  begin
+    Result := True;
+    Exit;
+  end;
+  Result := False;
+end;
+
+function MatchProcCall(const name: AnsiString; nArgs: Integer; const argTypes: array of TTypeKind): Integer;
+var i, j: Integer; match: Boolean;
+begin
+  { Phase 1: Try exact match }
+  for i := 0 to ProcCount-1 do
+  begin
+    if Procs[i].Name = name then
+    begin
+      if Procs[i].ParamCount = nArgs then
+      begin
+        match := True;
+        for j := 0 to nArgs-1 do
+        begin
+          if Procs[i].Params[j].TypeKind <> argTypes[j] then
+            match := False;
+        end;
+        if match then
+        begin
+          Result := i;
+          Exit;
+        end;
+      end;
+    end;
+  end;
+
+  { Phase 2: Try compatible match }
+  for i := 0 to ProcCount-1 do
+  begin
+    if Procs[i].Name = name then
+    begin
+      if Procs[i].ParamCount = nArgs then
+      begin
+        match := True;
+        for j := 0 to nArgs-1 do
+        begin
+          if not TypesCompatible(Procs[i].Params[j].TypeKind, argTypes[j]) then
+            match := False;
+        end;
+        if match then
+        begin
+          Result := i;
+          Exit;
+        end;
+      end;
+    end;
+  end;
+
+  writeln('Mismatch in MatchProcCall: name = ', name, ', nArgs = ', nArgs);
+  for j := 0 to nArgs-1 do
+    writeln('  arg[', j, '] = ', Ord(argTypes[j]));
+  for i := 0 to ProcCount-1 do
+  begin
+    if Procs[i].Name = name then
+    begin
+      writeln('  Candidate idx ', i, ': paramCount = ', Procs[i].ParamCount);
+      for j := 0 to Procs[i].ParamCount-1 do
+        writeln('    param[', j, '] = ', Ord(Procs[i].Params[j].TypeKind));
+    end;
+  end;
+
+  Result := -1;
+end;
+
+
 function RegisterProc(const name: AnsiString; isFunc: Boolean;
   retType: TTypeKind; nParams: Integer;
   const pnames: array of AnsiString; const ptypes: array of TTypeKind): Integer;

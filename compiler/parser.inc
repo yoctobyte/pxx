@@ -620,12 +620,13 @@ end;
 
 procedure ParseFactor;
 var name: AnsiString; recName: Integer; idx, pi, i, node, left, prevTok, valNode: Integer; tk: TTypeKind; op, argSeq, argSeq2, argSeq3, lastArg, argIdx, exprNode: Integer;
+    nArgs, argsHead, currArg: Integer; argTypes: array[0..7] of TTypeKind;
 begin
   LastExprTk := tyInteger;
   case CurTok.Kind of
     tkInteger:
     begin
-      node := AllocNode(AN_INT_LIT); ASTIVal[node] := CurTok.IVal; CurASTNode := node; Next;
+      node := AllocNode(AN_INT_LIT); ASTIVal[node] := CurTok.IVal; ASTTk[node] := Ord(tyInteger); CurASTNode := node; Next;
     end;
     tkTrue:
     begin
@@ -670,6 +671,7 @@ begin
       op := Ord(CurTok.Kind);
       Next; Expect(tkLParen, '('); ParseExpr; Expect(tkRParen, ')');
       node := AllocNode(AN_CALL); ASTIVal[node] := -op;
+      if op = Ord(tkChr) then ASTTk[node] := Ord(tyChar) else ASTTk[node] := Ord(tyInteger);
       argSeq := AllocNode(AN_ARG); ASTLeft[argSeq] := CurASTNode;
       ASTLeft[node] := argSeq;
       CurASTNode := node;
@@ -679,6 +681,7 @@ begin
       op := Ord(CurTok.Kind);
       Next; Expect(tkLParen, '('); ParseExpr; Expect(tkRParen, ')');
       node := AllocNode(AN_CALL); ASTIVal[node] := -op;
+      ASTTk[node] := Ord(tyInteger);
       argSeq := AllocNode(AN_ARG); ASTLeft[argSeq] := CurASTNode;
       ASTLeft[node] := argSeq;
       CurASTNode := node;
@@ -691,7 +694,7 @@ begin
       valNode := ParseLValueAST(idx);
       if idx < 0 then Error('Length: undefined variable');
       Expect(tkRParen, ')');
-      node := AllocNode(AN_CALL); ASTIVal[node] := -Ord(tkLength);
+      node := AllocNode(AN_CALL); ASTIVal[node] := -Ord(tkLength); ASTTk[node] := Ord(tyInteger);
       argSeq := AllocNode(AN_ARG); ASTLeft[argSeq] := valNode;
       ASTLeft[node] := argSeq;
       CurASTNode := node;
@@ -828,45 +831,72 @@ begin
       end;
       if (idx >= 0) and (Syms[idx].Kind = skConst) then
       begin
-        node := AllocNode(AN_INT_LIT); ASTIVal[node] := Syms[idx].ConstVal; CurASTNode := node; Next;
+        node := AllocNode(AN_INT_LIT); ASTIVal[node] := Syms[idx].ConstVal; ASTTk[node] := Ord(Syms[idx].TypeKind); CurASTNode := node; Next;
       end
-      else if (pi >= 0) and Procs[pi].IsFunc then
+      else if (pi >= 0) and Procs[pi].IsFunc and (Tokens[TokPos].Kind = tkLParen) then
       begin
         Next;
-        node := AllocNode(AN_CALL); ASTIVal[node] := pi; ASTTk[node] := Ord(Procs[pi].RetType);
+        Expect(tkLParen, '(');
+        argsHead := -1;
         lastArg := -1;
-        if CurTok.Kind = tkLParen then
+        nArgs := 0;
+        while CurTok.Kind <> tkRParen do
         begin
-          Next;
-          for i := 0 to Procs[pi].ParamCount-1 do
-          begin
-            if Procs[pi].Params[i].IsRef or Procs[pi].Params[i].IsArray then
-            begin
-              if CurTok.Kind <> tkIdent then Error('by-reference argument must be a variable');
-              argIdx := FindSym(CurTok.SVal); Next;
-              exprNode := ParseLValueAST(argIdx);
-            end
-            else
-            begin
-              ParseExpr;
-              exprNode := CurASTNode;
-            end;
-            
-            argSeq := AllocNode(AN_ARG);
-            ASTLeft[argSeq] := exprNode;
-            if lastArg = -1 then
-              ASTLeft[node] := argSeq
-            else
-              ASTRight[lastArg] := argSeq;
-            lastArg := argSeq;
-            
-            if i < Procs[pi].ParamCount-1 then Expect(tkComma, ',');
-          end;
-          Expect(tkRParen, ')');
+          ParseExpr;
+          argSeq := AllocNode(AN_ARG);
+          ASTLeft[argSeq] := CurASTNode;
+          if argsHead = -1 then
+            argsHead := argSeq
+          else
+            ASTRight[lastArg] := argSeq;
+          lastArg := argSeq;
+          Inc(nArgs);
+          if CurTok.Kind = tkComma then
+            Next
+          else if CurTok.Kind <> tkRParen then
+            Error('expected comma or close parenthesis');
         end;
+        Expect(tkRParen, ')');
+
+        currArg := argsHead;
+        for i := 0 to nArgs - 1 do
+        begin
+          exprNode := ASTLeft[currArg];
+          argTypes[i] := IntToTypeKind(ASTTk[exprNode]);
+          currArg := ASTRight[currArg];
+        end;
+
+        pi := MatchProcCall(name, nArgs, argTypes);
+        if pi < 0 then
+          Error('no overload of ' + name + ' matches these arguments');
+
+        currArg := argsHead;
+        for i := 0 to nArgs - 1 do
+        begin
+          exprNode := ASTLeft[currArg];
+          if Procs[pi].Params[i].IsRef or Procs[pi].Params[i].IsArray then
+          begin
+            if not ((ASTKind[exprNode] = AN_IDENT) or (ASTKind[exprNode] = AN_INDEX) or (ASTKind[exprNode] = AN_FIELD)) then
+              Error('by-reference argument must be a variable');
+          end;
+          currArg := ASTRight[currArg];
+        end;
+
+        node := AllocNode(AN_CALL);
+        ASTIVal[node] := pi;
+        ASTTk[node] := Ord(Procs[pi].RetType);
+        ASTLeft[node] := argsHead;
         CurASTNode := node;
       end
-      else if idx >= 0 then
+      else if (pi >= 0) and Procs[pi].IsFunc and (Procs[pi].ParamCount = 0) then
+      begin
+        Next;
+        node := AllocNode(AN_CALL);
+        ASTIVal[node] := pi;
+        ASTTk[node] := Ord(Procs[pi].RetType);
+        CurASTNode := node;
+      end
+      else
       begin
         Next;
         CurASTNode := ParseLValueAST(idx);
@@ -891,6 +921,7 @@ begin
     right := CurASTNode;
     node := AllocNode(AN_BINOP); ASTIVal[node] := Ord(op); ASTLeft[node] := left; ASTRight[node] := right;
     ASTSOffset[node] := opSOffset; ASTSLen[node] := opSLen;
+    if op = tkAnd then ASTTk[node] := ASTTk[left] else ASTTk[node] := Ord(tyInteger);
     CurASTNode := node;
   end;
 end;
@@ -902,7 +933,7 @@ begin
   ParseTerm;
   if neg then
   begin
-    node := AllocNode(AN_NEG); ASTLeft[node] := CurASTNode; CurASTNode := node;
+    node := AllocNode(AN_NEG); ASTLeft[node] := CurASTNode; ASTTk[node] := ASTTk[CurASTNode]; CurASTNode := node;
   end;
   while CurTok.Kind in [tkPlus, tkMinus, tkOr] do
   begin
@@ -912,7 +943,11 @@ begin
     right := CurASTNode;
     node := AllocNode(AN_BINOP); ASTIVal[node] := Ord(op); ASTLeft[node] := left; ASTRight[node] := right;
     if (op = tkPlus) and ((ASTTk[left] = Ord(tyString)) or (ASTTk[right] = Ord(tyString))) then
-      ASTTk[node] := Ord(tyString);
+      ASTTk[node] := Ord(tyString)
+    else if op = tkOr then
+      ASTTk[node] := ASTTk[left]
+    else
+      ASTTk[node] := Ord(tyInteger);
     CurASTNode := node;
   end;
 end;
@@ -1244,6 +1279,7 @@ function ParseStatementAST: Integer;
 var
   name: AnsiString;
   idx, pi, i, si, node, valNode, stepsNode, opNode, argSeq, argIdx, exprNode, lastArg: Integer;
+  nArgs, argsHead, currArg: Integer; argTypes: array[0..7] of TTypeKind;
   isLn: Boolean;
 begin
   node := -1;
@@ -1432,43 +1468,66 @@ begin
       else
       begin
         pi := FindProc(name);
-        if pi >= 0 then
+        if (pi >= 0) and (Tokens[TokPos].Kind = tkLParen) then
+        begin
+          Next;
+          Expect(tkLParen, '(');
+          argsHead := -1;
+          lastArg := -1;
+          nArgs := 0;
+          while CurTok.Kind <> tkRParen do
+          begin
+            ParseExpr;
+            argSeq := AllocNode(AN_ARG);
+            ASTLeft[argSeq] := CurASTNode;
+            if argsHead = -1 then
+              argsHead := argSeq
+            else
+              ASTRight[lastArg] := argSeq;
+            lastArg := argSeq;
+            Inc(nArgs);
+            if CurTok.Kind = tkComma then
+              Next
+            else if CurTok.Kind <> tkRParen then
+              Error('expected comma or close parenthesis');
+          end;
+          Expect(tkRParen, ')');
+
+          currArg := argsHead;
+          for i := 0 to nArgs - 1 do
+          begin
+            exprNode := ASTLeft[currArg];
+            argTypes[i] := IntToTypeKind(ASTTk[exprNode]);
+            currArg := ASTRight[currArg];
+          end;
+
+          pi := MatchProcCall(name, nArgs, argTypes);
+          if pi < 0 then
+            Error('no overload of ' + name + ' matches these arguments');
+
+          currArg := argsHead;
+          for i := 0 to nArgs - 1 do
+          begin
+            exprNode := ASTLeft[currArg];
+            if Procs[pi].Params[i].IsRef or Procs[pi].Params[i].IsArray then
+            begin
+              if not ((ASTKind[exprNode] = AN_IDENT) or (ASTKind[exprNode] = AN_INDEX) or (ASTKind[exprNode] = AN_FIELD)) then
+                Error('by-reference argument must be a variable');
+            end;
+            currArg := ASTRight[currArg];
+          end;
+
+          node := AllocNode(AN_CALL);
+          ASTIVal[node] := pi;
+          ASTLeft[node] := argsHead;
+        end
+        else if (pi >= 0) and (Procs[pi].ParamCount = 0) then
         begin
           Next;
           node := AllocNode(AN_CALL);
           ASTIVal[node] := pi;
-          lastArg := -1;
-          if CurTok.Kind = tkLParen then
-          begin
-            Next;
-            for i := 0 to Procs[pi].ParamCount-1 do
-            begin
-              if Procs[pi].Params[i].IsRef or Procs[pi].Params[i].IsArray then
-              begin
-                if CurTok.Kind <> tkIdent then Error('by-reference argument must be a variable');
-                argIdx := FindSym(CurTok.SVal); Next;
-                exprNode := ParseLValueAST(argIdx);
-              end
-              else
-              begin
-                ParseExpr;
-                exprNode := CurASTNode;
-              end;
-              
-              argSeq := AllocNode(AN_ARG);
-              ASTLeft[argSeq] := exprNode;
-              if lastArg = -1 then
-                ASTLeft[node] := argSeq
-              else
-                ASTRight[lastArg] := argSeq;
-              lastArg := argSeq;
-              
-              if i < Procs[pi].ParamCount-1 then Expect(tkComma, ',');
-            end;
-            Expect(tkRParen, ')');
-          end;
         end;
-        
+
         if node = -1 then
         begin
           idx := FindSym(name); Next;
@@ -1857,7 +1916,8 @@ begin
     begin
       Next; Eat(tkSemicolon);
     end;
-    if FindProc(name) < 0 then
+    pi := FindProcOverload(name, nparams, ptypes, parr, pbyref);
+    if pi < 0 then
     begin
       pi := RegisterProc(name, isFunc, retType, nparams, pnames, ptypes);
       Procs[pi].BodyAddr := -1;
@@ -1871,7 +1931,7 @@ begin
   end;
 
   { Register or resolve }
-  pi := FindProc(name);
+  pi := FindProcOverload(name, nparams, ptypes, parr, pbyref);
   if pi < 0 then
     pi := RegisterProc(name, isFunc, retType, nparams, pnames, ptypes);
   Procs[pi].BodyAddr := CodeLen;
