@@ -3,13 +3,16 @@
 Target: Delphi-compatible `try/except/finally/raise` via `setjmp`/`longjmp`.
 No DWARF unwind tables. No destructors. Correct Pascal semantics.
 
-**Status (2026-05-27):** Phases 1 and 2 implemented. PXX supports untyped
-`try/except` catch-all blocks, optional `else` on that catch-all form,
-`try/finally`, `raise <expr>`, `raise;` inside a handler, generic unhandled
-diagnostics, and `--no-unhandled-handler` / `-fno-unhandled-handler`.
-Typed `on` handlers, exception classes, and class/message diagnostics remain
-planned below. `Exit`, `break`, and `continue` execute crossed finalizers and
-remove crossed protected frames before reaching their control-flow target.
+**Status (2026-05-27):** Phases 1 and 2 and exact-class typed dispatch are
+implemented. PXX supports catch-all and `on E: TClass do` `try/except`
+handlers, optional `else`, `try/finally`, `raise <expr>`, `raise;` inside a
+handler, generic unhandled diagnostics, and
+`--no-unhandled-handler` / `-fno-unhandled-handler`. Typed handlers bind an
+existing user-class object and match its declared class exactly. A built-in
+`Exception` hierarchy, inherited matching, message constructors, and
+class/message diagnostics remain planned below. `Exit`, `break`, and
+`continue` execute crossed finalizers and remove crossed protected frames
+before reaching their control-flow target.
 
 ---
 
@@ -40,7 +43,7 @@ end;
 
 raise;                          { re-raise inside except block }
 
-{ Planned typed form }
+{ Exact user-class matching implemented }
 try
   <statements>
 except
@@ -48,6 +51,7 @@ except
   else <handler>;               { catch-all }
 end;
 
+{ Planned once class hierarchy/message support exists }
 raise ESomeException.Create('msg');
 ```
 
@@ -60,8 +64,9 @@ raise ESomeException.Create('msg');
                           (for minimal binaries; exits with code 1 silently)
 ```
 
-Phase 1 default: unhandled exception prints `Unhandled exception`, then exits
-with status 1. Phase 3 extends this to class name and message.
+The default unhandled path prints `Unhandled exception`, then exits with
+status 1. The remaining class-runtime work extends this to class name and
+message.
 
 Stored as `Boolean` flag alongside `DebugTrace` / `StrictOverload` in `defs.inc`.
 
@@ -342,10 +347,11 @@ Type matching in `on E: EClass` walks the parent chain.
 - Implemented: bare `raise;` from an exception handler.
 
 ### Phase 3 — typed handlers + class hierarchy
+- Implemented: `on E: TClass do` binds and matches currently supported
+  user-class instances by exact declared class.
 - `Exception` base class in compiler builtins
 - Class descriptor with name + parent
-- `on E: EClass do` type matching (walk parent chain)
-- Re-raise (`raise;`)
+- Inherited `on E: EClass do` type matching (walk parent chain)
 - `__frankon_unhandled` prints class name + Message
 
 ### Phase 4 — float integration

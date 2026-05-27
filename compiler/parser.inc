@@ -1411,6 +1411,7 @@ begin
         node := AllocNode(AN_CALL);
         ASTIVal[node] := -Ord(tkGetMem);
         ASTTk[node] := Ord(tyClass);
+        ASTRight[node] := idx; { preserve created user-class id for typed raises }
         
         exprNode := AllocNode(AN_INT_LIT);
         ASTIVal[exprNode] := prevTok;
@@ -1885,6 +1886,8 @@ end;
 function ParseTryStatementAST: Integer;
 var
   trySeq, tryLast, actionSeq, stmtNode, node: Integer;
+  handlerHead, lastHandler, handlerNode, handlerVar, ci, recId: Integer;
+  handlerName, className: AnsiString;
 begin
   trySeq := AllocNode(AN_SEQ);
   tryLast := trySeq;
@@ -1912,14 +1915,66 @@ begin
   else
   begin
     Expect(tkExcept, 'except');
+    handlerHead := -1;
+    lastHandler := -1;
     if CurTok.Kind = tkOn then
-      Error('typed exception handlers are not implemented yet');
-    Eat(tkElse); { Catch-all handler form. }
-    Inc(ExceptionHandlerParseDepth);
-    actionSeq := ParseBlockAST;
-    Dec(ExceptionHandlerParseDepth);
+    begin
+      while CurTok.Kind = tkOn do
+      begin
+        Next;
+        if CurTok.Kind <> tkIdent then Error('on: expected handler variable');
+        handlerName := CurTok.SVal;
+        Next;
+        Expect(tkColon, ':');
+        if CurTok.Kind <> tkIdent then Error('on: expected class type');
+        className := CurTok.SVal;
+        ci := FindUClass(className);
+        if ci < 0 then Error('on: unknown exception class');
+        recId := REC_UCLASS_BASE + ci;
+        Next;
+        Expect(tkDo, 'do');
+        handlerVar := AllocVar(handlerName, tyClass);
+        Syms[handlerVar].RecName := recId;
+        Inc(ExceptionHandlerParseDepth);
+        actionSeq := ParseStatementAST;
+        Dec(ExceptionHandlerParseDepth);
+        Eat(tkSemicolon);
+        handlerNode := AllocNode(AN_EXC_HANDLER);
+        ASTIVal[handlerNode] := recId;
+        ASTSOffset[handlerNode] := handlerVar;
+        ASTLeft[handlerNode] := actionSeq;
+        if handlerHead = -1 then handlerHead := handlerNode
+        else ASTRight[lastHandler] := handlerNode;
+        lastHandler := handlerNode;
+      end;
+      if Eat(tkElse) then
+      begin
+        Inc(ExceptionHandlerParseDepth);
+        actionSeq := ParseBlockAST;
+        Dec(ExceptionHandlerParseDepth);
+        handlerNode := AllocNode(AN_EXC_HANDLER);
+        ASTIVal[handlerNode] := -1;
+        ASTSOffset[handlerNode] := -1;
+        ASTLeft[handlerNode] := actionSeq;
+        ASTRight[lastHandler] := handlerNode;
+        lastHandler := handlerNode;
+      end;
+    end
+    else
+    begin
+      Eat(tkElse); { Untyped catch-all handler form. }
+      Inc(ExceptionHandlerParseDepth);
+      actionSeq := ParseBlockAST;
+      Dec(ExceptionHandlerParseDepth);
+      handlerNode := AllocNode(AN_EXC_HANDLER);
+      ASTIVal[handlerNode] := -1;
+      ASTSOffset[handlerNode] := -1;
+      ASTLeft[handlerNode] := actionSeq;
+      handlerHead := handlerNode;
+    end;
     Expect(tkEnd, 'end');
     node := AllocNode(AN_TRY_EXCEPT);
+    actionSeq := handlerHead;
   end;
   ASTLeft[node] := trySeq;
   ASTRight[node] := actionSeq;

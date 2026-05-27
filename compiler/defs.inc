@@ -59,9 +59,10 @@ const
   AN_EXIT      = 24;
   AN_BREAK     = 25;
   AN_CONTINUE  = 26;
-  AN_TRY_EXCEPT = 27; { Left = protected block; Right = catch-all handler block }
+  AN_TRY_EXCEPT = 27; { Left = protected block; Right = AN_EXC_HANDLER chain }
   AN_RAISE     = 28;  { Left = raised expression }
   AN_TRY_FINALLY = 29; { Left = protected block; Right = finalizer block }
+  AN_EXC_HANDLER = 30; { IVal = class recId or -1; Left = body; Right = next }
 
   EXC_FRAME_SIZE = 80;
   EXC_JMP_OFFSET = 8;

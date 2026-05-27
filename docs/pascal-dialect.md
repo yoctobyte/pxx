@@ -126,8 +126,8 @@ Tests presently exercise `<`, `>`, `=`, and `+`.
 
 ## Exceptions
 
-Exception handling currently supports untyped catch-all handlers and
-finalizers:
+Exception handling supports catch-all handlers, exact user-class typed
+handlers, and finalizers:
 
 ```pascal
 try
@@ -141,14 +141,21 @@ try
 finally
   writeln('cleanup');
 end;
+
+try
+  raise TParseError.Create;
+except
+  on E: TParseError do writeln(E.Code);
+end;
 ```
 
 `except else` is also accepted as an explicit catch-all form. A raised
 expression can cross procedure and unit boundaries, and `raise;` is accepted
-inside a handler. Typed `on E: EClass do` handlers and exception
-class/message objects are not implemented yet. `Exit`, `break`, and
-`continue` run finalizers and remove handler frames only when their
-destination leaves protected code.
+inside a handler. `on E: TClass do` binds a raised object and matches its
+declared user-class type exactly. Class inheritance, a built-in `Exception`
+base/message constructor, inherited matches, and class/message diagnostics
+are not implemented yet. `Exit`, `break`, and `continue` run finalizers and
+remove handler frames only when their destination leaves protected code.
 
 ## Compatibility Claim
 

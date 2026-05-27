@@ -28,7 +28,8 @@ Implemented Pascal capabilities include:
 - Generic classes and explicitly specialized generic routines.
 - Routine overloading and opt-in strict declaration checking.
 - Class/record operator implementations.
-- Exceptions: untyped `try/except`, `try/finally`, expression raise, and re-raise.
+- Exceptions: `try/except` including exact user-class typed handlers,
+  `try/finally`, expression raise, and re-raise.
 - Conditional compilation with the built-in `PXX` identity symbol.
 
 See [Pascal Dialect And Compatibility](pascal-dialect.md) for syntax and

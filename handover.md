@@ -79,9 +79,9 @@ markers and command-line `-dNAME` / `-uNAME`. Coverage is in
 `test/test_strict_overload.pas` and `test/test_strict_overload_error.pas`.
 See `COMPATIBILITY.md` for the compatibility inventory.
 
-### Exceptions (Phases 1-2)
-Untyped catch-all exception blocks, finalizers, expression raises, and
-handler re-raise are implemented:
+### Exceptions (Phases 1-2 plus exact typed dispatch)
+Catch-all exception blocks, exact user-class typed handlers, finalizers,
+expression raises, and handler re-raise are implemented:
 
 ```pascal
 try
@@ -95,16 +95,25 @@ try
 finally
   writeln('cleanup');
 end;
+
+try
+  raise TParseError.Create;
+except
+  on E: TParseError do writeln(E.Code);
+end;
 ```
 
 Raised values cross procedure and Pascal-unit boundaries through generated
 integer-state `setjmp`/`longjmp` helpers and an 80-byte linked frame per
-active `try`. Unhandled raises print `Unhandled exception` and exit with
-status 1; `--no-unhandled-handler` and `-fno-unhandled-handler` suppress that
-message. Typed `on` handlers and exception classes remain subsequent phases
-from `docs/exceptions-plan.md`. `Exit`, `break`, and `continue` track the
-nearest target's exception depth, execute crossed finalizers in order, and
-pop only protected frames crossed by the jump.
+active `try`. An `on E: TClass do` clause binds a raised user-class object and
+matches its declared class exactly. Unhandled raises print
+`Unhandled exception` and exit with status 1; `--no-unhandled-handler` and
+`-fno-unhandled-handler` suppress that message. Class inheritance, a built-in
+`Exception` hierarchy/message constructor, inherited matches, and richer
+unhandled diagnostics remain subsequent work from
+`docs/exceptions-plan.md`. `Exit`, `break`, and `continue` track the nearest
+target's exception depth, execute crossed finalizers in order, and pop only
+protected frames crossed by the jump.
 
 ### User-defined classes with fields and methods
 ```pascal

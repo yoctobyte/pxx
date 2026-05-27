@@ -47,6 +47,8 @@ begin
     else
       Result := REC_NONE;
   end
+  else if (ASTKind[node] = AN_CALL) and (ASTIVal[node] = -Ord(tkGetMem)) then
+    Result := ASTRight[node]
   else
     Result := REC_NONE;
 end;
@@ -500,6 +502,7 @@ var
   initNode, limitNode, isDownNode, bodyNode, seqNode, argNode, exprNode: Integer;
   si, vidx, specialId, arg1, arg2, arg3, pathIdx, dstIdx, srcIdx, rhsNode, branchJeStart: Integer;
   breakBase, continueBase, continueTarget: Integer;
+  handlerNode, handlerNextJmp: Integer;
   lhsTk, rhsTk, dummyTk: TTypeKind;
   recName, rhsRecName, opOvrlIdx: Integer;
   down: Boolean;
@@ -1247,7 +1250,9 @@ begin
       begin
         GenAST(ASTLeft[node]);
         EmitB($48); EmitB($89); EmitB($04); EmitB($25); EmitGlobRef(BSS_EXC_OBJ);
-        MovRaxImm(0);
+        dummyRec := ResolveNodeRec(ASTLeft[node]);
+        if dummyRec < REC_UCLASS_BASE then dummyRec := REC_NONE;
+        MovRaxImm(dummyRec);
         EmitB($48); EmitB($89); EmitB($04); EmitB($25); EmitGlobRef(BSS_EXC_CLS);
       end;
       EmitCodeCall(ExcRaiseAddr);
@@ -1277,11 +1282,35 @@ begin
       EmitB($48); EmitB($8B); EmitB($04); EmitB($24);
       EmitB($48); EmitB($89); EmitB($04); EmitB($25); EmitGlobRef(BSS_EXC_TOP);
       EmitB($48); EmitB($83); EmitB($C4); EmitB(EXC_FRAME_SIZE);
-      GenAST(ASTRight[node]);
-      MovRaxImm(0);
-      EmitB($48); EmitB($89); EmitB($04); EmitB($25); EmitGlobRef(BSS_EXC_OBJ);
-      EmitB($48); EmitB($89); EmitB($04); EmitB($25); EmitGlobRef(BSS_EXC_CLS);
-
+      handlerNode := ASTRight[node];
+      jmpCount := 0;
+      while handlerNode <> -1 do
+      begin
+        handlerNextJmp := -1;
+        if ASTIVal[handlerNode] >= 0 then
+        begin
+          EmitB($48); EmitB($8B); EmitB($04); EmitB($25); EmitGlobRef(BSS_EXC_CLS);
+          EmitB($48); EmitB($3D); EmitI32(ASTIVal[handlerNode]);
+          EmitB($0F); EmitB($85); handlerNextJmp := CodeLen; EmitI32(0);
+        end;
+        if ASTSOffset[handlerNode] >= 0 then
+        begin
+          EmitB($48); EmitB($8B); EmitB($04); EmitB($25); EmitGlobRef(BSS_EXC_OBJ);
+          EmitStoreVar(ASTSOffset[handlerNode]);
+        end;
+        GenAST(ASTLeft[handlerNode]);
+        MovRaxImm(0);
+        EmitB($48); EmitB($89); EmitB($04); EmitB($25); EmitGlobRef(BSS_EXC_OBJ);
+        EmitB($48); EmitB($89); EmitB($04); EmitB($25); EmitGlobRef(BSS_EXC_CLS);
+        if jmpCount >= 256 then Error('too many exception handlers');
+        EmitB($E9); jmpPositions[jmpCount] := CodeLen; Inc(jmpCount); EmitI32(0);
+        if handlerNextJmp >= 0 then
+          Patch32(handlerNextJmp, CodeLen - (handlerNextJmp + 4));
+        handlerNode := ASTRight[handlerNode];
+      end;
+      EmitCodeCall(ExcRaiseAddr); { no typed handler matched }
+      for i := 0 to jmpCount - 1 do
+        Patch32(jmpPositions[i], CodeLen - (jmpPositions[i] + 4));
       Patch32(elseJmp, CodeLen - (elseJmp + 4));
     end;
     AN_TRY_FINALLY:
