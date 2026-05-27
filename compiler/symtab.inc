@@ -122,6 +122,8 @@ const
   REC_TPROC = 8;
   REC_TRAWTOKEN = 9;
   REC_TMYCLASS = 10;
+  REC_TTEMPLATE = 11;
+  REC_TSPECIALIZATION = 12;
 
 function IsRecordType(const lo: AnsiString): Integer;
 var ci: Integer; lo2: AnsiString;
@@ -136,7 +138,9 @@ begin
   else if lo = 'TParam' then Result := REC_TPARAM
   else if lo = 'TProc' then Result := REC_TPROC
   else if lo = 'TRawToken' then Result := REC_TRAWTOKEN
-  else if (lo = 'TMyClass') or (lo = 'tmyclass') then Result := REC_TMYCLASS;
+  else if (lo = 'TMyClass') or (lo = 'tmyclass') then Result := REC_TMYCLASS
+  else if lo = 'TTemplate' then Result := REC_TTEMPLATE
+  else if lo = 'TSpecialization' then Result := REC_TSPECIALIZATION;
   if Result = REC_NONE then
   begin
     lo2 := lo;
@@ -171,6 +175,8 @@ begin
   else if rec = REC_TPROC then Result := 2688
   else if rec = REC_TRAWTOKEN then Result := 40
   else if rec = REC_TMYCLASS then Result := 16
+  else if rec = REC_TTEMPLATE then Result := 544
+  else if rec = REC_TSPECIALIZATION then Result := 800
   else if rec >= REC_UCLASS_BASE then Result := UClsSize_[rec - REC_UCLASS_BASE];
 end;
 
@@ -252,6 +258,20 @@ begin
   begin
     if (field = 'x') or (field = 'X') then Result := 0
     else if (field = 'y') or (field = 'Y') then Result := 8;
+  end;
+  if rec = REC_TTEMPLATE then
+  begin
+    if field = 'Name' then Result := 0
+    else if field = 'Param' then Result := 264
+    else if field = 'TokStart' then Result := 528
+    else if field = 'TokCount' then Result := 536;
+  end
+  else if rec = REC_TSPECIALIZATION then
+  begin
+    if field = 'Name' then Result := 0
+    else if field = 'TemplateName' then Result := 264
+    else if field = 'ConcreteType' then Result := 528
+    else if field = 'ConcreteName' then Result := 536;
   end
   else if rec >= REC_UCLASS_BASE then
   begin
@@ -291,6 +311,14 @@ begin
   else if rec = REC_TMYCLASS then
   begin
     Result := tyInteger;
+  end;
+  if rec = REC_TTEMPLATE then
+  begin
+    if (field = 'Name') or (field = 'Param') then Result := tyString;
+  end
+  else if rec = REC_TSPECIALIZATION then
+  begin
+    if (field = 'Name') or (field = 'TemplateName') or (field = 'ConcreteName') then Result := tyString;
   end
   else if rec >= REC_UCLASS_BASE then
   begin

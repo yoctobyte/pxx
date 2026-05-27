@@ -509,6 +509,19 @@ begin
   Result := unitStart;
 end;
 
+procedure InsertTokens(insertPos: Integer; const srcTokens: array of TRawToken; count: Integer);
+var i: Integer;
+begin
+  if TokCount + count >= MAX_TOKENS then Error('token buffer overflow');
+  { Shift right }
+  for i := TokCount - 1 downto insertPos do
+    Tokens[i + count] := Tokens[i];
+  { Copy }
+  for i := 0 to count - 1 do
+    Tokens[insertPos + i] := srcTokens[i];
+  Inc(TokCount, count);
+end;
+
 procedure Next;
 var i, off, len, j: Integer;
 begin

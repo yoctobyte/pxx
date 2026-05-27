@@ -140,6 +140,203 @@ function ParseStatementAST: Integer; forward;
 function ParseBlockAST: Integer; forward;
 procedure CompileAST(node: Integer); forward;
 
+function GetTokenStrFromRaw(const tok: TRawToken): AnsiString;
+var s: AnsiString; i: Integer;
+begin
+  s := '';
+  for i := 0 to tok.SLen - 1 do
+    AppendChar(s, TokChars[tok.SOffset + i]);
+  Result := s;
+end;
+
+procedure SpecializeStream(templateIdx: Integer; tokStart, count: Integer; const specName, paramName, concreteName: AnsiString; concreteType: TTokenKind);
+var
+  i, j: Integer;
+  tok: TRawToken;
+  subTokens: array[0..MAX_TEMPLATE_TOKENS-1] of TRawToken;
+  subCount: Integer;
+  s: AnsiString;
+begin
+  subCount := 0;
+  for i := 0 to count - 1 do
+  begin
+    tok := TemplateTokens[tokStart + i];
+    
+    if tok.Kind = tkIdent then
+    begin
+      s := GetTokenStrFromRaw(tok);
+      if CaseEqual(s, Templates[templateIdx].Name) then
+      begin
+        tok.SOffset := TokCharLen;
+        tok.SLen := Length(specName);
+        for j := 1 to Length(specName) do
+        begin
+          TokChars[TokCharLen] := specName[j];
+          Inc(TokCharLen);
+        end;
+      end
+      else if CaseEqual(s, paramName) then
+      begin
+        tok.Kind := concreteType;
+        tok.SOffset := TokCharLen;
+        tok.SLen := Length(concreteName);
+        for j := 1 to Length(concreteName) do
+        begin
+          TokChars[TokCharLen] := concreteName[j];
+          Inc(TokCharLen);
+        end;
+      end;
+    end;
+    
+    subTokens[subCount] := tok;
+    Inc(subCount);
+  end;
+  
+  InsertTokens(TokPos, subTokens, subCount);
+end;
+
+procedure ParseGenericTemplate;
+var
+  templateName, paramName: AnsiString;
+  depth, startTok, cur, finalCur: Integer;
+begin
+  if CurTok.Kind <> tkIdent then Error('expected generic class name');
+  templateName := CurTok.SVal; Next;
+  
+  Expect(tkLt, '<');
+  if CurTok.Kind <> tkIdent then Error('expected generic parameter name');
+  paramName := CurTok.SVal; Next;
+  Expect(tkGt, '>');
+  Expect(tkEq, '=');
+  
+  if CurTok.Kind <> tkClass then Error('generic templates must be class declarations');
+  
+  startTok := TokPos - 1;
+  depth := 1;
+  cur := TokPos;
+  while (cur < TokCount) and (depth > 0) do
+  begin
+    if Tokens[cur].Kind in [tkClass, tkRecord] then
+      Inc(depth)
+    else if Tokens[cur].Kind = tkEnd then
+      Dec(depth);
+    Inc(cur);
+  end;
+  
+  if (cur < TokCount) and (Tokens[cur].Kind = tkSemicolon) then
+    Inc(cur);
+  
+  finalCur := cur;  { save before for-loop clobbers 'cur' }
+  
+  if TemplateCount >= MAX_TEMPLATES then Error('too many generic templates');
+  Templates[TemplateCount].Name := templateName;
+  Templates[TemplateCount].Param := paramName;
+  Templates[TemplateCount].TokStart := TemplateTokenCount;
+  Templates[TemplateCount].TokCount := 0;
+  
+  for cur := startTok to finalCur - 1 do
+  begin
+    if TemplateTokenCount >= MAX_TEMPLATE_TOKENS then
+      Error('generic template tokens overflow');
+    TemplateTokens[TemplateTokenCount] := Tokens[cur];
+    Inc(TemplateTokenCount);
+    Templates[TemplateCount].TokCount := Templates[TemplateCount].TokCount + 1;
+  end;
+  
+  Inc(TemplateCount);
+  
+  TokPos := finalCur;
+  Next;
+end;
+
+procedure ParseSpecialization(const specName: AnsiString);
+var
+  templateName, concreteName: AnsiString;
+  concreteType: TTokenKind;
+  ti, i: Integer;
+begin
+  Next; { consume 'specialize' }
+  if CurTok.Kind <> tkIdent then Error('expected generic template name');
+  templateName := CurTok.SVal; Next;
+  
+  Expect(tkLt, '<');
+  if (CurTok.Kind <> tkIdent) and (CurTok.Kind <> tkInteger_T) and (CurTok.Kind <> tkBoolean_T) and (CurTok.Kind <> tkChar_T) and (CurTok.Kind <> tkString_T) then
+    Error('expected concrete type name');
+  concreteName := CurTok.SVal;
+  concreteType := CurTok.Kind;
+  Next;
+  Expect(tkGt, '>');
+  Eat(tkSemicolon);
+  
+  ti := -1;
+  for i := 0 to TemplateCount - 1 do
+    if CaseEqual(Templates[i].Name, templateName) then
+      ti := i;
+  if ti < 0 then Error('generic template ' + templateName + ' not found');
+  
+  if SpecializationCount >= MAX_SPECIALIZATIONS then Error('too many specializations');
+  Specializations[SpecializationCount].Name := specName;
+  Specializations[SpecializationCount].TemplateName := templateName;
+  Specializations[SpecializationCount].ConcreteType := concreteType;
+  Specializations[SpecializationCount].ConcreteName := concreteName;
+  Inc(SpecializationCount);
+  
+  SpecializeStream(ti, Templates[ti].TokStart, Templates[ti].TokCount, specName, Templates[ti].Param, concreteName, concreteType);
+  Next;
+end;
+
+procedure BufferGenericMethod(ti, startTokIdx: Integer);
+var
+  depth, cur, finalCur: Integer;
+  si, mStart, mCount: Integer;
+begin
+  depth := 0;
+  cur := startTokIdx;
+  while (cur < TokCount) and (Tokens[cur].Kind <> tkBegin) do
+    Inc(cur);
+  if cur >= TokCount then Error('expected begin in generic method');
+  
+  depth := 1;
+  Inc(cur);
+  while (cur < TokCount) and (depth > 0) do
+  begin
+    if Tokens[cur].Kind in [tkBegin, tkCase] then
+      Inc(depth)
+    else if Tokens[cur].Kind = tkEnd then
+      Dec(depth);
+    Inc(cur);
+  end;
+  
+  if (cur < TokCount) and (Tokens[cur].Kind = tkSemicolon) then
+    Inc(cur);
+  
+  finalCur := cur;  { save before for-loop clobbers 'cur' }
+  
+  mStart := TemplateTokenCount;
+  mCount := 0;
+  for cur := startTokIdx to finalCur - 1 do
+  begin
+    if TemplateTokenCount >= MAX_TEMPLATE_TOKENS then
+      Error('generic template tokens overflow');
+    TemplateTokens[TemplateTokenCount] := Tokens[cur];
+    Inc(TemplateTokenCount);
+    mCount := mCount + 1;
+  end;
+  
+  { Insert specializations AFTER the template method body, not at the dot position }
+  TokPos := finalCur;
+  for si := 0 to SpecializationCount - 1 do
+  begin
+    if CaseEqual(Specializations[si].TemplateName, Templates[ti].Name) then
+    begin
+      SpecializeStream(ti, mStart, mCount, Specializations[si].Name, Templates[ti].Param, Specializations[si].ConcreteName, Specializations[si].ConcreteType);
+    end;
+  end;
+  
+  { TokPos = finalCur (InsertTokens doesn't change it); parser reads from first specialization }
+  Next;
+end;
+
 function ParseLValueAST(idx: Integer): Integer;
 var
   node, indexNode, fieldNode, prevTok, recName, i: Integer;
@@ -1696,72 +1893,83 @@ begin
   Next;
   while CurTok.Kind = tkIdent do
   begin
-    tnOff := Tokens[TokPos-1].SOffset;
-    tnLen := Tokens[TokPos-1].SLen;
-    tname := CurTok.SVal; Next;
-    Expect(tkEq, '=');
-    if CurTok.Kind = tkLParen then
+    if CaseEqual(CurTok.SVal, 'generic') then
     begin
-      Next; ordinal := 0;
-      done := False;
-      while (CurTok.Kind = tkIdent) and not done do
-      begin
-        AddConst(CurTok.SVal, tyInteger, ordinal);
-        Inc(ordinal); Next;
-        if not Eat(tkComma) then done := True;
-      end;
-      Expect(tkRParen, ')');
-    end
-    else if CurTok.Kind = tkClass then
-    begin
-      Next;
-      ci := AddUClass(tnOff, tnLen);
-      curFieldOff := 0;
-      while (CurTok.Kind <> tkEnd) and (CurTok.Kind <> tkEOF) do
-      begin
-        if (CurTok.Kind = tkProcedure) or (CurTok.Kind = tkFunction) then
-        begin
-          while (CurTok.Kind <> tkSemicolon) and (CurTok.Kind <> tkEnd) and (CurTok.Kind <> tkEOF) do Next;
-          Eat(tkSemicolon);
-        end
-        else if CurTok.Kind = tkIdent then
-        begin
-          fnOff := Tokens[TokPos-1].SOffset;
-          fnLen := Tokens[TokPos-1].SLen;
-          Next;
-          Expect(tkColon, ':');
-          fTk := ParseTypeKind;
-          fRec := LastTypeRecId;
-          if fTk = tyString then fSize := LOCAL_STR_CAP + 8
-          else if fTk = tyRecord then fSize := RecSize(fRec)
-          else fSize := 8;
-          AddUField(ci, fnOff, fnLen, curFieldOff, Ord(fTk), fRec);
-          curFieldOff := curFieldOff + fSize;
-          Eat(tkSemicolon);
-        end
-        else
-          Next;
-      end;
-      UClsSize_[ci] := curFieldOff;
-      Expect(tkEnd, 'end');
-    end
-    else if CurTok.Kind = tkRecord then
-    begin
-      depth := 1;
-      Next;
-      while (depth > 0) and (CurTok.Kind <> tkEOF) do
-      begin
-        if (CurTok.Kind = tkRecord) or (CurTok.Kind = tkClass) then Inc(depth)
-        else if CurTok.Kind = tkEnd then Dec(depth);
-        Next;
-      end;
+      ParseGenericTemplate;
     end
     else
     begin
-      { Skip non-enum type defs }
-      while not (CurTok.Kind in [tkSemicolon,tkEOF]) do Next;
+      tnOff := Tokens[TokPos-1].SOffset;
+      tnLen := Tokens[TokPos-1].SLen;
+      tname := CurTok.SVal; Next;
+      Expect(tkEq, '=');
+      if CaseEqual(CurTok.SVal, 'specialize') then
+      begin
+        ParseSpecialization(tname);
+      end
+      else if CurTok.Kind = tkLParen then
+      begin
+        Next; ordinal := 0;
+        done := False;
+        while (CurTok.Kind = tkIdent) and not done do
+        begin
+          AddConst(CurTok.SVal, tyInteger, ordinal);
+          Inc(ordinal); Next;
+          if not Eat(tkComma) then done := True;
+        end;
+        Expect(tkRParen, ')');
+      end
+      else if CurTok.Kind = tkClass then
+      begin
+        Next;
+        ci := AddUClass(tnOff, tnLen);
+        curFieldOff := 0;
+        while (CurTok.Kind <> tkEnd) and (CurTok.Kind <> tkEOF) do
+        begin
+          if (CurTok.Kind = tkProcedure) or (CurTok.Kind = tkFunction) then
+          begin
+            while (CurTok.Kind <> tkSemicolon) and (CurTok.Kind <> tkEnd) and (CurTok.Kind <> tkEOF) do Next;
+            Eat(tkSemicolon);
+          end
+          else if CurTok.Kind = tkIdent then
+          begin
+            fnOff := Tokens[TokPos-1].SOffset;
+            fnLen := Tokens[TokPos-1].SLen;
+            Next;
+            Expect(tkColon, ':');
+            fTk := ParseTypeKind;
+            fRec := LastTypeRecId;
+            if fTk = tyString then fSize := LOCAL_STR_CAP + 8
+            else if fTk = tyRecord then fSize := RecSize(fRec)
+            else fSize := 8;
+            AddUField(ci, fnOff, fnLen, curFieldOff, Ord(fTk), fRec);
+            curFieldOff := curFieldOff + fSize;
+            Eat(tkSemicolon);
+          end
+          else
+            Next;
+        end;
+        UClsSize_[ci] := curFieldOff;
+        Expect(tkEnd, 'end');
+      end
+      else if CurTok.Kind = tkRecord then
+      begin
+        depth := 1;
+        Next;
+        while (depth > 0) and (CurTok.Kind <> tkEOF) do
+        begin
+          if (CurTok.Kind = tkRecord) or (CurTok.Kind = tkClass) then Inc(depth)
+          else if CurTok.Kind = tkEnd then Dec(depth);
+          Next;
+        end;
+      end
+      else
+      begin
+        { Skip non-enum type defs }
+        while not (CurTok.Kind in [tkSemicolon,tkEOF]) do Next;
+      end;
+      Eat(tkSemicolon);
     end;
-    Eat(tkSemicolon);
   end;
 end;
 
@@ -1798,6 +2006,15 @@ begin
   methSNOff := 0; methSNLen := 0;
   if CurTok.Kind = tkDot then
   begin
+    depth := -1;
+    for i := 0 to TemplateCount - 1 do
+      if CaseEqual(Templates[i].Name, name) then
+        depth := i;
+    if depth >= 0 then
+    begin
+      BufferGenericMethod(depth, TokPos - 2);
+      Exit;
+    end;
     methOwnerCi := FindUClass(name);
     if methOwnerCi >= 0 then
     begin

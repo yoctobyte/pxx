@@ -169,7 +169,34 @@ type
     ScopeBase  : Integer;   { Syms[] index at start of this proc's locals }
   end;
 
+const
+  MAX_TEMPLATES = 16;
+  MAX_TEMPLATE_TOKENS = 8192;
+  MAX_SPECIALIZATIONS = 32;
+
+type
+  TTemplate = record
+    Name     : AnsiString;
+    Param    : AnsiString;
+    TokStart : Integer;
+    TokCount : Integer;
+  end;
+
+  TSpecialization = record
+    Name         : AnsiString;  { e.g. TIntStack }
+    TemplateName : AnsiString;  { e.g. TStack }
+    ConcreteType : TTokenKind;  { e.g. tkInteger_T }
+    ConcreteName : AnsiString;  { e.g. 'Integer' or 'TMyClass' }
+  end;
+
 var
+  Templates          : array[0..MAX_TEMPLATES-1] of TTemplate;
+  TemplateCount      : Integer;
+  Specializations    : array[0..MAX_SPECIALIZATIONS-1] of TSpecialization;
+  SpecializationCount: Integer;
+  TemplateTokens     : array[0..MAX_TEMPLATE_TOKENS-1] of TRawToken;
+  TemplateTokenCount : Integer;
+
   DebugTrace : Boolean;
   Source  : AnsiString;
   SrcPos  : Integer;
@@ -378,4 +405,24 @@ begin
   {$else}
   Result := val;
   {$endif}
+end;
+
+function CaseEqual(const s1, s2: AnsiString): Boolean;
+var i, len: Integer; c1, c2: Char; match: Boolean;
+begin
+  Result := False;
+  len := Length(s1);
+  if len = Length(s2) then
+  begin
+    match := True;
+    for i := 1 to len do
+    begin
+      c1 := s1[i];
+      c2 := s2[i];
+      if (c1 >= 'A') and (c1 <= 'Z') then c1 := Chr(Ord(c1) + 32);
+      if (c2 >= 'A') and (c2 <= 'Z') then c2 := Chr(Ord(c2) + 32);
+      if c1 <> c2 then match := False;
+    end;
+    Result := match;
+  end;
 end;
