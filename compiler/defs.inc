@@ -61,6 +61,7 @@ const
   AN_CONTINUE  = 26;
   AN_TRY_EXCEPT = 27; { Left = protected block; Right = catch-all handler block }
   AN_RAISE     = 28;  { Left = raised expression }
+  AN_TRY_FINALLY = 29; { Left = protected block; Right = finalizer block }
 
   EXC_FRAME_SIZE = 80;
   EXC_JMP_OFFSET = 8;
@@ -348,6 +349,8 @@ var
   LoopContinueFixCount: Integer;
   LoopExceptionDepth  : array[0..MAX_LOOP_FIXUPS-1] of Integer;
   ExceptionCodegenDepth: Integer;
+  ExceptionFinallyBody : array[0..MAX_LOOP_FIXUPS-1] of Integer;
+  ExceptionHandlerParseDepth: Integer;
   AssignPath : AnsiString;
   IncExpanded : AnsiString;
   IncIncluded : AnsiString;

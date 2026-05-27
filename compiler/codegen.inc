@@ -142,6 +142,25 @@ begin
   end;
 end;
 
+procedure EmitCleanupToDepth(targetDepth: Integer);
+var current, bodyNode, savedDepth: Integer;
+begin
+  current := ExceptionCodegenDepth;
+  while current > targetDepth do
+  begin
+    EmitLeaveExceptionFrames(1);
+    bodyNode := ExceptionFinallyBody[current - 1];
+    if bodyNode <> -1 then
+    begin
+      savedDepth := ExceptionCodegenDepth;
+      ExceptionCodegenDepth := current - 1;
+      GenAST(bodyNode);
+      ExceptionCodegenDepth := savedDepth;
+    end;
+    Dec(current);
+  end;
+end;
+
 procedure GenLValueAddress(node: Integer; var tk: TTypeKind; var recName: Integer; derefClass: Boolean);
 var
   idx, offset, elemSize, lo, baseNode: Integer;
@@ -1169,8 +1188,11 @@ begin
       if exprNode <> -1 then
       begin
         GenAST(exprNode);
+        if (ASTKind[node] = AN_EXIT) and (CurProc >= 0) and
+           (Procs[CurProc].RetSymIdx >= 0) then
+          EmitStoreVar(Procs[CurProc].RetSymIdx);
         if ASTKind[node] = AN_EXIT then
-          EmitUnlinkExceptionFrames(ExceptionCodegenDepth);
+          EmitCleanupToDepth(0);
         if ASTKind[node] = AN_HALT then
         begin
           EmitB($48); EmitB($89); EmitB($C7);
@@ -1181,8 +1203,6 @@ begin
         begin
           if CurProc >= 0 then
           begin
-            if Procs[CurProc].RetSymIdx >= 0 then
-              EmitStoreVar(Procs[CurProc].RetSymIdx);
             EmitProcEpilog(Procs[CurProc].RetSymIdx);
           end
           else EmitExit(0);
@@ -1191,7 +1211,7 @@ begin
       else
       begin
         if ASTKind[node] = AN_EXIT then
-          EmitUnlinkExceptionFrames(ExceptionCodegenDepth);
+          EmitCleanupToDepth(0);
         if ASTKind[node] = AN_HALT then
           EmitExit(0)
         else
@@ -1205,7 +1225,7 @@ begin
     begin
       if LoopNestDepth = 0 then Error('break outside loop');
       if LoopBreakFixCount >= MAX_LOOP_FIXUPS then Error('too many break statements');
-      EmitLeaveExceptionFrames(ExceptionCodegenDepth - LoopExceptionDepth[LoopNestDepth - 1]);
+      EmitCleanupToDepth(LoopExceptionDepth[LoopNestDepth - 1]);
       EmitB($E9);
       LoopBreakFixPos[LoopBreakFixCount] := CodeLen;
       Inc(LoopBreakFixCount);
@@ -1215,7 +1235,7 @@ begin
     begin
       if LoopNestDepth = 0 then Error('continue outside loop');
       if LoopContinueFixCount >= MAX_LOOP_FIXUPS then Error('too many continue statements');
-      EmitLeaveExceptionFrames(ExceptionCodegenDepth - LoopExceptionDepth[LoopNestDepth - 1]);
+      EmitCleanupToDepth(LoopExceptionDepth[LoopNestDepth - 1]);
       EmitB($E9);
       LoopContinueFixPos[LoopContinueFixCount] := CodeLen;
       Inc(LoopContinueFixCount);
@@ -1223,10 +1243,13 @@ begin
     end;
     AN_RAISE:
     begin
-      GenAST(ASTLeft[node]);
-      EmitB($48); EmitB($89); EmitB($04); EmitB($25); EmitGlobRef(BSS_EXC_OBJ);
-      MovRaxImm(0);
-      EmitB($48); EmitB($89); EmitB($04); EmitB($25); EmitGlobRef(BSS_EXC_CLS);
+      if ASTLeft[node] <> -1 then
+      begin
+        GenAST(ASTLeft[node]);
+        EmitB($48); EmitB($89); EmitB($04); EmitB($25); EmitGlobRef(BSS_EXC_OBJ);
+        MovRaxImm(0);
+        EmitB($48); EmitB($89); EmitB($04); EmitB($25); EmitGlobRef(BSS_EXC_CLS);
+      end;
       EmitCodeCall(ExcRaiseAddr);
     end;
     AN_TRY_EXCEPT:
@@ -1241,6 +1264,7 @@ begin
       EmitB($85); EmitB($C0);                         { test eax, eax }
       EmitB($0F); EmitB($85); thenJmp := CodeLen; EmitI32(0); { jne handler }
 
+      ExceptionFinallyBody[ExceptionCodegenDepth] := -1;
       Inc(ExceptionCodegenDepth);
       GenAST(ASTLeft[node]);
       Dec(ExceptionCodegenDepth);
@@ -1257,6 +1281,33 @@ begin
       MovRaxImm(0);
       EmitB($48); EmitB($89); EmitB($04); EmitB($25); EmitGlobRef(BSS_EXC_OBJ);
       EmitB($48); EmitB($89); EmitB($04); EmitB($25); EmitGlobRef(BSS_EXC_CLS);
+
+      Patch32(elseJmp, CodeLen - (elseJmp + 4));
+    end;
+    AN_TRY_FINALLY:
+    begin
+      EmitB($48); EmitB($83); EmitB($EC); EmitB(EXC_FRAME_SIZE);
+      EmitB($48); EmitB($8B); EmitB($04); EmitB($25); EmitGlobRef(BSS_EXC_TOP);
+      EmitB($48); EmitB($89); EmitB($04); EmitB($24);
+      EmitB($48); EmitB($89); EmitB($E0);
+      EmitB($48); EmitB($89); EmitB($04); EmitB($25); EmitGlobRef(BSS_EXC_TOP);
+      EmitB($48); EmitB($8D); EmitB($7C); EmitB($24); EmitB(EXC_JMP_OFFSET);
+      EmitCodeCall(ExcSetJmpAddr);
+      EmitB($85); EmitB($C0);
+      EmitB($0F); EmitB($85); thenJmp := CodeLen; EmitI32(0);
+
+      ExceptionFinallyBody[ExceptionCodegenDepth] := ASTRight[node];
+      Inc(ExceptionCodegenDepth);
+      GenAST(ASTLeft[node]);
+      Dec(ExceptionCodegenDepth);
+      EmitLeaveExceptionFrames(1);
+      GenAST(ASTRight[node]);
+      EmitB($E9); elseJmp := CodeLen; EmitI32(0);
+
+      Patch32(thenJmp, CodeLen - (thenJmp + 4));
+      EmitLeaveExceptionFrames(1);
+      GenAST(ASTRight[node]);
+      EmitCodeCall(ExcRaiseAddr);
 
       Patch32(elseJmp, CodeLen - (elseJmp + 4));
     end;

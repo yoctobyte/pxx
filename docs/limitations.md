@@ -26,8 +26,8 @@ specific compatibility statement covers it.
 - Alternate Pascal modes such as Delphi mode are not implemented.
 - Broader Object Pascal features such as properties, interfaces, virtual
   dispatch, and related class semantics are not covered as supported.
-- Exception handling is at Phase 1: untyped `try/except` and `raise <expr>`
-  are supported. Typed handlers, `finally`, bare re-raise, exception classes,
+- Exception handling supports untyped `try/except`, `try/finally`,
+  `raise <expr>`, and handler re-raise. Typed handlers, exception classes,
   and class/message unhandled reports are not implemented.
 - Floating-point support is not implemented.
 - Integer arithmetic is intentionally unchecked for now: no mixed-sign

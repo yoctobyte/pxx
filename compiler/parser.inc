@@ -1882,9 +1882,9 @@ begin
   Result := seqNode;
 end;
 
-function ParseTryExceptStatementAST: Integer;
+function ParseTryStatementAST: Integer;
 var
-  trySeq, tryLast, handlerSeq, stmtNode, node: Integer;
+  trySeq, tryLast, actionSeq, stmtNode, node: Integer;
 begin
   trySeq := AllocNode(AN_SEQ);
   tryLast := trySeq;
@@ -1903,17 +1903,26 @@ begin
   end;
 
   if CurTok.Kind = tkFinally then
-    Error('try/finally is not implemented yet');
-  Expect(tkExcept, 'except');
-  if CurTok.Kind = tkOn then
-    Error('typed exception handlers are not implemented yet');
-  Eat(tkElse); { Phase 1 accepts either an untyped body or an explicit catch-all else. }
-  handlerSeq := ParseBlockAST;
-  Expect(tkEnd, 'end');
-
-  node := AllocNode(AN_TRY_EXCEPT);
+  begin
+    Next;
+    actionSeq := ParseBlockAST;
+    Expect(tkEnd, 'end');
+    node := AllocNode(AN_TRY_FINALLY);
+  end
+  else
+  begin
+    Expect(tkExcept, 'except');
+    if CurTok.Kind = tkOn then
+      Error('typed exception handlers are not implemented yet');
+    Eat(tkElse); { Catch-all handler form. }
+    Inc(ExceptionHandlerParseDepth);
+    actionSeq := ParseBlockAST;
+    Dec(ExceptionHandlerParseDepth);
+    Expect(tkEnd, 'end');
+    node := AllocNode(AN_TRY_EXCEPT);
+  end;
   ASTLeft[node] := trySeq;
-  ASTRight[node] := handlerSeq;
+  ASTRight[node] := actionSeq;
   Result := node;
 end;
 
@@ -1962,11 +1971,19 @@ begin
     tkRaise:
     begin
       Next;
+      valNode := -1;
       if CurTok.Kind in [tkSemicolon, tkEnd, tkElse, tkExcept, tkUntil, tkEOF] then
-        Error('re-raise is not implemented yet');
-      ParseExpr;
+      begin
+        if ExceptionHandlerParseDepth = 0 then
+          Error('raise without expression requires an exception handler');
+      end
+      else
+      begin
+        ParseExpr;
+        valNode := CurASTNode;
+      end;
       node := AllocNode(AN_RAISE);
-      ASTLeft[node] := CurASTNode;
+      ASTLeft[node] := valNode;
     end;
     
     tkInc, tkDec:
@@ -2068,7 +2085,7 @@ begin
     tkFor:    begin Next; node := ParseForStatementAST;   end;
     tkRepeat: begin Next; node := ParseRepeatStatementAST; end;
     tkCase:   begin Next; node := ParseCaseStatementAST;  end;
-    tkTry:    begin Next; node := ParseTryExceptStatementAST; end;
+    tkTry:    begin Next; node := ParseTryStatementAST; end;
     
     tkBegin:
     begin

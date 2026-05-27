@@ -3,20 +3,20 @@
 Target: Delphi-compatible `try/except/finally/raise` via `setjmp`/`longjmp`.
 No DWARF unwind tables. No destructors. Correct Pascal semantics.
 
-**Status (2026-05-27):** Phase 1 implemented. PXX supports untyped
+**Status (2026-05-27):** Phases 1 and 2 implemented. PXX supports untyped
 `try/except` catch-all blocks, optional `else` on that catch-all form,
-`raise <expr>`, generic unhandled diagnostics, and
-`--no-unhandled-handler` / `-fno-unhandled-handler`. Typed `on` handlers,
-`finally`, `raise;`, exception classes, and class/message diagnostics remain
-planned below. `Exit`, `break`, and `continue` remove any protected frames
-crossed by their control-flow destination.
+`try/finally`, `raise <expr>`, `raise;` inside a handler, generic unhandled
+diagnostics, and `--no-unhandled-handler` / `-fno-unhandled-handler`.
+Typed `on` handlers, exception classes, and class/message diagnostics remain
+planned below. `Exit`, `break`, and `continue` execute crossed finalizers and
+remove crossed protected frames before reaching their control-flow target.
 
 ---
 
 ## Syntax supported
 
 ```pascal
-{ Implemented Phase 1 form }
+{ Implemented forms }
 try
   <statements>
 except
@@ -32,7 +32,15 @@ end;
 
 raise <expr>;
 
-{ Planned forms }
+try
+  <statements>
+finally
+  <cleanup>
+end;
+
+raise;                          { re-raise inside except block }
+
+{ Planned typed form }
 try
   <statements>
 except
@@ -40,14 +48,7 @@ except
   else <handler>;               { catch-all }
 end;
 
-try
-  <statements>
-finally
-  <cleanup>                     { always runs }
-end;
-
 raise ESomeException.Create('msg');
-raise;                          { re-raise inside except block }
 ```
 
 ---
@@ -335,9 +336,10 @@ Type matching in `on E: EClass` walks the parent chain.
 - Implemented: `NoUnhandledHandler` flag and both CLI option spellings.
 
 ### Phase 2 — finally
-- Codegen for `try/finally`
-- finally-body-as-internal-proc pattern
-- raise-through-finally chain
+- Implemented: codegen for `try/finally`.
+- Implemented: finalizer execution on normal flow, raise propagation, and
+  crossed `Exit`/`break`/`continue` targets.
+- Implemented: bare `raise;` from an exception handler.
 
 ### Phase 3 — typed handlers + class hierarchy
 - `Exception` base class in compiler builtins

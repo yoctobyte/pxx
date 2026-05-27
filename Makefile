@@ -134,6 +134,10 @@ test: $(COMPILER) fpc-check
 	test "$$(/tmp/test_exception_unit26)" = "6"
 	./$(COMPILER) test/test_exception_control_error.pas /tmp/test_exception_control_flow26
 	test "$$(/tmp/test_exception_control_flow26)" = "$$(printf '1\n2\n3\n4\n5\n6\n7')"
+	./$(COMPILER) test/test_exception_finally.pas /tmp/test_exception_finally26
+	test "$$(/tmp/test_exception_finally26)" = "$$(printf '1\n2\n3\n4\n5\n6\n7\n8\n9\n10\n11\n12\n12')"
+	! ./$(COMPILER) test/test_reraise_error.pas /tmp/test_reraise_error26 > /tmp/test_reraise_error.log 2>&1
+	grep -q "raise without expression requires an exception handler" /tmp/test_reraise_error.log
 	./$(COMPILER) test/test_exception_unit_unhandled.pas /tmp/test_exception_unit_unhandled26
 	! /tmp/test_exception_unit_unhandled26 > /tmp/test_exception_unit_unhandled.out 2> /tmp/test_exception_unit_unhandled.log
 	grep -q "Unhandled exception" /tmp/test_exception_unit_unhandled.log

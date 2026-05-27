@@ -85,7 +85,7 @@ Regression-covered behavior includes:
 - Classes with fields and methods.
 - Generic classes and top-level generic function/procedure specialization.
 - Routine overloading and class/record operator implementations.
-- Untyped `try/except` catch-all handling and `raise <expr>`.
+- Untyped `try/except`, `try/finally`, expression raise, and handler re-raise.
 - Pascal conditional definitions and PXX/FPC identity separation.
 - Selected C interop and C preprocessing behavior described in
   `C_INTEROP.md`.
@@ -101,7 +101,7 @@ coverage:
 | Alternative generic syntax and call-site specialization | Planned; current syntax is the tested top-level `generic` / `specialize ... as ...` form. |
 | Pascal mode semantics | Only the current objfpc-like subset exists; Delphi/FPC/ISO mode differences are not modeled. |
 | Directive expression language and switch state | Missing beyond simple named conditional definitions. |
-| Broader Object Pascal model | Phase 1 untyped exceptions are covered; properties, interfaces, typed exception classes/handlers, `finally`, and virtual dispatch remain missing. |
+| Broader Object Pascal model | Untyped exception handlers/finalizers and re-raise are covered; properties, interfaces, typed exception classes/handlers, and virtual dispatch remain missing. |
 | Numeric/type breadth | Fixed-width integer and pointer-sized layout are covered for x86-64. Floating-point, `WideChar`/broader ordinal behavior, and general pointer expressions require further implementation and tests. |
 | FPC RTL/packages | Not provided as an FPC-compatible library layer. |
 | Cross-target output | Current target is Linux x86-64 only. |
