@@ -1,6 +1,6 @@
 # Frankonpiler Handover
 
-**Date:** 2026-05-27
+**Date:** 2026-05-27 (updated same day, session 2)
 
 ## Current Git State
 
@@ -139,6 +139,14 @@ prototype + dynamic resolve. `ctype` hardcoded → `libc.so.6`. Other headers de
 - **`ParseTopLevelSpecialize` semicolon**: do NOT call `Eat(tkSemicolon)` before
   `SpecializeStream`. Insert must happen while CurTok=`;`; otherwise CurTok after
   `ParseSubroutine` lands inside the next `specialize` statement.
+- **`REC_UCLASS_BASE` must exceed all hardcoded type IDs**: hardcoded types 1–14 live in
+  `symtab.inc` (`REC_TTEMPLATE=11` … `REC_TPENDINGGFSPEC=14`). `REC_UCLASS_BASE` was 11
+  — user class 0 got recId=11, hitting the `if rec=REC_TTEMPLATE` branch in
+  `RecFieldOffset`/`RecFieldType` instead of the user-class path. All field offsets
+  returned 0 → both X and Y fields of a user class always read from offset 0 → last
+  written value wins for all fields. Fixed: `REC_UCLASS_BASE=15` in `defs.inc`. Rule:
+  whenever a new hardcoded record type is added to `symtab.inc`, bump `REC_UCLASS_BASE`
+  past the new max.
 - **Self-evolution bootstrap rule**: evolve using self-hosted seed by default. FPC is
   recovery path only. Note any use of FPC bootstrap in `compiler/usernotes.md`.
 - **Map File output**: uses shared `TokChars` buffer; `sysfchmod` with decimal `420`
@@ -146,7 +154,7 @@ prototype + dynamic resolve. `ctype` hardcoded → `libc.so.6`. Other headers de
 
 ## Class / Method Implementation Details
 
-- `REC_UCLASS_BASE = 11`. User classes start at this recId.
+- `REC_UCLASS_BASE = 15`. User classes start at this recId (was 11 — see gotcha below).
 - `REC_TMYCLASS = 10` is a HARDCODED legacy class; `TMyClass` still routes to it via
   `IsRecordType`. All other user-defined classes use the dynamic UClass system.
 - `ParseTypeSection` registers every `class` type via `AddUClass`/`AddUField`.
@@ -162,19 +170,77 @@ Documented in `compiler/usernotes.md`. Key planned switches:
 - `strict_overload` (default off): require explicit `overload` directive on overloaded procs.
 - `generic_syntax` (default b1): b1=top-level `generic function`+`specialize as`, a=type-section style.
 
+## Operator Overloading (NEW — implemented but bootstrap pending)
+
+Syntax:
+```pascal
+operator < (a, b: TWeight): Boolean;
+begin Result := a.Value < b.Value; end;
+
+operator + (a, b: TPoint): TPoint;
+var r: TPoint;
+begin r := TPoint.Create; r.X := a.X + b.X; r.Y := a.Y + b.Y; Result := r; end;
+```
+
+`test/test_op_overload.pas` passes with FPC-compiled binary:
+```
+1 0 1 0 1 0 10 6
+```
+
+### Implementation
+
+- `defs.inc`: 4 parallel arrays (`OvrlOpKind`, `OvrlTypeKind`, `OvrlRecId`, `OvrlProcIdx`)
+  + `OvrlCount`. `MAX_OP_OVERLOADS=64`.
+- `symtab.inc`: `RegisterOpOverload(opKind, typeKind, recId, procIdx)` and
+  `FindOpOverload(opKind, typeKind, recId) → procIdx`.
+- `parser.inc`: `ParseOperatorDef` — called from `ParseProgram` when `CurTok='operator'`.
+  Lookahead inside `()` to find first `:` at depth=1, reads type name via
+  `GetTokenStrFromRaw(Tokens[i])`. Injects `function __op__NN (` into token stream,
+  calls `ParseSubroutine`, then `RegisterOpOverload`.
+- `parser.inc`/`ParseTypeSection`: `else if CaseEqual(CurTok.SVal,'operator') then Break`
+  prevents type section loop consuming `operator` as a type name.
+- `parser.inc`/`ParseSubroutine`: `ptypesRec[i] := LastTypeRecId` after `ParseTypeKind`;
+  sets `Syms[idx].RecName := ptypesRec[i]` for class/record params so field lookups work.
+- `codegen.inc`/`AN_BINOP`: before all other binop handling, call `FindOpOverload`; if
+  found, emit `mov rdi,rax; mov rsi,rcx; call proc` (SysV AMD64 ABI).
+
+### Bootstrap still broken
+
+`make bootstrap` fails: FPC-compiled binary compiles user programs fine but crashes on
+`compiler.pas` itself with `error: undefined variable ()` at line ~8944.
+
+**Debug state** (session ended mid-investigation):
+- Debug prints added to `ParseLValueAST` (parser.inc line ~597) and `CompileLValueAddress`
+  (line ~909) — **REMOVE these before committing**.
+- Output: `DBG ParseLValueAST prevTok=26836 name=[] TokPos=26837 kind=77 CurKind=77`
+- `kind=77` = `tkSemicolon` (counted from enum: tkSemicolon is 77th in `TTokenKind`).
+- Two consecutive semicolons at token positions 26836–26837, empty name.
+- `ParseLValueAST` is called with `idx=-1`; `prevTok=TokPos-1` unexpectedly points to
+  a semicolon, not an identifier. Parser consumed `;` token BEFORE arriving at a point
+  that tried to look up a variable name.
+- Hypothesis: something in compiler.pas (near the end — token 26836 is near EOF of the
+  ~27K-token stream) causes the parser to misparse a statement. Likely a construct in the
+  new operator-overloading code or in the `OvrlCount`/`OvrlOpKind` initialization section
+  of the main `begin` block that the self-hosted compiler doesn't handle.
+- **Candidate constructs to check**: does compiler.pas `begin` block initialize `OvrlCount`?
+  (It doesn't — should be fine as globals zero-init.) Check if parser.inc debug prints
+  themselves cause issues (they reference `StdErr` which may not be in scope).
+- Most likely next step: remove debug prints, binary-search the issue by temporarily
+  commenting out sections of the new code in defs.inc/parser.inc/symtab.inc to find which
+  new construct the self-hosted compiler chokes on.
+
 ## Parked Workstreams
 
 1. **BASIC frontend** (`blexer.inc` + `bparser.inc`) — partially working, parked.
-2. **Operator overloading** — needed for generic functions to work on user-defined types.
-   Design in `compiler/usernotes.md`. Not yet started.
-3. **B2 call-site generic sugar** — `Max<Integer>(a, b)` desugars to B1. After B1 stable.
+2. **B2 call-site generic sugar** — `Max<Integer>(a, b)` desugars to B1. After B1 stable.
 
 ## Suggested Next Steps
 
-1. **Operator overloading** — `operator <(a, b: TVector): Boolean`. Required for generic
-   functions to be useful beyond built-in types. Design already documented.
-2. **Compiler switches** — pragma `{$SWITCH value}` and `--switch=value` CLI flag.
+1. **Fix bootstrap** — remove debug prints from `parser.inc`, then binary-search the
+   `error: undefined variable ()` at token 26836. See debug state above.
+2. **Add test_op_overload to Makefile** — `make test` should run it.
+3. **Compiler switches** — pragma `{$SWITCH value}` and `--switch=value` CLI flag.
    `strict_overload` as first concrete switch.
-3. **C interop depth** — pointer args/returns, C strings, `size_t`, typedef aliases,
+4. **C interop depth** — pointer args/returns, C strings, `size_t`, typedef aliases,
    simple struct layout. Driven by real header needs.
-4. **Exercise more stdlib headers** — `string.h`, `stdio.h`, add to `make test`.
+5. **Exercise more stdlib headers** — `string.h`, `stdio.h`, add to `make test`.

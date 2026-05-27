@@ -913,6 +913,34 @@ begin
     begin EmitB($88); EmitB($01); end;              { mov [rcx], al }
 end;
 
+{ ===== Operator overload table ===== }
+
+procedure RegisterOpOverload(opKind, typeKind, recId, procIdx: Integer);
+begin
+  if OvrlCount >= MAX_OP_OVERLOADS then Error('too many operator overloads');
+  OvrlOpKind[OvrlCount]   := opKind;
+  OvrlTypeKind[OvrlCount] := typeKind;
+  OvrlRecId[OvrlCount]    := recId;
+  OvrlProcIdx[OvrlCount]  := procIdx;
+  Inc(OvrlCount);
+end;
+
+function FindOpOverload(opKind, typeKind, recId: Integer): Integer;
+var i: Integer;
+begin
+  Result := -1;
+  i := 0;
+  while i < OvrlCount do
+  begin
+    if (OvrlOpKind[i] = opKind) and (OvrlTypeKind[i] = typeKind) and (OvrlRecId[i] = recId) then
+    begin
+      Result := OvrlProcIdx[i];
+      Exit;
+    end;
+    Inc(i);
+  end;
+end;
+
 { ===== Procedure table ===== }
 
 function FindProc(const name: AnsiString): Integer;

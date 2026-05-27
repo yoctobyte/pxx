@@ -402,7 +402,7 @@ var
   initNode, limitNode, isDownNode, bodyNode, seqNode, argNode, exprNode: Integer;
   si, vidx, specialId, arg1, arg2, arg3, pathIdx, dstIdx, srcIdx, rhsNode, branchJeStart: Integer;
   lhsTk, rhsTk, dummyTk: TTypeKind;
-  recName, rhsRecName: Integer;
+  recName, rhsRecName, opOvrlIdx: Integer;
   down: Boolean;
   jePositions : array[0..255] of Integer;
   jeCount     : Integer;
@@ -464,7 +464,15 @@ begin
       EmitB($58); { pop rax }
       
       op := IntToTokenKind(ASTIVal[node]);
-      if (ASTTk[node] = Ord(tyString)) and (op = tkPlus) then
+      opOvrlIdx := FindOpOverload(Ord(op), ASTTk[ASTLeft[node]], ResolveNodeRec(ASTLeft[node]));
+      if opOvrlIdx >= 0 then
+      begin
+        { rax = lhs, rcx = rhs — set rdi/rsi for System V AMD64 ABI call }
+        EmitB($48); EmitB($89); EmitB($C7); { mov rdi, rax }
+        EmitB($48); EmitB($89); EmitB($CE); { mov rsi, rcx }
+        EmitCallProc(opOvrlIdx);
+      end
+      else if (ASTTk[node] = Ord(tyString)) and (op = tkPlus) then
       begin
         lhsTk := IntToTypeKind(ASTTk[ASTLeft[node]]);
         rhsTk := IntToTypeKind(ASTTk[ASTRight[node]]);

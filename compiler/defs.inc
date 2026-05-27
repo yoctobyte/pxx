@@ -23,7 +23,7 @@ const
   MAX_UCLASS      = 32;    { user-defined class slots }
   MAX_UFIELD      = 256;   { field slots across all user classes }
   MAX_UMETH       = 256;   { method slots across all user classes }
-  REC_UCLASS_BASE = 11;    { user class recIds start here }
+  REC_UCLASS_BASE = 15;    { user class recIds start here; must exceed REC_TPENDINGGFSPEC=14 }
 
   { AST node kinds }
   AN_NONE      = 0;
@@ -175,6 +175,7 @@ const
   MAX_SPECIALIZATIONS = 32;
   MAX_GENERIC_FUNCS = 16;
   MAX_PENDING_GFSPECS = 32;
+  MAX_OP_OVERLOADS = 64;
 
 type
   TTemplate = record
@@ -217,6 +218,12 @@ var
   GenericFuncCount   : Integer;
   PendingGFSpecs     : array[0..MAX_PENDING_GFSPECS-1] of TPendingGFSpec;
   PendingGFSpecCount : Integer;
+  { Operator overload table — parallel arrays, one entry per registered overload }
+  OvrlOpKind   : array[0..MAX_OP_OVERLOADS-1] of Integer;  { TTokenKind ordinal }
+  OvrlTypeKind : array[0..MAX_OP_OVERLOADS-1] of Integer;  { TTypeKind ordinal }
+  OvrlRecId    : array[0..MAX_OP_OVERLOADS-1] of Integer;
+  OvrlProcIdx  : array[0..MAX_OP_OVERLOADS-1] of Integer;
+  OvrlCount    : Integer;
   { Scratch output of ScanGenericFuncSig }
   GFSig_NParams : Integer;
   GFSig_RetType : TTypeKind;

@@ -141,6 +141,7 @@ function ParseBlockAST: Integer; forward;
 procedure CompileAST(node: Integer); forward;
 procedure ParseSubroutine; forward;
 procedure ParseGenericFunctionDef; forward;
+procedure ParseOperatorDef; forward;
 
 function GetTokenStrFromRaw(const tok: TRawToken): AnsiString;
 var s: AnsiString; i: Integer;
@@ -473,6 +474,114 @@ begin
     specName, GenericFuncs[gfi].Param, concreteName, concreteKind);
   Next;
   ParseSubroutine;
+end;
+
+{ Parses: operator < (a, b: TMyType): Boolean; begin...end;
+  Called when CurTok = tkIdent('operator') at top level }
+procedure ParseOperatorDef;
+var
+  opKind: TTokenKind;
+  synName: AnsiString;
+  typeName: AnsiString;
+  recId: Integer;
+  ci: Integer;
+  depth, i, j: Integer;
+  isFunc: Boolean;
+  nameOff, nameLen: Integer;
+  procIdx: Integer;
+begin
+  Next; { consume 'operator' }
+  opKind := CurTok.Kind;
+  if not (opKind in [tkPlus, tkMinus, tkStar, tkDiv, tkEq, tkNeq, tkLt, tkLe, tkGt, tkGe]) then
+    Error('expected operator symbol after operator keyword');
+  { Stay on operator token — do NOT call Next. TokPos → '(' }
+
+  { Lookahead: find first ':' inside '()' to get operand type name }
+  typeName := '';
+  depth := 0;
+  i := TokPos; { Tokens[TokPos] = '(' }
+  while (i < TokCount) and (typeName = '') do
+  begin
+    if Tokens[i].Kind = tkLParen then Inc(depth)
+    else if Tokens[i].Kind = tkRParen then Dec(depth)
+    else if (Tokens[i].Kind = tkColon) and (depth = 1) then
+    begin
+      Inc(i);
+      if i < TokCount then
+      begin
+        if Tokens[i].Kind = tkIdent then
+          typeName := GetTokenStrFromRaw(Tokens[i])
+        else if Tokens[i].Kind = tkInteger_T then typeName := 'Integer'
+        else if Tokens[i].Kind = tkBoolean_T then typeName := 'Boolean'
+        else if Tokens[i].Kind = tkChar_T then typeName := 'Char'
+        else if Tokens[i].Kind = tkString_T then typeName := 'String';
+      end;
+      i := TokCount; { break }
+    end;
+    Inc(i);
+  end;
+  if typeName = '' then Error('operator: cannot determine operand type');
+
+  { Resolve recId for the operand type }
+  recId := IsRecordType(typeName);
+  if recId = REC_NONE then
+  begin
+    ci := FindUClass(typeName);
+    if ci < 0 then Error('operator overloading: ' + typeName + ' is not a record or class type');
+    recId := REC_UCLASS_BASE + ci;
+  end;
+
+  { Determine function vs procedure: find matching ')' then check for ':' }
+  depth := 0;
+  i := TokPos;
+  while i < TokCount do
+  begin
+    if Tokens[i].Kind = tkLParen then Inc(depth)
+    else if Tokens[i].Kind = tkRParen then
+    begin
+      Dec(depth);
+      if depth = 0 then begin Inc(i); Break; end;
+    end;
+    Inc(i);
+  end;
+  isFunc := (i < TokCount) and (Tokens[i].Kind = tkColon);
+
+  { Synthesize unique proc name __op__NN }
+  synName := '__op__';
+  AppendChar(synName, Chr(Ord('0') + OvrlCount div 10));
+  AppendChar(synName, Chr(Ord('0') + OvrlCount mod 10));
+
+  { Insert 'function/procedure synName' at TokPos (before '(') }
+  if TokCount + 2 >= MAX_TOKENS then Error('token buffer overflow in operator def');
+  for j := TokCount - 1 downto TokPos do
+    Tokens[j + 2] := Tokens[j];
+  Inc(TokCount, 2);
+
+  if isFunc then Tokens[TokPos].Kind := tkFunction
+  else Tokens[TokPos].Kind := tkProcedure;
+  Tokens[TokPos].IVal := 0; Tokens[TokPos].Line := 0;
+  Tokens[TokPos].SOffset := 0; Tokens[TokPos].SLen := 0;
+
+  nameOff := TokCharLen;
+  nameLen := Length(synName);
+  for j := 1 to nameLen do
+  begin
+    TokChars[TokCharLen] := synName[j];
+    Inc(TokCharLen);
+  end;
+  Tokens[TokPos+1].Kind := tkIdent;
+  Tokens[TokPos+1].IVal := 0; Tokens[TokPos+1].Line := 0;
+  Tokens[TokPos+1].SOffset := nameOff;
+  Tokens[TokPos+1].SLen := nameLen;
+
+  { Advance into the injected 'function/procedure' token }
+  Next;
+  ParseSubroutine;
+
+  { After ParseSubroutine, the proc is registered — look it up by synName }
+  procIdx := FindProc(synName);
+  if procIdx < 0 then Error('operator: internal error, proc not found after parse');
+  RegisterOpOverload(Ord(opKind), Ord(tyClass), recId, procIdx);
 end;
 
 function ParseLValueAST(idx: Integer): Integer;
@@ -2035,6 +2144,8 @@ begin
     begin
       ParseGenericTemplate;
     end
+    else if CaseEqual(CurTok.SVal, 'operator') then
+      Break  { top-level operator def follows type section }
     else
     begin
       tnOff := Tokens[TokPos-1].SOffset;
@@ -2119,10 +2230,11 @@ var
   name     : AnsiString;
   retType  : TTypeKind;
   tk       : TTypeKind;
-  pnames   : array[0..7] of AnsiString;
-  ptypes   : array[0..7] of TTypeKind;
-  parr     : array[0..7] of Boolean;
-  pbyref   : array[0..7] of Boolean;
+  pnames    : array[0..7] of AnsiString;
+  ptypes    : array[0..7] of TTypeKind;
+  ptypesRec : array[0..7] of Integer;
+  parr      : array[0..7] of Boolean;
+  pbyref    : array[0..7] of Boolean;
   nparams  : Integer;
   pi, i    : Integer;
   savedSC, savedFS, savedCurProc : Integer;
@@ -2208,6 +2320,7 @@ begin
       for i := startIdx to nparams-1 do
       begin
         ptypes[i] := tk;
+        ptypesRec[i] := LastTypeRecId;
         parr[i] := isArr;
         pbyref[i] := isByRef;
       end;
@@ -2317,6 +2430,8 @@ begin
     Procs[pi].Params[i].SymIdx := idx;
     Syms[idx].Kind := skParam;
     Syms[idx].IsRef := pbyref[i];
+    if (ptypes[i] = tyClass) or (ptypes[i] = tyRecord) then
+      Syms[idx].RecName := ptypesRec[i];
     if parr[i] then
     begin
       Syms[idx].IsArray := True;
@@ -2736,6 +2851,8 @@ begin
           ParseGenericFunctionDef
         else if CaseEqual(CurTok.SVal, 'specialize') then
           ParseTopLevelSpecialize
+        else if CaseEqual(CurTok.SVal, 'operator') then
+          ParseOperatorDef
         else
           doneDecls := True;
       else
