@@ -21,18 +21,61 @@ procedure CPreprocess(var src: AnsiString; const baseDir: AnsiString); forward;
 
 { ===== Main ===== }
 
-var inFile, outFile: AnsiString; isC, isBasic: Boolean; n, i: Integer;
+var inFile, outFile, option: AnsiString; isC, isBasic, readingOptions: Boolean; n, i: Integer;
 begin
   DebugTrace := False;
+  PasInitDefines;
   i := 1;
-  if ParamCount >= 1 then inFile := ParamStr(1);
-  if (ParamCount >= 1) and (inFile = '--debug') then
+  readingOptions := True;
+  while (i <= ParamCount) and readingOptions do
   begin
-    DebugTrace := True;
-    i := 2;
+    option := ParamStr(i);
+    PasCommandOption := option;
+    if option = '--debug' then
+    begin
+      DebugTrace := True;
+      Inc(i);
+    end
+    else if option = '--strict-overload' then
+    begin
+      StrictOverload := True;
+      Inc(i);
+    end
+    else if option = '--permissive-overload' then
+    begin
+      StrictOverload := False;
+      Inc(i);
+    end
+    else if (Length(option) > 2) and (option[1] = '-') and
+            ((option[2] = 'd') or (option[2] = 'D')) then
+    begin
+      PasDefineCommandOption(3);
+      Inc(i);
+    end
+    else if (Length(option) > 2) and (option[1] = '-') and
+            ((option[2] = 'u') or (option[2] = 'U')) then
+    begin
+      PasUndefineCommandOption(3);
+      Inc(i);
+    end
+    else if (Length(option) > 2) and (option[1] = '-') and
+            ((option[2] = 'm') or (option[2] = 'M')) then
+    begin
+      { Dialect modes are accepted now; semantics remain the current objfpc-like subset. }
+      if not PasObjFpcModeOption then
+        begin writeln(StdErr, 'unsupported Pascal mode: ', option); Halt(1); end;
+      Inc(i);
+    end
+    else if (Length(option) > 0) and (option[1] = '-') then
+    begin
+      writeln(StdErr, 'unknown option: ', option);
+      Halt(1);
+    end
+    else
+      readingOptions := False;
   end;
   if ParamCount < i then
-    begin writeln(StdErr,'usage: pascal26 [--debug] <src> [out]'); Halt(1); end;
+    begin writeln(StdErr,'usage: pascal26/PXX [--debug] [-dNAME] [-uNAME] [-Mobjfpc] [--strict-overload] <src> [out]'); Halt(1); end;
 
   inFile  := ParamStr(i);
 {$ifdef FPC}

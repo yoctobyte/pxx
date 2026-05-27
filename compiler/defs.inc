@@ -19,6 +19,9 @@ const
   MAX_TOKENS  = 131072;
   MAX_AST     = 65536;
   MAX_LOOP_FIXUPS = 256;
+  MAX_PAS_DEFINES = 128;
+  MAX_PAS_DEFINE_CHARS = 4096;
+  MAX_PAS_CONDS = 64;
   SPECIAL_IN  = 999;
 
   MAX_UCLASS      = 32;    { user-defined class slots }
@@ -237,10 +240,22 @@ var
   GFSig_PTypes  : array[0..7] of TTypeKind;
 
   DebugTrace : Boolean;
+  StrictOverload : Boolean;
   Source  : AnsiString;
   SrcPos  : Integer;
   SrcLine : Integer;
   CurTok  : TToken;
+  PasDefineChars   : array[0..MAX_PAS_DEFINE_CHARS-1] of Char;
+  PasDefineNameOff : array[0..MAX_PAS_DEFINES-1] of Integer;
+  PasDefineNameLen : array[0..MAX_PAS_DEFINES-1] of Integer;
+  PasDefineActive  : array[0..MAX_PAS_DEFINES-1] of Boolean;
+  PasDefineCharLen : Integer;
+  PasDefineCount   : Integer;
+  PasCondParent    : array[0..MAX_PAS_CONDS-1] of Boolean;
+  PasCondActive    : array[0..MAX_PAS_CONDS-1] of Boolean;
+  PasCondTaken     : array[0..MAX_PAS_CONDS-1] of Boolean;
+  PasCondCount     : Integer;
+  PasCommandOption : AnsiString;
 
   Code    : array[0..MAX_CODE-1] of Byte;
   CodeLen : Integer;
@@ -267,6 +282,7 @@ var
   FrameSize : Integer;
 
   Procs     : array[0..MAX_PROCS-1] of TProc;
+  ProcOverloadDirective : array[0..MAX_PROCS-1] of Boolean;
   ProcCount : Integer;
   CurProc   : Integer;   { -1 = main }
   ProcExternal : array[0..MAX_PROCS-1] of Boolean;

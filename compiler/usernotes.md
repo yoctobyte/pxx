@@ -2,13 +2,42 @@ user notes.
 
 ---
 
+## Project identity and conditional compilation (implemented 2026-05-27)
+
+The provisional compiler name is **PXX**. It is deliberately provisional; the
+binary remains `compiler/pascal26` until a name is stable enough to rename seed
+and history-related artifacts.
+
+PXX now predefines `PXX` for Pascal source and does **not** predefine `FPC`.
+Accepted conditional directives:
+
+```pascal
+{$define NAME}
+{$undef NAME}
+{$ifdef NAME}
+{$ifndef NAME}
+{$else}
+{$endif}
+{$mode objfpc}
+```
+
+Command-line inputs implemented now are `-dNAME`, `-uNAME`, `-Mobjfpc`, and
+`--strict-overload`. The mode spelling is accepted as a compatibility marker;
+multiple semantic modes do not exist yet. Compiler bootstrap code may
+continue to use `{$ifdef FPC}` where the branch genuinely depends on Free
+Pascal as the host.
+
+Compatibility and missing-feature status is maintained in `COMPATIBILITY.md`.
+
+---
+
 ## Language dialect / compiler switches (2026-05-27)
 
 We are extending Pascal beyond standard — crafting a superset/dialect, not a subset.
 Features that deviate from standard Pascal should be controllable via compiler switches
 so users can opt in/out of non-standard behaviour.
 
-Proposed pragma syntax (inside source file):
+Proposed feature-switch syntax beyond the implemented conditional layer:
 ```pascal
 {$SWITCH_NAME value}
 ```
@@ -18,13 +47,14 @@ Or command-line flag:
 pascal26 --switch=value source.pas output
 ```
 
-### Known switches needed
+### Switch state
 
-**`strict_overload`** (default: off)
+**`strict_overload`** (implemented; default: off)
 - Off: overloading works without `overload` directive — compiler silently accepts both
   `procedure Foo(x: Integer)` and `procedure Foo(x: Char)` side by side.
   The `overload` keyword is accepted but ignored.
-- On: requires explicit `overload` directive on all overloaded variants (standard Delphi/FPC behaviour).
+- On via `{$strict_overload on}` or `--strict-overload`: requires explicit
+  `overload` directive on all overloaded variants (standard Delphi/FPC behaviour).
   Useful for codebases that want strict Pascal compatibility.
 
 **`generic_syntax`** (default: `b1`)
@@ -132,8 +162,8 @@ operand type and class/record id. Binary AST code generation checks this table
 before built-in emission and generates a normal call when matched.
 `test/test_op_overload.pas` covers `<`, `>`, `=`, and `+`.
 
-Routine overload declarations now also accept Delphi/FPC-style `overload;`.
-Until `strict_overload` is implemented, this directive is optional.
+Routine overload declarations accept Delphi/FPC-style `overload;`. It remains
+optional by default; `{$strict_overload on}` or `--strict-overload` enforces it.
 
 ## Loop Control (implemented 2026-05-27)
 

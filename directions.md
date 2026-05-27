@@ -1,5 +1,9 @@
 goal: create a self hosting pascal compiler, evolving into a "frankenstein" multi-language compiler.
 
+Working project/compiler identity: **PXX** (provisional; may be renamed before
+public stabilization). PXX defines `PXX`, never implicitly `FPC`; FPC
+compatibility modes describe source behavior, not compiler identity.
+
 ## bootstrap
 - **Self-evolution**: Avoid bootstrapping using FPC by default. The compiler should self-evolve using its own built self-hosted compiler binary (`compiler/pascal26`). FPC remains a secondary tool to verify compatibility.
 - bootstrap using fpc (Free Pascal) and gpc (GNU Pascal) — kept only as verification / backup path
@@ -150,6 +154,5 @@ FPC can target many architectures. That is valuable. Then again, we aim for a fr
 
 
   
-
 
 

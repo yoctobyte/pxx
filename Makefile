@@ -112,6 +112,16 @@ test: $(COMPILER) fpc-check
 	test "$$(/tmp/test_op_overload26)" = "$$(printf '1\n0\n1\n0\n1\n0\n10\n6')"
 	./$(COMPILER) test/test_loop_control.pas /tmp/test_loop_control26
 	test "$$(/tmp/test_loop_control26)" = "$$(printf '8\n5\n8\n7\n3')"
+	./$(COMPILER) test/test_pascal_directives.pas /tmp/test_pascal_directives26
+	test "$$(/tmp/test_pascal_directives26)" = "$$(printf '1\n0\n1\n1\n1\n0')"
+	./$(COMPILER) -dCLI_FLAG test/test_pascal_directives.pas /tmp/test_pascal_directives_defined26
+	test "$$(/tmp/test_pascal_directives_defined26)" = "$$(printf '1\n0\n1\n1\n1\n1')"
+	./$(COMPILER) test/test_strict_overload.pas /tmp/test_strict_overload26
+	test "$$(/tmp/test_strict_overload26)" = "$$(printf '5\n65')"
+	! ./$(COMPILER) test/test_strict_overload_error.pas /tmp/test_strict_overload_error26 > /tmp/test_strict_overload_error.log 2>&1
+	grep -q "overloaded routine requires overload directive" /tmp/test_strict_overload_error.log
+	./$(COMPILER) --strict-overload test/test_overloading.pas /tmp/test_overloading_strict26
+	test "$$(/tmp/test_overloading_strict26)" = "$$(printf 'Integer: 42\nChar: 65\nTwo Integers: 10, 20\nAdd integers: 12\nChar addition: XY')"
 	./$(COMPILER) $(COMPILER_SRC) /tmp/pascal26-self
 	/tmp/pascal26-self test/hello.pas /tmp/self-hello26
 	test "$$(/tmp/self-hello26)" = "Hello, World!"

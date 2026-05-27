@@ -952,6 +952,18 @@ begin
   Result := -1;
 end;
 
+function HasNonOverloadProc(const name: AnsiString): Boolean;
+var i: Integer;
+begin
+  Result := False;
+  for i := 0 to ProcCount-1 do
+    if (Procs[i].Name = name) and not ProcOverloadDirective[i] then
+    begin
+      Result := True;
+      Exit;
+    end;
+end;
+
 function FindProcOverload(const name: AnsiString; nParams: Integer; const ptypes: array of TTypeKind; const parr: array of Boolean; const pbyref: array of Boolean): Integer;
 var i, j: Integer; match: Boolean;
 begin
@@ -1080,6 +1092,7 @@ begin
   Procs[ProcCount].RetSymIdx  := -1;
   Procs[ProcCount].ScopeBase  := 0;
   ProcExternal[ProcCount]     := False;
+  ProcOverloadDirective[ProcCount] := False;
   ProcLibrary[ProcCount]      := -1;
   for i := 0 to nParams-1 do
   begin

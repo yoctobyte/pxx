@@ -1,4 +1,4 @@
-# Frankonpiler Handover
+# PXX / Frankonpiler Handover
 
 **Date:** 2026-05-27 (updated same day, session 3)
 
@@ -67,6 +67,17 @@ self-hosted compiler.
 `continue` targets the condition for `while`, the update step for `for`, and
 the `until` condition for `repeat`. Nested-loop behavior is covered by
 `test/test_loop_control.pas`.
+
+### Compiler identity and Pascal conditionals
+`PXX` is the provisional compiler name; the executable remains
+`compiler/pascal26` while naming is unsettled. PXX predefines `PXX`, not
+`FPC`. It supports `{$define}`, `{$undef}`, `{$ifdef}`, `{$ifndef}`,
+`{$else}`, and `{$endif}`, plus accepted `{$mode objfpc}` / `-Mobjfpc`
+markers and command-line `-dNAME` / `-uNAME`. Coverage is in
+`test/test_pascal_directives.pas`. `{$strict_overload on}` and
+`--strict-overload` enforce explicit routine overload declarations, covered by
+`test/test_strict_overload.pas` and `test/test_strict_overload_error.pas`.
+See `COMPATIBILITY.md` for the compatibility inventory.
 
 ### User-defined classes with fields and methods
 ```pascal
@@ -187,10 +198,13 @@ prototype + dynamic resolve. `ctype` hardcoded → `libc.so.6`. Other headers de
   recId so `Self.Field` resolves via `FindUField`.
 - `.Create` detected in `ParseFactor`; maps to `GetMem(UClsSize_[ci])`.
 
-## Dialect / Compiler Switches (planned)
+## Dialect / Compiler Switches
 
-Documented in `compiler/usernotes.md`. Key planned switches:
-- `strict_overload` (default off): require explicit `overload` directive on overloaded procs.
+The initial identity/conditional layer is implemented: `PXX` is predefined,
+`FPC` is not, named define conditionals nest, and `-dNAME`, `-uNAME`, and
+`-Mobjfpc` are accepted. The first semantic switch is also implemented:
+- `strict_overload` (default off): `{$strict_overload on}` /
+  `--strict-overload` requires explicit `overload` on overloaded procs.
 - `generic_syntax` (default b1): b1=top-level `generic function`+`specialize as`, a=type-section style.
 
 ## Operator Overloading
@@ -242,8 +256,8 @@ both converge again.
 
 ## Suggested Next Steps
 
-1. **Compiler switches** — pragma `{$SWITCH value}` and `--switch=value` CLI flag.
-   `strict_overload` as first concrete switch.
+1. **Compiler switches** — add further semantic switches, beginning with a
+   deliberate policy for alternative generic syntax/modes.
 2. **C interop depth** — pointer args/returns, C strings, `size_t`, typedef aliases,
    simple struct layout. Driven by real header needs.
 3. **Exercise more stdlib headers** — `string.h`, `stdio.h`, add to `make test`.

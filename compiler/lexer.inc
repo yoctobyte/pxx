@@ -9,7 +9,7 @@ end;
 
 { ===== Lexer ===== }
 
-procedure SkipSpace;
+procedure LegacySkipSpace;
 var doneSkip: Boolean;
 begin
   if DebugTrace then writeln('Entering SkipSpace. SrcPos = ', SrcPos, ' Length(Source) = ', Length(Source));
@@ -306,6 +306,260 @@ begin
 end;
 {$endif}
 
+function PasDirectiveActive: Boolean;
+begin
+  if PasCondCount = 0 then Result := True
+  else Result := PasCondActive[PasCondCount - 1];
+end;
+
+function PasDefineMatches(idx: Integer; const name: AnsiString): Boolean;
+var i: Integer; c1, c2: Char; match: Boolean;
+begin
+  Result := False;
+  if PasDefineNameLen[idx] = Length(name) then
+  begin
+    match := True;
+    i := 0;
+    while i < PasDefineNameLen[idx] do
+    begin
+      c1 := PasDefineChars[PasDefineNameOff[idx] + i];
+      c2 := name[i + 1];
+      if (c1 >= 'A') and (c1 <= 'Z') then c1 := Chr(Ord(c1) + 32);
+      if (c2 >= 'A') and (c2 <= 'Z') then c2 := Chr(Ord(c2) + 32);
+      if c1 <> c2 then match := False;
+      Inc(i);
+    end;
+    Result := match;
+  end;
+end;
+
+function PasDefineExists(const name: AnsiString): Boolean;
+var i: Integer;
+begin
+  Result := False;
+  i := 0;
+  while i < PasDefineCount do
+  begin
+    if PasDefineActive[i] and PasDefineMatches(i, name) then Result := True;
+    Inc(i);
+  end;
+end;
+
+procedure PasDefine(const name: AnsiString);
+var i, j, len: Integer;
+begin
+  if name = '' then Exit;
+  if PasDefineExists(name) then Exit;
+  i := 0;
+  while i < PasDefineCount do
+  begin
+    if PasDefineMatches(i, name) then
+    begin
+      PasDefineActive[i] := True;
+      Exit;
+    end;
+    Inc(i);
+  end;
+  if PasDefineCount >= MAX_PAS_DEFINES then Error('too many Pascal defines');
+  len := Length(name);
+  if PasDefineCharLen + len >= MAX_PAS_DEFINE_CHARS then Error('Pascal define storage overflow');
+  PasDefineNameOff[PasDefineCount] := PasDefineCharLen;
+  PasDefineNameLen[PasDefineCount] := len;
+  PasDefineActive[PasDefineCount] := True;
+  j := 1;
+  while j <= len do
+  begin
+    PasDefineChars[PasDefineCharLen] := name[j];
+    Inc(PasDefineCharLen);
+    Inc(j);
+  end;
+  Inc(PasDefineCount);
+end;
+
+procedure PasUndefine(const name: AnsiString);
+var i: Integer;
+begin
+  if CaseEqual(name, 'PXX') then Exit;
+  i := 0;
+  while i < PasDefineCount do
+  begin
+    if PasDefineMatches(i, name) then PasDefineActive[i] := False;
+    Inc(i);
+  end;
+end;
+
+function PasOptionTail(const value: AnsiString; first: Integer): AnsiString;
+var i: Integer;
+begin
+  Result := '';
+  i := first;
+  while i <= Length(value) do
+  begin
+    AppendChar(Result, value[i]);
+    Inc(i);
+  end;
+end;
+
+procedure PasInitDefines;
+var name: AnsiString;
+begin
+  PasDefineCharLen := 0;
+  PasDefineCount := 0;
+  PasCondCount := 0;
+  StrictOverload := False;
+  name := 'PXX';
+  PasDefine(name);
+end;
+
+procedure PasDefineCommandOption(first: Integer);
+var name: AnsiString;
+begin
+  name := PasOptionTail(PasCommandOption, first);
+  PasDefine(name);
+end;
+
+procedure PasUndefineCommandOption(first: Integer);
+var name: AnsiString;
+begin
+  name := PasOptionTail(PasCommandOption, first);
+  PasUndefine(name);
+end;
+
+function PasObjFpcModeOption: Boolean;
+var name: AnsiString;
+begin
+  name := PasOptionTail(PasCommandOption, 3);
+  Result := CaseEqual(name, 'objfpc');
+end;
+
+procedure ReadPasDirectiveWord(var word: AnsiString);
+begin
+  word := '';
+  while (SrcPos <= Length(Source)) and
+        (Source[SrcPos] in [' ', #9, #13, #10]) do
+  begin
+    if Source[SrcPos] = #10 then Inc(SrcLine);
+    Inc(SrcPos);
+  end;
+  while (SrcPos <= Length(Source)) and
+        (Source[SrcPos] in ['a'..'z','A'..'Z','0'..'9','_']) do
+  begin
+    AppendChar(word, Source[SrcPos]);
+    Inc(SrcPos);
+  end;
+end;
+
+procedure ProcessPasDirective;
+var command, name: AnsiString; parent, cond: Boolean; idx: Integer;
+begin
+  Inc(SrcPos); { dollar sign }
+  ReadPasDirectiveWord(command);
+  ReadPasDirectiveWord(name);
+  while (SrcPos <= Length(Source)) and (Source[SrcPos] <> '}') do
+  begin
+    if Source[SrcPos] = #10 then Inc(SrcLine);
+    Inc(SrcPos);
+  end;
+  if SrcPos <= Length(Source) then Inc(SrcPos);
+
+  if CaseEqual(command, 'ifdef') or CaseEqual(command, 'ifndef') then
+  begin
+    if PasCondCount >= MAX_PAS_CONDS then Error('conditional directive nesting overflow');
+    parent := PasDirectiveActive;
+    cond := PasDefineExists(name);
+    if CaseEqual(command, 'ifndef') then cond := not cond;
+    PasCondParent[PasCondCount] := parent;
+    PasCondActive[PasCondCount] := parent and cond;
+    PasCondTaken[PasCondCount] := parent and cond;
+    Inc(PasCondCount);
+  end
+  else if CaseEqual(command, 'else') then
+  begin
+    if PasCondCount = 0 then Error('unexpected else directive');
+    idx := PasCondCount - 1;
+    PasCondActive[idx] := PasCondParent[idx] and not PasCondTaken[idx];
+    PasCondTaken[idx] := True;
+  end
+  else if CaseEqual(command, 'endif') then
+  begin
+    if PasCondCount = 0 then Error('unexpected endif directive');
+    Dec(PasCondCount);
+  end
+  else if PasDirectiveActive then
+  begin
+    if CaseEqual(command, 'define') then PasDefine(name)
+    else if CaseEqual(command, 'undef') then PasUndefine(name)
+    else if CaseEqual(command, 'strict_overload') then
+    begin
+      if CaseEqual(name, 'on') then StrictOverload := True
+      else if CaseEqual(name, 'off') then StrictOverload := False
+      else Error('strict_overload requires on or off');
+    end;
+    { Mode and unsupported compatibility directives remain accepted comments. }
+  end;
+  if DebugTrace and (command <> '') then writeln('Pascal directive: ', command, ' ', name);
+end;
+
+procedure SkipSpace;
+begin
+  if DebugTrace then writeln('Entering SkipSpace. SrcPos = ', SrcPos, ' Length(Source) = ', Length(Source));
+  while SrcPos <= Length(Source) do
+  begin
+    if not PasDirectiveActive then
+    begin
+      if (Source[SrcPos] = '{') and (SrcPos < Length(Source)) and
+         (Source[SrcPos + 1] = '$') then
+      begin
+        Inc(SrcPos);
+        ProcessPasDirective;
+      end
+      else
+      begin
+        if Source[SrcPos] = #10 then Inc(SrcLine);
+        Inc(SrcPos);
+      end;
+    end
+    else
+      case Source[SrcPos] of
+        ' ', #9, #13: Inc(SrcPos);
+        #10: begin Inc(SrcLine); Inc(SrcPos); end;
+        '{':
+        begin
+          Inc(SrcPos);
+          if (SrcPos <= Length(Source)) and (Source[SrcPos] = '$') then
+            ProcessPasDirective
+          else
+          begin
+            while (SrcPos <= Length(Source)) and (Source[SrcPos] <> '}') do
+            begin
+              if Source[SrcPos] = #10 then Inc(SrcLine);
+              Inc(SrcPos);
+            end;
+            if SrcPos <= Length(Source) then Inc(SrcPos);
+          end;
+        end;
+        '(':
+          if (SrcPos+1 <= Length(Source)) and (Source[SrcPos+1] = '*') then
+          begin
+            Inc(SrcPos, 2);
+            while SrcPos+1 <= Length(Source) do
+            begin
+              if (Source[SrcPos] = '*') and (Source[SrcPos+1] = ')') then
+                begin Inc(SrcPos, 2); Exit; end;
+              if Source[SrcPos] = #10 then Inc(SrcLine);
+              Inc(SrcPos);
+            end;
+          end
+          else Exit;
+        '/':
+          if (SrcPos+1 <= Length(Source)) and (Source[SrcPos+1] = '/') then
+            while (SrcPos <= Length(Source)) and (Source[SrcPos] <> #10) do Inc(SrcPos)
+          else Exit;
+        else Exit;
+      end;
+  end;
+end;
+
 procedure LexOne;
 var
 {$ifdef FPC}
@@ -320,7 +574,12 @@ begin
   if DebugTrace then writeln('Entering Next. SrcPos = ', SrcPos);
   SkipSpace;
   CurTok.Line := SrcLine; CurTok.SVal := '';
-  if SrcPos > Length(Source) then begin CurTok.Kind := tkEOF; Exit; end;
+  if SrcPos > Length(Source) then
+  begin
+    if PasCondCount > 0 then Error('unterminated conditional directive');
+    CurTok.Kind := tkEOF;
+    Exit;
+  end;
   c := Source[SrcPos];
 
   if c in ['a'..'z','A'..'Z','_'] then

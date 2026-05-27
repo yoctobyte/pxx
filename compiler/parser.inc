@@ -2305,7 +2305,7 @@ var
   savedSC, savedFS, savedCurProc : Integer;
   patchPos : Integer;
   depth    : Integer;
-  doneArgs, doneParam, isArr, isByRef: Boolean;
+  doneArgs, doneParam, isArr, isByRef, declOverload: Boolean;
   startIdx, idx: Integer;
   tokKindOrd: Integer;
   methOwnerCi, methOwnerRec, methSNOff, methSNLen: Integer;
@@ -2401,9 +2401,11 @@ begin
   end;
 
   Eat(tkSemicolon);
+  declOverload := False;
   while ((CurTok.Kind = tkIdent) and ((CurTok.SVal = 'inline') or (CurTok.SVal = 'Inline'))) or
         (CurTok.Kind = tkOverload) do
   begin
+    if CurTok.Kind = tkOverload then declOverload := True;
     Next;
     Eat(tkSemicolon);
   end;
@@ -2453,21 +2455,39 @@ begin
     pi := FindProcOverload(name, nparams, ptypes, parr, pbyref);
     if pi < 0 then
     begin
+      if StrictOverload and (FindProc(name) >= 0) then
+      begin
+        if not declOverload then Error('overloaded routine requires overload directive');
+        if HasNonOverloadProc(name) then Error('all overloaded routines require overload directive');
+      end;
       pi := RegisterProc(name, isFunc, retType, nparams, pnames, ptypes);
+      ProcOverloadDirective[pi] := declOverload;
       Procs[pi].BodyAddr := -1;
       for i := 0 to nparams-1 do
       begin
         Procs[pi].Params[i].IsArray := parr[i];
         Procs[pi].Params[i].IsRef := pbyref[i];
       end;
-    end;
+    end
+    else if declOverload then
+      ProcOverloadDirective[pi] := True;
     Exit;
   end;
 
   { Register or resolve }
   pi := FindProcOverload(name, nparams, ptypes, parr, pbyref);
   if pi < 0 then
+  begin
+    if StrictOverload and (FindProc(name) >= 0) then
+    begin
+      if not declOverload then Error('overloaded routine requires overload directive');
+      if HasNonOverloadProc(name) then Error('all overloaded routines require overload directive');
+    end;
     pi := RegisterProc(name, isFunc, retType, nparams, pnames, ptypes);
+    ProcOverloadDirective[pi] := declOverload;
+  end
+  else if declOverload then
+    ProcOverloadDirective[pi] := True;
   Procs[pi].BodyAddr := CodeLen;
   for i := 0 to nparams-1 do
   begin
