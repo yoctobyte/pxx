@@ -381,6 +381,92 @@ begin
   end;
 end;
 
+{ ===== Central type-query helpers ===== }
+{ These are the single authoritative source for size, alignment, and signedness.
+  All new code must call these instead of hard-coding numbers.
+  Phase 3 migration: update TypeSize/TypeAlign here to change behaviour globally. }
+
+function TypeSize(tk: TTypeKind): Integer;
+{ Returns byte count needed to store one value of type tk.
+  For pointer-sized types, returns TARGET_PTR_SIZE (8 on x86-64). }
+begin
+  Result := 8; { default / legacy path — pointer-width slot }
+  case Ord(tk) of
+    { Legacy kinds (0-6): keep existing sizes during migration }
+    0: Result := 8;  { tyUnknown }
+    1: Result := 8;  { tyInteger  — legacy, will migrate to 4 via tyInt32 }
+    2: Result := 8;  { tyBoolean  — legacy, will migrate to 1 via tyUInt8 }
+    3: Result := 1;  { tyChar }
+    4: Result := 8;  { tyString   — struct pointer / inline; caller manages actual buffer }
+    5: Result := 8;  { tyRecord   — caller must use RecSize() for full record size }
+    6: Result := TARGET_PTR_SIZE;  { tyClass }
+    { New precise kinds (7-17) }
+    7:  Result := 1;  { tyInt8 }
+    8:  Result := 1;  { tyUInt8 }
+    9:  Result := 2;  { tyInt16 }
+    10: Result := 2;  { tyUInt16 }
+    11: Result := 4;  { tyInt32 }
+    12: Result := 4;  { tyUInt32 }
+    13: Result := 8;  { tyInt64 }
+    14: Result := 8;  { tyUInt64 }
+    15: Result := TARGET_PTR_SIZE;  { tyNativeInt }
+    16: Result := TARGET_PTR_SIZE;  { tyNativeUInt }
+    17: Result := TARGET_PTR_SIZE;  { tyPointer }
+  end;
+end;
+
+function TypeAlign(tk: TTypeKind): Integer;
+{ Returns alignment requirement (power of 2) for type tk.
+  On x86-64 all scalar types are naturally aligned. }
+var sz: Integer;
+begin
+  sz := TypeSize(tk);
+  if sz <= 1 then Result := 1
+  else if sz <= 2 then Result := 2
+  else if sz <= 4 then Result := 4
+  else Result := 8;
+end;
+
+function TypeSigned(tk: TTypeKind): Boolean;
+{ True for signed integer types. }
+begin
+  Result := False;
+  case Ord(tk) of
+    1:  Result := True;  { tyInteger  — legacy signed }
+    7:  Result := True;  { tyInt8 }
+    9:  Result := True;  { tyInt16 }
+    11: Result := True;  { tyInt32 }
+    13: Result := True;  { tyInt64 }
+    15: Result := True;  { tyNativeInt }
+  end;
+end;
+
+function TypeIsOrdinal(tk: TTypeKind): Boolean;
+{ True for integer and character types — types that have a simple ordinal value. }
+begin
+  Result := False;
+  case Ord(tk) of
+    1, 2, 3,         { tyInteger, tyBoolean, tyChar — legacy }
+    7, 8, 9, 10,     { tyInt8..tyUInt16 }
+    11, 12, 13, 14,  { tyInt32..tyUInt64 }
+    15, 16, 17:      { tyNativeInt, tyNativeUInt, tyPointer }
+      Result := True;
+  end;
+end;
+
+function TypeIsPointerSized(tk: TTypeKind): Boolean;
+{ True for types that occupy exactly TARGET_PTR_SIZE bytes: Pointer, NativeInt,
+  NativeUInt, tyClass. These grow with the target pointer width. }
+begin
+  Result := False;
+  case Ord(tk) of
+    6,       { tyClass }
+    15, 16,  { tyNativeInt, tyNativeUInt }
+    17:      { tyPointer }
+      Result := True;
+  end;
+end;
+
 { ===== Symbol table ===== }
 
 function StrEqual(const s1, s2: AnsiString): Boolean;

@@ -1291,8 +1291,98 @@ begin
     begin
       name := CurTok.SVal;
       prevTok := TokPos - 1;
+
+      { ---- SizeOf(TypeName) intrinsic: resolved at parse time to AN_INT_LIT ---- }
+      if CaseEqual(name, 'sizeof') then
+      begin
+        Next; { consume 'SizeOf' }
+        Expect(tkLParen, '(');
+        { Peek at the type token to determine the kind }
+        name := CurTok.SVal;
+        if CurTok.Kind = tkInteger_T then
+        begin
+          { 'Integer', 'LongInt', 'ShortInt', 'Byte', 'Word', 'SmallInt', 'Cardinal', 'LongWord' }
+          if CaseEqual(name, 'shortint') then
+            prevTok := TypeSize(tyInt8)
+          else if CaseEqual(name, 'byte') then
+            prevTok := TypeSize(tyUInt8)
+          else if CaseEqual(name, 'smallint') then
+            prevTok := TypeSize(tyInt16)
+          else if CaseEqual(name, 'word') then
+            prevTok := TypeSize(tyUInt16)
+          else if CaseEqual(name, 'longint') or CaseEqual(name, 'integer') then
+            prevTok := TypeSize(tyInt32)
+          else if CaseEqual(name, 'cardinal') then
+            prevTok := TypeSize(tyUInt32)
+          else
+            prevTok := TypeSize(tyInt32);  { default integer-family }
+        end
+        else if CurTok.Kind = tkLongWord_T then
+          prevTok := TypeSize(tyUInt32)
+        else if CurTok.Kind = tkBoolean_T then
+          prevTok := TypeSize(tyUInt8)   { Boolean is 1 byte per FPC ObjFPC }
+        else if CurTok.Kind = tkChar_T then
+          prevTok := TypeSize(tyChar)
+        else if CurTok.Kind = tkString_T then
+          prevTok := TypeSize(tyString)
+        else if CurTok.Kind = tkIdent then
+        begin
+          { Named type: check for known types by name }
+          if CaseEqual(name, 'shortint') then
+            prevTok := TypeSize(tyInt8)
+          else if CaseEqual(name, 'byte') then
+            prevTok := TypeSize(tyUInt8)
+          else if CaseEqual(name, 'smallint') then
+            prevTok := TypeSize(tyInt16)
+          else if CaseEqual(name, 'word') then
+            prevTok := TypeSize(tyUInt16)
+          else if CaseEqual(name, 'longint') or CaseEqual(name, 'integer') then
+            prevTok := TypeSize(tyInt32)
+          else if CaseEqual(name, 'cardinal') or CaseEqual(name, 'longword') then
+            prevTok := TypeSize(tyUInt32)
+          else if CaseEqual(name, 'int64') then
+            prevTok := TypeSize(tyInt64)
+          else if CaseEqual(name, 'qword') then
+            prevTok := TypeSize(tyUInt64)
+          else if CaseEqual(name, 'nativeint') or CaseEqual(name, 'ptrint') then
+            prevTok := TypeSize(tyNativeInt)
+          else if CaseEqual(name, 'nativeuint') or CaseEqual(name, 'ptruint') then
+            prevTok := TypeSize(tyNativeUInt)
+          else if CaseEqual(name, 'pointer') then
+            prevTok := TypeSize(tyPointer)
+          else if CaseEqual(name, 'boolean') then
+            prevTok := TypeSize(tyUInt8)
+          else if CaseEqual(name, 'char') or CaseEqual(name, 'ansichar') then
+            prevTok := TypeSize(tyChar)
+          else if CaseEqual(name, 'ansistring') or CaseEqual(name, 'string') then
+            prevTok := TypeSize(tyString)
+          else
+          begin
+            { Try record/class type }
+            idx := IsRecordType(name);
+            if idx <> REC_NONE then
+              prevTok := RecSize(idx)
+            else
+            begin
+              { Fall back: size of a known constant symbol if it is a type synonym }
+              prevTok := TARGET_PTR_SIZE;
+            end;
+          end;
+        end
+        else
+          prevTok := TARGET_PTR_SIZE;  { unknown token kind in SizeOf }
+        Next; { consume type token }
+        Expect(tkRParen, ')');
+        node := AllocNode(AN_INT_LIT);
+        ASTIVal[node] := prevTok;
+        ASTTk[node] := Ord(tyInteger);
+        CurASTNode := node;
+        Exit;
+      end;
+
       idx  := FindSym(name);
       pi   := FindProc(name);
+
       if (idx < 0) and (pi < 0) and IsClassType(name) and
          (CurTok.Kind = tkIdent) and (Tokens[TokPos].Kind = tkDot) and
          (Tokens[TokPos+1].Kind = tkIdent) and

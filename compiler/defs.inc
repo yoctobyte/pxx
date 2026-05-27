@@ -1,4 +1,6 @@
 const
+  TARGET_PTR_SIZE = 8;  { pointer size in bytes on the current target (x86-64) }
+
   MAX_CODE      = 1048576;
   LOCAL_STR_CAP = 256;     { max string length for local/stack variables }
   MAX_DATA    = 1048576;
@@ -138,7 +140,28 @@ type
     ProcIdx  : Integer;
   end;
 
-  TTypeKind = (tyUnknown, tyInteger, tyBoolean, tyChar, tyString, tyRecord, tyClass);
+  TTypeKind = (
+    { Ordinals 0–6: fixed since first bootstrap — DO NOT reorder }
+    tyUnknown,   { 0: unresolved/error }
+    tyInteger,   { 1: legacy 8-byte alias; migrating to tyInt32 }
+    tyBoolean,   { 2: legacy 8-byte alias; migrating to tyUInt8 }
+    tyChar,      { 3: 1-byte unsigned character/Byte alias }
+    tyString,    { 4: Pascal string with inline length prefix }
+    tyRecord,    { 5: record/struct }
+    tyClass,     { 6: class reference (pointer-sized) }
+    { Ordinals 7–17: appended for correct Pascal semantics — safe to extend }
+    tyInt8,      { 7: ShortInt  — 1 byte signed }
+    tyUInt8,     { 8: Byte      — 1 byte unsigned }
+    tyInt16,     { 9: SmallInt — 2 bytes signed }
+    tyUInt16,    { 10: Word    — 2 bytes unsigned }
+    tyInt32,     { 11: Integer/LongInt — 4 bytes signed }
+    tyUInt32,    { 12: Cardinal/LongWord — 4 bytes unsigned }
+    tyInt64,     { 13: Int64  — 8 bytes signed }
+    tyUInt64,    { 14: QWord  — 8 bytes unsigned }
+    tyNativeInt,  { 15: NativeInt/PtrInt — pointer-sized signed }
+    tyNativeUInt, { 16: NativeUInt/PtrUInt — pointer-sized unsigned }
+    tyPointer    { 17: untyped Pointer — pointer-sized, no sign }
+  );
 
   TSymKind  = (skLocal, skGlobal, skParam, skConst);
 

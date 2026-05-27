@@ -122,6 +122,8 @@ test: $(COMPILER) fpc-check
 	grep -q "overloaded routine requires overload directive" /tmp/test_strict_overload_error.log
 	./$(COMPILER) --strict-overload test/test_overloading.pas /tmp/test_overloading_strict26
 	test "$$(/tmp/test_overloading_strict26)" = "$$(printf 'Integer: 42\nChar: 65\nTwo Integers: 10, 20\nAdd integers: 12\nChar addition: XY')"
+	./$(COMPILER) test/test_sizeof.pas /tmp/test_sizeof26
+	test "$$(/tmp/test_sizeof26)" = "$$(printf '1\n1\n2\n2\n4\n4\n4\n4\n8\n8\n8\n8\n8\n8\n8\n1\n1')"
 	./$(COMPILER) $(COMPILER_SRC) /tmp/pascal26-self
 	/tmp/pascal26-self test/hello.pas /tmp/self-hello26
 	test "$$(/tmp/self-hello26)" = "Hello, World!"
