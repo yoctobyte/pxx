@@ -1,4 +1,13 @@
-so, some missing features:
+## Philosophical parking lot
+
+> In an ideal collaboration the human's job is deletion.
+
+Worth pondering. If AI generates, and the human curates — is curation just
+deletion? Is that enough? Is it the most human thing left?
+
+---
+
+## Missing features
 
 - class properties (getters and setters), mostly syntactic sugar, some namespace thingies. 
 
