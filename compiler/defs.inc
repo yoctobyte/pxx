@@ -173,6 +173,8 @@ const
   MAX_TEMPLATES = 16;
   MAX_TEMPLATE_TOKENS = 8192;
   MAX_SPECIALIZATIONS = 32;
+  MAX_GENERIC_FUNCS = 16;
+  MAX_PENDING_GFSPECS = 32;
 
 type
   TTemplate = record
@@ -189,6 +191,21 @@ type
     ConcreteName : AnsiString;  { e.g. 'Integer' or 'TMyClass' }
   end;
 
+  TGenericFunc = record
+    Name     : AnsiString;
+    Param    : AnsiString;
+    IsFunc   : Boolean;
+    TokStart : Integer;
+    TokCount : Integer;
+  end;
+
+  TPendingGFSpec = record
+    GenFuncIdx   : Integer;
+    ConcreteKind : TTokenKind;
+    ConcreteName : AnsiString;
+    SpecName     : AnsiString;
+  end;
+
 var
   Templates          : array[0..MAX_TEMPLATES-1] of TTemplate;
   TemplateCount      : Integer;
@@ -196,6 +213,15 @@ var
   SpecializationCount: Integer;
   TemplateTokens     : array[0..MAX_TEMPLATE_TOKENS-1] of TRawToken;
   TemplateTokenCount : Integer;
+  GenericFuncs       : array[0..MAX_GENERIC_FUNCS-1] of TGenericFunc;
+  GenericFuncCount   : Integer;
+  PendingGFSpecs     : array[0..MAX_PENDING_GFSPECS-1] of TPendingGFSpec;
+  PendingGFSpecCount : Integer;
+  { Scratch output of ScanGenericFuncSig }
+  GFSig_NParams : Integer;
+  GFSig_RetType : TTypeKind;
+  GFSig_PNames  : array[0..7] of AnsiString;
+  GFSig_PTypes  : array[0..7] of TTypeKind;
 
   DebugTrace : Boolean;
   Source  : AnsiString;
