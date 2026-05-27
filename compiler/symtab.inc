@@ -124,6 +124,8 @@ const
   REC_TMYCLASS = 10;
   REC_TTEMPLATE = 11;
   REC_TSPECIALIZATION = 12;
+  REC_TGENERICFUNC = 13;
+  REC_TPENDINGGFSPEC = 14;
 
 function IsRecordType(const lo: AnsiString): Integer;
 var ci: Integer; lo2: AnsiString;
@@ -140,7 +142,9 @@ begin
   else if lo = 'TRawToken' then Result := REC_TRAWTOKEN
   else if (lo = 'TMyClass') or (lo = 'tmyclass') then Result := REC_TMYCLASS
   else if lo = 'TTemplate' then Result := REC_TTEMPLATE
-  else if lo = 'TSpecialization' then Result := REC_TSPECIALIZATION;
+  else if lo = 'TSpecialization' then Result := REC_TSPECIALIZATION
+  else if lo = 'TGenericFunc' then Result := REC_TGENERICFUNC
+  else if lo = 'TPendingGFSpec' then Result := REC_TPENDINGGFSPEC;
   if Result = REC_NONE then
   begin
     lo2 := lo;
@@ -177,6 +181,8 @@ begin
   else if rec = REC_TMYCLASS then Result := 16
   else if rec = REC_TTEMPLATE then Result := 544
   else if rec = REC_TSPECIALIZATION then Result := 800
+  else if rec = REC_TGENERICFUNC then Result := 552
+  else if rec = REC_TPENDINGGFSPEC then Result := 544
   else if rec >= REC_UCLASS_BASE then Result := UClsSize_[rec - REC_UCLASS_BASE];
 end;
 
@@ -273,6 +279,21 @@ begin
     else if field = 'ConcreteType' then Result := 528
     else if field = 'ConcreteName' then Result := 536;
   end
+  else if rec = REC_TGENERICFUNC then
+  begin
+    if field = 'Name' then Result := 0
+    else if field = 'Param' then Result := 264
+    else if field = 'IsFunc' then Result := 528
+    else if field = 'TokStart' then Result := 536
+    else if field = 'TokCount' then Result := 544;
+  end
+  else if rec = REC_TPENDINGGFSPEC then
+  begin
+    if field = 'GenFuncIdx' then Result := 0
+    else if field = 'ConcreteKind' then Result := 8
+    else if field = 'ConcreteName' then Result := 16
+    else if field = 'SpecName' then Result := 280;
+  end
   else if rec >= REC_UCLASS_BASE then
   begin
     fi := FindUField(rec - REC_UCLASS_BASE, field2);
@@ -319,6 +340,15 @@ begin
   else if rec = REC_TSPECIALIZATION then
   begin
     if (field = 'Name') or (field = 'TemplateName') or (field = 'ConcreteName') then Result := tyString;
+  end
+  else if rec = REC_TGENERICFUNC then
+  begin
+    if (field = 'Name') or (field = 'Param') then Result := tyString
+    else if field = 'IsFunc' then Result := tyBoolean;
+  end
+  else if rec = REC_TPENDINGGFSPEC then
+  begin
+    if (field = 'ConcreteName') or (field = 'SpecName') then Result := tyString;
   end
   else if rec >= REC_UCLASS_BASE then
   begin

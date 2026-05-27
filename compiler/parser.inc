@@ -139,6 +139,8 @@ function ParseSetMembershipAST(leftExpr: Integer): Integer; forward;
 function ParseStatementAST: Integer; forward;
 function ParseBlockAST: Integer; forward;
 procedure CompileAST(node: Integer); forward;
+procedure ParseSubroutine; forward;
+procedure ParseGenericFunctionDef; forward;
 
 function GetTokenStrFromRaw(const tok: TRawToken): AnsiString;
 var s: AnsiString; i: Integer;
@@ -149,7 +151,7 @@ begin
   Result := s;
 end;
 
-procedure SpecializeStream(templateIdx: Integer; tokStart, count: Integer; const specName, paramName, concreteName: AnsiString; concreteType: TTokenKind);
+procedure SpecializeStream(const templateName: AnsiString; tokStart, count: Integer; const specName, paramName, concreteName: AnsiString; concreteType: TTokenKind);
 var
   i, j: Integer;
   tok: TRawToken;
@@ -161,11 +163,11 @@ begin
   for i := 0 to count - 1 do
   begin
     tok := TemplateTokens[tokStart + i];
-    
+
     if tok.Kind = tkIdent then
     begin
       s := GetTokenStrFromRaw(tok);
-      if CaseEqual(s, Templates[templateIdx].Name) then
+      if CaseEqual(s, templateName) then
       begin
         tok.SOffset := TokCharLen;
         tok.SLen := Length(specName);
@@ -281,7 +283,7 @@ begin
   Specializations[SpecializationCount].ConcreteName := concreteName;
   Inc(SpecializationCount);
   
-  SpecializeStream(ti, Templates[ti].TokStart, Templates[ti].TokCount, specName, Templates[ti].Param, concreteName, concreteType);
+  SpecializeStream(Templates[ti].Name, Templates[ti].TokStart, Templates[ti].TokCount, specName, Templates[ti].Param, concreteName, concreteType);
   Next;
 end;
 
@@ -329,12 +331,148 @@ begin
   begin
     if CaseEqual(Specializations[si].TemplateName, Templates[ti].Name) then
     begin
-      SpecializeStream(ti, mStart, mCount, Specializations[si].Name, Templates[ti].Param, Specializations[si].ConcreteName, Specializations[si].ConcreteType);
+      SpecializeStream(Templates[ti].Name, mStart, mCount, Specializations[si].Name, Templates[ti].Param, Specializations[si].ConcreteName, Specializations[si].ConcreteType);
     end;
   end;
   
   { TokPos = finalCur (InsertTokens doesn't change it); parser reads from first specialization }
   Next;
+end;
+
+function FindGenericFunc(const name: AnsiString): Integer;
+var i: Integer;
+begin
+  Result := -1;
+  for i := 0 to GenericFuncCount - 1 do
+    if CaseEqual(GenericFuncs[i].Name, name) then begin Result := i; Exit; end;
+end;
+
+{ Parses: generic function Max<T>(A, B: T): T; begin...end;
+  Called when CurTok = tkIdent('generic') }
+procedure ParseGenericFunctionDef;
+var isFunc: Boolean; funcName, paramName: AnsiString;
+    gfi, j, cur, finalCur, depth: Integer;
+    synTok: TRawToken;
+begin
+  Next; { consume 'generic' }
+  if (CurTok.Kind <> tkFunction) and (CurTok.Kind <> tkProcedure) then
+    Error('expected function or procedure after generic');
+  isFunc := CurTok.Kind = tkFunction;
+  Next; { consume function/procedure }
+
+  if CurTok.Kind <> tkIdent then Error('expected generic function name');
+  funcName := CurTok.SVal; Next;
+
+  Expect(tkLt, '<');
+  if CurTok.Kind <> tkIdent then Error('expected generic type parameter');
+  paramName := CurTok.SVal; Next;
+  Expect(tkGt, '>');
+  { CurTok = '(' of param list, or ';' / ':' if no params }
+
+  if GenericFuncCount >= MAX_GENERIC_FUNCS then Error('too many generic functions');
+  gfi := GenericFuncCount;
+  GenericFuncs[gfi].Name     := funcName;
+  GenericFuncs[gfi].Param    := paramName;
+  GenericFuncs[gfi].IsFunc   := isFunc;
+  GenericFuncs[gfi].TokStart := TemplateTokenCount;
+  GenericFuncs[gfi].TokCount := 0;
+
+  { Prepend synthetic 'function/procedure funcName' tokens into template buffer }
+  synTok.IVal := 0; synTok.Line := 0;
+  if isFunc then synTok.Kind := tkFunction else synTok.Kind := tkProcedure;
+  synTok.SOffset := TokCharLen; synTok.SLen := 0;
+  TemplateTokens[TemplateTokenCount] := synTok;
+  Inc(TemplateTokenCount);
+  GenericFuncs[gfi].TokCount := GenericFuncs[gfi].TokCount + 1;
+
+  synTok.Kind := tkIdent;
+  synTok.SOffset := TokCharLen;
+  synTok.SLen := Length(funcName);
+  for j := 1 to Length(funcName) do
+  begin
+    TokChars[TokCharLen] := funcName[j];
+    Inc(TokCharLen);
+  end;
+  TemplateTokens[TemplateTokenCount] := synTok;
+  Inc(TemplateTokenCount);
+  GenericFuncs[gfi].TokCount := GenericFuncs[gfi].TokCount + 1;
+
+  { Buffer remaining tokens: (A,B:T):T; begin...end; }
+  { TokPos-1 = index of current token '(' in Tokens array }
+  cur := TokPos - 1;
+  while (cur < TokCount) and (Tokens[cur].Kind <> tkBegin) do Inc(cur);
+  depth := 1; Inc(cur);
+  while (cur < TokCount) and (depth > 0) do
+  begin
+    if Tokens[cur].Kind in [tkBegin, tkCase] then Inc(depth)
+    else if Tokens[cur].Kind = tkEnd then Dec(depth);
+    Inc(cur);
+  end;
+  if (cur < TokCount) and (Tokens[cur].Kind = tkSemicolon) then Inc(cur);
+  finalCur := cur;
+
+  for cur := TokPos - 1 to finalCur - 1 do
+  begin
+    if TemplateTokenCount >= MAX_TEMPLATE_TOKENS then Error('generic template tokens overflow');
+    TemplateTokens[TemplateTokenCount] := Tokens[cur];
+    Inc(TemplateTokenCount);
+    GenericFuncs[gfi].TokCount := GenericFuncs[gfi].TokCount + 1;
+  end;
+
+  Inc(GenericFuncCount);
+  TokPos := finalCur;
+  Next;
+end;
+
+{ Parses: specialize Max<Integer> as MaxInt;
+  Called when CurTok = tkIdent('specialize') at top level }
+procedure ParseTopLevelSpecialize;
+var templateName, concreteName, specName: AnsiString;
+    concreteKind: TTokenKind; gfi, i: Integer;
+begin
+  Next; { consume 'specialize' }
+  if CurTok.Kind <> tkIdent then Error('expected generic function name after specialize');
+  templateName := CurTok.SVal; Next;
+
+  Expect(tkLt, '<');
+  if (CurTok.Kind = tkIdent) or (CurTok.Kind = tkInteger_T) or
+     (CurTok.Kind = tkBoolean_T) or (CurTok.Kind = tkChar_T) or
+     (CurTok.Kind = tkString_T) then
+  begin
+    concreteName := CurTok.SVal;
+    concreteKind := CurTok.Kind;
+    Next;
+  end
+  else
+    Error('expected concrete type in specialize');
+  Expect(tkGt, '>');
+
+  { Optional 'as Name' }
+  if (CurTok.Kind = tkIdent) and CaseEqual(CurTok.SVal, 'as') then
+  begin
+    Next;
+    if CurTok.Kind <> tkIdent then Error('expected name after as');
+    specName := CurTok.SVal; Next;
+  end
+  else
+  begin
+    { Auto-generate: Max_Integer }
+    specName := templateName;
+    AppendChar(specName, '_');
+    i := 1;
+    while i <= Length(concreteName) do begin AppendChar(specName, concreteName[i]); Inc(i); end;
+  end;
+  { CurTok = ';' — do NOT Eat here. Insert at TokPos (after ';') so that
+    after ParseSubroutine finishes its own 'end;', CurTok lands on the next
+    top-level token (next specialize/begin/etc.) rather than skipping it. }
+
+  gfi := FindGenericFunc(templateName);
+  if gfi < 0 then Error('generic function ' + templateName + ' not found');
+
+  SpecializeStream(GenericFuncs[gfi].Name, GenericFuncs[gfi].TokStart, GenericFuncs[gfi].TokCount,
+    specName, GenericFuncs[gfi].Param, concreteName, concreteKind);
+  Next;
+  ParseSubroutine;
 end;
 
 function ParseLValueAST(idx: Integer): Integer;
@@ -2545,7 +2683,7 @@ end;
 { ===== Program ===== }
 
 procedure ParseProgram;
-var jmpPatch: Integer; doneUses: Boolean;
+var jmpPatch: Integer; doneUses, doneDecls: Boolean;
 begin
   Expect(tkProgram, 'program');
   if CurTok.Kind = tkEOF then Error('expected program name');
@@ -2573,8 +2711,8 @@ begin
 
   EmitB($E9); jmpPatch := CodeLen; EmitI32(0);
 
-  while CurTok.Kind in
-    [tkUses, tkVar, tkConst, tkType, tkProcedure, tkFunction] do
+  doneDecls := False;
+  while not doneDecls do
     case CurTok.Kind of
       tkUses:
       begin
@@ -2593,6 +2731,15 @@ begin
       tkType:     ParseTypeSection;
       tkProcedure,
       tkFunction: ParseSubroutine;
+      tkIdent:
+        if CaseEqual(CurTok.SVal, 'generic') then
+          ParseGenericFunctionDef
+        else if CaseEqual(CurTok.SVal, 'specialize') then
+          ParseTopLevelSpecialize
+        else
+          doneDecls := True;
+      else
+        doneDecls := True;
     end;
 
   { Patch jmp to point here (start of main body) }
