@@ -910,7 +910,10 @@ begin
     left := CurASTNode;
     ParseTerm;
     right := CurASTNode;
-    node := AllocNode(AN_BINOP); ASTIVal[node] := Ord(op); ASTLeft[node] := left; ASTRight[node] := right; CurASTNode := node;
+    node := AllocNode(AN_BINOP); ASTIVal[node] := Ord(op); ASTLeft[node] := left; ASTRight[node] := right;
+    if (op = tkPlus) and ((ASTTk[left] = Ord(tyString)) or (ASTTk[right] = Ord(tyString))) then
+      ASTTk[node] := Ord(tyString);
+    CurASTNode := node;
   end;
 end;
 

@@ -464,7 +464,82 @@ begin
       EmitB($58); { pop rax }
       
       op := IntToTokenKind(ASTIVal[node]);
-      if (op = tkIdent) and (GetASTIdentName(node) = 'shr') then
+      if (ASTTk[node] = Ord(tyString)) and (op = tkPlus) then
+      begin
+        lhsTk := IntToTypeKind(ASTTk[ASTLeft[node]]);
+        rhsTk := IntToTypeKind(ASTTk[ASTRight[node]]);
+        
+        { 0. mov r10, rcx (save rcx to r10) }
+        EmitB($49); EmitB($89); EmitB($CA);
+        
+        { 1. sub rsp, 272 }
+        EmitB($48); EmitB($81); EmitB($EC); EmitI32(272);
+        { 2. mov r11, rsp }
+        EmitB($49); EmitB($89); EmitB($E3);
+        
+        { 3. Copy LHS }
+        if lhsTk = tyString then
+        begin
+          EmitB($4C); EmitB($8B); EmitB($00); { mov r8, [rax] }
+          EmitB($48); EmitB($8D); EmitB($70); EmitB($08); { lea rsi, [rax+8] }
+          EmitB($49); EmitB($8D); EmitB($7B); EmitB($08); { lea rdi, [r11+8] }
+          EmitB($4C); EmitB($89); EmitB($C1); { mov rcx, r8 }
+          
+          { Copy loop }
+          EmitB($48); EmitB($85); EmitB($C9); { test rcx, rcx }
+          EmitB($74); EmitB(15); { jz done (+15 bytes) }
+          EmitB($8A); EmitB($16); { mov dl, [rsi] }
+          EmitB($88); EmitB($17); { mov [rdi], dl }
+          EmitB($48); EmitB($FF); EmitB($C6); { inc rsi }
+          EmitB($48); EmitB($FF); EmitB($C7); { inc rdi }
+          EmitB($48); EmitB($FF); EmitB($C9); { dec rcx }
+          EmitB($EB); EmitB(Byte(-20)); { jmp loop (-20 bytes) }
+        end
+        else
+        begin
+          EmitB($49); EmitB($C7); EmitB($C0); EmitI32(1); { mov r8, 1 }
+          EmitB($41); EmitB($88); EmitB($43); EmitB($08); { mov [r11+8], al }
+        end;
+        
+        { 4. Copy RHS }
+        if rhsTk = tyString then
+        begin
+          EmitB($4D); EmitB($8B); EmitB($0A); { mov r9, [r10] }
+          EmitB($49); EmitB($8D); EmitB($72); EmitB($08); { lea rsi, [r10+8] }
+          EmitB($49); EmitB($8D); EmitB($7B); EmitB($08); { lea rdi, [r11+8] }
+          EmitB($4C); EmitB($01); EmitB($C7); { add rdi, r8 }
+          EmitB($4C); EmitB($89); EmitB($CA); { mov rdx, r9 }
+          
+          { Copy loop }
+          EmitB($48); EmitB($85); EmitB($D2); { test rdx, rdx }
+          EmitB($74); EmitB(15); { jz done (+15 bytes) }
+          EmitB($8A); EmitB($06); { mov al, [rsi] }
+          EmitB($88); EmitB($07); { mov [rdi], al }
+          EmitB($48); EmitB($FF); EmitB($C6); { inc rsi }
+          EmitB($48); EmitB($FF); EmitB($C7); { inc rdi }
+          EmitB($48); EmitB($FF); EmitB($CA); { dec rdx }
+          EmitB($EB); EmitB(Byte(-20)); { jmp loop (-20 bytes) }
+        end
+        else
+        begin
+          EmitB($49); EmitB($C7); EmitB($C1); EmitI32(1); { mov r9, 1 }
+          EmitB($49); EmitB($8D); EmitB($7B); EmitB($08); { lea rdi, [r11+8] }
+          EmitB($4C); EmitB($01); EmitB($C7); { add rdi, r8 }
+          EmitB($44); EmitB($88); EmitB($17); { mov [rdi], r10b }
+        end;
+        
+        { 5. Store total length }
+        EmitB($4B); EmitB($8D); EmitB($04); EmitB($08); { lea rax, [r8+r9] }
+        EmitB($48); EmitB($3D); EmitI32(256); { cmp rax, 256 }
+        EmitB($7E); EmitB(7); { jle len_ok }
+        EmitB($48); EmitB($C7); EmitB($C0); EmitI32(256); { mov rax, 256 }
+        { len_ok: }
+        EmitB($49); EmitB($89); EmitB($03); { mov [r11], rax }
+        
+        { 6. mov rax, r11 }
+        EmitB($4C); EmitB($89); EmitB($D8); { mov rax, r11 }
+      end
+      else if (op = tkIdent) and (GetASTIdentName(node) = 'shr') then
       begin
         EmitB($48); EmitB($D3); EmitB($E8); { shr rax, cl }
       end
@@ -615,7 +690,7 @@ begin
         end
         else
         begin
-          if ASTKind[rhsNode] = AN_CALL then
+          if (ASTKind[rhsNode] = AN_CALL) or (ASTTk[rhsNode] = Ord(tyString)) then
             GenAST(rhsNode)
           else
             GenLValueAddress(rhsNode, rhsTk, dummyRec, False);
@@ -659,7 +734,7 @@ begin
           end
           else
           begin
-            if ASTKind[rhsNode] = AN_CALL then
+            if (ASTKind[rhsNode] = AN_CALL) or (ASTTk[rhsNode] = Ord(tyString)) then
               GenAST(rhsNode)
             else
               GenLValueAddress(rhsNode, rhsTk, dummyRec, False);

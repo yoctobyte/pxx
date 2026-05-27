@@ -145,6 +145,69 @@ begin
   PatchDataU64(p + 8, dataBase + DynamicRelaOff);
 end;
 
+function IntToHexStr(val: Int64; digits: Integer): AnsiString;
+var
+  i, temp: Integer;
+  ch: Char;
+  v: Int64;
+begin
+  Result := '';
+  v := val;
+  for i := 1 to digits do
+  begin
+    temp := v and $F;
+    if temp < 10 then
+      ch := Chr(Ord('0') + temp)
+    else
+      ch := Chr(Ord('a') + temp - 10);
+    Result := ch + Result;
+    v := v shr 4;
+  end;
+end;
+
+procedure WriteMapFile(const outPath: AnsiString; codeOffset: Int64);
+var
+  mapPath, mapContent: AnsiString;
+  f, i, j, len: Integer;
+  addr: Int64;
+begin
+  mapPath := outPath + '.map';
+  mapContent := '# Frankonpiler Map File' + #10;
+  mapContent := mapContent + '# Executable: ' + outPath + #10;
+  mapContent := mapContent + '# Base Address: 0x' + IntToHexStr(LOAD_ADDR, 8) + #10;
+  mapContent := mapContent + '# Code Offset: 0x' + IntToHexStr(codeOffset, 8) + #10 + #10;
+  
+  { Entry / _start }
+  addr := LOAD_ADDR + codeOffset;
+  mapContent := mapContent + '0x' + IntToHexStr(addr, 16) + ' _start' + #10;
+  
+  for i := 0 to ProcCount - 1 do
+  begin
+    if Procs[i].BodyAddr >= 0 then
+    begin
+      addr := LOAD_ADDR + codeOffset + Procs[i].BodyAddr;
+      mapContent := mapContent + '0x' + IntToHexStr(addr, 16) + ' ' + Procs[i].Name + #10;
+    end;
+  end;
+  
+  len := Length(mapContent);
+  if len > STRING_CAP then
+    len := STRING_CAP;
+    
+  for j := 0 to len - 1 do
+    TokChars[j] := mapContent[j + 1];
+  
+  f := sysopen(mapPath, 577); { O_WRONLY | O_CREAT | O_TRUNC }
+  if f >= 0 then
+  begin
+    AssignPath := mapPath;
+    sysfchmod(f, 420); { chmod 644 }
+    if len > 0 then
+      syswrite(f, TokChars, len);
+    sysclose(f);
+  end;
+end;
+
 {$ifdef FPC}
 procedure writeU8(var f:File;v:Byte);   begin Blockwrite(f,v,1); end;
 procedure writeU16(var f:File;v:Word);
@@ -259,6 +322,7 @@ begin
   if DataLen > 0 then Blockwrite(f,Data[0],DataLen);
   Close(f);
   FpChmod(outPath,&755);
+  WriteMapFile(outPath, codeOffset);
 end;
 {$else}
 procedure writeELF(const outPath: AnsiString);
@@ -331,6 +395,7 @@ begin
   if DataLen > 0 then syswrite(f,Data,DataLen);
   sysfchmod(f, 493); { chmod 755 }
   sysclose(f);
+  WriteMapFile(outPath, codeOffset);
 end;
 {$endif}
 

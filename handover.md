@@ -95,10 +95,8 @@ prototype + dynamic resolve. `ctype` hardcoded → `libc.so.6`. Other headers de
   Any code that compares an `AnsiString` against a single-char literal must go through the
   string-vs-char path in codegen.inc (fixed 2026-05-27). Comparisons like `field = 'x'` work
   correctly now.
-- **String `+` concatenation**: `tkPlus` only emits `ADD RAX, RCX` — does NOT concatenate
-  strings. Use `AppendChar` loops instead. This bug is invisible to bootstrap because the
-  dot-method parsing code path (`name := name + '.' + CurTok.SVal`) was never exercised
-  during compilation of the compiler itself.
+- **String `+` concatenation**: Now fully supported and implemented! Correct type propagation has been added, and the emitter generates a stack-based temporary concatenation buffer (272 bytes) safely evaluating `a + b` for variables, literals, and chars without register clobbering.
+- **Self-evolution bootstrap rule**: Avoid bootstrapping using FPC by default. The compiler should evolve directly using its own built self-hosted seed (`compiler/pascal26`). FPC remains a secondary tool to verify compatibility.
 
 ## Class / Method Implementation Details
 
