@@ -59,6 +59,11 @@ const
   AN_EXIT      = 24;
   AN_BREAK     = 25;
   AN_CONTINUE  = 26;
+  AN_TRY_EXCEPT = 27; { Left = protected block; Right = catch-all handler block }
+  AN_RAISE     = 28;  { Left = raised expression }
+
+  EXC_FRAME_SIZE = 80;
+  EXC_JMP_OFFSET = 8;
 
   SYS_READ  = 0;
   SYS_WRITE = 1;
@@ -101,7 +106,8 @@ type
     tkPlus, tkMinus, tkStar, tkSlash,
     tkLParen, tkRParen, tkLBrack, tkRBrack,
     tkSemicolon, tkColon, tkComma, tkDot, tkDotDot, tkAt, tkCaret,
-    tkBreak, tkContinue, tkOverload
+    tkBreak, tkContinue, tkOverload,
+    tkTry, tkExcept, tkFinally, tkRaise, tkOn
   );
 
   TToken = record
@@ -264,6 +270,7 @@ var
 
   DebugTrace : Boolean;
   StrictOverload : Boolean;
+  NoUnhandledHandler : Boolean;
   Source  : AnsiString;
   SrcPos  : Integer;
   SrcLine : Integer;
@@ -339,6 +346,8 @@ var
   LoopBreakFixCount   : Integer;
   LoopContinueFixPos  : array[0..MAX_LOOP_FIXUPS-1] of Integer;
   LoopContinueFixCount: Integer;
+  ExceptionParseDepth : Integer;
+  ExceptionCodegenDepth: Integer;
   AssignPath : AnsiString;
   IncExpanded : AnsiString;
   IncIncluded : AnsiString;
@@ -394,6 +403,13 @@ var
   BSS_INITIAL_RSP : Integer;  { always 0; set in ParseProgram init }
   BSS_HEAP_PTR    : Integer;
   BSS_HEAP_END    : Integer;
+  BSS_EXC_TOP     : Integer;
+  BSS_EXC_OBJ     : Integer;
+  BSS_EXC_CLS     : Integer;
+  ExceptionUsed   : Boolean;
+  ExcSetJmpAddr   : Integer;
+  ExcLongJmpAddr  : Integer;
+  ExcRaiseAddr    : Integer;
 
   TokChars   : array[0..STRING_CAP-1] of Char;
   TokCharLen : Integer;

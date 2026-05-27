@@ -3,11 +3,36 @@
 Target: Delphi-compatible `try/except/finally/raise` via `setjmp`/`longjmp`.
 No DWARF unwind tables. No destructors. Correct Pascal semantics.
 
+**Status (2026-05-27):** Phase 1 implemented. PXX supports untyped
+`try/except` catch-all blocks, optional `else` on that catch-all form,
+`raise <expr>`, generic unhandled diagnostics, and
+`--no-unhandled-handler` / `-fno-unhandled-handler`. Typed `on` handlers,
+`finally`, `raise;`, exception classes, and class/message diagnostics remain
+planned below. `Exit` unlinks active Phase 1 frames; `break` and `continue`
+inside a protected body are rejected until loop-target unwinding is added.
+
 ---
 
 ## Syntax supported
 
 ```pascal
+{ Implemented Phase 1 form }
+try
+  <statements>
+except
+  <catch-all statements>
+end;
+
+try
+  <statements>
+except
+else
+  <catch-all statements>
+end;
+
+raise <expr>;
+
+{ Planned forms }
 try
   <statements>
 except
@@ -34,7 +59,8 @@ raise;                          { re-raise inside except block }
                           (for minimal binaries; exits with code 1 silently)
 ```
 
-Default: unhandled exception prints class name + message, then exits 1.
+Phase 1 default: unhandled exception prints `Unhandled exception`, then exits
+with status 1. Phase 3 extends this to class name and message.
 
 Stored as `Boolean` flag alongside `DebugTrace` / `StrictOverload` in `defs.inc`.
 
@@ -301,14 +327,12 @@ Type matching in `on E: EClass` walks the parent chain.
 ## Implementation phases
 
 ### Phase 1 — infrastructure (no class hierarchy yet)
-- Tokens: `tkTry`, `tkExcept`, `tkFinally`, `tkRaise`, `tkOn`
-- Lexer keyword entries
-- `__exc_top`, `__exc_obj`, `__exc_cls` globals in BSS
-- `__frankon_setjmp` / `__frankon_longjmp` inline asm stubs
-- `__frankon_raise` logic (no type matching yet)
-- Codegen for `try/except` with bare `else` handler only
-- Codegen for `raise <expr>`
-- `NoUnhandledHandler` flag + CLI parsing
+- Implemented: tokens and lexer entries for the exception grammar.
+- Implemented: `__exc_top`, `__exc_obj`, and reserved `__exc_cls` BSS state.
+- Implemented: inline integer-state `setjmp` / `longjmp` and raise dispatch.
+- Implemented: untyped catch-all `try/except`, with or without explicit `else`.
+- Implemented: `raise <expr>` and generic unhandled diagnostics.
+- Implemented: `NoUnhandledHandler` flag and both CLI option spellings.
 
 ### Phase 2 — finally
 - Codegen for `try/finally`

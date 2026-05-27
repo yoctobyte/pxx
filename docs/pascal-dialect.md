@@ -69,6 +69,7 @@ The regression suite currently covers:
 - Classes with fields and methods.
 - Generic classes and generic procedures/functions using explicit specialization.
 - Operator implementations for class/record operands.
+- Untyped `try/except` catch-all blocks and `raise <expr>`.
 - Selected C imports from Pascal `uses` clauses.
 
 ## Overloading
@@ -122,6 +123,24 @@ end;
 ```
 
 Tests presently exercise `<`, `>`, `=`, and `+`.
+
+## Exceptions
+
+Phase 1 exception handling supports untyped catch-all handlers:
+
+```pascal
+try
+  raise 42;
+except
+  writeln('caught');
+end;
+```
+
+`except else` is also accepted as an explicit catch-all form. A raised
+expression can cross procedure and unit boundaries. Typed `on E: EClass do`
+handlers, `try/finally`, bare `raise;`, and exception class/message objects
+are not implemented yet. `Exit` correctly removes active handler frames;
+`break` and `continue` in a protected body are rejected in this phase.
 
 ## Compatibility Claim
 

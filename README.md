@@ -29,6 +29,8 @@ Focus: Linux / POSIX. Single target for now: x86-64.
   identity.
 - **Compatibility switches** — opt-in `{$strict_overload on}` or
   `--strict-overload` enforces explicit routine overload declarations.
+- **Exceptions (Phase 1)** — untyped `try/except` and `raise <expr>` use
+  generated jump-frame runtime support.
 - **C interop** — `uses ctype;` imports a C header; the compiler reads it,
   links the shared object. See [C_INTEROP.md](C_INTEROP.md).
 - **Fast** — compiles itself in ~68 ms. FPC takes ~600 ms on the same source.

@@ -176,6 +176,8 @@ begin
     if (s[1]='t') and (s[2]='o') then Result := tkTo;
     if (s[1]='o') and (s[2]='f') then Result := tkOf;
     if (s[1]='o') and (s[2]='r') then Result := tkOr;
+    if (s[1]='o') and (s[2]='n') then Result := tkOn;
+    if (s[1]='O') and (s[2]='n') then Result := tkOn;
   end
   else if Length(s) = 3 then
   begin
@@ -194,6 +196,8 @@ begin
     if (s[1]='O') and (s[2]='r') and (s[3]='d') then Result := tkOrd;
     if (s[1]='c') and (s[2]='h') and (s[3]='r') then Result := tkChr;
     if (s[1]='C') and (s[2]='h') and (s[3]='r') then Result := tkChr;
+    if (s[1]='t') and (s[2]='r') and (s[3]='y') then Result := tkTry;
+    if (s[1]='T') and (s[2]='r') and (s[3]='y') then Result := tkTry;
   end
   else if Length(s) = 4 then
   begin
@@ -231,6 +235,8 @@ begin
     if (s[1]='w') and (s[2]='r') and (s[3]='i') and (s[4]='t') and (s[5]='e') then Result := tkwrite;
     if (s[1]='c') and (s[2]='l') and (s[3]='a') and (s[4]='s') and (s[5]='s') then Result := tkClass;
     if (s[1]='C') and (s[2]='l') and (s[3]='a') and (s[4]='s') and (s[5]='s') then Result := tkClass;
+    if (s[1]='r') and (s[2]='a') and (s[3]='i') and (s[4]='s') and (s[5]='e') then Result := tkRaise;
+    if (s[1]='R') and (s[2]='a') and (s[3]='i') and (s[4]='s') and (s[5]='e') then Result := tkRaise;
   end
   else if Length(s) = 6 then
   begin
@@ -246,6 +252,8 @@ begin
     if (s[1]='A') and (s[2]='r') and (s[3]='g') and (s[4]='S') and (s[5]='t') and (s[6]='r') then Result := tkArgStr;
     if (s[1]='s') and (s[2]='t') and (s[3]='r') and (s[4]='i') and (s[5]='n') and (s[6]='g') then Result := tkString_T;
     if (s[1]='S') and (s[2]='t') and (s[3]='r') and (s[4]='i') and (s[5]='n') and (s[6]='g') then Result := tkString_T;
+    if (s[1]='e') and (s[2]='x') and (s[3]='c') and (s[4]='e') and (s[5]='p') and (s[6]='t') then Result := tkExcept;
+    if (s[1]='E') and (s[2]='x') and (s[3]='c') and (s[4]='e') and (s[5]='p') and (s[6]='t') then Result := tkExcept;
   end
   else if Length(s) = 7 then
   begin
@@ -260,6 +268,8 @@ begin
     if (s[1]='I') and (s[2]='n') and (s[3]='t') and (s[4]='e') and (s[5]='g') and (s[6]='e') and (s[7]='r') then Result := tkInteger_T;
     if (s[1]='b') and (s[2]='o') and (s[3]='o') and (s[4]='l') and (s[5]='e') and (s[6]='a') and (s[7]='n') then Result := tkBoolean_T;
     if (s[1]='B') and (s[2]='o') and (s[3]='o') and (s[4]='l') and (s[5]='e') and (s[6]='a') and (s[7]='n') then Result := tkBoolean_T;
+    if (s[1]='f') and (s[2]='i') and (s[3]='n') and (s[4]='a') and (s[5]='l') and (s[6]='l') and (s[7]='y') then Result := tkFinally;
+    if (s[1]='F') and (s[2]='i') and (s[3]='n') and (s[4]='a') and (s[5]='l') and (s[6]='l') and (s[7]='y') then Result := tkFinally;
   end
   else if Length(s) = 8 then
   begin

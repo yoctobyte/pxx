@@ -55,6 +55,8 @@ Options must occur before the source path.
 | `-Mobjfpc` | Accept the current Object Pascal compatibility mode marker. It does not define `FPC` or change semantics yet. |
 | `--strict-overload` | Require `overload;` on every variant when a routine name is overloaded. |
 | `--permissive-overload` | Restore the default permissive overload behavior after an earlier strict option. |
+| `--no-unhandled-handler` | Exit with status 1 silently for an unhandled Phase 1 exception. |
+| `-fno-unhandled-handler` | Alias for `--no-unhandled-handler`. |
 
 Example:
 

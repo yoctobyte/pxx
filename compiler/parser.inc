@@ -139,6 +139,7 @@ function ParseSetMembershipAST(leftExpr: Integer): Integer; forward;
 function ParseStatementAST: Integer; forward;
 function ParseBlockAST: Integer; forward;
 procedure CompileAST(node: Integer); forward;
+procedure EmitExceptionRuntime; forward;
 procedure ParseSubroutine; forward;
 procedure ParseGenericFunctionDef; forward;
 procedure ParseOperatorDef; forward;
@@ -1881,6 +1882,43 @@ begin
   Result := seqNode;
 end;
 
+function ParseTryExceptStatementAST: Integer;
+var
+  trySeq, tryLast, handlerSeq, stmtNode, node: Integer;
+begin
+  trySeq := AllocNode(AN_SEQ);
+  tryLast := trySeq;
+  Inc(ExceptionParseDepth);
+  while not (CurTok.Kind in [tkExcept, tkFinally, tkEnd, tkEOF]) do
+  begin
+    stmtNode := ParseStatementAST;
+    Eat(tkSemicolon);
+    if ASTLeft[tryLast] = -1 then
+      ASTLeft[tryLast] := stmtNode
+    else
+    begin
+      ASTRight[tryLast] := AllocNode(AN_SEQ);
+      tryLast := ASTRight[tryLast];
+      ASTLeft[tryLast] := stmtNode;
+    end;
+  end;
+  Dec(ExceptionParseDepth);
+
+  if CurTok.Kind = tkFinally then
+    Error('try/finally is not implemented yet');
+  Expect(tkExcept, 'except');
+  if CurTok.Kind = tkOn then
+    Error('typed exception handlers are not implemented yet');
+  Eat(tkElse); { Phase 1 accepts either an untyped body or an explicit catch-all else. }
+  handlerSeq := ParseBlockAST;
+  Expect(tkEnd, 'end');
+
+  node := AllocNode(AN_TRY_EXCEPT);
+  ASTLeft[node] := trySeq;
+  ASTRight[node] := handlerSeq;
+  Result := node;
+end;
+
 function ParseStatementAST: Integer;
 var
   name: AnsiString;
@@ -1913,14 +1951,28 @@ begin
 
     tkBreak:
     begin
+      if ExceptionParseDepth > 0 then
+        Error('break inside try block is not implemented yet');
       Next;
       node := AllocNode(AN_BREAK);
     end;
 
     tkContinue:
     begin
+      if ExceptionParseDepth > 0 then
+        Error('continue inside try block is not implemented yet');
       Next;
       node := AllocNode(AN_CONTINUE);
+    end;
+
+    tkRaise:
+    begin
+      Next;
+      if CurTok.Kind in [tkSemicolon, tkEnd, tkElse, tkExcept, tkUntil, tkEOF] then
+        Error('re-raise is not implemented yet');
+      ParseExpr;
+      node := AllocNode(AN_RAISE);
+      ASTLeft[node] := CurASTNode;
     end;
     
     tkInc, tkDec:
@@ -2022,6 +2074,7 @@ begin
     tkFor:    begin Next; node := ParseForStatementAST;   end;
     tkRepeat: begin Next; node := ParseRepeatStatementAST; end;
     tkCase:   begin Next; node := ParseCaseStatementAST;  end;
+    tkTry:    begin Next; node := ParseTryExceptStatementAST; end;
     
     tkBegin:
     begin
@@ -2818,6 +2871,18 @@ begin
     dst[len1 + len2 + i] := s3[i];
 end;
 
+procedure EnableExceptionRuntime;
+begin
+  if not ExceptionUsed then
+  begin
+    ExceptionUsed := True;
+    BSS_EXC_TOP := BSSSize; Inc(BSSSize, 8);
+    BSS_EXC_OBJ := BSSSize; Inc(BSSSize, 8);
+    BSS_EXC_CLS := BSSSize; Inc(BSSSize, 8);
+    EmitExceptionRuntime;
+  end;
+end;
+
 procedure ParseUsesUnit(const name: AnsiString);
 var
   lo, path: AnsiString;
@@ -2951,6 +3016,12 @@ begin
 
     { Append tokens to global Token stream }
     startPos := LexAppend(UnitContent);
+    i := startPos;
+    while i < TokCount do
+    begin
+      if Tokens[i].Kind in [tkTry, tkRaise] then EnableExceptionRuntime;
+      Inc(i);
+    end;
 
     { Point parser to first token of the unit }
     TokPos := startPos;
@@ -3064,7 +3135,7 @@ end;
 { ===== Program ===== }
 
 procedure ParseProgram;
-var jmpPatch: Integer; doneUses, doneDecls: Boolean;
+var jmpPatch, i: Integer; doneUses, doneDecls, hasExceptions: Boolean;
 begin
   Expect(tkProgram, 'program');
   if CurTok.Kind = tkEOF then Error('expected program name');
@@ -3077,6 +3148,14 @@ begin
   BSS_INITIAL_RSP := BSSSize; Inc(BSSSize, 8);
   BSS_HEAP_PTR    := BSSSize; Inc(BSSSize, 8);
   BSS_HEAP_END    := BSSSize; Inc(BSSSize, 8);
+  ExceptionUsed := False;
+  hasExceptions := False;
+  i := 0;
+  while i < TokCount do
+  begin
+    if Tokens[i].Kind in [tkTry, tkRaise] then hasExceptions := True;
+    Inc(i);
+  end;
 
   { Emit entry stub: save rsp then jmp to main body }
   { mov [bss_initial_rsp], rsp: 48 89 24 25 <GlobRef(0)> }
@@ -3091,6 +3170,7 @@ begin
   EmitB($48); EmitB($89); EmitB($04); EmitB($25); EmitGlobRef(BSS_HEAP_END);
 
   EmitB($E9); jmpPatch := CodeLen; EmitI32(0);
+  if hasExceptions then EnableExceptionRuntime;
 
   doneDecls := False;
   while not doneDecls do

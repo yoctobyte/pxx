@@ -24,8 +24,13 @@ specific compatibility statement covers it.
 - `{$mode objfpc}` and `-Mobjfpc` are accepted markers, not a complete
   emulation of every Object FPC language rule.
 - Alternate Pascal modes such as Delphi mode are not implemented.
-- Broader Object Pascal features such as properties, interfaces, exceptions,
-  virtual dispatch, and related class semantics are not covered as supported.
+- Broader Object Pascal features such as properties, interfaces, virtual
+  dispatch, and related class semantics are not covered as supported.
+- Exception handling is at Phase 1: untyped `try/except` and `raise <expr>`
+  are supported. Typed handlers, `finally`, bare re-raise, exception classes,
+  and class/message unhandled reports are not implemented. `break` and
+  `continue` in a protected body are rejected until loop-target unwinding is
+  implemented.
 - Floating-point support is not implemented.
 - Integer arithmetic is intentionally unchecked for now: no mixed-sign
   warning or overflow/range-check switch is emitted, and narrowing or
@@ -74,7 +79,7 @@ implemented.
 
 - PXX does not provide the FPC RTL or its complete set of units.
 - Available built-ins and project units cover tested programs only.
-- FPC applications depending on `SysUtils`, containers, streams, exceptions,
+- FPC applications depending on `SysUtils`, containers, streams, rich exception classes,
   platform abstractions, or package ecosystems cannot be assumed to compile.
 
 ## C Frontend And Interop Gaps

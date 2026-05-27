@@ -79,6 +79,26 @@ markers and command-line `-dNAME` / `-uNAME`. Coverage is in
 `test/test_strict_overload.pas` and `test/test_strict_overload_error.pas`.
 See `COMPATIBILITY.md` for the compatibility inventory.
 
+### Exceptions (Phase 1)
+Untyped catch-all exception blocks and expression raises are implemented:
+
+```pascal
+try
+  raise 42;
+except
+  writeln('caught');
+end;
+```
+
+Raised values cross procedure and Pascal-unit boundaries through generated
+integer-state `setjmp`/`longjmp` helpers and an 80-byte linked frame per
+active `try`. Unhandled raises print `Unhandled exception` and exit with
+status 1; `--no-unhandled-handler` and `-fno-unhandled-handler` suppress that
+message. Typed `on` handlers, `finally`, bare `raise;`, and exception classes
+remain subsequent phases from `docs/exceptions-plan.md`. `Exit` unlinks active
+frames; `break` and `continue` inside a protected body are rejected pending
+loop-target unwinding support.
+
 ### User-defined classes with fields and methods
 ```pascal
 type TCounter = class Value: Integer; procedure Increment; function Get: Integer; end;
@@ -205,6 +225,8 @@ The initial identity/conditional layer is implemented: `PXX` is predefined,
 `-Mobjfpc` are accepted. The first semantic switch is also implemented:
 - `strict_overload` (default off): `{$strict_overload on}` /
   `--strict-overload` requires explicit `overload` on overloaded procs.
+- `--no-unhandled-handler` / `-fno-unhandled-handler`: suppresses the generic
+  Phase 1 unhandled-exception diagnostic while preserving exit status 1.
 - `generic_syntax` (default b1): b1=top-level `generic function`+`specialize as`, a=type-section style.
 
 ## Operator Overloading

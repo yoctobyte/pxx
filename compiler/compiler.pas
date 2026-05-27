@@ -24,6 +24,7 @@ procedure CPreprocess(var src: AnsiString; const baseDir: AnsiString); forward;
 var inFile, outFile, option: AnsiString; isC, isBasic, readingOptions: Boolean; n, i: Integer;
 begin
   DebugTrace := False;
+  NoUnhandledHandler := False;
   PasInitDefines;
   i := 1;
   readingOptions := True;
@@ -44,6 +45,12 @@ begin
     else if option = '--permissive-overload' then
     begin
       StrictOverload := False;
+      Inc(i);
+    end
+    else if (option = '--no-unhandled-handler') or
+            (option = '-fno-unhandled-handler') then
+    begin
+      NoUnhandledHandler := True;
       Inc(i);
     end
     else if (Length(option) > 2) and (option[1] = '-') and
@@ -75,7 +82,7 @@ begin
       readingOptions := False;
   end;
   if ParamCount < i then
-    begin writeln(StdErr,'usage: pascal26/PXX [--debug] [-dNAME] [-uNAME] [-Mobjfpc] [--strict-overload] <src> [out]'); Halt(1); end;
+    begin writeln(StdErr,'usage: pascal26/PXX [--debug] [-dNAME] [-uNAME] [-Mobjfpc] [--strict-overload] [--no-unhandled-handler] <src> [out]'); Halt(1); end;
 
   inFile  := ParamStr(i);
 {$ifdef FPC}
@@ -115,6 +122,7 @@ begin
   BFixupCount := 0;
   ASTNodeCount := 0; CurASTNode := -1;
   LoopNestDepth := 0; LoopBreakFixCount := 0; LoopContinueFixCount := 0;
+  ExceptionParseDepth := 0; ExceptionCodegenDepth := 0;
   UClsCount := 0; UFldCount := 0; UMthCount := 0; CurSelfClass := REC_NONE;
   AddConst('StdErr', tyInteger, 2);
 
