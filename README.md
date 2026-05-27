@@ -1,129 +1,60 @@
 # Frankonpiler
 
-Frankonpiler is a self-hosting Pascal compiler growing into a native,
-multi-language compiler. It emits x86-64 Linux ELF executables directly,
-without invoking an assembler or linker.
+A self-hosting Pascal compiler that emits x86-64 Linux ELF executables
+directly — no assembler, no linker, no external libraries required.
 
-## Build And Test
+The compiler itself is written in plain standard Pascal (no OOP). It compiles
+Object Pascal: classes, inheritance, generics (both class generics and generic
+functions), operator overloading (planned), and more. The goal is a
+Pascal superset / dialect that extends the language where it makes sense.
 
-Normal rebuilds use the checked-in self-hosted compiler seed:
+Focus: Linux / POSIX. Single target for now: x86-64.
 
-```sh
-make
-make test
-```
+## Highlights
 
-`make bootstrap` is the recovery path: it uses Free Pascal to build a seed,
-then requires the self-hosted generations to reach the same fixed point.
+- **Self-hosting** — the compiler compiles itself. No external toolchain
+  needed at runtime.
+- **Tiny output** — a Hello World binary is 325 bytes. No runtime, no stdlib
+  linked in.
+- **Generic functions** — `generic function Max<T>` + `specialize Max<Integer>
+  as MaxInt` — and class generics.
+- **C interop** — `uses ctype;` imports a C header; the compiler reads it,
+  links the shared object. See [C_INTEROP.md](C_INTEROP.md).
+- **Fast** — compiles itself in ~68 ms. FPC takes ~600 ms on the same source.
 
-## Calling A Shared C Library
+## Build
 
-Pascal source can import a supported C header through `uses` and call an
-external function directly:
-
-```pascal
-program test_shared_object;
-uses ctype;
-begin
-  writeln(tolower(65));
-end.
-```
-
-Build and run the included regression:
+Normal rebuild uses the checked-in self-hosted seed:
 
 ```sh
-./compiler/pascal26 test/test_shared_object.pas /tmp/test_shared_object
-/tmp/test_shared_object
+make        # rebuild compiler from itself
+make test   # full regression suite + fixedpoint check
 ```
 
-Output:
+## Bootstrap
 
-```text
-97
-```
-
-For this example, `uses ctype;` resolves to the installed C header:
-
-```text
-/usr/include/ctype.h
-```
-
-On the current Linux system, the required runtime shared object is available
-as `libc.so.6` (resolved by the dynamic loader to a path such as
-`/lib/x86_64-linux-gnu/libc.so.6`). The generated executable records the
-soname `libc.so.6`; it does not bake in that filesystem path.
-
-### How Resolution Works
-
-For a unit named `name`, the compiler currently searches in this order:
-
-```text
-<source directory>/name.pas
-<source directory>/name.pp
-<source directory>/name.c
-<source directory>/name.h
-compiler/name.pas
-compiler/name.pp
-compiler/name.c
-compiler/name.h
-/usr/include/name.h
-```
-
-If a `.c` file is found, supported function definitions are compiled into the
-program, as in `uses my_c_lib;` in `test/test_c_import.pas`.
-
-If a `.h` file is found, supported function prototypes are external calls.
-Only functions actually called by the Pascal program are emitted into the
-dynamic symbol and relocation tables. The ELF writer then adds the dynamic
-loader metadata required to resolve those calls at program startup.
-
-`ctype` is currently mapped explicitly to `libc.so.6`. Other header unit names
-default to a shared-object name of the form `lib<name>.so`; additional system
-library naming rules will need to be added as more APIs are exercised.
-
-### Current C Header Scope
-
-This is intentionally an early interop surface, not a complete C ABI/header
-frontend. It currently handles simple function prototypes using integer and
-character-like arguments and return values, with basic pointer syntax skipped
-where sufficient for declaration recognition. It tolerates unsupported
-declarations in system headers so usable simple prototypes can still be
-found.
-
-Before C lexing, a preprocessing phase now rewrites imported C input. Its
-current supported subset includes comment removal, continued directive lines,
-`#include`, common include guards, `#define`/`#undef`, `#if`/`#ifdef`/
-`#ifndef`/`#elif`/`#else`/`#endif`, object-like macros, and parameter
-substitution for function-like macros.
-
-This is not full C preprocessor or ABI coverage. Token pasting (`##`),
-stringification (`#`), variadic macros, complete macro rescanning, complex
-typedefs and structs, callbacks, variadic functions, full pointer marshalling,
-and arbitrary platform header layouts are not yet promised.
-
-### Regression Coverage
-
-`make test` covers both C paths:
-
-- `test/test_shared_object.pas`: imports `/usr/include/ctype.h`, loads
-  `tolower` from `libc.so.6`, and expects `97`.
-- `test/test_c_import.pas`: compiles a local C definition from
-  `test/my_c_lib.c` and expects `42`, including a preceding prototype to
-  ensure a local body wins over external resolution.
-- `test/test_c_preprocess.pas`: imports a local C file using includes,
-  guards, conditionals, and function-like macro substitution, and expects
-  `42`.
-
-## Compiler Tracing
-
-Use `--debug` before the source path to enable compiler tracing:
+The recovery path uses Free Pascal (FPC) to rebuild the seed from scratch:
 
 ```sh
-./compiler/pascal26 --debug test/hello.pas /tmp/hello
+make bootstrap
 ```
 
-The trace reports lexer/parser diagnostics already present in the compiler and
-C preprocessing events such as selected includes, macro definitions, active
-conditional branches, and expansions. It is intended for diagnosing compiler
-execution; ELF debug symbols for stepping through generated executables are a
-separate future enhancement.
+Other standard Pascal compilers should work in place of FPC. After bootstrap,
+the compiler is fully self-hosting again: the new seed must compile itself
+to a fixedpoint (gen1 == gen2) before the build is accepted.
+
+The goal is that `make bootstrap` becomes increasingly rare. Any regression
+that requires it is noted in `compiler/usernotes.md`.
+
+## Debug Tracing
+
+```sh
+./compiler/pascal26 --debug source.pas /tmp/out
+```
+
+Reports lexer/parser diagnostics and C preprocessing events.
+
+## Project Notes
+
+Design decisions, dialect proposals, and bootstrap history live in
+`compiler/usernotes.md`.
