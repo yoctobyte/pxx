@@ -103,7 +103,9 @@ the compiler source is valuable. Extensions to the *target* Pascal dialect
 
 Most of this document was drafted by AI and edited by a human. AI produces
 more words than any human wants to read. Good writing is cutting, not adding.
-The human's job in this collaboration was mostly deletion.
+In an ideal collaboration the human's job is deletion. In practice, two
+sessions in three involved recovering lost work rather than advancing it —
+crashed agents, re-done things, archaeology. The ideal is still worth naming.
 
 > *Schrijven is schrappen.* — "Writing is crossing out." (Dutch)
 
