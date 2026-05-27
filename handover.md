@@ -7,6 +7,11 @@
 Relevant commits on `master`:
 
 ```text
+7fd9d88 feat(exceptions): add exact typed handlers
+3c6da5a feat(exceptions): add finally and reraise
+d59d78b fix(exceptions): unwind protected loop exits
+7fa9aac feat(exceptions): add untyped try/except
+aa7a88e feat(types): finish scalar integer layout
 553dcdc docs: split README; move C interop to C_INTEROP.md
 7f72746 docs: note 2026-05-27 FPC bootstrap for generic function record types
 7cce611 feat(generics): implement generic functions (B1 syntax)
@@ -114,6 +119,25 @@ unhandled diagnostics remain subsequent work from
 `docs/exceptions-plan.md`. `Exit`, `break`, and `continue` track the nearest
 target's exception depth, execute crossed finalizers in order, and pop only
 protected frames crossed by the jump.
+
+### Float readiness
+Core floating-point implementation can start from this state. Fixed-width
+integer/pointer-sized layout is established, and exception control flow is
+covered for the current class runtime: catch-all and exact typed handlers,
+`finally`, re-raise, and crossed `Exit`/`break`/`continue` cleanup all pass
+the fixedpoint test suite.
+
+Implement scalar floats in layers: add `Single`/`Double`/`Real` type
+identity and size/alignment rules, then literals, storage/load/store,
+arithmetic/comparisons, calls/returns, and regression coverage using SSE2 on
+x86-64. This does not require the pending `Exception` class hierarchy.
+
+Do not treat floating-point traps as part of the first arithmetic increment.
+The generated exception jump buffer currently saves integer execution state
+only. If float exception trapping or preservation of the floating environment
+becomes observable, extend the exception frame/runtime for `mxcsr` (and x87
+state if x87 is used) and decide how `EFloatError` relates to the pending
+exception-class hierarchy.
 
 ### User-defined classes with fields and methods
 ```pascal
@@ -294,8 +318,12 @@ both converge again.
 
 ## Suggested Next Steps
 
-1. **Compiler switches** — add further semantic switches, beginning with a
-   deliberate policy for alternative generic syntax/modes.
-2. **C interop depth** — pointer args/returns, C strings, `size_t`, typedef aliases,
-   simple struct layout. Driven by real header needs.
-3. **Exercise more stdlib headers** — `string.h`, `stdio.h`, add to `make test`.
+1. **Scalar floats** — implement `Single`/`Double`/`Real` storage and SSE2
+   expression/codegen coverage; defer floating-point traps until the normal
+   arithmetic path is stable.
+2. **Exception class runtime** — add built-in `Exception`, descriptors,
+   inherited matching, messages, and class-aware unhandled reports before
+   exposing `EFloatError`.
+3. **C interop depth** — pointer args/returns, C strings, `size_t`, typedef
+   aliases, and simple struct layout, driven by real header needs.
+4. **Exercise more stdlib headers** — `string.h`, `stdio.h`, add to `make test`.
