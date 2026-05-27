@@ -1,7 +1,7 @@
 # PXX (provisional)
 
-A self-hosting Pascal compiler that emits x86-64 Linux ELF executables
-directly — no assembler, no linker, no external libraries required.
+A small Pascal compiler that emits x86-64 Linux ELF executables directly —
+no assembler, no linker, no external libraries required.
 
 `PXX` is the working name. The X's are open: Roman twenty-six, a pair of
 crosses — apt for a compiler that crosses languages — or honest placeholders.
@@ -26,9 +26,9 @@ Focus: Linux / POSIX. Single target for now: x86-64.
 - **C + Pascal in one static binary** — `uses my_c_lib;` compiles a local C
   source file and merges it into the output ELF. No linker step, no separate
   `.so`. Pascal and C code share one binary with no external dependencies.
-- **Zero-dependency self-hosting** — the compiler writes ELF directly. No
-  assembler, no linker, no external libraries invoked at compile time. It
-  compiles itself.
+- **Self-contained build path** — the compiler writes ELF directly and can
+  rebuild itself from the checked-in seed. FPC remains the bootstrap and
+  recovery tool.
 - **Generic functions and procedures** — `generic function Max<T>` +
   `specialize Max<Integer> as MaxInt`, alongside class generics.
 - **Overloading and operators** — routine overloading with optional strict

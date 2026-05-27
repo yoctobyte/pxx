@@ -13,7 +13,7 @@ User-facing documents:
 - [Philosophy](philosophy.md) - project vision, design constraints, language priority, and what this is not.
 - [Command Line](cli.md) - invoking the compiler, output files, options, and build commands.
 - [Pascal Dialect And Compatibility](pascal-dialect.md) - supported Pascal surface, PXX/FPC identity, and conditional compilation.
-- [Features](features.md) - self-hosting, language frontends, native output, and library loading.
+- [Features](features.md) - build baseline, language frontends, native output, and library loading.
 - [Limitations](limitations.md) - unsupported or only partially supported language, ABI, platform, and tooling areas.
 
 Frontend notes (planned languages):

@@ -3,11 +3,13 @@
 PXX is a small native compiler core with Pascal as its primary source
 language and early additional frontends/interoperability paths.
 
-## Self-Hosting
+## Baseline Build Constraint
 
-The compiler is written in Pascal and compiles itself. Normal builds use the
-checked-in PXX seed and require two generated compiler binaries to compare
-bit-for-bit. FPC remains the recovery path for rebuilding the seed.
+The compiler is written in Pascal and must be able to compile itself. This is
+the minimum viability bar for development, not a headline language feature.
+Normal builds use the checked-in PXX seed and require two generated compiler
+binaries to compare bit-for-bit. FPC remains the recovery path for rebuilding
+the seed.
 
 ## Native Executable Output
 
