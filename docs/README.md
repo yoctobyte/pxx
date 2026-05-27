@@ -22,6 +22,7 @@ Frontend notes (planned languages):
 
 Additional project material:
 
+- [Lineage and Acknowledgements](lineage.md) - the people and languages this project is built on.
 - [C Interoperability](../C_INTEROP.md) - detail on Pascal-to-C header imports and supported C preprocessing.
 - [Compatibility Status](../COMPATIBILITY.md) - dated implementation inventory and bootstrap policy.
 - [Implementation Handover](../handover.md) - internal architecture and bootstrap notes.

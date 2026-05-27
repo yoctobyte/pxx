@@ -3,9 +3,10 @@
 A self-hosting Pascal compiler that emits x86-64 Linux ELF executables
 directly — no assembler, no linker, no external libraries required.
 
-`PXX` is the working name and compiler identity while naming is still open.
-The existing executable remains `compiler/pascal26` until that rename is
-worth carrying through bootstrap/stable artifacts.
+`PXX` is the working name. The X's are open: Roman twenty-six, a pair of
+crosses — apt for a compiler that crosses languages — or honest placeholders.
+The executable stays `compiler/pascal26`. The spirit of the project has a
+better name: **Frankonpiler**. *Frankenstein Pascal Compiler* was already taken.
 
 The compiler itself is written in plain standard Pascal (no OOP, no external
 deps). It compiles Object Pascal: classes, generics (class generics and
@@ -101,3 +102,13 @@ Design decisions, dialect proposals, and bootstrap history live in
 
 The project vision — multi-language compiler, design constraints, language
 priority list — is in [docs/philosophy.md](docs/philosophy.md).
+
+## Acknowledgements
+
+[Free Pascal](https://www.freepascal.org/) and [Lazarus](https://www.lazarus-ide.org/)
+are the bootstrap and the ecosystem this project depends on. None of it exists
+without Ada Lovelace, who wrote the first algorithm before the machine to run
+it existed, or without everyone who kept building from there.
+
+The full lineage — Pascal, C, Ada, BASIC, GW-BASIC, FPC, and everyone else —
+is in [docs/lineage.md](docs/lineage.md).
