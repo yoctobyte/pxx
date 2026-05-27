@@ -342,6 +342,14 @@ Or detect context automatically: `generic` inside `type` → A-style;
 
 ---
 
+2026-05-27 — FPC BOOTSTRAP USED for generic function implementation
+
+Added TGenericFunc and TPendingGFSpec record types to defs.inc. Old seed
+didn't know them (symtab.inc hardcodes all record types). Same situation as
+2026-05-25. Bootstrap completed: FPC → gen1 → gen2 → gen3 fixedpoint. All tests pass.
+
+---
+
 2026-05-25 — FPC BOOTSTRAP USED (deliberate cheat, noted for the record)
 
 Stage 1 refactor (token stream buffering) introduced TRawToken, a new record type that the existing self-hosted seed did not know about (symtab.inc hardcodes all record types). The old seed could not compile the new source, so we fell back to `make bootstrap` to regenerate the seed via FPC.
