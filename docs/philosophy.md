@@ -1,0 +1,123 @@
+# Project Philosophy
+
+## What This Is
+
+PXX is a native compiler written in Pascal that compiles itself.
+The immediate goal is a robust, self-hosting Object Pascal compiler
+targeting Linux x86-64 ELF — no assembler, no linker, no external
+libraries at compile time.
+
+The longer goal is a multi-language native compiler sharing one backend:
+a single toolchain where Pascal, C, BASIC, and eventually other languages
+coexist, call each other's libraries, and compile to the same native output.
+The working nickname for that vision is **Frankonpiler** (or Frankenpiler —
+naming is open).
+
+## Design Constraints
+
+These are not preferences. They are hard rules that keep the project tractable:
+
+- **No external grammar tools.** No lex, yacc, ANTLR, or table-driven DFAs.
+  Every frontend is a hand-rolled recursive-descent parser. Simple, fast,
+  zero dependencies.
+- **No external toolchain at runtime.** The compiler writes ELF directly.
+  No intermediate assembler invocation, no linker step.
+- **Zero external dependencies in compiler source.** No licensed libraries,
+  no third-party code. The compiler source must be compilable by a
+  standards-conforming Pascal compiler and nothing else.
+- **In-memory pipeline.** Lex → parse → codegen → ELF write, all in one
+  process, all in RAM. No intermediate files, no assembler round-trip, no
+  linker invocation. The classic toolchain split — preprocessor, compiler,
+  assembler, linker — made sense when a C source file might not fit in memory
+  alongside the compiler. That constraint is long gone. Today's machines have
+  gigabytes of RAM; an entire project's source, symbol tables, and generated
+  code fit comfortably in one process. We do not recreate splits that exist
+  only for historical reasons.
+
+## Language Priority
+
+Languages planned for the shared compiler, roughly in priority order:
+
+| Priority | Language | Notes |
+|----------|----------|-------|
+| 1 | Pascal / Object Pascal | Primary. Self-hosting. FPC-compatible dialect. |
+| 2 | C | Core interop. C header import already works. |
+| 3 | BASIC | Early frontend present. Not yet a complete implementation. |
+| 4 | Ada | High interest. |
+| 5 | Rust | High interest — cleaner than C++. Borrow checker will not be implemented; heap ownership handled by reference counting (last reference freed frees the memory). Rust syntax is no harder to parse than Pascal. |
+| 6 | C++ | Partial/limited. |
+| 7 | Fortran, COBOL | Partial/limited. |
+| 8 | Java (JVM-less) | Interesting native-compilation goal, low priority. |
+| – | C# | Experimental / exploratory. |
+| – | JavaScript | More tractable than it looks. The language is well-defined and machine-independent — no manual memory, no pointers, clear semantics. A strict subset (no eval, no dynamic require) compiles to native straightforwardly. Priority lower than Rust for now, but not a hard problem. |
+| – | Python | Experimental / exploratory. |
+
+Subsets of each language are acceptable. The goal is not spec compliance —
+it is useful real-world code compiled natively.
+
+## RAM Is No Longer The Constraint
+
+When C was designed, a computer's RAM could easily be smaller than a project's
+total source. Compilers were built to process one file at a time and hand off
+to the next tool — preprocessor, compiler, assembler, linker — each reading
+and writing disk because keeping everything in memory was not an option.
+
+That world is gone. A modern machine has gigabytes of RAM. An entire project's
+source, all symbol tables, all generated code, the output binary — everything
+fits in one process without breaking a sweat. The multi-tool pipeline is a
+historical artifact, not a technical requirement.
+
+PXX takes the obvious conclusion: load it all, do it all in one pass, write
+the ELF, exit. No temp files, no hand-offs, no linker. The constraint that
+forced the old design no longer exists, so we don't carry it forward.
+
+## The Frankenstein Principle
+
+Pick the best tool for the job. A library written in C should be callable
+from Pascal without ceremony. A module where Ada's type system gives the
+clearest code should be writable in Ada. The compiler does not enforce
+ideological purity about language choice.
+
+This extends to the compiler source itself: the project starts in Pascal
+because it is universal enough and makes for an interesting bootstrap story.
+If a future component is significantly clearer or shorter in another language,
+that conversation is open — but only after the target/host is stable enough
+to justify it.
+
+## The Self-Hosting Commitment
+
+Normal development never requires FPC. The checked-in seed (`compiler/pascal26`)
+compiles the source; the result must reach a bit-identical fixedpoint with the
+previous generation before it replaces the seed. FPC is kept only as a
+recovery/verification path.
+
+A feature is considered stable for self-hosting only after it passes the
+recursive bootstrap check. New features live in tests until then.
+
+## Pascal Source Dialect Policy
+
+The compiler source is kept compatible with FPC. This means:
+
+- No PXX-specific extensions in the compiler's own source.
+- `{$ifdef FPC}` branches in the source cover genuine FPC host differences.
+- `make fpc-check` verifies FPC can still compile the compiler source.
+
+This is intentionally conservative: keeping FPC as a fallback compiler for
+the compiler source is valuable. Extensions to the *target* Pascal dialect
+(what PXX accepts from user code) are a separate question.
+
+## Output Targets
+
+- **Primary:** Linux x86-64 ELF.
+- **Planned:** ARM64, 32-bit x86.
+- **Interest:** Bare-metal / embedded (ESP32-class), no OS.
+- **Non-POSIX:** Not yet, but architecture abstraction is the plan from the start.
+
+## What This Is Not
+
+- Not an FPC replacement. FPC has decades of RTL, package ecosystem, and
+  multi-architecture support that this project does not claim.
+- Not a research compiler. The goal is a working tool, not a novel algorithm.
+- Not a transpiler. Output is native ELF, not source-to-source.
+- Not complete. Subsets of languages are fine. Unsupported constructs are
+  documented in [Limitations](limitations.md).

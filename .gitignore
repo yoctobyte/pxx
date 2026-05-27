@@ -1,5 +1,9 @@
 compiler/pascal26
+compiler/compiler
 compiler/*.o
 compiler/*.ppu
 test/hello
 /tmp/
+__pycache__/
+*.swp
+*.swo

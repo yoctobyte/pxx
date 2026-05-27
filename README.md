@@ -7,57 +7,80 @@ directly — no assembler, no linker, no external libraries required.
 The existing executable remains `compiler/pascal26` until that rename is
 worth carrying through bootstrap/stable artifacts.
 
-The compiler itself is written in plain standard Pascal (no OOP). It compiles
-Object Pascal: classes, generics (both class generics and generic
-functions), routine and operator overloading, loop control, and more. The goal is a
-Pascal superset / dialect that extends the language where it makes sense.
+The compiler itself is written in plain standard Pascal (no OOP, no external
+deps). It compiles Object Pascal: classes, generics (class generics and
+generic functions/procedures), routine and operator overloading, exceptions,
+C interop, and more.
+
+The longer-term goal is a multi-language native compiler — Pascal first,
+then C, BASIC, and eventually others — sharing one backend and one IR.
+See [Philosophy](docs/philosophy.md) for the vision.
 
 Focus: Linux / POSIX. Single target for now: x86-64.
 
 ## Highlights
 
-- **Self-hosting** — the compiler compiles itself. No external toolchain
-  needed at runtime.
-- **Tiny output** — a Hello World binary is 325 bytes. No runtime, no stdlib
-  linked in.
-- **Generic functions** — `generic function Max<T>` + `specialize Max<Integer>
-  as MaxInt` — and class generics.
-- **Overloading** — routine dispatch with optional `overload;`, plus class
-  operator implementations such as `operator +(a, b: TPoint): TPoint`.
-- **Conditional compilation** — `{$ifdef PXX}`, user `{$define}`/`{$undef}`,
-  nesting, and command-line `-dNAME` definitions without claiming `FPC`
-  identity.
-- **Compatibility switches** — opt-in `{$strict_overload on}` or
-  `--strict-overload` enforces explicit routine overload declarations.
-- **Exceptions (Phase 1)** — untyped `try/except` and `raise <expr>` use
-  generated jump-frame runtime support.
-- **C interop** — `uses ctype;` imports a C header; the compiler reads it,
-  links the shared object. See [C_INTEROP.md](C_INTEROP.md).
-- **Fast** — compiles itself in ~68 ms. FPC takes ~600 ms on the same source.
+- **Tiny output** — Hello World is 325 bytes. No runtime, no stdlib linked in.
+- **Fast** — single in-memory pipeline; no assembler round-trip, no linker invocation.
+- **C + Pascal in one static binary** — `uses my_c_lib;` compiles a local C
+  source file and merges it into the output ELF. No linker step, no separate
+  `.so`. Pascal and C code share one binary with no external dependencies.
+- **Zero-dependency self-hosting** — the compiler writes ELF directly. No
+  assembler, no linker, no external libraries invoked at compile time. It
+  compiles itself.
+- **Generic functions and procedures** — `generic function Max<T>` +
+  `specialize Max<Integer> as MaxInt`, alongside class generics.
+- **Overloading and operators** — routine overloading with optional strict
+  mode, plus `operator +(a, b: TPoint): TPoint` class operator implementations.
+- **Exceptions (Phase 1)** — `try/except`, `try/finally`, `raise <expr>`, and
+  re-raise; generated jump-frame runtime, no libc dependency.
+- **FPC-compatible source** — the compiler itself is valid FPC Pascal.
+  `make fpc-check` verifies this. FPC is the bootstrap tool and a respected
+  reference implementation.
 
 ## Build
 
-Normal rebuild uses the checked-in self-hosted seed:
+### Prerequisites
+
+- Linux x86-64
+- GNU `make`
+- FPC (Free Pascal Compiler) — needed for `make bootstrap` and `make fpc-check`; not required for a normal `make` if the seed is intact
+
+On Debian/Ubuntu: `sudo apt install fpc`
+
+### Normal build
+
+Uses the checked-in self-hosted seed binary. No FPC required.
 
 ```sh
-make        # rebuild compiler from itself
+git clone <repo-url>
+cd frankonpiler
+make        # rebuild compiler from the existing seed
 make test   # full regression suite + fixedpoint check
 ```
 
-## Bootstrap
+The seed is `compiler/pascal26`. `make` rebuilds it through itself and
+verifies the result is bit-identical (gen1 == gen2 fixedpoint).
 
-The recovery path uses Free Pascal (FPC) to rebuild the seed from scratch:
+### Bootstrap from FPC
+
+FPC (Free Pascal Compiler) is the bootstrap tool. It rebuilds the seed from
+scratch when needed:
 
 ```sh
 make bootstrap
 ```
 
-Other standard Pascal compilers should work in place of FPC. After bootstrap,
-the compiler is fully self-hosting again: the new seed must compile itself
-to a fixedpoint (gen1 == gen2) before the build is accepted.
+After bootstrap the compiler is self-hosting again: the new seed must reach
+a bit-identical fixedpoint before it replaces the working compiler.
 
-The goal is that `make bootstrap` becomes increasingly rare. Any regression
-that requires it is noted in `compiler/usernotes.md`.
+During active development, bootstrapping via FPC is still common — it is the
+fastest way to recover when a change breaks self-compilation. The long-term
+goal is that `make bootstrap` becomes rare, but it is a normal and supported
+workflow for now, not a last resort.
+
+`make fpc-check` verifies at any time that FPC can still compile the
+compiler source; this keeps the bootstrap path healthy.
 
 ## Debug Tracing
 
@@ -75,3 +98,6 @@ Pascal dialect, supported features, and explicit limitations.
 Design decisions, dialect proposals, and bootstrap history live in
 `compiler/usernotes.md`. The dated compatibility inventory is tracked in
 [COMPATIBILITY.md](COMPATIBILITY.md).
+
+The project vision — multi-language compiler, design constraints, language
+priority list — is in [docs/philosophy.md](docs/philosophy.md).
