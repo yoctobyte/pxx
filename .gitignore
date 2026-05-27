@@ -7,3 +7,4 @@ test/hello
 __pycache__/
 *.swp
 *.swo
+docs/historic/user-rambling/
