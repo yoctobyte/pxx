@@ -90,9 +90,8 @@ const
   INTBUF_SIZE     = 24;
   MINUS_OFFSET    = 24;
   NEWLINE_OFFSET  = 25;
-  SPACES_OFFSET   = 26;   { 40 bytes of 0x20, for write(:width) padding }
   SPACES_SIZE     = 40;
-  STR_INIT_OFFSET = 66;
+  STR_INIT_OFFSET = 26;
 
 type
   TTokenKind = (
@@ -311,7 +310,8 @@ var
   CodeLen : Integer;
 
   Data    : array[0..MAX_DATA-1] of Byte;
-  DataLen : Integer;
+  DataLen      : Integer;
+  SpacesOffset : Integer;  { -1 = not yet allocated; set lazily on first :width use }
 
   BSSSize : Integer;
 

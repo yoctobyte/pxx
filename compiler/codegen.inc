@@ -1344,7 +1344,8 @@ begin
             { Pad string literal: compute padding = max(0, wid - len) }
             if wid > Strs[si].Len then
             begin
-              EmitB($48); EmitB($BE); EmitDataRef(SPACES_OFFSET);
+              EnsureSpaces;
+              EmitB($48); EmitB($BE); EmitDataRef(SpacesOffset);
               MovRdxImm(wid - Strs[si].Len);
               MovRaxImm(SYS_WRITE); MovRdiImm(STDOUT); EmitSyscall;
             end;
@@ -1359,11 +1360,12 @@ begin
             if wid > 0 then
             begin
               { Runtime string width: load len, compute padding = max(0, wid - len) }
+              EnsureSpaces;
               EmitLoadStrLen(vidx);        { rcx = len }
               MovRaxImm(wid);
               EmitB($48); EmitB($29); EmitB($C8);  { sub rax, rcx }
               EmitB($7E); EmitB(35);               { jle .skip_pad (35 bytes) }
-              EmitB($48); EmitB($BE); EmitDataRef(SPACES_OFFSET);
+              EmitB($48); EmitB($BE); EmitDataRef(SpacesOffset);
               EmitB($48); EmitB($89); EmitB($C2);  { mov rdx, rax }
               MovRaxImm(SYS_WRITE); MovRdiImm(STDOUT); EmitSyscall;
               { .skip_pad: }
@@ -1399,6 +1401,7 @@ begin
           begin
             if wid > 0 then
             begin
+              EnsureSpaces;
               EmitB($48); EmitB($89); EmitB($C1);  { mov rcx, rax }  { save ptr }
               EmitB($48); EmitB($8B); EmitB($00);  { mov rax, [rax] } { rax = len }
               EmitB($48); EmitB($87); EmitB($C8);  { xchg rax, rcx }  { rax=ptr, rcx=len }
@@ -1408,7 +1411,7 @@ begin
               MovRaxImm(wid);
               EmitB($48); EmitB($29); EmitB($C8);  { sub rax, rcx }
               EmitB($7E); EmitB(35);               { jle .skip_pad (35 bytes) }
-              EmitB($48); EmitB($BE); EmitDataRef(SPACES_OFFSET);
+              EmitB($48); EmitB($BE); EmitDataRef(SpacesOffset);
               EmitB($48); EmitB($89); EmitB($C2);  { mov rdx, rax }
               MovRaxImm(SYS_WRITE); MovRdiImm(STDOUT); EmitSyscall;
               { .skip_pad: }

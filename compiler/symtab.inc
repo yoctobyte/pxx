@@ -1661,6 +1661,15 @@ begin
   MovRaxImm(SYS_WRITE); MovRdiImm(STDOUT); MovRdxImm(1); EmitSyscall;
 end;
 
+procedure EnsureSpaces;
+var j: Integer;
+begin
+  if SpacesOffset >= 0 then Exit;
+  SpacesOffset := DataLen;
+  for j := 0 to SPACES_SIZE - 1 do Data[DataLen + j] := $20;
+  Inc(DataLen, SPACES_SIZE);
+end;
+
 procedure EmitwriteIntW(width: Integer);
 { rax = signed int → right-aligned in field of min width chars }
 var jnsOff, jleOff, jzOff, loopStart: Integer;
@@ -1692,7 +1701,8 @@ begin
   EmitB($48); EmitB($29); EmitB($C8);                    { sub rax, rcx }
   EmitB($4C); EmitB($29); EmitB($C0);                    { sub rax, r8 }
   EmitB($7E); jleOff := CodeLen; EmitB(0);               { jle .no_pad }
-  EmitB($48); EmitB($BE); EmitDataRef(SPACES_OFFSET);    { mov rsi, spaces }
+  EnsureSpaces;
+  EmitB($48); EmitB($BE); EmitDataRef(SpacesOffset);    { mov rsi, spaces }
   EmitB($48); EmitB($89); EmitB($C2);                    { mov rdx, rax }
   MovRaxImm(SYS_WRITE); MovRdiImm(STDOUT); EmitSyscall;
   Code[jleOff] := Byte(CodeLen - (jleOff + 1));
@@ -1728,7 +1738,8 @@ begin
   MovRaxImm(width);
   EmitB($48); EmitB($29); EmitB($C8);                    { sub rax, rcx }
   EmitB($7E); jleOff := CodeLen; EmitB(0);               { jle .no_pad }
-  EmitB($48); EmitB($BE); EmitDataRef(SPACES_OFFSET);
+  EnsureSpaces;
+  EmitB($48); EmitB($BE); EmitDataRef(SpacesOffset);
   EmitB($48); EmitB($89); EmitB($C2);                    { mov rdx, rax }
   MovRaxImm(SYS_WRITE); MovRdiImm(STDOUT); EmitSyscall;
   Code[jleOff] := Byte(CodeLen - (jleOff + 1));

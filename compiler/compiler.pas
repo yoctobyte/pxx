@@ -107,10 +107,10 @@ begin
 
   SrcPos   := 1; SrcLine  := 1;
   CodeLen  := 0;
-  DataLen  := STR_INIT_OFFSET;
+  DataLen      := STR_INIT_OFFSET;
+  SpacesOffset := -1;
   Data[MINUS_OFFSET]   := Ord('-');
   Data[NEWLINE_OFFSET] := 10;
-  for i := 0 to SPACES_SIZE-1 do Data[SPACES_OFFSET + i] := $20;
   BSSSize  := 0;
   StrCount := 0; FixCount := 0;
   GlobFixCount := 0; CallFixCount := 0;
