@@ -30,3 +30,4 @@ Additional project material:
 - [IR Fixedpoint Milestone](selfcompile-milestone.md) - 2026-05-28 IR-to-IR self-recompile fixedpoint record.
 - [Target Roadmap](roadmap.md) - planned CPU targets and the fixedpoint gate each must pass.
 - [Language Status](language-status.md) - timestamped inventory of implemented, partial, and missing Pascal features with AST/IR complexity estimates.
+- [Interfaces Design Notes](interfaces-design.md) - why interfaces are last: fat pointers, COM vs lightweight model, and the prerequisite chain.
