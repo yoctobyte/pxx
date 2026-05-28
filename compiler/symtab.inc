@@ -1894,6 +1894,8 @@ begin
   begin
     if ASTKind[ASTLeft[node]] = AN_IDENT then
       Result := Syms[ASTIVal[ASTLeft[node]]].ElemRecName
+    else if ASTKind[ASTLeft[node]] = AN_FIELD then
+      Result := ResolveNodeRec(ASTLeft[node])
     else
       Result := REC_NONE;
   end
