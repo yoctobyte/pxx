@@ -104,18 +104,22 @@ The C capability is useful but intentionally incomplete:
 
 ## No Optimization
 
-PXX is a direct-emission compiler. Every construct is translated
-straight to machine code with no intermediate representation and no
-optimization passes. What you write is exactly what gets emitted:
+The default backend is a direct-emission compiler. Every construct is
+translated straight to machine code with no optimization passes.
+What you write is exactly what gets emitted:
 
 - No constant folding, dead-code elimination, or inlining.
 - No register allocation — values live in fixed registers per convention.
 - No loop transforms, strength reduction, or alias analysis.
 - No peephole cleanup of redundant loads/stores.
 
+An experimental IR backend (`--experimental-ir-codegen`) exists and
+reached self-recompile fixedpoint on 2026-05-28, but it does not yet add
+optimization passes. The IR layer is the foundation for future
+optimization work; that work has not started.
+
 This is intentional for the bootstrap phase: the compiler stays simple,
-self-hostable, and auditable. An IR and optimization layer are on the
-roadmap for after multi-architecture support lands.
+self-hostable, and auditable.
 
 ## Diagnostics And Tooling
 

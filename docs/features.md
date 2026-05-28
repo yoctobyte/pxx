@@ -88,6 +88,17 @@ The C import/input path implements:
 This support is deliberately driven by real imported APIs rather than a claim
 of full C conformance.
 
+## Experimental IR Backend
+
+`--experimental-ir-codegen` routes Pascal through an explicit linear IR
+before x86-64 emission, replacing the default direct AST-to-machine-code
+path. As of 2026-05-28 the IR backend reached full self-recompile
+fixedpoint: three consecutive IR-compiled compiler generations are
+bit-identical.
+
+`--dump-ir` prints the IR without changing the emitted binary and works
+with both backends.
+
 ## Development Guarantees
 
 The build suite exercises:

@@ -1,6 +1,6 @@
 # PXX Documentation
 
-**Documentation snapshot:** 2026-05-27
+**Documentation snapshot:** 2026-05-28
 
 `PXX` is the provisional project and compiler name. The executable is still
 called `compiler/pascal26` while the name and artifact migration remain open.
@@ -26,3 +26,5 @@ Additional project material:
 - [C Interoperability](../C_INTEROP.md) - detail on Pascal-to-C header imports and supported C preprocessing.
 - [Compatibility Status](../COMPATIBILITY.md) - dated implementation inventory and bootstrap policy.
 - [Implementation Handover](../handover.md) - internal architecture and bootstrap notes.
+- [IR Backend Status](ir-handover.md) - IR pipeline, coverage, and known gaps.
+- [IR Fixedpoint Milestone](selfcompile-milestone.md) - 2026-05-28 IR-to-IR self-recompile fixedpoint record.

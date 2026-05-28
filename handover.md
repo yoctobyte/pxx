@@ -1,30 +1,36 @@
 # PXX / Frankonpiler Handover
 
-**Date:** 2026-05-27 (updated same day, session 3)
+**Date:** 2026-05-28
 
 ## Current Git State
 
-Relevant commits on `master`:
+Relevant recent commits on `master`:
 
 ```text
+111c219 feat(ir): add string ops, Ord/Chr cast, set-in, and AN_PAIR lowering
+b8ea9bc docs: record IR-to-IR self-recompile fixedpoint milestone
+5b1bc42 fix(defs,parser): remove per-compilation AST node limit
+651d691 fix(symtab): extend ResolveNodeRec for AN_FIELD-based array indexing
+85060bc feat(ir): add exception handling
+ffa06c5 Fix tkSysClose AST parser bug
 7fd9d88 feat(exceptions): add exact typed handlers
 3c6da5a feat(exceptions): add finally and reraise
-d59d78b fix(exceptions): unwind protected loop exits
-7fa9aac feat(exceptions): add untyped try/except
-aa7a88e feat(types): finish scalar integer layout
-553dcdc docs: split README; move C interop to C_INTEROP.md
-7f72746 docs: note 2026-05-27 FPC bootstrap for generic function record types
 7cce611 feat(generics): implement generic functions (B1 syntax)
-7c96277 design: generic functions + dialect switches + operator overloading notes
-a5cf0a3 generics: fix bootstrap - no Continue, fix for-loop cur clobbering, insert after template method
-5079039 Stabilize overloading and achieve full 3-stage self-hosting convergence
-546cfd2 feat(interop): add math user library with C imports, fix recursive lexer stack overflow segfault
-144e13d feat(map): implement Map File generation (.map) and fix dynamic string concatenation
-f907626 docs: update handover for class/method completion
-0ecbca7 feat(class): fix class field offsets and method compilation
 ```
 
 ## What Works
+
+### IR-to-IR self-recompile fixedpoint (NEW — 2026-05-28)
+Three-generation IR fixedpoint achieved: stage0 (FPC-compiled) → gen1
+(IR-compiled) → gen2 (IR-compiled by IR-compiled compiler) → `cmp`: identical.
+The experimental IR backend is now self-consistent.
+See `docs/selfcompile-milestone.md` and `docs/ir-handover.md` for details.
+
+Two bugs blocked fixedpoint and were fixed:
+1. `ResolveNodeRec` in `symtab.inc` — missing `AN_FIELD` case for
+   `AN_INDEX` base, causing all `TParam` fields to alias offset 0.
+2. `MAX_TOKENS` too small (131072 → 262144) and `ASTNodeCount` was
+   never reset between functions — now reset after each `CompileAST`.
 
 ### Self-hosting fixedpoint
 `make bootstrap` and `make test` both pass. `gen2 == gen3`, bit-identical.
@@ -182,8 +188,8 @@ Binary sizes: hello world = **325 bytes** (FPC: 191 KB).
 
 - `compiler/compiler.pas` — main entry, includes all `.inc` files
 - Include chain: `defs.inc` → `lexer.inc` → `clexer.inc` → `blexer.inc` → `emit.inc` →
-  `symtab.inc` → `parser.inc` → `codegen.inc` → `cparser.inc` → `bparser.inc` →
-  `elfwriter.inc` → `cpreproc.inc`
+  `symtab.inc` → `parser.inc` → `codegen.inc` → `ir.inc` → `ir_codegen.inc` →
+  `cparser.inc` → `bparser.inc` → `elfwriter.inc` → `cpreproc.inc`
 - Single-pass: source → tokens → AST → x86-64 bytes → ELF write
 - No linker, no stdlib, no runtime
 - Static programs: one load segment, no dynamic section
@@ -318,15 +324,17 @@ both converge again.
 
 ## Suggested Next Steps
 
-1. **Scalar floats** — implement `Single`/`Double`/`Real` storage and SSE2
-   expression/codegen coverage; defer floating-point traps until the normal
-   arithmetic path is stable.
-2. **Exception class runtime** — add built-in `Exception`, descriptors,
-   inherited matching, messages, and class-aware unhandled reports before
-   exposing `EFloatError`.
-3. **C interop depth** — pointer args/returns, C strings, `size_t`, typedef
+1. **Unit system** — `uses`/`interface`/`implementation` sections; needed
+   before most library work becomes tractable.
+2. **Exception class runtime** — built-in `Exception` base, class
+   descriptors, inherited `on E: EClass do` matching, message constructors,
+   and class-aware unhandled reports.
+3. **Scalar floats** — `Single`/`Double`/`Real` storage and SSE2
+   expression/codegen; defer floating-point traps until arithmetic is stable.
+4. **IR optimization layer** — constant folding, dead-code elimination,
+   register allocation; only makes sense after IR backend is the default path.
+5. **C interop depth** — pointer args/returns, C strings, `size_t`, typedef
    aliases, and simple struct layout, driven by real header needs.
-4. **Exercise more stdlib headers** — `string.h`, `stdio.h`, add to `make test`.
 
 ## Pre-Publish Verification (2026-05-27)
 

@@ -1,6 +1,6 @@
 # PXX Compatibility Status
 
-**Status date:** 2026-05-27
+**Status date:** 2026-05-28
 
 `PXX` is the provisional name for this compiler. It may change before a
 public naming/API commitment. Existing executable and stable-seed paths remain

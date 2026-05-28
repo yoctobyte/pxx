@@ -35,6 +35,10 @@ Focus: Linux / POSIX. Single target for now: x86-64.
   mode, plus `operator +(a, b: TPoint): TPoint` class operator implementations.
 - **Exceptions (Phase 1)** — `try/except`, `try/finally`, `raise <expr>`, and
   re-raise; generated jump-frame runtime, no libc dependency.
+- **Experimental IR backend** — `--experimental-ir-codegen` routes Pascal
+  through an explicit IR before x86-64 emission. As of 2026-05-28 the IR
+  backend reached full self-recompile fixedpoint: three generations of
+  IR-compiled compiler produce a bit-identical binary.
 - **FPC-compatible source** — the compiler itself is valid FPC Pascal.
   `make fpc-check` verifies this. FPC is the bootstrap tool and a respected
   reference implementation.
@@ -55,7 +59,7 @@ Uses the checked-in self-hosted seed binary. No FPC required.
 
 ```sh
 git clone https://github.com/yoctobyte/pxx
-cd frankonpiler
+cd pxx
 make        # rebuild compiler from the existing seed
 make test   # full regression suite + fixedpoint check
 ```
