@@ -79,6 +79,12 @@ test: $(COMPILER) fpc-check
 	grep -q "jump_if_false" /tmp/test_ir_if26.log
 	grep -q "binop" /tmp/test_ir_if26.log
 	test "$$(/tmp/test_ir_if26)" = "then"
+	./$(COMPILER) --dump-ir test/test_ir_while.pas /tmp/test_ir_while26 > /tmp/test_ir_while26.log
+	grep -q "label" /tmp/test_ir_while26.log
+	grep -q "jump " /tmp/test_ir_while26.log
+	grep -q "jump_if_false" /tmp/test_ir_while26.log
+	grep -q "binop" /tmp/test_ir_while26.log
+	test "$$(/tmp/test_ir_while26)" = "3"
 	./$(COMPILER) test/test_shared_object.pas /tmp/shared_object26
 	test "$$(/tmp/shared_object26)" = "97"
 	./$(COMPILER) test/test_c_import.pas /tmp/c_import26

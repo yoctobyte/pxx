@@ -146,8 +146,8 @@ end;
 
 function IRLowerAST(node: Integer): Integer;
 var left, right, seq, item, value, outNode, first, last: Integer;
-    pairNode, condNode, elseNode: Integer;
-    elseLabel, endLabel, endLabelNode: Integer;
+    pairNode, condNode: Integer;
+    startLabel, elseLabel, endLabel, startLabelNode, endLabelNode: Integer;
 begin
   if node = -1 then
   begin
@@ -207,14 +207,23 @@ begin
       last := IRLowerAST(ASTLeft[pairNode]);
       last := IRAppend(IR_JUMP, endLabel, -1, -1, 0, 0);
       last := IRAppend(IR_LABEL, -1, -1, -1, elseLabel, 0);
-      elseNode := -1;
       if ASTRight[pairNode] <> -1 then
-        elseNode := IRLowerAST(ASTRight[pairNode]);
+        last := IRLowerAST(ASTRight[pairNode]);
       endLabelNode := IRAppend(IR_LABEL, -1, -1, -1, endLabel, 0);
-      if elseNode <> -1 then
-        Result := IRAppend(IR_BLOCK, first, endLabelNode, -1, 0, 0)
-      else
-        Result := IRAppend(IR_BLOCK, first, endLabelNode, -1, 0, 0);
+      Result := IRAppend(IR_BLOCK, first, endLabelNode, -1, 0, 0);
+    end;
+
+    AN_WHILE:
+    begin
+      startLabel := IRNewLabel;
+      endLabel := IRNewLabel;
+      startLabelNode := IRAppend(IR_LABEL, -1, -1, -1, startLabel, 0);
+      condNode := IRLowerAST(ASTLeft[node]);
+      last := IRAppend(IR_JUMP_IF_FALSE, endLabel, condNode, -1, 0, 0);
+      last := IRLowerAST(ASTRight[node]);
+      last := IRAppend(IR_JUMP, startLabel, -1, -1, 0, 0);
+      endLabelNode := IRAppend(IR_LABEL, -1, -1, -1, endLabel, 0);
+      Result := IRAppend(IR_BLOCK, startLabelNode, endLabelNode, -1, 0, 0);
     end;
 
     AN_WRITE, AN_WRITELN:
