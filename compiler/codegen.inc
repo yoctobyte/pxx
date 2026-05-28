@@ -569,6 +569,14 @@ begin
       begin
         if dummyTk = tySingle then
           begin EmitB($F3); EmitB($0F); EmitB($10); EmitB($00); end  { movss xmm0, [rax] }
+        else if dummyTk = tyExtended then
+        begin
+          EmitB($48); EmitB($83); EmitB($EC); EmitB($08);              { sub rsp, 8 }
+          EmitB($DF); EmitB($28);                                       { fldt [rax] }
+          EmitB($DD); EmitB($1C); EmitB($24);                          { fstpl [rsp] }
+          EmitB($F2); EmitB($0F); EmitB($10); EmitB($04); EmitB($24); { movsd xmm0, [rsp] }
+          EmitB($48); EmitB($83); EmitB($C4); EmitB($08);              { add rsp, 8 }
+        end
         else
           begin EmitB($F2); EmitB($0F); EmitB($10); EmitB($00); end; { movsd xmm0, [rax] }
       end
@@ -603,8 +611,8 @@ begin
     AN_BINOP:
     begin
       op := IntToTokenKind(ASTIVal[node]);
-      if (ASTTk[ASTLeft[node]] = Ord(tySingle)) or (ASTTk[ASTLeft[node]] = Ord(tyDouble)) or
-         (ASTTk[ASTRight[node]] = Ord(tySingle)) or (ASTTk[ASTRight[node]] = Ord(tyDouble)) or
+      if (ASTTk[ASTLeft[node]] = Ord(tySingle)) or (ASTTk[ASTLeft[node]] = Ord(tyDouble)) or (ASTTk[ASTLeft[node]] = Ord(tyExtended)) or
+         (ASTTk[ASTRight[node]] = Ord(tySingle)) or (ASTTk[ASTRight[node]] = Ord(tyDouble)) or (ASTTk[ASTRight[node]] = Ord(tyExtended)) or
          (op = tkSlash) then
       begin
         { Float path: xmm1 = left, xmm0 = right; integer ops convert first }
@@ -987,6 +995,14 @@ begin
           begin
             if lhsTk = tySingle then
               begin EmitB($F3); EmitB($0F); EmitB($11); EmitB($01); end  { movss [rcx], xmm0 }
+            else if lhsTk = tyExtended then
+            begin
+              EmitB($48); EmitB($83); EmitB($EC); EmitB($08);              { sub rsp, 8 }
+              EmitB($F2); EmitB($0F); EmitB($11); EmitB($04); EmitB($24); { movsd [rsp], xmm0 }
+              EmitB($DD); EmitB($04); EmitB($24);                          { fldl [rsp] }
+              EmitB($48); EmitB($83); EmitB($C4); EmitB($08);              { add rsp, 8 }
+              EmitB($DF); EmitB($39);                                       { fstpt [rcx] }
+            end
             else
               begin EmitB($F2); EmitB($0F); EmitB($11); EmitB($01); end; { movsd [rcx], xmm0 }
           end

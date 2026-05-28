@@ -1531,9 +1531,14 @@ begin
       ASTTk[node] := Ord(TypeDivideResult(IntToTypeKind(ASTTk[left])))
     else if op = tkIdent then
       ASTTk[node] := ASTTk[left]
-    else if (ASTTk[left] = Ord(tySingle)) or (ASTTk[left] = Ord(tyDouble)) or
-            (ASTTk[right] = Ord(tySingle)) or (ASTTk[right] = Ord(tyDouble)) then
-      ASTTk[node] := Ord(tyDouble)  { float operand promotes result to Double }
+    else if (ASTTk[left] = Ord(tySingle)) or (ASTTk[left] = Ord(tyDouble)) or (ASTTk[left] = Ord(tyExtended)) or
+            (ASTTk[right] = Ord(tySingle)) or (ASTTk[right] = Ord(tyDouble)) or (ASTTk[right] = Ord(tyExtended)) then
+    begin
+      if (ASTTk[left] = Ord(tyExtended)) or (ASTTk[right] = Ord(tyExtended)) then
+        ASTTk[node] := Ord(tyExtended)
+      else
+        ASTTk[node] := Ord(tyDouble);
+    end
     else if TypeIsOrdinal(IntToTypeKind(ASTTk[left])) and TypeIsOrdinal(IntToTypeKind(ASTTk[right])) then
       ASTTk[node] := Ord(TypeArithmeticResult(IntToTypeKind(ASTTk[left]), IntToTypeKind(ASTTk[right])))
     else
@@ -1562,9 +1567,14 @@ begin
       ASTTk[node] := Ord(tyString)
     else if (op = tkOr) and (ASTTk[left] = Ord(tyBoolean)) and (ASTTk[right] = Ord(tyBoolean)) then
       ASTTk[node] := Ord(tyBoolean)
-    else if (ASTTk[left] = Ord(tySingle)) or (ASTTk[left] = Ord(tyDouble)) or
-            (ASTTk[right] = Ord(tySingle)) or (ASTTk[right] = Ord(tyDouble)) then
-      ASTTk[node] := Ord(tyDouble)
+    else if (ASTTk[left] = Ord(tySingle)) or (ASTTk[left] = Ord(tyDouble)) or (ASTTk[left] = Ord(tyExtended)) or
+            (ASTTk[right] = Ord(tySingle)) or (ASTTk[right] = Ord(tyDouble)) or (ASTTk[right] = Ord(tyExtended)) then
+    begin
+      if (ASTTk[left] = Ord(tyExtended)) or (ASTTk[right] = Ord(tyExtended)) then
+        ASTTk[node] := Ord(tyExtended)
+      else
+        ASTTk[node] := Ord(tyDouble);
+    end
     else if TypeIsOrdinal(IntToTypeKind(ASTTk[left])) and TypeIsOrdinal(IntToTypeKind(ASTTk[right])) then
       ASTTk[node] := Ord(TypeArithmeticResult(IntToTypeKind(ASTTk[left]), IntToTypeKind(ASTTk[right])))
     else
@@ -2339,9 +2349,10 @@ begin
     tkBoolean_T: Result := tyBoolean;
     tkChar_T:    Result := tyChar;
     tkString_T:  Result := tyString;
-    tkReal_T:    Result := tyDouble;
-    tkSingle_T:  Result := tySingle;
-    tkDouble_T:  Result := tyDouble;
+    tkReal_T:     Result := tyDouble;
+    tkSingle_T:   Result := tySingle;
+    tkDouble_T:   Result := tyDouble;
+    tkExtended_T: Result := tyExtended;
     else
     begin
       lo := CurTok.SVal;
@@ -2349,6 +2360,7 @@ begin
       else if CaseEqual(lo, 'real') then Result := tyDouble
       else if CaseEqual(lo, 'single') then Result := tySingle
       else if CaseEqual(lo, 'double') then Result := tyDouble
+      else if CaseEqual(lo, 'extended') then Result := tyExtended
       else if CaseEqual(lo, 'shortint') then Result := tyInt8
       else if CaseEqual(lo, 'byte') then Result := tyUInt8
       else if CaseEqual(lo, 'smallint') then Result := tyInt16

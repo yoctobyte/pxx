@@ -111,7 +111,7 @@ type
     tkSemicolon, tkColon, tkComma, tkDot, tkDotDot, tkAt, tkCaret,
     tkBreak, tkContinue, tkOverload,
     tkTry, tkExcept, tkFinally, tkRaise, tkOn,
-    tkFloat, tkSingle_T, tkDouble_T
+    tkFloat, tkSingle_T, tkDouble_T, tkExtended_T
   );
 
   TToken = record
@@ -172,7 +172,8 @@ type
     tyNativeUInt, { 16: NativeUInt/PtrUInt — pointer-sized unsigned }
     tyPointer,   { 17: untyped Pointer — pointer-sized, no sign }
     tySingle,    { 18: Single — 4-byte IEEE 754, SSE2 xmm }
-    tyDouble     { 19: Double/Real — 8-byte IEEE 754, SSE2 xmm }
+    tyDouble,    { 19: Double/Real — 8-byte IEEE 754, SSE2 xmm }
+    tyExtended   { 20: Extended — 10-byte x87, load/store via x87; ops in SSE2 double }
   );
 
   TSymKind  = (skLocal, skGlobal, skParam, skConst);

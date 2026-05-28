@@ -419,6 +419,7 @@ begin
     17: Result := TARGET_PTR_SIZE;  { tyPointer }
     18: Result := 4;  { tySingle }
     19: Result := 8;  { tyDouble }
+    20: Result := 10; { tyExtended }
   end;
 end;
 
@@ -471,7 +472,7 @@ end;
 
 function TypeIsFloat(tk: TTypeKind): Boolean;
 begin
-  Result := (Ord(tk) = 18) or (Ord(tk) = 19);  { tySingle or tyDouble }
+  Result := (Ord(tk) = 18) or (Ord(tk) = 19) or (Ord(tk) = 20);  { tySingle or tyDouble or tyExtended }
 end;
 
 function TypeCompareUnsigned(lhs, rhs: TTypeKind): Boolean;
@@ -706,19 +707,43 @@ begin
     begin
       EmitB($48); EmitB($8B); EmitB($85); EmitI32(Syms[idx].Offset);  { mov rax, [rbp+off] }
       if tk = tySingle then
-        begin EmitB($F3); EmitB($0F); EmitB($10); EmitB($00); end   { movss xmm0, [rax] }
+        begin EmitB($F3); EmitB($0F); EmitB($10); EmitB($00); end       { movss xmm0, [rax] }
+      else if tk = tyExtended then
+      begin
+        EmitB($48); EmitB($83); EmitB($EC); EmitB($08);                 { sub rsp, 8 }
+        EmitB($DF); EmitB($28);                                          { fldt [rax] }
+        EmitB($DD); EmitB($1C); EmitB($24);                             { fstpl [rsp] }
+        EmitB($F2); EmitB($0F); EmitB($10); EmitB($04); EmitB($24);    { movsd xmm0, [rsp] }
+        EmitB($48); EmitB($83); EmitB($C4); EmitB($08);                 { add rsp, 8 }
+      end
       else
-        begin EmitB($F2); EmitB($0F); EmitB($10); EmitB($00); end;  { movsd xmm0, [rax] }
+        begin EmitB($F2); EmitB($0F); EmitB($10); EmitB($00); end;      { movsd xmm0, [rax] }
     end
     else case Syms[idx].Kind of
       skLocal, skParam:
         if tk = tySingle then
-          begin EmitB($F3); EmitB($0F); EmitB($10); EmitB($85); EmitI32(Syms[idx].Offset); end  { movss xmm0, [rbp+off] }
+          begin EmitB($F3); EmitB($0F); EmitB($10); EmitB($85); EmitI32(Syms[idx].Offset); end   { movss xmm0, [rbp+off] }
+        else if tk = tyExtended then
+        begin
+          EmitB($48); EmitB($83); EmitB($EC); EmitB($08);               { sub rsp, 8 }
+          EmitB($DF); EmitB($AD); EmitI32(Syms[idx].Offset);            { fldt [rbp+off] }
+          EmitB($DD); EmitB($1C); EmitB($24);                           { fstpl [rsp] }
+          EmitB($F2); EmitB($0F); EmitB($10); EmitB($04); EmitB($24);  { movsd xmm0, [rsp] }
+          EmitB($48); EmitB($83); EmitB($C4); EmitB($08);               { add rsp, 8 }
+        end
         else
-          begin EmitB($F2); EmitB($0F); EmitB($10); EmitB($85); EmitI32(Syms[idx].Offset); end; { movsd xmm0, [rbp+off] }
+          begin EmitB($F2); EmitB($0F); EmitB($10); EmitB($85); EmitI32(Syms[idx].Offset); end;  { movsd xmm0, [rbp+off] }
       skGlobal:
         if tk = tySingle then
           begin EmitB($F3); EmitB($0F); EmitB($10); EmitB($04); EmitB($25); EmitGlobRef(Syms[idx].Offset); end  { movss xmm0, [abs] }
+        else if tk = tyExtended then
+        begin
+          EmitB($48); EmitB($83); EmitB($EC); EmitB($08);               { sub rsp, 8 }
+          EmitB($DF); EmitB($2C); EmitB($25); EmitGlobRef(Syms[idx].Offset);  { fldt [abs32] }
+          EmitB($DD); EmitB($1C); EmitB($24);                           { fstpl [rsp] }
+          EmitB($F2); EmitB($0F); EmitB($10); EmitB($04); EmitB($24);  { movsd xmm0, [rsp] }
+          EmitB($48); EmitB($83); EmitB($C4); EmitB($08);               { add rsp, 8 }
+        end
         else
           begin EmitB($F2); EmitB($0F); EmitB($10); EmitB($04); EmitB($25); EmitGlobRef(Syms[idx].Offset); end; { movsd xmm0, [abs] }
       skConst: MovRaxImm(Syms[idx].ConstVal);
@@ -834,19 +859,43 @@ begin
     begin
       EmitB($48); EmitB($8B); EmitB($8D); EmitI32(Syms[idx].Offset);  { mov rcx, [rbp+off] }
       if tk = tySingle then
-        begin EmitB($F3); EmitB($0F); EmitB($11); EmitB($01); end   { movss [rcx], xmm0 }
+        begin EmitB($F3); EmitB($0F); EmitB($11); EmitB($01); end      { movss [rcx], xmm0 }
+      else if tk = tyExtended then
+      begin
+        EmitB($48); EmitB($83); EmitB($EC); EmitB($08);                { sub rsp, 8 }
+        EmitB($F2); EmitB($0F); EmitB($11); EmitB($04); EmitB($24);   { movsd [rsp], xmm0 }
+        EmitB($DD); EmitB($04); EmitB($24);                            { fldl [rsp] }
+        EmitB($48); EmitB($83); EmitB($C4); EmitB($08);                { add rsp, 8 }
+        EmitB($DF); EmitB($39);                                         { fstpt [rcx] }
+      end
       else
-        begin EmitB($F2); EmitB($0F); EmitB($11); EmitB($01); end;  { movsd [rcx], xmm0 }
+        begin EmitB($F2); EmitB($0F); EmitB($11); EmitB($01); end;     { movsd [rcx], xmm0 }
     end
     else case Syms[idx].Kind of
       skLocal, skParam:
         if tk = tySingle then
           begin EmitB($F3); EmitB($0F); EmitB($11); EmitB($85); EmitI32(Syms[idx].Offset); end  { movss [rbp+off], xmm0 }
+        else if tk = tyExtended then
+        begin
+          EmitB($48); EmitB($83); EmitB($EC); EmitB($08);              { sub rsp, 8 }
+          EmitB($F2); EmitB($0F); EmitB($11); EmitB($04); EmitB($24); { movsd [rsp], xmm0 }
+          EmitB($DD); EmitB($04); EmitB($24);                          { fldl [rsp] }
+          EmitB($48); EmitB($83); EmitB($C4); EmitB($08);              { add rsp, 8 }
+          EmitB($DF); EmitB($BD); EmitI32(Syms[idx].Offset);           { fstpt [rbp+off] }
+        end
         else
           begin EmitB($F2); EmitB($0F); EmitB($11); EmitB($85); EmitI32(Syms[idx].Offset); end; { movsd [rbp+off], xmm0 }
       skGlobal:
         if tk = tySingle then
           begin EmitB($F3); EmitB($0F); EmitB($11); EmitB($04); EmitB($25); EmitGlobRef(Syms[idx].Offset); end  { movss [abs], xmm0 }
+        else if tk = tyExtended then
+        begin
+          EmitB($48); EmitB($83); EmitB($EC); EmitB($08);              { sub rsp, 8 }
+          EmitB($F2); EmitB($0F); EmitB($11); EmitB($04); EmitB($24); { movsd [rsp], xmm0 }
+          EmitB($DD); EmitB($04); EmitB($24);                          { fldl [rsp] }
+          EmitB($48); EmitB($83); EmitB($C4); EmitB($08);              { add rsp, 8 }
+          EmitB($DF); EmitB($3C); EmitB($25); EmitGlobRef(Syms[idx].Offset);  { fstpt [abs32] }
+        end
         else
           begin EmitB($F2); EmitB($0F); EmitB($11); EmitB($04); EmitB($25); EmitGlobRef(Syms[idx].Offset); end; { movsd [abs], xmm0 }
       skConst: Error('cannot assign to constant');
