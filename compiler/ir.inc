@@ -51,6 +51,7 @@ begin
     IR_EXC_STORE: Result := 'exc_store';
     IR_EXC_CLEAR: Result := 'exc_clear';
     IR_TERMINATE: Result := 'terminate';
+    IR_VIRTUAL_CALL: Result := 'virtual_call';
   else
     Result := 'unknown';
   end;
@@ -234,6 +235,14 @@ begin
 
       IR_TERMINATE:
         IRRequireOptionalNode(IRA[i], 'terminate value');
+
+      IR_VIRTUAL_CALL:
+      begin
+        IRRequireOptionalNode(IRA[i], 'virtual_call first arg');
+        IRRequireOptionalNode(IRB[i], 'virtual_call last arg');
+        if (IRC[i] < 0) or (IRC[i] >= ProcCount) then
+          Error('invalid proc index in virtual_call');
+      end;
 
       IR_UNSUPPORTED:
         begin end;
@@ -901,6 +910,40 @@ begin
         last := item;
       end;
       Result := IRAppend(IR_BLOCK, first, last, -1, 0, 0);
+    end;
+
+    AN_VIRTUAL_CALL:
+    begin
+      { AN_VIRTUAL_CALL layout:
+          ASTIVal[node] = proc index   (for param signature)
+          ASTRight[node] = VMT slot index
+          ASTLeft[node]  = first AN_ARG (Self is arg 0, injected by parser) }
+      first := -1;
+      last := -1;
+      cpi := ASTIVal[node];
+      slot := ASTRight[node];
+      item := ASTLeft[node];
+      pathIdx := 0;
+      while item <> -1 do
+      begin
+        isRefArg := False;
+        if (pathIdx > 0) and (pathIdx < Procs[cpi].ParamCount) and
+           Procs[cpi].Params[pathIdx].IsRef then
+          isRefArg := True;
+        { Self (pathIdx=0) is always passed by value (pointer) }
+        if isRefArg then
+          value := IRLowerAddress(ASTLeft[item])
+        else
+          value := IRLowerAST(ASTLeft[item]);
+        argNode := IRAppend(IR_ARG, value, -1, -1, 0, ASTTk[item]);
+        if first < 0 then first := argNode
+        else IRB[last] := argNode;
+        last := argNode;
+        item := ASTRight[item];
+        Inc(pathIdx);
+      end;
+      { IRA=first arg, IRB=last arg, IRC=proc idx, IRIVal=VMT slot }
+      Result := IRAppend(IR_VIRTUAL_CALL, first, last, cpi, slot, ASTTk[node]);
     end;
 
     AN_PAIR, AN_SEQ:

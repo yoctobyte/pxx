@@ -15,25 +15,29 @@ before starting the next. Items within a phase are ordered by dependency.
 ### 0.1 — `AN_VIRTUAL_CALL` in IR lowering
 
 **File:** `compiler/ir.inc`, function `IRLowerAST`  
-**File:** `compiler/ir_codegen.inc`, function `IREmitNode`
+**File:** `compiler/ir_codegen.inc`, function `IREmitNode`  
+**File:** `compiler/defs.inc`, IR opcode table
 
 `AN_VIRTUAL_CALL` is emitted by the parser and handled in `codegen.inc`
-but has no case in `IRLowerAST`. Any program calling a virtual method
-via the IR backend silently hits `IR_UNSUPPORTED`.
+but had no case in `IRLowerAST`. Any program calling a virtual method
+via the IR backend silently hit `IR_UNSUPPORTED`.
 
-Fix: add `AN_VIRTUAL_CALL` case to `IRLowerAST`. Lower to:
-- `IR_LOAD_MEM` of the VMT pointer (offset 0 of object)
-- `IR_LOAD_MEM` of the vtable slot (VMT pointer + slot * 8)
-- `IR_INDIRECT_CALL` through that slot address
+**Strategy chosen:** `IR_VIRTUAL_CALL` (opcode 30, append-only).  
+Layout: `IRA`=first arg IR node, `IRB`=last arg IR node,
+`IRC`=proc index (for param signature), `IRIVal`=VMT slot index.
+Self is always arg 0 (already injected by the parser into the AN_ARG chain).
 
-Or add `IR_VIRTUAL_CALL` (IVal = VMT slot index; object in first arg)
-and handle in `IREmitNode` — mirrors what `codegen.inc` already does.
+This avoids taking a dependency on `IR_INDIRECT_CALL` (Phase 4) and exactly
+mirrors the `AN_VIRTUAL_CALL` case in `codegen.inc`.
 
-Reference: `compiler/codegen.inc` — search `AN_VIRTUAL_CALL` for the
-legacy implementation to mirror.
+Machine code emitted by `IREmitNode(IR_VIRTUAL_CALL)`:
+1. Push all args (Self → rdi via SysV register pop)
+2. `mov rax, [rdi]`  — load VMT pointer from object header
+3. `call [rax + slot*8]` — indirect call through vtable slot
 
-**Test:** any program with a virtual method call compiled with
-`--experimental-ir-codegen` must produce correct output.
+**Status:** ✅ Implemented and tested.  
+**Test:** `test/test_ir_virtual_call.pas` — base + derived class, override,
+and dispatch through a base-class pointer.  
 Confirm fixedpoint still holds after change.
 
 ---

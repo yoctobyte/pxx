@@ -100,6 +100,7 @@ const
   IR_EXC_STORE = 27;
   IR_EXC_CLEAR = 28;
   IR_TERMINATE = 29;
+  IR_VIRTUAL_CALL = 30;  { VMT dispatch: IRA=first arg, IRB=last arg, IRC=proc idx, IRIVal=slot }
 
   EXC_FRAME_SIZE = 80;
   EXC_JMP_OFFSET = 8;

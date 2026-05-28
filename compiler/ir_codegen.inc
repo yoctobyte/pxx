@@ -783,6 +783,34 @@ begin
             EmitExit(0);
         end;
       end;
+    IR_VIRTUAL_CALL:
+      begin
+        { IRA=first arg, IRB=last arg, IRC=proc idx, IRIVal=VMT slot }
+        pi := IRC[node];
+        slot := Integer(IRIVal[node]);
+        argNode := IRA[node];
+        pathIdx := 0;
+        while argNode <> -1 do
+        begin
+          IREmitNode(IRA[argNode]); { evaluates arg -> rax }
+          EmitB($50); { push rax }
+          argNode := IRB[argNode];
+          Inc(pathIdx);
+        end;
+        for i := Procs[pi].ParamCount - 1 downto 0 do
+          case i of
+            0: EmitB($5F); { pop rdi  (Self) }
+            1: EmitB($5E); { pop rsi }
+            2: EmitB($5A); { pop rdx }
+            3: EmitB($59); { pop rcx }
+            4: begin EmitB($41); EmitB($58); end; { pop r8 }
+            5: begin EmitB($41); EmitB($59); end; { pop r9 }
+          end;
+        { Virtual Method Table dispatch }
+        EmitB($48); EmitB($8B); EmitB($07); { mov rax, [rdi]   -- load VMT pointer }
+        EmitB($FF); EmitB($90); EmitI32(slot * 8); { call [rax + slot*8] }
+      end;
+
   else
     Error('Unsupported linear node in IR codegen');
   end;
