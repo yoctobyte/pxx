@@ -17,6 +17,16 @@ randomize the screw-ups.
 - variants
   possibly we can implement variant type as pure object/class implementation, especially since we already have operator overloading. therefore eliminate the need for any hardcoded implementation (although that could be faster. but no-one uses variants because they are fast).
 
+- **float Write/WriteLn**: no float-to-string conversion or direct writeln of float values.
+  Belongs in a standard library rewrite of Write/WriteLn rather than hardcoded compiler
+  intrinsics. FPC-compatible usage of WriteLn will require that rewrite anyway, so hold
+  off on compiler-level float printing until then.
+
+- **float cast intrinsics**: no Trunc(), Round(), Float(), Int() etc.
+  Integer↔float coercions happen implicitly in binary ops (cvtsi2sd) but explicit casts
+  are missing. Could live in compiler builtins or a math/system library — decide when
+  the library layer exists.
+
 
 
  

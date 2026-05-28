@@ -883,6 +883,8 @@ begin
           else
           begin
             GenAST(ASTLeft[argNode]);
+            if TypeIsFloat(Procs[pi].Params[pathIdx].TypeKind) then
+              begin EmitB($66); EmitB($48); EmitB($0F); EmitB($7E); EmitB($C0); end; { movq rax, xmm0 }
           end;
           EmitB($50);
           Inc(pathIdx);
