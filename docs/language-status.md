@@ -434,6 +434,33 @@ codegen, `High`/`Low`/`Length` intrinsics, and the GC/RC policy question.
 
 ### Interfaces
 
+**Common misconception:** interfaces look like a syntactic overlay on
+classes ("just a vtable contract with naming conventions"). They are not.
+They introduce a different object model that runs parallel to the class
+system.
+
+**Why they are not sugar:**
+
+1. **Fat pointers.** A class variable is 1 word (object address). An
+   interface variable is 2 words: `(object_ptr, interface_vtable_ptr)`.
+   The interface vtable is a *separate* table from the class VMT —
+   methods are in interface-declaration order, not class order. Any
+   procedure accepting an interface parameter receives two registers, not
+   one. Load/store, calling convention, and return-value handling all
+   change for interface-typed values.
+
+2. **Multiple vtables per class.** A class implementing two interfaces
+   needs two separate vtables, neither of which is the class VMT.
+   The compiler must track (class × interface → vtable offset) for every
+   combination. Our current `UClsVMTOffset` is one integer per class;
+   interfaces require a 2D table.
+
+3. **Runtime type queries.** `d as ISerializable` is not a compile-time
+   cast. It calls `QueryInterface` at runtime, matching a 16-byte GUID
+   and returning a fat pointer to the right vtable if the object supports
+   the interface. Requires GUID constants, interface descriptor tables,
+   and reference counting if `IInterface`-based.
+
 **AST impact:** `AN_INTERFACE_CALL` (interface vtable dispatch). Interface
 variables are fat pointers (object pointer + interface vtable pointer).
 `as` / `is` operators for interface type testing.
