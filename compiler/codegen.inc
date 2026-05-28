@@ -525,6 +525,19 @@ begin
     begin
       MovRaxImm(ASTIVal[node]);
     end;
+    AN_FLOAT_LIT:
+    begin
+      { align data to 8 bytes, embed IEEE 754 double bits, load into xmm0 }
+      while (DataLen mod 8) <> 0 do
+        begin if DataLen >= MAX_DATA then Error('data overflow'); Data[DataLen] := 0; Inc(DataLen); end;
+      idx := DataLen;
+      cv := ASTIVal[node];
+      for i := 0 to 7 do
+        begin if DataLen >= MAX_DATA then Error('data overflow'); Data[DataLen] := Byte((cv shr (i*8)) and $FF); Inc(DataLen); end;
+      EmitB($48); EmitB($B8); EmitDataRef(idx);   { mov rax, <abs addr of float const> }
+      EmitB($F2); EmitB($0F); EmitB($10); EmitB($00); { movsd xmm0, [rax] }
+      LastExprTk := tyDouble;
+    end;
     AN_STR_LIT:
     begin
       idx := InternStr(GetASTStrVal(node));
@@ -552,6 +565,13 @@ begin
       GenLValueAddress(node, dummyTk, dummyRec, False);
       if dummyTk = tyString then
         begin { address stays in rax } end
+      else if TypeIsFloat(dummyTk) then
+      begin
+        if dummyTk = tySingle then
+          begin EmitB($F3); EmitB($0F); EmitB($10); EmitB($00); end  { movss xmm0, [rax] }
+        else
+          begin EmitB($F2); EmitB($0F); EmitB($10); EmitB($00); end; { movsd xmm0, [rax] }
+      end
       else
       begin
         i := TypeSize(dummyTk);
@@ -582,13 +602,59 @@ begin
     end;
     AN_BINOP:
     begin
+      op := IntToTokenKind(ASTIVal[node]);
+      if (ASTTk[ASTLeft[node]] = Ord(tySingle)) or (ASTTk[ASTLeft[node]] = Ord(tyDouble)) or
+         (ASTTk[ASTRight[node]] = Ord(tySingle)) or (ASTTk[ASTRight[node]] = Ord(tyDouble)) or
+         (op = tkSlash) then
+      begin
+        { Float path: xmm1 = left, xmm0 = right; integer ops convert first }
+        GenAST(ASTLeft[node]);
+        if not TypeIsFloat(IntToTypeKind(ASTTk[ASTLeft[node]])) then
+          begin EmitB($F2); EmitB($48); EmitB($0F); EmitB($2A); EmitB($C0); end;  { cvtsi2sd xmm0, rax }
+        EmitB($48); EmitB($83); EmitB($EC); EmitB($08);              { sub rsp, 8 }
+        EmitB($F2); EmitB($0F); EmitB($11); EmitB($04); EmitB($24); { movsd [rsp], xmm0 }
+        GenAST(ASTRight[node]);
+        if not TypeIsFloat(IntToTypeKind(ASTTk[ASTRight[node]])) then
+          begin EmitB($F2); EmitB($48); EmitB($0F); EmitB($2A); EmitB($C0); end;  { cvtsi2sd xmm0, rax }
+        EmitB($F2); EmitB($0F); EmitB($10); EmitB($0C); EmitB($24); { movsd xmm1, [rsp] }
+        EmitB($48); EmitB($83); EmitB($C4); EmitB($08);              { add rsp, 8 }
+        { xmm1 = left, xmm0 = right }
+        case op of
+          tkPlus:  begin EmitB($F2); EmitB($0F); EmitB($58); EmitB($C1); end; { addsd xmm0, xmm1 }
+          tkMinus:
+            begin
+              EmitB($F2); EmitB($0F); EmitB($5C); EmitB($C8); { subsd xmm1, xmm0 }
+              EmitB($F2); EmitB($0F); EmitB($10); EmitB($C1); { movsd xmm0, xmm1 }
+            end;
+          tkStar:  begin EmitB($F2); EmitB($0F); EmitB($59); EmitB($C1); end; { mulsd xmm0, xmm1 }
+          tkSlash:
+            begin
+              EmitB($F2); EmitB($0F); EmitB($5E); EmitB($C8); { divsd xmm1, xmm0 }
+              EmitB($F2); EmitB($0F); EmitB($10); EmitB($C1); { movsd xmm0, xmm1 }
+            end;
+          tkEq, tkNeq, tkLt, tkLe, tkGt, tkGe:
+            begin
+              EmitB($66); EmitB($0F); EmitB($2E); EmitB($C8); { ucomisd xmm1, xmm0 }
+              case op of
+                tkEq:  begin EmitB($0F); EmitB($94); EmitB($C0); end; { sete al }
+                tkNeq: begin EmitB($0F); EmitB($95); EmitB($C0); end; { setne al }
+                tkLt:  begin EmitB($0F); EmitB($92); EmitB($C0); end; { setb al }
+                tkLe:  begin EmitB($0F); EmitB($96); EmitB($C0); end; { setbe al }
+                tkGt:  begin EmitB($0F); EmitB($97); EmitB($C0); end; { seta al }
+                tkGe:  begin EmitB($0F); EmitB($93); EmitB($C0); end; { setae al }
+              end;
+              EmitB($48); EmitB($0F); EmitB($B6); EmitB($C0); { movzx rax, al }
+            end;
+        end;
+      end
+      else
+      begin
       GenAST(ASTLeft[node]);
       EmitB($50); { push rax }
       GenAST(ASTRight[node]);
       EmitB($48); EmitB($89); EmitB($C1); { mov rcx, rax }
       EmitB($58); { pop rax }
-      
-      op := IntToTokenKind(ASTIVal[node]);
+
       opOvrlIdx := FindOpOverload(Ord(op), ASTTk[ASTLeft[node]], ResolveNodeRec(ASTLeft[node]));
       if opOvrlIdx >= 0 then
       begin
@@ -773,11 +839,20 @@ begin
           end;
         end;
       end;
+      end;  { end integer path else }
     end;
     AN_NEG:
     begin
       GenAST(ASTLeft[node]);
-      EmitB($48); EmitB($F7); EmitB($D8);
+      if TypeIsFloat(IntToTypeKind(ASTTk[ASTLeft[node]])) then
+      begin
+        { flip sign bit: movq rax,xmm0 → btc rax,63 → movq xmm0,rax }
+        EmitB($66); EmitB($48); EmitB($0F); EmitB($7E); EmitB($C0); { movq rax, xmm0 }
+        EmitB($48); EmitB($0F); EmitB($BA); EmitB($F8); EmitB($3F); { btc rax, 63 }
+        EmitB($66); EmitB($48); EmitB($0F); EmitB($6E); EmitB($C0); { movq xmm0, rax }
+      end
+      else
+        EmitB($48); EmitB($F7); EmitB($D8); { neg rax }
     end;
     AN_NOT:
     begin
@@ -908,15 +983,25 @@ begin
         begin
           GenAST(rhsNode);
           EmitB($59); { pop rcx }
-          i := TypeSize(lhsTk);
-          if i = 1 then
-            begin EmitB($88); EmitB($01); end
-          else if i = 2 then
-            begin EmitB($66); EmitB($89); EmitB($01); end
-          else if i = 4 then
-            begin EmitB($89); EmitB($01); end
+          if TypeIsFloat(lhsTk) then
+          begin
+            if lhsTk = tySingle then
+              begin EmitB($F3); EmitB($0F); EmitB($11); EmitB($01); end  { movss [rcx], xmm0 }
+            else
+              begin EmitB($F2); EmitB($0F); EmitB($11); EmitB($01); end; { movsd [rcx], xmm0 }
+          end
           else
-            begin EmitB($48); EmitB($89); EmitB($01); end;
+          begin
+            i := TypeSize(lhsTk);
+            if i = 1 then
+              begin EmitB($88); EmitB($01); end
+            else if i = 2 then
+              begin EmitB($66); EmitB($89); EmitB($01); end
+            else if i = 4 then
+              begin EmitB($89); EmitB($01); end
+            else
+              begin EmitB($48); EmitB($89); EmitB($01); end;
+          end;
         end;
       end;
     end;

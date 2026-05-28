@@ -63,6 +63,7 @@ const
   AN_RAISE     = 28;  { Left = raised expression }
   AN_TRY_FINALLY = 29; { Left = protected block; Right = finalizer block }
   AN_EXC_HANDLER = 30; { IVal = class recId or -1; Left = body; Right = next }
+  AN_FLOAT_LIT   = 31; { IVal = IEEE 754 double bits; ASTTk = Ord(tySingle or tyDouble) }
 
   EXC_FRAME_SIZE = 80;
   EXC_JMP_OFFSET = 8;
@@ -109,7 +110,8 @@ type
     tkLParen, tkRParen, tkLBrack, tkRBrack,
     tkSemicolon, tkColon, tkComma, tkDot, tkDotDot, tkAt, tkCaret,
     tkBreak, tkContinue, tkOverload,
-    tkTry, tkExcept, tkFinally, tkRaise, tkOn
+    tkTry, tkExcept, tkFinally, tkRaise, tkOn,
+    tkFloat, tkSingle_T, tkDouble_T
   );
 
   TToken = record
@@ -168,7 +170,9 @@ type
     tyUInt64,    { 14: QWord  — 8 bytes unsigned }
     tyNativeInt,  { 15: NativeInt/PtrInt — pointer-sized signed }
     tyNativeUInt, { 16: NativeUInt/PtrUInt — pointer-sized unsigned }
-    tyPointer    { 17: untyped Pointer — pointer-sized, no sign }
+    tyPointer,   { 17: untyped Pointer — pointer-sized, no sign }
+    tySingle,    { 18: Single — 4-byte IEEE 754, SSE2 xmm }
+    tyDouble     { 19: Double/Real — 8-byte IEEE 754, SSE2 xmm }
   );
 
   TSymKind  = (skLocal, skGlobal, skParam, skConst);

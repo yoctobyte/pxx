@@ -1129,6 +1129,11 @@ begin
     begin
       node := AllocNode(AN_INT_LIT); ASTIVal[node] := CurTok.IVal; ASTTk[node] := Ord(tyInteger); CurASTNode := node; Next;
     end;
+    tkFloat:
+    begin
+      node := AllocNode(AN_FLOAT_LIT); ASTIVal[node] := CurTok.IVal; ASTTk[node] := Ord(tyDouble);
+      CurASTNode := node; LastExprTk := tyDouble; Next;
+    end;
     tkTrue:
     begin
       node := AllocNode(AN_BOOL_LIT); ASTIVal[node] := 1; ASTTk[node] := Ord(tyBoolean); CurASTNode := node; Next; LastExprTk := tyBoolean;
@@ -1505,7 +1510,7 @@ procedure ParseTerm;
 var op: TTokenKind; left, right, node, opSOffset, opSLen: Integer;
 begin
   ParseFactor;
-  while (CurTok.Kind in [tkStar, tkDiv, tkMod, tkAnd]) or
+  while (CurTok.Kind in [tkStar, tkSlash, tkDiv, tkMod, tkAnd]) or
         ((CurTok.Kind = tkIdent) and (CurTok.SVal = 'shr')) do
   begin
     opSOffset := Tokens[TokPos - 1].SOffset;
@@ -1518,12 +1523,17 @@ begin
     ASTSOffset[node] := opSOffset; ASTSLen[node] := opSLen;
     if (op = tkAnd) and (ASTTk[left] = Ord(tyBoolean)) and (ASTTk[right] = Ord(tyBoolean)) then
       ASTTk[node] := Ord(tyBoolean)
+    else if op = tkSlash then
+      ASTTk[node] := Ord(tyDouble)  { '/' always produces Double }
     else if op = tkDiv then
       ASTTk[node] := Ord(TypeDivideResult(IntToTypeKind(ASTTk[left])))
     else if op = tkMod then
       ASTTk[node] := Ord(TypeDivideResult(IntToTypeKind(ASTTk[left])))
     else if op = tkIdent then
       ASTTk[node] := ASTTk[left]
+    else if (ASTTk[left] = Ord(tySingle)) or (ASTTk[left] = Ord(tyDouble)) or
+            (ASTTk[right] = Ord(tySingle)) or (ASTTk[right] = Ord(tyDouble)) then
+      ASTTk[node] := Ord(tyDouble)  { float operand promotes result to Double }
     else if TypeIsOrdinal(IntToTypeKind(ASTTk[left])) and TypeIsOrdinal(IntToTypeKind(ASTTk[right])) then
       ASTTk[node] := Ord(TypeArithmeticResult(IntToTypeKind(ASTTk[left]), IntToTypeKind(ASTTk[right])))
     else
@@ -1552,6 +1562,9 @@ begin
       ASTTk[node] := Ord(tyString)
     else if (op = tkOr) and (ASTTk[left] = Ord(tyBoolean)) and (ASTTk[right] = Ord(tyBoolean)) then
       ASTTk[node] := Ord(tyBoolean)
+    else if (ASTTk[left] = Ord(tySingle)) or (ASTTk[left] = Ord(tyDouble)) or
+            (ASTTk[right] = Ord(tySingle)) or (ASTTk[right] = Ord(tyDouble)) then
+      ASTTk[node] := Ord(tyDouble)
     else if TypeIsOrdinal(IntToTypeKind(ASTTk[left])) and TypeIsOrdinal(IntToTypeKind(ASTTk[right])) then
       ASTTk[node] := Ord(TypeArithmeticResult(IntToTypeKind(ASTTk[left]), IntToTypeKind(ASTTk[right])))
     else
@@ -2326,10 +2339,16 @@ begin
     tkBoolean_T: Result := tyBoolean;
     tkChar_T:    Result := tyChar;
     tkString_T:  Result := tyString;
+    tkReal_T:    Result := tyDouble;
+    tkSingle_T:  Result := tySingle;
+    tkDouble_T:  Result := tyDouble;
     else
     begin
       lo := CurTok.SVal;
       if CaseEqual(lo, 'ansistring') then Result := tyString
+      else if CaseEqual(lo, 'real') then Result := tyDouble
+      else if CaseEqual(lo, 'single') then Result := tySingle
+      else if CaseEqual(lo, 'double') then Result := tyDouble
       else if CaseEqual(lo, 'shortint') then Result := tyInt8
       else if CaseEqual(lo, 'byte') then Result := tyUInt8
       else if CaseEqual(lo, 'smallint') then Result := tyInt16

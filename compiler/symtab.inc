@@ -417,6 +417,8 @@ begin
     15: Result := TARGET_PTR_SIZE;  { tyNativeInt }
     16: Result := TARGET_PTR_SIZE;  { tyNativeUInt }
     17: Result := TARGET_PTR_SIZE;  { tyPointer }
+    18: Result := 4;  { tySingle }
+    19: Result := 8;  { tyDouble }
   end;
 end;
 
@@ -465,6 +467,11 @@ begin
     15, 16, 17:      { tyNativeInt, tyNativeUInt, tyPointer }
       Result := True;
   end;
+end;
+
+function TypeIsFloat(tk: TTypeKind): Boolean;
+begin
+  Result := (Ord(tk) = 18) or (Ord(tk) = 19);  { tySingle or tyDouble }
 end;
 
 function TypeCompareUnsigned(lhs, rhs: TTypeKind): Boolean;
@@ -693,6 +700,32 @@ begin
   sz := TypeSize(tk);
   sgn := TypeSigned(tk);
 
+  if TypeIsFloat(tk) then
+  begin
+    if (Syms[idx].Kind = skParam) and Syms[idx].IsRef then
+    begin
+      EmitB($48); EmitB($8B); EmitB($85); EmitI32(Syms[idx].Offset);  { mov rax, [rbp+off] }
+      if tk = tySingle then
+        begin EmitB($F3); EmitB($0F); EmitB($10); EmitB($00); end   { movss xmm0, [rax] }
+      else
+        begin EmitB($F2); EmitB($0F); EmitB($10); EmitB($00); end;  { movsd xmm0, [rax] }
+    end
+    else case Syms[idx].Kind of
+      skLocal, skParam:
+        if tk = tySingle then
+          begin EmitB($F3); EmitB($0F); EmitB($10); EmitB($85); EmitI32(Syms[idx].Offset); end  { movss xmm0, [rbp+off] }
+        else
+          begin EmitB($F2); EmitB($0F); EmitB($10); EmitB($85); EmitI32(Syms[idx].Offset); end; { movsd xmm0, [rbp+off] }
+      skGlobal:
+        if tk = tySingle then
+          begin EmitB($F3); EmitB($0F); EmitB($10); EmitB($04); EmitB($25); EmitGlobRef(Syms[idx].Offset); end  { movss xmm0, [abs] }
+        else
+          begin EmitB($F2); EmitB($0F); EmitB($10); EmitB($04); EmitB($25); EmitGlobRef(Syms[idx].Offset); end; { movsd xmm0, [abs] }
+      skConst: MovRaxImm(Syms[idx].ConstVal);
+    end;
+    Exit;
+  end;
+
   if (Syms[idx].Kind = skParam) and Syms[idx].IsRef and
      (tk <> tyString) then
   begin
@@ -794,6 +827,32 @@ var tk: TTypeKind; sz: Integer;
 begin
   tk := Syms[idx].TypeKind;
   sz := TypeSize(tk);
+
+  if TypeIsFloat(tk) then
+  begin
+    if (Syms[idx].Kind = skParam) and Syms[idx].IsRef then
+    begin
+      EmitB($48); EmitB($8B); EmitB($8D); EmitI32(Syms[idx].Offset);  { mov rcx, [rbp+off] }
+      if tk = tySingle then
+        begin EmitB($F3); EmitB($0F); EmitB($11); EmitB($01); end   { movss [rcx], xmm0 }
+      else
+        begin EmitB($F2); EmitB($0F); EmitB($11); EmitB($01); end;  { movsd [rcx], xmm0 }
+    end
+    else case Syms[idx].Kind of
+      skLocal, skParam:
+        if tk = tySingle then
+          begin EmitB($F3); EmitB($0F); EmitB($11); EmitB($85); EmitI32(Syms[idx].Offset); end  { movss [rbp+off], xmm0 }
+        else
+          begin EmitB($F2); EmitB($0F); EmitB($11); EmitB($85); EmitI32(Syms[idx].Offset); end; { movsd [rbp+off], xmm0 }
+      skGlobal:
+        if tk = tySingle then
+          begin EmitB($F3); EmitB($0F); EmitB($11); EmitB($04); EmitB($25); EmitGlobRef(Syms[idx].Offset); end  { movss [abs], xmm0 }
+        else
+          begin EmitB($F2); EmitB($0F); EmitB($11); EmitB($04); EmitB($25); EmitGlobRef(Syms[idx].Offset); end; { movsd [abs], xmm0 }
+      skConst: Error('cannot assign to constant');
+    end;
+    Exit;
+  end;
 
   if (Syms[idx].Kind = skParam) and Syms[idx].IsRef then
   begin

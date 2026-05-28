@@ -254,6 +254,10 @@ begin
     if (s[1]='S') and (s[2]='t') and (s[3]='r') and (s[4]='i') and (s[5]='n') and (s[6]='g') then Result := tkString_T;
     if (s[1]='e') and (s[2]='x') and (s[3]='c') and (s[4]='e') and (s[5]='p') and (s[6]='t') then Result := tkExcept;
     if (s[1]='E') and (s[2]='x') and (s[3]='c') and (s[4]='e') and (s[5]='p') and (s[6]='t') then Result := tkExcept;
+    if (s[1]='s') and (s[2]='i') and (s[3]='n') and (s[4]='g') and (s[5]='l') and (s[6]='e') then Result := tkSingle_T;
+    if (s[1]='S') and (s[2]='i') and (s[3]='n') and (s[4]='g') and (s[5]='l') and (s[6]='e') then Result := tkSingle_T;
+    if (s[1]='d') and (s[2]='o') and (s[3]='u') and (s[4]='b') and (s[5]='l') and (s[6]='e') then Result := tkDouble_T;
+    if (s[1]='D') and (s[2]='o') and (s[3]='u') and (s[4]='b') and (s[5]='l') and (s[6]='e') then Result := tkDouble_T;
   end
   else if Length(s) = 7 then
   begin
@@ -313,6 +317,107 @@ begin
   len := Length(dst);
   SetLength(dst, len + 1);
   dst[len + 1] := c;
+end;
+{$endif}
+
+{$ifdef FPC}
+function StrToDoubleBits(const s: AnsiString): Int64;
+var d: Double; code: Integer;
+begin
+  Val(s, d, code);
+  Move(d, Result, 8);
+end;
+{$else}
+function StrToDoubleBits(const s: AnsiString): Int64;
+{ Pure-integer IEEE 754 double. ~18 significant digits.
+  Subnormals flushed to zero; overflow = +/-Inf. No shl (not self-hostable). }
+var
+  i, len, fracDigits, expSign, expVal, decExp, bexp: Integer;
+  hasDot: Boolean;
+  coeff, N, D, mant, biasedExp, signBit, bitval, be: Int64;
+  c: Char;
+begin
+  Result := 0;
+  len := Length(s);
+  if len = 0 then Exit;
+  i := 1;
+  signBit := 0;
+  if s[i] = '-' then begin signBit := $8000000000000000; Inc(i); end
+  else if s[i] = '+' then Inc(i);
+
+  coeff := 0; fracDigits := 0; hasDot := False;
+  while i <= len do
+  begin
+    c := s[i];
+    if (c = '.') and not hasDot then begin hasDot := True; Inc(i); continue; end;
+    if (c < '0') or (c > '9') then break;
+    if coeff <= 999999999999999999 then
+      coeff := coeff * 10 + (Ord(c) - 48);
+    if hasDot then Inc(fracDigits);
+    Inc(i);
+  end;
+
+  expSign := 1; expVal := 0;
+  if (i <= len) and ((s[i] = 'e') or (s[i] = 'E')) then
+  begin
+    Inc(i);
+    if (i <= len) and (s[i] = '-') then begin expSign := -1; Inc(i); end
+    else if (i <= len) and (s[i] = '+') then Inc(i);
+    while (i <= len) and (s[i] >= '0') and (s[i] <= '9') do
+    begin
+      expVal := expVal * 10 + (Ord(s[i]) - 48);
+      Inc(i);
+    end;
+  end;
+
+  decExp := expSign * expVal - fracDigits;
+  if coeff = 0 then begin Result := signBit; Exit; end;
+
+  N := coeff; D := 1; bexp := 0;
+  if decExp >= 0 then
+  begin
+    while decExp > 0 do
+    begin
+      while N > 1844674407370955161 do begin N := N shr 1; Inc(bexp); end;
+      N := N * 5;
+      Inc(bexp);
+      Dec(decExp);
+    end;
+  end
+  else
+  begin
+    while decExp < 0 do
+    begin
+      if D > 922337203685477580 then
+      begin
+        N := N div 10;
+        if N = 0 then begin Result := signBit; Exit; end;
+      end
+      else
+        D := D * 10;
+      Inc(decExp);
+    end;
+  end;
+
+  { normalize N/D into [1,2): multiply by 2 instead of shl for self-hosting }
+  while N < D do begin N := N * 2; Dec(bexp); end;
+  while (N shr 1) >= D do begin N := N shr 1; Inc(bexp); end;
+
+  if bexp > 1023 then begin Result := signBit or $7FF0000000000000; Exit; end;
+  if bexp < -1022 then begin Result := signBit; Exit; end;
+
+  N := N - D;
+  mant := 0;
+  bitval := $8000000000000;  { 2^51 = top mantissa bit }
+  while bitval > 0 do
+  begin
+    N := N * 2;
+    if N >= D then begin mant := mant or bitval; N := N - D; end;
+    bitval := bitval shr 1;
+  end;
+
+  be := bexp + 1023; biasedExp := be * $10000000000000;  { be shl 52 }
+  Result := signBit or biasedExp or mant;
 end;
 {$endif}
 
@@ -585,6 +690,7 @@ var
 {$endif}
   s: AnsiString;
   n: Int64;
+  floatStart, fpos: Integer;
 begin
   if DebugTrace then writeln('Entering Next. SrcPos = ', SrcPos);
   SkipSpace;
@@ -615,8 +721,28 @@ begin
   if c in ['0'..'9'] then
   begin
     n := 0;
+    floatStart := SrcPos;
     while (SrcPos <= Length(Source)) and (Source[SrcPos] in ['0'..'9']) do
       begin n := n*10 + (Ord(Source[SrcPos])-48); Inc(SrcPos); end;
+    { detect float: '.' followed by digit, or e/E exponent }
+    if ((SrcPos < Length(Source)) and (Source[SrcPos] = '.') and (Source[SrcPos+1] in ['0'..'9'])) or
+       ((SrcPos <= Length(Source)) and ((Source[SrcPos] = 'e') or (Source[SrcPos] = 'E'))) then
+    begin
+      if (SrcPos < Length(Source)) and (Source[SrcPos] = '.') and (Source[SrcPos+1] in ['0'..'9']) then
+      begin
+        Inc(SrcPos);
+        while (SrcPos <= Length(Source)) and (Source[SrcPos] in ['0'..'9']) do Inc(SrcPos);
+      end;
+      if (SrcPos <= Length(Source)) and ((Source[SrcPos] = 'e') or (Source[SrcPos] = 'E')) then
+      begin
+        Inc(SrcPos);
+        if (SrcPos <= Length(Source)) and ((Source[SrcPos] = '+') or (Source[SrcPos] = '-')) then Inc(SrcPos);
+        while (SrcPos <= Length(Source)) and (Source[SrcPos] in ['0'..'9']) do Inc(SrcPos);
+      end;
+      s := ''; fpos := floatStart;
+      while fpos < SrcPos do begin AppendChar(s, Source[fpos]); Inc(fpos); end;
+      CurTok.Kind := tkFloat; CurTok.IVal := StrToDoubleBits(s); Exit;
+    end;
     CurTok.Kind := tkInteger; CurTok.IVal := n; Exit;
   end;
 
