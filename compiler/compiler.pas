@@ -13,6 +13,7 @@ uses SysUtils, BaseUnix;
 {$include symtab.inc}
 procedure CPreprocess(var src: AnsiString; const baseDir: AnsiString); forward;
 {$include parser.inc}
+{$include ir.inc}
 {$include codegen.inc}
 {$include cparser.inc}
 {$include bparser.inc}
@@ -24,6 +25,7 @@ procedure CPreprocess(var src: AnsiString; const baseDir: AnsiString); forward;
 var inFile, outFile, option: AnsiString; isC, isBasic, readingOptions: Boolean; n, i: Integer;
 begin
   DebugTrace := False;
+  DumpIR := False;
   NoUnhandledHandler := False;
   PasInitDefines;
   i := 1;
@@ -35,6 +37,11 @@ begin
     if option = '--debug' then
     begin
       DebugTrace := True;
+      Inc(i);
+    end
+    else if option = '--dump-ir' then
+    begin
+      DumpIR := True;
       Inc(i);
     end
     else if option = '--strict-overload' then
@@ -82,7 +89,7 @@ begin
       readingOptions := False;
   end;
   if ParamCount < i then
-    begin writeln(StdErr,'usage: pascal26/PXX [--debug] [-dNAME] [-uNAME] [-Mobjfpc] [--strict-overload] [--no-unhandled-handler] <src> [out]'); Halt(1); end;
+    begin writeln(StdErr,'usage: pascal26/PXX [--debug] [--dump-ir] [-dNAME] [-uNAME] [-Mobjfpc] [--strict-overload] [--no-unhandled-handler] <src> [out]'); Halt(1); end;
 
   inFile  := ParamStr(i);
 {$ifdef FPC}
@@ -122,6 +129,7 @@ begin
   BLabelCount := 0;
   BFixupCount := 0;
   ASTNodeCount := 0; CurASTNode := -1;
+  IRCount := 0;
   LoopNestDepth := 0; LoopBreakFixCount := 0; LoopContinueFixCount := 0;
   ExceptionCodegenDepth := 0; ExceptionHandlerParseDepth := 0;
   UClsCount := 0; UFldCount := 0; UMthCount := 0; CurSelfClass := REC_NONE;

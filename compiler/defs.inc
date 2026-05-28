@@ -20,6 +20,7 @@ const
   STRING_CAP  = 1048576;
   MAX_TOKENS  = 131072;
   MAX_AST     = 65536;
+  MAX_IR      = 8192;
   MAX_LOOP_FIXUPS = 256;
   MAX_PAS_DEFINES = 128;
   MAX_PAS_DEFINE_CHARS = 4096;
@@ -67,6 +68,23 @@ const
   AN_EXC_HANDLER = 30; { IVal = class recId or -1; Left = body; Right = next }
   AN_FLOAT_LIT   = 31; { IVal = IEEE 754 double bits; ASTTk = Ord(tySingle or tyDouble) }
   AN_VIRTUAL_CALL = 32;
+
+  { IR opcodes. Append only while bootstrapping, as with token/node kinds. }
+  IR_NOP       = 0;
+  IR_CONST_INT = 1;
+  IR_CONST_STR = 2;
+  IR_LOAD_SYM  = 3;
+  IR_STORE_SYM = 4;
+  IR_BINOP     = 5;
+  IR_CALL      = 6;
+  IR_WRITE     = 7;
+  IR_WRITELN   = 8;
+  IR_BLOCK     = 9;
+  IR_UNSUPPORTED = 10;
+  IR_IF        = 11;
+  IR_LABEL     = 12;
+  IR_JUMP      = 13;
+  IR_JUMP_IF_FALSE = 14;
 
   EXC_FRAME_SIZE = 80;
   EXC_JMP_OFFSET = 8;
@@ -288,6 +306,7 @@ var
   GFSig_PTypes  : array[0..7] of TTypeKind;
 
   DebugTrace : Boolean;
+  DumpIR : Boolean;
   StrictOverload : Boolean;
   NoUnhandledHandler : Boolean;
   Source  : AnsiString;
@@ -458,6 +477,14 @@ var
   ASTRight   : array[0..MAX_AST-1] of Integer;
   ASTTk      : array[0..MAX_AST-1] of Integer;  { TTypeKind of expression }
   ASTNodeCount : Integer;
+
+  IRKind  : array[0..MAX_IR-1] of Integer;
+  IRA     : array[0..MAX_IR-1] of Integer;
+  IRB     : array[0..MAX_IR-1] of Integer;
+  IRC     : array[0..MAX_IR-1] of Integer;
+  IRIVal  : array[0..MAX_IR-1] of Int64;
+  IRTk    : array[0..MAX_IR-1] of Integer;
+  IRCount : Integer;
 
   { User-defined class/field/method tables - integer-only for fixedpoint safety }
   UClsNOff   : array[0..MAX_UCLASS-1] of Integer;

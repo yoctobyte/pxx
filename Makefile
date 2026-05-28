@@ -69,6 +69,14 @@ test: $(COMPILER) fpc-check
 	./$(COMPILER) --debug test/hello.pas /tmp/hello_debug26 > /tmp/hello_debug26.log
 	grep -q "Loaded file length:" /tmp/hello_debug26.log
 	test "$$(/tmp/hello_debug26)" = "Hello, World!"
+	./$(COMPILER) --dump-ir test/hello.pas /tmp/hello_ir26 > /tmp/hello_ir26.log
+	grep -q "IR count=" /tmp/hello_ir26.log
+	grep -q "writeln" /tmp/hello_ir26.log
+	test "$$(/tmp/hello_ir26)" = "Hello, World!"
+	./$(COMPILER) --dump-ir test/test_ir_if.pas /tmp/test_ir_if26 > /tmp/test_ir_if26.log
+	grep -q ": if " /tmp/test_ir_if26.log
+	grep -q "binop" /tmp/test_ir_if26.log
+	test "$$(/tmp/test_ir_if26)" = "then"
 	./$(COMPILER) test/test_shared_object.pas /tmp/shared_object26
 	test "$$(/tmp/shared_object26)" = "97"
 	./$(COMPILER) test/test_c_import.pas /tmp/c_import26

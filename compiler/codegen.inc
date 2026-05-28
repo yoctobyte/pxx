@@ -1606,5 +1606,6 @@ end;
 
 procedure CompileAST(node: Integer);
 begin
+  IRBuildAndMaybeDump(node);
   GenAST(node);
 end;

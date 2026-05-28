@@ -50,6 +50,7 @@ Options must occur before the source path.
 | Option | Behavior |
 | --- | --- |
 | `--debug` | Print compiler lexer/parser/preprocessor diagnostics while compiling. |
+| `--dump-ir` | Print the experimental AST-lowered IR while still emitting the normal executable. |
 | `-dNAME` | Define a Pascal conditional-compilation symbol. |
 | `-uNAME` | Undefine a Pascal conditional-compilation symbol, except built-in `PXX`. |
 | `-Mobjfpc` | Accept the current Object Pascal compatibility mode marker. It does not define `FPC` or change semantics yet. |
