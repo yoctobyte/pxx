@@ -1,5 +1,22 @@
 { ===== Experimental IR Machine Code Generator ===== }
 
+procedure IREmitCodeCall(addr: Integer);
+begin
+  EmitB($E8);
+  EmitI32(addr - (CodeLen + 4));
+end;
+
+procedure IREmitLeaveExceptionFrames(count: Integer);
+var i: Integer;
+begin
+  for i := 1 to count do
+  begin
+    EmitB($48); EmitB($8B); EmitB($04); EmitB($24); { mov rax, [rsp] }
+    EmitB($48); EmitB($89); EmitB($04); EmitB($25); EmitGlobRef(BSS_EXC_TOP);
+    EmitB($48); EmitB($83); EmitB($C4); EmitB(EXC_FRAME_SIZE);
+  end;
+end;
+
 procedure IREmitNode(node: Integer);
 var left, right, valNode, symIdx, si: Integer;
     op: TTokenKind;
@@ -11,6 +28,7 @@ var left, right, valNode, symIdx, si: Integer;
     baseAddr, indexNode, lo, elemSize, offset, addressNode, valueNode: Integer;
     argNode, pathIdx, pi, specialId, classIdx, slot, cpi, i, jbePatch: Integer;
     arg1Node, arg2Node, arg3Node, val1Node, val2Node: Integer;
+    raiseClass: Integer;
 begin
   if node = -1 then Exit;
   
@@ -38,8 +56,46 @@ begin
       
     IR_STORE_SYM:
       begin
-        IREmitNode(IRB[node]);
-        EmitStoreVar(IRA[node]);
+        symIdx := IRA[node];
+        if (Syms[symIdx].TypeKind = tyString) and not Syms[symIdx].IsArray then
+        begin
+          valueNode := IRB[node];
+          if (IRKind[valueNode] = IR_CALL) and (IRA[valueNode] = -Ord(tkArgStr)) then
+          begin
+            argNode := IRB[valueNode];
+            IREmitNode(IRA[argNode]); { rax = argv index }
+            EmitArgvToString(symIdx);
+          end
+          else
+          begin
+            IREmitNode(valueNode); { rax = source string address }
+            EmitB($50); { push source }
+            if Syms[symIdx].Kind = skGlobal then
+            begin
+              EmitB($48); EmitB($8D); EmitB($04); EmitB($25); EmitGlobRef(Syms[symIdx].Offset);
+            end
+            else if Syms[symIdx].Kind = skParam then
+            begin
+              EmitB($48); EmitB($8B); EmitB($85); EmitI32(Syms[symIdx].Offset);
+            end
+            else
+            begin
+              EmitB($48); EmitB($8D); EmitB($85); EmitI32(Syms[symIdx].Offset);
+            end;
+            EmitB($48); EmitB($89); EmitB($C7); { mov rdi, rax }
+            EmitB($5E);                         { pop rsi }
+            EmitB($48); EmitB($8B); EmitB($0E); { mov rcx, [rsi] }
+            EmitB($48); EmitB($89); EmitB($0F); { mov [rdi], rcx }
+            EmitB($48); EmitB($83); EmitB($C6); EmitB($08);
+            EmitB($48); EmitB($83); EmitB($C7); EmitB($08);
+            EmitB($F3); EmitB($A4);             { rep movsb }
+          end;
+        end
+        else
+        begin
+          IREmitNode(IRB[node]);
+          EmitStoreVar(IRA[node]);
+        end;
       end;
       
     IR_LEA:
@@ -223,30 +279,39 @@ begin
           
           tkEq, tkNeq, tkLt, tkLe, tkGt, tkGe:
             begin
-              EmitB($48); EmitB($3B); EmitB($C1); { cmp rax, rcx }
-              if cmpUnsigned then
+              if ((op = tkEq) or (op = tkNeq)) and
+                 ((IntToTypeKind(IRTk[left]) = tyString) or
+                  (IntToTypeKind(IRTk[right]) = tyString)) then
               begin
-                case op of
-                  tkEq:  begin EmitB($0F); EmitB($94); EmitB($C0); end;
-                  tkNeq: begin EmitB($0F); EmitB($95); EmitB($C0); end;
-                  tkLt:  begin EmitB($0F); EmitB($92); EmitB($C0); end;
-                  tkLe:  begin EmitB($0F); EmitB($96); EmitB($C0); end;
-                  tkGt:  begin EmitB($0F); EmitB($97); EmitB($C0); end;
-                  tkGe:  begin EmitB($0F); EmitB($93); EmitB($C0); end;
-                end;
+                EmitStrCmpReg(op = tkEq);
               end
               else
               begin
-                case op of
-                  tkEq:  begin EmitB($0F); EmitB($94); EmitB($C0); end;
-                  tkNeq: begin EmitB($0F); EmitB($95); EmitB($C0); end;
-                  tkLt:  begin EmitB($0F); EmitB($9C); EmitB($C0); end;
-                  tkLe:  begin EmitB($0F); EmitB($9E); EmitB($C0); end;
-                  tkGt:  begin EmitB($0F); EmitB($9F); EmitB($C0); end;
-                  tkGe:  begin EmitB($0F); EmitB($9D); EmitB($C0); end;
+                EmitB($48); EmitB($3B); EmitB($C1); { cmp rax, rcx }
+                if cmpUnsigned then
+                begin
+                  case op of
+                    tkEq:  begin EmitB($0F); EmitB($94); EmitB($C0); end;
+                    tkNeq: begin EmitB($0F); EmitB($95); EmitB($C0); end;
+                    tkLt:  begin EmitB($0F); EmitB($92); EmitB($C0); end;
+                    tkLe:  begin EmitB($0F); EmitB($96); EmitB($C0); end;
+                    tkGt:  begin EmitB($0F); EmitB($97); EmitB($C0); end;
+                    tkGe:  begin EmitB($0F); EmitB($93); EmitB($C0); end;
+                  end;
+                end
+                else
+                begin
+                  case op of
+                    tkEq:  begin EmitB($0F); EmitB($94); EmitB($C0); end;
+                    tkNeq: begin EmitB($0F); EmitB($95); EmitB($C0); end;
+                    tkLt:  begin EmitB($0F); EmitB($9C); EmitB($C0); end;
+                    tkLe:  begin EmitB($0F); EmitB($9E); EmitB($C0); end;
+                    tkGt:  begin EmitB($0F); EmitB($9F); EmitB($C0); end;
+                    tkGe:  begin EmitB($0F); EmitB($9D); EmitB($C0); end;
+                  end;
                 end;
+                EmitB($48); EmitB($0F); EmitB($B6); EmitB($C0); { movzx rax, al }
               end;
-              EmitB($48); EmitB($0F); EmitB($B6); EmitB($C0); { movzx rax, al }
             end;
         else
           Error('Unsupported operator in IR codegen');
@@ -282,7 +347,8 @@ begin
           if Strs[si].Len > 0 then
             EmitwriteSyscall(Strs[si].Offset + 8, Strs[si].Len);
         end
-        else if (IRKind[valNode] = IR_LOAD_SYM) and (IntToTypeKind(IRTk[valNode]) = tyString) then
+        else if ((IRKind[valNode] = IR_LOAD_SYM) or (IRKind[valNode] = IR_LEA)) and
+                (IntToTypeKind(IRTk[valNode]) = tyString) then
         begin
           symIdx := IRA[valNode];
           EmitwriteStrVar(symIdx);
@@ -431,6 +497,36 @@ begin
             IREmitNode(IRA[arg1Node]); { evaluates address -> rax }
             EmitB($48); EmitB($8B); EmitB($00); { mov rax, [rax] }
           end
+          else if specialId = Ord(tkArgCount) then
+          begin
+            EmitB($48); EmitB($8B); EmitB($04); EmitB($25); EmitGlobRef(BSS_INITIAL_RSP);
+            EmitB($48); EmitB($8B); EmitB($00);
+            EmitB($48); EmitB($FF); EmitB($C8);
+          end
+          else if specialId = 100 then
+          begin
+            arg1Node := IRB[node];
+            arg2Node := IRB[arg1Node];
+            val1Node := IRA[arg1Node];
+            val2Node := IRA[arg2Node];
+            if (IRKind[val1Node] = IR_LEA) and (IRKind[val2Node] = IR_LEA) then
+              EmitLoadFile(IRA[val1Node], IRA[val2Node])
+            else
+              Error('LoadFile expects string variables in IR codegen');
+          end
+          else if specialId = 101 then
+          begin
+            arg1Node := IRB[node];
+            arg2Node := IRB[arg1Node];
+            val1Node := IRA[arg1Node];
+            if IRKind[val1Node] = IR_LEA then
+            begin
+              IREmitNode(IRA[arg2Node]);
+              EmitStoreStrLen(IRA[val1Node]);
+            end
+            else
+              Error('SetLength expects a string variable in IR codegen');
+          end
           else if specialId = Ord(tkSysOpen) then
           begin
             arg1Node := IRB[node];
@@ -500,6 +596,60 @@ begin
       begin
         EmitwriteSyscall(NEWLINE_OFFSET, 1);
       end;
+
+    IR_EXC_LEAVE:
+      begin
+        IREmitLeaveExceptionFrames(IRA[node]);
+      end;
+
+    IR_RAISE:
+      begin
+        if IRA[node] <> -1 then
+        begin
+          IREmitNode(IRA[node]);
+          EmitB($48); EmitB($89); EmitB($04); EmitB($25); EmitGlobRef(BSS_EXC_OBJ);
+          raiseClass := Integer(IRIVal[node]);
+          MovRaxImm(raiseClass);
+          EmitB($48); EmitB($89); EmitB($04); EmitB($25); EmitGlobRef(BSS_EXC_CLS);
+        end;
+        IREmitCodeCall(ExcRaiseAddr);
+      end;
+
+    IR_EXC_STORE:
+      begin
+        EmitB($48); EmitB($8B); EmitB($04); EmitB($25); EmitGlobRef(BSS_EXC_OBJ);
+        EmitStoreVar(IRA[node]);
+      end;
+
+    IR_EXC_CLEAR:
+      begin
+        MovRaxImm(0);
+        EmitB($48); EmitB($89); EmitB($04); EmitB($25); EmitGlobRef(BSS_EXC_OBJ);
+        EmitB($48); EmitB($89); EmitB($04); EmitB($25); EmitGlobRef(BSS_EXC_CLS);
+      end;
+
+    IR_TERMINATE:
+      begin
+        if IRIVal[node] = AN_HALT then
+        begin
+          if IRA[node] <> -1 then
+          begin
+            IREmitNode(IRA[node]);
+            EmitB($48); EmitB($89); EmitB($C7);
+            MovRaxImm(SYS_EXIT);
+            EmitSyscall;
+          end
+          else
+            EmitExit(0);
+        end
+        else
+        begin
+          if CurProc >= 0 then
+            EmitProcEpilog(Procs[CurProc].RetSymIdx)
+          else
+            EmitExit(0);
+        end;
+      end;
   else
     Error('Unsupported linear node in IR codegen');
   end;
@@ -564,7 +714,60 @@ begin
           end;
         end;
 
-      IR_STORE_SYM, IR_STORE_MEM, IR_WRITE, IR_WRITELN, IR_CALL:
+      IR_EXC_ENTER:
+        begin
+          lblId := IRA[i];
+          EmitB($48); EmitB($83); EmitB($EC); EmitB(EXC_FRAME_SIZE);
+          EmitB($48); EmitB($8B); EmitB($04); EmitB($25); EmitGlobRef(BSS_EXC_TOP);
+          EmitB($48); EmitB($89); EmitB($04); EmitB($24);
+          EmitB($48); EmitB($89); EmitB($E0);
+          EmitB($48); EmitB($89); EmitB($04); EmitB($25); EmitGlobRef(BSS_EXC_TOP);
+          EmitB($48); EmitB($8D); EmitB($7C); EmitB($24); EmitB(EXC_JMP_OFFSET);
+          IREmitCodeCall(ExcSetJmpAddr);
+          EmitB($85); EmitB($C0);
+          if LabelPositions[lblId] <> -1 then
+          begin
+            EmitB($0F); EmitB($85);
+            EmitI32(LabelPositions[lblId] - (CodeLen + 4));
+          end
+          else
+          begin
+            EmitB($0F); EmitB($85);
+            LabelFixupPos[LabelFixupCount] := CodeLen;
+            LabelFixupTarget[LabelFixupCount] := lblId;
+            Inc(LabelFixupCount);
+            EmitI32(0);
+          end;
+        end;
+
+      IR_EXC_MATCH:
+        begin
+          lblId := IRA[i];
+          EmitB($48); EmitB($8B); EmitB($04); EmitB($25); EmitGlobRef(BSS_EXC_CLS);
+          EmitB($48); EmitB($3D); EmitI32(Integer(IRIVal[i]));
+          if LabelPositions[lblId] <> -1 then
+          begin
+            EmitB($0F); EmitB($85);
+            EmitI32(LabelPositions[lblId] - (CodeLen + 4));
+          end
+          else
+          begin
+            EmitB($0F); EmitB($85);
+            LabelFixupPos[LabelFixupCount] := CodeLen;
+            LabelFixupTarget[LabelFixupCount] := lblId;
+            Inc(LabelFixupCount);
+            EmitI32(0);
+          end;
+        end;
+
+      IR_CALL:
+        begin
+          if IRIVal[i] = 1 then
+            IREmitNode(i);
+        end;
+
+      IR_STORE_SYM, IR_STORE_MEM, IR_WRITE, IR_WRITELN,
+      IR_EXC_LEAVE, IR_RAISE, IR_EXC_STORE, IR_EXC_CLEAR, IR_TERMINATE:
         begin
           IREmitNode(i);
         end;

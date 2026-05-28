@@ -19,7 +19,7 @@ const
   MAX_CPREP_ARGS = 544; { 34 macro-expansion levels, 16 arguments each }
   STRING_CAP  = 1048576;
   MAX_TOKENS  = 131072;
-  MAX_AST     = 65536;
+  MAX_AST     = 131072;
   MAX_IR      = 8192;
   MAX_LOOP_FIXUPS = 256;
   MAX_PAS_DEFINES = 128;
@@ -93,6 +93,13 @@ const
   IR_LOAD_MEM  = 20;
   IR_STORE_MEM = 21;
   IR_ARG       = 22;
+  IR_EXC_ENTER = 23;
+  IR_EXC_LEAVE = 24;
+  IR_RAISE     = 25;
+  IR_EXC_MATCH = 26;
+  IR_EXC_STORE = 27;
+  IR_EXC_CLEAR = 28;
+  IR_TERMINATE = 29;
 
   EXC_FRAME_SIZE = 80;
   EXC_JMP_OFFSET = 8;
@@ -497,6 +504,7 @@ var
   IRLabelCount : Integer;
   IRLoopStackBreak    : array[0..63] of Integer;
   IRLoopStackContinue : array[0..63] of Integer;
+  IRLoopStackExceptionDepth : array[0..63] of Integer;
   IRLoopStackDepth    : Integer;
 
   { User-defined class/field/method tables - integer-only for fixedpoint safety }

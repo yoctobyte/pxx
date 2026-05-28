@@ -44,6 +44,13 @@ begin
     IR_LOAD_MEM: Result := 'load_mem';
     IR_STORE_MEM: Result := 'store_mem';
     IR_ARG: Result := 'arg';
+    IR_EXC_ENTER: Result := 'exc_enter';
+    IR_EXC_LEAVE: Result := 'exc_leave';
+    IR_RAISE: Result := 'raise';
+    IR_EXC_MATCH: Result := 'exc_match';
+    IR_EXC_STORE: Result := 'exc_store';
+    IR_EXC_CLEAR: Result := 'exc_clear';
+    IR_TERMINATE: Result := 'terminate';
   else
     Result := 'unknown';
   end;
@@ -206,6 +213,28 @@ begin
         IRRequireOptionalNode(IRB[i], 'next arg');
       end;
 
+      IR_EXC_ENTER, IR_EXC_MATCH:
+      begin
+        lblId := IRA[i];
+        if (lblId < 0) or (lblId >= MAX_IR) then
+          Error('invalid IR exception jump target out of bounds');
+        if not seenLabel[lblId] then
+          Error('invalid IR exception jump target (label not defined)');
+      end;
+
+      IR_EXC_LEAVE, IR_EXC_CLEAR:
+        begin end;
+
+      IR_RAISE:
+        IRRequireOptionalNode(IRA[i], 'raise value');
+
+      IR_EXC_STORE:
+        if (IRA[i] < 0) or (IRA[i] >= SymCount) then
+          Error('invalid symbol in exception store');
+
+      IR_TERMINATE:
+        IRRequireOptionalNode(IRA[i], 'terminate value');
+
       IR_UNSUPPORTED:
         begin end;
 
@@ -216,6 +245,31 @@ begin
 end;
 
 function IRLowerAST(node: Integer): Integer; forward;
+
+procedure IRLowerCleanupToDepth(targetDepth: Integer);
+var current, bodyNode, savedDepth: Integer;
+begin
+  current := ExceptionCodegenDepth;
+  while current > targetDepth do
+  begin
+    IRAppend(IR_EXC_LEAVE, 1, -1, -1, 0, 0);
+    bodyNode := ExceptionFinallyBody[current - 1];
+    if bodyNode <> -1 then
+    begin
+      savedDepth := ExceptionCodegenDepth;
+      ExceptionCodegenDepth := current - 1;
+      IRLowerAST(bodyNode);
+      ExceptionCodegenDepth := savedDepth;
+    end;
+    Dec(current);
+  end;
+end;
+
+procedure IRMarkStatementNode(irNode: Integer);
+begin
+  if (irNode >= 0) and (irNode < IRCount) and (IRKind[irNode] = IR_CALL) then
+    IRIVal[irNode] := 1;
+end;
 
 function IRLowerAddress(node: Integer): Integer;
 var baseNode, baseAddr, indexNode, lo, elemSize: Integer;
@@ -235,8 +289,22 @@ begin
     indexNode := IRLowerAST(ASTRight[node]);
     
     isArr := IsNodeArray(baseNode);
-    tk := tyInteger;
-    recName := REC_NONE;
+    if ASTKind[baseNode] = AN_IDENT then
+    begin
+      tk := Syms[ASTIVal[baseNode]].TypeKind;
+      recName := Syms[ASTIVal[baseNode]].RecName;
+    end
+    else if ASTKind[baseNode] = AN_FIELD then
+    begin
+      recName := ResolveNodeRec(baseNode);
+      tk := RecFieldType(ResolveNodeRec(ASTLeft[baseNode]), GetASTIdentName(baseNode));
+    end
+    else
+    begin
+      tk := tyInteger;
+      recName := REC_NONE;
+    end;
+
     if isArr then
     begin
       if ASTKind[baseNode] = AN_IDENT then
@@ -251,31 +319,36 @@ begin
           tk := Syms[ASTIVal[baseNode]].ElemType;
           recName := Syms[ASTIVal[baseNode]].ElemRecName;
         end;
-      end
-      else if ASTKind[baseNode] = AN_FIELD then
-      begin
-        recName := ResolveNodeRec(baseNode);
-        tk := RecFieldType(ResolveNodeRec(ASTLeft[baseNode]), GetASTIdentName(baseNode));
       end;
     end;
     
-    if tk = tyString then
-    begin
-      if (ASTKind[baseNode] = AN_IDENT) and (Syms[ASTIVal[baseNode]].Kind = skGlobal) then
-        elemSize := STRING_CAP + 8
-      else
-        elemSize := LOCAL_STR_CAP + 8;
-    end
-    else if tk = tyRecord then
-      elemSize := RecSize(recName)
-    else
-      elemSize := TypeSize(tk);
-      
     lo := 0;
-    if ASTKind[baseNode] = AN_IDENT then
+    if (tk = tyString) and not isArr then
     begin
-      if Syms[ASTIVal[baseNode]].RecName <> REC_TPARAM then
-        lo := Syms[ASTIVal[baseNode]].ConstVal;
+      lo := -7;
+      elemSize := 1;
+      tk := tyChar;
+      recName := REC_NONE;
+    end
+    else
+    begin
+      if tk = tyString then
+      begin
+        if (ASTKind[baseNode] = AN_IDENT) and (Syms[ASTIVal[baseNode]].Kind = skGlobal) then
+          elemSize := STRING_CAP + 8
+        else
+          elemSize := LOCAL_STR_CAP + 8;
+      end
+      else if tk = tyRecord then
+        elemSize := RecSize(recName)
+      else
+        elemSize := TypeSize(tk);
+
+      if ASTKind[baseNode] = AN_IDENT then
+      begin
+        if Syms[ASTIVal[baseNode]].RecName <> REC_TPARAM then
+          lo := Syms[ASTIVal[baseNode]].ConstVal;
+      end;
     end;
     
     Result := IRAppend(IR_INDEX, baseAddr, indexNode, lo, elemSize, ASTTk[node]);
@@ -283,7 +356,11 @@ begin
   else if ASTKind[node] = AN_FIELD then
   begin
     baseNode := ASTLeft[node];
-    baseAddr := IRLowerAddress(baseNode);
+    if (ASTKind[baseNode] = AN_IDENT) and
+       (Syms[ASTIVal[baseNode]].TypeKind = tyClass) then
+      baseAddr := IRAppend(IR_LOAD_SYM, ASTIVal[baseNode], -1, -1, 0, Ord(tyPointer))
+    else
+      baseAddr := IRLowerAddress(baseNode);
     
     recName := ResolveNodeRec(baseNode);
     fieldName := GetASTIdentName(node);
@@ -308,6 +385,8 @@ var left, right, seq, item, value, outNode, first, last, leftAddr, argNode: Inte
     clauseBodyLabel, nextClauseLabel, selectorValNode: Integer;
     cv: Int64;
     constValNode, clauseBodyLabelNode, exitJmpNode, nextClauseLabelNode: Integer;
+    beforeCount, handlerLabel, handlerNode, handlerNextLabel, savedDepth: Integer;
+    raiseValueNode, raiseClass: Integer;
 begin
   if node = -1 then
   begin
@@ -323,7 +402,13 @@ begin
       Result := IRAppend(IR_CONST_STR, ASTSOffset[node], ASTSLen[node], -1, 0, ASTTk[node]);
 
     AN_IDENT:
-      Result := IRAppend(IR_LOAD_SYM, ASTIVal[node], -1, -1, 0, ASTTk[node]);
+    begin
+      varIdx := ASTIVal[node];
+      if (Syms[varIdx].TypeKind = tyString) or Syms[varIdx].IsArray then
+        Result := IRAppend(IR_LEA, varIdx, -1, -1, 0, ASTTk[node])
+      else
+        Result := IRAppend(IR_LOAD_SYM, varIdx, -1, -1, 0, ASTTk[node]);
+    end;
 
     AN_INDEX, AN_FIELD:
     begin
@@ -360,6 +445,34 @@ begin
         leftAddr := IRLowerAddress(ASTLeft[node]);
         Result := IRAppend(IR_STORE_MEM, leftAddr, value, -1, 0, ASTTk[ASTLeft[node]]);
       end;
+    end;
+
+    AN_HALT, AN_EXIT:
+    begin
+      beforeCount := IRCount;
+      if ASTKind[node] = AN_HALT then
+      begin
+        if ASTLeft[node] <> -1 then
+          value := IRLowerAST(ASTLeft[node])
+        else
+          value := -1;
+        last := IRAppend(IR_TERMINATE, value, -1, -1, AN_HALT, 0);
+      end
+      else
+      begin
+        if ASTLeft[node] <> -1 then
+        begin
+          value := IRLowerAST(ASTLeft[node]);
+          if (CurProc >= 0) and (Procs[CurProc].RetSymIdx >= 0) then
+            last := IRAppend(IR_STORE_SYM, Procs[CurProc].RetSymIdx, value, -1, 0, ASTTk[ASTLeft[node]]);
+        end;
+        IRLowerCleanupToDepth(0);
+        last := IRAppend(IR_TERMINATE, -1, -1, -1, AN_EXIT, 0);
+      end;
+      if beforeCount < last then
+        Result := IRAppend(IR_BLOCK, beforeCount, last, -1, 0, 0)
+      else
+        Result := last;
     end;
 
     AN_CALL:
@@ -428,10 +541,14 @@ begin
       first := condNode;
       last := IRAppend(IR_JUMP_IF_FALSE, elseLabel, condNode, -1, 0, 0);
       last := IRLowerAST(ASTLeft[pairNode]);
+      IRMarkStatementNode(last);
       last := IRAppend(IR_JUMP, endLabel, -1, -1, 0, 0);
       last := IRAppend(IR_LABEL, -1, -1, -1, elseLabel, 0);
       if ASTRight[pairNode] <> -1 then
+      begin
         last := IRLowerAST(ASTRight[pairNode]);
+        IRMarkStatementNode(last);
+      end;
       endLabelNode := IRAppend(IR_LABEL, -1, -1, -1, endLabel, 0);
       Result := IRAppend(IR_BLOCK, first, endLabelNode, -1, 0, 0);
     end;
@@ -447,9 +564,11 @@ begin
       if IRLoopStackDepth >= 64 then Error('IR loop stack overflow');
       IRLoopStackBreak[IRLoopStackDepth] := endLabel;
       IRLoopStackContinue[IRLoopStackDepth] := startLabel;
+      IRLoopStackExceptionDepth[IRLoopStackDepth] := ExceptionCodegenDepth;
       Inc(IRLoopStackDepth);
       
       last := IRLowerAST(ASTRight[node]);
+      IRMarkStatementNode(last);
       
       Dec(IRLoopStackDepth);
       
@@ -497,9 +616,11 @@ begin
       if IRLoopStackDepth >= 64 then Error('IR loop stack overflow');
       IRLoopStackBreak[IRLoopStackDepth] := endLabel;
       IRLoopStackContinue[IRLoopStackDepth] := continueLabel;
+      IRLoopStackExceptionDepth[IRLoopStackDepth] := ExceptionCodegenDepth;
       Inc(IRLoopStackDepth);
       
       bodyIRNode := IRLowerAST(bodyNode);
+      IRMarkStatementNode(bodyIRNode);
       
       Dec(IRLoopStackDepth);
       
@@ -533,9 +654,11 @@ begin
       if IRLoopStackDepth >= 64 then Error('IR loop stack overflow');
       IRLoopStackBreak[IRLoopStackDepth] := endLabel;
       IRLoopStackContinue[IRLoopStackDepth] := continueLabel;
+      IRLoopStackExceptionDepth[IRLoopStackDepth] := ExceptionCodegenDepth;
       Inc(IRLoopStackDepth);
       
       bodyIRNode := IRLowerAST(ASTLeft[node]);
+      IRMarkStatementNode(bodyIRNode);
       
       Dec(IRLoopStackDepth);
       
@@ -569,6 +692,7 @@ begin
         begin
           { Else Clause }
           bodyIRNode := IRLowerAST(stmtNode);
+          IRMarkStatementNode(bodyIRNode);
           if first < 0 then first := bodyIRNode;
           last := bodyIRNode;
         end
@@ -598,6 +722,7 @@ begin
           last := clauseBodyLabelNode;
           
           bodyIRNode := IRLowerAST(stmtNode);
+          IRMarkStatementNode(bodyIRNode);
           last := bodyIRNode;
           
           exitJmpNode := IRAppend(IR_JUMP, endLabel, -1, -1, 0, 0);
@@ -619,13 +744,111 @@ begin
     AN_BREAK:
     begin
       if IRLoopStackDepth = 0 then Error('break outside loop');
-      Result := IRAppend(IR_JUMP, IRLoopStackBreak[IRLoopStackDepth - 1], -1, -1, 0, 0);
+      beforeCount := IRCount;
+      IRLowerCleanupToDepth(IRLoopStackExceptionDepth[IRLoopStackDepth - 1]);
+      jmpNode := IRAppend(IR_JUMP, IRLoopStackBreak[IRLoopStackDepth - 1], -1, -1, 0, 0);
+      if beforeCount < jmpNode then
+        Result := IRAppend(IR_BLOCK, beforeCount, jmpNode, -1, 0, 0)
+      else
+        Result := jmpNode;
     end;
 
     AN_CONTINUE:
     begin
       if IRLoopStackDepth = 0 then Error('continue outside loop');
-      Result := IRAppend(IR_JUMP, IRLoopStackContinue[IRLoopStackDepth - 1], -1, -1, 0, 0);
+      beforeCount := IRCount;
+      IRLowerCleanupToDepth(IRLoopStackExceptionDepth[IRLoopStackDepth - 1]);
+      jmpNode := IRAppend(IR_JUMP, IRLoopStackContinue[IRLoopStackDepth - 1], -1, -1, 0, 0);
+      if beforeCount < jmpNode then
+        Result := IRAppend(IR_BLOCK, beforeCount, jmpNode, -1, 0, 0)
+      else
+        Result := jmpNode;
+    end;
+
+    AN_RAISE:
+    begin
+      if ASTLeft[node] <> -1 then
+      begin
+        raiseValueNode := IRLowerAST(ASTLeft[node]);
+        raiseClass := ResolveNodeRec(ASTLeft[node]);
+        if raiseClass < REC_UCLASS_BASE then raiseClass := REC_NONE;
+      end
+      else
+      begin
+        raiseValueNode := -1;
+        raiseClass := REC_NONE;
+      end;
+      Result := IRAppend(IR_RAISE, raiseValueNode, -1, -1, raiseClass, 0);
+    end;
+
+    AN_TRY_EXCEPT:
+    begin
+      handlerLabel := IRNewLabel;
+      endLabel := IRNewLabel;
+      first := IRAppend(IR_EXC_ENTER, handlerLabel, -1, -1, 0, 0);
+
+      ExceptionFinallyBody[ExceptionCodegenDepth] := -1;
+      Inc(ExceptionCodegenDepth);
+      last := IRLowerAST(ASTLeft[node]);
+      Dec(ExceptionCodegenDepth);
+
+      last := IRAppend(IR_EXC_LEAVE, 1, -1, -1, 0, 0);
+      last := IRAppend(IR_JUMP, endLabel, -1, -1, 0, 0);
+      last := IRAppend(IR_LABEL, -1, -1, -1, handlerLabel, 0);
+      last := IRAppend(IR_EXC_LEAVE, 1, -1, -1, 0, 0);
+
+      handlerNode := ASTRight[node];
+      while handlerNode <> -1 do
+      begin
+        handlerNextLabel := -1;
+        if ASTIVal[handlerNode] >= 0 then
+        begin
+          handlerNextLabel := IRNewLabel;
+          last := IRAppend(IR_EXC_MATCH, handlerNextLabel, -1, -1, ASTIVal[handlerNode], 0);
+        end;
+        if ASTSOffset[handlerNode] >= 0 then
+          last := IRAppend(IR_EXC_STORE, ASTSOffset[handlerNode], -1, -1, 0, 0);
+        last := IRLowerAST(ASTLeft[handlerNode]);
+        IRMarkStatementNode(last);
+        last := IRAppend(IR_EXC_CLEAR, -1, -1, -1, 0, 0);
+        last := IRAppend(IR_JUMP, endLabel, -1, -1, 0, 0);
+        if handlerNextLabel >= 0 then
+          last := IRAppend(IR_LABEL, -1, -1, -1, handlerNextLabel, 0);
+        handlerNode := ASTRight[handlerNode];
+      end;
+      last := IRAppend(IR_RAISE, -1, -1, -1, REC_NONE, 0);
+      endLabelNode := IRAppend(IR_LABEL, -1, -1, -1, endLabel, 0);
+      Result := IRAppend(IR_BLOCK, first, endLabelNode, -1, 0, 0);
+    end;
+
+    AN_TRY_FINALLY:
+    begin
+      handlerLabel := IRNewLabel;
+      endLabel := IRNewLabel;
+      first := IRAppend(IR_EXC_ENTER, handlerLabel, -1, -1, 0, 0);
+
+      ExceptionFinallyBody[ExceptionCodegenDepth] := ASTRight[node];
+      Inc(ExceptionCodegenDepth);
+      last := IRLowerAST(ASTLeft[node]);
+      IRMarkStatementNode(last);
+      Dec(ExceptionCodegenDepth);
+
+      last := IRAppend(IR_EXC_LEAVE, 1, -1, -1, 0, 0);
+      last := IRLowerAST(ASTRight[node]);
+      IRMarkStatementNode(last);
+      last := IRAppend(IR_JUMP, endLabel, -1, -1, 0, 0);
+
+      last := IRAppend(IR_LABEL, -1, -1, -1, handlerLabel, 0);
+      last := IRAppend(IR_EXC_LEAVE, 1, -1, -1, 0, 0);
+      savedDepth := ExceptionCodegenDepth;
+      ExceptionCodegenDepth := savedDepth;
+      last := IRLowerAST(ASTRight[node]);
+      IRMarkStatementNode(last);
+      ExceptionCodegenDepth := savedDepth;
+      last := IRAppend(IR_RAISE, -1, -1, -1, REC_NONE, 0);
+
+      endLabelNode := IRAppend(IR_LABEL, -1, -1, -1, endLabel, 0);
+      Result := IRAppend(IR_BLOCK, first, endLabelNode, -1, 0, 0);
     end;
 
     AN_WRITE, AN_WRITELN:
@@ -662,11 +885,13 @@ begin
         if ASTKind[seq] = AN_SEQ then
         begin
           item := IRLowerAST(ASTLeft[seq]);
+          IRMarkStatementNode(item);
           seq := ASTRight[seq];
         end
         else
         begin
           item := IRLowerAST(seq);
+          IRMarkStatementNode(item);
           seq := -1;
         end;
         if first < 0 then first := item;
@@ -678,7 +903,9 @@ begin
     AN_SEQ:
     begin
       left := IRLowerAST(ASTLeft[node]);
+      IRMarkStatementNode(left);
       right := IRLowerAST(ASTRight[node]);
+      IRMarkStatementNode(right);
       Result := IRAppend(IR_BLOCK, left, right, -1, 0, 0);
     end;
 
