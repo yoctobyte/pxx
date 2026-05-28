@@ -24,8 +24,14 @@ randomize the screw-ups.
 
 - **float cast intrinsics**: no Trunc(), Round(), Float(), Int() etc.
   Integer↔float coercions happen implicitly in binary ops (cvtsi2sd) but explicit casts
-  are missing. Could live in compiler builtins or a math/system library — decide when
-  the library layer exists.
+  are missing. Trunc/Round need compiler builtins (cvttsd2si/cvtsd2si on x86-64) or
+  inline asm; the rest (Frac, Floor, Ceil, Int) can be pure Pascal on top of those.
+  Defer until unit system exists — implement in a system/math unit, not as hardcoded
+  compiler intrinsics, to keep the compiler arch-neutral.
+
+- **inline assembler** (`asm...end` blocks): useful for float casts, SIMD, and other
+  low-level code, but a significant project. Defer until after IR/multi-arch work;
+  inline asm is inherently arch-specific and needs the arch abstraction layer first.
 
 
 
