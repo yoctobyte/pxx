@@ -226,6 +226,16 @@ begin
       Result := IRAppend(IR_BLOCK, startLabelNode, endLabelNode, -1, 0, 0);
     end;
 
+    AN_REPEAT:
+    begin
+      startLabel := IRNewLabel;
+      startLabelNode := IRAppend(IR_LABEL, -1, -1, -1, startLabel, 0);
+      last := IRLowerAST(ASTLeft[node]);
+      condNode := IRLowerAST(ASTRight[node]);
+      last := IRAppend(IR_JUMP_IF_FALSE, startLabel, condNode, -1, 0, 0);
+      Result := IRAppend(IR_BLOCK, startLabelNode, last, -1, 0, 0);
+    end;
+
     AN_WRITE, AN_WRITELN:
     begin
       first := -1;
