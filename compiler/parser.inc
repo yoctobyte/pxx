@@ -724,7 +724,17 @@ begin
       ParseExpr;
       ASTRight[indexNode] := CurASTNode;
       Expect(tkRBrack, ']');
-      if tk = tyString then
+      if IsNodeArray(node) then
+      begin
+        if ASTKind[node] = AN_IDENT then
+        begin
+          tk := Syms[ASTIVal[node]].ElemType;
+          recName := Syms[ASTIVal[node]].ElemRecName;
+        end
+        else
+          recName := ResolveNodeRec(node);
+      end
+      else if tk = tyString then
         tk := tyChar
       else
       begin
@@ -2642,6 +2652,7 @@ var node: Integer;
 begin
   node := ParseStatementAST;
   CompileAST(node);
+  ASTNodeCount := 0;
 end;
 
 procedure ParseBlock;
@@ -2649,6 +2660,7 @@ var node: Integer;
 begin
   node := ParseBlockAST;
   CompileAST(node);
+  ASTNodeCount := 0;
 end;
 
 { ===== Declaration parsing ===== }

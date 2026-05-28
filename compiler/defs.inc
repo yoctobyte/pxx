@@ -18,7 +18,7 @@ const
   MAX_CPREP_CHARS = 1048576;
   MAX_CPREP_ARGS = 544; { 34 macro-expansion levels, 16 arguments each }
   STRING_CAP  = 1048576;
-  MAX_TOKENS  = 131072;
+  MAX_TOKENS  = 262144;
   MAX_AST     = 131072;
   MAX_IR      = 8192;
   MAX_LOOP_FIXUPS = 256;
