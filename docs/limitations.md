@@ -30,7 +30,9 @@ specific compatibility statement covers it.
   `try/except` handlers, `try/finally`, `raise <expr>`, and handler re-raise.
   A built-in `Exception` hierarchy, inherited handler matching, message
   constructors, and class/message unhandled reports are not implemented.
-- Floating-point support is not implemented.
+- Floating-point support covers `Single` (4-byte SSE2), `Double`/`Real` (8-byte SSE2),
+  and `Extended` (10-byte x87 storage, SSE2 arithmetic). Write/WriteLn of float values
+  and explicit cast intrinsics (Trunc, Round, etc.) are not yet implemented.
 - Integer arithmetic is intentionally unchecked for now: no mixed-sign
   warning or overflow/range-check switch is emitted, and narrowing or
   machine-width overflow wraps.
@@ -99,6 +101,21 @@ The C capability is useful but intentionally incomplete:
   implementation.
 - Other proposed languages and mixed-source formats are roadmap ideas, not
   implemented user features.
+
+## No Optimization
+
+PXX is a direct-emission compiler. Every construct is translated
+straight to machine code with no intermediate representation and no
+optimization passes. What you write is exactly what gets emitted:
+
+- No constant folding, dead-code elimination, or inlining.
+- No register allocation — values live in fixed registers per convention.
+- No loop transforms, strength reduction, or alias analysis.
+- No peephole cleanup of redundant loads/stores.
+
+This is intentional for the bootstrap phase: the compiler stays simple,
+self-hostable, and auditable. An IR and optimization layer are on the
+roadmap for after multi-architecture support lands.
 
 ## Diagnostics And Tooling
 
