@@ -413,7 +413,10 @@ begin
     AN_INDEX, AN_FIELD:
     begin
       left := IRLowerAddress(node);
-      Result := IRAppend(IR_LOAD_MEM, left, -1, -1, 0, ASTTk[node]);
+      if IntToTypeKind(ASTTk[node]) = tyString then
+        Result := left
+      else
+        Result := IRAppend(IR_LOAD_MEM, left, -1, -1, 0, ASTTk[node]);
     end;
 
     AN_NEG:
@@ -900,7 +903,7 @@ begin
       Result := IRAppend(IR_BLOCK, first, last, -1, 0, 0);
     end;
 
-    AN_SEQ:
+    AN_PAIR, AN_SEQ:
     begin
       left := IRLowerAST(ASTLeft[node]);
       IRMarkStatementNode(left);

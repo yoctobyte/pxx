@@ -22,12 +22,14 @@ var left, right, valNode, symIdx, si: Integer;
     op: TTokenKind;
     cmpUnsigned: Boolean;
     sVal: AnsiString;
-    tk: TTypeKind;
+    tk, lhsTk, rhsTk: TTypeKind;
     size: Integer;
     isSigned: Boolean;
     baseAddr, indexNode, lo, elemSize, offset, addressNode, valueNode: Integer;
     argNode, pathIdx, pi, specialId, classIdx, slot, cpi, i, jbePatch: Integer;
     arg1Node, arg2Node, arg3Node, val1Node, val2Node: Integer;
+    itemNode, trueCount, nextJmp, falseJmp: Integer;
+    trueJumps: array[0..127] of Integer;
     raiseClass: Integer;
 begin
   if node = -1 then Exit;
@@ -209,18 +211,35 @@ begin
       begin
         addressNode := IRA[node];
         valueNode := IRB[node];
-        
-        IREmitNode(valueNode);
-        EmitB($50); { push rax -- value }
-        
-        IREmitNode(addressNode); { rax = address }
-        
-        EmitB($59); { pop rcx -- value }
-        
+
         tk := IntToTypeKind(IRTk[node]);
         size := TypeSize(tk);
-        
-        if size = 1 then
+
+        if tk = tyString then
+        begin
+          IREmitNode(valueNode); { rax = source string address }
+          EmitB($50); { push source }
+
+          IREmitNode(addressNode); { rax = destination address }
+
+          EmitB($48); EmitB($89); EmitB($C7); { mov rdi, rax }
+          EmitB($5E);                         { pop rsi }
+          EmitB($48); EmitB($8B); EmitB($0E); { mov rcx, [rsi] }
+          EmitB($48); EmitB($89); EmitB($0F); { mov [rdi], rcx }
+          EmitB($48); EmitB($83); EmitB($C6); EmitB($08);
+          EmitB($48); EmitB($83); EmitB($C7); EmitB($08);
+          EmitB($F3); EmitB($A4);             { rep movsb }
+        end
+        else
+        begin
+          IREmitNode(valueNode);
+          EmitB($50); { push rax -- value }
+
+          IREmitNode(addressNode); { rax = address }
+
+          EmitB($59); { pop rcx -- value }
+
+          if size = 1 then
         begin
           EmitB($88); EmitB($08); { mov byte ptr [rax], cl }
         end
@@ -235,6 +254,7 @@ begin
         else
         begin
           EmitB($48); EmitB($89); EmitB($08); { mov qword ptr [rax], rcx }
+        end;
         end;
       end;
       
@@ -251,9 +271,72 @@ begin
         EmitB($48); EmitB($89); EmitB($C1); { mov rcx, rax }
         EmitB($58); { pop rax }
         
-        cmpUnsigned := TypeCompareUnsigned(IntToTypeKind(IRTk[left]), IntToTypeKind(IRTk[right]));
-        
-        case op of
+        if (IntToTypeKind(IRTk[node]) = tyString) and (op = tkPlus) then
+        begin
+          lhsTk := IntToTypeKind(IRTk[left]);
+          rhsTk := IntToTypeKind(IRTk[right]);
+
+          EmitB($49); EmitB($89); EmitB($CA); { mov r10, rcx }
+          EmitB($48); EmitB($81); EmitB($EC); EmitI32(272);
+          EmitB($49); EmitB($89); EmitB($E3); { mov r11, rsp }
+
+          if lhsTk = tyString then
+          begin
+            EmitB($4C); EmitB($8B); EmitB($00);
+            EmitB($48); EmitB($8D); EmitB($70); EmitB($08);
+            EmitB($49); EmitB($8D); EmitB($7B); EmitB($08);
+            EmitB($4C); EmitB($89); EmitB($C1);
+            EmitB($48); EmitB($85); EmitB($C9);
+            EmitB($74); EmitB(15);
+            EmitB($8A); EmitB($16);
+            EmitB($88); EmitB($17);
+            EmitB($48); EmitB($FF); EmitB($C6);
+            EmitB($48); EmitB($FF); EmitB($C7);
+            EmitB($48); EmitB($FF); EmitB($C9);
+            EmitB($EB); EmitB(Byte(-20));
+          end
+          else
+          begin
+            EmitB($49); EmitB($C7); EmitB($C0); EmitI32(1);
+            EmitB($41); EmitB($88); EmitB($43); EmitB($08);
+          end;
+
+          if rhsTk = tyString then
+          begin
+            EmitB($4D); EmitB($8B); EmitB($0A);
+            EmitB($49); EmitB($8D); EmitB($72); EmitB($08);
+            EmitB($49); EmitB($8D); EmitB($7B); EmitB($08);
+            EmitB($4C); EmitB($01); EmitB($C7);
+            EmitB($4C); EmitB($89); EmitB($CA);
+            EmitB($48); EmitB($85); EmitB($D2);
+            EmitB($74); EmitB(15);
+            EmitB($8A); EmitB($06);
+            EmitB($88); EmitB($07);
+            EmitB($48); EmitB($FF); EmitB($C6);
+            EmitB($48); EmitB($FF); EmitB($C7);
+            EmitB($48); EmitB($FF); EmitB($CA);
+            EmitB($EB); EmitB(Byte(-20));
+          end
+          else
+          begin
+            EmitB($49); EmitB($C7); EmitB($C1); EmitI32(1);
+            EmitB($49); EmitB($8D); EmitB($7B); EmitB($08);
+            EmitB($4C); EmitB($01); EmitB($C7);
+            EmitB($44); EmitB($88); EmitB($17);
+          end;
+
+          EmitB($4B); EmitB($8D); EmitB($04); EmitB($08);
+          EmitB($48); EmitB($3D); EmitI32(256);
+          EmitB($7E); EmitB(7);
+          EmitB($48); EmitB($C7); EmitB($C0); EmitI32(256);
+          EmitB($49); EmitB($89); EmitB($03);
+          EmitB($4C); EmitB($89); EmitB($D8);
+        end
+        else
+        begin
+          cmpUnsigned := TypeCompareUnsigned(IntToTypeKind(IRTk[left]), IntToTypeKind(IRTk[right]));
+
+          case op of
           tkPlus:  begin EmitB($48); EmitB($01); EmitB($C8); end; { add rax, rcx }
           tkMinus: begin EmitB($48); EmitB($29); EmitB($C8); end; { sub rax, rcx }
           tkStar:  begin EmitB($48); EmitB($0F); EmitB($AF); EmitB($C1); end; { imul rax, rcx }
@@ -315,6 +398,7 @@ begin
             end;
         else
           Error('Unsupported operator in IR codegen');
+        end;
         end;
       end;
       
@@ -497,6 +581,12 @@ begin
             IREmitNode(IRA[arg1Node]); { evaluates address -> rax }
             EmitB($48); EmitB($8B); EmitB($00); { mov rax, [rax] }
           end
+          else if (specialId = Ord(tkOrd)) or (specialId = Ord(tkChr)) or
+                  (specialId = Ord(tkInteger_T)) or (specialId = Ord(tkLongWord_T)) then
+          begin
+            arg1Node := IRB[node];
+            IREmitNode(IRA[arg1Node]);
+          end
           else if specialId = Ord(tkArgCount) then
           begin
             EmitB($48); EmitB($8B); EmitB($04); EmitB($25); EmitGlobRef(BSS_INITIAL_RSP);
@@ -526,6 +616,49 @@ begin
             end
             else
               Error('SetLength expects a string variable in IR codegen');
+          end
+          else if specialId = SPECIAL_IN then
+          begin
+            arg1Node := IRB[node];
+            IREmitNode(IRA[arg1Node]);
+            EmitB($48); EmitB($89); EmitB($C1); { mov rcx, rax }
+
+            trueCount := 0;
+            argNode := IRB[arg1Node];
+            while argNode <> -1 do
+            begin
+              itemNode := IRA[argNode];
+              if IRKind[itemNode] = IR_BLOCK then
+              begin
+                lo := Integer(IRIVal[IRA[itemNode]]);
+                elemSize := Integer(IRIVal[IRB[itemNode]]);
+                EmitB($48); EmitB($81); EmitB($F9); EmitI32(lo);
+                EmitB($0F); EmitB($8C); nextJmp := CodeLen; EmitI32(0);
+                EmitB($48); EmitB($81); EmitB($F9); EmitI32(elemSize);
+                EmitB($0F); EmitB($8E);
+                if trueCount >= 128 then Error('set expression too large');
+                trueJumps[trueCount] := CodeLen; Inc(trueCount);
+                EmitI32(0);
+                Patch32(nextJmp, CodeLen - (nextJmp + 4));
+              end
+              else
+              begin
+                lo := Integer(IRIVal[itemNode]);
+                EmitB($48); EmitB($81); EmitB($F9); EmitI32(lo);
+                EmitB($0F); EmitB($84);
+                if trueCount >= 128 then Error('set expression too large');
+                trueJumps[trueCount] := CodeLen; Inc(trueCount);
+                EmitI32(0);
+              end;
+              argNode := IRB[argNode];
+            end;
+
+            MovRaxImm(0);
+            EmitB($E9); falseJmp := CodeLen; EmitI32(0);
+            for i := 0 to trueCount - 1 do
+              Patch32(trueJumps[i], CodeLen - (trueJumps[i] + 4));
+            MovRaxImm(1);
+            Patch32(falseJmp, CodeLen - (falseJmp + 4));
           end
           else if specialId = Ord(tkSysOpen) then
           begin
