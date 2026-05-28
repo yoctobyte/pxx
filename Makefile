@@ -102,6 +102,8 @@ test: $(COMPILER) fpc-check
 	test "$$(/tmp/test_class26)" = "$$(printf '1\n1\n1\n42\n100\n999\n888')"
 	./$(COMPILER) test/test_class_methods.pas /tmp/test_class_methods26
 	test "$$(/tmp/test_class_methods26)" = "3"
+	./$(COMPILER) test/test_static_methods.pas /tmp/test_static_methods26
+	test "$$(/tmp/test_static_methods26)" = "$$(printf '7\n11\n25')"
 	./$(COMPILER) test/test_math_unit.pas /tmp/test_math_unit26
 	test "$$(/tmp/test_math_unit26)" = "$$(printf '42\n999\n10\n20\n256\n6\n144')"
 	./$(COMPILER) test/test_generic_func.pas /tmp/test_generic_func26
