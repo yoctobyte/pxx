@@ -485,6 +485,7 @@ var
   IRIVal  : array[0..MAX_IR-1] of Int64;
   IRTk    : array[0..MAX_IR-1] of Integer;
   IRCount : Integer;
+  IRLabelCount : Integer;
 
   { User-defined class/field/method tables - integer-only for fixedpoint safety }
   UClsNOff   : array[0..MAX_UCLASS-1] of Integer;

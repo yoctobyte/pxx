@@ -1,6 +1,7 @@
 procedure IRReset;
 begin
   IRCount := 0;
+  IRLabelCount := 0;
 end;
 
 function IRAppend(kind, a, b, c: Integer; ival: Int64; tk: Integer): Integer;
@@ -42,6 +43,21 @@ end;
 function IRNodeOK(idx: Integer): Boolean;
 begin
   Result := (idx >= 0) and (idx < IRCount);
+end;
+
+function IRNewLabel: Integer;
+begin
+  Result := IRLabelCount;
+  Inc(IRLabelCount);
+end;
+
+function IRLabelExists(labelId: Integer): Boolean;
+var i: Integer;
+begin
+  Result := False;
+  for i := 0 to IRCount - 1 do
+    if (IRKind[i] = IR_LABEL) and (IRIVal[i] = labelId) then
+      Result := True;
 end;
 
 procedure IRRequireNode(idx: Integer; const context: AnsiString);
@@ -106,10 +122,17 @@ begin
         IRRequireOptionalNode(IRC[i], 'if else');
       end;
 
-      IR_JUMP, IR_JUMP_IF_FALSE:
+      IR_JUMP:
       begin
-        IRRequireOptionalNode(IRA[i], 'jump target');
-        IRRequireOptionalNode(IRB[i], 'jump condition');
+        if not IRLabelExists(IRA[i]) then
+          Error('invalid IR jump target');
+      end;
+
+      IR_JUMP_IF_FALSE:
+      begin
+        if not IRLabelExists(IRA[i]) then
+          Error('invalid IR conditional jump target');
+        IRRequireNode(IRB[i], 'jump condition');
       end;
 
       IR_UNSUPPORTED:
@@ -123,7 +146,8 @@ end;
 
 function IRLowerAST(node: Integer): Integer;
 var left, right, seq, item, value, outNode, first, last: Integer;
-    pairNode, condNode, thenNode, elseNode: Integer;
+    pairNode, condNode, elseNode: Integer;
+    elseLabel, endLabel, endLabelNode: Integer;
 begin
   if node = -1 then
   begin
@@ -175,12 +199,22 @@ begin
     AN_IF:
     begin
       pairNode := ASTRight[node];
+      elseLabel := IRNewLabel;
+      endLabel := IRNewLabel;
       condNode := IRLowerAST(ASTLeft[node]);
-      thenNode := IRLowerAST(ASTLeft[pairNode]);
+      first := condNode;
+      last := IRAppend(IR_JUMP_IF_FALSE, elseLabel, condNode, -1, 0, 0);
+      last := IRLowerAST(ASTLeft[pairNode]);
+      last := IRAppend(IR_JUMP, endLabel, -1, -1, 0, 0);
+      last := IRAppend(IR_LABEL, -1, -1, -1, elseLabel, 0);
       elseNode := -1;
       if ASTRight[pairNode] <> -1 then
         elseNode := IRLowerAST(ASTRight[pairNode]);
-      Result := IRAppend(IR_IF, condNode, thenNode, elseNode, 0, 0);
+      endLabelNode := IRAppend(IR_LABEL, -1, -1, -1, endLabel, 0);
+      if elseNode <> -1 then
+        Result := IRAppend(IR_BLOCK, first, endLabelNode, -1, 0, 0)
+      else
+        Result := IRAppend(IR_BLOCK, first, endLabelNode, -1, 0, 0);
     end;
 
     AN_WRITE, AN_WRITELN:
