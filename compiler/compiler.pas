@@ -14,6 +14,7 @@ uses SysUtils, BaseUnix;
 procedure CPreprocess(var src: AnsiString; const baseDir: AnsiString); forward;
 {$include parser.inc}
 {$include ir.inc}
+{$include ir_codegen.inc}
 {$include codegen.inc}
 {$include cparser.inc}
 {$include bparser.inc}
@@ -42,6 +43,11 @@ begin
     else if option = '--dump-ir' then
     begin
       DumpIR := True;
+      Inc(i);
+    end
+    else if option = '--experimental-ir-codegen' then
+    begin
+      ExperimentalIRCodegen := True;
       Inc(i);
     end
     else if option = '--strict-overload' then
@@ -89,7 +95,7 @@ begin
       readingOptions := False;
   end;
   if ParamCount < i then
-    begin writeln(StdErr,'usage: pascal26/PXX [--debug] [--dump-ir] [-dNAME] [-uNAME] [-Mobjfpc] [--strict-overload] [--no-unhandled-handler] <src> [out]'); Halt(1); end;
+    begin writeln(StdErr,'usage: pascal26/PXX [--debug] [--dump-ir] [--experimental-ir-codegen] [-dNAME] [-uNAME] [-Mobjfpc] [--strict-overload] [--no-unhandled-handler] <src> [out]'); Halt(1); end;
 
   inFile  := ParamStr(i);
 {$ifdef FPC}

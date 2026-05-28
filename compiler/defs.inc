@@ -85,6 +85,14 @@ const
   IR_LABEL     = 12;
   IR_JUMP      = 13;
   IR_JUMP_IF_FALSE = 14;
+  IR_NEG       = 15;
+  IR_NOT       = 16;
+  IR_LEA       = 17;
+  IR_INDEX     = 18;
+  IR_FIELD     = 19;
+  IR_LOAD_MEM  = 20;
+  IR_STORE_MEM = 21;
+  IR_ARG       = 22;
 
   EXC_FRAME_SIZE = 80;
   EXC_JMP_OFFSET = 8;
@@ -307,6 +315,7 @@ var
 
   DebugTrace : Boolean;
   DumpIR : Boolean;
+  ExperimentalIRCodegen : Boolean;
   StrictOverload : Boolean;
   NoUnhandledHandler : Boolean;
   Source  : AnsiString;
@@ -486,6 +495,9 @@ var
   IRTk    : array[0..MAX_IR-1] of Integer;
   IRCount : Integer;
   IRLabelCount : Integer;
+  IRLoopStackBreak    : array[0..63] of Integer;
+  IRLoopStackContinue : array[0..63] of Integer;
+  IRLoopStackDepth    : Integer;
 
   { User-defined class/field/method tables - integer-only for fixedpoint safety }
   UClsNOff   : array[0..MAX_UCLASS-1] of Integer;

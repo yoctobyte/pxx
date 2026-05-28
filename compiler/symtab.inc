@@ -1850,4 +1850,67 @@ begin
   end;
 end;
 
+function GetASTStrVal(node: Integer): AnsiString;
+var s: AnsiString; i, off, len, j: Integer;
+begin
+  s := '';
+  off := ASTSOffset[node];
+  len := ASTSLen[node];
+  i := 0;
+  while i < len do
+  begin
+    j := off + i;
+    AppendChar(s, TokChars[j]);
+    Inc(i);
+  end;
+  Result := s;
+end;
+
+function GetASTIdentName(node: Integer): AnsiString;
+var s: AnsiString; i, off, len, j: Integer;
+begin
+  s := '';
+  off := ASTSOffset[node];
+  len := ASTSLen[node];
+  i := 0;
+  while i < len do
+  begin
+    j := off + i;
+    AppendChar(s, TokChars[j]);
+    Inc(i);
+  end;
+  Result := s;
+end;
+
+function ResolveNodeRec(node: Integer): Integer;
+begin
+  if ASTKind[node] = AN_IDENT then
+    Result := Syms[ASTIVal[node]].RecName
+  else if ASTKind[node] = AN_FIELD then
+  begin
+    Result := RecFieldRecId(ResolveNodeRec(ASTLeft[node]), GetASTIdentName(node));
+  end
+  else if ASTKind[node] = AN_INDEX then
+  begin
+    if ASTKind[ASTLeft[node]] = AN_IDENT then
+      Result := Syms[ASTIVal[ASTLeft[node]]].ElemRecName
+    else
+      Result := REC_NONE;
+  end
+  else if (ASTKind[node] = AN_CALL) and (ASTIVal[node] = -Ord(tkGetMem)) then
+    Result := ASTRight[node]
+  else
+    Result := REC_NONE;
+end;
+
+function IsNodeArray(node: Integer): Boolean;
+begin
+  Result := False;
+  if ASTKind[node] = AN_IDENT then
+    Result := Syms[ASTIVal[node]].IsArray
+  else if ASTKind[node] = AN_FIELD then
+    Result := RecFieldIsArray(ResolveNodeRec(ASTLeft[node]), GetASTIdentName(node));
+end;
+
 { ===== Expression parser ===== }
+

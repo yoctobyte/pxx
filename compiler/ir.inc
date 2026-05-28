@@ -2,6 +2,7 @@ procedure IRReset;
 begin
   IRCount := 0;
   IRLabelCount := 0;
+  IRLoopStackDepth := 0;
 end;
 
 function IRAppend(kind, a, b, c: Integer; ival: Int64; tk: Integer): Integer;
@@ -35,6 +36,14 @@ begin
     IR_LABEL: Result := 'label';
     IR_JUMP: Result := 'jump';
     IR_JUMP_IF_FALSE: Result := 'jump_if_false';
+    IR_NEG: Result := 'neg';
+    IR_NOT: Result := 'not';
+    IR_LEA: Result := 'lea';
+    IR_INDEX: Result := 'index';
+    IR_FIELD: Result := 'field';
+    IR_LOAD_MEM: Result := 'load_mem';
+    IR_STORE_MEM: Result := 'store_mem';
+    IR_ARG: Result := 'arg';
   else
     Result := 'unknown';
   end;
@@ -73,8 +82,30 @@ begin
 end;
 
 procedure IRVerify;
-var i: Integer;
+var i, lblId, op: Integer;
+    seenLabel: array[0..MAX_IR-1] of Boolean;
 begin
+  for i := 0 to MAX_IR - 1 do
+    seenLabel[i] := False;
+
+  { Pass 1: populate seen labels and verify uniqueness }
+  for i := 0 to IRCount - 1 do
+  begin
+    if (IRTk[i] < 0) or (IRTk[i] > Ord(tyExtended)) then
+      Error('invalid type kind in IR node');
+
+    if IRKind[i] = IR_LABEL then
+    begin
+      lblId := Integer(IRIVal[i]);
+      if (lblId < 0) or (lblId >= MAX_IR) then
+        Error('IR label ID out of bounds');
+      if seenLabel[lblId] then
+        Error('duplicate IR label definition');
+      seenLabel[lblId] := True;
+    end;
+  end;
+
+  { Pass 2: check all instructions and operand invariants }
   for i := 0 to IRCount - 1 do
   begin
     case IRKind[i] of
@@ -96,6 +127,9 @@ begin
       begin
         IRRequireNode(IRA[i], 'binop left');
         IRRequireNode(IRB[i], 'binop right');
+        op := IRC[i];
+        if (op < 0) or (op > Ord(tkProperty)) then
+          Error('invalid operator token kind in binop');
       end;
 
       IR_CALL:
@@ -124,15 +158,52 @@ begin
 
       IR_JUMP:
       begin
-        if not IRLabelExists(IRA[i]) then
-          Error('invalid IR jump target');
+        lblId := IRA[i];
+        if (lblId < 0) or (lblId >= MAX_IR) then
+          Error('invalid IR jump target out of bounds');
+        if not seenLabel[lblId] then
+          Error('invalid IR jump target (label not defined)');
       end;
 
       IR_JUMP_IF_FALSE:
       begin
-        if not IRLabelExists(IRA[i]) then
-          Error('invalid IR conditional jump target');
+        lblId := IRA[i];
+        if (lblId < 0) or (lblId >= MAX_IR) then
+          Error('invalid IR conditional jump target out of bounds');
+        if not seenLabel[lblId] then
+          Error('invalid IR conditional jump target (label not defined)');
         IRRequireNode(IRB[i], 'jump condition');
+      end;
+
+      IR_NEG, IR_NOT:
+        IRRequireNode(IRA[i], 'unary operand');
+
+      IR_LEA:
+        if (IRA[i] < 0) or (IRA[i] >= SymCount) then
+          Error('invalid symbol in lea');
+
+      IR_INDEX:
+      begin
+        IRRequireNode(IRA[i], 'index base');
+        IRRequireNode(IRB[i], 'index offset');
+      end;
+
+      IR_FIELD:
+        IRRequireNode(IRA[i], 'field base');
+
+      IR_LOAD_MEM:
+        IRRequireNode(IRA[i], 'load_mem address');
+
+      IR_STORE_MEM:
+      begin
+        IRRequireNode(IRA[i], 'store_mem address');
+        IRRequireNode(IRB[i], 'store_mem value');
+      end;
+
+      IR_ARG:
+      begin
+        IRRequireNode(IRA[i], 'arg value');
+        IRRequireOptionalNode(IRB[i], 'next arg');
       end;
 
       IR_UNSUPPORTED:
@@ -144,10 +215,99 @@ begin
   end;
 end;
 
+function IRLowerAST(node: Integer): Integer; forward;
+
+function IRLowerAddress(node: Integer): Integer;
+var baseNode, baseAddr, indexNode, lo, elemSize: Integer;
+    fieldName: AnsiString;
+    isArr: Boolean;
+    tk: TTypeKind;
+    recName: Integer;
+begin
+  if ASTKind[node] = AN_IDENT then
+  begin
+    Result := IRAppend(IR_LEA, ASTIVal[node], -1, -1, 0, Ord(tyPointer));
+  end
+  else if ASTKind[node] = AN_INDEX then
+  begin
+    baseNode := ASTLeft[node];
+    baseAddr := IRLowerAddress(baseNode);
+    indexNode := IRLowerAST(ASTRight[node]);
+    
+    isArr := IsNodeArray(baseNode);
+    tk := tyInteger;
+    recName := REC_NONE;
+    if isArr then
+    begin
+      if ASTKind[baseNode] = AN_IDENT then
+      begin
+        if Syms[ASTIVal[baseNode]].RecName = REC_TPARAM then
+        begin
+          tk := tyRecord;
+          recName := REC_TPARAM;
+        end
+        else
+        begin
+          tk := Syms[ASTIVal[baseNode]].ElemType;
+          recName := Syms[ASTIVal[baseNode]].ElemRecName;
+        end;
+      end
+      else if ASTKind[baseNode] = AN_FIELD then
+      begin
+        recName := ResolveNodeRec(baseNode);
+        tk := RecFieldType(ResolveNodeRec(ASTLeft[baseNode]), GetASTIdentName(baseNode));
+      end;
+    end;
+    
+    if tk = tyString then
+    begin
+      if (ASTKind[baseNode] = AN_IDENT) and (Syms[ASTIVal[baseNode]].Kind = skGlobal) then
+        elemSize := STRING_CAP + 8
+      else
+        elemSize := LOCAL_STR_CAP + 8;
+    end
+    else if tk = tyRecord then
+      elemSize := RecSize(recName)
+    else
+      elemSize := TypeSize(tk);
+      
+    lo := 0;
+    if ASTKind[baseNode] = AN_IDENT then
+    begin
+      if Syms[ASTIVal[baseNode]].RecName <> REC_TPARAM then
+        lo := Syms[ASTIVal[baseNode]].ConstVal;
+    end;
+    
+    Result := IRAppend(IR_INDEX, baseAddr, indexNode, lo, elemSize, ASTTk[node]);
+  end
+  else if ASTKind[node] = AN_FIELD then
+  begin
+    baseNode := ASTLeft[node];
+    baseAddr := IRLowerAddress(baseNode);
+    
+    recName := ResolveNodeRec(baseNode);
+    fieldName := GetASTIdentName(node);
+    Result := IRAppend(IR_FIELD, baseAddr, -1, -1, RecFieldOffset(recName, fieldName), ASTTk[node]);
+  end
+  else
+    Result := IRAppend(IR_UNSUPPORTED, ASTKind[node], ASTLeft[node], ASTRight[node], ASTIVal[node], ASTTk[node]);
+end;
+
 function IRLowerAST(node: Integer): Integer;
-var left, right, seq, item, value, outNode, first, last: Integer;
-    pairNode, condNode: Integer;
+var left, right, seq, item, value, outNode, first, last, leftAddr, argNode: Integer;
+    pairNode, condNode, specialId, classIdx, slot, cpi, pathIdx: Integer;
+    isRefArg: Boolean;
     startLabel, elseLabel, endLabel, startLabelNode, endLabelNode: Integer;
+    lhsNode, pair3, pair1, pair2, initNode, limitNode, isDownNode, bodyNode: Integer;
+    down: Boolean;
+    varIdx: Integer;
+    initValNode, storeNode, limitValNode, cmpNode, condJmpNode, bodyIRNode: Integer;
+    loadVarNode2, constOneNode, stepNode, storeStepNode, jmpNode: Integer;
+    continueLabel, continueLabelNode: Integer;
+    branchSeq, branchPair, labelsHead, stmtNode, labelNode: Integer;
+    clauseBodyLabel, nextClauseLabel, selectorValNode: Integer;
+    cv: Int64;
+    constValNode, clauseBodyLabelNode, exitJmpNode, nextClauseLabelNode: Integer;
 begin
   if node = -1 then
   begin
@@ -165,6 +325,24 @@ begin
     AN_IDENT:
       Result := IRAppend(IR_LOAD_SYM, ASTIVal[node], -1, -1, 0, ASTTk[node]);
 
+    AN_INDEX, AN_FIELD:
+    begin
+      left := IRLowerAddress(node);
+      Result := IRAppend(IR_LOAD_MEM, left, -1, -1, 0, ASTTk[node]);
+    end;
+
+    AN_NEG:
+    begin
+      left := IRLowerAST(ASTLeft[node]);
+      Result := IRAppend(IR_NEG, left, -1, -1, 0, ASTTk[node]);
+    end;
+
+    AN_NOT:
+    begin
+      left := IRLowerAST(ASTLeft[node]);
+      Result := IRAppend(IR_NOT, left, -1, -1, 0, ASTTk[node]);
+    end;
+
     AN_BINOP:
     begin
       left := IRLowerAST(ASTLeft[node]);
@@ -178,22 +356,67 @@ begin
       if ASTKind[ASTLeft[node]] = AN_IDENT then
         Result := IRAppend(IR_STORE_SYM, ASTIVal[ASTLeft[node]], value, -1, 0, ASTTk[ASTLeft[node]])
       else
-        Result := IRAppend(IR_UNSUPPORTED, ASTKind[node], ASTKind[ASTLeft[node]], value, 0, ASTTk[node]);
+      begin
+        leftAddr := IRLowerAddress(ASTLeft[node]);
+        Result := IRAppend(IR_STORE_MEM, leftAddr, value, -1, 0, ASTTk[ASTLeft[node]]);
+      end;
     end;
 
     AN_CALL:
     begin
       first := -1;
       last := -1;
+      cpi := ASTIVal[node];
       item := ASTLeft[node];
+      pathIdx := 0;
+      classIdx := -1;
+      if cpi = -Ord(tkGetMem) then
+        classIdx := ASTRight[node];
       while item <> -1 do
       begin
-        value := IRLowerAST(ASTLeft[item]);
-        if first < 0 then first := value;
-        last := value;
+        isRefArg := False;
+        if cpi >= 0 then
+        begin
+          if (pathIdx < Procs[cpi].ParamCount) and Procs[cpi].Params[pathIdx].IsRef then
+            isRefArg := True;
+        end
+        else
+        begin
+          specialId := -cpi;
+          if specialId = Ord(tkLength) then
+          begin
+            if pathIdx = 0 then isRefArg := True;
+          end
+          else if (specialId = Ord(tkSysRead)) or (specialId = Ord(tkSyswrite)) then
+          begin
+            if pathIdx = 1 then isRefArg := True;
+          end
+          else if (specialId = Ord(tkGetMem)) and (pathIdx > 0) then
+          begin
+            classIdx := ASTRight[node];
+            slot := FindUMeth(classIdx - REC_UCLASS_BASE, 'create');
+            if slot >= 0 then
+            begin
+              slot := UMthProc_[slot];
+              if (pathIdx < Procs[slot].ParamCount) and Procs[slot].Params[pathIdx].IsRef then
+                isRefArg := True;
+            end;
+          end;
+        end;
+
+        if isRefArg then
+          value := IRLowerAddress(ASTLeft[item])
+        else
+          value := IRLowerAST(ASTLeft[item]);
+
+        argNode := IRAppend(IR_ARG, value, -1, -1, 0, ASTTk[item]);
+        if first < 0 then first := argNode
+        else IRB[last] := argNode;
+        last := argNode;
         item := ASTRight[item];
+        Inc(pathIdx);
       end;
-      Result := IRAppend(IR_CALL, ASTIVal[node], first, last, 0, ASTTk[node]);
+      Result := IRAppend(IR_CALL, ASTIVal[node], first, classIdx, 0, ASTTk[node]);
     end;
 
     AN_IF:
@@ -220,20 +443,189 @@ begin
       startLabelNode := IRAppend(IR_LABEL, -1, -1, -1, startLabel, 0);
       condNode := IRLowerAST(ASTLeft[node]);
       last := IRAppend(IR_JUMP_IF_FALSE, endLabel, condNode, -1, 0, 0);
+      
+      if IRLoopStackDepth >= 64 then Error('IR loop stack overflow');
+      IRLoopStackBreak[IRLoopStackDepth] := endLabel;
+      IRLoopStackContinue[IRLoopStackDepth] := startLabel;
+      Inc(IRLoopStackDepth);
+      
       last := IRLowerAST(ASTRight[node]);
+      
+      Dec(IRLoopStackDepth);
+      
       last := IRAppend(IR_JUMP, startLabel, -1, -1, 0, 0);
       endLabelNode := IRAppend(IR_LABEL, -1, -1, -1, endLabel, 0);
       Result := IRAppend(IR_BLOCK, startLabelNode, endLabelNode, -1, 0, 0);
     end;
 
+    AN_FOR:
+    begin
+      lhsNode := ASTLeft[node];
+      pair3 := ASTRight[node];
+      pair1 := ASTLeft[pair3];
+      pair2 := ASTRight[pair3];
+      
+      initNode  := ASTLeft[pair1];
+      limitNode := ASTRight[pair1];
+      
+      isDownNode := ASTLeft[pair2];
+      bodyNode   := ASTRight[pair2];
+      
+      down := ASTIVal[isDownNode] = 1;
+      varIdx := ASTIVal[lhsNode];
+      
+      initValNode := IRLowerAST(initNode);
+      storeNode := IRAppend(IR_STORE_SYM, varIdx, initValNode, -1, 0, ASTTk[lhsNode]);
+      
+      limitValNode := IRLowerAST(limitNode);
+      
+      startLabel := IRNewLabel;
+      endLabel := IRNewLabel;
+      continueLabel := IRNewLabel;
+      
+      startLabelNode := IRAppend(IR_LABEL, -1, -1, -1, startLabel, 0);
+      
+      condNode := IRAppend(IR_LOAD_SYM, varIdx, -1, -1, 0, ASTTk[lhsNode]);
+      
+      if down then
+        cmpNode := IRAppend(IR_BINOP, condNode, limitValNode, Ord(tkGe), 0, Ord(tyBoolean))
+      else
+        cmpNode := IRAppend(IR_BINOP, condNode, limitValNode, Ord(tkLe), 0, Ord(tyBoolean));
+        
+      condJmpNode := IRAppend(IR_JUMP_IF_FALSE, endLabel, cmpNode, -1, 0, 0);
+      
+      if IRLoopStackDepth >= 64 then Error('IR loop stack overflow');
+      IRLoopStackBreak[IRLoopStackDepth] := endLabel;
+      IRLoopStackContinue[IRLoopStackDepth] := continueLabel;
+      Inc(IRLoopStackDepth);
+      
+      bodyIRNode := IRLowerAST(bodyNode);
+      
+      Dec(IRLoopStackDepth);
+      
+      continueLabelNode := IRAppend(IR_LABEL, -1, -1, -1, continueLabel, 0);
+      
+      loadVarNode2 := IRAppend(IR_LOAD_SYM, varIdx, -1, -1, 0, ASTTk[lhsNode]);
+      constOneNode := IRAppend(IR_CONST_INT, -1, -1, -1, 1, Ord(tyInteger));
+      
+      if down then
+        stepNode := IRAppend(IR_BINOP, loadVarNode2, constOneNode, Ord(tkMinus), 0, ASTTk[lhsNode])
+      else
+        stepNode := IRAppend(IR_BINOP, loadVarNode2, constOneNode, Ord(tkPlus), 0, ASTTk[lhsNode]);
+        
+      storeStepNode := IRAppend(IR_STORE_SYM, varIdx, stepNode, -1, 0, ASTTk[lhsNode]);
+      
+      jmpNode := IRAppend(IR_JUMP, startLabel, -1, -1, 0, 0);
+      
+      endLabelNode := IRAppend(IR_LABEL, -1, -1, -1, endLabel, 0);
+      
+      Result := IRAppend(IR_BLOCK, storeNode, endLabelNode, -1, 0, 0);
+    end;
+
     AN_REPEAT:
     begin
       startLabel := IRNewLabel;
+      continueLabel := IRNewLabel;
+      endLabel := IRNewLabel;
+      
       startLabelNode := IRAppend(IR_LABEL, -1, -1, -1, startLabel, 0);
-      last := IRLowerAST(ASTLeft[node]);
+      
+      if IRLoopStackDepth >= 64 then Error('IR loop stack overflow');
+      IRLoopStackBreak[IRLoopStackDepth] := endLabel;
+      IRLoopStackContinue[IRLoopStackDepth] := continueLabel;
+      Inc(IRLoopStackDepth);
+      
+      bodyIRNode := IRLowerAST(ASTLeft[node]);
+      
+      Dec(IRLoopStackDepth);
+      
+      continueLabelNode := IRAppend(IR_LABEL, -1, -1, -1, continueLabel, 0);
+      
       condNode := IRLowerAST(ASTRight[node]);
+      
       last := IRAppend(IR_JUMP_IF_FALSE, startLabel, condNode, -1, 0, 0);
-      Result := IRAppend(IR_BLOCK, startLabelNode, last, -1, 0, 0);
+      
+      endLabelNode := IRAppend(IR_LABEL, -1, -1, -1, endLabel, 0);
+      
+      Result := IRAppend(IR_BLOCK, startLabelNode, endLabelNode, -1, 0, 0);
+    end;
+
+    AN_CASE:
+    begin
+      selectorValNode := IRLowerAST(ASTLeft[node]);
+      endLabel := IRNewLabel;
+      
+      first := -1;
+      last := -1;
+      
+      branchSeq := ASTRight[node];
+      while branchSeq <> -1 do
+      begin
+        branchPair := ASTLeft[branchSeq];
+        labelsHead := ASTLeft[branchPair];
+        stmtNode   := ASTRight[branchPair];
+        
+        if labelsHead = -1 then
+        begin
+          { Else Clause }
+          bodyIRNode := IRLowerAST(stmtNode);
+          if first < 0 then first := bodyIRNode;
+          last := bodyIRNode;
+        end
+        else
+        begin
+          { Normal Clause }
+          clauseBodyLabel := IRNewLabel;
+          nextClauseLabel := IRNewLabel;
+          
+          labelNode := labelsHead;
+          while labelNode <> -1 do
+          begin
+            cv := ASTIVal[ASTLeft[labelNode]];
+            constValNode := IRAppend(IR_CONST_INT, -1, -1, -1, cv, Ord(tyInteger));
+            cmpNode := IRAppend(IR_BINOP, selectorValNode, constValNode, Ord(tkNeq), 0, Ord(tyBoolean));
+            condJmpNode := IRAppend(IR_JUMP_IF_FALSE, clauseBodyLabel, cmpNode, -1, 0, 0);
+            if first < 0 then first := condJmpNode;
+            last := condJmpNode;
+            
+            labelNode := ASTRight[labelNode];
+          end;
+          
+          exitJmpNode := IRAppend(IR_JUMP, nextClauseLabel, -1, -1, 0, 0);
+          last := exitJmpNode;
+          
+          clauseBodyLabelNode := IRAppend(IR_LABEL, -1, -1, -1, clauseBodyLabel, 0);
+          last := clauseBodyLabelNode;
+          
+          bodyIRNode := IRLowerAST(stmtNode);
+          last := bodyIRNode;
+          
+          exitJmpNode := IRAppend(IR_JUMP, endLabel, -1, -1, 0, 0);
+          last := exitJmpNode;
+          
+          nextClauseLabelNode := IRAppend(IR_LABEL, -1, -1, -1, nextClauseLabel, 0);
+          last := nextClauseLabelNode;
+        end;
+        
+        branchSeq := ASTRight[branchSeq];
+      end;
+      
+      endLabelNode := IRAppend(IR_LABEL, -1, -1, -1, endLabel, 0);
+      last := endLabelNode;
+      
+      Result := IRAppend(IR_BLOCK, first, last, -1, 0, 0);
+    end;
+
+    AN_BREAK:
+    begin
+      if IRLoopStackDepth = 0 then Error('break outside loop');
+      Result := IRAppend(IR_JUMP, IRLoopStackBreak[IRLoopStackDepth - 1], -1, -1, 0, 0);
+    end;
+
+    AN_CONTINUE:
+    begin
+      if IRLoopStackDepth = 0 then Error('continue outside loop');
+      Result := IRAppend(IR_JUMP, IRLoopStackContinue[IRLoopStackDepth - 1], -1, -1, 0, 0);
     end;
 
     AN_WRITE, AN_WRITELN:
@@ -296,17 +688,53 @@ begin
 end;
 
 procedure IRDump;
-var i: Integer;
+var i, blockNum: Integer;
+    isLeader: array[0..MAX_IR-1] of Boolean;
+    symIdx: Integer;
 begin
-  writeln('IR count=', IRCount);
+  for i := 0 to MAX_IR - 1 do
+    isLeader[i] := False;
+
+  if IRCount > 0 then
+    isLeader[0] := True;
+
   for i := 0 to IRCount - 1 do
   begin
+    if IRKind[i] = IR_LABEL then
+      isLeader[i] := True;
+    if (IRKind[i] = IR_JUMP) or (IRKind[i] = IR_JUMP_IF_FALSE) then
+    begin
+      if i + 1 < IRCount then
+        isLeader[i + 1] := True;
+    end;
+  end;
+
+  writeln('IR count=', IRCount);
+  blockNum := 0;
+  for i := 0 to IRCount - 1 do
+  begin
+    if isLeader[i] then
+    begin
+      Inc(blockNum);
+      writeln('--- BASIC BLOCK BB', blockNum, ' ---');
+    end;
     write(i, ': ', IROpName(IRKind[i]),
           ' a=', IRA[i],
           ' b=', IRB[i],
           ' c=', IRC[i],
           ' ival=', IRIVal[i],
           ' tk=', IRTk[i]);
+          
+    if (IRKind[i] = IR_LOAD_SYM) or (IRKind[i] = IR_STORE_SYM) or (IRKind[i] = IR_LEA) then
+    begin
+      symIdx := IRA[i];
+      if (symIdx >= 0) and (symIdx < SymCount) then
+        write(' [sym=', Syms[symIdx].Name, ']');
+    end;
+    if IRKind[i] = IR_FIELD then
+      write(' [offset=', IRIVal[i], ']');
+    if IRKind[i] = IR_INDEX then
+      write(' [lo=', IRC[i], ' size=', IRIVal[i], ']');
     writeln;
   end;
 end;

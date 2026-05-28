@@ -90,6 +90,39 @@ test: $(COMPILER) fpc-check
 	grep -q "jump_if_false" /tmp/test_ir_repeat26.log
 	grep -q "binop" /tmp/test_ir_repeat26.log
 	test "$$(/tmp/test_ir_repeat26)" = "3"
+	./$(COMPILER) --dump-ir test/test_ir_for.pas /tmp/test_ir_for26 > /tmp/test_ir_for26.log
+	grep -q "label" /tmp/test_ir_for26.log
+	grep -q "jump " /tmp/test_ir_for26.log
+	grep -q "jump_if_false" /tmp/test_ir_for26.log
+	grep -q "binop" /tmp/test_ir_for26.log
+	grep -q "const_int" /tmp/test_ir_for26.log
+	grep -q "store_sym" /tmp/test_ir_for26.log
+	grep -q "load_sym" /tmp/test_ir_for26.log
+	test "$$(/tmp/test_ir_for26)" = "$$(printf '15\n15')"
+	./$(COMPILER) --dump-ir test/test_ir_loop_control.pas /tmp/test_ir_loop_control26 > /tmp/test_ir_loop_control26.log
+	grep -q "label" /tmp/test_ir_loop_control26.log
+	grep -q "jump " /tmp/test_ir_loop_control26.log
+	grep -q "jump_if_false" /tmp/test_ir_loop_control26.log
+	grep -q "binop" /tmp/test_ir_loop_control26.log
+	test "$$(/tmp/test_ir_loop_control26)" = "$$(printf '10\n12\n15\n12\n6\n12')"
+	./$(COMPILER) --dump-ir test/test_ir_case.pas /tmp/test_ir_case26 > /tmp/test_ir_case26.log
+	grep -q "label" /tmp/test_ir_case26.log
+	grep -q "jump " /tmp/test_ir_case26.log
+	grep -q "jump_if_false" /tmp/test_ir_case26.log
+	grep -q "binop" /tmp/test_ir_case26.log
+	test "$$(/tmp/test_ir_case26)" = "$$(printf '12\n12\n3\n99\n99')"
+	./$(COMPILER) --experimental-ir-codegen test/test_ir_codegen.pas /tmp/test_ir_codegen26
+	test "$$(/tmp/test_ir_codegen26)" = "$$(printf '15\nOK')"
+	./$(COMPILER) --experimental-ir-codegen test/test_ir_codegen_fail.pas /tmp/test_ir_codegen_fail26
+	test "$$(/tmp/test_ir_codegen_fail26)" = "$$(printf '15\nFAIL')"
+	./$(COMPILER) --experimental-ir-codegen test/test_ir_unary.pas /tmp/test_ir_unary26
+	test "$$(/tmp/test_ir_unary26)" = "$$(printf '%s\nOK' '-5')"
+	./$(COMPILER) --experimental-ir-codegen test/test_ir_deref.pas /tmp/test_ir_deref26
+	test "$$(/tmp/test_ir_deref26)" = "$$(printf '10\n20\n100\n200')"
+	./$(COMPILER) --experimental-ir-codegen test/test_ir_call.pas /tmp/test_ir_call26
+	test "$$(/tmp/test_ir_call26)" = "$$(printf '30\n30\n42')"
+	./$(COMPILER) --experimental-ir-codegen test/test_ir_binops.pas /tmp/test_ir_binops26
+	test "$$(/tmp/test_ir_binops26)" = "$$(printf -- '-3\n-2\n3\n2\n8\n14\n0\n1\n25')"
 	./$(COMPILER) test/test_shared_object.pas /tmp/shared_object26
 	test "$$(/tmp/shared_object26)" = "97"
 	./$(COMPILER) test/test_c_import.pas /tmp/c_import26

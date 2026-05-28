@@ -2,3 +2,5 @@
 2026-05-25T18:21:12Z  v2  09a67b12adda862179ac8a6d203150ecb62f3b224f072a1479b87e972999b409  6f82fd2e2e3581f4ef2ca2afc0771e8ec327d87b  Add stabilize target and stable binary registry
 2026-05-25T18:25:57Z  v3  09a67b12adda862179ac8a6d203150ecb62f3b224f072a1479b87e972999b409  2bca4e82cdb54ae80551fe2fb56492faec53f2b8  Track versioned stable binaries in git
 2026-05-25T19:23:07Z  v4  bbe5785af8cf6f94a3ccfb880f89f5fc59943b2a885a2302d723d0d919d56e4e  d75a6a423f555a65a8c0d490d3e922f330195b42  Stage 2b: wire expression AST building (parallel with direct emit)
+2026-05-28T14:55:07Z  v5  4ad3a9d46b6e32cda411db26099f4d0d3b55295cab1f03ac1ef51202285eb716  de1bc00ef3c28d702e02f0dfedf8bf352e08422b  feat(ir): lower repeat to label jumps
+2026-05-28T15:06:19Z  v6  c2e1475ddd07b3a55a750c531ad24079d50b0f3e4a531882b85d2cbfff4edb9d  de1bc00ef3c28d702e02f0dfedf8bf352e08422b  feat(ir): lower repeat to label jumps
