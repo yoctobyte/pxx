@@ -642,15 +642,69 @@ var
   node, indexNode, fieldNode, prevTok, recName, i: Integer;
   tk: TTypeKind;
   fieldName: AnsiString;
-  mci, mmi, mpi, mcallNode, mselfArg, mlastArg, margSeq, margIdx, mexprNode, mai, pri: Integer;
+  mci, mmi, mpi, mcallNode, mselfArg, mlastArg, margSeq, margIdx, mexprNode, mai, pri, ci: Integer;
   methName: AnsiString;
   isAssign: Boolean;
 begin
   prevTok := TokPos - 1;
   if idx < 0 then
   begin
-    ErrorIdent := GetTokenStr(prevTok);
-    Error('undefined variable');
+    ci := FindUClass(GetTokenStr(prevTok));
+    if ci >= 0 then
+    begin
+      Expect(tkDot, '.');
+      if CurTok.Kind <> tkIdent then Error('expected class method name');
+      fieldName := CurTok.SVal;
+      Next;
+      
+      mmi := FindUMeth(ci, fieldName);
+      if mmi < 0 then Error('class method not found: ' + fieldName);
+      mpi := UMthProc_[mmi];
+      
+      if not UMthIsStatic[mmi] then
+        Error('cannot call non-static method on class type directly');
+        
+      mcallNode := AllocNode(AN_CALL);
+      ASTIVal[mcallNode] := mpi;
+      ASTTk[mcallNode] := Ord(Procs[mpi].RetType);
+      mlastArg := -1;
+      
+      if CurTok.Kind = tkLParen then
+      begin
+        Next;
+        mai := 0;
+        while mai <= Procs[mpi].ParamCount-1 do
+        begin
+          if Procs[mpi].Params[mai].IsRef or Procs[mpi].Params[mai].IsArray then
+          begin
+            if CurTok.Kind <> tkIdent then Error('expected variable');
+            margIdx := FindSym(CurTok.SVal); Next;
+            mexprNode := ParseLValueAST(margIdx);
+          end
+          else
+          begin
+            ParseExpr; mexprNode := CurASTNode;
+          end;
+          margSeq := AllocNode(AN_ARG); ASTLeft[margSeq] := mexprNode;
+          if mlastArg = -1 then
+            ASTLeft[mcallNode] := margSeq
+          else
+            ASTRight[mlastArg] := margSeq;
+          mlastArg := margSeq;
+          if mai < Procs[mpi].ParamCount-1 then Expect(tkComma, ',');
+          Inc(mai);
+        end;
+        Expect(tkRParen, ')');
+      end;
+      
+      Result := mcallNode;
+      Exit;
+    end
+    else
+    begin
+      ErrorIdent := GetTokenStr(prevTok);
+      Error('undefined variable');
+    end;
   end;
   node := AllocNode(AN_IDENT);
   ASTIVal[node] := idx;
@@ -799,46 +853,86 @@ begin
       begin
         mpi := UMthProc_[mmi];
         Next; { consume method name }
-        if (mmi >= 0) and (UMthVirSlot[mmi] >= 0) then
+        if UMthIsStatic[mmi] then
         begin
-          mcallNode := AllocNode(AN_VIRTUAL_CALL);
-          ASTRight[mcallNode] := UMthVirSlot[mmi];
+          mcallNode := AllocNode(AN_CALL);
+          ASTIVal[mcallNode] := mpi;
+          ASTTk[mcallNode] := Ord(Procs[mpi].RetType);
+          mlastArg := -1;
+          if CurTok.Kind = tkLParen then
+          begin
+            Next;
+            mai := 0;
+            while mai <= Procs[mpi].ParamCount-1 do
+            begin
+              if Procs[mpi].Params[mai].IsRef or Procs[mpi].Params[mai].IsArray then
+              begin
+                if CurTok.Kind <> tkIdent then Error('expected variable');
+                margIdx := FindSym(CurTok.SVal); Next;
+                mexprNode := ParseLValueAST(margIdx);
+              end
+              else
+              begin
+                ParseExpr; mexprNode := CurASTNode;
+              end;
+              margSeq := AllocNode(AN_ARG); ASTLeft[margSeq] := mexprNode;
+              if mlastArg = -1 then
+                ASTLeft[mcallNode] := margSeq
+              else
+                ASTRight[mlastArg] := margSeq;
+              mlastArg := margSeq;
+              if mai < Procs[mpi].ParamCount-1 then Expect(tkComma, ',');
+              Inc(mai);
+            end;
+            Expect(tkRParen, ')');
+          end;
+          node := mcallNode;
+          tk := Procs[mpi].RetType;
+          Continue;
         end
         else
         begin
-          mcallNode := AllocNode(AN_CALL);
-        end;
-        ASTIVal[mcallNode] := mpi;
-        ASTTk[mcallNode] := Ord(Procs[mpi].RetType);
-        mselfArg := AllocNode(AN_ARG);
-        ASTLeft[mselfArg] := node;
-        ASTLeft[mcallNode] := mselfArg;
-        mlastArg := mselfArg;
-        if CurTok.Kind = tkLParen then
-        begin
-          Next;
-          mai := 1;
-          while mai <= Procs[mpi].ParamCount-1 do
+          if (mmi >= 0) and (UMthVirSlot[mmi] >= 0) then
           begin
-            if Procs[mpi].Params[mai].IsRef or Procs[mpi].Params[mai].IsArray then
-            begin
-              if CurTok.Kind <> tkIdent then Error('expected variable');
-              margIdx := FindSym(CurTok.SVal); Next;
-              mexprNode := ParseLValueAST(margIdx);
-            end
-            else
-            begin
-              ParseExpr; mexprNode := CurASTNode;
-            end;
-            margSeq := AllocNode(AN_ARG); ASTLeft[margSeq] := mexprNode;
-            ASTRight[mlastArg] := margSeq; mlastArg := margSeq;
-            if mai < Procs[mpi].ParamCount-1 then Expect(tkComma, ',');
-            Inc(mai);
+            mcallNode := AllocNode(AN_VIRTUAL_CALL);
+            ASTRight[mcallNode] := UMthVirSlot[mmi];
+          end
+          else
+          begin
+            mcallNode := AllocNode(AN_CALL);
           end;
-          Expect(tkRParen, ')');
+          ASTIVal[mcallNode] := mpi;
+          ASTTk[mcallNode] := Ord(Procs[mpi].RetType);
+          mselfArg := AllocNode(AN_ARG);
+          ASTLeft[mselfArg] := node;
+          ASTLeft[mcallNode] := mselfArg;
+          mlastArg := mselfArg;
+          if CurTok.Kind = tkLParen then
+          begin
+            Next;
+            mai := 1;
+            while mai <= Procs[mpi].ParamCount-1 do
+            begin
+              if Procs[mpi].Params[mai].IsRef or Procs[mpi].Params[mai].IsArray then
+              begin
+                if CurTok.Kind <> tkIdent then Error('expected variable');
+                margIdx := FindSym(CurTok.SVal); Next;
+                mexprNode := ParseLValueAST(margIdx);
+              end
+              else
+              begin
+                ParseExpr; mexprNode := CurASTNode;
+              end;
+              margSeq := AllocNode(AN_ARG); ASTLeft[margSeq] := mexprNode;
+              ASTRight[mlastArg] := margSeq; mlastArg := margSeq;
+              if mai < Procs[mpi].ParamCount-1 then Expect(tkComma, ',');
+              Inc(mai);
+            end;
+            Expect(tkRParen, ')');
+          end;
+          node := mcallNode;
+          Result := node; Exit;
         end;
-        node := mcallNode;
-        Result := node; Exit;
       end;
       fieldNode := AllocNode(AN_FIELD);
       ASTLeft[fieldNode] := node;
@@ -1232,6 +1326,7 @@ end;
 procedure ParseFactor;
 var name: AnsiString; recName: Integer; idx, pi, i, node, left, prevTok, valNode: Integer; tk: TTypeKind; op, argSeq, argSeq2, argSeq3, lastArg, argIdx, exprNode, szArg: Integer;
     nArgs, argsHead, currArg: Integer; argTypes: array[0..15] of TTypeKind;
+    ci, mmi, mpi, mcallNode, mlastArg: Integer;
 begin
   LastExprTk := tyInteger;
   case CurTok.Kind of
@@ -1565,6 +1660,52 @@ begin
         
         CurASTNode := node;
         Exit;
+      end;
+      if (idx < 0) and (pi < 0) and IsClassType(name) and
+         (Tokens[TokPos].Kind = tkDot) and (Tokens[TokPos+1].Kind = tkIdent) then
+      begin
+        ci := FindUClass(name);
+        mmi := FindUMeth(ci, GetTokenStr(TokPos+1));
+        if (mmi >= 0) and UMthIsStatic[mmi] then
+        begin
+          mpi := UMthProc_[mmi];
+          Next; { consume class name }
+          Expect(tkDot, '.');
+          Next; { consume method name }
+          mcallNode := AllocNode(AN_CALL);
+          ASTIVal[mcallNode] := mpi;
+          ASTTk[mcallNode] := Ord(Procs[mpi].RetType);
+          mlastArg := -1;
+          if CurTok.Kind = tkLParen then
+          begin
+            Next;
+            i := 0;
+            while i <= Procs[mpi].ParamCount-1 do
+            begin
+              if Procs[mpi].Params[i].IsRef or Procs[mpi].Params[i].IsArray then
+              begin
+                if CurTok.Kind <> tkIdent then Error('expected variable');
+                argIdx := FindSym(CurTok.SVal); Next;
+                exprNode := ParseLValueAST(argIdx);
+              end
+              else
+              begin
+                ParseExpr; exprNode := CurASTNode;
+              end;
+              argSeq := AllocNode(AN_ARG); ASTLeft[argSeq] := exprNode;
+              if mlastArg = -1 then
+                ASTLeft[mcallNode] := argSeq
+              else
+                ASTRight[mlastArg] := argSeq;
+              mlastArg := argSeq;
+              if i < Procs[mpi].ParamCount-1 then Expect(tkComma, ',');
+              Inc(i);
+            end;
+            Expect(tkRParen, ')');
+          end;
+          CurASTNode := mcallNode;
+          Exit;
+        end;
       end;
       if (idx >= 0) and (Syms[idx].Kind = skConst) then
       begin
@@ -2642,7 +2783,7 @@ var
   tnOff, tnLen, ci, fnOff, fnLen, curFieldOff, fRec, fSize, fAlign, classAlign, depth: Integer;
   fTk: TTypeKind;
   parentCi, slot, mmi, mnOff, mnLen, pnOff, pnLen, rFOff, rFLen, rMOff, rMLen, wFOff, wFLen, wMOff, wMLen, rnOff, rnLen, wnOff, wnLen, propRec, i: Integer;
-  isConstructor, isDestructor, isVirtual, isOverride: Boolean;
+  isConstructor, isDestructor, isVirtual, isOverride, isClassMethod: Boolean;
         mname, propName, readName, writeName: AnsiString;
   propTk: TTypeKind;
 begin
@@ -2708,6 +2849,13 @@ begin
 
         while (CurTok.Kind <> tkEnd) and (CurTok.Kind <> tkEOF) do
         begin
+          isClassMethod := False;
+          if (CurTok.Kind = tkClass) and ((Tokens[TokPos].Kind = tkProcedure) or (Tokens[TokPos].Kind = tkFunction)) then
+          begin
+            isClassMethod := True;
+            Next; { consume 'class' }
+          end;
+
           if (CurTok.Kind = tkProcedure) or (CurTok.Kind = tkFunction) or
              ((CurTok.Kind = tkIdent) and (CaseEqual(CurTok.SVal, 'constructor') or CaseEqual(CurTok.SVal, 'destructor'))) then
           begin
@@ -2744,6 +2892,7 @@ begin
             
             AddUMeth(ci, mnOff, mnLen, -1);
             mmi := UMthCount - 1;
+            UMthIsStatic[mmi] := isClassMethod;
             
             if isVirtual then
             begin
@@ -2900,12 +3049,18 @@ var
   savedSC, savedFS, savedCurProc : Integer;
   patchPos : Integer;
   depth    : Integer;
-  doneArgs, doneParam, isArr, isByRef, declOverload: Boolean;
+  doneArgs, doneParam, isArr, isByRef, declOverload, isClassKeyword, isStaticMethod: Boolean;
   startIdx, idx: Integer;
   tokKindOrd: Integer;
   methOwnerCi, methOwnerRec, methSNOff, methSNLen, mmi, slot, otherCi: Integer;
   methName: AnsiString;
 begin
+  isClassKeyword := False;
+  if CurTok.Kind = tkClass then
+  begin
+    isClassKeyword := True;
+    Next;
+  end;
   isFunc := CurTok.Kind = tkFunction;
   Next;
   if CurTok.Kind <> tkIdent then Error('expected name');
@@ -3007,8 +3162,16 @@ begin
     Eat(tkSemicolon);
   end;
 
-  { Inject implicit Self parameter at index 0 for methods }
+  { Inject implicit Self parameter at index 0 for methods (unless static) }
+  isStaticMethod := False;
   if methOwnerCi >= 0 then
+  begin
+    mmi := FindUMeth(methOwnerCi, methName);
+    if (mmi >= 0) and UMthIsStatic[mmi] then
+      isStaticMethod := True;
+  end;
+
+  if (methOwnerCi >= 0) and not isStaticMethod then
   begin
     for i := nparams downto 1 do
     begin
@@ -3102,7 +3265,6 @@ begin
   { Set method context before allocating params }
   if methOwnerCi >= 0 then
   begin
-    CurSelfClass := methOwnerRec;
     mmi := FindUMeth(methOwnerCi, methName);
     if mmi >= 0 then
     begin
@@ -3113,6 +3275,9 @@ begin
       AddUMeth(methOwnerCi, methSNOff, methSNLen, pi);
       mmi := UMthCount - 1;
     end;
+    
+    if not UMthIsStatic[mmi] then
+      CurSelfClass := methOwnerRec;
     
     if UMthVirSlot[mmi] >= 0 then
     begin
@@ -3144,7 +3309,7 @@ begin
       Syms[idx].RecName := ptypesRec[i];
   end;
   { Wire Self's RecName so field lookups resolve against the owner class }
-  if methOwnerCi >= 0 then
+  if (methOwnerCi >= 0) and not UMthIsStatic[mmi] then
     Syms[Procs[pi].Params[0].SymIdx].RecName := methOwnerRec;
 
   { Return value slot }
@@ -3509,6 +3674,7 @@ begin
       tkVar:      ParseVarSection;
       tkConst:    ParseConstSection;
       tkType:     ParseTypeSection;
+      tkClass,
       tkProcedure,
       tkFunction: ParseSubroutine;
       else
@@ -3552,6 +3718,7 @@ begin
         tkVar:      ParseVarSection;
         tkConst:    ParseConstSection;
         tkType:     ParseTypeSection;
+        tkClass,
         tkProcedure,
         tkFunction: ParseSubroutine;
         else
@@ -3624,6 +3791,7 @@ begin
       tkVar:      ParseVarSection;
       tkConst:    ParseConstSection;
       tkType:     ParseTypeSection;
+      tkClass,
       tkProcedure,
       tkFunction: ParseSubroutine;
       tkIdent:

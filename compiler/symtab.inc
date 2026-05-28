@@ -185,6 +185,7 @@ begin
   mi := UMthCount;
   UMthNOff[mi] := noff; UMthNLen[mi] := nlen; UMthProc_[mi] := pi;
   UMthVirSlot[mi] := -1;
+  UMthIsStatic[mi] := False;
   UMthCount := UMthCount + 1;
   UClsMCount[ci] := UClsMCount[ci] + 1;
 end;

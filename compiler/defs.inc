@@ -483,6 +483,7 @@ var
   UMthNLen   : array[0..MAX_UMETH-1] of Integer;
   UMthProc_  : array[0..MAX_UMETH-1] of Integer;
   UMthVirSlot : array[0..MAX_UMETH-1] of Integer;
+  UMthIsStatic : array[0..MAX_UMETH-1] of Boolean;
   UMthCount  : Integer;
 
   UPropNOff   : array[0..MAX_UPROP-1] of Integer;
