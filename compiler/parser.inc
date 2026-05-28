@@ -2431,7 +2431,8 @@ begin
       ParseExpr; Expect(tkRParen, ')');
       node := AllocNode(AN_CALL);
       ASTIVal[node] := -Ord(tkSysClose);
-      ASTLeft[node] := CurASTNode;
+      argSeq := AllocNode(AN_ARG); ASTLeft[argSeq] := CurASTNode;
+      ASTLeft[node] := argSeq;
     end;
     
     tkSysFchmod:
