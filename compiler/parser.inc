@@ -2144,11 +2144,11 @@ end;
 
 function ParsewriteArgsAST(isLn: Boolean): Integer;
 var
-  node, argNode, lastArg, exprNode, vidx: Integer;
+  node, argNode, lastArg, exprNode, vidx, widthVal, decimalsVal: Integer;
 begin
   node := AllocNode(AN_WRITE);
   if isLn then ASTKind[node] := AN_WRITELN;
-  
+
   if CurTok.Kind = tkLParen then
   begin
     Next;
@@ -2165,7 +2165,22 @@ begin
       ParseExpr; exprNode := CurASTNode;
       argNode := AllocNode(AN_ARG);
       ASTLeft[argNode] := exprNode;
-      
+      { Parse optional :width[:decimals] format specifiers }
+      widthVal := 0; decimalsVal := -1;
+      if CurTok.Kind = tkColon then
+      begin
+        Next;
+        if CurTok.Kind <> tkInteger then Error('write: expected integer width after :');
+        widthVal := CurTok.IVal; Next;
+        if CurTok.Kind = tkColon then
+        begin
+          Next;
+          if CurTok.Kind <> tkInteger then Error('write: expected integer decimals after :');
+          decimalsVal := CurTok.IVal; Next;
+        end;
+      end;
+      ASTIVal[argNode] := widthVal;
+      ASTSOffset[argNode] := decimalsVal;
       if lastArg = -1 then
         ASTLeft[node] := argNode
       else

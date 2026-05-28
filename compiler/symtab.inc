@@ -1068,6 +1068,25 @@ begin
   end;
 end;
 
+procedure EmitLoadStrLen(idx: Integer);
+{ Load length of string variable into rcx }
+begin
+  if (Syms[idx].Kind = skParam) and (Syms[idx].TypeKind = tyString) then
+  begin
+    EmitB($48); EmitB($8B); EmitB($85); EmitI32(Syms[idx].Offset); { mov rax, [rbp+off] = P }
+    EmitB($48); EmitB($8B); EmitB($08);                              { mov rcx, [rax] }
+  end
+  else
+  begin
+    case Syms[idx].Kind of
+      skLocal, skParam:
+        begin EmitB($48); EmitB($8B); EmitB($8D); EmitI32(Syms[idx].Offset); end; { mov rcx, [rbp+off] }
+      skGlobal:
+        begin EmitB($48); EmitB($8B); EmitB($0C); EmitB($25); EmitGlobRef(Syms[idx].Offset); end; { mov rcx, [abs] }
+    end;
+  end;
+end;
+
 procedure EmitLeaStrDataRdi(idx: Integer);
 begin
   if (Syms[idx].Kind = skParam) and (Syms[idx].TypeKind = tyString) then
@@ -1637,10 +1656,85 @@ end;
 procedure EmitwriteChar;
 { rax = char byte value → write 1 byte to stdout }
 begin
-  { Store byte to INTBUF[0] in data section }
-  EmitB($48); EmitB($BE); EmitDataRef(INTBUF_OFFSET);  { mov rsi, &intbuf }
-  EmitB($88); EmitB($06);                               { mov [rsi], al }
+  EmitB($48); EmitB($BE); EmitDataRef(INTBUF_OFFSET);
+  EmitB($88); EmitB($06);
   MovRaxImm(SYS_WRITE); MovRdiImm(STDOUT); MovRdxImm(1); EmitSyscall;
+end;
+
+procedure EmitwriteIntW(width: Integer);
+{ rax = signed int → right-aligned in field of min width chars }
+var jnsOff, jleOff, jzOff, loopStart: Integer;
+begin
+  { r8 = sign flag (0=positive, 1=negative) }
+  EmitB($4D); EmitB($31); EmitB($C0);                    { xor r8, r8 }
+  EmitB($48); EmitB($85); EmitB($C0);                    { test rax, rax }
+  EmitB($79); jnsOff := CodeLen; EmitB(0);               { jns .positive }
+  EmitB($48); EmitB($F7); EmitB($D8);                    { neg rax }
+  EmitB($49); EmitB($FF); EmitB($C0);                    { inc r8 }
+  Code[jnsOff] := Byte(CodeLen - (jnsOff + 1));
+  { Digit conversion into INTBUF from end }
+  EmitB($48); EmitB($31); EmitB($C9);                    { xor rcx, rcx }
+  MovRbxImm(10);
+  EmitB($48); EmitB($BF); EmitDataRef(INTBUF_OFFSET + INTBUF_SIZE);
+  loopStart := CodeLen;
+  EmitB($48); EmitB($31); EmitB($D2);                    { xor rdx, rdx }
+  EmitB($48); EmitB($F7); EmitB($F3);                    { div rbx }
+  EmitB($80); EmitB($C2); EmitB($30);                    { add dl, '0' }
+  EmitB($48); EmitB($FF); EmitB($CF);                    { dec rdi }
+  EmitB($88); EmitB($17);                                { mov [rdi], dl }
+  EmitB($48); EmitB($FF); EmitB($C1);                    { inc rcx }
+  EmitB($48); EmitB($85); EmitB($C0);                    { test rax, rax }
+  EmitB($75); EmitB(Byte(loopStart - (CodeLen + 1)));    { jnz loop }
+  { Save digit start/count; compute padding = width - digits - sign }
+  EmitB($57);                                            { push rdi }
+  EmitB($51);                                            { push rcx }
+  MovRaxImm(width);
+  EmitB($48); EmitB($29); EmitB($C8);                    { sub rax, rcx }
+  EmitB($4C); EmitB($29); EmitB($C0);                    { sub rax, r8 }
+  EmitB($7E); jleOff := CodeLen; EmitB(0);               { jle .no_pad }
+  EmitB($48); EmitB($BE); EmitDataRef(SPACES_OFFSET);    { mov rsi, spaces }
+  EmitB($48); EmitB($89); EmitB($C2);                    { mov rdx, rax }
+  MovRaxImm(SYS_WRITE); MovRdiImm(STDOUT); EmitSyscall;
+  Code[jleOff] := Byte(CodeLen - (jleOff + 1));
+  { Write sign if negative }
+  EmitB($4D); EmitB($85); EmitB($C0);                    { test r8, r8 }
+  EmitB($74); jzOff := CodeLen; EmitB(0);                { jz .no_sign }
+  EmitwriteSyscall(MINUS_OFFSET, 1);
+  Code[jzOff] := Byte(CodeLen - (jzOff + 1));
+  { Write digits }
+  EmitB($5A);                                            { pop rdx }
+  EmitB($5E);                                            { pop rsi }
+  MovRaxImm(SYS_WRITE); MovRdiImm(STDOUT); EmitSyscall;
+end;
+
+procedure EmitwriteUIntW(width: Integer);
+{ rax = unsigned int → right-aligned in field of min width chars }
+var jleOff, loopStart: Integer;
+begin
+  EmitB($48); EmitB($31); EmitB($C9);                    { xor rcx, rcx }
+  MovRbxImm(10);
+  EmitB($48); EmitB($BF); EmitDataRef(INTBUF_OFFSET + INTBUF_SIZE);
+  loopStart := CodeLen;
+  EmitB($48); EmitB($31); EmitB($D2);                    { xor rdx, rdx }
+  EmitB($48); EmitB($F7); EmitB($F3);                    { div rbx }
+  EmitB($80); EmitB($C2); EmitB($30);                    { add dl, '0' }
+  EmitB($48); EmitB($FF); EmitB($CF);                    { dec rdi }
+  EmitB($88); EmitB($17);                                { mov [rdi], dl }
+  EmitB($48); EmitB($FF); EmitB($C1);                    { inc rcx }
+  EmitB($48); EmitB($85); EmitB($C0);                    { test rax, rax }
+  EmitB($75); EmitB(Byte(loopStart - (CodeLen + 1)));    { jnz loop }
+  EmitB($57);                                            { push rdi }
+  EmitB($51);                                            { push rcx }
+  MovRaxImm(width);
+  EmitB($48); EmitB($29); EmitB($C8);                    { sub rax, rcx }
+  EmitB($7E); jleOff := CodeLen; EmitB(0);               { jle .no_pad }
+  EmitB($48); EmitB($BE); EmitDataRef(SPACES_OFFSET);
+  EmitB($48); EmitB($89); EmitB($C2);                    { mov rdx, rax }
+  MovRaxImm(SYS_WRITE); MovRdiImm(STDOUT); EmitSyscall;
+  Code[jleOff] := Byte(CodeLen - (jleOff + 1));
+  EmitB($5A);                                            { pop rdx }
+  EmitB($5E);                                            { pop rsi }
+  MovRaxImm(SYS_WRITE); MovRdiImm(STDOUT); EmitSyscall;
 end;
 
 { ===== Prologue/Epilogue ===== }

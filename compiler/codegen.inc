@@ -500,7 +500,7 @@ var
   pi, i, idx, dummyRec, limitIdx, loopTop, condJmp, exitJmp, slot: Integer;
   thenJmp, elseJmp, pairNode, elseNode, lhsNode, pair3, pair1, pair2: Integer;
   initNode, limitNode, isDownNode, bodyNode, seqNode, argNode, exprNode: Integer;
-  si, vidx, specialId, arg1, arg2, arg3, pathIdx, dstIdx, srcIdx, rhsNode, branchJeStart: Integer;
+  si, vidx, specialId, arg1, arg2, arg3, pathIdx, dstIdx, srcIdx, rhsNode, branchJeStart, wid: Integer;
   breakBase, continueBase, continueTarget: Integer;
   handlerNode, handlerNextJmp: Integer;
   lhsTk, rhsTk, dummyTk: TTypeKind;
@@ -1335,9 +1335,20 @@ begin
       while argNode <> -1 do
       begin
         exprNode := ASTLeft[argNode];
+        wid := ASTIVal[argNode];  { 0 = no width }
         if ASTKind[exprNode] = AN_STR_LIT then
         begin
           si := InternStr(GetASTStrVal(exprNode));
+          if wid > 0 then
+          begin
+            { Pad string literal: compute padding = max(0, wid - len) }
+            if wid > Strs[si].Len then
+            begin
+              EmitB($48); EmitB($BE); EmitDataRef(SPACES_OFFSET);
+              MovRdxImm(wid - Strs[si].Len);
+              MovRaxImm(SYS_WRITE); MovRdiImm(STDOUT); EmitSyscall;
+            end;
+          end;
           if Strs[si].Len > 0 then EmitwriteSyscall(Strs[si].Offset + 8, Strs[si].Len);
         end
         else if ASTKind[exprNode] = AN_IDENT then
@@ -1345,6 +1356,18 @@ begin
           vidx := ASTIVal[exprNode];
           if (vidx >= 0) and (Syms[vidx].TypeKind = tyString) and not Syms[vidx].IsArray then
           begin
+            if wid > 0 then
+            begin
+              { Runtime string width: load len, compute padding = max(0, wid - len) }
+              EmitLoadStrLen(vidx);        { rcx = len }
+              MovRaxImm(wid);
+              EmitB($48); EmitB($29); EmitB($C8);  { sub rax, rcx }
+              EmitB($7E); EmitB(35);               { jle .skip_pad (35 bytes) }
+              EmitB($48); EmitB($BE); EmitDataRef(SPACES_OFFSET);
+              EmitB($48); EmitB($89); EmitB($C2);  { mov rdx, rax }
+              MovRaxImm(SYS_WRITE); MovRdiImm(STDOUT); EmitSyscall;
+              { .skip_pad: }
+            end;
             EmitwriteStrVar(vidx);
           end
           else if (vidx >= 0) and Syms[vidx].IsArray and (Syms[vidx].ElemType = tyChar) then
@@ -1358,9 +1381,13 @@ begin
             if TypeIsOrdinal(Syms[vidx].TypeKind) and
                (not TypeSigned(Syms[vidx].TypeKind)) and
                (TypeSize(Syms[vidx].TypeKind) = 8) then
-              EmitwriteUInt
+            begin
+              if wid > 0 then EmitwriteUIntW(wid) else EmitwriteUInt;
+            end
             else
-              EmitwriteInt;
+            begin
+              if wid > 0 then EmitwriteIntW(wid) else EmitwriteInt;
+            end;
           end;
         end
         else
@@ -1370,17 +1397,46 @@ begin
             EmitwriteChar
           else if ASTTk[exprNode] = Ord(tyString) then
           begin
-            EmitB($48); EmitB($89); EmitB($C6); { mov rsi, rax }
-            EmitB($48); EmitB($8B); EmitB($10); { mov rdx, [rax] }
-            EmitB($48); EmitB($83); EmitB($C6); EmitB($08); { add rsi, 8 }
-            MovRaxImm(SYS_WRITE); MovRdiImm(STDOUT); EmitSyscall;
+            if wid > 0 then
+            begin
+              EmitB($48); EmitB($89); EmitB($C1);  { mov rcx, rax }  { save ptr }
+              EmitB($48); EmitB($8B); EmitB($00);  { mov rax, [rax] } { rax = len }
+              EmitB($48); EmitB($87); EmitB($C8);  { xchg rax, rcx }  { rax=ptr, rcx=len }
+              { compute padding }
+              EmitB($50);                           { push rax (ptr) }
+              EmitB($51);                           { push rcx (len) }
+              MovRaxImm(wid);
+              EmitB($48); EmitB($29); EmitB($C8);  { sub rax, rcx }
+              EmitB($7E); EmitB(35);               { jle .skip_pad (35 bytes) }
+              EmitB($48); EmitB($BE); EmitDataRef(SPACES_OFFSET);
+              EmitB($48); EmitB($89); EmitB($C2);  { mov rdx, rax }
+              MovRaxImm(SYS_WRITE); MovRdiImm(STDOUT); EmitSyscall;
+              { .skip_pad: }
+              EmitB($59);                           { pop rcx → rdx via next }
+              EmitB($58);                           { pop rax (ptr) }
+              EmitB($48); EmitB($89); EmitB($C6);  { mov rsi, rax }
+              EmitB($48); EmitB($89); EmitB($CA);  { mov rdx, rcx }
+              EmitB($48); EmitB($83); EmitB($C6); EmitB($08); { add rsi, 8 }
+              MovRaxImm(SYS_WRITE); MovRdiImm(STDOUT); EmitSyscall;
+            end
+            else
+            begin
+              EmitB($48); EmitB($89); EmitB($C6); { mov rsi, rax }
+              EmitB($48); EmitB($8B); EmitB($10); { mov rdx, [rax] }
+              EmitB($48); EmitB($83); EmitB($C6); EmitB($08); { add rsi, 8 }
+              MovRaxImm(SYS_WRITE); MovRdiImm(STDOUT); EmitSyscall;
+            end;
           end
           else if TypeIsOrdinal(IntToTypeKind(ASTTk[exprNode])) and
                   (not TypeSigned(IntToTypeKind(ASTTk[exprNode]))) and
                   (TypeSize(IntToTypeKind(ASTTk[exprNode])) = 8) then
-            EmitwriteUInt
+          begin
+            if wid > 0 then EmitwriteUIntW(wid) else EmitwriteUInt;
+          end
           else
-            EmitwriteInt;
+          begin
+            if wid > 0 then EmitwriteIntW(wid) else EmitwriteInt;
+          end;
         end;
         argNode := ASTRight[argNode];
       end;

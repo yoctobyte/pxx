@@ -90,7 +90,9 @@ const
   INTBUF_SIZE     = 24;
   MINUS_OFFSET    = 24;
   NEWLINE_OFFSET  = 25;
-  STR_INIT_OFFSET = 26;
+  SPACES_OFFSET   = 26;   { 40 bytes of 0x20, for write(:width) padding }
+  SPACES_SIZE     = 40;
+  STR_INIT_OFFSET = 66;
 
 type
   TTokenKind = (
