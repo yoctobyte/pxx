@@ -29,3 +29,4 @@ Additional project material:
 - [IR Backend Status](ir-handover.md) - IR pipeline, coverage, and known gaps.
 - [IR Fixedpoint Milestone](selfcompile-milestone.md) - 2026-05-28 IR-to-IR self-recompile fixedpoint record.
 - [Target Roadmap](roadmap.md) - planned CPU targets and the fixedpoint gate each must pass.
+- [Language Status](language-status.md) - timestamped inventory of implemented, partial, and missing Pascal features with AST/IR complexity estimates.
