@@ -31,3 +31,4 @@ Additional project material:
 - [Target Roadmap](roadmap.md) - planned CPU targets and the fixedpoint gate each must pass.
 - [Language Status](language-status.md) - timestamped inventory of implemented, partial, and missing Pascal features with AST/IR complexity estimates.
 - [Interfaces Design Notes](interfaces-design.md) - why interfaces are last: fat pointers, COM vs lightweight model, and the prerequisite chain.
+- [RTTI Design Notes](rtti-design.md) - reflection as data-emission, opt-in via published, and why it comes before interfaces.
