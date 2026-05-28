@@ -124,6 +124,7 @@ begin
   LoopNestDepth := 0; LoopBreakFixCount := 0; LoopContinueFixCount := 0;
   ExceptionCodegenDepth := 0; ExceptionHandlerParseDepth := 0;
   UClsCount := 0; UFldCount := 0; UMthCount := 0; CurSelfClass := REC_NONE;
+  MethodFixCount := 0; UPropCount := 0;
   AddConst('StdErr', tyInteger, 2);
 
   if isBasic then
@@ -149,6 +150,8 @@ begin
     Next;
     ParseProgram;
   end;
+  for i := 0 to ProcCount - 1 do
+    writeln('proc ', i, ': ', Procs[i].Name, ' at ', Procs[i].BodyAddr);
   writeELF(outFile);
 
   writeln('ok: ',outFile,'  [code=',CodeLen,'B  data=',DataLen,

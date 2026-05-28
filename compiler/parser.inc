@@ -642,7 +642,9 @@ var
   node, indexNode, fieldNode, prevTok, recName, i: Integer;
   tk: TTypeKind;
   fieldName: AnsiString;
-  mci, mmi, mpi, mcallNode, mselfArg, mlastArg, margSeq, margIdx, mexprNode, mai: Integer;
+  mci, mmi, mpi, mcallNode, mselfArg, mlastArg, margSeq, margIdx, mexprNode, mai, pri: Integer;
+  methName: AnsiString;
+  isAssign: Boolean;
 begin
   prevTok := TokPos - 1;
   if idx < 0 then
@@ -686,6 +688,106 @@ begin
       fieldName := '';
       for i := Tokens[prevTok].SOffset to Tokens[prevTok].SOffset + Tokens[prevTok].SLen - 1 do
         AppendChar(fieldName, TokChars[i]);
+      { Check if it is a property on a class }
+      mci := -1; pri := -1;
+      if recName >= REC_UCLASS_BASE then
+      begin
+        mci := recName - REC_UCLASS_BASE;
+        pri := FindUProp(mci, fieldName);
+      end;
+      
+      if pri >= 0 then
+      begin
+        isAssign := (CurTok.Kind = tkAssign) or ((TokPos < TokCount) and (Tokens[TokPos].Kind = tkAssign));
+        if isAssign then
+        begin
+          if UPropWriteFLen[pri] > 0 then
+          begin
+            fieldName := '';
+            for i := 0 to UPropWriteFLen[pri] - 1 do
+              AppendChar(fieldName, TokChars[UPropWriteFOff[pri] + i]);
+          end
+          else if UPropWriteMLen[pri] > 0 then
+          begin
+            methName := '';
+            for i := 0 to UPropWriteMLen[pri] - 1 do
+              AppendChar(methName, TokChars[UPropWriteMOff[pri] + i]);
+            mmi := FindUMeth(mci, methName);
+            if mmi < 0 then Error('setter method not found: ' + methName);
+            mpi := UMthProc_[mmi];
+            
+            if CurTok.Kind = tkIdent then Next; { consume property name }
+            Expect(tkAssign, ':=');
+            ParseExpr;
+            
+            if UMthVirSlot[mmi] >= 0 then
+            begin
+              mcallNode := AllocNode(AN_VIRTUAL_CALL);
+              ASTRight[mcallNode] := UMthVirSlot[mmi];
+            end
+            else
+            begin
+              mcallNode := AllocNode(AN_CALL);
+            end;
+            ASTIVal[mcallNode] := mpi;
+            ASTTk[mcallNode] := Ord(Procs[mpi].RetType);
+            
+            mselfArg := AllocNode(AN_ARG);
+            ASTLeft[mselfArg] := node;
+            ASTLeft[mcallNode] := mselfArg;
+            
+            margSeq := AllocNode(AN_ARG);
+            ASTLeft[margSeq] := CurASTNode;
+            ASTRight[mselfArg] := margSeq;
+            
+            node := mcallNode;
+            Result := node; Exit;
+          end
+          else
+            Error('property is read-only');
+        end
+        else
+        begin
+          if UPropReadFLen[pri] > 0 then
+          begin
+            fieldName := '';
+            for i := 0 to UPropReadFLen[pri] - 1 do
+              AppendChar(fieldName, TokChars[UPropReadFOff[pri] + i]);
+          end
+          else if UPropReadMLen[pri] > 0 then
+          begin
+            methName := '';
+            for i := 0 to UPropReadMLen[pri] - 1 do
+              AppendChar(methName, TokChars[UPropReadMOff[pri] + i]);
+            mmi := FindUMeth(mci, methName);
+            if mmi < 0 then Error('getter method not found: ' + methName);
+            mpi := UMthProc_[mmi];
+            
+            Next; { consume property name }
+            if UMthVirSlot[mmi] >= 0 then
+            begin
+              mcallNode := AllocNode(AN_VIRTUAL_CALL);
+              ASTRight[mcallNode] := UMthVirSlot[mmi];
+            end
+            else
+            begin
+              mcallNode := AllocNode(AN_CALL);
+            end;
+            ASTIVal[mcallNode] := mpi;
+            ASTTk[mcallNode] := Ord(Procs[mpi].RetType);
+            
+            mselfArg := AllocNode(AN_ARG);
+            ASTLeft[mselfArg] := node;
+            ASTLeft[mcallNode] := mselfArg;
+            
+            node := mcallNode;
+            Result := node; Exit;
+          end
+          else
+            Error('property is write-only');
+        end;
+      end;
+
       { Check if this is a method call on a user class }
       mci := -1; mmi := -1; mpi := -1;
       if recName >= REC_UCLASS_BASE then
@@ -697,7 +799,15 @@ begin
       begin
         mpi := UMthProc_[mmi];
         Next; { consume method name }
-        mcallNode := AllocNode(AN_CALL);
+        if (mmi >= 0) and (UMthVirSlot[mmi] >= 0) then
+        begin
+          mcallNode := AllocNode(AN_VIRTUAL_CALL);
+          ASTRight[mcallNode] := UMthVirSlot[mmi];
+        end
+        else
+        begin
+          mcallNode := AllocNode(AN_CALL);
+        end;
         ASTIVal[mcallNode] := mpi;
         ASTTk[mcallNode] := Ord(Procs[mpi].RetType);
         mselfArg := AllocNode(AN_ARG);
@@ -1120,8 +1230,8 @@ begin
 end;
 
 procedure ParseFactor;
-var name: AnsiString; recName: Integer; idx, pi, i, node, left, prevTok, valNode: Integer; tk: TTypeKind; op, argSeq, argSeq2, argSeq3, lastArg, argIdx, exprNode: Integer;
-    nArgs, argsHead, currArg: Integer; argTypes: array[0..7] of TTypeKind;
+var name: AnsiString; recName: Integer; idx, pi, i, node, left, prevTok, valNode: Integer; tk: TTypeKind; op, argSeq, argSeq2, argSeq3, lastArg, argIdx, exprNode, szArg: Integer;
+    nArgs, argsHead, currArg: Integer; argTypes: array[0..15] of TTypeKind;
 begin
   LastExprTk := tyInteger;
   case CurTok.Kind of
@@ -1144,9 +1254,12 @@ begin
     end;
     tkString:
     begin
+      prevTok := TokPos - 1;
       if Length(CurTok.SVal) = 1 then
       begin
-        node := AllocNode(AN_INT_LIT); ASTIVal[node] := Ord(CurTok.SVal[1]); ASTTk[node] := Ord(tyChar); CurASTNode := node; Next; LastExprTk := tyChar;
+        node := AllocNode(AN_INT_LIT); ASTIVal[node] := Ord(CurTok.SVal[1]); ASTTk[node] := Ord(tyChar);
+        ASTSOffset[node] := Tokens[prevTok].SOffset; ASTSLen[node] := Tokens[prevTok].SLen;
+        CurASTNode := node; Next; LastExprTk := tyChar;
       end
       else
       begin
@@ -1404,9 +1517,28 @@ begin
         Next; { Eat class name }
         Next; { Eat dot }
         Next; { Eat 'Create' }
+        
+        argsHead := -1;
+        lastArg := -1;
         if CurTok.Kind = tkLParen then
         begin
-          Next; Expect(tkRParen, ')');
+          Next;
+          while CurTok.Kind <> tkRParen do
+          begin
+            ParseExpr;
+            argSeq := AllocNode(AN_ARG);
+            ASTLeft[argSeq] := CurASTNode;
+            if argsHead = -1 then
+              argsHead := argSeq
+            else
+              ASTRight[lastArg] := argSeq;
+            lastArg := argSeq;
+            if CurTok.Kind = tkComma then
+              Next
+            else if CurTok.Kind <> tkRParen then
+              Error('expected comma or close parenthesis');
+          end;
+          Expect(tkRParen, ')');
         end;
         
         idx := IsRecordType(name);
@@ -1416,15 +1548,20 @@ begin
         node := AllocNode(AN_CALL);
         ASTIVal[node] := -Ord(tkGetMem);
         ASTTk[node] := Ord(tyClass);
-        ASTRight[node] := idx; { preserve created user-class id for typed raises }
+        ASTRight[node] := idx; { preserve created user-class id }
         
         exprNode := AllocNode(AN_INT_LIT);
         ASTIVal[exprNode] := prevTok;
         ASTTk[exprNode] := Ord(tyInteger);
         
-        argSeq := AllocNode(AN_ARG);
-        ASTLeft[argSeq] := exprNode;
-        ASTLeft[node] := argSeq;
+        { The first argument to the GetMem call is the size }
+        szArg := AllocNode(AN_ARG);
+        ASTLeft[szArg] := exprNode;
+        ASTLeft[node] := szArg;
+        
+        { The rest of the arguments are constructor arguments! }
+        if argsHead <> -1 then
+          ASTRight[szArg] := argsHead;
         
         CurASTNode := node;
         Exit;
@@ -1469,6 +1606,21 @@ begin
         pi := MatchProcCall(name, nArgs, argTypes);
         if pi < 0 then
           Error('no overload of ' + name + ' matches these arguments');
+
+        currArg := argsHead;
+        for i := 0 to nArgs - 1 do
+        begin
+          exprNode := ASTLeft[currArg];
+          if (Procs[pi].Params[i].TypeKind = tyString) and (IntToTypeKind(ASTTk[exprNode]) = tyChar) then
+          begin
+            if ASTKind[exprNode] = AN_INT_LIT then
+            begin
+              ASTKind[exprNode] := AN_STR_LIT;
+              ASTTk[exprNode] := Ord(tyString);
+            end;
+          end;
+          currArg := ASTRight[currArg];
+        end;
 
         currArg := argsHead;
         for i := 0 to nArgs - 1 do
@@ -2008,7 +2160,7 @@ function ParseStatementAST: Integer;
 var
   name: AnsiString;
   idx, pi, i, si, node, valNode, stepsNode, opNode, argSeq, argIdx, exprNode, lastArg: Integer;
-  nArgs, argsHead, currArg: Integer; argTypes: array[0..7] of TTypeKind;
+  nArgs, argsHead, currArg: Integer; argTypes: array[0..15] of TTypeKind;
   isLn: Boolean;
 begin
   node := -1;
@@ -2269,6 +2421,21 @@ begin
           for i := 0 to nArgs - 1 do
           begin
             exprNode := ASTLeft[currArg];
+            if (Procs[pi].Params[i].TypeKind = tyString) and (IntToTypeKind(ASTTk[exprNode]) = tyChar) then
+            begin
+              if ASTKind[exprNode] = AN_INT_LIT then
+              begin
+                ASTKind[exprNode] := AN_STR_LIT;
+                ASTTk[exprNode] := Ord(tyString);
+              end;
+            end;
+            currArg := ASTRight[currArg];
+          end;
+
+          currArg := argsHead;
+          for i := 0 to nArgs - 1 do
+          begin
+            exprNode := ASTLeft[currArg];
             if Procs[pi].Params[i].IsRef or Procs[pi].Params[i].IsArray then
             begin
               if not ((ASTKind[exprNode] = AN_IDENT) or (ASTKind[exprNode] = AN_INDEX) or (ASTKind[exprNode] = AN_FIELD)) then
@@ -2292,7 +2459,7 @@ begin
         begin
           idx := FindSym(name); Next;
           valNode := ParseLValueAST(idx);
-          if ASTKind[valNode] = AN_CALL then
+          if (ASTKind[valNode] = AN_CALL) or (ASTKind[valNode] = AN_VIRTUAL_CALL) then
             node := valNode
           else
           begin
@@ -2474,10 +2641,14 @@ var
   done, stopTypes: Boolean;
   tnOff, tnLen, ci, fnOff, fnLen, curFieldOff, fRec, fSize, fAlign, classAlign, depth: Integer;
   fTk: TTypeKind;
+  parentCi, slot, mmi, mnOff, mnLen, pnOff, pnLen, rFOff, rFLen, rMOff, rMLen, wFOff, wFLen, wMOff, wMLen, rnOff, rnLen, wnOff, wnLen, propRec, i: Integer;
+  isConstructor, isDestructor, isVirtual, isOverride: Boolean;
+        mname, propName, readName, writeName: AnsiString;
+  propTk: TTypeKind;
 begin
   Next;
   stopTypes := False;
-  while (CurTok.Kind = tkIdent) and not stopTypes do
+  while (CurTok.Kind = tkIdent) and (not CaseEqual(CurTok.SVal, 'constructor')) and (not CaseEqual(CurTok.SVal, 'destructor')) and not stopTypes do
   begin
     if CaseEqual(CurTok.SVal, 'generic') then
     begin
@@ -2510,15 +2681,142 @@ begin
       else if CurTok.Kind = tkClass then
       begin
         Next;
+        parentCi := -1;
+        if Eat(tkLParen) then
+        begin
+          if CurTok.Kind <> tkIdent then Error('expected parent class name');
+          parentCi := FindUClass(CurTok.SVal);
+          if parentCi < 0 then Error('parent class not found: ' + CurTok.SVal);
+          Next;
+          Expect(tkRParen, ')');
+        end;
+        
         ci := AddUClass(tnOff, tnLen);
+        UClsParent[ci] := parentCi;
+        
         curFieldOff := 0;
         classAlign := 1;
+        if parentCi >= 0 then
+        begin
+          curFieldOff := UClsSize_[parentCi];
+          UClsVirtCount[ci] := UClsVirtCount[parentCi];
+        end
+        else
+        begin
+          curFieldOff := 8; { reserve offset 0 for VMT pointer }
+        end;
+
         while (CurTok.Kind <> tkEnd) and (CurTok.Kind <> tkEOF) do
         begin
-          if (CurTok.Kind = tkProcedure) or (CurTok.Kind = tkFunction) then
+          if (CurTok.Kind = tkProcedure) or (CurTok.Kind = tkFunction) or
+             ((CurTok.Kind = tkIdent) and (CaseEqual(CurTok.SVal, 'constructor') or CaseEqual(CurTok.SVal, 'destructor'))) then
           begin
-            while (CurTok.Kind <> tkSemicolon) and (CurTok.Kind <> tkEnd) and (CurTok.Kind <> tkEOF) do Next;
+            isConstructor := False;
+            isDestructor := False;
+            if CurTok.Kind = tkIdent then
+            begin
+              isConstructor := CaseEqual(CurTok.SVal, 'constructor');
+              isDestructor := CaseEqual(CurTok.SVal, 'destructor');
+              Next;
+            end
+            else
+              Next;
+            
+            if CurTok.Kind <> tkIdent then Error('expected method name');
+            mname := CurTok.SVal;
+            mnOff := Tokens[TokPos-1].SOffset;
+            mnLen := Tokens[TokPos-1].SLen;
+            Next;
+            
+            while (CurTok.Kind <> tkSemicolon) and (CurTok.Kind <> tkEnd) and (CurTok.Kind <> tkEOF) do
+              Next;
             Eat(tkSemicolon);
+
+            isVirtual := False;
+            isOverride := False;
+            while (CurTok.Kind = tkIdent) and (CaseEqual(CurTok.SVal, 'virtual') or CaseEqual(CurTok.SVal, 'override')) do
+            begin
+              if CaseEqual(CurTok.SVal, 'virtual') then isVirtual := True;
+              if CaseEqual(CurTok.SVal, 'override') then isOverride := True;
+              Next;
+              Eat(tkSemicolon);
+            end;
+            
+            AddUMeth(ci, mnOff, mnLen, -1);
+            mmi := UMthCount - 1;
+            
+            if isVirtual then
+            begin
+              slot := UClsVirtCount[ci];
+              UClsVirtCount[ci] := UClsVirtCount[ci] + 1;
+              UMthVirSlot[mmi] := slot;
+            end
+            else if isOverride then
+            begin
+              slot := FindParentVirtualSlot(parentCi, mname);
+              if slot < 0 then Error('cannot override: no virtual method found in parent chain: ' + mname);
+              UMthVirSlot[mmi] := slot;
+            end;
+          end
+          else if CurTok.Kind = tkProperty then
+          begin
+            Next;
+            if CurTok.Kind <> tkIdent then Error('expected property name');
+            propName := CurTok.SVal;
+            pnOff := Tokens[TokPos-1].SOffset;
+            pnLen := Tokens[TokPos-1].SLen;
+            Next;
+            Expect(tkColon, ':');
+            propTk := ParseTypeKind;
+            propRec := LastTypeRecId;
+            
+            rFOff := 0; rFLen := 0;
+            rMOff := 0; rMLen := 0;
+            wFOff := 0; wFLen := 0;
+            wMOff := 0; wMLen := 0;
+            
+            if CurTok.Kind = tkRead then
+            begin
+              Next;
+              if CurTok.Kind <> tkIdent then Error('expected read field or method name');
+              readName := CurTok.SVal;
+              rnOff := Tokens[TokPos-1].SOffset;
+              rnLen := Tokens[TokPos-1].SLen;
+              Next;
+              if FindUField(ci, readName) >= 0 then
+              begin
+                rFOff := rnOff; rFLen := rnLen;
+              end
+              else
+              begin
+                rMOff := rnOff; rMLen := rnLen;
+              end;
+            end;
+            
+            if CurTok.Kind = tkwrite then
+            begin
+              Next;
+              if CurTok.Kind <> tkIdent then Error('expected write field or method name');
+              writeName := CurTok.SVal;
+              wnOff := Tokens[TokPos-1].SOffset;
+              wnLen := Tokens[TokPos-1].SLen;
+              Next;
+              if FindUField(ci, writeName) >= 0 then
+              begin
+                wFOff := wnOff; wFLen := wnLen;
+              end
+              else
+              begin
+                wMOff := wnOff; wMLen := wnLen;
+              end;
+            end;
+            
+            Eat(tkSemicolon);
+            i := AddUProperty(ci, pnOff, pnLen, Ord(propTk), propRec);
+            UPropReadFOff[i] := rFOff; UPropReadFLen[i] := rFLen;
+            UPropReadMOff[i] := rMOff; UPropReadMLen[i] := rMLen;
+            UPropWriteFOff[i] := wFOff; UPropWriteFLen[i] := wFLen;
+            UPropWriteMOff[i] := wMOff; UPropWriteMLen[i] := wMLen;
           end
           else if CurTok.Kind = tkIdent then
           begin
@@ -2554,6 +2852,14 @@ begin
         end;
         UClsSize_[ci] := AlignTo(curFieldOff, classAlign);
         Expect(tkEnd, 'end');
+        
+        UClsVMTOffset[ci] := DataLen;
+        for i := 0 to UClsVirtCount[ci] * 8 - 1 do
+        begin
+          if DataLen >= MAX_DATA then Error('data overflow');
+          Data[DataLen] := 0;
+          Inc(DataLen);
+        end;
       end
       else if CurTok.Kind = tkRecord then
       begin
@@ -2584,11 +2890,11 @@ var
   name     : AnsiString;
   retType  : TTypeKind;
   tk       : TTypeKind;
-  pnames    : array[0..7] of AnsiString;
-  ptypes    : array[0..7] of TTypeKind;
-  ptypesRec : array[0..7] of Integer;
-  parr      : array[0..7] of Boolean;
-  pbyref    : array[0..7] of Boolean;
+  pnames    : array[0..15] of AnsiString;
+  ptypes    : array[0..15] of TTypeKind;
+  ptypesRec : array[0..15] of Integer;
+  parr      : array[0..15] of Boolean;
+  pbyref    : array[0..15] of Boolean;
   nparams  : Integer;
   pi, i, sz: Integer;
   savedSC, savedFS, savedCurProc : Integer;
@@ -2597,7 +2903,8 @@ var
   doneArgs, doneParam, isArr, isByRef, declOverload: Boolean;
   startIdx, idx: Integer;
   tokKindOrd: Integer;
-  methOwnerCi, methOwnerRec, methSNOff, methSNLen: Integer;
+  methOwnerCi, methOwnerRec, methSNOff, methSNLen, mmi, slot, otherCi: Integer;
+  methName: AnsiString;
 begin
   isFunc := CurTok.Kind = tkFunction;
   Next;
@@ -2619,19 +2926,20 @@ begin
       BufferGenericMethod(depth, TokPos - 2);
       Exit;
     end;
-    methOwnerCi := FindUClass(name);
-    if methOwnerCi >= 0 then
-    begin
-      methOwnerRec := REC_UCLASS_BASE + methOwnerCi;
-      Next; { consume dot }
-      if CurTok.Kind <> tkIdent then Error('expected method name');
-      methSNOff := Tokens[TokPos-1].SOffset;
-      methSNLen := Tokens[TokPos-1].SLen;
-      AppendChar(name, '.');
-      i := 1;
-      while i <= Length(CurTok.SVal) do begin AppendChar(name, CurTok.SVal[i]); Inc(i); end;
-      Next; { consume method name }
-    end;
+      methOwnerCi := FindUClass(name);
+      if methOwnerCi >= 0 then
+      begin
+        methOwnerRec := REC_UCLASS_BASE + methOwnerCi;
+        Next; { consume dot }
+        if CurTok.Kind <> tkIdent then Error('expected method name');
+        methName := CurTok.SVal;
+        methSNOff := Tokens[TokPos-1].SOffset;
+        methSNLen := Tokens[TokPos-1].SLen;
+        AppendChar(name, '.');
+        i := 1;
+        while i <= Length(CurTok.SVal) do begin AppendChar(name, CurTok.SVal[i]); Inc(i); end;
+        Next; { consume method name }
+      end;
   end;
 
   nparams := 0; retType := tyInteger;
@@ -2795,7 +3103,36 @@ begin
   if methOwnerCi >= 0 then
   begin
     CurSelfClass := methOwnerRec;
-    AddUMeth(methOwnerCi, methSNOff, methSNLen, pi);
+    mmi := FindUMeth(methOwnerCi, methName);
+    if mmi >= 0 then
+    begin
+      UMthProc_[mmi] := pi;
+    end
+    else
+    begin
+      AddUMeth(methOwnerCi, methSNOff, methSNLen, pi);
+      mmi := UMthCount - 1;
+    end;
+    
+    if UMthVirSlot[mmi] >= 0 then
+    begin
+      slot := UMthVirSlot[mmi];
+      if MethodFixCount >= 256 then Error('too many virtual method fixups');
+      MethodFixups[MethodFixCount].DataPos := UClsVMTOffset[methOwnerCi] + slot * 8;
+      MethodFixups[MethodFixCount].ProcIdx := pi;
+      Inc(MethodFixCount);
+      
+      for otherCi := 0 to UClsCount-1 do
+      begin
+        if IsSubclassOf(otherCi, methOwnerCi) then
+        begin
+          if MethodFixCount >= 256 then Error('too many virtual method fixups');
+          MethodFixups[MethodFixCount].DataPos := UClsVMTOffset[otherCi] + slot * 8;
+          MethodFixups[MethodFixCount].ProcIdx := pi;
+          Inc(MethodFixCount);
+        end;
+      end;
+    end;
   end;
 
   { Allocate param slots }
@@ -3296,6 +3633,8 @@ begin
           ParseTopLevelSpecialize
         else if CaseEqual(CurTok.SVal, 'operator') then
           ParseOperatorDef
+        else if CaseEqual(CurTok.SVal, 'constructor') or CaseEqual(CurTok.SVal, 'destructor') then
+          ParseSubroutine
         else
           doneDecls := True;
       else

@@ -45,35 +45,110 @@ begin
 end;
 
 function FindUField(ci: Integer; const name: AnsiString): Integer;
-var i, base, cnt: Integer; lo, name2: AnsiString;
+var i, base, cnt: Integer; lo, name2: AnsiString; curr: Integer;
 begin
   Result := -1;
   name2 := name;
   lo := ULower(name2);
-  base := UClsFBase[ci];
-  cnt  := UClsFCount[ci];
-  i := 0;
-  while i < cnt do
+  curr := ci;
+  while curr >= 0 do
   begin
-    if UNameMatch(UFldNOff[base + i], UFldNLen[base + i], lo) then begin Result := base + i; Exit; end;
-    Inc(i);
+    base := UClsFBase[curr];
+    cnt  := UClsFCount[curr];
+    i := 0;
+    while i < cnt do
+    begin
+      if UNameMatch(UFldNOff[base + i], UFldNLen[base + i], lo) then begin Result := base + i; Exit; end;
+      Inc(i);
+    end;
+    curr := UClsParent[curr];
   end;
 end;
 
 function FindUMeth(ci: Integer; const name: AnsiString): Integer;
-var i, base, cnt: Integer; lo, name2: AnsiString;
+var i, base, cnt: Integer; lo, name2: AnsiString; curr: Integer;
 begin
   Result := -1;
   name2 := name;
   lo := ULower(name2);
-  base := UClsMBase[ci];
-  cnt  := UClsMCount[ci];
-  i := 0;
-  while i < cnt do
+  curr := ci;
+  while curr >= 0 do
   begin
-    if UNameMatch(UMthNOff[base + i], UMthNLen[base + i], lo) then begin Result := base + i; Exit; end;
-    Inc(i);
+    base := UClsMBase[curr];
+    cnt  := UClsMCount[curr];
+    i := 0;
+    while i < cnt do
+    begin
+      if UNameMatch(UMthNOff[base + i], UMthNLen[base + i], lo) then begin Result := base + i; Exit; end;
+      Inc(i);
+    end;
+    curr := UClsParent[curr];
   end;
+end;
+
+function IsSubclassOf(otherCi, ci: Integer): Boolean;
+var curr: Integer;
+begin
+  Result := False;
+  curr := UClsParent[otherCi];
+  while curr >= 0 do
+  begin
+    if curr = ci then begin Result := True; Exit; end;
+    curr := UClsParent[curr];
+  end;
+end;
+
+function FindParentVirtualSlot(parentCi: Integer; const name: AnsiString): Integer;
+var curr, mmi: Integer;
+begin
+  Result := -1;
+  curr := parentCi;
+  while curr >= 0 do
+  begin
+    mmi := FindUMeth(curr, name);
+    if (mmi >= 0) and (UMthVirSlot[mmi] >= 0) then
+    begin
+      Result := UMthVirSlot[mmi];
+      Exit;
+    end;
+    curr := UClsParent[curr];
+  end;
+end;
+
+function FindUProp(ci: Integer; const name: AnsiString): Integer;
+var i, base, cnt: Integer; lo, name2: AnsiString; curr: Integer;
+begin
+  Result := -1;
+  name2 := name;
+  lo := ULower(name2);
+  curr := ci;
+  while curr >= 0 do
+  begin
+    base := UClsPBase[curr];
+    cnt  := UClsPCount[curr];
+    i := 0;
+    while i < cnt do
+    begin
+      if UNameMatch(UPropNOff[base + i], UPropNLen[base + i], lo) then begin Result := base + i; Exit; end;
+      Inc(i);
+    end;
+    curr := UClsParent[curr];
+  end;
+end;
+
+function AddUProperty(ci, noff, nlen, tk, recId: Integer): Integer;
+var pri: Integer;
+begin
+  pri := UPropCount;
+  UPropNOff[pri] := noff; UPropNLen[pri] := nlen;
+  UPropTk[pri] := tk; UPropRec[pri] := recId;
+  UPropReadFOff[pri] := 0; UPropReadFLen[pri] := 0;
+  UPropReadMOff[pri] := 0; UPropReadMLen[pri] := 0;
+  UPropWriteFOff[pri] := 0; UPropWriteFLen[pri] := 0;
+  UPropWriteMOff[pri] := 0; UPropWriteMLen[pri] := 0;
+  UPropCount := UPropCount + 1;
+  UClsPCount[ci] := UClsPCount[ci] + 1;
+  Result := pri;
 end;
 
 function AddUClass(off, len: Integer): Integer;
@@ -86,6 +161,11 @@ begin
   UClsFCount[UClsCount] := 0;
   UClsMBase[UClsCount]  := UMthCount;
   UClsMCount[UClsCount] := 0;
+  UClsPBase[UClsCount]  := UPropCount;
+  UClsPCount[UClsCount] := 0;
+  UClsParent[UClsCount] := -1;
+  UClsVirtCount[UClsCount] := 0;
+  UClsVMTOffset[UClsCount] := -1;
   UClsCount := UClsCount + 1;
 end;
 
@@ -104,6 +184,7 @@ var mi: Integer;
 begin
   mi := UMthCount;
   UMthNOff[mi] := noff; UMthNLen[mi] := nlen; UMthProc_[mi] := pi;
+  UMthVirSlot[mi] := -1;
   UMthCount := UMthCount + 1;
   UClsMCount[ci] := UClsMCount[ci] + 1;
 end;
@@ -144,7 +225,8 @@ begin
   else if lo = 'TTemplate' then Result := REC_TTEMPLATE
   else if lo = 'TSpecialization' then Result := REC_TSPECIALIZATION
   else if lo = 'TGenericFunc' then Result := REC_TGENERICFUNC
-  else if lo = 'TPendingGFSpec' then Result := REC_TPENDINGGFSPEC;
+  else if lo = 'TPendingGFSpec' then Result := REC_TPENDINGGFSPEC
+  else if lo = 'TMethodFixup' then Result := REC_TMETHODFIXUP;
   if Result = REC_NONE then
   begin
     lo2 := lo;
@@ -183,6 +265,7 @@ begin
   else if rec = REC_TSPECIALIZATION then Result := 800
   else if rec = REC_TGENERICFUNC then Result := 552
   else if rec = REC_TPENDINGGFSPEC then Result := 544
+  else if rec = REC_TMETHODFIXUP then Result := 8
   else if rec >= REC_UCLASS_BASE then Result := UClsSize_[rec - REC_UCLASS_BASE];
 end;
 
@@ -293,6 +376,11 @@ begin
     else if field = 'ConcreteKind' then Result := 8
     else if field = 'ConcreteName' then Result := 16
     else if field = 'SpecName' then Result := 280;
+  end
+  else if rec = REC_TMETHODFIXUP then
+  begin
+    if field = 'DataPos' then Result := 0
+    else if field = 'ProcIdx' then Result := 4;
   end
   else if rec >= REC_UCLASS_BASE then
   begin

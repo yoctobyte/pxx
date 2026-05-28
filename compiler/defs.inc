@@ -29,7 +29,9 @@ const
   MAX_UCLASS      = 32;    { user-defined class slots }
   MAX_UFIELD      = 256;   { field slots across all user classes }
   MAX_UMETH       = 256;   { method slots across all user classes }
-  REC_UCLASS_BASE = 15;    { user class recIds start here; must exceed REC_TPENDINGGFSPEC=14 }
+  MAX_UPROP       = 64;
+  REC_TMETHODFIXUP = 15;
+  REC_UCLASS_BASE = 16;    { user class recIds start here; must exceed REC_TMETHODFIXUP=15 }
 
   { AST node kinds }
   AN_NONE      = 0;
@@ -64,6 +66,7 @@ const
   AN_TRY_FINALLY = 29; { Left = protected block; Right = finalizer block }
   AN_EXC_HANDLER = 30; { IVal = class recId or -1; Left = body; Right = next }
   AN_FLOAT_LIT   = 31; { IVal = IEEE 754 double bits; ASTTk = Ord(tySingle or tyDouble) }
+  AN_VIRTUAL_CALL = 32;
 
   EXC_FRAME_SIZE = 80;
   EXC_JMP_OFFSET = 8;
@@ -111,7 +114,8 @@ type
     tkSemicolon, tkColon, tkComma, tkDot, tkDotDot, tkAt, tkCaret,
     tkBreak, tkContinue, tkOverload,
     tkTry, tkExcept, tkFinally, tkRaise, tkOn,
-    tkFloat, tkSingle_T, tkDouble_T, tkExtended_T
+    tkFloat, tkSingle_T, tkDouble_T, tkExtended_T,
+    tkProperty
   );
 
   TToken = record
@@ -205,7 +209,7 @@ type
     IsFunc     : Boolean;
     RetType    : TTypeKind;
     ParamCount : Integer;
-    Params     : array[0..7] of TParam;
+    Params     : array[0..15] of TParam;
     BodyAddr   : Integer;   { -1 = forward declared }
     FramePatch : Integer;   { code position of sub rsp imm32 }
     RetSymIdx  : Integer;   { Syms[] index for return value; -1 if proc }
@@ -250,6 +254,11 @@ type
     SpecName     : AnsiString;
   end;
 
+  TMethodFixup = record
+    DataPos : Integer;
+    ProcIdx : Integer;
+  end;
+
 var
   Templates          : array[0..MAX_TEMPLATES-1] of TTemplate;
   TemplateCount      : Integer;
@@ -263,6 +272,8 @@ var
   GenericFuncCount   : Integer;
   PendingGFSpecs     : array[0..MAX_PENDING_GFSPECS-1] of TPendingGFSpec;
   PendingGFSpecCount : Integer;
+  MethodFixups       : array[0..255] of TMethodFixup;
+  MethodFixCount     : Integer;
   { Operator overload table — parallel arrays, one entry per registered overload }
   OvrlOpKind   : array[0..MAX_OP_OVERLOADS-1] of Integer;  { TTokenKind ordinal }
   OvrlTypeKind : array[0..MAX_OP_OVERLOADS-1] of Integer;  { TTypeKind ordinal }
@@ -454,6 +465,11 @@ var
   UClsFCount : array[0..MAX_UCLASS-1] of Integer;
   UClsMBase  : array[0..MAX_UCLASS-1] of Integer;
   UClsMCount : array[0..MAX_UCLASS-1] of Integer;
+  UClsParent : array[0..MAX_UCLASS-1] of Integer;
+  UClsVirtCount : array[0..MAX_UCLASS-1] of Integer;
+  UClsVMTOffset : array[0..MAX_UCLASS-1] of Integer;
+  UClsPBase  : array[0..MAX_UCLASS-1] of Integer;
+  UClsPCount : array[0..MAX_UCLASS-1] of Integer;
   UClsCount  : Integer;
 
   UFldNOff   : array[0..MAX_UFIELD-1] of Integer;
@@ -466,7 +482,22 @@ var
   UMthNOff   : array[0..MAX_UMETH-1] of Integer;
   UMthNLen   : array[0..MAX_UMETH-1] of Integer;
   UMthProc_  : array[0..MAX_UMETH-1] of Integer;
+  UMthVirSlot : array[0..MAX_UMETH-1] of Integer;
   UMthCount  : Integer;
+
+  UPropNOff   : array[0..MAX_UPROP-1] of Integer;
+  UPropNLen   : array[0..MAX_UPROP-1] of Integer;
+  UPropTk     : array[0..MAX_UPROP-1] of Integer;
+  UPropRec    : array[0..MAX_UPROP-1] of Integer;
+  UPropReadFOff : array[0..MAX_UPROP-1] of Integer;
+  UPropReadFLen : array[0..MAX_UPROP-1] of Integer;
+  UPropReadMOff : array[0..MAX_UPROP-1] of Integer;
+  UPropReadMLen : array[0..MAX_UPROP-1] of Integer;
+  UPropWriteFOff: array[0..MAX_UPROP-1] of Integer;
+  UPropWriteFLen: array[0..MAX_UPROP-1] of Integer;
+  UPropWriteMOff: array[0..MAX_UPROP-1] of Integer;
+  UPropWriteMLen: array[0..MAX_UPROP-1] of Integer;
+  UPropCount  : Integer;
 
   CurSelfClass : Integer;
 

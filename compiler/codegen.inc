@@ -497,7 +497,7 @@ end;
 procedure GenAST(node: Integer);
 var
   op: TTokenKind;
-  pi, i, idx, dummyRec, limitIdx, loopTop, condJmp, exitJmp: Integer;
+  pi, i, idx, dummyRec, limitIdx, loopTop, condJmp, exitJmp, slot: Integer;
   thenJmp, elseJmp, pairNode, elseNode, lhsNode, pair3, pair1, pair2: Integer;
   initNode, limitNode, isDownNode, bodyNode, seqNode, argNode, exprNode: Integer;
   si, vidx, specialId, arg1, arg2, arg3, pathIdx, dstIdx, srcIdx, rhsNode, branchJeStart: Integer;
@@ -901,10 +901,109 @@ begin
           end;
         EmitCallProc(pi);
       end
+      else if pi = -Ord(tkGetMem) then
+      begin
+        { Class instantiation }
+        GenSpecialCall(Ord(tkGetMem), ASTLeft[node]);
+        
+        { Put instance pointer in rdi }
+        EmitB($48); EmitB($89); EmitB($C7); { mov rdi, rax }
+        
+        { Initialize VMT pointer at offset 0 }
+        idx := ASTRight[node];
+        EmitB($48); EmitB($B8); EmitDataRef(UClsVMTOffset[idx - REC_UCLASS_BASE]); { mov rax, VMT_addr }
+        EmitB($48); EmitB($89); EmitB($07); { mov [rdi], rax }
+        
+        { Find constructor 'Create' of this class }
+        slot := FindUMeth(idx - REC_UCLASS_BASE, 'create');
+        if slot >= 0 then
+        begin
+          pi := UMthProc_[slot];
+          
+          { Push Self first }
+          EmitB($57); { push rdi }
+          
+          { Push explicit constructor arguments }
+          initNode := ASTLeft[node];
+          pathIdx := 1;
+          argNode := ASTRight[initNode];
+          while argNode <> -1 do
+          begin
+            if Procs[pi].Params[pathIdx].IsRef then
+              GenLValueAddress(ASTLeft[argNode], dummyTk, dummyRec, False)
+            else
+              GenAST(ASTLeft[argNode]);
+            EmitB($50);
+            Inc(pathIdx);
+            argNode := ASTRight[argNode];
+          end;
+          
+          { Pop args into SysV ABI registers }
+          for i := Procs[pi].ParamCount-1 downto 0 do
+            case i of
+              0: EmitB($5F);
+              1: EmitB($5E);
+              2: EmitB($5A);
+              3: EmitB($59);
+              4: begin EmitB($41); EmitB($58); end;
+              5: begin EmitB($41); EmitB($59); end;
+            end;
+            
+          { Save Self on stack across the call }
+          EmitB($57); { push rdi }
+          
+          EmitCallProc(pi);
+          
+          { Restore Self into rax as the result of the constructor call }
+          EmitB($58); { pop rax }
+        end
+        else
+        begin
+          { No constructor defined, just return the instance pointer in rax }
+          EmitB($48); EmitB($89); EmitB($F8); { mov rax, rdi }
+        end;
+      end
       else
       begin
         GenSpecialCall(-pi, ASTLeft[node]);
       end;
+    end;
+    AN_VIRTUAL_CALL:
+    begin
+      pi := ASTIVal[node];
+      slot := ASTRight[node];
+      pathIdx := 0;
+      argNode := ASTLeft[node];
+      while argNode <> -1 do
+      begin
+        if Procs[pi].Params[pathIdx].IsRef then
+        begin
+          GenLValueAddress(ASTLeft[argNode], dummyTk, dummyRec, False);
+        end
+        else
+        begin
+          GenAST(ASTLeft[argNode]);
+          if TypeIsFloat(Procs[pi].Params[pathIdx].TypeKind) then
+            begin EmitB($66); EmitB($48); EmitB($0F); EmitB($7E); EmitB($C0); end; { movq rax, xmm0 }
+        end;
+        EmitB($50);
+        Inc(pathIdx);
+        argNode := ASTRight[argNode];
+      end;
+      for i := Procs[pi].ParamCount-1 downto 0 do
+        case i of
+          0: EmitB($5F);
+          1: EmitB($5E);
+          2: EmitB($5A);
+          3: EmitB($59);
+          4: begin EmitB($41); EmitB($58); end;
+          5: begin EmitB($41); EmitB($59); end;
+        end;
+      { Virtual Method Table Dispatch: }
+      { mov rax, [rdi] }
+      EmitB($48); EmitB($8B); EmitB($07);
+      { call [rax + slot * 8] }
+      EmitB($FF); EmitB($90); EmitI32(slot * 8);
     end;
     AN_ASSIGN:
     begin

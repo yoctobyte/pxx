@@ -292,6 +292,12 @@ begin
     PatchDynamicData(dataBase);
   end;
 
+  for i := 0 to MethodFixCount-1 do
+  begin
+    addr := entry + Procs[MethodFixups[i].ProcIdx].BodyAddr;
+    PatchDataU64(MethodFixups[i].DataPos, addr);
+  end;
+
   Assign(f, outPath); Rewrite(f, 1);
 
   writeU8(f,$7F);writeU8(f,$45);writeU8(f,$4C);writeU8(f,$46);
@@ -362,6 +368,12 @@ begin
     for i := 0 to DynCallCount-1 do
       Patch32(DynCallCodePos[i], dataBase + ExternalGotOff[DynCallExtIdx[i]]);
     PatchDynamicData(dataBase);
+  end;
+
+  for i := 0 to MethodFixCount-1 do
+  begin
+    addr := entry + Procs[MethodFixups[i].ProcIdx].BodyAddr;
+    PatchDataU64(MethodFixups[i].DataPos, addr);
   end;
 
   AssignPath := outPath;
