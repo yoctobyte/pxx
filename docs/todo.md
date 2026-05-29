@@ -35,7 +35,8 @@ executable plan: **[`plan-rtti-streaming-lfm.md`](plan-rtti-streaming-lfm.md)**.
   registry + `--dump-rtti` done for integer/string/class prop kinds and
   published methods (`rtti_emit.inc`, `test/test_rtti_emit.pas`). Remaining:
   enum/set/method-pointer kinds (need enum name-table infra — enums are thin).
-- Phase 2 🟡 reflection API (TypInfo-named). **Chosen unblock: fix general
+- Phase 2 🟡 reflection API (TypInfo-named). **Resume checklist + rationale:
+  [`phase2-handoff.md`](phase2-handoff.md).** **Chosen unblock: fix general
   typed pointers** (architect decision) so blobs are walked in pure Pascal,
   rather than asm helpers/intrinsics. Done so far: typed-pointer C1+C2 (aliases,
   indexing — see §4). **Still needed before the RTL:**
