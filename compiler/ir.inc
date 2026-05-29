@@ -99,7 +99,7 @@ begin
   { Pass 1: populate seen labels and verify uniqueness }
   for i := 0 to IRCount - 1 do
   begin
-    if (IRTk[i] < 0) or (IRTk[i] > Ord(tyExtended)) then
+    if (IRTk[i] < 0) or (IRTk[i] > Ord(tySet)) then
       Error('invalid type kind in IR node');
 
     if IRKind[i] = IR_LABEL then
@@ -136,7 +136,7 @@ begin
         IRRequireNode(IRA[i], 'binop left');
         IRRequireNode(IRB[i], 'binop right');
         op := IRC[i];
-        if (op < 0) or (op > Ord(tkProperty)) then
+        if (op < 0) or (op > Ord(tkIn)) then
           Error('invalid operator token kind in binop');
       end;
 

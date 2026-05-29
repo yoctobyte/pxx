@@ -172,6 +172,8 @@ begin
   if Length(s) = 2 then
   begin
     if (s[1]='i') and (s[2]='f') then Result := tkIf;
+    if (s[1]='i') and (s[2]='n') then Result := tkIn;
+    if (s[1]='I') and (s[2]='n') then Result := tkIn;
     if (s[1]='d') and (s[2]='o') then Result := tkDo;
     if (s[1]='t') and (s[2]='o') then Result := tkTo;
     if (s[1]='o') and (s[2]='f') then Result := tkOf;
@@ -203,6 +205,9 @@ begin
   end
   else if Length(s) = 4 then
   begin
+    if (s[1]='w') and (s[2]='i') and (s[3]='t') and (s[4]='h') then Result := tkWith;
+    if (s[1]='W') and (s[2]='i') and (s[3]='t') and (s[4]='h') then Result := tkWith;
+    if (s[1]='W') and (s[2]='I') and (s[3]='T') and (s[4]='H') then Result := tkWith;
     if (s[1]='t') and (s[2]='y') and (s[3]='p') and (s[4]='e') then Result := tkType;
     if (s[1]='u') and (s[2]='s') and (s[3]='e') and (s[4]='s') then Result := tkUses;
     if (s[1]='u') and (s[2]='n') and (s[3]='i') and (s[4]='t') then Result := tkUnit;

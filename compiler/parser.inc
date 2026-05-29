@@ -138,6 +138,7 @@ function ParseLValueAST(idx: Integer; identTokIdx: Integer): Integer; forward;
 function ParseSetMembershipAST(leftExpr: Integer): Integer; forward;
 function ParseSetLiteralAST: Integer; forward;
 function ParseStatementAST: Integer; forward;
+function ParseWithStatementAST: Integer; forward;
 function ParseBlockAST: Integer; forward;
 procedure CompileAST(node: Integer); forward;
 procedure EmitExceptionRuntime; forward;
@@ -648,20 +649,70 @@ var
   methName: AnsiString;
   isAssign: Boolean;
   selfClassCi, selfIdx, fldIdx, selfNode: Integer;
+  w, withNode, recId: Integer;
+  withResolved: Boolean;
 begin
   prevTok := identTokIdx;
   if DebugTrace then writeln('ParseLValueAST: idx = ', idx, ' prevTok = ', prevTok, ' TokenStr = "', GetTokenStr(prevTok), '" CurTok.Line = ', CurTok.Line, ' TokPos = ', TokPos);
-  if idx < 0 then
+  
+  fieldName := GetTokenStr(prevTok);
+  withResolved := False;
+  
+  if WithStackDepth > 0 then
   begin
-    fieldName := GetTokenStr(prevTok);
-    fldIdx := -1;
-    if (CurSelfClass >= REC_UCLASS_BASE) and (CurProc >= 0) and (Procs[CurProc].ParamCount > 0) then
+    for w := WithStackDepth - 1 downto 0 do
     begin
-      selfClassCi := CurSelfClass - REC_UCLASS_BASE;
-      fldIdx := FindUField(selfClassCi, fieldName);
+      withNode := WithStack[w];
+      recId := ResolveNodeRec(withNode);
+      if recId >= REC_UCLASS_BASE then
+      begin
+        selfClassCi := recId - REC_UCLASS_BASE;
+        fldIdx := FindUField(selfClassCi, fieldName);
+        if fldIdx >= 0 then
+        begin
+          fieldNode := AllocNode(AN_FIELD);
+          ASTLeft[fieldNode] := withNode;
+          ASTSOffset[fieldNode] := Tokens[prevTok].SOffset;
+          ASTSLen[fieldNode] := Tokens[prevTok].SLen;
+          tk := IntToTypeKind(UFldTk[fldIdx]);
+          recName := UFldRec_[fldIdx];
+          ASTTk[fieldNode] := Ord(tk);
+          node := fieldNode;
+          withResolved := True;
+          Break;
+        end;
+      end
+      else if (recId <> REC_NONE) and (recId < REC_UCLASS_BASE) then
+      begin
+        tk := RecFieldType(recId, fieldName);
+        if tk <> tyUnknown then
+        begin
+          fieldNode := AllocNode(AN_FIELD);
+          ASTLeft[fieldNode] := withNode;
+          ASTSOffset[fieldNode] := Tokens[prevTok].SOffset;
+          ASTSLen[fieldNode] := Tokens[prevTok].SLen;
+          recName := RecFieldRecId(recId, fieldName);
+          ASTTk[fieldNode] := Ord(tk);
+          node := fieldNode;
+          withResolved := True;
+          Break;
+        end;
+      end;
     end;
+  end;
 
-    if fldIdx >= 0 then
+  if not withResolved then
+  begin
+    if idx < 0 then
+    begin
+      fldIdx := -1;
+      if (CurSelfClass >= REC_UCLASS_BASE) and (CurProc >= 0) and (Procs[CurProc].ParamCount > 0) then
+      begin
+        selfClassCi := CurSelfClass - REC_UCLASS_BASE;
+        fldIdx := FindUField(selfClassCi, fieldName);
+      end;
+
+      if fldIdx >= 0 then
     begin
       selfIdx := Procs[CurProc].Params[0].SymIdx;
       selfNode := AllocNode(AN_IDENT);
@@ -748,6 +799,7 @@ begin
     tk := Syms[idx].TypeKind;
     recName := Syms[idx].RecName;
     ASTTk[node] := Ord(tk);
+  end;
   end;
   
   while CurTok.Kind in [tkLBrack, tkDot, tkCaret] do
@@ -2554,6 +2606,41 @@ begin
   Result := node;
 end;
 
+function ParseWithStatementAST: Integer;
+var
+  varNode, bodyNode: Integer;
+begin
+  ParseExpr;
+  varNode := CurASTNode;
+  
+  if Eat(tkComma) then
+  begin
+    { Push with variable }
+    WithStack[WithStackDepth] := varNode;
+    Inc(WithStackDepth);
+    
+    bodyNode := ParseWithStatementAST;
+    
+    { Pop }
+    Dec(WithStackDepth);
+  end
+  else
+  begin
+    Expect(tkDo, 'do');
+    
+    { Push with variable }
+    WithStack[WithStackDepth] := varNode;
+    Inc(WithStackDepth);
+    
+    bodyNode := ParseStatementAST;
+    
+    { Pop }
+    Dec(WithStackDepth);
+  end;
+  
+  Result := bodyNode;
+end;
+
 function ParseStatementAST: Integer;
 var
   name: AnsiString;
@@ -2715,6 +2802,7 @@ begin
     tkRepeat: begin Next; node := ParseRepeatStatementAST; end;
     tkCase:   begin Next; node := ParseCaseStatementAST;  end;
     tkTry:    begin Next; node := ParseTryStatementAST; end;
+    tkWith:   begin Next; node := ParseWithStatementAST;  end;
     
     tkBegin:
     begin

@@ -20,7 +20,7 @@ const
   STRING_CAP  = 1048576;
   MAX_TOKENS  = 262144;
   MAX_AST     = 131072;
-  MAX_IR      = 8192;
+  MAX_IR      = 32768;
   MAX_LOOP_FIXUPS = 256;
   MAX_GOTO_LABELS = 64;
   MAX_PAS_DEFINES = 128;
@@ -74,6 +74,7 @@ const
   AN_GOTO         = 34; { ASTSOffset/SLen = label name in TokChars }
   AN_ADDR         = 35;
   AN_DEREF        = 36;
+  AN_SET_LIT      = 37;
 
   { IR opcodes. Append only while bootstrapping, as with token/node kinds. }
   IR_NOP       = 0;
@@ -157,7 +158,9 @@ type
     tkTry, tkExcept, tkFinally, tkRaise, tkOn,
     tkFloat, tkSingle_T, tkDouble_T, tkExtended_T,
     tkProperty,
-    tkNil
+    tkNil,
+    tkIn,
+    tkWith
   );
 
   TToken = record
@@ -219,7 +222,8 @@ type
     tyPointer,   { 17: untyped Pointer — pointer-sized, no sign }
     tySingle,    { 18: Single — 4-byte IEEE 754, SSE2 xmm }
     tyDouble,    { 19: Double/Real — 8-byte IEEE 754, SSE2 xmm }
-    tyExtended   { 20: Extended — 10-byte x87, load/store via x87; ops in SSE2 double }
+    tyExtended,  { 20: Extended — 10-byte x87, load/store via x87; ops in SSE2 double }
+    tySet        { 21: Set — 32-byte bitset }
   );
 
   TSymKind  = (skLocal, skGlobal, skParam, skConst);
@@ -417,6 +421,8 @@ var
   ExceptionCodegenDepth: Integer;
   ExceptionFinallyBody : array[0..MAX_LOOP_FIXUPS-1] of Integer;
   ExceptionHandlerParseDepth: Integer;
+  WithStack: array[0..31] of Integer;
+  WithStackDepth: Integer;
   AssignPath : AnsiString;
   IncExpanded : AnsiString;
   IncIncluded : AnsiString;

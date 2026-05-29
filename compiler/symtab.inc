@@ -537,6 +537,7 @@ begin
     18: Result := 4;  { tySingle }
     19: Result := 8;  { tyDouble }
     20: Result := 10; { tyExtended }
+    21: Result := 32; { tySet }
   end;
 end;
 
