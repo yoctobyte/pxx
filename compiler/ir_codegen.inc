@@ -432,7 +432,49 @@ begin
                  ((IntToTypeKind(IRTk[left]) = tyString) or
                   (IntToTypeKind(IRTk[right]) = tyString)) then
               begin
-                EmitStrCmpReg(op = tkEq);
+                lhsTk := IntToTypeKind(IRTk[left]);
+                rhsTk := IntToTypeKind(IRTk[right]);
+                if (lhsTk = tyString) and (rhsTk = tyChar) then
+                begin
+                  { String = Char: rax = string struct, rcx = char ordinal.
+                    Equal iff len=1 and the single byte matches. }
+                  EmitB($51);                                                  { push rcx }
+                  EmitB($48); EmitB($8B); EmitB($08);                          { mov rcx, [rax] }
+                  EmitB($48); EmitB($83); EmitB($F9); EmitB($01);              { cmp rcx, 1 }
+                  EmitB($0F); EmitB($85); nextJmp := CodeLen; EmitI32(0);      { jne not_equal }
+                  EmitB($48); EmitB($0F); EmitB($B6); EmitB($48); EmitB($08);  { movzx rcx, byte [rax+8] }
+                  EmitB($58);                                                  { pop rax }
+                  EmitB($48); EmitB($39); EmitB($C1);                          { cmp rcx, rax }
+                  if op = tkEq then begin EmitB($0F); EmitB($94); EmitB($C0); end
+                  else begin EmitB($0F); EmitB($95); EmitB($C0); end;
+                  EmitB($48); EmitB($0F); EmitB($B6); EmitB($C0);              { movzx rax, al }
+                  EmitB($E9); falseJmp := CodeLen; EmitI32(0);                 { jmp end }
+                  Patch32(nextJmp, CodeLen - (nextJmp + 4));
+                  EmitB($59);                                                  { pop rcx }
+                  if op = tkNeq then MovRaxImm(1) else MovRaxImm(0);
+                  Patch32(falseJmp, CodeLen - (falseJmp + 4));
+                end
+                else if (lhsTk = tyChar) and (rhsTk = tyString) then
+                begin
+                  { Char = String: rax = char ordinal, rcx = string struct. }
+                  EmitB($50);                                                  { push rax }
+                  EmitB($48); EmitB($8B); EmitB($01);                          { mov rax, [rcx] }
+                  EmitB($48); EmitB($83); EmitB($F8); EmitB($01);              { cmp rax, 1 }
+                  EmitB($0F); EmitB($85); nextJmp := CodeLen; EmitI32(0);      { jne not_equal }
+                  EmitB($48); EmitB($0F); EmitB($B6); EmitB($41); EmitB($08);  { movzx rax, byte [rcx+8] }
+                  EmitB($5A);                                                  { pop rdx }
+                  EmitB($48); EmitB($39); EmitB($D0);                          { cmp rax, rdx }
+                  if op = tkEq then begin EmitB($0F); EmitB($94); EmitB($C0); end
+                  else begin EmitB($0F); EmitB($95); EmitB($C0); end;
+                  EmitB($48); EmitB($0F); EmitB($B6); EmitB($C0);              { movzx rax, al }
+                  EmitB($E9); falseJmp := CodeLen; EmitI32(0);                 { jmp end }
+                  Patch32(nextJmp, CodeLen - (nextJmp + 4));
+                  EmitB($5A);                                                  { pop rdx }
+                  if op = tkNeq then MovRaxImm(1) else MovRaxImm(0);
+                  Patch32(falseJmp, CodeLen - (falseJmp + 4));
+                end
+                else
+                  EmitStrCmpReg(op = tkEq);
               end
               else
               begin
