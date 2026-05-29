@@ -115,6 +115,28 @@ inheritance depth, method-resolution clauses, COM ARC.
 - 🟡 **Generics.** Template mechanism exists; breadth vs FPC unverified.
 - ⬜ **Class visibility.** Covered as Phase 0 of the LFM arc (see §2).
 
+### Self-host papered-over gaps (real features the compiler dodges on itself)
+
+These are masked by the bootstrap because the compiler never uses them on its
+own source — exactly the class of bug that hid the op-overload segfault and the
+string-`+` break. Not needed yet, but they are genuine missing/half features,
+not eternal "constraints". Promote to fixes when convenient:
+
+- ⬜ **`shl` operator.** Not tokenised at all (no `tkShl`); only `shr` exists.
+  Compiler-side code uses `* 2^n` as the workaround. Add the operator + IR
+  lowering so user code can shift left. (`lexer.inc` ~348/417/443 show the
+  `*2`-instead-of-`shl` self-host dance.)
+- ⬜ **`readln` / `read` statements.** `tkReadln`/`tkRead` are lexed but never
+  parsed as I/O statements (`tkRead` is only consumed as the property `read`
+  keyword, `parser.inc:3505`). `write`/`writeln` are handled (`parser.inc:2666`);
+  `read*` is the missing half. Needs runtime input plumbing too.
+- ⬜ **Single-char string literal typed as `tyChar`.** `'x'` is `tyChar`, not a
+  1-char string, so string vars must init as `s := ''` then `AppendChar`.
+  Decide: context-coerce char→string on assign/concat, or leave as documented
+  dialect quirk. (String `+` itself = standing bug §1.2.)
+- Note: "integer-only compiler tables" stays a deliberate **constraint**, not a
+  bug — it is the fixedpoint-safety convention, nothing to fix.
+
 ### Recently resolved (corrects stale notes in gap-analysis / older memory)
 
 - ✅ `break` / `continue` — implemented (`parser.inc` ~2687/2693).
