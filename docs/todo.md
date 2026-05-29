@@ -31,7 +31,10 @@ executable plan: **[`plan-rtti-streaming-lfm.md`](plan-rtti-streaming-lfm.md)**.
 - Phase 0 ✅ class visibility parsing (`private/protected/public/published`;
   not enforced). Per-member published flag recorded for RTTI; see
   `test/test_visibility.pas`.
-- Phase 1 ⬜ RTTI emission (published-only, custom-minimal layout).
+- Phase 1 🟡 RTTI emission (published-only, custom-minimal layout). Blobs +
+  registry + `--dump-rtti` done for integer/string/class prop kinds and
+  published methods (`rtti_emit.inc`, `test/test_rtti_emit.pas`). Remaining:
+  enum/set/method-pointer kinds (need enum name-table infra — enums are thin).
 - Phase 2 ⬜ reflection API (TypInfo-named).
 - Phase 3 ⬜ streaming runtime (own TReader/TWriter-lite).
 - Phase 4 ⬜ resource embedding primitive (`{$R}` / `FindResource`;
@@ -120,6 +123,15 @@ inheritance depth, method-resolution clauses, COM ARC.
   as an lvalue). No-arg method statements (`obj.Reset`) work, and arg'd calls
   work in expression context. Statement-position arg'd method calls are the
   gap. Surfaced writing `test/test_visibility.pas`.
+- ⬜ **Nested `{ }` comments.** The self-hosted lexer ends a `{` comment at the
+  first `}`, so a `{` inside a comment breaks self-compile (`unexpected
+  character`). FPC accepts nested comments (warns "comment level 2"). Avoid
+  inner braces in compiler-side comments until fixed. Surfaced in Phase 1.
+- 🔴 **String field on a class reads/writes as garbage.** `obj.FStr := 'x';
+  writeln(obj.FStr)` on a class string field printed an address, not the
+  string (record string fields work — see `record_string_field.pas`). Class
+  layout/codegen for string fields differs. Surfaced writing
+  `test/test_rtti_emit.pas`; blocks streaming string props until fixed.
 
 ### Self-host papered-over gaps (real features the compiler dodges on itself)
 
