@@ -490,7 +490,13 @@ begin
         valNode := IRA[node];
         wid  := IRB[node];   { field width, 0 = none }
         decs := IRC[node];   { decimals, -1 = none }
-        if IRKind[valNode] = IR_CONST_STR then
+        if TypeIsFloat(IntToTypeKind(IRTk[node])) then
+        begin
+          IREmitNode(valNode);                                        { double bits -> rax }
+          EmitB($66); EmitB($48); EmitB($0F); EmitB($6E); EmitB($C0); { movq xmm0, rax }
+          if decs >= 0 then EmitWriteFloatFixed(decs) else EmitWriteFloatSci;
+        end
+        else if IRKind[valNode] = IR_CONST_STR then
         begin
           sVal := GetTokenStrFromRaw(IRA[valNode], IRB[valNode]);
           si := InternStr(sVal);

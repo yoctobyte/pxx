@@ -1304,7 +1304,16 @@ begin
       begin
         exprNode := ASTLeft[argNode];
         wid := ASTIVal[argNode];  { 0 = no width }
-        if ASTKind[exprNode] = AN_STR_LIT then
+        if WriteExprIsFloat(exprNode) then
+        begin
+          GenAST(exprNode);   { double value -> xmm0 }
+          { ASTSOffset[argNode] = decimals (-1 = none -> scientific) }
+          if ASTSOffset[argNode] >= 0 then
+            EmitWriteFloatFixed(ASTSOffset[argNode])
+          else
+            EmitWriteFloatSci;
+        end
+        else if ASTKind[exprNode] = AN_STR_LIT then
         begin
           si := InternStr(GetASTStrVal(exprNode));
           if wid > 0 then

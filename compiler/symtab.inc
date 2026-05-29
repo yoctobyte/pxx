@@ -1855,6 +1855,175 @@ begin
   MovRaxImm(SYS_WRITE); MovRdiImm(STDOUT); EmitSyscall;
 end;
 
+procedure EmitWriteFloatFixed(decimals: Integer);
+{ Double value in xmm0. Prints [-]intpart.frac with exactly 'decimals'
+  fractional digits (decimals=0 -> rounded integer, no point). Reuses the
+  integer printers; the value is scaled by 10^decimals and rounded to an
+  Int64 so all digits come from integer division. No field-width padding. }
+var pow10, divisor: Int64; i, k, jncOff: Integer;
+begin
+  pow10 := 1;
+  for i := 1 to decimals do pow10 := pow10 * 10;
+
+  { sign: if the sign bit is set, print '-' and clear it (abs) }
+  EmitB($66); EmitB($48); EmitB($0F); EmitB($7E); EmitB($C0);   { movq rax, xmm0 }
+  EmitB($48); EmitB($0F); EmitB($BA); EmitB($E0); EmitB($3F);   { bt rax, 63 }
+  EmitB($73); jncOff := CodeLen; EmitB(0);                      { jnc .pos }
+  EmitB($48); EmitB($0F); EmitB($BA); EmitB($F0); EmitB($3F);   { btr rax, 63 }
+  EmitB($66); EmitB($48); EmitB($0F); EmitB($6E); EmitB($C0);   { movq xmm0, rax }
+  MovRaxImm(Ord('-')); EmitwriteChar;
+  Code[jncOff] := Byte(CodeLen - (jncOff + 1));
+
+  { xmm0 *= (double)pow10 ; rax = round(xmm0) }
+  MovRaxImm(pow10);
+  EmitB($F2); EmitB($48); EmitB($0F); EmitB($2A); EmitB($C8);   { cvtsi2sd xmm1, rax }
+  EmitB($F2); EmitB($0F); EmitB($59); EmitB($C1);               { mulsd xmm0, xmm1 }
+  EmitB($F2); EmitB($48); EmitB($0F); EmitB($2D); EmitB($C0);   { cvtsd2si rax, xmm0 }
+
+  if decimals <= 0 then begin EmitwriteUInt; Exit; end;
+
+  { split: rax = intpart, rdx = frac }
+  EmitB($48); EmitB($31); EmitB($D2);                           { xor rdx, rdx }
+  EmitB($48); EmitB($BB); EmitI64(pow10);                       { mov rbx, pow10 }
+  EmitB($48); EmitB($F7); EmitB($F3);                           { div rbx }
+  EmitB($52);                                                   { push rdx (frac) }
+  EmitwriteUInt;                                                { print intpart }
+  MovRaxImm(Ord('.')); EmitwriteChar;
+  EmitB($5B);                                                   { pop rbx (frac) }
+
+  { print frac as 'decimals' zero-padded digits, most significant first.
+    frac stays in rbx (preserved across the write syscall). }
+  for i := decimals - 1 downto 0 do
+  begin
+    divisor := 1;
+    for k := 1 to i do divisor := divisor * 10;
+    EmitB($48); EmitB($89); EmitB($D8);                         { mov rax, rbx }
+    EmitB($48); EmitB($31); EmitB($D2);                         { xor rdx, rdx }
+    EmitB($48); EmitB($B9); EmitI64(divisor);                   { mov rcx, divisor }
+    EmitB($48); EmitB($F7); EmitB($F1);                         { div rcx }
+    EmitB($48); EmitB($89); EmitB($D3);                         { mov rbx, rdx }
+    EmitB($48); EmitB($83); EmitB($C0); EmitB($30);             { add rax, '0' }
+    EmitwriteChar;
+  end;
+end;
+
+procedure EmitWriteFloatSci;
+{ Double value in xmm0. Prints Pascal-style scientific notation:
+  <' '|'-'>d.<15 digits>E<'+'|'-'>ddd  (16 significant digits, 3-digit exponent).
+  Digit extraction uses double arithmetic, so the last 1-2 digits may differ
+  from a bignum formatter; adequate for general output. e10 kept in r12. }
+const FRAC = 15;
+var jncPos, jmpSignDone, jnzNz, jmpDone: Integer;
+    laTop, laJb, lbTop, lbJae, jnsPos2, jmpEd: Integer;
+    k, j: Integer; divisor: Int64;
+begin
+  EmitB($41); EmitB($54);                                       { push r12 }
+
+  { ---- sign ---- }
+  EmitB($66); EmitB($48); EmitB($0F); EmitB($7E); EmitB($C0);   { movq rax, xmm0 }
+  EmitB($48); EmitB($0F); EmitB($BA); EmitB($E0); EmitB($3F);   { bt rax, 63 }
+  EmitB($73); jncPos := CodeLen; EmitB(0);                      { jnc .pos }
+  EmitB($48); EmitB($0F); EmitB($BA); EmitB($F0); EmitB($3F);   { btr rax, 63 }
+  EmitB($66); EmitB($48); EmitB($0F); EmitB($6E); EmitB($C0);   { movq xmm0, rax }
+  MovRaxImm(Ord('-')); EmitwriteChar;
+  EmitB($EB); jmpSignDone := CodeLen; EmitB(0);                 { jmp .signdone }
+  Code[jncPos] := Byte(CodeLen - (jncPos + 1));                 { .pos: }
+  MovRaxImm(Ord(' ')); EmitwriteChar;
+  Code[jmpSignDone] := Byte(CodeLen - (jmpSignDone + 1));       { .signdone: }
+
+  { 10.0 -> xmm1, 1.0 -> xmm2 (preserved across syscalls) }
+  MovRaxImm(10); EmitB($F2); EmitB($48); EmitB($0F); EmitB($2A); EmitB($C8); { cvtsi2sd xmm1, rax }
+  MovRaxImm(1);  EmitB($F2); EmitB($48); EmitB($0F); EmitB($2A); EmitB($D0); { cvtsi2sd xmm2, rax }
+
+  { ---- zero special case ---- }
+  EmitB($66); EmitB($48); EmitB($0F); EmitB($7E); EmitB($C0);   { movq rax, xmm0 }
+  EmitB($48); EmitB($85); EmitB($C0);                          { test rax, rax }
+  EmitB($0F); EmitB($85); jnzNz := CodeLen; EmitI32(0);        { jnz .nz }
+  MovRaxImm(Ord('0')); EmitwriteChar;
+  MovRaxImm(Ord('.')); EmitwriteChar;
+  for j := 1 to FRAC do begin MovRaxImm(Ord('0')); EmitwriteChar; end;
+  MovRaxImm(Ord('E')); EmitwriteChar;
+  MovRaxImm(Ord('+')); EmitwriteChar;
+  for j := 1 to 3 do begin MovRaxImm(Ord('0')); EmitwriteChar; end;
+  EmitB($E9); jmpDone := CodeLen; EmitI32(0);                  { jmp .done }
+  Patch32(jnzNz, CodeLen - (jnzNz + 4));                       { .nz: }
+
+  { ---- normalize value into [1,10), tracking decimal exponent in r12 ---- }
+  EmitB($4D); EmitB($31); EmitB($E4);                          { xor r12, r12 }
+  laTop := CodeLen;                                            { .la: while value>=10 }
+  EmitB($66); EmitB($0F); EmitB($2E); EmitB($C1);              { ucomisd xmm0, xmm1 }
+  EmitB($72); laJb := CodeLen; EmitB(0);                       { jb .ea }
+  EmitB($F2); EmitB($0F); EmitB($5E); EmitB($C1);              { divsd xmm0, xmm1 }
+  EmitB($49); EmitB($FF); EmitB($C4);                          { inc r12 }
+  EmitB($EB); EmitB(Byte(laTop - (CodeLen + 1)));              { jmp .la }
+  Code[laJb] := Byte(CodeLen - (laJb + 1));                    { .ea: }
+  lbTop := CodeLen;                                            { .lb: while value<1 }
+  EmitB($66); EmitB($0F); EmitB($2E); EmitB($C2);              { ucomisd xmm0, xmm2 }
+  EmitB($73); lbJae := CodeLen; EmitB(0);                      { jae .eb }
+  EmitB($F2); EmitB($0F); EmitB($59); EmitB($C1);              { mulsd xmm0, xmm1 }
+  EmitB($49); EmitB($FF); EmitB($CC);                          { dec r12 }
+  EmitB($EB); EmitB(Byte(lbTop - (CodeLen + 1)));              { jmp .lb }
+  Code[lbJae] := Byte(CodeLen - (lbJae + 1));                  { .eb: }
+
+  { m = round(value * 10^FRAC) in rbx (16-digit integer) }
+  divisor := 1; for k := 1 to FRAC do divisor := divisor * 10;
+  MovRaxImm(divisor);
+  EmitB($F2); EmitB($48); EmitB($0F); EmitB($2A); EmitB($D8);  { cvtsi2sd xmm3, rax }
+  EmitB($F2); EmitB($0F); EmitB($59); EmitB($C3);              { mulsd xmm0, xmm3 }
+  EmitB($F2); EmitB($48); EmitB($0F); EmitB($2D); EmitB($D8);  { cvtsd2si rbx, xmm0 }
+
+  { print m as d.<FRAC digits>, most significant first }
+  for k := FRAC downto 0 do
+  begin
+    divisor := 1; for j := 1 to k do divisor := divisor * 10;
+    EmitB($48); EmitB($89); EmitB($D8);                        { mov rax, rbx }
+    EmitB($48); EmitB($31); EmitB($D2);                        { xor rdx, rdx }
+    EmitB($48); EmitB($B9); EmitI64(divisor);                  { mov rcx, divisor }
+    EmitB($48); EmitB($F7); EmitB($F1);                        { div rcx }
+    EmitB($48); EmitB($89); EmitB($D3);                        { mov rbx, rdx }
+    EmitB($48); EmitB($83); EmitB($C0); EmitB($30);            { add rax, '0' }
+    EmitwriteChar;
+    if k = FRAC then begin MovRaxImm(Ord('.')); EmitwriteChar; end;
+  end;
+
+  { 'E', exponent sign, 3-digit exponent }
+  MovRaxImm(Ord('E')); EmitwriteChar;
+  EmitB($4C); EmitB($89); EmitB($E0);                          { mov rax, r12 }
+  EmitB($48); EmitB($85); EmitB($C0);                          { test rax, rax }
+  EmitB($79); jnsPos2 := CodeLen; EmitB(0);                    { jns .pos2 }
+  EmitB($48); EmitB($F7); EmitB($D8);                          { neg rax }
+  EmitB($48); EmitB($89); EmitB($C3);                          { mov rbx, rax }
+  MovRaxImm(Ord('-')); EmitwriteChar;
+  EmitB($EB); jmpEd := CodeLen; EmitB(0);                      { jmp .ed }
+  Code[jnsPos2] := Byte(CodeLen - (jnsPos2 + 1));              { .pos2: }
+  EmitB($48); EmitB($89); EmitB($C3);                          { mov rbx, rax }
+  MovRaxImm(Ord('+')); EmitwriteChar;
+  Code[jmpEd] := Byte(CodeLen - (jmpEd + 1));                  { .ed: }
+  for k := 2 downto 0 do
+  begin
+    divisor := 1; for j := 1 to k do divisor := divisor * 10;
+    EmitB($48); EmitB($89); EmitB($D8);                        { mov rax, rbx }
+    EmitB($48); EmitB($31); EmitB($D2);                        { xor rdx, rdx }
+    EmitB($48); EmitB($B9); EmitI64(divisor);                  { mov rcx, divisor }
+    EmitB($48); EmitB($F7); EmitB($F1);                        { div rcx }
+    EmitB($48); EmitB($89); EmitB($D3);                        { mov rbx, rdx }
+    EmitB($48); EmitB($83); EmitB($C0); EmitB($30);            { add rax, '0' }
+    EmitwriteChar;
+  end;
+
+  Patch32(jmpDone, CodeLen - (jmpDone + 4));                   { .done: }
+  EmitB($41); EmitB($5C);                                       { pop r12 }
+end;
+
+function WriteExprIsFloat(node: Integer): Boolean;
+{ True when a writeln argument expression has a floating-point type. }
+begin
+  if ASTKind[node] = AN_IDENT then
+    Result := (ASTIVal[node] >= 0) and TypeIsFloat(Syms[ASTIVal[node]].TypeKind)
+  else
+    Result := TypeIsFloat(IntToTypeKind(ASTTk[node]));
+end;
+
 { ===== Prologue/Epilogue ===== }
 
 function EmitProcPrologue: Integer;
