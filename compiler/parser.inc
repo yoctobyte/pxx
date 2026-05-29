@@ -2982,8 +2982,17 @@ var
   fTk: TTypeKind;
   parentCi, slot, mmi, mnOff, mnLen, pnOff, pnLen, rFOff, rFLen, rMOff, rMLen, wFOff, wFLen, wMOff, wMLen, rnOff, rnLen, wnOff, wnLen, propRec, i: Integer;
   isConstructor, isDestructor, isVirtual, isOverride, isAbstract, isClassMethod: Boolean;
-        mname, propName, readName, writeName: AnsiString;
+  mname, propName, readName, writeName: AnsiString;
   propTk: TTypeKind;
+  mIsFunc, mDoneArgs, mDoneParam, mIsArr, mIsByRef: Boolean;
+  mRetType, mTk: TTypeKind;
+  mNParams, mStartIdx, mTokKindOrd, mpi, mSelfIdx, mFullNameOff, mFullNameLen: Integer;
+  mFullName: AnsiString;
+  mPNames: array[0..15] of AnsiString;
+  mPTypes: array[0..15] of TTypeKind;
+  mPTypesRec: array[0..15] of Integer;
+  mPArr: array[0..15] of Boolean;
+  mPByRef: array[0..15] of Boolean;
 begin
   Next;
   stopTypes := False;
@@ -3057,6 +3066,7 @@ begin
           if (CurTok.Kind = tkProcedure) or (CurTok.Kind = tkFunction) or
              ((CurTok.Kind = tkIdent) and (CaseEqual(CurTok.SVal, 'constructor') or CaseEqual(CurTok.SVal, 'destructor'))) then
           begin
+            mIsFunc := CurTok.Kind = tkFunction;
             isConstructor := False;
             isDestructor := False;
             if CurTok.Kind = tkIdent then
@@ -3074,9 +3084,94 @@ begin
             mnLen := Tokens[TokPos-1].SLen;
             Next;
             
-            while (CurTok.Kind <> tkSemicolon) and (CurTok.Kind <> tkEnd) and (CurTok.Kind <> tkEOF) do
+            mNParams := 0;
+            mRetType := tyInteger;
+            if CurTok.Kind = tkLParen then
+            begin
               Next;
+              mDoneArgs := False;
+              while (CurTok.Kind <> tkRParen) and not mDoneArgs do
+              begin
+                mIsByRef := False;
+                if (CurTok.Kind = tkVar) or
+                   ((CurTok.Kind = tkIdent) and CaseEqual(CurTok.SVal, 'out')) then
+                begin
+                  mIsByRef := True;
+                  Next;
+                end
+                else if CurTok.Kind = tkConst then
+                  Next;
+                mStartIdx := mNParams;
+                mDoneParam := False;
+                while (CurTok.Kind = tkIdent) and not mDoneParam do
+                begin
+                  mPNames[mNParams] := CurTok.SVal; Inc(mNParams); Next;
+                  if not Eat(tkComma) then mDoneParam := True;
+                  if CurTok.Kind = tkColon then mDoneParam := True;
+                end;
+                Expect(tkColon, ':');
+                mIsArr := False;
+                if CurTok.Kind = tkArray then
+                begin
+                  Next;
+                  Expect(tkOf, 'of');
+                  mTk := ParseTypeKind;
+                  mIsArr := True;
+                end
+                else
+                  mTk := ParseTypeKind;
+                for i := mStartIdx to mNParams-1 do
+                begin
+                  mPTypes[i] := mTk;
+                  mPTypesRec[i] := LastTypeRecId;
+                  mPArr[i] := mIsArr;
+                  mPByRef[i] := mIsByRef;
+                end;
+                if not Eat(tkSemicolon) then mDoneArgs := True;
+              end;
+              Expect(tkRParen, ')');
+            end;
+
+            if mIsFunc then
+            begin
+              Expect(tkColon, ':');
+              mRetType := ParseTypeKind;
+            end;
             Eat(tkSemicolon);
+
+            if not isClassMethod then
+            begin
+              for i := mNParams downto 1 do
+              begin
+                mPNames[i] := mPNames[i-1];
+                mPTypes[i] := mPTypes[i-1];
+                mPArr[i]   := mPArr[i-1];
+                mPByRef[i] := mPByRef[i-1];
+              end;
+              mPNames[0] := 'Self';
+              mPTypes[0] := tyClass;
+              mPArr[0]   := False;
+              mPByRef[0] := False;
+              mNParams := mNParams + 1;
+            end;
+
+            mFullName := tname;
+            AppendChar(mFullName, '.');
+            for i := 1 to Length(mname) do AppendChar(mFullName, mname[i]);
+
+            mpi := FindProcOverload(mFullName, mNParams, mPTypes, mPArr, mPByRef);
+            if mpi < 0 then
+            begin
+              mpi := RegisterProc(mFullName, mIsFunc, mRetType, mNParams, mPNames, mPTypes);
+              Procs[mpi].BodyAddr := -1;
+              for i := 0 to mNParams-1 do
+              begin
+                Procs[mpi].Params[i].IsArray := mPArr[i];
+                Procs[mpi].Params[i].IsRef := mPByRef[i];
+                if (mPTypes[i] = tyClass) or (mPTypes[i] = tyRecord) then
+                  Procs[mpi].Params[i].SymIdx := -1;
+              end;
+            end;
 
             isVirtual := False;
             isOverride := False;
@@ -3097,7 +3192,7 @@ begin
               Eat(tkSemicolon);
             end;
             
-            AddUMeth(ci, mnOff, mnLen, -1);
+            AddUMeth(ci, mnOff, mnLen, mpi);
             mmi := UMthCount - 1;
             UMthIsStatic[mmi] := isClassMethod;
             
