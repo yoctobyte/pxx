@@ -28,6 +28,9 @@ begin
   DebugTrace := False;
   DumpIR := False;
   NoUnhandledHandler := False;
+  { IR is the default backend. The direct (legacy) backend is frozen, kept only
+    for reference and reachable via --legacy-codegen. New work targets IR. }
+  ExperimentalIRCodegen := True;
   PasInitDefines;
   i := 1;
   readingOptions := True;
@@ -47,7 +50,14 @@ begin
     end
     else if option = '--experimental-ir-codegen' then
     begin
+      { Deprecated no-op: IR is now the default backend. Accepted for compatibility. }
       ExperimentalIRCodegen := True;
+      Inc(i);
+    end
+    else if option = '--legacy-codegen' then
+    begin
+      { Opt back into the frozen direct x86-64 emitter (reference only). }
+      ExperimentalIRCodegen := False;
       Inc(i);
     end
     else if option = '--strict-overload' then
@@ -95,7 +105,7 @@ begin
       readingOptions := False;
   end;
   if ParamCount < i then
-    begin writeln(StdErr,'usage: pascal26/PXX [--debug] [--dump-ir] [--experimental-ir-codegen] [-dNAME] [-uNAME] [-Mobjfpc] [--strict-overload] [--no-unhandled-handler] <src> [out]'); Halt(1); end;
+    begin writeln(StdErr,'usage: pascal26/PXX [--debug] [--dump-ir] [--legacy-codegen] [-dNAME] [-uNAME] [-Mobjfpc] [--strict-overload] [--no-unhandled-handler] <src> [out]'); Halt(1); end;
 
   inFile  := ParamStr(i);
 {$ifdef FPC}
