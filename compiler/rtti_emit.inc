@@ -60,10 +60,36 @@ begin
   Inc(MethodFixCount);
 end;
 
+{ Emit an enum type RTTI blob: name ptr, value count, ptr to array of name ptrs.
+  Returns the Data[] offset of the header. }
+function EmitEnumRTTI(etid: Integer): Integer;
+var hdr, arrOff, base, cnt, i, strIdx: Integer;
+    nm: AnsiString;
+begin
+  base := EnumTypeValBase[etid];
+  cnt := EnumTypeValCount[etid];
+  arrOff := DataLen;
+  DataPutZeros(cnt * 8);
+  for i := 0 to cnt - 1 do
+  begin
+    nm := TokSliceStr(EnumValNOff[base + i], EnumValNLen[base + i]);
+    strIdx := InternStr(nm);
+    AddDataPtrFix(arrOff + i * 8, Strs[strIdx].Offset);
+  end;
+  hdr := DataLen;
+  DataPutZeros(24);
+  nm := TokSliceStr(EnumTypeNOff[etid], EnumTypeNLen[etid]);
+  strIdx := InternStr(nm);
+  AddDataPtrFix(hdr + 0, Strs[strIdx].Offset);
+  PatchDataU64(hdr + 8, cnt);
+  if cnt > 0 then AddDataPtrFix(hdr + 16, arrOff);
+  EmitEnumRTTI := hdr;
+end;
+
 { Emit one PropInfo (RTTI_PROP_SIZE bytes) for property pri belonging to ci.
   Returns the Data[] offset of the record. }
 function EmitPropInfo(ci, pri: Integer): Integer;
-var piPos, tk, kind, tci, strIdx, fIdx, mIdx, procIdx: Integer;
+var piPos, tk, kind, tci, eid, strIdx, fIdx, mIdx, procIdx: Integer;
     nm: AnsiString;
 begin
   piPos := DataLen;
@@ -74,19 +100,26 @@ begin
   strIdx := InternStr(nm);
   AddDataPtrFix(piPos + 0, Strs[strIdx].Offset);
 
-  { kind from declared type }
+  { kind from declared type (enum identity overrides the integer fallback) }
   tk := UPropTk[pri];
-  if tk = Ord(tyString) then kind := RTTI_KIND_STRING
+  if UPropEnumId[pri] >= 0 then kind := RTTI_KIND_ENUM
+  else if tk = Ord(tyString) then kind := RTTI_KIND_STRING
   else if tk = Ord(tyClass) then kind := RTTI_KIND_CLASS
   else kind := RTTI_KIND_INT;
   PatchDataU64(piPos + 8, kind);
 
-  { typeRef: for class props, point at the referenced class RTTI if it exists }
+  { typeRef: class props -> class RTTI; enum props -> enum RTTI }
   if kind = RTTI_KIND_CLASS then
   begin
     tci := UPropRec[pri] - REC_UCLASS_BASE;
     if (tci >= 0) and (tci < UClsCount) and (UClsRTTIOff[tci] >= 0) then
       AddDataPtrFix(piPos + 16, UClsRTTIOff[tci]);
+  end
+  else if kind = RTTI_KIND_ENUM then
+  begin
+    eid := UPropEnumId[pri];
+    if (eid >= 0) and (EnumTypeRTTIOff[eid] >= 0) then
+      AddDataPtrFix(piPos + 16, EnumTypeRTTIOff[eid]);
   end;
 
   { getter: field (getKind=0, getRef=byte offset) or method (getKind=1, getRef=code) }
@@ -151,7 +184,7 @@ begin
 end;
 
 procedure EmitRTTI;
-var ci, i, base, cnt, hdr, strIdx: Integer;
+var ci, i, base, cnt, hdr, strIdx, etid: Integer;
     propCount, propsOff, methCount, methsOff, firstOff: Integer;
     regEntries, entryPos: Integer;
     nm: AnsiString;
@@ -159,6 +192,11 @@ begin
   RTTIRegistryOff := -1;
   RTTIRegistryCount := 0;
   for ci := 0 to MAX_UCLASS - 1 do UClsRTTIOff[ci] := -1;
+
+  { Enum type RTTI first, so prop typeRefs can point at it. }
+  for etid := 0 to EnumTypeCount - 1 do
+    EnumTypeRTTIOff[etid] := EmitEnumRTTI(etid);
+
   if UClsCount = 0 then Exit;
 
   { Pass 1: reserve a header per published class so forward type refs resolve. }
@@ -249,10 +287,19 @@ end;
 { Compile-time structural dump (--dump-rtti). Proves names/kinds/offsets and
   resolved proc indices; runtime method *addresses* are validated in Phase 2. }
 procedure DumpRTTITables;
-var ci, i, base, cnt, pri, tk, mi, fIdx, procIdx: Integer;
+var ci, i, base, cnt, pri, tk, mi, fIdx, procIdx, etid, vb: Integer;
     nm: AnsiString;
 begin
   writeln('RTTI: registryOff=', RTTIRegistryOff, ' classes=', RTTIRegistryCount);
+  for etid := 0 to EnumTypeCount - 1 do
+  begin
+    nm := TokSliceStr(EnumTypeNOff[etid], EnumTypeNLen[etid]);
+    write('enum ', nm, ' count=', EnumTypeValCount[etid], ' rttiOff=', EnumTypeRTTIOff[etid]);
+    vb := EnumTypeValBase[etid];
+    for i := 0 to EnumTypeValCount[etid] - 1 do
+      write(' ', TokSliceStr(EnumValNOff[vb + i], EnumValNLen[vb + i]));
+    writeln;
+  end;
   for ci := 0 to UClsCount - 1 do
   begin
     if UClsRTTIOff[ci] < 0 then continue;
@@ -267,6 +314,8 @@ begin
       nm := TokSliceStr(UPropNOff[pri], UPropNLen[pri]);
       tk := UPropTk[pri];
       write('  prop ', nm, ' tk=', tk);
+      if UPropEnumId[pri] >= 0 then
+        write(' enum=', TokSliceStr(EnumTypeNOff[UPropEnumId[pri]], EnumTypeNLen[UPropEnumId[pri]]));
       if UPropReadFLen[pri] > 0 then
       begin
         fIdx := FindUField(ci, TokSliceStr(UPropReadFOff[pri], UPropReadFLen[pri]));

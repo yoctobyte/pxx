@@ -46,6 +46,42 @@ begin
   Result := True;
 end;
 
+function FindEnumType(const name: AnsiString): Integer;
+var i: Integer; lo, name2: AnsiString;
+begin
+  Result := -1;
+  name2 := name;
+  lo := ULower(name2);
+  i := 0;
+  while i < EnumTypeCount do
+  begin
+    if UNameMatch(EnumTypeNOff[i], EnumTypeNLen[i], lo) then begin Result := i; Exit; end;
+    Inc(i);
+  end;
+end;
+
+function RegisterEnumType(noff, nlen: Integer): Integer;
+{ Open a new enum type; value names added via AddEnumVal, then closed by the
+  caller via EnumTypeValCount[etid] (set to EnumValCount - ValBase). }
+begin
+  if EnumTypeCount >= MAX_ENUMTYPE then Error('too many enum types');
+  Result := EnumTypeCount;
+  EnumTypeNOff[Result] := noff;
+  EnumTypeNLen[Result] := nlen;
+  EnumTypeValBase[Result] := EnumValCount;
+  EnumTypeValCount[Result] := 0;
+  EnumTypeRTTIOff[Result] := -1;
+  Inc(EnumTypeCount);
+end;
+
+procedure AddEnumVal(noff, nlen: Integer);
+begin
+  if EnumValCount >= MAX_ENUMVAL then Error('too many enum values');
+  EnumValNOff[EnumValCount] := noff;
+  EnumValNLen[EnumValCount] := nlen;
+  Inc(EnumValCount);
+end;
+
 function FindUClass(const name: AnsiString): Integer;
 var i: Integer; lo, name2: AnsiString;
 begin
@@ -163,6 +199,7 @@ begin
   UPropWriteFOff[pri] := 0; UPropWriteFLen[pri] := 0;
   UPropWriteMOff[pri] := 0; UPropWriteMLen[pri] := 0;
   UPropPub[pri] := 0;
+  UPropEnumId[pri] := -1;
   UPropCount := UPropCount + 1;
   UClsPCount[ci] := UClsPCount[ci] + 1;
   Result := pri;

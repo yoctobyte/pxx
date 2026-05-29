@@ -3091,6 +3091,7 @@ begin
   LastTypeRecId := REC_NONE;
   LastTypePointerElemTk := tyUnknown;
   LastTypePointerElemRec := REC_NONE;
+  LastTypeEnumId := -1;
   case CurTok.Kind of
     tkCaret:
     begin
@@ -3160,7 +3161,10 @@ begin
           if LastTypeRecId <> REC_NONE then
             Result := tyRecord
           else
-            Result := tyInteger;
+          begin
+            LastTypeEnumId := FindEnumType(lo);
+            Result := tyInteger;  { enums are ordinal/integer-sized at codegen }
+          end;
         end;
       end;
     end;
@@ -3264,6 +3268,7 @@ var
   mRetType, mTk: TTypeKind;
   mNParams, mStartIdx, mTokKindOrd, mpi, mSelfIdx, mFullNameOff, mFullNameLen: Integer;
   curPublished: Integer;  { 1 while inside a published section of the current class body }
+  etid, propEnumId: Integer;
   mFullName: AnsiString;
   mPNames: array[0..15] of AnsiString;
   mPTypes: array[0..15] of TTypeKind;
@@ -3293,15 +3298,18 @@ begin
       end
       else if CurTok.Kind = tkLParen then
       begin
+        etid := RegisterEnumType(tnOff, tnLen);
         Next; ordinal := 0;
         done := False;
         while (CurTok.Kind = tkIdent) and not done do
         begin
+          AddEnumVal(Tokens[TokPos-1].SOffset, Tokens[TokPos-1].SLen);
           AddConst(CurTok.SVal, tyInteger, ordinal);
           Inc(ordinal); Next;
           if not Eat(tkComma) then done := True;
         end;
         Expect(tkRParen, ')');
+        EnumTypeValCount[etid] := EnumValCount - EnumTypeValBase[etid];
       end
       else if CurTok.Kind = tkClass then
       begin
@@ -3512,7 +3520,8 @@ begin
             Expect(tkColon, ':');
             propTk := ParseTypeKind;
             propRec := LastTypeRecId;
-            
+            propEnumId := LastTypeEnumId;
+
             rFOff := 0; rFLen := 0;
             rMOff := 0; rMLen := 0;
             wFOff := 0; wFLen := 0;
@@ -3561,6 +3570,7 @@ begin
             UPropWriteFOff[i] := wFOff; UPropWriteFLen[i] := wFLen;
             UPropWriteMOff[i] := wMOff; UPropWriteMLen[i] := wMLen;
             UPropPub[i] := curPublished;
+            UPropEnumId[i] := propEnumId;
           end
           else if CurTok.Kind = tkIdent then
           begin

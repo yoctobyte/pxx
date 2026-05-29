@@ -32,6 +32,8 @@ const
   MAX_UFIELD      = 256;   { field slots across all user classes }
   MAX_UMETH       = 256;   { method slots across all user classes }
   MAX_UPROP       = 64;
+  MAX_ENUMTYPE    = 64;    { distinct named enum types }
+  MAX_ENUMVAL     = 512;   { enum value names across all enum types }
   MAX_DATAPTRFIX  = 4096;  { data->data 8-byte pointer relocations (RTTI blobs) }
   MAX_METHFIX     = 1024;  { code-address relocations into Data[] (VMT + RTTI) }
 
@@ -627,7 +629,21 @@ var
   UPropWriteMOff: array[0..MAX_UPROP-1] of Integer;
   UPropWriteMLen: array[0..MAX_UPROP-1] of Integer;
   UPropPub    : array[0..MAX_UPROP-1] of Integer;  { 1 = published, 0 = other }
+  UPropEnumId : array[0..MAX_UPROP-1] of Integer;  { enum type index if prop is enum-typed, else -1 }
   UPropCount  : Integer;
+
+  { Named enum types (ordinal<->name). Enum vars stay integer-sized; this table
+    only records identity + value names for RTTI/streaming. }
+  EnumTypeNOff    : array[0..MAX_ENUMTYPE-1] of Integer;  { type name in TokChars }
+  EnumTypeNLen    : array[0..MAX_ENUMTYPE-1] of Integer;
+  EnumTypeValBase : array[0..MAX_ENUMTYPE-1] of Integer;  { into EnumVal* arrays }
+  EnumTypeValCount: array[0..MAX_ENUMTYPE-1] of Integer;
+  EnumTypeRTTIOff : array[0..MAX_ENUMTYPE-1] of Integer;  { Data[] off, -1 }
+  EnumTypeCount   : Integer;
+  EnumValNOff     : array[0..MAX_ENUMVAL-1] of Integer;   { value name in TokChars }
+  EnumValNLen     : array[0..MAX_ENUMVAL-1] of Integer;
+  EnumValCount    : Integer;
+  LastTypeEnumId  : Integer;  { set by ParseTypeKind: enum type index or -1 }
 
   CurSelfClass : Integer;
 

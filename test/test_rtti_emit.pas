@@ -6,6 +6,7 @@ program test_rtti_emit;
   still compiles and runs end to end. Method addresses in the blob are
   validated at runtime in Phase 2. }
 type
+  TAlign = (alNone, alLeft, alRight, alClient);
   TBase = class
   private
     FId: Integer;
@@ -18,9 +19,11 @@ type
   private
     FCaption: string;
     FOwner: TBase;
+    FAlign: TAlign;
   published
     property Caption: string read FCaption write FCaption;
     property Owner: TBase read FOwner write FOwner;
+    property Align: TAlign read FAlign write FAlign;
   end;
 
 procedure TBase.Notify;
@@ -35,4 +38,7 @@ begin
   { field-backed published property round-trip (read + write via FId) }
   c.Id := 42;
   writeln(c.Id);
+  { enum-typed published property round-trip }
+  c.Align := alClient;
+  writeln(Ord(c.Align));
 end.

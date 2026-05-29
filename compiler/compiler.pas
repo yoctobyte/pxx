@@ -160,6 +160,7 @@ begin
   MethodFixCount := 0; UPropCount := 0;
   DataPtrFixCount := 0;
   RTTIRegistryOff := -1; RTTIRegistryCount := 0;
+  EnumTypeCount := 0; EnumValCount := 0; LastTypeEnumId := -1;
   AddConst('StdErr', tyInteger, 2);
 
   if isBasic then
