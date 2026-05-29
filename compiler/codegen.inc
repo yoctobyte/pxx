@@ -238,42 +238,6 @@ begin
   end;
 end;
 
-procedure EmitBumpAlloc;
-{ On entry: rax = byte count requested. On exit: rax = allocated block base.
-  Rounds size up to 8, bumps BSS_HEAP_PTR, grows the break via brk if needed. }
-var jbePatch: Integer;
-begin
-  { Round size up to multiple of 8 for alignment }
-  EmitB($48); EmitB($83); EmitB($C0); EmitB($07); { add rax, 7 }
-  EmitB($48); EmitB($83); EmitB($E0); EmitB($F8); { and rax, -8 }
-  { mov rbx, [BSS_HEAP_PTR] }
-  EmitB($48); EmitB($8B); EmitB($1C); EmitB($25); EmitGlobRef(BSS_HEAP_PTR);
-  { add rbx, rax }
-  EmitB($48); EmitB($01); EmitB($C3);
-  { cmp rbx, [BSS_HEAP_END] }
-  EmitB($48); EmitB($3B); EmitB($1C); EmitB($25); EmitGlobRef(BSS_HEAP_END);
-  { jbe skip_brk }
-  EmitB($76); jbePatch := CodeLen; EmitB(0);
-  { push rbx }
-  EmitB($53);
-  { mov rdi, rbx }
-  EmitB($48); EmitB($89); EmitB($DF);
-  { mov rax, SYS_BRK }
-  MovRaxImm(SYS_BRK);
-  { syscall }
-  EmitSyscall;
-  { pop rbx }
-  EmitB($5B);
-  { mov [BSS_HEAP_END], rax }
-  EmitB($48); EmitB($89); EmitB($04); EmitB($25); EmitGlobRef(BSS_HEAP_END);
-  { Patch short jump offset }
-  Code[jbePatch] := Byte(CodeLen - (jbePatch + 1));
-  { mov rax, [BSS_HEAP_PTR] }
-  EmitB($48); EmitB($8B); EmitB($04); EmitB($25); EmitGlobRef(BSS_HEAP_PTR);
-  { mov [BSS_HEAP_PTR], rbx }
-  EmitB($48); EmitB($89); EmitB($1C); EmitB($25); EmitGlobRef(BSS_HEAP_PTR);
-end;
-
 procedure GenSpecialCall(specialId: Integer; argHead: Integer);
 var
   arg1, arg2, arg3, idx, pathIdx, dstIdx, lo, hi, nextJmp, falseJmp, trueCount, i, jbePatch: Integer;

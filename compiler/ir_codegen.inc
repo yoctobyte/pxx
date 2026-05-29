@@ -113,11 +113,17 @@ begin
         symIdx := IRA[node];
         if Syms[symIdx].Kind = skGlobal then
         begin
-          EmitB($48); EmitB($8D); EmitB($04); EmitB($25); EmitGlobRef(Syms[symIdx].Offset);
+          { Dynamic array slot holds a heap data pointer; load it (mov), not its
+            address (lea), so indexing/Length operate on the heap block. }
+          if Syms[symIdx].IsArray and (Syms[symIdx].ArrLen = -1) then
+            begin EmitB($48); EmitB($8B); EmitB($04); EmitB($25); EmitGlobRef(Syms[symIdx].Offset); end
+          else
+            begin EmitB($48); EmitB($8D); EmitB($04); EmitB($25); EmitGlobRef(Syms[symIdx].Offset); end;
         end
         else
         begin
-          if (Syms[symIdx].Kind = skParam) and (Syms[symIdx].IsRef or Syms[symIdx].IsArray or (Syms[symIdx].TypeKind = tyString)) then
+          if (Syms[symIdx].IsArray and (Syms[symIdx].ArrLen = -1)) or
+             ((Syms[symIdx].Kind = skParam) and (Syms[symIdx].IsRef or Syms[symIdx].IsArray or (Syms[symIdx].TypeKind = tyString))) then
           begin
             EmitB($48); EmitB($8B); EmitB($85); EmitI32(Syms[symIdx].Offset);
           end
@@ -635,8 +641,23 @@ begin
           if specialId = Ord(tkLength) then
           begin
             arg1Node := IRB[node];
-            IREmitNode(IRA[arg1Node]); { evaluates address -> rax }
-            EmitB($48); EmitB($8B); EmitB($00); { mov rax, [rax] }
+            val1Node := IRA[arg1Node];
+            if (IRKind[val1Node] = IR_LEA) and Syms[IRA[val1Node]].IsArray
+               and (Syms[IRA[val1Node]].ArrLen = -1) then
+            begin
+              { Dynamic array: IR_LEA already loaded the heap data pointer (or 0).
+                Length lives at [ptr-8]; a nil array reports 0. }
+              IREmitNode(val1Node);                          { rax = data ptr (or 0) }
+              EmitB($48); EmitB($85); EmitB($C0);            { test rax, rax }
+              EmitB($74); jbePatch := CodeLen; EmitB(0);     { jz done (rax already 0) }
+              EmitB($48); EmitB($8B); EmitB($40); EmitB($F8);{ mov rax, [rax-8] }
+              Code[jbePatch] := Byte(CodeLen - (jbePatch + 1));
+            end
+            else
+            begin
+              IREmitNode(val1Node); { evaluates address -> rax }
+              EmitB($48); EmitB($8B); EmitB($00); { mov rax, [rax] }
+            end;
           end
           else if (specialId = Ord(tkOrd)) or (specialId = Ord(tkChr)) or
                   (specialId = Ord(tkInteger_T)) or (specialId = Ord(tkLongWord_T)) then
@@ -673,6 +694,41 @@ begin
             end
             else
               Error('SetLength expects a string variable in IR codegen');
+          end
+          else if specialId = 102 then
+          begin
+            { Dynamic-array SetLength. Heap layout: [base]=refcount, [base+8]=length,
+              [base+16]=data. Store the data pointer into the array variable's slot.
+              v1: fresh-allocates; old contents not preserved. }
+            arg1Node := IRB[node];
+            arg2Node := IRB[arg1Node];
+            val1Node := IRA[arg1Node];
+            if IRKind[val1Node] <> IR_LEA then
+              Error('SetLength expects an array variable in IR codegen');
+            symIdx := IRA[val1Node];
+            if (Syms[symIdx].ElemType = tyRecord) or (Syms[symIdx].ElemType = tyString) then
+              Error('SetLength: dynamic array of record/string not yet supported');
+            elemSize := TypeSize(Syms[symIdx].ElemType);
+
+            IREmitNode(IRA[arg2Node]);      { rax = n }
+            EmitB($50);                     { push rax -- save n }
+            if elemSize = 8 then
+              begin EmitB($48); EmitB($C1); EmitB($E0); EmitB($03); end { shl rax, 3 }
+            else if elemSize > 1 then
+              begin
+                EmitB($48); EmitB($C7); EmitB($C1); EmitI32(elemSize); { mov rcx, elemSize }
+                EmitB($48); EmitB($0F); EmitB($AF); EmitB($C1);        { imul rax, rcx }
+              end;
+            EmitB($48); EmitB($83); EmitB($C0); EmitB($10); { add rax, 16 (header) }
+            EmitBumpAlloc;                  { rax = base }
+            EmitB($59);                     { pop rcx -- n }
+            EmitB($48); EmitB($C7); EmitB($00); EmitI32(1);  { mov qword [rax], 1 (refcount) }
+            EmitB($48); EmitB($89); EmitB($48); EmitB($08);  { mov [rax+8], rcx (length) }
+            EmitB($48); EmitB($83); EmitB($C0); EmitB($10);  { add rax, 16 (data ptr) }
+            if Syms[symIdx].Kind = skGlobal then
+              begin EmitB($48); EmitB($89); EmitB($04); EmitB($25); EmitGlobRef(Syms[symIdx].Offset); end
+            else
+              begin EmitB($48); EmitB($89); EmitB($85); EmitI32(Syms[symIdx].Offset); end;
           end
           else if specialId = SPECIAL_IN then
           begin
