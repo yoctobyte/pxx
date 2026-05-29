@@ -146,6 +146,8 @@ test: $(COMPILER) fpc-check
 	test "$$(/tmp/records26)" = "$$(printf '42\n7\n11\n22')"
 	./$(COMPILER) test/fileio.pas /tmp/fileio26
 	test "$$(/tmp/fileio26 test/hello.pas | sed -n '1,3p')" = "$$(printf 'test/hello.pas\n14\n54')"
+	./$(COMPILER) --experimental-ir-codegen test/fileio.pas /tmp/fileio_ir26
+	test "$$(/tmp/fileio_ir26 test/hello.pas | sed -n '1,3p')" = "$$(printf 'test/hello.pas\n14\n54')"
 	./$(COMPILER) test/string_compare.pas /tmp/string_compare26
 	test "$$(/tmp/string_compare26)" = "$$(printf '1\n1\n1')"
 	./$(COMPILER) test/record_string_field.pas /tmp/record_string_field26

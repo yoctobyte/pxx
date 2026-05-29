@@ -876,6 +876,30 @@ begin
             IREmitNode(IRA[arg1Node]);
             EmitB($48); EmitB($89); EmitB($C7); { mov rdi, rax }
             MovRaxImm(SYS_CLOSE); EmitSyscall;
+          end
+          else if specialId = Ord(tkArgStr) then
+          begin
+            { ArgStr(index, strVar): copy argv[index] into the string variable.
+              arg1 = index expr, arg2 = string var (lowers to IR_LEA). }
+            arg1Node := IRB[node];
+            arg2Node := IRB[arg1Node];
+            val2Node := IRA[arg2Node];
+            if (IRKind[val2Node] = IR_LEA) or (IRKind[val2Node] = IR_LOAD_SYM) then
+              symIdx := IRA[val2Node]
+            else
+              Error('ArgStr expects a string variable in IR codegen');
+            IREmitNode(IRA[arg1Node]);   { rax = index }
+            EmitArgvToString(symIdx);
+          end
+          else if specialId = Ord(tkSysFchmod) then
+          begin
+            arg1Node := IRB[node];
+            arg2Node := IRB[arg1Node];
+            IREmitNode(IRA[arg1Node]);
+            EmitB($48); EmitB($89); EmitB($C7); { mov rdi, rax }
+            IREmitNode(IRA[arg2Node]);
+            EmitB($48); EmitB($89); EmitB($C6); { mov rsi, rax }
+            MovRaxImm(91); EmitSyscall;
           end;
         end;
       end;
