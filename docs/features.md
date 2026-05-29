@@ -99,6 +99,14 @@ bit-identical.
 `--dump-ir` prints the IR without changing the emitted binary and works
 with both backends.
 
+## Inline Assembler
+
+Rudimentary x86-64 inline assembler (Intel syntax): `asm ... end` statement
+blocks and `assembler`-modifier function bodies. Pascal locals and params are
+referenced by name (resolved to their `[rbp+disp32]` frame slot), so asm can
+read and write variables directly. See [Inline Assembler](inline-asm.md) for
+the supported instruction set and current limits.
+
 ## Development Guarantees
 
 The build suite exercises:

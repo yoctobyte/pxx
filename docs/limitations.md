@@ -142,6 +142,15 @@ self-hostable, and auditable.
   integration are not claimed.
 - The command line is project-specific and does not emulate the FPC CLI.
 
+## Inline Assembler
+
+Rudimentary x86-64 inline asm (Intel syntax) is implemented: `asm ... end`
+blocks and `assembler` functions, with variables read/written by name. It is
+not a full assembler — notably **no labels/branches**, **no global-var
+operands**, **no explicit `[reg]` memory**, and **no AT&T syntax**. See
+[Inline Assembler](inline-asm.md) for the supported instruction set,
+limitations, and TODO.
+
 ## How To Read Compatibility Claims
 
 Compatibility is split into separate questions:

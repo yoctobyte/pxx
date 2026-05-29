@@ -15,6 +15,7 @@ User-facing documents:
 - [Pascal Dialect And Compatibility](pascal-dialect.md) - supported Pascal surface, PXX/FPC identity, and conditional compilation.
 - [Features](features.md) - build baseline, language frontends, native output, and library loading.
 - [Limitations](limitations.md) - unsupported or only partially supported language, ABI, platform, and tooling areas.
+- [Inline Assembler](inline-asm.md) - x86-64 inline asm support, supported instruction set, variable passing, limitations, and TODO.
 
 Frontend notes (planned languages):
 
