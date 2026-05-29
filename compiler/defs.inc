@@ -77,6 +77,12 @@ const
   AN_SET_LIT      = 37;
   AN_ASM          = 38;
 
+  { Inline-asm operand kinds }
+  AOP_NONE = 0;
+  AOP_REG  = 1;
+  AOP_MEM  = 2;   { [rbp+disp32] — a named local/param }
+  AOP_IMM  = 3;
+
   { IR opcodes. Append only while bootstrapping, as with token/node kinds. }
   IR_NOP       = 0;
   IR_CONST_INT = 1;
@@ -428,6 +434,11 @@ var
   WithStackDepth: Integer;
   AsmBytes: array[0..65535] of Byte;
   AsmBytesCount: Integer;
+  { Inline-asm operand scratch (slot 0 = dest, slot 1 = src) }
+  AsmOpKind : array[0..1] of Integer;   { AOP_* }
+  AsmOpReg  : array[0..1] of Integer;   { register number 0..15 }
+  AsmOpSize : array[0..1] of Integer;   { 1, 2, 4, 8 (bytes) }
+  AsmOpVal  : array[0..1] of Int64;     { immediate value, or mem disp for AOP_MEM }
   AssignPath : AnsiString;
   IncExpanded : AnsiString;
   IncIncluded : AnsiString;

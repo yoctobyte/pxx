@@ -11,6 +11,7 @@ uses SysUtils, BaseUnix;
 {$include blexer.inc}
 {$include emit.inc}
 {$include symtab.inc}
+{$include asmenc.inc}
 procedure CPreprocess(var src: AnsiString; const baseDir: AnsiString); forward;
 {$include parser.inc}
 {$include ir.inc}

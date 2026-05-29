@@ -68,6 +68,10 @@ test: $(COMPILER) fpc-check
 	test "$$(/tmp/hello26)" = "Hello, World!"
 	./$(COMPILER) test/test_asm.pas /tmp/test_asm26
 	/tmp/test_asm26; test "$$?" = "42"
+	./$(COMPILER) test/test_asm_func.pas /tmp/test_asm_func26
+	test "$$(/tmp/test_asm_func26)" = "14"
+	./$(COMPILER) test/test_asm_swap.pas /tmp/test_asm_swap26
+	test "$$(/tmp/test_asm_swap26)" = "$$(printf '42\n-7\n-7\n42')"
 	./$(COMPILER) --debug test/hello.pas /tmp/hello_debug26 > /tmp/hello_debug26.log
 	grep -q "Loaded file length:" /tmp/hello_debug26.log
 	test "$$(/tmp/hello_debug26)" = "Hello, World!"

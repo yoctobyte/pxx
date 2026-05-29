@@ -2610,72 +2610,8 @@ end;
 function ParseAsmStatementAST: Integer;
 var
   node, startOff, len: Integer;
-  val: Int64;
-  dir: AnsiString;
 begin
-  startOff := AsmBytesCount;
-  
-  while CurTok.Kind <> tkEnd do
-  begin
-    if CurTok.Kind = tkIdent then
-    begin
-      dir := CurTok.SVal;
-      if CaseEqual(dir, 'db') or CaseEqual(dir, 'dw') or CaseEqual(dir, 'dd') or CaseEqual(dir, 'dq') then
-      begin
-        Next; { Consume db/dw/dd/dq }
-        repeat
-          if CurTok.Kind <> tkInteger then Error('asm: expected integer constant');
-          val := CurTok.IVal;
-          Next;
-          
-          if CaseEqual(dir, 'db') then
-          begin
-            if AsmBytesCount >= 65536 then Error('asm: out of instruction byte capacity');
-            AsmBytes[AsmBytesCount] := Byte(val and $FF);
-            Inc(AsmBytesCount);
-          end
-          else if CaseEqual(dir, 'dw') then
-          begin
-            if AsmBytesCount + 2 > 65536 then Error('asm: out of instruction byte capacity');
-            AsmBytes[AsmBytesCount] := Byte(val and $FF);
-            AsmBytes[AsmBytesCount + 1] := Byte((val shr 8) and $FF);
-            Inc(AsmBytesCount, 2);
-          end
-          else if CaseEqual(dir, 'dd') then
-          begin
-            if AsmBytesCount + 4 > 65536 then Error('asm: out of instruction byte capacity');
-            AsmBytes[AsmBytesCount] := Byte(val and $FF);
-            AsmBytes[AsmBytesCount + 1] := Byte((val shr 8) and $FF);
-            AsmBytes[AsmBytesCount + 2] := Byte((val shr 16) and $FF);
-            AsmBytes[AsmBytesCount + 3] := Byte((val shr 24) and $FF);
-            Inc(AsmBytesCount, 4);
-          end
-          else if CaseEqual(dir, 'dq') then
-          begin
-            if AsmBytesCount + 8 > 65536 then Error('asm: out of instruction byte capacity');
-            AsmBytes[AsmBytesCount] := Byte(val and $FF);
-            AsmBytes[AsmBytesCount + 1] := Byte((val shr 8) and $FF);
-            AsmBytes[AsmBytesCount + 2] := Byte((val shr 16) and $FF);
-            AsmBytes[AsmBytesCount + 3] := Byte((val shr 24) and $FF);
-            AsmBytes[AsmBytesCount + 4] := Byte((val shr 32) and $FF);
-            AsmBytes[AsmBytesCount + 5] := Byte((val shr 40) and $FF);
-            AsmBytes[AsmBytesCount + 6] := Byte((val shr 48) and $FF);
-            AsmBytes[AsmBytesCount + 7] := Byte((val shr 56) and $FF);
-            Inc(AsmBytesCount, 8);
-          end;
-        until not Eat(tkComma);
-      end
-      else
-        Next;
-    end
-    else
-      Next;
-  end;
-  
-  Expect(tkEnd, 'end');
-  Eat(tkSemicolon);
-  
-  len := AsmBytesCount - startOff;
+  AsmParseBody(startOff, len);
   node := AllocNode(AN_ASM);
   ASTLeft[node] := startOff;
   ASTRight[node] := len;
@@ -3787,12 +3723,15 @@ var
   patchPos : Integer;
   depth    : Integer;
   doneArgs, doneParam, isArr, isByRef, declOverload, isClassKeyword, isStaticMethod: Boolean;
+  isAsmFunc: Boolean;
+  asmNode: Integer;
   startIdx, idx: Integer;
   tokKindOrd: Integer;
   methOwnerCi, methOwnerRec, methSNOff, methSNLen, mmi, slot, otherCi: Integer;
   methName: AnsiString;
 begin
   isClassKeyword := False;
+  isAsmFunc := False;
   if CurTok.Kind = tkClass then
   begin
     isClassKeyword := True;
@@ -3897,10 +3836,12 @@ begin
   while ((CurTok.Kind = tkIdent) and
          ((CurTok.SVal = 'inline') or (CurTok.SVal = 'Inline') or (CurTok.SVal = 'INLINE') or
           (CurTok.SVal = 'register') or (CurTok.SVal = 'Register') or (CurTok.SVal = 'REGISTER') or
-          (CurTok.SVal = 'cdecl') or (CurTok.SVal = 'Cdecl') or (CurTok.SVal = 'CDECL'))) or
+          (CurTok.SVal = 'cdecl') or (CurTok.SVal = 'Cdecl') or (CurTok.SVal = 'CDECL') or
+          CaseEqual(CurTok.SVal, 'assembler'))) or
         (CurTok.Kind = tkOverload) do
   begin
     if CurTok.Kind = tkOverload then declOverload := True;
+    if (CurTok.Kind = tkIdent) and CaseEqual(CurTok.SVal, 'assembler') then isAsmFunc := True;
     Next;
     Eat(tkSemicolon);
   end;
@@ -4189,10 +4130,24 @@ begin
   end;
 
   { Body }
-  Expect(tkBegin, 'begin');
-  ParseBlock;
-  Expect(tkEnd, 'end');
-  Eat(tkSemicolon);
+  if isAsmFunc then
+  begin
+    { Whole-function asm body: 'asm ... end;'. Params already copied to their
+      stack slots, so the asm can read/write them by name. The asm is
+      responsible for leaving the result in rax (FPC accumulator convention),
+      so the epilogue below must not reload Result. }
+    Expect(tkAsm, 'asm');
+    asmNode := ParseAsmStatementAST;
+    CompileAST(asmNode);
+    ASTNodeCount := 0;
+  end
+  else
+  begin
+    Expect(tkBegin, 'begin');
+    ParseBlock;
+    Expect(tkEnd, 'end');
+    Eat(tkSemicolon);
+  end;
 
   { Verify all forward goto fixups were resolved }
   for i := 0 to GotoLabelCount - 1 do
@@ -4204,8 +4159,12 @@ begin
             GetTokenStrFromRaw(GotoLabelNOff[i], GotoLabelNLen[i]));
     end;
 
-  { Epilogue }
-  EmitProcEpilog(Procs[pi].RetSymIdx);
+  { Epilogue. For assembler functions the asm body already set rax, so pass
+    -1 to skip reloading Result (which would clobber the asm's return value). }
+  if isAsmFunc then
+    EmitProcEpilog(-1)
+  else
+    EmitProcEpilog(Procs[pi].RetSymIdx);
 
   { Patch frame size }
   PatchProcPrologue(patchPos, FrameSize);
