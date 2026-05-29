@@ -878,13 +878,23 @@ begin
       item := ASTLeft[node];
       while item <> -1 do
       begin
+        { IR_WRITE: IRB = field width (0 = none), IRC = decimals (-1 = none),
+          IRTk = the source expression type (for write dispatch). }
         if ASTKind[item] = AN_ARG then
-          value := IRLowerAST(ASTLeft[item])
+        begin
+          value := IRLowerAST(ASTLeft[item]);
+          outNode := IRAppend(IR_WRITE, value, ASTIVal[item], ASTSOffset[item], 0, Ord(IntToTypeKind(ASTTk[ASTLeft[item]])));
+        end
         else if ASTKind[item] = AN_PAIR then
-          value := IRLowerAST(ASTLeft[item])
+        begin
+          value := IRLowerAST(ASTLeft[item]);
+          outNode := IRAppend(IR_WRITE, value, -1, -1, 0, IRTk[value]);
+        end
         else
+        begin
           value := IRLowerAST(item);
-        outNode := IRAppend(IR_WRITE, value, -1, -1, 0, IRTk[value]);
+          outNode := IRAppend(IR_WRITE, value, -1, -1, 0, IRTk[value]);
+        end;
         if first < 0 then first := outNode;
         last := outNode;
         item := ASTRight[item];

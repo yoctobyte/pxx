@@ -27,6 +27,7 @@ var left, right, valNode, symIdx, si: Integer;
     isSigned: Boolean;
     baseAddr, indexNode, lo, elemSize, offset, addressNode, valueNode: Integer;
     argNode, pathIdx, pi, specialId, classIdx, slot, cpi, i, jbePatch: Integer;
+    wid, decs: Integer;
     arg1Node, arg2Node, arg3Node, val1Node, val2Node: Integer;
     itemNode, trueCount, nextJmp, falseJmp: Integer;
     trueJumps: array[0..127] of Integer;
@@ -487,10 +488,19 @@ begin
     IR_WRITE:
       begin
         valNode := IRA[node];
+        wid  := IRB[node];   { field width, 0 = none }
+        decs := IRC[node];   { decimals, -1 = none }
         if IRKind[valNode] = IR_CONST_STR then
         begin
           sVal := GetTokenStrFromRaw(IRA[valNode], IRB[valNode]);
           si := InternStr(sVal);
+          if (wid > 0) and (wid > Strs[si].Len) then
+          begin
+            EnsureSpaces;
+            EmitB($48); EmitB($BE); EmitDataRef(SpacesOffset);
+            MovRdxImm(wid - Strs[si].Len);
+            MovRaxImm(SYS_WRITE); MovRdiImm(STDOUT); EmitSyscall;
+          end;
           if Strs[si].Len > 0 then
             EmitwriteSyscall(Strs[si].Offset + 8, Strs[si].Len);
         end
@@ -498,6 +508,18 @@ begin
                 (IntToTypeKind(IRTk[valNode]) = tyString) then
         begin
           symIdx := IRA[valNode];
+          if wid > 0 then
+          begin
+            { Runtime string width: pad with max(0, wid - len) spaces. }
+            EnsureSpaces;
+            EmitLoadStrLen(symIdx);              { rcx = len }
+            MovRaxImm(wid);
+            EmitB($48); EmitB($29); EmitB($C8);  { sub rax, rcx }
+            EmitB($7E); EmitB(35);               { jle .skip_pad (35 bytes) }
+            EmitB($48); EmitB($BE); EmitDataRef(SpacesOffset);
+            EmitB($48); EmitB($89); EmitB($C2);  { mov rdx, rax }
+            MovRaxImm(SYS_WRITE); MovRdiImm(STDOUT); EmitSyscall;
+          end;
           EmitwriteStrVar(symIdx);
         end
         else
@@ -506,9 +528,13 @@ begin
           if IntToTypeKind(IRTk[node]) = tyChar then
             EmitwriteChar
           else if not TypeSigned(IntToTypeKind(IRTk[node])) then
-            EmitwriteUInt
+          begin
+            if wid > 0 then EmitwriteUIntW(wid) else EmitwriteUInt;
+          end
           else
-            EmitwriteInt;
+          begin
+            if wid > 0 then EmitwriteIntW(wid) else EmitwriteInt;
+          end;
         end;
       end;
       
