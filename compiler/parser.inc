@@ -640,6 +640,7 @@ end;
 function ParseLValueAST(idx: Integer; identTokIdx: Integer): Integer;
 var
   node, indexNode, fieldNode, prevTok, recName, i: Integer;
+  baseNode, baseRec, fIdx: Integer;
   tk: TTypeKind;
   fieldName: AnsiString;
   mci, mmi, mpi, mcallNode, mselfArg, mlastArg, margSeq, margIdx, mexprNode, mai, pri, ci: Integer;
@@ -748,9 +749,63 @@ begin
     ASTTk[node] := Ord(tk);
   end;
   
-  while CurTok.Kind in [tkLBrack, tkDot] do
+  while CurTok.Kind in [tkLBrack, tkDot, tkCaret] do
   begin
-    if CurTok.Kind = tkLBrack then
+    if CurTok.Kind = tkCaret then
+    begin
+      Next;
+      indexNode := AllocNode(AN_DEREF);
+      ASTLeft[indexNode] := node;
+      if tk = tyPointer then
+      begin
+        if ASTKind[node] = AN_IDENT then
+        begin
+          tk := Syms[ASTIVal[node]].PtrElemTk;
+          recName := Syms[ASTIVal[node]].PtrElemRec;
+        end
+        else if ASTKind[node] = AN_FIELD then
+        begin
+          baseNode := ASTLeft[node];
+          baseRec := ResolveNodeRec(baseNode);
+          fieldName := GetASTIdentName(node);
+          fIdx := FindUField(baseRec, fieldName);
+          if fIdx >= 0 then
+          begin
+            tk := IntToTypeKind(UFldPtrElemTk[fIdx]);
+            recName := UFldPtrElemRec[fIdx];
+          end
+          else
+          begin
+            tk := tyUnknown;
+            recName := REC_NONE;
+          end;
+        end
+        else if ASTKind[node] = AN_INDEX then
+        begin
+          baseNode := ASTLeft[node];
+          if ASTKind[baseNode] = AN_IDENT then
+          begin
+            tk := Syms[ASTIVal[baseNode]].PtrElemTk;
+            recName := Syms[ASTIVal[baseNode]].PtrElemRec;
+          end
+          else
+          begin
+            tk := tyUnknown;
+            recName := REC_NONE;
+          end;
+        end
+        else
+        begin
+          tk := tyInteger;
+          recName := REC_NONE;
+        end;
+      end
+      else
+        Error('dereferenced value is not a pointer');
+      ASTTk[indexNode] := Ord(tk);
+      node := indexNode;
+    end
+    else if CurTok.Kind = tkLBrack then
     begin
       Next;
       indexNode := AllocNode(AN_INDEX);
@@ -1377,6 +1432,24 @@ begin
     tkInteger:
     begin
       node := AllocNode(AN_INT_LIT); ASTIVal[node] := CurTok.IVal; ASTTk[node] := Ord(tyInteger); CurASTNode := node; Next;
+    end;
+    tkNil:
+    begin
+      node := AllocNode(AN_INT_LIT); ASTIVal[node] := 0; ASTTk[node] := Ord(tyPointer); CurASTNode := node; Next; LastExprTk := tyPointer;
+    end;
+    tkAt:
+    begin
+      Next;
+      if CurTok.Kind <> tkIdent then Error('expected identifier after @');
+      name := CurTok.SVal;
+      idx := FindSym(name);
+      Next;
+      valNode := ParseLValueAST(idx, TokPos - 2);
+      node := AllocNode(AN_ADDR);
+      ASTLeft[node] := valNode;
+      ASTTk[node] := Ord(tyPointer);
+      CurASTNode := node;
+      LastExprTk := tyPointer;
     end;
     tkFloat:
     begin
@@ -2840,10 +2913,21 @@ end;
 { ===== Declaration parsing ===== }
 
 function ParseTypeKind: TTypeKind;
-var lo: AnsiString;
+var lo: AnsiString; elemTk: TTypeKind;
 begin
   LastTypeRecId := REC_NONE;
+  LastTypePointerElemTk := tyUnknown;
+  LastTypePointerElemRec := REC_NONE;
   case CurTok.Kind of
+    tkCaret:
+    begin
+      Next;
+      elemTk := ParseTypeKind;
+      LastTypePointerElemTk := elemTk;
+      LastTypePointerElemRec := LastTypeRecId;
+      Result := tyPointer;
+      Exit;
+    end;
     tkInteger_T:
     begin
       lo := CurTok.SVal;
@@ -2988,7 +3072,7 @@ procedure ParseTypeSection;
 var
   ordinal: Int64;
   tname: AnsiString;
-  done, stopTypes: Boolean;
+  done, stopTypes: Boolean; loVal, hiVal, arrLen: Integer; isArr: Boolean;
   tnOff, tnLen, ci, fnOff, fnLen, curFieldOff, fRec, fSize, fAlign, classAlign, depth: Integer;
   fTk: TTypeKind;
   parentCi, slot, mmi, mnOff, mnLen, pnOff, pnLen, rFOff, rFLen, rMOff, rMLen, wFOff, wFLen, wMOff, wMLen, rnOff, rnLen, wnOff, wnLen, propRec, i: Integer;
@@ -3286,8 +3370,35 @@ begin
             fnLen := Tokens[TokPos-1].SLen;
             Next;
             Expect(tkColon, ':');
-            fTk := ParseTypeKind;
-            fRec := LastTypeRecId;
+            isArr := False;
+            arrLen := 1;
+            if CurTok.Kind = tkArray then
+            begin
+              Next;
+              Expect(tkLBrack, '[');
+              if CurTok.Kind = tkInteger then
+              begin
+                loVal := CurTok.IVal;
+                Next;
+                Expect(tkDotDot, '..');
+                if CurTok.Kind = tkInteger then
+                begin
+                  hiVal := CurTok.IVal;
+                  arrLen := hiVal - loVal + 1;
+                  Next;
+                end;
+              end;
+              Expect(tkRBrack, ']');
+              Expect(tkOf, 'of');
+              fTk := ParseTypeKind;
+              fRec := LastTypeRecId;
+              isArr := True;
+            end
+            else
+            begin
+              fTk := ParseTypeKind;
+              fRec := LastTypeRecId;
+            end;
             if fTk = tyString then
             begin
               fSize := LOCAL_STR_CAP + 8;
@@ -3303,6 +3414,8 @@ begin
               fSize := TypeSize(fTk);
               fAlign := TypeAlign(fTk);
             end;
+            if isArr then
+              fSize := fSize * arrLen;
             curFieldOff := AlignTo(curFieldOff, fAlign);
             AddUField(ci, fnOff, fnLen, curFieldOff, Ord(fTk), fRec);
             curFieldOff := curFieldOff + fSize;
@@ -3325,14 +3438,77 @@ begin
       end
       else if CurTok.Kind = tkRecord then
       begin
-        depth := 1;
         Next;
-        while (depth > 0) and (CurTok.Kind <> tkEOF) do
+        ci := AddUClass(tnOff, tnLen);
+        UClsParent[ci] := -1;
+        UClsIsRecord[ci] := True;
+        curFieldOff := 0;
+        classAlign := 1;
+        while (CurTok.Kind <> tkEnd) and (CurTok.Kind <> tkEOF) do
         begin
-          if (CurTok.Kind = tkRecord) or (CurTok.Kind = tkClass) then Inc(depth)
-          else if CurTok.Kind = tkEnd then Dec(depth);
-          Next;
+          if CurTok.Kind = tkIdent then
+          begin
+            fnOff := Tokens[TokPos-1].SOffset;
+            fnLen := Tokens[TokPos-1].SLen;
+            Next;
+            Expect(tkColon, ':');
+            isArr := False;
+            arrLen := 1;
+            if CurTok.Kind = tkArray then
+            begin
+              Next;
+              Expect(tkLBrack, '[');
+              if CurTok.Kind = tkInteger then
+              begin
+                loVal := CurTok.IVal;
+                Next;
+                Expect(tkDotDot, '..');
+                if CurTok.Kind = tkInteger then
+                begin
+                  hiVal := CurTok.IVal;
+                  arrLen := hiVal - loVal + 1;
+                  Next;
+                end;
+              end;
+              Expect(tkRBrack, ']');
+              Expect(tkOf, 'of');
+              fTk := ParseTypeKind;
+              fRec := LastTypeRecId;
+              isArr := True;
+            end
+            else
+            begin
+              fTk := ParseTypeKind;
+              fRec := LastTypeRecId;
+            end;
+            if fTk = tyString then
+            begin
+              fSize := LOCAL_STR_CAP + 8;
+              fAlign := TARGET_PTR_SIZE;
+            end
+            else if fTk = tyRecord then
+            begin
+              fSize := RecSize(fRec);
+              fAlign := TARGET_PTR_SIZE;
+            end
+            else
+            begin
+              fSize := TypeSize(fTk);
+              fAlign := TypeAlign(fTk);
+            end;
+            if isArr then
+              fSize := fSize * arrLen;
+            curFieldOff := AlignTo(curFieldOff, fAlign);
+            AddUField(ci, fnOff, fnLen, curFieldOff, Ord(fTk), fRec);
+            curFieldOff := curFieldOff + fSize;
+            if fAlign > classAlign then classAlign := fAlign;
+            Eat(tkSemicolon);
+          end
+          else
+            Next;
         end;
+        UClsSize_[ci] := AlignTo(curFieldOff, classAlign);
+        Expect(tkEnd, 'end');
       end
       else
       begin
@@ -3355,6 +3531,8 @@ var
   pnames    : array[0..15] of AnsiString;
   ptypes    : array[0..15] of TTypeKind;
   ptypesRec : array[0..15] of Integer;
+  ptypesPtrElemTk : array[0..15] of TTypeKind;
+  ptypesPtrElemRec : array[0..15] of Integer;
   parr      : array[0..15] of Boolean;
   pbyref    : array[0..15] of Boolean;
   nparams  : Integer;
@@ -3453,6 +3631,8 @@ begin
       begin
         ptypes[i] := tk;
         ptypesRec[i] := LastTypeRecId;
+        ptypesPtrElemTk[i] := LastTypePointerElemTk;
+        ptypesPtrElemRec[i] := LastTypePointerElemRec;
         parr[i] := isArr;
         pbyref[i] := isByRef;
       end;
@@ -3627,6 +3807,11 @@ begin
     Procs[pi].Params[i].SymIdx := idx;
     if (ptypes[i] = tyClass) or (ptypes[i] = tyRecord) then
       Syms[idx].RecName := ptypesRec[i];
+    if ptypes[i] = tyPointer then
+    begin
+      Syms[idx].PtrElemTk := ptypesPtrElemTk[i];
+      Syms[idx].PtrElemRec := ptypesPtrElemRec[i];
+    end;
   end;
   { Wire Self's RecName so field lookups resolve against the owner class }
   if (methOwnerCi >= 0) and not UMthIsStatic[mmi] then

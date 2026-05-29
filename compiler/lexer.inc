@@ -198,6 +198,8 @@ begin
     if (s[1]='C') and (s[2]='h') and (s[3]='r') then Result := tkChr;
     if (s[1]='t') and (s[2]='r') and (s[3]='y') then Result := tkTry;
     if (s[1]='T') and (s[2]='r') and (s[3]='y') then Result := tkTry;
+    if (s[1]='n') and (s[2]='i') and (s[3]='l') then Result := tkNil;
+    if (s[1]='N') and (s[2]='i') and (s[3]='l') then Result := tkNil;
   end
   else if Length(s) = 4 then
   begin

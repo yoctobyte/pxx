@@ -235,6 +235,12 @@ begin
     
     tk := RecFieldType(recName, fieldName);
     recName := RecFieldRecId(recName, fieldName);
+  end
+  else if ASTKind[node] = AN_DEREF then
+  begin
+    GenAST(ASTLeft[node]);
+    tk := IntToTypeKind(ASTTk[node]);
+    recName := ResolveNodeRec(node);
   end;
 end;
 
@@ -522,7 +528,11 @@ begin
           EmitLoadVar(idx);
       end;
     end;
-    AN_INDEX, AN_FIELD:
+    AN_ADDR:
+    begin
+      GenLValueAddress(ASTLeft[node], dummyTk, dummyRec, False);
+    end;
+    AN_INDEX, AN_FIELD, AN_DEREF:
     begin
       GenLValueAddress(node, dummyTk, dummyRec, False);
       if dummyTk = tyString then

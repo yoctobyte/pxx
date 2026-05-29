@@ -182,6 +182,7 @@ begin
   UClsParent[UClsCount] := -1;
   UClsVirtCount[UClsCount] := 0;
   UClsVMTOffset[UClsCount] := -1;
+  UClsIsRecord[UClsCount] := False;
   UClsCount := UClsCount + 1;
 end;
 
@@ -191,6 +192,16 @@ begin
   fi := UFldCount;
   UFldNOff[fi] := noff;  UFldNLen[fi] := nlen;
   UFldOff_[fi] := byteOff; UFldTk[fi] := tk; UFldRec_[fi] := recId;
+  if tk = Ord(tyPointer) then
+  begin
+    UFldPtrElemTk[fi] := Ord(LastTypePointerElemTk);
+    UFldPtrElemRec[fi] := LastTypePointerElemRec;
+  end
+  else
+  begin
+    UFldPtrElemTk[fi] := Ord(tyUnknown);
+    UFldPtrElemRec[fi] := REC_NONE;
+  end;
   UFldCount := UFldCount + 1;
   UClsFCount[ci] := UClsFCount[ci] + 1;
 end;
@@ -209,7 +220,6 @@ end;
 { ===== Record Helper Functions ===== }
 
 const
-  REC_NONE = 0;
   REC_TTOKEN = 1;
   REC_TSTRENTRY = 2;
   REC_TFIXUP = 3;
@@ -248,7 +258,7 @@ begin
   begin
     lo2 := lo;
     ci := FindUClass(lo2);
-    if ci >= 0 then Result := REC_UCLASS_BASE + ci;
+    if (ci >= 0) and UClsIsRecord[ci] then Result := REC_UCLASS_BASE + ci;
   end;
 end;
 
@@ -261,7 +271,7 @@ begin
   begin
     lo2 := lo;
     ci := FindUClass(lo2);
-    if ci >= 0 then Result := True;
+    if (ci >= 0) and (not UClsIsRecord[ci]) then Result := True;
   end;
 end;
 
@@ -273,7 +283,7 @@ begin
   else if rec = REC_TFIXUP then Result := 16
   else if rec = REC_TGLOBFIX then Result := 16
   else if rec = REC_TCALLFIX then Result := 16
-  else if rec = REC_TSYMBOL then Result := 344
+  else if rec = REC_TSYMBOL then Result := 360
   else if rec = REC_TPARAM then Result := 296
   else if rec = REC_TPROC then Result := 2688
   else if rec = REC_TRAWTOKEN then Result := 40
@@ -330,7 +340,9 @@ begin
     else if field = 'ElemType' then Result := 312
     else if field = 'RecName' then Result := 320
     else if field = 'ElemRecName' then Result := 328
-    else if field = 'IsRef' then Result := 336;
+    else if field = 'IsRef' then Result := 336
+    else if field = 'PtrElemTk' then Result := 344
+    else if field = 'PtrElemRec' then Result := 352;
   end
   else if rec = REC_TPARAM then
   begin
@@ -682,6 +694,13 @@ begin
   Syms[SymCount].ElemType := tyInteger;
   Syms[SymCount].RecName  := LastTypeRecId;
   Syms[SymCount].IsRef    := False;
+  Syms[SymCount].PtrElemTk := tyUnknown;
+  Syms[SymCount].PtrElemRec := REC_NONE;
+  if tk = tyPointer then
+  begin
+    Syms[SymCount].PtrElemTk := LastTypePointerElemTk;
+    Syms[SymCount].PtrElemRec := LastTypePointerElemRec;
+  end;
 
   sz := TypeSize(tk);
   if tk = tyString then
@@ -731,6 +750,13 @@ begin
   Syms[SymCount].RecName  := LastTypeRecId;
   Syms[SymCount].IsRef    := isRef;
   Syms[SymCount].Kind     := skParam;
+  Syms[SymCount].PtrElemTk := tyUnknown;
+  Syms[SymCount].PtrElemRec := REC_NONE;
+  if tk = tyPointer then
+  begin
+    Syms[SymCount].PtrElemTk := LastTypePointerElemTk;
+    Syms[SymCount].PtrElemRec := LastTypePointerElemRec;
+  end;
 
   if isRef or isArray or (tk = tyString) or (tk = tyRecord) or (tk = tyClass) or (tk = tyPointer) then
     sz := TARGET_PTR_SIZE
@@ -2159,6 +2185,7 @@ begin
 end;
 
 function ResolveNodeRec(node: Integer): Integer;
+var baseNode, baseRec, fIdx, innerNode: Integer; fieldName: AnsiString;
 begin
   if ASTKind[node] = AN_IDENT then
     Result := Syms[ASTIVal[node]].RecName
@@ -2172,6 +2199,32 @@ begin
       Result := Syms[ASTIVal[ASTLeft[node]]].ElemRecName
     else if ASTKind[ASTLeft[node]] = AN_FIELD then
       Result := ResolveNodeRec(ASTLeft[node])
+    else
+      Result := REC_NONE;
+  end
+  else if ASTKind[node] = AN_DEREF then
+  begin
+    baseNode := ASTLeft[node];
+    if ASTKind[baseNode] = AN_IDENT then
+      Result := Syms[ASTIVal[baseNode]].PtrElemRec
+    else if ASTKind[baseNode] = AN_FIELD then
+    begin
+      baseRec := ResolveNodeRec(ASTLeft[baseNode]);
+      fieldName := GetASTIdentName(baseNode);
+      fIdx := FindUField(baseRec, fieldName);
+      if fIdx >= 0 then
+        Result := UFldPtrElemRec[fIdx]
+      else
+        Result := REC_NONE;
+    end
+    else if ASTKind[baseNode] = AN_INDEX then
+    begin
+      innerNode := ASTLeft[baseNode];
+      if ASTKind[innerNode] = AN_IDENT then
+        Result := Syms[ASTIVal[innerNode]].PtrElemRec
+      else
+        Result := REC_NONE;
+    end
     else
       Result := REC_NONE;
   end

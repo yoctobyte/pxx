@@ -32,6 +32,7 @@ const
   MAX_UFIELD      = 256;   { field slots across all user classes }
   MAX_UMETH       = 256;   { method slots across all user classes }
   MAX_UPROP       = 64;
+  REC_NONE         = 0;
   REC_TMETHODFIXUP = 15;
   REC_UCLASS_BASE = 16;    { user class recIds start here; must exceed REC_TMETHODFIXUP=15 }
 
@@ -71,6 +72,8 @@ const
   AN_VIRTUAL_CALL = 32;
   AN_LABEL        = 33; { ASTSOffset/SLen = label name in TokChars }
   AN_GOTO         = 34; { ASTSOffset/SLen = label name in TokChars }
+  AN_ADDR         = 35;
+  AN_DEREF        = 36;
 
   { IR opcodes. Append only while bootstrapping, as with token/node kinds. }
   IR_NOP       = 0;
@@ -153,7 +156,8 @@ type
     tkBreak, tkContinue, tkOverload,
     tkTry, tkExcept, tkFinally, tkRaise, tkOn,
     tkFloat, tkSingle_T, tkDouble_T, tkExtended_T,
-    tkProperty
+    tkProperty,
+    tkNil
   );
 
   TToken = record
@@ -232,6 +236,8 @@ type
     RecName  : Integer;
     ElemRecName: Integer;
     IsRef    : Boolean;   { parameter passed by reference }
+    PtrElemTk : TTypeKind;
+    PtrElemRec: Integer;
   end;
 
   TParam = record
@@ -393,6 +399,8 @@ var
   DynamicOff       : Integer;
   DynamicSize      : Integer;
   LastTypeRecId : Integer;
+  LastTypePointerElemTk : TTypeKind;
+  LastTypePointerElemRec : Integer;
   ErrorIdent : AnsiString;
   LastExprTk : TTypeKind;
   InInterface : Boolean;
@@ -535,6 +543,7 @@ var
   UClsVMTOffset : array[0..MAX_UCLASS-1] of Integer;
   UClsPBase  : array[0..MAX_UCLASS-1] of Integer;
   UClsPCount : array[0..MAX_UCLASS-1] of Integer;
+  UClsIsRecord : array[0..MAX_UCLASS-1] of Boolean;
   UClsCount  : Integer;
 
   UFldNOff   : array[0..MAX_UFIELD-1] of Integer;
@@ -542,6 +551,8 @@ var
   UFldOff_   : array[0..MAX_UFIELD-1] of Integer;
   UFldTk     : array[0..MAX_UFIELD-1] of Integer;
   UFldRec_   : array[0..MAX_UFIELD-1] of Integer;
+  UFldPtrElemTk : array[0..MAX_UFIELD-1] of Integer;
+  UFldPtrElemRec : array[0..MAX_UFIELD-1] of Integer;
   UFldCount  : Integer;
 
   UMthNOff   : array[0..MAX_UMETH-1] of Integer;

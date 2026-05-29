@@ -375,6 +375,10 @@ begin
     fieldName := GetASTIdentName(node);
     Result := IRAppend(IR_FIELD, baseAddr, -1, -1, RecFieldOffset(recName, fieldName), ASTTk[node]);
   end
+  else if ASTKind[node] = AN_DEREF then
+  begin
+    Result := IRLowerAST(ASTLeft[node]);
+  end
   else
     Result := IRAppend(IR_UNSUPPORTED, ASTKind[node], ASTLeft[node], ASTRight[node], ASTIVal[node], ASTTk[node]);
 end;
@@ -427,13 +431,18 @@ begin
         Result := IRAppend(IR_LOAD_SYM, varIdx, -1, -1, 0, ASTTk[node]);
     end;
 
-    AN_INDEX, AN_FIELD:
+    AN_INDEX, AN_FIELD, AN_DEREF:
     begin
       left := IRLowerAddress(node);
       if IntToTypeKind(ASTTk[node]) = tyString then
         Result := left
       else
         Result := IRAppend(IR_LOAD_MEM, left, -1, -1, 0, ASTTk[node]);
+    end;
+
+    AN_ADDR:
+    begin
+      Result := IRLowerAddress(ASTLeft[node]);
     end;
 
     AN_NEG:
