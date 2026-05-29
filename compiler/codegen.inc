@@ -460,13 +460,29 @@ begin
   end;
 end;
 
+function Shl8(shift: Integer): Integer;
+begin
+  Result := 0;
+  case shift of
+    0: Result := 1;
+    1: Result := 2;
+    2: Result := 4;
+    3: Result := 8;
+    4: Result := 16;
+    5: Result := 32;
+    6: Result := 64;
+    7: Result := 128;
+  end;
+end;
+
 procedure GenAST(node: Integer);
 var
   op: TTokenKind;
   pi, i, idx, dummyRec, limitIdx, loopTop, condJmp, exitJmp, slot: Integer;
   thenJmp, elseJmp, pairNode, elseNode, lhsNode, pair3, pair1, pair2: Integer;
   initNode, limitNode, isDownNode, bodyNode, seqNode, argNode, exprNode: Integer;
-  si, vidx, specialId, arg1, arg2, arg3, pathIdx, dstIdx, srcIdx, rhsNode, branchJeStart, wid: Integer;
+  si, vidx, specialId, arg1, arg2, arg3, pathIdx, dstIdx, srcIdx, rhsNode, branchJeStart, wid, lo, hi, val1, itemNode: Integer;
+  falseJmp1, falseJmp2, falseJmp3, falseJmp4, falseTarget: Integer;
   breakBase, continueBase, continueTarget: Integer;
   handlerNode, handlerNextJmp: Integer;
   lhsTk, rhsTk, dummyTk: TTypeKind;
@@ -511,6 +527,49 @@ begin
       idx := InternStr(GetASTStrVal(node));
       EmitB($48); EmitB($B8); EmitDataRef(Strs[idx].Offset);
     end;
+    AN_SET_LIT:
+    begin
+      while (DataLen mod 8) <> 0 do
+      begin
+        if DataLen >= MAX_DATA then Error('data overflow');
+        Data[DataLen] := 0;
+        Inc(DataLen);
+      end;
+      idx := DataLen;
+      for i := 0 to 31 do
+      begin
+        if DataLen >= MAX_DATA then Error('data overflow');
+        Data[DataLen] := 0;
+        Inc(DataLen);
+      end;
+      argNode := ASTLeft[node];
+      while argNode <> -1 do
+      begin
+        itemNode := ASTLeft[argNode];
+        if ASTKind[itemNode] = AN_PAIR then
+        begin
+          lo := ASTIVal[ASTLeft[itemNode]];
+          hi := ASTIVal[ASTRight[itemNode]];
+          if lo < 0 then lo := 0;
+          if hi > 255 then hi := 255;
+          for val1 := lo to hi do
+          begin
+            Data[idx + (val1 div 8)] := Data[idx + (val1 div 8)] or Shl8(val1 mod 8);
+          end;
+        end
+        else
+        begin
+          val1 := ASTIVal[itemNode];
+          if (val1 >= 0) and (val1 <= 255) then
+          begin
+            Data[idx + (val1 div 8)] := Data[idx + (val1 div 8)] or Shl8(val1 mod 8);
+          end;
+        end;
+        argNode := ASTRight[argNode];
+      end;
+      EmitB($48); EmitB($B8); EmitDataRef(idx);
+      LastExprTk := tySet;
+    end;
     AN_IDENT:
     begin
       idx := ASTIVal[node];
@@ -520,7 +579,7 @@ begin
       end
       else
       begin
-        if (Syms[idx].TypeKind = tyString) or Syms[idx].IsArray then
+        if (Syms[idx].TypeKind = tyString) or (Syms[idx].TypeKind = tySet) or Syms[idx].IsArray then
         begin
           CompileLValueAddressInternal(idx, dummyTk, dummyRec);
         end
@@ -535,7 +594,7 @@ begin
     AN_INDEX, AN_FIELD, AN_DEREF:
     begin
       GenLValueAddress(node, dummyTk, dummyRec, False);
-      if dummyTk = tyString then
+      if (dummyTk = tyString) or (dummyTk = tySet) then
         begin { address stays in rax } end
       else if TypeIsFloat(dummyTk) then
       begin
@@ -638,7 +697,138 @@ begin
       EmitB($48); EmitB($89); EmitB($C1); { mov rcx, rax }
       EmitB($58); { pop rax }
 
-      opOvrlIdx := FindOpOverload(Ord(op), ASTTk[ASTLeft[node]], ResolveNodeRec(ASTLeft[node]));
+      if (ASTTk[ASTLeft[node]] = Ord(tySet)) and (op in [tkPlus, tkMinus, tkStar]) then
+      begin
+        { rax = LHS set address, rcx = RHS set address }
+        EmitB($48); EmitB($89); EmitB($C6); { mov rsi, rax }
+        EmitB($48); EmitB($89); EmitB($CA); { mov rdx, rcx }
+        EmitB($48); EmitB($83); EmitB($EC); EmitB(32); { sub rsp, 32 }
+        EmitB($48); EmitB($89); EmitB($E7); { mov rdi, rsp }
+        
+        { Load and combine first 8 bytes }
+        EmitB($48); EmitB($8B); EmitB($06); { mov rax, [rsi] }
+        case op of
+          tkPlus:  begin EmitB($48); EmitB($0B); EmitB($02); end; { or rax, [rdx] }
+          tkMinus: begin EmitB($48); EmitB($8B); EmitB($0A); { mov rcx, [rdx] }; EmitB($48); EmitB($F7); EmitB($D1); { not rcx }; EmitB($48); EmitB($21); EmitB($C8); { and rax, rcx } end;
+          tkStar:  begin EmitB($48); EmitB($23); EmitB($02); end; { and rax, [rdx] }
+        end;
+        EmitB($48); EmitB($89); EmitB($07); { mov [rdi], rax }
+        
+        { Load and combine second 8 bytes }
+        EmitB($48); EmitB($8B); EmitB($46); EmitB($08); { mov rax, [rsi+8] }
+        case op of
+          tkPlus:  begin EmitB($48); EmitB($0B); EmitB($42); EmitB($08); end; { or rax, [rdx+8] }
+          tkMinus: begin EmitB($48); EmitB($8B); EmitB($4A); EmitB($08); { mov rcx, [rdx+8] }; EmitB($48); EmitB($F7); EmitB($D1); { not rcx }; EmitB($48); EmitB($21); EmitB($C8); { and rax, rcx } end;
+          tkStar:  begin EmitB($48); EmitB($23); EmitB($42); EmitB($08); end; { and rax, [rdx+8] }
+        end;
+        EmitB($48); EmitB($89); EmitB($47); EmitB($08); { mov [rdi+8], rax }
+
+        { Load and combine third 8 bytes }
+        EmitB($48); EmitB($8B); EmitB($46); EmitB($10); { mov rax, [rsi+16] }
+        case op of
+          tkPlus:  begin EmitB($48); EmitB($0B); EmitB($42); EmitB($10); end; { or rax, [rdx+16] }
+          tkMinus: begin EmitB($48); EmitB($8B); EmitB($4A); EmitB($10); { mov rcx, [rdx+16] }; EmitB($48); EmitB($F7); EmitB($D1); { not rcx }; EmitB($48); EmitB($21); EmitB($C8); { and rax, rcx } end;
+          tkStar:  begin EmitB($48); EmitB($23); EmitB($42); EmitB($10); end; { and rax, [rdx+16] }
+        end;
+        EmitB($48); EmitB($89); EmitB($47); EmitB($10); { mov [rdi+16], rax }
+
+        { Load and combine fourth 8 bytes }
+        EmitB($48); EmitB($8B); EmitB($46); EmitB($18); { mov rax, [rsi+24] }
+        case op of
+          tkPlus:  begin EmitB($48); EmitB($0B); EmitB($42); EmitB($18); end; { or rax, [rdx+24] }
+          tkMinus: begin EmitB($48); EmitB($8B); EmitB($4A); EmitB($18); { mov rcx, [rdx+24] }; EmitB($48); EmitB($F7); EmitB($D1); { not rcx }; EmitB($48); EmitB($21); EmitB($C8); { and rax, rcx } end;
+          tkStar:  begin EmitB($48); EmitB($23); EmitB($42); EmitB($18); end; { and rax, [rdx+24] }
+        end;
+        EmitB($48); EmitB($89); EmitB($47); EmitB($18); { mov [rdi+24], rax }
+        
+        EmitB($48); EmitB($89); EmitB($F8); { mov rax, rdi }
+        LastExprTk := tySet;
+      end
+      else if (ASTTk[ASTLeft[node]] = Ord(tySet)) and (op in [tkEq, tkNeq, tkLe, tkGe]) then
+      begin
+        { rax = LHS set address, rcx = RHS set address }
+        EmitB($48); EmitB($89); EmitB($C6); { mov rsi, rax }
+        EmitB($48); EmitB($89); EmitB($CA); { mov rdx, rcx }
+        
+        if (op = tkEq) or (op = tkNeq) then
+        begin
+          EmitB($48); EmitB($8B); EmitB($06); { mov rax, [rsi] }
+          EmitB($48); EmitB($3B); EmitB($02); { cmp rax, [rdx] }
+          EmitB($75); falseJmp1 := CodeLen; EmitB(0);
+          
+          EmitB($48); EmitB($8B); EmitB($46); EmitB($08); { mov rax, [rsi+8] }
+          EmitB($48); EmitB($3B); EmitB($42); EmitB($08); { cmp rax, [rdx+8] }
+          EmitB($75); falseJmp2 := CodeLen; EmitB(0);
+
+          EmitB($48); EmitB($8B); EmitB($46); EmitB($10); { mov rax, [rsi+16] }
+          EmitB($48); EmitB($3B); EmitB($42); EmitB($10); { cmp rax, [rdx+16] }
+          EmitB($75); falseJmp3 := CodeLen; EmitB(0);
+
+          EmitB($48); EmitB($8B); EmitB($46); EmitB($18); { mov rax, [rsi+24] }
+          EmitB($48); EmitB($3B); EmitB($42); EmitB($18); { cmp rax, [rdx+24] }
+          EmitB($75); falseJmp4 := CodeLen; EmitB(0);
+          
+          if op = tkEq then MovRaxImm(1) else MovRaxImm(0);
+          EmitB($E9); exitJmp := CodeLen; EmitI32(0);
+          
+          falseTarget := CodeLen;
+          Patch8(falseJmp1, falseTarget - (falseJmp1 + 1));
+          Patch8(falseJmp2, falseTarget - (falseJmp2 + 1));
+          Patch8(falseJmp3, falseTarget - (falseJmp3 + 1));
+          Patch8(falseJmp4, falseTarget - (falseJmp4 + 1));
+          if op = tkEq then MovRaxImm(0) else MovRaxImm(1);
+          
+          Patch32(exitJmp, CodeLen - (exitJmp + 4));
+        end
+        else
+        begin
+          if op = tkGe then
+          begin
+            EmitB($48); EmitB($89); EmitB($CE); { mov rsi, rcx }
+            EmitB($48); EmitB($89); EmitB($C2); { mov rdx, rax }
+          end;
+          
+          EmitB($48); EmitB($8B); EmitB($06); { mov rax, [rsi] }
+          EmitB($48); EmitB($8B); EmitB($0A); { mov rcx, [rdx] }
+          EmitB($48); EmitB($F7); EmitB($D1); { not rcx }
+          EmitB($48); EmitB($21); EmitB($C8); { and rax, rcx }
+          EmitB($75); falseJmp1 := CodeLen; EmitB(0);
+
+          EmitB($48); EmitB($8B); EmitB($46); EmitB($08); { mov rax, [rsi+8] }
+          EmitB($48); EmitB($8B); EmitB($4A); EmitB($08); { mov rcx, [rdx+8] }
+          EmitB($48); EmitB($F7); EmitB($D1); { not rcx }
+          EmitB($48); EmitB($21); EmitB($C8); { and rax, rcx }
+          EmitB($75); falseJmp2 := CodeLen; EmitB(0);
+
+          EmitB($48); EmitB($8B); EmitB($46); EmitB($10); { mov rax, [rsi+16] }
+          EmitB($48); EmitB($8B); EmitB($4A); EmitB($10); { mov rcx, [rdx+16] }
+          EmitB($48); EmitB($F7); EmitB($D1); { not rcx }
+          EmitB($48); EmitB($21); EmitB($C8); { and rax, rcx }
+          EmitB($75); falseJmp3 := CodeLen; EmitB(0);
+
+          EmitB($48); EmitB($8B); EmitB($46); EmitB($18); { mov rax, [rsi+24] }
+          EmitB($48); EmitB($8B); EmitB($4A); EmitB($18); { mov rcx, [rdx+24] }
+          EmitB($48); EmitB($F7); EmitB($D1); { not rcx }
+          EmitB($48); EmitB($21); EmitB($C8); { and rax, rcx }
+          EmitB($75); falseJmp4 := CodeLen; EmitB(0);
+          
+          MovRaxImm(1);
+          EmitB($E9); exitJmp := CodeLen; EmitI32(0);
+          
+          falseTarget := CodeLen;
+          Patch8(falseJmp1, falseTarget - (falseJmp1 + 1));
+          Patch8(falseJmp2, falseTarget - (falseJmp2 + 1));
+          Patch8(falseJmp3, falseTarget - (falseJmp3 + 1));
+          Patch8(falseJmp4, falseTarget - (falseJmp4 + 1));
+          MovRaxImm(0);
+          
+          Patch32(exitJmp, CodeLen - (exitJmp + 4));
+        end;
+        LastExprTk := tyBoolean;
+      end
+      else
+      begin
+        opOvrlIdx := FindOpOverload(Ord(op), ASTTk[ASTLeft[node]], ResolveNodeRec(ASTLeft[node]));
       if opOvrlIdx >= 0 then
       begin
         { rax = lhs, rcx = rhs — set rdi/rsi for System V AMD64 ABI call }
@@ -729,6 +919,31 @@ begin
       begin
         case op of
           tkStar: begin EmitB($48); EmitB($0F); EmitB($AF); EmitB($C1); end;
+          tkIn:
+          begin
+            { rax = element value (LHS), rcx = set address (RHS) }
+            EmitB($48); EmitB($3D); EmitI32(255); { cmp rax, 255 }
+            EmitB($0F); EmitB($87); condJmp := CodeLen; EmitI32(0); { ja out_of_range }
+            
+            EmitB($48); EmitB($89); EmitB($C2); { mov rdx, rax }
+            EmitB($48); EmitB($C1); EmitB($EA); EmitB($03); { shr rdx, 3 }
+            EmitB($49); EmitB($89); EmitB($C0); { mov r8, rax }
+            EmitB($49); EmitB($83); EmitB($E0); EmitB($07); { and r8, 7 }
+            
+            EmitB($48); EmitB($0F); EmitB($B6); EmitB($14); EmitB($11); { movzx rdx, byte [rcx+rdx] }
+            
+            MovRaxImm(1);
+            EmitB($4C); EmitB($89); EmitB($C1); { mov rcx, r8 }
+            EmitB($48); EmitB($D3); EmitB($E0); { shl rax, cl }
+            EmitB($48); EmitB($85); EmitB($D0); { test rax, rdx }
+            EmitB($0F); EmitB($95); EmitB($C0); { setnz al }
+            EmitB($48); EmitB($0F); EmitB($B6); EmitB($C0); { movzx rax, al }
+            EmitB($E9); exitJmp := CodeLen; EmitI32(0); { jmp exit }
+            
+            Patch32(condJmp, CodeLen - (condJmp + 4));
+            MovRaxImm(0);
+            Patch32(exitJmp, CodeLen - (exitJmp + 4));
+          end;
           tkDiv:
           begin
             if TypeDivideUnsigned(IntToTypeKind(ASTTk[ASTLeft[node]])) then
@@ -823,6 +1038,7 @@ begin
         end;
       end;
       end;  { end integer path else }
+      end;
     end;
     AN_NEG:
     begin
@@ -1065,9 +1281,31 @@ begin
         end
         else
         begin
-          GenAST(rhsNode);
-          EmitB($59); { pop rcx }
-          if TypeIsFloat(lhsTk) then
+          if (ASTKind[rhsNode] = AN_BINOP) and (ASTTk[rhsNode] = Ord(tySet)) then
+          begin
+            GenAST(rhsNode);
+            { mov rcx, [rsp + 32] }
+            EmitB($48); EmitB($8B); EmitB($4C); EmitB($24); EmitB($20);
+          end
+          else
+          begin
+            GenAST(rhsNode);
+            EmitB($59); { pop rcx }
+          end;
+
+          if lhsTk = tySet then
+          begin
+            { mov rsi, rax }
+            EmitB($48); EmitB($89); EmitB($C6);
+            { mov rdi, rcx }
+            EmitB($48); EmitB($89); EmitB($CF);
+            { movsq x 4 }
+            EmitB($48); EmitB($A5);
+            EmitB($48); EmitB($A5);
+            EmitB($48); EmitB($A5);
+            EmitB($48); EmitB($A5);
+          end
+          else if TypeIsFloat(lhsTk) then
           begin
             if lhsTk = tySingle then
             begin
@@ -1096,6 +1334,10 @@ begin
               begin EmitB($89); EmitB($01); end
             else
               begin EmitB($48); EmitB($89); EmitB($01); end;
+          end;
+          if (ASTKind[rhsNode] = AN_BINOP) and (ASTTk[rhsNode] = Ord(tySet)) then
+          begin
+            EmitB($48); EmitB($83); EmitB($C4); EmitB(40); { add rsp, 40 }
           end;
         end;
       end;

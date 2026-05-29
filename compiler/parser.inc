@@ -136,6 +136,7 @@ procedure EmitArgvToAddr; forward;
 
 function ParseLValueAST(idx: Integer; identTokIdx: Integer): Integer; forward;
 function ParseSetMembershipAST(leftExpr: Integer): Integer; forward;
+function ParseSetLiteralAST: Integer; forward;
 function ParseStatementAST: Integer; forward;
 function ParseBlockAST: Integer; forward;
 procedure CompileAST(node: Integer); forward;
@@ -1092,6 +1093,53 @@ begin
   Result := node;
 end;
 
+function ParseSetLiteralAST: Integer;
+var node, argNode, lastArg, loVal, hiVal, itemNode: Integer; done: Boolean;
+begin
+  node := AllocNode(AN_SET_LIT);
+  ASTTk[node] := Ord(tySet);
+  ASTLeft[node] := -1;
+  lastArg := -1;
+  
+  Expect(tkLBrack, '[');
+  if CurTok.Kind <> tkRBrack then
+  begin
+    done := False;
+    while not done do
+    begin
+      loVal := ParseSetConst;
+      if Eat(tkDotDot) then
+      begin
+        hiVal := ParseSetConst;
+        itemNode := AllocNode(AN_PAIR);
+        ASTLeft[itemNode] := AllocNode(AN_INT_LIT);
+        ASTIVal[ASTLeft[itemNode]] := loVal;
+        ASTRight[itemNode] := AllocNode(AN_INT_LIT);
+        ASTIVal[ASTRight[itemNode]] := hiVal;
+      end
+      else
+      begin
+        itemNode := AllocNode(AN_INT_LIT);
+        ASTIVal[itemNode] := loVal;
+      end;
+      
+      argNode := AllocNode(AN_ARG);
+      ASTLeft[argNode] := itemNode;
+      ASTRight[argNode] := -1;
+      
+      if lastArg = -1 then
+        ASTLeft[node] := argNode
+      else
+        ASTRight[lastArg] := argNode;
+      lastArg := argNode;
+      
+      if not Eat(tkComma) then done := True;
+    end;
+  end;
+  Expect(tkRBrack, ']');
+  Result := node;
+end;
+
 
 
 procedure EmitArgvToAddr;
@@ -1432,6 +1480,11 @@ begin
     tkInteger:
     begin
       node := AllocNode(AN_INT_LIT); ASTIVal[node] := CurTok.IVal; ASTTk[node] := Ord(tyInteger); CurASTNode := node; Next;
+    end;
+    tkLBrack:
+    begin
+      CurASTNode := ParseSetLiteralAST;
+      LastExprTk := tySet;
     end;
     tkNil:
     begin
@@ -1986,6 +2039,8 @@ begin
     ASTSOffset[node] := opSOffset; ASTSLen[node] := opSLen;
     if (op = tkAnd) and (ASTTk[left] = Ord(tyBoolean)) and (ASTTk[right] = Ord(tyBoolean)) then
       ASTTk[node] := Ord(tyBoolean)
+    else if (ASTTk[left] = Ord(tySet)) or (ASTTk[right] = Ord(tySet)) then
+      ASTTk[node] := Ord(tySet)
     else if op = tkSlash then
       ASTTk[node] := Ord(tyDouble)  { '/' always produces Double }
     else if op = tkDiv then
@@ -2028,6 +2083,8 @@ begin
     node := AllocNode(AN_BINOP); ASTIVal[node] := Ord(op); ASTLeft[node] := left; ASTRight[node] := right;
     if (op = tkPlus) and ((ASTTk[left] = Ord(tyString)) or (ASTTk[right] = Ord(tyString))) then
       ASTTk[node] := Ord(tyString)
+    else if (ASTTk[left] = Ord(tySet)) or (ASTTk[right] = Ord(tySet)) then
+      ASTTk[node] := Ord(tySet)
     else if (op = tkOr) and (ASTTk[left] = Ord(tyBoolean)) and (ASTTk[right] = Ord(tyBoolean)) then
       ASTTk[node] := Ord(tyBoolean)
     else if (ASTTk[left] = Ord(tySingle)) or (ASTTk[left] = Ord(tyDouble)) or (ASTTk[left] = Ord(tyExtended)) or
@@ -2050,10 +2107,25 @@ procedure ParseExpr;
 var op: TTokenKind; left, right, node: Integer;
 begin
   ParseSimpleExpr;
-  if (CurTok.Kind = tkIdent) and ((CurTok.SVal = 'in') or (CurTok.SVal = 'In')) then
+  if CurTok.Kind = tkIn then
   begin
     Next;
-    CurASTNode := ParseSetMembershipAST(CurASTNode);
+    if CurTok.Kind = tkLBrack then
+    begin
+      CurASTNode := ParseSetMembershipAST(CurASTNode);
+    end
+    else
+    begin
+      left := CurASTNode;
+      ParseSimpleExpr;
+      right := CurASTNode;
+      node := AllocNode(AN_BINOP);
+      ASTIVal[node] := Ord(tkIn);
+      ASTLeft[node] := left;
+      ASTRight[node] := right;
+      ASTTk[node] := Ord(tyBoolean);
+      CurASTNode := node;
+    end;
     Exit;
   end;
   if CurTok.Kind in [tkEq, tkNeq, tkLt, tkLe, tkGt, tkGe] then
@@ -2950,6 +3022,14 @@ begin
     else
     begin
       lo := CurTok.SVal;
+      if CaseEqual(lo, 'set') then
+      begin
+        Next;
+        Expect(tkOf, 'of');
+        elemTk := ParseTypeKind;
+        Result := tySet;
+        Exit;
+      end;
       if CaseEqual(lo, 'ansistring') then Result := tyString
       else if CaseEqual(lo, 'real') then Result := tyDouble
       else if CaseEqual(lo, 'single') then Result := tySingle
