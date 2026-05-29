@@ -334,7 +334,58 @@ begin
         end
         else
         begin
-          cmpUnsigned := TypeCompareUnsigned(IntToTypeKind(IRTk[left]), IntToTypeKind(IRTk[right]));
+          lhsTk := IntToTypeKind(IRTk[left]);
+          rhsTk := IntToTypeKind(IRTk[right]);
+          if (lhsTk = tySingle) or (lhsTk = tyDouble) or (lhsTk = tyExtended) or
+             (rhsTk = tySingle) or (rhsTk = tyDouble) or (rhsTk = tyExtended) or
+             (op = tkSlash) then
+          begin
+            if not TypeIsFloat(lhsTk) then
+              begin EmitB($F2); EmitB($48); EmitB($0F); EmitB($2A); EmitB($C8); end  { cvtsi2sd xmm1, rax }
+            else
+              begin EmitB($66); EmitB($48); EmitB($0F); EmitB($6E); EmitB($C8); end; { movq xmm1, rax }
+
+            if not TypeIsFloat(rhsTk) then
+              begin EmitB($F2); EmitB($48); EmitB($0F); EmitB($2A); EmitB($C1); end  { cvtsi2sd xmm0, rcx }
+            else
+              begin EmitB($66); EmitB($48); EmitB($0F); EmitB($6E); EmitB($C1); end; { movq xmm0, rcx }
+
+            case op of
+              tkPlus:  begin EmitB($F2); EmitB($0F); EmitB($58); EmitB($C1); end; { addsd xmm0, xmm1 }
+              tkMinus:
+                begin
+                  EmitB($F2); EmitB($0F); EmitB($5C); EmitB($C8); { subsd xmm1, xmm0 }
+                  EmitB($F2); EmitB($0F); EmitB($10); EmitB($C1); { movsd xmm0, xmm1 }
+                end;
+              tkStar:  begin EmitB($F2); EmitB($0F); EmitB($59); EmitB($C1); end; { mulsd xmm0, xmm1 }
+              tkSlash:
+                begin
+                  EmitB($F2); EmitB($0F); EmitB($5E); EmitB($C8); { divsd xmm1, xmm0 }
+                  EmitB($F2); EmitB($0F); EmitB($10); EmitB($C1); { movsd xmm0, xmm1 }
+                end;
+              tkEq, tkNeq, tkLt, tkLe, tkGt, tkGe:
+                begin
+                  EmitB($66); EmitB($0F); EmitB($2E); EmitB($C8); { ucomisd xmm1, xmm0 }
+                  case op of
+                    tkEq:  begin EmitB($0F); EmitB($94); EmitB($C0); end; { sete al }
+                    tkNeq: begin EmitB($0F); EmitB($95); EmitB($C0); end; { setne al }
+                    tkLt:  begin EmitB($0F); EmitB($92); EmitB($C0); end; { setb al }
+                    tkLe:  begin EmitB($0F); EmitB($96); EmitB($C0); end; { setbe al }
+                    tkGt:  begin EmitB($0F); EmitB($97); EmitB($C0); end; { seta al }
+                    tkGe:  begin EmitB($0F); EmitB($93); EmitB($C0); end; { setae al }
+                  end;
+                  EmitB($48); EmitB($0F); EmitB($B6); EmitB($C0); { movzx rax, al }
+                end;
+            end;
+
+            if not ((op = tkEq) or (op = tkNeq) or (op = tkLt) or (op = tkLe) or (op = tkGt) or (op = tkGe)) then
+            begin
+              EmitB($66); EmitB($48); EmitB($0F); EmitB($7E); EmitB($C0); { movq rax, xmm0 }
+            end;
+          end
+          else
+          begin
+            cmpUnsigned := TypeCompareUnsigned(IntToTypeKind(IRTk[left]), IntToTypeKind(IRTk[right]));
 
           case op of
           tkPlus:  begin EmitB($48); EmitB($01); EmitB($C8); end; { add rax, rcx }
@@ -398,6 +449,7 @@ begin
             end;
         else
           Error('Unsupported operator in IR codegen');
+        end;
         end;
         end;
       end;

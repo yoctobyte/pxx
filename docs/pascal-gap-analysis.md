@@ -10,11 +10,11 @@ These four features represent the most critical, daily-used language mechanics i
 
 ### 1. Floating-Point Math (`Single` / `Double`)
 * **Reference behavior**: Native IEEE-754 single and double precision support mapped to SSE2 registers (`XMM0`-`XMM7`).
-* **Current state**: The types `Single` and `Double` are recognized by the parser, and scalar variables can be loaded and stored. However, actual float constant parsing (e.g. `3.14`), floating-point operators (`+`, `-`, `*`, `/`), and x86-64 SSE code generation are not yet implemented.
-* **Implementation requirements**:
-  - Update lexer/parser to support real literal parsing (`[0-9]+\.[0-9]+`).
-  - Implement SSE scalar arithmetic instructions (`addsd`, `subsd`, `mulsd`, `divsd`).
-  - Update `ParseFactor` to handle floating-point operators.
+* **Current state**: Implemented in the direct x86-64 backend for scalar `Single`, `Double`/`Real`, and `Extended` storage; real literals including exponent notation; unary minus; mixed integer/float arithmetic; `/` as floating division; and float comparisons. Coverage is tracked by `test/test_float.pas`.
+* **Remaining gaps**:
+  - Write/WriteLn of float values.
+  - Explicit cast/rounding intrinsics such as `Trunc`, `Round`, `Float`, and `Int`.
+  - Complete IR-backend parity for float literals and operations.
 
 ### 2. Dynamic Arrays (`array of T`)
 * **Reference behavior**: Heap-allocated arrays declared as `array of Type`. Resized at runtime via `SetLength(Arr, Size)`. Behind the scenes, dynamic arrays are pointers to heap blocks with size and reference count metadata stored immediately before the actual data:

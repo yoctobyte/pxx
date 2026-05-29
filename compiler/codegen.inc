@@ -508,11 +508,14 @@ begin
       else if TypeIsFloat(dummyTk) then
       begin
         if dummyTk = tySingle then
-          begin EmitB($F3); EmitB($0F); EmitB($10); EmitB($00); end  { movss xmm0, [rax] }
+        begin
+          EmitB($F3); EmitB($0F); EmitB($10); EmitB($00);            { movss xmm0, [rax] }
+          EmitB($F3); EmitB($0F); EmitB($5A); EmitB($C0);            { cvtss2sd xmm0, xmm0 }
+        end
         else if dummyTk = tyExtended then
         begin
           EmitB($48); EmitB($83); EmitB($EC); EmitB($08);              { sub rsp, 8 }
-          EmitB($DF); EmitB($28);                                       { fldt [rax] }
+          EmitB($DB); EmitB($28);                                       { fldt [rax] }
           EmitB($DD); EmitB($1C); EmitB($24);                          { fstpl [rsp] }
           EmitB($F2); EmitB($0F); EmitB($10); EmitB($04); EmitB($24); { movsd xmm0, [rsp] }
           EmitB($48); EmitB($83); EmitB($C4); EmitB($08);              { add rsp, 8 }
@@ -1035,14 +1038,17 @@ begin
           if TypeIsFloat(lhsTk) then
           begin
             if lhsTk = tySingle then
-              begin EmitB($F3); EmitB($0F); EmitB($11); EmitB($01); end  { movss [rcx], xmm0 }
+            begin
+              EmitB($F2); EmitB($0F); EmitB($5A); EmitB($C0);            { cvtsd2ss xmm0, xmm0 }
+              EmitB($F3); EmitB($0F); EmitB($11); EmitB($01);            { movss [rcx], xmm0 }
+            end
             else if lhsTk = tyExtended then
             begin
               EmitB($48); EmitB($83); EmitB($EC); EmitB($08);              { sub rsp, 8 }
               EmitB($F2); EmitB($0F); EmitB($11); EmitB($04); EmitB($24); { movsd [rsp], xmm0 }
               EmitB($DD); EmitB($04); EmitB($24);                          { fldl [rsp] }
               EmitB($48); EmitB($83); EmitB($C4); EmitB($08);              { add rsp, 8 }
-              EmitB($DF); EmitB($39);                                       { fstpt [rcx] }
+              EmitB($DB); EmitB($39);                                       { fstpt [rcx] }
             end
             else
               begin EmitB($F2); EmitB($0F); EmitB($11); EmitB($01); end; { movsd [rcx], xmm0 }

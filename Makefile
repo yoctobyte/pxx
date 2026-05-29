@@ -186,6 +186,8 @@ test: $(COMPILER) fpc-check
 	grep -q "SizeOf: unknown type" /tmp/test_sizeof_error.log
 	./$(COMPILER) test/test_type_runtime.pas /tmp/test_type_runtime26
 	test "$$(/tmp/test_type_runtime26)" = "$$(printf '1\n1\n1\n0\n1\n18446744065119617025\n18446744073709551615\n9223372036854775807\n1\n-1\n-1\n-1\n18446744073709551615\n-1\n0\n2\n7\n123456\n9\n20')"
+	./$(COMPILER) test/test_float.pas /tmp/test_float26
+	test "$$(/tmp/test_float26)" = "$$(printf '1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1')"
 	./$(COMPILER) test/test_exceptions.pas /tmp/test_exceptions26
 	test "$$(/tmp/test_exceptions26)" = "$$(printf '1\n2\n4\n5')"
 	./$(COMPILER) test/test_exception_unit.pas /tmp/test_exception_unit26

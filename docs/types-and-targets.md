@@ -1,7 +1,7 @@
 # PXX Type System and Target Policy
 
-**Status:** Scalar integer storage and x86-64 target contract implemented.
-**Documentation snapshot:** 2026-05-27. Implementation may change faster than this document.
+**Status:** Scalar integer storage, scalar floating-point storage/arithmetic, and x86-64 target contract implemented.
+**Documentation snapshot:** 2026-05-29. Implementation may change faster than this document.
 **Reference:** [FPC ordinal/integer types](https://www.freepascal.org/daily/doc/ref/refsu4.html),
 [NativeInt](https://www.freepascal.org/docs-html/rtl/system/nativeint.html)
 
@@ -43,8 +43,9 @@ The sizes below are **source-language sizes**, not target-word sizes.
 | `NativeUInt`, `PtrUInt` | `tyNativeUInt` | target ptr | No | |
 | `Pointer` | `tyPointer` | target ptr | No | |
 | class reference | `tyClass` | target ptr | No | |
-| `Single` | `tySingle` | 4 | — | Floating point (future) |
-| `Double` | `tyDouble` | 8 | — | Floating point (future) |
+| `Single` | `tySingle` | 4 | — | 4-byte IEEE-754 storage; SSE2 scalar arithmetic |
+| `Double`, `Real` | `tyDouble` | 8 | — | 8-byte IEEE-754 storage; SSE2 scalar arithmetic |
+| `Extended` | `tyExtended` | 10 | — | 10-byte x87 storage; arithmetic lowered through SSE2 double |
 | `AnsiString` | `tyString` | varies | — | Heap/inline; see String Layout |
 
 **Key rule:** A 64-bit target changes pointer-sized types (`Pointer`, `NativeInt`,
@@ -192,22 +193,25 @@ Implemented for the current x86-64 Linux target:
 - Unsigned decimal output for eight-byte unsigned integer values.
 - C `int` function bodies and Pascal calls under the four-byte `Integer` model.
 - Predefined `PXX`, `CPU64`, `CPUX86_64`, and `LINUX` conditional symbols.
+- Scalar float literals, variables, arithmetic, unary minus, comparisons, and
+  mixed integer/float expression promotion in the direct backend.
 
 Remaining target/type work:
 
-1. Floating point types and operations (`Single`, `Double`).
-2. Optional integer diagnostics and checking modes are deferred; for now,
+1. Float output formatting and explicit cast/rounding intrinsics.
+2. Float parity in the experimental IR backend.
+3. Optional integer diagnostics and checking modes are deferred; for now,
    arithmetic wraps when a value is stored back into a narrower or overflowed
    machine-sized result, and mixed-sign expressions do not warn.
-3. Additional ordinal surface: `WideChar`, explicit ordinal/range conformance,
+4. Additional ordinal surface: `WideChar`, explicit ordinal/range conformance,
    and associated compatibility tests. `Ord` is implemented as a compiler
    intrinsic today and may later be presented through the System/RTL builtin
    surface; it does not need ordinary external-library calling semantics.
-4. General pointer syntax and semantics (`^T`, `@value`, dereference, `nil`,
+5. General pointer syntax and semantics (`^T`, `@value`, dereference, `nil`,
    casts and checks). Pointer-sized storage and `SizeOf(Pointer)` are already
    established independently of that syntax work.
-5. Explicit target selection (`--target=`).
-6. i386 output after the type system and ABI surface are stable.
+6. Explicit target selection (`--target=`).
+7. i386 output after the type system and ABI surface are stable.
 
 ---
 
@@ -225,7 +229,7 @@ Remaining target/type work:
 
 ## What Is NOT Addressed Here
 
-- Float/real types (`Single`, `Double`): future work
+- Float Write/WriteLn and cast intrinsics: future work
 - Full ordinal surface, including `WideChar`: future work
 - General pointer expressions and typed pointer syntax: future work; pointer
   size/layout is already part of the implemented target contract
