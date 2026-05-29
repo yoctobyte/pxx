@@ -32,7 +32,10 @@ specific compatibility statement covers it.
   constructors, and class/message unhandled reports are not implemented.
 - Floating-point support covers `Single` (4-byte SSE2), `Double`/`Real` (8-byte SSE2),
   and `Extended` (10-byte x87 storage, SSE2 arithmetic). Write/WriteLn of float values
-  and explicit cast intrinsics (Trunc, Round, etc.) are not yet implemented.
+  is implemented in both backends: fixed form `x:w:n` (exact, IEEE round-to-nearest-even)
+  and a bare scientific form (`d.<15 digits>E±ddd`, digits extracted in double precision,
+  so the format and last digits differ slightly from FPC). Explicit cast intrinsics
+  (Trunc, Round, etc.) are not yet implemented.
 - Integer arithmetic is intentionally unchecked for now: no mixed-sign
   warning or overflow/range-check switch is emitted, and narrowing or
   machine-width overflow wraps.

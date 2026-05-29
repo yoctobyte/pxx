@@ -12,7 +12,7 @@ These four features represent the most critical, daily-used language mechanics i
 * **Reference behavior**: Native IEEE-754 single and double precision support mapped to SSE2 registers (`XMM0`-`XMM7`).
 * **Current state**: Implemented in the direct x86-64 backend for scalar `Single`, `Double`/`Real`, and `Extended` storage; real literals including exponent notation; unary minus; mixed integer/float arithmetic; `/` as floating division; and float comparisons. Coverage is tracked by `test/test_float.pas`.
 * **Remaining gaps**:
-  - Write/WriteLn of float values.
+  - Write/WriteLn of float values: **done** — fixed `x:w:n` (exact) and bare scientific, both backends.
   - Explicit cast/rounding intrinsics such as `Trunc`, `Round`, `Float`, and `Int`.
   - IR-backend parity: **done** — floats work under `--experimental-ir-codegen`.
 
