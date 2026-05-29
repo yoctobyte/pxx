@@ -396,6 +396,7 @@ var left, right, seq, item, value, outNode, first, last, leftAddr, argNode: Inte
     constValNode, clauseBodyLabelNode, exitJmpNode, nextClauseLabelNode: Integer;
     beforeCount, handlerLabel, handlerNode, handlerNextLabel, savedDepth: Integer;
     raiseValueNode, raiseClass: Integer;
+    i, lbId, off, len: Integer;
 begin
   if node = -1 then
   begin
@@ -946,6 +947,38 @@ begin
       Result := IRAppend(IR_VIRTUAL_CALL, first, last, cpi, slot, ASTTk[node]);
     end;
 
+    AN_LABEL:
+    begin
+      off := ASTSOffset[node];
+      len := ASTSLen[node];
+      lbId := -1;
+      for i := 0 to GotoLabelCount - 1 do
+        if TokSlicesMatch(GotoLabelNOff[i], GotoLabelNLen[i], off, len) then
+        begin
+          if GotoLabelIRId[i] = -1 then
+            GotoLabelIRId[i] := IRNewLabel;
+          lbId := GotoLabelIRId[i];
+          Break;
+        end;
+      if lbId = -1 then Error('AN_LABEL: undeclared label');
+      Result := IRAppend(IR_LABEL, -1, -1, -1, lbId, 0);
+    end;
+    AN_GOTO:
+    begin
+      off := ASTSOffset[node];
+      len := ASTSLen[node];
+      lbId := -1;
+      for i := 0 to GotoLabelCount - 1 do
+        if TokSlicesMatch(GotoLabelNOff[i], GotoLabelNLen[i], off, len) then
+        begin
+          if GotoLabelIRId[i] = -1 then
+            GotoLabelIRId[i] := IRNewLabel;
+          lbId := GotoLabelIRId[i];
+          Break;
+        end;
+      if lbId = -1 then Error('AN_GOTO: undefined label');
+      Result := IRAppend(IR_JUMP, lbId, -1, -1, 0, 0);
+    end;
     AN_PAIR, AN_SEQ:
     begin
       left := IRLowerAST(ASTLeft[node]);

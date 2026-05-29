@@ -452,6 +452,8 @@ var
   nextJmpCount    : Integer;
   branchSeq, branchPair, labelsHead, stmtNode, labelNode: Integer;
   cv: Int64;
+  j, gOff, gLen: Integer; gFound: Boolean;
+  isRefArg, isFloatArg: Boolean;
 begin
   if node = -1 then Exit;
   case ASTKind[node] of
@@ -1538,6 +1540,48 @@ begin
       EmitCodeCall(ExcRaiseAddr);
 
       Patch32(elseJmp, CodeLen - (elseJmp + 4));
+    end;
+    AN_LABEL:
+    begin
+      gOff := ASTSOffset[node];
+      gLen := ASTSLen[node];
+      for i := 0 to GotoLabelCount - 1 do
+        if TokSlicesMatch(GotoLabelNOff[i], GotoLabelNLen[i], gOff, gLen) then
+        begin
+          GotoLabelCodePos[i] := CodeLen;
+          for j := 0 to GotoFixupCount - 1 do
+            if TokSlicesMatch(GotoFixupNOff[j], GotoFixupNLen[j], gOff, gLen) then
+              Patch32(GotoFixupCodePos[j], CodeLen - (GotoFixupCodePos[j] + 4));
+          Break;
+        end;
+    end;
+    AN_GOTO:
+    begin
+      gOff := ASTSOffset[node];
+      gLen := ASTSLen[node];
+      gFound := False;
+      for i := 0 to GotoLabelCount - 1 do
+        if TokSlicesMatch(GotoLabelNOff[i], GotoLabelNLen[i], gOff, gLen) then
+        begin
+          gFound := True;
+          if GotoLabelCodePos[i] <> -1 then
+          begin
+            EmitB($E9);
+            EmitI32(GotoLabelCodePos[i] - (CodeLen + 4));
+          end
+          else
+          begin
+            EmitB($E9);
+            if GotoFixupCount >= 256 then Error('too many goto fixups');
+            GotoFixupCodePos[GotoFixupCount] := CodeLen;
+            GotoFixupNOff[GotoFixupCount]    := gOff;
+            GotoFixupNLen[GotoFixupCount]    := gLen;
+            Inc(GotoFixupCount);
+            EmitI32(0);
+          end;
+          Break;
+        end;
+      if not gFound then Error('goto: undefined label');
     end;
   end;
 end;

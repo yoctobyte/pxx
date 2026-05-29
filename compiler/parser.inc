@@ -134,7 +134,7 @@ procedure CompileLValueAddress(const name: AnsiString; var tk: TTypeKind; var re
 procedure ParseLValue(const name: AnsiString); forward;
 procedure EmitArgvToAddr; forward;
 
-function ParseLValueAST(idx: Integer): Integer; forward;
+function ParseLValueAST(idx: Integer; identTokIdx: Integer): Integer; forward;
 function ParseSetMembershipAST(leftExpr: Integer): Integer; forward;
 function ParseStatementAST: Integer; forward;
 function ParseBlockAST: Integer; forward;
@@ -637,7 +637,7 @@ begin
   RegisterOpOverload(Ord(opKind), Ord(tyClass), recId, procIdx);
 end;
 
-function ParseLValueAST(idx: Integer): Integer;
+function ParseLValueAST(idx: Integer; identTokIdx: Integer): Integer;
 var
   node, indexNode, fieldNode, prevTok, recName, i: Integer;
   tk: TTypeKind;
@@ -645,74 +645,108 @@ var
   mci, mmi, mpi, mcallNode, mselfArg, mlastArg, margSeq, margIdx, mexprNode, mai, pri, ci: Integer;
   methName: AnsiString;
   isAssign: Boolean;
+  selfClassCi, selfIdx, fldIdx, selfNode: Integer;
 begin
-  prevTok := TokPos - 1;
+  prevTok := identTokIdx;
+  if DebugTrace then writeln('ParseLValueAST: idx = ', idx, ' prevTok = ', prevTok, ' TokenStr = "', GetTokenStr(prevTok), '" CurTok.Line = ', CurTok.Line, ' TokPos = ', TokPos);
   if idx < 0 then
   begin
-    ci := FindUClass(GetTokenStr(prevTok));
-    if ci >= 0 then
+    fieldName := GetTokenStr(prevTok);
+    fldIdx := -1;
+    if (CurSelfClass >= REC_UCLASS_BASE) and (CurProc >= 0) and (Procs[CurProc].ParamCount > 0) then
     begin
-      Expect(tkDot, '.');
-      if CurTok.Kind <> tkIdent then Error('expected class method name');
-      fieldName := CurTok.SVal;
-      Next;
+      selfClassCi := CurSelfClass - REC_UCLASS_BASE;
+      fldIdx := FindUField(selfClassCi, fieldName);
+    end;
+
+    if fldIdx >= 0 then
+    begin
+      selfIdx := Procs[CurProc].Params[0].SymIdx;
+      selfNode := AllocNode(AN_IDENT);
+      ASTIVal[selfNode] := selfIdx;
+      ASTTk[selfNode] := Ord(tyClass);
       
-      mmi := FindUMeth(ci, fieldName);
-      if mmi < 0 then Error('class method not found: ' + fieldName);
-      mpi := UMthProc_[mmi];
+      fieldNode := AllocNode(AN_FIELD);
+      ASTLeft[fieldNode] := selfNode;
+      ASTSOffset[fieldNode] := Tokens[prevTok].SOffset;
+      ASTSLen[fieldNode] := Tokens[prevTok].SLen;
       
-      if not UMthIsStatic[mmi] then
-        Error('cannot call non-static method on class type directly');
-        
-      mcallNode := AllocNode(AN_CALL);
-      ASTIVal[mcallNode] := mpi;
-      ASTTk[mcallNode] := Ord(Procs[mpi].RetType);
-      mlastArg := -1;
+      tk := IntToTypeKind(UFldTk[fldIdx]);
+      recName := UFldRec_[fldIdx];
+      ASTTk[fieldNode] := Ord(tk);
       
-      if CurTok.Kind = tkLParen then
-      begin
-        Next;
-        mai := 0;
-        while mai <= Procs[mpi].ParamCount-1 do
-        begin
-          if Procs[mpi].Params[mai].IsRef or Procs[mpi].Params[mai].IsArray then
-          begin
-            if CurTok.Kind <> tkIdent then Error('expected variable');
-            margIdx := FindSym(CurTok.SVal); Next;
-            mexprNode := ParseLValueAST(margIdx);
-          end
-          else
-          begin
-            ParseExpr; mexprNode := CurASTNode;
-          end;
-          margSeq := AllocNode(AN_ARG); ASTLeft[margSeq] := mexprNode;
-          if mlastArg = -1 then
-            ASTLeft[mcallNode] := margSeq
-          else
-            ASTRight[mlastArg] := margSeq;
-          mlastArg := margSeq;
-          if mai < Procs[mpi].ParamCount-1 then Expect(tkComma, ',');
-          Inc(mai);
-        end;
-        Expect(tkRParen, ')');
-      end;
-      
-      Result := mcallNode;
-      Exit;
+      node := fieldNode;
     end
     else
     begin
-      ErrorIdent := GetTokenStr(prevTok);
-      Error('undefined variable');
+      ci := FindUClass(fieldName);
+      if ci >= 0 then
+      begin
+        Expect(tkDot, '.');
+        if CurTok.Kind <> tkIdent then Error('expected class method name');
+        fieldName := CurTok.SVal;
+        Next;
+        
+        mmi := FindUMeth(ci, fieldName);
+        if mmi < 0 then Error('class method not found: ' + fieldName);
+        mpi := UMthProc_[mmi];
+        
+        if not UMthIsStatic[mmi] then
+          Error('cannot call non-static method on class type directly');
+          
+        mcallNode := AllocNode(AN_CALL);
+        ASTIVal[mcallNode] := mpi;
+        ASTTk[mcallNode] := Ord(Procs[mpi].RetType);
+        mlastArg := -1;
+        
+        if CurTok.Kind = tkLParen then
+        begin
+          Next;
+          mai := 0;
+          while mai <= Procs[mpi].ParamCount-1 do
+          begin
+            if Procs[mpi].Params[mai].IsRef or Procs[mpi].Params[mai].IsArray then
+            begin
+              if CurTok.Kind <> tkIdent then Error('expected variable');
+              margIdx := FindSym(CurTok.SVal); Next;
+              mexprNode := ParseLValueAST(margIdx, TokPos - 2);
+            end
+            else
+            begin
+              ParseExpr; mexprNode := CurASTNode;
+            end;
+            margSeq := AllocNode(AN_ARG); ASTLeft[margSeq] := mexprNode;
+            if mlastArg = -1 then
+              ASTLeft[mcallNode] := margSeq
+            else
+              ASTRight[mlastArg] := margSeq;
+            mlastArg := margSeq;
+            if mai < Procs[mpi].ParamCount-1 then Expect(tkComma, ',');
+            Inc(mai);
+          end;
+          Expect(tkRParen, ')');
+        end;
+        
+        Result := mcallNode;
+        Exit;
+      end
+      else
+      begin
+        ErrorIdent := fieldName;
+        Error('undefined variable');
+      end;
     end;
+  end
+  else
+  begin
+    node := AllocNode(AN_IDENT);
+    ASTIVal[node] := idx;
+    ASTSOffset[node] := Tokens[prevTok].SOffset;
+    ASTSLen[node] := Tokens[prevTok].SLen;
+    tk := Syms[idx].TypeKind;
+    recName := Syms[idx].RecName;
+    ASTTk[node] := Ord(tk);
   end;
-  node := AllocNode(AN_IDENT);
-  ASTIVal[node] := idx;
-  ASTSOffset[node] := Tokens[prevTok].SOffset;
-  ASTSLen[node] := Tokens[prevTok].SLen;
-  tk := Syms[idx].TypeKind;
-  recName := Syms[idx].RecName;
-  ASTTk[node] := Ord(tk);
   
   while CurTok.Kind in [tkLBrack, tkDot] do
   begin
@@ -879,7 +913,7 @@ begin
               begin
                 if CurTok.Kind <> tkIdent then Error('expected variable');
                 margIdx := FindSym(CurTok.SVal); Next;
-                mexprNode := ParseLValueAST(margIdx);
+                mexprNode := ParseLValueAST(margIdx, TokPos - 2);
               end
               else
               begin
@@ -927,7 +961,7 @@ begin
               begin
                 if CurTok.Kind <> tkIdent then Error('expected variable');
                 margIdx := FindSym(CurTok.SVal); Next;
-                mexprNode := ParseLValueAST(margIdx);
+                mexprNode := ParseLValueAST(margIdx, TokPos - 2);
               end
               else
               begin
@@ -1336,7 +1370,7 @@ end;
 procedure ParseFactor;
 var name: AnsiString; recName: Integer; idx, pi, i, node, left, prevTok, valNode: Integer; tk: TTypeKind; op, argSeq, argSeq2, argSeq3, lastArg, argIdx, exprNode, szArg: Integer;
     nArgs, argsHead, currArg: Integer; argTypes: array[0..15] of TTypeKind;
-    ci, mmi, mpi, mcallNode, mlastArg: Integer;
+    ci, mmi, mpi, mcallNode, mlastArg, smSelfIdx, smselfArg: Integer;
 begin
   LastExprTk := tyInteger;
   case CurTok.Kind of
@@ -1415,7 +1449,7 @@ begin
       Next; Expect(tkLParen, '(');
       if CurTok.Kind <> tkIdent then Error('Length: expected string variable');
       idx := FindSym(CurTok.SVal); Next;
-      valNode := ParseLValueAST(idx);
+      valNode := ParseLValueAST(idx, TokPos - 2);
       if idx < 0 then Error('Length: undefined variable');
       Expect(tkRParen, ')');
       node := AllocNode(AN_CALL); ASTIVal[node] := -Ord(tkLength); ASTTk[node] := Ord(tyInteger);
@@ -1439,7 +1473,7 @@ begin
       Next; Expect(tkLParen, '(');
       if CurTok.Kind <> tkIdent then Error('SysOpen: expected string var');
       idx := FindSym(CurTok.SVal); Next;
-      valNode := ParseLValueAST(idx);
+      valNode := ParseLValueAST(idx, TokPos - 2);
       if (idx < 0) or (Syms[idx].TypeKind <> tyString) then Error('SysOpen: not a string var');
       Expect(tkComma, ',');
       
@@ -1461,7 +1495,7 @@ begin
       Expect(tkComma, ',');
       if CurTok.Kind <> tkIdent then Error('SysRead: expected array var');
       idx := FindSym(CurTok.SVal); Next;
-      valNode := ParseLValueAST(idx);
+      valNode := ParseLValueAST(idx, TokPos - 2);
       if (idx < 0) or not Syms[idx].IsArray then Error('SysRead: not an array var');
       Expect(tkComma, ',');
       
@@ -1484,7 +1518,7 @@ begin
       Expect(tkComma, ',');
       if CurTok.Kind <> tkIdent then Error('Syswrite: expected array var');
       idx := FindSym(CurTok.SVal); Next;
-      valNode := ParseLValueAST(idx);
+      valNode := ParseLValueAST(idx, TokPos - 2);
       if (idx < 0) or not Syms[idx].IsArray then Error('Syswrite: not an array var');
       Expect(tkComma, ',');
       
@@ -1696,7 +1730,7 @@ begin
               begin
                 if CurTok.Kind <> tkIdent then Error('expected variable');
                 argIdx := FindSym(CurTok.SVal); Next;
-                exprNode := ParseLValueAST(argIdx);
+                exprNode := ParseLValueAST(argIdx, TokPos - 2);
               end
               else
               begin
@@ -1801,8 +1835,61 @@ begin
       end
       else
       begin
-        Next;
-        CurASTNode := ParseLValueAST(idx);
+        { Implicit Self.method dispatch for methods called bare inside a class body in expression context }
+        node := -1;
+        if (idx < 0) and (pi < 0) and (CurSelfClass >= REC_UCLASS_BASE) then
+        begin
+          ci := CurSelfClass - REC_UCLASS_BASE;
+          mmi := FindUMeth(ci, name);
+          if mmi >= 0 then
+          begin
+            mpi := UMthProc_[mmi];
+            Next; { consume method name }
+            smSelfIdx := Procs[CurProc].Params[0].SymIdx;
+            smselfArg := AllocNode(AN_ARG);
+            valNode := AllocNode(AN_IDENT);
+            ASTIVal[valNode] := smSelfIdx;
+            ASTTk[valNode] := Ord(tyClass);
+            ASTLeft[smselfArg] := valNode;
+            if (mmi >= 0) and (UMthVirSlot[mmi] >= 0) then
+            begin
+              mcallNode := AllocNode(AN_VIRTUAL_CALL);
+              ASTRight[mcallNode] := UMthVirSlot[mmi];
+            end
+            else
+              mcallNode := AllocNode(AN_CALL);
+            ASTIVal[mcallNode] := mpi;
+            if (mpi >= 0) then
+              ASTTk[mcallNode] := Ord(Procs[mpi].RetType)
+            else
+              ASTTk[mcallNode] := Ord(tyInteger);
+            ASTLeft[mcallNode] := smselfArg;
+            mlastArg := smselfArg;
+            if CurTok.Kind = tkLParen then
+            begin
+              Next;
+              i := 1;
+              while CurTok.Kind <> tkRParen do
+              begin
+                ParseExpr;
+                argSeq := AllocNode(AN_ARG);
+                ASTLeft[argSeq] := CurASTNode;
+                ASTRight[mlastArg] := argSeq;
+                mlastArg := argSeq;
+                Inc(i);
+                if CurTok.Kind = tkComma then Next;
+              end;
+              Expect(tkRParen, ')');
+            end;
+            CurASTNode := mcallNode;
+            node := mcallNode;
+          end;
+        end;
+        if node = -1 then
+        begin
+          Next;
+          CurASTNode := ParseLValueAST(idx, TokPos - 2);
+        end;
       end;
     end;
     else Error('expected expression');
@@ -2325,9 +2412,10 @@ end;
 function ParseStatementAST: Integer;
 var
   name: AnsiString;
-  idx, pi, i, si, node, valNode, stepsNode, opNode, argSeq, argIdx, exprNode, lastArg: Integer;
+   idx, pi, i, si, node, valNode, stepsNode, opNode, argSeq, argIdx, exprNode, lastArg, identTokIdx: Integer;
   nArgs, argsHead, currArg: Integer; argTypes: array[0..15] of TTypeKind;
   isLn: Boolean;
+  smci, smmii, smpii, smcallNode, smselfArg, smLastArg, smArgSeq, smMai, smSelfIdx: Integer;
 begin
   node := -1;
   case CurTok.Kind of
@@ -2387,7 +2475,7 @@ begin
       idx := Ord(CurTok.Kind); Next;
       Expect(tkLParen, '(');
       if CurTok.Kind <> tkIdent then Error('expected variable');
-      argIdx := FindSym(CurTok.SVal); Next;
+      argIdx := FindSym(CurTok.SVal); identTokIdx := TokPos - 1; Next;
       if argIdx < 0 then Error('undefined');
       
       if Eat(tkComma) then
@@ -2401,7 +2489,7 @@ begin
       end;
       Expect(tkRParen, ')');
       
-      valNode := ParseLValueAST(argIdx);
+      valNode := ParseLValueAST(argIdx, identTokIdx);
       opNode := AllocNode(AN_BINOP);
       if idx = Ord(tkInc) then ASTIVal[opNode] := Ord(tkPlus) else ASTIVal[opNode] := Ord(tkMinus);
       ASTLeft[opNode] := valNode;
@@ -2416,9 +2504,8 @@ begin
     begin
       Next; Expect(tkLParen, '(');
       ParseExpr; argSeq := AllocNode(AN_ARG); ASTLeft[argSeq] := CurASTNode; Expect(tkComma, ',');
-      if CurTok.Kind <> tkIdent then Error('Syswrite: expected array var');
-      argIdx := FindSym(CurTok.SVal); Next;
-      valNode := ParseLValueAST(argIdx);
+      argIdx := FindSym(CurTok.SVal); identTokIdx := TokPos - 1; Next;
+      valNode := ParseLValueAST(argIdx, identTokIdx);
       if (argIdx < 0) or not Syms[argIdx].IsArray then Error('Syswrite: not an array var');
       Expect(tkComma, ',');
       
@@ -2464,8 +2551,8 @@ begin
       Next; Expect(tkLParen, '(');
       ParseExpr; argSeq := AllocNode(AN_ARG); ASTLeft[argSeq] := CurASTNode; Expect(tkComma, ',');
       if CurTok.Kind <> tkIdent then Error('ArgStr: expected string var');
-      argIdx := FindSym(CurTok.SVal); Next;
-      valNode := ParseLValueAST(argIdx);
+      argIdx := FindSym(CurTok.SVal); identTokIdx := TokPos - 1; Next;
+      valNode := ParseLValueAST(argIdx, identTokIdx);
       if (argIdx < 0) or (Syms[argIdx].TypeKind <> tyString) then Error('ArgStr: not a string var');
       Expect(tkRParen, ')');
       
@@ -2494,17 +2581,27 @@ begin
     tkIdent:
     begin
       name := CurTok.SVal;
+      { Label definition: 'labelname:' as a statement }
+      if Tokens[TokPos].Kind = tkColon then
+      begin
+        node := AllocNode(AN_LABEL);
+        ASTSOffset[node] := Tokens[TokPos-1].SOffset;
+        ASTSLen[node]    := Tokens[TokPos-1].SLen;
+        Next; Next; { consume ident and colon }
+        Result := node;
+        Exit;
+      end;
       if (name = 'LoadFile') or (name = 'loadfile') then
       begin
         Next; Expect(tkLParen, '(');
         if CurTok.Kind <> tkIdent then Error('LoadFile: expected path');
-        idx := FindSym(CurTok.SVal); Next;
-        valNode := ParseLValueAST(idx);
+        idx := FindSym(CurTok.SVal); identTokIdx := TokPos - 1; Next;
+        valNode := ParseLValueAST(idx, identTokIdx);
         Expect(tkComma, ',');
         
         if CurTok.Kind <> tkIdent then Error('LoadFile: expected destination');
-        si := FindSym(CurTok.SVal); Next;
-        stepsNode := ParseLValueAST(si);
+        si := FindSym(CurTok.SVal); identTokIdx := TokPos - 1; Next;
+        stepsNode := ParseLValueAST(si, identTokIdx);
         Expect(tkRParen, ')');
         
         argSeq := AllocNode(AN_ARG); ASTLeft[argSeq] := valNode;
@@ -2519,8 +2616,8 @@ begin
       begin
         Next; Expect(tkLParen, '(');
         if CurTok.Kind <> tkIdent then Error('SetLength: expected string variable');
-        idx := FindSym(CurTok.SVal); Next;
-        valNode := ParseLValueAST(idx);
+        idx := FindSym(CurTok.SVal); identTokIdx := TokPos - 1; Next;
+        valNode := ParseLValueAST(idx, identTokIdx);
         Expect(tkComma, ',');
         
         ParseExpr; Expect(tkRParen, ')');
@@ -2538,11 +2635,20 @@ begin
         Next; Expect(tkAssign, ':=');
         valNode := AllocNode(AN_IDENT);
         ASTIVal[valNode] := Procs[CurProc].RetSymIdx;
-        
+
         ParseExpr;
         node := AllocNode(AN_ASSIGN);
         ASTLeft[node] := valNode;
         ASTRight[node] := CurASTNode;
+      end
+      else if CaseEqual(name, 'goto') then
+      begin
+        Next;
+        if CurTok.Kind <> tkIdent then Error('expected label name after goto');
+        node := AllocNode(AN_GOTO);
+        ASTSOffset[node] := Tokens[TokPos-1].SOffset;
+        ASTSLen[node]    := Tokens[TokPos-1].SLen;
+        Next;
       end
       else
       begin
@@ -2624,17 +2730,68 @@ begin
 
         if node = -1 then
         begin
-          idx := FindSym(name); Next;
-          valNode := ParseLValueAST(idx);
-          if (ASTKind[valNode] = AN_CALL) or (ASTKind[valNode] = AN_VIRTUAL_CALL) then
-            node := valNode
-          else
+          { Implicit Self.method dispatch for methods called bare inside a class body }
+          if CurSelfClass >= REC_UCLASS_BASE then
           begin
-            Expect(tkAssign, ':=');
-            ParseExpr;
-            node := AllocNode(AN_ASSIGN);
-            ASTLeft[node] := valNode;
-            ASTRight[node] := CurASTNode;
+            smci := CurSelfClass - REC_UCLASS_BASE;
+            smmii := FindUMeth(smci, name);
+            if smmii >= 0 then
+            begin
+              smpii := UMthProc_[smmii];
+              Next; { consume method name }
+              smSelfIdx := Procs[CurProc].Params[0].SymIdx;
+              smselfArg := AllocNode(AN_ARG);
+              valNode := AllocNode(AN_IDENT);
+              ASTIVal[valNode] := smSelfIdx;
+              ASTTk[valNode] := Ord(tyClass);
+              ASTLeft[smselfArg] := valNode;
+              if (smmii >= 0) and (UMthVirSlot[smmii] >= 0) then
+              begin
+                smcallNode := AllocNode(AN_VIRTUAL_CALL);
+                ASTRight[smcallNode] := UMthVirSlot[smmii];
+              end
+              else
+                smcallNode := AllocNode(AN_CALL);
+              ASTIVal[smcallNode] := smpii;
+              if (smpii >= 0) then
+                ASTTk[smcallNode] := Ord(Procs[smpii].RetType)
+              else
+                ASTTk[smcallNode] := Ord(tyInteger);
+              ASTLeft[smcallNode] := smselfArg;
+              smLastArg := smselfArg;
+              if CurTok.Kind = tkLParen then
+              begin
+                Next;
+                smMai := 1;
+                while CurTok.Kind <> tkRParen do
+                begin
+                  ParseExpr;
+                  smArgSeq := AllocNode(AN_ARG);
+                  ASTLeft[smArgSeq] := CurASTNode;
+                  ASTRight[smLastArg] := smArgSeq;
+                  smLastArg := smArgSeq;
+                  Inc(smMai);
+                  if CurTok.Kind = tkComma then Next;
+                end;
+                Expect(tkRParen, ')');
+              end;
+              node := smcallNode;
+            end;
+          end;
+          if node = -1 then
+          begin
+            idx := FindSym(name); Next;
+            valNode := ParseLValueAST(idx, TokPos - 2);
+            if (ASTKind[valNode] = AN_CALL) or (ASTKind[valNode] = AN_VIRTUAL_CALL) then
+              node := valNode
+            else
+            begin
+              Expect(tkAssign, ':=');
+              ParseExpr;
+              node := AllocNode(AN_ASSIGN);
+              ASTLeft[node] := valNode;
+              ASTRight[node] := CurASTNode;
+            end;
           end;
         end;
       end;
@@ -2642,7 +2799,20 @@ begin
     
     tkSemicolon, tkEnd, tkElse, tkUntil, tkEOF: ;
     else
-      while not (CurTok.Kind in [tkSemicolon,tkEnd,tkElse,tkUntil,tkEOF]) do Next;
+    begin
+      { Check for 'goto label' }
+      if (CurTok.Kind = tkIdent) and CaseEqual(CurTok.SVal, 'goto') then
+      begin
+        Next;
+        if CurTok.Kind <> tkIdent then Error('expected label name after goto');
+        node := AllocNode(AN_GOTO);
+        ASTSOffset[node] := Tokens[TokPos-1].SOffset;
+        ASTSLen[node]    := Tokens[TokPos-1].SLen;
+        Next;
+      end
+      else
+        while not (CurTok.Kind in [tkSemicolon,tkEnd,tkElse,tkUntil,tkEOF]) do Next;
+    end;
   end;
   Result := node;
 end;
@@ -2811,7 +2981,7 @@ var
   tnOff, tnLen, ci, fnOff, fnLen, curFieldOff, fRec, fSize, fAlign, classAlign, depth: Integer;
   fTk: TTypeKind;
   parentCi, slot, mmi, mnOff, mnLen, pnOff, pnLen, rFOff, rFLen, rMOff, rMLen, wFOff, wFLen, wMOff, wMLen, rnOff, rnLen, wnOff, wnLen, propRec, i: Integer;
-  isConstructor, isDestructor, isVirtual, isOverride, isClassMethod: Boolean;
+  isConstructor, isDestructor, isVirtual, isOverride, isAbstract, isClassMethod: Boolean;
         mname, propName, readName, writeName: AnsiString;
   propTk: TTypeKind;
 begin
@@ -2910,10 +3080,19 @@ begin
 
             isVirtual := False;
             isOverride := False;
-            while (CurTok.Kind = tkIdent) and (CaseEqual(CurTok.SVal, 'virtual') or CaseEqual(CurTok.SVal, 'override')) do
+            isAbstract := False;
+            while (CurTok.Kind = tkIdent) and
+                  (CaseEqual(CurTok.SVal, 'virtual') or
+                   CaseEqual(CurTok.SVal, 'override') or
+                   CaseEqual(CurTok.SVal, 'abstract')) do
             begin
               if CaseEqual(CurTok.SVal, 'virtual') then isVirtual := True;
               if CaseEqual(CurTok.SVal, 'override') then isOverride := True;
+              if CaseEqual(CurTok.SVal, 'abstract') then
+              begin
+                isVirtual := True;   { abstract implies virtual }
+                isAbstract := True;
+              end;
               Next;
               Eat(tkSemicolon);
             end;
@@ -3075,6 +3254,7 @@ var
   nparams  : Integer;
   pi, i, sz: Integer;
   savedSC, savedFS, savedCurProc : Integer;
+  savedGLC, savedGFC, j: Integer;
   patchPos : Integer;
   depth    : Integer;
   doneArgs, doneParam, isArr, isByRef, declOverload, isClassKeyword, isStaticMethod: Boolean;
@@ -3134,7 +3314,8 @@ begin
     while (CurTok.Kind <> tkRParen) and not doneArgs do
     begin
       isByRef := False;
-      if CurTok.Kind = tkVar then
+      if (CurTok.Kind = tkVar) or
+         ((CurTok.Kind = tkIdent) and CaseEqual(CurTok.SVal, 'out')) then
       begin
         isByRef := True;
         Next;
@@ -3286,6 +3467,11 @@ begin
   { Save scope }
   savedSC := SymCount;
   savedFS := FrameSize;
+  savedGLC := GotoLabelCount;
+  savedGFC := GotoFixupCount;
+  GotoLabelCount := 0;
+  GotoFixupCount := 0;
+  for j := 0 to MAX_GOTO_LABELS - 1 do GotoLabelIRId[j] := -1;
   FrameSize := 0;
   CurProc := pi;
   Procs[pi].ScopeBase := SymCount;
@@ -3439,19 +3625,45 @@ begin
     end;
   end;
 
-  { Optional var section }
+  { Optional var/const/type/label sections }
   while CurTok.Kind in [tkVar, tkConst, tkType] do
     case CurTok.Kind of
       tkVar:   ParseVarSection;
       tkConst: ParseConstSection;
       tkType:  ParseTypeSection;
     end;
+  { label declarations: label foo, bar; }
+  while (CurTok.Kind = tkIdent) and CaseEqual(CurTok.SVal, 'label') do
+  begin
+    Next;
+    while CurTok.Kind = tkIdent do
+    begin
+      if GotoLabelCount >= MAX_GOTO_LABELS then Error('too many labels');
+      GotoLabelNOff[GotoLabelCount]    := Tokens[TokPos-1].SOffset;
+      GotoLabelNLen[GotoLabelCount]    := Tokens[TokPos-1].SLen;
+      GotoLabelCodePos[GotoLabelCount] := -1;
+      Inc(GotoLabelCount);
+      Next;
+      if not Eat(tkComma) then break;
+    end;
+    Eat(tkSemicolon);
+  end;
 
   { Body }
   Expect(tkBegin, 'begin');
   ParseBlock;
   Expect(tkEnd, 'end');
   Eat(tkSemicolon);
+
+  { Verify all forward goto fixups were resolved }
+  for i := 0 to GotoLabelCount - 1 do
+    if GotoLabelCodePos[i] = -1 then
+    begin
+      for j := 0 to GotoFixupCount - 1 do
+        if TokSlicesMatch(GotoFixupNOff[j], GotoFixupNLen[j], GotoLabelNOff[i], GotoLabelNLen[i]) then
+          Error('goto target label never placed: ' +
+            GetTokenStrFromRaw(GotoLabelNOff[i], GotoLabelNLen[i]));
+    end;
 
   { Epilogue }
   EmitProcEpilog(Procs[pi].RetSymIdx);
@@ -3462,6 +3674,8 @@ begin
   { Restore scope }
   SymCount  := savedSC;
   FrameSize := savedFS;
+  GotoLabelCount := savedGLC;
+  GotoFixupCount := savedGFC;
   CurProc   := -1;
   CurSelfClass := REC_NONE;
 end;
@@ -3764,7 +3978,7 @@ end;
 { ===== Program ===== }
 
 procedure ParseProgram;
-var jmpPatch, i: Integer; doneUses, doneDecls, hasExceptions: Boolean;
+var jmpPatch, i, j: Integer; doneUses, doneDecls, hasExceptions: Boolean;
 begin
   Expect(tkProgram, 'program');
   if CurTok.Kind = tkEOF then Error('expected program name');
@@ -3779,6 +3993,7 @@ begin
   BSS_HEAP_END    := BSSSize; Inc(BSSSize, 8);
   ExceptionUsed := False;
   hasExceptions := False;
+  for i := 0 to MAX_GOTO_LABELS - 1 do GotoLabelIRId[i] := -1;
   i := 0;
   while i < TokCount do
   begin
@@ -3831,6 +4046,21 @@ begin
           ParseOperatorDef
         else if CaseEqual(CurTok.SVal, 'constructor') or CaseEqual(CurTok.SVal, 'destructor') then
           ParseSubroutine
+        else if CaseEqual(CurTok.SVal, 'label') then
+        begin
+          Next;
+          while CurTok.Kind = tkIdent do
+          begin
+            if GotoLabelCount >= MAX_GOTO_LABELS then Error('too many labels');
+            GotoLabelNOff[GotoLabelCount]    := Tokens[TokPos-1].SOffset;
+            GotoLabelNLen[GotoLabelCount]    := Tokens[TokPos-1].SLen;
+            GotoLabelCodePos[GotoLabelCount] := -1;
+            Inc(GotoLabelCount);
+            Next;
+            if not Eat(tkComma) then Break;
+          end;
+          Eat(tkSemicolon);
+        end
         else
           doneDecls := True;
       else
@@ -3844,6 +4074,16 @@ begin
   ParseBlock;
   Expect(tkEnd, 'end');
   Eat(tkDot);
+
+  { Verify all forward goto fixups were resolved }
+  for i := 0 to GotoLabelCount - 1 do
+    if GotoLabelCodePos[i] = -1 then
+    begin
+      for j := 0 to GotoFixupCount - 1 do
+        if TokSlicesMatch(GotoFixupNOff[j], GotoFixupNLen[j], GotoLabelNOff[i], GotoLabelNLen[i]) then
+          Error('goto target label never placed: ' +
+            GetTokenStrFromRaw(GotoLabelNOff[i], GotoLabelNLen[i]));
+    end;
 
   EmitExit(0);
   ApplyCallFixups;

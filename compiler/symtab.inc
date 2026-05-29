@@ -30,6 +30,22 @@ begin
   Result := True;
 end;
 
+function TokSlicesMatch(off1, len1, off2, len2: Integer): Boolean;
+var i: Integer; c1, c2: Char;
+begin
+  Result := False;
+  if len1 <> len2 then Exit;
+  for i := 0 to len1 - 1 do
+  begin
+    c1 := TokChars[off1 + i];
+    c2 := TokChars[off2 + i];
+    if (c1 >= 'A') and (c1 <= 'Z') then c1 := Chr(Ord(c1) + 32);
+    if (c2 >= 'A') and (c2 <= 'Z') then c2 := Chr(Ord(c2) + 32);
+    if c1 <> c2 then Exit;
+  end;
+  Result := True;
+end;
+
 function FindUClass(const name: AnsiString): Integer;
 var i: Integer; lo, name2: AnsiString;
 begin
@@ -636,8 +652,14 @@ var i: Integer; lo: AnsiString;
 begin
   lo := name;
   for i := SymCount-1 downto 0 do
-    if StrEqual(Syms[i].Name, lo) then begin Result := i; Exit; end;
+    if StrEqual(Syms[i].Name, lo) then
+    begin
+      if DebugTrace then writeln('FindSym: ', lo, ' -> ', i);
+      Result := i;
+      Exit;
+    end;
 
+  if DebugTrace then writeln('FindSym: ', lo, ' -> -1');
   if DebugTrace and StrEqual(lo, 'ELF_HEADER_SIZE') then
   begin
     writeln('FindSym failed for ELF_HEADER_SIZE. lo = ', lo);

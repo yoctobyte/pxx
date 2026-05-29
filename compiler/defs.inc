@@ -22,6 +22,7 @@ const
   MAX_AST     = 131072;
   MAX_IR      = 8192;
   MAX_LOOP_FIXUPS = 256;
+  MAX_GOTO_LABELS = 64;
   MAX_PAS_DEFINES = 128;
   MAX_PAS_DEFINE_CHARS = 4096;
   MAX_PAS_CONDS = 64;
@@ -68,6 +69,8 @@ const
   AN_EXC_HANDLER = 30; { IVal = class recId or -1; Left = body; Right = next }
   AN_FLOAT_LIT   = 31; { IVal = IEEE 754 double bits; ASTTk = Ord(tySingle or tyDouble) }
   AN_VIRTUAL_CALL = 32;
+  AN_LABEL        = 33; { ASTSOffset/SLen = label name in TokChars }
+  AN_GOTO         = 34; { ASTSOffset/SLen = label name in TokChars }
 
   { IR opcodes. Append only while bootstrapping, as with token/node kinds. }
   IR_NOP       = 0;
@@ -479,6 +482,17 @@ var
   BLabelLineNums : array[0..255] of Int64;
   BLabelCodePoss : array[0..255] of Integer;
   BLabelCount    : Integer;
+
+  { goto/label fixup tables for Pascal label declarations }
+  GotoLabelNOff   : array[0..MAX_GOTO_LABELS-1] of Integer; { name offset in TokChars }
+  GotoLabelNLen   : array[0..MAX_GOTO_LABELS-1] of Integer; { name length }
+  GotoLabelCodePos: array[0..MAX_GOTO_LABELS-1] of Integer; { code position; -1 = not yet placed }
+  GotoLabelIRId   : array[0..MAX_GOTO_LABELS-1] of Integer; { IR label ID for IR path; -1 = unallocated }
+  GotoLabelCount  : Integer;
+  GotoFixupCodePos: array[0..255] of Integer; { code position of the jmp rel32 operand }
+  GotoFixupNOff   : array[0..255] of Integer; { name offset }
+  GotoFixupNLen   : array[0..255] of Integer; { name length }
+  GotoFixupCount  : Integer;
 
   BFixupTargetLines : array[0..255] of Int64;
   BFixupCodePoss    : array[0..255] of Integer;
