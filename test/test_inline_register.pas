@@ -20,10 +20,22 @@ begin
   writeln('Both upper test: OK');
 end;
 
+procedure TestCdecl; cdecl;
+begin
+  writeln('Cdecl test: OK');
+end;
+
+procedure TestMultiple; Inline; Register; Cdecl;
+begin
+  writeln('Multiple test: OK');
+end;
+
 begin
   TestInline;
   TestRegister;
   TestBoth;
   TestBothUpper;
+  TestCdecl;
+  TestMultiple;
   writeln('all inline/register tests completed!');
 end.
