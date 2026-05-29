@@ -28,8 +28,9 @@ correct stale notes elsewhere).
 **RTTI → published → streaming → resources → LFM.** Full phased, agent-
 executable plan: **[`plan-rtti-streaming-lfm.md`](plan-rtti-streaming-lfm.md)**.
 
-- Phase 0 ⬜ class visibility parsing (`private/protected/public/published`;
-  private intentionally not enforced).
+- Phase 0 ✅ class visibility parsing (`private/protected/public/published`;
+  not enforced). Per-member published flag recorded for RTTI; see
+  `test/test_visibility.pas`.
 - Phase 1 ⬜ RTTI emission (published-only, custom-minimal layout).
 - Phase 2 ⬜ reflection API (TypInfo-named).
 - Phase 3 ⬜ streaming runtime (own TReader/TWriter-lite).
@@ -113,7 +114,7 @@ inheritance depth, method-resolution clauses, COM ARC.
 - 🟡 **Enums.** Type handling exists; **verify completeness for RTTI** —
   streaming needs ordinal↔name (Phase 1 dependency).
 - 🟡 **Generics.** Template mechanism exists; breadth vs FPC unverified.
-- ⬜ **Class visibility.** Covered as Phase 0 of the LFM arc (see §2).
+- ✅ **Class visibility.** Phase 0 of the LFM arc done (see §2).
 
 ### Self-host papered-over gaps (real features the compiler dodges on itself)
 
