@@ -54,6 +54,10 @@ begin
     IR_LOAD_SYM:
       begin
         EmitLoadVar(IRA[node]);
+        { EmitLoadVar leaves floats in xmm0, but the IR value model carries
+          floats as double bits in rax. Bridge xmm0 -> rax. }
+        if TypeIsFloat(Syms[IRA[node]].TypeKind) then
+          begin EmitB($66); EmitB($48); EmitB($0F); EmitB($7E); EmitB($C0); end; { movq rax, xmm0 }
       end;
       
     IR_STORE_SYM:
@@ -96,6 +100,10 @@ begin
         else
         begin
           IREmitNode(IRB[node]);
+          { IR carries floats as double bits in rax; EmitStoreVar reads xmm0.
+            Bridge rax -> xmm0. }
+          if TypeIsFloat(Syms[IRA[node]].TypeKind) then
+            begin EmitB($66); EmitB($48); EmitB($0F); EmitB($6E); EmitB($C0); end; { movq xmm0, rax }
           EmitStoreVar(IRA[node]);
         end;
       end;
@@ -458,13 +466,10 @@ begin
       begin
         IREmitNode(IRA[node]);
         if TypeIsFloat(IntToTypeKind(IRTk[node])) then
-        begin
-          EmitB($66); EmitB($48); EmitB($0F); EmitB($7E); EmitB($C0); { movq rax, xmm0 }
-          EmitB($48); EmitB($0F); EmitB($BA); EmitB($F8); EmitB($3F); { btc rax, 63 }
-          EmitB($66); EmitB($48); EmitB($0F); EmitB($6E); EmitB($C0); { movq xmm0, rax }
-        end
+          { Float value lives as double bits in rax; flip the sign bit. }
+          begin EmitB($48); EmitB($0F); EmitB($BA); EmitB($F8); EmitB($3F); end { btc rax, 63 }
         else
-          EmitB($48); EmitB($F7); EmitB($D8); { neg rax }
+          begin EmitB($48); EmitB($F7); EmitB($D8); end; { neg rax }
       end;
       
     IR_NOT:

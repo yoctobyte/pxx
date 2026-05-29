@@ -861,7 +861,7 @@ begin
         EmitB($66); EmitB($48); EmitB($0F); EmitB($6E); EmitB($C0); { movq xmm0, rax }
       end
       else
-        EmitB($48); EmitB($F7); EmitB($D8); { neg rax }
+        begin EmitB($48); EmitB($F7); EmitB($D8); end; { neg rax }
     end;
     AN_NOT:
     begin

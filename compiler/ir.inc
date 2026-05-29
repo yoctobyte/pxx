@@ -408,6 +408,13 @@ begin
     AN_INT_LIT, AN_BOOL_LIT:
       Result := IRAppend(IR_CONST_INT, -1, -1, -1, ASTIVal[node], ASTTk[node]);
 
+    AN_FLOAT_LIT:
+      { IVal holds the IEEE 754 double bit pattern. The IR value model carries
+        floats as bits in rax (binop/store move them to xmm via movq), so a float
+        literal is just mov rax, imm64 — identical to IR_CONST_INT. ASTTk (tyDouble)
+        is preserved so downstream nodes select the float path. }
+      Result := IRAppend(IR_CONST_INT, -1, -1, -1, ASTIVal[node], ASTTk[node]);
+
     AN_STR_LIT:
       Result := IRAppend(IR_CONST_STR, ASTSOffset[node], ASTSLen[node], -1, 0, ASTTk[node]);
 
