@@ -32,6 +32,7 @@ const
   MAX_UFIELD      = 256;   { field slots across all user classes }
   MAX_UMETH       = 256;   { method slots across all user classes }
   MAX_UPROP       = 64;
+  MAX_DATAPTRFIX  = 4096;  { data->data 8-byte pointer relocations (RTTI blobs) }
   REC_NONE         = 0;
   REC_TMETHODFIXUP = 15;
   REC_UCLASS_BASE = 16;    { user class recIds start here; must exceed REC_TMETHODFIXUP=15 }
@@ -316,6 +317,11 @@ type
     ProcIdx : Integer;
   end;
 
+  TDataPtrFix = record
+    DataPos   : Integer;   { byte offset in Data[] of the 8-byte pointer slot }
+    TargetOff : Integer;   { byte offset in Data[] the slot should point at }
+  end;
+
 var
   Templates          : array[0..MAX_TEMPLATES-1] of TTemplate;
   TemplateCount      : Integer;
@@ -331,6 +337,8 @@ var
   PendingGFSpecCount : Integer;
   MethodFixups       : array[0..255] of TMethodFixup;
   MethodFixCount     : Integer;
+  DataPtrFix         : array[0..MAX_DATAPTRFIX-1] of TDataPtrFix;
+  DataPtrFixCount    : Integer;
   { Operator overload table — parallel arrays, one entry per registered overload }
   OvrlOpKind   : array[0..MAX_OP_OVERLOADS-1] of Integer;  { TTokenKind ordinal }
   OvrlTypeKind : array[0..MAX_OP_OVERLOADS-1] of Integer;  { TTypeKind ordinal }

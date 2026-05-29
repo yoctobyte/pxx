@@ -51,6 +51,16 @@ begin
   Data[pos+7] := Byte((v shr 56) and $FF);
 end;
 
+procedure AddDataPtrFix(dataPos, targetOff: Integer);
+{ Record a data->data 8-byte pointer relocation: the slot at dataPos is patched
+  at link time to (dataBase + targetOff). Used by RTTI blob emission. }
+begin
+  if DataPtrFixCount >= MAX_DATAPTRFIX then Error('data ptr fixup overflow');
+  DataPtrFix[DataPtrFixCount].DataPos   := dataPos;
+  DataPtrFix[DataPtrFixCount].TargetOff := targetOff;
+  Inc(DataPtrFixCount);
+end;
+
 procedure DataPutZ(const s: AnsiString);
 var i: Integer;
 begin
@@ -298,6 +308,9 @@ begin
     PatchDataU64(MethodFixups[i].DataPos, addr);
   end;
 
+  for i := 0 to DataPtrFixCount-1 do
+    PatchDataU64(DataPtrFix[i].DataPos, dataBase + DataPtrFix[i].TargetOff);
+
   Assign(f, outPath); Rewrite(f, 1);
 
   writeU8(f,$7F);writeU8(f,$45);writeU8(f,$4C);writeU8(f,$46);
@@ -375,6 +388,9 @@ begin
     addr := entry + Procs[MethodFixups[i].ProcIdx].BodyAddr;
     PatchDataU64(MethodFixups[i].DataPos, addr);
   end;
+
+  for i := 0 to DataPtrFixCount-1 do
+    PatchDataU64(DataPtrFix[i].DataPos, dataBase + DataPtrFix[i].TargetOff);
 
   AssignPath := outPath;
   f := sysopen(AssignPath, 577); { O_WRONLY | O_CREAT | O_TRUNC }

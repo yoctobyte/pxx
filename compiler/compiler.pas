@@ -151,6 +151,7 @@ begin
   ExceptionCodegenDepth := 0; ExceptionHandlerParseDepth := 0; WithStackDepth := 0; AsmBytesCount := 0;
   UClsCount := 0; UFldCount := 0; UMthCount := 0; CurSelfClass := REC_NONE;
   MethodFixCount := 0; UPropCount := 0;
+  DataPtrFixCount := 0;
   AddConst('StdErr', tyInteger, 2);
 
   if isBasic then
