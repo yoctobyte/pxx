@@ -193,6 +193,7 @@ Implemented for the current x86-64 Linux target:
 - Unsigned decimal output for eight-byte unsigned integer values.
 - C `int` function bodies and Pascal calls under the four-byte `Integer` model.
 - Predefined `PXX`, `CPU64`, `CPUX86_64`, and `LINUX` conditional symbols.
+- Support for the Pascal `with` statement (single, nested, and multi-variable scoped lookups), correctly resolving identifiers to record or class member active contexts with proper lexical shadowing.
 - Scalar float literals, variables, arithmetic, unary minus, comparisons, and
   mixed integer/float expression promotion in the direct backend.
 
