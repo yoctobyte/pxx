@@ -33,6 +33,21 @@ const
   MAX_UMETH       = 256;   { method slots across all user classes }
   MAX_UPROP       = 64;
   MAX_DATAPTRFIX  = 4096;  { data->data 8-byte pointer relocations (RTTI blobs) }
+  MAX_METHFIX     = 1024;  { code-address relocations into Data[] (VMT + RTTI) }
+
+  { RTTI property kinds (OUR codes; streaming-grade subset) }
+  RTTI_KIND_INT    = 0;   { integer / ordinal / boolean / sized ints }
+  RTTI_KIND_STRING = 1;
+  RTTI_KIND_CLASS  = 2;
+  RTTI_KIND_ENUM   = 3;   { reserved; enum name tables not emitted yet }
+  RTTI_KIND_SET    = 4;   { reserved }
+  RTTI_KIND_METHOD = 5;   { reserved; event/method-pointer props }
+
+  { RTTI blob byte layouts (all fields 8 bytes) }
+  RTTI_CLS_SIZE    = 64;  { name,parent,instSize,vmt,propCount,props,methCount,meths }
+  RTTI_PROP_SIZE   = 64;  { name,kind,typeRef,getKind,getRef,setKind,setRef,ordType }
+  RTTI_METH_SIZE   = 16;  { name,code }
+
   REC_NONE         = 0;
   REC_TMETHODFIXUP = 15;
   REC_UCLASS_BASE = 16;    { user class recIds start here; must exceed REC_TMETHODFIXUP=15 }
@@ -335,10 +350,15 @@ var
   GenericFuncCount   : Integer;
   PendingGFSpecs     : array[0..MAX_PENDING_GFSPECS-1] of TPendingGFSpec;
   PendingGFSpecCount : Integer;
-  MethodFixups       : array[0..255] of TMethodFixup;
+  MethodFixups       : array[0..MAX_METHFIX-1] of TMethodFixup;
   MethodFixCount     : Integer;
   DataPtrFix         : array[0..MAX_DATAPTRFIX-1] of TDataPtrFix;
   DataPtrFixCount    : Integer;
+  { RTTI emission state }
+  UClsRTTIOff        : array[0..MAX_UCLASS-1] of Integer; { Data[] off of class RTTI hdr, -1 if none }
+  RTTIRegistryOff    : Integer;  { Data[] off of registry (count slot then name/rtti ptr pairs), -1 if none }
+  RTTIRegistryCount  : Integer;
+  DumpRTTI           : Boolean;
   { Operator overload table — parallel arrays, one entry per registered overload }
   OvrlOpKind   : array[0..MAX_OP_OVERLOADS-1] of Integer;  { TTokenKind ordinal }
   OvrlTypeKind : array[0..MAX_OP_OVERLOADS-1] of Integer;  { TTypeKind ordinal }

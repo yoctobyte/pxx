@@ -20,6 +20,7 @@ procedure CPreprocess(var src: AnsiString; const baseDir: AnsiString); forward;
 {$include cparser.inc}
 {$include bparser.inc}
 {$include elfwriter.inc}
+{$include rtti_emit.inc}
 {$include cpreproc.inc}
 
 { ===== Main ===== }
@@ -28,6 +29,7 @@ var inFile, outFile, option: AnsiString; isC, isBasic, readingOptions: Boolean; 
 begin
   DebugTrace := False;
   DumpIR := False;
+  DumpRTTI := False;
   NoUnhandledHandler := False;
   { IR is the default backend. The direct (legacy) backend is frozen, kept only
     for reference and reachable via --legacy-codegen. New work targets IR. }
@@ -47,6 +49,11 @@ begin
     else if option = '--dump-ir' then
     begin
       DumpIR := True;
+      Inc(i);
+    end
+    else if option = '--dump-rtti' then
+    begin
+      DumpRTTI := True;
       Inc(i);
     end
     else if option = '--experimental-ir-codegen' then
@@ -152,6 +159,7 @@ begin
   UClsCount := 0; UFldCount := 0; UMthCount := 0; CurSelfClass := REC_NONE;
   MethodFixCount := 0; UPropCount := 0;
   DataPtrFixCount := 0;
+  RTTIRegistryOff := -1; RTTIRegistryCount := 0;
   AddConst('StdErr', tyInteger, 2);
 
   if isBasic then
@@ -176,6 +184,11 @@ begin
     TokPos := 0;
     Next;
     ParseProgram;
+  end;
+  if (not isC) and (not isBasic) then
+  begin
+    EmitRTTI;
+    if DumpRTTI then DumpRTTITables;
   end;
   for i := 0 to ProcCount - 1 do
     writeln('proc ', i, ': ', Procs[i].Name, ' at ', Procs[i].BodyAddr);

@@ -172,6 +172,15 @@ test: $(COMPILER) fpc-check
 	test "$$(/tmp/test_class_methods26)" = "3"
 	./$(COMPILER) test/test_visibility.pas /tmp/test_visibility26
 	test "$$(/tmp/test_visibility26)" = "$$(printf '7\n3\n42\n99\n123')"
+	./$(COMPILER) test/test_rtti_emit.pas /tmp/test_rtti_emit26
+	test "$$(/tmp/test_rtti_emit26)" = "42"
+	./$(COMPILER) --dump-rtti test/test_rtti_emit.pas /tmp/test_rtti_emit_dump26 > /tmp/test_rtti_emit_dump26.log
+	grep -q "class TBase" /tmp/test_rtti_emit_dump26.log
+	grep -q "class TChild" /tmp/test_rtti_emit_dump26.log
+	grep -q "prop Id tk=1 getField@8 setField@8" /tmp/test_rtti_emit_dump26.log
+	grep -q "meth Notify proc=" /tmp/test_rtti_emit_dump26.log
+	grep -q "prop Caption tk=4" /tmp/test_rtti_emit_dump26.log
+	grep -q "prop Owner tk=6" /tmp/test_rtti_emit_dump26.log
 	./$(COMPILER) test/test_static_methods.pas /tmp/test_static_methods26
 	test "$$(/tmp/test_static_methods26)" = "$$(printf '7\n11\n25')"
 	./$(COMPILER) test/test_write_fmt.pas /tmp/test_write_fmt26
