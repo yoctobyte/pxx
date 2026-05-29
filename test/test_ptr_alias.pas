@@ -21,4 +21,14 @@ begin
   writeln(q^);
   q^ := 34;
   writeln(ibuf[0]);
+
+  { pointer indexing p[i] (read + write), stride = element size }
+  buf[1] := 20; buf[2] := 30;
+  p := @buf[0];
+  writeln(p[1]);
+  writeln(p[2]);
+  p[2] := 99;
+  writeln(buf[2]);
+  q := @ibuf[0]; ibuf[1] := 55;
+  writeln(q[1]);
 end.

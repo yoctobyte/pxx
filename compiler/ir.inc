@@ -295,9 +295,24 @@ begin
   else if ASTKind[node] = AN_INDEX then
   begin
     baseNode := ASTLeft[node];
+    { Pointer indexing p[i]: base address is the pointer's VALUE (not &p), and
+      the stride is the pointed-at element size. Arrays fall through below. }
+    if (ASTKind[baseNode] = AN_IDENT) and
+       (Syms[ASTIVal[baseNode]].TypeKind = tyPointer) then
+    begin
+      indexNode := IRLowerAST(ASTRight[node]);
+      tk := Syms[ASTIVal[baseNode]].PtrElemTk;
+      if tk = tyRecord then
+        elemSize := RecSize(Syms[ASTIVal[baseNode]].PtrElemRec)
+      else
+        elemSize := TypeSize(tk);
+      baseAddr := IRLowerAST(baseNode);
+      Result := IRAppend(IR_INDEX, baseAddr, indexNode, 0, elemSize, Ord(tk));
+      Exit;
+    end;
     baseAddr := IRLowerAddress(baseNode);
     indexNode := IRLowerAST(ASTRight[node]);
-    
+
     isArr := IsNodeArray(baseNode);
     if ASTKind[baseNode] = AN_IDENT then
     begin

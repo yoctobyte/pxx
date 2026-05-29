@@ -879,6 +879,12 @@ begin
       end
       else if tk = tyString then
         tk := tyChar
+      else if (tk = tyPointer) and (ASTKind[node] = AN_IDENT) then
+      begin
+        { pointer indexing: p[i] yields the pointed-at element type }
+        tk := Syms[ASTIVal[node]].PtrElemTk;
+        recName := Syms[ASTIVal[node]].PtrElemRec;
+      end
       else
       begin
         tk := Syms[idx].ElemType;
