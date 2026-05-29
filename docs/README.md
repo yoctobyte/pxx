@@ -16,6 +16,7 @@ User-facing documents:
 - [Features](features.md) - build baseline, language frontends, native output, and library loading.
 - [Limitations](limitations.md) - unsupported or only partially supported language, ABI, platform, and tooling areas.
 - [Inline Assembler](inline-asm.md) - x86-64 inline asm support, supported instruction set, variable passing, limitations, and TODO.
+- [Plan: RTTI → Streaming → LFM](plan-rtti-streaming-lfm.md) - agent-executable phased plan for Lazarus/LCL enablement (RTTI, published, component streaming, resources, LFM).
 
 Frontend notes (planned languages):
 
