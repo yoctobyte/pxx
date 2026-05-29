@@ -190,6 +190,8 @@ test: $(COMPILER) fpc-check
 	test "$$(/tmp/test_float26)" = "$$(printf '1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1')"
 	./$(COMPILER) test/test_dynarray.pas /tmp/test_dynarray26
 	test "$$(/tmp/test_dynarray26)" = "$$(printf '1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1')"
+	./$(COMPILER) test/test_float_literals.pas /tmp/test_float_literals26
+	test "$$(/tmp/test_float_literals26)" = "$$(printf '1\n1\n1\n1\n1\n1\n1')"
 	./$(COMPILER) test/test_exceptions.pas /tmp/test_exceptions26
 	test "$$(/tmp/test_exceptions26)" = "$$(printf '1\n2\n4\n5')"
 	./$(COMPILER) test/test_exception_unit.pas /tmp/test_exception_unit26

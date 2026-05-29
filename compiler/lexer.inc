@@ -404,9 +404,18 @@ begin
     end;
   end;
 
-  { normalize N/D into [1,2): multiply by 2 instead of shl for self-hosting }
+  { normalize N/D into [1,2): multiply by 2 instead of shl for self-hosting.
+    Scale the denominator up rather than shifting N down — N shr 1 truncates
+    N's low bit and corrupts odd coefficients (e.g. 3.5 -> 3.4). N >= D holds
+    after the first loop, so N - D >= D is the overflow-safe form of N >= 2D.
+    If D is too large to double safely, fall back to the lossy N shift (only
+    reachable for extreme magnitudes where the low bit is below precision). }
   while N < D do begin N := N * 2; Dec(bexp); end;
-  while (N shr 1) >= D do begin N := N shr 1; Inc(bexp); end;
+  while (N - D) >= D do
+  begin
+    if D <= $3FFFFFFFFFFFFFFF then begin D := D * 2; Inc(bexp); end
+    else begin N := N shr 1; Inc(bexp); end;
+  end;
 
   if bexp > 1023 then begin Result := signBit or $7FF0000000000000; Exit; end;
   if bexp < -1022 then begin Result := signBit; Exit; end;
