@@ -35,7 +35,25 @@ executable plan: **[`plan-rtti-streaming-lfm.md`](plan-rtti-streaming-lfm.md)**.
   registry + `--dump-rtti` done for integer/string/class prop kinds and
   published methods (`rtti_emit.inc`, `test/test_rtti_emit.pas`). Remaining:
   enum/set/method-pointer kinds (need enum name-table infra — enums are thin).
-- Phase 2 ⬜ reflection API (TypInfo-named).
+- Phase 2 🟡 reflection API (TypInfo-named). **Chosen unblock: fix general
+  typed pointers** (architect decision) so blobs are walked in pure Pascal,
+  rather than asm helpers/intrinsics. Done so far: typed-pointer C1+C2 (aliases,
+  indexing — see §4). **Still needed before the RTL:**
+  - C3 `p^.field` (record-pointer fields) — to read RTTI blob fields as a typed
+    record rather than `blob[i]` index math (index math already works via C2).
+  - C4 pointer casts `PType(addr)` — to turn an Int64/Pointer address into a
+    typed pointer.
+  - **Registry access**: a way for runtime Pascal to obtain the address of the
+    RTTI registry blob (`RTTIRegistryOff`). Needs a finalize-time fixup (like
+    `EmitDataRef`) since `RTTIRegistryOff` is only known after parse. A small
+    codegen intrinsic (e.g. `__rttireg`) or a fixed head symbol is the likely
+    path — asm can't (no relocation in the parse-time asm buffer).
+  - **Indirect call** for method-backed props + events (`GetMethodAddr`/
+    `SetMethodProp`): still unsolved by the pointer work — needs procedural-
+    variable call or an IR `call_indirect`. Field-backed props (the common
+    streaming case) do NOT need it; deliver those first.
+  - Then `typinfo.pas`: `GetClass`/`GetPropInfo`/`GetPropList`/`Get|SetOrdProp`/
+    `Get|SetStrProp` over the emitted blobs; `test/test_rtti.pas` round-trip.
 - Phase 3 ⬜ streaming runtime (own TReader/TWriter-lite).
 - Phase 4 ⬜ resource embedding primitive (`{$R}` / `FindResource`;
   independent — good parallel warm-up).
@@ -106,9 +124,15 @@ inheritance depth, method-resolution clauses, COM ARC.
 
 ## 4. Language gaps (smaller, opportunistic)
 
-- 🟡 **General pointer syntax.** `Pointer` and pointer storage work; full
-  `^T` declarations, `Ptr^` deref, and `@var` address-of are restricted. See
-  [`pascal-gap-analysis.md`](pascal-gap-analysis.md) §1.3.
+- 🟡 **General pointer syntax.** Progress (Phase 2 unblock — typed-pointer path):
+  - ✅ C1 named pointer aliases `PFoo = ^TFoo` (carry element type).
+  - ✅ C2 pointer indexing `p[i]` read+write, stride = element size.
+  - ⬜ C3 record-pointer field access `p^.field` (deref a `^TRec` then field).
+  - ⬜ C4 pointer casts `PType(expr)` preserving element type (currently
+    `PType(x)` errors "undefined variable" — casts parse as function calls).
+  - ⬜ pointer arithmetic `p + n` (currently unscaled/garbage; indexing is the
+    working substitute). `@var` address-of works for `@arr[i]`/`@x`.
+  See [`pascal-gap-analysis.md`](pascal-gap-analysis.md) §1.3.
 - ⬜ **Float intrinsics.** `Trunc`, `Round`, `Int`, `Float` not implemented
   (float arithmetic/compare/write itself is done).
 - 🟡 **Dynamic arrays.** Work for scalar elements. Missing: reference counting
