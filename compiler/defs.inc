@@ -75,6 +75,7 @@ const
   AN_ADDR         = 35;
   AN_DEREF        = 36;
   AN_SET_LIT      = 37;
+  AN_ASM          = 38;
 
   { IR opcodes. Append only while bootstrapping, as with token/node kinds. }
   IR_NOP       = 0;
@@ -108,6 +109,7 @@ const
   IR_EXC_CLEAR = 28;
   IR_TERMINATE = 29;
   IR_VIRTUAL_CALL = 30;  { VMT dispatch: IRA=first arg, IRB=last arg, IRC=proc idx, IRIVal=slot }
+  IR_ASM          = 31;
 
   EXC_FRAME_SIZE = 80;
   EXC_JMP_OFFSET = 8;
@@ -160,7 +162,8 @@ type
     tkProperty,
     tkNil,
     tkIn,
-    tkWith
+    tkWith,
+    tkAsm
   );
 
   TToken = record
@@ -423,6 +426,8 @@ var
   ExceptionHandlerParseDepth: Integer;
   WithStack: array[0..31] of Integer;
   WithStackDepth: Integer;
+  AsmBytes: array[0..65535] of Byte;
+  AsmBytesCount: Integer;
   AssignPath : AnsiString;
   IncExpanded : AnsiString;
   IncIncluded : AnsiString;

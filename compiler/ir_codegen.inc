@@ -52,6 +52,14 @@ begin
         EmitB($48); EmitB($B8); EmitDataRef(Strs[si].Offset);
       end;
       
+    IR_ASM:
+      begin
+        for i := 0 to IRB[node] - 1 do
+        begin
+          EmitB(AsmBytes[IRA[node] + i]);
+        end;
+      end;
+      
     IR_LOAD_SYM:
       begin
         EmitLoadVar(IRA[node]);
@@ -1149,7 +1157,8 @@ begin
         end;
 
       IR_STORE_SYM, IR_STORE_MEM, IR_WRITE, IR_WRITELN,
-      IR_EXC_LEAVE, IR_RAISE, IR_EXC_STORE, IR_EXC_CLEAR, IR_TERMINATE:
+      IR_EXC_LEAVE, IR_RAISE, IR_EXC_STORE, IR_EXC_CLEAR, IR_TERMINATE,
+      IR_ASM:
         begin
           IREmitNode(i);
         end;

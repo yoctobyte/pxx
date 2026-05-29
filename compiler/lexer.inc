@@ -183,6 +183,9 @@ begin
   end
   else if Length(s) = 3 then
   begin
+    if (s[1]='a') and (s[2]='s') and (s[3]='m') then Result := tkAsm;
+    if (s[1]='A') and (s[2]='s') and (s[3]='m') then Result := tkAsm;
+    if (s[1]='A') and (s[2]='S') and (s[3]='M') then Result := tkAsm;
     if (s[1]='e') and (s[2]='n') and (s[3]='d') then Result := tkEnd;
     if (s[1]='v') and (s[2]='a') and (s[3]='r') then Result := tkVar;
     if (s[1]='f') and (s[2]='o') and (s[3]='r') then Result := tkFor;

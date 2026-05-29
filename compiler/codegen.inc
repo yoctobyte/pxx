@@ -527,6 +527,13 @@ begin
       idx := InternStr(GetASTStrVal(node));
       EmitB($48); EmitB($B8); EmitDataRef(Strs[idx].Offset);
     end;
+    AN_ASM:
+    begin
+      for i := 0 to ASTRight[node] - 1 do
+      begin
+        EmitB(AsmBytes[ASTLeft[node] + i]);
+      end;
+    end;
     AN_SET_LIT:
     begin
       while (DataLen mod 8) <> 0 do

@@ -52,6 +52,7 @@ begin
     IR_EXC_CLEAR: Result := 'exc_clear';
     IR_TERMINATE: Result := 'terminate';
     IR_VIRTUAL_CALL: Result := 'virtual_call';
+    IR_ASM: Result := 'asm';
   else
     Result := 'unknown';
   end;
@@ -117,7 +118,7 @@ begin
   for i := 0 to IRCount - 1 do
   begin
     case IRKind[i] of
-      IR_CONST_INT, IR_CONST_STR, IR_NOP, IR_LABEL:
+      IR_CONST_INT, IR_CONST_STR, IR_NOP, IR_LABEL, IR_ASM:
         begin end;
 
       IR_LOAD_SYM:
@@ -421,6 +422,9 @@ begin
 
     AN_STR_LIT:
       Result := IRAppend(IR_CONST_STR, ASTSOffset[node], ASTSLen[node], -1, 0, ASTTk[node]);
+
+    AN_ASM:
+      Result := IRAppend(IR_ASM, ASTLeft[node], ASTRight[node], -1, 0, Ord(tyUnknown));
 
     AN_IDENT:
     begin

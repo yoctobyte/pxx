@@ -139,6 +139,7 @@ function ParseSetMembershipAST(leftExpr: Integer): Integer; forward;
 function ParseSetLiteralAST: Integer; forward;
 function ParseStatementAST: Integer; forward;
 function ParseWithStatementAST: Integer; forward;
+function ParseAsmStatementAST: Integer; forward;
 function ParseBlockAST: Integer; forward;
 procedure CompileAST(node: Integer); forward;
 procedure EmitExceptionRuntime; forward;
@@ -2606,6 +2607,81 @@ begin
   Result := node;
 end;
 
+function ParseAsmStatementAST: Integer;
+var
+  node, startOff, len: Integer;
+  val: Int64;
+  dir: AnsiString;
+begin
+  startOff := AsmBytesCount;
+  
+  while CurTok.Kind <> tkEnd do
+  begin
+    if CurTok.Kind = tkIdent then
+    begin
+      dir := CurTok.SVal;
+      if CaseEqual(dir, 'db') or CaseEqual(dir, 'dw') or CaseEqual(dir, 'dd') or CaseEqual(dir, 'dq') then
+      begin
+        Next; { Consume db/dw/dd/dq }
+        repeat
+          if CurTok.Kind <> tkInteger then Error('asm: expected integer constant');
+          val := CurTok.IVal;
+          Next;
+          
+          if CaseEqual(dir, 'db') then
+          begin
+            if AsmBytesCount >= 65536 then Error('asm: out of instruction byte capacity');
+            AsmBytes[AsmBytesCount] := Byte(val and $FF);
+            Inc(AsmBytesCount);
+          end
+          else if CaseEqual(dir, 'dw') then
+          begin
+            if AsmBytesCount + 2 > 65536 then Error('asm: out of instruction byte capacity');
+            AsmBytes[AsmBytesCount] := Byte(val and $FF);
+            AsmBytes[AsmBytesCount + 1] := Byte((val shr 8) and $FF);
+            Inc(AsmBytesCount, 2);
+          end
+          else if CaseEqual(dir, 'dd') then
+          begin
+            if AsmBytesCount + 4 > 65536 then Error('asm: out of instruction byte capacity');
+            AsmBytes[AsmBytesCount] := Byte(val and $FF);
+            AsmBytes[AsmBytesCount + 1] := Byte((val shr 8) and $FF);
+            AsmBytes[AsmBytesCount + 2] := Byte((val shr 16) and $FF);
+            AsmBytes[AsmBytesCount + 3] := Byte((val shr 24) and $FF);
+            Inc(AsmBytesCount, 4);
+          end
+          else if CaseEqual(dir, 'dq') then
+          begin
+            if AsmBytesCount + 8 > 65536 then Error('asm: out of instruction byte capacity');
+            AsmBytes[AsmBytesCount] := Byte(val and $FF);
+            AsmBytes[AsmBytesCount + 1] := Byte((val shr 8) and $FF);
+            AsmBytes[AsmBytesCount + 2] := Byte((val shr 16) and $FF);
+            AsmBytes[AsmBytesCount + 3] := Byte((val shr 24) and $FF);
+            AsmBytes[AsmBytesCount + 4] := Byte((val shr 32) and $FF);
+            AsmBytes[AsmBytesCount + 5] := Byte((val shr 40) and $FF);
+            AsmBytes[AsmBytesCount + 6] := Byte((val shr 48) and $FF);
+            AsmBytes[AsmBytesCount + 7] := Byte((val shr 56) and $FF);
+            Inc(AsmBytesCount, 8);
+          end;
+        until not Eat(tkComma);
+      end
+      else
+        Next;
+    end
+    else
+      Next;
+  end;
+  
+  Expect(tkEnd, 'end');
+  Eat(tkSemicolon);
+  
+  len := AsmBytesCount - startOff;
+  node := AllocNode(AN_ASM);
+  ASTLeft[node] := startOff;
+  ASTRight[node] := len;
+  Result := node;
+end;
+
 function ParseWithStatementAST: Integer;
 var
   varNode, bodyNode: Integer;
@@ -2803,6 +2879,7 @@ begin
     tkCase:   begin Next; node := ParseCaseStatementAST;  end;
     tkTry:    begin Next; node := ParseTryStatementAST; end;
     tkWith:   begin Next; node := ParseWithStatementAST;  end;
+    tkAsm:    begin Next; node := ParseAsmStatementAST;   end;
     
     tkBegin:
     begin
