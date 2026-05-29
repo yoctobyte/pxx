@@ -40,8 +40,9 @@ executable plan: **[`plan-rtti-streaming-lfm.md`](plan-rtti-streaming-lfm.md)**.
   typed pointers** (architect decision) so blobs are walked in pure Pascal,
   rather than asm helpers/intrinsics. Done so far: typed-pointer C1+C2 (aliases,
   indexing — see §4). **Still needed before the RTL:**
-  - C3 `p^.field` (record-pointer fields) — to read RTTI blob fields as a typed
-    record rather than `blob[i]` index math (index math already works via C2).
+  - C3 ✅ `p^.field` (record-pointer fields) — already wired via `AN_DEREF`
+    branch in `IRLowerAddress` + `ResolveNodeRec`; no compiler change needed.
+    Test: `test/test_ptr_deref_field.pas`.
   - C4 pointer casts `PType(addr)` — to turn an Int64/Pointer address into a
     typed pointer.
   - **Registry access**: a way for runtime Pascal to obtain the address of the
@@ -128,7 +129,8 @@ inheritance depth, method-resolution clauses, COM ARC.
 - 🟡 **General pointer syntax.** Progress (Phase 2 unblock — typed-pointer path):
   - ✅ C1 named pointer aliases `PFoo = ^TFoo` (carry element type).
   - ✅ C2 pointer indexing `p[i]` read+write, stride = element size.
-  - ⬜ C3 record-pointer field access `p^.field` (deref a `^TRec` then field).
+  - ✅ C3 record-pointer field access `p^.field` (deref a `^TRec` then field).
+    Already wired; test: `test/test_ptr_deref_field.pas`.
   - ⬜ C4 pointer casts `PType(expr)` preserving element type (currently
     `PType(x)` errors "undefined variable" — casts parse as function calls).
   - ⬜ pointer arithmetic `p + n` (currently unscaled/garbage; indexing is the

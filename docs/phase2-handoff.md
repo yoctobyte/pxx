@@ -32,7 +32,10 @@ file is the *resume checklist*, not the spec.
   - **C2 ✅** pointer indexing `p[i]` read+write. Pointer-base branch in
     `IRLowerAddress` (`ir.inc` ~296): base = pointer VALUE (not `&p`), stride =
     pointed-at element size; parser types `p[i]` as the element type.
-  - Test: `test/test_ptr_alias.pas`.
+  - **C3 ✅** `p^.field` (record-pointer field access). The `AN_FIELD` branch of
+    `IRLowerAddress` combined with `ResolveNodeRec(AN_DEREF(...))` already
+    threaded correctly — no compiler change needed.
+  - Tests: `test/test_ptr_alias.pas`, `test/test_ptr_deref_field.pas`.
 
 ## Why typed pointers (not asm helpers / codegen intrinsics)
 
@@ -49,11 +52,12 @@ gap as a side effect.
 
 ## Resume checklist (ordered)
 
-1. **C3 — `p^.field` (record-pointer fields).** Deref a `^TRec` then access a
-   field. ⚠️ Leans on `RecFieldOffset` — the **known IR self-miscompile area**
-   that blocks the direct→IR flip. Test under the IR backend carefully; this is
-   the riskiest step. (Index math `blob[i]` already works via C2 as a fallback
-   if records prove painful.)
+1. **C3 ✅ — `p^.field` (record-pointer fields).** Deref a `^TRec` then access
+   a field. The IR path in `IRLowerAddress` already threaded correctly: the
+   `AN_DEREF` branch returns the pointer value as the base address, and
+   `ResolveNodeRec(AN_DEREF(...))` yields the pointee's record ID for offset
+   lookup. No compiler change was needed — the feature was already wired;
+   the test confirms correctness. Test: `test/test_ptr_deref_field.pas`.
 2. **C4 — pointer casts `PType(addr)`.** Turn an `Int64`/`Pointer` address into
    a typed pointer. Currently errors `undefined variable (PType)` because casts
    parse as function calls — needs cast recognition for alias type names.
