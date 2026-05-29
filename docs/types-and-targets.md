@@ -213,6 +213,21 @@ Remaining target/type work:
 6. Explicit target selection (`--target=`).
 7. i386 output after the type system and ABI surface are stable.
 
+## Calling Conventions and Modifiers
+
+### Subroutine Modifiers
+* **`inline` / `register` / `overload`**: The compiler recognizes these subroutine modifiers case-insensitively (`inline`, `register`, `overload` and all casing variations) following a procedure or function declaration, and cleanly ignores them for the purposes of code generation.
+  * *`inline`*: Frankonpiler currently compiles inlined functions as standard callable procedures. Since our compilation passes are extremely lightweight, this keeps code generation robust and simple.
+  * *`register`*: Since the x86-64 backend naturally leverages register-based parameter passing (System V AMD64 ABI), register annotation is implicitly supported out-of-the-box.
+
+### Calling Conventions
+* **`cdecl` / System V AMD64 ABI**: Internally, Frankonpiler uses the standard System V AMD64 ABI calling convention for all procedures and functions. This matches the standard Linux `cdecl` calling convention on x86-64:
+  * First 6 integer/pointer arguments are passed in `rdi`, `rsi`, `rdx`, `rcx`, `r8`, `r9`.
+  * Float arguments are passed in `xmm0`–`xmm7`.
+  * Return value is passed in `rax` (integers/pointers) or `xmm0` (floats).
+  * Callee cleans up local stack frames, while caller manages stack-passed arguments.
+* **`stdcall`**: Windows-specific calling conventions like `stdcall` are not supported on Linux and are not implemented.
+
 ---
 
 ## FPC ObjFPC Compatibility Goals
