@@ -107,8 +107,9 @@ The C capability is useful but intentionally incomplete:
 
 ## No Optimization
 
-The default backend is a direct-emission compiler. Every construct is
-translated straight to machine code with no optimization passes.
+Neither backend optimizes. Every construct is translated straight to
+machine code with no optimization passes (the IR layer exists to enable
+this later, but no passes are implemented yet).
 What you write is exactly what gets emitted:
 
 - No constant folding, dead-code elimination, or inlining.
@@ -116,23 +117,20 @@ What you write is exactly what gets emitted:
 - No loop transforms, strength reduction, or alias analysis.
 - No peephole cleanup of redundant loads/stores.
 
-An IR backend (`--experimental-ir-codegen`) exists and reached
-self-recompile fixedpoint on 2026-05-28. It now has full behavioral parity
-with the direct backend: a direct-built compiler running IR codegen produces
-identical output to the direct path across every runnable test. The IR layer
-is the foundation for future targets and optimization work (neither started).
+**The IR backend is now the default.** It has full behavioral parity with
+the direct backend and is self-host *correct*: an IR-built compiler compiles
+the entire test suite identically to the direct path, reaches self-recompile
+fixedpoint, and passes `make test` + `fpc-check`. The IR layer is the
+foundation for future targets and optimization work (neither started).
 
 **Development focus: the IR backend.** The direct x86-64 backend
-(`codegen.inc`) is frozen and kept only for reference and bootstrapping. New
+(`codegen.inc`) is frozen and kept only for reference and fallback. New
 language features and fixes should target IR (`ir.inc` + `ir_codegen.inc`)
 and shared helpers in `symtab.inc`; do not extend the direct backend.
 
-**IR is not yet the default**, and is not yet self-host *correct*: an
-IR-built compiler reaches a stable fixedpoint but miscompiles its own
-`RecFieldOffset`, so it segfaults compiling class programs. Promoting IR to
-the default backend (and retiring the direct path) is gated on fixing that
-self-miscompilation. Until then the direct backend remains the default so the
-compiler bootstraps correctly.
+- Default backend: IR.
+- `--legacy-codegen`: opt back into the frozen direct emitter.
+- `--experimental-ir-codegen`: deprecated no-op, still accepted.
 
 This is intentional for the bootstrap phase: the compiler stays simple,
 self-hostable, and auditable.
