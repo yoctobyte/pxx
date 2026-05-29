@@ -115,6 +115,11 @@ inheritance depth, method-resolution clauses, COM ARC.
   streaming needs ordinal↔name (Phase 1 dependency).
 - 🟡 **Generics.** Template mechanism exists; breadth vs FPC unverified.
 - ✅ **Class visibility.** Phase 0 of the LFM arc done (see §2).
+- ⬜ **Method-call-with-args as a statement.** `obj.Method(arg)` on its own
+  line fails parse (`Expected: :=` — the statement parser treats `obj.Method`
+  as an lvalue). No-arg method statements (`obj.Reset`) work, and arg'd calls
+  work in expression context. Statement-position arg'd method calls are the
+  gap. Surfaced writing `test/test_visibility.pas`.
 
 ### Self-host papered-over gaps (real features the compiler dodges on itself)
 
