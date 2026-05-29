@@ -450,9 +450,25 @@ begin
 
     AN_BINOP:
     begin
-      left := IRLowerAST(ASTLeft[node]);
-      right := IRLowerAST(ASTRight[node]);
-      Result := IRAppend(IR_BINOP, left, right, Integer(ASTIVal[node]), 0, ASTTk[node]);
+      { Operator overloading: a <op> b on a class/record operand resolves to a
+        call to the registered operator proc (lhs, rhs), mirroring the direct
+        backend. Args are passed by value (rdi=lhs, rsi=rhs). }
+      cpi := FindOpOverload(Integer(ASTIVal[node]), ASTTk[ASTLeft[node]], ResolveNodeRec(ASTLeft[node]));
+      if cpi >= 0 then
+      begin
+        left  := IRLowerAST(ASTLeft[node]);
+        first := IRAppend(IR_ARG, left, -1, -1, 0, ASTTk[ASTLeft[node]]);
+        right := IRLowerAST(ASTRight[node]);
+        last  := IRAppend(IR_ARG, right, -1, -1, 0, ASTTk[ASTRight[node]]);
+        IRB[first] := last;
+        Result := IRAppend(IR_CALL, cpi, first, -1, 0, ASTTk[node]);
+      end
+      else
+      begin
+        left := IRLowerAST(ASTLeft[node]);
+        right := IRLowerAST(ASTRight[node]);
+        Result := IRAppend(IR_BINOP, left, right, Integer(ASTIVal[node]), 0, ASTTk[node]);
+      end;
     end;
 
     AN_ASSIGN:

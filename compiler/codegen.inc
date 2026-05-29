@@ -1354,6 +1354,11 @@ begin
             GenAST(exprNode);
             EmitwriteChar;
           end
+          else if (vidx >= 0) and (Syms[vidx].TypeKind = tyChar) and not Syms[vidx].IsArray then
+          begin
+            GenAST(exprNode);
+            EmitwriteChar;
+          end
           else
           begin
             GenAST(exprNode);

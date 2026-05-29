@@ -528,6 +528,16 @@ begin
           end;
           EmitwriteStrVar(symIdx);
         end
+        else if IntToTypeKind(IRTk[node]) = tyString then
+        begin
+          { String-valued expression (e.g. a function returning String):
+            the value is the address of a [len][chars] struct in rax. }
+          IREmitNode(valNode);
+          EmitB($48); EmitB($89); EmitB($C6);              { mov rsi, rax }
+          EmitB($48); EmitB($8B); EmitB($10);              { mov rdx, [rax] }
+          EmitB($48); EmitB($83); EmitB($C6); EmitB($08);  { add rsi, 8 }
+          MovRaxImm(SYS_WRITE); MovRdiImm(STDOUT); EmitSyscall;
+        end
         else
         begin
           IREmitNode(valNode);

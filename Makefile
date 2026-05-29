@@ -123,6 +123,12 @@ test: $(COMPILER) fpc-check
 	test "$$(/tmp/test_ir_call26)" = "$$(printf '30\n30\n42')"
 	./$(COMPILER) --experimental-ir-codegen test/test_ir_binops.pas /tmp/test_ir_binops26
 	test "$$(/tmp/test_ir_binops26)" = "$$(printf -- '-3\n-2\n3\n2\n8\n14\n0\n1\n25')"
+	./$(COMPILER) --experimental-ir-codegen test/test_op_overload.pas /tmp/test_op_overload_ir26
+	test "$$(/tmp/test_op_overload_ir26)" = "$$(printf '1\n0\n1\n0\n1\n0\n10\n6')"
+	./$(COMPILER) --experimental-ir-codegen test/test_overloading.pas /tmp/test_overloading_ir26
+	test "$$(/tmp/test_overloading_ir26)" = "$$(printf 'Integer: 42\nChar: A\nTwo Integers: 10, 20\nAdd integers: 12\nChar addition: XY')"
+	./$(COMPILER) --experimental-ir-codegen test/test_float_write.pas /tmp/test_float_write_ir26
+	test "$$(/tmp/test_float_write_ir26)" = "$$(printf '3.50\n4\n-2.750\n1.0\n0.00\n10.5\n 1.000000000000000E+000\n-2.000000000000000E+000\n 0.000000000000000E+000\n 3.500000000000000E+000\n 1.234500000000000E+003')"
 	./$(COMPILER) test/test_shared_object.pas /tmp/shared_object26
 	test "$$(/tmp/shared_object26)" = "97"
 	./$(COMPILER) test/test_c_import.pas /tmp/c_import26
@@ -165,7 +171,7 @@ test: $(COMPILER) fpc-check
 	./$(COMPILER) test/test_generic_func.pas /tmp/test_generic_func26
 	test "$$(/tmp/test_generic_func26)" = "$$(printf '7\n10\n3\n4\n5\n1\n10\n99\n42')"
 	./$(COMPILER) test/test_overloading.pas /tmp/test_overloading26
-	test "$$(/tmp/test_overloading26)" = "$$(printf 'Integer: 42\nChar: 65\nTwo Integers: 10, 20\nAdd integers: 12\nChar addition: XY')"
+	test "$$(/tmp/test_overloading26)" = "$$(printf 'Integer: 42\nChar: A\nTwo Integers: 10, 20\nAdd integers: 12\nChar addition: XY')"
 	./$(COMPILER) test/test_op_overload.pas /tmp/test_op_overload26
 	test "$$(/tmp/test_op_overload26)" = "$$(printf '1\n0\n1\n0\n1\n0\n10\n6')"
 	./$(COMPILER) test/test_loop_control.pas /tmp/test_loop_control26
@@ -179,7 +185,7 @@ test: $(COMPILER) fpc-check
 	! ./$(COMPILER) test/test_strict_overload_error.pas /tmp/test_strict_overload_error26 > /tmp/test_strict_overload_error.log 2>&1
 	grep -q "overloaded routine requires overload directive" /tmp/test_strict_overload_error.log
 	./$(COMPILER) --strict-overload test/test_overloading.pas /tmp/test_overloading_strict26
-	test "$$(/tmp/test_overloading_strict26)" = "$$(printf 'Integer: 42\nChar: 65\nTwo Integers: 10, 20\nAdd integers: 12\nChar addition: XY')"
+	test "$$(/tmp/test_overloading_strict26)" = "$$(printf 'Integer: 42\nChar: A\nTwo Integers: 10, 20\nAdd integers: 12\nChar addition: XY')"
 	./$(COMPILER) test/test_sizeof.pas /tmp/test_sizeof26
 	test "$$(/tmp/test_sizeof26)" = "$$(printf '1\n1\n2\n2\n4\n4\n4\n4\n8\n8\n8\n8\n8\n8\n8\n1\n1')"
 	! ./$(COMPILER) test/test_sizeof_error.pas /tmp/test_sizeof_error26 > /tmp/test_sizeof_error.log 2>&1
