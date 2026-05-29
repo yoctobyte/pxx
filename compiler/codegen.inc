@@ -110,9 +110,12 @@ begin
   if ASTKind[node] = AN_IDENT then
   begin
     idx := ASTIVal[node];
+    { A dynamic array variable's slot holds a heap pointer; loading the slot
+      yields the data base address that indexing/Length operate on. }
     if Syms[idx].Kind = skGlobal then
     begin
-      if (Syms[idx].TypeKind = tyClass) and derefClass then
+      if ((Syms[idx].TypeKind = tyClass) and derefClass)
+         or (Syms[idx].IsArray and (Syms[idx].ArrLen = -1)) then
       begin
         EmitB($48); EmitB($8B); EmitB($04); EmitB($25); EmitGlobRef(Syms[idx].Offset);
       end
@@ -124,6 +127,7 @@ begin
     else
     begin
       if ((Syms[idx].TypeKind = tyClass) and derefClass) or
+         (Syms[idx].IsArray and (Syms[idx].ArrLen = -1)) or
          ((Syms[idx].Kind = skParam) and
           (Syms[idx].IsRef or Syms[idx].IsArray or (Syms[idx].TypeKind = tyString))) then
       begin
@@ -234,17 +238,69 @@ begin
   end;
 end;
 
+procedure EmitBumpAlloc;
+{ On entry: rax = byte count requested. On exit: rax = allocated block base.
+  Rounds size up to 8, bumps BSS_HEAP_PTR, grows the break via brk if needed. }
+var jbePatch: Integer;
+begin
+  { Round size up to multiple of 8 for alignment }
+  EmitB($48); EmitB($83); EmitB($C0); EmitB($07); { add rax, 7 }
+  EmitB($48); EmitB($83); EmitB($E0); EmitB($F8); { and rax, -8 }
+  { mov rbx, [BSS_HEAP_PTR] }
+  EmitB($48); EmitB($8B); EmitB($1C); EmitB($25); EmitGlobRef(BSS_HEAP_PTR);
+  { add rbx, rax }
+  EmitB($48); EmitB($01); EmitB($C3);
+  { cmp rbx, [BSS_HEAP_END] }
+  EmitB($48); EmitB($3B); EmitB($1C); EmitB($25); EmitGlobRef(BSS_HEAP_END);
+  { jbe skip_brk }
+  EmitB($76); jbePatch := CodeLen; EmitB(0);
+  { push rbx }
+  EmitB($53);
+  { mov rdi, rbx }
+  EmitB($48); EmitB($89); EmitB($DF);
+  { mov rax, SYS_BRK }
+  MovRaxImm(SYS_BRK);
+  { syscall }
+  EmitSyscall;
+  { pop rbx }
+  EmitB($5B);
+  { mov [BSS_HEAP_END], rax }
+  EmitB($48); EmitB($89); EmitB($04); EmitB($25); EmitGlobRef(BSS_HEAP_END);
+  { Patch short jump offset }
+  Code[jbePatch] := Byte(CodeLen - (jbePatch + 1));
+  { mov rax, [BSS_HEAP_PTR] }
+  EmitB($48); EmitB($8B); EmitB($04); EmitB($25); EmitGlobRef(BSS_HEAP_PTR);
+  { mov [BSS_HEAP_PTR], rbx }
+  EmitB($48); EmitB($89); EmitB($1C); EmitB($25); EmitGlobRef(BSS_HEAP_PTR);
+end;
+
 procedure GenSpecialCall(specialId: Integer; argHead: Integer);
 var
   arg1, arg2, arg3, idx, pathIdx, dstIdx, lo, hi, nextJmp, falseJmp, trueCount, i, jbePatch: Integer;
+  dynElemSize, jzPatch: Integer;
   tk: TTypeKind; recName: Integer;
   trueJumps: array[0..127] of Integer;
   argNode, itemNode: Integer;
 begin
   if specialId = Ord(tkLength) then
   begin
-    GenLValueAddress(ASTLeft[argHead], tk, recName, False);
-    EmitB($48); EmitB($8B); EmitB($00); { mov rax, [rax] }
+    argNode := ASTLeft[argHead];
+    if (ASTKind[argNode] = AN_IDENT) and Syms[ASTIVal[argNode]].IsArray
+       and (Syms[ASTIVal[argNode]].ArrLen = -1) then
+    begin
+      { Dynamic array: slot holds heap data pointer; length lives at [ptr-8].
+        A nil (unallocated) array reports length 0. }
+      GenLValueAddress(argNode, tk, recName, False); { rax = data ptr (or 0) }
+      EmitB($48); EmitB($85); EmitB($C0);            { test rax, rax }
+      EmitB($74); jzPatch := CodeLen; EmitB(0);      { jz done (rax already 0) }
+      EmitB($48); EmitB($8B); EmitB($40); EmitB($F8);{ mov rax, [rax-8] }
+      Code[jzPatch] := Byte(CodeLen - (jzPatch + 1));
+    end
+    else
+    begin
+      GenLValueAddress(argNode, tk, recName, False);
+      EmitB($48); EmitB($8B); EmitB($00); { mov rax, [rax] }
+    end;
   end
   else if specialId = Ord(tkSysOpen) then
   begin
@@ -391,44 +447,46 @@ begin
   begin
     { Evaluates size expression into rax and runs the bump allocator }
     GenAST(ASTLeft[argHead]);
-    
-    { Round size up to multiple of 8 for alignment }
-    EmitB($48); EmitB($83); EmitB($C0); EmitB($07); { add rax, 7 }
-    EmitB($48); EmitB($83); EmitB($E0); EmitB($F8); { and rax, -8 }
-    
-    { mov rbx, [BSS_HEAP_PTR] }
-    EmitB($48); EmitB($8B); EmitB($1C); EmitB($25); EmitGlobRef(BSS_HEAP_PTR);
-    
-    { add rbx, rax }
-    EmitB($48); EmitB($01); EmitB($C3);
-    
-    { cmp rbx, [BSS_HEAP_END] }
-    EmitB($48); EmitB($3B); EmitB($1C); EmitB($25); EmitGlobRef(BSS_HEAP_END);
-    
-    { jbe skip_brk }
-    EmitB($76); jbePatch := CodeLen; EmitB(0);
-    
-    { push rbx }
-    EmitB($53);
-    { mov rdi, rbx }
-    EmitB($48); EmitB($89); EmitB($DF);
-    { mov rax, SYS_BRK }
-    MovRaxImm(SYS_BRK);
-    { syscall }
-    EmitSyscall;
-    { pop rbx }
-    EmitB($5B);
-    { mov [BSS_HEAP_END], rax }
-    EmitB($48); EmitB($89); EmitB($04); EmitB($25); EmitGlobRef(BSS_HEAP_END);
-    
-    { Patch short jump offset }
-    Code[jbePatch] := Byte(CodeLen - (jbePatch + 1));
-    
-    { mov rax, [BSS_HEAP_PTR] }
-    EmitB($48); EmitB($8B); EmitB($04); EmitB($25); EmitGlobRef(BSS_HEAP_PTR);
-    
-    { mov [BSS_HEAP_PTR], rbx }
-    EmitB($48); EmitB($89); EmitB($1C); EmitB($25); EmitGlobRef(BSS_HEAP_PTR);
+    EmitBumpAlloc;
+  end
+  else if specialId = 102 then
+  begin
+    { SetLength on a dynamic array. arg1=array lvalue, arg2=new length expr.
+      Heap layout: [base+0]=refcount, [base+8]=length, [base+16]=elements.
+      Data pointer (base+16) is stored into the array variable's slot.
+      v1: always fresh-allocates; old contents are not preserved. }
+    arg1 := argHead;
+    arg2 := ASTRight[arg1];
+    idx  := ASTIVal[ASTLeft[arg1]];
+    if (Syms[idx].ElemType = tyRecord) or (Syms[idx].ElemType = tyString) then
+      Error('SetLength: dynamic array of record/string not yet supported');
+    dynElemSize := TypeSize(Syms[idx].ElemType);
+
+    GenAST(ASTLeft[arg2]);          { rax = n }
+    EmitB($50);                     { push rax -- save n }
+    { rax = n * elemSize }
+    if dynElemSize = 8 then
+      begin EmitB($48); EmitB($C1); EmitB($E0); EmitB($03); end { shl rax, 3 }
+    else if dynElemSize > 1 then
+      begin
+        EmitB($48); EmitB($C7); EmitB($C1); EmitI32(dynElemSize); { mov rcx, elemSize }
+        EmitB($48); EmitB($0F); EmitB($AF); EmitB($C1);           { imul rax, rcx }
+      end;
+    { add rax, 16  (header) }
+    EmitB($48); EmitB($83); EmitB($C0); EmitB($10);
+    EmitBumpAlloc;                  { rax = base }
+    EmitB($59);                     { pop rcx -- n }
+    { mov qword [rax], 1   (refcount) }
+    EmitB($48); EmitB($C7); EmitB($00); EmitI32(1);
+    { mov [rax+8], rcx     (length) }
+    EmitB($48); EmitB($89); EmitB($48); EmitB($08);
+    { add rax, 16          (data pointer) }
+    EmitB($48); EmitB($83); EmitB($C0); EmitB($10);
+    { store data pointer into the variable's slot }
+    if Syms[idx].Kind = skGlobal then
+      begin EmitB($48); EmitB($89); EmitB($04); EmitB($25); EmitGlobRef(Syms[idx].Offset); end
+    else
+      begin EmitB($48); EmitB($89); EmitB($85); EmitI32(Syms[idx].Offset); end;
   end;
 end;
 

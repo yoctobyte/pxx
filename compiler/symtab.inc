@@ -788,6 +788,35 @@ begin
   Result := SymCount; Inc(SymCount);
 end;
 
+function AllocDynArray(const name: AnsiString; elemType: TTypeKind): Integer;
+{ Dynamic array (array of T): a pointer-sized slot holding a heap data pointer.
+  ArrLen = -1 marks the symbol as dynamic (static arrays always have ArrLen >= 1). }
+begin
+  if SymCount >= MAX_SYMS then Error('too many symbols');
+  Syms[SymCount].Name        := name;
+  Syms[SymCount].TypeKind    := elemType;
+  Syms[SymCount].ConstVal    := 0;            { lower bound: dynamic arrays are 0-based }
+  Syms[SymCount].IsArray     := True;
+  Syms[SymCount].ArrLen      := -1;           { -1 = dynamic }
+  Syms[SymCount].ElemType    := elemType;
+  Syms[SymCount].ElemRecName := LastTypeRecId;
+  Syms[SymCount].IsRef       := False;
+  if CurProc < 0 then
+  begin
+    BSSSize := AlignTo(BSSSize, TARGET_PTR_SIZE);
+    Syms[SymCount].Kind   := skGlobal;
+    Syms[SymCount].Offset := BSSSize;
+    Inc(BSSSize, TARGET_PTR_SIZE);
+  end
+  else
+  begin
+    FrameSize := AlignTo(FrameSize + TARGET_PTR_SIZE, TARGET_PTR_SIZE);
+    Syms[SymCount].Kind   := skLocal;
+    Syms[SymCount].Offset := -FrameSize;
+  end;
+  Result := SymCount; Inc(SymCount);
+end;
+
 function AllocTemp: Integer;
 begin Result := AllocVar('', tyInteger); end;
 

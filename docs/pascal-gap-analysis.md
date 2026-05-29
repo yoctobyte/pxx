@@ -23,8 +23,12 @@ These four features represent the most critical, daily-used language mechanics i
   [-4 bytes]: Length / Element Count (32-bit integer)
   [Pointer]:  First element of the array
   ```
-* **Current state**: Completely absent. The compiler currently only supports static arrays (`array[Low..High] of Type`).
-* **Benefits**: Distinct declaration format means this will not touch or conflict with static array structures.
+* **Current state**: Implemented in the direct x86-64 backend for scalar element types. `var a: array of T;` declares a pointer-sized slot holding a heap data pointer; `SetLength(a, n)` bump-allocates a `[refcount(8)][length(8)][elements...]` block and stores the data pointer into the slot; `Length(a)` reads the length word with a nil-guard (unallocated → 0); indexed read/write are 0-based. Distinct declaration format from static arrays, so no conflict with `array[Low..High]`. Coverage tracked by `test/test_dynarray.pas`.
+* **Remaining gaps**:
+  - `SetLength` always fresh-allocates; old contents are not preserved on regrow, and freed blocks are not reclaimed (no reference counting / copy semantics yet).
+  - Dynamic `array of record` / `array of string` element types.
+  - Dynamic arrays as parameters and function results.
+  - IR-backend parity.
 
 ### 3. General Pointer Syntax & Semantics (`^T`, `@`, `nil`)
 * **Reference behavior**: Fully-typed pointer declarations (`^Integer`), explicit dereferencing caret operator (`Ptr^`), the address-of operator (`@Var`), and the predefined constant pointer value `nil` (0).

@@ -2615,19 +2615,23 @@ begin
       else if (name = 'SetLength') or (name = 'setlength') then
       begin
         Next; Expect(tkLParen, '(');
-        if CurTok.Kind <> tkIdent then Error('SetLength: expected string variable');
+        if CurTok.Kind <> tkIdent then Error('SetLength: expected string or array variable');
         idx := FindSym(CurTok.SVal); identTokIdx := TokPos - 1; Next;
         valNode := ParseLValueAST(idx, identTokIdx);
         Expect(tkComma, ',');
-        
+
         ParseExpr; Expect(tkRParen, ')');
-        
+
         argSeq := AllocNode(AN_ARG); ASTLeft[argSeq] := valNode;
         ASTRight[argSeq] := AllocNode(AN_ARG);
         ASTLeft[ASTRight[argSeq]] := CurASTNode;
-        
+
         node := AllocNode(AN_CALL);
-        ASTIVal[node] := -101;
+        { -101 = string SetLength; -102 = dynamic-array SetLength (heap alloc). }
+        if (idx >= 0) and Syms[idx].IsArray and (Syms[idx].ArrLen = -1) then
+          ASTIVal[node] := -102
+        else
+          ASTIVal[node] := -101;
         ASTLeft[node] := argSeq;
       end
       else if (CurProc >= 0) and Procs[CurProc].IsFunc and (name = Procs[CurProc].Name) then
@@ -2901,7 +2905,7 @@ end;
 
 procedure ParseVarSection;
 var names: array[0..63] of AnsiString; n, i, idx: Integer; tk: TTypeKind;
-    isArr: Boolean; arrLo, arrHi: Integer; elemTk: TTypeKind;
+    isArr, isDyn: Boolean; arrLo, arrHi: Integer; elemTk: TTypeKind;
 begin
   Next;
   while CurTok.Kind = tkIdent do
@@ -2911,7 +2915,7 @@ begin
       names[n] := CurTok.SVal; Inc(n); Next;
     until not Eat(tkComma);
     Expect(tkColon, ':');
-    isArr := False; arrLo := 0; arrHi := 0; elemTk := tyInteger;
+    isArr := False; isDyn := False; arrLo := 0; arrHi := 0; elemTk := tyInteger;
     if CurTok.Kind = tkArray then
     begin
       isArr := True; Next;
@@ -2922,7 +2926,9 @@ begin
         Expect(tkDotDot, '..');
         arrHi := ConstEval;
         Expect(tkRBrack, ']');
-      end;
+      end
+      else
+        isDyn := True;   { 'array of T' without bounds is a dynamic array }
       Expect(tkOf, 'of');
       elemTk := ParseTypeKind;
       tk := elemTk;
@@ -2939,9 +2945,14 @@ begin
 	    if isArr then
 	      for i := 0 to n-1 do
 	      begin
-	        idx := AllocArray(names[i], elemTk, arrLo, arrHi);
-	        if elemTk = tyRecord then
-	          Syms[idx].ElemRecName := LastTypeRecId;
+	        if isDyn then
+	          idx := AllocDynArray(names[i], elemTk)
+	        else
+	        begin
+	          idx := AllocArray(names[i], elemTk, arrLo, arrHi);
+	          if elemTk = tyRecord then
+	            Syms[idx].ElemRecName := LastTypeRecId;
+	        end;
 	      end
 	    else
 	      for i := 0 to n-1 do
