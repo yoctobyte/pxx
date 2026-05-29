@@ -42,6 +42,14 @@ These four features represent the most critical, daily-used language mechanics i
 
 ## 2. Parked / Excluded Features
 
-### ❌ Interfaces (`interface` types)
-* **Status**: **Parked indefinitely.**
-* **Rationale**: Interfaces in Delphi/FPC are heavily tied to Windows and COM objects (incorporating GUIDs, reference counting via `_AddRef`/`_Release`, and multiple VMT layouts). Since Frankonpiler targets purely lightweight Linux ELF execution, **Windows/COM interfaces are entirely excluded from the project roadmap.**
+### Interfaces (`interface` types)
+* **Status**: **Planned** (superseded — was previously parked). The next big
+  language feature, scheduled after the Lazarus/LCL streaming arc. See
+  [`todo.md`](todo.md) §3 for the scoping outline.
+* **Note**: The earlier "park indefinitely" rationale (COM/Windows baggage) is
+  retired. We do not need COM. The plan is a lightweight Linux-native model
+  (CORBA-style / no-refcount first; COM-style ARC deferred). GUIDs optional.
+
+> This document is partially superseded — sets and floating point listed above
+> as gaps are now implemented, and interfaces are now planned. See
+> [`todo.md`](todo.md) for the current consolidated list.
