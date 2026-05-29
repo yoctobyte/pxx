@@ -14,7 +14,7 @@ These four features represent the most critical, daily-used language mechanics i
 * **Remaining gaps**:
   - Write/WriteLn of float values.
   - Explicit cast/rounding intrinsics such as `Trunc`, `Round`, `Float`, and `Int`.
-  - Complete IR-backend parity for float literals and operations.
+  - IR-backend parity: **done** — floats work under `--experimental-ir-codegen`.
 
 ### 2. Dynamic Arrays (`array of T`)
 * **Reference behavior**: Heap-allocated arrays declared as `array of Type`. Resized at runtime via `SetLength(Arr, Size)`. Behind the scenes, dynamic arrays are pointers to heap blocks with size and reference count metadata stored immediately before the actual data:
@@ -28,7 +28,7 @@ These four features represent the most critical, daily-used language mechanics i
   - `SetLength` always fresh-allocates; old contents are not preserved on regrow, and freed blocks are not reclaimed (no reference counting / copy semantics yet).
   - Dynamic `array of record` / `array of string` element types.
   - Dynamic arrays as parameters and function results.
-  - IR-backend parity.
+  - IR-backend parity: **done** — dynamic arrays work under `--experimental-ir-codegen`.
 
 ### 3. General Pointer Syntax & Semantics (`^T`, `@`, `nil`)
 * **Reference behavior**: Fully-typed pointer declarations (`^Integer`), explicit dereferencing caret operator (`Ptr^`), the address-of operator (`@Var`), and the predefined constant pointer value `nil` (0).
