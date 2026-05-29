@@ -34,6 +34,7 @@ const
   MAX_UPROP       = 64;
   MAX_ENUMTYPE    = 64;    { distinct named enum types }
   MAX_ENUMVAL     = 512;   { enum value names across all enum types }
+  MAX_TYPEALIAS   = 128;   { named type aliases (pointer aliases etc.) }
   MAX_DATAPTRFIX  = 4096;  { data->data 8-byte pointer relocations (RTTI blobs) }
   MAX_METHFIX     = 1024;  { code-address relocations into Data[] (VMT + RTTI) }
 
@@ -644,6 +645,15 @@ var
   EnumValNLen     : array[0..MAX_ENUMVAL-1] of Integer;
   EnumValCount    : Integer;
   LastTypeEnumId  : Integer;  { set by ParseTypeKind: enum type index or -1 }
+
+  { Named type aliases. Phase 2: pointer aliases (PFoo = ^TFoo) carry an element
+    type so the deref/index machinery knows what they point at. }
+  AliasNOff    : array[0..MAX_TYPEALIAS-1] of Integer;  { alias name in TokChars }
+  AliasNLen    : array[0..MAX_TYPEALIAS-1] of Integer;
+  AliasTk      : array[0..MAX_TYPEALIAS-1] of Integer;  { resolved TTypeKind ordinal }
+  AliasElemTk  : array[0..MAX_TYPEALIAS-1] of Integer;  { pointer element TTypeKind ordinal }
+  AliasElemRec : array[0..MAX_TYPEALIAS-1] of Integer;  { pointer element record/class id }
+  AliasCount   : Integer;
 
   CurSelfClass : Integer;
 

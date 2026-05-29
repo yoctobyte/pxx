@@ -172,6 +172,8 @@ test: $(COMPILER) fpc-check
 	test "$$(/tmp/test_class_methods26)" = "3"
 	./$(COMPILER) test/test_visibility.pas /tmp/test_visibility26
 	test "$$(/tmp/test_visibility26)" = "$$(printf '7\n3\n42\n99\n123')"
+	./$(COMPILER) test/test_ptr_alias.pas /tmp/test_ptr_alias26
+	test "$$(/tmp/test_ptr_alias26)" = "$$(printf '777\n888\n12\n34')"
 	./$(COMPILER) test/test_rtti_emit.pas /tmp/test_rtti_emit26
 	test "$$(/tmp/test_rtti_emit26)" = "$$(printf '42\n3')"
 	./$(COMPILER) --dump-rtti test/test_rtti_emit.pas /tmp/test_rtti_emit_dump26 > /tmp/test_rtti_emit_dump26.log

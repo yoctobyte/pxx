@@ -3086,7 +3086,7 @@ end;
 { ===== Declaration parsing ===== }
 
 function ParseTypeKind: TTypeKind;
-var lo: AnsiString; elemTk: TTypeKind;
+var lo: AnsiString; elemTk: TTypeKind; aliasIdx: Integer;
 begin
   LastTypeRecId := REC_NONE;
   LastTypePointerElemTk := tyUnknown;
@@ -3162,8 +3162,18 @@ begin
             Result := tyRecord
           else
           begin
-            LastTypeEnumId := FindEnumType(lo);
-            Result := tyInteger;  { enums are ordinal/integer-sized at codegen }
+            aliasIdx := FindTypeAlias(lo);
+            if aliasIdx >= 0 then
+            begin
+              LastTypePointerElemTk := IntToTypeKind(AliasElemTk[aliasIdx]);
+              LastTypePointerElemRec := AliasElemRec[aliasIdx];
+              Result := tyPointer;
+            end
+            else
+            begin
+              LastTypeEnumId := FindEnumType(lo);
+              Result := tyInteger;  { enums are ordinal/integer-sized at codegen }
+            end;
           end;
         end;
       end;
@@ -3718,6 +3728,14 @@ begin
         end;
         UClsSize_[ci] := AlignTo(curFieldOff, classAlign);
         Expect(tkEnd, 'end');
+      end
+      else if CurTok.Kind = tkCaret then
+      begin
+        { Named pointer type alias: PFoo = ^TFoo }
+        Next;
+        fTk := ParseTypeKind;
+        RegisterPtrAlias(tnOff, tnLen, Ord(fTk), LastTypeRecId);
+        Eat(tkSemicolon);
       end
       else
       begin

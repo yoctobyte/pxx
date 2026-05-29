@@ -46,6 +46,31 @@ begin
   Result := True;
 end;
 
+function FindTypeAlias(const name: AnsiString): Integer;
+var i: Integer; lo, name2: AnsiString;
+begin
+  Result := -1;
+  name2 := name;
+  lo := ULower(name2);
+  i := 0;
+  while i < AliasCount do
+  begin
+    if UNameMatch(AliasNOff[i], AliasNLen[i], lo) then begin Result := i; Exit; end;
+    Inc(i);
+  end;
+end;
+
+procedure RegisterPtrAlias(noff, nlen, elemTk, elemRec: Integer);
+begin
+  if AliasCount >= MAX_TYPEALIAS then Error('too many type aliases');
+  AliasNOff[AliasCount] := noff;
+  AliasNLen[AliasCount] := nlen;
+  AliasTk[AliasCount] := Ord(tyPointer);
+  AliasElemTk[AliasCount] := elemTk;
+  AliasElemRec[AliasCount] := elemRec;
+  Inc(AliasCount);
+end;
+
 function FindEnumType(const name: AnsiString): Integer;
 var i: Integer; lo, name2: AnsiString;
 begin
