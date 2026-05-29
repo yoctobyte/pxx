@@ -3263,6 +3263,7 @@ var
   mIsFunc, mDoneArgs, mDoneParam, mIsArr, mIsByRef: Boolean;
   mRetType, mTk: TTypeKind;
   mNParams, mStartIdx, mTokKindOrd, mpi, mSelfIdx, mFullNameOff, mFullNameLen: Integer;
+  curPublished: Integer;  { 1 while inside a published section of the current class body }
   mFullName: AnsiString;
   mPNames: array[0..15] of AnsiString;
   mPTypes: array[0..15] of TTypeKind;
@@ -3330,8 +3331,22 @@ begin
           curFieldOff := 8; { reserve offset 0 for VMT pointer }
         end;
 
+        curPublished := 0;
         while (CurTok.Kind <> tkEnd) and (CurTok.Kind <> tkEOF) do
         begin
+          { Visibility section markers. Not reserved words, so treat as section
+            switch only when immediately at member-start position. Access is not
+            enforced (project policy); we only record the published flag for RTTI. }
+          if (CurTok.Kind = tkIdent) and
+             (CaseEqual(CurTok.SVal, 'private') or CaseEqual(CurTok.SVal, 'protected') or
+              CaseEqual(CurTok.SVal, 'public') or CaseEqual(CurTok.SVal, 'published')) then
+          begin
+            if CaseEqual(CurTok.SVal, 'published') then curPublished := 1
+            else curPublished := 0;
+            Next;
+            continue;
+          end;
+
           isClassMethod := False;
           if (CurTok.Kind = tkClass) and ((Tokens[TokPos].Kind = tkProcedure) or (Tokens[TokPos].Kind = tkFunction)) then
           begin
@@ -3471,6 +3486,7 @@ begin
             AddUMeth(ci, mnOff, mnLen, mpi);
             mmi := UMthCount - 1;
             UMthIsStatic[mmi] := isClassMethod;
+            UMthPub[mmi] := curPublished;
             
             if isVirtual then
             begin
@@ -3544,6 +3560,7 @@ begin
             UPropReadMOff[i] := rMOff; UPropReadMLen[i] := rMLen;
             UPropWriteFOff[i] := wFOff; UPropWriteFLen[i] := wFLen;
             UPropWriteMOff[i] := wMOff; UPropWriteMLen[i] := wMLen;
+            UPropPub[i] := curPublished;
           end
           else if CurTok.Kind = tkIdent then
           begin
@@ -3599,6 +3616,7 @@ begin
               fSize := fSize * arrLen;
             curFieldOff := AlignTo(curFieldOff, fAlign);
             AddUField(ci, fnOff, fnLen, curFieldOff, Ord(fTk), fRec);
+            UFldPub[UFldCount-1] := curPublished;
             curFieldOff := curFieldOff + fSize;
             if fAlign > classAlign then classAlign := fAlign;
             Eat(tkSemicolon);
@@ -3608,7 +3626,7 @@ begin
         end;
         UClsSize_[ci] := AlignTo(curFieldOff, classAlign);
         Expect(tkEnd, 'end');
-        
+
         UClsVMTOffset[ci] := DataLen;
         for i := 0 to UClsVirtCount[ci] * 8 - 1 do
         begin

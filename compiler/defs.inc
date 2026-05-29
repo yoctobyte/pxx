@@ -575,6 +575,7 @@ var
   UFldRec_   : array[0..MAX_UFIELD-1] of Integer;
   UFldPtrElemTk : array[0..MAX_UFIELD-1] of Integer;
   UFldPtrElemRec : array[0..MAX_UFIELD-1] of Integer;
+  UFldPub    : array[0..MAX_UFIELD-1] of Integer;  { 1 = published, 0 = other }
   UFldCount  : Integer;
 
   UMthNOff   : array[0..MAX_UMETH-1] of Integer;
@@ -582,6 +583,7 @@ var
   UMthProc_  : array[0..MAX_UMETH-1] of Integer;
   UMthVirSlot : array[0..MAX_UMETH-1] of Integer;
   UMthIsStatic : array[0..MAX_UMETH-1] of Boolean;
+  UMthPub    : array[0..MAX_UMETH-1] of Integer;  { 1 = published, 0 = other }
   UMthCount  : Integer;
 
   UPropNOff   : array[0..MAX_UPROP-1] of Integer;
@@ -596,6 +598,7 @@ var
   UPropWriteFLen: array[0..MAX_UPROP-1] of Integer;
   UPropWriteMOff: array[0..MAX_UPROP-1] of Integer;
   UPropWriteMLen: array[0..MAX_UPROP-1] of Integer;
+  UPropPub    : array[0..MAX_UPROP-1] of Integer;  { 1 = published, 0 = other }
   UPropCount  : Integer;
 
   CurSelfClass : Integer;

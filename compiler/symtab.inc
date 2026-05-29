@@ -162,6 +162,7 @@ begin
   UPropReadMOff[pri] := 0; UPropReadMLen[pri] := 0;
   UPropWriteFOff[pri] := 0; UPropWriteFLen[pri] := 0;
   UPropWriteMOff[pri] := 0; UPropWriteMLen[pri] := 0;
+  UPropPub[pri] := 0;
   UPropCount := UPropCount + 1;
   UClsPCount[ci] := UClsPCount[ci] + 1;
   Result := pri;
@@ -202,6 +203,7 @@ begin
     UFldPtrElemTk[fi] := Ord(tyUnknown);
     UFldPtrElemRec[fi] := REC_NONE;
   end;
+  UFldPub[fi] := 0;
   UFldCount := UFldCount + 1;
   UClsFCount[ci] := UClsFCount[ci] + 1;
 end;
@@ -213,6 +215,7 @@ begin
   UMthNOff[mi] := noff; UMthNLen[mi] := nlen; UMthProc_[mi] := pi;
   UMthVirSlot[mi] := -1;
   UMthIsStatic[mi] := False;
+  UMthPub[mi] := 0;
   UMthCount := UMthCount + 1;
   UClsMCount[ci] := UClsMCount[ci] + 1;
 end;
