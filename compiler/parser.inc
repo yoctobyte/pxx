@@ -4183,11 +4183,17 @@ begin
     begin
       pnames[i] := pnames[i-1];
       ptypes[i] := ptypes[i-1];
+      ptypesRec[i] := ptypesRec[i-1];
+      ptypesPtrElemTk[i] := ptypesPtrElemTk[i-1];
+      ptypesPtrElemRec[i] := ptypesPtrElemRec[i-1];
       parr[i]   := parr[i-1];
       pbyref[i] := pbyref[i-1];
     end;
     pnames[0] := 'Self';
     ptypes[0] := tyClass;
+    ptypesRec[0] := REC_NONE;   { Self's RecName is wired to the owner class below }
+    ptypesPtrElemTk[0] := tyUnknown;
+    ptypesPtrElemRec[0] := REC_NONE;
     parr[0]   := False;
     pbyref[0] := False;
     nparams := nparams + 1;
