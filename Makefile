@@ -205,6 +205,8 @@ test: $(COMPILER) fpc-check
 	test "$$(/tmp/test_char_to_string26)" = "$$(printf 'x\ny\nab\nZZy\nyZZ\nyy\nA\nqqq\nz\ndone')"
 	./$(COMPILER) test/test_method_named_result.pas /tmp/test_method_named_result26
 	test "$$(/tmp/test_method_named_result26)" = "$$(printf '120\nHi Bob')"
+	./$(COMPILER) test/test_ptr_field_index.pas /tmp/test_ptr_field_index26
+	test "$$(/tmp/test_ptr_field_index26)" = "$$(printf '10\n30\n50')"
 	./$(COMPILER) test/test_static_methods.pas /tmp/test_static_methods26
 	test "$$(/tmp/test_static_methods26)" = "$$(printf '7\n11\n25')"
 	./$(COMPILER) test/test_write_fmt.pas /tmp/test_write_fmt26

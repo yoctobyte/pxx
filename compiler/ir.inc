@@ -328,6 +328,27 @@ begin
       Result := IRAppend(IR_INDEX, baseAddr, indexNode, 0, elemSize, Ord(tk));
       Exit;
     end;
+    { Pointer-typed class field indexing FField[i]: base is the field's VALUE
+      (the pointer), stride is the pointed-at element size. Mirrors the AN_IDENT
+      pointer path above for an AN_FIELD base. }
+    if ASTKind[baseNode] = AN_FIELD then
+    begin
+      recName := ResolveNodeRec(ASTLeft[baseNode]);
+      fieldName := GetASTIdentName(baseNode);
+      if (RecFieldType(recName, fieldName) = tyPointer) and
+         (not RecFieldIsArray(recName, fieldName)) then
+      begin
+        indexNode := IRLowerAST(ASTRight[node]);
+        tk := RecFieldPtrElemTk(recName, fieldName);
+        if tk = tyRecord then
+          elemSize := RecSize(RecFieldPtrElemRec(recName, fieldName))
+        else
+          elemSize := TypeSize(tk);
+        baseAddr := IRLowerAST(baseNode);   { field value = the pointer }
+        Result := IRAppend(IR_INDEX, baseAddr, indexNode, 0, elemSize, Ord(tk));
+        Exit;
+      end;
+    end;
     { Typed-pointer-cast indexing PType(expr)[i]: base is the cast's pointer
       VALUE, stride is the cast's pointed-at element size (from the alias). }
     if ASTKind[baseNode] = AN_PTR_CAST then

@@ -207,12 +207,17 @@ not eternal "constraints". Promote to fixes when convenient:
   match the method short name via `LastDotName`, gated on a `:=` lookahead (so a
   recursive call statement isn't mistaken for an assignment).
   Test: `test/test_method_named_result.pas`.
-- 🔴 **Indexing a pointer-typed class field miscompiles.** `FField[i]` where
-  `FField` is a `^T`/alias field returns garbage — the pointer-index fast path
-  in `IRLowerAddress` only fires for an `AN_IDENT` base, not `AN_FIELD`. Same
-  family as the ptr-cast stride fix (`d03fe17`), but the field path doesn't
-  carry the pointed-at element type. Workaround: copy the field to a local
-  pointer var, then index. Surfaced building `streams.pas`.
+- ✅ **Indexing a pointer-typed class field** — fixed 2026-05-30. `FField[i]`
+  (read + write) now dereferences the pointer with the right element stride.
+  Added an `AN_FIELD` pointer-index fast path in `IRLowerAddress` plus
+  `RecFieldPtrElemTk`/`RecFieldPtrElemRec` accessors over `UFldPtrElem*`.
+  Test: `test/test_ptr_field_index.pas`.
+- 🔴 **Chained `[i].field` lvalue/rvalue unsupported.** `p[i].X` where `p` is a
+  `^record` (or `c.Arr[i].X` for an array-of-record field) fails to parse
+  ("unexpected token" right after the `.`). The postfix suffix loop doesn't
+  continue a `.field` access after an `[index]` on a record element. Surfaced
+  2026-05-30 extending the ptr-field-index test. Affects record arrays via
+  pointers/fields generally, not just classes.
 - ✅ **Single-char string literal / char → string** — fixed 2026-05-30. See the
   "char → string coercion" entry in §1.2 above. `s := 'x'`, `s := someChar`,
   `s := Chr(n)`, and char→string class/record fields all work now.

@@ -600,6 +600,30 @@ begin
   end;
 end;
 
+function RecFieldPtrElemTk(rec: Integer; const field: AnsiString): TTypeKind;
+{ Pointed-at element type of a pointer-typed class field (for FField[i]). }
+var fi: Integer; field2: AnsiString;
+begin
+  Result := tyUnknown; field2 := field;
+  if rec >= REC_UCLASS_BASE then
+  begin
+    fi := FindUField(rec - REC_UCLASS_BASE, field2);
+    if fi >= 0 then Result := IntToTypeKind(UFldPtrElemTk[fi]);
+  end;
+end;
+
+function RecFieldPtrElemRec(rec: Integer; const field: AnsiString): Integer;
+{ Record id pointed at by a pointer-typed class field, else REC_NONE. }
+var fi: Integer; field2: AnsiString;
+begin
+  Result := REC_NONE; field2 := field;
+  if rec >= REC_UCLASS_BASE then
+  begin
+    fi := FindUField(rec - REC_UCLASS_BASE, field2);
+    if fi >= 0 then Result := UFldPtrElemRec[fi];
+  end;
+end;
+
 { ===== Central type-query helpers ===== }
 { These are the single authoritative source for size, alignment, and signedness.
   All new code must call these instead of hard-coding numbers. }
