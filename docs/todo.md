@@ -57,8 +57,16 @@ executable plan: **[`plan-rtti-streaming-lfm.md`](plan-rtti-streaming-lfm.md)**.
   data, len)` walks it via the `__resources` intrinsic (mirrors the RTTI
   registry / `__rttireg`). Test: `test/test_resource.pas` + `test/greeting.dat`.
   (Format is our own `{$R name file}`, not FPC's single-arg `{$R file.res}`.)
-- Phase 5 ⬜ LFM library (text→binary tool + runtime glue). **Next** — depends
-  on Phase 3 (streaming) + Phase 4 (resources), both done.
+- Phase 5 🟡 LFM library. In-memory path (no file I/O yet): `.lfm` text embedded
+  via `{$R}`, converted to TPF0 at runtime by `compiler/lfm.pas` (`TLfmReader` +
+  `InitInheritedComponent`), streamed by Phase 3 `TReader`. `test/test_lfm.pas`
+  + `test/test_lfm_form.lfm`. Converter output verified byte-exact; simple
+  streaming works. **BLOCKED**: a pre-existing compiler bug segfaults any program
+  with 4+ units that use typinfo RTTI (`GetPropInfo` reads a wild `NamePtr`);
+  LFM needs 5 units so it always trips it. Minimal repro:
+  `test/gui/repro_multiunit_rtti_segfault.pas` (reproduces at fd1c3b4 — not from
+  the enum/set work). Layout-sensitive (data-ptr fixup / codegen). Must fix that
+  bug before LFM can run end-to-end. Not wired into `make test` until then.
 
 GUI / LCL widget sets are pure library work **after** this arc — no further
 compiler ask.

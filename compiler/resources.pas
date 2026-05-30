@@ -6,9 +6,9 @@ unit resources;
 
 interface
 
-type
-  PString = ^string;
+uses typinfo;   { PString — declaring it here too would duplicate the type and corrupt RTTI }
 
+type
   TResEntry = record
     NamePtr: PString;
     DataPtr: Pointer;

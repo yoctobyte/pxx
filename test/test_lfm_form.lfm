@@ -1,0 +1,9 @@
+object MyForm: TMyForm
+  Caption = 'Hello LFM'
+  Width = 320
+  Align = alClient
+  object Btn: TButton
+    Caption = 'OK'
+    Tag = 7
+  end
+end
