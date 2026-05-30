@@ -159,6 +159,7 @@ const
   SYS_OPEN  = 2;
   SYS_CLOSE = 3;
   SYS_EXIT  = 60;
+  SYS_EXIT_GROUP = 231;
   SYS_BRK   = 12;
   STDOUT    = 1;
 

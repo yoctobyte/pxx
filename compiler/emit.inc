@@ -58,7 +58,11 @@ begin
 end;
 
 procedure EmitExit(code: Int64);
-begin MovRaxImm(SYS_EXIT); MovRdiImm(code); EmitSyscall; end;
+{ exit_group, not exit: terminate every thread. A bare exit (60) only ends
+  the calling thread, so a program that started worker threads (e.g. via
+  gtk_init / GLib) would leave the process alive after main returns. For a
+  single-threaded program the two are equivalent. }
+begin MovRaxImm(SYS_EXIT_GROUP); MovRdiImm(code); EmitSyscall; end;
 
 { ===== String table ===== }
 
