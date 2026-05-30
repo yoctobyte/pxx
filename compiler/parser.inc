@@ -651,6 +651,7 @@ var
   isAssign: Boolean;
   selfClassCi, selfIdx, fldIdx, selfNode: Integer;
   w, withNode, recId: Integer;
+  propFOff, propFLen: Integer;
   withResolved: Boolean;
 begin
   prevTok := identTokIdx;
@@ -933,6 +934,10 @@ begin
       fieldName := '';
       for i := Tokens[prevTok].SOffset to Tokens[prevTok].SOffset + Tokens[prevTok].SLen - 1 do
         AppendChar(fieldName, TokChars[i]);
+      { Default field-name source span = the parsed token; property-backed
+        access overrides it below with the backing field's span. }
+      propFOff := Tokens[prevTok].SOffset;
+      propFLen := Tokens[prevTok].SLen;
       { Check if it is a property on a class }
       mci := -1; pri := -1;
       if recName >= REC_UCLASS_BASE then
@@ -951,6 +956,8 @@ begin
             fieldName := '';
             for i := 0 to UPropWriteFLen[pri] - 1 do
               AppendChar(fieldName, TokChars[UPropWriteFOff[pri] + i]);
+            propFOff := UPropWriteFOff[pri];
+            propFLen := UPropWriteFLen[pri];
           end
           else if UPropWriteMLen[pri] > 0 then
           begin
@@ -998,6 +1005,8 @@ begin
             fieldName := '';
             for i := 0 to UPropReadFLen[pri] - 1 do
               AppendChar(fieldName, TokChars[UPropReadFOff[pri] + i]);
+            propFOff := UPropReadFOff[pri];
+            propFLen := UPropReadFLen[pri];
           end
           else if UPropReadMLen[pri] > 0 then
           begin
@@ -1127,8 +1136,8 @@ begin
       end;
       fieldNode := AllocNode(AN_FIELD);
       ASTLeft[fieldNode] := node;
-      ASTSOffset[fieldNode] := Tokens[prevTok].SOffset;
-      ASTSLen[fieldNode] := Tokens[prevTok].SLen;
+      ASTSOffset[fieldNode] := propFOff;
+      ASTSLen[fieldNode] := propFLen;
       tk := RecFieldType(recName, fieldName);
       recName := RecFieldRecId(recName, fieldName);
       ASTTk[fieldNode] := Ord(tk);
