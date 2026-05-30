@@ -161,7 +161,8 @@ begin
         if (IRA[i] >= ProcCount) then
           Error('invalid IR proc reference in call');
         IRRequireOptionalNode(IRB[i], 'call first arg');
-        IRRequireOptionalNode(IRC[i], 'call last arg');
+        { IRC = classIdx (record id for constructor/method dispatch), NOT a
+          node — do not validate it as one. Args chain via IRB[argNode]. }
       end;
 
       IR_WRITE:
