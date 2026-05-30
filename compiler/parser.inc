@@ -2855,6 +2855,19 @@ begin
   Result := bodyNode;
 end;
 
+function LastDotName(const s: AnsiString): AnsiString;
+{ Part of s after the last '.', else s. A method's Procs[].Name is
+  'TClass.Method', so result-by-name (Method := ...) must match the tail. }
+var i, p: Integer;
+begin
+  p := 0;
+  for i := 1 to Length(s) do
+    if s[i] = '.' then p := i;
+  Result := '';
+  for i := p + 1 to Length(s) do
+    AppendChar(Result, s[i]);
+end;
+
 function ParseStatementAST: Integer;
 var
   name: AnsiString;
@@ -3084,7 +3097,10 @@ begin
           ASTIVal[node] := -101;
         ASTLeft[node] := argSeq;
       end
-      else if (CurProc >= 0) and Procs[CurProc].IsFunc and (name = Procs[CurProc].Name) then
+      else if (CurProc >= 0) and Procs[CurProc].IsFunc and
+              (Tokens[TokPos].Kind = tkAssign) and
+              ((name = Procs[CurProc].Name) or
+               CaseEqual(name, LastDotName(Procs[CurProc].Name))) then
       begin
         Next; Expect(tkAssign, ':=');
         valNode := AllocNode(AN_IDENT);

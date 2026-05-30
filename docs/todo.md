@@ -200,11 +200,13 @@ not eternal "constraints". Promote to fixes when convenient:
   `parser.inc:3505`). `write`/`writeln` are handled (`parser.inc:2666`); `read*`
   is the missing half. Needs runtime input plumbing too (SYS_READ from stdin,
   line buffer, parse into Integer/string/Char targets).
-- 🔴 **Named result in a class method miscompiles.** In `function TFoo.Bar`,
-  assigning `Bar := v` (function-name-as-result) segfaults — the name resolves
-  toward a self method-call instead of the result slot. Plain (non-method)
-  functions are fine (the compiler uses named results throughout). Workaround:
-  use `Result :=` in all methods. Surfaced building `streams.pas`.
+- ✅ **Named result in a class method** — fixed 2026-05-30. `Bar := v` inside
+  `function TFoo.Bar` now hits the result slot. The statement-level result-assign
+  check only matched `Procs[].Name`, which for a method is `TFoo.Bar`, so the
+  bare `Bar` fell through to a self method-call. Fix (`parser.inc` ~3100): also
+  match the method short name via `LastDotName`, gated on a `:=` lookahead (so a
+  recursive call statement isn't mistaken for an assignment).
+  Test: `test/test_method_named_result.pas`.
 - 🔴 **Indexing a pointer-typed class field miscompiles.** `FField[i]` where
   `FField` is a `^T`/alias field returns garbage — the pointer-index fast path
   in `IRLowerAddress` only fires for an `AN_IDENT` base, not `AN_FIELD`. Same
