@@ -187,10 +187,12 @@ not eternal "constraints". Promote to fixes when convenient:
   Compiler-side code uses `* 2^n` as the workaround. Add the operator + IR
   lowering so user code can shift left. (`lexer.inc` ~348/417/443 show the
   `*2`-instead-of-`shl` self-host dance.)
-- ⬜ **`readln` / `read` statements.** `tkReadln`/`tkRead` are lexed but never
-  parsed as I/O statements (`tkRead` is only consumed as the property `read`
-  keyword, `parser.inc:3505`). `write`/`writeln` are handled (`parser.inc:2666`);
-  `read*` is the missing half. Needs runtime input plumbing too.
+- ⬜ **`readln` / `read` statements.** *(user-requested, 2026-05-30 — wanted for
+  library/interactive work.)* `tkReadln`/`tkRead` are lexed but never parsed as
+  I/O statements (`tkRead` is only consumed as the property `read` keyword,
+  `parser.inc:3505`). `write`/`writeln` are handled (`parser.inc:2666`); `read*`
+  is the missing half. Needs runtime input plumbing too (SYS_READ from stdin,
+  line buffer, parse into Integer/string/Char targets).
 - 🔴 **Named result in a class method miscompiles.** In `function TFoo.Bar`,
   assigning `Bar := v` (function-name-as-result) segfaults — the name resolves
   toward a self method-call instead of the result slot. Plain (non-method)
