@@ -11,11 +11,11 @@ correct stale notes elsewhere).
 
 ## 1. Standing bugs (fix first)
 
-- 🔴 **IR operator-overload segfault.** `test/test_op_overload.pas`
-  miscompiles under the IR backend (diverges at output line 5, then
-  segfaults). Pre-existing on clean HEAD; makes the full `make test` die mid-
-  suite. Use targeted tests until fixed. Fix lives in `ir.inc` lowering +
-  `ir_codegen.inc` emit for the `__op__NN` overload procs.
+- ✅ **IR operator-overload segfault** — resolved. `test/test_op_overload.pas`
+  now produces the correct `1 0 1 0 1 0 10 6` under the IR backend and `make
+  test` runs the full suite to the fixedpoint check (exit 0). (Was: miscompiled
+  at output line 5 then segfaulted; cleared by the 2026-05-30 IR index/stride
+  fixes.)
 - 🔴 **String `+` concatenation broken.** `tkPlus` on strings only emits
   `ADD RAX,RCX`; it never concatenates. Invisible to bootstrap (the compiler
   never concatenates strings via `+` on itself — it uses `AppendChar`). Real
@@ -31,32 +31,20 @@ executable plan: **[`plan-rtti-streaming-lfm.md`](plan-rtti-streaming-lfm.md)**.
 - Phase 0 ✅ class visibility parsing (`private/protected/public/published`;
   not enforced). Per-member published flag recorded for RTTI; see
   `test/test_visibility.pas`.
-- Phase 1 🟡 RTTI emission (published-only, custom-minimal layout). Blobs +
-  registry + `--dump-rtti` done for integer/string/class prop kinds and
-  published methods (`rtti_emit.inc`, `test/test_rtti_emit.pas`). Remaining:
-  enum/set/method-pointer kinds (need enum name-table infra — enums are thin).
-- Phase 2 🟡 reflection API (TypInfo-named). **Resume checklist + rationale:
-  [`phase2-handoff.md`](phase2-handoff.md).** **Chosen unblock: fix general
-  typed pointers** (architect decision) so blobs are walked in pure Pascal,
-  rather than asm helpers/intrinsics. Done so far: typed-pointer C1+C2 (aliases,
-  indexing — see §4). **Still needed before the RTL:**
-  - C3 ✅ `p^.field` (record-pointer fields) — already wired via `AN_DEREF`
-    branch in `IRLowerAddress` + `ResolveNodeRec`; no compiler change needed.
-    Test: `test/test_ptr_deref_field.pas`.
-  - C4 pointer casts `PType(addr)` — to turn an Int64/Pointer address into a
-    typed pointer.
-  - **Registry access**: a way for runtime Pascal to obtain the address of the
-    RTTI registry blob (`RTTIRegistryOff`). Needs a finalize-time fixup (like
-    `EmitDataRef`) since `RTTIRegistryOff` is only known after parse. A small
-    codegen intrinsic (e.g. `__rttireg`) or a fixed head symbol is the likely
-    path — asm can't (no relocation in the parse-time asm buffer).
-  - **Indirect call** for method-backed props + events (`GetMethodAddr`/
-    `SetMethodProp`): still unsolved by the pointer work — needs procedural-
-    variable call or an IR `call_indirect`. Field-backed props (the common
-    streaming case) do NOT need it; deliver those first.
-  - Then `typinfo.pas`: `GetClass`/`GetPropInfo`/`GetPropList`/`Get|SetOrdProp`/
-    `Get|SetStrProp` over the emitted blobs; `test/test_rtti.pas` round-trip.
-- Phase 3 ⬜ streaming runtime (own TReader/TWriter-lite).
+- Phase 1 ✅ RTTI emission (published-only, custom-minimal layout). Blobs +
+  registry + `--dump-rtti` for **all** prop kinds — integer/ordinal, string,
+  class, enum, set, method-pointer — plus published methods (`rtti_emit.inc`,
+  `test/test_rtti_emit.pas`). Enum identity infra (`EnumType*`/`EnumVal*`,
+  `LastTypeEnumId`, `UPropEnumId`) and named set types (alias table,
+  `AliasTk=tySet`) both landed.
+- Phase 2 ✅ reflection API (TypInfo-named), `compiler/typinfo.pas`. The whole
+  path round-trips on the IR backend via `test/test_rtti.pas`: `GetClass` →
+  `GetPropList` → `Get|SetOrdProp` → `Get|SetStrProp` → `GetMethodAddr` /
+  `SetMethodProp` → set properties, matching the direct backend. Delivered by
+  fixing general typed pointers (C1–C4 — see §4), the `__rttireg` registry
+  intrinsic, and indirect call for method-backed props. Rationale archived in
+  [`historic/phase2-handoff.md`](historic/phase2-handoff.md).
+- Phase 3 ⬜ streaming runtime (own TReader/TWriter-lite). **Next.**
 - Phase 4 ⬜ resource embedding primitive (`{$R}` / `FindResource`;
   independent — good parallel warm-up).
 - Phase 5 ⬜ LFM library (text→binary tool + runtime glue).
@@ -126,13 +114,14 @@ inheritance depth, method-resolution clauses, COM ARC.
 
 ## 4. Language gaps (smaller, opportunistic)
 
-- 🟡 **General pointer syntax.** Progress (Phase 2 unblock — typed-pointer path):
+- 🟡 **General pointer syntax.** Typed-pointer path (Phase 2 unblock) done:
   - ✅ C1 named pointer aliases `PFoo = ^TFoo` (carry element type).
   - ✅ C2 pointer indexing `p[i]` read+write, stride = element size.
   - ✅ C3 record-pointer field access `p^.field` (deref a `^TRec` then field).
-    Already wired; test: `test/test_ptr_deref_field.pas`.
-  - ⬜ C4 pointer casts `PType(expr)` preserving element type (currently
-    `PType(x)` errors "undefined variable" — casts parse as function calls).
+    Test: `test/test_ptr_deref_field.pas`.
+  - ✅ C4 pointer casts `PType(expr)` preserving element type. `AN_PTR_CAST`;
+    indexing a cast strides by the cast's pointed-at element size
+    (`test/test_ptr_cast.pas`).
   - ⬜ pointer arithmetic `p + n` (currently unscaled/garbage; indexing is the
     working substitute). `@var` address-of works for `@arr[i]`/`@x`.
   See [`pascal-gap-analysis.md`](pascal-gap-analysis.md) §1.3.
@@ -141,8 +130,8 @@ inheritance depth, method-resolution clauses, COM ARC.
 - 🟡 **Dynamic arrays.** Work for scalar elements. Missing: reference counting
   / copy-on-grow (content preserved), reclaim of freed blocks, `array of
   record` / `array of string`, and dynamic arrays as params / results.
-- 🟡 **Enums.** Type handling exists; **verify completeness for RTTI** —
-  streaming needs ordinal↔name (Phase 1 dependency).
+- ✅ **Enums.** Type identity + ordinal↔name infra in place and used by RTTI
+  (enum prop kind, EnumRTTI). Named set types (`set of TEnum`) also recognized.
 - 🟡 **Generics.** Template mechanism exists; breadth vs FPC unverified.
 - ✅ **Class visibility.** Phase 0 of the LFM arc done (see §2).
 - ⬜ **Method-call-with-args as a statement.** `obj.Method(arg)` on its own
@@ -154,11 +143,13 @@ inheritance depth, method-resolution clauses, COM ARC.
   first `}`, so a `{` inside a comment breaks self-compile (`unexpected
   character`). FPC accepts nested comments (warns "comment level 2"). Avoid
   inner braces in compiler-side comments until fixed. Surfaced in Phase 1.
-- 🔴 **String field on a class reads/writes as garbage.** `obj.FStr := 'x';
-  writeln(obj.FStr)` on a class string field printed an address, not the
-  string (record string fields work — see `record_string_field.pas`). Class
-  layout/codegen for string fields differs. Surfaced writing
-  `test/test_rtti_emit.pas`; blocks streaming string props until fixed.
+- 🔴 **String field on a class is broken.** A class string field used directly
+  — `obj.FStr := 'x'; writeln(obj.FStr)` — now fails to compile on **both**
+  backends: `error: invalid optional IR node reference in call last arg`
+  (earlier it mis-emitted an address at runtime). Record string fields work
+  (see `record_string_field.pas`), and string *properties* round-trip fine via
+  RTTI (`GetStrProp`/`SetStrProp` — `test/test_rtti.pas` Caption). The raw
+  class-field path is the remaining gap; relevant to streaming string props.
 
 ### Self-host papered-over gaps (real features the compiler dodges on itself)
 

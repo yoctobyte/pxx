@@ -22,25 +22,20 @@ correctly is not a shipped target.
 
 ---
 
-## Phase 1 — Remove "Experimental" from IR
+## Phase 1 — Remove "Experimental" from IR ✅ (done 2026-05-29)
 
-**Status:** Ready to start (fixedpoint achieved 2026-05-28)
+**Status:** Done. IR is the default backend; the compiler bootstraps through it.
 
-The IR backend is self-consistent. The "experimental" flag exists for
-safety, not because the backend is incomplete. Removing it means making
-IR the **default** code generation path.
+The IR backend is self-consistent. Completed tasks:
+- ✅ Full `make test` passes with IR as the backend (the former
+  `test_op_overload.pas` IR red was cleared 2026-05-30).
+- ✅ `--experimental-ir-codegen` is now a no-op alias (kept for compatibility).
+- ✅ Legacy direct-emission `codegen.inc` gated behind `--legacy-codegen`.
+- ✅ Fixedpoint confirmed: IR-compiled compiler → recompile → identical.
 
-Tasks:
-- Run full `make test` with IR backend forced — all tests must pass
-- Make `--experimental-ir-codegen` a no-op alias (keep for compatibility
-  a while, then drop)
-- Remove legacy direct-emission `codegen.inc` path or gate it behind
-  `--legacy-codegen` for the transition period
-- Confirm fixedpoint: IR-compiled compiler → recompile → identical
-
-The legacy `codegen.inc` remains as reference and fallback until the IR
-backend has proven itself as the default over multiple real-world
-compilation cycles.
+The legacy `codegen.inc` remains as reference/fallback (it can no longer
+compile the newest IR-only features, e.g. RTTI). Eventual deletion is tracked
+in [`todo.md`](todo.md) §5.
 
 ---
 

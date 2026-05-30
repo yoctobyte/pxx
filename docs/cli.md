@@ -50,7 +50,8 @@ Options must occur before the source path.
 | Option | Behavior |
 | --- | --- |
 | `--debug` | Print compiler lexer/parser/preprocessor diagnostics while compiling. |
-| `--experimental-ir-codegen` | Route Pascal through the IR backend instead of the legacy direct-emission backend. As of 2026-05-28 the IR backend is self-consistent and has reached self-recompile fixedpoint. |
+| `--legacy-codegen` | Opt back into the frozen direct AST→x86-64 emitter (reference only). The IR backend is the default since 2026-05-29; new features land in IR only and the legacy path cannot compile the newest ones (e.g. RTTI). |
+| `--experimental-ir-codegen` | Deprecated no-op, accepted for compatibility. IR is already the default. |
 | `--dump-ir` | Print the AST-lowered IR while still emitting the normal executable. |
 | `-dNAME` | Define a Pascal conditional-compilation symbol. |
 | `-uNAME` | Undefine a Pascal conditional-compilation symbol, except built-in `PXX`. |

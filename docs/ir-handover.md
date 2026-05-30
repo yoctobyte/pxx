@@ -1,6 +1,6 @@
 # IR Backend Status
 
-**Updated:** 2026-05-28
+**Updated:** 2026-05-30
 
 ## Current State: Fixedpoint Achieved
 
@@ -12,17 +12,18 @@ compiler, each compiled via the IR path, produce a bit-identical binary.
 FPC → stage0 → gen1 (IR) → gen2 (IR-by-IR) → cmp gen1 gen2: identical
 ```
 
-See [selfcompile-milestone.md](selfcompile-milestone.md) for the full account.
+See [historic/selfcompile-milestone.md](historic/selfcompile-milestone.md) for the full account.
 
 ## What the IR Backend Does
 
-`--experimental-ir-codegen` replaces the direct AST-to-x86-64 path
-(`codegen.inc`) with a two-stage pipeline:
+The IR path is a two-stage pipeline:
 
 1. `IRLowerAST` (`ir.inc`) — walks the AST and emits a linear IR sequence
 2. `IREmitMachineCode` (`ir_codegen.inc`) — translates IR nodes to x86-64 bytes
 
-The legacy backend (`codegen.inc`) remains the default and the reference.
+The IR backend is the **default** (since 2026-05-29) and the compiler
+bootstraps through it. The direct AST→x86-64 backend (`codegen.inc`) is frozen
+and reference-only, reachable via `--legacy-codegen`.
 
 ## Key Files
 
@@ -34,11 +35,15 @@ The legacy backend (`codegen.inc`) remains the default and the reference.
 
 ## Invoking
 
+The IR backend is the default; no flag needed:
+
 ```sh
-./compiler/pascal26 --experimental-ir-codegen source.pas /tmp/out
+./compiler/pascal26 source.pas /tmp/out
 ```
 
-Add `--dump-ir` to print the IR before emission:
+`--experimental-ir-codegen` is accepted as a deprecated no-op. Use
+`--legacy-codegen` to opt back into the frozen direct emitter. Add `--dump-ir`
+to print the IR before emission:
 
 ```sh
 ./compiler/pascal26 --dump-ir source.pas /tmp/out
@@ -85,6 +90,13 @@ The IR backend handles the full compiler source, including:
 - `Ord`/`Chr`/integer cast intrinsics
 - Set-membership (`in`) tests
 - Exception frames (`try/except`, `try/finally`, `raise`)
+- Operator overloading (the former `test_op_overload.pas` IR red is resolved)
+- Typed pointers: named aliases `PFoo = ^TFoo`, indexing `p[i]`, `p^.field`,
+  casts `PType(expr)`, all with correct element-size stride
+- Published RTTI end-to-end (`compiler/typinfo.pas`): GetClass / GetPropList /
+  Get|SetOrdProp / Get|SetStrProp / SetMethodProp / set properties.
+  `test/test_rtti.pas` round-trips. (The frozen legacy backend can't compile
+  this path — RTTI is IR-only.)
 
 ## Known Gaps
 

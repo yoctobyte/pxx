@@ -1,6 +1,6 @@
 # PXX Documentation
 
-**Documentation snapshot:** 2026-05-28
+**Documentation snapshot:** 2026-05-30
 
 `PXX` is the provisional project and compiler name. The executable is still
 called `compiler/pascal26` while the name and artifact migration remain open.
@@ -20,20 +20,25 @@ User-facing documents:
 - [Plan: RTTI → Streaming → LFM](plan-rtti-streaming-lfm.md) - agent-executable phased plan for Lazarus/LCL enablement (RTTI, published, component streaming, resources, LFM).
 - [Project TODO](todo.md) - consolidated remaining-work list: standing bugs, the LCL arc, interfaces (detailed), language gaps, targets, and the units refactor.
 
-Frontend notes (planned languages):
+Architecture and current state:
 
-- [Rust Frontend](rust-frontend.md) - memory management approach and scope for the planned Rust frontend.
+- [Implementation Architecture](architecture.md) - include chain, generic machinery, library resolution, key gotchas, class/method layout, dialect switches, operator overloading.
+- [IR Backend Status](ir-handover.md) - IR pipeline, coverage, and known gaps. The IR path is the development focus and has reached self-recompile fixedpoint.
+- [Compatibility Status](../COMPATIBILITY.md) - dated implementation inventory and bootstrap policy.
+- [Target Roadmap](roadmap.md) - planned CPU targets and the fixedpoint gate each must pass.
 
 Additional project material:
 
 - [Lineage and Acknowledgements](lineage.md) - the people and languages this project is built on.
 - [C Interoperability](../C_INTEROP.md) - detail on Pascal-to-C header imports and supported C preprocessing.
-- [Compatibility Status](../COMPATIBILITY.md) - dated implementation inventory and bootstrap policy.
-- [Implementation Handover](../handover.md) - internal architecture and bootstrap notes.
-- [IR Backend Status](ir-handover.md) - IR pipeline, coverage, and known gaps.
-- [IR Fixedpoint Milestone](selfcompile-milestone.md) - 2026-05-28 IR-to-IR self-recompile fixedpoint record.
-- [Target Roadmap](roadmap.md) - planned CPU targets and the fixedpoint gate each must pass.
-- [Language Status](language-status.md) - timestamped inventory of implemented, partial, and missing Pascal features with AST/IR complexity estimates.
-- [Interfaces Design Notes](interfaces-design.md) - why interfaces are last: fat pointers, COM vs lightweight model, and the prerequisite chain.
-- [RTTI Design Notes](rtti-design.md) - reflection as data-emission, opt-in via published, and why it comes before interfaces.
-- [Implementation Plan](implementation-plan.md) - ordered phase-by-phase plan for all missing language features; ready for agents to execute.
+
+Historic / design archive (`historic/`, point-in-time — superseded by the above):
+
+- [Implementation Handover (2026-05-28)](historic/handover-2026-05-28.md) - dated session snapshot; durable parts now in `architecture.md`.
+- [Phase 2 Handoff](historic/phase2-handoff.md) - RTTI-via-typed-pointers resume checklist; delivered 2026-05-30.
+- [IR Fixedpoint Milestone](historic/selfcompile-milestone.md) - 2026-05-28 IR-to-IR self-recompile fixedpoint record.
+- [Language Status](historic/language-status.md) - timestamped feature inventory with AST/IR complexity estimates.
+- [Interfaces Design Notes](historic/interfaces-design.md) - fat pointers, COM vs lightweight model, prerequisite chain.
+- [RTTI Design Notes](historic/rtti-design.md) - reflection as data-emission, opt-in via published.
+- [Implementation Plan](historic/implementation-plan.md) - ordered phase-by-phase plan for missing language features.
+- [Rust Frontend](historic/rust-frontend.md) - memory-management approach and scope for the planned Rust frontend.

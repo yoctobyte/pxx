@@ -39,6 +39,11 @@ Focus: Linux / POSIX. Single target for now: x86-64.
   through an explicit IR before x86-64 emission. As of 2026-05-28 the IR
   backend reached full self-recompile fixedpoint: three generations of
   IR-compiled compiler produce a bit-identical binary.
+- **Published RTTI + reflection** — `published` properties/methods emit a
+  compact RTTI blob; `compiler/typinfo.pas` walks it at runtime
+  (`GetClass`/`GetPropList`/`Get|SetOrdProp`/`Get|SetStrProp`/`SetMethodProp`,
+  including enum and set properties). Built on typed pointers (named aliases,
+  `p[i]`, `p^.field`, `PType(expr)` casts). Groundwork for component streaming.
 - **FPC-compatible source** — the compiler itself is valid FPC Pascal.
   `make fpc-check` verifies this. FPC is the bootstrap tool and a respected
   reference implementation.

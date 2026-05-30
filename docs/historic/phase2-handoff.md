@@ -1,5 +1,13 @@
 # Phase 2 Handoff — RTTI reflection via typed pointers
 
+> **Historic (delivered 2026-05-30).** The entire resume checklist below is
+> done: typed-pointer C1–C4, registry access (`__rttireg`), indirect call for
+> method-backed props, and `compiler/typinfo.pas`. `test/test_rtti.pas`
+> round-trips end-to-end on the IR backend (GetClass → GetPropList →
+> Get/SetOrdProp → Get/SetStrProp → SetMethodProp → set props). Kept for the
+> rationale (why typed pointers over asm helpers). Current state:
+> `docs/todo.md` §2, `docs/architecture.md` RTTI notes.
+
 Session handoff for the LFM-enablement arc (plan: `plan-rtti-streaming-lfm.md`;
 ordered TODO: `todo.md` §2 Phase 2 + §4 pointer gap). Read those first — this
 file is the *resume checklist*, not the spec.
