@@ -1156,6 +1156,18 @@ begin
         EmitReadVarParse(IntToTypeKind(IRTk[node]));
       end;
 
+    IR_COPY_REC:
+      begin
+        { full-record copy: rep movsb IRIVal bytes from src (IRB) to dest (IRA) }
+        IREmitNode(IRB[node]);                 { rax = source address }
+        EmitB($50);                            { push rsi-source }
+        IREmitNode(IRA[node]);                 { rax = dest address }
+        EmitB($48); EmitB($89); EmitB($C7);    { mov rdi, rax }
+        EmitB($5E);                            { pop rsi }
+        EmitB($48); EmitB($B9); EmitI64(IRIVal[node]); { movabs rcx, byte count }
+        EmitB($F3); EmitB($A4);                { rep movsb }
+      end;
+
     IR_EXC_LEAVE:
       begin
         IREmitLeaveExceptionFrames(IRA[node]);
@@ -1358,7 +1370,7 @@ begin
         end;
 
       IR_STORE_SYM, IR_STORE_MEM, IR_WRITE, IR_WRITELN,
-      IR_READLINE, IR_READ_VAR,
+      IR_READLINE, IR_READ_VAR, IR_COPY_REC,
       IR_EXC_LEAVE, IR_RAISE, IR_EXC_STORE, IR_EXC_CLEAR, IR_TERMINATE,
       IR_ASM:
         begin

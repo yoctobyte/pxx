@@ -149,6 +149,7 @@ const
   IR_RESOURCES    = 34;
   IR_READLINE     = 35;  { read one line from stdin into the line buffer }
   IR_READ_VAR     = 36;  { IRA = target address; IRTk = target type; parse from buffer }
+  IR_COPY_REC     = 37;  { IRA = dest addr; IRB = src addr; IRIVal = byte count (full record copy) }
 
   EXC_FRAME_SIZE = 80;
   EXC_JMP_OFFSET = 8;

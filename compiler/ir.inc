@@ -45,6 +45,7 @@ begin
     IR_WRITELN: Result := 'writeln';
     IR_READLINE: Result := 'readline';
     IR_READ_VAR: Result := 'read_var';
+    IR_COPY_REC: Result := 'copy_rec';
     IR_BLOCK: Result := 'block';
     IR_UNSUPPORTED: Result := 'unsupported';
     IR_IF: Result := 'if';
@@ -176,6 +177,12 @@ begin
 
       IR_READ_VAR:
         IRRequireNode(IRA[i], 'read_var');
+
+      IR_COPY_REC:
+      begin
+        IRRequireNode(IRA[i], 'copy_rec dest');
+        IRRequireNode(IRB[i], 'copy_rec src');
+      end;
 
       IR_WRITELN, IR_BLOCK:
       begin
@@ -480,6 +487,7 @@ var left, right, seq, item, value, outNode, first, last, leftAddr, argNode: Inte
     continueLabel, continueLabelNode: Integer;
     branchSeq, branchPair, labelsHead, stmtNode, labelNode: Integer;
     clauseBodyLabel, nextClauseLabel, selectorValNode: Integer;
+    rhsIsLValue: Boolean;
     cv: Int64;
     constValNode, clauseBodyLabelNode, exitJmpNode, nextClauseLabelNode: Integer;
     beforeCount, handlerLabel, handlerNode, handlerNextLabel, savedDepth: Integer;
@@ -630,13 +638,30 @@ begin
 
     AN_ASSIGN:
     begin
-      value := IRLowerAST(ASTRight[node]);
-      if ASTKind[ASTLeft[node]] = AN_IDENT then
-        Result := IRAppend(IR_STORE_SYM, ASTIVal[ASTLeft[node]], value, -1, 0, ASTTk[ASTLeft[node]])
-      else
+      { Whole-record copy: the scalar store paths move only a qword (8 bytes),
+        which truncates records larger than 8 bytes. When the RHS is an lvalue,
+        copy the full RecSize via IR_COPY_REC (rep movsb). }
+      rhsIsLValue := (ASTKind[ASTRight[node]] = AN_IDENT) or
+                     (ASTKind[ASTRight[node]] = AN_FIELD) or
+                     (ASTKind[ASTRight[node]] = AN_INDEX) or
+                     (ASTKind[ASTRight[node]] = AN_DEREF);
+      if (IntToTypeKind(ASTTk[ASTLeft[node]]) = tyRecord) and rhsIsLValue then
       begin
         leftAddr := IRLowerAddress(ASTLeft[node]);
-        Result := IRAppend(IR_STORE_MEM, leftAddr, value, -1, 0, ASTTk[ASTLeft[node]]);
+        right := IRLowerAddress(ASTRight[node]);
+        Result := IRAppend(IR_COPY_REC, leftAddr, right, -1,
+                           RecSize(ResolveNodeRec(ASTLeft[node])), Ord(tyRecord));
+      end
+      else
+      begin
+        value := IRLowerAST(ASTRight[node]);
+        if ASTKind[ASTLeft[node]] = AN_IDENT then
+          Result := IRAppend(IR_STORE_SYM, ASTIVal[ASTLeft[node]], value, -1, 0, ASTTk[ASTLeft[node]])
+        else
+        begin
+          leftAddr := IRLowerAddress(ASTLeft[node]);
+          Result := IRAppend(IR_STORE_MEM, leftAddr, value, -1, 0, ASTTk[ASTLeft[node]]);
+        end;
       end;
     end;
 

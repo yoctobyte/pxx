@@ -226,14 +226,17 @@ not eternal "constraints". Promote to fixes when convenient:
 - ✅ **Single-char string literal / char → string** — fixed 2026-05-30. See the
   "char → string coercion" entry in §1.2 above. `s := 'x'`, `s := someChar`,
   `s := Chr(n)`, and char→string class/record fields all work now.
-- 🔴 **Whole-record array-element copy miscompiles in main-program body.**
-  `arr[j] := arr[j+1]` for an 8-byte record silently no-ops the store under
-  some conditions inside the program's main body (IR backend). Surfaced in the
-  `__rttireg` sentinel-drop loop (`compiler.pas`): dropped every Fixup, NULLing
-  string literals. Does NOT reproduce standalone; fpc-built compiler is fine, so
-  it is self-hosted codegen of `IR_STORE_MEM` for a record lvalue. Worked around
-  field-wise (`Fixups[j].CodePos/.DataOff := ...`). Real fix pending — disasm the
-  main-body record store. (2026-05-30)
+- ✅ **Whole-record copy truncated records > 8 bytes** — fixed 2026-05-30.
+  `r1 := r2` and `arr[i] := arr[j]` copied a hardcoded `TypeSize(tyRecord)` = 8
+  bytes (one qword) regardless of the record's real size, so anything larger
+  (e.g. the 16-byte `TFixup`, or any user record with >2 ints) lost its tail.
+  The earlier "main-program body / heisenbug" framing was wrong: the trigger is
+  simply record size > 8 (compiler.pas's `Fixups`/`TFixup` is 16 via the
+  hardcoded `RecSize` table, so the sentinel-drop shift truncated it → NULL
+  string literals). Fix: whole-record lvalue assignment now lowers to
+  `IR_COPY_REC` (rep movsb of the full `RecSize`) instead of the scalar
+  qword store. The field-wise workaround in `compiler.pas` was removed.
+  Test: `test/test_record_copy.pas`.
 - Note: "integer-only compiler tables" stays a deliberate **constraint**, not a
   bug — it is the fixedpoint-safety convention, nothing to fix.
 
