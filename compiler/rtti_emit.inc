@@ -86,15 +86,15 @@ begin
   EmitEnumRTTI := hdr;
 end;
 
-{ Emit one PropInfo (RTTI_PROP_SIZE bytes) for property pri belonging to ci.
-  Returns the Data[] offset of the record. }
-function EmitPropInfo(ci, pri: Integer): Integer;
-var piPos, tk, kind, tci, eid, strIdx, fIdx, mIdx, procIdx: Integer;
+{ Fill a PropInfo record at the already-reserved offset piPos for property pri
+  belonging to ci. The record (RTTI_PROP_SIZE bytes) must be reserved by the
+  caller BEFORE calling this: InternStr appends string data to Data[], so any
+  interning done here would otherwise land between consecutive records and
+  break the runtime's fixed-stride props[i] indexing. }
+procedure EmitPropInfo(ci, pri, piPos: Integer);
+var tk, kind, tci, eid, strIdx, fIdx, mIdx, procIdx: Integer;
     nm: AnsiString;
 begin
-  piPos := DataLen;
-  DataPutZeros(RTTI_PROP_SIZE);
-
   { name }
   nm := TokSliceStr(UPropNOff[pri], UPropNLen[pri]);
   strIdx := InternStr(nm);
@@ -181,28 +181,25 @@ begin
 
   { ordType: type-kind hint (size/sign for ordinals) }
   PatchDataU64(piPos + 56, tk);
-
-  EmitPropInfo := piPos;
 end;
 
-{ Emit one MethInfo (RTTI_METH_SIZE bytes) for published method mi of ci. }
-function EmitMethInfo(mi: Integer): Integer;
-var miPos, strIdx, procIdx: Integer;
+{ Fill a MethInfo record (RTTI_METH_SIZE bytes) at the already-reserved offset
+  miPos for published method mi. Record must be reserved by the caller first
+  (see EmitPropInfo: InternStr appends and would otherwise split the array). }
+procedure EmitMethInfo(mi, miPos: Integer);
+var strIdx, procIdx: Integer;
     nm: AnsiString;
 begin
-  miPos := DataLen;
-  DataPutZeros(RTTI_METH_SIZE);
   nm := TokSliceStr(UMthNOff[mi], UMthNLen[mi]);
   strIdx := InternStr(nm);
   AddDataPtrFix(miPos + 0, Strs[strIdx].Offset);
   procIdx := UMthProc_[mi];
   if procIdx >= 0 then QueueMethCodeFixup(miPos + 8, procIdx);
-  EmitMethInfo := miPos;
 end;
 
 procedure EmitRTTI;
-var ci, i, base, cnt, hdr, strIdx, etid: Integer;
-    propCount, propsOff, methCount, methsOff, firstOff: Integer;
+var ci, i, k, base, cnt, hdr, strIdx, etid: Integer;
+    propCount, methCount, firstOff: Integer;
     regEntries, entryPos: Integer;
     nm: AnsiString;
 begin
@@ -248,32 +245,46 @@ begin
     if UClsVMTOffset[ci] >= 0 then
       AddDataPtrFix(hdr + 24, UClsVMTOffset[ci]);
 
-    { published properties (own) }
+    { published properties (own). Reserve the whole array contiguously BEFORE
+      filling: EmitPropInfo interns names (which append to Data[]), so records
+      must be laid out first or the runtime's props[i] stride breaks. }
     base := UClsPBase[ci]; cnt := UClsPCount[ci];
-    propCount := 0; firstOff := -1;
+    propCount := 0;
     for i := 0 to cnt - 1 do
+      if UPropPub[base + i] = 1 then Inc(propCount);
+    firstOff := -1;
+    if propCount > 0 then
     begin
-      if UPropPub[base + i] = 1 then
-      begin
-        propsOff := EmitPropInfo(ci, base + i);
-        if firstOff < 0 then firstOff := propsOff;
-        Inc(propCount);
-      end;
+      firstOff := DataLen;
+      DataPutZeros(propCount * RTTI_PROP_SIZE);
+      k := 0;
+      for i := 0 to cnt - 1 do
+        if UPropPub[base + i] = 1 then
+        begin
+          EmitPropInfo(ci, base + i, firstOff + k * RTTI_PROP_SIZE);
+          Inc(k);
+        end;
     end;
     PatchDataU64(hdr + 32, propCount);
     if propCount > 0 then AddDataPtrFix(hdr + 40, firstOff);
 
-    { published methods (own) }
+    { published methods (own) — same contiguous-reserve-then-fill rule. }
     base := UClsMBase[ci]; cnt := UClsMCount[ci];
-    methCount := 0; firstOff := -1;
+    methCount := 0;
     for i := 0 to cnt - 1 do
+      if UMthPub[base + i] = 1 then Inc(methCount);
+    firstOff := -1;
+    if methCount > 0 then
     begin
-      if UMthPub[base + i] = 1 then
-      begin
-        methsOff := EmitMethInfo(base + i);
-        if firstOff < 0 then firstOff := methsOff;
-        Inc(methCount);
-      end;
+      firstOff := DataLen;
+      DataPutZeros(methCount * RTTI_METH_SIZE);
+      k := 0;
+      for i := 0 to cnt - 1 do
+        if UMthPub[base + i] = 1 then
+        begin
+          EmitMethInfo(base + i, firstOff + k * RTTI_METH_SIZE);
+          Inc(k);
+        end;
     end;
     PatchDataU64(hdr + 48, methCount);
     if methCount > 0 then AddDataPtrFix(hdr + 56, firstOff);

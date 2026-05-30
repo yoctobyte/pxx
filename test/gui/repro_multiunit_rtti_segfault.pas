@@ -1,13 +1,13 @@
 program repro_multiunit_rtti_segfault;
-{ PRE-EXISTING COMPILER BUG (predates Phase 5; reproduces at commit fd1c3b4).
-  4+ units that pull in typinfo's RTTI + a published class with an inherited
-  property => GetPropInfo walks a WILD NamePtr => SIGSEGV.
-  Fault is inside typinfo.GetPropInfo at the inline string-compare
-  (props[i].NamePtr^ = name); NamePtr is a corrupt pointer.
-  Heisenbug: adding locals/writelns near the call shifts code layout and can
-  make it pass, so it is layout/relocation sensitive (data-ptr fixup or codegen).
-  3 units (typinfo, streams, classes_lite) WORK; adding any 4th (math here)
-  breaks it. Blocks Phase 5 LFM, which inherently needs 5 units. }
+{ Regression test for the multi-unit RTTI segfault (fixed 2026-05-30).
+  Was: 4+ units pulling in typinfo's RTTI + a published class with an inherited
+  property => GetPropInfo walked a WILD NamePtr => SIGSEGV. Root cause was NOT
+  unit count: EmitPropInfo interned each prop name (which appends to Data[])
+  *between* the per-prop record reservations, so the runtime's fixed-64-byte
+  props[i] stride landed on interleaved string data. Adding a 4th unit just
+  changed which names were already interned, hence the heisenbug. Fixed by
+  reserving the prop/meth array contiguously before filling (rtti_emit.inc).
+  Expected output: "propcount=2" then "Name found". }
 uses typinfo, streams, classes_lite, math;
 type
   TF = class(TComponent)
