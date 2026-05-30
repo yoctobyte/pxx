@@ -35,6 +35,7 @@ const
   MAX_ENUMTYPE    = 64;    { distinct named enum types }
   MAX_ENUMVAL     = 512;   { enum value names across all enum types }
   MAX_TYPEALIAS   = 128;   { named type aliases (pointer aliases etc.) }
+  MAX_RESOURCES   = 64;    { embedded R-directive resources }
   MAX_DATAPTRFIX  = 4096;  { data->data 8-byte pointer relocations (RTTI blobs) }
   MAX_METHFIX     = 1024;  { code-address relocations into Data[] (VMT + RTTI) }
 
@@ -99,6 +100,7 @@ const
                             Left=inner expr, IVal=aliasIdx (AliasElemTk/Rec),
                             Tk=Ord(tyPointer) }
   AN_RTTI_REG     = 40; { __rttireg() intrinsic returning pointer to RTTI registry }
+  AN_RESOURCES    = 41; { __resources() intrinsic returning pointer to resource table }
 
   { Inline-asm operand kinds }
   AOP_NONE = 0;
@@ -141,6 +143,7 @@ const
   IR_ASM          = 31;
   IR_RTTI_REG     = 32;
   IR_SET_LIT      = 33;
+  IR_RESOURCES    = 34;
 
   EXC_FRAME_SIZE = 80;
   EXC_JMP_OFFSET = 8;
@@ -368,6 +371,13 @@ var
   RTTIRegistryOff    : Integer;  { Data[] off of registry (count slot then name/rtti ptr pairs), -1 if none }
   RTTIRegistryCount  : Integer;
   DumpRTTI           : Boolean;
+  { Embedded resources (R directive: name + file); pending pairs filled by the
+    lexer, blobs + table emitted post-parse by EmitResources. }
+  ResPendName        : array[0..MAX_RESOURCES-1] of AnsiString;
+  ResPendFile        : array[0..MAX_RESOURCES-1] of AnsiString;
+  ResPendCount       : Integer;
+  ResourceTableOff   : Integer;  { Data[] off of resource table (count slot then name/data/len triples), -1 if none }
+  ResourceCount      : Integer;
   { Operator overload table — parallel arrays, one entry per registered overload }
   OvrlOpKind   : array[0..MAX_OP_OVERLOADS-1] of Integer;  { TTokenKind ordinal }
   OvrlTypeKind : array[0..MAX_OP_OVERLOADS-1] of Integer;  { TTypeKind ordinal }

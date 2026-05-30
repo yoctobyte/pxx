@@ -67,6 +67,7 @@ begin
     IR_VIRTUAL_CALL: Result := 'virtual_call';
     IR_ASM: Result := 'asm';
     IR_RTTI_REG: Result := 'rtti_reg';
+    IR_RESOURCES: Result := 'resources';
     IR_SET_LIT: Result := 'set_lit';
   else
     Result := 'unknown';
@@ -133,7 +134,7 @@ begin
   for i := 0 to IRCount - 1 do
   begin
     case IRKind[i] of
-      IR_CONST_INT, IR_CONST_STR, IR_NOP, IR_LABEL, IR_ASM, IR_RTTI_REG, IR_SET_LIT:
+      IR_CONST_INT, IR_CONST_STR, IR_NOP, IR_LABEL, IR_ASM, IR_RTTI_REG, IR_SET_LIT, IR_RESOURCES:
         begin end;
 
       IR_LOAD_SYM:
@@ -551,6 +552,11 @@ begin
     AN_RTTI_REG:
     begin
       Result := IRAppend(IR_RTTI_REG, -1, -1, -1, 0, ASTTk[node]);
+    end;
+
+    AN_RESOURCES:
+    begin
+      Result := IRAppend(IR_RESOURCES, -1, -1, -1, 0, ASTTk[node]);
     end;
 
     AN_ADDR:

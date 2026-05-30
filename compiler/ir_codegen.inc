@@ -69,6 +69,11 @@ begin
       begin
         EmitB($48); EmitB($B8); EmitDataRef(-100);
       end;
+
+    IR_RESOURCES:
+      begin
+        EmitB($48); EmitB($B8); EmitDataRef(-101);
+      end;
       
     IR_LOAD_SYM:
       begin

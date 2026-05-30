@@ -50,9 +50,13 @@ executable plan: **[`plan-rtti-streaming-lfm.md`](plan-rtti-streaming-lfm.md)**.
   configures a component tree (int/string/bool/event props, nested children by
   class name). Test: `test/test_streaming.pas`. Remaining for full fidelity:
   enum/set value-types by name (`vaIdent` enums, `vaSet`), `vaLString`.
-- Phase 4 ⬜ resource embedding primitive (`{$R}` / `FindResource`;
-  independent — good parallel warm-up). **Next.**
-- Phase 5 ⬜ LFM library (text→binary tool + runtime glue).
+- Phase 4 ✅ resource embedding. `{$R name file}` reads the file at compile
+  time into Data and builds a table; runtime `resources.FindResource(name,
+  data, len)` walks it via the `__resources` intrinsic (mirrors the RTTI
+  registry / `__rttireg`). Test: `test/test_resource.pas` + `test/greeting.dat`.
+  (Format is our own `{$R name file}`, not FPC's single-arg `{$R file.res}`.)
+- Phase 5 ⬜ LFM library (text→binary tool + runtime glue). **Next** — depends
+  on Phase 3 (streaming) + Phase 4 (resources), both done.
 
 GUI / LCL widget sets are pure library work **after** this arc — no further
 compiler ask.

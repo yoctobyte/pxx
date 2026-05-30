@@ -1881,6 +1881,20 @@ begin
         Exit;
       end;
 
+      if CaseEqual(name, '__resources') then
+      begin
+        Next; { consume '__resources' }
+        if CurTok.Kind = tkLParen then
+        begin
+          Next;
+          Expect(tkRParen, ')');
+        end;
+        node := AllocNode(AN_RESOURCES);
+        ASTTk[node] := Ord(tyPointer);
+        CurASTNode := node;
+        Exit;
+      end;
+
       if CaseEqual(name, '__rttireg') then
       begin
         Next; { consume '__rttireg' }

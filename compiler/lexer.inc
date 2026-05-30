@@ -594,12 +594,34 @@ begin
   end;
 end;
 
+procedure ReadPasDirectiveFile(var word: AnsiString);
+{ Like ReadPasDirectiveWord but for a filename: keep dots, slashes, dashes. }
+begin
+  word := '';
+  while (SrcPos <= Length(Source)) and
+        (Source[SrcPos] in [' ', #9, #13, #10]) do
+  begin
+    if Source[SrcPos] = #10 then Inc(SrcLine);
+    Inc(SrcPos);
+  end;
+  while (SrcPos <= Length(Source)) and
+        not (Source[SrcPos] in [' ', #9, #13, #10, '}']) do
+  begin
+    AppendChar(word, Source[SrcPos]);
+    Inc(SrcPos);
+  end;
+end;
+
 procedure ProcessPasDirective;
-var command, name: AnsiString; parent, cond: Boolean; idx: Integer;
+var command, name, fname: AnsiString; parent, cond: Boolean; idx: Integer;
 begin
   Inc(SrcPos); { dollar sign }
   ReadPasDirectiveWord(command);
   ReadPasDirectiveWord(name);
+  { Resource directive (R name file): capture the filename before skipping. }
+  fname := '';
+  if CaseEqual(command, 'R') and PasDirectiveActive then
+    ReadPasDirectiveFile(fname);
   while (SrcPos <= Length(Source)) and (Source[SrcPos] <> '}') do
   begin
     if Source[SrcPos] = #10 then Inc(SrcLine);
@@ -639,6 +661,18 @@ begin
       if CaseEqual(name, 'on') then StrictOverload := True
       else if CaseEqual(name, 'off') then StrictOverload := False
       else Error('strict_overload requires on or off');
+    end
+    else if CaseEqual(command, 'R') then
+    begin
+      { R-directive (name file): queue an embedded resource; EmitResources
+        reads the file and builds the table after parsing. }
+      if Length(fname) > 0 then
+      begin
+        if ResPendCount >= MAX_RESOURCES then Error('too many {$R} resources');
+        ResPendName[ResPendCount] := name;
+        ResPendFile[ResPendCount] := fname;
+        Inc(ResPendCount);
+      end;
     end;
     { Mode and unsupported compatibility directives remain accepted comments. }
   end;

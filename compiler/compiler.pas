@@ -21,6 +21,7 @@ procedure CPreprocess(var src: AnsiString; const baseDir: AnsiString); forward;
 {$include bparser.inc}
 {$include elfwriter.inc}
 {$include rtti_emit.inc}
+{$include resources_emit.inc}
 {$include cpreproc.inc}
 
 { ===== Main ===== }
@@ -160,6 +161,7 @@ begin
   MethodFixCount := 0; UPropCount := 0;
   DataPtrFixCount := 0;
   RTTIRegistryOff := -1; RTTIRegistryCount := 0;
+  ResPendCount := 0; ResourceTableOff := -1; ResourceCount := 0;
   EnumTypeCount := 0; EnumValCount := 0; LastTypeEnumId := -1;
   AliasCount := 0;
   AddConst('StdErr', tyInteger, 2);
@@ -191,8 +193,10 @@ begin
   begin
     EmitRTTI;
     if DumpRTTI then DumpRTTITables;
+    EmitResources;
   end;
-  { Patch RTTIRegistryOff relocations }
+  { Patch RTTIRegistryOff (-100) and ResourceTableOff (-101) relocations. A
+    sentinel with no table is dropped (the intrinsic then returns nil/0). }
   i := 0;
   while i < FixCount do
   begin
@@ -200,6 +204,18 @@ begin
     begin
       if RTTIRegistryOff >= 0 then
         Fixups[i].DataOff := RTTIRegistryOff
+      else
+      begin
+        for j := i to FixCount - 2 do
+          Fixups[j] := Fixups[j + 1];
+        Dec(FixCount);
+        continue;
+      end;
+    end
+    else if Fixups[i].DataOff = -101 then
+    begin
+      if ResourceTableOff >= 0 then
+        Fixups[i].DataOff := ResourceTableOff
       else
       begin
         for j := i to FixCount - 2 do
