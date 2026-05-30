@@ -277,6 +277,10 @@ begin
           Error('invalid proc index in virtual_call');
       end;
 
+      IR_PROCADDR:
+        if (IRA[i] < 0) or (IRA[i] >= ProcCount) then
+          Error('invalid proc index in procaddr');
+
       IR_UNSUPPORTED:
         begin end;
 
@@ -599,6 +603,11 @@ begin
     AN_ADDR:
     begin
       Result := IRLowerAddress(ASTLeft[node]);
+    end;
+
+    AN_PROCADDR:
+    begin
+      Result := IRAppend(IR_PROCADDR, Integer(ASTIVal[node]), -1, -1, 0, ASTTk[node]);
     end;
 
     AN_NEG:

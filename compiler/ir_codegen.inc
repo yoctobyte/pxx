@@ -187,6 +187,21 @@ begin
         EmitB($48); EmitB($B8); EmitDataRef(Strs[si].Offset);
       end;
 
+    IR_PROCADDR:
+      begin
+        { @proc → mov rax, <absolute code address>, patched at finalize.
+          External routines have no link-time address (resolved into the GOT
+          by the dynamic linker); pass an internal wrapper instead. }
+        if ProcExternal[IRA[node]] then
+          Error('@ on external routine not supported; wrap it in a local routine');
+        EmitB($48); EmitB($B8); { mov rax, imm64 }
+        if ProcAddrFixCount >= MAX_CALLFIX then Error('proc addr fixup overflow');
+        ProcAddrFix[ProcAddrFixCount].CodePos := CodeLen;
+        ProcAddrFix[ProcAddrFixCount].ProcIdx := IRA[node];
+        Inc(ProcAddrFixCount);
+        EmitI64(0);
+      end;
+
     IR_SET_LIT:
       begin
         EmitB($48); EmitB($B8); EmitDataRef(IRIVal[node]);

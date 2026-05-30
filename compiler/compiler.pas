@@ -145,7 +145,7 @@ begin
   Data[NEWLINE_OFFSET] := 10;
   BSSSize  := 0;
   StrCount := 0; FixCount := 0;
-  GlobFixCount := 0; CallFixCount := 0;
+  GlobFixCount := 0; CallFixCount := 0; ProcAddrFixCount := 0;
   SymCount := 0; ProcCount := 0;
   ExternalCount := 0; DynCallCount := 0; CurrentCLibrary := '';
   FrameSize := 0; CurProc := -1;

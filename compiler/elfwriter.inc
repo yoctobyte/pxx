@@ -308,6 +308,13 @@ begin
     PatchDataU64(MethodFixups[i].DataPos, addr);
   end;
 
+  { @proc: patch each `mov rax, imm64` with the routine's absolute code address }
+  for i := 0 to ProcAddrFixCount-1 do
+  begin
+    addr := entry + Procs[ProcAddrFix[i].ProcIdx].BodyAddr;
+    PatchAddr8(ProcAddrFix[i].CodePos, addr);
+  end;
+
   for i := 0 to DataPtrFixCount-1 do
     PatchDataU64(DataPtrFix[i].DataPos, dataBase + DataPtrFix[i].TargetOff);
 
@@ -387,6 +394,13 @@ begin
   begin
     addr := entry + Procs[MethodFixups[i].ProcIdx].BodyAddr;
     PatchDataU64(MethodFixups[i].DataPos, addr);
+  end;
+
+  { @proc: patch each `mov rax, imm64` with the routine's absolute code address }
+  for i := 0 to ProcAddrFixCount-1 do
+  begin
+    addr := entry + Procs[ProcAddrFix[i].ProcIdx].BodyAddr;
+    PatchAddr8(ProcAddrFix[i].CodePos, addr);
   end;
 
   for i := 0 to DataPtrFixCount-1 do

@@ -104,6 +104,7 @@ const
   AN_RESOURCES    = 41; { __resources() intrinsic returning pointer to resource table }
   AN_READLN       = 42; { Left = AN_ARG chain of lvalue targets (consumes a line) }
   AN_READ         = 43; { like AN_READLN; subset: also reads a fresh line }
+  AN_PROCADDR     = 44; { ASTIVal = proc index; @proc → absolute code address as Pointer }
 
   { Inline-asm operand kinds }
   AOP_NONE = 0;
@@ -150,6 +151,7 @@ const
   IR_READLINE     = 35;  { read one line from stdin into the line buffer }
   IR_READ_VAR     = 36;  { IRA = target address; IRTk = target type; parse from buffer }
   IR_COPY_REC     = 37;  { IRA = dest addr; IRB = src addr; IRIVal = byte count (full record copy) }
+  IR_PROCADDR     = 38;  { IRA = proc idx; load absolute code address of an internal proc into the result }
 
   EXC_FRAME_SIZE = 80;
   EXC_JMP_OFFSET = 8;
@@ -438,6 +440,11 @@ var
 
   CallFix  : array[0..MAX_CALLFIX-1] of TCallFix;
   CallFixCount : Integer;
+
+  { @proc: code-side `mov rax, imm64` placeholders patched at finalize with the
+    absolute runtime address of an internal proc (entry + BodyAddr). }
+  ProcAddrFix : array[0..MAX_CALLFIX-1] of TCallFix;
+  ProcAddrFixCount : Integer;
 
   Syms      : array[0..MAX_SYMS-1]  of TSymbol;
   SymCount  : Integer;

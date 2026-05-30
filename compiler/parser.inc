@@ -1619,13 +1619,26 @@ begin
       if CurTok.Kind <> tkIdent then Error('expected identifier after @');
       name := CurTok.SVal;
       idx := FindSym(name);
-      Next;
-      valNode := ParseLValueAST(idx, TokPos - 2);
-      node := AllocNode(AN_ADDR);
-      ASTLeft[node] := valNode;
-      ASTTk[node] := Ord(tyPointer);
-      CurASTNode := node;
-      LastExprTk := tyPointer;
+      { @proc: not a variable but a known routine → absolute code address }
+      if (idx < 0) and (FindProc(name) >= 0) then
+      begin
+        node := AllocNode(AN_PROCADDR);
+        ASTIVal[node] := FindProc(name);
+        ASTTk[node] := Ord(tyPointer);
+        Next;
+        CurASTNode := node;
+        LastExprTk := tyPointer;
+      end
+      else
+      begin
+        Next;
+        valNode := ParseLValueAST(idx, TokPos - 2);
+        node := AllocNode(AN_ADDR);
+        ASTLeft[node] := valNode;
+        ASTTk[node] := Ord(tyPointer);
+        CurASTNode := node;
+        LastExprTk := tyPointer;
+      end;
     end;
     tkFloat:
     begin

@@ -72,6 +72,8 @@ test: $(COMPILER) fpc-check
 	test "$$(/tmp/test_asm_func26)" = "14"
 	./$(COMPILER) test/test_asm_swap.pas /tmp/test_asm_swap26
 	test "$$(/tmp/test_asm_swap26)" = "$$(printf '42\n-7\n-7\n42')"
+	./$(COMPILER) test/test_procaddr.pas /tmp/test_procaddr26
+	test "$$(/tmp/test_procaddr26)" = "1 2 3 4 5 "
 	./$(COMPILER) --debug test/hello.pas /tmp/hello_debug26 > /tmp/hello_debug26.log
 	grep -q "Loaded file length:" /tmp/hello_debug26.log
 	test "$$(/tmp/hello_debug26)" = "Hello, World!"
