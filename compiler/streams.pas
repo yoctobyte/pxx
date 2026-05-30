@@ -26,6 +26,7 @@ type
     function ReadInt64: Int64;      { little-endian }
     function ReadStrLen(n: Integer): string; { n bytes as a string }
     function ReadShortStr: string;  { 1-byte length prefix + bytes }
+    function ReadLStr: string;       { 4-byte (little-endian) length prefix + bytes }
   end;
 
 implementation
@@ -116,6 +117,13 @@ function TByteStream.ReadShortStr: string;
 var n: Integer;
 begin
   n := ReadByte;
+  Result := ReadStrLen(n);
+end;
+
+function TByteStream.ReadLStr: string;
+var n: Integer;
+begin
+  n := ReadInt32;
   Result := ReadStrLen(n);
 end;
 

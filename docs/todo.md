@@ -48,8 +48,10 @@ executable plan: **[`plan-rtti-streaming-lfm.md`](plan-rtti-streaming-lfm.md)**.
   (TByteStream), `compiler/classes_lite.pas` (TComponent-lite + TReader),
   `typinfo.CreateInstance`. Walks our minimal TPF0 subset and instantiates +
   configures a component tree (int/string/bool/event props, nested children by
-  class name). Test: `test/test_streaming.pas`. Remaining for full fidelity:
-  enum/set value-types by name (`vaIdent` enums, `vaSet`), `vaLString`.
+  class name). Tests: `test/test_streaming.pas`, `test/test_streaming_enumset.pas`.
+  Enum (`vaIdent`→ordinal via enum RTTI), set (`vaSet` member-name list→bitset),
+  and `vaLString` (4-byte length prefix) value-types now handled — props carry a
+  typeRef to the element enum RTTI for both enum and set kinds.
 - Phase 4 ✅ resource embedding. `{$R name file}` reads the file at compile
   time into Data and builds a table; runtime `resources.FindResource(name,
   data, len)` walks it via the `__resources` intrinsic (mirrors the RTTI

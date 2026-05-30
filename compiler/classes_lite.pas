@@ -29,6 +29,8 @@ const
   vaIdent  = 7;
   vaFalse  = 8;
   vaTrue   = 9;
+  vaSet    = 11;
+  vaLString = 12;
   vaInt64  = 19;
 
 type
@@ -118,11 +120,12 @@ end;
 
 procedure TReader.ReadProps(inst: Pointer; cls: PClassRTTI; rootInst: Pointer; rootCls: PClassRTTI);
 var
-  lenByte, vt: Integer;
+  lenByte, vt, ev: Integer;
   v: Int64;
   propName, sv, ident: string;
   p: PPropInfo;
   m: TMethod;
+  setDone: Boolean;
 begin
   while True do
   begin
@@ -165,14 +168,44 @@ begin
       sv := FStream.ReadShortStr;
       if p <> nil then SetStrProp(inst, p, sv);
     end
+    else if vt = vaLString then
+    begin
+      sv := FStream.ReadLStr;
+      if p <> nil then SetStrProp(inst, p, sv);
+    end
     else if vt = vaIdent then
     begin
       ident := FStream.ReadShortStr;
-      if (p <> nil) and (p^.Kind = 5) then   { piMethod: an event }
+      if p <> nil then
       begin
-        m.Code := GetMethodAddr(rootCls, ident);
-        m.Data := rootInst;
-        SetMethodProp(inst, p, m);
+        if p^.Kind = 5 then           { piMethod: an event }
+        begin
+          m.Code := GetMethodAddr(rootCls, ident);
+          m.Data := rootInst;
+          SetMethodProp(inst, p, m);
+        end
+        else if p^.Kind = 3 then      { piEnum: identifier names a member }
+        begin
+          ev := GetEnumValue(PEnumRTTI(p^.TypeRef), ident);
+          if ev >= 0 then SetOrdProp(inst, p, ev);
+        end;
+      end;
+    end
+    else if vt = vaSet then
+    begin
+      { Set value: a run of member-name shortstrings, ended by an empty one.
+        Map each name to its ordinal via the element enum RTTI and set its bit. }
+      setDone := False;
+      while not setDone do
+      begin
+        ident := FStream.ReadShortStr;
+        if ident = '' then
+          setDone := True
+        else if (p <> nil) and (p^.Kind = 4) then
+        begin
+          ev := GetEnumValue(PEnumRTTI(p^.TypeRef), ident);
+          if ev >= 0 then SetSetProp(inst, p, ev);
+        end;
       end;
     end
     else

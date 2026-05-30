@@ -3388,7 +3388,11 @@ begin
       begin
         Next;
         Expect(tkOf, 'of');
+        LastTypeEnumId := -1;
         elemTk := ParseTypeKind;
+        { inline `set of TFoo`: the element parse records the enum identity in
+          LastTypeEnumId; carry it as the set's element enum for RTTI. }
+        LastTypeSetEnumId := LastTypeEnumId;
         Result := tySet;
         Exit;
       end;
@@ -3435,9 +3439,13 @@ begin
             if aliasIdx >= 0 then
             begin
               if AliasTk[aliasIdx] = Ord(tySet) then
+              begin
                 { Named set type: element enum kept in AliasElemTk but not
-                  exposed as LastTypeEnumId, so the property kind stays SET. }
-                Result := tySet
+                  exposed as LastTypeEnumId, so the property kind stays SET.
+                  Expose it as LastTypeSetEnumId for RTTI typeRef. }
+                LastTypeSetEnumId := AliasElemTk[aliasIdx];
+                Result := tySet;
+              end
               else
               begin
                 LastTypePointerElemTk := IntToTypeKind(AliasElemTk[aliasIdx]);
@@ -3559,7 +3567,7 @@ var
   mRetType, mTk: TTypeKind;
   mNParams, mStartIdx, mTokKindOrd, mpi, mSelfIdx, mFullNameOff, mFullNameLen: Integer;
   curPublished: Integer;  { 1 while inside a published section of the current class body }
-  etid, propEnumId: Integer;
+  etid, propEnumId, propSetEnumId: Integer;
   mFullName: AnsiString;
   mPNames: array[0..15] of AnsiString;
   mPTypes: array[0..15] of TTypeKind;
@@ -3809,9 +3817,11 @@ begin
             pnLen := Tokens[TokPos-1].SLen;
             Next;
             Expect(tkColon, ':');
+            LastTypeSetEnumId := -1;
             propTk := ParseTypeKind;
             propRec := LastTypeRecId;
             propEnumId := LastTypeEnumId;
+            propSetEnumId := LastTypeSetEnumId;
 
             rFOff := 0; rFLen := 0;
             rMOff := 0; rMLen := 0;
@@ -3862,6 +3872,7 @@ begin
             UPropWriteMOff[i] := wMOff; UPropWriteMLen[i] := wMLen;
             UPropPub[i] := curPublished;
             UPropEnumId[i] := propEnumId;
+            UPropSetEnumId[i] := propSetEnumId;
           end
           else if CurTok.Kind = tkIdent then
           begin

@@ -130,6 +130,13 @@ begin
     eid := UPropEnumId[pri];
     if (eid >= 0) and (EnumTypeRTTIOff[eid] >= 0) then
       AddDataPtrFix(piPos + 16, EnumTypeRTTIOff[eid]);
+  end
+  else if kind = RTTI_KIND_SET then
+  begin
+    { typeRef -> element enum RTTI, so streaming can map member names to bits }
+    eid := UPropSetEnumId[pri];
+    if (eid >= 0) and (EnumTypeRTTIOff[eid] >= 0) then
+      AddDataPtrFix(piPos + 16, EnumTypeRTTIOff[eid]);
   end;
 
   { getter: field (getKind=0, getRef=byte offset) or method (getKind=1, getRef=code) }

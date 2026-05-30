@@ -647,6 +647,7 @@ var
   UPropWriteMLen: array[0..MAX_UPROP-1] of Integer;
   UPropPub    : array[0..MAX_UPROP-1] of Integer;  { 1 = published, 0 = other }
   UPropEnumId : array[0..MAX_UPROP-1] of Integer;  { enum type index if prop is enum-typed, else -1 }
+  UPropSetEnumId : array[0..MAX_UPROP-1] of Integer;  { element enum type index if prop is set-typed, else -1 }
   UPropCount  : Integer;
 
   { Named enum types (ordinal<->name). Enum vars stay integer-sized; this table
@@ -661,6 +662,7 @@ var
   EnumValNLen     : array[0..MAX_ENUMVAL-1] of Integer;
   EnumValCount    : Integer;
   LastTypeEnumId  : Integer;  { set by ParseTypeKind: enum type index or -1 }
+  LastTypeSetEnumId : Integer;  { set by ParseTypeKind for set types: element enum index or -1 }
 
   { Named type aliases. Phase 2: pointer aliases (PFoo = ^TFoo) carry an element
     type so the deref/index machinery knows what they point at. }

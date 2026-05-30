@@ -255,6 +255,7 @@ begin
   UPropWriteMOff[pri] := 0; UPropWriteMLen[pri] := 0;
   UPropPub[pri] := 0;
   UPropEnumId[pri] := -1;
+  UPropSetEnumId[pri] := -1;
   UPropCount := UPropCount + 1;
   UClsPCount[ci] := UClsPCount[ci] + 1;
   Result := pri;

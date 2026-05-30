@@ -29,6 +29,19 @@ type
   end;
   PClassRTTI = ^TClassRTTI;
 
+  PPString = ^PString;   { indexable array of PString (enum value-name table) }
+
+  { Enum type RTTI blob (see rtti_emit.inc EmitEnumRTTI):
+      +0  NamePtr   -> enum type name
+      +8  Count     : Int64
+      +16 ValuesPtr -> array[Count] of PString (member names, by ordinal) }
+  TEnumRTTI = record
+    NamePtr:   PString;
+    Count:     Int64;
+    ValuesPtr: Pointer; { actually PStringArr }
+  end;
+  PEnumRTTI = ^TEnumRTTI;
+
   TPropInfo = record
     NamePtr: PString;
     Kind:    Int64;      { 0=int, 1=string, 2=class, 3=enum, 4=set, 5=method }
@@ -76,6 +89,8 @@ procedure SetStrProp(instance: Pointer; p: PPropInfo; const v: string);
 function GetMethodProp(instance: Pointer; p: PPropInfo): TMethod;
 procedure SetMethodProp(instance: Pointer; p: PPropInfo; const v: TMethod);
 function GetMethodAddr(cls: PClassRTTI; const name: string): Pointer;
+function GetEnumValue(et: PEnumRTTI; const name: string): Integer;
+procedure SetSetProp(instance: Pointer; p: PPropInfo; ordinal: Integer);
 
 implementation
 
@@ -293,6 +308,50 @@ begin
   begin
     addr := @PUInt8(instance)[p^.SetRef];
     PMethod(addr)^ := v;
+  end;
+end;
+
+{ Map an enum member name to its ordinal via the enum RTTI. -1 if not found. }
+function GetEnumValue(et: PEnumRTTI; const name: string): Integer;
+var
+  arr: PPString;
+  sp: PString;
+  i: Integer;
+begin
+  GetEnumValue := -1;
+  if et = nil then Exit;
+  arr := PPString(et^.ValuesPtr);
+  if arr = nil then Exit;
+  for i := 0 to Integer(et^.Count) - 1 do
+  begin
+    { copy the element pointer to a local before deref: inline index-then-deref
+      (arr[i]^) of a pointer-array miscompiles in this dialect. }
+    sp := arr[i];
+    if sp^ = name then
+    begin
+      GetEnumValue := i;
+      Exit;
+    end;
+  end;
+end;
+
+{ Set one member bit in a field-backed set property. Sets are 32-byte little-
+  endian bitsets: member n lives at byte (n div 8), bit (n mod 8). No `shl` in
+  this dialect, so build the mask by doubling. }
+procedure SetSetProp(instance: Pointer; p: PPropInfo; ordinal: Integer);
+var
+  addr: PUInt8;
+  byteIdx, bitIdx, mask, k: Integer;
+begin
+  if p^.SetKind = 0 then
+  begin
+    if (ordinal < 0) or (ordinal > 255) then Exit;
+    addr := @PUInt8(instance)[p^.SetRef];
+    byteIdx := ordinal div 8;
+    bitIdx := ordinal - byteIdx * 8;
+    mask := 1;
+    for k := 1 to bitIdx do mask := mask * 2;
+    addr[byteIdx] := Byte(Integer(addr[byteIdx]) or mask);
   end;
 end;
 

@@ -193,6 +193,8 @@ test: $(COMPILER) fpc-check
 	test "$$(/tmp/test_rtti_reg26)" = "$$(printf 'Count: 2\nClass 0: TBase\nClass 1: TChild')"
 	./$(COMPILER) test/test_streaming.pas /tmp/test_streaming26
 	test "$$(/tmp/test_streaming26)" = "$$(printf 'root.Name=Root1\nroot.Count=42\nroot.Title=Hi\nOnGo bound: yes\nchildCount=1\nkid.Name=Kid1\nkid.Value=7')"
+	./$(COMPILER) test/test_streaming_enumset.pas /tmp/test_streaming_enumset26
+	test "$$(/tmp/test_streaming_enumset26)" = "$$(printf 'Color=1\nColors=5\nCaption=Hello, long world!')"
 	./$(COMPILER) test/test_resource.pas /tmp/test_resource26
 	test "$$(/tmp/test_resource26)" = "$$(printf 'len=16\ndata=Hello, resource!\nmissing: ok')"
 	./$(COMPILER) test/test_static_methods.pas /tmp/test_static_methods26
