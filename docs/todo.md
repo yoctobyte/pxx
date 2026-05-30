@@ -209,6 +209,14 @@ not eternal "constraints". Promote to fixes when convenient:
   Workaround: init/build strings via `s := ''` + `AppendChar`, or use a
   2+-char literal. Real fix: context-coerce char→string on assign/concat
   (materialise a 1-char string). (String `+` itself = standing bug §1.2.)
+- 🔴 **Whole-record array-element copy miscompiles in main-program body.**
+  `arr[j] := arr[j+1]` for an 8-byte record silently no-ops the store under
+  some conditions inside the program's main body (IR backend). Surfaced in the
+  `__rttireg` sentinel-drop loop (`compiler.pas`): dropped every Fixup, NULLing
+  string literals. Does NOT reproduce standalone; fpc-built compiler is fine, so
+  it is self-hosted codegen of `IR_STORE_MEM` for a record lvalue. Worked around
+  field-wise (`Fixups[j].CodePos/.DataOff := ...`). Real fix pending — disasm the
+  main-body record store. (2026-05-30)
 - Note: "integer-only compiler tables" stays a deliberate **constraint**, not a
   bug — it is the fixedpoint-safety convention, nothing to fix.
 
