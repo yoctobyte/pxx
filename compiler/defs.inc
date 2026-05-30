@@ -3,6 +3,7 @@ const
 
   MAX_CODE      = 1048576;
   LOCAL_STR_CAP = 256;     { max string length for local/stack variables }
+  LINE_BUF_SIZE = 4096;    { readln stdin line buffer }
   MAX_DATA    = 1048576;
   MAX_STRS    = 4096;
   MAX_FIXUPS  = 65536;
@@ -101,6 +102,8 @@ const
                             Tk=Ord(tyPointer) }
   AN_RTTI_REG     = 40; { __rttireg() intrinsic returning pointer to RTTI registry }
   AN_RESOURCES    = 41; { __resources() intrinsic returning pointer to resource table }
+  AN_READLN       = 42; { Left = AN_ARG chain of lvalue targets (consumes a line) }
+  AN_READ         = 43; { like AN_READLN; subset: also reads a fresh line }
 
   { Inline-asm operand kinds }
   AOP_NONE = 0;
@@ -144,6 +147,8 @@ const
   IR_RTTI_REG     = 32;
   IR_SET_LIT      = 33;
   IR_RESOURCES    = 34;
+  IR_READLINE     = 35;  { read one line from stdin into the line buffer }
+  IR_READ_VAR     = 36;  { IRA = target address; IRTk = target type; parse from buffer }
 
   EXC_FRAME_SIZE = 80;
   EXC_JMP_OFFSET = 8;
@@ -544,6 +549,9 @@ var
   BSS_EXC_TOP     : Integer;
   BSS_EXC_OBJ     : Integer;
   BSS_EXC_CLS     : Integer;
+  BSS_LINE_BUF    : Integer;  { readln line buffer }
+  BSS_LINE_LEN    : Integer;  { bytes currently in line buffer }
+  BSS_LINE_POS    : Integer;  { parse cursor into line buffer }
   ExceptionUsed   : Boolean;
   ExcSetJmpAddr   : Integer;
   ExcLongJmpAddr  : Integer;

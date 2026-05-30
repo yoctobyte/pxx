@@ -194,12 +194,15 @@ not eternal "constraints". Promote to fixes when convenient:
   Compiler-side code uses `* 2^n` as the workaround. Add the operator + IR
   lowering so user code can shift left. (`lexer.inc` ~348/417/443 show the
   `*2`-instead-of-`shl` self-host dance.)
-- ⬜ **`readln` / `read` statements.** *(user-requested, 2026-05-30 — wanted for
-  library/interactive work.)* `tkReadln`/`tkRead` are lexed but never parsed as
-  I/O statements (`tkRead` is only consumed as the property `read` keyword,
-  `parser.inc:3505`). `write`/`writeln` are handled (`parser.inc:2666`); `read*`
-  is the missing half. Needs runtime input plumbing too (SYS_READ from stdin,
-  line buffer, parse into Integer/string/Char targets).
+- ✅ **`readln` / `read` statements** — implemented 2026-05-30 (user-requested).
+  `readln(targets...)` reads one line from stdin into a BSS line buffer
+  (`EmitReadLine`, byte-at-a-time, stops at `\n`, skips `\r`) and parses each
+  lvalue by type (`EmitReadVarParse`): integer (leading blanks skipped, optional
+  `-`), several ints from one line, whole-line string, single char; bare
+  `readln` skips a line. AST `AN_READLN`/`AN_READ` → IR `IR_READLINE` +
+  `IR_READ_VAR`. `read` currently behaves like `readln` (reads a fresh line —
+  does not yet preserve the remainder of a line across calls). Test:
+  `test/test_readln.pas`.
 - ✅ **Named result in a class method** — fixed 2026-05-30. `Bar := v` inside
   `function TFoo.Bar` now hits the result slot. The statement-level result-assign
   check only matched `Procs[].Name`, which for a method is `TFoo.Bar`, so the

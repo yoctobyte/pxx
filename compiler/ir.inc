@@ -43,6 +43,8 @@ begin
     IR_CALL: Result := 'call';
     IR_WRITE: Result := 'write';
     IR_WRITELN: Result := 'writeln';
+    IR_READLINE: Result := 'readline';
+    IR_READ_VAR: Result := 'read_var';
     IR_BLOCK: Result := 'block';
     IR_UNSUPPORTED: Result := 'unsupported';
     IR_IF: Result := 'if';
@@ -168,6 +170,12 @@ begin
 
       IR_WRITE:
         IRRequireNode(IRA[i], 'write');
+
+      IR_READLINE:
+        begin end;
+
+      IR_READ_VAR:
+        IRRequireNode(IRA[i], 'read_var');
 
       IR_WRITELN, IR_BLOCK:
       begin
@@ -1068,6 +1076,23 @@ begin
         Result := IRAppend(IR_WRITELN, first, last, -1, 0, 0)
       else
         Result := IRAppend(IR_BLOCK, first, last, -1, 0, 0);
+    end;
+
+    AN_READLN, AN_READ:
+    begin
+      { Read one line from stdin, then parse each lvalue target from it by type. }
+      first := IRAppend(IR_READLINE, -1, -1, -1, 0, 0);
+      last := first;
+      item := ASTLeft[node];
+      while item <> -1 do
+      begin
+        value := IRLowerAddress(ASTLeft[item]);   { target address }
+        outNode := IRAppend(IR_READ_VAR, value, -1, -1, 0,
+                            Ord(IntToTypeKind(ASTTk[ASTLeft[item]])));
+        last := outNode;
+        item := ASTRight[item];
+      end;
+      Result := IRAppend(IR_BLOCK, first, last, -1, 0, 0);
     end;
 
     AN_BLOCK:

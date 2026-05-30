@@ -26,6 +26,132 @@ begin
   EmitB($40); EmitB($88); EmitB($77); EmitB($08); { mov byte [rdi+8], sil }
 end;
 
+procedure EmitReadLine;
+{ Read one line from stdin (fd 0) into BSS_LINE_BUF, byte at a time, stopping at
+  '\n' or EOF; '\r' is skipped. Sets BSS_LINE_LEN, resets BSS_LINE_POS. }
+var loopStart, j1, j2: Integer;
+begin
+  EmitB($48); EmitB($C7); EmitB($04); EmitB($25); EmitGlobRef(BSS_LINE_POS); EmitI32(0); { mov q[pos],0 }
+  EmitB($48); EmitB($C7); EmitB($04); EmitB($25); EmitGlobRef(BSS_LINE_LEN); EmitI32(0); { mov q[len],0 }
+  loopStart := CodeLen;
+  EmitB($48); EmitB($8D); EmitB($34); EmitB($25); EmitGlobRef(BSS_LINE_BUF);   { lea rsi,[buf] }
+  EmitB($48); EmitB($8B); EmitB($04); EmitB($25); EmitGlobRef(BSS_LINE_LEN);   { mov rax,[len] }
+  EmitB($48); EmitB($01); EmitB($C6);                                          { add rsi,rax }
+  MovRdiImm(0); MovRdxImm(1); MovRaxImm(SYS_READ); EmitSyscall;
+  EmitB($48); EmitB($85); EmitB($C0);                                          { test rax,rax }
+  EmitB($0F); EmitB($8E); j1 := CodeLen; EmitI32(0);                           { jle done }
+  EmitB($48); EmitB($0F); EmitB($B6); EmitB($0E);                              { movzx rcx,byte[rsi] }
+  EmitB($48); EmitB($83); EmitB($F9); EmitB($0D);                              { cmp rcx,13 }
+  EmitB($0F); EmitB($84); EmitI32(loopStart - (CodeLen + 4));                  { je loopStart (skip \r) }
+  EmitB($48); EmitB($83); EmitB($F9); EmitB($0A);                              { cmp rcx,10 }
+  EmitB($0F); EmitB($84); j2 := CodeLen; EmitI32(0);                           { je done (\n) }
+  EmitB($48); EmitB($FF); EmitB($04); EmitB($25); EmitGlobRef(BSS_LINE_LEN);   { inc q[len] }
+  EmitB($48); EmitB($8B); EmitB($04); EmitB($25); EmitGlobRef(BSS_LINE_LEN);   { mov rax,[len] }
+  EmitB($48); EmitB($3D); EmitI32(LINE_BUF_SIZE - 1);                          { cmp rax,BUFSIZE-1 }
+  EmitB($0F); EmitB($8C); EmitI32(loopStart - (CodeLen + 4));                  { jl loopStart }
+  Patch32(j1, CodeLen - (j1 + 4));
+  Patch32(j2, CodeLen - (j2 + 4));
+end;
+
+procedure EmitReadVarParse(tk: TTypeKind);
+{ rax = target address on entry. Parse a value from the line buffer at the
+  cursor by type and store it; advance the cursor. tyString takes the rest of
+  the line; tyChar one byte; integer kinds skip blanks then read [-]digits. }
+var sz, skipLoop, digLoop, jDone, jStart, jAdv, jDigits, jNoSign: Integer;
+    jEmpty, jSign, jDigEnd, jLt, jGt: Integer;
+begin
+  if tk = tyString then
+  begin
+    EmitB($48); EmitB($89); EmitB($C7);                                          { mov rdi,rax }
+    EmitB($48); EmitB($8B); EmitB($0C); EmitB($25); EmitGlobRef(BSS_LINE_LEN);    { mov rcx,[len] }
+    EmitB($48); EmitB($2B); EmitB($0C); EmitB($25); EmitGlobRef(BSS_LINE_POS);    { sub rcx,[pos] }
+    EmitB($48); EmitB($89); EmitB($0F);                                          { mov [rdi],rcx }
+    EmitB($48); EmitB($8D); EmitB($34); EmitB($25); EmitGlobRef(BSS_LINE_BUF);    { lea rsi,[buf] }
+    EmitB($48); EmitB($03); EmitB($34); EmitB($25); EmitGlobRef(BSS_LINE_POS);    { add rsi,[pos] }
+    EmitB($48); EmitB($83); EmitB($C7); EmitB($08);                              { add rdi,8 }
+    EmitB($F3); EmitB($A4);                                                      { rep movsb }
+    EmitB($48); EmitB($8B); EmitB($04); EmitB($25); EmitGlobRef(BSS_LINE_LEN);    { mov rax,[len] }
+    EmitB($48); EmitB($89); EmitB($04); EmitB($25); EmitGlobRef(BSS_LINE_POS);    { mov [pos],rax }
+    Exit;
+  end;
+  if tk = tyChar then
+  begin
+    EmitB($48); EmitB($89); EmitB($C7);                                          { mov rdi,rax }
+    EmitB($48); EmitB($8B); EmitB($14); EmitB($25); EmitGlobRef(BSS_LINE_POS);    { mov rdx,[pos] }
+    EmitB($48); EmitB($8B); EmitB($0C); EmitB($25); EmitGlobRef(BSS_LINE_LEN);    { mov rcx,[len] }
+    EmitB($31); EmitB($C0);                                                      { xor eax,eax }
+    EmitB($48); EmitB($39); EmitB($CA);                                          { cmp rdx,rcx }
+    EmitB($0F); EmitB($8D); jDone := CodeLen; EmitI32(0);                         { jge nochar }
+    EmitB($48); EmitB($8D); EmitB($34); EmitB($25); EmitGlobRef(BSS_LINE_BUF);    { lea rsi,[buf] }
+    EmitB($48); EmitB($01); EmitB($D6);                                          { add rsi,rdx }
+    EmitB($48); EmitB($0F); EmitB($B6); EmitB($06);                              { movzx rax,byte[rsi] }
+    EmitB($48); EmitB($FF); EmitB($C2);                                          { inc rdx }
+    EmitB($48); EmitB($89); EmitB($14); EmitB($25); EmitGlobRef(BSS_LINE_POS);    { mov [pos],rdx }
+    Patch32(jDone, CodeLen - (jDone + 4));
+    EmitB($88); EmitB($07);                                                      { mov [rdi],al }
+    Exit;
+  end;
+  { integer family: r8 = negative flag, r9 = accumulator, rdx = cursor }
+  EmitB($48); EmitB($89); EmitB($C7);                                            { mov rdi,rax }
+  EmitB($48); EmitB($8B); EmitB($14); EmitB($25); EmitGlobRef(BSS_LINE_POS);      { mov rdx,[pos] }
+  EmitB($48); EmitB($8B); EmitB($0C); EmitB($25); EmitGlobRef(BSS_LINE_LEN);      { mov rcx,[len] }
+  EmitB($48); EmitB($8D); EmitB($34); EmitB($25); EmitGlobRef(BSS_LINE_BUF);      { lea rsi,[buf] }
+  EmitB($4D); EmitB($31); EmitB($C0);                                            { xor r8,r8 (neg flag) }
+  EmitB($4D); EmitB($31); EmitB($C9);                                            { xor r9,r9 (acc) }
+  { skip whitespace }
+  skipLoop := CodeLen;
+  EmitB($48); EmitB($39); EmitB($CA);                                            { cmp rdx,rcx }
+  EmitB($0F); EmitB($8D); jEmpty := CodeLen; EmitI32(0);                          { jge applysign (empty) }
+  EmitB($48); EmitB($0F); EmitB($B6); EmitB($04); EmitB($16);                    { movzx rax,byte[rsi+rdx] }
+  EmitB($48); EmitB($83); EmitB($F8); EmitB($20);                                { cmp rax,32 }
+  EmitB($0F); EmitB($84); jAdv := CodeLen; EmitI32(0);                            { je advws }
+  EmitB($48); EmitB($83); EmitB($F8); EmitB($09);                                { cmp rax,9 }
+  EmitB($0F); EmitB($85); jStart := CodeLen; EmitI32(0);                          { jne startsign }
+  { advws: }
+  Patch32(jAdv, CodeLen - (jAdv + 4));
+  EmitB($48); EmitB($FF); EmitB($C2);                                            { inc rdx }
+  EmitB($E9); EmitI32(skipLoop - (CodeLen + 4));                                  { jmp skipLoop }
+  { startsign: }
+  Patch32(jStart, CodeLen - (jStart + 4));
+  EmitB($48); EmitB($0F); EmitB($B6); EmitB($04); EmitB($16);                    { movzx rax,byte[rsi+rdx] }
+  EmitB($48); EmitB($83); EmitB($F8); EmitB($2D);                                { cmp rax,45 '-' }
+  EmitB($0F); EmitB($85); jSign := CodeLen; EmitI32(0);                           { jne digits }
+  EmitB($49); EmitB($C7); EmitB($C0); EmitI32(1);                                { mov r8,1 }
+  EmitB($48); EmitB($FF); EmitB($C2);                                            { inc rdx }
+  { digits: }
+  Patch32(jSign, CodeLen - (jSign + 4));
+  digLoop := CodeLen;
+  EmitB($48); EmitB($39); EmitB($CA);                                            { cmp rdx,rcx }
+  EmitB($0F); EmitB($8D); jDigEnd := CodeLen; EmitI32(0);                         { jge applysign }
+  EmitB($48); EmitB($0F); EmitB($B6); EmitB($04); EmitB($16);                    { movzx rax,byte[rsi+rdx] }
+  EmitB($48); EmitB($83); EmitB($F8); EmitB($30);                                { cmp rax,48 }
+  EmitB($0F); EmitB($8C); jLt := CodeLen; EmitI32(0);                             { jl applysign }
+  EmitB($48); EmitB($83); EmitB($F8); EmitB($39);                                { cmp rax,57 }
+  EmitB($0F); EmitB($8F); jGt := CodeLen; EmitI32(0);                             { jg applysign }
+  EmitB($4D); EmitB($6B); EmitB($C9); EmitB($0A);                                { imul r9,r9,10 }
+  EmitB($48); EmitB($83); EmitB($E8); EmitB($30);                                { sub rax,48 }
+  EmitB($49); EmitB($01); EmitB($C1);                                            { add r9,rax }
+  EmitB($48); EmitB($FF); EmitB($C2);                                            { inc rdx }
+  EmitB($E9); EmitI32(digLoop - (CodeLen + 4));                                   { jmp digLoop }
+  { applysign: }
+  Patch32(jEmpty,  CodeLen - (jEmpty + 4));
+  Patch32(jDigEnd, CodeLen - (jDigEnd + 4));
+  Patch32(jLt,     CodeLen - (jLt + 4));
+  Patch32(jGt,     CodeLen - (jGt + 4));
+  EmitB($4D); EmitB($85); EmitB($C0);                                            { test r8,r8 }
+  EmitB($0F); EmitB($84); jNoSign := CodeLen; EmitI32(0);                         { jz nosign }
+  EmitB($49); EmitB($F7); EmitB($D9);                                            { neg r9 }
+  { nosign: }
+  Patch32(jNoSign, CodeLen - (jNoSign + 4));
+  EmitB($4C); EmitB($89); EmitB($C8);                                            { mov rax,r9 }
+  EmitB($48); EmitB($89); EmitB($14); EmitB($25); EmitGlobRef(BSS_LINE_POS);      { mov [pos],rdx }
+  sz := TypeSize(tk);
+  if sz = 1 then begin EmitB($88); EmitB($07); end                               { mov [rdi],al }
+  else if sz = 2 then begin EmitB($66); EmitB($89); EmitB($07); end              { mov [rdi],ax }
+  else if sz = 4 then begin EmitB($89); EmitB($07); end                          { mov [rdi],eax }
+  else begin EmitB($48); EmitB($89); EmitB($07); end;                            { mov [rdi],rax }
+end;
+
 procedure IREmitNode(node: Integer);
 var left, right, valNode, symIdx, si: Integer;
     op: TTokenKind;
@@ -1019,6 +1145,17 @@ begin
         EmitwriteSyscall(NEWLINE_OFFSET, 1);
       end;
 
+    IR_READLINE:
+      begin
+        EmitReadLine;
+      end;
+
+    IR_READ_VAR:
+      begin
+        IREmitNode(IRA[node]);   { rax = target address }
+        EmitReadVarParse(IntToTypeKind(IRTk[node]));
+      end;
+
     IR_EXC_LEAVE:
       begin
         IREmitLeaveExceptionFrames(IRA[node]);
@@ -1221,6 +1358,7 @@ begin
         end;
 
       IR_STORE_SYM, IR_STORE_MEM, IR_WRITE, IR_WRITELN,
+      IR_READLINE, IR_READ_VAR,
       IR_EXC_LEAVE, IR_RAISE, IR_EXC_STORE, IR_EXC_CLEAR, IR_TERMINATE,
       IR_ASM:
         begin

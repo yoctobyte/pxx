@@ -2660,6 +2660,34 @@ begin
   Result := node;
 end;
 
+function ParseReadArgsAST(isLn: Boolean): Integer;
+{ readln/read(target, ...): each target is an lvalue (ident/field/index). The
+  args are kept as an AN_ARG chain; IR lowering takes each one's address and
+  parses a value from the line buffer by the target's type. }
+var node, argNode, lastArg: Integer;
+begin
+  node := AllocNode(AN_READLN);
+  if not isLn then ASTKind[node] := AN_READ;
+  ASTLeft[node] := -1;
+  if CurTok.Kind = tkLParen then
+  begin
+    Next;
+    lastArg := -1;
+    repeat
+      ParseExpr;
+      argNode := AllocNode(AN_ARG);
+      ASTLeft[argNode] := CurASTNode;
+      if lastArg = -1 then
+        ASTLeft[node] := argNode
+      else
+        ASTRight[lastArg] := argNode;
+      lastArg := argNode;
+    until not Eat(tkComma);
+    Expect(tkRParen, ')');
+  end;
+  Result := node;
+end;
+
 function ParsewriteArgsAST(isLn: Boolean): Integer;
 var
   node, argNode, lastArg, exprNode, vidx, widthVal, decimalsVal: Integer;
@@ -2905,6 +2933,12 @@ begin
     begin
       isLn := CurTok.Kind = tkwriteln; Next;
       node := ParsewriteArgsAST(isLn);
+    end;
+
+    tkReadln, tkRead:
+    begin
+      isLn := CurTok.Kind = tkReadln; Next;
+      node := ParseReadArgsAST(isLn);
     end;
     
     tkHalt, tkExit:
@@ -4911,6 +4945,9 @@ begin
   BSS_INITIAL_RSP := BSSSize; Inc(BSSSize, 8);
   BSS_HEAP_PTR    := BSSSize; Inc(BSSSize, 8);
   BSS_HEAP_END    := BSSSize; Inc(BSSSize, 8);
+  BSS_LINE_POS    := BSSSize; Inc(BSSSize, 8);
+  BSS_LINE_LEN    := BSSSize; Inc(BSSSize, 8);
+  BSS_LINE_BUF    := BSSSize; Inc(BSSSize, LINE_BUF_SIZE);
   ExceptionUsed := False;
   hasExceptions := False;
   for i := 0 to MAX_GOTO_LABELS - 1 do GotoLabelIRId[i] := -1;
