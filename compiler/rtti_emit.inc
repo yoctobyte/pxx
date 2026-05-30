@@ -105,6 +105,16 @@ begin
   if UPropEnumId[pri] >= 0 then kind := RTTI_KIND_ENUM
   else if tk = Ord(tyString) then kind := RTTI_KIND_STRING
   else if tk = Ord(tyClass) then kind := RTTI_KIND_CLASS
+  else if tk = Ord(tySet) then kind := RTTI_KIND_SET
+  else if tk = Ord(tyRecord) then
+  begin
+    tci := UPropRec[pri] - REC_UCLASS_BASE;
+    if (tci >= 0) and (tci < UClsCount) and 
+       (LowerCase(TokSliceStr(UClsNOff[tci], UClsNLen[tci])) = 'tmethod') then
+      kind := RTTI_KIND_METHOD
+    else
+      kind := RTTI_KIND_INT;
+  end
   else kind := RTTI_KIND_INT;
   PatchDataU64(piPos + 8, kind);
 

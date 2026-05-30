@@ -25,7 +25,7 @@ procedure CPreprocess(var src: AnsiString; const baseDir: AnsiString); forward;
 
 { ===== Main ===== }
 
-var inFile, outFile, option: AnsiString; isC, isBasic, readingOptions: Boolean; n, i: Integer;
+var inFile, outFile, option: AnsiString; isC, isBasic, readingOptions: Boolean; n, i, j: Integer;
 begin
   DebugTrace := False;
   DumpIR := False;
@@ -191,6 +191,24 @@ begin
   begin
     EmitRTTI;
     if DumpRTTI then DumpRTTITables;
+  end;
+  { Patch RTTIRegistryOff relocations }
+  i := 0;
+  while i < FixCount do
+  begin
+    if Fixups[i].DataOff = -100 then
+    begin
+      if RTTIRegistryOff >= 0 then
+        Fixups[i].DataOff := RTTIRegistryOff
+      else
+      begin
+        for j := i to FixCount - 2 do
+          Fixups[j] := Fixups[j + 1];
+        Dec(FixCount);
+        continue;
+      end;
+    end;
+    Inc(i);
   end;
   for i := 0 to ProcCount - 1 do
     writeln('proc ', i, ': ', Procs[i].Name, ' at ', Procs[i].BodyAddr);

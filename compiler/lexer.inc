@@ -3,7 +3,7 @@
 
 procedure Error(const msg: AnsiString);
 begin
-  writeln('pascal26:', SrcLine, ': error: ', msg, ' (', ErrorIdent, ')');
+  writeln('pascal26:', CurTok.Line, ': error: ', msg, ' (', ErrorIdent, ')');
   Halt(1);
 end;
 

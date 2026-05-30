@@ -107,6 +107,21 @@ Design decisions, dialect proposals, and bootstrap history live in
 The project vision — multi-language compiler, design constraints, language
 priority list — is in [docs/philosophy.md](docs/philosophy.md).
 
+## License And Use Notice
+
+No license has been selected or granted yet. This repository is public so the
+code can be inspected, studied, and discussed for research and educational
+purposes while the project remains experimental.
+
+Do not use this compiler for security-sensitive, safety-sensitive, financial,
+legal, medical, infrastructure, or otherwise important work. Public visibility
+on GitHub does not grant permission to copy, modify, distribute, sublicense,
+sell, or otherwise use the code beyond what applicable law independently
+allows, and it does not make the author responsible for any consequences of
+use or reliance.
+
+See [LICENSE.md](LICENSE.md) for the full notice.
+
 ## Acknowledgements
 
 [Free Pascal](https://www.freepascal.org/) and [Lazarus](https://www.lazarus-ide.org/)

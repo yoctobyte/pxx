@@ -95,6 +95,10 @@ const
   AN_DEREF        = 36;
   AN_SET_LIT      = 37;
   AN_ASM          = 38;
+  AN_PTR_CAST     = 39; { typed pointer cast PType(expr):
+                            Left=inner expr, IVal=aliasIdx (AliasElemTk/Rec),
+                            Tk=Ord(tyPointer) }
+  AN_RTTI_REG     = 40; { __rttireg() intrinsic returning pointer to RTTI registry }
 
   { Inline-asm operand kinds }
   AOP_NONE = 0;
@@ -135,6 +139,8 @@ const
   IR_TERMINATE = 29;
   IR_VIRTUAL_CALL = 30;  { VMT dispatch: IRA=first arg, IRB=last arg, IRC=proc idx, IRIVal=slot }
   IR_ASM          = 31;
+  IR_RTTI_REG     = 32;
+  IR_SET_LIT      = 33;
 
   EXC_FRAME_SIZE = 80;
   EXC_JMP_OFFSET = 8;

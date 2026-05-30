@@ -643,7 +643,7 @@ end;
 function ParseLValueAST(idx: Integer; identTokIdx: Integer): Integer;
 var
   node, indexNode, fieldNode, prevTok, recName, i: Integer;
-  baseNode, baseRec, fIdx: Integer;
+  baseNode, baseRec, fIdx, aliasIdx: Integer;
   tk: TTypeKind;
   fieldName: AnsiString;
   mci, mmi, mpi, mcallNode, mselfArg, mlastArg, margSeq, margIdx, mexprNode, mai, pri, ci: Integer;
@@ -733,61 +733,77 @@ begin
     end
     else
     begin
-      ci := FindUClass(fieldName);
-      if ci >= 0 then
+      aliasIdx := FindTypeAlias(fieldName);
+      if (aliasIdx >= 0) and (CurTok.Kind = tkLParen) then
       begin
-        Expect(tkDot, '.');
-        if CurTok.Kind <> tkIdent then Error('expected class method name');
-        fieldName := CurTok.SVal;
-        Next;
-        
-        mmi := FindUMeth(ci, fieldName);
-        if mmi < 0 then Error('class method not found: ' + fieldName);
-        mpi := UMthProc_[mmi];
-        
-        if not UMthIsStatic[mmi] then
-          Error('cannot call non-static method on class type directly');
-          
-        mcallNode := AllocNode(AN_CALL);
-        ASTIVal[mcallNode] := mpi;
-        ASTTk[mcallNode] := Ord(Procs[mpi].RetType);
-        mlastArg := -1;
-        
-        if CurTok.Kind = tkLParen then
-        begin
-          Next;
-          mai := 0;
-          while mai <= Procs[mpi].ParamCount-1 do
-          begin
-            if Procs[mpi].Params[mai].IsRef or Procs[mpi].Params[mai].IsArray then
-            begin
-              if CurTok.Kind <> tkIdent then Error('expected variable');
-              margIdx := FindSym(CurTok.SVal); Next;
-              mexprNode := ParseLValueAST(margIdx, TokPos - 2);
-            end
-            else
-            begin
-              ParseExpr; mexprNode := CurASTNode;
-            end;
-            margSeq := AllocNode(AN_ARG); ASTLeft[margSeq] := mexprNode;
-            if mlastArg = -1 then
-              ASTLeft[mcallNode] := margSeq
-            else
-              ASTRight[mlastArg] := margSeq;
-            mlastArg := margSeq;
-            if mai < Procs[mpi].ParamCount-1 then Expect(tkComma, ',');
-            Inc(mai);
-          end;
-          Expect(tkRParen, ')');
-        end;
-        
-        Result := mcallNode;
-        Exit;
+        Next; { consume '(' }
+        ParseExpr;
+        Expect(tkRParen, ')');
+        node := AllocNode(AN_PTR_CAST);
+        ASTLeft[node] := CurASTNode;
+        ASTIVal[node] := aliasIdx;
+        ASTTk[node]   := Ord(tyPointer);
+        tk := tyPointer;
+        recName := AliasElemRec[aliasIdx];
       end
       else
       begin
-        ErrorIdent := fieldName;
-        Error('undefined variable');
+        ci := FindUClass(fieldName);
+        if ci >= 0 then
+        begin
+          Expect(tkDot, '.');
+          if CurTok.Kind <> tkIdent then Error('expected class method name');
+          fieldName := CurTok.SVal;
+          Next;
+          
+          mmi := FindUMeth(ci, fieldName);
+          if mmi < 0 then Error('class method not found: ' + fieldName);
+          mpi := UMthProc_[mmi];
+          
+          if not UMthIsStatic[mmi] then
+            Error('cannot call non-static method on class type directly');
+            
+          mcallNode := AllocNode(AN_CALL);
+          ASTIVal[mcallNode] := mpi;
+          ASTTk[mcallNode] := Ord(Procs[mpi].RetType);
+          mlastArg := -1;
+          
+          if CurTok.Kind = tkLParen then
+          begin
+            Next;
+            mai := 0;
+            while mai <= Procs[mpi].ParamCount-1 do
+            begin
+              if Procs[mpi].Params[mai].IsRef or Procs[mpi].Params[mai].IsArray then
+              begin
+                if CurTok.Kind <> tkIdent then Error('expected variable');
+                margIdx := FindSym(CurTok.SVal); Next;
+                mexprNode := ParseLValueAST(margIdx, TokPos - 2);
+              end
+              else
+              begin
+                ParseExpr; mexprNode := CurASTNode;
+              end;
+              margSeq := AllocNode(AN_ARG); ASTLeft[margSeq] := mexprNode;
+              if mlastArg = -1 then
+                ASTLeft[mcallNode] := margSeq
+              else
+                ASTRight[mlastArg] := margSeq;
+              mlastArg := margSeq;
+              if mai < Procs[mpi].ParamCount-1 then Expect(tkComma, ',');
+              Inc(mai);
+            end;
+            Expect(tkRParen, ')');
+          end;
+          
+          Result := mcallNode;
+          Exit;
+        end
+        else
+        begin
+          ErrorIdent := fieldName;
+          Error('undefined variable');
+        end;
       end;
     end;
   end
@@ -822,7 +838,9 @@ begin
           baseNode := ASTLeft[node];
           baseRec := ResolveNodeRec(baseNode);
           fieldName := GetASTIdentName(node);
-          fIdx := FindUField(baseRec, fieldName);
+          fIdx := -1;
+          if baseRec >= REC_UCLASS_BASE then
+            fIdx := FindUField(baseRec - REC_UCLASS_BASE, fieldName);
           if fIdx >= 0 then
           begin
             tk := IntToTypeKind(UFldPtrElemTk[fIdx]);
@@ -885,10 +903,24 @@ begin
         tk := Syms[ASTIVal[node]].PtrElemTk;
         recName := Syms[ASTIVal[node]].PtrElemRec;
       end
+      else if (tk = tyPointer) and (ASTKind[node] = AN_PTR_CAST) then
+      begin
+        aliasIdx := ASTIVal[node];
+        tk := IntToTypeKind(AliasElemTk[aliasIdx]);
+        recName := AliasElemRec[aliasIdx];
+      end
       else
       begin
-        tk := Syms[idx].ElemType;
-        recName := Syms[idx].ElemRecName;
+        if idx >= 0 then
+        begin
+          tk := Syms[idx].ElemType;
+          recName := Syms[idx].ElemRecName;
+        end
+        else
+        begin
+          tk := tyUnknown;
+          recName := REC_NONE;
+        end;
       end;
       ASTTk[indexNode] := Ord(tk);
       node := indexNode;
@@ -1533,6 +1565,8 @@ procedure ParseFactor;
 var name: AnsiString; recName: Integer; idx, pi, i, node, left, prevTok, valNode: Integer; tk: TTypeKind; op, argSeq, argSeq2, argSeq3, lastArg, argIdx, exprNode, szArg: Integer;
     nArgs, argsHead, currArg: Integer; argTypes: array[0..15] of TTypeKind;
     ci, mmi, mpi, mcallNode, mlastArg, smSelfIdx, smselfArg: Integer;
+    aliasIdx, fieldNode, indexNode, baseNode, baseRec, fIdx, mci, margSeq, margIdx, mexprNode, mai, pri: Integer;
+    fieldName, methName: AnsiString; isAssign: Boolean; castTk: TTypeKind;
 begin
   LastExprTk := tyInteger;
   case CurTok.Kind of
@@ -1738,6 +1772,8 @@ begin
     begin
       name := CurTok.SVal;
       prevTok := TokPos - 1;
+      if CaseEqual(name, 'puint8') then
+        writeln('ParseFactor PUInt8 found! Tokens[TokPos].Kind=', Ord(Tokens[TokPos].Kind), ' CurTok.Line=', CurTok.Line);
 
       { ---- SizeOf(TypeName) intrinsic: resolved at parse time to AN_INT_LIT ---- }
       if CaseEqual(name, 'sizeof') then
@@ -1807,6 +1843,12 @@ begin
           begin
             { Try record/class type }
             idx := IsRecordType(name);
+            if idx = REC_NONE then
+            begin
+              ci := FindUClass(name);
+              if ci >= 0 then
+                idx := REC_UCLASS_BASE + ci;
+            end;
             if idx <> REC_NONE then
               prevTok := RecSize(idx)
             else
@@ -1830,8 +1872,132 @@ begin
         Exit;
       end;
 
+      if CaseEqual(name, '__rttireg') then
+      begin
+        Next; { consume '__rttireg' }
+        if CurTok.Kind = tkLParen then
+        begin
+          Next;
+          Expect(tkRParen, ')');
+        end;
+        node := AllocNode(AN_RTTI_REG);
+        ASTTk[node] := Ord(tyPointer);
+        CurASTNode := node;
+        Exit;
+      end;
+
       idx  := FindSym(name);
       pi   := FindProc(name);
+
+      { C4: pointer-type-alias cast — PFoo(expr) where PFoo = ^TFoo }
+      if (idx < 0) and (pi < 0) and (Tokens[TokPos].Kind = tkLParen) then
+      begin
+        aliasIdx := FindTypeAlias(name);
+        if aliasIdx >= 0 then
+        begin
+          Next; { consume alias type name }
+          Expect(tkLParen, '(');
+          ParseExpr;
+          Expect(tkRParen, ')');
+          node := AllocNode(AN_PTR_CAST);
+          ASTLeft[node] := CurASTNode;
+          ASTIVal[node] := aliasIdx;
+          ASTTk[node]   := Ord(tyPointer);
+          { Set locals so the suffix loop below can resolve ^ and .field }
+          tk      := tyPointer;
+          recName := AliasElemRec[aliasIdx];  { pointee record id, used after ^ }
+          { Run suffix loop: handle chains of ^, .field, and [i] on the cast result. }
+          while CurTok.Kind in [tkCaret, tkDot, tkLBrack] do
+          begin
+            if CurTok.Kind = tkCaret then
+            begin
+              Next;
+              indexNode := AllocNode(AN_DEREF);
+              ASTLeft[indexNode] := node;
+              { After ^, type becomes the pointee }
+              tk      := IntToTypeKind(AliasElemTk[aliasIdx]);
+              recName := AliasElemRec[aliasIdx];
+              ASTTk[indexNode] := Ord(tk);
+              node := indexNode;
+            end
+            else if CurTok.Kind = tkLBrack then
+            begin
+              Next;
+              indexNode := AllocNode(AN_INDEX);
+              ASTLeft[indexNode] := node;
+              ParseExpr;
+              ASTRight[indexNode] := CurASTNode;
+              Expect(tkRBrack, ']');
+              if tk = tyPointer then
+              begin
+                tk := IntToTypeKind(AliasElemTk[aliasIdx]);
+                recName := AliasElemRec[aliasIdx];
+              end
+              else
+              begin
+                tk := tyUnknown;
+                recName := REC_NONE;
+              end;
+              ASTTk[indexNode] := Ord(tk);
+              node := indexNode;
+            end
+            else { tkDot }
+            begin
+              Next;
+              if CurTok.Kind in [tkEOF, tkSemicolon, tkAssign, tkRBrack, tkRParen] then
+                Error('expected field name after .');
+              prevTok  := TokPos - 1;
+              fieldName := '';
+              for i := Tokens[prevTok].SOffset to Tokens[prevTok].SOffset + Tokens[prevTok].SLen - 1 do
+                AppendChar(fieldName, TokChars[i]);
+              fieldNode := AllocNode(AN_FIELD);
+              ASTLeft[fieldNode] := node;
+              ASTSOffset[fieldNode] := Tokens[prevTok].SOffset;
+              ASTSLen[fieldNode]   := Tokens[prevTok].SLen;
+              tk      := RecFieldType(recName, fieldName);
+              recName := RecFieldRecId(recName, fieldName);
+              ASTTk[fieldNode] := Ord(tk);
+              Next;
+              node := fieldNode;
+            end;
+          end;
+          CurASTNode := node;
+          LastExprTk := tk;
+          Exit;
+        end
+        else
+        begin
+          { Built-in typecast }
+          castTk := tyUnknown;
+          if CaseEqual(name, 'pointer') then castTk := tyPointer
+          else if CaseEqual(name, 'int64') then castTk := tyInt64
+          else if CaseEqual(name, 'qword') then castTk := tyUInt64
+          else if CaseEqual(name, 'integer') or CaseEqual(name, 'longint') then castTk := tyInteger
+          else if CaseEqual(name, 'cardinal') or CaseEqual(name, 'longword') then castTk := tyUInt32
+          else if CaseEqual(name, 'smallint') then castTk := tyInt16
+          else if CaseEqual(name, 'word') then castTk := tyUInt16
+          else if CaseEqual(name, 'shortint') then castTk := tyInt8
+          else if CaseEqual(name, 'byte') then castTk := tyUInt8
+          else if CaseEqual(name, 'char') or CaseEqual(name, 'ansichar') then castTk := tyChar
+          else if CaseEqual(name, 'boolean') then castTk := tyBoolean
+          else if CaseEqual(name, 'string') or CaseEqual(name, 'ansistring') then castTk := tyString;
+
+          if castTk <> tyUnknown then
+          begin
+            Next; { consume type name }
+            Expect(tkLParen, '(');
+            ParseExpr;
+            Expect(tkRParen, ')');
+            node := AllocNode(AN_PTR_CAST);
+            ASTLeft[node] := CurASTNode;
+            ASTIVal[node] := -1; { indicates built-in cast }
+            ASTTk[node]   := Ord(castTk);
+            CurASTNode    := node;
+            LastExprTk    := castTk;
+            Exit;
+          end;
+        end;
+      end;
 
       if (idx < 0) and (pi < 0) and IsClassType(name) and
          (CurTok.Kind = tkIdent) and (Tokens[TokPos].Kind = tkDot) and
@@ -1866,6 +2032,12 @@ begin
         end;
         
         idx := IsRecordType(name);
+        if idx = REC_NONE then
+        begin
+          ci := FindUClass(name);
+          if ci >= 0 then
+            idx := REC_UCLASS_BASE + ci;
+        end;
         prevTok := RecSize(idx);
         
         { Construct GetMem(sz) AST node }
@@ -2666,6 +2838,8 @@ var
   nArgs, argsHead, currArg: Integer; argTypes: array[0..15] of TTypeKind;
   isLn: Boolean;
   smci, smmii, smpii, smcallNode, smselfArg, smLastArg, smArgSeq, smMai, smSelfIdx: Integer;
+  aliasIdx, fieldNode, indexNode, castPrevTok: Integer;
+  castFieldName: AnsiString; castTk: TTypeKind; castRec: Integer;
 begin
   node := -1;
   case CurTok.Kind of
@@ -3036,17 +3210,74 @@ begin
           end;
           if node = -1 then
           begin
-            idx := FindSym(name); Next;
-            valNode := ParseLValueAST(idx, TokPos - 2);
-            if (ASTKind[valNode] = AN_CALL) or (ASTKind[valNode] = AN_VIRTUAL_CALL) then
-              node := valNode
-            else
+            { C4: pointer-type-alias cast as lvalue statement — PFoo(expr)^.field := val }
+            aliasIdx := FindTypeAlias(name);
+            if (aliasIdx >= 0) and (Tokens[TokPos].Kind = tkLParen) then
             begin
+              Next; { consume alias name }
+              Expect(tkLParen, '(');
+              ParseExpr;
+              Expect(tkRParen, ')');
+              indexNode := AllocNode(AN_PTR_CAST);
+              ASTLeft[indexNode] := CurASTNode;
+              ASTIVal[indexNode] := aliasIdx;
+              ASTTk[indexNode]   := Ord(tyPointer);
+              castTk  := tyPointer;
+              castRec := AliasElemRec[aliasIdx];
+              valNode := indexNode;
+              { Handle ^  and .field suffix chain }
+              while CurTok.Kind in [tkCaret, tkDot] do
+              begin
+                if CurTok.Kind = tkCaret then
+                begin
+                  Next;
+                  fieldNode := AllocNode(AN_DEREF);
+                  ASTLeft[fieldNode] := valNode;
+                  castTk := IntToTypeKind(AliasElemTk[aliasIdx]);
+                  castRec := AliasElemRec[aliasIdx];
+                  ASTTk[fieldNode] := Ord(castTk);
+                  valNode := fieldNode;
+                end
+                else { tkDot }
+                begin
+                  Next;
+                  if CurTok.Kind in [tkEOF, tkSemicolon, tkAssign, tkRBrack, tkRParen] then
+                    Error('expected field name after .');
+                  castPrevTok := TokPos - 1;
+                  castFieldName := '';
+                  for i := Tokens[castPrevTok].SOffset to Tokens[castPrevTok].SOffset + Tokens[castPrevTok].SLen - 1 do
+                    AppendChar(castFieldName, TokChars[i]);
+                  fieldNode := AllocNode(AN_FIELD);
+                  ASTLeft[fieldNode] := valNode;
+                  ASTSOffset[fieldNode] := Tokens[castPrevTok].SOffset;
+                  ASTSLen[fieldNode]   := Tokens[castPrevTok].SLen;
+                  castTk  := RecFieldType(castRec, castFieldName);
+                  castRec := RecFieldRecId(castRec, castFieldName);
+                  ASTTk[fieldNode] := Ord(castTk);
+                  Next;
+                  valNode := fieldNode;
+                end;
+              end;
               Expect(tkAssign, ':=');
               ParseExpr;
               node := AllocNode(AN_ASSIGN);
-              ASTLeft[node] := valNode;
+              ASTLeft[node]  := valNode;
               ASTRight[node] := CurASTNode;
+            end
+            else
+            begin
+              idx := FindSym(name); Next;
+              valNode := ParseLValueAST(idx, TokPos - 2);
+              if (ASTKind[valNode] = AN_CALL) or (ASTKind[valNode] = AN_VIRTUAL_CALL) then
+                node := valNode
+              else
+              begin
+                Expect(tkAssign, ':=');
+                ParseExpr;
+                node := AllocNode(AN_ASSIGN);
+                ASTLeft[node] := valNode;
+                ASTRight[node] := CurASTNode;
+              end;
             end;
           end;
         end;
@@ -3092,7 +3323,7 @@ end;
 { ===== Declaration parsing ===== }
 
 function ParseTypeKind: TTypeKind;
-var lo: AnsiString; elemTk: TTypeKind; aliasIdx: Integer;
+var lo: AnsiString; elemTk: TTypeKind; aliasIdx, ci: Integer;
 begin
   LastTypeRecId := REC_NONE;
   LastTypePointerElemTk := tyUnknown;
@@ -3158,7 +3389,16 @@ begin
       begin
         if IsClassType(lo) then
         begin
-          LastTypeRecId := IsRecordType(lo);
+          if CaseEqual(lo, 'TMyClass') then
+            LastTypeRecId := REC_TMYCLASS
+          else
+          begin
+            ci := FindUClass(lo);
+            if ci >= 0 then
+              LastTypeRecId := REC_UCLASS_BASE + ci
+            else
+              LastTypeRecId := REC_NONE;
+          end;
           Result := tyClass;
         end
         else
@@ -3244,7 +3484,12 @@ begin
 	      begin
 	        idx := AllocVar(names[i], tk);
 	        if (tk = tyRecord) or (tk = tyClass) then
-	          Syms[idx].RecName := LastTypeRecId;
+	          Syms[idx].RecName := LastTypeRecId
+	        else if tk = tyPointer then
+	        begin
+	          Syms[idx].PtrElemTk := LastTypePointerElemTk;
+	          Syms[idx].PtrElemRec := LastTypePointerElemRec;
+	        end;
 	      end;
 	    if Eat(tkEq) then
 	    begin

@@ -51,6 +51,11 @@ begin
         si := InternStr(sVal);
         EmitB($48); EmitB($B8); EmitDataRef(Strs[si].Offset);
       end;
+
+    IR_SET_LIT:
+      begin
+        EmitB($48); EmitB($B8); EmitDataRef(IRIVal[node]);
+      end;
       
     IR_ASM:
       begin
@@ -58,6 +63,11 @@ begin
         begin
           EmitB(AsmBytes[IRA[node] + i]);
         end;
+      end;
+
+    IR_RTTI_REG:
+      begin
+        EmitB($48); EmitB($B8); EmitDataRef(-100);
       end;
       
     IR_LOAD_SYM:
@@ -433,6 +443,32 @@ begin
           tkAnd:   begin EmitB($48); EmitB($21); EmitB($C8); end; { and rax, rcx }
           tkOr:    begin EmitB($48); EmitB($09); EmitB($C8); end; { or rax, rcx }
           tkIdent: begin EmitB($48); EmitB($D3); EmitB($E8); end; { shr rax, cl }
+
+          tkIn:
+            begin
+              { rax = element value (LHS), rcx = set address (RHS) }
+              EmitB($48); EmitB($3D); EmitI32(255); { cmp rax, 255 }
+              EmitB($0F); EmitB($87); nextJmp := CodeLen; EmitI32(0); { ja out_of_range }
+              
+              EmitB($48); EmitB($89); EmitB($C2); { mov rdx, rax }
+              EmitB($48); EmitB($C1); EmitB($EA); EmitB($03); { shr rdx, 3 }
+              EmitB($49); EmitB($89); EmitB($C0); { mov r8, rax }
+              EmitB($49); EmitB($83); EmitB($E0); EmitB($07); { and r8, 7 }
+              
+              EmitB($48); EmitB($0F); EmitB($B6); EmitB($14); EmitB($11); { movzx rdx, byte [rcx+rdx] }
+              
+              MovRaxImm(1);
+              EmitB($4C); EmitB($89); EmitB($C1); { mov rcx, r8 }
+              EmitB($48); EmitB($D3); EmitB($E0); { shl rax, cl }
+              EmitB($48); EmitB($85); EmitB($D0); { test rax, rdx }
+              EmitB($0F); EmitB($95); EmitB($C0); { setnz al }
+              EmitB($48); EmitB($0F); EmitB($B6); EmitB($C0); { movzx rax, al }
+              EmitB($E9); falseJmp := CodeLen; EmitI32(0); { jmp exit }
+              
+              Patch32(nextJmp, CodeLen - (nextJmp + 4));
+              MovRaxImm(0);
+              Patch32(falseJmp, CodeLen - (falseJmp + 4));
+            end;
           
           tkEq, tkNeq, tkLt, tkLe, tkGt, tkGe:
             begin
@@ -1041,7 +1077,11 @@ begin
       end;
 
   else
+  begin
+    writeln('Unsupported linear node in IR codegen! Kind=', IRKind[node], ' node=', node,
+            ' IRA=', IRA[node], ' IRB=', IRB[node], ' IRC=', IRC[node], ' IRIVal=', IRIVal[node]);
     Error('Unsupported linear node in IR codegen');
+  end;
   end;
 end;
 

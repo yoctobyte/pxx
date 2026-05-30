@@ -176,8 +176,10 @@ test: $(COMPILER) fpc-check
 	test "$$(/tmp/test_ptr_alias26)" = "$$(printf '777\n888\n12\n34\n20\n30\n99\n55')"
 	./$(COMPILER) test/test_ptr_deref_field.pas /tmp/test_ptr_deref_field26
 	test "$$(/tmp/test_ptr_deref_field26)" = "$$(printf '10\n20\n42\n99\n1234\n5\n9999\n100\n300\n777')"
+	./$(COMPILER) test/test_ptr_cast.pas /tmp/test_ptr_cast26
+	test "$$(/tmp/test_ptr_cast26)" = "$$(printf '12345\n99999\n77\n88\n42\n1111\n7\n99\n100\n200\nbuiltin_cast: int64 ok\n100')"
 	./$(COMPILER) test/test_rtti_emit.pas /tmp/test_rtti_emit26
-	test "$$(/tmp/test_rtti_emit26)" = "$$(printf '42\n3')"
+	test "$$(/tmp/test_rtti_emit26)" = "$$(printf '42\n3\nhello')"
 	./$(COMPILER) --dump-rtti test/test_rtti_emit.pas /tmp/test_rtti_emit_dump26 > /tmp/test_rtti_emit_dump26.log
 	grep -q "enum TAlign count=4 rttiOff=.* alNone alLeft alRight alClient" /tmp/test_rtti_emit_dump26.log
 	grep -q "class TBase" /tmp/test_rtti_emit_dump26.log
@@ -187,6 +189,8 @@ test: $(COMPILER) fpc-check
 	grep -q "prop Caption tk=4" /tmp/test_rtti_emit_dump26.log
 	grep -q "prop Owner tk=6" /tmp/test_rtti_emit_dump26.log
 	grep -q "prop Align tk=1 enum=TAlign" /tmp/test_rtti_emit_dump26.log
+	./$(COMPILER) test/test_rtti_reg.pas /tmp/test_rtti_reg26
+	test "$$(/tmp/test_rtti_reg26)" = "$$(printf 'Count: 2\nClass 0: TBase\nClass 1: TChild')"
 	./$(COMPILER) test/test_static_methods.pas /tmp/test_static_methods26
 	test "$$(/tmp/test_static_methods26)" = "$$(printf '7\n11\n25')"
 	./$(COMPILER) test/test_write_fmt.pas /tmp/test_write_fmt26

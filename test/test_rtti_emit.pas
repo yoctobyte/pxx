@@ -41,4 +41,7 @@ begin
   { enum-typed published property round-trip }
   c.Align := alClient;
   writeln(Ord(c.Align));
+  { string-typed published property round-trip }
+  c.Caption := 'hello';
+  writeln(c.Caption);
 end.

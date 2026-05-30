@@ -1,3 +1,16 @@
+function Shl8_(shift: Integer): Integer;
+begin
+  Shl8_ := 0;
+  if shift = 0 then Shl8_ := 1
+  else if shift = 1 then Shl8_ := 2
+  else if shift = 2 then Shl8_ := 4
+  else if shift = 3 then Shl8_ := 8
+  else if shift = 4 then Shl8_ := 16
+  else if shift = 5 then Shl8_ := 32
+  else if shift = 6 then Shl8_ := 64
+  else if shift = 7 then Shl8_ := 128;
+end;
+
 procedure IRReset;
 begin
   IRCount := 0;
@@ -53,6 +66,8 @@ begin
     IR_TERMINATE: Result := 'terminate';
     IR_VIRTUAL_CALL: Result := 'virtual_call';
     IR_ASM: Result := 'asm';
+    IR_RTTI_REG: Result := 'rtti_reg';
+    IR_SET_LIT: Result := 'set_lit';
   else
     Result := 'unknown';
   end;
@@ -118,7 +133,7 @@ begin
   for i := 0 to IRCount - 1 do
   begin
     case IRKind[i] of
-      IR_CONST_INT, IR_CONST_STR, IR_NOP, IR_LABEL, IR_ASM:
+      IR_CONST_INT, IR_CONST_STR, IR_NOP, IR_LABEL, IR_ASM, IR_RTTI_REG, IR_SET_LIT:
         begin end;
 
       IR_LOAD_SYM:
@@ -298,7 +313,8 @@ begin
     { Pointer indexing p[i]: base address is the pointer's VALUE (not &p), and
       the stride is the pointed-at element size. Arrays fall through below. }
     if (ASTKind[baseNode] = AN_IDENT) and
-       (Syms[ASTIVal[baseNode]].TypeKind = tyPointer) then
+       (Syms[ASTIVal[baseNode]].TypeKind = tyPointer) and
+       (not Syms[ASTIVal[baseNode]].IsArray) then
     begin
       indexNode := IRLowerAST(ASTRight[node]);
       tk := Syms[ASTIVal[baseNode]].PtrElemTk;
@@ -395,6 +411,12 @@ begin
   begin
     Result := IRLowerAST(ASTLeft[node]);
   end
+  else if ASTKind[node] = AN_PTR_CAST then
+  begin
+    { The cast result is the pointer value itself; use it as the address.
+      IRLowerAST(inner) evaluates the integer/pointer expression -> rax = address. }
+    Result := IRLowerAST(ASTLeft[node]);
+  end
   else
     Result := IRAppend(IR_UNSUPPORTED, ASTKind[node], ASTLeft[node], ASTRight[node], ASTIVal[node], ASTTk[node]);
 end;
@@ -416,7 +438,7 @@ var left, right, seq, item, value, outNode, first, last, leftAddr, argNode: Inte
     constValNode, clauseBodyLabelNode, exitJmpNode, nextClauseLabelNode: Integer;
     beforeCount, handlerLabel, handlerNode, handlerNextLabel, savedDepth: Integer;
     raiseValueNode, raiseClass: Integer;
-    i, lbId, off, len: Integer;
+    i, lbId, off, len, idx, itemNode, lo, hi, val1: Integer;
 begin
   if node = -1 then
   begin
@@ -438,6 +460,50 @@ begin
     AN_STR_LIT:
       Result := IRAppend(IR_CONST_STR, ASTSOffset[node], ASTSLen[node], -1, 0, ASTTk[node]);
 
+    AN_SET_LIT:
+    begin
+      { Align DataLen to 8 bytes }
+      while (DataLen mod 8) <> 0 do
+      begin
+        if DataLen >= MAX_DATA then Error('data overflow');
+        Data[DataLen] := 0;
+        Inc(DataLen);
+      end;
+      idx := DataLen;
+      for i := 0 to 31 do
+      begin
+        if DataLen >= MAX_DATA then Error('data overflow');
+        Data[DataLen] := 0;
+        Inc(DataLen);
+      end;
+      argNode := ASTLeft[node];
+      while argNode <> -1 do
+      begin
+        itemNode := ASTLeft[argNode];
+        if ASTKind[itemNode] = AN_PAIR then
+        begin
+          lo := ASTIVal[ASTLeft[itemNode]];
+          hi := ASTIVal[ASTRight[itemNode]];
+          if lo < 0 then lo := 0;
+          if hi > 255 then hi := 255;
+          for val1 := lo to hi do
+          begin
+            Data[idx + (val1 div 8)] := Data[idx + (val1 div 8)] or Shl8_(val1 mod 8);
+          end;
+        end
+        else
+        begin
+          val1 := ASTIVal[itemNode];
+          if (val1 >= 0) and (val1 <= 255) then
+          begin
+            Data[idx + (val1 div 8)] := Data[idx + (val1 div 8)] or Shl8_(val1 mod 8);
+          end;
+        end;
+        argNode := ASTRight[argNode];
+      end;
+      Result := IRAppend(IR_SET_LIT, -1, -1, -1, idx, ASTTk[node]);
+    end;
+
     AN_ASM:
       Result := IRAppend(IR_ASM, ASTLeft[node], ASTRight[node], -1, 0, Ord(tyUnknown));
 
@@ -457,6 +523,18 @@ begin
         Result := left
       else
         Result := IRAppend(IR_LOAD_MEM, left, -1, -1, 0, ASTTk[node]);
+    end;
+
+    AN_PTR_CAST:
+    begin
+      { A cast PType(expr) is purely a type-tag change — the value in rax is
+        already the pointer. No load-through-memory here. }
+      Result := IRLowerAST(ASTLeft[node]);
+    end;
+
+    AN_RTTI_REG:
+    begin
+      Result := IRAppend(IR_RTTI_REG, -1, -1, -1, 0, ASTTk[node]);
     end;
 
     AN_ADDR:

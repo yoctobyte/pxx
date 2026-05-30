@@ -20,7 +20,7 @@ type
 
 function TWidget.GetTag: Integer;
 begin
-  GetTag := FTag;
+  Result := FTag;
 end;
 
 var

@@ -47,7 +47,7 @@ begin
 end;
 
 function FindTypeAlias(const name: AnsiString): Integer;
-var i: Integer; lo, name2: AnsiString;
+var i: Integer; lo, name2, s: AnsiString; j: Integer;
 begin
   Result := -1;
   name2 := name;
@@ -58,9 +58,21 @@ begin
     if UNameMatch(AliasNOff[i], AliasNLen[i], lo) then begin Result := i; Exit; end;
     Inc(i);
   end;
+  if lo = 'puint8' then
+  begin
+    writeln('FindTypeAlias failed to find puint8! AliasCount=', AliasCount);
+    for i := 0 to AliasCount - 1 do
+    begin
+      s := '';
+      for j := 0 to AliasNLen[i] - 1 do
+        AppendChar(s, TokChars[AliasNOff[i] + j]);
+      writeln('  Alias ', i, ': ', s, ' (noff=', AliasNOff[i], ', nlen=', AliasNLen[i], ')');
+    end;
+  end;
 end;
 
 procedure RegisterPtrAlias(noff, nlen, elemTk, elemRec: Integer);
+var i: Integer; s: AnsiString;
 begin
   if AliasCount >= MAX_TYPEALIAS then Error('too many type aliases');
   AliasNOff[AliasCount] := noff;
@@ -68,6 +80,11 @@ begin
   AliasTk[AliasCount] := Ord(tyPointer);
   AliasElemTk[AliasCount] := elemTk;
   AliasElemRec[AliasCount] := elemRec;
+  
+  s := '';
+  for i := 0 to nlen - 1 do AppendChar(s, TokChars[noff + i]);
+  writeln('RegisterPtrAlias: idx=', AliasCount, ' name="', s, '" noff=', noff, ' nlen=', nlen, ' elemTk=', elemTk, ' elemRec=', elemRec);
+
   Inc(AliasCount);
 end;
 
@@ -863,6 +880,13 @@ begin
   Syms[SymCount].ElemType := elemType;
   Syms[SymCount].ElemRecName := LastTypeRecId;
   Syms[SymCount].IsRef    := False;
+  Syms[SymCount].PtrElemTk := tyUnknown;
+  Syms[SymCount].PtrElemRec := REC_NONE;
+  if elemType = tyPointer then
+  begin
+    Syms[SymCount].PtrElemTk := LastTypePointerElemTk;
+    Syms[SymCount].PtrElemRec := LastTypePointerElemRec;
+  end;
 
   if CurProc < 0 then
   begin
@@ -893,6 +917,13 @@ begin
   Syms[SymCount].ElemType    := elemType;
   Syms[SymCount].ElemRecName := LastTypeRecId;
   Syms[SymCount].IsRef       := False;
+  Syms[SymCount].PtrElemTk := tyUnknown;
+  Syms[SymCount].PtrElemRec := REC_NONE;
+  if elemType = tyPointer then
+  begin
+    Syms[SymCount].PtrElemTk := LastTypePointerElemTk;
+    Syms[SymCount].PtrElemRec := LastTypePointerElemRec;
+  end;
   if CurProc < 0 then
   begin
     BSSSize := AlignTo(BSSSize, TARGET_PTR_SIZE);
@@ -2262,9 +2293,22 @@ begin
   else if ASTKind[node] = AN_INDEX then
   begin
     if ASTKind[ASTLeft[node]] = AN_IDENT then
-      Result := Syms[ASTIVal[ASTLeft[node]]].ElemRecName
+    begin
+      if Syms[ASTIVal[ASTLeft[node]]].TypeKind = tyPointer then
+        Result := Syms[ASTIVal[ASTLeft[node]]].PtrElemRec
+      else
+        Result := Syms[ASTIVal[ASTLeft[node]]].ElemRecName;
+    end
     else if ASTKind[ASTLeft[node]] = AN_FIELD then
-      Result := ResolveNodeRec(ASTLeft[node])
+    begin
+      baseRec := ResolveNodeRec(ASTLeft[ASTLeft[node]]);
+      fieldName := GetASTIdentName(ASTLeft[node]);
+      fIdx := FindUField(baseRec, fieldName);
+      if (fIdx >= 0) and (UFldTk[fIdx] = Ord(tyPointer)) then
+        Result := UFldPtrElemRec[fIdx]
+      else
+        Result := ResolveNodeRec(ASTLeft[node]);
+    end
     else
       Result := REC_NONE;
   end
@@ -2291,11 +2335,25 @@ begin
       else
         Result := REC_NONE;
     end
+    else if ASTKind[baseNode] = AN_PTR_CAST then
+    begin
+      if ASTIVal[baseNode] >= 0 then
+        Result := AliasElemRec[ASTIVal[baseNode]]
+      else
+        Result := REC_NONE;
+    end
     else
       Result := REC_NONE;
   end
   else if (ASTKind[node] = AN_CALL) and (ASTIVal[node] = -Ord(tkGetMem)) then
     Result := ASTRight[node]
+  else if ASTKind[node] = AN_PTR_CAST then
+  begin
+    if ASTIVal[node] >= 0 then
+      Result := AliasElemRec[ASTIVal[node]]
+    else
+      Result := REC_NONE;
+  end
   else
     Result := REC_NONE;
 end;
