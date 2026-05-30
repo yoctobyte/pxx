@@ -4179,6 +4179,7 @@ var
   tokKindOrd: Integer;
   methOwnerCi, methOwnerRec, methSNOff, methSNLen, mmi, slot, otherCi: Integer;
   methName: AnsiString;
+  extLib: AnsiString;
 begin
   isClassKeyword := False;
   isAsmFunc := False;
@@ -4294,6 +4295,35 @@ begin
     if (CurTok.Kind = tkIdent) and CaseEqual(CurTok.SVal, 'assembler') then isAsmFunc := True;
     Next;
     Eat(tkSemicolon);
+  end;
+
+  { External binding: `procedure foo(...); cdecl; external 'libname.so' [name 'sym'];`
+    Marks the routine as a dynamically-linked import. Symbol defaults to the
+    routine's own name (GTK symbols are valid lowercase identifiers); an
+    optional `name 'sym'` clause overrides the emitted symbol. }
+  if (CurTok.Kind = tkIdent) and CaseEqual(CurTok.SVal, 'external') then
+  begin
+    Next;
+    extLib := '';
+    if CurTok.Kind = tkString then begin extLib := CurTok.SVal; Next; end;
+    if (CurTok.Kind = tkIdent) and CaseEqual(CurTok.SVal, 'name') then
+    begin
+      Next;
+      if CurTok.Kind = tkString then begin name := CurTok.SVal; Next; end;
+    end;
+    Eat(tkSemicolon);
+    pi := FindProcOverload(name, nparams, ptypes, parr, pbyref);
+    if pi < 0 then
+      pi := RegisterProc(name, isFunc, retType, nparams, pnames, ptypes);
+    for i := 0 to nparams-1 do
+    begin
+      Procs[pi].Params[i].IsArray := parr[i];
+      Procs[pi].Params[i].IsRef := pbyref[i];
+    end;
+    Procs[pi].BodyAddr := -1;
+    ProcExternal[pi] := True;
+    ProcLibrary[pi] := InternStr(extLib);
+    Exit;
   end;
 
   { Inject implicit Self parameter at index 0 for methods (unless static) }

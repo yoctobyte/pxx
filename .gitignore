@@ -9,3 +9,8 @@ __pycache__/
 *.swo
 docs/historic/user-rambling/
 thesises/
+.antigravitycli/
+test/gui/helloworld/lib/
+test/gui/helloworld/backup/
+test/gui/helloworld/helloworld
+*.lps
