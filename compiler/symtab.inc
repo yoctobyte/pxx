@@ -88,6 +88,19 @@ begin
   Inc(AliasCount);
 end;
 
+procedure RegisterSetAlias(noff, nlen, elemEnumId: Integer);
+{ Named set type: TFooSet = set of TFoo. Stored in the alias table with
+  AliasTk=tySet; AliasElemTk holds the element enum id (or -1). }
+begin
+  if AliasCount >= MAX_TYPEALIAS then Error('too many type aliases');
+  AliasNOff[AliasCount] := noff;
+  AliasNLen[AliasCount] := nlen;
+  AliasTk[AliasCount] := Ord(tySet);
+  AliasElemTk[AliasCount] := elemEnumId;
+  AliasElemRec[AliasCount] := REC_NONE;
+  Inc(AliasCount);
+end;
+
 function FindEnumType(const name: AnsiString): Integer;
 var i: Integer; lo, name2: AnsiString;
 begin

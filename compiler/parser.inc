@@ -3420,9 +3420,16 @@ begin
             aliasIdx := FindTypeAlias(lo);
             if aliasIdx >= 0 then
             begin
-              LastTypePointerElemTk := IntToTypeKind(AliasElemTk[aliasIdx]);
-              LastTypePointerElemRec := AliasElemRec[aliasIdx];
-              Result := tyPointer;
+              if AliasTk[aliasIdx] = Ord(tySet) then
+                { Named set type: element enum kept in AliasElemTk but not
+                  exposed as LastTypeEnumId, so the property kind stays SET. }
+                Result := tySet
+              else
+              begin
+                LastTypePointerElemTk := IntToTypeKind(AliasElemTk[aliasIdx]);
+                LastTypePointerElemRec := AliasElemRec[aliasIdx];
+                Result := tyPointer;
+              end;
             end
             else
             begin
@@ -3996,6 +4003,15 @@ begin
         fTk := ParseTypeKind;
         RegisterPtrAlias(tnOff, tnLen, Ord(fTk), LastTypeRecId);
         Eat(tkSemicolon);
+      end
+      else if CaseEqual(CurTok.SVal, 'set') then
+      begin
+        { Named set type: TFooSet = set of TFoo }
+        Next;
+        Expect(tkOf, 'of');
+        propEnumId := FindEnumType(CurTok.SVal);
+        RegisterSetAlias(tnOff, tnLen, propEnumId);
+        while not (CurTok.Kind in [tkSemicolon,tkEOF]) do Next;
       end
       else
       begin
