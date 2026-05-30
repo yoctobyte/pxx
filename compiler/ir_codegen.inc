@@ -17,6 +17,15 @@ begin
   end;
 end;
 
+procedure IREmitStoreCharAsString;
+{ rdi = destination string buffer, rsi = char ordinal. Writes a 1-char string
+  ([len:8=1][char]) directly into the destination, so a tyChar value can be
+  assigned to a tyString slot. No allocation — the target buffer already exists.}
+begin
+  EmitB($48); EmitB($C7); EmitB($07); EmitI32(1); { mov qword [rdi], 1 }
+  EmitB($40); EmitB($88); EmitB($77); EmitB($08); { mov byte [rdi+8], sil }
+end;
+
 procedure IREmitNode(node: Integer);
 var left, right, valNode, symIdx, si: Integer;
     op: TTokenKind;
@@ -98,7 +107,7 @@ begin
           end
           else
           begin
-            IREmitNode(valueNode); { rax = source string address }
+            IREmitNode(valueNode); { rax = source string address (or char ordinal) }
             EmitB($50); { push source }
             if Syms[symIdx].Kind = skGlobal then
             begin
@@ -114,11 +123,16 @@ begin
             end;
             EmitB($48); EmitB($89); EmitB($C7); { mov rdi, rax }
             EmitB($5E);                         { pop rsi }
-            EmitB($48); EmitB($8B); EmitB($0E); { mov rcx, [rsi] }
-            EmitB($48); EmitB($89); EmitB($0F); { mov [rdi], rcx }
-            EmitB($48); EmitB($83); EmitB($C6); EmitB($08);
-            EmitB($48); EmitB($83); EmitB($C7); EmitB($08);
-            EmitB($F3); EmitB($A4);             { rep movsb }
+            if IntToTypeKind(IRTk[valueNode]) = tyChar then
+              IREmitStoreCharAsString          { rsi = char ordinal -> [len=1][char] }
+            else
+            begin
+              EmitB($48); EmitB($8B); EmitB($0E); { mov rcx, [rsi] }
+              EmitB($48); EmitB($89); EmitB($0F); { mov [rdi], rcx }
+              EmitB($48); EmitB($83); EmitB($C6); EmitB($08);
+              EmitB($48); EmitB($83); EmitB($C7); EmitB($08);
+              EmitB($F3); EmitB($A4);             { rep movsb }
+            end;
           end;
         end
         else
@@ -255,18 +269,23 @@ begin
 
         if tk = tyString then
         begin
-          IREmitNode(valueNode); { rax = source string address }
+          IREmitNode(valueNode); { rax = source string address (or char ordinal) }
           EmitB($50); { push source }
 
           IREmitNode(addressNode); { rax = destination address }
 
           EmitB($48); EmitB($89); EmitB($C7); { mov rdi, rax }
           EmitB($5E);                         { pop rsi }
-          EmitB($48); EmitB($8B); EmitB($0E); { mov rcx, [rsi] }
-          EmitB($48); EmitB($89); EmitB($0F); { mov [rdi], rcx }
-          EmitB($48); EmitB($83); EmitB($C6); EmitB($08);
-          EmitB($48); EmitB($83); EmitB($C7); EmitB($08);
-          EmitB($F3); EmitB($A4);             { rep movsb }
+          if IntToTypeKind(IRTk[valueNode]) = tyChar then
+            IREmitStoreCharAsString          { rsi = char ordinal -> [len=1][char] }
+          else
+          begin
+            EmitB($48); EmitB($8B); EmitB($0E); { mov rcx, [rsi] }
+            EmitB($48); EmitB($89); EmitB($0F); { mov [rdi], rcx }
+            EmitB($48); EmitB($83); EmitB($C6); EmitB($08);
+            EmitB($48); EmitB($83); EmitB($C7); EmitB($08);
+            EmitB($F3); EmitB($A4);             { rep movsb }
+          end;
         end
         else
         begin

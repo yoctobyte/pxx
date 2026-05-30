@@ -16,10 +16,17 @@ correct stale notes elsewhere).
   test` runs the full suite to the fixedpoint check (exit 0). (Was: miscompiled
   at output line 5 then segfaulted; cleared by the 2026-05-30 IR index/stride
   fixes.)
-- 🔴 **String `+` concatenation broken.** `tkPlus` on strings only emits
-  `ADD RAX,RCX`; it never concatenates. Invisible to bootstrap (the compiler
-  never concatenates strings via `+` on itself — it uses `AppendChar`). Real
-  user code needs this. Until fixed, all string building must use `AppendChar`.
+- ✅ **String `+` concatenation** — works on the IR backend (the default) and
+  legacy: `string+string`, `string+char`, `char+string`, and `char+char` all
+  concatenate. (The old note described a pre-IR state.) Test:
+  `test/test_char_to_string.pas`.
+- ✅ **char → string coercion** (2026-05-30). `s := 'x'` (single-char literal),
+  `s := someChar`, `s := Chr(n)`, and char-class-field stores now materialise a
+  1-char string instead of segfaulting. Fix: IR_STORE_SYM/IR_STORE_MEM write
+  `[len=1][char]` straight into the destination when the value is `tyChar`
+  (`ir_codegen.inc` `IREmitStoreCharAsString`); parser types `char+char` as
+  `tyString` so the concat path fires (`parser.inc` ~2338). No allocation, no
+  stack leak. Test: `test/test_char_to_string.pas`.
 
 ---
 
@@ -204,13 +211,9 @@ not eternal "constraints". Promote to fixes when convenient:
   family as the ptr-cast stride fix (`d03fe17`), but the field path doesn't
   carry the pointed-at element type. Workaround: copy the field to a local
   pointer var, then index. Surfaced building `streams.pas`.
-- 🔴 **Single-char string literal typed as `tyChar`.** `'x'` is `tyChar`, not a
-  1-char string. `s := 'x'` (any string target — var, record field, class
-  field) **segfaults**: the assign uses the LHS string type and `rep movsb`s
-  from the char code (e.g. 120) as if it were a source string address.
-  Workaround: init/build strings via `s := ''` + `AppendChar`, or use a
-  2+-char literal. Real fix: context-coerce char→string on assign/concat
-  (materialise a 1-char string). (String `+` itself = standing bug §1.2.)
+- ✅ **Single-char string literal / char → string** — fixed 2026-05-30. See the
+  "char → string coercion" entry in §1.2 above. `s := 'x'`, `s := someChar`,
+  `s := Chr(n)`, and char→string class/record fields all work now.
 - 🔴 **Whole-record array-element copy miscompiles in main-program body.**
   `arr[j] := arr[j+1]` for an 8-byte record silently no-ops the store under
   some conditions inside the program's main body (IR backend). Surfaced in the
