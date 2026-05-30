@@ -166,6 +166,17 @@ not eternal "constraints". Promote to fixes when convenient:
   parsed as I/O statements (`tkRead` is only consumed as the property `read`
   keyword, `parser.inc:3505`). `write`/`writeln` are handled (`parser.inc:2666`);
   `read*` is the missing half. Needs runtime input plumbing too.
+- 🔴 **Named result in a class method miscompiles.** In `function TFoo.Bar`,
+  assigning `Bar := v` (function-name-as-result) segfaults — the name resolves
+  toward a self method-call instead of the result slot. Plain (non-method)
+  functions are fine (the compiler uses named results throughout). Workaround:
+  use `Result :=` in all methods. Surfaced building `streams.pas`.
+- 🔴 **Indexing a pointer-typed class field miscompiles.** `FField[i]` where
+  `FField` is a `^T`/alias field returns garbage — the pointer-index fast path
+  in `IRLowerAddress` only fires for an `AN_IDENT` base, not `AN_FIELD`. Same
+  family as the ptr-cast stride fix (`d03fe17`), but the field path doesn't
+  carry the pointed-at element type. Workaround: copy the field to a local
+  pointer var, then index. Surfaced building `streams.pas`.
 - 🔴 **Single-char string literal typed as `tyChar`.** `'x'` is `tyChar`, not a
   1-char string. `s := 'x'` (any string target — var, record field, class
   field) **segfaults**: the assign uses the LHS string type and `rep movsb`s

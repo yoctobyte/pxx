@@ -63,8 +63,10 @@ type
   PUInt16 = ^Word;
   PInt32  = ^Integer;
   PInt64  = ^Int64;
+  PPointer = ^Pointer;
 
 function GetClass(const name: string): PClassRTTI;
+function CreateInstance(cls: PClassRTTI): Pointer;
 function GetPropInfo(cls: PClassRTTI; const name: string): PPropInfo;
 function GetPropList(cls: PClassRTTI; list: PPropList): Integer;
 function GetOrdProp(instance: Pointer; p: PPropInfo): Int64;
@@ -111,6 +113,19 @@ begin
       Exit;
     end;
   end;
+end;
+
+function CreateInstance(cls: PClassRTTI): Pointer;
+var
+  obj: Pointer;
+begin
+  CreateInstance := nil;
+  if cls = nil then Exit;
+  { Bump-allocated heap is kernel-zeroed, so all fields start cleared
+    (string fields = empty). Mirror normal .Create: VMT pointer at offset 0. }
+  obj := GetMem(Integer(cls^.InstanceSize));
+  PPointer(obj)^ := cls^.VMTPtr;
+  CreateInstance := obj;
 end;
 
 function GetPropInfo(cls: PClassRTTI; const name: string): PPropInfo;
