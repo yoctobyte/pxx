@@ -2341,7 +2341,9 @@ begin
     begin
       baseRec := ResolveNodeRec(ASTLeft[ASTLeft[node]]);
       fieldName := GetASTIdentName(ASTLeft[node]);
-      fIdx := FindUField(baseRec, fieldName);
+      fIdx := -1;
+      if baseRec >= REC_UCLASS_BASE then
+        fIdx := FindUField(baseRec - REC_UCLASS_BASE, fieldName);
       if (fIdx >= 0) and (UFldTk[fIdx] = Ord(tyPointer)) then
         Result := UFldPtrElemRec[fIdx]
       else
@@ -2359,7 +2361,9 @@ begin
     begin
       baseRec := ResolveNodeRec(ASTLeft[baseNode]);
       fieldName := GetASTIdentName(baseNode);
-      fIdx := FindUField(baseRec, fieldName);
+      fIdx := -1;
+      if baseRec >= REC_UCLASS_BASE then
+        fIdx := FindUField(baseRec - REC_UCLASS_BASE, fieldName);
       if fIdx >= 0 then
         Result := UFldPtrElemRec[fIdx]
       else

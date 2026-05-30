@@ -212,12 +212,14 @@ not eternal "constraints". Promote to fixes when convenient:
   Added an `AN_FIELD` pointer-index fast path in `IRLowerAddress` plus
   `RecFieldPtrElemTk`/`RecFieldPtrElemRec` accessors over `UFldPtrElem*`.
   Test: `test/test_ptr_field_index.pas`.
-- 🔴 **Chained `[i].field` lvalue/rvalue unsupported.** `p[i].X` where `p` is a
-  `^record` (or `c.Arr[i].X` for an array-of-record field) fails to parse
-  ("unexpected token" right after the `.`). The postfix suffix loop doesn't
-  continue a `.field` access after an `[index]` on a record element. Surfaced
-  2026-05-30 extending the ptr-field-index test. Affects record arrays via
-  pointers/fields generally, not just classes.
+- ✅ **Multi-name record/class fields** — fixed 2026-05-30. `X, Y: Integer` in a
+  `record`/`class` now declares both (each at its own offset); the field parser
+  only read one name before `:`. Also fixed `ResolveNodeRec` for indexing a
+  pointer-to-record field then a `.field` (`c.Pts[i].X`): two `FindUField` calls
+  were missing the `- REC_UCLASS_BASE` class-index offset, and the parser suffix
+  loop didn't carry the element record for an `AN_FIELD` pointer base.
+  Test: `test/test_record_multifield.pas`. (The earlier "chained `[i].field`"
+  note was a misdiagnosis — the real blocker was the multi-name field parse.)
 - ✅ **Single-char string literal / char → string** — fixed 2026-05-30. See the
   "char → string coercion" entry in §1.2 above. `s := 'x'`, `s := someChar`,
   `s := Chr(n)`, and char→string class/record fields all work now.

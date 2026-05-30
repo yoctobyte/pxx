@@ -910,6 +910,27 @@ begin
         tk := IntToTypeKind(AliasElemTk[aliasIdx]);
         recName := AliasElemRec[aliasIdx];
       end
+      else if (tk = tyPointer) and (ASTKind[node] = AN_FIELD) then
+      begin
+        { pointer-typed field indexing FField[i]: element type/rec from the
+          field's pointed-at metadata, so a trailing .field resolves correctly }
+        baseNode := ASTLeft[node];
+        baseRec := ResolveNodeRec(baseNode);
+        fieldName := GetASTIdentName(node);
+        fIdx := -1;
+        if baseRec >= REC_UCLASS_BASE then
+          fIdx := FindUField(baseRec - REC_UCLASS_BASE, fieldName);
+        if fIdx >= 0 then
+        begin
+          tk := IntToTypeKind(UFldPtrElemTk[fIdx]);
+          recName := UFldPtrElemRec[fIdx];
+        end
+        else
+        begin
+          tk := tyUnknown;
+          recName := REC_NONE;
+        end;
+      end
       else
       begin
         if idx >= 0 then
@@ -3590,6 +3611,9 @@ var
   mPTypes: array[0..15] of TTypeKind;
   mPTypesRec: array[0..15] of Integer;
   mPArr: array[0..15] of Boolean;
+  fldNOffs: array[0..31] of Integer;   { comma-separated field-name spans }
+  fldNLens: array[0..31] of Integer;
+  nFldNames, fni: Integer;
   mPByRef: array[0..15] of Boolean;
 begin
   Next;
@@ -3893,9 +3917,20 @@ begin
           end
           else if CurTok.Kind = tkIdent then
           begin
-            fnOff := Tokens[TokPos-1].SOffset;
-            fnLen := Tokens[TokPos-1].SLen;
+            { comma-separated names share one type: `A, B: Integer` }
+            fldNOffs[0] := Tokens[TokPos-1].SOffset;
+            fldNLens[0] := Tokens[TokPos-1].SLen;
+            nFldNames := 1;
             Next;
+            while CurTok.Kind = tkComma do
+            begin
+              Next;
+              if CurTok.Kind <> tkIdent then Error('expected field name after ","');
+              fldNOffs[nFldNames] := Tokens[TokPos-1].SOffset;
+              fldNLens[nFldNames] := Tokens[TokPos-1].SLen;
+              Inc(nFldNames);
+              Next;
+            end;
             Expect(tkColon, ':');
             isArr := False;
             arrLen := 1;
@@ -3943,10 +3978,13 @@ begin
             end;
             if isArr then
               fSize := fSize * arrLen;
-            curFieldOff := AlignTo(curFieldOff, fAlign);
-            AddUField(ci, fnOff, fnLen, curFieldOff, Ord(fTk), fRec);
-            UFldPub[UFldCount-1] := curPublished;
-            curFieldOff := curFieldOff + fSize;
+            for fni := 0 to nFldNames - 1 do
+            begin
+              curFieldOff := AlignTo(curFieldOff, fAlign);
+              AddUField(ci, fldNOffs[fni], fldNLens[fni], curFieldOff, Ord(fTk), fRec);
+              UFldPub[UFldCount-1] := curPublished;
+              curFieldOff := curFieldOff + fSize;
+            end;
             if fAlign > classAlign then classAlign := fAlign;
             Eat(tkSemicolon);
           end
@@ -3976,9 +4014,20 @@ begin
         begin
           if CurTok.Kind = tkIdent then
           begin
-            fnOff := Tokens[TokPos-1].SOffset;
-            fnLen := Tokens[TokPos-1].SLen;
+            { comma-separated names share one type: `X, Y: Integer` }
+            fldNOffs[0] := Tokens[TokPos-1].SOffset;
+            fldNLens[0] := Tokens[TokPos-1].SLen;
+            nFldNames := 1;
             Next;
+            while CurTok.Kind = tkComma do
+            begin
+              Next;
+              if CurTok.Kind <> tkIdent then Error('expected field name after ","');
+              fldNOffs[nFldNames] := Tokens[TokPos-1].SOffset;
+              fldNLens[nFldNames] := Tokens[TokPos-1].SLen;
+              Inc(nFldNames);
+              Next;
+            end;
             Expect(tkColon, ':');
             isArr := False;
             arrLen := 1;
@@ -4026,9 +4075,12 @@ begin
             end;
             if isArr then
               fSize := fSize * arrLen;
-            curFieldOff := AlignTo(curFieldOff, fAlign);
-            AddUField(ci, fnOff, fnLen, curFieldOff, Ord(fTk), fRec);
-            curFieldOff := curFieldOff + fSize;
+            for fni := 0 to nFldNames - 1 do
+            begin
+              curFieldOff := AlignTo(curFieldOff, fAlign);
+              AddUField(ci, fldNOffs[fni], fldNLens[fni], curFieldOff, Ord(fTk), fRec);
+              curFieldOff := curFieldOff + fSize;
+            end;
             if fAlign > classAlign then classAlign := fAlign;
             Eat(tkSemicolon);
           end
