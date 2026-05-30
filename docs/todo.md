@@ -143,13 +143,13 @@ inheritance depth, method-resolution clauses, COM ARC.
   first `}`, so a `{` inside a comment breaks self-compile (`unexpected
   character`). FPC accepts nested comments (warns "comment level 2"). Avoid
   inner braces in compiler-side comments until fixed. Surfaced in Phase 1.
-- 🔴 **String field on a class is broken.** A class string field used directly
-  — `obj.FStr := 'x'; writeln(obj.FStr)` — now fails to compile on **both**
-  backends: `error: invalid optional IR node reference in call last arg`
-  (earlier it mis-emitted an address at runtime). Record string fields work
-  (see `record_string_field.pas`), and string *properties* round-trip fine via
-  RTTI (`GetStrProp`/`SetStrProp` — `test/test_rtti.pas` Caption). The raw
-  class-field path is the remaining gap; relevant to streaming string props.
+- ✅ **Class string fields** — work with real strings (the earlier "garbage"
+  was a misdiagnosis). Two distinct bugs were behind it, both now understood:
+  - The `writeln(c.AnyField)`-as-sole-arg compile error was an IRVerify false
+    positive (validated IR_CALL's `IRC`=classIdx as a node); fixed in `ir.inc`.
+  - `s := 'x'` (single-char literal → tyString) segfaults — but that is the
+    char-literal quirk below, **not** class-specific (it hits plain string vars
+    and record fields identically). See "single-char string literal" in §4.
 
 ### Self-host papered-over gaps (real features the compiler dodges on itself)
 
@@ -166,10 +166,13 @@ not eternal "constraints". Promote to fixes when convenient:
   parsed as I/O statements (`tkRead` is only consumed as the property `read`
   keyword, `parser.inc:3505`). `write`/`writeln` are handled (`parser.inc:2666`);
   `read*` is the missing half. Needs runtime input plumbing too.
-- ⬜ **Single-char string literal typed as `tyChar`.** `'x'` is `tyChar`, not a
-  1-char string, so string vars must init as `s := ''` then `AppendChar`.
-  Decide: context-coerce char→string on assign/concat, or leave as documented
-  dialect quirk. (String `+` itself = standing bug §1.2.)
+- 🔴 **Single-char string literal typed as `tyChar`.** `'x'` is `tyChar`, not a
+  1-char string. `s := 'x'` (any string target — var, record field, class
+  field) **segfaults**: the assign uses the LHS string type and `rep movsb`s
+  from the char code (e.g. 120) as if it were a source string address.
+  Workaround: init/build strings via `s := ''` + `AppendChar`, or use a
+  2+-char literal. Real fix: context-coerce char→string on assign/concat
+  (materialise a 1-char string). (String `+` itself = standing bug §1.2.)
 - Note: "integer-only compiler tables" stays a deliberate **constraint**, not a
   bug — it is the fixedpoint-safety convention, nothing to fix.
 
