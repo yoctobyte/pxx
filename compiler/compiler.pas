@@ -196,7 +196,12 @@ begin
     EmitResources;
   end;
   { Patch RTTIRegistryOff (-100) and ResourceTableOff (-101) relocations. A
-    sentinel with no table is dropped (the intrinsic then returns nil/0). }
+    sentinel with no table is dropped (the intrinsic then returns nil/0).
+    The drop shifts entries down field-by-field: a whole-record array-element
+    copy (Fixups[j] := Fixups[j+1]) miscompiles here in the IR backend's main-
+    program body (the store silently no-ops, leaving every fixup -100 so the
+    loop drops them all and string literals get NULL addresses). Copying the
+    Integer fields one at a time sidesteps that codegen bug. }
   i := 0;
   while i < FixCount do
   begin
@@ -207,7 +212,10 @@ begin
       else
       begin
         for j := i to FixCount - 2 do
-          Fixups[j] := Fixups[j + 1];
+        begin
+          Fixups[j].CodePos := Fixups[j + 1].CodePos;
+          Fixups[j].DataOff := Fixups[j + 1].DataOff;
+        end;
         Dec(FixCount);
         continue;
       end;
@@ -219,7 +227,10 @@ begin
       else
       begin
         for j := i to FixCount - 2 do
-          Fixups[j] := Fixups[j + 1];
+        begin
+          Fixups[j].CodePos := Fixups[j + 1].CodePos;
+          Fixups[j].DataOff := Fixups[j + 1].DataOff;
+        end;
         Dec(FixCount);
         continue;
       end;
