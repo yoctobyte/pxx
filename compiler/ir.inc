@@ -301,7 +301,7 @@ var baseNode, baseAddr, indexNode, lo, elemSize: Integer;
     fieldName: AnsiString;
     isArr: Boolean;
     tk: TTypeKind;
-    recName: Integer;
+    recName, aliasIdx: Integer;
 begin
   if ASTKind[node] = AN_IDENT then
   begin
@@ -320,6 +320,21 @@ begin
       tk := Syms[ASTIVal[baseNode]].PtrElemTk;
       if tk = tyRecord then
         elemSize := RecSize(Syms[ASTIVal[baseNode]].PtrElemRec)
+      else
+        elemSize := TypeSize(tk);
+      baseAddr := IRLowerAST(baseNode);
+      Result := IRAppend(IR_INDEX, baseAddr, indexNode, 0, elemSize, Ord(tk));
+      Exit;
+    end;
+    { Typed-pointer-cast indexing PType(expr)[i]: base is the cast's pointer
+      VALUE, stride is the cast's pointed-at element size (from the alias). }
+    if ASTKind[baseNode] = AN_PTR_CAST then
+    begin
+      indexNode := IRLowerAST(ASTRight[node]);
+      aliasIdx := ASTIVal[baseNode];
+      tk := IntToTypeKind(AliasElemTk[aliasIdx]);
+      if tk = tyRecord then
+        elemSize := RecSize(AliasElemRec[aliasIdx])
       else
         elemSize := TypeSize(tk);
       baseAddr := IRLowerAST(baseNode);
