@@ -29,6 +29,13 @@ procedure gtk_main_quit; cdecl; external 'libgtk-3.so.0';
 function  gtk_events_pending: Integer; cdecl; external 'libgtk-3.so.0';
 function  gtk_main_iteration_do(blocking: Integer): Integer; cdecl; external 'libgtk-3.so.0';
 
+{ --- signals (GObject / GLib) --- }
+function  g_signal_connect_data(instance: Pointer; signal: PChar; handler: Pointer;
+                                data: Pointer; destroy: Pointer; flags: Integer): LongWord;
+            cdecl; external 'libgobject-2.0.so.0';
+function  g_timeout_add(interval: LongWord; func: Pointer; data: Pointer): LongWord;
+            cdecl; external 'libglib-2.0.so.0';
+
 { --- widgets --- }
 function  gtk_window_new(wtype: Integer): PGtkWidget; cdecl; external 'libgtk-3.so.0';
 procedure gtk_window_set_title(window: PGtkWidget; title: PChar); cdecl; external 'libgtk-3.so.0';
@@ -39,6 +46,10 @@ procedure gtk_widget_show_all(widget: PGtkWidget); cdecl; external 'libgtk-3.so.
 
 { --- libc --- }
 function  usleep(usec: LongWord): Integer; cdecl; external 'libc.so.6';
+
+{ g_signal_connect(obj, signal, handler) — the macro from gtk; forwards to
+  g_signal_connect_data with no closure data/notify and default flags. }
+function SignalConnect(obj: Pointer; signal: AnsiString; handler: Pointer): LongWord;
 
 { Convert a Pascal string to a transient NUL-terminated C string. The
   Pascal string value is a pointer to an 8-byte length prefix followed by
@@ -59,6 +70,11 @@ begin
     CBuf[i-1] := s[i];
   CBuf[Length(s)] := #0;
   PC := @CBuf[0];
+end;
+
+function SignalConnect(obj: Pointer; signal: AnsiString; handler: Pointer): LongWord;
+begin
+  SignalConnect := g_signal_connect_data(obj, PC(signal), handler, nil, nil, 0);
 end;
 
 end.
