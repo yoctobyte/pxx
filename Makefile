@@ -197,6 +197,10 @@ test: $(COMPILER) fpc-check
 	test "$$(/tmp/test_streaming_enumset26)" = "$$(printf 'Color=1\nColors=5\nCaption=Hello, long world!')"
 	./$(COMPILER) test/test_resource.pas /tmp/test_resource26
 	test "$$(/tmp/test_resource26)" = "$$(printf 'len=16\ndata=Hello, resource!\nmissing: ok')"
+	./$(COMPILER) test/test_lfm.pas /tmp/test_lfm26
+	test "$$(/tmp/test_lfm26)" = "$$(printf 'Caption=Hello LFM\nWidth=320\nAlign=2\nAnchors=10\nchildCount=1\nbtn.Name=Btn\nbtn.Caption=OK\nbtn.Tag=7')"
+	./$(COMPILER) test/gui/repro_multiunit_rtti_segfault.pas /tmp/repro_multiunit_rtti26
+	test "$$(/tmp/repro_multiunit_rtti26)" = "$$(printf 'propcount=2\nName found')"
 	./$(COMPILER) test/test_static_methods.pas /tmp/test_static_methods26
 	test "$$(/tmp/test_static_methods26)" = "$$(printf '7\n11\n25')"
 	./$(COMPILER) test/test_write_fmt.pas /tmp/test_write_fmt26

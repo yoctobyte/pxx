@@ -57,16 +57,22 @@ executable plan: **[`plan-rtti-streaming-lfm.md`](plan-rtti-streaming-lfm.md)**.
   data, len)` walks it via the `__resources` intrinsic (mirrors the RTTI
   registry / `__rttireg`). Test: `test/test_resource.pas` + `test/greeting.dat`.
   (Format is our own `{$R name file}`, not FPC's single-arg `{$R file.res}`.)
-- Phase 5 🟡 LFM library. In-memory path (no file I/O yet): `.lfm` text embedded
+- Phase 5 ✅ LFM library. In-memory path (no file I/O yet): `.lfm` text embedded
   via `{$R}`, converted to TPF0 at runtime by `compiler/lfm.pas` (`TLfmReader` +
   `InitInheritedComponent`), streamed by Phase 3 `TReader`. `test/test_lfm.pas`
-  + `test/test_lfm_form.lfm`. Converter output verified byte-exact; simple
-  streaming works. **BLOCKED**: a pre-existing compiler bug segfaults any program
-  with 4+ units that use typinfo RTTI (`GetPropInfo` reads a wild `NamePtr`);
-  LFM needs 5 units so it always trips it. Minimal repro:
-  `test/gui/repro_multiunit_rtti_segfault.pas` (reproduces at fd1c3b4 — not from
-  the enum/set work). Layout-sensitive (data-ptr fixup / codegen). Must fix that
-  bug before LFM can run end-to-end. Not wired into `make test` until then.
+  + `test/test_lfm_form.lfm` run end-to-end in `make test` (string/int/enum/set
+  props + child component; `Anchors=[akLeft,akBottom]` → 10 exercises set
+  streaming). Two pre-existing showstoppers fixed to unblock it (2026-05-30):
+  1. RTTI prop array was non-contiguous — `EmitPropInfo` interned prop-name
+     strings *between* the per-prop record reservations, so `props[i]` (fixed
+     64-byte stride) landed on string data → wild `NamePtr` → segfault. Fix
+     (`rtti_emit.inc`): reserve the whole prop/meth array first, then fill.
+  2. `uses typinfo` with no published class emitted NULL string literals:
+     the `__rttireg` sentinel-drop in `compiler.pas` shifted `Fixups[]` with a
+     whole-record array-element copy that the IR backend miscompiles in the
+     main-program body (store no-ops). Fix: copy the record fields one at a
+     time. Underlying codegen bug still latent — see memory note.
+  Regression repro: `test/gui/repro_multiunit_rtti_segfault.pas`.
 
 GUI / LCL widget sets are pure library work **after** this arc — no further
 compiler ask.

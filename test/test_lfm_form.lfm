@@ -2,6 +2,7 @@ object MyForm: TMyForm
   Caption = 'Hello LFM'
   Width = 320
   Align = alClient
+  Anchors = [akLeft, akBottom]
   object Btn: TButton
     Caption = 'OK'
     Tag = 7
