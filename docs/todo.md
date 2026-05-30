@@ -44,9 +44,14 @@ executable plan: **[`plan-rtti-streaming-lfm.md`](plan-rtti-streaming-lfm.md)**.
   fixing general typed pointers (C1–C4 — see §4), the `__rttireg` registry
   intrinsic, and indirect call for method-backed props. Rationale archived in
   [`historic/phase2-handoff.md`](historic/phase2-handoff.md).
-- Phase 3 ⬜ streaming runtime (own TReader/TWriter-lite). **Next.**
+- Phase 3 ✅ streaming runtime (TReader-lite). `compiler/streams.pas`
+  (TByteStream), `compiler/classes_lite.pas` (TComponent-lite + TReader),
+  `typinfo.CreateInstance`. Walks our minimal TPF0 subset and instantiates +
+  configures a component tree (int/string/bool/event props, nested children by
+  class name). Test: `test/test_streaming.pas`. Remaining for full fidelity:
+  enum/set value-types by name (`vaIdent` enums, `vaSet`), `vaLString`.
 - Phase 4 ⬜ resource embedding primitive (`{$R}` / `FindResource`;
-  independent — good parallel warm-up).
+  independent — good parallel warm-up). **Next.**
 - Phase 5 ⬜ LFM library (text→binary tool + runtime glue).
 
 GUI / LCL widget sets are pure library work **after** this arc — no further
