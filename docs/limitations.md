@@ -24,15 +24,16 @@ specific compatibility statement covers it.
 - `{$mode objfpc}` and `-Mobjfpc` are accepted markers, not a complete
   emulation of every Object FPC language rule.
 - Alternate Pascal modes such as Delphi mode are not implemented.
-- Broader Object Pascal features such as properties, interfaces, virtual
-  dispatch, and related class semantics are not covered as supported.
+- Properties, published RTTI, class references, and virtual/override dispatch
+  are implemented for the covered subset. Interfaces, `inherited`, complete
+  metaclass syntax, and broader class semantics remain incomplete.
 - Exception handling supports catch-all and exact user-class typed
   `try/except` handlers, `try/finally`, `raise <expr>`, and handler re-raise.
   A built-in `Exception` hierarchy, inherited handler matching, message
   constructors, and class/message unhandled reports are not implemented.
 - Floating-point support covers `Single` (4-byte SSE2), `Double`/`Real` (8-byte SSE2),
   and `Extended` (10-byte x87 storage, SSE2 arithmetic). Write/WriteLn of float values
-  is implemented in both backends: fixed form `x:w:n` (exact, IEEE round-to-nearest-even)
+  is implemented: fixed form `x:w:n` (exact, IEEE round-to-nearest-even)
   and a bare scientific form (`d.<15 digits>E±ddd`, digits extracted in double precision,
   so the format and last digits differ slightly from FPC). Explicit cast intrinsics
   (Trunc, Round, etc.) are not yet implemented.
@@ -46,11 +47,14 @@ specific compatibility statement covers it.
 - `Ord` is currently a compiler intrinsic. It may later be surfaced as an RTL
   builtin without requiring ordinary library-call code generation.
 - Pointer-sized types and layout (`Pointer`, `NativeInt`, `PtrInt`, class
-  references) are defined for x86-64. General pointer syntax and operations,
-  including typed pointers, address-of, dereference, `nil`, casts, and checks,
-  remain future work.
+  references) are defined for x86-64. Named typed pointers, address-of,
+  dereference, `nil`, casts, checks, indexing, and record-pointer fields are
+  covered. Scaled pointer arithmetic remains future work.
 - Generic call-site specialization syntax and alternative generic declaration
   forms are not implemented contracts.
+- Set literals, `in` membership, and RTTI-backed set properties work. General
+  set assignment, algebra, and comparison are unsafe until the IR gains
+  dedicated 32-byte set operations.
 
 ## Pascal Directive Gaps
 
@@ -101,13 +105,14 @@ The C capability is useful but intentionally incomplete:
 ## BASIC And Further Languages
 
 - BASIC exists as an early frontend, not as a documented complete language
-  implementation.
+  implementation. The current lexer fixture `test/test_basic_lexer.bas` hangs
+  during compilation and BASIC is not part of `make test`.
 - Other proposed languages and mixed-source formats are roadmap ideas, not
   implemented user features.
 
 ## No Optimization
 
-Neither backend optimizes. Every construct is translated straight to
+The IR pipeline does not optimize. Every construct is translated straight to
 machine code with no optimization passes (the IR layer exists to enable
 this later, but no passes are implemented yet).
 What you write is exactly what gets emitted:
@@ -117,20 +122,10 @@ What you write is exactly what gets emitted:
 - No loop transforms, strength reduction, or alias analysis.
 - No peephole cleanup of redundant loads/stores.
 
-**The IR backend is now the default.** It has full behavioral parity with
-the direct backend and is self-host *correct*: an IR-built compiler compiles
-the entire test suite identically to the direct path, reaches self-recompile
-fixedpoint, and passes `make test` + `fpc-check`. The IR layer is the
-foundation for future targets and optimization work (neither started).
-
-**Development focus: the IR backend.** The direct x86-64 backend
-(`codegen.inc`) is frozen and kept only for reference and fallback. New
-language features and fixes should target IR (`ir.inc` + `ir_codegen.inc`)
-and shared helpers in `symtab.inc`; do not extend the direct backend.
-
-- Default backend: IR.
-- `--legacy-codegen`: opt back into the frozen direct emitter.
-- `--experimental-ir-codegen`: deprecated no-op, still accepted.
+The IR path is self-host correct: an IR-built compiler reaches
+self-recompile fixedpoint and passes `make test` plus `fpc-check`. The obsolete
+direct emitter was archived under `docs/historic/` on 2026-05-31.
+`--experimental-ir-codegen` remains a deprecated no-op for compatibility.
 
 This is intentional for the bootstrap phase: the compiler stays simple,
 self-hostable, and auditable.

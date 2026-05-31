@@ -418,7 +418,6 @@ var
 
   DebugTrace : Boolean;
   DumpIR : Boolean;
-  ExperimentalIRCodegen : Boolean;
   StrictOverload : Boolean;
   CStyleComments : Boolean;   { CSTYLECOMMENTS directive: enable C slash-star comments }
   NestedComments : Boolean;   { NESTEDCOMMENTS directive: nest brace and paren-star comments }

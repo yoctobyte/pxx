@@ -24,10 +24,8 @@ If an output path is supplied, PXX writes an executable ELF file there and
 also writes `<output>.map`, containing addresses for `_start` and generated
 procedures/methods.
 
-An explicit output path is recommended. The native PXX default is currently
-the input path; the FPC-built bootstrap host uses FPC filename handling. That
-default-output discrepancy is an implementation detail, not a stable CLI
-promise.
+An explicit output path is recommended. Without one, PXX strips the input
+extension (`foo.pas` becomes `foo`) and refuses to overwrite the source path.
 
 ## Input Selection
 
@@ -50,8 +48,7 @@ Options must occur before the source path.
 | Option | Behavior |
 | --- | --- |
 | `--debug` | Print compiler lexer/parser/preprocessor diagnostics while compiling. |
-| `--legacy-codegen` | Opt back into the frozen direct AST→x86-64 emitter (reference only). The IR backend is the default since 2026-05-29; new features land in IR only and the legacy path cannot compile the newest ones (e.g. RTTI). |
-| `--experimental-ir-codegen` | Deprecated no-op, accepted for compatibility. IR is already the default. |
+| `--experimental-ir-codegen` | Deprecated no-op, accepted for compatibility. IR is the only backend. |
 | `--dump-ir` | Print the AST-lowered IR while still emitting the normal executable. |
 | `-dNAME` | Define a Pascal conditional-compilation symbol. |
 | `-uNAME` | Undefine a Pascal conditional-compilation symbol, except built-in `PXX`. |

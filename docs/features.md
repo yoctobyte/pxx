@@ -97,18 +97,16 @@ The C import/input path implements:
 This support is deliberately driven by real imported APIs rather than a claim
 of full C conformance.
 
-## IR Backend (default)
+## IR Backend
 
 Pascal is lowered through an explicit linear IR before x86-64 emission. The
-IR backend is the **default** since 2026-05-29 and the compiler bootstraps
-through it; it reached full self-recompile fixedpoint on 2026-05-28 (three
-consecutive IR-compiled compiler generations are bit-identical). The direct
-AST-to-machine-code path (`codegen.inc`) is frozen and reference-only,
-reachable via `--legacy-codegen`. `--experimental-ir-codegen` is a deprecated
-no-op.
+compiler bootstraps through this path and reached full self-recompile
+fixedpoint on 2026-05-28 (three consecutive IR-compiled compiler generations
+are bit-identical). The obsolete direct AST-to-machine-code emitter was
+archived under `docs/historic/` on 2026-05-31. `--experimental-ir-codegen`
+remains a deprecated no-op for compatibility.
 
-`--dump-ir` prints the IR without changing the emitted binary and works
-with both backends.
+`--dump-ir` prints the IR without changing the emitted binary.
 
 ## Inline Assembler
 

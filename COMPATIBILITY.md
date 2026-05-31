@@ -1,6 +1,6 @@
 # PXX Compatibility Status
 
-**Status date:** 2026-05-28
+**Status date:** 2026-05-31
 
 `PXX` is the provisional name for this compiler. It may change before a
 public naming/API commitment. Existing executable and stable-seed paths remain
@@ -40,6 +40,9 @@ Implemented:
 {$endif}
 {$mode objfpc}
 {$strict_overload on}   { or off }
+{$nestedcomments on}    { or off }
+{$cstylecomments on}    { or off }
+{$casesensitive on}     { or off }
 ```
 
 Command line:
@@ -52,6 +55,8 @@ Directive names and defined symbols are case-insensitive. Conditionals nest.
 `PXX` cannot be removed with `{$undef PXX}` or `-uPXX`.
 `strict_overload` defaults to off; when enabled, every variant of an
 overloaded routine must carry `overload;`.
+The comment-relaxation switches and strict Pascal casing also default to off.
+C-import symbols remain exact-case regardless of the Pascal casing mode.
 
 Current limitations:
 
@@ -82,7 +87,8 @@ Regression-covered behavior includes:
 - Programs, constants, variables, integer/Boolean/Char/String operations,
   arrays, records, procedures/functions, `var` parameters, and units.
 - `if`, `case`, `while`, `for`, `repeat`, `break`, and `continue`.
-- Classes with fields and methods.
+- Classes with fields and methods, inheritance, virtual/override dispatch,
+  visibility sections, properties, and published RTTI/reflection.
 - Generic classes and top-level generic function/procedure specialization.
 - Routine overloading and class/record operator implementations.
 - `try/except` including exact user-class typed handlers, `try/finally`,
@@ -102,8 +108,8 @@ coverage:
 | Alternative generic syntax and call-site specialization | Planned; current syntax is the tested top-level `generic` / `specialize ... as ...` form. |
 | Pascal mode semantics | Only the current objfpc-like subset exists; Delphi/FPC/ISO mode differences are not modeled. |
 | Directive expression language and switch state | Missing beyond simple named conditional definitions. |
-| Broader Object Pascal model | Exact user-class exception handlers, finalizers, and re-raise are covered; properties, interfaces, class inheritance/exception hierarchy semantics, rich exception messages, and virtual dispatch remain missing. |
-| Numeric/type breadth | Fixed-width integer and pointer-sized layout are covered for x86-64. Floating-point, `WideChar`/broader ordinal behavior, and general pointer expressions require further implementation and tests. |
+| Broader Object Pascal model | Exact user-class exception handlers, finalizers, re-raise, properties, class inheritance, virtual dispatch, and published RTTI are covered. Interfaces, `inherited`, complete metaclass syntax, exception hierarchy matching, and rich exception messages remain missing or incomplete. |
+| Numeric/type breadth | Fixed-width integer, scalar floating-point, and pointer-sized layout are covered for x86-64. `WideChar`/broader ordinal behavior, float conversion intrinsics, scaled pointer arithmetic, and dedicated set algebra semantics remain incomplete. |
 | FPC RTL/packages | Not provided as an FPC-compatible library layer. |
 | Cross-target output | Current target is Linux x86-64 only. |
 

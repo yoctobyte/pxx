@@ -1543,3 +1543,12 @@ begin
     Patch32(pos, targetOffset - (pos + 4));
   end;
 end;
+
+procedure CompileAST(node: Integer);
+begin
+  IRReset;
+  IRLowerAST(node);
+  IRVerify;
+  if DumpIR then IRDump;
+  IREmitMachineCode;
+end;

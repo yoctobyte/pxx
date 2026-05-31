@@ -1,7 +1,7 @@
 # PXX Type System and Target Policy
 
 **Status:** Scalar integer storage, scalar floating-point storage/arithmetic, and x86-64 target contract implemented.
-**Documentation snapshot:** 2026-05-29. Implementation may change faster than this document.
+**Documentation snapshot:** 2026-05-31. Implementation may change faster than this document.
 **Reference:** [FPC ordinal/integer types](https://www.freepascal.org/daily/doc/ref/refsu4.html),
 [NativeInt](https://www.freepascal.org/docs-html/rtl/system/nativeint.html)
 
@@ -194,23 +194,21 @@ Implemented for the current x86-64 Linux target:
 - C `int` function bodies and Pascal calls under the four-byte `Integer` model.
 - Predefined `PXX`, `CPU64`, `CPUX86_64`, and `LINUX` conditional symbols.
 - Support for the Pascal `with` statement (single, nested, and multi-variable scoped lookups), correctly resolving identifiers to record or class member active contexts with proper lexical shadowing.
-- Scalar float literals, variables, arithmetic, unary minus, comparisons, and
-  mixed integer/float expression promotion in the direct backend.
+- Scalar float literals, variables, arithmetic, unary minus, comparisons,
+  mixed integer/float expression promotion, and output formatting.
 
 Remaining target/type work:
 
-1. Float output formatting and explicit cast/rounding intrinsics.
-2. Float parity in the experimental IR backend.
-3. Optional integer diagnostics and checking modes are deferred; for now,
+1. Explicit float cast/rounding intrinsics.
+2. Optional integer diagnostics and checking modes are deferred; for now,
    arithmetic wraps when a value is stored back into a narrower or overflowed
    machine-sized result, and mixed-sign expressions do not warn.
 4. Additional ordinal surface: `WideChar`, explicit ordinal/range conformance,
    and associated compatibility tests. `Ord` is implemented as a compiler
    intrinsic today and may later be presented through the System/RTL builtin
    surface; it does not need ordinary external-library calling semantics.
-5. General pointer syntax and semantics (`^T`, `@value`, dereference, `nil`,
-   casts and checks). Pointer-sized storage and `SizeOf(Pointer)` are already
-   established independently of that syntax work.
+5. Scaled pointer arithmetic (`p + n`); typed pointers, address-of,
+   dereference, `nil`, casts, checks, fields, and indexing are covered.
 6. Explicit target selection (`--target=`).
 7. i386 output after the type system and ABI surface are stable.
 
@@ -245,11 +243,10 @@ Remaining target/type work:
 
 ## What Is NOT Addressed Here
 
-- Float Write/WriteLn and cast intrinsics: future work
+- Float cast intrinsics: future work
 - Full ordinal surface, including `WideChar`: future work
-- General pointer expressions and typed pointer syntax: future work; pointer
-  size/layout is already part of the implemented target contract
-- Dynamic arrays: future work
+- Scaled pointer arithmetic: future work
+- Dynamic arrays beyond scalar elements and basic resize behavior: future work
 - Interface types: future work
 - FPC runtime library compatibility: separate policy document needed
 - i386 ABI calling convention details: Phase 6 document

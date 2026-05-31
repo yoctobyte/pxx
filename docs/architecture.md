@@ -12,18 +12,19 @@ session snapshot this file was split from lives in
 ## Architecture
 
 - `compiler/compiler.pas` — main entry, includes all `.inc` files
-- Include chain: `defs.inc` → `lexer.inc` → `clexer.inc` → `blexer.inc` → `emit.inc` →
-  `symtab.inc` → `parser.inc` → `codegen.inc` → `ir.inc` → `ir_codegen.inc` →
-  `cparser.inc` → `bparser.inc` → `elfwriter.inc` → `cpreproc.inc`
-- Single-pass: source → tokens → AST → x86-64 bytes → ELF write
+- Include chain: `defs.inc` → `lexer.inc` → `clexer.inc` → `blexer.inc` →
+  `emit.inc` → `symtab.inc` → `exception_emit.inc` → `asmenc.inc` →
+  `parser.inc` → `ir.inc` → `ir_codegen.inc` → `cparser.inc` → `bparser.inc` →
+  `elfwriter.inc` → `rtti_emit.inc` → `resources_emit.inc` → `cpreproc.inc`
+- Pipeline: source → tokens → AST → linear IR → x86-64 bytes → ELF write
 - No linker, no stdlib, no runtime
 - Static programs: one load segment, no dynamic section
 - Dynamic programs (any external call): emit PT_INTERP, PT_DYNAMIC, DT_NEEDED, GOT,
   plt-style indirect calls
 
-The **default** path is the IR backend (`ir.inc` + `ir_codegen.inc`); the
-compiler bootstraps through it. The direct AST→x86-64 backend (`codegen.inc`)
-is frozen/reference-only, reachable via `--legacy-codegen`. See
+The active backend is the IR pipeline (`ir.inc` + `ir_codegen.inc`), and the
+compiler bootstraps through it. The obsolete direct AST→x86-64 emitter was
+archived as `historic/direct-codegen-legacy.inc` on 2026-05-31. See
 [`ir-handover.md`](ir-handover.md).
 
 ## Token Stream / Generic Machinery
@@ -55,7 +56,7 @@ prototype + dynamic resolve. `ctype` hardcoded → `libc.so.6`. Other headers de
 - **`CPExpandFunction` args**: depth-indexed fixed storage, not local open arrays
   (self-hosted stack limitation).
 - **Single-char string literals**: `'x'` → `AN_INT_LIT` with `ASTTk=Ord(tyChar)`.
-  String-vs-char path in codegen.inc handles comparisons like `field = 'x'`.
+  The IR emitter's string-vs-char path handles comparisons like `field = 'x'`.
 - **String `+` concatenation**: emitter generates 272-byte stack temp buffer; correct
   type propagation across variables, literals, and chars.
 - **Nested/Recursive Lexer Stack Fix**: `SavedLexSource` is a 1 MB global in `defs.inc`.

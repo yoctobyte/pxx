@@ -1,12 +1,11 @@
 # Plan: Open Pascal Syntax / Front-End Issues
 
-Status (2026-05-31): **§A comments DONE** (commit 6525e95), **§B1 GetMem DONE**
-(commit a42000f). Remaining: §B0 regressions, and the §B1 sibling builtins
-(`FreeMem`/`New`/`Dispose`/`Val`/`Str`).
+Status (2026-05-31): **Delivered.** Comments, assignment regressions, allocator
+builtins, and integer `Val`/`Str` are covered by `make test`. The detailed
+sections below retain the original reproductions and implementation record.
 Companion to `docs/limitations.md` (user-facing boundaries), `docs/pascal-dialect.md`
 (the comment switches are documented there), and `docs/todo.md`.
-Findings below were reproduced against `compiler/pascal26` on 2026-05-31 (IR
-backend default; legacy cross-checked where noted). Each item has a minimal
+Findings below were reproduced against `compiler/pascal26` on 2026-05-31. Each item has a minimal
 repro, the mechanism (`file:line`), a fix sketch, and rough effort.
 
 These should land **before** the C-header-import arc
@@ -44,13 +43,9 @@ re-litigated:
 
 ### Dev note — comments in compiler source
 
-The `make`/self-host step compiles the **new** source with the **previous**
-seed `compiler/pascal26` (nesting off). So a `{ … }` doc-comment in compiler
-source that contains `{$…}`, a `/* */`, or an unbalanced/inner `}` will break
-the seed compiler (the inner `}` closes the comment early →
-`unexpected character`). Hit this while writing these very fixes. **Keep
-compiler-source comments brace-free and directive-free.** This is the same
-hazard as putting `{$…}` inside a comment in any compiled unit.
+The compiler source now opts into nested comments at its top. Keep comments
+simple anyway: bootstrap work may involve older seeds, and nested directive
+text is easy to misread during lexer changes.
 
 ---
 
@@ -80,13 +75,9 @@ nesting; put `/* */` behind its own switch (e.g. `{$CSTYLECOMMENTS ON}` or fold
 into a relaxed-comments mode) since it is a pure extension. A3 (the `Exit` bug)
 is **not** switch-gated — it is an unambiguous correctness fix.
 
-The Pascal whitespace skipper exists in two copies — `LegacySkipSpace`
-(`compiler/lexer.inc:12`) and the live `SkipSpace` (`compiler/lexer.inc:718`).
-Only `SkipSpace` is on the current path (`LexOne` → `SkipSpace`,
-`lexer.inc:790`). Findings apply to `SkipSpace`; `LegacySkipSpace` has the same
-shape and should be fixed or deleted in lockstep to avoid drift. The C lexer's
-`CSkipSpace` (`clexer.inc:39`) already handles `/* */` and `//` — useful
-reference.
+The live implementation is `SkipSpace`. The dead `LegacySkipSpace` copy found
+during this work was removed on 2026-05-31. The C lexer's `CSkipSpace` already
+handled `/* */` and `//` and served as a useful reference.
 
 ### A1. Nested `{ }` comments not supported — 🔴 bug
 
@@ -140,12 +131,9 @@ or a relaxed-comments mode), so a `/` directly followed by `*` in existing code
 is not silently swallowed. `CSkipSpace` (`clexer.inc:39`) already implements the
 scan — port the same logic into the `/` branch. Effort: small.
 
-**Section A fix plan:** rework the `{`, `(`, `/` branches of `SkipSpace`
-(and `LegacySkipSpace`, or retire it) into a single loop that: counts `{ }`
-depth, counts/handles `(* *)`, continues (never `Exit`s) after a closing
-delimiter, and adds `/* */`. One focused edit; add a `test/test_comments.pas`
-regression covering nested `{}`, nested `(*)`, `(* *)`-then-code-same-line, and
-`/* */` mid-expression.
+**Section A delivered:** the `{`, `(`, `/` branches of `SkipSpace` count
+nesting where enabled, continue after a closing delimiter, and support
+optional `/* */`. `test/test_comments.pas` covers the regressions.
 
 ---
 
@@ -208,7 +196,7 @@ built on the per-block size header `GetMem` gained:
 - ✅ **`ReallocMem(p, size)`** — bump-allocates the new block, copies
   `min(oldsize, newsize)` (old size from the header), frees the old block,
   writes the new pointer back to `p`; `ReallocMem(nil, n)` == `GetMem`. IR
-  backend (special call -103); legacy errors. Test `test/test_reallocmem.pas`.
+  backend (special call -103). Test `test/test_reallocmem.pas`.
 
 The proper hybrid allocator (mmap large blocks straight from the kernel, munmap
 on free, size-binning/coalescing) is its own arc — `docs/todo.md` §4 "Heap
@@ -251,8 +239,8 @@ form:
 ```pascal
 p := GetMem(16);   { GOT }
 ```
-Reproduced on **both** IR and legacy backends, in the main body and inside a
-procedure — so it is a front-end wiring gap, not a backend store bug.
+Reproduced in the main body and inside a procedure, so it was a front-end
+wiring gap, not a backend store bug.
 
 Mechanism: `tkGetMem` is parsed (`parser.inc:1759`) as a **single-argument
 expression** — `ParseExpr` reads one operand as the *size* and the node returns

@@ -1580,7 +1580,7 @@ end;
 procedure EmitBumpAlloc;
 { On entry: rax = byte count requested. On exit: rax = allocated block base.
   Rounds size up to 8, bumps BSS_HEAP_PTR, grows the break via brk if needed.
-  Shared by GetMem/class-new (codegen.inc) and dynamic-array SetLength (both
+  Shared by GetMem/class-new and dynamic-array SetLength (both
   backends), so it lives here in symtab.inc ahead of every caller. }
 var jbePatch: Integer;
 begin

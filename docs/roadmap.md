@@ -1,6 +1,6 @@
 # PXX Target Roadmap
 
-**Updated:** 2026-05-28
+**Updated:** 2026-05-31
 
 The immediate goal after the IR fixedpoint milestone is to turn the IR
 backend into the default path, then systematically add CPU targets.
@@ -30,12 +30,12 @@ The IR backend is self-consistent. Completed tasks:
 - ✅ Full `make test` passes with IR as the backend (the former
   `test_op_overload.pas` IR red was cleared 2026-05-30).
 - ✅ `--experimental-ir-codegen` is now a no-op alias (kept for compatibility).
-- ✅ Legacy direct-emission `codegen.inc` gated behind `--legacy-codegen`.
+- ✅ Legacy direct-emission `codegen.inc` retired from the active compiler and
+  archived under `docs/historic/`.
 - ✅ Fixedpoint confirmed: IR-compiled compiler → recompile → identical.
 
-The legacy `codegen.inc` remains as reference/fallback (it can no longer
-compile the newest IR-only features, e.g. RTTI). Eventual deletion is tracked
-in [`todo.md`](todo.md) §5.
+The active compiler now has one backend. `--experimental-ir-codegen` remains a
+deprecated no-op for old scripts; `--legacy-codegen` was removed.
 
 ---
 

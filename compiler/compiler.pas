@@ -17,12 +17,12 @@ uses SysUtils, BaseUnix;
 {$include blexer.inc}
 {$include emit.inc}
 {$include symtab.inc}
+{$include exception_emit.inc}
 {$include asmenc.inc}
 procedure CPreprocess(var src: AnsiString; const baseDir: AnsiString); forward;
 {$include parser.inc}
 {$include ir.inc}
 {$include ir_codegen.inc}
-{$include codegen.inc}
 {$include cparser.inc}
 {$include bparser.inc}
 {$include elfwriter.inc}
@@ -38,9 +38,6 @@ begin
   DumpIR := False;
   DumpRTTI := False;
   NoUnhandledHandler := False;
-  { IR is the default backend. The direct (legacy) backend is frozen, kept only
-    for reference and reachable via --legacy-codegen. New work targets IR. }
-  ExperimentalIRCodegen := True;
   PasInitDefines;
   i := 1;
   readingOptions := True;
@@ -65,14 +62,7 @@ begin
     end
     else if option = '--experimental-ir-codegen' then
     begin
-      { Deprecated no-op: IR is now the default backend. Accepted for compatibility. }
-      ExperimentalIRCodegen := True;
-      Inc(i);
-    end
-    else if option = '--legacy-codegen' then
-    begin
-      { Opt back into the frozen direct x86-64 emitter (reference only). }
-      ExperimentalIRCodegen := False;
+      { Deprecated no-op: IR is the only backend. Accepted for compatibility. }
       Inc(i);
     end
     else if option = '--strict-overload' then
@@ -120,7 +110,7 @@ begin
       readingOptions := False;
   end;
   if ParamCount < i then
-    begin writeln(StdErr,'usage: pascal26/PXX [--debug] [--dump-ir] [--legacy-codegen] [-dNAME] [-uNAME] [-Mobjfpc] [--strict-overload] [--no-unhandled-handler] <src> [out]'); Halt(1); end;
+    begin writeln(StdErr,'usage: pascal26/PXX [--debug] [--dump-ir] [-dNAME] [-uNAME] [-Mobjfpc] [--strict-overload] [--no-unhandled-handler] <src> [out]'); Halt(1); end;
 
   inFile  := ParamStr(i);
 {$ifdef FPC}

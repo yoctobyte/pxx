@@ -66,6 +66,8 @@ benchmark: $(COMPILER) benchmark-check
 test: $(COMPILER) fpc-check
 	./$(COMPILER) test/hello.pas /tmp/hello26
 	test "$$(/tmp/hello26)" = "Hello, World!"
+	./$(COMPILER) test/hello.c /tmp/hello_c26
+	test "$$(/tmp/hello_c26)" = "Hello, World!"
 	./$(COMPILER) test/test_asm.pas /tmp/test_asm26
 	/tmp/test_asm26; test "$$?" = "42"
 	./$(COMPILER) test/test_asm_func.pas /tmp/test_asm_func26
@@ -80,6 +82,12 @@ test: $(COMPILER) fpc-check
 	test "$$(/tmp/test_const_record_param26)" = "111 222"
 	./$(COMPILER) test/test_virtual_proc.pas /tmp/test_virtual_proc26
 	test "$$(/tmp/test_virtual_proc26)" = "$$(printf 'B\nB')"
+	./$(COMPILER) test/test_ir_virtual_call.pas /tmp/test_ir_virtual_call26
+	test "$$(/tmp/test_ir_virtual_call26)" = "$$(printf '1\n2\n1\n2')"
+	./$(COMPILER) test/test_inheritance_dispatch.pas /tmp/test_inheritance_dispatch26
+	test "$$(/tmp/test_inheritance_dispatch26)" = "$$(printf '50\n507\n50\n507\n5\n12\n7\n99\n5\n88')"
+	./$(COMPILER) test/test_abstract_out.pas /tmp/test_abstract_out26
+	test "$$(/tmp/test_abstract_out26)" = "$$(printf '16\n9\n16\n32\n18\n42\n99\n100\n7')"
 	./$(COMPILER) --debug test/hello.pas /tmp/hello_debug26 > /tmp/hello_debug26.log
 	grep -q "Loaded file length:" /tmp/hello_debug26.log
 	test "$$(/tmp/hello_debug26)" = "Hello, World!"
@@ -125,23 +133,23 @@ test: $(COMPILER) fpc-check
 	grep -q "jump_if_false" /tmp/test_ir_case26.log
 	grep -q "binop" /tmp/test_ir_case26.log
 	test "$$(/tmp/test_ir_case26)" = "$$(printf '12\n12\n3\n99\n99')"
-	./$(COMPILER) --experimental-ir-codegen test/test_ir_codegen.pas /tmp/test_ir_codegen26
+	./$(COMPILER) test/test_ir_codegen.pas /tmp/test_ir_codegen26
 	test "$$(/tmp/test_ir_codegen26)" = "$$(printf '15\nOK')"
-	./$(COMPILER) --experimental-ir-codegen test/test_ir_codegen_fail.pas /tmp/test_ir_codegen_fail26
+	./$(COMPILER) test/test_ir_codegen_fail.pas /tmp/test_ir_codegen_fail26
 	test "$$(/tmp/test_ir_codegen_fail26)" = "$$(printf '15\nFAIL')"
-	./$(COMPILER) --experimental-ir-codegen test/test_ir_unary.pas /tmp/test_ir_unary26
+	./$(COMPILER) test/test_ir_unary.pas /tmp/test_ir_unary26
 	test "$$(/tmp/test_ir_unary26)" = "$$(printf '%s\nOK' '-5')"
-	./$(COMPILER) --experimental-ir-codegen test/test_ir_deref.pas /tmp/test_ir_deref26
+	./$(COMPILER) test/test_ir_deref.pas /tmp/test_ir_deref26
 	test "$$(/tmp/test_ir_deref26)" = "$$(printf '10\n20\n100\n200')"
-	./$(COMPILER) --experimental-ir-codegen test/test_ir_call.pas /tmp/test_ir_call26
+	./$(COMPILER) test/test_ir_call.pas /tmp/test_ir_call26
 	test "$$(/tmp/test_ir_call26)" = "$$(printf '30\n30\n42')"
-	./$(COMPILER) --experimental-ir-codegen test/test_ir_binops.pas /tmp/test_ir_binops26
+	./$(COMPILER) test/test_ir_binops.pas /tmp/test_ir_binops26
 	test "$$(/tmp/test_ir_binops26)" = "$$(printf -- '-3\n-2\n3\n2\n8\n14\n0\n1\n25')"
-	./$(COMPILER) --experimental-ir-codegen test/test_op_overload.pas /tmp/test_op_overload_ir26
+	./$(COMPILER) test/test_op_overload.pas /tmp/test_op_overload_ir26
 	test "$$(/tmp/test_op_overload_ir26)" = "$$(printf '1\n0\n1\n0\n1\n0\n10\n6')"
-	./$(COMPILER) --experimental-ir-codegen test/test_overloading.pas /tmp/test_overloading_ir26
+	./$(COMPILER) test/test_overloading.pas /tmp/test_overloading_ir26
 	test "$$(/tmp/test_overloading_ir26)" = "$$(printf 'Integer: 42\nChar: A\nTwo Integers: 10, 20\nAdd integers: 12\nChar addition: XY')"
-	./$(COMPILER) --experimental-ir-codegen test/test_float_write.pas /tmp/test_float_write_ir26
+	./$(COMPILER) test/test_float_write.pas /tmp/test_float_write_ir26
 	test "$$(/tmp/test_float_write_ir26)" = "$$(printf '3.50\n4\n-2.750\n1.0\n0.00\n10.5\n 1.000000000000000E+000\n-2.000000000000000E+000\n 0.000000000000000E+000\n 3.500000000000000E+000\n 1.234500000000000E+003')"
 	./$(COMPILER) test/test_shared_object.pas /tmp/shared_object26
 	test "$$(/tmp/shared_object26)" = "97"
@@ -160,12 +168,16 @@ test: $(COMPILER) fpc-check
 	test "$$(/tmp/records26)" = "$$(printf '42\n7\n11\n22')"
 	./$(COMPILER) test/fileio.pas /tmp/fileio26
 	test "$$(/tmp/fileio26 test/hello.pas | sed -n '1,3p')" = "$$(printf 'test/hello.pas\n14\n54')"
-	./$(COMPILER) --experimental-ir-codegen test/fileio.pas /tmp/fileio_ir26
+	./$(COMPILER) test/fileio.pas /tmp/fileio_ir26
 	test "$$(/tmp/fileio_ir26 test/hello.pas | sed -n '1,3p')" = "$$(printf 'test/hello.pas\n14\n54')"
 	./$(COMPILER) test/string_compare.pas /tmp/string_compare26
 	test "$$(/tmp/string_compare26)" = "$$(printf '1\n1\n1')"
+	./$(COMPILER) test/test_string_concat.pas /tmp/test_string_concat26
+	test "$$(/tmp/test_string_concat26)" = "$$(printf 'Hello, World!\nHello there!\nHi World')"
 	./$(COMPILER) test/record_string_field.pas /tmp/record_string_field26
 	test "$$(/tmp/record_string_field26)" = "$$(printf '1\n4')"
+	./$(COMPILER) test/test_class_str.pas /tmp/test_class_str26
+	test "$$(/tmp/test_class_str26)" = "FStr: hello"
 	./$(COMPILER) test/vars.pas /tmp/vars26
 	test "$$(/tmp/vars26)" = "$$(printf 'Sum: 42\nCountdown:\n5\n4\n3\n2\n1\nSquares:\n1\n4\n9\n16\n25\nbig\nloop 0\nloop 1\nloop 2')"
 	./$(COMPILER) test/arrays.pas /tmp/arrays26
@@ -186,6 +198,10 @@ test: $(COMPILER) fpc-check
 	test "$$(/tmp/test_ptr_deref_field26)" = "$$(printf '10\n20\n42\n99\n1234\n5\n9999\n100\n300\n777')"
 	./$(COMPILER) test/test_ptr_cast.pas /tmp/test_ptr_cast26
 	test "$$(/tmp/test_ptr_cast26)" = "$$(printf '12345\n99999\n77\n88\n42\n1111\n7\n99\n100\n200\nbuiltin_cast: int64 ok\n100')"
+	./$(COMPILER) test/test_pointers.pas /tmp/test_pointers26
+	test "$$(/tmp/test_pointers26 | tail -1)" = "all pointer tests done!"
+	./$(COMPILER) test/test_ref.pas /tmp/test_ref26
+	test "$$(/tmp/test_ref26)" = "hello"
 	./$(COMPILER) test/test_rtti_emit.pas /tmp/test_rtti_emit26
 	test "$$(/tmp/test_rtti_emit26)" = "$$(printf '42\n3\nhello')"
 	./$(COMPILER) --dump-rtti test/test_rtti_emit.pas /tmp/test_rtti_emit_dump26 > /tmp/test_rtti_emit_dump26.log
@@ -199,6 +215,11 @@ test: $(COMPILER) fpc-check
 	grep -q "prop Align tk=1 enum=TAlign" /tmp/test_rtti_emit_dump26.log
 	./$(COMPILER) test/test_rtti_reg.pas /tmp/test_rtti_reg26
 	test "$$(/tmp/test_rtti_reg26)" = "$$(printf 'Count: 2\nClass 0: TBase\nClass 1: TChild')"
+	./$(COMPILER) test/test_rtti.pas /tmp/test_rtti26
+	/tmp/test_rtti26 > /tmp/test_rtti26.log
+	grep -q "c.Caption: Antigravity" /tmp/test_rtti26.log
+	grep -q "c.Align: 3" /tmp/test_rtti26.log
+	grep -q "OnClick event thunk matches DummyHandler" /tmp/test_rtti26.log
 	./$(COMPILER) test/test_classref.pas /tmp/test_classref26
 	test "$$(/tmp/test_classref26)" = "$$(printf 'same: yes\nname=TFoo\nTag=99')"
 	./$(COMPILER) test/test_initsec.pas /tmp/test_initsec26
@@ -207,6 +228,8 @@ test: $(COMPILER) fpc-check
 	test "$$(/tmp/test_wildcard_lfm26)" = "$$(printf 'Caption=Wildcard\nWidth=200')"
 	./$(COMPILER) test/test_field_chain.pas /tmp/test_field_chain26
 	test "$$(/tmp/test_field_chain26)" = "$$(printf 'deep=9\nbasevar=9\nfield=9')"
+	./$(COMPILER) test/test_with.pas /tmp/test_with26
+	test "$$(/tmp/test_with26 | tail -1)" = "all with tests completed!"
 	./$(COMPILER) test/test_streaming.pas /tmp/test_streaming26
 	test "$$(/tmp/test_streaming26)" = "$$(printf 'root.Name=Root1\nroot.Count=42\nroot.Title=Hi\nOnGo bound: yes\nchildCount=1\nkid.Name=Kid1\nkid.Value=7')"
 	./$(COMPILER) test/test_streaming_enumset.pas /tmp/test_streaming_enumset26
@@ -265,6 +288,12 @@ test: $(COMPILER) fpc-check
 	test "$$(/tmp/test_op_overload26)" = "$$(printf '1\n0\n1\n0\n1\n0\n10\n6')"
 	./$(COMPILER) test/test_loop_control.pas /tmp/test_loop_control26
 	test "$$(/tmp/test_loop_control26)" = "$$(printf '8\n5\n8\n7\n3')"
+	./$(COMPILER) test/test_goto.pas /tmp/test_goto26
+	test "$$(/tmp/test_goto26)" = "$$(printf '15\nskipped\n3')"
+	./$(COMPILER) test/test_math_parens.pas /tmp/test_math_parens26
+	test "$$(/tmp/test_math_parens26)" = "14"
+	./$(COMPILER) test/test_inline_register.pas /tmp/test_inline_register26
+	test "$$(/tmp/test_inline_register26 | tail -1)" = "all inline/register tests completed!"
 	./$(COMPILER) test/test_pascal_directives.pas /tmp/test_pascal_directives26
 	test "$$(/tmp/test_pascal_directives26)" = "$$(printf '1\n0\n1\n1\n1\n0\n1\n1\n1')"
 	./$(COMPILER) -dCLI_FLAG test/test_pascal_directives.pas /tmp/test_pascal_directives_defined26

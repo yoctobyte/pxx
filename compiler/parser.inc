@@ -142,7 +142,6 @@ function ParseWithStatementAST: Integer; forward;
 function ParseAsmStatementAST: Integer; forward;
 function ParseBlockAST: Integer; forward;
 procedure CompileAST(node: Integer); forward;
-procedure EmitExceptionRuntime; forward;
 procedure ParseSubroutine; forward;
 procedure ParseGenericFunctionDef; forward;
 procedure ParseOperatorDef; forward;

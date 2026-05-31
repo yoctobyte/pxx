@@ -1,11 +1,11 @@
 # IR Backend Status
 
-**Updated:** 2026-05-30
+**Updated:** 2026-05-31
 
 ## Current State: Fixedpoint Achieved
 
-The experimental IR backend (`--experimental-ir-codegen`) reached full
-IR-to-IR self-recompile fixedpoint on 2026-05-28. Three generations of
+The IR backend reached full IR-to-IR self-recompile fixedpoint on 2026-05-28.
+Three generations of
 compiler, each compiled via the IR path, produce a bit-identical binary.
 
 ```
@@ -21,9 +21,9 @@ The IR path is a two-stage pipeline:
 1. `IRLowerAST` (`ir.inc`) — walks the AST and emits a linear IR sequence
 2. `IREmitMachineCode` (`ir_codegen.inc`) — translates IR nodes to x86-64 bytes
 
-The IR backend is the **default** (since 2026-05-29) and the compiler
-bootstraps through it. The direct AST→x86-64 backend (`codegen.inc`) is frozen
-and reference-only, reachable via `--legacy-codegen`.
+The IR backend is the only active backend and the compiler bootstraps through
+it. The obsolete direct AST→x86-64 emitter was archived under `historic/` on
+2026-05-31.
 
 ## Key Files
 
@@ -31,7 +31,8 @@ and reference-only, reachable via `--legacy-codegen`.
 |------|------|
 | `compiler/ir.inc` | AST → IR lowering (`IRLowerAST`, `IRLowerAddress`) |
 | `compiler/ir_codegen.inc` | IR → x86-64 (`IREmitNode`, `IREmitMachineCode`) |
-| `compiler/codegen.inc` | Legacy direct backend (reference) |
+| `compiler/exception_emit.inc` | Generated exception-runtime helper bytes |
+| `historic/direct-codegen-legacy.inc` | Archived obsolete direct emitter |
 
 ## Invoking
 
@@ -41,8 +42,7 @@ The IR backend is the default; no flag needed:
 ./compiler/pascal26 source.pas /tmp/out
 ```
 
-`--experimental-ir-codegen` is accepted as a deprecated no-op. Use
-`--legacy-codegen` to opt back into the frozen direct emitter. Add `--dump-ir`
+`--experimental-ir-codegen` is accepted as a deprecated no-op. Add `--dump-ir`
 to print the IR before emission:
 
 ```sh
@@ -95,17 +95,15 @@ The IR backend handles the full compiler source, including:
   casts `PType(expr)`, all with correct element-size stride
 - Published RTTI end-to-end (`compiler/typinfo.pas`): GetClass / GetPropList /
   Get|SetOrdProp / Get|SetStrProp / SetMethodProp / set properties.
-  `test/test_rtti.pas` round-trips. (The frozen legacy backend can't compile
-  this path — RTTI is IR-only.)
+  `test/test_rtti.pas` round-trips.
 
 ## Known Gaps
 
-The IR backend is self-consistent but not yet a replacement for the legacy
-backend. Areas not yet covered by the IR path:
+The IR backend is self-consistent. Remaining backend work:
 
 - Optimization passes (none planned yet — this is by design for now)
 - Some edge cases in C-frontend and BASIC-frontend paths
-- Float arithmetic (pending in both backends)
+- Dedicated 32-byte set algebra and comparison semantics
 
 ## Building and Testing
 

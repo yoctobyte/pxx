@@ -21,7 +21,7 @@ planned in **[`plan-pascal-syntax-issues.md`](plan-pascal-syntax-issues.md)**.
   at output line 5 then segfaulted; cleared by the 2026-05-30 IR index/stride
   fixes.)
 - ✅ **String `+` concatenation** — works on the IR backend (the default) and
-  legacy: `string+string`, `string+char`, `char+string`, and `char+char` all
+  handles `string+string`, `string+char`, `char+string`, and `char+char`
   concatenate. (The old note described a pre-IR state.) Test:
   `test/test_char_to_string.pas`.
 - ✅ **char → string coercion** (2026-05-30). `s := 'x'` (single-char literal),
@@ -51,7 +51,7 @@ executable plan: **[`plan-rtti-streaming-lfm.md`](plan-rtti-streaming-lfm.md)**.
 - Phase 2 ✅ reflection API (TypInfo-named), `compiler/typinfo.pas`. The whole
   path round-trips on the IR backend via `test/test_rtti.pas`: `GetClass` →
   `GetPropList` → `Get|SetOrdProp` → `Get|SetStrProp` → `GetMethodAddr` /
-  `SetMethodProp` → set properties, matching the direct backend. Delivered by
+  `SetMethodProp` → set properties. Delivered by
   fixing general typed pointers (C1–C4 — see §4), the `__rttireg` registry
   intrinsic, and indirect call for method-backed props. Rationale archived in
   [`historic/phase2-handoff.md`](historic/phase2-handoff.md).
@@ -221,7 +221,7 @@ inheritance depth, method-resolution clauses, COM ARC.
   record` / `array of string`, and dynamic arrays as params / results.
 - 🟡 **Heap allocator.** `GetMem`/`FreeMem` now do real free-list reuse on the
   IR backend (8-byte size header per block + single free list, first-fit, no
-  split/coalesce; legacy backend leaves `FreeMem` a no-op). Enough that
+  split/coalesce). Enough that
   alloc/free-heavy programs reuse memory instead of only ever bumping.
   `New`/`Dispose`/`ReallocMem` also implemented on top of the same header
   (ReallocMem preserves `min(old,new)` bytes; IR backend only).
@@ -287,21 +287,25 @@ inheritance depth, method-resolution clauses, COM ARC.
     existing ASCII folding suffices). Unicode is a string-data concern, separate.
   Discovered while wiring Str→StrInt (see [[project_rtl_dialect_landmines]]).
 - ✅ **Enums.** Type identity + ordinal↔name infra in place and used by RTTI
-  (enum prop kind, EnumRTTI). Named set types (`set of TEnum`) also recognized.
+  (enum prop kind, EnumRTTI).
+- 🔴 **Set algebra / comparison.** Set literals, named set types, and `in`
+  membership work, including RTTI-backed set properties. General set value
+  semantics do not: `test/test_sets.pas` segfaults at `s3 := s1 + s2`.
+  Sets are 32-byte values but general scalar load/store and binary-op paths
+  treat them as one word or pointer. Add dedicated IR copy, union,
+  intersection, difference, equality, and subset operations before claiming
+  complete set support.
 - 🟡 **Generics.** Template mechanism exists; breadth vs FPC unverified.
 - ✅ **Class visibility.** Phase 0 of the LFM arc done (see §2).
-- ⬜ **Method-call-with-args as a statement.** `obj.Method(arg)` on its own
-  line fails parse (`Expected: :=` — the statement parser treats `obj.Method`
-  as an lvalue). No-arg method statements (`obj.Reset`) work, and arg'd calls
-  work in expression context. Statement-position arg'd method calls are the
-  gap. Surfaced writing `test/test_visibility.pas`.
+- ✅ **Method-call-with-args as a statement.** Rechecked 2026-05-31 with a
+  direct `o.SetV(42)` statement; it compiles and updates the field correctly.
+  The earlier TODO was stale.
 - ✅ **Comments.** Nested `{ }` / `(* *)` under `{$NESTEDCOMMENTS ON}`, C-style
   `/* */` under `{$CSTYLECOMMENTS ON}` (both default off, TP/Delphi-compatible),
   and `(* *)` followed by same-line code fixed unconditionally. Done 2026-05-31
   (commit 6525e95); see [`plan-pascal-syntax-issues.md`](plan-pascal-syntax-issues.md)
-  §A. NB: both switches default off, so inner braces in compiler-source comments
-  still break the self-host seed unless that unit opts in — keep them
-  brace/directive-free.
+  §A. The compiler source opts into nested comments at its top; keep comments
+  simple anyway because bootstrap recovery may involve older seeds.
 - ✅ **Class string fields** — work with real strings (the earlier "garbage"
   was a misdiagnosis). Two distinct bugs were behind it, both now understood:
   - The `writeln(c.AnyField)`-as-sole-arg compile error was an IRVerify false
@@ -370,7 +374,8 @@ not eternal "constraints". Promote to fixes when convenient:
 ### Recently resolved (corrects stale notes in gap-analysis / older memory)
 
 - ✅ `break` / `continue` — implemented (`parser.inc` ~2687/2693).
-- ✅ Sets (`set of T`, literals, `in`, algebra) — implemented.
+- 🟡 Sets (`set of T`, literals, `in`) — partial; dedicated 32-byte algebra,
+  comparison, and general assignment semantics remain red as documented above.
 - ✅ `with` statement — implemented.
 - ✅ Floating point (Single/Double/Extended, arithmetic, compare, Write) —
   implemented, IR parity done.
@@ -380,8 +385,9 @@ not eternal "constraints". Promote to fixes when convenient:
 
 ## 5. Backend & targets
 
-- ⬜ **Delete the frozen direct backend** (`codegen.inc` / `GenAST`) once fully
-  confident in IR. Until then keep it compiling but add **no** features to it.
+- ✅ **Delete the frozen direct backend.** Retired from the active compiler on
+  2026-05-31. Archived as `historic/direct-codegen-legacy.inc`; shared
+  exception-runtime emission moved to `compiler/exception_emit.inc`.
 - ⬜ **Additional CPU targets**, per [`roadmap.md`](roadmap.md): i386 →
   aarch64 → arm32 → RISC-V bare metal. Each must pass the fixedpoint gate.
 - 🟡 **Inline asm depth** — see [`inline-asm.md`](inline-asm.md) TODO:
@@ -406,7 +412,7 @@ not eternal "constraints". Promote to fixes when convenient:
 
 ## Cross-cutting rules (apply to all work)
 
-- IR backend only; `codegen.inc` frozen.
+- IR backend only. The retired direct emitter is historic reference material.
 - Self-host constraints: no `shl` (use `*2^n`); no string `+` on hot paths
   (use `AppendChar`); init strings via `''` + `AppendChar`; keep compiler-side
   tables integer-only for fixedpoint safety.

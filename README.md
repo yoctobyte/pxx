@@ -35,10 +35,9 @@ Focus: Linux / POSIX. Single target for now: x86-64.
   mode, plus `operator +(a, b: TPoint): TPoint` class operator implementations.
 - **Exceptions (Phase 1)** — `try/except`, `try/finally`, `raise <expr>`, and
   re-raise; generated jump-frame runtime, no libc dependency.
-- **Experimental IR backend** — `--experimental-ir-codegen` routes Pascal
-  through an explicit IR before x86-64 emission. As of 2026-05-28 the IR
-  backend reached full self-recompile fixedpoint: three generations of
-  IR-compiled compiler produce a bit-identical binary.
+- **IR-native backend** — Pascal lowers through an explicit IR before x86-64
+  emission. The IR pipeline reached full self-recompile fixedpoint on
+  2026-05-28; the obsolete direct emitter was archived on 2026-05-31.
 - **Published RTTI + reflection** — `published` properties/methods emit a
   compact RTTI blob; `compiler/typinfo.pas` walks it at runtime
   (`GetClass`/`GetPropList`/`Get|SetOrdProp`/`Get|SetStrProp`/`SetMethodProp`,
@@ -104,6 +103,9 @@ Reports lexer/parser diagnostics and C preprocessing events.
 
 Start with the [documentation index](docs/README.md) for the command line,
 Pascal dialect, supported features, and explicit limitations.
+The dated [project-state audit](docs/project-state.md) is the shortest current
+inventory of verified support, confirmed bugs, missing Pascal features, and
+design debt.
 
 Design decisions, dialect proposals, and bootstrap history live in
 `compiler/usernotes.md`. The dated compatibility inventory is tracked in

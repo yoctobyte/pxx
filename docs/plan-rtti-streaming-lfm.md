@@ -1,5 +1,9 @@
 # Implementation Plan: RTTI → Published → Streaming → Resources → LFM
 
+**Status (2026-05-31): delivered.** This document is retained as the design
+record for the implemented RTTI/LFM arc. Current limits live in
+[`project-state.md`](project-state.md) and [`limitations.md`](limitations.md).
+
 Agent-executable plan for the Lazarus/LCL enablement arc. Decomposed so
 separate agents can take individual tasks. Each task lists goal, files,
 dependencies, approach, and done-criteria. **Read the cross-cutting rules
@@ -30,9 +34,9 @@ intended shape, not a contract.
 
 ## Cross-cutting rules (EVERY task)
 
-1. **IR backend only.** `codegen.inc` (direct) is frozen/reference — do not
-   add features to it. New emission goes in `symtab.inc` / `ir.inc` /
-   `ir_codegen.inc`. IR is the default and bootstraps the compiler.
+1. **IR backend only.** The obsolete direct emitter is archived under
+   `historic/`. New emission goes in `symtab.inc` / `ir.inc` /
+   `ir_codegen.inc`. IR bootstraps the compiler.
 2. **Self-host constraints** (the compiler must compile this code):
    - No `shl` operator — use `* 2^n`. (`shr` is fine.)
    - No string `+` on hot paths — build strings with `AppendChar`. (`+` in
@@ -57,7 +61,7 @@ intended shape, not a contract.
 6. ~~**Known standing red:** `test/test_op_overload.pas` segfaults under IR.~~
    **Resolved** — the full suite runs to the fixedpoint check (exit 0).
 
-## Current state (verified 2026-05-29)
+## Starting state (verified 2026-05-29)
 
 - Classes carry fields (`UFld*`), methods with VMT/virtual slots (`UMth*`,
   `UClsVMTOffset`, `UClsVirtCount`), and **properties** (`UProp*`: name, type,
