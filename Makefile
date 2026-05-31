@@ -199,6 +199,8 @@ test: $(COMPILER) fpc-check
 	grep -q "prop Align tk=1 enum=TAlign" /tmp/test_rtti_emit_dump26.log
 	./$(COMPILER) test/test_rtti_reg.pas /tmp/test_rtti_reg26
 	test "$$(/tmp/test_rtti_reg26)" = "$$(printf 'Count: 2\nClass 0: TBase\nClass 1: TChild')"
+	./$(COMPILER) test/test_classref.pas /tmp/test_classref26
+	test "$$(/tmp/test_classref26)" = "$$(printf 'same: yes\nname=TFoo\nTag=99')"
 	./$(COMPILER) test/test_streaming.pas /tmp/test_streaming26
 	test "$$(/tmp/test_streaming26)" = "$$(printf 'root.Name=Root1\nroot.Count=42\nroot.Title=Hi\nOnGo bound: yes\nchildCount=1\nkid.Name=Kid1\nkid.Value=7')"
 	./$(COMPILER) test/test_streaming_enumset.pas /tmp/test_streaming_enumset26

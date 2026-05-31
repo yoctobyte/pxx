@@ -282,6 +282,10 @@ begin
         if (IRA[i] < 0) or (IRA[i] >= ProcCount) then
           Error('invalid proc index in procaddr');
 
+      IR_CLASSREF:
+        if (IRA[i] < 0) or (IRA[i] >= UClsCount) then
+          Error('invalid class index in classref');
+
       IR_UNSUPPORTED:
         begin end;
 
@@ -614,6 +618,12 @@ begin
     AN_PROCADDR:
     begin
       Result := IRAppend(IR_PROCADDR, Integer(ASTIVal[node]), -1, -1, 0, ASTTk[node]);
+    end;
+
+    AN_CLASSREF:
+    begin
+      { class index in IRA; codegen emits the RTTI-blob address (PClassRTTI). }
+      Result := IRAppend(IR_CLASSREF, Integer(ASTIVal[node]), -1, -1, 0, Ord(tyPointer));
     end;
 
     AN_METHODREF:

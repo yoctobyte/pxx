@@ -202,6 +202,15 @@ begin
         EmitI64(0);
       end;
 
+    IR_CLASSREF:
+      begin
+        { metaclass value → mov rax, <address of class ci's RTTI blob>.
+          UClsRTTIOff is only known after EmitRTTI (runs post-parse), so emit a
+          per-class sentinel data-ref patched to the real offset in compiler.pas
+          (mirrors the -100 RTTI-registry / -101 resource-table sentinels). }
+        EmitB($48); EmitB($B8); EmitDataRef(-(CLASSREF_DATAREF_BASE + IRA[node]));
+      end;
+
     IR_SET_LIT:
       begin
         EmitB($48); EmitB($B8); EmitDataRef(IRIVal[node]);

@@ -223,6 +223,15 @@ begin
         Dec(FixCount);
         continue;
       end;
+    end
+    else if Fixups[i].DataOff <= -CLASSREF_DATAREF_BASE then
+    begin
+      { class-reference (metaclass) value: resolve to the class's RTTI blob. }
+      j := -Fixups[i].DataOff - CLASSREF_DATAREF_BASE;   { recover class index ci }
+      if (j >= 0) and (j < UClsCount) and (UClsRTTIOff[j] >= 0) then
+        Fixups[i].DataOff := UClsRTTIOff[j]
+      else
+        Error('class reference to a class with no RTTI (no published members?)');
     end;
     Inc(i);
   end;

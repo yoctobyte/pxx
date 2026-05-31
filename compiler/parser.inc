@@ -752,6 +752,19 @@ begin
         ci := FindUClass(fieldName);
         if ci >= 0 then
         begin
+          if CurTok.Kind <> tkDot then
+          begin
+            { Class identifier used as a value (metaclass / class reference):
+              `TForm1` passed to CreateForm etc. Yields the runtime address of
+              the class's RTTI blob (PClassRTTI), resolved post-EmitRTTI. }
+            node := AllocNode(AN_CLASSREF);
+            ASTIVal[node] := ci;
+            ASTTk[node] := Ord(tyPointer);
+            tk := tyPointer;
+            recName := REC_NONE;
+            Result := node;
+            Exit;
+          end;
           Expect(tkDot, '.');
           if CurTok.Kind <> tkIdent then Error('expected class method name');
           fieldName := CurTok.SVal;

@@ -106,6 +106,8 @@ const
   AN_READ         = 43; { like AN_READLN; subset: also reads a fresh line }
   AN_PROCADDR     = 44; { ASTIVal = proc index; @proc → absolute code address as Pointer }
   AN_METHODREF    = 45; { @obj.method → TMethod; ASTIVal = method proc index, ASTLeft = object value }
+  AN_CLASSREF     = 46; { class identifier used as a value (metaclass): ASTIVal = class index (ci);
+                          yields the runtime address of the class's RTTI blob (PClassRTTI) }
 
   { Inline-asm operand kinds }
   AOP_NONE = 0;
@@ -153,9 +155,16 @@ const
   IR_READ_VAR     = 36;  { IRA = target address; IRTk = target type; parse from buffer }
   IR_COPY_REC     = 37;  { IRA = dest addr; IRB = src addr; IRIVal = byte count (full record copy) }
   IR_PROCADDR     = 38;  { IRA = proc idx; load absolute code address of an internal proc into the result }
+  IR_CLASSREF     = 39;  { IRA = class index (ci); load runtime address of the class RTTI blob (PClassRTTI) }
 
   EXC_FRAME_SIZE = 80;
   EXC_JMP_OFFSET = 8;
+
+  { Data-ref sentinel base for class-reference (metaclass) values. A fixup with
+    DataOff = -(CLASSREF_DATAREF_BASE + ci) is patched to UClsRTTIOff[ci] after
+    EmitRTTI, then resolved to a real address by writeELF. Must clear the -100
+    (RTTI registry) / -101 (resource table) sentinels with room for every ci. }
+  CLASSREF_DATAREF_BASE = 100000;
 
   SYS_READ  = 0;
   SYS_WRITE = 1;
