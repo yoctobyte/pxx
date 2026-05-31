@@ -288,13 +288,15 @@ inheritance depth, method-resolution clauses, COM ARC.
   Discovered while wiring Str→StrInt (see [[project_rtl_dialect_landmines]]).
 - ✅ **Enums.** Type identity + ordinal↔name infra in place and used by RTTI
   (enum prop kind, EnumRTTI).
-- 🔴 **Set algebra / comparison.** Set literals, named set types, and `in`
-  membership work, including RTTI-backed set properties. General set value
-  semantics do not: `test/test_sets.pas` segfaults at `s3 := s1 + s2`.
-  Sets are 32-byte values but general scalar load/store and binary-op paths
-  treat them as one word or pointer. Add dedicated IR copy, union,
-  intersection, difference, equality, and subset operations before claiming
-  complete set support.
+- ✅ **Set algebra / comparison.** Dedicated 32-byte IR operations cover copy
+  assignment, union, intersection, difference, equality, and subset/superset
+  comparisons. Set literals, named set types, `in`, nested algebra, and
+  RTTI-backed set properties remain covered. Locals, record fields, `var`
+  params, and by-value reads are covered by `test/test_set_shapes.pas`.
+  Set-valued function results remain part of the aggregate-return ABI gap.
+- ✅ **Explicit `inherited` calls.** Parent-chain static dispatch works for
+  constructors, methods, bare `inherited`, and inherited function results.
+  Test: `test/test_inherited.pas`.
 - 🟡 **Generics.** Template mechanism exists; breadth vs FPC unverified.
 - ✅ **Class visibility.** Phase 0 of the LFM arc done (see §2).
 - ✅ **Method-call-with-args as a statement.** Rechecked 2026-05-31 with a
@@ -321,10 +323,8 @@ own source — exactly the class of bug that hid the op-overload segfault and th
 string-`+` break. Not needed yet, but they are genuine missing/half features,
 not eternal "constraints". Promote to fixes when convenient:
 
-- ⬜ **`shl` operator.** Not tokenised at all (no `tkShl`); only `shr` exists.
-  Compiler-side code uses `* 2^n` as the workaround. Add the operator + IR
-  lowering so user code can shift left. (`lexer.inc` ~348/417/443 show the
-  `*2`-instead-of-`shl` self-host dance.)
+- ✅ **`shl` operator.** Tokenised and lowered through the IR alongside `shr`.
+  Test: `test/test_shl.pas`.
 - ✅ **`readln` / `read` statements** — implemented 2026-05-30 (user-requested).
   `readln(targets...)` reads one line from stdin into a BSS line buffer
   (`EmitReadLine`, byte-at-a-time, stops at `\n`, skips `\r`) and parses each
@@ -374,8 +374,7 @@ not eternal "constraints". Promote to fixes when convenient:
 ### Recently resolved (corrects stale notes in gap-analysis / older memory)
 
 - ✅ `break` / `continue` — implemented (`parser.inc` ~2687/2693).
-- 🟡 Sets (`set of T`, literals, `in`) — partial; dedicated 32-byte algebra,
-  comparison, and general assignment semantics remain red as documented above.
+- ✅ Sets (`set of T`, literals, `in`, algebra, comparisons) — implemented.
 - ✅ `with` statement — implemented.
 - ✅ Floating point (Single/Double/Extended, arithmetic, compare, Write) —
   implemented, IR parity done.
@@ -413,9 +412,9 @@ not eternal "constraints". Promote to fixes when convenient:
 ## Cross-cutting rules (apply to all work)
 
 - IR backend only. The retired direct emitter is historic reference material.
-- Self-host constraints: no `shl` (use `*2^n`); no string `+` on hot paths
-  (use `AppendChar`); init strings via `''` + `AppendChar`; keep compiler-side
-  tables integer-only for fixedpoint safety.
+- Self-host constraints: avoid string `+` on hot paths (use `AppendChar`);
+  initialize strings via `''` + `AppendChar`; keep compiler-side tables
+  integer-only for fixedpoint safety.
 - Validate with `make bootstrap` (fixedpoint) **and** by running each feature's
   regression test under the self-built compiler — fixedpoint alone is not
   correctness.

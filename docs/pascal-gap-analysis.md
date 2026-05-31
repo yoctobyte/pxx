@@ -38,9 +38,10 @@ Three of the four are now implemented; pointers retain one gap (arithmetic).
 * **Current state**: Untyped `Pointer`, `nil`, `@Var`/`@arr[i]`, and `Ptr^` all work. Typed pointers C1–C4 are done: named aliases `PFoo = ^TFoo`, indexing `p[i]` (element-size stride), record-pointer fields `p^.field`, and casts `PType(expr)`. Tests: `test/test_ptr_alias.pas`, `test_ptr_deref_field.pas`, `test_ptr_cast.pas`.
 * **Remaining gap**: scaled pointer arithmetic `p + n` (currently unscaled/garbage; indexing `p[i]` is the working substitute). See `todo.md` §4.
 
-### 4. Sets & Set Operations (`set of T`) — 🟡 partial
+### 4. Sets & Set Operations (`set of T`) — ✅ implemented
 * **Reference behavior**: Grouping discrete ordinal values together as bitsets (e.g., `set of Byte` or custom enums), literal declarations `[1, 2, 5..10]`, and the `in` operator.
-* **Current state**: Set literals including ranges, `in` membership, and set-typed published properties surfaced via RTTI (kind=SET) work. General set assignment, algebra, and comparison are unsafe: `test/test_sets.pas` segfaults on union because the IR scalar paths do not implement 32-byte set value semantics.
+* **Current state**: Set literals including ranges, `in` membership, set-typed published properties surfaced via RTTI (kind=SET), assignment, union, intersection, difference, equality, subset/superset comparisons, locals, record fields, and parameters work. The IR uses dedicated 32-byte set operations. Coverage: `test/test_sets.pas`, `test/test_set_shapes.pas`.
+* **Remaining gap**: set-valued function results need the general aggregate-return ABI.
 
 ---
 
@@ -54,6 +55,6 @@ Three of the four are now implemented; pointers retain one gap (arithmetic).
   retired. We do not need COM. The plan is a lightweight Linux-native model
   (CORBA-style / no-refcount first; COM-style ARC deferred). GUIDs optional.
 
-> Of the four core features above, floats are implemented, sets are partial,
+> Of the four core features above, floats and sets are implemented,
 > and typed pointers are done bar arithmetic; interfaces are planned (not parked).
 > [`todo.md`](todo.md) is the authoritative consolidated status list.

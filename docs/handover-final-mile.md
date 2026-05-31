@@ -141,7 +141,6 @@ with the eventual real-units-dir plan (see todo.md).
 
 ## Dialect gotchas (will bite otherwise)
 
-- **No `inherited`.** Each constructor self-initializes; use virtual hooks.
 - **Virtual dispatch from inside a method needs `Self.Method`** — a bare call
   binds statically.
 - **No nested `{ }` comments** — `{ ... {x} ... }` ends the comment at the inner
@@ -151,8 +150,8 @@ with the eventual real-units-dir plan (see todo.md).
 - **Streamable properties must be field-backed** — `SetStrProp` can't drive a
   method-setter property. (`const` record params are passed by reference now, so
   `SetMethodProp(const v: TMethod)` works.)
-- Self-host constraints still apply to anything compiled into the compiler (no
-  `shl`, build strings with `AppendChar`, etc.) — but the GUI units are user
+- Self-host constraints still apply to anything compiled into the compiler
+  (build strings with `AppendChar`, etc.) — but the GUI units are user
   code, not compiler code, so they only need to satisfy the PXX dialect.
 
 ## Suggested order

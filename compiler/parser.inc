@@ -33,6 +33,18 @@ end;
 
 procedure ParseExpr; forward;
 
+function LastDotName(const s: AnsiString): AnsiString;
+{ Part of s after the last '.', else s. }
+var i, p: Integer;
+begin
+  p := 0;
+  for i := 1 to Length(s) do
+    if s[i] = '.' then p := i;
+  Result := '';
+  for i := p + 1 to Length(s) do
+    AppendChar(Result, s[i]);
+end;
+
 procedure SkipSelectors;
 begin
   while CurTok.Kind in [tkDot, tkLBrack] do
@@ -1603,6 +1615,65 @@ begin
   EmitB($50);
 end;
 
+function ParseInheritedCallAST: Integer;
+var
+  ci, parentCi, mmi, mpi, selfIdx, node, selfArg, lastArg, argSeq, argNo: Integer;
+  name: AnsiString;
+begin
+  if (CurSelfClass < REC_UCLASS_BASE) or (CurProc < 0) then
+    Error('inherited call outside method');
+  ci := CurSelfClass - REC_UCLASS_BASE;
+  parentCi := UClsParent[ci];
+  if parentCi < 0 then Error('inherited call has no parent class');
+
+  Next; { consume inherited }
+  if CurTok.Kind = tkIdent then
+  begin
+    name := CurTok.SVal;
+    Next;
+  end
+  else
+    name := LastDotName(Procs[CurProc].Name);
+
+  mmi := FindUMeth(parentCi, name);
+  if mmi < 0 then Error('inherited method not found: ' + name);
+  mpi := UMthProc_[mmi];
+
+  node := AllocNode(AN_CALL); { Deliberately static: call the ancestor body. }
+  ASTIVal[node] := mpi;
+  ASTTk[node] := Ord(Procs[mpi].RetType);
+  selfIdx := Procs[CurProc].Params[0].SymIdx;
+  selfArg := AllocNode(AN_ARG);
+  ASTLeft[selfArg] := AllocNode(AN_IDENT);
+  ASTIVal[ASTLeft[selfArg]] := selfIdx;
+  ASTTk[ASTLeft[selfArg]] := Ord(tyClass);
+  ASTLeft[node] := selfArg;
+  lastArg := selfArg;
+  argNo := 1;
+
+  if CurTok.Kind = tkLParen then
+  begin
+    Next;
+    while CurTok.Kind <> tkRParen do
+    begin
+      ParseExpr;
+      argSeq := AllocNode(AN_ARG);
+      ASTLeft[argSeq] := CurASTNode;
+      ASTRight[lastArg] := argSeq;
+      lastArg := argSeq;
+      Inc(argNo);
+      if CurTok.Kind = tkComma then
+        Next
+      else if CurTok.Kind <> tkRParen then
+        Error('expected comma or close parenthesis');
+    end;
+    Expect(tkRParen, ')');
+  end;
+  if argNo <> Procs[mpi].ParamCount then
+    Error('inherited call argument count mismatch');
+  Result := node;
+end;
+
 procedure ParseFactor;
 var name: AnsiString; recName: Integer; idx, pi, i, node, left, prevTok, valNode: Integer; tk: TTypeKind; op, argSeq, argSeq2, argSeq3, lastArg, argIdx, exprNode, szArg: Integer;
     nArgs, argsHead, currArg: Integer; argTypes: array[0..15] of TTypeKind;
@@ -1851,6 +1922,12 @@ begin
     begin
       name := CurTok.SVal;
       prevTok := TokPos - 1;
+      if CaseEqual(name, 'inherited') then
+      begin
+        CurASTNode := ParseInheritedCallAST;
+        LastExprTk := IntToTypeKind(ASTTk[CurASTNode]);
+        Exit;
+      end;
       if CaseEqual(name, 'puint8') then
         writeln('ParseFactor PUInt8 found! Tokens[TokPos].Kind=', Ord(Tokens[TokPos].Kind), ' CurTok.Line=', CurTok.Line);
 
@@ -2350,7 +2427,7 @@ procedure ParseTerm;
 var op: TTokenKind; left, right, node, opSOffset, opSLen: Integer;
 begin
   ParseFactor;
-  while (CurTok.Kind in [tkStar, tkSlash, tkDiv, tkMod, tkAnd]) or
+  while (CurTok.Kind in [tkStar, tkSlash, tkDiv, tkMod, tkAnd, tkShl]) or
         ((CurTok.Kind = tkIdent) and (CurTok.SVal = 'shr')) do
   begin
     opSOffset := Tokens[TokPos - 1].SOffset;
@@ -2371,7 +2448,7 @@ begin
       ASTTk[node] := Ord(TypeDivideResult(IntToTypeKind(ASTTk[left])))
     else if op = tkMod then
       ASTTk[node] := Ord(TypeDivideResult(IntToTypeKind(ASTTk[left])))
-    else if op = tkIdent then
+    else if (op = tkIdent) or (op = tkShl) then
       ASTTk[node] := ASTTk[left]
     else if (ASTTk[left] = Ord(tySingle)) or (ASTTk[left] = Ord(tyDouble)) or (ASTTk[left] = Ord(tyExtended)) or
             (ASTTk[right] = Ord(tySingle)) or (ASTTk[right] = Ord(tyDouble)) or (ASTTk[right] = Ord(tyExtended)) then
@@ -2953,19 +3030,6 @@ begin
   Result := bodyNode;
 end;
 
-function LastDotName(const s: AnsiString): AnsiString;
-{ Part of s after the last '.', else s. A method's Procs[].Name is
-  'TClass.Method', so result-by-name (Method := ...) must match the tail. }
-var i, p: Integer;
-begin
-  p := 0;
-  for i := 1 to Length(s) do
-    if s[i] = '.' then p := i;
-  Result := '';
-  for i := p + 1 to Length(s) do
-    AppendChar(Result, s[i]);
-end;
-
 function ParseStatementAST: Integer;
 var
   name: AnsiString;
@@ -3204,7 +3268,9 @@ begin
         Result := node;
         Exit;
       end;
-      if (name = 'LoadFile') or (name = 'loadfile') then
+      if CaseEqual(name, 'inherited') then
+        node := ParseInheritedCallAST
+      else if (name = 'LoadFile') or (name = 'loadfile') then
       begin
         Next; Expect(tkLParen, '(');
         if CurTok.Kind <> tkIdent then Error('LoadFile: expected path');

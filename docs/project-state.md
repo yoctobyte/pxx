@@ -38,11 +38,6 @@ Case behavior is per origin:
 
 ## Confirmed Bugs
 
-- **Set algebra is unsafe.** Set literals and `in` membership work, but
-  `test/test_sets.pas` segfaults at `s3 := s1 + s2`. A set is a 32-byte value;
-  current general scalar load/store and binary-op paths treat it like one
-  machine word or pointer. Union, intersection, difference, comparisons, and
-  full set assignment need dedicated IR semantics.
 - **BASIC lexer fixture hangs.** Compiling `test/test_basic_lexer.bas` did not
   terminate during this audit. BASIC remains experimental and is not part of
   `make test`.
@@ -51,16 +46,16 @@ Case behavior is per origin:
 
 - Interfaces, initially a CORBA-style no-refcount model; see `todo.md` section
   3.
-- `inherited` constructor/method calls.
 - Full `class of` syntax and general metaclass typing. The LCL slice has the
   narrower class-reference behavior it needs.
 - Scaled pointer arithmetic (`p + n`); pointer indexing works.
-- `shl` as a Pascal expression operator; `shr` exists.
 - Float conversion intrinsics such as `Trunc`, `Round`, `Int`, and float
   `Str`/`Val`.
 - Dynamic arrays beyond scalar elements and basic resize behavior: record or
   string elements, params/results, reference counting, copy-on-grow, and
   reclaim.
+- Aggregate-valued function results still need a deliberate ABI. Set-valued
+  function results compile but are not supported yet.
 - Full access-control enforcement. Visibility sections are parsed and
   `published` drives RTTI, but private/protected checks are intentionally not
   enforced yet.

@@ -103,7 +103,6 @@ The IR backend is self-consistent. Remaining backend work:
 
 - Optimization passes (none planned yet — this is by design for now)
 - Some edge cases in C-frontend and BASIC-frontend paths
-- Dedicated 32-byte set algebra and comparison semantics
 
 ## Building and Testing
 

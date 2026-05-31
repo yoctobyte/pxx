@@ -86,6 +86,8 @@ test: $(COMPILER) fpc-check
 	test "$$(/tmp/test_ir_virtual_call26)" = "$$(printf '1\n2\n1\n2')"
 	./$(COMPILER) test/test_inheritance_dispatch.pas /tmp/test_inheritance_dispatch26
 	test "$$(/tmp/test_inheritance_dispatch26)" = "$$(printf '50\n507\n50\n507\n5\n12\n7\n99\n5\n88')"
+	./$(COMPILER) test/test_inherited.pas /tmp/test_inherited26
+	test "$$(/tmp/test_inherited26)" = "$$(printf '42\nbase\nchild\n85\ntouch\nchild touch')"
 	./$(COMPILER) test/test_abstract_out.pas /tmp/test_abstract_out26
 	test "$$(/tmp/test_abstract_out26)" = "$$(printf '16\n9\n16\n32\n18\n42\n99\n100\n7')"
 	./$(COMPILER) --debug test/hello.pas /tmp/hello_debug26 > /tmp/hello_debug26.log
@@ -145,6 +147,8 @@ test: $(COMPILER) fpc-check
 	test "$$(/tmp/test_ir_call26)" = "$$(printf '30\n30\n42')"
 	./$(COMPILER) test/test_ir_binops.pas /tmp/test_ir_binops26
 	test "$$(/tmp/test_ir_binops26)" = "$$(printf -- '-3\n-2\n3\n2\n8\n14\n0\n1\n25')"
+	./$(COMPILER) test/test_shl.pas /tmp/test_shl26
+	test "$$(/tmp/test_shl26)" = "$$(printf '16\n12\n9')"
 	./$(COMPILER) test/test_op_overload.pas /tmp/test_op_overload_ir26
 	test "$$(/tmp/test_op_overload_ir26)" = "$$(printf '1\n0\n1\n0\n1\n0\n10\n6')"
 	./$(COMPILER) test/test_overloading.pas /tmp/test_overloading_ir26
@@ -314,6 +318,10 @@ test: $(COMPILER) fpc-check
 	test "$$(/tmp/test_float26)" = "$$(printf '1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1')"
 	./$(COMPILER) test/test_dynarray.pas /tmp/test_dynarray26
 	test "$$(/tmp/test_dynarray26)" = "$$(printf '1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1')"
+	./$(COMPILER) test/test_sets.pas /tmp/test_sets26
+	test "$$(/tmp/test_sets26 | tail -1)" = "all set tests completed!"
+	./$(COMPILER) test/test_set_shapes.pas /tmp/test_set_shapes26
+	test "$$(/tmp/test_set_shapes26)" = "$$(printf '1\n1\n1')"
 	./$(COMPILER) test/test_float_literals.pas /tmp/test_float_literals26
 	test "$$(/tmp/test_float_literals26)" = "$$(printf '1\n1\n1\n1\n1\n1\n1')"
 	./$(COMPILER) test/test_float_write.pas /tmp/test_float_write26

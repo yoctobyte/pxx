@@ -223,6 +223,8 @@ Classes support fields, methods, single inheritance, virtual/override dispatch
 (`private`/`protected`/`public`/`published`). Each class's VMT is filled by
 inheritance, so a subclass declared in a later unit correctly inherits an
 ancestor's overrides.
+Inside a constructor or method, `inherited Create(...)`, `inherited Method`,
+and bare `inherited` call the matching ancestor implementation statically.
 
 A class with a `published` section (in itself or an ancestor) gets a minimal,
 custom RTTI table. The reflection API uses `System.TypInfo` names

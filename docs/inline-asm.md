@@ -109,8 +109,6 @@ so the asm body's `rax` survives as the return value.
 
 The bootstrap compiler must compile this file, so:
 
-- **No `shl` operator** — the self-hosted compiler implements `shr` only. Use
-  multiplication (`x * 8`) for left shifts.
 - **No string `+`** on the hot path — string concatenation is unreliable when
   the compiler compiles itself. Build strings with `AppendChar`. (`+` in
   `Error(...)` messages is tolerated because those paths abort anyway.)

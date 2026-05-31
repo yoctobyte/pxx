@@ -157,6 +157,9 @@ const
   IR_COPY_REC     = 37;  { IRA = dest addr; IRB = src addr; IRIVal = byte count (full record copy) }
   IR_PROCADDR     = 38;  { IRA = proc idx; load absolute code address of an internal proc into the result }
   IR_CLASSREF     = 39;  { IRA = class index (ci); load runtime address of the class RTTI blob (PClassRTTI) }
+  IR_SET_COPY     = 40;  { IRA = dest addr; IRB = src addr; copy full 32-byte set }
+  IR_SET_BINOP    = 41;  { IRA/IRB = set addresses; IRC = op; IRIVal = BSS scratch offset }
+  IR_SET_CMP      = 42;  { IRA/IRB = set addresses; IRC = comparison op }
 
   EXC_FRAME_SIZE = 80;
   EXC_JMP_OFFSET = 8;
@@ -223,7 +226,8 @@ type
     tkNil,
     tkIn,
     tkWith,
-    tkAsm
+    tkAsm,
+    tkShl
   );
 
   TToken = record

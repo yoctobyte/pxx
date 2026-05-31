@@ -86,5 +86,22 @@ begin
   else
     writeln('s1 <= s2: OK');
 
+  if s3 < s1 then
+    writeln('s3 < s1: OK')
+  else
+    writeln('s3 < s1: FAIL');
+
+  if s1 > s3 then
+    writeln('s1 > s3: OK')
+  else
+    writeln('s1 > s3: FAIL');
+
+  { 8. Nested algebra keeps independent intermediate values }
+  s3 := (s1 + s2) - [2, 12];
+  if 1 in s3 then writeln('1 in nested result: OK') else writeln('1 in nested result: FAIL');
+  if 2 in s3 then writeln('2 in nested result: FAIL') else writeln('2 in nested result: OK');
+  if 12 in s3 then writeln('12 in nested result: FAIL') else writeln('12 in nested result: OK');
+  if 15 in s3 then writeln('15 in nested result: OK') else writeln('15 in nested result: FAIL');
+
   writeln('all set tests completed!');
 end.

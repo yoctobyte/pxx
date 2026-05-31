@@ -24,9 +24,10 @@ specific compatibility statement covers it.
 - `{$mode objfpc}` and `-Mobjfpc` are accepted markers, not a complete
   emulation of every Object FPC language rule.
 - Alternate Pascal modes such as Delphi mode are not implemented.
-- Properties, published RTTI, class references, and virtual/override dispatch
-  are implemented for the covered subset. Interfaces, `inherited`, complete
-  metaclass syntax, and broader class semantics remain incomplete.
+- Properties, published RTTI, class references, explicit `inherited` calls,
+  and virtual/override dispatch are implemented for the covered subset.
+  Interfaces, complete metaclass syntax, and broader class semantics remain
+  incomplete.
 - Exception handling supports catch-all and exact user-class typed
   `try/except` handlers, `try/finally`, `raise <expr>`, and handler re-raise.
   A built-in `Exception` hierarchy, inherited handler matching, message
@@ -52,9 +53,9 @@ specific compatibility statement covers it.
   covered. Scaled pointer arithmetic remains future work.
 - Generic call-site specialization syntax and alternative generic declaration
   forms are not implemented contracts.
-- Set literals, `in` membership, and RTTI-backed set properties work. General
-  set assignment, algebra, and comparison are unsafe until the IR gains
-  dedicated 32-byte set operations.
+- Set literals, `in` membership, RTTI-backed set properties, assignment,
+  algebra, comparisons, local values, record fields, and parameters are
+  covered. Set-valued function results still need aggregate-return ABI work.
 
 ## Pascal Directive Gaps
 

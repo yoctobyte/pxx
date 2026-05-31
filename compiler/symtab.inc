@@ -881,7 +881,8 @@ end;
 function ParamSize(idx: Integer): Integer;
 begin
   if Syms[idx].IsRef or Syms[idx].IsArray or (Syms[idx].TypeKind = tyString) or
-     (Syms[idx].TypeKind = tyRecord) or (Syms[idx].TypeKind = tyClass) or (Syms[idx].TypeKind = tyPointer) then
+     (Syms[idx].TypeKind = tyRecord) or (Syms[idx].TypeKind = tySet) or
+     (Syms[idx].TypeKind = tyClass) or (Syms[idx].TypeKind = tyPointer) then
     Result := TARGET_PTR_SIZE
   else
     Result := TypeSize(Syms[idx].TypeKind);
@@ -910,12 +911,12 @@ begin
     Syms[SymCount].PtrElemRec := LastTypePointerElemRec;
   end;
 
-  if isRef or isArray or (tk = tyString) or (tk = tyRecord) or (tk = tyClass) or (tk = tyPointer) then
+  if isRef or isArray or (tk = tyString) or (tk = tyRecord) or (tk = tySet) or (tk = tyClass) or (tk = tyPointer) then
     sz := TARGET_PTR_SIZE
   else
     sz := TypeSize(tk);
 
-  if isRef or isArray or (tk = tyString) or (tk = tyRecord) or (tk = tyClass) or (tk = tyPointer) then
+  if isRef or isArray or (tk = tyString) or (tk = tyRecord) or (tk = tySet) or (tk = tyClass) or (tk = tyPointer) then
     align := TARGET_PTR_SIZE
   else
     align := TypeAlign(tk);

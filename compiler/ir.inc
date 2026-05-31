@@ -73,6 +73,9 @@ begin
     IR_RTTI_REG: Result := 'rtti_reg';
     IR_RESOURCES: Result := 'resources';
     IR_SET_LIT: Result := 'set_lit';
+    IR_SET_COPY: Result := 'set_copy';
+    IR_SET_BINOP: Result := 'set_binop';
+    IR_SET_CMP: Result := 'set_cmp';
   else
     Result := 'unknown';
   end;
@@ -157,7 +160,7 @@ begin
         IRRequireNode(IRA[i], 'binop left');
         IRRequireNode(IRB[i], 'binop right');
         op := IRC[i];
-        if (op < 0) or (op > Ord(tkIn)) then
+        if (op < 0) or (op > Ord(tkShl)) then
           Error('invalid operator token kind in binop');
       end;
 
@@ -183,6 +186,12 @@ begin
       begin
         IRRequireNode(IRA[i], 'copy_rec dest');
         IRRequireNode(IRB[i], 'copy_rec src');
+      end;
+
+      IR_SET_COPY, IR_SET_BINOP, IR_SET_CMP:
+      begin
+        IRRequireNode(IRA[i], 'set op left');
+        IRRequireNode(IRB[i], 'set op right');
       end;
 
       IR_WRITELN, IR_BLOCK:
@@ -582,7 +591,7 @@ begin
     AN_IDENT:
     begin
       varIdx := ASTIVal[node];
-      if (Syms[varIdx].TypeKind = tyString) or Syms[varIdx].IsArray then
+      if (Syms[varIdx].TypeKind = tyString) or (Syms[varIdx].TypeKind = tySet) or Syms[varIdx].IsArray then
         Result := IRAppend(IR_LEA, varIdx, -1, -1, 0, ASTTk[node])
       else
         Result := IRAppend(IR_LOAD_SYM, varIdx, -1, -1, 0, ASTTk[node]);
@@ -591,7 +600,7 @@ begin
     AN_INDEX, AN_FIELD, AN_DEREF:
     begin
       left := IRLowerAddress(node);
-      if IntToTypeKind(ASTTk[node]) = tyString then
+      if (IntToTypeKind(ASTTk[node]) = tyString) or (IntToTypeKind(ASTTk[node]) = tySet) then
         Result := left
       else
         Result := IRAppend(IR_LOAD_MEM, left, -1, -1, 0, ASTTk[node]);
@@ -664,6 +673,24 @@ begin
         IRB[first] := last;
         Result := IRAppend(IR_CALL, cpi, first, -1, 0, ASTTk[node]);
       end
+      else if (ASTIVal[node] <> Ord(tkIn)) and
+              ((IntToTypeKind(ASTTk[ASTLeft[node]]) = tySet) or
+               (IntToTypeKind(ASTTk[ASTRight[node]]) = tySet)) then
+      begin
+        left := IRLowerAST(ASTLeft[node]);
+        right := IRLowerAST(ASTRight[node]);
+        if (ASTIVal[node] = Ord(tkEq)) or (ASTIVal[node] = Ord(tkNeq)) or
+           (ASTIVal[node] = Ord(tkLt)) or (ASTIVal[node] = Ord(tkLe)) or
+           (ASTIVal[node] = Ord(tkGt)) or (ASTIVal[node] = Ord(tkGe)) then
+          Result := IRAppend(IR_SET_CMP, left, right, Integer(ASTIVal[node]), 0, Ord(tyBoolean))
+        else
+        begin
+          BSSSize := AlignTo(BSSSize, 8);
+          idx := BSSSize;
+          Inc(BSSSize, 32);
+          Result := IRAppend(IR_SET_BINOP, left, right, Integer(ASTIVal[node]), idx, Ord(tySet));
+        end;
+      end
       else
       begin
         left := IRLowerAST(ASTLeft[node]);
@@ -694,6 +721,12 @@ begin
         outNode := IRAppend(IR_BINOP, right, item, Ord(tkPlus), 0, Ord(tyPointer));
         seq := IRLowerAST(ASTLeft[left]);
         Result := IRAppend(IR_STORE_MEM, outNode, seq, -1, 0, Ord(tyPointer));
+      end
+      else if IntToTypeKind(ASTTk[ASTLeft[node]]) = tySet then
+      begin
+        leftAddr := IRLowerAddress(ASTLeft[node]);
+        right := IRLowerAST(ASTRight[node]);
+        Result := IRAppend(IR_SET_COPY, leftAddr, right, -1, 0, Ord(tySet));
       end
       else if (IntToTypeKind(ASTTk[ASTLeft[node]]) = tyRecord) and rhsIsLValue then
       begin

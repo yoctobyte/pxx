@@ -36,6 +36,8 @@ begin
     if (s[1]='n') and (s[2]='o') and (s[3]='t') then Result := tkNot;
     if (s[1]='d') and (s[2]='i') and (s[3]='v') then Result := tkDiv;
     if (s[1]='m') and (s[2]='o') and (s[3]='d') then Result := tkMod;
+    if (s[1]='s') and (s[2]='h') and (s[3]='l') then Result := tkShl;
+    if (s[1]='S') and (s[2]='h') and (s[3]='l') then Result := tkShl;
     if (s[1]='i') and (s[2]='n') and (s[3]='c') then Result := tkInc;
     if (s[1]='I') and (s[2]='n') and (s[3]='c') then Result := tkInc;
     if (s[1]='d') and (s[2]='e') and (s[3]='c') then Result := tkDec;

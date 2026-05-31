@@ -38,7 +38,6 @@ intended shape, not a contract.
    `historic/`. New emission goes in `symtab.inc` / `ir.inc` /
    `ir_codegen.inc`. IR bootstraps the compiler.
 2. **Self-host constraints** (the compiler must compile this code):
-   - No `shl` operator — use `* 2^n`. (`shr` is fine.)
    - No string `+` on hot paths — build strings with `AppendChar`. (`+` in
      `Error(...)` is tolerated; those paths abort.)
    - Initialise strings as `s := ''` then `AppendChar`, not single-char

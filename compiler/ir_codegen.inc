@@ -312,7 +312,9 @@ begin
         else
         begin
           if (Syms[symIdx].IsArray and (Syms[symIdx].ArrLen = -1)) or
-             ((Syms[symIdx].Kind = skParam) and (Syms[symIdx].IsRef or Syms[symIdx].IsArray or (Syms[symIdx].TypeKind = tyString))) then
+             ((Syms[symIdx].Kind = skParam) and
+              (Syms[symIdx].IsRef or Syms[symIdx].IsArray or
+               (Syms[symIdx].TypeKind = tyString) or (Syms[symIdx].TypeKind = tySet))) then
           begin
             EmitB($48); EmitB($8B); EmitB($85); EmitI32(Syms[symIdx].Offset);
           end
@@ -618,6 +620,7 @@ begin
           tkAnd:   begin EmitB($48); EmitB($21); EmitB($C8); end; { and rax, rcx }
           tkOr:    begin EmitB($48); EmitB($09); EmitB($C8); end; { or rax, rcx }
           tkIdent: begin EmitB($48); EmitB($D3); EmitB($E8); end; { shr rax, cl }
+          tkShl:   begin EmitB($48); EmitB($D3); EmitB($E0); end; { shl rax, cl }
 
           tkIn:
             begin
@@ -1315,6 +1318,102 @@ begin
         EmitB($F3); EmitB($A4);                { rep movsb }
       end;
 
+    IR_SET_COPY:
+      begin
+        IREmitNode(IRB[node]);                 { rax = source address }
+        EmitB($50);
+        IREmitNode(IRA[node]);                 { rax = dest address }
+        EmitB($48); EmitB($89); EmitB($C7);    { mov rdi, rax }
+        EmitB($5E);                            { pop rsi }
+        EmitB($48); EmitB($C7); EmitB($C1); EmitI32(32); { mov rcx, 32 }
+        EmitB($F3); EmitB($A4);                { rep movsb }
+      end;
+
+    IR_SET_BINOP:
+      begin
+        IREmitNode(IRA[node]);                 { lhs address }
+        EmitB($50);
+        IREmitNode(IRB[node]);                 { rhs address }
+        EmitB($48); EmitB($89); EmitB($C6);    { mov rsi, rax }
+        EmitB($5A);                            { pop rdx = lhs }
+        EmitB($48); EmitB($8D); EmitB($3C); EmitB($25); EmitGlobRef(IRIVal[node]); { lea rdi, scratch }
+        for i := 0 to 3 do
+        begin
+          EmitB($48); EmitB($8B); EmitB($42); EmitB(i * 8); { mov rax, [rdx+off] }
+          EmitB($48); EmitB($8B); EmitB($4E); EmitB(i * 8); { mov rcx, [rsi+off] }
+          case IntToTokenKind(IRC[node]) of
+            tkPlus: EmitB($48); { prefix for or below }
+            tkStar: EmitB($48); { prefix for and below }
+            tkMinus:
+              begin
+                EmitB($48); EmitB($F7); EmitB($D1);        { not rcx }
+                EmitB($48); EmitB($21); EmitB($C8);        { and rax, rcx }
+              end;
+          end;
+          if IntToTokenKind(IRC[node]) = tkPlus then
+            begin EmitB($09); EmitB($C8); end               { or rax, rcx }
+          else if IntToTokenKind(IRC[node]) = tkStar then
+            begin EmitB($21); EmitB($C8); end;              { and rax, rcx }
+          EmitB($48); EmitB($89); EmitB($47); EmitB(i * 8); { mov [rdi+off], rax }
+        end;
+        EmitB($48); EmitB($8D); EmitB($04); EmitB($25); EmitGlobRef(IRIVal[node]); { lea rax, scratch }
+      end;
+
+    IR_SET_CMP:
+      begin
+        IREmitNode(IRA[node]);                 { lhs address }
+        EmitB($50);
+        IREmitNode(IRB[node]);                 { rhs address }
+        EmitB($48); EmitB($89); EmitB($C6);    { mov rsi, rax }
+        EmitB($5A);                            { pop rdx = lhs }
+        EmitB($4D); EmitB($31); EmitB($C0);    { xor r8, r8: subset violations }
+        EmitB($4D); EmitB($31); EmitB($C9);    { xor r9, r9: differences }
+        for i := 0 to 3 do
+        begin
+          EmitB($48); EmitB($8B); EmitB($42); EmitB(i * 8); { mov rax, [rdx+off] }
+          EmitB($48); EmitB($8B); EmitB($4E); EmitB(i * 8); { mov rcx, [rsi+off] }
+          EmitB($49); EmitB($89); EmitB($C2);                { mov r10, rax }
+          EmitB($49); EmitB($31); EmitB($CA);                { xor r10, rcx }
+          EmitB($4D); EmitB($09); EmitB($D1);                { or r9, r10 }
+          if (IRC[node] = Ord(tkLe)) or (IRC[node] = Ord(tkLt)) then
+          begin
+            EmitB($49); EmitB($89); EmitB($CA);              { mov r10, rcx }
+            EmitB($49); EmitB($F7); EmitB($D2);              { not r10 }
+            EmitB($4C); EmitB($21); EmitB($D0);              { and rax, r10 }
+            EmitB($49); EmitB($09); EmitB($C0);              { or r8, rax }
+          end
+          else if (IRC[node] = Ord(tkGe)) or (IRC[node] = Ord(tkGt)) then
+          begin
+            EmitB($49); EmitB($89); EmitB($C2);              { mov r10, rax }
+            EmitB($49); EmitB($F7); EmitB($D2);              { not r10 }
+            EmitB($4C); EmitB($21); EmitB($D1);              { and rcx, r10 }
+            EmitB($49); EmitB($09); EmitB($C8);              { or r8, rcx }
+          end;
+        end;
+        if IRC[node] = Ord(tkEq) then
+        begin
+          EmitB($4D); EmitB($85); EmitB($C9);                { test r9, r9 }
+          EmitB($0F); EmitB($94); EmitB($C0);                { sete al }
+        end
+        else if IRC[node] = Ord(tkNeq) then
+        begin
+          EmitB($4D); EmitB($85); EmitB($C9);                { test r9, r9 }
+          EmitB($0F); EmitB($95); EmitB($C0);                { setne al }
+        end
+        else
+        begin
+          EmitB($4D); EmitB($85); EmitB($C0);                { test r8, r8 }
+          EmitB($0F); EmitB($94); EmitB($C0);                { sete al }
+          if (IRC[node] = Ord(tkLt)) or (IRC[node] = Ord(tkGt)) then
+          begin
+            EmitB($4D); EmitB($85); EmitB($C9);              { test r9, r9 }
+            EmitB($0F); EmitB($95); EmitB($C1);              { setne cl }
+            EmitB($20); EmitB($C8);                          { and al, cl }
+          end;
+        end;
+        EmitB($48); EmitB($0F); EmitB($B6); EmitB($C0);      { movzx rax, al }
+      end;
+
     IR_EXC_LEAVE:
       begin
         IREmitLeaveExceptionFrames(IRA[node]);
@@ -1524,7 +1623,7 @@ begin
         end;
 
       IR_STORE_SYM, IR_STORE_MEM, IR_WRITE, IR_WRITELN,
-      IR_READLINE, IR_READ_VAR, IR_COPY_REC,
+      IR_READLINE, IR_READ_VAR, IR_COPY_REC, IR_SET_COPY,
       IR_EXC_LEAVE, IR_RAISE, IR_EXC_STORE, IR_EXC_CLEAR, IR_TERMINATE,
       IR_ASM:
         begin
