@@ -1,5 +1,17 @@
 # Handover: GUI final mile — compile the dropped `helloworld` unmodified
 
+> **STATUS: DONE (2026-05-31).** The stock `test/gui/helloworld` now compiles
+> and runs **unmodified**. This document is kept as historical context for how
+> the four remaining features were scoped; the actual implementation and the
+> compiler bug found en route are summarised in [gui.md](gui.md) ("Final mile")
+> and the per-feature commits. Library units moved to `lib/rtl` + `lib/lcl`.
+> Features landed: metaclass/class-reference values, executing `initialization`
+> sections, `{$R *.lfm}` wildcard + `{$R *.res}` no-op, `Dialogs.ShowMessage`,
+> `TApplication.CreateForm`/no-arg `Run`, and default-`published` implicit class
+> sections. Regressions: `test_classref`, `test_initsec`, `test_wildcard_lfm`,
+> `test_field_chain` (in `make test`), plus the GUI harness
+> `test/gui/test_lcl_helloworld`.
+
 **Audience:** a fresh session with no prior context. Read this top to bottom;
 it is self-contained. Treat the source and regression tests as authoritative.
 

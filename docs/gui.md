@@ -128,11 +128,42 @@ widgets and a click runs `Btn1Click`.
 The demos that need no input fire `gtk_button_clicked` synchronously so they
 terminate without a windowing robot; the windowed ones quit on a short timeout.
 
-## Not yet
+## Final mile — stock `helloworld` compiles unmodified (done 2026-05-31)
 
-The dropped `test/gui/helloworld` (a stock Lazarus project) does not compile
-unmodified yet. Remaining: a virtual `TComponent.Create(AOwner)` with
-`Application.CreateForm(TFormClass, ...)` (needs `class of` references and a
-runtime `ClassName`), a `Dialogs.ShowMessage`, and wiring a streamed child into
-its named published field. The streaming and event engine underneath is in
-place.
+The dropped `test/gui/helloworld` (a stock Lazarus project) now compiles and
+runs **unmodified**: a GTK window with a button whose click pops a Hello World
+message box. Four features closed the gap, each with a `make test` regression:
+
+- **Metaclass / class-reference values.** A class identifier used as a value
+  (`Application.CreateForm(TForm1, Form1)`) yields its `PClassRTTI`. Lowered as
+  `AN_CLASSREF` → `IR_CLASSREF` → `mov rax, <RTTI-blob address>` through a
+  per-class data-ref sentinel `-(CLASSREF_DATAREF_BASE + ci)` patched after
+  `EmitRTTI` (the same trick as the `-100`/`-101` registry/resource sentinels).
+- **`initialization` sections execute.** They were parsed and dropped; now each
+  unit's section is compiled into a synthesised `__init_<unit>` proc collected
+  in `InitProcs[]` and called at program entry, in dependency order, before the
+  main body. This is how the `forms` unit creates `Application`. `finalization`
+  is parsed and skipped.
+- **`{$R *.lfm}` wildcard + `{$R *.res}` no-op.** A leading `*` resolves to the
+  current unit's base name (tracked at lex time); a `.res` file is ignored; when
+  the directive's name field is empty the resource name is derived from the
+  `.lfm` root object's class, so `InitInheritedComponent(Self, ClassName)` finds
+  it.
+- **`Dialogs.ShowMessage` + LCL glue.** `ShowMessage` wraps the variadic
+  `gtk_message_dialog_new` (the external-call path now zeroes `al`, as the SysV
+  ABI requires for variadic callees). `TApplication.CreateForm` instantiates the
+  metaclass with `CreateInstance`, streams it by runtime `ClassName`, and keeps
+  it as the main form; no-arg `Run` realises it and enters `gtk_main`. A class's
+  implicit first section now defaults to `published` (Delphi `$M+`), so a stock
+  `TForm`'s fields and event handlers are streamable without an explicit
+  `published`.
+
+A compiler bug surfaced and was fixed along the way: a property/field reached
+through a **class-typed field** base (`host.field.prop`) did not dereference the
+field's pointer before applying the next offset (`test_field_chain`).
+
+Library units moved out of `compiler/` into `lib/rtl` (RTL) and `lib/lcl`
+(widgetset); the unit resolver searches both after `compiler/`. Two more GUI
+demos: `test_lcl_showmessage.pas` (a message dialog) and
+`test_lcl_helloworld.pas` (the full mile, mirroring `helloworld` but
+self-terminating: synthetic click → `ShowMessage` → dismiss → quit).
