@@ -41,6 +41,7 @@ function  gtk_window_new(wtype: Integer): PGtkWidget; cdecl; external 'libgtk-3.
 procedure gtk_window_set_title(window: PGtkWidget; title: PChar); cdecl; external 'libgtk-3.so.0';
 procedure gtk_window_set_default_size(window: PGtkWidget; w: Integer; h: Integer); cdecl; external 'libgtk-3.so.0';
 function  gtk_button_new_with_label(label_: PChar): PGtkWidget; cdecl; external 'libgtk-3.so.0';
+procedure gtk_button_set_label(button: PGtkWidget; label_: PChar); cdecl; external 'libgtk-3.so.0';
 procedure gtk_container_add(container: PGtkWidget; widget: PGtkWidget); cdecl; external 'libgtk-3.so.0';
 procedure gtk_widget_show_all(widget: PGtkWidget); cdecl; external 'libgtk-3.so.0';
 
