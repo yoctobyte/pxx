@@ -1,0 +1,4 @@
+object Form1: TWForm
+  Caption = 'Wildcard'
+  Width = 200
+end

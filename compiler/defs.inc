@@ -501,6 +501,9 @@ var
   InitProcs : array[0..255] of Integer;
   InitProcCount : Integer;
   SourceFileDir : AnsiString;
+  { Base name (no dir, no ext) of the source file currently being lexed; used to
+    resolve the `*` in $R *.lfm / $R *.res to the current unit. }
+  CurSrcBaseName : AnsiString;
   CurASTNode : Integer;
   LoopNestDepth       : Integer;
   LoopBreakFixPos     : array[0..MAX_LOOP_FIXUPS-1] of Integer;

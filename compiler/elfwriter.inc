@@ -476,6 +476,24 @@ begin
   end;
 end;
 
+function GetFileBaseName(const path: AnsiString): AnsiString;
+{ Strip directory and extension: 'test/gui/helloworld/main.lpr' -> 'main'.
+  Used to resolve the `*` in $R *.lfm / $R *.res to the current unit. }
+var i, lastSlash, lastDot: Integer; s: AnsiString;
+begin
+  lastSlash := 0; lastDot := 0;
+  for i := 1 to Length(path) do
+  begin
+    if path[i] = '/' then lastSlash := i;
+    if path[i] = '.' then lastDot := i;
+  end;
+  if lastDot <= lastSlash then lastDot := Length(path) + 1;
+  s := '';
+  for i := lastSlash + 1 to lastDot - 1 do
+    AppendChar(s, path[i]);
+  Result := s;
+end;
+
 procedure ExpandIncludes(var src: AnsiString; const baseDir: AnsiString);
 { Replace dollar-include directives with file contents, one level deep }
 var

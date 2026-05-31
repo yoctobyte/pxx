@@ -4796,6 +4796,7 @@ var
   savedCurTokSVal: AnsiString;
   savedCurTokIVal: Int64;
   savedCurTokLine: Integer;
+  savedSrcBase: AnsiString;
   isCompiled, isCUnit, isCHeader: Boolean;
 begin
   lo := LowerCase(name);
@@ -4949,6 +4950,11 @@ begin
 
     ExpandIncludes(UnitContent, GetFilePath(path));
 
+    { This unit's name resolves the `*` in its own $R *.lfm (processed during
+      LexAppend below). Restored after, so a nested `uses` doesn't leak its base. }
+    savedSrcBase := CurSrcBaseName;
+    CurSrcBaseName := lo;
+
     { Append tokens to global Token stream }
     startPos := LexAppend(UnitContent);
     i := startPos;
@@ -4971,6 +4977,7 @@ begin
     CurTok.SVal := savedCurTokSVal;
     CurTok.IVal := savedCurTokIVal;
     CurTok.Line := savedCurTokLine;
+    CurSrcBaseName := savedSrcBase;
   end;
 end;
 

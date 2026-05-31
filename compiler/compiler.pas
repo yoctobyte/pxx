@@ -131,6 +131,7 @@ begin
   LoadFile(inFile, Source);
   if DebugTrace then writeln('Loaded file length: ', Length(Source));
   SourceFileDir := GetFilePath(inFile);
+  CurSrcBaseName := GetFileBaseName(inFile);
   CompiledUnitCount := 0;
   InitProcCount := 0;
   InInterface := False;

@@ -612,6 +612,34 @@ begin
   end;
 end;
 
+function ResEndsWithDotRes(const s: AnsiString): Boolean;
+{ True for a '*.res'-style compiled-resource file, which we treat as a no-op
+  (Lazarus .res holds PE/COFF version info + icons we don't consume). }
+var n: Integer;
+begin
+  n := Length(s);
+  ResEndsWithDotRes :=
+    (n >= 4) and (s[n-3] = '.') and
+    ((s[n-2] = 'r') or (s[n-2] = 'R')) and
+    ((s[n-1] = 'e') or (s[n-1] = 'E')) and
+    ((s[n] = 's') or (s[n] = 'S'));
+end;
+
+function ResolveWildcardFile(const f: AnsiString): AnsiString;
+{ Resolve a leading '*' in a $R filename to the current source base name:
+  '*.lfm' in main.pas -> 'main.lfm'. Non-wildcard names pass through. }
+var i: Integer; r: AnsiString;
+begin
+  if (Length(f) >= 1) and (f[1] = '*') then
+  begin
+    r := CurSrcBaseName;
+    for i := 2 to Length(f) do AppendChar(r, f[i]);
+    ResolveWildcardFile := r;
+  end
+  else
+    ResolveWildcardFile := f;
+end;
+
 procedure ProcessPasDirective;
 var command, name, fname: AnsiString; parent, cond: Boolean; idx: Integer;
 begin
@@ -665,13 +693,21 @@ begin
     else if CaseEqual(command, 'R') then
     begin
       { R-directive (name file): queue an embedded resource; EmitResources
-        reads the file and builds the table after parsing. }
+        reads the file and builds the table after parsing. A leading '*' in the
+        filename resolves to the current unit base ($R *.lfm -> unit.lfm);
+        a '*.res' compiled-resource file is a no-op. When the name field is
+        empty (the wildcard form), EmitResources derives it from the .lfm root
+        object's class. }
       if Length(fname) > 0 then
       begin
-        if ResPendCount >= MAX_RESOURCES then Error('too many {$R} resources');
-        ResPendName[ResPendCount] := name;
-        ResPendFile[ResPendCount] := fname;
-        Inc(ResPendCount);
+        fname := ResolveWildcardFile(fname);
+        if not ResEndsWithDotRes(fname) then
+        begin
+          if ResPendCount >= MAX_RESOURCES then Error('too many {$R} resources');
+          ResPendName[ResPendCount] := name;
+          ResPendFile[ResPendCount] := fname;
+          Inc(ResPendCount);
+        end;
       end;
     end;
     { Mode and unsupported compatibility directives remain accepted comments. }
