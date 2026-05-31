@@ -3556,7 +3556,13 @@ var names: array[0..63] of AnsiString; n, i, idx: Integer; tk: TTypeKind;
     isArr, isDyn: Boolean; arrLo, arrHi: Integer; elemTk: TTypeKind;
 begin
   Next;
-  while CurTok.Kind = tkIdent do
+  { Stop at section keywords: these are plain identifiers in this dialect, so
+    an interface-level `var` block would otherwise consume `implementation`
+    (or initialization/finalization) as a variable name. }
+  while (CurTok.Kind = tkIdent) and
+        not CaseEqual(CurTok.SVal, 'implementation') and
+        not CaseEqual(CurTok.SVal, 'initialization') and
+        not CaseEqual(CurTok.SVal, 'finalization') do
   begin
     n := 0;
     repeat
@@ -4960,6 +4966,14 @@ begin
         tkClass,
         tkProcedure,
         tkFunction: ParseSubroutine;
+        tkIdent:
+          { constructor/destructor are identifiers in this dialect, not tokens;
+            their method bodies live in the unit implementation just like
+            procedure/function bodies. }
+          if CaseEqual(CurTok.SVal, 'constructor') or CaseEqual(CurTok.SVal, 'destructor') then
+            ParseSubroutine
+          else
+            Next;
         else
           Next;
       end;
@@ -5005,13 +5019,14 @@ begin
   { mov [bss_initial_rsp], rsp: 48 89 24 25 <GlobRef(0)> }
   EmitB($48); EmitB($89); EmitB($24); EmitB($25); EmitGlobRef(BSS_INITIAL_RSP);
 
-  { Initialize heap: calling sys_brk(0) }
-  MovRdiImm(0);
-  MovRaxImm(SYS_BRK);
-  EmitSyscall;
-  { Store returned start of heap in BSS_HEAP_PTR and BSS_HEAP_END }
+  { Initialize heap: reserve an arena via mmap (NOT brk). libc/GTK manage the
+    program break for their own malloc, so a brk-based heap would corrupt it. }
+  MovRsiImm(HEAP_ARENA_SIZE);
+  EmitMmapArena;                                          { rax = arena base }
   EmitB($48); EmitB($89); EmitB($04); EmitB($25); EmitGlobRef(BSS_HEAP_PTR);
-  EmitB($48); EmitB($89); EmitB($04); EmitB($25); EmitGlobRef(BSS_HEAP_END);
+  EmitB($48); EmitB($89); EmitB($C2);                     { mov rdx, rax }
+  EmitB($48); EmitB($81); EmitB($C2); EmitI32(HEAP_ARENA_SIZE); { add rdx, ARENA }
+  EmitB($48); EmitB($89); EmitB($14); EmitB($25); EmitGlobRef(BSS_HEAP_END);
 
   EmitB($E9); jmpPatch := CodeLen; EmitI32(0);
   if hasExceptions then EnableExceptionRuntime;
