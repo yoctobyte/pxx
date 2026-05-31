@@ -208,7 +208,7 @@ type
     tkAnd, tkOr, tkNot, tkDiv, tkMod,
     tkTrue, tkFalse,
     tkwriteln, tkwrite, tkReadln, tkRead,
-    tkHalt, tkInc, tkDec, tkLength, tkGetMem, tkOrd, tkChr, tkExit,
+    tkHalt, tkInc, tkDec, tkLength, tkGetMem, tkFreeMem, tkOrd, tkChr, tkExit,
     tkSysOpen, tkSysRead, tkSyswrite, tkSysClose, tkSysFchmod,
     tkArgCount, tkArgStr,
     tkInteger_T, tkBoolean_T, tkChar_T, tkString_T, tkReal_T, tkLongWord_T,
@@ -585,6 +585,7 @@ var
   BSS_INITIAL_RSP : Integer;  { always 0; set in ParseProgram init }
   BSS_HEAP_PTR    : Integer;
   BSS_HEAP_END    : Integer;
+  BSS_FREE_LIST   : Integer;  { head of GetMem/FreeMem free list; 0 = empty (BSS zero-init) }
   BSS_EXC_TOP     : Integer;
   BSS_EXC_OBJ     : Integer;
   BSS_EXC_CLS     : Integer;

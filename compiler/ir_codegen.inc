@@ -162,6 +162,7 @@ var left, right, valNode, symIdx, si: Integer;
     isSigned: Boolean;
     baseAddr, indexNode, lo, elemSize, offset, addressNode, valueNode: Integer;
     argNode, pathIdx, pi, specialId, classIdx, slot, cpi, i, jbePatch: Integer;
+    searchTop, pJzBump, pJaeTake, pJmpDone, pJbeNoGrow, pFreeNil: Integer;
     wid, decs: Integer;
     arg1Node, arg2Node, arg3Node, val1Node, val2Node: Integer;
     itemNode, trueCount, nextJmp, falseJmp: Integer;
@@ -842,52 +843,81 @@ begin
         end
         else if pi = -Ord(tkGetMem) then
         begin
-          { Class instantiation }
+          { GetMem with an 8-byte size header + free-list reuse.
+            Block layout: [size:8][payload...]; the returned pointer is the
+            payload (base+8), its size at payload-8. Freed blocks are threaded
+            through a single free list (head BSS_FREE_LIST), the link kept in
+            the freed payload's first 8 bytes. GetMem first-fits the list, else
+            bump-allocates a fresh block (growing the arena via mmap when
+            exhausted). No splitting/coalescing — proper allocator on the
+            todo (see docs/todo.md). Class instantiation continues below, so
+            both reuse and bump paths leave rax = payload. }
           argNode := IRB[node]; { size arg }
           IREmitNode(IRA[argNode]); { Evaluate size -> rax }
-          
-          { Round size up to multiple of 8 for alignment }
+
+          { Round up to a multiple of 8 and clamp to >= 8, so a freed block can
+            always hold its 8-byte free-list link. rcx = N (payload size). }
           EmitB($48); EmitB($83); EmitB($C0); EmitB($07); { add rax, 7 }
           EmitB($48); EmitB($83); EmitB($E0); EmitB($F8); { and rax, -8 }
-          
-          { mov rbx, [BSS_HEAP_PTR] }
-          EmitB($48); EmitB($8B); EmitB($1C); EmitB($25); EmitGlobRef(BSS_HEAP_PTR);
-          
-          { add rbx, rax }
-          EmitB($48); EmitB($01); EmitB($C3);
-          
-          { cmp rbx, [BSS_HEAP_END] }
-          EmitB($48); EmitB($3B); EmitB($1C); EmitB($25); EmitGlobRef(BSS_HEAP_END);
-          
-          { jbe skip_grow }
-          EmitB($76); jbePatch := CodeLen; EmitB(0);
+          EmitB($48); EmitB($83); EmitB($F8); EmitB($08); { cmp rax, 8 }
+          EmitB($73); EmitB($05);                         { jae +5 }
+          EmitB($B8); EmitI32(8);                         { mov eax, 8 }
+          EmitB($48); EmitB($89); EmitB($C1);             { mov rcx, rax }
 
-          { Grow: mmap a fresh arena (rax = needed size here). Length =
-            size + ARENA so this allocation always fits the new region; the
-            old region's tail is abandoned (simple bump allocator). After
-            this, HEAP_PTR = base and rbx = base + size, so the common
-            tail below returns base and advances correctly. }
-          EmitB($48); EmitB($89); EmitB($C6);                          { mov rsi, rax }
-          EmitB($48); EmitB($81); EmitB($C6); EmitI32(HEAP_ARENA_SIZE);{ add rsi, ARENA }
-          EmitB($50);                                                  { push rax (save size) }
-          EmitMmapArena;                                               { rax = base; rsi kept }
-          EmitB($59);                                                  { pop rcx (size) }
+          { Free-list first-fit. rsi = address of the slot pointing at the
+            current node (starts at &BSS_FREE_LIST); rdx = current node. }
+          EmitB($48); EmitB($8D); EmitB($34); EmitB($25); EmitGlobRef(BSS_FREE_LIST); { lea rsi, [BSS_FREE_LIST] }
+          searchTop := CodeLen;
+          EmitB($48); EmitB($8B); EmitB($16);             { mov rdx, [rsi]  (node) }
+          EmitB($48); EmitB($85); EmitB($D2);             { test rdx, rdx }
+          EmitB($74); pJzBump := CodeLen; EmitB(0);       { jz BUMP }
+          EmitB($48); EmitB($8B); EmitB($42); EmitB($F8); { mov rax, [rdx-8]  (block size) }
+          EmitB($48); EmitB($39); EmitB($C8);             { cmp rax, rcx }
+          EmitB($73); pJaeTake := CodeLen; EmitB(0);      { jae TAKE  (size >= N) }
+          EmitB($48); EmitB($89); EmitB($D6);             { mov rsi, rdx  (advance slot) }
+          EmitB($EB); EmitB(Byte(searchTop - (CodeLen + 1))); { jmp search }
+          { TAKE: unlink node, return payload }
+          Code[pJaeTake] := Byte(CodeLen - (pJaeTake + 1));
+          EmitB($48); EmitB($8B); EmitB($02);             { mov rax, [rdx]  (next) }
+          EmitB($48); EmitB($89); EmitB($06);             { mov [rsi], rax  (*slot = next) }
+          EmitB($48); EmitB($89); EmitB($D0);             { mov rax, rdx }
+          EmitB($E9); pJmpDone := CodeLen; EmitI32(0);    { jmp DONE }
+
+          { BUMP: fresh [size][payload] block at HEAP_PTR. }
+          Code[pJzBump] := Byte(CodeLen - (pJzBump + 1));
+          EmitB($48); EmitB($8B); EmitB($1C); EmitB($25); EmitGlobRef(BSS_HEAP_PTR); { mov rbx, [HEAP_PTR] }
+          EmitB($48); EmitB($89); EmitB($D8);             { mov rax, rbx }
+          EmitB($48); EmitB($01); EmitB($C8);             { add rax, rcx }
+          EmitB($48); EmitB($83); EmitB($C0); EmitB($08); { add rax, 8   (block end) }
+          EmitB($48); EmitB($3B); EmitB($04); EmitB($25); EmitGlobRef(BSS_HEAP_END); { cmp rax, [HEAP_END] }
+          EmitB($0F); EmitB($86); pJbeNoGrow := CodeLen; EmitI32(0); { jbe NOGROW }
+
+          { Grow: mmap N + 8 + ARENA so this block fits; old tail abandoned.
+            EmitMmapArena keeps rsi but clobbers rcx, so save N. }
+          EmitB($48); EmitB($89); EmitB($CE);             { mov rsi, rcx }
+          EmitB($48); EmitB($83); EmitB($C6); EmitB($08); { add rsi, 8 }
+          EmitB($48); EmitB($81); EmitB($C6); EmitI32(HEAP_ARENA_SIZE); { add rsi, ARENA }
+          EmitB($51);                                     { push rcx (save N) }
+          EmitMmapArena;                                  { rax = base; rsi kept }
+          EmitB($59);                                     { pop rcx (restore N) }
           EmitB($48); EmitB($89); EmitB($04); EmitB($25); EmitGlobRef(BSS_HEAP_PTR); { mov [HEAP_PTR], rax }
-          EmitB($48); EmitB($89); EmitB($C3);                          { mov rbx, rax }
-          EmitB($48); EmitB($01); EmitB($CB);                          { add rbx, rcx (base+size) }
-          EmitB($48); EmitB($89); EmitB($C2);                          { mov rdx, rax }
-          EmitB($48); EmitB($01); EmitB($F2);                          { add rdx, rsi (base+len) }
+          EmitB($48); EmitB($89); EmitB($C3);             { mov rbx, rax }
+          EmitB($48); EmitB($89); EmitB($C2);             { mov rdx, rax }
+          EmitB($48); EmitB($01); EmitB($F2);             { add rdx, rsi  (base+len) }
           EmitB($48); EmitB($89); EmitB($14); EmitB($25); EmitGlobRef(BSS_HEAP_END); { mov [HEAP_END], rdx }
 
-          { Patch short jump offset }
-          Code[jbePatch] := Byte(CodeLen - (jbePatch + 1));
-          
-          { mov rax, [BSS_HEAP_PTR] }
-          EmitB($48); EmitB($8B); EmitB($04); EmitB($25); EmitGlobRef(BSS_HEAP_PTR);
-          
-          { mov [BSS_HEAP_PTR], rbx }
-          EmitB($48); EmitB($89); EmitB($1C); EmitB($25); EmitGlobRef(BSS_HEAP_PTR);
-          
+          { NOGROW: base in rbx -> write header, advance HEAP_PTR, return payload. }
+          Patch32(pJbeNoGrow, CodeLen - (pJbeNoGrow + 4));
+          EmitB($48); EmitB($89); EmitB($0B);             { mov [rbx], rcx  (size header) }
+          EmitB($48); EmitB($8D); EmitB($43); EmitB($08); { lea rax, [rbx+8]  (payload) }
+          EmitB($48); EmitB($89); EmitB($DA);             { mov rdx, rbx }
+          EmitB($48); EmitB($01); EmitB($CA);             { add rdx, rcx }
+          EmitB($48); EmitB($83); EmitB($C2); EmitB($08); { add rdx, 8   (base+8+N) }
+          EmitB($48); EmitB($89); EmitB($14); EmitB($25); EmitGlobRef(BSS_HEAP_PTR); { mov [HEAP_PTR], rdx }
+
+          { DONE: rax = payload pointer }
+          Patch32(pJmpDone, CodeLen - (pJmpDone + 4));
+
           { Put instance pointer in rdi }
           EmitB($48); EmitB($89); EmitB($C7); { mov rdi, rax }
           
@@ -939,6 +969,20 @@ begin
             { No constructor defined, just return the instance pointer in rax }
             EmitB($48); EmitB($89); EmitB($F8); { mov rax, rdi }
           end;
+        end
+        else if pi = -Ord(tkFreeMem) then
+        begin
+          { FreeMem(p): push the block onto the free list (link stored in the
+            payload's first 8 bytes). nil is ignored. The size header at [p-8]
+            is left intact so GetMem can size the block for reuse. }
+          argNode := IRB[node]; { pointer arg }
+          IREmitNode(IRA[argNode]); { p -> rax }
+          EmitB($48); EmitB($85); EmitB($C0);             { test rax, rax }
+          EmitB($74); pFreeNil := CodeLen; EmitB(0);      { jz over (nil: skip) }
+          EmitB($48); EmitB($8B); EmitB($14); EmitB($25); EmitGlobRef(BSS_FREE_LIST); { mov rdx, [FREE_LIST] }
+          EmitB($48); EmitB($89); EmitB($10);             { mov [rax], rdx  (p.next = head) }
+          EmitB($48); EmitB($89); EmitB($04); EmitB($25); EmitGlobRef(BSS_FREE_LIST); { mov [FREE_LIST], rax }
+          Code[pFreeNil] := Byte(CodeLen - (pFreeNil + 1));
         end
         else
         begin

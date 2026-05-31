@@ -192,13 +192,23 @@ destinations. Regression: `test/test_getmem_proc.pas` (in `make test`).
 Self-host fixedpoint holds.
 
 **Sibling audit (the other procedure-form builtins):** `FreeMem`, `New`,
-`Dispose`, `Val`, `Str` are **not implemented at all** — they are not keywords
-and hard-error `undefined variable (...)`. So they do *not* share the silent
-write-back bug (they fail loudly). Follow-ups, not part of this fix:
-`FreeMem(p[, size])` is a trivial accepted **no-op** (the heap is bump-only, no
-reclaim) and pairs with `GetMem`; `New(p)`/`Dispose(p)` need the element size
-from the pointer's type; `Val`/`Str` are conversion routines. Original
-description kept below.
+`Dispose`, `Val`, `Str` were **not implemented at all** — not keywords,
+hard-erroring `undefined variable (...)` (so they never shared the silent
+write-back bug; they failed loudly).
+
+- ✅ **`FreeMem(p[, size])` now implemented** (2026-05-31) — and it actually
+  reclaims rather than being a no-op. `GetMem` gained an 8-byte size header per
+  block + a single free list; `FreeMem` pushes the block on the list and
+  `GetMem` first-fits it before bumping (IR backend; legacy keeps `FreeMem` a
+  no-op since its bump heap has no header). Two-arg `FreeMem(p, size)` is
+  accepted (size ignored — the header drives reuse); `FreeMem(nil)` is a no-op.
+  Tests: `test/test_freemem.pas`. The proper hybrid allocator (mmap large
+  blocks, munmap on free, binning/coalescing) is its own arc — see
+  `docs/todo.md` §4 "Heap allocator".
+- ⬜ `New(p)`/`Dispose(p)` need the element size from the pointer's type;
+  `Val`/`Str` are conversion routines. Still follow-ups.
+
+Original description kept below.
 
 
 

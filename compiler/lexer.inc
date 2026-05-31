@@ -273,6 +273,8 @@ begin
   begin
     if (s[1]='p') and (s[2]='r') and (s[3]='o') and (s[4]='g') and (s[5]='r') and (s[6]='a') and (s[7]='m') then Result := tkProgram;
     if (s[1]='f') and (s[2]='o') and (s[3]='r') and (s[4]='w') and (s[5]='a') and (s[6]='r') and (s[7]='d') then Result := tkForward;
+    if (s[1]='f') and (s[2]='r') and (s[3]='e') and (s[4]='e') and (s[5]='m') and (s[6]='e') and (s[7]='m') then Result := tkFreeMem;
+    if (s[1]='F') and (s[2]='r') and (s[3]='e') and (s[4]='e') and (s[5]='M') and (s[6]='e') and (s[7]='m') then Result := tkFreeMem;
     if (s[1]='w') and (s[2]='r') and (s[3]='i') and (s[4]='t') and (s[5]='e') and (s[6]='l') and (s[7]='n') then Result := tkwriteln;
     if (s[1]='s') and (s[2]='y') and (s[3]='s') and (s[4]='o') and (s[5]='p') and (s[6]='e') and (s[7]='n') then Result := tkSysOpen;
     if (s[1]='S') and (s[2]='y') and (s[3]='s') and (s[4]='O') and (s[5]='p') and (s[6]='e') and (s[7]='n') then Result := tkSysOpen;

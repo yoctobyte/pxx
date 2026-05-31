@@ -3066,6 +3066,26 @@ begin
       ASTRight[node] := opNode;
     end;
 
+    tkFreeMem:
+    begin
+      { FreeMem(p) or FreeMem(p, size): return the block to the free list. The
+        size argument (FPC's two-arg form) is accepted and ignored — the block's
+        own size header drives reuse. }
+      Next; Expect(tkLParen, '(');
+      ParseExpr;                       { pointer to free }
+      valNode := CurASTNode;
+      if CurTok.Kind = tkComma then begin Next; ParseExpr; end;  { size: accepted, ignored }
+      Expect(tkRParen, ')');
+
+      argSeq := AllocNode(AN_ARG);
+      ASTLeft[argSeq] := valNode;
+
+      node := AllocNode(AN_CALL);
+      ASTIVal[node] := -Ord(tkFreeMem);
+      ASTLeft[node] := argSeq;
+      ASTTk[node] := Ord(tyInteger);
+    end;
+
     tkGetMem:
     begin
       { Two-argument procedure form GetMem(dest, size): allocate `size` bytes and
@@ -5246,6 +5266,7 @@ begin
   BSS_INITIAL_RSP := BSSSize; Inc(BSSSize, 8);
   BSS_HEAP_PTR    := BSSSize; Inc(BSSSize, 8);
   BSS_HEAP_END    := BSSSize; Inc(BSSSize, 8);
+  BSS_FREE_LIST   := BSSSize; Inc(BSSSize, 8);
   BSS_LINE_POS    := BSSSize; Inc(BSSSize, 8);
   BSS_LINE_LEN    := BSSSize; Inc(BSSSize, 8);
   BSS_LINE_BUF    := BSSSize; Inc(BSSSize, LINE_BUF_SIZE);

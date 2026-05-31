@@ -219,6 +219,15 @@ inheritance depth, method-resolution clauses, COM ARC.
 - 🟡 **Dynamic arrays.** Work for scalar elements. Missing: reference counting
   / copy-on-grow (content preserved), reclaim of freed blocks, `array of
   record` / `array of string`, and dynamic arrays as params / results.
+- 🟡 **Heap allocator.** `GetMem`/`FreeMem` now do real free-list reuse on the
+  IR backend (8-byte size header per block + single free list, first-fit, no
+  split/coalesce; legacy backend leaves `FreeMem` a no-op). Enough that
+  alloc/free-heavy programs reuse memory instead of only ever bumping.
+  **Proper allocator still TODO** (own arc): a hybrid that keeps small blocks
+  on our free list but routes large requests (e.g. ≥ some threshold like a 1 MB
+  array) straight to `mmap`, `munmap`s large frees back to the kernel, and adds
+  size-binning + coalescing to fight fragmentation. Also fold the dynamic-array
+  reclaim above into it.
 - ✅ **Enums.** Type identity + ordinal↔name infra in place and used by RTTI
   (enum prop kind, EnumRTTI). Named set types (`set of TEnum`) also recognized.
 - 🟡 **Generics.** Template mechanism exists; breadth vs FPC unverified.
@@ -228,10 +237,13 @@ inheritance depth, method-resolution clauses, COM ARC.
   as an lvalue). No-arg method statements (`obj.Reset`) work, and arg'd calls
   work in expression context. Statement-position arg'd method calls are the
   gap. Surfaced writing `test/test_visibility.pas`.
-- ⬜ **Nested `{ }` comments.** The self-hosted lexer ends a `{` comment at the
-  first `}`, so a `{` inside a comment breaks self-compile (`unexpected
-  character`). FPC accepts nested comments (warns "comment level 2"). Avoid
-  inner braces in compiler-side comments until fixed. Surfaced in Phase 1.
+- ✅ **Comments.** Nested `{ }` / `(* *)` under `{$NESTEDCOMMENTS ON}`, C-style
+  `/* */` under `{$CSTYLECOMMENTS ON}` (both default off, TP/Delphi-compatible),
+  and `(* *)` followed by same-line code fixed unconditionally. Done 2026-05-31
+  (commit 6525e95); see [`plan-pascal-syntax-issues.md`](plan-pascal-syntax-issues.md)
+  §A. NB: both switches default off, so inner braces in compiler-source comments
+  still break the self-host seed unless that unit opts in — keep them
+  brace/directive-free.
 - ✅ **Class string fields** — work with real strings (the earlier "garbage"
   was a misdiagnosis). Two distinct bugs were behind it, both now understood:
   - The `writeln(c.AnyField)`-as-sole-arg compile error was an IRVerify false

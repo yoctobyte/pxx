@@ -419,6 +419,14 @@ begin
     GenAST(ASTLeft[argHead]);
     EmitBumpAlloc;
   end
+  else if specialId = Ord(tkFreeMem) then
+  begin
+    { Legacy bump allocator stores no size header, so a real free is not
+      possible here; accept FreeMem as a no-op (evaluate the pointer arg for
+      any side effects, then discard). The IR backend does real free-list
+      reuse. }
+    GenAST(ASTLeft[argHead]);
+  end
   else if specialId = 102 then
   begin
     { SetLength on a dynamic array. arg1=array lvalue, arg2=new length expr.
