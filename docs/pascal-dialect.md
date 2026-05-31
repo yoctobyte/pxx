@@ -57,6 +57,25 @@ with `-uPXX`.
 Not yet implemented: conditional expressions such as `{$if ...}`, valued
 defines, `{$elseif ...}`, or general FPC switch-state behavior.
 
+## Comments
+
+Three comment forms are recognised: brace `{ ... }`, paren-star `(* ... *)`,
+and line `// ...`. A `(* ... *)` (or any) comment may be followed by code on
+the same line.
+
+Two opt-in switches relax comment handling (both default **off**, matching
+Turbo Pascal / classic Delphi, which do not nest comments):
+
+```pascal
+{$NESTEDCOMMENTS ON}   { nest { } and (* *): an inner opener raises the depth }
+{$CSTYLECOMMENTS ON}   { recognise C-style /* ... */ comments (non-nesting) }
+```
+
+With `NESTEDCOMMENTS` off, a brace comment ends at the first `}` and a
+paren-star comment at the first `*)`. `CSTYLECOMMENTS` is a pure extension
+(standard Pascal has no `/* */`); leaving it off keeps `/` adjacent to `*`
+parsing as division. Both accept `ON`/`OFF` and are case-insensitive.
+
 ## Tested Language Surface
 
 The regression suite currently covers:

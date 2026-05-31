@@ -546,6 +546,8 @@ begin
   PasDefineCount := 0;
   PasCondCount := 0;
   StrictOverload := False;
+  CStyleComments := False;
+  NestedComments := False;
   name := 'PXX';
   PasDefine(name);
   name := 'CPU64';
@@ -690,6 +692,18 @@ begin
       else if CaseEqual(name, 'off') then StrictOverload := False
       else Error('strict_overload requires on or off');
     end
+    else if CaseEqual(command, 'cstylecomments') then
+    begin
+      if CaseEqual(name, 'on') then CStyleComments := True
+      else if CaseEqual(name, 'off') then CStyleComments := False
+      else Error('cstylecomments requires on or off');
+    end
+    else if CaseEqual(command, 'nestedcomments') then
+    begin
+      if CaseEqual(name, 'on') then NestedComments := True
+      else if CaseEqual(name, 'off') then NestedComments := False
+      else Error('nestedcomments requires on or off');
+    end
     else if CaseEqual(command, 'R') then
     begin
       { R-directive (name file): queue an embedded resource; EmitResources
@@ -716,6 +730,7 @@ begin
 end;
 
 procedure SkipSpace;
+var commentDepth: Integer; cDone: Boolean;
 begin
   if DebugTrace then writeln('Entering SkipSpace. SrcPos = ', SrcPos, ' Length(Source) = ', Length(Source));
   while SrcPos <= Length(Source) do
@@ -745,30 +760,61 @@ begin
             ProcessPasDirective
           else
           begin
-            while (SrcPos <= Length(Source)) and (Source[SrcPos] <> '}') do
+            { Brace comment. With NestedComments on, an inner open-brace raises
+              the depth so the matching close-brace ends the right level; off
+              (default) keeps the historic flat scan ending at the first one. }
+            commentDepth := 1;
+            while (SrcPos <= Length(Source)) and (commentDepth > 0) do
             begin
-              if Source[SrcPos] = #10 then Inc(SrcLine);
+              if Source[SrcPos] = #10 then Inc(SrcLine)
+              else if NestedComments and (Source[SrcPos] = '{') then Inc(commentDepth)
+              else if Source[SrcPos] = '}' then Dec(commentDepth);
               Inc(SrcPos);
             end;
-            if SrcPos <= Length(Source) then Inc(SrcPos);
           end;
         end;
         '(':
           if (SrcPos+1 <= Length(Source)) and (Source[SrcPos+1] = '*') then
           begin
             Inc(SrcPos, 2);
-            while SrcPos+1 <= Length(Source) do
+            { Paren-star comment. Nests under NestedComments. Must fall through
+              to the outer loop when it ends (not Exit) so code on the same line
+              after the close is still skipped. }
+            commentDepth := 1;
+            while (SrcPos+1 <= Length(Source)) and (commentDepth > 0) do
             begin
               if (Source[SrcPos] = '*') and (Source[SrcPos+1] = ')') then
-                begin Inc(SrcPos, 2); Exit; end;
-              if Source[SrcPos] = #10 then Inc(SrcLine);
-              Inc(SrcPos);
+                begin Dec(commentDepth); Inc(SrcPos, 2); end
+              else if NestedComments and (Source[SrcPos] = '(') and (Source[SrcPos+1] = '*') then
+                begin Inc(commentDepth); Inc(SrcPos, 2); end
+              else
+              begin
+                if Source[SrcPos] = #10 then Inc(SrcLine);
+                Inc(SrcPos);
+              end;
             end;
           end
           else Exit;
         '/':
           if (SrcPos+1 <= Length(Source)) and (Source[SrcPos+1] = '/') then
             while (SrcPos <= Length(Source)) and (Source[SrcPos] <> #10) do Inc(SrcPos)
+          else if CStyleComments and (SrcPos+1 <= Length(Source)) and (Source[SrcPos+1] = '*') then
+          begin
+            { C-style slash-star comment, enabled by CStyleComments. Does not
+              nest, matching C. }
+            Inc(SrcPos, 2);
+            cDone := False;
+            while (SrcPos+1 <= Length(Source)) and not cDone do
+            begin
+              if (Source[SrcPos] = '*') and (Source[SrcPos+1] = '/') then
+                begin Inc(SrcPos, 2); cDone := True; end
+              else
+              begin
+                if Source[SrcPos] = #10 then Inc(SrcLine);
+                Inc(SrcPos);
+              end;
+            end;
+          end
           else Exit;
         else Exit;
       end;

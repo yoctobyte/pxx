@@ -11,6 +11,10 @@ correct stale notes elsewhere).
 
 ## 1. Standing bugs (fix first)
 
+Front-end syntax/typing issues (comments, `GetMem(p,size)`) investigated +
+planned in **[`plan-pascal-syntax-issues.md`](plan-pascal-syntax-issues.md)**.
+
+
 - ✅ **IR operator-overload segfault** — resolved. `test/test_op_overload.pas`
   now produces the correct `1 0 1 0 1 0 10 6` under the IR backend and `make
   test` runs the full suite to the fixedpoint check (exit 0). (Was: miscompiled
@@ -113,6 +117,9 @@ engine itself is proven. **Self-contained handover for a fresh session:**
 ---
 
 ## 2c. Import C headers for complex libraries  ⬜  (wanted; the real goal)
+
+Full phased plan: **[`plan-c-header-import.md`](plan-c-header-import.md)**.
+
 
 Direct Pascal `external 'soname'` binding (used for the GTK widgetset) is a
 **stopgap, not the destination.** Hand-written bindings like `test/gui/gtk3.pas`
