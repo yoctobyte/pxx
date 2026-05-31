@@ -464,12 +464,16 @@ begin
   else if ASTKind[node] = AN_FIELD then
   begin
     baseNode := ASTLeft[node];
-    if (ASTKind[baseNode] = AN_IDENT) and
-       (Syms[ASTIVal[baseNode]].TypeKind = tyClass) then
-      baseAddr := IRAppend(IR_LOAD_SYM, ASTIVal[baseNode], -1, -1, 0, Ord(tyPointer))
+    { A class-typed base holds a POINTER to the object, so the field offset must
+      be applied to that pointer's VALUE, not to the address of the slot holding
+      it. This is true for any class-typed base — a variable (a.b), a class-typed
+      field (a.b.c), an index, etc. — so evaluate the base as a value when it is
+      class-typed, and take its address only for embedded (record) bases. }
+    if ASTTk[baseNode] = Ord(tyClass) then
+      baseAddr := IRLowerAST(baseNode)
     else
       baseAddr := IRLowerAddress(baseNode);
-    
+
     recName := ResolveNodeRec(baseNode);
     fieldName := GetASTIdentName(node);
     Result := IRAppend(IR_FIELD, baseAddr, -1, -1, RecFieldOffset(recName, fieldName), ASTTk[node]);

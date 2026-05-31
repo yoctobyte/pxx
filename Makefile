@@ -205,6 +205,8 @@ test: $(COMPILER) fpc-check
 	test "$$(/tmp/test_initsec26)" = "AB"
 	./$(COMPILER) test/test_wildcard_lfm.pas /tmp/test_wildcard_lfm26
 	test "$$(/tmp/test_wildcard_lfm26)" = "$$(printf 'Caption=Wildcard\nWidth=200')"
+	./$(COMPILER) test/test_field_chain.pas /tmp/test_field_chain26
+	test "$$(/tmp/test_field_chain26)" = "$$(printf 'deep=9\nbasevar=9\nfield=9')"
 	./$(COMPILER) test/test_streaming.pas /tmp/test_streaming26
 	test "$$(/tmp/test_streaming26)" = "$$(printf 'root.Name=Root1\nroot.Count=42\nroot.Title=Hi\nOnGo bound: yes\nchildCount=1\nkid.Name=Kid1\nkid.Value=7')"
 	./$(COMPILER) test/test_streaming_enumset.pas /tmp/test_streaming_enumset26
