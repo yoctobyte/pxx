@@ -1,7 +1,10 @@
 # Plan: Open Pascal Syntax / Front-End Issues
 
-Status: investigation + plan only — nothing fixed here yet.
-Companion to `docs/limitations.md` (user-facing boundaries) and `docs/todo.md`.
+Status (2026-05-31): **§A comments DONE** (commit 6525e95), **§B1 GetMem DONE**
+(commit a42000f). Remaining: §B0 regressions, and the §B1 sibling builtins
+(`FreeMem`/`New`/`Dispose`/`Val`/`Str`).
+Companion to `docs/limitations.md` (user-facing boundaries), `docs/pascal-dialect.md`
+(the comment switches are documented there), and `docs/todo.md`.
 Findings below were reproduced against `compiler/pascal26` on 2026-05-31 (IR
 backend default; legacy cross-checked where noted). Each item has a minimal
 repro, the mechanism (`file:line`), a fix sketch, and rough effort.
@@ -9,6 +12,45 @@ repro, the mechanism (`file:line`), a fix sketch, and rough effort.
 These should land **before** the C-header-import arc
 ([`plan-c-header-import.md`](plan-c-header-import.md)) — header import will lean
 on the same lexer (comments) and exercise pointer/`GetMem` paths heavily.
+
+---
+
+## Design decisions (rationale)
+
+Decisions taken while implementing §A/§B1, recorded so they are not
+re-litigated:
+
+- **Both comment-relaxation switches default OFF.** Turbo Pascal and original
+  Delphi do **not** nest comments (a long-standing PITA); FPC nests only under
+  `{$NESTEDCOMMENTS}`. Default-off preserves the historic flat behaviour — a
+  stray inner `}` inside a `{ … }` block, or a `/` adjacent to `*`, parses
+  exactly as before — so no existing source changes meaning. Nesting / C-style
+  comments are strictly opt-in, per unit.
+- **`/* */` gets its own switch (`{$CSTYLECOMMENTS}`), not folded into
+  `{$NESTEDCOMMENTS}`.** `/* */` is not standard Pascal at all and has no FPC
+  precedent to mirror, whereas `{$NESTEDCOMMENTS}` is a real FPC switch with
+  defined semantics. Keeping them separate avoids overloading an established
+  switch name with a non-standard extension. `/* */` does not nest (matches C).
+- **A3 (the `(* *)` `Exit` bug) is unconditional, not switch-gated** — it is an
+  unambiguous correctness fix (same-line code after `*)` was silently
+  mis-lexed), not a dialect choice.
+- **Section A (comments) was done before §B1 (GetMem)** even though B1 is the
+  higher-impact bug: A is smaller, lower-risk, fully contained in the lexer, and
+  A3 was actively (silently) biting. B1 touches the parser's statement
+  dispatcher and warranted its own commit.
+- **Switches are plain boolean lexer state** (`CStyleComments` /
+  `NestedComments` in `defs.inc`), wired through `ProcessPasDirective` exactly
+  like `strict_overload on/off` — no new directive machinery.
+
+### Dev note — comments in compiler source
+
+The `make`/self-host step compiles the **new** source with the **previous**
+seed `compiler/pascal26` (nesting off). So a `{ … }` doc-comment in compiler
+source that contains `{$…}`, a `/* */`, or an unbalanced/inner `}` will break
+the seed compiler (the inner `}` closes the comment early →
+`unexpected character`). Hit this while writing these very fixes. **Keep
+compiler-source comments brace-free and directive-free.** This is the same
+hazard as putting `{$…}` inside a comment in any compiled unit.
 
 ---
 
