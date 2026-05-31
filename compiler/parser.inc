@@ -4802,6 +4802,7 @@ var
   savedCurTokIVal: Int64;
   savedCurTokLine: Integer;
   savedSrcBase: AnsiString;
+  cdir, rtldir, lcldir: AnsiString;
   isCompiled, isCUnit, isCHeader: Boolean;
 begin
   lo := LowerCase(name);
@@ -4848,25 +4849,40 @@ begin
     if Length(UnitContent) > 0 then begin isCUnit := True; isCHeader := True; end;
   end;
 
+  { Library directories, anchored to the compiler binary (ExeDir) so units
+    resolve regardless of CWD. ExeDir is e.g. <root>/compiler/, so the RTL/LCL
+    dirs are its siblings via '../lib/...'. Falls back to CWD-relative when the
+    binary path carried no directory (run via a bare name). }
+  if ExeDir = '' then
+  begin
+    cdir := 'compiler/'; rtldir := 'lib/rtl/'; lcldir := 'lib/lcl/';
+  end
+  else
+  begin
+    cdir := ExeDir;
+    ConcatThree(ExeDir, '../lib/rtl/', '', rtldir);
+    ConcatThree(ExeDir, '../lib/lcl/', '', lcldir);
+  end;
+
   if Length(UnitContent) = 0 then
   begin
     { If not found in base dir, try compiler's local directory or common locations }
-    ConcatThree('compiler/', lo, '.pas', path);
+    ConcatThree(cdir, lo, '.pas', path);
     LoadFile(path, UnitContent);
     if Length(UnitContent) = 0 then
     begin
-      ConcatThree('compiler/', lo, '.pp', path);
+      ConcatThree(cdir, lo, '.pp', path);
       LoadFile(path, UnitContent);
     end;
     if Length(UnitContent) = 0 then
     begin
-      ConcatThree('compiler/', lo, '.c', path);
+      ConcatThree(cdir, lo, '.c', path);
       LoadFile(path, UnitContent);
       if Length(UnitContent) > 0 then isCUnit := True;
     end;
     if Length(UnitContent) = 0 then
     begin
-      ConcatThree('compiler/', lo, '.h', path);
+      ConcatThree(cdir, lo, '.h', path);
       LoadFile(path, UnitContent);
       if Length(UnitContent) > 0 then begin isCUnit := True; isCHeader := True; end;
     end;
@@ -4875,16 +4891,16 @@ begin
   if Length(UnitContent) = 0 then
   begin
     { RTL library units }
-    ConcatThree('lib/rtl/', lo, '.pas', path);
+    ConcatThree(rtldir, lo, '.pas', path);
     LoadFile(path, UnitContent);
     if Length(UnitContent) = 0 then
     begin
-      ConcatThree('lib/rtl/', lo, '.pp', path);
+      ConcatThree(rtldir, lo, '.pp', path);
       LoadFile(path, UnitContent);
     end;
     if Length(UnitContent) = 0 then
     begin
-      ConcatThree('lib/rtl/', lo, '.h', path);
+      ConcatThree(rtldir, lo, '.h', path);
       LoadFile(path, UnitContent);
       if Length(UnitContent) > 0 then begin isCUnit := True; isCHeader := True; end;
     end;
@@ -4893,12 +4909,37 @@ begin
   if Length(UnitContent) = 0 then
   begin
     { LCL widgetset units }
-    ConcatThree('lib/lcl/', lo, '.pas', path);
+    ConcatThree(lcldir, lo, '.pas', path);
     LoadFile(path, UnitContent);
     if Length(UnitContent) = 0 then
     begin
-      ConcatThree('lib/lcl/', lo, '.pp', path);
+      ConcatThree(lcldir, lo, '.pp', path);
       LoadFile(path, UnitContent);
+    end;
+  end;
+
+  { CWD-relative fallback (only meaningful when ExeDir is set and differs from
+    the repo root, e.g. the self-host tests run a /tmp copy of the compiler with
+    CWD at the repo root where compiler/ + lib/ live). }
+  if (Length(UnitContent) = 0) and (ExeDir <> '') then
+  begin
+    ConcatThree('compiler/', lo, '.pas', path);
+    LoadFile(path, UnitContent);
+    if Length(UnitContent) = 0 then begin ConcatThree('lib/rtl/', lo, '.pas', path); LoadFile(path, UnitContent); end;
+    if Length(UnitContent) = 0 then begin ConcatThree('lib/lcl/', lo, '.pas', path); LoadFile(path, UnitContent); end;
+    if Length(UnitContent) = 0 then begin ConcatThree('compiler/', lo, '.pp', path); LoadFile(path, UnitContent); end;
+    if Length(UnitContent) = 0 then begin ConcatThree('lib/rtl/', lo, '.pp', path); LoadFile(path, UnitContent); end;
+    if Length(UnitContent) = 0 then begin ConcatThree('lib/lcl/', lo, '.pp', path); LoadFile(path, UnitContent); end;
+    if Length(UnitContent) = 0 then
+    begin
+      ConcatThree('lib/rtl/', lo, '.h', path); LoadFile(path, UnitContent);
+      if Length(UnitContent) = 0 then begin ConcatThree('compiler/', lo, '.h', path); LoadFile(path, UnitContent); end;
+      if Length(UnitContent) > 0 then begin isCUnit := True; isCHeader := True; end;
+    end;
+    if Length(UnitContent) = 0 then
+    begin
+      ConcatThree('compiler/', lo, '.c', path); LoadFile(path, UnitContent);
+      if Length(UnitContent) > 0 then isCUnit := True;
     end;
   end;
 

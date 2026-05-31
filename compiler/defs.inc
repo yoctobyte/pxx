@@ -505,6 +505,10 @@ var
   { Base name (no dir, no ext) of the source file currently being lexed; used to
     resolve the `*` in $R *.lfm / $R *.res to the current unit. }
   CurSrcBaseName : AnsiString;
+  { Directory of the compiler binary itself (from ParamStr(0)); RTL/LCL units are
+    located relative to it so the compiler works from any CWD, not just the repo
+    root. Empty if the path has no directory part (then CWD-relative is used). }
+  ExeDir : AnsiString;
   CurASTNode : Integer;
   LoopNestDepth       : Integer;
   LoopBreakFixPos     : array[0..MAX_LOOP_FIXUPS-1] of Integer;

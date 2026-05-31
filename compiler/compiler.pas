@@ -26,7 +26,7 @@ procedure CPreprocess(var src: AnsiString; const baseDir: AnsiString); forward;
 
 { ===== Main ===== }
 
-var inFile, outFile, option: AnsiString; isC, isBasic, readingOptions: Boolean; n, i, j: Integer;
+var inFile, outFile, option, exePath: AnsiString; isC, isBasic, readingOptions: Boolean; n, i, j: Integer;
 begin
   DebugTrace := False;
   DumpIR := False;
@@ -132,6 +132,8 @@ begin
   if DebugTrace then writeln('Loaded file length: ', Length(Source));
   SourceFileDir := GetFilePath(inFile);
   CurSrcBaseName := GetFileBaseName(inFile);
+  exePath := ParamStr(0);              { copy to a local; ParamStr result does not match the param overload directly }
+  ExeDir := GetFilePath(exePath);
   CompiledUnitCount := 0;
   InitProcCount := 0;
   InInterface := False;
