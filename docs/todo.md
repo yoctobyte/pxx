@@ -105,8 +105,10 @@ compiler features — all landed and in `make test`:
 
 Final mile to compile the dropped `test/gui/helloworld` unmodified: virtual
 `TComponent.Create(AOwner)` + `Application.CreateForm` metaclass (needs `class
-of` + runtime `ClassName`), `Dialogs.ShowMessage`, and streamed-child →
-published-field wiring. The streaming + event engine itself is proven.
+of` + runtime `ClassName`), `Dialogs.ShowMessage`, LCL unit stubs, `{$R *.lfm}`
+wildcard, and streamed-child → published-field wiring. The streaming + event
+engine itself is proven. **Self-contained handover for a fresh session:**
+[`handover-final-mile.md`](handover-final-mile.md).
 
 ---
 
