@@ -222,6 +222,26 @@ begin
   end;
 end;
 
+function ResolveVMTSlotProc(ci, slot: Integer): Integer;
+{ Effective proc occupying virtual slot `slot` for class ci: search ci's own
+  methods first (an override wins), then walk ancestors. -1 if none. }
+var curr, i, base, cnt: Integer;
+begin
+  Result := -1;
+  curr := ci;
+  while curr >= 0 do
+  begin
+    base := UClsMBase[curr]; cnt := UClsMCount[curr];
+    for i := 0 to cnt - 1 do
+      if UMthVirSlot[base + i] = slot then
+      begin
+        Result := UMthProc_[base + i];
+        Exit;
+      end;
+    curr := UClsParent[curr];
+  end;
+end;
+
 function FindUProp(ci: Integer; const name: AnsiString): Integer;
 var i, base, cnt: Integer; lo, name2: AnsiString; curr: Integer;
 begin

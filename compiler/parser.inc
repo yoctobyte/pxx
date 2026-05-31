@@ -4078,6 +4078,22 @@ begin
           Data[DataLen] := 0;
           Inc(DataLen);
         end;
+        { Fill every VMT slot from the effective method (own override or an
+          inherited one). The per-override fixup loop only covers subclasses
+          that already exist when the override is parsed, so a subclass
+          declared later (or in a later unit) would leave inherited slots null
+          and crash on dispatch. This makes each class's VMT self-contained. }
+        for i := 0 to UClsVirtCount[ci] - 1 do
+        begin
+          slot := ResolveVMTSlotProc(ci, i);
+          if slot >= 0 then
+          begin
+            if MethodFixCount >= MAX_METHFIX then Error('too many virtual method fixups');
+            MethodFixups[MethodFixCount].DataPos := UClsVMTOffset[ci] + i * 8;
+            MethodFixups[MethodFixCount].ProcIdx := slot;
+            Inc(MethodFixCount);
+          end;
+        end;
       end
       else if CurTok.Kind = tkRecord then
       begin
