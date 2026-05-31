@@ -804,10 +804,19 @@ function FindSym(const name: AnsiString): Integer;
 var i: Integer; lo: AnsiString;
 begin
   lo := name;
+  { Exact-case match first, innermost scope out (preserves shadowing). }
   for i := SymCount-1 downto 0 do
     if StrEqual(Syms[i].Name, lo) then
     begin
       if DebugTrace then writeln('FindSym: ', lo, ' -> ', i);
+      Result := i;
+      Exit;
+    end;
+  { Case-insensitive fallback for case-insensitive symbols only. }
+  for i := SymCount-1 downto 0 do
+    if (not SymCaseSensitive[i]) and CaseEqual(Syms[i].Name, lo) then
+    begin
+      if DebugTrace then writeln('FindSym: ', lo, ' -> ', i, ' (ci)');
       Result := i;
       Exit;
     end;
@@ -835,6 +844,7 @@ begin
   Syms[SymCount].ElemType := tyInteger;
   Syms[SymCount].RecName  := LastTypeRecId;
   Syms[SymCount].IsRef    := False;
+  SymCaseSensitive[SymCount] := CaseSensitiveMode;
   Syms[SymCount].PtrElemTk := tyUnknown;
   Syms[SymCount].PtrElemRec := REC_NONE;
   if tk = tyPointer then
@@ -891,6 +901,7 @@ begin
   Syms[SymCount].RecName  := LastTypeRecId;
   Syms[SymCount].IsRef    := isRef;
   Syms[SymCount].Kind     := skParam;
+  SymCaseSensitive[SymCount] := CaseSensitiveMode;
   Syms[SymCount].PtrElemTk := tyUnknown;
   Syms[SymCount].PtrElemRec := REC_NONE;
   if tk = tyPointer then
@@ -940,6 +951,7 @@ begin
   Syms[SymCount].IsRef    := False;
   Syms[SymCount].PtrElemTk := tyUnknown;
   Syms[SymCount].PtrElemRec := REC_NONE;
+  SymCaseSensitive[SymCount] := CaseSensitiveMode;
   if elemType = tyPointer then
   begin
     Syms[SymCount].PtrElemTk := LastTypePointerElemTk;
@@ -977,6 +989,7 @@ begin
   Syms[SymCount].IsRef       := False;
   Syms[SymCount].PtrElemTk := tyUnknown;
   Syms[SymCount].PtrElemRec := REC_NONE;
+  SymCaseSensitive[SymCount] := CaseSensitiveMode;
   if elemType = tyPointer then
   begin
     Syms[SymCount].PtrElemTk := LastTypePointerElemTk;
@@ -1010,6 +1023,7 @@ begin
   Syms[SymCount].ConstVal := v;
   Syms[SymCount].Offset   := 0;
   Syms[SymCount].IsRef    := False;
+  SymCaseSensitive[SymCount] := CaseSensitiveMode;
   Result := SymCount; Inc(SymCount);
 end;
 
@@ -1735,8 +1749,15 @@ function FindProc(const name: AnsiString): Integer;
 var i: Integer; lo: AnsiString;
 begin
   lo := name;
+  { Exact-case match first — always, and the only path for case-sensitive
+    symbols (C imports, or Pascal in case-sensitive mode). }
   for i := 0 to ProcCount-1 do
     if Procs[i].Name = lo then begin Result := i; Exit; end;
+  { Case-insensitive fallback for case-insensitive symbols only (default Pascal).
+    First match wins; ambiguity refinement (warn) is future work. }
+  for i := 0 to ProcCount-1 do
+    if (not ProcCaseSensitive[i]) and CaseEqual(Procs[i].Name, lo) then
+    begin Result := i; Exit; end;
   Result := -1;
 end;
 
@@ -1879,6 +1900,7 @@ begin
   Procs[ProcCount].RetSymIdx  := -1;
   Procs[ProcCount].ScopeBase  := 0;
   ProcExternal[ProcCount]     := False;
+  ProcCaseSensitive[ProcCount] := CaseSensitiveMode;
   ProcOverloadDirective[ProcCount] := False;
   ProcLibrary[ProcCount]      := -1;
   for i := 0 to nParams-1 do

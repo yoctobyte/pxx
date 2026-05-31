@@ -422,6 +422,7 @@ var
   StrictOverload : Boolean;
   CStyleComments : Boolean;   { CSTYLECOMMENTS directive: enable C slash-star comments }
   NestedComments : Boolean;   { NESTEDCOMMENTS directive: nest brace and paren-star comments }
+  CaseSensitiveMode : Boolean; { CASESENSITIVE directive: when on, identifiers declared here match case-sensitively. Default off (standard case-insensitive Pascal). }
   NoUnhandledHandler : Boolean;
   Source  : AnsiString;
   SrcPos  : Integer;
@@ -466,6 +467,7 @@ var
   ProcAddrFixCount : Integer;
 
   Syms      : array[0..MAX_SYMS-1]  of TSymbol;
+  SymCaseSensitive : array[0..MAX_SYMS-1] of Boolean; { match this symbol name case-sensitively }
   SymCount  : Integer;
   FrameSize : Integer;
 
@@ -474,6 +476,7 @@ var
   ProcCount : Integer;
   CurProc   : Integer;   { -1 = main }
   ProcExternal : array[0..MAX_PROCS-1] of Boolean;
+  ProcCaseSensitive : array[0..MAX_PROCS-1] of Boolean; { match this proc name case-sensitively (C imports, or Pascal in case-sensitive mode) }
   ProcLibrary  : array[0..MAX_PROCS-1] of Integer; { Strs[] entry for DT_NEEDED name }
   CurrentCLibrary : AnsiString;
   ExternalProc   : array[0..MAX_EXTERNAL-1] of Integer;

@@ -76,22 +76,23 @@ paren-star comment at the first `*)`. `CSTYLECOMMENTS` is a pure extension
 (standard Pascal has no `/* */`); leaving it off keeps `/` adjacent to `*`
 parsing as division. Both accept `ON`/`OFF` and are case-insensitive.
 
-## Identifiers Are Case-Sensitive (current)
+## Identifier Case Modes
 
-Currently identifiers here are **case-sensitive**: `Min` and `min` are different
-names, and a routine must be called with the exact case it was declared.
-(Keywords are also only recognised in the capitalizations the lexer lists.) This
-diverges from standard Pascal and breaks ported FPC code that relies on
-case-insensitivity.
+Pascal identifiers are case-insensitive by default. `Min`, `min`, and `MIN`
+resolve to the same Pascal declaration unless strict mode is enabled:
 
-The planned model keeps case-sensitivity as an **opt-in feature, not the
-default**: a `{$CASESENSITIVE ON/OFF}` switch (default off for `.pas`, i.e.
-standard case-insensitive Pascal) with strictness available on demand (typo
-catching, self-source checks). Case is resolved **per symbol origin** — imported
-C/external symbols stay case-sensitive (their link names are exact), Pascal
-identifiers follow the switch — rather than lowercasing everything onto one pile,
-which would mangle C symbols. See `docs/todo.md` §4 "Name resolution / case
-sensitivity".
+```pascal
+{$CASESENSITIVE ON}
+```
+
+`{$CASESENSITIVE ON/OFF}` is case-insensitive and applies to declarations in
+the current Pascal source context. The compiler source opts into strict mode to
+catch misspellings during self-compilation.
+
+Case is resolved **per symbol origin** rather than by lowercasing every name.
+C-imported symbols stay case-sensitive because their link names are exact.
+`docs/todo.md` records a deferred C-import-only `{$LAZYCASING}` compatibility
+idea; it is not implemented and would not alter strict Pascal behavior.
 
 ## Tested Language Surface
 

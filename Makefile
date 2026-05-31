@@ -221,6 +221,14 @@ test: $(COMPILER) fpc-check
 	test "$$(/tmp/test_char_to_string26)" = "$$(printf 'x\ny\nab\nZZy\nyZZ\nyy\nA\nqqq\nz\ndone')"
 	./$(COMPILER) test/test_comments.pas /tmp/test_comments26
 	test "$$(/tmp/test_comments26)" = "$$(printf '3\ndone')"
+	./$(COMPILER) test/test_case_insensitive.pas /tmp/test_case_insensitive26
+	test "$$(/tmp/test_case_insensitive26)" = "42"
+	./$(COMPILER) test/test_case_sensitive.pas /tmp/test_case_sensitive26
+	test "$$(/tmp/test_case_sensitive26)" = "$$(printf '10\n20\nupper\nlower')"
+	! ./$(COMPILER) test/test_case_sensitive_error.pas /tmp/test_case_sensitive_error26 > /tmp/test_case_sensitive_error.log 2>&1
+	grep -q "undefined variable (VALUE)" /tmp/test_case_sensitive_error.log
+	./$(COMPILER) test/test_case_sensitive_unit.pas /tmp/test_case_sensitive_unit26
+	test "$$(/tmp/test_case_sensitive_unit26)" = "$$(printf 'unit\n7')"
 	./$(COMPILER) test/test_getmem_proc.pas /tmp/test_getmem_proc26
 	test "$$(/tmp/test_getmem_proc26)" = "$$(printf '1\n65\n66\n90\n1')"
 	./$(COMPILER) test/test_freemem.pas /tmp/test_freemem26

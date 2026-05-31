@@ -3,6 +3,12 @@
 
 program Pascal26;
 
+{ The compiler is written case-sensitively and relies on it (identifiers that
+  differ only in case, speculative FindProc/FindSym lookups). User .pas defaults
+  to case-insensitive; we opt in. }
+{$CASESENSITIVE ON}
+{$NESTEDCOMMENTS ON}
+
 uses SysUtils, BaseUnix;
 
 {$include defs.inc}

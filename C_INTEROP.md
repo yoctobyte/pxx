@@ -107,6 +107,16 @@ It handles simple function prototypes with integer and character-like
 arguments and return values. It tolerates unsupported declarations in system
 headers so that usable simple prototypes can still be found.
 
+### Suggested: lazy casing for C imports
+
+C-imported symbols currently require exact case because their link names are
+exact. A deferred compatibility feature is `{$LAZYCASING ON}` for C imports
+only, default off. It would keep exact lookup first, then accept a
+case-insensitive fallback only when exactly one imported C symbol matches,
+while preserving the declaration's exact spelling for ELF linkage. Ambiguous
+matches would remain errors. This should be implemented only after warnings
+exist so accepted misspellings remain visible.
+
 ## Compiler Tracing
 
 Use `--debug` to see C preprocessing events (selected includes, macro

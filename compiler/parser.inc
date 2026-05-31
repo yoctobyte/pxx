@@ -4950,7 +4950,7 @@ var
   savedCurTokLine: Integer;
   savedSrcBase: AnsiString;
   cdir, rtldir, lcldir: AnsiString;
-  isCompiled, isCUnit, isCHeader: Boolean;
+  isCompiled, isCUnit, isCHeader, savedCaseMode: Boolean;
 begin
   lo := LowerCase(name);
   if (lo = 'sysutils') or (lo = 'baseunix') or (lo = 'unix') then Exit;
@@ -5125,7 +5125,13 @@ begin
     TokPos := startPos;
     Next;
 
+    { C symbols are case-sensitive: force the mode so their proc names match
+      exactly (the link symbol is exact), independent of the host's setting.
+      Restored after so it does not leak into the including unit. }
+    savedCaseMode := CaseSensitiveMode;
+    CaseSensitiveMode := True;
     ParseCUnit;
+    CaseSensitiveMode := savedCaseMode;
 
     TokPos := savedTokPos;
     CurTok.Kind := savedCurTokKind;
@@ -5140,6 +5146,11 @@ begin
     savedCurTokSVal := CurTok.SVal;
     savedCurTokIVal := CurTok.IVal;
     savedCurTokLine := CurTok.Line;
+    { A unit's own CASESENSITIVE directive (processed during LexAppend below)
+      applies to that unit only — saved here, restored after ParseUnit, so it
+      does not leak into the including file. A unit with no directive inherits
+      the caller's mode. }
+    savedCaseMode := CaseSensitiveMode;
 
     ExpandIncludes(UnitContent, GetFilePath(path));
 
@@ -5171,6 +5182,7 @@ begin
     CurTok.IVal := savedCurTokIVal;
     CurTok.Line := savedCurTokLine;
     CurSrcBaseName := savedSrcBase;
+    CaseSensitiveMode := savedCaseMode;
   end;
 end;
 

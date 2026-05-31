@@ -256,29 +256,28 @@ inheritance depth, method-resolution clauses, COM ARC.
   modifier→formal mapping + variadic interplay then. Handle in the **parser**
   (it resolves the callee's directive), never the lexer. Rationale in the
   Str/Val discussion — see `plan-pascal-syntax-issues.md` §B1.
-- ⬜ **Name resolution / case sensitivity** (design locked, not built). Today
-  ALL identifiers are case-sensitive (FindProc/FindSym exact-match, nothing
-  lowercases; keywords only match the capitalizations the lexer lists), so
-  `min` ≠ `Min`. Target model — **per-origin case mode, never a global
-  lower-pile** (matters for the multi-language / "frankenstein" goal: don't
-  throw C/Pascal/BASIC symbols on one pile and lower them):
-  - Each symbol carries a `CaseSensitive` flag. C / external imports → always
-    sensitive (the link symbol is exact). Pascal decls → driven by a
-    `{$CASESENSITIVE ON/OFF}` switch (mirror the comment switches: lexer bool +
-    directive), **default off** for `.pas`. `ON` is an opt-in strict mode
-    (typo-catching, verifying our own source). Each future frontend tags its
-    own symbols' mode.
+- ✅ **Name resolution / case sensitivity.** Implemented as a **per-origin case
+  mode, never a global lower-pile** (matters for the multi-language /
+  "frankenstein" goal: don't throw C/Pascal/BASIC symbols on one pile and lower
+  them):
+  - Each symbol is tagged with a case mode. C imports → always sensitive (the
+    link symbol is exact). Pascal declarations → driven by a
+    `{$CASESENSITIVE ON/OFF}` switch, **default off** for `.pas`. `ON` is an
+    opt-in strict mode (typo-catching, verifying our own source). Each future
+    frontend tags its own symbols' mode.
   - **Store names verbatim — never lowercase the symbol table** (lowercasing
     mangles C symbols and diagnostics). Match with the existing `CaseEqual`
     (`defs.inc:776`); `LowerCase` (`parser.inc:4899`, ASCII) already exists and
     is only needed if symbols later move to hashed lookup.
   - **Lookup = exact-first, then case-insensitive fallback** when no exact hit
-    and the candidate is insensitive. This is additive/low-risk: everything that
-    compiles today is unchanged (exact still fires first, ambiguity auto-prefers
-    exact); only currently-failing lookups like `min`→`Min` start resolving. C
-    symbols stay exact-only. The rare two-C-symbols-differ-only-by-case case
-    resolves exact-or-errors naturally (a real ambiguity warning would need a
-    warnings facility — none today, compiler only Errors+Halts).
+    and the candidate is insensitive. C symbols stay exact-only.
+  - ⬜ **Suggested: `{$LAZYCASING ON/OFF}` for C imports only** (deferred,
+    default off). After exact lookup fails, allow a case-insensitive C-import
+    fallback only when exactly one imported symbol matches. Preserve the
+    declaration's exact spelling for ELF linkage. Reject ambiguous matches.
+    This is a compatibility convenience for imported APIs, not a Pascal mode;
+    it should not weaken `{$CASESENSITIVE ON}` Pascal code. Add warnings support
+    before implementing so accepted spelling mistakes are visible.
   - Disambiguation tooling, useful regardless and **both currently missing**:
     qualified `UnitName.Symbol` calls (verified unsupported — `math.Min(..)`
     errors), and a unit-rename import. `uses X as Y` is **not** standard Pascal

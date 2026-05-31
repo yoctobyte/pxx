@@ -550,6 +550,7 @@ begin
   StrictOverload := False;
   CStyleComments := False;
   NestedComments := False;
+  CaseSensitiveMode := False;
   name := 'PXX';
   PasDefine(name);
   name := 'CPU64';
@@ -705,6 +706,12 @@ begin
       if CaseEqual(name, 'on') then NestedComments := True
       else if CaseEqual(name, 'off') then NestedComments := False
       else Error('nestedcomments requires on or off');
+    end
+    else if CaseEqual(command, 'casesensitive') then
+    begin
+      if CaseEqual(name, 'on') then CaseSensitiveMode := True
+      else if CaseEqual(name, 'off') then CaseSensitiveMode := False
+      else Error('casesensitive requires on or off');
     end
     else if CaseEqual(command, 'R') then
     begin
