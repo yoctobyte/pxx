@@ -19,12 +19,10 @@ type
     FParent: TControl;
     FLeft, FTop, FWidth, FHeight: Integer;
     FCaption: string;
+    FOnClick: TMethod;
     procedure SetParent(p: TControl);
     procedure SetCaption(const v: string);
   public
-    { `of object` event: a TMethod (Code+Data). Assign with @obj.method.
-      Public field for now; a published property (for LFM streaming) is later. }
-    OnClick: TMethod;
     procedure ApplyCaption; virtual;
     procedure Show;
     procedure ConnectClick;
@@ -36,6 +34,9 @@ type
     property Width: Integer read FWidth write FWidth;
     property Height: Integer read FHeight write FHeight;
     property Caption: string read FCaption write SetCaption;
+    { `of object` event (TMethod, Code+Data). Streamable as RTTI piMethod;
+      set via the RTTI path (SetMethodProp) or directly with @obj.method. }
+    property OnClick: TMethod read FOnClick write FOnClick;
   end;
 
   TWinControl = class(TControl)
