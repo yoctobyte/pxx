@@ -17,6 +17,18 @@ type
 const
   GTK_WINDOW_TOPLEVEL = 0;
 
+  { GtkMessageType }
+  GTK_MESSAGE_INFO     = 0;
+  GTK_MESSAGE_WARNING  = 1;
+  GTK_MESSAGE_QUESTION = 2;
+  GTK_MESSAGE_ERROR    = 3;
+  { GtkButtonsType }
+  GTK_BUTTONS_NONE  = 0;
+  GTK_BUTTONS_OK    = 1;
+  { GtkDialogFlags }
+  GTK_DIALOG_MODAL              = 1;
+  GTK_DIALOG_DESTROY_WITH_PARENT = 2;
+
 { --- lifecycle --- }
 procedure gtk_init(argc: Pointer; argv: Pointer); cdecl; external 'libgtk-3.so.0';
 function  gtk_get_major_version: Integer; cdecl; external 'libgtk-3.so.0';
@@ -45,6 +57,17 @@ procedure gtk_button_set_label(button: PGtkWidget; label_: PChar); cdecl; extern
 procedure gtk_button_clicked(button: PGtkWidget); cdecl; external 'libgtk-3.so.0';
 procedure gtk_container_add(container: PGtkWidget; widget: PGtkWidget); cdecl; external 'libgtk-3.so.0';
 procedure gtk_widget_show_all(widget: PGtkWidget); cdecl; external 'libgtk-3.so.0';
+procedure gtk_widget_destroy(widget: PGtkWidget); cdecl; external 'libgtk-3.so.0';
+
+{ --- dialogs ---
+  gtk_message_dialog_new is variadic; we bind a fixed prototype that always
+  passes a "%s" format plus one message string, so arbitrary message text
+  (incl. % chars) is shown literally. The external-call path sets al=0. }
+function  gtk_message_dialog_new(parent: PGtkWidget; flags: Integer;
+                                 mtype: Integer; buttons: Integer;
+                                 fmt: PChar; msg: PChar): PGtkWidget;
+            cdecl; external 'libgtk-3.so.0';
+function  gtk_dialog_run(dialog: PGtkWidget): Integer; cdecl; external 'libgtk-3.so.0';
 
 { --- libc --- }
 function  usleep(usec: LongWord): Integer; cdecl; external 'libc.so.6';
@@ -66,15 +89,21 @@ function PC(const s: AnsiString): Pointer;
 implementation
 
 var
-  CBuf: array[0..1023] of Char;
+  { Ring of buffers so several transient C strings can be live at once
+    (e.g. a "%s" format plus its argument in the same call). }
+  CBuf: array[0..4095] of Char;
+  CBufSlot: Integer;
 
 function PC(const s: AnsiString): Pointer;
-var i: Integer;
+var i, base: Integer;
 begin
+  base := CBufSlot * 1024;
   for i := 1 to Length(s) do
-    CBuf[i-1] := s[i];
-  CBuf[Length(s)] := #0;
-  PC := @CBuf[0];
+    CBuf[base + i-1] := s[i];
+  CBuf[base + Length(s)] := #0;
+  PC := @CBuf[base];
+  CBufSlot := CBufSlot + 1;
+  if CBufSlot >= 4 then CBufSlot := 0;
 end;
 
 function SignalConnect(obj: Pointer; signal: AnsiString; handler: Pointer): LongWord;

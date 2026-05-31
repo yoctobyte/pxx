@@ -2282,6 +2282,10 @@ begin
     EmitB($48); EmitB($83); EmitB($E4); EmitB($F0); { and rsp, -16 }
     EmitB($48); EmitB($83); EmitB($EC); EmitB($08); { sub rsp, 8 }
     EmitB($41); EmitB($53);                         { push r11 }
+    { SysV: al = number of vector regs used by a variadic callee. We never
+      pass float/SSE args to bound externals, so al = 0 is always correct;
+      non-variadic callees ignore it. Required for gtk_message_dialog_new etc. }
+    EmitB($31); EmitB($C0);                         { xor eax, eax }
     EmitB($FF); EmitB($14); EmitB($25); { call qword ptr [absolute address] }
     DynCallCodePos[DynCallCount] := CodeLen;
     DynCallExtIdx[DynCallCount] := extIdx;
