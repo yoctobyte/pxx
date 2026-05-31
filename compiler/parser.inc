@@ -3310,6 +3310,45 @@ begin
         node := AllocNode(AN_ASSIGN);
         ASTLeft[node] := valNode; ASTRight[node] := opNode;
       end
+      else if (name = 'Str') or (name = 'str') then
+      begin
+        { Str(x[:w[:d]], s): format integer x into string s, right-justified to
+          width w. Parsed like write's value:w:d (literal width/decimals;
+          decimals ignored for integer Str). Rewritten to s := StrInt(x, w),
+          which lives in the auto-included builtin unit. }
+        Next; Expect(tkLParen, '(');
+        ParseExpr; exprNode := CurASTNode;        { value }
+        castPrevTok := 0;                          { width default }
+        if CurTok.Kind = tkColon then
+        begin
+          Next;
+          if CurTok.Kind <> tkInteger then Error('Str: expected integer width after :');
+          castPrevTok := CurTok.IVal; Next;
+          if CurTok.Kind = tkColon then
+          begin
+            Next;
+            if CurTok.Kind <> tkInteger then Error('Str: expected integer decimals after :');
+            Next;                                  { decimals: parsed, ignored }
+          end;
+        end;
+        Expect(tkComma, ',');
+        if CurTok.Kind <> tkIdent then Error('Str: expected destination string variable');
+        idx := FindSym(CurTok.SVal); identTokIdx := TokPos - 1; Next;
+        valNode := ParseLValueAST(idx, identTokIdx);
+        Expect(tkRParen, ')');
+
+        pi := FindProc('StrInt');
+        if pi < 0 then Error('Str: builtin unit not loaded');
+        stepsNode := AllocNode(AN_INT_LIT);
+        ASTIVal[stepsNode] := castPrevTok; ASTTk[stepsNode] := Ord(tyInteger);
+        argSeq := AllocNode(AN_ARG); ASTLeft[argSeq] := exprNode;
+        ASTRight[argSeq] := AllocNode(AN_ARG);
+        ASTLeft[ASTRight[argSeq]] := stepsNode;
+        opNode := AllocNode(AN_CALL);
+        ASTIVal[opNode] := pi; ASTLeft[opNode] := argSeq; ASTTk[opNode] := Ord(tyString);
+        node := AllocNode(AN_ASSIGN);
+        ASTLeft[node] := valNode; ASTRight[node] := opNode;
+      end
       else if (CurProc >= 0) and Procs[CurProc].IsFunc and
               (Tokens[TokPos].Kind = tkAssign) and
               ((name = Procs[CurProc].Name) or
@@ -5315,7 +5354,7 @@ end;
 { ===== Program ===== }
 
 procedure ParseProgram;
-var jmpPatch, i, j: Integer; doneUses, doneDecls, hasExceptions: Boolean;
+var jmpPatch, i, j: Integer; doneUses, doneDecls, hasExceptions, needsBuiltin: Boolean;
 begin
   Expect(tkProgram, 'program');
   if CurTok.Kind = tkEOF then Error('expected program name');
@@ -5334,11 +5373,20 @@ begin
   BSS_LINE_BUF    := BSSSize; Inc(BSSSize, LINE_BUF_SIZE);
   ExceptionUsed := False;
   hasExceptions := False;
+  needsBuiltin := False;
   for i := 0 to MAX_GOTO_LABELS - 1 do GotoLabelIRId[i] := -1;
   i := 0;
   while i < TokCount do
   begin
     if Tokens[i].Kind in [tkTry, tkRaise] then hasExceptions := True;
+    { Pull in the builtin unit (Str/Val backing) only if the program calls
+      Str(...) or Val(...) — name immediately followed by '(', so plain
+      variables/params named str/val don't drag it in. No DCE, so this keeps it
+      out of programs that never use them. }
+    if (Tokens[i].Kind = tkIdent) and (i + 1 < TokCount) and
+       (Tokens[i + 1].Kind = tkLParen) and
+       (CaseEqual(GetTokenStr(i), 'str') or CaseEqual(GetTokenStr(i), 'val')) then
+      needsBuiltin := True;
     Inc(i);
   end;
 
@@ -5357,6 +5405,10 @@ begin
 
   EmitB($E9); jmpPatch := CodeLen; EmitI32(0);
   if hasExceptions then EnableExceptionRuntime;
+
+  { Compile the builtin unit (Str/Val) before user declarations, so its proc
+    bodies land in the proc region after the entry jump and are resolvable. }
+  if needsBuiltin then ParseUsesUnit('builtin');
 
   doneDecls := False;
   while not doneDecls do

@@ -214,12 +214,24 @@ The proper hybrid allocator (mmap large blocks straight from the kernel, munmap
 on free, size-binning/coalescing) is its own arc — `docs/todo.md` §4 "Heap
 allocator".
 
-- ⬜ **`Val`/`Str`** — text↔number conversion. Still open. These are a different
-  subsystem from allocation: `Str(x[:w[:d]], s)` needs integer→ASCII into a
-  string buffer (only `EmitwriteInt`, stdout-targeted, exists today) plus the
-  `:w:d` width/decimals syntax; `Val(s, n[, code])` needs a parse loop with an
-  error-position out-param. Best done as RTL Pascal (`IntToStr`/`StrToInt`-style)
-  rather than more hand-emitted asm. Tracked as a follow-up.
+- ✅ **`Val`/`Str`** (integer) — done as pure-Pascal `lib/rtl/builtin.pas`
+  (`StrInt`, `Val`), not asm. The unit is **auto-included only when the program
+  calls `Str(`/`Val(`** (token pre-scan in ParseProgram, like the exception
+  runtime). `Str(x[:w[:d]], s)` is parsed like `write`'s `value:w:d` and
+  rewritten to `s := StrInt(x, w)` (decimals parsed, ignored for integers);
+  `Val(s, n, code)` is a plain var-param library call (no parser glue — `:` only
+  matters in declarations, never inside a call's arg list). Test
+  `test/test_str_val.pas`. Gaps: float `Str`/`Val`, and `:w:d` are literals not
+  expressions (matches `write`).
+
+  **Design note — why not a general directive yet.** The `value:w:d` form is a
+  localized micro-grammar (only `write`/`writeln`/`Str`). A declarable
+  `flexcolumn` calling-convention directive would let formatted routines be
+  ordinary library functions, but it would serve a population of one right now
+  (`Val` has no `:`; `write`/`writeln` are variadic and already special). Build
+  it later, in the **parser** (it resolves the callee's directive — the lexer
+  can't), when `write`/`writeln` move to library code. Tracked in `docs/todo.md`
+  §4.
 
 Original description kept below.
 

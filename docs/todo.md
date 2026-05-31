@@ -230,9 +230,22 @@ inheritance depth, method-resolution clauses, COM ARC.
   array) straight to `mmap`, `munmap`s large frees back to the kernel, and adds
   size-binning + coalescing to fight fragmentation. Also fold the dynamic-array
   reclaim above into it.
-- ⬜ **`Val`/`Str`.** Text↔number conversion procedures still unimplemented
-  (the other allocator-family/`var`-param builtins are done). Best as RTL
-  Pascal (`IntToStr`/`StrToInt`-style) — see `plan-pascal-syntax-issues.md` §B1.
+- ✅ **`Val`/`Str`** (integer). Implemented as pure-Pascal `lib/rtl/builtin.pas`
+  (`StrInt`, `Val`), auto-included **only** when a program calls `Str(`/`Val(`
+  (token pre-scan in ParseProgram, mirroring the exception-runtime prescan — no
+  DCE, so always-including would bloat every binary). `Str(x[:w[:d]], s)` is
+  rewritten by the parser to `s := StrInt(x, w)` (decimals parsed, ignored);
+  `Val(s, n, code)` is a plain var-param call. Tests: `test/test_str_val.pas`.
+  Gaps: float `Str`/`Val` (only Int64), and `:w:d` widths are literals not
+  expressions (matches `write`).
+- ⬜ **`flexcolumn` calling-convention directive** (future). Generalize the
+  `value:w:d` micro-grammar (today special-cased in `write`/`writeln`/`Str`)
+  into a declarable directive, so formatted routines can be ordinary library
+  functions whose call args carry optional `:w:d` modifiers. Pays off when
+  `write`/`writeln` (variadic) move to library code; spec the per-arg
+  modifier→formal mapping + variadic interplay then. Handle in the **parser**
+  (it resolves the callee's directive), never the lexer. Rationale in the
+  Str/Val discussion — see `plan-pascal-syntax-issues.md` §B1.
 - ✅ **Enums.** Type identity + ordinal↔name infra in place and used by RTTI
   (enum prop kind, EnumRTTI). Named set types (`set of TEnum`) also recognized.
 - 🟡 **Generics.** Template mechanism exists; breadth vs FPC unverified.

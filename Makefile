@@ -229,6 +229,8 @@ test: $(COMPILER) fpc-check
 	test "$$(/tmp/test_new_dispose26)" = "$$(printf '1234\n16\n1')"
 	./$(COMPILER) test/test_reallocmem.pas /tmp/test_reallocmem26
 	test "$$(/tmp/test_reallocmem26)" = "$$(printf '1\n50\n1\n1\n1\n77')"
+	./$(COMPILER) test/test_str_val.pas /tmp/test_str_val26
+	test "$$(/tmp/test_str_val26)" = "$$(printf '42\n-7\n0\n[  1234]\n100\n0\n-25\n0\n2\n1')"
 	./$(COMPILER) test/test_assign_types.pas /tmp/test_assign_types26
 	test "$$(/tmp/test_assign_types26)" = "$$(printf 'foobarbaz\nHi world!\nx\nQ\nhello\nY\n65')"
 	./$(COMPILER) test/test_method_named_result.pas /tmp/test_method_named_result26

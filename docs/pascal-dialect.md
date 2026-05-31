@@ -93,6 +93,9 @@ The regression suite currently covers:
 - Published RTTI and binary form (`.lfm`) streaming into a component tree.
 - Untyped `try/except`, `try/finally`, `raise <expr>`, and handler re-raise.
 - Selected C imports and direct `external` shared-library binding.
+- Heap: `GetMem`/`FreeMem` (free-list reuse), `New`/`Dispose`, `ReallocMem`.
+- `Str(x[:w[:d]], s)` and `Val(s, n, code)` for integers, via an auto-included
+  `builtin` unit (pulled in only when used).
 
 ## Overloading
 
