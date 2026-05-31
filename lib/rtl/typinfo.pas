@@ -17,6 +17,12 @@ type
   end;
   PMethInfo = ^TMethInfo;
 
+  TFieldInfo = record
+    NamePtr: PString;
+    Offset:  Int64;       { byte offset of the field within the instance }
+  end;
+  PFieldInfo = ^TFieldInfo;
+
   TClassRTTI = record
     NamePtr:      PString;
     ParentRTTI:   Pointer; { actually PClassRTTI }
@@ -26,6 +32,8 @@ type
     PropsPtr:     Pointer; { actually PPropInfo }
     MethCount:    Int64;
     MethsPtr:     PMethInfo;
+    FieldCount:   Int64;
+    FieldsPtr:    PFieldInfo;
   end;
   PClassRTTI = ^TClassRTTI;
 
@@ -90,6 +98,7 @@ procedure SetStrProp(instance: Pointer; p: PPropInfo; const v: string);
 function GetMethodProp(instance: Pointer; p: PPropInfo): TMethod;
 procedure SetMethodProp(instance: Pointer; p: PPropInfo; const v: TMethod);
 function GetMethodAddr(cls: PClassRTTI; const name: string): Pointer;
+function SetFieldByName(instance: Pointer; cls: PClassRTTI; const name: string; value: Pointer): Boolean;
 function GetEnumValue(et: PEnumRTTI; const name: string): Integer;
 procedure SetSetProp(instance: Pointer; p: PPropInfo; ordinal: Integer);
 
@@ -389,6 +398,40 @@ begin
         if meths[i].NamePtr^ = name then
         begin
           GetMethodAddr := meths[i].Code;
+          Exit;
+        end;
+      end;
+    end;
+    curr := PClassRTTI(curr^.ParentRTTI);
+  end;
+end;
+
+{ Store a pointer (a child component) into the published field named `name` of
+  `instance`, walking the class hierarchy. Returns False if no such field. Used
+  by the streamer to bind a named child into e.g. TForm1.Button1. }
+function SetFieldByName(instance: Pointer; cls: PClassRTTI; const name: string; value: Pointer): Boolean;
+var
+  curr: PClassRTTI;
+  fields: PFieldInfo;
+  ps: PString;
+  addr: Pointer;
+  i: Integer;
+begin
+  SetFieldByName := False;
+  curr := cls;
+  while curr <> nil do
+  begin
+    if curr^.FieldCount > 0 then
+    begin
+      fields := curr^.FieldsPtr;
+      for i := 0 to Integer(curr^.FieldCount) - 1 do
+      begin
+        ps := fields[i].NamePtr;
+        if ps^ = name then
+        begin
+          addr := @PUInt8(instance)[fields[i].Offset];
+          PPointer(addr)^ := value;
+          SetFieldByName := True;
           Exit;
         end;
       end;

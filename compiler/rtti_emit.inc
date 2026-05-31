@@ -204,9 +204,22 @@ begin
   if procIdx >= 0 then QueueMethCodeFixup(miPos + 8, procIdx);
 end;
 
+{ Fill a FieldInfo record (RTTI_FIELD_SIZE bytes) at fiPos for published field
+  fi: name ptr + byte offset. Lets the streamer wire a named child component into
+  its matching published field (e.g. a .lfm Button1 child -> TForm1.Button1).
+  Record must be reserved by the caller first (InternStr appends to Data[]). }
+procedure EmitFieldInfo(fi, fiPos: Integer);
+var strIdx: Integer; nm: AnsiString;
+begin
+  nm := TokSliceStr(UFldNOff[fi], UFldNLen[fi]);
+  strIdx := InternStr(nm);
+  AddDataPtrFix(fiPos + 0, Strs[strIdx].Offset);
+  PatchDataU64(fiPos + 8, UFldOff_[fi]);
+end;
+
 procedure EmitRTTI;
 var ci, i, k, base, cnt, hdr, strIdx, etid: Integer;
-    propCount, methCount, firstOff: Integer;
+    propCount, methCount, fieldCount, firstOff: Integer;
     regEntries, entryPos: Integer;
     nm: AnsiString;
 begin
@@ -295,6 +308,28 @@ begin
     end;
     PatchDataU64(hdr + 48, methCount);
     if methCount > 0 then AddDataPtrFix(hdr + 56, firstOff);
+
+    { published fields (own) — same contiguous-reserve-then-fill rule. Used to
+      wire streamed child components into their matching published field. }
+    base := UClsFBase[ci]; cnt := UClsFCount[ci];
+    fieldCount := 0;
+    for i := 0 to cnt - 1 do
+      if UFldPub[base + i] = 1 then Inc(fieldCount);
+    firstOff := -1;
+    if fieldCount > 0 then
+    begin
+      firstOff := DataLen;
+      DataPutZeros(fieldCount * RTTI_FIELD_SIZE);
+      k := 0;
+      for i := 0 to cnt - 1 do
+        if UFldPub[base + i] = 1 then
+        begin
+          EmitFieldInfo(base + i, firstOff + k * RTTI_FIELD_SIZE);
+          Inc(k);
+        end;
+    end;
+    PatchDataU64(hdr + 64, fieldCount);
+    if fieldCount > 0 then AddDataPtrFix(hdr + 72, firstOff);
   end;
 
   { Registry: count slot followed by (name ptr, rtti ptr) pairs }

@@ -49,9 +49,10 @@ const
   RTTI_KIND_METHOD = 5;   { reserved; event/method-pointer props }
 
   { RTTI blob byte layouts (all fields 8 bytes) }
-  RTTI_CLS_SIZE    = 64;  { name,parent,instSize,vmt,propCount,props,methCount,meths }
+  RTTI_CLS_SIZE    = 80;  { name,parent,instSize,vmt,propCount,props,methCount,meths,fieldCount,fields }
   RTTI_PROP_SIZE   = 64;  { name,kind,typeRef,getKind,getRef,setKind,setRef,ordType }
   RTTI_METH_SIZE   = 16;  { name,code }
+  RTTI_FIELD_SIZE  = 16;  { name,offset (published fields, for streamed child->field wiring) }
 
   REC_NONE         = 0;
   REC_TMETHODFIXUP = 15;

@@ -225,10 +225,11 @@ end;
 procedure TReader.ReadChildren(parent: TComponent; rootInst: Pointer; rootCls: PClassRTTI);
 var
   lenByte: Integer;
-  className: string;
+  className, childName: string;
   childCls: PClassRTTI;
   childP: Pointer;
   child: TComponent;
+  bound: Boolean;
 begin
   while True do
   begin
@@ -241,6 +242,10 @@ begin
     child := childP;
     ReadBody(child, childCls, rootInst, rootCls);
     parent.AddChild(child);
+    { Bind the child into the root's published field of the same name, so code
+      like Form1.Button1 reaches the streamed component (Lazarus does this). }
+    childName := child.Name;
+    bound := SetFieldByName(rootInst, rootCls, childName, childP);
   end;
 end;
 

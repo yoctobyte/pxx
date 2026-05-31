@@ -28,12 +28,17 @@ begin
 end;
 
 function ClickCB(data: Pointer): Integer; cdecl;
-var c: TComponent; ctl: TControl; h: Pointer;
+var h: Pointer;
 begin
-  c := Form1.FindChild('Button1');
-  ctl := c;
-  h := ctl.Handle;
-  gtk_button_clicked(h);            { fires OnClick -> ShowMessage (blocks) }
+  { Reach the streamed button through the published FIELD (not FindChild),
+    proving the streamer wired the child into TForm1.Button1. }
+  if Form1.Button1 = nil then
+    writeln('FAIL: Button1 field nil')
+  else
+  begin
+    h := Form1.Button1.Handle;
+    gtk_button_clicked(h);          { fires OnClick -> ShowMessage (blocks) }
+  end;
   ClickCB := 0;
 end;
 
