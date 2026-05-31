@@ -295,7 +295,10 @@ begin
   if p^.GetKind = 0 then
   begin
     addr := @PUInt8(instance)[p^.GetRef];
-    m := PMethod(addr)^;
+    { Copy the two pointers explicitly: a whole-record assignment through a
+      casted-pointer deref currently moves only 8 bytes (drops Data). }
+    m.Code := PMethod(addr)^.Code;
+    m.Data := PMethod(addr)^.Data;
   end;
   GetMethodProp := m;
 end;
@@ -307,7 +310,10 @@ begin
   if p^.SetKind = 0 then
   begin
     addr := @PUInt8(instance)[p^.SetRef];
-    PMethod(addr)^ := v;
+    { Store the two pointers explicitly: a whole-record assignment through a
+      casted-pointer deref currently moves only 8 bytes (drops Data). }
+    PMethod(addr)^.Code := v.Code;
+    PMethod(addr)^.Data := v.Data;
   end;
 end;
 
