@@ -69,8 +69,11 @@ The regression suite currently covers:
 - Classes with fields and methods.
 - Generic classes and generic procedures/functions using explicit specialization.
 - Operator implementations for class/record operands.
+- Virtual/override method dispatch, including from procedure-call statements.
+- Procedure and method references (`@routine`, `@obj.method`).
+- Published RTTI and binary form (`.lfm`) streaming into a component tree.
 - Untyped `try/except`, `try/finally`, `raise <expr>`, and handler re-raise.
-- Selected C imports from Pascal `uses` clauses.
+- Selected C imports and direct `external` shared-library binding.
 
 ## Overloading
 
@@ -156,6 +159,56 @@ declared user-class type exactly. Class inheritance, a built-in `Exception`
 base/message constructor, inherited matches, and class/message diagnostics
 are not implemented yet. `Exit`, `break`, and `continue` run finalizers and
 remove handler frames only when their destination leaves protected code.
+
+## Procedure And Method References
+
+`@` takes the address of a routine or of a bound method:
+
+```pascal
+p := @SomeRoutine;        { Pointer to the routine's code }
+m := @obj.Method;         { a TMethod (code + instance) — an `of object` value }
+```
+
+`@SomeRoutine` yields the routine's runtime code address as a `Pointer`,
+suitable for passing to C callbacks (e.g. `g_signal_connect`, `qsort`).
+`@obj.Method` yields a two-pointer `TMethod` (code address + the instance),
+which is what an `of object` event such as `OnClick` stores. Taking the
+address of an external routine is rejected (it has no link-time address);
+wrap it in a local routine instead.
+
+## Classes, Virtual Methods, And RTTI
+
+Classes support fields, methods, single inheritance, virtual/override dispatch
+(VMT), properties with field or method accessors, and class visibility sections
+(`private`/`protected`/`public`/`published`). Each class's VMT is filled by
+inheritance, so a subclass declared in a later unit correctly inherits an
+ancestor's overrides.
+
+A class with a `published` section (in itself or an ancestor) gets a minimal,
+custom RTTI table. The reflection API uses `System.TypInfo` names
+(`GetClass`, `GetPropInfo`, `GetOrdProp`/`SetOrdProp`, `GetStrProp`/`SetStrProp`,
+`GetMethodProp`/`SetMethodProp`, ...) covering streaming-grade property kinds:
+ordinal, enum, set, string, class, and method (event). On top of this, a binary
+form stream (`.lfm`) can instantiate and configure a component tree — see
+[GUI](gui.md).
+
+A bare method call inside another method binds statically; use `Self.Method`
+for virtual dispatch on the current instance.
+
+## Parameter Passing Notes
+
+`const` record parameters are passed by reference (as in FPC); a by-value
+record larger than a machine word would otherwise be truncated.
+
+## Shared-Library Binding
+
+A Pascal routine can bind a shared-library symbol directly:
+
+```pascal
+procedure gtk_init(argc, argv: Pointer); cdecl; external 'libgtk-3.so.0';
+```
+
+See [C Interoperability](../C_INTEROP.md).
 
 ## Compatibility Claim
 

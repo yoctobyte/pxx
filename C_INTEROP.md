@@ -3,6 +3,26 @@
 Frankonpiler can import C headers and link against shared C libraries, or
 compile C source files directly into Pascal programs.
 
+## Direct Pascal `external` Binding
+
+A Pascal routine can bind a shared-library symbol directly, without going
+through a C header. This is the right tool when the real headers are not
+practical to import (for example GTK, whose headers pull in large macro
+trees):
+
+```pascal
+function gtk_get_major_version: Integer; cdecl; external 'libgtk-3.so.0';
+procedure gtk_init(argc: Pointer; argv: Pointer); cdecl; external 'libgtk-3.so.0';
+```
+
+The soname after `external` is recorded as a `DT_NEEDED` entry; calls use the
+same PLT/GOT dynamic-link path as header-imported externals (System V AMD64 /
+`cdecl`). The link symbol defaults to the routine name (GTK symbols are valid
+lowercase identifiers); an optional `name 'symbol'` clause overrides it.
+
+A hand-written binding unit is just a list of such declarations — see
+`test/gui/gtk3.pas` and [GUI](docs/gui.md).
+
 ## Calling A Shared C Library
 
 Pascal source imports a supported C header through `uses` and calls an

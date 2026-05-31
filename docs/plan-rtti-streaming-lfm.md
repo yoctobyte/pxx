@@ -54,9 +54,8 @@ intended shape, not a contract.
    streaming, lfm) should be written as real `.pas` units from the start where
    practical — the inline-unit model already supports `uses`.
 5. **Commit per logical unit; never push without explicit confirmation.**
-6. **Known standing red:** `test/test_op_overload.pas` segfaults under IR
-   (pre-existing, unrelated). `make test` dies there. Don't be alarmed; run
-   targeted tests, don't treat the full-suite red as your regression.
+6. ~~**Known standing red:** `test/test_op_overload.pas` segfaults under IR.~~
+   **Resolved** — the full suite runs to the fixedpoint check (exit 0).
 
 ## Current state (verified 2026-05-29)
 
@@ -295,8 +294,11 @@ on the instances. Still no GUI rendering — that's later library work.
 
 ## After this plan
 
-- **GUI / LCL widget sets:** pure library work on top of Phase 5. No compiler
-  ask. Abstracted widget sets per Lazarus design; out of scope here.
+- **GUI / LCL widget sets:** an early GTK3 vertical slice with `.lfm`-streamed
+  UI is now built on top of Phase 5 — see [`gui.md`](gui.md). It did need some
+  general compiler features (shared-library FFI, procedure/method pointers,
+  virtual-procedure statements, full VMT inheritance), contrary to the
+  "no compiler ask" expectation here.
 - **Interfaces (separate plan, future session):** the last big language
   feature. Will need `IInterface`/`IUnknown`, GUIDs, an interface method table
   (IMT) distinct from the class VMT, `as`/`Supports`, and a reference-counting

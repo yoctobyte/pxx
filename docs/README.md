@@ -1,6 +1,6 @@
 # PXX Documentation
 
-**Documentation snapshot:** 2026-05-30
+**Documentation snapshot:** 2026-05-31
 
 `PXX` is the provisional project and compiler name. The executable is still
 called `compiler/pascal26` while the name and artifact migration remain open.
@@ -17,6 +17,7 @@ User-facing documents:
 - [Features](features.md) - build baseline, language frontends, native output, and library loading.
 - [Limitations](limitations.md) - unsupported or only partially supported language, ABI, platform, and tooling areas.
 - [Inline Assembler](inline-asm.md) - x86-64 inline asm support, supported instruction set, variable passing, limitations, and TODO.
+- [GUI (GTK3 + LFM streaming)](gui.md) - LCL-compatible widgetset on GTK3, of-object events, and `.lfm`-streamed component trees.
 - [Plan: RTTI → Streaming → LFM](plan-rtti-streaming-lfm.md) - agent-executable phased plan for Lazarus/LCL enablement (RTTI, published, component streaming, resources, LFM).
 - [Project TODO](todo.md) - consolidated remaining-work list: standing bugs, the LCL arc, interfaces (detailed), language gaps, targets, and the units refactor.
 

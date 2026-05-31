@@ -26,7 +26,9 @@ PXX emits x86-64 Linux ELF executables directly:
 Implemented Pascal capabilities include:
 
 - Basic procedural Pascal, arrays, records, strings, control flow, and units.
-- Classes with fields and methods.
+- Classes with fields and methods, virtual/override dispatch, and properties.
+- Class visibility sections and minimal published RTTI (`System.TypInfo`-named).
+- Procedure and method references (`@routine`, `@obj.method` → `TMethod`).
 - Generic classes and explicitly specialized generic routines.
 - Routine overloading and opt-in strict declaration checking.
 - Class/record operator implementations.
@@ -66,6 +68,13 @@ end.
 `uses ctype;` loads declarations from `/usr/include/ctype.h`, and the
 generated ELF requests `libc.so.6`. Only called external functions are
 emitted in dynamic symbol and relocation information.
+
+A Pascal routine can also bind a shared-library symbol directly, without a C
+header, which suits libraries whose headers are impractical to import:
+
+```pascal
+procedure gtk_init(argc, argv: Pointer); cdecl; external 'libgtk-3.so.0';
+```
 
 PXX can also compile supported local C source used from Pascal:
 
@@ -108,6 +117,14 @@ blocks and `assembler`-modifier function bodies. Pascal locals and params are
 referenced by name (resolved to their `[rbp+disp32]` frame slot), so asm can
 read and write variables directly. See [Inline Assembler](inline-asm.md) for
 the supported instruction set and current limits.
+
+## GUI (GTK3 + LFM Streaming)
+
+An early LCL-compatible GUI layer runs on GTK3 (Linux/X11). It is pure library
+code over the language: a hand-written `external` binding to `libgtk-3.so.0`,
+LCL-named classes (`TForm`, `TButton`, `TApplication`), `of object` events
+(`OnClick`), and binary form (`.lfm`) streaming that instantiates and wires a
+component tree by class name and event identifier. See [GUI](gui.md).
 
 ## Development Guarantees
 

@@ -81,8 +81,32 @@ executable plan: **[`plan-rtti-streaming-lfm.md`](plan-rtti-streaming-lfm.md)**.
      time. Underlying codegen bug still latent — see memory note.
   Regression repro: `test/gui/repro_multiunit_rtti_segfault.pas`.
 
-GUI / LCL widget sets are pure library work **after** this arc — no further
-compiler ask.
+---
+
+## 2b. GUI arc — GTK3 widgetset + LFM-streamed UI  ✅ (vertical slice)
+
+Full doc: **[`gui.md`](gui.md)**. An LCL-compatible GUI on GTK3 (Linux/X11)
+where a form's structure and event wiring come from an `.lfm`. Demos in
+`test/gui/` (`test_lcl_lfm.pas` is the end-to-end one). Contrary to the earlier
+"pure library, no compiler ask" expectation, it needed several general
+compiler features — all landed and in `make test`:
+
+- Direct Pascal `external 'soname'` shared-library binding (FFI without a C
+  header). `EmitExit` switched to `exit_group`, and the bump heap moved from
+  `brk` to `mmap` so it never collides with libc/GTK `malloc`.
+- 16-byte stack alignment at external SysV call sites (GTK uses aligned SSE).
+- `@routine` → code pointer; `@obj.method` → `TMethod` (of-object events).
+- `const` record params passed by reference (were truncated to 8 bytes).
+- Virtual **procedure**-call statements are now emitted (only virtual functions,
+  as expression operands, worked before).
+- Each class's VMT is filled by inheritance at emission, so a subclass declared
+  in a later unit (`TForm1 = class(TForm)`) inherits ancestor overrides.
+- A class is registered for RTTI if it *or an ancestor* has published members.
+
+Final mile to compile the dropped `test/gui/helloworld` unmodified: virtual
+`TComponent.Create(AOwner)` + `Application.CreateForm` metaclass (needs `class
+of` + runtime `ClassName`), `Dialogs.ShowMessage`, and streamed-child →
+published-field wiring. The streaming + event engine itself is proven.
 
 ---
 
