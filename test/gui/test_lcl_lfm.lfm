@@ -1,0 +1,7 @@
+object MainForm: TMainForm
+  Caption = 'LFM Streamed'
+  object Btn1: TButton
+    Caption = 'Click me'
+    OnClick = Btn1Click
+  end
+end
