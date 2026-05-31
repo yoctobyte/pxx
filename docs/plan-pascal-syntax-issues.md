@@ -196,17 +196,30 @@ Self-host fixedpoint holds.
 hard-erroring `undefined variable (...)` (so they never shared the silent
 write-back bug; they failed loudly).
 
-- ✅ **`FreeMem(p[, size])` now implemented** (2026-05-31) — and it actually
-  reclaims rather than being a no-op. `GetMem` gained an 8-byte size header per
-  block + a single free list; `FreeMem` pushes the block on the list and
-  `GetMem` first-fits it before bumping (IR backend; legacy keeps `FreeMem` a
-  no-op since its bump heap has no header). Two-arg `FreeMem(p, size)` is
-  accepted (size ignored — the header drives reuse); `FreeMem(nil)` is a no-op.
-  Tests: `test/test_freemem.pas`. The proper hybrid allocator (mmap large
-  blocks, munmap on free, binning/coalescing) is its own arc — see
-  `docs/todo.md` §4 "Heap allocator".
-- ⬜ `New(p)`/`Dispose(p)` need the element size from the pointer's type;
-  `Val`/`Str` are conversion routines. Still follow-ups.
+The **allocator family is now complete** on the IR backend (2026-05-31), all
+built on the per-block size header `GetMem` gained:
+
+- ✅ **`FreeMem(p[, size])`** — reclaims rather than no-op. `GetMem` gained an
+  8-byte size header per block + a single free list; `FreeMem` pushes, `GetMem`
+  first-fits before bumping. Two-arg form accepted (size ignored), `FreeMem(nil)`
+  safe. Legacy keeps it a no-op. Test `test/test_freemem.pas`.
+- ✅ **`New(p)`** — `p := GetMem(SizeOf(p^))`, size from the pointer's element
+  type. **`Dispose(p)`** — `FreeMem(p)`. Test `test/test_new_dispose.pas`.
+- ✅ **`ReallocMem(p, size)`** — bump-allocates the new block, copies
+  `min(oldsize, newsize)` (old size from the header), frees the old block,
+  writes the new pointer back to `p`; `ReallocMem(nil, n)` == `GetMem`. IR
+  backend (special call -103); legacy errors. Test `test/test_reallocmem.pas`.
+
+The proper hybrid allocator (mmap large blocks straight from the kernel, munmap
+on free, size-binning/coalescing) is its own arc — `docs/todo.md` §4 "Heap
+allocator".
+
+- ⬜ **`Val`/`Str`** — text↔number conversion. Still open. These are a different
+  subsystem from allocation: `Str(x[:w[:d]], s)` needs integer→ASCII into a
+  string buffer (only `EmitwriteInt`, stdout-targeted, exists today) plus the
+  `:w:d` width/decimals syntax; `Val(s, n[, code])` needs a parse loop with an
+  error-position out-param. Best done as RTL Pascal (`IntToStr`/`StrToInt`-style)
+  rather than more hand-emitted asm. Tracked as a follow-up.
 
 Original description kept below.
 

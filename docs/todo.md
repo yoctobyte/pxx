@@ -223,11 +223,16 @@ inheritance depth, method-resolution clauses, COM ARC.
   IR backend (8-byte size header per block + single free list, first-fit, no
   split/coalesce; legacy backend leaves `FreeMem` a no-op). Enough that
   alloc/free-heavy programs reuse memory instead of only ever bumping.
+  `New`/`Dispose`/`ReallocMem` also implemented on top of the same header
+  (ReallocMem preserves `min(old,new)` bytes; IR backend only).
   **Proper allocator still TODO** (own arc): a hybrid that keeps small blocks
   on our free list but routes large requests (e.g. ≥ some threshold like a 1 MB
   array) straight to `mmap`, `munmap`s large frees back to the kernel, and adds
   size-binning + coalescing to fight fragmentation. Also fold the dynamic-array
   reclaim above into it.
+- ⬜ **`Val`/`Str`.** Text↔number conversion procedures still unimplemented
+  (the other allocator-family/`var`-param builtins are done). Best as RTL
+  Pascal (`IntToStr`/`StrToInt`-style) — see `plan-pascal-syntax-issues.md` §B1.
 - ✅ **Enums.** Type identity + ordinal↔name infra in place and used by RTTI
   (enum prop kind, EnumRTTI). Named set types (`set of TEnum`) also recognized.
 - 🟡 **Generics.** Template mechanism exists; breadth vs FPC unverified.
