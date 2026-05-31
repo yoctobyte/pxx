@@ -1388,6 +1388,13 @@ begin
             IREmitNode(i);
         end;
 
+      IR_VIRTUAL_CALL:
+        begin
+          { Statement-level virtual (procedure) call — result discarded. }
+          if IRStmtRoot[i] then
+            IREmitNode(i);
+        end;
+
       IR_STORE_SYM, IR_STORE_MEM, IR_WRITE, IR_WRITELN,
       IR_READLINE, IR_READ_VAR, IR_COPY_REC,
       IR_EXC_LEAVE, IR_RAISE, IR_EXC_STORE, IR_EXC_CLEAR, IR_TERMINATE,

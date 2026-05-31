@@ -27,6 +27,7 @@ begin
   IRC[IRCount] := c;
   IRIVal[IRCount] := ival;
   IRTk[IRCount] := tk;
+  IRStmtRoot[IRCount] := False;
   Result := IRCount;
   Inc(IRCount);
 end;
@@ -313,8 +314,13 @@ end;
 
 procedure IRMarkStatementNode(irNode: Integer);
 begin
-  if (irNode >= 0) and (irNode < IRCount) and (IRKind[irNode] = IR_CALL) then
-    IRIVal[irNode] := 1;
+  if (irNode >= 0) and (irNode < IRCount) then
+  begin
+    if IRKind[irNode] = IR_CALL then
+      IRIVal[irNode] := 1
+    else if IRKind[irNode] = IR_VIRTUAL_CALL then
+      IRStmtRoot[irNode] := True;
+  end;
 end;
 
 function IRLowerAddress(node: Integer): Integer;

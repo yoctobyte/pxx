@@ -616,6 +616,11 @@ var
   IRC     : array[0..MAX_IR-1] of Integer;
   IRIVal  : array[0..MAX_IR-1] of Int64;
   IRTk    : array[0..MAX_IR-1] of Integer;
+  { Marks an IR node as a statement root (its result is discarded). The top-
+    level emitter only emits roots; calls whose value is consumed are emitted
+    via their parent. Needed for IR_VIRTUAL_CALL, whose IRIVal holds the VMT
+    slot and so cannot double as the IR_CALL=1 statement flag. }
+  IRStmtRoot : array[0..MAX_IR-1] of Boolean;
   IRCount : Integer;
   IRLabelCount : Integer;
   IRLoopStackBreak    : array[0..63] of Integer;
