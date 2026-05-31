@@ -850,22 +850,26 @@ begin
           { cmp rbx, [BSS_HEAP_END] }
           EmitB($48); EmitB($3B); EmitB($1C); EmitB($25); EmitGlobRef(BSS_HEAP_END);
           
-          { jbe skip_brk }
+          { jbe skip_grow }
           EmitB($76); jbePatch := CodeLen; EmitB(0);
-          
-          { push rbx }
-          EmitB($53);
-          { mov rdi, rbx }
-          EmitB($48); EmitB($89); EmitB($DF);
-          { mov rax, SYS_BRK }
-          MovRaxImm(SYS_BRK);
-          { syscall }
-          EmitSyscall;
-          { pop rbx }
-          EmitB($5B);
-          { mov [BSS_HEAP_END], rax }
-          EmitB($48); EmitB($89); EmitB($04); EmitB($25); EmitGlobRef(BSS_HEAP_END);
-          
+
+          { Grow: mmap a fresh arena (rax = needed size here). Length =
+            size + ARENA so this allocation always fits the new region; the
+            old region's tail is abandoned (simple bump allocator). After
+            this, HEAP_PTR = base and rbx = base + size, so the common
+            tail below returns base and advances correctly. }
+          EmitB($48); EmitB($89); EmitB($C6);                          { mov rsi, rax }
+          EmitB($48); EmitB($81); EmitB($C6); EmitI32(HEAP_ARENA_SIZE);{ add rsi, ARENA }
+          EmitB($50);                                                  { push rax (save size) }
+          EmitMmapArena;                                               { rax = base; rsi kept }
+          EmitB($59);                                                  { pop rcx (size) }
+          EmitB($48); EmitB($89); EmitB($04); EmitB($25); EmitGlobRef(BSS_HEAP_PTR); { mov [HEAP_PTR], rax }
+          EmitB($48); EmitB($89); EmitB($C3);                          { mov rbx, rax }
+          EmitB($48); EmitB($01); EmitB($CB);                          { add rbx, rcx (base+size) }
+          EmitB($48); EmitB($89); EmitB($C2);                          { mov rdx, rax }
+          EmitB($48); EmitB($01); EmitB($F2);                          { add rdx, rsi (base+len) }
+          EmitB($48); EmitB($89); EmitB($14); EmitB($25); EmitGlobRef(BSS_HEAP_END); { mov [HEAP_END], rdx }
+
           { Patch short jump offset }
           Code[jbePatch] := Byte(CodeLen - (jbePatch + 1));
           

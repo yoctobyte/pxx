@@ -163,6 +163,12 @@ const
   SYS_EXIT  = 60;
   SYS_EXIT_GROUP = 231;
   SYS_BRK   = 12;
+  SYS_MMAP  = 9;
+  { Heap arena reserved per mmap call. We allocate via mmap, not brk, so our
+    bump heap never collides with libc/GTK malloc (which owns the program
+    break). 256 MB is lazily committed by the kernel — only touched pages use
+    RAM. Fits in an imm32 for `add r/m64, imm32`. }
+  HEAP_ARENA_SIZE = $10000000;
   STDOUT    = 1;
 
   LOAD_ADDR        = $400000;

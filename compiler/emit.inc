@@ -57,6 +57,20 @@ begin
   MovRdxImm(len); EmitSyscall;
 end;
 
+procedure EmitMmapArena;
+{ Emit an anonymous mmap. Caller sets rsi = length; on return rax = base
+  address. Clobbers rax, rcx, r11, rdi, rdx, r10, r8, r9 (mmap syscall ABI);
+  rsi is preserved by the kernel. }
+begin
+  MovRdiImm(0);                          { addr = NULL }
+  MovRdxImm(3);                          { PROT_READ | PROT_WRITE }
+  EmitB($49); EmitB($BA); EmitI64($22);  { mov r10, MAP_PRIVATE|MAP_ANONYMOUS }
+  EmitB($49); EmitB($B8); EmitI64(-1);   { mov r8, -1  (fd) }
+  EmitB($49); EmitB($B9); EmitI64(0);    { mov r9, 0   (offset) }
+  MovRaxImm(SYS_MMAP);
+  EmitSyscall;
+end;
+
 procedure EmitExit(code: Int64);
 { exit_group, not exit: terminate every thread. A bare exit (60) only ends
   the calling thread, so a program that started worker threads (e.g. via

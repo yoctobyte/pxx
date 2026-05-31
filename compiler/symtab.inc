@@ -2252,11 +2252,23 @@ begin
       Inc(ExternalCount);
     end;
     if DynCallCount >= MAX_CALLFIX then Error('external call fixup overflow');
+    { Realign the stack to 16 bytes for the SysV call: our internal call
+      convention does not keep rsp 16-aligned at every call site, but C
+      callees (GTK/GLib) use aligned SSE (movaps) and fault otherwise. Args
+      are already in registers here (we only bind <=6-arg externals), so no
+      stack arguments are disturbed. Old rsp is saved and restored around the
+      call; r11 is scratch under SysV. }
+    EmitB($49); EmitB($89); EmitB($E3);             { mov r11, rsp }
+    EmitB($48); EmitB($83); EmitB($E4); EmitB($F0); { and rsp, -16 }
+    EmitB($48); EmitB($83); EmitB($EC); EmitB($08); { sub rsp, 8 }
+    EmitB($41); EmitB($53);                         { push r11 }
     EmitB($FF); EmitB($14); EmitB($25); { call qword ptr [absolute address] }
     DynCallCodePos[DynCallCount] := CodeLen;
     DynCallExtIdx[DynCallCount] := extIdx;
     Inc(DynCallCount);
     EmitI32(0);
+    EmitB($41); EmitB($5B);                         { pop r11 }
+    EmitB($4C); EmitB($89); EmitB($DC);             { mov rsp, r11 }
     Exit;
   end;
   EmitB($E8);
