@@ -3283,6 +3283,33 @@ begin
         ASTIVal[node] := -Ord(tkFreeMem);
         ASTLeft[node] := argSeq; ASTTk[node] := Ord(tyInteger);
       end
+      else if (name = 'ReallocMem') or (name = 'reallocmem') then
+      begin
+        { ReallocMem(p, newsize): resize the block p points at, preserving
+          min(oldsize, newsize) bytes, and store the new pointer back into p.
+          Old size comes from the block's header; old block is freed. Modelled
+          as p := <realloc>(p, newsize) (special id -103). p must be a simple
+          pointer variable. }
+        Next; Expect(tkLParen, '(');
+        if CurTok.Kind <> tkIdent then Error('ReallocMem: expected pointer variable');
+        idx := FindSym(CurTok.SVal); identTokIdx := TokPos - 1; Next;
+        valNode := ParseLValueAST(idx, identTokIdx);   { assign target }
+        Expect(tkComma, ',');
+        ParseExpr;                                      { new size -> CurASTNode }
+        Expect(tkRParen, ')');
+
+        exprNode := AllocNode(AN_IDENT);                { old pointer value }
+        ASTIVal[exprNode] := idx; ASTTk[exprNode] := Ord(tyPointer);
+        argSeq := AllocNode(AN_ARG); ASTLeft[argSeq] := exprNode;
+        ASTRight[argSeq] := AllocNode(AN_ARG);
+        ASTLeft[ASTRight[argSeq]] := CurASTNode;        { new size }
+
+        opNode := AllocNode(AN_CALL);
+        ASTIVal[opNode] := -103;
+        ASTLeft[opNode] := argSeq; ASTTk[opNode] := Ord(tyPointer);
+        node := AllocNode(AN_ASSIGN);
+        ASTLeft[node] := valNode; ASTRight[node] := opNode;
+      end
       else if (CurProc >= 0) and Procs[CurProc].IsFunc and
               (Tokens[TokPos].Kind = tkAssign) and
               ((name = Procs[CurProc].Name) or

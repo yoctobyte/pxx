@@ -984,6 +984,81 @@ begin
           EmitB($48); EmitB($89); EmitB($04); EmitB($25); EmitGlobRef(BSS_FREE_LIST); { mov [FREE_LIST], rax }
           Code[pFreeNil] := Byte(CodeLen - (pFreeNil + 1));
         end
+        else if pi = -103 then
+        begin
+          { ReallocMem(oldp, newsize) -> new pointer in rax.
+            Bump-allocate a fresh [size][payload] block of newsize, copy
+            min(oldsize, newsize) bytes from oldp (oldsize read from oldp's
+            header; nil oldp => copy nothing), push the old block on the free
+            list, return the new payload. Stack: [oldp] then [newp][oldp]. }
+          argNode := IRB[node];           { arg0 = oldp }
+          IREmitNode(IRA[argNode]);       { rax = oldp }
+          EmitB($50);                     { push rax (oldp) }
+          argNode := IRB[argNode];        { arg1 = newsize }
+          IREmitNode(IRA[argNode]);       { rax = newsize }
+
+          { round up to 8, clamp >= 8 -> rcx (N) }
+          EmitB($48); EmitB($83); EmitB($C0); EmitB($07); { add rax, 7 }
+          EmitB($48); EmitB($83); EmitB($E0); EmitB($F8); { and rax, -8 }
+          EmitB($48); EmitB($83); EmitB($F8); EmitB($08); { cmp rax, 8 }
+          EmitB($73); EmitB($05);                         { jae +5 }
+          EmitB($B8); EmitI32(8);                         { mov eax, 8 }
+          EmitB($48); EmitB($89); EmitB($C1);             { mov rcx, rax }
+
+          { bump-allocate N + 8 (no free-list reuse for the new block) }
+          EmitB($48); EmitB($8B); EmitB($1C); EmitB($25); EmitGlobRef(BSS_HEAP_PTR); { mov rbx, [HEAP_PTR] }
+          EmitB($48); EmitB($89); EmitB($D8);             { mov rax, rbx }
+          EmitB($48); EmitB($01); EmitB($C8);             { add rax, rcx }
+          EmitB($48); EmitB($83); EmitB($C0); EmitB($08); { add rax, 8 }
+          EmitB($48); EmitB($3B); EmitB($04); EmitB($25); EmitGlobRef(BSS_HEAP_END); { cmp rax, [HEAP_END] }
+          EmitB($0F); EmitB($86); pJbeNoGrow := CodeLen; EmitI32(0); { jbe NOGROW }
+          EmitB($48); EmitB($89); EmitB($CE);             { mov rsi, rcx }
+          EmitB($48); EmitB($83); EmitB($C6); EmitB($08); { add rsi, 8 }
+          EmitB($48); EmitB($81); EmitB($C6); EmitI32(HEAP_ARENA_SIZE); { add rsi, ARENA }
+          EmitB($51);                                     { push rcx }
+          EmitMmapArena;                                  { rax = base; rsi kept }
+          EmitB($59);                                     { pop rcx }
+          EmitB($48); EmitB($89); EmitB($04); EmitB($25); EmitGlobRef(BSS_HEAP_PTR); { mov [HEAP_PTR], rax }
+          EmitB($48); EmitB($89); EmitB($C3);             { mov rbx, rax }
+          EmitB($48); EmitB($89); EmitB($C2);             { mov rdx, rax }
+          EmitB($48); EmitB($01); EmitB($F2);             { add rdx, rsi }
+          EmitB($48); EmitB($89); EmitB($14); EmitB($25); EmitGlobRef(BSS_HEAP_END); { mov [HEAP_END], rdx }
+          Patch32(pJbeNoGrow, CodeLen - (pJbeNoGrow + 4));
+          EmitB($48); EmitB($89); EmitB($0B);             { mov [rbx], rcx  (header) }
+          EmitB($48); EmitB($8D); EmitB($43); EmitB($08); { lea rax, [rbx+8]  (newp) }
+          EmitB($48); EmitB($89); EmitB($DA);             { mov rdx, rbx }
+          EmitB($48); EmitB($01); EmitB($CA);             { add rdx, rcx }
+          EmitB($48); EmitB($83); EmitB($C2); EmitB($08); { add rdx, 8 }
+          EmitB($48); EmitB($89); EmitB($14); EmitB($25); EmitGlobRef(BSS_HEAP_PTR); { mov [HEAP_PTR], rdx }
+
+          { rax = newp, rcx = newsize. Recover oldp, stack [newp][oldp]. }
+          EmitB($5E);                                     { pop rsi (oldp) }
+          EmitB($50);                                     { push rax (newp) }
+          EmitB($56);                                     { push rsi (oldp) }
+
+          { oldsize -> rdx (0 if oldp nil) }
+          EmitB($48); EmitB($31); EmitB($D2);             { xor rdx, rdx }
+          EmitB($48); EmitB($85); EmitB($F6);             { test rsi, rsi }
+          EmitB($74); EmitB($04);                         { jz +4 }
+          EmitB($48); EmitB($8B); EmitB($56); EmitB($F8); { mov rdx, [rsi-8] }
+          { count = min(oldsize rdx, newsize rcx) -> rcx }
+          EmitB($48); EmitB($39); EmitB($CA);             { cmp rdx, rcx }
+          EmitB($73); EmitB($03);                         { jae +3 (rdx>=rcx: keep newsize) }
+          EmitB($48); EmitB($89); EmitB($D1);             { mov rcx, rdx }
+          { rep movsb from oldp([rsp]) to newp([rsp+8]) }
+          EmitB($48); EmitB($8B); EmitB($34); EmitB($24); { mov rsi, [rsp]  (oldp) }
+          EmitB($48); EmitB($8B); EmitB($7C); EmitB($24); EmitB($08); { mov rdi, [rsp+8]  (newp) }
+          EmitB($F3); EmitB($A4);                         { rep movsb }
+
+          { free old block (if non-nil): push on free list }
+          EmitB($5E);                                     { pop rsi (oldp) }
+          EmitB($48); EmitB($85); EmitB($F6);             { test rsi, rsi }
+          EmitB($74); EmitB($13);                         { jz +19 }
+          EmitB($48); EmitB($8B); EmitB($14); EmitB($25); EmitGlobRef(BSS_FREE_LIST); { mov rdx, [FREE_LIST] }
+          EmitB($48); EmitB($89); EmitB($16);             { mov [rsi], rdx }
+          EmitB($48); EmitB($89); EmitB($34); EmitB($25); EmitGlobRef(BSS_FREE_LIST); { mov [FREE_LIST], rsi }
+          EmitB($58);                                     { pop rax (newp) -> result }
+        end
         else
         begin
           { Special/built-in calls }

@@ -427,6 +427,10 @@ begin
       reuse. }
     GenAST(ASTLeft[argHead]);
   end
+  else if specialId = 103 then
+    { ReallocMem needs the per-block size header, which only the IR backend
+      emits; the legacy bump allocator cannot preserve content. }
+    Error('ReallocMem: supported on the IR backend only')
   else if specialId = 102 then
   begin
     { SetLength on a dynamic array. arg1=array lvalue, arg2=new length expr.
