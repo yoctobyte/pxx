@@ -18,6 +18,7 @@ implementation
 constructor TButton.Create;
 begin
   Self.Handle := gtk_button_new_with_label(PC(''));
+  Self.ConnectClick;
 end;
 
 procedure TButton.ApplyCaption;

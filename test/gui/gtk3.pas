@@ -42,6 +42,7 @@ procedure gtk_window_set_title(window: PGtkWidget; title: PChar); cdecl; externa
 procedure gtk_window_set_default_size(window: PGtkWidget; w: Integer; h: Integer); cdecl; external 'libgtk-3.so.0';
 function  gtk_button_new_with_label(label_: PChar): PGtkWidget; cdecl; external 'libgtk-3.so.0';
 procedure gtk_button_set_label(button: PGtkWidget; label_: PChar); cdecl; external 'libgtk-3.so.0';
+procedure gtk_button_clicked(button: PGtkWidget); cdecl; external 'libgtk-3.so.0';
 procedure gtk_container_add(container: PGtkWidget; widget: PGtkWidget); cdecl; external 'libgtk-3.so.0';
 procedure gtk_widget_show_all(widget: PGtkWidget); cdecl; external 'libgtk-3.so.0';
 
@@ -51,6 +52,9 @@ function  usleep(usec: LongWord): Integer; cdecl; external 'libc.so.6';
 { g_signal_connect(obj, signal, handler) — the macro from gtk; forwards to
   g_signal_connect_data with no closure data/notify and default flags. }
 function SignalConnect(obj: Pointer; signal: AnsiString; handler: Pointer): LongWord;
+
+{ Same, but passes a user-data pointer delivered as the handler's last arg. }
+function SignalConnectData(obj: Pointer; signal: AnsiString; handler: Pointer; data: Pointer): LongWord;
 
 { Convert a Pascal string to a transient NUL-terminated C string. The
   Pascal string value is a pointer to an 8-byte length prefix followed by
@@ -76,6 +80,11 @@ end;
 function SignalConnect(obj: Pointer; signal: AnsiString; handler: Pointer): LongWord;
 begin
   SignalConnect := g_signal_connect_data(obj, PC(signal), handler, nil, nil, 0);
+end;
+
+function SignalConnectData(obj: Pointer; signal: AnsiString; handler: Pointer; data: Pointer): LongWord;
+begin
+  SignalConnectData := g_signal_connect_data(obj, PC(signal), handler, data, nil, 0);
 end;
 
 end.
