@@ -76,6 +76,17 @@ paren-star comment at the first `*)`. `CSTYLECOMMENTS` is a pure extension
 (standard Pascal has no `/* */`); leaving it off keeps `/` adjacent to `*`
 parsing as division. Both accept `ON`/`OFF` and are case-insensitive.
 
+## Identifiers Are Case-Sensitive (current)
+
+Unlike standard Pascal, identifiers here are **case-sensitive**: `Min` and `min`
+are different names, and a routine must be called with the exact case it was
+declared. (Keywords are also only recognised in the capitalizations the lexer
+lists.) This is a current dialect trait, not standard Pascal — it maps cleanly
+onto case-sensitive C symbols but breaks ported FPC code that relies on
+case-insensitivity. A future change may move to the FPC model (case-insensitive
+Pascal identifiers, with the case-sensitive C name kept only in the external
+link symbol); see `docs/todo.md` §4 "Name resolution / case sensitivity".
+
 ## Tested Language Surface
 
 The regression suite currently covers:

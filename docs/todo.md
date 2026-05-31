@@ -238,6 +238,16 @@ inheritance depth, method-resolution clauses, COM ARC.
   `Val(s, n, code)` is a plain var-param call. Tests: `test/test_str_val.pas`.
   Gaps: float `Str`/`Val` (only Int64), and `:w:d` widths are literals not
   expressions (matches `write`).
+  - **Overloading**: `Val` is a plain proc → add a `Double` overload in
+    `builtin.pas` and the resolver picks by the destination's type, no special
+    work. `Str` is parser-intercepted → the desugar dispatches on the value's
+    `ASTTk` (float → `StrFloat`, else `StrInt`). ~free once float lands.
+  - **Float conversion** (deferred): reuse what already exists rather than
+    rolling new — the native float parser `StrToDoubleBits` (lexer.inc) for
+    float `Val`, and the `writeln` float formatter for float `Str`. If importing
+    from the system instead, the headers are `stdlib.h` (`strtod`, clean
+    non-variadic) and `stdio.h` (`snprintf`, variadic → hard); **not** `math.h`
+    (that's `sin/cos/pow`). Don't block on the C-header arc.
 - ⬜ **`flexcolumn` calling-convention directive** (future). Generalize the
   `value:w:d` micro-grammar (today special-cased in `write`/`writeln`/`Str`)
   into a declarable directive, so formatted routines can be ordinary library
@@ -246,6 +256,28 @@ inheritance depth, method-resolution clauses, COM ARC.
   modifier→formal mapping + variadic interplay then. Handle in the **parser**
   (it resolves the callee's directive), never the lexer. Rationale in the
   Str/Val discussion — see `plan-pascal-syntax-issues.md` §B1.
+- ⬜ **Name resolution / case sensitivity.** Currently ALL identifiers are
+  case-sensitive (FindProc/FindSym are exact-match, nothing lowercases; even
+  keywords only match the capitalizations the lexer lists). `min` ≠ `Min`. This
+  diverges from standard Pascal and breaks ported FPC code, but happens to map
+  1:1 onto C symbols. The clean target model (FPC's) **separates two things**:
+  the *Pascal identifier* (should be case-INsensitive — `WriteLn`==`writeln`) vs
+  the *external link symbol* (case-SENSITIVE — the `name 'glColor'` string in
+  the `.so`). C case-sensitivity belongs to the link name, not the source
+  identifier, so case-insensitive Pascal and exact C symbols coexist with no
+  conflict. Plan when tackled:
+  - Canonicalize Pascal identifiers case-insensitively (FindProc/FindSym/Keyword)
+    while keeping link-symbol strings exact.
+  - The only genuine collision is two imported C symbols differing only by case
+    (rare): exact-case match wins; otherwise unique case-insensitive match;
+    otherwise ambiguity error (needs a warnings facility — none today, the
+    compiler only Errors+Halts).
+  - Disambiguation tooling, useful regardless and **both currently missing**:
+    qualified `UnitName.Symbol` calls (verified unsupported — `math.Min(..)`
+    errors), and a unit-rename import. Note: `uses X as Y` is **not** standard
+    Pascal (that's C#/Python `as`); Delphi has `uses U in 'file'` + dotted
+    namespaces but no rename-import — a rename would be a dialect extension.
+  Discovered while wiring Str→StrInt (see [[project_rtl_dialect_landmines]]).
 - ✅ **Enums.** Type identity + ordinal↔name infra in place and used by RTTI
   (enum prop kind, EnumRTTI). Named set types (`set of TEnum`) also recognized.
 - 🟡 **Generics.** Template mechanism exists; breadth vs FPC unverified.
