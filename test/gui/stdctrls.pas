@@ -10,15 +10,21 @@ type
   TButton = class(TWinControl)
   public
     constructor Create;
+    procedure CreateHandle; override;
     procedure ApplyCaption; override;
   end;
 
 implementation
 
-constructor TButton.Create;
+procedure TButton.CreateHandle;
 begin
   Self.Handle := gtk_button_new_with_label(PC(''));
   Self.ConnectClick;
+end;
+
+constructor TButton.Create;
+begin
+  Self.HandleNeeded;
 end;
 
 procedure TButton.ApplyCaption;

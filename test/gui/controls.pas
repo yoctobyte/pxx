@@ -21,8 +21,10 @@ type
     FCaption: string;
     FOnClick: TMethod;
     procedure SetParent(p: TControl);
-    procedure SetCaption(const v: string);
   public
+    procedure CreateHandle; virtual;   { build the GTK widget; overridden per control }
+    procedure HandleNeeded;            { ensure FHandle exists (lazy, for streamed instances) }
+    procedure Realize;                 { build handle + caption + child widgets, recursively }
     procedure ApplyCaption; virtual;
     procedure Show;
     procedure ConnectClick;
@@ -33,7 +35,9 @@ type
     property Top: Integer read FTop write FTop;
     property Width: Integer read FWidth write FWidth;
     property Height: Integer read FHeight write FHeight;
-    property Caption: string read FCaption write SetCaption;
+    { Field-backed so the streamer (SetStrProp) can set it; the GTK widget is
+      updated at Realize via ApplyCaption (the widget may not exist yet). }
+    property Caption: string read FCaption write FCaption;
     { `of object` event (TMethod, Code+Data). Streamable as RTTI piMethod;
       set via the RTTI path (SetMethodProp) or directly with @obj.method. }
     property OnClick: TMethod read FOnClick write FOnClick;
@@ -84,24 +88,50 @@ begin
   SignalConnectData(h, 'clicked', @ControlClickTramp, sp);
 end;
 
+procedure TControl.CreateHandle;
+begin
+  { base: no widget. Subclasses build their GTK widget here. }
+end;
+
+procedure TControl.HandleNeeded;
+begin
+  { Self-qualified so CreateHandle dispatches virtually to the concrete control;
+    a bare call would bind statically to TControl.CreateHandle (empty). }
+  if FHandle = nil then
+    Self.CreateHandle;
+end;
+
+{ Realize the control and its children: build GTK widgets (lazily, since a
+  streamed instance never ran a constructor), push the streamed caption into
+  the widget, then realize + parent each child. Window/bin holds one child. }
+procedure TControl.Realize;
+var i, n: Integer; c: TComponent; ctl: TControl; ph, ch: Pointer;
+begin
+  Self.HandleNeeded;
+  Self.ApplyCaption;
+  ph := FHandle;
+  n := ChildCount;
+  for i := 0 to n - 1 do
+  begin
+    c := Child(i);
+    ctl := c;
+    ctl.Realize;
+    ch := ctl.Handle;
+    gtk_container_add(ph, ch);
+  end;
+end;
+
 procedure TControl.ApplyCaption;
 begin
   { base: no caption surface }
 end;
 
-procedure TControl.SetCaption(const v: string);
-begin
-  FCaption := v;
-  ApplyCaption;
-end;
-
+{ Register as a child of p; the actual GTK parenting happens at Realize, which
+  unifies the programmatic and streamed (FChildren) paths. }
 procedure TControl.SetParent(p: TControl);
-var ph, ch: Pointer;
 begin
   FParent := p;
-  ph := p.Handle;
-  ch := FHandle;
-  gtk_container_add(ph, ch);
+  p.AddChild(Self);
 end;
 
 procedure TControl.Show;

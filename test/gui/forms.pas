@@ -13,6 +13,7 @@ type
   TForm = class(TWinControl)
   public
     constructor Create;
+    procedure CreateHandle; override;
     procedure ApplyCaption; override;
   end;
 
@@ -35,12 +36,17 @@ begin
   gtk_main_quit;
 end;
 
-constructor TForm.Create;
+procedure TForm.CreateHandle;
 var h: Pointer;
 begin
   h := gtk_window_new(GTK_WINDOW_TOPLEVEL);
   Self.Handle := h;
   gtk_window_set_default_size(h, 320, 240);
+end;
+
+constructor TForm.Create;
+begin
+  Self.HandleNeeded;
 end;
 
 procedure TForm.ApplyCaption;
@@ -60,6 +66,7 @@ procedure TApplication.Run(mainForm: TForm);
 var h: Pointer;
 begin
   FMainForm := mainForm;
+  mainForm.Realize;                 { build child widgets (streamed forms) }
   h := mainForm.Handle;
   SignalConnect(h, 'destroy', @AppDestroy);
   gtk_widget_show_all(h);
