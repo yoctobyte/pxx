@@ -4855,6 +4855,36 @@ begin
 
   if Length(UnitContent) = 0 then
   begin
+    { RTL library units }
+    ConcatThree('lib/rtl/', lo, '.pas', path);
+    LoadFile(path, UnitContent);
+    if Length(UnitContent) = 0 then
+    begin
+      ConcatThree('lib/rtl/', lo, '.pp', path);
+      LoadFile(path, UnitContent);
+    end;
+    if Length(UnitContent) = 0 then
+    begin
+      ConcatThree('lib/rtl/', lo, '.h', path);
+      LoadFile(path, UnitContent);
+      if Length(UnitContent) > 0 then begin isCUnit := True; isCHeader := True; end;
+    end;
+  end;
+
+  if Length(UnitContent) = 0 then
+  begin
+    { LCL widgetset units }
+    ConcatThree('lib/lcl/', lo, '.pas', path);
+    LoadFile(path, UnitContent);
+    if Length(UnitContent) = 0 then
+    begin
+      ConcatThree('lib/lcl/', lo, '.pp', path);
+      LoadFile(path, UnitContent);
+    end;
+  end;
+
+  if Length(UnitContent) = 0 then
+  begin
     ConcatThree('/usr/include/', lo, '.h', path);
     LoadFile(path, UnitContent);
     if Length(UnitContent) > 0 then begin isCUnit := True; isCHeader := True; end;
