@@ -110,6 +110,30 @@ published-field wiring. The streaming + event engine itself is proven.
 
 ---
 
+## 2c. Import C headers for complex libraries  ⬜  (wanted; the real goal)
+
+Direct Pascal `external 'soname'` binding (used for the GTK widgetset) is a
+**stopgap, not the destination.** Hand-written bindings like `test/gui/gtk3.pas`
+hardcode the soname (`libgtk-3.so.0`) and every prototype — manual versioning
+and guaranteed drift against the installed library. The intended end state is
+to **import the real C headers** (as `uses gtk3` already does for simple
+headers like `ctype`), so we never re-declare externals by hand and the soname
+follows the headers instead of being pinned.
+
+The blocker is C's macro-heavy headers: GTK/glib pull in large macro and
+typedef trees the current C importer (`cparser.inc`/`cpreproc.inc`) can't yet
+digest. That is the hard part — not a reason to drop the goal.
+
+- Strengthen the C preprocessor + parser enough to ingest glib/GTK-grade
+  headers (nested includes, function-like macros, `typedef`/struct/enum/
+  pointer churn, attribute spellings, conditional platform blocks).
+- Then a binding becomes `uses gtk;` resolving `/usr/include/gtk-3.0/...` with
+  the soname derived from the header set — no hardcoded version.
+- Manual `external` stays available as the escape hatch for symbols not
+  cleanly expressible from headers.
+
+---
+
 ## 3. Interfaces  ⬜  (next big language feature, after the LFM arc)
 
 The headline remaining language feature. The old gap analysis parked

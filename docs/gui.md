@@ -11,6 +11,12 @@ This is an early vertical slice, not a full LCL. It runs on Linux/X11 with
 `libgtk-3.so.0` installed (no GTK `-dev` headers required — the binding is a
 hand-written Pascal `external` unit, not a header import).
 
+> The hand-written binding is a **stopgap**, not the goal. It hardcodes the
+> soname and every prototype, which means manual versioning and drift against
+> the installed library. The intended end state is to import the real C headers
+> (no hand-redefining of externals) — blocked today by GTK/glib's macro-heavy
+> headers. Tracked in [Project TODO](todo.md) §2c.
+
 ## Layers
 
 ```
