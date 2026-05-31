@@ -105,6 +105,7 @@ const
   AN_READLN       = 42; { Left = AN_ARG chain of lvalue targets (consumes a line) }
   AN_READ         = 43; { like AN_READLN; subset: also reads a fresh line }
   AN_PROCADDR     = 44; { ASTIVal = proc index; @proc → absolute code address as Pointer }
+  AN_METHODREF    = 45; { @obj.method → TMethod; ASTIVal = method proc index, ASTLeft = object value }
 
   { Inline-asm operand kinds }
   AOP_NONE = 0;

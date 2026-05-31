@@ -610,6 +610,13 @@ begin
       Result := IRAppend(IR_PROCADDR, Integer(ASTIVal[node]), -1, -1, 0, ASTTk[node]);
     end;
 
+    AN_METHODREF:
+    begin
+      { Outside an assignment to a TMethod target we can only surface the code
+        half; the proper 16-byte store lives in AN_ASSIGN. }
+      Result := IRAppend(IR_PROCADDR, Integer(ASTIVal[node]), -1, -1, 0, Ord(tyPointer));
+    end;
+
     AN_NEG:
     begin
       left := IRLowerAST(ASTLeft[node]);
@@ -654,7 +661,21 @@ begin
                      (ASTKind[ASTRight[node]] = AN_FIELD) or
                      (ASTKind[ASTRight[node]] = AN_INDEX) or
                      (ASTKind[ASTRight[node]] = AN_DEREF);
-      if (IntToTypeKind(ASTTk[ASTLeft[node]]) = tyRecord) and rhsIsLValue then
+      if ASTKind[ASTRight[node]] = AN_METHODREF then
+      begin
+        { @obj.method assigned to a TMethod target: write the two pointers
+          directly — Code at field+0, Data at field+8. }
+        left := ASTRight[node];
+        leftAddr := IRLowerAddress(ASTLeft[node]);
+        value := IRAppend(IR_PROCADDR, Integer(ASTIVal[left]), -1, -1, 0, Ord(tyPointer));
+        IRAppend(IR_STORE_MEM, leftAddr, value, -1, 0, Ord(tyPointer));
+        right := IRLowerAddress(ASTLeft[node]);
+        item := IRAppend(IR_CONST_INT, -1, -1, -1, 8, Ord(tyInteger));
+        outNode := IRAppend(IR_BINOP, right, item, Ord(tkPlus), 0, Ord(tyPointer));
+        seq := IRLowerAST(ASTLeft[left]);
+        Result := IRAppend(IR_STORE_MEM, outNode, seq, -1, 0, Ord(tyPointer));
+      end
+      else if (IntToTypeKind(ASTTk[ASTLeft[node]]) = tyRecord) and rhsIsLValue then
       begin
         leftAddr := IRLowerAddress(ASTLeft[node]);
         right := IRLowerAddress(ASTRight[node]);

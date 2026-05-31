@@ -1619,8 +1619,32 @@ begin
       if CurTok.Kind <> tkIdent then Error('expected identifier after @');
       name := CurTok.SVal;
       idx := FindSym(name);
+      { @obj.method yields a TMethod (Code+Data): obj is a class instance var,
+        method one of its methods. Code = method proc address,
+        Data = the instance pointer. Only valid as the RHS of an assignment to
+        a TMethod-shaped target (handled in AN_ASSIGN). }
+      if (idx >= 0) and (Syms[idx].RecName >= REC_UCLASS_BASE) and
+         (TokPos < TokCount) and (Tokens[TokPos].Kind = tkDot) then
+      begin
+        ci := Syms[idx].RecName - REC_UCLASS_BASE;
+        Next;            { consume obj name (CurTok = '.') }
+        Next;            { consume '.' (CurTok = method name) }
+        if CurTok.Kind <> tkIdent then Error('expected method name after @obj.');
+        mmi := FindUMeth(ci, CurTok.SVal);
+        if mmi < 0 then Error('@obj.method: unknown method');
+        valNode := AllocNode(AN_IDENT);   { object value = the instance pointer }
+        ASTIVal[valNode] := idx;
+        ASTTk[valNode] := Ord(tyClass);
+        node := AllocNode(AN_METHODREF);
+        ASTIVal[node] := UMthProc_[mmi];
+        ASTLeft[node] := valNode;
+        ASTTk[node] := Ord(tyRecord);
+        Next;            { consume method name }
+        CurASTNode := node;
+        LastExprTk := tyRecord;
+      end
       { @proc: not a variable but a known routine → absolute code address }
-      if (idx < 0) and (FindProc(name) >= 0) then
+      else if (idx < 0) and (FindProc(name) >= 0) then
       begin
         node := AllocNode(AN_PROCADDR);
         ASTIVal[node] := FindProc(name);
