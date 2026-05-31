@@ -30,19 +30,26 @@ begin
 end;
 
 function ClassHasPublished(ci: Integer): Boolean;
-{ Own (non-inherited) published members only. }
-var base, cnt, i: Integer;
+{ True if this class OR any ancestor declares a published member. A class that
+  only inherits published members is still streamable (GetClass must find it),
+  so it needs an RTTI header too. }
+var base, cnt, i, curr: Integer;
 begin
   ClassHasPublished := False;
-  base := UClsFBase[ci]; cnt := UClsFCount[ci];
-  for i := 0 to cnt - 1 do
-    if UFldPub[base + i] = 1 then begin ClassHasPublished := True; Exit; end;
-  base := UClsMBase[ci]; cnt := UClsMCount[ci];
-  for i := 0 to cnt - 1 do
-    if UMthPub[base + i] = 1 then begin ClassHasPublished := True; Exit; end;
-  base := UClsPBase[ci]; cnt := UClsPCount[ci];
-  for i := 0 to cnt - 1 do
-    if UPropPub[base + i] = 1 then begin ClassHasPublished := True; Exit; end;
+  curr := ci;
+  while curr >= 0 do
+  begin
+    base := UClsFBase[curr]; cnt := UClsFCount[curr];
+    for i := 0 to cnt - 1 do
+      if UFldPub[base + i] = 1 then begin ClassHasPublished := True; Exit; end;
+    base := UClsMBase[curr]; cnt := UClsMCount[curr];
+    for i := 0 to cnt - 1 do
+      if UMthPub[base + i] = 1 then begin ClassHasPublished := True; Exit; end;
+    base := UClsPBase[curr]; cnt := UClsPCount[curr];
+    for i := 0 to cnt - 1 do
+      if UPropPub[base + i] = 1 then begin ClassHasPublished := True; Exit; end;
+    curr := UClsParent[curr];
+  end;
 end;
 
 procedure DataPutZeros(n: Integer);
