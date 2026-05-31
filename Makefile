@@ -225,6 +225,8 @@ test: $(COMPILER) fpc-check
 	test "$$(/tmp/test_getmem_proc26)" = "$$(printf '1\n65\n66\n90\n1')"
 	./$(COMPILER) test/test_freemem.pas /tmp/test_freemem26
 	test "$$(/tmp/test_freemem26)" = "$$(printf '1\n1\n1\n1\n1\n1')"
+	./$(COMPILER) test/test_new_dispose.pas /tmp/test_new_dispose26
+	test "$$(/tmp/test_new_dispose26)" = "$$(printf '1234\n16\n1')"
 	./$(COMPILER) test/test_assign_types.pas /tmp/test_assign_types26
 	test "$$(/tmp/test_assign_types26)" = "$$(printf 'foobarbaz\nHi world!\nx\nQ\nhello\nY\n65')"
 	./$(COMPILER) test/test_method_named_result.pas /tmp/test_method_named_result26

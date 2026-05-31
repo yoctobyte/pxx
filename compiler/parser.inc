@@ -3248,6 +3248,41 @@ begin
           ASTIVal[node] := -101;
         ASTLeft[node] := argSeq;
       end
+      else if (name = 'New') or (name = 'new') then
+      begin
+        { New(p): allocate SizeOf(p^) and store the block into the pointer p.
+          Equivalent to p := GetMem(SizeOf(p^)); size comes from p's element
+          type. }
+        Next; Expect(tkLParen, '(');
+        if CurTok.Kind <> tkIdent then Error('New: expected pointer variable');
+        idx := FindSym(CurTok.SVal); identTokIdx := TokPos - 1; Next;
+        valNode := ParseLValueAST(idx, identTokIdx);
+        Expect(tkRParen, ')');
+        if idx < 0 then Error('New: undefined variable');
+        if Syms[idx].PtrElemTk = tyRecord then
+          castPrevTok := RecSize(Syms[idx].PtrElemRec)
+        else
+          castPrevTok := TypeSize(Syms[idx].PtrElemTk);
+        exprNode := AllocNode(AN_INT_LIT);
+        ASTIVal[exprNode] := castPrevTok; ASTTk[exprNode] := Ord(tyInteger);
+        argSeq := AllocNode(AN_ARG); ASTLeft[argSeq] := exprNode;
+        opNode := AllocNode(AN_CALL);
+        ASTIVal[opNode] := -Ord(tkGetMem);
+        ASTLeft[opNode] := argSeq; ASTTk[opNode] := Ord(tyPointer);
+        node := AllocNode(AN_ASSIGN);
+        ASTLeft[node] := valNode; ASTRight[node] := opNode;
+      end
+      else if (name = 'Dispose') or (name = 'dispose') then
+      begin
+        { Dispose(p): return the block to the free list (= FreeMem(p)). }
+        Next; Expect(tkLParen, '(');
+        ParseExpr; valNode := CurASTNode;
+        Expect(tkRParen, ')');
+        argSeq := AllocNode(AN_ARG); ASTLeft[argSeq] := valNode;
+        node := AllocNode(AN_CALL);
+        ASTIVal[node] := -Ord(tkFreeMem);
+        ASTLeft[node] := argSeq; ASTTk[node] := Ord(tyInteger);
+      end
       else if (CurProc >= 0) and Procs[CurProc].IsFunc and
               (Tokens[TokPos].Kind = tkAssign) and
               ((name = Procs[CurProc].Name) or
