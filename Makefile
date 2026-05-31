@@ -76,6 +76,8 @@ test: $(COMPILER) fpc-check
 	test "$$(/tmp/test_procaddr26)" = "1 2 3 4 5 "
 	./$(COMPILER) test/test_methodptr.pas /tmp/test_methodptr26
 	test "$$(/tmp/test_methodptr26)" = "$$(printf 'code set\ndata ok')"
+	./$(COMPILER) test/test_const_record_param.pas /tmp/test_const_record_param26
+	test "$$(/tmp/test_const_record_param26)" = "111 222"
 	./$(COMPILER) --debug test/hello.pas /tmp/hello_debug26 > /tmp/hello_debug26.log
 	grep -q "Loaded file length:" /tmp/hello_debug26.log
 	test "$$(/tmp/hello_debug26)" = "Hello, World!"

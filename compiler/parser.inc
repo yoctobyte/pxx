@@ -4215,7 +4215,7 @@ var
   savedGLC, savedGFC, j: Integer;
   patchPos : Integer;
   depth    : Integer;
-  doneArgs, doneParam, isArr, isByRef, declOverload, isClassKeyword, isStaticMethod: Boolean;
+  doneArgs, doneParam, isArr, isByRef, isConst, declOverload, isClassKeyword, isStaticMethod: Boolean;
   isAsmFunc: Boolean;
   asmNode: Integer;
   startIdx, idx: Integer;
@@ -4276,6 +4276,7 @@ begin
     while (CurTok.Kind <> tkRParen) and not doneArgs do
     begin
       isByRef := False;
+      isConst := False;
       if (CurTok.Kind = tkVar) or
          ((CurTok.Kind = tkIdent) and CaseEqual(CurTok.SVal, 'out')) then
       begin
@@ -4283,7 +4284,10 @@ begin
         Next;
       end
       else if CurTok.Kind = tkConst then
+      begin
+        isConst := True;
         Next;
+      end;
       startIdx := nparams;
       doneParam := False;
       while (CurTok.Kind = tkIdent) and not doneParam do
@@ -4305,6 +4309,10 @@ begin
       end
       else
         tk := ParseTypeKind;
+      { A `const` record param is passed by reference (like FPC). Passing it by
+        value truncates to a single qword, dropping all but the first field. }
+      if isConst and (tk = tyRecord) and not isArr then
+        isByRef := True;
       for i := startIdx to nparams-1 do
       begin
         ptypes[i] := tk;
