@@ -120,9 +120,13 @@ begin
 {$ifdef FPC}
   outFile := ChangeFileExt(inFile,'');
 {$else}
-  outFile := inFile;
+  { Default output = input path with the extension stripped (foo.lpr -> foo).
+    Never the input itself — that overwrote the source with the binary. }
+  outFile := GetFilePath(inFile) + GetFileBaseName(inFile);
 {$endif}
   if ParamCount >= i + 1 then outFile := ParamStr(i + 1);
+  { Last-resort guard: refuse to write the binary over the source file. }
+  if outFile = inFile then outFile := inFile + '.out';
 
   n := Length(inFile);
   isC := (n >= 2) and (inFile[n] = 'c') and (inFile[n-1] = '.');
