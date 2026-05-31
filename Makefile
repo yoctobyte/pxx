@@ -221,6 +221,8 @@ test: $(COMPILER) fpc-check
 	test "$$(/tmp/test_char_to_string26)" = "$$(printf 'x\ny\nab\nZZy\nyZZ\nyy\nA\nqqq\nz\ndone')"
 	./$(COMPILER) test/test_comments.pas /tmp/test_comments26
 	test "$$(/tmp/test_comments26)" = "$$(printf '3\ndone')"
+	./$(COMPILER) test/test_getmem_proc.pas /tmp/test_getmem_proc26
+	test "$$(/tmp/test_getmem_proc26)" = "$$(printf '1\n65\n66\n90\n1')"
 	./$(COMPILER) test/test_method_named_result.pas /tmp/test_method_named_result26
 	test "$$(/tmp/test_method_named_result26)" = "$$(printf '120\nHi Bob')"
 	./$(COMPILER) test/test_ptr_field_index.pas /tmp/test_ptr_field_index26

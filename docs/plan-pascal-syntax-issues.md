@@ -139,7 +139,26 @@ These should be captured as regressions (`test/test_assign_types.pas`) so they
 do not silently regress, and `docs/` notes/memories that still prescribe the
 temp-var workaround should be corrected.
 
-### B1. `GetMem(p, size)` two-arg procedure form does not write back — 🔴 bug
+### B1. `GetMem(p, size)` two-arg procedure form does not write back — ✅ FIXED (2026-05-31)
+
+Fixed: a `tkGetMem` case in `ParseStatementAST` (`parser.inc`) now parses the
+two-arg form as `dest := GetMem(size)` — `ParseExpr` for the destination lvalue
+(ident/field/index/deref), then an `AN_ASSIGN` wrapping the existing one-arg
+`GetMem(size)` call node. The function form `p := GetMem(size)` is unchanged.
+Verified for plain `Pointer`, typed pointer (then indexed), and record-field
+destinations. Regression: `test/test_getmem_proc.pas` (in `make test`).
+Self-host fixedpoint holds.
+
+**Sibling audit (the other procedure-form builtins):** `FreeMem`, `New`,
+`Dispose`, `Val`, `Str` are **not implemented at all** — they are not keywords
+and hard-error `undefined variable (...)`. So they do *not* share the silent
+write-back bug (they fail loudly). Follow-ups, not part of this fix:
+`FreeMem(p[, size])` is a trivial accepted **no-op** (the heap is bump-only, no
+reclaim) and pairs with `GetMem`; `New(p)`/`Dispose(p)` need the element size
+from the pointer's type; `Val`/`Str` are conversion routines. Original
+description kept below.
+
+
 
 This is the real workaround driver.
 

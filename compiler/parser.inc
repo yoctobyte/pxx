@@ -3065,7 +3065,33 @@ begin
       ASTLeft[node] := valNode;
       ASTRight[node] := opNode;
     end;
-    
+
+    tkGetMem:
+    begin
+      { Two-argument procedure form GetMem(dest, size): allocate `size` bytes and
+        store the pointer into the lvalue `dest`. (The function form
+        `p := GetMem(size)` is handled in ParseFactor.) Without this, a bare
+        GetMem statement fell through to the default branch and was discarded —
+        the destination was never written. }
+      Next; Expect(tkLParen, '(');
+      ParseExpr;                       { destination lvalue (ident/field/index/deref) }
+      valNode := CurASTNode;
+      Expect(tkComma, ',');
+      ParseExpr;                       { size in bytes }
+      argSeq := AllocNode(AN_ARG);
+      ASTLeft[argSeq] := CurASTNode;
+      Expect(tkRParen, ')');
+
+      opNode := AllocNode(AN_CALL);
+      ASTIVal[opNode] := -Ord(tkGetMem);
+      ASTLeft[opNode] := argSeq;
+      ASTTk[opNode] := Ord(tyPointer);
+
+      node := AllocNode(AN_ASSIGN);
+      ASTLeft[node] := valNode;
+      ASTRight[node] := opNode;
+    end;
+
     tkSyswrite:
     begin
       Next; Expect(tkLParen, '(');
