@@ -1,13 +1,16 @@
 unit forms;
 
-{ LCL-compatible TForm + TApplication on GTK3. Slice 1: a form is a GTK
-  toplevel window; Application.Run wires window-close to quit and enters the
-  GTK main loop. No `initialization` sections in the dialect, so the program
-  must create Application explicitly before use (see the demo). }
+{ LCL-compatible TForm + TApplication on GTK3.
+
+  A form is a GTK toplevel window. Application.CreateForm instantiates a form
+  from a metaclass (class reference), streams its .lfm via RTTI, and remembers
+  it as the main form; Application.Run realizes it, wires window-close to quit,
+  and enters the GTK main loop. Application itself is created in this unit's
+  initialization section (as in real LCL), so a stock program can just use it. }
 
 interface
 
-uses controls, gtk3;
+uses controls, classes_lite, typinfo, lfm, gtk3;
 
 type
   TForm = class(TWinControl)
@@ -21,12 +24,16 @@ type
   private
     FMainForm: TForm;
   public
+    Scaled: Boolean;            { accepted for LCL source compat (no effect yet) }
     procedure Initialize;
-    procedure Run(mainForm: TForm);
+    procedure CreateForm(formClass: Pointer; var ref: TForm);
+    procedure Run;
   end;
 
 var
   Application: TApplication;
+  { LCL global toggled by stock .lpr files; accepted, no effect here. }
+  RequireDerivedFormResource: Boolean;
 
 implementation
 
@@ -62,15 +69,32 @@ begin
   gtk_init(nil, nil);
 end;
 
-procedure TApplication.Run(mainForm: TForm);
+{ Instantiate a form from its metaclass (PClassRTTI), stream its .lfm by the
+  class's runtime name, hand the instance back to the caller's var, and keep it
+  as the main form. No constructor is run (CreateInstance just sets the VMT);
+  the .lfm + Realize drive the rest, matching the LCL streaming contract. }
+procedure TApplication.CreateForm(formClass: Pointer; var ref: TForm);
+var meta: PClassRTTI; inst: TForm; comp: TComponent; nm: string;
+begin
+  meta := formClass;
+  inst := CreateInstance(meta);     { Pointer -> class }
+  comp := inst;                     { TForm -> TComponent for the streamer }
+  nm := GetClassName(meta);
+  InitInheritedComponent(comp, nm);
+  ref := inst;
+  FMainForm := inst;
+end;
+
+procedure TApplication.Run;
 var h: Pointer;
 begin
-  FMainForm := mainForm;
-  mainForm.Realize;                 { build child widgets (streamed forms) }
-  h := mainForm.Handle;
+  FMainForm.Realize;                { build child widgets (streamed forms) }
+  h := FMainForm.Handle;
   SignalConnect(h, 'destroy', @AppDestroy);
   gtk_widget_show_all(h);
   gtk_main;
 end;
 
+initialization
+  Application := TApplication.Create;
 end.

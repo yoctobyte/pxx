@@ -79,6 +79,7 @@ type
   PPointer = ^Pointer;
 
 function GetClass(const name: string): PClassRTTI;
+function GetClassName(cls: PClassRTTI): string;
 function CreateInstance(cls: PClassRTTI): Pointer;
 function GetPropInfo(cls: PClassRTTI; const name: string): PPropInfo;
 function GetPropList(cls: PClassRTTI; list: PPropList): Integer;
@@ -128,6 +129,15 @@ begin
       Exit;
     end;
   end;
+end;
+
+function GetClassName(cls: PClassRTTI): string;
+var ps: PString;
+begin
+  GetClassName := '';
+  if cls = nil then Exit;
+  ps := cls^.NamePtr;          { copy ptr field to local before deref }
+  GetClassName := ps^;
 end;
 
 function CreateInstance(cls: PClassRTTI): Pointer;

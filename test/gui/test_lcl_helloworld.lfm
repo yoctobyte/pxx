@@ -1,0 +1,9 @@
+object Form1: TForm1
+  Caption = 'helloworld'
+  ClientHeight = 240
+  ClientWidth = 320
+  object Button1: TButton
+    Caption = 'Button1'
+    OnClick = Button1Click
+  end
+end

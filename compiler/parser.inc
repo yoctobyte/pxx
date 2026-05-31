@@ -3769,7 +3769,12 @@ begin
           curFieldOff := 8; { reserve offset 0 for VMT pointer }
         end;
 
-        curPublished := 0;
+        { Implicit first section defaults to published, as Delphi/Lazarus do for
+          $M+ (TPersistent-descended) classes — so a stock TForm's fields and
+          event handlers are streamable/reflectable without an explicit
+          `published`. We don't track $M+, so this applies to every class; the
+          only effect is extra RTTI, which is harmless. }
+        curPublished := 1;
         while (CurTok.Kind <> tkEnd) and (CurTok.Kind <> tkEOF) do
         begin
           { Visibility section markers. Not reserved words, so treat as section
