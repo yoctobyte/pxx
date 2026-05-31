@@ -78,14 +78,20 @@ parsing as division. Both accept `ON`/`OFF` and are case-insensitive.
 
 ## Identifiers Are Case-Sensitive (current)
 
-Unlike standard Pascal, identifiers here are **case-sensitive**: `Min` and `min`
-are different names, and a routine must be called with the exact case it was
-declared. (Keywords are also only recognised in the capitalizations the lexer
-lists.) This is a current dialect trait, not standard Pascal — it maps cleanly
-onto case-sensitive C symbols but breaks ported FPC code that relies on
-case-insensitivity. A future change may move to the FPC model (case-insensitive
-Pascal identifiers, with the case-sensitive C name kept only in the external
-link symbol); see `docs/todo.md` §4 "Name resolution / case sensitivity".
+Currently identifiers here are **case-sensitive**: `Min` and `min` are different
+names, and a routine must be called with the exact case it was declared.
+(Keywords are also only recognised in the capitalizations the lexer lists.) This
+diverges from standard Pascal and breaks ported FPC code that relies on
+case-insensitivity.
+
+The planned model keeps case-sensitivity as an **opt-in feature, not the
+default**: a `{$CASESENSITIVE ON/OFF}` switch (default off for `.pas`, i.e.
+standard case-insensitive Pascal) with strictness available on demand (typo
+catching, self-source checks). Case is resolved **per symbol origin** — imported
+C/external symbols stay case-sensitive (their link names are exact), Pascal
+identifiers follow the switch — rather than lowercasing everything onto one pile,
+which would mangle C symbols. See `docs/todo.md` §4 "Name resolution / case
+sensitivity".
 
 ## Tested Language Surface
 

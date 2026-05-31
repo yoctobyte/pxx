@@ -256,27 +256,36 @@ inheritance depth, method-resolution clauses, COM ARC.
   modifier→formal mapping + variadic interplay then. Handle in the **parser**
   (it resolves the callee's directive), never the lexer. Rationale in the
   Str/Val discussion — see `plan-pascal-syntax-issues.md` §B1.
-- ⬜ **Name resolution / case sensitivity.** Currently ALL identifiers are
-  case-sensitive (FindProc/FindSym are exact-match, nothing lowercases; even
-  keywords only match the capitalizations the lexer lists). `min` ≠ `Min`. This
-  diverges from standard Pascal and breaks ported FPC code, but happens to map
-  1:1 onto C symbols. The clean target model (FPC's) **separates two things**:
-  the *Pascal identifier* (should be case-INsensitive — `WriteLn`==`writeln`) vs
-  the *external link symbol* (case-SENSITIVE — the `name 'glColor'` string in
-  the `.so`). C case-sensitivity belongs to the link name, not the source
-  identifier, so case-insensitive Pascal and exact C symbols coexist with no
-  conflict. Plan when tackled:
-  - Canonicalize Pascal identifiers case-insensitively (FindProc/FindSym/Keyword)
-    while keeping link-symbol strings exact.
-  - The only genuine collision is two imported C symbols differing only by case
-    (rare): exact-case match wins; otherwise unique case-insensitive match;
-    otherwise ambiguity error (needs a warnings facility — none today, the
-    compiler only Errors+Halts).
+- ⬜ **Name resolution / case sensitivity** (design locked, not built). Today
+  ALL identifiers are case-sensitive (FindProc/FindSym exact-match, nothing
+  lowercases; keywords only match the capitalizations the lexer lists), so
+  `min` ≠ `Min`. Target model — **per-origin case mode, never a global
+  lower-pile** (matters for the multi-language / "frankenstein" goal: don't
+  throw C/Pascal/BASIC symbols on one pile and lower them):
+  - Each symbol carries a `CaseSensitive` flag. C / external imports → always
+    sensitive (the link symbol is exact). Pascal decls → driven by a
+    `{$CASESENSITIVE ON/OFF}` switch (mirror the comment switches: lexer bool +
+    directive), **default off** for `.pas`. `ON` is an opt-in strict mode
+    (typo-catching, verifying our own source). Each future frontend tags its
+    own symbols' mode.
+  - **Store names verbatim — never lowercase the symbol table** (lowercasing
+    mangles C symbols and diagnostics). Match with the existing `CaseEqual`
+    (`defs.inc:776`); `LowerCase` (`parser.inc:4899`, ASCII) already exists and
+    is only needed if symbols later move to hashed lookup.
+  - **Lookup = exact-first, then case-insensitive fallback** when no exact hit
+    and the candidate is insensitive. This is additive/low-risk: everything that
+    compiles today is unchanged (exact still fires first, ambiguity auto-prefers
+    exact); only currently-failing lookups like `min`→`Min` start resolving. C
+    symbols stay exact-only. The rare two-C-symbols-differ-only-by-case case
+    resolves exact-or-errors naturally (a real ambiguity warning would need a
+    warnings facility — none today, compiler only Errors+Halts).
   - Disambiguation tooling, useful regardless and **both currently missing**:
     qualified `UnitName.Symbol` calls (verified unsupported — `math.Min(..)`
-    errors), and a unit-rename import. Note: `uses X as Y` is **not** standard
-    Pascal (that's C#/Python `as`); Delphi has `uses U in 'file'` + dotted
-    namespaces but no rename-import — a rename would be a dialect extension.
+    errors), and a unit-rename import. `uses X as Y` is **not** standard Pascal
+    (that's C#/Python `as`); Delphi has `uses U in 'file'` + dotted namespaces
+    but no rename-import — a rename would be a dialect extension.
+  - Unicode is out of scope for identifiers (Pascal/C identifiers are ASCII;
+    existing ASCII folding suffices). Unicode is a string-data concern, separate.
   Discovered while wiring Str→StrInt (see [[project_rtl_dialect_landmines]]).
 - ✅ **Enums.** Type identity + ordinal↔name infra in place and used by RTTI
   (enum prop kind, EnumRTTI). Named set types (`set of TEnum`) also recognized.
