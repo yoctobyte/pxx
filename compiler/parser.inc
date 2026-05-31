@@ -4974,6 +4974,75 @@ begin
   end;
 end;
 
+{ Compile a unit's `initialization` section into a synthesized parameterless
+  proc and register it in InitProcs[]. The dialect has no real init execution,
+  so ParseUnit used to drop these tokens; this emits a normal proc body that the
+  program entry calls (in dependency order) before `main begin`. Precondition:
+  the `initialization` keyword has been consumed; statements run until `end` or
+  `finalization`. Leaves the parser positioned at that terminator. }
+procedure ParseInitializationSection(const uname: AnsiString);
+var
+  pi, savedSC, savedFS, savedGLC, savedGFC, j, patchPos: Integer;
+  seqNode, lastSeq, stmtNode: Integer;
+  dummyNames: array[0..0] of AnsiString;
+  dummyTypes: array[0..0] of TTypeKind;
+begin
+  pi := RegisterProc('__init_' + uname, False, tyInteger, 0, dummyNames, dummyTypes);
+  Procs[pi].BodyAddr := CodeLen;
+
+  savedSC := SymCount; savedFS := FrameSize;
+  savedGLC := GotoLabelCount; savedGFC := GotoFixupCount;
+  GotoLabelCount := 0; GotoFixupCount := 0;
+  for j := 0 to MAX_GOTO_LABELS - 1 do GotoLabelIRId[j] := -1;
+  FrameSize := 0;
+  CurProc := pi;
+  Procs[pi].ScopeBase := SymCount;
+
+  patchPos := EmitProcPrologue;
+  Procs[pi].FramePatch := patchPos;
+
+  { Optional local var/const/type sections (rare in init, but harmless). }
+  while CurTok.Kind in [tkVar, tkConst, tkType] do
+    case CurTok.Kind of
+      tkVar:   ParseVarSection;
+      tkConst: ParseConstSection;
+      tkType:  ParseTypeSection;
+    end;
+
+  { Statements until `end` or `finalization` (an identifier, not a token). }
+  seqNode := AllocNode(AN_SEQ);
+  lastSeq := seqNode;
+  while not (CurTok.Kind in [tkEnd, tkEOF]) and
+        not ((CurTok.Kind = tkIdent) and CaseEqual(CurTok.SVal, 'finalization')) do
+  begin
+    stmtNode := ParseStatementAST;
+    Eat(tkSemicolon);
+    if ASTLeft[lastSeq] = -1 then
+      ASTLeft[lastSeq] := stmtNode
+    else
+    begin
+      ASTRight[lastSeq] := AllocNode(AN_SEQ);
+      lastSeq := ASTRight[lastSeq];
+      ASTLeft[lastSeq] := stmtNode;
+    end;
+  end;
+  CompileAST(seqNode);
+  ASTNodeCount := 0;
+
+  EmitProcEpilog(-1);
+  PatchProcPrologue(patchPos, FrameSize);
+
+  SymCount := savedSC; FrameSize := savedFS;
+  GotoLabelCount := savedGLC; GotoFixupCount := savedGFC;
+  CurProc := -1;
+
+  if InitProcCount < 256 then
+  begin
+    InitProcs[InitProcCount] := pi;
+    Inc(InitProcCount);
+  end;
+end;
+
 procedure ParseUnit;
 var
   uname: AnsiString;
@@ -5063,8 +5132,13 @@ begin
             procedure/function bodies. }
           if CaseEqual(CurTok.SVal, 'constructor') or CaseEqual(CurTok.SVal, 'destructor') then
             ParseSubroutine
+          else if CaseEqual(CurTok.SVal, 'initialization') then
+          begin
+            Next;                       { consume 'initialization' }
+            ParseInitializationSection(uname);
+          end
           else
-            Next;
+            Next;                       { 'finalization' + its body are skipped }
         else
           Next;
       end;
@@ -5175,6 +5249,12 @@ begin
 
   { Patch jmp to point here (start of main body) }
   Patch32(jmpPatch, CodeLen - (jmpPatch + 4));
+
+  { Run unit initialization sections before the program body, in dependency
+    order (a used unit is fully parsed — and its init proc registered — before
+    the using unit). This is where e.g. the LCL `Forms` unit creates Application. }
+  for i := 0 to InitProcCount - 1 do
+    EmitCallProc(InitProcs[i]);
 
   Expect(tkBegin, 'begin');
   ParseBlock;

@@ -496,6 +496,10 @@ var
   InInterface : Boolean;
   CompiledUnits : array[0..255] of Integer;
   CompiledUnitCount : Integer;
+  { Synthesized unit initialization procs, in dependency (post-uses) order.
+    Called at program entry before the main body so unit globals get set up. }
+  InitProcs : array[0..255] of Integer;
+  InitProcCount : Integer;
   SourceFileDir : AnsiString;
   CurASTNode : Integer;
   LoopNestDepth       : Integer;

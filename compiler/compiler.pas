@@ -132,6 +132,7 @@ begin
   if DebugTrace then writeln('Loaded file length: ', Length(Source));
   SourceFileDir := GetFilePath(inFile);
   CompiledUnitCount := 0;
+  InitProcCount := 0;
   InInterface := False;
   if (not isC) and (not isBasic) then
     ExpandIncludes(Source, SourceFileDir);
