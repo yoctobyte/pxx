@@ -368,8 +368,14 @@ procedure EmitVarBinOp(opTk, resultOff: Integer; isCompare: Boolean);
 { rdi = left variant addr, rsi = right variant addr. Closed double-dispatch:
   both integer-class -> integer op (preserves int); any VT_DOUBLE -> double op.
   isCompare -> Boolean 0/1 in rax; else Variant result at BSS[resultOff], addr in rax. }
-var pDbl1, pDbl2, pDoneInt, pLi, pRi, pLd, pRd: Integer;
+var pDbl1, pDbl2, pDoneInt, pLi, pRi, pLd, pRd, pForceDbl: Integer;
 begin
+  { '/' is real division: always Double, like Pascal — skip the integer path. }
+  pForceDbl := -1;
+  if (not isCompare) and (opTk = Ord(tkSlash)) then
+  begin
+    EmitB($E9); pForceDbl := CodeLen; EmitI32(0);          { jmp Ldouble }
+  end;
   EmitB($48); EmitB($8B); EmitB($07);                       { mov rax,[rdi]  (lTag) }
   EmitB($48); EmitB($83); EmitB($F8); EmitB(VT_DOUBLE);     { cmp rax, VT_DOUBLE }
   EmitB($0F); EmitB($84); pDbl1 := CodeLen; EmitI32(0);     { je  Ldouble }
@@ -390,7 +396,10 @@ begin
     if      opTk = Ord(tkPlus)  then begin EmitB($48); EmitB($01); EmitB($C8); end             { add  rax,rcx }
     else if opTk = Ord(tkMinus) then begin EmitB($48); EmitB($29); EmitB($C8); end             { sub  rax,rcx }
     else if opTk = Ord(tkStar)  then begin EmitB($48); EmitB($0F); EmitB($AF); EmitB($C1); end { imul rax,rcx }
-    else Error('Variant arithmetic: only + - * supported (div/mod//, string pending)');
+    else if opTk = Ord(tkDiv)   then begin EmitB($48); EmitB($99); EmitB($48); EmitB($F7); EmitB($F9); end                       { cqo; idiv rcx -> quotient in rax }
+    else if opTk = Ord(tkMod)   then begin EmitB($48); EmitB($99); EmitB($48); EmitB($F7); EmitB($F9); EmitB($48); EmitB($89); EmitB($D0); end  { cqo; idiv rcx; mov rax,rdx (remainder) }
+    else if opTk = Ord(tkSlash) then { dead code: '/' is force-jumped to the double path above }
+    else Error('Variant arithmetic: unsupported operator (string pending)');
     EmitB($48); EmitB($8D); EmitB($14); EmitB($25); EmitGlobRef(resultOff);       { lea rdx,[result] }
     EmitB($48); EmitB($C7); EmitB($02); EmitI32(VT_INT64);                        { mov qword[rdx],VT_INT64 }
     EmitB($48); EmitB($89); EmitB($42); EmitB($08);                               { mov [rdx+8],rax }
@@ -401,6 +410,7 @@ begin
   { Ldouble: load both operands into xmm0/xmm1 }
   Patch32(pDbl1, CodeLen - (pDbl1 + 4));
   Patch32(pDbl2, CodeLen - (pDbl2 + 4));
+  if pForceDbl >= 0 then Patch32(pForceDbl, CodeLen - (pForceDbl + 4));
   EmitB($48); EmitB($8B); EmitB($07);                       { mov rax,[rdi] }
   EmitB($48); EmitB($83); EmitB($F8); EmitB(VT_DOUBLE);
   EmitB($75); pLi := CodeLen; EmitB(0);                     { jne  Lli }
@@ -422,12 +432,26 @@ begin
     EmitB($66); EmitB($0F); EmitB($2F); EmitB($C1);          { comisd xmm0,xmm1 }
     EmitSetcc(opTk, False);
   end
+  else if (opTk = Ord(tkDiv)) or (opTk = Ord(tkMod)) then
+  begin
+    { div/mod are integer operators: truncate the double operands to int64,
+      integer-divide, store VT_INT64. (Pascal div/mod semantics.) }
+    EmitB($F2); EmitB($48); EmitB($0F); EmitB($2C); EmitB($C0);                  { cvttsd2si rax, xmm0 }
+    EmitB($F2); EmitB($48); EmitB($0F); EmitB($2C); EmitB($C9);                  { cvttsd2si rcx, xmm1 }
+    EmitB($48); EmitB($99); EmitB($48); EmitB($F7); EmitB($F9);                  { cqo; idiv rcx }
+    if opTk = Ord(tkMod) then begin EmitB($48); EmitB($89); EmitB($D0); end;     { mov rax,rdx (remainder) }
+    EmitB($48); EmitB($8D); EmitB($14); EmitB($25); EmitGlobRef(resultOff);      { lea rdx,[result] }
+    EmitB($48); EmitB($C7); EmitB($02); EmitI32(VT_INT64);                       { mov qword[rdx],VT_INT64 }
+    EmitB($48); EmitB($89); EmitB($42); EmitB($08);                              { mov [rdx+8],rax }
+    EmitB($48); EmitB($89); EmitB($D0);                                          { mov rax,rdx }
+  end
   else
   begin
     if      opTk = Ord(tkPlus)  then begin EmitB($F2); EmitB($0F); EmitB($58); EmitB($C1); end   { addsd }
     else if opTk = Ord(tkMinus) then begin EmitB($F2); EmitB($0F); EmitB($5C); EmitB($C1); end   { subsd }
     else if opTk = Ord(tkStar)  then begin EmitB($F2); EmitB($0F); EmitB($59); EmitB($C1); end   { mulsd }
-    else Error('Variant arithmetic: only + - * supported (div/mod//, string pending)');
+    else if opTk = Ord(tkSlash) then begin EmitB($F2); EmitB($0F); EmitB($5E); EmitB($C1); end   { divsd ('/' real division) }
+    else Error('Variant arithmetic: unsupported operator');
     EmitB($66); EmitB($48); EmitB($0F); EmitB($7E); EmitB($C0);                  { movq rax,xmm0 }
     EmitB($48); EmitB($8D); EmitB($14); EmitB($25); EmitGlobRef(resultOff);      { lea rdx,[result] }
     EmitB($48); EmitB($C7); EmitB($02); EmitI32(VT_DOUBLE);                      { mov qword[rdx],VT_DOUBLE }
