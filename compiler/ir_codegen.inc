@@ -224,6 +224,110 @@ begin
   EmitB($48); EmitB($83); EmitB($C4); EmitB($08);   { add rsp, 8       ; discard addr }
 end;
 
+procedure EmitSetcc(opTk: Integer; signed: Boolean);
+{ Flags already set (cmp / comisd). Emit setcc al + movzx eax,al -> rax = 0/1.
+  signed=True for integer cmp; False (unsigned/comisd) for double comisd. }
+begin
+  EmitB($0F);
+  if signed then
+  begin
+    if      opTk = Ord(tkLt)  then EmitB($9C)   { setl  }
+    else if opTk = Ord(tkLe)  then EmitB($9E)   { setle }
+    else if opTk = Ord(tkGt)  then EmitB($9F)   { setg  }
+    else if opTk = Ord(tkGe)  then EmitB($9D)   { setge }
+    else if opTk = Ord(tkEq)  then EmitB($94)   { sete  }
+    else if opTk = Ord(tkNeq) then EmitB($95)   { setne }
+    else Error('Variant compare: unsupported operator');
+  end
+  else
+  begin
+    if      opTk = Ord(tkLt)  then EmitB($92)   { setb  }
+    else if opTk = Ord(tkLe)  then EmitB($96)   { setbe }
+    else if opTk = Ord(tkGt)  then EmitB($97)   { seta  }
+    else if opTk = Ord(tkGe)  then EmitB($93)   { setae }
+    else if opTk = Ord(tkEq)  then EmitB($94)   { sete  }
+    else if opTk = Ord(tkNeq) then EmitB($95)   { setne }
+    else Error('Variant compare: unsupported operator');
+  end;
+  EmitB($C0);                                  { ...al }
+  EmitB($0F); EmitB($B6); EmitB($C0);          { movzx eax, al }
+end;
+
+procedure EmitVarBinOp(opTk, resultOff: Integer; isCompare: Boolean);
+{ rdi = left variant addr, rsi = right variant addr. Closed double-dispatch:
+  both integer-class -> integer op (preserves int); any VT_DOUBLE -> double op.
+  isCompare -> Boolean 0/1 in rax; else Variant result at BSS[resultOff], addr in rax. }
+var pDbl1, pDbl2, pDoneInt, pLi, pRi, pLd, pRd: Integer;
+begin
+  EmitB($48); EmitB($8B); EmitB($07);                       { mov rax,[rdi]  (lTag) }
+  EmitB($48); EmitB($83); EmitB($F8); EmitB(VT_DOUBLE);     { cmp rax, VT_DOUBLE }
+  EmitB($0F); EmitB($84); pDbl1 := CodeLen; EmitI32(0);     { je  Ldouble }
+  EmitB($48); EmitB($8B); EmitB($06);                       { mov rax,[rsi]  (rTag) }
+  EmitB($48); EmitB($83); EmitB($F8); EmitB(VT_DOUBLE);
+  EmitB($0F); EmitB($84); pDbl2 := CodeLen; EmitI32(0);     { je  Ldouble }
+
+  { both integer-class }
+  EmitB($48); EmitB($8B); EmitB($47); EmitB($08);           { mov rax,[rdi+8] }
+  EmitB($48); EmitB($8B); EmitB($4E); EmitB($08);           { mov rcx,[rsi+8] }
+  if isCompare then
+  begin
+    EmitB($48); EmitB($39); EmitB($C8);                     { cmp rax,rcx }
+    EmitSetcc(opTk, True);
+  end
+  else
+  begin
+    if      opTk = Ord(tkPlus)  then begin EmitB($48); EmitB($01); EmitB($C8); end             { add  rax,rcx }
+    else if opTk = Ord(tkMinus) then begin EmitB($48); EmitB($29); EmitB($C8); end             { sub  rax,rcx }
+    else if opTk = Ord(tkStar)  then begin EmitB($48); EmitB($0F); EmitB($AF); EmitB($C1); end { imul rax,rcx }
+    else Error('Variant arithmetic: only + - * supported (div/mod//, string pending)');
+    EmitB($48); EmitB($8D); EmitB($14); EmitB($25); EmitGlobRef(resultOff);       { lea rdx,[result] }
+    EmitB($48); EmitB($C7); EmitB($02); EmitI32(VT_INT64);                        { mov qword[rdx],VT_INT64 }
+    EmitB($48); EmitB($89); EmitB($42); EmitB($08);                               { mov [rdx+8],rax }
+    EmitB($48); EmitB($89); EmitB($D0);                                           { mov rax,rdx }
+  end;
+  EmitB($E9); pDoneInt := CodeLen; EmitI32(0);              { jmp Ldone }
+
+  { Ldouble: load both operands into xmm0/xmm1 }
+  Patch32(pDbl1, CodeLen - (pDbl1 + 4));
+  Patch32(pDbl2, CodeLen - (pDbl2 + 4));
+  EmitB($48); EmitB($8B); EmitB($07);                       { mov rax,[rdi] }
+  EmitB($48); EmitB($83); EmitB($F8); EmitB(VT_DOUBLE);
+  EmitB($75); pLi := CodeLen; EmitB(0);                     { jne  Lli }
+  EmitB($F2); EmitB($0F); EmitB($10); EmitB($47); EmitB($08);            { movsd xmm0,[rdi+8] }
+  EmitB($EB); pLd := CodeLen; EmitB(0);                     { jmp  Lldone }
+  Code[pLi] := Byte(CodeLen - (pLi + 1));
+  EmitB($F2); EmitB($48); EmitB($0F); EmitB($2A); EmitB($47); EmitB($08);{ cvtsi2sd xmm0,[rdi+8] }
+  Code[pLd] := Byte(CodeLen - (pLd + 1));
+  EmitB($48); EmitB($8B); EmitB($06);                       { mov rax,[rsi] }
+  EmitB($48); EmitB($83); EmitB($F8); EmitB(VT_DOUBLE);
+  EmitB($75); pRi := CodeLen; EmitB(0);                     { jne  Lri }
+  EmitB($F2); EmitB($0F); EmitB($10); EmitB($4E); EmitB($08);            { movsd xmm1,[rsi+8] }
+  EmitB($EB); pRd := CodeLen; EmitB(0);
+  Code[pRi] := Byte(CodeLen - (pRi + 1));
+  EmitB($F2); EmitB($48); EmitB($0F); EmitB($2A); EmitB($4E); EmitB($08);{ cvtsi2sd xmm1,[rsi+8] }
+  Code[pRd] := Byte(CodeLen - (pRd + 1));
+  if isCompare then
+  begin
+    EmitB($66); EmitB($0F); EmitB($2F); EmitB($C1);          { comisd xmm0,xmm1 }
+    EmitSetcc(opTk, False);
+  end
+  else
+  begin
+    if      opTk = Ord(tkPlus)  then begin EmitB($F2); EmitB($0F); EmitB($58); EmitB($C1); end   { addsd }
+    else if opTk = Ord(tkMinus) then begin EmitB($F2); EmitB($0F); EmitB($5C); EmitB($C1); end   { subsd }
+    else if opTk = Ord(tkStar)  then begin EmitB($F2); EmitB($0F); EmitB($59); EmitB($C1); end   { mulsd }
+    else Error('Variant arithmetic: only + - * supported (div/mod//, string pending)');
+    EmitB($66); EmitB($48); EmitB($0F); EmitB($7E); EmitB($C0);                  { movq rax,xmm0 }
+    EmitB($48); EmitB($8D); EmitB($14); EmitB($25); EmitGlobRef(resultOff);      { lea rdx,[result] }
+    EmitB($48); EmitB($C7); EmitB($02); EmitI32(VT_DOUBLE);                      { mov qword[rdx],VT_DOUBLE }
+    EmitB($48); EmitB($89); EmitB($42); EmitB($08);                             { mov [rdx+8],rax }
+    EmitB($48); EmitB($89); EmitB($D0);                                         { mov rax,rdx }
+  end;
+
+  { Ldone: }
+  Patch32(pDoneInt, CodeLen - (pDoneInt + 4));
+end;
+
 procedure IREmitNode(node: Integer);
 var left, right, valNode, symIdx, si: Integer;
     op: TTokenKind;
@@ -1551,6 +1655,43 @@ begin
           EmitB($48); EmitB($C7); EmitB($07); EmitI32(size);  { mov qword [rdi], tag }
           EmitB($48); EmitB($89); EmitB($4F); EmitB($08);     { mov [rdi+8], rcx }
         end;
+      end;
+
+    IR_VAR_BOX:
+      begin
+        { Box a scalar into a temp variant (IRA=temp addr), return addr in rax. }
+        tk := IntToTypeKind(IRC[node]);
+        case tk of
+          tyInteger, tyInt8, tyInt16, tyInt32: size := VT_INT;
+          tyInt64, tyNativeInt:                size := VT_INT64;
+          tyUInt8, tyUInt16, tyUInt32, tyUInt64,
+          tyNativeUInt, tyPointer:             size := VT_INT64;
+          tyBoolean:                           size := VT_BOOL;
+          tyChar:                              size := VT_CHAR;
+          tyDouble:                            size := VT_DOUBLE;
+        else
+          Error('Variant operand: this scalar type not yet supported (string/single/extended pending)');
+        end;
+        IREmitNode(IRB[node]);                 { rax = scalar value }
+        if (tk = tyInteger) or (tk = tyInt8) or (tk = tyInt16) or (tk = tyInt32) then
+        begin EmitB($48); EmitB($98); end;     { cdqe }
+        EmitB($50);                            { push payload }
+        IREmitNode(IRA[node]);                 { rax = temp addr }
+        EmitB($48); EmitB($89); EmitB($C7);    { mov rdi, rax }
+        EmitB($59);                            { pop rcx }
+        EmitB($48); EmitB($C7); EmitB($07); EmitI32(size);  { mov qword [rdi], tag }
+        EmitB($48); EmitB($89); EmitB($4F); EmitB($08);     { mov [rdi+8], rcx }
+        EmitB($48); EmitB($89); EmitB($F8);    { mov rax, rdi  (return addr) }
+      end;
+
+    IR_VAR_BINOP:
+      begin
+        IREmitNode(IRA[node]);                 { rax = left addr }
+        EmitB($50);                            { push left }
+        IREmitNode(IRB[node]);                 { rax = right addr }
+        EmitB($48); EmitB($89); EmitB($C6);    { mov rsi, rax  (right) }
+        EmitB($5F);                            { pop rdi       (left) }
+        EmitVarBinOp(IRC[node], Integer(IRIVal[node]), IntToTypeKind(IRTk[node]) = tyBoolean);
       end;
 
     IR_COPY_REC:

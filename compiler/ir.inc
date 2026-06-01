@@ -77,6 +77,8 @@ begin
     IR_SET_BINOP: Result := 'set_binop';
     IR_SET_CMP: Result := 'set_cmp';
     IR_VAR_STORE: Result := 'var_store';
+    IR_VAR_BINOP: Result := 'var_binop';
+    IR_VAR_BOX: Result := 'var_box';
   else
     Result := 'unknown';
   end;
@@ -305,6 +307,18 @@ begin
       begin
         IRRequireNode(IRA[i], 'var_store dest');
         IRRequireNode(IRB[i], 'var_store value');
+      end;
+
+      IR_VAR_BINOP:
+      begin
+        IRRequireNode(IRA[i], 'var_binop left');
+        IRRequireNode(IRB[i], 'var_binop right');
+      end;
+
+      IR_VAR_BOX:
+      begin
+        IRRequireNode(IRA[i], 'var_box dest');
+        IRRequireNode(IRB[i], 'var_box value');
       end;
 
     else
@@ -758,6 +772,40 @@ begin
           idx := BSSSize;
           Inc(BSSSize, 32);
           Result := IRAppend(IR_SET_BINOP, left, right, Integer(ASTIVal[node]), idx, Ord(tySet));
+        end;
+      end
+      else if (IntToTypeKind(ASTTk[ASTLeft[node]]) = tyVariant) or
+              (IntToTypeKind(ASTTk[ASTRight[node]]) = tyVariant) then
+      begin
+        { Variant operand: make both sides variant addresses (box a scalar side
+          into a temp), then IR_VAR_BINOP. Comparison -> Boolean in rax;
+          arithmetic -> a Variant result in a fresh BSS temp (addr in rax). }
+        if IntToTypeKind(ASTTk[ASTLeft[node]]) = tyVariant then
+          left := IRLowerAddress(ASTLeft[node])
+        else
+        begin
+          value := AllocVar('', tyVariant);
+          left := IRAppend(IR_VAR_BOX, IRAppend(IR_LEA, value, -1, -1, 0, Ord(tyPointer)),
+                           IRLowerAST(ASTLeft[node]), Ord(IntToTypeKind(ASTTk[ASTLeft[node]])), 0, Ord(tyVariant));
+        end;
+        if IntToTypeKind(ASTTk[ASTRight[node]]) = tyVariant then
+          right := IRLowerAddress(ASTRight[node])
+        else
+        begin
+          value := AllocVar('', tyVariant);
+          right := IRAppend(IR_VAR_BOX, IRAppend(IR_LEA, value, -1, -1, 0, Ord(tyPointer)),
+                            IRLowerAST(ASTRight[node]), Ord(IntToTypeKind(ASTTk[ASTRight[node]])), 0, Ord(tyVariant));
+        end;
+        item := Integer(ASTIVal[node]);
+        if (item = Ord(tkEq)) or (item = Ord(tkNeq)) or (item = Ord(tkLt)) or
+           (item = Ord(tkLe)) or (item = Ord(tkGt)) or (item = Ord(tkGe)) then
+          Result := IRAppend(IR_VAR_BINOP, left, right, item, 0, Ord(tyBoolean))
+        else
+        begin
+          BSSSize := AlignTo(BSSSize, 8);
+          idx := BSSSize;
+          Inc(BSSSize, 16);
+          Result := IRAppend(IR_VAR_BINOP, left, right, item, idx, Ord(tyVariant));
         end;
       end
       else

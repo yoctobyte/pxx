@@ -2468,7 +2468,9 @@ begin
     right := CurASTNode;
     node := AllocNode(AN_BINOP); ASTIVal[node] := Ord(op); ASTLeft[node] := left; ASTRight[node] := right;
     ASTSOffset[node] := opSOffset; ASTSLen[node] := opSLen;
-    if (op = tkAnd) and (ASTTk[left] = Ord(tyBoolean)) and (ASTTk[right] = Ord(tyBoolean)) then
+    if (ASTTk[left] = Ord(tyVariant)) or (ASTTk[right] = Ord(tyVariant)) then
+      ASTTk[node] := Ord(tyVariant)
+    else if (op = tkAnd) and (ASTTk[left] = Ord(tyBoolean)) and (ASTTk[right] = Ord(tyBoolean)) then
       ASTTk[node] := Ord(tyBoolean)
     else if (ASTTk[left] = Ord(tySet)) or (ASTTk[right] = Ord(tySet)) then
       ASTTk[node] := Ord(tySet)
@@ -2512,7 +2514,9 @@ begin
     ParseTerm;
     right := CurASTNode;
     node := AllocNode(AN_BINOP); ASTIVal[node] := Ord(op); ASTLeft[node] := left; ASTRight[node] := right;
-    if (op = tkPlus) and ((ASTTk[left] = Ord(tyString)) or (ASTTk[right] = Ord(tyString)) or
+    if (ASTTk[left] = Ord(tyVariant)) or (ASTTk[right] = Ord(tyVariant)) then
+      ASTTk[node] := Ord(tyVariant)
+    else if (op = tkPlus) and ((ASTTk[left] = Ord(tyString)) or (ASTTk[right] = Ord(tyString)) or
                           ((ASTTk[left] = Ord(tyChar)) and (ASTTk[right] = Ord(tyChar)))) then
       ASTTk[node] := Ord(tyString)
     else if ((op = tkPlus) or (op = tkMinus)) and
