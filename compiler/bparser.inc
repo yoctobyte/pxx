@@ -93,10 +93,28 @@ begin
     ParseExpr;
     condNode := CurASTNode;
     Expect(tkThen, 'THEN');
-    thenNode := ParseBStatement;
-    elseNode := -1;
-    if Eat(tkElse) then
-      elseNode := ParseBStatement;
+    
+    if CurTok.Kind = tkSemicolon then
+    begin
+      Next;
+      thenNode := ParseBBlock(tkElse, tkEnd);
+      elseNode := -1;
+      if CurTok.Kind = tkElse then
+      begin
+        Next;
+        if CurTok.Kind = tkSemicolon then Next;
+        elseNode := ParseBBlock(tkEnd, tkEOF);
+      end;
+      Expect(tkEnd, 'END');
+      Expect(tkIf, 'IF');
+    end
+    else
+    begin
+      thenNode := ParseBStatement;
+      elseNode := -1;
+      if Eat(tkElse) then
+        elseNode := ParseBStatement;
+    end;
       
     stmtNode := AllocNode(AN_IF);
     ASTLeft[stmtNode] := condNode;

@@ -123,8 +123,7 @@ The C capability is useful but intentionally incomplete:
 ## BASIC And Further Languages
 
 - BASIC exists as an early frontend, not as a documented complete language
-  implementation. The current lexer fixture `test/test_basic_lexer.bas` hangs
-  during compilation and BASIC is not part of `make test`.
+  implementation. (The former hang compiling `test/test_basic_lexer.bas` was resolved by implementing Block IF statements; BASIC remains experimental and is not part of `make test`).
 - Other proposed languages and mixed-source formats are roadmap ideas, not
   implemented user features.
 

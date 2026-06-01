@@ -42,9 +42,7 @@ Case behavior is per origin:
 
 ## Confirmed Bugs
 
-- **BASIC lexer fixture hangs.** Compiling `test/test_basic_lexer.bas` did not
-  terminate during this audit. BASIC remains experimental and is not part of
-  `make test`.
+- None. (The hang compiling `test/test_basic_lexer.bas` was resolved on 2026-06-01 by adding Block IF support to the BASIC parser).
 
 ## Major Missing Pascal Features
 

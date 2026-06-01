@@ -88,17 +88,25 @@ more APIs are exercised.
 
 ## C Preprocessor Support
 
-A preprocessing phase rewrites imported C input before lexing. Supported subset:
+A preprocessing phase rewrites imported C input before lexing. Supported features:
 
 - Comment removal, continued directive lines
-- `#include`, common include guards
+- `#include`, common include guards (searches base directory, `/usr/include`, `/usr/include/x86_64-linux-gnu`, `/usr/lib/gcc/x86_64-linux-gnu/13/include`, `/usr/lib/llvm-18/lib/clang/18/include`)
 - `#define` / `#undef`
 - `#if` / `#ifdef` / `#ifndef` / `#elif` / `#else` / `#endif`
 - Object-like macros and parameter substitution for function-like macros
+- **Fully recursive macro expansion and rescan** with standard paint-blue logic to prevent infinite self-reference recursion.
+- **GCC attribute and qualifier discarding**: Discards `__attribute__((...))`, GObject annotations (`G_GNUC_*`), GLIBC macros, and other compiler-specific specifiers/qualifiers to prevent poisoning parser inputs.
 
-Not yet supported: token pasting (`##`), stringification (`#`), variadic
-macros, complete macro rescanning, complex typedefs and structs, callbacks,
-variadic functions, full pointer marshalling.
+Not yet supported: token pasting (`##`), stringification (`#`), variadic macros, complex callbacks, variadic functions, full pointer marshalling.
+
+## Struct & Record Alignment and Packing
+
+Frankonpiler supports binary-compatible struct mapping for C interoperability through Pascal packed and aligned records:
+
+- **Packed Records**: Declaring a record as `packed record` forces all field alignments to 1 (no padding bytes).
+- **Directives Support**: Dynamic `$PACKRECORDS N` and `$ALIGN N` directives (where `N` can be `1`, `2`, `4`, `8`, `16`, `default`, or `normal`) change the packing alignment threshold dynamically inside the source file. The compiler uses a per-token historical tracking array (`TokPackRecords`) to preserve the correct alignment context active at the time of each token's lexing.
+- **Nested Record Layout**: Propagates computed alignments of nested structures dynamically (`UClsAlign`), allowing naturally aligned outer records to embed packed inner structures correctly.
 
 ## Scope Limitations
 

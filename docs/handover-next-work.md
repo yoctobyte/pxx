@@ -102,8 +102,7 @@ deliberately rather than pulling deferred work forward accidentally:
 
 ## Known Red
 
-- Compiling `test/test_basic_lexer.bas` hangs. BASIC stays experimental and
-  outside `make test`.
+- None. (The hang compiling `test/test_basic_lexer.bas` was resolved by implementing Block IF statements).
 
 ## Verification Baseline
 

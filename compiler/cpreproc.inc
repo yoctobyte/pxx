@@ -373,35 +373,28 @@ end;
 procedure CPExpandRange(const src: AnsiString; first, last, level: Integer;
   var dst: AnsiString); forward;
 
-procedure CPExpandObject(mi, level: Integer; var dst: AnsiString);
-var p, last, a, b, other: Integer;
+function CPMacroIsActive(mi: Integer): Boolean;
+var i: Integer;
 begin
-  if level > 32 then Error('C macro recursion');
+  Result := False;
+  for i := 0 to CPActiveMacroCount - 1 do
+    if CPActiveMacros[i] = mi then
+    begin
+      Result := True;
+      Exit;
+    end;
+end;
+
+procedure CPExpandObject(mi, level: Integer; var dst: AnsiString);
+var p, last: Integer;
+begin
   if DebugTrace then writeln('C preprocessor: expand object #', mi, ' level=', level);
   p := CPMValueOff[mi];
   last := p + CPMValueLen[mi] - 1;
   while p <= last do
   begin
-    if CPIsIdentStart(CPrepChars[p]) then
-    begin
-      a := p;
-      while (p <= last) and CPIsIdentChar(CPrepChars[p]) do Inc(p);
-      b := p - 1;
-      other := CPFindMacroPool(a, b - a + 1);
-      if (other >= 0) and not CPMFunction[other] and (other <> mi) then
-        CPExpandObject(other, level + 1, dst)
-      else
-        while a <= b do
-        begin
-          AppendChar(dst, CPrepChars[a]);
-          Inc(a);
-        end;
-    end
-    else
-    begin
-      AppendChar(dst, CPrepChars[p]);
-      Inc(p);
-    end;
+    AppendChar(dst, CPrepChars[p]);
+    Inc(p);
   end;
 end;
 
@@ -422,9 +415,9 @@ end;
 
 procedure CPExpandFunction(mi: Integer; const src: AnsiString;
   argCount, level: Integer; var dst: AnsiString);
-var p, last, a, b, ai, other, argBase: Integer;
+var p, last, a, b, ai, argBase, argP: Integer;
+    expandedArg: AnsiString;
 begin
-  if level > 32 then Error('C macro recursion');
   if DebugTrace then writeln('C preprocessor: expand function #', mi, ' level=', level);
   argBase := level * 16;
   p := CPMValueOff[mi];
@@ -438,19 +431,20 @@ begin
       b := p - 1;
       ai := CPParamIndex(mi, a, b - a + 1);
       if (ai >= 0) and (ai < argCount) then
+      begin
+        SetLength(expandedArg, 0);
         CPExpandRange(src, CPArgStart[argBase + ai], CPArgEnd[argBase + ai],
-          level + 1, dst)
+          level + 1, expandedArg);
+        for argP := 1 to Length(expandedArg) do
+          AppendChar(dst, expandedArg[argP]);
+      end
       else
       begin
-        other := CPFindMacroPool(a, b - a + 1);
-        if (other >= 0) and not CPMFunction[other] then
-          CPExpandObject(other, level + 1, dst)
-        else
-          while a <= b do
-          begin
-            AppendChar(dst, CPrepChars[a]);
-            Inc(a);
-          end;
+        while a <= b do
+        begin
+          AppendChar(dst, CPrepChars[a]);
+          Inc(a);
+        end;
       end;
     end
     else
@@ -467,6 +461,7 @@ var
   p, a, b, mi, q, depth, argc, argBase: Integer;
   quote: Char;
   quotedDone: Boolean;
+  tmp: AnsiString;
 begin
   if level > 32 then Error('C macro recursion');
   p := first;
@@ -503,7 +498,21 @@ begin
       if (mi < 0) then
         CPAppendRange(dst, src, a, b)
       else if not CPMFunction[mi] then
-        CPExpandObject(mi, level + 1, dst)
+      begin
+        if CPMacroIsActive(mi) then
+          CPAppendRange(dst, src, a, b)
+        else
+        begin
+          CPActiveMacros[CPActiveMacroCount] := mi;
+          Inc(CPActiveMacroCount);
+          
+          SetLength(tmp, 0);
+          CPExpandObject(mi, level + 1, tmp);
+          CPExpandRange(tmp, 1, Length(tmp), level + 1, dst);
+          
+          Dec(CPActiveMacroCount);
+        end;
+      end
       else
       begin
         q := p;
@@ -535,7 +544,21 @@ begin
             Inc(q);
           end;
           if argc > 0 then CPArgEnd[argBase + argc - 1] := q - 1;
-          CPExpandFunction(mi, src, argc, level + 1, dst);
+          
+          if CPMacroIsActive(mi) then
+            CPAppendRange(dst, src, a, q)
+          else
+          begin
+            CPActiveMacros[CPActiveMacroCount] := mi;
+            Inc(CPActiveMacroCount);
+            
+            SetLength(tmp, 0);
+            CPExpandFunction(mi, src, argc, level + 1, tmp);
+            CPExpandRange(tmp, 1, Length(tmp), level + 1, dst);
+            
+            Dec(CPActiveMacroCount);
+          end;
+          
           if (q <= last) and (src[q] = ')') then Inc(q);
           p := q;
         end;
@@ -714,6 +737,20 @@ begin
     end;
     if CPIncludeLength(depth) = 0 then
     begin
+      SetLength(CPrepPath, 0);
+      CPAppendRange(CPrepPath, '/usr/lib/gcc/x86_64-linux-gnu/13/include/', 1, 41);
+      CPAppendRange(CPrepPath, line, a, p - 1);
+      CPLoadInclude(depth);
+    end;
+    if CPIncludeLength(depth) = 0 then
+    begin
+      SetLength(CPrepPath, 0);
+      CPAppendRange(CPrepPath, '/usr/lib/llvm-18/lib/clang/18/include/', 1, 38);
+      CPAppendRange(CPrepPath, line, a, p - 1);
+      CPLoadInclude(depth);
+    end;
+    if CPIncludeLength(depth) = 0 then
+    begin
       ErrorIdent := CPrepPath;
       Error('C include file not found');
     end;
@@ -816,6 +853,7 @@ begin
   CPMCount := 0;
   CPPCount := 0;
   CPCondCount := 0;
+  CPActiveMacroCount := 0;
   CPAddLiteral('__linux__', '01');
   CPAddLiteral('__x86_64__', '01');
   CPAddLiteral('__STDC__', '01');

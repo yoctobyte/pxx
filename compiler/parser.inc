@@ -1724,6 +1724,7 @@ begin
         Data = the instance pointer. Only valid as the RHS of an assignment to
         a TMethod-shaped target (handled in AN_ASSIGN). }
       if (idx >= 0) and (Syms[idx].RecName >= REC_UCLASS_BASE) and
+         (not UClsIsRecord[Syms[idx].RecName - REC_UCLASS_BASE]) and
          (TokPos < TokCount) and (Tokens[TokPos].Kind = tkDot) then
       begin
         ci := Syms[idx].RecName - REC_UCLASS_BASE;
@@ -3944,7 +3945,7 @@ procedure ParseTypeSection;
 var
   ordinal: Int64;
   tname: AnsiString;
-  done, stopTypes: Boolean; loVal, hiVal, arrLen: Integer; isArr: Boolean;
+  done, stopTypes: Boolean; loVal, hiVal, arrLen: Integer; isArr: Boolean; isPackedRecord: Boolean;
   tnOff, tnLen, ci, fnOff, fnLen, curFieldOff, fRec, fSize, fAlign, classAlign, depth: Integer;
   fTk: TTypeKind;
   parentCi, slot, mmi, mnOff, mnLen, pnOff, pnLen, rFOff, rFLen, rMOff, rMLen, wFOff, wFLen, wMOff, wMLen, rnOff, rnLen, wnOff, wnLen, propRec, i: Integer;
@@ -4386,9 +4387,16 @@ begin
           end;
         end;
       end
-      else if CurTok.Kind = tkRecord then
+      else if (CurTok.Kind = tkPacked) or (CurTok.Kind = tkRecord) then
       begin
-        Next;
+        isPackedRecord := CurTok.Kind = tkPacked;
+        if isPackedRecord then
+        begin
+          Next;
+          Expect(tkRecord, 'record');
+        end
+        else
+          Next;
         ci := AddUClass(tnOff, tnLen);
         UClsParent[ci] := -1;
         UClsIsRecord[ci] := True;
@@ -4450,13 +4458,20 @@ begin
             else if fTk = tyRecord then
             begin
               fSize := RecSize(fRec);
-              fAlign := TARGET_PTR_SIZE;
+              if fRec >= REC_UCLASS_BASE then
+                fAlign := UClsAlign[fRec - REC_UCLASS_BASE]
+              else
+                fAlign := TARGET_PTR_SIZE;
             end
             else
             begin
               fSize := TypeSize(fTk);
               fAlign := TypeAlign(fTk);
             end;
+            if isPackedRecord then
+              fAlign := 1
+            else if fAlign > TokPackRecords[TokPos - 1] then
+              fAlign := TokPackRecords[TokPos - 1];
             if isArr then
               fSize := fSize * arrLen;
             for fni := 0 to nFldNames - 1 do
@@ -4472,6 +4487,7 @@ begin
             Next;
         end;
         UClsSize_[ci] := AlignTo(curFieldOff, classAlign);
+        UClsAlign[ci] := classAlign;
         Expect(tkEnd, 'end');
       end
       else if CurTok.Kind = tkCaret then

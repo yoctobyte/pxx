@@ -97,6 +97,8 @@ begin
   begin
     if (s[1]='d') and (s[2]='o') and (s[3]='w') and (s[4]='n') and (s[5]='t') and (s[6]='o') then Result := tkDownto;
     if (s[1]='r') and (s[2]='e') and (s[3]='p') and (s[4]='e') and (s[5]='a') and (s[6]='t') then Result := tkRepeat;
+    if (s[1]='p') and (s[2]='a') and (s[3]='c') and (s[4]='k') and (s[5]='e') and (s[6]='d') then Result := tkPacked;
+    if (s[1]='P') and (s[2]='a') and (s[3]='c') and (s[4]='k') and (s[5]='e') and (s[6]='d') then Result := tkPacked;
     if (s[1]='r') and (s[2]='e') and (s[3]='c') and (s[4]='o') and (s[5]='r') and (s[6]='d') then Result := tkRecord;
     if (s[1]='r') and (s[2]='e') and (s[3]='a') and (s[4]='d') and (s[5]='l') and (s[6]='n') then Result := tkReadln;
     if (s[1]='l') and (s[2]='e') and (s[3]='n') and (s[4]='g') and (s[5]='t') and (s[6]='h') then Result := tkLength;
@@ -396,6 +398,7 @@ begin
   CStyleComments := False;
   NestedComments := False;
   CaseSensitiveMode := False;
+  PackRecordsVal := 8;
   name := 'PXX';
   PasDefine(name);
   name := 'CPU64';
@@ -786,6 +789,16 @@ begin
       else if CaseEqual(name, 'off') then CaseSensitiveMode := False
       else Error('casesensitive requires on or off');
     end
+    else if CaseEqual(command, 'packrecords') or CaseEqual(command, 'align') then
+    begin
+      if CaseEqual(name, 'normal') or CaseEqual(name, 'default') then PackRecordsVal := 8
+      else if CaseEqual(name, '1') then PackRecordsVal := 1
+      else if CaseEqual(name, '2') then PackRecordsVal := 2
+      else if CaseEqual(name, '4') then PackRecordsVal := 4
+      else if CaseEqual(name, '8') then PackRecordsVal := 8
+      else if CaseEqual(name, '16') then PackRecordsVal := 16
+      else Error('invalid packrecords value: ' + name);
+    end
     else if CaseEqual(command, 'R') then
     begin
       { R-directive (name file): queue an embedded resource; EmitResources
@@ -1080,6 +1093,7 @@ begin
     Tokens[TokCount].Kind    := CurTok.Kind;
     Tokens[TokCount].IVal    := CurTok.IVal;
     Tokens[TokCount].Line    := CurTok.Line;
+    TokPackRecords[TokCount] := PackRecordsVal;
     sval := CurTok.SVal;
     len  := Length(sval);
     Tokens[TokCount].SOffset := TokCharLen;
@@ -1123,6 +1137,7 @@ begin
     Tokens[TokCount].Kind    := CurTok.Kind;
     Tokens[TokCount].IVal    := CurTok.IVal;
     Tokens[TokCount].Line    := CurTok.Line;
+    TokPackRecords[TokCount] := PackRecordsVal;
     sval := CurTok.SVal;
     len  := Length(sval);
     Tokens[TokCount].SOffset := TokCharLen;

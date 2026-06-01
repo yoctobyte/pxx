@@ -229,6 +229,7 @@ type
     tkWith,
     tkAsm,
     tkShl,
+    tkPacked,
     { C declaration-specifier keywords (distinct so width/signedness/void are
       not collapsed into tkInteger_T). `int`->tkInteger_T, `char`->tkChar_T
       stay as before. }
@@ -581,6 +582,9 @@ var
   CPrepInclude15: AnsiString;
   CPrepChars    : array[0..MAX_CPREP_CHARS-1] of Char;
   CPrepCharLen  : Integer;
+  CPActiveMacros : array[0..63] of Integer;
+  CPActiveMacroCount : Integer;
+  PackRecordsVal : Integer;
   CPMNameOff    : array[0..MAX_CPREP_MACROS-1] of Integer;
   CPMNameLen    : array[0..MAX_CPREP_MACROS-1] of Integer;
   CPMValueOff   : array[0..MAX_CPREP_MACROS-1] of Integer;
@@ -621,6 +625,7 @@ var
   TokChars   : array[0..STRING_CAP-1] of Char;
   TokCharLen : Integer;
   Tokens     : array[0..MAX_TOKENS-1] of TRawToken;
+  TokPackRecords : array[0..MAX_TOKENS-1] of Integer;
   TokCount   : Integer;
   TokPos     : Integer;
   MainProgramTokCount : Integer;
@@ -677,6 +682,7 @@ var
   UClsNOff   : array[0..MAX_UCLASS-1] of Integer;
   UClsNLen   : array[0..MAX_UCLASS-1] of Integer;
   UClsSize_  : array[0..MAX_UCLASS-1] of Integer;
+  UClsAlign  : array[0..MAX_UCLASS-1] of Integer;
   UClsFBase  : array[0..MAX_UCLASS-1] of Integer;
   UClsFCount : array[0..MAX_UCLASS-1] of Integer;
   UClsMBase  : array[0..MAX_UCLASS-1] of Integer;

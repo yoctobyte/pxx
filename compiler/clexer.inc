@@ -39,34 +39,113 @@ begin
 end;
 
 procedure CSkipSpace;
-var done: Boolean;
+var done, idDone: Boolean;
+    p, depth, nameLen: Integer;
+    s: AnsiString;
 begin
   done := False;
   while (SrcPos <= Length(Source)) and not done do
   begin
-    case Source[SrcPos] of
-      ' ', #9, #13: Inc(SrcPos);
-      #10: begin Inc(SrcLine); Inc(SrcPos); end;
-      '/':
+    if Source[SrcPos] in ['a'..'z','A'..'Z','_'] then
+    begin
+      { Parse the identifier/word first using AppendChar }
+      s := '';
+      p := SrcPos;
+      while (p <= Length(Source)) and (Source[p] in ['a'..'z','A'..'Z','0'..'9','_']) do
       begin
-        if (SrcPos < Length(Source)) and (Source[SrcPos+1] = '/') then
+        AppendChar(s, Source[p]);
+        Inc(p);
+      end;
+      nameLen := Length(s);
+      
+      idDone := False;
+      if (s = '__attribute__') or (s = '__attribute') then
+      begin
+        SrcPos := p;
+        { Skip spaces }
+        while (SrcPos <= Length(Source)) and (Source[SrcPos] in [' ', #9, #10, #13]) do
         begin
-          while (SrcPos <= Length(Source)) and (Source[SrcPos] <> #10) do Inc(SrcPos);
-        end
-        else if (SrcPos < Length(Source)) and (Source[SrcPos+1] = '*') then
+          if Source[SrcPos] = #10 then Inc(SrcLine);
+          Inc(SrcPos);
+        end;
+        { Skip balanced parens if present }
+        if (SrcPos <= Length(Source)) and (Source[SrcPos] = '(') then
         begin
-          Inc(SrcPos); Inc(SrcPos);
-          while (SrcPos < Length(Source)) and
-                not ((Source[SrcPos] = '*') and (Source[SrcPos+1] = '/')) do
+          Inc(SrcPos);
+          depth := 1;
+          while (SrcPos <= Length(Source)) and (depth > 0) do
           begin
-            if Source[SrcPos] = #10 then Inc(SrcLine);
+            if Source[SrcPos] = '(' then Inc(depth)
+            else if Source[SrcPos] = ')' then Dec(depth)
+            else if Source[SrcPos] = #10 then Inc(SrcLine);
             Inc(SrcPos);
           end;
-          if SrcPos < Length(Source) then begin Inc(SrcPos); Inc(SrcPos); end;
-        end
+        end;
+        idDone := True;
+      end
+      else if (s = '__extension__') or (s = '__inline') or (s = '__inline__') or (s = 'inline') or
+              (s = '__restrict') or (s = '__restrict__') or (s = 'restrict') or
+              (s = 'volatile') or (s = '__volatile') or (s = '__volatile__') or
+              (s = '__const') or (s = '__const__') then
+      begin
+        SrcPos := p;
+        idDone := True;
+      end
+      else if ((nameLen >= 7) and (s[1] = 'G') and (s[2] = '_') and (s[3] = 'G') and (s[4] = 'N') and (s[5] = 'U') and (s[6] = 'C') and (s[7] = '_')) or
+              ((nameLen >= 9) and (s[1] = '_') and (s[2] = 'G') and (s[3] = 'L') and (s[4] = 'I') and (s[5] = 'B') and (s[6] = 'C') and (s[7] = 'X') and (s[8] = 'X') and (s[9] = '_')) then
+      begin
+        SrcPos := p;
+        { Skip spaces }
+        while (SrcPos <= Length(Source)) and (Source[SrcPos] in [' ', #9, #10, #13]) do
+        begin
+          if Source[SrcPos] = #10 then Inc(SrcLine);
+          Inc(SrcPos);
+        end;
+        { Skip balanced parens if present }
+        if (SrcPos <= Length(Source)) and (Source[SrcPos] = '(') then
+        begin
+          Inc(SrcPos);
+          depth := 1;
+          while (SrcPos <= Length(Source)) and (depth > 0) do
+          begin
+            if Source[SrcPos] = '(' then Inc(depth)
+            else if Source[SrcPos] = ')' then Dec(depth)
+            else if Source[SrcPos] = #10 then Inc(SrcLine);
+            Inc(SrcPos);
+          end;
+        end;
+        idDone := True;
+      end;
+
+      if not idDone then
+        done := True;
+    end
+    else
+    begin
+      case Source[SrcPos] of
+        ' ', #9, #13: Inc(SrcPos);
+        #10: begin Inc(SrcLine); Inc(SrcPos); end;
+        '/':
+        begin
+          if (SrcPos < Length(Source)) and (Source[SrcPos+1] = '/') then
+          begin
+            while (SrcPos <= Length(Source)) and (Source[SrcPos] <> #10) do Inc(SrcPos);
+          end
+          else if (SrcPos < Length(Source)) and (Source[SrcPos+1] = '*') then
+          begin
+            Inc(SrcPos); Inc(SrcPos);
+            while (SrcPos < Length(Source)) and
+                  not ((Source[SrcPos] = '*') and (Source[SrcPos+1] = '/')) do
+            begin
+              if Source[SrcPos] = #10 then Inc(SrcLine);
+              Inc(SrcPos);
+            end;
+            if SrcPos < Length(Source) then begin Inc(SrcPos); Inc(SrcPos); end;
+          end
+          else done := True;
+        end;
         else done := True;
       end;
-      else done := True;
     end;
   end;
 end;

@@ -175,6 +175,8 @@ test: $(COMPILER) fpc-check
 	./$(COMPILER) --debug test/test_c_preprocess.pas /tmp/c_preprocess_debug26 > /tmp/c_preprocess_debug26.log
 	grep -q "C preprocessor: expand function" /tmp/c_preprocess_debug26.log
 	test "$$(/tmp/c_preprocess_debug26)" = "42"
+	./$(COMPILER) test/test_c_macro_soup.pas /tmp/c_macro_soup26
+	test "$$(/tmp/c_macro_soup26)" = "42"
 	./$(COMPILER) test/bootstrap_features.pas /tmp/bootstrap_features26
 	test "$$(/tmp/bootstrap_features26)" = "$$(printf '120\n98\ncase-ok\n0')"
 	./$(COMPILER) test/paramcount_if.pas /tmp/paramcount_if26
@@ -336,6 +338,12 @@ test: $(COMPILER) fpc-check
 	test "$$(/tmp/test_sizeof26)" = "$$(printf '1\n1\n2\n2\n4\n4\n4\n4\n8\n8\n8\n8\n8\n8\n8\n1\n1')"
 	! ./$(COMPILER) test/test_sizeof_error.pas /tmp/test_sizeof_error26 > /tmp/test_sizeof_error.log 2>&1
 	grep -q "SizeOf: unknown type" /tmp/test_sizeof_error.log
+	./$(COMPILER) test/test_record_alignment.pas /tmp/test_record_alignment26
+	test "$$(/tmp/test_record_alignment26)" = "$$(printf '8\n4\n5\n1\n6\n2\n5\n1\n12\n2\n8\n12\n1\n8')"
+	./$(COMPILER) test/test_pthread_header.pas /tmp/test_pthread_header26
+	test "$$(/tmp/test_pthread_header26)" = "pthread loaded successfully"
+	./$(COMPILER) test/test_c_gtk.pas /tmp/test_c_gtk26
+	test "$$(/tmp/test_c_gtk26)" = "my_gtk header parsed and imported successfully"
 	./$(COMPILER) test/test_type_runtime.pas /tmp/test_type_runtime26
 	test "$$(/tmp/test_type_runtime26)" = "$$(printf '1\n1\n1\n0\n1\n18446744065119617025\n18446744073709551615\n9223372036854775807\n1\n-1\n-1\n-1\n18446744073709551615\n-1\n0\n2\n7\n123456\n9\n20')"
 	./$(COMPILER) test/test_float.pas /tmp/test_float26

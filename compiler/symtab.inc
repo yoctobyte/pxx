@@ -301,6 +301,7 @@ begin
   UClsNOff[UClsCount]   := off;
   UClsNLen[UClsCount]   := len;
   UClsSize_[UClsCount]  := 0;
+  UClsAlign[UClsCount]  := 1;
   UClsFBase[UClsCount]  := UFldCount;
   UClsFCount[UClsCount] := 0;
   UClsMBase[UClsCount]  := UMthCount;
