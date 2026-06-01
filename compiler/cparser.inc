@@ -459,7 +459,8 @@ begin
   CurProc := -1;
 end;
 
-{ Consume a balanced { ... } block. CurTok must be at the opening tkBegin. }
+{ Consume a balanced brace-delimited block. CurTok must be at the opening
+  tkBegin; on return CurTok is just past the matching closing brace. }
 procedure SkipBraceBlock;
 var depth: Integer;
 begin
@@ -471,9 +472,113 @@ begin
   until (depth = 0) or (CurTok.Kind = tkEOF);
 end;
 
+{ Integer constant-expression evaluator for enum values. Operates on the live
+  C token stream. The C lexer does not produce distinct shift/bitwise tokens,
+  so `<<` arrives as two tkLt, `>>` as two tkGt, `|` as tkOr, `&` as tkAnd.
+  Precedence, low to high: | , & , << >> , + - , * , unary , primary.
+  Unknown/unsupported tokens evaluate to 0 rather than derailing. }
+function CEvalConstExpr: Int64; forward;
+
+function CEvalConstPrimary: Int64;
+var idx: Integer;
+begin
+  Result := 0;
+  if CurTok.Kind = tkLParen then
+  begin
+    Next; Result := CEvalConstExpr;
+    if CurTok.Kind = tkRParen then Next;
+  end
+  else if CurTok.Kind = tkMinus then begin Next; Result := -CEvalConstPrimary; end
+  else if CurTok.Kind = tkPlus then begin Next; Result := CEvalConstPrimary; end
+  else if CurTok.Kind = tkNot then begin Next; Result := not CEvalConstPrimary; end
+  else if CurTok.Kind = tkInteger then begin Result := CurTok.IVal; Next; end
+  else if CurTok.Kind = tkIdent then
+  begin
+    idx := FindSym(CurTok.SVal);
+    if (idx >= 0) and (Syms[idx].Kind = skConst) then Result := Syms[idx].ConstVal;
+    Next;
+  end;
+end;
+
+function CEvalConstMul: Int64;
+begin
+  Result := CEvalConstPrimary;
+  while CurTok.Kind = tkStar do begin Next; Result := Result * CEvalConstPrimary; end;
+end;
+
+function CEvalConstAdd: Int64;
+begin
+  Result := CEvalConstMul;
+  while (CurTok.Kind = tkPlus) or (CurTok.Kind = tkMinus) do
+  begin
+    if CurTok.Kind = tkPlus then begin Next; Result := Result + CEvalConstMul; end
+    else begin Next; Result := Result - CEvalConstMul; end;
+  end;
+end;
+
+function CEvalConstShift: Int64;
+begin
+  Result := CEvalConstAdd;
+  while (CurTok.Kind = tkLt) or (CurTok.Kind = tkGt) do
+  begin
+    if CurTok.Kind = tkLt then
+    begin
+      Next; if CurTok.Kind = tkLt then Next; { second '<' of '<<' }
+      Result := Result shl CEvalConstAdd;
+    end
+    else
+    begin
+      Next; if CurTok.Kind = tkGt then Next; { second '>' of '>>' }
+      Result := Result shr CEvalConstAdd;
+    end;
+  end;
+end;
+
+function CEvalConstAnd: Int64;
+begin
+  Result := CEvalConstShift;
+  while CurTok.Kind = tkAnd do begin Next; Result := Result and CEvalConstShift; end;
+end;
+
+function CEvalConstExpr: Int64;
+begin
+  Result := CEvalConstAnd;
+  while CurTok.Kind = tkOr do begin Next; Result := Result or CEvalConstAnd; end;
+end;
+
+{ Parse an enumerator list. CurTok must be at the opening tkBegin (the brace).
+  Registers each enumerator as an Int32 constant (auto-incrementing from 0,
+  or from the last explicit value + 1). Leaves CurTok after the closing brace. }
+procedure ParseCEnumBody;
+var nextVal, val: Int64; nm: AnsiString;
+begin
+  Next; { consume the opening brace }
+  nextVal := 0;
+  while (CurTok.Kind <> tkEnd) and (CurTok.Kind <> tkEOF) do
+  begin
+    if CurTok.Kind = tkIdent then
+    begin
+      nm := CurTok.SVal; Next;
+      if CurTok.Kind = tkAssign then { an = introduces an explicit value }
+      begin
+        Next;
+        val := CEvalConstExpr;
+      end
+      else
+        val := nextVal;
+      AddConst(nm, tyInt32, val);
+      nextVal := val + 1;
+      if CurTok.Kind = tkComma then Next;
+    end
+    else
+      Next;
+  end;
+  if CurTok.Kind = tkEnd then Next; { consume the closing brace }
+end;
+
 { Parse a top-level `typedef ...;` and register the new type name.
-  - struct/union [tag] [{...}] Name  -> opaque, mapped to Pointer
-  - enum [tag] {...} Name            -> Int32 (constants handled later)
+  - struct/union [tag] [body] Name   -> opaque, mapped to Pointer
+  - enum [tag] body Name             -> Int32, enumerators become constants
   - <decl-specifiers> Name           -> the mapped scalar/pointer type
   Function-pointer typedefs `ret (*Name)(args)` are detected and registered
   as Pointer; their argument signature is not yet modelled. }
@@ -505,7 +610,7 @@ begin
   begin
     Next; { 'enum' }
     if CurTok.Kind = tkIdent then Next;      { optional tag }
-    if CurTok.Kind = tkBegin then SkipBraceBlock; { enumerator list }
+    if CurTok.Kind = tkBegin then ParseCEnumBody; { enumerators -> constants }
     if CurTok.Kind = tkIdent then
     begin
       nm := CurTok.SVal; Next;
@@ -542,12 +647,25 @@ begin
   Eat(tkSemicolon);
 end;
 
+{ Bare top-level `enum [tag] body ;` — register the enumerators as
+  constants (no new type name). }
+procedure ParseCEnumDecl;
+begin
+  Next; { consume 'enum' }
+  if CurTok.Kind = tkIdent then Next;        { optional tag }
+  if CurTok.Kind = tkBegin then ParseCEnumBody;
+  while (CurTok.Kind <> tkSemicolon) and (CurTok.Kind <> tkEOF) do Next;
+  Eat(tkSemicolon);
+end;
+
 procedure ParseCUnit;
 begin
   while CurTok.Kind <> tkEOF do
   begin
     if (CurTok.Kind = tkIdent) and (CurTok.SVal = 'typedef') then
       ParseCTypedef
+    else if (CurTok.Kind = tkIdent) and (CurTok.SVal = 'enum') then
+      ParseCEnumDecl
     else if IsCTypeTok then
       ParseCSubroutine
     else

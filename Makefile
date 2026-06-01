@@ -163,6 +163,8 @@ test: $(COMPILER) fpc-check
 	test "$$(/tmp/c_widths26)" = "5000000000"
 	./$(COMPILER) test/test_c_typedef.pas /tmp/c_typedef26
 	test "$$(/tmp/c_typedef26)" = "5000000000"
+	./$(COMPILER) test/test_c_enum.pas /tmp/c_enum26
+	test "$$(/tmp/c_enum26)" = "$$(printf '0 1 2\n0 1 2 4 5\n1000 1001')"
 	./$(COMPILER) test/test_c_preprocess.pas /tmp/c_preprocess26
 	test "$$(/tmp/c_preprocess26)" = "42"
 	./$(COMPILER) --debug test/test_c_preprocess.pas /tmp/c_preprocess_debug26 > /tmp/c_preprocess_debug26.log
