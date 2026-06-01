@@ -167,6 +167,9 @@ test: $(COMPILER) fpc-check
 	test "$$(/tmp/c_enum26)" = "$$(printf '0 1 2\n0 1 2 4 5\n1000 1001')"
 	./$(COMPILER) test/test_c_float.pas /tmp/c_float26
 	test "$$(/tmp/c_float26)" = "$$(printf '1024.0\n16.0\n12.0')"
+	cc -shared -fPIC -o /tmp/libspill.so test/spill_lib.c
+	./$(COMPILER) test/test_c_argspill.pas /tmp/c_argspill26
+	test "$$(LD_LIBRARY_PATH=/tmp /tmp/c_argspill26)" = "$$(printf '28\n55.0\n45')"
 	./$(COMPILER) test/test_c_preprocess.pas /tmp/c_preprocess26
 	test "$$(/tmp/c_preprocess26)" = "42"
 	./$(COMPILER) --debug test/test_c_preprocess.pas /tmp/c_preprocess_debug26 > /tmp/c_preprocess_debug26.log

@@ -415,7 +415,7 @@ begin
   else if rec = REC_TCALLFIX then Result := 16
   else if rec = REC_TSYMBOL then Result := 360
   else if rec = REC_TPARAM then Result := 296
-  else if rec = REC_TPROC then Result := 2688
+  else if rec = REC_TPROC then Result := 5056
   else if rec = REC_TRAWTOKEN then Result := 40
   else if rec = REC_TMYCLASS then Result := 16
   else if rec = REC_TTEMPLATE then Result := 544
@@ -489,10 +489,10 @@ begin
     else if field = 'RetType' then Result := 272
     else if field = 'ParamCount' then Result := 280
     else if field = 'Params' then Result := 288
-    else if field = 'BodyAddr' then Result := 2656
-    else if field = 'FramePatch' then Result := 2664
-    else if field = 'RetSymIdx' then Result := 2672
-    else if field = 'ScopeBase' then Result := 2680;
+    else if field = 'BodyAddr' then Result := 5024
+    else if field = 'FramePatch' then Result := 5032
+    else if field = 'RetSymIdx' then Result := 5040
+    else if field = 'ScopeBase' then Result := 5048;
   end
   else if rec = REC_TRAWTOKEN then
   begin
@@ -2413,47 +2413,60 @@ end;
 
 { ===== Call emission ===== }
 
-procedure EmitCallProc(pi: Integer);
+{ Ensure the external pi has a GOT slot; return its ExternalProc[] index. }
+function RegisterExternal(pi: Integer): Integer;
 var i, extIdx: Integer;
+begin
+  extIdx := -1;
+  for i := 0 to ExternalCount-1 do
+    if ExternalProc[i] = pi then extIdx := i;
+  if extIdx < 0 then
+  begin
+    if ExternalCount >= MAX_EXTERNAL then Error('external function overflow');
+    extIdx := ExternalCount;
+    ExternalProc[extIdx] := pi;
+    ExternalGotOff[extIdx] := DataLen;
+    for i := 0 to 7 do
+    begin
+      Data[DataLen] := 0;
+      Inc(DataLen);
+    end;
+    Inc(ExternalCount);
+  end;
+  Result := extIdx;
+end;
+
+{ Emit the indirect call through the external's GOT slot and register the
+  fixup. Caller is responsible for argument marshalling, stack alignment, and
+  the variadic AL count. }
+procedure EmitExternalIndirectCall(extIdx: Integer);
+begin
+  if DynCallCount >= MAX_CALLFIX then Error('external call fixup overflow');
+  EmitB($FF); EmitB($14); EmitB($25); { call qword ptr [absolute address] }
+  DynCallCodePos[DynCallCount] := CodeLen;
+  DynCallExtIdx[DynCallCount] := extIdx;
+  Inc(DynCallCount);
+  EmitI32(0);
+end;
+
+procedure EmitCallProc(pi: Integer);
+var extIdx: Integer;
 begin
   if ProcExternal[pi] then
   begin
-    extIdx := -1;
-    for i := 0 to ExternalCount-1 do
-      if ExternalProc[i] = pi then extIdx := i;
-    if extIdx < 0 then
-    begin
-      if ExternalCount >= MAX_EXTERNAL then Error('external function overflow');
-      extIdx := ExternalCount;
-      ExternalProc[extIdx] := pi;
-      ExternalGotOff[extIdx] := DataLen;
-      for i := 0 to 7 do
-      begin
-        Data[DataLen] := 0;
-        Inc(DataLen);
-      end;
-      Inc(ExternalCount);
-    end;
-    if DynCallCount >= MAX_CALLFIX then Error('external call fixup overflow');
+    extIdx := RegisterExternal(pi);
     { Realign the stack to 16 bytes for the SysV call: our internal call
       convention does not keep rsp 16-aligned at every call site, but C
-      callees (GTK/GLib) use aligned SSE (movaps) and fault otherwise. Args
-      are already in registers here (we only bind <=6-arg externals), so no
-      stack arguments are disturbed. Old rsp is saved and restored around the
-      call; r11 is scratch under SysV. }
+      callees (GTK/GLib) use aligned SSE (movaps) and fault otherwise. This
+      path is for register-only externals (no stack args to disturb); the
+      stack-spill path in IR_CALL handles its own alignment. Old rsp is saved
+      and restored around the call; r11 is scratch under SysV. }
     EmitB($49); EmitB($89); EmitB($E3);             { mov r11, rsp }
     EmitB($48); EmitB($83); EmitB($E4); EmitB($F0); { and rsp, -16 }
     EmitB($48); EmitB($83); EmitB($EC); EmitB($08); { sub rsp, 8 }
     EmitB($41); EmitB($53);                         { push r11 }
-    { SysV: al = number of vector regs used by a variadic callee. We never
-      pass float/SSE args to bound externals, so al = 0 is always correct;
-      non-variadic callees ignore it. Required for gtk_message_dialog_new etc. }
-    EmitB($31); EmitB($C0);                         { xor eax, eax }
-    EmitB($FF); EmitB($14); EmitB($25); { call qword ptr [absolute address] }
-    DynCallCodePos[DynCallCount] := CodeLen;
-    DynCallExtIdx[DynCallCount] := extIdx;
-    Inc(DynCallCount);
-    EmitI32(0);
+    EmitB($31); EmitB($C0);                         { xor eax, eax (al=0) }
+    EmitExternalIndirectCall(extIdx);
     EmitB($41); EmitB($5B);                         { pop r11 }
     EmitB($4C); EmitB($89); EmitB($DC);             { mov rsp, r11 }
     Exit;

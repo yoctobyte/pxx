@@ -168,9 +168,11 @@ var left, right, valNode, symIdx, si: Integer;
     itemNode, trueCount, nextJmp, falseJmp: Integer;
     trueJumps: array[0..127] of Integer;
     raiseClass: Integer;
-    intIdx, sseIdx: Integer;
+    intIdx, sseIdx, nArgs, mStack, padBytes, extIdx, restoreOff: Integer;
     argIsSse: array[0..15] of Boolean;
+    argIsStack: array[0..15] of Boolean;
     argRegIdx: array[0..15] of Integer;
+    argNodeArr: array[0..15] of Integer;
 begin
   if node = -1 then Exit;
   
@@ -826,70 +828,106 @@ begin
         pi := IRA[node];
         if pi >= 0 then
         begin
-          { User-defined procedure/function }
-          argNode := IRB[node];
-          pathIdx := 0;
-          while argNode <> -1 do
-          begin
-            IREmitNode(IRA[argNode]); { evaluates arg -> rax (floats as bits) }
-            EmitB($50); { push rax }
-            argNode := IRB[argNode];
-            Inc(pathIdx);
-          end;
-
           if ProcExternal[pi] then
           begin
-            { External C call — SysV AMD64 ABI: integer/pointer args fill
-              rdi,rsi,rdx,rcx,r8,r9 and floating args fill xmm0..xmm7, each
-              class counted independently. Floats are carried as bits in rax,
-              so pop rax then movq into the assigned xmm. Internal Pascal calls
-              keep the all-integer-register convention below. }
-            intIdx := 0; sseIdx := 0;
+            { External C call — SysV AMD64 ABI. Integer/pointer args fill
+              rdi,rsi,rdx,rcx,r8,r9; floating args fill xmm0..xmm7 (the two
+              classes are counted independently); further args of each class
+              spill to the stack, pushed right-to-left so the leftmost stack
+              arg lies at the lowest address. Floats are carried as bits in
+              rax. Internal Pascal calls use the all-integer path below. }
+            argNode := IRB[node]; nArgs := 0;
+            while argNode <> -1 do
+            begin
+              argNodeArr[nArgs] := IRA[argNode]; Inc(nArgs);
+              argNode := IRB[argNode];
+            end;
+            intIdx := 0; sseIdx := 0; mStack := 0;
             for i := 0 to Procs[pi].ParamCount - 1 do
             begin
               if TypeIsFloat(Procs[pi].Params[i].TypeKind) then
               begin
-                argIsSse[i] := True; argRegIdx[i] := sseIdx; Inc(sseIdx);
+                argIsSse[i] := True;
+                if sseIdx < 8 then
+                begin argIsStack[i] := False; argRegIdx[i] := sseIdx; Inc(sseIdx); end
+                else begin argIsStack[i] := True; Inc(mStack); end;
               end
               else
               begin
-                argIsSse[i] := False; argRegIdx[i] := intIdx; Inc(intIdx);
+                argIsSse[i] := False;
+                if intIdx < 6 then
+                begin argIsStack[i] := False; argRegIdx[i] := intIdx; Inc(intIdx); end
+                else begin argIsStack[i] := True; Inc(mStack); end;
               end;
             end;
-            { Reverse-pop: the last-pushed arg sits on top, so index i pops
-              arg[i] into its precomputed register slot. }
+            extIdx := RegisterExternal(pi);
+            { Align the stack and reserve the outgoing stack-arg area in one
+              self-contained sequence (EmitCallProc's realign path cannot be
+              used here — it would move rsp away from the stack args). Save the
+              caller's rsp below the arg area so it survives the call (r11 is
+              caller-saved, so spill it to the stack rather than trust it).
+                mov r11, rsp ; and rsp, -16 ; push r11
+              leaves rsp = aligned-8. At the call rsp must be 16-aligned, so
+              with the saved-rsp slot plus mStack 8-byte args we pad by 8 when
+              mStack is even. }
+            EmitB($49); EmitB($89); EmitB($E3);             { mov r11, rsp }
+            EmitB($48); EmitB($83); EmitB($E4); EmitB($F0); { and rsp, -16 }
+            EmitB($41); EmitB($53);                         { push r11 }
+            if (mStack and 1) = 0 then
+            begin
+              padBytes := 8;
+              EmitB($48); EmitB($83); EmitB($EC); EmitB($08); { sub rsp, 8 }
+            end
+            else
+              padBytes := 0;
+            { Stack args, right-to-left (leftmost ends at the lowest address). }
             for i := Procs[pi].ParamCount - 1 downto 0 do
-            begin
-              if argIsSse[i] then
+              if argIsStack[i] then
               begin
-                EmitB($58); { pop rax }
-                { movq xmm[n], rax : 66 48 0F 6E (C0 + n*8) }
-                EmitB($66); EmitB($48); EmitB($0F); EmitB($6E);
-                EmitB($C0 + argRegIdx[i] * 8);
-                if Procs[pi].Params[i].TypeKind = tySingle then
+                IREmitNode(argNodeArr[i]); { -> rax }
+                EmitB($50); { push rax }
+              end;
+            { Register args: push right-to-left, then pop left-to-right into the
+              target registers (each arg evaluated once, no register clobber). }
+            for i := Procs[pi].ParamCount - 1 downto 0 do
+              if not argIsStack[i] then
+              begin
+                IREmitNode(argNodeArr[i]); { -> rax }
+                EmitB($50); { push rax }
+              end;
+            for i := 0 to Procs[pi].ParamCount - 1 do
+              if not argIsStack[i] then
+              begin
+                if argIsSse[i] then
                 begin
-                  { narrow double bits to single: cvtsd2ss xmm[n],xmm[n] }
-                  EmitB($F2); EmitB($0F); EmitB($5A);
-                  EmitB($C0 + argRegIdx[i] * 9);
-                end;
-              end
-              else
-                case argRegIdx[i] of
-                  0: EmitB($5F); { pop rdi }
-                  1: EmitB($5E); { pop rsi }
-                  2: EmitB($5A); { pop rdx }
-                  3: EmitB($59); { pop rcx }
-                  4: begin EmitB($41); EmitB($58); end; { pop r8 }
-                  5: begin EmitB($41); EmitB($59); end; { pop r9 }
-                end;
-            end;
-            { Variadic ABI: AL = number of vector registers used. Harmless for
-              fixed-prototype callees. Only set when floats are present. }
-            if sseIdx > 0 then
-            begin
-              EmitB($B8); EmitI32(sseIdx); { mov eax, sseIdx }
-            end;
-            EmitCallProc(pi);
+                  EmitB($58); { pop rax }
+                  EmitB($66); EmitB($48); EmitB($0F); EmitB($6E);
+                  EmitB($C0 + argRegIdx[i] * 8);           { movq xmm[n], rax }
+                  if Procs[pi].Params[i].TypeKind = tySingle then
+                  begin
+                    EmitB($F2); EmitB($0F); EmitB($5A);
+                    EmitB($C0 + argRegIdx[i] * 9);          { cvtsd2ss xmm[n],xmm[n] }
+                  end;
+                end
+                else
+                  case argRegIdx[i] of
+                    0: EmitB($5F); { pop rdi }
+                    1: EmitB($5E); { pop rsi }
+                    2: EmitB($5A); { pop rdx }
+                    3: EmitB($59); { pop rcx }
+                    4: begin EmitB($41); EmitB($58); end; { pop r8 }
+                    5: begin EmitB($41); EmitB($59); end; { pop r9 }
+                  end;
+              end;
+            { Variadic ABI: AL = number of vector registers used. Set
+              unconditionally (0 for all-integer calls) so variadic callees
+              such as printf read the correct count. }
+            EmitB($B8); EmitI32(sseIdx); { mov eax, sseIdx }
+            EmitExternalIndirectCall(extIdx);
+            { Restore the caller's rsp from the saved slot, which sits
+              padBytes + mStack*8 above the current (post-call) rsp. }
+            restoreOff := padBytes + mStack * 8;
+            EmitB($48); EmitB($8B); EmitB($A4); EmitB($24); EmitI32(restoreOff); { mov rsp, [rsp+off] }
             if TypeIsFloat(Procs[pi].RetType) then
             begin
               { float/double returned in xmm0; bridge to rax bits. }
@@ -898,6 +936,14 @@ begin
           end
           else
           begin
+            { Internal Pascal call: all args in integer registers by index. }
+            argNode := IRB[node];
+            while argNode <> -1 do
+            begin
+              IREmitNode(IRA[argNode]); { -> rax }
+              EmitB($50); { push rax }
+              argNode := IRB[argNode];
+            end;
             for i := Procs[pi].ParamCount - 1 downto 0 do
               case i of
                 0: EmitB($5F); { pop rdi }
