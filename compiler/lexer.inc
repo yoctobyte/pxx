@@ -490,16 +490,233 @@ begin
     ResolveWildcardFile := f;
 end;
 
+procedure SkipPasDirectiveSpaces;
+begin
+  while (SrcPos <= Length(Source)) and (Source[SrcPos] in [' ', #9, #13, #10]) do
+  begin
+    if Source[SrcPos] = #10 then Inc(SrcLine);
+    Inc(SrcPos);
+  end;
+end;
+
+function ReadPasDirectiveIdent: AnsiString;
+begin
+  Result := '';
+  SkipPasDirectiveSpaces;
+  while (SrcPos <= Length(Source)) and
+        (Source[SrcPos] in ['a'..'z', 'A'..'Z', '0'..'9', '_']) do
+  begin
+    AppendChar(Result, Source[SrcPos]);
+    Inc(SrcPos);
+  end;
+end;
+
+function PasCondOpPrecedence(op: Char): Integer;
+begin
+  if op = '!' then PasCondOpPrecedence := 3
+  else if op = '&' then PasCondOpPrecedence := 2
+  else if op = '|' then PasCondOpPrecedence := 1
+  else PasCondOpPrecedence := 0;
+end;
+
+var
+  PasCondValues: array[0..63] of Boolean;
+  PasCondOps: array[0..63] of Char;
+  PasCondValueCount, PasCondOpCount: Integer;
+  PasCondExprText: AnsiString;
+  PasCondExprPos: Integer;
+
+procedure SkipPasCondExprSpaces;
+begin
+  while (PasCondExprPos <= Length(PasCondExprText)) and
+        (PasCondExprText[PasCondExprPos] in [' ', #9, #13, #10]) do
+    Inc(PasCondExprPos);
+end;
+
+function ReadPasCondExprIdent: AnsiString;
+begin
+  Result := '';
+  SkipPasCondExprSpaces;
+  while (PasCondExprPos <= Length(PasCondExprText)) and
+        (PasCondExprText[PasCondExprPos] in ['a'..'z', 'A'..'Z', '0'..'9', '_']) do
+  begin
+    AppendChar(Result, PasCondExprText[PasCondExprPos]);
+    Inc(PasCondExprPos);
+  end;
+end;
+
+procedure PasCondApplyOp;
+var op: Char; lhs, rhs: Boolean;
+begin
+  if PasCondOpCount <= 0 then Error('conditional directive: missing operator');
+  Dec(PasCondOpCount);
+  op := PasCondOps[PasCondOpCount];
+  if op = '!' then
+  begin
+    if PasCondValueCount < 1 then Error('conditional directive: missing operand');
+    PasCondValues[PasCondValueCount - 1] := not PasCondValues[PasCondValueCount - 1];
+  end
+  else
+  begin
+    if PasCondValueCount < 2 then Error('conditional directive: missing operand');
+    Dec(PasCondValueCount);
+    rhs := PasCondValues[PasCondValueCount];
+    lhs := PasCondValues[PasCondValueCount - 1];
+    if op = '&' then PasCondValues[PasCondValueCount - 1] := lhs and rhs
+    else if op = '|' then PasCondValues[PasCondValueCount - 1] := lhs or rhs
+    else Error('conditional directive: bad operator');
+  end;
+end;
+
+function EvalPasCondExprText(const text: AnsiString): Boolean;
+var word, name: AnsiString;
+  op: Char;
+  expectValue, done: Boolean;
+begin
+  PasCondExprText := text;
+  PasCondExprPos := 1;
+  PasCondValueCount := 0;
+  PasCondOpCount := 0;
+  expectValue := True;
+  done := False;
+  while not done do
+  begin
+    SkipPasCondExprSpaces;
+    if PasCondExprPos > Length(PasCondExprText) then
+      done := True
+    else if PasCondExprText[PasCondExprPos] = '(' then
+    begin
+      if not expectValue then Error('conditional directive: expected operator');
+      if PasCondOpCount >= 64 then Error('conditional directive nesting overflow');
+      PasCondOps[PasCondOpCount] := '(';
+      Inc(PasCondOpCount);
+      Inc(PasCondExprPos);
+    end
+    else if PasCondExprText[PasCondExprPos] = ')' then
+    begin
+      if expectValue then Error('conditional directive: expected operand');
+      while (PasCondOpCount > 0) and (PasCondOps[PasCondOpCount - 1] <> '(') do
+        PasCondApplyOp;
+      if PasCondOpCount <= 0 then Error('conditional directive: unexpected )');
+      Dec(PasCondOpCount);
+      Inc(PasCondExprPos);
+      while (PasCondOpCount > 0) and (PasCondOps[PasCondOpCount - 1] = '!') do
+        PasCondApplyOp;
+    end
+    else
+    begin
+      word := ReadPasCondExprIdent;
+      if word = '' then Error('conditional directive: unexpected character');
+      if CaseEqual(word, 'not') then
+      begin
+        if not expectValue then Error('conditional directive: expected operator');
+        if PasCondOpCount >= 64 then Error('conditional directive nesting overflow');
+        PasCondOps[PasCondOpCount] := '!';
+        Inc(PasCondOpCount);
+      end
+      else if CaseEqual(word, 'and') or CaseEqual(word, 'or') then
+      begin
+        if expectValue then Error('conditional directive: expected operand');
+        if CaseEqual(word, 'and') then op := '&' else op := '|';
+        while (PasCondOpCount > 0) and (PasCondOps[PasCondOpCount - 1] <> '(') and
+              (PasCondOpPrecedence(PasCondOps[PasCondOpCount - 1]) >= PasCondOpPrecedence(op)) do
+          PasCondApplyOp;
+        if PasCondOpCount >= 64 then Error('conditional directive nesting overflow');
+        PasCondOps[PasCondOpCount] := op;
+        Inc(PasCondOpCount);
+        expectValue := True;
+      end
+      else
+      begin
+        if not expectValue then Error('conditional directive: expected operator');
+        if CaseEqual(word, 'defined') then
+        begin
+          SkipPasCondExprSpaces;
+          if (PasCondExprPos > Length(PasCondExprText)) or
+             (PasCondExprText[PasCondExprPos] <> '(') then
+            Error('conditional directive: defined requires (NAME)');
+          Inc(PasCondExprPos);
+          name := ReadPasCondExprIdent;
+          SkipPasCondExprSpaces;
+          if (PasCondExprPos > Length(PasCondExprText)) or
+             (PasCondExprText[PasCondExprPos] <> ')') then
+            Error('conditional directive: defined requires (NAME)');
+          Inc(PasCondExprPos);
+          if PasCondValueCount >= 64 then Error('conditional directive expression overflow');
+          PasCondValues[PasCondValueCount] := PasDefineExists(name);
+        end
+        else
+        begin
+          if PasCondValueCount >= 64 then Error('conditional directive expression overflow');
+          if word = '1' then PasCondValues[PasCondValueCount] := True
+          else if word = '0' then PasCondValues[PasCondValueCount] := False
+          else PasCondValues[PasCondValueCount] := PasDefineExists(word);
+        end;
+        Inc(PasCondValueCount);
+        expectValue := False;
+        while (PasCondOpCount > 0) and (PasCondOps[PasCondOpCount - 1] = '!') do
+          PasCondApplyOp;
+      end;
+    end;
+  end;
+  if expectValue then Error('conditional directive: expected operand');
+  while PasCondOpCount > 0 do
+  begin
+    if PasCondOps[PasCondOpCount - 1] = '(' then Error('conditional directive: expected )');
+    PasCondApplyOp;
+  end;
+  if PasCondValueCount <> 1 then Error('conditional directive: malformed expression');
+  EvalPasCondExprText := PasCondValues[0];
+end;
+
+function ParsePasCondExpr: Boolean;
+var text: AnsiString; p: Integer;
+begin
+  text := '';
+  p := SrcPos;
+  while (p <= Length(Source)) and (Source[p] <> '}') do
+  begin
+    AppendChar(text, Source[p]);
+    Inc(p);
+  end;
+  ParsePasCondExpr := EvalPasCondExprText(text);
+end;
+
+procedure ReadPasDirectiveRest(var text: AnsiString);
+begin
+  text := '';
+  SkipPasDirectiveSpaces;
+  while (SrcPos <= Length(Source)) and (Source[SrcPos] <> '}') do
+  begin
+    AppendChar(text, Source[SrcPos]);
+    Inc(SrcPos);
+  end;
+end;
+
 procedure ProcessPasDirective;
-var command, name, fname: AnsiString; parent, cond: Boolean; idx: Integer;
+var command, name, fname, messageText: AnsiString; parent, cond: Boolean; idx: Integer;
 begin
   Inc(SrcPos); { dollar sign }
   ReadPasDirectiveWord(command);
-  ReadPasDirectiveWord(name);
+  name := '';
+  cond := False;
+  if CaseEqual(command, 'if') or CaseEqual(command, 'elseif') then
+    cond := ParsePasCondExpr
+  else
+    ReadPasDirectiveWord(name);
   { Resource directive (R name file): capture the filename before skipping. }
   fname := '';
   if CaseEqual(command, 'R') and PasDirectiveActive then
     ReadPasDirectiveFile(fname);
+  messageText := '';
+  if CaseEqual(command, 'warning') or CaseEqual(command, 'message') or
+     CaseEqual(command, 'error') then
+  begin
+    messageText := name;
+    if messageText <> '' then AppendChar(messageText, ' ');
+    ReadPasDirectiveRest(fname);
+    for idx := 1 to Length(fname) do AppendChar(messageText, fname[idx]);
+  end;
   while (SrcPos <= Length(Source)) and (Source[SrcPos] <> '}') do
   begin
     if Source[SrcPos] = #10 then Inc(SrcLine);
@@ -507,16 +724,27 @@ begin
   end;
   if SrcPos <= Length(Source) then Inc(SrcPos);
 
-  if CaseEqual(command, 'ifdef') or CaseEqual(command, 'ifndef') then
+  if CaseEqual(command, 'ifdef') or CaseEqual(command, 'ifndef') or
+     CaseEqual(command, 'if') then
   begin
     if PasCondCount >= MAX_PAS_CONDS then Error('conditional directive nesting overflow');
     parent := PasDirectiveActive;
-    cond := PasDefineExists(name);
-    if CaseEqual(command, 'ifndef') then cond := not cond;
+    if not CaseEqual(command, 'if') then
+    begin
+      cond := PasDefineExists(name);
+      if CaseEqual(command, 'ifndef') then cond := not cond;
+    end;
     PasCondParent[PasCondCount] := parent;
     PasCondActive[PasCondCount] := parent and cond;
     PasCondTaken[PasCondCount] := parent and cond;
     Inc(PasCondCount);
+  end
+  else if CaseEqual(command, 'elseif') then
+  begin
+    if PasCondCount = 0 then Error('unexpected elseif directive');
+    idx := PasCondCount - 1;
+    PasCondActive[idx] := PasCondParent[idx] and not PasCondTaken[idx] and cond;
+    if PasCondActive[idx] then PasCondTaken[idx] := True;
   end
   else if CaseEqual(command, 'else') then
   begin
@@ -577,7 +805,13 @@ begin
           Inc(ResPendCount);
         end;
       end;
-    end;
+    end
+    else if CaseEqual(command, 'warning') then
+      writeln('pascal26:', SrcLine, ': warning: ', messageText)
+    else if CaseEqual(command, 'message') then
+      writeln('pascal26:', SrcLine, ': message: ', messageText)
+    else if CaseEqual(command, 'error') then
+      Error(messageText);
     { Mode and unsupported compatibility directives remain accepted comments. }
   end;
   if DebugTrace and (command <> '') then writeln('Pascal directive: ', command, ' ', name);

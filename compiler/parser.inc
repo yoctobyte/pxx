@@ -33,6 +33,23 @@ end;
 
 procedure ParseExpr; forward;
 
+function ConsumeUnitQualifier(var name: AnsiString): Integer;
+begin
+  Result := -1;
+  if (CurTok.Kind = tkIdent) and (TokPos + 1 < TokCount) and
+     (Tokens[TokPos].Kind = tkDot) and
+     (Tokens[TokPos + 1].Kind = tkIdent) then
+  begin
+    Result := FindCompiledUnit(name);
+    if Result >= 0 then
+    begin
+      Next;                 { consume unit name }
+      Expect(tkDot, '.');
+      name := CurTok.SVal;  { leave parser on the member name }
+    end;
+  end;
+end;
+
 function LastDotName(const s: AnsiString): AnsiString;
 { Part of s after the last '.', else s. }
 var i, p: Integer;
@@ -1678,7 +1695,7 @@ procedure ParseFactor;
 var name: AnsiString; recName: Integer; idx, pi, i, node, left, prevTok, valNode: Integer; tk: TTypeKind; op, argSeq, argSeq2, argSeq3, lastArg, argIdx, exprNode, szArg: Integer;
     nArgs, argsHead, currArg: Integer; argTypes: array[0..15] of TTypeKind;
     ci, mmi, mpi, mcallNode, mlastArg, smSelfIdx, smselfArg: Integer;
-    aliasIdx, fieldNode, indexNode, baseNode, baseRec, fIdx, mci, margSeq, margIdx, mexprNode, mai, pri: Integer;
+    aliasIdx, fieldNode, indexNode, baseNode, baseRec, fIdx, mci, margSeq, margIdx, mexprNode, mai, pri, qUnit: Integer;
     fieldName, methName: AnsiString; isAssign: Boolean; castTk: TTypeKind;
 begin
   LastExprTk := tyInteger;
@@ -1921,6 +1938,7 @@ begin
     tkIdent:
     begin
       name := CurTok.SVal;
+      qUnit := ConsumeUnitQualifier(name);
       prevTok := TokPos - 1;
       if CaseEqual(name, 'inherited') then
       begin
@@ -2056,8 +2074,16 @@ begin
         Exit;
       end;
 
-      idx  := FindSym(name);
-      pi   := FindProc(name);
+      if qUnit >= 0 then
+      begin
+        idx := FindSymInUnit(name, qUnit);
+        pi := FindProcInUnit(name, qUnit);
+      end
+      else
+      begin
+        idx := FindSym(name);
+        pi := FindProc(name);
+      end;
 
       { C4: pointer-type-alias cast — PFoo(expr) where PFoo = ^TFoo }
       if (idx < 0) and (pi < 0) and (Tokens[TokPos].Kind = tkLParen) then
@@ -2315,7 +2341,10 @@ begin
           currArg := ASTRight[currArg];
         end;
 
-        pi := MatchProcCall(name, nArgs, argTypes);
+        if qUnit >= 0 then
+          pi := MatchProcCallInUnit(name, qUnit, nArgs, argTypes)
+        else
+          pi := MatchProcCall(name, nArgs, argTypes);
         if pi < 0 then
           Error('no overload of ' + name + ' matches these arguments');
 
@@ -2485,6 +2514,14 @@ begin
     if (op = tkPlus) and ((ASTTk[left] = Ord(tyString)) or (ASTTk[right] = Ord(tyString)) or
                           ((ASTTk[left] = Ord(tyChar)) and (ASTTk[right] = Ord(tyChar)))) then
       ASTTk[node] := Ord(tyString)
+    else if ((op = tkPlus) or (op = tkMinus)) and
+            (ASTTk[left] = Ord(tyPointer)) and
+            TypeIsOrdinal(IntToTypeKind(ASTTk[right])) then
+      ASTTk[node] := Ord(tyPointer)
+    else if (op = tkPlus) and
+            TypeIsOrdinal(IntToTypeKind(ASTTk[left])) and
+            (ASTTk[right] = Ord(tyPointer)) then
+      ASTTk[node] := Ord(tyPointer)
     else if (ASTTk[left] = Ord(tySet)) or (ASTTk[right] = Ord(tySet)) then
       ASTTk[node] := Ord(tySet)
     else if (op = tkOr) and (ASTTk[left] = Ord(tyBoolean)) and (ASTTk[right] = Ord(tyBoolean)) then
@@ -3037,7 +3074,7 @@ var
   nArgs, argsHead, currArg: Integer; argTypes: array[0..15] of TTypeKind;
   isLn: Boolean;
   smci, smmii, smpii, smcallNode, smselfArg, smLastArg, smArgSeq, smMai, smSelfIdx: Integer;
-  aliasIdx, fieldNode, indexNode, castPrevTok: Integer;
+  aliasIdx, fieldNode, indexNode, castPrevTok, qUnit: Integer;
   castFieldName: AnsiString; castTk: TTypeKind; castRec: Integer;
 begin
   node := -1;
@@ -3258,6 +3295,7 @@ begin
     tkIdent:
     begin
       name := CurTok.SVal;
+      qUnit := ConsumeUnitQualifier(name);
       { Label definition: 'labelname:' as a statement }
       if Tokens[TokPos].Kind = tkColon then
       begin
@@ -3439,7 +3477,10 @@ begin
       end
       else
       begin
-        pi := FindProc(name);
+        if qUnit >= 0 then
+          pi := FindProcInUnit(name, qUnit)
+        else
+          pi := FindProc(name);
         if (pi >= 0) and (Tokens[TokPos].Kind = tkLParen) then
         begin
           Next;
@@ -3473,7 +3514,10 @@ begin
             currArg := ASTRight[currArg];
           end;
 
-          pi := MatchProcCall(name, nArgs, argTypes);
+          if qUnit >= 0 then
+            pi := MatchProcCallInUnit(name, qUnit, nArgs, argTypes)
+          else
+            pi := MatchProcCall(name, nArgs, argTypes);
           if pi < 0 then
             Error('no overload of ' + name + ' matches these arguments');
 
@@ -3623,7 +3667,11 @@ begin
             end
             else
             begin
-              idx := FindSym(name); Next;
+              if qUnit >= 0 then
+                idx := FindSymInUnit(name, qUnit)
+              else
+                idx := FindSym(name);
+              Next;
               valNode := ParseLValueAST(idx, TokPos - 2);
               if (ASTKind[valNode] = AN_CALL) or (ASTKind[valNode] = AN_VIRTUAL_CALL) then
                 node := valNode
@@ -3952,6 +4000,19 @@ begin
         end;
         Expect(tkRParen, ')');
         EnumTypeValCount[etid] := EnumValCount - EnumTypeValBase[etid];
+      end
+      else if (CurTok.Kind = tkClass) and (Tokens[TokPos].Kind = tkOf) then
+      begin
+        { Named metaclass alias: TFooClass = class of TFoo. Values use the
+          existing RTTI-pointer class-reference representation. }
+        Next;
+        Expect(tkOf, 'of');
+        if CurTok.Kind <> tkIdent then Error('expected base class after class of');
+        ci := FindUClass(CurTok.SVal);
+        if ci < 0 then Error('class of base type not found: ' + CurTok.SVal);
+        RegisterClassRefAlias(tnOff, tnLen, REC_UCLASS_BASE + ci);
+        Next;
+        Eat(tkSemicolon);
       end
       else if CurTok.Kind = tkClass then
       begin
@@ -4456,7 +4517,7 @@ var
   parr      : array[0..15] of Boolean;
   pbyref    : array[0..15] of Boolean;
   nparams  : Integer;
-  pi, i, sz: Integer;
+  pi, i, sz, retRecId, savedLastTypeRecId: Integer;
   savedSC, savedFS, savedCurProc : Integer;
   savedGLC, savedGFC, j: Integer;
   patchPos : Integer;
@@ -4513,7 +4574,7 @@ begin
       end;
   end;
 
-  nparams := 0; retType := tyInteger;
+  nparams := 0; retType := tyInteger; retRecId := REC_NONE;
 
   if CurTok.Kind = tkLParen then
   begin
@@ -4577,6 +4638,8 @@ begin
   begin
     Expect(tkColon, ':');
     retType := ParseTypeKind;
+    if retType = tyRecord then
+      retRecId := LastTypeRecId;
   end;
 
   Eat(tkSemicolon);
@@ -4612,6 +4675,7 @@ begin
     pi := FindProcOverload(name, nparams, ptypes, parr, pbyref);
     if pi < 0 then
       pi := RegisterProc(name, isFunc, retType, nparams, pnames, ptypes);
+    ProcRetRecId[pi] := retRecId;
     for i := 0 to nparams-1 do
     begin
       Procs[pi].Params[i].IsArray := parr[i];
@@ -4688,6 +4752,7 @@ begin
         if HasNonOverloadProc(name) then Error('all overloaded routines require overload directive');
       end;
       pi := RegisterProc(name, isFunc, retType, nparams, pnames, ptypes);
+      ProcRetRecId[pi] := retRecId;
       ProcOverloadDirective[pi] := declOverload;
       Procs[pi].BodyAddr := -1;
       for i := 0 to nparams-1 do
@@ -4698,6 +4763,7 @@ begin
     end
     else if declOverload then
       ProcOverloadDirective[pi] := True;
+    ProcRetRecId[pi] := retRecId;
     Exit;
   end;
 
@@ -4715,6 +4781,7 @@ begin
   end
   else if declOverload then
     ProcOverloadDirective[pi] := True;
+  ProcRetRecId[pi] := retRecId;
   Procs[pi].BodyAddr := CodeLen;
   for i := 0 to nparams-1 do
   begin
@@ -4792,6 +4859,9 @@ begin
   { Return value slot }
   if isFunc then
   begin
+    savedLastTypeRecId := LastTypeRecId;
+    if retType = tyRecord then
+      LastTypeRecId := ProcRetRecId[pi];
     if retType = tyString then
     begin
       savedCurProc := CurProc;
@@ -4807,11 +4877,22 @@ begin
       Procs[pi].RetSymIdx := SymCount - 1;
       Syms[SymCount-1].Kind := skLocal;
     end;
+    LastTypeRecId := savedLastTypeRecId;
+    if TypeIsAggregate(retType) then
+    begin
+      idx := AllocVar('', tyPointer);
+      ProcAggregateDestSym[pi] := idx;
+    end;
   end;
 
   { Prologue }
   patchPos := EmitProcPrologue;
   Procs[pi].FramePatch := patchPos;
+  if ProcAggregateDestSym[pi] >= 0 then
+  begin
+    idx := ProcAggregateDestSym[pi];
+    EmitB($4C); EmitB($89); EmitB($95); EmitI32(Syms[idx].Offset); { mov [rbp+off], r10 }
+  end;
 
   { Copy params from registers to stack: mov [rbp+off], rdi/rsi/rdx/rcx/r8/r9 }
   for i := 0 to nparams-1 do
@@ -5008,7 +5089,7 @@ end;
 procedure ParseUsesUnit(const name: AnsiString);
 var
   lo, path: AnsiString;
-  startPos, savedTokPos, strIdx, i: Integer;
+  startPos, savedTokPos, strIdx, i, savedCurrentUnitIdx: Integer;
   savedCurTokKind: TTokenKind;
   savedCurTokSVal: AnsiString;
   savedCurTokIVal: Int64;
@@ -5194,9 +5275,12 @@ begin
       exactly (the link symbol is exact), independent of the host's setting.
       Restored after so it does not leak into the including unit. }
     savedCaseMode := CaseSensitiveMode;
+    savedCurrentUnitIdx := CurrentUnitIdx;
+    CurrentUnitIdx := strIdx;
     CaseSensitiveMode := True;
     ParseCUnit;
     CaseSensitiveMode := savedCaseMode;
+    CurrentUnitIdx := savedCurrentUnitIdx;
 
     TokPos := savedTokPos;
     CurTok.Kind := savedCurTokKind;
@@ -5216,6 +5300,8 @@ begin
       does not leak into the including file. A unit with no directive inherits
       the caller's mode. }
     savedCaseMode := CaseSensitiveMode;
+    savedCurrentUnitIdx := CurrentUnitIdx;
+    CurrentUnitIdx := strIdx;
 
     ExpandIncludes(UnitContent, GetFilePath(path));
 
@@ -5248,6 +5334,7 @@ begin
     CurTok.Line := savedCurTokLine;
     CurSrcBaseName := savedSrcBase;
     CaseSensitiveMode := savedCaseMode;
+    CurrentUnitIdx := savedCurrentUnitIdx;
   end;
 end;
 

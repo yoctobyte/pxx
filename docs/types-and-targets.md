@@ -207,10 +207,8 @@ Remaining target/type work:
    and associated compatibility tests. `Ord` is implemented as a compiler
    intrinsic today and may later be presented through the System/RTL builtin
    surface; it does not need ordinary external-library calling semantics.
-5. Scaled pointer arithmetic (`p + n`); typed pointers, address-of,
-   dereference, `nil`, casts, checks, fields, and indexing are covered.
-6. Explicit target selection (`--target=`).
-7. i386 output after the type system and ABI surface are stable.
+5. Explicit target selection (`--target=`).
+6. i386 output after the type system and ABI surface are stable.
 
 ## Calling Conventions and Modifiers
 
@@ -245,7 +243,6 @@ Remaining target/type work:
 
 - Float cast intrinsics: future work
 - Full ordinal surface, including `WideChar`: future work
-- Scaled pointer arithmetic: future work
 - Dynamic arrays beyond scalar elements and basic resize behavior: future work
 - Interface types: future work
 - FPC runtime library compatibility: separate policy document needed

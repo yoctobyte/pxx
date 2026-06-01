@@ -495,10 +495,16 @@ begin
 end;
 
 procedure ExpandIncludes(var src: AnsiString; const baseDir: AnsiString);
-{ Replace dollar-include directives with file contents, one level deep }
+{ Replace active dollar-include directives with file contents, one level deep.
+  Conditional directives remain in the text for the real lexer pass; this
+  pre-pass only simulates enough state to avoid loading includes from inactive
+  branches. }
 var
-  i, j, k: Integer;
-  fname: AnsiString;
+  i, j, k, closePos, condCount, savedDefineCount, savedDefineCharLen: Integer;
+  fname, command, name, exprSource: AnsiString;
+  cond, active: Boolean;
+  condParent, condActive, condTaken: array[0..MAX_PAS_CONDS-1] of Boolean;
+  savedDefineActive: array[0..MAX_PAS_DEFINES-1] of Boolean;
 {$ifdef FPC}
   c: Char;
 {$else}
@@ -506,45 +512,119 @@ var
 {$endif}
   fullPath: AnsiString;
 begin
+  savedDefineCount := PasDefineCount;
+  savedDefineCharLen := PasDefineCharLen;
+  for k := 0 to MAX_PAS_DEFINES - 1 do
+    savedDefineActive[k] := PasDefineActive[k];
+  condCount := 0;
+  active := True;
   SetLength(IncExpanded, 0);
   i := 1;
   while i <= Length(src) do
   begin
-    if (i <= Length(src) - 9) and
-       (src[i] = '{') and (src[i+1] = '$') and
-       ((src[i+2] = 'i') or (src[i+2] = 'I')) and
-       ((src[i+3] = 'n') or (src[i+3] = 'N')) and
-       ((src[i+4] = 'c') or (src[i+4] = 'C')) and
-       ((src[i+5] = 'l') or (src[i+5] = 'L')) and
-       ((src[i+6] = 'u') or (src[i+6] = 'U')) and
-       ((src[i+7] = 'd') or (src[i+7] = 'D')) and
-       ((src[i+8] = 'e') or (src[i+8] = 'E')) and
-       (src[i+9] = ' ') then
+    if (i < Length(src)) and (src[i] = '{') and (src[i + 1] = '$') then
     begin
-      j := i + 10;
-      fname := '';
-      while (j <= Length(src)) and (src[j] <> '}') and (src[j] <> #10) do
+      j := i + 2;
+      while (j <= Length(src)) and (src[j] in [' ', #9, #13, #10]) do Inc(j);
+      command := '';
+      while (j <= Length(src)) and
+            (src[j] in ['a'..'z', 'A'..'Z', '0'..'9', '_']) do
       begin
-        c := src[j];
-{$ifdef FPC}
-        if (c <> '''') and (c <> '"') and (c <> ' ') then
-          AppendChar(fname, c);
-{$else}
-        if (c <> 39) and (c <> 34) and (c <> 32) then
-          AppendChar(fname, Chr(c));
-{$endif}
+        AppendChar(command, src[j]);
         Inc(j);
       end;
-      if (Length(fname) > 0) and (j <= Length(src)) then
+      while (j <= Length(src)) and (src[j] in [' ', #9, #13, #10]) do Inc(j);
+      name := '';
+      k := j;
+      while (k <= Length(src)) and
+            (src[k] in ['a'..'z', 'A'..'Z', '0'..'9', '_']) do
       begin
-        fullPath := baseDir;
-        for k := 1 to Length(fname) do
-          AppendChar(fullPath, fname[k]);
-        LoadFile(fullPath, IncIncluded);
-        { Append all characters of included to dst }
-        for k := 1 to Length(IncIncluded) do
-          AppendChar(IncExpanded, IncIncluded[k]);
-        i := j + 1;
+        AppendChar(name, src[k]);
+        Inc(k);
+      end;
+      closePos := j;
+      while (closePos <= Length(src)) and (src[closePos] <> '}') do Inc(closePos);
+      if closePos > Length(src) then Error('unterminated Pascal directive during include expansion');
+
+      if CaseEqual(command, 'ifdef') or CaseEqual(command, 'ifndef') or
+         CaseEqual(command, 'if') then
+      begin
+        if condCount >= MAX_PAS_CONDS then Error('include conditional nesting overflow');
+        cond := False;
+        if CaseEqual(command, 'if') then
+        begin
+          exprSource := '';
+          for k := j to closePos - 1 do AppendChar(exprSource, src[k]);
+          cond := EvalPasCondExprText(exprSource);
+        end
+        else
+        begin
+          cond := PasDefineExists(name);
+          if CaseEqual(command, 'ifndef') then cond := not cond;
+        end;
+        condParent[condCount] := active;
+        condActive[condCount] := active and cond;
+        condTaken[condCount] := active and cond;
+        active := condActive[condCount];
+        Inc(condCount);
+      end
+      else if CaseEqual(command, 'elseif') then
+      begin
+        if condCount = 0 then Error('unexpected elseif directive during include expansion');
+        exprSource := '';
+        for k := j to closePos - 1 do AppendChar(exprSource, src[k]);
+        cond := EvalPasCondExprText(exprSource);
+        k := condCount - 1;
+        condActive[k] := condParent[k] and not condTaken[k] and cond;
+        if condActive[k] then condTaken[k] := True;
+        active := condActive[k];
+      end
+      else if CaseEqual(command, 'else') then
+      begin
+        if condCount = 0 then Error('unexpected else directive during include expansion');
+        k := condCount - 1;
+        condActive[k] := condParent[k] and not condTaken[k];
+        condTaken[k] := True;
+        active := condActive[k];
+      end
+      else if CaseEqual(command, 'endif') then
+      begin
+        if condCount = 0 then Error('unexpected endif directive during include expansion');
+        Dec(condCount);
+        if condCount = 0 then active := True
+        else active := condActive[condCount - 1];
+      end
+      else if active and CaseEqual(command, 'define') then
+        PasDefine(name)
+      else if active and CaseEqual(command, 'undef') then
+        PasUndefine(name);
+
+      if active and (CaseEqual(command, 'include') or CaseEqual(command, 'i')) then
+      begin
+        fname := '';
+        while (j <= Length(src)) and (src[j] <> '}') and (src[j] <> #10) do
+        begin
+          c := src[j];
+{$ifdef FPC}
+          if (c <> '''') and (c <> '"') and (c <> ' ') then AppendChar(fname, c);
+{$else}
+          if (c <> 39) and (c <> 34) and (c <> 32) then AppendChar(fname, Chr(c));
+{$endif}
+          Inc(j);
+        end;
+        if (Length(fname) > 0) and (j <= Length(src)) then
+        begin
+          fullPath := baseDir;
+          for k := 1 to Length(fname) do AppendChar(fullPath, fname[k]);
+          LoadFile(fullPath, IncIncluded);
+          for k := 1 to Length(IncIncluded) do AppendChar(IncExpanded, IncIncluded[k]);
+          i := j + 1;
+        end
+        else
+        begin
+          AppendChar(IncExpanded, src[i]);
+          Inc(i);
+        end;
       end
       else
       begin
@@ -558,5 +638,10 @@ begin
       Inc(i);
     end;
   end;
+  if condCount <> 0 then Error('unterminated conditional directive during include expansion');
+  PasDefineCount := savedDefineCount;
+  PasDefineCharLen := savedDefineCharLen;
+  for k := 0 to MAX_PAS_DEFINES - 1 do
+    PasDefineActive[k] := savedDefineActive[k];
   src := IncExpanded;
 end;

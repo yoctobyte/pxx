@@ -1,6 +1,6 @@
 # Project State Audit
 
-**Audited:** 2026-05-31
+**Audited:** 2026-06-01
 
 This is the compact current-state snapshot. Source and `make test` remain
 authoritative. Detailed design notes live in [`todo.md`](todo.md), while older
@@ -23,12 +23,16 @@ point-in-time material stays under `historic/`.
 ## Verified Pascal Surface
 
 `make test` covers procedural Pascal, units and initialization, arrays,
-records, strings, classes, constructors, inheritance, virtual/override and
+records, strings, classes, constructors, inheritance, `class of` metaclasses,
+virtual/override and
 abstract dispatch, visibility parsing, properties, published RTTI, reflection,
 resources, LFM streaming, procedure/method pointers, integer and float
 arithmetic, typed pointers, dynamic arrays of scalar values, exceptions,
-generics, overloads, operators, inline asm, `goto`, `with`, comments, case
-modes, allocator builtins, `read`/`readln`, and selected RTL helpers.
+generics, overloads, operators, qualified unit symbols, scaled typed-pointer
+arithmetic, record/set aggregate-valued function results, conditional
+directive expressions and active-branch includes, inline asm, `goto`, `with`,
+comments, case modes, allocator builtins,
+`read`/`readln`, and selected RTL helpers.
 
 Case behavior is per origin:
 
@@ -44,25 +48,26 @@ Case behavior is per origin:
 
 ## Major Missing Pascal Features
 
-- Interfaces, initially a CORBA-style no-refcount model; see `todo.md` section
-  3.
-- Full `class of` syntax and general metaclass typing. The LCL slice has the
-  narrower class-reference behavior it needs.
-- Scaled pointer arithmetic (`p + n`); pointer indexing works.
+- Interfaces are intentionally deferred until a concrete compatibility target
+  needs them; see `todo.md` section 3.
+- Metaclass aliases are pointer-backed and do not yet enforce every descendant
+  constraint against arbitrary pointer-compatible assignments.
 - Float conversion intrinsics such as `Trunc`, `Round`, `Int`, and float
   `Str`/`Val`.
+- Managed `AnsiString`: current strings are inline fixed-capacity values.
+  Reference-counted heap strings need an explicit cross-thread sharing policy
+  before their ABI is fixed, because thread-safe refcounts imply atomic or
+  equivalent synchronization overhead.
 - Dynamic arrays beyond scalar elements and basic resize behavior: record or
   string elements, params/results, reference counting, copy-on-grow, and
-  reclaim.
-- Aggregate-valued function results still need a deliberate ABI. Set-valued
-  function results compile but are not supported yet.
-- Full access-control enforcement. Visibility sections are parsed and
-  `published` drives RTTI, but private/protected checks are intentionally not
-  enforced yet.
-- FPC directive breadth: conditional expressions, switch state, warning/error
-  directives, and complete conditional include behavior.
-- Qualified `UnitName.Symbol` resolution and broader unit namespace/import
-  behavior.
+  reclaim. Deepen these after allocator and managed-`AnsiString` work.
+- Full access-control enforcement is intentionally deferred. Visibility
+  sections are parsed because `published` drives RTTI; rejecting
+  private/protected access enables no new programs.
+- FPC directive breadth beyond the covered expression subset: checking,
+  optimization, and code-generation switch state.
+- Broader unit namespace/import behavior beyond qualified `UnitName.Symbol`
+  resolution, such as a possible nonstandard rename-import extension.
 
 ## Broader Design Debt
 

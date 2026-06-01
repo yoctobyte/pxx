@@ -1,6 +1,6 @@
 # PXX Compatibility Status
 
-**Status date:** 2026-05-31
+**Status date:** 2026-06-01
 
 `PXX` is the provisional name for this compiler. It may change before a
 public naming/API commitment. Existing executable and stable-seed paths remain
@@ -36,8 +36,13 @@ Implemented:
 {$undef NAME}
 {$ifdef NAME}
 {$ifndef NAME}
+{$if defined(NAME) and not defined(OTHER)}
+{$elseif 1}
 {$else}
 {$endif}
+{$warning text}
+{$message text}
+{$error text}
 {$mode objfpc}
 {$strict_overload on}   { or off }
 {$nestedcomments on}    { or off }
@@ -53,6 +58,9 @@ Command line:
 
 Directive names and defined symbols are case-insensitive. Conditionals nest.
 `PXX` cannot be removed with `{$undef PXX}` or `-uPXX`.
+The expression subset supports `defined(NAME)`, bare symbols, `not`, `and`,
+`or`, parentheses, `0`, and `1`. Includes are expanded only from active
+Pascal conditional branches and remain one level deep.
 `strict_overload` defaults to off; when enabled, every variant of an
 overloaded routine must carry `overload;`.
 The comment-relaxation switches and strict Pascal casing also default to off.
@@ -63,10 +71,9 @@ Current limitations:
 - `{$mode objfpc}` is accepted but there are not yet alternate Pascal semantic modes.
 - Unknown Pascal directives are currently ignored as comments, allowing existing
   compiler-source markers such as `{$H+}` to pass through.
-- `{$if ...}`, `{$elseif ...}`, valued macros, warning directives, and switch
-  state such as range checking are not implemented.
-- Includes are expanded before Pascal conditional processing; conditional
-  inclusion behavior still needs deliberate design and tests.
+- Valued macros and macro replacement are not implemented.
+- Switch state such as range checking, optimization, and code-generation
+  controls is not implemented.
 
 ## Compatibility Matrix
 
@@ -85,15 +92,18 @@ Current limitations:
 Regression-covered behavior includes:
 
 - Programs, constants, variables, integer/Boolean/Char/String operations,
-  arrays, records, procedures/functions, `var` parameters, and units.
+  arrays, records, procedures/functions, `var` parameters, units, and
+  qualified `UnitName.Symbol` lookups.
 - `if`, `case`, `while`, `for`, `repeat`, `break`, and `continue`.
 - Classes with fields and methods, inheritance, virtual/override dispatch,
-  visibility sections, properties, and published RTTI/reflection.
+  named `class of` metaclass aliases, visibility sections, properties, and
+  published RTTI/reflection.
 - Generic classes and top-level generic function/procedure specialization.
 - Routine overloading and class/record operator implementations.
 - `try/except` including exact user-class typed handlers, `try/finally`,
   expression raise, and handler re-raise.
-- Pascal conditional definitions and PXX/FPC identity separation.
+- Pascal conditional definitions and expressions, active-branch includes,
+  directive diagnostics, and PXX/FPC identity separation.
 - Selected C interop and C preprocessing behavior described in
   `C_INTEROP.md`.
 
@@ -107,9 +117,9 @@ coverage:
 | Strict `overload` enforcement | Implemented as opt-in `{$strict_overload on}` / `--strict-overload`; permissive behavior remains the default. |
 | Alternative generic syntax and call-site specialization | Planned; current syntax is the tested top-level `generic` / `specialize ... as ...` form. |
 | Pascal mode semantics | Only the current objfpc-like subset exists; Delphi/FPC/ISO mode differences are not modeled. |
-| Directive expression language and switch state | Missing beyond simple named conditional definitions. |
-| Broader Object Pascal model | Exact user-class exception handlers, finalizers, re-raise, properties, class inheritance, explicit `inherited` calls, virtual dispatch, and published RTTI are covered. Interfaces, complete metaclass syntax, exception hierarchy matching, and rich exception messages remain missing or incomplete. |
-| Numeric/type breadth | Fixed-width integer, scalar floating-point, set algebra, and pointer-sized layout are covered for x86-64. `WideChar`/broader ordinal behavior, float conversion intrinsics, and scaled pointer arithmetic remain incomplete. |
+| Directive expression language and switch state | Named and expression conditionals, active-branch includes, and warning/message/error diagnostics are covered. Checking, optimization, and code-generation switch state remains missing. |
+| Broader Object Pascal model | Exact user-class exception handlers, finalizers, re-raise, properties, class inheritance, explicit `inherited` calls, virtual dispatch, published RTTI, named `class of` metaclass aliases, and record/set aggregate returns are covered. Interfaces are intentionally deferred until required by a concrete target; strict descendant enforcement for pointer-backed metaclass aliases, exception hierarchy matching, and rich exception messages remain missing or incomplete. |
+| Numeric/type breadth | Fixed-width integer, scalar floating-point, set algebra, pointer-sized layout, and scaled typed-pointer arithmetic are covered for x86-64. `WideChar`/broader ordinal behavior and float conversion intrinsics remain incomplete. |
 | FPC RTL/packages | Not provided as an FPC-compatible library layer. |
 | Cross-target output | Current target is Linux x86-64 only. |
 

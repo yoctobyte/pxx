@@ -202,6 +202,8 @@ test: $(COMPILER) fpc-check
 	test "$$(/tmp/test_ptr_deref_field26)" = "$$(printf '10\n20\n42\n99\n1234\n5\n9999\n100\n300\n777')"
 	./$(COMPILER) test/test_ptr_cast.pas /tmp/test_ptr_cast26
 	test "$$(/tmp/test_ptr_cast26)" = "$$(printf '12345\n99999\n77\n88\n42\n1111\n7\n99\n100\n200\nbuiltin_cast: int64 ok\n100')"
+	./$(COMPILER) test/test_ptr_arithmetic.pas /tmp/test_ptr_arithmetic26
+	test "$$(/tmp/test_ptr_arithmetic26)" = "$$(printf '30\n20\n40\n40\n77\n99\n20')"
 	./$(COMPILER) test/test_pointers.pas /tmp/test_pointers26
 	test "$$(/tmp/test_pointers26 | tail -1)" = "all pointer tests done!"
 	./$(COMPILER) test/test_ref.pas /tmp/test_ref26
@@ -226,6 +228,8 @@ test: $(COMPILER) fpc-check
 	grep -q "OnClick event thunk matches DummyHandler" /tmp/test_rtti26.log
 	./$(COMPILER) test/test_classref.pas /tmp/test_classref26
 	test "$$(/tmp/test_classref26)" = "$$(printf 'same: yes\nname=TFoo\nTag=99')"
+	./$(COMPILER) test/test_class_of.pas /tmp/test_class_of26
+	test "$$(/tmp/test_class_of26)" = "TChild"
 	./$(COMPILER) test/test_initsec.pas /tmp/test_initsec26
 	test "$$(/tmp/test_initsec26)" = "AB"
 	./$(COMPILER) test/test_wildcard_lfm.pas /tmp/test_wildcard_lfm26
@@ -256,6 +260,8 @@ test: $(COMPILER) fpc-check
 	grep -q "undefined variable (VALUE)" /tmp/test_case_sensitive_error.log
 	./$(COMPILER) test/test_case_sensitive_unit.pas /tmp/test_case_sensitive_unit26
 	test "$$(/tmp/test_case_sensitive_unit26)" = "$$(printf 'unit\n7')"
+	./$(COMPILER) test/test_qualified_units.pas /tmp/test_qualified_units26
+	test "$$(/tmp/test_qualified_units26)" = "$$(printf '3\n7\n11\n22\n101\n201')"
 	./$(COMPILER) test/test_getmem_proc.pas /tmp/test_getmem_proc26
 	test "$$(/tmp/test_getmem_proc26)" = "$$(printf '1\n65\n66\n90\n1')"
 	./$(COMPILER) test/test_freemem.pas /tmp/test_freemem26
@@ -299,9 +305,16 @@ test: $(COMPILER) fpc-check
 	./$(COMPILER) test/test_inline_register.pas /tmp/test_inline_register26
 	test "$$(/tmp/test_inline_register26 | tail -1)" = "all inline/register tests completed!"
 	./$(COMPILER) test/test_pascal_directives.pas /tmp/test_pascal_directives26
-	test "$$(/tmp/test_pascal_directives26)" = "$$(printf '1\n0\n1\n1\n1\n0\n1\n1\n1')"
+	test "$$(/tmp/test_pascal_directives26)" = "$$(printf '1\n0\n1\n1\n1\n0\n1\n1\n1\n1\n1\n1')"
 	./$(COMPILER) -dCLI_FLAG test/test_pascal_directives.pas /tmp/test_pascal_directives_defined26
-	test "$$(/tmp/test_pascal_directives_defined26)" = "$$(printf '1\n0\n1\n1\n1\n1\n1\n1\n1')"
+	test "$$(/tmp/test_pascal_directives_defined26)" = "$$(printf '1\n0\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1')"
+	./$(COMPILER) test/test_pascal_directive_messages.pas /tmp/test_pascal_directive_messages26 > /tmp/test_pascal_directive_messages.log
+	grep -q "warning: warning text" /tmp/test_pascal_directive_messages.log
+	grep -q "message: message text" /tmp/test_pascal_directive_messages.log
+	! ./$(COMPILER) test/test_pascal_directive_error.pas /tmp/test_pascal_directive_error26 > /tmp/test_pascal_directive_error.log 2>&1
+	grep -q "requested failure" /tmp/test_pascal_directive_error.log
+	./$(COMPILER) test/test_pascal_conditional_include.pas /tmp/test_pascal_conditional_include26
+	test "$$(/tmp/test_pascal_conditional_include26)" = "$$(printf '42\n7')"
 	./$(COMPILER) test/test_strict_overload.pas /tmp/test_strict_overload26
 	test "$$(/tmp/test_strict_overload26)" = "$$(printf '5\n65')"
 	! ./$(COMPILER) test/test_strict_overload_error.pas /tmp/test_strict_overload_error26 > /tmp/test_strict_overload_error.log 2>&1
@@ -322,6 +335,8 @@ test: $(COMPILER) fpc-check
 	test "$$(/tmp/test_sets26 | tail -1)" = "all set tests completed!"
 	./$(COMPILER) test/test_set_shapes.pas /tmp/test_set_shapes26
 	test "$$(/tmp/test_set_shapes26)" = "$$(printf '1\n1\n1')"
+	./$(COMPILER) test/test_aggregate_results.pas /tmp/test_aggregate_results26
+	test "$$(/tmp/test_aggregate_results26)" = "$$(printf '1\n1\n1\n1\n1\n1\n2\n5\n16\n20')"
 	./$(COMPILER) test/test_float_literals.pas /tmp/test_float_literals26
 	test "$$(/tmp/test_float_literals26)" = "$$(printf '1\n1\n1\n1\n1\n1\n1')"
 	./$(COMPILER) test/test_float_write.pas /tmp/test_float_write26

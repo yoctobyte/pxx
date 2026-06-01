@@ -471,6 +471,7 @@ var
 
   Syms      : array[0..MAX_SYMS-1]  of TSymbol;
   SymCaseSensitive : array[0..MAX_SYMS-1] of Boolean; { match this symbol name case-sensitively }
+  SymUnitIdx : array[0..MAX_SYMS-1] of Integer; { Strs[] unit name, or -1 for main/local compiler-generated symbols }
   SymCount  : Integer;
   FrameSize : Integer;
 
@@ -481,6 +482,9 @@ var
   ProcExternal : array[0..MAX_PROCS-1] of Boolean;
   ProcCaseSensitive : array[0..MAX_PROCS-1] of Boolean; { match this proc name case-sensitively (C imports, or Pascal in case-sensitive mode) }
   ProcLibrary  : array[0..MAX_PROCS-1] of Integer; { Strs[] entry for DT_NEEDED name }
+  ProcUnitIdx : array[0..MAX_PROCS-1] of Integer; { Strs[] unit name, or -1 for main }
+  ProcRetRecId : array[0..MAX_PROCS-1] of Integer; { record id for tyRecord results }
+  ProcAggregateDestSym : array[0..MAX_PROCS-1] of Integer; { hidden caller-result pointer local, or -1 }
   CurrentCLibrary : AnsiString;
   ExternalProc   : array[0..MAX_EXTERNAL-1] of Integer;
   ExternalGotOff : array[0..MAX_EXTERNAL-1] of Integer;
@@ -505,6 +509,7 @@ var
   InInterface : Boolean;
   CompiledUnits : array[0..255] of Integer;
   CompiledUnitCount : Integer;
+  CurrentUnitIdx : Integer; { Strs[] name while parsing an imported unit, else -1 }
   { Synthesized unit initialization procs, in dependency (post-uses) order.
     Called at program entry before the main body so unit globals get set up. }
   InitProcs : array[0..255] of Integer;

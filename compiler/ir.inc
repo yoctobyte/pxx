@@ -169,8 +169,10 @@ begin
         if (IRA[i] >= ProcCount) then
           Error('invalid IR proc reference in call');
         IRRequireOptionalNode(IRB[i], 'call first arg');
-        { IRC = classIdx (record id for constructor/method dispatch), NOT a
-          node — do not validate it as one. Args chain via IRB[argNode]. }
+        if (IRA[i] >= 0) and TypeIsAggregate(Procs[IRA[i]].RetType) then
+          IRRequireNode(IRC[i], 'call aggregate destination');
+        { Otherwise IRC = classIdx (record id for constructor/method dispatch),
+          NOT a node. Args chain via IRB[argNode]. }
       end;
 
       IR_WRITE:
@@ -501,6 +503,66 @@ begin
     Result := IRAppend(IR_UNSUPPORTED, ASTKind[node], ASTLeft[node], ASTRight[node], ASTIVal[node], ASTTk[node]);
 end;
 
+function IRAppendCall(procIdx, firstArg, classIdx, tk: Integer): Integer;
+var scratchSym, scratchAddr, savedRecId: Integer;
+begin
+  if (procIdx >= 0) and TypeIsAggregate(Procs[procIdx].RetType) then
+  begin
+    { Aggregate calls return into caller-owned storage. IRC carries an IR_LEA
+      node for that hidden destination; ordinary calls keep the class index. }
+    savedRecId := LastTypeRecId;
+    if Procs[procIdx].RetType = tyRecord then
+      LastTypeRecId := ProcRetRecId[procIdx];
+    scratchSym := AllocVar('', Procs[procIdx].RetType);
+    LastTypeRecId := savedRecId;
+    scratchAddr := IRAppend(IR_LEA, scratchSym, -1, -1, 0, Ord(tyPointer));
+    Result := IRAppend(IR_CALL, procIdx, firstArg, scratchAddr, 0, tk);
+  end
+  else
+    Result := IRAppend(IR_CALL, procIdx, firstArg, classIdx, 0, tk);
+end;
+
+function IRPointerStride(node: Integer): Integer;
+var elemTk: TTypeKind; recId, aliasIdx: Integer;
+begin
+  elemTk := tyUnknown;
+  recId := REC_NONE;
+  if ASTKind[node] = AN_IDENT then
+  begin
+    elemTk := Syms[ASTIVal[node]].PtrElemTk;
+    recId := Syms[ASTIVal[node]].PtrElemRec;
+  end
+  else if ASTKind[node] = AN_FIELD then
+  begin
+    recId := ResolveNodeRec(ASTLeft[node]);
+    elemTk := RecFieldPtrElemTk(recId, GetASTIdentName(node));
+    recId := RecFieldPtrElemRec(recId, GetASTIdentName(node));
+  end
+  else if ASTKind[node] = AN_PTR_CAST then
+  begin
+    aliasIdx := ASTIVal[node];
+    if aliasIdx >= 0 then
+    begin
+      elemTk := IntToTypeKind(AliasElemTk[aliasIdx]);
+      recId := AliasElemRec[aliasIdx];
+    end;
+  end
+  else if ASTKind[node] = AN_BINOP then
+  begin
+    if IntToTypeKind(ASTTk[ASTLeft[node]]) = tyPointer then
+      Result := IRPointerStride(ASTLeft[node])
+    else
+      Result := IRPointerStride(ASTRight[node]);
+    Exit;
+  end;
+  if elemTk = tyRecord then
+    Result := RecSize(recId)
+  else if elemTk = tyUnknown then
+    Result := 1
+  else
+    Result := TypeSize(elemTk);
+end;
+
 function IRLowerAST(node: Integer): Integer;
 var left, right, seq, item, value, outNode, first, last, leftAddr, argNode: Integer;
     pairNode, condNode, specialId, classIdx, slot, cpi, pathIdx: Integer;
@@ -519,7 +581,7 @@ var left, right, seq, item, value, outNode, first, last, leftAddr, argNode: Inte
     constValNode, clauseBodyLabelNode, exitJmpNode, nextClauseLabelNode: Integer;
     beforeCount, handlerLabel, handlerNode, handlerNextLabel, savedDepth: Integer;
     raiseValueNode, raiseClass: Integer;
-    i, lbId, off, len, idx, itemNode, lo, hi, val1: Integer;
+    i, lbId, off, len, idx, itemNode, lo, hi, val1, elemSize: Integer;
 begin
   if node = -1 then
   begin
@@ -671,7 +733,7 @@ begin
         right := IRLowerAST(ASTRight[node]);
         last  := IRAppend(IR_ARG, right, -1, -1, 0, ASTTk[ASTRight[node]]);
         IRB[first] := last;
-        Result := IRAppend(IR_CALL, cpi, first, -1, 0, ASTTk[node]);
+        Result := IRAppendCall(cpi, first, -1, ASTTk[node]);
       end
       else if (ASTIVal[node] <> Ord(tkIn)) and
               ((IntToTypeKind(ASTTk[ASTLeft[node]]) = tySet) or
@@ -693,9 +755,40 @@ begin
       end
       else
       begin
-        left := IRLowerAST(ASTLeft[node]);
-        right := IRLowerAST(ASTRight[node]);
-        Result := IRAppend(IR_BINOP, left, right, Integer(ASTIVal[node]), 0, ASTTk[node]);
+        if ((ASTIVal[node] = Ord(tkPlus)) or (ASTIVal[node] = Ord(tkMinus))) and
+           (IntToTypeKind(ASTTk[ASTLeft[node]]) = tyPointer) and
+           TypeIsOrdinal(IntToTypeKind(ASTTk[ASTRight[node]])) then
+        begin
+          left := IRLowerAST(ASTLeft[node]);
+          right := IRLowerAST(ASTRight[node]);
+          elemSize := IRPointerStride(ASTLeft[node]);
+          if elemSize > 1 then
+          begin
+            item := IRAppend(IR_CONST_INT, -1, -1, -1, elemSize, Ord(tyInteger));
+            right := IRAppend(IR_BINOP, right, item, Ord(tkStar), 0, Ord(tyInteger));
+          end;
+          Result := IRAppend(IR_BINOP, left, right, Integer(ASTIVal[node]), 0, Ord(tyPointer));
+        end
+        else if (ASTIVal[node] = Ord(tkPlus)) and
+                TypeIsOrdinal(IntToTypeKind(ASTTk[ASTLeft[node]])) and
+                (IntToTypeKind(ASTTk[ASTRight[node]]) = tyPointer) then
+        begin
+          left := IRLowerAST(ASTRight[node]);
+          right := IRLowerAST(ASTLeft[node]);
+          elemSize := IRPointerStride(ASTRight[node]);
+          if elemSize > 1 then
+          begin
+            item := IRAppend(IR_CONST_INT, -1, -1, -1, elemSize, Ord(tyInteger));
+            right := IRAppend(IR_BINOP, right, item, Ord(tkStar), 0, Ord(tyInteger));
+          end;
+          Result := IRAppend(IR_BINOP, left, right, Ord(tkPlus), 0, Ord(tyPointer));
+        end
+        else
+        begin
+          left := IRLowerAST(ASTLeft[node]);
+          right := IRLowerAST(ASTRight[node]);
+          Result := IRAppend(IR_BINOP, left, right, Integer(ASTIVal[node]), 0, ASTTk[node]);
+        end;
       end;
     end;
 
@@ -728,10 +821,13 @@ begin
         right := IRLowerAST(ASTRight[node]);
         Result := IRAppend(IR_SET_COPY, leftAddr, right, -1, 0, Ord(tySet));
       end
-      else if (IntToTypeKind(ASTTk[ASTLeft[node]]) = tyRecord) and rhsIsLValue then
+      else if IntToTypeKind(ASTTk[ASTLeft[node]]) = tyRecord then
       begin
         leftAddr := IRLowerAddress(ASTLeft[node]);
-        right := IRLowerAddress(ASTRight[node]);
+        if rhsIsLValue then
+          right := IRLowerAddress(ASTRight[node])
+        else
+          right := IRLowerAST(ASTRight[node]);
         Result := IRAppend(IR_COPY_REC, leftAddr, right, -1,
                            RecSize(ResolveNodeRec(ASTLeft[node])), Ord(tyRecord));
       end
@@ -765,7 +861,22 @@ begin
         begin
           value := IRLowerAST(ASTLeft[node]);
           if (CurProc >= 0) and (Procs[CurProc].RetSymIdx >= 0) then
-            last := IRAppend(IR_STORE_SYM, Procs[CurProc].RetSymIdx, value, -1, 0, ASTTk[ASTLeft[node]]);
+          begin
+            varIdx := Procs[CurProc].RetSymIdx;
+            if Syms[varIdx].TypeKind = tySet then
+            begin
+              leftAddr := IRAppend(IR_LEA, varIdx, -1, -1, 0, Ord(tyPointer));
+              last := IRAppend(IR_SET_COPY, leftAddr, value, -1, 0, Ord(tySet));
+            end
+            else if Syms[varIdx].TypeKind = tyRecord then
+            begin
+              leftAddr := IRAppend(IR_LEA, varIdx, -1, -1, 0, Ord(tyPointer));
+              last := IRAppend(IR_COPY_REC, leftAddr, value, -1,
+                               RecSize(Syms[varIdx].RecName), Ord(tyRecord));
+            end
+            else
+              last := IRAppend(IR_STORE_SYM, varIdx, value, -1, 0, ASTTk[ASTLeft[node]]);
+          end;
         end;
         IRLowerCleanupToDepth(0);
         last := IRAppend(IR_TERMINATE, -1, -1, -1, AN_EXIT, 0);
@@ -830,7 +941,7 @@ begin
         item := ASTRight[item];
         Inc(pathIdx);
       end;
-      Result := IRAppend(IR_CALL, ASTIVal[node], first, classIdx, 0, ASTTk[node]);
+      Result := IRAppendCall(ASTIVal[node], first, classIdx, ASTTk[node]);
     end;
 
     AN_IF:

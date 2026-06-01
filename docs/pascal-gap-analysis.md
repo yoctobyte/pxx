@@ -13,7 +13,8 @@ is in `todo.md` §4.
 ## 1. Core Features (mostly delivered)
 
 The four daily-used mechanics that had to land for a robust Pascal dialect.
-Three of the four are now implemented; pointers retain one gap (arithmetic).
+The active pointer gap is now closed; dynamic arrays retain their deliberate
+allocator-dependent depth work.
 
 ### 1. Floating-Point Math (`Single` / `Double`) — ✅ implemented
 * **Reference behavior**: Native IEEE-754 single and double precision support mapped to SSE2 registers (`XMM0`-`XMM7`).
@@ -32,29 +33,32 @@ Three of the four are now implemented; pointers retain one gap (arithmetic).
   - `SetLength` always fresh-allocates; old contents are not preserved on regrow, and freed blocks are not reclaimed (no reference counting / copy semantics yet).
   - Dynamic `array of record` / `array of string` element types.
   - Dynamic arrays as parameters and function results.
+* **Ordering note**: improve allocator foundations first, then design managed
+  reference-counted `AnsiString`, then deepen arrays. Arrays of strings should
+  reuse the string ownership/finalization rules. The managed-string ABI must
+  state whether cross-thread sharing is supported; that determines whether
+  refcount updates need atomic operations and their associated overhead.
+  Atomic counts protect lifetime only, not concurrent mutation or
+  copy-on-write uniqueness checks.
 
-### 3. General Pointer Syntax & Semantics (`^T`, `@`, `nil`) — 🟡 partial
+### 3. General Pointer Syntax & Semantics (`^T`, `@`, `nil`) — ✅ implemented subset
 * **Reference behavior**: Fully-typed pointer declarations (`^Integer`), explicit dereferencing caret operator (`Ptr^`), the address-of operator (`@Var`), and the predefined constant pointer value `nil` (0).
-* **Current state**: Untyped `Pointer`, `nil`, `@Var`/`@arr[i]`, and `Ptr^` all work. Typed pointers C1–C4 are done: named aliases `PFoo = ^TFoo`, indexing `p[i]` (element-size stride), record-pointer fields `p^.field`, and casts `PType(expr)`. Tests: `test/test_ptr_alias.pas`, `test_ptr_deref_field.pas`, `test_ptr_cast.pas`.
-* **Remaining gap**: scaled pointer arithmetic `p + n` (currently unscaled/garbage; indexing `p[i]` is the working substitute). See `todo.md` §4.
+* **Current state**: Untyped `Pointer`, `nil`, `@Var`/`@arr[i]`, and `Ptr^` all work. Typed pointers cover named aliases `PFoo = ^TFoo`, indexing `p[i]`, record-pointer fields `p^.field`, casts `PType(expr)`, and scaled `p + n`, `p - n`, and `n + p`. Typed strides use the pointed-at element size; untyped pointers use byte stride. Tests: `test/test_ptr_alias.pas`, `test_ptr_deref_field.pas`, `test_ptr_cast.pas`, `test/test_ptr_arithmetic.pas`.
 
 ### 4. Sets & Set Operations (`set of T`) — ✅ implemented
 * **Reference behavior**: Grouping discrete ordinal values together as bitsets (e.g., `set of Byte` or custom enums), literal declarations `[1, 2, 5..10]`, and the `in` operator.
-* **Current state**: Set literals including ranges, `in` membership, set-typed published properties surfaced via RTTI (kind=SET), assignment, union, intersection, difference, equality, subset/superset comparisons, locals, record fields, and parameters work. The IR uses dedicated 32-byte set operations. Coverage: `test/test_sets.pas`, `test/test_set_shapes.pas`.
-* **Remaining gap**: set-valued function results need the general aggregate-return ABI.
+* **Current state**: Set literals including ranges, `in` membership, set-typed published properties surfaced via RTTI (kind=SET), assignment, union, intersection, difference, equality, subset/superset comparisons, locals, record fields, parameters, and function results work. The IR uses dedicated 32-byte set operations and the shared aggregate-return ABI. Coverage: `test/test_sets.pas`, `test/test_set_shapes.pas`, `test/test_aggregate_results.pas`.
 
 ---
 
 ## 2. Parked / Excluded Features
 
 ### Interfaces (`interface` types)
-* **Status**: **Planned** (superseded — was previously parked). The next big
-  language feature, scheduled after the Lazarus/LCL streaming arc. See
-  [`todo.md`](todo.md) §3 for the scoping outline.
-* **Note**: The earlier "park indefinitely" rationale (COM/Windows baggage) is
-  retired. We do not need COM. The plan is a lightweight Linux-native model
-  (CORBA-style / no-refcount first; COM-style ARC deferred). GUIDs optional.
+* **Status**: **Intentionally deferred.** No current target source requires
+  interfaces, while even a no-refcount model adds substantial dispatch, ABI,
+  and lifetime-design surface. See [`todo.md`](todo.md) §3 for the retained
+  scoping outline.
 
-> Of the four core features above, floats and sets are implemented,
-> and typed pointers are done bar arithmetic; interfaces are planned (not parked).
+> Of the four core features above, floats, sets, and the covered typed-pointer
+> surface are implemented; interfaces are intentionally deferred.
 > [`todo.md`](todo.md) is the authoritative consolidated status list.

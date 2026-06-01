@@ -101,6 +101,20 @@ begin
   Inc(AliasCount);
 end;
 
+procedure RegisterClassRefAlias(noff, nlen, classRec: Integer);
+{ Named metaclass type: TFooClass = class of TFoo. Runtime values are RTTI
+  pointers, so reuse the typed-pointer alias representation with a tyClass
+  element marker and the base class record id. }
+begin
+  if AliasCount >= MAX_TYPEALIAS then Error('too many type aliases');
+  AliasNOff[AliasCount] := noff;
+  AliasNLen[AliasCount] := nlen;
+  AliasTk[AliasCount] := Ord(tyPointer);
+  AliasElemTk[AliasCount] := Ord(tyClass);
+  AliasElemRec[AliasCount] := classRec;
+  Inc(AliasCount);
+end;
+
 function FindEnumType(const name: AnsiString): Integer;
 var i: Integer; lo, name2: AnsiString;
 begin
@@ -733,6 +747,11 @@ begin
   Result := (Ord(tk) = 18) or (Ord(tk) = 19) or (Ord(tk) = 20);  { tySingle or tyDouble or tyExtended }
 end;
 
+function TypeIsAggregate(tk: TTypeKind): Boolean;
+begin
+  Result := (tk = tyRecord) or (tk = tySet);
+end;
+
 function TypeCompareUnsigned(lhs, rhs: TTypeKind): Boolean;
 { The wider operand determines the comparison domain; at equal width a signed
   operand wins. Values are still evaluated in 64-bit registers. }
@@ -832,6 +851,44 @@ begin
   Result := -1;
 end;
 
+function FindCompiledUnit(const name: AnsiString): Integer;
+var i, j, unitIdx: Integer; lo: AnsiString;
+begin
+  lo := name;
+  for j := 1 to Length(lo) do
+    if lo[j] in ['A'..'Z'] then
+      lo[j] := Chr(Ord(lo[j]) + 32);
+  for i := 0 to CompiledUnitCount - 1 do
+  begin
+    unitIdx := CompiledUnits[i];
+    if Strs[unitIdx].Text = lo then
+    begin
+      Result := unitIdx;
+      Exit;
+    end;
+  end;
+  Result := -1;
+end;
+
+function FindSymInUnit(const name: AnsiString; unitIdx: Integer): Integer;
+var i: Integer;
+begin
+  for i := SymCount - 1 downto 0 do
+    if (SymUnitIdx[i] = unitIdx) and StrEqual(Syms[i].Name, name) then
+    begin
+      Result := i;
+      Exit;
+    end;
+  for i := SymCount - 1 downto 0 do
+    if (SymUnitIdx[i] = unitIdx) and (not SymCaseSensitive[i]) and
+       CaseEqual(Syms[i].Name, name) then
+    begin
+      Result := i;
+      Exit;
+    end;
+  Result := -1;
+end;
+
 function AllocVar(const name: AnsiString; tk: TTypeKind): Integer;
 var sz, align: Integer;
 begin
@@ -845,6 +902,7 @@ begin
   Syms[SymCount].RecName  := LastTypeRecId;
   Syms[SymCount].IsRef    := False;
   SymCaseSensitive[SymCount] := CaseSensitiveMode;
+  SymUnitIdx[SymCount] := CurrentUnitIdx;
   Syms[SymCount].PtrElemTk := tyUnknown;
   Syms[SymCount].PtrElemRec := REC_NONE;
   if tk = tyPointer then
@@ -903,6 +961,7 @@ begin
   Syms[SymCount].IsRef    := isRef;
   Syms[SymCount].Kind     := skParam;
   SymCaseSensitive[SymCount] := CaseSensitiveMode;
+  SymUnitIdx[SymCount] := CurrentUnitIdx;
   Syms[SymCount].PtrElemTk := tyUnknown;
   Syms[SymCount].PtrElemRec := REC_NONE;
   if tk = tyPointer then
@@ -953,6 +1012,7 @@ begin
   Syms[SymCount].PtrElemTk := tyUnknown;
   Syms[SymCount].PtrElemRec := REC_NONE;
   SymCaseSensitive[SymCount] := CaseSensitiveMode;
+  SymUnitIdx[SymCount] := CurrentUnitIdx;
   if elemType = tyPointer then
   begin
     Syms[SymCount].PtrElemTk := LastTypePointerElemTk;
@@ -991,6 +1051,7 @@ begin
   Syms[SymCount].PtrElemTk := tyUnknown;
   Syms[SymCount].PtrElemRec := REC_NONE;
   SymCaseSensitive[SymCount] := CaseSensitiveMode;
+  SymUnitIdx[SymCount] := CurrentUnitIdx;
   if elemType = tyPointer then
   begin
     Syms[SymCount].PtrElemTk := LastTypePointerElemTk;
@@ -1025,6 +1086,7 @@ begin
   Syms[SymCount].Offset   := 0;
   Syms[SymCount].IsRef    := False;
   SymCaseSensitive[SymCount] := CaseSensitiveMode;
+  SymUnitIdx[SymCount] := CurrentUnitIdx;
   Result := SymCount; Inc(SymCount);
 end;
 
@@ -1762,12 +1824,32 @@ begin
   Result := -1;
 end;
 
+function FindProcInUnit(const name: AnsiString; unitIdx: Integer): Integer;
+var i: Integer;
+begin
+  for i := 0 to ProcCount - 1 do
+    if (ProcUnitIdx[i] = unitIdx) and (Procs[i].Name = name) then
+    begin
+      Result := i;
+      Exit;
+    end;
+  for i := 0 to ProcCount - 1 do
+    if (ProcUnitIdx[i] = unitIdx) and (not ProcCaseSensitive[i]) and
+       CaseEqual(Procs[i].Name, name) then
+    begin
+      Result := i;
+      Exit;
+    end;
+  Result := -1;
+end;
+
 function HasNonOverloadProc(const name: AnsiString): Boolean;
 var i: Integer;
 begin
   Result := False;
   for i := 0 to ProcCount-1 do
-    if (Procs[i].Name = name) and not ProcOverloadDirective[i] then
+    if (ProcUnitIdx[i] = CurrentUnitIdx) and (Procs[i].Name = name) and
+       not ProcOverloadDirective[i] then
     begin
       Result := True;
       Exit;
@@ -1779,7 +1861,7 @@ var i, j: Integer; match: Boolean;
 begin
   for i := 0 to ProcCount-1 do
   begin
-    if Procs[i].Name = name then
+    if (ProcUnitIdx[i] = CurrentUnitIdx) and (Procs[i].Name = name) then
     begin
       if Procs[i].ParamCount = nParams then
       begin
@@ -1885,6 +1967,43 @@ begin
   Result := -1;
 end;
 
+function MatchProcCallInUnit(const name: AnsiString; unitIdx, nArgs: Integer;
+  const argTypes: array of TTypeKind): Integer;
+var i, j: Integer; match: Boolean;
+begin
+  for i := 0 to ProcCount - 1 do
+    if (ProcUnitIdx[i] = unitIdx) and
+       ((Procs[i].Name = name) or
+        ((not ProcCaseSensitive[i]) and CaseEqual(Procs[i].Name, name))) and
+       (Procs[i].ParamCount = nArgs) then
+    begin
+      match := True;
+      for j := 0 to nArgs - 1 do
+        if Procs[i].Params[j].TypeKind <> argTypes[j] then match := False;
+      if match then
+      begin
+        Result := i;
+        Exit;
+      end;
+    end;
+  for i := 0 to ProcCount - 1 do
+    if (ProcUnitIdx[i] = unitIdx) and
+       ((Procs[i].Name = name) or
+        ((not ProcCaseSensitive[i]) and CaseEqual(Procs[i].Name, name))) and
+       (Procs[i].ParamCount = nArgs) then
+    begin
+      match := True;
+      for j := 0 to nArgs - 1 do
+        if not TypesCompatible(Procs[i].Params[j].TypeKind, argTypes[j]) then match := False;
+      if match then
+      begin
+        Result := i;
+        Exit;
+      end;
+    end;
+  Result := -1;
+end;
+
 
 function RegisterProc(const name: AnsiString; isFunc: Boolean;
   retType: TTypeKind; nParams: Integer;
@@ -1904,6 +2023,9 @@ begin
   ProcCaseSensitive[ProcCount] := CaseSensitiveMode;
   ProcOverloadDirective[ProcCount] := False;
   ProcLibrary[ProcCount]      := -1;
+  ProcUnitIdx[ProcCount]      := CurrentUnitIdx;
+  ProcRetRecId[ProcCount]     := REC_NONE;
+  ProcAggregateDestSym[ProcCount] := -1;
   for i := 0 to nParams-1 do
   begin
     Procs[ProcCount].Params[i].Name     := pnames[i];
@@ -2247,10 +2369,28 @@ begin
 end;
 
 procedure EmitProcEpilog(retSymIdx: Integer);
+var sz: Integer;
 begin
   if retSymIdx >= 0 then
   begin
-    if Syms[retSymIdx].TypeKind = tyString then
+    if TypeIsAggregate(Syms[retSymIdx].TypeKind) and
+       (CurProc >= 0) and (ProcAggregateDestSym[CurProc] >= 0) then
+    begin
+      { Aggregate results use a hidden caller-owned destination pointer in r10.
+        The prologue saves it in a local so nested calls cannot clobber it. }
+      EmitLoadVar(ProcAggregateDestSym[CurProc]);
+      EmitB($50);                                  { push original destination }
+      EmitB($48); EmitB($89); EmitB($C7);          { mov rdi, rax }
+      EmitB($48); EmitB($8D); EmitB($B5); EmitI32(Syms[retSymIdx].Offset); { lea rsi, [rbp+off] }
+      if Syms[retSymIdx].TypeKind = tyRecord then
+        sz := RecSize(Syms[retSymIdx].RecName)
+      else
+        sz := TypeSize(Syms[retSymIdx].TypeKind);
+      EmitB($48); EmitB($B9); EmitI64(sz);          { movabs rcx, byte count }
+      EmitB($F3); EmitB($A4);                       { rep movsb }
+      EmitB($58);                                   { pop rax = result address }
+    end
+    else if Syms[retSymIdx].TypeKind = tyString then
     begin
       if Syms[retSymIdx].Kind = skGlobal then
       begin
@@ -2446,8 +2586,15 @@ begin
     else
       Result := REC_NONE;
   end
-  else if (ASTKind[node] = AN_CALL) and (ASTIVal[node] = -Ord(tkGetMem)) then
-    Result := ASTRight[node]
+  else if ASTKind[node] = AN_CALL then
+  begin
+    if ASTIVal[node] = -Ord(tkGetMem) then
+      Result := ASTRight[node]
+    else if ASTIVal[node] >= 0 then
+      Result := ProcRetRecId[ASTIVal[node]]
+    else
+      Result := REC_NONE;
+  end
   else if ASTKind[node] = AN_PTR_CAST then
   begin
     if ASTIVal[node] >= 0 then

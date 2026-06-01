@@ -48,14 +48,23 @@ Implemented directives:
 {$ifndef FEATURE}
   writeln('not defined');
 {$endif}
+
+{$if defined(FEATURE) and not defined(DISABLED)}
+  writeln('expression enabled');
+{$elseif 1}
+  writeln('fallback');
+{$endif}
 ```
 
 Symbols and directive names are case-insensitive. Blocks may be nested.
 `PXX` is a built-in identity symbol and cannot be undefined from source or
-with `-uPXX`.
+with `-uPXX`. The expression subset supports `defined(NAME)`, bare symbols,
+`not`, `and`, `or`, parentheses, `0`, and `1`. `{$warning text}`,
+`{$message text}`, and `{$error text}` act only in active branches. Include
+directives are expanded only from active branches and remain one level deep.
 
-Not yet implemented: conditional expressions such as `{$if ...}`, valued
-defines, `{$elseif ...}`, or general FPC switch-state behavior.
+Not yet implemented: valued defines, macro replacement, or general FPC
+switch-state behavior.
 
 ## Comments
 
@@ -98,16 +107,17 @@ idea; it is not implemented and would not alter strict Pascal behavior.
 
 The regression suite currently covers:
 
-- Programs and Pascal units.
+- Programs, Pascal units, and qualified `UnitName.Symbol` lookups.
 - Constants, variables, integer, Boolean, character, and string operations.
 - Arrays and records.
 - Procedures, functions, `var` parameters, and overload dispatch.
 - `if`, `case`, `while`, `for`, `repeat`, `break`, and `continue`.
-- Classes with fields and methods.
+- Classes with fields, methods, and named `class of` metaclass aliases.
 - Generic classes and generic procedures/functions using explicit specialization.
 - Operator implementations for class/record operands.
 - Virtual/override method dispatch, including from procedure-call statements.
 - Procedure and method references (`@routine`, `@obj.method`).
+- Typed-pointer indexing, casts, fields, and scaled arithmetic.
 - Published RTTI and binary form (`.lfm`) streaming into a component tree.
 - Untyped `try/except`, `try/finally`, `raise <expr>`, and handler re-raise.
 - Selected C imports and direct `external` shared-library binding.

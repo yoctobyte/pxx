@@ -151,6 +151,7 @@ begin
   StrCount := 0; FixCount := 0;
   GlobFixCount := 0; CallFixCount := 0; ProcAddrFixCount := 0;
   SymCount := 0; ProcCount := 0;
+  CurrentUnitIdx := -1;
   ExternalCount := 0; DynCallCount := 0; CurrentCLibrary := '';
   FrameSize := 0; CurProc := -1;
   TokCount := 0; TokPos := 0; TokCharLen := 0;

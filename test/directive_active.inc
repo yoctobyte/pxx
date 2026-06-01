@@ -1,0 +1,1 @@
+const IncludedValue = 42;

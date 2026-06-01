@@ -842,6 +842,11 @@ begin
               4: begin EmitB($41); EmitB($58); end; { pop r8 }
               5: begin EmitB($41); EmitB($59); end; { pop r9 }
             end;
+          if TypeIsAggregate(Procs[pi].RetType) then
+          begin
+            IREmitNode(IRC[node]);                   { rax = hidden destination }
+            EmitB($49); EmitB($89); EmitB($C2);     { mov r10, rax }
+          end;
           EmitCallProc(pi);
         end
         else if pi = -Ord(tkGetMem) then

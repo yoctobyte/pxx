@@ -64,6 +64,29 @@ const LinuxTarget = 1;
 const LinuxTarget = 0;
 {$endif}
 
+{$if defined(PXX) and not defined(MISSING_EXPR)}
+const ExpressionConditional = 1;
+{$elseif defined(FPC)}
+const ExpressionConditional = 0;
+{$else}
+const ExpressionConditional = 0;
+{$endif}
+
+{$if defined(MISSING_EXPR)}
+{$error inactive error must not fire}
+const ElseIfConditional = 0;
+{$elseif 1}
+const ElseIfConditional = 1;
+{$else}
+const ElseIfConditional = 0;
+{$endif}
+
+{$if (defined(MISSING_EXPR) or defined(PXX)) and 1}
+const ParenthesizedOrConditional = 1;
+{$else}
+const ParenthesizedOrConditional = 0;
+{$endif}
+
 begin
   writeln(NativeCompiler);
   writeln(FreePascalIdentity);
@@ -74,4 +97,7 @@ begin
   writeln(Cpu64Target);
   writeln(CpuX8664Target);
   writeln(LinuxTarget);
+  writeln(ExpressionConditional);
+  writeln(ElseIfConditional);
+  writeln(ParenthesizedOrConditional);
 end.

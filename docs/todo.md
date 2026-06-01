@@ -107,11 +107,11 @@ compiler features — all landed and in `make test`:
   in a later unit (`TForm1 = class(TForm)`) inherits ancestor overrides.
 - A class is registered for RTTI if it *or an ancestor* has published members.
 
-Final mile to compile the dropped `test/gui/helloworld` unmodified: virtual
-`TComponent.Create(AOwner)` + `Application.CreateForm` metaclass (needs `class
-of` + runtime `ClassName`), `Dialogs.ShowMessage`, LCL unit stubs, `{$R *.lfm}`
-wildcard, and streamed-child → published-field wiring. The streaming + event
-engine itself is proven. **Self-contained handover for a fresh session:**
+The dropped `test/gui/helloworld` final mile landed: virtual
+`TComponent.Create(AOwner)`, `Application.CreateForm`, named `class of`
+metaclasses with runtime `ClassName`, `Dialogs.ShowMessage`, LCL unit stubs,
+`{$R *.lfm}` wildcard handling, and streamed-child → published-field wiring.
+The earlier plan remains as historical context in
 [`handover-final-mile.md`](handover-final-mile.md).
 
 ---
@@ -143,12 +143,13 @@ digest. That is the hard part — not a reason to drop the goal.
 
 ---
 
-## 3. Interfaces  ⬜  (next big language feature, after the LFM arc)
+## 3. Interfaces  ⬜  (intentionally deferred)
 
-The headline remaining language feature. The old gap analysis parked
-interfaces "indefinitely" over COM/Windows baggage — **that rationale is
-retired.** We do not need COM. Implement a lightweight, Linux-native model.
-Detailed planning is a separate session; this is the scoping outline.
+Interfaces remain a real language gap, but they are not active work. No
+current target source requires them, and even a lightweight Linux-native
+model adds substantial dispatch, ABI, and lifetime-design surface. Revisit
+when a concrete compatibility target needs them. The scoping outline below
+keeps that future decision explicit.
 
 ### Decisions to lock (in that session)
 
@@ -203,7 +204,7 @@ inheritance depth, method-resolution clauses, COM ARC.
 
 ## 4. Language gaps (smaller, opportunistic)
 
-- 🟡 **General pointer syntax.** Typed-pointer path (Phase 2 unblock) done:
+- ✅ **General pointer syntax.** Typed-pointer path (Phase 2 unblock) done:
   - ✅ C1 named pointer aliases `PFoo = ^TFoo` (carry element type).
   - ✅ C2 pointer indexing `p[i]` read+write, stride = element size.
   - ✅ C3 record-pointer field access `p^.field` (deref a `^TRec` then field).
@@ -211,14 +212,30 @@ inheritance depth, method-resolution clauses, COM ARC.
   - ✅ C4 pointer casts `PType(expr)` preserving element type. `AN_PTR_CAST`;
     indexing a cast strides by the cast's pointed-at element size
     (`test/test_ptr_cast.pas`).
-  - ⬜ pointer arithmetic `p + n` (currently unscaled/garbage; indexing is the
-    working substitute). `@var` address-of works for `@arr[i]`/`@x`.
+  - ✅ C5 scaled pointer arithmetic `p + n`, `p - n`, and `n + p`, including
+    typed pointer fields, record pointers, and casts. Untyped pointers use byte
+    stride. Test: `test/test_ptr_arithmetic.pas`.
+  - `@var` address-of works for `@arr[i]`/`@x`.
   See [`pascal-gap-analysis.md`](pascal-gap-analysis.md) §1.3.
 - ⬜ **Float intrinsics.** `Trunc`, `Round`, `Int`, `Float` not implemented
   (float arithmetic/compare/write itself is done).
+- ⬜ **Managed `AnsiString` representation.** Current Pascal strings are inline
+  fixed-capacity values with a length prefix, not heap-backed reference-counted
+  `AnsiString`s. Do this before ownership-heavy dynamic-array work so arrays of
+  strings can reuse the same managed-value initialization, assignment,
+  finalization, and copy-on-write rules. Decide the threading contract before
+  fixing the ABI: supporting strings shared across threads requires atomic
+  refcount increments/decrements or another synchronization policy. Atomics
+  add assignment overhead; a mutex per operation is likely worse. A
+  single-threaded contract is cheaper but must be explicit. Atomic refcounts
+  protect lifetime accounting only: concurrent mutation and copy-on-write
+  uniqueness checks still require an external synchronization rule or a
+  stronger runtime design.
 - 🟡 **Dynamic arrays.** Work for scalar elements. Missing: reference counting
   / copy-on-grow (content preserved), reclaim of freed blocks, `array of
-  record` / `array of string`, and dynamic arrays as params / results.
+  record` / `array of string`, and dynamic arrays as params / results. Order:
+  allocator foundations → managed `AnsiString` ownership model → dynamic-array
+  depth.
 - 🟡 **Heap allocator.** `GetMem`/`FreeMem` now do real free-list reuse on the
   IR backend (8-byte size header per block + single free list, first-fit, no
   split/coalesce). Enough that
@@ -278,9 +295,9 @@ inheritance depth, method-resolution clauses, COM ARC.
     This is a compatibility convenience for imported APIs, not a Pascal mode;
     it should not weaken `{$CASESENSITIVE ON}` Pascal code. Add warnings support
     before implementing so accepted spelling mistakes are visible.
-  - Disambiguation tooling, useful regardless and **both currently missing**:
-    qualified `UnitName.Symbol` calls (verified unsupported — `math.Min(..)`
-    errors), and a unit-rename import. `uses X as Y` is **not** standard Pascal
+  - ✅ Qualified `UnitName.Symbol` lookup resolves imported-unit symbols and
+    overloaded routine calls. Test: `test/test_qualified_units.pas`.
+  - A unit-rename import remains missing. `uses X as Y` is **not** standard Pascal
     (that's C#/Python `as`); Delphi has `uses U in 'file'` + dotted namespaces
     but no rename-import — a rename would be a dialect extension.
   - Unicode is out of scope for identifiers (Pascal/C identifiers are ASCII;
@@ -293,7 +310,8 @@ inheritance depth, method-resolution clauses, COM ARC.
   comparisons. Set literals, named set types, `in`, nested algebra, and
   RTTI-backed set properties remain covered. Locals, record fields, `var`
   params, and by-value reads are covered by `test/test_set_shapes.pas`.
-  Set-valued function results remain part of the aggregate-return ABI gap.
+  Set-valued and record-valued function results use the shared hidden-
+  destination aggregate-return ABI; see `test/test_aggregate_results.pas`.
 - ✅ **Explicit `inherited` calls.** Parent-chain static dispatch works for
   constructors, methods, bare `inherited`, and inherited function results.
   Test: `test/test_inherited.pas`.

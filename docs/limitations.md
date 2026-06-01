@@ -24,10 +24,16 @@ specific compatibility statement covers it.
 - `{$mode objfpc}` and `-Mobjfpc` are accepted markers, not a complete
   emulation of every Object FPC language rule.
 - Alternate Pascal modes such as Delphi mode are not implemented.
-- Properties, published RTTI, class references, explicit `inherited` calls,
-  and virtual/override dispatch are implemented for the covered subset.
-  Interfaces, complete metaclass syntax, and broader class semantics remain
-  incomplete.
+- Properties, published RTTI, class references, named `class of` metaclass
+  aliases, explicit `inherited` calls, and virtual/override dispatch are
+  implemented for the covered subset. Metaclass aliases reuse pointer-backed
+  class-reference storage; stricter descendant-assignment enforcement and
+  broader class semantics remain incomplete. Interfaces are intentionally
+  deferred until a concrete target requires their dispatch and lifetime model.
+- Visibility sections are parsed because `published` drives RTTI.
+  Private/protected access restrictions are intentionally not enforced:
+  enforcing them enables no new programs and is deferred until compatibility
+  pressure justifies it.
 - Exception handling supports catch-all and exact user-class typed
   `try/except` handlers, `try/finally`, `raise <expr>`, and handler re-raise.
   A built-in `Exception` hierarchy, inherited handler matching, message
@@ -49,36 +55,43 @@ specific compatibility statement covers it.
   builtin without requiring ordinary library-call code generation.
 - Pointer-sized types and layout (`Pointer`, `NativeInt`, `PtrInt`, class
   references) are defined for x86-64. Named typed pointers, address-of,
-  dereference, `nil`, casts, checks, indexing, and record-pointer fields are
-  covered. Scaled pointer arithmetic remains future work.
+  dereference, `nil`, casts, checks, indexing, record-pointer fields, and
+  scaled typed-pointer arithmetic are covered. Untyped pointers use byte
+  stride because they have no pointed-at type.
 - Generic call-site specialization syntax and alternative generic declaration
   forms are not implemented contracts.
 - Set literals, `in` membership, RTTI-backed set properties, assignment,
   algebra, comparisons, local values, record fields, and parameters are
-  covered. Set-valued function results still need aggregate-return ABI work.
+  covered. Set-valued and record-valued function results use the shared
+  hidden-destination aggregate-return ABI.
 
 ## Pascal Directive Gaps
 
-Implemented conditional directives are limited to named symbols:
+Implemented conditional directives include named symbols and a small
+expression language:
 
 ```pascal
 {$define NAME}
 {$undef NAME}
 {$ifdef NAME}
 {$ifndef NAME}
+{$if defined(NAME) and not defined(OTHER)}
+{$elseif 1}
 {$else}
 {$endif}
 ```
 
 Missing or incomplete:
 
-- `{$if expression}` and `{$elseif ...}`.
+- Expression operators beyond `defined(NAME)`, bare symbols, `not`, `and`,
+  `or`, parentheses, `0`, and `1`.
 - Define values or macro replacement.
-- FPC warning/error/message directives.
 - FPC compile switches such as checking, optimization, and code-generation
   states.
-- Complete conditional-include semantics; includes are currently expanded
-  before Pascal conditional processing.
+
+`{$warning text}`, `{$message text}`, and `{$error text}` are active-branch
+diagnostics. Includes are expanded only from active Pascal conditional
+branches; include expansion intentionally remains one level deep.
 
 Unknown Pascal directives are presently ignored as comments. This is useful
 for bootstrap source markers, but it is not evidence that their semantics are
@@ -88,6 +101,10 @@ implemented.
 
 - PXX does not provide the FPC RTL or its complete set of units.
 - Available built-ins and project units cover tested programs only.
+- Pascal strings are currently inline fixed-capacity values, not heap-backed
+  reference-counted `AnsiString`s. A future managed-string representation must
+  define whether cross-thread sharing is supported before choosing atomic or
+  otherwise synchronized reference-count updates.
 - FPC applications depending on `SysUtils`, containers, streams, rich exception classes,
   platform abstractions, or package ecosystems cannot be assumed to compile.
 
@@ -155,7 +172,7 @@ Compatibility is split into separate questions:
 | --- | --- |
 | Syntax | Tested Pascal subset only. |
 | Semantics | Covered behavior in regression tests only. |
-| Directives | Basic named conditional compilation and strict overload mode. |
+| Directives | Named and expression conditional compilation, active-branch includes, diagnostics, and strict overload mode. |
 | RTL | No FPC RTL compatibility claim. |
 | ABI | Native ELF/shared-call support only; no FPC ABI claim. |
 | Tooling | PXX commands and build flow only. |

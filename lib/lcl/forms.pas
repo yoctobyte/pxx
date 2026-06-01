@@ -20,13 +20,15 @@ type
     procedure ApplyCaption; override;
   end;
 
+  TFormClass = class of TForm;
+
   TApplication = class
   private
     FMainForm: TForm;
   public
     Scaled: Boolean;            { accepted for LCL source compat (no effect yet) }
     procedure Initialize;
-    procedure CreateForm(formClass: Pointer; var ref: TForm);
+    procedure CreateForm(formClass: TFormClass; var ref: TForm);
     procedure Run;
   end;
 
@@ -73,7 +75,7 @@ end;
   class's runtime name, hand the instance back to the caller's var, and keep it
   as the main form. No constructor is run (CreateInstance just sets the VMT);
   the .lfm + Realize drive the rest, matching the LCL streaming contract. }
-procedure TApplication.CreateForm(formClass: Pointer; var ref: TForm);
+procedure TApplication.CreateForm(formClass: TFormClass; var ref: TForm);
 var meta: PClassRTTI; inst: TForm; comp: TComponent; nm: string;
 begin
   meta := formClass;
