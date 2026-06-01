@@ -311,6 +311,40 @@ begin
   ASTTk[Result] := Ord(Syms[symIdx].TypeKind);
 end;
 
+function PyIntLiteralText(n: Int64): AnsiString;
+var rev, res: AnsiString; negative: Boolean; i: Integer;
+begin
+  rev := '';
+  res := '';
+  negative := n < 0;
+  if negative then n := -n;
+  if n = 0 then
+    AppendChar(rev, '0')
+  else
+    while n > 0 do
+    begin
+      AppendChar(rev, Chr(Ord('0') + (n mod 10)));
+      n := n div 10;
+    end;
+  if negative then AppendChar(res, '-');
+  for i := Length(rev) downto 1 do AppendChar(res, rev[i]);
+  Result := res;
+end;
+
+procedure PyCoerceAssignmentRHS(lhsTk: TTypeKind; rhsNode: Integer);
+begin
+  { Numeric casts are not represented by a shared AST node yet. For widened
+    Double slots, rewrite integer literals at parse time so the ordinary
+    floating store receives IEEE bits instead of an integer payload. }
+  if (lhsTk = tyDouble) and (ASTKind[rhsNode] = AN_INT_LIT) and
+     TypeIsOrdinal(IntToTypeKind(ASTTk[rhsNode])) then
+  begin
+    ASTKind[rhsNode] := AN_FLOAT_LIT;
+    ASTIVal[rhsNode] := StrToDoubleBits(PyIntLiteralText(ASTIVal[rhsNode]));
+    ASTTk[rhsNode] := Ord(tyDouble);
+  end;
+end;
+
 function PyParseBlock: Integer; forward;
 function PyParseStatement: Integer; forward;
 
@@ -496,6 +530,7 @@ begin
       symIdx := AllocVar(name, tk);
     end;
     lhsNode := PyMakeIdent(symIdx);
+    PyCoerceAssignmentRHS(Syms[symIdx].TypeKind, CurASTNode);
     node := AllocNode(AN_ASSIGN);
     ASTLeft[node] := lhsNode;
     ASTRight[node] := CurASTNode;
