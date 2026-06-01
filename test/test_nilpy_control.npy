@@ -1,0 +1,35 @@
+def classify(n: int) -> int:
+    if n == 0:
+        return 10
+    elif n == 1:
+        pass
+        return 20
+    else:
+        return 30
+
+print(classify(0))
+print(classify(1))
+print(classify(2))
+
+total = 0
+for i in range(4):
+    total = total + i
+print(total)
+
+for j in range(2, 5):
+    total = total + j
+print(total)
+
+outer = 0
+inner_total = 0
+while outer < 2:
+    inner = 0
+    while inner < 3:
+        inner_total = inner_total + 1
+        inner = inner + 1
+    outer = outer + 1
+print(inner_total)
+
+pass
+print((1 +
+       2))

@@ -68,10 +68,28 @@ test-nilpy: $(COMPILER)
 	test "$$(/tmp/test_nil_python_core26)" = "$$(printf '0\n1\n1\n2\n3\n5\n10')"
 	./$(COMPILER) test/test_nilpy_variant.npy /tmp/test_nilpy_variant26
 	test "$$(/tmp/test_nilpy_variant26)" = "$$(printf '5\n 3.140000000000000E+000\n1')"
+	./$(COMPILER) test/test_nilpy_control.npy /tmp/test_nilpy_control26
+	test "$$(/tmp/test_nilpy_control26)" = "$$(printf '10\n20\n30\n6\n15\n6\n3')"
+	./$(COMPILER) test/test_nilpy_local_variant.npy /tmp/test_nilpy_local_variant26
+	test "$$(/tmp/test_nilpy_local_variant26)" = "$$(printf '5\n 3.140000000000000E+000\n1\n7')"
+	./$(COMPILER) test/test_nilpy_numeric_widen.npy /tmp/test_nilpy_numeric_widen26
+	test "$$(/tmp/test_nilpy_numeric_widen26)" = "3"
 	! ./$(COMPILER) test/test_nilpy_slash_fail.npy /tmp/test_nilpy_slash_fail26 > /tmp/test_nilpy_slash_fail.log 2>&1
 	grep -q "unsupported operator /; use // for integer division" /tmp/test_nilpy_slash_fail.log
 	! ./$(COMPILER) test/test_nilpy_string_variant_fail.npy /tmp/test_nilpy_string_variant_fail26 > /tmp/test_nilpy_string_variant_fail.log 2>&1
 	grep -q "string-typed Variant pending managed AnsiString" /tmp/test_nilpy_string_variant_fail.log
+	! ./$(COMPILER) test/test_nilpy_missing_param_annotation_fail.npy /tmp/test_nilpy_missing_param_annotation_fail26 > /tmp/test_nilpy_missing_param_annotation_fail.log 2>&1
+	grep -q "unexpected token" /tmp/test_nilpy_missing_param_annotation_fail.log
+	! ./$(COMPILER) test/test_nilpy_missing_result_annotation_fail.npy /tmp/test_nilpy_missing_result_annotation_fail26 > /tmp/test_nilpy_missing_result_annotation_fail.log 2>&1
+	grep -q "unexpected token" /tmp/test_nilpy_missing_result_annotation_fail.log
+	! ./$(COMPILER) test/test_nilpy_range_step_fail.npy /tmp/test_nilpy_range_step_fail26 > /tmp/test_nilpy_range_step_fail.log 2>&1
+	grep -q "range step other than 1 is not supported in v1" /tmp/test_nilpy_range_step_fail.log
+	! ./$(COMPILER) test/test_nilpy_five_params_fail.npy /tmp/test_nilpy_five_params_fail26 > /tmp/test_nilpy_five_params_fail.log 2>&1
+	grep -q "more than four parameters are not supported in v1" /tmp/test_nilpy_five_params_fail.log
+	! ./$(COMPILER) test/test_nilpy_inconsistent_dedent_fail.npy /tmp/test_nilpy_inconsistent_dedent_fail26 > /tmp/test_nilpy_inconsistent_dedent_fail.log 2>&1
+	grep -q "inconsistent dedent" /tmp/test_nilpy_inconsistent_dedent_fail.log
+	! ./$(COMPILER) test/test_nilpy_mixed_indent_fail.npy /tmp/test_nilpy_mixed_indent_fail26 > /tmp/test_nilpy_mixed_indent_fail.log 2>&1
+	grep -q "mixing tabs and spaces for indentation" /tmp/test_nilpy_mixed_indent_fail.log
 
 test: $(COMPILER) fpc-check
 	./$(COMPILER) test/hello.pas /tmp/hello26

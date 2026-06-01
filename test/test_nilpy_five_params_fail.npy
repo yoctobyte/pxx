@@ -1,0 +1,4 @@
+def bad(a: int, b: int, c: int, d: int, e: int) -> int:
+    return a
+
+print(bad(1, 2, 3, 4, 5))
