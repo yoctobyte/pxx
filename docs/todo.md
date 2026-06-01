@@ -137,8 +137,12 @@ Full phased plan: **[`plan-c-header-import.md`](plan-c-header-import.md)**.
   integer regs (independent classing), float return via xmm0. libm works.
   Regression `test/test_c_float.pas`. External calls only; internal Pascal
   convention unchanged.
-- ⬜ Remaining: >6 integer / >8 vector argument stack spill, Stage C macro
-  soup (gtk), Stage D recovery, Stage E final wiring.
+- ✅ Argument stack spill: >6 integer / >8 vector args spill to the stack
+  (SysV, 16-byte aligned). Required fixing a hardcoded `TProc` record layout
+  (Params reserved too little space; 9+ param functions corrupted the next
+  proc — latent self-host bug). Regression `test/test_c_argspill.pas`.
+- ⬜ Remaining: Stage C macro soup (gtk), Stage D recovery, Stage E final
+  wiring.
 
 
 Direct Pascal `external 'soname'` binding (used for the GTK widgetset) is a

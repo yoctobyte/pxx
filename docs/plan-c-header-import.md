@@ -41,10 +41,18 @@ Status: in progress. Owner doc for todo §2c. Companion to `C_INTEROP.md`
   from xmm0 into rax; AL set to the vector count for variadics. Applies to
   `ProcExternal` calls only — internal Pascal calls keep the all-integer
   convention. libm works via `external 'libm.so.6'`. Regression:
-  `test/test_c_float.pas` (pow/sqrt/ldexp). Still absent: >6 integer / >8
-  vector argument stack spill.
+  `test/test_c_float.pas` (pow/sqrt/ldexp).
+- **Argument stack spill, done.** External calls spill integer args beyond
+  rdi..r9 and floating args beyond xmm0..xmm7 to the stack (SysV right-to-left,
+  16-byte aligned, in a self-contained IR_CALL sequence; AL set for variadics).
+  This also required fixing a hardcoded `TProc` record layout: `Params`
+  reserved too little space, so functions with 9+ parameters corrupted the next
+  `Procs[]` entry — a latent self-host bug never hit because no compiler routine
+  has 9+ params (FPC builds lay TProc out natively, so only self-host was
+  affected). Regression: `test/test_c_argspill.pas` (sum7/dsum10/mix9 via a
+  cc-built `.so`).
 - **Next:** a real pthread end-to-end (header import + `pthread_create`/
-  `pthread_join`); then Stage C macro soup + >6-arg stack spill (gtk).
+  `pthread_join`); then Stage C macro soup (gtk).
 
 ## Goal
 
