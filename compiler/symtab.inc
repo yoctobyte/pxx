@@ -710,6 +710,7 @@ begin
     19: Result := 8;  { tyDouble }
     20: Result := 10; { tyExtended }
     21: Result := 32; { tySet }
+    22: Result := 16; { tyVariant — 8-byte tag + 8-byte payload }
   end;
 end;
 

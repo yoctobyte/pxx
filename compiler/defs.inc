@@ -162,6 +162,18 @@ const
   IR_SET_BINOP    = 41;  { IRA/IRB = set addresses; IRC = op; IRIVal = BSS scratch offset }
   IR_SET_CMP      = 42;  { IRA/IRB = set addresses; IRC = comparison op }
 
+  { Variant tag (VType) values, stored in the first 8 bytes of a tyVariant slot.
+    Payload (next 8 bytes) interpreted per tag. Closed scalar set; vtObject is a
+    reserved seam for the future class-boxing tier (see lib/rtl/anybox.pas). }
+  VT_EMPTY   = 0;   { unassigned slot; payload ignored }
+  VT_INT     = 1;   { payload = sign-extended Int64 }
+  VT_INT64   = 2;   { payload = Int64 }
+  VT_DOUBLE  = 3;   { payload = IEEE-754 double bits }
+  VT_BOOL    = 4;   { payload = 0/1 }
+  VT_CHAR    = 5;   { payload = byte in low 8 bits }
+  VT_STRING  = 6;   { payload = managed string ref (pending managed AnsiString) }
+  VT_OBJECT  = 7;   { reserved: payload = pointer to boxed class/record (not yet implemented) }
+
   EXC_FRAME_SIZE = 80;
   EXC_JMP_OFFSET = 8;
 
@@ -297,7 +309,8 @@ type
     tySingle,    { 18: Single — 4-byte IEEE 754, SSE2 xmm }
     tyDouble,    { 19: Double/Real — 8-byte IEEE 754, SSE2 xmm }
     tyExtended,  { 20: Extended — 10-byte x87, load/store via x87; ops in SSE2 double }
-    tySet        { 21: Set — 32-byte bitset }
+    tySet,       { 21: Set — 32-byte bitset }
+    tyVariant    { 22: Variant — 16-byte tagged scalar value (8-byte tag + 8-byte payload) }
   );
 
   TSymKind  = (skLocal, skGlobal, skParam, skConst);
