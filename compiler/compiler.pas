@@ -15,6 +15,7 @@ uses SysUtils, BaseUnix;
 {$include lexer.inc}
 {$include clexer.inc}
 {$include blexer.inc}
+{$include pylexer.inc}
 {$include emit.inc}
 {$include symtab.inc}
 {$include exception_emit.inc}
@@ -25,6 +26,7 @@ procedure CPreprocess(var src: AnsiString; const baseDir: AnsiString); forward;
 {$include ir_codegen.inc}
 {$include cparser.inc}
 {$include bparser.inc}
+{$include pyparser.inc}
 {$include elfwriter.inc}
 {$include rtti_emit.inc}
 {$include resources_emit.inc}
@@ -32,7 +34,7 @@ procedure CPreprocess(var src: AnsiString; const baseDir: AnsiString); forward;
 
 { ===== Main ===== }
 
-var inFile, outFile, option, exePath: AnsiString; isC, isBasic, readingOptions: Boolean; n, i, j: Integer;
+var inFile, outFile, option, exePath: AnsiString; isC, isBasic, isNilPy, readingOptions: Boolean; n, i, j: Integer;
 begin
   DebugTrace := False;
   DumpIR := False;
@@ -133,6 +135,7 @@ begin
   n := Length(inFile);
   isC := (n >= 2) and (inFile[n] = 'c') and (inFile[n-1] = '.');
   isBasic := (n >= 4) and (inFile[n] = 's') and (inFile[n-1] = 'a') and (inFile[n-2] = 'b') and (inFile[n-3] = '.');
+  isNilPy := (n >= 4) and (inFile[n] = 'y') and (inFile[n-1] = 'p') and (inFile[n-2] = 'n') and (inFile[n-3] = '.');
 
   LoadFile(inFile, Source);
   if DebugTrace then writeln('Loaded file length: ', Length(Source));
@@ -143,7 +146,7 @@ begin
   CompiledUnitCount := 0;
   InitProcCount := 0;
   InInterface := False;
-  if (not isC) and (not isBasic) then
+  if (not isC) and (not isBasic) and (not isNilPy) then
     ExpandIncludes(Source, SourceFileDir);
   if DebugTrace then writeln('After include expansion: ', Length(Source));
 
@@ -179,7 +182,15 @@ begin
   AliasCount := 0;
   AddConst('StdErr', tyInteger, 2);
 
-  if isBasic then
+  if isNilPy then
+  begin
+    PyLexAll(False);
+    MainProgramTokCount := TokCount;
+    TokPos := 0;
+    Next;
+    ParsePyProgram;
+  end
+  else if isBasic then
   begin
     BLexAll(True);
     MainProgramTokCount := TokCount;
@@ -202,7 +213,7 @@ begin
     Next;
     ParseProgram;
   end;
-  if (not isC) and (not isBasic) then
+  if (not isC) and (not isBasic) and (not isNilPy) then
   begin
     EmitRTTI;
     if DumpRTTI then DumpRTTITables;
