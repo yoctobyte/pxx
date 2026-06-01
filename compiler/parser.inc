@@ -3795,6 +3795,7 @@ begin
       else if CaseEqual(lo, 'nativeint') or CaseEqual(lo, 'ptrint') then Result := tyNativeInt
       else if CaseEqual(lo, 'nativeuint') or CaseEqual(lo, 'ptruint') then Result := tyNativeUInt
       else if CaseEqual(lo, 'pointer') then Result := tyPointer
+      else if CaseEqual(lo, 'variant') then Result := tyVariant
       else
       begin
         if IsClassType(lo) then

@@ -173,6 +173,57 @@ begin
   else begin EmitB($48); EmitB($89); EmitB($07); end;                            { mov [rdi],rax }
 end;
 
+procedure EmitWriteVariant;
+{ On entry rax = address of a 16-byte variant slot: [tag:8][payload:8].
+  Reads the tag and dispatches to the matching scalar writer. Clobbers the
+  caller-saved set like the other write helpers; balances its own stack. }
+var pInt, pInt64, pBool, pDbl, pChar, jmpDefault, pEnd1, pEnd2: Integer;
+begin
+  EmitB($50);                                  { push rax            -> [rsp]=addr }
+  EmitB($48); EmitB($8B); EmitB($00);          { mov rax, [rax]       ; tag }
+
+  EmitB($48); EmitB($3D); EmitI32(VT_INT);     { cmp rax, VT_INT }
+  EmitB($0F); EmitB($84); pInt := CodeLen; EmitI32(0);
+  EmitB($48); EmitB($3D); EmitI32(VT_INT64);   { cmp rax, VT_INT64 }
+  EmitB($0F); EmitB($84); pInt64 := CodeLen; EmitI32(0);
+  EmitB($48); EmitB($3D); EmitI32(VT_BOOL);    { cmp rax, VT_BOOL }
+  EmitB($0F); EmitB($84); pBool := CodeLen; EmitI32(0);
+  EmitB($48); EmitB($3D); EmitI32(VT_DOUBLE);  { cmp rax, VT_DOUBLE }
+  EmitB($0F); EmitB($84); pDbl := CodeLen; EmitI32(0);
+  EmitB($48); EmitB($3D); EmitI32(VT_CHAR);    { cmp rax, VT_CHAR }
+  EmitB($0F); EmitB($84); pChar := CodeLen; EmitI32(0);
+  EmitB($E9); jmpDefault := CodeLen; EmitI32(0);   { default (empty/string/object): nothing }
+
+  { integer/bool: payload as signed int64 }
+  Patch32(pInt,   CodeLen - (pInt   + 4));
+  Patch32(pInt64, CodeLen - (pInt64 + 4));
+  Patch32(pBool,  CodeLen - (pBool  + 4));
+  EmitB($48); EmitB($8B); EmitB($04); EmitB($24);   { mov rax, [rsp]   ; addr }
+  EmitB($48); EmitB($8B); EmitB($40); EmitB($08);   { mov rax, [rax+8] ; payload }
+  EmitwriteInt;
+  EmitB($E9); pEnd1 := CodeLen; EmitI32(0);
+
+  { double: payload bits -> xmm0 }
+  Patch32(pDbl, CodeLen - (pDbl + 4));
+  EmitB($48); EmitB($8B); EmitB($04); EmitB($24);   { mov rax, [rsp] }
+  EmitB($48); EmitB($8B); EmitB($40); EmitB($08);   { mov rax, [rax+8] }
+  EmitB($66); EmitB($48); EmitB($0F); EmitB($6E); EmitB($C0); { movq xmm0, rax }
+  EmitWriteFloatSci;
+  EmitB($E9); pEnd2 := CodeLen; EmitI32(0);
+
+  { char: payload low byte }
+  Patch32(pChar, CodeLen - (pChar + 4));
+  EmitB($48); EmitB($8B); EmitB($04); EmitB($24);   { mov rax, [rsp] }
+  EmitB($0F); EmitB($B6); EmitB($40); EmitB($08);   { movzx eax, byte [rax+8] }
+  EmitwriteChar;
+
+  { Lend }
+  Patch32(jmpDefault, CodeLen - (jmpDefault + 4));
+  Patch32(pEnd1, CodeLen - (pEnd1 + 4));
+  Patch32(pEnd2, CodeLen - (pEnd2 + 4));
+  EmitB($48); EmitB($83); EmitB($C4); EmitB($08);   { add rsp, 8       ; discard addr }
+end;
+
 procedure IREmitNode(node: Integer);
 var left, right, valNode, symIdx, si: Integer;
     op: TTokenKind;
@@ -780,7 +831,13 @@ begin
         valNode := IRA[node];
         wid  := IRB[node];   { field width, 0 = none }
         decs := IRC[node];   { decimals, -1 = none }
-        if TypeIsFloat(IntToTypeKind(IRTk[node])) then
+        if IntToTypeKind(IRTk[node]) = tyVariant then
+        begin
+          { valNode lowers to the variant slot address; dispatch on the tag. }
+          IREmitNode(valNode);
+          EmitWriteVariant;
+        end
+        else if TypeIsFloat(IntToTypeKind(IRTk[node])) then
         begin
           IREmitNode(valNode);                                        { double bits -> rax }
           EmitB($66); EmitB($48); EmitB($0F); EmitB($6E); EmitB($C0); { movq xmm0, rax }
@@ -1452,6 +1509,48 @@ begin
       begin
         IREmitNode(IRA[node]);   { rax = target address }
         EmitReadVarParse(IntToTypeKind(IRTk[node]));
+      end;
+
+    IR_VAR_STORE:
+      begin
+        { Box a scalar (or copy a whole variant) into a 16-byte variant slot.
+          IRA = dest addr, IRB = value/src addr, IRC = source TTypeKind ord. }
+        tk := IntToTypeKind(IRC[node]);
+        if tk = tyVariant then
+        begin
+          { 16-byte variant-to-variant copy }
+          IREmitNode(IRB[node]);                 { rax = src addr }
+          EmitB($50);
+          IREmitNode(IRA[node]);                 { rax = dest addr }
+          EmitB($48); EmitB($89); EmitB($C7);    { mov rdi, rax }
+          EmitB($5E);                            { pop rsi }
+          EmitB($48); EmitB($C7); EmitB($C1); EmitI32(16); { mov rcx, 16 }
+          EmitB($F3); EmitB($A4);                { rep movsb }
+        end
+        else
+        begin
+          { select VType tag from the source scalar kind }
+          case tk of
+            tyInteger, tyInt8, tyInt16, tyInt32: size := VT_INT;
+            tyInt64, tyNativeInt:                size := VT_INT64;
+            tyUInt8, tyUInt16, tyUInt32, tyUInt64,
+            tyNativeUInt, tyPointer:             size := VT_INT64;
+            tyBoolean:                           size := VT_BOOL;
+            tyChar:                              size := VT_CHAR;
+            tyDouble:                            size := VT_DOUBLE;
+          else
+            Error('Variant := this type not yet supported (scalar tags only; string/single/extended pending)');
+          end;
+          IREmitNode(IRB[node]);                 { rax = scalar value (float: double bits) }
+          if (tk = tyInteger) or (tk = tyInt8) or (tk = tyInt16) or (tk = tyInt32) then
+          begin EmitB($48); EmitB($98); end;     { cdqe: sign-extend eax -> rax }
+          EmitB($50);                            { push rax  (payload) }
+          IREmitNode(IRA[node]);                 { rax = dest addr }
+          EmitB($48); EmitB($89); EmitB($C7);    { mov rdi, rax }
+          EmitB($59);                            { pop rcx   (payload) }
+          EmitB($48); EmitB($C7); EmitB($07); EmitI32(size);  { mov qword [rdi], tag }
+          EmitB($48); EmitB($89); EmitB($4F); EmitB($08);     { mov [rdi+8], rcx }
+        end;
       end;
 
     IR_COPY_REC:
