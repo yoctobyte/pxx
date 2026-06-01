@@ -133,8 +133,12 @@ Full phased plan: **[`plan-c-header-import.md`](plan-c-header-import.md)**.
   constants with a small const-expr evaluator, and function-pointer typedefs
   (as opaque pointers). Full struct field layout deferred per plan. Regressions
   `test/test_c_typedef.pas`, `test/test_c_enum.pas`.
-- ⬜ Remaining: SSE float C-call ABI (libm), Stage C macro soup + >6-arg stack
-  spill (gtk), Stage D recovery, Stage E final wiring.
+- ✅ SysV float C-call ABI: float args in xmm0..7, int args in the six
+  integer regs (independent classing), float return via xmm0. libm works.
+  Regression `test/test_c_float.pas`. External calls only; internal Pascal
+  convention unchanged.
+- ⬜ Remaining: >6 integer / >8 vector argument stack spill, Stage C macro
+  soup (gtk), Stage D recovery, Stage E final wiring.
 
 
 Direct Pascal `external 'soname'` binding (used for the GTK widgetset) is a

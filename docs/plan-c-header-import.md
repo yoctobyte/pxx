@@ -35,9 +35,16 @@ Status: in progress. Owner doc for todo §2c. Companion to `C_INTEROP.md`
   Full struct field layout is deferred per the original plan — opaque
   pointer-only suffices for the pthread/GTK call surface, which touches these
   structs only through pointers.
+- **Float C-call ABI, done.** External calls follow the SysV AMD64 FP
+  convention: float args fill xmm0..xmm7, integer/pointer args fill the six
+  integer registers, classes counted independently; float/double return read
+  from xmm0 into rax; AL set to the vector count for variadics. Applies to
+  `ProcExternal` calls only — internal Pascal calls keep the all-integer
+  convention. libm works via `external 'libm.so.6'`. Regression:
+  `test/test_c_float.pas` (pow/sqrt/ldexp). Still absent: >6 integer / >8
+  vector argument stack spill.
 - **Next:** a real pthread end-to-end (header import + `pthread_create`/
-  `pthread_join`); then SSE float ABI (libm); then Stage C macro soup +
-  >6-arg stack spill (gtk).
+  `pthread_join`); then Stage C macro soup + >6-arg stack spill (gtk).
 
 ## Goal
 
