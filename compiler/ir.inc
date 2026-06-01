@@ -76,6 +76,7 @@ begin
     IR_SET_COPY: Result := 'set_copy';
     IR_SET_BINOP: Result := 'set_binop';
     IR_SET_CMP: Result := 'set_cmp';
+    IR_VAR_STORE: Result := 'var_store';
   else
     Result := 'unknown';
   end;
@@ -123,7 +124,7 @@ begin
   { Pass 1: populate seen labels and verify uniqueness }
   for i := 0 to IRCount - 1 do
   begin
-    if (IRTk[i] < 0) or (IRTk[i] > Ord(tySet)) then
+    if (IRTk[i] < 0) or (IRTk[i] > Ord(tyVariant)) then
       Error('invalid type kind in IR node');
 
     if IRKind[i] = IR_LABEL then
@@ -299,6 +300,12 @@ begin
 
       IR_UNSUPPORTED:
         begin end;
+
+      IR_VAR_STORE:
+      begin
+        IRRequireNode(IRA[i], 'var_store dest');
+        IRRequireNode(IRB[i], 'var_store value');
+      end;
 
     else
       Error('unknown IR opcode');
@@ -831,6 +838,26 @@ begin
         Result := IRAppend(IR_COPY_REC, leftAddr, right, -1,
                            RecSize(ResolveNodeRec(ASTLeft[node])), Ord(tyRecord));
       end
+      else if IntToTypeKind(ASTTk[ASTLeft[node]]) = tyVariant then
+      begin
+        { Variant target. IRC carries the source kind: tyVariant => full 16-byte
+          copy; any scalar kind => box it (tag + payload) via IR_VAR_STORE. }
+        leftAddr := IRLowerAddress(ASTLeft[node]);
+        if IntToTypeKind(ASTTk[ASTRight[node]]) = tyVariant then
+        begin
+          if rhsIsLValue then
+            right := IRLowerAddress(ASTRight[node])
+          else
+            right := IRLowerAST(ASTRight[node]);
+          Result := IRAppend(IR_VAR_STORE, leftAddr, right, Ord(tyVariant), 0, Ord(tyVariant));
+        end
+        else
+        begin
+          value := IRLowerAST(ASTRight[node]);
+          Result := IRAppend(IR_VAR_STORE, leftAddr, value,
+                             Ord(IntToTypeKind(ASTTk[ASTRight[node]])), 0, Ord(tyVariant));
+        end;
+      end
       else
       begin
         value := IRLowerAST(ASTRight[node]);
@@ -1274,13 +1301,23 @@ begin
           IRTk = the source expression type (for write dispatch). }
         if ASTKind[item] = AN_ARG then
         begin
-          value := IRLowerAST(ASTLeft[item]);
+          { A Variant arg writes its slot address; codegen reads tag+payload and
+            dispatches at runtime (IRTk stays tyVariant). }
+          if IntToTypeKind(ASTTk[ASTLeft[item]]) = tyVariant then
+            value := IRLowerAddress(ASTLeft[item])
+          else
+            value := IRLowerAST(ASTLeft[item]);
           outNode := IRAppend(IR_WRITE, value, ASTIVal[item], ASTSOffset[item], 0, Ord(IntToTypeKind(ASTTk[ASTLeft[item]])));
         end
         else if ASTKind[item] = AN_PAIR then
         begin
           value := IRLowerAST(ASTLeft[item]);
           outNode := IRAppend(IR_WRITE, value, -1, -1, 0, IRTk[value]);
+        end
+        else if IntToTypeKind(ASTTk[item]) = tyVariant then
+        begin
+          value := IRLowerAddress(item);
+          outNode := IRAppend(IR_WRITE, value, -1, -1, 0, Ord(tyVariant));
         end
         else
         begin

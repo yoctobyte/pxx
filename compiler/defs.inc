@@ -161,6 +161,7 @@ const
   IR_SET_COPY     = 40;  { IRA = dest addr; IRB = src addr; copy full 32-byte set }
   IR_SET_BINOP    = 41;  { IRA/IRB = set addresses; IRC = op; IRIVal = BSS scratch offset }
   IR_SET_CMP      = 42;  { IRA/IRB = set addresses; IRC = comparison op }
+  IR_VAR_STORE    = 43;  { IRA = dest variant addr; IRB = value; IRC = source TTypeKind ord (tyVariant ord = 16-byte copy) }
 
   { Variant tag (VType) values, stored in the first 8 bytes of a tyVariant slot.
     Payload (next 8 bytes) interpreted per tag. Closed scalar set; vtObject is a
