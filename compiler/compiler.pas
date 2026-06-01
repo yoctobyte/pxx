@@ -158,6 +158,8 @@ begin
   GlobFixCount := 0; CallFixCount := 0; ProcAddrFixCount := 0;
   SymCount := 0; ProcCount := 0;
   CurrentUnitIdx := -1;
+  CTypedefCount := 0;
+  CTypedefCharLen := 0;
   ExternalCount := 0; DynCallCount := 0; CurrentCLibrary := '';
   FrameSize := 0; CurProc := -1;
   TokCount := 0; TokPos := 0; TokCharLen := 0;

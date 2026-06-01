@@ -138,7 +138,7 @@ end;
 
 procedure CPDefine(const line: AnsiString; p, last: Integer);
 var
-  mi, nameStart, nameEnd, valueStart, valueEnd, paramStart, paramEnd: Integer;
+  mi, nameStart, nameEnd, valueStart, valueEnd, paramStart, paramEnd, j: Integer;
 begin
   while (p <= last) and (line[p] in [' ', #9]) do Inc(p);
   if (p > last) or not CPIsIdentStart(line[p]) then Exit;
@@ -188,8 +188,13 @@ begin
   else
     CPMValueLen[mi] := 0;
   if DebugTrace then
-    writeln('C preprocessor: define #', mi, ' name-len=', CPMNameLen[mi],
-      ' value-len=', CPMValueLen[mi], ' function=', Ord(CPMFunction[mi]));
+  begin
+    write('C preprocessor: define #', mi, ' name=');
+    for j := 0 to CPMNameLen[mi] - 1 do write(CPrepChars[CPMNameOff[mi] + j]);
+    write(' value=');
+    for j := 0 to CPMValueLen[mi] - 1 do write(CPrepChars[CPMValueOff[mi] + j]);
+    writeln(' function=', Ord(CPMFunction[mi]));
+  end;
 end;
 
 procedure CPUndef(const line: AnsiString; p, last: Integer);
@@ -373,10 +378,25 @@ end;
 procedure CPExpandRange(const src: AnsiString; first, last, level: Integer;
   var dst: AnsiString); forward;
 
+procedure CPSetTempStrLength(level: Integer; len: Integer); forward;
+procedure CPExpandObjectForLevel(mi, level: Integer); forward;
+procedure CPExpandRangeForLevel(level: Integer; var dst: AnsiString); forward;
+procedure CPExpandFunctionForLevel(mi: Integer; const src: AnsiString; argCount, level: Integer); forward;
+procedure CPSetExpandedArgLength(level, len: Integer); forward;
+procedure CPExpandRangeForArgLevel(level: Integer; const src: AnsiString; first, last: Integer); forward;
+procedure CPAppendExpandedArgToDst(level: Integer; var dst: AnsiString); forward;
+
 function CPMacroIsActive(mi: Integer): Boolean;
 var i: Integer;
 begin
   Result := False;
+  if DebugTrace then
+  begin
+    write('Active macros (count=', CPActiveMacroCount, '): ');
+    for i := 0 to CPActiveMacroCount - 1 do
+      write(CPActiveMacros[i], ' ');
+    writeln;
+  end;
   for i := 0 to CPActiveMacroCount - 1 do
     if CPActiveMacros[i] = mi then
     begin
@@ -416,7 +436,6 @@ end;
 procedure CPExpandFunction(mi: Integer; const src: AnsiString;
   argCount, level: Integer; var dst: AnsiString);
 var p, last, a, b, ai, argBase, argP: Integer;
-    expandedArg: AnsiString;
 begin
   if DebugTrace then writeln('C preprocessor: expand function #', mi, ' level=', level);
   argBase := level * 16;
@@ -432,11 +451,9 @@ begin
       ai := CPParamIndex(mi, a, b - a + 1);
       if (ai >= 0) and (ai < argCount) then
       begin
-        SetLength(expandedArg, 0);
-        CPExpandRange(src, CPArgStart[argBase + ai], CPArgEnd[argBase + ai],
-          level + 1, expandedArg);
-        for argP := 1 to Length(expandedArg) do
-          AppendChar(dst, expandedArg[argP]);
+        CPSetExpandedArgLength(level, 0);
+        CPExpandRangeForArgLevel(level, src, CPArgStart[argBase + ai], CPArgEnd[argBase + ai]);
+        CPAppendExpandedArgToDst(level, dst);
       end
       else
       begin
@@ -461,7 +478,6 @@ var
   p, a, b, mi, q, depth, argc, argBase: Integer;
   quote: Char;
   quotedDone: Boolean;
-  tmp: AnsiString;
 begin
   if level > 32 then Error('C macro recursion');
   p := first;
@@ -506,9 +522,9 @@ begin
           CPActiveMacros[CPActiveMacroCount] := mi;
           Inc(CPActiveMacroCount);
           
-          SetLength(tmp, 0);
-          CPExpandObject(mi, level + 1, tmp);
-          CPExpandRange(tmp, 1, Length(tmp), level + 1, dst);
+          CPSetTempStrLength(level, 0);
+          CPExpandObjectForLevel(mi, level);
+          CPExpandRangeForLevel(level, dst);
           
           Dec(CPActiveMacroCount);
         end;
@@ -552,9 +568,9 @@ begin
             CPActiveMacros[CPActiveMacroCount] := mi;
             Inc(CPActiveMacroCount);
             
-            SetLength(tmp, 0);
-            CPExpandFunction(mi, src, argc, level + 1, tmp);
-            CPExpandRange(tmp, 1, Length(tmp), level + 1, dst);
+            CPSetTempStrLength(level, 0);
+            CPExpandFunctionForLevel(mi, src, argc, level);
+            CPExpandRangeForLevel(level, dst);
             
             Dec(CPActiveMacroCount);
           end;
@@ -569,6 +585,280 @@ begin
       AppendChar(dst, src[p]);
       Inc(p);
     end;
+  end;
+end;
+
+procedure CPSetTempStrLength(level: Integer; len: Integer);
+begin
+  case level of
+    0: SetLength(CPTempStr0, len);
+    1: SetLength(CPTempStr1, len);
+    2: SetLength(CPTempStr2, len);
+    3: SetLength(CPTempStr3, len);
+    4: SetLength(CPTempStr4, len);
+    5: SetLength(CPTempStr5, len);
+    6: SetLength(CPTempStr6, len);
+    7: SetLength(CPTempStr7, len);
+    8: SetLength(CPTempStr8, len);
+    9: SetLength(CPTempStr9, len);
+    10: SetLength(CPTempStr10, len);
+    11: SetLength(CPTempStr11, len);
+    12: SetLength(CPTempStr12, len);
+    13: SetLength(CPTempStr13, len);
+    14: SetLength(CPTempStr14, len);
+    15: SetLength(CPTempStr15, len);
+    16: SetLength(CPTempStr16, len);
+    17: SetLength(CPTempStr17, len);
+    18: SetLength(CPTempStr18, len);
+    19: SetLength(CPTempStr19, len);
+    20: SetLength(CPTempStr20, len);
+    21: SetLength(CPTempStr21, len);
+    22: SetLength(CPTempStr22, len);
+    23: SetLength(CPTempStr23, len);
+    24: SetLength(CPTempStr24, len);
+    25: SetLength(CPTempStr25, len);
+    26: SetLength(CPTempStr26, len);
+    27: SetLength(CPTempStr27, len);
+    28: SetLength(CPTempStr28, len);
+    29: SetLength(CPTempStr29, len);
+    30: SetLength(CPTempStr30, len);
+    31: SetLength(CPTempStr31, len);
+    32: SetLength(CPTempStr32, len);
+  end;
+end;
+
+procedure CPExpandObjectForLevel(mi, level: Integer);
+begin
+  case level of
+    0: CPExpandObject(mi, level + 1, CPTempStr0);
+    1: CPExpandObject(mi, level + 1, CPTempStr1);
+    2: CPExpandObject(mi, level + 1, CPTempStr2);
+    3: CPExpandObject(mi, level + 1, CPTempStr3);
+    4: CPExpandObject(mi, level + 1, CPTempStr4);
+    5: CPExpandObject(mi, level + 1, CPTempStr5);
+    6: CPExpandObject(mi, level + 1, CPTempStr6);
+    7: CPExpandObject(mi, level + 1, CPTempStr7);
+    8: CPExpandObject(mi, level + 1, CPTempStr8);
+    9: CPExpandObject(mi, level + 1, CPTempStr9);
+    10: CPExpandObject(mi, level + 1, CPTempStr10);
+    11: CPExpandObject(mi, level + 1, CPTempStr11);
+    12: CPExpandObject(mi, level + 1, CPTempStr12);
+    13: CPExpandObject(mi, level + 1, CPTempStr13);
+    14: CPExpandObject(mi, level + 1, CPTempStr14);
+    15: CPExpandObject(mi, level + 1, CPTempStr15);
+    16: CPExpandObject(mi, level + 1, CPTempStr16);
+    17: CPExpandObject(mi, level + 1, CPTempStr17);
+    18: CPExpandObject(mi, level + 1, CPTempStr18);
+    19: CPExpandObject(mi, level + 1, CPTempStr19);
+    20: CPExpandObject(mi, level + 1, CPTempStr20);
+    21: CPExpandObject(mi, level + 1, CPTempStr21);
+    22: CPExpandObject(mi, level + 1, CPTempStr22);
+    23: CPExpandObject(mi, level + 1, CPTempStr23);
+    24: CPExpandObject(mi, level + 1, CPTempStr24);
+    25: CPExpandObject(mi, level + 1, CPTempStr25);
+    26: CPExpandObject(mi, level + 1, CPTempStr26);
+    27: CPExpandObject(mi, level + 1, CPTempStr27);
+    28: CPExpandObject(mi, level + 1, CPTempStr28);
+    29: CPExpandObject(mi, level + 1, CPTempStr29);
+    30: CPExpandObject(mi, level + 1, CPTempStr30);
+    31: CPExpandObject(mi, level + 1, CPTempStr31);
+    32: CPExpandObject(mi, level + 1, CPTempStr32);
+  end;
+end;
+
+procedure CPExpandRangeForLevel(level: Integer; var dst: AnsiString);
+begin
+  case level of
+    0: CPExpandRange(CPTempStr0, 1, Length(CPTempStr0), level + 1, dst);
+    1: CPExpandRange(CPTempStr1, 1, Length(CPTempStr1), level + 1, dst);
+    2: CPExpandRange(CPTempStr2, 1, Length(CPTempStr2), level + 1, dst);
+    3: CPExpandRange(CPTempStr3, 1, Length(CPTempStr3), level + 1, dst);
+    4: CPExpandRange(CPTempStr4, 1, Length(CPTempStr4), level + 1, dst);
+    5: CPExpandRange(CPTempStr5, 1, Length(CPTempStr5), level + 1, dst);
+    6: CPExpandRange(CPTempStr6, 1, Length(CPTempStr6), level + 1, dst);
+    7: CPExpandRange(CPTempStr7, 1, Length(CPTempStr7), level + 1, dst);
+    8: CPExpandRange(CPTempStr8, 1, Length(CPTempStr8), level + 1, dst);
+    9: CPExpandRange(CPTempStr9, 1, Length(CPTempStr9), level + 1, dst);
+    10: CPExpandRange(CPTempStr10, 1, Length(CPTempStr10), level + 1, dst);
+    11: CPExpandRange(CPTempStr11, 1, Length(CPTempStr11), level + 1, dst);
+    12: CPExpandRange(CPTempStr12, 1, Length(CPTempStr12), level + 1, dst);
+    13: CPExpandRange(CPTempStr13, 1, Length(CPTempStr13), level + 1, dst);
+    14: CPExpandRange(CPTempStr14, 1, Length(CPTempStr14), level + 1, dst);
+    15: CPExpandRange(CPTempStr15, 1, Length(CPTempStr15), level + 1, dst);
+    16: CPExpandRange(CPTempStr16, 1, Length(CPTempStr16), level + 1, dst);
+    17: CPExpandRange(CPTempStr17, 1, Length(CPTempStr17), level + 1, dst);
+    18: CPExpandRange(CPTempStr18, 1, Length(CPTempStr18), level + 1, dst);
+    19: CPExpandRange(CPTempStr19, 1, Length(CPTempStr19), level + 1, dst);
+    20: CPExpandRange(CPTempStr20, 1, Length(CPTempStr20), level + 1, dst);
+    21: CPExpandRange(CPTempStr21, 1, Length(CPTempStr21), level + 1, dst);
+    22: CPExpandRange(CPTempStr22, 1, Length(CPTempStr22), level + 1, dst);
+    23: CPExpandRange(CPTempStr23, 1, Length(CPTempStr23), level + 1, dst);
+    24: CPExpandRange(CPTempStr24, 1, Length(CPTempStr24), level + 1, dst);
+    25: CPExpandRange(CPTempStr25, 1, Length(CPTempStr25), level + 1, dst);
+    26: CPExpandRange(CPTempStr26, 1, Length(CPTempStr26), level + 1, dst);
+    27: CPExpandRange(CPTempStr27, 1, Length(CPTempStr27), level + 1, dst);
+    28: CPExpandRange(CPTempStr28, 1, Length(CPTempStr28), level + 1, dst);
+    29: CPExpandRange(CPTempStr29, 1, Length(CPTempStr29), level + 1, dst);
+    30: CPExpandRange(CPTempStr30, 1, Length(CPTempStr30), level + 1, dst);
+    31: CPExpandRange(CPTempStr31, 1, Length(CPTempStr31), level + 1, dst);
+    32: CPExpandRange(CPTempStr32, 1, Length(CPTempStr32), level + 1, dst);
+  end;
+end;
+
+procedure CPExpandFunctionForLevel(mi: Integer; const src: AnsiString; argCount, level: Integer);
+begin
+  case level of
+    0: CPExpandFunction(mi, src, argCount, level + 1, CPTempStr0);
+    1: CPExpandFunction(mi, src, argCount, level + 1, CPTempStr1);
+    2: CPExpandFunction(mi, src, argCount, level + 1, CPTempStr2);
+    3: CPExpandFunction(mi, src, argCount, level + 1, CPTempStr3);
+    4: CPExpandFunction(mi, src, argCount, level + 1, CPTempStr4);
+    5: CPExpandFunction(mi, src, argCount, level + 1, CPTempStr5);
+    6: CPExpandFunction(mi, src, argCount, level + 1, CPTempStr6);
+    7: CPExpandFunction(mi, src, argCount, level + 1, CPTempStr7);
+    8: CPExpandFunction(mi, src, argCount, level + 1, CPTempStr8);
+    9: CPExpandFunction(mi, src, argCount, level + 1, CPTempStr9);
+    10: CPExpandFunction(mi, src, argCount, level + 1, CPTempStr10);
+    11: CPExpandFunction(mi, src, argCount, level + 1, CPTempStr11);
+    12: CPExpandFunction(mi, src, argCount, level + 1, CPTempStr12);
+    13: CPExpandFunction(mi, src, argCount, level + 1, CPTempStr13);
+    14: CPExpandFunction(mi, src, argCount, level + 1, CPTempStr14);
+    15: CPExpandFunction(mi, src, argCount, level + 1, CPTempStr15);
+    16: CPExpandFunction(mi, src, argCount, level + 1, CPTempStr16);
+    17: CPExpandFunction(mi, src, argCount, level + 1, CPTempStr17);
+    18: CPExpandFunction(mi, src, argCount, level + 1, CPTempStr18);
+    19: CPExpandFunction(mi, src, argCount, level + 1, CPTempStr19);
+    20: CPExpandFunction(mi, src, argCount, level + 1, CPTempStr20);
+    21: CPExpandFunction(mi, src, argCount, level + 1, CPTempStr21);
+    22: CPExpandFunction(mi, src, argCount, level + 1, CPTempStr22);
+    23: CPExpandFunction(mi, src, argCount, level + 1, CPTempStr23);
+    24: CPExpandFunction(mi, src, argCount, level + 1, CPTempStr24);
+    25: CPExpandFunction(mi, src, argCount, level + 1, CPTempStr25);
+    26: CPExpandFunction(mi, src, argCount, level + 1, CPTempStr26);
+    27: CPExpandFunction(mi, src, argCount, level + 1, CPTempStr27);
+    28: CPExpandFunction(mi, src, argCount, level + 1, CPTempStr28);
+    29: CPExpandFunction(mi, src, argCount, level + 1, CPTempStr29);
+    30: CPExpandFunction(mi, src, argCount, level + 1, CPTempStr30);
+    31: CPExpandFunction(mi, src, argCount, level + 1, CPTempStr31);
+    32: CPExpandFunction(mi, src, argCount, level + 1, CPTempStr32);
+  end;
+end;
+
+procedure CPSetExpandedArgLength(level, len: Integer);
+begin
+  case level of
+    0: SetLength(CPExpandedArg0, len);
+    1: SetLength(CPExpandedArg1, len);
+    2: SetLength(CPExpandedArg2, len);
+    3: SetLength(CPExpandedArg3, len);
+    4: SetLength(CPExpandedArg4, len);
+    5: SetLength(CPExpandedArg5, len);
+    6: SetLength(CPExpandedArg6, len);
+    7: SetLength(CPExpandedArg7, len);
+    8: SetLength(CPExpandedArg8, len);
+    9: SetLength(CPExpandedArg9, len);
+    10: SetLength(CPExpandedArg10, len);
+    11: SetLength(CPExpandedArg11, len);
+    12: SetLength(CPExpandedArg12, len);
+    13: SetLength(CPExpandedArg13, len);
+    14: SetLength(CPExpandedArg14, len);
+    15: SetLength(CPExpandedArg15, len);
+    16: SetLength(CPExpandedArg16, len);
+    17: SetLength(CPExpandedArg17, len);
+    18: SetLength(CPExpandedArg18, len);
+    19: SetLength(CPExpandedArg19, len);
+    20: SetLength(CPExpandedArg20, len);
+    21: SetLength(CPExpandedArg21, len);
+    22: SetLength(CPExpandedArg22, len);
+    23: SetLength(CPExpandedArg23, len);
+    24: SetLength(CPExpandedArg24, len);
+    25: SetLength(CPExpandedArg25, len);
+    26: SetLength(CPExpandedArg26, len);
+    27: SetLength(CPExpandedArg27, len);
+    28: SetLength(CPExpandedArg28, len);
+    29: SetLength(CPExpandedArg29, len);
+    30: SetLength(CPExpandedArg30, len);
+    31: SetLength(CPExpandedArg31, len);
+    32: SetLength(CPExpandedArg32, len);
+  end;
+end;
+
+procedure CPExpandRangeForArgLevel(level: Integer; const src: AnsiString; first, last: Integer);
+begin
+  case level of
+    0: CPExpandRange(src, first, last, level + 1, CPExpandedArg0);
+    1: CPExpandRange(src, first, last, level + 1, CPExpandedArg1);
+    2: CPExpandRange(src, first, last, level + 1, CPExpandedArg2);
+    3: CPExpandRange(src, first, last, level + 1, CPExpandedArg3);
+    4: CPExpandRange(src, first, last, level + 1, CPExpandedArg4);
+    5: CPExpandRange(src, first, last, level + 1, CPExpandedArg5);
+    6: CPExpandRange(src, first, last, level + 1, CPExpandedArg6);
+    7: CPExpandRange(src, first, last, level + 1, CPExpandedArg7);
+    8: CPExpandRange(src, first, last, level + 1, CPExpandedArg8);
+    9: CPExpandRange(src, first, last, level + 1, CPExpandedArg9);
+    10: CPExpandRange(src, first, last, level + 1, CPExpandedArg10);
+    11: CPExpandRange(src, first, last, level + 1, CPExpandedArg11);
+    12: CPExpandRange(src, first, last, level + 1, CPExpandedArg12);
+    13: CPExpandRange(src, first, last, level + 1, CPExpandedArg13);
+    14: CPExpandRange(src, first, last, level + 1, CPExpandedArg14);
+    15: CPExpandRange(src, first, last, level + 1, CPExpandedArg15);
+    16: CPExpandRange(src, first, last, level + 1, CPExpandedArg16);
+    17: CPExpandRange(src, first, last, level + 1, CPExpandedArg17);
+    18: CPExpandRange(src, first, last, level + 1, CPExpandedArg18);
+    19: CPExpandRange(src, first, last, level + 1, CPExpandedArg19);
+    20: CPExpandRange(src, first, last, level + 1, CPExpandedArg20);
+    21: CPExpandRange(src, first, last, level + 1, CPExpandedArg21);
+    22: CPExpandRange(src, first, last, level + 1, CPExpandedArg22);
+    23: CPExpandRange(src, first, last, level + 1, CPExpandedArg23);
+    24: CPExpandRange(src, first, last, level + 1, CPExpandedArg24);
+    25: CPExpandRange(src, first, last, level + 1, CPExpandedArg25);
+    26: CPExpandRange(src, first, last, level + 1, CPExpandedArg26);
+    27: CPExpandRange(src, first, last, level + 1, CPExpandedArg27);
+    28: CPExpandRange(src, first, last, level + 1, CPExpandedArg28);
+    29: CPExpandRange(src, first, last, level + 1, CPExpandedArg29);
+    30: CPExpandRange(src, first, last, level + 1, CPExpandedArg30);
+    31: CPExpandRange(src, first, last, level + 1, CPExpandedArg31);
+    32: CPExpandRange(src, first, last, level + 1, CPExpandedArg32);
+  end;
+end;
+
+procedure CPAppendExpandedArgToDst(level: Integer; var dst: AnsiString);
+var argP: Integer;
+begin
+  case level of
+    0: for argP := 1 to Length(CPExpandedArg0) do AppendChar(dst, CPExpandedArg0[argP]);
+    1: for argP := 1 to Length(CPExpandedArg1) do AppendChar(dst, CPExpandedArg1[argP]);
+    2: for argP := 1 to Length(CPExpandedArg2) do AppendChar(dst, CPExpandedArg2[argP]);
+    3: for argP := 1 to Length(CPExpandedArg3) do AppendChar(dst, CPExpandedArg3[argP]);
+    4: for argP := 1 to Length(CPExpandedArg4) do AppendChar(dst, CPExpandedArg4[argP]);
+    5: for argP := 1 to Length(CPExpandedArg5) do AppendChar(dst, CPExpandedArg5[argP]);
+    6: for argP := 1 to Length(CPExpandedArg6) do AppendChar(dst, CPExpandedArg6[argP]);
+    7: for argP := 1 to Length(CPExpandedArg7) do AppendChar(dst, CPExpandedArg7[argP]);
+    8: for argP := 1 to Length(CPExpandedArg8) do AppendChar(dst, CPExpandedArg8[argP]);
+    9: for argP := 1 to Length(CPExpandedArg9) do AppendChar(dst, CPExpandedArg9[argP]);
+    10: for argP := 1 to Length(CPExpandedArg10) do AppendChar(dst, CPExpandedArg10[argP]);
+    11: for argP := 1 to Length(CPExpandedArg11) do AppendChar(dst, CPExpandedArg11[argP]);
+    12: for argP := 1 to Length(CPExpandedArg12) do AppendChar(dst, CPExpandedArg12[argP]);
+    13: for argP := 1 to Length(CPExpandedArg13) do AppendChar(dst, CPExpandedArg13[argP]);
+    14: for argP := 1 to Length(CPExpandedArg14) do AppendChar(dst, CPExpandedArg14[argP]);
+    15: for argP := 1 to Length(CPExpandedArg15) do AppendChar(dst, CPExpandedArg15[argP]);
+    16: for argP := 1 to Length(CPExpandedArg16) do AppendChar(dst, CPExpandedArg16[argP]);
+    17: for argP := 1 to Length(CPExpandedArg17) do AppendChar(dst, CPExpandedArg17[argP]);
+    18: for argP := 1 to Length(CPExpandedArg18) do AppendChar(dst, CPExpandedArg18[argP]);
+    19: for argP := 1 to Length(CPExpandedArg19) do AppendChar(dst, CPExpandedArg19[argP]);
+    20: for argP := 1 to Length(CPExpandedArg20) do AppendChar(dst, CPExpandedArg20[argP]);
+    21: for argP := 1 to Length(CPExpandedArg21) do AppendChar(dst, CPExpandedArg21[argP]);
+    22: for argP := 1 to Length(CPExpandedArg22) do AppendChar(dst, CPExpandedArg22[argP]);
+    23: for argP := 1 to Length(CPExpandedArg23) do AppendChar(dst, CPExpandedArg23[argP]);
+    24: for argP := 1 to Length(CPExpandedArg24) do AppendChar(dst, CPExpandedArg24[argP]);
+    25: for argP := 1 to Length(CPExpandedArg25) do AppendChar(dst, CPExpandedArg25[argP]);
+    26: for argP := 1 to Length(CPExpandedArg26) do AppendChar(dst, CPExpandedArg26[argP]);
+    27: for argP := 1 to Length(CPExpandedArg27) do AppendChar(dst, CPExpandedArg27[argP]);
+    28: for argP := 1 to Length(CPExpandedArg28) do AppendChar(dst, CPExpandedArg28[argP]);
+    29: for argP := 1 to Length(CPExpandedArg29) do AppendChar(dst, CPExpandedArg29[argP]);
+    30: for argP := 1 to Length(CPExpandedArg30) do AppendChar(dst, CPExpandedArg30[argP]);
+    31: for argP := 1 to Length(CPExpandedArg31) do AppendChar(dst, CPExpandedArg31[argP]);
+    32: for argP := 1 to Length(CPExpandedArg32) do AppendChar(dst, CPExpandedArg32[argP]);
   end;
 end;
 
@@ -731,7 +1021,91 @@ begin
     if CPIncludeLength(depth) = 0 then
     begin
       SetLength(CPrepPath, 0);
+      CPAppendRange(CPrepPath, '/usr/include/gtk-2.0/', 1, 21);
+      CPAppendRange(CPrepPath, line, a, p - 1);
+      CPLoadInclude(depth);
+    end;
+    if CPIncludeLength(depth) = 0 then
+    begin
+      SetLength(CPrepPath, 0);
+      CPAppendRange(CPrepPath, '/usr/lib/x86_64-linux-gnu/gtk-2.0/include/', 1, 42);
+      CPAppendRange(CPrepPath, line, a, p - 1);
+      CPLoadInclude(depth);
+    end;
+    if CPIncludeLength(depth) = 0 then
+    begin
+      SetLength(CPrepPath, 0);
+      CPAppendRange(CPrepPath, '/usr/include/glib-2.0/', 1, 22);
+      CPAppendRange(CPrepPath, line, a, p - 1);
+      CPLoadInclude(depth);
+    end;
+    if CPIncludeLength(depth) = 0 then
+    begin
+      SetLength(CPrepPath, 0);
+      CPAppendRange(CPrepPath, '/usr/lib/x86_64-linux-gnu/glib-2.0/include/', 1, 43);
+      CPAppendRange(CPrepPath, line, a, p - 1);
+      CPLoadInclude(depth);
+    end;
+    if CPIncludeLength(depth) = 0 then
+    begin
+      SetLength(CPrepPath, 0);
+      CPAppendRange(CPrepPath, '/usr/include/pango-1.0/', 1, 23);
+      CPAppendRange(CPrepPath, line, a, p - 1);
+      CPLoadInclude(depth);
+    end;
+    if CPIncludeLength(depth) = 0 then
+    begin
+      SetLength(CPrepPath, 0);
+      CPAppendRange(CPrepPath, '/usr/include/cairo/', 1, 19);
+      CPAppendRange(CPrepPath, line, a, p - 1);
+      CPLoadInclude(depth);
+    end;
+    if CPIncludeLength(depth) = 0 then
+    begin
+      SetLength(CPrepPath, 0);
+      CPAppendRange(CPrepPath, '/usr/include/gdk-pixbuf-2.0/', 1, 28);
+      CPAppendRange(CPrepPath, line, a, p - 1);
+      CPLoadInclude(depth);
+    end;
+    if CPIncludeLength(depth) = 0 then
+    begin
+      SetLength(CPrepPath, 0);
+      CPAppendRange(CPrepPath, '/usr/include/atk-1.0/', 1, 21);
+      CPAppendRange(CPrepPath, line, a, p - 1);
+      CPLoadInclude(depth);
+    end;
+    if CPIncludeLength(depth) = 0 then
+    begin
+      SetLength(CPrepPath, 0);
       CPAppendRange(CPrepPath, '/usr/include/x86_64-linux-gnu/', 1, 30);
+      CPAppendRange(CPrepPath, line, a, p - 1);
+      CPLoadInclude(depth);
+    end;
+    if CPIncludeLength(depth) = 0 then
+    begin
+      SetLength(CPrepPath, 0);
+      CPAppendRange(CPrepPath, '/usr/include/harfbuzz/', 1, 22);
+      CPAppendRange(CPrepPath, line, a, p - 1);
+      CPLoadInclude(depth);
+    end;
+    if CPIncludeLength(depth) = 0 then
+    begin
+      SetLength(CPrepPath, 0);
+      CPAppendRange(CPrepPath, '/usr/include/freetype2/', 1, 23);
+      CPAppendRange(CPrepPath, line, a, p - 1);
+      CPLoadInclude(depth);
+    end;
+    if CPIncludeLength(depth) = 0 then
+    begin
+      SetLength(CPrepPath, 0);
+      CPAppendRange(CPrepPath, '/usr/include/pixman-1/', 1, 22);
+      CPAppendRange(CPrepPath, line, a, p - 1);
+      CPLoadInclude(depth);
+    end;
+    if CPIncludeLength(depth) = 0 then
+    begin
+      SetLength(CPrepPath, 0);
+      CPAppendRange(CPrepPath, '/usr/include/fontconfig/', 1, 24);
       CPAppendRange(CPrepPath, line, a, p - 1);
       CPLoadInclude(depth);
     end;

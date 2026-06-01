@@ -2,22 +2,48 @@
 
 function ParseCBlockAST: Integer; forward;
 function ParseCStatementAST: Integer; forward;
+procedure SkipBraceBlock; forward;
 
 function FindCTypedef(const name: AnsiString): Integer;
-var i: Integer;
+var i, j: Integer; match: Boolean;
 begin
   Result := -1;
   for i := 0 to CTypedefCount-1 do
-    if CTypedefName[i] = name then begin Result := i; Exit; end;
+  begin
+    if CTypedefNameLen[i] = Length(name) then
+    begin
+      match := True;
+      for j := 0 to CTypedefNameLen[i] - 1 do
+        if CTypedefChars[CTypedefNameOff[i] + j] <> name[j + 1] then
+        begin
+          match := False;
+          Break;
+        end;
+      if match then
+      begin
+        Result := i;
+        Exit;
+      end;
+    end;
+  end;
 end;
 
 procedure AddCTypedef(const name: AnsiString; tk: TTypeKind);
-var idx: Integer;
+var idx, i: Integer;
 begin
   idx := FindCTypedef(name);
   if idx >= 0 then begin CTypedefTk[idx] := Ord(tk); Exit; end;
   if CTypedefCount >= MAX_CTYPEDEF then Error('C typedef table overflow');
-  CTypedefName[CTypedefCount] := name;
+  if CTypedefCharLen + Length(name) >= 524288 then Error('C typedef chars pool overflow');
+  
+  CTypedefNameOff[CTypedefCount] := CTypedefCharLen;
+  CTypedefNameLen[CTypedefCount] := Length(name);
+  for i := 1 to Length(name) do
+  begin
+    CTypedefChars[CTypedefCharLen] := name[i];
+    Inc(CTypedefCharLen);
+  end;
+  
   CTypedefTk[CTypedefCount] := Ord(tk);
   Inc(CTypedefCount);
 end;
@@ -340,6 +366,14 @@ begin
     ProcExternal[pi] := True;
     ProcLibrary[pi] := InternStr(CurrentCLibrary);
     Next;
+    Exit;
+  end;
+
+  if CHeaderMode then
+  begin
+    ProcExternal[pi] := True;
+    ProcLibrary[pi] := InternStr(CurrentCLibrary);
+    SkipBraceBlock;
     Exit;
   end;
   

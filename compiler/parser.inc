@@ -5272,6 +5272,13 @@ begin
 
   if Length(UnitContent) = 0 then
   begin
+    ConcatThree('/usr/include/gtk-2.0/gtk/', lo, '.h', path);
+    LoadFile(path, UnitContent);
+    if Length(UnitContent) > 0 then begin isCUnit := True; isCHeader := True; end;
+  end;
+
+  if Length(UnitContent) = 0 then
+  begin
     Error('uses: unit source not found');
   end;
 
@@ -5291,6 +5298,10 @@ begin
         CurrentCLibrary := 'libm.so.6'
       else if (lo = 'pthread') then
         CurrentCLibrary := 'libpthread.so.0'
+      else if (lo = 'gtk3_c') then
+        CurrentCLibrary := 'libgtk-3.so.0'
+      else if (lo = 'gtk') then
+        CurrentCLibrary := 'libgtk-x11-2.0.so.0'
       else if (lo = 'dl') then
         CurrentCLibrary := 'libdl.so.2'
       else if (lo = 'rt') then
@@ -5321,6 +5332,7 @@ begin
     savedCurrentUnitIdx := CurrentUnitIdx;
     CurrentUnitIdx := strIdx;
     CaseSensitiveMode := True;
+    CHeaderMode := isCHeader;
     ParseCUnit;
     CaseSensitiveMode := savedCaseMode;
     CurrentUnitIdx := savedCurrentUnitIdx;

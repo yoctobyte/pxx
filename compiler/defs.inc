@@ -4,24 +4,24 @@ const
   MAX_CODE      = 1048576;
   LOCAL_STR_CAP = 256;     { max string length for local/stack variables }
   LINE_BUF_SIZE = 4096;    { readln stdin line buffer }
-  MAX_DATA    = 1048576;
-  MAX_STRS    = 4096;
-  MAX_FIXUPS  = 65536;
-  MAX_SYMS    = 8192;
-  MAX_PROCS   = 512;
-  MAX_CALLFIX = 4096;
-  MAX_GLOBFIX = 8192;
-  MAX_EXTERNAL = 256;
-  MAX_CPREP_MACROS = 1024;
-  MAX_CPREP_PARAMS = 4096;
-  MAX_CPREP_CONDS = 64;
-  MAX_CPREP_INCLUDES = 16;
-  MAX_CPREP_CHARS = 1048576;
-  MAX_CPREP_ARGS = 544; { 34 macro-expansion levels, 16 arguments each }
-  STRING_CAP  = 1048576;
-  MAX_TOKENS  = 262144;
-  MAX_AST     = 131072;
-  MAX_IR      = 32768;
+  MAX_DATA    = 2097152;      { 2 MB }
+  MAX_STRS    = 8192;
+  MAX_FIXUPS  = 131072;
+  MAX_SYMS    = 131072;
+  MAX_PROCS   = 16384;
+  MAX_CALLFIX = 16384;
+  MAX_GLOBFIX = 32768;
+  MAX_EXTERNAL = 16384;
+  MAX_CPREP_MACROS = 32768;
+  MAX_CPREP_PARAMS = 131072;
+  MAX_CPREP_CONDS = 256;
+  MAX_CPREP_INCLUDES = 128;
+  MAX_CPREP_CHARS = 8388608;  { 8 MB }
+  MAX_CPREP_ARGS = 4096;
+  STRING_CAP  = 8388608;      { 8 MB }
+  MAX_TOKENS  = 524288;
+  MAX_AST     = 524288;
+  MAX_IR      = 131072;
   MAX_LOOP_FIXUPS = 256;
   MAX_GOTO_LABELS = 64;
   MAX_PAS_DEFINES = 128;
@@ -33,11 +33,11 @@ const
   MAX_UFIELD      = 256;   { field slots across all user classes }
   MAX_UMETH       = 256;   { method slots across all user classes }
   MAX_UPROP       = 64;
-  MAX_ENUMTYPE    = 64;    { distinct named enum types }
-  MAX_ENUMVAL     = 512;   { enum value names across all enum types }
-  MAX_TYPEALIAS   = 128;   { named type aliases (pointer aliases etc.) }
-  MAX_CTYPEDEF    = 512;   { C typedef name table (case-sensitive) }
-  MAX_RESOURCES   = 64;    { embedded R-directive resources }
+  MAX_ENUMTYPE = 512;
+  MAX_ENUMVAL  = 4096;
+  MAX_TYPEALIAS = 4096;
+  MAX_CTYPEDEF  = 8192;
+  MAX_RESOURCES   = 16;    { embedded R-directive resources }
   MAX_DATAPTRFIX  = 4096;  { data->data 8-byte pointer relocations (RTTI blobs) }
   MAX_METHFIX     = 1024;  { code-address relocations into Data[] (VMT + RTTI) }
 
@@ -494,9 +494,13 @@ var
   ProcAggregateDestSym : array[0..MAX_PROCS-1] of Integer; { hidden caller-result pointer local, or -1 }
   CurrentCLibrary : AnsiString;
   CTypeIsVoid : Boolean; { last ParseCDeclType saw bare void (no pointer) }
+  CHeaderMode : Boolean; { parsing C in header/FFI mode }
   CTypedefCount : Integer;
-  CTypedefName  : array[0..MAX_CTYPEDEF-1] of AnsiString;
+  CTypedefNameOff : array[0..MAX_CTYPEDEF-1] of Integer;
+  CTypedefNameLen : array[0..MAX_CTYPEDEF-1] of Integer;
   CTypedefTk    : array[0..MAX_CTYPEDEF-1] of Integer; { resolved TTypeKind ordinal }
+  CTypedefChars : array[0..524287] of Char;
+  CTypedefCharLen : Integer;
   ExternalProc   : array[0..MAX_EXTERNAL-1] of Integer;
   ExternalGotOff : array[0..MAX_EXTERNAL-1] of Integer;
   ExternalCount  : Integer;
@@ -585,6 +589,16 @@ var
   CPrepCharLen  : Integer;
   CPActiveMacros : array[0..63] of Integer;
   CPActiveMacroCount : Integer;
+  CPTempStr0, CPTempStr1, CPTempStr2, CPTempStr3, CPTempStr4, CPTempStr5, CPTempStr6, CPTempStr7,
+  CPTempStr8, CPTempStr9, CPTempStr10, CPTempStr11, CPTempStr12, CPTempStr13, CPTempStr14, CPTempStr15,
+  CPTempStr16, CPTempStr17, CPTempStr18, CPTempStr19, CPTempStr20, CPTempStr21, CPTempStr22, CPTempStr23,
+  CPTempStr24, CPTempStr25, CPTempStr26, CPTempStr27, CPTempStr28, CPTempStr29, CPTempStr30, CPTempStr31,
+  CPTempStr32 : AnsiString;
+  CPExpandedArg0, CPExpandedArg1, CPExpandedArg2, CPExpandedArg3, CPExpandedArg4, CPExpandedArg5, CPExpandedArg6, CPExpandedArg7,
+  CPExpandedArg8, CPExpandedArg9, CPExpandedArg10, CPExpandedArg11, CPExpandedArg12, CPExpandedArg13, CPExpandedArg14, CPExpandedArg15,
+  CPExpandedArg16, CPExpandedArg17, CPExpandedArg18, CPExpandedArg19, CPExpandedArg20, CPExpandedArg21, CPExpandedArg22, CPExpandedArg23,
+  CPExpandedArg24, CPExpandedArg25, CPExpandedArg26, CPExpandedArg27, CPExpandedArg28, CPExpandedArg29, CPExpandedArg30, CPExpandedArg31,
+  CPExpandedArg32 : AnsiString;
   PackRecordsVal : Integer;
   CPMNameOff    : array[0..MAX_CPREP_MACROS-1] of Integer;
   CPMNameLen    : array[0..MAX_CPREP_MACROS-1] of Integer;
@@ -771,6 +785,8 @@ end;
 function sysread(fd: Integer; var buf; count: Integer): Integer;
 begin
   Result := fpRead(fd, buf, count);
+  if Result < 0 then
+    writeln('fpRead fd=', fd, ' count=', count, ' failed with errno=', fpGetErrno);
 end;
 
 function sysclose(fd: Integer): Integer;
