@@ -38,6 +38,7 @@ begin
   DumpIR := False;
   DumpRTTI := False;
   NoUnhandledHandler := False;
+  ThreadSafeMode := False;
   PasInitDefines;
   i := 1;
   readingOptions := True;
@@ -68,6 +69,11 @@ begin
     else if option = '--strict-overload' then
     begin
       StrictOverload := True;
+      Inc(i);
+    end
+    else if option = '--threadsafe' then
+    begin
+      ThreadSafeMode := True;
       Inc(i);
     end
     else if option = '--permissive-overload' then

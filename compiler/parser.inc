@@ -3829,11 +3829,16 @@ begin
                 LastTypeSetEnumId := AliasElemTk[aliasIdx];
                 Result := tySet;
               end
-              else
+              else if AliasTk[aliasIdx] = Ord(tyPointer) then
               begin
                 LastTypePointerElemTk := IntToTypeKind(AliasElemTk[aliasIdx]);
                 LastTypePointerElemRec := AliasElemRec[aliasIdx];
                 Result := tyPointer;
+              end
+              else
+              begin
+                LastTypeRecId := AliasElemRec[aliasIdx];
+                Result := IntToTypeKind(AliasTk[aliasIdx]);
               end;
             end
             else
@@ -4507,10 +4512,16 @@ begin
         RegisterSetAlias(tnOff, tnLen, propEnumId);
         while not (CurTok.Kind in [tkSemicolon,tkEOF]) do Next;
       end
+      else if (CurTok.Kind = tkArray) or (CurTok.Kind = tkProcedure) or (CurTok.Kind = tkFunction) then
+      begin
+        { Skip named array/subroutine type defs (not supported as simple aliases) }
+        while not (CurTok.Kind in [tkSemicolon,tkEOF]) do Next;
+      end
       else
       begin
-        { Skip non-enum type defs }
-        while not (CurTok.Kind in [tkSemicolon,tkEOF]) do Next;
+        { Named simple type alias: PFoo = BaseType }
+        fTk := ParseTypeKind;
+        RegisterGeneralAlias(tnOff, tnLen, Ord(fTk), LastTypeRecId);
       end;
       Eat(tkSemicolon);
     end;
@@ -5564,6 +5575,7 @@ begin
   BSS_HEAP_PTR    := BSSSize; Inc(BSSSize, 8);
   BSS_HEAP_END    := BSSSize; Inc(BSSSize, 8);
   BSS_FREE_LIST   := BSSSize; Inc(BSSSize, 8);
+  BSS_HEAP_LOCK   := BSSSize; Inc(BSSSize, 8);
   BSS_LINE_POS    := BSSSize; Inc(BSSSize, 8);
   BSS_LINE_LEN    := BSSSize; Inc(BSSSize, 8);
   BSS_LINE_BUF    := BSSSize; Inc(BSSSize, LINE_BUF_SIZE);

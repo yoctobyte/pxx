@@ -6,6 +6,27 @@ begin
   EmitI32(addr - (CodeLen + 4));
 end;
 
+procedure EmitAcquireHeapLock;
+var start: Integer;
+begin
+  if ThreadSafeMode then
+  begin
+    start := CodeLen;
+    EmitB($B8); EmitI32(1);                         { mov eax, 1 }
+    EmitB($F0); EmitB($87); EmitB($04); EmitB($25); EmitGlobRef(BSS_HEAP_LOCK); { lock xchg [BSS_HEAP_LOCK], eax }
+    EmitB($85); EmitB($C0);                         { test eax, eax }
+    EmitB($75); EmitB(Byte(start - (CodeLen + 1))); { jnz start }
+  end;
+end;
+
+procedure EmitReleaseHeapLock;
+begin
+  if ThreadSafeMode then
+  begin
+    EmitB($C7); EmitB($04); EmitB($25); EmitGlobRef(BSS_HEAP_LOCK); EmitI32(0); { mov dword [BSS_HEAP_LOCK], 0 }
+  end;
+end;
+
 procedure IREmitLeaveExceptionFrames(count: Integer);
 var i: Integer;
 begin
@@ -972,6 +993,8 @@ begin
             exhausted). No splitting/coalescing — proper allocator on the
             todo (see docs/todo.md). Class instantiation continues below, so
             both reuse and bump paths leave rax = payload. }
+          EmitAcquireHeapLock;
+          EmitB($53);                                     { push rbx }
           argNode := IRB[node]; { size arg }
           IREmitNode(IRA[argNode]); { Evaluate size -> rax }
 
@@ -1037,6 +1060,8 @@ begin
 
           { DONE: rax = payload pointer }
           Patch32(pJmpDone, CodeLen - (pJmpDone + 4));
+          EmitB($5B);                                     { pop rbx }
+          EmitReleaseHeapLock;
 
           { Put instance pointer in rdi }
           EmitB($48); EmitB($89); EmitB($C7); { mov rdi, rax }
@@ -1095,6 +1120,7 @@ begin
           { FreeMem(p): push the block onto the free list (link stored in the
             payload's first 8 bytes). nil is ignored. The size header at [p-8]
             is left intact so GetMem can size the block for reuse. }
+          EmitAcquireHeapLock;
           argNode := IRB[node]; { pointer arg }
           IREmitNode(IRA[argNode]); { p -> rax }
           EmitB($48); EmitB($85); EmitB($C0);             { test rax, rax }
@@ -1103,6 +1129,7 @@ begin
           EmitB($48); EmitB($89); EmitB($10);             { mov [rax], rdx  (p.next = head) }
           EmitB($48); EmitB($89); EmitB($04); EmitB($25); EmitGlobRef(BSS_FREE_LIST); { mov [FREE_LIST], rax }
           Code[pFreeNil] := Byte(CodeLen - (pFreeNil + 1));
+          EmitReleaseHeapLock;
         end
         else if pi = -103 then
         begin
@@ -1111,6 +1138,8 @@ begin
             min(oldsize, newsize) bytes from oldp (oldsize read from oldp's
             header; nil oldp => copy nothing), push the old block on the free
             list, return the new payload. Stack: [oldp] then [newp][oldp]. }
+          EmitAcquireHeapLock;
+          EmitB($53);                                     { push rbx }
           argNode := IRB[node];           { arg0 = oldp }
           IREmitNode(IRA[argNode]);       { rax = oldp }
           EmitB($50);                     { push rax (oldp) }
@@ -1178,6 +1207,8 @@ begin
           EmitB($48); EmitB($89); EmitB($16);             { mov [rsi], rdx }
           EmitB($48); EmitB($89); EmitB($34); EmitB($25); EmitGlobRef(BSS_FREE_LIST); { mov [FREE_LIST], rsi }
           EmitB($58);                                     { pop rax (newp) -> result }
+          EmitB($5B);                                     { pop rbx }
+          EmitReleaseHeapLock;
         end
         else
         begin

@@ -395,6 +395,7 @@ begin
   PasDefineCount := 0;
   PasCondCount := 0;
   StrictOverload := False;
+  ThreadSafeMode := False;
   CStyleComments := False;
   NestedComments := False;
   CaseSensitiveMode := False;
@@ -770,6 +771,12 @@ begin
       if CaseEqual(name, 'on') then StrictOverload := True
       else if CaseEqual(name, 'off') then StrictOverload := False
       else Error('strict_overload requires on or off');
+    end
+    else if CaseEqual(command, 'threadsafe') then
+    begin
+      if CaseEqual(name, 'on') then ThreadSafeMode := True
+      else if CaseEqual(name, 'off') then ThreadSafeMode := False
+      else Error('threadsafe requires on or off');
     end
     else if CaseEqual(command, 'cstylecomments') then
     begin

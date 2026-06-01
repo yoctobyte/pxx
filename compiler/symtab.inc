@@ -88,6 +88,23 @@ begin
   Inc(AliasCount);
 end;
 
+procedure RegisterGeneralAlias(noff, nlen, tk, rec: Integer);
+var i: Integer; s: AnsiString;
+begin
+  if AliasCount >= MAX_TYPEALIAS then Error('too many type aliases');
+  AliasNOff[AliasCount] := noff;
+  AliasNLen[AliasCount] := nlen;
+  AliasTk[AliasCount] := tk;
+  AliasElemTk[AliasCount] := tk;
+  AliasElemRec[AliasCount] := rec;
+  
+  s := '';
+  for i := 0 to nlen - 1 do AppendChar(s, TokChars[noff + i]);
+  writeln('RegisterGeneralAlias: idx=', AliasCount, ' name="', s, '" noff=', noff, ' nlen=', nlen, ' tk=', tk, ' rec=', rec);
+
+  Inc(AliasCount);
+end;
+
 procedure RegisterSetAlias(noff, nlen, elemEnumId: Integer);
 { Named set type: TFooSet = set of TFoo. Stored in the alias table with
   AliasTk=tySet; AliasElemTk holds the element enum id (or -1). }

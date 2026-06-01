@@ -429,6 +429,7 @@ var
   DebugTrace : Boolean;
   DumpIR : Boolean;
   StrictOverload : Boolean;
+  ThreadSafeMode : Boolean;
   CStyleComments : Boolean;   { CSTYLECOMMENTS directive: enable C slash-star comments }
   NestedComments : Boolean;   { NESTEDCOMMENTS directive: nest brace and paren-star comments }
   CaseSensitiveMode : Boolean; { CASESENSITIVE directive: when on, identifiers declared here match case-sensitively. Default off (standard case-insensitive Pascal). }
@@ -611,6 +612,7 @@ var
   BSS_HEAP_PTR    : Integer;
   BSS_HEAP_END    : Integer;
   BSS_FREE_LIST   : Integer;  { head of GetMem/FreeMem free list; 0 = empty (BSS zero-init) }
+  BSS_HEAP_LOCK   : Integer;  { spinlock for heap allocations }
   BSS_EXC_TOP     : Integer;
   BSS_EXC_OBJ     : Integer;
   BSS_EXC_CLS     : Integer;

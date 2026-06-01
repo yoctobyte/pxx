@@ -378,6 +378,8 @@ test: $(COMPILER) fpc-check
 	./$(COMPILER) test/test_exception_unhandled.pas /tmp/test_exception_unhandled26
 	! /tmp/test_exception_unhandled26 > /tmp/test_exception_unhandled.out 2> /tmp/test_exception_unhandled.log
 	grep -q "Unhandled exception" /tmp/test_exception_unhandled.log
+	./$(COMPILER) --threadsafe test/test_multithreading.pas /tmp/test_multithreading26
+	test "$$(/tmp/test_multithreading26 | tail -1)" = "multithreading test completed successfully"
 	test ! -s /tmp/test_exception_unhandled.out
 	./$(COMPILER) --no-unhandled-handler test/test_exception_unhandled.pas /tmp/test_exception_silent26
 	! /tmp/test_exception_silent26 > /tmp/test_exception_silent.out 2> /tmp/test_exception_silent.log
@@ -400,6 +402,8 @@ test: $(COMPILER) fpc-check
 	test "$$(/tmp/self_record_string_field26)" = "$$(printf '1\n4')"
 	/tmp/pascal26-self test/test_heap.pas /tmp/self-test_heap26
 	test "$$(/tmp/self-test_heap26)" = "$$(printf '1\n1\n1\n1\n1\n1')"
+	/tmp/pascal26-self --threadsafe test/test_multithreading.pas /tmp/self-test_multithreading26
+	test "$$(/tmp/self-test_multithreading26 | tail -1)" = "multithreading test completed successfully"
 	/tmp/pascal26-self test/test_math_unit.pas /tmp/self-test_math_unit26
 	test "$$(/tmp/self-test_math_unit26)" = "$$(printf '42\n999\n10\n20\n256\n6\n144')"
 	/tmp/pascal26-self test/fileio.pas /tmp/self-fileio26
@@ -419,6 +423,8 @@ test: $(COMPILER) fpc-check
 	test "$$(/tmp/next_record_string_field26)" = "$$(printf '1\n4')"
 	/tmp/pascal26-next test/test_heap.pas /tmp/next-test_heap26
 	test "$$(/tmp/next-test_heap26)" = "$$(printf '1\n1\n1\n1\n1\n1')"
+	/tmp/pascal26-next --threadsafe test/test_multithreading.pas /tmp/next-test_multithreading26
+	test "$$(/tmp/next-test_multithreading26 | tail -1)" = "multithreading test completed successfully"
 	/tmp/pascal26-next test/test_math_unit.pas /tmp/next-test_math_unit26
 	test "$$(/tmp/next-test_math_unit26)" = "$$(printf '42\n999\n10\n20\n256\n6\n144')"
 	/tmp/pascal26-next test/fileio.pas /tmp/next-fileio26
