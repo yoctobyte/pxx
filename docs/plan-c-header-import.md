@@ -1,8 +1,30 @@
 # Plan: Real C Header Import (glib/GTK-grade)
 
-Status: planning only — nothing here is implemented yet.
-Owner doc for todo §2c. Companion to `C_INTEROP.md` (current behaviour) and
-`docs/gui.md` (why the hand-written GTK binding exists).
+Status: in progress. Owner doc for todo §2c. Companion to `C_INTEROP.md`
+(current behaviour) and `docs/gui.md` (why the hand-written GTK binding exists).
+
+## Progress (2026-06-01)
+
+- **Pillar 1, partial.** DT_NEEDED is deduplicated — one entry per distinct
+  library, not per imported symbol (`elfwriter.inc` `PrepareDynamicData` /
+  `PatchDynamicData`, `DynamicNeededCount`). The unversioned `lib<name>.so`
+  guess is replaced by a soname table for the FFI targets in use (libc.so.6,
+  libm.so.6, libpthread.so.0, libdl.so.2, librt.so.1, libz.so.1) in
+  `parser.inc`. **Deferred:** the dynamic `ld.so.cache`/`DT_SONAME` probe and
+  link directives (1a/1b/1c). Note: the self-hosted compiler has no `execve`
+  (runtime syscalls are read/write/open/close/mmap/brk/exit only), so
+  pkg-config/ldconfig shelling is not available — the probe must parse
+  `/etc/ld.so.cache` or read `DT_SONAME` from candidate `.so` files via plain
+  file I/O.
+- **Stage A, done.** Real C type model: distinct lexer tokens for
+  void/short/long/signed/unsigned/float/double/_Bool; `ParseCDeclType` folds a
+  declaration-specifier sequence + pointer suffix into one canonical
+  Pascal/ABI `TTypeKind` (long->tyInt64, short->tyInt16, unsigned widths, any
+  pointer->tyPointer, bare void->`CTypeIsVoid`). Widths flow through the
+  size-aware prologue/`ParamSize`. Bare `return;` allowed in C bodies.
+  Regression: `test/test_c_widths.pas`. 16-param cap retained; SSE float
+  arg/return ABI still absent (libm blocked on it).
+- **Next:** Stage B (typedef/enum/opaque-struct), gated toward pthread.
 
 ## Goal
 
