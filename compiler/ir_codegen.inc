@@ -168,6 +168,9 @@ var left, right, valNode, symIdx, si: Integer;
     itemNode, trueCount, nextJmp, falseJmp: Integer;
     trueJumps: array[0..127] of Integer;
     raiseClass: Integer;
+    intIdx, sseIdx: Integer;
+    argIsSse: array[0..15] of Boolean;
+    argRegIdx: array[0..15] of Integer;
 begin
   if node = -1 then Exit;
   
@@ -828,26 +831,89 @@ begin
           pathIdx := 0;
           while argNode <> -1 do
           begin
-            IREmitNode(IRA[argNode]); { evaluates arg -> rax }
+            IREmitNode(IRA[argNode]); { evaluates arg -> rax (floats as bits) }
             EmitB($50); { push rax }
             argNode := IRB[argNode];
             Inc(pathIdx);
           end;
-          for i := Procs[pi].ParamCount - 1 downto 0 do
-            case i of
-              0: EmitB($5F); { pop rdi }
-              1: EmitB($5E); { pop rsi }
-              2: EmitB($5A); { pop rdx }
-              3: EmitB($59); { pop rcx }
-              4: begin EmitB($41); EmitB($58); end; { pop r8 }
-              5: begin EmitB($41); EmitB($59); end; { pop r9 }
-            end;
-          if TypeIsAggregate(Procs[pi].RetType) then
+
+          if ProcExternal[pi] then
           begin
-            IREmitNode(IRC[node]);                   { rax = hidden destination }
-            EmitB($49); EmitB($89); EmitB($C2);     { mov r10, rax }
+            { External C call — SysV AMD64 ABI: integer/pointer args fill
+              rdi,rsi,rdx,rcx,r8,r9 and floating args fill xmm0..xmm7, each
+              class counted independently. Floats are carried as bits in rax,
+              so pop rax then movq into the assigned xmm. Internal Pascal calls
+              keep the all-integer-register convention below. }
+            intIdx := 0; sseIdx := 0;
+            for i := 0 to Procs[pi].ParamCount - 1 do
+            begin
+              if TypeIsFloat(Procs[pi].Params[i].TypeKind) then
+              begin
+                argIsSse[i] := True; argRegIdx[i] := sseIdx; Inc(sseIdx);
+              end
+              else
+              begin
+                argIsSse[i] := False; argRegIdx[i] := intIdx; Inc(intIdx);
+              end;
+            end;
+            { Reverse-pop: the last-pushed arg sits on top, so index i pops
+              arg[i] into its precomputed register slot. }
+            for i := Procs[pi].ParamCount - 1 downto 0 do
+            begin
+              if argIsSse[i] then
+              begin
+                EmitB($58); { pop rax }
+                { movq xmm[n], rax : 66 48 0F 6E (C0 + n*8) }
+                EmitB($66); EmitB($48); EmitB($0F); EmitB($6E);
+                EmitB($C0 + argRegIdx[i] * 8);
+                if Procs[pi].Params[i].TypeKind = tySingle then
+                begin
+                  { narrow double bits to single: cvtsd2ss xmm[n],xmm[n] }
+                  EmitB($F2); EmitB($0F); EmitB($5A);
+                  EmitB($C0 + argRegIdx[i] * 9);
+                end;
+              end
+              else
+                case argRegIdx[i] of
+                  0: EmitB($5F); { pop rdi }
+                  1: EmitB($5E); { pop rsi }
+                  2: EmitB($5A); { pop rdx }
+                  3: EmitB($59); { pop rcx }
+                  4: begin EmitB($41); EmitB($58); end; { pop r8 }
+                  5: begin EmitB($41); EmitB($59); end; { pop r9 }
+                end;
+            end;
+            { Variadic ABI: AL = number of vector registers used. Harmless for
+              fixed-prototype callees. Only set when floats are present. }
+            if sseIdx > 0 then
+            begin
+              EmitB($B8); EmitI32(sseIdx); { mov eax, sseIdx }
+            end;
+            EmitCallProc(pi);
+            if TypeIsFloat(Procs[pi].RetType) then
+            begin
+              { float/double returned in xmm0; bridge to rax bits. }
+              EmitB($66); EmitB($48); EmitB($0F); EmitB($7E); EmitB($C0); { movq rax, xmm0 }
+            end;
+          end
+          else
+          begin
+            for i := Procs[pi].ParamCount - 1 downto 0 do
+              case i of
+                0: EmitB($5F); { pop rdi }
+                1: EmitB($5E); { pop rsi }
+                2: EmitB($5A); { pop rdx }
+                3: EmitB($59); { pop rcx }
+                4: begin EmitB($41); EmitB($58); end; { pop r8 }
+                5: begin EmitB($41); EmitB($59); end; { pop r9 }
+              end;
+            if TypeIsAggregate(Procs[pi].RetType) then
+            begin
+              IREmitNode(IRC[node]);                   { rax = hidden destination }
+              EmitB($49); EmitB($89); EmitB($C2);     { mov r10, rax }
+            end;
+            EmitCallProc(pi);
           end;
-          EmitCallProc(pi);
         end
         else if pi = -Ord(tkGetMem) then
         begin
