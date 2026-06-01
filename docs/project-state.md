@@ -79,8 +79,12 @@ Case behavior is per origin:
   coalescing, bins, or large-block `munmap`.
 - There are no IR optimization passes, register allocation, or additional CPU
   targets.
-- The C importer needs substantially deeper preprocessing, typedef, struct,
-  callback, and ABI support before real GTK/glib headers replace handwritten
-  bindings.
+- The C importer has advanced (2026-06-01, see `plan-c-header-import.md`): real
+  C type model (widths/signedness/void/pointers), typedef + enum + opaque
+  struct/union resolution, the full SysV float and >6/>8-arg stack-spill call
+  ABI, and DT_NEEDED dedup with a versioned soname table. Still needed before
+  real GTK/glib headers replace handwritten bindings: macro-soup preprocessing
+  (token paste/stringify/variadic/attributes), struct field layout, callback
+  signatures, and a dynamic soname probe.
 - Automated GUI tests remain separate because they require GTK/display
   environment handling.
