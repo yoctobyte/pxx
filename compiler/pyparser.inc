@@ -24,6 +24,8 @@ type
 var
   PyLocals: array[0..PY_MAX_LOCALS-1] of TPyLocalConstraint;
   PyLocalCount: Integer;
+  PyModuleLocals: array[0..PY_MAX_LOCALS-1] of TPyLocalConstraint;
+  PyModuleLocalCount: Integer;
 
 function PyIsIdent(const s: AnsiString): Boolean;
 begin
@@ -111,11 +113,28 @@ begin
             (tk = tyDouble) or (tk = tyExtended);
 end;
 
+function PyVariantScalar(tk: TTypeKind): Boolean;
+begin
+  Result := PyNumeric(tk) or (tk = tyBoolean) or (tk = tyChar);
+end;
+
 function PyWiden(a, b: TTypeKind): TTypeKind;
 begin
   if a = tyUnknown then begin Result := b; Exit; end;
   if b = tyUnknown then begin Result := a; Exit; end;
   if a = b then begin Result := a; Exit; end;
+  if (a = tyString) or (b = tyString) then
+    Error('Nil Python: string-typed Variant pending managed AnsiString');
+  if (a = tyVariant) or (b = tyVariant) then
+  begin
+    if ((a = tyVariant) or PyVariantScalar(a)) and
+       ((b = tyVariant) or PyVariantScalar(b)) then
+    begin
+      Result := tyVariant;
+      Exit;
+    end;
+    Error('Nil Python: annotate the type / too dynamic');
+  end;
   if PyNumeric(a) and PyNumeric(b) then
   begin
     if (a = tyDouble) or (b = tyDouble) or (a = tyExtended) or (b = tyExtended) then
@@ -126,9 +145,12 @@ begin
       Result := tyInteger;
     Exit;
   end;
-  { TODO(Phase 1): promote the function-scope slot to tyVariant here once the
-    Variant backend lands. Keep this branch independent of tyVariant for now. }
-  Error('Nil Python: type unification failed — tyVariant promotion pending (Phase 1)');
+  if PyVariantScalar(a) and PyVariantScalar(b) then
+  begin
+    Result := tyVariant;
+    Exit;
+  end;
+  Error('Nil Python: annotate the type / too dynamic');
   Result := tyUnknown;
 end;
 
@@ -137,6 +159,14 @@ var i: Integer;
 begin
   for i := 0 to PyLocalCount - 1 do
     if PyLocals[i].Name = name then begin Result := i; Exit; end;
+  Result := -1;
+end;
+
+function PyFindModuleConstraint(const name: AnsiString): Integer;
+var i: Integer;
+begin
+  for i := 0 to PyModuleLocalCount - 1 do
+    if PyModuleLocals[i].Name = name then begin Result := i; Exit; end;
   Result := -1;
 end;
 
@@ -198,6 +228,61 @@ begin
     else
       Inc(i);
   end;
+end;
+
+procedure PyCollectModuleLocals;
+var i, j, ci, depth, skipDepth: Integer; name: AnsiString; tk: TTypeKind;
+    waitingForFunctionIndent: Boolean;
+begin
+  PyLocalCount := 0;
+  depth := 0;
+  skipDepth := -1;
+  waitingForFunctionIndent := False;
+  i := 0;
+  while i < TokCount do
+  begin
+    if Tokens[i].Kind = tkFunction then
+      waitingForFunctionIndent := True
+    else if Tokens[i].Kind = tkIndent then
+    begin
+      Inc(depth);
+      if waitingForFunctionIndent then
+      begin
+        skipDepth := depth;
+        waitingForFunctionIndent := False;
+      end;
+    end
+    else if Tokens[i].Kind = tkDedent then
+    begin
+      if depth = skipDepth then skipDepth := -1;
+      Dec(depth);
+    end
+    else if (skipDepth < 0) and (Tokens[i].Kind = tkIdent) and
+            (i + 1 < TokCount) and (Tokens[i + 1].Kind = tkAssign) then
+    begin
+      name := GetTokenStr(i);
+      j := i + 2;
+      while (j < TokCount) and not (Tokens[j].Kind in [tkNewline, tkDedent]) do Inc(j);
+      tk := PyInferExprType(i + 2, j);
+      if tk = tyUnknown then
+        Error('Nil Python: cannot infer module local type for ' + name);
+      ci := PyFindConstraint(name);
+      if ci < 0 then
+      begin
+        if PyLocalCount >= PY_MAX_LOCALS then Error('Nil Python: too many inferred module locals');
+        PyLocals[PyLocalCount].Name := name;
+        PyLocals[PyLocalCount].TypeKind := tk;
+        Inc(PyLocalCount);
+      end
+      else
+        PyLocals[ci].TypeKind := PyWiden(PyLocals[ci].TypeKind, tk);
+      i := j - 1;
+    end;
+    Inc(i);
+  end;
+  PyModuleLocalCount := PyLocalCount;
+  for i := 0 to PyLocalCount - 1 do
+    PyModuleLocals[i] := PyLocals[i];
 end;
 
 function PyFindBodyEnd(bodyStart: Integer): Integer;
@@ -368,7 +453,7 @@ begin
 end;
 
 function PyParseStatement: Integer;
-var name: AnsiString; symIdx, lhsNode, node: Integer;
+var name: AnsiString; symIdx, lhsNode, node, ci: Integer; tk: TTypeKind;
 begin
   Result := -1;
   if CurTok.Kind = tkIf then begin Result := PyParseIf; Exit; end;
@@ -400,7 +485,16 @@ begin
     Next;
     Expect(tkAssign, '=');
     ParseExpr;
-    if symIdx < 0 then symIdx := AllocVar(name, IntToTypeKind(ASTTk[CurASTNode]));
+    if symIdx < 0 then
+    begin
+      tk := IntToTypeKind(ASTTk[CurASTNode]);
+      if CurProc < 0 then
+      begin
+        ci := PyFindModuleConstraint(name);
+        if ci >= 0 then tk := PyModuleLocals[ci].TypeKind;
+      end;
+      symIdx := AllocVar(name, tk);
+    end;
     lhsNode := PyMakeIdent(symIdx);
     node := AllocNode(AN_ASSIGN);
     ASTLeft[node] := lhsNode;
@@ -510,6 +604,7 @@ procedure ParsePyProgram;
 var mainNode, stmt, blockNode, jmpPatch: Integer;
 begin
   PyValidateOperators;
+  PyCollectModuleLocals;
   BSS_INITIAL_RSP := BSSSize; Inc(BSSSize, 8);
   EmitB($48); EmitB($89); EmitB($24); EmitB($25); EmitGlobRef(BSS_INITIAL_RSP);
   EmitB($E9); jmpPatch := CodeLen; EmitI32(0);
