@@ -501,6 +501,7 @@ var
   DynamicRelaOff   : Integer;
   DynamicOff       : Integer;
   DynamicSize      : Integer;
+  DynamicNeededCount : Integer; { distinct DT_NEEDED libraries }
   LastTypeRecId : Integer;
   LastTypePointerElemTk : TTypeKind;
   LastTypePointerElemRec : Integer;

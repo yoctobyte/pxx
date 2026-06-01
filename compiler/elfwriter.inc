@@ -76,9 +76,11 @@ end;
 
 procedure PrepareDynamicData;
 var
-  i: Integer;
+  i, j, libIdx: Integer;
+  found: Boolean;
   nameOff: array[0..MAX_EXTERNAL-1] of Integer;
-  libOff : array[0..MAX_EXTERNAL-1] of Integer;
+  neededLibStr : array[0..MAX_EXTERNAL-1] of Integer; { distinct Strs[] indices }
+  neededLibOff : array[0..MAX_EXTERNAL-1] of Integer; { their dynstr offsets }
 begin
   DynamicInterpOff := DataLen;
   DataPutZ('/lib64/ld-linux-x86-64.so.2');
@@ -86,10 +88,27 @@ begin
 
   DynamicStrOff := DataLen;
   DataPutB(0);
+  { Emit each distinct library soname once (one DT_NEEDED per library, not
+    per imported symbol). InternStr dedups library names, so identical
+    libraries share a Strs[] index — compare by index. }
+  DynamicNeededCount := 0;
   for i := 0 to ExternalCount-1 do
   begin
-    libOff[i] := DataLen - DynamicStrOff;
-    DataPutZ(Strs[ProcLibrary[ExternalProc[i]]].Text);
+    libIdx := ProcLibrary[ExternalProc[i]];
+    found := False;
+    for j := 0 to DynamicNeededCount-1 do
+      if neededLibStr[j] = libIdx then begin found := True; break; end;
+    if not found then
+    begin
+      neededLibStr[DynamicNeededCount] := libIdx;
+      neededLibOff[DynamicNeededCount] := DataLen - DynamicStrOff;
+      DataPutZ(Strs[libIdx].Text);
+      Inc(DynamicNeededCount);
+    end;
+  end;
+  { Symbol names (one per imported symbol) }
+  for i := 0 to ExternalCount-1 do
+  begin
     nameOff[i] := DataLen - DynamicStrOff;
     DataPutZ(Procs[ExternalProc[i]].Name);
   end;
@@ -127,7 +146,7 @@ begin
   end;
 
   DynamicOff := DataLen;
-  for i := 0 to ExternalCount-1 do DataPutDyn(1, libOff[i]); { DT_NEEDED }
+  for i := 0 to DynamicNeededCount-1 do DataPutDyn(1, neededLibOff[i]); { DT_NEEDED }
   DataPutDyn(5, 0);                         { DT_STRTAB }
   DataPutDyn(10, DynamicStrSize);           { DT_STRSZ }
   DataPutDyn(6, 0);                         { DT_SYMTAB }
@@ -145,7 +164,7 @@ var i, p: Integer;
 begin
   for i := 0 to ExternalCount-1 do
     PatchDataU64(DynamicRelaOff + (i * 24), dataBase + ExternalGotOff[i]);
-  p := DynamicOff + (ExternalCount * 16);
+  p := DynamicOff + (DynamicNeededCount * 16);
   PatchDataU64(p + 8, dataBase + DynamicStrOff);
   Inc(p, 32);
   PatchDataU64(p + 8, dataBase + DynamicSymOff);

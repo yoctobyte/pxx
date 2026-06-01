@@ -5252,8 +5252,24 @@ begin
   begin
     if isCHeader then
     begin
-      if (lo = 'ctype') or (lo = 'math_ext') then
+      { Map the header/unit name to the DT_NEEDED soname the system ships.
+        Versioned sonames (not the unversioned dev symlink lib<name>.so) so
+        the emitted ELF loads against the runtime libraries present on a
+        stock system without -dev packages. Dynamic ld.so.cache probing is a
+        later refinement; this table covers the FFI targets in use. }
+      if (lo = 'ctype') or (lo = 'math_ext') or (lo = 'stdio') or
+         (lo = 'stdlib') or (lo = 'string') or (lo = 'unistd') then
         CurrentCLibrary := 'libc.so.6'
+      else if (lo = 'math') or (lo = 'm') then
+        CurrentCLibrary := 'libm.so.6'
+      else if (lo = 'pthread') then
+        CurrentCLibrary := 'libpthread.so.0'
+      else if (lo = 'dl') then
+        CurrentCLibrary := 'libdl.so.2'
+      else if (lo = 'rt') then
+        CurrentCLibrary := 'librt.so.1'
+      else if (lo = 'z') then
+        CurrentCLibrary := 'libz.so.1'
       else
         ConcatThree('lib', lo, '.so', CurrentCLibrary);
     end;
