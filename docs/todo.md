@@ -129,8 +129,10 @@ Full phased plan: **[`plan-c-header-import.md`](plan-c-header-import.md)**.
   `DT_SONAME` via file I/O.
 - ✅ Stage A: real C type model — widths, signedness, `void`, and pointers are
   preserved (`ParseCDeclType`). Regression `test/test_c_widths.pas`.
-- 🟡 Stage B: typedef / enum / opaque-struct / function-pointer typedef — in
-  progress, gated toward `pthread`.
+- ✅ Stage B (core): typedef (scalar/pointer/opaque struct+union), enum
+  constants with a small const-expr evaluator, and function-pointer typedefs
+  (as opaque pointers). Full struct field layout deferred per plan. Regressions
+  `test/test_c_typedef.pas`, `test/test_c_enum.pas`.
 - ⬜ Remaining: SSE float C-call ABI (libm), Stage C macro soup + >6-arg stack
   spill (gtk), Stage D recovery, Stage E final wiring.
 

@@ -24,7 +24,20 @@ Status: in progress. Owner doc for todo §2c. Companion to `C_INTEROP.md`
   size-aware prologue/`ParamSize`. Bare `return;` allowed in C bodies.
   Regression: `test/test_c_widths.pas`. 16-param cap retained; SSE float
   arg/return ABI still absent (libm blocked on it).
-- **Next:** Stage B (typedef/enum/opaque-struct), gated toward pthread.
+- **Stage B, done (core).** typedef + enum + opaque struct/union.
+  Case-sensitive `CTypedef` table; `ParseCTypedef` registers scalar/pointer
+  aliases, opaque struct/union (`typedef struct _X X;` -> Pointer), enum
+  typedefs, and function-pointer typedefs (-> Pointer). `ParseCDeclType`
+  resolves typedef names in type position. Enumerators become Int32 constants
+  (`AddConst`) via a small integer constant-expression evaluator that handles
+  `(1<<N)`, `A|B`, etc. (the C lexer splits `<<` into two `tkLt`, `|` into
+  `tkOr`). Regressions: `test/test_c_typedef.pas`, `test/test_c_enum.pas`.
+  Full struct field layout is deferred per the original plan — opaque
+  pointer-only suffices for the pthread/GTK call surface, which touches these
+  structs only through pointers.
+- **Next:** a real pthread end-to-end (header import + `pthread_create`/
+  `pthread_join`); then SSE float ABI (libm); then Stage C macro soup +
+  >6-arg stack spill (gtk).
 
 ## Goal
 
