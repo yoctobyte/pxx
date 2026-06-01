@@ -159,6 +159,8 @@ test: $(COMPILER) fpc-check
 	test "$$(/tmp/shared_object26)" = "97"
 	./$(COMPILER) test/test_c_import.pas /tmp/c_import26
 	test "$$(/tmp/c_import26)" = "42"
+	./$(COMPILER) test/test_c_widths.pas /tmp/c_widths26
+	test "$$(/tmp/c_widths26)" = "5000000000"
 	./$(COMPILER) test/test_c_preprocess.pas /tmp/c_preprocess26
 	test "$$(/tmp/c_preprocess26)" = "42"
 	./$(COMPILER) --debug test/test_c_preprocess.pas /tmp/c_preprocess_debug26 > /tmp/c_preprocess_debug26.log

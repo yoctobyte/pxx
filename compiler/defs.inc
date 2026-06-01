@@ -227,7 +227,11 @@ type
     tkIn,
     tkWith,
     tkAsm,
-    tkShl
+    tkShl,
+    { C declaration-specifier keywords (distinct so width/signedness/void are
+      not collapsed into tkInteger_T). `int`->tkInteger_T, `char`->tkChar_T
+      stay as before. }
+    tkCVoid, tkCShort, tkCLong, tkCSigned, tkCUnsigned, tkCFloat, tkCDouble, tkCBool
   );
 
   TToken = record
@@ -486,6 +490,7 @@ var
   ProcRetRecId : array[0..MAX_PROCS-1] of Integer; { record id for tyRecord results }
   ProcAggregateDestSym : array[0..MAX_PROCS-1] of Integer; { hidden caller-result pointer local, or -1 }
   CurrentCLibrary : AnsiString;
+  CTypeIsVoid : Boolean; { last ParseCDeclType saw bare void (no pointer) }
   ExternalProc   : array[0..MAX_EXTERNAL-1] of Integer;
   ExternalGotOff : array[0..MAX_EXTERNAL-1] of Integer;
   ExternalCount  : Integer;

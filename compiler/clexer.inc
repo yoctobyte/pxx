@@ -14,24 +14,26 @@ begin
     end;
     4: begin
       if (s[1]='c') and (s[2]='h') and (s[3]='a') and (s[4]='r') then Result := tkChar_T;
-      if (s[1]='v') and (s[2]='o') and (s[3]='i') and (s[4]='d') then Result := tkInteger_T;
+      if (s[1]='v') and (s[2]='o') and (s[3]='i') and (s[4]='d') then Result := tkCVoid;
       if (s[1]='e') and (s[2]='l') and (s[3]='s') and (s[4]='e') then Result := tkElse;
-      if (s[1]='l') and (s[2]='o') and (s[3]='n') and (s[4]='g') then Result := tkInteger_T;
+      if (s[1]='l') and (s[2]='o') and (s[3]='n') and (s[4]='g') then Result := tkCLong;
     end;
     5: begin
       if (s[1]='w') and (s[2]='h') and (s[3]='i') and (s[4]='l') and (s[5]='e') then Result := tkWhile;
-      if (s[1]='s') and (s[2]='h') and (s[3]='o') and (s[4]='r') and (s[5]='t') then Result := tkInteger_T;
+      if (s[1]='s') and (s[2]='h') and (s[3]='o') and (s[4]='r') and (s[5]='t') then Result := tkCShort;
       if (s[1]='c') and (s[2]='o') and (s[3]='n') and (s[4]='s') and (s[5]='t') then Result := tkConst;
       if (s[1]='b') and (s[2]='r') and (s[3]='e') and (s[4]='a') and (s[5]='k') then Result := tkHalt;
+      if (s[1]='f') and (s[2]='l') and (s[3]='o') and (s[4]='a') and (s[5]='t') then Result := tkCFloat;
+      if (s[1]='_') and (s[2]='B') and (s[3]='o') and (s[4]='o') and (s[5]='l') then Result := tkCBool;
     end;
     6: begin
       if (s[1]='r') and (s[2]='e') and (s[3]='t') and (s[4]='u') and (s[5]='r') and (s[6]='n') then Result := tkExit;
       if (s[1]='s') and (s[2]='t') and (s[3]='r') and (s[4]='u') and (s[5]='c') and (s[6]='t') then Result := tkRecord;
-      if (s[1]='s') and (s[2]='i') and (s[3]='g') and (s[4]='n') and (s[5]='e') and (s[6]='d') then Result := tkInteger_T;
-      if (s[1]='d') and (s[2]='o') and (s[3]='u') and (s[4]='b') and (s[5]='l') and (s[6]='e') then Result := tkInteger_T;
+      if (s[1]='s') and (s[2]='i') and (s[3]='g') and (s[4]='n') and (s[5]='e') and (s[6]='d') then Result := tkCSigned;
+      if (s[1]='d') and (s[2]='o') and (s[3]='u') and (s[4]='b') and (s[5]='l') and (s[6]='e') then Result := tkCDouble;
     end;
     8: begin
-      if (s[1]='u') and (s[2]='n') and (s[3]='s') and (s[4]='i') and (s[5]='g') and (s[6]='n') and (s[7]='e') and (s[8]='d') then Result := tkInteger_T;
+      if (s[1]='u') and (s[2]='n') and (s[3]='s') and (s[4]='i') and (s[5]='g') and (s[6]='n') and (s[7]='e') and (s[8]='d') then Result := tkCUnsigned;
     end;
   end;
 end;

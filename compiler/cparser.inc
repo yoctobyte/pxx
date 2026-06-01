@@ -5,7 +5,79 @@ function ParseCStatementAST: Integer; forward;
 
 function IsCTypeTok: Boolean;
 begin
-  Result := CurTok.Kind in [tkInteger_T, tkChar_T];
+  Result := CurTok.Kind in [tkInteger_T, tkChar_T, tkCVoid, tkCShort,
+    tkCLong, tkCSigned, tkCUnsigned, tkCFloat, tkCDouble, tkCBool, tkConst];
+end;
+
+function CUnsignedOf(tk: TTypeKind): TTypeKind;
+begin
+  Result := tk;
+  if tk = tyInt16 then Result := tyUInt16
+  else if tk = tyInt32 then Result := tyUInt32
+  else if tk = tyInt64 then Result := tyUInt64;
+end;
+
+{ Consume a C declaration-specifier sequence (const, signed/unsigned,
+  short/long[/long], int/char/void/float/double/_Bool) followed by any
+  pointer suffix, and return the mapped Pascal/ABI TTypeKind. Sets the
+  global CTypeIsVoid when the result is bare `void` (no pointer). Width and
+  signedness are preserved: long/long long -> 8-byte on LP64, short -> 2,
+  any pointer -> untyped Pointer (8). }
+function ParseCDeclType: TTypeKind;
+var
+  isUnsigned, isSigned, isFloatTy, isVoid, loop: Boolean;
+  shortCount, longCount: Integer;
+  base: TTypeKind;
+begin
+  isUnsigned := False; isSigned := False; isFloatTy := False; isVoid := False;
+  shortCount := 0; longCount := 0; base := tyInt32;
+  loop := True;
+  while loop do
+  begin
+    case CurTok.Kind of
+      tkConst:     Next;
+      tkCSigned:   begin isSigned := True; Next; end;
+      tkCUnsigned: begin isUnsigned := True; Next; end;
+      tkCShort:    begin Inc(shortCount); Next; end;
+      tkCLong:     begin Inc(longCount); Next; end;
+      tkInteger_T: begin base := tyInt32; Next; end;
+      tkChar_T:    begin base := tyChar; Next; end;
+      tkCVoid:     begin isVoid := True; Next; end;
+      tkCFloat:    begin base := tySingle; isFloatTy := True; Next; end;
+      tkCDouble:   begin base := tyDouble; isFloatTy := True; Next; end;
+      tkCBool:     begin base := tyUInt8; Next; end;
+      else loop := False;
+    end;
+  end;
+
+  CTypeIsVoid := isVoid;
+
+  if isVoid then
+    Result := tyInteger          { placeholder; pointer suffix overrides below }
+  else if isFloatTy then
+    Result := base
+  else if base = tyChar then
+  begin
+    if isSigned then base := tyInt8
+    else if isUnsigned then base := tyUInt8;
+    Result := base;              { plain char stays tyChar }
+  end
+  else
+  begin
+    if shortCount > 0 then base := tyInt16
+    else if longCount > 0 then base := tyInt64
+    else base := tyInt32;
+    if isUnsigned then base := CUnsignedOf(base);
+    Result := base;
+  end;
+
+  { Any pointer depth collapses to an untyped 8-byte Pointer. }
+  while CurTok.Kind = tkStar do
+  begin
+    Result := tyPointer;
+    CTypeIsVoid := False;
+    Next;
+  end;
 end;
 
 function ParseCPrintfAST: Integer;
@@ -38,13 +110,18 @@ begin
   Result := -1;
   if CurTok.Kind = tkEOF then Exit;
 
-  { return expr; }
+  { return [expr]; — the expression is optional for void functions }
   if CurTok.Kind = tkExit then
   begin
     Next;
     node := AllocNode(AN_EXIT);
-    ParseExpr;
-    ASTLeft[node] := CurASTNode;
+    if CurTok.Kind <> tkSemicolon then
+    begin
+      ParseExpr;
+      ASTLeft[node] := CurASTNode;
+    end
+    else
+      ASTLeft[node] := -1;
     Eat(tkSemicolon);
     Result := node;
     Exit;
@@ -107,8 +184,7 @@ begin
   begin
     if IsCTypeTok then
     begin
-      Next;
-      if CurTok.Kind = tkStar then Next;  { pointer return type }
+      ParseCDeclType;  { consume return type incl. pointer suffix }
       if CurTok.Kind = tkIdent then
       begin
         name := CurTok.SVal;
@@ -152,7 +228,7 @@ end;
 
 procedure ParseCSubroutine;
 var
-  retType: TTypeKind;
+  retType, ptype: TTypeKind;
   name: AnsiString;
   isFunc: Boolean;
   nparams, pi, i, idx, patchPos, sz: Integer;
@@ -160,13 +236,9 @@ var
   pnames: array[0..15] of AnsiString;
   savedSC, savedFS, node, savedCurProc: Integer;
 begin
-  retType := tyInteger;
-  if CurTok.Kind = tkInteger_T then retType := tyInteger
-  else if CurTok.Kind = tkChar_T then retType := tyChar;
-  Next;
-  
-  if CurTok.Kind = tkStar then Next; { skip pointer type like int* }
-  
+  retType := ParseCDeclType;
+  if CTypeIsVoid then retType := tyInteger; { void return: value slot unused }
+
   if CurTok.Kind <> tkIdent then
   begin
     while (CurTok.Kind <> tkSemicolon) and (CurTok.Kind <> tkEOF) do Next;
@@ -188,23 +260,26 @@ begin
   begin
     if IsCTypeTok then
     begin
-      ptypes[nparams] := tyInteger;
-      if CurTok.Kind = tkChar_T then ptypes[nparams] := tyChar;
-      Next;
-
-      if CurTok.Kind = tkStar then Next;
-
-      if CurTok.Kind = tkIdent then
+      ptype := ParseCDeclType;
+      if CTypeIsVoid then
       begin
-        pnames[nparams] := CurTok.SVal;
-        Next;
+        { `(void)` empty parameter list — no actual parameter }
       end
-      else
+      else if nparams <= 15 then
       begin
-        pnames[nparams] := 'arg0';
-        pnames[nparams][4] := Chr(Ord('0') + nparams);
+        ptypes[nparams] := ptype;
+        if CurTok.Kind = tkIdent then
+        begin
+          pnames[nparams] := CurTok.SVal;
+          Next;
+        end
+        else
+        begin
+          pnames[nparams] := 'arg0';
+          pnames[nparams][4] := Chr(Ord('0') + nparams);
+        end;
+        Inc(nparams);
       end;
-      Inc(nparams);
     end
     else
       Next;
