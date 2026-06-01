@@ -174,6 +174,13 @@ function PyInferExprType(startIdx, endIdx: Integer): TTypeKind;
 var i, ci, si: Integer; tk: TTypeKind; name: AnsiString;
 begin
   Result := tyUnknown;
+  if (startIdx < endIdx) and (Tokens[startIdx].Kind = tkIdent) and
+     IsClassType(GetTokenStr(startIdx)) and (startIdx + 1 < endIdx) and
+     (Tokens[startIdx + 1].Kind = tkLParen) then
+  begin
+    Result := tyClass;
+    Exit;
+  end;
   i := startIdx;
   while i < endIdx do
   begin
@@ -183,8 +190,9 @@ begin
       if Tokens[i].Kind = tkIdent then
       begin
         name := GetTokenStr(i);
+        if IsClassType(name) then tk := tyClass;
         ci := PyFindConstraint(name);
-        if ci >= 0 then tk := PyLocals[ci].TypeKind
+        if (tk = tyUnknown) and (ci >= 0) then tk := PyLocals[ci].TypeKind
         else
         begin
           si := FindSym(name);
@@ -195,6 +203,15 @@ begin
     if tk <> tyUnknown then Result := PyWiden(Result, tk);
     Inc(i);
   end;
+end;
+
+procedure PyRegisterClassShells;
+var i: Integer;
+begin
+  for i := 0 to TokCount - 2 do
+    if (Tokens[i].Kind = tkClass) and (Tokens[i + 1].Kind = tkIdent) and
+       (FindUClass(GetTokenStr(i + 1)) < 0) then
+      AddUClass(Tokens[i + 1].SOffset, Tokens[i + 1].SLen);
 end;
 
 procedure PyCollectLocals(bodyStart, bodyEnd: Integer);
@@ -329,6 +346,59 @@ begin
   if negative then AppendChar(res, '-');
   for i := Length(rev) downto 1 do AppendChar(res, rev[i]);
   Result := res;
+end;
+
+function PyStoredName(const s: AnsiString): Integer;
+var i: Integer;
+begin
+  Result := TokCharLen;
+  for i := 1 to Length(s) do
+  begin
+    if TokCharLen >= STRING_CAP then Error('token char buffer overflow');
+    TokChars[TokCharLen] := s[i];
+    Inc(TokCharLen);
+  end;
+end;
+
+function PyRawName(off, len: Integer): AnsiString;
+var i: Integer; s: AnsiString;
+begin
+  s := '';
+  for i := 0 to len - 1 do AppendChar(s, TokChars[off + i]);
+  Result := s;
+end;
+
+function PyClassCreate: Integer;
+var name: AnsiString; ci, recId, node, argNode, lastArg, sizeNode: Integer;
+begin
+  name := CurTok.SVal;
+  ci := FindUClass(name);
+  if ci < 0 then Error('Nil Python: class not found: ' + name);
+  recId := REC_UCLASS_BASE + ci;
+  Next;
+  Expect(tkLParen, '(');
+  node := AllocNode(AN_CALL);
+  ASTIVal[node] := -Ord(tkGetMem);
+  ASTTk[node] := Ord(tyClass);
+  ASTRight[node] := recId;
+  sizeNode := AllocNode(AN_INT_LIT);
+  ASTIVal[sizeNode] := RecSize(recId);
+  ASTTk[sizeNode] := Ord(tyInteger);
+  argNode := AllocNode(AN_ARG);
+  ASTLeft[argNode] := sizeNode;
+  ASTLeft[node] := argNode;
+  lastArg := argNode;
+  while CurTok.Kind <> tkRParen do
+  begin
+    ParseExpr;
+    argNode := AllocNode(AN_ARG);
+    ASTLeft[argNode] := CurASTNode;
+    ASTRight[lastArg] := argNode;
+    lastArg := argNode;
+    if not Eat(tkComma) then break;
+  end;
+  Expect(tkRParen, ')');
+  Result := node;
 end;
 
 procedure PyCoerceAssignmentRHS(lhsTk: TTypeKind; rhsNode: Integer);
@@ -487,7 +557,7 @@ begin
 end;
 
 function PyParseStatement: Integer;
-var name: AnsiString; symIdx, lhsNode, node, ci: Integer; tk: TTypeKind;
+var name: AnsiString; symIdx, lhsNode, node, ci, rhsNode: Integer; tk: TTypeKind;
 begin
   Result := -1;
   if CurTok.Kind = tkIf then begin Result := PyParseIf; Exit; end;
@@ -512,16 +582,36 @@ begin
     Exit;
   end;
   if (CurTok.Kind = tkIdent) and (TokPos < TokCount) and
+     (Tokens[TokPos].Kind = tkDot) then
+  begin
+    ParseExpr;
+    lhsNode := CurASTNode;
+    Expect(tkAssign, '=');
+    ParseExpr;
+    node := AllocNode(AN_ASSIGN);
+    ASTLeft[node] := lhsNode;
+    ASTRight[node] := CurASTNode;
+    Result := node;
+    Exit;
+  end;
+  if (CurTok.Kind = tkIdent) and (TokPos < TokCount) and
      (Tokens[TokPos].Kind = tkAssign) then
   begin
     name := CurTok.SVal;
     symIdx := FindSym(name);
     Next;
     Expect(tkAssign, '=');
-    ParseExpr;
+    if (CurTok.Kind = tkIdent) and IsClassType(CurTok.SVal) and
+       (TokPos < TokCount) and (Tokens[TokPos].Kind = tkLParen) then
+      rhsNode := PyClassCreate
+    else
+    begin
+      ParseExpr;
+      rhsNode := CurASTNode;
+    end;
     if symIdx < 0 then
     begin
-      tk := IntToTypeKind(ASTTk[CurASTNode]);
+      tk := IntToTypeKind(ASTTk[rhsNode]);
       if CurProc < 0 then
       begin
         ci := PyFindModuleConstraint(name);
@@ -529,11 +619,13 @@ begin
       end;
       symIdx := AllocVar(name, tk);
     end;
+    if (ASTKind[rhsNode] = AN_CALL) and (ASTIVal[rhsNode] = -Ord(tkGetMem)) then
+      Syms[symIdx].RecName := ASTRight[rhsNode];
     lhsNode := PyMakeIdent(symIdx);
-    PyCoerceAssignmentRHS(Syms[symIdx].TypeKind, CurASTNode);
+    PyCoerceAssignmentRHS(Syms[symIdx].TypeKind, rhsNode);
     node := AllocNode(AN_ASSIGN);
     ASTLeft[node] := lhsNode;
-    ASTRight[node] := CurASTNode;
+    ASTRight[node] := rhsNode;
     Result := node;
     Exit;
   end;
@@ -635,19 +727,215 @@ begin
   CurProc := -1;
 end;
 
+function PyMethodName(const name: AnsiString): AnsiString;
+begin
+  if name = '__init__' then Result := 'create' else Result := name;
+end;
+
+function PyHeaderParamType(methodStart, stopIdx: Integer; const name: AnsiString): TTypeKind;
+var i: Integer;
+begin
+  Result := tyUnknown;
+  for i := methodStart to stopIdx - 2 do
+    if (Tokens[i].Kind = tkIdent) and (GetTokenStr(i) = name) and
+       (Tokens[i + 1].Kind = tkColon) then
+    begin
+      Result := PyTypeFromTokenIndex(i + 2);
+      Exit;
+    end;
+end;
+
+procedure PyRegisterClassMembers(ci, bodyStart, bodyEnd: Integer);
+var i, j, k, depth, methodStart, nparams, pi, mmi, slot, curOff, align, sz: Integer;
+    origName, name, fullName, rhsName: AnsiString; isCtor: Boolean;
+    pnames: array[0..15] of AnsiString; ptypes: array[0..15] of TTypeKind;
+    tk: TTypeKind;
+begin
+  curOff := 8;
+  align := 8;
+  depth := 0;
+  i := bodyStart;
+  while i < bodyEnd do
+  begin
+    if Tokens[i].Kind = tkIndent then Inc(depth)
+    else if Tokens[i].Kind = tkDedent then Dec(depth)
+    else if (depth = 0) and (Tokens[i].Kind = tkFunction) then
+    begin
+      methodStart := i;
+      origName := GetTokenStr(i + 1);
+      name := PyMethodName(origName);
+      isCtor := name = 'create';
+      nparams := 0;
+      j := i + 3;
+      while Tokens[j].Kind <> tkRParen do
+      begin
+        pnames[nparams] := GetTokenStr(j);
+        if (nparams = 0) and (pnames[nparams] = 'self') then
+          ptypes[nparams] := tyClass
+        else
+        begin
+          Inc(j);
+          if Tokens[j].Kind <> tkColon then Error('Nil Python: expected parameter type annotation');
+          Inc(j);
+          ptypes[nparams] := PyTypeFromTokenIndex(j);
+          if ptypes[nparams] = tyUnknown then Error('Nil Python: expected parameter type annotation');
+        end;
+        Inc(nparams);
+        Inc(j);
+        if Tokens[j].Kind = tkComma then Inc(j);
+      end;
+      fullName := PyRawName(UClsNOff[ci], UClsNLen[ci]);
+      AppendChar(fullName, '.');
+      for k := 1 to Length(name) do AppendChar(fullName, name[k]);
+      pi := RegisterProc(fullName, not isCtor, tyInteger, nparams, pnames, ptypes);
+      if isCtor then
+      begin
+        k := PyStoredName('create');
+        AddUMeth(ci, k, 6, pi);
+      end
+      else
+        AddUMeth(ci, Tokens[i + 1].SOffset, Tokens[i + 1].SLen, pi);
+      mmi := UMthCount - 1;
+      if not isCtor then
+      begin
+        slot := UClsVirtCount[ci];
+        UClsVirtCount[ci] := UClsVirtCount[ci] + 1;
+        UMthVirSlot[mmi] := slot;
+      end;
+      { Constructor assignments define fields: self.name = annotated_param. }
+      if isCtor then
+      begin
+        while (j < bodyEnd) and (Tokens[j].Kind <> tkIndent) do Inc(j);
+        Inc(j);
+        while (j + 4 < bodyEnd) and (Tokens[j].Kind <> tkDedent) do
+        begin
+          if (Tokens[j].Kind = tkIdent) and (GetTokenStr(j) = 'self') and
+             (Tokens[j + 1].Kind = tkDot) and (Tokens[j + 2].Kind = tkIdent) and
+             (Tokens[j + 3].Kind = tkAssign) then
+          begin
+            tk := PyTypeFromTokenIndex(j + 4);
+            if (tk = tyUnknown) and (Tokens[j + 4].Kind = tkIdent) then
+            begin
+              rhsName := GetTokenStr(j + 4);
+              tk := PyHeaderParamType(methodStart, j, rhsName);
+            end;
+            if tk = tyUnknown then Error('Nil Python: cannot infer class field type');
+            if FindUField(ci, GetTokenStr(j + 2)) < 0 then
+            begin
+              sz := TypeSize(tk);
+              curOff := AlignTo(curOff, TypeAlign(tk));
+              AddUField(ci, Tokens[j + 2].SOffset, Tokens[j + 2].SLen, curOff, Ord(tk), REC_NONE);
+              Inc(curOff, sz);
+            end;
+          end;
+          Inc(j);
+        end;
+      end;
+    end;
+    Inc(i);
+  end;
+  UClsSize_[ci] := AlignTo(curOff, align);
+  UClsVMTOffset[ci] := DataLen;
+  for i := 0 to UClsVirtCount[ci] * 8 - 1 do
+  begin
+    Data[DataLen] := 0;
+    Inc(DataLen);
+  end;
+  for i := UClsMBase[ci] to UClsMBase[ci] + UClsMCount[ci] - 1 do
+    if UMthVirSlot[i] >= 0 then
+    begin
+      MethodFixups[MethodFixCount].DataPos := UClsVMTOffset[ci] + UMthVirSlot[i] * 8;
+      MethodFixups[MethodFixCount].ProcIdx := UMthProc_[i];
+      Inc(MethodFixCount);
+    end;
+end;
+
+procedure PyParseMethod(ci: Integer);
+var origName, name, fullName: AnsiString; pi, i, idx, nparams, savedSC, savedFS,
+    savedSelf, patchPos, bodyNode: Integer; pnames: array[0..15] of AnsiString;
+    ptypes: array[0..15] of TTypeKind; isCtor: Boolean;
+begin
+  Expect(tkFunction, 'def');
+  origName := CurTok.SVal; name := PyMethodName(origName); Next;
+  isCtor := name = 'create';
+  Expect(tkLParen, '(');
+  nparams := 0;
+  while CurTok.Kind <> tkRParen do
+  begin
+    pnames[nparams] := CurTok.SVal; Next;
+    if (nparams = 0) and (pnames[nparams] = 'self') then ptypes[nparams] := tyClass
+    else begin Expect(tkColon, ':'); ptypes[nparams] := PyParseType; end;
+    Inc(nparams);
+    if not Eat(tkComma) then break;
+  end;
+  Expect(tkRParen, ')'); Expect(tkMinus, '- in ->'); Expect(tkGt, '> in ->');
+  if isCtor then begin Expect(tkNil, 'None'); end else PyParseType;
+  Expect(tkColon, ':'); Expect(tkNewline, 'newline'); Expect(tkIndent, 'indent');
+  fullName := PyRawName(UClsNOff[ci], UClsNLen[ci]); AppendChar(fullName, '.');
+  for i := 1 to Length(name) do AppendChar(fullName, name[i]);
+  pi := FindProc(fullName);
+  savedSC := SymCount; savedFS := FrameSize; savedSelf := CurSelfClass;
+  FrameSize := 0; CurProc := pi; CurSelfClass := REC_UCLASS_BASE + ci;
+  for i := 0 to nparams - 1 do
+  begin
+    idx := AllocParam(pnames[i], ptypes[i], False, False);
+    Procs[pi].Params[i].SymIdx := idx;
+    if i = 0 then Syms[idx].RecName := REC_UCLASS_BASE + ci;
+  end;
+  if not isCtor then begin idx := AllocVar('Result', Procs[pi].RetType); Procs[pi].RetSymIdx := idx; end;
+  Procs[pi].BodyAddr := CodeLen;
+  patchPos := EmitProcPrologue; Procs[pi].FramePatch := patchPos;
+  for i := 0 to nparams - 1 do
+  begin
+    idx := Procs[pi].Params[i].SymIdx;
+    if TypeSize(Syms[idx].TypeKind) = 8 then EmitB($48);
+    EmitB($89);
+    case i of 0: EmitB($BD); 1: EmitB($B5); 2: EmitB($95); 3: EmitB($8D); end;
+    EmitI32(Syms[idx].Offset);
+  end;
+  bodyNode := PyParseBlock; Expect(tkDedent, 'dedent');
+  CompileAST(bodyNode); EmitProcEpilog(Procs[pi].RetSymIdx); PatchProcPrologue(patchPos, FrameSize);
+  SymCount := savedSC; FrameSize := savedFS; CurProc := -1; CurSelfClass := savedSelf;
+end;
+
+procedure PyParseClass;
+var ci, bodyStart, bodyEnd: Integer;
+begin
+  Expect(tkClass, 'class');
+  ci := FindUClass(CurTok.SVal); Next;
+  Expect(tkColon, ':'); Expect(tkNewline, 'newline'); Expect(tkIndent, 'indent');
+  bodyStart := TokPos - 1; bodyEnd := PyFindBodyEnd(bodyStart);
+  PyRegisterClassMembers(ci, bodyStart, bodyEnd);
+  PySkipNewlines;
+  while CurTok.Kind <> tkDedent do begin PyParseMethod(ci); PySkipNewlines; end;
+  Expect(tkDedent, 'dedent');
+end;
+
 procedure ParsePyProgram;
 var mainNode, stmt, blockNode, jmpPatch: Integer;
 begin
   PyValidateOperators;
+  PyRegisterClassShells;
   PyCollectModuleLocals;
   BSS_INITIAL_RSP := BSSSize; Inc(BSSSize, 8);
+  BSS_HEAP_PTR    := BSSSize; Inc(BSSSize, 8);
+  BSS_HEAP_END    := BSSSize; Inc(BSSSize, 8);
+  BSS_FREE_LIST   := BSSSize; Inc(BSSSize, 8);
+  BSS_HEAP_LOCK   := BSSSize; Inc(BSSSize, 8);
   EmitB($48); EmitB($89); EmitB($24); EmitB($25); EmitGlobRef(BSS_INITIAL_RSP);
+  MovRsiImm(HEAP_ARENA_SIZE);
+  EmitMmapArena;
+  EmitB($48); EmitB($89); EmitB($04); EmitB($25); EmitGlobRef(BSS_HEAP_PTR);
+  EmitB($48); EmitB($89); EmitB($C2);
+  EmitB($48); EmitB($81); EmitB($C2); EmitI32(HEAP_ARENA_SIZE);
+  EmitB($48); EmitB($89); EmitB($14); EmitB($25); EmitGlobRef(BSS_HEAP_END);
   EmitB($E9); jmpPatch := CodeLen; EmitI32(0);
   mainNode := -1;
   PySkipNewlines;
   while CurTok.Kind <> tkEOF do
   begin
-    if CurTok.Kind = tkFunction then PyParseDef
+    if CurTok.Kind = tkClass then PyParseClass
+    else if CurTok.Kind = tkFunction then PyParseDef
     else
     begin
       stmt := PyParseStatement;
