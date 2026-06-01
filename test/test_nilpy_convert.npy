@@ -1,0 +1,2 @@
+print(int(3.9))
+print(str(42))

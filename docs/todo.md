@@ -167,6 +167,31 @@ digest. That is the hard part — not a reason to drop the goal.
 
 ---
 
+## 2d. Managed runtime values and thread audit  ⬜  (next runtime arc)
+
+Full ordered design: **[`threads-todo.md`](threads-todo.md)**.
+
+- Unify class, string, array, and raw-memory allocation behind one heap path;
+  keep Linux syscalls as optional target hooks and improve
+  splitting/coalescing/in-place resize/bins only after the shared path is
+  correct. See
+  **[`allocator-platform-design.md`](allocator-platform-design.md)**.
+- Add a fixed-static-arena profile so allocator and managed-value tests pass
+  without `mmap`, `munmap`, or `brk`.
+- Replace fixed-capacity inline strings with variable-length,
+  reference-counted, copy-on-write `AnsiString` allocations. Every allocation
+  reserves one extra trailing `#0` byte so the data pointer is directly
+  `PChar` compatible.
+- Deepen dynamic arrays after the general managed-value finalization model:
+  scope-exit release, params/results, then managed element types.
+- Preserve a short default path: mutexes, spinlocks, and atomic updates are
+  emitted only with `--threadsafe` / `{$THREADSAFE ON}`.
+- Audit compound runtime operations after managed values land. In particular,
+  threaded `write`/`writeln` needs statement-level serialization because one
+  Pascal output statement currently emits several syscalls.
+
+---
+
 ## 3. Interfaces  ⬜  (intentionally deferred)
 
 Interfaces remain a real language gap, but they are not active work. No
@@ -247,30 +272,30 @@ inheritance depth, method-resolution clauses, COM ARC.
   fixed-capacity values with a length prefix, not heap-backed reference-counted
   `AnsiString`s. Do this before ownership-heavy dynamic-array work so arrays of
   strings can reuse the same managed-value initialization, assignment,
-  finalization, and copy-on-write rules. Decide the threading contract before
-  fixing the ABI: supporting strings shared across threads requires atomic
-  refcount increments/decrements or another synchronization policy. Atomics
-  add assignment overhead; a mutex per operation is likely worse. A
-  single-threaded contract is cheaper but must be explicit. Atomic refcounts
-  protect lifetime accounting only: concurrent mutation and copy-on-write
-  uniqueness checks still require an external synchronization rule or a
-  stronger runtime design.
-- 🟡 **Dynamic arrays.** Work for scalar elements. Missing: reference counting
-  / copy-on-grow (content preserved), reclaim of freed blocks, `array of
-  record` / `array of string`, and dynamic arrays as params / results. Order:
-  allocator foundations → managed `AnsiString` ownership model → dynamic-array
-  depth.
+  finalization, and copy-on-write rules. The threading contract is now fixed:
+  keep one managed ABI in both modes and emit atomic refcount updates only with
+  `--threadsafe`. Atomic refcounts protect lifetime accounting only; concurrent
+  mutation and copy-on-write uniqueness checks still require an external
+  synchronization rule or a stronger runtime design.
+- 🟡 **Dynamic arrays.** Scalar elements support pointer-sized slots,
+  assignment retain/release, preserving grow/shrink, zero-initialized new
+  slots, `SetLength(a, 0)` reclaim, local-slot nil initialization, and
+  conditional atomic refcounts under `--threadsafe`. Missing: automatic
+  release at scope exit, `array of record` / `array of string`, and dynamic
+  arrays as params / results. Deepen these after managed `AnsiString`
+  establishes the general finalization model.
 - 🟡 **Heap allocator.** `GetMem`/`FreeMem` now do real free-list reuse on the
   IR backend (8-byte size header per block + single free list, first-fit, no
   split/coalesce). Enough that
   alloc/free-heavy programs reuse memory instead of only ever bumping.
   `New`/`Dispose`/`ReallocMem` also implemented on top of the same header
   (ReallocMem preserves `min(old,new)` bytes; IR backend only).
-  **Proper allocator still TODO** (own arc): a hybrid that keeps small blocks
-  on our free list but routes large requests (e.g. ≥ some threshold like a 1 MB
-  array) straight to `mmap`, `munmap`s large frees back to the kernel, and adds
-  size-binning + coalescing to fight fragmentation. Also fold the dynamic-array
-  reclaim above into it.
+  **Proper allocator still TODO** (own arc): a syscall-free internal heap with
+  alignment, splitting, coalescing, and in-place resize attempts, plus optional
+  target hooks for region reserve/release/resize. Linux can use `mmap`/`munmap`
+  hooks for large regions; bare-metal and RTOS-backed ESP32 profiles must not
+  depend on them. Add bins after the shared allocator path is correct. See
+  [`allocator-platform-design.md`](allocator-platform-design.md).
 - ✅ **`Val`/`Str`** (integer). Implemented as pure-Pascal `lib/rtl/builtin.pas`
   (`StrInt`, `Val`), auto-included **only** when a program calls `Str(`/`Val(`
   (token pre-scan in ParseProgram, mirroring the exception-runtime prescan — no

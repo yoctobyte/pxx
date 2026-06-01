@@ -1939,6 +1939,28 @@ begin
     tkIdent:
     begin
       name := CurTok.SVal;
+      if isNilPy and (name = 'int') then
+      begin
+        Next; Expect(tkLParen, '('); ParseExpr; Expect(tkRParen, ')');
+        node := AllocNode(AN_CALL); ASTIVal[node] := -200;
+        ASTTk[node] := Ord(tyInteger);
+        argSeq := AllocNode(AN_ARG); ASTLeft[argSeq] := CurASTNode;
+        ASTLeft[node] := argSeq;
+        CurASTNode := node;
+        LastExprTk := tyInteger;
+        Exit;
+      end
+      else if isNilPy and (name = 'str') then
+      begin
+        Next; Expect(tkLParen, '('); ParseExpr; Expect(tkRParen, ')');
+        node := AllocNode(AN_CALL); ASTIVal[node] := -201;
+        ASTTk[node] := Ord(tyString);
+        argSeq := AllocNode(AN_ARG); ASTLeft[argSeq] := CurASTNode;
+        ASTLeft[node] := argSeq;
+        CurASTNode := node;
+        LastExprTk := tyString;
+        Exit;
+      end;
       qUnit := ConsumeUnitQualifier(name);
       prevTok := TokPos - 1;
       if CaseEqual(name, 'inherited') then

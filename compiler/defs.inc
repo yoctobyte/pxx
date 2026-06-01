@@ -854,3 +854,6 @@ begin
     Result := match;
   end;
 end;
+
+var
+  isC, isBasic, isNilPy: Boolean;

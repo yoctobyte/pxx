@@ -473,7 +473,7 @@ var left, right, valNode, symIdx, si: Integer;
     isSigned: Boolean;
     baseAddr, indexNode, lo, elemSize, offset, addressNode, valueNode: Integer;
     argNode, pathIdx, pi, specialId, classIdx, slot, cpi, i, jbePatch: Integer;
-    searchTop, pJzBump, pJaeTake, pJmpDone, pJbeNoGrow, pFreeNil: Integer;
+    searchTop, pJzBump, pJaeTake, pJmpDone, pJbeNoGrow, pFreeNil, pNotDouble, pDone: Integer;
     pDynZero, pDynNoOld, pDynKeepCopy: Integer;
     wid, decs: Integer;
     arg1Node, arg2Node, arg3Node, val1Node, val2Node: Integer;
@@ -1556,6 +1556,36 @@ begin
           begin
             arg1Node := IRB[node];
             IREmitNode(IRA[arg1Node]);
+          end
+          else if specialId = 200 then
+          begin
+            { int(x): float/Variant -> integer }
+            arg1Node := IRB[node];
+            val1Node := IRA[arg1Node];
+            IREmitNode(val1Node); { evaluates arg -> rax }
+            if TypeIsFloat(IntToTypeKind(IRTk[val1Node])) then
+            begin
+              EmitB($66); EmitB($48); EmitB($0F); EmitB($6E); EmitB($C0);   { movq xmm0, rax }
+              EmitB($F2); EmitB($48); EmitB($0F); EmitB($2C); EmitB($C0);   { cvttsd2si rax, xmm0 }
+            end
+            else if IntToTypeKind(IRTk[val1Node]) = tyVariant then
+            begin
+              EmitB($53);                                      { push rbx }
+              EmitB($48); EmitB($89); EmitB($C3);              { mov rbx, rax }
+              EmitB($48); EmitB($8B); EmitB($03);              { mov rax, [rbx]  ; tag }
+              EmitB($48); EmitB($3D); EmitI32(VT_DOUBLE);      { cmp rax, VT_DOUBLE }
+              EmitB($75); pNotDouble := CodeLen; EmitB(0);     { jne .not_double }
+              EmitB($48); EmitB($8B); EmitB($43); EmitB($08);  { mov rax, [rbx+8] ; payload }
+              EmitB($66); EmitB($48); EmitB($0F); EmitB($6E); EmitB($C0);   { movq xmm0, rax }
+              EmitB($F2); EmitB($48); EmitB($0F); EmitB($2C); EmitB($C0);   { cvttsd2si rax, xmm0 }
+              EmitB($EB); pDone := CodeLen; EmitB(0);          { jmp .done }
+              { .not_double: }
+              Code[pNotDouble] := Byte(CodeLen - (pNotDouble + 1));
+              EmitB($48); EmitB($8B); EmitB($43); EmitB($08);  { mov rax, [rbx+8] ; payload }
+              { .done: }
+              Code[pDone] := Byte(CodeLen - (pDone + 1));
+              EmitB($5B);                                      { pop rbx }
+            end;
           end
           else if specialId = Ord(tkArgCount) then
           begin

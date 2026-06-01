@@ -30,6 +30,7 @@ Architecture and current state:
 - [IR Backend Status](ir-handover.md) - IR pipeline, coverage, and known gaps. The IR path is the development focus and has reached self-recompile fixedpoint.
 - [Compatibility Status](../COMPATIBILITY.md) - dated implementation inventory and bootstrap policy.
 - [Target Roadmap](roadmap.md) - planned CPU targets and the fixedpoint gate each must pass.
+- [Allocator Platform Design](allocator-platform-design.md) - syscall-free internal heap with optional hosted or RTOS hooks.
 
 Additional project material:
 

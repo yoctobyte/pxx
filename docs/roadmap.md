@@ -118,6 +118,13 @@ etc.). Either:
 - A thin HAL Pascal unit the user provides
 - Or a built-in target-specific default (e.g. `writeln` → UART0 on ESP32)
 
+Memory follows the same rule. Managed strings, dynamic arrays, classes, and
+`GetMem` must work with the syscall-free internal heap described in
+[`allocator-platform-design.md`](allocator-platform-design.md). Hosted targets
+may add optional reserve/release/resize hooks; bare-metal ESP32 can initialize
+the heap from linker-defined RAM regions, while an ESP32 RTOS profile can adapt
+RTOS allocation services without changing language semantics.
+
 ### ESP32 specifics
 - ESP32 original: Xtensa LX6 dual-core, 32-bit
 - ESP32-C3/C6/H2: RISC-V (RV32IMC)

@@ -1,96 +1,199 @@
-# Multithreading Roadmap & Design Todo
+# Managed Runtime and Multithreading Roadmap
 
-This document serves as a technical design specification and task roadmap for the continuation of the multithreading and thread-safety features in the Frankonpiler/PXX dialect.
+**Updated:** 2026-06-01
 
----
+This is the active design for managed runtime values and thread safety. The
+older allocator options discussion in
+[`threading-and-heap-design.md`](threading-and-heap-design.md) is background
+material; this document defines the implementation order.
 
-## 1. Executive Status & Retrospective
+## 1. Fixed Policy
 
-We have successfully established the foundational multithreading architecture. Single-threaded programs continue to compile and run with zero overhead, while compiling with `--threadsafe` or `{$THREADSAFE ON}` correctly compiles concurrent code, self-hosts, and runs under FPC and self-hosted compiler pipelines without deadlocks or register corruption.
+- Threading remains optional. `--threadsafe` and `{$THREADSAFE ON}` enable
+  synchronization; the default remains single-threaded.
+- The non-threaded path stays short: no mutexes, spinlocks, atomic prefixes, or
+  synchronization syscalls are emitted unless `ThreadSafeMode` is active.
+- Managed `AnsiString` and dynamic-array ABIs are not optional dialect modes.
+  Their layout and value semantics stay the same in both modes. Only refcount
+  updates and shared-runtime critical sections differ.
+- Build the simple correct threaded implementation first. Optimize contention
+  only after stress tests justify the complexity.
 
-### Completed Milestones
-* **Global Heap Lock**: Implemented a 32-bit user-space spinlock (`BSS_HEAP_LOCK`) using atomic `lock xchg` and `mov` instructions around all heap allocations, deallocations, and reallocations.
-* **System V ABI Register Compliance**: Resolved a thread hang/deadlock by saving and restoring the callee-saved `%rbx` register inside the `GetMem` and `ReallocMem` inline blocks (`push %rbx` / `pop %rbx`).
-* **General Type Alias Resolution**: Extended the parser to register non-pointer type aliases (e.g., `PthreadT = QWord`), resolving a truncation issue where 64-bit Thread IDs were corrupted during `pthread_join`.
-* **Testing Infrastructure**: Integrated robust, concurrent thread-joining tests into all bootstrap verification stages in the `Makefile`.
+## 2. Current Baseline
 
----
+Already implemented:
 
-## 2. Upcoming Roadmap & Technical Specifications
+- `--threadsafe` and `{$THREADSAFE ON/OFF}`.
+- Conditional heap spinlock emission around IR `GetMem`, `FreeMem`, and
+  `ReallocMem`.
+- Heap blocks with size headers, a first-fit free list, and `mmap` arena growth
+  in the IR allocator path.
+- Scalar dynamic arrays with pointer-sized slots, assignment retain/release,
+  preserving `SetLength`, zero-initialized growth, replacement reclaim, and
+  atomic refcount updates only under `--threadsafe`, using the provisional
+  layout `[refcount:8][length:8][data...]`.
+- A pthread regression that concurrently allocates and frees heap blocks.
 
-```mermaid
-graph TD
-    classDef priority fill:#2b2b2b,stroke:#db4437,stroke-width:2px,color:#fff;
-    A[Global Spinlock Heap] --> B["Refcounted Strings & Arrays<br>(Absolute Priority)"]:::priority
-    B --> C["Dynamic Arrays (Mandatory)"]
-    B --> D["Refcounted Strings (Switch-controlled)"]
-    A --> E[Thread-Local Storage / TLS]
-    E --> F[Thread-Local Heap Arena]
+Known gaps:
+
+- Strings are still fixed-capacity inline values: globals reserve
+  `STRING_CAP + 8`; locals reserve `LOCAL_STR_CAP + 8`.
+- Dynamic arrays still need automatic release at scope exit and support for
+  managed element types, params, and results.
+- The older shared `EmitBumpAlloc` helper still uses the obsolete `brk` model
+  and is not protected by the heap lock. Managed values must go through one
+  allocator path before threaded stress testing.
+- `write`/`writeln`, exception output, and `read`/`readln` use shared output or
+  input state without a threaded atomic-operation policy.
+
+## 3. Phase 1: Managed `AnsiString`
+
+Do strings first. They are heavily exercised by the compiler itself and force
+the lifetime model needed by dynamic arrays.
+
+### ABI
+
+An `AnsiString` variable is one pointer-sized slot. `nil` represents the empty
+string. A non-empty string points directly at its first character for free
+`PChar` compatibility:
+
+```text
+allocation base
+  +0   refcount     qword
+  +8   length       qword
+  +16  capacity     qword
+  +24  data[0]      byte  <-- AnsiString value / PChar
+       ...
+  +24+length        byte  always #0
 ```
 
-### Phase 1: Reference-Counted Strings & Dynamic Arrays (Absolute Priority)
-Following our preprocessor stack allocation retrospective, implementing **dynamic, reference-counted strings (`AnsiString`) and dynamic arrays** has been elevated to the absolute top of the upcoming roadmap. 
+Always allocate room for `capacity + 1` bytes and write a trailing zero after
+creation, resize, concatenation, append, indexed mutation, and input. The
+terminator is outside the Pascal `Length`.
 
-By transitioning local string buffers from fixed-size call-stack allocations (which risk silently exceeding the 8 MB OS stack limit under deep recursion) to dynamically allocated, reference-counted heap pointers (just 8 bytes on the stack), we will permanently eliminate the danger of stack overflow and BSS memory corruption.
+The empty string is `nil`; `PChar('')` support can later use a shared static
+zero byte if required by compatibility tests.
 
-#### Implementation Steps:
-1. **Reference Counting Compiler Pass**: Update the code generator (`ir_codegen.inc` and `symtab.inc`) to track string variable lifetimes and automatically insert atomic reference increments (`lock inc`) and decrements (`lock dec`).
-2. **Copy-on-Write (COW) Semantics**: Add runtime helper routines to perform the "split" operation (duplicate buffer if refcount > 1) prior to any string modifications.
-3. **Dynamic Heap Allocation**: Integrate string manipulation routines (`Concat`, `Insert`, etc.) directly with our thread-safe `GetMem`/`ReallocMem` heap allocator.
+### Semantics
 
----
+- Assignment shares the allocation and increments its refcount.
+- Scope exit, overwrite, record/class finalization, and global finalization
+  decrement the old allocation and free it at zero.
+- Mutating operations use copy-on-write when `refcount > 1`.
+- Capacity allows append-heavy paths such as lexer preprocessing to grow
+  geometrically instead of reallocating for every character.
+- Literals may initially materialize into managed allocations. A later
+  immortal/static-literal optimization is valid if it preserves the ABI.
 
-### Phase 2: Dynamic Arrays Atomic Locking
-Dynamic arrays are reference-counted structures in the PXX dialect. Currently, reference increments and decrements are performed via standard memory modifications, which are unsafe under concurrent thread access.
+### Threaded Delta
 
-#### Implementation Steps
-1. **Locate Refcount Nodes**: Locate where reference counts are updated inside [ir_codegen.inc](file:///home/rene/frankonpiler/compiler/ir_codegen.inc).
-2. **Inject Lock Prefixes**: In thread-safe mode, emit the x86-64 `lock` prefix (`$F0`) before reference increment and decrement instructions.
-   > [!IMPORTANT]
-   > On x86-64, only specific instructions (like `ADD`, `SUB`, `INC`, `DEC`) can be prefixed with `lock` when their destination operand is in memory.
+- Default mode emits ordinary refcount increment/decrement instructions.
+- `ThreadSafeMode` emits atomic memory refcount updates, for example
+  `lock inc qword [ptr-24]` and `lock dec qword [ptr-24]`.
+- The decrement-to-zero decision must be part of the same atomic decrement
+  sequence (`lock dec` followed by flags-based branch), so exactly one thread
+  reclaims the allocation.
+- Copy-on-write protects separate variables sharing an allocation. Concurrent
+  writes through the same variable remain a caller data race; the runtime does
+  not turn every variable access into a lock.
 
----
+### Migration Order
 
-### Phase 3: The String Reference-Counting Switch
-Currently, strings in PXX are simplified, value-copied structures. If we implement reference-counted strings, they **must** be placed behind a compiler switch due to significant design trade-offs:
+1. Add centralized code-emission helpers for managed retain, release,
+   allocation, uniqueness, and trailing-zero maintenance.
+2. Change string locals, globals, fields, params, and results to pointer slots.
+3. Convert literal assignment, variable assignment, concat, `AppendChar`,
+   `SetLength`, indexed reads/writes, comparisons, `Length`, `Str`/`Val`,
+   `readln`, and `write`/`writeln`.
+4. Inject releases on overwrite and normal scope exit, then cover early
+   `Exit`, exception unwinding, records, classes, and globals.
+5. Bootstrap and fixedpoint-test in both default and `--threadsafe` modes.
 
-#### The String Reference-Counting Switch
-We will introduce `{$REFCOUNTSTRINGS ON/OFF}` and the `--refcount-strings` command-line flag.
+## 4. Phase 2: Managed Dynamic Arrays
 
-| Mode | Semantics | Performance Pros | Performance Cons |
-| :--- | :--- | :--- | :--- |
-| **Value-Copied (Default)** | Value semantics, deep copy on assign | Extremely fast local assignments, no locking overhead | High copy cost for very large strings |
-| **Reference-Counted (Optional)** | Pointer semantics, shared buffers | Instant assignments (pointer copies) | Atomic refcount modification penalties, complex COW logic |
+Use the same ownership machinery after strings are stable.
 
-> [!NOTE]
-> **Copy-On-Write (COW) Semantics:**
-> When writing to a character index in a reference-counted string (e.g., `s[i] := 'a'`), the code generator must first check if the reference count is $> 1$. If so, it must allocate a new buffer, copy the string data (the "split" operation), decrement the old refcount, and only then perform the write. This prevents modifying other string variables sharing the same buffer.
+### ABI
 
----
+A dynamic-array variable is one pointer-sized slot. `nil` represents length
+zero. A non-empty value points directly at element zero:
 
-### Phase 3: Thread-Local Storage (TLS) & Hybrid Allocator
-To eliminate spinlock contention under highly concurrent allocation workloads, we can transition from a globally locked heap to a hybrid thread-local heap model.
-
+```text
+allocation base
+  +0   refcount     qword
+  +8   length       qword
+  +16  capacity     qword
+  +24  element[0]   <-- dynamic-array value
 ```
-+-------------------------------------------------------------+
-|                     GLOBAL MMAP HEAP                        |
-+-------------------------------------------------------------+
-                               | (Grow Local Arena)
-                               v
-+------------------+  +------------------+  +------------------+
-|  Thread 1 Heap   |  |  Thread 2 Heap   |  |  Thread 3 Heap   |
-| (Lock-Free Bump) |  | (Lock-Free Bump) |  | (Lock-Free Bump) |
-+------------------+  +------------------+  +------------------+
-```
 
-#### Architecture Design
-* **Thread-Local Arena**: Each thread has a fast, lock-free bump-allocation pointer referencing a thread-local segment.
-* **Segment Register access**: Thread-local heap pointers are accessed using the AMD64 `%fs` segment register (e.g. `%fs:0`).
-* **Global Heap Fallback**: Large allocations or cross-thread memory deallocations fall back onto the globally synchronized heap.
+### Semantics
 
----
+- Assignment retains; overwrite and scope exit release.
+- `SetLength` preserves `min(oldLength, newLength)` elements.
+- New scalar slots are zero-initialized.
+- Resize may occur in place only for a unique allocation with sufficient
+  capacity; otherwise allocate-copy-release.
+- Dynamic arrays of strings and records come after scalar lifecycle support.
+  They need element initialization, copy, and finalization helpers.
+- Apply the same conditional atomic refcount strategy as `AnsiString`.
 
-### Phase 4: Threading Library Abstraction
-Introduce native abstractions to insulate code from raw POSIX FFI:
-* **TThread Class**: Provide a standard `TThread` class or a lightweight `beginthread`/`endthread` procedural wrapper.
-* **Automatic Thread Cleanup**: Manage thread descriptors and resource reclamation natively upon termination.
+### Verification
+
+Add regressions for alias assignment, copy-on-resize, shrink/grow preservation,
+release at scope exit, arrays of strings, arrays of records containing strings,
+and multi-threaded retain/release stress.
+
+## 5. Phase 3: Heap and Memory Management
+
+Detailed design: [`allocator-platform-design.md`](allocator-platform-design.md).
+Unify allocation behind a target-neutral contract before adding
+sophistication. Linux syscalls are optional hooks, not runtime requirements.
+
+1. Route `GetMem`, `FreeMem`, `ReallocMem`, class allocation, managed strings,
+   and dynamic arrays through one allocator implementation.
+2. Keep the current global heap spinlock only in `ThreadSafeMode`; default
+   builds emit no lock code.
+3. Implement the required syscall-free internal heap: supplied memory regions,
+   alignment, free-list splitting, adjacent-block coalescing, and in-place
+   resize attempts.
+4. Add optional per-target hooks for region reserve/release/resize. Linux may
+   use `mmap`/`munmap`; bare-metal ESP32 may provide no hooks; an ESP32 RTOS
+   profile may adapt RTOS allocation services.
+5. Add size bins and double-free/debug checks in small independent steps.
+6. Add a fixed-static-arena test profile that emits no memory syscalls.
+7. Consider thread-local arenas only after measurement. Cross-thread free,
+   ownership routing, and TLS ABI details make them a later optimization.
+
+## 6. Phase 4: Thread-Safety Audit
+
+Managed values and the heap are necessary but not sufficient. Audit runtime
+operations with shared mutable state:
+
+- `write`/`writeln`: one source statement currently becomes multiple
+  `SYS_WRITE` calls. Under `ThreadSafeMode`, protect the whole statement so
+  arguments and newline cannot interleave with another thread.
+- `read`/`readln`: protect the shared line buffer and cursor for the whole
+  source statement, or move them to per-thread state.
+- Exception runtime: audit global exception state (`BSS_EXC_*`). It likely
+  needs thread-local storage before exceptions are supported across threads.
+- Unit initialization/finalization and global managed-value release: define
+  single-threaded startup/shutdown ownership.
+- Compiler/RTL globals, resource tables, RTTI registries, and external-call
+  wrappers: distinguish immutable shared data from mutable state.
+- Syscalls: most kernel calls are independently thread-safe, but compound
+  runtime operations may still require a lock around several calls.
+
+Use separate BSS locks for unrelated concerns (`heap`, `stdout`, `stdin`) so
+output does not serialize allocation.
+
+## 7. Exit Gate
+
+Each phase must pass:
+
+1. Default `make test`.
+2. Self-host bootstrap and binary fixedpoint.
+3. The same bootstrap and fixedpoint path compiled with `--threadsafe`.
+4. Focused pthread stress tests for the phase's shared runtime operations.
+
+Only after these gates should native `BeginThread`/`TThread` wrappers or TLS
+allocator optimizations move onto the active roadmap.

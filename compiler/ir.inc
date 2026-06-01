@@ -585,9 +585,9 @@ begin
 end;
 
 function IRLowerAST(node: Integer): Integer;
-var left, right, seq, item, value, outNode, first, last, leftAddr, argNode: Integer;
+var left, right, seq, item, value, outNode, first, last, leftAddr, argNode, argVal, intCallNode, intArgSeq, argNode2, zeroVal, pi: Integer;
     pairNode, condNode, specialId, classIdx, slot, cpi, pathIdx: Integer;
-    isRefArg: Boolean;
+    isRefArg: Boolean; argTk: TTypeKind;
     startLabel, elseLabel, endLabel, startLabelNode, endLabelNode: Integer;
     lhsNode, pair3, pair1, pair2, initNode, limitNode, isDownNode, bodyNode: Integer;
     down: Boolean;
@@ -968,6 +968,41 @@ begin
       last := -1;
       cpi := ASTIVal[node];
       item := ASTLeft[node];
+      if cpi = -201 then
+      begin
+        argVal := ASTLeft[item];
+        argTk := IntToTypeKind(ASTTk[argVal]);
+        if TypeIsFloat(argTk) then
+        begin
+          intCallNode := AllocNode(AN_CALL);
+          ASTIVal[intCallNode] := -200;
+          ASTTk[intCallNode] := Ord(tyInteger);
+          intArgSeq := AllocNode(AN_ARG);
+          ASTLeft[intArgSeq] := argVal;
+          ASTRight[intArgSeq] := -1;
+          ASTLeft[intCallNode] := intArgSeq;
+          
+          value := IRLowerAST(intCallNode);
+          argTk := tyInteger;
+        end
+        else
+        begin
+          value := IRLowerAST(argVal);
+        end;
+
+        pi := FindProc('StrInt');
+        if pi < 0 then Error('str: builtin unit not loaded');
+
+        argNode := IRAppend(IR_ARG, value, -1, -1, 0, Ord(argTk));
+        first := argNode;
+
+        zeroVal := IRAppend(IR_CONST_INT, 0, -1, -1, 0, Ord(tyInteger));
+        argNode2 := IRAppend(IR_ARG, zeroVal, -1, -1, 0, Ord(tyInteger));
+        IRB[argNode] := argNode2;
+
+        Result := IRAppendCall(pi, first, -1, Ord(tyString));
+        Exit;
+      end;
       pathIdx := 0;
       classIdx := -1;
       if cpi = -Ord(tkGetMem) then

@@ -102,9 +102,10 @@ implemented.
 - PXX does not provide the FPC RTL or its complete set of units.
 - Available built-ins and project units cover tested programs only.
 - Pascal strings are currently inline fixed-capacity values, not heap-backed
-  reference-counted `AnsiString`s. A future managed-string representation must
-  define whether cross-thread sharing is supported before choosing atomic or
-  otherwise synchronized reference-count updates.
+  reference-counted `AnsiString`s. The managed-string ABI and cross-thread
+  policy are now specified in [`threads-todo.md`](threads-todo.md): value
+  semantics stay identical in both modes, while refcount updates become atomic
+  only in `--threadsafe` mode.
 - FPC applications depending on `SysUtils`, containers, streams, rich exception classes,
   platform abstractions, or package ecosystems cannot be assumed to compile.
 

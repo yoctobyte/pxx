@@ -35,7 +35,7 @@ end;
 procedure PyValidateOperators;
 var i: Integer;
 begin
-  for i := 0 to TokCount - 1 do
+  for i := 0 to MainProgramTokCount - 1 do
     if Tokens[i].Kind = tkSlash then
     begin
       CurTok.Line := Tokens[i].Line;
@@ -208,7 +208,7 @@ end;
 procedure PyRegisterClassShells;
 var i: Integer;
 begin
-  for i := 0 to TokCount - 2 do
+  for i := 0 to MainProgramTokCount - 2 do
     if (Tokens[i].Kind = tkClass) and (Tokens[i + 1].Kind = tkIdent) and
        (FindUClass(GetTokenStr(i + 1)) < 0) then
       AddUClass(Tokens[i + 1].SOffset, Tokens[i + 1].SLen);
@@ -256,7 +256,7 @@ begin
   skipDepth := -1;
   waitingForFunctionIndent := False;
   i := 0;
-  while i < TokCount do
+  while i < MainProgramTokCount do
   begin
     if Tokens[i].Kind = tkFunction then
       waitingForFunctionIndent := True
@@ -275,11 +275,11 @@ begin
       Dec(depth);
     end
     else if (skipDepth < 0) and (Tokens[i].Kind = tkIdent) and
-            (i + 1 < TokCount) and (Tokens[i + 1].Kind = tkAssign) then
+            (i + 1 < MainProgramTokCount) and (Tokens[i + 1].Kind = tkAssign) then
     begin
       name := GetTokenStr(i);
       j := i + 2;
-      while (j < TokCount) and not (Tokens[j].Kind in [tkNewline, tkDedent]) do Inc(j);
+      while (j < MainProgramTokCount) and not (Tokens[j].Kind in [tkNewline, tkDedent]) do Inc(j);
       tk := PyInferExprType(i + 2, j);
       if tk = tyUnknown then
         Error('Nil Python: cannot infer module local type for ' + name);
@@ -307,7 +307,7 @@ var i, depth: Integer;
 begin
   depth := 1;
   i := bodyStart;
-  while i < TokCount do
+  while i < MainProgramTokCount do
   begin
     if Tokens[i].Kind = tkIndent then Inc(depth)
     else if Tokens[i].Kind = tkDedent then
@@ -318,7 +318,7 @@ begin
     Inc(i);
   end;
   Error('Nil Python: unterminated indented block');
-  Result := TokCount;
+  Result := MainProgramTokCount;
 end;
 
 function PyMakeIdent(symIdx: Integer): Integer;
@@ -914,8 +914,16 @@ begin
 end;
 
 procedure ParsePyProgram;
-var mainNode, stmt, blockNode, jmpPatch: Integer;
+var mainNode, stmt, blockNode, jmpPatch, i: Integer; needsBuiltin: Boolean;
 begin
+  needsBuiltin := False;
+  for i := 0 to MainProgramTokCount - 1 do
+  begin
+    if (Tokens[i].Kind = tkIdent) and (i + 1 < MainProgramTokCount) and
+       (Tokens[i + 1].Kind = tkLParen) and
+       (CaseEqual(GetTokenStr(i), 'str') or CaseEqual(GetTokenStr(i), 'val')) then
+      needsBuiltin := True;
+  end;
   PyValidateOperators;
   PyRegisterClassShells;
   PyCollectModuleLocals;
@@ -932,6 +940,7 @@ begin
   EmitB($48); EmitB($81); EmitB($C2); EmitI32(HEAP_ARENA_SIZE);
   EmitB($48); EmitB($89); EmitB($14); EmitB($25); EmitGlobRef(BSS_HEAP_END);
   EmitB($E9); jmpPatch := CodeLen; EmitI32(0);
+  if needsBuiltin then ParseUsesUnit('builtin');
   mainNode := -1;
   PySkipNewlines;
   while CurTok.Kind <> tkEOF do

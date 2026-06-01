@@ -2,47 +2,33 @@
 
 **Snapshot:** 2026-06-01
 
-Use this as the resume checklist after the set / `inherited` / `shl`,
-aggregate-return, and language-gap batches.
+Use this as the resume checklist after the scalar dynamic-array ownership and
+allocator-platform design batch.
 Source and `make test` remain authoritative; [`todo.md`](todo.md) keeps the
 full inventory.
 
 ## Delivered In The Latest Batch
 
-- Sets now use dedicated 32-byte IR operations for copy assignment, union,
-  intersection, difference, equality, and subset/superset comparisons.
-- Set coverage includes literals, `in`, nested algebra, locals, globals,
-  record fields, `var` parameters, and by-value reads.
-- Explicit `inherited` calls work for constructors, named methods, bare
-  `inherited`, and inherited function results. Calls lower statically to the
-  ancestor body so virtual dispatch does not recurse into the override.
-- Pascal `shl` is tokenized and lowered beside `shr`.
-- Record-valued and set-valued functions share a hidden-destination return
-  ABI, including nested calls, explicit `Exit(set)`, and recursive returns.
-- Qualified `UnitName.Symbol` resolution now selects symbols and overloaded
-  routines from the named imported unit.
-- Named metaclass aliases use `TClassRef = class of TBase`; class values retain
-  their runtime RTTI identity for `CreateInstance` and `ClassNameOf`.
-- Typed-pointer `p + n`, `p - n`, and `n + p` arithmetic scales by the
-  pointed-at type, including record pointers, pointer fields, and casts.
-- Pascal conditional expressions support `defined(NAME)`, bare symbols,
-  `not`, `and`, `or`, parentheses, `0`, and `1`. `{$elseif}`,
-  `{$warning}`, `{$message}`, `{$error}`, and active-branch include expansion
-  are covered.
+- Scalar dynamic-array assignment retains shared storage and releases replaced
+  storage.
+- Scalar `SetLength` preserves content when growing or shrinking, zeroes new
+  slots, reclaims replaced blocks, and releases storage at length zero.
+- Local dynamic-array pointer slots initialize to `nil`.
+- Dynamic-array refcount operations are atomic only in threaded builds.
+- The pthread regression now repeatedly resizes local arrays while four
+  workers also exercise `GetMem` / `FreeMem`.
+- The allocator direction is documented in
+  [`allocator-platform-design.md`](allocator-platform-design.md): a
+  syscall-free internal heap is required on every target, with optional Linux,
+  ESP32 bare-metal, and ESP32 RTOS hooks.
 
 Regression gates:
 
 ```text
-test/test_sets.pas
-test/test_set_shapes.pas
-test/test_inherited.pas
-test/test_shl.pas
-test/test_aggregate_results.pas
-test/test_qualified_units.pas
-test/test_class_of.pas
-test/test_ptr_arithmetic.pas
-test/test_pascal_directives.pas
-test/test_pascal_conditional_include.pas
+test/test_dynarray.pas
+test/test_multithreading.pas
+make all
+make test
 ```
 
 ## Delivered Aggregate ABI
@@ -56,24 +42,26 @@ record returns in `test/test_aggregate_results.pas`.
 
 ## Recommended Order
 
-The previous no-excuse language list is complete. Pick the next arc
-deliberately rather than pulling deferred work forward accidentally:
+The next runtime work should keep hosted optimizations optional:
 
-1. **C header imports.** Grow preprocessing, typedef, struct, callback, and ABI
-   support from concrete GTK/glib header fixtures.
-2. **Allocator foundations.** Improve allocation policy before adding managed
-   values that depend on predictable reclaim behavior.
-3. **Managed `AnsiString`.** Replace the current inline fixed-capacity string
+1. **Allocator contract.** Add central target-neutral `Alloc`, `Free`, and
+   `Realloc` emission helpers. Route raw memory, classes, arrays, and later
+   strings through them.
+2. **Syscall-free profile.** Add a fixed-static-arena test profile. Managed
+   runtime tests must pass without `mmap`, `munmap`, or `brk`.
+3. **Internal allocator.** Add alignment, splitting, coalescing, and in-place
+   resize attempts. Linux `mmap`/`munmap` and future ESP32 RTOS services remain
+   optional target hooks.
+4. **Managed `AnsiString`.** Replace the current inline fixed-capacity string
    representation with reference-counted storage before deepening dynamic
-   arrays. Decide the threading contract first: shared strings require atomic
-   refcount updates or another synchronization policy, while a single-threaded
-   contract avoids that overhead but must be explicit. Atomic refcounts protect
-   lifetime only; they do not make concurrent mutation or copy-on-write checks
-   safe.
-4. **Dynamic arrays.** Reuse the managed-value ownership rules after allocator
-   and `AnsiString` work settle.
-5. **Directive breadth.** Add named checking/optimization switch state only
-   when code generation or diagnostics consume it.
+   arrays. The threading contract is fixed: use one managed ABI in both modes
+   and emit atomic refcount updates only with `--threadsafe`. Atomic refcounts
+   protect lifetime only; they do not make concurrent mutation or copy-on-write
+   checks safe.
+5. **Managed finalization and arrays.** Add scope-exit release, params/results,
+   arrays of strings, and arrays of records.
+6. **Thread audit.** Serialize compound `write`/`writeln`, decide shared
+   `readln` state handling, and move exception globals to a thread-safe model.
 
 ## Deferred Arcs
 
@@ -88,15 +76,19 @@ deliberately rather than pulling deferred work forward accidentally:
 - **Float conversions and float `Str`/`Val`:** handle with the math-library
   design rather than as isolated intrinsics.
 - **Managed `AnsiString`:** design before dynamic-array depth. Current strings
-  are inline fixed-capacity values, not reference-counted heap strings. Decide
-  whether cross-thread sharing is supported before fixing the representation:
-  atomic increments/decrements add overhead, while mutex-based refcounting is
-  likely too expensive for ordinary assignment.
-- **Dynamic-array depth:** improve after allocator and managed-`AnsiString`
-  work. Scalar arrays work; record/string elements, params/results, ownership,
-  copy-on-grow, and reclaim remain incomplete.
-- **Allocator:** replace the current simple first-fit free list with splitting,
-  coalescing, bins, and large-block `mmap`/`munmap`.
+  are inline fixed-capacity values, not reference-counted heap strings. The
+  representation and cross-thread policy are now fixed in
+  [`threads-todo.md`](threads-todo.md): keep one managed ABI in both modes and
+  emit atomic refcount updates only in threaded builds.
+- **Dynamic-array depth:** improve after managed-`AnsiString` establishes the
+  ownership helpers and shared allocation path. Scalar arrays work;
+  record/string elements, params/results, ownership, copy-on-grow, and reclaim
+  remain incomplete.
+- **Allocator:** use the target-neutral contract in
+  [`allocator-platform-design.md`](allocator-platform-design.md). Replace the
+  current simple first-fit free list with a syscall-free internal heap
+  supporting splitting, coalescing, and in-place resize. Keep Linux
+  `mmap`/`munmap` and RTOS services behind optional target hooks.
 - **Compiler internal split:** move include-heavy internals toward real Pascal
   units late, after behavioral work settles.
 

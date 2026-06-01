@@ -1,5 +1,9 @@
 # Threading & Heap Allocation Design Proposal
 
+> Historical design exploration. The implemented baseline and active ordered
+> plan now live in [`threads-todo.md`](threads-todo.md). Statements below about
+> the current implementation are not authoritative.
+
 This document outlines the architectural roadmap for introducing thread safety, locking, and memory allocation control to the Frankonpiler (PXX dialect) without compromising its core system programming performance or "zero external dependencies" philosophy.
 
 ---

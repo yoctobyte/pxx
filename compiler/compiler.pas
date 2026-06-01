@@ -34,7 +34,7 @@ procedure CPreprocess(var src: AnsiString; const baseDir: AnsiString); forward;
 
 { ===== Main ===== }
 
-var inFile, outFile, option, exePath: AnsiString; isC, isBasic, isNilPy, readingOptions: Boolean; n, i, j: Integer;
+var inFile, outFile, option, exePath: AnsiString; readingOptions: Boolean; n, i, j: Integer;
 begin
   DebugTrace := False;
   DumpIR := False;

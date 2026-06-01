@@ -198,9 +198,10 @@ built on the per-block size header `GetMem` gained:
   writes the new pointer back to `p`; `ReallocMem(nil, n)` == `GetMem`. IR
   backend (special call -103). Test `test/test_reallocmem.pas`.
 
-The proper hybrid allocator (mmap large blocks straight from the kernel, munmap
-on free, size-binning/coalescing) is its own arc — `docs/todo.md` §4 "Heap
-allocator".
+The proper allocator is its own arc: a syscall-free internal heap with optional
+target hooks for hosted reserve/release/resize facilities, plus
+splitting/coalescing and later bins. See
+[`allocator-platform-design.md`](allocator-platform-design.md).
 
 - ✅ **`Val`/`Str`** (integer) — done as pure-Pascal `lib/rtl/builtin.pas`
   (`StrInt`, `Val`), not asm. The unit is **auto-included only when the program

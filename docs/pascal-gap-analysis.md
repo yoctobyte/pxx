@@ -28,18 +28,18 @@ allocator-dependent depth work.
   [-4 bytes]: Length / Element Count (32-bit integer)
   [Pointer]:  First element of the array
   ```
-* **Current state**: Implemented for scalar element types. `var a: array of T;` declares a pointer-sized slot holding a heap data pointer; `SetLength(a, n)` allocates a `[refcount(8)][length(8)][elements...]` block and stores the data pointer into the slot; `Length(a)` reads the length word with a nil-guard (unallocated → 0); indexed read/write are 0-based. Distinct declaration format from static arrays, so no conflict with `array[Low..High]`. Coverage: `test/test_dynarray.pas`.
+* **Current state**: Implemented for scalar element types. `var a: array of T;` declares a pointer-sized slot holding a heap data pointer; `SetLength(a, n)` allocates a `[refcount(8)][length(8)][elements...]` block and stores the data pointer into the slot; `Length(a)` reads the length word with a nil-guard (unallocated → 0); indexed read/write are 0-based. Assignment retains/releases shared storage; resize preserves the retained prefix, zeroes new slots, and reclaims replaced blocks; `SetLength(a, 0)` releases storage. Local slots initialize to nil. Refcount updates become atomic only under `--threadsafe`. Distinct declaration format from static arrays, so no conflict with `array[Low..High]`. Coverage: `test/test_dynarray.pas`, `test/test_multithreading.pas`.
 * **Remaining gaps**:
-  - `SetLength` always fresh-allocates; old contents are not preserved on regrow, and freed blocks are not reclaimed (no reference counting / copy semantics yet).
+  - Automatic release at local scope exit.
   - Dynamic `array of record` / `array of string` element types.
   - Dynamic arrays as parameters and function results.
-* **Ordering note**: improve allocator foundations first, then design managed
-  reference-counted `AnsiString`, then deepen arrays. Arrays of strings should
-  reuse the string ownership/finalization rules. The managed-string ABI must
-  state whether cross-thread sharing is supported; that determines whether
-  refcount updates need atomic operations and their associated overhead.
-  Atomic counts protect lifetime only, not concurrent mutation or
-  copy-on-write uniqueness checks.
+* **Ordering note**: follow [`threads-todo.md`](threads-todo.md): land managed
+  reference-counted `AnsiString`, deepen arrays with the same ownership
+  machinery, and unify allocator paths before allocator sophistication. Arrays
+  of strings should reuse the string ownership/finalization rules. The
+  cross-thread policy is fixed: atomic refcount updates are emitted only in
+  threaded builds. Atomic counts protect lifetime only, not concurrent
+  mutation or copy-on-write uniqueness checks.
 
 ### 3. General Pointer Syntax & Semantics (`^T`, `@`, `nil`) — ✅ implemented subset
 * **Reference behavior**: Fully-typed pointer declarations (`^Integer`), explicit dereferencing caret operator (`Ptr^`), the address-of operator (`@Var`), and the predefined constant pointer value `nil` (0).
