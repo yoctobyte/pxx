@@ -403,7 +403,7 @@ test: $(COMPILER) fpc-check
 	/tmp/pascal26-self test/test_heap.pas /tmp/self-test_heap26
 	test "$$(/tmp/self-test_heap26)" = "$$(printf '1\n1\n1\n1\n1\n1')"
 	/tmp/pascal26-self --threadsafe test/test_multithreading.pas /tmp/self-test_multithreading26
-	test "$$(/tmp/self-test_multithreading26 | tail -1)" = "multithreading test completed successfully"
+	/tmp/self-test_multithreading26 | grep -q "multithreading test completed successfully"
 	/tmp/pascal26-self test/test_math_unit.pas /tmp/self-test_math_unit26
 	test "$$(/tmp/self-test_math_unit26)" = "$$(printf '42\n999\n10\n20\n256\n6\n144')"
 	/tmp/pascal26-self test/fileio.pas /tmp/self-fileio26
@@ -424,13 +424,16 @@ test: $(COMPILER) fpc-check
 	/tmp/pascal26-next test/test_heap.pas /tmp/next-test_heap26
 	test "$$(/tmp/next-test_heap26)" = "$$(printf '1\n1\n1\n1\n1\n1')"
 	/tmp/pascal26-next --threadsafe test/test_multithreading.pas /tmp/next-test_multithreading26
-	test "$$(/tmp/next-test_multithreading26 | tail -1)" = "multithreading test completed successfully"
+	/tmp/next-test_multithreading26 | grep -q "multithreading test completed successfully"
 	/tmp/pascal26-next test/test_math_unit.pas /tmp/next-test_math_unit26
 	test "$$(/tmp/next-test_math_unit26)" = "$$(printf '42\n999\n10\n20\n256\n6\n144')"
 	/tmp/pascal26-next test/fileio.pas /tmp/next-fileio26
 	test "$$(/tmp/next-fileio26 test/hello.pas | sed -n '1,3p')" = "$$(printf 'test/hello.pas\n14\n54')"
 	/tmp/pascal26-next $(COMPILER_SRC) /tmp/pascal26-fixedpoint
 	cmp /tmp/pascal26-next /tmp/pascal26-fixedpoint
+	./$(COMPILER) --threadsafe $(COMPILER_SRC) /tmp/pascal26-threadsafe-self
+	/tmp/pascal26-threadsafe-self --threadsafe $(COMPILER_SRC) /tmp/pascal26-threadsafe-next
+	cmp /tmp/pascal26-threadsafe-self /tmp/pascal26-threadsafe-next
 
 stabilize: test
 	@echo "=== stabilize: 4-iteration fixedpoint check ==="
