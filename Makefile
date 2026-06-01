@@ -378,6 +378,20 @@ test: $(COMPILER) fpc-check
 	test "$$(/tmp/test_float26)" = "$$(printf '1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1')"
 	./$(COMPILER) test/test_dynarray.pas /tmp/test_dynarray26
 	test "$$(/tmp/test_dynarray26)" = "$$(printf '1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1')"
+	./$(COMPILER) test/test_variant.pas /tmp/test_variant26
+	test "$$(/tmp/test_variant26)" = "$$(printf '42\n-7\nQ\n 3.140000000000000E+000\n1\n100')"
+	./$(COMPILER) test/test_variant_ops.pas /tmp/test_variant_ops26
+	test "$$(/tmp/test_variant_ops26)" = "$$(printf '8\n2\n15\n 7.500000000000000E+000\n 1.250000000000000E+001\n1\n0\n0\n1\n1\n11\n1')"
+	./$(COMPILER) test/test_variant_div.pas /tmp/test_variant_div26
+	test "$$(/tmp/test_variant_div26)" = "$$(printf '3\n2\n 3.400000000000000E+000\n 2.500000000000000E+000')"
+	./$(COMPILER) test/test_nil_python_core.npy /tmp/test_nil_python_core26
+	test "$$(/tmp/test_nil_python_core26)" = "$$(printf '0\n1\n1\n2\n3\n5\n10')"
+	./$(COMPILER) test/test_nilpy_variant.npy /tmp/test_nilpy_variant26
+	test "$$(/tmp/test_nilpy_variant26)" = "$$(printf '5\n 3.140000000000000E+000\n1')"
+	./$(COMPILER) test/test_nilpy_class.npy /tmp/test_nilpy_class26
+	test "$$(/tmp/test_nilpy_class26)" = "25"
+	./$(COMPILER) test/test_nilpy_widen_fix.npy /tmp/test_nilpy_widen_fix26
+	test "$$(/tmp/test_nilpy_widen_fix26)" = "$$(printf ' 5.000000000000000E+000\n 3.140000000000000E+000\n 7.000000000000000E+000\n 2.500000000000000E+000')"
 	./$(COMPILER) test/test_sets.pas /tmp/test_sets26
 	test "$$(/tmp/test_sets26 | tail -1)" = "all set tests completed!"
 	./$(COMPILER) test/test_set_shapes.pas /tmp/test_set_shapes26
