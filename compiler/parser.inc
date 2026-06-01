@@ -5008,6 +5008,13 @@ begin
       tkConst: ParseConstSection;
       tkType:  ParseTypeSection;
     end;
+  { Dynamic-array locals are managed pointer slots. Initialize them before the
+    body so their first SetLength sees nil rather than stale stack bytes. }
+  for i := savedSC to SymCount - 1 do
+    if (Syms[i].Kind = skLocal) and Syms[i].IsArray and (Syms[i].ArrLen = -1) then
+    begin
+      EmitB($48); EmitB($C7); EmitB($85); EmitI32(Syms[i].Offset); EmitI32(0);
+    end;
   { label declarations: label foo, bar; }
   while (CurTok.Kind = tkIdent) and CaseEqual(CurTok.SVal, 'label') do
   begin
@@ -5431,6 +5438,11 @@ begin
       tkVar:   ParseVarSection;
       tkConst: ParseConstSection;
       tkType:  ParseTypeSection;
+    end;
+  for j := savedSC to SymCount - 1 do
+    if (Syms[j].Kind = skLocal) and Syms[j].IsArray and (Syms[j].ArrLen = -1) then
+    begin
+      EmitB($48); EmitB($C7); EmitB($85); EmitI32(Syms[j].Offset); EmitI32(0);
     end;
 
   { Statements until `end` or `finalization` (an identifier, not a token). }

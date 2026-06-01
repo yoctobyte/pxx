@@ -27,6 +27,117 @@ begin
   end;
 end;
 
+procedure EmitHeapAllocLocked;
+{ rax = requested payload bytes. Returns payload pointer in rax. Caller holds
+  the heap lock when threading is enabled. Uses the GetMem block layout:
+  [size:8][payload...]. }
+var searchTop, pJzBump, pJaeTake, pJmpDone, pJbeNoGrow: Integer;
+begin
+  EmitB($53);                                     { push rbx }
+  EmitB($48); EmitB($83); EmitB($C0); EmitB($07); { add rax, 7 }
+  EmitB($48); EmitB($83); EmitB($E0); EmitB($F8); { and rax, -8 }
+  EmitB($48); EmitB($83); EmitB($F8); EmitB($08); { cmp rax, 8 }
+  EmitB($73); EmitB($05);                         { jae +5 }
+  EmitB($B8); EmitI32(8);                         { mov eax, 8 }
+  EmitB($48); EmitB($89); EmitB($C1);             { mov rcx, rax }
+
+  EmitB($48); EmitB($8D); EmitB($34); EmitB($25); EmitGlobRef(BSS_FREE_LIST); { lea rsi, [FREE_LIST] }
+  searchTop := CodeLen;
+  EmitB($48); EmitB($8B); EmitB($16);             { mov rdx, [rsi] }
+  EmitB($48); EmitB($85); EmitB($D2);             { test rdx, rdx }
+  EmitB($74); pJzBump := CodeLen; EmitB(0);       { jz BUMP }
+  EmitB($48); EmitB($8B); EmitB($42); EmitB($F8); { mov rax, [rdx-8] }
+  EmitB($48); EmitB($39); EmitB($C8);             { cmp rax, rcx }
+  EmitB($73); pJaeTake := CodeLen; EmitB(0);      { jae TAKE }
+  EmitB($48); EmitB($89); EmitB($D6);             { mov rsi, rdx }
+  EmitB($EB); EmitB(Byte(searchTop - (CodeLen + 1)));
+
+  Code[pJaeTake] := Byte(CodeLen - (pJaeTake + 1));
+  EmitB($48); EmitB($8B); EmitB($02);             { mov rax, [rdx] }
+  EmitB($48); EmitB($89); EmitB($06);             { mov [rsi], rax }
+  EmitB($48); EmitB($89); EmitB($D0);             { mov rax, rdx }
+  EmitB($E9); pJmpDone := CodeLen; EmitI32(0);
+
+  Code[pJzBump] := Byte(CodeLen - (pJzBump + 1));
+  EmitB($48); EmitB($8B); EmitB($1C); EmitB($25); EmitGlobRef(BSS_HEAP_PTR); { mov rbx, [HEAP_PTR] }
+  EmitB($48); EmitB($89); EmitB($D8);             { mov rax, rbx }
+  EmitB($48); EmitB($01); EmitB($C8);             { add rax, rcx }
+  EmitB($48); EmitB($83); EmitB($C0); EmitB($08); { add rax, 8 }
+  EmitB($48); EmitB($3B); EmitB($04); EmitB($25); EmitGlobRef(BSS_HEAP_END);
+  EmitB($0F); EmitB($86); pJbeNoGrow := CodeLen; EmitI32(0);
+
+  EmitB($48); EmitB($89); EmitB($CE);             { mov rsi, rcx }
+  EmitB($48); EmitB($83); EmitB($C6); EmitB($08); { add rsi, 8 }
+  EmitB($48); EmitB($81); EmitB($C6); EmitI32(HEAP_ARENA_SIZE);
+  EmitB($51);                                     { push rcx }
+  EmitMmapArena;
+  EmitB($59);                                     { pop rcx }
+  EmitB($48); EmitB($89); EmitB($04); EmitB($25); EmitGlobRef(BSS_HEAP_PTR);
+  EmitB($48); EmitB($89); EmitB($C3);             { mov rbx, rax }
+  EmitB($48); EmitB($89); EmitB($C2);             { mov rdx, rax }
+  EmitB($48); EmitB($01); EmitB($F2);             { add rdx, rsi }
+  EmitB($48); EmitB($89); EmitB($14); EmitB($25); EmitGlobRef(BSS_HEAP_END);
+
+  Patch32(pJbeNoGrow, CodeLen - (pJbeNoGrow + 4));
+  EmitB($48); EmitB($89); EmitB($0B);             { mov [rbx], rcx }
+  EmitB($48); EmitB($8D); EmitB($43); EmitB($08); { lea rax, [rbx+8] }
+  EmitB($48); EmitB($89); EmitB($DA);             { mov rdx, rbx }
+  EmitB($48); EmitB($01); EmitB($CA);             { add rdx, rcx }
+  EmitB($48); EmitB($83); EmitB($C2); EmitB($08); { add rdx, 8 }
+  EmitB($48); EmitB($89); EmitB($14); EmitB($25); EmitGlobRef(BSS_HEAP_PTR);
+
+  Patch32(pJmpDone, CodeLen - (pJmpDone + 4));
+  EmitB($5B);                                     { pop rbx }
+end;
+
+procedure EmitHeapFreeLocked;
+{ rax = payload pointer from EmitHeapAllocLocked/GetMem. Caller holds the heap
+  lock when threading is enabled. nil is ignored. }
+var pNil: Integer;
+begin
+  EmitB($48); EmitB($85); EmitB($C0);             { test rax, rax }
+  EmitB($74); pNil := CodeLen; EmitB(0);          { jz done }
+  EmitB($48); EmitB($8B); EmitB($14); EmitB($25); EmitGlobRef(BSS_FREE_LIST);
+  EmitB($48); EmitB($89); EmitB($10);             { mov [rax], rdx }
+  EmitB($48); EmitB($89); EmitB($04); EmitB($25); EmitGlobRef(BSS_FREE_LIST);
+  Code[pNil] := Byte(CodeLen - (pNil + 1));
+end;
+
+procedure EmitDynArrayRetain;
+{ rax = dynamic-array data pointer. Preserve rax. }
+var pNil: Integer;
+begin
+  EmitB($48); EmitB($85); EmitB($C0);             { test rax, rax }
+  EmitB($74); pNil := CodeLen; EmitB(0);          { jz done }
+  if ThreadSafeMode then EmitB($F0);               { lock }
+  EmitB($48); EmitB($FF); EmitB($40); EmitB($F0); { inc qword [rax-16] }
+  Code[pNil] := Byte(CodeLen - (pNil + 1));
+end;
+
+procedure EmitDynArrayReleaseLocked;
+{ rax = dynamic-array data pointer. Decrement its refcount and return the
+  allocator payload to the free list at zero. Caller holds the heap lock when
+  threading is enabled. }
+var pNil, pNonZero: Integer;
+begin
+  EmitB($48); EmitB($85); EmitB($C0);             { test rax, rax }
+  EmitB($74); pNil := CodeLen; EmitB(0);          { jz done }
+  if ThreadSafeMode then EmitB($F0);               { lock }
+  EmitB($48); EmitB($FF); EmitB($48); EmitB($F0); { dec qword [rax-16] }
+  EmitB($75); pNonZero := CodeLen; EmitB(0);      { jnz done }
+  EmitB($48); EmitB($83); EmitB($E8); EmitB($10); { sub rax, 16 }
+  EmitHeapFreeLocked;
+  Code[pNil] := Byte(CodeLen - (pNil + 1));
+  Code[pNonZero] := Byte(CodeLen - (pNonZero + 1));
+end;
+
+procedure EmitDynArrayRelease;
+begin
+  EmitAcquireHeapLock;
+  EmitDynArrayReleaseLocked;
+  EmitReleaseHeapLock;
+end;
+
 procedure IREmitLeaveExceptionFrames(count: Integer);
 var i: Integer;
 begin
@@ -339,6 +450,7 @@ var left, right, valNode, symIdx, si: Integer;
     baseAddr, indexNode, lo, elemSize, offset, addressNode, valueNode: Integer;
     argNode, pathIdx, pi, specialId, classIdx, slot, cpi, i, jbePatch: Integer;
     searchTop, pJzBump, pJaeTake, pJmpDone, pJbeNoGrow, pFreeNil: Integer;
+    pDynZero, pDynNoOld, pDynKeepCopy: Integer;
     wid, decs: Integer;
     arg1Node, arg2Node, arg3Node, val1Node, val2Node: Integer;
     itemNode, trueCount, nextJmp, falseJmp: Integer;
@@ -428,7 +540,26 @@ begin
     IR_STORE_SYM:
       begin
         symIdx := IRA[node];
-        if (Syms[symIdx].TypeKind = tyString) and not Syms[symIdx].IsArray then
+        if Syms[symIdx].IsArray and (Syms[symIdx].ArrLen = -1) then
+        begin
+          IREmitNode(IRB[node]);                   { rax = new data pointer }
+          EmitDynArrayRetain;
+          EmitB($50);                             { push new data pointer }
+          if Syms[symIdx].Kind = skGlobal then
+            begin EmitB($48); EmitB($8B); EmitB($04); EmitB($25); EmitGlobRef(Syms[symIdx].Offset); end
+          else
+            begin EmitB($48); EmitB($8B); EmitB($85); EmitI32(Syms[symIdx].Offset); end;
+          EmitB($50);                             { push old data pointer }
+          EmitB($48); EmitB($8B); EmitB($44); EmitB($24); EmitB($08); { mov rax, [rsp+8] }
+          if Syms[symIdx].Kind = skGlobal then
+            begin EmitB($48); EmitB($89); EmitB($04); EmitB($25); EmitGlobRef(Syms[symIdx].Offset); end
+          else
+            begin EmitB($48); EmitB($89); EmitB($85); EmitI32(Syms[symIdx].Offset); end;
+          EmitB($58);                             { pop rax = old data pointer }
+          EmitDynArrayRelease;
+          EmitB($58);                             { pop rax = new data pointer }
+        end
+        else if (Syms[symIdx].TypeKind = tyString) and not Syms[symIdx].IsArray then
         begin
           valueNode := IRB[node];
           if (IRKind[valueNode] = IR_CALL) and (IRA[valueNode] = -Ord(tkArgStr)) then
@@ -1434,9 +1565,9 @@ begin
           end
           else if specialId = 102 then
           begin
-            { Dynamic-array SetLength. Heap layout: [base]=refcount, [base+8]=length,
-              [base+16]=data. Store the data pointer into the array variable's slot.
-              v1: fresh-allocates; old contents not preserved. }
+            { Scalar dynamic-array SetLength. The allocator payload contains
+              [refcount:8][length:8][data...]. Allocate-copy-free so growing
+              and shrinking preserve min(old,new) elements. }
             arg1Node := IRB[node];
             arg2Node := IRB[arg1Node];
             val1Node := IRA[arg1Node];
@@ -1448,7 +1579,17 @@ begin
             elemSize := TypeSize(Syms[symIdx].ElemType);
 
             IREmitNode(IRA[arg2Node]);      { rax = n }
-            EmitB($50);                     { push rax -- save n }
+            EmitB($50);                     { push n }
+            EmitAcquireHeapLock;
+            if Syms[symIdx].Kind = skGlobal then
+              begin EmitB($48); EmitB($8B); EmitB($34); EmitB($25); EmitGlobRef(Syms[symIdx].Offset); end
+            else
+              begin EmitB($48); EmitB($8B); EmitB($B5); EmitI32(Syms[symIdx].Offset); end;
+            EmitB($56);                     { push old data pointer }
+            EmitB($48); EmitB($8B); EmitB($44); EmitB($24); EmitB($08); { mov rax, [rsp+8] = n }
+            EmitB($48); EmitB($85); EmitB($C0); { test rax, rax }
+            EmitB($0F); EmitB($84); pDynZero := CodeLen; EmitI32(0);
+
             if elemSize = 8 then
               begin EmitB($48); EmitB($C1); EmitB($E0); EmitB($03); end { shl rax, 3 }
             else if elemSize > 1 then
@@ -1457,15 +1598,69 @@ begin
                 EmitB($48); EmitB($0F); EmitB($AF); EmitB($C1);        { imul rax, rcx }
               end;
             EmitB($48); EmitB($83); EmitB($C0); EmitB($10); { add rax, 16 (header) }
-            EmitBumpAlloc;                  { rax = base }
-            EmitB($59);                     { pop rcx -- n }
+            EmitHeapAllocLocked;            { rax = allocator payload / array base }
+            EmitB($48); EmitB($8B); EmitB($4C); EmitB($24); EmitB($08); { mov rcx, [rsp+8] = n }
             EmitB($48); EmitB($C7); EmitB($00); EmitI32(1);  { mov qword [rax], 1 (refcount) }
             EmitB($48); EmitB($89); EmitB($48); EmitB($08);  { mov [rax+8], rcx (length) }
-            EmitB($48); EmitB($83); EmitB($C0); EmitB($10);  { add rax, 16 (data ptr) }
+            EmitB($48); EmitB($8D); EmitB($78); EmitB($10);  { lea rdi, [rax+16] (new data) }
+            EmitB($57);                     { push new data pointer }
+
+            { Zero all new slots, then copy the preserved old prefix over it. }
+            if elemSize = 8 then
+              begin EmitB($48); EmitB($C1); EmitB($E1); EmitB($03); end
+            else if elemSize > 1 then
+              begin
+                EmitB($48); EmitB($C7); EmitB($C0); EmitI32(elemSize);
+                EmitB($48); EmitB($0F); EmitB($AF); EmitB($C8);
+              end;
+            EmitB($31); EmitB($C0);          { xor eax, eax }
+            EmitB($F3); EmitB($AA);          { rep stosb }
+
+            EmitB($48); EmitB($8B); EmitB($3C); EmitB($24);           { mov rdi, [rsp] = new data }
+            EmitB($48); EmitB($8B); EmitB($74); EmitB($24); EmitB($08); { mov rsi, [rsp+8] = old data }
+            EmitB($48); EmitB($85); EmitB($F6);                       { test rsi, rsi }
+            EmitB($0F); EmitB($84); pDynNoOld := CodeLen; EmitI32(0);
+            EmitB($48); EmitB($8B); EmitB($4E); EmitB($F8);           { mov rcx, [rsi-8] = old length }
+            EmitB($48); EmitB($8B); EmitB($54); EmitB($24); EmitB($10); { mov rdx, [rsp+16] = n }
+            EmitB($48); EmitB($39); EmitB($D1);                       { cmp rcx, rdx }
+            EmitB($0F); EmitB($86); pDynKeepCopy := CodeLen; EmitI32(0); { jbe copy_size }
+            EmitB($48); EmitB($89); EmitB($D1);                       { mov rcx, rdx }
+            Patch32(pDynKeepCopy, CodeLen - (pDynKeepCopy + 4));
+            if elemSize = 8 then
+              begin EmitB($48); EmitB($C1); EmitB($E1); EmitB($03); end
+            else if elemSize > 1 then
+              begin
+                EmitB($48); EmitB($C7); EmitB($C0); EmitI32(elemSize);
+                EmitB($48); EmitB($0F); EmitB($AF); EmitB($C8);
+              end;
+            EmitB($F3); EmitB($A4);          { rep movsb }
+            Patch32(pDynNoOld, CodeLen - (pDynNoOld + 4));
+
+            EmitB($58);                     { pop rax = new data pointer }
+            EmitB($5E);                     { pop rsi = old data pointer }
+            EmitB($59);                     { pop rcx = n }
             if Syms[symIdx].Kind = skGlobal then
               begin EmitB($48); EmitB($89); EmitB($04); EmitB($25); EmitGlobRef(Syms[symIdx].Offset); end
             else
               begin EmitB($48); EmitB($89); EmitB($85); EmitI32(Syms[symIdx].Offset); end;
+            EmitB($48); EmitB($89); EmitB($F0);                       { mov rax, rsi }
+            EmitDynArrayReleaseLocked;
+            EmitB($E9); pJmpDone := CodeLen; EmitI32(0);
+
+            { SetLength(a, 0): publish nil and release the old allocation. }
+            Patch32(pDynZero, CodeLen - (pDynZero + 4));
+            EmitB($5E);                     { pop rsi = old data pointer }
+            EmitB($59);                     { pop rcx = n }
+            EmitB($31); EmitB($C0);          { xor eax, eax }
+            if Syms[symIdx].Kind = skGlobal then
+              begin EmitB($48); EmitB($89); EmitB($04); EmitB($25); EmitGlobRef(Syms[symIdx].Offset); end
+            else
+              begin EmitB($48); EmitB($89); EmitB($85); EmitI32(Syms[symIdx].Offset); end;
+            EmitB($48); EmitB($89); EmitB($F0);                       { mov rax, rsi }
+            EmitDynArrayReleaseLocked;
+
+            Patch32(pJmpDone, CodeLen - (pJmpDone + 4));
+            EmitReleaseHeapLock;
           end
           else if specialId = SPECIAL_IN then
           begin
@@ -2011,7 +2206,7 @@ begin
         end;
 
       IR_STORE_SYM, IR_STORE_MEM, IR_WRITE, IR_WRITELN,
-      IR_READLINE, IR_READ_VAR, IR_COPY_REC, IR_SET_COPY,
+      IR_READLINE, IR_READ_VAR, IR_COPY_REC, IR_SET_COPY, IR_VAR_STORE,
       IR_EXC_LEAVE, IR_RAISE, IR_EXC_STORE, IR_EXC_CLEAR, IR_TERMINATE,
       IR_ASM:
         begin

@@ -13,16 +13,22 @@ procedure usleep(usec: Cardinal); cdecl; external 'libc.so.6';
 function ThreadFunc(arg: Pointer): Pointer; cdecl;
 var
   p: ^Int64;
-  i: Integer;
+  a: array of Integer;
+  i, n: Integer;
 begin
   for i := 1 to 200 do
   begin
     p := GetMem(8);
     p^ := i * 100;
+    n := i mod 8 + 1;
+    SetLength(a, n);
+    a[0] := i;
+    if a[0] <> i then Halt(1);
     if i mod 50 = 0 then write('.');
     usleep(10);
     FreeMem(p);
   end;
+  SetLength(a, 0);
   Result := nil;
 end;
 

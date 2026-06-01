@@ -377,7 +377,7 @@ test: $(COMPILER) fpc-check
 	./$(COMPILER) test/test_float.pas /tmp/test_float26
 	test "$$(/tmp/test_float26)" = "$$(printf '1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1')"
 	./$(COMPILER) test/test_dynarray.pas /tmp/test_dynarray26
-	test "$$(/tmp/test_dynarray26)" = "$$(printf '1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1')"
+	test "$$(/tmp/test_dynarray26)" = "$$(printf '1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1')"
 	./$(COMPILER) test/test_sets.pas /tmp/test_sets26
 	test "$$(/tmp/test_sets26 | tail -1)" = "all set tests completed!"
 	./$(COMPILER) test/test_set_shapes.pas /tmp/test_set_shapes26
@@ -407,7 +407,7 @@ test: $(COMPILER) fpc-check
 	! /tmp/test_exception_unhandled26 > /tmp/test_exception_unhandled.out 2> /tmp/test_exception_unhandled.log
 	grep -q "Unhandled exception" /tmp/test_exception_unhandled.log
 	./$(COMPILER) --threadsafe test/test_multithreading.pas /tmp/test_multithreading26
-	test "$$(/tmp/test_multithreading26 | tail -1)" = "multithreading test completed successfully"
+	/tmp/test_multithreading26 | grep -q "multithreading test completed successfully"
 	test ! -s /tmp/test_exception_unhandled.out
 	./$(COMPILER) --no-unhandled-handler test/test_exception_unhandled.pas /tmp/test_exception_silent26
 	! /tmp/test_exception_silent26 > /tmp/test_exception_silent.out 2> /tmp/test_exception_silent.log

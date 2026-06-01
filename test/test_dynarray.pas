@@ -42,9 +42,40 @@ begin
   { a is unchanged by b }
   Check(a[4] = 16);
 
-  { regrow a (fresh allocation, contents not preserved in v1) }
+  { grow preserves old contents and zero-initializes new slots }
   SetLength(a, 10);
   Check(Length(a) = 10);
+  Check(a[1] = 1);
+  Check(a[4] = 16);
+  Check(a[5] = 0);
   a[9] := 42;
   Check(a[9] = 42);
+
+  { shrink preserves the retained prefix }
+  SetLength(a, 2);
+  Check(Length(a) = 2);
+  Check(a[1] = 1);
+
+  { zero length publishes nil; a later allocation starts zeroed }
+  SetLength(a, 0);
+  Check(Length(a) = 0);
+  SetLength(a, 4);
+  Check(Length(a) = 4);
+  Check(a[0] = 0);
+  Check(a[3] = 0);
+
+  { assignment shares storage until either variable is resized }
+  a[0] := 77;
+  b := a;
+  Check(b[0] = 77);
+  SetLength(b, 6);
+  Check(Length(b) = 6);
+  Check(b[0] = 77);
+  b[0] := 88;
+  Check(a[0] = 77);
+  Check(b[0] = 88);
+  SetLength(a, 0);
+  Check(b[0] = 88);
+  SetLength(b, 0);
+  Check(Length(b) = 0);
 end.
