@@ -14,7 +14,7 @@ VERIFY_COMPILER := /tmp/pascal26-verify
 
 STABLE_DIR := stable
 
-.PHONY: all bootstrap bootstrap-check fpc-check test stabilize check-stable revert benchmark benchmark-check clean distclean
+.PHONY: all bootstrap bootstrap-check fpc-check test test-nilpy stabilize check-stable revert benchmark benchmark-check clean distclean
 
 all: $(COMPILER)
 
@@ -62,6 +62,16 @@ benchmark: $(COMPILER) benchmark-check
 	test "$$(/tmp/hello-bench-self)" = "Hello, World!"
 	/tmp/pascal26-bench-self test/hello.pas /tmp/bench-compiler-hello >/dev/null
 	test "$$(/tmp/bench-compiler-hello)" = "Hello, World!"
+
+test-nilpy: $(COMPILER)
+	./$(COMPILER) test/test_nil_python_core.npy /tmp/test_nil_python_core26
+	test "$$(/tmp/test_nil_python_core26)" = "$$(printf '0\n1\n1\n2\n3\n5\n10')"
+	./$(COMPILER) test/test_nilpy_variant.npy /tmp/test_nilpy_variant26
+	test "$$(/tmp/test_nilpy_variant26)" = "$$(printf '5\n 3.140000000000000E+000\n1')"
+	! ./$(COMPILER) test/test_nilpy_slash_fail.npy /tmp/test_nilpy_slash_fail26 > /tmp/test_nilpy_slash_fail.log 2>&1
+	grep -q "unsupported operator /; use // for integer division" /tmp/test_nilpy_slash_fail.log
+	! ./$(COMPILER) test/test_nilpy_string_variant_fail.npy /tmp/test_nilpy_string_variant_fail26 > /tmp/test_nilpy_string_variant_fail.log 2>&1
+	grep -q "string-typed Variant pending managed AnsiString" /tmp/test_nilpy_string_variant_fail.log
 
 test: $(COMPILER) fpc-check
 	./$(COMPILER) test/hello.pas /tmp/hello26
