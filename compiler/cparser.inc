@@ -3,10 +3,31 @@
 function ParseCBlockAST: Integer; forward;
 function ParseCStatementAST: Integer; forward;
 
+function FindCTypedef(const name: AnsiString): Integer;
+var i: Integer;
+begin
+  Result := -1;
+  for i := 0 to CTypedefCount-1 do
+    if CTypedefName[i] = name then begin Result := i; Exit; end;
+end;
+
+procedure AddCTypedef(const name: AnsiString; tk: TTypeKind);
+var idx: Integer;
+begin
+  idx := FindCTypedef(name);
+  if idx >= 0 then begin CTypedefTk[idx] := Ord(tk); Exit; end;
+  if CTypedefCount >= MAX_CTYPEDEF then Error('C typedef table overflow');
+  CTypedefName[CTypedefCount] := name;
+  CTypedefTk[CTypedefCount] := Ord(tk);
+  Inc(CTypedefCount);
+end;
+
 function IsCTypeTok: Boolean;
 begin
   Result := CurTok.Kind in [tkInteger_T, tkChar_T, tkCVoid, tkCShort,
     tkCLong, tkCSigned, tkCUnsigned, tkCFloat, tkCDouble, tkCBool, tkConst];
+  if (not Result) and (CurTok.Kind = tkIdent) then
+    Result := FindCTypedef(CurTok.SVal) >= 0;
 end;
 
 function CUnsignedOf(tk: TTypeKind): TTypeKind;
@@ -25,27 +46,42 @@ end;
   any pointer -> untyped Pointer (8). }
 function ParseCDeclType: TTypeKind;
 var
-  isUnsigned, isSigned, isFloatTy, isVoid, loop: Boolean;
-  shortCount, longCount: Integer;
+  isUnsigned, isSigned, isFloatTy, isVoid, loop, sawBase, isTypedef: Boolean;
+  shortCount, longCount, tdIdx: Integer;
   base: TTypeKind;
 begin
   isUnsigned := False; isSigned := False; isFloatTy := False; isVoid := False;
+  sawBase := False; isTypedef := False;
   shortCount := 0; longCount := 0; base := tyInt32;
   loop := True;
   while loop do
   begin
     case CurTok.Kind of
       tkConst:     Next;
-      tkCSigned:   begin isSigned := True; Next; end;
-      tkCUnsigned: begin isUnsigned := True; Next; end;
-      tkCShort:    begin Inc(shortCount); Next; end;
-      tkCLong:     begin Inc(longCount); Next; end;
-      tkInteger_T: begin base := tyInt32; Next; end;
-      tkChar_T:    begin base := tyChar; Next; end;
-      tkCVoid:     begin isVoid := True; Next; end;
-      tkCFloat:    begin base := tySingle; isFloatTy := True; Next; end;
-      tkCDouble:   begin base := tyDouble; isFloatTy := True; Next; end;
-      tkCBool:     begin base := tyUInt8; Next; end;
+      tkCSigned:   begin isSigned := True; sawBase := True; Next; end;
+      tkCUnsigned: begin isUnsigned := True; sawBase := True; Next; end;
+      tkCShort:    begin Inc(shortCount); sawBase := True; Next; end;
+      tkCLong:     begin Inc(longCount); sawBase := True; Next; end;
+      tkInteger_T: begin base := tyInt32; sawBase := True; Next; end;
+      tkChar_T:    begin base := tyChar; sawBase := True; Next; end;
+      tkCVoid:     begin isVoid := True; sawBase := True; Next; end;
+      tkCFloat:    begin base := tySingle; isFloatTy := True; sawBase := True; Next; end;
+      tkCDouble:   begin base := tyDouble; isFloatTy := True; sawBase := True; Next; end;
+      tkCBool:     begin base := tyUInt8; sawBase := True; Next; end;
+      tkIdent:
+        begin
+          { A typedef name is a type only in type position (before any base
+            type is seen); otherwise it is the declarator name — stop. }
+          tdIdx := -1;
+          if not sawBase then tdIdx := FindCTypedef(CurTok.SVal);
+          if tdIdx >= 0 then
+          begin
+            base := IntToTypeKind(CTypedefTk[tdIdx]);
+            sawBase := True; isTypedef := True;
+            Next;
+          end
+          else loop := False;
+        end;
       else loop := False;
     end;
   end;
@@ -54,6 +90,8 @@ begin
 
   if isVoid then
     Result := tyInteger          { placeholder; pointer suffix overrides below }
+  else if isTypedef then
+    Result := base               { typedef carries its own resolved kind }
   else if isFloatTy then
     Result := base
   else if base = tyChar then
@@ -421,11 +459,96 @@ begin
   CurProc := -1;
 end;
 
+{ Consume a balanced { ... } block. CurTok must be at the opening tkBegin. }
+procedure SkipBraceBlock;
+var depth: Integer;
+begin
+  depth := 0;
+  repeat
+    if CurTok.Kind = tkBegin then Inc(depth)
+    else if CurTok.Kind = tkEnd then Dec(depth);
+    Next;
+  until (depth = 0) or (CurTok.Kind = tkEOF);
+end;
+
+{ Parse a top-level `typedef ...;` and register the new type name.
+  - struct/union [tag] [{...}] Name  -> opaque, mapped to Pointer
+  - enum [tag] {...} Name            -> Int32 (constants handled later)
+  - <decl-specifiers> Name           -> the mapped scalar/pointer type
+  Function-pointer typedefs `ret (*Name)(args)` are detected and registered
+  as Pointer; their argument signature is not yet modelled. }
+procedure ParseCTypedef;
+var tk: TTypeKind; nm: AnsiString; isAggregate: Boolean;
+begin
+  Next; { consume 'typedef' }
+
+  isAggregate := (CurTok.Kind = tkRecord) or
+                 ((CurTok.Kind = tkIdent) and (CurTok.SVal = 'union'));
+  if isAggregate then
+  begin
+    Next; { 'struct' / 'union' }
+    if CurTok.Kind = tkIdent then Next;      { optional tag }
+    if CurTok.Kind = tkBegin then SkipBraceBlock; { body, if present }
+    { the declarator may carry a pointer: typedef struct _X *XRef; }
+    while CurTok.Kind = tkStar do Next;
+    if CurTok.Kind = tkIdent then
+    begin
+      nm := CurTok.SVal; Next;
+      AddCTypedef(nm, tyPointer); { opaque aggregate: pointer-only }
+    end;
+    while (CurTok.Kind <> tkSemicolon) and (CurTok.Kind <> tkEOF) do Next;
+    Eat(tkSemicolon);
+    Exit;
+  end;
+
+  if (CurTok.Kind = tkIdent) and (CurTok.SVal = 'enum') then
+  begin
+    Next; { 'enum' }
+    if CurTok.Kind = tkIdent then Next;      { optional tag }
+    if CurTok.Kind = tkBegin then SkipBraceBlock; { enumerator list }
+    if CurTok.Kind = tkIdent then
+    begin
+      nm := CurTok.SVal; Next;
+      AddCTypedef(nm, tyInt32);
+    end;
+    while (CurTok.Kind <> tkSemicolon) and (CurTok.Kind <> tkEOF) do Next;
+    Eat(tkSemicolon);
+    Exit;
+  end;
+
+  { scalar / pointer typedef }
+  tk := ParseCDeclType;
+  { function-pointer form: ret (*Name)(...) — the declarator name sits inside
+    parens. Detect a '(' next and recover the name, registering as Pointer. }
+  if CurTok.Kind = tkLParen then
+  begin
+    Next;
+    while CurTok.Kind = tkStar do Next;
+    if CurTok.Kind = tkIdent then
+    begin
+      nm := CurTok.SVal; Next;
+      AddCTypedef(nm, tyPointer);
+    end;
+    while (CurTok.Kind <> tkSemicolon) and (CurTok.Kind <> tkEOF) do Next;
+    Eat(tkSemicolon);
+    Exit;
+  end;
+  if CurTok.Kind = tkIdent then
+  begin
+    nm := CurTok.SVal; Next;
+    AddCTypedef(nm, tk);
+  end;
+  while (CurTok.Kind <> tkSemicolon) and (CurTok.Kind <> tkEOF) do Next;
+  Eat(tkSemicolon);
+end;
+
 procedure ParseCUnit;
 begin
   while CurTok.Kind <> tkEOF do
   begin
-    if IsCTypeTok then
+    if (CurTok.Kind = tkIdent) and (CurTok.SVal = 'typedef') then
+      ParseCTypedef
+    else if IsCTypeTok then
       ParseCSubroutine
     else
       Next;

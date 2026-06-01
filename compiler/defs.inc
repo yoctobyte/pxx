@@ -36,6 +36,7 @@ const
   MAX_ENUMTYPE    = 64;    { distinct named enum types }
   MAX_ENUMVAL     = 512;   { enum value names across all enum types }
   MAX_TYPEALIAS   = 128;   { named type aliases (pointer aliases etc.) }
+  MAX_CTYPEDEF    = 512;   { C typedef name table (case-sensitive) }
   MAX_RESOURCES   = 64;    { embedded R-directive resources }
   MAX_DATAPTRFIX  = 4096;  { data->data 8-byte pointer relocations (RTTI blobs) }
   MAX_METHFIX     = 1024;  { code-address relocations into Data[] (VMT + RTTI) }
@@ -491,6 +492,9 @@ var
   ProcAggregateDestSym : array[0..MAX_PROCS-1] of Integer; { hidden caller-result pointer local, or -1 }
   CurrentCLibrary : AnsiString;
   CTypeIsVoid : Boolean; { last ParseCDeclType saw bare void (no pointer) }
+  CTypedefCount : Integer;
+  CTypedefName  : array[0..MAX_CTYPEDEF-1] of AnsiString;
+  CTypedefTk    : array[0..MAX_CTYPEDEF-1] of Integer; { resolved TTypeKind ordinal }
   ExternalProc   : array[0..MAX_EXTERNAL-1] of Integer;
   ExternalGotOff : array[0..MAX_EXTERNAL-1] of Integer;
   ExternalCount  : Integer;
