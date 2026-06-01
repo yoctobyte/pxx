@@ -116,9 +116,23 @@ The earlier plan remains as historical context in
 
 ---
 
-## 2c. Import C headers for complex libraries  ⬜  (wanted; the real goal)
+## 2c. Import C headers for complex libraries  🟡  (active arc — the real goal)
 
 Full phased plan: **[`plan-c-header-import.md`](plan-c-header-import.md)**.
+
+**Progress (2026-06-01):**
+- ✅ Pillar 1 (partial): DT_NEEDED deduplicated (one per distinct library, not
+  per symbol); versioned soname table for libc/libm/libpthread/libdl/librt/libz
+  replacing the `lib<name>.so` guess. Dynamic `ld.so.cache`/`DT_SONAME` probe
+  deferred — the self-hosted compiler has **no execve**, so pkg-config/ldconfig
+  shelling is impossible; the probe must read `/etc/ld.so.cache` or `.so`
+  `DT_SONAME` via file I/O.
+- ✅ Stage A: real C type model — widths, signedness, `void`, and pointers are
+  preserved (`ParseCDeclType`). Regression `test/test_c_widths.pas`.
+- 🟡 Stage B: typedef / enum / opaque-struct / function-pointer typedef — in
+  progress, gated toward `pthread`.
+- ⬜ Remaining: SSE float C-call ABI (libm), Stage C macro soup + >6-arg stack
+  spill (gtk), Stage D recovery, Stage E final wiring.
 
 
 Direct Pascal `external 'soname'` binding (used for the GTK widgetset) is a
