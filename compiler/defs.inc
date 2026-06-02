@@ -30,7 +30,7 @@ const
   SPECIAL_IN  = 999;
 
   MAX_UCLASS      = 32;    { user-defined class slots }
-  MAX_UFIELD      = 256;   { field slots across all user classes }
+  MAX_UFIELD      = 512;   { field slots across all user classes }
   MAX_UMETH       = 256;   { method slots across all user classes }
   MAX_UPROP       = 64;
   MAX_ENUMTYPE = 512;
@@ -165,6 +165,8 @@ const
   IR_VAR_BINOP    = 44;  { value: IRA/IRB = operand variant addrs; IRC = op token; IRIVal = result BSS off (arith); IRTk = tyVariant(arith)|tyBoolean(cmp) }
   IR_VAR_BOX      = 45;  { value: IRA = temp variant addr; IRB = scalar value; IRC = scalar TTypeKind ord; boxes and returns addr in rax }
   IR_COPY_REC_MANAGED = 46; { IRA = dest addr; IRB = src addr; IRC = recId; IRIVal = byte count; ARC-correct whole-record copy }
+  IR_DYNDATA      = 47;  { IRA = dyn-array symbol idx; loads the data pointer from the slot (mov, never lea) }
+  IR_SETLEN_DYN   = 48;  { IRA = target slot-address node; IRB = count; IRC = dyn depth; IRIVal = base elem size; nested scalar SetLength }
 
   { Variant tag (VType) values, stored in the first 8 bytes of a tyVariant slot.
     Payload (next 8 bytes) interpreted per tag. Closed scalar set; vtObject is a
@@ -328,7 +330,7 @@ type
     ConstVal : Int64;     { skConst }
     IsArray  : Boolean;
     ArrLen   : Integer;   { number of elements (IsArray=True) }
-    ElemType : TTypeKind; { element type when IsArray }
+    ElemType : TTypeKind; { element type when IsArray; for dyn arrays this is the BASE element type }
     RecName  : Integer;
     ElemRecName: Integer;
     IsRef    : Boolean;   { parameter passed by reference }
@@ -498,6 +500,7 @@ var
   Syms      : array[0..MAX_SYMS-1]  of TSymbol;
   SymCaseSensitive : array[0..MAX_SYMS-1] of Boolean; { match this symbol name case-sensitively }
   SymUnitIdx : array[0..MAX_SYMS-1] of Integer; { Strs[] unit name, or -1 for main/local compiler-generated symbols }
+  SymDynDepth : array[0..MAX_SYMS-1] of Integer; { dynamic-array nesting: 0=not dynamic, 1=array of T, 2=array of array of T, ... }
   SymCount  : Integer;
   FrameSize : Integer;
 

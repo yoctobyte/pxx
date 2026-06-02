@@ -288,10 +288,48 @@ begin
   EmitB($41); EmitB($5D); EmitB($41); EmitB($5C); EmitB($5B);
 end;
 
+procedure EmitDynArrayNestedReleaseLocked(depth: Integer);
+{ rax = data pointer of a depth-`depth` nested dynamic array (scalar base). On
+  reaching refcount zero, release each sub-array element (recursively) then free
+  the block. depth=1 is a plain array (no sub-elements). Caller holds the heap
+  lock. Preserves rbx/r12/r13 of the caller (saved/restored here). }
+var pDoneNil, pDoneShared, pNoElems, loopTop: Integer;
+begin
+  if depth <= 1 then begin EmitDynArrayReleaseLocked; Exit; end;
+  EmitB($53);                                      { push rbx }
+  EmitB($41); EmitB($54);                          { push r12 }
+  EmitB($41); EmitB($55);                          { push r13 }
+  EmitB($49); EmitB($89); EmitB($C5);              { mov r13, rax }
+  EmitB($48); EmitB($85); EmitB($C0);              { test rax, rax }
+  EmitB($0F); EmitB($84); pDoneNil := CodeLen; EmitI32(0);
+  if ThreadSafeMode then EmitB($F0);
+  EmitB($48); EmitB($FF); EmitB($48); EmitB($F0);  { dec qword [rax-16] }
+  EmitB($0F); EmitB($85); pDoneShared := CodeLen; EmitI32(0);
+  EmitB($4D); EmitB($8B); EmitB($65); EmitB($F8);  { mov r12, [r13-8] (length) }
+  EmitB($4C); EmitB($89); EmitB($EB);              { mov rbx, r13 }
+  EmitB($4D); EmitB($85); EmitB($E4);              { test r12, r12 }
+  EmitB($0F); EmitB($84); pNoElems := CodeLen; EmitI32(0);
+  loopTop := CodeLen;
+  EmitB($48); EmitB($8B); EmitB($03);              { mov rax, [rbx] (sub-array handle) }
+  EmitDynArrayNestedReleaseLocked(depth - 1);
+  EmitB($48); EmitB($83); EmitB($C3); EmitB($08);  { add rbx, 8 (handle stride) }
+  EmitB($49); EmitB($FF); EmitB($CC);              { dec r12 }
+  EmitB($0F); EmitB($85); EmitI32(loopTop - (CodeLen + 4));
+  Patch32(pNoElems, CodeLen - (pNoElems + 4));
+  EmitB($4C); EmitB($89); EmitB($E8);              { mov rax, r13 }
+  EmitB($48); EmitB($83); EmitB($E8); EmitB($10);  { sub rax, 16 }
+  EmitHeapFreeLocked;
+  Patch32(pDoneNil, CodeLen - (pDoneNil + 4));
+  Patch32(pDoneShared, CodeLen - (pDoneShared + 4));
+  EmitB($41); EmitB($5D); EmitB($41); EmitB($5C); EmitB($5B);
+end;
+
 procedure EmitDynArrayReleaseForSym(symIdx: Integer);
 begin
   EmitAcquireHeapLock;
-  if Syms[symIdx].IsArray and (Syms[symIdx].ElemType = tyAnsiString) then
+  if Syms[symIdx].IsArray and (SymDynDepth[symIdx] >= 2) then
+    EmitDynArrayNestedReleaseLocked(SymDynDepth[symIdx])
+  else if Syms[symIdx].IsArray and (Syms[symIdx].ElemType = tyAnsiString) then
     EmitDynArrayAnsiStrReleaseLocked
   else if Syms[symIdx].IsArray and (Syms[symIdx].ElemType = tyRecord) and
           RecordHasManagedFields(Syms[symIdx].ElemRecName) then
@@ -916,6 +954,7 @@ var left, right, valNode, symIdx, si, nextJmp2, pNil: Integer;
     argNode, pathIdx, pi, specialId, classIdx, slot, cpi, i, jbePatch: Integer;
     searchTop, pJzBump, pJaeTake, pJmpDone, pJbeNoGrow, pFreeNil, pNotDouble, pDone: Integer;
     pDynZero, pDynNoOld, pDynKeepCopy, pDynNoRetain, pDynNoRetainCount: Integer;
+    slDepth, slElemSize, slRetainTop, pSlRetainDone: Integer;
     wid, decs: Integer;
     arg1Node, arg2Node, arg3Node, val1Node, val2Node: Integer;
     itemNode, trueCount, nextJmp, falseJmp: Integer;
@@ -1158,6 +1197,18 @@ begin
             EmitB($48); EmitB($8D); EmitB($85); EmitI32(Syms[symIdx].Offset);
           end;
         end;
+      end;
+
+    IR_DYNDATA:
+      begin
+        { Load the data pointer stored in a dyn-array slot (always a load, never
+          a lea — used as the base of nested-array indexing regardless of
+          InLValueWrite). }
+        symIdx := IRA[node];
+        if Syms[symIdx].Kind = skGlobal then
+          begin EmitB($48); EmitB($8B); EmitB($04); EmitB($25); EmitGlobRef(Syms[symIdx].Offset); end
+        else
+          begin EmitB($48); EmitB($8B); EmitB($85); EmitI32(Syms[symIdx].Offset); end;
       end;
 
     IR_INDEX:
@@ -2269,6 +2320,19 @@ begin
                EmitB($48); EmitB($8B); EmitB($40); EmitB($F8);{ mov rax, [rax-8] }
                Code[jbePatch] := Byte(CodeLen - (jbePatch + 1));
              end
+             else if (IRKind[val1Node] = IR_INDEX) and
+                     (IntToTypeKind(IRTk[val1Node]) = tyPointer) then
+             begin
+               { Length of a nested dynamic-array element (a sub-array handle).
+                 val1Node is the ADDRESS of the handle slot; load the handle, then
+                 read its header length word. }
+               IREmitNode(val1Node);                          { rax = &handle }
+               EmitB($48); EmitB($8B); EmitB($00);            { mov rax, [rax] = data ptr }
+               EmitB($48); EmitB($85); EmitB($C0);            { test rax, rax }
+               EmitB($74); jbePatch := CodeLen; EmitB(0);     { jz done }
+               EmitB($48); EmitB($8B); EmitB($40); EmitB($F8);{ mov rax, [rax-8] }
+               Code[jbePatch] := Byte(CodeLen - (jbePatch + 1));
+             end
             else
             begin
               IREmitNode(val1Node); { evaluates address -> rax }
@@ -2811,6 +2875,131 @@ begin
         EmitB($F3); EmitB($A4);                { rep movsb (src -> dest) }
       end;
 
+    IR_SETLEN_DYN:
+      begin
+        { Nested (scalar-base) SetLength on a target slot ADDRESS. Allocate a new
+          [refcount:8][length:8][data] block of `count` elements, zero it, copy
+          min(old,new) elements, retain copied sub-array handles (depth>1), then
+          publish into the slot and recursively release the old block. No COW. }
+        slDepth := IRC[node];
+        if slDepth > 1 then slElemSize := 8 else slElemSize := Integer(IRIVal[node]);
+
+        savedLValueWrite := InLValueWrite; InLValueWrite := True;
+        IREmitNode(IRA[node]);                                 { rax = &slot }
+        InLValueWrite := savedLValueWrite;
+        EmitB($50);                                            { push &slot }
+
+        IREmitNode(IRB[node]);                                 { rax = n }
+        EmitB($50);                                            { push n }
+
+        EmitAcquireHeapLock;
+
+        EmitB($48); EmitB($8B); EmitB($44); EmitB($24); EmitB($08); { mov rax,[rsp+8] = &slot }
+        EmitB($48); EmitB($8B); EmitB($30);                    { mov rsi,[rax] = old data ptr }
+        EmitB($56);                                            { push old }
+
+        EmitB($48); EmitB($8B); EmitB($44); EmitB($24); EmitB($08); { mov rax,[rsp+8] = n }
+        EmitB($48); EmitB($85); EmitB($C0);                    { test rax,rax }
+        EmitB($0F); EmitB($84); pDynZero := CodeLen; EmitI32(0); { jz zero }
+
+        { size = n*elemSize + 16 }
+        if slElemSize = 8 then
+          begin EmitB($48); EmitB($C1); EmitB($E0); EmitB($03); end
+        else
+          begin
+            EmitB($48); EmitB($C7); EmitB($C1); EmitI32(slElemSize);
+            EmitB($48); EmitB($0F); EmitB($AF); EmitB($C1);
+          end;
+        EmitB($48); EmitB($83); EmitB($C0); EmitB($10);        { add rax,16 }
+        EmitHeapAllocLocked;                                   { rax = block base }
+        EmitB($48); EmitB($8B); EmitB($4C); EmitB($24); EmitB($08); { mov rcx,[rsp+8] = n }
+        EmitB($48); EmitB($C7); EmitB($00); EmitI32(1);        { mov qword [rax],1 (refcount) }
+        EmitB($48); EmitB($89); EmitB($48); EmitB($08);        { mov [rax+8],rcx (length) }
+        EmitB($48); EmitB($8D); EmitB($78); EmitB($10);        { lea rdi,[rax+16] (new data) }
+        EmitB($57);                                            { push new data }
+
+        { zero new data: rcx = n * elemSize bytes }
+        EmitB($48); EmitB($8B); EmitB($4C); EmitB($24); EmitB($10); { mov rcx,[rsp+16] = n }
+        if slElemSize = 8 then
+          begin EmitB($48); EmitB($C1); EmitB($E1); EmitB($03); end
+        else
+          begin
+            EmitB($48); EmitB($C7); EmitB($C0); EmitI32(slElemSize);
+            EmitB($48); EmitB($0F); EmitB($AF); EmitB($C8);
+          end;
+        EmitB($48); EmitB($8B); EmitB($3C); EmitB($24);        { mov rdi,[rsp] = new data }
+        EmitB($31); EmitB($C0);                                { xor eax,eax }
+        EmitB($F3); EmitB($AA);                                { rep stosb }
+
+        { copy old prefix: min(oldlen, n) elements }
+        EmitB($48); EmitB($8B); EmitB($74); EmitB($24); EmitB($08); { mov rsi,[rsp+8] = old }
+        EmitB($48); EmitB($85); EmitB($F6);                    { test rsi,rsi }
+        EmitB($0F); EmitB($84); pDynNoOld := CodeLen; EmitI32(0);
+        EmitB($48); EmitB($8B); EmitB($4E); EmitB($F8);        { mov rcx,[rsi-8] = old len }
+        EmitB($48); EmitB($8B); EmitB($54); EmitB($24); EmitB($10); { mov rdx,[rsp+16] = n }
+        EmitB($48); EmitB($39); EmitB($D1);                    { cmp rcx,rdx }
+        EmitB($0F); EmitB($86); pDynKeepCopy := CodeLen; EmitI32(0); { jbe c1 }
+        EmitB($48); EmitB($89); EmitB($D1);                    { mov rcx,rdx }
+        Patch32(pDynKeepCopy, CodeLen - (pDynKeepCopy + 4));
+        EmitB($48); EmitB($8B); EmitB($3C); EmitB($24);        { mov rdi,[rsp] = new data }
+        if slElemSize = 8 then
+          begin EmitB($48); EmitB($C1); EmitB($E1); EmitB($03); end
+        else
+          begin
+            EmitB($48); EmitB($C7); EmitB($C0); EmitI32(slElemSize);
+            EmitB($48); EmitB($0F); EmitB($AF); EmitB($C8);
+          end;
+        EmitB($F3); EmitB($A4);                                { rep movsb }
+        Patch32(pDynNoOld, CodeLen - (pDynNoOld + 4));
+
+        { retain copied sub-array handles (depth > 1 only) }
+        if slDepth > 1 then
+        begin
+          EmitB($48); EmitB($8B); EmitB($74); EmitB($24); EmitB($08); { mov rsi,[rsp+8] = old }
+          EmitB($48); EmitB($85); EmitB($F6);                  { test rsi,rsi }
+          EmitB($0F); EmitB($84); pSlRetainDone := CodeLen; EmitI32(0);
+          EmitB($48); EmitB($8B); EmitB($4E); EmitB($F8);      { mov rcx,[rsi-8] = old len }
+          EmitB($48); EmitB($8B); EmitB($54); EmitB($24); EmitB($10); { mov rdx,[rsp+16] = n }
+          EmitB($48); EmitB($39); EmitB($D1);                  { cmp rcx,rdx }
+          EmitB($0F); EmitB($86); pDynKeepCopy := CodeLen; EmitI32(0);
+          EmitB($48); EmitB($89); EmitB($D1);                  { mov rcx,rdx }
+          Patch32(pDynKeepCopy, CodeLen - (pDynKeepCopy + 4));
+          EmitB($48); EmitB($85); EmitB($C9);                  { test rcx,rcx }
+          EmitB($0F); EmitB($84); pDynKeepCopy := CodeLen; EmitI32(0);
+          EmitB($48); EmitB($8B); EmitB($3C); EmitB($24);      { mov rdi,[rsp] = new data }
+          slRetainTop := CodeLen;
+          EmitB($48); EmitB($8B); EmitB($07);                  { mov rax,[rdi] }
+          EmitDynArrayRetain;
+          EmitB($48); EmitB($83); EmitB($C7); EmitB($08);      { add rdi,8 }
+          EmitB($48); EmitB($FF); EmitB($C9);                  { dec rcx }
+          EmitB($0F); EmitB($85); EmitI32(slRetainTop - (CodeLen + 4));
+          Patch32(pDynKeepCopy, CodeLen - (pDynKeepCopy + 4));
+          Patch32(pSlRetainDone, CodeLen - (pSlRetainDone + 4));
+        end;
+
+        { publish new data into the slot, release old block, result = new data }
+        EmitB($48); EmitB($8B); EmitB($4C); EmitB($24); EmitB($18); { mov rcx,[rsp+24] = &slot }
+        EmitB($48); EmitB($8B); EmitB($04); EmitB($24);        { mov rax,[rsp] = new data }
+        EmitB($48); EmitB($89); EmitB($01);                    { mov [rcx],rax }
+        EmitB($48); EmitB($8B); EmitB($44); EmitB($24); EmitB($08); { mov rax,[rsp+8] = old }
+        EmitDynArrayNestedReleaseLocked(slDepth);
+        EmitB($48); EmitB($8B); EmitB($04); EmitB($24);        { mov rax,[rsp] = new data (result) }
+        EmitB($48); EmitB($83); EmitB($C4); EmitB($20);        { add rsp,32 }
+        EmitB($E9); pJmpDone := CodeLen; EmitI32(0);           { jmp done }
+
+        { zero case (n == 0): publish nil, release old }
+        Patch32(pDynZero, CodeLen - (pDynZero + 4));
+        EmitB($48); EmitB($8B); EmitB($4C); EmitB($24); EmitB($10); { mov rcx,[rsp+16] = &slot }
+        EmitB($31); EmitB($C0);                                { xor eax,eax }
+        EmitB($48); EmitB($89); EmitB($01);                    { mov [rcx],rax (nil) }
+        EmitB($48); EmitB($8B); EmitB($04); EmitB($24);        { mov rax,[rsp] = old }
+        EmitDynArrayNestedReleaseLocked(slDepth);
+        EmitB($48); EmitB($83); EmitB($C4); EmitB($18);        { add rsp,24 }
+
+        Patch32(pJmpDone, CodeLen - (pJmpDone + 4));
+        EmitReleaseHeapLock;
+      end;
+
     IR_SET_COPY:
       begin
         IREmitNode(IRB[node]);                 { rax = source address }
@@ -3117,6 +3306,7 @@ begin
 
       IR_STORE_SYM, IR_STORE_MEM, IR_WRITE, IR_WRITELN,
       IR_READLINE, IR_READ_VAR, IR_COPY_REC, IR_COPY_REC_MANAGED, IR_SET_COPY, IR_VAR_STORE,
+      IR_SETLEN_DYN,
       IR_EXC_LEAVE, IR_RAISE, IR_EXC_STORE, IR_EXC_CLEAR, IR_TERMINATE,
       IR_ASM:
         begin

@@ -48,6 +48,8 @@ begin
     IR_READ_VAR: Result := 'read_var';
     IR_COPY_REC: Result := 'copy_rec';
     IR_COPY_REC_MANAGED: Result := 'copy_rec_managed';
+    IR_DYNDATA: Result := 'dyndata';
+    IR_SETLEN_DYN: Result := 'setlen_dyn';
     IR_BLOCK: Result := 'block';
     IR_UNSUPPORTED: Result := 'unsupported';
     IR_IF: Result := 'if';
@@ -198,6 +200,16 @@ begin
       begin
         IRRequireNode(IRA[i], 'copy_rec_managed dest');
         IRRequireNode(IRB[i], 'copy_rec_managed src');
+      end;
+
+      IR_DYNDATA:
+        if (IRA[i] < 0) or (IRA[i] >= SymCount) then
+          Error('invalid symbol in dyndata');
+
+      IR_SETLEN_DYN:
+      begin
+        IRRequireNode(IRA[i], 'setlen_dyn target');
+        IRRequireNode(IRB[i], 'setlen_dyn count');
       end;
 
       IR_SET_COPY, IR_SET_BINOP, IR_SET_CMP:
@@ -366,11 +378,59 @@ begin
   end;
 end;
 
+function NodeDynDepth(node: Integer): Integer;
+{ Dynamic-array nesting of an expression's value: 0 if not a dyn array, else the
+  remaining `array of` levels. m (array of array of T) is 2; m[i] is 1; m[i][j]
+  is 0 (a base value). }
+var bd: Integer;
+begin
+  Result := 0;
+  if node < 0 then Exit;
+  case ASTKind[node] of
+    AN_IDENT:
+      if Syms[ASTIVal[node]].IsArray and (Syms[ASTIVal[node]].ArrLen = -1) then
+        Result := SymDynDepth[ASTIVal[node]];
+    AN_INDEX:
+      begin
+        bd := NodeDynDepth(ASTLeft[node]);
+        if bd > 0 then Result := bd - 1;
+      end;
+  end;
+end;
+
+function NodeDynBaseSym(node: Integer): Integer;
+{ Root dynamic-array symbol of a (possibly nested) index expression, or -1. }
+begin
+  Result := -1;
+  if node < 0 then Exit;
+  if ASTKind[node] = AN_IDENT then
+  begin
+    if Syms[ASTIVal[node]].IsArray and (Syms[ASTIVal[node]].ArrLen = -1) then
+      Result := ASTIVal[node];
+  end
+  else if ASTKind[node] = AN_INDEX then
+    Result := NodeDynBaseSym(ASTLeft[node]);
+end;
+
+function DynElemSize(depth: Integer; baseTk: TTypeKind; baseRec: Integer): Integer;
+{ Stride of one element of a dynamic array at the given depth. depth>1 holds
+  pointer-sized sub-array handles; depth=1 holds base elements. }
+begin
+  if depth > 1 then
+    Result := TARGET_PTR_SIZE
+  else if baseTk = tyRecord then
+    Result := RecSize(baseRec)
+  else
+    Result := TypeSize(baseTk);
+end;
+
 function IRLowerAddress(node: Integer): Integer;
 var baseNode, baseAddr, indexNode, lo, elemSize: Integer;
     fieldName: AnsiString;
     isArr: Boolean;
     tk: TTypeKind;
+    baseDynDepth, dynRootSym, dynBaseRec: Integer;
+    dynBaseTk: TTypeKind;
     recName, aliasIdx: Integer;
 begin
   if ASTKind[node] = AN_IDENT then
@@ -430,6 +490,32 @@ begin
         elemSize := TypeSize(tk);
       baseAddr := IRLowerAST(baseNode);
       Result := IRAppend(IR_INDEX, baseAddr, indexNode, 0, elemSize, Ord(tk));
+      Exit;
+    end;
+    { Nested dynamic-array indexing: base is a nested dyn array (depth>=2) or a
+      sub-array element (an AN_INDEX whose value is still a dyn array). The base
+      data pointer is evaluated independently of InLValueWrite; no copy-on-write
+      at nested levels. Plain depth-1 arrays keep the path below. }
+    baseDynDepth := NodeDynDepth(baseNode);
+    if (baseDynDepth >= 2) or
+       ((baseDynDepth = 1) and (ASTKind[baseNode] = AN_INDEX)) then
+    begin
+      dynRootSym := NodeDynBaseSym(baseNode);
+      dynBaseTk := Syms[dynRootSym].ElemType;
+      dynBaseRec := Syms[dynRootSym].ElemRecName;
+      if (baseDynDepth = 1) and
+         ((dynBaseTk = tyAnsiString) or (dynBaseTk = tyRecord)) then
+        Error('nested dynamic arrays of managed types not yet supported');
+      if ASTKind[baseNode] = AN_IDENT then
+        baseAddr := IRAppend(IR_DYNDATA, ASTIVal[baseNode], -1, -1, 0, Ord(tyPointer))
+      else
+        baseAddr := IRAppend(IR_LOAD_MEM, IRLowerAddress(baseNode), -1, -1, 0, Ord(tyPointer));
+      indexNode := IRLowerAST(ASTRight[node]);
+      elemSize := DynElemSize(baseDynDepth, dynBaseTk, dynBaseRec);
+      if baseDynDepth >= 2 then
+        Result := IRAppend(IR_INDEX, baseAddr, indexNode, 0, elemSize, Ord(tyPointer))
+      else
+        Result := IRAppend(IR_INDEX, baseAddr, indexNode, 0, elemSize, Ord(dynBaseTk));
       Exit;
     end;
     baseAddr := IRLowerAddress(baseNode);
@@ -617,6 +703,7 @@ var left, right, seq, item, value, outNode, first, last, leftAddr, argNode, argV
     beforeCount, handlerLabel, handlerNode, handlerNextLabel, savedDepth: Integer;
     raiseValueNode, raiseClass: Integer;
     i, lbId, off, len, idx, itemNode, lo, hi, val1, elemSize: Integer;
+    slTargetAST, slCountAST, slRootSym, slDepth, slTargetAddr, slCountNode: Integer;
 begin
   if node = -1 then
   begin
@@ -997,6 +1084,28 @@ begin
       last := -1;
       cpi := ASTIVal[node];
       item := ASTLeft[node];
+      if cpi = -102 then
+      begin
+        { SetLength. Nested dynamic arrays (root depth >= 2, scalar base) take a
+          dedicated path operating on the target slot ADDRESS with a depth-aware
+          element stride. Plain depth-1 arrays fall through to the generic
+          special-call lowering (managed strings/records + COW). }
+        slTargetAST := ASTLeft[ASTLeft[node]];
+        slCountAST  := ASTLeft[ASTRight[ASTLeft[node]]];
+        slRootSym := NodeDynBaseSym(slTargetAST);
+        if (slRootSym >= 0) and (SymDynDepth[slRootSym] >= 2) then
+        begin
+          if (Syms[slRootSym].ElemType = tyAnsiString) or
+             (Syms[slRootSym].ElemType = tyRecord) then
+            Error('nested dynamic arrays of managed types not yet supported');
+          slDepth := NodeDynDepth(slTargetAST);
+          slTargetAddr := IRLowerAddress(slTargetAST);
+          slCountNode := IRLowerAST(slCountAST);
+          Result := IRAppend(IR_SETLEN_DYN, slTargetAddr, slCountNode, slDepth,
+                             TypeSize(Syms[slRootSym].ElemType), Ord(tyPointer));
+          Exit;
+        end;
+      end;
       if cpi = -201 then
       begin
         argVal := ASTLeft[item];

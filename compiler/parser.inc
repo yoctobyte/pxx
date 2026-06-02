@@ -3933,7 +3933,7 @@ end;
 
 procedure ParseVarSection;
 var names: array[0..63] of AnsiString; n, i, idx: Integer; tk: TTypeKind;
-    isArr, isDyn: Boolean; arrLo, arrHi: Integer; elemTk: TTypeKind;
+    isArr, isDyn: Boolean; arrLo, arrHi: Integer; elemTk: TTypeKind; dynDepth: Integer;
 begin
   Next;
   { Stop at section keywords: these are plain identifiers in this dialect, so
@@ -3960,10 +3960,23 @@ begin
         Expect(tkDotDot, '..');
         arrHi := ConstEval;
         Expect(tkRBrack, ']');
+        Expect(tkOf, 'of');
       end
       else
+      begin
         isDyn := True;   { 'array of T' without bounds is a dynamic array }
-      Expect(tkOf, 'of');
+        dynDepth := 1;
+        Expect(tkOf, 'of');
+        { Nested dynamic arrays: array of array of ... of BaseType. }
+        while CurTok.Kind = tkArray do
+        begin
+          Next;
+          if CurTok.Kind = tkLBrack then
+            Error('mixed static/dynamic nested arrays not supported');
+          Inc(dynDepth);
+          Expect(tkOf, 'of');
+        end;
+      end;
       elemTk := ParseTypeKind;
       tk := elemTk;
     end
@@ -3980,7 +3993,7 @@ begin
 	      for i := 0 to n-1 do
 	      begin
 	        if isDyn then
-	          idx := AllocDynArray(names[i], elemTk)
+	          idx := AllocDynArray(names[i], elemTk, dynDepth)
 	        else
 	        begin
 	          idx := AllocArray(names[i], elemTk, arrLo, arrHi);
@@ -5001,7 +5014,7 @@ begin
       { Result is a dynamic array: a pointer-sized local heap handle. Indexing,
         Length, and SetLength operate on it like any dyn-array local. }
       LastTypeRecId := retElemRec;
-      idx := AllocDynArray('Result', retElemTk);
+      idx := AllocDynArray('Result', retElemTk, 1);
       Procs[pi].RetSymIdx := idx;
     end
     else if retType = tyString then

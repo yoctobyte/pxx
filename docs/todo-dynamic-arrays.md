@@ -84,9 +84,23 @@ char-read path separately.
 
 3. ~~Add dynamic arrays as procedure parameters.~~ Done.
 4. ~~Add dynamic arrays as function results.~~ Done.
-5. Add nested dynamic arrays such as `array of array of Integer`.
-6. Extend recursive lifecycle metadata for nested dynamic arrays and records
-   containing them.
+5. ~~Add nested dynamic arrays such as `array of array of Integer`.~~ Done
+   2026-06-02. Scalar element types, any depth. Each level is an independent
+   `[refcount][length][data]` heap block of pointer-sized sub-array handles;
+   the deepest level holds base elements. `SetLength` works on the outer array
+   and on any sub-array element (`IR_SETLEN_DYN` on a target slot address);
+   `Length` reads each level's header; sub-arrays are released recursively on
+   scope exit / reassignment (`EmitDynArrayNestedReleaseLocked`). Depth is
+   tracked in the `SymDynDepth` parallel array (NOT a `TSymbol` field — adding a
+   field to that record breaks self-host: it pushes the compiler's own record
+   field count past the limit, see below). Regression:
+   `test/test_nested_dynarray.pas`.
+   - **Not supported:** copy-on-write at nested levels (sub-array element writes
+     mutate in place; aliasing a sub-array then mutating affects both); nested
+     arrays of managed base types (`array of array of AnsiString`/record) —
+     these error with "nested dynamic arrays of managed types not yet supported".
+6. Extend recursive lifecycle metadata for nested dynamic arrays of *managed*
+   base types (currently only scalar bases nest).
 7. Add exception-path cleanup only if exception lifetime semantics become an
    active requirement. Normal scope-exit cleanup is implemented.
 

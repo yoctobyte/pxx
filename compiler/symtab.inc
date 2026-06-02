@@ -338,6 +338,7 @@ end;
 procedure AddUField(ci, noff, nlen, byteOff, tk, recId: Integer);
 var fi: Integer;
 begin
+  if UFldCount >= MAX_UFIELD then Error('too many record/class fields (MAX_UFIELD)');
   fi := UFldCount;
   UFldNOff[fi] := noff;  UFldNLen[fi] := nlen;
   UFldOff_[fi] := byteOff; UFldTk[fi] := tk; UFldRec_[fi] := recId;
@@ -952,6 +953,7 @@ begin
   Syms[SymCount].ConstVal := 0;
   Syms[SymCount].IsArray  := False;
   Syms[SymCount].ArrLen   := 0;
+  SymDynDepth[SymCount] := 0;
   Syms[SymCount].ElemType := tyInteger;
   if tk = tyAnsiString then
     Syms[SymCount].ElemType := tyChar;
@@ -1012,6 +1014,7 @@ begin
   Syms[SymCount].IsArray  := isArray;
   Syms[SymCount].ArrLen   := 0;
   if isArray then Syms[SymCount].ArrLen := 1000;
+  SymDynDepth[SymCount] := 0;
   Syms[SymCount].ElemType := tk;
   Syms[SymCount].RecName  := LastTypeRecId;
   Syms[SymCount].IsRef    := isRef;
@@ -1062,6 +1065,7 @@ begin
   Syms[SymCount].ConstVal := lo;   { lo bound stored in ConstVal }
   Syms[SymCount].IsArray  := True;
   Syms[SymCount].ArrLen   := hi - lo + 1;
+  SymDynDepth[SymCount] := 0;
   Syms[SymCount].ElemType := elemType;
   Syms[SymCount].ElemRecName := LastTypeRecId;
   Syms[SymCount].IsRef    := False;
@@ -1091,9 +1095,11 @@ begin
   Result := SymCount; Inc(SymCount);
 end;
 
-function AllocDynArray(const name: AnsiString; elemType: TTypeKind): Integer;
+function AllocDynArray(const name: AnsiString; elemType: TTypeKind; depth: Integer): Integer;
 { Dynamic array (array of T): a pointer-sized slot holding a heap data pointer.
-  ArrLen = -1 marks the symbol as dynamic (static arrays always have ArrLen >= 1). }
+  ArrLen = -1 marks the symbol as dynamic (static arrays always have ArrLen >= 1).
+  depth is the nesting count: 1 for `array of T`, 2 for `array of array of T`...
+  elemType is the BASE element type at the deepest level. }
 begin
   if SymCount >= MAX_SYMS then Error('too many symbols');
   Syms[SymCount].Name        := name;
@@ -1101,6 +1107,7 @@ begin
   Syms[SymCount].ConstVal    := 0;            { lower bound: dynamic arrays are 0-based }
   Syms[SymCount].IsArray     := True;
   Syms[SymCount].ArrLen      := -1;           { -1 = dynamic }
+  SymDynDepth[SymCount] := depth;
   Syms[SymCount].ElemType    := elemType;
   Syms[SymCount].ElemRecName := LastTypeRecId;
   Syms[SymCount].IsRef       := False;
