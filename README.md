@@ -21,7 +21,8 @@ Focus: Linux / POSIX. Single target for now: x86-64.
 
 ## Highlights
 
-- **Tiny output** — Hello World is 325 bytes. No runtime, no stdlib linked in.
+- **Tiny output** — Pascal Hello World is 1,134 bytes. No runtime or stdlib is
+  linked in. See the [2026-06-02 benchmark](bench/2026-06-02-vs-fpc.md).
 - **Fast** — single in-memory pipeline; no assembler round-trip, no linker invocation.
 - **C + Pascal in one static binary** — `uses my_c_lib;` compiles a local C
   source file and merges it into the output ELF. No linker step, no separate

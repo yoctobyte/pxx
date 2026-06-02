@@ -1,6 +1,6 @@
 # Project State Audit
 
-**Audited:** 2026-06-01
+**Audited:** 2026-06-02
 
 This is the compact current-state snapshot. Source and `make test` remain
 authoritative. Detailed design notes live in [`todo.md`](todo.md), while older
@@ -44,6 +44,15 @@ Case behavior is per origin:
 ## Confirmed Bugs
 
 - None. (The hang compiling `test/test_basic_lexer.bas` was resolved on 2026-06-01 by adding Block IF support to the BASIC parser).
+
+## Latest Benchmark Snapshot
+
+The 2026-06-02 `make benchmark` run is recorded in
+[`bench/2026-06-02-vs-fpc.md`](../bench/2026-06-02-vs-fpc.md). On the recorded
+host, the self-hosted compiler remains 1.18x faster than FPC when compiling
+its expanded 22,789-line source tree and 19.15x faster for a batch of twenty
+Pascal hello-world compiles. The directly emitted static hello-world ELF is
+1,134 bytes.
 
 ## Latest Runtime Progress
 
