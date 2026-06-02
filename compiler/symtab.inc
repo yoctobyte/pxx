@@ -1,5 +1,8 @@
 { ===== User-class helpers (must precede hardcoded record helpers) ===== }
 
+procedure IREmitCodeCall(addr: Integer); forward;
+procedure EmitDynArrayReleaseForSym(symIdx: Integer); forward;
+
 function ULower(const s: AnsiString): AnsiString;
 var res: AnsiString; i: Integer; c: Char;
 begin
@@ -2557,8 +2560,31 @@ begin
 end;
 
 procedure EmitProcEpilog(retSymIdx: Integer);
-var sz: Integer;
+var sz, i: Integer;
 begin
+  { Release local managed variables before returning }
+  if CurProc >= 0 then
+  begin
+    for i := Procs[CurProc].ScopeBase to SymCount - 1 do
+    begin
+      if (Syms[i].Kind = skLocal) and (i <> retSymIdx) then
+      begin
+        if Syms[i].TypeKind = tyAnsiString then
+        begin
+          { mov rax, [rbp + Offset] }
+          EmitB($48); EmitB($8B); EmitB($85); EmitI32(Syms[i].Offset);
+          IREmitCodeCall(AnsiStrReleaseAddr);
+        end
+        else if Syms[i].IsArray and (Syms[i].ArrLen = -1) then
+        begin
+          { mov rax, [rbp + Offset] }
+          EmitB($48); EmitB($8B); EmitB($85); EmitI32(Syms[i].Offset);
+          EmitDynArrayReleaseForSym(i);
+        end;
+      end;
+    end;
+  end;
+
   if retSymIdx >= 0 then
   begin
     if TypeIsAggregate(Syms[retSymIdx].TypeKind) and

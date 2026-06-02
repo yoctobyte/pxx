@@ -173,6 +173,7 @@ begin
   IRCount := 0; IRLabelCount := 0;
   LoopNestDepth := 0; LoopBreakFixCount := 0; LoopContinueFixCount := 0;
   ExceptionCodegenDepth := 0; ExceptionHandlerParseDepth := 0; WithStackDepth := 0; AsmBytesCount := 0;
+  InLValueWrite := False;
   UClsCount := 0; UFldCount := 0; UMthCount := 0; CurSelfClass := REC_NONE;
   MethodFixCount := 0; UPropCount := 0;
   DataPtrFixCount := 0;

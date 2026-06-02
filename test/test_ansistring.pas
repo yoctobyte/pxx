@@ -4,6 +4,7 @@ program test_ansistring;
 var
   s: AnsiString;
   t: AnsiString;
+  c: Char;
 
 procedure TestLocal;
 var
@@ -40,13 +41,32 @@ begin
   { Modify first character }
   s[1] := 'h';
   writeln(s);
-  writeln(t); { Since t is a copy and we haven't implemented COW yet, let's see: wait, since we haven't done copy-on-write (COW) yet, modifying s[1] will modify the shared buffer. In a future slice we will implement COW. For now, they share the buffer, so let's verify both reflect the change, or just test changing it. }
-  if s[1] = 'h' then
-    writeln('Index write ok')
+  writeln(t); { Should print Hello (isolated via COW) }
+  if (s = 'hello') and (t = 'Hello') then
+    writeln('COW index write ok')
   else
-    writeln('Index write fail');
+    writeln('COW index write fail');
 
   TestLocal;
+
+  { Assign char variable to AnsiString }
+  c := 'X';
+  s := c;
+  writeln(s);
+  if s = 'X' then
+    writeln('Char assign ok')
+  else
+    writeln('Char assign fail');
+
+  s := 'Hello';
+  t := ' World';
+  s := s + t + '!';
+  writeln(s);
+
+  t := s;
+  SetLength(s, 5);
+  writeln(s);
+  writeln(t);
 
   s := '';
   writeln(Length(s));

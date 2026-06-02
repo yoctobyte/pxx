@@ -48,7 +48,11 @@ cost is mostly *semantics*, handled by the phasing below.
 
 ### Reality checks from review (do not assume away)
 
-- **Strings are not heap-backed yet.** Current Pascal strings are fixed-capacity inline buffers. The managed `AnsiString` ABI is designed but unimplemented. → string-capable Variant is blocked on it (see Prerequisites).
+- **Managed strings are still opt-in and incomplete.** The
+  `{$define PXX_MANAGED_STRING}` path implements heap-backed strings, local
+  cleanup, copy-on-write indexed writes, concatenation, coercions, and
+  `SetLength`. String-capable Variant remains blocked on complete ownership
+  coverage for params/results, globals, exceptions, and aggregates.
 - **No general linker.** The output path can't auto-pull a new RTL unit. Phase 1 must decide explicitly: Variant helpers as **compiler-emitted runtime routines** vs **linked RTL symbols**.
 - **Allocator needs the target-neutral migration** in `docs/allocator-platform-design.md`: every target gets a syscall-free internal heap; hosted `mmap`/release/resize and ESP32 RTOS facilities stay optional hooks.
 

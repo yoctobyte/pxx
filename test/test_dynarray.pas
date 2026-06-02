@@ -64,10 +64,14 @@ begin
   Check(a[0] = 0);
   Check(a[3] = 0);
 
-  { assignment shares storage until either variable is resized }
+  { assignment shares storage until either variable is written or resized }
   a[0] := 77;
   b := a;
   Check(b[0] = 77);
+  b[0] := 88;
+  Check(a[0] = 77);
+  Check(b[0] = 88);
+  b := a;
   SetLength(b, 6);
   Check(Length(b) = 6);
   Check(b[0] = 77);

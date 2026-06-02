@@ -27,7 +27,8 @@ records, strings, classes, constructors, inheritance, `class of` metaclasses,
 virtual/override and
 abstract dispatch, visibility parsing, properties, published RTTI, reflection,
 resources, LFM streaming, procedure/method pointers, integer and float
-arithmetic, typed pointers, dynamic arrays of scalar values, exceptions,
+arithmetic, typed pointers, dynamic arrays of scalar values, opt-in managed
+`AnsiString` arrays, exceptions,
 generics, overloads, operators, qualified unit symbols, scaled typed-pointer
 arithmetic, record/set aggregate-valued function results, conditional
 directive expressions and active-branch includes, inline asm, `goto`, `with`,
@@ -46,27 +47,34 @@ Case behavior is per origin:
 
 ## Latest Runtime Progress
 
-The 2026-06-01 managed-runtime batch established the scalar dynamic-array
-baseline:
+The 2026-06-02 managed-runtime batch established generic dynamic-array
+copy-on-write and the first managed-element slice:
 
 - Dynamic-array locals are initialized to `nil`.
 - Assignment retains the new allocation and releases replaced storage.
+- Indexed writes clone shared dynamic-array storage before mutation.
 - `SetLength` preserves the retained prefix when growing or shrinking, zeroes
   newly exposed scalar slots, and releases storage for `SetLength(a, 0)`.
 - Replaced blocks return to the existing free list.
 - Refcount increments/decrements are ordinary instructions by default and gain
   an atomic prefix only with `--threadsafe` / `{$THREADSAFE ON}`.
-- `test/test_dynarray.pas` covers preservation, zeroing, alias assignment, and
-  copy-on-resize. `test/test_multithreading.pas` repeatedly resizes local arrays
-  while four pthread workers allocate and free raw heap blocks.
+- Dynamic-array locals release storage on normal procedure exit.
+- Under `{$define PXX_MANAGED_STRING}`, `array of AnsiString` retains copied
+  element references during clone/resize and releases elements when the final
+  array owner dies.
+- `test/test_dynarray.pas` covers scalar preservation, zeroing, alias
+  assignment, copy-on-write, and copy-on-resize.
+  `test/test_dynarray_ansistring.pas` covers managed-element aliasing, resize,
+  shrink, cleanup, and threaded emission. `test/test_multithreading.pas`
+  repeatedly resizes local arrays while four pthread workers allocate and free
+  raw heap blocks.
 
 Verification passed after the batch:
 
 ```text
 make all
 make test
-thread-safe dynamic-array aliasing regression
-10 repeated pthread resize stress runs
+thread-safe managed-string dynamic-array regression
 git diff --check
 ```
 
@@ -85,17 +93,17 @@ runtime dependencies.
   constraint against arbitrary pointer-compatible assignments.
 - Float conversion intrinsics such as `Trunc`, `Round`, `Int`, and float
   `Str`/`Val`.
-- Managed `AnsiString`: current strings are inline fixed-capacity values. The
-  target ABI is now fixed: heap-backed, reference-counted, copy-on-write
-  strings with a trailing zero byte for `PChar` compatibility. The value ABI
-  stays identical in both modes; refcount updates become atomic only with
-  `--threadsafe` / `{$THREADSAFE ON}`. See
-  [`threads-todo.md`](threads-todo.md).
-- Dynamic arrays support scalar elements, assignment retain/release,
-  preserving resize, zero-initialized growth, replacement reclaim, and
-  conditional atomic refcounts. Still missing: automatic scope-exit release,
-  record or string elements, and params/results. Deepen these after allocator
-  and managed-`AnsiString` work.
+- Managed `AnsiString` is available as an initial
+  `{$define PXX_MANAGED_STRING}` slice: heap-backed refcounting, normal local
+  cleanup, copy-on-write indexed writes, concatenation, coercions, and
+  `SetLength`. The default representation remains inline while the remaining
+  params/results, globals, exception, and aggregate ownership paths are
+  completed.
+- Dynamic arrays support scalar elements plus opt-in managed `AnsiString`
+  elements, assignment retain/release, indexed-write copy-on-write, preserving
+  resize, zero-initialized growth, replacement reclaim, normal local cleanup,
+  and conditional atomic refcounts. Still missing: nested arrays, managed
+  records, and params/results.
 - Full access-control enforcement is intentionally deferred. Visibility
   sections are parsed because `published` drives RTTI; rejecting
   private/protected access enables no new programs.
@@ -135,9 +143,9 @@ runtime dependencies.
    tests pass without `mmap`, `munmap`, or `brk`.
 3. Implement allocator splitting, coalescing, alignment, and in-place
    `Realloc` attempts; keep hosted and RTOS facilities behind optional hooks.
-4. Implement managed `AnsiString`: pointer slot, refcount, capacity,
-   copy-on-write, and a trailing `#0` byte for direct `PChar` compatibility.
-5. Add general managed-value finalization, then complete dynamic arrays:
-   scope-exit release, params/results, arrays of strings, and arrays of records.
+4. Finish the opt-in managed `AnsiString` migration: params/results, globals,
+   exception paths, and remaining record/class ownership paths.
+5. Add recursive managed-value metadata, then complete dynamic arrays:
+   params/results, nested arrays, and arrays of managed records.
 6. Audit threaded compound runtime operations: statement-level
    `write`/`writeln`, shared `read`/`readln` state, and exception globals.

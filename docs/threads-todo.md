@@ -28,18 +28,23 @@ Already implemented:
   `ReallocMem`.
 - Heap blocks with size headers, a first-fit free list, and `mmap` arena growth
   in the IR allocator path.
-- Scalar dynamic arrays with pointer-sized slots, assignment retain/release,
-  preserving `SetLength`, zero-initialized growth, replacement reclaim, and
-  atomic refcount updates only under `--threadsafe`, using the provisional
-  layout `[refcount:8][length:8][data...]`.
+- Dynamic arrays with pointer-sized slots, assignment retain/release,
+  indexed-write copy-on-write, preserving `SetLength`, zero-initialized
+  growth, replacement reclaim, normal local cleanup, and atomic refcount
+  updates only under `--threadsafe`, using the provisional layout
+  `[refcount:8][length:8][data...]`.
+- `{$define PXX_MANAGED_STRING}` enables the first managed `AnsiString` slice
+  and `array of AnsiString`, including element retain/finalize during array
+  clone, resize, and final release.
 - A pthread regression that concurrently allocates and frees heap blocks.
 
 Known gaps:
 
-- Strings are still fixed-capacity inline values: globals reserve
-  `STRING_CAP + 8`; locals reserve `LOCAL_STR_CAP + 8`.
-- Dynamic arrays still need automatic release at scope exit and support for
-  managed element types, params, and results.
+- Strings remain fixed-capacity inline values by default. The opt-in managed
+  ABI still needs params/results, globals, exception paths, and complete
+  record/class ownership coverage.
+- Dynamic arrays still need recursive element metadata for nested arrays and
+  managed records, plus params and results.
 - The older shared `EmitBumpAlloc` helper still uses the obsolete `brk` model
   and is not protected by the heap lock. Managed values must go through one
   allocator path before threaded stress testing.

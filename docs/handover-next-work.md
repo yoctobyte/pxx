@@ -1,9 +1,9 @@
 # Handover: Next Compiler Work
 
-**Snapshot:** 2026-06-01
+**Snapshot:** 2026-06-02
 
-Use this as the resume checklist after the scalar dynamic-array ownership and
-allocator-platform design batch.
+Use this as the resume checklist after the first managed `AnsiString` and
+managed dynamic-array ownership batch.
 Source and `make test` remain authoritative; [`todo.md`](todo.md) keeps the
 full inventory.
 
@@ -15,6 +15,13 @@ full inventory.
   slots, reclaims replaced blocks, and releases storage at length zero.
 - Local dynamic-array pointer slots initialize to `nil`.
 - Dynamic-array refcount operations are atomic only in threaded builds.
+- Dynamic-array indexed writes clone shared storage before mutation.
+- Dynamic-array locals release storage on normal procedure exit.
+- `{$define PXX_MANAGED_STRING}` enables heap-backed managed strings with
+  local cleanup, copy-on-write indexed writes, concatenation, coercions, and
+  `SetLength`.
+- `array of AnsiString` retains copied element references during clone/resize
+  and finalizes elements when the final array owner is released.
 - The pthread regression now repeatedly resizes local arrays while four
   workers also exercise `GetMem` / `FreeMem`.
 - The allocator direction is documented in
@@ -26,6 +33,7 @@ Regression gates:
 
 ```text
 test/test_dynarray.pas
+test/test_dynarray_ansistring.pas
 test/test_multithreading.pas
 make all
 make test
@@ -52,14 +60,11 @@ The next runtime work should keep hosted optimizations optional:
 3. **Internal allocator.** Add alignment, splitting, coalescing, and in-place
    resize attempts. Linux `mmap`/`munmap` and future ESP32 RTOS services remain
    optional target hooks.
-4. **Managed `AnsiString`.** Replace the current inline fixed-capacity string
-   representation with reference-counted storage before deepening dynamic
-   arrays. The threading contract is fixed: use one managed ABI in both modes
-   and emit atomic refcount updates only with `--threadsafe`. Atomic refcounts
-   protect lifetime only; they do not make concurrent mutation or copy-on-write
-   checks safe.
-5. **Managed finalization and arrays.** Add scope-exit release, params/results,
-   arrays of strings, and arrays of records.
+4. **Managed `AnsiString` depth.** Finish params/results, globals, exception
+   paths, and remaining record/class ownership paths before making the
+   opt-in ABI the default.
+5. **Managed finalization and arrays.** Add recursive element metadata, then
+   support params/results, nested dynamic arrays, and arrays of managed records.
 6. **Thread audit.** Serialize compound `write`/`writeln`, decide shared
    `readln` state handling, and move exception globals to a thread-safe model.
 
@@ -75,15 +80,12 @@ The next runtime work should keep hosted optimizations optional:
   pressure justifies it.
 - **Float conversions and float `Str`/`Val`:** handle with the math-library
   design rather than as isolated intrinsics.
-- **Managed `AnsiString`:** design before dynamic-array depth. Current strings
-  are inline fixed-capacity values, not reference-counted heap strings. The
-  representation and cross-thread policy are now fixed in
-  [`threads-todo.md`](threads-todo.md): keep one managed ABI in both modes and
-  emit atomic refcount updates only in threaded builds.
-- **Dynamic-array depth:** improve after managed-`AnsiString` establishes the
-  ownership helpers and shared allocation path. Scalar arrays work;
-  record/string elements, params/results, ownership, copy-on-grow, and reclaim
-  remain incomplete.
+- **Managed `AnsiString`:** the initial opt-in slice is implemented. Keep the
+  ABI gated until params/results, globals, exceptions, and remaining
+  record/class paths are covered.
+- **Dynamic-array depth:** scalar and managed-string element arrays work.
+  Recursive ownership still needs richer element metadata for nested arrays,
+  managed records, and params/results.
 - **Allocator:** use the target-neutral contract in
   [`allocator-platform-design.md`](allocator-platform-design.md). Replace the
   current simple first-fit free list with a syscall-free internal heap
@@ -102,6 +104,7 @@ The latest batch passed:
 
 ```sh
 make test
+make test-nilpy
 git diff --check
 ```
 

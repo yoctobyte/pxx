@@ -99,7 +99,7 @@ test-nilpy: $(COMPILER)
 
 test: $(COMPILER) fpc-check
 	./$(COMPILER) test/test_ansistring.pas /tmp/test_ansistring26
-	test "$$(/tmp/test_ansistring26)" = "$$(printf '0\nInitially empty ok\nHello\n5\nHello\nAssignment equal ok\nhello\nhello\nIndex write ok\nLocalString\n11\nLocal equal ok\n0\nClear empty ok')"
+	test "$$(/tmp/test_ansistring26)" = "$$(printf '0\nInitially empty ok\nHello\n5\nHello\nAssignment equal ok\nhello\nHello\nCOW index write ok\nLocalString\n11\nLocal equal ok\nX\nChar assign ok\nHello World!\nHello\nHello World!\n0\nClear empty ok')"
 	./$(COMPILER) test/hello.pas /tmp/hello26
 	test "$$(/tmp/hello26)" = "Hello, World!"
 	./$(COMPILER) test/hello.c /tmp/hello_c26
@@ -385,7 +385,11 @@ test: $(COMPILER) fpc-check
 	./$(COMPILER) test/test_float.pas /tmp/test_float26
 	test "$$(/tmp/test_float26)" = "$$(printf '1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1')"
 	./$(COMPILER) test/test_dynarray.pas /tmp/test_dynarray26
-	test "$$(/tmp/test_dynarray26)" = "$$(printf '1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1')"
+	test "$$(/tmp/test_dynarray26)" = "$$(printf '1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1')"
+	./$(COMPILER) test/test_dynarray_ansistring.pas /tmp/test_dynarray_ansistring26
+	test "$$(/tmp/test_dynarray_ansistring26)" = "$$(printf '1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1')"
+	./$(COMPILER) --threadsafe test/test_dynarray_ansistring.pas /tmp/test_dynarray_ansistring_threadsafe26
+	test "$$(/tmp/test_dynarray_ansistring_threadsafe26)" = "$$(printf '1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1')"
 	./$(COMPILER) test/test_variant.pas /tmp/test_variant26
 	test "$$(/tmp/test_variant26)" = "$$(printf '42\n-7\nQ\n3.14\n1\n100')"
 	./$(COMPILER) test/test_variant_ops.pas /tmp/test_variant_ops26

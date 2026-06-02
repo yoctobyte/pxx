@@ -652,12 +652,15 @@ var
   BSS_LINE_LEN    : Integer;  { bytes currently in line buffer }
   BSS_LINE_POS    : Integer;  { parse cursor into line buffer }
   ExceptionUsed   : Boolean;
+  InLValueWrite   : Boolean;
   ExcSetJmpAddr   : Integer;
   ExcLongJmpAddr  : Integer;
   ExcRaiseAddr    : Integer;
   AnsiStrReleaseAddr : Integer;
   AnsiStrRetainAddr  : Integer;
   AnsiStrFromLiteralAddr : Integer;
+  AnsiStrUniqueAddr : Integer;
+  AnsiStrConcatAddr : Integer;
 
   TokChars   : array[0..STRING_CAP-1] of Char;
   TokCharLen : Integer;

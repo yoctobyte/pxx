@@ -178,12 +178,14 @@ Full ordered design: **[`threads-todo.md`](threads-todo.md)**.
   **[`allocator-platform-design.md`](allocator-platform-design.md)**.
 - Add a fixed-static-arena profile so allocator and managed-value tests pass
   without `mmap`, `munmap`, or `brk`.
-- Replace fixed-capacity inline strings with variable-length,
-  reference-counted, copy-on-write `AnsiString` allocations. Every allocation
-  reserves one extra trailing `#0` byte so the data pointer is directly
-  `PChar` compatible.
-- Deepen dynamic arrays after the general managed-value finalization model:
-  scope-exit release, params/results, then managed element types.
+- Finish the opt-in `{$define PXX_MANAGED_STRING}` migration. Heap-backed,
+  reference-counted, copy-on-write strings, local cleanup, concatenation,
+  coercions, and `SetLength` work; params/results, globals, exceptions, and
+  remaining record/class ownership paths are pending.
+- Deepen dynamic arrays after adding recursive managed-value metadata.
+  Scalar arrays and `array of AnsiString` support scope-exit release and
+  indexed-write copy-on-write; params/results, nested arrays, and arrays of
+  managed records remain.
 - Preserve a short default path: mutexes, spinlocks, and atomic updates are
   emitted only with `--threadsafe` / `{$THREADSAFE ON}`.
 - Audit compound runtime operations after managed values land. In particular,
@@ -268,22 +270,19 @@ inheritance depth, method-resolution clauses, COM ARC.
   See [`pascal-gap-analysis.md`](pascal-gap-analysis.md) §1.3.
 - ⬜ **Float intrinsics.** `Trunc`, `Round`, `Int`, `Float` not implemented
   (float arithmetic/compare/write itself is done).
-- ⬜ **Managed `AnsiString` representation.** Current Pascal strings are inline
-  fixed-capacity values with a length prefix, not heap-backed reference-counted
-  `AnsiString`s. Do this before ownership-heavy dynamic-array work so arrays of
-  strings can reuse the same managed-value initialization, assignment,
-  finalization, and copy-on-write rules. The threading contract is now fixed:
-  keep one managed ABI in both modes and emit atomic refcount updates only with
-  `--threadsafe`. Atomic refcounts protect lifetime accounting only; concurrent
-  mutation and copy-on-write uniqueness checks still require an external
-  synchronization rule or a stronger runtime design.
-- 🟡 **Dynamic arrays.** Scalar elements support pointer-sized slots,
-  assignment retain/release, preserving grow/shrink, zero-initialized new
-  slots, `SetLength(a, 0)` reclaim, local-slot nil initialization, and
-  conditional atomic refcounts under `--threadsafe`. Missing: automatic
-  release at scope exit, `array of record` / `array of string`, and dynamic
-  arrays as params / results. Deepen these after managed `AnsiString`
-  establishes the general finalization model.
+- 🟡 **Managed `AnsiString` representation.** The opt-in
+  `{$define PXX_MANAGED_STRING}` path implements heap-backed reference counts,
+  local cleanup, copy-on-write indexed writes, concatenation, coercions, and
+  `SetLength`. Complete params/results, globals, exception paths, and remaining
+  record/class ownership before making it the default. Atomic refcounts protect
+  lifetime accounting only; concurrent mutation and copy-on-write uniqueness
+  checks still require external synchronization.
+- 🟡 **Dynamic arrays.** Scalar and opt-in managed-string elements support
+  pointer-sized slots, assignment retain/release, indexed-write copy-on-write,
+  preserving grow/shrink, zero-initialized new slots, `SetLength(a, 0)`
+  reclaim, local-slot initialization and normal scope-exit release, and
+  conditional atomic refcounts under `--threadsafe`. Missing: recursive
+  metadata for nested arrays and managed records, plus params/results.
 - 🟡 **Heap allocator.** `GetMem`/`FreeMem` now do real free-list reuse on the
   IR backend (8-byte size header per block + single free list, first-fit, no
   split/coalesce). Enough that
