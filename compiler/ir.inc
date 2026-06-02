@@ -47,6 +47,7 @@ begin
     IR_READLINE: Result := 'readline';
     IR_READ_VAR: Result := 'read_var';
     IR_COPY_REC: Result := 'copy_rec';
+    IR_COPY_REC_MANAGED: Result := 'copy_rec_managed';
     IR_BLOCK: Result := 'block';
     IR_UNSUPPORTED: Result := 'unsupported';
     IR_IF: Result := 'if';
@@ -191,6 +192,12 @@ begin
       begin
         IRRequireNode(IRA[i], 'copy_rec dest');
         IRRequireNode(IRB[i], 'copy_rec src');
+      end;
+
+      IR_COPY_REC_MANAGED:
+      begin
+        IRRequireNode(IRA[i], 'copy_rec_managed dest');
+        IRRequireNode(IRB[i], 'copy_rec_managed src');
       end;
 
       IR_SET_COPY, IR_SET_BINOP, IR_SET_CMP:
@@ -893,15 +900,20 @@ begin
       end
       else if IntToTypeKind(ASTTk[ASTLeft[node]]) = tyRecord then
       begin
-        if RecordHasManagedFields(ResolveNodeRec(ASTLeft[node])) then
-          Error('whole-record assignment with managed fields not yet supported');
         leftAddr := IRLowerAddress(ASTLeft[node]);
         if rhsIsLValue then
           right := IRLowerAddress(ASTRight[node])
         else
           right := IRLowerAST(ASTRight[node]);
-        Result := IRAppend(IR_COPY_REC, leftAddr, right, -1,
-                           RecSize(ResolveNodeRec(ASTLeft[node])), Ord(tyRecord));
+        if RecordHasManagedFields(ResolveNodeRec(ASTLeft[node])) then
+          { ARC-correct copy: retain source managed fields, release the old
+            destination ones, then bulk-copy. }
+          Result := IRAppend(IR_COPY_REC_MANAGED, leftAddr, right,
+                             ResolveNodeRec(ASTLeft[node]),
+                             RecSize(ResolveNodeRec(ASTLeft[node])), Ord(tyRecord))
+        else
+          Result := IRAppend(IR_COPY_REC, leftAddr, right, -1,
+                             RecSize(ResolveNodeRec(ASTLeft[node])), Ord(tyRecord));
       end
       else if IntToTypeKind(ASTTk[ASTLeft[node]]) = tyVariant then
       begin

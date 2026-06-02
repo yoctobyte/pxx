@@ -72,14 +72,15 @@ char-read path separately.
 ## Remaining Dynamic-Array Work
 
 1. ~~Fix static-array field indexing inside records.~~ Done (see above).
-2. Add whole-record assignment bookkeeping for records containing managed
-   fields. Raw `rep movsb` is incorrect because copied references must be
-   retained and replaced destination fields must be released. The compiler
-   currently rejects this case explicitly:
-
-   ```text
-   whole-record assignment with managed fields not yet supported
-   ```
+2. ~~Add whole-record assignment bookkeeping for records containing managed
+   fields.~~ Done 2026-06-02. `IR_COPY_REC_MANAGED` retains the source's managed
+   fields, releases the destination's old ones (under the heap lock), then bulk
+   copies. Retain-before-release makes self-assignment and shared fields safe.
+   Record/managed-array locals are now zero-initialised so the release of the
+   (nil) old destination fields is safe. Regression:
+   `test/test_managed_record_assign.pas`. Not yet covered: returning a managed
+   record *by value* from a function (`Result := rec` / `Exit(rec)`) still uses
+   the plain `IR_COPY_REC` and does not retain.
 
 3. ~~Add dynamic arrays as procedure parameters.~~ Done.
 4. ~~Add dynamic arrays as function results.~~ Done.

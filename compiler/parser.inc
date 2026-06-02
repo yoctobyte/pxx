@@ -4626,6 +4626,7 @@ var
   pbyref    : array[0..15] of Boolean;
   nparams  : Integer;
   pi, i, sz, retRecId, savedLastTypeRecId: Integer;
+  zeroBytes : Integer;
   retIsDynArr : Boolean; retElemTk : TTypeKind; retElemRec : Integer;
   savedSC, savedFS, savedCurProc : Integer;
   savedGLC, savedGFC, j: Integer;
@@ -5117,13 +5118,40 @@ begin
       tkConst: ParseConstSection;
       tkType:  ParseTypeSection;
     end;
-  { Dynamic-array and AnsiString locals are managed pointer slots. Initialize them before the
-    body so their first SetLength sees nil rather than stale stack bytes. }
+  { Managed locals (dynamic arrays, AnsiStrings, and records/arrays containing
+    them) hold managed pointer slots. Zero their full extent before the body so
+    a first SetLength / assignment sees nil rather than stale stack bytes — and
+    so an ARC-correct whole-record copy can safely release the (nil) old fields. }
   for i := savedSC to SymCount - 1 do
-    if (Syms[i].Kind = skLocal) and
-       ((Syms[i].IsArray and (Syms[i].ArrLen = -1)) or (Syms[i].TypeKind = tyAnsiString)) then
+    if Syms[i].Kind = skLocal then
     begin
-      EmitB($48); EmitB($C7); EmitB($85); EmitI32(Syms[i].Offset); EmitI32(0);
+      zeroBytes := 0;
+      if Syms[i].IsArray and (Syms[i].ArrLen = -1) then
+        zeroBytes := TARGET_PTR_SIZE                          { dyn-array handle }
+      else if Syms[i].TypeKind = tyAnsiString then
+      begin
+        if Syms[i].IsArray then
+          zeroBytes := Syms[i].ArrLen * TARGET_PTR_SIZE       { static array of AnsiString }
+        else
+          zeroBytes := TARGET_PTR_SIZE;                       { scalar AnsiString }
+      end
+      else if (Syms[i].TypeKind = tyRecord) and not Syms[i].IsArray and
+              RecordHasManagedFields(Syms[i].RecName) then
+        zeroBytes := RecSize(Syms[i].RecName)
+      else if (Syms[i].TypeKind = tyRecord) and Syms[i].IsArray and
+              RecordHasManagedFields(Syms[i].ElemRecName) then
+        zeroBytes := Syms[i].ArrLen * RecSize(Syms[i].ElemRecName);
+      if zeroBytes = TARGET_PTR_SIZE then
+      begin
+        EmitB($48); EmitB($C7); EmitB($85); EmitI32(Syms[i].Offset); EmitI32(0); { mov qword [rbp+off], 0 }
+      end
+      else if zeroBytes > 0 then
+      begin
+        EmitB($48); EmitB($8D); EmitB($BD); EmitI32(Syms[i].Offset);  { lea rdi, [rbp+off] }
+        EmitB($48); EmitB($31); EmitB($C0);                           { xor rax, rax }
+        EmitB($48); EmitB($C7); EmitB($C1); EmitI32(zeroBytes);       { mov rcx, zeroBytes }
+        EmitB($F3); EmitB($AA);                                       { rep stosb }
+      end;
     end;
   { label declarations: label foo, bar; }
   while (CurTok.Kind = tkIdent) and CaseEqual(CurTok.SVal, 'label') do

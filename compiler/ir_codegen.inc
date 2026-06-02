@@ -2784,6 +2784,33 @@ begin
         EmitB($F3); EmitB($A4);                { rep movsb }
       end;
 
+    IR_COPY_REC_MANAGED:
+      begin
+        { ARC-correct whole-record copy. Retain the source's managed fields,
+          release the destination's old ones, then bulk-copy. Retaining before
+          releasing makes self-assignment and shared fields safe. dest/src are
+          parked on the stack so the retain/release helpers may clobber freely. }
+        IREmitNode(IRB[node]);                 { rax = source address }
+        EmitB($50);                            { push src      [rsp+16 below] }
+        IREmitNode(IRA[node]);                 { rax = dest address }
+        EmitB($50);                            { push dest     [rsp+8 below]  }
+        EmitB($53);                            { push rbx      [rsp]          }
+
+        EmitB($48); EmitB($8B); EmitB($5C); EmitB($24); EmitB($10); { mov rbx, [rsp+16] = src }
+        EmitManagedRecordRetain(IRC[node]);
+
+        EmitAcquireHeapLock;
+        EmitB($48); EmitB($8B); EmitB($5C); EmitB($24); EmitB($08); { mov rbx, [rsp+8] = dest }
+        EmitManagedRecordReleaseLocked(IRC[node]);
+        EmitReleaseHeapLock;
+
+        EmitB($5B);                            { pop rbx }
+        EmitB($5F);                            { pop rdi = dest }
+        EmitB($5E);                            { pop rsi = src }
+        EmitB($48); EmitB($B9); EmitI64(IRIVal[node]); { movabs rcx, byte count }
+        EmitB($F3); EmitB($A4);                { rep movsb (src -> dest) }
+      end;
+
     IR_SET_COPY:
       begin
         IREmitNode(IRB[node]);                 { rax = source address }
@@ -3089,7 +3116,7 @@ begin
         end;
 
       IR_STORE_SYM, IR_STORE_MEM, IR_WRITE, IR_WRITELN,
-      IR_READLINE, IR_READ_VAR, IR_COPY_REC, IR_SET_COPY, IR_VAR_STORE,
+      IR_READLINE, IR_READ_VAR, IR_COPY_REC, IR_COPY_REC_MANAGED, IR_SET_COPY, IR_VAR_STORE,
       IR_EXC_LEAVE, IR_RAISE, IR_EXC_STORE, IR_EXC_CLEAR, IR_TERMINATE,
       IR_ASM:
         begin

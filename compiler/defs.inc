@@ -164,6 +164,7 @@ const
   IR_VAR_STORE    = 43;  { IRA = dest variant addr; IRB = value; IRC = source TTypeKind ord (tyVariant ord = 16-byte copy) }
   IR_VAR_BINOP    = 44;  { value: IRA/IRB = operand variant addrs; IRC = op token; IRIVal = result BSS off (arith); IRTk = tyVariant(arith)|tyBoolean(cmp) }
   IR_VAR_BOX      = 45;  { value: IRA = temp variant addr; IRB = scalar value; IRC = scalar TTypeKind ord; boxes and returns addr in rax }
+  IR_COPY_REC_MANAGED = 46; { IRA = dest addr; IRB = src addr; IRC = recId; IRIVal = byte count; ARC-correct whole-record copy }
 
   { Variant tag (VType) values, stored in the first 8 bytes of a tyVariant slot.
     Payload (next 8 bytes) interpreted per tag. Closed scalar set; vtObject is a
