@@ -5473,6 +5473,8 @@ begin
         CurrentCLibrary := 'librt.so.1'
       else if (lo = 'z') then
         CurrentCLibrary := 'libz.so.1'
+      else if (lo = 'sqlite3') then
+        CurrentCLibrary := 'libsqlite3.so.0'
       else
         ConcatThree('lib', lo, '.so', CurrentCLibrary);
     end;

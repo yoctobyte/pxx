@@ -73,7 +73,7 @@ end;
 function ParseCDeclType: TTypeKind;
 var
   isUnsigned, isSigned, isFloatTy, isVoid, loop, sawBase, isTypedef: Boolean;
-  shortCount, longCount, tdIdx: Integer;
+  shortCount, longCount, tdIdx, depth: Integer;
   base: TTypeKind;
 begin
   isUnsigned := False; isSigned := False; isFloatTy := False; isVoid := False;
@@ -141,6 +141,33 @@ begin
     Result := tyPointer;
     CTypeIsVoid := False;
     Next;
+  end;
+
+  { Function-pointer declarator: ret (*name)(params) — e.g. sqlite3_exec's
+    callback. Without this the base type (int) leaks through as the param
+    type, so a Pointer/nil argument fails overload and would truncate to 4
+    bytes. Detect `(` immediately followed by `*`, collapse to Pointer, and
+    skip both the `(*name)` declarator group and the trailing `(params)`
+    group so the caller's parameter loop resyncs on the next `,`/`)`. }
+  if (CurTok.Kind = tkLParen) and (Tokens[TokPos].Kind = tkStar) then
+  begin
+    Result := tyPointer;
+    CTypeIsVoid := False;
+    depth := 0;
+    repeat
+      if CurTok.Kind = tkLParen then Inc(depth)
+      else if CurTok.Kind = tkRParen then Dec(depth);
+      Next;
+    until (depth = 0) or (CurTok.Kind = tkEOF);
+    if CurTok.Kind = tkLParen then
+    begin
+      depth := 0;
+      repeat
+        if CurTok.Kind = tkLParen then Inc(depth)
+        else if CurTok.Kind = tkRParen then Dec(depth);
+        Next;
+      until (depth = 0) or (CurTok.Kind = tkEOF);
+    end;
   end;
 end;
 
