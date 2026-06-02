@@ -50,6 +50,32 @@ authoritative.
   2026-06-02 audit is in
   [`runtime-emission-size-audit-2026-06-02.md`](runtime-emission-size-audit-2026-06-02.md).
 
+## Unexplained Anomalies
+
+- **One-off non-reproducible miscompile (2026-06-02).** During validation of the
+  record-value `Exit` fix, the *same* `compiler/pascal26` (md5 unchanged)
+  occasionally produced a *different*, crashing binary for
+  `test/test_managed_record_exit.pas`. `cmp` showed about ten differing bytes at
+  the same total file size (offsets ~97/98, 105/106, 125/126, 205/206, 223/224),
+  with several 16-bit-field high bytes shifting `0x0F`→`0x16` together — the
+  shape of a single corrupted base/address value propagated to multiple emit
+  sites, not ten independent flips.
+
+  **No software source was found, and it self-cleared without any change.** The
+  toolchain uses no randomness, no timestamps, and no threads within a single
+  compile, and the self-host gate requires byte-identical `build == verify`, so
+  output is deterministic by construction. After the event, 160+ consecutive
+  recompiles were byte-identical and ran clean, and `make test` was green; the
+  divergence never recurred. The leading suspicion is a transient hardware fault
+  (a RAM or cache bit flip on non-ECC memory), not a compiler defect — the
+  record-`Exit` fix itself is sound (it takes the source *address* for the
+  `IR_COPY_REC` source instead of a loaded value).
+
+  If it recurs, the cheap detector is a determinism canary —
+  `for i in $(seq 1 200); do ./compiler/pascal26 test/hello.pas /tmp/t; cmp /tmp/t /tmp/golden || echo "DIVERGED $i"; done` —
+  alongside `journalctl -k | grep -iE 'mce|edac|hardware error'` and a memtest86
+  pass. Prefer ECC RAM for long unattended self-host runs.
+
 ## C Interoperability
 
 C header import is **delivered for the intended FFI-extraction model**, not an
