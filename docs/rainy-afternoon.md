@@ -76,7 +76,9 @@ authoritative.
   If it recurs, the cheap detector is a determinism canary —
   `for i in $(seq 1 200); do ./compiler/pascal26 test/hello.pas /tmp/t; cmp /tmp/t /tmp/golden || echo "DIVERGED $i"; done` —
   alongside `journalctl -k | grep -iE 'mce|edac|hardware error'` and a memtest86
-  pass. Prefer ECC RAM for long unattended self-host runs.
+  pass. Prefer ECC RAM for long unattended self-host runs. Full forensic write-up
+  (system meta, byte-level `cmp` analysis, timeline):
+  [`anomaly_2026-06-02_2000.md`](anomaly_2026-06-02_2000.md).
 
 ## C Interoperability
 

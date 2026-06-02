@@ -1,0 +1,28 @@
+# System meta snapshot — captured 2026-06-02 ~20:07 local (filing time)
+## uname
+Linux borg 6.17.0-29-generic #29~24.04.1-Ubuntu SMP PREEMPT_DYNAMIC Mon May 11 10:30:58 UTC 2 x86_64 x86_64 x86_64 GNU/Linux
+## os-release
+PRETTY_NAME="Ubuntu 24.04.4 LTS"
+VERSION_ID="24.04"
+VERSION="24.04.4 LTS (Noble Numbat)"
+VERSION_CODENAME=noble
+## cpu
+model name	: Intel(R) Core(TM) i7-6700 CPU @ 3.40GHz
+cores=8 stepping=3 microcode=0xf0
+## memory
+MemTotal:       16336412 kB
+SwapTotal:       4194300 kB
+ECC: EDAC ie31200: No ECC support (non-ECC)
+## storage
+/ and /tmp -> /dev/sda3 ext4; sda model=P3-1TB rotational=0 (SSD); swap=/swap.img 4G
+## kernel HW-error log
+May 30 10:51:19 borg kernel: EDAC MC: Ver: 3.0.0
+May 30 10:51:22 borg kernel: EDAC ie31200: No ECC support
+## toolchain
+fpc=3.2.2 ld=GNU ld (GNU Binutils for Ubuntu) 2.42 gcc=gcc (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0
+## core capture
+core_pattern=|/usr/share/apport/apport -p%p -s%s -c%c -d%d -P%P -u%u -g%g -F%F -- %E; ulimit -c=0 (no cores persisted; apport discards non-package binaries)
+## git HEAD at filing
+d502a0ff5302fea9858d7a37a806edb0a038c86a
+## compiler artifact (untracked) md5 throughout episode
+badd42afaa535e195f7ce5910df4c9b4  compiler/pascal26

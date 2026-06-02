@@ -1,0 +1,13 @@
+# Surviving fragment of: cmp -l <good> <corrupt>
+# CAPTURED WITH `| head` -> ONLY THE FIRST 10 DIFFERING BYTES SURVIVE.
+# Format: <byte#(1-based)> <octal value in GOOD> <octal value in CORRUPT>
+  97 251 201
+  98  17  26
+ 105 161 211
+ 106  40  47
+ 125 251 201
+ 126  17  26
+ 205 261 211
+ 206  17  26
+ 223 271 221
+ 224  17  26

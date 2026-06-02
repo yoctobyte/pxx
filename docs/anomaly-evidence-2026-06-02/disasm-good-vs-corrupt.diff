@@ -1,0 +1,40 @@
+2c2
+< good-binary.a9f415.elf:     file format binary
+---
+> partial-corrupt-reconstruction.elf:     file format binary
+37c37
+<   40005f:	00 a9 0f 00 00 00    	add    %ch,0xf(%rcx)
+---
+>   40005f:	00 81 16 00 00 00    	add    %al,0x16(%rcx)
+39,47c39,51
+<   400067:	00 71 20             	add    %dh,0x20(%rcx)
+< 	...
+<   400072:	20 00                	and    %al,(%rax)
+<   400074:	00 00                	add    %al,(%rax)
+<   400076:	00 00                	add    %al,(%rax)
+<   400078:	48 89 24 25 a9 0f 40 	mov    %rsp,0x400fa9
+<   40007f:	00 
+<   400080:	48 be 00 00 00 10 00 	movabs $0x10000000,%rsi
+<   400087:	00 00 00 
+---
+>   400067:	00 89 27 00 00 00    	add    %cl,0x27(%rcx)
+>   40006d:	00 00                	add    %al,(%rax)
+>   40006f:	00 00                	add    %al,(%rax)
+>   400071:	00 20                	add    %ah,(%rax)
+>   400073:	00 00                	add    %al,(%rax)
+>   400075:	00 00                	add    %al,(%rax)
+>   400077:	00 48 89             	add    %cl,-0x77(%rax)
+>   40007a:	24 25                	and    $0x25,%al
+>   40007c:	81 16 40 00 48 be    	adcl   $0xbe480040,(%rsi)
+>   400082:	00 00                	add    %al,(%rax)
+>   400084:	00 10                	add    %dl,(%rax)
+>   400086:	00 00                	add    %al,(%rax)
+>   400088:	00 00                	add    %al,(%rax)
+61c65
+<   4000c8:	48 89 04 25 b1 0f 40 	mov    %rax,0x400fb1
+---
+>   4000c8:	48 89 04 25 89 16 40 	mov    %rax,0x401689
+65c69
+<   4000da:	48 89 14 25 b9 0f 40 	mov    %rdx,0x400fb9
+---
+>   4000da:	48 89 14 25 91 16 40 	mov    %rdx,0x401691
