@@ -21,6 +21,7 @@ User-facing documents:
 - [Handover: GUI final mile](handover-final-mile.md) - self-contained next-session brief to compile the stock `helloworld` Lazarus project unmodified.
 - [Plan: RTTI → Streaming → LFM](plan-rtti-streaming-lfm.md) - agent-executable phased plan for Lazarus/LCL enablement (RTTI, published, component streaming, resources, LFM).
 - [Project TODO](todo.md) - consolidated remaining-work list: standing bugs, the LCL arc, interfaces (detailed), language gaps, targets, and the units refactor.
+- [Rainy Afternoon Backlog](rainy-afternoon.md) - compact list of known non-critical bugs, limitations, and optional cleanup work.
 - [Project State Audit](project-state.md) - dated compact inventory of verified support, confirmed bugs, missing Pascal features, and design debt.
 - [Handover: Next Compiler Work](handover-next-work.md) - resume checklist after the set / inherited / shl batch, with dependency-ordered next tasks and deferred arcs.
 

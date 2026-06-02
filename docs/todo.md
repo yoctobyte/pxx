@@ -3,6 +3,9 @@
 Single consolidated list of remaining work. Detailed plans live in their own
 docs; this page links to them rather than duplicating. Ordering is rough
 priority, not a contract — source and regression tests are authoritative.
+For the compact current list of non-critical known issues and cleanup work, see
+**[`rainy-afternoon.md`](rainy-afternoon.md)**. Older detailed sections below
+may retain delivered milestones for historical context.
 
 Status legend: 🔴 bug · 🟡 partial · ⬜ not started · ✅ done (kept briefly to
 correct stale notes elsewhere).
