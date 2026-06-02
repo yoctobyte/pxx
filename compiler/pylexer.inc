@@ -45,6 +45,7 @@ begin
     6: begin
       if lower = 'return' then Result := tkExit;
       if lower = 'except' then Result := tkExcept;
+      if lower = 'import' then Result := tkUses;
     end;
     7: begin
       if lower = 'finally' then Result := tkFinally;

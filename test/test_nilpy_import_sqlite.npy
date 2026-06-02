@@ -1,0 +1,5 @@
+# Nil Python `import` maps onto the Pascal unit resolver, so a C header in
+# /usr/include is imported and dynamically linked. Here sqlite3.h is imported
+# and sqlite3_libversion_number() is called straight from libsqlite3.so.0.
+import sqlite3
+print(sqlite3_libversion_number())

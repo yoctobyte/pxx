@@ -66,6 +66,8 @@ benchmark: $(COMPILER) benchmark-check
 test-nilpy: $(COMPILER)
 	./$(COMPILER) test/test_nil_python_core.npy /tmp/test_nil_python_core26
 	test "$$(/tmp/test_nil_python_core26)" = "$$(printf '0\n1\n1\n2\n3\n5\n10')"
+	./$(COMPILER) test/test_nilpy_import_sqlite.npy /tmp/test_nilpy_import_sqlite26
+	test "$$(/tmp/test_nilpy_import_sqlite26)" = "3045001"
 	./$(COMPILER) test/test_nilpy_variant.npy /tmp/test_nilpy_variant26
 	test "$$(/tmp/test_nilpy_variant26)" = "$$(printf '5\n3.14\n1')"
 	./$(COMPILER) test/test_nilpy_control.npy /tmp/test_nilpy_control26

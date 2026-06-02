@@ -1010,6 +1010,23 @@ begin
   EmitB($E9); jmpPatch := CodeLen; EmitI32(0);
   EmitAnsiStringRuntime;
   if needsBuiltin then ParseUsesUnit('builtin');
+  PySkipNewlines;
+  { Nil Python `import name[, name]` maps each module onto the same unit
+    resolver as a Pascal `uses` clause, so a C header in /usr/include
+    (e.g. sqlite3) is imported and dynamically linked identically. The
+    lexer rewrites `import` to tkUses; leading imports are processed before
+    the program body so their symbols are registered for the main code. }
+  while CurTok.Kind = tkUses do
+  begin
+    Next;
+    while CurTok.Kind = tkIdent do
+    begin
+      ParseUsesUnit(CurTok.SVal);
+      Next;
+      if not Eat(tkComma) then Break;
+    end;
+    PySkipNewlines;
+  end;
   PyExprMode := True;   { Pascal RTL units are loaded; from here on, .npy expression
                           parsing uses Python and/or/not precedence }
   mainNode := -1;
