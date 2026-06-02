@@ -649,11 +649,18 @@ begin
 end;
 
 function RecFieldIsArray(rec: Integer; const field: AnsiString): Boolean;
+var fi: Integer; field2: AnsiString;
 begin
   Result := False;
   if rec = REC_TPROC then
   begin
     if field = 'Params' then Result := True;
+  end
+  else if rec >= REC_UCLASS_BASE then
+  begin
+    field2 := field;
+    fi := FindUField(rec - REC_UCLASS_BASE, field2);
+    if fi >= 0 then Result := UFldIsArray[fi];
   end;
 end;
 

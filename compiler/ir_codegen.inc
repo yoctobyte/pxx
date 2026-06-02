@@ -1123,8 +1123,12 @@ begin
         if Syms[symIdx].Kind = skGlobal then
         begin
           { Dynamic array slot holds a heap data pointer; load it (mov), not its
-             address (lea), so indexing/Length operate on the heap block. }
-          if (Syms[symIdx].IsArray and (Syms[symIdx].ArrLen = -1)) or (Syms[symIdx].TypeKind = tyAnsiString) then
+             address (lea), so indexing/Length operate on the heap block. A
+             scalar AnsiString slot is likewise a heap pointer. But a *static*
+             array of AnsiString is laid out inline: its symbol address is the
+             array base, so it must use a plain lea (else branch). }
+          if (Syms[symIdx].IsArray and (Syms[symIdx].ArrLen = -1)) or
+             ((Syms[symIdx].TypeKind = tyAnsiString) and not Syms[symIdx].IsArray) then
           begin
             if InLValueWrite then
               begin EmitB($48); EmitB($8D); EmitB($04); EmitB($25); EmitGlobRef(Syms[symIdx].Offset); end
@@ -1137,7 +1141,7 @@ begin
         else
         begin
           if (Syms[symIdx].IsArray and (Syms[symIdx].ArrLen = -1)) or
-             (Syms[symIdx].TypeKind = tyAnsiString) or
+             ((Syms[symIdx].TypeKind = tyAnsiString) and not Syms[symIdx].IsArray) or
              ((Syms[symIdx].Kind = skParam) and
               (Syms[symIdx].IsRef or Syms[symIdx].IsArray or
                (Syms[symIdx].TypeKind = tyString) or (Syms[symIdx].TypeKind = tySet))) then
@@ -1174,8 +1178,12 @@ begin
              (Syms[symIdx].TypeKind = tyAnsiString) then
             isAnsiStr := True;
         end
-        else if (IRKind[baseAddr] = IR_FIELD) and (IRTk[baseAddr] = Ord(tyAnsiString)) then
+        else if (IRKind[baseAddr] = IR_FIELD) and (IRTk[baseAddr] = Ord(tyAnsiString))
+                and (elemSize = 1) then
         begin
+          { Char-indexing a scalar AnsiString field (s[i]) uses a 1-byte stride
+            and needs copy-on-write. An *array of AnsiString* field indexes whole
+            elements (8-byte stride); it is not a string being uniqued. }
           isAnsiStr := True;
         end;
 

@@ -40,41 +40,38 @@ test/test_dynarray_result.pas
 test/test_multithreading.pas
 ```
 
-## High Priority Bug
+## High Priority Bug — FIXED 2026-06-02
 
-Fix static-array field indexing inside records.
+Static-array indexing of managed `AnsiString` now works (standalone, record
+field, and dyn-array-of-record field). Regression:
+`test/test_static_array_ansistring_field.pas`.
 
-Example:
+Three independent defects were responsible:
 
-```pascal
-type
-  TEntry = record
-    Tags: array[0..1] of AnsiString;
-  end;
+1. `RecFieldIsArray` ignored user record/class fields (only handled the
+   hardcoded `REC_TPROC.Params`), so `IsNodeArray(field)` returned false and the
+   parser typed `e.Tags[0]` as a `Char` (scalar string char-index) instead of an
+   `AnsiString` element. Fixed by consulting `UFldIsArray` for `REC_UCLASS_BASE+`.
+2. `IR_LEA` treated a *static array of AnsiString* like a scalar managed string
+   (load-value `mov` instead of address `lea`) on the read path, so indexing
+   operated on the string pointer rather than the array base. Guarded the
+   managed-scalar branch with `not IsArray`.
+3. `IR_INDEX` ran copy-on-write (`AnsiStrUnique`) when the base was an
+   `IR_FIELD` of type `tyAnsiString`, without checking the field was a scalar
+   string — for an array-of-AnsiString field this clobbered the destination
+   address to 0 and segfaulted on write. Guarded with `elemSize = 1`
+   (char-index stride) vs 8 (array element stride).
 
-var
-  a: array of TEntry;
+### Related, still broken (separate, pre-existing)
 
-begin
-  SetLength(a, 1);
-  a[0].Tags[0] := 'tag';
-end.
-```
-
-During managed-record testing, `Tags[0]` lowered with an incorrect address and
-wrote before the field. This is an existing address-lowering bug, not a
-managed-reference-counting bug. Add a focused regression before fixing it.
-
-Likely investigation area:
-
-```text
-compiler/ir.inc
-compiler/parser.inc
-```
+Char-indexed *read* of a scalar `AnsiString` record field (`c := r.s[1]`)
+returns a blank/garbage char. Char-indexing a plain `AnsiString` *variable*
+works. Out of scope for the static-array fix; investigate the `IR_FIELD`
+char-read path separately.
 
 ## Remaining Dynamic-Array Work
 
-1. Fix static-array field indexing inside records.
+1. ~~Fix static-array field indexing inside records.~~ Done (see above).
 2. Add whole-record assignment bookkeeping for records containing managed
    fields. Raw `rep movsb` is incorrect because copied references must be
    retained and replaced destination fields must be released. The compiler

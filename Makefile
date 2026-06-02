@@ -398,6 +398,8 @@ test: $(COMPILER) fpc-check
 	test "$$(/tmp/test_dynarray_params26)" = "$$(printf '1\n1\n1\n1\n1\n1\n1\n1\n1')"
 	./$(COMPILER) test/test_dynarray_result.pas /tmp/test_dynarray_result26
 	test "$$(/tmp/test_dynarray_result26)" = "$$(printf '1\n1\n1\n1\n1\n1\n1\n1\n1\n1')"
+	./$(COMPILER) test/test_static_array_ansistring_field.pas /tmp/test_static_array_ansistring_field26
+	test "$$(/tmp/test_static_array_ansistring_field26)" = "$$(printf '1\n1\n1\n1\n1\n1\n1\n1')"
 	! ./$(COMPILER) test/test_dynarray_managed_record_assign_error.pas /tmp/test_dynarray_managed_record_assign_error26 > /tmp/test_dynarray_managed_record_assign_error.log 2>&1
 	grep -q "whole-record assignment with managed fields not yet supported" /tmp/test_dynarray_managed_record_assign_error.log
 	./$(COMPILER) test/test_variant.pas /tmp/test_variant26
