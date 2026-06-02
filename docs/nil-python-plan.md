@@ -48,11 +48,12 @@ cost is mostly *semantics*, handled by the phasing below.
 
 ### Reality checks from review (do not assume away)
 
-- **Managed strings are still opt-in and incomplete.** The
+- **Managed strings remain opt-in at the Pascal surface.** The
   `{$define PXX_MANAGED_STRING}` path implements heap-backed strings, local
   cleanup, copy-on-write indexed writes, concatenation, coercions, and
-  `SetLength`. String-capable Variant remains blocked on complete ownership
-  coverage for params/results, globals, exceptions, and aggregates.
+  `SetLength`. Variant now supports managed-string assignment, copying,
+  overwrite cleanup, local cleanup, and printing. String operators and the
+  remaining ownership surfaces still need coverage.
 - **No general linker.** The output path can't auto-pull a new RTL unit. Phase 1 must decide explicitly: Variant helpers as **compiler-emitted runtime routines** vs **linked RTL symbols**.
 - **Allocator needs the target-neutral migration** in `docs/allocator-platform-design.md`: every target gets a syscall-free internal heap; hosted `mmap`/release/resize and ESP32 RTOS facilities stay optional hooks.
 
@@ -62,7 +63,7 @@ cost is mostly *semantics*, handled by the phasing below.
 
 Nil Python reuses managed-runtime work already needed by Pascal rather than growing a
 Python-specific ownership layer. These are **Pascal milestones, not extra Nil Python costs**.
-A scalar-only Variant can be prototyped before they finish; a string-capable Variant cannot.
+The scalar Variant and its first managed-string ownership slice are implemented.
 
 1. Centralize the target-neutral allocator contract; add the syscall-free static-arena profile. Linux `mmap` stays an optional region hook; ESP32 bare-metal/RTOS use the same allocation contract.
 2. Implement managed `AnsiString`: pointer slot, refcount, capacity, copy-on-write, one trailing `#0` for direct `PChar` compat.
@@ -80,8 +81,8 @@ develop and test through the *existing Pascal frontend*, low-risk, before any ne
 exists. Pascal and Nil Python both consume it. ("Don't invent it for Python alone.")
 
 `tyVariant` = inline value type, fixed ~16 bytes: tag (`VType`) + 8-byte payload. Closed
-scalar set: int / int64 / float / bool / char — then string once managed `AnsiString` and
-shared finalization land (string payload = managed heap reference).
+scalar set: int / int64 / float / bool / char / managed string. String payloads
+use the managed `AnsiString` heap reference directly.
 
 Thin compiler layer over a fat library:
 - `compiler/defs.inc`: add `tyVariant` type kind; `vt*` tag constants (incl. `vtEmpty`, reserved `vtObject`).
@@ -154,6 +155,29 @@ quirks. No metaclasses, no runtime class mutation.
 
 - Heap-per-scalar if boxing with classes → avoided in tier 1 by Variant being a value type. Future opt: tagged-pointer fixnums.
 - Boxes-holding-boxes cycles → the GC question, deferred. Closed-world + single-typed-default keeps this rare.
+
+### BigInt is library-backed late polish
+
+Python-style integers conceptually grow when an operation overflows the current
+machine representation. Do not build arbitrary-precision arithmetic into the
+compiler backend or penalize the ordinary integer path prematurely.
+
+The eventual shape is:
+
+- Keep native `Integer` / `Int64` arithmetic while values fit.
+- Put arbitrary-precision arithmetic, shifts, formatting, and storage in an RTL
+  BigInt library.
+- Add an optional pointer payload tag such as `VT_BIGINT` to `Variant`; manage
+  it like `VT_STRING`.
+- Promote on overflow, oversized literals, or operations whose result no
+  longer fits the native representation. Even trivial addition can carry, so
+  this requires runtime overflow checks where Python-integer semantics are
+  requested.
+- Consider fixed-width `Int128` or wider intermediate fast paths only after
+  profiling justifies them.
+
+This is intentionally one of the last compatibility layers. It does not block
+the current Nil Python core, containers, modules, SQLite, or async groundwork.
 
 ---
 

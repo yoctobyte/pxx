@@ -115,7 +115,8 @@ end;
 
 function PyVariantScalar(tk: TTypeKind): Boolean;
 begin
-  Result := PyNumeric(tk) or (tk = tyBoolean) or (tk = tyChar);
+  Result := PyNumeric(tk) or (tk = tyBoolean) or (tk = tyChar) or
+            (tk = tyString) or (tk = tyAnsiString);
 end;
 
 function PyWiden(a, b: TTypeKind): TTypeKind;
@@ -123,8 +124,6 @@ begin
   if a = tyUnknown then begin Result := b; Exit; end;
   if b = tyUnknown then begin Result := a; Exit; end;
   if a = b then begin Result := a; Exit; end;
-  if (a = tyString) or (b = tyString) then
-    Error('Nil Python: string-typed Variant pending managed AnsiString');
   if (a = tyVariant) or (b = tyVariant) then
   begin
     if ((a = tyVariant) or PyVariantScalar(a)) and
@@ -152,6 +151,17 @@ begin
   end;
   Error('Nil Python: annotate the type / too dynamic');
   Result := tyUnknown;
+end;
+
+procedure PyInitVariantLocals(scopeBase: Integer);
+var i: Integer;
+begin
+  for i := scopeBase to SymCount - 1 do
+    if (Syms[i].Kind = skLocal) and (Syms[i].TypeKind = tyVariant) then
+    begin
+      EmitB($48); EmitB($C7); EmitB($85); EmitI32(Syms[i].Offset); EmitI32(0);
+      EmitB($48); EmitB($C7); EmitB($85); EmitI32(Syms[i].Offset + 8); EmitI32(0);
+    end;
 end;
 
 { Nil Python boolean-expression layer: Python precedence (or < and < not <
@@ -774,6 +784,7 @@ begin
     end;
     EmitI32(Syms[idx].Offset);
   end;
+  PyInitVariantLocals(Procs[pi].ScopeBase);
   bodyNode := PyParseBlock;
   Expect(tkDedent, 'dedent');
   CompileAST(bodyNode);
@@ -933,6 +944,7 @@ begin
   pi := FindProc(fullName);
   savedSC := SymCount; savedFS := FrameSize; savedSelf := CurSelfClass;
   FrameSize := 0; CurProc := pi; CurSelfClass := REC_UCLASS_BASE + ci;
+  Procs[pi].ScopeBase := SymCount;
   for i := 0 to nparams - 1 do
   begin
     idx := AllocParam(pnames[i], ptypes[i], False, False);
@@ -950,6 +962,7 @@ begin
     case i of 0: EmitB($BD); 1: EmitB($B5); 2: EmitB($95); 3: EmitB($8D); end;
     EmitI32(Syms[idx].Offset);
   end;
+  PyInitVariantLocals(Procs[pi].ScopeBase);
   bodyNode := PyParseBlock; Expect(tkDedent, 'dedent');
   CompileAST(bodyNode); EmitProcEpilog(Procs[pi].RetSymIdx); PatchProcPrologue(patchPos, FrameSize);
   SymCount := savedSC; FrameSize := savedFS; CurProc := -1; CurSelfClass := savedSelf;
@@ -995,6 +1008,7 @@ begin
   EmitB($48); EmitB($81); EmitB($C2); EmitI32(HEAP_ARENA_SIZE);
   EmitB($48); EmitB($89); EmitB($14); EmitB($25); EmitGlobRef(BSS_HEAP_END);
   EmitB($E9); jmpPatch := CodeLen; EmitI32(0);
+  EmitAnsiStringRuntime;
   if needsBuiltin then ParseUsesUnit('builtin');
   PyExprMode := True;   { Pascal RTL units are loaded; from here on, .npy expression
                           parsing uses Python and/or/not precedence }

@@ -5148,6 +5148,8 @@ begin
         else
           zeroBytes := TARGET_PTR_SIZE;                       { scalar AnsiString }
       end
+      else if Syms[i].TypeKind = tyVariant then
+        zeroBytes := TypeSize(tyVariant)
       else if (Syms[i].TypeKind = tyRecord) and not Syms[i].IsArray and
               RecordHasManagedFields(Syms[i].RecName) then
         zeroBytes := RecSize(Syms[i].RecName)

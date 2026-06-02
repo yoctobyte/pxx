@@ -128,7 +128,7 @@ model and managed-frame finalization.
 
 Before implementation:
 
-- Finish string-capable `Variant`.
+- Finish the remaining string-capable `Variant` operators and ownership paths.
 - Add the `TAnyBox` fallback tier and clarify its ownership rules.
 - Land typed containers and their recursive finalization.
 - Establish Nil Python module imports through a real full-chain target such as
@@ -158,4 +158,3 @@ The first proof should be intentionally small:
    correctly.
 
 Only then add language syntax.
-

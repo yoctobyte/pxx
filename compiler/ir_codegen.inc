@@ -628,6 +628,43 @@ begin
   EmitB($C3);                         { ret }
 end;
 
+procedure EmitVariantClear;
+{ rax = address of a 16-byte variant slot. Release a managed payload, then
+  reset the slot to VT_EMPTY. Preserves the slot address in rax. }
+var pDone: Integer;
+begin
+  EmitB($50);                                        { push rax }
+  EmitB($48); EmitB($83); EmitB($38); EmitB(VT_STRING); { cmp qword [rax], VT_STRING }
+  EmitB($0F); EmitB($85); pDone := CodeLen; EmitI32(0); { jne done }
+  EmitB($48); EmitB($8B); EmitB($40); EmitB($08);   { mov rax, [rax+8] }
+  IREmitCodeCall(AnsiStrReleaseAddr);
+  Patch32(pDone, CodeLen - (pDone + 4));
+  EmitB($58);                                        { pop rax }
+  EmitB($48); EmitB($C7); EmitB($00); EmitI32(VT_EMPTY); { mov qword [rax], VT_EMPTY }
+  EmitB($48); EmitB($C7); EmitB($40); EmitB($08); EmitI32(0); { mov qword [rax+8], 0 }
+end;
+
+procedure EmitVariantRetain;
+{ rax = address of a variant slot. Retain a managed payload. Preserves rax. }
+var pDone: Integer;
+begin
+  EmitB($50);                                        { push rax }
+  EmitB($48); EmitB($83); EmitB($38); EmitB(VT_STRING); { cmp qword [rax], VT_STRING }
+  EmitB($0F); EmitB($85); pDone := CodeLen; EmitI32(0); { jne done }
+  EmitB($48); EmitB($8B); EmitB($40); EmitB($08);   { mov rax, [rax+8] }
+  IREmitCodeCall(AnsiStrRetainAddr);
+  Patch32(pDone, CodeLen - (pDone + 4));
+  EmitB($58);                                        { pop rax }
+end;
+
+procedure EmitAnsiStrFromInlineString;
+{ rax = inline string address ([len:8][chars]). Returns a managed string ptr. }
+begin
+  EmitB($48); EmitB($8B); EmitB($38);               { mov rdi, [rax] }
+  EmitB($48); EmitB($8D); EmitB($70); EmitB($08);   { lea rsi, [rax+8] }
+  IREmitCodeCall(AnsiStrFromLiteralAddr);
+end;
+
 procedure IREmitLeaveExceptionFrames(count: Integer);
 var i: Integer;
 begin
@@ -778,7 +815,7 @@ procedure EmitWriteVariant;
 { On entry rax = address of a 16-byte variant slot: [tag:8][payload:8].
   Reads the tag and dispatches to the matching scalar writer. Clobbers the
   caller-saved set like the other write helpers; balances its own stack. }
-var pInt, pInt64, pBool, pDbl, pChar, jmpDefault, pEnd1, pEnd2: Integer;
+var pInt, pInt64, pBool, pDbl, pChar, pStr, pNil, jmpDefault, pEnd1, pEnd2, pEnd3: Integer;
 begin
   EmitB($50);                                  { push rax            -> [rsp]=addr }
   EmitB($48); EmitB($8B); EmitB($00);          { mov rax, [rax]       ; tag }
@@ -793,7 +830,9 @@ begin
   EmitB($0F); EmitB($84); pDbl := CodeLen; EmitI32(0);
   EmitB($48); EmitB($3D); EmitI32(VT_CHAR);    { cmp rax, VT_CHAR }
   EmitB($0F); EmitB($84); pChar := CodeLen; EmitI32(0);
-  EmitB($E9); jmpDefault := CodeLen; EmitI32(0);   { default (empty/string/object): nothing }
+  EmitB($48); EmitB($3D); EmitI32(VT_STRING);  { cmp rax, VT_STRING }
+  EmitB($0F); EmitB($84); pStr := CodeLen; EmitI32(0);
+  EmitB($E9); jmpDefault := CodeLen; EmitI32(0);   { default (empty/object): nothing }
 
   { integer/bool: payload as signed int64 }
   Patch32(pInt,   CodeLen - (pInt   + 4));
@@ -817,11 +856,24 @@ begin
   EmitB($48); EmitB($8B); EmitB($04); EmitB($24);   { mov rax, [rsp] }
   EmitB($0F); EmitB($B6); EmitB($40); EmitB($08);   { movzx eax, byte [rax+8] }
   EmitwriteChar;
+  EmitB($E9); pEnd3 := CodeLen; EmitI32(0);
+
+  { managed string: payload points after the refcount/length header }
+  Patch32(pStr, CodeLen - (pStr + 4));
+  EmitB($48); EmitB($8B); EmitB($04); EmitB($24);   { mov rax, [rsp] }
+  EmitB($48); EmitB($8B); EmitB($40); EmitB($08);   { mov rax, [rax+8] }
+  EmitB($48); EmitB($85); EmitB($C0);               { test rax, rax }
+  EmitB($0F); EmitB($84); pNil := CodeLen; EmitI32(0); { jz Lend }
+  EmitB($48); EmitB($89); EmitB($C6);               { mov rsi, rax }
+  EmitB($48); EmitB($8B); EmitB($50); EmitB($F8);   { mov rdx, [rax-8] }
+  MovRaxImm(SYS_WRITE); MovRdiImm(STDOUT); EmitSyscall;
 
   { Lend }
+  Patch32(pNil, CodeLen - (pNil + 4));
   Patch32(jmpDefault, CodeLen - (jmpDefault + 4));
   Patch32(pEnd1, CodeLen - (pEnd1 + 4));
   Patch32(pEnd2, CodeLen - (pEnd2 + 4));
+  Patch32(pEnd3, CodeLen - (pEnd3 + 4));
   EmitB($48); EmitB($83); EmitB($C4); EmitB($08);   { add rsp, 8       ; discard addr }
 end;
 
@@ -2782,10 +2834,13 @@ begin
         tk := IntToTypeKind(IRC[node]);
         if tk = tyVariant then
         begin
-          { 16-byte variant-to-variant copy }
+          { ARC-correct 16-byte variant-to-variant copy. Retain before release
+            makes self-assignment safe. }
           IREmitNode(IRB[node]);                 { rax = src addr }
+          EmitVariantRetain;
           EmitB($50);
           IREmitNode(IRA[node]);                 { rax = dest addr }
+          EmitVariantClear;
           EmitB($48); EmitB($89); EmitB($C7);    { mov rdi, rax }
           EmitB($5E);                            { pop rsi }
           EmitB($48); EmitB($C7); EmitB($C1); EmitI32(16); { mov rcx, 16 }
@@ -2802,14 +2857,20 @@ begin
             tyBoolean:                           size := VT_BOOL;
             tyChar:                              size := VT_CHAR;
             tyDouble:                            size := VT_DOUBLE;
+            tyString, tyAnsiString:               size := VT_STRING;
           else
-            Error('Variant := this type not yet supported (scalar tags only; string/single/extended pending)');
+            Error('Variant := this type not yet supported (single/extended pending)');
           end;
           IREmitNode(IRB[node]);                 { rax = scalar value (float: double bits) }
-          if (tk = tyInteger) or (tk = tyInt8) or (tk = tyInt16) or (tk = tyInt32) then
+          if tk = tyString then
+            EmitAnsiStrFromInlineString
+          else if tk = tyAnsiString then
+            IREmitCodeCall(AnsiStrRetainAddr)
+          else if (tk = tyInteger) or (tk = tyInt8) or (tk = tyInt16) or (tk = tyInt32) then
           begin EmitB($48); EmitB($98); end;     { cdqe: sign-extend eax -> rax }
           EmitB($50);                            { push rax  (payload) }
           IREmitNode(IRA[node]);                 { rax = dest addr }
+          EmitVariantClear;
           EmitB($48); EmitB($89); EmitB($C7);    { mov rdi, rax }
           EmitB($59);                            { pop rcx   (payload) }
           EmitB($48); EmitB($C7); EmitB($07); EmitI32(size);  { mov qword [rdi], tag }
@@ -2829,14 +2890,20 @@ begin
           tyBoolean:                           size := VT_BOOL;
           tyChar:                              size := VT_CHAR;
           tyDouble:                            size := VT_DOUBLE;
+          tyString, tyAnsiString:               size := VT_STRING;
         else
-          Error('Variant operand: this scalar type not yet supported (string/single/extended pending)');
+          Error('Variant operand: this scalar type not yet supported (single/extended pending)');
         end;
         IREmitNode(IRB[node]);                 { rax = scalar value }
-        if (tk = tyInteger) or (tk = tyInt8) or (tk = tyInt16) or (tk = tyInt32) then
+        if tk = tyString then
+          EmitAnsiStrFromInlineString
+        else if tk = tyAnsiString then
+          IREmitCodeCall(AnsiStrRetainAddr)
+        else if (tk = tyInteger) or (tk = tyInt8) or (tk = tyInt16) or (tk = tyInt32) then
         begin EmitB($48); EmitB($98); end;     { cdqe }
         EmitB($50);                            { push payload }
         IREmitNode(IRA[node]);                 { rax = temp addr }
+        EmitVariantClear;
         EmitB($48); EmitB($89); EmitB($C7);    { mov rdi, rax }
         EmitB($59);                            { pop rcx }
         EmitB($48); EmitB($C7); EmitB($07); EmitI32(size);  { mov qword [rdi], tag }

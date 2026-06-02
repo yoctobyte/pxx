@@ -2,6 +2,7 @@
 
 procedure IREmitCodeCall(addr: Integer); forward;
 procedure EmitDynArrayReleaseForSym(symIdx: Integer); forward;
+procedure EmitVariantClear; forward;
 
 function ULower(const s: AnsiString): AnsiString;
 var res: AnsiString; i: Integer; c: Char;
@@ -2614,6 +2615,12 @@ begin
           { mov rax, [rbp + Offset] }
           EmitB($48); EmitB($8B); EmitB($85); EmitI32(Syms[i].Offset);
           IREmitCodeCall(AnsiStrReleaseAddr);
+        end
+        else if Syms[i].TypeKind = tyVariant then
+        begin
+          { lea rax, [rbp + Offset] }
+          EmitB($48); EmitB($8D); EmitB($85); EmitI32(Syms[i].Offset);
+          EmitVariantClear;
         end
         else if Syms[i].IsArray and (Syms[i].ArrLen = -1) then
         begin

@@ -699,7 +699,7 @@ var left, right, seq, item, value, outNode, first, last, leftAddr, argNode, argV
     constValNode, clauseBodyLabelNode, exitJmpNode, nextClauseLabelNode: Integer;
     beforeCount, handlerLabel, handlerNode, handlerNextLabel, savedDepth: Integer;
     raiseValueNode, raiseClass: Integer;
-    i, lbId, off, len, idx, itemNode, lo, hi, val1, elemSize: Integer;
+    i, lbId, off, len, idx, itemNode, lo, hi, val1, elemSize, savedProc: Integer;
     slTargetAST, slCountAST, slRootSym, slDepth, slTargetAddr, slCountNode: Integer;
 begin
   if node = -1 then
@@ -882,7 +882,10 @@ begin
           left := IRLowerAddress(ASTLeft[node])
         else
         begin
+          savedProc := CurProc;
+          CurProc := -1;
           value := AllocVar('', tyVariant);
+          CurProc := savedProc;
           left := IRAppend(IR_VAR_BOX, IRAppend(IR_LEA, value, -1, -1, 0, Ord(tyPointer)),
                            IRLowerAST(ASTLeft[node]), Ord(IntToTypeKind(ASTTk[ASTLeft[node]])), 0, Ord(tyVariant));
         end;
@@ -890,7 +893,10 @@ begin
           right := IRLowerAddress(ASTRight[node])
         else
         begin
+          savedProc := CurProc;
+          CurProc := -1;
           value := AllocVar('', tyVariant);
+          CurProc := savedProc;
           right := IRAppend(IR_VAR_BOX, IRAppend(IR_LEA, value, -1, -1, 0, Ord(tyPointer)),
                             IRLowerAST(ASTRight[node]), Ord(IntToTypeKind(ASTTk[ASTRight[node]])), 0, Ord(tyVariant));
         end;

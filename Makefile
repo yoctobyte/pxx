@@ -82,8 +82,8 @@ test-nilpy: $(COMPILER)
 	test "$$(/tmp/test_nilpy_str_float26)" = "$$(printf '3.14\n2.5\n-1.25\npi=3.14159\n3\n2')"
 	! ./$(COMPILER) test/test_nilpy_slash_fail.npy /tmp/test_nilpy_slash_fail26 > /tmp/test_nilpy_slash_fail.log 2>&1
 	grep -q "unsupported operator /; use // for integer division" /tmp/test_nilpy_slash_fail.log
-	! ./$(COMPILER) test/test_nilpy_string_variant_fail.npy /tmp/test_nilpy_string_variant_fail26 > /tmp/test_nilpy_string_variant_fail.log 2>&1
-	grep -q "string-typed Variant pending managed AnsiString" /tmp/test_nilpy_string_variant_fail.log
+	./$(COMPILER) test/test_nilpy_string_variant.npy /tmp/test_nilpy_string_variant26
+	test "$$(/tmp/test_nilpy_string_variant26)" = "text"
 	! ./$(COMPILER) test/test_nilpy_missing_param_annotation_fail.npy /tmp/test_nilpy_missing_param_annotation_fail26 > /tmp/test_nilpy_missing_param_annotation_fail.log 2>&1
 	grep -q "unexpected token" /tmp/test_nilpy_missing_param_annotation_fail.log
 	! ./$(COMPILER) test/test_nilpy_missing_result_annotation_fail.npy /tmp/test_nilpy_missing_result_annotation_fail26 > /tmp/test_nilpy_missing_result_annotation_fail.log 2>&1
@@ -416,6 +416,8 @@ test: $(COMPILER) fpc-check
 	test "$$(/tmp/test_variant_ops26)" = "$$(printf '8\n2\n15\n7.5\n12.5\n1\n0\n0\n1\n1\n11\n1')"
 	./$(COMPILER) test/test_variant_div.pas /tmp/test_variant_div26
 	test "$$(/tmp/test_variant_div26)" = "$$(printf '3\n2\n3.4\n2.5')"
+	./$(COMPILER) test/test_variant_string.pas /tmp/test_variant_string26
+	test "$$(/tmp/test_variant_string26)" = "$$(printf 'hello\n42\nhello\nmanaged\nworld\nlocal\n7')"
 	./$(COMPILER) test/test_float_intrinsics.pas /tmp/test_float_intrinsics26
 	test "$$(/tmp/test_float_intrinsics26)" = "$$(printf '3\n-3\n4\n2\n4\n0.7500\n3.0')"
 	./$(COMPILER) test/test_nil_python_core.npy /tmp/test_nil_python_core26

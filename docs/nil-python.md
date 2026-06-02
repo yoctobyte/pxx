@@ -46,19 +46,13 @@ When incompatible assignments remain inside the closed scalar set, the slot is
 promoted retroactively to a 16-byte `tyVariant` value:
 
 ```text
-int, int64, float, bool, char
+int, int64, float, bool, char, str
 ```
 
 `tyVariant` is a tagged scalar escape hatch, not an open dynamic top type.
-Assignment and `print` dispatch for scalar Variants are implemented. Do not
-rely on Variant arithmetic until its backend support lands.
-
-String payloads are not supported yet because managed `AnsiString` is still
-pending. Rebinding a scalar slot to a string produces:
-
-```text
-string-typed Variant pending managed AnsiString
-```
+Assignment, copying, overwrite cleanup, local cleanup, and `print` dispatch are
+implemented for scalar and managed-string Variants. Numeric Variant arithmetic
+and comparison are implemented. String operators remain pending.
 
 Records, classes, arrays, and containers do not promote to Variant. Dynamic
 conflicts outside the scalar set are rejected with an `annotate the type / too
@@ -83,8 +77,7 @@ dynamic` diagnostic.
 - Functions currently support at most four parameters in generated code.
 - Containers, classes, dynamic attributes, decorators, generators, `eval`, and
   `exec` are outside the v1 frontend.
-- Variant arithmetic is not part of the documented surface yet.
-- String-capable Variant waits for managed `AnsiString`.
+- Variant string operators and conversions remain pending.
 
 ## Regression Tests
 
@@ -94,5 +87,5 @@ Run the focused frontend suite with:
 make test-nilpy
 ```
 
-The suite compiles and runs the core and scalar-Variant programs, then verifies
-the `/` and string-Variant rejection paths.
+The suite compiles and runs the core and Variant programs, including widening a
+slot from integer to string, then verifies the `/` rejection path.

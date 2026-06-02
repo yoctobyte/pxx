@@ -177,7 +177,7 @@ const
   VT_DOUBLE  = 3;   { payload = IEEE-754 double bits }
   VT_BOOL    = 4;   { payload = 0/1 }
   VT_CHAR    = 5;   { payload = byte in low 8 bits }
-  VT_STRING  = 6;   { payload = managed string ref (pending managed AnsiString) }
+  VT_STRING  = 6;   { payload = managed AnsiString ref }
   VT_OBJECT  = 7;   { reserved: payload = pointer to boxed class/record (not yet implemented) }
 
   EXC_FRAME_SIZE = 80;
