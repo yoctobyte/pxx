@@ -2221,6 +2221,23 @@ begin
         begin
           { Built-in typecast }
           castTk := tyUnknown;
+          if CaseEqual(name, 'pchar') or CaseEqual(name, 'pansichar') then
+          begin
+            { PChar(s): yields a C `const char*` into the string's char data.
+              Lowered specially (sentinel -2) to skip the inline length prefix
+              for string operands; a plain Pointer reinterpret otherwise. }
+            Next; { consume type name }
+            Expect(tkLParen, '(');
+            ParseExpr;
+            Expect(tkRParen, ')');
+            node := AllocNode(AN_PTR_CAST);
+            ASTLeft[node] := CurASTNode;
+            ASTIVal[node] := -2; { PChar adapter }
+            ASTTk[node]   := Ord(tyPointer);
+            CurASTNode    := node;
+            LastExprTk    := tyPointer;
+            Exit;
+          end;
           if CaseEqual(name, 'pointer') then castTk := tyPointer
           else if CaseEqual(name, 'int64') then castTk := tyInt64
           else if CaseEqual(name, 'qword') then castTk := tyUInt64
@@ -3871,6 +3888,11 @@ begin
       else if CaseEqual(lo, 'nativeint') or CaseEqual(lo, 'ptrint') then Result := tyNativeInt
       else if CaseEqual(lo, 'nativeuint') or CaseEqual(lo, 'ptruint') then Result := tyNativeUInt
       else if CaseEqual(lo, 'pointer') then Result := tyPointer
+      else if CaseEqual(lo, 'pchar') or CaseEqual(lo, 'pansichar') then
+      begin
+        LastTypePointerElemTk := tyChar;
+        Result := tyPointer;
+      end
       else if CaseEqual(lo, 'variant') then Result := tyVariant
       else
       begin

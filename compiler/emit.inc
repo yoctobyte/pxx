@@ -109,7 +109,15 @@ begin
   
   for j := 1 to Length(s) do
     begin if DataLen >= MAX_DATA then Error('data overflow'); Data[DataLen] := Ord(s[j]); Inc(DataLen); end;
-  
+
+  { Explicit NUL terminator after the chars so the char data at Offset+8 is a
+    valid C string for PChar()/const char* interop. The alignment padding below
+    used to supply this only incidentally (and not at all when the char count
+    was already 8-aligned). }
+  if DataLen >= MAX_DATA then Error('data overflow');
+  Data[DataLen] := 0;
+  Inc(DataLen);
+
   { Align to 8 bytes }
   while (DataLen mod 8) <> 0 do
   begin

@@ -792,6 +792,16 @@ begin
       { A cast PType(expr) is purely a type-tag change — the value in rax is
         already the pointer. No load-through-memory here. }
       Result := IRLowerAST(ASTLeft[node]);
+      { PChar(stringExpr): an inline-length string value points at its 8-byte
+        length prefix; a C `const char*` needs the char data, which sits at +8
+        (now guaranteed NUL-terminated by InternStr). Sentinel -2 in ASTIVal
+        marks the PChar/PAnsiChar adapter; only adjust for inline-string
+        operands so PChar(somePointer) stays a pure reinterpret. }
+      if (ASTIVal[node] = -2) and (ASTTk[ASTLeft[node]] = Ord(tyString)) then
+      begin
+        right := IRAppend(IR_CONST_INT, -1, -1, -1, 8, Ord(tyInteger));
+        Result := IRAppend(IR_BINOP, Result, right, Ord(tkPlus), 0, Ord(tyPointer));
+      end;
     end;
 
     AN_RTTI_REG:
