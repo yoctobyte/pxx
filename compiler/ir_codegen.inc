@@ -319,7 +319,7 @@ begin
   EmitB($48); EmitB($8B); EmitB($04); EmitB($24);   { mov rax, [rsp] }
   EmitB($48); EmitB($8B); EmitB($40); EmitB($08);   { mov rax, [rax+8] }
   EmitB($66); EmitB($48); EmitB($0F); EmitB($6E); EmitB($C0); { movq xmm0, rax }
-  EmitWriteFloatSci;
+  EmitWriteFloatNat;
   EmitB($E9); pEnd2 := CodeLen; EmitI32(0);
 
   { char: payload low byte }
@@ -1100,7 +1100,9 @@ begin
         begin
           IREmitNode(valNode);                                        { double bits -> rax }
           EmitB($66); EmitB($48); EmitB($0F); EmitB($6E); EmitB($C0); { movq xmm0, rax }
-          if decs >= 0 then EmitWriteFloatFixed(decs) else EmitWriteFloatSci;
+          if decs = -2 then EmitWriteFloatNat
+          else if decs >= 0 then EmitWriteFloatFixed(decs)
+          else EmitWriteFloatSci;
         end
         else if IRKind[valNode] = IR_CONST_STR then
         begin

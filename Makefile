@@ -67,13 +67,13 @@ test-nilpy: $(COMPILER)
 	./$(COMPILER) test/test_nil_python_core.npy /tmp/test_nil_python_core26
 	test "$$(/tmp/test_nil_python_core26)" = "$$(printf '0\n1\n1\n2\n3\n5\n10')"
 	./$(COMPILER) test/test_nilpy_variant.npy /tmp/test_nilpy_variant26
-	test "$$(/tmp/test_nilpy_variant26)" = "$$(printf '5\n 3.140000000000000E+000\n1')"
+	test "$$(/tmp/test_nilpy_variant26)" = "$$(printf '5\n3.14\n1')"
 	./$(COMPILER) test/test_nilpy_control.npy /tmp/test_nilpy_control26
 	test "$$(/tmp/test_nilpy_control26)" = "$$(printf '10\n20\n30\n6\n15\n6\n3')"
 	./$(COMPILER) test/test_nilpy_local_variant.npy /tmp/test_nilpy_local_variant26
-	test "$$(/tmp/test_nilpy_local_variant26)" = "$$(printf '5\n 3.140000000000000E+000\n1\n7')"
+	test "$$(/tmp/test_nilpy_local_variant26)" = "$$(printf '5\n3.14\n1\n7')"
 	./$(COMPILER) test/test_nilpy_numeric_widen.npy /tmp/test_nilpy_numeric_widen26
-	test "$$(/tmp/test_nilpy_numeric_widen26)" = "$$(printf ' 3.140000000000000E+000')"
+	test "$$(/tmp/test_nilpy_numeric_widen26)" = "$$(printf '3.14')"
 	./$(COMPILER) test/test_nilpy_convert.npy /tmp/test_nilpy_convert26
 	test "$$(/tmp/test_nilpy_convert26)" = "$$(printf '3\n42')"
 	! ./$(COMPILER) test/test_nilpy_slash_fail.npy /tmp/test_nilpy_slash_fail26 > /tmp/test_nilpy_slash_fail.log 2>&1
@@ -381,19 +381,19 @@ test: $(COMPILER) fpc-check
 	./$(COMPILER) test/test_dynarray.pas /tmp/test_dynarray26
 	test "$$(/tmp/test_dynarray26)" = "$$(printf '1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1')"
 	./$(COMPILER) test/test_variant.pas /tmp/test_variant26
-	test "$$(/tmp/test_variant26)" = "$$(printf '42\n-7\nQ\n 3.140000000000000E+000\n1\n100')"
+	test "$$(/tmp/test_variant26)" = "$$(printf '42\n-7\nQ\n3.14\n1\n100')"
 	./$(COMPILER) test/test_variant_ops.pas /tmp/test_variant_ops26
-	test "$$(/tmp/test_variant_ops26)" = "$$(printf '8\n2\n15\n 7.500000000000000E+000\n 1.250000000000000E+001\n1\n0\n0\n1\n1\n11\n1')"
+	test "$$(/tmp/test_variant_ops26)" = "$$(printf '8\n2\n15\n7.5\n12.5\n1\n0\n0\n1\n1\n11\n1')"
 	./$(COMPILER) test/test_variant_div.pas /tmp/test_variant_div26
-	test "$$(/tmp/test_variant_div26)" = "$$(printf '3\n2\n 3.400000000000000E+000\n 2.500000000000000E+000')"
+	test "$$(/tmp/test_variant_div26)" = "$$(printf '3\n2\n3.4\n2.5')"
 	./$(COMPILER) test/test_nil_python_core.npy /tmp/test_nil_python_core26
 	test "$$(/tmp/test_nil_python_core26)" = "$$(printf '0\n1\n1\n2\n3\n5\n10')"
 	./$(COMPILER) test/test_nilpy_variant.npy /tmp/test_nilpy_variant26
-	test "$$(/tmp/test_nilpy_variant26)" = "$$(printf '5\n 3.140000000000000E+000\n1')"
+	test "$$(/tmp/test_nilpy_variant26)" = "$$(printf '5\n3.14\n1')"
 	./$(COMPILER) test/test_nilpy_class.npy /tmp/test_nilpy_class26
 	test "$$(/tmp/test_nilpy_class26)" = "25"
 	./$(COMPILER) test/test_nilpy_widen_fix.npy /tmp/test_nilpy_widen_fix26
-	test "$$(/tmp/test_nilpy_widen_fix26)" = "$$(printf ' 5.000000000000000E+000\n 3.140000000000000E+000\n 7.000000000000000E+000\n 2.500000000000000E+000')"
+	test "$$(/tmp/test_nilpy_widen_fix26)" = "$$(printf '5.0\n3.14\n7.0\n2.5')"
 	./$(COMPILER) test/test_nilpy_convert.npy /tmp/test_nilpy_convert26
 	test "$$(/tmp/test_nilpy_convert26)" = "$$(printf '3\n42')"
 	./$(COMPILER) test/test_sets.pas /tmp/test_sets26

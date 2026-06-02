@@ -2200,6 +2200,80 @@ begin
   MovRaxImm(SYS_WRITE); MovRdiImm(STDOUT); EmitSyscall;
 end;
 
+procedure EmitWriteFloatNat;
+{ Double in xmm0. Python-style natural decimal: [-]int.frac with trailing zeros
+  trimmed but at least one fractional digit (so 5.0 prints "5.0"). Integer part
+  is printed via the integer writer (no scaling overflow); the fractional part is
+  (value - trunc)*1e15 rounded to an Int64, emitted most-significant-first and
+  stopped once the remainder reaches zero. frac kept in r13 across the syscalls. }
+const FRAC = 15;
+var jncOff, jbCarry, i, k, nJz: Integer;
+    endJz: array[0..FRAC-1] of Integer;
+    divisor, scale: Int64;
+begin
+  scale := 1;
+  for k := 1 to FRAC do scale := scale * 10;                   { 10^15 }
+
+  EmitB($41); EmitB($55);                                       { push r13 }
+
+  { sign: strip and print '-' }
+  EmitB($66); EmitB($48); EmitB($0F); EmitB($7E); EmitB($C0);   { movq rax, xmm0 }
+  EmitB($48); EmitB($0F); EmitB($BA); EmitB($E0); EmitB($3F);   { bt rax, 63 }
+  EmitB($73); jncOff := CodeLen; EmitB(0);                      { jnc .pos }
+  EmitB($48); EmitB($0F); EmitB($BA); EmitB($F0); EmitB($3F);   { btr rax, 63 }
+  EmitB($66); EmitB($48); EmitB($0F); EmitB($6E); EmitB($C0);   { movq xmm0, rax }
+  MovRaxImm(Ord('-')); EmitwriteChar;
+  Code[jncOff] := Byte(CodeLen - (jncOff + 1));                 { .pos: }
+
+  { intpart = trunc(value) -> rax ; frac double = value - intpart }
+  EmitB($F2); EmitB($48); EmitB($0F); EmitB($2C); EmitB($C0);   { cvttsd2si rax, xmm0 }
+  EmitB($F2); EmitB($48); EmitB($0F); EmitB($2A); EmitB($D8);   { cvtsi2sd xmm3, rax }
+  EmitB($F2); EmitB($0F); EmitB($5C); EmitB($C3);               { subsd xmm0, xmm3 }
+  { frac *= scale ; round -> rbx }
+  EmitB($48); EmitB($B9); EmitI64(scale);                       { mov rcx, scale }
+  EmitB($F2); EmitB($48); EmitB($0F); EmitB($2A); EmitB($C9);   { cvtsi2sd xmm1, rcx }
+  EmitB($F2); EmitB($0F); EmitB($59); EmitB($C1);               { mulsd xmm0, xmm1 }
+  EmitB($F2); EmitB($48); EmitB($0F); EmitB($2D); EmitB($D8);   { cvtsd2si rbx, xmm0 }
+  { carry: if rbx >= scale (frac rounded up to 1.0): rbx -= scale; intpart++ }
+  EmitB($49); EmitB($B8); EmitI64(scale);                       { mov r8, scale }
+  EmitB($4C); EmitB($39); EmitB($C3);                           { cmp rbx, r8 }
+  EmitB($72); jbCarry := CodeLen; EmitB(0);                     { jb .nocarry }
+  EmitB($4C); EmitB($29); EmitB($C3);                           { sub rbx, r8 }
+  EmitB($48); EmitB($FF); EmitB($C0);                           { inc rax }
+  Code[jbCarry] := Byte(CodeLen - (jbCarry + 1));               { .nocarry: }
+  EmitB($49); EmitB($89); EmitB($DD);                           { mov r13, rbx (frac) }
+
+  { print intpart (non-negative) then '.' }
+  EmitwriteUInt;
+  MovRaxImm(Ord('.')); EmitwriteChar;
+
+  { frac digits MSD-first, stop after the remainder hits 0 (>=1 digit always) }
+  nJz := 0;
+  for i := 0 to FRAC - 1 do
+  begin
+    divisor := 1;
+    for k := 1 to (FRAC - 1 - i) do divisor := divisor * 10;     { 10^(FRAC-1-i) }
+    EmitB($4C); EmitB($89); EmitB($E8);                          { mov rax, r13 }
+    EmitB($48); EmitB($31); EmitB($D2);                          { xor rdx, rdx }
+    EmitB($48); EmitB($B9); EmitI64(divisor);                    { mov rcx, divisor }
+    EmitB($48); EmitB($F7); EmitB($F1);                          { div rcx -> rax=digit, rdx=rem }
+    EmitB($49); EmitB($89); EmitB($D5);                          { mov r13, rdx (remainder) }
+    EmitB($48); EmitB($83); EmitB($C0); EmitB($30);             { add rax, '0' }
+    EmitwriteChar;
+    if i < FRAC - 1 then
+    begin
+      EmitB($4D); EmitB($85); EmitB($ED);                        { test r13, r13 }
+      EmitB($0F); EmitB($84); endJz[nJz] := CodeLen; EmitI32(0); { jz .end }
+      Inc(nJz);
+    end;
+  end;
+
+  { .end: }
+  for k := 0 to nJz - 1 do
+    Patch32(endJz[k], CodeLen - (endJz[k] + 4));
+  EmitB($41); EmitB($5D);                                        { pop r13 }
+end;
+
 procedure EmitWriteFloatFixed(decimals: Integer);
 { Double value in xmm0. Prints [-]intpart.frac with exactly 'decimals'
   fractional digits (decimals=0 -> rounded integer, no point). Reuses the

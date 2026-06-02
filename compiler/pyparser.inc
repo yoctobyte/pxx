@@ -432,7 +432,7 @@ begin
       ASTLeft[argNode] := CurASTNode;
       ASTRight[argNode] := -1;
       ASTIVal[argNode] := 0;     { field width: 0 = none }
-      ASTSOffset[argNode] := -1; { decimals: -1 = natural format (else floats truncate) }
+      ASTSOffset[argNode] := -2; { decimals: -2 = Python-natural float format (EmitWriteFloatNat) }
       if lastArg < 0 then ASTLeft[node] := argNode
       else ASTRight[lastArg] := argNode;
       lastArg := argNode;
