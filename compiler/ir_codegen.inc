@@ -1252,6 +1252,13 @@ begin
         if isAnsiStr and InLValueWrite then
         begin
           IREmitCodeCall(AnsiStrUniqueAddr);
+        end
+        else if isAnsiStr and (IRKind[baseAddr] = IR_FIELD) then
+        begin
+          { IR_FIELD yields the address of the managed-string slot. Reads need
+            the heap data pointer stored in that slot; writes above deliberately
+            pass the slot address to AnsiStrUnique. }
+          EmitB($48); EmitB($8B); EmitB($00);     { mov rax,[rax] }
         end;
         if InLValueWrite and (IRKind[baseAddr] = IR_LEA) then
         begin
