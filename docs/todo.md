@@ -184,12 +184,11 @@ Dynamic-array continuation checklist:
   reference-counted, copy-on-write strings, local cleanup, concatenation,
   coercions, and `SetLength` work; params/results, globals, exceptions, and
   remaining record/class ownership paths are pending.
-- Deepen dynamic arrays after adding recursive managed-value metadata.
-  Scalar arrays, `array of AnsiString`, and arrays of nested records containing
-  strings support scope-exit release and indexed-write copy-on-write.
-  Whole-record managed assignment, params/results, nested arrays, and embedded
-  static-array field indexing remain. Fix embedded static-array field indexing
-  first; it is a high-priority address-lowering bug.
+- Dynamic arrays now cover scalar arrays, `array of AnsiString`, arrays of
+  recursively managed records, params/results, whole-record managed assignment,
+  embedded static-array field indexing, and nested arrays of scalar or managed
+  bases. Deferred semantics: nested-level copy-on-write, exception-path cleanup,
+  and fresh-result move semantics.
 - Preserve a short default path: mutexes, spinlocks, and atomic updates are
   emitted only with `--threadsafe` / `{$THREADSAFE ON}`.
 - Audit compound runtime operations after managed values land. In particular,
@@ -281,12 +280,13 @@ inheritance depth, method-resolution clauses, COM ARC.
   record/class ownership before making it the default. Atomic refcounts protect
   lifetime accounting only; concurrent mutation and copy-on-write uniqueness
   checks still require external synchronization.
-- 🟡 **Dynamic arrays.** Scalar and opt-in managed-string elements support
+- 🟡 **Dynamic arrays.** Scalar, opt-in managed-string, recursively managed
+  record, and nested elements support
   pointer-sized slots, assignment retain/release, indexed-write copy-on-write,
   preserving grow/shrink, zero-initialized new slots, `SetLength(a, 0)`
   reclaim, local-slot initialization and normal scope-exit release, and
-  conditional atomic refcounts under `--threadsafe`. Missing: recursive
-  metadata for nested arrays and managed records, plus params/results.
+  conditional atomic refcounts under `--threadsafe`. Deferred: nested-level
+  copy-on-write, exception-path cleanup, and fresh-result move semantics.
 - 🟡 **Heap allocator.** `GetMem`/`FreeMem` now do real free-list reuse on the
   IR backend (8-byte size header per block + single free list, first-fit, no
   split/coalesce). Enough that

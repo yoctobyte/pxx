@@ -38,6 +38,8 @@ Already implemented:
   clone, resize, and final release.
 - Dynamic arrays of records recursively containing managed strings use the
   same element lifecycle helpers. Class/object pointers stay unmanaged.
+- Nested dynamic arrays of scalar, managed-string, and managed-record bases
+  recursively retain and finalize each level.
 - A pthread regression that concurrently allocates and frees heap blocks.
 
 Known gaps:
@@ -45,8 +47,8 @@ Known gaps:
 - Strings remain fixed-capacity inline values by default. The opt-in managed
   ABI still needs params/results, globals, exception paths, and complete
   record/class ownership coverage.
-- Dynamic arrays still need whole-record managed assignment, nested dynamic
-  arrays, params/results, and embedded static-array field indexing fixes.
+- Dynamic arrays still defer nested-level copy-on-write, exception-path
+  cleanup, and fresh-result move semantics.
 - The older shared `EmitBumpAlloc` helper still uses the obsolete `brk` model
   and is not protected by the heap lock. Managed values must go through one
   allocator path before threaded stress testing.

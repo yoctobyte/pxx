@@ -37,6 +37,9 @@ test/test_dynarray_ansistring.pas
 test/test_dynarray_managed_record.pas
 test/test_dynarray_params.pas
 test/test_dynarray_result.pas
+test/test_nested_dynarray.pas
+test/test_nested_dynarray_managed.pas
+test/test_ansistring_record_char_read.pas
 test/test_multithreading.pas
 ```
 
@@ -62,12 +65,13 @@ Three independent defects were responsible:
    address to 0 and segfaulted on write. Guarded with `elemSize = 1`
    (char-index stride) vs 8 (array element stride).
 
-### Related, still broken (separate, pre-existing)
+### Related char-read bug — FIXED 2026-06-02
 
 Char-indexed *read* of a scalar `AnsiString` record field (`c := r.s[1]`)
-returns a blank/garbage char. Char-indexing a plain `AnsiString` *variable*
-works. Out of scope for the static-array fix; investigate the `IR_FIELD`
-char-read path separately.
+now loads the managed-string data pointer from the `IR_FIELD` slot before
+applying the character index. Writes still pass the slot address to
+`AnsiStrUnique` for copy-on-write. Regression:
+`test/test_ansistring_record_char_read.pas`.
 
 ## Remaining Dynamic-Array Work
 
@@ -85,8 +89,9 @@ char-read path separately.
 3. ~~Add dynamic arrays as procedure parameters.~~ Done.
 4. ~~Add dynamic arrays as function results.~~ Done.
 5. ~~Add nested dynamic arrays such as `array of array of Integer`.~~ Done
-   2026-06-02. Scalar element types, any depth. Each level is an independent
-   `[refcount][length][data]` heap block of pointer-sized sub-array handles;
+   2026-06-02. Scalar and managed base element types, any depth. Each level is
+   an independent `[refcount][length][data]` heap block of pointer-sized
+   sub-array handles;
    the deepest level holds base elements. `SetLength` works on the outer array
    and on any sub-array element (`IR_SETLEN_DYN` on a target slot address);
    `Length` reads each level's header; sub-arrays are released recursively on
@@ -96,11 +101,12 @@ char-read path separately.
    field count past the limit, see below). Regression:
    `test/test_nested_dynarray.pas`.
    - **Not supported:** copy-on-write at nested levels (sub-array element writes
-     mutate in place; aliasing a sub-array then mutating affects both); nested
-     arrays of managed base types (`array of array of AnsiString`/record) —
-     these error with "nested dynamic arrays of managed types not yet supported".
-6. Extend recursive lifecycle metadata for nested dynamic arrays of *managed*
-   base types (currently only scalar bases nest).
+     mutate in place; aliasing a sub-array then mutating affects both).
+6. ~~Extend recursive lifecycle metadata for nested dynamic arrays of
+   *managed* base types.~~ Done 2026-06-02. Nested `AnsiString` and recursively
+   managed-record leaves retain copied values during resize and finalize them
+   recursively on shrink, reassignment, and scope exit. Coverage:
+   `test/test_nested_dynarray_managed.pas`.
 7. Add exception-path cleanup only if exception lifetime semantics become an
    active requirement. Normal scope-exit cleanup is implemented.
 
@@ -127,6 +133,7 @@ compiler/symtab.inc: RecordHasManagedFields
 compiler/ir_codegen.inc: EmitManagedRecordRetain
 compiler/ir_codegen.inc: EmitManagedRecordReleaseLocked
 compiler/ir_codegen.inc: EmitDynArrayManagedRecReleaseLocked
+compiler/ir_codegen.inc: EmitDynArrayNestedReleaseLocked
 ```
 
 Do not add automatic ownership for class/object references. Copy them as raw

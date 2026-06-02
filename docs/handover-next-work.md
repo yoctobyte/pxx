@@ -28,6 +28,9 @@ static-array indexing bug, are tracked in
   and finalizes elements when the final array owner is released.
 - Dynamic arrays of records recursively containing `AnsiString` fields use the
   same retain/finalize rules. Objects remain raw user-owned pointers.
+- Nested dynamic arrays support scalar, managed `AnsiString`, and recursively
+  managed-record bases at any depth. Nested-level copy-on-write remains
+  intentionally deferred.
 - The pthread regression now repeatedly resizes local arrays while four
   workers also exercise `GetMem` / `FreeMem`.
 - The allocator direction is documented in
@@ -41,6 +44,9 @@ Regression gates:
 test/test_dynarray.pas
 test/test_dynarray_ansistring.pas
 test/test_dynarray_managed_record.pas
+test/test_nested_dynarray.pas
+test/test_nested_dynarray_managed.pas
+test/test_ansistring_record_char_read.pas
 test/test_multithreading.pas
 make all
 make test
@@ -70,9 +76,9 @@ The next runtime work should keep hosted optimizations optional:
 4. **Managed `AnsiString` depth.** Finish params/results, globals, exception
    paths, and remaining record/class ownership paths before making the
    opt-in ABI the default.
-5. **Managed finalization depth.** Add whole-record managed assignment,
-   params/results, nested dynamic arrays, and embedded static-array field
-   indexing. Dynamic arrays of nested records containing strings are covered.
+5. **Managed finalization depth.** Finish managed-record return-by-value
+   ownership and add exception-path cleanup when exception lifetime semantics
+   become active.
 6. **Thread audit.** Serialize compound `write`/`writeln`, decide shared
    `readln` state handling, and move exception globals to a thread-safe model.
 
@@ -91,10 +97,9 @@ The next runtime work should keep hosted optimizations optional:
 - **Managed `AnsiString`:** the initial opt-in slice is implemented. Keep the
   ABI gated until params/results, globals, exceptions, and remaining
   record/class paths are covered.
-- **Dynamic-array depth:** scalar, managed-string, and nested managed-record
-  element arrays work. Remaining depth: whole-record managed assignment,
-  nested arrays, params/results, and the existing embedded static-array field
-  indexing bug.
+- **Dynamic-array depth:** scalar, managed-string, managed-record, and nested
+  arrays of those bases work. Deferred semantics: nested-level copy-on-write,
+  exception-path cleanup, and fresh-result move semantics.
 - **Allocator:** use the target-neutral contract in
   [`allocator-platform-design.md`](allocator-platform-design.md). Replace the
   current simple first-fit free list with a syscall-free internal heap
