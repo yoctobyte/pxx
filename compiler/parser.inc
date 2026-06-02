@@ -5742,8 +5742,37 @@ end;
 
 { ===== Program ===== }
 
+procedure DetectPascalRuntimeNeeds(var needsHeap, needsAnsiRuntime: Boolean);
+{ Conservative pre-scan for optional emitted runtime support. Imported units
+  are treated as opaque: keep the support bundle if uses is present. }
+var i: Integer; name: AnsiString;
+begin
+  needsHeap := False;
+  needsAnsiRuntime := PasDefineExists('PXX_MANAGED_STRING');
+  i := 0;
+  while i < TokCount do
+  begin
+    if Tokens[i].Kind in [tkUses, tkArray, tkClass, tkGetMem, tkFreeMem] then
+      needsHeap := True;
+    if Tokens[i].Kind = tkUses then
+      needsAnsiRuntime := True;
+    if Tokens[i].Kind = tkIdent then
+    begin
+      name := GetTokenStr(i);
+      if CaseEqual(name, 'AnsiString') or CaseEqual(name, 'Variant') then
+        needsAnsiRuntime := True;
+      if CaseEqual(name, 'New') or CaseEqual(name, 'Dispose') or
+         CaseEqual(name, 'ReallocMem') or CaseEqual(name, 'SetLength') then
+        needsHeap := True;
+    end;
+    Inc(i);
+  end;
+  if needsAnsiRuntime then needsHeap := True;
+end;
+
 procedure ParseProgram;
-var jmpPatch, i, j: Integer; doneUses, doneDecls, hasExceptions, needsBuiltin: Boolean;
+var jmpPatch, i, j: Integer; doneUses, doneDecls, hasExceptions, needsBuiltin,
+    needsHeap, needsAnsiRuntime: Boolean;
 begin
   Expect(tkProgram, 'program');
   if CurTok.Kind = tkEOF then Error('expected program name');
@@ -5764,6 +5793,7 @@ begin
   ExceptionUsed := False;
   hasExceptions := False;
   needsBuiltin := False;
+  DetectPascalRuntimeNeeds(needsHeap, needsAnsiRuntime);
   for i := 0 to MAX_GOTO_LABELS - 1 do GotoLabelIRId[i] := -1;
   i := 0;
   while i < TokCount do
@@ -5784,17 +5814,20 @@ begin
   { mov [bss_initial_rsp], rsp: 48 89 24 25 <GlobRef(0)> }
   EmitB($48); EmitB($89); EmitB($24); EmitB($25); EmitGlobRef(BSS_INITIAL_RSP);
 
-  { Initialize heap: reserve an arena via mmap (NOT brk). libc/GTK manage the
-    program break for their own malloc, so a brk-based heap would corrupt it. }
-  MovRsiImm(HEAP_ARENA_SIZE);
-  EmitMmapArena;                                          { rax = arena base }
-  EmitB($48); EmitB($89); EmitB($04); EmitB($25); EmitGlobRef(BSS_HEAP_PTR);
-  EmitB($48); EmitB($89); EmitB($C2);                     { mov rdx, rax }
-  EmitB($48); EmitB($81); EmitB($C2); EmitI32(HEAP_ARENA_SIZE); { add rdx, ARENA }
-  EmitB($48); EmitB($89); EmitB($14); EmitB($25); EmitGlobRef(BSS_HEAP_END);
+  if needsHeap then
+  begin
+    { Initialize heap: reserve an arena via mmap (NOT brk). libc/GTK manage the
+      program break for their own malloc, so a brk-based heap would corrupt it. }
+    MovRsiImm(HEAP_ARENA_SIZE);
+    EmitMmapArena;                                          { rax = arena base }
+    EmitB($48); EmitB($89); EmitB($04); EmitB($25); EmitGlobRef(BSS_HEAP_PTR);
+    EmitB($48); EmitB($89); EmitB($C2);                     { mov rdx, rax }
+    EmitB($48); EmitB($81); EmitB($C2); EmitI32(HEAP_ARENA_SIZE); { add rdx, ARENA }
+    EmitB($48); EmitB($89); EmitB($14); EmitB($25); EmitGlobRef(BSS_HEAP_END);
+  end;
 
   EmitB($E9); jmpPatch := CodeLen; EmitI32(0);
-  EmitAnsiStringRuntime;
+  if needsAnsiRuntime then EmitAnsiStringRuntime;
   if hasExceptions then EnableExceptionRuntime;
 
   { Compile the builtin unit (Str/Val) before user declarations, so its proc
