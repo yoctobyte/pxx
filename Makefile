@@ -83,7 +83,7 @@ test-nilpy: $(COMPILER)
 	! ./$(COMPILER) test/test_nilpy_slash_fail.npy /tmp/test_nilpy_slash_fail26 > /tmp/test_nilpy_slash_fail.log 2>&1
 	grep -q "unsupported operator /; use // for integer division" /tmp/test_nilpy_slash_fail.log
 	./$(COMPILER) test/test_nilpy_string_variant.npy /tmp/test_nilpy_string_variant26
-	test "$$(/tmp/test_nilpy_string_variant26)" = "text"
+	test "$$(/tmp/test_nilpy_string_variant26)" = "$$(printf '5\napple\n1\n0\n0\n1\n1\n1\n0\n0\n1\n1\n0\n1\n0\n0\nhello world\nhello potato\ngreen world')"
 	! ./$(COMPILER) test/test_nilpy_missing_param_annotation_fail.npy /tmp/test_nilpy_missing_param_annotation_fail26 > /tmp/test_nilpy_missing_param_annotation_fail.log 2>&1
 	grep -q "unexpected token" /tmp/test_nilpy_missing_param_annotation_fail.log
 	! ./$(COMPILER) test/test_nilpy_missing_result_annotation_fail.npy /tmp/test_nilpy_missing_result_annotation_fail26 > /tmp/test_nilpy_missing_result_annotation_fail.log 2>&1
@@ -411,6 +411,8 @@ test: $(COMPILER) fpc-check
 	test "$$(/tmp/test_nested_dynarray_managed_threadsafe26)" = "$$(printf '1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1')"
 	./$(COMPILER) test/test_managed_record_assign.pas /tmp/test_managed_record_assign26
 	test "$$(/tmp/test_managed_record_assign26)" = "$$(printf '1\n1\n1\n1\n1\n1\n1\n1\n1\n1')"
+	./$(COMPILER) test/test_managed_record_exit.pas /tmp/test_managed_record_exit26
+	test "$$(/tmp/test_managed_record_exit26)" = "$$(printf '1\n1\n1\n1\n1\n1\n1\n1\n1\n1\nOK')"
 	./$(COMPILER) test/test_variant.pas /tmp/test_variant26
 	test "$$(/tmp/test_variant26)" = "$$(printf '42\n-7\nQ\n3.14\n1\n100')"
 	./$(COMPILER) test/test_variant_ops.pas /tmp/test_variant_ops26
@@ -419,6 +421,8 @@ test: $(COMPILER) fpc-check
 	test "$$(/tmp/test_variant_div26)" = "$$(printf '3\n2\n3.4\n2.5')"
 	./$(COMPILER) test/test_variant_string.pas /tmp/test_variant_string26
 	test "$$(/tmp/test_variant_string26)" = "$$(printf 'hello\n42\nhello\nmanaged\nworld\nlocal\n7')"
+	./$(COMPILER) test/test_variant_string_ops.pas /tmp/test_variant_string_ops26
+	test "$$(/tmp/test_variant_string_ops26)" = "$$(printf '1\n0\n0\n1\n1\n1\n0\n0\n1\n1\n1\n1\n1\n0\n1\n1\n0\nhello world\nab\nsweet potato\ngreen tomato\n0\n1\n0\n0')"
 	./$(COMPILER) test/test_float_intrinsics.pas /tmp/test_float_intrinsics26
 	test "$$(/tmp/test_float_intrinsics26)" = "$$(printf '3\n-3\n4\n2\n4\n0.7500\n3.0')"
 	./$(COMPILER) test/test_nil_python_core.npy /tmp/test_nil_python_core26

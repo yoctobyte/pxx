@@ -4742,7 +4742,7 @@ begin
         tk := ParseTypeKind;
       { A `const` record param is passed by reference (like FPC). Passing it by
         value truncates to a single qword, dropping all but the first field. }
-      if isConst and (tk = tyRecord) and not isArr then
+      if isConst and ((tk = tyRecord) or (tk = tyVariant)) and not isArr then
         isByRef := True;
       for i := startIdx to nparams-1 do
       begin

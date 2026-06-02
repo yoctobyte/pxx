@@ -19,8 +19,38 @@ interface
 function StrInt(v: Int64; width: Integer): string;
 function FloatToStr(v: Double): string;
 procedure Val(const s: string; var v: Int64; var code: Integer);
+function VariantToStr(const v: Variant): AnsiString;
 
 implementation
+
+type
+  TVariantRecord = record
+    VType: Int64;
+    Payload: Int64;
+  end;
+  PVariantRecord = ^TVariantRecord;
+  PDouble = ^Double;
+  PAnsiString = ^AnsiString;
+
+function VariantToStr(const v: Variant): AnsiString;
+var
+  p: PVariantRecord;
+begin
+  p := @v;
+  if p^.VType = 1 then
+    Result := StrInt(p^.Payload, 0)
+  else if p^.VType = 3 then
+    Result := FloatToStr(PDouble(@p^.Payload)^)
+  else if p^.VType = 5 then
+    Result := Chr(p^.Payload)
+  else if p^.VType = 6 then
+    Result := PAnsiString(@p^.Payload)^
+  else if p^.VType = 0 then
+    Result := 'None'
+  else
+    Result := '';
+end;
+
 
 function StrInt(v: Int64; width: Integer): string;
 var

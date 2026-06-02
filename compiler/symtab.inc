@@ -1030,12 +1030,12 @@ begin
     Syms[SymCount].PtrElemRec := LastTypePointerElemRec;
   end;
 
-  if isRef or isArray or (tk = tyString) or (tk = tyRecord) or (tk = tySet) or (tk = tyClass) or (tk = tyPointer) then
+  if isRef or isArray or (tk = tyString) or (tk = tyRecord) or (tk = tyVariant) or (tk = tySet) or (tk = tyClass) or (tk = tyPointer) then
     sz := TARGET_PTR_SIZE
   else
     sz := TypeSize(tk);
 
-  if isRef or isArray or (tk = tyString) or (tk = tyRecord) or (tk = tySet) or (tk = tyClass) or (tk = tyPointer) then
+  if isRef or isArray or (tk = tyString) or (tk = tyRecord) or (tk = tyVariant) or (tk = tySet) or (tk = tyClass) or (tk = tyPointer) then
     align := TARGET_PTR_SIZE
   else
     align := TypeAlign(tk);
@@ -2052,6 +2052,16 @@ begin
     Exit;
   end;
   if (pType = tyString) and (aType = tyChar) then
+  begin
+    Result := True;
+    Exit;
+  end;
+  if (pType = tyAnsiString) and (aType = tyString) then
+  begin
+    Result := True;
+    Exit;
+  end;
+  if (pType = tyString) and (aType = tyAnsiString) then
   begin
     Result := True;
     Exit;

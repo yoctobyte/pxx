@@ -1065,8 +1065,46 @@ begin
             else if Syms[varIdx].TypeKind = tyRecord then
             begin
               leftAddr := IRAppend(IR_LEA, varIdx, -1, -1, 0, Ord(tyPointer));
-              last := IRAppend(IR_COPY_REC, leftAddr, value, -1,
-                               RecSize(Syms[varIdx].RecName), Ord(tyRecord));
+              { COPY_REC needs the SOURCE ADDRESS. For an lvalue record source
+                IRLowerAST would emit IR_LOAD_SYM (first 8 bytes loaded as a
+                value), which COPY_REC would then misread as a pointer and
+                segfault. Take its address instead, mirroring assignment. }
+              rhsIsLValue := (ASTKind[ASTLeft[node]] = AN_IDENT) or
+                             (ASTKind[ASTLeft[node]] = AN_FIELD) or
+                             (ASTKind[ASTLeft[node]] = AN_INDEX) or
+                             (ASTKind[ASTLeft[node]] = AN_DEREF);
+              if rhsIsLValue then
+                right := IRLowerAddress(ASTLeft[node])
+              else
+                right := value;
+              if RecordHasManagedFields(Syms[varIdx].RecName) then
+                last := IRAppend(IR_COPY_REC_MANAGED, leftAddr, right,
+                                 Syms[varIdx].RecName,
+                                 RecSize(Syms[varIdx].RecName), Ord(tyRecord))
+              else
+                last := IRAppend(IR_COPY_REC, leftAddr, right, -1,
+                                 RecSize(Syms[varIdx].RecName), Ord(tyRecord));
+            end
+            else if Syms[varIdx].TypeKind = tyVariant then
+            begin
+              leftAddr := IRAppend(IR_LEA, varIdx, -1, -1, 0, Ord(tyPointer));
+              if IntToTypeKind(ASTTk[ASTLeft[node]]) = tyVariant then
+              begin
+                rhsIsLValue := (ASTKind[ASTLeft[node]] = AN_IDENT) or
+                               (ASTKind[ASTLeft[node]] = AN_FIELD) or
+                               (ASTKind[ASTLeft[node]] = AN_INDEX) or
+                               (ASTKind[ASTLeft[node]] = AN_DEREF);
+                if rhsIsLValue then
+                  right := IRLowerAddress(ASTLeft[node])
+                else
+                  right := value;
+                last := IRAppend(IR_VAR_STORE, leftAddr, right, Ord(tyVariant), 0, Ord(tyVariant));
+              end
+              else
+              begin
+                last := IRAppend(IR_VAR_STORE, leftAddr, value,
+                                 Ord(IntToTypeKind(ASTTk[ASTLeft[node]])), 0, Ord(tyVariant));
+              end;
             end
             else
               last := IRAppend(IR_STORE_SYM, varIdx, value, -1, 0, ASTTk[ASTLeft[node]]);
@@ -1110,6 +1148,15 @@ begin
       begin
         argVal := ASTLeft[item];
         argTk := IntToTypeKind(ASTTk[argVal]);
+        if argTk = tyVariant then
+        begin
+          pi := FindProc('VariantToStr');
+          if pi < 0 then Error('str: VariantToStr builtin not loaded');
+          value := IRLowerAddress(argVal);
+          argNode := IRAppend(IR_ARG, value, -1, -1, 0, Ord(tyVariant));
+          Result := IRAppendCall(pi, argNode, -1, Ord(tyAnsiString));
+          Exit;
+        end;
         if TypeIsFloat(argTk) then
         begin
           { str(float): format via the RTL FloatToStr (natural decimal). }
@@ -1176,7 +1223,7 @@ begin
         else
           value := IRLowerAST(ASTLeft[item]);
 
-        argNode := IRAppend(IR_ARG, value, -1, -1, 0, ASTTk[item]);
+        argNode := IRAppend(IR_ARG, value, -1, -1, 0, ASTTk[ASTLeft[item]]);
         if first < 0 then first := argNode
         else IRB[last] := argNode;
         last := argNode;
@@ -1614,7 +1661,7 @@ begin
           value := IRLowerAddress(ASTLeft[item])
         else
           value := IRLowerAST(ASTLeft[item]);
-        argNode := IRAppend(IR_ARG, value, -1, -1, 0, ASTTk[item]);
+        argNode := IRAppend(IR_ARG, value, -1, -1, 0, ASTTk[ASTLeft[item]]);
         if first < 0 then first := argNode
         else IRB[last] := argNode;
         last := argNode;

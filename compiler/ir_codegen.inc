@@ -911,7 +911,239 @@ procedure EmitVarBinOp(opTk, resultOff: Integer; isCompare: Boolean);
   both integer-class -> integer op (preserves int); any VT_DOUBLE -> double op.
   isCompare -> Boolean 0/1 in rax; else Variant result at BSS[resultOff], addr in rax. }
 var pDbl1, pDbl2, pDoneInt, pLi, pRi, pLd, pRd, pForceDbl: Integer;
+    pIsStr1, pIsStr2, pIsStr3, pIsStr4, pNumericPath: Integer;
+    pLhsOk, pRhsOk, pDiffTags1, pDiffTags2: Integer;
+    pLhsStrCmp, pLhsCharCmp, pLhsDoneCmp, pLhsDone2Cmp, pLhsDone3Cmp, pLhsNilCmp: Integer;
+    pRhsStrCmp, pRhsCharCmp, pRhsDoneCmp, pRhsDone2Cmp, pRhsDone3Cmp, pRhsNilCmp: Integer;
+    pLhsStrConcat, pLhsCharConcat, pLhsDoneConcat, pLhsDone2Concat, pLhsDone3Concat, pLhsNilConcat: Integer;
+    pRhsStrConcat, pRhsCharConcat, pRhsDoneConcat, pRhsDone2Concat, pRhsDone3Concat, pRhsNilConcat: Integer;
+    pDoneStr1, pDoneStr2, pDoneStr3: Integer;
 begin
+  pIsStr1 := -1; pIsStr2 := -1; pIsStr3 := -1; pIsStr4 := -1;
+  pNumericPath := -1;
+  pDoneStr1 := -1; pDoneStr2 := -1; pDoneStr3 := -1;
+
+  if isCompare or (opTk = Ord(tkPlus)) then
+  begin
+    { --- String check --- }
+    EmitB($48); EmitB($8B); EmitB($07);                       { mov rax, [rdi] }
+    EmitB($48); EmitB($3D); EmitI32(VT_STRING);               { cmp rax, VT_STRING }
+    EmitB($0F); EmitB($84); pIsStr1 := CodeLen; EmitI32(0);   { je L_is_str_op }
+    EmitB($48); EmitB($3D); EmitI32(VT_CHAR);                 { cmp rax, VT_CHAR }
+    EmitB($0F); EmitB($84); pIsStr2 := CodeLen; EmitI32(0);   { je L_is_str_op }
+
+    EmitB($48); EmitB($8B); EmitB($06);                       { mov rax, [rsi] }
+    EmitB($48); EmitB($3D); EmitI32(VT_STRING);               { cmp rax, VT_STRING }
+    EmitB($0F); EmitB($84); pIsStr3 := CodeLen; EmitI32(0);   { je L_is_str_op }
+    EmitB($48); EmitB($3D); EmitI32(VT_CHAR);                 { cmp rax, VT_CHAR }
+    EmitB($0F); EmitB($84); pIsStr4 := CodeLen; EmitI32(0);   { je L_is_str_op }
+
+    { If we reach here, neither side is stringy -> go to numeric path }
+    EmitB($E9); pNumericPath := CodeLen; EmitI32(0);          { jmp L_numeric_path }
+
+    { L_is_str_op }
+    Patch32(pIsStr1, CodeLen - (pIsStr1 + 4));
+    Patch32(pIsStr2, CodeLen - (pIsStr2 + 4));
+    Patch32(pIsStr3, CodeLen - (pIsStr3 + 4));
+    Patch32(pIsStr4, CodeLen - (pIsStr4 + 4));
+
+    if isCompare then
+    begin
+      { Compare tags first }
+      EmitB($48); EmitB($8B); EmitB($07);                       { mov rax, [rdi] }
+      EmitB($48); EmitB($8B); EmitB($0E);                       { mov rcx, [rsi] }
+      
+      EmitB($48); EmitB($83); EmitB($F8); EmitB(VT_CHAR);
+      EmitB($74); pLhsOk := CodeLen; EmitB(0);
+      EmitB($48); EmitB($83); EmitB($F8); EmitB(VT_STRING);
+      EmitB($0F); EmitB($85); pDiffTags1 := CodeLen; EmitI32(0);   { jne L_diff_tags }
+      
+      { L_lhs_ok }
+      Code[pLhsOk] := Byte(CodeLen - (pLhsOk + 1));
+      EmitB($48); EmitB($83); EmitB($F9); EmitB(VT_CHAR);
+      EmitB($74); pRhsOk := CodeLen; EmitB(0);
+      EmitB($48); EmitB($83); EmitB($F9); EmitB(VT_STRING);
+      EmitB($0F); EmitB($85); pDiffTags2 := CodeLen; EmitI32(0);   { jne L_diff_tags }
+      
+      { L_rhs_ok }
+      Code[pRhsOk] := Byte(CodeLen - (pRhsOk + 1));
+
+      { Extract LHS details from rdi }
+      EmitB($56);                                               { push rsi }
+      EmitB($48); EmitB($8B); EmitB($07);                       { mov rax, [rdi] }
+      EmitB($48); EmitB($83); EmitB($F8); EmitB(VT_STRING);     { cmp rax, VT_STRING }
+      EmitB($74); pLhsStrCmp := CodeLen; EmitB(0);
+      EmitB($48); EmitB($83); EmitB($F8); EmitB(VT_CHAR);       { cmp rax, VT_CHAR }
+      EmitB($74); pLhsCharCmp := CodeLen; EmitB(0);
+      
+      EmitB($31); EmitB($F6);                                   { xor esi, esi }
+      EmitB($31); EmitB($D2);                                   { xor edx, edx }
+      EmitB($EB); pLhsDoneCmp := CodeLen; EmitB(0);
+      
+      Patch8(pLhsCharCmp, CodeLen - (pLhsCharCmp + 1));
+      EmitB($48); EmitB($8D); EmitB($77); EmitB($08);           { lea rsi, [rdi+8] }
+      EmitB($48); EmitB($C7); EmitB($C2); EmitI32(1);           { mov rdx, 1 }
+      EmitB($EB); pLhsDone2Cmp := CodeLen; EmitB(0);
+      
+      Patch8(pLhsStrCmp, CodeLen - (pLhsStrCmp + 1));
+      EmitB($48); EmitB($8B); EmitB($77); EmitB($08);           { mov rsi, [rdi+8] }
+      EmitB($48); EmitB($85); EmitB($F6);                       { test rsi, rsi }
+      EmitB($74); pLhsNilCmp := CodeLen; EmitB(0);
+      EmitB($48); EmitB($8B); EmitB($56); EmitB($F8);           { mov rdx, [rsi-8] }
+      EmitB($EB); pLhsDone3Cmp := CodeLen; EmitB(0);
+      Patch8(pLhsNilCmp, CodeLen - (pLhsNilCmp + 1));
+      EmitB($31); EmitB($F6);                                   { xor esi, esi }
+      EmitB($31); EmitB($D2);                                   { xor edx, edx }
+      
+      Patch8(pLhsDoneCmp, CodeLen - (pLhsDoneCmp + 1));
+      Code[pLhsDone2Cmp] := Byte(CodeLen - (pLhsDone2Cmp + 1));
+      Code[pLhsDone3Cmp] := Byte(CodeLen - (pLhsDone3Cmp + 1));
+
+      { Pop RHS Variant address to r8 }
+      EmitB($41); EmitB($58);                                   { pop r8 }
+
+      { Extract RHS details from r8 }
+      EmitB($41); EmitB($8B); EmitB($00);                       { mov eax, [r8] }
+      EmitB($48); EmitB($83); EmitB($F8); EmitB(VT_STRING);     { cmp rax, VT_STRING }
+      EmitB($74); pRhsStrCmp := CodeLen; EmitB(0);
+      EmitB($48); EmitB($83); EmitB($F8); EmitB(VT_CHAR);       { cmp rax, VT_CHAR }
+      EmitB($74); pRhsCharCmp := CodeLen; EmitB(0);
+      
+      EmitB($31); EmitB($FF);                                   { xor edi, edi }
+      EmitB($45); EmitB($31); EmitB($C9);                       { xor r9d, r9d }
+      EmitB($EB); pRhsDoneCmp := CodeLen; EmitB(0);
+      
+      Patch8(pRhsCharCmp, CodeLen - (pRhsCharCmp + 1));
+      EmitB($49); EmitB($8D); EmitB($78); EmitB($08);           { lea rdi, [r8+8] }
+      EmitB($41); EmitB($C7); EmitB($C1); EmitI32(1);           { mov r9d, 1 }
+      EmitB($EB); pRhsDone2Cmp := CodeLen; EmitB(0);
+      
+      Patch8(pRhsStrCmp, CodeLen - (pRhsStrCmp + 1));
+      EmitB($49); EmitB($8B); EmitB($78); EmitB($08);           { mov rdi, [r8+8] }
+      EmitB($48); EmitB($85); EmitB($FF);                       { test rdi, rdi }
+      EmitB($74); pRhsNilCmp := CodeLen; EmitB(0);
+      EmitB($4C); EmitB($8B); EmitB($4F); EmitB($F8);           { mov r9, [rdi-8] }
+      EmitB($EB); pRhsDone3Cmp := CodeLen; EmitB(0);
+      Patch8(pRhsNilCmp, CodeLen - (pRhsNilCmp + 1));
+      EmitB($31); EmitB($FF);                                   { xor edi, edi }
+      EmitB($45); EmitB($31); EmitB($C9);                       { xor r9d, r9d }
+      
+      Patch8(pRhsDoneCmp, CodeLen - (pRhsDoneCmp + 1));
+      Code[pRhsDone2Cmp] := Byte(CodeLen - (pRhsDone2Cmp + 1));
+      Code[pRhsDone3Cmp] := Byte(CodeLen - (pRhsDone3Cmp + 1));
+
+      { Compare }
+      EmitB($48); EmitB($89); EmitB($D1);                       { mov rcx, rdx }
+      EmitB($4C); EmitB($39); EmitB($CA);                       { cmp rdx, r9 }
+      EmitB($76); EmitB($03);                                   { jbe +3 }
+      EmitB($4C); EmitB($89); EmitB($C9);                       { mov rcx, r9 }
+      EmitB($48); EmitB($85); EmitB($C9);                       { test rcx, rcx }
+      EmitB($74); EmitB($06);                                   { jz +6 }
+      EmitB($F3); EmitB($A6);                                   { repe cmpsb }
+      EmitB($74); EmitB($02);                                   { je +2 }
+      EmitB($EB); EmitB($03);                                   { jmp +3 }
+      EmitB($4C); EmitB($39); EmitB($CA);                       { cmp rdx, r9 }
+      EmitSetcc(opTk, False);
+      EmitB($E9); pDoneStr2 := CodeLen; EmitI32(0);             { jmp L_done_str }
+
+      { L_diff_tags }
+      Patch32(pDiffTags1, CodeLen - (pDiffTags1 + 4));
+      Patch32(pDiffTags2, CodeLen - (pDiffTags2 + 4));
+      if opTk = Ord(tkNeq) then
+        MovRaxImm(1)
+      else
+        MovRaxImm(0);
+      EmitB($E9); pDoneStr1 := CodeLen; EmitI32(0);             { jmp L_done_str }
+    end
+    else
+    begin
+      { LHS string/char details from rdi -> r8 (data), r9 (len) }
+      EmitB($48); EmitB($8B); EmitB($07);                       { mov rax, [rdi] }
+      EmitB($48); EmitB($83); EmitB($F8); EmitB(VT_STRING);     { cmp rax, VT_STRING }
+      EmitB($74); pLhsStrConcat := CodeLen; EmitB(0);
+      EmitB($48); EmitB($83); EmitB($F8); EmitB(VT_CHAR);       { cmp rax, VT_CHAR }
+      EmitB($74); pLhsCharConcat := CodeLen; EmitB(0);
+      
+      EmitB($4D); EmitB($31); EmitB($C0);                       { xor r8, r8 }
+      EmitB($4D); EmitB($31); EmitB($C9);                       { xor r9, r9 }
+      EmitB($EB); pLhsDoneConcat := CodeLen; EmitB(0);
+      
+      Patch8(pLhsCharConcat, CodeLen - (pLhsCharConcat + 1));
+      EmitB($4C); EmitB($8D); EmitB($47); EmitB($08);           { lea r8, [rdi+8] }
+      EmitB($49); EmitB($C7); EmitB($C1); EmitI32(1);           { mov r9, 1 }
+      EmitB($EB); pLhsDone2Concat := CodeLen; EmitB(0);
+      
+      Patch8(pLhsStrConcat, CodeLen - (pLhsStrConcat + 1));
+      EmitB($48); EmitB($8B); EmitB($47); EmitB($08);           { mov rax, [rdi+8] }
+      EmitB($48); EmitB($85); EmitB($C0);                       { test rax, rax }
+      EmitB($74); pLhsNilConcat := CodeLen; EmitB(0);
+      EmitB($48); EmitB($8B); EmitB($48); EmitB($F8);           { mov rcx, [rax-8] }
+      EmitB($49); EmitB($89); EmitB($C0);                       { mov r8, rax }
+      EmitB($49); EmitB($89); EmitB($C9);                       { mov r9, rcx }
+      EmitB($EB); pLhsDone3Concat := CodeLen; EmitB(0);
+      
+      Patch8(pLhsNilConcat, CodeLen - (pLhsNilConcat + 1));
+      EmitB($4D); EmitB($31); EmitB($C0);                       { xor r8, r8 }
+      EmitB($4D); EmitB($31); EmitB($C9);                       { xor r9, r9 }
+      
+      Patch8(pLhsDoneConcat, CodeLen - (pLhsDoneConcat + 1));
+      Code[pLhsDone2Concat] := Byte(CodeLen - (pLhsDone2Concat + 1));
+      Code[pLhsDone3Concat] := Byte(CodeLen - (pLhsDone3Concat + 1));
+
+      { RHS string/char details from rsi -> r10 (data), r11 (len) }
+      EmitB($48); EmitB($8B); EmitB($06);                       { mov rax, [rsi] }
+      EmitB($48); EmitB($83); EmitB($F8); EmitB(VT_STRING);     { cmp rax, VT_STRING }
+      EmitB($74); pRhsStrConcat := CodeLen; EmitB(0);
+      EmitB($48); EmitB($83); EmitB($F8); EmitB(VT_CHAR);       { cmp rax, VT_CHAR }
+      EmitB($74); pRhsCharConcat := CodeLen; EmitB(0);
+      
+      EmitB($4D); EmitB($31); EmitB($D2);                       { xor r10, r10 }
+      EmitB($4D); EmitB($31); EmitB($DB);                       { xor r11, r11 }
+      EmitB($EB); pRhsDoneConcat := CodeLen; EmitB(0);
+      
+      Patch8(pRhsCharConcat, CodeLen - (pRhsCharConcat + 1));
+      EmitB($4C); EmitB($8D); EmitB($56); EmitB($08);           { lea r10, [rsi+8] }
+      EmitB($49); EmitB($C7); EmitB($C3); EmitI32(1);           { mov r11, 1 }
+      EmitB($EB); pRhsDone2Concat := CodeLen; EmitB(0);
+      
+      Patch8(pRhsStrConcat, CodeLen - (pRhsStrConcat + 1));
+      EmitB($48); EmitB($8B); EmitB($46); EmitB($08);           { mov rax, [rsi+8] }
+      EmitB($48); EmitB($85); EmitB($C0);                       { test rax, rax }
+      EmitB($74); pRhsNilConcat := CodeLen; EmitB(0);
+      EmitB($48); EmitB($8B); EmitB($48); EmitB($F8);           { mov rcx, [rax-8] }
+      EmitB($49); EmitB($89); EmitB($C2);                       { mov r10, rax }
+      EmitB($49); EmitB($89); EmitB($CB);                       { mov r11, rcx }
+      EmitB($EB); pRhsDone3Concat := CodeLen; EmitB(0);
+      
+      Patch8(pRhsNilConcat, CodeLen - (pRhsNilConcat + 1));
+      EmitB($4D); EmitB($31); EmitB($D2);                       { xor r10, r10 }
+      EmitB($4D); EmitB($31); EmitB($DB);                       { xor r11, r11 }
+
+      Patch8(pRhsDoneConcat, CodeLen - (pRhsDoneConcat + 1));
+      Code[pRhsDone2Concat] := Byte(CodeLen - (pRhsDone2Concat + 1));
+      Code[pRhsDone3Concat] := Byte(CodeLen - (pRhsDone3Concat + 1));
+
+      EmitB($4C); EmitB($89); EmitB($C6);                       { mov rsi, r8 }
+      EmitB($4C); EmitB($89); EmitB($CF);                       { mov rdi, r9 }
+      EmitB($4C); EmitB($89); EmitB($D2);                       { mov rdx, r10 }
+      EmitB($4C); EmitB($89); EmitB($D9);                       { mov rcx, r11 }
+      IREmitCodeCall(AnsiStrConcatAddr);
+
+      EmitB($50);                                                                   { push rax }
+      EmitB($48); EmitB($8D); EmitB($04); EmitB($25); EmitGlobRef(resultOff);       { lea rax,[result] }
+      EmitVariantClear;
+      EmitB($59);                                                                   { pop rcx }
+      EmitB($48); EmitB($C7); EmitB($00); EmitI32(VT_STRING);                       { mov qword[rax],VT_STRING }
+      EmitB($48); EmitB($89); EmitB($48); EmitB($08);                               { mov [rax+8],rcx }
+
+      EmitB($E9); pDoneStr3 := CodeLen; EmitI32(0);             { jmp L_done_str }
+    end;
+
+  { L_numeric_path }
+  if pNumericPath >= 0 then
+    Patch32(pNumericPath, CodeLen - (pNumericPath + 4));
+  end;
+
   { '/' is real division: always Double, like Pascal — skip the integer path. }
   pForceDbl := -1;
   if (not isCompare) and (opTk = Ord(tkSlash)) then
@@ -1003,6 +1235,20 @@ begin
 
   { Ldone: }
   Patch32(pDoneInt, CodeLen - (pDoneInt + 4));
+
+  { L_done_str: }
+  if isCompare or (opTk = Ord(tkPlus)) then
+  begin
+    if isCompare then
+    begin
+      Patch32(pDoneStr1, CodeLen - (pDoneStr1 + 4));
+      Patch32(pDoneStr2, CodeLen - (pDoneStr2 + 4));
+    end
+    else
+    begin
+      Patch32(pDoneStr3, CodeLen - (pDoneStr3 + 4));
+    end;
+  end;
 end;
 
 procedure IREmitNode(node: Integer);
@@ -1147,6 +1393,10 @@ begin
               EmitB($48); EmitB($C7); EmitB($C7); EmitI32(1);  { mov rdi, 1 }
               IREmitCodeCall(AnsiStrFromLiteralAddr);
               EmitB($59);                                     { pop rcx (restore stack) }
+            end
+            else if IntToTypeKind(IRTk[valueNode]) = tyString then
+            begin
+              EmitAnsiStrFromInlineString;
             end
             else if not ((IRKind[valueNode] = IR_BINOP) and
                          (IntToTypeKind(IRTk[valueNode]) = tyAnsiString)) then
@@ -1453,6 +1703,10 @@ begin
               EmitB($48); EmitB($C7); EmitB($C7); EmitI32(1);  { mov rdi, 1 }
               IREmitCodeCall(AnsiStrFromLiteralAddr);
               EmitB($59);                                     { pop rcx (restore stack) }
+            end
+            else if IntToTypeKind(IRTk[valueNode]) = tyString then
+            begin
+              EmitAnsiStrFromInlineString;
             end
             else if not ((IRKind[valueNode] = IR_BINOP) and
                          (IntToTypeKind(IRTk[valueNode]) = tyAnsiString)) then
@@ -2109,11 +2363,29 @@ begin
           begin
             { Internal Pascal call: all args in integer registers by index. }
             argNode := IRB[node];
+            i := 0;
             while argNode <> -1 do
             begin
               IREmitNode(IRA[argNode]); { -> rax }
+              if (pi >= 0) and (i < Procs[pi].ParamCount) then
+              begin
+                if Procs[pi].Params[i].TypeKind = tyAnsiString then
+                begin
+                  if IntToTypeKind(IRTk[argNode]) = tyString then
+                    EmitAnsiStrFromInlineString
+                  else if IntToTypeKind(IRTk[argNode]) = tyChar then
+                  begin
+                    EmitB($50);                                     { push rax (char code) }
+                    EmitB($48); EmitB($89); EmitB($E6);             { mov rsi, rsp }
+                    EmitB($48); EmitB($C7); EmitB($C7); EmitI32(1);  { mov rdi, 1 }
+                    IREmitCodeCall(AnsiStrFromLiteralAddr);
+                    EmitB($59);                                     { pop rcx (restore stack) }
+                  end;
+                end;
+              end;
               EmitB($50); { push rax }
               argNode := IRB[argNode];
+              Inc(i);
             end;
             for i := Procs[pi].ParamCount - 1 downto 0 do
               case i of
