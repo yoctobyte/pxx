@@ -11,6 +11,7 @@ snapshot date when assessing compatibility claims.
 User-facing documents:
 
 - [License And Use Notice](../LICENSE.md) - public research visibility only; no license or usage rights granted yet.
+- [Acronyms And Glossary](acronyms.md) - expansions for acronyms and shorthand used across the docs, source, and handovers (WIP, IR, RTL, RTTI, LFM, ABI, ...).
 - [Philosophy](philosophy.md) - project vision, design constraints, language priority, and what this is not.
 - [Command Line](cli.md) - invoking the compiler, output files, options, and build commands.
 - [Pascal Dialect And Compatibility](pascal-dialect.md) - supported Pascal surface, PXX/FPC identity, and conditional compilation.
