@@ -1961,6 +1961,29 @@ begin
         CurASTNode := node;
         LastExprTk := tyString;
         Exit;
+      end
+      else if (CaseEqual(name, 'trunc') or CaseEqual(name, 'round') or
+               CaseEqual(name, 'frac') or CaseEqual(name, 'int')) and
+              (Tokens[TokPos].Kind = tkLParen) then
+      begin
+        { only a call `name(...)` is the float intrinsic; a bare identifier of the
+          same name (e.g. the FRAC const) falls through to normal handling }
+        { Float intrinsics via SSE conversions (specialId 203-206):
+          Trunc -> Int64 (toward zero), Round -> Int64 (nearest-even),
+          Frac/Int -> Double (fractional part / integer part as float). }
+        if CaseEqual(name, 'trunc') then prevTok := -203
+        else if CaseEqual(name, 'round') then prevTok := -204
+        else if CaseEqual(name, 'frac') then prevTok := -205
+        else prevTok := -206;
+        Next; Expect(tkLParen, '('); ParseExpr; Expect(tkRParen, ')');
+        node := AllocNode(AN_CALL); ASTIVal[node] := prevTok;
+        if (prevTok = -203) or (prevTok = -204) then ASTTk[node] := Ord(tyInt64)
+        else ASTTk[node] := Ord(tyDouble);
+        argSeq := AllocNode(AN_ARG); ASTLeft[argSeq] := CurASTNode;
+        ASTLeft[node] := argSeq;
+        CurASTNode := node;
+        LastExprTk := IntToTypeKind(ASTTk[node]);
+        Exit;
       end;
       qUnit := ConsumeUnitQualifier(name);
       prevTok := TokPos - 1;

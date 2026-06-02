@@ -1589,6 +1589,47 @@ begin
               EmitB($5B);                                      { pop rbx }
             end;
           end
+          else if (specialId = 203) or (specialId = 204) or
+                  (specialId = 205) or (specialId = 206) then
+          begin
+            { Float intrinsics: 203 Trunc(->Int64,toward zero), 204 Round(->Int64,
+              nearest-even), 205 Frac(->Double), 206 Int(->Double, integer part). }
+            arg1Node := IRB[node];
+            val1Node := IRA[arg1Node];
+            IREmitNode(val1Node);                                        { arg -> rax }
+            if TypeIsFloat(IntToTypeKind(IRTk[val1Node])) then
+            begin
+              EmitB($66); EmitB($48); EmitB($0F); EmitB($6E); EmitB($C0); { movq xmm0, rax }
+              if specialId = 203 then
+              begin EmitB($F2); EmitB($48); EmitB($0F); EmitB($2C); EmitB($C0); end   { cvttsd2si rax, xmm0 }
+              else if specialId = 204 then
+              begin EmitB($F2); EmitB($48); EmitB($0F); EmitB($2D); EmitB($C0); end   { cvtsd2si rax, xmm0 }
+              else if specialId = 206 then
+              begin
+                EmitB($F2); EmitB($48); EmitB($0F); EmitB($2C); EmitB($C0);           { cvttsd2si rax, xmm0 }
+                EmitB($F2); EmitB($48); EmitB($0F); EmitB($2A); EmitB($C0);           { cvtsi2sd xmm0, rax }
+                EmitB($66); EmitB($48); EmitB($0F); EmitB($7E); EmitB($C0);           { movq rax, xmm0 }
+              end
+              else
+              begin   { 205 Frac = x - trunc(x) }
+                EmitB($F2); EmitB($48); EmitB($0F); EmitB($2C); EmitB($C8);           { cvttsd2si rcx, xmm0 }
+                EmitB($F2); EmitB($48); EmitB($0F); EmitB($2A); EmitB($C9);           { cvtsi2sd xmm1, rcx }
+                EmitB($F2); EmitB($0F); EmitB($5C); EmitB($C1);                       { subsd xmm0, xmm1 }
+                EmitB($66); EmitB($48); EmitB($0F); EmitB($7E); EmitB($C0);           { movq rax, xmm0 }
+              end;
+            end
+            else
+            begin   { integer argument }
+              if specialId = 205 then
+              begin EmitB($48); EmitB($31); EmitB($C0); end                          { xor rax,rax (Frac(int)=0) }
+              else if specialId = 206 then
+              begin
+                EmitB($F2); EmitB($48); EmitB($0F); EmitB($2A); EmitB($C0);           { cvtsi2sd xmm0, rax }
+                EmitB($66); EmitB($48); EmitB($0F); EmitB($7E); EmitB($C0);           { movq rax, xmm0 (Int(int) as double) }
+              end;
+              { 203/204 Trunc/Round of an integer: rax already holds it }
+            end;
+          end
           else if specialId = Ord(tkArgCount) then
           begin
             EmitB($48); EmitB($8B); EmitB($04); EmitB($25); EmitGlobRef(BSS_INITIAL_RSP);

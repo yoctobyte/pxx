@@ -17,6 +17,7 @@ unit builtin;
 interface
 
 function StrInt(v: Int64; width: Integer): string;
+function FloatToStr(v: Double): string;
 procedure Val(const s: string; var v: Int64; var code: Integer);
 
 implementation
@@ -47,6 +48,43 @@ begin
   Result := digits;
   while Length(Result) < width do
     Result := ' ' + Result;
+end;
+
+function FloatToStr(v: Double): string;
+{ Python-style natural decimal: [-]int.frac with trailing zeros trimmed but at
+  least one fractional digit (5.0 -> "5.0"). Uses the Trunc/Frac/Round float
+  intrinsics so all digit extraction is integer arithmetic. Mirrors the
+  EmitWriteFloatNat codegen path used by writeln. }
+var
+  neg: Boolean;
+  intpart, fracpart, divisor, rem, d: Int64;
+  digits: string;
+  i: Integer;
+begin
+  neg := v < 0;
+  if neg then v := -v;
+  intpart := Trunc(v);
+  fracpart := Round(Frac(v) * 1000000000000000.0);   { scale fractional part to 15 digits }
+  if fracpart >= 1000000000000000 then
+  begin
+    fracpart := fracpart - 1000000000000000;
+    intpart := intpart + 1;
+  end;
+  Result := StrInt(intpart, 0);
+  if neg then Result := '-' + Result;
+  Result := Result + '.';
+  digits := '';
+  rem := fracpart;
+  divisor := 100000000000000;                          { 1e14 }
+  for i := 0 to 14 do
+  begin
+    d := rem div divisor;
+    rem := rem mod divisor;
+    digits := digits + Chr(Ord('0') + d);
+    divisor := divisor div 10;
+    if rem = 0 then break;                             { trailing zeros trimmed }
+  end;
+  Result := Result + digits;
 end;
 
 procedure Val(const s: string; var v: Int64; var code: Integer);

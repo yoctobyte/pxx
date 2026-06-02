@@ -974,21 +974,15 @@ begin
         argTk := IntToTypeKind(ASTTk[argVal]);
         if TypeIsFloat(argTk) then
         begin
-          intCallNode := AllocNode(AN_CALL);
-          ASTIVal[intCallNode] := -200;
-          ASTTk[intCallNode] := Ord(tyInteger);
-          intArgSeq := AllocNode(AN_ARG);
-          ASTLeft[intArgSeq] := argVal;
-          ASTRight[intArgSeq] := -1;
-          ASTLeft[intCallNode] := intArgSeq;
-          
-          value := IRLowerAST(intCallNode);
-          argTk := tyInteger;
-        end
-        else
-        begin
-          value := IRLowerAST(argVal);
+          { str(float): format via the RTL FloatToStr (natural decimal). }
+          pi := FindProc('FloatToStr');
+          if pi < 0 then Error('str: builtin unit not loaded');
+          value := IRLowerAST(argVal);                       { double bits in rax }
+          argNode := IRAppend(IR_ARG, value, -1, -1, 0, Ord(tyDouble));
+          Result := IRAppendCall(pi, argNode, -1, Ord(tyString));
+          Exit;
         end;
+        value := IRLowerAST(argVal);
 
         pi := FindProc('StrInt');
         if pi < 0 then Error('str: builtin unit not loaded');

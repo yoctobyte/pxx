@@ -1,0 +1,6 @@
+print(str(3.14))
+print(str(2.5))
+print(str(-1.25))
+print("pi=" + str(3.14159))
+print(round(2.7))
+print(trunc(2.7))
