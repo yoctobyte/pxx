@@ -57,7 +57,21 @@ header and calls a scalar C function.** What is NOT yet possible: full CRUD
 
 ## Plan forward (phased, dependency-ordered)
 
-### Step 1 — Pascal binding + Nil Python CRUD proof (ships now, no language change)
+### Step 1 — Pascal binding + Nil Python CRUD proof — DONE (commit 2ed0dd8)
+
+Shipped as `lib/rtl/sqlitedb.pas` + `test/test_nilpy_sqlite_crud.npy`
+(`make test-nilpy` → `1 alice` / `2 bob`). Notes from doing it:
+- Binding API is exactly the global-handle shape below; `db_col_str` does the
+  `char*`→managed-`string` conversion via `PChar` indexing.
+- Nil Python resolves a bare `name()` statement as an expression needing a
+  value, so binding entry points must be **functions, not procedures**
+  (`db_query_done` returns the finalize rc).
+- `.npy` string literals reach a Pascal `const string` param correctly — no
+  coercion gap found.
+- Fixed alongside: Python `print` now space-separates successive args (synthetic
+  space char arg, `.npy` path only; Pascal `writeln` unchanged).
+
+Original design (for reference):
 
 Write `lib/rtl/sqlitedb.pas` (or `test/`-local for the proof) that `uses
 sqlite3` and exposes a pointer-free, nilpy-native API. **Hide handles in module
