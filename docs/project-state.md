@@ -47,12 +47,12 @@ Case behavior is per origin:
 
 ## Latest Benchmark Snapshot
 
-The 2026-06-02 `make benchmark` run is recorded in
-[`bench/2026-06-02-vs-fpc.md`](../bench/2026-06-02-vs-fpc.md). On the recorded
-host, the self-hosted compiler remains 1.18x faster than FPC when compiling
-its expanded 22,789-line source tree and 19.15x faster for a batch of twenty
+The post-gate 2026-06-02 `make benchmark` run is recorded in
+[`bench/2026-06-02-runtime-gate.md`](../bench/2026-06-02-runtime-gate.md). On
+the recorded host, the self-hosted compiler remains 1.12x faster than FPC when
+compiling its expanded source tree and 18.80x faster for a batch of twenty
 Pascal hello-world compiles. The directly emitted static hello-world ELF is
-1,134 bytes.
+back to 287 bytes.
 
 ## Latest Runtime Progress
 
@@ -136,9 +136,10 @@ runtime dependencies.
   See [`allocator-platform-design.md`](allocator-platform-design.md).
 - There are no IR optimization passes, register allocation, or additional CPU
   targets.
-- Optional runtime support is still emitted eagerly. Plain Pascal hello carries
-  unused heap startup and managed-string helpers. This is a code-size cleanup,
-  not an architectural blocker for embedded targets; see
+- Pascal now uses a conservative token-reachability gate to omit unused heap
+  startup and managed-string helpers. Plain hello is back to 287 bytes.
+  Helper-level splitting and argv-stack gating remain optional code-size
+  cleanup, not architectural blockers for embedded targets; see
   [`runtime-emission-size-audit-2026-06-02.md`](runtime-emission-size-audit-2026-06-02.md).
 - The C importer has advanced (2026-06-01, see `plan-c-header-import.md`): real
   C type model (widths/signedness/void/pointers), typedef + enum + opaque

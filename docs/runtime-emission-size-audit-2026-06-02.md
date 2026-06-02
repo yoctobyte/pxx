@@ -1,6 +1,7 @@
 # Runtime Emission Size Audit - 2026-06-02
 
-This is a dated rainy-afternoon note. It is not active work.
+This is a dated rainy-afternoon note. The coarse Pascal runtime gate landed in
+`1f9739a`; finer helper-level reachability remains deferred.
 
 ## Why This Was Checked
 
@@ -54,32 +55,87 @@ Variant managed-string slice did not increase plain hello-world output.
 
 ## Root Cause
 
-`ParseProgram` currently emits startup support eagerly:
+Before `1f9739a`, `ParseProgram` emitted startup support eagerly:
 
-- Heap BSS slots and Linux arena initialization are reserved unconditionally.
-- `EmitAnsiStringRuntime` emits allocation/from-literal, retain, release,
+- Heap BSS slots and Linux arena initialization were reserved unconditionally.
+- `EmitAnsiStringRuntime` emitted allocation/from-literal, retain, release,
   copy-on-write uniqueness, and concatenation helpers unconditionally.
-- Initial stack preservation is emitted even when argv access is unused.
+- Initial stack preservation is still emitted even when argv access is unused.
 
 This was a reasonable implementation shortcut while the managed runtime was
 moving quickly. It is not a required ABI or backend property.
 
+## Why Eager Emission Existed
+
+The current Pascal pipeline parses declarations and bodies while emitting
+machine code. Managed-value lowering emits direct calls to helper addresses
+such as `AnsiStrReleaseAddr`. Emitting the complete helper bundle before
+parsing user bodies made those addresses immediately available and kept the
+one-pass parser simple.
+
+That was a sequencing convenience, not a semantic requirement. It traded a
+small Linux binary-size regression for easier runtime bring-up while managed
+strings, arrays, and Variants were changing rapidly.
+
+## Landed Gate Behavior
+
+Commit `1f9739a` adds `DetectPascalRuntimeNeeds`, a conservative token pre-scan
+before Pascal program emission:
+
+- Clearly allocation-free Pascal programs skip Linux heap arena startup.
+- They also skip the complete managed-string helper bundle.
+- Programs keep heap startup when tokens indicate arrays, classes, raw memory
+  operations, `New`, `Dispose`, `ReallocMem`, or `SetLength`.
+- Programs keep managed-string support when managed-string mode, `AnsiString`,
+  `Variant`, or imported units may require it.
+- Imported units are treated as opaque and retain support. False positives are
+  acceptable; false negatives are not.
+- Nil Python remains eager for now because its dynamic fallback makes the
+  narrowest safe gate less obvious.
+
+This restores compact output without restructuring the parser or introducing
+helper-call fixups. `make test` asserts that plain Pascal hello remains exactly
+287 bytes.
+
+## Why This Matters
+
+Linux barely notices an extra kilobyte. Future microcontroller targets do.
+ESP32-class boards, Arduino-class systems, and especially smaller PIC-class
+devices benefit from emitting only the runtime capabilities a program reaches:
+
+- smaller flash images;
+- lower startup cost;
+- no accidental dependence on unavailable hosted syscalls;
+- a clearer path to fixed-arena bare-metal profiles;
+- confidence that adding a high-level language feature does not tax unrelated
+  tiny programs.
+
+The direct emitter is already a good fit for this. Optional feature accounting
+is enough; no runtime architecture rewrite is implied.
+
 ## Rainy-Afternoon Cleanup
 
-Add a lightweight feature-reachability pass before program emission:
+The first coarse feature-reachability pass now scans Pascal tokens and omits
+both heap startup and the managed-string bundle for clearly allocation-free
+programs. Plain hello returned from 1,134 bytes to 287 bytes.
 
-1. Scan the parsed program and included units for required runtime features.
-2. Emit managed-string helpers only when managed strings are reachable.
-3. Split the helper bundle so retain/release, allocation, COW, and concat emit
+Remaining cleanup:
+
+1. Split the helper bundle so retain/release, allocation, COW, and concat emit
    only when their dependency closure requires them.
-4. Initialize the heap only when allocation-capable features are reachable.
-5. Preserve the initial stack pointer only when argv access is reachable.
-6. Keep target-specific region hooks optional. Bare-metal targets should use a
+2. Preserve the initial stack pointer only when argv access is reachable.
+3. Apply an appropriate gate to Nil Python once its fallback requirements are
+   clear.
+4. Keep target-specific region hooks optional. Bare-metal targets should use a
    fixed arena or linker-defined memory region without Linux `mmap`.
 
-A coarse managed-string gate should reduce current hello from 1,134 bytes to
-about 385 bytes. Gating heap startup and argv preservation should bring it
-close to the actual body-plus-ELF floor.
+A future precise gate may collect feature bits while parsing and emit helpers
+after analysis, or use fixups for helper calls whose addresses are not known
+yet. Either approach would reduce conservative false positives while
+preserving the simple direct-emission model.
+
+The landed coarse gate removes 847 bytes (74.7%). Gating argv preservation can
+trim the remaining startup bytes later.
 
 ## Embedded Interpretation
 

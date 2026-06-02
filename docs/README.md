@@ -24,6 +24,7 @@ User-facing documents:
 - [Rainy Afternoon Backlog](rainy-afternoon.md) - compact list of known non-critical bugs, limitations, and optional cleanup work.
 - [Project State Audit](project-state.md) - dated compact inventory of verified support, confirmed bugs, missing Pascal features, design debt, and the latest benchmark snapshot.
 - [Handover: Next Compiler Work](handover-next-work.md) - resume checklist after the set / inherited / shl batch, with dependency-ordered next tasks and deferred arcs.
+- [Handover: Resume Python-Ready Variant Work](handover-sis-ai-2026-06-02.md) - current resume brief after managed-string Variant support and Pascal runtime gating.
 
 Architecture and current state:
 

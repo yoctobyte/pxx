@@ -43,9 +43,10 @@ authoritative.
   needs a target-neutral contract, a syscall-free fixed-arena profile,
   alignment, splitting, coalescing, and in-place resize attempts. Keep hosted
   `mmap` and future RTOS hooks optional.
-- **Runtime support emission is eager.** Plain Pascal hello currently emits
-  unused heap startup and the managed-string helper bundle. Add feature
-  reachability gates before embedded work or code-size tuning. The measured
+- **Runtime support emission still has finer cleanup available.** A coarse
+  Pascal gate now omits unused heap startup and managed-string helpers, taking
+  hello from 1,134 to 287 bytes. Split helper dependencies and gate argv-stack
+  preservation before embedded work or deeper code-size tuning. The measured
   2026-06-02 audit is in
   [`runtime-emission-size-audit-2026-06-02.md`](runtime-emission-size-audit-2026-06-02.md).
 
