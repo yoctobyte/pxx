@@ -166,7 +166,7 @@ const
   IR_VAR_BOX      = 45;  { value: IRA = temp variant addr; IRB = scalar value; IRC = scalar TTypeKind ord; boxes and returns addr in rax }
   IR_COPY_REC_MANAGED = 46; { IRA = dest addr; IRB = src addr; IRC = recId; IRIVal = byte count; ARC-correct whole-record copy }
   IR_DYNDATA      = 47;  { IRA = dyn-array symbol idx; loads the data pointer from the slot (mov, never lea) }
-  IR_SETLEN_DYN   = 48;  { IRA = target slot-address node; IRB = count; IRC = dyn depth; IRIVal = base elem size; nested scalar SetLength }
+  IR_SETLEN_DYN   = 48;  { IRA = target slot-address node; IRB = count; IRC = dyn depth; IRIVal = root dyn-array symbol idx }
 
   { Variant tag (VType) values, stored in the first 8 bytes of a tyVariant slot.
     Payload (next 8 bytes) interpreted per tag. Closed scalar set; vtObject is a

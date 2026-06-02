@@ -503,9 +503,6 @@ begin
       dynRootSym := NodeDynBaseSym(baseNode);
       dynBaseTk := Syms[dynRootSym].ElemType;
       dynBaseRec := Syms[dynRootSym].ElemRecName;
-      if (baseDynDepth = 1) and
-         ((dynBaseTk = tyAnsiString) or (dynBaseTk = tyRecord)) then
-        Error('nested dynamic arrays of managed types not yet supported');
       if ASTKind[baseNode] = AN_IDENT then
         baseAddr := IRAppend(IR_DYNDATA, ASTIVal[baseNode], -1, -1, 0, Ord(tyPointer))
       else
@@ -1086,7 +1083,7 @@ begin
       item := ASTLeft[node];
       if cpi = -102 then
       begin
-        { SetLength. Nested dynamic arrays (root depth >= 2, scalar base) take a
+        { SetLength. Nested dynamic arrays (root depth >= 2) take a
           dedicated path operating on the target slot ADDRESS with a depth-aware
           element stride. Plain depth-1 arrays fall through to the generic
           special-call lowering (managed strings/records + COW). }
@@ -1095,14 +1092,11 @@ begin
         slRootSym := NodeDynBaseSym(slTargetAST);
         if (slRootSym >= 0) and (SymDynDepth[slRootSym] >= 2) then
         begin
-          if (Syms[slRootSym].ElemType = tyAnsiString) or
-             (Syms[slRootSym].ElemType = tyRecord) then
-            Error('nested dynamic arrays of managed types not yet supported');
           slDepth := NodeDynDepth(slTargetAST);
           slTargetAddr := IRLowerAddress(slTargetAST);
           slCountNode := IRLowerAST(slCountAST);
           Result := IRAppend(IR_SETLEN_DYN, slTargetAddr, slCountNode, slDepth,
-                             TypeSize(Syms[slRootSym].ElemType), Ord(tyPointer));
+                             slRootSym, Ord(tyPointer));
           Exit;
         end;
       end;

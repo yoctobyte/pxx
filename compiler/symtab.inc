@@ -2822,6 +2822,8 @@ begin
       else
         Result := ResolveNodeRec(ASTLeft[node]);
     end
+    else if ASTKind[ASTLeft[node]] = AN_INDEX then
+      Result := ResolveNodeRec(ASTLeft[node])
     else
       Result := REC_NONE;
   end
@@ -2880,10 +2882,31 @@ begin
     Result := REC_NONE;
 end;
 
+function DynArrayNodeDepth(node: Integer): Integer;
+{ Remaining dynamic-array nesting of an AST expression. Keep this parser-side
+  helper here because selectors are typed before IR lowering runs. }
+var depth: Integer;
+begin
+  Result := 0;
+  if node < 0 then Exit;
+  if ASTKind[node] = AN_IDENT then
+  begin
+    if Syms[ASTIVal[node]].IsArray and (Syms[ASTIVal[node]].ArrLen = -1) then
+      Result := SymDynDepth[ASTIVal[node]];
+  end
+  else if ASTKind[node] = AN_INDEX then
+  begin
+    depth := DynArrayNodeDepth(ASTLeft[node]);
+    if depth > 0 then Result := depth - 1;
+  end;
+end;
+
 function IsNodeArray(node: Integer): Boolean;
 begin
   Result := False;
-  if ASTKind[node] = AN_IDENT then
+  if DynArrayNodeDepth(node) > 0 then
+    Result := True
+  else if ASTKind[node] = AN_IDENT then
     Result := Syms[ASTIVal[node]].IsArray
   else if ASTKind[node] = AN_FIELD then
     Result := RecFieldIsArray(ResolveNodeRec(ASTLeft[node]), GetASTIdentName(node));

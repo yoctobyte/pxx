@@ -288,14 +288,24 @@ begin
   EmitB($41); EmitB($5D); EmitB($41); EmitB($5C); EmitB($5B);
 end;
 
-procedure EmitDynArrayNestedReleaseLocked(depth: Integer);
-{ rax = data pointer of a depth-`depth` nested dynamic array (scalar base). On
+procedure EmitDynArrayNestedReleaseLocked(depth: Integer; baseTk: TTypeKind;
+  baseRec: Integer);
+{ rax = data pointer of a depth-`depth` nested dynamic array. On
   reaching refcount zero, release each sub-array element (recursively) then free
-  the block. depth=1 is a plain array (no sub-elements). Caller holds the heap
+  the block. At depth=1, dispatch managed leaf finalization when needed. Caller holds the heap
   lock. Preserves rbx/r12/r13 of the caller (saved/restored here). }
 var pDoneNil, pDoneShared, pNoElems, loopTop: Integer;
 begin
-  if depth <= 1 then begin EmitDynArrayReleaseLocked; Exit; end;
+  if depth <= 1 then
+  begin
+    if baseTk = tyAnsiString then
+      EmitDynArrayAnsiStrReleaseLocked
+    else if (baseTk = tyRecord) and RecordHasManagedFields(baseRec) then
+      EmitDynArrayManagedRecReleaseLocked(baseRec)
+    else
+      EmitDynArrayReleaseLocked;
+    Exit;
+  end;
   EmitB($53);                                      { push rbx }
   EmitB($41); EmitB($54);                          { push r12 }
   EmitB($41); EmitB($55);                          { push r13 }
@@ -311,7 +321,7 @@ begin
   EmitB($0F); EmitB($84); pNoElems := CodeLen; EmitI32(0);
   loopTop := CodeLen;
   EmitB($48); EmitB($8B); EmitB($03);              { mov rax, [rbx] (sub-array handle) }
-  EmitDynArrayNestedReleaseLocked(depth - 1);
+  EmitDynArrayNestedReleaseLocked(depth - 1, baseTk, baseRec);
   EmitB($48); EmitB($83); EmitB($C3); EmitB($08);  { add rbx, 8 (handle stride) }
   EmitB($49); EmitB($FF); EmitB($CC);              { dec r12 }
   EmitB($0F); EmitB($85); EmitI32(loopTop - (CodeLen + 4));
@@ -328,7 +338,8 @@ procedure EmitDynArrayReleaseForSym(symIdx: Integer);
 begin
   EmitAcquireHeapLock;
   if Syms[symIdx].IsArray and (SymDynDepth[symIdx] >= 2) then
-    EmitDynArrayNestedReleaseLocked(SymDynDepth[symIdx])
+    EmitDynArrayNestedReleaseLocked(SymDynDepth[symIdx], Syms[symIdx].ElemType,
+      Syms[symIdx].ElemRecName)
   else if Syms[symIdx].IsArray and (Syms[symIdx].ElemType = tyAnsiString) then
     EmitDynArrayAnsiStrReleaseLocked
   else if Syms[symIdx].IsArray and (Syms[symIdx].ElemType = tyRecord) and
@@ -2877,12 +2888,19 @@ begin
 
     IR_SETLEN_DYN:
       begin
-        { Nested (scalar-base) SetLength on a target slot ADDRESS. Allocate a new
+        { Nested SetLength on a target slot ADDRESS. Allocate a new
           [refcount:8][length:8][data] block of `count` elements, zero it, copy
-          min(old,new) elements, retain copied sub-array handles (depth>1), then
+          min(old,new) elements, retain copied sub-array handles or managed leaf
+          values, then
           publish into the slot and recursively release the old block. No COW. }
         slDepth := IRC[node];
-        if slDepth > 1 then slElemSize := 8 else slElemSize := Integer(IRIVal[node]);
+        symIdx := Integer(IRIVal[node]);
+        if slDepth > 1 then
+          slElemSize := 8
+        else if Syms[symIdx].ElemType = tyRecord then
+          slElemSize := RecSize(Syms[symIdx].ElemRecName)
+        else
+          slElemSize := TypeSize(Syms[symIdx].ElemType);
 
         savedLValueWrite := InLValueWrite; InLValueWrite := True;
         IREmitNode(IRA[node]);                                 { rax = &slot }
@@ -2952,8 +2970,10 @@ begin
         EmitB($F3); EmitB($A4);                                { rep movsb }
         Patch32(pDynNoOld, CodeLen - (pDynNoOld + 4));
 
-        { retain copied sub-array handles (depth > 1 only) }
-        if slDepth > 1 then
+        { Retain copied sub-array handles or managed leaf values. }
+        if (slDepth > 1) or (Syms[symIdx].ElemType = tyAnsiString) or
+           ((Syms[symIdx].ElemType = tyRecord) and
+            RecordHasManagedFields(Syms[symIdx].ElemRecName)) then
         begin
           EmitB($48); EmitB($8B); EmitB($74); EmitB($24); EmitB($08); { mov rsi,[rsp+8] = old }
           EmitB($48); EmitB($85); EmitB($F6);                  { test rsi,rsi }
@@ -2968,9 +2988,23 @@ begin
           EmitB($0F); EmitB($84); pDynKeepCopy := CodeLen; EmitI32(0);
           EmitB($48); EmitB($8B); EmitB($3C); EmitB($24);      { mov rdi,[rsp] = new data }
           slRetainTop := CodeLen;
-          EmitB($48); EmitB($8B); EmitB($07);                  { mov rax,[rdi] }
-          EmitDynArrayRetain;
-          EmitB($48); EmitB($83); EmitB($C7); EmitB($08);      { add rdi,8 }
+          if slDepth > 1 then
+          begin
+            EmitB($48); EmitB($8B); EmitB($07);                { mov rax,[rdi] }
+            EmitDynArrayRetain;
+          end
+          else if Syms[symIdx].ElemType = tyAnsiString then
+          begin
+            EmitB($48); EmitB($8B); EmitB($07);                { mov rax,[rdi] }
+            IREmitCodeCall(AnsiStrRetainAddr);
+          end
+          else
+          begin
+            EmitB($48); EmitB($89); EmitB($FB);                { mov rbx,rdi }
+            EmitManagedRecordRetain(Syms[symIdx].ElemRecName);
+          end;
+          EmitB($48); EmitB($81); EmitB($C7);
+          EmitI32(slElemSize);                                 { add rdi,element size }
           EmitB($48); EmitB($FF); EmitB($C9);                  { dec rcx }
           EmitB($0F); EmitB($85); EmitI32(slRetainTop - (CodeLen + 4));
           Patch32(pDynKeepCopy, CodeLen - (pDynKeepCopy + 4));
@@ -2982,7 +3016,8 @@ begin
         EmitB($48); EmitB($8B); EmitB($04); EmitB($24);        { mov rax,[rsp] = new data }
         EmitB($48); EmitB($89); EmitB($01);                    { mov [rcx],rax }
         EmitB($48); EmitB($8B); EmitB($44); EmitB($24); EmitB($08); { mov rax,[rsp+8] = old }
-        EmitDynArrayNestedReleaseLocked(slDepth);
+        EmitDynArrayNestedReleaseLocked(slDepth, Syms[symIdx].ElemType,
+          Syms[symIdx].ElemRecName);
         EmitB($48); EmitB($8B); EmitB($04); EmitB($24);        { mov rax,[rsp] = new data (result) }
         EmitB($48); EmitB($83); EmitB($C4); EmitB($20);        { add rsp,32 }
         EmitB($E9); pJmpDone := CodeLen; EmitI32(0);           { jmp done }
@@ -2993,7 +3028,8 @@ begin
         EmitB($31); EmitB($C0);                                { xor eax,eax }
         EmitB($48); EmitB($89); EmitB($01);                    { mov [rcx],rax (nil) }
         EmitB($48); EmitB($8B); EmitB($04); EmitB($24);        { mov rax,[rsp] = old }
-        EmitDynArrayNestedReleaseLocked(slDepth);
+        EmitDynArrayNestedReleaseLocked(slDepth, Syms[symIdx].ElemType,
+          Syms[symIdx].ElemRecName);
         EmitB($48); EmitB($83); EmitB($C4); EmitB($18);        { add rsp,24 }
 
         Patch32(pJmpDone, CodeLen - (pJmpDone + 4));
