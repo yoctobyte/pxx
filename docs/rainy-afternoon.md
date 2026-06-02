@@ -29,6 +29,10 @@ authoritative.
 
 ## Runtime And Threads
 
+- **Async, coroutines, and `yield` are a future shared-language arc.** They can
+  share one compiler-generated resumable-frame mechanism plus an event loop and
+  worker pool. Finish Variant, containers, modules, SQLite, and allocator
+  groundwork first. Design: [`plan-async-coroutines.md`](plan-async-coroutines.md).
 - **`read` consumes a fresh line like `readln`.** Preserve the unread remainder
   of the current line across separate `read` calls.
 - **Compound I/O is not statement-atomic under threads.** Decide locking for
@@ -88,4 +92,3 @@ those longer documents are refreshed.
   `test/test_float_intrinsics.pas`.
 - Fold delivered C-import milestones back into the longer C interop documents
   when those documents are next edited.
-
