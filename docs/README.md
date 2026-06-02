@@ -26,6 +26,7 @@ User-facing documents:
 - [Project State Audit](project-state.md) - dated compact inventory of verified support, confirmed bugs, missing Pascal features, design debt, and the latest benchmark snapshot.
 - [Handover: Next Compiler Work](handover-next-work.md) - resume checklist after the set / inherited / shl batch, with dependency-ordered next tasks and deferred arcs.
 - [Handover: Resume Python-Ready Variant Work](handover-sis-ai-2026-06-02.md) - current resume brief after managed-string Variant support and Pascal runtime gating.
+- [Handover: Nil Python ↔ C Binding And Inference](handover-nilpy-c-binding-2026-06-02.md) - phased plan to let `.npy` consume C libraries (SQLite proven), via a Pascal binding now and signature-directed type inference next.
 - [Anomaly: non-reproducible miscompile (2026-06-02)](anomaly_2026-06-02_2000.md) - forensic record of a one-off, self-cleared, deterministic-toolchain miscompile; suspected hardware bit flip. Evidence in [`anomaly-evidence-2026-06-02/`](anomaly-evidence-2026-06-02/).
 
 Architecture and current state:

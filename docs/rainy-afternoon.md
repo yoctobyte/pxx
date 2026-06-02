@@ -89,6 +89,16 @@ constants, strips common GCC/framework annotations, recursively rescans macros,
 supports callbacks via `@proc`, and emits SysV AMD64 integer, floating-point,
 variadic-vector-count, and stack-spill call ABI behavior.
 
+SQLite is now driven end-to-end from Pascal (open/exec/prepare/step/columns)
+and `import`ed from Nil Python; `const char*` marshalling (`PChar()`),
+function-pointer params (→ `Pointer`), and the `import` statement landed
+2026-06-02. The next arc is the **Nil Python ↔ C binding and signature-directed
+inference** plan: [`handover-nilpy-c-binding-2026-06-02.md`](handover-nilpy-c-binding-2026-06-02.md).
+Its keystone is preserving one level of **pointer depth** in the importer
+(`*` vs `**` currently collapse to one `Pointer`, so out-parameters cannot be
+told from opaque handles) — the prerequisite for raw `.npy` C calls without a
+hand-written binding.
+
 Possible breadth improvements, only when a concrete library requires them:
 
 - Add preprocessor token paste (`##`), stringification (`#`), and variadic

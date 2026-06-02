@@ -82,9 +82,34 @@ Only functions actually called by the Pascal program are emitted into the
 dynamic symbol and relocation tables. The ELF writer adds the dynamic loader
 metadata to resolve those calls at startup.
 
-`ctype` is explicitly mapped to `libc.so.6`. Other header unit names default
-to `lib<name>.so`; additional system library naming rules will be added as
-more APIs are exercised.
+`ctype` is explicitly mapped to `libc.so.6`. Other mapped names include
+`math`/`m` (`libm.so.6`), `pthread`, `dl`, `rt`, `z`, the GTK headers, and
+`sqlite3` (`libsqlite3.so.0`). Unmapped header unit names default to
+`lib<name>.so`; additional system library naming rules are added as more APIs
+are exercised.
+
+Nil Python (`.npy`) reaches the same resolver through `import name`: the lexer
+rewrites `import` to the `uses` token, so `import sqlite3` imports the C header
+and links the shared object exactly as a Pascal `uses sqlite3` clause.
+
+## Strings And C Function Pointers
+
+- **`const char*` arguments.** A Pascal string value carries an inline 8-byte
+  length prefix, so it is not a C string. `PChar(stringExpr)` yields a
+  `const char*` pointing at the NUL-terminated char data (the literal interner
+  always emits a terminator). `PChar(somePointer)` is a plain reinterpret.
+  `PChar`/`PAnsiChar` are also usable as pointer variable types, and a `PChar`
+  may be indexed (`p[i]`) to read a returned C string byte by byte.
+- **Function-pointer parameters** such as a callback `int (*)(void*, ...)`
+  collapse to an untyped `Pointer`, so `nil` (or a `@`-wrapped local routine)
+  can be passed. The declarator and its argument list are skipped during
+  import; the pointed-to signature is not yet modelled.
+
+A pointer-free, nilpy-native facade over a pointer-heavy C API (handles, out
+parameters, `char**`) belongs in a thin Pascal binding unit that `uses` the C
+header and exposes string/integer calls — only Pascal is fluent in both the C
+ABI and the managed-string runtime. See
+[`docs/handover-nilpy-c-binding-2026-06-02.md`](docs/handover-nilpy-c-binding-2026-06-02.md).
 
 ## C Preprocessor Support
 
@@ -110,10 +135,15 @@ Frankonpiler supports binary-compatible struct mapping for C interoperability th
 
 ## Scope Limitations
 
-This is an early interop surface, not a complete C ABI or header frontend.
-It handles simple function prototypes with integer and character-like
-arguments and return values. It tolerates unsupported declarations in system
-headers so that usable simple prototypes can still be found.
+This is a working FFI-extraction surface, not a complete C ABI or header
+frontend. It handles function prototypes with integer, character-like,
+floating-point, and pointer (including opaque-handle and function-pointer)
+arguments and return values, and drives a real library end-to-end — see the
+SQLite round-trip below. It tolerates unsupported declarations in system
+headers so that usable prototypes are still found. Not yet modelled: C struct
+field layout (opaque pointers preferred), pointer depth (`*` vs `**` collapse
+to one `Pointer`, so out-parameters are indistinguishable from handles),
+variadic functions, and full callback signatures.
 
 ### Suggested: lazy casing for C imports
 
@@ -143,3 +173,10 @@ definitions, active conditional branches, expansions):
 - `test/test_c_import.pas` — compiles a local `.c` definition, expects `42`.
 - `test/test_c_preprocess.pas` — exercises includes, guards, conditionals,
   and function-like macro substitution, expects `42`.
+- `test/test_sqlite_crud.pas` — imports `/usr/include/sqlite3.h`, links
+  `libsqlite3.so.0`, and runs a full round-trip: open, `sqlite3_exec`
+  (DROP/CREATE/INSERT with a `nil` callback through the function-pointer
+  param), then `prepare`/`step` reading an INTEGER (`sqlite3_column_int`) and a
+  TEXT column (`sqlite3_column_text` + `PChar` indexing).
+- `test/test_nilpy_import_sqlite.npy` (under `make test-nilpy`) — Nil Python
+  `import sqlite3` then `sqlite3_libversion_number()` → `3045001`.
