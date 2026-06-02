@@ -64,9 +64,11 @@ authoritative.
   **No software source was found, and it self-cleared without any change.** The
   toolchain uses no randomness, no timestamps, and no threads within a single
   compile, and the self-host gate requires byte-identical `build == verify`, so
-  output is deterministic by construction. After the event, 160+ consecutive
-  recompiles were byte-identical and ran clean, and `make test` was green; the
-  divergence never recurred. The leading suspicion is a transient hardware fault
+  output is deterministic by construction. After the event a determinism canary
+  of 400 consecutive recompiles (200 compiler self-compiles + 200 of the failing
+  test) was byte-identical with zero crashes, and full `bootstrap` / `test` /
+  `test-nilpy` were green; the divergence never recurred. The leading suspicion
+  is a transient hardware fault
   (a RAM or cache bit flip on non-ECC memory), not a compiler defect — the
   record-`Exit` fix itself is sound (it takes the source *address* for the
   `IR_COPY_REC` source instead of a loaded value).
