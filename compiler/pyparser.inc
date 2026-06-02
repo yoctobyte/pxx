@@ -484,7 +484,7 @@ function PyParseBlock: Integer; forward;
 function PyParseStatement: Integer; forward;
 
 function PyParsePrint: Integer;
-var node, argNode, lastArg: Integer;
+var node, argNode, lastArg, sepLit: Integer;
 begin
   Next;
   Expect(tkLParen, '(');
@@ -492,6 +492,23 @@ begin
   lastArg := -1;
   if CurTok.Kind <> tkRParen then
     repeat
+      { Python print separates successive arguments with a single space.
+        Inject a synthetic space char arg before every argument after the
+        first (a tyChar AN_INT_LIT writes the byte, not a number). This is the
+        .npy print path only; Pascal writeln keeps its no-separator semantics. }
+      if lastArg >= 0 then
+      begin
+        sepLit := AllocNode(AN_INT_LIT);
+        ASTIVal[sepLit] := 32;
+        ASTTk[sepLit] := Ord(tyChar);
+        argNode := AllocNode(AN_ARG);
+        ASTLeft[argNode] := sepLit;
+        ASTRight[argNode] := -1;
+        ASTIVal[argNode] := 0;
+        ASTSOffset[argNode] := -2;
+        ASTRight[lastArg] := argNode;
+        lastArg := argNode;
+      end;
       PyParseBoolExpr;
       argNode := AllocNode(AN_ARG);
       ASTLeft[argNode] := CurASTNode;

@@ -1,0 +1,17 @@
+# Full SQLite CRUD round-trip driven from Nil Python. `import sqlitedb` pulls in
+# the Pascal binding (lib/rtl/sqlitedb.pas), which itself imports the C header
+# /usr/include/sqlite3.h and links libsqlite3.so.0. The binding hides every
+# pointer behind module globals and returns nilpy-native ints and strings, so
+# this program holds no pointer-shaped value. Proves open/exec/query/step plus
+# reading back an integer and a managed-string TEXT column.
+import sqlitedb
+db_open("/tmp/test_nilpy_sqlite_crud.db")
+db_exec("DROP TABLE IF EXISTS t;")
+db_exec("CREATE TABLE t(id INTEGER, name TEXT);")
+db_exec("INSERT INTO t VALUES(1, 'alice');")
+db_exec("INSERT INTO t VALUES(2, 'bob');")
+db_query("SELECT id, name FROM t ORDER BY id;")
+while db_step():
+    print(db_col_int(0), db_col_str(1))
+db_query_done()
+db_close()
