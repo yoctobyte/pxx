@@ -136,6 +136,10 @@ runtime dependencies.
   See [`allocator-platform-design.md`](allocator-platform-design.md).
 - There are no IR optimization passes, register allocation, or additional CPU
   targets.
+- Optional runtime support is still emitted eagerly. Plain Pascal hello carries
+  unused heap startup and managed-string helpers. This is a code-size cleanup,
+  not an architectural blocker for embedded targets; see
+  [`runtime-emission-size-audit-2026-06-02.md`](runtime-emission-size-audit-2026-06-02.md).
 - The C importer has advanced (2026-06-01, see `plan-c-header-import.md`): real
   C type model (widths/signedness/void/pointers), typedef + enum + opaque
   struct/union resolution, the full SysV float and >6/>8-arg stack-spill call

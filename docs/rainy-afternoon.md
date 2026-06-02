@@ -43,6 +43,11 @@ authoritative.
   needs a target-neutral contract, a syscall-free fixed-arena profile,
   alignment, splitting, coalescing, and in-place resize attempts. Keep hosted
   `mmap` and future RTOS hooks optional.
+- **Runtime support emission is eager.** Plain Pascal hello currently emits
+  unused heap startup and the managed-string helper bundle. Add feature
+  reachability gates before embedded work or code-size tuning. The measured
+  2026-06-02 audit is in
+  [`runtime-emission-size-audit-2026-06-02.md`](runtime-emission-size-audit-2026-06-02.md).
 
 ## C Interoperability
 
