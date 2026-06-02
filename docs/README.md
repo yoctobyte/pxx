@@ -36,6 +36,7 @@ Architecture and current state:
 - [Compatibility Status](../COMPATIBILITY.md) - dated implementation inventory and bootstrap policy.
 - [Target Roadmap](roadmap.md) - planned CPU targets and the fixedpoint gate each must pass.
 - [Allocator Platform Design](allocator-platform-design.md) - syscall-free internal heap with optional hosted or RTOS hooks.
+- [Garbage Collection Thoughts](garbage-collection-thoughts.md) - why GC is not the default (root-finding cost, bare-metal tension) and the per-target/per-frontend memory profile decision (ARC / arena / hosted collector).
 - [Runtime Emission Size Audit (2026-06-02)](runtime-emission-size-audit-2026-06-02.md) - measured hello-world overhead and deferred feature-reachability cleanup for embedded targets.
 - [Plan: Async, Coroutines, And Yield](plan-async-coroutines.md) - deferred shared state-machine design for Pascal, Nil Python, and future frontends.
 
