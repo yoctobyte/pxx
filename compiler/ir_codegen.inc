@@ -138,6 +138,97 @@ begin
   EmitReleaseHeapLock;
 end;
 
+procedure EmitAnsiStrFromLiteral;
+var pDone: Integer;
+begin
+  AnsiStrFromLiteralAddr := CodeLen;
+  EmitB($53); { push rbx }
+  EmitB($51); { push rcx }
+  EmitB($52); { push rdx }
+  EmitB($56); { push rsi }
+  EmitB($57); { push rdi }
+
+  EmitB($31); EmitB($C0);                         { xor eax, eax }
+  EmitB($48); EmitB($85); EmitB($FF);             { test rdi, rdi }
+  { Emit 32-bit JZ: 0F 84 <32-bit offset> }
+  EmitB($0F); EmitB($84); pDone := CodeLen; EmitI32(0);
+
+  EmitB($48); EmitB($89); EmitB($F8);             { mov rax, rdi }
+  EmitB($48); EmitB($83); EmitB($C0); EmitB($11); { add rax, 17 }
+
+  EmitB($57); { push rdi }
+  EmitB($56); { push rsi }
+
+  EmitAcquireHeapLock;
+  EmitHeapAllocLocked;
+  EmitReleaseHeapLock;
+
+  EmitB($5E); { pop rsi }
+  EmitB($5F); { pop rdi }
+
+  EmitB($48); EmitB($C7); EmitB($00); EmitI32(1);  { mov qword [rax], 1 (refcount) }
+  EmitB($48); EmitB($89); EmitB($78); EmitB($08); { mov [rax+8], rdi (length) }
+
+  EmitB($48); EmitB($89); EmitB($F9);             { mov rcx, rdi }
+  EmitB($57);                                      { push rdi }
+  EmitB($48); EmitB($8D); EmitB($78); EmitB($10); { lea rdi, [rax+16] }
+  EmitB($F3); EmitB($A4);                          { rep movsb }
+  EmitB($5F);                                      { pop rdi }
+
+  EmitB($C6); EmitB($44); EmitB($38); EmitB($10); EmitB(0); { mov byte [rax+rdi+16], 0 }
+  EmitB($48); EmitB($83); EmitB($C0); EmitB($10); { add rax, 16 }
+
+  Patch32(pDone, CodeLen - (pDone + 4));
+  EmitB($5F); { pop rdi }
+  EmitB($5E); { pop rsi }
+  EmitB($5A); { pop rdx }
+  EmitB($59); { pop rcx }
+  EmitB($5B); { pop rbx }
+  EmitB($C3); { ret }
+end;
+
+procedure EmitAnsiStringRuntime;
+var pNil1, pNil2, pNonZero: Integer;
+begin
+  EmitAnsiStrFromLiteral;
+
+  AnsiStrRetainAddr := CodeLen;
+  EmitB($48); EmitB($85); EmitB($C0);             { test rax, rax }
+  EmitB($74); pNil1 := CodeLen; EmitB(0);          { jz done }
+  if ThreadSafeMode then EmitB($F0);               { lock }
+  EmitB($48); EmitB($FF); EmitB($40); EmitB($F0); { inc qword [rax-16] }
+  Code[pNil1] := Byte(CodeLen - (pNil1 + 1));
+  EmitB($C3);                                     { ret }
+
+  AnsiStrReleaseAddr := CodeLen;
+  EmitB($50); { push rax }
+  EmitB($51); { push rcx }
+  EmitB($52); { push rdx }
+  EmitB($56); { push rsi }
+  EmitB($57); { push rdi }
+
+  EmitB($48); EmitB($85); EmitB($C0);             { test rax, rax }
+  EmitB($74); pNil2 := CodeLen; EmitB(0);          { jz done }
+
+  if ThreadSafeMode then EmitB($F0);
+  EmitB($48); EmitB($FF); EmitB($48); EmitB($F0); { dec qword [rax-16] }
+  EmitB($75); pNonZero := CodeLen; EmitB(0);      { jnz done }
+
+  EmitAcquireHeapLock;
+  EmitB($48); EmitB($83); EmitB($E8); EmitB($10); { sub rax, 16 }
+  EmitHeapFreeLocked;
+  EmitReleaseHeapLock;
+
+  Code[pNil2] := Byte(CodeLen - (pNil2 + 1));
+  Code[pNonZero] := Byte(CodeLen - (pNonZero + 1));
+  EmitB($5F); { pop rdi }
+  EmitB($5E); { pop rsi }
+  EmitB($5A); { pop rdx }
+  EmitB($59); { pop rcx }
+  EmitB($58); { pop rax }
+  EmitB($C3); { ret }
+end;
+
 procedure IREmitLeaveExceptionFrames(count: Integer);
 var i: Integer;
 begin
@@ -464,7 +555,7 @@ begin
 end;
 
 procedure IREmitNode(node: Integer);
-var left, right, valNode, symIdx, si: Integer;
+var left, right, valNode, symIdx, si, nextJmp2, pNil: Integer;
     op: TTokenKind;
     cmpUnsigned: Boolean;
     sVal: AnsiString;
@@ -583,6 +674,37 @@ begin
           EmitDynArrayRelease;
           EmitB($58);                             { pop rax = new data pointer }
         end
+        else if Syms[symIdx].TypeKind = tyAnsiString then
+        begin
+          valueNode := IRB[node];
+          if IRKind[valueNode] = IR_CONST_STR then
+          begin
+            sVal := GetTokenStrFromRaw(IRA[valueNode], IRB[valueNode]);
+            si := InternStr(sVal);
+            EmitB($48); EmitB($BE); EmitDataRef(Strs[si].Offset + 8);
+            EmitB($48); EmitB($BF); EmitI64(Strs[si].Len);
+            IREmitCodeCall(AnsiStrFromLiteralAddr);
+          end
+          else
+          begin
+            IREmitNode(valueNode);
+            IREmitCodeCall(AnsiStrRetainAddr);
+          end;
+          EmitB($50);                             { push new pointer }
+          if Syms[symIdx].Kind = skGlobal then
+            begin EmitB($48); EmitB($8B); EmitB($04); EmitB($25); EmitGlobRef(Syms[symIdx].Offset); end
+          else
+            begin EmitB($48); EmitB($8B); EmitB($85); EmitI32(Syms[symIdx].Offset); end;
+          EmitB($50);                             { push old pointer }
+          EmitB($48); EmitB($8B); EmitB($44); EmitB($24); EmitB($08); { mov rax, [rsp+8] }
+          if Syms[symIdx].Kind = skGlobal then
+            begin EmitB($48); EmitB($89); EmitB($04); EmitB($25); EmitGlobRef(Syms[symIdx].Offset); end
+          else
+            begin EmitB($48); EmitB($89); EmitB($85); EmitI32(Syms[symIdx].Offset); end;
+          EmitB($58);                             { pop rax = old pointer }
+          IREmitCodeCall(AnsiStrReleaseAddr);
+          EmitB($58);                             { pop rax = new pointer }
+        end
         else if (Syms[symIdx].TypeKind = tyString) and not Syms[symIdx].IsArray then
         begin
           valueNode := IRB[node];
@@ -640,7 +762,7 @@ begin
         begin
           { Dynamic array slot holds a heap data pointer; load it (mov), not its
             address (lea), so indexing/Length operate on the heap block. }
-          if Syms[symIdx].IsArray and (Syms[symIdx].ArrLen = -1) then
+          if (Syms[symIdx].IsArray and (Syms[symIdx].ArrLen = -1)) or (Syms[symIdx].TypeKind = tyAnsiString) then
             begin EmitB($48); EmitB($8B); EmitB($04); EmitB($25); EmitGlobRef(Syms[symIdx].Offset); end
           else
             begin EmitB($48); EmitB($8D); EmitB($04); EmitB($25); EmitGlobRef(Syms[symIdx].Offset); end;
@@ -648,6 +770,7 @@ begin
         else
         begin
           if (Syms[symIdx].IsArray and (Syms[symIdx].ArrLen = -1)) or
+             (Syms[symIdx].TypeKind = tyAnsiString) or
              ((Syms[symIdx].Kind = skParam) and
               (Syms[symIdx].IsRef or Syms[symIdx].IsArray or
                (Syms[symIdx].TypeKind = tyString) or (Syms[symIdx].TypeKind = tySet))) then
@@ -775,6 +898,34 @@ begin
             EmitB($48); EmitB($83); EmitB($C7); EmitB($08);
             EmitB($F3); EmitB($A4);             { rep movsb }
           end;
+        end
+        else if tk = tyAnsiString then
+        begin
+          if IRKind[valueNode] = IR_CONST_STR then
+          begin
+            sVal := GetTokenStrFromRaw(IRA[valueNode], IRB[valueNode]);
+            si := InternStr(sVal);
+            EmitB($48); EmitB($BE); EmitDataRef(Strs[si].Offset + 8);
+            EmitB($48); EmitB($BF); EmitI64(Strs[si].Len);
+            IREmitCodeCall(AnsiStrFromLiteralAddr);
+          end
+          else
+          begin
+            IREmitNode(valueNode);
+            IREmitCodeCall(AnsiStrRetainAddr);
+          end;
+          EmitB($50); { push rax (new string) }
+          
+          IREmitNode(addressNode); { rax = destination address }
+          
+          EmitB($48); EmitB($89); EmitB($C7); { mov rdi, rax }
+          EmitB($48); EmitB($8B); EmitB($37); { mov rsi, [rdi] }
+          EmitB($48); EmitB($8B); EmitB($04); EmitB($24); { mov rax, [rsp] }
+          EmitB($48); EmitB($89); EmitB($07); { mov [rdi], rax }
+          
+          EmitB($48); EmitB($89); EmitB($F0); { mov rax, rsi }
+          IREmitCodeCall(AnsiStrReleaseAddr);
+          EmitB($58); { pop rax (new string) }
         end
         else
         begin
@@ -987,8 +1138,61 @@ begin
           tkEq, tkNeq, tkLt, tkLe, tkGt, tkGe:
             begin
               if ((op = tkEq) or (op = tkNeq)) and
-                 ((IntToTypeKind(IRTk[left]) = tyString) or
-                  (IntToTypeKind(IRTk[right]) = tyString)) then
+                 ((IntToTypeKind(IRTk[left]) = tyAnsiString) or
+                  (IntToTypeKind(IRTk[right]) = tyAnsiString)) then
+              begin
+                lhsTk := IntToTypeKind(IRTk[left]);
+                rhsTk := IntToTypeKind(IRTk[right]);
+                if (lhsTk = tyAnsiString) and (rhsTk = tyChar) then
+                begin
+                  EmitB($51);                                                  { push rcx }
+                  EmitB($48); EmitB($85); EmitB($C0);
+                  EmitB($0F); EmitB($84); nextJmp := CodeLen; EmitI32(0);      { jz not_equal }
+                  EmitB($48); EmitB($8B); EmitB($48); EmitB($F8);              { mov rcx, [rax-8] }
+                  EmitB($48); EmitB($83); EmitB($F9); EmitB($01);              { cmp rcx, 1 }
+                  EmitB($0F); EmitB($85); nextJmp2 := CodeLen; EmitI32(0);     { jne not_equal }
+                  EmitB($48); EmitB($0F); EmitB($B6); EmitB($08);              { movzx rcx, byte [rax] }
+                  EmitB($58);                                                  { pop rax }
+                  EmitB($48); EmitB($39); EmitB($C1);                          { cmp rcx, rax }
+                  if op = tkEq then begin EmitB($0F); EmitB($94); EmitB($C0); end
+                  else begin EmitB($0F); EmitB($95); EmitB($C0); end;
+                  EmitB($48); EmitB($0F); EmitB($B6); EmitB($C0);              { movzx rax, al }
+                  EmitB($E9); falseJmp := CodeLen; EmitI32(0);                 { jmp end }
+                  
+                  Patch32(nextJmp, CodeLen - (nextJmp + 4));
+                  Patch32(nextJmp2, CodeLen - (nextJmp2 + 4));
+                  EmitB($59);                                                  { pop rcx }
+                  if op = tkNeq then MovRaxImm(1) else MovRaxImm(0);
+                  Patch32(falseJmp, CodeLen - (falseJmp + 4));
+                end
+                else if (lhsTk = tyChar) and (rhsTk = tyAnsiString) then
+                begin
+                  EmitB($50);                                                  { push rax }
+                  EmitB($48); EmitB($85); EmitB($C9);
+                  EmitB($0F); EmitB($84); nextJmp := CodeLen; EmitI32(0);      { jz not_equal }
+                  EmitB($48); EmitB($8B); EmitB($41); EmitB($F8);              { mov rax, [rcx-8] }
+                  EmitB($48); EmitB($83); EmitB($F8); EmitB($01);              { cmp rax, 1 }
+                  EmitB($0F); EmitB($85); nextJmp2 := CodeLen; EmitI32(0);     { jne not_equal }
+                  EmitB($48); EmitB($0F); EmitB($B6); EmitB($01);              { movzx rax, byte [rcx] }
+                  EmitB($5A);                                                  { pop rdx }
+                  EmitB($48); EmitB($39); EmitB($D0);                          { cmp rax, rdx }
+                  if op = tkEq then begin EmitB($0F); EmitB($94); EmitB($C0); end
+                  else begin EmitB($0F); EmitB($95); EmitB($C0); end;
+                  EmitB($48); EmitB($0F); EmitB($B6); EmitB($C0);              { movzx rax, al }
+                  EmitB($E9); falseJmp := CodeLen; EmitI32(0);                 { jmp end }
+                  
+                  Patch32(nextJmp, CodeLen - (nextJmp + 4));
+                  Patch32(nextJmp2, CodeLen - (nextJmp2 + 4));
+                  EmitB($5A);                                                  { pop rdx }
+                  if op = tkNeq then MovRaxImm(1) else MovRaxImm(0);
+                  Patch32(falseJmp, CodeLen - (falseJmp + 4));
+                end
+                else
+                  EmitAnsiStrCmpReg(op = tkEq, lhsTk, rhsTk);
+              end
+              else if ((op = tkEq) or (op = tkNeq)) and
+                  ((IntToTypeKind(IRTk[left]) = tyString) or
+                   (IntToTypeKind(IRTk[right]) = tyString)) then
               begin
                 lhsTk := IntToTypeKind(IRTk[left]);
                 rhsTk := IntToTypeKind(IRTk[right]);
@@ -1135,6 +1339,16 @@ begin
             MovRaxImm(SYS_WRITE); MovRdiImm(STDOUT); EmitSyscall;
           end;
           EmitwriteStrVar(symIdx);
+        end
+        else if IntToTypeKind(IRTk[node]) = tyAnsiString then
+        begin
+          IREmitNode(valNode);
+          EmitB($48); EmitB($85); EmitB($C0);            { test rax, rax }
+          EmitB($74); pNil := CodeLen; EmitB(0);          { jz done }
+          EmitB($48); EmitB($89); EmitB($C6);            { mov rsi, rax }
+          EmitB($48); EmitB($8B); EmitB($50); EmitB($F8); { mov rdx, [rax-8] }
+          MovRaxImm(SYS_WRITE); MovRdiImm(STDOUT); EmitSyscall;
+          Code[pNil] := Byte(CodeLen - (pNil + 1));
         end
         else if IntToTypeKind(IRTk[node]) = tyString then
         begin
@@ -1536,17 +1750,24 @@ begin
           begin
             arg1Node := IRB[node];
             val1Node := IRA[arg1Node];
-            if (IRKind[val1Node] = IR_LEA) and Syms[IRA[val1Node]].IsArray
-               and (Syms[IRA[val1Node]].ArrLen = -1) then
-            begin
-              { Dynamic array: IR_LEA already loaded the heap data pointer (or 0).
-                Length lives at [ptr-8]; a nil array reports 0. }
-              IREmitNode(val1Node);                          { rax = data ptr (or 0) }
-              EmitB($48); EmitB($85); EmitB($C0);            { test rax, rax }
-              EmitB($74); jbePatch := CodeLen; EmitB(0);     { jz done (rax already 0) }
-              EmitB($48); EmitB($8B); EmitB($40); EmitB($F8);{ mov rax, [rax-8] }
-              Code[jbePatch] := Byte(CodeLen - (jbePatch + 1));
-            end
+            if (IntToTypeKind(IRTk[val1Node]) = tyAnsiString) or
+               ((IRKind[val1Node] = IR_LEA) and (Syms[IRA[val1Node]].TypeKind = tyAnsiString)) then
+             begin
+               IREmitNode(val1Node);                          { rax = data ptr (or 0) }
+               EmitB($48); EmitB($85); EmitB($C0);            { test rax, rax }
+               EmitB($74); jbePatch := CodeLen; EmitB(0);     { jz done }
+               EmitB($48); EmitB($8B); EmitB($40); EmitB($F8);{ mov rax, [rax-8] }
+               Code[jbePatch] := Byte(CodeLen - (jbePatch + 1));
+             end
+             else if (IRKind[val1Node] = IR_LEA) and Syms[IRA[val1Node]].IsArray
+                and (Syms[IRA[val1Node]].ArrLen = -1) then
+             begin
+               IREmitNode(val1Node);                          { rax = data ptr (or 0) }
+               EmitB($48); EmitB($85); EmitB($C0);            { test rax, rax }
+               EmitB($74); jbePatch := CodeLen; EmitB(0);     { jz done (rax already 0) }
+               EmitB($48); EmitB($8B); EmitB($40); EmitB($F8);{ mov rax, [rax-8] }
+               Code[jbePatch] := Byte(CodeLen - (jbePatch + 1));
+             end
             else
             begin
               IREmitNode(val1Node); { evaluates address -> rax }
@@ -1671,7 +1892,8 @@ begin
             if IRKind[val1Node] <> IR_LEA then
               Error('SetLength expects an array variable in IR codegen');
             symIdx := IRA[val1Node];
-            if (Syms[symIdx].ElemType = tyRecord) or (Syms[symIdx].ElemType = tyString) then
+            if ((Syms[symIdx].ElemType = tyRecord) or (Syms[symIdx].ElemType = tyString)) and
+               (Syms[symIdx].TypeKind <> tyAnsiString) then
               Error('SetLength: dynamic array of record/string not yet supported');
             elemSize := TypeSize(Syms[symIdx].ElemType);
 
@@ -1694,7 +1916,10 @@ begin
                 EmitB($48); EmitB($C7); EmitB($C1); EmitI32(elemSize); { mov rcx, elemSize }
                 EmitB($48); EmitB($0F); EmitB($AF); EmitB($C1);        { imul rax, rcx }
               end;
-            EmitB($48); EmitB($83); EmitB($C0); EmitB($10); { add rax, 16 (header) }
+            if Syms[symIdx].TypeKind = tyAnsiString then
+              begin EmitB($48); EmitB($83); EmitB($C0); EmitB($11); end { add rax, 17 }
+            else
+              begin EmitB($48); EmitB($83); EmitB($C0); EmitB($10); end; { add rax, 16 (header) }
             EmitHeapAllocLocked;            { rax = allocator payload / array base }
             EmitB($48); EmitB($8B); EmitB($4C); EmitB($24); EmitB($08); { mov rcx, [rsp+8] = n }
             EmitB($48); EmitB($C7); EmitB($00); EmitI32(1);  { mov qword [rax], 1 (refcount) }
@@ -1731,6 +1956,12 @@ begin
                 EmitB($48); EmitB($0F); EmitB($AF); EmitB($C8);
               end;
             EmitB($F3); EmitB($A4);          { rep movsb }
+            if Syms[symIdx].TypeKind = tyAnsiString then
+            begin
+              EmitB($48); EmitB($8B); EmitB($3C); EmitB($24); { mov rdi, [rsp] }
+              EmitB($48); EmitB($8B); EmitB($4C); EmitB($24); EmitB($10); { mov rcx, [rsp+16] }
+              EmitB($C6); EmitB($04); EmitB($0F); EmitB(0); { mov byte [rdi+rcx], 0 }
+            end;
             Patch32(pDynNoOld, CodeLen - (pDynNoOld + 4));
 
             EmitB($58);                     { pop rax = new data pointer }

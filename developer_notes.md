@@ -1,5 +1,8 @@
 # keep this doc out of public push for now. user edited - and user is slow.
 
+Warning
+This projects still has many bugs. Don't use it for anything important.
+
 What is it
 It's a compiler written in Pascal. Why pascal? It is similar and a sortof superset of C. 
 The compiler supports Object Pascal, but the compiler itself is written in linear Pascal.

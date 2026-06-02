@@ -313,7 +313,8 @@ type
     tyDouble,    { 19: Double/Real — 8-byte IEEE 754, SSE2 xmm }
     tyExtended,  { 20: Extended — 10-byte x87, load/store via x87; ops in SSE2 double }
     tySet,       { 21: Set — 32-byte bitset }
-    tyVariant    { 22: Variant — 16-byte tagged scalar value (8-byte tag + 8-byte payload) }
+    tyVariant,    { 22: Variant — 16-byte tagged scalar value (8-byte tag + 8-byte payload) }
+    tyAnsiString  { 23: Managed refcounted AnsiString }
   );
 
   TSymKind  = (skLocal, skGlobal, skParam, skConst);
@@ -654,6 +655,9 @@ var
   ExcSetJmpAddr   : Integer;
   ExcLongJmpAddr  : Integer;
   ExcRaiseAddr    : Integer;
+  AnsiStrReleaseAddr : Integer;
+  AnsiStrRetainAddr  : Integer;
+  AnsiStrFromLiteralAddr : Integer;
 
   TokChars   : array[0..STRING_CAP-1] of Char;
   TokCharLen : Integer;

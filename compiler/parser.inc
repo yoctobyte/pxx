@@ -4,6 +4,8 @@ procedure LoadFile(const path: AnsiString; var dst: AnsiString); forward;
 function GetFilePath(const path: AnsiString): AnsiString; forward;
 procedure ExpandIncludes(var src: AnsiString; const baseDir: AnsiString); forward;
 procedure ParseCUnit; forward;
+procedure EmitAnsiStringRuntime; forward;
+
 
 function AllocNode(kind: Integer): Integer;
 begin
@@ -938,7 +940,7 @@ begin
         else
           recName := ResolveNodeRec(node);
       end
-      else if tk = tyString then
+      else if (tk = tyString) or (tk = tyAnsiString) then
         tk := tyChar
       else if (tk = tyPointer) and (ASTKind[node] = AN_IDENT) then
       begin
@@ -2058,7 +2060,14 @@ begin
             prevTok := TypeSize(tyUInt8)
           else if CaseEqual(name, 'char') or CaseEqual(name, 'ansichar') then
             prevTok := TypeSize(tyChar)
-          else if CaseEqual(name, 'ansistring') or CaseEqual(name, 'string') then
+          else if CaseEqual(name, 'ansistring') then
+          begin
+            if PasDefineExists('PXX_MANAGED_STRING') then
+              prevTok := TypeSize(tyAnsiString)
+            else
+              prevTok := TypeSize(tyString);
+          end
+          else if CaseEqual(name, 'string') then
             prevTok := TypeSize(tyString)
           else
           begin
@@ -2223,7 +2232,14 @@ begin
           else if CaseEqual(name, 'byte') then castTk := tyUInt8
           else if CaseEqual(name, 'char') or CaseEqual(name, 'ansichar') then castTk := tyChar
           else if CaseEqual(name, 'boolean') then castTk := tyBoolean
-          else if CaseEqual(name, 'string') or CaseEqual(name, 'ansistring') then castTk := tyString;
+          else if CaseEqual(name, 'ansistring') then
+          begin
+            if PasDefineExists('PXX_MANAGED_STRING') then
+              castTk := tyAnsiString
+            else
+              castTk := tyString;
+          end
+          else if CaseEqual(name, 'string') then castTk := tyString;
 
           if castTk <> tyUnknown then
           begin
@@ -3398,7 +3414,7 @@ begin
 
         node := AllocNode(AN_CALL);
         { -101 = string SetLength; -102 = dynamic-array SetLength (heap alloc). }
-        if (idx >= 0) and Syms[idx].IsArray and (Syms[idx].ArrLen = -1) then
+        if (idx >= 0) and ((Syms[idx].IsArray and (Syms[idx].ArrLen = -1)) or (Syms[idx].TypeKind = tyAnsiString)) then
           ASTIVal[node] := -102
         else
           ASTIVal[node] := -101;
@@ -3831,7 +3847,13 @@ begin
         Result := tySet;
         Exit;
       end;
-      if CaseEqual(lo, 'ansistring') then Result := tyString
+      if CaseEqual(lo, 'ansistring') then
+      begin
+        if PasDefineExists('PXX_MANAGED_STRING') then
+          Result := tyAnsiString
+        else
+          Result := tyString;
+      end
       else if CaseEqual(lo, 'real') then Result := tyDouble
       else if CaseEqual(lo, 'single') then Result := tySingle
       else if CaseEqual(lo, 'double') then Result := tyDouble
@@ -5056,10 +5078,11 @@ begin
       tkConst: ParseConstSection;
       tkType:  ParseTypeSection;
     end;
-  { Dynamic-array locals are managed pointer slots. Initialize them before the
+  { Dynamic-array and AnsiString locals are managed pointer slots. Initialize them before the
     body so their first SetLength sees nil rather than stale stack bytes. }
   for i := savedSC to SymCount - 1 do
-    if (Syms[i].Kind = skLocal) and Syms[i].IsArray and (Syms[i].ArrLen = -1) then
+    if (Syms[i].Kind = skLocal) and
+       ((Syms[i].IsArray and (Syms[i].ArrLen = -1)) or (Syms[i].TypeKind = tyAnsiString)) then
     begin
       EmitB($48); EmitB($C7); EmitB($85); EmitI32(Syms[i].Offset); EmitI32(0);
     end;
@@ -5689,6 +5712,7 @@ begin
   EmitB($48); EmitB($89); EmitB($14); EmitB($25); EmitGlobRef(BSS_HEAP_END);
 
   EmitB($E9); jmpPatch := CodeLen; EmitI32(0);
+  EmitAnsiStringRuntime;
   if hasExceptions then EnableExceptionRuntime;
 
   { Compile the builtin unit (Str/Val) before user declarations, so its proc

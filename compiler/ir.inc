@@ -126,7 +126,7 @@ begin
   { Pass 1: populate seen labels and verify uniqueness }
   for i := 0 to IRCount - 1 do
   begin
-    if (IRTk[i] < 0) or (IRTk[i] > Ord(tyVariant)) then
+    if (IRTk[i] < 0) or (IRTk[i] > Ord(tyAnsiString)) then
       Error('invalid type kind in IR node');
 
     if IRKind[i] = IR_LABEL then
@@ -463,7 +463,14 @@ begin
     end;
     
     lo := 0;
-    if (tk = tyString) and not isArr then
+    if (tk = tyAnsiString) and not isArr then
+    begin
+      lo := 1;
+      elemSize := 1;
+      tk := tyChar;
+      recName := REC_NONE;
+    end
+    else if (tk = tyString) and not isArr then
     begin
       lo := -7;
       elemSize := 1;

@@ -98,6 +98,8 @@ test-nilpy: $(COMPILER)
 	grep -q "mixing tabs and spaces for indentation" /tmp/test_nilpy_mixed_indent_fail.log
 
 test: $(COMPILER) fpc-check
+	./$(COMPILER) test/test_ansistring.pas /tmp/test_ansistring26
+	test "$$(/tmp/test_ansistring26)" = "$$(printf '0\nInitially empty ok\nHello\n5\nHello\nAssignment equal ok\nhello\nhello\nIndex write ok\nLocalString\n11\nLocal equal ok\n0\nClear empty ok')"
 	./$(COMPILER) test/hello.pas /tmp/hello26
 	test "$$(/tmp/hello26)" = "Hello, World!"
 	./$(COMPILER) test/hello.c /tmp/hello_c26

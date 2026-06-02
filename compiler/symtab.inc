@@ -711,6 +711,7 @@ begin
     20: Result := 10; { tyExtended }
     21: Result := 32; { tySet }
     22: Result := 16; { tyVariant — 8-byte tag + 8-byte payload }
+    23: Result := TARGET_PTR_SIZE; { tyAnsiString }
   end;
 end;
 
@@ -816,7 +817,8 @@ begin
   case Ord(tk) of
     6,       { tyClass }
     15, 16,  { tyNativeInt, tyNativeUInt }
-    17:      { tyPointer }
+    17,      { tyPointer }
+    23:      { tyAnsiString }
       Result := True;
   end;
 end;
@@ -918,6 +920,8 @@ begin
   Syms[SymCount].IsArray  := False;
   Syms[SymCount].ArrLen   := 0;
   Syms[SymCount].ElemType := tyInteger;
+  if tk = tyAnsiString then
+    Syms[SymCount].ElemType := tyChar;
   Syms[SymCount].RecName  := LastTypeRecId;
   Syms[SymCount].IsRef    := False;
   SymCaseSensitive[SymCount] := CaseSensitiveMode;
@@ -1651,6 +1655,97 @@ begin
 
   { equal: }
   Patch32(okJmp, CodeLen - (okJmp + 4));
+  if eq then MovRaxImm(1) else MovRaxImm(0);
+
+  { end: }
+  Patch32(skipJmp, CodeLen - (skipJmp + 4));
+end;
+
+procedure EmitAnsiStrCmpReg(eq: Boolean; lhsTk, rhsTk: TTypeKind);
+var pLhsNil, pLhsDone, pRhsNil, pRhsDone, skipJmp, okJmp, okJmp2: Integer;
+begin
+  { --- Load LHS (rax) -> rsi (chars), rdx (len) --- }
+  if lhsTk = tyAnsiString then
+  begin
+    { test rax, rax }
+    EmitB($48); EmitB($85); EmitB($C0);
+    { jz lhs_nil }
+    EmitB($74); pLhsNil := CodeLen; EmitB(0);
+    
+    EmitB($48); EmitB($89); EmitB($C6);             { mov rsi, rax }
+    EmitB($48); EmitB($8B); EmitB($50); EmitB($F8); { mov rdx, [rax-8] }
+    { jmp lhs_done }
+    EmitB($EB); pLhsDone := CodeLen; EmitB(0);
+    
+    { lhs_nil: }
+    Code[pLhsNil] := Byte(CodeLen - (pLhsNil + 1));
+    EmitB($31); EmitB($F6);                         { xor esi, esi }
+    EmitB($31); EmitB($D2);                         { xor edx, edx }
+    
+    { lhs_done: }
+    Code[pLhsDone] := Byte(CodeLen - (pLhsDone + 1));
+  end
+  else
+  begin
+    EmitB($48); EmitB($8D); EmitB($70); EmitB($08); { lea rsi, [rax+8] }
+    EmitB($48); EmitB($8B); EmitB($10);             { mov rdx, [rax] }
+  end;
+
+  { --- Load RHS (rcx) -> rdi (chars), r8 (len) --- }
+  if rhsTk = tyAnsiString then
+  begin
+    { test rcx, rcx }
+    EmitB($48); EmitB($85); EmitB($C9);
+    { jz rhs_nil }
+    EmitB($74); pRhsNil := CodeLen; EmitB(0);
+    
+    EmitB($48); EmitB($89); EmitB($CF);             { mov rdi, rcx }
+    EmitB($4C); EmitB($8B); EmitB($41); EmitB($F8); { mov r8, [rcx-8] }
+    { jmp rhs_done }
+    EmitB($EB); pRhsDone := CodeLen; EmitB(0);
+    
+    { rhs_nil: }
+    Code[pRhsNil] := Byte(CodeLen - (pRhsNil + 1));
+    EmitB($31); EmitB($FF);                         { xor edi, edi }
+    EmitB($45); EmitB($31); EmitB($C0);             { xor r8d, r8d }
+    
+    { rhs_done: }
+    Code[pRhsDone] := Byte(CodeLen - (pRhsDone + 1));
+  end
+  else
+  begin
+    EmitB($48); EmitB($8D); EmitB($79); EmitB($08); { lea rdi, [rcx+8] }
+    EmitB($4C); EmitB($8B); EmitB($01);             { mov r8, [rcx] }
+  end;
+
+  { --- Comparison --- }
+  { cmp rdx, r8 }
+  EmitB($4C); EmitB($39); EmitB($C2);
+  { jne not_equal }
+  EmitB($0F); EmitB($85); skipJmp := CodeLen; EmitI32(0);
+
+  { Lengths are equal. If length is 0, they are equal! }
+  { test rdx, rdx }
+  EmitB($48); EmitB($85); EmitB($D2);
+  { jz equal }
+  EmitB($0F); EmitB($84); okJmp := CodeLen; EmitI32(0);
+
+  { Compare contents:
+    rcx = rdx (length for repe) }
+  EmitB($48); EmitB($89); EmitB($D1);             { mov rcx, rdx }
+  EmitB($F3); EmitB($A6);                          { repe cmpsb }
+  { je equal }
+  EmitB($0F); EmitB($84); okJmp2 := CodeLen; EmitI32(0);
+
+  { not_equal: }
+  Patch32(skipJmp, CodeLen - (skipJmp + 4));
+  if eq then MovRaxImm(0) else MovRaxImm(1);
+  { jmp end }
+  EmitB($E9); skipJmp := CodeLen; EmitI32(0);
+
+  { equal: }
+  Patch32(okJmp, CodeLen - (okJmp + 4));
+  Patch32(okJmp2, CodeLen - (okJmp2 + 4));
   if eq then MovRaxImm(1) else MovRaxImm(0);
 
   { end: }
