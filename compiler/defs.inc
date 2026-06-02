@@ -510,6 +510,9 @@ var
   ProcUnitIdx : array[0..MAX_PROCS-1] of Integer; { Strs[] unit name, or -1 for main }
   ProcRetRecId : array[0..MAX_PROCS-1] of Integer; { record id for tyRecord results }
   ProcAggregateDestSym : array[0..MAX_PROCS-1] of Integer; { hidden caller-result pointer local, or -1 }
+  ProcRetIsDynArray : array[0..MAX_PROCS-1] of Boolean; { result is `array of T` (pointer-sized heap handle) }
+  ProcRetElemTk : array[0..MAX_PROCS-1] of TTypeKind;    { element type of a dyn-array result }
+  ProcRetElemRec : array[0..MAX_PROCS-1] of Integer;     { element record id of a dyn-array result }
   CurrentCLibrary : AnsiString;
   CTypeIsVoid : Boolean; { last ParseCDeclType saw bare void (no pointer) }
   CHeaderMode : Boolean; { parsing C in header/FFI mode }
@@ -745,6 +748,8 @@ var
   UFldRec_   : array[0..MAX_UFIELD-1] of Integer;
   UFldPtrElemTk : array[0..MAX_UFIELD-1] of Integer;
   UFldPtrElemRec : array[0..MAX_UFIELD-1] of Integer;
+  UFldIsArray : array[0..MAX_UFIELD-1] of Boolean;
+  UFldArrLen  : array[0..MAX_UFIELD-1] of Integer;
   UFldPub    : array[0..MAX_UFIELD-1] of Integer;  { 1 = published, 0 = other }
   UFldCount  : Integer;
 

@@ -883,8 +883,18 @@ begin
         right := IRLowerAST(ASTRight[node]);
         Result := IRAppend(IR_SET_COPY, leftAddr, right, -1, 0, Ord(tySet));
       end
+      else if (ASTKind[ASTLeft[node]] = AN_IDENT) and
+              Syms[ASTIVal[ASTLeft[node]]].IsArray and
+              (Syms[ASTIVal[ASTLeft[node]]].ArrLen = -1) then
+      begin
+        value := IRLowerAST(ASTRight[node]);
+        Result := IRAppend(IR_STORE_SYM, ASTIVal[ASTLeft[node]], value, -1, 0,
+                           ASTTk[ASTLeft[node]]);
+      end
       else if IntToTypeKind(ASTTk[ASTLeft[node]]) = tyRecord then
       begin
+        if RecordHasManagedFields(ResolveNodeRec(ASTLeft[node])) then
+          Error('whole-record assignment with managed fields not yet supported');
         leftAddr := IRLowerAddress(ASTLeft[node]);
         if rhsIsLValue then
           right := IRLowerAddress(ASTRight[node])

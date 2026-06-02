@@ -149,6 +149,77 @@ begin
   Code[pNonZero] := Byte(CodeLen - (pNonZero + 1));
 end;
 
+procedure EmitManagedRecordRetain(recId: Integer);
+{ rbx = record address. Retain recursively embedded managed strings. }
+var ci, base, fieldCount, i, j, elemCount, fieldOff, fieldSize: Integer;
+begin
+  if recId < REC_UCLASS_BASE then Exit;
+  ci := recId - REC_UCLASS_BASE;
+  if not UClsIsRecord[ci] then Exit;
+  base := UClsFBase[ci];
+  fieldCount := UClsFCount[ci];
+  for i := 0 to fieldCount - 1 do
+  begin
+    if UFldIsArray[base + i] then elemCount := UFldArrLen[base + i] else elemCount := 1;
+    if UFldTk[base + i] = Ord(tyRecord) then
+      fieldSize := RecSize(UFldRec_[base + i])
+    else
+      fieldSize := TypeSize(IntToTypeKind(UFldTk[base + i]));
+    fieldOff := UFldOff_[base + i];
+    for j := 0 to elemCount - 1 do
+    begin
+      if UFldTk[base + i] = Ord(tyAnsiString) then
+      begin
+        EmitB($48); EmitB($8B); EmitB($83); EmitI32(fieldOff + j * fieldSize); { mov rax, [rbx+off] }
+        IREmitCodeCall(AnsiStrRetainAddr);
+      end
+      else if (UFldTk[base + i] = Ord(tyRecord)) and
+              RecordHasManagedFields(UFldRec_[base + i]) then
+      begin
+        EmitB($48); EmitB($81); EmitB($C3); EmitI32(fieldOff + j * fieldSize); { add rbx, off }
+        EmitManagedRecordRetain(UFldRec_[base + i]);
+        EmitB($48); EmitB($81); EmitB($EB); EmitI32(fieldOff + j * fieldSize); { sub rbx, off }
+      end;
+    end;
+  end;
+end;
+
+procedure EmitManagedRecordReleaseLocked(recId: Integer);
+{ rbx = record address. Release recursively embedded managed strings. Caller
+  holds the heap lock when threading is enabled. }
+var ci, base, fieldCount, i, j, elemCount, fieldOff, fieldSize: Integer;
+begin
+  if recId < REC_UCLASS_BASE then Exit;
+  ci := recId - REC_UCLASS_BASE;
+  if not UClsIsRecord[ci] then Exit;
+  base := UClsFBase[ci];
+  fieldCount := UClsFCount[ci];
+  for i := 0 to fieldCount - 1 do
+  begin
+    if UFldIsArray[base + i] then elemCount := UFldArrLen[base + i] else elemCount := 1;
+    if UFldTk[base + i] = Ord(tyRecord) then
+      fieldSize := RecSize(UFldRec_[base + i])
+    else
+      fieldSize := TypeSize(IntToTypeKind(UFldTk[base + i]));
+    fieldOff := UFldOff_[base + i];
+    for j := 0 to elemCount - 1 do
+    begin
+      if UFldTk[base + i] = Ord(tyAnsiString) then
+      begin
+        EmitB($48); EmitB($8B); EmitB($83); EmitI32(fieldOff + j * fieldSize); { mov rax, [rbx+off] }
+        EmitAnsiStrReleaseLocked;
+      end
+      else if (UFldTk[base + i] = Ord(tyRecord)) and
+              RecordHasManagedFields(UFldRec_[base + i]) then
+      begin
+        EmitB($48); EmitB($81); EmitB($C3); EmitI32(fieldOff + j * fieldSize); { add rbx, off }
+        EmitManagedRecordReleaseLocked(UFldRec_[base + i]);
+        EmitB($48); EmitB($81); EmitB($EB); EmitI32(fieldOff + j * fieldSize); { sub rbx, off }
+      end;
+    end;
+  end;
+end;
+
 procedure EmitDynArrayAnsiStrReleaseLocked;
 { rax = array data pointer. Finalize managed-string elements when the final
   array reference is released. Caller holds the heap lock when threading is
@@ -185,11 +256,46 @@ begin
   EmitB($5B);                                      { pop rbx }
 end;
 
+procedure EmitDynArrayManagedRecReleaseLocked(recId: Integer);
+{ rax = array data pointer. Finalize recursively managed record elements when
+  the final array reference is released. }
+var pDoneNil, pDoneShared, pNoElems, loopTop: Integer;
+begin
+  EmitB($53);                                      { push rbx }
+  EmitB($41); EmitB($54);                         { push r12 }
+  EmitB($41); EmitB($55);                         { push r13 }
+  EmitB($49); EmitB($89); EmitB($C5);             { mov r13, rax }
+  EmitB($48); EmitB($85); EmitB($C0);             { test rax, rax }
+  EmitB($0F); EmitB($84); pDoneNil := CodeLen; EmitI32(0);
+  if ThreadSafeMode then EmitB($F0);
+  EmitB($48); EmitB($FF); EmitB($48); EmitB($F0); { dec qword [rax-16] }
+  EmitB($0F); EmitB($85); pDoneShared := CodeLen; EmitI32(0);
+  EmitB($4D); EmitB($8B); EmitB($65); EmitB($F8); { mov r12, [r13-8] }
+  EmitB($4C); EmitB($89); EmitB($EB);             { mov rbx, r13 }
+  EmitB($4D); EmitB($85); EmitB($E4);             { test r12, r12 }
+  EmitB($0F); EmitB($84); pNoElems := CodeLen; EmitI32(0);
+  loopTop := CodeLen;
+  EmitManagedRecordReleaseLocked(recId);
+  EmitB($48); EmitB($81); EmitB($C3); EmitI32(RecSize(recId)); { add rbx, size }
+  EmitB($49); EmitB($FF); EmitB($CC);             { dec r12 }
+  EmitB($0F); EmitB($85); EmitI32(loopTop - (CodeLen + 4));
+  Patch32(pNoElems, CodeLen - (pNoElems + 4));
+  EmitB($4C); EmitB($89); EmitB($E8);             { mov rax, r13 }
+  EmitB($48); EmitB($83); EmitB($E8); EmitB($10); { sub rax, 16 }
+  EmitHeapFreeLocked;
+  Patch32(pDoneNil, CodeLen - (pDoneNil + 4));
+  Patch32(pDoneShared, CodeLen - (pDoneShared + 4));
+  EmitB($41); EmitB($5D); EmitB($41); EmitB($5C); EmitB($5B);
+end;
+
 procedure EmitDynArrayReleaseForSym(symIdx: Integer);
 begin
   EmitAcquireHeapLock;
   if Syms[symIdx].IsArray and (Syms[symIdx].ElemType = tyAnsiString) then
     EmitDynArrayAnsiStrReleaseLocked
+  else if Syms[symIdx].IsArray and (Syms[symIdx].ElemType = tyRecord) and
+          RecordHasManagedFields(Syms[symIdx].ElemRecName) then
+    EmitDynArrayManagedRecReleaseLocked(Syms[symIdx].ElemRecName)
   else
     EmitDynArrayReleaseLocked;
   EmitReleaseHeapLock;
@@ -237,15 +343,24 @@ begin
       EmitB($48); EmitB($0F); EmitB($AF); EmitB($C8);
     end;
   EmitB($F3); EmitB($A4);                         { rep movsb }
-  if Syms[symIdx].ElemType = tyAnsiString then
+  if (Syms[symIdx].ElemType = tyAnsiString) or
+     ((Syms[symIdx].ElemType = tyRecord) and
+      RecordHasManagedFields(Syms[symIdx].ElemRecName)) then
   begin
     EmitB($4C); EmitB($89); EmitB($F3);           { mov rbx, r14 }
     EmitB($4D); EmitB($85); EmitB($ED);           { test r13, r13 }
     EmitB($0F); EmitB($84); pNoRetain := CodeLen; EmitI32(0);
     retainTop := CodeLen;
-    EmitB($48); EmitB($8B); EmitB($03);           { mov rax, [rbx] }
-    IREmitCodeCall(AnsiStrRetainAddr);
-    EmitB($48); EmitB($83); EmitB($C3); EmitB($08); { add rbx, 8 }
+    if Syms[symIdx].ElemType = tyAnsiString then
+    begin
+      EmitB($48); EmitB($8B); EmitB($03);         { mov rax, [rbx] }
+      IREmitCodeCall(AnsiStrRetainAddr);
+    end
+    else
+      EmitManagedRecordRetain(Syms[symIdx].ElemRecName);
+    EmitB($48); EmitB($81); EmitB($C3);
+    if Syms[symIdx].ElemType = tyRecord then EmitI32(RecSize(Syms[symIdx].ElemRecName))
+    else EmitI32(8);                              { add rbx, element size }
     EmitB($49); EmitB($FF); EmitB($CD);            { dec r13 }
     EmitB($0F); EmitB($85); EmitI32(retainTop - (CodeLen + 4));
     Patch32(pNoRetain, CodeLen - (pNoRetain + 4));
@@ -254,6 +369,9 @@ begin
   EmitB($4C); EmitB($89); EmitB($E0);             { mov rax, r12 }
   if Syms[symIdx].ElemType = tyAnsiString then
     EmitDynArrayAnsiStrReleaseLocked
+  else if (Syms[symIdx].ElemType = tyRecord) and
+          RecordHasManagedFields(Syms[symIdx].ElemRecName) then
+    EmitDynArrayManagedRecReleaseLocked(Syms[symIdx].ElemRecName)
   else
     EmitDynArrayReleaseLocked;
   EmitB($4C); EmitB($89); EmitB($F0);             { mov rax, r14 }
@@ -2131,8 +2249,12 @@ begin
                Code[jbePatch] := Byte(CodeLen - (jbePatch + 1));
              end
              else if (IRKind[val1Node] = IR_LEA) and Syms[IRA[val1Node]].IsArray
-                and (Syms[IRA[val1Node]].ArrLen = -1) then
+                and ((Syms[IRA[val1Node]].ArrLen = -1) or
+                     (Syms[IRA[val1Node]].Kind = skParam)) then
              begin
+               { Dynamic-array variable (ArrLen=-1) or an `array of T` parameter.
+                 In both cases the slot holds the heap data pointer whose header
+                 word at [P-8] is the element count. }
                IREmitNode(val1Node);                          { rax = data ptr (or 0) }
                EmitB($48); EmitB($85); EmitB($C0);            { test rax, rax }
                EmitB($74); jbePatch := CodeLen; EmitB(0);     { jz done (rax already 0) }
@@ -2265,10 +2387,13 @@ begin
                     (Syms[IRA[val1Node]].TypeKind = tyAnsiString)) then
               Error('SetLength expects an array variable in IR codegen');
             symIdx := IRA[val1Node];
-            if ((Syms[symIdx].ElemType = tyRecord) or (Syms[symIdx].ElemType = tyString)) and
+            if (Syms[symIdx].ElemType = tyString) and
                (Syms[symIdx].TypeKind <> tyAnsiString) then
               Error('SetLength: dynamic array of record/string not yet supported');
-            elemSize := TypeSize(Syms[symIdx].ElemType);
+            if Syms[symIdx].ElemType = tyRecord then
+              elemSize := RecSize(Syms[symIdx].ElemRecName)
+            else
+              elemSize := TypeSize(Syms[symIdx].ElemType);
 
             IREmitNode(IRA[arg2Node]);      { rax = n }
             EmitB($50);                     { push n }
@@ -2330,7 +2455,10 @@ begin
               end;
             EmitB($F3); EmitB($A4);          { rep movsb }
             Patch32(pDynNoOld, CodeLen - (pDynNoOld + 4));
-            if Syms[symIdx].IsArray and (Syms[symIdx].ElemType = tyAnsiString) then
+            if Syms[symIdx].IsArray and
+               ((Syms[symIdx].ElemType = tyAnsiString) or
+                ((Syms[symIdx].ElemType = tyRecord) and
+                 RecordHasManagedFields(Syms[symIdx].ElemRecName))) then
             begin
               { The copied array prefix owns its own references. }
               EmitB($48); EmitB($8B); EmitB($3C); EmitB($24);           { mov rdi, [rsp] = new data }
@@ -2346,9 +2474,19 @@ begin
               EmitB($48); EmitB($85); EmitB($C9);                       { test rcx, rcx }
               EmitB($0F); EmitB($84); pDynNoRetainCount := CodeLen; EmitI32(0);
               pDynKeepCopy := CodeLen;
-              EmitB($48); EmitB($8B); EmitB($07);                       { mov rax, [rdi] }
-              IREmitCodeCall(AnsiStrRetainAddr);
-              EmitB($48); EmitB($83); EmitB($C7); EmitB($08);           { add rdi, 8 }
+              if Syms[symIdx].ElemType = tyAnsiString then
+              begin
+                EmitB($48); EmitB($8B); EmitB($07);                     { mov rax, [rdi] }
+                IREmitCodeCall(AnsiStrRetainAddr);
+              end
+              else
+              begin
+                EmitB($48); EmitB($89); EmitB($FB);                     { mov rbx, rdi }
+                EmitManagedRecordRetain(Syms[symIdx].ElemRecName);
+              end;
+              EmitB($48); EmitB($81); EmitB($C7);
+              if Syms[symIdx].ElemType = tyRecord then EmitI32(RecSize(Syms[symIdx].ElemRecName))
+              else EmitI32(8);                                         { add rdi, element size }
               EmitB($48); EmitB($FF); EmitB($C9);                       { dec rcx }
               EmitB($0F); EmitB($85); EmitI32(pDynKeepCopy - (CodeLen + 4));
               Patch32(pDynNoRetainCount, CodeLen - (pDynNoRetainCount + 4));
@@ -2371,6 +2509,9 @@ begin
             EmitB($48); EmitB($89); EmitB($F0);                       { mov rax, rsi }
             if Syms[symIdx].IsArray and (Syms[symIdx].ElemType = tyAnsiString) then
               EmitDynArrayAnsiStrReleaseLocked
+            else if Syms[symIdx].IsArray and (Syms[symIdx].ElemType = tyRecord) and
+                    RecordHasManagedFields(Syms[symIdx].ElemRecName) then
+              EmitDynArrayManagedRecReleaseLocked(Syms[symIdx].ElemRecName)
             else
               EmitDynArrayReleaseLocked;
             EmitB($E9); pJmpDone := CodeLen; EmitI32(0);
@@ -2387,6 +2528,9 @@ begin
             EmitB($48); EmitB($89); EmitB($F0);                       { mov rax, rsi }
             if Syms[symIdx].IsArray and (Syms[symIdx].ElemType = tyAnsiString) then
               EmitDynArrayAnsiStrReleaseLocked
+            else if Syms[symIdx].IsArray and (Syms[symIdx].ElemType = tyRecord) and
+                    RecordHasManagedFields(Syms[symIdx].ElemRecName) then
+              EmitDynArrayManagedRecReleaseLocked(Syms[symIdx].ElemRecName)
             else
               EmitDynArrayReleaseLocked;
 

@@ -99,11 +99,12 @@ runtime dependencies.
   `SetLength`. The default representation remains inline while the remaining
   params/results, globals, exception, and aggregate ownership paths are
   completed.
-- Dynamic arrays support scalar elements plus opt-in managed `AnsiString`
-  elements, assignment retain/release, indexed-write copy-on-write, preserving
-  resize, zero-initialized growth, replacement reclaim, normal local cleanup,
-  and conditional atomic refcounts. Still missing: nested arrays, managed
-  records, and params/results.
+- Dynamic arrays support scalar elements, opt-in managed `AnsiString`
+  elements, and records recursively containing managed strings. Assignment,
+  indexed-write copy-on-write, preserving resize, zero-initialized growth,
+  replacement reclaim, normal local cleanup, and conditional atomic refcounts
+  are covered. Still missing: whole-record managed assignment bookkeeping,
+  nested arrays, and params/results.
 - Full access-control enforcement is intentionally deferred. Visibility
   sections are parsed because `published` drives RTTI; rejecting
   private/protected access enables no new programs.
@@ -145,7 +146,7 @@ runtime dependencies.
    `Realloc` attempts; keep hosted and RTOS facilities behind optional hooks.
 4. Finish the opt-in managed `AnsiString` migration: params/results, globals,
    exception paths, and remaining record/class ownership paths.
-5. Add recursive managed-value metadata, then complete dynamic arrays:
-   params/results, nested arrays, and arrays of managed records.
+5. Finish recursive managed-value depth: whole-record managed assignment,
+   params/results, nested arrays, and embedded static-array field indexing.
 6. Audit threaded compound runtime operations: statement-level
    `write`/`writeln`, shared `read`/`readln` state, and exception globals.

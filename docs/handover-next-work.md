@@ -7,6 +7,10 @@ managed dynamic-array ownership batch.
 Source and `make test` remain authoritative; [`todo.md`](todo.md) keeps the
 full inventory.
 
+Dynamic-array continuation details, including the high-priority embedded
+static-array indexing bug, are tracked in
+[`todo-dynamic-arrays.md`](todo-dynamic-arrays.md).
+
 ## Delivered In The Latest Batch
 
 - Scalar dynamic-array assignment retains shared storage and releases replaced
@@ -22,6 +26,8 @@ full inventory.
   `SetLength`.
 - `array of AnsiString` retains copied element references during clone/resize
   and finalizes elements when the final array owner is released.
+- Dynamic arrays of records recursively containing `AnsiString` fields use the
+  same retain/finalize rules. Objects remain raw user-owned pointers.
 - The pthread regression now repeatedly resizes local arrays while four
   workers also exercise `GetMem` / `FreeMem`.
 - The allocator direction is documented in
@@ -34,6 +40,7 @@ Regression gates:
 ```text
 test/test_dynarray.pas
 test/test_dynarray_ansistring.pas
+test/test_dynarray_managed_record.pas
 test/test_multithreading.pas
 make all
 make test
@@ -63,8 +70,9 @@ The next runtime work should keep hosted optimizations optional:
 4. **Managed `AnsiString` depth.** Finish params/results, globals, exception
    paths, and remaining record/class ownership paths before making the
    opt-in ABI the default.
-5. **Managed finalization and arrays.** Add recursive element metadata, then
-   support params/results, nested dynamic arrays, and arrays of managed records.
+5. **Managed finalization depth.** Add whole-record managed assignment,
+   params/results, nested dynamic arrays, and embedded static-array field
+   indexing. Dynamic arrays of nested records containing strings are covered.
 6. **Thread audit.** Serialize compound `write`/`writeln`, decide shared
    `readln` state handling, and move exception globals to a thread-safe model.
 
@@ -83,9 +91,10 @@ The next runtime work should keep hosted optimizations optional:
 - **Managed `AnsiString`:** the initial opt-in slice is implemented. Keep the
   ABI gated until params/results, globals, exceptions, and remaining
   record/class paths are covered.
-- **Dynamic-array depth:** scalar and managed-string element arrays work.
-  Recursive ownership still needs richer element metadata for nested arrays,
-  managed records, and params/results.
+- **Dynamic-array depth:** scalar, managed-string, and nested managed-record
+  element arrays work. Remaining depth: whole-record managed assignment,
+  nested arrays, params/results, and the existing embedded static-array field
+  indexing bug.
 - **Allocator:** use the target-neutral contract in
   [`allocator-platform-design.md`](allocator-platform-design.md). Replace the
   current simple first-fit free list with a syscall-free internal heap

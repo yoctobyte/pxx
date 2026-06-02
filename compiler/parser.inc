@@ -4433,6 +4433,8 @@ begin
             begin
               curFieldOff := AlignTo(curFieldOff, fAlign);
               AddUField(ci, fldNOffs[fni], fldNLens[fni], curFieldOff, Ord(fTk), fRec);
+              UFldIsArray[UFldCount-1] := isArr;
+              UFldArrLen[UFldCount-1] := arrLen;
               UFldPub[UFldCount-1] := curPublished;
               curFieldOff := curFieldOff + fSize;
             end;
@@ -4560,6 +4562,8 @@ begin
             begin
               curFieldOff := AlignTo(curFieldOff, fAlign);
               AddUField(ci, fldNOffs[fni], fldNLens[fni], curFieldOff, Ord(fTk), fRec);
+              UFldIsArray[UFldCount-1] := isArr;
+              UFldArrLen[UFldCount-1] := arrLen;
               curFieldOff := curFieldOff + fSize;
             end;
             if fAlign > classAlign then classAlign := fAlign;
@@ -4622,6 +4626,7 @@ var
   pbyref    : array[0..15] of Boolean;
   nparams  : Integer;
   pi, i, sz, retRecId, savedLastTypeRecId: Integer;
+  retIsDynArr : Boolean; retElemTk : TTypeKind; retElemRec : Integer;
   savedSC, savedFS, savedCurProc : Integer;
   savedGLC, savedGFC, j: Integer;
   patchPos : Integer;
@@ -4679,6 +4684,7 @@ begin
   end;
 
   nparams := 0; retType := tyInteger; retRecId := REC_NONE;
+  retIsDynArr := False; retElemTk := tyUnknown; retElemRec := REC_NONE;
 
   if CurTok.Kind = tkLParen then
   begin
@@ -4741,9 +4747,24 @@ begin
   if isFunc then
   begin
     Expect(tkColon, ':');
-    retType := ParseTypeKind;
-    if retType = tyRecord then
-      retRecId := LastTypeRecId;
+    if CurTok.Kind = tkArray then
+    begin
+      { `array of T` result: a pointer-sized dynamic-array handle. retType holds
+        the element type so the result is non-aggregate; the dyn-array nature is
+        tracked separately in ProcRetIsDynArray. }
+      Next;
+      Expect(tkOf, 'of');
+      retType := ParseTypeKind;
+      retIsDynArr := True;
+      retElemTk := retType;
+      retElemRec := LastTypeRecId;
+    end
+    else
+    begin
+      retType := ParseTypeKind;
+      if retType = tyRecord then
+        retRecId := LastTypeRecId;
+    end;
   end;
 
   Eat(tkSemicolon);
@@ -4868,6 +4889,10 @@ begin
     else if declOverload then
       ProcOverloadDirective[pi] := True;
     ProcRetRecId[pi] := retRecId;
+    ProcRetIsDynArray[pi] := retIsDynArr;
+    ProcRetElemTk[pi] := retElemTk;
+    ProcRetElemRec[pi] := retElemRec;
+    if retIsDynArr then Procs[pi].RetType := tyPointer; { 8-byte heap handle ABI }
     Exit;
   end;
 
@@ -4886,6 +4911,10 @@ begin
   else if declOverload then
     ProcOverloadDirective[pi] := True;
   ProcRetRecId[pi] := retRecId;
+  ProcRetIsDynArray[pi] := retIsDynArr;
+  ProcRetElemTk[pi] := retElemTk;
+  ProcRetElemRec[pi] := retElemRec;
+  if retIsDynArr then Procs[pi].RetType := tyPointer; { 8-byte heap handle ABI }
   Procs[pi].BodyAddr := CodeLen;
   for i := 0 to nparams-1 do
   begin
@@ -4966,7 +4995,15 @@ begin
     savedLastTypeRecId := LastTypeRecId;
     if retType = tyRecord then
       LastTypeRecId := ProcRetRecId[pi];
-    if retType = tyString then
+    if retIsDynArr then
+    begin
+      { Result is a dynamic array: a pointer-sized local heap handle. Indexing,
+        Length, and SetLength operate on it like any dyn-array local. }
+      LastTypeRecId := retElemRec;
+      idx := AllocDynArray('Result', retElemTk);
+      Procs[pi].RetSymIdx := idx;
+    end
+    else if retType = tyString then
     begin
       savedCurProc := CurProc;
       CurProc := -1;
@@ -4982,7 +5019,7 @@ begin
       Syms[SymCount-1].Kind := skLocal;
     end;
     LastTypeRecId := savedLastTypeRecId;
-    if TypeIsAggregate(retType) then
+    if not retIsDynArr and TypeIsAggregate(retType) then
     begin
       idx := AllocVar('', tyPointer);
       ProcAggregateDestSym[pi] := idx;

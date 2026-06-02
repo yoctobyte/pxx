@@ -351,6 +351,8 @@ begin
     UFldPtrElemTk[fi] := Ord(tyUnknown);
     UFldPtrElemRec[fi] := REC_NONE;
   end;
+  UFldIsArray[fi] := False;
+  UFldArrLen[fi] := 1;
   UFldPub[fi] := 0;
   UFldCount := UFldCount + 1;
   UClsFCount[ci] := UClsFCount[ci] + 1;
@@ -676,6 +678,27 @@ begin
   begin
     fi := FindUField(rec - REC_UCLASS_BASE, field2);
     if fi >= 0 then Result := UFldPtrElemRec[fi];
+  end;
+end;
+
+function RecordHasManagedFields(recId: Integer): Boolean;
+{ Class/object references are deliberately unmanaged. Only recurse through
+  fixed-size user records and compiler-managed value fields. }
+var ci, base, cnt, i: Integer;
+begin
+  Result := False;
+  if recId < REC_UCLASS_BASE then Exit;
+  ci := recId - REC_UCLASS_BASE;
+  if not UClsIsRecord[ci] then Exit;
+  base := UClsFBase[ci];
+  cnt := UClsFCount[ci];
+  for i := 0 to cnt - 1 do
+  begin
+    if UFldTk[base + i] = Ord(tyAnsiString) then
+      begin Result := True; Exit; end;
+    if (UFldTk[base + i] = Ord(tyRecord)) and
+       RecordHasManagedFields(UFldRec_[base + i]) then
+      begin Result := True; Exit; end;
   end;
 end;
 
@@ -2143,6 +2166,9 @@ begin
   ProcUnitIdx[ProcCount]      := CurrentUnitIdx;
   ProcRetRecId[ProcCount]     := REC_NONE;
   ProcAggregateDestSym[ProcCount] := -1;
+  ProcRetIsDynArray[ProcCount] := False;
+  ProcRetElemTk[ProcCount]     := tyUnknown;
+  ProcRetElemRec[ProcCount]    := REC_NONE;
   for i := 0 to nParams-1 do
   begin
     Procs[ProcCount].Params[i].Name     := pnames[i];
@@ -2616,6 +2642,13 @@ begin
         { Return address of the local string structure on the stack }
         EmitB($48); EmitB($8D); EmitB($85); EmitI32(Syms[retSymIdx].Offset);
       end;
+    end
+    else if Syms[retSymIdx].IsArray and (Syms[retSymIdx].ArrLen = -1) then
+    begin
+      { Dynamic-array result: the slot holds a pointer-sized heap handle. Return
+        all 8 bytes; a narrow EmitLoadVar keyed on the element type would
+        truncate (and sign-extend) the pointer. }
+      EmitB($48); EmitB($8B); EmitB($85); EmitI32(Syms[retSymIdx].Offset); { mov rax, [rbp+off] }
     end
     else
     begin

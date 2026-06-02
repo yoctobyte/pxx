@@ -170,6 +170,8 @@ digest. That is the hard part — not a reason to drop the goal.
 ## 2d. Managed runtime values and thread audit  ⬜  (next runtime arc)
 
 Full ordered design: **[`threads-todo.md`](threads-todo.md)**.
+Dynamic-array continuation checklist:
+**[`todo-dynamic-arrays.md`](todo-dynamic-arrays.md)**.
 
 - Unify class, string, array, and raw-memory allocation behind one heap path;
   keep Linux syscalls as optional target hooks and improve
@@ -183,9 +185,11 @@ Full ordered design: **[`threads-todo.md`](threads-todo.md)**.
   coercions, and `SetLength` work; params/results, globals, exceptions, and
   remaining record/class ownership paths are pending.
 - Deepen dynamic arrays after adding recursive managed-value metadata.
-  Scalar arrays and `array of AnsiString` support scope-exit release and
-  indexed-write copy-on-write; params/results, nested arrays, and arrays of
-  managed records remain.
+  Scalar arrays, `array of AnsiString`, and arrays of nested records containing
+  strings support scope-exit release and indexed-write copy-on-write.
+  Whole-record managed assignment, params/results, nested arrays, and embedded
+  static-array field indexing remain. Fix embedded static-array field indexing
+  first; it is a high-priority address-lowering bug.
 - Preserve a short default path: mutexes, spinlocks, and atomic updates are
   emitted only with `--threadsafe` / `{$THREADSAFE ON}`.
 - Audit compound runtime operations after managed values land. In particular,

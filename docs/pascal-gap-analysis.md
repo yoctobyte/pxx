@@ -28,10 +28,13 @@ allocator-dependent depth work.
   [-4 bytes]: Length / Element Count (32-bit integer)
   [Pointer]:  First element of the array
   ```
-* **Current state**: Implemented for scalar element types and, under `{$define PXX_MANAGED_STRING}`, `array of AnsiString`. `var a: array of T;` declares a pointer-sized slot holding a heap data pointer; `SetLength(a, n)` allocates a `[refcount(8)][length(8)][elements...]` block and stores the data pointer into the slot; `Length(a)` reads the length word with a nil-guard (unallocated → 0); indexed read/write are 0-based. Assignment retains/releases shared storage. Indexed writes clone shared array storage before mutation. Resize preserves the retained prefix, zeroes new slots, and reclaims replaced blocks; `SetLength(a, 0)` releases storage. Local slots initialize to nil and release on normal scope exit. Managed-string arrays retain copied elements and finalize elements when their final array owner is released. Refcount updates become atomic only under `--threadsafe`. Distinct declaration format from static arrays, so no conflict with `array[Low..High]`. Coverage: `test/test_dynarray.pas`, `test/test_dynarray_ansistring.pas`, `test/test_multithreading.pas`.
+* **Current state**: Implemented for scalar element types and, under `{$define PXX_MANAGED_STRING}`, `array of AnsiString` plus arrays of records recursively containing `AnsiString` fields. `var a: array of T;` declares a pointer-sized slot holding a heap data pointer; `SetLength(a, n)` allocates a `[refcount(8)][length(8)][elements...]` block and stores the data pointer into the slot; `Length(a)` reads the length word with a nil-guard (unallocated → 0); indexed read/write are 0-based. Assignment retains/releases shared storage. Indexed writes clone shared array storage before mutation. Resize preserves the retained prefix, zeroes new slots, and reclaims replaced blocks; `SetLength(a, 0)` releases storage. Local slots initialize to nil and release on normal scope exit. Managed element arrays recursively retain copied strings and finalize them when their final array owner is released. Refcount updates become atomic only under `--threadsafe`. Coverage: `test/test_dynarray.pas`, `test/test_dynarray_ansistring.pas`, `test/test_dynarray_managed_record.pas`, `test/test_multithreading.pas`.
 * **Remaining gaps**:
-  - Nested dynamic arrays and dynamic arrays of managed records.
+  - Whole-record assignment bookkeeping for managed records.
+  - Nested dynamic arrays.
   - Dynamic arrays as parameters and function results.
+  - Static-array fields embedded in records have an existing index-lowering
+    bug and are not part of the managed-record array slice.
 * **Ordering note**: recursive element lifecycle support needs richer element
   metadata than the current single `ElemType`. The cross-thread policy is
   fixed: atomic refcount updates are emitted only in threaded builds. Atomic
