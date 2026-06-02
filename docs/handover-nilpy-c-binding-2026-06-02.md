@@ -1,8 +1,27 @@
 # Handover: Nil Python ↔ C Library Binding And Signature-Directed Inference
 
 **Filed:** 2026-06-02 20:49 (+0200)
+**Updated:** 2026-06-02 21:05 (+0200) — Step 1 shipped; Phase B decomposed by
+risk and out-param auto-address marked a **non-goal** (see "Plan forward").
 **Author:** session continuing the Python-ready Variant work
-**Prereqs landed this session:** commits `104dfff`, `cd01ef4`, `7d3a6f6` (see below)
+**Prereqs landed this session:** commits `104dfff`, `cd01ef4`, `7d3a6f6`,
+`2ed0dd8`, `ce059af` (see below)
+
+## TL;DR for the next agent
+
+Step 1 (Pascal binding + `.npy` CRUD) is **done and pushed**. Two bounded,
+no-rabbit-hole tasks remain; do them, then stop:
+
+1. **Phase A — callee-return inference** (~15 lines, clean). `rc = db_open(...)`
+   should infer `rc`'s type from the callee return.
+2. **Auto `string`→`const char*` at the call site** (clean, no type-model
+   change). Drops the `PChar()` boilerplate.
+
+**Explicit non-goal: out-parameter auto-address-of (`&db`).** It needs pointer
+depth in the type model, hits the `TSymbol` field landmine, and is irreducibly
+un-Pythonic. The Pascal binding already handles out-params cleanly. Do **not**
+enter it. Design rule: *binding owns the pointer-shaped 5% (out-params,
+callbacks); auto everything else.*
 
 This brief hands off a clear, phased plan for letting Nil Python (`.npy`)
 consume C libraries — proven against SQLite imported from
@@ -107,41 +126,42 @@ db_query_done()
 db_close()
 ```
 
-Wire both into `make test` / `make test-nilpy`. **Watch:** Nil Python local
-inference (see Step 2) — `rc = db_open(...)` currently won't infer `rc`'s type
-from the callee. Until Step 2 lands, annotate or assign through a typed
-expression. Verify whether `.npy` string literals (`'alice'`) reach the Pascal
-binding param as a proper `string`/`AnsiString`; if not, that is a small
-coercion gap to fix in the call-arg path.
+Wired into `make test-nilpy`. (Done — see the Step 1 DONE block above.)
 
-### Step 2 — Phase A inference: locals from callee return type (small, sound)
+### Step 2 — Phase A inference: locals from callee return type (DO THIS — clean, ~15 lines)
 
 `PyInferExprType` (`compiler/pyparser.inc` ~238) widens over RHS *tokens* but
 only consults variables (`FindSym`) — **not function return types**. When the
 RHS is `name(...)`, look up `FindProc(name)` and use its `RetType`. Then
-`db = db_open(path)` types `db` with no annotation. Needs no pointer depth.
-~10 lines. Add a `.npy` regression that relies on call-return inference.
+`rc = db_open(path)` types `rc` with no annotation. Needs no pointer depth. Add
+a `.npy` regression that relies on call-return inference. Watch: the existing
+token-widening heuristic over a mixed-operator RHS (e.g. `f(x) + 1`) — keep the
+call-return type folding into the same `PyWiden`, do not special-case.
 
-### Step 3 — Phase B: preserve pointer depth (the keystone)
+### Step 3 — Signature-directed call adaptation, decomposed by risk
 
-This is what lets raw `.npy` call C without a hand-written binding for the
-common cases. Today `ParseCDeclType` collapses every `*`/`**` to one
-`tyPointer` — destroying the info that distinguishes an opaque handle
-(`sqlite3*`) from an out-param (`sqlite3**`). The carrier already exists
-(`PtrElemTk`, `AliasElemTk`, `LastTypePointerElemTk`); the C path just flattens
-it. Record **one level of depth** (ptr vs ptr-to-ptr) on imported params/return.
+Originally framed as one "Phase B keystone"; that overstated it. It is three
+independent slices with very different risk. Do the clean one, weigh the
+medium one, and treat the last as a **non-goal**.
 
-With depth back, add **signature-directed argument adaptation** at the call
-site (the checking, not magic):
+| Slice | Pointer depth? | Risk | Verdict |
+|-------|----------------|------|---------|
+| Auto `string`→`const char*` at the call (param already `tyPointer`, arg is a string → fire the existing `PChar` adapter) | No | low | **do it** — drops `PChar()` boilerplate |
+| `char*` return → managed `string` (auto-wrap when target is a string) | No, but needs a target-type signal and a **copy** (sqlite owns `column_text` memory) | medium | optional; only if a real API needs it |
+| **Out-param auto-address** (`T**` param + bare local lvalue → silent `&`) | **Yes** | **high** | **NON-GOAL — do not build** |
 
-- string arg + char-pointer param → auto `PChar` adapter (machinery exists).
-- `char*` return + nilpy string target → auto wrap to managed `string`.
-- **out-param auto-address:** param is `T**` *and* arg is a **bare local
-  lvalue** → silently pass its address. Never for expressions. This removes the
-  one irreducibly un-Pythonic construct (`&db`).
+**Why out-param auto-address is a non-goal, not a deferral:** it forces pointer
+depth into the type model (`*` vs `**` currently collapse to one `tyPointer`),
+which collides with the `TSymbol` field landmine, and it is the one
+irreducibly un-Pythonic construct. The Pascal binding already expresses
+out-params cleanly and explicitly. The standing design decision is:
 
-After Phase B, the hand-written binding shrinks to genuinely awkward cases only
-(callbacks, varargs) — it is a crutch for the language era, not the language.
+> **The binding owns the pointer-shaped ~5% (out-params, callbacks, `char**`).
+> Auto everything else.** This is the permanent answer for pointer-hostile
+> frontends, not a stopgap.
+
+Revisit only if hand-written bindings ever become painful *at scale* (many
+libraries), and even then prototype pointer-depth in isolation first.
 
 ## Gotchas for the next session
 
