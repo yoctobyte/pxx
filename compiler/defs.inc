@@ -662,6 +662,9 @@ var
   TokCount   : Integer;
   TokPos     : Integer;
   MainProgramTokCount : Integer;
+  PyExprMode : Boolean;  { True only while parsing Nil Python expressions: gives `and`/`or`/`not`
+                           Python precedence (below comparison) via PyParseBoolExpr; suppressed
+                           in Pascal RTL units pulled in by .npy programs }
 
   BLabelLineNums : array[0..255] of Int64;
   BLabelCodePoss : array[0..255] of Integer;

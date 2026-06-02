@@ -76,6 +76,8 @@ test-nilpy: $(COMPILER)
 	test "$$(/tmp/test_nilpy_numeric_widen26)" = "$$(printf '3.14')"
 	./$(COMPILER) test/test_nilpy_convert.npy /tmp/test_nilpy_convert26
 	test "$$(/tmp/test_nilpy_convert26)" = "$$(printf '3\n42')"
+	./$(COMPILER) test/test_nilpy_bool.npy /tmp/test_nilpy_bool26
+	test "$$(/tmp/test_nilpy_bool26)" = "$$(printf '1\n1\n1\n0\n1\n1')"
 	! ./$(COMPILER) test/test_nilpy_slash_fail.npy /tmp/test_nilpy_slash_fail26 > /tmp/test_nilpy_slash_fail.log 2>&1
 	grep -q "unsupported operator /; use // for integer division" /tmp/test_nilpy_slash_fail.log
 	! ./$(COMPILER) test/test_nilpy_string_variant_fail.npy /tmp/test_nilpy_string_variant_fail26 > /tmp/test_nilpy_string_variant_fail.log 2>&1
@@ -396,6 +398,8 @@ test: $(COMPILER) fpc-check
 	test "$$(/tmp/test_nilpy_widen_fix26)" = "$$(printf '5.0\n3.14\n7.0\n2.5')"
 	./$(COMPILER) test/test_nilpy_convert.npy /tmp/test_nilpy_convert26
 	test "$$(/tmp/test_nilpy_convert26)" = "$$(printf '3\n42')"
+	./$(COMPILER) test/test_nilpy_bool.npy /tmp/test_nilpy_bool26
+	test "$$(/tmp/test_nilpy_bool26)" = "$$(printf '1\n1\n1\n0\n1\n1')"
 	./$(COMPILER) test/test_sets.pas /tmp/test_sets26
 	test "$$(/tmp/test_sets26 | tail -1)" = "all set tests completed!"
 	./$(COMPILER) test/test_set_shapes.pas /tmp/test_set_shapes26

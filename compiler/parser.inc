@@ -32,6 +32,7 @@ begin
 end;
 
 procedure ParseExpr; forward;
+procedure PyParseBoolExpr; forward;  { Nil Python boolean layer (defined in pyparser.inc) }
 
 function ConsumeUnitQualifier(var name: AnsiString): Integer;
 begin
@@ -1796,7 +1797,7 @@ begin
         LastExprTk := tyString;
       end;
     end;
-    tkLParen:  begin Next; ParseExpr; Expect(tkRParen, ')'); end;
+    tkLParen:  begin Next; if PyExprMode then PyParseBoolExpr else ParseExpr; Expect(tkRParen, ')'); end;
     tkMinus:
     begin
       Next; ParseFactor;
@@ -2479,8 +2480,9 @@ procedure ParseTerm;
 var op: TTokenKind; left, right, node, opSOffset, opSLen: Integer;
 begin
   ParseFactor;
-  while (CurTok.Kind in [tkStar, tkSlash, tkDiv, tkMod, tkAnd, tkShl]) or
-        ((CurTok.Kind = tkIdent) and (CurTok.SVal = 'shr')) do
+  while ((CurTok.Kind in [tkStar, tkSlash, tkDiv, tkMod, tkAnd, tkShl]) or
+        ((CurTok.Kind = tkIdent) and (CurTok.SVal = 'shr'))) and
+        not (PyExprMode and (CurTok.Kind = tkAnd)) do
   begin
     opSOffset := Tokens[TokPos - 1].SOffset;
     opSLen := Tokens[TokPos - 1].SLen;
@@ -2529,7 +2531,8 @@ begin
   begin
     node := AllocNode(AN_NEG); ASTLeft[node] := CurASTNode; ASTTk[node] := ASTTk[CurASTNode]; CurASTNode := node;
   end;
-  while CurTok.Kind in [tkPlus, tkMinus, tkOr] do
+  while (CurTok.Kind in [tkPlus, tkMinus, tkOr]) and
+        not (PyExprMode and (CurTok.Kind = tkOr)) do
   begin
     op := CurTok.Kind; Next;
     left := CurASTNode;

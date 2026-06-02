@@ -154,6 +154,61 @@ begin
   Result := tyUnknown;
 end;
 
+{ Nil Python boolean-expression layer: Python precedence (or < and < not <
+  comparison), unlike Pascal where and/or bind tighter than comparison. The
+  comparison/arithmetic atom is parsed by the shared ParseExpr, whose and/or/not
+  consumption is suppressed while PyExprMode is set; parenthesised sub-expressions
+  re-enter PyParseBoolExpr (see ParseFactor). Result in CurASTNode. }
+procedure PyParseBoolNot;
+var node: Integer;
+begin
+  if CurTok.Kind = tkNot then
+  begin
+    Next;
+    PyParseBoolNot;
+    node := AllocNode(AN_NOT);
+    ASTLeft[node] := CurASTNode;
+    ASTTk[node] := Ord(tyBoolean);
+    CurASTNode := node;
+  end
+  else
+    ParseExpr;   { comparison + arithmetic atom }
+end;
+
+procedure PyParseBoolAnd;
+var left, right, node: Integer;
+begin
+  PyParseBoolNot;
+  left := CurASTNode;
+  while CurTok.Kind = tkAnd do
+  begin
+    Next;
+    PyParseBoolNot;
+    right := CurASTNode;
+    node := AllocNode(AN_BINOP); ASTIVal[node] := Ord(tkAnd);
+    ASTLeft[node] := left; ASTRight[node] := right; ASTTk[node] := Ord(tyBoolean);
+    left := node;
+  end;
+  CurASTNode := left;
+end;
+
+procedure PyParseBoolExpr;
+var left, right, node: Integer;
+begin
+  PyParseBoolAnd;
+  left := CurASTNode;
+  while CurTok.Kind = tkOr do
+  begin
+    Next;
+    PyParseBoolAnd;
+    right := CurASTNode;
+    node := AllocNode(AN_BINOP); ASTIVal[node] := Ord(tkOr);
+    ASTLeft[node] := left; ASTRight[node] := right; ASTTk[node] := Ord(tyBoolean);
+    left := node;
+  end;
+  CurASTNode := left;
+end;
+
 function PyFindConstraint(const name: AnsiString): Integer;
 var i: Integer;
 begin
@@ -390,7 +445,7 @@ begin
   lastArg := argNode;
   while CurTok.Kind <> tkRParen do
   begin
-    ParseExpr;
+    PyParseBoolExpr;
     argNode := AllocNode(AN_ARG);
     ASTLeft[argNode] := CurASTNode;
     ASTRight[lastArg] := argNode;
@@ -427,7 +482,7 @@ begin
   lastArg := -1;
   if CurTok.Kind <> tkRParen then
     repeat
-      ParseExpr;
+      PyParseBoolExpr;
       argNode := AllocNode(AN_ARG);
       ASTLeft[argNode] := CurASTNode;
       ASTRight[argNode] := -1;
@@ -445,7 +500,7 @@ function PyParseIf: Integer;
 var node, pairNode, condNode, thenNode, elseNode: Integer;
 begin
   Next;
-  ParseExpr;
+  PyParseBoolExpr;
   condNode := CurASTNode;
   Expect(tkColon, ':');
   Expect(tkNewline, 'newline');
@@ -477,7 +532,7 @@ function PyParseWhile: Integer;
 var node: Integer;
 begin
   Next;
-  ParseExpr;
+  PyParseBoolExpr;
   node := AllocNode(AN_WHILE);
   ASTLeft[node] := CurASTNode;
   Expect(tkColon, ':');
@@ -501,12 +556,12 @@ begin
   Expect(tkIn, 'in');
   PyExpectIdent('range');
   Expect(tkLParen, '(');
-  ParseExpr;
+  PyParseBoolExpr;
   startNode := CurASTNode;
   if Eat(tkComma) then
   begin
     stopNode := startNode;
-    ParseExpr;
+    PyParseBoolExpr;
     startNode := stopNode;
     stopNode := CurASTNode;
   end
@@ -519,7 +574,7 @@ begin
   end;
   if Eat(tkComma) then
   begin
-    ParseExpr;
+    PyParseBoolExpr;
     stepNode := CurASTNode;
     if (ASTKind[stepNode] <> AN_INT_LIT) or (ASTIVal[stepNode] <> 1) then
       Error('Nil Python: range step other than 1 is not supported in v1');
@@ -572,7 +627,7 @@ begin
     node := AllocNode(AN_EXIT);
     if not (CurTok.Kind in [tkNewline, tkDedent, tkEOF]) then
     begin
-      ParseExpr;
+      PyParseBoolExpr;
       ASTLeft[node] := CurASTNode;
     end;
     Result := node;
@@ -586,10 +641,10 @@ begin
   if (CurTok.Kind = tkIdent) and (TokPos < TokCount) and
      (Tokens[TokPos].Kind = tkDot) then
   begin
-    ParseExpr;
+    PyParseBoolExpr;
     lhsNode := CurASTNode;
     Expect(tkAssign, '=');
-    ParseExpr;
+    PyParseBoolExpr;
     node := AllocNode(AN_ASSIGN);
     ASTLeft[node] := lhsNode;
     ASTRight[node] := CurASTNode;
@@ -608,7 +663,7 @@ begin
       rhsNode := PyClassCreate
     else
     begin
-      ParseExpr;
+      PyParseBoolExpr;
       rhsNode := CurASTNode;
     end;
     if symIdx < 0 then
@@ -631,7 +686,7 @@ begin
     Result := node;
     Exit;
   end;
-  ParseExpr;
+  PyParseBoolExpr;
   Result := CurASTNode;
 end;
 
@@ -941,6 +996,8 @@ begin
   EmitB($48); EmitB($89); EmitB($14); EmitB($25); EmitGlobRef(BSS_HEAP_END);
   EmitB($E9); jmpPatch := CodeLen; EmitI32(0);
   if needsBuiltin then ParseUsesUnit('builtin');
+  PyExprMode := True;   { Pascal RTL units are loaded; from here on, .npy expression
+                          parsing uses Python and/or/not precedence }
   mainNode := -1;
   PySkipNewlines;
   while CurTok.Kind <> tkEOF do
@@ -958,6 +1015,7 @@ begin
   blockNode := AllocNode(AN_BLOCK);
   ASTLeft[blockNode] := mainNode;
   ASTTk[blockNode] := Ord(tyUnknown);
+  PyExprMode := False;
   CompileAST(blockNode);
   EmitExit(0);
 end;
