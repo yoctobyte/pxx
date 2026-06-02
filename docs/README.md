@@ -1,6 +1,6 @@
 # PXX Documentation
 
-**Documentation snapshot:** 2026-05-31
+**Documentation snapshot:** 2026-06-02
 
 `PXX` is the provisional project and compiler name. The executable is still
 called `compiler/pascal26` while the name and artifact migration remain open.

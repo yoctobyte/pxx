@@ -148,13 +148,36 @@ runtime dependencies.
   real GTK/glib headers replace handwritten bindings: macro-soup preprocessing
   (token paste/stringify/variadic/attributes), struct field layout, callback
   signatures, and a dynamic soname probe.
+- SQLite is driven end-to-end from the imported `/usr/include/sqlite3.h`
+  (2026-06-02): open/exec/prepare/step plus `column_int`/`column_text`, linked
+  against `libsqlite3.so.0`. Added to support it: C function-pointer params map
+  to `Pointer` (were leaking the base `int`), `PChar()` marshals a Pascal string
+  to a `const char*` (literal interner now NUL-terminates), and `PChar` is a
+  usable/indexable pointer type. Regression `test/test_sqlite_crud.pas`.
+- Limit to know for FFI inference: the importer collapses all pointer depth
+  (`*` and `**` → one `Pointer`), so out-parameters cannot be distinguished
+  from opaque handles. This is why pointer-heavy APIs are wrapped (see Nil
+  Python below); deepening it is a documented non-goal — see
+  [`garbage-collection-thoughts.md`](garbage-collection-thoughts.md) sibling
+  decision and [`handover-nilpy-c-binding-2026-06-02.md`](handover-nilpy-c-binding-2026-06-02.md).
+- Nil Python (`.npy`) gained `import name` (2026-06-02), routed to the same
+  unit/C-header resolver as Pascal `uses`. It imports C headers directly
+  (`import sqlite3` → `sqlite3_libversion_number()`), and drives full SQLite
+  CRUD through a pointer-free Pascal binding `lib/rtl/sqlitedb.pas` (the binding
+  does the `char*`↔managed-`string` translation that only Pascal can).
+  Regressions `test/test_nilpy_import_sqlite.npy`,
+  `test/test_nilpy_sqlite_crud.npy`. Python `print` now space-separates args.
 - Automated GUI tests remain separate because they require GTK/display
   environment handling.
 
 ## Ordered Next Work
 
 1. Introduce central target-neutral allocator helpers and route raw memory,
-   classes, dynamic arrays, and later managed strings through them.
+   classes, dynamic arrays, and later managed strings through them. Memory
+   management is a per-target/per-frontend **profile** sharing this contract
+   (ARC default · arena embedded · hosted conservative+cycle collector); GC is
+   never the default — see
+   [`garbage-collection-thoughts.md`](garbage-collection-thoughts.md).
 2. Add a fixed-static-arena profile that proves allocator and managed-value
    tests pass without `mmap`, `munmap`, or `brk`.
 3. Implement allocator splitting, coalescing, alignment, and in-place

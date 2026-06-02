@@ -119,9 +119,25 @@ The C capability is useful but intentionally incomplete:
 - Token pasting (`##`), stringification (`#`), variadic macros, and complete
   macro rescanning are not supported.
 - Complex typedefs/structs, callbacks, variadic functions, and full pointer
-  marshalling are not supported as a stable interop surface.
-- Library-name resolution has special handling for `ctype`/`libc.so.6`;
-  general system-library mapping remains limited.
+  marshalling are not supported as a stable interop surface. Function-pointer
+  *parameters* do map to `Pointer` (so `nil` callbacks pass), and `PChar(s)`
+  marshals a string to a `const char*`.
+- **Pointer depth is collapsed.** `*` and `**` both import as one `Pointer`,
+  so an out-parameter (`T**`) is indistinguishable from an opaque handle.
+  Out-parameter auto-address-of is a **documented non-goal**, not a backlog
+  item — see [`handover-nilpy-c-binding-2026-06-02.md`](handover-nilpy-c-binding-2026-06-02.md).
+- Library-name resolution maps known names to versioned sonames (`ctype`,
+  `math`/`m`, `pthread`, `dl`, `rt`, `z`, GTK, `sqlite3`); unmapped names
+  default to `lib<name>.so` and there is no dynamic loader-cache probe yet.
+
+## Nil Python (`.npy`)
+
+- v1 caps: at most four parameters, `//` for integer division (`/` is an
+  error), `for` range step must be 1, and parameter/result type annotations are
+  required (locals are inferred, but not yet from a call's return type).
+- C libraries with pointer-heavy APIs are consumed through a Pascal binding
+  unit (e.g. `lib/rtl/sqlitedb.pas`), not called raw, because `.npy` has no
+  pointer/address-of surface. This is the intended design, not a temporary gap.
 
 ## BASIC And Further Languages
 

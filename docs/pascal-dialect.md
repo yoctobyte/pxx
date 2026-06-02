@@ -118,6 +118,9 @@ The regression suite currently covers:
 - Virtual/override method dispatch, including from procedure-call statements.
 - Procedure and method references (`@routine`, `@obj.method`).
 - Typed-pointer indexing, casts, fields, and scaled arithmetic.
+- `PChar`/`PAnsiChar` pointer types and the `PChar(s)` cast, which marshals a
+  Pascal string to a NUL-terminated C `const char*` (skips the inline length
+  prefix); a `PChar` is indexable to read a returned C string.
 - Published RTTI and binary form (`.lfm`) streaming into a component tree.
 - Untyped `try/except`, `try/finally`, `raise <expr>`, and handler re-raise.
 - Selected C imports and direct `external` shared-library binding.

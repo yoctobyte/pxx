@@ -170,6 +170,29 @@ digest. That is the hard part — not a reason to drop the goal.
 
 ---
 
+## 2c-bis. Nil Python ↔ C libraries  🟡  (active; plan + decisions in handover)
+
+Full plan: **[`handover-nilpy-c-binding-2026-06-02.md`](handover-nilpy-c-binding-2026-06-02.md)**.
+
+- ✅ `import name` routes to the unit/C-header resolver; `.npy` imports C
+  headers and drives full SQLite CRUD via the pointer-free Pascal binding
+  `lib/rtl/sqlitedb.pas`. `PChar()` `const char*` marshalling, fn-ptr params →
+  `Pointer`, NUL-terminated literals, space-separated `print` all landed.
+- ⬜ **Phase A — callee-return inference** (clean, ~15 lines): `PyInferExprType`
+  (`pyparser.inc` ~238) should consult `FindProc(name).RetType` for a
+  `name(...)` RHS so `rc = db_open(...)` needs no annotation.
+- ⬜ **Auto `string`→`const char*` at the call site** (clean, no type-model
+  change): fire the existing `PChar` adapter when a pointer param meets a string
+  arg. Drops `PChar()` boilerplate.
+- 🟡 optional: `char*` return → managed `string` auto-wrap (needs a target
+  signal + a copy, since sqlite owns `column_text`).
+- 🚫 **NON-GOAL: out-parameter auto-address-of (`&db`).** Forces pointer depth
+  into the type model, hits the `TSymbol` field landmine, irreducibly
+  un-Pythonic. Standing decision: the binding owns the pointer-shaped ~5%
+  (out-params, callbacks); auto everything else.
+
+---
+
 ## 2d. Managed runtime values and thread audit  ⬜  (next runtime arc)
 
 Full ordered design: **[`threads-todo.md`](threads-todo.md)**.
@@ -181,6 +204,10 @@ Dynamic-array continuation checklist:
   splitting/coalescing/in-place resize/bins only after the shared path is
   correct. See
   **[`allocator-platform-design.md`](allocator-platform-design.md)**.
+  Memory management is a per-target/per-frontend **profile** sharing this path
+  (ARC default · arena embedded · hosted conservative+cycle collector). GC is
+  never the default and never on bare metal — rationale and decision in
+  **[`garbage-collection-thoughts.md`](garbage-collection-thoughts.md)**.
 - Add a fixed-static-arena profile so allocator and managed-value tests pass
   without `mmap`, `munmap`, or `brk`.
 - Finish the opt-in `{$define PXX_MANAGED_STRING}` migration. Heap-backed,

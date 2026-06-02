@@ -46,6 +46,7 @@ The compiler currently selects a frontend based on the input source suffix:
 | Input | Status |
 | --- | --- |
 | Pascal input | Primary, self-hosting frontend. |
+| Nil Python input (`.npy`) | Python-shaped static dialect; shares the Pascal AST/IR. Supports `import name` (routed to the unit/C-header resolver), classes, control flow, Variant, and space-separated `print`. |
 | C input (`.c`) | Implemented subset sufficient for covered local C tests. |
 | BASIC input (`.bas`) | Present frontend; early/partial and not the project compatibility baseline. |
 
@@ -81,6 +82,26 @@ PXX can also compile supported local C source used from Pascal:
 ```pascal
 uses my_c_lib;
 ```
+
+A real library is driven end-to-end this way: `test/test_sqlite_crud.pas`
+imports `/usr/include/sqlite3.h`, links `libsqlite3.so.0`, and runs a full
+open/exec/prepare/step/columns round-trip. `PChar(s)` marshals a Pascal string
+to a C `const char*`.
+
+## External Library Loading From Nil Python
+
+Nil Python reaches the same resolver through `import name`:
+
+```python
+import sqlite3
+print(sqlite3_libversion_number())
+```
+
+For a pointer-heavy API, a thin Pascal binding unit holds the pointers and
+exposes string/integer calls that `.npy` imports — see
+`lib/rtl/sqlitedb.pas` and `test/test_nilpy_sqlite_crud.npy` (full SQLite CRUD
+from Nil Python), and the plan in
+[`handover-nilpy-c-binding-2026-06-02.md`](handover-nilpy-c-binding-2026-06-02.md).
 
 For the precise unit search order and supported C preprocessor subset, see
 [C Interoperability](../C_INTEROP.md).
