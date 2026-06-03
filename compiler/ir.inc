@@ -998,8 +998,14 @@ begin
         Result := IRAppend(IR_STORE_SYM, ASTIVal[ASTLeft[node]], value, -1, 0,
                            ASTTk[ASTLeft[node]]);
       end
-      else if IntToTypeKind(ASTTk[ASTLeft[node]]) = tyRecord then
+      else if (IntToTypeKind(ASTTk[ASTLeft[node]]) = tyRecord) or
+              ((ASTKind[ASTLeft[node]] = AN_IDENT) and
+               (Syms[ASTIVal[ASTLeft[node]]].TypeKind = tyRecord)) then
       begin
+        { A record-typed destination. The function-name result form
+          (`FuncName := rec`) leaves the LHS ASTTk unset (0), so fall back to
+          the symbol's TypeKind; without this the scalar store path below
+          copies only the first qword and truncates the record. }
         leftAddr := IRLowerAddress(ASTLeft[node]);
         if rhsIsLValue then
           right := IRLowerAddress(ASTRight[node])

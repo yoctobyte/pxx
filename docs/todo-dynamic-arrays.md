@@ -82,9 +82,15 @@ applying the character index. Writes still pass the slot address to
    copies. Retain-before-release makes self-assignment and shared fields safe.
    Record/managed-array locals are now zero-initialised so the release of the
    (nil) old destination fields is safe. Regression:
-   `test/test_managed_record_assign.pas`. Not yet covered: returning a managed
-   record *by value* from a function (`Result := rec` / `Exit(rec)`) still uses
-   the plain `IR_COPY_REC` and does not retain.
+   `test/test_managed_record_assign.pas`. Returning a managed record *by value*
+   via the function-name result form (`FuncName := rec`) is now ARC-correct
+   too: the LHS ASTTk is unset (0) on that form, so `AN_ASSIGN` formerly fell
+   through to the scalar store path and copied only the first qword — `s`
+   survived, the scalar tail (`n`) was truncated to its zero-init value. Fixed
+   2026-06-03 by also keying the record-copy branch on the LHS symbol's
+   `TypeKind` (`ir.inc` `AN_ASSIGN`), so it lowers to `IR_COPY_REC_MANAGED`
+   (full `RecSize`, retain-before-release). Regression:
+   `test/test_managed_record_funcname_return.pas`.
 
 3. ~~Add dynamic arrays as procedure parameters.~~ Done.
 4. ~~Add dynamic arrays as function results.~~ Done.
