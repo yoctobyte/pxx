@@ -133,6 +133,8 @@ Frankonpiler supports binary-compatible struct mapping for C interoperability th
 - **Packed Records**: Declaring a record as `packed record` forces all field alignments to 1 (no padding bytes).
 - **Directives Support**: Dynamic `$PACKRECORDS N` and `$ALIGN N` directives (where `N` can be `1`, `2`, `4`, `8`, `16`, `default`, or `normal`) change the packing alignment threshold dynamically inside the source file. The compiler uses a per-token historical tracking array (`TokPackRecords`) to preserve the correct alignment context active at the time of each token's lexing.
 - **Nested Record Layout**: Propagates computed alignments of nested structures dynamically (`UClsAlign`), allowing naturally aligned outer records to embed packed inner structures correctly.
+- **Imported C struct bodies**: A `typedef struct { ... } Name;` with a body is laid out as a real record (C natural alignment: each field on its own alignment, struct align = max member, size rounded up), so Pascal can read/write `p.field`. Scalar, pointer, fixed-array, nested-struct-by-value, and union fields are supported; bitfields and inline anonymous struct/union definitions are skipped. A bodyless `typedef struct foo foo;` stays an opaque pointer handle.
+- **Typed pointers**: pointer types carry their pointed-at type (depth 1), so a `T*` field or a pointer typedef (`typedef Point *PPoint;`) is a typed pointer — `q^.field`, indexing, and scaled arithmetic resolve against the element. `T**` records only pointer-to-pointer.
 
 ## Scope Limitations
 

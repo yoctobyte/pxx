@@ -121,15 +121,27 @@ The C capability is useful but intentionally incomplete:
 - Object-like **integer** `#define` macros are surfaced as named constants
   (e.g. `SQLITE_ROW`); string, floating-point, function-like, and
   non-constant-expression macro bodies are not.
-- Complex typedefs/structs, callbacks, variadic functions, and full pointer
-  marshalling are not supported as a stable interop surface. Function-pointer
-  *parameters* do map to `Pointer` (so `nil` callbacks pass). A string argument
-  to a `Pointer` parameter auto-marshals to a `const char*` (the `PChar(s)` cast
-  is now only needed when the parameter type is not already a pointer).
-- **Pointer depth is collapsed.** `*` and `**` both import as one `Pointer`,
-  so an out-parameter (`T**`) is indistinguishable from an opaque handle.
-  Out-parameter auto-address-of is a **documented non-goal**, not a backlog
-  item — see [`handover-nilpy-c-binding-2026-06-02.md`](handover-nilpy-c-binding-2026-06-02.md).
+- Callbacks, variadic functions, and full pointer marshalling are not a stable
+  interop surface. Function-pointer *parameters* do map to `Pointer` (so `nil`
+  callbacks pass). A string argument to a `Pointer` parameter auto-marshals to a
+  `const char*` (the `PChar(s)` cast is now only needed when the parameter type
+  is not already a pointer).
+- **C structs** (`typedef struct { ... } Name;`) with a body are laid out as
+  real records with C natural alignment: scalar fields, pointer fields, fixed
+  arrays, nested struct-by-value, and unions are supported. Not yet: bitfields
+  and inline anonymous struct/union *definitions* (skipped, not laid out), and
+  self-referential structs via the bare tag (`struct Node *next;` inside `Node`)
+  resolve the inner pointer as opaque. C structs share the small
+  `MAX_UCLASS`/`MAX_UFIELD` record tables with Pascal, so once headroom runs low
+  (a macro-soup header such as GTK) struct bodies fall back to opaque pointers;
+  raising those limits is future work.
+- **Typed pointers carry their element type** (depth 1): `T*` knows the
+  pointed-at type for deref/index/field, and a pointer typedef becomes a typed
+  Pascal pointer. Depth ≥ 2 (`T**`) records only that it is a pointer-to-pointer.
+  Function *parameter* pointer-element typing is not yet wired (params still
+  carry the bare `Pointer`). Out-parameter auto-address-of remains a
+  **documented non-goal** — see
+  [`handover-nilpy-c-binding-2026-06-02.md`](handover-nilpy-c-binding-2026-06-02.md).
 - Library-name resolution maps known names to versioned sonames (`ctype`,
   `math`/`m`, `pthread`, `dl`, `rt`, `z`, GTK, `sqlite3`); unmapped names
   default to `lib<name>.so` and there is no dynamic loader-cache probe yet.
