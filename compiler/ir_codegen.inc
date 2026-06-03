@@ -1,5 +1,7 @@
 { ===== Experimental IR Machine Code Generator ===== }
 
+procedure IREmitNode(node: Integer); forward;
+
 procedure IREmitCodeCall(addr: Integer);
 begin
   EmitB($E8);
@@ -809,6 +811,36 @@ begin
   else if sz = 2 then begin EmitB($66); EmitB($89); EmitB($07); end              { mov [rdi],ax }
   else if sz = 4 then begin EmitB($89); EmitB($07); end                          { mov [rdi],eax }
   else begin EmitB($48); EmitB($89); EmitB($07); end;                            { mov [rdi],rax }
+end;
+
+procedure EmitLoadVariantAddress(node: Integer);
+var symIdx, addressNode: Integer;
+begin
+  if IRKind[node] = IR_LOAD_SYM then
+  begin
+    symIdx := IRA[node];
+    if Syms[symIdx].Kind = skGlobal then
+    begin
+      EmitB($48); EmitB($8D); EmitB($04); EmitB($25); EmitGlobRef(Syms[symIdx].Offset);
+    end
+    else if (Syms[symIdx].Kind = skParam) and Syms[symIdx].IsRef then
+    begin
+      EmitB($48); EmitB($8B); EmitB($85); EmitI32(Syms[symIdx].Offset);
+    end
+    else
+    begin
+      EmitB($48); EmitB($8D); EmitB($85); EmitI32(Syms[symIdx].Offset);
+    end;
+  end
+  else if IRKind[node] = IR_LOAD_MEM then
+  begin
+    addressNode := IRA[node];
+    IREmitNode(addressNode);
+  end
+  else
+  begin
+    IREmitNode(node);
+  end;
 end;
 
 procedure EmitWriteVariant;
@@ -2309,7 +2341,14 @@ begin
             for i := Procs[pi].ParamCount - 1 downto 0 do
               if argIsStack[i] then
               begin
-                IREmitNode(argNodeArr[i]); { -> rax }
+                if (IntToTypeKind(IRTk[argNodeArr[i]]) = tyVariant) and
+                   (TypeIsOrdinal(Procs[pi].Params[i].TypeKind) or TypeIsFloat(Procs[pi].Params[i].TypeKind)) then
+                begin
+                  EmitLoadVariantAddress(argNodeArr[i]);
+                  EmitB($48); EmitB($8B); EmitB($40); EmitB($08); { mov rax, [rax+8] }
+                end
+                else
+                  IREmitNode(argNodeArr[i]);
                 EmitB($50); { push rax }
               end;
             { Register args: push right-to-left, then pop left-to-right into the
@@ -2317,7 +2356,14 @@ begin
             for i := Procs[pi].ParamCount - 1 downto 0 do
               if not argIsStack[i] then
               begin
-                IREmitNode(argNodeArr[i]); { -> rax }
+                if (IntToTypeKind(IRTk[argNodeArr[i]]) = tyVariant) and
+                   (TypeIsOrdinal(Procs[pi].Params[i].TypeKind) or TypeIsFloat(Procs[pi].Params[i].TypeKind)) then
+                begin
+                  EmitLoadVariantAddress(argNodeArr[i]);
+                  EmitB($48); EmitB($8B); EmitB($40); EmitB($08); { mov rax, [rax+8] }
+                end
+                else
+                  IREmitNode(argNodeArr[i]);
                 EmitB($50); { push rax }
               end;
             for i := 0 to Procs[pi].ParamCount - 1 do
