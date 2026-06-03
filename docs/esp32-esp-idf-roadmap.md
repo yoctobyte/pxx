@@ -82,14 +82,41 @@ tooling are cleaner. Xtensa can follow once the target abstraction is proven.
 
 1. **ESP-IDF header import proof on the host.** Parse selected ESP-IDF headers
    and prove constants/signatures can be extracted without emitting ESP32 code.
-2. **RISC-V backend.** Target RV32 ESP32-class parts first.
-3. **ESP-IDF integration path.** Emit an object or ELF that ESP-IDF can link and
+2. **Header metadata cache.** ESP-IDF headers are large and macro-heavy, like
+   GTK. The compiler should serialize the extracted model (usable functions,
+   constants, types, pointer metadata, required libraries, and dependency
+   fingerprints) so normal rebuilds do not reparse the SDK.
+3. **RISC-V backend.** Target RV32 ESP32-class parts first.
+4. **ESP-IDF integration path.** Emit an object or ELF that ESP-IDF can link and
    flash. This proves hardware behavior while reusing Espressif's image and boot
    machinery.
-4. **Fast direct path.** Once ABI, startup, memory, and image layout are stable,
+5. **Fast direct path.** Once ABI, startup, memory, and image layout are stable,
    bypass more of the slow build stack.
-5. **Optional facades.** Add small friendly units only where they improve the
+6. **Optional facades.** Add small friendly units only where they improve the
    user experience. The C import remains the ground truth.
+
+## Header Cache
+
+Parsing complex C header forests is real work. GTK already shows this on the
+desktop side; ESP-IDF will likely be similar or larger. The compiler does not
+need to rediscover the same SDK facts on every edit.
+
+A practical cache can store the compiler-facing result of header import:
+
+- callable external symbols and their mapped parameter/return types;
+- integer constants and enum values;
+- struct/tag/type aliases that survived import;
+- pointer element types and pointer-depth metadata;
+- required sonames or target libraries;
+- source header paths, mtimes, sizes, content hashes, target profile, and
+  relevant preprocessor defines.
+
+Then a normal compile can load the serialized model when the SDK inputs and
+target profile match. Cache invalidation is mechanical: if any dependency,
+define set, compiler cache format version, or target ABI changes, rebuild the
+cache. This keeps wrapper-free C import as the ground truth while making the
+edit/compile/flash loop much closer to a native compiler loop than a full SDK
+reparse.
 
 ## Runtime Stance
 
@@ -105,7 +132,7 @@ The preferred direction is:
 - explicit ownership rules;
 - syscall-free allocator hooks for bare metal;
 - optional RTOS allocation/task hooks for ESP-IDF profiles;
-- fast rebuilds through cached or preprocessed SDK metadata where possible.
+- fast rebuilds through cached SDK metadata where possible.
 
 The design law from C interop still applies: C imports should be usable directly
 from every frontend; handwritten wrappers are optional sugar, never required

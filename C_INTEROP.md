@@ -119,6 +119,20 @@ pointer-heavy APIs, but they are not required for Nil Python to consume a C
 header directly. See
 [`docs/handover-wrapper-free-nilpy-c-2026-06-03.md`](docs/handover-wrapper-free-nilpy-c-2026-06-03.md).
 
+## Header Import Cache
+
+Large C header forests can be expensive to preprocess and parse. GTK already
+demonstrates this, and ESP-IDF is expected to have the same shape. The intended
+long-term answer is a compiler-owned cache of imported header findings, not a
+hand-written wrapper layer.
+
+The cache should serialize the compiler-facing model: callable symbols,
+constants, type aliases, struct/tag records, pointer element/depth metadata,
+required libraries, source header dependencies, relevant preprocessor defines,
+target profile, ABI, and a cache-format version. A compile may reuse the cached
+model when those fingerprints match; otherwise it reparses and refreshes the
+cache.
+
 ## C Preprocessor Support
 
 A preprocessing phase rewrites imported C input before lexing. Supported features:
