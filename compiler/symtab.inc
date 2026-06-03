@@ -2049,6 +2049,11 @@ begin
     Result := True;
     Exit;
   end;
+  if (pType = tyAnsiString) and (aType = tyChar) then
+  begin
+    Result := True;
+    Exit;
+  end;
   if (pType = tyAnsiString) and (aType = tyString) then
   begin
     Result := True;
