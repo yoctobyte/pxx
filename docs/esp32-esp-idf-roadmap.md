@@ -82,10 +82,10 @@ tooling are cleaner. Xtensa can follow once the target abstraction is proven.
 
 1. **ESP-IDF header import proof on the host.** Parse selected ESP-IDF headers
    and prove constants/signatures can be extracted without emitting ESP32 code.
-2. **Header metadata cache.** ESP-IDF headers are large and macro-heavy, like
-   GTK. The compiler should serialize the extracted model (usable functions,
-   constants, types, pointer metadata, required libraries, and dependency
-   fingerprints) so normal rebuilds do not reparse the SDK.
+2. **Macro/header parser speed.** ESP-IDF headers are large and macro-heavy,
+   like GTK. First make the preprocessor and C importer correct and fast enough
+   on the macro soup itself; do not hide correctness or algorithmic problems
+   behind a cache.
 3. **RISC-V backend.** Target RV32 ESP32-class parts first.
 4. **ESP-IDF integration path.** Emit an object or ELF that ESP-IDF can link and
    flash. This proves hardware behavior while reusing Espressif's image and boot
@@ -95,13 +95,19 @@ tooling are cleaner. Xtensa can follow once the target abstraction is proven.
 6. **Optional facades.** Add small friendly units only where they improve the
    user experience. The C import remains the ground truth.
 
-## Header Cache
+## Header Cache, Later
 
 Parsing complex C header forests is real work. GTK already shows this on the
 desktop side; ESP-IDF will likely be similar or larger. The compiler does not
-need to rediscover the same SDK facts on every edit.
+cache imported headers today.
 
-A practical cache can store the compiler-facing result of header import:
+The preferred first answer is still better compiler correctness and parser
+speed: robust preprocessing, no avoidable O(n^2) lookups in parse loops, and
+fast handling of macro-heavy SDK headers. A cache should be a later accelerator,
+not a substitute for fixing the importer.
+
+If large SDKs remain expensive after that, a practical cache can store the
+compiler-facing result of header import:
 
 - callable external symbols and their mapped parameter/return types;
 - integer constants and enum values;
@@ -116,7 +122,7 @@ target profile match. Cache invalidation is mechanical: if any dependency,
 define set, compiler cache format version, or target ABI changes, rebuild the
 cache. This keeps wrapper-free C import as the ground truth while making the
 edit/compile/flash loop much closer to a native compiler loop than a full SDK
-reparse.
+reparse. This is a later concern; current work stays focused on correctness.
 
 ## Runtime Stance
 
@@ -132,7 +138,7 @@ The preferred direction is:
 - explicit ownership rules;
 - syscall-free allocator hooks for bare metal;
 - optional RTOS allocation/task hooks for ESP-IDF profiles;
-- fast rebuilds through cached SDK metadata where possible.
+- fast macro-heavy header parsing first, cached SDK metadata later if needed.
 
 The design law from C interop still applies: C imports should be usable directly
 from every frontend; handwritten wrappers are optional sugar, never required
