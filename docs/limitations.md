@@ -133,8 +133,11 @@ The C capability is useful but intentionally incomplete:
   anonymous struct/union definitions, or `struct`/`union`/`enum`-tag-typed
   fields — **fall back to an opaque pointer for that struct** (never a
   silently-wrong layout); sibling POD structs in the same header are
-  unaffected. Self-referential structs via the bare tag (`struct Node *next;`)
-  are one such opaque case. The `MAX_UCLASS`/`MAX_UFIELD` record tables
+  unaffected. Struct/union **tags** resolve as record types (separate from the
+  typedef namespace): self-referential structs (`struct Node *next;` inside
+  `Node`) and bare non-typedef'd tagged structs (`struct Inner { ... };` then
+  `struct Inner` as a field/param type) are laid out. The
+  `MAX_UCLASS`/`MAX_UFIELD` record tables
   (shared with Pascal) are large enough for ordinary headers; an extreme
   macro-soup header (GTK, thousands of structs) still falls back to opaque once
   they fill, and `FindUClass` is a linear scan, so very large headers parse in
