@@ -1,51 +1,97 @@
-# keep this doc out of public push for now. user edited - and user is slow.
+# Developer Notes
 
-Warning
-This projects still has many bugs. Don't use it for anything important.
+Rough developer notes. These are loose thoughts, not polished project
+positioning.
 
-What is it
-It's a compiler written in Pascal. Why pascal? It is similar and a sortof superset of C. 
-The compiler supports Object Pascal, but the compiler itself is written in linear Pascal.
-Actually, the architecture is blunt. a bunch of includes combined to a monolith source file. I've discussed this with the agents. As it is totally counterintuitive to what a human would do - split it up in manageable pieces, like files. Yet AI agents insisted. They rather just grep what they need from a known file. Than an overly complex yet well designed file architexcture. So, i let them and it seems to work well. It is still readable and somewhat origanized, yet pretty large for a human. Then again, well organized. 
+## Warning
 
-Side goals already achieved
-- Those were not really goals but more aside effects
-- fast compile time (assumes plenty RAM)
-- small executables (no linker step, really an only what is needed)
-I tried to keep those goals troout project, but obviously stuff like memory management and anything else may take their tolls.
+This project still has many bugs. Do not use it for anything important.
 
-FPC compliance
-Yes and no. We like to have our source be able to compiled by FPC. or any other pascal compiler for that matter. we cannot escape being a dialect of our own. even if we strive compatibility. Our aim is to be 'lax' and 'fully implementing modern syntax' but that is quite bold, and who defines what is fashionable. Hence. We strive for FPC compatibility for compiling ourselves, to bootstrap or just as sane compatibility validation. 
+## What It Is
 
+It is a compiler written in Pascal. Why Pascal? It is similar to C, and in some
+ways a sort of superset of C.
 
-So.. Features
-- We compile C. And demangle the macro soup, as far possible. 
-- We compile Python as if it were Pascal. Pascal is the 'superset'.
+The compiler supports Object Pascal, but the compiler itself is written in
+linear Pascal.
 
--No target for C++. That is really too complicated and dependant on anything
--Rust - Sounds plausible, many gotya's
--Javascript - sortof doable but it's html dependancy will come bite us
-- Java. Sounds doable. Somewhat compatible with Object Pascal. Not a target atm
-- C#. See java, even more introspection and reflection issues. 
-All of those need sincere attention. And may undermine our goals.
-  	
+The architecture is blunt: a bunch of includes combined into one monolithic
+source file. I have discussed this with the agents. It is totally
+counterintuitive to what a human would usually do: split it into manageable
+pieces, like files. Yet AI agents insisted. They would rather grep what they
+need from a known file than deal with an overly complex, well-designed file
+architecture. So I let them, and it seems to work well. It is still readable
+and somewhat organized, yet pretty large for a human. Then again, well
+organized.
 
-So, this is an odd project. With various goals. It's a research project. Hopefully one day it'd be useful, right now it's not. I tried documenting it.
+## Side Goals Already Achieved
 
-Now, this is totally vibe-coded. But where a human may walk and sometimes run, agentic agents can run at 100mph all day.
+These were not really goals, but more like side effects:
 
-So, self hosting vs bootstrap. We are not ashamed to bootstrap. Why waste cycles on fixing bugs or crafting features if a helpful tools exist. That would be suffering in vein and a waste of time. Compatibility is the goal. 
+- fast compile time, assuming plenty of RAM;
+- small executables: no linker step, really only what is needed.
 
-Franken. This is a multi-facet goal. 1. cross compile. 2. zero external dependencies (*linux/-like kernel) to self-host.
+I tried to keep those goals throughout the project, but obviously things like
+memory management and everything else may take their toll.
 
-Windows is not a target. Too complex for self hosting. Windows as cross-compile is obviously possible in the future. Just use WSL2. I dont intend to port code to Windows but if someone likes to do that, be my guest.
+## FPC Compliance
 
-0
+Yes and no.
 
- 
+We like to have our source be compilable by FPC, or any other Pascal compiler
+for that matter. We cannot escape being a dialect of our own, even if we strive
+for compatibility.
 
+Our aim is to be lax and to fully implement modern syntax. That is quite bold,
+and who defines what is fashionable? So we strive for FPC compatibility for
+compiling ourselves, to bootstrap or just as sane compatibility validation.
 
-So, goals. Not trivial to set a primary
+## Features
+
+- We compile C, and demangle the macro soup as far as possible.
+- We compile Python as if it were Pascal. Pascal is the superset.
+
+Non-goals or possible future language targets:
+
+- C++: not a target. It is really too complicated and dependent on everything.
+- Rust: sounds plausible, but there are many gotchas.
+- JavaScript: sort of doable, but its HTML dependency will come bite us.
+- Java: sounds doable; somewhat compatible with Object Pascal. Not a target at
+  the moment.
+- C#: see Java, with even more introspection and reflection issues.
+
+All of those need sincere attention and may undermine our goals.
+
+## Project Shape
+
+This is an odd project with various goals. It is a research project. Hopefully
+one day it will be useful; right now it is not. I tried documenting it.
+
+This is totally vibe-coded. But where a human may walk and sometimes run,
+agentic agents can run at 100 mph all day.
+
+## Self-Hosting And Bootstrap
+
+We are not ashamed to bootstrap. Why waste cycles on fixing bugs or crafting
+features if helpful tools exist? That would be suffering in vain and a waste of
+time. Compatibility is the goal.
+
+## Frankonpiler
+
+Franken is a multi-faceted goal:
+
+1. cross-compile;
+2. zero external dependencies on Linux or Linux-like kernels to self-host.
+
+Windows is not a target. It is too complex for self-hosting. Windows as a
+cross-compile target is obviously possible in the future. Just use WSL2. I do
+not intend to port code to Windows, but if someone likes to do that, be my
+guest.
+
+## Goals
+
+It is not trivial to set a single primary goal.
 
 Subgoals:
-Craft a pascal compiler that is somewhat compatible with the FPC compiler.
+
+- craft a Pascal compiler that is somewhat compatible with the FPC compiler.
