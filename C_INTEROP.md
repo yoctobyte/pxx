@@ -122,8 +122,9 @@ A preprocessing phase rewrites imported C input before lexing. Supported feature
 - Object-like macros and parameter substitution for function-like macros
 - **Fully recursive macro expansion and rescan** with standard paint-blue logic to prevent infinite self-reference recursion.
 - **GCC attribute and qualifier discarding**: Discards `__attribute__((...))`, GObject annotations (`G_GNUC_*`), GLIBC macros, and other compiler-specific specifiers/qualifiers to prevent poisoning parser inputs.
+- **Object-like integer `#define` macros become constants**: after a header is parsed, each object-like macro whose body is a pure integer constant expression (literals, `+ - *`, `<< >> | & ~`, parens, and identifiers that already resolve to a constant) is registered as a named constant. So `#define SQLITE_ROW 100` is usable by name from Pascal and Nil Python instead of being a hardcoded magic number. String, floating-point, function-like, and non-constant macro bodies are skipped.
 
-Not yet supported: token pasting (`##`), stringification (`#`), variadic macros, complex callbacks, variadic functions, full pointer marshalling.
+Not yet supported: token pasting (`##`), stringification (`#`), variadic macros, complex callbacks, variadic functions, full pointer marshalling. Non-integer (string/float) `#define` constants are not surfaced.
 
 ## Struct & Record Alignment and Packing
 

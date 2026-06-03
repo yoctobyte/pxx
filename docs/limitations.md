@@ -118,6 +118,9 @@ The C capability is useful but intentionally incomplete:
 - Header processing and C parsing accept selected practical cases only.
 - Token pasting (`##`), stringification (`#`), variadic macros, and complete
   macro rescanning are not supported.
+- Object-like **integer** `#define` macros are surfaced as named constants
+  (e.g. `SQLITE_ROW`); string, floating-point, function-like, and
+  non-constant-expression macro bodies are not.
 - Complex typedefs/structs, callbacks, variadic functions, and full pointer
   marshalling are not supported as a stable interop surface. Function-pointer
   *parameters* do map to `Pointer` (so `nil` callbacks pass). A string argument
