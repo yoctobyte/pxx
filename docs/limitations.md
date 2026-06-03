@@ -120,8 +120,9 @@ The C capability is useful but intentionally incomplete:
   macro rescanning are not supported.
 - Complex typedefs/structs, callbacks, variadic functions, and full pointer
   marshalling are not supported as a stable interop surface. Function-pointer
-  *parameters* do map to `Pointer` (so `nil` callbacks pass), and `PChar(s)`
-  marshals a string to a `const char*`.
+  *parameters* do map to `Pointer` (so `nil` callbacks pass). A string argument
+  to a `Pointer` parameter auto-marshals to a `const char*` (the `PChar(s)` cast
+  is now only needed when the parameter type is not already a pointer).
 - **Pointer depth is collapsed.** `*` and `**` both import as one `Pointer`,
   so an out-parameter (`T**`) is indistinguishable from an opaque handle.
   Out-parameter auto-address-of is a **documented non-goal**, not a backlog
@@ -134,7 +135,8 @@ The C capability is useful but intentionally incomplete:
 
 - v1 caps: at most four parameters, `//` for integer division (`/` is an
   error), `for` range step must be 1, and parameter/result type annotations are
-  required (locals are inferred, but not yet from a call's return type).
+  required. Locals are inferred, including from a callee's return type
+  (`rc = db_open(path)` types `rc` from the binding's `-> Integer`).
 - C libraries with pointer-heavy APIs are consumed through a Pascal binding
   unit (e.g. `lib/rtl/sqlitedb.pas`), not called raw, because `.npy` has no
   pointer/address-of surface. This is the intended design, not a temporary gap.

@@ -120,7 +120,9 @@ The regression suite currently covers:
 - Typed-pointer indexing, casts, fields, and scaled arithmetic.
 - `PChar`/`PAnsiChar` pointer types and the `PChar(s)` cast, which marshals a
   Pascal string to a NUL-terminated C `const char*` (skips the inline length
-  prefix); a `PChar` is indexable to read a returned C string.
+  prefix); a `PChar` is indexable to read a returned C string. A string passed
+  directly to a `Pointer` parameter auto-marshals the same way, so the explicit
+  `PChar()` cast is only needed when the target is not already a pointer.
 - Published RTTI and binary form (`.lfm`) streaming into a component tree.
 - Untyped `try/except`, `try/finally`, `raise <expr>`, and handler re-raise.
 - Selected C imports and direct `external` shared-library binding.

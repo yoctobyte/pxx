@@ -83,8 +83,8 @@ Current limitations:
 | Pascal syntax | A tested subset of Object Pascal is implemented; it is not full FPC syntax compatibility. |
 | Pascal directives | Initial define/conditional/identity support exists as listed above; FPC directive coverage is incomplete. |
 | RTL and units | Small built-in/runtime surface plus project Pascal units; not FPC RTL compatibility. |
-| C interoperability | Header imports drive a real library end-to-end (SQLite from `/usr/include/sqlite3.h`, linked `libsqlite3.so.0`): pointer/handle args, function-pointer params, `PChar()` `const char*` marshalling. Pointer depth is collapsed (`*`≡`**`), so out-params are wrapped, not auto-addressed. Not a full C frontend or ABI surface. |
-| Nil Python (`.npy`) | `import name` routes to the unit/C-header resolver; imports C headers and drives full SQLite CRUD via a pointer-free Pascal binding. |
+| C interoperability | Header imports drive a real library end-to-end (SQLite from `/usr/include/sqlite3.h`, linked `libsqlite3.so.0`): pointer/handle args, function-pointer params, and automatic `string`→`const char*` marshalling (explicit `PChar()` only needed for non-pointer targets). Pointer depth is collapsed (`*`≡`**`), so out-params are wrapped, not auto-addressed. Not a full C frontend or ABI surface. |
+| Nil Python (`.npy`) | `import name` routes to the unit/C-header resolver; imports C headers and drives full SQLite CRUD via a pointer-free Pascal binding. Locals infer from a callee's return type. |
 | Binary/ABI compatibility | Emits x86-64 Linux ELF executables and calls selected shared-library symbols; no claim of FPC object/unit ABI compatibility. |
 | Tooling/CLI | Project-specific compiler invocation and build rules; FPC switch compatibility is not claimed. |
 

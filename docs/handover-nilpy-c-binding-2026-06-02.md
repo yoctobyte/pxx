@@ -9,13 +9,19 @@ risk and out-param auto-address marked a **non-goal** (see "Plan forward").
 
 ## TL;DR for the next agent
 
-Step 1 (Pascal binding + `.npy` CRUD) is **done and pushed**. Two bounded,
-no-rabbit-hole tasks remain; do them, then stop:
+Step 1 (Pascal binding + `.npy` CRUD), **Phase A**, and **auto
+`string`→`const char*`** are all **done and pushed** (2026-06-03). Nothing on
+this arc is left except the standing non-goal below.
 
-1. **Phase A — callee-return inference** (~15 lines, clean). `rc = db_open(...)`
-   should infer `rc`'s type from the callee return.
-2. **Auto `string`→`const char*` at the call site** (clean, no type-model
-   change). Drops the `PChar()` boilerplate.
+1. ~~**Phase A — callee-return inference**~~ **DONE** (commit `fab54f5`).
+   `PyInferExprType` folds the callee `RetType` for a `name(...)` RHS and skips
+   the arg tokens; `PyDefReturnType` handles the module-local timing (locals
+   collected before defs registered). `rc = db_open(path)` types with no
+   annotation. Regression: `test/test_nilpy_call_return_infer.npy`.
+2. ~~**Auto `string`→`const char*` at the call site**~~ **DONE** (commit
+   `9734328`). `TypesCompatible` accepts `string`→`Pointer` (Phase-2 match) and
+   `IRLowerAST` fires the `+8` adapter. `lib/rtl/sqlitedb.pas` now calls sqlite
+   with bare strings. Regression: `test/test_string_to_pchar_auto.pas`.
 
 **Explicit non-goal: out-parameter auto-address-of (`&db`).** It needs pointer
 depth in the type model, hits the `TSymbol` field landmine, and is irreducibly
@@ -128,7 +134,7 @@ db_close()
 
 Wired into `make test-nilpy`. (Done — see the Step 1 DONE block above.)
 
-### Step 2 — Phase A inference: locals from callee return type (DO THIS — clean, ~15 lines)
+### Step 2 — Phase A inference: locals from callee return type — DONE (commit fab54f5)
 
 `PyInferExprType` (`compiler/pyparser.inc` ~238) widens over RHS *tokens* but
 only consults variables (`FindSym`) — **not function return types**. When the
@@ -146,7 +152,7 @@ medium one, and treat the last as a **non-goal**.
 
 | Slice | Pointer depth? | Risk | Verdict |
 |-------|----------------|------|---------|
-| Auto `string`→`const char*` at the call (param already `tyPointer`, arg is a string → fire the existing `PChar` adapter) | No | low | **do it** — drops `PChar()` boilerplate |
+| Auto `string`→`const char*` at the call (param already `tyPointer`, arg is a string → fire the existing `PChar` adapter) | No | low | **DONE** (commit `9734328`) — `PChar()` boilerplate dropped |
 | `char*` return → managed `string` (auto-wrap when target is a string) | No, but needs a target-type signal and a **copy** (sqlite owns `column_text` memory) | medium | optional; only if a real API needs it |
 | **Out-param auto-address** (`T**` param + bare local lvalue → silent `&`) | **Yes** | **high** | **NON-GOAL — do not build** |
 
