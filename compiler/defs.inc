@@ -9,6 +9,7 @@ const
   MAX_FIXUPS  = 131072;
   MAX_SYMS    = 131072;
   MAX_PROCS   = 16384;
+  MAX_PARAM_DEPTHS = 262144;  { MAX_PROCS * 16 }
   MAX_CALLFIX = 16384;
   MAX_GLOBFIX = 32768;
   MAX_EXTERNAL = 16384;
@@ -519,6 +520,7 @@ var
   ProcRetElemRec : array[0..MAX_PROCS-1] of Integer;     { element record id of a dyn-array result }
   ProcRetPtrElemTk : array[0..MAX_PROCS-1] of Integer;   { pointed-at TTypeKind ord when the result is a typed pointer (tyUnknown otherwise) }
   ProcRetPtrElemRec : array[0..MAX_PROCS-1] of Integer;  { pointed-at record id when the result is a typed pointer-to-struct }
+  ProcParamPtrDepth : array[0..MAX_PARAM_DEPTHS-1] of Integer; { C interop: pointer depth for parameters }
   CurrentCLibrary : AnsiString;
   CTypeIsVoid : Boolean; { last ParseCDeclType saw bare void (no pointer) }
   CTypePtrDepth : Integer;   { pointer-star count of the last ParseCDeclType (0 = not a pointer) }
@@ -730,6 +732,7 @@ var
   ASTLeft    : array[0..MAX_AST-1] of Integer;
   ASTRight   : array[0..MAX_AST-1] of Integer;
   ASTTk      : array[0..MAX_AST-1] of Integer;  { TTypeKind of expression }
+  ASTLiftedVar : array[0..MAX_AST-1] of Integer; { symbol index of compiler-lifted variable, or -1 }
   ASTNodeCount : Integer;
 
   IRKind  : array[0..MAX_IR-1] of Integer;

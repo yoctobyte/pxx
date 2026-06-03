@@ -20,6 +20,7 @@ function StrInt(v: Int64; width: Integer): string;
 function FloatToStr(v: Double): string;
 procedure Val(const s: string; var v: Int64; var code: Integer);
 function VariantToStr(const v: Variant): AnsiString;
+function PCharToString(p: PChar): string;
 
 implementation
 
@@ -160,6 +161,25 @@ begin
   if neg then n := -n;
   v := n;
   code := 0;
+end;
+
+function PCharToString(p: PChar): string;
+var
+  i: Integer;
+  c: Char;
+begin
+  Result := '';
+  if p <> nil then
+  begin
+    i := 0;
+    c := p[i];
+    while c <> #0 do
+    begin
+      Result := Result + c;
+      i := i + 1;
+      c := p[i];
+    end;
+  end;
 end;
 
 end.

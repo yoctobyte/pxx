@@ -303,23 +303,21 @@ begin
           pi := FindProc(name);
           if pi >= 0 then tk := Procs[pi].RetType
           else tk := PyDefReturnType(name);
-          if tk <> tyUnknown then
+          if tk = tyUnknown then tk := tyVariant;
+          i := i + 1; depth := 0;
+          while i < endIdx do
           begin
-            i := i + 1; depth := 0;
-            while i < endIdx do
+            if Tokens[i].Kind = tkLParen then Inc(depth)
+            else if Tokens[i].Kind = tkRParen then
             begin
-              if Tokens[i].Kind = tkLParen then Inc(depth)
-              else if Tokens[i].Kind = tkRParen then
-              begin
-                Dec(depth);
-                if depth = 0 then Break;
-              end;
-              Inc(i);
+              Dec(depth);
+              if depth = 0 then Break;
             end;
-            Result := PyWiden(Result, tk);
             Inc(i);
-            Continue;
           end;
+          Result := PyWiden(Result, tk);
+          Inc(i);
+          Continue;
         end;
         if IsClassType(name) then tk := tyClass;
         ci := PyFindConstraint(name);
@@ -902,6 +900,12 @@ var i, j, k, depth, methodStart, nparams, pi, mmi, slot, curOff, align, sz: Inte
     pnames: array[0..15] of AnsiString; ptypes: array[0..15] of TTypeKind;
     tk: TTypeKind;
 begin
+  UClsFBase[ci] := UFldCount;
+  UClsFCount[ci] := 0;
+  UClsMBase[ci] := UMthCount;
+  UClsMCount[ci] := 0;
+  UClsPBase[ci] := UPropCount;
+  UClsPCount[ci] := 0;
   curOff := 8;
   align := 8;
   depth := 0;
@@ -1067,7 +1071,7 @@ end;
 procedure ParsePyProgram;
 var mainNode, stmt, blockNode, jmpPatch, i: Integer; needsBuiltin: Boolean;
 begin
-  needsBuiltin := False;
+  needsBuiltin := True;
   for i := 0 to MainProgramTokCount - 1 do
   begin
     if (Tokens[i].Kind = tkIdent) and (i + 1 < MainProgramTokCount) and

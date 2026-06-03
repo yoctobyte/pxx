@@ -2034,6 +2034,11 @@ begin
     Result := True;
     Exit;
   end;
+  if (pType = tyVariant) or (aType = tyVariant) then
+  begin
+    Result := True;
+    Exit;
+  end;
   if TypeIsOrdinal(pType) and TypeIsOrdinal(aType) then
   begin
     Result := True;
@@ -2090,12 +2095,56 @@ begin
     end;
   end;
 
+  { Phase 1b: Try exact match with return-lifting }
+  for i := 0 to ProcCount-1 do
+  begin
+    if Procs[i].Name = name then
+    begin
+      if (Procs[i].ParamCount > nArgs) and (ProcParamPtrDepth[i * 16 + nArgs] = 2) then
+      begin
+        match := True;
+        for j := 0 to nArgs-1 do
+        begin
+          if Procs[i].Params[j].TypeKind <> argTypes[j] then
+            match := False;
+        end;
+        if match then
+        begin
+          Result := i;
+          Exit;
+        end;
+      end;
+    end;
+  end;
+
   { Phase 2: Try compatible match }
   for i := 0 to ProcCount-1 do
   begin
     if Procs[i].Name = name then
     begin
       if Procs[i].ParamCount = nArgs then
+      begin
+        match := True;
+        for j := 0 to nArgs-1 do
+        begin
+          if not TypesCompatible(Procs[i].Params[j].TypeKind, argTypes[j]) then
+            match := False;
+        end;
+        if match then
+        begin
+          Result := i;
+          Exit;
+        end;
+      end;
+    end;
+  end;
+
+  { Phase 2b: Try compatible match with return-lifting }
+  for i := 0 to ProcCount-1 do
+  begin
+    if Procs[i].Name = name then
+    begin
+      if (Procs[i].ParamCount > nArgs) and (ProcParamPtrDepth[i * 16 + nArgs] = 2) then
       begin
         match := True;
         for j := 0 to nArgs-1 do
@@ -2147,6 +2196,25 @@ begin
         Exit;
       end;
     end;
+
+  { Phase 1b: Try exact match with return-lifting }
+  for i := 0 to ProcCount - 1 do
+    if (ProcUnitIdx[i] = unitIdx) and
+       ((Procs[i].Name = name) or
+        ((not ProcCaseSensitive[i]) and CaseEqual(Procs[i].Name, name))) and
+       (Procs[i].ParamCount > nArgs) and
+       (ProcParamPtrDepth[i * 16 + nArgs] = 2) then
+    begin
+      match := True;
+      for j := 0 to nArgs - 1 do
+        if Procs[i].Params[j].TypeKind <> argTypes[j] then match := False;
+      if match then
+      begin
+        Result := i;
+        Exit;
+      end;
+    end;
+
   for i := 0 to ProcCount - 1 do
     if (ProcUnitIdx[i] = unitIdx) and
        ((Procs[i].Name = name) or
@@ -2162,6 +2230,25 @@ begin
         Exit;
       end;
     end;
+
+  { Phase 2b: Try compatible match with return-lifting }
+  for i := 0 to ProcCount - 1 do
+    if (ProcUnitIdx[i] = unitIdx) and
+       ((Procs[i].Name = name) or
+        ((not ProcCaseSensitive[i]) and CaseEqual(Procs[i].Name, name))) and
+       (Procs[i].ParamCount > nArgs) and
+       (ProcParamPtrDepth[i * 16 + nArgs] = 2) then
+    begin
+      match := True;
+      for j := 0 to nArgs - 1 do
+        if not TypesCompatible(Procs[i].Params[j].TypeKind, argTypes[j]) then match := False;
+      if match then
+      begin
+        Result := i;
+        Exit;
+      end;
+    end;
+
   Result := -1;
 end;
 
@@ -2192,6 +2279,8 @@ begin
   ProcRetElemRec[ProcCount]    := REC_NONE;
   ProcRetPtrElemTk[ProcCount]  := Ord(tyUnknown);
   ProcRetPtrElemRec[ProcCount] := REC_NONE;
+  for i := 0 to 15 do
+    ProcParamPtrDepth[ProcCount * 16 + i] := 0;
   for i := 0 to nParams-1 do
   begin
     Procs[ProcCount].Params[i].Name     := pnames[i];

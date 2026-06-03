@@ -479,6 +479,7 @@ var
   retPtrElemTk, retPtrElemRec: Integer;
   ptypes: array[0..15] of TTypeKind;
   pnames: array[0..15] of AnsiString;
+  pdepths: array[0..15] of Integer;
   savedSC, savedFS, node, savedCurProc: Integer;
 begin
   retType := ParseCDeclType;
@@ -522,6 +523,7 @@ begin
       else if nparams <= 15 then
       begin
         ptypes[nparams] := ptype;
+        pdepths[nparams] := CTypePtrDepth;
         if CurTok.Kind = tkIdent then
         begin
           pnames[nparams] := CurTok.SVal;
@@ -547,6 +549,8 @@ begin
   pi := FindProc(name);
   if pi < 0 then
     pi := RegisterProc(name, isFunc, retType, nparams, pnames, ptypes);
+  for i := 0 to nparams - 1 do
+    ProcParamPtrDepth[pi * 16 + i] := pdepths[i];
   ProcRetPtrElemTk[pi] := retPtrElemTk;
   ProcRetPtrElemRec[pi] := retPtrElemRec;
 

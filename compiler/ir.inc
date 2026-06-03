@@ -684,7 +684,7 @@ end;
 function IRLowerAST(node: Integer): Integer;
 var left, right, seq, item, value, outNode, first, last, leftAddr, argNode, argVal, intCallNode, intArgSeq, argNode2, zeroVal, pi: Integer;
     pairNode, condNode, specialId, classIdx, slot, cpi, pathIdx: Integer;
-    isRefArg: Boolean; argTk: TTypeKind;
+    isRefArg: Boolean; argTk: TTypeKind; callRetType: TTypeKind; callVal: Integer;
     startLabel, elseLabel, endLabel, startLabelNode, endLabelNode: Integer;
     lhsNode, pair3, pair1, pair2, initNode, limitNode, isDownNode, bodyNode: Integer;
     down: Boolean;
@@ -1253,7 +1253,15 @@ begin
         item := ASTRight[item];
         Inc(pathIdx);
       end;
-      Result := IRAppendCall(ASTIVal[node], first, classIdx, ASTTk[node]);
+      if ASTLiftedVar[node] >= 0 then
+      begin
+        callRetType := Procs[ASTIVal[node]].RetType;
+        callVal := IRAppendCall(ASTIVal[node], first, classIdx, Ord(callRetType));
+        IRIVal[callVal] := 1;
+        Result := IRAppend(IR_LOAD_SYM, ASTLiftedVar[node], -1, -1, 0, ASTTk[node]);
+      end
+      else
+        Result := IRAppendCall(ASTIVal[node], first, classIdx, ASTTk[node]);
     end;
 
     AN_IF:

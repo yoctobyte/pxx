@@ -18,6 +18,7 @@ begin
   ASTLeft[ASTNodeCount]    := -1;
   ASTRight[ASTNodeCount]   := -1;
   ASTTk[ASTNodeCount]      := 0;
+  ASTLiftedVar[ASTNodeCount] := -1;
   Result := ASTNodeCount;
   Inc(ASTNodeCount);
 end;
@@ -269,15 +270,15 @@ var
 begin
   if CurTok.Kind <> tkIdent then Error('expected generic class name');
   templateName := CurTok.SVal; Next;
-  
+
   Expect(tkLt, '<');
   if CurTok.Kind <> tkIdent then Error('expected generic parameter name');
   paramName := CurTok.SVal; Next;
   Expect(tkGt, '>');
   Expect(tkEq, '=');
-  
+
   if CurTok.Kind <> tkClass then Error('generic templates must be class declarations');
-  
+
   startTok := TokPos - 1;
   depth := 1;
   cur := TokPos;
@@ -289,18 +290,18 @@ begin
       Dec(depth);
     Inc(cur);
   end;
-  
+
   if (cur < TokCount) and (Tokens[cur].Kind = tkSemicolon) then
     Inc(cur);
-  
+
   finalCur := cur;  { save before for-loop clobbers 'cur' }
-  
+
   if TemplateCount >= MAX_TEMPLATES then Error('too many generic templates');
   Templates[TemplateCount].Name := templateName;
   Templates[TemplateCount].Param := paramName;
   Templates[TemplateCount].TokStart := TemplateTokenCount;
   Templates[TemplateCount].TokCount := 0;
-  
+
   for cur := startTok to finalCur - 1 do
   begin
     if TemplateTokenCount >= MAX_TEMPLATE_TOKENS then
@@ -313,9 +314,9 @@ begin
     Inc(TemplateTokenCount);
     Templates[TemplateCount].TokCount := Templates[TemplateCount].TokCount + 1;
   end;
-  
+
   Inc(TemplateCount);
-  
+
   TokPos := finalCur;
   Next;
 end;
@@ -329,7 +330,7 @@ begin
   Next; { consume 'specialize' }
   if CurTok.Kind <> tkIdent then Error('expected generic template name');
   templateName := CurTok.SVal; Next;
-  
+
   Expect(tkLt, '<');
   if (CurTok.Kind <> tkIdent) and (CurTok.Kind <> tkInteger_T) and (CurTok.Kind <> tkBoolean_T) and (CurTok.Kind <> tkChar_T) and (CurTok.Kind <> tkString_T) then
     Error('expected concrete type name');
@@ -338,20 +339,20 @@ begin
   Next;
   Expect(tkGt, '>');
   Eat(tkSemicolon);
-  
+
   ti := -1;
   for i := 0 to TemplateCount - 1 do
     if CaseEqual(Templates[i].Name, templateName) then
       ti := i;
   if ti < 0 then Error('generic template ' + templateName + ' not found');
-  
+
   if SpecializationCount >= MAX_SPECIALIZATIONS then Error('too many specializations');
   Specializations[SpecializationCount].Name := specName;
   Specializations[SpecializationCount].TemplateName := templateName;
   Specializations[SpecializationCount].ConcreteType := concreteType;
   Specializations[SpecializationCount].ConcreteName := concreteName;
   Inc(SpecializationCount);
-  
+
   SpecializeTemplateName := Templates[ti].Name;
   SpecializeStream(Templates[ti].TokStart, Templates[ti].TokCount, specName, Templates[ti].Param, concreteName, concreteType);
   Next;
@@ -367,7 +368,7 @@ begin
   while (cur < TokCount) and (Tokens[cur].Kind <> tkBegin) do
     Inc(cur);
   if cur >= TokCount then Error('expected begin in generic method');
-  
+
   depth := 1;
   Inc(cur);
   while (cur < TokCount) and (depth > 0) do
@@ -378,12 +379,12 @@ begin
       Dec(depth);
     Inc(cur);
   end;
-  
+
   if (cur < TokCount) and (Tokens[cur].Kind = tkSemicolon) then
     Inc(cur);
-  
+
   finalCur := cur;  { save before for-loop clobbers 'cur' }
-  
+
   mStart := TemplateTokenCount;
   mCount := 0;
   for cur := startTokIdx to finalCur - 1 do
@@ -398,7 +399,7 @@ begin
     Inc(TemplateTokenCount);
     mCount := mCount + 1;
   end;
-  
+
   { Insert specializations AFTER the template method body, not at the dot position }
   TokPos := finalCur;
   for si := 0 to SpecializationCount - 1 do
@@ -409,7 +410,7 @@ begin
       SpecializeStream(mStart, mCount, Specializations[si].Name, Templates[ti].Param, Specializations[si].ConcreteName, Specializations[si].ConcreteType);
     end;
   end;
-  
+
   { TokPos = finalCur (InsertTokens doesn't change it); parser reads from first specialization }
   Next;
 end;
@@ -688,10 +689,10 @@ var
 begin
   prevTok := identTokIdx;
   if DebugTrace then writeln('ParseLValueAST: idx = ', idx, ' prevTok = ', prevTok, ' TokenStr = "', GetTokenStr(prevTok), '" CurTok.Line = ', CurTok.Line, ' TokPos = ', TokPos);
-  
+
   fieldName := GetTokenStr(prevTok);
   withResolved := False;
-  
+
   if WithStackDepth > 0 then
   begin
     for w := WithStackDepth - 1 downto 0 do
@@ -752,16 +753,16 @@ begin
       selfNode := AllocNode(AN_IDENT);
       ASTIVal[selfNode] := selfIdx;
       ASTTk[selfNode] := Ord(tyClass);
-      
+
       fieldNode := AllocNode(AN_FIELD);
       ASTLeft[fieldNode] := selfNode;
       ASTSOffset[fieldNode] := Tokens[prevTok].SOffset;
       ASTSLen[fieldNode] := Tokens[prevTok].SLen;
-      
+
       tk := IntToTypeKind(UFldTk[fldIdx]);
       recName := UFldRec_[fldIdx];
       ASTTk[fieldNode] := Ord(tk);
-      
+
       node := fieldNode;
     end
     else
@@ -801,19 +802,19 @@ begin
           if CurTok.Kind <> tkIdent then Error('expected class method name');
           fieldName := CurTok.SVal;
           Next;
-          
+
           mmi := FindUMeth(ci, fieldName);
           if mmi < 0 then Error('class method not found: ' + fieldName);
           mpi := UMthProc_[mmi];
-          
+
           if not UMthIsStatic[mmi] then
             Error('cannot call non-static method on class type directly');
-            
+
           mcallNode := AllocNode(AN_CALL);
           ASTIVal[mcallNode] := mpi;
           ASTTk[mcallNode] := Ord(Procs[mpi].RetType);
           mlastArg := -1;
-          
+
           if CurTok.Kind = tkLParen then
           begin
             Next;
@@ -841,7 +842,7 @@ begin
             end;
             Expect(tkRParen, ')');
           end;
-          
+
           Result := mcallNode;
           Exit;
         end
@@ -864,7 +865,7 @@ begin
     ASTTk[node] := Ord(tk);
   end;
   end;
-  
+
   while CurTok.Kind in [tkLBrack, tkDot, tkCaret] do
   begin
     if CurTok.Kind = tkCaret then
@@ -1011,7 +1012,7 @@ begin
         mci := recName - REC_UCLASS_BASE;
         pri := FindUProp(mci, fieldName);
       end;
-      
+
       if pri >= 0 then
       begin
         isAssign := (CurTok.Kind = tkAssign) or ((TokPos < TokCount) and (Tokens[TokPos].Kind = tkAssign));
@@ -1033,11 +1034,11 @@ begin
             mmi := FindUMeth(mci, methName);
             if mmi < 0 then Error('setter method not found: ' + methName);
             mpi := UMthProc_[mmi];
-            
+
             if CurTok.Kind = tkIdent then Next; { consume property name }
             Expect(tkAssign, ':=');
             ParseExpr;
-            
+
             if UMthVirSlot[mmi] >= 0 then
             begin
               mcallNode := AllocNode(AN_VIRTUAL_CALL);
@@ -1049,15 +1050,15 @@ begin
             end;
             ASTIVal[mcallNode] := mpi;
             ASTTk[mcallNode] := Ord(Procs[mpi].RetType);
-            
+
             mselfArg := AllocNode(AN_ARG);
             ASTLeft[mselfArg] := node;
             ASTLeft[mcallNode] := mselfArg;
-            
+
             margSeq := AllocNode(AN_ARG);
             ASTLeft[margSeq] := CurASTNode;
             ASTRight[mselfArg] := margSeq;
-            
+
             node := mcallNode;
             Result := node; Exit;
           end
@@ -1082,7 +1083,7 @@ begin
             mmi := FindUMeth(mci, methName);
             if mmi < 0 then Error('getter method not found: ' + methName);
             mpi := UMthProc_[mmi];
-            
+
             Next; { consume property name }
             if UMthVirSlot[mmi] >= 0 then
             begin
@@ -1095,11 +1096,11 @@ begin
             end;
             ASTIVal[mcallNode] := mpi;
             ASTTk[mcallNode] := Ord(Procs[mpi].RetType);
-            
+
             mselfArg := AllocNode(AN_ARG);
             ASTLeft[mselfArg] := node;
             ASTLeft[mcallNode] := mselfArg;
-            
+
             node := mcallNode;
             Result := node; Exit;
           end
@@ -1219,12 +1220,12 @@ var node, argNode, lastArg, loVal, hiVal, itemNode: Integer; done: Boolean;
 begin
   node := AllocNode(AN_CALL);
   ASTIVal[node] := -SPECIAL_IN;
-  
+
   argNode := AllocNode(AN_ARG);
   ASTLeft[argNode] := leftExpr;
   ASTLeft[node] := argNode;
   lastArg := argNode;
-  
+
   Expect(tkLBrack, '[');
   if CurTok.Kind <> tkRBrack then
   begin
@@ -1246,12 +1247,12 @@ begin
         itemNode := AllocNode(AN_INT_LIT);
         ASTIVal[itemNode] := loVal;
       end;
-      
+
       argNode := AllocNode(AN_ARG);
       ASTLeft[argNode] := itemNode;
       ASTRight[lastArg] := argNode;
       lastArg := argNode;
-      
+
       if not Eat(tkComma) then done := True;
     end;
   end;
@@ -1266,7 +1267,7 @@ begin
   ASTTk[node] := Ord(tySet);
   ASTLeft[node] := -1;
   lastArg := -1;
-  
+
   Expect(tkLBrack, '[');
   if CurTok.Kind <> tkRBrack then
   begin
@@ -1288,17 +1289,17 @@ begin
         itemNode := AllocNode(AN_INT_LIT);
         ASTIVal[itemNode] := loVal;
       end;
-      
+
       argNode := AllocNode(AN_ARG);
       ASTLeft[argNode] := itemNode;
       ASTRight[argNode] := -1;
-      
+
       if lastArg = -1 then
         ASTLeft[node] := argNode
       else
         ASTRight[lastArg] := argNode;
       lastArg := argNode;
-      
+
       if not Eat(tkComma) then done := True;
     end;
   end;
@@ -1372,11 +1373,11 @@ begin
       end;
     end;
   end;
-  
+
   curTk := Syms[idx].TypeKind;
   curRec := Syms[idx].RecName;
   isArr := Syms[idx].IsArray;
-  
+
   while CurTok.Kind in [tkLBrack, tkDot] do
   begin
     if CurTok.Kind = tkLBrack then
@@ -1385,7 +1386,7 @@ begin
       EmitB($50); { push rax -- base address }
       ParseExpr; { rax = index }
       Expect(tkRBrack, ']');
-      
+
       if isArr then
       begin
         if curTk = tyString then
@@ -1402,7 +1403,7 @@ begin
         end
         else
           elemSize := TypeSize(curTk);
-        
+
         if elemSize = 8 then
         begin
           EmitB($48); EmitB($C1); EmitB($E0); EmitB($03); { shl rax, 3 }
@@ -1412,18 +1413,18 @@ begin
           EmitB($48); EmitB($C7); EmitB($C1); EmitI32(elemSize); { mov rcx, elemSize }
           EmitB($48); EmitB($0F); EmitB($AF); EmitB($C1); { imul rax, rcx }
         end;
-        
+
         if curRec = REC_TPARAM then lo := 0
         else lo := Syms[idx].ConstVal;
-        
+
         if lo <> 0 then
         begin
           EmitB($48); EmitB($2D); EmitI32(lo * elemSize); { sub rax, lo*elemSize }
         end;
-        
+
         EmitB($59); { pop rcx -- base address }
         EmitB($48); EmitB($01); EmitB($C8); { add rax, rcx }
-        
+
         isArr := False;
         if curRec = REC_TPARAM then
         begin
@@ -1443,7 +1444,7 @@ begin
         EmitB($48); EmitB($05); EmitI32(7);
         EmitB($59); { pop rcx -- base address }
         EmitB($48); EmitB($01); EmitB($C8); { add rax, rcx }
-        
+
         curTk := tyChar;
         curRec := REC_NONE;
       end
@@ -1457,9 +1458,9 @@ begin
       if DebugTrace then writeln('Dot selector: curRec = ', curRec, ', field = ', CurTok.SVal);
       offset := RecFieldOffset(curRec, CurTok.SVal);
       EmitB($48); EmitB($05); EmitI32(offset); { add rax, offset }
-      
+
       isArr := RecFieldIsArray(curRec, CurTok.SVal);
-      
+
       curTk := RecFieldType(curRec, CurTok.SVal);
       curRec := RecFieldRecId(curRec, CurTok.SVal);
       Next;
@@ -1496,10 +1497,10 @@ begin
     ErrorIdent := name;
     Error('undefined variable');
   end;
-  
+
   Next; { consume identifier }
   isComplex := CurTok.Kind in [tkLBrack, tkDot];
-  
+
   if not isComplex then
   begin
     Expect(tkAssign, ':=');
@@ -1559,7 +1560,7 @@ begin
     CompileLValueAddressInternal(idx, tk, recName);
     EmitB($50); { push rax -- destination address }
     Expect(tkAssign, ':=');
-    
+
     if tk = tyString then
     begin
       if CurTok.Kind = tkString then
@@ -1761,6 +1762,9 @@ var name: AnsiString; recName: Integer; idx, pi, i, node, left, prevTok, valNode
     ci, mmi, mpi, mcallNode, mlastArg, smSelfIdx, smselfArg: Integer;
     aliasIdx, fieldNode, indexNode, baseNode, baseRec, fIdx, mci, margSeq, margIdx, mexprNode, mai, pri, qUnit: Integer;
     fieldName, methName: AnsiString; isAssign: Boolean; castTk: TTypeKind;
+    liftedVar, identNode, addrNode: Integer;
+    helperPi, wrapperArg, wrapperCall: Integer;
+    isLiftedCall, isCStringCall: Boolean;
 begin
   LastExprTk := tyInteger;
   case CurTok.Kind of
@@ -1927,13 +1931,13 @@ begin
       valNode := ParseLValueAST(idx, TokPos - 2);
       if (idx < 0) or (Syms[idx].TypeKind <> tyString) then Error('SysOpen: not a string var');
       Expect(tkComma, ',');
-      
+
       argSeq := AllocNode(AN_ARG); ASTLeft[argSeq] := valNode;
       ParseExpr;
       argSeq2 := AllocNode(AN_ARG); ASTLeft[argSeq2] := CurASTNode;
       ASTRight[argSeq] := argSeq2;
       Expect(tkRParen, ')');
-      
+
       node := AllocNode(AN_CALL); ASTIVal[node] := -Ord(tkSysOpen);
       ASTLeft[node] := argSeq;
       CurASTNode := node;
@@ -1949,14 +1953,14 @@ begin
       valNode := ParseLValueAST(idx, TokPos - 2);
       if (idx < 0) or not Syms[idx].IsArray then Error('SysRead: not an array var');
       Expect(tkComma, ',');
-      
+
       argSeq2 := AllocNode(AN_ARG); ASTLeft[argSeq2] := valNode;
       ASTRight[argSeq] := argSeq2;
       ParseExpr;
       argSeq3 := AllocNode(AN_ARG); ASTLeft[argSeq3] := CurASTNode;
       ASTRight[argSeq2] := argSeq3;
       Expect(tkRParen, ')');
-      
+
       node := AllocNode(AN_CALL); ASTIVal[node] := -Ord(tkSysRead);
       ASTLeft[node] := argSeq;
       CurASTNode := node;
@@ -1972,14 +1976,14 @@ begin
       valNode := ParseLValueAST(idx, TokPos - 2);
       if (idx < 0) or not Syms[idx].IsArray then Error('Syswrite: not an array var');
       Expect(tkComma, ',');
-      
+
       argSeq2 := AllocNode(AN_ARG); ASTLeft[argSeq2] := valNode;
       ASTRight[argSeq] := argSeq2;
       ParseExpr;
       argSeq3 := AllocNode(AN_ARG); ASTLeft[argSeq3] := CurASTNode;
       ASTRight[argSeq2] := argSeq3;
       Expect(tkRParen, ')');
-      
+
       node := AllocNode(AN_CALL); ASTIVal[node] := -Ord(tkSyswrite);
       ASTLeft[node] := argSeq;
       CurASTNode := node;
@@ -2344,7 +2348,7 @@ begin
         Next; { Eat class name }
         Next; { Eat dot }
         Next; { Eat 'Create' }
-        
+
         argsHead := -1;
         lastArg := -1;
         if CurTok.Kind = tkLParen then
@@ -2367,7 +2371,7 @@ begin
           end;
           Expect(tkRParen, ')');
         end;
-        
+
         idx := IsRecordType(name);
         if idx = REC_NONE then
         begin
@@ -2376,26 +2380,26 @@ begin
             idx := REC_UCLASS_BASE + ci;
         end;
         prevTok := RecSize(idx);
-        
+
         { Construct GetMem(sz) AST node }
         node := AllocNode(AN_CALL);
         ASTIVal[node] := -Ord(tkGetMem);
         ASTTk[node] := Ord(tyClass);
         ASTRight[node] := idx; { preserve created user-class id }
-        
+
         exprNode := AllocNode(AN_INT_LIT);
         ASTIVal[exprNode] := prevTok;
         ASTTk[exprNode] := Ord(tyInteger);
-        
+
         { The first argument to the GetMem call is the size }
         szArg := AllocNode(AN_ARG);
         ASTLeft[szArg] := exprNode;
         ASTLeft[node] := szArg;
-        
+
         { The rest of the arguments are constructor arguments! }
         if argsHead <> -1 then
           ASTRight[szArg] := argsHead;
-        
+
         CurASTNode := node;
         Exit;
       end;
@@ -2489,6 +2493,67 @@ begin
         if pi < 0 then
           Error('no overload of ' + name + ' matches these arguments');
 
+        isLiftedCall := (pi >= 0) and (Procs[pi].ParamCount > nArgs) and
+                        (ProcParamPtrDepth[pi * 16 + nArgs] = 2);
+
+        if isLiftedCall then
+        begin
+          liftedVar := AllocVar('', tyPointer);
+          identNode := AllocNode(AN_IDENT);
+          ASTIVal[identNode] := liftedVar;
+          ASTTk[identNode] := Ord(tyPointer);
+
+          addrNode := AllocNode(AN_ADDR);
+          ASTLeft[addrNode] := identNode;
+          ASTTk[addrNode] := Ord(tyPointer);
+
+          argSeq := AllocNode(AN_ARG);
+          ASTLeft[argSeq] := addrNode;
+
+          if argsHead = -1 then
+          begin
+            argsHead := argSeq;
+            lastArg := argSeq;
+          end
+          else
+          begin
+            ASTRight[lastArg] := argSeq;
+            lastArg := argSeq;
+          end;
+
+          argTypes[nArgs] := tyPointer;
+          Inc(nArgs);
+
+          while nArgs < Procs[pi].ParamCount do
+          begin
+            addrNode := AllocNode(AN_INT_LIT);
+            ASTIVal[addrNode] := 0;
+            ASTTk[addrNode] := Ord(tyPointer);
+
+            argSeq := AllocNode(AN_ARG);
+            ASTLeft[argSeq] := addrNode;
+
+            if argsHead = -1 then
+            begin
+              argsHead := argSeq;
+              lastArg := argSeq;
+            end
+            else
+            begin
+              ASTRight[lastArg] := argSeq;
+              lastArg := argSeq;
+            end;
+
+            argTypes[nArgs] := tyPointer;
+            Inc(nArgs);
+          end;
+        end;
+
+        isCStringCall := PyExprMode and (Procs[pi].RetType = tyPointer) and
+                         ((ProcRetPtrElemTk[pi] = Ord(tyChar)) or
+                          (ProcRetPtrElemTk[pi] = Ord(tyUInt8)) or
+                          (ProcRetPtrElemTk[pi] = Ord(tyInt8)));
+
         currArg := argsHead;
         for i := 0 to nArgs - 1 do
         begin
@@ -2520,7 +2585,36 @@ begin
         ASTIVal[node] := pi;
         ASTTk[node] := Ord(Procs[pi].RetType);
         ASTLeft[node] := argsHead;
-        ApplyCallResultPtrSuffix(node, pi);  { f(...)^ / ^.field / [i] }
+        if isLiftedCall then
+        begin
+          ASTLiftedVar[node] := liftedVar;
+          ASTTk[node] := Ord(tyPointer);
+        end;
+
+        if isCStringCall then
+        begin
+          helperPi := FindProc('PCharToString');
+          if helperPi < 0 then Error('builtin: PCharToString not found in Nil Python mode');
+          wrapperArg := AllocNode(AN_ARG);
+          ASTLeft[wrapperArg] := node;
+          wrapperCall := AllocNode(AN_CALL);
+          ASTIVal[wrapperCall] := helperPi;
+          ASTTk[wrapperCall] := Ord(tyString);
+          ASTLeft[wrapperCall] := wrapperArg;
+          node := wrapperCall;
+
+          CurASTNode := node;
+          LastExprTk := tyString;
+        end
+        else
+        begin
+          ApplyCallResultPtrSuffix(node, pi);  { f(...)^ / ^.field / [i] }
+          if isLiftedCall then
+          begin
+            CurASTNode := node;
+            LastExprTk := tyPointer;
+          end;
+        end;
         Exit;
       end
       else if (pi >= 0) and Procs[pi].IsFunc and (Procs[pi].ParamCount = 0) then
@@ -2789,7 +2883,7 @@ begin
   elseNode := -1;
   if Eat(tkElse) then
     elseNode := ParseStatementAST;
-  
+
   node := AllocNode(AN_IF);
   ASTLeft[node] := condNode;
   pairNode := AllocNode(AN_PAIR);
@@ -2828,26 +2922,26 @@ begin
   ParseExpr; limitNode := CurASTNode;
   Expect(tkDo, 'do');
   bodyNode := ParseStatementAST;
-  
+
   node := AllocNode(AN_FOR);
   ASTLeft[node] := AllocNode(AN_IDENT);
   ASTIVal[ASTLeft[node]] := varIdx;
-  
+
   pair1 := AllocNode(AN_PAIR);
   ASTLeft[pair1] := initNode;
   ASTRight[pair1] := limitNode;
-  
+
   isDownNode := AllocNode(AN_INT_LIT);
   if down then ASTIVal[isDownNode] := 1 else ASTIVal[isDownNode] := 0;
-  
+
   pair2 := AllocNode(AN_PAIR);
   ASTLeft[pair2] := isDownNode;
   ASTRight[pair2] := bodyNode;
-  
+
   pair3 := AllocNode(AN_PAIR);
   ASTLeft[pair3] := pair1;
   ASTRight[pair3] := pair2;
-  
+
   ASTRight[node] := pair3;
   Result := node;
 end;
@@ -2888,11 +2982,11 @@ var
 begin
   ParseExpr; condNode := CurASTNode;
   Expect(tkOf, 'of');
-  
+
   branchSeq := AllocNode(AN_SEQ);
   lastBranch := branchSeq;
   hasElse := False;
-  
+
   while (not (CurTok.Kind in [tkEnd, tkEOF])) and not hasElse do
   begin
     if CurTok.Kind = tkElse then
@@ -2901,11 +2995,11 @@ begin
       Next;
       stmtNode := ParseStatementAST;
       Eat(tkSemicolon);
-      
+
       branchPair := AllocNode(AN_PAIR);
       ASTLeft[branchPair] := -1;
       ASTRight[branchPair] := stmtNode;
-      
+
       if ASTLeft[lastBranch] = -1 then
         ASTLeft[lastBranch] := branchPair
       else
@@ -2934,10 +3028,10 @@ begin
         end
         else Error('expected case label');
         Next;
-        
+
         labelValNode := AllocNode(AN_INT_LIT);
         ASTIVal[labelValNode] := cv;
-        
+
         if ASTLeft[lastLabel] = -1 then
           ASTLeft[lastLabel] := labelValNode
         else
@@ -2948,14 +3042,14 @@ begin
         end;
       until not Eat(tkComma);
       Expect(tkColon, ':');
-      
+
       stmtNode := ParseStatementAST;
       Eat(tkSemicolon);
-      
+
       branchPair := AllocNode(AN_PAIR);
       ASTLeft[branchPair] := labelsHead;
       ASTRight[branchPair] := stmtNode;
-      
+
       if ASTLeft[lastBranch] = -1 then
         ASTLeft[lastBranch] := branchPair
       else
@@ -2967,7 +3061,7 @@ begin
     end;
   end;
   Expect(tkEnd, 'end');
-  
+
   node := AllocNode(AN_CASE);
   ASTLeft[node] := condNode;
   ASTRight[node] := branchSeq;
@@ -3189,32 +3283,32 @@ var
 begin
   ParseExpr;
   varNode := CurASTNode;
-  
+
   if Eat(tkComma) then
   begin
     { Push with variable }
     WithStack[WithStackDepth] := varNode;
     Inc(WithStackDepth);
-    
+
     bodyNode := ParseWithStatementAST;
-    
+
     { Pop }
     Dec(WithStackDepth);
   end
   else
   begin
     Expect(tkDo, 'do');
-    
+
     { Push with variable }
     WithStack[WithStackDepth] := varNode;
     Inc(WithStackDepth);
-    
+
     bodyNode := ParseStatementAST;
-    
+
     { Pop }
     Dec(WithStackDepth);
   end;
-  
+
   Result := bodyNode;
 end;
 
@@ -3241,7 +3335,7 @@ begin
       isLn := CurTok.Kind = tkReadln; Next;
       node := ParseReadArgsAST(isLn);
     end;
-    
+
     tkHalt, tkExit:
     begin
       idx := Ord(CurTok.Kind); Next;
@@ -3249,7 +3343,7 @@ begin
         node := AllocNode(AN_HALT)
       else
         node := AllocNode(AN_EXIT);
-      
+
       if CurTok.Kind = tkLParen then
       begin
         Next; ParseExpr; Expect(tkRParen, ')');
@@ -3286,7 +3380,7 @@ begin
       node := AllocNode(AN_RAISE);
       ASTLeft[node] := valNode;
     end;
-    
+
     tkInc, tkDec:
     begin
       idx := Ord(CurTok.Kind); Next;
@@ -3294,7 +3388,7 @@ begin
       if CurTok.Kind <> tkIdent then Error('expected variable');
       argIdx := FindSym(CurTok.SVal); identTokIdx := TokPos - 1; Next;
       if argIdx < 0 then Error('undefined');
-      
+
       if Eat(tkComma) then
       begin
         ParseExpr; stepsNode := CurASTNode;
@@ -3305,13 +3399,13 @@ begin
         ASTIVal[stepsNode] := 1;
       end;
       Expect(tkRParen, ')');
-      
+
       valNode := ParseLValueAST(argIdx, identTokIdx);
       opNode := AllocNode(AN_BINOP);
       if idx = Ord(tkInc) then ASTIVal[opNode] := Ord(tkPlus) else ASTIVal[opNode] := Ord(tkMinus);
       ASTLeft[opNode] := valNode;
       ASTRight[opNode] := stepsNode;
-      
+
       node := AllocNode(AN_ASSIGN);
       ASTLeft[node] := valNode;
       ASTRight[node] := opNode;
@@ -3371,20 +3465,20 @@ begin
       valNode := ParseLValueAST(argIdx, identTokIdx);
       if (argIdx < 0) or not Syms[argIdx].IsArray then Error('Syswrite: not an array var');
       Expect(tkComma, ',');
-      
+
       ASTRight[argSeq] := AllocNode(AN_ARG);
       ASTLeft[ASTRight[argSeq]] := valNode;
-      
+
       ParseExpr;
       ASTRight[ASTRight[argSeq]] := AllocNode(AN_ARG);
       ASTLeft[ASTRight[ASTRight[argSeq]]] := CurASTNode;
       Expect(tkRParen, ')');
-      
+
       node := AllocNode(AN_CALL);
       ASTIVal[node] := -Ord(tkSyswrite);
       ASTLeft[node] := argSeq;
     end;
-    
+
     tkSysClose:
     begin
       Next; Expect(tkLParen, '(');
@@ -3394,7 +3488,7 @@ begin
       argSeq := AllocNode(AN_ARG); ASTLeft[argSeq] := CurASTNode;
       ASTLeft[node] := argSeq;
     end;
-    
+
     tkSysFchmod:
     begin
       Next; Expect(tkLParen, '(');
@@ -3403,12 +3497,12 @@ begin
       ASTRight[argSeq] := AllocNode(AN_ARG);
       ASTLeft[ASTRight[argSeq]] := CurASTNode;
       Expect(tkRParen, ')');
-      
+
       node := AllocNode(AN_CALL);
       ASTIVal[node] := -Ord(tkSysFchmod);
       ASTLeft[node] := argSeq;
     end;
-    
+
     tkArgStr:
     begin
       Next; Expect(tkLParen, '(');
@@ -3418,15 +3512,15 @@ begin
       valNode := ParseLValueAST(argIdx, identTokIdx);
       if (argIdx < 0) or (Syms[argIdx].TypeKind <> tyString) then Error('ArgStr: not a string var');
       Expect(tkRParen, ')');
-      
+
       ASTRight[argSeq] := AllocNode(AN_ARG);
       ASTLeft[ASTRight[argSeq]] := valNode;
-      
+
       node := AllocNode(AN_CALL);
       ASTIVal[node] := -Ord(tkArgStr);
       ASTLeft[node] := argSeq;
     end;
-    
+
     tkIf:     begin Next; node := ParseIfStatementAST;    end;
     tkWhile:  begin Next; node := ParseWhileStatementAST; end;
     tkFor:    begin Next; node := ParseForStatementAST;   end;
@@ -3435,14 +3529,14 @@ begin
     tkTry:    begin Next; node := ParseTryStatementAST; end;
     tkWith:   begin Next; node := ParseWithStatementAST;  end;
     tkAsm:    begin Next; node := ParseAsmStatementAST;   end;
-    
+
     tkBegin:
     begin
       Next;
       node := ParseBlockAST;
       Expect(tkEnd, 'end');
     end;
-    
+
     tkIdent:
     begin
       name := CurTok.SVal;
@@ -3466,16 +3560,16 @@ begin
         idx := FindSym(CurTok.SVal); identTokIdx := TokPos - 1; Next;
         valNode := ParseLValueAST(idx, identTokIdx);
         Expect(tkComma, ',');
-        
+
         if CurTok.Kind <> tkIdent then Error('LoadFile: expected destination');
         si := FindSym(CurTok.SVal); identTokIdx := TokPos - 1; Next;
         stepsNode := ParseLValueAST(si, identTokIdx);
         Expect(tkRParen, ')');
-        
+
         argSeq := AllocNode(AN_ARG); ASTLeft[argSeq] := valNode;
         ASTRight[argSeq] := AllocNode(AN_ARG);
         ASTLeft[ASTRight[argSeq]] := stepsNode;
-        
+
         node := AllocNode(AN_CALL);
         ASTIVal[node] := -100;
         ASTLeft[node] := argSeq;
@@ -3839,7 +3933,7 @@ begin
         end;
       end;
     end;
-    
+
     tkSemicolon, tkEnd, tkElse, tkUntil, tkEOF: ;
     else
     begin
@@ -4207,10 +4301,10 @@ begin
           Next;
           Expect(tkRParen, ')');
         end;
-        
+
         ci := AddUClass(tnOff, tnLen);
         UClsParent[ci] := parentCi;
-        
+
         curFieldOff := 0;
         classAlign := 1;
         if parentCi >= 0 then
@@ -4265,13 +4359,13 @@ begin
             end
             else
               Next;
-            
+
             if CurTok.Kind <> tkIdent then Error('expected method name');
             mname := CurTok.SVal;
             mnOff := Tokens[TokPos-1].SOffset;
             mnLen := Tokens[TokPos-1].SLen;
             Next;
-            
+
             mNParams := 0;
             mRetType := tyInteger;
             if CurTok.Kind = tkLParen then
@@ -4379,12 +4473,12 @@ begin
               Next;
               Eat(tkSemicolon);
             end;
-            
+
             AddUMeth(ci, mnOff, mnLen, mpi);
             mmi := UMthCount - 1;
             UMthIsStatic[mmi] := isClassMethod;
             UMthPub[mmi] := curPublished;
-            
+
             if isVirtual then
             begin
               slot := UClsVirtCount[ci];
@@ -4417,7 +4511,7 @@ begin
             rMOff := 0; rMLen := 0;
             wFOff := 0; wFLen := 0;
             wMOff := 0; wMLen := 0;
-            
+
             if CurTok.Kind = tkRead then
             begin
               Next;
@@ -4435,7 +4529,7 @@ begin
                 rMOff := rnOff; rMLen := rnLen;
               end;
             end;
-            
+
             if CurTok.Kind = tkwrite then
             begin
               Next;
@@ -4453,7 +4547,7 @@ begin
                 wMOff := wnOff; wMLen := wnLen;
               end;
             end;
-            
+
             Eat(tkSemicolon);
             i := AddUProperty(ci, pnOff, pnLen, Ord(propTk), propRec);
             UPropReadFOff[i] := rFOff; UPropReadFLen[i] := rFLen;
@@ -5057,10 +5151,10 @@ begin
       AddUMeth(methOwnerCi, methSNOff, methSNLen, pi);
       mmi := UMthCount - 1;
     end;
-    
+
     if not UMthIsStatic[mmi] then
       CurSelfClass := methOwnerRec;
-    
+
     if UMthVirSlot[mmi] >= 0 then
     begin
       slot := UMthVirSlot[mmi];
@@ -5068,7 +5162,7 @@ begin
       MethodFixups[MethodFixCount].DataPos := UClsVMTOffset[methOwnerCi] + slot * 8;
       MethodFixups[MethodFixCount].ProcIdx := pi;
       Inc(MethodFixCount);
-      
+
       for otherCi := 0 to UClsCount-1 do
       begin
         if IsSubclassOf(otherCi, methOwnerCi) then
