@@ -128,13 +128,17 @@ The C capability is useful but intentionally incomplete:
   is not already a pointer).
 - **C structs** (`typedef struct { ... } Name;`) with a body are laid out as
   real records with C natural alignment: scalar fields, pointer fields, fixed
-  arrays, nested struct-by-value, and unions are supported. Not yet: bitfields
-  and inline anonymous struct/union *definitions* (skipped, not laid out), and
-  self-referential structs via the bare tag (`struct Node *next;` inside `Node`)
-  resolve the inner pointer as opaque. C structs share the small
-  `MAX_UCLASS`/`MAX_UFIELD` record tables with Pascal, so once headroom runs low
-  (a macro-soup header such as GTK) struct bodies fall back to opaque pointers;
-  raising those limits is future work.
+  arrays, nested struct-by-value, and top-level unions are supported. Bodies
+  using a construct that cannot be laid out correctly — bitfields, nested or
+  anonymous struct/union definitions, or `struct`/`union`/`enum`-tag-typed
+  fields — **fall back to an opaque pointer for that struct** (never a
+  silently-wrong layout); sibling POD structs in the same header are
+  unaffected. Self-referential structs via the bare tag (`struct Node *next;`)
+  are one such opaque case. The `MAX_UCLASS`/`MAX_UFIELD` record tables
+  (shared with Pascal) are large enough for ordinary headers; an extreme
+  macro-soup header (GTK, thousands of structs) still falls back to opaque once
+  they fill, and `FindUClass` is a linear scan, so very large headers parse in
+  super-linear time (index it later if needed).
 - **Typed pointers carry their element type** (depth 1): `T*` knows the
   pointed-at type for deref/index/field, and a pointer typedef becomes a typed
   Pascal pointer. Depth ≥ 2 (`T**`) records only that it is a pointer-to-pointer.
