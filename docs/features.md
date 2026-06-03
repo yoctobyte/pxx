@@ -97,11 +97,19 @@ import sqlite3
 print(sqlite3_libversion_number())
 ```
 
-For a pointer-heavy API, a thin Pascal binding unit holds the pointers and
-exposes string/integer calls that `.npy` imports — see
-`lib/rtl/sqlitedb.pas` and `test/test_nilpy_sqlite_crud.npy` (full SQLite CRUD
-from Nil Python), and the plan in
-[`handover-nilpy-c-binding-2026-06-02.md`](handover-nilpy-c-binding-2026-06-02.md).
+Nil Python can also call a C header directly. The SQLite CRUD regression imports
+`sqlite3`, opens a database with lifted `sqlite3_open`, prepares a statement with
+lifted `sqlite3_prepare_v2`, and copies returned `char*` text into managed
+strings:
+
+```python
+import sqlite3
+db = sqlite3_open("/tmp/test_nilpy_sqlite_crud.db")
+stmt = sqlite3_prepare_v2(db, "SELECT id, name FROM t ORDER BY id;", -1)
+```
+
+Thin Pascal binding units such as `lib/rtl/sqlitedb.pas` remain optional
+ergonomic facades, not a requirement.
 
 For the precise unit search order and supported C preprocessor subset, see
 [C Interoperability](../C_INTEROP.md).

@@ -90,16 +90,11 @@ supports callbacks via `@proc`, and emits SysV AMD64 integer, floating-point,
 variadic-vector-count, and stack-spill call ABI behavior.
 
 SQLite is now driven end-to-end from Pascal (open/exec/prepare/step/columns)
-and from Nil Python through a Pascal binding (`lib/rtl/sqlitedb.pas`, proven by
+and directly from Nil Python through `import sqlite3` (proven by
 `test/test_nilpy_sqlite_crud.npy`); `const char*` marshalling (`PChar()`),
-function-pointer params (→ `Pointer`), the `import` statement, and Python
-`print` arg spacing landed 2026-06-02. Remaining work is two bounded tasks in
-[`handover-nilpy-c-binding-2026-06-02.md`](handover-nilpy-c-binding-2026-06-02.md):
-Phase A callee-return inference, and auto `string`→`const char*` at the call
-site. **Out-parameter auto-address-of is a documented non-goal** — it would
-force pointer depth into the type model and is the one irreducibly un-Pythonic
-construct; the design decision is that the binding owns the pointer-shaped ~5%
-(out-params, callbacks) and everything else is auto.
+callee-return inference, auto `string`→`const char*`, strict trailing `T**`
+out-param return-lifting, and returned `char*`→managed-string copying are done.
+`lib/rtl/sqlitedb.pas` is now an optional facade, not required interop.
 
 Possible breadth improvements, only when a concrete library requires them:
 

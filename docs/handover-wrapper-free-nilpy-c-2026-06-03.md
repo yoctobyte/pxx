@@ -27,14 +27,27 @@ with **no hand-written Pascal wrapper unit**. Wrappers become *optional* sugar.
   pointer depth, struct field access, struct tags, `#define` int consts,
   auto `string`→`const char*`, function-return pointer-element typing.
 
-## Remaining pieces (each independent; do in this order)
+## Delivered closure
+
+Completed 2026-06-03 in `2b438a3`:
+
+- Nil Python calls trailing depth-2 C out-params through return-lifting. The
+  lifted expression returns the handle and drops the C integer status return.
+- C `char*` returns used from Nil Python are copied into managed strings through
+  the builtin `PCharToString` helper.
+- `test/test_nilpy_sqlite_crud.npy` imports `sqlite3` directly and performs full
+  CRUD with no `import sqlitedb`.
+- `lib/rtl/sqlitedb.pas` is an optional pointer-free facade, not required for
+  wrapper-free interop.
+
+## Original remaining pieces (now closed)
 
 ### A. nilpy call with >4 arguments — **CLEARED (not a blocker)**
 Verified 2026-06-03: `x = sqlite3_exec(0, "x", 0, 0, 0)` (5 args) compiles from
 nilpy — the external-call path already spills args 5+. The 4-param cap is only on
 `def` (defining nilpy routines), not on calls. Nothing to do here.
 
-### B. Out-param handle: pick the ergonomic, then auto-`&`
+### B. Out-param handle: pick the ergonomic, then auto-`&` — DONE
 `int sqlite3_open(const char*, sqlite3**)` — the handle comes back through a
 `sqlite3**` out-param. nilpy has no `&` and no `nil`. Two options:
 
@@ -51,14 +64,14 @@ nilpy — the external-call path already spills args 5+. The 4-param cap is only
 with depth 2 and the arg is a pointer-typed local, wrap the arg in `AN_ADDR`
 (LEA of the local's stack slot) instead of loading its value.
 
-### C. Inbound `char*` → managed string
+### C. Inbound `char*` → managed string — DONE
 When a C function returns `char*` (e.g. `sqlite3_column_text`) and the nilpy
 context wants a string, emit the copy loop (index the `PChar` to NUL into a fresh
 managed string) at the call site — the mirror of the existing outbound
 `string`→`const char*` auto-marshal. **Copy, per the ownership rule** (sqlite owns
 the original and invalidates it on the next step).
 
-### D. Proof
+### D. Proof — DONE
 Rewrite `test/test_nilpy_sqlite_crud.npy` to `import sqlite3` directly —
 open/exec/prepare/step/`column_int`/`column_text` — with **no** `import sqlitedb`.
 When green, `lib/rtl/sqlitedb.pas` is demoted to an *optional example*, not a

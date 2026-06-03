@@ -7,6 +7,13 @@ risk and out-param auto-address marked a **non-goal** (see "Plan forward").
 **Prereqs landed this session:** commits `104dfff`, `cd01ef4`, `7d3a6f6`,
 `2ed0dd8`, `ce059af` (see below)
 
+> Superseded note, 2026-06-03: this handover records the earlier binding-first
+> plan. The wrapper-free path is now delivered in
+> [`handover-wrapper-free-nilpy-c-2026-06-03.md`](handover-wrapper-free-nilpy-c-2026-06-03.md):
+> Nil Python imports `sqlite3` directly, uses strict trailing `T**`
+> return-lifting, and copies returned `char*` values into managed strings.
+> `lib/rtl/sqlitedb.pas` remains only an optional facade.
+
 ## TL;DR for the next agent
 
 Step 1 (Pascal binding + `.npy` CRUD), **Phase A**, and **auto

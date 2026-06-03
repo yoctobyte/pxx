@@ -159,9 +159,10 @@ The C capability is useful but intentionally incomplete:
   error), `for` range step must be 1, and parameter/result type annotations are
   required. Locals are inferred, including from a callee's return type
   (`rc = db_open(path)` types `rc` from the binding's `-> Integer`).
-- C libraries with pointer-heavy APIs are consumed through a Pascal binding
-  unit (e.g. `lib/rtl/sqlitedb.pas`), not called raw, because `.npy` has no
-  pointer/address-of surface. This is the intended design, not a temporary gap.
+- Nil Python has no source-level pointer/address-of syntax. Imported C handles
+  can still be held and passed, and strict trailing `T**` out-params can be
+  return-lifted by the compiler. Pascal wrappers remain optional ergonomic
+  facades for APIs that want a smaller native surface.
 
 ## BASIC And Further Languages
 

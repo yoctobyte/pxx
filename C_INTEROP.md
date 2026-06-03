@@ -104,12 +104,20 @@ and links the shared object exactly as a Pascal `uses sqlite3` clause.
   collapse to an untyped `Pointer`, so `nil` (or a `@`-wrapped local routine)
   can be passed. The declarator and its argument list are skipped during
   import; the pointed-to signature is not yet modelled.
+- **Nil Python out-param return lifting.** For imported C calls in Nil Python,
+  a trailing depth-2 pointer parameter (`T**`) may be omitted. The compiler
+  allocates a hidden `T*` local, passes its address, and makes the call
+  expression yield that handle. This is intentionally strict: depth-1 `T*`
+  remains a normal pointer argument so buffers and handles are not confused.
+  The C integer status return is dropped in the lifted expression form.
+- **Returned C strings in Nil Python.** A C `char*` return used from Nil Python
+  is copied into a managed string at the call site. The original memory remains
+  foreign-owned.
 
-A pointer-free, nilpy-native facade over a pointer-heavy C API (handles, out
-parameters, `char**`) belongs in a thin Pascal binding unit that `uses` the C
-header and exposes string/integer calls — only Pascal is fluent in both the C
-ABI and the managed-string runtime. See
-[`docs/handover-nilpy-c-binding-2026-06-02.md`](docs/handover-nilpy-c-binding-2026-06-02.md).
+Pascal binding units remain useful as optional ergonomic facades over
+pointer-heavy APIs, but they are not required for Nil Python to consume a C
+header directly. See
+[`docs/handover-wrapper-free-nilpy-c-2026-06-03.md`](docs/handover-wrapper-free-nilpy-c-2026-06-03.md).
 
 ## C Preprocessor Support
 
@@ -143,10 +151,10 @@ frontend. It handles function prototypes with integer, character-like,
 floating-point, and pointer (including opaque-handle and function-pointer)
 arguments and return values, and drives a real library end-to-end — see the
 SQLite round-trip below. It tolerates unsupported declarations in system
-headers so that usable prototypes are still found. Not yet modelled: C struct
-field layout (opaque pointers preferred), pointer depth (`*` vs `**` collapse
-to one `Pointer`, so out-parameters are indistinguishable from handles),
-variadic functions, and full callback signatures.
+headers so that usable prototypes are still found. Still shallow or incomplete:
+general depth >= 2 pointer modelling beyond the strict Nil Python trailing
+out-param lift, struct-by-value ABI coverage, variadic functions, and full
+callback signatures.
 
 ### Suggested: lazy casing for C imports
 
@@ -183,3 +191,7 @@ definitions, active conditional branches, expansions):
   TEXT column (`sqlite3_column_text` + `PChar` indexing).
 - `test/test_nilpy_import_sqlite.npy` (under `make test-nilpy`) — Nil Python
   `import sqlite3` then `sqlite3_libversion_number()` → `3045001`.
+- `test/test_nilpy_sqlite_crud.npy` (under `make test-nilpy`) — Nil Python
+  imports `sqlite3` directly, opens a handle via lifted `sqlite3_open`, prepares
+  a statement via lifted `sqlite3_prepare_v2`, and reads `column_text` through a
+  copied managed string. No Pascal wrapper is required.

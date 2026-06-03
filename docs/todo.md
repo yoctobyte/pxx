@@ -170,26 +170,25 @@ digest. That is the hard part — not a reason to drop the goal.
 
 ---
 
-## 2c-bis. Nil Python ↔ C libraries  🟡  (active; plan + decisions in handover)
+## 2c-bis. Nil Python ↔ C libraries  ✅  (wrapper-free SQLite path landed)
 
-Full plan: **[`handover-nilpy-c-binding-2026-06-02.md`](handover-nilpy-c-binding-2026-06-02.md)**.
+Delivered path: **[`handover-wrapper-free-nilpy-c-2026-06-03.md`](handover-wrapper-free-nilpy-c-2026-06-03.md)**.
 
 - ✅ `import name` routes to the unit/C-header resolver; `.npy` imports C
-  headers and drives full SQLite CRUD via the pointer-free Pascal binding
-  `lib/rtl/sqlitedb.pas`. `PChar()` `const char*` marshalling, fn-ptr params →
-  `Pointer`, NUL-terminated literals, space-separated `print` all landed.
-- ⬜ **Phase A — callee-return inference** (clean, ~15 lines): `PyInferExprType`
-  (`pyparser.inc` ~238) should consult `FindProc(name).RetType` for a
-  `name(...)` RHS so `rc = db_open(...)` needs no annotation.
-- ⬜ **Auto `string`→`const char*` at the call site** (clean, no type-model
-  change): fire the existing `PChar` adapter when a pointer param meets a string
-  arg. Drops `PChar()` boilerplate.
-- 🟡 optional: `char*` return → managed `string` auto-wrap (needs a target
-  signal + a copy, since sqlite owns `column_text`).
-- 🚫 **NON-GOAL: out-parameter auto-address-of (`&db`).** Forces pointer depth
-  into the type model, hits the `TSymbol` field landmine, irreducibly
-  un-Pythonic. Standing decision: the binding owns the pointer-shaped ~5%
-  (out-params, callbacks); auto everything else.
+  headers and drives full SQLite CRUD directly via `import sqlite3`.
+- ✅ Callee-return inference, typed C pointer returns, auto
+  `string`→`const char*`, integer `#define` constants, function-pointer params
+  → `Pointer`, and NUL-terminated literals all landed.
+- ✅ Strict trailing depth-2 C out-param return-lifting landed for Nil Python:
+  `db = sqlite3_open(path)` and `stmt = sqlite3_prepare_v2(...)` allocate hidden
+  pointer locals and return the handle. The C integer status return is dropped
+  in this lifted expression form.
+- ✅ C `char*` returns used from Nil Python are copied into managed strings.
+- ✅ `lib/rtl/sqlitedb.pas` is now an optional pointer-free facade, not required
+  for direct C use from `.npy`.
+- Remaining C interop gaps are tracked separately: depth >= 2 beyond the strict
+  trailing out-param lift, struct-by-value ABI proof, non-integer `#define`
+  constants, function-like macro edge cases, and variadics.
 
 ---
 

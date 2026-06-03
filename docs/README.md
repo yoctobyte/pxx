@@ -16,6 +16,7 @@ User-facing documents:
 - [Command Line](cli.md) - invoking the compiler, output files, options, and build commands.
 - [Pascal Dialect And Compatibility](pascal-dialect.md) - supported Pascal surface, PXX/FPC identity, and conditional compilation.
 - [Features](features.md) - build baseline, language frontends, native output, and library loading.
+- [Wrapper-Free C From Nil Python](wrapper-free-c-from-nil-python.md) - public overview of the SQLite proof: `.npy` imports `sqlite3` directly, with compiler-lifted out-params and copied C strings instead of handwritten wrappers.
 - [Limitations](limitations.md) - unsupported or only partially supported language, ABI, platform, and tooling areas.
 - [Inline Assembler](inline-asm.md) - x86-64 inline asm support, supported instruction set, variable passing, limitations, and TODO.
 - [GUI (GTK3 + LFM streaming)](gui.md) - LCL-compatible widgetset on GTK3, of-object events, and `.lfm`-streamed component trees.
@@ -26,8 +27,8 @@ User-facing documents:
 - [Project State Audit](project-state.md) - dated compact inventory of verified support, confirmed bugs, missing Pascal features, design debt, and the latest benchmark snapshot.
 - [Handover: Next Compiler Work](handover-next-work.md) - resume checklist after the set / inherited / shl batch, with dependency-ordered next tasks and deferred arcs.
 - [Handover: Resume Python-Ready Variant Work](handover-sis-ai-2026-06-02.md) - current resume brief after managed-string Variant support and Pascal runtime gating.
-- [Handover: Nil Python ↔ C Binding And Inference](handover-nilpy-c-binding-2026-06-02.md) - phased plan to let `.npy` consume C libraries (SQLite proven), via a Pascal binding now and signature-directed type inference next.
-- [Handover: Wrapper-Free Nil Python ↔ C](handover-wrapper-free-nilpy-c-2026-06-03.md) - the next arc: `.npy` calls a C library directly (no Pascal wrapper). Foundation done (handles held/passed, typed C model complete); remaining = out-param handle ergonomics + inbound `char*`→string copy.
+- [Handover: Nil Python ↔ C Binding And Inference](handover-nilpy-c-binding-2026-06-02.md) - historical binding-first plan, superseded by the wrapper-free SQLite path.
+- [Handover: Wrapper-Free Nil Python ↔ C](handover-wrapper-free-nilpy-c-2026-06-03.md) - delivered arc: `.npy` calls a C library directly (no required Pascal wrapper). SQLite CRUD now imports `sqlite3` directly, uses lifted `T**` out-params, and copies returned `char*` values into managed strings.
 - [Anomaly: non-reproducible miscompile (2026-06-02)](anomaly_2026-06-02_2000.md) - forensic record of a one-off, self-cleared, deterministic-toolchain miscompile; suspected hardware bit flip. Evidence in [`anomaly-evidence-2026-06-02/`](anomaly-evidence-2026-06-02/).
 
 Navigation:

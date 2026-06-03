@@ -1,12 +1,10 @@
 unit sqlitedb;
 
-{ Pointer-free SQLite facade for pointer-less frontends (Nil Python).
+{ Optional pointer-free SQLite facade.
 
-  Why this lives in Pascal and not C: the facade's job is translating between
-  the C ABI and PXX-native types. Only Pascal is fluent in both — it speaks the
-  C pointer ABI (via the imported sqlite3 header) AND can manufacture a managed
-  `string` for return values (db_col_str), which a C binding cannot. Pascal
-  callers do not need this unit; they call the raw header directly.
+  Nil Python and Pascal can call the imported sqlite3 header directly. This unit
+  remains useful as a small ergonomic wrapper for callers that prefer a
+  pointer-free API, but it is not required for C interop.
 
   v1 keeps the connection and the active statement in module globals, so a
   caller never holds a pointer-shaped value. Single connection, single active

@@ -154,17 +154,16 @@ runtime dependencies.
   to `Pointer` (were leaking the base `int`), `PChar()` marshals a Pascal string
   to a `const char*` (literal interner now NUL-terminates), and `PChar` is a
   usable/indexable pointer type. Regression `test/test_sqlite_crud.pas`.
-- Limit to know for FFI inference: the importer collapses all pointer depth
-  (`*` and `**` → one `Pointer`), so out-parameters cannot be distinguished
-  from opaque handles. This is why pointer-heavy APIs are wrapped (see Nil
-  Python below); deepening it is a documented non-goal — see
-  [`garbage-collection-thoughts.md`](garbage-collection-thoughts.md) sibling
-  decision and [`handover-nilpy-c-binding-2026-06-02.md`](handover-nilpy-c-binding-2026-06-02.md).
+- Imported C parameter pointer depth is recorded separately from the Pascal
+  surface type. This supports strict Nil Python trailing `T**` out-param
+  return-lifting while keeping depth-1 `T*` as a normal pointer argument.
 - Nil Python (`.npy`) gained `import name` (2026-06-02), routed to the same
   unit/C-header resolver as Pascal `uses`. It imports C headers directly
-  (`import sqlite3` → `sqlite3_libversion_number()`), and drives full SQLite
-  CRUD through a pointer-free Pascal binding `lib/rtl/sqlitedb.pas` (the binding
-  does the `char*`↔managed-`string` translation that only Pascal can).
+  (`import sqlite3` → `sqlite3_libversion_number()`), and now drives full SQLite
+  CRUD directly from the imported header: lifted `sqlite3_open` /
+  `sqlite3_prepare_v2`, direct `sqlite3_exec` / `step` / `column_int`, and
+  copied `char*`→managed-string for `column_text`. `lib/rtl/sqlitedb.pas` is an
+  optional facade.
   Regressions `test/test_nilpy_import_sqlite.npy`,
   `test/test_nilpy_sqlite_crud.npy`. Python `print` now space-separates args.
 - Automated GUI tests remain separate because they require GTK/display

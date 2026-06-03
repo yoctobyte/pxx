@@ -23,10 +23,16 @@ Focus: Linux / POSIX. Single target for now: x86-64.
 
 - **Tiny output** — Pascal Hello World is 287 bytes. No runtime or stdlib is
   linked in. See the [runtime-gate benchmark](bench/2026-06-02-runtime-gate.md).
-- **Fast** — single in-memory pipeline; no assembler round-trip, no linker invocation.
+- **Fast** — single in-memory pipeline; no assembler round-trip, no linker
+  invocation. See the [compiler-runtime benchmark](bench/2026-06-03-compiler-runtime.md)
+  for FPC-built vs self-hosted compiler runtime.
 - **C + Pascal in one static binary** — `uses my_c_lib;` compiles a local C
   source file and merges it into the output ELF. No linker step, no separate
   `.so`. Pascal and C code share one binary with no external dependencies.
+- **Wrapper-free C from Nil Python** — `.npy` can import `sqlite3` directly and
+  run SQLite CRUD with no Pascal wrapper; the compiler lifts C out-params and
+  copies returned `char*` values. See
+  [Wrapper-Free C From Nil Python](docs/wrapper-free-c-from-nil-python.md).
 - **Self-contained build path** — the compiler writes ELF directly and can
   rebuild itself from the checked-in seed. FPC remains the bootstrap and
   recovery tool.
