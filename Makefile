@@ -15,9 +15,14 @@ VERIFY_COMPILER := /tmp/pascal26-verify
 
 STABLE_DIR := stable
 
-.PHONY: all bootstrap bootstrap-check fpc-check test test-nilpy stabilize check-stable revert benchmark benchmark-compiler-runtime benchmark-check clean distclean
+.PHONY: all bootstrap bootstrap-check fpc-check test test-nilpy stabilize check-stable revert benchmark benchmark-compiler-runtime benchmark-check clean distclean symbols
 
 all: $(COMPILER)
+
+# Regenerate SYMBOLS.md — concise routine index (universal-ctags). Navigation
+# aid for humans and agents; re-run after code changes.
+symbols:
+	./tools/gen-symbols.sh
 
 bootstrap-check:
 	@which $(FPC) > /dev/null 2>&1 || \

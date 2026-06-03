@@ -30,6 +30,10 @@ User-facing documents:
 - [Handover: Wrapper-Free Nil Python ↔ C](handover-wrapper-free-nilpy-c-2026-06-03.md) - the next arc: `.npy` calls a C library directly (no Pascal wrapper). Foundation done (handles held/passed, typed C model complete); remaining = out-param handle ergonomics + inbound `char*`→string copy.
 - [Anomaly: non-reproducible miscompile (2026-06-02)](anomaly_2026-06-02_2000.md) - forensic record of a one-off, self-cleared, deterministic-toolchain miscompile; suspected hardware bit flip. Evidence in [`anomaly-evidence-2026-06-02/`](anomaly-evidence-2026-06-02/).
 
+Navigation:
+
+- [Symbol Index (`SYMBOLS.md`)](../SYMBOLS.md) - concise per-file list of every routine signature with line numbers, for fast code navigation. Regenerate with `make symbols` (universal-ctags). Read this before grepping the large `.inc` files.
+
 Architecture and current state:
 
 - [Implementation Architecture](architecture.md) - include chain, generic machinery, library resolution, key gotchas, class/method layout, dialect switches, operator overloading.
