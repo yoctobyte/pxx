@@ -920,7 +920,7 @@ end;
   as Pointer; their argument signature is not yet modelled. }
 procedure ParseCTypedef;
 var tk: TTypeKind; nm: AnsiString; isAggregate, isUnion: Boolean;
-    ci, ptrStars: Integer;
+    ci, ptrStars, nmOff, nmLen: Integer;
 begin
   Next; { consume 'typedef' }
 
@@ -962,14 +962,23 @@ begin
       while CurTok.Kind = tkStar do begin Inc(ptrStars); Next; end;
       if CurTok.Kind = tkIdent then
       begin
-        UClsNOff[ci] := Tokens[TokPos-1].SOffset;
-        UClsNLen[ci] := Tokens[TokPos-1].SLen;
+        nmOff := Tokens[TokPos-1].SOffset;
+        nmLen := Tokens[TokPos-1].SLen;
         nm := CurTok.SVal; Next;
         if ptrStars > 0 then
-          { typedef struct {..} *Name; — Name is a pointer to the record }
-          AddCTypedefEx(nm, tyPointer, Ord(tyRecord), REC_UCLASS_BASE + ci)
+        begin
+          { typedef struct {..} *Name; — the record stays anonymous, Name is a
+            pointer to it (both for the C parser and as a Pascal pointer type). }
+          AddCTypedefEx(nm, tyPointer, Ord(tyRecord), REC_UCLASS_BASE + ci);
+          RegisterPtrAlias(nmOff, nmLen, Ord(tyRecord), REC_UCLASS_BASE + ci);
+        end
         else
+        begin
+          { typedef struct {..} Name; — Name *is* the record. }
+          UClsNOff[ci] := nmOff;
+          UClsNLen[ci] := nmLen;
           AddCTypedefEx(nm, tyRecord, Ord(tyUnknown), REC_UCLASS_BASE + ci);
+        end;
       end;
       while (CurTok.Kind <> tkSemicolon) and (CurTok.Kind <> tkEOF) do Next;
       Eat(tkSemicolon);
@@ -1022,11 +1031,17 @@ begin
   end;
   if CurTok.Kind = tkIdent then
   begin
+    nmOff := Tokens[TokPos-1].SOffset;
+    nmLen := Tokens[TokPos-1].SLen;
     nm := CurTok.SVal; Next;
     { Carry the pointed-at type for a pointer typedef (e.g. typedef char *PStr),
-      so a Pascal/nilpy var of that type is a typed pointer (deref/index). }
+      so a Pascal/nilpy var of that type is a typed pointer (deref/index). The
+      PtrAlias makes it resolvable by Pascal's type parser (FindTypeAlias). }
     if (tk = tyPointer) and (CTypePtrDepth > 0) then
-      AddCTypedefEx(nm, tk, CTypeElemTk, CTypeElemRec)
+    begin
+      AddCTypedefEx(nm, tk, CTypeElemTk, CTypeElemRec);
+      RegisterPtrAlias(nmOff, nmLen, CTypeElemTk, CTypeElemRec);
+    end
     else
       AddCTypedef(nm, tk);
   end;

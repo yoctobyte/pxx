@@ -10,3 +10,7 @@ typedef struct {
   char *name;
   Point origin;
 } Item;
+
+/* A pointer typedef carries its element type, so a Pascal var of this type is
+   a typed pointer to the Point record (deref to fields works). */
+typedef Point *PPoint;

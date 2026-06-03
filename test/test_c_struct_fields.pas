@@ -10,6 +10,7 @@ var
   p: Point;
   it: Item;
   s: string;
+  q: PPoint;
 begin
   p.x := 3;
   p.y := 4;
@@ -25,4 +26,8 @@ begin
   it.name := PChar(s);                  { char* field is a typed char pointer }
   writeln(it.name[0]);                  { h }
   writeln(it.name[1]);                  { i }
+
+  q := @p;                              { typed C pointer to a record }
+  writeln(q^.x);                        { 3 }
+  writeln(q^.y);                        { 4 }
 end.
