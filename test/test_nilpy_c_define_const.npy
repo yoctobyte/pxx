@@ -1,0 +1,8 @@
+# Object-like integer #define macros from an imported C header reach Nil Python
+# too: `import sqlite3` surfaces SQLITE_OK / SQLITE_ROW / SQLITE_DONE (plain
+# #define integers in sqlite3.h) as named constants, so a binding no longer has
+# to hardcode magic numbers like 100.
+import sqlite3
+print(SQLITE_OK)
+print(SQLITE_ROW)
+print(SQLITE_DONE)

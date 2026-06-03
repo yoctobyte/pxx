@@ -4,6 +4,7 @@ HYPERFINE ?= hyperfine
 BENCH_RUNS ?= 30
 BENCH_HELLO_RUNS ?= 10
 BENCH_BATCH ?= 20
+BENCH_RUNTIME_RUNS ?= 30
 
 COMPILER     := compiler/pascal26
 COMPILER_SRC := compiler/compiler.pas
@@ -14,7 +15,7 @@ VERIFY_COMPILER := /tmp/pascal26-verify
 
 STABLE_DIR := stable
 
-.PHONY: all bootstrap bootstrap-check fpc-check test test-nilpy stabilize check-stable revert benchmark benchmark-check clean distclean
+.PHONY: all bootstrap bootstrap-check fpc-check test test-nilpy stabilize check-stable revert benchmark benchmark-compiler-runtime benchmark-check clean distclean
 
 all: $(COMPILER)
 
@@ -62,6 +63,25 @@ benchmark: $(COMPILER) benchmark-check
 	test "$$(/tmp/hello-bench-self)" = "Hello, World!"
 	/tmp/pascal26-bench-self test/hello.pas /tmp/bench-compiler-hello >/dev/null
 	test "$$(/tmp/bench-compiler-hello)" = "Hello, World!"
+
+benchmark-compiler-runtime: $(COMPILER) benchmark-check
+	rm -rf /tmp/frankonpiler-bench-runtime-fpc-units
+	mkdir -p /tmp/frankonpiler-bench-runtime-fpc-units
+	$(FPC) $(FPCFLAGS) -FU/tmp/frankonpiler-bench-runtime-fpc-units -o/tmp/pascal26-runtime-fpc $(COMPILER_SRC) >/dev/null
+	/tmp/pascal26-runtime-fpc $(COMPILER_SRC) /tmp/pascal26-runtime-fpc-output >/dev/null
+	./$(COMPILER) $(COMPILER_SRC) /tmp/pascal26-runtime-self-output >/dev/null
+	cmp /tmp/pascal26-runtime-fpc-output /tmp/pascal26-runtime-self-output
+	$(HYPERFINE) --warmup 3 --runs $(BENCH_RUNTIME_RUNS) \
+	  --export-markdown /tmp/frankonpiler-compiler-runtime-bench.md \
+	  --command-name 'FPC-built pascal26 compiles compiler' '/tmp/pascal26-runtime-fpc $(COMPILER_SRC) /tmp/pascal26-runtime-fpc-output >/dev/null' \
+	  --command-name 'self-hosted pascal26 compiles compiler' './$(COMPILER) $(COMPILER_SRC) /tmp/pascal26-runtime-self-output >/dev/null'
+	$(HYPERFINE) --warmup 1 --runs $(BENCH_HELLO_RUNS) \
+	  --export-markdown /tmp/frankonpiler-compiler-runtime-hello-bench.md \
+	  --command-name 'FPC-built pascal26: $(BENCH_BATCH) x hello' 'for i in $$(seq 1 $(BENCH_BATCH)); do /tmp/pascal26-runtime-fpc test/hello.pas /tmp/hello-runtime-fpc >/dev/null; done' \
+	  --command-name 'self-hosted pascal26: $(BENCH_BATCH) x hello' 'for i in $$(seq 1 $(BENCH_BATCH)); do ./$(COMPILER) test/hello.pas /tmp/hello-runtime-self >/dev/null; done'
+	stat -c '%n %s bytes' /tmp/pascal26-runtime-fpc /tmp/pascal26-runtime-fpc-output /tmp/pascal26-runtime-self-output /tmp/hello-runtime-fpc /tmp/hello-runtime-self
+	test "$$(/tmp/hello-runtime-fpc)" = "Hello, World!"
+	test "$$(/tmp/hello-runtime-self)" = "Hello, World!"
 
 test-nilpy: $(COMPILER)
 	./$(COMPILER) test/test_nil_python_core.npy /tmp/test_nil_python_core26
@@ -215,6 +235,8 @@ test: $(COMPILER) fpc-check
 	test "$$(/tmp/sqlite_crud26)" = "$$(printf 'open=0\nprepare=0\n1 alice\n2 bob\nfinalize=0\nclose=0')"
 	./$(COMPILER) test/test_string_to_pchar_auto.pas /tmp/string_to_pchar_auto26
 	test "$$(/tmp/string_to_pchar_auto26)" = "$$(printf 'open=0\nprepare=0\n1 alice\n2 bob\nfinalize=0\nclose=0')"
+	./$(COMPILER) test/test_c_define_const.pas /tmp/c_define_const26
+	test "$$(/tmp/c_define_const26)" = "$$(printf '0\n100\n101\n101')"
 	./$(COMPILER) test/test_c_preprocess.pas /tmp/c_preprocess26
 	test "$$(/tmp/c_preprocess26)" = "42"
 	./$(COMPILER) --debug test/test_c_preprocess.pas /tmp/c_preprocess_debug26 > /tmp/c_preprocess_debug26.log
@@ -443,6 +465,8 @@ test: $(COMPILER) fpc-check
 	test "$$(/tmp/test_nilpy_widen_fix26)" = "$$(printf '5.0\n3.14\n7.0\n2.5')"
 	./$(COMPILER) test/test_nilpy_call_return_infer.npy /tmp/test_nilpy_call_return_infer26
 	test "$$(/tmp/test_nilpy_call_return_infer26)" = "42"
+	./$(COMPILER) test/test_nilpy_c_define_const.npy /tmp/test_nilpy_c_define_const26
+	test "$$(/tmp/test_nilpy_c_define_const26)" = "$$(printf '0\n100\n101')"
 	./$(COMPILER) test/test_nilpy_convert.npy /tmp/test_nilpy_convert26
 	test "$$(/tmp/test_nilpy_convert26)" = "$$(printf '3\n42')"
 	./$(COMPILER) test/test_nilpy_bool.npy /tmp/test_nilpy_bool26

@@ -33,8 +33,9 @@ function  db_close: Integer;
 
 implementation
 
-const
-  SQLITE_ROW = 100;   { sqlite3_step: a row is available }
+{ SQLITE_ROW (a row is available from sqlite3_step) now comes from the imported
+  sqlite3 header's `#define`, surfaced as a constant by the C-header importer —
+  no longer hardcoded here. }
 
 var
   gDb:   Pointer;     { active connection }

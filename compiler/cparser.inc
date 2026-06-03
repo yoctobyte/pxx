@@ -637,6 +637,90 @@ begin
   if CurTok.Kind = tkEnd then Next; { consume the closing brace }
 end;
 
+{ Build an AnsiString from a span of the C preprocessor character pool. }
+function CMacroPoolText(off, len: Integer): AnsiString;
+var i: Integer;
+begin
+  Result := '';
+  for i := 0 to len - 1 do AppendChar(Result, CPrepChars[off + i]);
+end;
+
+{ Surface object-like integer #define macros as Pascal constants, so a C
+  header's `#define SQLITE_ROW 100` is usable by name instead of being a magic
+  number hardcoded in every binding. Function-like macros, string/float/empty
+  bodies, and bodies that are not a pure integer constant expression are
+  skipped. The macro value text is lexed into the token stream and evaluated
+  with the same CEvalConstExpr used for enum values; an identifier in the body
+  is accepted only when it already resolves to a registered constant (so chains
+  like `#define B (A+1)` work in definition order). Must run after ParseCUnit,
+  while the C header's case-sensitive mode and unit index are still in effect,
+  so the constants match the exact C spelling. }
+procedure RegisterCMacroConsts;
+var mi, vStart, vEnd, t, savedPos: Integer;
+    name, valText: AnsiString;
+    firstCh: Char; ok: Boolean; v: Int64; si: Integer;
+begin
+  mi := 0;
+  while mi < CPMCount do
+  begin
+    if CPMFunction[mi] or (CPMNameLen[mi] <= 0) or (CPMValueLen[mi] <= 0) then
+    begin
+      Inc(mi);
+      Continue;
+    end;
+    { Cheap text prefilter: a pure integer expression starts with a digit, an
+      open paren, or a unary +/-. Rejects string/identifier bodies without
+      lexing them, keeping the token stream from bloating on system headers. }
+    firstCh := CPrepChars[CPMValueOff[mi]];
+    if not ((firstCh in ['0'..'9']) or (firstCh = '(') or
+            (firstCh = '+') or (firstCh = '-')) then
+    begin
+      Inc(mi);
+      Continue;
+    end;
+    name := CMacroPoolText(CPMNameOff[mi], CPMNameLen[mi]);
+    if FindSym(name) >= 0 then begin Inc(mi); Continue; end;  { don't clobber }
+
+    valText := CMacroPoolText(CPMValueOff[mi], CPMValueLen[mi]);
+    vStart := CLexAppend(valText);
+    vEnd := vStart;
+    while (vEnd < TokCount) and (Tokens[vEnd].Kind <> tkEOF) do Inc(vEnd);
+
+    { Guard: every token must belong to a pure integer constant expression. }
+    ok := vEnd > vStart;
+    t := vStart;
+    while t < vEnd do
+    begin
+      if (Tokens[t].Kind = tkInteger) or (Tokens[t].Kind = tkLParen) or
+         (Tokens[t].Kind = tkRParen) or (Tokens[t].Kind = tkPlus) or
+         (Tokens[t].Kind = tkMinus) or (Tokens[t].Kind = tkStar) or
+         (Tokens[t].Kind = tkLt) or (Tokens[t].Kind = tkGt) or
+         (Tokens[t].Kind = tkOr) or (Tokens[t].Kind = tkAnd) or
+         (Tokens[t].Kind = tkNot) then
+        { allowed }
+      else if Tokens[t].Kind = tkIdent then
+      begin
+        si := FindSym(GetTokenStr(t));
+        if (si < 0) or (Syms[si].Kind <> skConst) then ok := False;
+      end
+      else
+        ok := False;
+      Inc(t);
+    end;
+
+    if ok then
+    begin
+      savedPos := TokPos;
+      TokPos := vStart;
+      Next;
+      v := CEvalConstExpr;
+      AddConst(name, tyInt32, v);
+      TokPos := savedPos;
+    end;
+    Inc(mi);
+  end;
+end;
+
 { Parse a top-level `typedef ...;` and register the new type name.
   - struct/union [tag] [body] Name   -> opaque, mapped to Pointer
   - enum [tag] body Name             -> Int32, enumerators become constants

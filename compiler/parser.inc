@@ -4,6 +4,7 @@ procedure LoadFile(const path: AnsiString; var dst: AnsiString); forward;
 function GetFilePath(const path: AnsiString): AnsiString; forward;
 procedure ExpandIncludes(var src: AnsiString; const baseDir: AnsiString); forward;
 procedure ParseCUnit; forward;
+procedure RegisterCMacroConsts; forward;
 procedure EmitAnsiStringRuntime; forward;
 
 
@@ -5523,6 +5524,9 @@ begin
     CaseSensitiveMode := True;
     CHeaderMode := isCHeader;
     ParseCUnit;
+    { Surface object-like integer #define macros (e.g. SQLITE_ROW) as constants,
+      still under the header's case-sensitive mode and unit index. }
+    RegisterCMacroConsts;
     CaseSensitiveMode := savedCaseMode;
     CurrentUnitIdx := savedCurrentUnitIdx;
 
