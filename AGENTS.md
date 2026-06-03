@@ -5,9 +5,10 @@ Read once at session start. Keep edits here terse — this loads every session.
 
 ## Navigation
 - **Read `codemap/symbols.md` before grepping the source.** It's a per-file index of every
-  routine signature with line numbers (the `.inc` files are huge). Regenerate
-  after code changes: `make symbols` (uses universal-ctags). Line numbers drift
-  between regens — verify a line before editing.
+  constant, type (with fields), global, and routine signature (with the
+  doc-comment above each) with line numbers (the `.inc` files are huge).
+  Regenerate after code changes: `make symbols` (`tools/gen_symbols.py`, stdlib
+  only). Line numbers drift between regens — verify a line before editing.
 - The `.inc` files are `{$include}`d into one unit: symbols share a single flat
   namespace (a name has one definition project-wide).
 - Current work & design context live in `docs/handover-*.md`; index in
