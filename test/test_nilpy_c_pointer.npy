@@ -1,0 +1,10 @@
+# Nil Python holds and passes a raw C pointer (handle) with no wrapper unit:
+# malloc returns void*, the local `p` is inferred as a pointer from the callee
+# return, and it is passed straight back to free. This is the handle mechanic
+# the wrapper-free nilpy<->C arc builds on — a .npy program can carry an opaque
+# C handle across calls. (Out-param `&` and char*->string marshalling are the
+# remaining pieces; see the handover.)
+import stdlib
+p = malloc(64)
+free(p)
+print(1)

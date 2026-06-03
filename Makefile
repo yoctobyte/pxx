@@ -475,6 +475,8 @@ test: $(COMPILER) fpc-check
 	test "$$(/tmp/test_nilpy_call_return_infer26)" = "42"
 	./$(COMPILER) test/test_nilpy_c_define_const.npy /tmp/test_nilpy_c_define_const26
 	test "$$(/tmp/test_nilpy_c_define_const26)" = "$$(printf '0\n100\n101')"
+	./$(COMPILER) test/test_nilpy_c_pointer.npy /tmp/test_nilpy_c_pointer26
+	test "$$(/tmp/test_nilpy_c_pointer26)" = "1"
 	./$(COMPILER) test/test_nilpy_convert.npy /tmp/test_nilpy_convert26
 	test "$$(/tmp/test_nilpy_convert26)" = "$$(printf '3\n42')"
 	./$(COMPILER) test/test_nilpy_bool.npy /tmp/test_nilpy_bool26
