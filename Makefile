@@ -239,6 +239,8 @@ test: $(COMPILER) fpc-check
 	test "$$(/tmp/c_define_const26)" = "$$(printf '0\n100\n101\n101')"
 	./$(COMPILER) test/test_c_struct_fields.pas /tmp/c_struct_fields26
 	test "$$(/tmp/c_struct_fields26)" = "$$(printf '7\n9\n11\nh\ni\n3\n4')"
+	./$(COMPILER) test/test_c_struct_many.pas /tmp/c_struct_many26
+	test "$$(/tmp/c_struct_many26)" = "$$(printf '30\n4300')"
 	./$(COMPILER) test/test_c_preprocess.pas /tmp/c_preprocess26
 	test "$$(/tmp/c_preprocess26)" = "42"
 	./$(COMPILER) --debug test/test_c_preprocess.pas /tmp/c_preprocess_debug26 > /tmp/c_preprocess_debug26.log

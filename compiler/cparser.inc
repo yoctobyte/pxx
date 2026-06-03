@@ -772,6 +772,49 @@ begin
   end;
 end;
 
+{ Conservatively decide whether a C struct/union body is laid out as a record.
+  startIdx is the opening brace (tkBegin) token index. Returns False — meaning
+  fall back to an opaque pointer — for any construct ParseCStructInto cannot lay
+  out correctly, so it never produces silently-wrong field offsets:
+    - bitfields (`name : n`): wrong offsets for following fields,
+    - nested/anonymous struct or union bodies (a second brace),
+    - struct/union/enum-tag-typed fields (`struct Foo bar;`): the field would be
+      dropped, shifting offsets.
+  Plain POD (scalars, pointers, fixed arrays, typedef-named-type fields incl.
+  nested-struct-by-value) returns True. }
+function CStructBodyIsSimple(startIdx: Integer): Boolean;
+var i, depth: Integer; s: AnsiString;
+begin
+  Result := True;
+  depth := 0;
+  i := startIdx;
+  while i < TokCount do
+  begin
+    if Tokens[i].Kind = tkBegin then
+    begin
+      if depth >= 1 then begin Result := False; Exit; end;  { nested aggregate body }
+      Inc(depth);
+    end
+    else if Tokens[i].Kind = tkEnd then
+    begin
+      Dec(depth);
+      if depth <= 0 then Exit;                               { end of the outer body }
+    end
+    else if depth >= 1 then
+    begin
+      if Tokens[i].Kind = tkColon then begin Result := False; Exit; end;  { bitfield }
+      if Tokens[i].Kind = tkRecord then begin Result := False; Exit; end; { struct kw }
+      if Tokens[i].Kind = tkIdent then
+      begin
+        s := GetTokenStr(i);
+        if (s = 'union') or (s = 'enum') or (s = 'struct') then
+        begin Result := False; Exit; end;
+      end;
+    end;
+    Inc(i);
+  end;
+end;
+
 { Record alignment of a record id (struct field by value). }
 function CRecAlign(rec: Integer): Integer;
 begin
@@ -833,15 +876,6 @@ begin
         fnOff := Tokens[TokPos-1].SOffset;
         fnLen := Tokens[TokPos-1].SLen;
         Next;
-
-        { bitfield `name : n` — skip layout, consume to the separator }
-        if CurTok.Kind = tkColon then
-        begin
-          while (CurTok.Kind <> tkComma) and (CurTok.Kind <> tkSemicolon) and
-                (CurTok.Kind <> tkEOF) do Next;
-          firstDecl := False;
-          if not Eat(tkComma) then Break else Continue;
-        end;
 
         isArr := False; arrLen := 1;
         while CurTok.Kind = tkLBrack do
@@ -932,13 +966,14 @@ begin
     Next; { 'struct' / 'union' }
     if CurTok.Kind = tkIdent then Next;      { optional tag }
     if (CurTok.Kind = tkBegin) and
-       ((UClsCount >= MAX_UCLASS - 1) or (UFldCount >= MAX_UFIELD - 128)) then
+       ((UClsCount >= MAX_UCLASS - 1) or (UFldCount >= MAX_UFIELD - 128) or
+        (not CStructBodyIsSimple(TokPos - 1))) then
     begin
-      { Out of record-table headroom. C structs share the small MAX_UCLASS /
-        MAX_UFIELD tables with Pascal records, so a macro-soup header (GTK,
-        thousands of structs) cannot all be laid out. Fall back to the old
-        opaque pointer behavior once headroom runs low. Raising those limits to
-        support many C structs is future work (record-layout landmine). }
+      { Fall back to an opaque pointer when either (a) record-table headroom is
+        low (C structs share the MAX_UCLASS/MAX_UFIELD tables with Pascal), or
+        (b) the body uses a construct we cannot lay out without silently-wrong
+        offsets (bitfields, nested/anonymous aggregates, struct/union/enum-tag
+        fields). Plain POD bodies take the record path below. }
       SkipBraceBlock;
       while CurTok.Kind = tkStar do Next;
       if CurTok.Kind = tkIdent then

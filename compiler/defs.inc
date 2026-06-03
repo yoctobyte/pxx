@@ -29,8 +29,8 @@ const
   MAX_PAS_CONDS = 64;
   SPECIAL_IN  = 999;
 
-  MAX_UCLASS      = 32;    { user-defined class slots }
-  MAX_UFIELD      = 512;   { field slots across all user classes }
+  MAX_UCLASS      = 512;   { user-defined class/record slots (incl. imported C structs) }
+  MAX_UFIELD      = 16384; { field slots across all user classes/records }
   MAX_UMETH       = 256;   { method slots across all user classes }
   MAX_UPROP       = 64;
   MAX_ENUMTYPE = 512;
