@@ -76,7 +76,6 @@ begin
 end;
 
 procedure RegisterPtrAlias(noff, nlen, elemTk, elemRec: Integer);
-var i: Integer; s: AnsiString;
 begin
   if AliasCount >= MAX_TYPEALIAS then Error('too many type aliases');
   AliasNOff[AliasCount] := noff;
@@ -84,16 +83,10 @@ begin
   AliasTk[AliasCount] := Ord(tyPointer);
   AliasElemTk[AliasCount] := elemTk;
   AliasElemRec[AliasCount] := elemRec;
-  
-  s := '';
-  for i := 0 to nlen - 1 do AppendChar(s, TokChars[noff + i]);
-  writeln('RegisterPtrAlias: idx=', AliasCount, ' name="', s, '" noff=', noff, ' nlen=', nlen, ' elemTk=', elemTk, ' elemRec=', elemRec);
-
   Inc(AliasCount);
 end;
 
 procedure RegisterGeneralAlias(noff, nlen, tk, rec: Integer);
-var i: Integer; s: AnsiString;
 begin
   if AliasCount >= MAX_TYPEALIAS then Error('too many type aliases');
   AliasNOff[AliasCount] := noff;
@@ -101,11 +94,6 @@ begin
   AliasTk[AliasCount] := tk;
   AliasElemTk[AliasCount] := tk;
   AliasElemRec[AliasCount] := rec;
-  
-  s := '';
-  for i := 0 to nlen - 1 do AppendChar(s, TokChars[noff + i]);
-  writeln('RegisterGeneralAlias: idx=', AliasCount, ' name="', s, '" noff=', noff, ' nlen=', nlen, ' tk=', tk, ' rec=', rec);
-
   Inc(AliasCount);
 end;
 
