@@ -536,6 +536,16 @@ var
     zero-initialised state means "empty" (no -1 fill needed). Size is a power of
     two > 2*MAX_CTYPEDEF for a <=0.5 load factor. }
   CTypedefHash  : array[0..16383] of Integer;
+  { C struct/union tag namespace (separate from typedefs): tag name -> record id.
+    Lets `struct Tag` resolve, bare tagged structs lay out, and a struct
+    self-reference (`struct Node *next;` inside Node) work via forward tags. }
+  CTagCount   : Integer;
+  CTagNameOff : array[0..MAX_CTYPEDEF-1] of Integer;
+  CTagNameLen : array[0..MAX_CTYPEDEF-1] of Integer;
+  CTagRec     : array[0..MAX_CTYPEDEF-1] of Integer;  { REC_UCLASS_BASE + ci }
+  CTagChars   : array[0..524287] of Char;
+  CTagCharLen : Integer;
+  CTagHash    : array[0..16383] of Integer;  { name->idx+1 (0=empty), O(1) tag lookup }
   CTypedefChars : array[0..524287] of Char;
   CTypedefCharLen : Integer;
   ExternalProc   : array[0..MAX_EXTERNAL-1] of Integer;

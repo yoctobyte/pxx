@@ -45,6 +45,74 @@ begin
   CTypedefHash[slot] := idx + 1;
 end;
 
+{ Index of a struct/union tag in the tag table, or -1. O(1) via CTagHash. }
+function CTagNameMatches(idx: Integer; const name: AnsiString): Boolean;
+var j: Integer;
+begin
+  Result := False;
+  if CTagNameLen[idx] <> Length(name) then Exit;
+  for j := 0 to CTagNameLen[idx] - 1 do
+    if CTagChars[CTagNameOff[idx] + j] <> name[j + 1] then Exit;
+  Result := True;
+end;
+
+function FindCTagIdx(const name: AnsiString): Integer;
+var slot, stored: Integer;
+begin
+  slot := CTypedefHashKey(name);
+  while True do
+  begin
+    stored := CTagHash[slot];
+    if stored = 0 then begin Result := -1; Exit; end;
+    if CTagNameMatches(stored - 1, name) then begin Result := stored - 1; Exit; end;
+    slot := (slot + 1) and 16383;
+  end;
+end;
+
+{ Struct/union tag lookup. Returns the record id (REC_UCLASS_BASE+ci) or -1. }
+function FindCTag(const name: AnsiString): Integer;
+var idx: Integer;
+begin
+  idx := FindCTagIdx(name);
+  if idx >= 0 then Result := CTagRec[idx] else Result := -1;
+end;
+
+procedure AddCTag(const name: AnsiString; recId: Integer);
+var idx, i: Integer;
+begin
+  idx := FindCTagIdx(name);
+  if idx >= 0 then begin CTagRec[idx] := recId; Exit; end;  { update (forward -> defined) }
+  if CTagCount >= MAX_CTYPEDEF then Error('C tag table overflow');
+  if CTagCharLen + Length(name) >= 524288 then Error('C tag chars pool overflow');
+  CTagNameOff[CTagCount] := CTagCharLen;
+  CTagNameLen[CTagCount] := Length(name);
+  for i := 1 to Length(name) do begin CTagChars[CTagCharLen] := name[i]; Inc(CTagCharLen); end;
+  CTagRec[CTagCount] := recId;
+  i := CTypedefHashKey(name);
+  while CTagHash[i] <> 0 do i := (i + 1) and 16383;
+  CTagHash[i] := CTagCount + 1;
+  Inc(CTagCount);
+end;
+
+{ Resolve a struct/union tag to its record id, creating a forward (empty)
+  record if the tag has not been seen — so `struct Node *next;` inside Node and
+  forward declarations resolve. }
+function FindOrForwardCTag(const name: AnsiString): Integer;
+var rec, ci: Integer;
+begin
+  rec := FindCTag(name);
+  if rec >= 0 then begin Result := rec; Exit; end;
+  { Out of record-table headroom (e.g. GTK's thousands of tags): resolve the tag
+    as opaque (REC_NONE) instead of allocating a UClass, so a macro-soup header
+    degrades gracefully rather than overflowing MAX_UCLASS. }
+  if UClsCount >= MAX_UCLASS - 1 then begin Result := REC_NONE; Exit; end;
+  ci := AddUClass(0, 0);
+  UClsIsRecord[ci] := True;
+  rec := REC_UCLASS_BASE + ci;
+  AddCTag(name, rec);
+  Result := rec;
+end;
+
 procedure AddCTypedefEx(const name: AnsiString; tk: TTypeKind; elemTk, rec: Integer);
 var idx, i: Integer;
 begin
@@ -82,9 +150,11 @@ end;
 function IsCTypeTok: Boolean;
 begin
   Result := CurTok.Kind in [tkInteger_T, tkChar_T, tkCVoid, tkCShort,
-    tkCLong, tkCSigned, tkCUnsigned, tkCFloat, tkCDouble, tkCBool, tkConst];
+    tkCLong, tkCSigned, tkCUnsigned, tkCFloat, tkCDouble, tkCBool, tkConst,
+    tkRecord { 'struct' }];
   if (not Result) and (CurTok.Kind = tkIdent) then
-    Result := FindCTypedef(CurTok.SVal) >= 0;
+    Result := (CurTok.SVal = 'union') or (CurTok.SVal = 'enum') or
+              (FindCTypedef(CurTok.SVal) >= 0);
 end;
 
 function CUnsignedOf(tk: TTypeKind): TTypeKind;
@@ -103,12 +173,12 @@ end;
   any pointer -> untyped Pointer (8). }
 function ParseCDeclType: TTypeKind;
 var
-  isUnsigned, isSigned, isFloatTy, isVoid, loop, sawBase, isTypedef: Boolean;
+  isUnsigned, isSigned, isFloatTy, isVoid, loop, sawBase, isTypedef, isAggBase: Boolean;
   shortCount, longCount, tdIdx, depth, baseRec: Integer;
   base: TTypeKind;
 begin
   isUnsigned := False; isSigned := False; isFloatTy := False; isVoid := False;
-  sawBase := False; isTypedef := False;
+  sawBase := False; isTypedef := False; isAggBase := False;
   shortCount := 0; longCount := 0; base := tyInt32; baseRec := REC_NONE;
   loop := True;
   while loop do
@@ -125,20 +195,50 @@ begin
       tkCFloat:    begin base := tySingle; isFloatTy := True; sawBase := True; Next; end;
       tkCDouble:   begin base := tyDouble; isFloatTy := True; sawBase := True; Next; end;
       tkCBool:     begin base := tyUInt8; sawBase := True; Next; end;
+      tkRecord:    { 'struct' [tag] — tag reference in type position }
+        begin
+          Next;
+          if CurTok.Kind = tkIdent then
+          begin
+            base := tyRecord; baseRec := FindOrForwardCTag(CurTok.SVal);
+            isAggBase := True; sawBase := True; Next;
+          end
+          else begin base := tyRecord; isAggBase := True; sawBase := True; end;
+        end;
       tkIdent:
         begin
           { A typedef name is a type only in type position (before any base
-            type is seen); otherwise it is the declarator name — stop. }
-          tdIdx := -1;
-          if not sawBase then tdIdx := FindCTypedef(CurTok.SVal);
-          if tdIdx >= 0 then
+            type is seen); otherwise it is the declarator name — stop.
+            `union`/`enum` keywords are idents in this lexer. }
+          if (not sawBase) and (CurTok.SVal = 'union') then
           begin
-            base := IntToTypeKind(CTypedefTk[tdIdx]);
-            baseRec := CTypedefRec[tdIdx];
-            sawBase := True; isTypedef := True;
             Next;
+            if CurTok.Kind = tkIdent then
+            begin
+              base := tyRecord; baseRec := FindOrForwardCTag(CurTok.SVal); Next;
+            end
+            else base := tyRecord;
+            isAggBase := True; sawBase := True;
           end
-          else loop := False;
+          else if (not sawBase) and (CurTok.SVal = 'enum') then
+          begin
+            Next;
+            if CurTok.Kind = tkIdent then Next;   { tag — enum value is just an int }
+            base := tyInt32; sawBase := True;
+          end
+          else
+          begin
+            tdIdx := -1;
+            if not sawBase then tdIdx := FindCTypedef(CurTok.SVal);
+            if tdIdx >= 0 then
+            begin
+              base := IntToTypeKind(CTypedefTk[tdIdx]);
+              baseRec := CTypedefRec[tdIdx];
+              sawBase := True; isTypedef := True;
+              Next;
+            end
+            else loop := False;
+          end;
         end;
       else loop := False;
     end;
@@ -148,6 +248,8 @@ begin
 
   if isVoid then
     Result := tyInteger          { placeholder; pointer suffix overrides below }
+  else if isAggBase then
+    Result := tyRecord           { struct/union tag reference }
   else if isTypedef then
     Result := base               { typedef carries its own resolved kind }
   else if isFloatTy then
@@ -795,7 +897,7 @@ end;
   Plain POD (scalars, pointers, fixed arrays, typedef-named-type fields incl.
   nested-struct-by-value) returns True. }
 function CStructBodyIsSimple(startIdx: Integer): Boolean;
-var i, depth: Integer; s: AnsiString;
+var i, depth: Integer;
 begin
   Result := True;
   depth := 0;
@@ -814,14 +916,12 @@ begin
     end
     else if depth >= 1 then
     begin
-      if Tokens[i].Kind = tkColon then begin Result := False; Exit; end;  { bitfield }
-      if Tokens[i].Kind = tkRecord then begin Result := False; Exit; end; { struct kw }
-      if Tokens[i].Kind = tkIdent then
-      begin
-        s := GetTokenStr(i);
-        if (s = 'union') or (s = 'enum') or (s = 'struct') then
-        begin Result := False; Exit; end;
-      end;
+      { Bitfields can't be laid out (wrong following offsets) -> opaque fallback.
+        struct/union/enum keywords are now OK as field types (`struct Tag *next`,
+        `enum E e`) because ParseCDeclType resolves a tag reference; an INLINE
+        anonymous aggregate body is still rejected via the nested-brace check
+        above. }
+      if Tokens[i].Kind = tkColon then begin Result := False; Exit; end;
     end;
     Inc(i);
   end;
@@ -965,7 +1065,7 @@ end;
   Function-pointer typedefs `ret (*Name)(args)` are detected and registered
   as Pointer; their argument signature is not yet modelled. }
 procedure ParseCTypedef;
-var tk: TTypeKind; nm: AnsiString; isAggregate, isUnion: Boolean;
+var tk: TTypeKind; nm, tagName: AnsiString; isAggregate, isUnion, hasTag: Boolean;
     ci, ptrStars, nmOff, nmLen: Integer;
 begin
   Next; { consume 'typedef' }
@@ -976,7 +1076,11 @@ begin
   begin
     isUnion := (CurTok.Kind = tkIdent) and (CurTok.SVal = 'union');
     Next; { 'struct' / 'union' }
-    if CurTok.Kind = tkIdent then Next;      { optional tag }
+    hasTag := False;
+    if CurTok.Kind = tkIdent then              { optional tag — capture it }
+    begin
+      tagName := CurTok.SVal; hasTag := True; Next;
+    end;
     if (CurTok.Kind = tkBegin) and
        ((UClsCount >= MAX_UCLASS - 1) or (UFldCount >= MAX_UFIELD - 128) or
         (not CStructBodyIsSimple(TokPos - 1))) then
@@ -1000,9 +1104,13 @@ begin
     if CurTok.Kind = tkBegin then
     begin
       { Body present: lay it out as a real record so fields are addressable.
-        The typedef Name follows the body, so create the class first with a
-        placeholder name and patch it once the name token is read. }
-      ci := AddUClass(0, 0);
+        The typedef Name follows the body. When the struct has a tag, register
+        (or reuse a forward) record for that tag BEFORE parsing the body, so a
+        self-reference `struct Tag *next;` inside resolves to this same record. }
+      if hasTag then
+        ci := FindOrForwardCTag(tagName) - REC_UCLASS_BASE
+      else
+        ci := AddUClass(0, 0);
       UClsIsRecord[ci] := True;
       ParseCStructInto(ci, isUnion);
       ptrStars := 0;
@@ -1107,6 +1215,64 @@ begin
   Eat(tkSemicolon);
 end;
 
+{ True when the upcoming `struct`/`union` tokens are a bare struct/union
+  declaration or definition (`struct Tag { ... };` or `struct Tag;`) rather than
+  a function/variable typed by the struct (`struct Tag *get();`). CurTok is the
+  struct/union keyword, so Tokens[TokPos] is the token after it. }
+function IsBareStructDecl: Boolean;
+var i: Integer;
+begin
+  i := TokPos;
+  if (i < TokCount) and (Tokens[i].Kind = tkIdent) then Inc(i);  { skip tag }
+  Result := (i < TokCount) and (Tokens[i].Kind in [tkBegin, tkSemicolon]);
+end;
+
+{ Bare `struct/union [Tag] { body };` (definition) or `struct Tag;` (forward).
+  A tagged definition lays the body out as a record under the tag, so other C
+  declarations can use `struct Tag` by name. }
+procedure ParseCStructDecl;
+var isUnion, hasTag: Boolean; tagName: AnsiString; ci, tagOff, tagLen, tagRec: Integer;
+begin
+  isUnion := (CurTok.Kind = tkIdent) and (CurTok.SVal = 'union');
+  Next; { struct / union }
+  hasTag := False; tagOff := 0; tagLen := 0;
+  if CurTok.Kind = tkIdent then
+  begin
+    tagName := CurTok.SVal;
+    tagOff := Tokens[TokPos-1].SOffset; tagLen := Tokens[TokPos-1].SLen;
+    hasTag := True; Next;
+  end;
+  if CurTok.Kind = tkBegin then
+  begin
+    ci := -1;
+    if hasTag then
+    begin
+      tagRec := FindOrForwardCTag(tagName);          { may be REC_NONE if table full }
+      if tagRec >= REC_UCLASS_BASE then ci := tagRec - REC_UCLASS_BASE;
+    end
+    else if UClsCount < MAX_UCLASS - 1 then
+      ci := AddUClass(0, 0);
+    if ci < 0 then
+      SkipBraceBlock                                  { no headroom: opaque }
+    else
+    begin
+      UClsIsRecord[ci] := True;
+      if hasTag and (UClsNLen[ci] = 0) then
+      begin
+        UClsNOff[ci] := tagOff; UClsNLen[ci] := tagLen;  { name the record by its tag }
+      end;
+      if (UFldCount < MAX_UFIELD - 128) and CStructBodyIsSimple(TokPos - 1) then
+        ParseCStructInto(ci, isUnion)
+      else
+        SkipBraceBlock;   { opaque: keep the tag, drop the layout }
+    end;
+  end
+  else if hasTag then
+    FindOrForwardCTag(tagName);  { forward `struct Tag;` }
+  while (CurTok.Kind <> tkSemicolon) and (CurTok.Kind <> tkEOF) do Next;
+  Eat(tkSemicolon);
+end;
+
 procedure ParseCUnit;
 begin
   while CurTok.Kind <> tkEOF do
@@ -1115,6 +1281,10 @@ begin
       ParseCTypedef
     else if (CurTok.Kind = tkIdent) and (CurTok.SVal = 'enum') then
       ParseCEnumDecl
+    else if ((CurTok.Kind = tkRecord) or
+             ((CurTok.Kind = tkIdent) and (CurTok.SVal = 'union'))) and
+            IsBareStructDecl then
+      ParseCStructDecl
     else if IsCTypeTok then
       ParseCSubroutine
     else

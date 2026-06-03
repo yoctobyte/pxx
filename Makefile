@@ -243,6 +243,8 @@ test: $(COMPILER) fpc-check
 	test "$$(/tmp/c_struct_many26)" = "$$(printf '30\n4300')"
 	./$(COMPILER) test/test_func_ptr_return.pas /tmp/func_ptr_return26
 	test "$$(/tmp/func_ptr_return26)" = "$$(printf '7\n8\n9')"
+	./$(COMPILER) test/test_c_struct_tags.pas /tmp/c_struct_tags26
+	test "$$(/tmp/c_struct_tags26)" = "$$(printf '12\n10\n20')"
 	./$(COMPILER) test/test_c_preprocess.pas /tmp/c_preprocess26
 	test "$$(/tmp/c_preprocess26)" = "42"
 	./$(COMPILER) --debug test/test_c_preprocess.pas /tmp/c_preprocess_debug26 > /tmp/c_preprocess_debug26.log
