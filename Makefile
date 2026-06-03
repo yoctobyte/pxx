@@ -213,6 +213,8 @@ test: $(COMPILER) fpc-check
 	test "$$(LD_LIBRARY_PATH=/tmp /tmp/c_argspill26)" = "$$(printf '28\n55.0\n45')"
 	./$(COMPILER) test/test_sqlite_crud.pas /tmp/sqlite_crud26
 	test "$$(/tmp/sqlite_crud26)" = "$$(printf 'open=0\nprepare=0\n1 alice\n2 bob\nfinalize=0\nclose=0')"
+	./$(COMPILER) test/test_string_to_pchar_auto.pas /tmp/string_to_pchar_auto26
+	test "$$(/tmp/string_to_pchar_auto26)" = "$$(printf 'open=0\nprepare=0\n1 alice\n2 bob\nfinalize=0\nclose=0')"
 	./$(COMPILER) test/test_c_preprocess.pas /tmp/c_preprocess26
 	test "$$(/tmp/c_preprocess26)" = "42"
 	./$(COMPILER) --debug test/test_c_preprocess.pas /tmp/c_preprocess_debug26 > /tmp/c_preprocess_debug26.log

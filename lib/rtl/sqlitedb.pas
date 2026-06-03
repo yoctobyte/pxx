@@ -13,8 +13,10 @@ unit sqlitedb;
   statement at a time — enough to prove an end-to-end CRUD round-trip.
 
   Dialect notes (see lib/rtl/builtin.pas): plain functions use Result; strings
-  are built by concatenation; PChar(s) marshals a Pascal string to a C
-  `const char*`; a PChar is indexed to read a returned C string. }
+  are built by concatenation; a string argument auto-marshals to a C
+  `const char*` (length-prefix skipped) when the parameter is a Pointer, so no
+  PChar() cast is needed on the way in; a PChar is indexed to read a returned C
+  string on the way back. }
 
 interface
 
@@ -42,18 +44,18 @@ function db_open(const path: string): Integer;
 begin
   gDb := nil;
   gStmt := nil;
-  Result := sqlite3_open(PChar(path), @gDb);
+  Result := sqlite3_open(path, @gDb);
 end;
 
 function db_exec(const sql: string): Integer;
 begin
-  Result := sqlite3_exec(gDb, PChar(sql), nil, nil, nil);
+  Result := sqlite3_exec(gDb, sql, nil, nil, nil);
 end;
 
 function db_query(const sql: string): Integer;
 begin
   gStmt := nil;
-  Result := sqlite3_prepare_v2(gDb, PChar(sql), -1, @gStmt, nil);
+  Result := sqlite3_prepare_v2(gDb, sql, -1, @gStmt, nil);
 end;
 
 function db_step: Boolean;

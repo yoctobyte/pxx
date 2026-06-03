@@ -2066,6 +2066,14 @@ begin
     Result := True;
     Exit;
   end;
+  { A string argument marshals to a const char* (Pointer) parameter: IR lowering
+    skips the inline length prefix (+8), so a C binding can pass a Pascal string
+    without an explicit PChar() cast. Compatible-match only, after exact match. }
+  if (pType = tyPointer) and (aType = tyString) then
+  begin
+    Result := True;
+    Exit;
+  end;
   Result := False;
 end;
 

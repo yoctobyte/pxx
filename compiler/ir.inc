@@ -1233,7 +1233,20 @@ begin
         else
           value := IRLowerAST(ASTLeft[item]);
 
-        argNode := IRAppend(IR_ARG, value, -1, -1, 0, ASTTk[ASTLeft[item]]);
+        { Auto const char* marshalling: a string argument passed to a Pointer
+          parameter gets the same +8 length-prefix skip as an explicit PChar()
+          cast, so C bindings pass a Pascal string without PChar() boilerplate.
+          The string data at Offset+8 is NUL-terminated by InternStr. }
+        if (not isRefArg) and (cpi >= 0) and (pathIdx < Procs[cpi].ParamCount) and
+           (Procs[cpi].Params[pathIdx].TypeKind = tyPointer) and
+           (IntToTypeKind(ASTTk[ASTLeft[item]]) = tyString) then
+        begin
+          right := IRAppend(IR_CONST_INT, -1, -1, -1, 8, Ord(tyInteger));
+          value := IRAppend(IR_BINOP, value, right, Ord(tkPlus), 0, Ord(tyPointer));
+          argNode := IRAppend(IR_ARG, value, -1, -1, 0, Ord(tyPointer));
+        end
+        else
+          argNode := IRAppend(IR_ARG, value, -1, -1, 0, ASTTk[ASTLeft[item]]);
         if first < 0 then first := argNode
         else IRB[last] := argNode;
         last := argNode;
