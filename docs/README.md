@@ -32,7 +32,7 @@ User-facing documents:
 
 Navigation:
 
-- [Symbol Index (`SYMBOLS.md`)](../SYMBOLS.md) - concise per-file list of every routine signature with line numbers, for fast code navigation. Regenerate with `make symbols` (universal-ctags). Read this before grepping the large `.inc` files.
+- [Symbol Index (`codemap/symbols.md`)](../codemap/symbols.md) - concise per-file list of every routine signature with line numbers, for fast code navigation. Regenerate with `make symbols` (universal-ctags). Read this before grepping the large `.inc` files.
 
 Architecture and current state:
 

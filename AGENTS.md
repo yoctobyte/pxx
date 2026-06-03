@@ -4,7 +4,7 @@ Shared instructions for any AI agent (Claude, Codex, agy, …) working this repo
 Read once at session start. Keep edits here terse — this loads every session.
 
 ## Navigation
-- **Read `SYMBOLS.md` before grepping the source.** It's a per-file index of every
+- **Read `codemap/symbols.md` before grepping the source.** It's a per-file index of every
   routine signature with line numbers (the `.inc` files are huge). Regenerate
   after code changes: `make symbols` (uses universal-ctags). Line numbers drift
   between regens — verify a line before editing.
@@ -20,7 +20,7 @@ Read once at session start. Keep edits here terse — this loads every session.
   `make fpc-check` — all green, all byte-identical.
 - Tooling/docs/test-only changes (no compiler source edit) skip the gate.
 - After touching any hardcoded record layout constant (RecSize/RecFieldOffset),
-  FPC-reseed via `make bootstrap`.
+  optionally FPC-reseed via `make bootstrap` if things don't work out.
 
 ## Workflow
 - Work on `master` directly. Commit per logical unit (fine-grained history).

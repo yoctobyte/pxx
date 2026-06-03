@@ -10,8 +10,9 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-OUT=SYMBOLS.md
+OUT=codemap/symbols.md
 SRC=(compiler/*.inc compiler/*.pas)
+mkdir -p codemap
 
 if ! ctags --version 2>/dev/null | grep -qi 'Universal Ctags'; then
   echo "gen-symbols: universal-ctags required (found legacy/none)" >&2
