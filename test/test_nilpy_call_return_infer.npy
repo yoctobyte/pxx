@@ -1,0 +1,9 @@
+# Local typed purely from a callee's return type. `r` has no annotation and the
+# RHS is a bare call with no type-bearing argument tokens, so the only inference
+# source is get_val's `-> int` return. Before callee-return inference this raised
+# "cannot infer local type for r". Proves PyInferExprType folds Procs[].RetType.
+def get_val() -> int:
+    return 42
+
+r = get_val()
+print(r)

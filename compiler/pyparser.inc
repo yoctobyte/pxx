@@ -235,8 +235,48 @@ begin
   Result := -1;
 end;
 
+{ Return type of a top-level `def name(...) -> TYPE` by scanning the program
+  tokens. Used by inference when the callee is a Nil Python function not yet
+  registered (module-local types are collected before defs are parsed).
+  Depth-guarded to top level so class methods (bare-named) are not matched. }
+function PyDefReturnType(const name: AnsiString): TTypeKind;
+var i, j, depth, pdepth: Integer;
+begin
+  Result := tyUnknown;
+  depth := 0;
+  i := 0;
+  while i < MainProgramTokCount do
+  begin
+    if Tokens[i].Kind = tkIndent then Inc(depth)
+    else if Tokens[i].Kind = tkDedent then Dec(depth)
+    else if (depth = 0) and (Tokens[i].Kind = tkFunction) and
+            (i + 1 < MainProgramTokCount) and (Tokens[i + 1].Kind = tkIdent) and
+            (GetTokenStr(i + 1) = name) and (i + 2 < MainProgramTokCount) and
+            (Tokens[i + 2].Kind = tkLParen) then
+    begin
+      j := i + 2; pdepth := 0;
+      while j < MainProgramTokCount do
+      begin
+        if Tokens[j].Kind = tkLParen then Inc(pdepth)
+        else if Tokens[j].Kind = tkRParen then
+        begin
+          Dec(pdepth);
+          if pdepth = 0 then Break;
+        end;
+        Inc(j);
+      end;
+      { after ')': expect `-> TYPE` }
+      if (j + 3 < MainProgramTokCount) and (Tokens[j + 1].Kind = tkMinus) and
+         (Tokens[j + 2].Kind = tkGt) then
+        Result := PyTypeFromTokenIndex(j + 3);
+      Exit;
+    end;
+    Inc(i);
+  end;
+end;
+
 function PyInferExprType(startIdx, endIdx: Integer): TTypeKind;
-var i, ci, si: Integer; tk: TTypeKind; name: AnsiString;
+var i, ci, si, pi, depth: Integer; tk: TTypeKind; name: AnsiString;
 begin
   Result := tyUnknown;
   if (startIdx < endIdx) and (Tokens[startIdx].Kind = tkIdent) and
@@ -255,6 +295,32 @@ begin
       if Tokens[i].Kind = tkIdent then
       begin
         name := GetTokenStr(i);
+        { Call form `name(...)`: take the callee's return type and skip the
+          whole argument group so arg tokens do not pollute the widening. }
+        if (i + 1 < endIdx) and (Tokens[i + 1].Kind = tkLParen) and
+           not IsClassType(name) then
+        begin
+          pi := FindProc(name);
+          if pi >= 0 then tk := Procs[pi].RetType
+          else tk := PyDefReturnType(name);
+          if tk <> tyUnknown then
+          begin
+            i := i + 1; depth := 0;
+            while i < endIdx do
+            begin
+              if Tokens[i].Kind = tkLParen then Inc(depth)
+              else if Tokens[i].Kind = tkRParen then
+              begin
+                Dec(depth);
+                if depth = 0 then Break;
+              end;
+              Inc(i);
+            end;
+            Result := PyWiden(Result, tk);
+            Inc(i);
+            Continue;
+          end;
+        end;
         if IsClassType(name) then tk := tyClass;
         ci := PyFindConstraint(name);
         if (tk = tyUnknown) and (ci >= 0) then tk := PyLocals[ci].TypeKind
