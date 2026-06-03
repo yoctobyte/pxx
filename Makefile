@@ -22,7 +22,7 @@ all: $(COMPILER)
 # Regenerate SYMBOLS.md — concise routine index (universal-ctags). Navigation
 # aid for humans and agents; re-run after code changes.
 symbols:
-	./tools/gen-symbols.sh
+	python3 tools/gen_symbols.py
 
 bootstrap-check:
 	@which $(FPC) > /dev/null 2>&1 || \
