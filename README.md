@@ -33,6 +33,9 @@ Focus: Linux / POSIX. Single target for now: x86-64.
   run SQLite CRUD with no Pascal wrapper; the compiler lifts C out-params and
   copies returned `char*` values. See
   [Wrapper-Free C From Nil Python](docs/wrapper-free-c-from-nil-python.md).
+- **Embedded direction** — ESP32/ESP-IDF is a long-term target: use the vendor C
+  SDK directly, treat FreeRTOS as a target profile, and keep the program native.
+  See [ESP32 And ESP-IDF Direction](docs/esp32-esp-idf-roadmap.md).
 - **Self-contained build path** — the compiler writes ELF directly and can
   rebuild itself from the checked-in seed. FPC remains the bootstrap and
   recovery tool.

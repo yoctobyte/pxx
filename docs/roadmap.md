@@ -100,6 +100,9 @@ Fixedpoint check: same pattern, under QEMU `qemu-arm` or native Pi.
 
 **When:** After at least two Linux targets (i386 + one ARM) are stable.
 
+See also the public ESP32-specific note:
+[`esp32-esp-idf-roadmap.md`](esp32-esp-idf-roadmap.md).
+
 This is a qualitatively different step. Linux targets share:
 - ELF executable format with OS loader
 - Syscall interface for I/O
