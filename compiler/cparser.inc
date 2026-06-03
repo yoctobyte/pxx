@@ -4,38 +4,61 @@ function ParseCBlockAST: Integer; forward;
 function ParseCStatementAST: Integer; forward;
 procedure SkipBraceBlock; forward;
 
-function FindCTypedef(const name: AnsiString): Integer;
-var i, j: Integer; match: Boolean;
+function CTypedefHashKey(const name: AnsiString): Integer;
+var i, h: Integer;
 begin
-  Result := -1;
-  for i := 0 to CTypedefCount-1 do
+  h := 5381;                  { djb2; small literals to stay self-host safe }
+  for i := 1 to Length(name) do
+    h := ((h * 33) + Ord(name[i])) and 1073741823;  { mask to 30 bits }
+  Result := h and 16383;      { table size - 1 }
+end;
+
+function CTypedefNameMatches(idx: Integer; const name: AnsiString): Boolean;
+var j: Integer;
+begin
+  Result := False;
+  if CTypedefNameLen[idx] <> Length(name) then Exit;
+  for j := 0 to CTypedefNameLen[idx] - 1 do
+    if CTypedefChars[CTypedefNameOff[idx] + j] <> name[j + 1] then Exit;
+  Result := True;
+end;
+
+{ O(1) average lookup via the open-addressed hash. Slots hold idx+1; 0 = empty. }
+function FindCTypedef(const name: AnsiString): Integer;
+var slot, stored: Integer;
+begin
+  slot := CTypedefHashKey(name);
+  while True do
   begin
-    if CTypedefNameLen[i] = Length(name) then
-    begin
-      match := True;
-      for j := 0 to CTypedefNameLen[i] - 1 do
-        if CTypedefChars[CTypedefNameOff[i] + j] <> name[j + 1] then
-        begin
-          match := False;
-          Break;
-        end;
-      if match then
-      begin
-        Result := i;
-        Exit;
-      end;
-    end;
+    stored := CTypedefHash[slot];
+    if stored = 0 then begin Result := -1; Exit; end;
+    if CTypedefNameMatches(stored - 1, name) then begin Result := stored - 1; Exit; end;
+    slot := (slot + 1) and 16383;
   end;
 end;
 
-procedure AddCTypedef(const name: AnsiString; tk: TTypeKind);
+procedure CTypedefHashInsert(idx: Integer; const name: AnsiString);
+var slot: Integer;
+begin
+  slot := CTypedefHashKey(name);
+  while CTypedefHash[slot] <> 0 do slot := (slot + 1) and 16383;
+  CTypedefHash[slot] := idx + 1;
+end;
+
+procedure AddCTypedefEx(const name: AnsiString; tk: TTypeKind; elemTk, rec: Integer);
 var idx, i: Integer;
 begin
   idx := FindCTypedef(name);
-  if idx >= 0 then begin CTypedefTk[idx] := Ord(tk); Exit; end;
+  if idx >= 0 then
+  begin
+    CTypedefTk[idx] := Ord(tk);
+    CTypedefElemTk[idx] := elemTk;
+    CTypedefRec[idx] := rec;
+    Exit;
+  end;
   if CTypedefCount >= MAX_CTYPEDEF then Error('C typedef table overflow');
   if CTypedefCharLen + Length(name) >= 524288 then Error('C typedef chars pool overflow');
-  
+
   CTypedefNameOff[CTypedefCount] := CTypedefCharLen;
   CTypedefNameLen[CTypedefCount] := Length(name);
   for i := 1 to Length(name) do
@@ -43,9 +66,17 @@ begin
     CTypedefChars[CTypedefCharLen] := name[i];
     Inc(CTypedefCharLen);
   end;
-  
+
   CTypedefTk[CTypedefCount] := Ord(tk);
+  CTypedefElemTk[CTypedefCount] := elemTk;
+  CTypedefRec[CTypedefCount] := rec;
+  CTypedefHashInsert(CTypedefCount, name);
   Inc(CTypedefCount);
+end;
+
+procedure AddCTypedef(const name: AnsiString; tk: TTypeKind);
+begin
+  AddCTypedefEx(name, tk, Ord(tyUnknown), REC_NONE);
 end;
 
 function IsCTypeTok: Boolean;
@@ -73,12 +104,12 @@ end;
 function ParseCDeclType: TTypeKind;
 var
   isUnsigned, isSigned, isFloatTy, isVoid, loop, sawBase, isTypedef: Boolean;
-  shortCount, longCount, tdIdx, depth: Integer;
+  shortCount, longCount, tdIdx, depth, baseRec: Integer;
   base: TTypeKind;
 begin
   isUnsigned := False; isSigned := False; isFloatTy := False; isVoid := False;
   sawBase := False; isTypedef := False;
-  shortCount := 0; longCount := 0; base := tyInt32;
+  shortCount := 0; longCount := 0; base := tyInt32; baseRec := REC_NONE;
   loop := True;
   while loop do
   begin
@@ -103,6 +134,7 @@ begin
           if tdIdx >= 0 then
           begin
             base := IntToTypeKind(CTypedefTk[tdIdx]);
+            baseRec := CTypedefRec[tdIdx];
             sawBase := True; isTypedef := True;
             Next;
           end
@@ -135,12 +167,31 @@ begin
     Result := base;
   end;
 
-  { Any pointer depth collapses to an untyped 8-byte Pointer. }
-  while CurTok.Kind = tkStar do
+  { Pointer suffix. Every star is still an 8-byte Pointer at the value level,
+    but we now record the pointed-at type (depth 1) and the depth, so a typed
+    handle can deref/index/field correctly and a struct pointer knows its
+    record. Depth >= 2 reports the element as Pointer (a `T**` derefs to a
+    `T*`). The base (Result) before the stars is the element kind. }
+  CTypePtrDepth := 0;
+  CTypeElemTk := Ord(tyUnknown);
+  CTypeElemRec := REC_NONE;
+  CTypeBaseRec := baseRec;
+  if CurTok.Kind = tkStar then
   begin
+    CTypeElemTk := Ord(Result);   { the pointed-at scalar/typedef kind at depth 1 }
+    CTypeElemRec := baseRec;      { ...and its record id, if it is a struct }
+    while CurTok.Kind = tkStar do
+    begin
+      Inc(CTypePtrDepth);
+      Next;
+    end;
+    if CTypePtrDepth >= 2 then
+    begin
+      CTypeElemTk := Ord(tyPointer);
+      CTypeElemRec := REC_NONE;
+    end;
     Result := tyPointer;
     CTypeIsVoid := False;
-    Next;
   end;
 
   { Function-pointer declarator: ret (*name)(params) — e.g. sqlite3_exec's
@@ -721,6 +772,146 @@ begin
   end;
 end;
 
+{ Record alignment of a record id (struct field by value). }
+function CRecAlign(rec: Integer): Integer;
+begin
+  if rec >= REC_UCLASS_BASE then Result := UClsAlign[rec - REC_UCLASS_BASE]
+  else Result := TARGET_PTR_SIZE;
+  if Result < 1 then Result := 1;
+end;
+
+{ Parse a C struct/union body into the user record `ci`. CurTok must be at the
+  opening brace (tkBegin). Fills fields with C natural alignment (each field on
+  its own alignment; struct align = max member align; size rounded up to that),
+  and leaves CurTok past the closing brace (tkEnd). Unions lay every field at
+  offset 0 with size = the largest member. Supported field shapes: scalars,
+  pointers (any depth -> Pointer, element type/record recorded for deref),
+  fixed arrays `T x[N]`, and nested struct-by-value. Bitfields (`x : n`) and
+  inline anonymous struct definitions are skipped, not laid out. }
+procedure ParseCStructInto(ci: Integer; isUnion: Boolean);
+var
+  curOff, maxAlign, fnOff, fnLen, arrLen, declStars, sz, al, totalSz, thisOff: Integer;
+  baseScalarTk, baseElemTk, baseElemRec, baseRecId, declTk, declElemTk, declElemRec, declRec: Integer;
+  fTk: TTypeKind;
+  isArr, firstDecl: Boolean;
+begin
+  Next; { consume the opening brace }
+  curOff := 0;
+  maxAlign := 1;
+  while (CurTok.Kind <> tkEnd) and (CurTok.Kind <> tkEOF) do
+  begin
+    if IsCTypeTok then
+    begin
+      fTk := ParseCDeclType;
+      { Recover the base scalar/struct before pointer folding, so comma
+        declarators with differing pointer levels (`int *a, b`) are correct. }
+      if CTypePtrDepth > 0 then
+      begin
+        baseScalarTk := CTypeElemTk;
+        baseElemRec := CTypeElemRec;
+      end
+      else
+      begin
+        baseScalarTk := Ord(fTk);
+        baseElemRec := REC_NONE;
+      end;
+      baseRecId := CTypeBaseRec;
+      baseElemTk := baseScalarTk;
+
+      firstDecl := True;
+      repeat
+        { stars for this declarator: the first one's stars were consumed by
+          ParseCDeclType (CTypePtrDepth); later ones carry their own. }
+        if firstDecl then
+          declStars := CTypePtrDepth
+        else
+        begin
+          declStars := 0;
+          while CurTok.Kind = tkStar do begin Inc(declStars); Next; end;
+        end;
+        if CurTok.Kind <> tkIdent then Break;
+        fnOff := Tokens[TokPos-1].SOffset;
+        fnLen := Tokens[TokPos-1].SLen;
+        Next;
+
+        { bitfield `name : n` — skip layout, consume to the separator }
+        if CurTok.Kind = tkColon then
+        begin
+          while (CurTok.Kind <> tkComma) and (CurTok.Kind <> tkSemicolon) and
+                (CurTok.Kind <> tkEOF) do Next;
+          firstDecl := False;
+          if not Eat(tkComma) then Break else Continue;
+        end;
+
+        isArr := False; arrLen := 1;
+        while CurTok.Kind = tkLBrack do
+        begin
+          Next;
+          if CurTok.Kind = tkInteger then begin arrLen := arrLen * CurTok.IVal; Next; end;
+          while (CurTok.Kind <> tkRBrack) and (CurTok.Kind <> tkEOF) do Next;
+          Eat(tkRBrack);
+          isArr := True;
+        end;
+
+        if declStars > 0 then
+        begin
+          declTk := Ord(tyPointer); declRec := REC_NONE;
+          declElemTk := baseElemTk; declElemRec := baseElemRec;
+          if declStars >= 2 then begin declElemTk := Ord(tyPointer); declElemRec := REC_NONE; end;
+          sz := TARGET_PTR_SIZE; al := TARGET_PTR_SIZE;
+        end
+        else if (IntToTypeKind(baseScalarTk) = tyRecord) and (baseRecId >= REC_UCLASS_BASE) then
+        begin
+          declTk := Ord(tyRecord); declRec := baseRecId;
+          declElemTk := Ord(tyUnknown); declElemRec := REC_NONE;
+          sz := RecSize(baseRecId); al := CRecAlign(baseRecId);
+        end
+        else
+        begin
+          declTk := baseScalarTk; declRec := REC_NONE;
+          declElemTk := Ord(tyUnknown); declElemRec := REC_NONE;
+          sz := TypeSize(IntToTypeKind(baseScalarTk));
+          al := TypeAlign(IntToTypeKind(baseScalarTk));
+        end;
+        if al < 1 then al := 1;
+
+        if isUnion then thisOff := 0
+        else thisOff := AlignTo(curOff, al);
+
+        { AddUField reads LastTypePointerElemTk/Rec for pointer fields. Skip the
+          record (but keep advancing the offset, so size stays correct) if the
+          field pool is nearly full — avoids a hard overflow on a giant struct. }
+        if UFldCount < MAX_UFIELD - 1 then
+        begin
+          LastTypePointerElemTk := IntToTypeKind(declElemTk);
+          LastTypePointerElemRec := declElemRec;
+          AddUField(ci, fnOff, fnLen, thisOff, declTk, declRec);
+          UFldIsArray[UFldCount-1] := isArr;
+          UFldArrLen[UFldCount-1] := arrLen;
+        end;
+
+        totalSz := sz;
+        if isArr then totalSz := sz * arrLen;
+        if isUnion then
+        begin
+          if totalSz > curOff then curOff := totalSz;
+        end
+        else
+          curOff := thisOff + totalSz;
+        if al > maxAlign then maxAlign := al;
+
+        firstDecl := False;
+      until not Eat(tkComma);
+      Eat(tkSemicolon);
+    end
+    else
+      Next;  { skip nested struct/union defs, attributes, unknown tokens }
+  end;
+  Eat(tkEnd); { consume the closing brace }
+  UClsSize_[ci] := AlignTo(curOff, maxAlign);
+  UClsAlign[ci] := maxAlign;
+end;
+
 { Parse a top-level `typedef ...;` and register the new type name.
   - struct/union [tag] [body] Name   -> opaque, mapped to Pointer
   - enum [tag] body Name             -> Int32, enumerators become constants
@@ -728,7 +919,8 @@ end;
   Function-pointer typedefs `ret (*Name)(args)` are detected and registered
   as Pointer; their argument signature is not yet modelled. }
 procedure ParseCTypedef;
-var tk: TTypeKind; nm: AnsiString; isAggregate: Boolean;
+var tk: TTypeKind; nm: AnsiString; isAggregate, isUnion: Boolean;
+    ci, ptrStars: Integer;
 begin
   Next; { consume 'typedef' }
 
@@ -736,10 +928,55 @@ begin
                  ((CurTok.Kind = tkIdent) and (CurTok.SVal = 'union'));
   if isAggregate then
   begin
+    isUnion := (CurTok.Kind = tkIdent) and (CurTok.SVal = 'union');
     Next; { 'struct' / 'union' }
     if CurTok.Kind = tkIdent then Next;      { optional tag }
-    if CurTok.Kind = tkBegin then SkipBraceBlock; { body, if present }
-    { the declarator may carry a pointer: typedef struct _X *XRef; }
+    if (CurTok.Kind = tkBegin) and
+       ((UClsCount >= MAX_UCLASS - 1) or (UFldCount >= MAX_UFIELD - 128)) then
+    begin
+      { Out of record-table headroom. C structs share the small MAX_UCLASS /
+        MAX_UFIELD tables with Pascal records, so a macro-soup header (GTK,
+        thousands of structs) cannot all be laid out. Fall back to the old
+        opaque pointer behavior once headroom runs low. Raising those limits to
+        support many C structs is future work (record-layout landmine). }
+      SkipBraceBlock;
+      while CurTok.Kind = tkStar do Next;
+      if CurTok.Kind = tkIdent then
+      begin
+        nm := CurTok.SVal; Next;
+        AddCTypedef(nm, tyPointer);
+      end;
+      while (CurTok.Kind <> tkSemicolon) and (CurTok.Kind <> tkEOF) do Next;
+      Eat(tkSemicolon);
+      Exit;
+    end;
+    if CurTok.Kind = tkBegin then
+    begin
+      { Body present: lay it out as a real record so fields are addressable.
+        The typedef Name follows the body, so create the class first with a
+        placeholder name and patch it once the name token is read. }
+      ci := AddUClass(0, 0);
+      UClsIsRecord[ci] := True;
+      ParseCStructInto(ci, isUnion);
+      ptrStars := 0;
+      while CurTok.Kind = tkStar do begin Inc(ptrStars); Next; end;
+      if CurTok.Kind = tkIdent then
+      begin
+        UClsNOff[ci] := Tokens[TokPos-1].SOffset;
+        UClsNLen[ci] := Tokens[TokPos-1].SLen;
+        nm := CurTok.SVal; Next;
+        if ptrStars > 0 then
+          { typedef struct {..} *Name; — Name is a pointer to the record }
+          AddCTypedefEx(nm, tyPointer, Ord(tyRecord), REC_UCLASS_BASE + ci)
+        else
+          AddCTypedefEx(nm, tyRecord, Ord(tyUnknown), REC_UCLASS_BASE + ci);
+      end;
+      while (CurTok.Kind <> tkSemicolon) and (CurTok.Kind <> tkEOF) do Next;
+      Eat(tkSemicolon);
+      Exit;
+    end;
+    { No body: opaque forward declaration — pointer-only handle.
+      The declarator may carry a pointer: typedef struct _X *XRef; }
     while CurTok.Kind = tkStar do Next;
     if CurTok.Kind = tkIdent then
     begin
@@ -786,7 +1023,12 @@ begin
   if CurTok.Kind = tkIdent then
   begin
     nm := CurTok.SVal; Next;
-    AddCTypedef(nm, tk);
+    { Carry the pointed-at type for a pointer typedef (e.g. typedef char *PStr),
+      so a Pascal/nilpy var of that type is a typed pointer (deref/index). }
+    if (tk = tyPointer) and (CTypePtrDepth > 0) then
+      AddCTypedefEx(nm, tk, CTypeElemTk, CTypeElemRec)
+    else
+      AddCTypedef(nm, tk);
   end;
   while (CurTok.Kind <> tkSemicolon) and (CurTok.Kind <> tkEOF) do Next;
   Eat(tkSemicolon);

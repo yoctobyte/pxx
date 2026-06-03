@@ -519,11 +519,21 @@ var
   ProcRetElemRec : array[0..MAX_PROCS-1] of Integer;     { element record id of a dyn-array result }
   CurrentCLibrary : AnsiString;
   CTypeIsVoid : Boolean; { last ParseCDeclType saw bare void (no pointer) }
+  CTypePtrDepth : Integer;   { pointer-star count of the last ParseCDeclType (0 = not a pointer) }
+  CTypeElemTk : Integer;     { pointed-at TTypeKind ordinal when CTypePtrDepth>0 (tyPointer for depth>=2) }
+  CTypeElemRec : Integer;    { pointed-at record id when the element is a struct, else REC_NONE }
+  CTypeBaseRec : Integer;    { record id of the base type before any pointer suffix, else REC_NONE }
   CHeaderMode : Boolean; { parsing C in header/FFI mode }
   CTypedefCount : Integer;
   CTypedefNameOff : array[0..MAX_CTYPEDEF-1] of Integer;
   CTypedefNameLen : array[0..MAX_CTYPEDEF-1] of Integer;
   CTypedefTk    : array[0..MAX_CTYPEDEF-1] of Integer; { resolved TTypeKind ordinal }
+  CTypedefElemTk : array[0..MAX_CTYPEDEF-1] of Integer; { pointer typedef: pointed-at TTypeKind ordinal }
+  CTypedefRec   : array[0..MAX_CTYPEDEF-1] of Integer;  { struct typedef: record id; pointer typedef: elem record id }
+  { Open-addressed name->index hash for O(1) FindCTypedef. Stores idx+1 so the
+    zero-initialised state means "empty" (no -1 fill needed). Size is a power of
+    two > 2*MAX_CTYPEDEF for a <=0.5 load factor. }
+  CTypedefHash  : array[0..16383] of Integer;
   CTypedefChars : array[0..524287] of Char;
   CTypedefCharLen : Integer;
   ExternalProc   : array[0..MAX_EXTERNAL-1] of Integer;

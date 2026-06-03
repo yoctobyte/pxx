@@ -237,6 +237,8 @@ test: $(COMPILER) fpc-check
 	test "$$(/tmp/string_to_pchar_auto26)" = "$$(printf 'open=0\nprepare=0\n1 alice\n2 bob\nfinalize=0\nclose=0')"
 	./$(COMPILER) test/test_c_define_const.pas /tmp/c_define_const26
 	test "$$(/tmp/c_define_const26)" = "$$(printf '0\n100\n101\n101')"
+	./$(COMPILER) test/test_c_struct_fields.pas /tmp/c_struct_fields26
+	test "$$(/tmp/c_struct_fields26)" = "$$(printf '7\n9\n11\nh\ni')"
 	./$(COMPILER) test/test_c_preprocess.pas /tmp/c_preprocess26
 	test "$$(/tmp/c_preprocess26)" = "42"
 	./$(COMPILER) --debug test/test_c_preprocess.pas /tmp/c_preprocess_debug26 > /tmp/c_preprocess_debug26.log
