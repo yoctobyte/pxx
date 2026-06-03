@@ -140,10 +140,10 @@ The C capability is useful but intentionally incomplete:
   they fill, and `FindUClass` is a linear scan, so very large headers parse in
   super-linear time (index it later if needed).
 - **Typed pointers carry their element type** (depth 1): `T*` knows the
-  pointed-at type for deref/index/field, and a pointer typedef becomes a typed
-  Pascal pointer. Depth ≥ 2 (`T**`) records only that it is a pointer-to-pointer.
-  Function *parameter* pointer-element typing is not yet wired (params still
-  carry the bare `Pointer`). Out-parameter auto-address-of remains a
+  pointed-at type for deref/index/field, a pointer typedef becomes a typed
+  Pascal pointer, and a function whose result is a typed pointer supports the
+  chain directly (`f()^`, `f()^.field`, `f()[i]`). Depth ≥ 2 (`T**`) records
+  only that it is a pointer-to-pointer. Out-parameter auto-address-of remains a
   **documented non-goal** — see
   [`handover-nilpy-c-binding-2026-06-02.md`](handover-nilpy-c-binding-2026-06-02.md).
 - Library-name resolution maps known names to versioned sonames (`ctype`,
