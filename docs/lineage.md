@@ -43,6 +43,10 @@ or another.
 
 ### The Pascal Branch
 
+**Blaise Pascal** (1623–1662) — mathematician, physicist, philosopher, and
+builder of the Pascaline mechanical calculator. The Pascal language was named
+in his honour.
+
 **Niklaus Wirth** — **Pascal** (1970). Clean, structured, strongly typed.
 Designed to teach good programming practice. Turned out to also be excellent
 for real software.
