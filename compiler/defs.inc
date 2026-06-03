@@ -517,6 +517,8 @@ var
   ProcRetIsDynArray : array[0..MAX_PROCS-1] of Boolean; { result is `array of T` (pointer-sized heap handle) }
   ProcRetElemTk : array[0..MAX_PROCS-1] of TTypeKind;    { element type of a dyn-array result }
   ProcRetElemRec : array[0..MAX_PROCS-1] of Integer;     { element record id of a dyn-array result }
+  ProcRetPtrElemTk : array[0..MAX_PROCS-1] of Integer;   { pointed-at TTypeKind ord when the result is a typed pointer (tyUnknown otherwise) }
+  ProcRetPtrElemRec : array[0..MAX_PROCS-1] of Integer;  { pointed-at record id when the result is a typed pointer-to-struct }
   CurrentCLibrary : AnsiString;
   CTypeIsVoid : Boolean; { last ParseCDeclType saw bare void (no pointer) }
   CTypePtrDepth : Integer;   { pointer-star count of the last ParseCDeclType (0 = not a pointer) }

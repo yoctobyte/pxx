@@ -1695,6 +1695,66 @@ begin
   Result := node;
 end;
 
+{ Apply a chain of ^, [i], and .field to a function-call result that is a typed
+  pointer, using the callee's recorded return element type (ProcRetPtrElemTk/Rec).
+  Lets `f()^`, `f()^.field`, and `f()[i]` resolve without a typed intermediate
+  variable. Sets CurASTNode and LastExprTk; consumes nothing when the result is
+  not a typed pointer. }
+procedure ApplyCallResultPtrSuffix(node, pi: Integer);
+var tk: TTypeKind; elemTk, elemRec, recId, sub, prevTok: Integer; fieldName: AnsiString;
+begin
+  tk := Procs[pi].RetType;
+  recId := REC_NONE;
+  elemTk := ProcRetPtrElemTk[pi];
+  elemRec := ProcRetPtrElemRec[pi];
+  if (tk = tyPointer) and (elemTk <> Ord(tyUnknown)) then
+  begin
+    while CurTok.Kind in [tkCaret, tkDot, tkLBrack] do
+    begin
+      if CurTok.Kind = tkCaret then
+      begin
+        Next;
+        sub := AllocNode(AN_DEREF);
+        ASTLeft[sub] := node;
+        tk := IntToTypeKind(elemTk); recId := elemRec;
+        ASTTk[sub] := Ord(tk);
+        node := sub;
+      end
+      else if CurTok.Kind = tkLBrack then
+      begin
+        Next;
+        sub := AllocNode(AN_INDEX);
+        ASTLeft[sub] := node;
+        ParseExpr;
+        ASTRight[sub] := CurASTNode;
+        Expect(tkRBrack, ']');
+        tk := IntToTypeKind(elemTk); recId := elemRec;
+        ASTTk[sub] := Ord(tk);
+        node := sub;
+      end
+      else { tkDot — field of the pointed-at record }
+      begin
+        Next;
+        if CurTok.Kind in [tkEOF, tkSemicolon, tkAssign, tkRBrack, tkRParen] then
+          Error('expected field name after .');
+        prevTok := TokPos - 1;
+        fieldName := GetTokenStr(prevTok);
+        sub := AllocNode(AN_FIELD);
+        ASTLeft[sub] := node;
+        ASTSOffset[sub] := Tokens[prevTok].SOffset;
+        ASTSLen[sub] := Tokens[prevTok].SLen;
+        tk := RecFieldType(recId, fieldName);
+        recId := RecFieldRecId(recId, fieldName);
+        ASTTk[sub] := Ord(tk);
+        Next;
+        node := sub;
+      end;
+    end;
+  end;
+  CurASTNode := node;
+  LastExprTk := tk;
+end;
+
 procedure ParseFactor;
 var name: AnsiString; recName: Integer; idx, pi, i, node, left, prevTok, valNode: Integer; tk: TTypeKind; op, argSeq, argSeq2, argSeq3, lastArg, argIdx, exprNode, szArg: Integer;
     nArgs, argsHead, currArg: Integer; argTypes: array[0..15] of TTypeKind;
@@ -2460,7 +2520,8 @@ begin
         ASTIVal[node] := pi;
         ASTTk[node] := Ord(Procs[pi].RetType);
         ASTLeft[node] := argsHead;
-        CurASTNode := node;
+        ApplyCallResultPtrSuffix(node, pi);  { f(...)^ / ^.field / [i] }
+        Exit;
       end
       else if (pi >= 0) and Procs[pi].IsFunc and (Procs[pi].ParamCount = 0) then
       begin
@@ -2468,7 +2529,8 @@ begin
         node := AllocNode(AN_CALL);
         ASTIVal[node] := pi;
         ASTTk[node] := Ord(Procs[pi].RetType);
-        CurASTNode := node;
+        ApplyCallResultPtrSuffix(node, pi);  { f()^ / ^.field / [i] }
+        Exit;
       end
       else
       begin
@@ -4664,6 +4726,7 @@ var
   pi, i, sz, retRecId, savedLastTypeRecId: Integer;
   zeroBytes : Integer;
   retIsDynArr : Boolean; retElemTk : TTypeKind; retElemRec : Integer;
+  retPtrElemTk, retPtrElemRec : Integer;
   savedSC, savedFS, savedCurProc : Integer;
   savedGLC, savedGFC, j: Integer;
   patchPos : Integer;
@@ -4722,6 +4785,7 @@ begin
 
   nparams := 0; retType := tyInteger; retRecId := REC_NONE;
   retIsDynArr := False; retElemTk := tyUnknown; retElemRec := REC_NONE;
+  retPtrElemTk := Ord(tyUnknown); retPtrElemRec := REC_NONE;
 
   if CurTok.Kind = tkLParen then
   begin
@@ -4801,6 +4865,11 @@ begin
       retType := ParseTypeKind;
       if retType = tyRecord then
         retRecId := LastTypeRecId;
+      if retType = tyPointer then
+      begin
+        retPtrElemTk := Ord(LastTypePointerElemTk);
+        retPtrElemRec := LastTypePointerElemRec;
+      end;
     end;
   end;
 
@@ -4929,6 +4998,8 @@ begin
     ProcRetIsDynArray[pi] := retIsDynArr;
     ProcRetElemTk[pi] := retElemTk;
     ProcRetElemRec[pi] := retElemRec;
+    ProcRetPtrElemTk[pi] := retPtrElemTk;
+    ProcRetPtrElemRec[pi] := retPtrElemRec;
     if retIsDynArr then Procs[pi].RetType := tyPointer; { 8-byte heap handle ABI }
     Exit;
   end;
@@ -4951,6 +5022,8 @@ begin
   ProcRetIsDynArray[pi] := retIsDynArr;
   ProcRetElemTk[pi] := retElemTk;
   ProcRetElemRec[pi] := retElemRec;
+  ProcRetPtrElemTk[pi] := retPtrElemTk;
+  ProcRetPtrElemRec[pi] := retPtrElemRec;
   if retIsDynArr then Procs[pi].RetType := tyPointer; { 8-byte heap handle ABI }
   Procs[pi].BodyAddr := CodeLen;
   for i := 0 to nparams-1 do

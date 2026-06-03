@@ -2190,6 +2190,8 @@ begin
   ProcRetIsDynArray[ProcCount] := False;
   ProcRetElemTk[ProcCount]     := tyUnknown;
   ProcRetElemRec[ProcCount]    := REC_NONE;
+  ProcRetPtrElemTk[ProcCount]  := Ord(tyUnknown);
+  ProcRetPtrElemRec[ProcCount] := REC_NONE;
   for i := 0 to nParams-1 do
   begin
     Procs[ProcCount].Params[i].Name     := pnames[i];
@@ -2869,6 +2871,14 @@ begin
     begin
       if ASTIVal[baseNode] >= 0 then
         Result := AliasElemRec[ASTIVal[baseNode]]
+      else
+        Result := REC_NONE;
+    end
+    else if ASTKind[baseNode] = AN_CALL then
+    begin
+      { f()^ : the pointed-at record comes from the callee's return element. }
+      if ASTIVal[baseNode] >= 0 then
+        Result := ProcRetPtrElemRec[ASTIVal[baseNode]]
       else
         Result := REC_NONE;
     end

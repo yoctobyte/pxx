@@ -374,11 +374,21 @@ var
   name: AnsiString;
   isFunc: Boolean;
   nparams, pi, i, idx, patchPos, sz: Integer;
+  retPtrElemTk, retPtrElemRec: Integer;
   ptypes: array[0..15] of TTypeKind;
   pnames: array[0..15] of AnsiString;
   savedSC, savedFS, node, savedCurProc: Integer;
 begin
   retType := ParseCDeclType;
+  { Capture the return type's pointed-at type so `f()^`, `f()^.field`, `f()[i]`
+    on a typed-pointer result resolve the element. }
+  retPtrElemTk := Ord(tyUnknown);
+  retPtrElemRec := REC_NONE;
+  if (retType = tyPointer) and (CTypePtrDepth > 0) then
+  begin
+    retPtrElemTk := CTypeElemTk;
+    retPtrElemRec := CTypeElemRec;
+  end;
   if CTypeIsVoid then retType := tyInteger; { void return: value slot unused }
 
   if CurTok.Kind <> tkIdent then
@@ -435,7 +445,9 @@ begin
   pi := FindProc(name);
   if pi < 0 then
     pi := RegisterProc(name, isFunc, retType, nparams, pnames, ptypes);
-  
+  ProcRetPtrElemTk[pi] := retPtrElemTk;
+  ProcRetPtrElemRec[pi] := retPtrElemRec;
+
   { If it is just a declaration (ends with ';'), we are done! }
   while (CurTok.Kind <> tkSemicolon) and (CurTok.Kind <> tkBegin) and
         (CurTok.Kind <> tkEOF) do Next;
