@@ -943,6 +943,7 @@ begin
   Syms[SymCount].IsArray  := False;
   Syms[SymCount].ArrLen   := 0;
   SymDynDepth[SymCount] := 0;
+  SymIsHiddenArgTemp[SymCount] := False;
   Syms[SymCount].ElemType := tyInteger;
   if tk = tyAnsiString then
     Syms[SymCount].ElemType := tyChar;

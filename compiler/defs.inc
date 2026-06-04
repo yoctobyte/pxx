@@ -502,6 +502,7 @@ var
   SymCaseSensitive : array[0..MAX_SYMS-1] of Boolean; { match this symbol name case-sensitively }
   SymUnitIdx : array[0..MAX_SYMS-1] of Integer; { Strs[] unit name, or -1 for main/local compiler-generated symbols }
   SymDynDepth : array[0..MAX_SYMS-1] of Integer; { dynamic-array nesting: 0=not dynamic, 1=array of T, 2=array of array of T, ... }
+  SymIsHiddenArgTemp : array[0..MAX_SYMS-1] of Boolean; { compiler-synthesised owning local for a materialised managed-string call argument; needs nil-init before the body }
   SymCount  : Integer;
   FrameSize : Integer;
 

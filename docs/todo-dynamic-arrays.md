@@ -137,16 +137,28 @@ The residual 351 MB is a **separate** leak (`tools` v2 probe): managed string
 per-call arg string (~31 B/iter); a no-arg `Mk` result loop is flat (264 KB).
 Tracked below.
 
-### Known leak: managed string arguments not released on callee return
+### Managed string argument temporaries leaked — FIXED 2026-06-04
 
-Passing a managed `AnsiString` argument (e.g. a literal, which materialises a
-fresh refcount-1 managed string at the call site) leaks one reference per call:
-the temporary is never released after the call returns. Pure result moves are
-clean (no-arg function result loop stays at 264 KB); param passthrough
-(`function Mk(a: AnsiString): AnsiString; begin Mk := a; end;`) grows ~31 B/iter.
-Fix needs caller-side release of materialised argument temporaries after the
-call (or callee-side release of by-value managed params on scope exit), honoring
-"whoever reserves, frees".
+A materialised managed `AnsiString` argument (a literal, concat, char/string
+coercion, or function result — anything that is not an existing lvalue) is
+refcount 1 with no owner, so passing it directly leaked one reference per call.
+Params stay *borrowed* (the "borrow by default" law): existing-variable args
+were already clean.
+
+Fixed by binding each such temporary to a hidden owning local at the call site
+(`ir.inc`, `AN_CALL` arg loop): the temp is stored into a synthesised
+`tyAnsiString` local (the store releases the previous value, covering loop
+reuse) and passed by borrow; the epilog's managed-local release frees it at
+scope exit. The hidden locals are created during body lowering — after the
+parser's prologue zero-init pass — so `IREmitMachineCode` nil-inits them
+(flagged via the `SymIsHiddenArgTemp` parallel array) before the body, keeping
+the first store's release-of-old safe. Only fires under `PXX_MANAGED_STRING`
+(`tyAnsiString` exists only then), so the self-hosted compiler build is
+byte-identical. Regression: `test/test_managed_arg_temp.pas`.
+
+A/B over a 5M-iteration `s := Mk('a','b')` loop: peak RSS 507 MB (pre-result-fix)
+→ 351 MB (result move) → **264 KB** (arg temps owned). A no-arg result loop and
+a variable-arg loop were already flat at 264 KB.
 
 ## Implementation Notes
 

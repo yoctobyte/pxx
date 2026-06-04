@@ -691,6 +691,7 @@ var left, right, seq, item, value, outNode, first, last, leftAddr, argNode, argV
     varIdx: Integer;
     initValNode, storeNode, limitValNode, cmpNode, condJmpNode, bodyIRNode: Integer;
     loadVarNode2, constOneNode, stepNode, storeStepNode, jmpNode: Integer;
+    hiddenArgSym: Integer; argIsManagedTemp: Boolean;
     continueLabel, continueLabelNode: Integer;
     branchSeq, branchPair, labelsHead, stmtNode, labelNode: Integer;
     clauseBodyLabel, nextClauseLabel, selectorValNode: Integer;
@@ -1239,6 +1240,22 @@ begin
         else
           value := IRLowerAST(ASTLeft[item]);
 
+        { A materialised managed-string argument (a literal, concat, char/string
+          coercion, or function result — anything that is not an existing lvalue)
+          is refcount 1 with no owner, so passing it directly leaks one reference
+          per call. Bind it to a hidden owning local and pass that by borrow: the
+          local's store releases the previous value (loop reuse) and the epilog's
+          managed-local release frees it at scope exit. Only fires under managed
+          strings (tyAnsiString exists only with PXX_MANAGED_STRING), so the
+          self-hosted compiler build is unaffected. }
+        argIsManagedTemp :=
+          (not isRefArg) and (cpi >= 0) and (pathIdx < Procs[cpi].ParamCount) and
+          (Procs[cpi].Params[pathIdx].TypeKind = tyAnsiString) and
+          (ASTKind[ASTLeft[item]] <> AN_IDENT) and
+          (ASTKind[ASTLeft[item]] <> AN_FIELD) and
+          (ASTKind[ASTLeft[item]] <> AN_INDEX) and
+          (ASTKind[ASTLeft[item]] <> AN_DEREF);
+
         { Auto const char* marshalling: a string argument passed to a Pointer
           parameter gets the same +8 length-prefix skip as an explicit PChar()
           cast, so C bindings pass a Pascal string without PChar() boilerplate.
@@ -1250,6 +1267,14 @@ begin
           right := IRAppend(IR_CONST_INT, -1, -1, -1, 8, Ord(tyInteger));
           value := IRAppend(IR_BINOP, value, right, Ord(tkPlus), 0, Ord(tyPointer));
           argNode := IRAppend(IR_ARG, value, -1, -1, 0, Ord(tyPointer));
+        end
+        else if argIsManagedTemp then
+        begin
+          hiddenArgSym := AllocVar('', tyAnsiString);
+          SymIsHiddenArgTemp[hiddenArgSym] := True;
+          IRAppend(IR_STORE_SYM, hiddenArgSym, value, -1, 0, Ord(tyAnsiString));
+          value := IRAppend(IR_LOAD_SYM, hiddenArgSym, -1, -1, 0, Ord(tyAnsiString));
+          argNode := IRAppend(IR_ARG, value, -1, -1, 0, Ord(tyAnsiString));
         end
         else
           argNode := IRAppend(IR_ARG, value, -1, -1, 0, ASTTk[ASTLeft[item]]);

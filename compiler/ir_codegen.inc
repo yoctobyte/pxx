@@ -3639,6 +3639,18 @@ begin
     LabelPositions[i] := -1;
   LabelFixupCount := 0;
 
+  { Nil-init hidden owning locals synthesised for materialised managed-string
+    arguments. They are created during this body's IR lowering, after the
+    parser's prologue zero-init pass, so they would otherwise hold stale stack
+    bytes and the first store's release-of-old would free garbage. Main-program
+    temps are skGlobal (BSS, already zeroed), so only in-proc skLocal needs it. }
+  if CurProc >= 0 then
+    for i := Procs[CurProc].ScopeBase to SymCount - 1 do
+      if SymIsHiddenArgTemp[i] and (Syms[i].Kind = skLocal) then
+      begin
+        EmitB($48); EmitB($C7); EmitB($85); EmitI32(Syms[i].Offset); EmitI32(0); { mov qword [rbp+off], 0 }
+      end;
+
   for i := 0 to IRCount - 1 do
   begin
     case IRKind[i] of
