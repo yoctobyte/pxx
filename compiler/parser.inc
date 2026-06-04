@@ -357,9 +357,46 @@ begin
   Specializations[SpecializationCount].ConcreteName := concreteName;
   Inc(SpecializationCount);
 
+  { Stream the concrete class body inline so the fall-through binds the alias
+    name. Methods that were buffered BEFORE this specialization (template in a
+    used unit) cannot be streamed here — a `procedure` token would close the
+    type section and orphan any following specialization — so defer them to a
+    pending queue that ParseTypeSection flushes once the section ends. Methods
+    buffered AFTER this point are streamed by BufferGenericMethod, so each
+    (method, specialization) pair is materialised exactly once. }
+  if GenericMethodCount > 0 then
+  begin
+    if PendingSpecCount >= MAX_PENDING_SPECS then Error('too many pending specializations');
+    PendingSpecTi[PendingSpecCount] := ti;
+    PendingSpecIdx[PendingSpecCount] := SpecializationCount - 1;
+    Inc(PendingSpecCount);
+  end;
+
   SpecializeTemplateName := Templates[ti].Name;
   SpecializeStream(Templates[ti].TokStart, Templates[ti].TokCount, specName, Templates[ti].Param, concreteName, concreteType);
   Next;
+end;
+
+{ Materialise the methods of every class specialization buffered during the
+  type section just parsed. Called once the section's token loop exits, so the
+  streamed `procedure`/`function` bodies land after the whole `type` block and
+  are parsed as ordinary top-level subroutines. Inserting at TokPos prepends
+  before the section-terminating token, which was un-read by the caller. }
+procedure FlushPendingClassSpecializations;
+var p, gm, ti, si: Integer;
+begin
+  for p := 0 to PendingSpecCount - 1 do
+  begin
+    ti := PendingSpecTi[p];
+    si := PendingSpecIdx[p];
+    SpecializeTemplateName := Templates[ti].Name;
+    for gm := 0 to GenericMethodCount - 1 do
+      if GenericMethods[gm].TemplateIdx = ti then
+        SpecializeStream(GenericMethods[gm].TokStart, GenericMethods[gm].TokCount,
+          Specializations[si].Name, Templates[ti].Param,
+          Specializations[si].ConcreteName, Specializations[si].ConcreteType);
+  end;
+  PendingSpecCount := 0;
 end;
 
 procedure BufferGenericMethod(ti, startTokIdx: Integer);
@@ -404,7 +441,19 @@ begin
     mCount := mCount + 1;
   end;
 
-  { Insert specializations AFTER the template method body, not at the dot position }
+  { Remember the buffered method so a later specialization (parsed after this
+    method, e.g. template in a unit + `specialize` in the program) can still
+    materialise it. See ParseSpecialization. }
+  if GenericMethodCount >= MAX_GENERIC_METHODS then Error('too many generic methods');
+  GenericMethods[GenericMethodCount].TemplateIdx := ti;
+  GenericMethods[GenericMethodCount].TokStart := mStart;
+  GenericMethods[GenericMethodCount].TokCount := mCount;
+  Inc(GenericMethodCount);
+
+  { Insert specializations AFTER the template method body, not at the dot
+    position. Only specializations already registered are streamed here; ones
+    declared later stream this method from ParseSpecialization, so each
+    (method, specialization) pair is materialised exactly once. }
   TokPos := finalCur;
   for si := 0 to SpecializationCount - 1 do
   begin
@@ -4874,6 +4923,17 @@ begin
       end;
       Eat(tkSemicolon);
     end;
+  end;
+  { Materialise deferred class-specialization methods after the section. The
+    loop exited with the terminating token already loaded into CurTok (TokPos
+    points past it); un-read it so the streamed methods are inserted before it,
+    then reload CurTok from the first streamed token (or the terminator again if
+    nothing was streamed). }
+  if PendingSpecCount > 0 then
+  begin
+    Dec(TokPos);
+    FlushPendingClassSpecializations;
+    Next;
   end;
 end;
 

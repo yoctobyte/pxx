@@ -364,6 +364,8 @@ type
 const
   MAX_TEMPLATES = 16;
   MAX_TEMPLATE_TOKENS = 8192;
+  MAX_GENERIC_METHODS = 64;
+  MAX_PENDING_SPECS = 32;
   MAX_SPECIALIZATIONS = 32;
   MAX_GENERIC_FUNCS = 16;
   MAX_PENDING_GFSPECS = 32;
@@ -390,6 +392,15 @@ type
     IsFunc   : Boolean;
     TokStart : Integer;
     TokCount : Integer;
+  end;
+
+  { A buffered generic-class method body, kept so a specialization that is
+    parsed AFTER the method (e.g. the template lives in a used unit and the
+    `specialize` is in the program) can still materialise the method. }
+  TGenericMethod = record
+    TemplateIdx : Integer;
+    TokStart    : Integer;
+    TokCount    : Integer;
   end;
 
   TPendingGFSpec = record
@@ -419,6 +430,17 @@ var
   SpecializeTokens   : array[0..MAX_TEMPLATE_TOKENS-1] of TRawToken;
   TemplateTokenCount : Integer;
   GenericFuncs       : array[0..MAX_GENERIC_FUNCS-1] of TGenericFunc;
+  GenericMethods     : array[0..MAX_GENERIC_METHODS-1] of TGenericMethod;
+  GenericMethodCount : Integer;
+  { Class specializations seen in the current type section whose template
+    methods must be materialised AFTER the section closes (streaming a method —
+    a `procedure ...` — inside the section would terminate it). Stored as
+    indices into Specializations[] (which already holds the names/types) to
+    avoid large frozen-AnsiString arrays in the compiler's own BSS. Flushed by
+    ParseTypeSection. }
+  PendingSpecTi    : array[0..MAX_PENDING_SPECS-1] of Integer;
+  PendingSpecIdx   : array[0..MAX_PENDING_SPECS-1] of Integer;
+  PendingSpecCount : Integer;
   GenericFuncCount   : Integer;
   PendingGFSpecs     : array[0..MAX_PENDING_GFSPECS-1] of TPendingGFSpec;
   PendingGFSpecCount : Integer;
