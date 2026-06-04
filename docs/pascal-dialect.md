@@ -166,7 +166,34 @@ end;
 specialize Max<Integer> as MaxInt;
 ```
 
-Class generics are supported as well. Generic call-site sugar such as
+Class generics work the same way. A template names one type parameter; the
+method bodies follow it (same source or a used unit):
+
+```pascal
+type
+  generic TList<T> = class
+    FItems: array of T;
+    FCount: Integer;
+    procedure Add(v: T);
+    function Get(i: Integer): T;
+  end;
+
+procedure TList.Add(v: T); begin ... end;
+function TList.Get(i: Integer): T; begin Result := Self.FItems[i]; end;
+```
+
+A `specialize` produces a concrete class — either inside a type section or at
+top level:
+
+```pascal
+type
+  TIntList = specialize TList<Integer>;          { type-section form }
+specialize TList<AnsiString> as TStrList;        { top-level form }
+```
+
+The template may live in a used unit (`lib/rtl/collections.pas` ships a generic
+`TList<T>`) and be specialized from the program; the concrete methods are
+materialized at the specialization site. Generic call-site sugar such as
 `Max<Integer>(a, b)` is not an implemented compatibility promise.
 
 ## Operator Implementations

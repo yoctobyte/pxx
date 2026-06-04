@@ -397,7 +397,15 @@ inheritance depth, method-resolution clauses, COM ARC.
 - ✅ **Explicit `inherited` calls.** Parent-chain static dispatch works for
   constructors, methods, bare `inherited`, and inherited function results.
   Test: `test/test_inherited.pas`.
-- 🟡 **Generics.** Template mechanism exists; breadth vs FPC unverified.
+- ✅ **Generics.** Generic functions/procedures and **generic classes** both
+  work via explicit `specialize`. A `generic TFoo<T> = class ... end;` template
+  with its method bodies can live in a used unit; `specialize TFoo<C> as TBar;`
+  in any program (or later unit) materializes a concrete class with its methods
+  (token-stream specialization, deferred so cross-unit specialization composes —
+  see the generic-class parser commits). The standard library ships a generic
+  `TList<T>` (`lib/rtl/collections.pas`) backed by a managed `array of T` field.
+  Tests: `test/test_generic_func.pas`, `test/test_collections.pas`. Generic
+  call-site sugar (`Max<Integer>(a,b)`) is still not a compatibility promise.
 - ✅ **Class visibility.** Phase 0 of the LFM arc done (see §2).
 - ✅ **Method-call-with-args as a statement.** Rechecked 2026-05-31 with a
   direct `o.SetV(42)` statement; it compiles and updates the field correctly.
