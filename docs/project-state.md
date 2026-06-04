@@ -112,9 +112,9 @@ runtime dependencies.
   elements, records recursively containing managed strings, and nested arrays
   of those bases at any depth. Assignment,
   indexed-write copy-on-write, preserving resize, zero-initialized growth,
-  replacement reclaim, normal local cleanup, and conditional atomic refcounts
-  are covered. Deferred semantics: nested-level copy-on-write, exception-path
-  cleanup, and fresh-result move semantics.
+  replacement reclaim, normal local cleanup, nested-level copy-on-write,
+  fresh-result move semantics, argument-temp ownership, and conditional atomic
+  refcounts are covered. Deferred semantics: exception-path cleanup.
 - Full access-control enforcement is intentionally deferred. Visibility
   sections are parsed because `published` drives RTTI; rejecting
   private/protected access enables no new programs.

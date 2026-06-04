@@ -215,9 +215,9 @@ Dynamic-array continuation checklist:
   remaining record/class ownership paths are pending.
 - Dynamic arrays now cover scalar arrays, `array of AnsiString`, arrays of
   recursively managed records, params/results, whole-record managed assignment,
-  embedded static-array field indexing, and nested arrays of scalar or managed
-  bases. Deferred semantics: nested-level copy-on-write, exception-path cleanup,
-  and fresh-result move semantics.
+  embedded static-array field indexing, nested arrays of scalar or managed
+  bases, nested-level copy-on-write, fresh-result move semantics, and
+  argument-temp ownership. Deferred semantics: exception-path cleanup.
 - Preserve a short default path: mutexes, spinlocks, and atomic updates are
   emitted only with `--threadsafe` / `{$THREADSAFE ON}`.
 - Audit compound runtime operations after managed values land. In particular,
@@ -313,9 +313,10 @@ inheritance depth, method-resolution clauses, COM ARC.
   record, and nested elements support
   pointer-sized slots, assignment retain/release, indexed-write copy-on-write,
   preserving grow/shrink, zero-initialized new slots, `SetLength(a, 0)`
-  reclaim, local-slot initialization and normal scope-exit release, and
-  conditional atomic refcounts under `--threadsafe`. Deferred: nested-level
-  copy-on-write, exception-path cleanup, and fresh-result move semantics.
+  reclaim, local-slot initialization and normal scope-exit release,
+  nested-level copy-on-write, fresh-result move semantics, argument-temp
+  ownership, and conditional atomic refcounts under `--threadsafe`. Deferred:
+  exception-path cleanup.
 - 🟡 **Heap allocator.** `GetMem`/`FreeMem` now do real free-list reuse on the
   IR backend (8-byte size header per block + single free list, first-fit, no
   split/coalesce). Enough that

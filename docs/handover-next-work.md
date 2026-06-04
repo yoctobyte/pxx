@@ -29,8 +29,8 @@ static-array indexing bug, are tracked in
 - Dynamic arrays of records recursively containing `AnsiString` fields use the
   same retain/finalize rules. Objects remain raw user-owned pointers.
 - Nested dynamic arrays support scalar, managed `AnsiString`, and recursively
-  managed-record bases at any depth. Nested-level copy-on-write remains
-  intentionally deferred.
+  managed-record bases at any depth, including nested-level copy-on-write
+  (landed 2026-06-04).
 - The pthread regression now repeatedly resizes local arrays while four
   workers also exercise `GetMem` / `FreeMem`.
 - The allocator direction is documented in
@@ -98,8 +98,8 @@ The next runtime work should keep hosted optimizations optional:
   ABI gated until params/results, globals, exceptions, and remaining
   record/class paths are covered.
 - **Dynamic-array depth:** scalar, managed-string, managed-record, and nested
-  arrays of those bases work. Deferred semantics: nested-level copy-on-write,
-  exception-path cleanup, and fresh-result move semantics.
+  arrays of those bases work, including nested-level copy-on-write, fresh-result
+  move, and argument-temp ownership. Deferred semantics: exception-path cleanup.
 - **Allocator:** use the target-neutral contract in
   [`allocator-platform-design.md`](allocator-platform-design.md). Replace the
   current simple first-fit free list with a syscall-free internal heap

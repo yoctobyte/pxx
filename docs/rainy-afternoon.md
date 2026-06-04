@@ -9,23 +9,13 @@ authoritative.
 
 ## Managed Values
 
-- **Fresh managed result leaks one reference.** A dynamic-array function result
-  is built with refcount 1, then caller assignment retains it again. Managed
-  `AnsiString` results follow the same pattern. Add move semantics for a fresh
-  call result so assignment can skip the retain.
-- **Managed-record return-by-value ownership is incomplete.** Ordinary
-  whole-record assignment uses `IR_COPY_REC_MANAGED`, but aggregate function
-  result copy-out still needs equivalent retain handling for records containing
-  managed fields.
 - **Exception unwinding does not finalize managed locals.** Normal scope exit
   cleanup works. Add unwind-path cleanup when managed exception lifetime
   semantics become active work.
-- **Nested dynamic-array sublevels do not copy on write.** Recursive ownership
-  is implemented, but mutating an aliased sub-array can still affect both
-  aliases. This is documented behavior for now.
 - **Managed `AnsiString` remains opt-in.** Before making it the default ABI,
-  finish params/results, globals, exception paths, and remaining class
-  ownership coverage.
+  finish globals, exception paths, and remaining class ownership coverage.
+  (Params/results, fresh-result move, argument-temp ownership, and nested-level
+  copy-on-write all landed 2026-06-04.)
 
 ## Runtime And Threads
 

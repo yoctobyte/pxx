@@ -105,9 +105,10 @@ implemented.
   `{$define PXX_MANAGED_STRING}` enables the first heap-backed,
   reference-counted `AnsiString` slice: assignment, normal local cleanup,
   copy-on-write indexed mutation, concatenation, coercions, and `SetLength`.
-  Refcount updates become atomic only in `--threadsafe` mode. The opt-in ABI
-  is not yet complete for params/results, globals, exception unwinding, and
-  all record/class ownership paths.
+  Refcount updates become atomic only in `--threadsafe` mode. Params/results
+  (with fresh-result move and argument-temp ownership) and nested-level
+  copy-on-write are covered; the opt-in ABI is not yet complete for globals,
+  exception unwinding, and all record/class ownership paths.
 - FPC applications depending on `SysUtils`, containers, streams, rich exception classes,
   platform abstractions, or package ecosystems cannot be assumed to compile.
 
