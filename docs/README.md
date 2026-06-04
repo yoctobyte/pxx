@@ -47,6 +47,7 @@ Architecture and current state:
 - [Garbage Collection Thoughts](garbage-collection-thoughts.md) - why GC is not the default (root-finding cost, bare-metal tension) and the per-target/per-frontend memory profile decision (ARC / arena / hosted collector).
 - [Runtime Emission Size Audit (2026-06-02)](runtime-emission-size-audit-2026-06-02.md) - measured hello-world overhead and deferred feature-reachability cleanup for embedded targets.
 - [Plan: Async, Coroutines, And Yield](plan-async-coroutines.md) - deferred shared state-machine design for Pascal, Nil Python, and future frontends.
+- [Plan: Refcounted Compiler Strings](plan-refcounted-compiler-strings.md) - mapping + staged plan + risk register for flipping the compiler's own `AnsiString`s from frozen 8 MB inline buffers (~1.6 GB BSS) to refcounted handles.
 
 Additional project material:
 
