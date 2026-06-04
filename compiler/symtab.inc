@@ -3,6 +3,9 @@
 procedure IREmitCodeCall(addr: Integer); forward;
 procedure EmitDynArrayReleaseForSym(symIdx: Integer); forward;
 procedure EmitVariantClear; forward;
+procedure EmitManagedRecordReleaseLocked(recId: Integer); forward;
+procedure EmitAcquireHeapLock; forward;
+procedure EmitReleaseHeapLock; forward;
 
 function ULower(const s: AnsiString): AnsiString;
 var res: AnsiString; i: Integer; c: Char;
@@ -343,6 +346,7 @@ begin
   end;
   UFldIsArray[fi] := False;
   UFldArrLen[fi] := 1;
+  UFldDynDepth[fi] := 0;
   UFldPub[fi] := 0;
   UFldCount := UFldCount + 1;
   UClsFCount[ci] := UClsFCount[ci] + 1;
@@ -654,6 +658,20 @@ begin
   end;
 end;
 
+function RecFieldDynDepth(rec: Integer; const field: AnsiString): Integer;
+{ Dynamic-array nesting of a class/record field: 0 if the field is not a
+  dynamic array, else 1 for `array of T`, 2 for `array of array of T`, ... }
+var fi: Integer; field2: AnsiString;
+begin
+  Result := 0;
+  if rec >= REC_UCLASS_BASE then
+  begin
+    field2 := field;
+    fi := FindUField(rec - REC_UCLASS_BASE, field2);
+    if fi >= 0 then Result := UFldDynDepth[fi];
+  end;
+end;
+
 function RecFieldPtrElemTk(rec: Integer; const field: AnsiString): TTypeKind;
 { Pointed-at element type of a pointer-typed class field (for FField[i]). }
 var fi: Integer; field2: AnsiString;
@@ -692,6 +710,10 @@ begin
   for i := 0 to cnt - 1 do
   begin
     if UFldTk[base + i] = Ord(tyAnsiString) then
+      begin Result := True; Exit; end;
+    { A dynamic-array field holds a heap handle that must be zero-initialised,
+      retained on record copy, and released on finalization. }
+    if UFldIsArray[base + i] and (UFldArrLen[base + i] = -1) then
       begin Result := True; Exit; end;
     if (UFldTk[base + i] = Ord(tyRecord)) and
        RecordHasManagedFields(UFldRec_[base + i]) then
@@ -2730,6 +2752,18 @@ begin
           { mov rax, [rbp + Offset] }
           EmitB($48); EmitB($8B); EmitB($85); EmitI32(Syms[i].Offset);
           EmitDynArrayReleaseForSym(i);
+        end
+        else if (Syms[i].TypeKind = tyRecord) and not Syms[i].IsArray and
+                RecordHasManagedFields(Syms[i].RecName) then
+        begin
+          { Record value local with managed fields (AnsiString, dynamic-array, or
+            nested): release them under the heap lock. rbx = record address. }
+          EmitB($53);                                              { push rbx }
+          EmitB($48); EmitB($8D); EmitB($9D); EmitI32(Syms[i].Offset); { lea rbx, [rbp+off] }
+          EmitAcquireHeapLock;
+          EmitManagedRecordReleaseLocked(Syms[i].RecName);
+          EmitReleaseHeapLock;
+          EmitB($5B);                                              { pop rbx }
         end;
       end;
     end;

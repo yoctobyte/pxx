@@ -400,12 +400,44 @@ begin
     AN_IDENT:
       if Syms[ASTIVal[node]].IsArray and (Syms[ASTIVal[node]].ArrLen = -1) then
         Result := SymDynDepth[ASTIVal[node]];
+    AN_FIELD:
+      Result := RecFieldDynDepth(ResolveNodeRec(ASTLeft[node]), GetASTIdentName(node));
     AN_INDEX:
       begin
         bd := NodeDynDepth(ASTLeft[node]);
         if bd > 0 then Result := bd - 1;
       end;
   end;
+end;
+
+function NodeDynBaseTk(node: Integer): TTypeKind;
+{ Base element type of a (possibly nested) dynamic-array expression, walking to
+  the root symbol or field. tyUnknown if not a dynamic array. }
+begin
+  Result := tyUnknown;
+  if node < 0 then Exit;
+  if ASTKind[node] = AN_IDENT then
+  begin
+    if Syms[ASTIVal[node]].IsArray and (Syms[ASTIVal[node]].ArrLen = -1) then
+      Result := Syms[ASTIVal[node]].ElemType;
+  end
+  else if ASTKind[node] = AN_FIELD then
+    Result := RecFieldType(ResolveNodeRec(ASTLeft[node]), GetASTIdentName(node))
+  else if ASTKind[node] = AN_INDEX then
+    Result := NodeDynBaseTk(ASTLeft[node]);
+end;
+
+function NodeDynBaseRec(node: Integer): Integer;
+{ Base element record id of a (possibly nested) dynamic-array expression. }
+begin
+  Result := REC_NONE;
+  if node < 0 then Exit;
+  if ASTKind[node] = AN_IDENT then
+    Result := Syms[ASTIVal[node]].ElemRecName
+  else if ASTKind[node] = AN_FIELD then
+    Result := RecFieldRecId(ResolveNodeRec(ASTLeft[node]), GetASTIdentName(node))
+  else if ASTKind[node] = AN_INDEX then
+    Result := NodeDynBaseRec(ASTLeft[node]);
 end;
 
 function NodeDynBaseSym(node: Integer): Integer;
@@ -511,15 +543,18 @@ begin
       arrays keep the path below. }
     baseDynDepth := NodeDynDepth(baseNode);
     if (baseDynDepth >= 2) or
-       ((baseDynDepth = 1) and (ASTKind[baseNode] = AN_INDEX)) then
+       ((baseDynDepth = 1) and ((ASTKind[baseNode] = AN_INDEX) or
+                                (ASTKind[baseNode] = AN_FIELD))) then
     begin
-      dynRootSym := NodeDynBaseSym(baseNode);
-      dynBaseTk := Syms[dynRootSym].ElemType;
-      dynBaseRec := Syms[dynRootSym].ElemRecName;
+      { Base element metadata, walking to the root symbol OR record/class field
+        (a dynamic-array field is just another handle slot). }
+      dynBaseTk := NodeDynBaseTk(baseNode);
+      dynBaseRec := NodeDynBaseRec(baseNode);
       elemSize := DynElemSize(baseDynDepth, dynBaseTk, dynBaseRec);
-      { Address of the slot holding this level's array handle. For the root the
-        slot is the variable itself; for a sub-array it is the element address in
-        the parent's data (its own IR_DYNUNIQUE chain, so COW recurses upward). }
+      { Address of the slot holding this level's array handle. For a variable
+        root the slot is the variable itself; for a field root it is the field
+        slot in the object; for a sub-array it is the element address in the
+        parent's data (its own IR_DYNUNIQUE chain, so COW recurses upward). }
       if ASTKind[baseNode] = AN_IDENT then
         slotAddrNode := IRAppend(IR_SLOTADDR, ASTIVal[baseNode], -1, -1, 0, Ord(tyPointer))
       else
@@ -623,7 +658,13 @@ begin
 
     recName := ResolveNodeRec(baseNode);
     fieldName := GetASTIdentName(node);
-    Result := IRAppend(IR_FIELD, baseAddr, -1, -1, RecFieldOffset(recName, fieldName), ASTTk[node]);
+    { A dynamic-array field slot holds a heap handle (pointer); tag the address
+      node tyPointer so Length / indexing treat it as a handle slot, like a
+      nested sub-array element. }
+    if RecFieldDynDepth(recName, fieldName) > 0 then
+      Result := IRAppend(IR_FIELD, baseAddr, -1, -1, RecFieldOffset(recName, fieldName), Ord(tyPointer))
+    else
+      Result := IRAppend(IR_FIELD, baseAddr, -1, -1, RecFieldOffset(recName, fieldName), ASTTk[node]);
   end
   else if ASTKind[node] = AN_DEREF then
   begin
@@ -720,6 +761,7 @@ var left, right, seq, item, value, outNode, first, last, leftAddr, argNode, argV
     raiseValueNode, raiseClass: Integer;
     i, lbId, off, len, idx, itemNode, lo, hi, val1, elemSize, savedProc: Integer;
     slTargetAST, slCountAST, slRootSym, slDepth, slTargetAddr, slCountNode: Integer;
+    slFldRec, slFldDepth, slFldBaseRec: Integer; slFldName: AnsiString; slFldBaseTk: TTypeKind;
 begin
   if node = -1 then
   begin
@@ -1177,6 +1219,26 @@ begin
           Result := IRAppend(IR_SETLEN_DYN, slTargetAddr, slCountNode, slDepth,
                              slRootSym, Ord(tyPointer));
           Exit;
+        end;
+        { Dynamic-array FIELD target (obj.field): no root symbol, so address the
+          slot via the field and carry element metadata on the node. Covers any
+          depth, including managed-string/record element leaves. }
+        if ASTKind[slTargetAST] = AN_FIELD then
+        begin
+          slFldRec := ResolveNodeRec(ASTLeft[slTargetAST]);
+          slFldName := GetASTIdentName(slTargetAST);
+          slFldDepth := RecFieldDynDepth(slFldRec, slFldName);
+          if slFldDepth > 0 then
+          begin
+            slFldBaseTk := RecFieldType(slFldRec, slFldName);
+            slFldBaseRec := RecFieldRecId(slFldRec, slFldName);
+            slTargetAddr := IRLowerAddress(slTargetAST);
+            slCountNode := IRLowerAST(slCountAST);
+            Result := IRAppend(IR_SETLEN_DYN, slTargetAddr, slCountNode,
+                               slFldDepth, -1, Ord(slFldBaseTk));
+            IRSetLenBaseRec[Result] := slFldBaseRec;
+            Exit;
+          end;
         end;
       end;
       if cpi = -201 then

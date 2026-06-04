@@ -744,6 +744,7 @@ var
   IRC     : array[0..MAX_IR-1] of Integer;
   IRIVal  : array[0..MAX_IR-1] of Int64;
   IRTk    : array[0..MAX_IR-1] of Integer;
+  IRSetLenBaseRec : array[0..MAX_IR-1] of Integer; { IR_SETLEN_DYN on a non-symbol (field) target: base element record id when IRIVal<0; -1/REC_NONE otherwise }
   { Marks an IR node as a statement root (its result is discarded). The top-
     level emitter only emits roots; calls whose value is consumed are emitted
     via their parent. Needed for IR_VIRTUAL_CALL, whose IRIVal holds the VMT
@@ -782,6 +783,7 @@ var
   UFldPtrElemRec : array[0..MAX_UFIELD-1] of Integer;
   UFldIsArray : array[0..MAX_UFIELD-1] of Boolean;
   UFldArrLen  : array[0..MAX_UFIELD-1] of Integer;
+  UFldDynDepth : array[0..MAX_UFIELD-1] of Integer; { dynamic-array field nesting: 0 = not a dynamic array, 1 = array of T, 2 = array of array of T, ... (UFldArrLen = -1 also marks dynamic, mirroring the symbol convention) }
   UFldPub    : array[0..MAX_UFIELD-1] of Integer;  { 1 = published, 0 = other }
   UFldCount  : Integer;
 

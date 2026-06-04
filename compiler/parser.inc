@@ -3317,7 +3317,7 @@ var
   name: AnsiString;
    idx, pi, i, si, node, valNode, stepsNode, opNode, argSeq, argIdx, exprNode, lastArg, identTokIdx: Integer;
   nArgs, argsHead, currArg: Integer; argTypes: array[0..15] of TTypeKind;
-  isLn: Boolean;
+  isLn, slIsArrTarget: Boolean;
   smci, smmii, smpii, smcallNode, smselfArg, smLastArg, smArgSeq, smMai, smSelfIdx: Integer;
   aliasIdx, fieldNode, indexNode, castPrevTok, qUnit: Integer;
   castFieldName: AnsiString; castTk: TTypeKind; castRec: Integer;
@@ -3589,8 +3589,23 @@ begin
         ASTLeft[ASTRight[argSeq]] := CurASTNode;
 
         node := AllocNode(AN_CALL);
-        { -101 = string SetLength; -102 = dynamic-array SetLength (heap alloc). }
-        if (idx >= 0) and ((Syms[idx].IsArray and (Syms[idx].ArrLen = -1)) or (Syms[idx].TypeKind = tyAnsiString)) then
+        { -101 = string SetLength; -102 = dynamic-array (and managed AnsiString)
+          SetLength (heap alloc). Classify from the resolved lvalue, not the
+          base symbol: `SetLength(obj.field, n)` resolves `idx` to the object,
+          so a dynamic-array field would otherwise be misrouted to the string
+          path. }
+        slIsArrTarget := False;
+        if ASTKind[valNode] = AN_FIELD then
+          slIsArrTarget := (RecFieldDynDepth(ResolveNodeRec(ASTLeft[valNode]),
+                              GetASTIdentName(valNode)) > 0) or
+                           (RecFieldType(ResolveNodeRec(ASTLeft[valNode]),
+                              GetASTIdentName(valNode)) = tyAnsiString)
+        else if ASTKind[valNode] = AN_INDEX then
+          slIsArrTarget := True   { nested dynamic sub-array }
+        else if idx >= 0 then
+          slIsArrTarget := (Syms[idx].IsArray and (Syms[idx].ArrLen = -1)) or
+                           (Syms[idx].TypeKind = tyAnsiString);
+        if slIsArrTarget then
           ASTIVal[node] := -102
         else
           ASTIVal[node] := -101;
@@ -4220,6 +4235,7 @@ var
   ordinal: Int64;
   tname: AnsiString;
   done, stopTypes: Boolean; loVal, hiVal, arrLen: Integer; isArr: Boolean; isPackedRecord: Boolean;
+  fIsDyn: Boolean; fDynDepth: Integer;
   tnOff, tnLen, ci, fnOff, fnLen, curFieldOff, fRec, fSize, fAlign, classAlign, depth: Integer;
   fTk: TTypeKind;
   parentCi, slot, mmi, mnOff, mnLen, pnOff, pnLen, rFOff, rFLen, rMOff, rMLen, wFOff, wFLen, wMOff, wMLen, rnOff, rnLen, wnOff, wnLen, propRec, i: Integer;
@@ -4577,34 +4593,60 @@ begin
             Expect(tkColon, ':');
             isArr := False;
             arrLen := 1;
+            fIsDyn := False;
+            fDynDepth := 0;
             if CurTok.Kind = tkArray then
             begin
               Next;
-              Expect(tkLBrack, '[');
-              if CurTok.Kind = tkInteger then
+              if CurTok.Kind = tkLBrack then
               begin
-                loVal := CurTok.IVal;
                 Next;
-                Expect(tkDotDot, '..');
                 if CurTok.Kind = tkInteger then
                 begin
-                  hiVal := CurTok.IVal;
-                  arrLen := hiVal - loVal + 1;
+                  loVal := CurTok.IVal;
                   Next;
+                  Expect(tkDotDot, '..');
+                  if CurTok.Kind = tkInteger then
+                  begin
+                    hiVal := CurTok.IVal;
+                    arrLen := hiVal - loVal + 1;
+                    Next;
+                  end;
                 end;
+                Expect(tkRBrack, ']');
+                Expect(tkOf, 'of');
+                fTk := ParseTypeKind;
+                fRec := LastTypeRecId;
+                isArr := True;
+              end
+              else
+              begin
+                { Dynamic-array field: `array of T`, including nested. The slot is
+                  a pointer-sized handle; fTk/fRec carry the base element type. }
+                fIsDyn := True;
+                fDynDepth := 1;
+                Expect(tkOf, 'of');
+                while CurTok.Kind = tkArray do
+                begin
+                  Next;
+                  Inc(fDynDepth);
+                  Expect(tkOf, 'of');
+                end;
+                fTk := ParseTypeKind;
+                fRec := LastTypeRecId;
               end;
-              Expect(tkRBrack, ']');
-              Expect(tkOf, 'of');
-              fTk := ParseTypeKind;
-              fRec := LastTypeRecId;
-              isArr := True;
             end
             else
             begin
               fTk := ParseTypeKind;
               fRec := LastTypeRecId;
             end;
-            if fTk = tyString then
+            if fIsDyn then
+            begin
+              fSize := TARGET_PTR_SIZE;
+              fAlign := TARGET_PTR_SIZE;
+            end
+            else if fTk = tyString then
             begin
               fSize := LOCAL_STR_CAP + 8;
               fAlign := TARGET_PTR_SIZE;
@@ -4625,8 +4667,10 @@ begin
             begin
               curFieldOff := AlignTo(curFieldOff, fAlign);
               AddUField(ci, fldNOffs[fni], fldNLens[fni], curFieldOff, Ord(fTk), fRec);
-              UFldIsArray[UFldCount-1] := isArr;
-              UFldArrLen[UFldCount-1] := arrLen;
+              UFldIsArray[UFldCount-1] := isArr or fIsDyn;
+              if fIsDyn then UFldArrLen[UFldCount-1] := -1
+              else UFldArrLen[UFldCount-1] := arrLen;
+              UFldDynDepth[UFldCount-1] := fDynDepth;
               UFldPub[UFldCount-1] := curPublished;
               curFieldOff := curFieldOff + fSize;
             end;
@@ -4699,34 +4743,59 @@ begin
             Expect(tkColon, ':');
             isArr := False;
             arrLen := 1;
+            fIsDyn := False;
+            fDynDepth := 0;
             if CurTok.Kind = tkArray then
             begin
               Next;
-              Expect(tkLBrack, '[');
-              if CurTok.Kind = tkInteger then
+              if CurTok.Kind = tkLBrack then
               begin
-                loVal := CurTok.IVal;
                 Next;
-                Expect(tkDotDot, '..');
                 if CurTok.Kind = tkInteger then
                 begin
-                  hiVal := CurTok.IVal;
-                  arrLen := hiVal - loVal + 1;
+                  loVal := CurTok.IVal;
                   Next;
+                  Expect(tkDotDot, '..');
+                  if CurTok.Kind = tkInteger then
+                  begin
+                    hiVal := CurTok.IVal;
+                    arrLen := hiVal - loVal + 1;
+                    Next;
+                  end;
                 end;
+                Expect(tkRBrack, ']');
+                Expect(tkOf, 'of');
+                fTk := ParseTypeKind;
+                fRec := LastTypeRecId;
+                isArr := True;
+              end
+              else
+              begin
+                { Dynamic-array field: `array of T`, including nested. }
+                fIsDyn := True;
+                fDynDepth := 1;
+                Expect(tkOf, 'of');
+                while CurTok.Kind = tkArray do
+                begin
+                  Next;
+                  Inc(fDynDepth);
+                  Expect(tkOf, 'of');
+                end;
+                fTk := ParseTypeKind;
+                fRec := LastTypeRecId;
               end;
-              Expect(tkRBrack, ']');
-              Expect(tkOf, 'of');
-              fTk := ParseTypeKind;
-              fRec := LastTypeRecId;
-              isArr := True;
             end
             else
             begin
               fTk := ParseTypeKind;
               fRec := LastTypeRecId;
             end;
-            if fTk = tyString then
+            if fIsDyn then
+            begin
+              fSize := TARGET_PTR_SIZE;
+              fAlign := TARGET_PTR_SIZE;
+            end
+            else if fTk = tyString then
             begin
               fSize := LOCAL_STR_CAP + 8;
               fAlign := TARGET_PTR_SIZE;
@@ -4754,8 +4823,10 @@ begin
             begin
               curFieldOff := AlignTo(curFieldOff, fAlign);
               AddUField(ci, fldNOffs[fni], fldNLens[fni], curFieldOff, Ord(fTk), fRec);
-              UFldIsArray[UFldCount-1] := isArr;
-              UFldArrLen[UFldCount-1] := arrLen;
+              UFldIsArray[UFldCount-1] := isArr or fIsDyn;
+              if fIsDyn then UFldArrLen[UFldCount-1] := -1
+              else UFldArrLen[UFldCount-1] := arrLen;
+              UFldDynDepth[UFldCount-1] := fDynDepth;
               curFieldOff := curFieldOff + fSize;
             end;
             if fAlign > classAlign then classAlign := fAlign;
