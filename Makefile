@@ -464,6 +464,8 @@ test: $(COMPILER) fpc-check
 	test "$$(/tmp/test_managed_result_move26)" = "$$(printf '1\n1\n1\n1\n1\n1\n1\n1\n1')"
 	./$(COMPILER) test/test_managed_arg_temp.pas /tmp/test_managed_arg_temp26
 	test "$$(/tmp/test_managed_arg_temp26)" = "$$(printf 'literal\nab\nk\n<x>\n<m>\nkeep\n1\n1')"
+	./$(COMPILER) test/test_nested_cow.pas /tmp/test_nested_cow26
+	test "$$(/tmp/test_nested_cow26)" = "$$(printf '1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1')"
 	./$(COMPILER) test/test_variant.pas /tmp/test_variant26
 	test "$$(/tmp/test_variant26)" = "$$(printf '42\n-7\nQ\n3.14\n1\n100')"
 	./$(COMPILER) test/test_variant_ops.pas /tmp/test_variant_ops26

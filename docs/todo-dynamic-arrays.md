@@ -106,8 +106,21 @@ applying the character index. Writes still pass the slot address to
    field to that record breaks self-host: it pushes the compiler's own record
    field count past the limit, see below). Regression:
    `test/test_nested_dynarray.pas`.
-   - **Not supported:** copy-on-write at nested levels (sub-array element writes
-     mutate in place; aliasing a sub-array then mutating affects both).
+   - **Copy-on-write at nested levels — DONE 2026-06-04.** A write through a
+     nested index (`b[i][j] := v`) now clones every shared level along the path
+     so an aliased array (`b := a`) is never mutated in place. The nested-index
+     lowering wraps each level's handle slot in `IR_DYNUNIQUE` (`ir.inc`), which
+     at codegen loads the data pointer on a read and clones-if-shared on a write
+     (keyed on the same `InLValueWrite` the depth-1 outer array uses), recursing
+     up the chain. Cloning a level retains what its elements own — sub-array
+     handles for inner levels, managed strings/records at the leaf — via the
+     metadata-driven `EmitDynArrayUniqueMeta`; the old block is freed through
+     `EmitDynArrayNestedReleaseLocked`. The root's slot address uses the new
+     `IR_SLOTADDR` op (a quirk-free `lea`) because `IR_LEA` auto-loads a
+     dyn-array handle on reads. The compiler itself uses no nested dynamic
+     arrays, so the self-host build stays byte-identical. Regression:
+     `test/test_nested_cow.pas` (2-/3-level, nested managed strings, sibling
+     integrity, 2M-iteration alias+write loop flat at 264 KB).
 6. ~~Extend recursive lifecycle metadata for nested dynamic arrays of
    *managed* base types.~~ Done 2026-06-02. Nested `AnsiString` and recursively
    managed-record leaves retain copied values during resize and finalize them

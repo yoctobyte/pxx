@@ -168,6 +168,8 @@ const
   IR_COPY_REC_MANAGED = 46; { IRA = dest addr; IRB = src addr; IRC = recId; IRIVal = byte count; ARC-correct whole-record copy }
   IR_DYNDATA      = 47;  { IRA = dyn-array symbol idx; loads the data pointer from the slot (mov, never lea) }
   IR_SETLEN_DYN   = 48;  { IRA = target slot-address node; IRB = count; IRC = dyn depth; IRIVal = root dyn-array symbol idx }
+  IR_DYNUNIQUE    = 49;  { IRA = slot-address node; IRB = dyn depth at this level; IRC = base record id; IRIVal = element size; IRTk = base TTypeKind. Read mode (not InLValueWrite): load data ptr. Write mode: clone-if-shared then load. Returns the (unique) data pointer in rax. }
+  IR_SLOTADDR     = 50;  { IRA = symbol idx; always loads the ADDRESS of the variable's slot (lea), bypassing IR_LEA's dyn-array/AnsiString auto-load. Used as the IR_DYNUNIQUE base for a root dynamic array. }
 
   { Variant tag (VType) values, stored in the first 8 bytes of a tyVariant slot.
     Payload (next 8 bytes) interpreted per tag. Closed scalar set; vtObject is a

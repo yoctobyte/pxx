@@ -50,6 +50,8 @@ begin
     IR_COPY_REC_MANAGED: Result := 'copy_rec_managed';
     IR_DYNDATA: Result := 'dyndata';
     IR_SETLEN_DYN: Result := 'setlen_dyn';
+    IR_DYNUNIQUE: Result := 'dynunique';
+    IR_SLOTADDR: Result := 'slotaddr';
     IR_BLOCK: Result := 'block';
     IR_UNSUPPORTED: Result := 'unsupported';
     IR_IF: Result := 'if';
@@ -211,6 +213,14 @@ begin
         IRRequireNode(IRA[i], 'setlen_dyn target');
         IRRequireNode(IRB[i], 'setlen_dyn count');
       end;
+
+      IR_DYNUNIQUE:
+        { IRA = slot-address node; IRB carries the depth integer, not a node. }
+        IRRequireNode(IRA[i], 'dynunique slot');
+
+      IR_SLOTADDR:
+        if (IRA[i] < 0) or (IRA[i] >= SymCount) then
+          Error('invalid symbol in slotaddr');
 
       IR_SET_COPY, IR_SET_BINOP, IR_SET_CMP:
       begin
@@ -429,7 +439,7 @@ var baseNode, baseAddr, indexNode, lo, elemSize: Integer;
     fieldName: AnsiString;
     isArr: Boolean;
     tk: TTypeKind;
-    baseDynDepth, dynRootSym, dynBaseRec: Integer;
+    baseDynDepth, dynRootSym, dynBaseRec, slotAddrNode: Integer;
     dynBaseTk: TTypeKind;
     recName, aliasIdx: Integer;
 begin
@@ -494,8 +504,11 @@ begin
     end;
     { Nested dynamic-array indexing: base is a nested dyn array (depth>=2) or a
       sub-array element (an AN_INDEX whose value is still a dyn array). The base
-      data pointer is evaluated independently of InLValueWrite; no copy-on-write
-      at nested levels. Plain depth-1 arrays keep the path below. }
+      handle is wrapped in IR_DYNUNIQUE, which loads the data pointer on a read
+      and clones-if-shared (copy-on-write) on a write, decided by InLValueWrite
+      at codegen time — exactly as the depth-1 path does for the outer array, so
+      writing through one alias never mutates another at any depth. Plain depth-1
+      arrays keep the path below. }
     baseDynDepth := NodeDynDepth(baseNode);
     if (baseDynDepth >= 2) or
        ((baseDynDepth = 1) and (ASTKind[baseNode] = AN_INDEX)) then
@@ -503,12 +516,17 @@ begin
       dynRootSym := NodeDynBaseSym(baseNode);
       dynBaseTk := Syms[dynRootSym].ElemType;
       dynBaseRec := Syms[dynRootSym].ElemRecName;
-      if ASTKind[baseNode] = AN_IDENT then
-        baseAddr := IRAppend(IR_DYNDATA, ASTIVal[baseNode], -1, -1, 0, Ord(tyPointer))
-      else
-        baseAddr := IRAppend(IR_LOAD_MEM, IRLowerAddress(baseNode), -1, -1, 0, Ord(tyPointer));
-      indexNode := IRLowerAST(ASTRight[node]);
       elemSize := DynElemSize(baseDynDepth, dynBaseTk, dynBaseRec);
+      { Address of the slot holding this level's array handle. For the root the
+        slot is the variable itself; for a sub-array it is the element address in
+        the parent's data (its own IR_DYNUNIQUE chain, so COW recurses upward). }
+      if ASTKind[baseNode] = AN_IDENT then
+        slotAddrNode := IRAppend(IR_SLOTADDR, ASTIVal[baseNode], -1, -1, 0, Ord(tyPointer))
+      else
+        slotAddrNode := IRLowerAddress(baseNode);
+      baseAddr := IRAppend(IR_DYNUNIQUE, slotAddrNode, baseDynDepth, dynBaseRec,
+                           elemSize, Ord(dynBaseTk));
+      indexNode := IRLowerAST(ASTRight[node]);
       if baseDynDepth >= 2 then
         Result := IRAppend(IR_INDEX, baseAddr, indexNode, 0, elemSize, Ord(tyPointer))
       else

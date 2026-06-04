@@ -352,10 +352,14 @@ begin
   EmitReleaseHeapLock;
 end;
 
-procedure EmitDynArrayUnique(symIdx: Integer; elemSize: Integer);
-{ rax = address of dynamic-array slot. Clone shared storage before indexed
-  writes. Return the unique array data pointer in rax. }
-var pDoneNil, pDoneUnique, pNoRetain, retainTop: Integer;
+procedure EmitDynArrayUniqueMeta(elemSize, depth: Integer; baseTk: TTypeKind; baseRec: Integer);
+{ rax = address of a dynamic-array slot at nesting `depth` (1 = leaf level whose
+  elements are base values of kind baseTk; >=2 = a level whose elements are
+  sub-array handles). Clone the storage if shared, retaining whatever the
+  elements own (sub-array handles, managed strings, or managed records) so the
+  clone and the original each hold a valid reference, then release the old
+  block. Returns the unique array data pointer in rax. }
+var pDoneNil, pDoneUnique, pNoRetain, retainTop: Integer; needRetain: Boolean; stride: Integer;
 begin
   EmitB($53);                                      { push rbx }
   EmitB($41); EmitB($54);                         { push r12 }
@@ -394,37 +398,39 @@ begin
       EmitB($48); EmitB($0F); EmitB($AF); EmitB($C8);
     end;
   EmitB($F3); EmitB($A4);                         { rep movsb }
-  if (Syms[symIdx].ElemType = tyAnsiString) or
-     ((Syms[symIdx].ElemType = tyRecord) and
-      RecordHasManagedFields(Syms[symIdx].ElemRecName)) then
+  { Retain whatever the copied elements own so the clone holds its own
+    references: sub-array handles (depth>=2), managed strings, or managed
+    records. Scalar leaves need nothing. }
+  needRetain := (depth >= 2) or (baseTk = tyAnsiString) or
+                ((baseTk = tyRecord) and RecordHasManagedFields(baseRec));
+  if needRetain then
   begin
+    if (depth >= 2) or (baseTk = tyAnsiString) then stride := 8
+    else stride := RecSize(baseRec);
     EmitB($4C); EmitB($89); EmitB($F3);           { mov rbx, r14 }
     EmitB($4D); EmitB($85); EmitB($ED);           { test r13, r13 }
     EmitB($0F); EmitB($84); pNoRetain := CodeLen; EmitI32(0);
     retainTop := CodeLen;
-    if Syms[symIdx].ElemType = tyAnsiString then
+    if depth >= 2 then
+    begin
+      EmitB($48); EmitB($8B); EmitB($03);         { mov rax, [rbx] (sub-array handle) }
+      EmitDynArrayRetain;
+    end
+    else if baseTk = tyAnsiString then
     begin
       EmitB($48); EmitB($8B); EmitB($03);         { mov rax, [rbx] }
       IREmitCodeCall(AnsiStrRetainAddr);
     end
     else
-      EmitManagedRecordRetain(Syms[symIdx].ElemRecName);
-    EmitB($48); EmitB($81); EmitB($C3);
-    if Syms[symIdx].ElemType = tyRecord then EmitI32(RecSize(Syms[symIdx].ElemRecName))
-    else EmitI32(8);                              { add rbx, element size }
+      EmitManagedRecordRetain(baseRec);
+    EmitB($48); EmitB($81); EmitB($C3); EmitI32(stride); { add rbx, stride }
     EmitB($49); EmitB($FF); EmitB($CD);            { dec r13 }
     EmitB($0F); EmitB($85); EmitI32(retainTop - (CodeLen + 4));
     Patch32(pNoRetain, CodeLen - (pNoRetain + 4));
   end;
   EmitB($4D); EmitB($89); EmitB($37);             { mov [r15], r14 }
   EmitB($4C); EmitB($89); EmitB($E0);             { mov rax, r12 }
-  if Syms[symIdx].ElemType = tyAnsiString then
-    EmitDynArrayAnsiStrReleaseLocked
-  else if (Syms[symIdx].ElemType = tyRecord) and
-          RecordHasManagedFields(Syms[symIdx].ElemRecName) then
-    EmitDynArrayManagedRecReleaseLocked(Syms[symIdx].ElemRecName)
-  else
-    EmitDynArrayReleaseLocked;
+  EmitDynArrayNestedReleaseLocked(depth, baseTk, baseRec);
   EmitB($4C); EmitB($89); EmitB($F0);             { mov rax, r14 }
   EmitB($E9); pNoRetain := CodeLen; EmitI32(0);
   Patch32(pDoneNil, CodeLen - (pDoneNil + 4));
@@ -440,6 +446,12 @@ begin
   EmitB($41); EmitB($5D);                         { pop r13 }
   EmitB($41); EmitB($5C);                         { pop r12 }
   EmitB($5B);                                      { pop rbx }
+end;
+
+procedure EmitDynArrayUnique(symIdx: Integer; elemSize: Integer);
+{ Depth-1 wrapper: clone the leaf-level dynamic array for symbol symIdx. }
+begin
+  EmitDynArrayUniqueMeta(elemSize, 1, Syms[symIdx].ElemType, Syms[symIdx].ElemRecName);
 end;
 
 procedure EmitAnsiStrFromLiteral;
@@ -1564,6 +1576,35 @@ begin
           begin EmitB($48); EmitB($8B); EmitB($04); EmitB($25); EmitGlobRef(Syms[symIdx].Offset); end
         else
           begin EmitB($48); EmitB($8B); EmitB($85); EmitI32(Syms[symIdx].Offset); end;
+      end;
+
+    IR_SLOTADDR:
+      begin
+        { Address of a variable's slot, unconditionally (plain lea). Unlike
+          IR_LEA this never auto-loads a dyn-array/AnsiString handle, so it is a
+          safe base for IR_DYNUNIQUE in both read and write mode. }
+        symIdx := IRA[node];
+        if Syms[symIdx].Kind = skGlobal then
+          begin EmitB($48); EmitB($8D); EmitB($04); EmitB($25); EmitGlobRef(Syms[symIdx].Offset); end
+        else
+          begin EmitB($48); EmitB($8D); EmitB($85); EmitI32(Syms[symIdx].Offset); end;
+      end;
+
+    IR_DYNUNIQUE:
+      begin
+        { Nested-array copy-on-write. IRA gives the address of the slot holding
+          this level's array handle. On a read, just load the data pointer; on a
+          write (InLValueWrite, set across the whole LHS address chain), clone
+          the level if it is shared, publishing the unique handle back into the
+          slot, so a write through one alias never mutates the other. Recursion
+          up the chain happens naturally: IRA is itself an IR_DYNUNIQUE / element
+          address that was emitted under the same InLValueWrite. }
+        IREmitNode(IRA[node]);                  { rax = slot address }
+        if InLValueWrite then
+          EmitDynArrayUniqueMeta(Integer(IRIVal[node]), IRB[node],
+            IntToTypeKind(IRTk[node]), IRC[node])
+        else
+          begin EmitB($48); EmitB($8B); EmitB($00); end;  { mov rax, [rax] }
       end;
 
     IR_INDEX:
