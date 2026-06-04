@@ -35,6 +35,7 @@ Coverage:
 test/test_dynarray.pas
 test/test_dynarray_ansistring.pas
 test/test_dynarray_managed_record.pas
+test/test_dynarray_field.pas
 test/test_dynarray_params.pas
 test/test_dynarray_result.pas
 test/test_nested_dynarray.pas
@@ -128,6 +129,29 @@ applying the character index. Writes still pass the slot address to
    `test/test_nested_dynarray_managed.pas`.
 7. Add exception-path cleanup only if exception lifetime semantics become an
    active requirement. Normal scope-exit cleanup is implemented.
+8. ~~Make `array of T` a first-class **field** of a record or class.~~ Done
+   2026-06-04. A dynamic-array field is a pointer-sized handle slot at
+   object+offset; metadata is `UFldIsArray=True`, `UFldArrLen=-1`,
+   `UFldTk`=base element type, `UFldRec_`=element record, and the new
+   `UFldDynDepth` parallel array for nesting. `SetLength`, `Length`, indexed
+   read/write, copy-on-write, retain-on-record-copy, and scope-exit
+   finalization all operate on the slot. For a field target the SetLength
+   lowering emits `IR_SETLEN_DYN` with `symIdx=-1` and carries the element
+   metadata on the node (`IRTk`=base type, `IRSetLenBaseRec`=base record)
+   rather than reading a root symbol; the codegen reads symbol-or-node so the
+   symbol path stays byte-identical. `Length` and the field IR get tagged
+   `tyPointer` so the handle slot is dereferenced for its length word, not
+   returned as data. `EmitProcEpilog` releases record-with-managed-field
+   locals; `EmitManagedRecordRetain`/`ReleaseLocked` retain/release dynarray
+   fields recursively. **Class instances are zero-filled on construction**
+   (`rep stosb` over the requested payload at the alloc DONE label, before the
+   VMT write) so a freshly `Create`d managed field starts nil even when the
+   backing block is a reused free-list block carrying stale data — otherwise
+   the field SetLength read garbage as the old data pointer and faulted. The
+   compiler self-compiles without `PXX_MANAGED_STRING` and uses no managed
+   fields, so the self-host build stays byte-identical. Regression:
+   `test/test_dynarray_field.pas` (int/string list fields, `Length`, indexed
+   access, record-copy COW independence, 200k-iteration scope finalization).
 
 ### Result refcount off-by-one — FIXED 2026-06-04
 
