@@ -1,6 +1,6 @@
 # Project State Audit
 
-**Audited:** 2026-06-02
+**Audited:** 2026-06-04
 
 This is the compact current-state snapshot. Source and `make test` remain
 authoritative. Detailed design notes live in [`todo.md`](todo.md), while older
@@ -55,6 +55,35 @@ Pascal hello-world compiles. The directly emitted static hello-world ELF is
 back to 287 bytes.
 
 ## Latest Runtime Progress
+
+### 2026-06-04 — generic collection library
+
+A single generic `TList<T>` template (`lib/rtl/collections.pas`) now backs a
+duplication-free collection library, specialized per element type from any
+program. This closed three layers in one arc:
+
+- **Managed dynamic-array fields.** `array of T` is now a first-class managed
+  field of a record or class — `SetLength`, `Length`, indexed read/write,
+  copy-on-write, retain-on-copy, and scope-exit finalization all operate on the
+  field slot, not only a top-level local. Field-target `SetLength` carries
+  element metadata on the IR node (symIdx=-1) so the symbol path stays
+  byte-identical. (`test/test_dynarray_field.pas`.)
+- **Instance zero-fill.** Class instances are zeroed on construction, so a
+  freshly `Create`d managed field starts `nil` even when its backing block is a
+  reused free-list block — without this the field `SetLength` dereferenced
+  stale data and faulted.
+- **Generic classes, including cross-unit.** `generic TFoo<T> = class ... end;`
+  plus `specialize` now actually work (the wired-but-broken path had three
+  token-stream bugs). A template can live in a used unit and be specialized
+  from the program; method bodies are materialized at the specialization site,
+  deferred past the type section so multiple specializations compose.
+  (`test/test_generic_func.pas`, `test/test_collections.pas`.)
+
+`TList<T>` is the deliverable these enabled: managed dynarray storage, chunked
+(doubling) growth, no manual allocation or freeing, one template for both
+scalar `Integer` and managed `AnsiString` elements.
+
+### 2026-06-02 — managed dynamic-array runtime
 
 The 2026-06-02 managed-runtime batch established generic dynamic-array
 copy-on-write and the first managed-element slice:
