@@ -268,6 +268,7 @@ var
   templateName, paramName: AnsiString;
   depth, startTok, cur, finalCur: Integer;
 begin
+  Next; { consume 'generic' }
   if CurTok.Kind <> tkIdent then Error('expected generic class name');
   templateName := CurTok.SVal; Next;
 
@@ -338,7 +339,10 @@ begin
   concreteType := CurTok.Kind;
   Next;
   Expect(tkGt, '>');
-  Eat(tkSemicolon);
+  { Leave CurTok on the trailing ';' (do NOT Eat) so SpecializeStream inserts
+    the class-body tokens right after it; the final Next then lands CurTok on
+    the inserted 'class', and the caller falls through to the class-binding
+    branch (which names the concrete class from the saved tnOff/tnLen). }
 
   ti := -1;
   for i := 0 to TemplateCount - 1 do
@@ -4273,11 +4277,12 @@ begin
       tnLen := Tokens[TokPos-1].SLen;
       tname := CurTok.SVal; Next;
       Expect(tkEq, '=');
+      { A generic class specialization streams the concrete class body in place
+        and leaves CurTok on 'class', falling through to the class-binding
+        branch below — the concrete name comes from the saved tnOff/tnLen. }
       if CaseEqual(CurTok.SVal, 'specialize') then
-      begin
         ParseSpecialization(tname);
-      end
-      else if CurTok.Kind = tkLParen then
+      if CurTok.Kind = tkLParen then
       begin
         etid := RegisterEnumType(tnOff, tnLen);
         Next; ordinal := 0;
@@ -4929,7 +4934,10 @@ begin
         depth := i;
     if depth >= 0 then
     begin
-      BufferGenericMethod(depth, TokPos - 2);
+      { Start the captured range at the 'procedure'/'function' keyword (one
+        token before the template name) so the specialized stream is a complete
+        standalone subroutine the top-level loop can parse. }
+      BufferGenericMethod(depth, TokPos - 3);
       Exit;
     end;
       methOwnerCi := FindUClass(name);
