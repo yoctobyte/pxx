@@ -460,6 +460,8 @@ test: $(COMPILER) fpc-check
 	test "$$(/tmp/test_managed_record_funcname_return26)" = "$$(printf '1\n1\n1\n1\n1')"
 	./$(COMPILER) test/test_char_arg_ansistring.pas /tmp/test_char_arg_ansistring26
 	test "$$(/tmp/test_char_arg_ansistring26)" = "$$(printf 'x\nyy\nz\n[q]')"
+	./$(COMPILER) test/test_managed_result_move.pas /tmp/test_managed_result_move26
+	test "$$(/tmp/test_managed_result_move26)" = "$$(printf '1\n1\n1\n1\n1\n1\n1\n1\n1')"
 	./$(COMPILER) test/test_variant.pas /tmp/test_variant26
 	test "$$(/tmp/test_variant26)" = "$$(printf '42\n-7\nQ\n3.14\n1\n100')"
 	./$(COMPILER) test/test_variant_ops.pas /tmp/test_variant_ops26

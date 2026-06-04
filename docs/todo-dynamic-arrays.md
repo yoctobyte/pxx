@@ -116,15 +116,37 @@ applying the character index. Writes still pass the slot address to
 7. Add exception-path cleanup only if exception lifetime semantics become an
    active requirement. Normal scope-exit cleanup is implemented.
 
-### Known limitation: result refcount off-by-one
+### Result refcount off-by-one — FIXED 2026-06-04
 
-A dynamic-array function result is built in the `Result` slot with refcount 1
-and is excluded from scope-exit release (it is the return value). The caller's
-assignment (`a := F(...)`) then unconditionally retains it, so the handle keeps
-refcount 2 with a single owner — a one-reference leak, never a double free.
-This matches the existing managed-`AnsiString` result behaviour. A real fix
-needs move semantics at the assignment site (skip the retain when the RHS is a
-fresh call result).
+A managed function result (dynamic array or `AnsiString`) is built in the
+`Result` slot at refcount 1 and excluded from scope-exit release. The caller's
+assignment (`a := F(...)`) used to unconditionally retain it, so the handle kept
+refcount 2 with a single owner — a one-reference leak per assignment.
+
+Fixed by move semantics at the store: `IR_STORE_SYM` / `IR_STORE_MEM` now skip
+the retain when the RHS is a fresh user-function result (`IRKind = IR_CALL` and
+`IRA >= 0`), mirroring the pre-existing skip for concat (`IR_BINOP`) results.
+Intrinsic results (`IRA < 0`) keep the conservative retain. The move is safe
+because every return path is `Result := X`, which already establishes the +1
+destined for the caller. Regression: `test/test_managed_result_move.pas`
+(alias-survives-reassignment, the over-free risk). A/B on a 5M-iteration
+`s := Mk('a','b')` loop: peak RSS 507 MB → 351 MB.
+
+The residual 351 MB is a **separate** leak (`tools` v2 probe): managed string
+*arguments* are not released on callee return. `s := Mk('hello')` leaks the
+per-call arg string (~31 B/iter); a no-arg `Mk` result loop is flat (264 KB).
+Tracked below.
+
+### Known leak: managed string arguments not released on callee return
+
+Passing a managed `AnsiString` argument (e.g. a literal, which materialises a
+fresh refcount-1 managed string at the call site) leaks one reference per call:
+the temporary is never released after the call returns. Pure result moves are
+clean (no-arg function result loop stays at 264 KB); param passthrough
+(`function Mk(a: AnsiString): AnsiString; begin Mk := a; end;`) grows ~31 B/iter.
+Fix needs caller-side release of materialised argument temporaries after the
+call (or callee-side release of by-value managed params on scope exit), honoring
+"whoever reserves, frees".
 
 ## Implementation Notes
 

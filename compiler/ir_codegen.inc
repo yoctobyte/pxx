@@ -1388,7 +1388,13 @@ begin
         if Syms[symIdx].IsArray and (Syms[symIdx].ArrLen = -1) then
         begin
           IREmitNode(IRB[node]);                   { rax = new data pointer }
-          EmitDynArrayRetain;
+          { Move semantics: a fresh user-function result already carries the +1
+            destined for this owner (it was retained by the callee's
+            `Result := X` and excluded from the callee's scope-exit release), so
+            retaining again here would leak one reference. Intrinsic results
+            (IRA < 0) keep the conservative retain. }
+          if not ((IRKind[IRB[node]] = IR_CALL) and (IRA[IRB[node]] >= 0)) then
+            EmitDynArrayRetain;
           EmitB($50);                             { push new data pointer }
           if Syms[symIdx].Kind = skGlobal then
             begin EmitB($48); EmitB($8B); EmitB($04); EmitB($25); EmitGlobRef(Syms[symIdx].Offset); end
@@ -1430,9 +1436,13 @@ begin
             begin
               EmitAnsiStrFromInlineString;
             end
-            else if not ((IRKind[valueNode] = IR_BINOP) and
-                         (IntToTypeKind(IRTk[valueNode]) = tyAnsiString)) then
+            else if not (((IRKind[valueNode] = IR_BINOP) and
+                          (IntToTypeKind(IRTk[valueNode]) = tyAnsiString)) or
+                         ((IRKind[valueNode] = IR_CALL) and (IRA[valueNode] >= 0))) then
             begin
+              { A concat result (BINOP) or a fresh user-function result (IR_CALL,
+                IRA >= 0) is already refcount 1 for this owner — move it instead
+                of retaining, otherwise the handle leaks one reference. }
               IREmitCodeCall(AnsiStrRetainAddr);
             end;
           end;
@@ -1740,9 +1750,13 @@ begin
             begin
               EmitAnsiStrFromInlineString;
             end
-            else if not ((IRKind[valueNode] = IR_BINOP) and
-                         (IntToTypeKind(IRTk[valueNode]) = tyAnsiString)) then
+            else if not (((IRKind[valueNode] = IR_BINOP) and
+                          (IntToTypeKind(IRTk[valueNode]) = tyAnsiString)) or
+                         ((IRKind[valueNode] = IR_CALL) and (IRA[valueNode] >= 0))) then
             begin
+              { A concat result (BINOP) or a fresh user-function result (IR_CALL,
+                IRA >= 0) is already refcount 1 for this owner — move it instead
+                of retaining, otherwise the handle leaks one reference. }
               IREmitCodeCall(AnsiStrRetainAddr);
             end;
           end;
