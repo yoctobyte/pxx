@@ -2603,6 +2603,15 @@ begin
 
           { DONE: rax = payload pointer }
           Patch32(pJmpDone, CodeLen - (pJmpDone + 4));
+          { Zero the instance payload (rcx = N requested bytes). A reused
+            free-list block carries stale data; managed fields (dynarray
+            handles, ansistrings) must start nil or SetLength/finalization
+            dereferences garbage. The VMT pointer is rewritten just below. }
+          EmitB($50);                                     { push rax (payload) }
+          EmitB($48); EmitB($89); EmitB($C7);             { mov rdi, rax }
+          EmitB($31); EmitB($C0);                         { xor eax, eax }
+          EmitB($F3); EmitB($AA);                         { rep stosb (rcx bytes) }
+          EmitB($58);                                     { pop rax }
           EmitB($5B);                                     { pop rbx }
           EmitReleaseHeapLock;
 
