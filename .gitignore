@@ -3,6 +3,12 @@ compiler/compiler
 compiler/*.o
 compiler/*.ppu
 test/hello
+# Compiled test binaries: extensionless ELF built from test/*.pas (and .npy).
+# Ignore everything named test_* under test/, then keep the sources (anything
+# with an extension) and any subdirectories.
+test/test_*
+!test/test_*.*
+!test/test_*/
 /tmp/
 __pycache__/
 *.swp
