@@ -69,8 +69,17 @@ by value; restricted to `cpi >= 0` so builtins like `Length` (which flag
 `tyAnsiString` path now, for an `IsRef` param, derefs the slot to release the
 caller's old handle and publish the new one. An arg that is itself a by-ref
 managed param keeps `IR_LEA` (its slot already holds the forwarded address).
-Remaining in B: `SetLength` through a `var` string — blocked on gap F below
-(`SetLength` on a managed string is broken even for a plain local).
+
+**`SetLength` through a `var` string — now done (2026-06-05).** The
+`specialId`-102 SetLength codegen read the old data pointer from, and published
+the new one into, `Syms[symIdx].Offset` directly; for an `IsRef` param that slot
+holds the *address* of the caller's handle, so the resize silently no-op'd at the
+caller. The 102 path now branches on `(Kind = skParam) and IsRef` at all three
+emit sites — the old-pointer read, the grow/shrink publish, and the zero-length
+release publish — derefing the slot to reach the caller's. Regression:
+`test/test_managed_setlength_var.pas` (shrink/grow/zero through `var` + plain-local
+no-regression). The same no-op exists for `SetLength(var dynarray)` and is fixed
+by the same generic branch. Gap B is now fully resolved.
 
 The original analysis, kept for reference:
 
@@ -107,17 +116,22 @@ enumerated. A dedicated probe phase is required: implement gap A, then iterate
 `-dPXX_MANAGED_STRING` compiles collecting each subsequent error/idiom until the
 compiler produces a binary.
 
-### F. `SetLength` on a managed string is broken (newly found 2026-06-05)
-`SetLength(s, n)` where `s` is a `tyAnsiString` is misrouted: the parser sends a
-managed-string target to the `-102` dynamic-array path (`parser.inc` ~3660), but
-that path uses the symbol's array element metadata, which is unset for a plain
-managed string — so the data is resized but the length word ends up garbage
-(`s := 'hello'; SetLength(s,3)` → prints `hel <garbage>`, even for a non-`var`
-local). This is independent of by-ref params (gap B) and must be fixed for any
-code — the compiler included — that `SetLength`s a managed string. Likely fix:
-give the `-102` managed-string case an explicit element size of 1 (char) and a
-length word in chars, or route managed strings to a dedicated managed-string
-`SetLength` rather than the dynarray path.
+### F. `SetLength` on a plain-local managed string — NOT a bug (retracted 2026-06-05)
+Re-tested under the current build: `s := 'hello'; SetLength(s,3)` correctly
+prints `hel` with `Length(s) = 3`; grow + zero-fill, index-write into the grown
+region, and `SetLength(s,0)` all behave. The earlier `hel <garbage>` report did
+not reproduce — the prior managed-string batch had already aligned the
+`tyAnsiString` case of the `-102` path (the `add rax, 17` header + nul-terminator
+handling). Only the by-ref case (gap B above) was actually broken, and it is now
+fixed.
+
+**Adjacent bug found, not yet fixed:** a *named* dynamic-array type used as a
+variable (`type T = array of Integer; var a: T`) misroutes `SetLength(a, n)` to
+the `-101` string path → `SetLength expects a string variable in IR codegen`,
+even for a plain local. The parser routing (`parser.inc` ~3658) keys on
+`Syms[idx].IsArray and ArrLen = -1`, which the named-alias symbol doesn't carry;
+the inline form (`var a: array of Integer`) works. Out of scope for the managed
+arc; flag for a parser-routing pass.
 
 ### E. Byte-identical re-baseline
 Once the managed compiler self-compiles, a **new** byte-identical baseline must
@@ -155,8 +169,8 @@ be established:
 | Risk | Severity | Note |
 |---|---|---|
 | Each gap-A builtin is a real codegen rewrite, not a guard tweak | Med | Scoped; 4–5 sites |
-| `var`/`out` string param managed by-ref store | **Resolved (store)** | Assign + concat through `var` implemented & churn-tested (2026-06-05); `SetLength`-through-`var` waits on gap F |
-| `SetLength` on a managed string misrouted to dynarray path | Med | Broken even for a plain local; gap F |
+| `var`/`out` string param managed by-ref store | **Resolved** | Assign + concat + `SetLength` through `var` all implemented & tested (2026-06-05); gap B fully closed |
+| `SetLength` on a plain-local managed string | **Retracted** | Not a bug — works; gap F report did not reproduce |
 | Unknown error tail (gap D) could be long | **High** | Only the first error is known; needs the probe phase to size |
 | FPC-seed byte-identical parity (gap E) | **High** | Two string runtimes must emit identical code |
 | Compile-time perf change under real workload | Low–Med | First-fit free-list is O(freelist) per alloc; measure compile time, not just RSS |

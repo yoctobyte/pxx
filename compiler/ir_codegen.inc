@@ -2962,6 +2962,14 @@ begin
             EmitAcquireHeapLock;
             if Syms[symIdx].Kind = skGlobal then
               begin EmitB($48); EmitB($8B); EmitB($34); EmitB($25); EmitGlobRef(Syms[symIdx].Offset); end
+            else if (Syms[symIdx].Kind = skParam) and Syms[symIdx].IsRef then
+              begin
+                { by-ref (var/out) param: the slot holds the ADDRESS of the
+                  caller's handle/data-pointer slot; deref to reach the old data
+                  pointer, and (below) publish the new one into the caller's slot. }
+                EmitB($48); EmitB($8B); EmitB($B5); EmitI32(Syms[symIdx].Offset); { mov rsi, [rbp+off] = caller slot addr }
+                EmitB($48); EmitB($8B); EmitB($36);                               { mov rsi, [rsi] = old data ptr }
+              end
             else
               begin EmitB($48); EmitB($8B); EmitB($B5); EmitI32(Syms[symIdx].Offset); end;
             EmitB($56);                     { push old data pointer }
@@ -3066,6 +3074,11 @@ begin
             EmitB($59);                     { pop rcx = n }
             if Syms[symIdx].Kind = skGlobal then
               begin EmitB($48); EmitB($89); EmitB($04); EmitB($25); EmitGlobRef(Syms[symIdx].Offset); end
+            else if (Syms[symIdx].Kind = skParam) and Syms[symIdx].IsRef then
+              begin
+                EmitB($48); EmitB($8B); EmitB($8D); EmitI32(Syms[symIdx].Offset); { mov rcx, [rbp+off] = caller slot addr }
+                EmitB($48); EmitB($89); EmitB($01);                               { mov [rcx], rax (new ptr -> caller slot) }
+              end
             else
               begin EmitB($48); EmitB($89); EmitB($85); EmitI32(Syms[symIdx].Offset); end;
             EmitB($48); EmitB($89); EmitB($F0);                       { mov rax, rsi }
@@ -3085,6 +3098,11 @@ begin
             EmitB($31); EmitB($C0);          { xor eax, eax }
             if Syms[symIdx].Kind = skGlobal then
               begin EmitB($48); EmitB($89); EmitB($04); EmitB($25); EmitGlobRef(Syms[symIdx].Offset); end
+            else if (Syms[symIdx].Kind = skParam) and Syms[symIdx].IsRef then
+              begin
+                EmitB($48); EmitB($8B); EmitB($8D); EmitI32(Syms[symIdx].Offset); { mov rcx, [rbp+off] = caller slot addr }
+                EmitB($48); EmitB($89); EmitB($01);                               { mov [rcx], rax (nil -> caller slot) }
+              end
             else
               begin EmitB($48); EmitB($89); EmitB($85); EmitI32(Syms[symIdx].Offset); end;
             EmitB($48); EmitB($89); EmitB($F0);                       { mov rax, rsi }
