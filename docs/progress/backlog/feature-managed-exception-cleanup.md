@@ -3,6 +3,7 @@
 - **Type:** feature
 - **Status:** backlog
 - **Owner:** —
+- **Unblocks:** feature-managed-string-default
 - **Opened:** 2026-06-06 (from todo.md §2d/§4 + rainy-afternoon)
 
 ## Motivation

@@ -3,6 +3,7 @@
 - **Type:** feature
 - **Status:** backlog
 - **Owner:** —
+- **Blocked-by:** bug-managed-byref-string-param-store, feature-managed-exception-cleanup
 - **Opened:** 2026-06-06 (from todo.md §2d / §4)
 
 ## Motivation

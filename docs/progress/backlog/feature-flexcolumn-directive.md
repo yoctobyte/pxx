@@ -3,6 +3,7 @@
 - **Type:** feature
 - **Status:** backlog
 - **Owner:** —
+- **Blocked-by:** chore-inc-to-units
 - **Opened:** 2026-06-06 (from todo.md §4)
 
 ## Motivation

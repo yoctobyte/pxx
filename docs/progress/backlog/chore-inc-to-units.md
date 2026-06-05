@@ -3,6 +3,7 @@
 - **Type:** chore
 - **Status:** backlog
 - **Owner:** —
+- **Unblocks:** feature-flexcolumn-directive
 - **Opened:** 2026-06-06 (from todo.md §6)
 
 ## Motivation

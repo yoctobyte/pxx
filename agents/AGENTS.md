@@ -51,6 +51,12 @@ Read once at session start. Keep edits here terse — this loads every session.
 - **Claim before working:** `git mv` to `working/` and set `Owner` in the same
   commit (multi-agent: one file per ticket = few conflicts). New item mid-task:
   drop a `backlog/` ticket and keep going. On `done/`, append commit + test.
+- **Priority = dependencies, not labels.** Tickets carry `Blocked-by:` /
+  `Unblocks:` edges. A ticket is *ready* when its `Blocked-by` slugs are all in
+  `done/`; *leverage* = how many tickets it unblocks. Pull high-leverage ready
+  tickets (or by locality of what you're already editing). `urgent/` is a
+  WIP-limited (~3) human override. Compute it: `tools/progress.sh`. When you spot
+  "X before Y", add `Blocked-by` to Y — landing X makes Y ready automatically.
 - Record + state, not a clean DB — duplicate/stale tickets tolerated, prefer
   parking to losing info. No separate index; written status stays in
   `docs/developer/project-state.md` / `docs/developer/todo.md`.

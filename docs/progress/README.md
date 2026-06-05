@@ -44,6 +44,8 @@ moves between folders.
 - **Type:** bug | feature | test | chore | docs | idea
 - **Status:** <folder>            (redundant with the folder, but handy in diffs)
 - **Owner:** <agent/name or —>    (who holds it while in working/)
+- **Blocked-by:** <slug, slug>    (omit when nothing blocks it)
+- **Unblocks:** <slug, slug>      (omit when it blocks nothing)
 - **Found / Opened:** <date + context>
 
 ## <body: symptom + repro, or motivation + intended surface + acceptance test>
@@ -54,6 +56,34 @@ moves between folders.
 
 When moving to `done/`, append the commit hash and the regression test that
 proves it. When moving to `blocked/`/`rejected/`, append the reason.
+
+## Priority = dependencies, not labels
+
+There are **no P1/P2 labels**. A hand-assigned priority is a global total order;
+this project has dependency chains, locality, and several agents — a fixed rank
+goes stale and makes agents collide on the same item. Instead, priority is
+*derived* from edges that are cheap to keep correct:
+
+- **`Blocked-by:`** — slugs that must reach `done/` before this is workable.
+- **`Unblocks:`** — slugs this one frees up (the inverse edge, for humans;
+  the script derives it from everyone's `Blocked-by`).
+
+From those two fields, priority falls out and never goes stale:
+
+- **Ready** = a backlog/urgent ticket whose `Blocked-by` slugs are all in `done/`
+  (or it has none). Only ready tickets are pullable.
+- **Leverage** = how many tickets name this one in their `Blocked-by`. High
+  leverage + ready = do it now; it frees the most downstream work.
+
+Keep the edges honest: when you notice "X must land before Y", add `Blocked-by`
+to Y. Landing X then makes Y ready automatically — no re-ranking.
+
+`urgent/` is the **human override on top of the graph**: a WIP-limited (keep it
+to ~3) "do these regardless." Scarcity forces a real choice. For a swarm, prefer
+pulling by **locality** — grab tickets in the topic cluster you're already in
+(`*managed*`, `*c-header*`) over the globally "highest" one.
+
+Compute the queue: `tools/progress.sh` (ready list + leverage + board summary).
 
 ## Multi-agent use
 

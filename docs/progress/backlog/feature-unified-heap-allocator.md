@@ -3,6 +3,7 @@
 - **Type:** feature
 - **Status:** backlog
 - **Owner:** —
+- **Unblocks:** feature-static-arena-profile, feature-threadsafe-io-serialization, feature-async-coroutines
 - **Opened:** 2026-06-06 (from todo.md §2d / §4)
 
 ## Motivation

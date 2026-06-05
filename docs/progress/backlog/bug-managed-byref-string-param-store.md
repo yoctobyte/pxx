@@ -3,6 +3,7 @@
 - **Type:** bug
 - **Status:** backlog
 - **Owner:** —
+- **Unblocks:** feature-managed-string-default
 - **Opened:** 2026-06-06 (from plan-refcounted-compiler-strings.md gap B)
 
 ## Symptom (under `{$define PXX_MANAGED_STRING}`)

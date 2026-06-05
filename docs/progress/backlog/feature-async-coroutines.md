@@ -3,6 +3,7 @@
 - **Type:** feature
 - **Status:** backlog
 - **Owner:** —
+- **Blocked-by:** feature-unified-heap-allocator
 - **Opened:** 2026-06-06 (from rainy-afternoon / plan-async-coroutines.md)
 
 ## Motivation
