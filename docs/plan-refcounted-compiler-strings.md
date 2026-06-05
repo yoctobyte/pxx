@@ -58,13 +58,43 @@ not `IR_LEA`, so today they hit hard `Error(...)` guards.
   with the managed array path (102).
 - Guard inventory: `ir_codegen.inc` lines 2907, 2920, 2933, 3200.
 
-### B. `var` / `out` AnsiString parameters
-44 sites across the compiler (`grep "var … : AnsiString"`). Managed by-ref
-string params pass the **handle-slot address**; a callee that assigns or
-`SetLength`s the param must update the caller's handle with retain/release.
-Verify the managed var-param store path is correct (it is only lightly
-exercised today) and add targeted tests before trusting the compiler's heavy
-use of this idiom.
+### B. `var` / `out` AnsiString parameters — by-ref STORE now implemented (2026-06-05)
+Assign-through-`var` and concat-through-`var` now work and are leak/over-free
+free under a 2 M churn loop (`test/test_managed_var_param.pas`). The fix had two
+parts: lower a managed-string by-ref arg to a USER proc as `IR_SLOTADDR` (the
+unconditional slot-address lea) instead of `IRLowerAddress`→`IR_LEA` — `IR_LEA`
+auto-loads the handle for a `tyAnsiString` in read mode, so it passed the handle
+by value; restricted to `cpi >= 0` so builtins like `Length` (which flag
+`isRefArg` but want the handle) are unaffected; and the `IR_STORE_SYM`
+`tyAnsiString` path now, for an `IsRef` param, derefs the slot to release the
+caller's old handle and publish the new one. An arg that is itself a by-ref
+managed param keeps `IR_LEA` (its slot already holds the forwarded address).
+Remaining in B: `SetLength` through a `var` string — blocked on gap F below
+(`SetLength` on a managed string is broken even for a plain local).
+
+The original analysis, kept for reference:
+
+### B (orig). `var` / `out` AnsiString parameters — CONFIRMED UNIMPLEMENTED (real work)
+44 sites across the compiler (`grep "var … : AnsiString"`). This is **not**
+touch-up — it is missing managed runtime. A by-ref managed string today is
+passed **by value** (a copy of the 8-byte handle), not as the address of the
+caller's handle slot, so a store in the callee never reaches the caller and the
+borrow/release bookkeeping on the copied handle is wrong. Verified 2026-06-04 on
+`/tmp/v{1,2,3}.pas` under `PXX_MANAGED_STRING`:
+
+| Callee op | Frozen | Managed (today) |
+|---|---|---|
+| `s := 'hello'` (assign-through-var) | caller updated → `hello` | silently no-ops → caller still `OLD` |
+| `s := s + '!'` (concat-through-var) | works | **segfault** |
+| `SetLength(s, 3)` (setlength-through-var) | works | silently no-ops → caller unchanged |
+
+Frozen var-params work only because the param *is* the buffer — a store copies
+bytes in place. Correct managed semantics for a by-ref string store: deref the
+ref to reach the caller's slot, **release the old handle there, store the new
+handle, retain as needed** (the borrow-on-read path stays as is). That store
+path does not exist yet; it is the true first blocker, ahead of the gap-A
+builtins. The compiler relies on this idiom heavily (~44 sites), so it is
+load-bearing.
 
 ### C. `Source` and other whole-file buffers
 `Source : AnsiString` holds an entire source file. Frozen caps it at 8 MB
@@ -76,6 +106,18 @@ The compile stops at the first error (LoadFile). Errors past it are not yet
 enumerated. A dedicated probe phase is required: implement gap A, then iterate
 `-dPXX_MANAGED_STRING` compiles collecting each subsequent error/idiom until the
 compiler produces a binary.
+
+### F. `SetLength` on a managed string is broken (newly found 2026-06-05)
+`SetLength(s, n)` where `s` is a `tyAnsiString` is misrouted: the parser sends a
+managed-string target to the `-102` dynamic-array path (`parser.inc` ~3660), but
+that path uses the symbol's array element metadata, which is unset for a plain
+managed string — so the data is resized but the length word ends up garbage
+(`s := 'hello'; SetLength(s,3)` → prints `hel <garbage>`, even for a non-`var`
+local). This is independent of by-ref params (gap B) and must be fixed for any
+code — the compiler included — that `SetLength`s a managed string. Likely fix:
+give the `-102` managed-string case an explicit element size of 1 (char) and a
+length word in chars, or route managed strings to a dedicated managed-string
+`SetLength` rather than the dynarray path.
 
 ### E. Byte-identical re-baseline
 Once the managed compiler self-compiles, a **new** byte-identical baseline must
@@ -113,7 +155,8 @@ be established:
 | Risk | Severity | Note |
 |---|---|---|
 | Each gap-A builtin is a real codegen rewrite, not a guard tweak | Med | Scoped; 4–5 sites |
-| `var`/`out` string param managed semantics latent-buggy | Med | 44 call sites; lightly tested today |
+| `var`/`out` string param managed by-ref store | **Resolved (store)** | Assign + concat through `var` implemented & churn-tested (2026-06-05); `SetLength`-through-`var` waits on gap F |
+| `SetLength` on a managed string misrouted to dynarray path | Med | Broken even for a plain local; gap F |
 | Unknown error tail (gap D) could be long | **High** | Only the first error is known; needs the probe phase to size |
 | FPC-seed byte-identical parity (gap E) | **High** | Two string runtimes must emit identical code |
 | Compile-time perf change under real workload | Low–Med | First-fit free-list is O(freelist) per alloc; measure compile time, not just RSS |
@@ -125,3 +168,6 @@ be established:
   `LoadFile expects string variables in IR codegen` (gap A, expected).
 - 2 M-iteration managed concat loop → 264 KB peak RSS, no crash (gap C/churn
   retired).
+- Managed by-ref string param (`var s: AnsiString`) assign / concat / SetLength
+  → caller-no-op / segfault / caller-no-op (gap B confirmed unimplemented; now
+  the first thing being built).
