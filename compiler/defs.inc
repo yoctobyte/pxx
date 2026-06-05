@@ -321,7 +321,8 @@ type
     tyExtended,  { 20: Extended — 10-byte x87, load/store via x87; ops in SSE2 double }
     tySet,       { 21: Set — 32-byte bitset }
     tyVariant,    { 22: Variant — 16-byte tagged scalar value (8-byte tag + 8-byte payload) }
-    tyAnsiString  { 23: Managed refcounted AnsiString }
+    tyAnsiString, { 23: Managed refcounted AnsiString }
+    tyAuto        { 24: Statically typed variable with inferred type }
   );
 
   TSymKind  = (skLocal, skGlobal, skParam, skConst);
@@ -477,6 +478,7 @@ var
   DumpIR : Boolean;
   StrictOverload : Boolean;
   ThreadSafeMode : Boolean;
+  EnableAutoVar : Boolean;
   CStyleComments : Boolean;   { CSTYLECOMMENTS directive: enable C slash-star comments }
   NestedComments : Boolean;   { NESTEDCOMMENTS directive: nest brace and paren-star comments }
   CaseSensitiveMode : Boolean; { CASESENSITIVE directive: when on, identifiers declared here match case-sensitively. Default off (standard case-insensitive Pascal). }

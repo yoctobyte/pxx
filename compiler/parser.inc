@@ -23,6 +23,98 @@ begin
   Inc(ASTNodeCount);
 end;
 
+procedure InferSymTypeFromNode(symIdx: Integer; node: Integer);
+var tk: TTypeKind; pi, recId, varIdx: Integer;
+begin
+  tk := IntToTypeKind(ASTTk[node]);
+  Syms[symIdx].TypeKind := tk;
+  
+  if tk = tyRecord then
+    Syms[symIdx].RecName := ResolveNodeRec(node)
+  else if tk = tyClass then
+    Syms[symIdx].RecName := ResolveNodeRec(node)
+  else if tk = tyPointer then
+  begin
+    { If it's an identifier }
+    if ASTKind[node] = AN_IDENT then
+    begin
+      varIdx := ASTIVal[node];
+      if (varIdx >= 0) and (varIdx < SymCount) then
+      begin
+        Syms[symIdx].PtrElemTk := Syms[varIdx].PtrElemTk;
+        Syms[symIdx].PtrElemRec := Syms[varIdx].PtrElemRec;
+      end;
+    end
+    { If it's a field }
+    else if ASTKind[node] = AN_FIELD then
+    begin
+      recId := ResolveNodeRec(ASTLeft[node]);
+      if recId <> REC_NONE then
+      begin
+        Syms[symIdx].PtrElemTk := RecFieldPtrElemTk(recId, GetASTIdentName(node));
+        Syms[symIdx].PtrElemRec := RecFieldPtrElemRec(recId, GetASTIdentName(node));
+      end;
+    end
+    { If it's a function call }
+    else if ASTKind[node] = AN_CALL then
+    begin
+      pi := ASTIVal[node];
+      if (pi >= 0) and (pi < ProcCount) then
+      begin
+        Syms[symIdx].PtrElemTk := IntToTypeKind(ProcRetPtrElemTk[pi]);
+        Syms[symIdx].PtrElemRec := ProcRetPtrElemRec[pi];
+      end;
+    end
+    { If it's a typecast }
+    else if ASTKind[node] = AN_PTR_CAST then
+    begin
+      if ASTIVal[node] = -2 then
+      begin
+        Syms[symIdx].PtrElemTk := tyChar;
+        Syms[symIdx].PtrElemRec := REC_NONE;
+      end
+      else if ASTIVal[node] >= 0 then
+      begin
+        Syms[symIdx].PtrElemTk := IntToTypeKind(AliasElemTk[ASTIVal[node]]);
+        Syms[symIdx].PtrElemRec := AliasElemRec[ASTIVal[node]];
+      end;
+    end
+    { If it's an address-of operator }
+    else if ASTKind[node] = AN_ADDR then
+    begin
+      Syms[symIdx].PtrElemTk := IntToTypeKind(ASTTk[ASTLeft[node]]);
+      if (Syms[symIdx].PtrElemTk = tyRecord) or (Syms[symIdx].PtrElemTk = tyClass) then
+        Syms[symIdx].PtrElemRec := ResolveNodeRec(ASTLeft[node]);
+    end;
+  end;
+end;
+
+procedure AllocateSymOffset(idx: Integer);
+var sz, align: Integer; tk: TTypeKind;
+begin
+  tk := Syms[idx].TypeKind;
+  sz := TypeSize(tk);
+  if tk = tyString then
+  begin
+    if Syms[idx].Kind = skGlobal then sz := STRING_CAP + 8
+    else sz := LOCAL_STR_CAP + 8;
+  end
+  else if tk = tyRecord then sz := RecSize(Syms[idx].RecName);
+  align := TypeAlign(tk);
+
+  if Syms[idx].Kind = skGlobal then
+  begin
+    BSSSize := AlignTo(BSSSize, align);
+    Syms[idx].Offset := BSSSize;
+    Inc(BSSSize, sz);
+  end
+  else
+  begin
+    FrameSize := AlignTo(FrameSize + sz, align);
+    Syms[idx].Offset := -FrameSize;
+  end;
+end;
+
 function GetTokenStr(idx: Integer): AnsiString;
 var s: AnsiString; i: Integer;
 begin
@@ -2263,6 +2355,9 @@ begin
         pi := FindProc(name);
       end;
 
+      if (idx >= 0) and (Syms[idx].TypeKind = tyAuto) then
+        Error('use of auto variable before type is inferred');
+
       { C4: pointer-type-alias cast — PFoo(expr) where PFoo = ^TFoo }
       if (idx < 0) and (pi < 0) and (Tokens[TokPos].Kind = tkLParen) then
       begin
@@ -3999,6 +4094,17 @@ begin
               begin
                 Expect(tkAssign, ':=');
                 ParseExpr;
+                if idx >= 0 then
+                begin
+                  if Syms[idx].TypeKind = tyAuto then
+                  begin
+                    if (LastExprTk = tyUnknown) or (LastExprTk = tyAuto) then
+                      Error('cannot infer type for auto variable');
+                    InferSymTypeFromNode(idx, CurASTNode);
+                    AllocateSymOffset(idx);
+                    ASTTk[valNode] := Ord(Syms[idx].TypeKind);
+                  end;
+                end;
                 node := AllocNode(AN_ASSIGN);
                 ASTLeft[node] := valNode;
                 ASTRight[node] := CurASTNode;
@@ -4126,6 +4232,7 @@ begin
         Result := tyPointer;
       end
       else if CaseEqual(lo, 'variant') then Result := tyVariant
+      else if EnableAutoVar and CaseEqual(lo, 'auto') then Result := tyAuto
       else
       begin
         if IsClassType(lo) then

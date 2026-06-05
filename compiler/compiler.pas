@@ -41,6 +41,7 @@ begin
   DumpRTTI := False;
   NoUnhandledHandler := False;
   ThreadSafeMode := False;
+  EnableAutoVar := True;
   PasInitDefines;
   i := 1;
   readingOptions := True;
@@ -87,6 +88,12 @@ begin
             (option = '-fno-unhandled-handler') then
     begin
       NoUnhandledHandler := True;
+      Inc(i);
+    end
+    else if (option = '--no-auto-var') or
+            (option = '-fno-auto-var') then
+    begin
+      EnableAutoVar := False;
       Inc(i);
     end
     else if (Length(option) > 2) and (option[1] = '-') and

@@ -283,6 +283,12 @@ test: $(COMPILER) fpc-check
 	test "$$(/tmp/sqlite_crud26)" = "$$(printf 'open=0\nprepare=0\n1 alice\n2 bob\nfinalize=0\nclose=0')"
 	./$(COMPILER) test/test_string_to_pchar_auto.pas /tmp/string_to_pchar_auto26
 	test "$$(/tmp/string_to_pchar_auto26)" = "$$(printf 'open=0\nprepare=0\n1 alice\n2 bob\nfinalize=0\nclose=0')"
+	./$(COMPILER) test/test_auto_var.pas /tmp/test_auto_var26
+	test "$$(/tmp/test_auto_var26)" = "$$(printf 'Global tests:\ng_int = 456\ng_str = hello global\ng_bool is False\ng_dbl = 3.14\nLocal tests:\nl_int = 123\nl_str = hello local\nl_bool is True\nl_rec = 10, 20\np_rec^ = 10, 20\nall auto variable tests done!')"
+	./$(COMPILER) test/test_sqlite_crud_autotyped.pas /tmp/test_sqlite_crud_autotyped26
+	test "$$(/tmp/test_sqlite_crud_autotyped26)" = "$$(printf 'open=0\nprepare=0\n1 alice\n2 bob\nfinalize=0\nclose=0')"
+	! ./$(COMPILER) test/test_auto_var_fail.pas /tmp/test_auto_var_fail26 > /tmp/test_auto_var_fail.log 2>&1
+	grep -q "use of auto variable before type is inferred" /tmp/test_auto_var_fail.log
 	./$(COMPILER) test/test_c_define_const.pas /tmp/c_define_const26
 	test "$$(/tmp/c_define_const26)" = "$$(printf '0\n100\n101\n101')"
 	./$(COMPILER) test/test_c_struct_fields.pas /tmp/c_struct_fields26

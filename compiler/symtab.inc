@@ -942,6 +942,7 @@ begin
     21: Result := 32; { tySet }
     22: Result := 16; { tyVariant — 8-byte tag + 8-byte payload }
     23: Result := TARGET_PTR_SIZE; { tyAnsiString }
+    24: Result := 0;  { tyAuto }
   end;
 end;
 
@@ -1166,27 +1167,38 @@ begin
     Syms[SymCount].PtrElemRec := LastTypePointerElemRec;
   end;
 
-  sz := TypeSize(tk);
-  if tk = tyString then
+  if tk = tyAuto then
   begin
-    if CurProc < 0 then sz := STRING_CAP + 8
-    else sz := LOCAL_STR_CAP + 8;
-  end
-  else if tk = tyRecord then sz := RecSize(LastTypeRecId);
-  align := TypeAlign(tk);
-
-  if CurProc < 0 then
-  begin
-    BSSSize := AlignTo(BSSSize, align);
-    Syms[SymCount].Kind   := skGlobal;
-    Syms[SymCount].Offset := BSSSize;
-    Inc(BSSSize, sz);
+    Syms[SymCount].Offset := 0;
+    if CurProc < 0 then
+      Syms[SymCount].Kind := skGlobal
+    else
+      Syms[SymCount].Kind := skLocal;
   end
   else
   begin
-    FrameSize := AlignTo(FrameSize + sz, align);
-    Syms[SymCount].Kind   := skLocal;
-    Syms[SymCount].Offset := -FrameSize;
+    sz := TypeSize(tk);
+    if tk = tyString then
+    begin
+      if CurProc < 0 then sz := STRING_CAP + 8
+      else sz := LOCAL_STR_CAP + 8;
+    end
+    else if tk = tyRecord then sz := RecSize(LastTypeRecId);
+    align := TypeAlign(tk);
+
+    if CurProc < 0 then
+    begin
+      BSSSize := AlignTo(BSSSize, align);
+      Syms[SymCount].Kind   := skGlobal;
+      Syms[SymCount].Offset := BSSSize;
+      Inc(BSSSize, sz);
+    end
+    else
+    begin
+      FrameSize := AlignTo(FrameSize + sz, align);
+      Syms[SymCount].Kind   := skLocal;
+      Syms[SymCount].Offset := -FrameSize;
+    end;
   end;
   Result := SymCount; Inc(SymCount);
 end;
