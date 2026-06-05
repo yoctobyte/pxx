@@ -21,26 +21,61 @@ features PXX supports and the extras/switches specific to PXX.
 - Heap: `GetMem`/`FreeMem`, `New`/`Dispose`, `ReallocMem`.
 - Frontends: Pascal, a C subset, and early BASIC / Nil Python.
 
+## Type inference and inline `var` (PXX extras)
+
+Two non-FPC conveniences, both **on by default** (disable per the flags below):
+
+- **Inline `var` declarations** — a `var` statement may appear anywhere in a
+  block, not only in the routine's top `var` section. It is scoped to its block.
+- **Auto-typed variables** — a `var` with an initializer infers its type. Spell
+  the type as `auto` or omit it entirely. Inference needs an initializer.
+
+```pascal
+begin
+  var i := 0;              { inferred Integer, declared inline }
+  var name: auto := 'Pi';  { explicit auto keyword }
+  var x: Double := 3.14;   { inline, explicit type }
+  for i := 1 to 10 do ...
+end;
+```
+
 ## Compiler identity
 
 `{$ifdef PXX}` is true under PXX; `{$ifdef FPC}` is false (reserved for real
 FPC). `PXX` is built in and cannot be undefined. `{$mode objfpc}` / `-Mobjfpc`
 are accepted markers, not full mode emulation.
 
-## PXX switches
+## Source directives
 
-| Switch | Default | Effect |
+| Directive | Default | Effect |
 | --- | --- | --- |
-| `{$NESTEDCOMMENTS ON}` | off | Nest `{ }` and `(* *)`. |
-| `{$CSTYLECOMMENTS ON}` | off | Recognize `/* ... */`. |
-| `{$CASESENSITIVE ON}` | off | Case-sensitive identifiers in this source. |
-| `{$strict_overload on}` | off | Require `overload;` on every overloaded variant. |
+| `{$NESTEDCOMMENTS ON\|OFF}` | off | Nest `{ }` and `(* *)`. |
+| `{$CSTYLECOMMENTS ON\|OFF}` | off | Recognize `/* ... */`. |
+| `{$CASESENSITIVE ON\|OFF}` | off | Case-sensitive identifiers in this source. |
+| `{$STRICT_OVERLOAD ON\|OFF}` | off | Require `overload;` on every overloaded variant. |
+| `{$THREADSAFE ON\|OFF}` | off | Atomic refcounts for managed strings/arrays. |
+| `{$PACKRECORDS N}` / `{$ALIGN N}` | 8 | Record field alignment (`1`/`2`/`4`/`8`/`16`/`normal`). |
+| `{$R name}` / `{$R *.lfm}` | — | Queue an embedded resource (`*` = current unit base). |
 
 Conditional compilation supports `{$define}`/`{$undef}`,
-`{$ifdef}`/`{$ifndef}`/`{$else}`/`{$endif}`, and `{$if}`/`{$elseif}` over a
-small expression subset (`defined(NAME)`, bare symbols, `not`/`and`/`or`,
-parens, `0`/`1`). `{$warning}`/`{$message}`/`{$error}` fire in active branches.
-Valued defines and macro replacement are not implemented.
+`{$ifdef}`/`{$ifndef}`/`{$else}`/`{$endif}`, `{$if}`/`{$elseif}` over a small
+expression subset (`defined(NAME)`, bare symbols, `not`/`and`/`or`, parens,
+`0`/`1`), and `{$include}` (one level deep, active branches only).
+`{$warning}`/`{$message}`/`{$error}` fire in active branches. Valued defines and
+macro replacement are not implemented. Unknown directives are accepted as
+comments.
+
+## Command-line switches
+
+Beyond `-dNAME`/`-uNAME` and `-Mobjfpc` (see [Command Line](cli.md)):
+
+| Flag | Effect |
+| --- | --- |
+| `--strict-overload` / `--permissive-overload` | Toggle the overload rule above. |
+| `--threadsafe` | Atomic refcounts (same as `{$THREADSAFE ON}`). |
+| `--no-auto-var` / `-fno-auto-var` | Disable auto-typed variables. |
+| `--no-lazy-var` / `-fno-lazy-var` | Disable inline `var` declarations. |
+| `--dump-rtti` | Print generated RTTI tables while still emitting the executable. |
 
 ## Generics
 
