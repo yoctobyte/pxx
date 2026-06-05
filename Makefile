@@ -292,7 +292,7 @@ test: $(COMPILER) fpc-check
 	./$(COMPILER) test/test_lazy_var.pas /tmp/test_lazy_var26
 	test "$$(/tmp/test_lazy_var26)" = "$$(printf 'Basic tests:\na = 123\nb = hello inline\nc = 3.14\nd is True\nScoping tests:\nouter x = 10\ninner x = 20\ninner y = 30\nouter x after block = 10\nMultiple declarations:\nx = 42, y = 24\nall lazy variable tests done!')"
 	./$(COMPILER) test/test_sqlite_crud_lazy.pas /tmp/test_sqlite_crud_lazy26
-	test "$$(/tmp/test_sqlite_crud_lazy26)" = "$$(printf 'open=0\nprepare=0\n1 alice\n2 bob\nfinalize=0\nclose=0')"
+	test "$$(/tmp/test_sqlite_crud_lazy26)" = "$$(printf 'open=0\nprepare=0\n1 alice alice\n2 bob bob\nfinalize=0\nclose=0')"
 	! ./$(COMPILER) test/test_lazy_var_scope_fail.pas /tmp/test_lazy_var_scope_fail26 > /tmp/test_lazy_var_scope_fail.log 2>&1
 	grep -q "undefined variable (a)" /tmp/test_lazy_var_scope_fail.log
 	./$(COMPILER) test/test_c_define_const.pas /tmp/c_define_const26

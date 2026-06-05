@@ -27,7 +27,8 @@ begin
   begin
     var id := sqlite3_column_int(stmt, 0);
     var name := PCharToString(sqlite3_column_text(stmt, 1));
-    writeln(id, ' ', name);
+    var name2: string := sqlite3_column_text(stmt, 1);
+    writeln(id, ' ', name, ' ', name2);
   end;
 
   rc := sqlite3_finalize(stmt);
