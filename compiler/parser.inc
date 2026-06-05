@@ -712,6 +712,7 @@ var
   synName: AnsiString;
   typeName: AnsiString;
   recId: Integer;
+  opTypeKind: Integer;
   ci: Integer;
   depth, i, j: Integer;
   isFunc, foundClose: Boolean;
@@ -750,14 +751,21 @@ begin
   end;
   if typeName = '' then Error('operator: cannot determine operand type');
 
-  { Resolve recId for the operand type }
+  { Resolve recId for the operand type. Record the operand's real type kind so
+    the registration tag matches how the use site looks it up (a record operand
+    carries ASTTk=tyRecord, a class operand tyClass). Registering everything as
+    tyClass made FindOpOverload miss for record operands, so `a + b` on records
+    silently fell through to a scalar binop. }
   recId := IsRecordType(typeName);
   if recId = REC_NONE then
   begin
     ci := FindUClass(typeName);
     if ci < 0 then Error('operator overloading: ' + typeName + ' is not a record or class type');
     recId := REC_UCLASS_BASE + ci;
-  end;
+    opTypeKind := Ord(tyClass);
+  end
+  else
+    opTypeKind := Ord(tyRecord);
 
   { Determine function vs procedure: find matching ')' then check for ':' }
   depth := 0;
@@ -816,7 +824,7 @@ begin
   { After ParseSubroutine, the proc is registered — look it up by synName }
   procIdx := FindProc(synName);
   if procIdx < 0 then Error('operator: internal error, proc not found after parse');
-  RegisterOpOverload(Ord(opKind), Ord(tyClass), recId, procIdx);
+  RegisterOpOverload(Ord(opKind), opTypeKind, recId, procIdx);
 end;
 
 function ParseLValueAST(idx: Integer; identTokIdx: Integer): Integer;
@@ -2854,7 +2862,7 @@ begin
 end;
 
 procedure ParseTerm;
-var op: TTokenKind; left, right, node, opSOffset, opSLen: Integer;
+var op: TTokenKind; left, right, node, opSOffset, opSLen, opci: Integer;
 begin
   ParseFactor;
   while ((CurTok.Kind in [tkStar, tkSlash, tkDiv, tkMod, tkAnd, tkShl]) or
@@ -2869,7 +2877,13 @@ begin
     right := CurASTNode;
     node := AllocNode(AN_BINOP); ASTIVal[node] := Ord(op); ASTLeft[node] := left; ASTRight[node] := right;
     ASTSOffset[node] := opSOffset; ASTSLen[node] := opSLen;
-    if (ASTTk[left] = Ord(tyVariant)) or (ASTTk[right] = Ord(tyVariant)) then
+    opci := -1;
+    if (IntToTypeKind(ASTTk[left]) = tyRecord) or (IntToTypeKind(ASTTk[left]) = tyClass) then
+      opci := FindOpOverload(Ord(op), ASTTk[left], ResolveNodeRec(left));
+    if opci >= 0 then
+      { Overloaded operator on a record/class operand returns its result type. }
+      ASTTk[node] := Ord(Procs[opci].RetType)
+    else if (ASTTk[left] = Ord(tyVariant)) or (ASTTk[right] = Ord(tyVariant)) then
       ASTTk[node] := Ord(tyVariant)
     else if (op = tkAnd) and (ASTTk[left] = Ord(tyBoolean)) and (ASTTk[right] = Ord(tyBoolean)) then
       ASTTk[node] := Ord(tyBoolean)
@@ -2900,7 +2914,7 @@ begin
 end;
 
 procedure ParseSimpleExpr;
-var op: TTokenKind; neg: Boolean; left, right, node: Integer;
+var op: TTokenKind; neg: Boolean; left, right, node, opci: Integer;
 begin
   neg := CurTok.Kind = tkMinus; Eat(tkMinus); Eat(tkPlus);
   ParseTerm;
@@ -2916,7 +2930,15 @@ begin
     ParseTerm;
     right := CurASTNode;
     node := AllocNode(AN_BINOP); ASTIVal[node] := Ord(op); ASTLeft[node] := left; ASTRight[node] := right;
-    if (ASTTk[left] = Ord(tyVariant)) or (ASTTk[right] = Ord(tyVariant)) then
+    opci := -1;
+    if (IntToTypeKind(ASTTk[left]) = tyRecord) or (IntToTypeKind(ASTTk[left]) = tyClass) then
+      opci := FindOpOverload(Ord(op), ASTTk[left], ResolveNodeRec(left));
+    if opci >= 0 then
+      { Overloaded operator on a record/class operand: the node's type is the
+        operator's result type, so an inferred target and the aggregate-return
+        copy are sized correctly (not the tyInteger catch-all below). }
+      ASTTk[node] := Ord(Procs[opci].RetType)
+    else if (ASTTk[left] = Ord(tyVariant)) or (ASTTk[right] = Ord(tyVariant)) then
       ASTTk[node] := Ord(tyVariant)
     else if (op = tkPlus) and ((ASTTk[left] = Ord(tyAnsiString)) or (ASTTk[right] = Ord(tyAnsiString))) then
       ASTTk[node] := Ord(tyAnsiString)

@@ -3287,6 +3287,17 @@ begin
     else
       Result := REC_NONE;
   end
+  else if ASTKind[node] = AN_BINOP then
+  begin
+    { An overloaded operator on record/class operands resolves to its result
+      record (the call returns an aggregate). Without this, an inferred
+      `var c := a + b` gets REC_NONE -> wrong RecSize -> truncated/garbage copy. }
+    fIdx := FindOpOverload(ASTIVal[node], ASTTk[ASTLeft[node]], ResolveNodeRec(ASTLeft[node]));
+    if fIdx >= 0 then
+      Result := ProcRetRecId[fIdx]
+    else
+      Result := REC_NONE;
+  end
   else
     Result := REC_NONE;
 end;
