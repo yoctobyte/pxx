@@ -92,10 +92,11 @@ ln -sfn "$PWD/stable_linux_amd64/default/latest" "$HOME/.local/bin/pxx"
 - [Not implemented](docs/not-implemented.md)
 - [Not stable](docs/not-stable.md)
 - [Developer docs](docs/developer/README.md)
+- [Agent instructions](agents/AGENTS.md) — guidelines and workflow for AI agents working on this repo.
 
 ## Repository Layout
 
-- `agents/` - shared AI-agent instructions and generated code map.
+- `agents/` - shared AI-agent instructions ([agents/AGENTS.md](agents/AGENTS.md)) and generated code map.
 - `benchmarks/` - dated benchmark snapshots.
 - `compiler/` - compiler source, runtime support units, and checked-in seed.
 - `docs/` - public docs, project state, plans, and historic handovers.
