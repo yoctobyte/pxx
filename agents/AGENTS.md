@@ -39,6 +39,14 @@ Read once at session start. Keep edits here terse — this loads every session.
   possible. Handovers are a good model: short, dated, attributable, and easy
   for the next agent to find without cluttering the repository root.
 
+## Bug tracking (`docs/bugs/`)
+- File-per-bug, **folder = status**: `discovered/` → `working/` → `fixed/`, plus
+  `unfixed/` (parked/wontfix/can't-repro). `git mv` between folders is the only
+  state change. Spec + file convention: `docs/bugs/README.md`.
+- Found a bug mid-task: drop a `YYYY-MM-DD-slug.md` in `discovered/` and keep
+  going; don't derail unless asked. On fix, add a `## Fix` section (commit +
+  regression test) and `git mv` to `fixed/`.
+
 ## Landmines (cost real time)
 - **Don't add fields to `TSymbol` / `TParam` / `TProc`.** Their byte layout is
   hardcoded (symtab.inc RecSize/RecFieldOffset) and the field pool (`MAX_UFIELD`)
