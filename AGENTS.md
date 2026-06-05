@@ -29,7 +29,8 @@ Read once at session start. Keep edits here terse — this loads every session.
 - Attribution: if you add a `Co-Authored-By` trailer, use your own actual
   agent/model identity, never another agent's. Examples:
   `Co-Authored-By: Codex <codex@openai.com>`,
-  `Co-Authored-By: Claude <claude@anthropic.com>`.
+  `Co-Authored-By: Claude <claude@anthropic.com>`,
+  `Co-Authored-By: Antigravity <antigravity@google.com>`.
 - If continuing uncommitted work from an unknown/crashed agent, say so in the
   commit body (e.g. "Continues uncommitted changes present at session start;
   original agent unknown.") and list what you personally changed.
