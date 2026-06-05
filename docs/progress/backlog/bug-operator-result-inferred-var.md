@@ -1,7 +1,13 @@
 # Operator-result into an inferred `var` drops record fields
 
-**Found:** 2026-06-05, while drafting the dialect showcase in `docs/dialect.md`.
-**Status:** discovered (folder = status).
+- **Type:** bug (also in filename)
+- **Status:** backlog (folder = status)
+- **Owner:** —
+- **Found:** 2026-06-05, while drafting the dialect showcase in `docs/dialect.md`.
+
+## Log
+
+- 2026-06-05 — discovered and written up. Not started.
 
 ## Symptom
 

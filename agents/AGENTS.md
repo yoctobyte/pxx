@@ -39,20 +39,19 @@ Read once at session start. Keep edits here terse — this loads every session.
   possible. Handovers are a good model: short, dated, attributable, and easy
   for the next agent to find without cluttering the repository root.
 
-## Trackers (`docs/bugs/`, `docs/features/`)
-- File-per-item, **folder = status**, `git mv` between folders is the only state
-  change. Docs only → skip the self-host gate.
-- Bugs: `discovered/` → `working/` → `fixed/`, plus `unfixed/`. New bug mid-task:
-  drop `YYYY-MM-DD-slug.md` in `discovered/` and keep going (don't derail unless
-  asked); on fix add `## Fix` (commit + regression test), `git mv` to `fixed/`.
-- Features: `proposed/` → `working/` → `completed/`, plus `incomplete/`,
-  `crashes/`, `rejected/`. Slug-named (no date); on completion add `## Done`
-  (commit + test).
-- Both have a `triage/` escape hatch: unknown / check-later / needs-user / idk —
-  park there rather than lose the item. Keep the **record** (file + git history)
-  and the **state** (folder); duplicate/stale entries are tolerated. No separate
-  index — written status stays in `docs/project-state.md` / `docs/todo.md`.
-- Specs: `docs/bugs/README.md`, `docs/features/README.md`.
+## Progress tracker (`docs/progress/`)
+- One board of tickets (bugs/features/tests/chores). **Status = folder**, **type
+  = filename prefix** (`bug-`, `feature-`, `test-`, …). One ticket per `.md`,
+  appendable `## Log`. `git mv` between folders is the only state change. Docs
+  only → skip the self-host gate. Spec: `docs/progress/README.md`.
+- Folders: `backlog/` (or `urgent/`) → `working/` → `done/`, plus `blocked/`
+  (needs-user / can't-repro) and `rejected/`.
+- **Claim before working:** `git mv` to `working/` and set `Owner` in the same
+  commit (multi-agent: one file per ticket = few conflicts). New item mid-task:
+  drop a `backlog/` ticket and keep going. On `done/`, append commit + test.
+- Record + state, not a clean DB — duplicate/stale tickets tolerated, prefer
+  parking to losing info. No separate index; written status stays in
+  `docs/project-state.md` / `docs/todo.md`.
 
 ## Landmines (cost real time)
 - **Don't add fields to `TSymbol` / `TParam` / `TProc`.** Their byte layout is
