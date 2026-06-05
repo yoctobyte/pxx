@@ -1,23 +1,13 @@
-# PXX (provisional)
+# PXX (Provisional)
 
-A small Pascal compiler that emits x86-64 Linux ELF executables directly —
-no assembler, no linker, no external libraries required.
+PXX is a small self-hosting Pascal compiler for Linux x86-64. It emits ELF
+executables directly, without an assembler or linker.
 
-`PXX` is the working name. The X's are open: Roman twenty-six, a pair of
-crosses — apt for a compiler that crosses languages — or honest placeholders.
-The executable stays `compiler/pascal26`. The spirit of the project has a
-better name: **Frankonpiler**. *Frankenstein Pascal Compiler* was already taken.
-
-The compiler itself is written in plain standard Pascal (no OOP, no external
-deps). It compiles Object Pascal: classes, generics (class generics and
-generic functions/procedures), routine and operator overloading, exceptions,
-C interop, and more.
-
-The longer-term goal is a multi-language native compiler — Pascal first,
-then C, BASIC, and eventually others — sharing one backend and one IR.
-See [Philosophy](docs/philosophy.md) for the vision.
-
-Focus: Linux / POSIX. Single target for now: x86-64.
+The compiler is written in plain Pascal and currently compiles a tested Object
+Pascal subset with classes, generics, overloads, operators, exceptions, C
+interop, and early BASIC / Nil Python frontends. The longer-term direction is a
+multi-language native compiler sharing one backend and IR. See
+[Philosophy](docs/philosophy.md) for the vision.
 
 ## Highlights
 
@@ -57,49 +47,42 @@ Focus: Linux / POSIX. Single target for now: x86-64.
   `make fpc-check` verifies this. FPC is the bootstrap tool and a respected
   reference implementation.
 
-## Build
+## Quick Start
 
 ### Prerequisites
 
 - Linux x86-64
 - GNU `make`
-- FPC (Free Pascal Compiler) — needed for `make bootstrap` and `make fpc-check`; not required for a normal `make` if the seed is intact
+- FPC only for bootstrap/recovery builds
 
-On Debian/Ubuntu: `sudo apt install fpc`
+### Self-Hosted Build
 
-### Normal build
-
-Uses the checked-in self-hosted seed binary. No FPC required.
+Uses the checked-in PXX seed. No FPC needed.
 
 ```sh
 git clone https://github.com/yoctobyte/pxx
 cd pxx
-make        # rebuild compiler from the existing seed
-make test   # full regression suite + fixedpoint check
+make
+make test
 ```
 
-The seed is `compiler/pascal26`. `make` rebuilds it through itself and
-verifies the result is bit-identical (gen1 == gen2 fixedpoint).
+### Bootstrap From FPC
 
-### Bootstrap from FPC
-
-FPC (Free Pascal Compiler) is the bootstrap tool. It rebuilds the seed from
-scratch when needed:
+Use this when the checked-in seed is missing, stale, or intentionally being
+reseated.
 
 ```sh
+sudo apt install fpc
+git clone https://github.com/yoctobyte/pxx
+cd pxx
 make bootstrap
+make test
+make test-nilpy
+make fpc-check
 ```
 
-After bootstrap the compiler is self-hosting again: the new seed must reach
-a bit-identical fixedpoint before it replaces the working compiler.
-
-During active development, bootstrapping via FPC is still common — it is the
-fastest way to recover when a change breaks self-compilation. The long-term
-goal is that `make bootstrap` becomes rare, but it is a normal and supported
-workflow for now, not a last resort.
-
-`make fpc-check` verifies at any time that FPC can still compile the
-compiler source; this keeps the bootstrap path healthy.
+Both paths require byte-identical fixedpoint before replacing
+`compiler/pascal26`.
 
 ## Debug Tracing
 
