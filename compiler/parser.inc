@@ -1212,15 +1212,18 @@ begin
         end
         else
         begin
-          if (mmi >= 0) and (UMthVirSlot[mmi] >= 0) then
+          if mmi >= 0 then
           begin
-            mcallNode := AllocNode(AN_VIRTUAL_CALL);
-            ASTRight[mcallNode] := UMthVirSlot[mmi];
+            if UMthVirSlot[mmi] >= 0 then
+            begin
+              mcallNode := AllocNode(AN_VIRTUAL_CALL);
+              ASTRight[mcallNode] := UMthVirSlot[mmi];
+            end
+            else
+              mcallNode := AllocNode(AN_CALL);
           end
           else
-          begin
             mcallNode := AllocNode(AN_CALL);
-          end;
           ASTIVal[mcallNode] := mpi;
           ASTTk[mcallNode] := Ord(Procs[mpi].RetType);
           mselfArg := AllocNode(AN_ARG);
@@ -2462,45 +2465,48 @@ begin
       begin
         ci := FindUClass(name);
         mmi := FindUMeth(ci, GetTokenStr(TokPos+1));
-        if (mmi >= 0) and UMthIsStatic[mmi] then
+        if mmi >= 0 then
         begin
-          mpi := UMthProc_[mmi];
-          Next; { consume class name }
-          Expect(tkDot, '.');
-          Next; { consume method name }
-          mcallNode := AllocNode(AN_CALL);
-          ASTIVal[mcallNode] := mpi;
-          ASTTk[mcallNode] := Ord(Procs[mpi].RetType);
-          mlastArg := -1;
-          if CurTok.Kind = tkLParen then
+          if UMthIsStatic[mmi] then
           begin
-            Next;
-            i := 0;
-            while i <= Procs[mpi].ParamCount-1 do
+            mpi := UMthProc_[mmi];
+            Next; { consume class name }
+            Expect(tkDot, '.');
+            Next; { consume method name }
+            mcallNode := AllocNode(AN_CALL);
+            ASTIVal[mcallNode] := mpi;
+            ASTTk[mcallNode] := Ord(Procs[mpi].RetType);
+            mlastArg := -1;
+            if CurTok.Kind = tkLParen then
             begin
-              if Procs[mpi].Params[i].IsRef or Procs[mpi].Params[i].IsArray then
+              Next;
+              i := 0;
+              while i <= Procs[mpi].ParamCount-1 do
               begin
-                if CurTok.Kind <> tkIdent then Error('expected variable');
-                argIdx := FindSym(CurTok.SVal); Next;
-                exprNode := ParseLValueAST(argIdx, TokPos - 2);
-              end
-              else
-              begin
-                ParseExpr; exprNode := CurASTNode;
+                if Procs[mpi].Params[i].IsRef or Procs[mpi].Params[i].IsArray then
+                begin
+                  if CurTok.Kind <> tkIdent then Error('expected variable');
+                  argIdx := FindSym(CurTok.SVal); Next;
+                  exprNode := ParseLValueAST(argIdx, TokPos - 2);
+                end
+                else
+                begin
+                  ParseExpr; exprNode := CurASTNode;
+                end;
+                argSeq := AllocNode(AN_ARG); ASTLeft[argSeq] := exprNode;
+                if mlastArg = -1 then
+                  ASTLeft[mcallNode] := argSeq
+                else
+                  ASTRight[mlastArg] := argSeq;
+                mlastArg := argSeq;
+                if i < Procs[mpi].ParamCount-1 then Expect(tkComma, ',');
+                Inc(i);
               end;
-              argSeq := AllocNode(AN_ARG); ASTLeft[argSeq] := exprNode;
-              if mlastArg = -1 then
-                ASTLeft[mcallNode] := argSeq
-              else
-                ASTRight[mlastArg] := argSeq;
-              mlastArg := argSeq;
-              if i < Procs[mpi].ParamCount-1 then Expect(tkComma, ',');
-              Inc(i);
+              Expect(tkRParen, ')');
             end;
-            Expect(tkRParen, ')');
+            CurASTNode := mcallNode;
+            Exit;
           end;
-          CurASTNode := mcallNode;
-          Exit;
         end;
       end;
       if (idx >= 0) and (Syms[idx].Kind = skConst) then
@@ -2698,7 +2704,7 @@ begin
             ASTIVal[valNode] := smSelfIdx;
             ASTTk[valNode] := Ord(tyClass);
             ASTLeft[smselfArg] := valNode;
-            if (mmi >= 0) and (UMthVirSlot[mmi] >= 0) then
+            if UMthVirSlot[mmi] >= 0 then
             begin
               mcallNode := AllocNode(AN_VIRTUAL_CALL);
               ASTRight[mcallNode] := UMthVirSlot[mmi];
@@ -3890,7 +3896,7 @@ begin
               ASTIVal[valNode] := smSelfIdx;
               ASTTk[valNode] := Ord(tyClass);
               ASTLeft[smselfArg] := valNode;
-              if (smmii >= 0) and (UMthVirSlot[smmii] >= 0) then
+              if UMthVirSlot[smmii] >= 0 then
               begin
                 smcallNode := AllocNode(AN_VIRTUAL_CALL);
                 ASTRight[smcallNode] := UMthVirSlot[smmii];
@@ -5157,8 +5163,9 @@ begin
   if methOwnerCi >= 0 then
   begin
     mmi := FindUMeth(methOwnerCi, methName);
-    if (mmi >= 0) and UMthIsStatic[mmi] then
-      isStaticMethod := True;
+    if mmi >= 0 then
+      if UMthIsStatic[mmi] then
+        isStaticMethod := True;
   end;
 
   if (methOwnerCi >= 0) and not isStaticMethod then
@@ -5330,7 +5337,7 @@ begin
     end;
   end;
   { Wire Self's RecName so field lookups resolve against the owner class }
-  if (methOwnerCi >= 0) and not UMthIsStatic[mmi] then
+  if (methOwnerCi >= 0) and not isStaticMethod then
     Syms[Procs[pi].Params[0].SymIdx].RecName := methOwnerRec;
 
   { Return value slot }

@@ -1471,6 +1471,8 @@ var left, right, valNode, symIdx, si, nextJmp2, pNil: Integer;
     baseAddr, indexNode, lo, elemSize, offset, addressNode, valueNode: Integer;
     argNode, pathIdx, pi, specialId, classIdx, slot, cpi, i, jbePatch: Integer;
     searchTop, pJzBump, pJaeTake, pJmpDone, pJbeNoGrow, pFreeNil, pNotDouble, pDone: Integer;
+    pAnsiAlloc, pAnsiShared, pAnsiTooSmall, pAnsiNoZeroGrow, pAnsiFastDone: Integer;
+    pAnsiUseNeededNil, pAnsiUseNeededSmall, pAnsiMinDone, pAnsiCapDone: Integer;
     pDynZero, pDynNoOld, pDynKeepCopy, pDynNoRetain, pDynNoRetainCount: Integer;
     slDepth, slElemSize, slRetainTop, pSlRetainDone, slBaseRec: Integer;
     slBaseTk: TTypeKind;
@@ -3141,6 +3143,8 @@ begin
               elemSize := RecSize(Syms[symIdx].ElemRecName)
             else
               elemSize := TypeSize(Syms[symIdx].ElemType);
+            if (Syms[symIdx].TypeKind = tyAnsiString) and not Syms[symIdx].IsArray then
+              elemSize := 1;
 
             IREmitNode(IRA[arg2Node]);      { rax = n }
             EmitB($50);                     { push n }
@@ -3162,16 +3166,69 @@ begin
             EmitB($48); EmitB($85); EmitB($C0); { test rax, rax }
             EmitB($0F); EmitB($84); pDynZero := CodeLen; EmitI32(0);
 
-            if elemSize = 8 then
+            if (Syms[symIdx].TypeKind = tyAnsiString) and not Syms[symIdx].IsArray then
+            begin
+              { Managed strings use the allocator payload size at [data-24] as
+                capacity. Resize unique buffers in place when the request fits;
+                otherwise allocate with geometric headroom so AppendChar is
+                amortized. The visible length remains n. }
+              EmitB($48); EmitB($8B); EmitB($34); EmitB($24);           { mov rsi, [rsp] = old data }
+              EmitB($48); EmitB($85); EmitB($F6);                       { test rsi, rsi }
+              EmitB($0F); EmitB($84); pAnsiAlloc := CodeLen; EmitI32(0); { jz alloc }
+              EmitB($48); EmitB($83); EmitB($7E); EmitB($F0); EmitB($01); { cmp qword [rsi-16], 1 }
+              EmitB($0F); EmitB($85); pAnsiShared := CodeLen; EmitI32(0); { jne alloc }
+              EmitB($48); EmitB($8B); EmitB($44); EmitB($24); EmitB($08); { mov rax, [rsp+8] = n }
+              EmitB($48); EmitB($83); EmitB($C0); EmitB($11);           { add rax, 17 = needed payload }
+              EmitB($48); EmitB($3B); EmitB($46); EmitB($E8);           { cmp rax, [rsi-24] = capacity payload }
+              EmitB($0F); EmitB($87); pAnsiTooSmall := CodeLen; EmitI32(0); { ja alloc }
+
+              EmitB($48); EmitB($8B); EmitB($4E); EmitB($F8);           { mov rcx, [rsi-8] = old len }
+              EmitB($48); EmitB($8B); EmitB($54); EmitB($24); EmitB($08); { mov rdx, [rsp+8] = n }
+              EmitB($48); EmitB($39); EmitB($CA);                       { cmp rdx, rcx }
+              EmitB($0F); EmitB($86); pAnsiNoZeroGrow := CodeLen; EmitI32(0); { jbe no_zero }
+              EmitB($48); EmitB($8D); EmitB($3C); EmitB($0E);           { lea rdi, [rsi+rcx] }
+              EmitB($48); EmitB($89); EmitB($D1);                       { mov rcx, rdx }
+              EmitB($48); EmitB($2B); EmitB($4E); EmitB($F8);           { sub rcx, [rsi-8] }
+              EmitB($31); EmitB($C0);                                   { xor eax, eax }
+              EmitB($F3); EmitB($AA);                                   { rep stosb }
+              Patch32(pAnsiNoZeroGrow, CodeLen - (pAnsiNoZeroGrow + 4));
+              EmitB($48); EmitB($8B); EmitB($54); EmitB($24); EmitB($08); { mov rdx, [rsp+8] = n }
+              EmitB($48); EmitB($89); EmitB($56); EmitB($F8);           { mov [rsi-8], rdx }
+              EmitB($C6); EmitB($04); EmitB($16); EmitB(0);             { mov byte [rsi+rdx], 0 }
+              EmitB($58);                                               { pop rax = old data }
+              EmitB($59);                                               { pop rcx = n }
+              EmitB($E9); pAnsiFastDone := CodeLen; EmitI32(0);         { jmp done/release-lock }
+
+              Patch32(pAnsiAlloc, CodeLen - (pAnsiAlloc + 4));
+              Patch32(pAnsiShared, CodeLen - (pAnsiShared + 4));
+              Patch32(pAnsiTooSmall, CodeLen - (pAnsiTooSmall + 4));
+              EmitB($48); EmitB($8B); EmitB($34); EmitB($24);           { mov rsi, [rsp] = old data }
+              EmitB($48); EmitB($8B); EmitB($44); EmitB($24); EmitB($08); { mov rax, [rsp+8] = n }
+              EmitB($48); EmitB($83); EmitB($C0); EmitB($11);           { add rax, 17 = needed payload }
+              EmitB($48); EmitB($85); EmitB($F6);                       { test rsi, rsi }
+              EmitB($0F); EmitB($84); pAnsiUseNeededNil := CodeLen; EmitI32(0); { jz use needed }
+              EmitB($48); EmitB($8B); EmitB($4E); EmitB($E8);           { mov rcx, [rsi-24] = old payload cap }
+              EmitB($48); EmitB($01); EmitB($C9);                       { add rcx, rcx }
+              EmitB($48); EmitB($39); EmitB($C1);                       { cmp rcx, rax }
+              EmitB($0F); EmitB($82); pAnsiUseNeededSmall := CodeLen; EmitI32(0); { jb use needed }
+              EmitB($48); EmitB($89); EmitB($C8);                       { mov rax, rcx }
+              EmitB($E9); pAnsiCapDone := CodeLen; EmitI32(0);          { jmp cap_done }
+              Patch32(pAnsiUseNeededNil, CodeLen - (pAnsiUseNeededNil + 4));
+              Patch32(pAnsiUseNeededSmall, CodeLen - (pAnsiUseNeededSmall + 4));
+              EmitB($48); EmitB($83); EmitB($F8); EmitB($20);           { cmp rax, 32 }
+              EmitB($0F); EmitB($83); pAnsiMinDone := CodeLen; EmitI32(0); { jae cap_done }
+              EmitB($B8); EmitI32(32);                                  { mov eax, 32 }
+              Patch32(pAnsiMinDone, CodeLen - (pAnsiMinDone + 4));
+              Patch32(pAnsiCapDone, CodeLen - (pAnsiCapDone + 4));
+            end
+            else if elemSize = 8 then
               begin EmitB($48); EmitB($C1); EmitB($E0); EmitB($03); end { shl rax, 3 }
             else if elemSize > 1 then
               begin
                 EmitB($48); EmitB($C7); EmitB($C1); EmitI32(elemSize); { mov rcx, elemSize }
                 EmitB($48); EmitB($0F); EmitB($AF); EmitB($C1);        { imul rax, rcx }
               end;
-            if (Syms[symIdx].TypeKind = tyAnsiString) and not Syms[symIdx].IsArray then
-              begin EmitB($48); EmitB($83); EmitB($C0); EmitB($11); end { add rax, 17 }
-            else
+            if not ((Syms[symIdx].TypeKind = tyAnsiString) and not Syms[symIdx].IsArray) then
               begin EmitB($48); EmitB($83); EmitB($C0); EmitB($10); end; { add rax, 16 (header) }
             EmitHeapAllocLocked;            { rax = allocator payload / array base }
             EmitB($48); EmitB($8B); EmitB($4C); EmitB($24); EmitB($08); { mov rcx, [rsp+8] = n }
@@ -3300,6 +3357,8 @@ begin
               EmitDynArrayReleaseLocked;
 
             Patch32(pJmpDone, CodeLen - (pJmpDone + 4));
+            if (Syms[symIdx].TypeKind = tyAnsiString) and not Syms[symIdx].IsArray then
+              Patch32(pAnsiFastDone, CodeLen - (pAnsiFastDone + 4));
             EmitReleaseHeapLock;
           end
           else if specialId = SPECIAL_IN then
