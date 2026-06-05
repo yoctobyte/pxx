@@ -1,13 +1,13 @@
 program test_sqlite_crud_lazy;
 uses sqlite3, builtin;
 
-procedure Exec(db: Pointer; sql: PChar);
+procedure Exec(db: Pointer; const sql: string);
 begin
   var exec_rc := sqlite3_exec(db, sql, nil, nil, nil);
-  if exec_rc <> 0 then writeln('exec failed rc=', exec_rc);
+  if exec_rc <> SQLITE_OK then writeln('exec failed rc=', exec_rc);
 end;
 
-procedure RunTest(DbPath: PChar);
+procedure RunTest(const DbPath: string);
 begin
   var db := nil;
   var stmt := nil;
@@ -15,16 +15,16 @@ begin
   var rc := sqlite3_open(DbPath, @db);
   writeln('open=', rc);
 
-  Exec(db, PChar('DROP TABLE IF EXISTS t;'));
-  Exec(db, PChar('CREATE TABLE t(id INTEGER, name TEXT);'));
-  Exec(db, PChar('INSERT INTO t VALUES(1, ''alice'');'));
-  Exec(db, PChar('INSERT INTO t VALUES(2, ''bob'');'));
+  Exec(db, 'DROP TABLE IF EXISTS t;');
+  Exec(db, 'CREATE TABLE t(id INTEGER, name TEXT);');
+  Exec(db, 'INSERT INTO t VALUES(1, ''alice'');');
+  Exec(db, 'INSERT INTO t VALUES(2, ''bob'');');
 
-  rc := sqlite3_prepare_v2(db, PChar('SELECT id, name FROM t ORDER BY id;'),
+  rc := sqlite3_prepare_v2(db, 'SELECT id, name FROM t ORDER BY id;',
                            -1, @stmt, nil);
   writeln('prepare=', rc);
 
-  while sqlite3_step(stmt) = 100 do   { 100 = SQLITE_ROW }
+  while sqlite3_step(stmt) = SQLITE_ROW do
   begin
     var id := sqlite3_column_int(stmt, 0);
     var name := PCharToString(sqlite3_column_text(stmt, 1));
@@ -40,7 +40,7 @@ end;
 
 begin
   writeln('--- File Database ---');
-  RunTest(PChar('/tmp/test_sqlite_crud_lazy26.db'));
+  RunTest('/tmp/test_sqlite_crud_lazy26.db');
   writeln('--- In-Memory Database ---');
-  RunTest(PChar(':memory:'));
+  RunTest(':memory:');
 end.
