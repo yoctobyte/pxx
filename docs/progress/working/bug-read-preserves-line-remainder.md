@@ -1,8 +1,8 @@
 # `read` consumes a whole line like `readln`
 
 - **Type:** bug
-- **Status:** backlog
-- **Owner:** —
+- **Status:** working
+- **Owner:** Antigravity
 - **Opened:** 2026-06-06 (from todo.md §4 / rainy-afternoon)
 
 ## Symptom
@@ -28,3 +28,4 @@ from one line; `readln` still advances past the line.
 
 ## Log
 - 2026-06-06 — ticket opened from todo.md §4.
+- 2026-06-06 — claimed by Antigravity; working on implementation.
