@@ -77,11 +77,10 @@ The normal frozen gate is also clean after this fix:
 `make bootstrap && make test && make test-nilpy && make fpc-check`, followed by
 `make symbols`.
 
-No current correctness blocker is known on the managed self-compile path. The
-next work is policy/operational: decide whether to record a deliberate managed
-reseed/stable artifact, add a first-class managed fixedpoint make target if
-desired, and then continue any remaining managed-string cleanup outside the
-self-compile critical path.
+All remaining correctness blockers and build gate tasks have been completed:
+1. **Wildcard Resource Naming Fix**: Resolved the bug where `Length(ResPendName[i])` and char indexing on array elements (base `IR_INDEX` nodes) returned garbage/incorrect lengths because the compiler missed dereferencing `IR_INDEX` nodes in managed `tkLength` and COW codegen.
+2. **Automated Managed Gate**: Added `make bootstrap-managed` and `make test-managed` as first-class Makefile targets.
+3. **Stabilized Managed Target**: Added `make stabilize-managed` to lock in the stable managed binary (`stable/pascal26-stable-managed`). Verified that both normal and managed bootstrap/test suites compile successfully to byte-identical fixedpoint and are fully green.
 
 ## F2 record-layout fix: delivered summary
 
