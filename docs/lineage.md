@@ -1,139 +1,115 @@
-# Lineage and Acknowledgements
+# Lineage And Acknowledgements
 
-This compiler exists because of the people listed here. Every design choice,
-every feature, every line of source code is downstream of their work.
+PXX is a small project, but it sits on a long chain of language design,
+compiler engineering, operating-system work, and open-source maintenance. This
+page records the main influences and dependencies. It is not a complete
+history of programming languages.
 
----
+## Early Foundations
 
-## The First Programmer
+**Ada Lovelace** (1815-1852) described an algorithm for Charles Babbage's
+Analytical Engine and recognized that a symbolic machine could manipulate more
+than numbers. The Ada language is named in her honor.
 
-**Ada Lovelace** (1815–1852) wrote what is considered the first algorithm — a
-method for computing Bernoulli numbers on Charles Babbage's Analytical Engine,
-a machine that was never built in her lifetime. She understood that a machine
-capable of manipulating symbols could do more than arithmetic. That insight is
-the foundation of everything that followed.
+**FORTRAN** (John Backus and the IBM team, 1957) proved that compiled
+high-level languages could be practical for scientific and engineering work.
 
-The Ada programming language is named in her honour.
+**Lisp** (John McCarthy, 1958) introduced ideas that still shape language
+design: symbolic computation, recursion as a central tool, automatic memory
+management, and code as data.
 
----
+**COBOL** (Grace Hopper and collaborators, 1959) helped establish programming
+as a business tool and argued for source code that domain experts could read.
 
-## The Foundations (1950s)
+**BASIC** (John Kemeny and Thomas Kurtz, 1964) made interactive programming
+accessible to students and later to millions of personal-computer users.
 
-- **John Backus** and the IBM team — **FORTRAN** (1957). The first widely used
-  high-level language. Proved that compiled code could be fast enough for
-  real work. The field has not stopped arguing about it since.
-- **Grace Hopper** and team — **COBOL** (1959). Proved that programs could be
-  readable by people who were not mathematicians. Hopper fought for that idea
-  when most of the field did not believe it.
-- **John McCarthy** — **Lisp** (1958). Garbage collection, recursion as a
-  first principle, code as data. Decades ahead of everyone else and still
-  teaching lessons.
-- **John Kemeny and Thomas Kurtz** — **BASIC** (1964, Dartmouth). Designed to
-  be accessible to students with no prior experience. The first language for
-  millions of people.
+## ALGOL And Structured Programming
 
----
+**ALGOL 60** introduced block structure, lexical scoping, and a formal grammar
+notation through Backus-Naur Form. It is one of the main ancestors of modern
+structured programming languages.
 
-## Two Lineages from One Root
+**Niklaus Wirth** carried that tradition through Pascal, Modula-2, and Oberon:
+small languages, clear type systems, explicit structure, and compilers that can
+be understood by working programmers. PXX is particularly close to that
+tradition: it prefers a simple bootstrap compiler over a large, opaque toolchain.
 
-**ALGOL 60** (1960) — designed by an international committee including
-**Peter Naur**, **John Backus**, and others. Block structure, lexical scoping,
-formal grammar (BNF). Nearly every language since is a descendant, one way
-or another.
+## Pascal, Object Pascal, FPC, And Lazarus
 
-### The Pascal Branch
+**Pascal** (Niklaus Wirth, 1970) combined a clean syntax, strong typing, and
+structured programming. It was designed for teaching but proved useful far
+beyond the classroom. The language is named for **Blaise Pascal**, the
+mathematician and inventor of the Pascaline mechanical calculator.
 
-**Blaise Pascal** (1623–1662) — mathematician, physicist, philosopher, and
-builder of the Pascaline mechanical calculator. The Pascal language was named
-in his honour.
+**Object Pascal** brought object-oriented programming into the Pascal family.
+Apple's Object Pascal work and later Borland's Delphi lineage made classes,
+properties, components, and visual application development central to the
+ecosystem.
 
-**Niklaus Wirth** — **Pascal** (1970). Clean, structured, strongly typed.
-Designed to teach good programming practice. Turned out to also be excellent
-for real software.
+**Turbo Pascal** (Anders Hejlsberg and Borland, 1983) showed how much a fast,
+integrated compiler could change day-to-day programming. Delphi later extended
+that lesson into a full component-oriented development environment.
 
-**Niklaus Wirth** and **Larry Tesler** (Apple) — **Object Pascal** (1986).
-Object-oriented extensions to Pascal. The language that powered the early Mac.
+**Free Pascal (FPC)** keeps Pascal portable, open, and actively maintained. It
+is PXX's bootstrap and recovery compiler, and `make fpc-check` exists to keep
+that path healthy.
 
-**Anders Hejlsberg** (Borland) — **Turbo Pascal** (1983). Made Pascal fast to
-compile, cheap to buy, and accessible to everyone. Hejlsberg later designed
-C# and TypeScript. His compiler work shaped what compilers can be.
+**Lazarus** keeps the Delphi-style ecosystem viable on top of FPC. PXX's RTTI,
+published-property, component-streaming, and LFM work are directly informed by
+that ecosystem.
 
-**Borland** — **Delphi** (1995). Object Pascal with a visual IDE. Defined
-component-based development for a generation.
+## C, Unix, And Native Interop
 
-**The Free Pascal team** — **FPC** (1993–present). Kept Pascal alive, open,
-and cross-platform after the commercial era ended. Multi-architecture,
-actively maintained. Without FPC, this project has no bootstrap path.
+**BCPL** (Martin Richards), **B** (Ken Thompson), and **C** (Dennis Ritchie)
+form the lineage behind Unix and much of today's systems software. C's direct
+mapping to native interfaces is why PXX treats C imports as a first-class
+compiler concern rather than a wrapper-only afterthought.
 
-**The Lazarus team** — **Lazarus** (1999–present). An open-source
-Delphi-compatible IDE built on FPC. Kept the whole ecosystem healthy. Love
-and respect.
+Unix, POSIX, ELF, and the System V AMD64 ABI define much of PXX's current
+target environment. The compiler emits Linux x86-64 ELF directly and calls
+selected shared-library symbols without invoking a system linker.
 
-### The C Branch
+**C++** (Bjarne Stroustrup) is not a current PXX target, but its influence is
+unavoidable: templates, RAII, and decades of systems programming practice shape
+the surrounding ecosystem PXX must interoperate with.
 
-**Martin Richards** — **BCPL** (1967). Typeless, direct, the ancestor of
-everything below.
+## Ada And Strong Systems Languages
 
-**Ken Thompson** — **B** (1969, Bell Labs). BCPL stripped for the PDP-7.
+**Ada** (Jean Ichbiah and team, 1980) was designed for large, safety-critical
+systems with strong typing, packages, exceptions, and concurrency in the
+language specification. It is an important reminder that systems languages can
+be rigorous without being minimal.
 
-**Dennis Ritchie** — **C** (1972, Bell Labs). Added types, became the language
-of Unix, then of everything. Sharp, honest, and unforgiving. We love it.
+## Later Language Influences
 
-**Bjarne Stroustrup** — **C++** (1983). Classes, templates, RAII. The language
-that set out to have everything.
+**Microsoft BASIC** and **GW-BASIC** put programming in front of many early
+personal-computer users. They matter here because accessibility is part of a
+language's impact, not a side detail.
 
----
+**Python** (Guido van Rossum, 1991) is a major influence on readability and on
+PXX's experimental Nil Python frontend. PXX does not try to reproduce CPython;
+it explores a small, statically compiled Python-like surface.
 
-## Ada
+**Rust** (Graydon Hoare and the Rust project, 2010) shows that memory safety and
+native code are not opposing goals. PXX is not a Rust compiler, but Rust's
+ownership discipline is relevant whenever this project discusses managed
+values, borrowing, and embedded targets.
 
-**Jean Ichbiah** and team — **Ada** (1980, DoD). Commissioned to replace a
-zoo of incompatible languages across US defense systems. Strongly influenced
-by Pascal and ALGOL 68. Strong typing, packages, built-in concurrency,
-exception handling in the spec. Named for Ada Lovelace. Consistently
-underappreciated.
+The **GNU**, **GCC**, **LLVM**, **Linux**, and broader open-source communities
+provide the ecosystem in which this project can exist: tools, documentation,
+ABIs, reference implementations, and decades of accumulated practice.
 
----
+## This Project
 
-## BASIC and the PC Era
+PXX, also called Frankonpiler in project notes, is an experiment in building a
+small self-hosting native compiler with Pascal as the anchor language and other
+frontends sharing the same backend. The checked-in compiler source, build
+system, tests, and documentation were developed collaboratively by the project
+owner and AI coding agents, including OpenAI Codex, Anthropic Claude, Google
+Gemini, and Antigravity.
 
-**Bill Gates and Paul Allen** — **Microsoft BASIC** (1975) and **GW-BASIC**
-(1983). Put a programming language in the hands of everyone who bought a
-personal computer. Millions wrote their first program in GW-BASIC. That
-matters more than it is usually credited for.
-
----
-
-## Everyone Who Came After
-
-**Niklaus Wirth** — **Modula-2** (1978) and **Oberon** (1987). Kept
-demonstrating that a language can be small, clean, and powerful all at once.
-
-**Guido van Rossum** — **Python** (1991). Readable above all else.
-
-**Graydon Hoare** — **Rust** (2010). Memory safety without a garbage
-collector. The borrow checker is a genuinely brilliant piece of engineering.
-
-**The GNU project**, **LLVM**, **GCC** teams — the infrastructure the whole
-industry builds on.
-
-Every language designer. Every compiler writer. Every open source maintainer
-who kept a tool alive past its commercial era. This project is downstream of
-all of it.
-
----
-
-## The Authors of This Project
-
-**PXX / Frankonpiler** is what happens when a human rambles about wanting a
-Frankenstein compiler and several AI assistants — OpenAI Codex, Anthropic
-Claude, and Google Gemini — attempt to interpret that rambling as source code.
-
-The vision, the direction, and the stubborn conviction that Pascal is
-underrated were human. The code is AI's best guess at what was meant.
-
-Ada Lovelace would have had opinions about this.
-
-*(This is a joke. The human was genuinely involved. The compiler works.
-These facts are not in conflict.)*
-
-Ada, love ya.
+The project direction, priorities, review decisions, and taste remain human.
+The implementation history includes AI-generated code and documentation, which
+is why this repository keeps explicit agent notes and attribution policy under
+`agents/`.
