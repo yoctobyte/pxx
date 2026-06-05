@@ -1,9 +1,9 @@
 # Plan: flip the compiler to refcounted (managed) strings
 
-**Status:** active fixedpoint tail. Authored 2026-06-04; updated 2026-06-05.
-Gaps A/B/F1/F2 are implemented and frozen-gate clean. An FPC-seeded managed
-compiler builds and can compile/run `test/hello.pas`; stage-2 managed
-self-compile currently grows to multi-GB RSS and does not finish.
+**Status:** managed fixedpoint reached. Authored 2026-06-04; updated
+2026-06-05. Gaps A/B/F1/F2 are implemented and frozen-gate clean. A
+`-dPXX_MANAGED_STRING` compiler now builds itself again to byte-identical
+fixedpoint and can compile/run `test/hello.pas`.
 
 ## Why
 
@@ -245,14 +245,17 @@ functions must agree with that **same runtime check**.
 - Frozen validation asserts the computed layout equals the old hardcoded ABI
   before codegen. Full frozen gate is green:
   `make bootstrap && make test && make test-nilpy && make fpc-check`.
-- FPC reseed now gets past `AddConst`: the managed compiler builds and compiles
-  `test/hello.pas` correctly.
+- The managed self-host tail now reaches fixedpoint. The scalar managed-string
+  `SetLength` path is byte-sized even when the lvalue is a `var AnsiString`,
+  unique buffers are resized in place when allocator capacity permits, and
+  growth allocates geometric headroom. Regression:
+  `test/test_managed_setlength_growth.pas`.
 
-**Current tail:** stage-2 managed self-compile
-(`/tmp/p26_managed_1 -dPXX_MANAGED_STRING compiler/compiler.pas /tmp/p26_managed_2`)
-ran for about four minutes, grew to roughly 10 GB RSS, produced no output file,
-and was killed. The next task is to profile/instrument that CPU/RSS growth before
-attempting fixedpoint.
+**Current tail:** managed stage1 and stage2 now compare byte-identical:
+`./compiler/pascal26 -dPXX_MANAGED_STRING compiler/compiler.pas /tmp/p26_managed_check_1`
+then `/tmp/p26_managed_check_1 -dPXX_MANAGED_STRING compiler/compiler.pas
+/tmp/p26_managed_check_2`, followed by `cmp`. The stage2 compiler builds and
+runs `test/hello.pas`.
 
 **Residual risk:** built-in layout metadata remains load-bearing. The frozen
 validator catches mismatches against the old ABI, and the managed `hello.pas`
@@ -280,11 +283,12 @@ be established:
 - **Phase 2 — var/out string params.** Audit and fix managed by-ref string
   semantics; regression test assign-through and `SetLength`-through a `var`
   string param.
-- **Phase 3 — drive the self-compile.** Done through `hello.pas`: the
-  FPC-seeded managed compiler builds and runs a hello-world target correctly.
-- **Phase 4 — fixedpoint.** In progress: diagnose stage-2 managed self-compile
-  CPU/RSS growth, then iterate to byte-identical (gap E, self-hosted half).
-- **Phase 5 — FPC-seed parity + flip the default.** Reconcile `fpc-check`,
+- **Phase 3 — drive the self-compile.** Done: the managed compiler builds and
+  runs a hello-world target correctly.
+- **Phase 4 — fixedpoint.** Done: managed stage1/stage2 are byte-identical.
+- **Phase 5 — FPC-seed parity + flip the default.** Decide how to package the
+  managed reseed/stable artifact, optionally add an automated managed fixedpoint
+  gate, reconcile any remaining FPC-seed parity concerns for the managed mode,
   switch the build to define `PXX_MANAGED_STRING` by default (keep the frozen
   path available), re-green `test` / `test-nilpy` / `fpc-check`, and measure
   BSS + compile-time RSS before/after.
@@ -296,10 +300,10 @@ be established:
 | Each gap-A builtin is a real codegen rewrite, not a guard tweak | Med | Scoped; 4–5 sites |
 | `var`/`out` string param managed by-ref store | **Resolved** | Assign + concat + `SetLength` through `var` all implemented & tested (2026-06-05); gap B fully closed |
 | `SetLength` on a plain-local managed string | **Retracted** | Not a bug — works; gap F report did not reproduce |
-| Unknown error tail (gap D) could be long | **Reduced** | Tail is past `AddConst`; managed compiler builds and runs `hello.pas` |
+| Unknown error tail (gap D) could be long | **Resolved** | Managed self-compile reaches byte-identical fixedpoint |
 | FPC-seed byte-identical parity (gap E) | **High** | Two string runtimes must emit identical code |
-| Stage-2 managed self-compile CPU/RSS growth | **High** | Current blocker: stage 2 reached ~10 GB RSS without finishing |
-| Compile-time perf change under real workload | **High** | First-fit free-list is O(freelist) per alloc; now implicated by stage-2 growth until proven otherwise |
+| Stage-2 managed self-compile CPU/RSS growth | **Resolved** | Fixed by scalar `AnsiString` SetLength byte sizing + capacity-aware growth |
+| Compile-time perf change under real workload | **Med** | Still worth measuring before flipping the default |
 | Allocator crash under churn | **Retired** | 2 M-concat loop flat at 264 KB |
 
 ## Cheap experiments already run
@@ -310,5 +314,5 @@ be established:
   retired).
 - Managed by-ref string param (`var s: AnsiString`) assign / concat / SetLength
   originally failed; now fixed and tested.
-- FPC-seeded managed compiler builds and compiles/runs `test/hello.pas`.
-- Stage-2 managed self-compile reached about 10 GB RSS and was killed.
+- Managed compiler builds and compiles/runs `test/hello.pas`.
+- Managed stage1/stage2 self-compile reaches byte-identical fixedpoint.

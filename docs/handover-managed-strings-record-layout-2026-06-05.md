@@ -1,8 +1,8 @@
-# Handover: managed-strings self-compile — stage-2 growth after F2
+# Handover: managed-strings self-compile — fixedpoint reached after F2
 
 **Date:** 2026-06-05. **For:** the next agent (sis AI). **Read with:**
 `docs/plan-refcounted-compiler-strings.md` (the live plan; §F2 records the
-completed computed-layout refactor and the current fixedpoint tail).
+completed computed-layout refactor and the fixedpoint tail).
 
 ## Goal
 
@@ -38,35 +38,50 @@ compiler binary grew only because it carries the new source, output is identical
   validated against the old constants before codegen.
 - Tests: `test/test_managed_setlength_var.pas` and
   `test/test_managed_record_field_string_ops.pas` wired into `make test`.
-- Commits: `e5cafc7`, `da28c88`, `36ff5c8`, `1640750`, `9039a27`; plan docs
+- Stage-2 managed self-compile growth: fixed by making scalar managed-string
+  `SetLength` byte-sized even through `var AnsiString`, resizing unique buffers
+  in place when allocator capacity permits, allocating geometric headroom for
+  growth, and guarding parser method metadata reads without relying on
+  short-circuit `and`. Regression: `test/test_managed_setlength_growth.pas`.
+- Commits: `e5cafc7`, `da28c88`, `36ff5c8`, `1640750`, `9039a27`, `2f82301`; plan docs
   `6e1c4cf`, `e2029d3`.
 
-State: the F2/AddConst crash is gone. An FPC-built seed can compile
-`compiler/compiler.pas -dPXX_MANAGED_STRING` into a managed compiler, and that
-managed compiler can compile/run `test/hello.pas`.
+State: the F2/AddConst crash is gone, and the stage-2 growth blocker is gone.
+The frozen self-hosted compiler can compile `compiler/compiler.pas
+-dPXX_MANAGED_STRING` into a managed compiler; that managed compiler can
+compile itself again with `-dPXX_MANAGED_STRING`; stage1 and stage2 compare
+byte-identical; the managed compiler also compiles and runs `test/hello.pas`.
 
-## Current blocker: stage-2 managed self-compile growth
+## Current state: managed fixedpoint
 
-The next managed self-host stage does not currently reach fixedpoint. Probe run:
+Latest probe:
 
 ```
-fpc -O2 -Tlinux -Px86_64 -o/tmp/p26_fpc_managed_seed compiler/compiler.pas
-/tmp/p26_fpc_managed_seed -dPXX_MANAGED_STRING compiler/compiler.pas /tmp/p26_managed_1
-/tmp/p26_managed_1 test/hello.pas /tmp/hello_m1 && /tmp/hello_m1
-/tmp/p26_managed_1 -dPXX_MANAGED_STRING compiler/compiler.pas /tmp/p26_managed_2
+./compiler/pascal26 -dPXX_MANAGED_STRING compiler/compiler.pas /tmp/p26_managed_check_1
+/tmp/p26_managed_check_1 -dPXX_MANAGED_STRING compiler/compiler.pas /tmp/p26_managed_check_2
+cmp /tmp/p26_managed_check_1 /tmp/p26_managed_check_2
+/tmp/p26_managed_check_2 test/hello.pas /tmp/hello_managed_check
+/tmp/hello_managed_check
 ```
 
 Observed:
 
-- `/tmp/p26_managed_1` builds successfully (`code=1077894B data=30600B
+- `/tmp/p26_managed_check_1` builds successfully (`code=1094860B data=30600B
   bss=106035320B procs=485`).
-- `/tmp/p26_managed_1` compiles and runs `test/hello.pas` (`Hello, World!`).
-- Stage 2 (`/tmp/p26_managed_1 -dPXX_MANAGED_STRING ... /tmp/p26_managed_2`)
-  ran for about four minutes at ~99% CPU, grew to roughly 10 GB RSS, produced no
-  output file, and was killed to avoid exhausting the machine.
+- `/tmp/p26_managed_check_2` builds successfully with the same sizes.
+- `cmp` reports stage1 == stage2.
+- The stage2 managed compiler builds `test/hello.pas`, which prints
+  `Hello, World!`.
 
-So the remaining blocker is no longer a correctness crash at AddConst; it is a
-pathological CPU/memory growth case during stage-2 managed self-compilation.
+The normal frozen gate is also clean after this fix:
+`make bootstrap && make test && make test-nilpy && make fpc-check`, followed by
+`make symbols`.
+
+No current correctness blocker is known on the managed self-compile path. The
+next work is policy/operational: decide whether to record a deliberate managed
+reseed/stable artifact, add a first-class managed fixedpoint make target if
+desired, and then continue any remaining managed-string cleanup outside the
+self-compile critical path.
 
 ## F2 record-layout fix: delivered summary
 
@@ -138,11 +153,11 @@ parser already picks `tyAnsiString` vs `tyString` at runtime (parser.inc 2184,
    computed layout equals the current hardcoded constants (TSymbol=360, every
    offset). Match ⇒ engine reproduces the known-good ABI. Keep frozen
    `bootstrap`/`test`/`fpc-check` green here.
-4. **IN PROGRESS — FPC reseed `-dPXX_MANAGED_STRING`.** The tail is now past
-   `AddConst`, and the managed compiler can compile/run `hello.pas`. Next:
-   diagnose the stage-2 CPU/RSS growth, then drive fixedpoint and reconcile
-   `fpc-check` (two managed runtimes; emitted code must match). Frozen default
-   remains untouched (the `?8:264` returns 264 with no `-d`).
+4. **DONE — managed fixedpoint.** The tail is past `AddConst`; the managed
+   compiler can compile/run `hello.pas`; managed stage1 and stage2 are
+   byte-identical. Frozen default remains untouched (the `?8:264` returns 264
+   with no `-d`). Next: decide how to package/record the managed reseed and
+   whether to add an automated managed fixedpoint gate.
 
 ## Key file:line
 
