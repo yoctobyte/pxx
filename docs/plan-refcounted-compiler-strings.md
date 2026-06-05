@@ -178,20 +178,78 @@ wants the slot address) was already handled. Verified: `AppendChar`
 string, and `Length` after concat-through-`var` all correct. All changes are
 tyAnsiString/IsRef-gated → frozen self-host byte-identical.
 
-### F2. record string fields stay frozen-inline under managed (the real wall)
-`RecSize`/`RecFieldOffset` (symtab.inc) **hardcode the frozen layout**: e.g.
-`TSymbol` = 360 B with `Name` a 264-B inline string at offset 0, `TypeKind` at
-264, … (the AGENTS landmine). Under managed, standalone `AnsiString`
-vars/globals became 8-B handles (bss 1.6 GB → 213 MB), but record string fields
-did **not** — the `Syms`/`Procs` arrays are still the bulk of the 213 MB. So
-`Syms[x].Name := name` (managed handle → frozen inline field, in `AddConst`)
-mismatches and `rep movsb`-copies with a garbage length → crash. This is the
-fork that needs a decision:
-- (a) make record string fields managed handles too, and re-derive **every**
-  hardcoded `RecSize`/`RecFieldOffset` constant to the new layout (FPC-reseed),
-  capturing most of the remaining memory win; or
-- (b) keep record string fields frozen-inline under managed (forgo that part of
-  the win) and make managed↔inline field assignment correct in both directions.
+### F2. the ~15 hardcoded built-in records are frozen-only (the wall) — PLAN
+
+**Diagnosis (fully pinned 2026-06-05).** The compiler maps ~15 built-in type
+names to hardcoded record ids (`symtab.inc` ~389: `if lo='TSymbol' then Result
+:= REC_TSYMBOL` …). For those ids, `RecSize` / `RecFieldOffset` / `RecFieldType`
+are hardcoded to the **frozen** layout: e.g. `RecFieldType(REC_TSYMBOL,'Name') =
+tyString`, `Name` a 264-B inline at offset 0, `TypeKind` at 264, … size 360.
+*User* records take the dynamic path (`UFld*`/`UClsSize_`) and already lay a
+`tyAnsiString` field out as an 8-B handle — verified: a user record with an
+`AnsiString` field assigns and stores correctly under managed. So **only the
+hardcoded built-in records are frozen**, and that is what crashes the managed
+self-compile: `Syms[x].Name := name` (managed handle → frozen-inline field) does
+a frozen `rep movsb` of `[len][data]` from an 8-B handle → garbage length.
+Decision (user, the architect): fix the records. Records that need it:
+
+| recId | string fields |
+|---|---|
+| `REC_TTOKEN` | `SVal` |
+| `REC_TSTRENTRY` | `Text` |
+| `REC_TSYMBOL` | `Name` |
+| `REC_TPARAM` | `Name` |
+| `REC_TPROC` | `Name` (+ `Params: array of TParam`) |
+| `REC_TTEMPLATE` | `Name`, `Param` |
+| `REC_TSPECIALIZATION` | `Name`, `TemplateName`, `ConcreteName` |
+| `REC_TGENERICFUNC` | `Name`, `Param` |
+| `REC_TPENDINGGFSPEC` | `ConcreteName`, `SpecName` |
+
+(Plus `REC_TRAWTOKEN` has no string field; check `TMyClass`.)
+
+**Why it can't just be a runtime `if PasDefineExists`.** These tables describe
+the compiler's **own** in-memory structs (its `Syms`/`Procs` arrays) *and* are
+reused to generate the target's layout. For a frozen compiler those must stay
+frozen (its own structs are frozen); for a managed compiler they must be managed.
+So the tables key on the compiler's **build** define via `{$ifdef
+PXX_MANAGED_STRING}` (same mechanism as `AppendChar`), not on a runtime flag.
+
+**Plan (Phase 4 — record layout flip):**
+
+1. **Codegen first (applies to all records, user + built-in).** Fix the managed
+   *field* codegen gaps so a `tyAnsiString` field works everywhere, mirroring the
+   F1 by-ref fixes but for `IR_FIELD`:
+   - `Length(rec.field)` on a managed-string field returns 0 today (user-record
+     repro confirmed) — deref the field slot to the handle before `[-8]`.
+   - audit `rec.field[i]` read/write, `recA.field := recB.field`, passing
+     `rec.field` as a `var`/value arg, and scope/never-finalized globals (the
+     built-in arrays live forever, so no field finalization needed for them).
+   These are `tyAnsiString`-gated → frozen byte-identical; land + test on user
+   records (no reseed) before touching the hardcoded tables.
+
+2. **Flip the hardcoded tables under `{$ifdef PXX_MANAGED_STRING}`.** For each
+   record above, add a managed branch to `RecSize`, `RecFieldOffset`,
+   `RecFieldType` (string field → `tyAnsiString`, size 8, offsets recomputed —
+   every field after a string shifts down by 256 per shrunk string). Managed
+   layout must match **FPC's** managed record layout (ansistring = 8-B pointer,
+   declaration order, 8-align) so the FPC reseed in step 3 is self-consistent.
+   Compute carefully; one wrong offset = crash. (E.g. `TSYMBOL` managed: `Name@0`
+   8B, then every later field −256 → size 104.)
+
+3. **FPC reseed with `-dPXX_MANAGED_STRING`.** Build the compiler with FPC *and*
+   the managed define so FPC lays the compiler's own structs out managed and the
+   managed-branch tables match. That managed compiler compiles `compiler.pas
+   -dPXX_MANAGED_STRING` → managed compiler′; iterate to byte-identical (gap E).
+   The frozen default build is untouched (frozen branch of every `{$ifdef}`).
+
+4. **Drive the remaining error tail** (gap D) past `AddConst` to a working
+   `hello.pas`, then to fixedpoint, then reconcile `fpc-check` (now two managed
+   runtimes — self-hosted vs FPC's ansistring; emitted code must match).
+
+**Risk:** step 2 is the AGENTS landmine (hand-derived offsets + `MAX_UFIELD`
+pressure is N/A here since built-ins aren't UClass). Mitigation: the FPC reseed
+crashes loudly on any mismatch; bisect per record. Keep `MAX_UFIELD`/`TParam`
+field-pool untouched — these are hardcoded records, not parallel arrays.
 
 ### E. Byte-identical re-baseline
 Once the managed compiler self-compiles, a **new** byte-identical baseline must
