@@ -39,13 +39,16 @@ Read once at session start. Keep edits here terse — this loads every session.
   possible. Handovers are a good model: short, dated, attributable, and easy
   for the next agent to find without cluttering the repository root.
 
-## Bug tracking (`docs/bugs/`)
-- File-per-bug, **folder = status**: `discovered/` → `working/` → `fixed/`, plus
-  `unfixed/` (parked/wontfix/can't-repro). `git mv` between folders is the only
-  state change. Spec + file convention: `docs/bugs/README.md`.
-- Found a bug mid-task: drop a `YYYY-MM-DD-slug.md` in `discovered/` and keep
-  going; don't derail unless asked. On fix, add a `## Fix` section (commit +
-  regression test) and `git mv` to `fixed/`.
+## Trackers (`docs/bugs/`, `docs/features/`)
+- File-per-item, **folder = status**, `git mv` between folders is the only state
+  change. Docs only → skip the self-host gate.
+- Bugs: `discovered/` → `working/` → `fixed/`, plus `unfixed/`. New bug mid-task:
+  drop `YYYY-MM-DD-slug.md` in `discovered/` and keep going (don't derail unless
+  asked); on fix add `## Fix` (commit + regression test), `git mv` to `fixed/`.
+- Features: `proposed/` → `working/` → `completed/`, plus `incomplete/`,
+  `crashes/`, `rejected/`. Slug-named (no date); on completion add `## Done`
+  (commit + test).
+- Specs: `docs/bugs/README.md`, `docs/features/README.md`.
 
 ## Landmines (cost real time)
 - **Don't add fields to `TSymbol` / `TParam` / `TProc`.** Their byte layout is
