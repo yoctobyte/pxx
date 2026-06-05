@@ -6149,6 +6149,8 @@ begin
        (Tokens[i + 1].Kind = tkLParen) and
        (CaseEqual(GetTokenStr(i), 'str') or CaseEqual(GetTokenStr(i), 'val')) then
       needsBuiltin := True;
+    if Tokens[i].Kind = tkUses then
+      needsBuiltin := True;
     Inc(i);
   end;
 

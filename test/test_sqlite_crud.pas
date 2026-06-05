@@ -39,16 +39,7 @@ begin
   while sqlite3_step(stmt) = 100 do   { 100 = SQLITE_ROW }
   begin
     id := sqlite3_column_int(stmt, 0);
-    p := sqlite3_column_text(stmt, 1);
-    name := '';
-    i := 0;
-    c := p[i];
-    while c <> #0 do
-    begin
-      name := name + c;
-      i := i + 1;
-      c := p[i];
-    end;
+    name := sqlite3_column_text(stmt, 1);
     writeln(id, ' ', name);
   end;
 

@@ -740,6 +740,80 @@ begin
     Result := TypeSize(elemTk);
 end;
 
+function IsNodePChar(node: Integer): Boolean;
+var tk: TTypeKind; pi, recId, symId: Integer;
+begin
+  Result := False;
+  if node < 0 then Exit;
+  tk := IntToTypeKind(ASTTk[node]);
+  if tk <> tyPointer then Exit;
+
+  { 1. If it's a PChar cast node }
+  if (ASTKind[node] = AN_PTR_CAST) and (ASTIVal[node] = -2) then
+  begin
+    Result := True;
+    Exit;
+  end;
+
+  { 2. If it's an identifier }
+  if ASTKind[node] = AN_IDENT then
+  begin
+    symId := ASTIVal[node];
+    if (symId >= 0) and (symId < SymCount) then
+    begin
+      if (Syms[symId].TypeKind = tyPointer) and
+         ((Syms[symId].PtrElemTk = tyChar) or
+          (Syms[symId].PtrElemTk = tyUInt8) or
+          (Syms[symId].PtrElemTk = tyInt8)) then
+      begin
+        Result := True;
+        Exit;
+      end;
+    end;
+  end;
+
+  { 3. If it's a field access }
+  if ASTKind[node] = AN_FIELD then
+  begin
+    recId := ResolveNodeRec(ASTLeft[node]);
+    if recId <> REC_NONE then
+    begin
+      tk := RecFieldPtrElemTk(recId, GetASTIdentName(node));
+      if (tk = tyChar) or (tk = tyUInt8) or (tk = tyInt8) then
+      begin
+        Result := True;
+        Exit;
+      end;
+    end;
+  end;
+
+  { 4. If it's a function call }
+  if ASTKind[node] = AN_CALL then
+  begin
+    pi := ASTIVal[node];
+    if (pi >= 0) and (pi < ProcCount) then
+    begin
+      if (ProcRetPtrElemTk[pi] = Ord(tyChar)) or
+         (ProcRetPtrElemTk[pi] = Ord(tyUInt8)) or
+         (ProcRetPtrElemTk[pi] = Ord(tyInt8)) then
+      begin
+        Result := True;
+        Exit;
+      end;
+    end;
+  end;
+
+  { 5. If it's a binop pointer expression }
+  if ASTKind[node] = AN_BINOP then
+  begin
+    if IntToTypeKind(ASTTk[ASTLeft[node]]) = tyPointer then
+      Result := IsNodePChar(ASTLeft[node])
+    else
+      Result := IsNodePChar(ASTRight[node]);
+    Exit;
+  end;
+end;
+
 function IRLowerAST(node: Integer): Integer;
 var left, right, seq, item, value, outNode, first, last, leftAddr, argNode, argVal, intCallNode, intArgSeq, argNode2, zeroVal, pi: Integer;
     pairNode, condNode, specialId, classIdx, slot, cpi, pathIdx: Integer;
@@ -762,6 +836,8 @@ var left, right, seq, item, value, outNode, first, last, leftAddr, argNode, argV
     i, lbId, off, len, idx, itemNode, lo, hi, val1, elemSize, savedProc: Integer;
     slTargetAST, slCountAST, slRootSym, slDepth, slTargetAddr, slCountNode: Integer;
     slFldRec, slFldDepth, slFldBaseRec: Integer; slFldName: AnsiString; slFldBaseTk: TTypeKind;
+    helperPi, wrapperArg, wrapperCall: Integer;
+    lhsTk, castTk: TTypeKind;
 begin
   if node = -1 then
   begin
@@ -850,6 +926,30 @@ begin
 
     AN_PTR_CAST:
     begin
+      castTk := IntToTypeKind(ASTTk[node]);
+      if (castTk = tyString) or (castTk = tyAnsiString) then
+      begin
+        if IsNodePChar(ASTLeft[node]) then
+        begin
+          pi := FindProc('PCharToString');
+          if pi < 0 then Error('compiler error: PCharToString helper not found');
+
+          wrapperArg := AllocNode(AN_ARG);
+          ASTLeft[wrapperArg] := ASTLeft[node];
+          ASTRight[wrapperArg] := -1;
+          ASTTk[wrapperArg] := Ord(tyPointer);
+
+          wrapperCall := AllocNode(AN_CALL);
+          ASTIVal[wrapperCall] := pi;
+          ASTTk[wrapperCall] := Ord(tyString);
+          ASTLeft[wrapperCall] := wrapperArg;
+          ASTRight[wrapperCall] := -1;
+
+          Result := IRLowerAST(wrapperCall);
+          Exit;
+        end;
+      end;
+
       { A cast PType(expr) is purely a type-tag change — the value in rax is
         already the pointer. No load-through-memory here. }
       Result := IRLowerAST(ASTLeft[node]);
@@ -1024,6 +1124,35 @@ begin
 
     AN_ASSIGN:
     begin
+      lhsTk := IntToTypeKind(ASTTk[ASTLeft[node]]);
+      if (lhsTk = tyUnknown) and (ASTKind[ASTLeft[node]] = AN_IDENT) then
+      begin
+        varIdx := ASTIVal[ASTLeft[node]];
+        if (varIdx >= 0) and (varIdx < SymCount) then
+          lhsTk := Syms[varIdx].TypeKind;
+      end;
+      if (lhsTk = tyString) or (lhsTk = tyAnsiString) then
+      begin
+        if IsNodePChar(ASTRight[node]) then
+        begin
+          pi := FindProc('PCharToString');
+          if pi < 0 then Error('compiler error: PCharToString helper not found');
+
+          wrapperArg := AllocNode(AN_ARG);
+          ASTLeft[wrapperArg] := ASTRight[node];
+          ASTRight[wrapperArg] := -1;
+          ASTTk[wrapperArg] := Ord(tyPointer);
+
+          wrapperCall := AllocNode(AN_CALL);
+          ASTIVal[wrapperCall] := pi;
+          ASTTk[wrapperCall] := Ord(tyString);
+          ASTLeft[wrapperCall] := wrapperArg;
+          ASTRight[wrapperCall] := -1;
+
+          ASTRight[node] := wrapperCall;
+        end;
+      end;
+
       { Whole-record copy: the scalar store paths move only a qword (8 bytes),
         which truncates records larger than 8 bytes. When the RHS is an lvalue,
         copy the full RecSize via IR_COPY_REC (rep movsb). }
