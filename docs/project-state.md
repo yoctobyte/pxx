@@ -155,9 +155,10 @@ runtime dependencies.
 ## Broader Design Debt
 
 - Active compiler internals are still one include-heavy translation unit.
-- Several compiler record layouts are hardcoded in `symtab.inc`; extending
-  those records requires synchronized metadata changes and often an FPC
-  bootstrap.
+- Built-in compiler record layouts in `symtab.inc` are now computed from
+  metadata tables and validated against the frozen ABI. Extending those records
+  still requires synchronized metadata updates, but the old hand-derived
+  `RecSize`/`RecFieldOffset` chains are gone.
 - The allocator uses a simple first-fit free list with no splitting,
   coalescing, bins, or in-place resize. Linux arena growth currently emits
   `mmap` directly; the next allocator refactor must move that behind optional
@@ -210,8 +211,11 @@ runtime dependencies.
    tests pass without `mmap`, `munmap`, or `brk`.
 3. Implement allocator splitting, coalescing, alignment, and in-place
    `Realloc` attempts; keep hosted and RTOS facilities behind optional hooks.
-4. Finish the opt-in managed `AnsiString` migration: params/results, globals,
-   exception paths, and remaining record/class ownership paths.
+4. Finish the opt-in managed `AnsiString` migration: the FPC-seeded managed
+   compiler now builds and runs `hello.pas`; next investigate the stage-2
+   managed self-compile CPU/RSS growth, then drive byte-identical fixedpoint and
+   FPC parity. Exception paths and remaining record/class ownership paths still
+   need audit.
 5. Finish remaining managed-value ownership paths: managed-record
    return-by-value, exception cleanup, and fresh-result move semantics.
 6. Audit threaded compound runtime operations: statement-level

@@ -1,6 +1,9 @@
 # Plan: flip the compiler to refcounted (managed) strings
 
-**Status:** mapping only — no code written yet. (Authored 2026-06-04.)
+**Status:** active fixedpoint tail. Authored 2026-06-04; updated 2026-06-05.
+Gaps A/B/F1/F2 are implemented and frozen-gate clean. An FPC-seeded managed
+compiler builds and can compile/run `test/hello.pas`; stage-2 managed
+self-compile currently grows to multi-GB RSS and does not finish.
 
 ## Why
 
@@ -178,7 +181,7 @@ wants the slot address) was already handled. Verified: `AppendChar`
 string, and `Length` after concat-through-`var` all correct. All changes are
 tyAnsiString/IsRef-gated → frozen self-host byte-identical.
 
-### F2. the ~15 hardcoded built-in records are frozen-only (the wall) — PLAN
+### F2. the built-in record layouts are computed — DONE (2026-06-05)
 
 **Diagnosis (fully pinned 2026-06-05).** The compiler maps ~15 built-in type
 names to hardcoded record ids (`symtab.inc` ~389: `if lo='TSymbol' then Result
@@ -191,7 +194,7 @@ tyString`, `Name` a 264-B inline at offset 0, `TypeKind` at 264, … size 360.
 hardcoded built-in records are frozen**, and that is what crashes the managed
 self-compile: `Syms[x].Name := name` (managed handle → frozen-inline field) does
 a frozen `rep movsb` of `[len][data]` from an 8-B handle → garbage length.
-Decision (user, the architect): fix the records. Records that need it:
+Decision (user, the architect): fix the records. Records fixed:
 
 | recId | string fields |
 |---|---|
@@ -227,54 +230,34 @@ flag. The parser already decides `tyAnsiString` vs `tyString` at runtime via
 `PasDefineExists('PXX_MANAGED_STRING')` (parser.inc 2184, 4097); the record-layout
 functions must agree with that **same runtime check**.
 
-**Plan (Phase 4 — replace the hardcoded tables with a computed engine):**
+**Delivered implementation:**
 
-1. **Codegen first (applies to all records, user + built-in).** Fix the managed
-   *field* codegen gaps so a `tyAnsiString` field works everywhere, mirroring the
-   F1 by-ref fixes but for `IR_FIELD`:
-   - `Length(rec.field)` on a managed-string field returns 0 today (user-record
-     repro confirmed: `/tmp/r1.pas` printed `name=[hello] ... len=0`) — deref the
-     field slot to the handle before `[-8]`.
-   - audit `rec.field[i]` read/write, `recA.field := recB.field`, passing
-     `rec.field` as a `var`/value arg. The built-in arrays are globals that live
-     forever, so no field finalization is needed for them.
-   These are `tyAnsiString`-gated → frozen byte-identical; land + test on **user**
-   records (no reseed) before touching the layout tables.
+- User-record managed string field codegen was fixed first: `Length(rec.field)`
+  now loads the handle from the field slot before reading `[handle-8]`.
+  Regression: `test/test_managed_record_field_string_ops.pas`.
+- `symtab.inc` now computes built-in `RecSize`/`RecFieldOffset`/`RecFieldType`/
+  `RecFieldRecId`/`RecFieldIsArray` from one metadata table in declaration
+  order.
+- Built-in string field layout is selected by runtime target define:
+  `PasDefineExists('PXX_MANAGED_STRING') ? tyAnsiString/8 : tyString/264`.
+- Nested record arrays are supported; `TProc.Params` is
+  `16 * RecSize(REC_TPARAM)`.
+- Frozen validation asserts the computed layout equals the old hardcoded ABI
+  before codegen. Full frozen gate is green:
+  `make bootstrap && make test && make test-nilpy && make fpc-check`.
+- FPC reseed now gets past `AddConst`: the managed compiler builds and compiles
+  `test/hello.pas` correctly.
 
-2. **Computed layout engine (the real refactor — don't hand-flip offsets).**
-   Replace the four hardcoded `if rec = REC_… then` chains with **one compute
-   pass driven by a per-record field table** (each field's name + kind, in
-   declaration order, transcribed once from defs.inc). The ABI rule these records
-   follow:
-   - scalar field → 8 bytes
-   - string field → `PasDefineExists('PXX_MANAGED_STRING') ? 8 : 264`  ← the whole
-     managed flip is this one line
-   - record field → `RecSize(thatRec)`;  array field → `elem × count`
-   `RecFieldOffset`/`RecSize`/`RecFieldType` then read the computed table. Managed
-   vs frozen falls out automatically; no hand-derived offsets, AGENTS landmine
-   gone. `TProc` is the gnarly one: `Params: array[0..15] of TParam` (nested
-   record-array = 16 × `RecSize(REC_TPARAM)`) + `BodyAddr@5024`, size 5056 frozen
-   — the engine must handle nested-record-array fields.
+**Current tail:** stage-2 managed self-compile
+(`/tmp/p26_managed_1 -dPXX_MANAGED_STRING compiler/compiler.pas /tmp/p26_managed_2`)
+ran for about four minutes, grew to roughly 10 GB RSS, produced no output file,
+and was killed. The next task is to profile/instrument that CPU/RSS growth before
+attempting fixedpoint.
 
-3. **Validation (provable green before any managed step).** Assert the **frozen**
-   computed layout equals the current hardcoded constants (TSymbol=360, every
-   offset). If they match, the engine reproduces the known-good ABI → the managed
-   output is trustworthy by construction. Keep `make bootstrap`/`test`/`fpc-check`
-   green at this point (still frozen).
-
-4. **FPC reseed with `-dPXX_MANAGED_STRING`** and drive the rest. Build the
-   compiler with FPC *and* the managed define; that compiler compiles
-   `compiler.pas -dPXX_MANAGED_STRING` → managed compiler′; iterate to
-   byte-identical (gap E). Drive the remaining error tail (gap D) past `AddConst`
-   to a working `hello.pas`, then fixedpoint, then reconcile `fpc-check` (two
-   managed runtimes — self-hosted vs FPC's ansistring; emitted code must match).
-   The frozen default build is untouched (the `?8:264` line returns 264 with no
-   `-d`).
-
-**Risk:** step 2 is the AGENTS landmine (hand-derived offsets + `MAX_UFIELD`
-pressure is N/A here since built-ins aren't UClass). Mitigation: the FPC reseed
-crashes loudly on any mismatch; bisect per record. Keep `MAX_UFIELD`/`TParam`
-field-pool untouched — these are hardcoded records, not parallel arrays.
+**Residual risk:** built-in layout metadata remains load-bearing. The frozen
+validator catches mismatches against the old ABI, and the managed `hello.pas`
+probe proves the first managed layout consumer works. Keep `MAX_UFIELD`/`TParam`
+field-pool untouched — these are built-in target records, not UClass fields.
 
 ### E. Byte-identical re-baseline
 Once the managed compiler self-compiles, a **new** byte-identical baseline must
@@ -297,11 +280,10 @@ be established:
 - **Phase 2 — var/out string params.** Audit and fix managed by-ref string
   semantics; regression test assign-through and `SetLength`-through a `var`
   string param.
-- **Phase 3 — drive the self-compile.** Iterate
-  `pascal26 -dPXX_MANAGED_STRING compiler/compiler.pas`, fixing the error tail
-  (gap D) until a managed compiler compiles `hello.pas` correctly.
-- **Phase 4 — fixedpoint.** Managed compiler self-compiles to byte-identical
-  (gap E, self-hosted half).
+- **Phase 3 — drive the self-compile.** Done through `hello.pas`: the
+  FPC-seeded managed compiler builds and runs a hello-world target correctly.
+- **Phase 4 — fixedpoint.** In progress: diagnose stage-2 managed self-compile
+  CPU/RSS growth, then iterate to byte-identical (gap E, self-hosted half).
 - **Phase 5 — FPC-seed parity + flip the default.** Reconcile `fpc-check`,
   switch the build to define `PXX_MANAGED_STRING` by default (keep the frozen
   path available), re-green `test` / `test-nilpy` / `fpc-check`, and measure
@@ -314,17 +296,19 @@ be established:
 | Each gap-A builtin is a real codegen rewrite, not a guard tweak | Med | Scoped; 4–5 sites |
 | `var`/`out` string param managed by-ref store | **Resolved** | Assign + concat + `SetLength` through `var` all implemented & tested (2026-06-05); gap B fully closed |
 | `SetLength` on a plain-local managed string | **Retracted** | Not a bug — works; gap F report did not reproduce |
-| Unknown error tail (gap D) could be long | **High** | Only the first error is known; needs the probe phase to size |
+| Unknown error tail (gap D) could be long | **Reduced** | Tail is past `AddConst`; managed compiler builds and runs `hello.pas` |
 | FPC-seed byte-identical parity (gap E) | **High** | Two string runtimes must emit identical code |
-| Compile-time perf change under real workload | Low–Med | First-fit free-list is O(freelist) per alloc; measure compile time, not just RSS |
+| Stage-2 managed self-compile CPU/RSS growth | **High** | Current blocker: stage 2 reached ~10 GB RSS without finishing |
+| Compile-time perf change under real workload | **High** | First-fit free-list is O(freelist) per alloc; now implicated by stage-2 growth until proven otherwise |
 | Allocator crash under churn | **Retired** | 2 M-concat loop flat at 264 KB |
 
 ## Cheap experiments already run
 
-- `pascal26 -dPXX_MANAGED_STRING compiler/compiler.pas` → stops at
-  `LoadFile expects string variables in IR codegen` (gap A, expected).
+- `pascal26 -dPXX_MANAGED_STRING compiler/compiler.pas` initially stopped at
+  `LoadFile expects string variables in IR codegen` (gap A); fixed.
 - 2 M-iteration managed concat loop → 264 KB peak RSS, no crash (gap C/churn
   retired).
 - Managed by-ref string param (`var s: AnsiString`) assign / concat / SetLength
-  → caller-no-op / segfault / caller-no-op (gap B confirmed unimplemented; now
-  the first thing being built).
+  originally failed; now fixed and tested.
+- FPC-seeded managed compiler builds and compiles/runs `test/hello.pas`.
+- Stage-2 managed self-compile reached about 10 GB RSS and was killed.

@@ -1,8 +1,8 @@
-# Handover: managed-strings self-compile — record-layout flip (F2)
+# Handover: managed-strings self-compile — stage-2 growth after F2
 
 **Date:** 2026-06-05. **For:** the next agent (sis AI). **Read with:**
-`docs/plan-refcounted-compiler-strings.md` (the live plan; §F2 has the full
-detail and the corrected approach).
+`docs/plan-refcounted-compiler-strings.md` (the live plan; §F2 records the
+completed computed-layout refactor and the current fixedpoint tail).
 
 ## Goal
 
@@ -11,7 +11,7 @@ Make the compiler self-compile with refcounted (managed) `AnsiString`:
 compiler binary, then reach byte-identical fixedpoint. Payoff: BSS collapses
 (already 1.6 GB → 213 MB from standalone-var handles; the rest is record arrays).
 
-## What is DONE (this session — all committed, gate-clean)
+## What is DONE (all committed, gate-clean)
 
 Drove the managed self-compile from first-error to the last wall. Every fix is
 `tyAnsiString`/`IsRef`-gated, so the **frozen** default build stays byte-identical
@@ -28,25 +28,59 @@ compiler binary grew only because it carries the new source, output is identical
   now deref the forwarded slot to the handle (the fix is at the two consumers —
   `tkLength` branch and `IR_INDEX` read — not the `IR_LEA` node, so forwarding a
   var-param keeps working).
-- Tests: `test/test_managed_setlength_var.pas` wired into `make test`.
-- Commits: `e5cafc7`, `da28c88`, `36ff5c8`, plan docs `6e1c4cf` + this handover.
+- F1-adjacent user-record field read: `Length(rec.field)` now derefs the managed
+  string field slot before reading the length word. Regression:
+  `test/test_managed_record_field_string_ops.pas`.
+- F2: built-in compiler records now use computed metadata-driven target layouts
+  instead of hardcoded frozen `RecSize`/`RecFieldOffset`/`RecFieldType` chains.
+  The string field size/type branch uses runtime
+  `PasDefineExists('PXX_MANAGED_STRING')`, not `{$ifdef}`. Frozen layout is
+  validated against the old constants before codegen.
+- Tests: `test/test_managed_setlength_var.pas` and
+  `test/test_managed_record_field_string_ops.pas` wired into `make test`.
+- Commits: `e5cafc7`, `da28c88`, `36ff5c8`, `1640750`, `9039a27`; plan docs
+  `6e1c4cf`, `e2029d3`.
 
-State: the managed self-compile **runs to completion** and emits a binary; that
-binary crashes only at F2 (below). Everything before F2 works.
+State: the F2/AddConst crash is gone. An FPC-built seed can compile
+`compiler/compiler.pas -dPXX_MANAGED_STRING` into a managed compiler, and that
+managed compiler can compile/run `test/hello.pas`.
 
-## The ONE remaining blocker: F2
+## Current blocker: stage-2 managed self-compile growth
 
-The managed compiler crashes in `AddConst` on `Syms[x].Name := name` — a
-`rep movsb` of `[len][data]` from an 8-byte managed handle with a garbage length.
+The next managed self-host stage does not currently reach fixedpoint. Probe run:
 
-**Root cause (fully pinned):** `symtab.inc` ~389 (`IsRecordType`) maps ~15
-built-in type names to hardcoded record ids. For those ids,
-`RecSize` (425) / `RecFieldOffset` (446) / `RecFieldType` (568) are **hardcoded
-to the frozen layout** (e.g. `RecFieldType(REC_TSYMBOL,'Name') = tyString`, `Name`
-264 B inline @0, size 360). User records take the dynamic `UFld*`/`UClsSize_` path
-and already lay a `tyAnsiString` field out as an 8-byte handle and work under
-managed (verified). So **only the hardcoded built-in records are frozen**, and a
-managed-handle store into their inline string field mismatches.
+```
+fpc -O2 -Tlinux -Px86_64 -o/tmp/p26_fpc_managed_seed compiler/compiler.pas
+/tmp/p26_fpc_managed_seed -dPXX_MANAGED_STRING compiler/compiler.pas /tmp/p26_managed_1
+/tmp/p26_managed_1 test/hello.pas /tmp/hello_m1 && /tmp/hello_m1
+/tmp/p26_managed_1 -dPXX_MANAGED_STRING compiler/compiler.pas /tmp/p26_managed_2
+```
+
+Observed:
+
+- `/tmp/p26_managed_1` builds successfully (`code=1077894B data=30600B
+  bss=106035320B procs=485`).
+- `/tmp/p26_managed_1` compiles and runs `test/hello.pas` (`Hello, World!`).
+- Stage 2 (`/tmp/p26_managed_1 -dPXX_MANAGED_STRING ... /tmp/p26_managed_2`)
+  ran for about four minutes at ~99% CPU, grew to roughly 10 GB RSS, produced no
+  output file, and was killed to avoid exhausting the machine.
+
+So the remaining blocker is no longer a correctness crash at AddConst; it is a
+pathological CPU/memory growth case during stage-2 managed self-compilation.
+
+## F2 record-layout fix: delivered summary
+
+The old crash was:
+
+`Syms[x].Name := name` in `AddConst` stored an 8-byte managed handle into a
+target `TSymbol.Name` field that the built-in record tables still described as a
+264-byte frozen inline string.
+
+**Root cause (verified):** `RecSize`/`RecFieldOffset`/`RecFieldType` are
+target-codegen metadata only. They never access the compiler's own FPC/self-host
+struct memory. The old built-in tables encoded a target ABI of "every scalar =
+8 bytes; frozen string = 264 bytes", while user records already selected
+`tyAnsiString` handle fields under `-dPXX_MANAGED_STRING`.
 
 Records to fix (string-bearing built-ins): `TToken(SVal)`, `TStrEntry(Text)`,
 `TSymbol(Name)`, `TParam(Name)`, `TProc(Name + Params: array of TParam)`,
@@ -65,35 +99,50 @@ Records to fix (string-bearing built-ins): `TToken(SVal)`, `TStrEntry(Text)`,
    (`parser.inc` ~4716 packs via `TypeSize`: Integer=4, Boolean=1). So you cannot
    route built-ins through the user-record engine.
 
-## The agreed fix (architect's call): computed engine, not hand-flipped offsets
+Delivered approach:
+
+- `compiler/symtab.inc` now has per-record field metadata helpers
+  (`BuiltinRecField*`) and computes size/offset/type/array/record-id from one
+  declaration-order table.
+- String field size/type is runtime target-state:
+  `PasDefineExists('PXX_MANAGED_STRING') ? tyAnsiString/8 : tyString/264`.
+- `TProc.Params` is handled as a nested record array:
+  `16 * RecSize(REC_TPARAM)`.
+- `TMethodFixup` preserves its old 4-byte scalar fields (`DataPos@0`,
+  `ProcIdx@4`, size 8).
+- `ValidateBuiltinRecordLayout` asserts the frozen computed layout equals the
+  old hardcoded constants before codegen; skipped for managed targets.
+
+## Previous agreed fix notes (kept for context)
 
 Branch on the **target** define at **runtime** (`PasDefineExists('PXX_MANAGED_STRING')`),
 NOT `{$ifdef}` — the same binary compiles frozen or managed targets, and the
 parser already picks `tyAnsiString` vs `tyString` at runtime (parser.inc 2184,
 4097); the layout functions must agree with that.
 
-1. **Codegen first (all records, no reseed, byte-identical).** Fix managed
+1. **DONE — codegen first (all records, no reseed, byte-identical).** Fix managed
    `IR_FIELD` field gaps, mirroring F1 but for fields. Confirmed bug:
    `Length(rec.field)` on a managed-string field returns 0 (repro `/tmp/r1.pas`:
    `name=[hello] kind=7 len=0`). Deref the field slot before `[-8]`. Audit
    `rec.field[i]` r/w, `recA.field := recB.field`, passing `rec.field` as arg.
    Built-in arrays are globals (live forever) → no field finalization needed.
    Land + test on **user** records first.
-2. **Replace the four hardcoded `Rec*` if-chains with one computed pass** driven
+2. **DONE — replace the four hardcoded `Rec*` if-chains with one computed pass** driven
    by a per-record field table (field name + kind, declaration order, transcribed
    from defs.inc). ABI rule: scalar → 8; string →
    `PasDefineExists('PXX_MANAGED_STRING') ? 8 : 264` (this one line IS the flip);
    record → `RecSize`; array → `elem × count`. `TProc.Params: array[0..15] of
    TParam` (= 16 × `RecSize(REC_TPARAM)`, `BodyAddr@5024`, size 5056) is the
    gnarly nested-record-array case.
-3. **Validation gate (do this before any managed step):** assert the **frozen**
+3. **DONE — validation gate:** assert the **frozen**
    computed layout equals the current hardcoded constants (TSymbol=360, every
    offset). Match ⇒ engine reproduces the known-good ABI. Keep frozen
    `bootstrap`/`test`/`fpc-check` green here.
-4. **FPC reseed `-dPXX_MANAGED_STRING`**, drive the tail past `AddConst` to a
-   working `hello.pas`, then fixedpoint, then reconcile `fpc-check` (two managed
-   runtimes; emitted code must match). Frozen default untouched (the `?8:264`
-   returns 264 with no `-d`).
+4. **IN PROGRESS — FPC reseed `-dPXX_MANAGED_STRING`.** The tail is now past
+   `AddConst`, and the managed compiler can compile/run `hello.pas`. Next:
+   diagnose the stage-2 CPU/RSS growth, then drive fixedpoint and reconcile
+   `fpc-check` (two managed runtimes; emitted code must match). Frozen default
+   remains untouched (the `?8:264` returns 264 with no `-d`).
 
 ## Key file:line
 
@@ -115,8 +164,8 @@ parser already picks `tyAnsiString` vs `tyString` at runtime (parser.inc 2184,
 ```
 fpc -O2 -Tlinux -Px86_64 -o/tmp/p26new compiler/compiler.pas        # build from source
 /tmp/p26new -dPXX_MANAGED_STRING compiler/compiler.pas /tmp/p26managed   # self-compile (managed)
-/tmp/p26managed test/hello.pas /tmp/hello_m && /tmp/hello_m          # does the managed compiler work?
-# crash PC: gdb -q -batch -ex 'set debuginfod enabled off' -ex run -ex 'info registers rip rax rcx' --args /tmp/p26managed test/hello.pas /tmp/hello_m
+/tmp/p26managed test/hello.pas /tmp/hello_m && /tmp/hello_m          # should print Hello, World!
+/tmp/p26managed -dPXX_MANAGED_STRING compiler/compiler.pas /tmp/p26managed2  # current growth blocker
 # map a crash vaddr to a proc: dump proc list from the self-compile (proc N: NAME at OFFSET), vaddr ≈ 0x400000 + codeoffset (verify against objdump)
 ```
 Frozen gate after any compiler edit: `make bootstrap && make test && make
