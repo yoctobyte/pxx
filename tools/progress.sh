@@ -64,10 +64,83 @@ cmd_board() {
   done
 }
 
+# Validate board integrity. Exits non-zero on any problem (CI-friendly).
+#   - dangling Blocked-by slugs (typo → ticket blocked forever),
+#   - dependency cycles (graph must stay a DAG),
+#   - working/ tickets without an Owner,
+#   - done/ tickets without a commit reference.
+cmd_check() {
+  local problems=0
+  declare -A exists           # slug -> path of every ticket on the board
+  local f s
+  while IFS= read -r f; do
+    exists["$(slug "$f")"]="$f"
+  done < <(find "$PROG" -name '*.md' ! -name 'README.md')
+
+  # 1. Dangling Blocked-by slugs.
+  for s in "${!exists[@]}"; do
+    while read -r b; do
+      [ -z "$b" ] && continue
+      if [ -z "${exists[$b]+x}" ]; then
+        echo "DANGLING: $s blocked-by '$b' — no such ticket"; problems=1
+      fi
+    done < <(blockers_of "${exists[$s]}")
+  done
+
+  # 2. Cycle detection via Kahn's algorithm over in-board edges.
+  declare -A indeg
+  for s in "${!exists[@]}"; do indeg["$s"]=0; done
+  for s in "${!exists[@]}"; do
+    while read -r b; do
+      [ -z "$b" ] && continue
+      [ -n "${exists[$b]+x}" ] && indeg["$s"]=$(( indeg["$s"] + 1 ))
+    done < <(blockers_of "${exists[$s]}")
+  done
+  local removed=1 total=${#exists[@]} gone=0
+  declare -A done_node
+  while [ "$removed" -eq 1 ]; do
+    removed=0
+    for s in "${!exists[@]}"; do
+      [ -n "${done_node[$s]+x}" ] && continue
+      if [ "${indeg[$s]}" -eq 0 ]; then
+        done_node["$s"]=1; gone=$(( gone + 1 )); removed=1
+        # decrement dependents (tickets that list s as a blocker)
+        local t
+        for t in "${!exists[@]}"; do
+          [ -n "${done_node[$t]+x}" ] && continue
+          while read -r b; do
+            [ "$b" = "$s" ] && indeg["$t"]=$(( indeg["$t"] - 1 ))
+          done < <(blockers_of "${exists[$t]}")
+        done
+      fi
+    done
+  done
+  if [ "$gone" -ne "$total" ]; then
+    echo "CYCLE: dependency graph is not a DAG ($(( total - gone )) tickets in a cycle)"; problems=1
+  fi
+
+  # 3. working/ needs an Owner; done/ needs a commit reference.
+  for f in "$PROG"/working/*.md; do
+    [ -e "$f" ] || continue
+    if grep -qiE '^\s*-?\s*\*\*Owner:\*\*\s*—?\s*$' "$f"; then
+      echo "NO-OWNER: $(slug "$f") is in working/ but has no Owner"; problems=1
+    fi
+  done
+  for f in "$PROG"/done/*.md; do
+    [ -e "$f" ] || continue
+    if ! grep -qiE 'commit|[0-9a-f]{7,40}' "$f"; then
+      echo "NO-COMMIT: $(slug "$f") is in done/ but logs no commit"; problems=1
+    fi
+  done
+
+  if [ "$problems" -eq 0 ]; then echo "board OK"; else return 1; fi
+}
+
 case "${1:-all}" in
   ready)    cmd_ready ;;
   leverage) cmd_leverage ;;
   board)    cmd_board ;;
+  check)    cmd_check ;;
   all)      cmd_board; echo; cmd_leverage; echo; cmd_ready ;;
-  *) echo "usage: $0 [ready|leverage|board|all]" >&2; exit 2 ;;
+  *) echo "usage: $0 [ready|leverage|board|check|all]" >&2; exit 2 ;;
 esac

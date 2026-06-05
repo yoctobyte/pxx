@@ -84,6 +84,8 @@ pulling by **locality** — grab tickets in the topic cluster you're already in
 (`*managed*`, `*c-header*`) over the globally "highest" one.
 
 Compute the queue: `tools/progress.sh` (ready list + leverage + board summary).
+Validate the board: `tools/progress.sh check` (dangling `Blocked-by` slugs,
+dependency cycles, working/ without Owner, done/ without a commit).
 
 ## Multi-agent use
 

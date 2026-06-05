@@ -97,10 +97,10 @@ script is disposable.
   any agent can add it when noticed.
 - **Slug typos fail silent-ish.** A `Blocked-by:` slug that matches no real
   ticket can never be in `done/`, so the ticket stays "not ready" forever.
-  Treat an unexpectedly-never-ready ticket as a possible typo. (A future script
-  check could flag dangling slugs.)
-- **No cycle detection.** Nothing stops `A blocked-by B` + `B blocked-by A`. The
-  script would just show neither as ready. Keep the graph a DAG by hand.
+  `tools/progress.sh check` now flags dangling slugs (added 2026-06-06 per
+  Antigravity's review — see `discussion/progress-tracker.md`).
+- **Cycles** are now caught by `tools/progress.sh check` (Kahn topological pass);
+  keep the graph a DAG. The script reports but does not auto-break cycles.
 - **No transitive readiness display.** "Ready" only checks direct blockers being
   in `done/`; it does not rank by depth of the chain behind a ticket. Leverage is
   a one-hop count, not a full reachability weight. Good enough; revisit if the
@@ -111,12 +111,18 @@ script is disposable.
 - **README template is excluded** from the script's scans by name so its
   placeholder `Blocked-by:` lines don't pollute leverage counts.
 
-## Possible extensions (not built)
+## Possible extensions
 
-- A `progress.sh check` that flags dangling `Blocked-by` slugs and cycles.
-- A generated `BOARD.md` snapshot for humans (kept out for now — the filesystem
-  *is* the index; a generated file would just drift).
+- ✅ `progress.sh check` — flags dangling `Blocked-by` slugs, dependency cycles,
+  ownerless `working/`, and commit-less `done/`. Built 2026-06-06.
+- A generated `BOARD.md` snapshot for humans (kept out of git — the filesystem
+  *is* the index; a checked-in file would drift). Could be an on-demand,
+  gitignored `progress.sh board-md` if a visual grid is wanted.
+- Transition helpers (`progress.sh claim <slug>` / `resolve <slug> <commit>`) to
+  do the `git mv` + field edits, leaving the commit to the agent.
 - Promote `Owner` to include a timestamp for stale-claim detection.
+
+See `discussion/progress-tracker.md` for the review thread behind these.
 
 ## For reviewing agents
 
