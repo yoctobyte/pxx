@@ -164,17 +164,19 @@ Fixed, in order hit:
   caller-slot address (`mov`, not `lea`) so AnsiStrUnique/COW act on the
   caller's handle. Write-only — see blocker F2.
 
-### F1. by-ref managed-string READ addressing is inconsistent (OPEN)
-Different read consumers of a `var AnsiString` param disagree on what `IR_LEA`
-should yield: `Length(s)` and index-read want the **handle** (deref the
-forwarded slot once), but a concat operand `s + '!'` through `var` wants the
-**slot address** (no extra deref — adding one segfaults `test_managed_var_param`).
-A single `IR_LEA` read toggle can't satisfy both; they are distinct read paths
-that need untangling (likely: route Length/index-read of an IsRef managed param
-through a path that derefs, leave the concat-operand path alone). Symptom with
-the current (no-deref) read: `AppendChar` (`len := Length(dst); SetLength;
-dst[len+1] := c`) sees `Length(dst) = 0` every call, so a built-up string
-collapses to its last char. The write side is fixed; only the read side is open.
+### F1. by-ref managed-string READ addressing — FIXED (2026-06-05)
+Different `IR_LEA` consumers of a `var AnsiString` param need different things:
+`Length(s)` and index-read want the **handle**, but forwarding the param as a
+by-ref arg (and the concat operand, which actually lowers via `load_sym`, not
+`IR_LEA`) want the raw **slot value**. Resolved by keeping `IR_LEA`-of-a-by-ref
+param = slot value (no deref, preserves forwarding) and adding the deref at the
+two consumers that want the handle: the `tkLength` managed branch and the
+`IR_INDEX` managed read both now `mov rax,[rax]` once when the base is an
+`IR_LEA` of an `IsRef tyAnsiString` param. The index *write* side (AnsiStrUnique
+wants the slot address) was already handled. Verified: `AppendChar`
+(`len := Length; SetLength; dst[len+1] := c`), index-read loop over a `var`
+string, and `Length` after concat-through-`var` all correct. All changes are
+tyAnsiString/IsRef-gated → frozen self-host byte-identical.
 
 ### F2. record string fields stay frozen-inline under managed (the real wall)
 `RecSize`/`RecFieldOffset` (symtab.inc) **hardcode the frozen layout**: e.g.

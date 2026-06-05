@@ -1846,6 +1846,14 @@ begin
             the heap data pointer stored in that slot; writes above deliberately
             pass the slot address to AnsiStrUnique. }
           EmitB($48); EmitB($8B); EmitB($00);     { mov rax,[rax] }
+        end
+        else if isAnsiStr and (IRKind[baseAddr] = IR_LEA) and
+                (Syms[IRA[baseAddr]].Kind = skParam) and Syms[IRA[baseAddr]].IsRef then
+        begin
+          { by-ref managed string read: IR_LEA yields the forwarded slot address;
+            deref to the handle so indexing uses the data pointer, not the slot.
+            (Writes were handled above: AnsiStrUnique wants the slot address.) }
+          EmitB($48); EmitB($8B); EmitB($00);     { mov rax,[rax] }
         end;
         if InLValueWrite and (IRKind[baseAddr] = IR_LEA) then
         begin
@@ -2956,6 +2964,11 @@ begin
                ((IRKind[val1Node] = IR_LEA) and (Syms[IRA[val1Node]].TypeKind = tyAnsiString)) then
              begin
                IREmitNode(val1Node);                          { rax = data ptr (or 0) }
+               if (IRKind[val1Node] = IR_LEA) and
+                  (Syms[IRA[val1Node]].Kind = skParam) and Syms[IRA[val1Node]].IsRef then
+                 { by-ref managed string: IR_LEA yields the forwarded slot address
+                   (&handle); deref once to reach the handle before reading [-8]. }
+                 begin EmitB($48); EmitB($8B); EmitB($00); end; { mov rax, [rax] }
                EmitB($48); EmitB($85); EmitB($C0);            { test rax, rax }
                EmitB($74); jbePatch := CodeLen; EmitB(0);     { jz done }
                EmitB($48); EmitB($8B); EmitB($40); EmitB($F8);{ mov rax, [rax-8] }
