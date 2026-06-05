@@ -86,8 +86,10 @@ pulling by **locality** — grab tickets in the topic cluster you're already in
 Compute the queue: `tools/progress.sh` (ready list + leverage + board summary).
 Validate the board: `tools/progress.sh check` (dangling `Blocked-by` slugs,
 dependency cycles, working/ without Owner, done/ without a commit).
-Render a human grid: `tools/progress.sh board-md` → `BOARD.md` (gitignored,
-on-demand; never committed).
+Render a human grid: `tools/progress.sh board-md` → `BOARD.md` (a **committed**
+kanban snapshot; its git history is the board's progress log). Regenerate it
+after any board change — `check` fails on a stale `BOARD.md`. The render is
+deterministic (no timestamp) so it diffs cleanly.
 
 ## Multi-agent use
 

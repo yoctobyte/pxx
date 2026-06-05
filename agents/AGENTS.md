@@ -57,6 +57,9 @@ Read once at session start. Keep edits here terse — this loads every session.
   tickets (or by locality of what you're already editing). `urgent/` is a
   WIP-limited (~3) human override. Compute it: `tools/progress.sh`. When you spot
   "X before Y", add `Blocked-by` to Y — landing X makes Y ready automatically.
+- After any board change, regenerate the committed snapshot:
+  `tools/progress.sh board-md` (then commit `docs/progress/BOARD.md` with it).
+  `tools/progress.sh check` fails on a stale board, dangling slugs, or cycles.
 - Design + rationale (why folders/filenames/edges, tradeoffs, multi-agent
   semantics): `agents/progress-tracker-design.md`. Format spec:
   `docs/progress/README.md`.

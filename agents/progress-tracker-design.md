@@ -115,9 +115,13 @@ script is disposable.
 
 - ✅ `progress.sh check` — flags dangling `Blocked-by` slugs, dependency cycles,
   ownerless `working/`, and commit-less `done/`. Built 2026-06-06.
-- ✅ `progress.sh board-md` — renders a kanban grid + ready/leverage to a
-  gitignored, on-demand `docs/progress/BOARD.md` (never committed; the filesystem
-  is the real index). Built 2026-06-06.
+- ✅ `progress.sh board-md` — renders a kanban grid + ready/leverage to
+  `docs/progress/BOARD.md`. Built 2026-06-06. **Committed** (decision 2026-06-06):
+  its git history is a sane progress overview over time. To make that safe the
+  render is deterministic (no timestamp — git supplies dates) and
+  `progress.sh check` fails on a stale or missing `BOARD.md`, so the committed
+  snapshot can't silently drift from the tickets. Regenerate after any board
+  change.
 - Transition helpers (`progress.sh claim <slug>` / `resolve <slug> <commit>`) to
   do the `git mv` + field edits, leaving the commit to the agent.
 - Promote `Owner` to include a timestamp for stale-claim detection.

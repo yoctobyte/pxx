@@ -26,9 +26,16 @@ wants the grid. Decide before scoping.
 ## Done
 
 Implemented in commit `5b020a7` as `tools/progress.sh board-md` →
-`docs/progress/BOARD.md` (gitignored, on-demand). No regression test — tooling
-script, exercised by running it; `tools/progress.sh check` keeps the board valid.
+`docs/progress/BOARD.md`. No regression test — tooling script, exercised by
+running it; `tools/progress.sh check` keeps the board valid.
+
+Follow-up decision (2026-06-06, user): **commit** `BOARD.md` rather than gitignore
+it — its git history is a useful progress overview over time. To keep the
+committed snapshot honest the render was made deterministic (no timestamp) and
+`check` now fails on a stale/missing `BOARD.md`.
 
 ## Log
 - 2026-06-06 — ticket opened from the design review thread.
 - 2026-06-06 — implemented (5b020a7), moved to done/.
+- 2026-06-06 — reversed the gitignore call: BOARD.md is now committed, with a
+  deterministic render + staleness check.

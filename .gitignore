@@ -22,5 +22,3 @@ test/gui/helloworld/helloworld
 *.lps
 *.map
 
-# Generated on demand by tools/progress.sh board-md (never commit)
-docs/progress/BOARD.md
