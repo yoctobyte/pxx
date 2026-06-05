@@ -148,3 +148,5 @@ it existed, or without everyone who kept building from there.
 
 The full lineage — Pascal, C, Ada, BASIC, GW-BASIC, FPC, and everyone else —
 is in [docs/lineage.md](docs/lineage.md).
+
+Agent instructions live in [agents/](agents/).
