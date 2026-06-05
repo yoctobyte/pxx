@@ -524,7 +524,7 @@ end;
 
 procedure EmitAnsiStringRuntime;
 var pNil1, pNil2, pNonZero, pNilUnique, pNilUnique2, pDone, pDone2,
-    pConcatNil, pConcatDone: Integer;
+    pConcatNil, pConcatDone, pFail, pLfDone: Integer;
 begin
   EmitAnsiStrFromLiteral;
 
@@ -659,6 +659,152 @@ begin
   EmitB($41); EmitB($5C);             { pop r12 }
   EmitB($5B);                         { pop rbx }
   EmitB($C3);                         { ret }
+
+  { rdi = path managed-string data pointer (nul-terminated) or nil.
+    Returns rax = a fresh managed-string data pointer (refcount 1, length =
+    bytes read, nul-terminated) holding the file contents, or nil on open
+    failure. The file is sized with lseek so the buffer is exact (the frozen
+    EmitLoadFile capped at STRING_CAP and truncated larger inputs). fd/size/data
+    live in r12/r13/r14 — EmitHeapAllocLocked preserves those. }
+  AnsiStrLoadFileAddr := CodeLen;
+  EmitB($41); EmitB($54);                          { push r12 }
+  EmitB($41); EmitB($55);                          { push r13 }
+  EmitB($41); EmitB($56);                          { push r14 }
+
+  { open(path, O_RDONLY, 0); rdi already = path }
+  MovRsiImm(0); MovRdxImm(0); MovRaxImm(SYS_OPEN); EmitSyscall;
+  EmitB($48); EmitB($85); EmitB($C0);              { test rax, rax }
+  EmitB($0F); EmitB($88); pFail := CodeLen; EmitI32(0); { js fail }
+  EmitB($49); EmitB($89); EmitB($C4);              { mov r12, rax (fd) }
+
+  { size = lseek(fd, 0, SEEK_END=2) }
+  EmitB($4C); EmitB($89); EmitB($E7);              { mov rdi, r12 }
+  MovRsiImm(0); MovRdxImm(2); MovRaxImm(SYS_LSEEK); EmitSyscall;
+  EmitB($49); EmitB($89); EmitB($C5);              { mov r13, rax (size) }
+
+  { lseek(fd, 0, SEEK_SET=0) }
+  EmitB($4C); EmitB($89); EmitB($E7);              { mov rdi, r12 }
+  MovRsiImm(0); MovRdxImm(0); MovRaxImm(SYS_LSEEK); EmitSyscall;
+
+  { allocate size+17 (refcount8 + length8 + data + nul) }
+  EmitB($4C); EmitB($89); EmitB($E8);              { mov rax, r13 }
+  EmitB($48); EmitB($83); EmitB($C0); EmitB($11);  { add rax, 17 }
+  EmitAcquireHeapLock;
+  EmitHeapAllocLocked;
+  EmitReleaseHeapLock;
+  EmitB($48); EmitB($C7); EmitB($00); EmitI32(1);  { mov qword [rax], 1 (refcount) }
+  EmitB($4C); EmitB($89); EmitB($68); EmitB($08);  { mov [rax+8], r13 (length=size) }
+  EmitB($4C); EmitB($8D); EmitB($70); EmitB($10);  { lea r14, [rax+16] (data) }
+
+  { read(fd, data, size) }
+  EmitB($4C); EmitB($89); EmitB($E7);              { mov rdi, r12 }
+  EmitB($4C); EmitB($89); EmitB($F6);              { mov rsi, r14 }
+  EmitB($4C); EmitB($89); EmitB($EA);              { mov rdx, r13 }
+  MovRaxImm(SYS_READ); EmitSyscall;
+  EmitB($48); EmitB($85); EmitB($C0);              { test rax, rax }
+  EmitB($79); EmitB($02);                          { jns +2 }
+  EmitB($31); EmitB($C0);                          { xor eax, eax (clamp negative read) }
+  EmitB($49); EmitB($89); EmitB($46); EmitB($F8);  { mov [r14-8], rax (length=bytes read) }
+
+  { nul-terminate at data + length }
+  EmitB($4C); EmitB($89); EmitB($F1);              { mov rcx, r14 }
+  EmitB($48); EmitB($01); EmitB($C1);              { add rcx, rax }
+  EmitB($C6); EmitB($01); EmitB(0);                { mov byte [rcx], 0 }
+
+  { close(fd) }
+  EmitB($4C); EmitB($89); EmitB($E7);              { mov rdi, r12 }
+  MovRaxImm(SYS_CLOSE); EmitSyscall;
+
+  EmitB($4C); EmitB($89); EmitB($F0);              { mov rax, r14 (return data ptr) }
+  EmitB($EB); pLfDone := CodeLen; EmitB(0);        { jmp done }
+
+  Patch32(pFail, CodeLen - (pFail + 4));
+  EmitB($31); EmitB($C0);                          { xor eax, eax (nil) }
+
+  Patch8(pLfDone, CodeLen - (pLfDone + 1));
+  EmitB($41); EmitB($5E);                          { pop r14 }
+  EmitB($41); EmitB($5D);                          { pop r13 }
+  EmitB($41); EmitB($5C);                          { pop r12 }
+  EmitB($C3);                                      { ret }
+end;
+
+procedure EmitLoadManagedHandleRdi(symIdx: Integer);
+{ Load a managed-string variable's handle (data pointer) into rdi. }
+begin
+  if Syms[symIdx].Kind = skGlobal then
+    begin EmitB($48); EmitB($8B); EmitB($3C); EmitB($25); EmitGlobRef(Syms[symIdx].Offset); end
+  else
+  begin
+    EmitB($48); EmitB($8B); EmitB($BD); EmitI32(Syms[symIdx].Offset); { mov rdi, [rbp+off] }
+    if (Syms[symIdx].Kind = skParam) and Syms[symIdx].IsRef then
+      begin EmitB($48); EmitB($8B); EmitB($3F); end                   { mov rdi, [rdi] }
+  end;
+end;
+
+procedure EmitPublishManagedString(dstIdx: Integer);
+{ rax = a fresh managed string (refcount already 1). Publish it into the dst
+  variable, releasing dst's old handle. Handles global, local, and IsRef-param
+  destinations (the IsRef case derefs the slot to reach the caller's handle). }
+begin
+  EmitB($50);                                      { push rax (new) }
+  if (Syms[dstIdx].Kind = skParam) and Syms[dstIdx].IsRef then
+  begin
+    EmitB($48); EmitB($8B); EmitB($8D); EmitI32(Syms[dstIdx].Offset); { mov rcx, [rbp+off] = caller slot addr }
+    EmitB($48); EmitB($8B); EmitB($01);            { mov rax, [rcx] = old }
+    EmitB($50);                                    { push old }
+    EmitB($48); EmitB($8B); EmitB($44); EmitB($24); EmitB($08); { mov rax, [rsp+8] = new }
+    EmitB($48); EmitB($89); EmitB($01);            { mov [rcx], rax }
+    EmitB($58);                                    { pop rax = old }
+    IREmitCodeCall(AnsiStrReleaseAddr);
+    EmitB($58);                                    { pop rax = new (discard) }
+  end
+  else
+  begin
+    if Syms[dstIdx].Kind = skGlobal then
+      begin EmitB($48); EmitB($8B); EmitB($04); EmitB($25); EmitGlobRef(Syms[dstIdx].Offset); end
+    else
+      begin EmitB($48); EmitB($8B); EmitB($85); EmitI32(Syms[dstIdx].Offset); end; { mov rax, [rbp+off] = old }
+    EmitB($50);                                    { push old }
+    EmitB($48); EmitB($8B); EmitB($44); EmitB($24); EmitB($08); { mov rax, [rsp+8] = new }
+    if Syms[dstIdx].Kind = skGlobal then
+      begin EmitB($48); EmitB($89); EmitB($04); EmitB($25); EmitGlobRef(Syms[dstIdx].Offset); end
+    else
+      begin EmitB($48); EmitB($89); EmitB($85); EmitI32(Syms[dstIdx].Offset); end; { mov [rbp+off], rax = new }
+    EmitB($58);                                    { pop rax = old }
+    IREmitCodeCall(AnsiStrReleaseAddr);
+    EmitB($58);                                    { pop rax = new (discard) }
+  end;
+end;
+
+procedure EmitLoadFileManaged(pathIdx, dstIdx: Integer);
+{ Managed LoadFile: load the file via AnsiStrLoadFile, then publish the new
+  managed string into dst (releasing dst's old handle). }
+begin
+  EmitLoadManagedHandleRdi(pathIdx);
+  IREmitCodeCall(AnsiStrLoadFileAddr);             { rax = new managed string }
+  EmitPublishManagedString(dstIdx);
+end;
+
+procedure EmitArgvToStringManaged(dstIdx: Integer);
+{ On entry rax = argv index. Build a managed string from argv[index] (a C
+  string) and publish it into dst (releasing dst's old handle). Managed
+  counterpart of EmitArgvToString. }
+begin
+  EmitB($48); EmitB($C1); EmitB($E0); EmitB($03);   { shl rax, 3 }
+  EmitB($48); EmitB($8B); EmitB($0C); EmitB($25); EmitGlobRef(BSS_INITIAL_RSP);
+  EmitB($48); EmitB($83); EmitB($C1); EmitB($08);   { add rcx, 8 }
+  EmitB($48); EmitB($01); EmitB($C8);               { add rax, rcx }
+  EmitB($48); EmitB($8B); EmitB($00);               { mov rax, [rax] = argv[index] }
+  EmitB($48); EmitB($89); EmitB($C6);               { mov rsi, rax (src) }
+  { strlen(rsi) -> rcx }
+  EmitB($48); EmitB($31); EmitB($C9);               { xor rcx, rcx }
+  EmitB($80); EmitB($3C); EmitB($0E); EmitB($00);   { cmp byte [rsi+rcx], 0 }
+  EmitB($74); EmitB($05);                           { je +5 }
+  EmitB($48); EmitB($FF); EmitB($C1);               { inc rcx }
+  EmitB($EB); EmitB($F5);                           { jmp -11 }
+  EmitB($48); EmitB($89); EmitB($CF);               { mov rdi, rcx (length) }
+  IREmitCodeCall(AnsiStrFromLiteralAddr);           { rax = new managed string }
+  EmitPublishManagedString(dstIdx);
 end;
 
 procedure EmitVariantClear;
@@ -1445,6 +1591,17 @@ begin
         else if Syms[symIdx].TypeKind = tyAnsiString then
         begin
           valueNode := IRB[node];
+          if (IRKind[valueNode] = IR_CALL) and (IRA[valueNode] = -Ord(tkArgStr)) then
+          begin
+            { managed ParamStr/ArgStr: build a managed string from argv[i] and
+              publish into dst. The value-build path below would otherwise emit the
+              1-arg ArgStr call, whose codegen expects the 2-arg statement form. }
+            argNode := IRB[valueNode];
+            IREmitNode(IRA[argNode]);   { rax = argv index }
+            EmitArgvToStringManaged(symIdx);
+          end
+          else
+          begin
           if IRKind[valueNode] = IR_CONST_STR then
           begin
             sVal := GetTokenStrFromRaw(IRA[valueNode], IRB[valueNode]);
@@ -1508,6 +1665,7 @@ begin
             EmitB($58);                             { pop rax = old pointer }
             IREmitCodeCall(AnsiStrReleaseAddr);
             EmitB($58);                             { pop rax = new pointer }
+          end;
           end;
         end
         else if (Syms[symIdx].TypeKind = tyString) and not Syms[symIdx].IsArray then
@@ -1589,7 +1747,14 @@ begin
               (Syms[symIdx].IsRef or Syms[symIdx].IsArray or
                (Syms[symIdx].TypeKind = tyString) or (Syms[symIdx].TypeKind = tySet))) then
           begin
-            if InLValueWrite and
+            if InLValueWrite and (Syms[symIdx].Kind = skParam) and Syms[symIdx].IsRef and
+               (Syms[symIdx].TypeKind = tyAnsiString) and not Syms[symIdx].IsArray then
+              { by-ref (var/out) managed string write: the param slot holds the
+                ADDRESS of the caller's handle slot; load it so AnsiStrUnique/COW
+                operate on the caller's handle in place, not the local param copy.
+                (The read path is unchanged — handled via EmitLoadVar elsewhere.) }
+              begin EmitB($48); EmitB($8B); EmitB($85); EmitI32(Syms[symIdx].Offset); end
+            else if InLValueWrite and
                ((Syms[symIdx].TypeKind = tyAnsiString) or
                 (Syms[symIdx].IsArray and (Syms[symIdx].ArrLen = -1))) then
               begin EmitB($48); EmitB($8D); EmitB($85); EmitI32(Syms[symIdx].Offset); end
@@ -2920,6 +3085,9 @@ begin
             val2Node := IRA[arg2Node];
             if (IRKind[val1Node] = IR_LEA) and (IRKind[val2Node] = IR_LEA) then
               EmitLoadFile(IRA[val1Node], IRA[val2Node])
+            else if (IRKind[val2Node] = IR_LOAD_SYM) and
+                    (Syms[IRA[val2Node]].TypeKind = tyAnsiString) then
+              EmitLoadFileManaged(IRA[val1Node], IRA[val2Node])
             else
               Error('LoadFile expects string variables in IR codegen');
           end
@@ -3172,10 +3340,17 @@ begin
               symIdx := IRA[val1Node]
             else
               symIdx := -1;
-              
-            EmitTerminateString(symIdx);
-            EmitLeaStrDataRdi(symIdx);
-            
+
+            if (symIdx >= 0) and (Syms[symIdx].TypeKind = tyAnsiString) and
+               not Syms[symIdx].IsArray then
+              { managed string: the handle is the nul-terminated path; load it. }
+              EmitLoadManagedHandleRdi(symIdx)
+            else
+            begin
+              EmitTerminateString(symIdx);
+              EmitLeaStrDataRdi(symIdx);
+            end;
+
             IREmitNode(val2Node); { Evaluates flags -> rax }
             EmitB($48); EmitB($89); EmitB($C6); { mov rsi, rax }
             MovRaxImm(0); EmitB($48); EmitB($89); EmitB($C2);

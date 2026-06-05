@@ -1,7 +1,7 @@
 const
   TARGET_PTR_SIZE = 8;  { pointer size in bytes on the current target (x86-64) }
 
-  MAX_CODE      = 1048576;
+  MAX_CODE      = 4194304;
   LOCAL_STR_CAP = 256;     { max string length for local/stack variables }
   LINE_BUF_SIZE = 4096;    { readln stdin line buffer }
   MAX_DATA    = 2097152;      { 2 MB }
@@ -196,6 +196,7 @@ const
   SYS_WRITE = 1;
   SYS_OPEN  = 2;
   SYS_CLOSE = 3;
+  SYS_LSEEK = 8;
   SYS_EXIT  = 60;
   SYS_EXIT_GROUP = 231;
   SYS_BRK   = 12;
@@ -717,6 +718,7 @@ var
   AnsiStrFromLiteralAddr : Integer;
   AnsiStrUniqueAddr : Integer;
   AnsiStrConcatAddr : Integer;
+  AnsiStrLoadFileAddr : Integer;
 
   TokChars   : array[0..STRING_CAP-1] of Char;
   TokCharLen : Integer;

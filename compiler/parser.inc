@@ -1982,7 +1982,8 @@ begin
       if CurTok.Kind <> tkIdent then Error('SysOpen: expected string var');
       idx := FindSym(CurTok.SVal); Next;
       valNode := ParseLValueAST(idx, TokPos - 2);
-      if (idx < 0) or (Syms[idx].TypeKind <> tyString) then Error('SysOpen: not a string var');
+      if (idx < 0) or ((Syms[idx].TypeKind <> tyString) and
+                       (Syms[idx].TypeKind <> tyAnsiString)) then Error('SysOpen: not a string var');
       Expect(tkComma, ',');
 
       argSeq := AllocNode(AN_ARG); ASTLeft[argSeq] := valNode;

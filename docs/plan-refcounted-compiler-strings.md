@@ -133,6 +133,64 @@ even for a plain local. The parser routing (`parser.inc` ~3658) keys on
 the inline form (`var a: array of Integer`) works. Out of scope for the managed
 arc; flag for a parser-routing pass.
 
+## Phase 3 drive log (2026-06-05)
+
+Drove `pascal26 -dPXX_MANAGED_STRING compiler/compiler.pas`, fixing each error in
+turn. All fixes are `tyAnsiString`-gated, so the frozen self-host stays
+byte-identical (re-baselined: code 861793→867766 from the always-emitted
+LoadFile helper; `make bootstrap`/`test`/`test-nilpy`/`fpc-check` green).
+
+Fixed, in order hit:
+- **gap A — `LoadFile`** (managed). New runtime helper `AnsiStrLoadFile`
+  (`AnsiStrLoadFileAddr`): open + lseek-size + alloc(size+17) + read + nul-term,
+  returns a fresh managed handle; `EmitLoadFileManaged` loads the path handle,
+  calls it, and publishes into dst via the shared `EmitPublishManagedString`
+  (global/local/IsRef-aware release-old). `SYS_LSEEK = 8` added.
+- **`MAX_CODE` 1 MB → 4 MB.** Managed codegen emits ~1.06 MB for the compiler
+  (managed string ops expand many sites); the old cap overflowed. Frozen output
+  is <1 MB so unchanged.
+- **gap A — `SysOpen`** (managed). Parser now accepts a `tyAnsiString` target;
+  codegen loads the handle (already nul-terminated) into rdi instead of
+  lea-ing an inline buffer.
+- **gap A — `ArgStr`/`ParamStr`** (managed). `option := ParamStr(i)` lowers to a
+  1-arg `tkArgStr` expression; the managed `IR_STORE_SYM` path now special-cases
+  it (mirroring the frozen tyString path) and calls `EmitArgvToStringManaged`
+  (build managed string from argv[i] + publish). NB: must emit the index node
+  into rax *before* the builder.
+- **gap B — `SetLength` through `var`** finished (the `specialId`-102 IsRef
+  branch from earlier in the session).
+- **indexed write `s[i] := c` through `var`** (write side). The `IR_LEA`
+  lvalue path for an `IsRef` `tyAnsiString` param now loads the forwarded
+  caller-slot address (`mov`, not `lea`) so AnsiStrUnique/COW act on the
+  caller's handle. Write-only — see blocker F2.
+
+### F1. by-ref managed-string READ addressing is inconsistent (OPEN)
+Different read consumers of a `var AnsiString` param disagree on what `IR_LEA`
+should yield: `Length(s)` and index-read want the **handle** (deref the
+forwarded slot once), but a concat operand `s + '!'` through `var` wants the
+**slot address** (no extra deref — adding one segfaults `test_managed_var_param`).
+A single `IR_LEA` read toggle can't satisfy both; they are distinct read paths
+that need untangling (likely: route Length/index-read of an IsRef managed param
+through a path that derefs, leave the concat-operand path alone). Symptom with
+the current (no-deref) read: `AppendChar` (`len := Length(dst); SetLength;
+dst[len+1] := c`) sees `Length(dst) = 0` every call, so a built-up string
+collapses to its last char. The write side is fixed; only the read side is open.
+
+### F2. record string fields stay frozen-inline under managed (the real wall)
+`RecSize`/`RecFieldOffset` (symtab.inc) **hardcode the frozen layout**: e.g.
+`TSymbol` = 360 B with `Name` a 264-B inline string at offset 0, `TypeKind` at
+264, … (the AGENTS landmine). Under managed, standalone `AnsiString`
+vars/globals became 8-B handles (bss 1.6 GB → 213 MB), but record string fields
+did **not** — the `Syms`/`Procs` arrays are still the bulk of the 213 MB. So
+`Syms[x].Name := name` (managed handle → frozen inline field, in `AddConst`)
+mismatches and `rep movsb`-copies with a garbage length → crash. This is the
+fork that needs a decision:
+- (a) make record string fields managed handles too, and re-derive **every**
+  hardcoded `RecSize`/`RecFieldOffset` constant to the new layout (FPC-reseed),
+  capturing most of the remaining memory win; or
+- (b) keep record string fields frozen-inline under managed (forgo that part of
+  the win) and make managed↔inline field assignment correct in both directions.
+
 ### E. Byte-identical re-baseline
 Once the managed compiler self-compiles, a **new** byte-identical baseline must
 be established:
