@@ -67,4 +67,4 @@ proves it. When moving to `blocked/`/`rejected/`, append the reason.
 
 Docs only — adding/moving tickets does not touch compiler source, so it skips
 the self-host gate. There is no separate index; written status stays in
-`../project-state.md` / `../todo.md` as before.
+`../developer/project-state.md` / `../developer/todo.md` as before.

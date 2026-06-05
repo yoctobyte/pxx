@@ -11,9 +11,11 @@ Read once at session start. Keep edits here terse — this loads every session.
   only). Line numbers drift between regens — verify a line before editing.
 - The `.inc` files are `{$include}`d into one unit: symbols share a single flat
   namespace (a name has one definition project-wide).
-- Current work & design context lives in `docs/README.md`, `docs/project-state.md`,
-  `docs/todo.md`, and active `docs/plan-*.md` files. Completed handovers are
-  archived under `docs/historic/`.
+- `docs/` is short **user** docs; **developer** docs live under `docs/developer/`
+  (index: `docs/developer/README.md`). Current work & design context:
+  `docs/developer/project-state.md`, `docs/developer/todo.md`, and active
+  `docs/developer/plan-*.md`. Completed handovers archived under
+  `docs/developer/historic/`.
 
 ## Build & verify (non-negotiable)
 - This is a **self-hosting** compiler. Any change that alters emitted code must pass
@@ -51,7 +53,7 @@ Read once at session start. Keep edits here terse — this loads every session.
   drop a `backlog/` ticket and keep going. On `done/`, append commit + test.
 - Record + state, not a clean DB — duplicate/stale tickets tolerated, prefer
   parking to losing info. No separate index; written status stays in
-  `docs/project-state.md` / `docs/todo.md`.
+  `docs/developer/project-state.md` / `docs/developer/todo.md`.
 
 ## Landmines (cost real time)
 - **Don't add fields to `TSymbol` / `TParam` / `TProc`.** Their byte layout is
