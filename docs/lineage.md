@@ -100,16 +100,7 @@ The **GNU**, **GCC**, **LLVM**, **Linux**, and broader open-source communities
 provide the ecosystem in which this project can exist: tools, documentation,
 ABIs, reference implementations, and decades of accumulated practice.
 
-## This Project
-
-PXX, also called Frankonpiler in project notes, is an experiment in building a
-small self-hosting native compiler with Pascal as the anchor language and other
-frontends sharing the same backend. The checked-in compiler source, build
-system, tests, and documentation were developed collaboratively by the project
-owner and AI coding agents, including OpenAI Codex, Anthropic Claude, Google
-Gemini, and Antigravity.
-
-The project direction, priorities, review decisions, and taste remain human.
-The implementation history includes AI-generated code and documentation, which
-is why this repository keeps explicit agent notes and attribution policy under
-`agents/`.
+This project is built on all of that work. The relevant point is not novelty,
+but continuity: small compilers, Pascal, native code, C interop, bootstrap
+discipline, and public documentation are all inherited practices. PXX is one
+more attempt to learn from them and carry a useful subset forward.
