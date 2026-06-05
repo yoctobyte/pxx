@@ -1316,7 +1316,26 @@ begin
         end;
 
         if isRefArg then
-          value := IRLowerAddress(ASTLeft[item])
+        begin
+          { A by-ref managed-string arg to a USER proc (cpi >= 0) must pass the
+            ADDRESS of the variable's handle slot so the callee can store back.
+            For a direct (non-ref) tyAnsiString variable, IRLowerAddress→IR_LEA
+            auto-loads the handle in read mode (passing it by value and breaking
+            the callee's deref), so use IR_SLOTADDR (the unconditional lea =
+            &slot). For an arg that is ITSELF a by-ref managed-string param, its
+            slot already holds the forwarded address; IR_LEA loads that value,
+            which is exactly what to forward, so keep IRLowerAddress there.
+            Builtins (cpi < 0, e.g. Length) flag isRefArg for their own
+            addressing and want the handle, not the slot — excluded by cpi >= 0. }
+          if (cpi >= 0) and
+             (ASTKind[ASTLeft[item]] = AN_IDENT) and
+             (Syms[ASTIVal[ASTLeft[item]]].TypeKind = tyAnsiString) and
+             not ((Syms[ASTIVal[ASTLeft[item]]].Kind = skParam) and
+                  Syms[ASTIVal[ASTLeft[item]]].IsRef) then
+            value := IRAppend(IR_SLOTADDR, ASTIVal[ASTLeft[item]], -1, -1, 0, Ord(tyPointer))
+          else
+            value := IRLowerAddress(ASTLeft[item]);
+        end
         else
           value := IRLowerAST(ASTLeft[item]);
 

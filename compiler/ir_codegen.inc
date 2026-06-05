@@ -1479,19 +1479,36 @@ begin
             end;
           end;
           EmitB($50);                             { push new pointer }
-          if Syms[symIdx].Kind = skGlobal then
-            begin EmitB($48); EmitB($8B); EmitB($04); EmitB($25); EmitGlobRef(Syms[symIdx].Offset); end
+          if (Syms[symIdx].Kind = skParam) and Syms[symIdx].IsRef then
+          begin
+            { by-ref (var/out) managed string: the param slot holds the ADDRESS
+              of the caller's handle slot. Release the old handle there, publish
+              the new one into the caller's slot — not the local param copy. }
+            EmitB($48); EmitB($8B); EmitB($8D); EmitI32(Syms[symIdx].Offset); { mov rcx, [rbp+off] = caller slot addr }
+            EmitB($48); EmitB($8B); EmitB($01);                               { mov rax, [rcx] = old }
+            EmitB($50);                             { push old pointer }
+            EmitB($48); EmitB($8B); EmitB($44); EmitB($24); EmitB($08);       { mov rax, [rsp+8] = new }
+            EmitB($48); EmitB($89); EmitB($01);                               { mov [rcx], rax }
+            EmitB($58);                             { pop rax = old pointer }
+            IREmitCodeCall(AnsiStrReleaseAddr);
+            EmitB($58);                             { pop rax = new pointer }
+          end
           else
-            begin EmitB($48); EmitB($8B); EmitB($85); EmitI32(Syms[symIdx].Offset); end;
-          EmitB($50);                             { push old pointer }
-          EmitB($48); EmitB($8B); EmitB($44); EmitB($24); EmitB($08); { mov rax, [rsp+8] }
-          if Syms[symIdx].Kind = skGlobal then
-            begin EmitB($48); EmitB($89); EmitB($04); EmitB($25); EmitGlobRef(Syms[symIdx].Offset); end
-          else
-            begin EmitB($48); EmitB($89); EmitB($85); EmitI32(Syms[symIdx].Offset); end;
-          EmitB($58);                             { pop rax = old pointer }
-          IREmitCodeCall(AnsiStrReleaseAddr);
-          EmitB($58);                             { pop rax = new pointer }
+          begin
+            if Syms[symIdx].Kind = skGlobal then
+              begin EmitB($48); EmitB($8B); EmitB($04); EmitB($25); EmitGlobRef(Syms[symIdx].Offset); end
+            else
+              begin EmitB($48); EmitB($8B); EmitB($85); EmitI32(Syms[symIdx].Offset); end;
+            EmitB($50);                             { push old pointer }
+            EmitB($48); EmitB($8B); EmitB($44); EmitB($24); EmitB($08); { mov rax, [rsp+8] }
+            if Syms[symIdx].Kind = skGlobal then
+              begin EmitB($48); EmitB($89); EmitB($04); EmitB($25); EmitGlobRef(Syms[symIdx].Offset); end
+            else
+              begin EmitB($48); EmitB($89); EmitB($85); EmitI32(Syms[symIdx].Offset); end;
+            EmitB($58);                             { pop rax = old pointer }
+            IREmitCodeCall(AnsiStrReleaseAddr);
+            EmitB($58);                             { pop rax = new pointer }
+          end;
         end
         else if (Syms[symIdx].TypeKind = tyString) and not Syms[symIdx].IsArray then
         begin
