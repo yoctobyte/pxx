@@ -1,6 +1,6 @@
 # Project State Audit
 
-**Audited:** 2026-06-04
+**Audited:** 2026-06-05
 
 This is the compact current-state snapshot. Source and `make test` remain
 authoritative. Detailed design notes live in [`todo.md`](todo.md), while older
@@ -55,6 +55,17 @@ Pascal hello-world compiles. The directly emitted static hello-world ELF is
 back to 287 bytes.
 
 ## Latest Runtime Progress
+
+### 2026-06-05 — default keyword and managed self-compile fixedpoint
+
+- `default` assignment is implemented and covered by
+  `test/test_default_keyword.pas`: scalar and pointer targets reset to zero,
+  string targets reset to empty, and managed record storage is cleared through
+  the assignment path.
+- The opt-in managed `AnsiString` compiler build now reaches byte-identical
+  fixedpoint through the committed managed bootstrap targets. The earlier
+  stage-2 CPU/RSS growth blocker is gone; the remaining question is when and
+  how to promote the managed ABI from opt-in to default.
 
 ### 2026-06-04 — generic collection library
 
@@ -131,12 +142,13 @@ runtime dependencies.
   constraint against arbitrary pointer-compatible assignments.
 - Float conversion intrinsics such as `Trunc`, `Round`, `Int`, and float
   `Str`/`Val`.
-- Managed `AnsiString` is available as an initial
+- Managed `AnsiString` is available as an opt-in
   `{$define PXX_MANAGED_STRING}` slice: heap-backed refcounting, normal local
-  cleanup, copy-on-write indexed writes, concatenation, coercions, and
-  `SetLength`. The default representation remains inline while the remaining
-  params/results, globals, exception, and aggregate ownership paths are
-  completed.
+  cleanup, copy-on-write indexed writes, concatenation, coercions,
+  `SetLength`, params/results, argument temporaries, dynamic-array elements,
+  records with managed fields, and managed compiler self-compile fixedpoint.
+  The default representation remains inline while globals, exception
+  unwinding, and final default-ABI promotion are decided.
 - Dynamic arrays support scalar elements, opt-in managed `AnsiString`
   elements, records recursively containing managed strings, and nested arrays
   of those bases at any depth. Assignment,
@@ -211,12 +223,10 @@ runtime dependencies.
    tests pass without `mmap`, `munmap`, or `brk`.
 3. Implement allocator splitting, coalescing, alignment, and in-place
    `Realloc` attempts; keep hosted and RTOS facilities behind optional hooks.
-4. Finish the opt-in managed `AnsiString` migration: the FPC-seeded managed
-   compiler now builds and runs `hello.pas`; next investigate the stage-2
-   managed self-compile CPU/RSS growth, then drive byte-identical fixedpoint and
-   FPC parity. Exception paths and remaining record/class ownership paths still
-   need audit.
-5. Finish remaining managed-value ownership paths: managed-record
-   return-by-value, exception cleanup, and fresh-result move semantics.
+4. Decide how to package or promote the opt-in managed `AnsiString` ABI now
+   that managed self-compile fixedpoint is reached; keep global managed payload
+   cleanup, exception-path cleanup, and record/class ownership audits visible.
+5. Finish remaining managed-value ownership paths that still affect uncovered
+   aggregates and exceptional exits.
 6. Audit threaded compound runtime operations: statement-level
    `write`/`writeln`, shared `read`/`readln` state, and exception globals.

@@ -1,6 +1,6 @@
 # PXX Documentation
 
-**Documentation snapshot:** 2026-06-02
+**Documentation snapshot:** 2026-06-05
 
 `PXX` is the provisional project and compiler name. The executable is still
 called `compiler/pascal26` while the name and artifact migration remain open.
@@ -21,17 +21,10 @@ User-facing documents:
 - [Limitations](limitations.md) - unsupported or only partially supported language, ABI, platform, and tooling areas.
 - [Inline Assembler](inline-asm.md) - x86-64 inline asm support, supported instruction set, variable passing, limitations, and TODO.
 - [GUI (GTK3 + LFM streaming)](gui.md) - LCL-compatible widgetset on GTK3, of-object events, and `.lfm`-streamed component trees.
-- [Handover: GUI final mile](handover-final-mile.md) - self-contained next-session brief to compile the stock `helloworld` Lazarus project unmodified.
 - [Plan: RTTI → Streaming → LFM](plan-rtti-streaming-lfm.md) - agent-executable phased plan for Lazarus/LCL enablement (RTTI, published, component streaming, resources, LFM).
 - [Project TODO](todo.md) - consolidated remaining-work list: standing bugs, the LCL arc, interfaces (detailed), language gaps, targets, and the units refactor.
 - [Rainy Afternoon Backlog](rainy-afternoon.md) - compact list of known non-critical bugs, limitations, and optional cleanup work.
 - [Project State Audit](project-state.md) - dated compact inventory of verified support, confirmed bugs, missing Pascal features, design debt, and the latest benchmark snapshot.
-- [Handover: Next Compiler Work](handover-next-work.md) - resume checklist after the set / inherited / shl batch, with dependency-ordered next tasks and deferred arcs.
-- [Handover: Resume Python-Ready Variant Work](handover-sis-ai-2026-06-02.md) - current resume brief after managed-string Variant support and Pascal runtime gating.
-- [Handover: Managed-Strings Self-Compile — Fixedpoint](handover-managed-strings-record-layout-2026-06-05.md) - resume brief for the managed-string self-compile; gaps A/B/F1/F2 are done and gate-clean, managed stage1/stage2 are byte-identical, and the managed compiler builds and runs `hello.pas`. Pairs with [Plan: Refcounted Compiler Strings](plan-refcounted-compiler-strings.md).
-- [Handover: `default` Keyword Design & Prompt](handover-default-keyword-2026-06-05.md) - architecture and prompt for implementing the generic zero-initializer `default` keyword.
-- [Handover: Nil Python ↔ C Binding And Inference](handover-nilpy-c-binding-2026-06-02.md) - historical binding-first plan, superseded by the wrapper-free SQLite path.
-- [Handover: Wrapper-Free Nil Python ↔ C](handover-wrapper-free-nilpy-c-2026-06-03.md) - delivered arc: `.npy` calls a C library directly (no required Pascal wrapper). SQLite CRUD now imports `sqlite3` directly, uses lifted `T**` out-params, and copies returned `char*` values into managed strings.
 - [Anomaly: non-reproducible miscompile (2026-06-02)](anomaly_2026-06-02_2000.md) - forensic record of a one-off, self-cleared, deterministic-toolchain miscompile; suspected hardware bit flip. Evidence in [`anomaly-evidence-2026-06-02/`](anomaly-evidence-2026-06-02/).
 
 Navigation:
@@ -49,7 +42,7 @@ Architecture and current state:
 - [Garbage Collection Thoughts](garbage-collection-thoughts.md) - why GC is not the default (root-finding cost, bare-metal tension) and the per-target/per-frontend memory profile decision (ARC / arena / hosted collector).
 - [Runtime Emission Size Audit (2026-06-02)](runtime-emission-size-audit-2026-06-02.md) - measured hello-world overhead and deferred feature-reachability cleanup for embedded targets.
 - [Plan: Async, Coroutines, And Yield](plan-async-coroutines.md) - deferred shared state-machine design for Pascal, Nil Python, and future frontends.
-- [Plan: Refcounted Compiler Strings](plan-refcounted-compiler-strings.md) - mapping + staged plan + risk register for flipping the compiler's own `AnsiString`s from frozen 8 MB inline buffers (~1.6 GB BSS) to refcounted handles.
+- [Plan: Refcounted Compiler Strings](plan-refcounted-compiler-strings.md) - status and remaining decisions for flipping the compiler's own `AnsiString`s from frozen 8 MB inline buffers (~1.6 GB BSS) to refcounted handles. Managed self-compile fixedpoint is reached; default flip/reseed remains a product decision.
 
 Additional project material:
 
@@ -58,6 +51,13 @@ Additional project material:
 
 Historic / design archive (`historic/`, point-in-time — superseded by the above):
 
+- [Handover: `default` Keyword Design & Prompt](historic/handover-default-keyword-2026-06-05.md) - archived implementation prompt; `default` assignment is now implemented and covered by `test/test_default_keyword.pas`.
+- [Handover: GUI final mile](historic/handover-final-mile.md) - archived plan; stock `test/gui/helloworld` support is delivered and summarized in `gui.md`.
+- [Handover: Managed-Strings Self-Compile — Fixedpoint](historic/handover-managed-strings-record-layout-2026-06-05.md) - archived drive log for the managed-string self-compile fixedpoint.
+- [Handover: Next Compiler Work](historic/handover-next-work.md) - archived 2026-06-02 runtime/allocator resume checklist; durable items now live in `project-state.md`, `todo.md`, and allocator/threads plans.
+- [Handover: Resume Python-Ready Variant Work](historic/handover-sis-ai-2026-06-02.md) - archived Variant/Nil Python resume brief after the runtime gate.
+- [Handover: Nil Python ↔ C Binding And Inference](historic/handover-nilpy-c-binding-2026-06-02.md) - archived binding-first plan, superseded by the wrapper-free SQLite path.
+- [Handover: Wrapper-Free Nil Python ↔ C](historic/handover-wrapper-free-nilpy-c-2026-06-03.md) - archived delivered arc: `.npy` imports `sqlite3` directly with lifted trailing `T**` out-params and copied `char*` returns.
 - [Implementation Handover (2026-05-28)](historic/handover-2026-05-28.md) - dated session snapshot; durable parts now in `architecture.md`.
 - [Phase 2 Handoff](historic/phase2-handoff.md) - RTTI-via-typed-pointers resume checklist; delivered 2026-05-30.
 - [IR Fixedpoint Milestone](historic/selfcompile-milestone.md) - 2026-05-28 IR-to-IR self-recompile fixedpoint record.

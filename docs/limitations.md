@@ -149,7 +149,7 @@ The C capability is useful but intentionally incomplete:
   chain directly (`f()^`, `f()^.field`, `f()[i]`). Depth ≥ 2 (`T**`) records
   only that it is a pointer-to-pointer. Out-parameter auto-address-of remains a
   **documented non-goal** — see
-  [`handover-nilpy-c-binding-2026-06-02.md`](handover-nilpy-c-binding-2026-06-02.md).
+  [`historic/handover-nilpy-c-binding-2026-06-02.md`](historic/handover-nilpy-c-binding-2026-06-02.md).
 - Library-name resolution maps known names to versioned sonames (`ctype`,
   `math`/`m`, `pthread`, `dl`, `rt`, `z`, GTK, `sqlite3`); unmapped names
   default to `lib<name>.so` and there is no dynamic loader-cache probe yet.

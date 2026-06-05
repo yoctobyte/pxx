@@ -115,7 +115,7 @@ The dropped `test/gui/helloworld` final mile landed: virtual
 metaclasses with runtime `ClassName`, `Dialogs.ShowMessage`, LCL unit stubs,
 `{$R *.lfm}` wildcard handling, and streamed-child → published-field wiring.
 The earlier plan remains as historical context in
-[`handover-final-mile.md`](handover-final-mile.md).
+[`historic/handover-final-mile.md`](historic/handover-final-mile.md).
 
 ---
 
@@ -172,7 +172,7 @@ digest. That is the hard part — not a reason to drop the goal.
 
 ## 2c-bis. Nil Python ↔ C libraries  ✅  (wrapper-free SQLite path landed)
 
-Delivered path: **[`handover-wrapper-free-nilpy-c-2026-06-03.md`](handover-wrapper-free-nilpy-c-2026-06-03.md)**.
+Delivered path: **[`historic/handover-wrapper-free-nilpy-c-2026-06-03.md`](historic/handover-wrapper-free-nilpy-c-2026-06-03.md)**.
 
 - ✅ `import name` routes to the unit/C-header resolver; `.npy` imports C
   headers and drives full SQLite CRUD directly via `import sqlite3`.
@@ -209,10 +209,10 @@ Dynamic-array continuation checklist:
   **[`garbage-collection-thoughts.md`](garbage-collection-thoughts.md)**.
 - Add a fixed-static-arena profile so allocator and managed-value tests pass
   without `mmap`, `munmap`, or `brk`.
-- Finish the opt-in `{$define PXX_MANAGED_STRING}` migration. Heap-backed,
-  reference-counted, copy-on-write strings, local cleanup, concatenation,
-  coercions, and `SetLength` work; params/results, globals, exceptions, and
-  remaining record/class ownership paths are pending.
+- Package or promote the opt-in `{$define PXX_MANAGED_STRING}` ABI now that
+  heap-backed, reference-counted, copy-on-write strings reach managed
+  self-compile fixedpoint. Globals, exception cleanup, and remaining
+  record/class ownership audits are still pending before making it default.
 - Dynamic arrays now cover scalar arrays, `array of AnsiString`, arrays of
   recursively managed records, params/results, whole-record managed assignment,
   embedded static-array field indexing, nested arrays of scalar or managed
@@ -304,11 +304,13 @@ inheritance depth, method-resolution clauses, COM ARC.
   (float arithmetic/compare/write itself is done).
 - 🟡 **Managed `AnsiString` representation.** The opt-in
   `{$define PXX_MANAGED_STRING}` path implements heap-backed reference counts,
-  local cleanup, copy-on-write indexed writes, concatenation, coercions, and
-  `SetLength`. Complete params/results, globals, exception paths, and remaining
-  record/class ownership before making it the default. Atomic refcounts protect
-  lifetime accounting only; concurrent mutation and copy-on-write uniqueness
-  checks still require external synchronization.
+  local cleanup, copy-on-write indexed writes, concatenation, coercions,
+  `SetLength`, params/results, argument temporaries, dynamic-array elements,
+  managed record fields, and managed compiler self-compile fixedpoint. Finish
+  globals, exception paths, and final default-ABI packaging before making it
+  the default. Atomic refcounts protect lifetime accounting only; concurrent
+  mutation and copy-on-write uniqueness checks still require external
+  synchronization.
 - 🟡 **Dynamic arrays.** Scalar, opt-in managed-string, recursively managed
   record, and nested elements support
   pointer-sized slots, assignment retain/release, indexed-write copy-on-write,

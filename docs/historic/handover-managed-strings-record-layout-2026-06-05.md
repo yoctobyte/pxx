@@ -1,7 +1,8 @@
 # Handover: managed-strings self-compile — fixedpoint reached after F2
 
 **Date:** 2026-06-05. **For:** the next agent (sis AI). **Read with:**
-`docs/plan-refcounted-compiler-strings.md` (the live plan; §F2 records the
+[`plan-refcounted-compiler-strings.md`](../plan-refcounted-compiler-strings.md)
+(the live plan; §F2 records the
 completed computed-layout refactor and the fixedpoint tail).
 
 ## Goal

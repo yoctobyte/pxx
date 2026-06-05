@@ -24,7 +24,7 @@ make test-nilpy
   [`plan-async-coroutines.md`](plan-async-coroutines.md).
 - Pascal runtime support now has a conservative token-reachability gate.
   Allocation-free hello emits 287 bytes instead of 1,134. Details:
-  [`runtime-emission-size-audit-2026-06-02.md`](runtime-emission-size-audit-2026-06-02.md).
+  [`runtime-emission-size-audit-2026-06-02.md`](../runtime-emission-size-audit-2026-06-02.md).
   The gate is intentionally pre-parse and conservative: direct helper-call
   addresses stay available during one-pass body emission.
 
@@ -40,7 +40,7 @@ make benchmark
 git diff --check
 ```
 
-Post-gate benchmark: [`bench/2026-06-02-runtime-gate.md`](../bench/2026-06-02-runtime-gate.md).
+Post-gate benchmark: [`bench/2026-06-02-runtime-gate.md`](../../bench/2026-06-02-runtime-gate.md).
 
 ## Immediate Next Work
 

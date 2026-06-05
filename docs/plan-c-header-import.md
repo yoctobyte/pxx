@@ -319,9 +319,9 @@ only one.
 
 ---
 
-## Pascal Wrapperless C-Header Import & Auto-Typed Variables (Planned 2026-06-05)
+## Pascal Wrapperless C-Header Import & Auto-Typed Variables (Delivered 2026-06-05)
 
-To bring Pascal's interop on par with the wrapperless SQLite pipeline in Nil Python (`test_nilpy_sqlite_crud.npy`), we plan to implement the following dialect extensions:
+To bring Pascal's interop on par with the wrapperless SQLite pipeline in Nil Python (`test_nilpy_sqlite_crud.npy`), these dialect extensions landed:
 
 ### 1. PChar -> String Coercion Polish (Done 2026-06-05)
 Assigning `PChar` directly to a Pascal `string`/`AnsiString` (e.g., `name := p;` in `test_sqlite_crud.pas`) or casting it explicitly (e.g. `string(p)`) is now fully supported:
@@ -329,9 +329,8 @@ Assigning `PChar` directly to a Pascal `string`/`AnsiString` (e.g., `name := p;`
 - **Parser/Builtin integration**: The `builtin` unit is auto-included when any `uses` clause is present to guarantee `PCharToString` availability.
 
 ### 2. Auto-Typed Variables (`var a: auto;` - Deferred Type Inference)
-To eliminate verbose type declarations for C pointers/structures, we will implement statically-typed variables with deferred type inference:
+To eliminate verbose type declarations for C pointers/structures, statically-typed variables with deferred type inference are supported:
 - **Syntax**: `var db: auto;` in the standard Pascal `var` section.
 - **Symbol Table**: The variable is added with a placeholder type `tyAuto` and no stack offset.
 - **First Assignment**: On the first assignment (e.g. `db := sqlite3_open(...)`), the compiler resolves the type of the RHS expression, locks in the variable's type to that concrete type, and allocates its stack offset on the fly.
 - **Static Typing**: Subsequent statements treat the variable as statically typed under the resolved type.
-

@@ -11,8 +11,9 @@ Read once at session start. Keep edits here terse — this loads every session.
   only). Line numbers drift between regens — verify a line before editing.
 - The `.inc` files are `{$include}`d into one unit: symbols share a single flat
   namespace (a name has one definition project-wide).
-- Current work & design context live in `docs/handover-*.md`; index in
-  `docs/README.md`.
+- Current work & design context lives in `docs/README.md`, `docs/project-state.md`,
+  `docs/todo.md`, and active `docs/plan-*.md` files. Completed handovers are
+  archived under `docs/historic/`.
 
 ## Build & verify (non-negotiable)
 - This is a **self-hosting** compiler. Any change that alters emitted code must pass

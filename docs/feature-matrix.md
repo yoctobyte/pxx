@@ -5,7 +5,8 @@ This matrix tracks proposed dialect additions, standard extensions, and compiler
 | Feature | Standardization | Implementation Complexity | Priority / Use Case | Status | Description |
 |---|---|---|---|---|---|
 | **PChar $\rightarrow$ String Coercion** | **Standard** (FPC/Delphi compatible) | **Low-Medium** | **Critical** / Unblocks clean C-header use | ✅ Delivered | Auto-generate copying loops when assigning or casting `PChar` to a Pascal `string`/`AnsiString`. |
-| **Auto-Typed Variables (`var a: auto`)** | **Dialect** (Modern Object Pascal has inline `var`) | **Low** | **High** / Ergonomics for wrapperless C imports | ⬜ Planned | Deferred type-inference. The variable is declared as `auto` and statically locks into the type of its first RHS assignment. |
+| **Auto-Typed Variables (`var a: auto`)** | **Dialect** (Modern Object Pascal has inline `var`) | **Low** | **High** / Ergonomics for wrapperless C imports | ✅ Delivered | Deferred type-inference. The variable is declared as `auto` and statically locks into the type of its first RHS assignment. |
+| **`default` Assignment** | **Dialect** | **Low-Medium** | **High** / Reset variables without spelling type-specific zero values | ✅ Delivered | `x := default` resets explicitly typed variables to their default state: zero, `nil`, empty string, or zeroed managed storage. |
 | **Nested Subroutines** | **Standard** (Wirth Pascal core) | **High** | **Medium** / Structural modularity | ⬜ Deferred | Functions declared inside functions. Requires lexical scoping (passing a stack frame static-link pointer to inner scopes). |
 | **Out-Param Return-Lifting** | **Dialect** | **None** (Shared with Python) | **Done** | ✅ Delivered | Trailing `T**` C out-parameters are lifted to the call's return value (e.g., `db := sqlite3_open(path)`). |
 | **Dynamic `any` Type** | **Dialect** (Variant concept) | **Very High** | **Low** / Scripting helper | ⬜ Excluded | Dynamic types with runtime tagging and dispatch. Discarded to keep compiler bootstrap lightweight. |
@@ -31,9 +32,8 @@ While it is tempting to implement `PChar` as a regular library function, it **mu
 
 ---
 
-### Future Deliverable: Two SQLite Demos
+### Delivered SQLite Demos
 
-We will implement two distinct test cases in the test suite to demonstrate the two styles of C-interop:
-1. **`test_sqlite_crud_typed.pas` (Static Typing):** Employs explicit typenames parsed from the header (e.g., `var db: sqlite3; stmt: sqlite3_stmt;`).
-2. **`test_sqlite_crud_autotyped.pas` (Auto-Typed):** Employs deferred static type inference (e.g., `var db: auto; stmt: auto;`) where typenames are locked in dynamically upon first assignment.
-
+The test suite now demonstrates both Pascal C-interop styles:
+1. **Static typing:** explicit typenames parsed from the imported header.
+2. **Auto-typed locals:** deferred static type inference locks C handle locals on first assignment.

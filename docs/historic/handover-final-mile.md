@@ -3,7 +3,7 @@
 > **STATUS: DONE (2026-05-31).** The stock `test/gui/helloworld` now compiles
 > and runs **unmodified**. This document is kept as historical context for how
 > the four remaining features were scoped; the actual implementation and the
-> compiler bug found en route are summarised in [gui.md](gui.md) ("Final mile")
+> compiler bug found en route are summarised in [gui.md](../gui.md) ("Final mile")
 > and the per-feature commits. Library units moved to `lib/rtl` + `lib/lcl`.
 > Features landed: metaclass/class-reference values, executing `initialization`
 > sections, `{$R *.lfm}` wildcard + `{$R *.res}` no-op, `Dialogs.ShowMessage`,
@@ -29,7 +29,7 @@ Lazarus-generated source shape compiles. This is the last mile of the GUI arc.
 
 ## Where things stand (already working — build on it)
 
-The full arc is documented in **[gui.md](gui.md)**. Read it first. Summary of
+The full arc is documented in **[gui.md](../gui.md)**. Read it first. Summary of
 what already works end to end:
 
 - Native x86-64 ELF, IR backend is default, self-hosting. Build with

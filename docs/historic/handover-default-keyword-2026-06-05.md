@@ -1,5 +1,9 @@
 # Handover: `default` Keyword Implementation - 2026-06-05
 
+> **STATUS: DONE (2026-06-05).** `default` assignment is implemented and
+> covered by `test/test_default_keyword.pas`. This file is archived as the
+> original implementation prompt.
+
 This handover document defines the design and implementation plan for adding the `default` keyword to the compiler. It is designed to act as a zero-initializer for any type, particularly useful for clearing or resetting variable state (e.g., `db := default;`).
 
 ## Goal
@@ -56,7 +60,7 @@ Copy and run the prompt below to implement this feature:
 Please implement the `default` keyword feature in the compiler. 
 The feature allows assigning `default` to variables to reset them to their default state (0, nil, '', or zeroed memory).
 
-Refer to the design file `docs/handover-default-keyword-2026-06-05.md` for full implementation details.
+Refer to the archived design file `docs/historic/handover-default-keyword-2026-06-05.md` for full implementation details.
 Follow these steps:
 1. Add `tkDefault` to `defs.inc` and register `'default'` in `blexer.inc`'s keyword list.
 2. Define AST node kind `AN_DEFAULT` (if needed, check existing AST node kinds in defs.inc / parser.inc) and parse it in `ParsePrimary`.
@@ -65,6 +69,5 @@ Follow these steps:
 5. Build and verify using the standard compiler bootstrap gate: `make bootstrap`, `make test`, `make test-nilpy`, `make fpc-check` all green and byte-identical.
 6. Create a test file `test/test_default_keyword.pas` testing default assignments for Integer, string, Pointer, and a managed record.
 
-End your commit message with the Co-Authored-By trailer:
-Co-Authored-By: Antigravity <antigravity@google.com>
+End your commit message with the Co-Authored-By trailer for the agent that actually did the work.
 ```
