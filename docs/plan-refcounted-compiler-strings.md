@@ -207,44 +207,69 @@ Decision (user, the architect): fix the records. Records that need it:
 
 (Plus `REC_TRAWTOKEN` has no string field; check `TMyClass`.)
 
-**Why it can't just be a runtime `if PasDefineExists`.** These tables describe
-the compiler's **own** in-memory structs (its `Syms`/`Procs` arrays) *and* are
-reused to generate the target's layout. For a frozen compiler those must stay
-frozen (its own structs are frozen); for a managed compiler they must be managed.
-So the tables key on the compiler's **build** define via `{$ifdef
-PXX_MANAGED_STRING}` (same mechanism as `AppendChar`), not on a runtime flag.
+**Two facts that shape the fix (verified 2026-06-05):**
+- `RecSize`/`RecFieldOffset`/`RecFieldType` are used **only for target codegen** —
+  they size/address records in the program being compiled. They are **never** used
+  to access the compiler's own `Syms`/`Procs` memory (that field access is normal
+  Pascal, laid out by whoever built the binary — FPC or the prior self-host
+  stage). The `Syms[x]...` args in their callers are just looking up a *target*
+  variable's record type. So these tables define a self-consistent **target record
+  ABI**, free to change as long as it stays internally consistent and stable
+  across self-host stages.
+- That ABI is **"every scalar = 8 bytes"** (TSymbol: `Integer`/`Boolean`/enum all
+  8 apart; string = 264 frozen), which is *not* FPC's packing and *not* the
+  user-record rule (`parser.inc` ~4716 packs via `TypeSize`: Integer=4,
+  Boolean=1). So built-in records cannot be routed through the user-record engine.
 
-**Plan (Phase 4 — record layout flip):**
+**Therefore the branch is RUNTIME, not `{$ifdef}` (corrects an earlier note).**
+The same compiler binary compiles a frozen *or* a managed target per the `-d`
+flag. The parser already decides `tyAnsiString` vs `tyString` at runtime via
+`PasDefineExists('PXX_MANAGED_STRING')` (parser.inc 2184, 4097); the record-layout
+functions must agree with that **same runtime check**.
+
+**Plan (Phase 4 — replace the hardcoded tables with a computed engine):**
 
 1. **Codegen first (applies to all records, user + built-in).** Fix the managed
    *field* codegen gaps so a `tyAnsiString` field works everywhere, mirroring the
    F1 by-ref fixes but for `IR_FIELD`:
    - `Length(rec.field)` on a managed-string field returns 0 today (user-record
-     repro confirmed) — deref the field slot to the handle before `[-8]`.
+     repro confirmed: `/tmp/r1.pas` printed `name=[hello] ... len=0`) — deref the
+     field slot to the handle before `[-8]`.
    - audit `rec.field[i]` read/write, `recA.field := recB.field`, passing
-     `rec.field` as a `var`/value arg, and scope/never-finalized globals (the
-     built-in arrays live forever, so no field finalization needed for them).
-   These are `tyAnsiString`-gated → frozen byte-identical; land + test on user
-   records (no reseed) before touching the hardcoded tables.
+     `rec.field` as a `var`/value arg. The built-in arrays are globals that live
+     forever, so no field finalization is needed for them.
+   These are `tyAnsiString`-gated → frozen byte-identical; land + test on **user**
+   records (no reseed) before touching the layout tables.
 
-2. **Flip the hardcoded tables under `{$ifdef PXX_MANAGED_STRING}`.** For each
-   record above, add a managed branch to `RecSize`, `RecFieldOffset`,
-   `RecFieldType` (string field → `tyAnsiString`, size 8, offsets recomputed —
-   every field after a string shifts down by 256 per shrunk string). Managed
-   layout must match **FPC's** managed record layout (ansistring = 8-B pointer,
-   declaration order, 8-align) so the FPC reseed in step 3 is self-consistent.
-   Compute carefully; one wrong offset = crash. (E.g. `TSYMBOL` managed: `Name@0`
-   8B, then every later field −256 → size 104.)
+2. **Computed layout engine (the real refactor — don't hand-flip offsets).**
+   Replace the four hardcoded `if rec = REC_… then` chains with **one compute
+   pass driven by a per-record field table** (each field's name + kind, in
+   declaration order, transcribed once from defs.inc). The ABI rule these records
+   follow:
+   - scalar field → 8 bytes
+   - string field → `PasDefineExists('PXX_MANAGED_STRING') ? 8 : 264`  ← the whole
+     managed flip is this one line
+   - record field → `RecSize(thatRec)`;  array field → `elem × count`
+   `RecFieldOffset`/`RecSize`/`RecFieldType` then read the computed table. Managed
+   vs frozen falls out automatically; no hand-derived offsets, AGENTS landmine
+   gone. `TProc` is the gnarly one: `Params: array[0..15] of TParam` (nested
+   record-array = 16 × `RecSize(REC_TPARAM)`) + `BodyAddr@5024`, size 5056 frozen
+   — the engine must handle nested-record-array fields.
 
-3. **FPC reseed with `-dPXX_MANAGED_STRING`.** Build the compiler with FPC *and*
-   the managed define so FPC lays the compiler's own structs out managed and the
-   managed-branch tables match. That managed compiler compiles `compiler.pas
-   -dPXX_MANAGED_STRING` → managed compiler′; iterate to byte-identical (gap E).
-   The frozen default build is untouched (frozen branch of every `{$ifdef}`).
+3. **Validation (provable green before any managed step).** Assert the **frozen**
+   computed layout equals the current hardcoded constants (TSymbol=360, every
+   offset). If they match, the engine reproduces the known-good ABI → the managed
+   output is trustworthy by construction. Keep `make bootstrap`/`test`/`fpc-check`
+   green at this point (still frozen).
 
-4. **Drive the remaining error tail** (gap D) past `AddConst` to a working
-   `hello.pas`, then to fixedpoint, then reconcile `fpc-check` (now two managed
-   runtimes — self-hosted vs FPC's ansistring; emitted code must match).
+4. **FPC reseed with `-dPXX_MANAGED_STRING`** and drive the rest. Build the
+   compiler with FPC *and* the managed define; that compiler compiles
+   `compiler.pas -dPXX_MANAGED_STRING` → managed compiler′; iterate to
+   byte-identical (gap E). Drive the remaining error tail (gap D) past `AddConst`
+   to a working `hello.pas`, then fixedpoint, then reconcile `fpc-check` (two
+   managed runtimes — self-hosted vs FPC's ansistring; emitted code must match).
+   The frozen default build is untouched (the `?8:264` line returns 264 with no
+   `-d`).
 
 **Risk:** step 2 is the AGENTS landmine (hand-derived offsets + `MAX_UFIELD`
 pressure is N/A here since built-ins aren't UClass). Mitigation: the FPC reseed
