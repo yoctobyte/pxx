@@ -2969,6 +2969,10 @@ begin
                  { by-ref managed string: IR_LEA yields the forwarded slot address
                    (&handle); deref once to reach the handle before reading [-8]. }
                  begin EmitB($48); EmitB($8B); EmitB($00); end; { mov rax, [rax] }
+               if IRKind[val1Node] = IR_FIELD then
+                 { Managed string field: IR_FIELD yields the address of the
+                   handle slot; deref once to reach the handle. }
+                 begin EmitB($48); EmitB($8B); EmitB($00); end; { mov rax, [rax] }
                EmitB($48); EmitB($85); EmitB($C0);            { test rax, rax }
                EmitB($74); jbePatch := CodeLen; EmitB(0);     { jz done }
                EmitB($48); EmitB($8B); EmitB($40); EmitB($F8);{ mov rax, [rax-8] }
