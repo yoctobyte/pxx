@@ -35,6 +35,9 @@ Read once at session start. Keep edits here terse — this loads every session.
 - If continuing uncommitted work from an unknown/crashed agent, say so in the
   commit body (e.g. "Continues uncommitted changes present at session start;
   original agent unknown.") and list what you personally changed.
+- Agents should keep agent-to-agent coordination notes under `agents/` when
+  possible. Handovers are a good model: short, dated, attributable, and easy
+  for the next agent to find without cluttering the repository root.
 
 ## Landmines (cost real time)
 - **Don't add fields to `TSymbol` / `TParam` / `TProc`.** Their byte layout is
