@@ -1,7 +1,7 @@
 # Plan: Real C Header Import (glib/GTK-grade)
 
-Status: in progress. Owner doc for todo §2c. Companion to `C_INTEROP.md`
-(current behaviour) and `docs/gui.md` (why the hand-written GTK binding exists).
+Status: in progress. Owner doc for todo §2c. Companion to `c-interop.md`
+(current behaviour) and `gui.md` (why the hand-written GTK binding exists).
 
 ## Progress (2026-06-01)
 

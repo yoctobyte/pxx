@@ -221,7 +221,7 @@ Compatibility is split into separate questions:
 | ABI | Native ELF/shared-call support only; no FPC ABI claim. |
 | Tooling | PXX commands and build flow only. |
 
-The dated summary in [Compatibility Status](../COMPATIBILITY.md) and the
+The dated summary in [Compatibility Status](compatibility.md) and the
 [documentation index](README.md) identify the documentation snapshot. The
 implementation may change faster than that snapshot; source and regression
 tests are authoritative until the written inventory is refreshed.

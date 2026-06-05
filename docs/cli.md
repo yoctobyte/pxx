@@ -39,7 +39,7 @@ Frontend selection is filename-based:
 
 Pascal sources may additionally load supported Pascal units, local C source,
 or C headers through `uses`; see [Features](features.md) and
-[C Interoperability](../C_INTEROP.md).
+[C Interoperability](c-interop.md).
 
 ## Compiler Options
 

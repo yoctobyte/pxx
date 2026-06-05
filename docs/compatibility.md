@@ -106,7 +106,7 @@ Regression-covered behavior includes:
 - Pascal conditional definitions and expressions, active-branch includes,
   directive diagnostics, and PXX/FPC identity separation.
 - Selected C interop and C preprocessing behavior described in
-  `C_INTEROP.md`.
+  [`c-interop.md`](c-interop.md).
 
 ## Partial Or Missing Surface
 

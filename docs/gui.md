@@ -5,7 +5,7 @@ come from an `.lfm` form resource, mirroring the Lazarus model. Everything is
 pure library work on top of the language; the only compiler features it needs
 (shared-library FFI, procedure/method pointers, RTTI, form streaming) are
 general and documented in [Pascal Dialect](pascal-dialect.md) and
-[C Interoperability](../C_INTEROP.md).
+[C Interoperability](c-interop.md).
 
 This is an early vertical slice, not a full LCL. It runs on Linux/X11 with
 `libgtk-3.so.0` installed (no GTK `-dev` headers required — the binding is a

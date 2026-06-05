@@ -21,7 +21,7 @@ same PLT/GOT dynamic-link path as header-imported externals (System V AMD64 /
 lowercase identifiers); an optional `name 'symbol'` clause overrides it.
 
 A hand-written binding unit is just a list of such declarations — see
-`test/gui/gtk3.pas` and [GUI](docs/gui.md).
+`test/gui/gtk3.pas` and [GUI](gui.md).
 
 ## Calling A Shared C Library
 
@@ -117,7 +117,7 @@ and links the shared object exactly as a Pascal `uses sqlite3` clause.
 Pascal binding units remain useful as optional ergonomic facades over
 pointer-heavy APIs, but they are not required for Nil Python to consume a C
 header directly. See
-[`docs/handover-wrapper-free-nilpy-c-2026-06-03.md`](docs/handover-wrapper-free-nilpy-c-2026-06-03.md).
+[`historic/handover-wrapper-free-nilpy-c-2026-06-03.md`](historic/handover-wrapper-free-nilpy-c-2026-06-03.md).
 
 ## Header Import Cache, Later
 

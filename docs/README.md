@@ -35,7 +35,7 @@ Architecture and current state:
 
 - [Implementation Architecture](architecture.md) - include chain, generic machinery, library resolution, key gotchas, class/method layout, dialect switches, operator overloading.
 - [IR Backend Status](ir-handover.md) - IR pipeline, coverage, and known gaps. The IR path is the development focus and has reached self-recompile fixedpoint.
-- [Compatibility Status](../COMPATIBILITY.md) - dated implementation inventory and bootstrap policy.
+- [Compatibility Status](compatibility.md) - dated implementation inventory and bootstrap policy.
 - [Target Roadmap](roadmap.md) - planned CPU targets and the fixedpoint gate each must pass.
 - [ESP32 And ESP-IDF Direction](esp32-esp-idf-roadmap.md) - embedded target strategy for ESP-IDF, FreeRTOS compatibility, and CPU-family staging.
 - [Allocator Platform Design](allocator-platform-design.md) - syscall-free internal heap with optional hosted or RTOS hooks.
@@ -47,7 +47,8 @@ Architecture and current state:
 Additional project material:
 
 - [Lineage and Acknowledgements](lineage.md) - the people and languages this project is built on.
-- [C Interoperability](../C_INTEROP.md) - detail on Pascal-to-C header imports and supported C preprocessing.
+- [C Interoperability](c-interop.md) - detail on Pascal-to-C header imports and supported C preprocessing.
+- [Developer Notes](developer-notes.md) - rough project-shape notes and informal positioning.
 
 Historic / design archive (`historic/`, point-in-time — superseded by the above):
 

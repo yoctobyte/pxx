@@ -292,7 +292,7 @@ A Pascal routine can bind a shared-library symbol directly:
 procedure gtk_init(argc, argv: Pointer); cdecl; external 'libgtk-3.so.0';
 ```
 
-See [C Interoperability](../C_INTEROP.md).
+See [C Interoperability](c-interop.md).
 
 ## Compatibility Claim
 

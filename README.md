@@ -119,7 +119,7 @@ design debt.
 
 Design decisions, dialect proposals, and bootstrap history live in
 `compiler/usernotes.md`. The dated compatibility inventory is tracked in
-[COMPATIBILITY.md](COMPATIBILITY.md).
+[docs/compatibility.md](docs/compatibility.md).
 
 The project vision — multi-language compiler, design constraints, language
 priority list — is in [docs/philosophy.md](docs/philosophy.md).

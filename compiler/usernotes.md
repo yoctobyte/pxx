@@ -27,7 +27,7 @@ multiple semantic modes do not exist yet. Compiler bootstrap code may
 continue to use `{$ifdef FPC}` where the branch genuinely depends on Free
 Pascal as the host.
 
-Compatibility and missing-feature status is maintained in `COMPATIBILITY.md`.
+Compatibility and missing-feature status is maintained in `docs/compatibility.md`.
 
 ---
 

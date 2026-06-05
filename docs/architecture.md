@@ -3,7 +3,7 @@
 Durable internal-architecture reference: include chain, generic machinery,
 library resolution, hard-won gotchas, class/method layout, dialect switches,
 and operator overloading. For dated, point-in-time state see
-[`COMPATIBILITY.md`](../COMPATIBILITY.md) (feature inventory),
+[`compatibility.md`](compatibility.md) (feature inventory),
 [`todo.md`](todo.md) (remaining work), and
 [`ir-handover.md`](ir-handover.md) (IR backend status). The 2026-05-28
 session snapshot this file was split from lives in

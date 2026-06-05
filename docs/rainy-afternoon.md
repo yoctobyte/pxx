@@ -99,7 +99,7 @@ Possible breadth improvements, only when a concrete library requires them:
   needs more than the current raw-pointer callback surface.
 
 Older `plan-c-header-import.md`, `todo.md`, `project-state.md`, and
-`C_INTEROP.md` passages may describe earlier intermediate stages. Treat this
+`c-interop.md` passages may describe earlier intermediate stages. Treat this
 section and the current regression suite as the compact status summary until
 those longer documents are refreshed.
 

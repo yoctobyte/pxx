@@ -112,7 +112,7 @@ Thin Pascal binding units such as `lib/rtl/sqlitedb.pas` remain optional
 ergonomic facades, not a requirement.
 
 For the precise unit search order and supported C preprocessor subset, see
-[C Interoperability](../C_INTEROP.md).
+[C Interoperability](c-interop.md).
 
 ## C Preprocessing
 
