@@ -112,6 +112,7 @@ const
   AN_CLASSREF     = 46; { class identifier used as a value (metaclass): ASTIVal = class index (ci);
                           yields the runtime address of the class's RTTI blob (PClassRTTI) }
   AN_VAR_DECL     = 47;
+  AN_DEFAULT      = 48;
 
   { Inline-asm operand kinds }
   AOP_NONE = 0;
@@ -172,6 +173,7 @@ const
   IR_DYNUNIQUE    = 49;  { IRA = slot-address node; IRB = dyn depth at this level; IRC = base record id; IRIVal = element size; IRTk = base TTypeKind. Read mode (not InLValueWrite): load data ptr. Write mode: clone-if-shared then load. Returns the (unique) data pointer in rax. }
   IR_SLOTADDR     = 50;  { IRA = symbol idx; always loads the ADDRESS of the variable's slot (lea), bypassing IR_LEA's dyn-array/AnsiString auto-load. Used as the IR_DYNUNIQUE base for a root dynamic array. }
   IR_ZERO_SYM     = 51;
+  IR_DEFAULT_MEM  = 52;  { IRA = dest addr node; IRC = managed record id or REC_NONE; IRIVal = bytes to zero }
 
   { Variant tag (VType) values, stored in the first 8 bytes of a tyVariant slot.
     Payload (next 8 bytes) interpreted per tag. Closed scalar set; vtObject is a
@@ -251,6 +253,7 @@ type
     tkNil,
     tkIn,
     tkWith,
+    tkDefault,
     tkAsm,
     tkShl,
     tkPacked,

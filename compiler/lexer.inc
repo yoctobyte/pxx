@@ -118,6 +118,8 @@ begin
   end
   else if Length(s) = 7 then
   begin
+    if (s[1]='d') and (s[2]='e') and (s[3]='f') and (s[4]='a') and (s[5]='u') and (s[6]='l') and (s[7]='t') then Result := tkDefault;
+    if (s[1]='D') and (s[2]='e') and (s[3]='f') and (s[4]='a') and (s[5]='u') and (s[6]='l') and (s[7]='t') then Result := tkDefault;
     if (s[1]='p') and (s[2]='r') and (s[3]='o') and (s[4]='g') and (s[5]='r') and (s[6]='a') and (s[7]='m') then Result := tkProgram;
     if (s[1]='f') and (s[2]='o') and (s[3]='r') and (s[4]='w') and (s[5]='a') and (s[6]='r') and (s[7]='d') then Result := tkForward;
     if (s[1]='f') and (s[2]='r') and (s[3]='e') and (s[4]='e') and (s[5]='m') and (s[6]='e') and (s[7]='m') then Result := tkFreeMem;

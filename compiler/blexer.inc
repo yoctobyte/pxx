@@ -47,6 +47,9 @@ begin
     6: begin
       if lower = 'return' then Result := tkExit;
     end;
+    7: begin
+      if lower = 'default' then Result := tkDefault;
+    end;
     8: begin
       if lower = 'function' then Result := tkFunction;
     end;

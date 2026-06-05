@@ -1930,6 +1930,14 @@ begin
     begin
       node := AllocNode(AN_INT_LIT); ASTIVal[node] := 0; ASTTk[node] := Ord(tyPointer); CurASTNode := node; Next; LastExprTk := tyPointer;
     end;
+    tkDefault:
+    begin
+      node := AllocNode(AN_DEFAULT);
+      ASTTk[node] := Ord(tyUnknown);
+      CurASTNode := node;
+      LastExprTk := tyUnknown;
+      Next;
+    end;
     tkAt:
     begin
       Next;
@@ -3539,6 +3547,8 @@ begin
     
     if Syms[idx].TypeKind = tyAuto then
     begin
+      if ASTKind[valueNode] = AN_DEFAULT then
+        Error('cannot infer type from default; specify type explicitly');
       if (LastExprTk = tyUnknown) or (LastExprTk = tyAuto) then
         Error('cannot infer type for auto variable');
       InferSymTypeFromNode(idx, valueNode);
@@ -4231,6 +4241,8 @@ begin
                 begin
                   if Syms[idx].TypeKind = tyAuto then
                   begin
+                    if ASTKind[CurASTNode] = AN_DEFAULT then
+                      Error('cannot infer type from default; specify type explicitly');
                     if (LastExprTk = tyUnknown) or (LastExprTk = tyAuto) then
                       Error('cannot infer type for auto variable');
                     InferSymTypeFromNode(idx, CurASTNode);

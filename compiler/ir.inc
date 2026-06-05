@@ -52,6 +52,8 @@ begin
     IR_SETLEN_DYN: Result := 'setlen_dyn';
     IR_DYNUNIQUE: Result := 'dynunique';
     IR_SLOTADDR: Result := 'slotaddr';
+    IR_ZERO_SYM: Result := 'zero_sym';
+    IR_DEFAULT_MEM: Result := 'default_mem';
     IR_BLOCK: Result := 'block';
     IR_UNSUPPORTED: Result := 'unsupported';
     IR_IF: Result := 'if';
@@ -203,6 +205,9 @@ begin
         IRRequireNode(IRA[i], 'copy_rec_managed dest');
         IRRequireNode(IRB[i], 'copy_rec_managed src');
       end;
+
+      IR_DEFAULT_MEM:
+        IRRequireNode(IRA[i], 'default_mem dest');
 
       IR_DYNDATA:
         if (IRA[i] < 0) or (IRA[i] >= SymCount) then
@@ -859,6 +864,9 @@ begin
     AN_STR_LIT:
       Result := IRAppend(IR_CONST_STR, ASTSOffset[node], ASTSLen[node], -1, 0, ASTTk[node]);
 
+    AN_DEFAULT:
+      Error('default requires an assignment target');
+
     AN_SET_LIT:
     begin
       { Align DataLen to 8 bytes }
@@ -1144,6 +1152,55 @@ begin
         if (varIdx >= 0) and (varIdx < SymCount) then
           lhsTk := Syms[varIdx].TypeKind;
       end;
+      if ASTKind[ASTRight[node]] = AN_DEFAULT then
+      begin
+        if (lhsTk = tyUnknown) or (lhsTk = tyAuto) then
+          Error('default requires a known target type');
+        ASTTk[ASTRight[node]] := Ord(lhsTk);
+        if (lhsTk = tyRecord) or (lhsTk = tySet) or
+           ((ASTKind[ASTLeft[node]] = AN_IDENT) and Syms[ASTIVal[ASTLeft[node]]].IsArray and
+            not (Syms[ASTIVal[ASTLeft[node]]].ArrLen = -1)) then
+        begin
+          leftAddr := IRLowerAddress(ASTLeft[node]);
+          if lhsTk = tyRecord then
+          begin
+            idx := ResolveNodeRec(ASTLeft[node]);
+            elemSize := RecSize(idx);
+            if RecordHasManagedFields(idx) then
+              Result := IRAppend(IR_DEFAULT_MEM, leftAddr, -1, idx, elemSize, Ord(lhsTk))
+            else
+              Result := IRAppend(IR_DEFAULT_MEM, leftAddr, -1, REC_NONE, elemSize, Ord(lhsTk));
+          end
+          else if lhsTk = tySet then
+            Result := IRAppend(IR_DEFAULT_MEM, leftAddr, -1, REC_NONE, TypeSize(tySet), Ord(lhsTk))
+          else
+          begin
+            varIdx := ASTIVal[ASTLeft[node]];
+            if Syms[varIdx].ElemType = tyRecord then
+              elemSize := RecSize(Syms[varIdx].ElemRecName)
+            else
+              elemSize := TypeSize(Syms[varIdx].ElemType);
+            Result := IRAppend(IR_DEFAULT_MEM, leftAddr, -1, REC_NONE,
+                               Syms[varIdx].ArrLen * elemSize, ASTTk[ASTLeft[node]]);
+          end;
+        end
+        else
+        begin
+          if lhsTk = tyString then
+            value := IRAppend(IR_CONST_STR, 0, 0, -1, 0, Ord(tyString))
+          else
+            value := IRAppend(IR_CONST_INT, -1, -1, -1, 0, Ord(lhsTk));
+          if ASTKind[ASTLeft[node]] = AN_IDENT then
+            Result := IRAppend(IR_STORE_SYM, ASTIVal[ASTLeft[node]], value, -1, 0, ASTTk[ASTLeft[node]])
+          else
+          begin
+            leftAddr := IRLowerAddress(ASTLeft[node]);
+            Result := IRAppend(IR_STORE_MEM, leftAddr, value, -1, 0, ASTTk[ASTLeft[node]]);
+          end;
+        end;
+      end
+      else
+      begin
       if (lhsTk = tyString) or (lhsTk = tyAnsiString) then
       begin
         if IsNodePChar(ASTRight[node]) then
@@ -1254,6 +1311,7 @@ begin
           leftAddr := IRLowerAddress(ASTLeft[node]);
           Result := IRAppend(IR_STORE_MEM, leftAddr, value, -1, 0, ASTTk[ASTLeft[node]]);
         end;
+      end;
       end;
     end;
 

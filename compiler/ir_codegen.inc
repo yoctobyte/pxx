@@ -1801,6 +1801,25 @@ begin
         end;
       end;
 
+    IR_DEFAULT_MEM:
+      begin
+        IREmitNode(IRA[node]);                  { rax = destination address }
+        if (IRC[node] >= 0) and RecordHasManagedFields(IRC[node]) then
+        begin
+          EmitB($50);                           { preserve destination }
+          EmitAcquireHeapLock;
+          EmitB($48); EmitB($8B); EmitB($1C); EmitB($24); { mov rbx, [rsp] }
+          EmitManagedRecordReleaseLocked(IRC[node]);
+          EmitReleaseHeapLock;
+          EmitB($5F);                           { pop rdi = destination }
+        end
+        else
+          begin EmitB($48); EmitB($89); EmitB($C7); end; { mov rdi, rax }
+        EmitB($48); EmitB($31); EmitB($C0);              { xor rax, rax }
+        EmitB($48); EmitB($B9); EmitI64(IRIVal[node]);   { movabs rcx, byte count }
+        EmitB($F3); EmitB($AA);                          { rep stosb }
+      end;
+
     IR_SLOTADDR:
       begin
         { Address of a variable's slot, unconditionally (plain lea). Unlike
@@ -4146,7 +4165,7 @@ begin
 
       IR_STORE_SYM, IR_STORE_MEM, IR_WRITE, IR_WRITELN,
       IR_READLINE, IR_READ_VAR, IR_COPY_REC, IR_COPY_REC_MANAGED, IR_SET_COPY, IR_VAR_STORE,
-      IR_SETLEN_DYN,
+      IR_SETLEN_DYN, IR_DEFAULT_MEM,
       IR_EXC_LEAVE, IR_RAISE, IR_EXC_STORE, IR_EXC_CLEAR, IR_TERMINATE,
       IR_ASM:
         begin

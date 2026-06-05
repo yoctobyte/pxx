@@ -172,6 +172,8 @@ test: $(COMPILER) fpc-check
 	test "$$(/tmp/test_managed_setlength_var26)" = "$$(printf '1\n1\n1\n1\n1\n1')"
 	./$(COMPILER) test/test_managed_setlength_growth.pas /tmp/test_managed_setlength_growth26
 	test "$$(/tmp/test_managed_setlength_growth26)" = "$$(printf '1\n1\n1\n1\n1\n1\n1\n1')"
+	./$(COMPILER) test/test_default_keyword.pas /tmp/test_default_keyword26
+	test "$$(/tmp/test_default_keyword26)" = "$$(printf '1\n1\n1\n1\n1\n1\n1\n1')"
 	./$(COMPILER) test/hello.pas /tmp/hello26
 	test "$$(/tmp/hello26)" = "Hello, World!"
 	test "$$(stat -c '%s' /tmp/hello26)" = "287"
