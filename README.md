@@ -88,12 +88,10 @@ ln -sfn "$PWD/stable_linux_amd64/default/latest" "$HOME/.local/bin/pxx"
 
 - [Documentation index](docs/README.md)
 - [Command line](docs/cli.md)
-- [Pascal dialect and compatibility](docs/pascal-dialect.md)
-- [Features](docs/features.md)
-- [Limitations](docs/limitations.md)
-- [Project state](docs/project-state.md)
-- [C interoperability](docs/c-interop.md)
-- [Philosophy](docs/philosophy.md)
+- [Dialect](docs/dialect.md)
+- [Not implemented](docs/not-implemented.md)
+- [Not stable](docs/not-stable.md)
+- [Developer docs](docs/developer/README.md)
 
 ## Repository Layout
 
