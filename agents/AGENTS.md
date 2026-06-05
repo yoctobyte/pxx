@@ -57,6 +57,9 @@ Read once at session start. Keep edits here terse — this loads every session.
   tickets (or by locality of what you're already editing). `urgent/` is a
   WIP-limited (~3) human override. Compute it: `tools/progress.sh`. When you spot
   "X before Y", add `Blocked-by` to Y — landing X makes Y ready automatically.
+- Design + rationale (why folders/filenames/edges, tradeoffs, multi-agent
+  semantics): `agents/progress-tracker-design.md`. Format spec:
+  `docs/progress/README.md`.
 - Record + state, not a clean DB — duplicate/stale tickets tolerated, prefer
   parking to losing info. No separate index; written status stays in
   `docs/developer/project-state.md` / `docs/developer/todo.md`.
