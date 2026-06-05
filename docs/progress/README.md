@@ -86,6 +86,8 @@ pulling by **locality** — grab tickets in the topic cluster you're already in
 Compute the queue: `tools/progress.sh` (ready list + leverage + board summary).
 Validate the board: `tools/progress.sh check` (dangling `Blocked-by` slugs,
 dependency cycles, working/ without Owner, done/ without a commit).
+Render a human grid: `tools/progress.sh board-md` → `BOARD.md` (gitignored,
+on-demand; never committed).
 
 ## Multi-agent use
 

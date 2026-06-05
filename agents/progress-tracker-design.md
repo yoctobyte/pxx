@@ -115,9 +115,9 @@ script is disposable.
 
 - ✅ `progress.sh check` — flags dangling `Blocked-by` slugs, dependency cycles,
   ownerless `working/`, and commit-less `done/`. Built 2026-06-06.
-- A generated `BOARD.md` snapshot for humans (kept out of git — the filesystem
-  *is* the index; a checked-in file would drift). Could be an on-demand,
-  gitignored `progress.sh board-md` if a visual grid is wanted.
+- ✅ `progress.sh board-md` — renders a kanban grid + ready/leverage to a
+  gitignored, on-demand `docs/progress/BOARD.md` (never committed; the filesystem
+  is the real index). Built 2026-06-06.
 - Transition helpers (`progress.sh claim <slug>` / `resolve <slug> <commit>`) to
   do the `git mv` + field edits, leaving the commit to the agent.
 - Promote `Owner` to include a timestamp for stale-claim detection.
