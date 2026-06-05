@@ -1,8 +1,8 @@
 # C `__attribute__((packed))` / `aligned` ignored → field-offset drift
 
 - **Type:** bug
-- **Status:** backlog
-- **Owner:** —
+- **Status:** done
+- **Owner:** Antigravity
 - **Opened:** 2026-06-06 (from c-skipped-features-audit.md, Class A/B)
 
 ## Symptom
@@ -38,3 +38,4 @@ test confirms no silent offset drift; POD structs in the same header unaffected.
 
 ## Log
 - 2026-06-06 — ticket opened from c-skipped-features-audit.md.
+- 2026-06-06 — resolved in d8b9679; verified by test/test_c_packed_aligned.pas.
