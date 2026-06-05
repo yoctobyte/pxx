@@ -42,6 +42,7 @@ begin
   NoUnhandledHandler := False;
   ThreadSafeMode := False;
   EnableAutoVar := True;
+  EnableLazyVar := True;
   PasInitDefines;
   i := 1;
   readingOptions := True;
@@ -94,6 +95,12 @@ begin
             (option = '-fno-auto-var') then
     begin
       EnableAutoVar := False;
+      Inc(i);
+    end
+    else if (option = '--no-lazy-var') or
+            (option = '-fno-lazy-var') then
+    begin
+      EnableLazyVar := False;
       Inc(i);
     end
     else if (Length(option) > 2) and (option[1] = '-') and

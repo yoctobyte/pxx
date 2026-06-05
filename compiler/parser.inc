@@ -268,6 +268,7 @@ function ParseWithStatementAST: Integer; forward;
 function ParseAsmStatementAST: Integer; forward;
 function ParseBlockAST: Integer; forward;
 procedure CompileAST(node: Integer); forward;
+function ParseTypeKind: TTypeKind; forward;
 procedure ParseSubroutine; forward;
 procedure ParseGenericFunctionDef; forward;
 procedure ParseOperatorDef; forward;
@@ -3303,8 +3304,17 @@ end;
 
 function ParseBlockAST: Integer;
 var
-  seqNode, lastSeq, stmtNode: Integer;
+  seqNode, lastSeq, stmtNode, savedBlockId: Integer;
 begin
+  savedBlockId := CurBlockId;
+  if EnableLazyVar then
+  begin
+    if BlockCount >= 8191 then Error('too many blocks');
+    Inc(BlockCount);
+    BlockParent[BlockCount] := CurBlockId;
+    CurBlockId := BlockCount;
+  end;
+
   seqNode := AllocNode(AN_SEQ);
   lastSeq := seqNode;
   while not (CurTok.Kind in [tkEnd, tkEOF, tkUntil]) do
@@ -3319,6 +3329,11 @@ begin
       lastSeq := ASTRight[lastSeq];
       ASTLeft[lastSeq] := stmtNode;
     end;
+  end;
+
+  if EnableLazyVar then
+  begin
+    CurBlockId := savedBlockId;
   end;
   Result := seqNode;
 end;
@@ -3467,6 +3482,117 @@ begin
   Result := bodyNode;
 end;
 
+function ParseLazyVarDeclAST: Integer;
+var
+  names: array[0..63] of AnsiString;
+  nameTokIdx: array[0..63] of Integer;
+  n, i, idx, assignNode, seqNode, lastSeq, node, valueNode, declNode: Integer;
+  tk: TTypeKind;
+  isArr: Boolean;
+  arrLo, arrHi: Integer;
+begin
+  n := 0;
+  repeat
+    if CurTok.Kind <> tkIdent then Error('expected identifier in var declaration');
+    names[n] := CurTok.SVal;
+    nameTokIdx[n] := TokPos - 1;
+    Inc(n); Next;
+  until not Eat(tkComma);
+
+  tk := tyAuto;
+  isArr := False; arrLo := 0; arrHi := 0;
+  
+  if Eat(tkColon) then
+  begin
+    if CurTok.Kind = tkArray then
+    begin
+      isArr := True; Next;
+      if CurTok.Kind = tkLBrack then
+      begin
+        Next;
+        arrLo := ConstEval;
+        Expect(tkDotDot, '..');
+        arrHi := ConstEval;
+        Expect(tkRBrack, ']');
+        Expect(tkOf, 'of');
+      end
+      else
+        isArr := False;
+    end;
+    tk := ParseTypeKind;
+  end;
+
+  assignNode := -1;
+  if Eat(tkAssign) then
+  begin
+    if n > 1 then Error('initialization is only supported for single variable declarations');
+    
+    ParseExpr;
+    valueNode := CurASTNode;
+    
+    idx := AllocVar(names[0], tk);
+    if isArr then
+    begin
+      Syms[idx].IsArray := True;
+      Syms[idx].ArrLen := arrHi - arrLo + 1;
+    end;
+    
+    if Syms[idx].TypeKind = tyAuto then
+    begin
+      if (LastExprTk = tyUnknown) or (LastExprTk = tyAuto) then
+        Error('cannot infer type for auto variable');
+      InferSymTypeFromNode(idx, valueNode);
+      AllocateSymOffset(idx);
+    end;
+
+    node := AllocNode(AN_IDENT);
+    ASTIVal[node] := idx;
+    ASTSOffset[node] := Tokens[nameTokIdx[0]].SOffset;
+    ASTSLen[node] := Tokens[nameTokIdx[0]].SLen;
+    ASTTk[node] := Ord(Syms[idx].TypeKind);
+
+    assignNode := AllocNode(AN_ASSIGN);
+    ASTLeft[assignNode] := node;
+    ASTRight[assignNode] := valueNode;
+    ASTTk[assignNode] := Ord(Syms[idx].TypeKind);
+
+    declNode := AllocNode(AN_VAR_DECL);
+    ASTIVal[declNode] := idx;
+    ASTLeft[declNode] := assignNode;
+    Result := declNode;
+  end
+  else
+  begin
+    if tk = tyAuto then Error('auto variable must have an initialization');
+    
+    seqNode := AllocNode(AN_SEQ);
+    lastSeq := seqNode;
+    for i := 0 to n - 1 do
+    begin
+      idx := AllocVar(names[i], tk);
+      if isArr then
+      begin
+        Syms[idx].IsArray := True;
+        Syms[idx].ArrLen := arrHi - arrLo + 1;
+      end;
+      
+      declNode := AllocNode(AN_VAR_DECL);
+      ASTIVal[declNode] := idx;
+      ASTLeft[declNode] := -1;
+      
+      if ASTLeft[lastSeq] = -1 then
+        ASTLeft[lastSeq] := declNode
+      else
+      begin
+        ASTRight[lastSeq] := AllocNode(AN_SEQ);
+        lastSeq := ASTRight[lastSeq];
+        ASTLeft[lastSeq] := declNode;
+      end;
+    end;
+    Result := seqNode;
+  end;
+end;
+
 function ParseStatementAST: Integer;
 var
   name: AnsiString;
@@ -3479,6 +3605,13 @@ var
 begin
   node := -1;
   case CurTok.Kind of
+    tkVar:
+    begin
+      if not EnableLazyVar then Error('Lazy Variable Declarations are disabled; use --lazy-var to enable');
+      Next;
+      node := ParseLazyVarDeclAST;
+    end;
+
     tkwriteln, tkwrite:
     begin
       isLn := CurTok.Kind = tkwriteln; Next;

@@ -946,6 +946,42 @@ begin
   end;
 end;
 
+function SymNeedsZeroing(i: Integer; var zeroBytes: Integer): Boolean;
+begin
+  Result := False;
+  zeroBytes := 0;
+  if Syms[i].IsArray and (Syms[i].ArrLen = -1) then
+  begin
+    zeroBytes := TARGET_PTR_SIZE;
+    Result := True;
+  end
+  else if Syms[i].TypeKind = tyAnsiString then
+  begin
+    if Syms[i].IsArray then
+      zeroBytes := Syms[i].ArrLen * TARGET_PTR_SIZE
+    else
+      zeroBytes := TARGET_PTR_SIZE;
+    Result := True;
+  end
+  else if Syms[i].TypeKind = tyVariant then
+  begin
+    zeroBytes := TypeSize(tyVariant);
+    Result := True;
+  end
+  else if (Syms[i].TypeKind = tyRecord) and not Syms[i].IsArray and
+          RecordHasManagedFields(Syms[i].RecName) then
+  begin
+    zeroBytes := RecSize(Syms[i].RecName);
+    Result := True;
+  end
+  else if (Syms[i].TypeKind = tyRecord) and Syms[i].IsArray and
+          RecordHasManagedFields(Syms[i].ElemRecName) then
+  begin
+    zeroBytes := Syms[i].ArrLen * RecSize(Syms[i].ElemRecName);
+    Result := True;
+  end;
+end;
+
 function TypeAlign(tk: TTypeKind): Integer;
 { Returns alignment requirement (power of 2) for type tk.
   On x86-64 all scalar types are naturally aligned. }
@@ -1071,13 +1107,35 @@ begin
   end;
 end;
 
+function IsBlockVisible(symBlockId, curBlockId: Integer): Boolean;
+var b: Integer;
+begin
+  if not EnableLazyVar then
+  begin
+    Result := True;
+    Exit;
+  end;
+  b := curBlockId;
+  while b <> -1 do
+  begin
+    if b = symBlockId then
+    begin
+      Result := True;
+      Exit;
+    end;
+    if b = 0 then Break;
+    b := BlockParent[b];
+  end;
+  Result := False;
+end;
+
 function FindSym(const name: AnsiString): Integer;
 var i: Integer; lo: AnsiString;
 begin
   lo := name;
   { Exact-case match first, innermost scope out (preserves shadowing). }
   for i := SymCount-1 downto 0 do
-    if StrEqual(Syms[i].Name, lo) then
+    if StrEqual(Syms[i].Name, lo) and IsBlockVisible(SymBlockId[i], CurBlockId) then
     begin
       if DebugTrace then writeln('FindSym: ', lo, ' -> ', i);
       Result := i;
@@ -1085,7 +1143,8 @@ begin
     end;
   { Case-insensitive fallback for case-insensitive symbols only. }
   for i := SymCount-1 downto 0 do
-    if (not SymCaseSensitive[i]) and CaseEqual(Syms[i].Name, lo) then
+    if (not SymCaseSensitive[i]) and CaseEqual(Syms[i].Name, lo) and
+       IsBlockVisible(SymBlockId[i], CurBlockId) then
     begin
       if DebugTrace then writeln('FindSym: ', lo, ' -> ', i, ' (ci)');
       Result := i;
@@ -1152,6 +1211,7 @@ begin
   Syms[SymCount].ArrLen   := 0;
   SymDynDepth[SymCount] := 0;
   SymIsHiddenArgTemp[SymCount] := False;
+  SymBlockId[SymCount] := CurBlockId;
   Syms[SymCount].ElemType := tyInteger;
   if tk = tyAnsiString then
     Syms[SymCount].ElemType := tyChar;

@@ -815,7 +815,7 @@ begin
 end;
 
 function IRLowerAST(node: Integer): Integer;
-var left, right, seq, item, value, outNode, first, last, leftAddr, argNode, argVal, intCallNode, intArgSeq, argNode2, zeroVal, pi: Integer;
+var left, right, seq, item, value, outNode, first, last, leftAddr, argNode, argVal, intCallNode, intArgSeq, argNode2, zeroVal, pi, zeroBytes: Integer;
     pairNode, condNode, specialId, classIdx, slot, cpi, pathIdx: Integer;
     isRefArg: Boolean; argTk: TTypeKind; callRetType: TTypeKind; callVal: Integer;
     startLabel, elseLabel, endLabel, startLabelNode, endLabelNode: Integer;
@@ -1120,6 +1120,19 @@ begin
           Result := IRAppend(IR_BINOP, left, right, Integer(ASTIVal[node]), 0, ASTTk[node]);
         end;
       end;
+    end;
+
+    AN_VAR_DECL:
+    begin
+      varIdx := ASTIVal[node];
+      if SymNeedsZeroing(varIdx, zeroBytes) then
+      begin
+        IRAppend(IR_ZERO_SYM, varIdx, -1, -1, 0, Ord(Syms[varIdx].TypeKind));
+      end;
+      if ASTLeft[node] <> -1 then
+        Result := IRLowerAST(ASTLeft[node])
+      else
+        Result := -1;
     end;
 
     AN_ASSIGN:

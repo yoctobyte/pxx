@@ -1782,6 +1782,25 @@ begin
           begin EmitB($48); EmitB($8B); EmitB($85); EmitI32(Syms[symIdx].Offset); end;
       end;
 
+    IR_ZERO_SYM:
+      begin
+        symIdx := IRA[node];
+        if (Syms[symIdx].Kind = skLocal) and SymNeedsZeroing(symIdx, size) then
+        begin
+          if size = TARGET_PTR_SIZE then
+          begin
+            EmitB($48); EmitB($C7); EmitB($85); EmitI32(Syms[symIdx].Offset); EmitI32(0); { mov qword [rbp+off], 0 }
+          end
+          else if size > 0 then
+          begin
+            EmitB($48); EmitB($8D); EmitB($BD); EmitI32(Syms[symIdx].Offset);  { lea rdi, [rbp+off] }
+            EmitB($48); EmitB($31); EmitB($C0);                           { xor rax, rax }
+            EmitB($48); EmitB($C7); EmitB($C1); EmitI32(size);            { mov rcx, size }
+            EmitB($F3); EmitB($AA);                                       { rep stosb }
+          end;
+        end;
+      end;
+
     IR_SLOTADDR:
       begin
         { Address of a variable's slot, unconditionally (plain lea). Unlike

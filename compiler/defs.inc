@@ -111,6 +111,7 @@ const
   AN_METHODREF    = 45; { @obj.method → TMethod; ASTIVal = method proc index, ASTLeft = object value }
   AN_CLASSREF     = 46; { class identifier used as a value (metaclass): ASTIVal = class index (ci);
                           yields the runtime address of the class's RTTI blob (PClassRTTI) }
+  AN_VAR_DECL     = 47;
 
   { Inline-asm operand kinds }
   AOP_NONE = 0;
@@ -170,6 +171,7 @@ const
   IR_SETLEN_DYN   = 48;  { IRA = target slot-address node; IRB = count; IRC = dyn depth; IRIVal = root dyn-array symbol idx }
   IR_DYNUNIQUE    = 49;  { IRA = slot-address node; IRB = dyn depth at this level; IRC = base record id; IRIVal = element size; IRTk = base TTypeKind. Read mode (not InLValueWrite): load data ptr. Write mode: clone-if-shared then load. Returns the (unique) data pointer in rax. }
   IR_SLOTADDR     = 50;  { IRA = symbol idx; always loads the ADDRESS of the variable's slot (lea), bypassing IR_LEA's dyn-array/AnsiString auto-load. Used as the IR_DYNUNIQUE base for a root dynamic array. }
+  IR_ZERO_SYM     = 51;
 
   { Variant tag (VType) values, stored in the first 8 bytes of a tyVariant slot.
     Payload (next 8 bytes) interpreted per tag. Closed scalar set; vtObject is a
@@ -479,6 +481,7 @@ var
   StrictOverload : Boolean;
   ThreadSafeMode : Boolean;
   EnableAutoVar : Boolean;
+  EnableLazyVar : Boolean;
   CStyleComments : Boolean;   { CSTYLECOMMENTS directive: enable C slash-star comments }
   NestedComments : Boolean;   { NESTEDCOMMENTS directive: nest brace and paren-star comments }
   CaseSensitiveMode : Boolean; { CASESENSITIVE directive: when on, identifiers declared here match case-sensitively. Default off (standard case-insensitive Pascal). }
@@ -530,6 +533,7 @@ var
   SymUnitIdx : array[0..MAX_SYMS-1] of Integer; { Strs[] unit name, or -1 for main/local compiler-generated symbols }
   SymDynDepth : array[0..MAX_SYMS-1] of Integer; { dynamic-array nesting: 0=not dynamic, 1=array of T, 2=array of array of T, ... }
   SymIsHiddenArgTemp : array[0..MAX_SYMS-1] of Boolean; { compiler-synthesised owning local for a materialised managed-string call argument; needs nil-init before the body }
+  SymBlockId : array[0..MAX_SYMS-1] of Integer;
   SymCount  : Integer;
   FrameSize : Integer;
 
@@ -537,6 +541,9 @@ var
   ProcOverloadDirective : array[0..MAX_PROCS-1] of Boolean;
   ProcCount : Integer;
   CurProc   : Integer;   { -1 = main }
+  BlockParent: array[0..8191] of Integer;
+  BlockCount: Integer;
+  CurBlockId: Integer;
   ProcExternal : array[0..MAX_PROCS-1] of Boolean;
   ProcCaseSensitive : array[0..MAX_PROCS-1] of Boolean; { match this proc name case-sensitively (C imports, or Pascal in case-sensitive mode) }
   ProcLibrary  : array[0..MAX_PROCS-1] of Integer; { Strs[] entry for DT_NEEDED name }
