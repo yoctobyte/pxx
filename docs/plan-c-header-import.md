@@ -323,10 +323,10 @@ only one.
 
 To bring Pascal's interop on par with the wrapperless SQLite pipeline in Nil Python (`test_nilpy_sqlite_crud.npy`), we plan to implement the following dialect extensions:
 
-### 1. PChar -> String Coercion Polish (High Priority)
-Currently, assigning `PChar` directly to a Pascal `string`/`AnsiString` (e.g., `name := p;` in `test_sqlite_crud.pas`) causes a segmentation fault because the assignment codegen lacks the automatic copying of null-terminated C strings. We will implement:
-- Automatic null-terminated C-string copying on `PChar` assignment to a `string`/`AnsiString`.
-- Explicit casting support (e.g. `AnsiString(p)` or `string(p)`).
+### 1. PChar -> String Coercion Polish (Done 2026-06-05)
+Assigning `PChar` directly to a Pascal `string`/`AnsiString` (e.g., `name := p;` in `test_sqlite_crud.pas`) or casting it explicitly (e.g. `string(p)`) is now fully supported:
+- **Automatic Coercion**: Handled at the AST/IR lowering stage by wrapping the RHS in a call to `PCharToString`.
+- **Parser/Builtin integration**: The `builtin` unit is auto-included when any `uses` clause is present to guarantee `PCharToString` availability.
 
 ### 2. Auto-Typed Variables (`var a: auto;` - Deferred Type Inference)
 To eliminate verbose type declarations for C pointers/structures, we will implement statically-typed variables with deferred type inference:

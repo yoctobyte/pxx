@@ -4,7 +4,7 @@ This matrix tracks proposed dialect additions, standard extensions, and compiler
 
 | Feature | Standardization | Implementation Complexity | Priority / Use Case | Status | Description |
 |---|---|---|---|---|---|
-| **PChar $\rightarrow$ String Coercion** | **Standard** (FPC/Delphi compatible) | **Low-Medium** | **Critical** / Unblocks clean C-header use | ⬜ Planned | Auto-generate copying loops when assigning or casting `PChar` to a Pascal `string`/`AnsiString` (currently segfaults). |
+| **PChar $\rightarrow$ String Coercion** | **Standard** (FPC/Delphi compatible) | **Low-Medium** | **Critical** / Unblocks clean C-header use | ✅ Delivered | Auto-generate copying loops when assigning or casting `PChar` to a Pascal `string`/`AnsiString`. |
 | **Auto-Typed Variables (`var a: auto`)** | **Dialect** (Modern Object Pascal has inline `var`) | **Low** | **High** / Ergonomics for wrapperless C imports | ⬜ Planned | Deferred type-inference. The variable is declared as `auto` and statically locks into the type of its first RHS assignment. |
 | **Nested Subroutines** | **Standard** (Wirth Pascal core) | **High** | **Medium** / Structural modularity | ⬜ Deferred | Functions declared inside functions. Requires lexical scoping (passing a stack frame static-link pointer to inner scopes). |
 | **Out-Param Return-Lifting** | **Dialect** | **None** (Shared with Python) | **Done** | ✅ Delivered | Trailing `T**` C out-parameters are lifted to the call's return value (e.g., `db := sqlite3_open(path)`). |
