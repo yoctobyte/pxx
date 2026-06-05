@@ -11,7 +11,7 @@ begin
   var db := nil;
   var stmt := nil;
 
-  var rc := sqlite3_open(PChar('/tmp/test_sqlite_crud_lazy26.db'), @db);
+  var rc := sqlite3_open(PChar(':memory:'), @db);
   writeln('open=', rc);
 
   Exec(db, PChar('DROP TABLE IF EXISTS t;'));

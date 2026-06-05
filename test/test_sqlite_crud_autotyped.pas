@@ -25,7 +25,7 @@ end;
 begin
   Init;
 
-  rc := sqlite3_open(PChar('/tmp/test_sqlite_crud_autotyped26.db'), @db);
+  rc := sqlite3_open(PChar(':memory:'), @db);
   writeln('open=', rc);
 
   Exec(PChar('DROP TABLE IF EXISTS t;'));
