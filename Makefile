@@ -22,7 +22,8 @@ STABLE_MANAGED_DIR := $(STABLE_ROOT)/managed
 PXXFLAGS   :=
 
 .PHONY: all bootstrap bootstrap-check fpc-check test test-nilpy stabilize check-stable revert benchmark benchmark-compiler-runtime benchmark-check clean distclean symbols \
-        bootstrap-managed test-managed stabilize-managed check-stable-managed revert-managed test-nilpy-managed
+        bootstrap-managed test-managed stabilize-managed check-stable-managed revert-managed test-nilpy-managed \
+        progress-check
 
 all: $(COMPILER)
 
@@ -642,6 +643,14 @@ test: $(COMPILER) fpc-check
 	./$(COMPILER) $(PXXFLAGS) --threadsafe $(COMPILER_SRC) /tmp/pascal26-threadsafe-self
 	/tmp/pascal26-threadsafe-self $(PXXFLAGS) --threadsafe $(COMPILER_SRC) /tmp/pascal26-threadsafe-next
 	cmp /tmp/pascal26-threadsafe-self /tmp/pascal26-threadsafe-next
+	@echo "=== progress board check (non-fatal) ==="
+	@./tools/progress.sh check || echo "WARNING: progress board stale or invalid — run 'tools/progress.sh board-md' (non-fatal)"
+
+# Validate the docs/progress board: stale BOARD.md, dangling Blocked-by slugs,
+# dependency cycles, ownerless working/, commit-less done/. Fatal when run
+# directly; only advisory inside 'make test' (above).
+progress-check:
+	@./tools/progress.sh check
 
 stabilize: test
 	@echo "=== stabilize: 4-iteration fixedpoint check ==="
