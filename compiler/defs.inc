@@ -174,6 +174,7 @@ const
   IR_SLOTADDR     = 50;  { IRA = symbol idx; always loads the ADDRESS of the variable's slot (lea), bypassing IR_LEA's dyn-array/AnsiString auto-load. Used as the IR_DYNUNIQUE base for a root dynamic array. }
   IR_ZERO_SYM     = 51;
   IR_DEFAULT_MEM  = 52;  { IRA = dest addr node; IRC = managed record id or REC_NONE; IRIVal = bytes to zero }
+  IR_READ_DISCARD = 53;
 
   { Variant tag (VType) values, stored in the first 8 bytes of a tyVariant slot.
     Payload (next 8 bytes) interpreted per tag. Closed scalar set; vtObject is a

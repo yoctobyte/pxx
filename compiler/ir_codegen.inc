@@ -867,8 +867,13 @@ end;
 procedure EmitReadLine;
 { Read one line from stdin (fd 0) into BSS_LINE_BUF, byte at a time, stopping at
   '\n' or EOF; '\r' is skipped. Sets BSS_LINE_LEN, resets BSS_LINE_POS. }
-var loopStart, j1, j2: Integer;
+var loopStart, j1, j2, jSkip: Integer;
 begin
+  EmitB($48); EmitB($8B); EmitB($04); EmitB($25); EmitGlobRef(BSS_LINE_POS);   { mov rax,[pos] }
+  EmitB($48); EmitB($8B); EmitB($0C); EmitB($25); EmitGlobRef(BSS_LINE_LEN);   { mov rcx,[len] }
+  EmitB($48); EmitB($39); EmitB($C8);                                          { cmp rax,rcx }
+  EmitB($0F); EmitB($8C); jSkip := CodeLen; EmitI32(0);                         { jl skip }
+
   EmitB($48); EmitB($C7); EmitB($04); EmitB($25); EmitGlobRef(BSS_LINE_POS); EmitI32(0); { mov q[pos],0 }
   EmitB($48); EmitB($C7); EmitB($04); EmitB($25); EmitGlobRef(BSS_LINE_LEN); EmitI32(0); { mov q[len],0 }
   loopStart := CodeLen;
@@ -889,6 +894,7 @@ begin
   EmitB($0F); EmitB($8C); EmitI32(loopStart - (CodeLen + 4));                  { jl loopStart }
   Patch32(j1, CodeLen - (j1 + 4));
   Patch32(j2, CodeLen - (j2 + 4));
+  Patch32(jSkip, CodeLen - (jSkip + 4));
 end;
 
 procedure EmitReadVarParse(tk: TTypeKind);
@@ -3547,6 +3553,12 @@ begin
         EmitReadLine;
       end;
 
+    IR_READ_DISCARD:
+      begin
+        EmitB($48); EmitB($8B); EmitB($04); EmitB($25); EmitGlobRef(BSS_LINE_LEN);   { mov rax,[len] }
+        EmitB($48); EmitB($89); EmitB($04); EmitB($25); EmitGlobRef(BSS_LINE_POS);   { mov [pos],rax }
+      end;
+
     IR_READ_VAR:
       begin
         IREmitNode(IRA[node]);   { rax = target address }
@@ -4164,7 +4176,7 @@ begin
         end;
 
       IR_STORE_SYM, IR_STORE_MEM, IR_WRITE, IR_WRITELN,
-      IR_READLINE, IR_READ_VAR, IR_COPY_REC, IR_COPY_REC_MANAGED, IR_SET_COPY, IR_VAR_STORE,
+      IR_READLINE, IR_READ_VAR, IR_READ_DISCARD, IR_COPY_REC, IR_COPY_REC_MANAGED, IR_SET_COPY, IR_VAR_STORE,
       IR_SETLEN_DYN, IR_DEFAULT_MEM,
       IR_EXC_LEAVE, IR_RAISE, IR_EXC_STORE, IR_EXC_CLEAR, IR_TERMINATE,
       IR_ASM:

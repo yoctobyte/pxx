@@ -54,6 +54,7 @@ begin
     IR_SLOTADDR: Result := 'slotaddr';
     IR_ZERO_SYM: Result := 'zero_sym';
     IR_DEFAULT_MEM: Result := 'default_mem';
+    IR_READ_DISCARD: Result := 'read_discard';
     IR_BLOCK: Result := 'block';
     IR_UNSUPPORTED: Result := 'unsupported';
     IR_IF: Result := 'if';
@@ -208,6 +209,9 @@ begin
 
       IR_DEFAULT_MEM:
         IRRequireNode(IRA[i], 'default_mem dest');
+
+      IR_READ_DISCARD:
+        begin end;
 
       IR_DYNDATA:
         if (IRA[i] < 0) or (IRA[i] >= SymCount) then
@@ -1970,6 +1974,11 @@ begin
                             Ord(IntToTypeKind(ASTTk[ASTLeft[item]])));
         last := outNode;
         item := ASTRight[item];
+      end;
+      if ASTKind[node] = AN_READLN then
+      begin
+        outNode := IRAppend(IR_READ_DISCARD, -1, -1, -1, 0, 0);
+        last := outNode;
       end;
       Result := IRAppend(IR_BLOCK, first, last, -1, 0, 0);
     end;

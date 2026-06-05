@@ -435,7 +435,7 @@ test: $(COMPILER) fpc-check
 	./$(COMPILER) test/test_record_multifield.pas /tmp/test_record_multifield26
 	test "$$(/tmp/test_record_multifield26)" = "$$(printf '11 22\n0 1 2\n0 10 20')"
 	./$(COMPILER) test/test_readln.pas /tmp/test_readln26
-	test "$$(printf '42\n10 20\nhello world\nQ\nSKIP\n-5\n' | /tmp/test_readln26)" = "$$(printf -- '-5\n30\nhello world\nQ')"
+	test "$$(printf '100 200 300\n42\n10 20\nhello world\nQ\nSKIP\n-5\n' | /tmp/test_readln26)" = "$$(printf -- '100\n200\n300\n-5\n30\nhello world\nQ')"
 	./$(COMPILER) test/test_record_copy.pas /tmp/test_record_copy26
 	test "$$(/tmp/test_record_copy26)" = "$$(printf '1 2 3 4\n20 21 22 23')"
 	./$(COMPILER) test/test_static_methods.pas /tmp/test_static_methods26
