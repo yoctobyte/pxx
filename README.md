@@ -124,6 +124,19 @@ Design decisions, dialect proposals, and bootstrap history live in
 The project vision — multi-language compiler, design constraints, language
 priority list — is in [docs/philosophy.md](docs/philosophy.md).
 
+## Repository Layout
+
+- `agents/` — shared AI-agent instructions and the generated code map
+  (`agents/codemap/symbols.md`).
+- `benchmarks/` — dated benchmark snapshots.
+- `compiler/` — compiler source, runtime support units, and the checked-in
+  self-hosted seed executable.
+- `docs/` — public docs, current project state, plans, and historic handovers.
+- `lib/` — Pascal library units used by tests and demos.
+- `stable/` — stable seed/recovery material.
+- `test/` — regression tests, fixtures, and manual harnesses.
+- `tools/` — repository maintenance helpers.
+
 ## License And Use Notice
 
 No license has been selected or granted yet. This repository is public so the
@@ -148,5 +161,3 @@ it existed, or without everyone who kept building from there.
 
 The full lineage — Pascal, C, Ada, BASIC, GW-BASIC, FPC, and everyone else —
 is in [docs/lineage.md](docs/lineage.md).
-
-Agent instructions live in [agents/](agents/).
