@@ -4,11 +4,19 @@ PXX compiles a subset of Object Pascal. For language reference use the
 [FPC docs](https://www.freepascal.org/docs.html); this page lists the major
 features PXX supports and the extras/switches specific to PXX.
 
+A lot of what PXX does is "just" Object Pascal that behaves the way Free Pascal
+would — and matching FPC is itself a high bar, so it is worth stating plainly
+what already works alongside the PXX-specific extras.
+
 ## Supported language surface
 
 - Programs and units, qualified `UnitName.Symbol` lookup.
-- Integer, Boolean, `Char`, string, `Single`/`Double`/`Real`/`Extended`,
-  enums, sets, arrays, records, typed pointers.
+- Integer, Boolean, `Char`, `Single`/`Double`/`Real`/`Extended`, enums, sets,
+  arrays, records, typed pointers.
+- `AnsiString`: always usable inline; opt-in heap-backed refcounted mode under
+  `{$define PXX_MANAGED_STRING}` (see [Not Stable](not-stable.md)).
+- Dynamic arrays (`array of T`) with `SetLength`/`Length`, copy-on-write, and
+  scope-exit cleanup — as locals, and as record/class fields.
 - `if`, `case`, `while`, `for`, `repeat`, `break`, `continue`.
 - Procedures, functions, `var`/`const` params, overloads.
 - Classes: fields, methods, single inheritance, virtual/override (VMT),
@@ -16,10 +24,24 @@ features PXX supports and the extras/switches specific to PXX.
 - Generics via explicit named specialization (see below).
 - Operator overloading for class/record operands.
 - Exceptions: `try/except`, `try/finally`, `raise`, typed `on E: T do`, re-raise.
-- Published RTTI and `.lfm` component streaming (GTK3 GUI).
-- C interop: `external` shared-library binding and a C header/source frontend.
-- Heap: `GetMem`/`FreeMem`, `New`/`Dispose`, `ReallocMem`.
-- Frontends: Pascal, a C subset, and early BASIC / Nil Python.
+- Published RTTI and `.lfm` (Lazarus form) streaming into a component tree;
+  a stock GTK3 helloworld compiles unmodified — see [`developer/gui.md`](developer/gui.md).
+
+## Frontends and interop
+
+One IR and backend, several source languages:
+
+- **Pascal** — the primary, broadest frontend.
+- **Nil Python (`.npy`)** — a Python-shaped static dialect compiled to native
+  code (no interpreter).
+- **C subset** — local `.c` files compiled into the same output.
+- **BASIC** — early/experimental.
+
+C libraries can be used two ways: direct `external` binding to a shared library,
+or importing supported C headers so declarations come from the header instead of
+hand-written `external` lines. Nil Python can drive a C library (e.g. `sqlite3`)
+directly — see [`developer/c-interop.md`](developer/c-interop.md) and
+[`developer/wrapper-free-c-from-nil-python.md`](developer/wrapper-free-c-from-nil-python.md).
 
 ## Type inference and inline `var` (PXX extras)
 
@@ -38,6 +60,58 @@ begin
   for i := 1 to 10 do ...
 end;
 ```
+
+## Where we're headed (not all of this works yet)
+
+This is the kind of program PXX is aiming at — a single source blending a
+generic library list, an overloaded operator, a managed dynamic array, and
+auto-typed inline variables:
+
+```pascal
+program showcase;
+
+uses collections;
+
+type
+  TVec = record
+    X, Y: Integer;
+  end;
+  TIntList = specialize TList<Integer>;
+
+operator + (a, b: TVec): TVec;
+begin
+  Result.X := a.X + b.X;
+  Result.Y := a.Y + b.Y;
+end;
+
+var
+  list: TIntList;
+  i: Integer;
+begin
+  list := TIntList.Create;
+  for i := 1 to 5 do
+    list.Add(i * i);
+
+  var total := 0;                  { auto-typed, declared inline }
+  for i := 0 to list.Count - 1 do
+    total := total + list.Get(i);
+  writeln('sum of squares: ', total);
+
+  var a: TVec; var b: TVec;
+  a.X := 1; a.Y := 2;
+  b.X := 3; b.Y := 4;
+  var c := a + b;                  { overloaded operator, inferred type }
+  writeln('vector sum: ', c.X, ',', c.Y);
+end.
+```
+
+**Honesty note:** this does not fully work today. The generic list and the
+inline/auto-typed integers compile and run (`sum of squares: 55`), but
+assigning an overloaded-operator result into an *inferred* variable
+(`var c := a + b`) currently miscompiles — the second field is lost, so the
+program prints `vector sum: 4,0` instead of `4,6`. Treat the blend above as the
+target, not a promise. Use explicitly typed variables for overloaded-operator
+results until this is fixed.
 
 ## Compiler identity
 
