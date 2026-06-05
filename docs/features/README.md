@@ -14,9 +14,17 @@ between folders is the only state change.
 | `crashes/` | Implemented but currently miscompiles/crashes; link the repro or `../bugs/` file. |
 | `rejected/` | Decided against (for now). Say why; a `proposed/` idea can also go here. |
 | `completed/` | Done and covered by a test. Note the commit and the regression test. |
+| `triage/` | Escape hatch: unknown status, check-later, needs-a-human/user decision, idk. Park here, revisit. |
 
 Normal flow: `proposed/` → `working/` → `completed/`. A feature may instead land
-in `incomplete/` or `crashes/` (shipped but not done), or `rejected/`.
+in `incomplete/` or `crashes/` (shipped but not done), `rejected/`, or `triage/`.
+
+The point is to keep both a **record** (the file and its git history) and a
+**state** (which folder it's in). Duplicate or stale entries may exist — that's
+fine; prefer parking to losing information. Re-organize or simplify the folders
+later if they stop fitting. This is an agentic system: there is no separate
+index — agents keep written status in the usual docs (`../project-state.md`,
+`../todo.md`) as they already do.
 
 ## File convention
 

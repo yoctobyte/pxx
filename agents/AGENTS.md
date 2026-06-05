@@ -48,6 +48,10 @@ Read once at session start. Keep edits here terse — this loads every session.
 - Features: `proposed/` → `working/` → `completed/`, plus `incomplete/`,
   `crashes/`, `rejected/`. Slug-named (no date); on completion add `## Done`
   (commit + test).
+- Both have a `triage/` escape hatch: unknown / check-later / needs-user / idk —
+  park there rather than lose the item. Keep the **record** (file + git history)
+  and the **state** (folder); duplicate/stale entries are tolerated. No separate
+  index — written status stays in `docs/project-state.md` / `docs/todo.md`.
 - Specs: `docs/bugs/README.md`, `docs/features/README.md`.
 
 ## Landmines (cost real time)

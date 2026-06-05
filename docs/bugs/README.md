@@ -11,9 +11,17 @@ the status** — moving a file between folders is the only state change.
 | `working/` | Someone is actively fixing it. |
 | `fixed/` | Resolved. Keep the file as a record; note the fix and any regression test. |
 | `unfixed/` | Parked: wontfix, deferred, blocked, or can't-reproduce. Say why. |
+| `triage/` | Escape hatch: unknown status, check-later, needs-a-human/user decision, idk. Park here, revisit. |
 
 Normal flow: `discovered/` → `working/` → `fixed/`. A bug may instead land in
-`unfixed/` from anywhere.
+`unfixed/` or `triage/` from anywhere.
+
+The point is to keep both a **record** (the file and its git history) and a
+**state** (which folder it's in). Duplicate or stale entries may exist — that's
+fine; prefer parking to losing information. Re-organize or simplify the folders
+later if they stop fitting. This is an agentic system: there is no separate
+index — agents keep written status in the usual docs (`../project-state.md`,
+`../todo.md`) as they already do.
 
 ## File convention
 
