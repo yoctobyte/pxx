@@ -16,8 +16,9 @@ VERIFY_COMPILER := /tmp/pascal26-verify
 BUILD_COMPILER_MANAGED  := /tmp/pascal26-managed-build
 VERIFY_COMPILER_MANAGED := /tmp/pascal26-managed-verify
 
-STABLE_DIR := stable
-STABLE_COMPILER_MANAGED := $(STABLE_DIR)/pascal26-stable-managed
+STABLE_ROOT := stable_linux_amd64
+STABLE_DEFAULT_DIR := $(STABLE_ROOT)/default
+STABLE_MANAGED_DIR := $(STABLE_ROOT)/managed
 PXXFLAGS   :=
 
 .PHONY: all bootstrap bootstrap-check fpc-check test test-nilpy stabilize check-stable revert benchmark benchmark-compiler-runtime benchmark-check clean distclean symbols \
@@ -649,18 +650,18 @@ stabilize: test
 	/tmp/pascal26-s4 $(PXXFLAGS) $(COMPILER_SRC) /tmp/pascal26-s5
 	cmp /tmp/pascal26-next /tmp/pascal26-s5
 	@echo "=== recording stable binary ==="
-	@mkdir -p $(STABLE_DIR)
-	@NV=$$(( $$(cat $(STABLE_DIR)/VERSION) + 1 )); \
-	 echo $$NV > $(STABLE_DIR)/VERSION; \
-	 cp /tmp/pascal26-s5 $(STABLE_DIR)/pascal26-v$$NV; \
-	 cp /tmp/pascal26-s5 $(STABLE_DIR)/pascal26-stable; \
-	 SHA=$$(sha256sum $(STABLE_DIR)/pascal26-stable | awk '{print $$1}'); \
-	 echo "$$SHA  pascal26-stable" > $(STABLE_DIR)/last.sha256; \
+	@mkdir -p $(STABLE_DEFAULT_DIR)
+	@NV=$$(( $$(cat $(STABLE_DEFAULT_DIR)/VERSION 2>/dev/null || echo 0) + 1 )); \
+	 echo $$NV > $(STABLE_DEFAULT_DIR)/VERSION; \
+	 cp /tmp/pascal26-s5 $(STABLE_DEFAULT_DIR)/v$$NV; \
+	 ln -sfn v$$NV $(STABLE_DEFAULT_DIR)/latest; \
+	 SHA=$$(sha256sum $(STABLE_DEFAULT_DIR)/latest | awk '{print $$1}'); \
+	 echo "$$SHA  latest" > $(STABLE_DEFAULT_DIR)/last.sha256; \
 	 printf '%s  v%s  %s  %s  %s\n' \
 	   "$$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$$NV" "$$SHA" \
 	   "$$(git log -1 --format='%H')" \
 	   "$$(git log -1 --format='%s')" \
-	   >> $(STABLE_DIR)/history.log; \
+	   >> $(STABLE_DEFAULT_DIR)/history.log; \
 	 echo "STABLE v$$NV OK: $$SHA"
 
 stabilize-managed: COMPILER := $(COMPILER_MANAGED)
@@ -672,53 +673,53 @@ stabilize-managed: test-managed
 	/tmp/pascal26-s4 $(PXXFLAGS) $(COMPILER_SRC) /tmp/pascal26-s5
 	cmp /tmp/pascal26-next /tmp/pascal26-s5
 	@echo "=== recording stable managed binary ==="
-	@mkdir -p $(STABLE_DIR)
-	@NV=$$(( $$(cat $(STABLE_DIR)/VERSION-managed 2>/dev/null || echo 0) + 1 )); \
-	 echo $$NV > $(STABLE_DIR)/VERSION-managed; \
-	 cp /tmp/pascal26-s5 $(STABLE_DIR)/pascal26-managed-v$$NV; \
-	 cp /tmp/pascal26-s5 $(STABLE_DIR)/pascal26-stable-managed; \
-	 SHA=$$(sha256sum $(STABLE_DIR)/pascal26-stable-managed | awk '{print $$1}'); \
-	 echo "$$SHA  pascal26-stable-managed" > $(STABLE_DIR)/last-managed.sha256; \
+	@mkdir -p $(STABLE_MANAGED_DIR)
+	@NV=$$(( $$(cat $(STABLE_MANAGED_DIR)/VERSION 2>/dev/null || echo 0) + 1 )); \
+	 echo $$NV > $(STABLE_MANAGED_DIR)/VERSION; \
+	 cp /tmp/pascal26-s5 $(STABLE_MANAGED_DIR)/v$$NV; \
+	 ln -sfn v$$NV $(STABLE_MANAGED_DIR)/latest; \
+	 SHA=$$(sha256sum $(STABLE_MANAGED_DIR)/latest | awk '{print $$1}'); \
+	 echo "$$SHA  latest" > $(STABLE_MANAGED_DIR)/last.sha256; \
 	 printf '%s  v%s  %s  %s  %s\n' \
 	   "$$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$$NV" "$$SHA" \
 	   "$$(git log -1 --format='%H')" \
 	   "$$(git log -1 --format='%s')" \
-	   >> $(STABLE_DIR)/history-managed.log; \
+	   >> $(STABLE_MANAGED_DIR)/history.log; \
 	 echo "STABLE MANAGED v$$NV OK: $$SHA"
 
 check-stable:
-	@test -f $(STABLE_DIR)/pascal26-stable || \
+	@test -e $(STABLE_DEFAULT_DIR)/latest || \
 	  (echo "No stable binary. Run: make stabilize"; exit 1)
-	@(cd $(STABLE_DIR) && sha256sum -c last.sha256) && \
-	  echo "Stable v$$(cat $(STABLE_DIR)/VERSION) OK: $$(cat $(STABLE_DIR)/last.sha256)" || \
+	@(cd $(STABLE_DEFAULT_DIR) && sha256sum -c last.sha256) && \
+	  echo "Stable v$$(cat $(STABLE_DEFAULT_DIR)/VERSION) OK: $$(cat $(STABLE_DEFAULT_DIR)/last.sha256)" || \
 	  (echo "MISMATCH: stable binary does not match last.sha256"; exit 1)
 
 check-stable-managed:
-	@test -f $(STABLE_DIR)/pascal26-stable-managed || \
+	@test -e $(STABLE_MANAGED_DIR)/latest || \
 	  (echo "No stable managed binary. Run: make stabilize-managed"; exit 1)
-	@(cd $(STABLE_DIR) && sha256sum -c last-managed.sha256) && \
-	  echo "Stable managed v$$(cat $(STABLE_DIR)/VERSION-managed) OK: $$(cat $(STABLE_DIR)/last-managed.sha256)" || \
-	  (echo "MISMATCH: stable managed binary does not match last-managed.sha256"; exit 1)
+	@(cd $(STABLE_MANAGED_DIR) && sha256sum -c last.sha256) && \
+	  echo "Stable managed v$$(cat $(STABLE_MANAGED_DIR)/VERSION) OK: $$(cat $(STABLE_MANAGED_DIR)/last.sha256)" || \
+	  (echo "MISMATCH: stable managed binary does not match last.sha256"; exit 1)
 
 revert:
-	@V=$$(cat $(STABLE_DIR)/VERSION); \
+	@V=$$(cat $(STABLE_DEFAULT_DIR)/VERSION); \
 	 TV=$${VERSION:-$$((V-1))}; \
 	 test "$$TV" -ge 1 2>/dev/null || (echo "Usage: make revert VERSION=N"; exit 1); \
 	 test "$$TV" -le "$$V" || (echo "v$$TV does not exist (current is v$$V)"; exit 1); \
-	 test -f $(STABLE_DIR)/pascal26-v$$TV || \
-	   (echo "Binary stable/pascal26-v$$TV missing — may need to rebuild from that commit"; exit 1); \
-	 cp $(STABLE_DIR)/pascal26-v$$TV $(COMPILER); \
+	 test -f $(STABLE_DEFAULT_DIR)/v$$TV || \
+	   (echo "Binary $(STABLE_DEFAULT_DIR)/v$$TV missing — may need to rebuild from that commit"; exit 1); \
+	 cp $(STABLE_DEFAULT_DIR)/v$$TV $(COMPILER); \
 	 echo "Reverted $(COMPILER) to stable v$$TV (was v$$V)"; \
 	 echo "Run 'make test' to verify, or 'make stabilize' to record as new stable."
 
 revert-managed:
-	@V=$$(cat $(STABLE_DIR)/VERSION-managed); \
+	@V=$$(cat $(STABLE_MANAGED_DIR)/VERSION); \
 	 TV=$${VERSION:-$$((V-1))}; \
 	 test "$$TV" -ge 1 2>/dev/null || (echo "Usage: make revert-managed VERSION=N"; exit 1); \
 	 test "$$TV" -le "$$V" || (echo "v$$TV does not exist (current is v$$V)"; exit 1); \
-	 test -f $(STABLE_DIR)/pascal26-managed-v$$TV || \
-	   (echo "Binary stable/pascal26-managed-v$$TV missing — may need to rebuild from that commit"; exit 1); \
-	 cp $(STABLE_DIR)/pascal26-managed-v$$TV $(COMPILER_MANAGED); \
+	 test -f $(STABLE_MANAGED_DIR)/v$$TV || \
+	   (echo "Binary $(STABLE_MANAGED_DIR)/v$$TV missing — may need to rebuild from that commit"; exit 1); \
+	 cp $(STABLE_MANAGED_DIR)/v$$TV $(COMPILER_MANAGED); \
 	 echo "Reverted $(COMPILER_MANAGED) to stable managed v$$TV (was v$$V)"; \
 	 echo "Run 'make test-managed' to verify, or 'make stabilize-managed' to record as new stable."
 

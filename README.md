@@ -84,6 +84,22 @@ make fpc-check
 Both paths require byte-identical fixedpoint before replacing
 `compiler/pascal26`.
 
+### Optional PATH Symlink
+
+For contributor builds, point `pxx` at the mutable self-hosted seed:
+
+```sh
+mkdir -p "$HOME/.local/bin"
+ln -sfn "$PWD/compiler/pascal26" "$HOME/.local/bin/pxx"
+```
+
+For a stable/recovery binary, point it at the recorded latest stable build:
+
+```sh
+mkdir -p "$HOME/.local/bin"
+ln -sfn "$PWD/stable_linux_amd64/default/latest" "$HOME/.local/bin/pxx"
+```
+
 ## Debug Tracing
 
 ```sh
@@ -116,7 +132,8 @@ priority list — is in [docs/philosophy.md](docs/philosophy.md).
   self-hosted seed executable.
 - `docs/` — public docs, current project state, plans, and historic handovers.
 - `lib/` — Pascal library units used by tests and demos.
-- `stable/` — stable seed/recovery material.
+- `stable_linux_amd64/` — Linux x86-64 stable/recovery binaries, split into
+  `default/` and `managed/` channels with `latest` symlinks.
 - `test/` — regression tests, fixtures, and manual harnesses.
 - `tools/` — repository maintenance helpers.
 

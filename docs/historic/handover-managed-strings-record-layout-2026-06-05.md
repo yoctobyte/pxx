@@ -81,7 +81,7 @@ The normal frozen gate is also clean after this fix:
 All remaining correctness blockers and build gate tasks have been completed:
 1. **Wildcard Resource Naming Fix**: Resolved the bug where `Length(ResPendName[i])` and char indexing on array elements (base `IR_INDEX` nodes) returned garbage/incorrect lengths because the compiler missed dereferencing `IR_INDEX` nodes in managed `tkLength` and COW codegen.
 2. **Automated Managed Gate**: Added `make bootstrap-managed` and `make test-managed` as first-class Makefile targets.
-3. **Stabilized Managed Target**: Added `make stabilize-managed` to lock in the stable managed binary (`stable/pascal26-stable-managed`). Verified that both normal and managed bootstrap/test suites compile successfully to byte-identical fixedpoint and are fully green.
+3. **Stabilized Managed Target**: Added `make stabilize-managed` to lock in the stable managed binary (now `stable_linux_amd64/managed/latest`). Verified that both normal and managed bootstrap/test suites compile successfully to byte-identical fixedpoint and are fully green.
 
 ## F2 record-layout fix: delivered summary
 
