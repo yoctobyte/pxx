@@ -97,10 +97,9 @@ ownership discipline is relevant whenever this project discusses managed
 values, borrowing, and embedded targets.
 
 The **GNU**, **GCC**, **LLVM**, **Linux**, and broader open-source communities
-provide the ecosystem in which this project can exist: tools, documentation,
-ABIs, reference implementations, and decades of accumulated practice.
+provide tools, documentation, ABIs, reference implementations, and decades of
+accumulated practice.
 
-This project is built on all of that work. The relevant point is not novelty,
-but continuity: small compilers, Pascal, native code, C interop, bootstrap
-discipline, and public documentation are all inherited practices. PXX is one
-more attempt to learn from them and carry a useful subset forward.
+The Pascal tradition is part of that larger history: small compilers, readable
+source, strong typing, native code, practical tooling, and careful bootstrap
+discipline. That context is the reason these acknowledgements belong here.
