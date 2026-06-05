@@ -119,5 +119,4 @@ See [LICENSE.md](LICENSE.md) for the full notice.
 ## Acknowledgements
 
 PXX depends on [Free Pascal](https://www.freepascal.org/) for bootstrap and on
-the Lazarus/FPC ecosystem as a compatibility reference. The broader lineage is
-recorded in [docs/lineage.md](docs/lineage.md).
+the Lazarus/FPC ecosystem as a compatibility reference.

@@ -46,7 +46,6 @@ Architecture and current state:
 
 Additional project material:
 
-- [Lineage and Acknowledgements](lineage.md) - the people and languages this project is built on.
 - [C Interoperability](c-interop.md) - detail on Pascal-to-C header imports and supported C preprocessing.
 - [Developer Notes](developer-notes.md) - rough project-shape notes and informal positioning.
 
