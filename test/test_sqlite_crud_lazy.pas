@@ -7,11 +7,12 @@ begin
   if exec_rc <> 0 then writeln('exec failed rc=', exec_rc);
 end;
 
+procedure RunTest(DbPath: PChar);
 begin
   var db := nil;
   var stmt := nil;
 
-  var rc := sqlite3_open(PChar(':memory:'), @db);
+  var rc := sqlite3_open(DbPath, @db);
   writeln('open=', rc);
 
   Exec(db, PChar('DROP TABLE IF EXISTS t;'));
@@ -35,4 +36,11 @@ begin
   writeln('finalize=', rc);
   rc := sqlite3_close(db);
   writeln('close=', rc);
+end;
+
+begin
+  writeln('--- File Database ---');
+  RunTest(PChar('/tmp/test_sqlite_crud_lazy26.db'));
+  writeln('--- In-Memory Database ---');
+  RunTest(PChar(':memory:'));
 end.
