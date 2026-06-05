@@ -61,11 +61,11 @@ begin
 end;
 ```
 
-## Where we're headed (not all of this works yet)
+## A blend of features in one program
 
-This is the kind of program PXX is aiming at — a single source blending a
-generic library list, an overloaded operator, a managed dynamic array, and
-auto-typed inline variables:
+A single source blending a generic library list, an overloaded operator, a
+managed dynamic array, and auto-typed inline variables — this compiles and runs
+today:
 
 ```pascal
 program showcase;
@@ -105,13 +105,10 @@ begin
 end.
 ```
 
-**Honesty note:** this does not fully work today. The generic list and the
-inline/auto-typed integers compile and run (`sum of squares: 55`), but
-assigning an overloaded-operator result into an *inferred* variable
-(`var c := a + b`) currently miscompiles — the second field is lost, so the
-program prints `vector sum: 4,0` instead of `4,6`. Treat the blend above as the
-target, not a promise. Use explicitly typed variables for overloaded-operator
-results until this is fixed.
+Output: `sum of squares: 55` then `vector sum: 4,6`. (Record-valued operator
+results into explicit and inferred targets were fixed 2026-06-06; the operands
+here are 8-byte records — by-value record params larger than a machine word are
+still truncated, so pass big records as `const`.)
 
 ## Compiler identity
 

@@ -1,9 +1,20 @@
 # Latent: whole-record array-element copy in main-program body emits store no-ops
 
 - **Type:** bug
-- **Status:** backlog
+- **Status:** blocked (cannot reproduce)
 - **Owner:** —
 - **Opened:** 2026-06-06 (from todo.md §2 Phase 5 note)
+
+## Update (2026-06-06)
+
+Could **not** reproduce with a direct `arr[i] := someRecord` in the main-program
+body (3-field record): prints correctly. Likely already fixed by the
+record-copy>8 work (`IR_COPY_REC`), or it needs the exact historical trigger
+(the `__rttireg` sentinel-drop `Fixups[]` shift). Also confirmed it is **not**
+the same family as the operator-result bug (that was operator dispatch + binop
+typing, commit 2cf92fb). Parking in `blocked/` until someone produces a live
+repro; the worked-around path (`test/gui/repro_multiunit_rtti_segfault.pas`)
+still passes.
 
 ## Symptom
 
