@@ -4,7 +4,7 @@ Shared instructions for any AI agent (Claude, Codex, agy, …) working this repo
 Read once at session start. Keep edits here terse — this loads every session.
 
 ## Navigation
-- **Read `codemap/symbols.md` before grepping the source.** It's a per-file index of every
+- **Read `agents/codemap/symbols.md` before grepping the source.** It's a per-file index of every
   constant, type (with fields), global, and routine signature (with the
   doc-comment above each) with line numbers (the `.inc` files are huge).
   Regenerate after code changes: `make symbols` (`tools/gen_symbols.py`, stdlib

@@ -29,7 +29,7 @@ User-facing documents:
 
 Navigation:
 
-- [Code Map (`codemap/symbols.md`)](../codemap/symbols.md) - concise per-file index of constants, types (with fields), globals, and routine signatures (with the doc-comment above each), all with line numbers. Regenerate with `make symbols` (`tools/gen_symbols.py`, stdlib only). Read this before grepping the large `.inc` files.
+- [Code Map (`agents/codemap/symbols.md`)](../agents/codemap/symbols.md) - concise per-file index of constants, types (with fields), globals, and routine signatures (with the doc-comment above each), all with line numbers. Regenerate with `make symbols` (`tools/gen_symbols.py`, stdlib only). Read this before grepping the large `.inc` files.
 
 Architecture and current state:
 

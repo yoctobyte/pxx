@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate codemap/symbols.md — a concise "helicopter view" of the compiler
+"""Generate agents/codemap/symbols.md — a concise "helicopter view" of the compiler
 source so a human or agent can navigate by reading one file instead of grepping
 the large .inc files.
 
@@ -24,7 +24,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 os.chdir(ROOT)
 
 FILES = sorted(glob.glob("compiler/*.inc")) + sorted(glob.glob("compiler/*.pas"))
-OUT = "codemap/symbols.md"
+OUT = "agents/codemap/symbols.md"
 
 ROUTINE_RE = re.compile(r"^\s*(function|procedure)\s+([A-Za-z_][\w.]*)", re.I)
 SECTION_RE = re.compile(r"^(const|type|var|begin|implementation|interface|asm)\b", re.I)
@@ -162,7 +162,7 @@ def scan(path):
 
 
 def main():
-    os.makedirs("codemap", exist_ok=True)
+    os.makedirs(os.path.dirname(OUT), exist_ok=True)
     stamp = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%MZ")
     srclines = sum(len(open(f, errors="replace").read().split("\n")) for f in FILES)
     nroutines = 0

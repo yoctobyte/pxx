@@ -48,7 +48,7 @@ Case behavior is per origin:
 ## Latest Benchmark Snapshot
 
 The post-gate 2026-06-02 `make benchmark` run is recorded in
-[`bench/2026-06-02-runtime-gate.md`](../bench/2026-06-02-runtime-gate.md). On
+[`benchmarks/2026-06-02-runtime-gate.md`](../benchmarks/2026-06-02-runtime-gate.md). On
 the recorded host, the self-hosted compiler remains 1.12x faster than FPC when
 compiling its expanded source tree and 18.80x faster for a batch of twenty
 Pascal hello-world compiles. The directly emitted static hello-world ELF is

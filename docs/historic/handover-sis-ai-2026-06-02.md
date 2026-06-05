@@ -40,7 +40,7 @@ make benchmark
 git diff --check
 ```
 
-Post-gate benchmark: [`bench/2026-06-02-runtime-gate.md`](../../bench/2026-06-02-runtime-gate.md).
+Post-gate benchmark: [`benchmarks/2026-06-02-runtime-gate.md`](../../benchmarks/2026-06-02-runtime-gate.md).
 
 ## Immediate Next Work
 
