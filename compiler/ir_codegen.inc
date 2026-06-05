@@ -1829,12 +1829,11 @@ begin
              (Syms[symIdx].TypeKind = tyAnsiString) then
             isAnsiStr := True;
         end
-        else if (IRKind[baseAddr] = IR_FIELD) and (IRTk[baseAddr] = Ord(tyAnsiString))
-                and (elemSize = 1) then
+        else if ((IRKind[baseAddr] = IR_FIELD) or (IRKind[baseAddr] = IR_INDEX)) and
+                (IRTk[baseAddr] = Ord(tyAnsiString)) and (elemSize = 1) then
         begin
-          { Char-indexing a scalar AnsiString field (s[i]) uses a 1-byte stride
-            and needs copy-on-write. An *array of AnsiString* field indexes whole
-            elements (8-byte stride); it is not a string being uniqued. }
+          { Char-indexing a scalar AnsiString field or array element (s[i]) uses
+            a 1-byte stride and needs copy-on-write. }
           isAnsiStr := True;
         end;
 
@@ -1842,11 +1841,11 @@ begin
         begin
           IREmitCodeCall(AnsiStrUniqueAddr);
         end
-        else if isAnsiStr and (IRKind[baseAddr] = IR_FIELD) then
+        else if isAnsiStr and ((IRKind[baseAddr] = IR_FIELD) or (IRKind[baseAddr] = IR_INDEX)) then
         begin
-          { IR_FIELD yields the address of the managed-string slot. Reads need
-            the heap data pointer stored in that slot; writes above deliberately
-            pass the slot address to AnsiStrUnique. }
+          { IR_FIELD/IR_INDEX yields the address of the managed-string slot. Reads
+            need the heap data pointer stored in that slot; writes above
+            deliberately pass the slot address to AnsiStrUnique. }
           EmitB($48); EmitB($8B); EmitB($00);     { mov rax,[rax] }
         end
         else if isAnsiStr and (IRKind[baseAddr] = IR_LEA) and
@@ -2971,8 +2970,8 @@ begin
                  { by-ref managed string: IR_LEA yields the forwarded slot address
                    (&handle); deref once to reach the handle before reading [-8]. }
                  begin EmitB($48); EmitB($8B); EmitB($00); end; { mov rax, [rax] }
-               if IRKind[val1Node] = IR_FIELD then
-                 { Managed string field: IR_FIELD yields the address of the
+               if (IRKind[val1Node] = IR_FIELD) or (IRKind[val1Node] = IR_INDEX) then
+                 { Managed string field or array element: yields the address of the
                    handle slot; deref once to reach the handle. }
                  begin EmitB($48); EmitB($8B); EmitB($00); end; { mov rax, [rax] }
                EmitB($48); EmitB($85); EmitB($C0);            { test rax, rax }

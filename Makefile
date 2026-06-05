@@ -7,15 +7,21 @@ BENCH_BATCH ?= 20
 BENCH_RUNTIME_RUNS ?= 30
 
 COMPILER     := compiler/pascal26
+COMPILER_MANAGED := compiler/pascal26-managed
 COMPILER_SRC := compiler/compiler.pas
 COMPILER_INC := $(wildcard compiler/*.inc)
 FPC_COMPILER := /tmp/pascal26-fpc
 BUILD_COMPILER := /tmp/pascal26-build
 VERIFY_COMPILER := /tmp/pascal26-verify
+BUILD_COMPILER_MANAGED  := /tmp/pascal26-managed-build
+VERIFY_COMPILER_MANAGED := /tmp/pascal26-managed-verify
 
 STABLE_DIR := stable
+STABLE_COMPILER_MANAGED := $(STABLE_DIR)/pascal26-stable-managed
+PXXFLAGS   :=
 
-.PHONY: all bootstrap bootstrap-check fpc-check test test-nilpy stabilize check-stable revert benchmark benchmark-compiler-runtime benchmark-check clean distclean symbols
+.PHONY: all bootstrap bootstrap-check fpc-check test test-nilpy stabilize check-stable revert benchmark benchmark-compiler-runtime benchmark-check clean distclean symbols \
+        bootstrap-managed test-managed stabilize-managed check-stable-managed revert-managed test-nilpy-managed
 
 all: $(COMPILER)
 
@@ -35,17 +41,36 @@ bootstrap: bootstrap-check
 	cmp $(BUILD_COMPILER) $(VERIFY_COMPILER)
 	mv $(BUILD_COMPILER) $(COMPILER)
 
+bootstrap-managed: bootstrap-check
+	$(FPC) $(FPCFLAGS) -o$(FPC_COMPILER) $(COMPILER_SRC)
+	$(FPC_COMPILER) -dPXX_MANAGED_STRING $(COMPILER_SRC) $(BUILD_COMPILER_MANAGED)
+	$(BUILD_COMPILER_MANAGED) -dPXX_MANAGED_STRING $(COMPILER_SRC) $(VERIFY_COMPILER_MANAGED)
+	cmp $(BUILD_COMPILER_MANAGED) $(VERIFY_COMPILER_MANAGED)
+	mv $(BUILD_COMPILER_MANAGED) $(COMPILER_MANAGED)
+
 $(COMPILER): $(COMPILER_SRC) $(COMPILER_INC)
 	@test -x $(COMPILER) || \
 	  (echo "self-hosted compiler seed missing. Run: make bootstrap"; exit 1)
-	./$(COMPILER) $(COMPILER_SRC) $(BUILD_COMPILER)
-	$(BUILD_COMPILER) $(COMPILER_SRC) $(VERIFY_COMPILER)
+	./$(COMPILER) $(PXXFLAGS) $(COMPILER_SRC) $(BUILD_COMPILER)
+	$(BUILD_COMPILER) $(PXXFLAGS) $(COMPILER_SRC) $(VERIFY_COMPILER)
 	cmp $(BUILD_COMPILER) $(VERIFY_COMPILER)
 	mv $(BUILD_COMPILER) $(COMPILER)
 
+$(COMPILER_MANAGED): $(COMPILER_SRC) $(COMPILER_INC)
+	@test -x $(COMPILER_MANAGED) || \
+	  (echo "self-hosted managed compiler seed missing. Run: make bootstrap-managed"; exit 1)
+	./$(COMPILER_MANAGED) -dPXX_MANAGED_STRING $(COMPILER_SRC) $(BUILD_COMPILER_MANAGED)
+	$(BUILD_COMPILER_MANAGED) -dPXX_MANAGED_STRING $(COMPILER_SRC) $(VERIFY_COMPILER_MANAGED)
+	cmp $(BUILD_COMPILER_MANAGED) $(VERIFY_COMPILER_MANAGED)
+	mv $(BUILD_COMPILER_MANAGED) $(COMPILER_MANAGED)
+
 fpc-check: bootstrap-check $(COMPILER)
 	$(FPC) $(FPCFLAGS) -o$(FPC_COMPILER) $(COMPILER_SRC)
-	$(FPC_COMPILER) $(COMPILER_SRC) /tmp/pascal26-from-fpc
+	@if [ "$(COMPILER)" = "compiler/pascal26-managed" ]; then \
+	  $(FPC_COMPILER) -dPXX_MANAGED_STRING $(COMPILER_SRC) /tmp/pascal26-from-fpc; \
+	else \
+	  $(FPC_COMPILER) $(COMPILER_SRC) /tmp/pascal26-from-fpc; \
+	fi
 	cmp $(COMPILER) /tmp/pascal26-from-fpc
 
 benchmark-check: bootstrap-check
@@ -125,6 +150,14 @@ test-nilpy: $(COMPILER)
 	grep -q "inconsistent dedent" /tmp/test_nilpy_inconsistent_dedent_fail.log
 	! ./$(COMPILER) test/test_nilpy_mixed_indent_fail.npy /tmp/test_nilpy_mixed_indent_fail26 > /tmp/test_nilpy_mixed_indent_fail.log 2>&1
 	grep -q "mixing tabs and spaces for indentation" /tmp/test_nilpy_mixed_indent_fail.log
+
+test-managed: COMPILER := $(COMPILER_MANAGED)
+test-managed: PXXFLAGS := -dPXX_MANAGED_STRING
+test-managed: test
+
+test-nilpy-managed: COMPILER := $(COMPILER_MANAGED)
+test-nilpy-managed: PXXFLAGS := -dPXX_MANAGED_STRING
+test-nilpy-managed: test-nilpy
 
 test: $(COMPILER) fpc-check
 	./$(COMPILER) test/test_ansistring.pas /tmp/test_ansistring26
@@ -547,7 +580,7 @@ test: $(COMPILER) fpc-check
 	./$(COMPILER) -fno-unhandled-handler test/test_exception_unhandled.pas /tmp/test_exception_silent_alias26
 	! /tmp/test_exception_silent_alias26 > /tmp/test_exception_silent_alias.out 2> /tmp/test_exception_silent_alias.log
 	test ! -s /tmp/test_exception_silent_alias.log
-	./$(COMPILER) $(COMPILER_SRC) /tmp/pascal26-self
+	./$(COMPILER) $(PXXFLAGS) $(COMPILER_SRC) /tmp/pascal26-self
 	/tmp/pascal26-self test/hello.pas /tmp/self-hello26
 	test "$$(/tmp/self-hello26)" = "Hello, World!"
 	/tmp/pascal26-self test/bootstrap_features.pas /tmp/self-bootstrap_features26
@@ -568,7 +601,7 @@ test: $(COMPILER) fpc-check
 	test "$$(/tmp/self-test_math_unit26)" = "$$(printf '42\n999\n10\n20\n256\n6\n144')"
 	/tmp/pascal26-self test/fileio.pas /tmp/self-fileio26
 	test "$$(/tmp/self-fileio26 test/hello.pas | sed -n '1,3p')" = "$$(printf 'test/hello.pas\n14\n54')"
-	/tmp/pascal26-self $(COMPILER_SRC) /tmp/pascal26-next
+	/tmp/pascal26-self $(PXXFLAGS) $(COMPILER_SRC) /tmp/pascal26-next
 	/tmp/pascal26-next test/hello.pas /tmp/next-hello26
 	test "$$(/tmp/next-hello26)" = "Hello, World!"
 	/tmp/pascal26-next test/bootstrap_features.pas /tmp/next-bootstrap_features26
@@ -589,17 +622,17 @@ test: $(COMPILER) fpc-check
 	test "$$(/tmp/next-test_math_unit26)" = "$$(printf '42\n999\n10\n20\n256\n6\n144')"
 	/tmp/pascal26-next test/fileio.pas /tmp/next-fileio26
 	test "$$(/tmp/next-fileio26 test/hello.pas | sed -n '1,3p')" = "$$(printf 'test/hello.pas\n14\n54')"
-	/tmp/pascal26-next $(COMPILER_SRC) /tmp/pascal26-fixedpoint
+	/tmp/pascal26-next $(PXXFLAGS) $(COMPILER_SRC) /tmp/pascal26-fixedpoint
 	cmp /tmp/pascal26-next /tmp/pascal26-fixedpoint
-	./$(COMPILER) --threadsafe $(COMPILER_SRC) /tmp/pascal26-threadsafe-self
-	/tmp/pascal26-threadsafe-self --threadsafe $(COMPILER_SRC) /tmp/pascal26-threadsafe-next
+	./$(COMPILER) $(PXXFLAGS) --threadsafe $(COMPILER_SRC) /tmp/pascal26-threadsafe-self
+	/tmp/pascal26-threadsafe-self $(PXXFLAGS) --threadsafe $(COMPILER_SRC) /tmp/pascal26-threadsafe-next
 	cmp /tmp/pascal26-threadsafe-self /tmp/pascal26-threadsafe-next
 
 stabilize: test
 	@echo "=== stabilize: 4-iteration fixedpoint check ==="
-	/tmp/pascal26-fixedpoint $(COMPILER_SRC) /tmp/pascal26-s4
+	/tmp/pascal26-fixedpoint $(PXXFLAGS) $(COMPILER_SRC) /tmp/pascal26-s4
 	cmp /tmp/pascal26-next /tmp/pascal26-s4
-	/tmp/pascal26-s4 $(COMPILER_SRC) /tmp/pascal26-s5
+	/tmp/pascal26-s4 $(PXXFLAGS) $(COMPILER_SRC) /tmp/pascal26-s5
 	cmp /tmp/pascal26-next /tmp/pascal26-s5
 	@echo "=== recording stable binary ==="
 	@mkdir -p $(STABLE_DIR)
@@ -616,12 +649,42 @@ stabilize: test
 	   >> $(STABLE_DIR)/history.log; \
 	 echo "STABLE v$$NV OK: $$SHA"
 
+stabilize-managed: COMPILER := $(COMPILER_MANAGED)
+stabilize-managed: PXXFLAGS := -dPXX_MANAGED_STRING
+stabilize-managed: test-managed
+	@echo "=== stabilize-managed: 4-iteration fixedpoint check ==="
+	/tmp/pascal26-fixedpoint $(PXXFLAGS) $(COMPILER_SRC) /tmp/pascal26-s4
+	cmp /tmp/pascal26-next /tmp/pascal26-s4
+	/tmp/pascal26-s4 $(PXXFLAGS) $(COMPILER_SRC) /tmp/pascal26-s5
+	cmp /tmp/pascal26-next /tmp/pascal26-s5
+	@echo "=== recording stable managed binary ==="
+	@mkdir -p $(STABLE_DIR)
+	@NV=$$(( $$(cat $(STABLE_DIR)/VERSION-managed 2>/dev/null || echo 0) + 1 )); \
+	 echo $$NV > $(STABLE_DIR)/VERSION-managed; \
+	 cp /tmp/pascal26-s5 $(STABLE_DIR)/pascal26-managed-v$$NV; \
+	 cp /tmp/pascal26-s5 $(STABLE_DIR)/pascal26-stable-managed; \
+	 SHA=$$(sha256sum $(STABLE_DIR)/pascal26-stable-managed | awk '{print $$1}'); \
+	 echo "$$SHA  pascal26-stable-managed" > $(STABLE_DIR)/last-managed.sha256; \
+	 printf '%s  v%s  %s  %s  %s\n' \
+	   "$$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$$NV" "$$SHA" \
+	   "$$(git log -1 --format='%H')" \
+	   "$$(git log -1 --format='%s')" \
+	   >> $(STABLE_DIR)/history-managed.log; \
+	 echo "STABLE MANAGED v$$NV OK: $$SHA"
+
 check-stable:
 	@test -f $(STABLE_DIR)/pascal26-stable || \
 	  (echo "No stable binary. Run: make stabilize"; exit 1)
 	@(cd $(STABLE_DIR) && sha256sum -c last.sha256) && \
 	  echo "Stable v$$(cat $(STABLE_DIR)/VERSION) OK: $$(cat $(STABLE_DIR)/last.sha256)" || \
 	  (echo "MISMATCH: stable binary does not match last.sha256"; exit 1)
+
+check-stable-managed:
+	@test -f $(STABLE_DIR)/pascal26-stable-managed || \
+	  (echo "No stable managed binary. Run: make stabilize-managed"; exit 1)
+	@(cd $(STABLE_DIR) && sha256sum -c last-managed.sha256) && \
+	  echo "Stable managed v$$(cat $(STABLE_DIR)/VERSION-managed) OK: $$(cat $(STABLE_DIR)/last-managed.sha256)" || \
+	  (echo "MISMATCH: stable managed binary does not match last-managed.sha256"; exit 1)
 
 revert:
 	@V=$$(cat $(STABLE_DIR)/VERSION); \
@@ -634,8 +697,21 @@ revert:
 	 echo "Reverted $(COMPILER) to stable v$$TV (was v$$V)"; \
 	 echo "Run 'make test' to verify, or 'make stabilize' to record as new stable."
 
+revert-managed:
+	@V=$$(cat $(STABLE_DIR)/VERSION-managed); \
+	 TV=$${VERSION:-$$((V-1))}; \
+	 test "$$TV" -ge 1 2>/dev/null || (echo "Usage: make revert-managed VERSION=N"; exit 1); \
+	 test "$$TV" -le "$$V" || (echo "v$$TV does not exist (current is v$$V)"; exit 1); \
+	 test -f $(STABLE_DIR)/pascal26-managed-v$$TV || \
+	   (echo "Binary stable/pascal26-managed-v$$TV missing — may need to rebuild from that commit"; exit 1); \
+	 cp $(STABLE_DIR)/pascal26-managed-v$$TV $(COMPILER_MANAGED); \
+	 echo "Reverted $(COMPILER_MANAGED) to stable managed v$$TV (was v$$V)"; \
+	 echo "Run 'make test-managed' to verify, or 'make stabilize-managed' to record as new stable."
+
 clean:
 	rm -f compiler/*.o compiler/*.ppu
+	rm -f $(COMPILER_MANAGED)
+	rm -f $(BUILD_COMPILER_MANAGED) $(VERIFY_COMPILER_MANAGED)
 
 distclean: clean
 	rm -f $(COMPILER)

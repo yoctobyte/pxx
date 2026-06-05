@@ -1209,9 +1209,21 @@ begin
   begin
     CPReadLine(src, pos, inComment, CPrepLine);
     p := 1;
-    while (p <= Length(CPrepLine)) and (CPrepLine[p] in [' ', #9]) do Inc(p);
-    if (p <= Length(CPrepLine)) and (CPrepLine[p] = '#') then
-      CPDirective(CPrepLine, p, Length(CPrepLine), depth, baseDir)
+    while p <= Length(CPrepLine) do
+    begin
+      if not (CPrepLine[p] in [' ', #9]) then Break;
+      Inc(p);
+    end;
+    if p <= Length(CPrepLine) then
+    begin
+      if CPrepLine[p] = '#' then
+        CPDirective(CPrepLine, p, Length(CPrepLine), depth, baseDir)
+      else if CPActive then
+      begin
+        CPExpandRange(CPrepLine, 1, Length(CPrepLine), 0, CPrepOut);
+        AppendChar(CPrepOut, #10);
+      end;
+    end
     else if CPActive then
     begin
       CPExpandRange(CPrepLine, 1, Length(CPrepLine), 0, CPrepOut);

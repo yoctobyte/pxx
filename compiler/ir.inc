@@ -584,8 +584,8 @@ begin
     end
     else
     begin
-      tk := tyInteger;
-      recName := REC_NONE;
+      tk := IntToTypeKind(ASTTk[baseNode]);
+      recName := ResolveNodeRec(baseNode);
     end;
 
     if isArr then
