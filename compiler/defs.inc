@@ -723,6 +723,8 @@ var
   BSS_LINE_POS    : Integer;  { parse cursor into line buffer }
   ExceptionUsed   : Boolean;
   InLValueWrite   : Boolean;
+  CAttrPacked     : Boolean;
+  CAttrAligned    : Boolean;
   ExcSetJmpAddr   : Integer;
   ExcLongJmpAddr  : Integer;
   ExcRaiseAddr    : Integer;
@@ -737,6 +739,7 @@ var
   TokCharLen : Integer;
   Tokens     : array[0..MAX_TOKENS-1] of TRawToken;
   TokPackRecords : array[0..MAX_TOKENS-1] of Integer;
+  CAttrFlags : array[0..MAX_TOKENS-1] of Byte;
   TokCount   : Integer;
   TokPos     : Integer;
   MainProgramTokCount : Integer;

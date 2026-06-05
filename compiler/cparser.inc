@@ -901,13 +901,45 @@ end;
   Plain POD (scalars, pointers, fixed arrays, typedef-named-type fields incl.
   nested-struct-by-value) returns True. }
 function CStructBodyIsSimple(startIdx: Integer): Boolean;
-var i, depth: Integer;
+var i, depth, declStart: Integer;
 begin
   Result := True;
+  
+  { Find the preceding struct/union/typedef keyword to start scanning for attributes }
+  declStart := startIdx;
+  while declStart > 0 do
+  begin
+    if Tokens[declStart].Kind = tkRecord then Break;
+    if Tokens[declStart].Kind = tkIdent then
+    begin
+      if (GetTokenStrFromRaw(Tokens[declStart].SOffset, Tokens[declStart].SLen) = 'union') or
+         (GetTokenStrFromRaw(Tokens[declStart].SOffset, Tokens[declStart].SLen) = 'typedef') then
+        Break;
+    end;
+    Dec(declStart);
+  end;
+
+  { Scan from declStart to startIdx (the opening brace) for attributes }
+  for i := declStart to startIdx - 1 do
+  begin
+    if (CAttrFlags[i] and 3) <> 0 then
+    begin
+      Result := False;
+      Exit;
+    end;
+  end;
+
   depth := 0;
   i := startIdx;
   while i < TokCount do
   begin
+    { Check if token inside the body has attribute }
+    if (CAttrFlags[i] and 3) <> 0 then
+    begin
+      Result := False;
+      Exit;
+    end;
+
     if Tokens[i].Kind = tkBegin then
     begin
       if depth >= 1 then begin Result := False; Exit; end;  { nested aggregate body }
@@ -916,7 +948,23 @@ begin
     else if Tokens[i].Kind = tkEnd then
     begin
       Dec(depth);
-      if depth <= 0 then Exit;                               { end of the outer body }
+      if depth <= 0 then
+      begin
+        { We reached the end of the body. Now scan past the body up to the terminating semicolon }
+        Inc(i);
+        while (i < TokCount) and (Tokens[i].Kind <> tkEOF) do
+        begin
+          if (CAttrFlags[i] and 3) <> 0 then
+          begin
+            Result := False;
+            Exit;
+          end;
+          if Tokens[i].Kind = tkSemicolon then
+            Break;
+          Inc(i);
+        end;
+        Exit;
+      end;
     end
     else if depth >= 1 then
     begin
