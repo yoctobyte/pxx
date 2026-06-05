@@ -103,3 +103,5 @@ accumulated practice.
 The Pascal tradition is part of that larger history: small compilers, readable
 source, strong typing, native code, practical tooling, and careful bootstrap
 discipline. That context is the reason these acknowledgements belong here.
+
+Note: this document was generated and edited by AI agents.
