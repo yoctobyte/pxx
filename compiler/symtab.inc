@@ -422,141 +422,235 @@ begin
   end;
 end;
 
-function RecSize(rec: Integer): Integer;
+const
+  BRF_SCALAR8 = 1;
+  BRF_STRING = 2;
+  BRF_RECORD_ARRAY = 3;
+  BRF_SCALAR4 = 4;
+
+function RecSize(rec: Integer): Integer; forward;
+
+function BuiltinRecFieldCount(rec: Integer): Integer;
+begin
+  Result := 0;
+  case rec of
+    REC_TTOKEN: Result := 4;
+    REC_TSTRENTRY: Result := 3;
+    REC_TFIXUP, REC_TGLOBFIX, REC_TCALLFIX, REC_TMYCLASS, REC_TMETHODFIXUP: Result := 2;
+    REC_TSYMBOL: Result := 13;
+    REC_TPARAM: Result := 5;
+    REC_TPROC: Result := 9;
+    REC_TRAWTOKEN: Result := 5;
+    REC_TTEMPLATE: Result := 4;
+    REC_TSPECIALIZATION: Result := 4;
+    REC_TGENERICFUNC: Result := 5;
+    REC_TPENDINGGFSPEC: Result := 4;
+  end;
+end;
+
+function BuiltinRecFieldName(rec, idx: Integer): AnsiString;
+begin
+  Result := '';
+  case rec of
+    REC_TTOKEN:
+      case idx of
+        0: Result := 'Kind'; 1: Result := 'SVal';
+        2: Result := 'IVal'; 3: Result := 'Line';
+      end;
+    REC_TSTRENTRY:
+      case idx of
+        0: Result := 'Text'; 1: Result := 'Offset'; 2: Result := 'Len';
+      end;
+    REC_TFIXUP:
+      case idx of 0: Result := 'CodePos'; 1: Result := 'DataOff'; end;
+    REC_TGLOBFIX:
+      case idx of 0: Result := 'CodePos'; 1: Result := 'BSSoff'; end;
+    REC_TCALLFIX:
+      case idx of 0: Result := 'CodePos'; 1: Result := 'ProcIdx'; end;
+    REC_TSYMBOL:
+      case idx of
+        0: Result := 'Name'; 1: Result := 'TypeKind';
+        2: Result := 'Kind'; 3: Result := 'Offset';
+        4: Result := 'ConstVal'; 5: Result := 'IsArray';
+        6: Result := 'ArrLen'; 7: Result := 'ElemType';
+        8: Result := 'RecName'; 9: Result := 'ElemRecName';
+        10: Result := 'IsRef'; 11: Result := 'PtrElemTk';
+        12: Result := 'PtrElemRec';
+      end;
+    REC_TPARAM:
+      case idx of
+        0: Result := 'Name'; 1: Result := 'TypeKind';
+        2: Result := 'SymIdx'; 3: Result := 'IsRef';
+        4: Result := 'IsArray';
+      end;
+    REC_TPROC:
+      case idx of
+        0: Result := 'Name'; 1: Result := 'IsFunc';
+        2: Result := 'RetType'; 3: Result := 'ParamCount';
+        4: Result := 'Params'; 5: Result := 'BodyAddr';
+        6: Result := 'FramePatch'; 7: Result := 'RetSymIdx';
+        8: Result := 'ScopeBase';
+      end;
+    REC_TRAWTOKEN:
+      case idx of
+        0: Result := 'Kind'; 1: Result := 'IVal';
+        2: Result := 'Line'; 3: Result := 'SOffset';
+        4: Result := 'SLen';
+      end;
+    REC_TMYCLASS:
+      case idx of 0: Result := 'x'; 1: Result := 'y'; end;
+    REC_TTEMPLATE:
+      case idx of
+        0: Result := 'Name'; 1: Result := 'Param';
+        2: Result := 'TokStart'; 3: Result := 'TokCount';
+      end;
+    REC_TSPECIALIZATION:
+      case idx of
+        0: Result := 'Name'; 1: Result := 'TemplateName';
+        2: Result := 'ConcreteType'; 3: Result := 'ConcreteName';
+      end;
+    REC_TGENERICFUNC:
+      case idx of
+        0: Result := 'Name'; 1: Result := 'Param';
+        2: Result := 'IsFunc'; 3: Result := 'TokStart';
+        4: Result := 'TokCount';
+      end;
+    REC_TPENDINGGFSPEC:
+      case idx of
+        0: Result := 'GenFuncIdx'; 1: Result := 'ConcreteKind';
+        2: Result := 'ConcreteName'; 3: Result := 'SpecName';
+      end;
+    REC_TMETHODFIXUP:
+      case idx of 0: Result := 'DataPos'; 1: Result := 'ProcIdx'; end;
+  end;
+end;
+
+function BuiltinRecFieldKind(rec, idx: Integer): Integer;
+begin
+  Result := BRF_SCALAR8;
+  case rec of
+    REC_TTOKEN:
+      if idx = 1 then Result := BRF_STRING;
+    REC_TSTRENTRY:
+      if idx = 0 then Result := BRF_STRING;
+    REC_TSYMBOL:
+      if idx = 0 then Result := BRF_STRING;
+    REC_TPARAM:
+      if idx = 0 then Result := BRF_STRING;
+    REC_TPROC:
+      if idx = 0 then Result := BRF_STRING
+      else if idx = 4 then Result := BRF_RECORD_ARRAY;
+    REC_TTEMPLATE:
+      if (idx = 0) or (idx = 1) then Result := BRF_STRING;
+    REC_TSPECIALIZATION:
+      if (idx = 0) or (idx = 1) or (idx = 3) then Result := BRF_STRING;
+    REC_TGENERICFUNC:
+      if (idx = 0) or (idx = 1) then Result := BRF_STRING;
+    REC_TPENDINGGFSPEC:
+      if (idx = 2) or (idx = 3) then Result := BRF_STRING;
+    REC_TMETHODFIXUP:
+      Result := BRF_SCALAR4;
+  end;
+end;
+
+function BuiltinRecFieldType(rec, idx: Integer): TTypeKind;
+begin
+  Result := tyInteger;
+  if BuiltinRecFieldKind(rec, idx) = BRF_STRING then
+  begin
+    if PasDefineExists('PXX_MANAGED_STRING') then Result := tyAnsiString
+    else Result := tyString;
+    Exit;
+  end;
+  if BuiltinRecFieldKind(rec, idx) = BRF_RECORD_ARRAY then
+  begin
+    Result := tyRecord;
+    Exit;
+  end;
+  case rec of
+    REC_TTOKEN:
+      if idx = 2 then Result := tyInt64;
+    REC_TRAWTOKEN:
+      if idx = 1 then Result := tyInt64;
+    REC_TSYMBOL:
+      if idx = 4 then Result := tyInt64
+      else if (idx = 5) or (idx = 10) then Result := tyBoolean;
+    REC_TPARAM:
+      if (idx = 3) or (idx = 4) then Result := tyBoolean;
+    REC_TPROC:
+      if idx = 1 then Result := tyBoolean;
+    REC_TGENERICFUNC:
+      if idx = 2 then Result := tyBoolean;
+  end;
+end;
+
+function BuiltinRecFieldRecId(rec, idx: Integer): Integer;
+begin
+  Result := REC_NONE;
+  if (rec = REC_TPROC) and (idx = 4) then Result := REC_TPARAM;
+end;
+
+function BuiltinRecFieldArrayCount(rec, idx: Integer): Integer;
+begin
+  Result := 0;
+  if (rec = REC_TPROC) and (idx = 4) then Result := 16;
+end;
+
+function BuiltinRecFieldSize(rec, idx: Integer): Integer;
 begin
   Result := 8;
-  if rec = REC_TTOKEN then Result := 288
-  else if rec = REC_TSTRENTRY then Result := 280
-  else if rec = REC_TFIXUP then Result := 16
-  else if rec = REC_TGLOBFIX then Result := 16
-  else if rec = REC_TCALLFIX then Result := 16
-  else if rec = REC_TSYMBOL then Result := 360
-  else if rec = REC_TPARAM then Result := 296
-  else if rec = REC_TPROC then Result := 5056
-  else if rec = REC_TRAWTOKEN then Result := 40
-  else if rec = REC_TMYCLASS then Result := 16
-  else if rec = REC_TTEMPLATE then Result := 544
-  else if rec = REC_TSPECIALIZATION then Result := 800
-  else if rec = REC_TGENERICFUNC then Result := 552
-  else if rec = REC_TPENDINGGFSPEC then Result := 544
-  else if rec = REC_TMETHODFIXUP then Result := 8
+  case BuiltinRecFieldKind(rec, idx) of
+    BRF_STRING:
+      if PasDefineExists('PXX_MANAGED_STRING') then Result := TARGET_PTR_SIZE
+      else Result := LOCAL_STR_CAP + 8;
+    BRF_RECORD_ARRAY:
+      Result := BuiltinRecFieldArrayCount(rec, idx) *
+                RecSize(BuiltinRecFieldRecId(rec, idx));
+    BRF_SCALAR4:
+      Result := 4;
+  end;
+end;
+
+function BuiltinRecFieldMatches(rec, idx: Integer; const field: AnsiString): Boolean;
+begin
+  if rec = REC_TMYCLASS then
+    Result := ((idx = 0) and ((field = 'x') or (field = 'X'))) or
+              ((idx = 1) and ((field = 'y') or (field = 'Y')))
+  else
+    Result := field = BuiltinRecFieldName(rec, idx);
+end;
+
+function RecSize(rec: Integer): Integer;
+var i, cnt: Integer;
+begin
+  Result := 8;
+  cnt := BuiltinRecFieldCount(rec);
+  if cnt > 0 then
+  begin
+    Result := 0;
+    for i := 0 to cnt - 1 do
+      Result := Result + BuiltinRecFieldSize(rec, i);
+  end
   else if rec >= REC_UCLASS_BASE then Result := UClsSize_[rec - REC_UCLASS_BASE];
 end;
 
 function RecFieldOffset(rec: Integer; const field: AnsiString): Integer;
-var fi: Integer; field2: AnsiString;
+var fi, i, cnt, off: Integer; field2: AnsiString;
 begin
   Result := 0; fi := 0; field2 := field;
-  if rec = REC_TTOKEN then
+  cnt := BuiltinRecFieldCount(rec);
+  if cnt > 0 then
   begin
-    if field = 'Kind' then Result := 0
-    else if field = 'SVal' then Result := 8
-    else if field = 'IVal' then Result := 272
-    else if field = 'Line' then Result := 280;
-  end
-  else if rec = REC_TSTRENTRY then
-  begin
-    if field = 'Text' then Result := 0
-    else if field = 'Offset' then Result := 264
-    else if field = 'Len' then Result := 272;
-  end
-  else if rec = REC_TFIXUP then
-  begin
-    if field = 'CodePos' then Result := 0
-    else if field = 'DataOff' then Result := 8;
-  end
-  else if rec = REC_TGLOBFIX then
-  begin
-    if field = 'CodePos' then Result := 0
-    else if field = 'BSSoff' then Result := 8;
-  end
-  else if rec = REC_TCALLFIX then
-  begin
-    if field = 'CodePos' then Result := 0
-    else if field = 'ProcIdx' then Result := 8;
-  end
-  else if rec = REC_TSYMBOL then
-  begin
-    if field = 'Name' then Result := 0
-    else if field = 'TypeKind' then Result := 264
-    else if field = 'Kind' then Result := 272
-    else if field = 'Offset' then Result := 280
-    else if field = 'ConstVal' then Result := 288
-    else if field = 'IsArray' then Result := 296
-    else if field = 'ArrLen' then Result := 304
-    else if field = 'ElemType' then Result := 312
-    else if field = 'RecName' then Result := 320
-    else if field = 'ElemRecName' then Result := 328
-    else if field = 'IsRef' then Result := 336
-    else if field = 'PtrElemTk' then Result := 344
-    else if field = 'PtrElemRec' then Result := 352;
-  end
-  else if rec = REC_TPARAM then
-  begin
-    if field = 'Name' then Result := 0
-    else if field = 'TypeKind' then Result := 264
-    else if field = 'SymIdx' then Result := 272
-    else if field = 'IsRef' then Result := 280
-    else if field = 'IsArray' then Result := 288;
-  end
-  else if rec = REC_TPROC then
-  begin
-    if field = 'Name' then Result := 0
-    else if field = 'IsFunc' then Result := 264
-    else if field = 'RetType' then Result := 272
-    else if field = 'ParamCount' then Result := 280
-    else if field = 'Params' then Result := 288
-    else if field = 'BodyAddr' then Result := 5024
-    else if field = 'FramePatch' then Result := 5032
-    else if field = 'RetSymIdx' then Result := 5040
-    else if field = 'ScopeBase' then Result := 5048;
-  end
-  else if rec = REC_TRAWTOKEN then
-  begin
-    if field = 'Kind'    then Result := 0
-    else if field = 'IVal'    then Result := 8
-    else if field = 'Line'    then Result := 16
-    else if field = 'SOffset' then Result := 24
-    else if field = 'SLen'    then Result := 32;
-  end
-  else if rec = REC_TMYCLASS then
-  begin
-    if (field = 'x') or (field = 'X') then Result := 0
-    else if (field = 'y') or (field = 'Y') then Result := 8;
-  end;
-  if rec = REC_TTEMPLATE then
-  begin
-    if field = 'Name' then Result := 0
-    else if field = 'Param' then Result := 264
-    else if field = 'TokStart' then Result := 528
-    else if field = 'TokCount' then Result := 536;
-  end
-  else if rec = REC_TSPECIALIZATION then
-  begin
-    if field = 'Name' then Result := 0
-    else if field = 'TemplateName' then Result := 264
-    else if field = 'ConcreteType' then Result := 528
-    else if field = 'ConcreteName' then Result := 536;
-  end
-  else if rec = REC_TGENERICFUNC then
-  begin
-    if field = 'Name' then Result := 0
-    else if field = 'Param' then Result := 264
-    else if field = 'IsFunc' then Result := 528
-    else if field = 'TokStart' then Result := 536
-    else if field = 'TokCount' then Result := 544;
-  end
-  else if rec = REC_TPENDINGGFSPEC then
-  begin
-    if field = 'GenFuncIdx' then Result := 0
-    else if field = 'ConcreteKind' then Result := 8
-    else if field = 'ConcreteName' then Result := 16
-    else if field = 'SpecName' then Result := 280;
-  end
-  else if rec = REC_TMETHODFIXUP then
-  begin
-    if field = 'DataPos' then Result := 0
-    else if field = 'ProcIdx' then Result := 4;
+    off := 0;
+    for i := 0 to cnt - 1 do
+    begin
+      if BuiltinRecFieldMatches(rec, i, field) then
+      begin
+        Result := off;
+        Exit;
+      end;
+      off := off + BuiltinRecFieldSize(rec, i);
+    end;
   end
   else if rec >= REC_UCLASS_BASE then
   begin
@@ -566,59 +660,18 @@ begin
 end;
 
 function RecFieldType(rec: Integer; const field: AnsiString): TTypeKind;
-var fi: Integer; field2: AnsiString;
+var fi, i, cnt: Integer; field2: AnsiString;
 begin
   Result := tyInteger; fi := 0; field2 := field;
-  if rec = REC_TTOKEN then
+  cnt := BuiltinRecFieldCount(rec);
+  if cnt > 0 then
   begin
-    if field = 'SVal' then Result := tyString
-    else if field = 'IVal' then Result := tyInt64;
-  end
-  else if rec = REC_TRAWTOKEN then
-  begin
-    if field = 'IVal' then Result := tyInt64;
-  end
-  else if rec = REC_TSTRENTRY then
-  begin
-    if field = 'Text' then Result := tyString;
-  end
-  else if rec = REC_TSYMBOL then
-  begin
-    if field = 'Name' then Result := tyString
-    else if (field = 'IsArray') or (field = 'IsRef') then Result := tyBoolean
-    else if field = 'ConstVal' then Result := tyInt64;
-  end
-  else if rec = REC_TPARAM then
-  begin
-    if field = 'Name' then Result := tyString
-    else if (field = 'IsRef') or (field = 'IsArray') then Result := tyBoolean;
-  end
-  else if rec = REC_TPROC then
-  begin
-    if field = 'Name' then Result := tyString
-    else if field = 'IsFunc' then Result := tyBoolean
-    else if field = 'Params' then Result := tyRecord;
-  end
-  else if rec = REC_TMYCLASS then
-  begin
-    Result := tyInteger;
-  end;
-  if rec = REC_TTEMPLATE then
-  begin
-    if (field = 'Name') or (field = 'Param') then Result := tyString;
-  end
-  else if rec = REC_TSPECIALIZATION then
-  begin
-    if (field = 'Name') or (field = 'TemplateName') or (field = 'ConcreteName') then Result := tyString;
-  end
-  else if rec = REC_TGENERICFUNC then
-  begin
-    if (field = 'Name') or (field = 'Param') then Result := tyString
-    else if field = 'IsFunc' then Result := tyBoolean;
-  end
-  else if rec = REC_TPENDINGGFSPEC then
-  begin
-    if (field = 'ConcreteName') or (field = 'SpecName') then Result := tyString;
+    for i := 0 to cnt - 1 do
+      if BuiltinRecFieldMatches(rec, i, field) then
+      begin
+        Result := BuiltinRecFieldType(rec, i);
+        Exit;
+      end;
   end
   else if rec >= REC_UCLASS_BASE then
   begin
@@ -628,12 +681,18 @@ begin
 end;
 
 function RecFieldRecId(rec: Integer; const field: AnsiString): Integer;
-var fi: Integer; field2: AnsiString;
+var fi, i, cnt: Integer; field2: AnsiString;
 begin
   Result := REC_NONE; fi := 0; field2 := field;
-  if rec = REC_TPROC then
+  cnt := BuiltinRecFieldCount(rec);
+  if cnt > 0 then
   begin
-    if field = 'Params' then Result := REC_TPARAM;
+    for i := 0 to cnt - 1 do
+      if BuiltinRecFieldMatches(rec, i, field) then
+      begin
+        Result := BuiltinRecFieldRecId(rec, i);
+        Exit;
+      end;
   end
   else if rec >= REC_UCLASS_BASE then
   begin
@@ -643,12 +702,18 @@ begin
 end;
 
 function RecFieldIsArray(rec: Integer; const field: AnsiString): Boolean;
-var fi: Integer; field2: AnsiString;
+var fi, i, cnt: Integer; field2: AnsiString;
 begin
   Result := False;
-  if rec = REC_TPROC then
+  cnt := BuiltinRecFieldCount(rec);
+  if cnt > 0 then
   begin
-    if field = 'Params' then Result := True;
+    for i := 0 to cnt - 1 do
+      if BuiltinRecFieldMatches(rec, i, field) then
+      begin
+        Result := BuiltinRecFieldArrayCount(rec, i) > 0;
+        Exit;
+      end;
   end
   else if rec >= REC_UCLASS_BASE then
   begin
@@ -656,6 +721,126 @@ begin
     fi := FindUField(rec - REC_UCLASS_BASE, field2);
     if fi >= 0 then Result := UFldIsArray[fi];
   end;
+end;
+
+procedure BuiltinLayoutAssert(ok: Boolean; const msg: AnsiString);
+begin
+  if not ok then Error('built-in record layout validation failed: ' + msg);
+end;
+
+procedure CheckBuiltinRecSize(rec, expected: Integer; const name: AnsiString);
+begin
+  BuiltinLayoutAssert(RecSize(rec) = expected, name);
+end;
+
+procedure CheckBuiltinRecField(rec: Integer; const field: AnsiString; off: Integer;
+  tk: TTypeKind; recId: Integer; isArray: Boolean);
+begin
+  BuiltinLayoutAssert(RecFieldOffset(rec, field) = off, field);
+  BuiltinLayoutAssert(RecFieldType(rec, field) = tk, field);
+  BuiltinLayoutAssert(RecFieldRecId(rec, field) = recId, field);
+  BuiltinLayoutAssert(RecFieldIsArray(rec, field) = isArray, field);
+end;
+
+procedure ValidateBuiltinRecordLayout;
+begin
+  if PasDefineExists('PXX_MANAGED_STRING') then Exit;
+
+  CheckBuiltinRecSize(REC_TTOKEN, 288, 'TToken');
+  CheckBuiltinRecField(REC_TTOKEN, 'Kind', 0, tyInteger, REC_NONE, False);
+  CheckBuiltinRecField(REC_TTOKEN, 'SVal', 8, tyString, REC_NONE, False);
+  CheckBuiltinRecField(REC_TTOKEN, 'IVal', 272, tyInt64, REC_NONE, False);
+  CheckBuiltinRecField(REC_TTOKEN, 'Line', 280, tyInteger, REC_NONE, False);
+
+  CheckBuiltinRecSize(REC_TSTRENTRY, 280, 'TStrEntry');
+  CheckBuiltinRecField(REC_TSTRENTRY, 'Text', 0, tyString, REC_NONE, False);
+  CheckBuiltinRecField(REC_TSTRENTRY, 'Offset', 264, tyInteger, REC_NONE, False);
+  CheckBuiltinRecField(REC_TSTRENTRY, 'Len', 272, tyInteger, REC_NONE, False);
+
+  CheckBuiltinRecSize(REC_TFIXUP, 16, 'TFixup');
+  CheckBuiltinRecField(REC_TFIXUP, 'CodePos', 0, tyInteger, REC_NONE, False);
+  CheckBuiltinRecField(REC_TFIXUP, 'DataOff', 8, tyInteger, REC_NONE, False);
+
+  CheckBuiltinRecSize(REC_TGLOBFIX, 16, 'TGlobFix');
+  CheckBuiltinRecField(REC_TGLOBFIX, 'CodePos', 0, tyInteger, REC_NONE, False);
+  CheckBuiltinRecField(REC_TGLOBFIX, 'BSSoff', 8, tyInteger, REC_NONE, False);
+
+  CheckBuiltinRecSize(REC_TCALLFIX, 16, 'TCallFix');
+  CheckBuiltinRecField(REC_TCALLFIX, 'CodePos', 0, tyInteger, REC_NONE, False);
+  CheckBuiltinRecField(REC_TCALLFIX, 'ProcIdx', 8, tyInteger, REC_NONE, False);
+
+  CheckBuiltinRecSize(REC_TSYMBOL, 360, 'TSymbol');
+  CheckBuiltinRecField(REC_TSYMBOL, 'Name', 0, tyString, REC_NONE, False);
+  CheckBuiltinRecField(REC_TSYMBOL, 'TypeKind', 264, tyInteger, REC_NONE, False);
+  CheckBuiltinRecField(REC_TSYMBOL, 'Kind', 272, tyInteger, REC_NONE, False);
+  CheckBuiltinRecField(REC_TSYMBOL, 'Offset', 280, tyInteger, REC_NONE, False);
+  CheckBuiltinRecField(REC_TSYMBOL, 'ConstVal', 288, tyInt64, REC_NONE, False);
+  CheckBuiltinRecField(REC_TSYMBOL, 'IsArray', 296, tyBoolean, REC_NONE, False);
+  CheckBuiltinRecField(REC_TSYMBOL, 'ArrLen', 304, tyInteger, REC_NONE, False);
+  CheckBuiltinRecField(REC_TSYMBOL, 'ElemType', 312, tyInteger, REC_NONE, False);
+  CheckBuiltinRecField(REC_TSYMBOL, 'RecName', 320, tyInteger, REC_NONE, False);
+  CheckBuiltinRecField(REC_TSYMBOL, 'ElemRecName', 328, tyInteger, REC_NONE, False);
+  CheckBuiltinRecField(REC_TSYMBOL, 'IsRef', 336, tyBoolean, REC_NONE, False);
+  CheckBuiltinRecField(REC_TSYMBOL, 'PtrElemTk', 344, tyInteger, REC_NONE, False);
+  CheckBuiltinRecField(REC_TSYMBOL, 'PtrElemRec', 352, tyInteger, REC_NONE, False);
+
+  CheckBuiltinRecSize(REC_TPARAM, 296, 'TParam');
+  CheckBuiltinRecField(REC_TPARAM, 'Name', 0, tyString, REC_NONE, False);
+  CheckBuiltinRecField(REC_TPARAM, 'TypeKind', 264, tyInteger, REC_NONE, False);
+  CheckBuiltinRecField(REC_TPARAM, 'SymIdx', 272, tyInteger, REC_NONE, False);
+  CheckBuiltinRecField(REC_TPARAM, 'IsRef', 280, tyBoolean, REC_NONE, False);
+  CheckBuiltinRecField(REC_TPARAM, 'IsArray', 288, tyBoolean, REC_NONE, False);
+
+  CheckBuiltinRecSize(REC_TPROC, 5056, 'TProc');
+  CheckBuiltinRecField(REC_TPROC, 'Name', 0, tyString, REC_NONE, False);
+  CheckBuiltinRecField(REC_TPROC, 'IsFunc', 264, tyBoolean, REC_NONE, False);
+  CheckBuiltinRecField(REC_TPROC, 'RetType', 272, tyInteger, REC_NONE, False);
+  CheckBuiltinRecField(REC_TPROC, 'ParamCount', 280, tyInteger, REC_NONE, False);
+  CheckBuiltinRecField(REC_TPROC, 'Params', 288, tyRecord, REC_TPARAM, True);
+  CheckBuiltinRecField(REC_TPROC, 'BodyAddr', 5024, tyInteger, REC_NONE, False);
+  CheckBuiltinRecField(REC_TPROC, 'FramePatch', 5032, tyInteger, REC_NONE, False);
+  CheckBuiltinRecField(REC_TPROC, 'RetSymIdx', 5040, tyInteger, REC_NONE, False);
+  CheckBuiltinRecField(REC_TPROC, 'ScopeBase', 5048, tyInteger, REC_NONE, False);
+
+  CheckBuiltinRecSize(REC_TRAWTOKEN, 40, 'TRawToken');
+  CheckBuiltinRecField(REC_TRAWTOKEN, 'Kind', 0, tyInteger, REC_NONE, False);
+  CheckBuiltinRecField(REC_TRAWTOKEN, 'IVal', 8, tyInt64, REC_NONE, False);
+  CheckBuiltinRecField(REC_TRAWTOKEN, 'Line', 16, tyInteger, REC_NONE, False);
+  CheckBuiltinRecField(REC_TRAWTOKEN, 'SOffset', 24, tyInteger, REC_NONE, False);
+  CheckBuiltinRecField(REC_TRAWTOKEN, 'SLen', 32, tyInteger, REC_NONE, False);
+
+  CheckBuiltinRecSize(REC_TMYCLASS, 16, 'TMyClass');
+  CheckBuiltinRecField(REC_TMYCLASS, 'x', 0, tyInteger, REC_NONE, False);
+  CheckBuiltinRecField(REC_TMYCLASS, 'y', 8, tyInteger, REC_NONE, False);
+
+  CheckBuiltinRecSize(REC_TTEMPLATE, 544, 'TTemplate');
+  CheckBuiltinRecField(REC_TTEMPLATE, 'Name', 0, tyString, REC_NONE, False);
+  CheckBuiltinRecField(REC_TTEMPLATE, 'Param', 264, tyString, REC_NONE, False);
+  CheckBuiltinRecField(REC_TTEMPLATE, 'TokStart', 528, tyInteger, REC_NONE, False);
+  CheckBuiltinRecField(REC_TTEMPLATE, 'TokCount', 536, tyInteger, REC_NONE, False);
+
+  CheckBuiltinRecSize(REC_TSPECIALIZATION, 800, 'TSpecialization');
+  CheckBuiltinRecField(REC_TSPECIALIZATION, 'Name', 0, tyString, REC_NONE, False);
+  CheckBuiltinRecField(REC_TSPECIALIZATION, 'TemplateName', 264, tyString, REC_NONE, False);
+  CheckBuiltinRecField(REC_TSPECIALIZATION, 'ConcreteType', 528, tyInteger, REC_NONE, False);
+  CheckBuiltinRecField(REC_TSPECIALIZATION, 'ConcreteName', 536, tyString, REC_NONE, False);
+
+  CheckBuiltinRecSize(REC_TGENERICFUNC, 552, 'TGenericFunc');
+  CheckBuiltinRecField(REC_TGENERICFUNC, 'Name', 0, tyString, REC_NONE, False);
+  CheckBuiltinRecField(REC_TGENERICFUNC, 'Param', 264, tyString, REC_NONE, False);
+  CheckBuiltinRecField(REC_TGENERICFUNC, 'IsFunc', 528, tyBoolean, REC_NONE, False);
+  CheckBuiltinRecField(REC_TGENERICFUNC, 'TokStart', 536, tyInteger, REC_NONE, False);
+  CheckBuiltinRecField(REC_TGENERICFUNC, 'TokCount', 544, tyInteger, REC_NONE, False);
+
+  CheckBuiltinRecSize(REC_TPENDINGGFSPEC, 544, 'TPendingGFSpec');
+  CheckBuiltinRecField(REC_TPENDINGGFSPEC, 'GenFuncIdx', 0, tyInteger, REC_NONE, False);
+  CheckBuiltinRecField(REC_TPENDINGGFSPEC, 'ConcreteKind', 8, tyInteger, REC_NONE, False);
+  CheckBuiltinRecField(REC_TPENDINGGFSPEC, 'ConcreteName', 16, tyString, REC_NONE, False);
+  CheckBuiltinRecField(REC_TPENDINGGFSPEC, 'SpecName', 280, tyString, REC_NONE, False);
+
+  CheckBuiltinRecSize(REC_TMETHODFIXUP, 8, 'TMethodFixup');
+  CheckBuiltinRecField(REC_TMETHODFIXUP, 'DataPos', 0, tyInteger, REC_NONE, False);
+  CheckBuiltinRecField(REC_TMETHODFIXUP, 'ProcIdx', 4, tyInteger, REC_NONE, False);
 end;
 
 function RecFieldDynDepth(rec: Integer; const field: AnsiString): Integer;

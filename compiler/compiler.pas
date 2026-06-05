@@ -151,6 +151,8 @@ begin
   if DebugTrace then writeln('After include expansion: ', Length(Source));
 
   SrcPos   := 1; SrcLine  := 1;
+  CurTok.Line := 1;
+  ValidateBuiltinRecordLayout;
   CodeLen  := 0;
   DataLen      := STR_INIT_OFFSET;
   SpacesOffset := -1;
