@@ -22,6 +22,17 @@ procedure Val(const s: string; var v: Int64; var code: Integer);
 function VariantToStr(const v: Variant): AnsiString;
 function PCharToString(p: PChar): string;
 
+{ Heap allocator backing GetMem/New/class-new (PXXAlloc), FreeMem/Dispose (PXXFree),
+  and ReallocMem (PXXRealloc). The compiler redirects those operations to these
+  routines (see EmitHeapAllocLocked / EmitHeapFreeLocked in ir_codegen.inc), so
+  every compiled program shares one mmap-backed Pascal heap. Block layout: an
+  8-byte size header precedes each payload; freed blocks thread a singly linked
+  free list through the first 8 bytes of their payload. align is accepted for ABI
+  symmetry; payloads are always 8-aligned. }
+function PXXAlloc(size: Int64; align: Integer): Pointer;
+procedure PXXFree(p: Pointer);
+function PXXRealloc(p: Pointer; newSize: Int64; align: Integer): Pointer;
+
 implementation
 
 type
@@ -180,6 +191,124 @@ begin
       c := p[i];
     end;
   end;
+end;
+
+{ ===== Heap allocator ===== }
+
+type
+  PWord = ^Int64;   { machine-word access at an arbitrary address }
+
+const
+  HEAP_ARENA = 268435456;   { 256 MiB mmap chunk; anon pages fault in lazily }
+
+var
+  HeapPtr  : Int64;   { next free byte in the current arena (0 = none yet) }
+  HeapEnd  : Int64;   { end address of the current arena }
+  FreeList : Int64;   { head of the free list (payload address), 0 = empty }
+
+{ Anonymous mmap of len bytes; returns the base address (or the kernel's
+  negative errno, which a subsequent access would fault on). }
+function HeapMmap(len: Int64): Int64; assembler;
+{$asmMode intel}
+asm
+  mov rsi, len
+  mov rdi, 0          { addr = NULL }
+  mov rdx, 3          { PROT_READ | PROT_WRITE }
+  mov r10, 34         { MAP_PRIVATE | MAP_ANONYMOUS }
+  mov r8, -1          { fd }
+  mov r9, 0           { offset }
+  mov rax, 9          { sys_mmap }
+  syscall
+end;
+
+function PXXAlloc(size: Int64; align: Integer): Pointer;
+var
+  cur, prev, base, need, arena, i: Int64;
+begin
+  if size <= 0 then size := 8;
+  size := ((size + 7) div 8) * 8;          { round up to 8 }
+
+  { First-fit reuse: free-list nodes are payload addresses; the size header is
+    at [cur-8] and the next link at [cur]. A reused block holds stale bytes, so
+    zero the requested span — callers (managed refcount/length headers, zeroed
+    dynarray/instance slots) assume fresh memory is zero, like a bump block off
+    a fresh mmap page. }
+  prev := 0;
+  cur := FreeList;
+  while cur <> 0 do
+  begin
+    if PWord(cur - 8)^ >= size then
+    begin
+      if prev = 0 then FreeList := PWord(cur)^
+      else PWord(prev)^ := PWord(cur)^;
+      i := 0;
+      while i < size do
+      begin
+        PWord(cur + i)^ := 0;
+        i := i + 8;
+      end;
+      Result := Pointer(cur);
+      Exit;
+    end;
+    prev := cur;
+    cur := PWord(cur)^;
+  end;
+
+  { Bump from the current arena, mapping a new one when it can't fit. }
+  need := size + 8;                         { 8-byte size header + payload }
+  if (HeapPtr = 0) or (HeapEnd - HeapPtr < need) then
+  begin
+    arena := need;
+    if arena < HEAP_ARENA then arena := HEAP_ARENA;
+    HeapPtr := HeapMmap(arena);
+    HeapEnd := HeapPtr + arena;
+  end;
+  base := HeapPtr;
+  HeapPtr := HeapPtr + need;
+  PWord(base)^ := size;                     { size header }
+  Result := Pointer(base + 8);              { payload }
+end;
+
+procedure PXXFree(p: Pointer);
+var
+  addr: Int64;
+begin
+  addr := Int64(p);
+  if addr = 0 then Exit;
+  PWord(addr)^ := FreeList;                 { next link in the payload }
+  FreeList := addr;
+end;
+
+function PXXRealloc(p: Pointer; newSize: Int64; align: Integer): Pointer;
+var
+  addr, oldSize, i, src, dst: Int64;
+  np: Pointer;
+begin
+  addr := Int64(p);
+  if addr = 0 then
+  begin
+    Result := PXXAlloc(newSize, align);
+    Exit;
+  end;
+  if newSize <= 0 then newSize := 8;
+  newSize := ((newSize + 7) div 8) * 8;
+  oldSize := PWord(addr - 8)^;
+  if newSize <= oldSize then
+  begin
+    Result := p;                            { shrink/no-op: keep the block }
+    Exit;
+  end;
+  np := PXXAlloc(newSize, align);
+  dst := Int64(np);
+  src := addr;
+  i := 0;
+  while i < oldSize do                       { oldSize is a multiple of 8 }
+  begin
+    PWord(dst + i)^ := PWord(src + i)^;
+    i := i + 8;
+  end;
+  PXXFree(p);
+  Result := np;
 end;
 
 end.

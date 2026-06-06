@@ -1177,7 +1177,7 @@ begin
           { typedef struct {..} *Name; — the record stays anonymous, Name is a
             pointer to it (both for the C parser and as a Pascal pointer type). }
           AddCTypedefEx(nm, tyPointer, Ord(tyRecord), REC_UCLASS_BASE + ci);
-          RegisterPtrAlias(nmOff, nmLen, Ord(tyRecord), REC_UCLASS_BASE + ci);
+          RegisterPtrAlias(nmOff, nmLen, Ord(tyRecord), REC_UCLASS_BASE + ci, 0, 0);
         end
         else
         begin
@@ -1247,7 +1247,7 @@ begin
     if (tk = tyPointer) and (CTypePtrDepth > 0) then
     begin
       AddCTypedefEx(nm, tk, CTypeElemTk, CTypeElemRec);
-      RegisterPtrAlias(nmOff, nmLen, CTypeElemTk, CTypeElemRec);
+      RegisterPtrAlias(nmOff, nmLen, CTypeElemTk, CTypeElemRec, 0, 0);
     end
     else
       AddCTypedef(nm, tk);

@@ -2040,6 +2040,13 @@ begin
     begin
       Next; ParseFactor;
       left := CurASTNode;
+      { `not` is logical (boolean). A previous attempt to also emit bitwise `not`
+        for ordinals keyed off the global LastExprTk tracker, but that tracker is
+        not reliably set for every factor shape, so some boolean `not <expr>` in
+        the compiler's own source was mistyped as a bitwise ~, turning a
+        `while not done` into an endless loop and hanging self-compile. Until
+        `not` typing is driven by real per-node expression types, keep it logical
+        (matches the long-standing behavior the bootstrap relies on). }
       LastExprTk := tyBoolean;
       node := AllocNode(AN_NOT); ASTLeft[node] := left; ASTTk[node] := Ord(tyBoolean); CurASTNode := node;
     end;
@@ -2854,6 +2861,7 @@ begin
         begin
           Next;
           CurASTNode := ParseLValueAST(idx, TokPos - 2);
+          LastExprTk := IntToTypeKind(ASTTk[CurASTNode]);
         end;
       end;
     end;
@@ -4331,7 +4339,7 @@ begin
     tkCaret:
     begin
       Next;
-      elemTk := ParseTypeKind;
+      elemTk := ParseTypeKind();
       LastTypePointerElemTk := elemTk;
       LastTypePointerElemRec := LastTypeRecId;
       Result := tyPointer;
@@ -4364,7 +4372,7 @@ begin
         Next;
         Expect(tkOf, 'of');
         LastTypeEnumId := -1;
-        elemTk := ParseTypeKind;
+        elemTk := ParseTypeKind();
         { inline `set of TFoo`: the element parse records the enum identity in
           LastTypeEnumId; carry it as the set's element enum for RTTI. }
         LastTypeSetEnumId := LastTypeEnumId;
@@ -4570,7 +4578,7 @@ var
   tname: AnsiString;
   done, stopTypes: Boolean; loVal, hiVal, arrLen: Integer; isArr: Boolean; isPackedRecord: Boolean;
   fIsDyn: Boolean; fDynDepth: Integer;
-  tnOff, tnLen, ci, fnOff, fnLen, curFieldOff, fRec, fSize, fAlign, classAlign, depth: Integer;
+  tnOff, tnLen, ci, fnOff, fnLen, curFieldOff, fRec, fSize, fAlign, classAlign, depth, targetNOff, targetNLen: Integer;
   fTk: TTypeKind;
   parentCi, slot, mmi, mnOff, mnLen, pnOff, pnLen, rFOff, rFLen, rMOff, rMLen, wFOff, wFLen, wMOff, wMLen, rnOff, rnLen, wnOff, wnLen, propRec, i: Integer;
   isConstructor, isDestructor, isVirtual, isOverride, isAbstract, isClassMethod: Boolean;
@@ -5178,8 +5186,10 @@ begin
       begin
         { Named pointer type alias: PFoo = ^TFoo }
         Next;
+        targetNOff := Tokens[TokPos-1].SOffset;
+        targetNLen := Tokens[TokPos-1].SLen;
         fTk := ParseTypeKind;
-        RegisterPtrAlias(tnOff, tnLen, Ord(fTk), LastTypeRecId);
+        RegisterPtrAlias(tnOff, tnLen, Ord(fTk), LastTypeRecId, targetNOff, targetNLen);
         Eat(tkSemicolon);
       end
       else if CaseEqual(CurTok.SVal, 'set') then
@@ -5216,6 +5226,7 @@ begin
     FlushPendingClassSpecializations;
     Next;
   end;
+  ResolvePendingPointerAliases;
 end;
 
 { ===== Procedure/function parser ===== }
@@ -6396,6 +6407,9 @@ end;
 procedure ParseProgram;
 var jmpPatch, i, j: Integer; doneUses, doneDecls, hasExceptions, needsBuiltin,
     needsHeap, needsAnsiRuntime: Boolean;
+    savedUnitIdx: Integer;
+    dummyNames: array[0..3] of AnsiString;
+    dummyTypes: array[0..3] of TTypeKind;
 begin
   Expect(tkProgram, 'program');
   if CurTok.Kind = tkEOF then Error('expected program name');
@@ -6417,6 +6431,27 @@ begin
   hasExceptions := False;
   needsBuiltin := False;
   DetectPascalRuntimeNeeds(needsHeap, needsAnsiRuntime);
+  if needsHeap or needsAnsiRuntime or hasExceptions then needsBuiltin := True;
+
+  if needsBuiltin then
+  begin
+    savedUnitIdx := CurrentUnitIdx;
+    CurrentUnitIdx := InternStr('builtin');
+
+    dummyNames[0] := 'size';  dummyTypes[0] := tyInt64;
+    dummyNames[1] := 'align'; dummyTypes[1] := tyInteger;
+    i := RegisterProc('PXXAlloc', True, tyPointer, 2, dummyNames, dummyTypes);
+
+    dummyNames[0] := 'p';     dummyTypes[0] := tyPointer;
+    i := RegisterProc('PXXFree', False, tyPointer, 1, dummyNames, dummyTypes);
+
+    dummyNames[0] := 'p';     dummyTypes[0] := tyPointer;
+    dummyNames[1] := 'newSize'; dummyTypes[1] := tyInt64;
+    dummyNames[2] := 'align'; dummyTypes[2] := tyInteger;
+    i := RegisterProc('PXXRealloc', True, tyPointer, 3, dummyNames, dummyTypes);
+
+    CurrentUnitIdx := savedUnitIdx;
+  end;
   for i := 0 to MAX_GOTO_LABELS - 1 do GotoLabelIRId[i] := -1;
   i := 0;
   while i < TokCount do
@@ -6439,17 +6474,7 @@ begin
   { mov [bss_initial_rsp], rsp: 48 89 24 25 <GlobRef(0)> }
   EmitB($48); EmitB($89); EmitB($24); EmitB($25); EmitGlobRef(BSS_INITIAL_RSP);
 
-  if needsHeap then
-  begin
-    { Initialize heap: reserve an arena via mmap (NOT brk). libc/GTK manage the
-      program break for their own malloc, so a brk-based heap would corrupt it. }
-    MovRsiImm(HEAP_ARENA_SIZE);
-    EmitMmapArena;                                          { rax = arena base }
-    EmitB($48); EmitB($89); EmitB($04); EmitB($25); EmitGlobRef(BSS_HEAP_PTR);
-    EmitB($48); EmitB($89); EmitB($C2);                     { mov rdx, rax }
-    EmitB($48); EmitB($81); EmitB($C2); EmitI32(HEAP_ARENA_SIZE); { add rdx, ARENA }
-    EmitB($48); EmitB($89); EmitB($14); EmitB($25); EmitGlobRef(BSS_HEAP_END);
-  end;
+
 
   EmitB($E9); jmpPatch := CodeLen; EmitI32(0);
   if needsAnsiRuntime then EmitAnsiStringRuntime;

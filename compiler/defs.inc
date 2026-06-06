@@ -873,6 +873,8 @@ var
   AliasTk      : array[0..MAX_TYPEALIAS-1] of Integer;  { resolved TTypeKind ordinal }
   AliasElemTk  : array[0..MAX_TYPEALIAS-1] of Integer;  { pointer element TTypeKind ordinal }
   AliasElemRec : array[0..MAX_TYPEALIAS-1] of Integer;  { pointer element record/class id }
+  AliasTargetNOff : array[0..MAX_TYPEALIAS-1] of Integer;
+  AliasTargetNLen : array[0..MAX_TYPEALIAS-1] of Integer;
   AliasCount   : Integer;
 
   CurSelfClass : Integer;

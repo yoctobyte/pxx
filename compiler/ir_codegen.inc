@@ -35,78 +35,61 @@ end;
 
 procedure EmitHeapAllocLocked;
 { rax = requested payload bytes. Returns payload pointer in rax. Caller holds
-  the heap lock when threading is enabled. Uses the GetMem block layout:
-  [size:8][payload...]. }
-var searchTop, pJzBump, pJaeTake, pJmpDone, pJbeNoGrow: Integer;
+  the heap lock when threading is enabled. }
+var pi: Integer;
 begin
-  EmitB($53);                                     { push rbx }
-  EmitB($48); EmitB($83); EmitB($C0); EmitB($07); { add rax, 7 }
-  EmitB($48); EmitB($83); EmitB($E0); EmitB($F8); { and rax, -8 }
-  EmitB($48); EmitB($83); EmitB($F8); EmitB($08); { cmp rax, 8 }
-  EmitB($73); EmitB($05);                         { jae +5 }
-  EmitB($B8); EmitI32(8);                         { mov eax, 8 }
-  EmitB($48); EmitB($89); EmitB($C1);             { mov rcx, rax }
-
-  EmitB($48); EmitB($8D); EmitB($34); EmitB($25); EmitGlobRef(BSS_FREE_LIST); { lea rsi, [FREE_LIST] }
-  searchTop := CodeLen;
-  EmitB($48); EmitB($8B); EmitB($16);             { mov rdx, [rsi] }
-  EmitB($48); EmitB($85); EmitB($D2);             { test rdx, rdx }
-  EmitB($74); pJzBump := CodeLen; EmitB(0);       { jz BUMP }
-  EmitB($48); EmitB($8B); EmitB($42); EmitB($F8); { mov rax, [rdx-8] }
-  EmitB($48); EmitB($39); EmitB($C8);             { cmp rax, rcx }
-  EmitB($73); pJaeTake := CodeLen; EmitB(0);      { jae TAKE }
-  EmitB($48); EmitB($89); EmitB($D6);             { mov rsi, rdx }
-  EmitB($EB); EmitB(Byte(searchTop - (CodeLen + 1)));
-
-  Code[pJaeTake] := Byte(CodeLen - (pJaeTake + 1));
-  EmitB($48); EmitB($8B); EmitB($02);             { mov rax, [rdx] }
-  EmitB($48); EmitB($89); EmitB($06);             { mov [rsi], rax }
-  EmitB($48); EmitB($89); EmitB($D0);             { mov rax, rdx }
-  EmitB($E9); pJmpDone := CodeLen; EmitI32(0);
-
-  Code[pJzBump] := Byte(CodeLen - (pJzBump + 1));
-  EmitB($48); EmitB($8B); EmitB($1C); EmitB($25); EmitGlobRef(BSS_HEAP_PTR); { mov rbx, [HEAP_PTR] }
-  EmitB($48); EmitB($89); EmitB($D8);             { mov rax, rbx }
-  EmitB($48); EmitB($01); EmitB($C8);             { add rax, rcx }
-  EmitB($48); EmitB($83); EmitB($C0); EmitB($08); { add rax, 8 }
-  EmitB($48); EmitB($3B); EmitB($04); EmitB($25); EmitGlobRef(BSS_HEAP_END);
-  EmitB($0F); EmitB($86); pJbeNoGrow := CodeLen; EmitI32(0);
-
-  EmitB($48); EmitB($89); EmitB($CE);             { mov rsi, rcx }
-  EmitB($48); EmitB($83); EmitB($C6); EmitB($08); { add rsi, 8 }
-  EmitB($48); EmitB($81); EmitB($C6); EmitI32(HEAP_ARENA_SIZE);
+  EmitB($56);                                     { push rsi }
+  EmitB($57);                                     { push rdi }
   EmitB($51);                                     { push rcx }
-  EmitMmapArena;
+  EmitB($52);                                     { push rdx }
+  EmitB($41); EmitB($50);                         { push r8 }
+  EmitB($41); EmitB($51);                         { push r9 }
+  EmitB($41); EmitB($52);                         { push r10 }
+  EmitB($41); EmitB($53);                         { push r11 }
+
+  EmitB($48); EmitB($89); EmitB($C7);             { mov rdi, rax  (size) }
+  EmitB($48); EmitB($C7); EmitB($C6); EmitI32(8);  { mov rsi, 8    (alignment) }
+  pi := FindProc('PXXAlloc');
+  if pi < 0 then Error('compiler error: Alloc helper not found in builtin unit');
+  EmitCallProc(pi);                               { rax = returned pointer }
+
+  EmitB($41); EmitB($5B);                         { pop r11 }
+  EmitB($41); EmitB($5A);                         { pop r10 }
+  EmitB($41); EmitB($59);                         { pop r9 }
+  EmitB($41); EmitB($58);                         { pop r8 }
+  EmitB($5A);                                     { pop rdx }
   EmitB($59);                                     { pop rcx }
-  EmitB($48); EmitB($89); EmitB($04); EmitB($25); EmitGlobRef(BSS_HEAP_PTR);
-  EmitB($48); EmitB($89); EmitB($C3);             { mov rbx, rax }
-  EmitB($48); EmitB($89); EmitB($C2);             { mov rdx, rax }
-  EmitB($48); EmitB($01); EmitB($F2);             { add rdx, rsi }
-  EmitB($48); EmitB($89); EmitB($14); EmitB($25); EmitGlobRef(BSS_HEAP_END);
-
-  Patch32(pJbeNoGrow, CodeLen - (pJbeNoGrow + 4));
-  EmitB($48); EmitB($89); EmitB($0B);             { mov [rbx], rcx }
-  EmitB($48); EmitB($8D); EmitB($43); EmitB($08); { lea rax, [rbx+8] }
-  EmitB($48); EmitB($89); EmitB($DA);             { mov rdx, rbx }
-  EmitB($48); EmitB($01); EmitB($CA);             { add rdx, rcx }
-  EmitB($48); EmitB($83); EmitB($C2); EmitB($08); { add rdx, 8 }
-  EmitB($48); EmitB($89); EmitB($14); EmitB($25); EmitGlobRef(BSS_HEAP_PTR);
-
-  Patch32(pJmpDone, CodeLen - (pJmpDone + 4));
-  EmitB($5B);                                     { pop rbx }
+  EmitB($5F);                                     { pop rdi }
+  EmitB($5E);                                     { pop rsi }
 end;
 
 procedure EmitHeapFreeLocked;
 { rax = payload pointer from EmitHeapAllocLocked/GetMem. Caller holds the heap
   lock when threading is enabled. nil is ignored. }
-var pNil: Integer;
+var pi: Integer;
 begin
-  EmitB($48); EmitB($85); EmitB($C0);             { test rax, rax }
-  EmitB($74); pNil := CodeLen; EmitB(0);          { jz done }
-  EmitB($48); EmitB($8B); EmitB($14); EmitB($25); EmitGlobRef(BSS_FREE_LIST);
-  EmitB($48); EmitB($89); EmitB($10);             { mov [rax], rdx }
-  EmitB($48); EmitB($89); EmitB($04); EmitB($25); EmitGlobRef(BSS_FREE_LIST);
-  Code[pNil] := Byte(CodeLen - (pNil + 1));
+  EmitB($56);                                     { push rsi }
+  EmitB($57);                                     { push rdi }
+  EmitB($51);                                     { push rcx }
+  EmitB($52);                                     { push rdx }
+  EmitB($41); EmitB($50);                         { push r8 }
+  EmitB($41); EmitB($51);                         { push r9 }
+  EmitB($41); EmitB($52);                         { push r10 }
+  EmitB($41); EmitB($53);                         { push r11 }
+
+  EmitB($48); EmitB($89); EmitB($C7);             { mov rdi, rax  (pointer) }
+  pi := FindProc('PXXFree');
+  if pi < 0 then Error('compiler error: Free helper not found in builtin unit');
+  EmitCallProc(pi);
+
+  EmitB($41); EmitB($5B);                         { pop r11 }
+  EmitB($41); EmitB($5A);                         { pop r10 }
+  EmitB($41); EmitB($59);                         { pop r9 }
+  EmitB($41); EmitB($58);                         { pop r8 }
+  EmitB($5A);                                     { pop rdx }
+  EmitB($59);                                     { pop rcx }
+  EmitB($5F);                                     { pop rdi }
+  EmitB($5E);                                     { pop rsi }
 end;
 
 procedure EmitDynArrayRetain;
@@ -2496,7 +2479,14 @@ begin
     IR_NOT:
       begin
         IREmitNode(IRA[node]);
-        EmitB($48); EmitB($83); EmitB($F0); EmitB($01); { xor rax, 1 }
+        if TypeIsOrdinal(IntToTypeKind(IRTk[node])) and (IntToTypeKind(IRTk[node]) <> tyBoolean) then
+        begin
+          EmitB($48); EmitB($F7); EmitB($D0); { not rax }
+        end
+        else
+        begin
+          EmitB($48); EmitB($83); EmitB($F0); EmitB($01); { xor rax, 1 }
+        end;
       end;
 
     IR_WRITE:
@@ -2762,92 +2752,11 @@ begin
         end
         else if pi = -Ord(tkGetMem) then
         begin
-          { GetMem with an 8-byte size header + free-list reuse.
-            Block layout: [size:8][payload...]; the returned pointer is the
-            payload (base+8), its size at payload-8. Freed blocks are threaded
-            through a single free list (head BSS_FREE_LIST), the link kept in
-            the freed payload's first 8 bytes. GetMem first-fits the list, else
-            bump-allocates a fresh block (growing the arena via mmap when
-            exhausted). No splitting/coalescing — proper allocator on the
-            todo (see docs/todo.md). Class instantiation continues below, so
-            both reuse and bump paths leave rax = payload. }
+          { GetMem or class instantiation. Evaluate size -> rax, then Alloc. }
           EmitAcquireHeapLock;
-          EmitB($53);                                     { push rbx }
           argNode := IRB[node]; { size arg }
-          IREmitNode(IRA[argNode]); { Evaluate size -> rax }
-
-          { Round up to a multiple of 8 and clamp to >= 8, so a freed block can
-            always hold its 8-byte free-list link. rcx = N (payload size). }
-          EmitB($48); EmitB($83); EmitB($C0); EmitB($07); { add rax, 7 }
-          EmitB($48); EmitB($83); EmitB($E0); EmitB($F8); { and rax, -8 }
-          EmitB($48); EmitB($83); EmitB($F8); EmitB($08); { cmp rax, 8 }
-          EmitB($73); EmitB($05);                         { jae +5 }
-          EmitB($B8); EmitI32(8);                         { mov eax, 8 }
-          EmitB($48); EmitB($89); EmitB($C1);             { mov rcx, rax }
-
-          { Free-list first-fit. rsi = address of the slot pointing at the
-            current node (starts at &BSS_FREE_LIST); rdx = current node. }
-          EmitB($48); EmitB($8D); EmitB($34); EmitB($25); EmitGlobRef(BSS_FREE_LIST); { lea rsi, [BSS_FREE_LIST] }
-          searchTop := CodeLen;
-          EmitB($48); EmitB($8B); EmitB($16);             { mov rdx, [rsi]  (node) }
-          EmitB($48); EmitB($85); EmitB($D2);             { test rdx, rdx }
-          EmitB($74); pJzBump := CodeLen; EmitB(0);       { jz BUMP }
-          EmitB($48); EmitB($8B); EmitB($42); EmitB($F8); { mov rax, [rdx-8]  (block size) }
-          EmitB($48); EmitB($39); EmitB($C8);             { cmp rax, rcx }
-          EmitB($73); pJaeTake := CodeLen; EmitB(0);      { jae TAKE  (size >= N) }
-          EmitB($48); EmitB($89); EmitB($D6);             { mov rsi, rdx  (advance slot) }
-          EmitB($EB); EmitB(Byte(searchTop - (CodeLen + 1))); { jmp search }
-          { TAKE: unlink node, return payload }
-          Code[pJaeTake] := Byte(CodeLen - (pJaeTake + 1));
-          EmitB($48); EmitB($8B); EmitB($02);             { mov rax, [rdx]  (next) }
-          EmitB($48); EmitB($89); EmitB($06);             { mov [rsi], rax  (*slot = next) }
-          EmitB($48); EmitB($89); EmitB($D0);             { mov rax, rdx }
-          EmitB($E9); pJmpDone := CodeLen; EmitI32(0);    { jmp DONE }
-
-          { BUMP: fresh [size][payload] block at HEAP_PTR. }
-          Code[pJzBump] := Byte(CodeLen - (pJzBump + 1));
-          EmitB($48); EmitB($8B); EmitB($1C); EmitB($25); EmitGlobRef(BSS_HEAP_PTR); { mov rbx, [HEAP_PTR] }
-          EmitB($48); EmitB($89); EmitB($D8);             { mov rax, rbx }
-          EmitB($48); EmitB($01); EmitB($C8);             { add rax, rcx }
-          EmitB($48); EmitB($83); EmitB($C0); EmitB($08); { add rax, 8   (block end) }
-          EmitB($48); EmitB($3B); EmitB($04); EmitB($25); EmitGlobRef(BSS_HEAP_END); { cmp rax, [HEAP_END] }
-          EmitB($0F); EmitB($86); pJbeNoGrow := CodeLen; EmitI32(0); { jbe NOGROW }
-
-          { Grow: mmap N + 8 + ARENA so this block fits; old tail abandoned.
-            EmitMmapArena keeps rsi but clobbers rcx, so save N. }
-          EmitB($48); EmitB($89); EmitB($CE);             { mov rsi, rcx }
-          EmitB($48); EmitB($83); EmitB($C6); EmitB($08); { add rsi, 8 }
-          EmitB($48); EmitB($81); EmitB($C6); EmitI32(HEAP_ARENA_SIZE); { add rsi, ARENA }
-          EmitB($51);                                     { push rcx (save N) }
-          EmitMmapArena;                                  { rax = base; rsi kept }
-          EmitB($59);                                     { pop rcx (restore N) }
-          EmitB($48); EmitB($89); EmitB($04); EmitB($25); EmitGlobRef(BSS_HEAP_PTR); { mov [HEAP_PTR], rax }
-          EmitB($48); EmitB($89); EmitB($C3);             { mov rbx, rax }
-          EmitB($48); EmitB($89); EmitB($C2);             { mov rdx, rax }
-          EmitB($48); EmitB($01); EmitB($F2);             { add rdx, rsi  (base+len) }
-          EmitB($48); EmitB($89); EmitB($14); EmitB($25); EmitGlobRef(BSS_HEAP_END); { mov [HEAP_END], rdx }
-
-          { NOGROW: base in rbx -> write header, advance HEAP_PTR, return payload. }
-          Patch32(pJbeNoGrow, CodeLen - (pJbeNoGrow + 4));
-          EmitB($48); EmitB($89); EmitB($0B);             { mov [rbx], rcx  (size header) }
-          EmitB($48); EmitB($8D); EmitB($43); EmitB($08); { lea rax, [rbx+8]  (payload) }
-          EmitB($48); EmitB($89); EmitB($DA);             { mov rdx, rbx }
-          EmitB($48); EmitB($01); EmitB($CA);             { add rdx, rcx }
-          EmitB($48); EmitB($83); EmitB($C2); EmitB($08); { add rdx, 8   (base+8+N) }
-          EmitB($48); EmitB($89); EmitB($14); EmitB($25); EmitGlobRef(BSS_HEAP_PTR); { mov [HEAP_PTR], rdx }
-
-          { DONE: rax = payload pointer }
-          Patch32(pJmpDone, CodeLen - (pJmpDone + 4));
-          { Zero the instance payload (rcx = N requested bytes). A reused
-            free-list block carries stale data; managed fields (dynarray
-            handles, ansistrings) must start nil or SetLength/finalization
-            dereferences garbage. The VMT pointer is rewritten just below. }
-          EmitB($50);                                     { push rax (payload) }
-          EmitB($48); EmitB($89); EmitB($C7);             { mov rdi, rax }
-          EmitB($31); EmitB($C0);                         { xor eax, eax }
-          EmitB($F3); EmitB($AA);                         { rep stosb (rcx bytes) }
-          EmitB($58);                                     { pop rax }
-          EmitB($5B);                                     { pop rbx }
+          IREmitNode(IRA[argNode]); { size -> rax }
+          EmitHeapAllocLocked;      { rax = payload pointer }
           EmitReleaseHeapLock;
 
           { Put instance pointer in rdi }
@@ -2855,76 +2764,77 @@ begin
           
           { Initialize VMT pointer at offset 0 }
           classIdx := IRC[node];
-          EmitB($48); EmitB($B8); EmitDataRef(UClsVMTOffset[classIdx - REC_UCLASS_BASE]); { mov rax, VMT_addr }
-          EmitB($48); EmitB($89); EmitB($07); { mov [rdi], rax }
-          
-          { Find constructor 'Create' of this class }
-          slot := FindUMeth(classIdx - REC_UCLASS_BASE, 'create');
-          if slot >= 0 then
+          if classIdx >= REC_UCLASS_BASE then
           begin
-            cpi := UMthProc_[slot];
+            EmitB($48); EmitB($B8); EmitDataRef(UClsVMTOffset[classIdx - REC_UCLASS_BASE]); { mov rax, VMT_addr }
+            EmitB($48); EmitB($89); EmitB($07); { mov [rdi], rax }
             
-            { Push Self first }
-            EmitB($57); { push rdi }
-            
-            { Push explicit constructor arguments }
-            argNode := IRB[node]; { size arg }
-            argNode := IRB[argNode]; { first explicit constructor arg }
-            while argNode <> -1 do
+            { Find constructor 'Create' of this class }
+            slot := FindUMeth(classIdx - REC_UCLASS_BASE, 'create');
+            if slot >= 0 then
             begin
-              IREmitNode(IRA[argNode]); { evaluates arg -> rax }
-              EmitB($50); { push rax }
-              argNode := IRB[argNode];
-            end;
-            
-            { Pop args into SysV ABI registers }
-            for i := Procs[cpi].ParamCount-1 downto 0 do
-              case i of
-                0: EmitB($5F);
-                1: EmitB($5E);
-                2: EmitB($5A);
-                3: EmitB($59);
-                4: begin EmitB($41); EmitB($58); end;
-                5: begin EmitB($41); EmitB($59); end;
+              cpi := UMthProc_[slot];
+              
+              { Push Self first }
+              EmitB($57); { push rdi }
+              
+              { Push explicit constructor arguments }
+              argNode := IRB[node]; { size arg }
+              argNode := IRB[argNode]; { first explicit constructor arg }
+              while argNode <> -1 do
+              begin
+                IREmitNode(IRA[argNode]); { evaluates arg -> rax }
+                EmitB($50); { push rax }
+                argNode := IRB[argNode];
               end;
               
-            { Save Self on stack across the call }
-            EmitB($57); { push rdi }
-            
-            EmitCallProc(cpi);
-            
-            { Restore Self into rax as the result of the constructor call }
-            EmitB($58); { pop rax }
+              { Pop args into SysV ABI registers }
+              for i := Procs[cpi].ParamCount-1 downto 0 do
+                case i of
+                  0: EmitB($5F);
+                  1: EmitB($5E);
+                  2: EmitB($5A);
+                  3: EmitB($59);
+                  4: begin EmitB($41); EmitB($58); end;
+                  5: begin EmitB($41); EmitB($59); end;
+                end;
+
+              { Save Self across the call and return it as the constructor's
+                result (rax). Without this rax holds the constructor body's
+                garbage return, so `obj := T.Create` stores a bad pointer and a
+                later virtual call dereferences a wild VMT. rdi (= Self, arg0) is
+                unchanged by the push, so the callee still receives it. }
+              EmitB($57); { push rdi }
+              EmitCallProc(cpi);
+              EmitB($58); { pop rax }
+            end
+            else
+            begin
+              { No constructor defined, just return the instance pointer in rax }
+              EmitB($48); EmitB($89); EmitB($F8); { mov rax, rdi }
+            end;
           end
           else
           begin
-            { No constructor defined, just return the instance pointer in rax }
+            { Plain GetMem: return the payload pointer in rax }
             EmitB($48); EmitB($89); EmitB($F8); { mov rax, rdi }
           end;
         end
         else if pi = -Ord(tkFreeMem) then
         begin
-          { FreeMem(p): push the block onto the free list (link stored in the
-            payload's first 8 bytes). nil is ignored. The size header at [p-8]
-            is left intact so GetMem can size the block for reuse. }
+          { FreeMem(p): hand the payload back to the pure-Pascal allocator's
+            Free, matching GetMem -> Alloc. nil is ignored inside Free. (Was a
+            direct push onto the compiler's own BSS_FREE_LIST, which mismatched
+            the mmap pool that Alloc now serves.) }
           EmitAcquireHeapLock;
           argNode := IRB[node]; { pointer arg }
           IREmitNode(IRA[argNode]); { p -> rax }
-          EmitB($48); EmitB($85); EmitB($C0);             { test rax, rax }
-          EmitB($74); pFreeNil := CodeLen; EmitB(0);      { jz over (nil: skip) }
-          EmitB($48); EmitB($8B); EmitB($14); EmitB($25); EmitGlobRef(BSS_FREE_LIST); { mov rdx, [FREE_LIST] }
-          EmitB($48); EmitB($89); EmitB($10);             { mov [rax], rdx  (p.next = head) }
-          EmitB($48); EmitB($89); EmitB($04); EmitB($25); EmitGlobRef(BSS_FREE_LIST); { mov [FREE_LIST], rax }
-          Code[pFreeNil] := Byte(CodeLen - (pFreeNil + 1));
+          EmitHeapFreeLocked;       { Free(rax) }
           EmitReleaseHeapLock;
         end
         else if pi = -103 then
         begin
-          { ReallocMem(oldp, newsize) -> new pointer in rax.
-            Bump-allocate a fresh [size][payload] block of newsize, copy
-            min(oldsize, newsize) bytes from oldp (oldsize read from oldp's
-            header; nil oldp => copy nothing), push the old block on the free
-            list, return the new payload. Stack: [oldp] then [newp][oldp]. }
+          { ReallocMem(oldp, newsize) }
           EmitAcquireHeapLock;
           EmitB($53);                                     { push rbx }
           argNode := IRB[node];           { arg0 = oldp }
@@ -2933,67 +2843,14 @@ begin
           argNode := IRB[argNode];        { arg1 = newsize }
           IREmitNode(IRA[argNode]);       { rax = newsize }
 
-          { round up to 8, clamp >= 8 -> rcx (N) }
-          EmitB($48); EmitB($83); EmitB($C0); EmitB($07); { add rax, 7 }
-          EmitB($48); EmitB($83); EmitB($E0); EmitB($F8); { and rax, -8 }
-          EmitB($48); EmitB($83); EmitB($F8); EmitB($08); { cmp rax, 8 }
-          EmitB($73); EmitB($05);                         { jae +5 }
-          EmitB($B8); EmitI32(8);                         { mov eax, 8 }
-          EmitB($48); EmitB($89); EmitB($C1);             { mov rcx, rax }
+          EmitB($48); EmitB($89); EmitB($C6);             { mov rsi, rax (newsize) }
+          EmitB($5F);                                     { pop rdi (oldp) }
+          EmitB($48); EmitB($C7); EmitB($C2); EmitI32(8);  { mov rdx, 8 (align) }
 
-          { bump-allocate N + 8 (no free-list reuse for the new block) }
-          EmitB($48); EmitB($8B); EmitB($1C); EmitB($25); EmitGlobRef(BSS_HEAP_PTR); { mov rbx, [HEAP_PTR] }
-          EmitB($48); EmitB($89); EmitB($D8);             { mov rax, rbx }
-          EmitB($48); EmitB($01); EmitB($C8);             { add rax, rcx }
-          EmitB($48); EmitB($83); EmitB($C0); EmitB($08); { add rax, 8 }
-          EmitB($48); EmitB($3B); EmitB($04); EmitB($25); EmitGlobRef(BSS_HEAP_END); { cmp rax, [HEAP_END] }
-          EmitB($0F); EmitB($86); pJbeNoGrow := CodeLen; EmitI32(0); { jbe NOGROW }
-          EmitB($48); EmitB($89); EmitB($CE);             { mov rsi, rcx }
-          EmitB($48); EmitB($83); EmitB($C6); EmitB($08); { add rsi, 8 }
-          EmitB($48); EmitB($81); EmitB($C6); EmitI32(HEAP_ARENA_SIZE); { add rsi, ARENA }
-          EmitB($51);                                     { push rcx }
-          EmitMmapArena;                                  { rax = base; rsi kept }
-          EmitB($59);                                     { pop rcx }
-          EmitB($48); EmitB($89); EmitB($04); EmitB($25); EmitGlobRef(BSS_HEAP_PTR); { mov [HEAP_PTR], rax }
-          EmitB($48); EmitB($89); EmitB($C3);             { mov rbx, rax }
-          EmitB($48); EmitB($89); EmitB($C2);             { mov rdx, rax }
-          EmitB($48); EmitB($01); EmitB($F2);             { add rdx, rsi }
-          EmitB($48); EmitB($89); EmitB($14); EmitB($25); EmitGlobRef(BSS_HEAP_END); { mov [HEAP_END], rdx }
-          Patch32(pJbeNoGrow, CodeLen - (pJbeNoGrow + 4));
-          EmitB($48); EmitB($89); EmitB($0B);             { mov [rbx], rcx  (header) }
-          EmitB($48); EmitB($8D); EmitB($43); EmitB($08); { lea rax, [rbx+8]  (newp) }
-          EmitB($48); EmitB($89); EmitB($DA);             { mov rdx, rbx }
-          EmitB($48); EmitB($01); EmitB($CA);             { add rdx, rcx }
-          EmitB($48); EmitB($83); EmitB($C2); EmitB($08); { add rdx, 8 }
-          EmitB($48); EmitB($89); EmitB($14); EmitB($25); EmitGlobRef(BSS_HEAP_PTR); { mov [HEAP_PTR], rdx }
+          pi := FindProc('PXXRealloc');
+          if pi < 0 then Error('compiler error: Realloc helper not found in builtin unit');
+          EmitCallProc(pi);                               { rax = new pointer }
 
-          { rax = newp, rcx = newsize. Recover oldp, stack [newp][oldp]. }
-          EmitB($5E);                                     { pop rsi (oldp) }
-          EmitB($50);                                     { push rax (newp) }
-          EmitB($56);                                     { push rsi (oldp) }
-
-          { oldsize -> rdx (0 if oldp nil) }
-          EmitB($48); EmitB($31); EmitB($D2);             { xor rdx, rdx }
-          EmitB($48); EmitB($85); EmitB($F6);             { test rsi, rsi }
-          EmitB($74); EmitB($04);                         { jz +4 }
-          EmitB($48); EmitB($8B); EmitB($56); EmitB($F8); { mov rdx, [rsi-8] }
-          { count = min(oldsize rdx, newsize rcx) -> rcx }
-          EmitB($48); EmitB($39); EmitB($CA);             { cmp rdx, rcx }
-          EmitB($73); EmitB($03);                         { jae +3 (rdx>=rcx: keep newsize) }
-          EmitB($48); EmitB($89); EmitB($D1);             { mov rcx, rdx }
-          { rep movsb from oldp([rsp]) to newp([rsp+8]) }
-          EmitB($48); EmitB($8B); EmitB($34); EmitB($24); { mov rsi, [rsp]  (oldp) }
-          EmitB($48); EmitB($8B); EmitB($7C); EmitB($24); EmitB($08); { mov rdi, [rsp+8]  (newp) }
-          EmitB($F3); EmitB($A4);                         { rep movsb }
-
-          { free old block (if non-nil): push on free list }
-          EmitB($5E);                                     { pop rsi (oldp) }
-          EmitB($48); EmitB($85); EmitB($F6);             { test rsi, rsi }
-          EmitB($74); EmitB($13);                         { jz +19 }
-          EmitB($48); EmitB($8B); EmitB($14); EmitB($25); EmitGlobRef(BSS_FREE_LIST); { mov rdx, [FREE_LIST] }
-          EmitB($48); EmitB($89); EmitB($16);             { mov [rsi], rdx }
-          EmitB($48); EmitB($89); EmitB($34); EmitB($25); EmitGlobRef(BSS_FREE_LIST); { mov [FREE_LIST], rsi }
-          EmitB($58);                                     { pop rax (newp) -> result }
           EmitB($5B);                                     { pop rbx }
           EmitReleaseHeapLock;
         end

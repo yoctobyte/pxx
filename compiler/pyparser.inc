@@ -1069,7 +1069,9 @@ begin
 end;
 
 procedure ParsePyProgram;
-var mainNode, stmt, blockNode, jmpPatch, i: Integer; needsBuiltin: Boolean;
+var mainNode, stmt, blockNode, jmpPatch, i, savedUnitIdx: Integer; needsBuiltin: Boolean;
+    dummyNames: array[0..3] of AnsiString;
+    dummyTypes: array[0..3] of TTypeKind;
 begin
   needsBuiltin := True;
   for i := 0 to MainProgramTokCount - 1 do
@@ -1095,6 +1097,22 @@ begin
   EmitB($48); EmitB($81); EmitB($C2); EmitI32(HEAP_ARENA_SIZE);
   EmitB($48); EmitB($89); EmitB($14); EmitB($25); EmitGlobRef(BSS_HEAP_END);
   EmitB($E9); jmpPatch := CodeLen; EmitI32(0);
+  { Forward-declare the builtin heap allocator before emitting the string
+    runtime, which calls Alloc. The unit body (compiled by ParseUsesUnit below)
+    fills these in. Mirrors the Pascal ParseProgram path; without it a .npy that
+    touches the heap fails FindProc('PXXAlloc') during EmitAnsiStringRuntime. }
+  savedUnitIdx := CurrentUnitIdx;
+  CurrentUnitIdx := InternStr('builtin');
+  dummyNames[0] := 'size';  dummyTypes[0] := tyInt64;
+  dummyNames[1] := 'align'; dummyTypes[1] := tyInteger;
+  i := RegisterProc('PXXAlloc', True, tyPointer, 2, dummyNames, dummyTypes);
+  dummyNames[0] := 'p';     dummyTypes[0] := tyPointer;
+  i := RegisterProc('PXXFree', False, tyPointer, 1, dummyNames, dummyTypes);
+  dummyNames[0] := 'p';     dummyTypes[0] := tyPointer;
+  dummyNames[1] := 'newSize'; dummyTypes[1] := tyInt64;
+  dummyNames[2] := 'align'; dummyTypes[2] := tyInteger;
+  i := RegisterProc('PXXRealloc', True, tyPointer, 3, dummyNames, dummyTypes);
+  CurrentUnitIdx := savedUnitIdx;
   EmitAnsiStringRuntime;
   if needsBuiltin then ParseUsesUnit('builtin');
   PySkipNewlines;

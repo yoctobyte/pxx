@@ -78,7 +78,7 @@ begin
   end;
 end;
 
-procedure RegisterPtrAlias(noff, nlen, elemTk, elemRec: Integer);
+procedure RegisterPtrAlias(noff, nlen, elemTk, elemRec, targetNOff, targetNLen: Integer);
 begin
   if AliasCount >= MAX_TYPEALIAS then Error('too many type aliases');
   AliasNOff[AliasCount] := noff;
@@ -86,6 +86,8 @@ begin
   AliasTk[AliasCount] := Ord(tyPointer);
   AliasElemTk[AliasCount] := elemTk;
   AliasElemRec[AliasCount] := elemRec;
+  AliasTargetNOff[AliasCount] := targetNOff;
+  AliasTargetNLen[AliasCount] := targetNLen;
   Inc(AliasCount);
 end;
 
@@ -97,6 +99,8 @@ begin
   AliasTk[AliasCount] := tk;
   AliasElemTk[AliasCount] := tk;
   AliasElemRec[AliasCount] := rec;
+  AliasTargetNOff[AliasCount] := 0;
+  AliasTargetNLen[AliasCount] := 0;
   Inc(AliasCount);
 end;
 
@@ -110,8 +114,21 @@ begin
   AliasTk[AliasCount] := Ord(tySet);
   AliasElemTk[AliasCount] := elemEnumId;
   AliasElemRec[AliasCount] := REC_NONE;
+  AliasTargetNOff[AliasCount] := 0;
+  AliasTargetNLen[AliasCount] := 0;
   Inc(AliasCount);
 end;
+
+function GetSliceName(off, len: Integer): AnsiString;
+var s: AnsiString; i: Integer;
+begin
+  s := '';
+  for i := 0 to len - 1 do
+    AppendChar(s, TokChars[off + i]);
+  Result := s;
+end;
+
+
 
 procedure RegisterClassRefAlias(noff, nlen, classRec: Integer);
 { Named metaclass type: TFooClass = class of TFoo. Runtime values are RTTI
@@ -725,7 +742,16 @@ end;
 
 procedure BuiltinLayoutAssert(ok: Boolean; const msg: AnsiString);
 begin
-  if not ok then Error('built-in record layout validation failed: ' + msg);
+  if not ok then
+  begin
+    writeln('BuiltinLayoutAssert failed: ', msg);
+    writeln('REC_TTOKEN size = ', RecSize(REC_TTOKEN));
+    writeln('REC_TTOKEN Kind offset = ', RecFieldOffset(REC_TTOKEN, 'Kind'));
+    writeln('REC_TTOKEN SVal offset = ', RecFieldOffset(REC_TTOKEN, 'SVal'));
+    writeln('REC_TTOKEN IVal offset = ', RecFieldOffset(REC_TTOKEN, 'IVal'));
+    writeln('REC_TTOKEN Line offset = ', RecFieldOffset(REC_TTOKEN, 'Line'));
+    Error('built-in record layout validation failed: ' + msg);
+  end;
 end;
 
 procedure CheckBuiltinRecSize(rec, expected: Integer; const name: AnsiString);
@@ -735,11 +761,29 @@ end;
 
 procedure CheckBuiltinRecField(rec: Integer; const field: AnsiString; off: Integer;
   tk: TTypeKind; recId: Integer; isArray: Boolean);
+var
+  actOff, actRecId: Integer;
+  actTk: TTypeKind;
+  actIsArray: Boolean;
 begin
-  BuiltinLayoutAssert(RecFieldOffset(rec, field) = off, field);
-  BuiltinLayoutAssert(RecFieldType(rec, field) = tk, field);
-  BuiltinLayoutAssert(RecFieldRecId(rec, field) = recId, field);
-  BuiltinLayoutAssert(RecFieldIsArray(rec, field) = isArray, field);
+  actOff := RecFieldOffset(rec, field);
+  actTk := RecFieldType(rec, field);
+  actRecId := RecFieldRecId(rec, field);
+  actIsArray := RecFieldIsArray(rec, field);
+  
+  if actOff <> off then
+    writeln('Field ', field, ' offset mismatch: expected ', off, ', got ', actOff);
+  if actTk <> tk then
+    writeln('Field ', field, ' type mismatch: expected ', Ord(tk), ', got ', Ord(actTk));
+  if actRecId <> recId then
+    writeln('Field ', field, ' recId mismatch: expected ', recId, ', got ', actRecId);
+  if actIsArray <> isArray then
+    writeln('Field ', field, ' isArray mismatch: expected ', isArray, ', got ', actIsArray);
+
+  BuiltinLayoutAssert(actOff = off, field);
+  BuiltinLayoutAssert(actTk = tk, field);
+  BuiltinLayoutAssert(actRecId = recId, field);
+  BuiltinLayoutAssert(actIsArray = isArray, field);
 end;
 
 procedure ValidateBuiltinRecordLayout;
@@ -3330,6 +3374,29 @@ begin
     Result := Syms[ASTIVal[node]].IsArray
   else if ASTKind[node] = AN_FIELD then
     Result := RecFieldIsArray(ResolveNodeRec(ASTLeft[node]), GetASTIdentName(node));
+end;
+
+procedure ResolvePendingPointerAliases;
+var
+  i, ci: Integer;
+  targetName: AnsiString;
+begin
+  for i := 0 to AliasCount - 1 do
+  begin
+    if (AliasTk[i] = Ord(tyPointer)) and (AliasElemRec[i] = REC_NONE) and (AliasTargetNLen[i] > 0) then
+    begin
+      targetName := GetSliceName(AliasTargetNOff[i], AliasTargetNLen[i]);
+      ci := FindUClass(targetName);
+      if ci >= 0 then
+      begin
+        if UClsIsRecord[ci] then
+          AliasElemTk[i] := Ord(tyRecord)
+        else
+          AliasElemTk[i] := Ord(tyClass);
+        AliasElemRec[i] := REC_UCLASS_BASE + ci;
+      end;
+    end;
+  end;
 end;
 
 { ===== Expression parser ===== }
