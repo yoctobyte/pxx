@@ -1,8 +1,8 @@
 # Unified syscall-free heap allocator
 
 - **Type:** feature
-- **Status:** backlog
-- **Owner:** —
+- **Status:** done
+- **Owner:** Claude (Opus 4.8)
 - **Unblocks:** feature-static-arena-profile, feature-threadsafe-io-serialization, feature-async-coroutines, feature-parallel-processing
 - **Opened:** 2026-06-06 (from todo.md §2d / §4)
 
@@ -32,5 +32,24 @@ Design: `../../developer/allocator-platform-design.md`,
 Alloc/free-heavy programs reuse memory across all value kinds via the shared
 path; existing allocator/managed tests stay green; self-host fixedpoint holds.
 
+## Done
+
+Commits `2a3b2f6` + `f6de004`. Class, string, array, and raw-memory allocation
+now share **one** pure-Pascal contract — `PXXAlloc`/`PXXFree`/`PXXRealloc` in
+`lib/rtl/builtin.pas` — to which the compiler redirects GetMem/New/class-new,
+FreeMem/Dispose, and ReallocMem (`EmitHeapAllocLocked`/`EmitHeapFreeLocked`).
+mmap-backed, 8-byte size header + first-fit free list, reused blocks zeroed.
+Acceptance met: alloc/free-heavy programs reuse across all value kinds; full
+`make bootstrap` (byte-identical fixedpoint) + `make test` + `make test-nilpy`
+green.
+
+Deferred (separate tickets, not blocking the dependents above):
+- Split/coalesce/in-place-resize/size-bins/alignment → `feature-allocator-quality`.
+- Syscall-free target-hook abstraction (mmap optional; bare-metal/ESP32) →
+  `feature-static-arena-profile` (the no-syscall profile) and the ESP32 arc.
+
 ## Log
 - 2026-06-06 — ticket opened from todo.md §2d/§4.
+- 2026-06-06 — delivered the shared pure-Pascal allocator contract (2a3b2f6,
+  f6de004); reconstructed the lost builtin bodies and fixed the self-host
+  regressions (not-typing, constructor-Self, nilpy fixups). Moved to done/.

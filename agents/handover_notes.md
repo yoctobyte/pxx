@@ -1,45 +1,46 @@
-# Handover Notes: Redirecting Compiler Memory Allocations to Pure Pascal RTL
+# Handover Notes: Pure-Pascal Heap Allocator — DELIVERED
 
-This document provides a comprehensive summary of the work done to redirect memory allocation to the pure Pascal RTL allocator in `lib/rtl/builtin.pas` and to resolve compiler bootstrapping issues.
+Status: **done** (2026-06-06, commits `2a3b2f6` + `f6de004`). Kept as a record;
+durable tracking lives in `docs/progress/` (`feature-unified-heap-allocator` in
+`done/`, `feature-allocator-quality` follow-up in `backlog/`).
 
-## 1. Summary of Completed Fixes
-### Boolean Negation Bug (Resolved)
-- **Problem:** When compiling `/tmp/pascal26-verify` (stage 3 of the bootstrap), the layout validation checks failed. This was due to a miscompilation of boolean negation expressions (e.g. `not ok` in `BuiltinLayoutAssert`).
-- **Root Cause:** In [compiler/parser.inc](file:///home/rene/frankonpiler/compiler/parser.inc), parsing of bare identifiers in `ParseFactor` did not update the global `LastExprTk` type tracker. When parsing a boolean variable like `ok`, `LastExprTk` was left at its default initialization `tyInteger`. As a result, `not ok` compiled to an ordinal bitwise negation (`not rax`, i.e., `~1 = -2`) instead of logical negation (`xor rax, 1`). Both `True` and `False` values negated to non-zero values, which were interpreted as `True`, triggering spurious layout validation failures.
-- **Fix:** In `ParseFactor` under the `tkIdent` case, we added `LastExprTk := IntToTypeKind(ASTTk[CurASTNode]);` immediately after the `ParseLValueAST` call. This correctly propagates the type (e.g., `tyBoolean`) to `LastExprTk`. We also cleaned up all temporary diagnostic `writeln` statements.
+## What shipped
 
----
+The compiler's heap (GetMem/New/class-new, FreeMem/Dispose, ReallocMem) is
+redirected to one pure-Pascal contract — `PXXAlloc`/`PXXFree`/`PXXRealloc` in
+`lib/rtl/builtin.pas` (mmap-backed, 8-byte size header + first-fit free list,
+reused blocks zeroed). `make bootstrap` (byte-identical fixedpoint), `make test`
+(+ `fpc-check`), and `make test-nilpy` are all green.
 
-## 2. Redirected Memory Allocator Status
-- **Files Modified:**
-  - [lib/rtl/builtin.pas](file:///home/rene/frankonpiler/lib/rtl/builtin.pas): Implements `Alloc`, `Free`, and `Realloc` using custom `SyscallMmap` calls.
-  - [compiler/ir_codegen.inc](file:///home/rene/frankonpiler/compiler/ir_codegen.inc): Redirects `GetMem` and `ReallocMem` code generation to call `Alloc` and `Realloc` from the `builtin` unit.
-- **Current State:**
-  - `make bootstrap` compiles `/tmp/pascal26-build` successfully using the Free Pascal compiler (FPC).
-  - When executing `/tmp/pascal26-build` (the self-hosted compiler stage 2 binary) to compile `compiler.pas` for `/tmp/pascal26-verify`, the process enters an **infinite loop** (using 99.9% CPU).
-  - To rule out a free-list cyclic loop in the `builtin.pas` allocator, we temporarily converted `Alloc` and `Free` into a **pure bump allocator** (which does not traverse or pop from any free list, and `Free` is a no-op). However, the infinite loop still occurs, implying the hang is outside `Alloc`'s free-list traversal loop.
+## Correction to the original handover
 
----
+The original handover assumed `builtin.pas` already implemented `Alloc`/`Free`/
+`Realloc` and that the stage-2 hang was the asymmetric `FreeMem` (Hypothesis A).
+Reality: **those bodies were never committed and were absent from the tree**, so
+the redirected ops called bodyless procs. Hypothesis A alone could not have
+fixed it.
 
-## 3. Key Hypotheses and Diagnostics for the Next Agent
+## Bugs found and fixed en route
 
-### Hypothesis A: Mismatched/Asymmetric `FreeMem` Redirection
-- **Issue:** While `GetMem` (allocation) and `ReallocMem` (reallocation) were redirected to call `Alloc` and `Realloc` from `builtin.pas`, **`FreeMem` was NOT redirected** (see `tkFreeMem` case in `compiler/ir_codegen.inc`).
-- **Impact:** `FreeMem(p)` still compiles to the inline assembly in `tkFreeMem` which pushes blocks directly onto the compiler's own program `BSS_FREE_LIST`. This creates a severe mismatch: memory is allocated in one heap pool (`builtin`'s mmap-managed pool) and freed into another (`BSS_FREE_LIST`).
-- **Next Step:** Update `tkFreeMem` in [compiler/ir_codegen.inc](file:///home/rene/frankonpiler/compiler/ir_codegen.inc#L2816-L2831) to invoke `EmitHeapFreeLocked` (which calls `Free` from `builtin.pas`), matching `GetMem`.
+1. Reconstructed the missing `PXXAlloc`/`PXXFree`/`PXXRealloc` bodies.
+2. `FreeMem` → `EmitHeapFreeLocked` (the real Hypothesis A).
+3. Reused blocks must be zeroed (managed runtime assumes fresh = 0).
+4. **The "infinite loop" was a codegen regression, not the allocator:** a
+   `not`-typing heuristic (keyed on `LastExprTk`) mistyped a boolean `not` in
+   the compiler's own source as bitwise, so a `while not done` never terminated.
+   Reverted to logical `not`.
+5. **Virtual dispatch segfault:** the class-new refactor dropped "save Self /
+   return Self as the constructor result", so `obj := T.Create` returned garbage.
+   Re-added.
+6. **nilpy:** registered the allocator forward-decls and added the missing
+   `ApplyCallFixups` so `.npy` patches forward calls (the variant int→string
+   crash was an unpatched `call PXXAlloc`).
+7. Renamed `Alloc`/`Free`/`Realloc` → `PXX*` to avoid colliding with C
+   `free`/`malloc` and user identifiers.
 
-### Hypothesis B: `Realloc` Array Copy Out-Of-Bounds
-- **Issue:** In `lib/rtl/builtin.pas`'s `Realloc`, if `newSize > oldSize`, a new block `newP` is allocated, and the copy loop runs `for i := 0 to oldSize - 1 do dst^ := src^;`.
-- **Impact:** If `oldSize` (from `block^.Size`) is larger than the actual requested length of the original allocation (since it gets aligned to multiples of 8), but the allocation was at the very end of an mmap region, copying up to `oldSize` could potentially read past the page boundary and page-fault (though this usually segfaults rather than infinite-loops).
+## Follow-ups (tickets)
 
-### Hypothesis C: Miscompilation of other features in stage 2
-- **Issue:** Since stage 2 is compiled by our compiler, any compiler bug (in codegen, registers, or runtime) can cause stage 2 to loop infinitely.
-- **Next Step:** Compare the assembly code generated by `pascal26-fpc` and `pascal26-build` (or run under a debugger) to pinpoint the exact instruction sequence causing the infinite loop.
-
----
-
-## 4. Modified Files Reference
-
-- [compiler/parser.inc](file:///home/rene/frankonpiler/compiler/parser.inc) (parser logic for identifiers/negation tracking)
-- [compiler/ir_codegen.inc](file:///home/rene/frankonpiler/compiler/ir_codegen.inc) (heap operations codegen redirection)
-- [lib/rtl/builtin.pas](file:///home/rene/frankonpiler/lib/rtl/builtin.pas) (custom mmap heap allocator implementation)
+- `feature-allocator-quality` — split/coalesce/bins/alignment (deferred; the
+  simple allocator is correct and may be good enough).
+- `feature-static-arena-profile` — the syscall-free / target-hook abstraction
+  (mmap optional; bare-metal/ESP32).
