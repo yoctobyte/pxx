@@ -1,8 +1,8 @@
 # By-value record args >8 bytes truncate (and operator operand edges)
 
 - **Type:** bug
-- **Status:** backlog
-- **Owner:** —
+- **Status:** done
+- **Owner:** Antigravity
 - **Opened:** 2026-06-06 (surfaced while fixing bug-operator-result-inferred-var)
 
 ## Symptom
@@ -44,3 +44,5 @@ omitted with a note).
 
 ## Log
 - 2026-06-06 — ticket opened from the operator-result fix investigation.
+- 2026-06-06 — claimed by Antigravity; working on implementation.
+- 2026-06-06 — implemented parameter reference matching and chained operator temporary loading; fixed-point self-host verified and tests added.

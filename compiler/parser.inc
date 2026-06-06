@@ -5603,7 +5603,14 @@ begin
     idx := AllocParam(pnames[i], ptypes[i], pbyref[i], parr[i]);
     Procs[pi].Params[i].SymIdx := idx;
     if (ptypes[i] = tyClass) or (ptypes[i] = tyRecord) then
+    begin
       Syms[idx].RecName := ptypesRec[i];
+      if (ptypes[i] = tyRecord) and (RecSize(ptypesRec[i]) > 8) then
+      begin
+        Syms[idx].IsRef := True;
+        Procs[pi].Params[i].IsRef := True;
+      end;
+    end;
     if ptypes[i] = tyPointer then
     begin
       Syms[idx].PtrElemTk := ptypesPtrElemTk[i];

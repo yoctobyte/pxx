@@ -823,6 +823,96 @@ begin
   end;
 end;
 
+function IsASTLValue(node: Integer): Boolean;
+var symIdx: Integer;
+begin
+  Result := False;
+  if node < 0 then Exit;
+  if ASTKind[node] = AN_IDENT then
+  begin
+    symIdx := ASTIVal[node];
+    Result := (Syms[symIdx].Kind = skLocal) or
+              (Syms[symIdx].Kind = skParam) or
+              (Syms[symIdx].Kind = skGlobal);
+  end
+  else
+    Result := (ASTKind[node] = AN_FIELD) or
+              (ASTKind[node] = AN_INDEX) or
+              (ASTKind[node] = AN_DEREF);
+end;
+
+function IRLowerCallArg(cpi: Integer; pathIdx: Integer; argAST: Integer; isRefArg: Boolean): Integer;
+var argTk: TTypeKind;
+    needTemp: Boolean;
+    argRecId: Integer;
+    savedLastTypeRecId: Integer;
+    tmpSym: Integer;
+    tmpAddr: Integer;
+    srcAddr: Integer;
+    value: Integer;
+begin
+  argTk := IntToTypeKind(ASTTk[argAST]);
+  needTemp := False;
+  argRecId := REC_NONE;
+  if argTk = tyRecord then
+  begin
+    argRecId := ResolveNodeRec(argAST);
+    if isRefArg then
+    begin
+      if not IsASTLValue(argAST) then
+        needTemp := True;
+    end
+    else
+    begin
+      if RecSize(argRecId) > 8 then
+        needTemp := True;
+    end;
+  end;
+
+  if needTemp then
+  begin
+    savedLastTypeRecId := LastTypeRecId;
+    LastTypeRecId := argRecId;
+    tmpSym := AllocVar('', tyRecord);
+    LastTypeRecId := savedLastTypeRecId;
+
+    tmpAddr := IRAppend(IR_LEA, tmpSym, -1, -1, 0, Ord(tyPointer));
+
+    if IsASTLValue(argAST) then
+      srcAddr := IRLowerAddress(argAST)
+    else
+      srcAddr := IRLowerAST(argAST);
+
+    if RecordHasManagedFields(argRecId) then
+      IRAppend(IR_COPY_REC_MANAGED, tmpAddr, srcAddr, argRecId, RecSize(argRecId), Ord(tyRecord))
+    else
+      IRAppend(IR_COPY_REC, tmpAddr, srcAddr, -1, RecSize(argRecId), Ord(tyRecord));
+
+    value := tmpAddr;
+  end
+  else
+  begin
+    if isRefArg then
+    begin
+      if (cpi >= 0) and
+         (ASTKind[argAST] = AN_IDENT) and
+         (Syms[ASTIVal[argAST]].TypeKind = tyAnsiString) and
+         not ((Syms[ASTIVal[argAST]].Kind = skParam) and
+              Syms[ASTIVal[argAST]].IsRef) then
+        value := IRAppend(IR_SLOTADDR, ASTIVal[argAST], -1, -1, 0, Ord(tyPointer))
+      else
+        value := IRLowerAddress(argAST);
+    end
+    else
+    begin
+      value := IRLowerAST(argAST);
+      if (argTk = tyRecord) and ((ASTKind[argAST] = AN_CALL) or (ASTKind[argAST] = AN_BINOP)) then
+        value := IRAppend(IR_LOAD_MEM, value, -1, -1, 0, ASTTk[argAST]);
+    end;
+  end;
+  Result := value;
+end;
+
 function IRLowerAST(node: Integer): Integer;
 var left, right, seq, item, value, outNode, first, last, leftAddr, argNode, argVal, intCallNode, intArgSeq, argNode2, zeroVal, pi, zeroBytes: Integer;
     pairNode, condNode, specialId, classIdx, slot, cpi, pathIdx: Integer;
@@ -1030,9 +1120,9 @@ begin
       cpi := FindOpOverload(Integer(ASTIVal[node]), ASTTk[ASTLeft[node]], ResolveNodeRec(ASTLeft[node]));
       if cpi >= 0 then
       begin
-        left  := IRLowerAST(ASTLeft[node]);
+        left  := IRLowerCallArg(cpi, 0, ASTLeft[node], Procs[cpi].Params[0].IsRef);
         first := IRAppend(IR_ARG, left, -1, -1, 0, ASTTk[ASTLeft[node]]);
-        right := IRLowerAST(ASTRight[node]);
+        right := IRLowerCallArg(cpi, 1, ASTRight[node], Procs[cpi].Params[1].IsRef);
         last  := IRAppend(IR_ARG, right, -1, -1, 0, ASTTk[ASTRight[node]]);
         IRB[first] := last;
         Result := IRAppendCall(cpi, first, -1, ASTTk[node]);
@@ -1519,29 +1609,7 @@ begin
           end;
         end;
 
-        if isRefArg then
-        begin
-          { A by-ref managed-string arg to a USER proc (cpi >= 0) must pass the
-            ADDRESS of the variable's handle slot so the callee can store back.
-            For a direct (non-ref) tyAnsiString variable, IRLowerAddress→IR_LEA
-            auto-loads the handle in read mode (passing it by value and breaking
-            the callee's deref), so use IR_SLOTADDR (the unconditional lea =
-            &slot). For an arg that is ITSELF a by-ref managed-string param, its
-            slot already holds the forwarded address; IR_LEA loads that value,
-            which is exactly what to forward, so keep IRLowerAddress there.
-            Builtins (cpi < 0, e.g. Length) flag isRefArg for their own
-            addressing and want the handle, not the slot — excluded by cpi >= 0. }
-          if (cpi >= 0) and
-             (ASTKind[ASTLeft[item]] = AN_IDENT) and
-             (Syms[ASTIVal[ASTLeft[item]]].TypeKind = tyAnsiString) and
-             not ((Syms[ASTIVal[ASTLeft[item]]].Kind = skParam) and
-                  Syms[ASTIVal[ASTLeft[item]]].IsRef) then
-            value := IRAppend(IR_SLOTADDR, ASTIVal[ASTLeft[item]], -1, -1, 0, Ord(tyPointer))
-          else
-            value := IRLowerAddress(ASTLeft[item]);
-        end
-        else
-          value := IRLowerAST(ASTLeft[item]);
+        value := IRLowerCallArg(cpi, pathIdx, ASTLeft[item], isRefArg);
 
         { A materialised managed-string argument (a literal, concat, char/string
           coercion, or function result — anything that is not an existing lvalue)
