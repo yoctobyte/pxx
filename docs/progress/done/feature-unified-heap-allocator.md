@@ -36,7 +36,7 @@ path; existing allocator/managed tests stay green; self-host fixedpoint holds.
 
 Commits `2a3b2f6` + `f6de004`. Class, string, array, and raw-memory allocation
 now share **one** pure-Pascal contract — `PXXAlloc`/`PXXFree`/`PXXRealloc` in
-`lib/rtl/builtin.pas` — to which the compiler redirects GetMem/New/class-new,
+`compiler/builtin/builtin.pas` — to which the compiler redirects GetMem/New/class-new,
 FreeMem/Dispose, and ReallocMem (`EmitHeapAllocLocked`/`EmitHeapFreeLocked`).
 mmap-backed, 8-byte size header + first-fit free list, reused blocks zeroed.
 Acceptance met: alloc/free-heavy programs reuse across all value kinds; full

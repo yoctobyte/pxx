@@ -203,7 +203,7 @@ target hooks for hosted reserve/release/resize facilities, plus
 splitting/coalescing and later bins. See
 [`allocator-platform-design.md`](allocator-platform-design.md).
 
-- ✅ **`Val`/`Str`** (integer) — done as pure-Pascal `lib/rtl/builtin.pas`
+- ✅ **`Val`/`Str`** (integer) — done as pure-Pascal `compiler/builtin/builtin.pas`
   (`StrInt`, `Val`), not asm. The unit is **auto-included only when the program
   calls `Str(`/`Val(`** (token pre-scan in ParseProgram, like the exception
   runtime). `Str(x[:w[:d]], s)` is parsed like `write`'s `value:w:d` and

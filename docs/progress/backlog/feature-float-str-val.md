@@ -7,7 +7,7 @@
 
 ## Motivation
 
-`Str`/`Val` are implemented for integers only (`lib/rtl/builtin.pas`). Float
+`Str`/`Val` are implemented for integers only (`compiler/builtin/builtin.pas`). Float
 conversion is the remaining gap. (Float intrinsics `Trunc`/`Round`/`Int` are
 already done — `test/test_float_intrinsics.pas`.)
 

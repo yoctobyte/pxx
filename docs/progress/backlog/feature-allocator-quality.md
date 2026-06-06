@@ -8,7 +8,7 @@
 ## Motivation
 
 The shared pure-Pascal allocator (`PXXAlloc`/`PXXFree`/`PXXRealloc`,
-`lib/rtl/builtin.pas`) is delivered and self-hosts, but is deliberately simple:
+`compiler/builtin/builtin.pas`) is delivered and self-hosts, but is deliberately simple:
 first-fit free list, 8-byte size header, no splitting/coalescing, reused blocks
 returned whole (over-allocate when a big freed block serves a small request),
 and `Realloc` always copies on grow.

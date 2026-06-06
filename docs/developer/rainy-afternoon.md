@@ -84,7 +84,8 @@ and directly from Nil Python through `import sqlite3` (proven by
 `test/test_nilpy_sqlite_crud.npy`); `const char*` marshalling (`PChar()`),
 callee-return inference, auto `string`→`const char*`, strict trailing `T**`
 out-param return-lifting, and returned `char*`→managed-string copying are done.
-`lib/rtl/sqlitedb.pas` is now an optional facade, not required interop.
+No Pascal facade is required for interop; the `lib/rtl/sqlitedb.pas` facade was
+removed 2026-06-06.
 
 Possible breadth improvements, only when a concrete library requires them:
 

@@ -108,8 +108,9 @@ db = sqlite3_open("/tmp/test_nilpy_sqlite_crud.db")
 stmt = sqlite3_prepare_v2(db, "SELECT id, name FROM t ORDER BY id;", -1)
 ```
 
-Thin Pascal binding units such as `lib/rtl/sqlitedb.pas` remain optional
-ergonomic facades, not a requirement.
+Thin Pascal binding units are optional ergonomic facades, not a requirement; the
+direct C-from-frontend path needs none. (An example `sqlitedb.pas` facade was
+removed 2026-06-06.)
 
 For the precise unit search order and supported C preprocessor subset, see
 [C Interoperability](c-interop.md).

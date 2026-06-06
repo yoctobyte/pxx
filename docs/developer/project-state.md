@@ -204,8 +204,8 @@ runtime dependencies.
   (`import sqlite3` → `sqlite3_libversion_number()`), and now drives full SQLite
   CRUD directly from the imported header: lifted `sqlite3_open` /
   `sqlite3_prepare_v2`, direct `sqlite3_exec` / `step` / `column_int`, and
-  copied `char*`→managed-string for `column_text`. `lib/rtl/sqlitedb.pas` is an
-  optional facade.
+  copied `char*`→managed-string for `column_text`. (A `sqlitedb.pas` facade was
+  removed 2026-06-06 — the direct path needs no wrapper.)
   Regressions `test/test_nilpy_import_sqlite.npy`,
   `test/test_nilpy_sqlite_crud.npy`. Python `print` now space-separates args.
 - Automated GUI tests remain separate because they require GTK/display

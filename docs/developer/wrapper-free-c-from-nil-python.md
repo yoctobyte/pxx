@@ -54,8 +54,8 @@ type. The compiler handles the mismatch:
   no callback is needed.
 
 That is compiler sauce with a little magic spice, not wrapper code.
-`lib/rtl/sqlitedb.pas` still exists as an optional ergonomic facade, but the
-direct SQLite proof does not depend on it.
+A `sqlitedb.pas` facade was removed 2026-06-06; the direct SQLite proof never
+depended on it.
 
 ## Why This Matters
 

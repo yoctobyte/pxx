@@ -8,7 +8,7 @@ durable tracking lives in `docs/progress/` (`feature-unified-heap-allocator` in
 
 The compiler's heap (GetMem/New/class-new, FreeMem/Dispose, ReallocMem) is
 redirected to one pure-Pascal contract — `PXXAlloc`/`PXXFree`/`PXXRealloc` in
-`lib/rtl/builtin.pas` (mmap-backed, 8-byte size header + first-fit free list,
+`compiler/builtin/builtin.pas` (mmap-backed, 8-byte size header + first-fit free list,
 reused blocks zeroed). `make bootstrap` (byte-identical fixedpoint), `make test`
 (+ `fpc-check`), and `make test-nilpy` are all green.
 

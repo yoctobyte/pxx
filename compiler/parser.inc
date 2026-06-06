@@ -5916,7 +5916,7 @@ var
   savedCurTokIVal: Int64;
   savedCurTokLine: Integer;
   savedSrcBase: AnsiString;
-  cdir, rtldir, lcldir: AnsiString;
+  cdir, bdir, rtldir, lcldir: AnsiString;
   isCompiled, isCUnit, isCHeader, savedCaseMode: Boolean;
 begin
   lo := LowerCase(name);
@@ -5969,11 +5969,13 @@ begin
     binary path carried no directory (run via a bare name). }
   if ExeDir = '' then
   begin
-    cdir := 'compiler/'; rtldir := 'lib/rtl/'; lcldir := 'lib/lcl/';
+    cdir := 'compiler/'; bdir := 'compiler/builtin/';
+    rtldir := 'lib/rtl/'; lcldir := 'lib/lcl/';
   end
   else
   begin
     cdir := ExeDir;
+    ConcatThree(ExeDir, 'builtin/', '', bdir);   { ExeDir is <root>/compiler/ }
     ConcatThree(ExeDir, '../lib/rtl/', '', rtldir);
     ConcatThree(ExeDir, '../lib/lcl/', '', lcldir);
   end;
@@ -5999,6 +6001,19 @@ begin
       ConcatThree(cdir, lo, '.h', path);
       LoadFile(path, UnitContent);
       if Length(UnitContent) > 0 then begin isCUnit := True; isCHeader := True; end;
+    end;
+  end;
+
+  if Length(UnitContent) = 0 then
+  begin
+    { Compiler-specific runtime units (builtin: the auto-included heap allocator
+      and Str/Val/variant helpers). Not user RTL, so it lives with the compiler. }
+    ConcatThree(bdir, lo, '.pas', path);
+    LoadFile(path, UnitContent);
+    if Length(UnitContent) = 0 then
+    begin
+      ConcatThree(bdir, lo, '.pp', path);
+      LoadFile(path, UnitContent);
     end;
   end;
 
@@ -6039,6 +6054,7 @@ begin
   begin
     ConcatThree('compiler/', lo, '.pas', path);
     LoadFile(path, UnitContent);
+    if Length(UnitContent) = 0 then begin ConcatThree('compiler/builtin/', lo, '.pas', path); LoadFile(path, UnitContent); end;
     if Length(UnitContent) = 0 then begin ConcatThree('lib/rtl/', lo, '.pas', path); LoadFile(path, UnitContent); end;
     if Length(UnitContent) = 0 then begin ConcatThree('lib/lcl/', lo, '.pas', path); LoadFile(path, UnitContent); end;
     if Length(UnitContent) = 0 then begin ConcatThree('compiler/', lo, '.pp', path); LoadFile(path, UnitContent); end;

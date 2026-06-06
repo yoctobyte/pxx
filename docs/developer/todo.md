@@ -184,8 +184,8 @@ Delivered path: **[`historic/handover-wrapper-free-nilpy-c-2026-06-03.md`](histo
   pointer locals and return the handle. The C integer status return is dropped
   in this lifted expression form.
 - ✅ C `char*` returns used from Nil Python are copied into managed strings.
-- ✅ `lib/rtl/sqlitedb.pas` is now an optional pointer-free facade, not required
-  for direct C use from `.npy`.
+- ✅ Direct C use from `.npy` needs no Pascal facade; the `lib/rtl/sqlitedb.pas`
+  facade was removed 2026-06-06.
 - Remaining C interop gaps are tracked separately: depth >= 2 beyond the strict
   trailing out-param lift, struct-by-value ABI proof, non-integer `#define`
   constants, function-like macro edge cases, and variadics.
@@ -331,7 +331,7 @@ inheritance depth, method-resolution clauses, COM ARC.
   hooks for large regions; bare-metal and RTOS-backed ESP32 profiles must not
   depend on them. Add bins after the shared allocator path is correct. See
   [`allocator-platform-design.md`](allocator-platform-design.md).
-- ✅ **`Val`/`Str`** (integer). Implemented as pure-Pascal `lib/rtl/builtin.pas`
+- ✅ **`Val`/`Str`** (integer). Implemented as pure-Pascal `compiler/builtin/builtin.pas`
   (`StrInt`, `Val`), auto-included **only** when a program calls `Str(`/`Val(`
   (token pre-scan in ParseProgram, mirroring the exception-runtime prescan — no
   DCE, so always-including would bloat every binary). `Str(x[:w[:d]], s)` is
