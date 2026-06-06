@@ -1154,4 +1154,9 @@ begin
   PyExprMode := False;
   CompileAST(blockNode);
   EmitExit(0);
+  { Patch forward proc-call placeholders (e.g. the builtin heap allocator,
+    whose body is compiled after the string runtime that calls it). Pascal
+    ParseProgram does this; .npy needs it too now that string/variant codegen
+    calls PXXAlloc. }
+  ApplyCallFixups;
 end;
