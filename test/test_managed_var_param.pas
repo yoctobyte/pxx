@@ -29,6 +29,11 @@ begin
   AppendBang(s);
 end;
 
+procedure SetItOut(out s: AnsiString);
+begin
+  s := 'hello';
+end;
+
 procedure Check(ok: Boolean);
 begin
   if ok then writeln(1) else writeln(0);
@@ -41,6 +46,10 @@ begin
   a := 'OLD';
   SetIt(a);
   Check(a = 'hello');           { assign-through-var updated the caller }
+
+  a := 'OLD';
+  SetItOut(a);
+  Check(a = 'hello');           { assign-through-out updated the caller }
 
   AppendBang(a);
   Check(a = 'hello!');          { read+concat+store through var }

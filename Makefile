@@ -169,7 +169,7 @@ test: $(COMPILER) fpc-check
 	./$(COMPILER) test/test_collections.pas /tmp/test_collections26
 	test "$$(/tmp/test_collections26)" = "$$(printf '100\n0\n81\n9801\n7\n328276\n0\n3\nalpha\ngamma\nBETA')"
 	./$(COMPILER) test/test_managed_var_param.pas /tmp/test_managed_var_param26
-	test "$$(/tmp/test_managed_var_param26)" = "$$(printf '1\n1\n1\n1\n6')"
+	test "$$(/tmp/test_managed_var_param26)" = "$$(printf '1\n1\n1\n1\n1\n6')"
 	./$(COMPILER) test/test_managed_setlength_var.pas /tmp/test_managed_setlength_var26
 	test "$$(/tmp/test_managed_setlength_var26)" = "$$(printf '1\n1\n1\n1\n1\n1')"
 	./$(COMPILER) test/test_managed_setlength_growth.pas /tmp/test_managed_setlength_growth26
