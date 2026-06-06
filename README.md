@@ -98,9 +98,11 @@ ln -sfn "$PWD/stable_linux_amd64/default/latest" "$HOME/.local/bin/pxx"
 
 - `agents/` - shared AI-agent instructions ([agents/AGENTS.md](agents/AGENTS.md)) and generated code map.
 - `benchmarks/` - dated benchmark snapshots.
-- `compiler/` - compiler source, runtime support units, and checked-in seed.
+- `compiler/` - compiler source, the checked-in seed, and `builtin/` (the
+  compiler-specific runtime unit auto-included into compiled programs: heap
+  allocator, `Str`/`Val`, variant helpers).
 - `docs/` - public docs, project state, plans, and historic handovers.
-- `lib/` - Pascal library units used by tests and demos.
+- `lib/` - Pascal library units used by tests and demos (`rtl/`, `lcl/`).
 - `stable_linux_amd64/` - stable/recovery compiler binaries, split into
   `default/` and `managed/` channels with `latest` symlinks.
 - `test/` - regression tests, fixtures, and manual harnesses.

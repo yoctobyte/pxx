@@ -41,9 +41,10 @@ archived as `historic/direct-codegen-legacy.inc` on 2026-05-31. See
 
 ## Header / Library Resolution
 
-`uses name;` searches: local dir, `compiler/`, `/usr/include/`. `.h` → external
-prototype + dynamic resolve. `ctype` hardcoded → `libc.so.6`. Other headers default
-`lib<name>.so`.
+`uses name;` searches (ExeDir-anchored, CWD fallback): local dir, `compiler/`,
+`compiler/builtin/` (the auto-included `builtin` runtime unit), `lib/rtl/`,
+`lib/lcl/`, then `/usr/include/`. `.h` → external prototype + dynamic resolve.
+`ctype` hardcoded → `libc.so.6`. Other headers default `lib<name>.so`.
 
 ## Key Gotchas
 
@@ -96,7 +97,7 @@ prototype + dynamic resolve. `ctype` hardcoded → `libc.so.6`. Other headers de
 - **RTTI (published)**: `rtti_emit.inc` emits our own blob layout (`RTTI_*` in
   `defs.inc`) for published fields/props/methods; `AddDataPtrFix` does data→data
   pointer relocation; name→RTTI registry reachable at runtime via the `__rttireg`
-  intrinsic. Reflection RTL is `compiler/typinfo.pas`. See
+  intrinsic. Reflection RTL is `lib/rtl/typinfo.pas`. See
   [`plan-rtti-streaming-lfm.md`](plan-rtti-streaming-lfm.md).
 
 ## Dialect / Compiler Switches

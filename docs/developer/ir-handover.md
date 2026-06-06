@@ -93,7 +93,7 @@ The IR backend handles the full compiler source, including:
 - Operator overloading (the former `test_op_overload.pas` IR red is resolved)
 - Typed pointers: named aliases `PFoo = ^TFoo`, indexing `p[i]`, `p^.field`,
   casts `PType(expr)`, all with correct element-size stride
-- Published RTTI end-to-end (`compiler/typinfo.pas`): GetClass / GetPropList /
+- Published RTTI end-to-end (`lib/rtl/typinfo.pas`): GetClass / GetPropList /
   Get|SetOrdProp / Get|SetStrProp / SetMethodProp / set properties.
   `test/test_rtti.pas` round-trips.
 

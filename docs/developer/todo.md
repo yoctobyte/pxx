@@ -51,15 +51,15 @@ executable plan: **[`plan-rtti-streaming-lfm.md`](plan-rtti-streaming-lfm.md)**.
   `test/test_rtti_emit.pas`). Enum identity infra (`EnumType*`/`EnumVal*`,
   `LastTypeEnumId`, `UPropEnumId`) and named set types (alias table,
   `AliasTk=tySet`) both landed.
-- Phase 2 ✅ reflection API (TypInfo-named), `compiler/typinfo.pas`. The whole
+- Phase 2 ✅ reflection API (TypInfo-named), `lib/rtl/typinfo.pas`. The whole
   path round-trips on the IR backend via `test/test_rtti.pas`: `GetClass` →
   `GetPropList` → `Get|SetOrdProp` → `Get|SetStrProp` → `GetMethodAddr` /
   `SetMethodProp` → set properties. Delivered by
   fixing general typed pointers (C1–C4 — see §4), the `__rttireg` registry
   intrinsic, and indirect call for method-backed props. Rationale archived in
   [`historic/phase2-handoff.md`](historic/phase2-handoff.md).
-- Phase 3 ✅ streaming runtime (TReader-lite). `compiler/streams.pas`
-  (TByteStream), `compiler/classes_lite.pas` (TComponent-lite + TReader),
+- Phase 3 ✅ streaming runtime (TReader-lite). `lib/rtl/streams.pas`
+  (TByteStream), `lib/rtl/classes_lite.pas` (TComponent-lite + TReader),
   `typinfo.CreateInstance`. Walks our minimal TPF0 subset and instantiates +
   configures a component tree (int/string/bool/event props, nested children by
   class name). Tests: `test/test_streaming.pas`, `test/test_streaming_enumset.pas`.
@@ -72,7 +72,7 @@ executable plan: **[`plan-rtti-streaming-lfm.md`](plan-rtti-streaming-lfm.md)**.
   registry / `__rttireg`). Test: `test/test_resource.pas` + `test/greeting.dat`.
   (Format is our own `{$R name file}`, not FPC's single-arg `{$R file.res}`.)
 - Phase 5 ✅ LFM library. In-memory path (no file I/O yet): `.lfm` text embedded
-  via `{$R}`, converted to TPF0 at runtime by `compiler/lfm.pas` (`TLfmReader` +
+  via `{$R}`, converted to TPF0 at runtime by `lib/rtl/lfm.pas` (`TLfmReader` +
   `InitInheritedComponent`), streamed by Phase 3 `TReader`. `test/test_lfm.pas`
   + `test/test_lfm_form.lfm` run end-to-end in `make test` (string/int/enum/set
   props + child component; `Anchors=[akLeft,akBottom]` → 10 exercises set
