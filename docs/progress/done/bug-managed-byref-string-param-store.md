@@ -1,8 +1,8 @@
 # Managed by-ref AnsiString params: store-through-var no-ops / segfaults
 
 - **Type:** bug
-- **Status:** backlog
-- **Owner:** —
+- **Status:** done
+- **Owner:** Antigravity
 - **Unblocks:** feature-managed-string-default
 - **Opened:** 2026-06-06 (from plan-refcounted-compiler-strings.md gap B)
 
@@ -40,3 +40,5 @@ three rows.
 
 ## Log
 - 2026-06-06 — ticket opened from plan-refcounted-compiler-strings.md gap B.
+- 2026-06-06 — claimed by Antigravity; working on implementation.
+- 2026-06-06 — resolved in 14281be; verified by existing test/test_managed_var_param.pas and test/test_managed_setlength_var.pas.
