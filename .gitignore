@@ -16,9 +16,9 @@ __pycache__/
 docs/historic/user-rambling/
 thesises/
 .antigravitycli/
+external/
 test/gui/helloworld/lib/
 test/gui/helloworld/backup/
 test/gui/helloworld/helloworld
 *.lps
 *.map
-
