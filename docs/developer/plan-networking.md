@@ -65,6 +65,30 @@ Non-blocking support is interesting for the async/coroutine roadmap, but it
 should not drive the first milestone. Start with blocking loopback tests; later
 audit Synapse's limited non-blocking paths against PXX async support.
 
+Manual inventory helper:
+
+```sh
+tools/install_externals.sh
+test/manual/try_synapse_compile.sh
+```
+
+This is deliberately outside `make test`. It copies small smoke programs into
+`external/synapse/` so PXX's current source-relative unit resolver can find the
+Synapse units, then writes the full compiler log to `/tmp/pxx-synapse-compile.log`.
+
+Current baseline from Synapse `f2e705b`:
+
+- `synapse_smoke_synautil.pas`: fails on a conditional/directive parse issue.
+- `synapse_smoke_synaip.pas`: fails on a conditional/directive parse issue
+  while pulling `SysUtils, SynaUtil`.
+- `synapse_smoke_synsock.pas`: reaches `synsock`, then fails resolving a unit
+  source dependency.
+- `synapse_smoke_blcksock.pas`: fails on a conditional/directive parse issue
+  around the `uses` list / dependent units.
+
+First investigation pass should classify these into directive support, unit
+resolution, RTL unit availability, and Synapse platform-branch selection.
+
 ## First Milestone
 
 Implement Linux syscall-only IPv4:
