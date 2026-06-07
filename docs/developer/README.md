@@ -42,6 +42,7 @@ Architecture and current state:
 - [Garbage Collection Thoughts](garbage-collection-thoughts.md) - why GC is not the default (root-finding cost, bare-metal tension) and the per-target/per-frontend memory profile decision (ARC / arena / hosted collector).
 - [Runtime Emission Size Audit (2026-06-02)](runtime-emission-size-audit-2026-06-02.md) - measured hello-world overhead and deferred feature-reachability cleanup for embedded targets.
 - [Plan: Async, Coroutines, And Yield](plan-async-coroutines.md) - deferred shared state-machine design for Pascal, Nil Python, and future frontends.
+- [Plan: Networking Runtime](plan-networking.md) - target-neutral sockets API with Linux syscall, POSIX/libc, and ESP32/lwIP backend options.
 - [Plan: Refcounted Compiler Strings](plan-refcounted-compiler-strings.md) - status and remaining decisions for flipping the compiler's own `AnsiString`s from frozen 8 MB inline buffers (~1.6 GB BSS) to refcounted handles. Managed self-compile fixedpoint is reached; default flip/reseed remains a product decision.
 
 Additional project material:
