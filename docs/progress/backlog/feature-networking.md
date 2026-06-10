@@ -76,3 +76,13 @@ DNS deferred to a later milestone.
 
 - 2026-06-07 — ticket opened; consolidated from user note and plan-networking.md.
 - 2026-06-10 — relative-path units delivered (4aa293a); improved uses error now shows the synsock failure is a missing `syncobjs` RTL unit, i.e. RTL availability, not path resolution. Other three smoke units still fail on conditional-directive parse.
+- 2026-06-10 — quick-win pass (440a9e0, f81ea83): syncobjs RTL stub added;
+  directive layer now digests jedi.inc fully (inactive-branch `{$IF}` eval
+  skipped per FPC semantics, `{$IFOPT}` recognized, `{$IFEND}` accepted,
+  define table 128→1024). All four smoke units now fail on ONE remaining
+  blocker class: platform-branch selection. PXX predefines LINUX but not FPC,
+  so jedi.inc picks the Kylix path (`uses libc`/`system`). Predefining FPC
+  globally would break self-host (compiler source uses `{$ifdef FPC}` to mean
+  "real FPC, not PXX") — needs a design decision (per-source define set, or a
+  PXX-aware branch in install step, or `-d FPC` only for foreign code). After
+  that: RTL availability (synafpc, termio, sockets, netdb, Classes surface).
