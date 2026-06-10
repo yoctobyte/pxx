@@ -69,3 +69,18 @@ suite and fixedpoint gate on the dev host via `tools/run_target.sh`.
   parameterization to a dedicated slice. test_i386_procs.pas asserts identical
   output vs x86-64. Refusals: var/out + non-ordinal params, aggregate results,
   managed locals, external/builtin calls, default-arg calls.
+- 2026-06-10 — slice 4: loops. for/downto/repeat/Inc/Dec worked on existing
+  ops except the synthesized for-increment binop, which carries tk=0
+  (tyUnknown); walker now treats tyUnknown binops as integer like x86-64
+  does. test_i386_loops.pas in make test-i386.
+- HANDOVER (next session): ladder order — (1) char/bool writes + write width;
+  (2) var/out params (pass address, deref in callee); (3) THE BIG ONE: layout
+  parameterization — TARGET_PTR_SIZE (defs.inc:2) const -> per-target value,
+  TypeSize/string-len-prefix/record tables consult it; unlocks pointers,
+  arrays, records, and eventually the i386 fixedpoint gate. Fat-slot model
+  (8-byte slots, low 4 bytes used) is correct until then. Walker refusal
+  discipline: every unsupported IR op is a named hard error — keep it.
+  Cross-target oracle pattern: same source compiled for both targets, stdout
+  diffed (test_i386_*.pas in make test-i386). aarch64 (Pi 5 deliverable)
+  reuses: TargetArch dispatch seam, writeELF32-style writer (ELF64/EM_AARCH64),
+  runner + gen_arch_probe.py reference encodings.

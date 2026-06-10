@@ -119,7 +119,9 @@ begin
         right := IRB[node];
         op := IRC[node];
         tk := IntToTypeKind(IRTk[node]);
-        if not (TypeIsOrdinal(tk) or (tk = tyBoolean)) then
+        { tyUnknown: synthesized integer nodes (e.g. the for-loop increment)
+          carry tk=0; x86-64 treats them as integers, so do we. }
+        if not (TypeIsOrdinal(tk) or (tk = tyBoolean) or (tk = tyUnknown)) then
           Error('target i386: non-integer binop not yet supported');
         IREmitNode386(left);
         EmitB($50);                                  { push eax }
