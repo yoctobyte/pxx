@@ -21,7 +21,7 @@ STABLE_DEFAULT_DIR := $(STABLE_ROOT)/default
 STABLE_MANAGED_DIR := $(STABLE_ROOT)/managed
 PXXFLAGS   :=
 
-.PHONY: all bootstrap bootstrap-check fpc-check test test-nilpy stabilize check-stable revert benchmark benchmark-compiler-runtime benchmark-check clean distclean symbols \
+.PHONY: all bootstrap bootstrap-check fpc-check test test-nilpy qemu-env-check stabilize check-stable revert benchmark benchmark-compiler-runtime benchmark-check clean distclean symbols \
         bootstrap-managed test-managed stabilize-managed check-stable-managed revert-managed test-nilpy-managed \
         progress-check
 
@@ -659,6 +659,26 @@ test: $(COMPILER) fpc-check
 # directly; only advisory inside 'make test' (above).
 progress-check:
 	@./tools/progress.sh check
+
+# Cross-target test environment sanity (chore-qemu-test-env). Manual target:
+# joins 'make test' when the first cross backend exists. Validates the runner
+# indirection on the native path, then proves each planned target arch
+# actually EXECUTES under emulation via a minimal exit(42) probe ELF
+# (an installed emulator can still be broken; --version proves nothing).
+qemu-env-check: $(COMPILER)
+	./$(COMPILER) test/hello.pas /tmp/qemu_env_hello
+	test "$$(tools/run_target.sh x86_64 /tmp/qemu_env_hello)" = "Hello, World!"
+	@echo "runner ok (native x86_64 path)"
+	@fail=0; for a in i386 aarch64 arm32; do \
+	  python3 tools/gen_arch_probe.py $$a /tmp/qemu_probe_$$a; \
+	  chmod +x /tmp/qemu_probe_$$a; \
+	  if tools/run_target.sh $$a /tmp/qemu_probe_$$a; then rc=0; else rc=$$?; fi; \
+	  if [ "$$rc" = 42 ]; then \
+	    echo "ok: $$a probe (exit 42 via runner)"; \
+	  else \
+	    echo "FAIL: $$a probe (exit $$rc, expected 42)"; fail=1; \
+	  fi; \
+	done; exit $$fail
 
 stabilize: test
 	@echo "=== stabilize: 4-iteration fixedpoint check ==="
