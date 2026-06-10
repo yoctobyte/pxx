@@ -86,3 +86,4 @@ DNS deferred to a later milestone.
   "real FPC, not PXX") — needs a design decision (per-source define set, or a
   PXX-aware branch in install step, or `-d FPC` only for foreign code). After
   that: RTL availability (synafpc, termio, sockets, netdb, Classes surface).
+- 2026-06-10 — platform-branch decision made: opt-in mimic mode, see feature-mimic-fpc (35345a3). Synapse compatibility milestones wait on it; the syscall net.pas milestone does not.
