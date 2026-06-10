@@ -420,6 +420,8 @@ test: $(COMPILER) fpc-check
 	test "$$(/tmp/test_qualified_units26)" = "$$(printf '3\n7\n11\n22\n101\n201')"
 	./$(COMPILER) test/test_relpath_uses.pas /tmp/test_relpath_uses26
 	test "$$(/tmp/test_relpath_uses26)" = "$$(printf '13\n15\n100')"
+	./$(COMPILER) test/test_syncobjs.pas /tmp/test_syncobjs26
+	test "$$(/tmp/test_syncobjs26)" = "$$(printf '1\n2\n3')"
 	./$(COMPILER) test/test_getmem_proc.pas /tmp/test_getmem_proc26
 	test "$$(/tmp/test_getmem_proc26)" = "$$(printf '1\n65\n66\n90\n1')"
 	./$(COMPILER) test/test_freemem.pas /tmp/test_freemem26
