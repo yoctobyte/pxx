@@ -5676,10 +5676,30 @@ begin
   Procs[pi].FramePatch := patchPos;
   if ProcAggregateDestSym[pi] >= 0 then
   begin
+    if TargetArch = TARGET_I386 then
+      Error('target i386: aggregate-valued results not yet supported');
     idx := ProcAggregateDestSym[pi];
     EmitB($4C); EmitB($89); EmitB($95); EmitI32(Syms[idx].Offset); { mov [rbp+off], r10 }
   end;
 
+  if TargetArch = TARGET_I386 then
+  begin
+    { i386 internal convention: the caller evaluated and pushed args left to
+      right (leftmost ends up deepest), so param i of n sits at
+      [ebp + 8 + (n-1-i)*4]. Copy each into its frame slot; the caller cleans
+      the arg area after the call. Ordinal by-value params only for now. }
+    for i := 0 to nparams-1 do
+    begin
+      idx := Procs[pi].Params[i].SymIdx;
+      if Syms[idx].IsRef then
+        Error('target i386: var/out parameters not yet supported');
+      if Syms[idx].IsArray or not TypeIsOrdinal(Syms[idx].TypeKind) then
+        Error('target i386: only ordinal by-value parameters supported yet');
+      EmitB($8B); EmitB($85); EmitI32(8 + (nparams - 1 - i) * 4); { mov eax, [ebp+disp] }
+      EmitB($89); EmitB($85); EmitI32(Syms[idx].Offset);          { mov [ebp+off], eax }
+    end;
+  end
+  else
   { Copy params from registers to stack: mov [rbp+off], rdi/rsi/rdx/rcx/r8/r9 }
   for i := 0 to nparams-1 do
   begin
@@ -5787,6 +5807,8 @@ begin
       else if (Syms[i].TypeKind = tyRecord) and Syms[i].IsArray and
               RecordHasManagedFields(Syms[i].ElemRecName) then
         zeroBytes := Syms[i].ArrLen * RecSize(Syms[i].ElemRecName);
+      if (zeroBytes > 0) and (TargetArch <> TARGET_X86_64) then
+        Error('target i386: managed local variables not yet supported');
       if zeroBytes = TARGET_PTR_SIZE then
       begin
         EmitB($48); EmitB($C7); EmitB($85); EmitI32(Syms[i].Offset); EmitI32(0); { mov qword [rbp+off], 0 }

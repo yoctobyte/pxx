@@ -668,7 +668,10 @@ test-i386: $(COMPILER)
 	./$(COMPILER) --target=i386 test/test_i386_arith.pas /tmp/test_i386_arith
 	./$(COMPILER) test/test_i386_arith.pas /tmp/test_i386_arith_x64
 	test "$$(tools/run_target.sh i386 /tmp/test_i386_arith)" = "$$(/tmp/test_i386_arith_x64)"
-	@echo "i386 hello + arith ok (output identical to x86-64)"
+	./$(COMPILER) --target=i386 test/test_i386_procs.pas /tmp/test_i386_procs
+	./$(COMPILER) test/test_i386_procs.pas /tmp/test_i386_procs_x64
+	test "$$(tools/run_target.sh i386 /tmp/test_i386_procs)" = "$$(/tmp/test_i386_procs_x64)"
+	@echo "i386 hello + arith + procs ok (output identical to x86-64)"
 
 # Cross-target test environment sanity (chore-qemu-test-env). Manual target:
 # joins 'make test' when the first cross backend exists. Validates the runner

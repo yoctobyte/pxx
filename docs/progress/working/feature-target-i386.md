@@ -57,3 +57,15 @@ suite and fixedpoint gate on the dev host via `tools/run_target.sh`.
   (EmitwriteInt386 div-10 loop + int 0x80 write). test_i386_arith.pas asserts
   byte-identical output between the i386 and x86-64 builds of the same
   program. 64-bit int constants and non-global/non-ordinal syms refuse.
+- 2026-06-10 — slice 3: procedures + 32-bit frames. Prologue push ebp/mov
+  ebp,esp/sub esp,imm32 (patched); epilogue leave/ret with ordinal result
+  load. Internal i386 call convention: caller pushes args left-to-right
+  (leftmost deepest), callee spills [ebp+8+(n-1-i)*4] into fat frame slots,
+  caller cleans (add esp,n*4) — pure stack, no register-count limit, natural
+  recursion. IR_CALL/IR_TERMINATE (Exit/Halt) added to walker; load/store
+  extended to skLocal/skParam [ebp+off]. Layout question answered: IR ops are
+  width-agnostic but operands carry parser-computed 64-bit offsets
+  (TypeSize/TARGET_PTR_SIZE=8 at defs.inc:2); fat-slot model defers layout
+  parameterization to a dedicated slice. test_i386_procs.pas asserts identical
+  output vs x86-64. Refusals: var/out + non-ordinal params, aggregate results,
+  managed locals, external/builtin calls, default-arg calls.

@@ -51,14 +51,17 @@ begin
 end;
 
 procedure IREmit386CheckScalarSym(symIdx: Integer; const what: AnsiString);
-{ v1 symbol model: 8-byte BSS slots (parser allocates with 64-bit sizes), of
-  which i386 code reads/writes the low 4 bytes. Only zero-initialized global
-  scalars are safe under that model; refuse everything else. }
+{ "Fat slot" symbol model: the parser still lays out 8-byte slots (BSS and
+  frame, 64-bit TypeSize), and i386 code reads/writes only the low 4 bytes.
+  Sound because BSS is zeroed and 4-byte stores/loads are paired — the high
+  half is never read. Only ordinal scalars fit that model; refuse the rest. }
 begin
   if (symIdx < 0) or (symIdx >= SymCount) then
     Error('target i386: bad symbol in ' + what);
-  if Syms[symIdx].Kind <> skGlobal then
-    Error('target i386: only global variables supported yet (' + what + ')');
+  if not (Syms[symIdx].Kind in [skGlobal, skLocal, skParam]) then
+    Error('target i386: symbol kind not supported yet (' + what + ')');
+  if (Syms[symIdx].Kind = skParam) and Syms[symIdx].IsRef then
+    Error('target i386: var/out parameters not yet supported');
   if Syms[symIdx].IsArray then
     Error('target i386: arrays not yet supported');
   if not TypeIsOrdinal(Syms[symIdx].TypeKind) then
@@ -67,7 +70,7 @@ end;
 
 procedure IREmitNode386(node: Integer);
 var
-  valNode, si, left, right, op: Integer;
+  valNode, si, left, right, op, pi, argNode, nArgs: Integer;
   sVal: AnsiString;
   emsg: AnsiString;
   tk: TTypeKind;
@@ -86,14 +89,28 @@ begin
     IR_LOAD_SYM:
       begin
         IREmit386CheckScalarSym(IRA[node], 'load');
-        EmitB($A1); EmitGlobRef(Syms[IRA[node]].Offset); { mov eax, [abs32] }
+        if Syms[IRA[node]].Kind = skGlobal then
+        begin
+          EmitB($A1); EmitGlobRef(Syms[IRA[node]].Offset);          { mov eax, [abs32] }
+        end
+        else
+        begin
+          EmitB($8B); EmitB($85); EmitI32(Syms[IRA[node]].Offset);  { mov eax, [ebp+off] }
+        end;
       end;
 
     IR_STORE_SYM:
       begin
         IREmit386CheckScalarSym(IRA[node], 'store');
         IREmitNode386(IRB[node]);
-        EmitB($A3); EmitGlobRef(Syms[IRA[node]].Offset); { mov [abs32], eax }
+        if Syms[IRA[node]].Kind = skGlobal then
+        begin
+          EmitB($A3); EmitGlobRef(Syms[IRA[node]].Offset);          { mov [abs32], eax }
+        end
+        else
+        begin
+          EmitB($89); EmitB($85); EmitI32(Syms[IRA[node]].Offset);  { mov [ebp+off], eax }
+        end;
       end;
 
     IR_BINOP:
@@ -130,6 +147,36 @@ begin
         end
         else
           Error('target i386: binop operator not yet supported');
+      end;
+
+    IR_CALL:
+      begin
+        pi := IRA[node];
+        if pi < 0 then
+          Error('target i386: builtin/special call not yet supported');
+        if ProcExternal[pi] then
+          Error('target i386: external calls not yet supported');
+        if TypeIsAggregate(Procs[pi].RetType) then
+          Error('target i386: aggregate-valued results not yet supported');
+        { Internal i386 convention: evaluate and push args left to right
+          (leftmost ends up deepest, matching the callee's spill formula),
+          call, then the caller pops the arg area. Result in eax. }
+        argNode := IRB[node];
+        nArgs := 0;
+        while argNode <> -1 do
+        begin
+          IREmitNode386(IRA[argNode]);
+          EmitB($50);                                { push eax }
+          Inc(nArgs);
+          argNode := IRB[argNode];
+        end;
+        if nArgs <> Procs[pi].ParamCount then
+          Error('target i386: call argument count mismatch (defaults not supported yet)');
+        EmitCallProc(pi);                            { E8 rel32 + fixup, same as x86-64 }
+        if nArgs > 0 then
+        begin
+          EmitB($81); EmitB($C4); EmitI32(nArgs * 4); { add esp, nArgs*4 }
+        end;
       end;
 
     IR_NEG:
@@ -179,6 +226,31 @@ begin
 
     IR_WRITELN:
       EmitwriteSyscall(NEWLINE_OFFSET, 1);
+
+    IR_TERMINATE:
+      begin
+        { Exit / Halt. Mirrors x86-64: Halt(n) = exit syscall with code;
+          Exit inside a proc = inline epilogue (target-dispatched). }
+        if IRIVal[node] = AN_HALT then
+        begin
+          if IRA[node] <> -1 then
+          begin
+            IREmitNode386(IRA[node]);                { code -> eax }
+            EmitB($89); EmitB($C3);                  { mov ebx, eax }
+            EmitB($B8); EmitI32(252);                { mov eax, 252 (exit_group) }
+            EmitB($CD); EmitB($80);                  { int 0x80 }
+          end
+          else
+            EmitExit(0);
+        end
+        else
+        begin
+          if CurProc >= 0 then
+            EmitProcEpilog(Procs[CurProc].RetSymIdx)
+          else
+            EmitExit(0);
+        end;
+      end;
 
     else
       begin
@@ -242,11 +314,17 @@ begin
           end;
         end;
 
+      IR_CALL:
+        begin
+          if IRIVal[i] = 1 then                      { statement-level call }
+            IREmitNode386(i);
+        end;
+
       IR_STORE_SYM, IR_WRITE, IR_WRITELN:
         IREmitNode386(i);
 
       IR_NOP, IR_CONST_STR, IR_CONST_INT, IR_BLOCK,
-      IR_LOAD_SYM, IR_BINOP, IR_NEG, IR_NOT: ;       { operands, emitted by parents }
+      IR_LOAD_SYM, IR_BINOP, IR_NEG, IR_NOT, IR_ARG: ; { operands, emitted by parents }
 
       else
         IREmitNode386(i); { unknown statement op -> hard error inside }

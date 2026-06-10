@@ -3011,10 +3011,16 @@ end;
 { ===== Prologue/Epilogue ===== }
 
 function EmitProcPrologue: Integer;
-{ Returns patch position for sub rsp imm32 }
+{ Returns patch position for sub rsp/esp imm32 }
 begin
-  if TargetArch <> TARGET_X86_64 then
-    Error('target i386: procedures/functions not yet supported');
+  if TargetArch = TARGET_I386 then
+  begin
+    EmitB($55);                          { push ebp }
+    EmitB($89); EmitB($E5);              { mov ebp, esp }
+    EmitB($81); EmitB($EC);              { sub esp, imm32 }
+    Result := CodeLen; EmitI32(0);
+    Exit;
+  end;
   EmitB($55);
   EmitB($48); EmitB($89); EmitB($E5);
   EmitB($48); EmitB($81); EmitB($EC);
@@ -3031,6 +3037,20 @@ end;
 procedure EmitProcEpilog(retSymIdx: Integer);
 var sz, i: Integer;
 begin
+  if TargetArch = TARGET_I386 then
+  begin
+    { v1: ordinal results only (managed locals cannot be created on this
+      target yet, so the release loop below has nothing to do). }
+    if retSymIdx >= 0 then
+    begin
+      if Syms[retSymIdx].IsArray or (Syms[retSymIdx].Kind <> skLocal) or
+         not TypeIsOrdinal(Syms[retSymIdx].TypeKind) then
+        Error('target i386: only ordinal function results supported yet');
+      EmitB($8B); EmitB($85); EmitI32(Syms[retSymIdx].Offset); { mov eax, [ebp+off] }
+    end;
+    EmitB($C9); EmitB($C3);                                    { leave; ret }
+    Exit;
+  end;
   { Release local managed variables before returning }
   if CurProc >= 0 then
   begin
