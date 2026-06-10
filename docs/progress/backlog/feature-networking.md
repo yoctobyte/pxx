@@ -75,3 +75,4 @@ DNS deferred to a later milestone.
 ## Log
 
 - 2026-06-07 — ticket opened; consolidated from user note and plan-networking.md.
+- 2026-06-10 — relative-path units delivered (4aa293a); improved uses error now shows the synsock failure is a missing `syncobjs` RTL unit, i.e. RTL availability, not path resolution. Other three smoke units still fail on conditional-directive parse.
