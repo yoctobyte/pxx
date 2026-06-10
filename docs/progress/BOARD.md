@@ -41,7 +41,7 @@ _none_
 | feature-target-aarch64 | feature | Compile target: ARM64 / AArch64 Linux | feature-target-i386 |
 | feature-target-arm32 | feature | Compile target: ARM32 Linux | feature-target-aarch64 |
 | feature-target-esp32 | feature | Compile target: ESP32 / embedded (RISC-V entry, various MCUs) | feature-target-arm32 |
-| feature-target-i386 | feature | Compile target: i386 (32-bit x86 Linux) | — |
+| feature-target-i386 | feature | Compile target: i386 (32-bit x86 Linux) | chore-qemu-test-env |
 | feature-threadsafe-io-serialization | feature | Statement-level I/O serialization under threads | feature-unified-heap-allocator |
 | idea-unit-rename-import | idea | `uses X as Y` unit-rename import (dialect extension) | — |
 | idea-visibility-enforcement | idea | Enforce private/protected visibility | — |
@@ -53,7 +53,7 @@ _none_
 | bug-nonreproducible-miscompile-2026-06-02 | bug | Non-reproducible one-off miscompile (2026-06-02) | — |
 | bug-whole-record-copy-main-body-noop | bug | Latent: whole-record array-element copy in main-program body emits store no-ops | — |
 
-## done (9)
+## done (10)
 
 | Ticket | Type | Summary | Blocked-by |
 | --- | --- | --- | --- |
@@ -62,6 +62,7 @@ _none_
 | bug-operator-result-inferred-var | bug | Record-valued operator result is miscompiled (aggregate-return ABI) | — |
 | bug-read-preserves-line-remainder | bug | `read` consumes a whole line like `readln` | — |
 | bug-record-byvalue-arg-truncation | bug | By-value record args >8 bytes truncate (and operator operand edges) | — |
+| chore-qemu-test-env | chore | QEMU cross-target test environment | — |
 | feature-progress-check-makefile | feature | Wire `progress.sh check` into a make target | — |
 | feature-relative-path-units | feature | Relative/absolute path support in `uses`/`includes` | — |
 | feature-unified-heap-allocator | feature | Unified syscall-free heap allocator | — |
@@ -105,5 +106,6 @@ _none_
 - **1** — feature-managed-exception-cleanup
 - **1** — feature-directive-if-numeric
 - **1** — feature-compiler-warnings
+- **1** — chore-qemu-test-env
 - **1** — chore-inc-to-units
 - **1** — bug-managed-byref-string-param-store

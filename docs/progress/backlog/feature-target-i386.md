@@ -3,6 +3,7 @@
 - **Type:** feature
 - **Status:** backlog
 - **Owner:** —
+- **Blocked-by:** chore-qemu-test-env
 - **Unblocks:** feature-target-aarch64, feature-additional-cpu-targets
 - **Opened:** 2026-06-06 (user request; roadmap.md Phase 2)
 
@@ -29,8 +30,11 @@ meets the byte-identical **fixedpoint gate** for the i386 target.
 
 ## Note
 
-`Blocked-by` is empty: this is the first new target and the one that introduces
-the target-abstraction the chain depends on. Reprioritize by moving to `urgent/`.
+This is the first new target and the one that introduces the target-abstraction
+the chain depends on. Reprioritize by moving to `urgent/`. Blocked on the QEMU
+test environment (chore-qemu-test-env): every target must run its regression
+suite and fixedpoint gate on the dev host via `tools/run_target.sh`.
 
 ## Log
 - 2026-06-06 — ticket opened from user request + roadmap Phase 2.
+- 2026-06-10 — blocked-by chore-qemu-test-env added: test environment precedes the backend.
