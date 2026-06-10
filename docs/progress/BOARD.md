@@ -12,7 +12,7 @@ _none_
 
 _none_
 
-## backlog (27)
+## backlog (28)
 
 | Ticket | Type | Summary | Blocked-by |
 | --- | --- | --- | --- |
@@ -32,6 +32,7 @@ _none_
 | feature-managed-exception-cleanup | feature | Finalize managed values on exception unwind | — |
 | feature-managed-string-default | feature | Promote managed AnsiString from opt-in to default | bug-managed-byref-string-param-store, feature-managed-exception-cleanup |
 | feature-metaclass-descendant-enforcement | feature | Metaclass alias descendant-constraint enforcement | — |
+| feature-mimic-fpc | feature | `mimic FPC` compatibility mode | — |
 | feature-networking | feature | Networking runtime | — |
 | feature-parallel-processing | feature | Parallel processing as a language feature | feature-unified-heap-allocator |
 | feature-progress-transition-helpers | feature | Progress transition helpers (`claim` / `resolve`) | — |
@@ -83,6 +84,7 @@ _none_
 - feature-interfaces
 - feature-managed-exception-cleanup
 - feature-metaclass-descendant-enforcement
+- feature-mimic-fpc
 - feature-networking
 - feature-parallel-processing
 - feature-progress-transition-helpers
