@@ -513,6 +513,70 @@ begin
   Result := s;
 end;
 
+procedure NormalizePath(var p: AnsiString);
+{ Collapse '.' and '..' segments so resolved unit/include paths are canonical
+  in diagnostics and dedup keys. Leading '..' segments of a relative path are
+  preserved; '..' at the root of an absolute path stays at the root. Segment
+  bounds are tracked as integer offsets into the input, so no string tables. }
+var
+  keptStart, keptLen: array[0..127] of Integer;
+  depth, i, k, segStart, segLen: Integer;
+  res: AnsiString;
+  isAbs, isDot, isDotDot, popPrev: Boolean;
+begin
+  isAbs := (Length(p) > 0) and (p[1] = '/');
+  depth := 0;
+  segStart := 1;
+  for i := 1 to Length(p) + 1 do
+  begin
+    if (i > Length(p)) or (p[i] = '/') then
+    begin
+      segLen := i - segStart;
+      isDot := False; isDotDot := False;
+      if segLen = 1 then isDot := p[segStart] = '.';
+      if segLen = 2 then
+        isDotDot := (p[segStart] = '.') and (p[segStart + 1] = '.');
+      if (segLen > 0) and not isDot then
+      begin
+        if isDotDot then
+        begin
+          popPrev := False;
+          if depth > 0 then
+            popPrev := not ((keptLen[depth - 1] = 2) and
+                            (p[keptStart[depth - 1]] = '.') and
+                            (p[keptStart[depth - 1] + 1] = '.'));
+          if popPrev then
+            Dec(depth)
+          else if not isAbs then
+          begin
+            { relative path climbing above its start: keep the '..' }
+            if depth >= 128 then Error('NormalizePath: path too deep');
+            keptStart[depth] := segStart; keptLen[depth] := segLen;
+            Inc(depth);
+          end;
+          { absolute path: '..' at the root is dropped }
+        end
+        else
+        begin
+          if depth >= 128 then Error('NormalizePath: path too deep');
+          keptStart[depth] := segStart; keptLen[depth] := segLen;
+          Inc(depth);
+        end;
+      end;
+      segStart := i + 1;
+    end;
+  end;
+  res := '';
+  if isAbs then AppendChar(res, '/');
+  for k := 0 to depth - 1 do
+  begin
+    if k > 0 then AppendChar(res, '/');
+    for i := keptStart[k] to keptStart[k] + keptLen[k] - 1 do
+      AppendChar(res, p[i]);
+  end;
+  p := res;
+end;
+
 procedure ExpandIncludes(var src: AnsiString; const baseDir: AnsiString);
 { Replace active dollar-include directives with file contents, one level deep.
   Conditional directives remain in the text for the real lexer pass; this
@@ -633,8 +697,14 @@ begin
         end;
         if (Length(fname) > 0) and (j <= Length(src)) then
         begin
-          fullPath := baseDir;
-          for k := 1 to Length(fname) do AppendChar(fullPath, fname[k]);
+          if fname[1] = '/' then
+            fullPath := fname
+          else
+          begin
+            fullPath := baseDir;
+            for k := 1 to Length(fname) do AppendChar(fullPath, fname[k]);
+          end;
+          NormalizePath(fullPath);
           LoadFile(fullPath, IncIncluded);
           for k := 1 to Length(IncIncluded) do AppendChar(IncExpanded, IncIncluded[k]);
           i := j + 1;

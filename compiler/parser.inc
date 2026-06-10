@@ -2,6 +2,8 @@
 procedure LoadFile(const path: AnsiString; var dst: AnsiString); forward;
 {$endif}
 function GetFilePath(const path: AnsiString): AnsiString; forward;
+function GetFileBaseName(const path: AnsiString): AnsiString; forward;
+procedure NormalizePath(var p: AnsiString); forward;
 procedure ExpandIncludes(var src: AnsiString; const baseDir: AnsiString); forward;
 procedure ParseCUnit; forward;
 procedure RegisterCMacroConsts; forward;
@@ -5915,11 +5917,19 @@ var
   savedCurTokSVal: AnsiString;
   savedCurTokIVal: Int64;
   savedCurTokLine: Integer;
-  savedSrcBase: AnsiString;
+  savedSrcBase, savedUnitDir: AnsiString;
   cdir, bdir, rtldir, lcldir: AnsiString;
-  isCompiled, isCUnit, isCHeader, savedCaseMode: Boolean;
+  basePath, ext, emsg: AnsiString;
+  lastSlash, lastDot: Integer;
+  isCompiled, isCUnit, isCHeader, isPath, savedCaseMode: Boolean;
 begin
-  lo := LowerCase(name);
+  isPath := False;
+  for i := 1 to Length(name) do
+    if name[i] = '/' then isPath := True;
+  if isPath then
+    lo := LowerCase(GetFileBaseName(name))
+  else
+    lo := LowerCase(name);
   if (lo = 'sysutils') or (lo = 'baseunix') or (lo = 'unix') then Exit;
 
   { Check if already compiled }
@@ -5943,8 +5953,60 @@ begin
   isCHeader := False;
   CurrentCLibrary := '';
   UnitContent := '';
-  ConcatThree(SourceFileDir, lo, '.pas', path);
-  LoadFile(path, UnitContent);
+
+  if isPath then
+  begin
+    { Path-form reference (uses './sub/unit' or '/abs/unit'): resolve relative
+      to the directory of the file containing the directive (CurUnitDir);
+      absolute paths are used as-is. Extension may be omitted (.pas then .pp
+      inferred); an explicit .pas/.pp/.c/.h is honoured. The path is
+      authoritative — no directory search chain, miss is an error. }
+    lastSlash := 0; lastDot := 0;
+    for i := 1 to Length(name) do
+    begin
+      if name[i] = '/' then lastSlash := i;
+      if name[i] = '.' then lastDot := i;
+    end;
+    if name[1] = '/' then
+      basePath := name
+    else
+      ConcatThree(CurUnitDir, name, '', basePath);
+    NormalizePath(basePath);
+    if lastDot > lastSlash then
+    begin
+      ext := '';
+      for i := lastDot + 1 to Length(name) do AppendChar(ext, name[i]);
+      ext := LowerCase(ext);
+      if (Length(ext) = 1) and (ext[1] = 'c') then isCUnit := True;
+      if (Length(ext) = 1) and (ext[1] = 'h') then
+      begin
+        isCUnit := True; isCHeader := True;
+      end;
+      path := basePath;
+      LoadFile(path, UnitContent);
+    end
+    else
+    begin
+      ConcatThree(basePath, '.pas', '', path);
+      LoadFile(path, UnitContent);
+      if Length(UnitContent) = 0 then
+      begin
+        ConcatThree(basePath, '.pp', '', path);
+        LoadFile(path, UnitContent);
+      end;
+    end;
+    if Length(UnitContent) = 0 then
+    begin
+      ConcatThree('uses: unit source not found: ', basePath, '', emsg);
+      Error(emsg);
+    end;
+  end;
+
+  if Length(UnitContent) = 0 then
+  begin
+    ConcatThree(SourceFileDir, lo, '.pas', path);
+    LoadFile(path, UnitContent);
+  end;
   if Length(UnitContent) = 0 then
   begin
     ConcatThree(SourceFileDir, lo, '.pp', path);
@@ -6089,7 +6151,8 @@ begin
 
   if Length(UnitContent) = 0 then
   begin
-    Error('uses: unit source not found');
+    ConcatThree('uses: unit source not found: ', lo, '', emsg);
+    Error(emsg);
   end;
 
   if isCUnit then
@@ -6180,6 +6243,11 @@ begin
     savedSrcBase := CurSrcBaseName;
     CurSrcBaseName := lo;
 
+    { Nested path-form `uses` inside this unit resolve relative to the unit's
+      own directory. Restored after, like CurSrcBaseName. }
+    savedUnitDir := CurUnitDir;
+    CurUnitDir := GetFilePath(path);
+
     { Append tokens to global Token stream }
     startPos := LexAppend(UnitContent);
     i := startPos;
@@ -6203,6 +6271,7 @@ begin
     CurTok.IVal := savedCurTokIVal;
     CurTok.Line := savedCurTokLine;
     CurSrcBaseName := savedSrcBase;
+    CurUnitDir := savedUnitDir;
     CaseSensitiveMode := savedCaseMode;
     CurrentUnitIdx := savedCurrentUnitIdx;
   end;
@@ -6307,7 +6376,7 @@ begin
       begin
         Next;
         doneUses := False;
-        while (CurTok.Kind = tkIdent) and not doneUses do
+        while (CurTok.Kind in [tkIdent, tkString]) and not doneUses do
         begin
           ParseUsesUnit(CurTok.SVal);
           Next;
@@ -6351,7 +6420,7 @@ begin
         begin
           Next;
           doneUses := False;
-          while (CurTok.Kind = tkIdent) and not doneUses do
+          while (CurTok.Kind in [tkIdent, tkString]) and not doneUses do
           begin
             ParseUsesUnit(CurTok.SVal);
             Next;
@@ -6507,7 +6576,7 @@ begin
       begin
         Next;
         doneUses := False;
-        while (CurTok.Kind = tkIdent) and not doneUses do
+        while (CurTok.Kind in [tkIdent, tkString]) and not doneUses do
         begin
           ParseUsesUnit(CurTok.SVal);
           Next;

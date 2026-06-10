@@ -46,6 +46,16 @@ archived as `historic/direct-codegen-legacy.inc` on 2026-05-31. See
 `lib/lcl/`, then `/usr/include/`. `.h` → external prototype + dynamic resolve.
 `ctype` hardcoded → `libc.so.6`. Other headers default `lib<name>.so`.
 
+`uses './sub/unit';` (path-form, quoted string in the uses list) bypasses the
+search chain: relative paths resolve against the directory of the file
+containing the directive (`CurUnitDir`, saved/restored per nested unit parse),
+absolute paths are used as-is, `NormalizePath` collapses `.`/`..`. Extension
+optional (`.pas` then `.pp` inferred); explicit `.pas`/`.pp`/`.c`/`.h`
+honoured. Dedup key stays the lowercased basename, so `uses './a/util'` and a
+later `uses util` are the same unit. Miss is a hard error naming the resolved
+path. `{$include /abs/path.inc}` also accepts absolute paths.
+Test: `test/test_relpath_uses.pas` + `test/relpath/`.
+
 ## Key Gotchas
 
 - **Append new token kinds**: inserting token kinds in the existing enum changes

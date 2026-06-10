@@ -154,6 +154,7 @@ begin
   LoadFile(inFile, Source);
   if DebugTrace then writeln('Loaded file length: ', Length(Source));
   SourceFileDir := GetFilePath(inFile);
+  CurUnitDir := SourceFileDir;
   CurSrcBaseName := GetFileBaseName(inFile);
   exePath := ParamStr(0);              { copy to a local; ParamStr result does not match the param overload directly }
   ExeDir := GetFilePath(exePath);
