@@ -12,7 +12,7 @@ _none_
 
 _none_
 
-## backlog (26)
+## backlog (28)
 
 | Ticket | Type | Summary | Blocked-by |
 | --- | --- | --- | --- |
@@ -32,8 +32,10 @@ _none_
 | feature-managed-exception-cleanup | feature | Finalize managed values on exception unwind | — |
 | feature-managed-string-default | feature | Promote managed AnsiString from opt-in to default | bug-managed-byref-string-param-store, feature-managed-exception-cleanup |
 | feature-metaclass-descendant-enforcement | feature | Metaclass alias descendant-constraint enforcement | — |
+| feature-networking | feature | Networking runtime | — |
 | feature-parallel-processing | feature | Parallel processing as a language feature | feature-unified-heap-allocator |
 | feature-progress-transition-helpers | feature | Progress transition helpers (`claim` / `resolve`) | — |
+| feature-relative-path-units | feature | Relative/absolute path support in `uses`/`includes` | — |
 | feature-static-arena-profile | feature | Fixed-static-arena allocator profile | feature-unified-heap-allocator |
 | feature-target-aarch64 | feature | Compile target: ARM64 / AArch64 Linux | feature-target-i386 |
 | feature-target-arm32 | feature | Compile target: ARM32 Linux | feature-target-aarch64 |
@@ -81,8 +83,10 @@ _none_
 - feature-interfaces
 - feature-managed-exception-cleanup
 - feature-metaclass-descendant-enforcement
+- feature-networking
 - feature-parallel-processing
 - feature-progress-transition-helpers
+- feature-relative-path-units
 - feature-static-arena-profile
 - feature-target-i386
 - feature-threadsafe-io-serialization
