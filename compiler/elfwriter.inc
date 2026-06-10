@@ -463,24 +463,18 @@ end;
 procedure LoadFile(const path: AnsiString; var dst: AnsiString);
 var f, n: Integer;
 begin
-  writeln('Inside LoadFile! path="', path, '"');
   LoadPath := path;
   SetLength(dst, STRING_CAP);
   f := sysopen(LoadPath, 0);
   if f >= 0 then
   begin
     n := sysread(f, dst[1], STRING_CAP);
-    writeln('LoadFile read: path="', LoadPath, '" f=', f, ' raw_n=', n);
     if n < 0 then n := 0;
     sysclose(f);
     SetLength(dst, n);
-    writeln('LoadFile success: path="', LoadPath, '" f=', f, ' read_n=', n, ' dst_len=', Length(dst));
   end
   else
-  begin
     SetLength(dst, 0);
-    writeln('LoadFile failed: path="', LoadPath, '" f=', f);
-  end;
 end;
 
 function GetFilePath(const path: AnsiString): AnsiString;
