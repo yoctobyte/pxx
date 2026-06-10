@@ -8,11 +8,13 @@ lives in git, not in a timestamp._
 
 _none_
 
-## working (0)
+## working (1)
 
-_none_
+| Ticket | Type | Summary | Blocked-by |
+| --- | --- | --- | --- |
+| feature-relative-path-units | feature | Relative/absolute path support in `uses`/`includes` | — |
 
-## backlog (28)
+## backlog (27)
 
 | Ticket | Type | Summary | Blocked-by |
 | --- | --- | --- | --- |
@@ -35,7 +37,6 @@ _none_
 | feature-networking | feature | Networking runtime | — |
 | feature-parallel-processing | feature | Parallel processing as a language feature | feature-unified-heap-allocator |
 | feature-progress-transition-helpers | feature | Progress transition helpers (`claim` / `resolve`) | — |
-| feature-relative-path-units | feature | Relative/absolute path support in `uses`/`includes` | — |
 | feature-static-arena-profile | feature | Fixed-static-arena allocator profile | feature-unified-heap-allocator |
 | feature-target-aarch64 | feature | Compile target: ARM64 / AArch64 Linux | feature-target-i386 |
 | feature-target-arm32 | feature | Compile target: ARM32 Linux | feature-target-aarch64 |
@@ -86,7 +87,6 @@ _none_
 - feature-networking
 - feature-parallel-processing
 - feature-progress-transition-helpers
-- feature-relative-path-units
 - feature-static-arena-profile
 - feature-target-i386
 - feature-threadsafe-io-serialization

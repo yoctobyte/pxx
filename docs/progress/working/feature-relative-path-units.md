@@ -1,8 +1,8 @@
 # Relative/absolute path support in `uses`/`includes`
 
 - **Type:** feature
-- **Status:** backlog
-- **Owner:** —
+- **Status:** working
+- **Owner:** claude
 - **Opened:** 2026-06-07 (manual request)
 
 ## Problem
