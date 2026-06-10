@@ -23,7 +23,9 @@ uses SysUtils, BaseUnix;
 procedure CPreprocess(var src: AnsiString; const baseDir: AnsiString); forward;
 {$include parser.inc}
 {$include ir.inc}
+{$include ir_codegen_aarch64.inc}
 {$include ir_codegen386.inc}
+{$include ir_codegen_arm32.inc}
 {$include ir_codegen.inc}
 {$include cparser.inc}
 {$include bparser.inc}
@@ -41,6 +43,7 @@ begin
   DumpIR := False;
   DumpRTTI := False;
   TargetArch := TARGET_X86_64;
+  TARGET_PTR_SIZE := 8;
   NoUnhandledHandler := False;
   ThreadSafeMode := False;
   EnableAutoVar := True;
@@ -80,6 +83,16 @@ begin
     else if option = '--target=i386' then
     begin
       TargetArch := TARGET_I386;
+      Inc(i);
+    end
+    else if option = '--target=aarch64' then
+    begin
+      TargetArch := TARGET_AARCH64;
+      Inc(i);
+    end
+    else if option = '--target=arm32' then
+    begin
+      TargetArch := TARGET_ARM32;
       Inc(i);
     end
     else if option = '--strict-overload' then
@@ -143,6 +156,10 @@ begin
     else
       readingOptions := False;
   end;
+  if (TargetArch = TARGET_I386) or (TargetArch = TARGET_ARM32) then
+    TARGET_PTR_SIZE := 4
+  else
+    TARGET_PTR_SIZE := 8;
   if ParamCount < i then
     begin writeln(StdErr,'usage: pascal26/PXX [--debug] [--dump-ir] [-dNAME] [-uNAME] [-Mobjfpc] [--strict-overload] [--no-unhandled-handler] <src> [out]'); Halt(1); end;
 
@@ -291,7 +308,7 @@ begin
   end;
   for i := 0 to ProcCount - 1 do
     writeln('proc ', i, ': ', Procs[i].Name, ' at ', Procs[i].BodyAddr);
-  if TargetArch = TARGET_I386 then
+  if (TargetArch = TARGET_I386) or (TargetArch = TARGET_ARM32) then
     writeELF32(outFile)
   else
     writeELF(outFile);

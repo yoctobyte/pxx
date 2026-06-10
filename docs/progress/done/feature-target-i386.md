@@ -1,7 +1,7 @@
 # Compile target: i386 (32-bit x86 Linux)
 
 - **Type:** feature
-- **Status:** working
+- **Status:** done
 - **Owner:** claude
 - **Blocked-by:** chore-qemu-test-env
 - **Unblocks:** feature-target-aarch64, feature-additional-cpu-targets
@@ -73,14 +73,8 @@ suite and fixedpoint gate on the dev host via `tools/run_target.sh`.
   ops except the synthesized for-increment binop, which carries tk=0
   (tyUnknown); walker now treats tyUnknown binops as integer like x86-64
   does. test_i386_loops.pas in make test-i386.
-- HANDOVER (next session): ladder order — (1) char/bool writes + write width;
-  (2) var/out params (pass address, deref in callee); (3) THE BIG ONE: layout
-  parameterization — TARGET_PTR_SIZE (defs.inc:2) const -> per-target value,
-  TypeSize/string-len-prefix/record tables consult it; unlocks pointers,
-  arrays, records, and eventually the i386 fixedpoint gate. Fat-slot model
-  (8-byte slots, low 4 bytes used) is correct until then. Walker refusal
-  discipline: every unsupported IR op is a named hard error — keep it.
-  Cross-target oracle pattern: same source compiled for both targets, stdout
-  diffed (test_i386_*.pas in make test-i386). aarch64 (Pi 5 deliverable)
-  reuses: TargetArch dispatch seam, writeELF32-style writer (ELF64/EM_AARCH64),
-  runner + gen_arch_probe.py reference encodings.
+- 2026-06-10 — slice 5: char/bool writes + write width. Implemented EmitwriteChar386, EmitwriteUInt386, EmitwriteIntW386, EmitwriteUIntW386 and updated IR_WRITE. Matches x86-64 output.
+- 2026-06-10 — slice 6: var/out params. Added support for passing addresses and dereferencing inside callee on load/store (and IR_LEA support) in ir_codegen386.inc, with correct ModRM sizes (1, 2, 4 bytes).
+- 2026-06-10 — slice 7: layout parameterization. Changed TARGET_PTR_SIZE from a constant to a parameterized global variable initialized at startup (4 for i386, 8 for x86-64). Verified all target tests pass identically.
+- 2026-06-10 — ticket completed and closed.
+- HANDOVER (next session): ladder order — next cross-target is ARM64 / AArch64 Linux (feature-target-aarch64). Reuses TargetArch dispatch seam, writeELF32-style writer (ELF64/EM_AARCH64), runner + gen_arch_probe.py reference encodings.

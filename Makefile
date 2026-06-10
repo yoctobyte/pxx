@@ -21,7 +21,7 @@ STABLE_DEFAULT_DIR := $(STABLE_ROOT)/default
 STABLE_MANAGED_DIR := $(STABLE_ROOT)/managed
 PXXFLAGS   :=
 
-.PHONY: all bootstrap bootstrap-check fpc-check test test-nilpy qemu-env-check test-i386 stabilize check-stable revert benchmark benchmark-compiler-runtime benchmark-check clean distclean symbols \
+.PHONY: all bootstrap bootstrap-check fpc-check test test-nilpy qemu-env-check test-i386 test-aarch64 test-arm32 stabilize check-stable revert benchmark benchmark-compiler-runtime benchmark-check clean distclean symbols \
         bootstrap-managed test-managed stabilize-managed check-stable-managed revert-managed test-nilpy-managed \
         progress-check
 
@@ -674,7 +674,53 @@ test-i386: $(COMPILER)
 	./$(COMPILER) --target=i386 test/test_i386_loops.pas /tmp/test_i386_loops
 	./$(COMPILER) test/test_i386_loops.pas /tmp/test_i386_loops_x64
 	test "$$(tools/run_target.sh i386 /tmp/test_i386_loops)" = "$$(/tmp/test_i386_loops_x64)"
-	@echo "i386 hello + arith + procs + loops ok (output identical to x86-64)"
+	./$(COMPILER) --target=i386 test/test_i386_write.pas /tmp/test_i386_write
+	./$(COMPILER) test/test_i386_write.pas /tmp/test_i386_write_x64
+	test "$$(tools/run_target.sh i386 /tmp/test_i386_write)" = "$$(/tmp/test_i386_write_x64)"
+	./$(COMPILER) --target=i386 test/test_i386_varparam.pas /tmp/test_i386_varparam
+	./$(COMPILER) test/test_i386_varparam.pas /tmp/test_i386_varparam_x64
+	test "$$(tools/run_target.sh i386 /tmp/test_i386_varparam)" = "$$(/tmp/test_i386_varparam_x64)"
+	@echo "i386 hello + arith + procs + loops + write + varparam ok (output identical to x86-64)"
+
+test-aarch64: $(COMPILER)
+	./$(COMPILER) --target=aarch64 test/hello.pas /tmp/test_aarch64_hello
+	test "$$(tools/run_target.sh aarch64 /tmp/test_aarch64_hello)" = "Hello, World!"
+	./$(COMPILER) --target=aarch64 test/test_i386_arith.pas /tmp/test_aarch64_arith
+	./$(COMPILER) test/test_i386_arith.pas /tmp/test_aarch64_arith_x64
+	test "$$(tools/run_target.sh aarch64 /tmp/test_aarch64_arith)" = "$$(/tmp/test_aarch64_arith_x64)"
+	./$(COMPILER) --target=aarch64 test/test_i386_procs.pas /tmp/test_aarch64_procs
+	./$(COMPILER) test/test_i386_procs.pas /tmp/test_aarch64_procs_x64
+	test "$$(tools/run_target.sh aarch64 /tmp/test_aarch64_procs)" = "$$(/tmp/test_aarch64_procs_x64)"
+	./$(COMPILER) --target=aarch64 test/test_i386_loops.pas /tmp/test_aarch64_loops
+	./$(COMPILER) test/test_i386_loops.pas /tmp/test_aarch64_loops_x64
+	test "$$(tools/run_target.sh aarch64 /tmp/test_aarch64_loops)" = "$$(/tmp/test_aarch64_loops_x64)"
+	./$(COMPILER) --target=aarch64 test/test_i386_write.pas /tmp/test_aarch64_write
+	./$(COMPILER) test/test_i386_write.pas /tmp/test_aarch64_write_x64
+	test "$$(tools/run_target.sh aarch64 /tmp/test_aarch64_write)" = "$$(/tmp/test_aarch64_write_x64)"
+	./$(COMPILER) --target=aarch64 test/test_i386_varparam.pas /tmp/test_aarch64_varparam
+	./$(COMPILER) test/test_i386_varparam.pas /tmp/test_aarch64_varparam_x64
+	test "$$(tools/run_target.sh aarch64 /tmp/test_aarch64_varparam)" = "$$(/tmp/test_aarch64_varparam_x64)"
+	@echo "aarch64 hello + arith + procs + loops + write + varparam ok (output identical to x86-64)"
+
+test-arm32: $(COMPILER)
+	./$(COMPILER) --target=arm32 test/hello.pas /tmp/test_arm32_hello
+	test "$$(tools/run_target.sh arm32 /tmp/test_arm32_hello)" = "Hello, World!"
+	./$(COMPILER) --target=arm32 test/test_i386_arith.pas /tmp/test_arm32_arith
+	./$(COMPILER) test/test_i386_arith.pas /tmp/test_arm32_arith_x64
+	test "$$(tools/run_target.sh arm32 /tmp/test_arm32_arith)" = "$$(/tmp/test_arm32_arith_x64)"
+	./$(COMPILER) --target=arm32 test/test_i386_procs.pas /tmp/test_arm32_procs
+	./$(COMPILER) test/test_i386_procs.pas /tmp/test_arm32_procs_x64
+	test "$$(tools/run_target.sh arm32 /tmp/test_arm32_procs)" = "$$(/tmp/test_arm32_procs_x64)"
+	./$(COMPILER) --target=arm32 test/test_i386_loops.pas /tmp/test_arm32_loops
+	./$(COMPILER) test/test_i386_loops.pas /tmp/test_arm32_loops_x64
+	test "$$(tools/run_target.sh arm32 /tmp/test_arm32_loops)" = "$$(/tmp/test_arm32_loops_x64)"
+	./$(COMPILER) --target=arm32 test/test_i386_write.pas /tmp/test_arm32_write
+	./$(COMPILER) test/test_i386_write.pas /tmp/test_arm32_write_x64
+	test "$$(tools/run_target.sh arm32 /tmp/test_arm32_write)" = "$$(/tmp/test_arm32_write_x64)"
+	./$(COMPILER) --target=arm32 test/test_i386_varparam.pas /tmp/test_arm32_varparam
+	./$(COMPILER) test/test_i386_varparam.pas /tmp/test_arm32_varparam_x64
+	test "$$(tools/run_target.sh arm32 /tmp/test_arm32_varparam)" = "$$(/tmp/test_arm32_varparam_x64)"
+	@echo "arm32 hello + arith + procs + loops + write + varparam ok (output identical to x86-64)"
 
 # Cross-target test environment sanity (chore-qemu-test-env). Manual target:
 # joins 'make test' when the first cross backend exists. Validates the runner

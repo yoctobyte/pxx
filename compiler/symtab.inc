@@ -6,6 +6,9 @@ procedure EmitVariantClear; forward;
 procedure EmitManagedRecordReleaseLocked(recId: Integer); forward;
 procedure EmitAcquireHeapLock; forward;
 procedure EmitReleaseHeapLock; forward;
+procedure EmitLoadVarA64(idx: Integer); forward;
+procedure EmitLoadVarArm32(idx: Integer); forward;
+
 
 function ULower(const s: AnsiString): AnsiString;
 var res: AnsiString; i: Integer; c: Char;
@@ -3021,6 +3024,22 @@ begin
     Result := CodeLen; EmitI32(0);
     Exit;
   end;
+  if TargetArch = TARGET_ARM32 then
+  begin
+    EmitI32($E92D4800);  { push {fp, lr} }
+    EmitI32($E1A0B00D);  { mov fp, sp }
+    Result := CodeLen;
+    EmitI32($E24DD000);  { sub sp, sp, #0 }
+    Exit;
+  end;
+  if TargetArch = TARGET_AARCH64 then
+  begin
+    EmitI32($A9BF7BFD);  { stp x29, x30, [sp, #-16]! }
+    EmitI32($910003FD);  { mov x29, sp }
+    Result := CodeLen;
+    EmitI32($D10003FF);  { sub sp, sp, #0 }
+    Exit;
+  end;
   EmitB($55);
   EmitB($48); EmitB($89); EmitB($E5);
   EmitB($48); EmitB($81); EmitB($EC);
@@ -3031,7 +3050,12 @@ procedure PatchProcPrologue(patchPos, size: Integer);
 var aligned: Integer;
 begin
   aligned := ((size + 15) div 16) * 16;
-  Patch32(patchPos, aligned);
+  if TargetArch = TARGET_ARM32 then
+    Patch32(patchPos, $E24DD000 or aligned)
+  else if TargetArch = TARGET_AARCH64 then
+    Patch32(patchPos, $D10003FF or (aligned shl 10))
+  else
+    Patch32(patchPos, aligned);
 end;
 
 procedure EmitProcEpilog(retSymIdx: Integer);
@@ -3049,6 +3073,33 @@ begin
       EmitB($8B); EmitB($85); EmitI32(Syms[retSymIdx].Offset); { mov eax, [ebp+off] }
     end;
     EmitB($C9); EmitB($C3);                                    { leave; ret }
+    Exit;
+  end;
+  if TargetArch = TARGET_ARM32 then
+  begin
+    if retSymIdx >= 0 then
+    begin
+      if Syms[retSymIdx].IsArray or (Syms[retSymIdx].Kind <> skLocal) or
+         not TypeIsOrdinal(Syms[retSymIdx].TypeKind) then
+        Error('target arm32: only ordinal function results supported yet');
+      EmitLoadVarArm32(retSymIdx);
+    end;
+    EmitI32($E1A0D00B);  { mov sp, fp }
+    EmitI32($E8BD8800);  { pop {fp, pc} }
+    Exit;
+  end;
+  if TargetArch = TARGET_AARCH64 then
+  begin
+    if retSymIdx >= 0 then
+    begin
+      if Syms[retSymIdx].IsArray or (Syms[retSymIdx].Kind <> skLocal) or
+         not TypeIsOrdinal(Syms[retSymIdx].TypeKind) then
+        Error('target aarch64: only ordinal function results supported yet');
+      EmitLoadVarA64(retSymIdx);
+    end;
+    EmitI32($910003BF);  { mov sp, x29 }
+    EmitI32($A8C17BFD);  { ldp x29, x30, [sp], #16 }
+    EmitI32($D65F03C0);  { ret }
     Exit;
   end;
   { Release local managed variables before returning }
@@ -3199,6 +3250,34 @@ begin
     EmitB($4C); EmitB($89); EmitB($DC);             { mov rsp, r11 }
     Exit;
   end;
+  if TargetArch = TARGET_ARM32 then
+  begin
+    if Procs[pi].BodyAddr >= 0 then
+      EmitI32($EB000000 or ((((Procs[pi].BodyAddr - CodeLen) div 4) - 2) and $00ffffff))
+    else
+    begin
+      if CallFixCount >= MAX_CALLFIX then Error('call fixup overflow');
+      CallFix[CallFixCount].CodePos := CodeLen;
+      CallFix[CallFixCount].ProcIdx := pi;
+      Inc(CallFixCount);
+      EmitI32($EB000000);
+    end;
+    Exit;
+  end;
+  if TargetArch = TARGET_AARCH64 then
+  begin
+    if Procs[pi].BodyAddr >= 0 then
+      EmitI32($94000000 or (((Procs[pi].BodyAddr - CodeLen) div 4) and $03ffffff))
+    else
+    begin
+      if CallFixCount >= MAX_CALLFIX then Error('call fixup overflow');
+      CallFix[CallFixCount].CodePos := CodeLen;
+      CallFix[CallFixCount].ProcIdx := pi;
+      Inc(CallFixCount);
+      EmitI32($94000000);
+    end;
+    Exit;
+  end;
   EmitB($E8);
   if Procs[pi].BodyAddr >= 0 then
     EmitI32(Procs[pi].BodyAddr - (CodeLen + 4))
@@ -3223,7 +3302,12 @@ begin
     pi := CallFix[i].ProcIdx;
     if Procs[pi].BodyAddr < 0 then
       Error('unresolved forward');
-    Patch32(CallFix[i].CodePos, Procs[pi].BodyAddr - (CallFix[i].CodePos + 4));
+    if TargetArch = TARGET_ARM32 then
+      Patch32(CallFix[i].CodePos, $EB000000 or ((((Procs[pi].BodyAddr - CallFix[i].CodePos) div 4) - 2) and $00ffffff))
+    else if TargetArch = TARGET_AARCH64 then
+      Patch32(CallFix[i].CodePos, $94000000 or (((Procs[pi].BodyAddr - CallFix[i].CodePos) div 4) and $03ffffff))
+    else
+      Patch32(CallFix[i].CodePos, Procs[pi].BodyAddr - (CallFix[i].CodePos + 4));
   end;
 end;
 

@@ -1,5 +1,4 @@
 const
-  TARGET_PTR_SIZE = 8;  { pointer size in bytes on the current target (x86-64) }
 
   MAX_CODE      = 4194304;
   LOCAL_STR_CAP = 256;     { max string length for local/stack variables }
@@ -223,6 +222,8 @@ const
     mis-compile). See docs/progress/*/feature-target-i386.md. }
   TARGET_X86_64 = 0;
   TARGET_I386   = 1;
+  TARGET_AARCH64 = 2;
+  TARGET_ARM32   = 3;
   LOAD_ADDR32        = $08048000;  { classic i386 ET_EXEC base }
   ELF32_HEADER_SIZE  = 52;
   PROG32_HEADER_SIZE = 32;
@@ -439,6 +440,7 @@ type
   end;
 
 var
+  TARGET_PTR_SIZE    : Integer;
   Templates          : array[0..MAX_TEMPLATES-1] of TTemplate;
   TemplateCount      : Integer;
   Specializations    : array[0..MAX_SPECIALIZATIONS-1] of TSpecialization;
@@ -727,6 +729,7 @@ var
 
   { Reserved BSS slot 0: initial rsp (for argv access) }
   BSS_INITIAL_RSP : Integer;  { always 0; set in ParseProgram init }
+  BSS_INTBUF      : Integer;
   BSS_HEAP_PTR    : Integer;
   BSS_HEAP_END    : Integer;
   BSS_FREE_LIST   : Integer;  { head of GetMem/FreeMem free list; 0 = empty (BSS zero-init) }

@@ -50,6 +50,124 @@ begin
   EmitB($CD); EmitB($80);                          { int 0x80 }
 end;
 
+procedure EmitwriteChar386;
+{ eax = char byte value -> write 1 byte to stdout }
+begin
+  EmitB($BF); EmitDataRef(INTBUF_OFFSET);            { mov edi, INTBUF_OFFSET }
+  EmitB($88); EmitB($07);                            { mov [edi], al }
+  EmitB($B8); EmitI32(4);                            { mov eax, 4 (write) }
+  EmitB($BB); EmitI32(STDOUT);                       { mov ebx, 1 }
+  EmitB($B9); EmitDataRef(INTBUF_OFFSET);            { mov ecx, INTBUF_OFFSET }
+  EmitB($BA); EmitI32(1);                            { mov edx, 1 }
+  EmitB($CD); EmitB($80);                            { int 0x80 }
+end;
+
+procedure EmitwriteUInt386;
+{ eax = unsigned 32-bit int -> decimal on stdout }
+var loopStart: Integer;
+begin
+  EmitB($31); EmitB($C9);                                { xor ecx, ecx }
+  EmitB($BB); EmitI32(10);                               { mov ebx, 10 }
+  EmitB($BF); EmitDataRef(INTBUF_OFFSET + INTBUF_SIZE);  { mov edi, INTBUF_OFFSET + INTBUF_SIZE }
+  loopStart := CodeLen;
+  EmitB($31); EmitB($D2);                                { xor edx, edx }
+  EmitB($F7); EmitB($F3);                                { div ebx }
+  EmitB($80); EmitB($C2); EmitB($30);                    { add dl, '0' }
+  EmitB($4F);                                            { dec edi }
+  EmitB($88); EmitB($17);                                { mov [edi], dl }
+  EmitB($41);                                            { inc ecx }
+  EmitB($85); EmitB($C0);                                { test eax, eax }
+  EmitB($75); EmitB(Byte(loopStart - (CodeLen + 1)));    { jnz loop }
+  EmitB($89); EmitB($CA);                                { mov edx, ecx }
+  EmitB($89); EmitB($F9);                                { mov ecx, edi }
+  EmitB($BB); EmitI32(STDOUT);                           { mov ebx, 1 }
+  EmitB($B8); EmitI32(4);                                { mov eax, 4 }
+  EmitB($CD); EmitB($80);                                { int 0x80 }
+end;
+
+procedure EmitwriteIntW386(width: Integer);
+{ eax = signed 32-bit int -> right-aligned in field of min width chars }
+var jnsOff, jleOff, jzOff, loopStart: Integer;
+begin
+  EmitB($31); EmitB($F6);                                { xor esi, esi }
+  EmitB($85); EmitB($C0);                                { test eax, eax }
+  EmitB($79); jnsOff := CodeLen; EmitB(0);               { jns .positive }
+  EmitB($F7); EmitB($D8);                                { neg eax }
+  EmitB($46);                                            { inc esi }
+  Code[jnsOff] := Byte(CodeLen - (jnsOff + 1));
+  EmitB($31); EmitB($C9);                                { xor ecx, ecx }
+  EmitB($BB); EmitI32(10);                               { mov ebx, 10 }
+  EmitB($BF); EmitDataRef(INTBUF_OFFSET + INTBUF_SIZE);  { mov edi, INTBUF_OFFSET + INTBUF_SIZE }
+  loopStart := CodeLen;
+  EmitB($31); EmitB($D2);                                { xor edx, edx }
+  EmitB($F7); EmitB($F3);                                { div ebx }
+  EmitB($80); EmitB($C2); EmitB($30);                    { add dl, '0' }
+  EmitB($4F);                                            { dec edi }
+  EmitB($88); EmitB($17);                                { mov [edi], dl }
+  EmitB($41);                                            { inc ecx }
+  EmitB($85); EmitB($C0);                                { test eax, eax }
+  EmitB($75); EmitB(Byte(loopStart - (CodeLen + 1)));    { jnz loop }
+  EmitB($57);                                            { push edi }
+  EmitB($51);                                            { push ecx }
+  EmitB($B8); EmitI32(width);                            { mov eax, width }
+  EmitB($29); EmitB($C8);                                { sub eax, ecx }
+  EmitB($29); EmitB($F0);                                { sub eax, esi }
+  EmitB($7E); jleOff := CodeLen; EmitB(0);               { jle .no_pad }
+  EnsureSpaces;
+  EmitB($50);                                            { push eax }
+  EmitB($B8); EmitI32(4);                                { mov eax, 4 }
+  EmitB($BB); EmitI32(STDOUT);                           { mov ebx, 1 }
+  EmitB($B9); EmitDataRef(SpacesOffset);                 { mov ecx, spaces }
+  EmitB($5A);                                            { pop edx }
+  EmitB($CD); EmitB($80);                                { int 0x80 }
+  Code[jleOff] := Byte(CodeLen - (jleOff + 1));
+  EmitB($85); EmitB($F6);                                { test esi, esi }
+  EmitB($74); jzOff := CodeLen; EmitB(0);                { jz .no_sign }
+  EmitwriteSyscall(MINUS_OFFSET, 1);
+  Code[jzOff] := Byte(CodeLen - (jzOff + 1));
+  EmitB($5A);                                            { pop edx }
+  EmitB($59);                                            { pop ecx }
+  EmitB($BB); EmitI32(STDOUT);                           { mov ebx, 1 }
+  EmitB($B8); EmitI32(4);                                { mov eax, 4 }
+  EmitB($CD); EmitB($80);                                { int 0x80 }
+end;
+
+procedure EmitwriteUIntW386(width: Integer);
+{ eax = unsigned 32-bit int -> right-aligned in field of min width chars }
+var jleOff, loopStart: Integer;
+begin
+  EmitB($31); EmitB($C9);                                { xor ecx, ecx }
+  EmitB($BB); EmitI32(10);                               { mov ebx, 10 }
+  EmitB($BF); EmitDataRef(INTBUF_OFFSET + INTBUF_SIZE);  { mov edi, INTBUF_OFFSET + INTBUF_SIZE }
+  loopStart := CodeLen;
+  EmitB($31); EmitB($D2);                                { xor edx, edx }
+  EmitB($F7); EmitB($F3);                                { div ebx }
+  EmitB($80); EmitB($C2); EmitB($30);                    { add dl, '0' }
+  EmitB($4F);                                            { dec edi }
+  EmitB($88); EmitB($17);                                { mov [edi], dl }
+  EmitB($41);                                            { inc ecx }
+  EmitB($85); EmitB($C0);                                { test eax, eax }
+  EmitB($75); EmitB(Byte(loopStart - (CodeLen + 1)));    { jnz loop }
+  EmitB($57);                                            { push edi }
+  EmitB($51);                                            { push ecx }
+  EmitB($B8); EmitI32(width);                            { mov eax, width }
+  EmitB($29); EmitB($C8);                                { sub eax, ecx }
+  EmitB($7E); jleOff := CodeLen; EmitB(0);               { jle .no_pad }
+  EnsureSpaces;
+  EmitB($50);                                            { push eax }
+  EmitB($B8); EmitI32(4);                                { mov eax, 4 }
+  EmitB($BB); EmitI32(STDOUT);                           { mov ebx, 1 }
+  EmitB($B9); EmitDataRef(SpacesOffset);                 { mov ecx, spaces }
+  EmitB($5A);                                            { pop edx }
+  EmitB($CD); EmitB($80);                                { int 0x80 }
+  Code[jleOff] := Byte(CodeLen - (jleOff + 1));
+  EmitB($5A);                                            { pop edx }
+  EmitB($59);                                            { pop ecx }
+  EmitB($BB); EmitI32(STDOUT);                           { mov ebx, 1 }
+  EmitB($B8); EmitI32(4);                                { mov eax, 4 }
+  EmitB($CD); EmitB($80);                                { int 0x80 }
+end;
+
 procedure IREmit386CheckScalarSym(symIdx: Integer; const what: AnsiString);
 { "Fat slot" symbol model: the parser still lays out 8-byte slots (BSS and
   frame, 64-bit TypeSize), and i386 code reads/writes only the low 4 bytes.
@@ -60,8 +178,6 @@ begin
     Error('target i386: bad symbol in ' + what);
   if not (Syms[symIdx].Kind in [skGlobal, skLocal, skParam]) then
     Error('target i386: symbol kind not supported yet (' + what + ')');
-  if (Syms[symIdx].Kind = skParam) and Syms[symIdx].IsRef then
-    Error('target i386: var/out parameters not yet supported');
   if Syms[symIdx].IsArray then
     Error('target i386: arrays not yet supported');
   if not TypeIsOrdinal(Syms[symIdx].TypeKind) then
@@ -70,10 +186,11 @@ end;
 
 procedure IREmitNode386(node: Integer);
 var
-  valNode, si, left, right, op, pi, argNode, nArgs: Integer;
+  valNode, si, left, right, op, pi, argNode, nArgs, wid, sz: Integer;
   sVal: AnsiString;
   emsg: AnsiString;
   tk: TTypeKind;
+  sgn: Boolean;
 begin
   if node = -1 then Exit;
   case IRKind[node] of
@@ -89,13 +206,70 @@ begin
     IR_LOAD_SYM:
       begin
         IREmit386CheckScalarSym(IRA[node], 'load');
-        if Syms[IRA[node]].Kind = skGlobal then
+        si := IRA[node];
+        tk := Syms[si].TypeKind;
+        sz := TypeSize(tk);
+        sgn := TypeSigned(tk);
+        if Syms[si].Kind = skGlobal then
         begin
-          EmitB($A1); EmitGlobRef(Syms[IRA[node]].Offset);          { mov eax, [abs32] }
+          if sz = 1 then
+          begin
+            if sgn then
+              begin EmitB($0F); EmitB($BE); EmitB($05); EmitGlobRef(Syms[si].Offset); end
+            else
+              begin EmitB($0F); EmitB($B6); EmitB($05); EmitGlobRef(Syms[si].Offset); end;
+          end
+          else if sz = 2 then
+          begin
+            if sgn then
+              begin EmitB($0F); EmitB($BF); EmitB($05); EmitGlobRef(Syms[si].Offset); end
+            else
+              begin EmitB($0F); EmitB($B7); EmitB($05); EmitGlobRef(Syms[si].Offset); end;
+          end
+          else
+            begin EmitB($A1); EmitGlobRef(Syms[si].Offset); end;
         end
         else
         begin
-          EmitB($8B); EmitB($85); EmitI32(Syms[IRA[node]].Offset);  { mov eax, [ebp+off] }
+          if (Syms[si].Kind = skParam) and Syms[si].IsRef then
+          begin
+            EmitB($8B); EmitB($85); EmitI32(Syms[si].Offset);  { mov eax, [ebp+off] }
+            if sz = 1 then
+            begin
+              if sgn then
+                begin EmitB($0F); EmitB($BE); EmitB($00); end
+              else
+                begin EmitB($0F); EmitB($B6); EmitB($00); end;
+            end
+            else if sz = 2 then
+            begin
+              if sgn then
+                begin EmitB($0F); EmitB($BF); EmitB($00); end
+              else
+                begin EmitB($0F); EmitB($B7); EmitB($00); end;
+            end
+            else
+              begin EmitB($8B); EmitB($00); end;
+          end
+          else
+          begin
+            if sz = 1 then
+            begin
+              if sgn then
+                begin EmitB($0F); EmitB($BE); EmitB($85); EmitI32(Syms[si].Offset); end
+              else
+                begin EmitB($0F); EmitB($B6); EmitB($85); EmitI32(Syms[si].Offset); end;
+            end
+            else if sz = 2 then
+            begin
+              if sgn then
+                begin EmitB($0F); EmitB($BF); EmitB($85); EmitI32(Syms[si].Offset); end
+              else
+                begin EmitB($0F); EmitB($B7); EmitB($85); EmitI32(Syms[si].Offset); end;
+            end
+            else
+              begin EmitB($8B); EmitB($85); EmitI32(Syms[si].Offset); end;
+          end;
         end;
       end;
 
@@ -103,13 +277,58 @@ begin
       begin
         IREmit386CheckScalarSym(IRA[node], 'store');
         IREmitNode386(IRB[node]);
-        if Syms[IRA[node]].Kind = skGlobal then
+        si := IRA[node];
+        tk := Syms[si].TypeKind;
+        sz := TypeSize(tk);
+        if Syms[si].Kind = skGlobal then
         begin
-          EmitB($A3); EmitGlobRef(Syms[IRA[node]].Offset);          { mov [abs32], eax }
+          if sz = 1 then
+            begin EmitB($A2); EmitGlobRef(Syms[si].Offset); end
+          else if sz = 2 then
+            begin EmitB($66); EmitB($A3); EmitGlobRef(Syms[si].Offset); end
+          else
+            begin EmitB($A3); EmitGlobRef(Syms[si].Offset); end;
         end
         else
         begin
-          EmitB($89); EmitB($85); EmitI32(Syms[IRA[node]].Offset);  { mov [ebp+off], eax }
+          if (Syms[si].Kind = skParam) and Syms[si].IsRef then
+          begin
+            EmitB($50);                                         { push eax }
+            EmitB($8B); EmitB($85); EmitI32(Syms[si].Offset);  { mov eax, [ebp+off] }
+            EmitB($59);                                         { pop ecx }
+            if sz = 1 then
+              begin EmitB($88); EmitB($08); end
+            else if sz = 2 then
+              begin EmitB($66); EmitB($89); EmitB($08); end
+            else
+              begin EmitB($89); EmitB($08); end;
+          end
+          else
+          begin
+            if sz = 1 then
+              begin EmitB($88); EmitB($85); EmitI32(Syms[si].Offset); end
+            else if sz = 2 then
+              begin EmitB($66); EmitB($89); EmitB($85); EmitI32(Syms[si].Offset); end
+            else
+              begin EmitB($89); EmitB($85); EmitI32(Syms[si].Offset); end;
+          end;
+        end;
+      end;
+
+    IR_LEA:
+      begin
+        si := IRA[node];
+        if Syms[si].Kind = skGlobal then
+        begin
+          EmitB($B8); EmitGlobRef(Syms[si].Offset);          { mov eax, abs32 }
+        end
+        else if (Syms[si].Kind = skParam) and Syms[si].IsRef then
+        begin
+          EmitB($8B); EmitB($85); EmitI32(Syms[si].Offset);  { mov eax, [ebp+off] }
+        end
+        else
+        begin
+          EmitB($8D); EmitB($85); EmitI32(Syms[si].Offset);  { lea eax, [ebp+off] }
         end;
       end;
 
@@ -204,22 +423,53 @@ begin
     IR_WRITE:
       begin
         valNode := IRA[node];
-        if IRB[node] > 0 then
-          Error('target i386: field width in write not yet supported');
+        wid := IRB[node];
         if IRKind[valNode] = IR_CONST_STR then
         begin
           sVal := GetTokenStrFromRaw(IRA[valNode], IRB[valNode]);
           si := InternStr(sVal);
+          if (wid > 0) and (wid > Strs[si].Len) then
+          begin
+            EnsureSpaces;
+            EmitB($B8); EmitI32(4);
+            EmitB($BB); EmitI32(STDOUT);
+            EmitB($B9); EmitDataRef(SpacesOffset);
+            EmitB($BA); EmitI32(wid - Strs[si].Len);
+            EmitB($CD); EmitB($80);
+          end;
           if Strs[si].Len > 0 then
             EmitwriteSyscall(Strs[si].Offset + 8, Strs[si].Len);
         end
         else
         begin
           tk := IntToTypeKind(IRTk[node]);
-          if TypeIsOrdinal(tk) and (tk <> tyBoolean) and (tk <> tyChar) then
+          if tk = tyChar then
           begin
             IREmitNode386(valNode);
-            EmitwriteInt386;
+            if wid > 1 then
+            begin
+              EnsureSpaces;
+              EmitB($50);
+              EmitB($B8); EmitI32(4);
+              EmitB($BB); EmitI32(STDOUT);
+              EmitB($B9); EmitDataRef(SpacesOffset);
+              EmitB($BA); EmitI32(wid - 1);
+              EmitB($CD); EmitB($80);
+              EmitB($58);
+            end;
+            EmitwriteChar386;
+          end
+          else if TypeIsOrdinal(tk) then
+          begin
+            IREmitNode386(valNode);
+            if not TypeSigned(tk) then
+            begin
+              if wid > 0 then EmitwriteUIntW386(wid) else EmitwriteUInt386;
+            end
+            else
+            begin
+              if wid > 0 then EmitwriteIntW386(wid) else EmitwriteInt386;
+            end;
           end
           else
             Error('target i386: write of this operand not yet supported');
@@ -326,7 +576,7 @@ begin
         IREmitNode386(i);
 
       IR_NOP, IR_CONST_STR, IR_CONST_INT, IR_BLOCK,
-      IR_LOAD_SYM, IR_BINOP, IR_NEG, IR_NOT, IR_ARG: ; { operands, emitted by parents }
+      IR_LOAD_SYM, IR_BINOP, IR_NEG, IR_NOT, IR_ARG, IR_LEA: ; { operands, emitted by parents }
 
       else
         IREmitNode386(i); { unknown statement op -> hard error inside }

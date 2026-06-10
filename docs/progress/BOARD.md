@@ -12,9 +12,9 @@ _none_
 
 | Ticket | Type | Summary | Blocked-by |
 | --- | --- | --- | --- |
-| feature-target-i386 | feature | Compile target: i386 (32-bit x86 Linux) | chore-qemu-test-env |
+| feature-target-arm32 | feature | Compile target: ARM32 Linux | feature-target-aarch64 |
 
-## backlog (28)
+## backlog (26)
 
 | Ticket | Type | Summary | Blocked-by |
 | --- | --- | --- | --- |
@@ -40,8 +40,6 @@ _none_
 | feature-parallel-processing | feature | Parallel processing as a language feature | feature-unified-heap-allocator |
 | feature-progress-transition-helpers | feature | Progress transition helpers (`claim` / `resolve`) | — |
 | feature-static-arena-profile | feature | Fixed-static-arena allocator profile | feature-unified-heap-allocator |
-| feature-target-aarch64 | feature | Compile target: ARM64 / AArch64 Linux | feature-target-i386 |
-| feature-target-arm32 | feature | Compile target: ARM32 Linux | feature-target-aarch64 |
 | feature-target-esp32 | feature | Compile target: ESP32 / embedded (RISC-V entry, various MCUs) | feature-target-arm32 |
 | feature-threadsafe-io-serialization | feature | Statement-level I/O serialization under threads | feature-unified-heap-allocator |
 | idea-unit-rename-import | idea | `uses X as Y` unit-rename import (dialect extension) | — |
@@ -54,7 +52,7 @@ _none_
 | bug-nonreproducible-miscompile-2026-06-02 | bug | Non-reproducible one-off miscompile (2026-06-02) | — |
 | bug-whole-record-copy-main-body-noop | bug | Latent: whole-record array-element copy in main-program body emits store no-ops | — |
 
-## done (10)
+## done (12)
 
 | Ticket | Type | Summary | Blocked-by |
 | --- | --- | --- | --- |
@@ -66,6 +64,8 @@ _none_
 | chore-qemu-test-env | chore | QEMU cross-target test environment | — |
 | feature-progress-check-makefile | feature | Wire `progress.sh check` into a make target | — |
 | feature-relative-path-units | feature | Relative/absolute path support in `uses`/`includes` | — |
+| feature-target-aarch64 | feature | Compile target: ARM64 / AArch64 Linux | feature-target-i386 |
+| feature-target-i386 | feature | Compile target: i386 (32-bit x86 Linux) | chore-qemu-test-env |
 | feature-unified-heap-allocator | feature | Unified syscall-free heap allocator | — |
 | idea-progress-board-md | idea | On-demand `BOARD.md` kanban grid | — |
 

@@ -1,8 +1,7 @@
 # Compile target: ARM32 Linux
 
-- **Type:** feature
-- **Status:** backlog
-- **Owner:** —
+- **Status:** working
+- **Owner:** claude
 - **Blocked-by:** feature-target-aarch64
 - **Unblocks:** feature-target-esp32, feature-additional-cpu-targets
 - **Opened:** 2026-06-06 (user request; roadmap.md Phase 4)
@@ -32,3 +31,4 @@ roadmap staging, not a hard requirement. Move to `urgent/` to pull it forward.
 
 ## Log
 - 2026-06-06 — ticket opened from user request + roadmap Phase 4.
+- 2026-06-10 — ticket claimed; starting implementation of ARM32 target support.

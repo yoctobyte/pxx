@@ -3914,6 +3914,16 @@ begin
     IREmitMachineCode386;
     Exit;
   end;
+  if TargetArch = TARGET_ARM32 then
+  begin
+    IREmitMachineCodeArm32;
+    Exit;
+  end;
+  if TargetArch = TARGET_AARCH64 then
+  begin
+    IREmitMachineCodeAarch64;
+    Exit;
+  end;
   for i := 0 to MAX_IR - 1 do
     LabelPositions[i] := -1;
   LabelFixupCount := 0;

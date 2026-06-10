@@ -284,9 +284,13 @@ end;
 {$ifdef FPC}
 procedure writeELF(const outPath: AnsiString);
 var f: File; i: Integer;
-    phCount, codeOffset: Integer;
+    phCount, codeOffset, machine: Integer;
     dataBase, bssBase, entry, filesz, memsz, addr: Int64;
 begin
+  if TargetArch = TARGET_AARCH64 then
+    machine := 183
+  else
+    machine := 62;
   phCount := 1;
   codeOffset := CODE_OFFSET;
   if ExternalCount > 0 then
@@ -343,7 +347,7 @@ begin
   writeU8(f,2);writeU8(f,1);writeU8(f,1);writeU8(f,0);
   writeU8(f,0);writeU8(f,0);writeU8(f,0);writeU8(f,0);
   writeU8(f,0);writeU8(f,0);writeU8(f,0);writeU8(f,0);
-  writeU16(f,2);writeU16(f,62);writeU32(f,1);
+  writeU16(f,2);writeU16(f,machine);writeU32(f,1);
   writeU64(f,entry);writeU64(f,64);writeU64(f,0);
   writeU32(f,0);writeU16(f,64);writeU16(f,56);
   writeU16(f,phCount);writeU16(f,64);writeU16(f,0);writeU16(f,0);
@@ -372,9 +376,13 @@ end;
 {$else}
 procedure writeELF(const outPath: AnsiString);
 var f: Integer; i: Integer;
-    phCount, codeOffset: Integer;
+    phCount, codeOffset, machine: Integer;
     dataBase, bssBase, entry, filesz, memsz, addr: Int64;
 begin
+  if TargetArch = TARGET_AARCH64 then
+    machine := 183
+  else
+    machine := 62;
   phCount := 1;
   codeOffset := CODE_OFFSET;
   if ExternalCount > 0 then
@@ -432,7 +440,7 @@ begin
   writeU8(f,2);writeU8(f,1);writeU8(f,1);writeU8(f,0);
   writeU8(f,0);writeU8(f,0);writeU8(f,0);writeU8(f,0);
   writeU8(f,0);writeU8(f,0);writeU8(f,0);writeU8(f,0);
-  writeU16(f,2);writeU16(f,62);writeU32(f,1);
+  writeU16(f,2);writeU16(f,machine);writeU32(f,1);
   writeU64(f,entry);writeU64(f,64);writeU64(f,0);
   writeU32(f,0);writeU16(f,64);writeU16(f,56);
   writeU16(f,phCount);writeU16(f,64);writeU16(f,0);writeU16(f,0);
@@ -474,10 +482,20 @@ var
   f: Integer;
 {$endif}
 begin
-  if ExternalCount > 0 then
-    Error('target i386: external (dynamic) symbols not yet supported');
-  if (MethodFixCount > 0) or (ProcAddrFixCount > 0) or (DataPtrFixCount > 0) then
-    Error('target i386: method/proc-address fixups not yet supported');
+  if TargetArch = TARGET_I386 then
+  begin
+    if ExternalCount > 0 then
+      Error('target i386: external (dynamic) symbols not yet supported');
+    if (MethodFixCount > 0) or (ProcAddrFixCount > 0) or (DataPtrFixCount > 0) then
+      Error('target i386: method/proc-address fixups not yet supported');
+  end;
+  if TargetArch = TARGET_ARM32 then
+  begin
+    if ExternalCount > 0 then
+      Error('target arm32: external (dynamic) symbols not yet supported');
+    if (MethodFixCount > 0) or (ProcAddrFixCount > 0) or (DataPtrFixCount > 0) then
+      Error('target arm32: method/proc-address fixups not yet supported');
+  end;
 
   codeOffset := CODE_OFFSET32;
   dataBase := LOAD_ADDR32 + codeOffset + CodeLen;
@@ -512,9 +530,11 @@ begin
   writeU8(f,1);writeU8(f,1);writeU8(f,1);writeU8(f,0);  { class 32, LE, v1 }
   writeU8(f,0);writeU8(f,0);writeU8(f,0);writeU8(f,0);
   writeU8(f,0);writeU8(f,0);writeU8(f,0);writeU8(f,0);
-  writeU16(f,2);writeU16(f,3);writeU32(f,1);            { ET_EXEC, EM_386 }
+  writeU16(f,2);
+  if TargetArch = TARGET_ARM32 then writeU16(f,40) else writeU16(f,3);
+  writeU32(f,1);            { ET_EXEC, EM_ARM/EM_386 }
   writeU32(f,entry);writeU32(f,ELF32_HEADER_SIZE);writeU32(f,0);
-  writeU32(f,0);                                        { e_flags }
+  if TargetArch = TARGET_ARM32 then writeU32(f,$05000000) else writeU32(f,0);
   writeU16(f,ELF32_HEADER_SIZE);writeU16(f,PROG32_HEADER_SIZE);
   writeU16(f,1);writeU16(f,0);writeU16(f,0);writeU16(f,0);
 

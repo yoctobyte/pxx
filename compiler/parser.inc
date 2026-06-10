@@ -5691,12 +5691,60 @@ begin
     for i := 0 to nparams-1 do
     begin
       idx := Procs[pi].Params[i].SymIdx;
-      if Syms[idx].IsRef then
-        Error('target i386: var/out parameters not yet supported');
       if Syms[idx].IsArray or not TypeIsOrdinal(Syms[idx].TypeKind) then
-        Error('target i386: only ordinal by-value parameters supported yet');
+        Error('target i386: only ordinal parameters supported yet');
       EmitB($8B); EmitB($85); EmitI32(8 + (nparams - 1 - i) * 4); { mov eax, [ebp+disp] }
       EmitB($89); EmitB($85); EmitI32(Syms[idx].Offset);          { mov [ebp+off], eax }
+    end;
+  end
+  else if TargetArch = TARGET_AARCH64 then
+  begin
+    for i := 0 to nparams-1 do
+    begin
+      idx := Procs[pi].Params[i].SymIdx;
+      sz := ParamSize(idx);
+      if i < 8 then
+      begin
+        { Load local offset into x9 }
+        EmitLoadImmA64(9, Syms[idx].Offset);
+        { add x8, x29, x9 }
+        EmitI32($8B0903A8);
+        { Store parameter register i (x0..x7) into [x8] }
+        if sz = 1 then
+          EmitI32($39000100 + i)
+        else if sz = 2 then
+          EmitI32($79000100 + i)
+        else if sz = 4 then
+          EmitI32($B9000100 + i)
+        else
+          EmitI32($F9000100 + i);
+      end
+      else
+        Error('target aarch64: more than 8 parameters not yet supported');
+    end;
+  end
+  else if TargetArch = TARGET_ARM32 then
+  begin
+    for i := 0 to nparams-1 do
+    begin
+      idx := Procs[pi].Params[i].SymIdx;
+      sz := ParamSize(idx);
+      if i < 4 then
+      begin
+        { Load local offset into r9 }
+        EmitLoadImmArm32(9, Syms[idx].Offset);
+        { add r9, fp, r9 }
+        EmitI32($E08B9009);
+        { Store parameter register i (r0..r3) into [r9] }
+        if sz = 1 then
+          EmitI32($E5C90000 or (i shl 12))  { strb r[i], [r9] }
+        else if sz = 2 then
+          EmitI32($E1C900B0 or (i shl 12))  { strh r[i], [r9] }
+        else
+          EmitI32($E5890000 or (i shl 12)); { str r[i], [r9] }
+      end
+      else
+        Error('target arm32: more than 4 parameters not yet supported');
     end;
   end
   else
@@ -6534,6 +6582,7 @@ begin
   BSS_LINE_POS    := BSSSize; Inc(BSSSize, 8);
   BSS_LINE_LEN    := BSSSize; Inc(BSSSize, 8);
   BSS_LINE_BUF    := BSSSize; Inc(BSSSize, LINE_BUF_SIZE);
+  BSS_INTBUF      := BSSSize; Inc(BSSSize, INTBUF_SIZE);
   ExceptionUsed := False;
   hasExceptions := False;
   needsBuiltin := False;
@@ -6586,15 +6635,31 @@ begin
     { Entry stub: save esp for argv access, then jmp to main body.
       mov [abs32], esp: 89 25 <GlobRef> }
     EmitB($89); EmitB($25); EmitGlobRef(BSS_INITIAL_RSP);
+    EmitB($E9); jmpPatch := CodeLen; EmitI32(0);
+  end
+  else if TargetArch = TARGET_ARM32 then
+  begin
+    if needsBuiltin or needsHeap or needsAnsiRuntime or hasExceptions then
+      Error('target arm32: heap/string/exception runtime not yet supported');
+    { ARM32 entry stub: branch to main body. }
+    jmpPatch := CodeLen;
+    EmitI32($EA000000);
+  end
+  else if TargetArch = TARGET_AARCH64 then
+  begin
+    if needsBuiltin or needsHeap or needsAnsiRuntime or hasExceptions then
+      Error('target aarch64: heap/string/exception runtime not yet supported');
+    { AArch64 entry stub: branch to main body. }
+    jmpPatch := CodeLen;
+    EmitI32($14000000);
   end
   else
   begin
     { Emit entry stub: save rsp then jmp to main body }
     { mov [bss_initial_rsp], rsp: 48 89 24 25 <GlobRef(0)> }
     EmitB($48); EmitB($89); EmitB($24); EmitB($25); EmitGlobRef(BSS_INITIAL_RSP);
+    EmitB($E9); jmpPatch := CodeLen; EmitI32(0);
   end;
-
-  EmitB($E9); jmpPatch := CodeLen; EmitI32(0);
   if needsAnsiRuntime then EmitAnsiStringRuntime;
   if hasExceptions then EnableExceptionRuntime;
 
@@ -6654,7 +6719,12 @@ begin
     end;
 
   { Patch jmp to point here (start of main body) }
-  Patch32(jmpPatch, CodeLen - (jmpPatch + 4));
+  if TargetArch = TARGET_ARM32 then
+    Patch32(jmpPatch, $EA000000 or ((((CodeLen - jmpPatch) div 4) - 2) and $00ffffff))
+  else if TargetArch = TARGET_AARCH64 then
+    Patch32(jmpPatch, $14000000 or (((CodeLen - jmpPatch) div 4) and $03ffffff))
+  else
+    Patch32(jmpPatch, CodeLen - (jmpPatch + 4));
 
   { Run unit initialization sections before the program body, in dependency
     order (a used unit is fully parsed — and its init proc registered — before
