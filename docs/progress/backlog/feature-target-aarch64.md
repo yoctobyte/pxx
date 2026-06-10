@@ -36,3 +36,4 @@ the target-abstraction it introduces — not a hard ISA requirement. Move to
 
 ## Log
 - 2026-06-06 — ticket opened from user request + roadmap Phase 3.
+- 2026-06-10 — concrete deliverable set with user: binary runs on Raspberry Pi 5 (BCM2712, Cortex-A76, ARMv8.2-A, 64-bit Pi OS). i386 before this is not about i386 — it flushes 32-bit assumptions (ptr size, Int64 pairs, ELF32) ahead of the ESP32 goal. qemu-aarch64 runner + exit-42 probe already green (chore-qemu-test-env).

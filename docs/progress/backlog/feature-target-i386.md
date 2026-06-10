@@ -38,3 +38,4 @@ suite and fixedpoint gate on the dev host via `tools/run_target.sh`.
 ## Log
 - 2026-06-06 — ticket opened from user request + roadmap Phase 2.
 - 2026-06-10 — blocked-by chore-qemu-test-env added: test environment precedes the backend.
+- 2026-06-10 — user rationale: i386 matters only as 32-bit proving ground for ESP32; CPU itself is not a goal.
