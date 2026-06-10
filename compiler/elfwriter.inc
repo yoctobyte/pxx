@@ -630,15 +630,22 @@ begin
       if closePos > Length(src) then Error('unterminated Pascal directive during include expansion');
 
       if CaseEqual(command, 'ifdef') or CaseEqual(command, 'ifndef') or
-         CaseEqual(command, 'if') then
+         CaseEqual(command, 'if') or CaseEqual(command, 'ifopt') then
       begin
         if condCount >= MAX_PAS_CONDS then Error('include conditional nesting overflow');
         cond := False;
-        if CaseEqual(command, 'if') then
+        if CaseEqual(command, 'ifopt') then
+          cond := False { compiler option switches are not modelled; branch off }
+        else if CaseEqual(command, 'if') then
         begin
-          exprSource := '';
-          for k := j to closePos - 1 do AppendChar(exprSource, src[k]);
-          cond := EvalPasCondExprText(exprSource);
+          { Inactive branches need only nesting bookkeeping (FPC semantics):
+            don't evaluate $IF expressions inside a dead region. }
+          if active then
+          begin
+            exprSource := '';
+            for k := j to closePos - 1 do AppendChar(exprSource, src[k]);
+            cond := EvalPasCondExprText(exprSource);
+          end;
         end
         else
         begin
@@ -654,10 +661,17 @@ begin
       else if CaseEqual(command, 'elseif') then
       begin
         if condCount = 0 then Error('unexpected elseif directive during include expansion');
-        exprSource := '';
-        for k := j to closePos - 1 do AppendChar(exprSource, src[k]);
-        cond := EvalPasCondExprText(exprSource);
         k := condCount - 1;
+        cond := False;
+        { Evaluate only when this branch could fire (parent active, no branch
+          taken yet) — a dead $ELSEIF may use syntax we cannot evaluate. }
+        if condParent[k] and not condTaken[k] then
+        begin
+          exprSource := '';
+          for k := j to closePos - 1 do AppendChar(exprSource, src[k]);
+          cond := EvalPasCondExprText(exprSource);
+          k := condCount - 1;
+        end;
         condActive[k] := condParent[k] and not condTaken[k] and cond;
         if condActive[k] then condTaken[k] := True;
         active := condActive[k];
@@ -670,7 +684,7 @@ begin
         condTaken[k] := True;
         active := condActive[k];
       end
-      else if CaseEqual(command, 'endif') then
+      else if CaseEqual(command, 'endif') or CaseEqual(command, 'ifend') then
       begin
         if condCount = 0 then Error('unexpected endif directive during include expansion');
         Dec(condCount);

@@ -25,8 +25,8 @@ const
   MAX_IR      = 131072;
   MAX_LOOP_FIXUPS = 256;
   MAX_GOTO_LABELS = 64;
-  MAX_PAS_DEFINES = 128;
-  MAX_PAS_DEFINE_CHARS = 4096;
+  MAX_PAS_DEFINES = 1024;       { jedi.inc-grade compatibility headers define hundreds }
+  MAX_PAS_DEFINE_CHARS = 32768;
   MAX_PAS_CONDS = 64;
   SPECIAL_IN  = 999;
 

@@ -706,8 +706,19 @@ begin
   ReadPasDirectiveWord(command);
   name := '';
   cond := False;
-  if CaseEqual(command, 'if') or CaseEqual(command, 'elseif') then
-    cond := ParsePasCondExpr
+  { Inactive branches need only nesting bookkeeping (FPC semantics): an $IF
+    expression inside a dead region — or an $ELSEIF whose chain already took a
+    branch — may use operators/symbols we cannot evaluate, so don't try. }
+  if CaseEqual(command, 'if') then
+  begin
+    if PasDirectiveActive then cond := ParsePasCondExpr;
+  end
+  else if CaseEqual(command, 'elseif') then
+  begin
+    if (PasCondCount > 0) and PasCondParent[PasCondCount - 1] and
+       (not PasCondTaken[PasCondCount - 1]) then
+      cond := ParsePasCondExpr;
+  end
   else
     ReadPasDirectiveWord(name);
   { Resource directive (R name file): capture the filename before skipping. }
@@ -731,11 +742,13 @@ begin
   if SrcPos <= Length(Source) then Inc(SrcPos);
 
   if CaseEqual(command, 'ifdef') or CaseEqual(command, 'ifndef') or
-     CaseEqual(command, 'if') then
+     CaseEqual(command, 'if') or CaseEqual(command, 'ifopt') then
   begin
     if PasCondCount >= MAX_PAS_CONDS then Error('conditional directive nesting overflow');
     parent := PasDirectiveActive;
-    if not CaseEqual(command, 'if') then
+    if CaseEqual(command, 'ifopt') then
+      cond := False { compiler option switches are not modelled; branch off }
+    else if not CaseEqual(command, 'if') then
     begin
       cond := PasDefineExists(name);
       if CaseEqual(command, 'ifndef') then cond := not cond;
@@ -759,7 +772,7 @@ begin
     PasCondActive[idx] := PasCondParent[idx] and not PasCondTaken[idx];
     PasCondTaken[idx] := True;
   end
-  else if CaseEqual(command, 'endif') then
+  else if CaseEqual(command, 'endif') or CaseEqual(command, 'ifend') then
   begin
     if PasCondCount = 0 then Error('unexpected endif directive');
     Dec(PasCondCount);
