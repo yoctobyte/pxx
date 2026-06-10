@@ -3909,6 +3909,11 @@ var i, lblId, pos, targetOffset, f: Integer;
     LabelFixupTarget: array[0..2047] of Integer;
     LabelFixupCount: Integer;
 begin
+  if TargetArch = TARGET_I386 then
+  begin
+    IREmitMachineCode386;
+    Exit;
+  end;
   for i := 0 to MAX_IR - 1 do
     LabelPositions[i] := -1;
   LabelFixupCount := 0;

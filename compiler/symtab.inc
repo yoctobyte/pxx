@@ -3013,6 +3013,8 @@ end;
 function EmitProcPrologue: Integer;
 { Returns patch position for sub rsp imm32 }
 begin
+  if TargetArch <> TARGET_X86_64 then
+    Error('target i386: procedures/functions not yet supported');
   EmitB($55);
   EmitB($48); EmitB($89); EmitB($E5);
   EmitB($48); EmitB($81); EmitB($EC);

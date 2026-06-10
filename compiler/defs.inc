@@ -217,6 +217,16 @@ const
   ELF_HEADER_SIZE  = 64;
   PROG_HEADER_SIZE = 56;
   CODE_OFFSET      = ELF_HEADER_SIZE + PROG_HEADER_SIZE;
+
+  { Compile targets. x86-64 is the native/self-host target; others are
+    cross-only and grow op-by-op (unsupported constructs error, never
+    mis-compile). See docs/progress/*/feature-target-i386.md. }
+  TARGET_X86_64 = 0;
+  TARGET_I386   = 1;
+  LOAD_ADDR32        = $08048000;  { classic i386 ET_EXEC base }
+  ELF32_HEADER_SIZE  = 52;
+  PROG32_HEADER_SIZE = 32;
+  CODE_OFFSET32      = ELF32_HEADER_SIZE + PROG32_HEADER_SIZE;
   DYNAMIC_CODE_OFFSET = ELF_HEADER_SIZE + PROG_HEADER_SIZE +
                         PROG_HEADER_SIZE + PROG_HEADER_SIZE;
 
@@ -626,6 +636,8 @@ var
     unit references (uses './sub/unit') resolve relative to it. Saved/restored
     around each nested unit parse, like CurSrcBaseName. }
   CurUnitDir : AnsiString;
+  { Selected compile target (TARGET_*). Default TARGET_X86_64. }
+  TargetArch : Integer;
   { Directory of the compiler binary itself (from ParamStr(0)); RTL/LCL units are
     located relative to it so the compiler works from any CWD, not just the repo
     root. Empty if the path has no directory part (then CWD-relative is used). }

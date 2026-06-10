@@ -21,7 +21,7 @@ STABLE_DEFAULT_DIR := $(STABLE_ROOT)/default
 STABLE_MANAGED_DIR := $(STABLE_ROOT)/managed
 PXXFLAGS   :=
 
-.PHONY: all bootstrap bootstrap-check fpc-check test test-nilpy qemu-env-check stabilize check-stable revert benchmark benchmark-compiler-runtime benchmark-check clean distclean symbols \
+.PHONY: all bootstrap bootstrap-check fpc-check test test-nilpy qemu-env-check test-i386 stabilize check-stable revert benchmark benchmark-compiler-runtime benchmark-check clean distclean symbols \
         bootstrap-managed test-managed stabilize-managed check-stable-managed revert-managed test-nilpy-managed \
         progress-check
 
@@ -659,6 +659,13 @@ test: $(COMPILER) fpc-check
 # directly; only advisory inside 'make test' (above).
 progress-check:
 	@./tools/progress.sh check
+
+# i386 cross-target slice (feature-target-i386). Grows with the backend;
+# joins 'make test' when the op coverage is broad enough to matter.
+test-i386: $(COMPILER)
+	./$(COMPILER) --target=i386 test/hello.pas /tmp/test_i386_hello
+	test "$$(tools/run_target.sh i386 /tmp/test_i386_hello)" = "Hello, World!"
+	@echo "i386 hello ok"
 
 # Cross-target test environment sanity (chore-qemu-test-env). Manual target:
 # joins 'make test' when the first cross backend exists. Validates the runner

@@ -35,10 +35,13 @@ procedure MovRdxImm(v: Int64); begin EmitB($48); EmitB($BA); EmitI64(v); end;
 procedure EmitSyscall; begin EmitB($0F); EmitB($05); end;
 
 procedure EmitDataRef(dataOff: Integer);
+{ Absolute data-address placeholder; width follows the target's pointer size
+  (writeELF patches 8 bytes, writeELF32 patches 4). }
 begin
   if FixCount >= MAX_FIXUPS then Error('fixup overflow');
   Fixups[FixCount].CodePos := CodeLen; Fixups[FixCount].DataOff := dataOff;
-  Inc(FixCount); EmitI64(0);
+  Inc(FixCount);
+  if TargetArch = TARGET_I386 then EmitI32(0) else EmitI64(0);
 end;
 
 procedure EmitGlobRef(bssOff: Integer);
@@ -52,6 +55,16 @@ end;
 
 procedure EmitwriteSyscall(dataOff, len: Integer);
 begin
+  if TargetArch = TARGET_I386 then
+  begin
+    { i386 int 0x80 ABI: eax=4 (write), ebx=fd, ecx=buf, edx=len }
+    EmitB($B8); EmitI32(4);
+    EmitB($BB); EmitI32(STDOUT);
+    EmitB($B9); EmitDataRef(dataOff);
+    EmitB($BA); EmitI32(len);
+    EmitB($CD); EmitB($80);
+    Exit;
+  end;
   MovRaxImm(SYS_WRITE); MovRdiImm(STDOUT);
   EmitB($48); EmitB($BE); EmitDataRef(dataOff);
   MovRdxImm(len); EmitSyscall;
@@ -76,7 +89,17 @@ procedure EmitExit(code: Int64);
   the calling thread, so a program that started worker threads (e.g. via
   gtk_init / GLib) would leave the process alive after main returns. For a
   single-threaded program the two are equivalent. }
-begin MovRaxImm(SYS_EXIT_GROUP); MovRdiImm(code); EmitSyscall; end;
+begin
+  if TargetArch = TARGET_I386 then
+  begin
+    { i386 int 0x80 ABI: eax=252 (exit_group), ebx=code }
+    EmitB($B8); EmitI32(252);
+    EmitB($BB); EmitI32(code);
+    EmitB($CD); EmitB($80);
+    Exit;
+  end;
+  MovRaxImm(SYS_EXIT_GROUP); MovRdiImm(code); EmitSyscall;
+end;
 
 { ===== String table ===== }
 

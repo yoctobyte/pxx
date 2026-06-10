@@ -1,8 +1,8 @@
 # Compile target: i386 (32-bit x86 Linux)
 
 - **Type:** feature
-- **Status:** backlog
-- **Owner:** —
+- **Status:** working
+- **Owner:** claude
 - **Blocked-by:** chore-qemu-test-env
 - **Unblocks:** feature-target-aarch64, feature-additional-cpu-targets
 - **Opened:** 2026-06-06 (user request; roadmap.md Phase 2)
@@ -39,3 +39,14 @@ suite and fixedpoint gate on the dev host via `tools/run_target.sh`.
 - 2026-06-06 — ticket opened from user request + roadmap Phase 2.
 - 2026-06-10 — blocked-by chore-qemu-test-env added: test environment precedes the backend.
 - 2026-06-10 — user rationale: i386 matters only as 32-bit proving ground for ESP32; CPU itself is not a goal.
+- 2026-06-10 — first vertical slice landed: `--target=i386` flag, TargetArch
+  global, target-dispatched EmitExit/EmitwriteSyscall/EmitDataRef (int 0x80
+  ABI; 4-byte data fixups), i386 entry stub, minimal IR walker
+  (ir_codegen386.inc: const-str write/writeln/labels/jumps), ELF32 writer
+  (writeELF32: ET_EXEC/EM_386, one PT_LOAD at 0x08048000, whole-file map at
+  p_offset 0). hello.pas runs under qemu-i386 and natively (`make test-i386`).
+  Unsupported constructs are hard errors, never mis-compiles: proc prologue,
+  heap/string/exception runtimes, externals, and unknown IR ops all refuse
+  with named errors. x86-64 fixedpoint + make test + test-nilpy green.
+  Next increments: int locals/arith (IR const_int/store/load, i386 reg set),
+  proc prologue/calls (32-bit frame), then runtime emitters.

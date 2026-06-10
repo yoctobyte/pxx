@@ -6555,11 +6555,22 @@ begin
     Inc(i);
   end;
 
-  { Emit entry stub: save rsp then jmp to main body }
-  { mov [bss_initial_rsp], rsp: 48 89 24 25 <GlobRef(0)> }
-  EmitB($48); EmitB($89); EmitB($24); EmitB($25); EmitGlobRef(BSS_INITIAL_RSP);
-
-
+  if TargetArch = TARGET_I386 then
+  begin
+    { Cross-target v1: the runtime emitters below are x86-64 code. Refuse
+      anything that would pull them in rather than emit a wrong binary. }
+    if needsBuiltin or needsHeap or needsAnsiRuntime or hasExceptions then
+      Error('target i386: heap/string/exception runtime not yet supported');
+    { Entry stub: save esp for argv access, then jmp to main body.
+      mov [abs32], esp: 89 25 <GlobRef> }
+    EmitB($89); EmitB($25); EmitGlobRef(BSS_INITIAL_RSP);
+  end
+  else
+  begin
+    { Emit entry stub: save rsp then jmp to main body }
+    { mov [bss_initial_rsp], rsp: 48 89 24 25 <GlobRef(0)> }
+    EmitB($48); EmitB($89); EmitB($24); EmitB($25); EmitGlobRef(BSS_INITIAL_RSP);
+  end;
 
   EmitB($E9); jmpPatch := CodeLen; EmitI32(0);
   if needsAnsiRuntime then EmitAnsiStringRuntime;

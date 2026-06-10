@@ -8,11 +8,13 @@ lives in git, not in a timestamp._
 
 _none_
 
-## working (0)
+## working (1)
 
-_none_
+| Ticket | Type | Summary | Blocked-by |
+| --- | --- | --- | --- |
+| feature-target-i386 | feature | Compile target: i386 (32-bit x86 Linux) | chore-qemu-test-env |
 
-## backlog (29)
+## backlog (28)
 
 | Ticket | Type | Summary | Blocked-by |
 | --- | --- | --- | --- |
@@ -41,7 +43,6 @@ _none_
 | feature-target-aarch64 | feature | Compile target: ARM64 / AArch64 Linux | feature-target-i386 |
 | feature-target-arm32 | feature | Compile target: ARM32 Linux | feature-target-aarch64 |
 | feature-target-esp32 | feature | Compile target: ESP32 / embedded (RISC-V entry, various MCUs) | feature-target-arm32 |
-| feature-target-i386 | feature | Compile target: i386 (32-bit x86 Linux) | chore-qemu-test-env |
 | feature-threadsafe-io-serialization | feature | Statement-level I/O serialization under threads | feature-unified-heap-allocator |
 | idea-unit-rename-import | idea | `uses X as Y` unit-rename import (dialect extension) | — |
 | idea-visibility-enforcement | idea | Enforce private/protected visibility | — |
@@ -91,7 +92,6 @@ _none_
 - feature-parallel-processing
 - feature-progress-transition-helpers
 - feature-static-arena-profile
-- feature-target-i386
 - feature-threadsafe-io-serialization
 - idea-unit-rename-import
 - idea-visibility-enforcement

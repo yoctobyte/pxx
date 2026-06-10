@@ -23,6 +23,7 @@ uses SysUtils, BaseUnix;
 procedure CPreprocess(var src: AnsiString; const baseDir: AnsiString); forward;
 {$include parser.inc}
 {$include ir.inc}
+{$include ir_codegen386.inc}
 {$include ir_codegen.inc}
 {$include cparser.inc}
 {$include bparser.inc}
@@ -39,6 +40,7 @@ begin
   DebugTrace := False;
   DumpIR := False;
   DumpRTTI := False;
+  TargetArch := TARGET_X86_64;
   NoUnhandledHandler := False;
   ThreadSafeMode := False;
   EnableAutoVar := True;
@@ -68,6 +70,16 @@ begin
     else if option = '--experimental-ir-codegen' then
     begin
       { Deprecated no-op: IR is the only backend. Accepted for compatibility. }
+      Inc(i);
+    end
+    else if option = '--target=x86_64' then
+    begin
+      TargetArch := TARGET_X86_64;
+      Inc(i);
+    end
+    else if option = '--target=i386' then
+    begin
+      TargetArch := TARGET_I386;
       Inc(i);
     end
     else if option = '--strict-overload' then
@@ -279,7 +291,10 @@ begin
   end;
   for i := 0 to ProcCount - 1 do
     writeln('proc ', i, ': ', Procs[i].Name, ' at ', Procs[i].BodyAddr);
-  writeELF(outFile);
+  if TargetArch = TARGET_I386 then
+    writeELF32(outFile)
+  else
+    writeELF(outFile);
 
   writeln('ok: ',outFile,'  [code=',CodeLen,'B  data=',DataLen,
           'B  bss=',BSSSize,'B  procs=',ProcCount,']');

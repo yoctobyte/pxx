@@ -460,6 +460,83 @@ begin
 end;
 {$endif}
 
+procedure writeELF32(const outPath: AnsiString);
+{ Static i386 ET_EXEC writer (feature-target-i386). One PT_LOAD mapping the
+  whole file at LOAD_ADDR32 — p_offset must equal p_vaddr mod pagesize, so
+  offset 0 (the gen_arch_probe.py lesson). v1 constraints are enforced, not
+  assumed: anything needing 64-bit-only fixup machinery is a hard error. }
+var
+  i, codeOffset: Integer;
+  dataBase, bssBase, entry, filesz, memsz, addr: Int64;
+{$ifdef FPC}
+  f: File;
+{$else}
+  f: Integer;
+{$endif}
+begin
+  if ExternalCount > 0 then
+    Error('target i386: external (dynamic) symbols not yet supported');
+  if (MethodFixCount > 0) or (ProcAddrFixCount > 0) or (DataPtrFixCount > 0) then
+    Error('target i386: method/proc-address fixups not yet supported');
+
+  codeOffset := CODE_OFFSET32;
+  dataBase := LOAD_ADDR32 + codeOffset + CodeLen;
+  bssBase  := dataBase + DataLen;
+  entry    := LOAD_ADDR32 + codeOffset;
+  filesz   := codeOffset + CodeLen + DataLen;
+  memsz    := filesz + BSSSize;
+
+  { Data fixups: 4-byte absolute on this target (EmitDataRef emitted 4 bytes). }
+  for i := 0 to FixCount-1 do
+  begin
+    addr := dataBase + Fixups[i].DataOff;
+    Patch32(Fixups[i].CodePos, addr);
+  end;
+
+  { Global (BSS) fixups: 4-byte absolute, same as x86-64. }
+  for i := 0 to GlobFixCount-1 do
+  begin
+    addr := bssBase + GlobFix[i].BSSoff;
+    Patch32(GlobFix[i].CodePos, addr);
+  end;
+
+{$ifdef FPC}
+  Assign(f, outPath); Rewrite(f, 1);
+{$else}
+  AssignPath := outPath;
+  f := sysopen(AssignPath, 577); { O_WRONLY | O_CREAT | O_TRUNC }
+{$endif}
+
+  { ELF32 ehdr (52 bytes) }
+  writeU8(f,$7F);writeU8(f,$45);writeU8(f,$4C);writeU8(f,$46);
+  writeU8(f,1);writeU8(f,1);writeU8(f,1);writeU8(f,0);  { class 32, LE, v1 }
+  writeU8(f,0);writeU8(f,0);writeU8(f,0);writeU8(f,0);
+  writeU8(f,0);writeU8(f,0);writeU8(f,0);writeU8(f,0);
+  writeU16(f,2);writeU16(f,3);writeU32(f,1);            { ET_EXEC, EM_386 }
+  writeU32(f,entry);writeU32(f,ELF32_HEADER_SIZE);writeU32(f,0);
+  writeU32(f,0);                                        { e_flags }
+  writeU16(f,ELF32_HEADER_SIZE);writeU16(f,PROG32_HEADER_SIZE);
+  writeU16(f,1);writeU16(f,0);writeU16(f,0);writeU16(f,0);
+
+  { phdr32 (32 bytes): PT_LOAD RWX, whole file at LOAD_ADDR32 }
+  writeU32(f,1);writeU32(f,0);                          { type, offset }
+  writeU32(f,LOAD_ADDR32);writeU32(f,LOAD_ADDR32);
+  writeU32(f,filesz);writeU32(f,memsz);
+  writeU32(f,7);writeU32(f,$1000);                      { flags, align }
+
+{$ifdef FPC}
+  if CodeLen > 0 then Blockwrite(f,Code[0],CodeLen);
+  if DataLen > 0 then Blockwrite(f,Data[0],DataLen);
+  Close(f);
+  FpChmod(outPath,&755);
+{$else}
+  if CodeLen > 0 then syswrite(f,Code,CodeLen);
+  if DataLen > 0 then syswrite(f,Data,DataLen);
+  sysfchmod(f, 493); { chmod 755 }
+  sysclose(f);
+{$endif}
+end;
+
 procedure LoadFile(const path: AnsiString; var dst: AnsiString);
 var f, n: Integer;
 begin
