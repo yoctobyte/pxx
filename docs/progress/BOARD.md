@@ -8,11 +8,9 @@ lives in git, not in a timestamp._
 
 _none_
 
-## working (1)
+## working (0)
 
-| Ticket | Type | Summary | Blocked-by |
-| --- | --- | --- | --- |
-| feature-relative-path-units | feature | Relative/absolute path support in `uses`/`includes` | — |
+_none_
 
 ## backlog (27)
 
@@ -53,7 +51,7 @@ _none_
 | bug-nonreproducible-miscompile-2026-06-02 | bug | Non-reproducible one-off miscompile (2026-06-02) | — |
 | bug-whole-record-copy-main-body-noop | bug | Latent: whole-record array-element copy in main-program body emits store no-ops | — |
 
-## done (8)
+## done (9)
 
 | Ticket | Type | Summary | Blocked-by |
 | --- | --- | --- | --- |
@@ -63,6 +61,7 @@ _none_
 | bug-read-preserves-line-remainder | bug | `read` consumes a whole line like `readln` | — |
 | bug-record-byvalue-arg-truncation | bug | By-value record args >8 bytes truncate (and operator operand edges) | — |
 | feature-progress-check-makefile | feature | Wire `progress.sh check` into a make target | — |
+| feature-relative-path-units | feature | Relative/absolute path support in `uses`/`includes` | — |
 | feature-unified-heap-allocator | feature | Unified syscall-free heap allocator | — |
 | idea-progress-board-md | idea | On-demand `BOARD.md` kanban grid | — |
 
