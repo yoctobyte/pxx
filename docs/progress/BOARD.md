@@ -14,7 +14,7 @@ _none_
 | --- | --- | --- | --- |
 | feature-target-arm32 | feature | Compile target: ARM32 Linux | feature-target-aarch64 |
 
-## backlog (26)
+## backlog (27)
 
 | Ticket | Type | Summary | Blocked-by |
 | --- | --- | --- | --- |
@@ -25,6 +25,7 @@ _none_
 | feature-async-coroutines | feature | Async, coroutines, and `yield` | feature-unified-heap-allocator |
 | feature-c-header-import-complex | feature | Import C headers for complex libraries (glib/GTK-grade) | — |
 | feature-compiler-warnings | feature | Compiler warning diagnostics facility | — |
+| feature-cross-bootstrap | feature | feature-cross-bootstrap | — |
 | feature-directive-if-numeric | feature | Valued defines + numeric `{$IF}` evaluation | — |
 | feature-dynamic-soname-discovery | feature | Dynamic soname discovery (no execve) | — |
 | feature-flexcolumn-directive | feature | `flexcolumn` calling-convention directive | chore-inc-to-units |
@@ -81,6 +82,7 @@ _none_
 - feature-async-coroutines
 - feature-c-header-import-complex
 - feature-compiler-warnings
+- feature-cross-bootstrap
 - feature-directive-if-numeric
 - feature-dynamic-soname-discovery
 - feature-float-str-val
