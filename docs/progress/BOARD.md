@@ -12,7 +12,7 @@ _none_
 
 _none_
 
-## backlog (28)
+## backlog (29)
 
 | Ticket | Type | Summary | Blocked-by |
 | --- | --- | --- | --- |
@@ -23,6 +23,7 @@ _none_
 | feature-async-coroutines | feature | Async, coroutines, and `yield` | feature-unified-heap-allocator |
 | feature-c-header-import-complex | feature | Import C headers for complex libraries (glib/GTK-grade) | — |
 | feature-compiler-warnings | feature | Compiler warning diagnostics facility | — |
+| feature-directive-if-numeric | feature | Valued defines + numeric `{$IF}` evaluation | — |
 | feature-dynamic-soname-discovery | feature | Dynamic soname discovery (no execve) | — |
 | feature-flexcolumn-directive | feature | `flexcolumn` calling-convention directive | chore-inc-to-units |
 | feature-float-str-val | feature | Float Str / Val | — |
@@ -32,7 +33,7 @@ _none_
 | feature-managed-exception-cleanup | feature | Finalize managed values on exception unwind | — |
 | feature-managed-string-default | feature | Promote managed AnsiString from opt-in to default | bug-managed-byref-string-param-store, feature-managed-exception-cleanup |
 | feature-metaclass-descendant-enforcement | feature | Metaclass alias descendant-constraint enforcement | — |
-| feature-mimic-fpc | feature | `mimic FPC` compatibility mode | — |
+| feature-mimic-fpc | feature | `mimic FPC` compatibility mode | feature-directive-if-numeric |
 | feature-networking | feature | Networking runtime | — |
 | feature-parallel-processing | feature | Parallel processing as a language feature | feature-unified-heap-allocator |
 | feature-progress-transition-helpers | feature | Progress transition helpers (`claim` / `resolve`) | — |
@@ -78,13 +79,13 @@ _none_
 - feature-async-coroutines
 - feature-c-header-import-complex
 - feature-compiler-warnings
+- feature-directive-if-numeric
 - feature-dynamic-soname-discovery
 - feature-float-str-val
 - feature-inline-asm-depth
 - feature-interfaces
 - feature-managed-exception-cleanup
 - feature-metaclass-descendant-enforcement
-- feature-mimic-fpc
 - feature-networking
 - feature-parallel-processing
 - feature-progress-transition-helpers
@@ -102,6 +103,7 @@ _none_
 - **2** — feature-target-aarch64
 - **1** — feature-target-esp32
 - **1** — feature-managed-exception-cleanup
+- **1** — feature-directive-if-numeric
 - **1** — feature-compiler-warnings
 - **1** — chore-inc-to-units
 - **1** — bug-managed-byref-string-param-store

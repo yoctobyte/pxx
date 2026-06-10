@@ -3,6 +3,7 @@
 - **Type:** feature
 - **Status:** backlog
 - **Owner:** —
+- **Blocked-by:** feature-directive-if-numeric
 - **Opened:** 2026-06-10 (user decision after Synapse directive-wall pass)
 
 ## Motivation
@@ -102,8 +103,8 @@ semantics will fail loudly at parse — that is the correct failure shape.
 
 ## Work plan
 
-1. Valued defines + numeric comparisons in the conditional evaluator
-   (regression: `test/test_directive_if_numeric.pas`, no mimic needed).
+1. Valued defines + numeric comparisons in the conditional evaluator —
+   split out as **feature-directive-if-numeric** (full design there).
 2. `--mimic-fpc` flag + `{$MIMIC FPC}` directive installing the define set at
    lex-init; error on unknown mimic target (`{$MIMIC DELPHI}` reserved).
 3. `lib/` FPC-clean grep gate in `make test`.
