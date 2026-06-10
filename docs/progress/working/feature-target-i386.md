@@ -50,3 +50,10 @@ suite and fixedpoint gate on the dev host via `tools/run_target.sh`.
   with named errors. x86-64 fixedpoint + make test + test-nilpy green.
   Next increments: int locals/arith (IR const_int/store/load, i386 reg set),
   proc prologue/calls (32-bit frame), then runtime emitters.
+- 2026-06-10 — slice 2: integer globals + arithmetic. IR const_int/load_sym/
+  store_sym (global ordinals, low 4 bytes of the 8-byte BSS slots), binop
+  (+ - * div mod and or shl shr, signed compares via shared REX-free
+  EmitSetcc), neg/not, jump_if_false (while/if), integer writeln
+  (EmitwriteInt386 div-10 loop + int 0x80 write). test_i386_arith.pas asserts
+  byte-identical output between the i386 and x86-64 builds of the same
+  program. 64-bit int constants and non-global/non-ordinal syms refuse.
