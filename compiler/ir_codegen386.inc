@@ -1041,7 +1041,8 @@ begin
         IREmitNode386(IRA[node]);                    { address -> eax }
         tk := IntToTypeKind(IRTk[node]);
         if not (TypeIsOrdinal(tk) or (tk = tyBoolean) or (tk = tyPointer) or
-                (tk = tyChar) or (tk = tyUnknown)) then
+                (tk = tyChar) or (tk = tyUnknown) or
+                (tk = tyAnsiString) or (tk = tyClass)) then
           Error('target i386: load through pointer of this type not yet supported');
         sz := TypeSize(tk);
         sgn := TypeSigned(tk);
@@ -1151,6 +1152,69 @@ begin
         if sz = 1 then begin EmitB($88); EmitB($08); end       { mov [eax], cl }
         else if sz = 2 then begin EmitB($66); EmitB($89); EmitB($08); end { mov [eax], cx }
         else begin EmitB($89); EmitB($08); end;                { mov [eax], ecx }
+      end;
+
+    IR_COPY_REC:
+      begin
+        { rep movsb IRIVal bytes from src (IRB) to dest (IRA). }
+        IREmitNode386(IRB[node]);                    { eax = source }
+        EmitB($50);                                  { push eax }
+        IREmitNode386(IRA[node]);                    { eax = dest }
+        EmitB($89); EmitB($C7);                      { mov edi, eax }
+        EmitB($5E);                                  { pop esi (src) }
+        EmitB($B9); EmitI32(IRIVal[node]);           { mov ecx, count }
+        EmitB($F3); EmitB($A4);                      { rep movsb }
+      end;
+
+    IR_COPY_REC_MANAGED:
+      begin
+        { ARC-correct whole-record copy: retain src's managed fields, release
+          dest's old ones (via the layout-RTTI helpers), then bulk-copy.
+          Threadsafe locking is x86-64-only; i386 runs single-threaded. }
+        IREmitNode386(IRB[node]);                    { eax = src }
+        EmitB($50);                                  { push src  ([esp+4]) }
+        IREmitNode386(IRA[node]);                    { eax = dest }
+        EmitB($50);                                  { push dest ([esp])  }
+        pi := FindProc('PXXRecordRetain');
+        if pi < 0 then Error('compiler error: PXXRecordRetain not found');
+        EmitB($8B); EmitB($44); EmitB($24); EmitB($04); { mov eax, [esp+4] (src) }
+        EmitB($50);                                  { push eax (arg0 recAddr) }
+        EmitB($68); EmitDataRef(-(RECORD_RTTI_DATAREF_BASE + (IRC[node] - REC_UCLASS_BASE))); { push desc }
+        EmitCallProc(pi);
+        EmitB($81); EmitB($C4); EmitI32(8);          { add esp, 8 }
+        pi := FindProc('PXXRecordRelease');
+        if pi < 0 then Error('compiler error: PXXRecordRelease not found');
+        EmitB($8B); EmitB($04); EmitB($24);          { mov eax, [esp] (dest) }
+        EmitB($50);                                  { push eax (arg0 recAddr) }
+        EmitB($68); EmitDataRef(-(RECORD_RTTI_DATAREF_BASE + (IRC[node] - REC_UCLASS_BASE))); { push desc }
+        EmitCallProc(pi);
+        EmitB($81); EmitB($C4); EmitI32(8);          { add esp, 8 }
+        EmitB($5F);                                  { pop edi (dest) }
+        EmitB($5E);                                  { pop esi (src) }
+        EmitB($B9); EmitI32(IRIVal[node]);           { mov ecx, count }
+        EmitB($F3); EmitB($A4);                      { rep movsb }
+      end;
+
+    IR_DEFAULT_MEM:
+      begin
+        IREmitNode386(IRA[node]);                    { eax = destination }
+        if (IRC[node] >= 0) and RecordHasManagedFields(IRC[node]) then
+        begin
+          EmitB($50);                                { push dest }
+          pi := FindProc('PXXRecordRelease');
+          if pi < 0 then Error('compiler error: PXXRecordRelease not found');
+          EmitB($8B); EmitB($04); EmitB($24);        { mov eax, [esp] (dest) }
+          EmitB($50);                                { push eax (arg0) }
+          EmitB($68); EmitDataRef(-(RECORD_RTTI_DATAREF_BASE + (IRC[node] - REC_UCLASS_BASE))); { push desc }
+          EmitCallProc(pi);
+          EmitB($81); EmitB($C4); EmitI32(8);        { add esp, 8 }
+          EmitB($5F);                                { pop edi (dest) }
+        end
+        else
+          begin EmitB($89); EmitB($C7); end;         { mov edi, eax }
+        EmitB($31); EmitB($C0);                      { xor eax, eax }
+        EmitB($B9); EmitI32(IRIVal[node]);           { mov ecx, count }
+        EmitB($F3); EmitB($AA);                      { rep stosb }
       end;
 
     IR_SYSCALL:

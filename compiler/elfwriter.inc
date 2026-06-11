@@ -494,14 +494,14 @@ begin
   begin
     if ExternalCount > 0 then
       Error('target i386: external (dynamic) symbols not yet supported');
-    if (MethodFixCount > 0) or (ProcAddrFixCount > 0) or (DataPtrFixCount > 0) then
+    if (MethodFixCount > 0) or (ProcAddrFixCount > 0) then
       Error('target i386: method/proc-address fixups not yet supported');
   end;
   if TargetArch = TARGET_ARM32 then
   begin
     if ExternalCount > 0 then
       Error('target arm32: external (dynamic) symbols not yet supported');
-    if (MethodFixCount > 0) or (ProcAddrFixCount > 0) or (DataPtrFixCount > 0) then
+    if (MethodFixCount > 0) or (ProcAddrFixCount > 0) then
       Error('target arm32: method/proc-address fixups not yet supported');
   end;
 
@@ -525,6 +525,11 @@ begin
     addr := bssBase + GlobFix[i].BSSoff;
     Patch32(GlobFix[i].CodePos, addr);
   end;
+
+  { Data->data pointer relocations (RTTI/layout blobs). Slots are 8 bytes; the
+    32-bit absolute target fits in the low dword, high dword stays zero. }
+  for i := 0 to DataPtrFixCount-1 do
+    PatchDataU64(DataPtrFix[i].DataPos, dataBase + DataPtrFix[i].TargetOff);
 
 {$ifdef FPC}
   Assign(f, outPath); Rewrite(f, 1);
