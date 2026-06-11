@@ -1,7 +1,7 @@
 # Exception runtime on cross targets (i386 / ARM32 / AArch64)
 
 - **Type:** feature
-- **Status:** working
+- **Status:** done
 - **Owner:** Antigravity <antigravity@google.com>
 - **Unblocks:** feature-cross-bootstrap-selfhost
 - **Opened:** 2026-06-11 (user request)
@@ -42,3 +42,7 @@ joins the cross suites.
 - The unhandled-exception terminator and the unwind ABI must agree with the
   managed-local release that runs during unwinding (currently leaked on cross
   targets — see feature-cross-codegen-gaps).
+
+## Log
+
+- 2026-06-11 — Completed implementation of exception runtime and branch patchers on all cross-compilation targets, verified via emulator testing suite (commit 53c87bb).
