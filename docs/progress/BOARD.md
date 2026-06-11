@@ -8,11 +8,9 @@ lives in git, not in a timestamp._
 
 _none_
 
-## working (1)
+## working (0)
 
-| Ticket | Type | Summary | Blocked-by |
-| --- | --- | --- | --- |
-| feature-cross-managed-aggregates | feature | Cross-target managed aggregates (records + dynamic arrays) | feature-rtti-layout-table |
+_none_
 
 ## backlog (26)
 
@@ -52,7 +50,7 @@ _none_
 | bug-nonreproducible-miscompile-2026-06-02 | bug | Non-reproducible one-off miscompile (2026-06-02) | — |
 | bug-whole-record-copy-main-body-noop | bug | Latent: whole-record array-element copy in main-program body emits store no-ops | — |
 
-## done (16)
+## done (17)
 
 | Ticket | Type | Summary | Blocked-by |
 | --- | --- | --- | --- |
@@ -64,6 +62,7 @@ _none_
 | bug-threadsafe-layout-rtti-helper-races | bug | Thread-safe layout RTTI helper races | feature-rtti-layout-table |
 | chore-qemu-test-env | chore | QEMU cross-target test environment | — |
 | feature-cross-bootstrap | feature | feature-cross-bootstrap | — |
+| feature-cross-managed-aggregates | feature | Cross-target managed aggregates (records + dynamic arrays) | feature-rtti-layout-table |
 | feature-progress-check-makefile | feature | Wire `progress.sh check` into a make target | — |
 | feature-relative-path-units | feature | Relative/absolute path support in `uses`/`includes` | — |
 | feature-rtti-layout-table | feature | Target-independent layout RTTI (Tier B) | feature-cross-bootstrap |

@@ -1,10 +1,24 @@
 # Cross-target managed aggregates (records + dynamic arrays)
 
 - **Type:** feature
-- **Status:** working
+- **Status:** done
 - **Owner:** claude
 - **Blocked-by:** feature-rtti-layout-table
 - **Opened:** 2026-06-11
+- **Closed:** 2026-06-11
+
+## Outcome
+All four targets (x86-64, i386, ARM32, AArch64) now have the full managed
+runtime — heap, AnsiString, records, and dynamic arrays — riding on the Tier B
+portable layout-RTTI helpers in `builtinheap.pas`. Each `make test-<arch>` is
+oracle-matched to x86-64; `make test` + threadsafe self-compile + self-host
+fixedpoint all hold.
+
+Remaining minor gaps (own follow-ups, not blockers):
+- AArch64: pure literal+literal tyString inline concat (the 272-byte-buffer
+  path) — a codegen bug; ansistring-rooted concat covers real usage.
+- All cross targets: managed-local release at scope exit (v1 leaks; output
+  correct), class instantiation, exceptions, copy-on-write on dyn-array writes.
 
 ## Goal
 Make managed records and dynamic arrays work on the 32-bit cross targets
