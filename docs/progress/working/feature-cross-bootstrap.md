@@ -8,6 +8,25 @@ owner: claude
 # feature-cross-bootstrap
 
 ## Log
+- 2026-06-11 (focus shift: i386 first, per user). Tier A big blobs all ported
+  to Pascal: FromLit→PXXStrFromLit (0887904), Concat→PXXStrConcat, LoadFile→
+  PXXStrLoadFile (+ per-target PXXSysOpenRO/Lseek/Read/Close wrappers). Heap +
+  string helpers split out of builtin.pas into a new `builtinheap` unit so a
+  heap-only program does not pull the Str/Val/Variant routines (which use
+  features i386 lacks). builtinheap is raw-pointer/Int64/syscall — compiles on
+  all targets. i386 runtime guard relaxed: heap now allowed (New/Dispose/GetMem
+  via EmitHeapAllocLocked386/FreeLocked386 → PXXAlloc/PXXFree); only string +
+  exception still blocked. i386 backend gained IR_FIELD + IR_INDEX (records,
+  static arrays) and scalar pointer load/store (earlier). i386 functional
+  subset now: arith/control-flow/procs/loops/writes/var-params/syscalls/heap/
+  records/arrays. test_cross_heap covers it (oracle vs x86-64).
+  NOTE: moving procs between units changes what the seed binary pulls, so a
+  plain `make` fails ("unresolved forward"); re-bootstrap via fpc once, then
+  self-host fixedpoint holds.
+  i386 REMAINING for parity: managed strings (needs i386 runtime shims in an
+  EmitAnsiStringRuntime i386 path + i386 IR string ops: store/concat/write/
+  release), class instantiation (VMT+ctor), exceptions. Then aarch64/arm32 get
+  the same shim treatment (helpers already Pascal).
 - 2026-06-11 — claimed. Item 1 (target CPU defines, `PasApplyTargetDefines`) and
   item 2a (clean fatal on cross-target inline asm) landed (bf3df06). Item 2c
   done via a new route: `__pxxrawsyscall(nr, a0..a5)` intrinsic
