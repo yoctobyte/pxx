@@ -588,49 +588,36 @@ begin
   EmitB($C3); { ret }
 
   { rsi/lhs data, rdi/lhs length, rdx/rhs data, rcx/rhs length -> rax/string }
+  { Shim → PXXStrConcat(lenA, srcA, srcB, lenB). Caller already placed the
+    args in rdi/rsi/rdx/rcx (the internal call convention's first four), so
+    the body just saves scratch, takes the heap lock, and delegates. }
   AnsiStrConcatAddr := CodeLen;
-  EmitB($53);                         { push rbx }
-  EmitB($41); EmitB($54);             { push r12 }
-  EmitB($41); EmitB($55);             { push r13 }
-  EmitB($41); EmitB($56);             { push r14 }
-  EmitB($41); EmitB($57);             { push r15 }
-  EmitB($49); EmitB($89); EmitB($F4); { mov r12, rsi }
-  EmitB($49); EmitB($89); EmitB($FD); { mov r13, rdi }
-  EmitB($49); EmitB($89); EmitB($D6); { mov r14, rdx }
-  EmitB($49); EmitB($89); EmitB($CF); { mov r15, rcx }
-  EmitB($4C); EmitB($89); EmitB($EB); { mov rbx, r13 }
-  EmitB($4C); EmitB($01); EmitB($FB); { add rbx, r15 }
-  EmitB($48); EmitB($85); EmitB($DB); { test rbx, rbx }
-  EmitB($0F); EmitB($84); pConcatNil := CodeLen; EmitI32(0);
+  EmitB($53);             { push rbx }
+  EmitB($51);             { push rcx }
+  EmitB($52);             { push rdx }
+  EmitB($56);             { push rsi }
+  EmitB($57);             { push rdi }
+  EmitB($41); EmitB($50); { push r8 }
+  EmitB($41); EmitB($51); { push r9 }
+  EmitB($41); EmitB($52); { push r10 }
+  EmitB($41); EmitB($53); { push r11 }
 
-  EmitB($48); EmitB($89); EmitB($D8);             { mov rax, rbx }
-  EmitB($48); EmitB($83); EmitB($C0); EmitB($11); { add rax, 17 }
   EmitAcquireHeapLock;
-  EmitHeapAllocLocked;
+  pConcatNil := FindProc('PXXStrConcat');
+  if pConcatNil < 0 then Error('compiler error: PXXStrConcat helper not found in builtin unit');
+  EmitCallProc(pConcatNil);  { rax = result data pointer (or nil) }
   EmitReleaseHeapLock;
-  EmitB($48); EmitB($C7); EmitB($00); EmitI32(1); { mov qword [rax], 1 }
-  EmitB($48); EmitB($89); EmitB($58); EmitB($08); { mov [rax+8], rbx }
-  EmitB($48); EmitB($8D); EmitB($58); EmitB($10); { lea rbx, [rax+16] }
-  EmitB($48); EmitB($89); EmitB($DF);             { mov rdi, rbx }
-  EmitB($4C); EmitB($89); EmitB($E6);             { mov rsi, r12 }
-  EmitB($4C); EmitB($89); EmitB($E9);             { mov rcx, r13 }
-  EmitB($F3); EmitB($A4);                         { rep movsb }
-  EmitB($4C); EmitB($89); EmitB($F6);             { mov rsi, r14 }
-  EmitB($4C); EmitB($89); EmitB($F9);             { mov rcx, r15 }
-  EmitB($F3); EmitB($A4);                         { rep movsb }
-  EmitB($C6); EmitB($07); EmitB(0);               { mov byte [rdi], 0 }
-  EmitB($48); EmitB($89); EmitB($D8);             { mov rax, rbx }
-  EmitB($EB); pConcatDone := CodeLen; EmitB(0);
 
-  Patch32(pConcatNil, CodeLen - (pConcatNil + 4));
-  EmitB($31); EmitB($C0);                         { xor eax, eax }
-  Patch8(pConcatDone, CodeLen - (pConcatDone + 1));
-  EmitB($41); EmitB($5F);             { pop r15 }
-  EmitB($41); EmitB($5E);             { pop r14 }
-  EmitB($41); EmitB($5D);             { pop r13 }
-  EmitB($41); EmitB($5C);             { pop r12 }
-  EmitB($5B);                         { pop rbx }
-  EmitB($C3);                         { ret }
+  EmitB($41); EmitB($5B); { pop r11 }
+  EmitB($41); EmitB($5A); { pop r10 }
+  EmitB($41); EmitB($59); { pop r9 }
+  EmitB($41); EmitB($58); { pop r8 }
+  EmitB($5F);             { pop rdi }
+  EmitB($5E);             { pop rsi }
+  EmitB($5A);             { pop rdx }
+  EmitB($59);             { pop rcx }
+  EmitB($5B);             { pop rbx }
+  EmitB($C3);             { ret }
 
   { rdi = path managed-string data pointer (nul-terminated) or nil.
     Returns rax = a fresh managed-string data pointer (refcount 1, length =

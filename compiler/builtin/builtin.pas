@@ -348,4 +348,40 @@ begin
   Result := Pointer(d);
 end;
 
+{ Managed-string concatenation: allocate a fresh block holding srcA[0..lenA)
+  followed by srcB[0..lenB), nul-terminated. Returns the data pointer or nil
+  for an empty result. Called from the AnsiStrConcatAddr shim under the heap
+  lock. Raw pointers only. }
+function PXXStrConcat(lenA: Int64; srcA: Pointer; srcB: Pointer; lenB: Int64): Pointer;
+var
+  total, base, d, s, i: Int64;
+begin
+  total := lenA + lenB;
+  if total <= 0 then
+  begin
+    Result := nil;
+    Exit;
+  end;
+  base := Int64(PXXAlloc(total + 17, 8));
+  PWord(base)^ := 1;            { refcount }
+  PWord(base + 8)^ := total;    { length }
+  d := base + 16;
+  s := Int64(srcA);
+  i := 0;
+  while i < lenA do
+  begin
+    PByte(d + i)^ := PByte(s + i)^;
+    i := i + 1;
+  end;
+  s := Int64(srcB);
+  i := 0;
+  while i < lenB do
+  begin
+    PByte(d + lenA + i)^ := PByte(s + i)^;
+    i := i + 1;
+  end;
+  PByte(d + total)^ := 0;       { nul terminator }
+  Result := Pointer(d);
+end;
+
 end.

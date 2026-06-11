@@ -6639,6 +6639,12 @@ begin
     dummyNames[1] := 'src';   dummyTypes[1] := tyPointer;
     i := RegisterProc('PXXStrFromLit', True, tyPointer, 2, dummyNames, dummyTypes);
 
+    dummyNames[0] := 'lenA';  dummyTypes[0] := tyInt64;
+    dummyNames[1] := 'srcA';  dummyTypes[1] := tyPointer;
+    dummyNames[2] := 'srcB';  dummyTypes[2] := tyPointer;
+    dummyNames[3] := 'lenB';  dummyTypes[3] := tyInt64;
+    i := RegisterProc('PXXStrConcat', True, tyPointer, 4, dummyNames, dummyTypes);
+
     CurrentUnitIdx := savedUnitIdx;
   end;
   for i := 0 to MAX_GOTO_LABELS - 1 do GotoLabelIRId[i] := -1;
