@@ -39,4 +39,4 @@ roadmap staging, not a hard requirement. Move to `urgent/` to pull it forward.
   allocation/free including pointer dereference, record fields, and static
   array indexing (`test/test_cross_heap.pas`). Added ARM32 stack-argument
   support for helper procedures with more than four parameters and enabled the
-  Pascal `builtinheap` allocator path. Commit: pending.
+  Pascal `builtinheap` allocator path. Commit: e15bd4f.
