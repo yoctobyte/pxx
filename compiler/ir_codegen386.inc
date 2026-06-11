@@ -259,8 +259,9 @@ var
   classIdx, elemSize, lo: Integer;
   sVal: AnsiString;
   emsg: AnsiString;
-  tk: TTypeKind;
+  tk, lhsTk, rhsTk: TTypeKind;
   sgn: Boolean;
+  pNilLhs, pLoopLhs, pNilRhs, pLoopRhs, pCap, nextJmp, nextJmp2, falseJmp: Integer;
 begin
   if node = -1 then Exit;
   case IRKind[node] of
@@ -357,9 +358,7 @@ begin
         if Syms[si].TypeKind = tyAnsiString then
         begin
           { Managed-string assignment to a variable: build the new handle, then
-            publish into the slot (release old). by-ref params not supported yet.}
-          if (Syms[si].Kind = skParam) and Syms[si].IsRef then
-            Error('target i386: by-ref managed-string assignment not yet supported');
+            publish into the slot (release old). }
           valNode := IRB[node];
           if IRKind[valNode] = IR_CONST_STR then
           begin
@@ -371,6 +370,33 @@ begin
             if pi < 0 then Error('compiler error: PXXStrFromLit not found');
             EmitCallProc(pi);
             EmitB($81); EmitB($C4); EmitI32(8);         { add esp, 8 }
+          end
+          else if IntToTypeKind(IRTk[valNode]) = tyChar then
+          begin
+            IREmitNode386(valNode);                     { eax = char code }
+            EmitB($50);                                 { push eax (char code) }
+            EmitB($6A); EmitB($01);                     { push 1 (len) }
+            EmitB($8D); EmitB($44); EmitB($24); EmitB($04); { lea eax, [esp+4] (ptr to char code) }
+            EmitB($50);                                 { push eax (src) }
+            pi := FindProc('PXXStrFromLit');
+            if pi < 0 then Error('compiler error: PXXStrFromLit not found');
+            EmitCallProc(pi);
+            EmitB($81); EmitB($C4); EmitI32(8);         { add esp, 8 }
+            EmitB($59);                                 { pop ecx (restore stack) }
+          end
+          else if IntToTypeKind(IRTk[valNode]) = tyString then
+          begin
+            IREmitNode386(valNode);                     { eax = inline string buffer address }
+            EmitB($50);                                 { push eax }
+            EmitB($8B); EmitB($08);                     { mov ecx, [eax] (len) }
+            EmitB($83); EmitB($C0); EmitB($08);         { add eax, 8 (src) }
+            EmitB($51);                                 { push ecx (len) }
+            EmitB($50);                                 { push eax (src) }
+            pi := FindProc('PXXStrFromLit');
+            if pi < 0 then Error('compiler error: PXXStrFromLit not found');
+            EmitCallProc(pi);
+            EmitB($81); EmitB($C4); EmitI32(8);         { add esp, 8 }
+            EmitB($59);                                 { pop ecx }
           end
           else
           begin
@@ -386,22 +412,42 @@ begin
               EmitB($58);                               { pop eax }
             end;
           end;
-          EmitB($50);                                   { push new handle }
-          { eax = old handle from slot }
-          if Syms[si].Kind = skGlobal then
-            begin EmitB($A1); EmitGlobRef(Syms[si].Offset); end   { mov eax, [slot] }
+
+          if (Syms[si].Kind = skParam) and Syms[si].IsRef then
+          begin
+            EmitB($50);                                           { push eax (new handle) }
+            EmitB($8B); EmitB($8D); EmitI32(Syms[si].Offset);    { mov ecx, [ebp+off] (caller slot addr) }
+            EmitB($8B); EmitB($01);                               { mov eax, [ecx] (old) }
+            EmitB($50);                                           { push eax (old) }
+            EmitB($8B); EmitB($44); EmitB($24); EmitB($04);       { mov eax, [esp+4] (new) }
+            EmitB($89); EmitB($01);                               { mov [ecx], eax }
+            EmitB($58);                                           { pop eax (old) }
+            EmitB($50);                                           { push eax (arg0 = old) }
+            pi := FindProc('PXXStrDecRef');
+            if pi < 0 then Error('compiler error: PXXStrDecRef not found');
+            EmitCallProc(pi);
+            EmitB($81); EmitB($C4); EmitI32(4);                   { add esp, 4 }
+            EmitB($58);                                           { pop eax (new handle, discard) }
+          end
           else
-            begin EmitB($8B); EmitB($85); EmitI32(Syms[si].Offset); end; { mov eax, [ebp+off] }
-          EmitB($50);                                   { push eax (arg0 = old) }
-          pi := FindProc('PXXStrDecRef');
-          if pi < 0 then Error('compiler error: PXXStrDecRef not found');
-          EmitCallProc(pi);
-          EmitB($81); EmitB($C4); EmitI32(4);           { add esp, 4 }
-          EmitB($58);                                   { pop eax (new handle) }
-          if Syms[si].Kind = skGlobal then
-            begin EmitB($A3); EmitGlobRef(Syms[si].Offset); end   { mov [slot], eax }
-          else
-            begin EmitB($89); EmitB($85); EmitI32(Syms[si].Offset); end; { mov [ebp+off], eax }
+          begin
+            EmitB($50);                                   { push new handle }
+            { eax = old handle from slot }
+            if Syms[si].Kind = skGlobal then
+              begin EmitB($A1); EmitGlobRef(Syms[si].Offset); end   { mov eax, [slot] }
+            else
+              begin EmitB($8B); EmitB($85); EmitI32(Syms[si].Offset); end; { mov eax, [ebp+off] }
+            EmitB($50);                                   { push eax (arg0 = old) }
+            pi := FindProc('PXXStrDecRef');
+            if pi < 0 then Error('compiler error: PXXStrDecRef not found');
+            EmitCallProc(pi);
+            EmitB($81); EmitB($C4); EmitI32(4);           { add esp, 4 }
+            EmitB($58);                                   { pop eax (new handle) }
+            if Syms[si].Kind = skGlobal then
+              begin EmitB($A3); EmitGlobRef(Syms[si].Offset); end   { mov [slot], eax }
+            else
+              begin EmitB($89); EmitB($85); EmitI32(Syms[si].Offset); end; { mov [ebp+off], eax }
+          end;
           Exit;
         end;
         IREmit386CheckScalarSym(IRA[node], 'store');
@@ -454,6 +500,19 @@ begin
         else if (Syms[si].Kind = skParam) and Syms[si].IsRef then
         begin
           EmitB($8B); EmitB($85); EmitI32(Syms[si].Offset);  { mov eax, [ebp+off] }
+        end
+        else
+        begin
+          EmitB($8D); EmitB($85); EmitI32(Syms[si].Offset);  { lea eax, [ebp+off] }
+        end;
+      end;
+
+    IR_SLOTADDR:
+      begin
+        si := IRA[node];
+        if Syms[si].Kind = skGlobal then
+        begin
+          EmitB($B8); EmitGlobRef(Syms[si].Offset);          { mov eax, abs32 }
         end
         else
         begin
@@ -541,50 +600,278 @@ begin
           Exit;
         end;
 
-        if ((op = Ord(tkEq)) or (op = Ord(tkNeq))) and
-           ((IntToTypeKind(IRTk[left]) in [tyAnsiString, tyString]) or
-            (IntToTypeKind(IRTk[right]) in [tyAnsiString, tyString])) and
-           (IntToTypeKind(IRTk[left]) <> tyChar) and
-           (IntToTypeKind(IRTk[right]) <> tyChar) then
+        if (tk = tyString) and (op = Ord(tkPlus)) then
         begin
-          { String equality: decompose each operand into (len, src) and call
-            PXXStrEq. char operands deferred (rare; falls through to error). }
+          lhsTk := IntToTypeKind(IRTk[left]);
+          rhsTk := IntToTypeKind(IRTk[right]);
+
           IREmitNode386(left);  EmitB($50);            { push lhs value }
           IREmitNode386(right); EmitB($50);            { push rhs value }
-          { rhs at [esp] -> esi=srcB, edi=lenB }
-          EmitB($8B); EmitB($14); EmitB($24);          { mov edx, [esp] }
-          if IntToTypeKind(IRTk[right]) = tyAnsiString then
+
+          EmitB($81); EmitB($EC); EmitI32(272);         { sub esp, 272 }
+          EmitB($89); EmitB($E3);                      { mov ebx, esp }
+
+          if lhsTk = tyString then
           begin
-            EmitB($31); EmitB($C9); EmitB($85); EmitB($D2);
-            EmitB($74); EmitB($03); EmitB($8B); EmitB($4A); EmitB($F8);
+            { mov eax, [ebx+276] (lhs) }
+            EmitB($8B); EmitB($83); EmitI32(276);
+            { mov edx, [eax] (len) }
+            EmitB($8B); EmitB($10);
+            { lea esi, [eax+8] }
+            EmitB($8D); EmitB($70); EmitB($08);
+            { lea edi, [ebx+8] }
+            EmitB($8D); EmitB($7B); EmitB($08);
+            { mov ecx, edx (len) }
+            EmitB($89); EmitB($D1);
+            { test ecx, ecx }
+            EmitB($85); EmitB($C9);
+            { jz done_left }
+            EmitB($74); pNilLhs := CodeLen; EmitB(0);
+            { loop: }
+            pLoopLhs := CodeLen;
+            EmitB($8A); EmitB($06);                    { mov al, [esi] }
+            EmitB($88); EmitB($07);                    { mov [edi], al }
+            EmitB($46);                                { inc esi }
+            EmitB($47);                                { inc edi }
+            EmitB($49);                                { dec ecx }
+            EmitB($75); EmitB(Byte(pLoopLhs - (CodeLen + 1)));
+            Code[pNilLhs] := Byte(CodeLen - (pNilLhs + 1));
           end
           else
           begin
-            EmitB($8B); EmitB($0A); EmitB($83); EmitB($C2); EmitB($08);
+            { mov edx, 1 (len) }
+            EmitB($BA); EmitI32(1);
+            { mov al, [ebx+276] (char) }
+            EmitB($8A); EmitB($83); EmitI32(276);
+            { mov [ebx+8], al }
+            EmitB($88); EmitB($43); EmitB($08);
           end;
-          EmitB($89); EmitB($D6);                      { mov esi, edx }
-          EmitB($89); EmitB($CF);                      { mov edi, ecx }
-          { lhs at [esp+4] -> edx=srcA, ecx=lenA }
-          EmitB($8B); EmitB($54); EmitB($24); EmitB($04);
-          if IntToTypeKind(IRTk[left]) = tyAnsiString then
+
+          if rhsTk = tyString then
           begin
-            EmitB($31); EmitB($C9); EmitB($85); EmitB($D2);
-            EmitB($74); EmitB($03); EmitB($8B); EmitB($4A); EmitB($F8);
+            { mov eax, [ebx+272] (rhs) }
+            EmitB($8B); EmitB($83); EmitI32(272);
+            { mov ecx, [eax] (len) }
+            EmitB($8B); EmitB($08);
+            EmitB($51);                                { push ecx }
+            { lea esi, [eax+8] }
+            EmitB($8D); EmitB($70); EmitB($08);
+            { lea edi, [ebx+8] }
+            EmitB($8D); EmitB($7B); EmitB($08);
+            { add edi, edx }
+            EmitB($01); EmitB($D7);
+            { test ecx, ecx }
+            EmitB($85); EmitB($C9);
+            { jz done_rhs }
+            EmitB($74); pNilRhs := CodeLen; EmitB(0);
+            { loop: }
+            pLoopRhs := CodeLen;
+            EmitB($8A); EmitB($06);                    { mov al, [esi] }
+            EmitB($88); EmitB($07);                    { mov [edi], al }
+            EmitB($46);                                { inc esi }
+            EmitB($47);                                { inc edi }
+            EmitB($49);                                { dec ecx }
+            EmitB($75); EmitB(Byte(pLoopRhs - (CodeLen + 1)));
+            Code[pNilRhs] := Byte(CodeLen - (pNilRhs + 1));
+            EmitB($59);                                { pop ecx }
           end
           else
           begin
-            EmitB($8B); EmitB($0A); EmitB($83); EmitB($C2); EmitB($08);
+            { mov ecx, 1 (len) }
+            EmitB($B9); EmitI32(1);
+            { lea edi, [ebx+8] }
+            EmitB($8D); EmitB($7B); EmitB($08);
+            { add edi, edx }
+            EmitB($01); EmitB($D7);
+            { mov al, [ebx+272] (char) }
+            EmitB($8A); EmitB($83); EmitI32(272);
+            { mov [edi], al }
+            EmitB($88); EmitB($07);
           end;
-          EmitB($51);                                  { push ecx (lenA) }
-          EmitB($52);                                  { push edx (srcA) }
-          EmitB($57);                                  { push edi (lenB) }
-          EmitB($56);                                  { push esi (srcB) }
-          pi := FindProc('PXXStrEq');
-          if pi < 0 then Error('compiler error: PXXStrEq not found');
-          EmitCallProc(pi);                            { eax = 1/0 }
-          EmitB($81); EmitB($C4); EmitI32(16);         { add esp, 16 }
-          if op = Ord(tkNeq) then
-            begin EmitB($83); EmitB($F0); EmitB($01); end; { xor eax, 1 }
+
+          { add edx, ecx (total_len) }
+          EmitB($01); EmitB($CA);
+          { mov eax, edx }
+          EmitB($89); EmitB($D0);
+          { cmp eax, 256 }
+          EmitB($3D); EmitI32(256);
+          { jle .cap }
+          EmitB($7E); pCap := CodeLen; EmitB(0);
+          { mov eax, 256 }
+          EmitB($B8); EmitI32(256);
+          { .cap: }
+          Code[pCap] := Byte(CodeLen - (pCap + 1));
+          { mov [ebx], eax }
+          EmitB($89); EmitB($03);
+          { mov dword [ebx+4], 0 }
+          EmitB($C7); EmitB($43); EmitB($04); EmitI32(0);
+          { mov eax, ebx (result address) }
+          EmitB($89); EmitB($D8);
+          Exit;
+        end;
+
+        if ((op = Ord(tkEq)) or (op = Ord(tkNeq))) and
+           ((IntToTypeKind(IRTk[left]) in [tyAnsiString, tyString]) or
+            (IntToTypeKind(IRTk[right]) in [tyAnsiString, tyString])) then
+        begin
+          lhsTk := IntToTypeKind(IRTk[left]);
+          rhsTk := IntToTypeKind(IRTk[right]);
+          IREmitNode386(left);  EmitB($50);            { push lhs value }
+          IREmitNode386(right); EmitB($50);            { push rhs value }
+
+          if (lhsTk = tyAnsiString) and (rhsTk = tyChar) then
+          begin
+            { mov ecx, [esp] }
+            EmitB($8B); EmitB($0C); EmitB($24);
+            { mov eax, [esp+4] }
+            EmitB($8B); EmitB($44); EmitB($24); EmitB($04);
+            { test eax, eax }
+            EmitB($85); EmitB($C0);
+            { jz .not_equal }
+            EmitB($0F); EmitB($84); nextJmp := CodeLen; EmitI32(0);
+            { cmp dword [eax-8], 1 }
+            EmitB($83); EmitB($78); EmitB($F8); EmitB($01);
+            { jne .not_equal }
+            EmitB($0F); EmitB($85); nextJmp2 := CodeLen; EmitI32(0);
+            { movzx edx, byte [eax] }
+            EmitB($0F); EmitB($B6); EmitB($10);
+            { cmp edx, ecx }
+            EmitB($39); EmitB($CA);
+            { sete/setne al }
+            if op = Ord(tkEq) then begin EmitB($0F); EmitB($94); EmitB($C0); end
+            else begin EmitB($0F); EmitB($95); EmitB($C0); end;
+            { movzx eax, al }
+            EmitB($0F); EmitB($B6); EmitB($C0);
+            { jmp .done }
+            EmitB($E9); falseJmp := CodeLen; EmitI32(0);
+
+            Patch32(nextJmp, CodeLen - (nextJmp + 4));
+            Patch32(nextJmp2, CodeLen - (nextJmp2 + 4));
+            if op = Ord(tkNeq) then begin EmitB($B8); EmitI32(1); end else begin EmitB($B8); EmitI32(0); end;
+            Patch32(falseJmp, CodeLen - (falseJmp + 4));
+          end
+          else if (lhsTk = tyChar) and (rhsTk = tyAnsiString) then
+          begin
+            { mov ecx, [esp] }
+            EmitB($8B); EmitB($0C); EmitB($24);
+            { mov eax, [esp+4] }
+            EmitB($8B); EmitB($44); EmitB($24); EmitB($04);
+            { test ecx, ecx }
+            EmitB($85); EmitB($C9);
+            { jz .not_equal }
+            EmitB($0F); EmitB($84); nextJmp := CodeLen; EmitI32(0);
+            { cmp dword [ecx-8], 1 }
+            EmitB($83); EmitB($79); EmitB($F8); EmitB($01);
+            { jne .not_equal }
+            EmitB($0F); EmitB($85); nextJmp2 := CodeLen; EmitI32(0);
+            { movzx edx, byte [ecx] }
+            EmitB($0F); EmitB($B6); EmitB($11);
+            { cmp edx, eax }
+            EmitB($39); EmitB($C2);
+            { sete/setne al }
+            if op = Ord(tkEq) then begin EmitB($0F); EmitB($94); EmitB($C0); end
+            else begin EmitB($0F); EmitB($95); EmitB($C0); end;
+            { movzx eax, al }
+            EmitB($0F); EmitB($B6); EmitB($C0);
+            { jmp .done }
+            EmitB($E9); falseJmp := CodeLen; EmitI32(0);
+
+            Patch32(nextJmp, CodeLen - (nextJmp + 4));
+            Patch32(nextJmp2, CodeLen - (nextJmp2 + 4));
+            if op = Ord(tkNeq) then begin EmitB($B8); EmitI32(1); end else begin EmitB($B8); EmitI32(0); end;
+            Patch32(falseJmp, CodeLen - (falseJmp + 4));
+          end
+          else if (lhsTk = tyString) and (rhsTk = tyChar) then
+          begin
+            { mov ecx, [esp] }
+            EmitB($8B); EmitB($0C); EmitB($24);
+            { mov eax, [esp+4] }
+            EmitB($8B); EmitB($44); EmitB($24); EmitB($04);
+            { cmp dword [eax], 1 }
+            EmitB($83); EmitB($38); EmitB($01);
+            { jne .not_equal }
+            EmitB($0F); EmitB($85); nextJmp := CodeLen; EmitI32(0);
+            { movzx edx, byte [eax+8] }
+            EmitB($0F); EmitB($B6); EmitB($50); EmitB($08);
+            { cmp edx, ecx }
+            EmitB($39); EmitB($CA);
+            { sete/setne al }
+            if op = Ord(tkEq) then begin EmitB($0F); EmitB($94); EmitB($C0); end
+            else begin EmitB($0F); EmitB($95); EmitB($C0); end;
+            { movzx eax, al }
+            EmitB($0F); EmitB($B6); EmitB($C0);
+            { jmp .done }
+            EmitB($E9); falseJmp := CodeLen; EmitI32(0);
+
+            Patch32(nextJmp, CodeLen - (nextJmp + 4));
+            if op = Ord(tkNeq) then begin EmitB($B8); EmitI32(1); end else begin EmitB($B8); EmitI32(0); end;
+            Patch32(falseJmp, CodeLen - (falseJmp + 4));
+          end
+          else if (lhsTk = tyChar) and (rhsTk = tyString) then
+          begin
+            { mov ecx, [esp] }
+            EmitB($8B); EmitB($0C); EmitB($24);
+            { mov eax, [esp+4] }
+            EmitB($8B); EmitB($44); EmitB($24); EmitB($04);
+            { cmp dword [ecx], 1 }
+            EmitB($83); EmitB($09); EmitB($01);
+            { jne .not_equal }
+            EmitB($0F); EmitB($85); nextJmp := CodeLen; EmitI32(0);
+            { movzx edx, byte [ecx+8] }
+            EmitB($0F); EmitB($B6); EmitB($51); EmitB($08);
+            { cmp edx, eax }
+            EmitB($39); EmitB($C2);
+            { sete/setne al }
+            if op = Ord(tkEq) then begin EmitB($0F); EmitB($94); EmitB($C0); end
+            else begin EmitB($0F); EmitB($95); EmitB($C0); end;
+            { movzx eax, al }
+            EmitB($0F); EmitB($B6); EmitB($C0);
+            { jmp .done }
+            EmitB($E9); falseJmp := CodeLen; EmitI32(0);
+
+            Patch32(nextJmp, CodeLen - (nextJmp + 4));
+            if op = Ord(tkNeq) then begin EmitB($B8); EmitI32(1); end else begin EmitB($B8); EmitI32(0); end;
+            Patch32(falseJmp, CodeLen - (falseJmp + 4));
+          end
+          else
+          begin
+            { Standard string equality: decompose each operand into (len, src) and call PXXStrEq }
+            { rhs at [esp] -> esi=srcB, edi=lenB }
+            EmitB($8B); EmitB($14); EmitB($24);          { mov edx, [esp] }
+            if IntToTypeKind(IRTk[right]) = tyAnsiString then
+            begin
+              EmitB($31); EmitB($C9); EmitB($85); EmitB($D2);
+              EmitB($74); EmitB($03); EmitB($8B); EmitB($4A); EmitB($F8);
+            end
+            else
+            begin
+              EmitB($8B); EmitB($0A); EmitB($83); EmitB($C2); EmitB($08);
+            end;
+            EmitB($89); EmitB($D6);                      { mov esi, edx }
+            EmitB($89); EmitB($CF);                      { mov edi, ecx }
+            { lhs at [esp+4] -> edx=srcA, ecx=lenA }
+            EmitB($8B); EmitB($54); EmitB($24); EmitB($04);
+            if IntToTypeKind(IRTk[left]) = tyAnsiString then
+            begin
+              EmitB($31); EmitB($C9); EmitB($85); EmitB($D2);
+              EmitB($74); EmitB($03); EmitB($8B); EmitB($4A); EmitB($F8);
+            end
+            else
+            begin
+              EmitB($8B); EmitB($0A); EmitB($83); EmitB($C2); EmitB($08);
+            end;
+            EmitB($51);                                  { push ecx (lenA) }
+            EmitB($52);                                  { push edx (srcA) }
+            EmitB($57);                                  { push edi (lenB) }
+            EmitB($56);                                  { push esi (srcB) }
+            pi := FindProc('PXXStrEq');
+            if pi < 0 then Error('compiler error: PXXStrEq not found');
+            EmitCallProc(pi);                            { eax = 1/0 }
+            EmitB($81); EmitB($C4); EmitI32(16);         { add esp, 16 }
+            if op = Ord(tkNeq) then
+              begin EmitB($83); EmitB($F0); EmitB($01); end; { xor eax, 1 }
+          end;
+
           EmitB($50);                                  { push result }
           if (IRKind[left] = IR_BINOP) and (IntToTypeKind(IRTk[left]) = tyAnsiString) then
           begin
@@ -671,6 +958,37 @@ begin
         while argNode <> -1 do
         begin
           IREmitNode386(IRA[argNode]);
+          if (pi >= 0) and (nArgs < Procs[pi].ParamCount) then
+          begin
+            if Procs[pi].Params[nArgs].TypeKind = tyAnsiString then
+            begin
+              if IntToTypeKind(IRTk[argNode]) = tyChar then
+              begin
+                EmitB($50);                                 { push eax (char code) }
+                EmitB($6A); EmitB($01);                     { push 1 (len) }
+                EmitB($8D); EmitB($44); EmitB($24); EmitB($04); { lea eax, [esp+4] (ptr to char code) }
+                EmitB($50);                                 { push eax (src) }
+                j := FindProc('PXXStrFromLit');
+                if j < 0 then Error('compiler error: PXXStrFromLit not found');
+                EmitCallProc(j);
+                EmitB($81); EmitB($C4); EmitI32(8);         { add esp, 8 }
+                EmitB($59);                                 { pop ecx }
+              end
+              else if IntToTypeKind(IRTk[argNode]) = tyString then
+              begin
+                EmitB($50);                                 { push eax }
+                EmitB($8B); EmitB($08);                     { mov ecx, [eax] (len) }
+                EmitB($83); EmitB($C0); EmitB($08);         { add eax, 8 (src) }
+                EmitB($51);                                 { push ecx (len) }
+                EmitB($50);                                 { push eax (src) }
+                j := FindProc('PXXStrFromLit');
+                if j < 0 then Error('compiler error: PXXStrFromLit not found');
+                EmitCallProc(j);
+                EmitB($81); EmitB($C4); EmitI32(8);         { add esp, 8 }
+                EmitB($59);                                 { pop ecx }
+              end;
+            end;
+          end;
           EmitB($50);                                { push eax }
           Inc(nArgs);
           argNode := IRB[argNode];
@@ -763,6 +1081,33 @@ begin
             if pi < 0 then Error('compiler error: PXXStrFromLit not found');
             EmitCallProc(pi);
             EmitB($81); EmitB($C4); EmitI32(8);         { add esp, 8 }
+          end
+          else if IntToTypeKind(IRTk[valNode]) = tyChar then
+          begin
+            IREmitNode386(valNode);                     { eax = char code }
+            EmitB($50);                                 { push eax (char code) }
+            EmitB($6A); EmitB($01);                     { push 1 (len) }
+            EmitB($8D); EmitB($44); EmitB($24); EmitB($04); { lea eax, [esp+4] (ptr to char code) }
+            EmitB($50);                                 { push eax (src) }
+            pi := FindProc('PXXStrFromLit');
+            if pi < 0 then Error('compiler error: PXXStrFromLit not found');
+            EmitCallProc(pi);
+            EmitB($81); EmitB($C4); EmitI32(8);         { add esp, 8 }
+            EmitB($59);                                 { pop ecx (restore stack) }
+          end
+          else if IntToTypeKind(IRTk[valNode]) = tyString then
+          begin
+            IREmitNode386(valNode);                     { eax = inline string buffer address }
+            EmitB($50);                                 { push eax }
+            EmitB($8B); EmitB($08);                     { mov ecx, [eax] (len) }
+            EmitB($83); EmitB($C0); EmitB($08);         { add eax, 8 (src) }
+            EmitB($51);                                 { push ecx (len) }
+            EmitB($50);                                 { push eax (src) }
+            pi := FindProc('PXXStrFromLit');
+            if pi < 0 then Error('compiler error: PXXStrFromLit not found');
+            EmitCallProc(pi);
+            EmitB($81); EmitB($C4); EmitI32(8);         { add esp, 8 }
+            EmitB($59);                                 { pop ecx }
           end
           else
           begin
@@ -945,6 +1290,17 @@ begin
             end;
             Code[j] := Byte(CodeLen - (j + 1));          { patch jz done }
           end
+          else if tk = tyString then
+          begin
+            { String-valued expression (address of a [len:8][chars] struct in eax) }
+            IREmitNode386(valNode);                      { eax = address }
+            EmitB($89); EmitB($C1);                      { mov ecx, eax }
+            EmitB($83); EmitB($C1); EmitB($08);          { add ecx, 8 }
+            EmitB($8B); EmitB($10);                      { mov edx, [eax] }
+            EmitB($BB); EmitI32(STDOUT);                 { mov ebx, STDOUT }
+            EmitB($B8); EmitI32(4);                      { mov eax, 4 (write) }
+            EmitB($CD); EmitB($80);                      { int 0x80 }
+          end
           else
             Error('target i386: write of this operand not yet supported');
         end;
@@ -1051,7 +1407,7 @@ begin
 
       IR_NOP, IR_CONST_STR, IR_CONST_INT, IR_BLOCK,
       IR_LOAD_SYM, IR_BINOP, IR_NEG, IR_NOT, IR_ARG, IR_LEA, IR_SYSCALL,
-      IR_FIELD, IR_INDEX: ; { operands, emitted by parents }
+      IR_SLOTADDR, IR_FIELD, IR_INDEX: ; { operands, emitted by parents }
 
       else
         IREmitNode386(i); { unknown statement op -> hard error inside }

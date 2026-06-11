@@ -10,7 +10,19 @@ begin
   Greet := 'Hi, ' + name;
 end;
 
-var a, b, c: AnsiString; i: Integer;
+procedure AppendSuffix(var s: AnsiString);
+begin
+  s := s + ' suffix';
+end;
+
+procedure TestLocalLeak;
+var localStr: AnsiString;
+begin
+  localStr := 'local';
+  localStr := localStr + ' temp';
+end;
+
+var a, b, c: AnsiString; i: Integer; ch: Char;
 begin
   a := 'foo';
   b := 'bar';
@@ -28,4 +40,31 @@ begin
 
   for i := 1 to 3 do
     writeln(Greet(c));   { Hi, foo  x3 }
+
+  { Test by-ref string params }
+  c := 'start';
+  AppendSuffix(c);
+  writeln(c);            { start suffix }
+
+  { Test inline tyString concat }
+  writeln('hello' + ' ' + 'world'); { hello world }
+
+  { Test char-combo comparisons }
+  c := 'x';
+  ch := 'x';
+  if c = 'x' then writeln('c = x') else writeln('c <> x');
+  if 'x' = c then writeln('x = c') else writeln('x <> c');
+  if c = ch then writeln('c = ch') else writeln('c <> ch');
+  if ch = c then writeln('ch = c') else writeln('ch <> c');
+
+  c := 'xyz';
+  if c = 'x' then writeln('xyz = x') else writeln('xyz <> x');
+  if 'x' = c then writeln('x = xyz') else writeln('x <> xyz');
+  if c = ch then writeln('xyz = ch') else writeln('xyz <> ch');
+  if ch = c then writeln('ch = xyz') else writeln('ch <> xyz');
+
+  { Test scope-exit release }
+  for i := 1 to 10 do
+    TestLocalLeak;
+  writeln('leak test done');
 end.

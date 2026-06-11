@@ -8,6 +8,7 @@ procedure EmitAcquireHeapLock; forward;
 procedure EmitReleaseHeapLock; forward;
 procedure EmitLoadVarA64(idx: Integer); forward;
 procedure EmitLoadVarArm32(idx: Integer); forward;
+procedure EmitCallProc(pi: Integer); forward;
 
 
 function ULower(const s: AnsiString): AnsiString;
@@ -3059,13 +3060,34 @@ begin
 end;
 
 procedure EmitProcEpilog(retSymIdx: Integer);
-var sz, i: Integer;
+var sz, i, pi: Integer;
 begin
   if TargetArch = TARGET_I386 then
   begin
-    { Ordinal or pointer-sized (AnsiString/pointer/class handle) results. Managed
-      locals are not released here yet (v1 leaks them); the result handle's
-      ownership transfers to the caller, which treats an IR_CALL result as fresh. }
+    { Release local managed variables before returning }
+    if CurProc >= 0 then
+    begin
+      for i := Procs[CurProc].ScopeBase to SymCount - 1 do
+      begin
+        if (Syms[i].Kind = skLocal) and (i <> retSymIdx) then
+        begin
+          if Syms[i].TypeKind = tyAnsiString then
+          begin
+            { mov eax, [ebp + Offset] }
+            EmitB($8B); EmitB($85); EmitI32(Syms[i].Offset);
+            { push eax }
+            EmitB($50);
+            pi := FindProc('PXXStrDecRef');
+            if pi < 0 then Error('compiler error: PXXStrDecRef not found');
+            EmitCallProc(pi);
+            { add esp, 4 }
+            EmitB($81); EmitB($C4); EmitI32(4);
+          end;
+        end;
+      end;
+    end;
+
+    { Ordinal or pointer-sized (AnsiString/pointer/class handle) results. }
     if retSymIdx >= 0 then
     begin
       if Syms[retSymIdx].IsArray or (Syms[retSymIdx].Kind <> skLocal) or
