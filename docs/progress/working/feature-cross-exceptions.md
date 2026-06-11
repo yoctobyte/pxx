@@ -1,8 +1,8 @@
 # Exception runtime on cross targets (i386 / ARM32 / AArch64)
 
 - **Type:** feature
-- **Status:** backlog
-- **Owner:** —
+- **Status:** working
+- **Owner:** Antigravity <antigravity@google.com>
 - **Unblocks:** feature-cross-bootstrap-selfhost
 - **Opened:** 2026-06-11 (user request)
 
