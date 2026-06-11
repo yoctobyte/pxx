@@ -8,6 +8,7 @@ owner: claude
 # feature-cross-bootstrap
 
 ## Log
+- 2026-06-11 (i386 managed string gaps closed). Resolved target i386 managed string gaps (commit 38a0f87): fixed character/string assignments and argument conversions to AnsiString, restored total length calculation during inline tyString concat, and enabled scope-exit release of AnsiString locals. The cross test suite is fully green and identical to x86-64 output. Bootstrapping complete.
 - 2026-06-11 (i386 managed strings). AnsiString works on i386 for: literal
   assign, concat, var-to-var (retain + COW independence), string params/results,
   writeln, equality. i386 string IR ops call builtinheap Pascal helpers directly
