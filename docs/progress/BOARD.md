@@ -8,9 +8,11 @@ lives in git, not in a timestamp._
 
 _none_
 
-## working (0)
+## working (1)
 
-_none_
+| Ticket | Type | Summary | Blocked-by |
+| --- | --- | --- | --- |
+| feature-cross-managed-aggregates | feature | Cross-target managed aggregates (records + dynamic arrays) | feature-rtti-layout-table |
 
 ## backlog (26)
 
@@ -105,8 +107,8 @@ _none_
 - **2** — feature-target-i386
 - **2** — feature-target-arm32
 - **2** — feature-target-aarch64
+- **2** — feature-rtti-layout-table
 - **1** — feature-target-esp32
-- **1** — feature-rtti-layout-table
 - **1** — feature-managed-exception-cleanup
 - **1** — feature-directive-if-numeric
 - **1** — feature-cross-bootstrap
