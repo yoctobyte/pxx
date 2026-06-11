@@ -6590,7 +6590,7 @@ end;
 
 procedure ParseProgram;
 var jmpPatch, i, j: Integer; doneUses, doneDecls, hasExceptions, needsBuiltin,
-    needsHeap, needsAnsiRuntime: Boolean;
+    needsHeap, needsAnsiRuntime, needHeapUnit: Boolean;
     savedUnitIdx: Integer;
     dummyNames: array[0..3] of AnsiString;
     dummyTypes: array[0..3] of TTypeKind;
@@ -6616,12 +6616,18 @@ begin
   hasExceptions := False;
   needsBuiltin := False;
   DetectPascalRuntimeNeeds(needsHeap, needsAnsiRuntime);
-  if needsHeap or needsAnsiRuntime or hasExceptions then needsBuiltin := True;
+  { Full builtin (Str/Val/Variant) is pulled only for AnsiString/exception
+    programs and on demand for Str/Val (token loop below). The heap allocator
+    and managed-string helpers live in the separate `builtinheap` unit so a
+    heap-only program does not drag in the conversion routines (which need
+    features not yet on every target). }
+  if needsAnsiRuntime then needsBuiltin := True;
+  needHeapUnit := needsHeap or needsAnsiRuntime;
 
-  if needsBuiltin then
+  if needHeapUnit then
   begin
     savedUnitIdx := CurrentUnitIdx;
-    CurrentUnitIdx := InternStr('builtin');
+    CurrentUnitIdx := InternStr('builtinheap');
 
     dummyNames[0] := 'size';  dummyTypes[0] := tyInt64;
     dummyNames[1] := 'align'; dummyTypes[1] := tyInteger;
@@ -6670,10 +6676,11 @@ begin
 
   if TargetArch = TARGET_I386 then
   begin
-    { Cross-target v1: the runtime emitters below are x86-64 code. Refuse
-      anything that would pull them in rather than emit a wrong binary. }
-    if needsBuiltin or needsHeap or needsAnsiRuntime or hasExceptions then
-      Error('target i386: heap/string/exception runtime not yet supported');
+    { Cross-target i386: heap (New/Dispose/GetMem) is supported via the Pascal
+      allocator; the managed-string runtime and exceptions are still x86-64 only
+      and refused until ported. }
+    if needsAnsiRuntime or hasExceptions then
+      Error('target i386: string/exception runtime not yet supported');
     { Entry stub: save esp for argv access, then jmp to main body.
       mov [abs32], esp: 89 25 <GlobRef> }
     EmitB($89); EmitB($25); EmitGlobRef(BSS_INITIAL_RSP);
@@ -6705,8 +6712,10 @@ begin
   if needsAnsiRuntime then EmitAnsiStringRuntime;
   if hasExceptions then EnableExceptionRuntime;
 
-  { Compile the builtin unit (Str/Val) before user declarations, so its proc
-    bodies land in the proc region after the entry jump and are resolvable. }
+  { Compile the runtime units before user declarations, so their proc bodies
+    land in the proc region after the entry jump and are resolvable. builtinheap
+    (allocator + PXXStr*) first, then the Str/Val/Variant conversions. }
+  if needHeapUnit then ParseUsesUnit('builtinheap');
   if needsBuiltin then ParseUsesUnit('builtin');
 
   doneDecls := False;

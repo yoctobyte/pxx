@@ -18,6 +18,49 @@ procedure EmitSetcc(opTk: Integer; signed: Boolean); forward;
 
 procedure IREmitNode386(node: Integer); forward;
 
+procedure EmitAcquireHeapLock386;
+begin
+  { i386 threadsafe heap locking not implemented yet; non-threadsafe = no-op.
+    --threadsafe on i386 is rejected at the runtime guard. }
+end;
+
+procedure EmitReleaseHeapLock386;
+begin
+end;
+
+procedure EmitHeapAllocLocked386;
+{ eax = requested payload bytes. Returns payload pointer in eax. Mirrors
+  EmitHeapAllocLocked: delegate to the Pascal PXXAlloc(size, align=8). i386
+  internal ABI: push args left-to-right (arg0 deepest), caller pops. }
+var pi: Integer;
+begin
+  EmitB($51);                         { push ecx (caller-saved) }
+  EmitB($52);                         { push edx }
+  EmitB($50);                         { push eax = arg0 (size) }
+  EmitB($6A); EmitB($08);             { push 8  = arg1 (align) }
+  pi := FindProc('PXXAlloc');
+  if pi < 0 then Error('compiler error: Alloc helper not found in builtin unit');
+  EmitCallProc(pi);                   { eax = pointer }
+  EmitB($81); EmitB($C4); EmitI32(8); { add esp, 8 (pop args) }
+  EmitB($5A);                         { pop edx }
+  EmitB($59);                         { pop ecx }
+end;
+
+procedure EmitHeapFreeLocked386;
+{ eax = payload pointer. Delegate to Pascal PXXFree(p). nil is ignored inside. }
+var pi: Integer;
+begin
+  EmitB($51);                         { push ecx }
+  EmitB($52);                         { push edx }
+  EmitB($50);                         { push eax = arg0 (p) }
+  pi := FindProc('PXXFree');
+  if pi < 0 then Error('compiler error: Free helper not found in builtin unit');
+  EmitCallProc(pi);
+  EmitB($81); EmitB($C4); EmitI32(4); { add esp, 4 }
+  EmitB($5A);                         { pop edx }
+  EmitB($59);                         { pop ecx }
+end;
+
 procedure EmitwriteInt386;
 { eax = signed 32-bit value -> decimal on stdout. Transcription of
   symtab.inc EmitwriteInt to 32-bit registers and the int 0x80 write. }
@@ -187,6 +230,7 @@ end;
 procedure IREmitNode386(node: Integer);
 var
   valNode, si, left, right, op, pi, argNode, nArgs, wid, sz, i, j, base: Integer;
+  classIdx: Integer;
   sVal: AnsiString;
   emsg: AnsiString;
   tk: TTypeKind;
@@ -373,6 +417,29 @@ begin
     IR_CALL:
       begin
         pi := IRA[node];
+        if pi = -Ord(tkGetMem) then
+        begin
+          { GetMem / New. Evaluate size -> eax, then Alloc. Class
+            instantiation (VMT + constructor) is not supported on i386 yet. }
+          classIdx := IRC[node];
+          if classIdx >= REC_UCLASS_BASE then
+            Error('target i386: class instantiation not yet supported');
+          EmitAcquireHeapLock386;
+          argNode := IRB[node];          { size arg }
+          IREmitNode386(IRA[argNode]);   { size -> eax }
+          EmitHeapAllocLocked386;        { eax = payload pointer }
+          EmitReleaseHeapLock386;
+          Exit;
+        end;
+        if pi = -Ord(tkFreeMem) then
+        begin
+          EmitAcquireHeapLock386;
+          argNode := IRB[node];          { pointer arg }
+          IREmitNode386(IRA[argNode]);   { p -> eax }
+          EmitHeapFreeLocked386;
+          EmitReleaseHeapLock386;
+          Exit;
+        end;
         if pi < 0 then
           Error('target i386: builtin/special call not yet supported');
         if ProcExternal[pi] then

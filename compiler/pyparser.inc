@@ -1102,7 +1102,7 @@ begin
     fills these in. Mirrors the Pascal ParseProgram path; without it a .npy that
     touches the heap fails FindProc('PXXAlloc') during EmitAnsiStringRuntime. }
   savedUnitIdx := CurrentUnitIdx;
-  CurrentUnitIdx := InternStr('builtin');
+  CurrentUnitIdx := InternStr('builtinheap');
   dummyNames[0] := 'size';  dummyTypes[0] := tyInt64;
   dummyNames[1] := 'align'; dummyTypes[1] := tyInteger;
   i := RegisterProc('PXXAlloc', True, tyPointer, 2, dummyNames, dummyTypes);
@@ -1124,6 +1124,7 @@ begin
   i := RegisterProc('PXXStrLoadFile', True, tyPointer, 1, dummyNames, dummyTypes);
   CurrentUnitIdx := savedUnitIdx;
   EmitAnsiStringRuntime;
+  ParseUsesUnit('builtinheap');
   if needsBuiltin then ParseUsesUnit('builtin');
   PySkipNewlines;
   { Nil Python `import name[, name]` maps each module onto the same unit
