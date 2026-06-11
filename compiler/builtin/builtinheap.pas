@@ -28,6 +28,8 @@ procedure PXXRecordRetain(recAddr: Pointer; desc: Pointer);
 procedure PXXRecordRelease(recAddr: Pointer; desc: Pointer);
 procedure PXXDynArrayRelease(arrData: Pointer; desc: Pointer);
 function PXXDynArrayUnique(arrSlot: Pointer; desc: Pointer): Pointer;
+procedure PXXMemMove(dst: Pointer; src: Pointer; n: Int64);
+procedure PXXMemZero(dst: Pointer; n: Int64);
 
 implementation
 
@@ -651,6 +653,34 @@ begin
   PXXDynArrayRelease(arrData, desc);
 
   Result := newArrData;
+end;
+
+{ Forward byte copy (non-overlapping or dst < src). Used by cross backends that
+  lack a single-instruction block move (e.g. ARM32) for whole-record copies. }
+procedure PXXMemMove(dst: Pointer; src: Pointer; n: Int64);
+var d, s, i: Int64;
+begin
+  d := Int64(dst);
+  s := Int64(src);
+  i := 0;
+  while i < n do
+  begin
+    PByte(d + i)^ := PByte(s + i)^;
+    i := i + 1;
+  end;
+end;
+
+{ Zero n bytes at dst. }
+procedure PXXMemZero(dst: Pointer; n: Int64);
+var d, i: Int64;
+begin
+  d := Int64(dst);
+  i := 0;
+  while i < n do
+  begin
+    PByte(d + i)^ := 0;
+    i := i + 1;
+  end;
 end;
 
 end.

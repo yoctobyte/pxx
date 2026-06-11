@@ -633,7 +633,8 @@ begin
         IREmitNodeArm32(IRA[node]); { address -> r0 }
         tk := IntToTypeKind(IRTk[node]);
         if not (TypeIsOrdinal(tk) or (tk = tyBoolean) or (tk = tyPointer) or
-                (tk = tyChar) or (tk = tyUnknown)) then
+                (tk = tyChar) or (tk = tyUnknown) or
+                (tk = tyAnsiString) or (tk = tyClass)) then
           Error('target arm32: load through pointer of this type not yet supported');
         sz := TypeSize(tk);
         sgn := TypeSigned(tk);
@@ -677,6 +678,72 @@ begin
         if sz = 1 then EmitI32($E5C01000)      { strb r1, [r0] }
         else if sz = 2 then EmitI32($E1C010B0) { strh r1, [r0] }
         else EmitI32($E5801000);               { str r1, [r0] }
+      end;
+
+    IR_COPY_REC:
+      begin
+        { PXXMemMove(dest, src, count). }
+        IREmitNodeArm32(IRB[node]);          { r0 = src }
+        EmitI32($E92D0001);                  { push {r0} }
+        IREmitNodeArm32(IRA[node]);          { r0 = dest }
+        EmitI32($E8BD0002);                  { pop {r1} (src) }
+        EmitLoadImmArm32(2, IRIVal[node]);   { r2 = count }
+        pi := FindProc('PXXMemMove');
+        if pi < 0 then Error('compiler error: PXXMemMove not found');
+        EmitCallProc(pi);
+      end;
+
+    IR_COPY_REC_MANAGED:
+      begin
+        { ARC record copy: retain src, release dest, then move. }
+        IREmitNodeArm32(IRB[node]);          { r0 = src }
+        EmitI32($E92D0001);                  { push {r0} src at [sp+4] later }
+        IREmitNodeArm32(IRA[node]);          { r0 = dest }
+        EmitI32($E92D0001);                  { push {r0} dest at [sp] }
+        pi := FindProc('PXXRecordRetain');
+        if pi < 0 then Error('compiler error: PXXRecordRetain not found');
+        EmitI32($E59D0004);                  { ldr r0, [sp, #4] (src) }
+        EmitLoadDataRefArm32(1, -(RECORD_RTTI_DATAREF_BASE + (IRC[node] - REC_UCLASS_BASE)));
+        EmitCallProc(pi);
+        pi := FindProc('PXXRecordRelease');
+        if pi < 0 then Error('compiler error: PXXRecordRelease not found');
+        EmitI32($E59D0000);                  { ldr r0, [sp] (dest) }
+        EmitLoadDataRefArm32(1, -(RECORD_RTTI_DATAREF_BASE + (IRC[node] - REC_UCLASS_BASE)));
+        EmitCallProc(pi);
+        pi := FindProc('PXXMemMove');
+        if pi < 0 then Error('compiler error: PXXMemMove not found');
+        EmitI32($E59D0000);                  { ldr r0, [sp] (dest) }
+        EmitI32($E59D1004);                  { ldr r1, [sp, #4] (src) }
+        EmitLoadImmArm32(2, IRIVal[node]);   { r2 = count }
+        EmitCallProc(pi);
+        EmitI32($E28DD008);                  { add sp, sp, #8 }
+      end;
+
+    IR_DEFAULT_MEM:
+      begin
+        IREmitNodeArm32(IRA[node]);          { r0 = dest }
+        if (IRC[node] >= 0) and RecordHasManagedFields(IRC[node]) then
+        begin
+          EmitI32($E92D0001);                { push {r0} dest }
+          pi := FindProc('PXXRecordRelease');
+          if pi < 0 then Error('compiler error: PXXRecordRelease not found');
+          EmitI32($E59D0000);                { ldr r0, [sp] (dest) }
+          EmitLoadDataRefArm32(1, -(RECORD_RTTI_DATAREF_BASE + (IRC[node] - REC_UCLASS_BASE)));
+          EmitCallProc(pi);
+          pi := FindProc('PXXMemZero');
+          if pi < 0 then Error('compiler error: PXXMemZero not found');
+          EmitI32($E59D0000);                { ldr r0, [sp] (dest) }
+          EmitLoadImmArm32(1, IRIVal[node]); { r1 = count }
+          EmitCallProc(pi);
+          EmitI32($E28DD004);                { add sp, sp, #4 }
+        end
+        else
+        begin
+          pi := FindProc('PXXMemZero');
+          if pi < 0 then Error('compiler error: PXXMemZero not found');
+          EmitLoadImmArm32(1, IRIVal[node]); { r1 = count }
+          EmitCallProc(pi);
+        end;
       end;
 
     IR_SYSCALL:
