@@ -597,6 +597,8 @@ test: $(COMPILER) fpc-check
 	grep -q "Unhandled exception" /tmp/test_exception_unhandled.log
 	./$(COMPILER) --threadsafe test/test_multithreading.pas /tmp/test_multithreading26
 	/tmp/test_multithreading26 | grep -q "multithreading test completed successfully"
+	./$(COMPILER) --threadsafe test/test_threadsafe_layout_rtti.pas /tmp/test_threadsafe_layout_rtti26
+	test "$$(/tmp/test_threadsafe_layout_rtti26)" = "threadsafe layout ok"
 	test ! -s /tmp/test_exception_unhandled.out
 	./$(COMPILER) --no-unhandled-handler test/test_exception_unhandled.pas /tmp/test_exception_silent26
 	! /tmp/test_exception_silent26 > /tmp/test_exception_silent.out 2> /tmp/test_exception_silent.log

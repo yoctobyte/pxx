@@ -12,11 +12,10 @@ _none_
 
 _none_
 
-## backlog (27)
+## backlog (26)
 
 | Ticket | Type | Summary | Blocked-by |
 | --- | --- | --- | --- |
-| bug-threadsafe-layout-rtti-helper-races | bug | Thread-safe layout RTTI helper races | feature-rtti-layout-table |
 | chore-inc-to-units | chore | `.inc` → real `.pas` units refactor | — |
 | chore-runtime-emission-size | chore | Finer runtime-support emission (code size) | — |
 | feature-additional-cpu-targets | feature | Additional CPU targets (rollup: i386 → aarch64 → arm32 → ESP32/RISC-V) | feature-target-i386, feature-target-aarch64, feature-target-arm32, feature-target-esp32 |
@@ -51,7 +50,7 @@ _none_
 | bug-nonreproducible-miscompile-2026-06-02 | bug | Non-reproducible one-off miscompile (2026-06-02) | — |
 | bug-whole-record-copy-main-body-noop | bug | Latent: whole-record array-element copy in main-program body emits store no-ops | — |
 
-## done (15)
+## done (16)
 
 | Ticket | Type | Summary | Blocked-by |
 | --- | --- | --- | --- |
@@ -60,6 +59,7 @@ _none_
 | bug-operator-result-inferred-var | bug | Record-valued operator result is miscompiled (aggregate-return ABI) | — |
 | bug-read-preserves-line-remainder | bug | `read` consumes a whole line like `readln` | — |
 | bug-record-byvalue-arg-truncation | bug | By-value record args >8 bytes truncate (and operator operand edges) | — |
+| bug-threadsafe-layout-rtti-helper-races | bug | Thread-safe layout RTTI helper races | feature-rtti-layout-table |
 | chore-qemu-test-env | chore | QEMU cross-target test environment | — |
 | feature-cross-bootstrap | feature | feature-cross-bootstrap | — |
 | feature-progress-check-makefile | feature | Wire `progress.sh check` into a make target | — |
@@ -77,7 +77,6 @@ _none_
 
 ## Ready (no unmet blocker)
 
-- bug-threadsafe-layout-rtti-helper-races
 - chore-inc-to-units
 - chore-runtime-emission-size
 - feature-allocator-quality

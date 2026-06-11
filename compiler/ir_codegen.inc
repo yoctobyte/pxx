@@ -90,13 +90,32 @@ begin
   EmitB($5E);                                     { pop rsi }
 end;
 
-procedure EmitDynArrayRetain;
-{ rax = dynamic-array data pointer. Preserve rax. }
+procedure EmitDynArrayRetainLocked;
+{ rax = dynamic-array data pointer. Preserve rax. Caller holds the heap lock
+  when threading is enabled. }
 var pNil: Integer;
 begin
   EmitB($48); EmitB($85); EmitB($C0);             { test rax, rax }
   EmitB($74); pNil := CodeLen; EmitB(0);          { jz done }
-  if ThreadSafeMode then EmitB($F0);               { lock }
+  EmitB($48); EmitB($FF); EmitB($40); EmitB($F0); { inc qword [rax-16] }
+  Code[pNil] := Byte(CodeLen - (pNil + 1));
+end;
+
+procedure EmitDynArrayRetain;
+{ rax = dynamic-array data pointer. Preserve rax. }
+begin
+  EmitAcquireHeapLock;
+  EmitDynArrayRetainLocked;
+  EmitReleaseHeapLock;
+end;
+
+procedure EmitAnsiStrRetainLocked;
+{ rax = managed-string data pointer. Preserve rax. Caller holds the heap lock
+  when threading is enabled. }
+var pNil: Integer;
+begin
+  EmitB($48); EmitB($85); EmitB($C0);             { test rax, rax }
+  EmitB($74); pNil := CodeLen; EmitB(0);          { jz done }
   EmitB($48); EmitB($FF); EmitB($40); EmitB($F0); { inc qword [rax-16] }
   Code[pNil] := Byte(CodeLen - (pNil + 1));
 end;
@@ -279,17 +298,15 @@ begin
 end;
 
 procedure EmitAnsiStringRuntime;
-var pNil1, pNil2, pNonZero, pNilUnique, pNilUnique2, pDone, pDone2,
+var pNilUnique, pNilUnique2, pDone, pDone2,
     pConcatNil, pConcatDone, pFail, pLfDone: Integer;
 begin
   EmitAnsiStrFromLiteral;
 
   AnsiStrRetainAddr := CodeLen;
-  EmitB($48); EmitB($85); EmitB($C0);             { test rax, rax }
-  EmitB($74); pNil1 := CodeLen; EmitB(0);          { jz done }
-  if ThreadSafeMode then EmitB($F0);               { lock }
-  EmitB($48); EmitB($FF); EmitB($40); EmitB($F0); { inc qword [rax-16] }
-  Code[pNil1] := Byte(CodeLen - (pNil1 + 1));
+  EmitAcquireHeapLock;
+  EmitAnsiStrRetainLocked;
+  EmitReleaseHeapLock;
   EmitB($C3);                                     { ret }
 
   AnsiStrReleaseAddr := CodeLen;
@@ -298,21 +315,9 @@ begin
   EmitB($52); { push rdx }
   EmitB($56); { push rsi }
   EmitB($57); { push rdi }
-
-  EmitB($48); EmitB($85); EmitB($C0);             { test rax, rax }
-  EmitB($74); pNil2 := CodeLen; EmitB(0);          { jz done }
-
-  if ThreadSafeMode then EmitB($F0);
-  EmitB($48); EmitB($FF); EmitB($48); EmitB($F0); { dec qword [rax-16] }
-  EmitB($75); pNonZero := CodeLen; EmitB(0);      { jnz done }
-
   EmitAcquireHeapLock;
-  EmitB($48); EmitB($83); EmitB($E8); EmitB($10); { sub rax, 16 }
-  EmitHeapFreeLocked;
+  EmitAnsiStrReleaseLocked;
   EmitReleaseHeapLock;
-
-  Code[pNil2] := Byte(CodeLen - (pNil2 + 1));
-  Code[pNonZero] := Byte(CodeLen - (pNonZero + 1));
   EmitB($5F); { pop rdi }
   EmitB($5E); { pop rsi }
   EmitB($5A); { pop rdx }
@@ -1603,7 +1608,9 @@ begin
 
           pi := FindProc('PXXDynArrayUnique');
           if pi < 0 then Error('compiler error: PXXDynArrayUnique not found');
+          EmitAcquireHeapLock;
           EmitCallProc(pi);
+          EmitReleaseHeapLock;
         end
         else
           begin EmitB($48); EmitB($8B); EmitB($00); end;  { mov rax, [rax] }
@@ -2960,7 +2967,7 @@ begin
               if Syms[symIdx].ElemType = tyAnsiString then
               begin
                 EmitB($48); EmitB($8B); EmitB($07);                     { mov rax, [rdi] }
-                IREmitCodeCall(AnsiStrRetainAddr);
+                EmitAnsiStrRetainLocked;
               end
               else
               begin
@@ -3309,10 +3316,9 @@ begin
         EmitB($50);                            { push dest     [rsp+8 below]  }
         EmitB($53);                            { push rbx      [rsp]          }
 
+        EmitAcquireHeapLock;
         EmitB($48); EmitB($8B); EmitB($5C); EmitB($24); EmitB($10); { mov rbx, [rsp+16] = src }
         EmitManagedRecordRetain(IRC[node]);
-
-        EmitAcquireHeapLock;
         EmitB($48); EmitB($8B); EmitB($5C); EmitB($24); EmitB($08); { mov rbx, [rsp+8] = dest }
         EmitManagedRecordReleaseLocked(IRC[node]);
         EmitReleaseHeapLock;
@@ -3457,12 +3463,12 @@ begin
           if slDepth > 1 then
           begin
             EmitB($48); EmitB($8B); EmitB($07);                { mov rax,[rdi] }
-            EmitDynArrayRetain;
+            EmitDynArrayRetainLocked;
           end
           else if slBaseTk = tyAnsiString then
           begin
             EmitB($48); EmitB($8B); EmitB($07);                { mov rax,[rdi] }
-            IREmitCodeCall(AnsiStrRetainAddr);
+            EmitAnsiStrRetainLocked;
           end
           else
           begin

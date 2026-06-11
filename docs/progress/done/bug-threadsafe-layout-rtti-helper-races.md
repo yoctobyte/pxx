@@ -1,8 +1,8 @@
 # Thread-safe layout RTTI helper races
 
 - **Type:** bug
-- **Status:** backlog
-- **Owner:** —
+- **Status:** done
+- **Owner:** codex
 - **Blocked-by:** feature-rtti-layout-table
 - **Found / Opened:** 2026-06-11 (post-RTTI layout validation)
 
@@ -41,3 +41,13 @@ operations.
 
 - 2026-06-11 — Filed after validation of `feature-rtti-layout-table`; tests are
   green, but static review found inconsistent locking around new RTTI helpers.
+- 2026-06-11 — Fixed. Contract: Pascal layout RTTI helpers (`PXXRecordRetain`,
+  `PXXRecordRelease`, `PXXDynArrayRelease`, `PXXDynArrayUnique`) run under the
+  generated heap spinlock when `ThreadSafeMode` is active; call sites already in
+  a compound resize/COW critical section use raw retain emitters to avoid
+  re-entering the lock. `IR_DYNUNIQUE` now locks around `PXXDynArrayUnique`, and
+  ARC-correct managed record copy retains source fields and releases destination
+  fields inside one critical section. Public x86-64 string retain/release and
+  dynamic-array retain paths now use the same heap lock in threaded mode so
+  they cannot race the Pascal helpers' non-atomic refcount updates. Added
+  `test/test_threadsafe_layout_rtti.pas`.
