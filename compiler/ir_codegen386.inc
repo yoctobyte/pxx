@@ -493,7 +493,17 @@ begin
     IR_LEA:
       begin
         si := IRA[node];
-        if Syms[si].Kind = skGlobal then
+        if Syms[si].IsArray and (Syms[si].ArrLen = -1) then
+        begin
+          { Dynamic array: the slot holds the heap data pointer; load it (mov),
+            so indexing/Length operate on the heap block. v1: no copy-on-write
+            in write mode (single-owner arrays only). }
+          if Syms[si].Kind = skGlobal then
+            begin EmitB($A1); EmitGlobRef(Syms[si].Offset); end          { mov eax, [slot] }
+          else
+            begin EmitB($8B); EmitB($85); EmitI32(Syms[si].Offset); end; { mov eax, [ebp+off] }
+        end
+        else if Syms[si].Kind = skGlobal then
         begin
           EmitB($B8); EmitGlobRef(Syms[si].Offset);          { mov eax, abs32 }
         end
@@ -942,6 +952,49 @@ begin
           IREmitNode386(IRA[argNode]);   { p -> eax }
           EmitHeapFreeLocked386;
           EmitReleaseHeapLock386;
+          Exit;
+        end;
+        if pi = -102 then
+        begin
+          { SetLength(arr, n) for a depth-1 dynamic array via the portable
+            PXXDynSetLen(slotAddr, n, desc) helper. }
+          argNode := IRB[node];          { arg1 = array lvalue (IR_LEA) }
+          valNode := IRB[argNode];       { arg2 = new length }
+          left := IRA[argNode];          { IR_LEA node }
+          if IRKind[left] <> IR_LEA then
+            Error('target i386: SetLength expects an array variable');
+          si := IRA[left];
+          if not (Syms[si].IsArray and (Syms[si].ArrLen = -1)) then
+            Error('target i386: SetLength only supports dynamic arrays yet');
+          if (Syms[si].Kind = skParam) and Syms[si].IsRef then
+            Error('target i386: SetLength on a var-array parameter not yet supported');
+          { arg0 = slot address }
+          if Syms[si].Kind = skGlobal then
+            begin EmitB($B8); EmitGlobRef(Syms[si].Offset); end          { mov eax, slot addr }
+          else
+            begin EmitB($8D); EmitB($85); EmitI32(Syms[si].Offset); end; { lea eax, [ebp+off] }
+          EmitB($50);                    { push slot addr }
+          IREmitNode386(IRA[valNode]);   { eax = new length }
+          EmitB($50);                    { push n }
+          EmitB($68); EmitDataRef(GetOrAllocSymRTTI(si)); { push desc }
+          pi := FindProc('PXXDynSetLen');
+          if pi < 0 then Error('compiler error: PXXDynSetLen not found');
+          EmitCallProc(pi);
+          EmitB($81); EmitB($C4); EmitI32(12); { add esp, 12 }
+          Exit;
+        end;
+        if pi = -Ord(tkLength) then
+        begin
+          { Length(arr): IR_LEA auto-loaded the data pointer (handle); the
+            element count lives at [handle-8] (0 when nil). }
+          argNode := IRB[node];
+          valNode := IRA[argNode];
+          IREmitNode386(valNode);        { eax = handle (data ptr) or 0 }
+          if (IRKind[valNode] = IR_INDEX) or (IRKind[valNode] = IR_FIELD) then
+            begin EmitB($8B); EmitB($00); end;  { mov eax, [eax] (deref slot to handle) }
+          EmitB($85); EmitB($C0);        { test eax, eax }
+          EmitB($74); EmitB($03);        { jz +3 }
+          EmitB($8B); EmitB($40); EmitB($F8); { mov eax, [eax-8] }
           Exit;
         end;
         if pi < 0 then

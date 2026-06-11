@@ -30,6 +30,7 @@ procedure PXXDynArrayRelease(arrData: Pointer; desc: Pointer);
 function PXXDynArrayUnique(arrSlot: Pointer; desc: Pointer): Pointer;
 procedure PXXMemMove(dst: Pointer; src: Pointer; n: Int64);
 procedure PXXMemZero(dst: Pointer; n: Int64);
+procedure PXXDynSetLen(arrSlot: Pointer; newLen: Int64; desc: Pointer);
 
 implementation
 
@@ -681,6 +682,68 @@ begin
     PByte(d + i)^ := 0;
     i := i + 1;
   end;
+end;
+
+{ SetLength for a depth-1 dynamic array. arrSlot = address of the handle slot;
+  newLen = requested element count; desc = the array's layout descriptor
+  (+4 elSize, +8 depth, +12 baseKind, +16 baseTypeRef). Allocates a fresh
+  [refcount:8][length:8][data] block, zeroes it, copies min(old,new) elements,
+  retains the copied managed elements, publishes the new handle, and releases
+  the old one. newLen <= 0 publishes nil. Target-independent — replaces the
+  per-arch inline SetLength so i386/ARM32/AArch64 share one implementation. }
+procedure PXXDynSetLen(arrSlot: Pointer; newLen: Int64; desc: Pointer);
+var
+  oldData, newBlock, newArrData: Pointer;
+  oldLen, elSize, copyLen, i: Int64;
+  depth, baseKind, baseTypeRef: Integer;
+  baseRecDesc: Pointer;
+begin
+  if (arrSlot = nil) or (desc = nil) then Exit;
+  oldData := Pointer(PWord(arrSlot)^);
+  elSize := PInt32(Int64(desc) + 4)^;
+  depth := PInt32(Int64(desc) + 8)^;
+  baseKind := PInt32(Int64(desc) + 12)^;
+  baseTypeRef := PInt32(Int64(desc) + 16)^;
+  if baseKind = 3 then
+    baseRecDesc := Pointer(Int64(desc) + 16 + baseTypeRef)
+  else
+    baseRecDesc := nil;
+
+  if newLen <= 0 then
+  begin
+    PWord(arrSlot)^ := 0;
+    PXXDynArrayRelease(oldData, desc);
+    Exit;
+  end;
+
+  newBlock := PXXAlloc(16 + newLen * elSize, 8);
+  PWord(newBlock)^ := 1;
+  PWord(Int64(newBlock) + 8)^ := newLen;
+  newArrData := Pointer(Int64(newBlock) + 16);
+
+  i := 0;
+  while i < newLen * elSize do
+  begin
+    PByte(Int64(newArrData) + i)^ := 0;
+    i := i + 1;
+  end;
+
+  if oldData <> nil then
+  begin
+    oldLen := PWord(Int64(oldData) - 8)^;
+    copyLen := oldLen;
+    if newLen < copyLen then copyLen := newLen;
+    i := 0;
+    while i < copyLen * elSize do
+    begin
+      PByte(Int64(newArrData) + i)^ := PByte(Int64(oldData) + i)^;
+      i := i + 1;
+    end;
+    PXXDynArrayRetainImmediate(newArrData, copyLen, depth, baseKind, baseRecDesc);
+  end;
+
+  PWord(arrSlot)^ := Int64(newArrData);
+  PXXDynArrayRelease(oldData, desc);
 end;
 
 end.

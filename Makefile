@@ -694,7 +694,10 @@ test-i386: $(COMPILER)
 	./$(COMPILER) -dPXX_MANAGED_STRING --target=i386 test/test_cross_record.pas /tmp/test_i386_record
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_cross_record.pas /tmp/test_i386_record_x64
 	test "$$(tools/run_target.sh i386 /tmp/test_i386_record)" = "$$(/tmp/test_i386_record_x64)"
-	@echo "i386 hello + arith + procs + loops + write + varparam + syscall + heap + string + record ok (output identical to x86-64)"
+	./$(COMPILER) -dPXX_MANAGED_STRING --target=i386 test/test_cross_dynarray.pas /tmp/test_i386_dynarray
+	./$(COMPILER) -dPXX_MANAGED_STRING test/test_cross_dynarray.pas /tmp/test_i386_dynarray_x64
+	test "$$(tools/run_target.sh i386 /tmp/test_i386_dynarray)" = "$$(/tmp/test_i386_dynarray_x64)"
+	@echo "i386 hello + arith + procs + loops + write + varparam + syscall + heap + string + record + dynarray ok (output identical to x86-64)"
 
 test-aarch64: $(COMPILER)
 	./$(COMPILER) --target=aarch64 test/hello.pas /tmp/test_aarch64_hello
@@ -749,7 +752,10 @@ test-arm32: $(COMPILER)
 	./$(COMPILER) -dPXX_MANAGED_STRING --target=arm32 test/test_cross_record.pas /tmp/test_arm32_record
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_cross_record.pas /tmp/test_arm32_record_x64
 	test "$$(tools/run_target.sh arm32 /tmp/test_arm32_record)" = "$$(/tmp/test_arm32_record_x64)"
-	@echo "arm32 hello + arith + procs + loops + write + varparam + syscall + heap + string + record ok (output identical to x86-64)"
+	./$(COMPILER) -dPXX_MANAGED_STRING --target=arm32 test/test_cross_dynarray.pas /tmp/test_arm32_dynarray
+	./$(COMPILER) -dPXX_MANAGED_STRING test/test_cross_dynarray.pas /tmp/test_arm32_dynarray_x64
+	test "$$(tools/run_target.sh arm32 /tmp/test_arm32_dynarray)" = "$$(/tmp/test_arm32_dynarray_x64)"
+	@echo "arm32 hello + arith + procs + loops + write + varparam + syscall + heap + string + record + dynarray ok (output identical to x86-64)"
 
 # Cross-target test environment sanity (chore-qemu-test-env). Manual target:
 # joins 'make test' when the first cross backend exists. Validates the runner

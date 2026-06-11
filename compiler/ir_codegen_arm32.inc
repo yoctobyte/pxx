@@ -351,7 +351,26 @@ begin
       end;
 
     IR_LEA:
-      EmitLoadVarAddrArm32(IRA[node]);
+      begin
+        si := IRA[node];
+        if Syms[si].IsArray and (Syms[si].ArrLen = -1) then
+        begin
+          { Dynamic array: slot holds the heap data pointer; load it (v1: no COW). }
+          if Syms[si].Kind = skGlobal then
+          begin
+            EmitI32($E59F0000); EmitI32($EA000000); EmitGlobRef(Syms[si].Offset); { r0 = slot addr }
+            EmitI32($E5900000);  { ldr r0, [r0] = handle }
+          end
+          else
+          begin
+            EmitLoadImmArm32(0, Syms[si].Offset);
+            EmitI32($E08B0000);  { add r0, fp, r0 = slot addr }
+            EmitI32($E5900000);  { ldr r0, [r0] = handle }
+          end;
+        end
+        else
+          EmitLoadVarAddrArm32(si);
+      end;
 
     IR_SLOTADDR:
       begin
@@ -541,6 +560,53 @@ begin
           argNode := IRB[node];          { pointer arg }
           IREmitNodeArm32(IRA[argNode]); { p -> r0 }
           EmitHeapFreeLockedArm32;
+          Exit;
+        end;
+        if pi = -102 then
+        begin
+          { SetLength(arr, n) -> PXXDynSetLen(slotAddr, n, desc). }
+          argNode := IRB[node];          { arg1 = array lvalue (IR_LEA) }
+          valNode := IRB[argNode];       { arg2 = new length }
+          left := IRA[argNode];          { IR_LEA node }
+          if IRKind[left] <> IR_LEA then
+            Error('target arm32: SetLength expects an array variable');
+          si := IRA[left];
+          if not (Syms[si].IsArray and (Syms[si].ArrLen = -1)) then
+            Error('target arm32: SetLength only supports dynamic arrays yet');
+          if (Syms[si].Kind = skParam) and Syms[si].IsRef then
+            Error('target arm32: SetLength on a var-array parameter not yet supported');
+          { slot address -> r0, push }
+          if Syms[si].Kind = skGlobal then
+          begin
+            EmitI32($E59F0000); EmitI32($EA000000); EmitGlobRef(Syms[si].Offset);
+          end
+          else
+          begin
+            EmitLoadImmArm32(0, Syms[si].Offset);
+            EmitI32($E08B0000);          { add r0, fp, r0 }
+          end;
+          EmitI32($E92D0001);            { push {r0} slotAddr }
+          IREmitNodeArm32(IRA[valNode]); { r0 = n }
+          EmitI32($E92D0001);            { push {r0} n }
+          EmitI32($E8BD0002);            { pop {r1} (n) }
+          EmitI32($E8BD0001);            { pop {r0} (slotAddr) }
+          EmitLoadDataRefArm32(2, GetOrAllocSymRTTI(si)); { r2 = desc }
+          pi := FindProc('PXXDynSetLen');
+          if pi < 0 then Error('compiler error: PXXDynSetLen not found');
+          EmitCallProc(pi);
+          Exit;
+        end;
+        if pi = -Ord(tkLength) then
+        begin
+          { Length(arr): IR_LEA auto-loaded the data pointer; count at [handle-8]. }
+          argNode := IRB[node];
+          valNode := IRA[argNode];
+          IREmitNodeArm32(valNode);      { r0 = handle (or 0) }
+          if (IRKind[valNode] = IR_INDEX) or (IRKind[valNode] = IR_FIELD) then
+            EmitI32($E5900000);          { ldr r0, [r0] (deref slot to handle) }
+          EmitI32($E3500000);            { cmp r0, #0 }
+          EmitI32($0A000000);            { beq +1 (skip ldr) }
+          EmitI32($E5100008);            { ldr r0, [r0, #-8] }
           Exit;
         end;
         if pi < 0 then
