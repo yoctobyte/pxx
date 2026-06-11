@@ -12,7 +12,7 @@ _none_
 
 _none_
 
-## backlog (31)
+## backlog (32)
 
 | Ticket | Type | Summary | Blocked-by |
 | --- | --- | --- | --- |
@@ -43,8 +43,9 @@ _none_
 | feature-parallel-processing | feature | Parallel processing as a language feature | feature-unified-heap-allocator |
 | feature-progress-transition-helpers | feature | Progress transition helpers (`claim` / `resolve`) | — |
 | feature-static-arena-profile | feature | Fixed-static-arena allocator profile | feature-unified-heap-allocator |
-| feature-target-esp32 | feature | Compile target: ESP32 / embedded (RISC-V entry, various MCUs) | feature-target-arm32 |
+| feature-target-esp32 | feature | Compile target: ESP32 / embedded | feature-target-arm32 |
 | feature-threadsafe-io-serialization | feature | Statement-level I/O serialization under threads | feature-unified-heap-allocator |
+| feature-typed-instruction-encoders | feature | Typed instruction encoders for codegen | — |
 | idea-unit-rename-import | idea | `uses X as Y` unit-rename import (dialect extension) | — |
 | idea-visibility-enforcement | idea | Enforce private/protected visibility | — |
 
@@ -106,6 +107,7 @@ _none_
 - feature-static-arena-profile
 - feature-target-esp32
 - feature-threadsafe-io-serialization
+- feature-typed-instruction-encoders
 - idea-unit-rename-import
 - idea-visibility-enforcement
 

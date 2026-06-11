@@ -18,6 +18,7 @@ User-facing documents:
 - [Features](features.md) - build baseline, language frontends, native output, and library loading.
 - [Wrapper-Free C From Nil Python](wrapper-free-c-from-nil-python.md) - public overview of the SQLite proof: `.npy` imports `sqlite3` directly, with compiler-lifted out-params and copied C strings instead of handwritten wrappers.
 - [ESP32 And ESP-IDF Direction](esp32-esp-idf-roadmap.md) - public note on ESP32 as an embedded target, ESP-IDF C imports, FreeRTOS as a target profile, and fast native iteration.
+- [ESP32 Support Setup](esp32-support.md) - install buckets, ESP-IDF tooling, QEMU layers, and the `esp32-idf` / `esp32-bare` test strategy.
 - [Limitations](limitations.md) - unsupported or only partially supported language, ABI, platform, and tooling areas.
 - [Inline Assembler](inline-asm.md) - x86-64 inline asm support, supported instruction set, variable passing, limitations, and TODO.
 - [GUI (GTK3 + LFM streaming)](gui.md) - LCL-compatible widgetset on GTK3, of-object events, and `.lfm`-streamed component trees.
@@ -38,6 +39,7 @@ Architecture and current state:
 - [Compatibility Status](compatibility.md) - dated implementation inventory and bootstrap policy.
 - [Target Roadmap](roadmap.md) - planned CPU targets and the fixedpoint gate each must pass.
 - [ESP32 And ESP-IDF Direction](esp32-esp-idf-roadmap.md) - embedded target strategy for ESP-IDF, FreeRTOS compatibility, and CPU-family staging.
+- [ESP32 Support Setup](esp32-support.md) - concrete host packages, ESP-IDF installer use, Espressif QEMU, and testing ladder for ESP32 work.
 - [Allocator Platform Design](allocator-platform-design.md) - syscall-free internal heap with optional hosted or RTOS hooks.
 - [Garbage Collection Thoughts](garbage-collection-thoughts.md) - why GC is not the default (root-finding cost, bare-metal tension) and the per-target/per-frontend memory profile decision (ARC / arena / hosted collector).
 - [Runtime Emission Size Audit (2026-06-02)](runtime-emission-size-audit-2026-06-02.md) - measured hello-world overhead and deferred feature-reachability cleanup for embedded targets.
