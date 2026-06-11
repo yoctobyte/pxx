@@ -400,6 +400,47 @@ begin
         end;
       end;
 
+    IR_LOAD_MEM:
+      begin
+        IREmitNode386(IRA[node]);                    { address -> eax }
+        tk := IntToTypeKind(IRTk[node]);
+        if not (TypeIsOrdinal(tk) or (tk = tyBoolean) or (tk = tyPointer) or
+                (tk = tyChar) or (tk = tyUnknown)) then
+          Error('target i386: load through pointer of this type not yet supported');
+        sz := TypeSize(tk);
+        sgn := TypeSigned(tk);
+        if sz = 1 then
+        begin
+          if sgn then begin EmitB($0F); EmitB($BE); EmitB($00); end { movsx eax, byte [eax] }
+          else begin EmitB($0F); EmitB($B6); EmitB($00); end;       { movzx eax, byte [eax] }
+        end
+        else if sz = 2 then
+        begin
+          if sgn then begin EmitB($0F); EmitB($BF); EmitB($00); end { movsx eax, word [eax] }
+          else begin EmitB($0F); EmitB($B7); EmitB($00); end;       { movzx eax, word [eax] }
+        end
+        else
+        begin
+          EmitB($8B); EmitB($00);                    { mov eax, [eax] (4-, low dword of 8-byte) }
+        end;
+      end;
+
+    IR_STORE_MEM:
+      begin
+        tk := IntToTypeKind(IRTk[node]);
+        if not (TypeIsOrdinal(tk) or (tk = tyBoolean) or (tk = tyPointer) or
+                (tk = tyChar) or (tk = tyUnknown)) then
+          Error('target i386: store through pointer of this type not yet supported');
+        IREmitNode386(IRB[node]);                    { value -> eax }
+        EmitB($50);                                  { push eax }
+        IREmitNode386(IRA[node]);                    { address -> eax }
+        EmitB($59);                                  { pop ecx (value) }
+        sz := TypeSize(tk);
+        if sz = 1 then begin EmitB($88); EmitB($08); end       { mov [eax], cl }
+        else if sz = 2 then begin EmitB($66); EmitB($89); EmitB($08); end { mov [eax], cx }
+        else begin EmitB($89); EmitB($08); end;                { mov [eax], ecx }
+      end;
+
     IR_SYSCALL:
       begin
         { Raw syscall (int 0x80): args (nr, a0..a5) pushed left-to-right,

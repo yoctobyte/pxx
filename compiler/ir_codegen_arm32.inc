@@ -139,9 +139,10 @@ end;
 
 procedure IREmitNodeArm32(node: Integer);
 var
-  valNode, si, left, right, op, pi, argNode, nArgs, i, wid: Integer;
+  valNode, si, left, right, op, pi, argNode, nArgs, i, wid, sz: Integer;
   sVal: AnsiString;
   tk: TTypeKind;
+  sgn: Boolean;
 begin
   if node = -1 then Exit;
   case IRKind[node] of
@@ -228,6 +229,43 @@ begin
           EmitI32($E8BD0000 or (1 shl i)); { pop {r[i]} }
 
         EmitCallProc(pi);
+      end;
+
+    IR_LOAD_MEM:
+      begin
+        IREmitNodeArm32(IRA[node]); { address -> r0 }
+        tk := IntToTypeKind(IRTk[node]);
+        if not (TypeIsOrdinal(tk) or (tk = tyBoolean) or (tk = tyPointer) or
+                (tk = tyChar) or (tk = tyUnknown)) then
+          Error('target arm32: load through pointer of this type not yet supported');
+        sz := TypeSize(tk);
+        sgn := TypeSigned(tk);
+        if sz = 1 then
+        begin
+          if sgn then EmitI32($E1D000D0) else EmitI32($E5D00000); { ldrsb/ldrb r0, [r0] }
+        end
+        else if sz = 2 then
+        begin
+          if sgn then EmitI32($E1D000F0) else EmitI32($E1D000B0); { ldrsh/ldrh r0, [r0] }
+        end
+        else
+          EmitI32($E5900000); { ldr r0, [r0] (4- and low word of 8-byte) }
+      end;
+
+    IR_STORE_MEM:
+      begin
+        tk := IntToTypeKind(IRTk[node]);
+        if not (TypeIsOrdinal(tk) or (tk = tyBoolean) or (tk = tyPointer) or
+                (tk = tyChar) or (tk = tyUnknown)) then
+          Error('target arm32: store through pointer of this type not yet supported');
+        IREmitNodeArm32(IRB[node]); { value -> r0 }
+        EmitI32($E92D0001);         { push {r0} }
+        IREmitNodeArm32(IRA[node]); { address -> r0 }
+        EmitI32($E8BD0002);         { pop {r1} (value) }
+        sz := TypeSize(tk);
+        if sz = 1 then EmitI32($E5C01000)      { strb r1, [r0] }
+        else if sz = 2 then EmitI32($E1C010B0) { strh r1, [r0] }
+        else EmitI32($E5801000);               { str r1, [r0] }
       end;
 
     IR_SYSCALL:

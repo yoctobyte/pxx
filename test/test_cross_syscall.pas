@@ -1,8 +1,10 @@
 program test_cross_syscall;
-{ __pxxrawsyscall intrinsic: getpid (1 arg) and the full 7-arg mmap form.
+{ __pxxrawsyscall intrinsic: getpid (1 arg) and the full 7-arg mmap form,
+  plus a store/load through the mapped page (IR_STORE_MEM/IR_LOAD_MEM).
   Syscall numbers differ per target, so each arch branches on its CPU
   defines; the printed output is identical everywhere (oracle pattern). }
-var pid, p: Int64;
+type PInt = ^Integer;
+var pid, p: Int64; ok: Boolean;
 begin
 {$ifdef CPUX86_64}
   pid := __pxxrawsyscall(39);                        { getpid }
@@ -23,5 +25,13 @@ begin
   if pid > 0 then writeln(1) else writeln(0);
   { mmap failure is -4095..-1; high addresses go negative on 32-bit, so
     accept anything outside the errno window as success }
-  if (p < -4095) or (p > 0) then writeln(1) else writeln(0);
+  ok := (p < -4095) or (p > 0);
+  if ok then writeln(1) else writeln(0);
+  if ok then
+  begin
+    PInt(p)^ := 12345;
+    writeln(PInt(p)^);
+  end
+  else
+    writeln(-1);
 end.

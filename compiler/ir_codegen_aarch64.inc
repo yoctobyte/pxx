@@ -153,6 +153,7 @@ var
   valNode, si, left, right, op, pi, argNode, nArgs, i, sz, wid: Integer;
   sVal: AnsiString;
   tk: TTypeKind;
+  sgn: Boolean;
 begin
   if node = -1 then Exit;
   case IRKind[node] of
@@ -238,6 +239,48 @@ begin
           EmitI32($F84107E0 + i); { ldr x[i], [sp], #16 }
 
         EmitCallProc(pi);
+      end;
+
+    IR_LOAD_MEM:
+      begin
+        IREmitNodeAarch64(IRA[node]); { address -> x0 }
+        tk := IntToTypeKind(IRTk[node]);
+        if not (TypeIsOrdinal(tk) or (tk = tyBoolean) or (tk = tyPointer) or
+                (tk = tyChar) or (tk = tyUnknown)) then
+          Error('target aarch64: load through pointer of this type not yet supported');
+        sz := TypeSize(tk);
+        sgn := TypeSigned(tk);
+        if sz = 1 then
+        begin
+          if sgn then EmitI32($39C00000) else EmitI32($39400000); { ldrsb/ldrb x0/w0, [x0] }
+        end
+        else if sz = 2 then
+        begin
+          if sgn then EmitI32($79C00000) else EmitI32($79400000); { ldrsh/ldrh }
+        end
+        else if sz = 4 then
+        begin
+          if sgn then EmitI32($B9800000) else EmitI32($B9400000); { ldrsw/ldr w0 }
+        end
+        else
+          EmitI32($F9400000); { ldr x0, [x0] }
+      end;
+
+    IR_STORE_MEM:
+      begin
+        tk := IntToTypeKind(IRTk[node]);
+        if not (TypeIsOrdinal(tk) or (tk = tyBoolean) or (tk = tyPointer) or
+                (tk = tyChar) or (tk = tyUnknown)) then
+          Error('target aarch64: store through pointer of this type not yet supported');
+        IREmitNodeAarch64(IRB[node]); { value -> x0 }
+        EmitI32($F81F0FE0);           { str x0, [sp, #-16]! }
+        IREmitNodeAarch64(IRA[node]); { address -> x0 }
+        EmitI32($F84107E1);           { ldr x1, [sp], #16 (value) }
+        sz := TypeSize(tk);
+        if sz = 1 then EmitI32($39000001)      { strb w1, [x0] }
+        else if sz = 2 then EmitI32($79000001) { strh w1, [x0] }
+        else if sz = 4 then EmitI32($B9000001) { str w1, [x0] }
+        else EmitI32($F9000001);               { str x1, [x0] }
       end;
 
     IR_SYSCALL:
