@@ -16,6 +16,37 @@ owner: claude
   `test/test_cross_syscall.pas` in all cross suites. Item 2b (full asm
   encoders per arch) deliberately skipped — the guard + intrinsic cover
   builtin.pas. Remaining: item 3, the runtime emitter port (~1200 lines/arch).
+- 2026-06-11 — item 3 strategy change (PoC landed, 0887904). Instead of
+  re-emitting each runtime helper in aarch64/arm32 machine code, move the
+  helper BODY into builtin.pas as plain Pascal (raw PByte/PWord pointer ops,
+  __pxxrawsyscall for syscalls — all already cross-compile). The emitted blob
+  shrinks to a thin per-arch shim: save scratch, acquire heap lock, call the
+  Pascal helper, release. First helper done: AnsiStrFromLiteral → PXXStrFromLit.
+  Fixedpoint holds, self-host compile time unchanged (1.14s). See "Item 3
+  revised plan" below.
+
+## Item 3 revised plan (Pascal-helper approach)
+
+Tier A — directly portable (pure pointer/syscall logic, one Pascal fn each):
+  AnsiStrFromLiteral (DONE → PXXStrFromLit), AnsiStrRetain, AnsiStrRelease,
+  AnsiStrConcat, AnsiStrLoadFile, ReadLine, DynArrayRetain, DynArrayRelease,
+  AnsiStrReleaseLocked, HeapAllocLocked/FreeLocked (already call PXXAlloc/Free).
+  Each leaves a tiny x86-64 shim today; the shim is mechanical to replicate on
+  aarch64/arm32 (the call ABI + lock are the only arch-specific parts).
+
+Tier B — compile-time type-driven walkers (HARD): EmitManagedRecordRetain/
+  ReleaseLocked, EmitDynArray{AnsiStr,ManagedRec,Nested}ReleaseLocked,
+  EmitDynArrayUniqueMeta. These emit per-field code from compile-time type
+  metadata (UClsFBase/UFldOff_/...). They can't become a single Pascal fn
+  without a RUNTIME type descriptor (RTTI-style) the helper walks. Options:
+  (1) build a small managed-layout descriptor table per record/array and a
+  generic Pascal walker; (2) keep these per-arch hand-emitted for now (they
+  only fire for managed records/nested dyn-arrays, not plain string/heap).
+  Recommend deferring Tier B; cross-bootstrap of compiler.pas needs Tier A +
+  whatever managed types compiler.pas itself uses.
+
+Tier C — entry-stub + EnableExceptionRuntime: exceptions stay gated (out of
+  scope per original ticket).
 
 ## Goal
 
