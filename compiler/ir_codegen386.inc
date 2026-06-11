@@ -230,7 +230,7 @@ end;
 procedure IREmitNode386(node: Integer);
 var
   valNode, si, left, right, op, pi, argNode, nArgs, wid, sz, i, j, base: Integer;
-  classIdx: Integer;
+  classIdx, elemSize, lo: Integer;
   sVal: AnsiString;
   emsg: AnsiString;
   tk: TTypeKind;
@@ -465,6 +465,40 @@ begin
         begin
           EmitB($81); EmitB($C4); EmitI32(nArgs * 4); { add esp, nArgs*4 }
         end;
+      end;
+
+    IR_FIELD:
+      begin
+        IREmitNode386(IRA[node]);                    { base address -> eax }
+        j := Integer(IRIVal[node]);                  { field offset }
+        if j <> 0 then
+          begin EmitB($05); EmitI32(j); end;         { add eax, offset }
+      end;
+
+    IR_INDEX:
+      begin
+        { Static-array / pointer indexing. Managed strings and dynamic arrays
+          (which need copy-on-write) aren't available on i386 yet, so no COW
+          path here. base[index]: addr = base + (index - lo) * elemSize. }
+        left := IRA[node];
+        right := IRB[node];
+        lo := IRC[node];
+        elemSize := Integer(IRIVal[node]);
+        IREmitNode386(left);                          { base address -> eax }
+        EmitB($50);                                   { push eax }
+        IREmitNode386(right);                         { index -> eax }
+        if lo <> 0 then
+          begin EmitB($2D); EmitI32(lo); end;         { sub eax, lo }
+        if elemSize = 8 then
+          begin EmitB($C1); EmitB($E0); EmitB($03); end          { shl eax, 3 }
+        else if elemSize = 4 then
+          begin EmitB($C1); EmitB($E0); EmitB($02); end          { shl eax, 2 }
+        else if elemSize = 2 then
+          begin EmitB($C1); EmitB($E0); EmitB($01); end          { shl eax, 1 }
+        else if elemSize <> 1 then
+          begin EmitB($69); EmitB($C0); EmitI32(elemSize); end;  { imul eax, eax, elemSize }
+        EmitB($59);                                   { pop ecx (base) }
+        EmitB($01); EmitB($C8);                       { add eax, ecx }
       end;
 
     IR_LOAD_MEM:
@@ -725,7 +759,8 @@ begin
         IREmitNode386(i);
 
       IR_NOP, IR_CONST_STR, IR_CONST_INT, IR_BLOCK,
-      IR_LOAD_SYM, IR_BINOP, IR_NEG, IR_NOT, IR_ARG, IR_LEA, IR_SYSCALL: ; { operands, emitted by parents }
+      IR_LOAD_SYM, IR_BINOP, IR_NEG, IR_NOT, IR_ARG, IR_LEA, IR_SYSCALL,
+      IR_FIELD, IR_INDEX: ; { operands, emitted by parents }
 
       else
         IREmitNode386(i); { unknown statement op -> hard error inside }
