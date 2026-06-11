@@ -15,6 +15,20 @@ begin
   EmitDataRef(dataOff);
 end;
 
+procedure IREmitLeaveExceptionFramesAarch64(count: Integer);
+var i: Integer;
+begin
+  for i := 1 to count do
+  begin
+    EmitI32($18000041);                                         { ldr w1, [pc+8] }
+    EmitI32($14000002);                                         { b [pc+8] }
+    EmitGlobRef(BSS_EXC_TOP);
+    EmitI32($F94003E2);                                         { ldr x2, [sp] }
+    EmitI32($F9000022);                                         { str x2, [x1] }
+    EmitI32($910203FF);                                         { add sp, sp, #128 }
+  end;
+end;
+
 procedure EmitHeapAllocLockedA64;
 { x0 = requested payload bytes. Returns payload pointer in x0. Delegates to the
   Pascal PXXAlloc(size, align=8). Threadsafe locking is x86-64-only. }
@@ -876,7 +890,7 @@ begin
 end;
 
 procedure IREmitMachineCodeAarch64;
-var i, lblId, pos, targetOffset, f: Integer;
+var i, lblId, pos, targetOffset, f, si, classIdx: Integer;
     LabelPositions: array[0..MAX_IR-1] of Integer;
     LabelFixupPos: array[0..2047] of Integer;
     LabelFixupTarget: array[0..2047] of Integer;
@@ -931,6 +945,97 @@ begin
             IREmitNodeAarch64(i);
         end;
 
+      IR_EXC_ENTER:
+        begin
+          lblId := IRA[i];
+          EmitI32($D10203FF);                                         { sub sp, sp, #128 }
+          EmitI32($18000041);                                         { ldr w1, [pc+8] }
+          EmitI32($14000002);                                         { b [pc+8] }
+          EmitGlobRef(BSS_EXC_TOP);
+          EmitI32($F9400022);                                         { ldr x2, [x1] }
+          EmitI32($F90003E2);                                         { str x2, [sp] }
+          EmitI32($910003E2);                                         { mov x2, sp }
+          EmitI32($F9000022);                                         { str x2, [x1] }
+          EmitI32($910043E0);                                         { add x0, sp, #16 }
+          EmitI32($94000000 or (((ExcSetJmpAddr - CodeLen) div 4) and $03ffffff)); { bl ExcSetJmpAddr }
+          if LabelPositions[lblId] <> -1 then
+            EmitI32($B5000000 or ((((LabelPositions[lblId] - CodeLen) div 4) and $7ffff) shl 5)) { cbnz x0, label }
+          else
+          begin
+            LabelFixupPos[LabelFixupCount] := CodeLen;
+            LabelFixupTarget[LabelFixupCount] := lblId;
+            Inc(LabelFixupCount);
+            EmitI32($B5000000);
+          end;
+        end;
+
+      IR_EXC_LEAVE:
+        begin
+          IREmitLeaveExceptionFramesAarch64(IRA[i]);
+        end;
+
+      IR_RAISE:
+        begin
+          if IRA[i] <> -1 then
+          begin
+            IREmitNodeAarch64(IRA[i]);                                { result in x0 }
+            EmitI32($18000041);                                       { ldr w1, [pc+8] }
+            EmitI32($14000002);                                       { b [pc+8] }
+            EmitGlobRef(BSS_EXC_OBJ);
+            EmitI32($F9000020);                                       { str x0, [x1] }
+            classIdx := Integer(IRIVal[i]);
+            EmitLoadImmA64(0, classIdx);                              { x0 = classIdx }
+            EmitI32($18000041);                                       { ldr w1, [pc+8] }
+            EmitI32($14000002);                                       { b [pc+8] }
+            EmitGlobRef(BSS_EXC_CLS);
+            EmitI32($F9000020);                                       { str x0, [x1] }
+          end;
+          EmitI32($94000000 or (((ExcRaiseAddr - CodeLen) div 4) and $03ffffff)); { bl ExcRaiseAddr }
+        end;
+
+      IR_EXC_STORE:
+        begin
+          si := IRA[i];
+          EmitI32($18000041);                                         { ldr w1, [pc+8] }
+          EmitI32($14000002);                                         { b [pc+8] }
+          EmitGlobRef(BSS_EXC_OBJ);
+          EmitI32($F9400020);                                         { ldr x0, [x1] }
+          EmitStoreVarA64(si);
+        end;
+
+      IR_EXC_MATCH:
+        begin
+          lblId := IRA[i];
+          EmitI32($18000041);                                         { ldr w1, [pc+8] }
+          EmitI32($14000002);                                         { b [pc+8] }
+          EmitGlobRef(BSS_EXC_CLS);
+          EmitI32($F9400020);                                         { ldr x0, [x1] }
+          EmitLoadImmA64(1, Integer(IRIVal[i]));                      { x1 = expected }
+          EmitI32($EB01001F);                                         { cmp x0, x1 (subs xzr, x0, x1) }
+          if LabelPositions[lblId] <> -1 then
+            EmitI32($54000001 or ((((LabelPositions[lblId] - CodeLen) div 4) and $7ffff) shl 5)) { b.ne label }
+          else
+          begin
+            LabelFixupPos[LabelFixupCount] := CodeLen;
+            LabelFixupTarget[LabelFixupCount] := lblId;
+            Inc(LabelFixupCount);
+            EmitI32($54000001);
+          end;
+        end;
+
+      IR_EXC_CLEAR:
+        begin
+          EmitI32($D2800000);                                         { movz x0, #0 }
+          EmitI32($18000041);                                         { ldr w1, [pc+8] }
+          EmitI32($14000002);                                         { b [pc+8] }
+          EmitGlobRef(BSS_EXC_OBJ);
+          EmitI32($F9000020);                                         { str x0, [x1] }
+          EmitI32($18000041);                                         { ldr w1, [pc+8] }
+          EmitI32($14000002);                                         { b [pc+8] }
+          EmitGlobRef(BSS_EXC_CLS);
+          EmitI32($F9000020);                                         { str x0, [x1] }
+        end;
+
       IR_STORE_SYM, IR_WRITE, IR_WRITELN:
         IREmitNodeAarch64(i);
 
@@ -953,6 +1058,10 @@ begin
       Patch32(pos, $14000000 or (((targetOffset - pos) div 4) and $03ffffff))
     else if Code[pos+3] = $B4 then
       Patch32(pos, $B4000000 or (((targetOffset - pos) div 4) and $7ffff) shl 5)
+    else if Code[pos+3] = $B5 then
+      Patch32(pos, $B5000000 or (((targetOffset - pos) div 4) and $7ffff) shl 5 or (Code[pos] and $1f))
+    else if Code[pos+3] = $54 then
+      Patch32(pos, $54000000 or (((targetOffset - pos) div 4) and $7ffff) shl 5 or (Code[pos] and $1f))
     else
       Error('target aarch64: invalid instruction at label fixup');
   end;

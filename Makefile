@@ -697,7 +697,10 @@ test-i386: $(COMPILER)
 	./$(COMPILER) -dPXX_MANAGED_STRING --target=i386 test/test_cross_dynarray.pas /tmp/test_i386_dynarray
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_cross_dynarray.pas /tmp/test_i386_dynarray_x64
 	test "$$(tools/run_target.sh i386 /tmp/test_i386_dynarray)" = "$$(/tmp/test_i386_dynarray_x64)"
-	@echo "i386 hello + arith + procs + loops + write + varparam + syscall + heap + string + record + dynarray ok (output identical to x86-64)"
+	./$(COMPILER) --target=i386 test/test_cross_exception.pas /tmp/test_i386_exception
+	./$(COMPILER) test/test_cross_exception.pas /tmp/test_i386_exception_x64
+	test "$$(tools/run_target.sh i386 /tmp/test_i386_exception)" = "$$(/tmp/test_i386_exception_x64)"
+	@echo "i386 hello + arith + procs + loops + write + varparam + syscall + heap + string + record + dynarray + exception ok (output identical to x86-64)"
 
 test-aarch64: $(COMPILER)
 	./$(COMPILER) --target=aarch64 test/hello.pas /tmp/test_aarch64_hello
@@ -726,7 +729,10 @@ test-aarch64: $(COMPILER)
 	./$(COMPILER) -dPXX_MANAGED_STRING --target=aarch64 test/test_cross_managed_a64.pas /tmp/test_aarch64_managed
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_cross_managed_a64.pas /tmp/test_aarch64_managed_x64
 	test "$$(tools/run_target.sh aarch64 /tmp/test_aarch64_managed)" = "$$(/tmp/test_aarch64_managed_x64)"
-	@echo "aarch64 hello + arith + procs + loops + write + varparam + syscall + heap + string + record + dynarray ok (output identical to x86-64)"
+	./$(COMPILER) --target=aarch64 test/test_cross_exception.pas /tmp/test_aarch64_exception
+	./$(COMPILER) test/test_cross_exception.pas /tmp/test_aarch64_exception_x64
+	test "$$(tools/run_target.sh aarch64 /tmp/test_aarch64_exception)" = "$$(/tmp/test_aarch64_exception_x64)"
+	@echo "aarch64 hello + arith + procs + loops + write + varparam + syscall + heap + string + record + dynarray + exception ok (output identical to x86-64)"
 
 test-arm32: $(COMPILER)
 	./$(COMPILER) --target=arm32 test/hello.pas /tmp/test_arm32_hello
@@ -761,7 +767,10 @@ test-arm32: $(COMPILER)
 	./$(COMPILER) -dPXX_MANAGED_STRING --target=arm32 test/test_cross_dynarray.pas /tmp/test_arm32_dynarray
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_cross_dynarray.pas /tmp/test_arm32_dynarray_x64
 	test "$$(tools/run_target.sh arm32 /tmp/test_arm32_dynarray)" = "$$(/tmp/test_arm32_dynarray_x64)"
-	@echo "arm32 hello + arith + procs + loops + write + varparam + syscall + heap + string + record + dynarray ok (output identical to x86-64)"
+	./$(COMPILER) --target=arm32 test/test_cross_exception.pas /tmp/test_arm32_exception
+	./$(COMPILER) test/test_cross_exception.pas /tmp/test_arm32_exception_x64
+	test "$$(tools/run_target.sh arm32 /tmp/test_arm32_exception)" = "$$(/tmp/test_arm32_exception_x64)"
+	@echo "arm32 hello + arith + procs + loops + write + varparam + syscall + heap + string + record + dynarray + exception ok (output identical to x86-64)"
 
 # Cross-target test environment sanity (chore-qemu-test-env). Manual target:
 # joins 'make test' when the first cross backend exists. Validates the runner

@@ -18,6 +18,17 @@ procedure EmitSetcc(opTk: Integer; signed: Boolean); forward;
 
 procedure IREmitNode386(node: Integer); forward;
 
+procedure IREmitLeaveExceptionFrames386(count: Integer);
+var i: Integer;
+begin
+  for i := 1 to count do
+  begin
+    EmitB($8B); EmitB($04); EmitB($24);                  { mov eax, [esp] }
+    EmitB($A3); EmitGlobRef(BSS_EXC_TOP);                { mov [BSS_EXC_TOP], eax }
+    EmitB($83); EmitB($C4); EmitB(EXC_FRAME_SIZE_386);   { add esp, 32 }
+  end;
+end;
+
 procedure EmitAcquireHeapLock386;
 begin
   { i386 threadsafe heap locking not implemented yet; non-threadsafe = no-op.
@@ -1461,7 +1472,8 @@ begin
 end;
 
 procedure IREmitMachineCode386;
-var i, lblId, pos, targetOffset, f: Integer;
+var i, lblId, pos, targetOffset, f, si, classIdx, sz: Integer;
+    tk: TTypeKind;
     LabelPositions: array[0..MAX_IR-1] of Integer;
     LabelFixupPos: array[0..2047] of Integer;
     LabelFixupTarget: array[0..2047] of Integer;
@@ -1517,6 +1529,103 @@ begin
         begin
           if IRIVal[i] = 1 then                      { statement-level call }
             IREmitNode386(i);
+        end;
+
+      IR_EXC_ENTER:
+        begin
+          lblId := IRA[i];
+          EmitB($83); EmitB($EC); EmitB(EXC_FRAME_SIZE_386); { sub esp, 32 }
+          EmitB($A1); EmitGlobRef(BSS_EXC_TOP);                { mov eax, [BSS_EXC_TOP] }
+          EmitB($89); EmitB($04); EmitB($24);                  { mov [esp], eax }
+          EmitB($89); EmitB($E0);                              { mov eax, esp }
+          EmitB($A3); EmitGlobRef(BSS_EXC_TOP);                { mov [BSS_EXC_TOP], eax }
+          EmitB($8D); EmitB($44); EmitB($24); EmitB(EXC_JMP_OFFSET_386); { lea eax, [esp+EXC_JMP_OFFSET_386] }
+          EmitB($E8); EmitI32(ExcSetJmpAddr - (CodeLen + 4));  { call ExcSetJmpAddr }
+          EmitB($85); EmitB($C0);                              { test eax, eax }
+          if LabelPositions[lblId] <> -1 then
+          begin
+            EmitB($0F); EmitB($85);                            { jnz rel32 }
+            EmitI32(LabelPositions[lblId] - (CodeLen + 4));
+          end
+          else
+          begin
+            EmitB($0F); EmitB($85);
+            LabelFixupPos[LabelFixupCount] := CodeLen;
+            LabelFixupTarget[LabelFixupCount] := lblId;
+            Inc(LabelFixupCount);
+            EmitI32(0);
+          end;
+        end;
+
+      IR_EXC_LEAVE:
+        begin
+          IREmitLeaveExceptionFrames386(IRA[i]);
+        end;
+
+      IR_RAISE:
+        begin
+          if IRA[i] <> -1 then
+          begin
+            IREmitNode386(IRA[i]);
+            EmitB($A3); EmitGlobRef(BSS_EXC_OBJ);
+            classIdx := Integer(IRIVal[i]);
+            EmitB($B8); EmitI32(classIdx);
+            EmitB($A3); EmitGlobRef(BSS_EXC_CLS);
+          end;
+          EmitB($E8); EmitI32(ExcRaiseAddr - (CodeLen + 4));
+        end;
+
+      IR_EXC_STORE:
+        begin
+          si := IRA[i];
+          tk := Syms[si].TypeKind;
+          sz := TypeSize(tk);
+          EmitB($A1); EmitGlobRef(BSS_EXC_OBJ); { mov eax, [BSS_EXC_OBJ] }
+          if Syms[si].Kind = skGlobal then
+          begin
+            if sz = 1 then
+              begin EmitB($A2); EmitGlobRef(Syms[si].Offset); end
+            else if sz = 2 then
+              begin EmitB($66); EmitB($A3); EmitGlobRef(Syms[si].Offset); end
+            else
+              begin EmitB($A3); EmitGlobRef(Syms[si].Offset); end;
+          end
+          else
+          begin
+            if sz = 1 then
+              begin EmitB($88); EmitB($85); EmitI32(Syms[si].Offset); end
+            else if sz = 2 then
+              begin EmitB($66); EmitB($89); EmitB($85); EmitI32(Syms[si].Offset); end
+            else
+              begin EmitB($89); EmitB($85); EmitI32(Syms[si].Offset); end;
+          end;
+        end;
+
+      IR_EXC_MATCH:
+        begin
+          lblId := IRA[i];
+          EmitB($A1); EmitGlobRef(BSS_EXC_CLS); { mov eax, [BSS_EXC_CLS] }
+          EmitB($3D); EmitI32(Integer(IRIVal[i])); { cmp eax, imm32 }
+          if LabelPositions[lblId] <> -1 then
+          begin
+            EmitB($0F); EmitB($85);                            { jnz rel32 }
+            EmitI32(LabelPositions[lblId] - (CodeLen + 4));
+          end
+          else
+          begin
+            EmitB($0F); EmitB($85);
+            LabelFixupPos[LabelFixupCount] := CodeLen;
+            LabelFixupTarget[LabelFixupCount] := lblId;
+            Inc(LabelFixupCount);
+            EmitI32(0);
+          end;
+        end;
+
+      IR_EXC_CLEAR:
+        begin
+          EmitB($31); EmitB($C0); { xor eax, eax }
+          EmitB($A3); EmitGlobRef(BSS_EXC_OBJ);
+          EmitB($A3); EmitGlobRef(BSS_EXC_CLS);
         end;
 
       IR_STORE_SYM, IR_WRITE, IR_WRITELN:

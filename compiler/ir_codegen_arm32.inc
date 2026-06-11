@@ -3,6 +3,20 @@
   ARM32 (ARMv7-A) target backend. Operates on fixed-width 32-bit instructions.
   Registers used: r0 for expression results, r1..r3 for arguments/temporaries. }
 
+procedure IREmitLeaveExceptionFramesArm32(count: Integer);
+var i: Integer;
+begin
+  for i := 1 to count do
+  begin
+    EmitI32($E59D2000);                                         { ldr r2, [sp] }
+    EmitI32($E59F1000);                                         { ldr r1, [pc] }
+    EmitI32($EA000000);                                         { b .+8 }
+    EmitGlobRef(BSS_EXC_TOP);
+    EmitI32($E5812000);                                         { str r2, [r1] }
+    EmitI32($E28DD030);                                         { add sp, sp, #48 }
+  end;
+end;
+
 procedure EmitLoadVarArm32(idx: Integer);
 var tk: TTypeKind; sz: Integer; sgn: Boolean;
 begin
@@ -965,7 +979,8 @@ begin
 end;
 
 procedure IREmitMachineCodeArm32;
-var i, lblId, pos, targetOffset, f: Integer;
+var i, lblId, pos, targetOffset, f, si, classIdx, sz: Integer;
+    tk: TTypeKind;
     LabelPositions: array[0..MAX_IR-1] of Integer;
     LabelFixupPos: array[0..2047] of Integer;
     LabelFixupTarget: array[0..2047] of Integer;
@@ -1021,6 +1036,100 @@ begin
             IREmitNodeArm32(i);
         end;
 
+      IR_EXC_ENTER:
+        begin
+          lblId := IRA[i];
+          EmitI32($E24DD030);                                         { sub sp, sp, #48 }
+          EmitI32($E59F1000);                                         { ldr r1, [pc] }
+          EmitI32($EA000000);                                         { b .+8 }
+          EmitGlobRef(BSS_EXC_TOP);
+          EmitI32($E5912000);                                         { ldr r2, [r1] }
+          EmitI32($E58D2000);                                         { str r2, [sp] }
+          EmitI32($E1A0200D);                                         { mov r2, sp }
+          EmitI32($E5812000);                                         { str r2, [r1] }
+          EmitI32($E28D0008);                                         { add r0, sp, #8 }
+          EmitI32($EB000000 or ((((ExcSetJmpAddr - CodeLen) div 4) - 2) and $00ffffff)); { bl ExcSetJmpAddr }
+          EmitI32($E3500000);                                         { cmp r0, #0 }
+          if LabelPositions[lblId] <> -1 then
+            EmitI32($1A000000 or ((((LabelPositions[lblId] - CodeLen) div 4) - 2) and $00ffffff)) { bne label }
+          else
+          begin
+            LabelFixupPos[LabelFixupCount] := CodeLen;
+            LabelFixupTarget[LabelFixupCount] := lblId;
+            Inc(LabelFixupCount);
+            EmitI32($1A000000);
+          end;
+        end;
+
+      IR_EXC_LEAVE:
+        begin
+          IREmitLeaveExceptionFramesArm32(IRA[i]);
+        end;
+
+      IR_RAISE:
+        begin
+          if IRA[i] <> -1 then
+          begin
+            IREmitNodeArm32(IRA[i]);                                  { result in r0 }
+            EmitI32($E59F1000);                                       { ldr r1, [pc] }
+            EmitI32($EA000000);                                       { b .+8 }
+            EmitGlobRef(BSS_EXC_OBJ);
+            EmitI32($E5810000);                                       { str r0, [r1] }
+            classIdx := Integer(IRIVal[i]);
+            EmitLoadImmArm32(0, classIdx);                            { r0 = classIdx }
+            EmitI32($E59F1000);                                       { ldr r1, [pc] }
+            EmitI32($EA000000);                                       { b .+8 }
+            EmitGlobRef(BSS_EXC_CLS);
+            EmitI32($E5810000);                                       { str r0, [r1] }
+          end;
+          EmitI32($EB000000 or ((((ExcRaiseAddr - CodeLen) div 4) - 2) and $00ffffff)); { bl ExcRaiseAddr }
+        end;
+
+      IR_EXC_STORE:
+        begin
+          si := IRA[i];
+          tk := Syms[si].TypeKind;
+          sz := TypeSize(tk);
+          EmitI32($E59F1000);                                         { ldr r1, [pc] }
+          EmitI32($EA000000);                                         { b .+8 }
+          EmitGlobRef(BSS_EXC_OBJ);
+          EmitI32($E5910000);                                         { ldr r0, [r1] }
+          EmitStoreVarArm32(si);
+        end;
+
+      IR_EXC_MATCH:
+        begin
+          lblId := IRA[i];
+          EmitI32($E59F1000);                                         { ldr r1, [pc] }
+          EmitI32($EA000000);                                         { b .+8 }
+          EmitGlobRef(BSS_EXC_CLS);
+          EmitI32($E5910000);                                         { ldr r0, [r1] }
+          EmitLoadImmArm32(1, Integer(IRIVal[i]));                    { r1 = expected }
+          EmitI32($E1500001);                                         { cmp r0, r1 }
+          if LabelPositions[lblId] <> -1 then
+            EmitI32($1A000000 or ((((LabelPositions[lblId] - CodeLen) div 4) - 2) and $00ffffff)) { bne label }
+          else
+          begin
+            LabelFixupPos[LabelFixupCount] := CodeLen;
+            LabelFixupTarget[LabelFixupCount] := lblId;
+            Inc(LabelFixupCount);
+            EmitI32($1A000000);
+          end;
+        end;
+
+      IR_EXC_CLEAR:
+        begin
+          EmitI32($E3A00000);                                         { mov r0, #0 }
+          EmitI32($E59F1000);                                         { ldr r1, [pc] }
+          EmitI32($EA000000);                                         { b .+8 }
+          EmitGlobRef(BSS_EXC_OBJ);
+          EmitI32($E5810000);                                         { str r0, [r1] }
+          EmitI32($E59F1000);                                         { ldr r1, [pc] }
+          EmitI32($EA000000);                                         { b .+8 }
+          EmitGlobRef(BSS_EXC_CLS);
+          EmitI32($E5810000);                                         { str r0, [r1] }
+        end;
+
       IR_STORE_SYM, IR_WRITE, IR_WRITELN:
         IREmitNodeArm32(i);
 
@@ -1043,6 +1152,8 @@ begin
       Patch32(pos, $EA000000 or ((((targetOffset - pos) div 4) - 2) and $00ffffff))
     else if Code[pos+3] = $0A then
       Patch32(pos, $0A000000 or ((((targetOffset - pos) div 4) - 2) and $00ffffff))
+    else if Code[pos+3] = $1A then
+      Patch32(pos, $1A000000 or ((((targetOffset - pos) div 4) - 2) and $00ffffff))
     else
       Error('target arm32: invalid instruction at label fixup');
   end;

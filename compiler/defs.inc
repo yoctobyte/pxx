@@ -191,6 +191,12 @@ const
 
   EXC_FRAME_SIZE = 80;
   EXC_JMP_OFFSET = 8;
+  EXC_FRAME_SIZE_386 = 32;
+  EXC_JMP_OFFSET_386 = 8;
+  EXC_FRAME_SIZE_ARM32 = 48;
+  EXC_JMP_OFFSET_ARM32 = 8;
+  EXC_FRAME_SIZE_A64 = 128;
+  EXC_JMP_OFFSET_A64 = 16;
 
   { Data-ref sentinel base for class-reference (metaclass) values. A fixup with
     DataOff = -(CLASSREF_DATAREF_BASE + ci) is patched to UClsRTTIOff[ci] after

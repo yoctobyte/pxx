@@ -6724,12 +6724,7 @@ begin
 
   if TargetArch = TARGET_I386 then
   begin
-    { Cross-target i386: heap (New/Dispose/GetMem) and managed strings are
-      supported via the Pascal allocator + builtinheap helpers (i386 string IR
-      ops call them directly; no x86-64 shim layer). Exceptions are still
-      x86-64 only and refused until ported. }
-    if hasExceptions then
-      Error('target i386: exception runtime not yet supported');
+    { Cross-target i386: heap (New/Dispose/GetMem), managed strings, and exception runtime. }
     { Entry stub: save esp for argv access, then jmp to main body.
       mov [abs32], esp: 89 25 <GlobRef> }
     EmitB($89); EmitB($25); EmitGlobRef(BSS_INITIAL_RSP);
@@ -6737,18 +6732,13 @@ begin
   end
   else if TargetArch = TARGET_ARM32 then
   begin
-    if needsBuiltin or hasExceptions then
-      Error('target arm32: builtin/exception runtime not yet supported');
     { ARM32 entry stub: branch to main body. }
     jmpPatch := CodeLen;
     EmitI32($EA000000);
   end
   else if TargetArch = TARGET_AARCH64 then
   begin
-    { Heap + managed strings via the Pascal allocator/builtinheap helpers;
-      exception runtime not yet ported. }
-    if hasExceptions then
-      Error('target aarch64: exception runtime not yet supported');
+    { Heap + managed strings + exceptions. }
     { AArch64 entry stub: branch to main body. }
     jmpPatch := CodeLen;
     EmitI32($14000000);
