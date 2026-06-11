@@ -208,17 +208,23 @@ var
 
 { Anonymous mmap of len bytes; returns the base address (or the kernel's
   negative errno, which a subsequent access would fault on). }
-function HeapMmap(len: Int64): Int64; assembler;
-{$asmMode intel}
-asm
-  mov rsi, len
-  mov rdi, 0          { addr = NULL }
-  mov rdx, 3          { PROT_READ | PROT_WRITE }
-  mov r10, 34         { MAP_PRIVATE | MAP_ANONYMOUS }
-  mov r8, -1          { fd }
-  mov r9, 0           { offset }
-  mov rax, 9          { sys_mmap }
-  syscall
+function HeapMmap(len: Int64): Int64;
+begin
+  { mmap(NULL, len, PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_ANONYMOUS, -1, 0)
+    via the raw-syscall intrinsic so every target lowers it natively.
+    32-bit targets use mmap2 (offset in pages; 0 either way). }
+{$ifdef CPUX86_64}
+  Result := __pxxrawsyscall(9, 0, len, 3, 34, -1, 0);
+{$endif}
+{$ifdef CPUAARCH64}
+  Result := __pxxrawsyscall(222, 0, len, 3, 34, -1, 0);
+{$endif}
+{$ifdef CPU_ARM32}
+  Result := __pxxrawsyscall(192, 0, len, 3, 34, -1, 0);
+{$endif}
+{$ifdef CPU_I386}
+  Result := __pxxrawsyscall(192, 0, len, 3, 34, -1, 0);
+{$endif}
 end;
 
 function PXXAlloc(size: Int64; align: Integer): Pointer;
