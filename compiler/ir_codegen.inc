@@ -457,52 +457,41 @@ begin
 end;
 
 procedure EmitAnsiStrFromLiteral;
-var pDone: Integer;
+var pi: Integer;
 begin
   AnsiStrFromLiteralAddr := CodeLen;
-  EmitB($53); { push rbx }
-  EmitB($51); { push rcx }
-  EmitB($52); { push rdx }
-  EmitB($56); { push rsi }
-  EmitB($57); { push rdi }
-
-  EmitB($31); EmitB($C0);                         { xor eax, eax }
-  EmitB($48); EmitB($85); EmitB($FF);             { test rdi, rdi }
-  { Emit 32-bit JZ: 0F 84 <32-bit offset> }
-  EmitB($0F); EmitB($84); pDone := CodeLen; EmitI32(0);
-
-  EmitB($48); EmitB($89); EmitB($F8);             { mov rax, rdi }
-  EmitB($48); EmitB($83); EmitB($C0); EmitB($11); { add rax, 17 }
-
-  EmitB($57); { push rdi }
-  EmitB($56); { push rsi }
+  { Shim: keep the historical blob contract (rdi = len, rsi = src, every GPR
+    except rax preserved) but delegate the body to the Pascal helper in
+    builtin.pas. rdi/rsi are already the internal call convention's first two
+    argument registers, so no marshalling is needed. The callee may clobber
+    any caller-visible scratch register, hence the full save set (mirrors
+    EmitHeapAllocLocked). The lock wraps the whole call in threadsafe mode. }
+  EmitB($53);             { push rbx }
+  EmitB($51);             { push rcx }
+  EmitB($52);             { push rdx }
+  EmitB($56);             { push rsi }
+  EmitB($57);             { push rdi }
+  EmitB($41); EmitB($50); { push r8 }
+  EmitB($41); EmitB($51); { push r9 }
+  EmitB($41); EmitB($52); { push r10 }
+  EmitB($41); EmitB($53); { push r11 }
 
   EmitAcquireHeapLock;
-  EmitHeapAllocLocked;
+  pi := FindProc('PXXStrFromLit');
+  if pi < 0 then Error('compiler error: PXXStrFromLit helper not found in builtin unit');
+  EmitCallProc(pi);       { rax = managed string pointer (or nil) }
   EmitReleaseHeapLock;
 
-  EmitB($5E); { pop rsi }
-  EmitB($5F); { pop rdi }
-
-  EmitB($48); EmitB($C7); EmitB($00); EmitI32(1);  { mov qword [rax], 1 (refcount) }
-  EmitB($48); EmitB($89); EmitB($78); EmitB($08); { mov [rax+8], rdi (length) }
-
-  EmitB($48); EmitB($89); EmitB($F9);             { mov rcx, rdi }
-  EmitB($57);                                      { push rdi }
-  EmitB($48); EmitB($8D); EmitB($78); EmitB($10); { lea rdi, [rax+16] }
-  EmitB($F3); EmitB($A4);                          { rep movsb }
-  EmitB($5F);                                      { pop rdi }
-
-  EmitB($C6); EmitB($44); EmitB($38); EmitB($10); EmitB(0); { mov byte [rax+rdi+16], 0 }
-  EmitB($48); EmitB($83); EmitB($C0); EmitB($10); { add rax, 16 }
-
-  Patch32(pDone, CodeLen - (pDone + 4));
-  EmitB($5F); { pop rdi }
-  EmitB($5E); { pop rsi }
-  EmitB($5A); { pop rdx }
-  EmitB($59); { pop rcx }
-  EmitB($5B); { pop rbx }
-  EmitB($C3); { ret }
+  EmitB($41); EmitB($5B); { pop r11 }
+  EmitB($41); EmitB($5A); { pop r10 }
+  EmitB($41); EmitB($59); { pop r9 }
+  EmitB($41); EmitB($58); { pop r8 }
+  EmitB($5F);             { pop rdi }
+  EmitB($5E);             { pop rsi }
+  EmitB($5A);             { pop rdx }
+  EmitB($59);             { pop rcx }
+  EmitB($5B);             { pop rbx }
+  EmitB($C3);             { ret }
 end;
 
 procedure EmitAnsiStringRuntime;

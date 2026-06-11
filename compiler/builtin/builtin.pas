@@ -197,6 +197,7 @@ end;
 
 type
   PWord = ^Int64;   { machine-word access at an arbitrary address }
+  PByte = ^Byte;    { byte access at an arbitrary address }
 
 const
   HEAP_ARENA = 268435456;   { 256 MiB mmap chunk; anon pages fault in lazily }
@@ -315,6 +316,36 @@ begin
   end;
   PXXFree(p);
   Result := np;
+end;
+
+{ Managed-string constructor: allocate a [refcount:8][length:8][data][nul]
+  block and copy len bytes from src. Returns the data pointer (base+16) or
+  nil for an empty string. Called from the emitted runtime shim
+  (AnsiStrFromLiteralAddr); the shim holds the heap lock in threadsafe mode.
+  Raw pointers only — this code IS the string runtime, so it must not use
+  managed strings itself. }
+function PXXStrFromLit(len: Int64; src: Pointer): Pointer;
+var
+  base, s, d, i: Int64;
+begin
+  if len <= 0 then
+  begin
+    Result := nil;
+    Exit;
+  end;
+  base := Int64(PXXAlloc(len + 17, 8));
+  PWord(base)^ := 1;            { refcount }
+  PWord(base + 8)^ := len;      { length }
+  d := base + 16;
+  s := Int64(src);
+  i := 0;
+  while i < len do
+  begin
+    PByte(d + i)^ := PByte(s + i)^;
+    i := i + 1;
+  end;
+  PByte(d + len)^ := 0;         { nul terminator }
+  Result := Pointer(d);
 end;
 
 end.

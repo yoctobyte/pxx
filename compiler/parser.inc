@@ -6635,6 +6635,10 @@ begin
     dummyNames[2] := 'align'; dummyTypes[2] := tyInteger;
     i := RegisterProc('PXXRealloc', True, tyPointer, 3, dummyNames, dummyTypes);
 
+    dummyNames[0] := 'len';   dummyTypes[0] := tyInt64;
+    dummyNames[1] := 'src';   dummyTypes[1] := tyPointer;
+    i := RegisterProc('PXXStrFromLit', True, tyPointer, 2, dummyNames, dummyTypes);
+
     CurrentUnitIdx := savedUnitIdx;
   end;
   for i := 0 to MAX_GOTO_LABELS - 1 do GotoLabelIRId[i] := -1;

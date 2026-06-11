@@ -1112,6 +1112,9 @@ begin
   dummyNames[1] := 'newSize'; dummyTypes[1] := tyInt64;
   dummyNames[2] := 'align'; dummyTypes[2] := tyInteger;
   i := RegisterProc('PXXRealloc', True, tyPointer, 3, dummyNames, dummyTypes);
+  dummyNames[0] := 'len';   dummyTypes[0] := tyInt64;
+  dummyNames[1] := 'src';   dummyTypes[1] := tyPointer;
+  i := RegisterProc('PXXStrFromLit', True, tyPointer, 2, dummyNames, dummyTypes);
   CurrentUnitIdx := savedUnitIdx;
   EmitAnsiStringRuntime;
   if needsBuiltin then ParseUsesUnit('builtin');
