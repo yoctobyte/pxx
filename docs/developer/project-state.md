@@ -1,6 +1,6 @@
 # Project State Audit
 
-**Audited:** 2026-06-05
+**Audited:** 2026-06-11
 
 This is the compact current-state snapshot. Source and `make test` remain
 authoritative. Detailed design notes live in [`todo.md`](todo.md), while older
@@ -47,12 +47,11 @@ Case behavior is per origin:
 
 ## Latest Benchmark Snapshot
 
-The post-gate 2026-06-02 `make benchmark` run is recorded in
-[`benchmarks/2026-06-02-runtime-gate.md`](../benchmarks/2026-06-02-runtime-gate.md). On
-the recorded host, the self-hosted compiler remains 1.12x faster than FPC when
-compiling its expanded source tree and 18.80x faster for a batch of twenty
-Pascal hello-world compiles. The directly emitted static hello-world ELF is
-back to 287 bytes.
+The post-gate 2026-06-11 benchmark and regression audit is recorded in
+[`benchmarks/2026-06-11-vs-fpc.md`](../benchmarks/2026-06-11-vs-fpc.md). On
+the recorded host, the self-hosted compiler compiles the compiler source tree in 1.12x of FPC's time, and compiles a batch of twenty
+Pascal hello-world compiles 15.05x faster than FPC. The directly emitted static hello-world ELF is
+exactly 287 bytes.
 
 ## Latest Runtime Progress
 
