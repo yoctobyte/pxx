@@ -686,7 +686,10 @@ test-i386: $(COMPILER)
 	./$(COMPILER) --target=i386 test/test_cross_heap.pas /tmp/test_i386_heap
 	./$(COMPILER) test/test_cross_heap.pas /tmp/test_i386_heap_x64
 	test "$$(tools/run_target.sh i386 /tmp/test_i386_heap)" = "$$(/tmp/test_i386_heap_x64)"
-	@echo "i386 hello + arith + procs + loops + write + varparam + syscall + heap ok (output identical to x86-64)"
+	./$(COMPILER) -dPXX_MANAGED_STRING --target=i386 test/test_cross_string.pas /tmp/test_i386_string
+	./$(COMPILER) -dPXX_MANAGED_STRING test/test_cross_string.pas /tmp/test_i386_string_x64
+	test "$$(tools/run_target.sh i386 /tmp/test_i386_string)" = "$$(/tmp/test_i386_string_x64)"
+	@echo "i386 hello + arith + procs + loops + write + varparam + syscall + heap + string ok (output identical to x86-64)"
 
 test-aarch64: $(COMPILER)
 	./$(COMPILER) --target=aarch64 test/hello.pas /tmp/test_aarch64_hello

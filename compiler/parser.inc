@@ -5720,8 +5720,13 @@ begin
     for i := 0 to nparams-1 do
     begin
       idx := Procs[pi].Params[i].SymIdx;
-      if Syms[idx].IsArray or not TypeIsOrdinal(Syms[idx].TypeKind) then
-        Error('target i386: only ordinal parameters supported yet');
+      { Ordinals and pointer-sized handles (pointer/string/class) are passed as
+        one 4-byte stack slot. 8-byte ordinals (Int64) use the low dword only,
+        consistent with the rest of the i386 backend's fat-slot model. }
+      if Syms[idx].IsArray or
+         not (TypeIsOrdinal(Syms[idx].TypeKind) or
+              (Syms[idx].TypeKind in [tyAnsiString, tyPointer, tyClass])) then
+        Error('target i386: only ordinal/pointer parameters supported yet');
       EmitB($8B); EmitB($85); EmitI32(8 + (nparams - 1 - i) * 4); { mov eax, [ebp+disp] }
       EmitB($89); EmitB($85); EmitI32(Syms[idx].Offset);          { mov [ebp+off], eax }
     end;
@@ -5884,9 +5889,16 @@ begin
       else if (Syms[i].TypeKind = tyRecord) and Syms[i].IsArray and
               RecordHasManagedFields(Syms[i].ElemRecName) then
         zeroBytes := Syms[i].ArrLen * RecSize(Syms[i].ElemRecName);
-      if (zeroBytes > 0) and (TargetArch <> TARGET_X86_64) then
-        Error('target i386: managed local variables not yet supported');
-      if zeroBytes = TARGET_PTR_SIZE then
+      { i386: only pointer-sized managed handles (scalar AnsiString / dyn-array)
+        are supported; the larger managed aggregates (records/variants/arrays of
+        managed) are not on this target yet. }
+      if (zeroBytes > TARGET_PTR_SIZE) and (TargetArch <> TARGET_X86_64) then
+        Error('target i386: managed aggregate locals not yet supported');
+      if (zeroBytes = TARGET_PTR_SIZE) and (TargetArch = TARGET_I386) then
+      begin
+        EmitB($C7); EmitB($85); EmitI32(Syms[i].Offset); EmitI32(0);  { mov dword [ebp+off], 0 }
+      end
+      else if zeroBytes = TARGET_PTR_SIZE then
       begin
         EmitB($48); EmitB($C7); EmitB($85); EmitI32(Syms[i].Offset); EmitI32(0); { mov qword [rbp+off], 0 }
       end
@@ -6621,7 +6633,8 @@ begin
     and managed-string helpers live in the separate `builtinheap` unit so a
     heap-only program does not drag in the conversion routines (which need
     features not yet on every target). }
-  if needsAnsiRuntime then needsBuiltin := True;
+  { Plain AnsiString needs only builtinheap (allocator + PXXStr*), not the full
+    builtin conversions. Variant/Str/Val/uses pull builtin in the token loop. }
   needHeapUnit := needsHeap or needsAnsiRuntime;
 
   if needHeapUnit then
@@ -6654,6 +6667,16 @@ begin
     dummyNames[0] := 'path';  dummyTypes[0] := tyPointer;
     i := RegisterProc('PXXStrLoadFile', True, tyPointer, 1, dummyNames, dummyTypes);
 
+    dummyNames[0] := 'p';     dummyTypes[0] := tyPointer;
+    i := RegisterProc('PXXStrIncRef', False, tyPointer, 1, dummyNames, dummyTypes);
+    i := RegisterProc('PXXStrDecRef', False, tyPointer, 1, dummyNames, dummyTypes);
+
+    dummyNames[0] := 'lenA';  dummyTypes[0] := tyInt64;
+    dummyNames[1] := 'srcA';  dummyTypes[1] := tyPointer;
+    dummyNames[2] := 'lenB';  dummyTypes[2] := tyInt64;
+    dummyNames[3] := 'srcB';  dummyTypes[3] := tyPointer;
+    i := RegisterProc('PXXStrEq', True, tyInt64, 4, dummyNames, dummyTypes);
+
     CurrentUnitIdx := savedUnitIdx;
   end;
   for i := 0 to MAX_GOTO_LABELS - 1 do GotoLabelIRId[i] := -1;
@@ -6669,6 +6692,9 @@ begin
        (Tokens[i + 1].Kind = tkLParen) and
        (CaseEqual(GetTokenStr(i), 'str') or CaseEqual(GetTokenStr(i), 'val')) then
       needsBuiltin := True;
+    { Variant use needs VariantToStr (in builtin) for variant writes. }
+    if (Tokens[i].Kind = tkIdent) and CaseEqual(GetTokenStr(i), 'Variant') then
+      needsBuiltin := True;
     if Tokens[i].Kind = tkUses then
       needsBuiltin := True;
     Inc(i);
@@ -6676,11 +6702,12 @@ begin
 
   if TargetArch = TARGET_I386 then
   begin
-    { Cross-target i386: heap (New/Dispose/GetMem) is supported via the Pascal
-      allocator; the managed-string runtime and exceptions are still x86-64 only
-      and refused until ported. }
-    if needsAnsiRuntime or hasExceptions then
-      Error('target i386: string/exception runtime not yet supported');
+    { Cross-target i386: heap (New/Dispose/GetMem) and managed strings are
+      supported via the Pascal allocator + builtinheap helpers (i386 string IR
+      ops call them directly; no x86-64 shim layer). Exceptions are still
+      x86-64 only and refused until ported. }
+    if hasExceptions then
+      Error('target i386: exception runtime not yet supported');
     { Entry stub: save esp for argv access, then jmp to main body.
       mov [abs32], esp: 89 25 <GlobRef> }
     EmitB($89); EmitB($25); EmitGlobRef(BSS_INITIAL_RSP);
@@ -6709,7 +6736,10 @@ begin
     EmitB($48); EmitB($89); EmitB($24); EmitB($25); EmitGlobRef(BSS_INITIAL_RSP);
     EmitB($E9); jmpPatch := CodeLen; EmitI32(0);
   end;
-  if needsAnsiRuntime then EmitAnsiStringRuntime;
+  { The emitted AnsiString runtime is x86-64 machine code; i386 string IR ops
+    call the builtinheap Pascal helpers directly instead, so skip the shim
+    emission there (its AnsiStr*Addr labels stay 0 and are never referenced). }
+  if needsAnsiRuntime and (TargetArch <> TARGET_I386) then EmitAnsiStringRuntime;
   if hasExceptions then EnableExceptionRuntime;
 
   { Compile the runtime units before user declarations, so their proc bodies

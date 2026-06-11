@@ -3063,13 +3063,15 @@ var sz, i: Integer;
 begin
   if TargetArch = TARGET_I386 then
   begin
-    { v1: ordinal results only (managed locals cannot be created on this
-      target yet, so the release loop below has nothing to do). }
+    { Ordinal or pointer-sized (AnsiString/pointer/class handle) results. Managed
+      locals are not released here yet (v1 leaks them); the result handle's
+      ownership transfers to the caller, which treats an IR_CALL result as fresh. }
     if retSymIdx >= 0 then
     begin
       if Syms[retSymIdx].IsArray or (Syms[retSymIdx].Kind <> skLocal) or
-         not TypeIsOrdinal(Syms[retSymIdx].TypeKind) then
-        Error('target i386: only ordinal function results supported yet');
+         not (TypeIsOrdinal(Syms[retSymIdx].TypeKind) or
+              (Syms[retSymIdx].TypeKind in [tyAnsiString, tyPointer, tyClass])) then
+        Error('target i386: only ordinal/pointer/string function results supported yet');
       EmitB($8B); EmitB($85); EmitI32(Syms[retSymIdx].Offset); { mov eax, [ebp+off] }
     end;
     EmitB($C9); EmitB($C3);                                    { leave; ret }

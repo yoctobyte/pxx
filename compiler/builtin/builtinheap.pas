@@ -21,6 +21,9 @@ function PXXRealloc(p: Pointer; newSize: Int64; align: Integer): Pointer;
 function PXXStrFromLit(len: Int64; src: Pointer): Pointer;
 function PXXStrConcat(lenA: Int64; srcA: Pointer; srcB: Pointer; lenB: Int64): Pointer;
 function PXXStrLoadFile(path: Pointer): Pointer;
+procedure PXXStrIncRef(p: Pointer);
+procedure PXXStrDecRef(p: Pointer);
+function PXXStrEq(lenA: Int64; srcA: Pointer; lenB: Int64; srcB: Pointer): Int64;
 
 implementation
 
@@ -305,6 +308,55 @@ begin
   PByte(d + n)^ := 0;                      { nul terminator }
   PXXSysClose(fd);
   Result := Pointer(d);
+end;
+
+{ Managed-string refcount retain/release for targets without the hand-emitted
+  atomic blob (i386 and other cross targets). p = data pointer; refcount lives
+  at [p-16], length at [p-8]. NON-atomic — threadsafe mode is x86-64 only and
+  keeps its lock-prefixed inline version. PXXStrDecRef frees the block (base =
+  p-16) when the count reaches zero. nil is ignored. }
+procedure PXXStrIncRef(p: Pointer);
+var base: Int64;
+begin
+  if p = nil then Exit;
+  base := Int64(p) - 16;
+  PWord(base)^ := PWord(base)^ + 1;
+end;
+
+procedure PXXStrDecRef(p: Pointer);
+var base, rc: Int64;
+begin
+  if p = nil then Exit;
+  base := Int64(p) - 16;
+  rc := PWord(base)^ - 1;
+  PWord(base)^ := rc;
+  if rc = 0 then PXXFree(Pointer(base));
+end;
+
+{ Byte-wise string equality for the cross targets' compare codegen. Operands are
+  pre-decomposed into (length, data pointer) so it works uniformly for managed
+  handles and inline strings. Returns 1 when equal, 0 otherwise. }
+function PXXStrEq(lenA: Int64; srcA: Pointer; lenB: Int64; srcB: Pointer): Int64;
+var i, a, b: Int64;
+begin
+  if lenA <> lenB then
+  begin
+    Result := 0;
+    Exit;
+  end;
+  a := Int64(srcA);
+  b := Int64(srcB);
+  i := 0;
+  while i < lenA do
+  begin
+    if PByte(a + i)^ <> PByte(b + i)^ then
+    begin
+      Result := 0;
+      Exit;
+    end;
+    i := i + 1;
+  end;
+  Result := 1;
 end;
 
 end.

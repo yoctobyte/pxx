@@ -61,6 +61,28 @@ begin
   EmitB($59);                         { pop ecx }
 end;
 
+procedure EmitStrIncRef386;
+{ eax = managed-string handle. Retain (calls Pascal PXXStrIncRef). eax clobbered. }
+var pi: Integer;
+begin
+  EmitB($50);                         { push eax (arg0 = p) }
+  pi := FindProc('PXXStrIncRef');
+  if pi < 0 then Error('compiler error: PXXStrIncRef not found');
+  EmitCallProc(pi);
+  EmitB($81); EmitB($C4); EmitI32(4); { add esp, 4 }
+end;
+
+procedure EmitStrDecRef386;
+{ eax = managed-string handle. Release (calls Pascal PXXStrDecRef). eax clobbered. }
+var pi: Integer;
+begin
+  EmitB($50);                         { push eax (arg0 = p) }
+  pi := FindProc('PXXStrDecRef');
+  if pi < 0 then Error('compiler error: PXXStrDecRef not found');
+  EmitCallProc(pi);
+  EmitB($81); EmitB($C4); EmitI32(4); { add esp, 4 }
+end;
+
 procedure EmitwriteInt386;
 { eax = signed 32-bit value -> decimal on stdout. Transcription of
   symtab.inc EmitwriteInt to 32-bit registers and the int 0x80 write. }
@@ -223,8 +245,12 @@ begin
     Error('target i386: symbol kind not supported yet (' + what + ')');
   if Syms[symIdx].IsArray then
     Error('target i386: arrays not yet supported');
-  if not TypeIsOrdinal(Syms[symIdx].TypeKind) then
-    Error('target i386: only ordinal variables supported yet');
+  { Ordinals plus pointer-sized handles (managed-string/pointer/class): the
+    handle is a TARGET_PTR_SIZE scalar in the slot. Refcount bookkeeping for
+    managed strings happens in the IR_STORE_MEM publish path, not here. }
+  if not (TypeIsOrdinal(Syms[symIdx].TypeKind) or
+          (Syms[symIdx].TypeKind in [tyAnsiString, tyPointer, tyClass])) then
+    Error('target i386: only ordinal/pointer/string variables supported yet');
 end;
 
 procedure IREmitNode386(node: Integer);
@@ -245,6 +271,14 @@ begin
         if (IRIVal[node] > 2147483647) or (IRIVal[node] < -2147483648) then
           Error('target i386: integer constant exceeds 32 bits');
         EmitB($B8); EmitI32(IRIVal[node]);           { mov eax, imm32 }
+      end;
+
+    IR_CONST_STR:
+      begin
+        { Address of the interned [len:8][data] struct (inline tyString value). }
+        sVal := GetTokenStrFromRaw(IRA[node], IRB[node]);
+        si := InternStr(sVal);
+        EmitB($B8); EmitDataRef(Strs[si].Offset);    { mov eax, str_struct_addr }
       end;
 
     IR_LOAD_SYM:
@@ -319,6 +353,57 @@ begin
 
     IR_STORE_SYM:
       begin
+        si := IRA[node];
+        if Syms[si].TypeKind = tyAnsiString then
+        begin
+          { Managed-string assignment to a variable: build the new handle, then
+            publish into the slot (release old). by-ref params not supported yet.}
+          if (Syms[si].Kind = skParam) and Syms[si].IsRef then
+            Error('target i386: by-ref managed-string assignment not yet supported');
+          valNode := IRB[node];
+          if IRKind[valNode] = IR_CONST_STR then
+          begin
+            sVal := GetTokenStrFromRaw(IRA[valNode], IRB[valNode]);
+            j := InternStr(sVal);
+            EmitB($68); EmitI32(Strs[j].Len);           { push len }
+            EmitB($68); EmitDataRef(Strs[j].Offset + 8); { push src }
+            pi := FindProc('PXXStrFromLit');
+            if pi < 0 then Error('compiler error: PXXStrFromLit not found');
+            EmitCallProc(pi);
+            EmitB($81); EmitB($C4); EmitI32(8);         { add esp, 8 }
+          end
+          else
+          begin
+            IREmitNode386(valNode);                     { eax = source handle }
+            if not (((IRKind[valNode] = IR_BINOP) and
+                     (IntToTypeKind(IRTk[valNode]) = tyAnsiString)) or
+                    ((IRKind[valNode] = IR_CALL) and (IRA[valNode] >= 0))) then
+            begin
+              EmitB($50);                               { push eax (arg0) }
+              pi := FindProc('PXXStrIncRef');
+              if pi < 0 then Error('compiler error: PXXStrIncRef not found');
+              EmitCallProc(pi);
+              EmitB($58);                               { pop eax }
+            end;
+          end;
+          EmitB($50);                                   { push new handle }
+          { eax = old handle from slot }
+          if Syms[si].Kind = skGlobal then
+            begin EmitB($A1); EmitGlobRef(Syms[si].Offset); end   { mov eax, [slot] }
+          else
+            begin EmitB($8B); EmitB($85); EmitI32(Syms[si].Offset); end; { mov eax, [ebp+off] }
+          EmitB($50);                                   { push eax (arg0 = old) }
+          pi := FindProc('PXXStrDecRef');
+          if pi < 0 then Error('compiler error: PXXStrDecRef not found');
+          EmitCallProc(pi);
+          EmitB($81); EmitB($C4); EmitI32(4);           { add esp, 4 }
+          EmitB($58);                                   { pop eax (new handle) }
+          if Syms[si].Kind = skGlobal then
+            begin EmitB($A3); EmitGlobRef(Syms[si].Offset); end   { mov [slot], eax }
+          else
+            begin EmitB($89); EmitB($85); EmitI32(Syms[si].Offset); end; { mov [ebp+off], eax }
+          Exit;
+        end;
         IREmit386CheckScalarSym(IRA[node], 'store');
         IREmitNode386(IRB[node]);
         si := IRA[node];
@@ -382,6 +467,138 @@ begin
         right := IRB[node];
         op := IRC[node];
         tk := IntToTypeKind(IRTk[node]);
+
+        if (tk = tyAnsiString) and (op = Ord(tkPlus)) then
+        begin
+          { Managed-string concat: a + b -> PXXStrConcat(lenA, srcA, srcB, lenB).
+            Each operand may be a managed handle, an inline tyString, or a char.
+            Stack after both pushes: [esp]=rhs value, [esp+4]=lhs value. }
+          IREmitNode386(left);  EmitB($50);            { push lhs value }
+          IREmitNode386(right); EmitB($50);            { push rhs value }
+          { ---- srcB / lenB from rhs at [esp] -> esi/edi ---- }
+          EmitB($8B); EmitB($14); EmitB($24);          { mov edx, [esp] (rhs) }
+          if IntToTypeKind(IRTk[right]) = tyAnsiString then
+          begin
+            EmitB($31); EmitB($C9);                    { xor ecx, ecx }
+            EmitB($85); EmitB($D2);                    { test edx, edx }
+            EmitB($74); EmitB($03);                    { jz +3 }
+            EmitB($8B); EmitB($4A); EmitB($F8);        { mov ecx, [edx-8] }
+          end
+          else if IntToTypeKind(IRTk[right]) = tyString then
+          begin
+            EmitB($8B); EmitB($0A);                    { mov ecx, [edx] (len) }
+            EmitB($83); EmitB($C2); EmitB($08);        { add edx, 8 (data) }
+          end
+          else
+          begin
+            EmitB($8D); EmitB($14); EmitB($24);        { lea edx, [esp] (char byte) }
+            EmitB($B9); EmitI32(1);                    { mov ecx, 1 }
+          end;
+          EmitB($89); EmitB($D6);                      { mov esi, edx (srcB) }
+          EmitB($89); EmitB($CF);                      { mov edi, ecx (lenB) }
+          { ---- srcA / lenA from lhs at [esp+4] -> edx/ecx ---- }
+          EmitB($8B); EmitB($54); EmitB($24); EmitB($04); { mov edx, [esp+4] (lhs) }
+          if IntToTypeKind(IRTk[left]) = tyAnsiString then
+          begin
+            EmitB($31); EmitB($C9);                    { xor ecx, ecx }
+            EmitB($85); EmitB($D2);                    { test edx, edx }
+            EmitB($74); EmitB($03);                    { jz +3 }
+            EmitB($8B); EmitB($4A); EmitB($F8);        { mov ecx, [edx-8] }
+          end
+          else if IntToTypeKind(IRTk[left]) = tyString then
+          begin
+            EmitB($8B); EmitB($0A);                    { mov ecx, [edx] (len) }
+            EmitB($83); EmitB($C2); EmitB($08);        { add edx, 8 (data) }
+          end
+          else
+          begin
+            EmitB($8D); EmitB($54); EmitB($24); EmitB($04); { lea edx, [esp+4] }
+            EmitB($B9); EmitI32(1);                    { mov ecx, 1 }
+          end;
+          { push PXXStrConcat(lenA=ecx, srcA=edx, srcB=esi, lenB=edi) }
+          EmitB($51);                                  { push ecx (lenA) }
+          EmitB($52);                                  { push edx (srcA) }
+          EmitB($56);                                  { push esi (srcB) }
+          EmitB($57);                                  { push edi (lenB) }
+          pi := FindProc('PXXStrConcat');
+          if pi < 0 then Error('compiler error: PXXStrConcat not found');
+          EmitCallProc(pi);                            { eax = result }
+          EmitB($81); EmitB($C4); EmitI32(16);         { add esp, 16 }
+          { release fresh BINOP operand temporaries; [esp]=rhs, [esp+4]=lhs }
+          EmitB($50);                                  { push eax (save result) }
+          if (IRKind[left] = IR_BINOP) and (IntToTypeKind(IRTk[left]) = tyAnsiString) then
+          begin
+            EmitB($8B); EmitB($44); EmitB($24); EmitB($08); { mov eax, [esp+8] (lhs) }
+            EmitStrDecRef386;
+          end;
+          if (IRKind[right] = IR_BINOP) and (IntToTypeKind(IRTk[right]) = tyAnsiString) then
+          begin
+            EmitB($8B); EmitB($44); EmitB($24); EmitB($04); { mov eax, [esp+4] (rhs) }
+            EmitStrDecRef386;
+          end;
+          EmitB($58);                                  { pop eax (result) }
+          EmitB($81); EmitB($C4); EmitI32(8);          { add esp, 8 (drop lhs,rhs) }
+          Exit;
+        end;
+
+        if ((op = Ord(tkEq)) or (op = Ord(tkNeq))) and
+           ((IntToTypeKind(IRTk[left]) in [tyAnsiString, tyString]) or
+            (IntToTypeKind(IRTk[right]) in [tyAnsiString, tyString])) and
+           (IntToTypeKind(IRTk[left]) <> tyChar) and
+           (IntToTypeKind(IRTk[right]) <> tyChar) then
+        begin
+          { String equality: decompose each operand into (len, src) and call
+            PXXStrEq. char operands deferred (rare; falls through to error). }
+          IREmitNode386(left);  EmitB($50);            { push lhs value }
+          IREmitNode386(right); EmitB($50);            { push rhs value }
+          { rhs at [esp] -> esi=srcB, edi=lenB }
+          EmitB($8B); EmitB($14); EmitB($24);          { mov edx, [esp] }
+          if IntToTypeKind(IRTk[right]) = tyAnsiString then
+          begin
+            EmitB($31); EmitB($C9); EmitB($85); EmitB($D2);
+            EmitB($74); EmitB($03); EmitB($8B); EmitB($4A); EmitB($F8);
+          end
+          else
+          begin
+            EmitB($8B); EmitB($0A); EmitB($83); EmitB($C2); EmitB($08);
+          end;
+          EmitB($89); EmitB($D6);                      { mov esi, edx }
+          EmitB($89); EmitB($CF);                      { mov edi, ecx }
+          { lhs at [esp+4] -> edx=srcA, ecx=lenA }
+          EmitB($8B); EmitB($54); EmitB($24); EmitB($04);
+          if IntToTypeKind(IRTk[left]) = tyAnsiString then
+          begin
+            EmitB($31); EmitB($C9); EmitB($85); EmitB($D2);
+            EmitB($74); EmitB($03); EmitB($8B); EmitB($4A); EmitB($F8);
+          end
+          else
+          begin
+            EmitB($8B); EmitB($0A); EmitB($83); EmitB($C2); EmitB($08);
+          end;
+          EmitB($51);                                  { push ecx (lenA) }
+          EmitB($52);                                  { push edx (srcA) }
+          EmitB($57);                                  { push edi (lenB) }
+          EmitB($56);                                  { push esi (srcB) }
+          pi := FindProc('PXXStrEq');
+          if pi < 0 then Error('compiler error: PXXStrEq not found');
+          EmitCallProc(pi);                            { eax = 1/0 }
+          EmitB($81); EmitB($C4); EmitI32(16);         { add esp, 16 }
+          if op = Ord(tkNeq) then
+            begin EmitB($83); EmitB($F0); EmitB($01); end; { xor eax, 1 }
+          EmitB($50);                                  { push result }
+          if (IRKind[left] = IR_BINOP) and (IntToTypeKind(IRTk[left]) = tyAnsiString) then
+          begin
+            EmitB($8B); EmitB($44); EmitB($24); EmitB($08); EmitStrDecRef386;
+          end;
+          if (IRKind[right] = IR_BINOP) and (IntToTypeKind(IRTk[right]) = tyAnsiString) then
+          begin
+            EmitB($8B); EmitB($44); EmitB($24); EmitB($04); EmitStrDecRef386;
+          end;
+          EmitB($58);                                  { pop result }
+          EmitB($81); EmitB($C4); EmitI32(8);          { add esp, 8 }
+          Exit;
+        end;
+
         { tyUnknown: synthesized integer nodes (e.g. the for-loop increment)
           carry tk=0; x86-64 treats them as integers, so do we. }
         if not (TypeIsOrdinal(tk) or (tk = tyBoolean) or (tk = tyUnknown)) then
@@ -529,6 +746,55 @@ begin
     IR_STORE_MEM:
       begin
         tk := IntToTypeKind(IRTk[node]);
+        if tk = tyAnsiString then
+        begin
+          { Managed-string assignment: produce the new handle in eax, then
+            publish into the slot (store new, release old). i386 calls the
+            Pascal helpers directly (no shim/lock; threadsafe is x86-64-only). }
+          valNode := IRB[node];
+          if IRKind[valNode] = IR_CONST_STR then
+          begin
+            sVal := GetTokenStrFromRaw(IRA[valNode], IRB[valNode]);
+            si := InternStr(sVal);
+            { PXXStrFromLit(len, src): push len then src (arg0 deepest). }
+            EmitB($68); EmitI32(Strs[si].Len);          { push len }
+            EmitB($68); EmitDataRef(Strs[si].Offset + 8); { push src }
+            pi := FindProc('PXXStrFromLit');
+            if pi < 0 then Error('compiler error: PXXStrFromLit not found');
+            EmitCallProc(pi);
+            EmitB($81); EmitB($C4); EmitI32(8);         { add esp, 8 }
+          end
+          else
+          begin
+            IREmitNode386(valNode);                     { eax = source handle }
+            { Retain unless the value is already a fresh refcount-1 owner
+              (concat result, or a user-function result). }
+            if not (((IRKind[valNode] = IR_BINOP) and
+                     (IntToTypeKind(IRTk[valNode]) = tyAnsiString)) or
+                    ((IRKind[valNode] = IR_CALL) and (IRA[valNode] >= 0))) then
+            begin
+              EmitB($50);                               { push eax (arg0 = p) }
+              pi := FindProc('PXXStrIncRef');
+              if pi < 0 then Error('compiler error: PXXStrIncRef not found');
+              EmitCallProc(pi);
+              EmitB($58);                               { pop eax (restore handle) }
+            end;
+          end;
+          EmitB($50);                                   { push eax (new handle) }
+          IREmitNode386(IRA[node]);                     { eax = slot address }
+          EmitB($89); EmitB($C7);                       { mov edi, eax }
+          EmitB($8B); EmitB($37);                       { mov esi, [edi] (old) }
+          EmitB($8B); EmitB($04); EmitB($24);           { mov eax, [esp] (new) }
+          EmitB($89); EmitB($07);                       { mov [edi], eax }
+          EmitB($89); EmitB($F0);                       { mov eax, esi (old) }
+          pi := FindProc('PXXStrDecRef');
+          if pi < 0 then Error('compiler error: PXXStrDecRef not found');
+          EmitB($50);                                   { push eax (arg0 = old) }
+          EmitCallProc(pi);
+          EmitB($81); EmitB($C4); EmitI32(4);           { add esp, 4 }
+          EmitB($58);                                   { pop eax (new, discard) }
+          Exit;
+        end;
         if not (TypeIsOrdinal(tk) or (tk = tyBoolean) or (tk = tyPointer) or
                 (tk = tyChar) or (tk = tyUnknown)) then
           Error('target i386: store through pointer of this type not yet supported');
@@ -653,6 +919,31 @@ begin
             begin
               if wid > 0 then EmitwriteIntW386(wid) else EmitwriteInt386;
             end;
+          end
+          else if tk = tyAnsiString then
+          begin
+            { write(1, data, [data-8]); nil handle -> skip. len is the low
+              dword of the 8-byte length header. }
+            IREmitNode386(valNode);                      { eax = handle }
+            EmitB($85); EmitB($C0);                      { test eax, eax }
+            EmitB($74); j := CodeLen; EmitB(0);          { jz done }
+            EmitB($50);                                  { push eax (preserve) }
+            EmitB($8B); EmitB($50); EmitB($F8);          { mov edx, [eax-8] (len) }
+            EmitB($89); EmitB($C1);                      { mov ecx, eax (buf) }
+            EmitB($BB); EmitI32(STDOUT);                 { mov ebx, 1 }
+            EmitB($B8); EmitI32(4);                      { mov eax, 4 (write) }
+            EmitB($CD); EmitB($80);                      { int 0x80 }
+            EmitB($58);                                  { pop eax (handle) }
+            if (IRKind[valNode] = IR_BINOP) and
+               (IntToTypeKind(IRTk[valNode]) = tyAnsiString) then
+            begin
+              EmitB($50);                                { push eax (arg0) }
+              pi := FindProc('PXXStrDecRef');
+              if pi < 0 then Error('compiler error: PXXStrDecRef not found');
+              EmitCallProc(pi);
+              EmitB($81); EmitB($C4); EmitI32(4);        { add esp, 4 }
+            end;
+            Code[j] := Byte(CodeLen - (j + 1));          { patch jz done }
           end
           else
             Error('target i386: write of this operand not yet supported');
