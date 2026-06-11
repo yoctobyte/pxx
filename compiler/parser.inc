@@ -6739,8 +6739,10 @@ begin
   end
   else if TargetArch = TARGET_AARCH64 then
   begin
-    if needsBuiltin or needsHeap or needsAnsiRuntime or hasExceptions then
-      Error('target aarch64: heap/string/exception runtime not yet supported');
+    { Heap (New/Dispose/GetMem) supported via the Pascal allocator; string and
+      exception runtime not yet ported. }
+    if needsAnsiRuntime or hasExceptions then
+      Error('target aarch64: string/exception runtime not yet supported');
     { AArch64 entry stub: branch to main body. }
     jmpPatch := CodeLen;
     EmitI32($14000000);

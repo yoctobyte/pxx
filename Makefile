@@ -720,7 +720,10 @@ test-aarch64: $(COMPILER)
 	./$(COMPILER) --target=aarch64 test/test_cross_syscall.pas /tmp/test_aarch64_syscall
 	./$(COMPILER) test/test_cross_syscall.pas /tmp/test_aarch64_syscall_x64
 	test "$$(tools/run_target.sh aarch64 /tmp/test_aarch64_syscall)" = "$$(/tmp/test_aarch64_syscall_x64)"
-	@echo "aarch64 hello + arith + procs + loops + write + varparam + syscall ok (output identical to x86-64)"
+	./$(COMPILER) --target=aarch64 test/test_cross_heap.pas /tmp/test_aarch64_heap
+	./$(COMPILER) test/test_cross_heap.pas /tmp/test_aarch64_heap_x64
+	test "$$(tools/run_target.sh aarch64 /tmp/test_aarch64_heap)" = "$$(/tmp/test_aarch64_heap_x64)"
+	@echo "aarch64 hello + arith + procs + loops + write + varparam + syscall + heap ok (output identical to x86-64)"
 
 test-arm32: $(COMPILER)
 	./$(COMPILER) --target=arm32 test/hello.pas /tmp/test_arm32_hello

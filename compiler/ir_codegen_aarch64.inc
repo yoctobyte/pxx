@@ -3,6 +3,37 @@
   AArch64 (ARM64) target backend. Operates on fixed-width 32-bit instructions.
   Registers used: x0 for expression results, x1..x7 for arguments/temporaries. }
 
+procedure IREmitNodeAarch64(node: Integer); forward;
+
+procedure EmitLoadDataRefA64(rd, dataOff: Integer);
+{ Load a data address (or descriptor sentinel) into x[rd]. Inline literal loaded
+  as a 32-bit word, zero-extended — binaries map below 4 GiB. }
+begin
+  EmitI32($18000040 or rd);  { ldr w[rd], [pc+8] }
+  EmitI32($14000002);        { b [pc+8] }
+  EmitDataRef(dataOff);
+end;
+
+procedure EmitHeapAllocLockedA64;
+{ x0 = requested payload bytes. Returns payload pointer in x0. Delegates to the
+  Pascal PXXAlloc(size, align=8). Threadsafe locking is x86-64-only. }
+var pi: Integer;
+begin
+  EmitLoadImmA64(1, 8);              { mov x1, #8 (align) }
+  pi := FindProc('PXXAlloc');
+  if pi < 0 then Error('compiler error: Alloc helper not found in builtin unit');
+  EmitCallProc(pi);                 { x0 = pointer }
+end;
+
+procedure EmitHeapFreeLockedA64;
+{ x0 = payload pointer. Delegates to PXXFree(p). nil ignored inside. }
+var pi: Integer;
+begin
+  pi := FindProc('PXXFree');
+  if pi < 0 then Error('compiler error: Free helper not found in builtin unit');
+  EmitCallProc(pi);
+end;
+
 procedure EmitLoadVarA64(idx: Integer);
 var tk: TTypeKind; sz: Integer; sgn: Boolean;
 begin
@@ -214,6 +245,23 @@ begin
     IR_CALL:
       begin
         pi := IRA[node];
+        if pi = -Ord(tkGetMem) then
+        begin
+          si := IRC[node];
+          if si >= REC_UCLASS_BASE then
+            Error('target aarch64: class instantiation not yet supported');
+          argNode := IRB[node];               { size arg }
+          IREmitNodeAarch64(IRA[argNode]);    { size -> x0 }
+          EmitHeapAllocLockedA64;             { x0 = payload pointer }
+          Exit;
+        end;
+        if pi = -Ord(tkFreeMem) then
+        begin
+          argNode := IRB[node];               { pointer arg }
+          IREmitNodeAarch64(IRA[argNode]);    { p -> x0 }
+          EmitHeapFreeLockedA64;
+          Exit;
+        end;
         if pi < 0 then
           Error('target aarch64: builtin/special call not yet supported');
         if ProcExternal[pi] then
@@ -241,12 +289,51 @@ begin
         EmitCallProc(pi);
       end;
 
+    IR_CONST_STR:
+      begin
+        sVal := GetTokenStrFromRaw(IRA[node], IRB[node]);
+        si := InternStr(sVal);
+        EmitLoadDataRefA64(0, Strs[si].Offset);  { x0 = [len][data] struct addr }
+      end;
+
+    IR_FIELD:
+      begin
+        IREmitNodeAarch64(IRA[node]);            { base address -> x0 }
+        if Integer(IRIVal[node]) <> 0 then
+        begin
+          EmitLoadImmA64(9, IRIVal[node]);       { x9 = offset }
+          EmitI32($8B090000);                    { add x0, x0, x9 }
+        end;
+      end;
+
+    IR_INDEX:
+      begin
+        { base[index]: addr = base + (index - lo) * elemSize. No COW (managed
+          dynamic arrays use the handle loaded by IR_LEA). }
+        IREmitNodeAarch64(IRA[node]);            { base -> x0 }
+        EmitI32($F81F0FE0);                      { str x0, [sp, #-16]! }
+        IREmitNodeAarch64(IRB[node]);            { index -> x0 }
+        if IRC[node] <> 0 then
+        begin
+          EmitLoadImmA64(9, IRC[node]);          { x9 = lo }
+          EmitI32($CB090000);                    { sub x0, x0, x9 }
+        end;
+        if Integer(IRIVal[node]) <> 1 then
+        begin
+          EmitLoadImmA64(9, IRIVal[node]);       { x9 = elemSize }
+          EmitI32($9B097C00);                    { mul x0, x0, x9 }
+        end;
+        EmitI32($F84107E1);                      { ldr x1, [sp], #16 (base) }
+        EmitI32($8B010000);                      { add x0, x0, x1 }
+      end;
+
     IR_LOAD_MEM:
       begin
         IREmitNodeAarch64(IRA[node]); { address -> x0 }
         tk := IntToTypeKind(IRTk[node]);
         if not (TypeIsOrdinal(tk) or (tk = tyBoolean) or (tk = tyPointer) or
-                (tk = tyChar) or (tk = tyUnknown)) then
+                (tk = tyChar) or (tk = tyUnknown) or
+                (tk = tyAnsiString) or (tk = tyClass)) then
           Error('target aarch64: load through pointer of this type not yet supported');
         sz := TypeSize(tk);
         sgn := TypeSigned(tk);
@@ -468,7 +555,8 @@ begin
         IREmitNodeAarch64(i);
 
       IR_NOP, IR_CONST_STR, IR_CONST_INT, IR_BLOCK,
-      IR_LOAD_SYM, IR_BINOP, IR_NEG, IR_NOT, IR_ARG, IR_LEA, IR_SYSCALL: ;
+      IR_LOAD_SYM, IR_BINOP, IR_NEG, IR_NOT, IR_ARG, IR_LEA, IR_SYSCALL,
+      IR_FIELD, IR_INDEX, IR_CONST_STR: ;
 
       else
         IREmitNodeAarch64(i);
