@@ -12,4 +12,4 @@ Replace target-specific assembly-code walkers (for managed record retain/release
 
 ## Log
 - 2026-06-11 — Tier B layout RTTI completed. Added runtime helpers (`PXXRecordRetain`, `PXXRecordRelease`, `PXXDynArrayRelease`, `PXXDynArrayUnique`) in `builtinheap.pas`. Added RTTI compiler emission in `rtti_emit.inc` and resolved references dynamically in `ir_codegen.inc` to avoid link-time resolution failures for local variables. Fixed System V ABI register-clobbering bug in `SetLength` loops and fixed dynamic array field RTTI count mapping. All tests compiled, self-bootstrapped, and verified successfully.
-- 2026-06-11 — Validation pass: `git diff --check`, focused dynamic-array/managed-record tests, `make test`, and `make test-nilpy` all pass. Follow-up race condition filed as `bug-threadsafe-layout-rtti-helper-races`. Commit: this landing commit.
+- 2026-06-11 — Validation pass: `git diff --check`, focused dynamic-array/managed-record tests, `make test`, and `make test-nilpy` all pass. Follow-up race condition filed as `bug-threadsafe-layout-rtti-helper-races`. Commit: 58e3803.
