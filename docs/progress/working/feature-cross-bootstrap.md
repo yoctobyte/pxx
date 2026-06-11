@@ -2,9 +2,20 @@
 summary: "Cross-architecture compiler bootstrap (AArch64/ARM32 → byte-identical self-compile)"
 type: feature
 blocked-by: []
+owner: claude
 ---
 
 # feature-cross-bootstrap
+
+## Log
+- 2026-06-11 — claimed. Item 1 (target CPU defines, `PasApplyTargetDefines`) and
+  item 2a (clean fatal on cross-target inline asm) landed (bf3df06). Item 2c
+  done via a new route: `__pxxrawsyscall(nr, a0..a5)` intrinsic
+  (AN_SYSCALL/IR_SYSCALL) emitting the native trap on all 4 backends;
+  `HeapMmap` rewritten asm-free with per-target mmap/mmap2 branches.
+  `test/test_cross_syscall.pas` in all cross suites. Item 2b (full asm
+  encoders per arch) deliberately skipped — the guard + intrinsic cover
+  builtin.pas. Remaining: item 3, the runtime emitter port (~1200 lines/arch).
 
 ## Goal
 
