@@ -8,6 +8,18 @@ owner: claude
 # feature-cross-bootstrap
 
 ## Log
+- 2026-06-11 (i386 managed strings). AnsiString works on i386 for: literal
+  assign, concat, var-to-var (retain + COW independence), string params/results,
+  writeln, equality. i386 string IR ops call builtinheap Pascal helpers directly
+  (no x86-64 shim/lock): added PXXStrIncRef/DecRef (non-atomic refcount), PXXStrEq
+  (byte compare). EmitAnsiStringRuntime skipped on i386. needsAnsiRuntime no
+  longer forces full builtin (plain AnsiString → builtinheap only; Variant/Str/
+  Val/uses → builtin). CheckScalarSym/param-copy/epilogue/zero-init accept
+  pointer-sized handles. test_cross_string in i386 suite (needs -dPXX_MANAGED_STRING).
+  i386 string GAPS (clean errors, deferred): inline tyString concat (272-byte
+  buffer path), char-combo string compare, by-ref string params, managed-local
+  release at scope exit (v1 LEAKS locals; output correct), class instantiation,
+  exceptions. NEXT per user: Tier B RTTI layout table.
 - 2026-06-11 (focus shift: i386 first, per user). Tier A big blobs all ported
   to Pascal: FromLit→PXXStrFromLit (0887904), Concat→PXXStrConcat, LoadFile→
   PXXStrLoadFile (+ per-target PXXSysOpenRO/Lseek/Read/Close wrappers). Heap +
