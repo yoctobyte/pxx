@@ -611,6 +611,10 @@ end;
 procedure AsmParseBody(var startOff, len: Integer);
 var dir: AnsiString; v: Int64;
 begin
+  { The encoder below emits x86-64 bytes only; encoding them into a
+    cross-target ELF would be silently wrong. }
+  if TargetArch <> TARGET_X86_64 then
+    Error('inline asm is x86-64 only; not supported for this target');
   startOff := AsmBytesCount;
 
   while (CurTok.Kind <> tkEnd) and (CurTok.Kind <> tkEOF) do

@@ -412,6 +412,45 @@ begin
   PasDefine(name);
 end;
 
+procedure PasApplyTargetDefines;
+var name: AnsiString;
+begin
+  { PasInitDefines seeds host (x86-64) defines before option parsing; once the
+    target is known, swap them so ifdef CPU... branches see the target. }
+  if TargetArch = TARGET_X86_64 then Exit;
+  name := 'CPU64';
+  PasUndefine(name);
+  name := 'CPUX86_64';
+  PasUndefine(name);
+  if TargetArch = TARGET_AARCH64 then
+  begin
+    name := 'CPU64';
+    PasDefine(name);
+    name := 'CPUAARCH64';
+    PasDefine(name);
+    name := 'CPU_AARCH64';
+    PasDefine(name);
+  end
+  else if TargetArch = TARGET_ARM32 then
+  begin
+    name := 'CPU32';
+    PasDefine(name);
+    name := 'CPUARM';
+    PasDefine(name);
+    name := 'CPU_ARM32';
+    PasDefine(name);
+  end
+  else if TargetArch = TARGET_I386 then
+  begin
+    name := 'CPU32';
+    PasDefine(name);
+    name := 'CPUI386';
+    PasDefine(name);
+    name := 'CPU_I386';
+    PasDefine(name);
+  end;
+end;
+
 procedure PasDefineCommandOption(first: Integer);
 var name: AnsiString;
 begin

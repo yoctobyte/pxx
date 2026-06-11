@@ -160,6 +160,7 @@ begin
     TARGET_PTR_SIZE := 4
   else
     TARGET_PTR_SIZE := 8;
+  PasApplyTargetDefines;
   if ParamCount < i then
     begin writeln(StdErr,'usage: pascal26/PXX [--debug] [--dump-ir] [-dNAME] [-uNAME] [-Mobjfpc] [--strict-overload] [--no-unhandled-handler] <src> [out]'); Halt(1); end;
 
