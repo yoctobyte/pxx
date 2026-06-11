@@ -12,7 +12,7 @@ _none_
 
 _none_
 
-## backlog (26)
+## backlog (31)
 
 | Ticket | Type | Summary | Blocked-by |
 | --- | --- | --- | --- |
@@ -23,6 +23,11 @@ _none_
 | feature-async-coroutines | feature | Async, coroutines, and `yield` | feature-unified-heap-allocator |
 | feature-c-header-import-complex | feature | Import C headers for complex libraries (glib/GTK-grade) | — |
 | feature-compiler-warnings | feature | Compiler warning diagnostics facility | — |
+| feature-cross-bootstrap-selfhost | feature | Cross self-host bootstrap (compiler.pas → byte-identical under QEMU) | feature-cross-exceptions, feature-cross-float-variant, feature-cross-param-abi, feature-cross-codegen-gaps |
+| feature-cross-codegen-gaps | feature | Cross-target codegen gaps (deferred v1 shortcuts) | — |
+| feature-cross-exceptions | feature | Exception runtime on cross targets (i386 / ARM32 / AArch64) | — |
+| feature-cross-float-variant | feature | Float + Variant codegen on cross targets | — |
+| feature-cross-param-abi | feature | Full parameter/result ABI on cross targets | — |
 | feature-directive-if-numeric | feature | Valued defines + numeric `{$IF}` evaluation | — |
 | feature-dynamic-soname-discovery | feature | Dynamic soname discovery (no execve) | — |
 | feature-flexcolumn-directive | feature | `flexcolumn` calling-convention directive | chore-inc-to-units |
@@ -84,6 +89,10 @@ _none_
 - feature-async-coroutines
 - feature-c-header-import-complex
 - feature-compiler-warnings
+- feature-cross-codegen-gaps
+- feature-cross-exceptions
+- feature-cross-float-variant
+- feature-cross-param-abi
 - feature-directive-if-numeric
 - feature-dynamic-soname-discovery
 - feature-float-str-val
@@ -110,6 +119,10 @@ _none_
 - **1** — feature-target-esp32
 - **1** — feature-managed-exception-cleanup
 - **1** — feature-directive-if-numeric
+- **1** — feature-cross-param-abi
+- **1** — feature-cross-float-variant
+- **1** — feature-cross-exceptions
+- **1** — feature-cross-codegen-gaps
 - **1** — feature-cross-bootstrap
 - **1** — feature-compiler-warnings
 - **1** — chore-qemu-test-env
