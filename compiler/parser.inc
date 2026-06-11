@@ -5763,12 +5763,12 @@ begin
     begin
       idx := Procs[pi].Params[i].SymIdx;
       sz := ParamSize(idx);
+      { Load local offset into r9 }
+      EmitLoadImmArm32(9, Syms[idx].Offset);
+      { add r9, fp, r9 }
+      EmitI32($E08B9009);
       if i < 4 then
       begin
-        { Load local offset into r9 }
-        EmitLoadImmArm32(9, Syms[idx].Offset);
-        { add r9, fp, r9 }
-        EmitI32($E08B9009);
         { Store parameter register i (r0..r3) into [r9] }
         if sz = 1 then
           EmitI32($E5C90000 or (i shl 12))  { strb r[i], [r9] }
@@ -5778,7 +5778,16 @@ begin
           EmitI32($E5890000 or (i shl 12)); { str r[i], [r9] }
       end
       else
-        Error('target arm32: more than 4 parameters not yet supported');
+      begin
+        { Stack arguments start above saved fp/lr: [fp+8], [fp+12], ... }
+        EmitI32($E59B0000 or (8 + (i - 4) * 4)); { ldr r0, [fp, #off] }
+        if sz = 1 then
+          EmitI32($E5C90000)  { strb r0, [r9] }
+        else if sz = 2 then
+          EmitI32($E1C900B0)  { strh r0, [r9] }
+        else
+          EmitI32($E5890000); { str r0, [r9] }
+      end;
     end;
   end
   else
@@ -6715,8 +6724,8 @@ begin
   end
   else if TargetArch = TARGET_ARM32 then
   begin
-    if needsBuiltin or needsHeap or needsAnsiRuntime or hasExceptions then
-      Error('target arm32: heap/string/exception runtime not yet supported');
+    if needsBuiltin or needsAnsiRuntime or hasExceptions then
+      Error('target arm32: string/exception runtime not yet supported');
     { ARM32 entry stub: branch to main body. }
     jmpPatch := CodeLen;
     EmitI32($EA000000);

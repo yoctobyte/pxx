@@ -137,9 +137,33 @@ begin
   else Error('target arm32: unsupported compare operator');
 end;
 
+procedure EmitHeapAllocLockedArm32;
+{ r0 = requested payload bytes. Returns payload pointer in r0. }
+var pi: Integer;
+begin
+  EmitI32($E92D000E);             { push {r1,r2,r3} }
+  EmitI32($E3A01008);             { mov r1, #8 (alignment) }
+  pi := FindProc('PXXAlloc');
+  if pi < 0 then Error('compiler error: Alloc helper not found in builtin unit');
+  EmitCallProc(pi);
+  EmitI32($E8BD000E);             { pop {r1,r2,r3} }
+end;
+
+procedure EmitHeapFreeLockedArm32;
+{ r0 = payload pointer. nil is ignored inside PXXFree. }
+var pi: Integer;
+begin
+  EmitI32($E92D000E);             { push {r1,r2,r3} }
+  pi := FindProc('PXXFree');
+  if pi < 0 then Error('compiler error: Free helper not found in builtin unit');
+  EmitCallProc(pi);
+  EmitI32($E8BD000E);             { pop {r1,r2,r3} }
+end;
+
 procedure IREmitNodeArm32(node: Integer);
 var
   valNode, si, left, right, op, pi, argNode, nArgs, i, wid, sz: Integer;
+  classIdx, elemSize, lo: Integer;
   sVal: AnsiString;
   tk: TTypeKind;
   sgn: Boolean;
@@ -204,6 +228,23 @@ begin
     IR_CALL:
       begin
         pi := IRA[node];
+        if pi = -Ord(tkGetMem) then
+        begin
+          classIdx := IRC[node];
+          if classIdx >= REC_UCLASS_BASE then
+            Error('target arm32: class instantiation not yet supported');
+          argNode := IRB[node];          { size arg }
+          IREmitNodeArm32(IRA[argNode]); { size -> r0 }
+          EmitHeapAllocLockedArm32;      { r0 = payload pointer }
+          Exit;
+        end;
+        if pi = -Ord(tkFreeMem) then
+        begin
+          argNode := IRB[node];          { pointer arg }
+          IREmitNodeArm32(IRA[argNode]); { p -> r0 }
+          EmitHeapFreeLockedArm32;
+          Exit;
+        end;
         if pi < 0 then
           Error('target arm32: builtin/special call not yet supported');
         if ProcExternal[pi] then
@@ -222,13 +263,66 @@ begin
         end;
         if nArgs <> Procs[pi].ParamCount then
           Error('target arm32: call argument count mismatch');
-        if nArgs > 4 then
-          Error('target arm32: procedures with more than 4 arguments not yet supported');
 
-        for i := nArgs - 1 downto 0 do
-          EmitI32($E8BD0000 or (1 shl i)); { pop {r[i]} }
+        for i := 0 to nArgs - 1 do
+        begin
+          if i < 4 then
+            EmitI32($E59D0000 or (i shl 12) or ((nArgs - 1 - i) * 4)); { ldr r[i], [sp, #off] }
+        end;
+        if nArgs > 0 then
+        begin
+          if nArgs < 4 then
+            EmitLoadImmArm32(9, nArgs * 4)
+          else
+            EmitLoadImmArm32(9, 16);
+          EmitI32($E08DD009); { add sp, sp, r9; leaves stack args at [sp] }
+        end;
 
         EmitCallProc(pi);
+        if nArgs > 4 then
+        begin
+          EmitLoadImmArm32(9, (nArgs - 4) * 4);
+          EmitI32($E08DD009); { add sp, sp, r9 }
+        end;
+      end;
+
+    IR_FIELD:
+      begin
+        IREmitNodeArm32(IRA[node]); { base address -> r0 }
+        if Integer(IRIVal[node]) <> 0 then
+        begin
+          EmitLoadImmArm32(1, Integer(IRIVal[node]));
+          EmitI32($E0800001);       { add r0, r0, r1 }
+        end;
+      end;
+
+    IR_INDEX:
+      begin
+        left := IRA[node];
+        right := IRB[node];
+        lo := IRC[node];
+        elemSize := Integer(IRIVal[node]);
+        IREmitNodeArm32(left);      { base address -> r0 }
+        EmitI32($E92D0001);         { push {r0} }
+        IREmitNodeArm32(right);     { index -> r0 }
+        if lo <> 0 then
+        begin
+          EmitLoadImmArm32(1, lo);
+          EmitI32($E0400001);       { sub r0, r0, r1 }
+        end;
+        if elemSize = 8 then
+          EmitI32($E1A00180)        { lsl r0, r0, #3 }
+        else if elemSize = 4 then
+          EmitI32($E1A00100)        { lsl r0, r0, #2 }
+        else if elemSize = 2 then
+          EmitI32($E1A00080)        { lsl r0, r0, #1 }
+        else if elemSize <> 1 then
+        begin
+          EmitLoadImmArm32(1, elemSize);
+          EmitI32($E0000091);       { mul r0, r1, r0 }
+        end;
+        EmitI32($E8BD0002);         { pop {r1} = base }
+        EmitI32($E0800001);         { add r0, r0, r1 }
       end;
 
     IR_LOAD_MEM:
@@ -454,7 +548,8 @@ begin
         IREmitNodeArm32(i);
 
       IR_NOP, IR_CONST_STR, IR_CONST_INT, IR_BLOCK,
-      IR_LOAD_SYM, IR_BINOP, IR_NEG, IR_NOT, IR_ARG, IR_LEA, IR_SYSCALL: ;
+      IR_LOAD_SYM, IR_BINOP, IR_NEG, IR_NOT, IR_ARG, IR_LEA, IR_SYSCALL,
+      IR_FIELD, IR_INDEX: ;
 
       else
         IREmitNodeArm32(i);

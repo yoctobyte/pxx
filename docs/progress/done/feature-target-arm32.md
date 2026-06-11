@@ -1,6 +1,7 @@
 # Compile target: ARM32 Linux
 
-- **Status:** working
+- **Type:** feature
+- **Status:** done
 - **Owner:** claude
 - **Blocked-by:** feature-target-aarch64
 - **Unblocks:** feature-target-esp32, feature-additional-cpu-targets
@@ -32,3 +33,10 @@ roadmap staging, not a hard requirement. Move to `urgent/` to pull it forward.
 ## Log
 - 2026-06-06 — ticket opened from user request + roadmap Phase 4.
 - 2026-06-10 — ticket claimed; starting implementation of ARM32 target support.
+- 2026-06-11 — completed ARM32 Linux target slice. `make test-arm32` passes
+  under `tools/run_target.sh arm32` with output identical to x86-64 for hello,
+  arithmetic, procedures, loops, writes, var/out params, raw syscalls, and heap
+  allocation/free including pointer dereference, record fields, and static
+  array indexing (`test/test_cross_heap.pas`). Added ARM32 stack-argument
+  support for helper procedures with more than four parameters and enabled the
+  Pascal `builtinheap` allocator path. Commit: pending.
