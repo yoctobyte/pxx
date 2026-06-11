@@ -384,4 +384,97 @@ begin
   Result := Pointer(d);
 end;
 
+{ Per-target syscall wrappers for the file-load helper. AArch64 has no plain
+  open/lseek/read/close in the legacy slots, so it uses openat(AT_FDCWD=-100).
+  i386/arm32 use 32-bit lseek (files < 2 GiB); good enough for source loads. }
+function PXXSysOpenRO(path: Pointer): Int64;
+begin
+{$ifdef CPUX86_64}
+  Result := __pxxrawsyscall(2, Int64(path), 0, 0);
+{$endif}
+{$ifdef CPU_I386}
+  Result := __pxxrawsyscall(5, Int64(path), 0, 0);
+{$endif}
+{$ifdef CPU_ARM32}
+  Result := __pxxrawsyscall(5, Int64(path), 0, 0);
+{$endif}
+{$ifdef CPUAARCH64}
+  Result := __pxxrawsyscall(56, -100, Int64(path), 0, 0);
+{$endif}
+end;
+
+function PXXSysLseek(fd, offset, whence: Int64): Int64;
+begin
+{$ifdef CPUX86_64}
+  Result := __pxxrawsyscall(8, fd, offset, whence);
+{$endif}
+{$ifdef CPU_I386}
+  Result := __pxxrawsyscall(19, fd, offset, whence);
+{$endif}
+{$ifdef CPU_ARM32}
+  Result := __pxxrawsyscall(19, fd, offset, whence);
+{$endif}
+{$ifdef CPUAARCH64}
+  Result := __pxxrawsyscall(62, fd, offset, whence);
+{$endif}
+end;
+
+function PXXSysRead(fd, buf, count: Int64): Int64;
+begin
+{$ifdef CPUX86_64}
+  Result := __pxxrawsyscall(0, fd, buf, count);
+{$endif}
+{$ifdef CPU_I386}
+  Result := __pxxrawsyscall(3, fd, buf, count);
+{$endif}
+{$ifdef CPU_ARM32}
+  Result := __pxxrawsyscall(3, fd, buf, count);
+{$endif}
+{$ifdef CPUAARCH64}
+  Result := __pxxrawsyscall(63, fd, buf, count);
+{$endif}
+end;
+
+function PXXSysClose(fd: Int64): Int64;
+begin
+{$ifdef CPUX86_64}
+  Result := __pxxrawsyscall(3, fd);
+{$endif}
+{$ifdef CPU_I386}
+  Result := __pxxrawsyscall(6, fd);
+{$endif}
+{$ifdef CPU_ARM32}
+  Result := __pxxrawsyscall(6, fd);
+{$endif}
+{$ifdef CPUAARCH64}
+  Result := __pxxrawsyscall(57, fd);
+{$endif}
+end;
+
+{ Read an entire file into a fresh managed string. path = nul-terminated
+  managed-string data pointer (or nil). Returns the data pointer (refcount 1,
+  length = bytes read, nul-terminated) or nil on open failure. Called from the
+  AnsiStrLoadFileAddr shim under the heap lock. Raw pointers only. }
+function PXXStrLoadFile(path: Pointer): Pointer;
+var
+  fd, size, base, d, n: Int64;
+begin
+  Result := nil;
+  if path = nil then Exit;
+  fd := PXXSysOpenRO(path);
+  if fd < 0 then Exit;
+  size := PXXSysLseek(fd, 0, 2);          { SEEK_END }
+  PXXSysLseek(fd, 0, 0);                   { SEEK_SET }
+  base := Int64(PXXAlloc(size + 17, 8));
+  PWord(base)^ := 1;                       { refcount }
+  PWord(base + 8)^ := size;                { length (corrected below) }
+  d := base + 16;
+  n := PXXSysRead(fd, d, size);
+  if n < 0 then n := 0;
+  PWord(base + 8)^ := n;                   { actual bytes read }
+  PByte(d + n)^ := 0;                      { nul terminator }
+  PXXSysClose(fd);
+  Result := Pointer(d);
+end;
+
 end.

@@ -6645,6 +6645,9 @@ begin
     dummyNames[3] := 'lenB';  dummyTypes[3] := tyInt64;
     i := RegisterProc('PXXStrConcat', True, tyPointer, 4, dummyNames, dummyTypes);
 
+    dummyNames[0] := 'path';  dummyTypes[0] := tyPointer;
+    i := RegisterProc('PXXStrLoadFile', True, tyPointer, 1, dummyNames, dummyTypes);
+
     CurrentUnitIdx := savedUnitIdx;
   end;
   for i := 0 to MAX_GOTO_LABELS - 1 do GotoLabelIRId[i] := -1;

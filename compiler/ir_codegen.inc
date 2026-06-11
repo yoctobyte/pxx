@@ -619,72 +619,35 @@ begin
   EmitB($5B);             { pop rbx }
   EmitB($C3);             { ret }
 
-  { rdi = path managed-string data pointer (nul-terminated) or nil.
-    Returns rax = a fresh managed-string data pointer (refcount 1, length =
-    bytes read, nul-terminated) holding the file contents, or nil on open
-    failure. The file is sized with lseek so the buffer is exact (the frozen
-    EmitLoadFile capped at STRING_CAP and truncated larger inputs). fd/size/data
-    live in r12/r13/r14 — EmitHeapAllocLocked preserves those. }
+  { Shim → PXXStrLoadFile(path). Caller passes the path data pointer in rdi
+    (param 0). Save scratch, take the heap lock for the inner PXXAlloc, call. }
   AnsiStrLoadFileAddr := CodeLen;
-  EmitB($41); EmitB($54);                          { push r12 }
-  EmitB($41); EmitB($55);                          { push r13 }
-  EmitB($41); EmitB($56);                          { push r14 }
+  EmitB($53);             { push rbx }
+  EmitB($51);             { push rcx }
+  EmitB($52);             { push rdx }
+  EmitB($56);             { push rsi }
+  EmitB($57);             { push rdi }
+  EmitB($41); EmitB($50); { push r8 }
+  EmitB($41); EmitB($51); { push r9 }
+  EmitB($41); EmitB($52); { push r10 }
+  EmitB($41); EmitB($53); { push r11 }
 
-  { open(path, O_RDONLY, 0); rdi already = path }
-  MovRsiImm(0); MovRdxImm(0); MovRaxImm(SYS_OPEN); EmitSyscall;
-  EmitB($48); EmitB($85); EmitB($C0);              { test rax, rax }
-  EmitB($0F); EmitB($88); pFail := CodeLen; EmitI32(0); { js fail }
-  EmitB($49); EmitB($89); EmitB($C4);              { mov r12, rax (fd) }
-
-  { size = lseek(fd, 0, SEEK_END=2) }
-  EmitB($4C); EmitB($89); EmitB($E7);              { mov rdi, r12 }
-  MovRsiImm(0); MovRdxImm(2); MovRaxImm(SYS_LSEEK); EmitSyscall;
-  EmitB($49); EmitB($89); EmitB($C5);              { mov r13, rax (size) }
-
-  { lseek(fd, 0, SEEK_SET=0) }
-  EmitB($4C); EmitB($89); EmitB($E7);              { mov rdi, r12 }
-  MovRsiImm(0); MovRdxImm(0); MovRaxImm(SYS_LSEEK); EmitSyscall;
-
-  { allocate size+17 (refcount8 + length8 + data + nul) }
-  EmitB($4C); EmitB($89); EmitB($E8);              { mov rax, r13 }
-  EmitB($48); EmitB($83); EmitB($C0); EmitB($11);  { add rax, 17 }
   EmitAcquireHeapLock;
-  EmitHeapAllocLocked;
+  pFail := FindProc('PXXStrLoadFile');
+  if pFail < 0 then Error('compiler error: PXXStrLoadFile helper not found in builtin unit');
+  EmitCallProc(pFail);    { rax = managed string pointer (or nil) }
   EmitReleaseHeapLock;
-  EmitB($48); EmitB($C7); EmitB($00); EmitI32(1);  { mov qword [rax], 1 (refcount) }
-  EmitB($4C); EmitB($89); EmitB($68); EmitB($08);  { mov [rax+8], r13 (length=size) }
-  EmitB($4C); EmitB($8D); EmitB($70); EmitB($10);  { lea r14, [rax+16] (data) }
 
-  { read(fd, data, size) }
-  EmitB($4C); EmitB($89); EmitB($E7);              { mov rdi, r12 }
-  EmitB($4C); EmitB($89); EmitB($F6);              { mov rsi, r14 }
-  EmitB($4C); EmitB($89); EmitB($EA);              { mov rdx, r13 }
-  MovRaxImm(SYS_READ); EmitSyscall;
-  EmitB($48); EmitB($85); EmitB($C0);              { test rax, rax }
-  EmitB($79); EmitB($02);                          { jns +2 }
-  EmitB($31); EmitB($C0);                          { xor eax, eax (clamp negative read) }
-  EmitB($49); EmitB($89); EmitB($46); EmitB($F8);  { mov [r14-8], rax (length=bytes read) }
-
-  { nul-terminate at data + length }
-  EmitB($4C); EmitB($89); EmitB($F1);              { mov rcx, r14 }
-  EmitB($48); EmitB($01); EmitB($C1);              { add rcx, rax }
-  EmitB($C6); EmitB($01); EmitB(0);                { mov byte [rcx], 0 }
-
-  { close(fd) }
-  EmitB($4C); EmitB($89); EmitB($E7);              { mov rdi, r12 }
-  MovRaxImm(SYS_CLOSE); EmitSyscall;
-
-  EmitB($4C); EmitB($89); EmitB($F0);              { mov rax, r14 (return data ptr) }
-  EmitB($EB); pLfDone := CodeLen; EmitB(0);        { jmp done }
-
-  Patch32(pFail, CodeLen - (pFail + 4));
-  EmitB($31); EmitB($C0);                          { xor eax, eax (nil) }
-
-  Patch8(pLfDone, CodeLen - (pLfDone + 1));
-  EmitB($41); EmitB($5E);                          { pop r14 }
-  EmitB($41); EmitB($5D);                          { pop r13 }
-  EmitB($41); EmitB($5C);                          { pop r12 }
-  EmitB($C3);                                      { ret }
+  EmitB($41); EmitB($5B); { pop r11 }
+  EmitB($41); EmitB($5A); { pop r10 }
+  EmitB($41); EmitB($59); { pop r9 }
+  EmitB($41); EmitB($58); { pop r8 }
+  EmitB($5F);             { pop rdi }
+  EmitB($5E);             { pop rsi }
+  EmitB($5A);             { pop rdx }
+  EmitB($59);             { pop rcx }
+  EmitB($5B);             { pop rbx }
+  EmitB($C3);             { ret }
 end;
 
 procedure EmitLoadManagedHandleRdi(symIdx: Integer);
