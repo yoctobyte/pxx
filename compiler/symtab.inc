@@ -3105,11 +3105,30 @@ begin
   end;
   if TargetArch = TARGET_ARM32 then
   begin
+    { Release local managed variables before returning. }
+    if CurProc >= 0 then
+    begin
+      for i := Procs[CurProc].ScopeBase to SymCount - 1 do
+      begin
+        if (Syms[i].Kind = skLocal) and (i <> retSymIdx) and
+           (Syms[i].TypeKind = tyAnsiString) then
+        begin
+          EmitLoadVarArm32(i);                         { r0 = handle }
+          EmitI32($E92D000E);                          { push {r1,r2,r3} }
+          pi := FindProc('PXXStrDecRef');
+          if pi < 0 then Error('compiler error: PXXStrDecRef not found');
+          EmitCallProc(pi);
+          EmitI32($E8BD000E);                          { pop {r1,r2,r3} }
+        end;
+      end;
+    end;
+
     if retSymIdx >= 0 then
     begin
       if Syms[retSymIdx].IsArray or (Syms[retSymIdx].Kind <> skLocal) or
-         not TypeIsOrdinal(Syms[retSymIdx].TypeKind) then
-        Error('target arm32: only ordinal function results supported yet');
+         not (TypeIsOrdinal(Syms[retSymIdx].TypeKind) or
+              (Syms[retSymIdx].TypeKind in [tyAnsiString, tyPointer, tyClass])) then
+        Error('target arm32: only ordinal/pointer/string function results supported yet');
       EmitLoadVarArm32(retSymIdx);
     end;
     EmitI32($E1A0D00B);  { mov sp, fp }

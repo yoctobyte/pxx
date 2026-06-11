@@ -160,10 +160,142 @@ begin
   EmitI32($E8BD000E);             { pop {r1,r2,r3} }
 end;
 
+procedure IREmitNodeArm32(node: Integer); forward;
+
+procedure EmitStrIncRefArm32;
+{ r0 = managed-string handle. Preserve r0-r3 for expression callers. }
+var pi: Integer;
+begin
+  EmitI32($E92D000F);             { push {r0,r1,r2,r3} }
+  pi := FindProc('PXXStrIncRef');
+  if pi < 0 then Error('compiler error: PXXStrIncRef not found');
+  EmitCallProc(pi);
+  EmitI32($E8BD000F);             { pop {r0,r1,r2,r3} }
+end;
+
+procedure EmitStrDecRefArm32;
+{ r0 = managed-string handle. r0 is clobbered. }
+var pi: Integer;
+begin
+  EmitI32($E92D000E);             { push {r1,r2,r3} }
+  pi := FindProc('PXXStrDecRef');
+  if pi < 0 then Error('compiler error: PXXStrDecRef not found');
+  EmitCallProc(pi);
+  EmitI32($E8BD000E);             { pop {r1,r2,r3} }
+end;
+
+procedure EmitLoadDataRefArm32(rd, dataOff: Integer);
+begin
+  EmitI32($E59F0000 or (rd shl 12));  { ldr rd, [pc] }
+  EmitI32($EA000000);                 { b .+8 }
+  EmitDataRef(dataOff);
+end;
+
+procedure EmitAnsiStringFromNodeArm32(valNode: Integer);
+{ Build a managed AnsiString handle in r0 from a char, inline string, literal,
+  or existing AnsiString-like expression. Existing handles are retained unless
+  they are fresh owners produced by concat/user function results. }
+var sVal: AnsiString; si, pi: Integer; tk: TTypeKind;
+begin
+  if IRKind[valNode] = IR_CONST_STR then
+  begin
+    sVal := GetTokenStrFromRaw(IRA[valNode], IRB[valNode]);
+    si := InternStr(sVal);
+    EmitLoadImmArm32(0, Strs[si].Len);
+    EmitLoadDataRefArm32(1, Strs[si].Offset + 8);
+    pi := FindProc('PXXStrFromLit');
+    if pi < 0 then Error('compiler error: PXXStrFromLit not found');
+    EmitCallProc(pi);
+    Exit;
+  end;
+
+  tk := IntToTypeKind(IRTk[valNode]);
+  if tk = tyChar then
+  begin
+    IREmitNodeArm32(valNode);       { r0 = char code }
+    EmitI32($E92D0001);             { push {r0}; byte lives at [sp] }
+    EmitI32($E3A00001);             { mov r0, #1 }
+    EmitI32($E28D1000);             { add r1, sp, #0 }
+    pi := FindProc('PXXStrFromLit');
+    if pi < 0 then Error('compiler error: PXXStrFromLit not found');
+    EmitCallProc(pi);
+    EmitI32($E28DD004);             { add sp, sp, #4 }
+  end
+  else if tk = tyString then
+  begin
+    IREmitNodeArm32(valNode);       { r0 = inline string buffer }
+    EmitI32($E1A02000);             { mov r2, r0 }
+    EmitI32($E5920000);             { ldr r0, [r2] (len) }
+    EmitI32($E2821008);             { add r1, r2, #8 (src) }
+    pi := FindProc('PXXStrFromLit');
+    if pi < 0 then Error('compiler error: PXXStrFromLit not found');
+    EmitCallProc(pi);
+  end
+  else
+  begin
+    IREmitNodeArm32(valNode);       { r0 = handle }
+    if not (((IRKind[valNode] = IR_BINOP) and
+             (IntToTypeKind(IRTk[valNode]) = tyAnsiString)) or
+            ((IRKind[valNode] = IR_CALL) and (IRA[valNode] >= 0))) then
+      EmitStrIncRefArm32;
+  end;
+end;
+
+procedure EmitArm32StringParts(valueReg, srcReg, lenReg: Integer; tk: TTypeKind;
+                               charStackOff: Integer);
+{ Convert an evaluated string operand into (src,len). For tyChar, valueReg is
+  the pushed word value and charStackOff points to that byte on the stack. }
+var jmpPos: Integer;
+begin
+  if tk = tyAnsiString then
+  begin
+    EmitI32($E1A00000 or (srcReg shl 12) or valueReg); { mov src, value }
+    EmitLoadImmArm32(lenReg, 0);
+    EmitI32($E3500000 or (valueReg shl 16));           { cmp value, #0 }
+    jmpPos := CodeLen;
+    EmitI32($0A000000);                                { beq done }
+    EmitI32($E5100008 or (valueReg shl 16) or (lenReg shl 12)); { ldr len, [value,#-8] }
+    Patch32(jmpPos, $0A000000 or ((((CodeLen - jmpPos) div 4) - 2) and $00ffffff));
+  end
+  else if tk = tyString then
+  begin
+    EmitI32($E5900000 or (valueReg shl 16) or (lenReg shl 12)); { ldr len, [value] }
+    EmitI32($E2800008 or (valueReg shl 16) or (srcReg shl 12)); { add src, value, #8 }
+  end
+  else
+  begin
+    EmitLoadImmArm32(lenReg, 1);
+    if (charStackOff >= 0) and (charStackOff <= 255) then
+      EmitI32($E28D0000 or (srcReg shl 12) or charStackOff)     { add src, sp, #off }
+    else
+    begin
+      EmitLoadImmArm32(srcReg, charStackOff);
+      EmitI32($E08D0000 or (srcReg shl 12) or srcReg);          { add src, sp, src }
+    end;
+  end;
+end;
+
+procedure EmitArm32CopyBytes(countReg, srcReg, dstReg: Integer);
+var donePos, loopStart: Integer;
+begin
+  EmitI32($E3500000 or (countReg shl 16)); { cmp count, #0 }
+  donePos := CodeLen;
+  EmitI32($0A000000);                      { beq done }
+  loopStart := CodeLen;
+  EmitI32($E5D08000 or (srcReg shl 16));   { ldrb r8, [src] }
+  EmitI32($E5C08000 or (dstReg shl 16));   { strb r8, [dst] }
+  EmitI32($E2800001 or (srcReg shl 16) or (srcReg shl 12)); { add src, src, #1 }
+  EmitI32($E2800001 or (dstReg shl 16) or (dstReg shl 12)); { add dst, dst, #1 }
+  EmitI32($E2500001 or (countReg shl 16) or (countReg shl 12)); { subs count, count, #1 }
+  EmitI32($1A000000 or ((((loopStart - CodeLen) div 4) - 2) and $00ffffff));
+  Patch32(donePos, $0A000000 or ((((CodeLen - donePos) div 4) - 2) and $00ffffff));
+end;
+
 procedure IREmitNodeArm32(node: Integer);
 var
-  valNode, si, left, right, op, pi, argNode, nArgs, i, wid, sz: Integer;
+  valNode, si, left, right, op, pi, argNode, nArgs, i, j, wid, sz: Integer;
   classIdx, elemSize, lo: Integer;
+  lhsTk, rhsTk: TTypeKind;
   sVal: AnsiString;
   tk: TTypeKind;
   sgn: Boolean;
@@ -175,11 +307,45 @@ begin
     IR_CONST_INT:
       EmitLoadImmArm32(0, IRIVal[node]);
 
+    IR_CONST_STR:
+      begin
+        sVal := GetTokenStrFromRaw(IRA[node], IRB[node]);
+        si := InternStr(sVal);
+        EmitLoadDataRefArm32(0, Strs[si].Offset);
+      end;
+
     IR_LOAD_SYM:
       EmitLoadVarArm32(IRA[node]);
 
     IR_STORE_SYM:
       begin
+        si := IRA[node];
+        if Syms[si].TypeKind = tyAnsiString then
+        begin
+          valNode := IRB[node];
+          EmitAnsiStringFromNodeArm32(valNode);       { r0 = new handle }
+          if (Syms[si].Kind = skParam) and Syms[si].IsRef then
+          begin
+            EmitI32($E92D0001);                       { push {r0} new }
+            EmitLoadImmArm32(9, Syms[si].Offset);
+            EmitI32($E08B9009);                       { add r9, fp, r9 }
+            EmitI32($E5991000);                       { ldr r1, [r9] slot addr }
+            EmitI32($E5910000);                       { ldr r0, [r1] old }
+            EmitI32($E59D2000);                       { ldr r2, [sp] new }
+            EmitI32($E5812000);                       { str r2, [r1] }
+            EmitStrDecRefArm32;
+            EmitI32($E28DD004);                       { add sp, sp, #4 }
+          end
+          else
+          begin
+            EmitI32($E92D0001);                       { push {r0} new }
+            EmitLoadVarArm32(si);                     { r0 = old }
+            EmitStrDecRefArm32;
+            EmitI32($E8BD0001);                       { pop {r0} new }
+            EmitStoreVarArm32(si);
+          end;
+          Exit;
+        end;
         IREmitNodeArm32(IRB[node]);
         EmitStoreVarArm32(IRA[node]);
       end;
@@ -187,12 +353,144 @@ begin
     IR_LEA:
       EmitLoadVarAddrArm32(IRA[node]);
 
+    IR_SLOTADDR:
+      begin
+        si := IRA[node];
+        if Syms[si].Kind = skGlobal then
+        begin
+          EmitI32($E59F0000);  { ldr r0, [pc] }
+          EmitI32($EA000000);  { b .+8 }
+          EmitGlobRef(Syms[si].Offset);
+        end
+        else
+        begin
+          EmitLoadImmArm32(0, Syms[si].Offset);
+          EmitI32($E08B0000);  { add r0, fp, r0 }
+        end;
+      end;
+
     IR_BINOP:
       begin
         left := IRA[node];
         right := IRB[node];
         op := IRC[node];
         tk := IntToTypeKind(IRTk[node]);
+
+        if (tk = tyAnsiString) and (op = Ord(tkPlus)) then
+        begin
+          lhsTk := IntToTypeKind(IRTk[left]);
+          rhsTk := IntToTypeKind(IRTk[right]);
+          IREmitNodeArm32(left);  EmitI32($E92D0001); { push lhs }
+          IREmitNodeArm32(right); EmitI32($E92D0001); { push rhs }
+
+          EmitI32($E59D0000);                         { r0 = rhs value }
+          EmitArm32StringParts(0, 1, 2, rhsTk, 0);    { r1=srcB, r2=lenB }
+          EmitI32($E92D0006);                         { push {r1,r2} }
+          EmitI32($E59D000C);                         { r0 = lhs value }
+          EmitArm32StringParts(0, 1, 2, lhsTk, 12);   { r1=srcA, r2=lenA }
+          EmitI32($E1A00002);                         { mov r0, r2 (lenA) }
+          EmitI32($E59D2000);                         { r2 = srcB }
+          EmitI32($E59D3004);                         { r3 = lenB }
+          EmitI32($E28DD008);                         { add sp, sp, #8 }
+          pi := FindProc('PXXStrConcat');
+          if pi < 0 then Error('compiler error: PXXStrConcat not found');
+          EmitCallProc(pi);                           { r0 = result }
+
+          EmitI32($E92D0001);                         { push result }
+          if (IRKind[left] = IR_BINOP) and (IntToTypeKind(IRTk[left]) = tyAnsiString) then
+          begin
+            EmitI32($E59D0008);                       { lhs }
+            EmitStrDecRefArm32;
+          end;
+          if (IRKind[right] = IR_BINOP) and (IntToTypeKind(IRTk[right]) = tyAnsiString) then
+          begin
+            EmitI32($E59D0004);                       { rhs }
+            EmitStrDecRefArm32;
+          end;
+          EmitI32($E8BD0001);                         { pop result }
+          EmitI32($E28DD008);                         { drop rhs,lhs }
+          Exit;
+        end;
+
+        if (tk = tyString) and (op = Ord(tkPlus)) then
+        begin
+          lhsTk := IntToTypeKind(IRTk[left]);
+          rhsTk := IntToTypeKind(IRTk[right]);
+          IREmitNodeArm32(left);  EmitI32($E92D0001); { push lhs }
+          IREmitNodeArm32(right); EmitI32($E92D0001); { push rhs }
+
+          EmitLoadImmArm32(9, 272);
+          EmitI32($E04DD009);                         { sub sp, sp, r9 }
+          EmitI32($E1A0300D);                         { mov r3, sp (buffer) }
+
+          EmitI32($E59D0114);                         { r0 = lhs value [sp+276] }
+          EmitArm32StringParts(0, 5, 4, lhsTk, 276);  { r5=src, r4=len }
+          EmitI32($E1A07004);                         { mov r7, r4 (left len) }
+          EmitI32($E2836008);                         { add r6, r3, #8 (dst) }
+          EmitArm32CopyBytes(4, 5, 6);
+
+          EmitI32($E59D0110);                         { r0 = rhs value [sp+272] }
+          EmitArm32StringParts(0, 5, 4, rhsTk, 272);  { r5=src, r4=len }
+          EmitI32($E1A09004);                         { mov r9, r4 (right len) }
+          EmitI32($E2836008);                         { add r6, r3, #8 }
+          EmitI32($E0866007);                         { add r6, r6, r7 }
+          EmitArm32CopyBytes(4, 5, 6);
+
+          EmitI32($E0877009);                         { add r7, r7, r9 (total len) }
+          EmitI32($E3570C01);                         { cmp r7, #256 }
+          j := CodeLen;
+          EmitI32($DA000000);                         { ble cap_done }
+          EmitLoadImmArm32(7, 256);
+          Patch32(j, $DA000000 or ((((CodeLen - j) div 4) - 2) and $00ffffff));
+          EmitI32($E5837000);                         { str r7, [r3] }
+          EmitI32($E3A00000);                         { mov r0, #0 }
+          EmitI32($E5830004);                         { str r0, [r3,#4] }
+          EmitI32($E1A00003);                         { mov r0, r3 }
+          Exit;
+        end;
+
+        if ((op = Ord(tkEq)) or (op = Ord(tkNeq))) and
+           ((IntToTypeKind(IRTk[left]) in [tyAnsiString, tyString, tyChar]) or
+            (IntToTypeKind(IRTk[right]) in [tyAnsiString, tyString, tyChar])) and
+           ((IntToTypeKind(IRTk[left]) in [tyAnsiString, tyString, tyChar]) and
+            (IntToTypeKind(IRTk[right]) in [tyAnsiString, tyString, tyChar])) then
+        begin
+          lhsTk := IntToTypeKind(IRTk[left]);
+          rhsTk := IntToTypeKind(IRTk[right]);
+          IREmitNodeArm32(left);  EmitI32($E92D0001); { push lhs }
+          IREmitNodeArm32(right); EmitI32($E92D0001); { push rhs }
+
+          EmitI32($E59D0000);                         { r0 = rhs value }
+          EmitArm32StringParts(0, 1, 2, rhsTk, 0);    { r1=srcB, r2=lenB }
+          EmitI32($E92D0006);                         { push {r1,r2} }
+          EmitI32($E59D000C);                         { r0 = lhs value }
+          EmitArm32StringParts(0, 1, 2, lhsTk, 12);   { r1=srcA, r2=lenA }
+          EmitI32($E1A00002);                         { mov r0, r2 (lenA) }
+          EmitI32($E59D3000);                         { r3 = srcB }
+          EmitI32($E59D2004);                         { r2 = lenB }
+          EmitI32($E28DD008);                         { add sp, sp, #8 }
+          pi := FindProc('PXXStrEq');
+          if pi < 0 then Error('compiler error: PXXStrEq not found');
+          EmitCallProc(pi);
+          if op = Ord(tkNeq) then
+            EmitI32($E2200001);                       { eor r0, r0, #1 }
+
+          EmitI32($E92D0001);                         { push result }
+          if (IRKind[left] = IR_BINOP) and (IntToTypeKind(IRTk[left]) = tyAnsiString) then
+          begin
+            EmitI32($E59D0008);                       { lhs }
+            EmitStrDecRefArm32;
+          end;
+          if (IRKind[right] = IR_BINOP) and (IntToTypeKind(IRTk[right]) = tyAnsiString) then
+          begin
+            EmitI32($E59D0004);                       { rhs }
+            EmitStrDecRefArm32;
+          end;
+          EmitI32($E8BD0001);                         { pop result }
+          EmitI32($E28DD008);                         { drop rhs,lhs }
+          Exit;
+        end;
+
         if not (TypeIsOrdinal(tk) or (tk = tyBoolean) or (tk = tyUnknown)) then
           Error('target arm32: non-integer binop not yet supported');
         IREmitNodeArm32(left);
@@ -256,7 +554,12 @@ begin
         nArgs := 0;
         while argNode <> -1 do
         begin
-          IREmitNodeArm32(IRA[argNode]);
+          if (pi >= 0) and (nArgs < Procs[pi].ParamCount) and
+             (Procs[pi].Params[nArgs].TypeKind = tyAnsiString) and
+             (IntToTypeKind(IRTk[argNode]) in [tyChar, tyString]) then
+            EmitAnsiStringFromNodeArm32(IRA[argNode])
+          else
+            IREmitNodeArm32(IRA[argNode]);
           EmitI32($E92D0001); { push {r0} }
           Inc(nArgs);
           argNode := IRB[argNode];
@@ -349,6 +652,20 @@ begin
     IR_STORE_MEM:
       begin
         tk := IntToTypeKind(IRTk[node]);
+        if tk = tyAnsiString then
+        begin
+          valNode := IRB[node];
+          EmitAnsiStringFromNodeArm32(valNode); { r0 = new }
+          EmitI32($E92D0001);                   { push {r0} new }
+          IREmitNodeArm32(IRA[node]);           { r0 = slot address }
+          EmitI32($E1A01000);                   { mov r1, r0 }
+          EmitI32($E5910000);                   { ldr r0, [r1] old }
+          EmitI32($E59D2000);                   { ldr r2, [sp] new }
+          EmitI32($E5812000);                   { str r2, [r1] }
+          EmitStrDecRefArm32;
+          EmitI32($E28DD004);                   { add sp, sp, #4 }
+          Exit;
+        end;
         if not (TypeIsOrdinal(tk) or (tk = tyBoolean) or (tk = tyPointer) or
                 (tk = tyChar) or (tk = tyUnknown)) then
           Error('target arm32: store through pointer of this type not yet supported');
@@ -452,6 +769,33 @@ begin
                 EmitwriteIntArm32;
             end;
           end
+          else if tk = tyAnsiString then
+          begin
+            IREmitNodeArm32(valNode);            { r0 = handle }
+            EmitI32($E3500000);                  { cmp r0, #0 }
+            j := CodeLen;
+            EmitI32($0A000000);                  { beq done }
+            EmitI32($E92D0001);                  { push {r0} }
+            EmitI32($E5102008);                  { ldr r2, [r0, #-8] }
+            EmitI32($E1A01000);                  { mov r1, r0 }
+            EmitI32($E3A00001);                  { mov r0, #1 }
+            EmitI32($E3A07004);                  { mov r7, #4 }
+            EmitI32($EF000000);                  { svc #0 }
+            EmitI32($E8BD0001);                  { pop {r0} handle }
+            if (IRKind[valNode] = IR_BINOP) and
+               (IntToTypeKind(IRTk[valNode]) = tyAnsiString) then
+              EmitStrDecRefArm32;
+            Patch32(j, $0A000000 or ((((CodeLen - j) div 4) - 2) and $00ffffff));
+          end
+          else if tk = tyString then
+          begin
+            IREmitNodeArm32(valNode);            { r0 = [len:8][data] }
+            EmitI32($E5902000);                  { ldr r2, [r0] }
+            EmitI32($E2801008);                  { add r1, r0, #8 }
+            EmitI32($E3A00001);                  { mov r0, #1 }
+            EmitI32($E3A07004);                  { mov r7, #4 }
+            EmitI32($EF000000);                  { svc #0 }
+          end
           else
             Error('target arm32: write of this operand not yet supported');
         end;
@@ -549,7 +893,7 @@ begin
 
       IR_NOP, IR_CONST_STR, IR_CONST_INT, IR_BLOCK,
       IR_LOAD_SYM, IR_BINOP, IR_NEG, IR_NOT, IR_ARG, IR_LEA, IR_SYSCALL,
-      IR_FIELD, IR_INDEX: ;
+      IR_SLOTADDR, IR_FIELD, IR_INDEX: ;
 
       else
         IREmitNodeArm32(i);

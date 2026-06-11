@@ -40,3 +40,11 @@ roadmap staging, not a hard requirement. Move to `urgent/` to pull it forward.
   array indexing (`test/test_cross_heap.pas`). Added ARM32 stack-argument
   support for helper procedures with more than four parameters and enabled the
   Pascal `builtinheap` allocator path. Commit: e15bd4f.
+- 2026-06-11 — added ARM32 managed AnsiString support. The backend now lowers
+  literal/char/inline-string conversion, retain/release assignment, by-ref
+  store publishing, concat/equality through `PXXStr*` Pascal helpers, string
+  writes, pointer-sized string returns, local string cleanup, `IR_SLOTADDR`,
+  and inline `tyString` stack-buffer concat. Fixed two ARM32-specific issues
+  found during validation: x86-64 managed-local zeroing bytes in ARM32
+  procedures, and invalid large ARM immediate encoding for the 272-byte inline
+  string buffer. Added `test/test_cross_string.pas` to `make test-arm32`.

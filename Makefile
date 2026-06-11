@@ -738,7 +738,10 @@ test-arm32: $(COMPILER)
 	./$(COMPILER) --target=arm32 test/test_cross_heap.pas /tmp/test_arm32_heap
 	./$(COMPILER) test/test_cross_heap.pas /tmp/test_arm32_heap_x64
 	test "$$(tools/run_target.sh arm32 /tmp/test_arm32_heap)" = "$$(/tmp/test_arm32_heap_x64)"
-	@echo "arm32 hello + arith + procs + loops + write + varparam + syscall + heap ok (output identical to x86-64)"
+	./$(COMPILER) -dPXX_MANAGED_STRING --target=arm32 test/test_cross_string.pas /tmp/test_arm32_string
+	./$(COMPILER) -dPXX_MANAGED_STRING test/test_cross_string.pas /tmp/test_arm32_string_x64
+	test "$$(tools/run_target.sh arm32 /tmp/test_arm32_string)" = "$$(/tmp/test_arm32_string_x64)"
+	@echo "arm32 hello + arith + procs + loops + write + varparam + syscall + heap + string ok (output identical to x86-64)"
 
 # Cross-target test environment sanity (chore-qemu-test-env). Manual target:
 # joins 'make test' when the first cross backend exists. Validates the runner

@@ -5902,10 +5902,17 @@ begin
         are supported; the larger managed aggregates (records/variants/arrays of
         managed) are not on this target yet. }
       if (zeroBytes > TARGET_PTR_SIZE) and (TargetArch <> TARGET_X86_64) then
-        Error('target i386: managed aggregate locals not yet supported');
+        Error('target: managed aggregate locals not yet supported');
       if (zeroBytes = TARGET_PTR_SIZE) and (TargetArch = TARGET_I386) then
       begin
         EmitB($C7); EmitB($85); EmitI32(Syms[i].Offset); EmitI32(0);  { mov dword [ebp+off], 0 }
+      end
+      else if (zeroBytes = TARGET_PTR_SIZE) and (TargetArch = TARGET_ARM32) then
+      begin
+        EmitLoadImmArm32(9, Syms[i].Offset);
+        EmitI32($E08B9009);                                          { add r9, fp, r9 }
+        EmitI32($E3A00000);                                          { mov r0, #0 }
+        EmitI32($E5890000);                                          { str r0, [r9] }
       end
       else if zeroBytes = TARGET_PTR_SIZE then
       begin
@@ -6724,8 +6731,8 @@ begin
   end
   else if TargetArch = TARGET_ARM32 then
   begin
-    if needsBuiltin or needsAnsiRuntime or hasExceptions then
-      Error('target arm32: string/exception runtime not yet supported');
+    if needsBuiltin or hasExceptions then
+      Error('target arm32: builtin/exception runtime not yet supported');
     { ARM32 entry stub: branch to main body. }
     jmpPatch := CodeLen;
     EmitI32($EA000000);
@@ -6748,7 +6755,7 @@ begin
   { The emitted AnsiString runtime is x86-64 machine code; i386 string IR ops
     call the builtinheap Pascal helpers directly instead, so skip the shim
     emission there (its AnsiStr*Addr labels stay 0 and are never referenced). }
-  if needsAnsiRuntime and (TargetArch <> TARGET_I386) then EmitAnsiStringRuntime;
+  if needsAnsiRuntime and not ((TargetArch = TARGET_I386) or (TargetArch = TARGET_ARM32)) then EmitAnsiStringRuntime;
   if hasExceptions then EnableExceptionRuntime;
 
   { Compile the runtime units before user declarations, so their proc bodies
