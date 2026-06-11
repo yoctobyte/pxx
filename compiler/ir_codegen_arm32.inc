@@ -230,6 +230,26 @@ begin
         EmitCallProc(pi);
       end;
 
+    IR_SYSCALL:
+      begin
+        { Raw syscall (EABI): args (nr, a0..a5) pushed left-to-right, then
+          popped into r7 (number) and r0..r5. Result stays in r0. }
+        argNode := IRA[node]; nArgs := 0;
+        while argNode <> -1 do
+        begin
+          IREmitNodeArm32(IRA[argNode]);
+          EmitI32($E92D0001); { push {r0} }
+          Inc(nArgs);
+          argNode := IRB[argNode];
+        end;
+        for i := nArgs - 1 downto 0 do
+          if i = 0 then
+            EmitI32($E8BD0080)                  { pop {r7} }
+          else
+            EmitI32($E8BD0000 or (1 shl (i - 1))); { pop {r[i-1]} }
+        EmitI32($EF000000); { svc 0 }
+      end;
+
     IR_NEG:
       begin
         IREmitNodeArm32(IRA[node]);
@@ -396,7 +416,7 @@ begin
         IREmitNodeArm32(i);
 
       IR_NOP, IR_CONST_STR, IR_CONST_INT, IR_BLOCK,
-      IR_LOAD_SYM, IR_BINOP, IR_NEG, IR_NOT, IR_ARG, IR_LEA: ;
+      IR_LOAD_SYM, IR_BINOP, IR_NEG, IR_NOT, IR_ARG, IR_LEA, IR_SYSCALL: ;
 
       else
         IREmitNodeArm32(i);

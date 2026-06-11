@@ -2342,6 +2342,35 @@ begin
         Exit;
       end;
 
+      if CaseEqual(name, '__pxxrawsyscall') then
+      begin
+        { Raw syscall intrinsic: lowered to the target's native syscall
+          instruction. First arg = syscall number, then up to 6 arguments. }
+        Next; { consume '__pxxrawsyscall' }
+        Expect(tkLParen, '(');
+        node := AllocNode(AN_SYSCALL);
+        ASTTk[node] := Ord(tyInt64);
+        lastArg := -1;
+        nArgs := 0;
+        repeat
+          ParseExpr;
+          exprNode := CurASTNode;
+          argSeq := AllocNode(AN_ARG);
+          ASTLeft[argSeq] := exprNode;
+          if lastArg = -1 then
+            ASTLeft[node] := argSeq
+          else
+            ASTRight[lastArg] := argSeq;
+          lastArg := argSeq;
+          Inc(nArgs);
+        until not Eat(tkComma);
+        Expect(tkRParen, ')');
+        if nArgs > 7 then Error('__pxxrawsyscall: at most 7 arguments (nr + 6)');
+        LastExprTk := tyInt64;
+        CurASTNode := node;
+        Exit;
+      end;
+
       if CaseEqual(name, '__resources') then
       begin
         Next; { consume '__resources' }

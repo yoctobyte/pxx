@@ -680,7 +680,10 @@ test-i386: $(COMPILER)
 	./$(COMPILER) --target=i386 test/test_i386_varparam.pas /tmp/test_i386_varparam
 	./$(COMPILER) test/test_i386_varparam.pas /tmp/test_i386_varparam_x64
 	test "$$(tools/run_target.sh i386 /tmp/test_i386_varparam)" = "$$(/tmp/test_i386_varparam_x64)"
-	@echo "i386 hello + arith + procs + loops + write + varparam ok (output identical to x86-64)"
+	./$(COMPILER) --target=i386 test/test_cross_syscall.pas /tmp/test_i386_syscall
+	./$(COMPILER) test/test_cross_syscall.pas /tmp/test_i386_syscall_x64
+	test "$$(tools/run_target.sh i386 /tmp/test_i386_syscall)" = "$$(/tmp/test_i386_syscall_x64)"
+	@echo "i386 hello + arith + procs + loops + write + varparam + syscall ok (output identical to x86-64)"
 
 test-aarch64: $(COMPILER)
 	./$(COMPILER) --target=aarch64 test/hello.pas /tmp/test_aarch64_hello
@@ -700,7 +703,10 @@ test-aarch64: $(COMPILER)
 	./$(COMPILER) --target=aarch64 test/test_i386_varparam.pas /tmp/test_aarch64_varparam
 	./$(COMPILER) test/test_i386_varparam.pas /tmp/test_aarch64_varparam_x64
 	test "$$(tools/run_target.sh aarch64 /tmp/test_aarch64_varparam)" = "$$(/tmp/test_aarch64_varparam_x64)"
-	@echo "aarch64 hello + arith + procs + loops + write + varparam ok (output identical to x86-64)"
+	./$(COMPILER) --target=aarch64 test/test_cross_syscall.pas /tmp/test_aarch64_syscall
+	./$(COMPILER) test/test_cross_syscall.pas /tmp/test_aarch64_syscall_x64
+	test "$$(tools/run_target.sh aarch64 /tmp/test_aarch64_syscall)" = "$$(/tmp/test_aarch64_syscall_x64)"
+	@echo "aarch64 hello + arith + procs + loops + write + varparam + syscall ok (output identical to x86-64)"
 
 test-arm32: $(COMPILER)
 	./$(COMPILER) --target=arm32 test/hello.pas /tmp/test_arm32_hello
@@ -720,7 +726,10 @@ test-arm32: $(COMPILER)
 	./$(COMPILER) --target=arm32 test/test_i386_varparam.pas /tmp/test_arm32_varparam
 	./$(COMPILER) test/test_i386_varparam.pas /tmp/test_arm32_varparam_x64
 	test "$$(tools/run_target.sh arm32 /tmp/test_arm32_varparam)" = "$$(/tmp/test_arm32_varparam_x64)"
-	@echo "arm32 hello + arith + procs + loops + write + varparam ok (output identical to x86-64)"
+	./$(COMPILER) --target=arm32 test/test_cross_syscall.pas /tmp/test_arm32_syscall
+	./$(COMPILER) test/test_cross_syscall.pas /tmp/test_arm32_syscall_x64
+	test "$$(tools/run_target.sh arm32 /tmp/test_arm32_syscall)" = "$$(/tmp/test_arm32_syscall_x64)"
+	@echo "arm32 hello + arith + procs + loops + write + varparam + syscall ok (output identical to x86-64)"
 
 # Cross-target test environment sanity (chore-qemu-test-env). Manual target:
 # joins 'make test' when the first cross backend exists. Validates the runner

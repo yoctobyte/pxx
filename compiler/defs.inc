@@ -112,6 +112,7 @@ const
                           yields the runtime address of the class's RTTI blob (PClassRTTI) }
   AN_VAR_DECL     = 47;
   AN_DEFAULT      = 48;
+  AN_SYSCALL      = 49; { __pxxrawsyscall(nr, a0..a5): Int64; Left = AN_ARG chain (1..7 args) }
 
   { Inline-asm operand kinds }
   AOP_NONE = 0;
@@ -174,6 +175,7 @@ const
   IR_ZERO_SYM     = 51;
   IR_DEFAULT_MEM  = 52;  { IRA = dest addr node; IRC = managed record id or REC_NONE; IRIVal = bytes to zero }
   IR_READ_DISCARD = 53;
+  IR_SYSCALL      = 54;  { IRA = first IR_ARG (nr, then up to 6 args); raw target syscall; result in accumulator }
 
   { Variant tag (VType) values, stored in the first 8 bytes of a tyVariant slot.
     Payload (next 8 bytes) interpreted per tag. Closed scalar set; vtObject is a

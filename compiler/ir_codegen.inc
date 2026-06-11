@@ -1541,7 +1541,33 @@ begin
       begin
         EmitB($48); EmitB($B8); EmitDataRef(-101);
       end;
-      
+
+    IR_SYSCALL:
+      begin
+        { Raw syscall: args (nr, a0..a5) evaluated left-to-right onto the
+          stack, then popped into rax, rdi, rsi, rdx, r10, r8, r9 (Linux
+          x86-64 syscall convention). Result stays in rax. }
+        argNode := IRA[node]; nArgs := 0;
+        while argNode <> -1 do
+        begin
+          IREmitNode(IRA[argNode]);
+          EmitB($50); { push rax }
+          Inc(nArgs);
+          argNode := IRB[argNode];
+        end;
+        for i := nArgs - 1 downto 0 do
+          case i of
+            0: EmitB($58);                        { pop rax }
+            1: EmitB($5F);                        { pop rdi }
+            2: EmitB($5E);                        { pop rsi }
+            3: EmitB($5A);                        { pop rdx }
+            4: begin EmitB($41); EmitB($5A); end; { pop r10 }
+            5: begin EmitB($41); EmitB($58); end; { pop r8 }
+            6: begin EmitB($41); EmitB($59); end; { pop r9 }
+          end;
+        EmitB($0F); EmitB($05); { syscall }
+      end;
+
     IR_LOAD_SYM:
       begin
         EmitLoadVar(IRA[node]);

@@ -186,7 +186,7 @@ end;
 
 procedure IREmitNode386(node: Integer);
 var
-  valNode, si, left, right, op, pi, argNode, nArgs, wid, sz: Integer;
+  valNode, si, left, right, op, pi, argNode, nArgs, wid, sz, i, j, base: Integer;
   sVal: AnsiString;
   emsg: AnsiString;
   tk: TTypeKind;
@@ -400,6 +400,47 @@ begin
         end;
       end;
 
+    IR_SYSCALL:
+      begin
+        { Raw syscall (int 0x80): args (nr, a0..a5) pushed left-to-right,
+          then loaded into eax, ebx, ecx, edx, esi, edi, ebp from the stack.
+          ebp doubles as the frame pointer, so a full 6-arg syscall saves and
+          restores it around the trap. Result stays in eax. }
+        argNode := IRA[node]; nArgs := 0;
+        while argNode <> -1 do
+        begin
+          IREmitNode386(IRA[argNode]);
+          EmitB($50);                                { push eax }
+          Inc(nArgs);
+          argNode := IRB[argNode];
+        end;
+        base := 0;
+        if nArgs = 7 then
+        begin
+          EmitB($55);                                { push ebp (save frame ptr) }
+          base := 4;
+        end;
+        for i := 0 to nArgs - 1 do
+        begin
+          j := 0;                                    { eax }
+          if i = 1 then j := 3                       { ebx }
+          else if i = 2 then j := 1                  { ecx }
+          else if i = 3 then j := 2                  { edx }
+          else if i = 4 then j := 6                  { esi }
+          else if i = 5 then j := 7                  { edi }
+          else if i = 6 then j := 5;                 { ebp }
+          EmitB($8B); EmitB($44 + (j shl 3)); EmitB($24);
+          EmitB(base + (nArgs - 1 - i) * 4);         { mov reg, [esp+disp8] }
+        end;
+        EmitB($CD); EmitB($80);                      { int 0x80 }
+        if nArgs = 7 then
+          EmitB($5D);                                { pop ebp (restore frame ptr) }
+        if nArgs > 0 then
+        begin
+          EmitB($81); EmitB($C4); EmitI32(nArgs * 4); { add esp, nArgs*4 }
+        end;
+      end;
+
     IR_NEG:
       begin
         IREmitNode386(IRA[node]);
@@ -576,7 +617,7 @@ begin
         IREmitNode386(i);
 
       IR_NOP, IR_CONST_STR, IR_CONST_INT, IR_BLOCK,
-      IR_LOAD_SYM, IR_BINOP, IR_NEG, IR_NOT, IR_ARG, IR_LEA: ; { operands, emitted by parents }
+      IR_LOAD_SYM, IR_BINOP, IR_NEG, IR_NOT, IR_ARG, IR_LEA, IR_SYSCALL: ; { operands, emitted by parents }
 
       else
         IREmitNode386(i); { unknown statement op -> hard error inside }
