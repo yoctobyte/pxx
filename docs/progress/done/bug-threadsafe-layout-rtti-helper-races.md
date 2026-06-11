@@ -50,4 +50,4 @@ operations.
   fields inside one critical section. Public x86-64 string retain/release and
   dynamic-array retain paths now use the same heap lock in threaded mode so
   they cannot race the Pascal helpers' non-atomic refcount updates. Added
-  `test/test_threadsafe_layout_rtti.pas`.
+  `test/test_threadsafe_layout_rtti.pas`. Commit: 9c447c0.
