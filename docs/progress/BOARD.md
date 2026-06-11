@@ -14,10 +14,11 @@ _none_
 | --- | --- | --- | --- |
 | feature-target-arm32 | feature | Compile target: ARM32 Linux | feature-target-aarch64 |
 
-## backlog (26)
+## backlog (27)
 
 | Ticket | Type | Summary | Blocked-by |
 | --- | --- | --- | --- |
+| bug-threadsafe-layout-rtti-helper-races | bug | Thread-safe layout RTTI helper races | feature-rtti-layout-table |
 | chore-inc-to-units | chore | `.inc` → real `.pas` units refactor | — |
 | chore-runtime-emission-size | chore | Finer runtime-support emission (code size) | — |
 | feature-additional-cpu-targets | feature | Additional CPU targets (rollup: i386 → aarch64 → arm32 → ESP32/RISC-V) | feature-target-i386, feature-target-aarch64, feature-target-arm32, feature-target-esp32 |
@@ -52,7 +53,7 @@ _none_
 | bug-nonreproducible-miscompile-2026-06-02 | bug | Non-reproducible one-off miscompile (2026-06-02) | — |
 | bug-whole-record-copy-main-body-noop | bug | Latent: whole-record array-element copy in main-program body emits store no-ops | — |
 
-## done (13)
+## done (14)
 
 | Ticket | Type | Summary | Blocked-by |
 | --- | --- | --- | --- |
@@ -65,6 +66,7 @@ _none_
 | feature-cross-bootstrap | feature | feature-cross-bootstrap | — |
 | feature-progress-check-makefile | feature | Wire `progress.sh check` into a make target | — |
 | feature-relative-path-units | feature | Relative/absolute path support in `uses`/`includes` | — |
+| feature-rtti-layout-table | feature | Target-independent layout RTTI (Tier B) | feature-cross-bootstrap |
 | feature-target-aarch64 | feature | Compile target: ARM64 / AArch64 Linux | feature-target-i386 |
 | feature-target-i386 | feature | Compile target: i386 (32-bit x86 Linux) | chore-qemu-test-env |
 | feature-unified-heap-allocator | feature | Unified syscall-free heap allocator | — |
@@ -76,6 +78,7 @@ _none_
 
 ## Ready (no unmet blocker)
 
+- bug-threadsafe-layout-rtti-helper-races
 - chore-inc-to-units
 - chore-runtime-emission-size
 - feature-allocator-quality
@@ -104,8 +107,10 @@ _none_
 - **2** — feature-target-arm32
 - **2** — feature-target-aarch64
 - **1** — feature-target-esp32
+- **1** — feature-rtti-layout-table
 - **1** — feature-managed-exception-cleanup
 - **1** — feature-directive-if-numeric
+- **1** — feature-cross-bootstrap
 - **1** — feature-compiler-warnings
 - **1** — chore-qemu-test-env
 - **1** — chore-inc-to-units

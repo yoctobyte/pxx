@@ -225,6 +225,7 @@ begin
   MethodFixCount := 0; UPropCount := 0;
   DataPtrFixCount := 0;
   RTTIRegistryOff := -1; RTTIRegistryCount := 0;
+  AnonDynArrayCount := 0;
   ResPendCount := 0; ResourceTableOff := -1; ResourceCount := 0;
   EnumTypeCount := 0; EnumValCount := 0; LastTypeEnumId := -1;
   AliasCount := 0;
@@ -296,6 +297,15 @@ begin
         continue;
       end;
     end
+    else if (Fixups[i].DataOff <= -RECORD_RTTI_DATAREF_BASE) and (Fixups[i].DataOff > -SYM_RTTI_DATAREF_BASE) then
+    begin
+      j := -Fixups[i].DataOff - RECORD_RTTI_DATAREF_BASE;
+      if (j >= 0) and (j < UClsCount) and (UClsRTTIOff[j] >= 0) then
+        Fixups[i].DataOff := UClsRTTIOff[j]
+      else
+        Error('record reference to a record with no RTTI');
+    end
+
     else if Fixups[i].DataOff <= -CLASSREF_DATAREF_BASE then
     begin
       { class-reference (metaclass) value: resolve to the class's RTTI blob. }

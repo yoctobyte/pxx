@@ -197,6 +197,8 @@ const
     EmitRTTI, then resolved to a real address by writeELF. Must clear the -100
     (RTTI registry) / -101 (resource table) sentinels with room for every ci. }
   CLASSREF_DATAREF_BASE = 100000;
+  RECORD_RTTI_DATAREF_BASE = 200000;
+  SYM_RTTI_DATAREF_BASE = 300000;
 
   SYS_READ  = 0;
   SYS_WRITE = 1;
@@ -475,6 +477,12 @@ var
   RTTIRegistryOff    : Integer;  { Data[] off of registry (count slot then name/rtti ptr pairs), -1 if none }
   RTTIRegistryCount  : Integer;
   DumpRTTI           : Boolean;
+  AnonDynArrayOff    : array[0..8191] of Integer;
+  AnonDynArrayDepth  : array[0..8191] of Integer;
+  AnonDynArrayBaseTk : array[0..8191] of Integer;
+  AnonDynArrayBaseRec: array[0..8191] of Integer;
+  AnonDynArrayElSize : array[0..8191] of Integer;
+  AnonDynArrayCount  : Integer;
   { Embedded resources (R directive: name + file); pending pairs filled by the
     lexer, blobs + table emitted post-parse by EmitResources. }
   ResPendName        : array[0..MAX_RESOURCES-1] of AnsiString;
@@ -550,6 +558,7 @@ var
   SymCaseSensitive : array[0..MAX_SYMS-1] of Boolean; { match this symbol name case-sensitively }
   SymUnitIdx : array[0..MAX_SYMS-1] of Integer; { Strs[] unit name, or -1 for main/local compiler-generated symbols }
   SymDynDepth : array[0..MAX_SYMS-1] of Integer; { dynamic-array nesting: 0=not dynamic, 1=array of T, 2=array of array of T, ... }
+  SymRTTIOff  : array[0..MAX_SYMS-1] of Integer; { Data[] offset of layout RTTI descriptor, -1 if none }
   SymIsHiddenArgTemp : array[0..MAX_SYMS-1] of Boolean; { compiler-synthesised owning local for a materialised managed-string call argument; needs nil-init before the body }
   SymBlockId : array[0..MAX_SYMS-1] of Integer;
   SymCount  : Integer;

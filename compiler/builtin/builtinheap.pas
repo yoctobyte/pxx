@@ -24,6 +24,10 @@ function PXXStrLoadFile(path: Pointer): Pointer;
 procedure PXXStrIncRef(p: Pointer);
 procedure PXXStrDecRef(p: Pointer);
 function PXXStrEq(lenA: Int64; srcA: Pointer; lenB: Int64; srcB: Pointer): Int64;
+procedure PXXRecordRetain(recAddr: Pointer; desc: Pointer);
+procedure PXXRecordRelease(recAddr: Pointer; desc: Pointer);
+procedure PXXDynArrayRelease(arrData: Pointer; desc: Pointer);
+function PXXDynArrayUnique(arrSlot: Pointer; desc: Pointer): Pointer;
 
 implementation
 
@@ -31,6 +35,7 @@ implementation
 type
   PWord = ^Int64;   { machine-word access at an arbitrary address }
   PByte = ^Byte;    { byte access at an arbitrary address }
+  PInt32 = ^Integer; { 32-bit integer access }
 
 const
   HEAP_ARENA = 268435456;   { 256 MiB mmap chunk; anon pages fault in lazily }
@@ -357,6 +362,295 @@ begin
     i := i + 1;
   end;
   Result := 1;
+end;
+
+procedure PXXDynArrayIncRef(p: Pointer);
+var base: Int64;
+begin
+  if p = nil then Exit;
+  base := Int64(p) - 16;
+  PWord(base)^ := PWord(base)^ + 1;
+end;
+
+procedure PXXDynArrayReleaseDepth(arrData: Pointer; depth: Integer; baseKind: Integer; baseRecDesc: Pointer);
+var
+  base, rc, len: Int64;
+  i: Int64;
+  itemAddr: Pointer;
+  elSize: Int64;
+begin
+  if arrData = nil then Exit;
+  base := Int64(arrData) - 16;
+  rc := PWord(base)^ - 1;
+  PWord(base)^ := rc;
+  if rc = 0 then
+  begin
+    len := PWord(Int64(arrData) - 8)^;
+    if depth > 1 then
+    begin
+      i := 0;
+      while i < len do
+      begin
+        itemAddr := Pointer(Int64(arrData) + i * SizeOf(Pointer));
+        PXXDynArrayReleaseDepth(Pointer(PWord(itemAddr)^), depth - 1, baseKind, baseRecDesc);
+        i := i + 1;
+      end;
+    end
+    else
+    begin
+      if baseKind = 1 then
+      begin
+        i := 0;
+        while i < len do
+        begin
+          itemAddr := Pointer(Int64(arrData) + i * SizeOf(Pointer));
+          PXXStrDecRef(Pointer(PWord(itemAddr)^));
+          i := i + 1;
+        end;
+      end
+      else if baseKind = 3 then
+      begin
+        if baseRecDesc <> nil then
+        begin
+          elSize := PInt32(Int64(baseRecDesc) + 4)^;
+          i := 0;
+          while i < len do
+          begin
+            itemAddr := Pointer(Int64(arrData) + i * elSize);
+            PXXRecordRelease(itemAddr, baseRecDesc);
+            i := i + 1;
+          end;
+        end;
+      end;
+    end;
+    PXXFree(Pointer(base));
+  end;
+end;
+
+procedure PXXDynArrayRetainImmediate(arrData: Pointer; len: Int64; depth: Integer; baseKind: Integer; baseRecDesc: Pointer);
+var
+  i: Int64;
+  itemAddr: Pointer;
+  elSize: Int64;
+begin
+  if arrData = nil then Exit;
+  if depth > 1 then
+  begin
+    i := 0;
+    while i < len do
+    begin
+      itemAddr := Pointer(Int64(arrData) + i * SizeOf(Pointer));
+      PXXDynArrayIncRef(Pointer(PWord(itemAddr)^));
+      i := i + 1;
+    end;
+  end
+  else
+  begin
+    if baseKind = 1 then
+    begin
+      i := 0;
+      while i < len do
+      begin
+        itemAddr := Pointer(Int64(arrData) + i * SizeOf(Pointer));
+        PXXStrIncRef(Pointer(PWord(itemAddr)^));
+        i := i + 1;
+      end;
+    end
+    else if baseKind = 3 then
+    begin
+      if baseRecDesc <> nil then
+      begin
+        elSize := PInt32(Int64(baseRecDesc) + 4)^;
+        i := 0;
+        while i < len do
+        begin
+          itemAddr := Pointer(Int64(arrData) + i * elSize);
+          PXXRecordRetain(itemAddr, baseRecDesc);
+          i := i + 1;
+        end;
+      end;
+    end;
+  end;
+end;
+
+procedure PXXRecordRetain(recAddr: Pointer; desc: Pointer);
+var
+  memberCount, i, j: Integer;
+  memberPtr: Int64;
+  offset, kind, arrayCount, typeRef: Integer;
+  memberAddr, itemAddr: Pointer;
+  subDesc: Pointer;
+  memberSize: Int64;
+begin
+  if (recAddr = nil) or (desc = nil) then Exit;
+  memberCount := PInt32(Int64(desc) + 8)^;
+  memberPtr := Int64(desc) + 12;
+
+  i := 0;
+  while i < memberCount do
+  begin
+    offset := PInt32(memberPtr)^;
+    kind := PInt32(memberPtr + 4)^;
+    arrayCount := PInt32(memberPtr + 8)^;
+    typeRef := PInt32(memberPtr + 12)^;
+
+    memberAddr := Pointer(Int64(recAddr) + offset);
+
+    if kind = 3 then
+    begin
+      subDesc := Pointer(memberPtr + 12 + typeRef);
+      memberSize := PInt32(Int64(subDesc) + 4)^;
+    end
+    else
+    begin
+      memberSize := SizeOf(Pointer);
+    end;
+
+    j := 0;
+    while j < arrayCount do
+    begin
+      itemAddr := Pointer(Int64(memberAddr) + j * memberSize);
+      case kind of
+        1: { String }
+          PXXStrIncRef(Pointer(PWord(itemAddr)^));
+        2: { DynArray }
+          PXXDynArrayIncRef(Pointer(PWord(itemAddr)^));
+        3: { Record }
+          PXXRecordRetain(itemAddr, subDesc);
+      end;
+      j := j + 1;
+    end;
+
+    memberPtr := memberPtr + 16;
+    i := i + 1;
+  end;
+end;
+
+procedure PXXRecordRelease(recAddr: Pointer; desc: Pointer);
+var
+  memberCount, i, j: Integer;
+  memberPtr: Int64;
+  offset, kind, arrayCount, typeRef: Integer;
+  memberAddr, itemAddr: Pointer;
+  subDesc: Pointer;
+  memberSize: Int64;
+begin
+  if (recAddr = nil) or (desc = nil) then Exit;
+  memberCount := PInt32(Int64(desc) + 8)^;
+  memberPtr := Int64(desc) + 12;
+
+  i := 0;
+  while i < memberCount do
+  begin
+    offset := PInt32(memberPtr)^;
+    kind := PInt32(memberPtr + 4)^;
+    arrayCount := PInt32(memberPtr + 8)^;
+    typeRef := PInt32(memberPtr + 12)^;
+
+    memberAddr := Pointer(Int64(recAddr) + offset);
+
+    if kind = 3 then
+    begin
+      subDesc := Pointer(memberPtr + 12 + typeRef);
+      memberSize := PInt32(Int64(subDesc) + 4)^;
+    end
+    else
+    begin
+      memberSize := SizeOf(Pointer);
+    end;
+
+    j := 0;
+    while j < arrayCount do
+    begin
+      itemAddr := Pointer(Int64(memberAddr) + j * memberSize);
+      case kind of
+        1: { String }
+          PXXStrDecRef(Pointer(PWord(itemAddr)^));
+        2: { DynArray }
+          begin
+            subDesc := Pointer(memberPtr + 12 + typeRef);
+            PXXDynArrayRelease(Pointer(PWord(itemAddr)^), subDesc);
+          end;
+        3: { Record }
+          PXXRecordRelease(itemAddr, subDesc);
+      end;
+      j := j + 1;
+    end;
+
+    memberPtr := memberPtr + 16;
+    i := i + 1;
+  end;
+end;
+
+procedure PXXDynArrayRelease(arrData: Pointer; desc: Pointer);
+var
+  depth, baseKind, baseTypeRef: Integer;
+  baseRecDesc: Pointer;
+begin
+  if (arrData = nil) or (desc = nil) then Exit;
+  depth := PInt32(Int64(desc) + 8)^;
+  baseKind := PInt32(Int64(desc) + 12)^;
+  baseTypeRef := PInt32(Int64(desc) + 16)^;
+  if baseKind = 3 then
+    baseRecDesc := Pointer(Int64(desc) + 16 + baseTypeRef)
+  else
+    baseRecDesc := nil;
+
+  PXXDynArrayReleaseDepth(arrData, depth, baseKind, baseRecDesc);
+end;
+
+function PXXDynArrayUnique(arrSlot: Pointer; desc: Pointer): Pointer;
+var
+  arrData: Pointer;
+  refCountPtr: PWord;
+  lenPtr: PWord;
+  rc, len, elSize, i: Int64;
+  newBlock, newArrData: Pointer;
+  depth, baseKind, baseTypeRef: Integer;
+  baseRecDesc: Pointer;
+begin
+  Result := nil;
+  if (arrSlot = nil) or (desc = nil) then Exit;
+  arrData := Pointer(PWord(arrSlot)^);
+  if arrData = nil then Exit;
+
+  refCountPtr := PWord(Int64(arrData) - 16);
+  rc := refCountPtr^;
+  if rc <= 1 then
+  begin
+    Result := arrData;
+    Exit;
+  end;
+
+  lenPtr := PWord(Int64(arrData) - 8);
+  len := lenPtr^;
+  elSize := PInt32(Int64(desc) + 4)^;
+
+  newBlock := PXXAlloc(16 + len * elSize, 8);
+  PWord(newBlock)^ := 1;
+  PWord(Int64(newBlock) + 8)^ := len;
+  newArrData := Pointer(Int64(newBlock) + 16);
+
+  i := 0;
+  while i < len * elSize do
+  begin
+    PByte(Int64(newArrData) + i)^ := PByte(Int64(arrData) + i)^;
+    i := i + 1;
+  end;
+
+  depth := PInt32(Int64(desc) + 8)^;
+  baseKind := PInt32(Int64(desc) + 12)^;
+  baseTypeRef := PInt32(Int64(desc) + 16)^;
+  if baseKind = 3 then
+    baseRecDesc := Pointer(Int64(desc) + 16 + baseTypeRef)
+  else
+    baseRecDesc := nil;
+
+  PXXDynArrayRetainImmediate(newArrData, len, depth, baseKind, baseRecDesc);
+  PWord(arrSlot)^ := Int64(newArrData);
+  PXXDynArrayRelease(arrData, desc);
+
+  Result := newArrData;
 end;
 
 end.

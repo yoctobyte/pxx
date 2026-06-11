@@ -51,6 +51,14 @@ begin
   Data[pos+7] := Byte((v shr 56) and $FF);
 end;
 
+procedure PatchDataI32(pos: Integer; v: Integer);
+begin
+  Data[pos+0] := Byte(v and $FF);
+  Data[pos+1] := Byte((v shr 8) and $FF);
+  Data[pos+2] := Byte((v shr 16) and $FF);
+  Data[pos+3] := Byte((v shr 24) and $FF);
+end;
+
 procedure AddDataPtrFix(dataPos, targetOff: Integer);
 { Record a data->data 8-byte pointer relocation: the slot at dataPos is patched
   at link time to (dataBase + targetOff). Used by RTTI blob emission. }

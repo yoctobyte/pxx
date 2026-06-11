@@ -1258,6 +1258,7 @@ begin
   Syms[SymCount].IsArray  := False;
   Syms[SymCount].ArrLen   := 0;
   SymDynDepth[SymCount] := 0;
+  SymRTTIOff[SymCount] := -1;
   SymIsHiddenArgTemp[SymCount] := False;
   SymBlockId[SymCount] := CurBlockId;
   Syms[SymCount].ElemType := tyInteger;
@@ -1332,6 +1333,7 @@ begin
   Syms[SymCount].ArrLen   := 0;
   if isArray then Syms[SymCount].ArrLen := 1000;
   SymDynDepth[SymCount] := 0;
+  SymRTTIOff[SymCount] := -1;
   Syms[SymCount].ElemType := tk;
   Syms[SymCount].RecName  := LastTypeRecId;
   Syms[SymCount].IsRef    := isRef;
@@ -1383,6 +1385,7 @@ begin
   Syms[SymCount].IsArray  := True;
   Syms[SymCount].ArrLen   := hi - lo + 1;
   SymDynDepth[SymCount] := 0;
+  SymRTTIOff[SymCount] := -1;
   Syms[SymCount].ElemType := elemType;
   Syms[SymCount].ElemRecName := LastTypeRecId;
   Syms[SymCount].IsRef    := False;
@@ -1425,6 +1428,7 @@ begin
   Syms[SymCount].IsArray     := True;
   Syms[SymCount].ArrLen      := -1;           { -1 = dynamic }
   SymDynDepth[SymCount] := depth;
+  SymRTTIOff[SymCount] := -1;
   Syms[SymCount].ElemType    := elemType;
   Syms[SymCount].ElemRecName := LastTypeRecId;
   Syms[SymCount].IsRef       := False;

@@ -15,6 +15,29 @@
   This file is included after elfwriter.inc (DataPut*/PatchDataU64 live there)
   and is driven once from the main program after parsing. }
 
+procedure EmitLayoutRTTI; forward;
+
+function FieldIsManaged(fi: Integer): Boolean;
+begin
+  FieldIsManaged := False;
+  if UFldTk[fi] = Ord(tyAnsiString) then FieldIsManaged := True
+  else if UFldIsArray[fi] and (UFldArrLen[fi] = -1) then FieldIsManaged := True
+  else if (UFldTk[fi] = Ord(tyRecord)) and RecordHasManagedFields(UFldRec_[fi]) then FieldIsManaged := True;
+end;
+
+function RecordManagedFieldCount(ci: Integer): Integer;
+var base, cnt, i, managed: Integer;
+begin
+  managed := 0;
+  base := UClsFBase[ci];
+  cnt := UClsFCount[ci];
+  for i := 0 to cnt - 1 do
+  begin
+    if FieldIsManaged(base + i) then Inc(managed);
+  end;
+  RecordManagedFieldCount := managed;
+end;
+
 function TokSliceStr(off, len: Integer): AnsiString;
 { Build a real string from a name slice in TokChars (self-host safe: AppendChar). }
 var s: AnsiString; i: Integer;
@@ -231,126 +254,311 @@ begin
   for etid := 0 to EnumTypeCount - 1 do
     EnumTypeRTTIOff[etid] := EmitEnumRTTI(etid);
 
-  if UClsCount = 0 then Exit;
+  if UClsCount > 0 then
+  begin
+    { Pass 1: reserve a header per published class so forward type refs resolve. }
+    for ci := 0 to UClsCount - 1 do
+    begin
+      if (not UClsIsRecord[ci]) and ClassHasPublished(ci) then
+      begin
+        UClsRTTIOff[ci] := DataLen;
+        DataPutZeros(RTTI_CLS_SIZE);
+      end;
+    end;
 
-  { Pass 1: reserve a header per published class so forward type refs resolve. }
+    { Pass 2: fill headers + emit prop/meth arrays. }
+    for ci := 0 to UClsCount - 1 do
+    begin
+      if UClsRTTIOff[ci] < 0 then continue;
+      hdr := UClsRTTIOff[ci];
+
+      { name }
+      nm := TokSliceStr(UClsNOff[ci], UClsNLen[ci]);
+      strIdx := InternStr(nm);
+      AddDataPtrFix(hdr + 0, Strs[strIdx].Offset);
+
+      { parent RTTI }
+      if (UClsParent[ci] >= 0) and (UClsRTTIOff[UClsParent[ci]] >= 0) then
+        AddDataPtrFix(hdr + 8, UClsRTTIOff[UClsParent[ci]]);
+
+      { instance size }
+      PatchDataU64(hdr + 16, UClsSize_[ci]);
+
+      { VMT pointer }
+      if UClsVMTOffset[ci] >= 0 then
+        AddDataPtrFix(hdr + 24, UClsVMTOffset[ci]);
+
+      { published properties (own). Reserve the whole array contiguously BEFORE
+        filling: EmitPropInfo interns names (which append to Data[]), so records
+        must be laid out first or the runtime's props[i] stride breaks. }
+      base := UClsPBase[ci]; cnt := UClsPCount[ci];
+      propCount := 0;
+      for i := 0 to cnt - 1 do
+        if UPropPub[base + i] = 1 then Inc(propCount);
+      firstOff := -1;
+      if propCount > 0 then
+      begin
+        firstOff := DataLen;
+        DataPutZeros(propCount * RTTI_PROP_SIZE);
+        k := 0;
+        for i := 0 to cnt - 1 do
+          if UPropPub[base + i] = 1 then
+          begin
+            EmitPropInfo(ci, base + i, firstOff + k * RTTI_PROP_SIZE);
+            Inc(k);
+          end;
+      end;
+      PatchDataU64(hdr + 32, propCount);
+      if propCount > 0 then AddDataPtrFix(hdr + 40, firstOff);
+
+      { published methods (own) — same contiguous-reserve-then-fill rule. }
+      base := UClsMBase[ci]; cnt := UClsMCount[ci];
+      methCount := 0;
+      for i := 0 to cnt - 1 do
+        if UMthPub[base + i] = 1 then Inc(methCount);
+      firstOff := -1;
+      if methCount > 0 then
+      begin
+        firstOff := DataLen;
+        DataPutZeros(methCount * RTTI_METH_SIZE);
+        k := 0;
+        for i := 0 to cnt - 1 do
+          if UMthPub[base + i] = 1 then
+          begin
+            EmitMethInfo(base + i, firstOff + k * RTTI_METH_SIZE);
+            Inc(k);
+          end;
+      end;
+      PatchDataU64(hdr + 48, methCount);
+      if methCount > 0 then AddDataPtrFix(hdr + 56, firstOff);
+
+      { published fields (own) — same contiguous-reserve-then-fill rule. Used to
+        wire streamed child components into their matching published field. }
+      base := UClsFBase[ci]; cnt := UClsFCount[ci];
+      fieldCount := 0;
+      for i := 0 to cnt - 1 do
+        if UFldPub[base + i] = 1 then Inc(fieldCount);
+      firstOff := -1;
+      if fieldCount > 0 then
+      begin
+        firstOff := DataLen;
+        DataPutZeros(fieldCount * RTTI_FIELD_SIZE);
+        k := 0;
+        for i := 0 to cnt - 1 do
+          if UFldPub[base + i] = 1 then
+          begin
+            EmitFieldInfo(base + i, firstOff + k * RTTI_FIELD_SIZE);
+            Inc(k);
+          end;
+      end;
+      PatchDataU64(hdr + 64, fieldCount);
+      if fieldCount > 0 then AddDataPtrFix(hdr + 72, firstOff);
+    end;
+  end;
+
+  EmitLayoutRTTI;
+
+  if UClsCount > 0 then
+  begin
+    { Registry: count slot followed by (name ptr, rtti ptr) pairs }
+    regEntries := 0;
+    for ci := 0 to UClsCount - 1 do
+      if UClsRTTIOff[ci] >= 0 then Inc(regEntries);
+    if regEntries > 0 then
+    begin
+      RTTIRegistryOff := DataLen;
+      RTTIRegistryCount := regEntries;
+      DataPutZeros(8);                       { count slot }
+      PatchDataU64(RTTIRegistryOff, regEntries);
+      for ci := 0 to UClsCount - 1 do
+      begin
+        if UClsRTTIOff[ci] < 0 then continue;
+        entryPos := DataLen;
+        DataPutZeros(16);
+        nm := TokSliceStr(UClsNOff[ci], UClsNLen[ci]);
+        strIdx := InternStr(nm);
+        AddDataPtrFix(entryPos + 0, Strs[strIdx].Offset);
+        AddDataPtrFix(entryPos + 8, UClsRTTIOff[ci]);
+      end;
+    end;
+  end;
+end;
+
+procedure EmitLayoutRTTI;
+var
+  ci, i, fi, base, cnt, mCount, dCount, mHdr, dynDescOff: Integer;
+  hdr, subCi, arrCount, mKind, typeRef: Integer;
+  depth, baseKind, elSize, baseTypeRef, k, dynIdx: Integer;
+  targetPtrSize: Integer;
+
+
+
+begin
+  targetPtrSize := TARGET_PTR_SIZE;
+
+  { Pass 1: pre-allocate RTTI offsets in Data[] }
   for ci := 0 to UClsCount - 1 do
   begin
-    if (not UClsIsRecord[ci]) and ClassHasPublished(ci) then
+    if UClsIsRecord[ci] and RecordHasManagedFields(ci + REC_UCLASS_BASE) then
     begin
       UClsRTTIOff[ci] := DataLen;
-      DataPutZeros(RTTI_CLS_SIZE);
+      mCount := 0;
+      dCount := 0;
+      base := UClsFBase[ci];
+      cnt := UClsFCount[ci];
+      for i := 0 to cnt - 1 do
+      begin
+        fi := base + i;
+        if FieldIsManaged(fi) then
+        begin
+          Inc(mCount);
+          if UFldIsArray[fi] and (UFldArrLen[fi] = -1) then
+            Inc(dCount);
+        end;
+      end;
+      DataPutZeros(12 + mCount * 16 + dCount * 20);
     end;
   end;
 
-  { Pass 2: fill headers + emit prop/meth arrays. }
+
+
+  { Pass 2: fill descriptors }
   for ci := 0 to UClsCount - 1 do
   begin
-    if UClsRTTIOff[ci] < 0 then continue;
-    hdr := UClsRTTIOff[ci];
-
-    { name }
-    nm := TokSliceStr(UClsNOff[ci], UClsNLen[ci]);
-    strIdx := InternStr(nm);
-    AddDataPtrFix(hdr + 0, Strs[strIdx].Offset);
-
-    { parent RTTI }
-    if (UClsParent[ci] >= 0) and (UClsRTTIOff[UClsParent[ci]] >= 0) then
-      AddDataPtrFix(hdr + 8, UClsRTTIOff[UClsParent[ci]]);
-
-    { instance size }
-    PatchDataU64(hdr + 16, UClsSize_[ci]);
-
-    { VMT pointer }
-    if UClsVMTOffset[ci] >= 0 then
-      AddDataPtrFix(hdr + 24, UClsVMTOffset[ci]);
-
-    { published properties (own). Reserve the whole array contiguously BEFORE
-      filling: EmitPropInfo interns names (which append to Data[]), so records
-      must be laid out first or the runtime's props[i] stride breaks. }
-    base := UClsPBase[ci]; cnt := UClsPCount[ci];
-    propCount := 0;
-    for i := 0 to cnt - 1 do
-      if UPropPub[base + i] = 1 then Inc(propCount);
-    firstOff := -1;
-    if propCount > 0 then
+    if UClsIsRecord[ci] and RecordHasManagedFields(ci + REC_UCLASS_BASE) then
     begin
-      firstOff := DataLen;
-      DataPutZeros(propCount * RTTI_PROP_SIZE);
+      hdr := UClsRTTIOff[ci];
+      PatchDataI32(hdr + 0, 1); { Kind = 1 (Record) }
+      PatchDataI32(hdr + 4, UClsSize_[ci]); { Size }
+
+      base := UClsFBase[ci];
+      cnt := UClsFCount[ci];
+      mCount := RecordManagedFieldCount(ci);
+
       k := 0;
+      dynIdx := 0;
       for i := 0 to cnt - 1 do
-        if UPropPub[base + i] = 1 then
+      begin
+        fi := base + i;
+        if FieldIsManaged(fi) then
         begin
-          EmitPropInfo(ci, base + i, firstOff + k * RTTI_PROP_SIZE);
+          mHdr := hdr + 12 + k * 16;
+          PatchDataI32(mHdr + 0, UFldOff_[fi]); { Offset }
+
+          if UFldTk[fi] = Ord(tyAnsiString) then
+            mKind := 1
+          else if UFldIsArray[fi] and (UFldArrLen[fi] = -1) then
+            mKind := 2
+          else
+            mKind := 3;
+          PatchDataI32(mHdr + 4, mKind);
+
+          if UFldIsArray[fi] then
+          begin
+            if UFldArrLen[fi] = -1 then
+              arrCount := 1
+            else
+              arrCount := UFldArrLen[fi];
+          end
+          else
+            arrCount := 1;
+          PatchDataI32(mHdr + 8, arrCount);
+
+          typeRef := 0;
+          if mKind = 2 then
+          begin
+            dynDescOff := hdr + 12 + mCount * 16 + dynIdx * 20;
+            typeRef := dynDescOff - (mHdr + 12);
+
+            PatchDataI32(dynDescOff + 0, 2); { Kind = 2 (DynArray) }
+
+            depth := UFldDynDepth[fi];
+            if UFldTk[fi] = Ord(tyAnsiString) then
+              baseKind := 1
+            else if (UFldTk[fi] = Ord(tyRecord)) and RecordHasManagedFields(UFldRec_[fi]) then
+              baseKind := 3
+            else
+              baseKind := 0;
+
+            if depth > 1 then
+              elSize := targetPtrSize
+            else
+            begin
+              if baseKind = 1 then
+                elSize := targetPtrSize
+              else if baseKind = 3 then
+                elSize := UClsSize_[UFldRec_[fi] - REC_UCLASS_BASE]
+              else
+                elSize := TypeSize(IntToTypeKind(UFldTk[fi]));
+            end;
+            PatchDataI32(dynDescOff + 4, elSize);
+            PatchDataI32(dynDescOff + 8, depth);
+            PatchDataI32(dynDescOff + 12, baseKind);
+
+            baseTypeRef := 0;
+            if baseKind = 3 then
+            begin
+              subCi := UFldRec_[fi] - REC_UCLASS_BASE;
+              if (subCi >= 0) and (subCi < UClsCount) and (UClsRTTIOff[subCi] >= 0) then
+                baseTypeRef := UClsRTTIOff[subCi] - (dynDescOff + 16);
+            end;
+            PatchDataI32(dynDescOff + 16, baseTypeRef);
+
+            Inc(dynIdx);
+          end
+          else if mKind = 3 then
+          begin
+            subCi := UFldRec_[fi] - REC_UCLASS_BASE;
+            if (subCi >= 0) and (subCi < UClsCount) and (UClsRTTIOff[subCi] >= 0) then
+              typeRef := UClsRTTIOff[subCi] - (mHdr + 12);
+          end;
+          PatchDataI32(mHdr + 12, typeRef);
+
           Inc(k);
         end;
+      end;
+      PatchDataI32(hdr + 8, k); { MemberCount }
     end;
-    PatchDataU64(hdr + 32, propCount);
-    if propCount > 0 then AddDataPtrFix(hdr + 40, firstOff);
-
-    { published methods (own) — same contiguous-reserve-then-fill rule. }
-    base := UClsMBase[ci]; cnt := UClsMCount[ci];
-    methCount := 0;
-    for i := 0 to cnt - 1 do
-      if UMthPub[base + i] = 1 then Inc(methCount);
-    firstOff := -1;
-    if methCount > 0 then
-    begin
-      firstOff := DataLen;
-      DataPutZeros(methCount * RTTI_METH_SIZE);
-      k := 0;
-      for i := 0 to cnt - 1 do
-        if UMthPub[base + i] = 1 then
-        begin
-          EmitMethInfo(base + i, firstOff + k * RTTI_METH_SIZE);
-          Inc(k);
-        end;
-    end;
-    PatchDataU64(hdr + 48, methCount);
-    if methCount > 0 then AddDataPtrFix(hdr + 56, firstOff);
-
-    { published fields (own) — same contiguous-reserve-then-fill rule. Used to
-      wire streamed child components into their matching published field. }
-    base := UClsFBase[ci]; cnt := UClsFCount[ci];
-    fieldCount := 0;
-    for i := 0 to cnt - 1 do
-      if UFldPub[base + i] = 1 then Inc(fieldCount);
-    firstOff := -1;
-    if fieldCount > 0 then
-    begin
-      firstOff := DataLen;
-      DataPutZeros(fieldCount * RTTI_FIELD_SIZE);
-      k := 0;
-      for i := 0 to cnt - 1 do
-        if UFldPub[base + i] = 1 then
-        begin
-          EmitFieldInfo(base + i, firstOff + k * RTTI_FIELD_SIZE);
-          Inc(k);
-        end;
-    end;
-    PatchDataU64(hdr + 64, fieldCount);
-    if fieldCount > 0 then AddDataPtrFix(hdr + 72, firstOff);
   end;
 
-  { Registry: count slot followed by (name ptr, rtti ptr) pairs }
-  regEntries := 0;
-  for ci := 0 to UClsCount - 1 do
-    if UClsRTTIOff[ci] >= 0 then Inc(regEntries);
-  if regEntries = 0 then Exit;
 
-  RTTIRegistryOff := DataLen;
-  RTTIRegistryCount := regEntries;
-  DataPutZeros(8);                       { count slot }
-  PatchDataU64(RTTIRegistryOff, regEntries);
-  for ci := 0 to UClsCount - 1 do
+
+  for i := 0 to AnonDynArrayCount - 1 do
   begin
-    if UClsRTTIOff[ci] < 0 then continue;
-    entryPos := DataLen;
-    DataPutZeros(16);
-    nm := TokSliceStr(UClsNOff[ci], UClsNLen[ci]);
-    strIdx := InternStr(nm);
-    AddDataPtrFix(entryPos + 0, Strs[strIdx].Offset);
-    AddDataPtrFix(entryPos + 8, UClsRTTIOff[ci]);
+    hdr := AnonDynArrayOff[i];
+    PatchDataI32(hdr + 0, 2); { Kind = 2 (DynArray) }
+
+    depth := AnonDynArrayDepth[i];
+    if AnonDynArrayBaseTk[i] = Ord(tyAnsiString) then
+      baseKind := 1
+    else if (AnonDynArrayBaseTk[i] = Ord(tyRecord)) and RecordHasManagedFields(AnonDynArrayBaseRec[i]) then
+      baseKind := 3
+    else
+      baseKind := 0;
+
+    if depth > 1 then
+      elSize := targetPtrSize
+    else
+    begin
+      if baseKind = 1 then
+        elSize := targetPtrSize
+      else if baseKind = 3 then
+        elSize := UClsSize_[AnonDynArrayBaseRec[i] - REC_UCLASS_BASE]
+      else
+        elSize := AnonDynArrayElSize[i];
+    end;
+    PatchDataI32(hdr + 4, elSize);
+    PatchDataI32(hdr + 8, depth);
+    PatchDataI32(hdr + 12, baseKind);
+
+    baseTypeRef := 0;
+    if baseKind = 3 then
+    begin
+      subCi := AnonDynArrayBaseRec[i] - REC_UCLASS_BASE;
+      if (subCi >= 0) and (subCi < UClsCount) and (UClsRTTIOff[subCi] >= 0) then
+        baseTypeRef := UClsRTTIOff[subCi] - (hdr + 16);
+    end;
+    PatchDataI32(hdr + 16, baseTypeRef);
   end;
 end;
 
