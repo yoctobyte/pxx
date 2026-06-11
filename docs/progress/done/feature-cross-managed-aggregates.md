@@ -65,6 +65,11 @@ the Tier B target-independent layout-RTTI helpers in `builtinheap.pas`.
 2. **i386/arm32 string gaps** (deferred): managed-local release at scope exit
    (v1 leaks), class instantiation, exceptions.
 
+## Log
+- 2026-06-11 — i386 + ARM32 records (9d26096, feb480b), dynamic arrays
+  (6 files incl. PXXDynSetLen). AArch64 heap (aa0337b), then full managed
+  strings + records + dynarrays (febd9b3). Ticket closed.
+
 ## Test plan
 Per target: `make test-i386 / test-arm32 / test-aarch64` stay oracle-matched to
 x86-64; `make test` + threadsafe self-compile unbroken; self-host fixedpoint.
