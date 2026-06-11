@@ -5914,6 +5914,12 @@ begin
         EmitI32($E3A00000);                                          { mov r0, #0 }
         EmitI32($E5890000);                                          { str r0, [r9] }
       end
+      else if (zeroBytes = TARGET_PTR_SIZE) and (TargetArch = TARGET_AARCH64) then
+      begin
+        EmitLoadImmA64(9, Syms[i].Offset);
+        EmitI32($8B0903A9);                                          { add x9, x29, x9 }
+        EmitI32($F900013F);                                          { str xzr, [x9] }
+      end
       else if zeroBytes = TARGET_PTR_SIZE then
       begin
         EmitB($48); EmitB($C7); EmitB($85); EmitI32(Syms[i].Offset); EmitI32(0); { mov qword [rbp+off], 0 }
@@ -6739,10 +6745,10 @@ begin
   end
   else if TargetArch = TARGET_AARCH64 then
   begin
-    { Heap (New/Dispose/GetMem) supported via the Pascal allocator; string and
+    { Heap + managed strings via the Pascal allocator/builtinheap helpers;
       exception runtime not yet ported. }
-    if needsAnsiRuntime or hasExceptions then
-      Error('target aarch64: string/exception runtime not yet supported');
+    if hasExceptions then
+      Error('target aarch64: exception runtime not yet supported');
     { AArch64 entry stub: branch to main body. }
     jmpPatch := CodeLen;
     EmitI32($14000000);
@@ -6757,7 +6763,7 @@ begin
   { The emitted AnsiString runtime is x86-64 machine code; i386 string IR ops
     call the builtinheap Pascal helpers directly instead, so skip the shim
     emission there (its AnsiStr*Addr labels stay 0 and are never referenced). }
-  if needsAnsiRuntime and not ((TargetArch = TARGET_I386) or (TargetArch = TARGET_ARM32)) then EmitAnsiStringRuntime;
+  if needsAnsiRuntime and (TargetArch = TARGET_X86_64) then EmitAnsiStringRuntime;
   if hasExceptions then EnableExceptionRuntime;
 
   { Compile the runtime units before user declarations, so their proc bodies

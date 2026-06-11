@@ -6,11 +6,12 @@
 procedure IREmitNodeAarch64(node: Integer); forward;
 
 procedure EmitLoadDataRefA64(rd, dataOff: Integer);
-{ Load a data address (or descriptor sentinel) into x[rd]. Inline literal loaded
-  as a 32-bit word, zero-extended — binaries map below 4 GiB. }
+{ Load a data address (or descriptor sentinel) into x[rd]. EmitDataRef emits an
+  8-byte slot on this 64-bit target, so use the 64-bit literal load and branch
+  past the full 8 bytes (mirrors EmitwriteSyscallA64). }
 begin
-  EmitI32($18000040 or rd);  { ldr w[rd], [pc+8] }
-  EmitI32($14000002);        { b [pc+8] }
+  EmitI32($58000040 or rd);  { ldr x[rd], [pc+8] }
+  EmitI32($14000003);        { b [pc+12] (skip 8-byte literal) }
   EmitDataRef(dataOff);
 end;
 
@@ -32,6 +33,116 @@ begin
   pi := FindProc('PXXFree');
   if pi < 0 then Error('compiler error: Free helper not found in builtin unit');
   EmitCallProc(pi);
+end;
+
+procedure EmitStrIncRefA64;
+{ x0 = managed-string handle. Retain; x0 preserved. }
+var pi: Integer;
+begin
+  EmitI32($F81F0FE0);             { str x0, [sp, #-16]! (save handle; x0 still arg) }
+  pi := FindProc('PXXStrIncRef');
+  if pi < 0 then Error('compiler error: PXXStrIncRef not found');
+  EmitCallProc(pi);
+  EmitI32($F84107E0);             { ldr x0, [sp], #16 (restore handle) }
+end;
+
+procedure EmitStrDecRefA64;
+{ x0 = managed-string handle. x0 clobbered. }
+var pi: Integer;
+begin
+  pi := FindProc('PXXStrDecRef');
+  if pi < 0 then Error('compiler error: PXXStrDecRef not found');
+  EmitCallProc(pi);
+end;
+
+procedure EmitAnsiStringFromNodeA64(valNode: Integer);
+{ Build a managed AnsiString handle in x0 from a literal, char, inline string,
+  or existing handle (retained unless a fresh concat/function result). }
+var sVal: AnsiString; si, pi: Integer; tk: TTypeKind;
+begin
+  if IRKind[valNode] = IR_CONST_STR then
+  begin
+    sVal := GetTokenStrFromRaw(IRA[valNode], IRB[valNode]);
+    si := InternStr(sVal);
+    EmitLoadImmA64(0, Strs[si].Len);
+    EmitLoadDataRefA64(1, Strs[si].Offset + 8);
+    pi := FindProc('PXXStrFromLit');
+    if pi < 0 then Error('compiler error: PXXStrFromLit not found');
+    EmitCallProc(pi);
+    Exit;
+  end;
+  tk := IntToTypeKind(IRTk[valNode]);
+  if tk = tyChar then
+  begin
+    IREmitNodeAarch64(valNode);   { x0 = char code }
+    EmitI32($F81F0FE0);           { str x0, [sp, #-16]! (byte at [sp]) }
+    EmitLoadImmA64(0, 1);         { x0 = 1 }
+    EmitI32($910003E1);           { add x1, sp, #0 }
+    pi := FindProc('PXXStrFromLit');
+    if pi < 0 then Error('compiler error: PXXStrFromLit not found');
+    EmitCallProc(pi);
+    EmitI32($910043FF);           { add sp, sp, #16 }
+  end
+  else if tk = tyString then
+  begin
+    IREmitNodeAarch64(valNode);   { x0 = inline string buffer }
+    EmitI32($AA0003E2);           { mov x2, x0 }
+    EmitI32($F9400040);           { ldr x0, [x2] (len) }
+    EmitI32($91002041);           { add x1, x2, #8 (src) }
+    pi := FindProc('PXXStrFromLit');
+    if pi < 0 then Error('compiler error: PXXStrFromLit not found');
+    EmitCallProc(pi);
+  end
+  else
+  begin
+    IREmitNodeAarch64(valNode);   { x0 = handle }
+    if not (((IRKind[valNode] = IR_BINOP) and
+             (IntToTypeKind(IRTk[valNode]) = tyAnsiString)) or
+            ((IRKind[valNode] = IR_CALL) and (IRA[valNode] >= 0))) then
+      EmitStrIncRefA64;
+  end;
+end;
+
+{ Decompose an evaluated string operand value (in x[valueReg]) into
+  (src in x[srcReg], len in x[lenReg]). tk selects managed-handle / inline /
+  char. For char, charStackOff is the byte offset from sp. }
+procedure EmitA64StringParts(valueReg, srcReg, lenReg: Integer; tk: TTypeKind;
+                             charStackOff: Integer);
+begin
+  if tk = tyAnsiString then
+  begin
+    EmitI32($AA0003E0 or (valueReg shl 16) or srcReg); { mov src, value }
+    EmitLoadImmA64(lenReg, 0);
+    EmitI32($B4000040 or (valueReg) or (2 shl 5));     { cbz value, +8 }
+    { ldur len, [value, #-8] }
+    EmitI32($F85F8000 or (valueReg shl 5) or lenReg);
+  end
+  else if tk = tyString then
+  begin
+    EmitI32($F9400000 or (valueReg shl 5) or lenReg);  { ldr len, [value] }
+    EmitI32($91002000 or (valueReg shl 5) or srcReg);  { add src, value, #8 }
+  end
+  else
+  begin
+    EmitLoadImmA64(lenReg, 1);
+    EmitI32($910003E0 or (charStackOff shl 10) or srcReg); { add src, sp, #off }
+  end;
+end;
+
+procedure EmitA64CopyBytes(countReg, srcReg, dstReg: Integer);
+{ Copy x[countReg] bytes from x[srcReg] to x[dstReg]. Uses w8 as scratch. }
+var donePos, loopStart: Integer;
+begin
+  donePos := CodeLen;
+  EmitI32($B4000000 or countReg);                 { cbz count, done (patched) }
+  loopStart := CodeLen;
+  EmitI32($39400008 or (srcReg shl 5));            { ldrb w8, [src] }
+  EmitI32($39000008 or (dstReg shl 5));            { strb w8, [dst] }
+  EmitI32($91000400 or (srcReg shl 5) or srcReg);  { add src, src, #1 }
+  EmitI32($91000400 or (dstReg shl 5) or dstReg);  { add dst, dst, #1 }
+  EmitI32($F1000400 or (countReg shl 5) or countReg); { subs count, count, #1 }
+  EmitI32($54000001 or ((((loopStart - CodeLen) div 4) and $7FFFF) shl 5)); { b.ne loop }
+  Patch32(donePos, $B4000000 or countReg or ((((CodeLen - donePos) div 4) and $7FFFF) shl 5));
 end;
 
 procedure EmitLoadVarA64(idx: Integer);
@@ -182,8 +293,9 @@ end;
 procedure IREmitNodeAarch64(node: Integer);
 var
   valNode, si, left, right, op, pi, argNode, nArgs, i, sz, wid: Integer;
+  classIdx, elemSize, lo: Integer;
   sVal: AnsiString;
-  tk: TTypeKind;
+  tk, lhsTk, rhsTk: TTypeKind;
   sgn: Boolean;
 begin
   if node = -1 then Exit;
@@ -198,12 +310,52 @@ begin
 
     IR_STORE_SYM:
       begin
+        si := IRA[node];
+        if Syms[si].TypeKind = tyAnsiString then
+        begin
+          valNode := IRB[node];
+          EmitAnsiStringFromNodeA64(valNode);   { x0 = new handle (retained) }
+          if (Syms[si].Kind = skParam) and Syms[si].IsRef then
+          begin
+            EmitI32($F81F0FE0);                 { str x0, [sp, #-16]! (new) }
+            EmitLoadImmA64(9, Syms[si].Offset);
+            EmitI32($8B0903A9);                 { add x9, x29, x9 }
+            EmitI32($F9400121);                 { ldr x1, [x9] caller slot addr }
+            EmitI32($F9400020);                 { ldr x0, [x1] old }
+            EmitI32($F94003E2);                 { ldr x2, [sp] new }
+            EmitI32($F9000022);                 { str x2, [x1] }
+            EmitStrDecRefA64;                   { release old (x0) }
+            EmitI32($910043FF);                 { add sp, sp, #16 }
+          end
+          else
+          begin
+            EmitI32($F81F0FE0);                 { str x0, [sp, #-16]! (new) }
+            EmitLoadVarA64(si);                 { x0 = old }
+            EmitStrDecRefA64;                   { release old }
+            EmitI32($F84107E0);                 { ldr x0, [sp], #16 (new) }
+            EmitStoreVarA64(si);                { store new }
+          end;
+          Exit;
+        end;
         IREmitNodeAarch64(IRB[node]);
         EmitStoreVarA64(IRA[node]);
       end;
 
     IR_LEA:
-      EmitLoadVarAddrA64(IRA[node]);
+      begin
+        si := IRA[node];
+        if Syms[si].IsArray and (Syms[si].ArrLen = -1) then
+        begin
+          { Dynamic array: slot holds the heap data pointer; load it (v1: no COW). }
+          EmitLoadVarAddrA64(si);               { x0 = slot address }
+          EmitI32($F9400000);                   { ldr x0, [x0] = handle }
+        end
+        else
+          EmitLoadVarAddrA64(si);
+      end;
+
+    IR_SLOTADDR:
+      EmitLoadVarAddrA64(IRA[node]);            { always the slot address }
 
     IR_BINOP:
       begin
@@ -211,6 +363,88 @@ begin
         right := IRB[node];
         op := IRC[node];
         tk := IntToTypeKind(IRTk[node]);
+
+        if (tk = tyAnsiString) and (op = Ord(tkPlus)) then
+        begin
+          { a + b -> PXXStrConcat(lenA, srcA, srcB, lenB). Operands pushed as
+            16-byte slots. }
+          lhsTk := IntToTypeKind(IRTk[left]);
+          rhsTk := IntToTypeKind(IRTk[right]);
+          IREmitNodeAarch64(left);  EmitI32($F81F0FE0); { push lhs }
+          IREmitNodeAarch64(right); EmitI32($F81F0FE0); { push rhs; [sp]=rhs,[sp+16]=lhs }
+          EmitI32($F94003E0);                           { ldr x0, [sp] (rhs) }
+          EmitA64StringParts(0, 1, 2, rhsTk, 0);        { x1=srcB, x2=lenB }
+          EmitI32($F81F0FE1);                           { str x1, [sp,#-16]! (srcB) }
+          EmitI32($F81F0FE2);                           { str x2, [sp,#-16]! (lenB) }
+          { [sp]=lenB,[sp+16]=srcB,[sp+32]=rhs,[sp+48]=lhs }
+          EmitI32($F9401BE0);                           { ldr x0, [sp,#48] (lhs) }
+          EmitA64StringParts(0, 1, 2, lhsTk, 48);       { x1=srcA, x2=lenA }
+          EmitI32($AA0203E0);                           { mov x0, x2 (lenA) }
+          EmitI32($F9400BE2);                           { ldr x2, [sp,#16] (srcB) }
+          EmitI32($F94003E3);                           { ldr x3, [sp] (lenB) }
+          EmitI32($910083FF);                           { add sp, sp, #32 (drop temps) }
+          pi := FindProc('PXXStrConcat');
+          if pi < 0 then Error('compiler error: PXXStrConcat not found');
+          EmitCallProc(pi);                             { x0 = result }
+          EmitI32($F81F0FE0);                           { push result; [sp]=res,[sp+16]=rhs,[sp+32]=lhs }
+          if (IRKind[left] = IR_BINOP) and (IntToTypeKind(IRTk[left]) = tyAnsiString) then
+          begin
+            EmitI32($F94013E0);                         { ldr x0, [sp,#32] (lhs) }
+            EmitStrDecRefA64;
+          end;
+          if (IRKind[right] = IR_BINOP) and (IntToTypeKind(IRTk[right]) = tyAnsiString) then
+          begin
+            EmitI32($F9400BE0);                         { ldr x0, [sp,#16] (rhs) }
+            EmitStrDecRefA64;
+          end;
+          EmitI32($F84107E0);                           { ldr x0, [sp], #16 (result) }
+          EmitI32($910083FF);                           { add sp, sp, #32 (drop rhs,lhs) }
+          Exit;
+        end;
+
+        if ((op = Ord(tkEq)) or (op = Ord(tkNeq))) and
+           ((IntToTypeKind(IRTk[left]) in [tyAnsiString, tyString, tyChar]) and
+            (IntToTypeKind(IRTk[right]) in [tyAnsiString, tyString, tyChar])) and
+           ((IntToTypeKind(IRTk[left]) = tyAnsiString) or
+            (IntToTypeKind(IRTk[right]) = tyAnsiString)) then
+        begin
+          { String/char equality via PXXStrEq(lenA, srcA, lenB, srcB). At least
+            one operand is a managed handle. }
+          lhsTk := IntToTypeKind(IRTk[left]);
+          rhsTk := IntToTypeKind(IRTk[right]);
+          IREmitNodeAarch64(left);  EmitI32($F81F0FE0); { push lhs }
+          IREmitNodeAarch64(right); EmitI32($F81F0FE0); { push rhs }
+          EmitI32($F94003E0);                           { ldr x0, [sp] (rhs) }
+          EmitA64StringParts(0, 1, 2, rhsTk, 0);        { x1=srcB, x2=lenB }
+          EmitI32($F81F0FE1);                           { str x1, [sp,#-16]! (srcB) }
+          EmitI32($F81F0FE2);                           { str x2, [sp,#-16]! (lenB) }
+          EmitI32($F9401BE0);                           { ldr x0, [sp,#48] (lhs) }
+          EmitA64StringParts(0, 1, 2, lhsTk, 48);       { x1=srcA, x2=lenA }
+          EmitI32($AA0203E0);                           { mov x0, x2 (lenA) }
+          EmitI32($F9400BE3);                           { ldr x3, [sp,#16] (srcB) }
+          EmitI32($F94003E2);                           { ldr x2, [sp] (lenB) }
+          EmitI32($910083FF);                           { add sp, sp, #32 }
+          pi := FindProc('PXXStrEq');
+          if pi < 0 then Error('compiler error: PXXStrEq not found');
+          EmitCallProc(pi);                             { x0 = 1/0 }
+          if op = Ord(tkNeq) then
+            EmitI32($D2400000);                         { eor x0, x0, #1 }
+          EmitI32($F81F0FE0);                           { push result }
+          if (IRKind[left] = IR_BINOP) and (IntToTypeKind(IRTk[left]) = tyAnsiString) then
+          begin
+            EmitI32($F94013E0);                         { ldr x0, [sp,#32] (lhs) }
+            EmitStrDecRefA64;
+          end;
+          if (IRKind[right] = IR_BINOP) and (IntToTypeKind(IRTk[right]) = tyAnsiString) then
+          begin
+            EmitI32($F9400BE0);                         { ldr x0, [sp,#16] (rhs) }
+            EmitStrDecRefA64;
+          end;
+          EmitI32($F84107E0);                           { ldr x0, [sp], #16 (result) }
+          EmitI32($910083FF);                           { add sp, sp, #32 }
+          Exit;
+        end;
+
         if not (TypeIsOrdinal(tk) or (tk = tyBoolean) or (tk = tyUnknown)) then
           Error('target aarch64: non-integer binop not yet supported');
         IREmitNodeAarch64(left);
@@ -260,6 +494,42 @@ begin
           argNode := IRB[node];               { pointer arg }
           IREmitNodeAarch64(IRA[argNode]);    { p -> x0 }
           EmitHeapFreeLockedA64;
+          Exit;
+        end;
+        if pi = -102 then
+        begin
+          { SetLength(arr, n) -> PXXDynSetLen(slotAddr, n, desc). }
+          argNode := IRB[node];               { arg1 = array lvalue (IR_LEA) }
+          valNode := IRB[argNode];            { arg2 = new length }
+          left := IRA[argNode];               { IR_LEA node }
+          if IRKind[left] <> IR_LEA then
+            Error('target aarch64: SetLength expects an array variable');
+          si := IRA[left];
+          if not (Syms[si].IsArray and (Syms[si].ArrLen = -1)) then
+            Error('target aarch64: SetLength only supports dynamic arrays yet');
+          if (Syms[si].Kind = skParam) and Syms[si].IsRef then
+            Error('target aarch64: SetLength on a var-array parameter not yet supported');
+          EmitLoadVarAddrA64(si);             { x0 = slot address }
+          EmitI32($F81F0FE0);                 { str x0, [sp, #-16]! }
+          IREmitNodeAarch64(IRA[valNode]);    { x0 = n }
+          EmitI32($AA0003E1);                 { mov x1, x0 (n) }
+          EmitI32($F84107E0);                 { ldr x0, [sp], #16 (slotAddr) }
+          EmitLoadDataRefA64(2, GetOrAllocSymRTTI(si)); { x2 = desc }
+          pi := FindProc('PXXDynSetLen');
+          if pi < 0 then Error('compiler error: PXXDynSetLen not found');
+          EmitCallProc(pi);
+          Exit;
+        end;
+        if pi = -Ord(tkLength) then
+        begin
+          { Length(arr): IR_LEA auto-loaded the data pointer; count at [handle-8]. }
+          argNode := IRB[node];
+          valNode := IRA[argNode];
+          IREmitNodeAarch64(valNode);         { x0 = handle (or 0) }
+          if (IRKind[valNode] = IR_INDEX) or (IRKind[valNode] = IR_FIELD) then
+            EmitI32($F9400000);               { ldr x0, [x0] (deref slot to handle) }
+          EmitI32($B4000040);                 { cbz x0, +8 (skip ldur) }
+          EmitI32($F85F8000);                 { ldur x0, [x0, #-8] }
           Exit;
         end;
         if pi < 0 then
@@ -356,6 +626,22 @@ begin
     IR_STORE_MEM:
       begin
         tk := IntToTypeKind(IRTk[node]);
+        if tk = tyAnsiString then
+        begin
+          { Managed-string store through an address (field/slot): publish new,
+            release old. }
+          valNode := IRB[node];
+          EmitAnsiStringFromNodeA64(valNode);   { x0 = new (retained) }
+          EmitI32($F81F0FE0);                   { str x0, [sp, #-16]! (new) }
+          IREmitNodeAarch64(IRA[node]);         { x0 = slot address }
+          EmitI32($AA0003E1);                   { mov x1, x0 }
+          EmitI32($F9400020);                   { ldr x0, [x1] old }
+          EmitI32($F94003E2);                   { ldr x2, [sp] new }
+          EmitI32($F9000022);                   { str x2, [x1] }
+          EmitStrDecRefA64;                     { release old }
+          EmitI32($910043FF);                   { add sp, sp, #16 }
+          Exit;
+        end;
         if not (TypeIsOrdinal(tk) or (tk = tyBoolean) or (tk = tyPointer) or
                 (tk = tyChar) or (tk = tyUnknown)) then
           Error('target aarch64: store through pointer of this type not yet supported');
@@ -368,6 +654,72 @@ begin
         else if sz = 2 then EmitI32($79000001) { strh w1, [x0] }
         else if sz = 4 then EmitI32($B9000001) { str w1, [x0] }
         else EmitI32($F9000001);               { str x1, [x0] }
+      end;
+
+    IR_COPY_REC:
+      begin
+        { PXXMemMove(dest, src, count). }
+        IREmitNodeAarch64(IRB[node]);          { x0 = src }
+        EmitI32($F81F0FE0);                    { str x0, [sp, #-16]! }
+        IREmitNodeAarch64(IRA[node]);          { x0 = dest }
+        EmitI32($F84107E1);                    { ldr x1, [sp], #16 (src) }
+        EmitLoadImmA64(2, IRIVal[node]);       { x2 = count }
+        pi := FindProc('PXXMemMove');
+        if pi < 0 then Error('compiler error: PXXMemMove not found');
+        EmitCallProc(pi);
+      end;
+
+    IR_COPY_REC_MANAGED:
+      begin
+        { ARC record copy: retain src, release dest, then move. }
+        IREmitNodeAarch64(IRB[node]);          { x0 = src }
+        EmitI32($F81F0FE0);                    { str x0, [sp,#-16]! (src @ [sp+16]) }
+        IREmitNodeAarch64(IRA[node]);          { x0 = dest }
+        EmitI32($F81F0FE0);                    { str x0, [sp,#-16]! (dest @ [sp]) }
+        pi := FindProc('PXXRecordRetain');
+        if pi < 0 then Error('compiler error: PXXRecordRetain not found');
+        EmitI32($F9400BE0);                    { ldr x0, [sp,#16] (src) }
+        EmitLoadDataRefA64(1, -(RECORD_RTTI_DATAREF_BASE + (IRC[node] - REC_UCLASS_BASE)));
+        EmitCallProc(pi);
+        pi := FindProc('PXXRecordRelease');
+        if pi < 0 then Error('compiler error: PXXRecordRelease not found');
+        EmitI32($F94003E0);                    { ldr x0, [sp] (dest) }
+        EmitLoadDataRefA64(1, -(RECORD_RTTI_DATAREF_BASE + (IRC[node] - REC_UCLASS_BASE)));
+        EmitCallProc(pi);
+        pi := FindProc('PXXMemMove');
+        if pi < 0 then Error('compiler error: PXXMemMove not found');
+        EmitI32($F94003E0);                    { ldr x0, [sp] (dest) }
+        EmitI32($F9400BE1);                    { ldr x1, [sp,#16] (src) }
+        EmitLoadImmA64(2, IRIVal[node]);       { x2 = count }
+        EmitCallProc(pi);
+        EmitI32($910083FF);                    { add sp, sp, #32 }
+      end;
+
+    IR_DEFAULT_MEM:
+      begin
+        IREmitNodeAarch64(IRA[node]);          { x0 = dest }
+        if (IRC[node] >= 0) and RecordHasManagedFields(IRC[node]) then
+        begin
+          EmitI32($F81F0FE0);                  { str x0, [sp,#-16]! (dest) }
+          pi := FindProc('PXXRecordRelease');
+          if pi < 0 then Error('compiler error: PXXRecordRelease not found');
+          EmitI32($F94003E0);                  { ldr x0, [sp] (dest) }
+          EmitLoadDataRefA64(1, -(RECORD_RTTI_DATAREF_BASE + (IRC[node] - REC_UCLASS_BASE)));
+          EmitCallProc(pi);
+          pi := FindProc('PXXMemZero');
+          if pi < 0 then Error('compiler error: PXXMemZero not found');
+          EmitI32($F94003E0);                  { ldr x0, [sp] (dest) }
+          EmitLoadImmA64(1, IRIVal[node]);     { x1 = count }
+          EmitCallProc(pi);
+          EmitI32($910043FF);                  { add sp, sp, #16 }
+        end
+        else
+        begin
+          pi := FindProc('PXXMemZero');
+          if pi < 0 then Error('compiler error: PXXMemZero not found');
+          EmitLoadImmA64(1, IRIVal[node]);     { x1 = count }
+          EmitCallProc(pi);
+        end;
       end;
 
     IR_SYSCALL:
@@ -459,6 +811,34 @@ begin
               else
                 EmitwriteIntA64;
             end;
+          end
+          else if tk = tyString then
+          begin
+            { write(1, buf+8, [buf]) for an inline [len:8][data] value. }
+            IREmitNodeAarch64(valNode);            { x0 = struct addr }
+            EmitI32($F9400002);                    { ldr x2, [x0] (len) }
+            EmitI32($91002001);                    { add x1, x0, #8 (buf) }
+            EmitI32($D2800020);                    { movz x0, #1 (fd) }
+            EmitI32($D2800808);                    { movz x8, #64 (write) }
+            EmitI32($D4000001);                    { svc #0 }
+          end
+          else if tk = tyAnsiString then
+          begin
+            { write(1, data, [data-8]); nil handle -> skip. }
+            IREmitNodeAarch64(valNode);            { x0 = handle }
+            wid := CodeLen;
+            EmitI32($B4000000);                    { cbz x0, done (patched) }
+            EmitI32($F81F0FE0);                    { str x0, [sp, #-16]! (preserve) }
+            EmitI32($F85F8002);                    { ldur x2, [x0, #-8] (len) }
+            EmitI32($AA0003E1);                    { mov x1, x0 (buf) }
+            EmitI32($D2800020);                    { movz x0, #1 (fd) }
+            EmitI32($D2800808);                    { movz x8, #64 (write) }
+            EmitI32($D4000001);                    { svc #0 }
+            EmitI32($F84107E0);                    { ldr x0, [sp], #16 (handle) }
+            if (IRKind[valNode] = IR_BINOP) and
+               (IntToTypeKind(IRTk[valNode]) = tyAnsiString) then
+              EmitStrDecRefA64;
+            Patch32(wid, $B4000000 or ((((CodeLen - wid) div 4) and $7FFFF) shl 5));
           end
           else
             Error('target aarch64: write of this operand not yet supported');

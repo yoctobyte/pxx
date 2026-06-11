@@ -3140,8 +3140,9 @@ begin
     if retSymIdx >= 0 then
     begin
       if Syms[retSymIdx].IsArray or (Syms[retSymIdx].Kind <> skLocal) or
-         not TypeIsOrdinal(Syms[retSymIdx].TypeKind) then
-        Error('target aarch64: only ordinal function results supported yet');
+         not (TypeIsOrdinal(Syms[retSymIdx].TypeKind) or
+              (Syms[retSymIdx].TypeKind in [tyAnsiString, tyPointer, tyClass])) then
+        Error('target aarch64: only ordinal/pointer/string function results supported yet');
       EmitLoadVarA64(retSymIdx);
     end;
     EmitI32($910003BF);  { mov sp, x29 }

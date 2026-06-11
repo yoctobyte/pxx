@@ -723,7 +723,10 @@ test-aarch64: $(COMPILER)
 	./$(COMPILER) --target=aarch64 test/test_cross_heap.pas /tmp/test_aarch64_heap
 	./$(COMPILER) test/test_cross_heap.pas /tmp/test_aarch64_heap_x64
 	test "$$(tools/run_target.sh aarch64 /tmp/test_aarch64_heap)" = "$$(/tmp/test_aarch64_heap_x64)"
-	@echo "aarch64 hello + arith + procs + loops + write + varparam + syscall + heap ok (output identical to x86-64)"
+	./$(COMPILER) -dPXX_MANAGED_STRING --target=aarch64 test/test_cross_managed_a64.pas /tmp/test_aarch64_managed
+	./$(COMPILER) -dPXX_MANAGED_STRING test/test_cross_managed_a64.pas /tmp/test_aarch64_managed_x64
+	test "$$(tools/run_target.sh aarch64 /tmp/test_aarch64_managed)" = "$$(/tmp/test_aarch64_managed_x64)"
+	@echo "aarch64 hello + arith + procs + loops + write + varparam + syscall + heap + string + record + dynarray ok (output identical to x86-64)"
 
 test-arm32: $(COMPILER)
 	./$(COMPILER) --target=arm32 test/hello.pas /tmp/test_arm32_hello
