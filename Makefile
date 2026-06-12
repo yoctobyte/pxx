@@ -22,7 +22,7 @@ STABLE_MANAGED_DIR := $(STABLE_ROOT)/managed
 PXXFLAGS   :=
 FROZEN_PXXFLAGS := -uPXX_MANAGED_STRING
 
-.PHONY: all bootstrap bootstrap-check fpc-check test test-core test-nilpy qemu-env-check test-i386 test-aarch64 test-arm32 stabilize check-stable revert benchmark benchmark-compiler-runtime benchmark-check clean distclean symbols \
+.PHONY: all bootstrap bootstrap-check fpc-check test test-core test-nilpy qemu-env-check test-i386 test-aarch64 test-arm32 test-emit-obj stabilize check-stable revert benchmark benchmark-compiler-runtime benchmark-check clean distclean symbols \
         bootstrap-managed bootstrap-frozen test-managed test-frozen stabilize-managed stabilize-frozen check-stable-managed revert-managed test-nilpy-managed test-nilpy-frozen \
         progress-check
 
@@ -807,6 +807,35 @@ test-arm32: $(COMPILER)
 	./$(COMPILER) test/test_cross_variant.pas /tmp/test_arm32_variant_x64
 	test "$$(tools/run_target.sh arm32 /tmp/test_arm32_variant)" = "$$(/tmp/test_arm32_variant_x64)"
 	@echo "arm32 hello + arith + procs + loops + write + varparam + syscall + heap + string + record + dynarray + exception + float + variant ok (output identical to x86-64)"
+
+# Relocatable .o emission for the esp32-idf profile (feature-elf-rel-writer).
+# Host-only checks via binutils readelf; if the ESP cross toolchains are
+# installed (~/.espressif), also proves each .o links against a C shim.
+test-emit-obj: $(COMPILER)
+	./$(COMPILER) --target=riscv32 test/test_emit_obj.pas /tmp/test_emit_obj_rv.o
+	readelf -h /tmp/test_emit_obj_rv.o | grep -q 'REL (Relocatable file)'
+	readelf -h /tmp/test_emit_obj_rv.o | grep -q 'RISC-V'
+	readelf -s /tmp/test_emit_obj_rv.o | grep -q 'FUNC    GLOBAL DEFAULT    1 app_main'
+	readelf -s /tmp/test_emit_obj_rv.o | grep -q 'UND ext_notify'
+	readelf -r /tmp/test_emit_obj_rv.o | grep -q 'R_RISCV_32'
+	readelf -r /tmp/test_emit_obj_rv.o | grep -q 'ext_notify + 0'
+	./$(COMPILER) --target=xtensa test/test_emit_obj.pas /tmp/test_emit_obj_xt.o
+	readelf -h /tmp/test_emit_obj_xt.o | grep -q 'REL (Relocatable file)'
+	readelf -h /tmp/test_emit_obj_xt.o | grep -q 'Xtensa'
+	readelf -s /tmp/test_emit_obj_xt.o | grep -q 'FUNC    GLOBAL DEFAULT    1 app_main'
+	readelf -s /tmp/test_emit_obj_xt.o | grep -q 'UND ext_notify'
+	readelf -r /tmp/test_emit_obj_xt.o | grep -q 'R_XTENSA_32'
+	readelf -r /tmp/test_emit_obj_xt.o | grep -q 'ext_notify + 0'
+	@printf 'int captured;\nvoid ext_notify(int v) { captured = v; }\nextern void app_main(void);\nint main(void) { app_main(); return captured; }\n' > /tmp/test_emit_obj_shim.c
+	@RV=$$(ls $$HOME/.espressif/tools/riscv32-esp-elf/*/riscv32-esp-elf/bin/riscv32-esp-elf-gcc 2>/dev/null | head -1); \
+	if [ -n "$$RV" ]; then \
+	  $$RV -nostartfiles -Wl,-e,main /tmp/test_emit_obj_shim.c /tmp/test_emit_obj_rv.o -o /tmp/test_emit_obj_rv.elf && echo "riscv32 .o links ok"; \
+	else echo "riscv32-esp-elf-gcc not installed; link check skipped"; fi
+	@XT=$$(ls $$HOME/.espressif/tools/xtensa-esp-elf/*/xtensa-esp-elf/bin/xtensa-esp32s3-elf-gcc 2>/dev/null | head -1); \
+	if [ -n "$$XT" ]; then \
+	  $$XT -nostartfiles -Wl,-e,main /tmp/test_emit_obj_shim.c /tmp/test_emit_obj_xt.o -o /tmp/test_emit_obj_xt.elf && echo "xtensa .o links ok"; \
+	else echo "xtensa-esp32s3-elf-gcc not installed; link check skipped"; fi
+	@echo "emit-obj ok (ET_REL sections/symbols/relocs sane on riscv32 + xtensa)"
 
 # Cross-target test environment sanity (chore-qemu-test-env). Manual target:
 # joins 'make test' when the first cross backend exists. Validates the runner

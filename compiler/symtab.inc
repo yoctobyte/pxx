@@ -3389,6 +3389,35 @@ begin
   if ProcExternal[pi] then
   begin
     extIdx := RegisterExternal(pi);
+    { esp32 targets: indirect call through a 32-bit literal slot. The slot is
+      recorded as a DynCall fixup; the ET_REL writer turns it into an
+      R_XTENSA_32/R_RISCV_32 data-word reloc against the undefined symbol, so
+      no code relocations are needed (the zero-code-reloc property). }
+    if TargetArch = TARGET_XTENSA then
+    begin
+      if DynCallCount >= MAX_CALLFIX then Error('external call fixup overflow');
+      XtensaEmitLitHeader;
+      DynCallCodePos[DynCallCount] := CodeLen;
+      DynCallExtIdx[DynCallCount] := extIdx;
+      Inc(DynCallCount);
+      EmitI32(0);
+      xtensa_l32r(reg_xtensa_a8, $FFFF);
+      xtensa_callx0(reg_xtensa_a8);
+      Exit;
+    end;
+    if TargetArch = TARGET_RISCV32 then
+    begin
+      if DynCallCount >= MAX_CALLFIX then Error('external call fixup overflow');
+      rv32_auipc(reg_t0, 0);
+      rv32_jal(reg_zero, 8);
+      DynCallCodePos[DynCallCount] := CodeLen;
+      DynCallExtIdx[DynCallCount] := extIdx;
+      Inc(DynCallCount);
+      EmitI32(0);
+      rv32_lw(reg_t0, reg_t0, 8);
+      rv32_jalr(reg_ra, reg_t0, 0);
+      Exit;
+    end;
     { Realign the stack to 16 bytes for the SysV call: our internal call
       convention does not keep rsp 16-aligned at every call site, but C
       callees (GTK/GLib) use aligned SSE (movaps) and fault otherwise. This

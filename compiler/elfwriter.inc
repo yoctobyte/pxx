@@ -255,6 +255,40 @@ var b:array[0..3]of Byte;
 begin b[0]:=v and $FF;b[1]:=(v shr 8)and $FF;b[2]:=(v shr 16)and $FF;b[3]:=(v shr 24)and $FF;Blockwrite(f,b,4);end;
 procedure writeU64(var f:File;v:Int64);
 begin writeU32(f,LongWord(v and $FFFFFFFF));writeU32(f,LongWord((v shr 32)and $FFFFFFFF));end;
+procedure writeStrZ(var f: File; const s: AnsiString);
+var i: Integer;
+begin
+  for i := 1 to Length(s) do writeU8(f, Ord(s[i]));
+  writeU8(f, 0);
+end;
+procedure writePad(var f: File; n: Integer);
+var i: Integer;
+begin
+  for i := 1 to n do writeU8(f, 0);
+end;
+procedure writeSym32(var f: File; name, value, size, info, shndx: Integer);
+begin
+  writeU32(f, name); writeU32(f, value); writeU32(f, size);
+  writeU8(f, info); writeU8(f, 0); writeU16(f, shndx);
+end;
+procedure writeRela32(var f: File; offset, symIdx, rtype, addend: Integer);
+begin
+  writeU32(f, offset); writeU32(f, (symIdx shl 8) or rtype); writeU32(f, addend);
+end;
+{ One Elf32_Shdr = writeShdrA (name..size) + writeShdrB (link..entsize).
+  Split in two: calls with more than ~6 parameters are miscompiled by the
+  self-hosted backend (see bug-many-param-call-corruption). }
+procedure writeShdrA(var f: File; name, typ, flags, off, size: Integer);
+begin
+  writeU32(f, name); writeU32(f, typ); writeU32(f, flags);
+  writeU32(f, 0);   { sh_addr = 0 in ET_REL }
+  writeU32(f, off); writeU32(f, size);
+end;
+procedure writeShdrB(var f: File; link, info, alignv, entsize: Integer);
+begin
+  writeU32(f, link); writeU32(f, info);
+  writeU32(f, alignv); writeU32(f, entsize);
+end;
 {$else}
 procedure writeU8(f: Integer; v: Byte);
 begin
@@ -286,6 +320,40 @@ begin
   sysbuf[6] := (v shr 48) and 255;
   sysbuf[7] := (v shr 56) and 255;
   syswrite(f, sysbuf, 8);
+end;
+procedure writeStrZ(f: Integer; const s: AnsiString);
+var i: Integer;
+begin
+  for i := 1 to Length(s) do writeU8(f, Ord(s[i]));
+  writeU8(f, 0);
+end;
+procedure writePad(f: Integer; n: Integer);
+var i: Integer;
+begin
+  for i := 1 to n do writeU8(f, 0);
+end;
+procedure writeSym32(f: Integer; name, value, size, info, shndx: Integer);
+begin
+  writeU32(f, name); writeU32(f, value); writeU32(f, size);
+  writeU8(f, info); writeU8(f, 0); writeU16(f, shndx);
+end;
+procedure writeRela32(f: Integer; offset, symIdx, rtype, addend: Integer);
+begin
+  writeU32(f, offset); writeU32(f, (symIdx shl 8) or rtype); writeU32(f, addend);
+end;
+{ One Elf32_Shdr = writeShdrA (name..size) + writeShdrB (link..entsize).
+  Split in two: calls with more than ~6 parameters are miscompiled by the
+  self-hosted backend (see bug-many-param-call-corruption). }
+procedure writeShdrA(f: Integer; name, typ, flags, off, size: Integer);
+begin
+  writeU32(f, name); writeU32(f, typ); writeU32(f, flags);
+  writeU32(f, 0);   { sh_addr = 0 in ET_REL }
+  writeU32(f, off); writeU32(f, size);
+end;
+procedure writeShdrB(f: Integer; link, info, alignv, entsize: Integer);
+begin
+  writeU32(f, link); writeU32(f, info);
+  writeU32(f, alignv); writeU32(f, entsize);
 end;
 {$endif}
 
@@ -579,6 +647,178 @@ begin
   if CodeLen > 0 then syswrite(f,Code,CodeLen);
   if DataLen > 0 then syswrite(f,Data,DataLen);
   sysfchmod(f, 493); { chmod 755 }
+  sysclose(f);
+{$endif}
+end;
+
+procedure writeELF32Rel(const outPath: AnsiString);
+{ Relocatable ELF32 object writer (feature-elf-rel-writer): ET_REL .o for the
+  esp32-idf profile. Both ESP backends route every absolute address through a
+  32-bit literal slot and resolve intra-object calls at emit time, so every
+  relocation is a plain data-word R_XTENSA_32 / R_RISCV_32 (type 1 on both) —
+  no code relocations, no linker-relaxation interaction.
+  File layout (written sequentially; the self-hosted writer cannot seek):
+  ehdr, .text, .data, .symtab, .strtab, .rela.text, .rela.data, .shstrtab,
+  section headers. Symbols: section syms, every proc as LOCAL FUNC (debug
+  visibility without link-time name collisions), the program entry exported
+  GLOBAL as app_main, externals as UNDEF GLOBAL. }
+var
+  i, machine: Integer;
+  numProcSyms, numSyms, firstGlobal: Integer;
+  textOff, dataOff, symOff, strOff, relaTextOff, relaDataOff: Integer;
+  shstrOff, shOff, strSize: Integer;
+  relaTextCount, relaDataCount, appMainOff: Integer;
+{$ifdef FPC}
+  f: File;
+{$else}
+  f: Integer;
+{$endif}
+begin
+  if (TargetArch <> TARGET_XTENSA) and (TargetArch <> TARGET_RISCV32) then
+    Error('--emit-obj: only xtensa/riscv32 targets are supported');
+  if ProcAddrFixCount > 0 then
+    Error('--emit-obj: proc-address fixups not yet supported');
+  if TargetArch = TARGET_XTENSA then machine := 94 else machine := 243;
+
+  { .strtab layout: 0 = empty, then proc names, app_main, external names }
+  strSize := 1;
+  numProcSyms := 0;
+  for i := 0 to ProcCount-1 do
+    if (Procs[i].BodyAddr >= 0) and (not ProcExternal[i]) then
+    begin
+      ObjProcStrOff[i] := strSize;
+      strSize := strSize + Length(Procs[i].Name) + 1;
+      Inc(numProcSyms);
+    end
+    else
+      ObjProcStrOff[i] := -1;
+  appMainOff := strSize;
+  strSize := strSize + 9;  { 'app_main' + NUL }
+  for i := 0 to ExternalCount-1 do
+  begin
+    ObjExtStrOff[i] := strSize;
+    strSize := strSize + Length(Procs[ExternalProc[i]].Name) + 1;
+  end;
+
+  firstGlobal := 4 + numProcSyms;  { null + .text/.data/.bss section syms + procs }
+  numSyms := firstGlobal + 1 + ExternalCount;
+  relaTextCount := FixCount + GlobFixCount + DynCallCount;
+  relaDataCount := DataPtrFixCount + MethodFixCount;
+
+  textOff := ELF32_HEADER_SIZE;                  { 52, already 4-aligned }
+  dataOff := AlignTo(textOff + CodeLen, 8);
+  symOff  := AlignTo(dataOff + DataLen, 4);
+  strOff  := symOff + numSyms * 16;
+  relaTextOff := AlignTo(strOff + strSize, 4);
+  relaDataOff := relaTextOff + relaTextCount * 12;
+  shstrOff := relaDataOff + relaDataCount * 12;
+  shOff := AlignTo(shstrOff + 66, 4);            { 66 = .shstrtab blob size }
+
+{$ifdef FPC}
+  Assign(f, outPath); Rewrite(f, 1);
+{$else}
+  AssignPath := outPath;
+  f := sysopen(AssignPath, 577); { O_WRONLY | O_CREAT | O_TRUNC }
+{$endif}
+
+  { ELF32 ehdr (52 bytes), ET_REL }
+  writeU8(f,$7F);writeU8(f,$45);writeU8(f,$4C);writeU8(f,$46);
+  writeU8(f,1);writeU8(f,1);writeU8(f,1);writeU8(f,0);  { class 32, LE, v1 }
+  writeU8(f,0);writeU8(f,0);writeU8(f,0);writeU8(f,0);
+  writeU8(f,0);writeU8(f,0);writeU8(f,0);writeU8(f,0);
+  writeU16(f,1);writeU16(f,machine);writeU32(f,1);      { ET_REL }
+  writeU32(f,0);writeU32(f,0);writeU32(f,shOff);        { entry, phoff, shoff }
+  writeU32(f,0);                                        { e_flags }
+  writeU16(f,ELF32_HEADER_SIZE);writeU16(f,0);writeU16(f,0);
+  writeU16(f,40);writeU16(f,9);writeU16(f,8);   { shentsize, shnum, shstrndx }
+
+{$ifdef FPC}
+  if CodeLen > 0 then Blockwrite(f,Code[0],CodeLen);
+  writePad(f, dataOff - (textOff + CodeLen));
+  if DataLen > 0 then Blockwrite(f,Data[0],DataLen);
+{$else}
+  if CodeLen > 0 then syswrite(f,Code,CodeLen);
+  writePad(f, dataOff - (textOff + CodeLen));
+  if DataLen > 0 then syswrite(f,Data,DataLen);
+{$endif}
+  writePad(f, symOff - (dataOff + DataLen));
+
+  { .symtab; sh_info below = firstGlobal (locals first, per the ELF spec) }
+  writeSym32(f, 0, 0, 0, 0, 0);
+  writeSym32(f, 0, 0, 0, 3, 1);   { STT_SECTION .text }
+  writeSym32(f, 0, 0, 0, 3, 3);   { STT_SECTION .data }
+  writeSym32(f, 0, 0, 0, 3, 5);   { STT_SECTION .bss }
+  for i := 0 to ProcCount-1 do
+    if ObjProcStrOff[i] >= 0 then
+      writeSym32(f, ObjProcStrOff[i], Procs[i].BodyAddr, 0, 2, 1); { LOCAL FUNC }
+  writeSym32(f, appMainOff, 0, 0, $12, 1);  { GLOBAL FUNC app_main = entry }
+  for i := 0 to ExternalCount-1 do
+    writeSym32(f, ObjExtStrOff[i], 0, 0, $10, 0); { GLOBAL NOTYPE UNDEF }
+
+  { .strtab }
+  writeU8(f, 0);
+  for i := 0 to ProcCount-1 do
+    if ObjProcStrOff[i] >= 0 then writeStrZ(f, Procs[i].Name);
+  writeStrZ(f, 'app_main');
+  for i := 0 to ExternalCount-1 do
+    writeStrZ(f, Procs[ExternalProc[i]].Name);
+  writePad(f, relaTextOff - (strOff + strSize));
+
+  { .rela.text: literal slots -> .data / .bss / undefined externals.
+    Symbol indices: 1 = .text section sym, 2 = .data, 3 = .bss. }
+  for i := 0 to FixCount-1 do
+    writeRela32(f, Fixups[i].CodePos, 2, 1, Fixups[i].DataOff);
+  for i := 0 to GlobFixCount-1 do
+    writeRela32(f, GlobFix[i].CodePos, 3, 1, GlobFix[i].BSSoff);
+  for i := 0 to DynCallCount-1 do
+    writeRela32(f, DynCallCodePos[i], firstGlobal + 1 + DynCallExtIdx[i], 1, 0);
+
+  { .rela.data: data->data pointers and data->code method slots. Slots are 8
+    bytes wide (layout shared with 64-bit targets); the reloc patches the low
+    word, the high word stays zero. }
+  for i := 0 to DataPtrFixCount-1 do
+    writeRela32(f, DataPtrFix[i].DataPos, 2, 1, DataPtrFix[i].TargetOff);
+  for i := 0 to MethodFixCount-1 do
+    writeRela32(f, MethodFixups[i].DataPos, 1, 1,
+                Procs[MethodFixups[i].ProcIdx].BodyAddr);
+
+  { .shstrtab: fixed 66-byte blob; name offsets hardcoded in the shdrs below }
+  writeU8(f, 0);
+  writeStrZ(f, '.text');        { 1 }
+  writeStrZ(f, '.rela.text');   { 7 }
+  writeStrZ(f, '.data');        { 18 }
+  writeStrZ(f, '.rela.data');   { 24 }
+  writeStrZ(f, '.bss');         { 35 }
+  writeStrZ(f, '.symtab');      { 40 }
+  writeStrZ(f, '.strtab');      { 48 }
+  writeStrZ(f, '.shstrtab');    { 56 }
+  writePad(f, shOff - (shstrOff + 66));
+
+  { shdrs: 0 null, 1 .text, 2 .rela.text, 3 .data, 4 .rela.data, 5 .bss,
+    6 .symtab, 7 .strtab, 8 .shstrtab. $40 = SHF_INFO_LINK on rela sections. }
+  writeShdrA(f, 0, 0, 0, 0, 0);
+  writeShdrB(f, 0, 0, 0, 0);
+  writeShdrA(f, 1, 1, 6, textOff, CodeLen);
+  writeShdrB(f, 0, 0, 4, 0);
+  writeShdrA(f, 7, 4, $40, relaTextOff, relaTextCount*12);
+  writeShdrB(f, 6, 1, 4, 12);
+  writeShdrA(f, 18, 1, 3, dataOff, DataLen);
+  writeShdrB(f, 0, 0, 8, 0);
+  writeShdrA(f, 24, 4, $40, relaDataOff, relaDataCount*12);
+  writeShdrB(f, 6, 3, 4, 12);
+  writeShdrA(f, 35, 8, 3, dataOff + DataLen, BSSSize);
+  writeShdrB(f, 0, 0, 8, 0);
+  writeShdrA(f, 40, 2, 0, symOff, numSyms*16);
+  writeShdrB(f, 7, firstGlobal, 4, 16);
+  writeShdrA(f, 48, 3, 0, strOff, strSize);
+  writeShdrB(f, 0, 0, 1, 0);
+  writeShdrA(f, 56, 3, 0, shstrOff, 66);
+  writeShdrB(f, 0, 0, 1, 0);
+
+{$ifdef FPC}
+  Close(f);
+{$else}
+  sysfchmod(f, 420); { chmod 644 — a .o is not executable }
   sysclose(f);
 {$endif}
 end;

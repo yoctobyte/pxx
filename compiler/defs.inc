@@ -659,6 +659,13 @@ var
   CurUnitDir : AnsiString;
   { Selected compile target (TARGET_*). Default TARGET_X86_64. }
   TargetArch : Integer;
+  { Emit a relocatable ET_REL .o instead of a linked ET_EXEC image
+    (--emit-obj, or inferred from a .o output name). esp32 targets only. }
+  EmitObjMode : Boolean;
+  { writeELF32Rel scratch: per-proc / per-external .strtab name offsets
+    (globals, not locals — 64KB each would strain the self-hosted stack). }
+  ObjProcStrOff : array[0..MAX_PROCS-1] of Integer;
+  ObjExtStrOff  : array[0..MAX_EXTERNAL-1] of Integer;
   { Directory of the compiler binary itself (from ParamStr(0)); RTL/LCL units are
     located relative to it so the compiler works from any CWD, not just the repo
     root. Empty if the path has no directory part (then CWD-relative is used). }

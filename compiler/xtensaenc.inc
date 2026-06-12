@@ -189,6 +189,14 @@ begin
   EmitB((val shr 16) and $FF);
 end;
 
+procedure xtensa_callx0(s: Integer);
+begin
+  { CALLX0 as = insn word $0000C0 or (s shl 8), LE bytes C0 0s 00. }
+  EmitB($C0);
+  EmitB(s);
+  EmitB(0);
+end;
+
 function EncodeXtensaBranch(r, s, t, offset: Integer): Integer;
 var
   imm8: Integer;

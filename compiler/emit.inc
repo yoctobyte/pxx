@@ -4,6 +4,7 @@ procedure EnsureSpaces; forward;
 procedure EmitLoadImmArm32(rd: Integer; v: Int32); forward;
 procedure EmitwriteSyscallArm32(dataOff, len: Integer); forward;
 procedure xtensa_j(offset: Integer); forward;
+procedure XtensaEmitLitHeader; forward;
 
 procedure EmitB(b: Byte); inline;
 begin

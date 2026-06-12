@@ -54,6 +54,7 @@ begin
   DumpRTTI := False;
   TargetArch := TARGET_X86_64;
   TARGET_PTR_SIZE := 8;
+  EmitObjMode := False;
   NoUnhandledHandler := False;
   ThreadSafeMode := False;
   ProcExceptionCleanupFrameActive := False;
@@ -114,6 +115,11 @@ begin
     else if option = '--target=riscv32' then
     begin
       TargetArch := TARGET_RISCV32;
+      Inc(i);
+    end
+    else if option = '--emit-obj' then
+    begin
+      EmitObjMode := True;
       Inc(i);
     end
     else if option = '--strict-overload' then
@@ -197,6 +203,10 @@ begin
   if ParamCount >= i + 1 then outFile := ParamStr(i + 1);
   { Last-resort guard: refuse to write the binary over the source file. }
   if outFile = inFile then outFile := inFile + '.out';
+  { A .o output name implies object emission (same as --emit-obj). }
+  n := Length(outFile);
+  if (n >= 2) and (outFile[n] = 'o') and (outFile[n-1] = '.') then
+    EmitObjMode := True;
 
   n := Length(inFile);
   isC := (n >= 2) and (inFile[n] = 'c') and (inFile[n-1] = '.');
@@ -339,9 +349,12 @@ begin
     end;
     Inc(i);
   end;
-  for i := 0 to ProcCount - 1 do
-    writeln('proc ', i, ': ', Procs[i].Name, ' at ', Procs[i].BodyAddr);
-  if (TargetArch = TARGET_I386) or (TargetArch = TARGET_ARM32) or
+  if DebugTrace then
+    for i := 0 to ProcCount - 1 do
+      writeln('proc ', i, ': ', Procs[i].Name, ' at ', Procs[i].BodyAddr);
+  if EmitObjMode then
+    writeELF32Rel(outFile)
+  else if (TargetArch = TARGET_I386) or (TargetArch = TARGET_ARM32) or
      (TargetArch = TARGET_XTENSA) or (TargetArch = TARGET_RISCV32) then
     writeELF32(outFile)
   else
