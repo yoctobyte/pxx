@@ -31,6 +31,7 @@ function PXXDynArrayUnique(arrSlot: Pointer; desc: Pointer): Pointer;
 procedure PXXMemMove(dst: Pointer; src: Pointer; n: Int64);
 procedure PXXMemZero(dst: Pointer; n: Int64);
 procedure PXXDynSetLen(arrSlot: Pointer; newLen: Int64; desc: Pointer);
+function PXXVarBinOp(dest: Pointer; left: Pointer; right: Pointer; opTk: Int64; isCompare: Int64): Int64;
 
 implementation
 
@@ -744,6 +745,180 @@ begin
 
   PWord(arrSlot)^ := Int64(newArrData);
   PXXDynArrayRelease(oldData, desc);
+end;
+
+type
+  PDouble = ^Double;
+
+function PXXVarBinOp(dest: Pointer; left: Pointer; right: Pointer; opTk: Int64; isCompare: Int64): Int64;
+var
+  lTag, rTag, lVal, rVal, resVal: Int64;
+  lDbl, rDbl, resDbl: Double;
+  lStr, rStr, resStr: Pointer;
+  lLen, rLen: Int64;
+  lStrPtr, rStrPtr: Pointer;
+begin
+  lTag := PWord(left)^;
+  rTag := PWord(right)^;
+  lVal := PWord(Int64(left) + 8)^;
+  rVal := PWord(Int64(right) + 8)^;
+
+  { 1. String check }
+  if (isCompare = 1) or (opTk = 70) then { tkPlus = 70 }
+  begin
+    if (lTag = 6) or (lTag = 5) or (rTag = 6) or (rTag = 5) then
+    begin
+      if isCompare = 1 then
+      begin
+        { Compare tags first }
+        if lTag <> rTag then
+        begin
+          if opTk = 65 then Result := 1 else Result := 0; { tkNeq = 65 }
+          Exit;
+        end;
+        
+        { Tags are the same: string/string or char/char }
+        if lTag = 5 then
+        begin
+          { Char comparison }
+          if opTk = 64 then Result := Int64(lVal = rVal)
+          else if opTk = 65 then Result := Int64(lVal <> rVal)
+          else if opTk = 66 then Result := Int64(lVal < rVal)
+          else if opTk = 67 then Result := Int64(lVal <= rVal)
+          else if opTk = 68 then Result := Int64(lVal > rVal)
+          else if opTk = 69 then Result := Int64(lVal >= rVal);
+          Exit;
+        end
+        else
+        begin
+          { String comparison }
+          lStr := Pointer(lVal);
+          rStr := Pointer(rVal);
+          if lStr = nil then lLen := 0 else lLen := PWord(Int64(lStr) - 8)^;
+          if rStr = nil then rLen := 0 else rLen := PWord(Int64(rStr) - 8)^;
+          
+          resVal := PXXStrEq(lLen, lStr, rLen, rStr);
+          if opTk = 64 then Result := resVal
+          else if opTk = 65 then Result := 1 - resVal
+          else Result := 0;
+          Exit;
+        end;
+      end
+      else
+      begin
+        { tkPlus: string concatenation }
+        if lTag = 5 then
+        begin
+          lStrPtr := Pointer(Int64(left) + 8);
+          lLen := 1;
+        end
+        else
+        begin
+          lStrPtr := Pointer(lVal);
+          if lStrPtr = nil then lLen := 0 else lLen := PWord(Int64(lStrPtr) - 8)^;
+        end;
+
+        if rTag = 5 then
+        begin
+          rStrPtr := Pointer(Int64(right) + 8);
+          rLen := 1;
+        end
+        else
+        begin
+          rStrPtr := Pointer(rVal);
+          if rStrPtr = nil then rLen := 0 else rLen := PWord(Int64(rStrPtr) - 8)^;
+        end;
+
+        resStr := PXXStrConcat(lLen, lStrPtr, rStrPtr, rLen);
+        if PWord(dest)^ = 6 then
+          PXXStrDecRef(Pointer(PWord(Int64(dest) + 8)^));
+        PWord(dest)^ := 6;
+        PWord(Int64(dest) + 8)^ := Int64(resStr);
+        Result := Int64(dest);
+        Exit;
+      end;
+    end;
+  end;
+
+  { 2. Numeric path }
+  if (lTag = 3) or (rTag = 3) or (opTk = 73) then { VT_DOUBLE = 3, tkSlash = 73 }
+  begin
+    if lTag = 3 then
+      lDbl := PDouble(@lVal)^
+    else
+      lDbl := lVal;
+
+    if rTag = 3 then
+      rDbl := PDouble(@rVal)^
+    else
+      rDbl := rVal;
+
+    if isCompare = 1 then
+    begin
+      if opTk = 64 then Result := Int64(lDbl = rDbl)
+      else if opTk = 65 then Result := Int64(lDbl <> rDbl)
+      else if opTk = 66 then Result := Int64(lDbl < rDbl)
+      else if opTk = 67 then Result := Int64(lDbl <= rDbl)
+      else if opTk = 68 then Result := Int64(lDbl > rDbl)
+      else if opTk = 69 then Result := Int64(lDbl >= rDbl);
+      Exit;
+    end
+    else if (opTk = 33) or (opTk = 34) then { tkDiv = 33, tkMod = 34 }
+    begin
+      lVal := Trunc(lDbl);
+      rVal := Trunc(rDbl);
+      if opTk = 33 then resVal := lVal div rVal else resVal := lVal mod rVal;
+      if PWord(dest)^ = 6 then
+        PXXStrDecRef(Pointer(PWord(Int64(dest) + 8)^));
+      PWord(dest)^ := 1;
+      PWord(Int64(dest) + 8)^ := resVal;
+      Result := Int64(dest);
+      Exit;
+    end
+    else
+    begin
+      if opTk = 70 then resDbl := lDbl + rDbl
+      else if opTk = 71 then resDbl := lDbl - rDbl
+      else if opTk = 72 then resDbl := lDbl * rDbl
+      else if opTk = 73 then resDbl := lDbl / rDbl;
+
+      if PWord(dest)^ = 6 then
+        PXXStrDecRef(Pointer(PWord(Int64(dest) + 8)^));
+      PWord(dest)^ := 3;
+      PDouble(Int64(dest) + 8)^ := resDbl;
+      Result := Int64(dest);
+      Exit;
+    end;
+  end
+  else
+  begin
+    { Both are integer-class }
+    if isCompare = 1 then
+    begin
+      if opTk = 64 then Result := Int64(lVal = rVal)
+      else if opTk = 65 then Result := Int64(lVal <> rVal)
+      else if opTk = 66 then Result := Int64(lVal < rVal)
+      else if opTk = 67 then Result := Int64(lVal <= rVal)
+      else if opTk = 68 then Result := Int64(lVal > rVal)
+      else if opTk = 69 then Result := Int64(lVal >= rVal);
+      Exit;
+    end
+    else
+    begin
+      if opTk = 70 then resVal := lVal + rVal
+      else if opTk = 71 then resVal := lVal - rVal
+      else if opTk = 72 then resVal := lVal * rVal
+      else if opTk = 33 then resVal := lVal div rVal
+      else if opTk = 34 then resVal := lVal mod rVal;
+
+      if PWord(dest)^ = 6 then
+        PXXStrDecRef(Pointer(PWord(Int64(dest) + 8)^));
+      PWord(dest)^ := 1;
+      PWord(Int64(dest) + 8)^ := resVal;
+      Result := Int64(dest);
+      Exit;
+    end;
+  end;
 end;
 
 end.

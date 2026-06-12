@@ -6626,8 +6626,8 @@ procedure ParseProgram;
 var jmpPatch, i, j: Integer; doneUses, doneDecls, hasExceptions, needsBuiltin,
     needsHeap, needsAnsiRuntime, needHeapUnit: Boolean;
     savedUnitIdx: Integer;
-    dummyNames: array[0..3] of AnsiString;
-    dummyTypes: array[0..3] of TTypeKind;
+    dummyNames: array[0..7] of AnsiString;
+    dummyTypes: array[0..7] of TTypeKind;
 begin
   Expect(tkProgram, 'program');
   if CurTok.Kind = tkEOF then Error('expected program name');
@@ -6698,6 +6698,13 @@ begin
     dummyNames[2] := 'lenB';  dummyTypes[2] := tyInt64;
     dummyNames[3] := 'srcB';  dummyTypes[3] := tyPointer;
     i := RegisterProc('PXXStrEq', True, tyInt64, 4, dummyNames, dummyTypes);
+
+    dummyNames[0] := 'dest';      dummyTypes[0] := tyPointer;
+    dummyNames[1] := 'left';      dummyTypes[1] := tyPointer;
+    dummyNames[2] := 'right';     dummyTypes[2] := tyPointer;
+    dummyNames[3] := 'opTk';      dummyTypes[3] := tyInt64;
+    dummyNames[4] := 'isCompare'; dummyTypes[4] := tyInt64;
+    i := RegisterProc('PXXVarBinOp', True, tyInt64, 5, dummyNames, dummyTypes);
 
     CurrentUnitIdx := savedUnitIdx;
   end;
