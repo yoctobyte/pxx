@@ -205,6 +205,86 @@ begin
   EmitDataRef(dataOff);
 end;
 
+{ ---- Float support (VFP). Value model: float-typed IR nodes leave their
+  value in d0 (a second channel besides r0); spills use vpush/vpop. Float ->
+  text goes through the portable builtinheap helpers (PXXWriteFloat*). ---- }
+
+procedure EmitIntToD0Arm32;
+{ signed r0 -> d0 }
+begin
+  EmitI32($EE000A10);  { vmov s0, r0 }
+  EmitI32($EEB80BC0);  { vcvt.f64.s32 d0, s0 }
+end;
+
+procedure EmitFloatCallWriterArm32(const name: AnsiString; decs: Integer);
+{ d0 = value. Spill to a stack slot, pass its address (plus decimals for the
+  fixed writer) to the builtinheap float writer. }
+var pi: Integer;
+begin
+  EmitI32($ED2D0B02);            { vpush {d0} }
+  EmitI32($E1A0000D);            { mov r0, sp (slot addr) }
+  if decs >= 0 then
+    EmitLoadImmArm32(1, decs);   { r1 = decimals }
+  pi := FindProc(name);
+  if pi < 0 then Error('compiler error: float writer helper not found');
+  EmitCallProc(pi);
+  EmitI32($E28DD008);            { add sp, sp, #8 (drop slot) }
+end;
+
+procedure EmitVarHelperCallArm32(const name: AnsiString);
+{ r0 = variant slot address; r0-r3 preserved. }
+var pi: Integer;
+begin
+  EmitI32($E92D000F);            { push {r0-r3} }
+  pi := FindProc(name);
+  if pi < 0 then Error('compiler error: variant helper not found');
+  EmitCallProc(pi);
+  EmitI32($E8BD000F);            { pop {r0-r3} }
+end;
+
+procedure EmitVariantFillArm32(tag: Integer; payloadTk: TTypeKind);
+{ r0 = variant slot address; payload on the stack: vpush'd d0 for a double,
+  else a pushed 4-byte word. Clears the old value, stores tag + payload,
+  leaves the slot address in r0. }
+begin
+  EmitVarHelperCallArm32('PXXVarClear');
+  EmitLoadImmArm32(1, tag);
+  EmitI32($E5801000);                  { str r1, [r0] }
+  EmitI32($E3A01000);                  { mov r1, #0 }
+  EmitI32($E5801004);                  { str r1, [r0, #4] }
+  if payloadTk = tyDouble then
+  begin
+    EmitI32($ECBD0B02);                { vpop {d0} }
+    EmitI32($ED800B02);                { vstr d0, [r0, #8] }
+  end
+  else
+  begin
+    EmitI32($E8BD0002);                { pop {r1} (payload) }
+    EmitI32($E5801008);                { str r1, [r0, #8] }
+    if tag = VT_INT then
+    begin
+      EmitI32($E1A02FC1);              { asr r2, r1, #31 (sign) }
+      EmitI32($E580200C);              { str r2, [r0, #12] }
+    end
+    else
+    begin
+      EmitI32($E3A02000);              { mov r2, #0 }
+      EmitI32($E580200C);              { str r2, [r0, #12] }
+    end;
+  end;
+end;
+
+procedure EmitLoadVariantAddrArm32(node: Integer);
+{ Address of a variant slot for value-position variant nodes. }
+begin
+  if IRKind[node] = IR_LOAD_SYM then
+    EmitLoadVarAddrArm32(IRA[node])
+  else if IRKind[node] = IR_LOAD_MEM then
+    IREmitNodeArm32(IRA[node])
+  else
+    IREmitNodeArm32(node);
+end;
+
 procedure EmitAnsiStringFromNodeArm32(valNode: Integer);
 { Build a managed AnsiString handle in r0 from a char, inline string, literal,
   or existing AnsiString-like expression. Existing handles are retained unless
@@ -319,7 +399,20 @@ begin
     IR_NOP, IR_BLOCK: ;
 
     IR_CONST_INT:
-      EmitLoadImmArm32(0, IRIVal[node]);
+      begin
+        if TypeIsFloat(IntToTypeKind(IRTk[node])) then
+        begin
+          { Float literal: raw double bits -> d0 via r0:r1. }
+          EmitI32($E59F0004);                                  { ldr r0, [pc, #4] (lo) }
+          EmitI32($E59F1004);                                  { ldr r1, [pc, #4] (hi) }
+          EmitI32($EA000001);                                  { b past the data }
+          EmitI32(Integer(IRIVal[node] and $FFFFFFFF));
+          EmitI32(Integer(IRIVal[node] shr 32));
+          EmitI32($EC410B10);                                  { vmov d0, r0, r1 }
+          Exit;
+        end;
+        EmitLoadImmArm32(0, IRIVal[node]);
+      end;
 
     IR_CONST_STR:
       begin
@@ -329,7 +422,41 @@ begin
       end;
 
     IR_LOAD_SYM:
-      EmitLoadVarArm32(IRA[node]);
+      begin
+        si := IRA[node];
+        tk := Syms[si].TypeKind;
+        if TypeIsFloat(tk) then
+        begin
+          { Float load -> d0 (Single widened to double). Address -> r1. }
+          if Syms[si].Kind = skGlobal then
+          begin
+            EmitI32($E59F1000);  { ldr r1, [pc] }
+            EmitI32($EA000000);  { b .+8 }
+            EmitGlobRef(Syms[si].Offset);
+          end
+          else
+          begin
+            EmitLoadImmArm32(9, Syms[si].Offset);
+            EmitI32($E08B1009);  { add r1, fp, r9 }
+            if (Syms[si].Kind = skParam) and Syms[si].IsRef then
+              EmitI32($E5911000); { ldr r1, [r1] }
+          end;
+          if tk = tySingle then
+          begin
+            EmitI32($ED910A00);  { vldr s0, [r1] }
+            EmitI32($EEB70AC0);  { vcvt.f64.f32 d0, s0 }
+          end
+          else
+            EmitI32($ED910B00);  { vldr d0, [r1] }
+          Exit;
+        end;
+        if tk = tyVariant then
+        begin
+          EmitLoadVariantAddrArm32(node);
+          Exit;
+        end;
+        EmitLoadVarArm32(si);
+      end;
 
     IR_STORE_SYM:
       begin
@@ -358,6 +485,33 @@ begin
             EmitI32($E8BD0001);                       { pop {r0} new }
             EmitStoreVarArm32(si);
           end;
+          Exit;
+        end;
+        tk := Syms[si].TypeKind;
+        if TypeIsFloat(tk) then
+        begin
+          IREmitNodeArm32(IRB[node]);                 { value -> d0 (or r0) }
+          if not TypeIsFloat(IntToTypeKind(IRTk[IRB[node]])) then
+            EmitIntToD0Arm32;
+          if tk = tySingle then
+            EmitI32($EEB70BC0);                       { vcvt.f32.f64 s0, d0 }
+          if Syms[si].Kind = skGlobal then
+          begin
+            EmitI32($E59F1000);  { ldr r1, [pc] }
+            EmitI32($EA000000);  { b .+8 }
+            EmitGlobRef(Syms[si].Offset);
+          end
+          else
+          begin
+            EmitLoadImmArm32(9, Syms[si].Offset);
+            EmitI32($E08B1009);  { add r1, fp, r9 }
+            if (Syms[si].Kind = skParam) and Syms[si].IsRef then
+              EmitI32($E5911000); { ldr r1, [r1] }
+          end;
+          if tk = tySingle then
+            EmitI32($ED810A00)   { vstr s0, [r1] }
+          else
+            EmitI32($ED810B00);  { vstr d0, [r1] }
           Exit;
         end;
         IREmitNodeArm32(IRB[node]);
@@ -524,6 +678,34 @@ begin
           Exit;
         end;
 
+        lhsTk := IntToTypeKind(IRTk[left]);
+        rhsTk := IntToTypeKind(IRTk[right]);
+        if TypeIsFloat(lhsTk) or TypeIsFloat(rhsTk) or (op = Ord(tkSlash)) then
+        begin
+          IREmitNodeArm32(left);
+          if not TypeIsFloat(lhsTk) then EmitIntToD0Arm32;
+          EmitI32($ED2D0B02);                    { vpush {d0} }
+          IREmitNodeArm32(right);
+          if not TypeIsFloat(rhsTk) then EmitIntToD0Arm32;
+          EmitI32($EEB01B40);                    { vmov.f64 d1, d0 }
+          EmitI32($ECBD0B02);                    { vpop {d0} (left) }
+
+          if op = Ord(tkPlus) then EmitI32($EE300B01)        { vadd.f64 d0, d0, d1 }
+          else if op = Ord(tkMinus) then EmitI32($EE300B41)  { vsub.f64 d0, d0, d1 }
+          else if op = Ord(tkStar) then EmitI32($EE200B01)   { vmul.f64 d0, d0, d1 }
+          else if op = Ord(tkSlash) then EmitI32($EE800B01)  { vdiv.f64 d0, d0, d1 }
+          else if (op = Ord(tkEq)) or (op = Ord(tkNeq)) or (op = Ord(tkLt)) or
+                  (op = Ord(tkLe)) or (op = Ord(tkGt)) or (op = Ord(tkGe)) then
+          begin
+            EmitI32($EEB40B41);                  { vcmp.f64 d0, d1 }
+            EmitI32($EEF1FA10);                  { vmrs APSR_nzcv, fpscr }
+            EmitSetccArm32(op);
+          end
+          else
+            Error('target arm32: unsupported float binop');
+          Exit;
+        end;
+
         if not (TypeIsOrdinal(tk) or (tk = tyBoolean) or (tk = tyUnknown)) then
           Error('target arm32: non-integer binop not yet supported');
         IREmitNodeArm32(left);
@@ -624,7 +806,97 @@ begin
           Exit;
         end;
         if pi < 0 then
-          Error('target arm32: builtin/special call not yet supported');
+        begin
+          j := -pi;
+          if (j = Ord(tkOrd)) or (j = Ord(tkChr)) or
+             (j = Ord(tkInteger_T)) or (j = Ord(tkLongWord_T)) then
+          begin
+            { type-pun passthrough: evaluate the argument in place }
+            argNode := IRB[node];
+            IREmitNodeArm32(IRA[argNode]);
+            Exit;
+          end;
+          if j = 200 then
+          begin
+            { int(x): float/Variant -> integer }
+            argNode := IRB[node];
+            valNode := IRA[argNode];
+            if IntToTypeKind(IRTk[valNode]) = tyVariant then
+            begin
+              EmitLoadVariantAddrArm32(valNode);    { r0 = slot addr }
+              EmitI32($E5901000);                   { ldr r1, [r0] (tag low) }
+              EmitI32($E3510003);                   { cmp r1, #3 (VT_DOUBLE) }
+              i := CodeLen;
+              EmitI32($1A000000);                   { bne .not_double }
+              EmitI32($ED900B02);                   { vldr d0, [r0, #8] }
+              EmitI32($EEBD0BC0);                   { vcvt.s32.f64 s0, d0 }
+              EmitI32($EE100A10);                   { vmov r0, s0 }
+              lo := CodeLen;
+              EmitI32($EA000000);                   { b .done }
+              Patch32(i, $1A000000 or ((((CodeLen - i) div 4) - 2) and $00ffffff));
+              EmitI32($E5900008);                   { ldr r0, [r0, #8] (payload low) }
+              Patch32(lo, $EA000000 or ((((CodeLen - lo) div 4) - 2) and $00ffffff));
+              Exit;
+            end;
+            IREmitNodeArm32(valNode);
+            if TypeIsFloat(IntToTypeKind(IRTk[valNode])) then
+            begin
+              EmitI32($EEBD0BC0);                   { vcvt.s32.f64 s0, d0 (trunc) }
+              EmitI32($EE100A10);                   { vmov r0, s0 }
+            end;
+            Exit;
+          end
+          else if (j = 203) or (j = 204) or (j = 205) or (j = 206) then
+          begin
+            { Float intrinsics: 203 Trunc, 204 Round, 205 Frac, 206 Int }
+            argNode := IRB[node];
+            valNode := IRA[argNode];
+            IREmitNodeArm32(valNode);
+            if TypeIsFloat(IntToTypeKind(IRTk[valNode])) then
+            begin
+              if j = 203 then
+              begin
+                EmitI32($EEBD0BC0);                 { vcvt.s32.f64 s0, d0 (round-zero) }
+                EmitI32($EE100A10);                 { vmov r0, s0 }
+              end
+              else if j = 204 then
+              begin
+                EmitI32($EEBD0B40);                 { vcvtr.s32.f64 s0, d0 (FPSCR RN = half-even) }
+                EmitI32($EE100A10);                 { vmov r0, s0 }
+              end
+              else if j = 205 then
+              begin
+                { Frac = x - trunc(x). Scratch s8 (in d4): s0 aliases the
+                  low half of d0, converting into it would corrupt x. }
+                EmitI32($EEBD4BC0);                 { vcvt.s32.f64 s8, d0 }
+                EmitI32($EEB81BC4);                 { vcvt.f64.s32 d1, s8 }
+                EmitI32($EE300B41);                 { vsub.f64 d0, d0, d1 }
+              end
+              else
+              begin
+                { Int = trunc as float }
+                EmitI32($EEBD0BC0);                 { vcvt.s32.f64 s0, d0 }
+                EmitI32($EEB80BC0);                 { vcvt.f64.s32 d0, s0 }
+              end;
+            end
+            else
+            begin
+              { integer argument }
+              if j = 205 then
+              begin
+                EmitLoadImmArm32(0, 0);
+                EmitLoadImmArm32(1, 0);
+                EmitI32($EC410B10);                 { vmov d0, r0, r1 = 0.0 }
+              end
+              else if j = 206 then
+                EmitIntToD0Arm32;
+              { 203/204: r0 already holds the value }
+            end;
+            Exit;
+          end
+          else
+            Error('target arm32: builtin/special call not yet supported');
+        end;
         if ProcExternal[pi] then
           Error('target arm32: external calls not yet supported');
         if TypeIsAggregate(Procs[pi].RetType) then
@@ -712,6 +984,17 @@ begin
       begin
         IREmitNodeArm32(IRA[node]); { address -> r0 }
         tk := IntToTypeKind(IRTk[node]);
+        if TypeIsFloat(tk) then
+        begin
+          if tk = tySingle then
+          begin
+            EmitI32($ED900A00);  { vldr s0, [r0] }
+            EmitI32($EEB70AC0);  { vcvt.f64.f32 d0, s0 }
+          end
+          else
+            EmitI32($ED900B00);  { vldr d0, [r0] }
+          Exit;
+        end;
         if not (TypeIsOrdinal(tk) or (tk = tyBoolean) or (tk = tyPointer) or
                 (tk = tyChar) or (tk = tyUnknown) or
                 (tk = tyAnsiString) or (tk = tyClass)) then
@@ -745,6 +1028,23 @@ begin
           EmitI32($E5812000);                   { str r2, [r1] }
           EmitStrDecRefArm32;
           EmitI32($E28DD004);                   { add sp, sp, #4 }
+          Exit;
+        end;
+        if TypeIsFloat(tk) then
+        begin
+          IREmitNodeArm32(IRB[node]);               { value -> d0 (or r0) }
+          if not TypeIsFloat(IntToTypeKind(IRTk[IRB[node]])) then
+            EmitIntToD0Arm32;
+          EmitI32($ED2D0B02);                       { vpush {d0} }
+          IREmitNodeArm32(IRA[node]);               { address -> r0 }
+          EmitI32($ECBD0B02);                       { vpop {d0} }
+          if tk = tySingle then
+          begin
+            EmitI32($EEB70BC0);                     { vcvt.f32.f64 s0, d0 }
+            EmitI32($ED800A00);                     { vstr s0, [r0] }
+          end
+          else
+            EmitI32($ED800B00);                     { vstr d0, [r0] }
           Exit;
         end;
         if not (TypeIsOrdinal(tk) or (tk = tyBoolean) or (tk = tyPointer) or
@@ -849,7 +1149,10 @@ begin
     IR_NEG:
       begin
         IREmitNodeArm32(IRA[node]);
-        EmitI32($E2600000); { rsb r0, r0, #0 }
+        if TypeIsFloat(IntToTypeKind(IRTk[node])) then
+          EmitI32($EEB10B40)  { vneg.f64 d0, d0 }
+        else
+          EmitI32($E2600000); { rsb r0, r0, #0 }
       end;
 
     IR_NOT:
@@ -885,7 +1188,22 @@ begin
         else
         begin
           tk := IntToTypeKind(IRTk[node]);
-          if tk = tyChar then
+          if tk = tyVariant then
+          begin
+            EmitLoadVariantAddrArm32(valNode);    { r0 = slot addr }
+            pi := FindProc('PXXWriteVariant');
+            if pi < 0 then Error('compiler error: PXXWriteVariant not found');
+            EmitCallProc(pi);
+          end
+          else if TypeIsFloat(tk) then
+          begin
+            IREmitNodeArm32(valNode);             { value -> d0 }
+            j := IRC[node];                       { decimals }
+            if j = -2 then EmitFloatCallWriterArm32('PXXWriteFloatNat', -1)
+            else if j >= 0 then EmitFloatCallWriterArm32('PXXWriteFloatFixed', j)
+            else EmitFloatCallWriterArm32('PXXWriteFloatSci', -1);
+          end
+          else if tk = tyChar then
           begin
             IREmitNodeArm32(valNode);
             if wid > 1 then
@@ -971,6 +1289,113 @@ begin
           else
             EmitExit(0);
         end;
+      end;
+
+    IR_VAR_STORE:
+      begin
+        { IRA = dest addr, IRB = value/src addr, IRC = source TTypeKind ord. }
+        tk := IntToTypeKind(IRC[node]);
+        if tk = tyVariant then
+        begin
+          { ARC-correct 16-byte variant-to-variant copy. }
+          EmitLoadVariantAddrArm32(IRB[node]);   { r0 = src addr }
+          EmitVarHelperCallArm32('PXXVarRetain');
+          EmitI32($E92D0001);                    { push {r0} (src) }
+          IREmitNodeArm32(IRA[node]);            { r0 = dest addr }
+          EmitVarHelperCallArm32('PXXVarClear');
+          EmitI32($E8BD0002);                    { pop {r1} (src) }
+          EmitI32($E5912000);                    { ldr r2, [r1] }
+          EmitI32($E5802000);                    { str r2, [r0] }
+          EmitI32($E5912004);                    { ldr r2, [r1, #4] }
+          EmitI32($E5802004);                    { str r2, [r0, #4] }
+          EmitI32($E5912008);                    { ldr r2, [r1, #8] }
+          EmitI32($E5802008);                    { str r2, [r0, #8] }
+          EmitI32($E591200C);                    { ldr r2, [r1, #12] }
+          EmitI32($E580200C);                    { str r2, [r0, #12] }
+        end
+        else
+        begin
+          j := VariantTagForTk386(tk, 'Variant :=');
+          if (tk = tyString) or (tk = tyAnsiString) then
+          begin
+            if tk = tyString then
+              EmitAnsiStringFromNodeArm32(IRB[node])  { r0 = new handle (owned) }
+            else
+            begin
+              IREmitNodeArm32(IRB[node]);             { r0 = handle }
+              EmitStrIncRefArm32;
+            end;
+            EmitI32($E92D0001);                       { push {r0} (payload) }
+          end
+          else
+          begin
+            IREmitNodeArm32(IRB[node]);               { scalar -> r0 / double -> d0 }
+            if tk = tyDouble then
+              EmitI32($ED2D0B02)                      { vpush {d0} }
+            else
+              EmitI32($E92D0001);                     { push {r0} }
+          end;
+          IREmitNodeArm32(IRA[node]);                 { r0 = dest addr }
+          EmitVariantFillArm32(j, tk);
+        end;
+      end;
+
+    IR_VAR_BOX:
+      begin
+        { Box a scalar into a temp variant (IRA = temp addr); addr -> r0. }
+        tk := IntToTypeKind(IRC[node]);
+        j := VariantTagForTk386(tk, 'Variant operand');
+        if (tk = tyString) or (tk = tyAnsiString) then
+        begin
+          if tk = tyString then
+            EmitAnsiStringFromNodeArm32(IRB[node])
+          else
+          begin
+            IREmitNodeArm32(IRB[node]);
+            EmitStrIncRefArm32;
+          end;
+          EmitI32($E92D0001);                         { push {r0} (payload) }
+        end
+        else
+        begin
+          IREmitNodeArm32(IRB[node]);
+          if tk = tyDouble then
+            EmitI32($ED2D0B02)                        { vpush {d0} }
+          else
+            EmitI32($E92D0001);                       { push {r0} }
+        end;
+        IREmitNodeArm32(IRA[node]);                   { r0 = temp addr }
+        EmitVariantFillArm32(j, tk);                  { leaves addr in r0 }
+      end;
+
+    IR_VAR_BINOP:
+      begin
+        { PXXVarBinOp(dest, left, right, opTk, isCompare): args r0-r3 plus
+          the 5th argument on the stack at [sp]. }
+        sgn := IntToTypeKind(IRTk[node]) = tyBoolean;
+        IREmitNodeArm32(IRA[node]);                   { r0 = left addr }
+        EmitI32($E92D0001);                           { push {r0} }
+        IREmitNodeArm32(IRB[node]);                   { r0 = right addr }
+        EmitI32($E1A02000);                           { mov r2, r0 (right) }
+        EmitI32($E8BD0002);                           { pop {r1} (left) }
+        if sgn then
+          EmitI32($E3A00000)                          { mov r0, #0 (dest unused) }
+        else
+        begin
+          EmitI32($E59F0000);                         { ldr r0, [pc] }
+          EmitI32($EA000000);                         { b .+8 }
+          EmitGlobRef(Integer(IRIVal[node]));         { dest temp }
+        end;
+        EmitLoadImmArm32(3, IRC[node]);               { r3 = opTk }
+        if sgn then
+          EmitLoadImmArm32(9, 1)
+        else
+          EmitLoadImmArm32(9, 0);
+        EmitI32($E92D0200);                           { push {r9} (isCompare, 5th arg) }
+        pi := FindProc('PXXVarBinOp');
+        if pi < 0 then Error('compiler error: PXXVarBinOp not found');
+        EmitCallProc(pi);
+        EmitI32($E28DD004);                           { add sp, sp, #4 }
       end;
 
     else
