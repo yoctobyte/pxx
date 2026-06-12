@@ -1,8 +1,8 @@
 # Relocatable ELF32 object writer (.o for ESP-IDF linking)
 
 - **Type:** feature
-- **Status:** backlog
-- **Owner:** —
+- **Status:** working
+- **Owner:** claude
 - **Unblocks:** feature-esp32-idf-riscv32, feature-esp32-idf-xtensa
 - **Opened:** 2026-06-12 (esp32-idf integration plan; follow-on to feature-target-esp32)
 

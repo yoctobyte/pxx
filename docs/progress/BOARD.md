@@ -8,11 +8,13 @@ lives in git, not in a timestamp._
 
 _none_
 
-## working (0)
+## working (1)
 
-_none_
+| Ticket | Type | Summary | Blocked-by |
+| --- | --- | --- | --- |
+| feature-elf-rel-writer | feature | Relocatable ELF32 object writer (.o for ESP-IDF linking) | — |
 
-## backlog (31)
+## backlog (30)
 
 | Ticket | Type | Summary | Blocked-by |
 | --- | --- | --- | --- |
@@ -28,7 +30,6 @@ _none_
 | feature-cross-param-abi | feature | Full parameter/result ABI on cross targets | — |
 | feature-directive-if-numeric | feature | Valued defines + numeric `{$IF}` evaluation | — |
 | feature-dynamic-soname-discovery | feature | Dynamic soname discovery (no execve) | — |
-| feature-elf-rel-writer | feature | Relocatable ELF32 object writer (.o for ESP-IDF linking) | — |
 | feature-esp32-bare-boot | feature | ESP32 bare-metal boot profile (no IDF) | — |
 | feature-esp32-idf-riscv32 | feature | ESP-IDF integration: riscv32 (ESP32-C3) end-to-end | feature-elf-rel-writer |
 | feature-esp32-idf-xtensa | feature | ESP-IDF integration: Xtensa (ESP32-S2/S3) — QEMU + real hardware | feature-elf-rel-writer, feature-esp32-idf-riscv32, feature-xtensa-windowed-abi |
@@ -100,7 +101,6 @@ _none_
 - feature-cross-param-abi
 - feature-directive-if-numeric
 - feature-dynamic-soname-discovery
-- feature-elf-rel-writer
 - feature-esp32-bare-boot
 - feature-float-str-val
 - feature-inline-asm-depth
