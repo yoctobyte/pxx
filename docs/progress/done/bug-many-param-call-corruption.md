@@ -1,7 +1,7 @@
 # Self-hosted x86-64 backend miscompiles calls with many parameters
 
 - **Type:** bug
-- **Status:** working
+- **Status:** done
 - **Owner:** claude
 - **Found / Opened:** 2026-06-12 (while writing writeELF32Rel, feature-elf-rel-writer)
 
@@ -78,3 +78,16 @@ clobbered by the callee's own frame/local layout.
   helper produced a truncated .o (section headers never written because the
   fd argument arrived corrupted and writes failed silently). Bisected to the
   call shape, not the writer.
+
+- 2026-06-12 — FIXED (commit a57a80a). Root cause: the internal-call pop loop
+  (`for i := ParamCount-1 downto 0 do case i of 0..5`) had no arm past r9 —
+  with N>6 args the first N-6 iterations popped nothing, then `pop r9` took
+  the stack top (the LAST arg), shifting every register by N-6 and leaking
+  N-6 qwords on the stack. The earlier "10 params worked" observation was a
+  red herring: that test summed the args, and a sum is commutative — the
+  shuffle was invisible. Fix: procs with >6 params use an all-stack internal
+  convention (caller keeps its left-to-right pushes, cleans up post-call;
+  callee prologue copies param i of n from [rbp+16+(n-1-i)*8]). Patched all
+  three x86-64 internal call paths: IR_CALL, constructor calls, virtual
+  dispatch. Regression: test/test_many_params.pas in make test (the previous
+  stable compiler fails it). Suite/frozen/nilpy/cross/self-host all green.

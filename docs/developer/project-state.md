@@ -43,11 +43,11 @@ Case behavior is per origin:
 
 ## Confirmed Bugs
 
-- The self-hosted x86-64 backend miscompiles calls with roughly seven or more
-  parameters: arguments arrive shifted in the callee (silent wrong-code). The
-  FPC-built compiler generates correct code for the same source. Repro and
-  analysis in `docs/progress/backlog/bug-many-param-call-corruption.md`;
-  found 2026-06-12.
+- None. (The >6-parameter internal-call argument corruption found 2026-06-12
+  was fixed the same day: procs with more than 6 parameters now use an
+  all-stack internal convention. See
+  `docs/progress/done/bug-many-param-call-corruption.md` and
+  `test/test_many_params.pas`.)
 
 ## Latest Benchmark Snapshot
 
@@ -69,10 +69,10 @@ builds include managed runtime support.
   per-proc symbols, entry exported as `app_main`, externals as undefined
   symbols with indirect literal-slot calls. Links against the ESP-IDF cross
   toolchains; `make test-emit-obj` is the regression gate.
-- Found in the process: the self-hosted x86-64 backend miscompiles calls with
-  roughly seven or more parameters (silent argument shift) — tracked as
-  `bug-many-param-call-corruption`; keep helper signatures at six parameters
-  or fewer until fixed.
+- Found in the process: internal x86-64 calls with more than 6 parameters
+  silently shifted their arguments (`bug-many-param-call-corruption`) —
+  fixed the same day with an all-stack convention for >6-param procs;
+  regression test `test/test_many_params.pas`.
 
 ### 2026-06-12 — managed `AnsiString` default
 
