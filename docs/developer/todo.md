@@ -209,10 +209,9 @@ Dynamic-array continuation checklist:
   **[`garbage-collection-thoughts.md`](garbage-collection-thoughts.md)**.
 - Add a fixed-static-arena profile so allocator and managed-value tests pass
   without `mmap`, `munmap`, or `brk`.
-- Package or promote the opt-in `{$define PXX_MANAGED_STRING}` ABI now that
-  heap-backed, reference-counted, copy-on-write strings reach managed
-  self-compile fixedpoint. Globals, exception cleanup, and remaining
-  record/class ownership audits are still pending before making it default.
+- Keep the frozen `-uPXX_MANAGED_STRING` compatibility path tested now that
+  heap-backed, reference-counted, copy-on-write `AnsiString` is the default and
+  reaches self-compile fixedpoint.
 - Dynamic arrays now cover scalar arrays, `array of AnsiString`, arrays of
   recursively managed records, params/results, whole-record managed assignment,
   embedded static-array field indexing, nested arrays of scalar or managed
@@ -302,17 +301,16 @@ inheritance depth, method-resolution clauses, COM ARC.
   See [`pascal-gap-analysis.md`](pascal-gap-analysis.md) §1.3.
 - ⬜ **Float intrinsics.** `Trunc`, `Round`, `Int`, `Float` not implemented
   (float arithmetic/compare/write itself is done).
-- 🟡 **Managed `AnsiString` representation.** The opt-in
-  `{$define PXX_MANAGED_STRING}` path implements heap-backed reference counts,
-  local cleanup, copy-on-write indexed writes, concatenation, coercions,
-  `SetLength`, params/results, argument temporaries, dynamic-array elements,
-  managed record fields, and managed compiler self-compile fixedpoint. Finish
-  globals, exception paths, and final default-ABI packaging before making it
-  the default. Atomic refcounts protect lifetime accounting only; concurrent
-  mutation and copy-on-write uniqueness checks still require external
+- 🟡 **Managed `AnsiString` representation.** The default path implements
+  heap-backed reference counts, local/global cleanup, copy-on-write indexed
+  writes, concatenation, coercions, `SetLength`, params/results, argument
+  temporaries, dynamic-array elements, managed record/class fields, exception
+  cleanup, and compiler self-compile fixedpoint. Atomic refcounts protect
+  lifetime accounting only; concurrent mutation and copy-on-write uniqueness
+  checks still require external
   synchronization.
-- 🟡 **Dynamic arrays.** Scalar, opt-in managed-string, recursively managed
-  record, and nested elements support
+- 🟡 **Dynamic arrays.** Scalar, managed-string, recursively managed record, and
+  nested elements support
   pointer-sized slots, assignment retain/release, indexed-write copy-on-write,
   preserving grow/shrink, zero-initialized new slots, `SetLength(a, 0)`
   reclaim, local-slot initialization and normal scope-exit release,

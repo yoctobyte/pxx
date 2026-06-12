@@ -27,8 +27,8 @@ records, strings, classes, constructors, inheritance, `class of` metaclasses,
 virtual/override and
 abstract dispatch, visibility parsing, properties, published RTTI, reflection,
 resources, LFM streaming, procedure/method pointers, integer and float
-arithmetic, typed pointers, dynamic arrays of scalar values, opt-in managed
-`AnsiString` arrays, exceptions,
+arithmetic, typed pointers, dynamic arrays of scalar and managed `AnsiString`
+values, exceptions,
 generics, overloads, operators, qualified unit symbols, scaled typed-pointer
 arithmetic, record/set aggregate-valued function results, conditional
 directive expressions and active-branch includes, inline asm, `goto`, `with`,
@@ -50,10 +50,24 @@ Case behavior is per origin:
 The post-gate 2026-06-11 benchmark and regression audit is recorded in
 [`benchmarks/2026-06-11-vs-fpc.md`](../benchmarks/2026-06-11-vs-fpc.md). On
 the recorded host, the self-hosted compiler compiles the compiler source tree in 1.12x of FPC's time, and compiles a batch of twenty
-Pascal hello-world compiles 15.05x faster than FPC. The directly emitted static hello-world ELF is
-exactly 287 bytes.
+Pascal hello-world compiles 15.05x faster than FPC. The recorded 287-byte
+hello-world ELF was from the frozen inline-string path; managed-string default
+builds include managed runtime support.
 
 ## Latest Runtime Progress
+
+### 2026-06-12 — managed `AnsiString` default
+
+- `PXX_MANAGED_STRING` is seeded by default, so `AnsiString` now uses the
+  heap-backed, refcounted representation unless the command line passes
+  `-uPXX_MANAGED_STRING`.
+- The default managed compiler self-hosts to a byte-identical fixedpoint and
+  FPC-seeded output matches the checked-in compiler. The compiler BSS drops from
+  the frozen inline-string scale (~1.6 GB) to managed pointer slots
+  (~133 MB in the 2026-06-12 bootstrap).
+- `make benchmark` now reports both Hello World output modes. A one-sample sanity
+  run produced 24,665 bytes for managed-default hello and 287 bytes for frozen
+  `-uPXX_MANAGED_STRING` hello.
 
 ### 2026-06-05 — default keyword and managed self-compile fixedpoint
 
@@ -61,10 +75,9 @@ exactly 287 bytes.
   `test/test_default_keyword.pas`: scalar and pointer targets reset to zero,
   string targets reset to empty, and managed record storage is cleared through
   the assignment path.
-- The opt-in managed `AnsiString` compiler build now reaches byte-identical
-  fixedpoint through the committed managed bootstrap targets. The earlier
-  stage-2 CPU/RSS growth blocker is gone; the remaining question is when and
-  how to promote the managed ABI from opt-in to default.
+- The managed `AnsiString` compiler build reached byte-identical fixedpoint
+  through the committed managed bootstrap targets. The earlier stage-2 CPU/RSS
+  growth blocker is gone.
 
 ### 2026-06-04 — generic collection library
 
@@ -141,16 +154,15 @@ runtime dependencies.
   constraint against arbitrary pointer-compatible assignments.
 - Float conversion intrinsics such as `Trunc`, `Round`, `Int`, and float
   `Str`/`Val`.
-- Managed `AnsiString` is available as an opt-in
-  `{$define PXX_MANAGED_STRING}` slice: heap-backed refcounting, normal local
-  cleanup, copy-on-write indexed writes, concatenation, coercions,
-  `SetLength`, params/results, argument temporaries, dynamic-array elements,
-  records with managed fields, and managed compiler self-compile fixedpoint.
-  The default representation remains inline while globals, exception
-  unwinding, and final default-ABI promotion are decided.
-- Dynamic arrays support scalar elements, opt-in managed `AnsiString`
-  elements, records recursively containing managed strings, and nested arrays
-  of those bases at any depth. Assignment,
+- Managed `AnsiString` is the default representation and covers heap-backed
+  refcounting, local/global cleanup, copy-on-write indexed writes,
+  concatenation, coercions, `SetLength`, params/results, argument temporaries,
+  dynamic-array elements, records/classes with managed fields, exception
+  unwinding, and compiler self-compile fixedpoint. The frozen inline ABI remains
+  available with `-uPXX_MANAGED_STRING`.
+- Dynamic arrays support scalar elements, managed `AnsiString` elements,
+  records recursively containing managed strings, and nested arrays of those
+  bases at any depth. Assignment,
   indexed-write copy-on-write, preserving resize, zero-initialized growth,
   replacement reclaim, normal local cleanup, nested-level copy-on-write,
   fresh-result move semantics, argument-temp ownership, and conditional atomic
@@ -222,10 +234,9 @@ runtime dependencies.
    tests pass without `mmap`, `munmap`, or `brk`.
 3. Implement allocator splitting, coalescing, alignment, and in-place
    `Realloc` attempts; keep hosted and RTOS facilities behind optional hooks.
-4. Decide how to package or promote the opt-in managed `AnsiString` ABI now
-   that managed self-compile fixedpoint is reached; keep global managed payload
-   cleanup, exception-path cleanup, and record/class ownership audits visible.
-5. Finish remaining managed-value ownership paths that still affect uncovered
-   aggregates and exceptional exits.
+4. Keep exercising the frozen `-uPXX_MANAGED_STRING` compatibility path while
+   the managed `AnsiString` default settles.
+5. Finish remaining managed-value ownership paths only where uncovered aggregate
+   shapes or exceptional exits still appear.
 6. Audit threaded compound runtime operations: statement-level
    `write`/`writeln`, shared `read`/`readln` state, and exception globals.

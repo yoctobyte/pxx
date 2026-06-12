@@ -39,11 +39,16 @@ Options come before the source path.
 | `--no-unhandled-handler` | Exit status 1 silently on an unhandled exception. |
 | `--experimental-ir-codegen` | Deprecated no-op; IR is the only backend. |
 
+`PXX_MANAGED_STRING` is defined by default. Use `-uPXX_MANAGED_STRING` to select
+the frozen fixed-capacity inline `AnsiString` ABI for compatibility testing.
+
 ## Build commands (repo root)
 
 | Command | Effect |
 | --- | --- |
 | `make` | Rebuild PXX from the checked-in seed; require byte-identical fixedpoint. |
 | `make test` | Regression + FPC comparison + fixedpoint checks. |
+| `make test-frozen` | Run the regression suite with `-uPXX_MANAGED_STRING`. |
 | `make bootstrap` | Recovery: build a seed with FPC, then require fixedpoint. |
+| `make bootstrap-frozen` | Recovery path for the frozen inline string ABI. |
 | `make fpc-check` | Verify an FPC-built compiler reproduces the current binary. |

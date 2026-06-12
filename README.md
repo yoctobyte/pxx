@@ -15,8 +15,10 @@ one IR and backend.
 
 - **Self-hosting:** `make` rebuilds the compiler through the checked-in PXX
   seed and requires a byte-identical fixedpoint before replacing it.
-- **Tiny output:** Pascal Hello World is 287 bytes with no linked runtime; see
-  the [runtime-gate benchmark](benchmarks/2026-06-02-runtime-gate.md).
+- **Small direct ELF output:** benchmarks report Pascal Hello World in both the
+  managed-default string mode and the frozen `-uPXX_MANAGED_STRING`
+  compatibility mode; see the
+  [runtime-gate benchmark](benchmarks/2026-06-02-runtime-gate.md).
 - **Fast pipeline:** one in-memory frontend-to-ELF path, no assembler or linker
   subprocess. See the [compiler-runtime benchmark](benchmarks/2026-06-03-compiler-runtime.md).
 - **Pascal + C interop:** local C files can be compiled into the same output,
@@ -103,8 +105,9 @@ ln -sfn "$PWD/stable_linux_amd64/default/latest" "$HOME/.local/bin/pxx"
   allocator, `Str`/`Val`, variant helpers).
 - `docs/` - public docs, project state, plans, and historic handovers.
 - `lib/` - Pascal library units used by tests and demos (`rtl/`, `lcl/`).
-- `stable_linux_amd64/` - stable/recovery compiler binaries, split into
-  `default/` and `managed/` channels with `latest` symlinks.
+- `stable_linux_amd64/` - stable/recovery compiler binaries. The default channel
+  uses managed `AnsiString`; historical managed/frozen channels may remain for
+  compatibility.
 - `test/` - regression tests, fixtures, and manual harnesses.
 - `tools/` - repository maintenance helpers.
 

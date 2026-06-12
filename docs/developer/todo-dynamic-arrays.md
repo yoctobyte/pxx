@@ -17,7 +17,7 @@ dynamic-array session.
 - Normal local cleanup on procedure exit.
 - Conditional atomic refcount updates under `--threadsafe`.
 - Scalar element types.
-- `array of AnsiString` under `{$define PXX_MANAGED_STRING}`.
+- `array of AnsiString` under the default managed string ABI.
 - Arrays of fixed-size records recursively containing managed `AnsiString`
   fields.
 - Class/object references remain unmanaged raw pointers. Their lifetime stays
@@ -148,8 +148,8 @@ applying the character index. Writes still pass the slot address to
    VMT write) so a freshly `Create`d managed field starts nil even when the
    backing block is a reused free-list block carrying stale data — otherwise
    the field SetLength read garbage as the old data pointer and faulted. The
-   compiler self-compiles without `PXX_MANAGED_STRING` and uses no managed
-   fields, so the self-host build stays byte-identical. Regression:
+   compiler now self-compiles with managed strings by default while the frozen
+   `-uPXX_MANAGED_STRING` path remains byte-identical. Regression:
    `test/test_dynarray_field.pas` (int/string list fields, `Length`, indexed
    access, record-copy COW independence, 200k-iteration scope finalization).
 
@@ -189,9 +189,9 @@ reuse) and passed by borrow; the epilog's managed-local release frees it at
 scope exit. The hidden locals are created during body lowering — after the
 parser's prologue zero-init pass — so `IREmitMachineCode` nil-inits them
 (flagged via the `SymIsHiddenArgTemp` parallel array) before the body, keeping
-the first store's release-of-old safe. Only fires under `PXX_MANAGED_STRING`
-(`tyAnsiString` exists only then), so the self-hosted compiler build is
-byte-identical. Regression: `test/test_managed_arg_temp.pas`.
+the first store's release-of-old safe. This is active in the default managed
+string build; the frozen `-uPXX_MANAGED_STRING` path remains byte-identical.
+Regression: `test/test_managed_arg_temp.pas`.
 
 A/B over a 5M-iteration `s := Mk('a','b')` loop: peak RSS 507 MB (pre-result-fix)
 → 351 MB (result move) → **264 KB** (arg temps owned). A no-arg result loop and

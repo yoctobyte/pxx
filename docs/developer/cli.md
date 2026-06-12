@@ -58,6 +58,9 @@ Options must occur before the source path.
 | `--no-unhandled-handler` | Exit with status 1 silently for an unhandled Phase 1 exception. |
 | `-fno-unhandled-handler` | Alias for `--no-unhandled-handler`. |
 
+`PXX_MANAGED_STRING` is defined by default, so `AnsiString` uses the managed
+heap-backed ABI unless a build or command passes `-uPXX_MANAGED_STRING`.
+
 Example:
 
 ```sh
@@ -80,9 +83,11 @@ Run from the repository root:
 | --- | --- |
 | `make` | Rebuild PXX using the checked-in self-hosted seed and require a fixedpoint. |
 | `make test` | Run regression coverage, FPC comparison, and self-hosted fixedpoint checks. |
+| `make test-frozen` | Run regression coverage with `-uPXX_MANAGED_STRING`. |
 | `make bootstrap` | Recovery path: compile a seed with FPC, then require the PXX fixedpoint before installing it. |
+| `make bootstrap-frozen` | Recovery path for the frozen inline string ABI. |
 | `make fpc-check` | Check that an FPC-built compiler produces the same current PXX binary. |
-| `make benchmark` | Benchmark self-compilation and Hello World compilation; requires `hyperfine`. |
+| `make benchmark` | Benchmark self-compilation plus managed-default and frozen Hello World compilation; requires `hyperfine`. |
 | `make stabilize` | Run tests and record a stable binary generation. |
 
 FPC is a bootstrap/recovery and verification host. PXX programs are not

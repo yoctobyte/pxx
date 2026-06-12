@@ -33,9 +33,8 @@ Already implemented:
   growth, replacement reclaim, normal local cleanup, and atomic refcount
   updates only under `--threadsafe`, using the provisional layout
   `[refcount:8][length:8][data...]`.
-- `{$define PXX_MANAGED_STRING}` enables the first managed `AnsiString` slice
-  and `array of AnsiString`, including element retain/finalize during array
-  clone, resize, and final release.
+- Managed `AnsiString` is the default and `array of AnsiString` includes
+  element retain/finalize during array clone, resize, and final release.
 - Dynamic arrays of records recursively containing managed strings use the
   same element lifecycle helpers. Class/object pointers stay unmanaged.
 - Nested dynamic arrays of scalar, managed-string, and managed-record bases
@@ -44,9 +43,9 @@ Already implemented:
 
 Known gaps:
 
-- Strings remain fixed-capacity inline values by default. The opt-in managed
-  ABI still needs params/results, globals, exception paths, and complete
-  record/class ownership coverage.
+- Frozen fixed-capacity inline strings remain available with
+  `-uPXX_MANAGED_STRING`; default managed strings still need thread-level
+  synchronization decisions for compound mutation beyond atomic refcounts.
 - Dynamic arrays still defer nested-level copy-on-write, exception-path
   cleanup, and fresh-result move semantics.
 - The older shared `EmitBumpAlloc` helper still uses the obsolete `brk` model

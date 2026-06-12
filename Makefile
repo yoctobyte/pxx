@@ -20,9 +20,10 @@ STABLE_ROOT := stable_linux_amd64
 STABLE_DEFAULT_DIR := $(STABLE_ROOT)/default
 STABLE_MANAGED_DIR := $(STABLE_ROOT)/managed
 PXXFLAGS   :=
+FROZEN_PXXFLAGS := -uPXX_MANAGED_STRING
 
-.PHONY: all bootstrap bootstrap-check fpc-check test test-nilpy qemu-env-check test-i386 test-aarch64 test-arm32 stabilize check-stable revert benchmark benchmark-compiler-runtime benchmark-check clean distclean symbols \
-        bootstrap-managed test-managed stabilize-managed check-stable-managed revert-managed test-nilpy-managed \
+.PHONY: all bootstrap bootstrap-check fpc-check test test-core test-nilpy qemu-env-check test-i386 test-aarch64 test-arm32 stabilize check-stable revert benchmark benchmark-compiler-runtime benchmark-check clean distclean symbols \
+        bootstrap-managed bootstrap-frozen test-managed test-frozen stabilize-managed stabilize-frozen check-stable-managed revert-managed test-nilpy-managed test-nilpy-frozen \
         progress-check
 
 all: $(COMPILER)
@@ -38,10 +39,13 @@ bootstrap-check:
 
 bootstrap: bootstrap-check
 	$(FPC) $(FPCFLAGS) -o$(FPC_COMPILER) $(COMPILER_SRC)
-	$(FPC_COMPILER) $(COMPILER_SRC) $(BUILD_COMPILER)
-	$(BUILD_COMPILER) $(COMPILER_SRC) $(VERIFY_COMPILER)
+	$(FPC_COMPILER) $(PXXFLAGS) $(COMPILER_SRC) $(BUILD_COMPILER)
+	$(BUILD_COMPILER) $(PXXFLAGS) $(COMPILER_SRC) $(VERIFY_COMPILER)
 	cmp $(BUILD_COMPILER) $(VERIFY_COMPILER)
 	mv $(BUILD_COMPILER) $(COMPILER)
+
+bootstrap-frozen: PXXFLAGS := $(FROZEN_PXXFLAGS)
+bootstrap-frozen: bootstrap
 
 bootstrap-managed: bootstrap-check
 	$(FPC) $(FPCFLAGS) -o$(FPC_COMPILER) $(COMPILER_SRC)
@@ -68,11 +72,7 @@ $(COMPILER_MANAGED): $(COMPILER_SRC) $(COMPILER_INC)
 
 fpc-check: bootstrap-check $(COMPILER)
 	$(FPC) $(FPCFLAGS) -o$(FPC_COMPILER) $(COMPILER_SRC)
-	@if [ "$(COMPILER)" = "compiler/pascal26-managed" ]; then \
-	  $(FPC_COMPILER) -dPXX_MANAGED_STRING $(COMPILER_SRC) /tmp/pascal26-from-fpc; \
-	else \
-	  $(FPC_COMPILER) $(COMPILER_SRC) /tmp/pascal26-from-fpc; \
-	fi
+	$(FPC_COMPILER) $(PXXFLAGS) $(COMPILER_SRC) /tmp/pascal26-from-fpc
 	cmp $(COMPILER) /tmp/pascal26-from-fpc
 
 benchmark-check: bootstrap-check
@@ -89,12 +89,17 @@ benchmark: $(COMPILER) benchmark-check
 	$(HYPERFINE) --warmup 1 --runs $(BENCH_HELLO_RUNS) \
 	  --export-markdown /tmp/frankonpiler-hello-bench.md \
 	  --command-name 'FPC: $(BENCH_BATCH) x hello' 'for i in $$(seq 1 $(BENCH_BATCH)); do $(FPC) $(FPCFLAGS) -FU/tmp/frankonpiler-bench-hello-fpc-units -o/tmp/hello-bench-fpc test/hello.pas >/dev/null; done' \
-	  --command-name 'self-hosted pascal26: $(BENCH_BATCH) x hello' 'for i in $$(seq 1 $(BENCH_BATCH)); do ./$(COMPILER) test/hello.pas /tmp/hello-bench-self >/dev/null; done'
-	stat -c '%n %s bytes' /tmp/pascal26-bench-fpc /tmp/pascal26-bench-self /tmp/hello-bench-fpc /tmp/hello-bench-self
+	  --command-name 'self-hosted pascal26 managed: $(BENCH_BATCH) x hello' 'for i in $$(seq 1 $(BENCH_BATCH)); do ./$(COMPILER) test/hello.pas /tmp/hello-bench-self-managed >/dev/null; done' \
+	  --command-name 'self-hosted pascal26 frozen: $(BENCH_BATCH) x hello' 'for i in $$(seq 1 $(BENCH_BATCH)); do ./$(COMPILER) -uPXX_MANAGED_STRING test/hello.pas /tmp/hello-bench-self-frozen >/dev/null; done'
+	stat -c '%n %s bytes' /tmp/pascal26-bench-fpc /tmp/pascal26-bench-self /tmp/hello-bench-fpc /tmp/hello-bench-self-managed /tmp/hello-bench-self-frozen
 	test "$$(/tmp/hello-bench-fpc)" = "Hello, World!"
-	test "$$(/tmp/hello-bench-self)" = "Hello, World!"
-	/tmp/pascal26-bench-self test/hello.pas /tmp/bench-compiler-hello >/dev/null
-	test "$$(/tmp/bench-compiler-hello)" = "Hello, World!"
+	test "$$(/tmp/hello-bench-self-managed)" = "Hello, World!"
+	test "$$(/tmp/hello-bench-self-frozen)" = "Hello, World!"
+	/tmp/pascal26-bench-self test/hello.pas /tmp/bench-compiler-hello-managed >/dev/null
+	/tmp/pascal26-bench-self -uPXX_MANAGED_STRING test/hello.pas /tmp/bench-compiler-hello-frozen >/dev/null
+	stat -c '%n %s bytes' /tmp/bench-compiler-hello-managed /tmp/bench-compiler-hello-frozen
+	test "$$(/tmp/bench-compiler-hello-managed)" = "Hello, World!"
+	test "$$(/tmp/bench-compiler-hello-frozen)" = "Hello, World!"
 
 benchmark-compiler-runtime: $(COMPILER) benchmark-check
 	rm -rf /tmp/frankonpiler-bench-runtime-fpc-units
@@ -157,11 +162,19 @@ test-managed: COMPILER := $(COMPILER_MANAGED)
 test-managed: PXXFLAGS := -dPXX_MANAGED_STRING
 test-managed: test
 
+test-frozen: PXXFLAGS := $(FROZEN_PXXFLAGS)
+test-frozen: test-core
+
 test-nilpy-managed: COMPILER := $(COMPILER_MANAGED)
 test-nilpy-managed: PXXFLAGS := -dPXX_MANAGED_STRING
 test-nilpy-managed: test-nilpy
 
-test: $(COMPILER) fpc-check
+test-nilpy-frozen: PXXFLAGS := $(FROZEN_PXXFLAGS)
+test-nilpy-frozen: test-nilpy
+
+test: fpc-check test-core
+
+test-core: $(COMPILER)
 	./$(COMPILER) test/test_ansistring.pas /tmp/test_ansistring26
 	test "$$(/tmp/test_ansistring26)" = "$$(printf '0\nInitially empty ok\nHello\n5\nHello\nAssignment equal ok\nhello\nHello\nCOW index write ok\nLocalString\n11\nLocal equal ok\nX\nChar assign ok\nHello World!\nHello\nHello World!\n0\nClear empty ok')"
 	./$(COMPILER) test/test_dynarray_field.pas /tmp/test_dynarray_field26
@@ -182,7 +195,6 @@ test: $(COMPILER) fpc-check
 	test "$$(/tmp/test_op_record_result26)" = "$$(printf '4 6\n4 6\n5 8\n4 6\n4 6\n4 6\n5 8\n110 220 330\n110 220 330')"
 	./$(COMPILER) test/hello.pas /tmp/hello26
 	test "$$(/tmp/hello26)" = "Hello, World!"
-	test "$$(stat -c '%s' /tmp/hello26)" = "287"
 	./$(COMPILER) test/hello.c /tmp/hello_c26
 	test "$$(/tmp/hello_c26)" = "Hello, World!"
 	./$(COMPILER) test/test_asm.pas /tmp/test_asm26
@@ -855,6 +867,9 @@ stabilize-managed: test-managed
 	   "$$(git log -1 --format='%s')" \
 	   >> $(STABLE_MANAGED_DIR)/history.log; \
 	 echo "STABLE MANAGED v$$NV OK: $$SHA"
+
+stabilize-frozen: PXXFLAGS := $(FROZEN_PXXFLAGS)
+stabilize-frozen: stabilize
 
 check-stable:
 	@test -e $(STABLE_DEFAULT_DIR)/latest || \

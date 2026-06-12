@@ -13,8 +13,9 @@ what already works alongside the PXX-specific extras.
 - Programs and units, qualified `UnitName.Symbol` lookup.
 - Integer, Boolean, `Char`, `Single`/`Double`/`Real`/`Extended`, enums, sets,
   arrays, records, typed pointers.
-- `AnsiString`: always usable inline; opt-in heap-backed refcounted mode under
-  `{$define PXX_MANAGED_STRING}` (see [Not Stable](not-stable.md)).
+- `AnsiString`: heap-backed and refcounted by default; `-uPXX_MANAGED_STRING`
+  selects the frozen inline ABI for compatibility testing (see
+  [Not Stable](not-stable.md)).
 - Dynamic arrays (`array of T`) with `SetLength`/`Length`, copy-on-write, and
   scope-exit cleanup — as locals, and as record/class fields.
 - `if`, `case`, `while`, `for`, `repeat`, `break`, `continue`.

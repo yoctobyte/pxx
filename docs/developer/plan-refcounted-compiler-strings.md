@@ -286,12 +286,12 @@ be established:
 - **Phase 3 — drive the self-compile.** Done: the managed compiler builds and
   runs a hello-world target correctly.
 - **Phase 4 — fixedpoint.** Done: managed stage1/stage2 are byte-identical.
-- **Phase 5 — FPC-seed parity + flip the default.** Decide how to package the
-  managed reseed/stable artifact, optionally add an automated managed fixedpoint
-  gate, reconcile any remaining FPC-seed parity concerns for the managed mode,
-  switch the build to define `PXX_MANAGED_STRING` by default (keep the frozen
-  path available), re-green `test` / `test-nilpy` / `fpc-check`, and measure
-  BSS + compile-time RSS before/after.
+- **Phase 5 — FPC-seed parity + flip the default.** Done 2026-06-12:
+  `PasInitDefines` now seeds `PXX_MANAGED_STRING`, so `AnsiString` is managed by
+  default. `-uPXX_MANAGED_STRING` keeps the frozen inline ABI available for
+  compatibility testing. The default build keeps the `make bootstrap`,
+  `make test`, `make test-nilpy`, and `make fpc-check` gates; `make test-frozen`
+  exercises the opt-out path.
 
 ## Risk register
 
@@ -301,9 +301,9 @@ be established:
 | `var`/`out` string param managed by-ref store | **Resolved** | Assign + concat + `SetLength` through `var` all implemented & tested (2026-06-05); gap B fully closed |
 | `SetLength` on a plain-local managed string | **Retracted** | Not a bug — works; gap F report did not reproduce |
 | Unknown error tail (gap D) could be long | **Resolved** | Managed self-compile reaches byte-identical fixedpoint |
-| FPC-seed byte-identical parity (gap E) | **High** | Two string runtimes must emit identical code |
+| FPC-seed byte-identical parity (gap E) | **Resolved** | FPC-seeded managed default reproduces the self-hosted binary |
 | Stage-2 managed self-compile CPU/RSS growth | **Resolved** | Fixed by scalar `AnsiString` SetLength byte sizing + capacity-aware growth |
-| Compile-time perf change under real workload | **Med** | Still worth measuring before flipping the default |
+| Compile-time perf change under real workload | **Med** | Still worth measuring after the default flip |
 | Allocator crash under churn | **Retired** | 2 M-concat loop flat at 264 KB |
 
 ## Cheap experiments already run
@@ -316,3 +316,5 @@ be established:
   originally failed; now fixed and tested.
 - Managed compiler builds and compiles/runs `test/hello.pas`.
 - Managed stage1/stage2 self-compile reaches byte-identical fixedpoint.
+- Managed strings are now the default compiler string mode; the frozen inline
+  ABI remains available with `-uPXX_MANAGED_STRING`.

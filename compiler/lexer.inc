@@ -404,6 +404,8 @@ begin
   PackRecordsVal := 8;
   name := 'PXX';
   PasDefine(name);
+  name := 'PXX_MANAGED_STRING';
+  PasDefine(name);
   name := 'CPU64';
   PasDefine(name);
   name := 'CPUX86_64';

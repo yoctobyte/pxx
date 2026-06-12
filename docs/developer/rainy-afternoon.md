@@ -9,13 +9,10 @@ authoritative.
 
 ## Managed Values
 
-- **Exception unwinding does not finalize managed locals.** Normal scope exit
-  cleanup works. Add unwind-path cleanup when managed exception lifetime
-  semantics become active work.
-- **Managed `AnsiString` remains opt-in.** Before making it the default ABI,
-  finish globals, exception paths, and remaining class ownership coverage.
-  (Params/results, fresh-result move, argument-temp ownership, and nested-level
-  copy-on-write all landed 2026-06-04.)
+- **Managed `AnsiString` default follow-up.** The default ABI now uses managed
+  strings, including globals, exception paths, and record/class ownership in the
+  covered regression set. Keep adding narrow ownership tests when new aggregate
+  shapes appear.
 
 ## Runtime And Threads
 

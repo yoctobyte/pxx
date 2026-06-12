@@ -101,14 +101,12 @@ implemented.
 
 - PXX does not provide the FPC RTL or its complete set of units.
 - Available built-ins and project units cover tested programs only.
-- Pascal strings use the inline fixed-capacity representation by default.
-  `{$define PXX_MANAGED_STRING}` enables the first heap-backed,
-  reference-counted `AnsiString` slice: assignment, normal local cleanup,
-  copy-on-write indexed mutation, concatenation, coercions, and `SetLength`.
-  Refcount updates become atomic only in `--threadsafe` mode. Params/results
-  (with fresh-result move and argument-temp ownership) and nested-level
-  copy-on-write are covered; the opt-in ABI is not yet complete for globals,
-  exception unwinding, and all record/class ownership paths.
+- `AnsiString` uses the heap-backed, reference-counted representation by
+  default. Assignment, local/global cleanup, copy-on-write indexed mutation,
+  concatenation, coercions, params/results, `SetLength`, records/classes, and
+  exception unwinding are covered by current regression tests. Refcount updates
+  become atomic only in `--threadsafe` mode. `-uPXX_MANAGED_STRING` selects the
+  frozen fixed-capacity inline ABI for bootstrap compatibility.
 - FPC applications depending on `SysUtils`, containers, streams, rich exception classes,
   platform abstractions, or package ecosystems cannot be assumed to compile.
 

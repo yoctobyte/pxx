@@ -48,12 +48,10 @@ cost is mostly *semantics*, handled by the phasing below.
 
 ### Reality checks from review (do not assume away)
 
-- **Managed strings remain opt-in at the Pascal surface.** The
-  `{$define PXX_MANAGED_STRING}` path implements heap-backed strings, local
-  cleanup, copy-on-write indexed writes, concatenation, coercions, and
-  `SetLength`. Variant now supports managed-string assignment, copying,
-  overwrite cleanup, local cleanup, and printing. String operators and the
-  remaining ownership surfaces still need coverage.
+- **Managed strings are the Pascal default.** `AnsiString` now uses the
+  heap-backed, refcounted path unless a build passes `-uPXX_MANAGED_STRING`.
+  Variant supports managed-string assignment, copying, overwrite cleanup, local
+  cleanup, and printing.
 - **No general linker.** The output path can't auto-pull a new RTL unit. Phase 1 must decide explicitly: Variant helpers as **compiler-emitted runtime routines** vs **linked RTL symbols**.
 - **Allocator needs the target-neutral migration** in `docs/allocator-platform-design.md`: every target gets a syscall-free internal heap; hosted `mmap`/release/resize and ESP32 RTOS facilities stay optional hooks.
 

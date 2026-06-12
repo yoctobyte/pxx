@@ -16,11 +16,11 @@ sharp edges, or break outside covered paths.
 
 ## Managed strings
 
-- Default strings use a fixed-capacity inline representation.
-  `{$define PXX_MANAGED_STRING}` enables a refcounted `AnsiString` (assignment,
-  cleanup, copy-on-write, concat, `SetLength`). The opt-in ABI is incomplete for
-  globals, exception unwinding, and some record/class ownership paths. Refcounts
-  are atomic only under `--threadsafe`.
+- `AnsiString` uses the heap-backed, refcounted representation by default
+  (assignment cleanup, copy-on-write, concat, `SetLength`, globals, records,
+  classes, and exception unwinding are covered by current regression tests).
+  `-uPXX_MANAGED_STRING` selects the frozen fixed-capacity inline ABI for
+  bootstrap compatibility. Refcounts are atomic only under `--threadsafe`.
 
 ## C structs / headers
 
