@@ -1091,39 +1091,47 @@ begin
     CurTok.Kind := tkInteger; CurTok.IVal := n; Exit;
   end;
 
-  if c = '''' then
+  if (c = '''') or (c = '#') then
   begin
-    Inc(SrcPos); s := '';
+    { String literal: a run of adjacent quoted segments and #nn char codes
+      forms ONE literal ('a'#10'b'). Previously each segment was its own
+      token, which happened to parse in plain expressions but broke inside
+      argument lists. }
+    s := '';
     while SrcPos <= Length(Source) do
     begin
       if Source[SrcPos] = '''' then
       begin
         Inc(SrcPos);
-        if (SrcPos <= Length(Source)) and (Source[SrcPos] = '''') then
+        while SrcPos <= Length(Source) do
         begin
-          AppendChar(s, '''');
-          Inc(SrcPos);
-        end
-        else begin CurTok.Kind := tkString; CurTok.SVal := s; Exit; end;
+          if Source[SrcPos] = '''' then
+          begin
+            Inc(SrcPos);
+            if (SrcPos <= Length(Source)) and (Source[SrcPos] = '''') then
+            begin
+              AppendChar(s, '''');
+              Inc(SrcPos);
+            end
+            else
+              break;
+          end
+          else
+          begin
+            AppendChar(s, Source[SrcPos]);
+            Inc(SrcPos);
+          end;
+        end;
+      end
+      else if Source[SrcPos] = '#' then
+      begin
+        Inc(SrcPos); n := 0;
+        while (SrcPos <= Length(Source)) and (Source[SrcPos] in ['0'..'9']) do
+          begin n := n*10 + (Ord(Source[SrcPos])-48); Inc(SrcPos); end;
+        AppendChar(s, Chr(n));
       end
       else
-      begin
-        AppendChar(s, Source[SrcPos]);
-        Inc(SrcPos);
-      end;
-    end;
-    CurTok.Kind := tkString; CurTok.SVal := s; Exit;
-  end;
-
-  if c = '#' then
-  begin
-    s := '';
-    while (SrcPos <= Length(Source)) and (Source[SrcPos] = '#') do
-    begin
-      Inc(SrcPos); n := 0;
-      while (SrcPos <= Length(Source)) and (Source[SrcPos] in ['0'..'9']) do
-        begin n := n*10 + (Ord(Source[SrcPos])-48); Inc(SrcPos); end;
-      AppendChar(s, Chr(n));
+        break;
     end;
     CurTok.Kind := tkString; CurTok.SVal := s; Exit;
   end;

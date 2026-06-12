@@ -327,6 +327,10 @@ begin
         while argNode <> -1 do
         begin
           IREmitNodeXtensa(IRA[argNode]);
+          { External C call: skip the 8-byte length prefix of a Pascal string
+            literal so the callee sees a const char* (as on x86-64/riscv32). }
+          if ProcExternal[pi] and (IntToTypeKind(IRTk[argNode]) = tyString) then
+            xtensa_addi(reg_xtensa_a2, reg_xtensa_a2, 8);
           XtensaPushA2;
           Inc(nArgs);
           argNode := IRB[argNode];

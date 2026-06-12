@@ -300,6 +300,11 @@ begin
         while argNode <> -1 do
         begin
           IREmitNodeRISCV32(IRA[argNode]);
+          { External C call: a Pascal string literal is stored as an 8-byte
+            length prefix + NUL-terminated chars; pass the char data so the
+            callee sees a const char* (same auto-marshal as x86-64). }
+          if ProcExternal[pi] and (IntToTypeKind(IRTk[argNode]) = tyString) then
+            rv32_addi(reg_a0, reg_a0, 8);
           rv32_addi(reg_sp, reg_sp, -4);
           rv32_sw(reg_a0, reg_sp, 0);
           Inc(nArgs);
