@@ -8,13 +8,11 @@ lives in git, not in a timestamp._
 
 _none_
 
-## working (1)
+## working (0)
 
-| Ticket | Type | Summary | Blocked-by |
-| --- | --- | --- | --- |
-| feature-target-esp32 | feature | Compile target: ESP32 / embedded | — |
+_none_
 
-## backlog (26)
+## backlog (31)
 
 | Ticket | Type | Summary | Blocked-by |
 | --- | --- | --- | --- |
@@ -30,6 +28,10 @@ _none_
 | feature-cross-param-abi | feature | Full parameter/result ABI on cross targets | — |
 | feature-directive-if-numeric | feature | Valued defines + numeric `{$IF}` evaluation | — |
 | feature-dynamic-soname-discovery | feature | Dynamic soname discovery (no execve) | — |
+| feature-elf-rel-writer | feature | Relocatable ELF32 object writer (.o for ESP-IDF linking) | — |
+| feature-esp32-bare-boot | feature | ESP32 bare-metal boot profile (no IDF) | — |
+| feature-esp32-idf-riscv32 | feature | ESP-IDF integration: riscv32 (ESP32-C3) end-to-end | feature-elf-rel-writer |
+| feature-esp32-idf-xtensa | feature | ESP-IDF integration: Xtensa (ESP32-S2/S3) — QEMU + real hardware | feature-elf-rel-writer, feature-esp32-idf-riscv32, feature-xtensa-windowed-abi |
 | feature-flexcolumn-directive | feature | `flexcolumn` calling-convention directive | chore-inc-to-units |
 | feature-float-str-val | feature | Float Str / Val | — |
 | feature-inline-asm-depth | feature | Inline assembler depth | — |
@@ -42,6 +44,7 @@ _none_
 | feature-progress-transition-helpers | feature | Progress transition helpers (`claim` / `resolve`) | — |
 | feature-static-arena-profile | feature | Fixed-static-arena allocator profile | feature-unified-heap-allocator |
 | feature-threadsafe-io-serialization | feature | Statement-level I/O serialization under threads | feature-unified-heap-allocator |
+| feature-xtensa-windowed-abi | feature | Xtensa windowed ABI codegen variant (for ESP-IDF interop) | — |
 | idea-unit-rename-import | idea | `uses X as Y` unit-rename import (dialect extension) | — |
 | idea-visibility-enforcement | idea | Enforce private/protected visibility | — |
 
@@ -52,7 +55,7 @@ _none_
 | bug-nonreproducible-miscompile-2026-06-02 | bug | Non-reproducible one-off miscompile (2026-06-02) | — |
 | bug-whole-record-copy-main-body-noop | bug | Latent: whole-record array-element copy in main-program body emits store no-ops | — |
 
-## done (22)
+## done (23)
 
 | Ticket | Type | Summary | Blocked-by |
 | --- | --- | --- | --- |
@@ -74,6 +77,7 @@ _none_
 | feature-rtti-layout-table | feature | Target-independent layout RTTI (Tier B) | feature-cross-bootstrap |
 | feature-target-aarch64 | feature | Compile target: ARM64 / AArch64 Linux | feature-target-i386 |
 | feature-target-arm32 | feature | Compile target: ARM32 Linux | feature-target-aarch64 |
+| feature-target-esp32 | feature | Compile target: ESP32 / embedded | — |
 | feature-target-i386 | feature | Compile target: i386 (32-bit x86 Linux) | chore-qemu-test-env |
 | feature-typed-instruction-encoders | feature | Typed instruction encoders for codegen | — |
 | feature-unified-heap-allocator | feature | Unified syscall-free heap allocator | — |
@@ -87,6 +91,7 @@ _none_
 
 - chore-inc-to-units
 - chore-runtime-emission-size
+- feature-additional-cpu-targets
 - feature-allocator-quality
 - feature-async-coroutines
 - feature-c-header-import-complex
@@ -95,6 +100,8 @@ _none_
 - feature-cross-param-abi
 - feature-directive-if-numeric
 - feature-dynamic-soname-discovery
+- feature-elf-rel-writer
+- feature-esp32-bare-boot
 - feature-float-str-val
 - feature-inline-asm-depth
 - feature-interfaces
@@ -104,6 +111,7 @@ _none_
 - feature-progress-transition-helpers
 - feature-static-arena-profile
 - feature-threadsafe-io-serialization
+- feature-xtensa-windowed-abi
 - idea-unit-rename-import
 - idea-visibility-enforcement
 
@@ -113,9 +121,12 @@ _none_
 - **2** — feature-target-i386
 - **2** — feature-target-aarch64
 - **2** — feature-rtti-layout-table
+- **2** — feature-elf-rel-writer
+- **1** — feature-xtensa-windowed-abi
 - **1** — feature-target-esp32
 - **1** — feature-target-arm32
 - **1** — feature-managed-exception-cleanup
+- **1** — feature-esp32-idf-riscv32
 - **1** — feature-directive-if-numeric
 - **1** — feature-cross-param-abi
 - **1** — feature-cross-float-variant

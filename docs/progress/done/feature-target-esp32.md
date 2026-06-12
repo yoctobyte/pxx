@@ -1,8 +1,8 @@
 # Compile target: ESP32 / embedded
 
 - **Type:** feature
-- **Status:** working
-- **Owner:** Antigravity
+- **Status:** done
+- **Owner:** Antigravity / Claude
 - **Unblocks:** feature-additional-cpu-targets
 - **Opened:** 2026-06-06 (user request; roadmap.md Phase 5)
 
@@ -57,6 +57,20 @@ Phase 1 focuses on code generation, targeting bare-metal executables for both ar
 - **JTAG / GDB tests:** verify that a debugger can attach and step/unwind correctly using the generated map files and preserved frame pointers.
 
 ## Log
+- 2026-06-12 — CLOSED as stage 1 complete: both instruction emitters proven
+  by execution under qemu-user (identical oracle globals on riscv32 and
+  xtensa) and ESP-IDF environment installed. Remaining acceptance items
+  split into follow-on tickets so each fits a clean session:
+  - feature-elf-rel-writer (.o emission, ELF symbol tables; root of the
+    esp32-idf chain),
+  - feature-esp32-idf-riscv32 (C3 end-to-end: component, app_main,
+    qemu -M esp32c3 — zero ABI work, proves the pipeline),
+  - feature-xtensa-windowed-abi (entry/retw/call8 variant; IDF interop
+    requirement for S2/S3),
+  - feature-esp32-idf-xtensa (QEMU -M esp32s3 + real S2/S3 hardware,
+    GDB/JTAG acceptance),
+  - feature-esp32-bare-boot (parked bare face: memory map, UART MMIO,
+    .map files, static arena).
 - 2026-06-12 — ESP-IDF v6.0.1 installed via tools/install_esp32_target.sh
   (fixed: `set -e` aborted on apt-get update failing over an unrelated broken
   repo). Verified: idf.py, xtensa-esp32s2/s3-elf-gcc 15.2.0, Espressif QEMU
