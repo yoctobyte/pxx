@@ -461,88 +461,6 @@ begin
   EmitI32($F84107F3);                                           { ldr x19, [sp], #16 }
 end;
 
-procedure EmitWriteVariantA64;
-var
-  pInt, pBool, pDbl, pChar, pStr, pNil: Integer;
-  jmpDefault, pEnd1, pEnd2, pEnd3, pEnd4: Integer;
-begin
-  EmitI32($F81F0FE0);                                           { str x0, [sp, #-16]! }
-  EmitI32($F9400000);                                           { ldr x0, [x0] (tag) }
-
-  EmitI32($F100021F);                                           { cmp x0, #1 (VT_INT) }
-  pInt := CodeLen;
-  EmitI32($54000000);                                           { b.eq .int }
-  
-  EmitI32($F100041F);                                           { cmp x0, #2 (VT_BOOL) }
-  pBool := CodeLen;
-  EmitI32($54000000);                                           { b.eq .bool }
-
-  EmitI32($F100061F);                                           { cmp x0, #3 (VT_DOUBLE) }
-  pDbl := CodeLen;
-  EmitI32($54000000);                                           { b.eq .dbl }
-
-  EmitI32($F1000A1F);                                           { cmp x0, #5 (VT_CHAR) }
-  pChar := CodeLen;
-  EmitI32($54000000);                                           { b.eq .char }
-
-  EmitI32($F1000C1F);                                           { cmp x0, #6 (VT_STRING) }
-  pStr := CodeLen;
-  EmitI32($54000000);                                           { b.eq .str }
-
-  jmpDefault := CodeLen;
-  EmitI32($14000000);                                           { b .default }
-
-  { .int / .bool }
-  Patch32(pInt, $54000000 or (((CodeLen - pInt) div 4) and $7FFFF) shl 5);
-  Patch32(pBool, $54000000 or (((CodeLen - pBool) div 4) and $7FFFF) shl 5);
-  EmitI32($F94003E0);                                           { ldr x0, [sp] }
-  EmitI32($F9400400);                                           { ldr x0, [x0, #8] }
-  EmitwriteIntA64;
-  pEnd1 := CodeLen;
-  EmitI32($14000000);
-
-  { .dbl }
-  Patch32(pDbl, $54000000 or (((CodeLen - pDbl) div 4) and $7FFFF) shl 5);
-  EmitI32($F94003E0);                                           { ldr x0, [sp] }
-  EmitI32($F9400400);                                           { ldr x0, [x0, #8] }
-  EmitWriteFloatNatA64;
-  pEnd2 := CodeLen;
-  EmitI32($14000000);
-
-  { .char }
-  Patch32(pChar, $54000000 or (((CodeLen - pChar) div 4) and $7FFFF) shl 5);
-  EmitI32($F94003E0);                                           { ldr x0, [sp] }
-  EmitI32($F9400400);                                           { ldr x0, [x0, #8] }
-  EmitwriteCharA64;
-  pEnd3 := CodeLen;
-  EmitI32($14000000);
-
-  { .str }
-  Patch32(pStr, $54000000 or (((CodeLen - pStr) div 4) and $7FFFF) shl 5);
-  EmitI32($F94003E0);                                           { ldr x0, [sp] }
-  EmitI32($F9400400);                                           { ldr x0, [x0, #8] }
-  pNil := CodeLen;
-  EmitI32($B4000000);                                           { cbz x0, .nil }
-  EmitI32($F85F8002);                                           { ldur x2, [x0, #-8] }
-  EmitI32($AA0003E1);                                           { mov x1, x0 }
-  EmitI32($D2800020);                                           { movz x0, #1 }
-  EmitI32($D2800808);                                           { movz x8, #64 }
-  EmitI32($D4000001);                                           { svc #0 }
-  { .nil }
-  Patch32(pNil, $B4000000 or (((CodeLen - pNil) div 4) and $7FFFF) shl 5);
-  pEnd4 := CodeLen;
-  EmitI32($14000000);
-
-  { .default / .done }
-  Patch32(jmpDefault, $14000000 or (((CodeLen - jmpDefault) div 4) and $03FFFFFF));
-  Patch32(pEnd1, $14000000 or (((CodeLen - pEnd1) div 4) and $03FFFFFF));
-  Patch32(pEnd2, $14000000 or (((CodeLen - pEnd2) div 4) and $03FFFFFF));
-  Patch32(pEnd3, $14000000 or (((CodeLen - pEnd3) div 4) and $03FFFFFF));
-  Patch32(pEnd4, $14000000 or (((CodeLen - pEnd4) div 4) and $03FFFFFF));
-
-  EmitI32($910043FF);                                           { add sp, sp, #16 }
-end;
-
 procedure EmitVariantClearA64;
 var pDone: Integer;
 begin
@@ -826,6 +744,13 @@ begin
           Exit;
         end;
         IREmitNodeAarch64(IRB[node]);
+        if TypeIsFloat(Syms[IRA[node]].TypeKind) and
+           not TypeIsFloat(IntToTypeKind(IRTk[IRB[node]])) then
+        begin
+          { int value into a float slot: convert (bits stay in x0) }
+          EmitI32($9E620000);                     { scvtf d0, x0 }
+          EmitI32($9E660000);                     { fmov x0, d0 }
+        end;
         EmitStoreVarA64(IRA[node]);
       end;
 
@@ -1064,6 +989,14 @@ begin
         if pi < 0 then
         begin
           specialId := -pi;
+          if (specialId = Ord(tkOrd)) or (specialId = Ord(tkChr)) or
+             (specialId = Ord(tkInteger_T)) or (specialId = Ord(tkLongWord_T)) then
+          begin
+            { type-pun passthrough: evaluate the argument in place }
+            argNode := IRB[node];
+            IREmitNodeAarch64(IRA[argNode]);
+            Exit;
+          end;
           if specialId = 200 then
           begin
             { int(x): float/Variant -> integer }
@@ -1425,8 +1358,10 @@ begin
         decs := IRC[node];   { decimals, -1 = none }
         if IntToTypeKind(IRTk[node]) = tyVariant then
         begin
-          IREmitNodeAarch64(valNode);
-          EmitWriteVariantA64;
+          IREmitNodeAarch64(valNode);              { x0 = slot addr }
+          pi := FindProc('PXXWriteVariant');
+          if pi < 0 then Error('compiler error: PXXWriteVariant not found');
+          EmitCallProc(pi);
         end
         else if TypeIsFloat(IntToTypeKind(IRTk[node])) then
         begin
