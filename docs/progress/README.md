@@ -38,6 +38,12 @@ moves between folders.
 
 ## Ticket shape
 
+Two equivalent formats — different agents prefer different ones, the tooling
+reads both. Frontmatter wins for scalar fields when a file mixes them;
+`Blocked-by` slugs are merged from both.
+
+Markdown-bullet style:
+
 ```markdown
 # Short title
 
@@ -52,6 +58,22 @@ moves between folders.
 
 ## Log
 - <date> — what happened / what changed.
+```
+
+YAML-frontmatter style (`summary` replaces the H1 in BOARD.md; inline
+`[a, b]` and block lists both work for `blocked-by`):
+
+```markdown
+---
+summary: "Short title"
+type: bug | feature | test | chore | docs | idea
+owner: <agent/name>
+blocked-by: [slug, slug]
+---
+
+# <slug or title>
+
+## <body, log — same as above>
 ```
 
 When moving to `done/`, append the commit hash and the regression test that

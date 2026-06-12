@@ -23,11 +23,73 @@ done_slugs() {
   find "$PROG/done" -name '*.md' 2>/dev/null -exec basename {} .md \;
 }
 
-# Print the `Blocked-by:` slugs of a ticket file, one per line (empty if none).
+# --- Ticket field extraction -------------------------------------------------
+# Two ticket formats are accepted (agents differ; both are first-class):
+#   A) YAML frontmatter between leading `---` lines:
+#        summary: "..."   owner: name   blocked-by: [a, b]  (or a block list)
+#   B) Markdown bullets:  `- **Blocked-by:** a, b`, `- **Owner:** name`,
+#      with the H1 `# Title` as the summary.
+# Frontmatter wins for scalar fields when both are present; Blocked-by slugs
+# are merged from both sources.
+
+# Print the YAML frontmatter body (empty if the file has none).
+frontmatter_of() {
+  awk 'NR==1 { if ($0 != "---") exit; next } $0 == "---" { exit } { print }' "$1"
+}
+
+# Scalar frontmatter value for key $2 (surrounding quotes stripped).
+fm_field() {
+  frontmatter_of "$1" | awk -v key="$2" '
+    !found && index($0, key ":") == 1 {
+      v = substr($0, length(key) + 2)
+      gsub(/^[[:space:]]+|[[:space:]]+$/, "", v)
+      found = 1; print v
+    }' \
+    | sed -E "s/^\"(.*)\"$/\1/; s/^'(.*)'$/\1/"
+}
+
+# Blocked-by slugs from frontmatter: inline `[a, b]`, scalar, or block list.
+fm_blockers() {
+  frontmatter_of "$1" | awk '
+    /^blocked-by:[[:space:]]*\[/ {
+      s = $0
+      sub(/^blocked-by:[[:space:]]*\[/, "", s); sub(/\].*/, "", s)
+      gsub(/,/, " ", s); print s; next
+    }
+    /^blocked-by:[[:space:]]*$/    { inlist = 1; next }
+    /^blocked-by:[[:space:]]*[^[]/ {
+      s = $0; sub(/^blocked-by:[[:space:]]*/, "", s)
+      gsub(/,/, " ", s); print s; next
+    }
+    inlist && /^[[:space:]]*-[[:space:]]*/ {
+      s = $0; sub(/^[[:space:]]*-[[:space:]]*/, "", s); print s; next
+    }
+    inlist { inlist = 0 }
+  ' | tr ' ' '\n' | sed 's/[`"'"'"']//g; /^$/d'
+}
+
+# Print the Blocked-by slugs of a ticket file, one per line (empty if none).
+# Union of the bullet line and the frontmatter list, deduplicated.
+# (greps are ||-guarded: "no match" must not trip set -e / pipefail.)
 blockers_of() {
-  grep -iE '^\s*-?\s*\*\*Blocked-by:\*\*' "$1" 2>/dev/null \
-    | sed -E 's/.*\*\*Blocked-by:\*\*//; s/[`*]//g; s/,/ /g' \
-    | tr ' ' '\n' | sed '/^$/d'
+  {
+    { grep -iE '^\s*-?\s*\*\*Blocked-by:\*\*' "$1" 2>/dev/null || true; } \
+      | sed -E 's/.*\*\*Blocked-by:\*\*//; s/[`*]//g; s/,/ /g' \
+      | tr ' ' '\n'
+    fm_blockers "$1"
+  } | sed '/^$/d' | sort -u
+}
+
+# Owner from frontmatter or bullet (frontmatter wins); empty when unset or `—`.
+ticket_owner() {
+  local o
+  o="$(fm_field "$1" owner)"
+  if [ -z "$o" ]; then
+    o="$(grep -m1 -iE '^\s*-?\s*\*\*Owner:\*\*' "$1" 2>/dev/null \
+      | sed -E 's/.*\*\*Owner:\*\*[[:space:]]*//' || true)"
+  fi
+  [ "$o" = "—" ] && o=""
+  echo "$o"
 }
 
 cmd_ready() {
@@ -50,11 +112,11 @@ cmd_ready() {
 
 cmd_leverage() {
   echo "== LEVERAGE (how many tickets each slug unblocks) =="
-  find "$PROG" -name '*.md' ! -name 'README.md' ! -name 'BOARD.md' -exec cat {} + \
-    | grep -iE '^\s*-?\s*\*\*Blocked-by:\*\*' \
-    | sed -E 's/.*\*\*Blocked-by:\*\*//; s/[`*]//g; s/,/ /g' \
-    | tr ' ' '\n' | sed '/^$/d' | sort | uniq -c | sort -rn \
-    | sed 's/^/  /'
+  local f
+  while IFS= read -r f; do
+    blockers_of "$f"
+  done < <(find "$PROG" -name '*.md' ! -name 'README.md' ! -name 'BOARD.md') \
+    | sort | uniq -c | sort -rn | sed 's/^/  /'
 }
 
 cmd_board() {
@@ -124,7 +186,7 @@ cmd_check() {
   # 3. working/ needs an Owner; done/ needs a commit reference.
   for f in "$PROG"/working/*.md; do
     [ -e "$f" ] || continue
-    if grep -qiE '^\s*-?\s*\*\*Owner:\*\*\s*—?\s*$' "$f"; then
+    if [ -z "$(ticket_owner "$f")" ]; then
       echo "NO-OWNER: $(slug "$f") is in working/ but has no Owner"; problems=1
     fi
   done
@@ -148,9 +210,15 @@ cmd_check() {
 # Type (filename prefix) of a ticket.
 ticket_type() { local s; s="$(slug "$1")"; echo "${s%%-*}"; }
 
-# One-line summary: the ticket's `# Title`, with table-breaking pipes escaped.
+# One-line summary: frontmatter `summary:` if present, else the ticket's
+# `# Title`. Table-breaking pipes escaped.
 ticket_summary() {
-  grep -m1 '^# ' "$1" 2>/dev/null | sed 's/^# //; s/|/\\|/g'
+  local s
+  s="$(fm_field "$1" summary)"
+  if [ -z "$s" ]; then
+    s="$(grep -m1 '^# ' "$1" 2>/dev/null | sed 's/^# //' || true)"
+  fi
+  echo "$s" | sed 's/|/\\|/g'
 }
 
 # Comma-joined Blocked-by slugs, or em dash when none.

@@ -20,12 +20,12 @@ _none_
 | --- | --- | --- | --- |
 | chore-inc-to-units | chore | `.inc` → real `.pas` units refactor | — |
 | chore-runtime-emission-size | chore | Finer runtime-support emission (code size) | — |
-| feature-additional-cpu-targets | feature | Additional CPU targets (rollup: i386 → aarch64 → arm32 → ESP32/RISC-V) | feature-target-i386, feature-target-aarch64, feature-target-arm32, feature-target-esp32 |
+| feature-additional-cpu-targets | feature | Additional CPU targets (rollup: i386 → aarch64 → arm32 → ESP32/RISC-V) | feature-target-aarch64, feature-target-arm32, feature-target-esp32, feature-target-i386 |
 | feature-allocator-quality | feature | Allocator quality: split / coalesce / bins / alignment | — |
 | feature-async-coroutines | feature | Async, coroutines, and `yield` | feature-unified-heap-allocator |
 | feature-c-header-import-complex | feature | Import C headers for complex libraries (glib/GTK-grade) | — |
 | feature-compiler-warnings | feature | Compiler warning diagnostics facility | — |
-| feature-cross-bootstrap-selfhost | feature | Cross self-host bootstrap (compiler.pas → byte-identical under QEMU) | feature-cross-exceptions, feature-cross-float-variant, feature-cross-param-abi, feature-cross-codegen-gaps |
+| feature-cross-bootstrap-selfhost | feature | Cross self-host bootstrap (compiler.pas → byte-identical under QEMU) | feature-cross-codegen-gaps, feature-cross-exceptions, feature-cross-float-variant, feature-cross-param-abi |
 | feature-cross-codegen-gaps | feature | Cross-target codegen gaps (deferred v1 shortcuts) | — |
 | feature-cross-param-abi | feature | Full parameter/result ABI on cross targets | — |
 | feature-directive-if-numeric | feature | Valued defines + numeric `{$IF}` evaluation | — |
