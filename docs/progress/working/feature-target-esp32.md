@@ -57,6 +57,15 @@ Phase 1 focuses on code generation, targeting bare-metal executables for both ar
 - **JTAG / GDB tests:** verify that a debugger can attach and step/unwind correctly using the generated map files and preserved frame pointers.
 
 ## Log
+- 2026-06-12 — ESP-IDF v6.0.1 installed via tools/install_esp32_target.sh
+  (fixed: `set -e` aborted on apt-get update failing over an unrelated broken
+  repo). Verified: idf.py, xtensa-esp32s2/s3-elf-gcc 15.2.0, Espressif QEMU
+  9.2.2 with `-M esp32`/`-M esp32s3` (xtensa) and `-M esp32c3` (riscv32) under
+  ~/.espressif/tools (export.sh doesn't PATH qemu-riscv32 — use full path).
+  Host pkgs flex/bison/gperf/ccache/dfu-util still pending (sudo; needed for
+  idf.py build). Unblocks: system-mode boot slice — target the real ESP32
+  memory map (IRAM 0x40080000, UART0 MMIO 0x3FF40000) + image format for a
+  UART hello under `qemu-system-xtensa -M esp32`.
 - 2026-06-12 — xtensa smoke binary EXECUTED correctly under user-mode
   `qemu-xtensa` (dc232b core covers our core+density+mul32 subset; ESP32 LX6
   itself absent from stock QEMU): runs to the terminal self-loop, globals
