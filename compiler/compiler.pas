@@ -47,6 +47,7 @@ begin
   TARGET_PTR_SIZE := 8;
   NoUnhandledHandler := False;
   ThreadSafeMode := False;
+  ProcExceptionCleanupFrameActive := False;
   EnableAutoVar := True;
   EnableLazyVar := True;
   PasInitDefines;

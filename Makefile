@@ -174,6 +174,8 @@ test: $(COMPILER) fpc-check
 	test "$$(/tmp/test_managed_setlength_var26)" = "$$(printf '1\n1\n1\n1\n1\n1')"
 	./$(COMPILER) test/test_managed_setlength_growth.pas /tmp/test_managed_setlength_growth26
 	test "$$(/tmp/test_managed_setlength_growth26)" = "$$(printf '1\n1\n1\n1\n1\n1\n1\n1')"
+	./$(COMPILER) test/test_managed_exception_cleanup.pas /tmp/test_managed_exception_cleanup26
+	ulimit -v 800000; test "$$(/tmp/test_managed_exception_cleanup26)" = "1"
 	./$(COMPILER) test/test_default_keyword.pas /tmp/test_default_keyword26
 	test "$$(/tmp/test_default_keyword26)" = "$$(printf '1\n1\n1\n1\n1\n1\n1\n1')"
 	./$(COMPILER) test/test_op_record_result.pas /tmp/test_op_record_result26

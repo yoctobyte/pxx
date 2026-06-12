@@ -5282,9 +5282,11 @@ var
   retPtrElemTk, retPtrElemRec : Integer;
   savedSC, savedFS, savedCurProc : Integer;
   savedGLC, savedGFC, j: Integer;
+  cleanupJnePatch, cleanupJmpPatch: Integer;
   patchPos : Integer;
   depth    : Integer;
   doneArgs, doneParam, isArr, isByRef, isConst, declOverload, isClassKeyword, isStaticMethod: Boolean;
+  needsProcCleanupFrame, savedProcCleanupFrameActive: Boolean;
   isAsmFunc: Boolean;
   asmNode: Integer;
   startIdx, idx: Integer;
@@ -5594,6 +5596,8 @@ begin
   savedFS := FrameSize;
   savedGLC := GotoLabelCount;
   savedGFC := GotoFixupCount;
+  savedProcCleanupFrameActive := ProcExceptionCleanupFrameActive;
+  ProcExceptionCleanupFrameActive := False;
   GotoLabelCount := 0;
   GotoFixupCount := 0;
   for j := 0 to MAX_GOTO_LABELS - 1 do GotoLabelIRId[j] := -1;
@@ -5949,6 +5953,22 @@ begin
     Eat(tkSemicolon);
   end;
 
+  needsProcCleanupFrame := (TargetArch = TARGET_X86_64) and ExceptionUsed and
+                           (not isAsmFunc) and ProcHasManagedLocalCleanup(pi, -1);
+  if needsProcCleanupFrame then
+  begin
+    EmitB($48); EmitB($83); EmitB($EC); EmitB(EXC_FRAME_SIZE);
+    EmitB($48); EmitB($8B); EmitB($04); EmitB($25); EmitGlobRef(BSS_EXC_TOP);
+    EmitB($48); EmitB($89); EmitB($04); EmitB($24);
+    EmitB($48); EmitB($89); EmitB($E0);
+    EmitB($48); EmitB($89); EmitB($04); EmitB($25); EmitGlobRef(BSS_EXC_TOP);
+    EmitB($48); EmitB($8D); EmitB($7C); EmitB($24); EmitB(EXC_JMP_OFFSET);
+    IREmitCodeCall(ExcSetJmpAddr);
+    EmitB($85); EmitB($C0);
+    EmitB($0F); EmitB($85); cleanupJnePatch := CodeLen; EmitI32(0);
+    ProcExceptionCleanupFrameActive := True;
+  end;
+
   { Body }
   if isAsmFunc then
   begin
@@ -5969,6 +5989,16 @@ begin
     Eat(tkSemicolon);
   end;
 
+  if needsProcCleanupFrame then
+  begin
+    EmitB($E9); cleanupJmpPatch := CodeLen; EmitI32(0);
+    Patch32(cleanupJnePatch, CodeLen - (cleanupJnePatch + 4));
+    EmitLeaveExceptionFrameX64;
+    EmitManagedLocalCleanup(-1);
+    IREmitCodeCall(ExcRaiseAddr);
+    Patch32(cleanupJmpPatch, CodeLen - (cleanupJmpPatch + 4));
+  end;
+
   { Verify all forward goto fixups were resolved }
   for i := 0 to GotoLabelCount - 1 do
     if GotoLabelCodePos[i] = -1 then
@@ -5985,6 +6015,7 @@ begin
     EmitProcEpilog(-1)
   else
     EmitProcEpilog(Procs[pi].RetSymIdx);
+  ProcExceptionCleanupFrameActive := savedProcCleanupFrameActive;
 
   { Patch frame size }
   PatchProcPrologue(patchPos, FrameSize);

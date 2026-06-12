@@ -758,6 +758,7 @@ var
   BSS_LINE_LEN    : Integer;  { bytes currently in line buffer }
   BSS_LINE_POS    : Integer;  { parse cursor into line buffer }
   ExceptionUsed   : Boolean;
+  ProcExceptionCleanupFrameActive: Boolean;
   InLValueWrite   : Boolean;
   CAttrPacked     : Boolean;
   CAttrAligned    : Boolean;

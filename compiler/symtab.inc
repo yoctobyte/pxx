@@ -9,6 +9,9 @@ procedure EmitReleaseHeapLock; forward;
 procedure EmitLoadVarA64(idx: Integer); forward;
 procedure EmitLoadVarArm32(idx: Integer); forward;
 procedure EmitCallProc(pi: Integer); forward;
+procedure EmitManagedLocalCleanup(retSymIdx: Integer); forward;
+function ProcHasManagedLocalCleanup(pi, retSymIdx: Integer): Boolean; forward;
+procedure EmitLeaveExceptionFrameX64; forward;
 
 
 function ULower(const s: AnsiString): AnsiString;
@@ -3063,6 +3066,81 @@ begin
     Patch32(patchPos, aligned);
 end;
 
+function SymNeedsManagedCleanup(i: Integer): Boolean;
+begin
+  Result := False;
+  if Syms[i].TypeKind = tyAnsiString then
+    Result := True
+  else if Syms[i].TypeKind = tyVariant then
+    Result := True
+  else if Syms[i].IsArray and (Syms[i].ArrLen = -1) then
+    Result := True
+  else if (Syms[i].TypeKind = tyRecord) and not Syms[i].IsArray and
+          RecordHasManagedFields(Syms[i].RecName) then
+    Result := True;
+end;
+
+function ProcHasManagedLocalCleanup(pi, retSymIdx: Integer): Boolean;
+var i: Integer;
+begin
+  Result := False;
+  for i := Procs[pi].ScopeBase to SymCount - 1 do
+    if (Syms[i].Kind = skLocal) and (i <> retSymIdx) and SymNeedsManagedCleanup(i) then
+    begin
+      Result := True;
+      Exit;
+    end;
+end;
+
+procedure EmitLeaveExceptionFrameX64;
+begin
+  EmitB($48); EmitB($8B); EmitB($04); EmitB($24); { mov rax, [rsp] }
+  EmitB($48); EmitB($89); EmitB($04); EmitB($25); EmitGlobRef(BSS_EXC_TOP);
+  EmitB($48); EmitB($83); EmitB($C4); EmitB(EXC_FRAME_SIZE);
+end;
+
+procedure EmitManagedLocalCleanup(retSymIdx: Integer);
+var i: Integer;
+begin
+  if CurProc < 0 then Exit;
+  for i := Procs[CurProc].ScopeBase to SymCount - 1 do
+  begin
+    if (Syms[i].Kind = skLocal) and (i <> retSymIdx) then
+    begin
+      if Syms[i].TypeKind = tyAnsiString then
+      begin
+        { mov rax, [rbp + Offset] }
+        EmitB($48); EmitB($8B); EmitB($85); EmitI32(Syms[i].Offset);
+        IREmitCodeCall(AnsiStrReleaseAddr);
+      end
+      else if Syms[i].TypeKind = tyVariant then
+      begin
+        { lea rax, [rbp + Offset] }
+        EmitB($48); EmitB($8D); EmitB($85); EmitI32(Syms[i].Offset);
+        EmitVariantClear;
+      end
+      else if Syms[i].IsArray and (Syms[i].ArrLen = -1) then
+      begin
+        { mov rax, [rbp + Offset] }
+        EmitB($48); EmitB($8B); EmitB($85); EmitI32(Syms[i].Offset);
+        EmitDynArrayReleaseForSym(i);
+      end
+      else if (Syms[i].TypeKind = tyRecord) and not Syms[i].IsArray and
+              RecordHasManagedFields(Syms[i].RecName) then
+      begin
+        { Record value local with managed fields (AnsiString, dynamic-array, or
+          nested): release them under the heap lock. rbx = record address. }
+        EmitB($53);                                              { push rbx }
+        EmitB($48); EmitB($8D); EmitB($9D); EmitI32(Syms[i].Offset); { lea rbx, [rbp+off] }
+        EmitAcquireHeapLock;
+        EmitManagedRecordReleaseLocked(Syms[i].RecName);
+        EmitReleaseHeapLock;
+        EmitB($5B);                                              { pop rbx }
+      end;
+    end;
+  end;
+end;
+
 procedure EmitProcEpilog(retSymIdx: Integer);
 var sz, i, pi: Integer;
 begin
@@ -3151,45 +3229,10 @@ begin
     Exit;
   end;
   { Release local managed variables before returning }
+  if ProcExceptionCleanupFrameActive then
+    EmitLeaveExceptionFrameX64;
   if CurProc >= 0 then
-  begin
-    for i := Procs[CurProc].ScopeBase to SymCount - 1 do
-    begin
-      if (Syms[i].Kind = skLocal) and (i <> retSymIdx) then
-      begin
-        if Syms[i].TypeKind = tyAnsiString then
-        begin
-          { mov rax, [rbp + Offset] }
-          EmitB($48); EmitB($8B); EmitB($85); EmitI32(Syms[i].Offset);
-          IREmitCodeCall(AnsiStrReleaseAddr);
-        end
-        else if Syms[i].TypeKind = tyVariant then
-        begin
-          { lea rax, [rbp + Offset] }
-          EmitB($48); EmitB($8D); EmitB($85); EmitI32(Syms[i].Offset);
-          EmitVariantClear;
-        end
-        else if Syms[i].IsArray and (Syms[i].ArrLen = -1) then
-        begin
-          { mov rax, [rbp + Offset] }
-          EmitB($48); EmitB($8B); EmitB($85); EmitI32(Syms[i].Offset);
-          EmitDynArrayReleaseForSym(i);
-        end
-        else if (Syms[i].TypeKind = tyRecord) and not Syms[i].IsArray and
-                RecordHasManagedFields(Syms[i].RecName) then
-        begin
-          { Record value local with managed fields (AnsiString, dynamic-array, or
-            nested): release them under the heap lock. rbx = record address. }
-          EmitB($53);                                              { push rbx }
-          EmitB($48); EmitB($8D); EmitB($9D); EmitI32(Syms[i].Offset); { lea rbx, [rbp+off] }
-          EmitAcquireHeapLock;
-          EmitManagedRecordReleaseLocked(Syms[i].RecName);
-          EmitReleaseHeapLock;
-          EmitB($5B);                                              { pop rbx }
-        end;
-      end;
-    end;
-  end;
+    EmitManagedLocalCleanup(retSymIdx);
 
   if retSymIdx >= 0 then
   begin
