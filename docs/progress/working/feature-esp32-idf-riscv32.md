@@ -1,8 +1,8 @@
 # ESP-IDF integration: riscv32 (ESP32-C3) end-to-end
 
 - **Type:** feature
-- **Status:** backlog
-- **Owner:** —
+- **Status:** working
+- **Owner:** claude
 - **Blocked-by:** feature-elf-rel-writer
 - **Unblocks:** feature-esp32-idf-xtensa
 - **Opened:** 2026-06-12 (esp32-idf integration plan)
