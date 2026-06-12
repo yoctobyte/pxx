@@ -39,6 +39,11 @@ Stage 1 (bare codegen) and the relocatable object writer are done:
   a relocated literal slot.
 - Regression: `make test-emit-obj` (readelf checks always; link checks when
   the ESP toolchains are installed under `~/.espressif`).
+- Host prerequisites verified 2026-06-12: flex/bison/gperf/ccache/dfu-util/
+  cmake/ninja/libusb installed, `idf.py --version` reports ESP-IDF v6.0.1
+  after `export.sh`, and Espressif `qemu-system-riscv32` 9.2.2 provides the
+  `esp32c3` machine. Nothing blocks `idf.py build` for the
+  `feature-esp32-idf-riscv32` ticket.
 
 Link recipe against a C shim (acceptance check, not the IDF flow yet):
 
