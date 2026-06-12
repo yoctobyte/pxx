@@ -1,7 +1,7 @@
 # ESP-IDF integration: riscv32 (ESP32-C3) end-to-end
 
 - **Type:** feature
-- **Status:** working
+- **Status:** done
 - **Owner:** claude
 - **Blocked-by:** feature-elf-rel-writer
 - **Unblocks:** feature-esp32-idf-xtensa
@@ -54,3 +54,19 @@ Xtensa ABI variant exists.
 - Calling convention trap to watch: IDF varargs (`esp_rom_printf`) on RV32
   passes varargs in regs like normal args — our caller already does that, but
   64-bit varargs would need register-pair alignment; stick to 32-bit args.
+
+## Log
+- 2026-06-12 — DONE (commit c372647). examples/esp32/hello-c3: Pascal
+  app_main compiled --target=riscv32 to .o, ar-wrapped, registered via
+  add_prebuilt_library in the main component (+ `-u app_main`); idf.py build
+  links it (map shows app_main = libpxx_app.a(main.o) at 0x4200b06c). Boots
+  under Espressif qemu-system-riscv32 -M esp32c3 (merge-bin flash image):
+  serial prints "PXX hello from Pascal: i=1..5" and "PXX sum 1..5 = 15" via
+  esp_rom_printf, then parks in a vTaskDelay loop — no WDT, no crash.
+  Acceptance met: build + map proof + QEMU serial + README recipe.
+  Required compiler work: (1) esp32 external calls auto-marshal string
+  literals to const char* (+8 past the length prefix); (2) lexer fix —
+  adjacent 'str'#nn segments now lex as ONE literal (was per-segment tokens;
+  broke argument lists). The never-returning app_main is worked around in
+  Pascal (terminal `while True do vTaskDelay(1000)`); a returning epilogue
+  remains future work if ever needed.

@@ -8,11 +8,9 @@ lives in git, not in a timestamp._
 
 _none_
 
-## working (1)
+## working (0)
 
-| Ticket | Type | Summary | Blocked-by |
-| --- | --- | --- | --- |
-| feature-esp32-idf-riscv32 | feature | ESP-IDF integration: riscv32 (ESP32-C3) end-to-end | feature-elf-rel-writer |
+_none_
 
 ## backlog (29)
 
@@ -55,7 +53,7 @@ _none_
 | bug-nonreproducible-miscompile-2026-06-02 | bug | Non-reproducible one-off miscompile (2026-06-02) | — |
 | bug-whole-record-copy-main-body-noop | bug | Latent: whole-record array-element copy in main-program body emits store no-ops | — |
 
-## done (25)
+## done (26)
 
 | Ticket | Type | Summary | Blocked-by |
 | --- | --- | --- | --- |
@@ -72,6 +70,7 @@ _none_
 | feature-cross-float-variant | feature | Float + Variant codegen on cross targets | — |
 | feature-cross-managed-aggregates | feature | Cross-target managed aggregates (records + dynamic arrays) | feature-rtti-layout-table |
 | feature-elf-rel-writer | feature | Relocatable ELF32 object writer (.o for ESP-IDF linking) | — |
+| feature-esp32-idf-riscv32 | feature | ESP-IDF integration: riscv32 (ESP32-C3) end-to-end | feature-elf-rel-writer |
 | feature-managed-exception-cleanup | feature | Finalize managed values on exception unwind | — |
 | feature-managed-string-default | feature | Promote managed AnsiString from opt-in to default | bug-managed-byref-string-param-store, feature-managed-exception-cleanup |
 | feature-progress-check-makefile | feature | Wire `progress.sh check` into a make target | — |
