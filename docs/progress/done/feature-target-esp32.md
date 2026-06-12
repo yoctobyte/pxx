@@ -119,3 +119,8 @@ Phase 1 focuses on code generation, targeting bare-metal executables for both ar
 - 2026-06-11 — revised with user after ESP-IDF/FreeRTOS discussion and actual hardware inventory. Do not skip Xtensa for the practical IDF path: user has ESP32-S2/S3 boards. Use Espressif's toolchain/build system when the goal is Wi-Fi/networking/vendor drivers.
 - 2026-06-10 — scope decision with user: target the ISA. RISC-V RV32IMC covers forward roadmap; ESP32-C3 reference chip.
 - 2026-06-06 — ticket opened from user request.
+- 2026-06-12 — host packages verified installed (flex, bison, gperf, ccache,
+  dfu-util, cmake, ninja, libusb-1.0-0); `idf.py --version` reports
+  ESP-IDF v6.0.1 after export.sh; Espressif qemu-system-riscv32 9.2.2 has the
+  `esp32c3` machine. Nothing blocks `idf.py build` for
+  feature-esp32-idf-riscv32.
