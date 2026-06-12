@@ -32,6 +32,12 @@ procedure PXXMemMove(dst: Pointer; src: Pointer; n: Int64);
 procedure PXXMemZero(dst: Pointer; n: Int64);
 procedure PXXDynSetLen(arrSlot: Pointer; newLen: Int64; desc: Pointer);
 function PXXVarBinOp(dest: Pointer; left: Pointer; right: Pointer; opTk: Int64; isCompare: Int64): Int64;
+procedure PXXVarClear(v: Pointer);
+procedure PXXVarRetain(v: Pointer);
+procedure PXXWriteVariant(v: Pointer);
+procedure PXXWriteFloatNat(p: Pointer);
+procedure PXXWriteFloatFixed(p: Pointer; decimals: Int64);
+procedure PXXWriteFloatSci(p: Pointer);
 
 implementation
 
@@ -843,13 +849,16 @@ begin
   { 2. Numeric path }
   if (lTag = 3) or (rTag = 3) or (opTk = 73) then { VT_DOUBLE = 3, tkSlash = 73 }
   begin
+    { Read double payloads straight from the slot: on 32-bit targets lVal
+      holds only the low machine word, so a bounce through @lVal would
+      truncate the double. }
     if lTag = 3 then
-      lDbl := PDouble(@lVal)^
+      lDbl := PDouble(Int64(left) + 8)^
     else
       lDbl := lVal;
 
     if rTag = 3 then
-      rDbl := PDouble(@rVal)^
+      rDbl := PDouble(Int64(right) + 8)^
     else
       rDbl := rVal;
 
@@ -917,6 +926,266 @@ begin
       PWord(Int64(dest) + 8)^ := resVal;
       Result := Int64(dest);
       Exit;
+    end;
+  end;
+end;
+
+procedure PXXVarClear(v: Pointer);
+{ Release a string payload and zero the 16-byte slot (both words fully, so
+  32-bit targets leave no stale high halves behind). }
+begin
+  if PWord(v)^ = 6 then  { VT_STRING }
+    PXXStrDecRef(Pointer(PWord(Int64(v) + 8)^));
+  PXXMemZero(v, 16);
+end;
+
+procedure PXXVarRetain(v: Pointer);
+begin
+  if PWord(v)^ = 6 then  { VT_STRING }
+    PXXStrIncRef(Pointer(PWord(Int64(v) + 8)^));
+end;
+
+{ ---- Float -> text writers (portable bodies for the cross targets, used in
+  place of the per-arch EmitWriteFloat* emitters; x86-64 keeps its native
+  ones and this code must match their output byte for byte).
+
+  32-bit targets have no 64-bit integer registers, so all the scaling and
+  digit extraction here stays in Double: every intermediate is an integral
+  double below 2^53 (exactly representable), and each per-digit quotient is
+  provably more than half an ulp below the next integer, so Trunc of the
+  rounded quotient equals the exact integer digit.
+
+  The i386/ARM32 internal call ABI passes every argument as one pointer-sized
+  slot, so no helper here may take or return a Double; values cross procedure
+  boundaries by address. Round-to-nearest-even (the cvtsd2si / fcvtns
+  semantics) is done with the 2^52 add/sub trick, written as separate
+  statements so no constant folding can collapse it. }
+
+procedure PXXWriteUIntD(pv: Pointer);
+{ Print a non-negative integral double in decimal (writeUInt, double domain). }
+var v, p: Double; d: Integer; ch: Char;
+begin
+  v := PDouble(pv)^;
+  p := 1.0;
+  while p * 10.0 <= v do p := p * 10.0;
+  while p >= 1.0 do
+  begin
+    d := Trunc(v / p);
+    ch := Chr(48 + d);
+    write(ch);
+    v := v - d * p;
+    p := p / 10.0;
+  end;
+end;
+
+procedure PXXWriteFloatNat(p: Pointer);
+{ Natural decimal: [-]int.frac, trailing zeros trimmed, at least one
+  fractional digit. Mirrors EmitWriteFloatNat (x86-64). }
+var x, ip, m, dv, r: Double; d, i: Integer; ch: Char;
+begin
+  x := PDouble(p)^;
+  if PByte(Int64(p) + 7)^ >= 128 then  { sign bit (handles -0.0 too) }
+  begin
+    write('-');
+    x := -x;
+  end;
+  { ip := trunc(x): round-even, then correct down }
+  if x >= 4503599627370496.0 then
+    r := x
+  else
+  begin
+    r := x + 4503599627370496.0;
+    r := r - 4503599627370496.0;
+  end;
+  if r > x then r := r - 1.0;
+  ip := r;
+  { m := round-even((x - ip) * 1e15); the product is < 2^52 }
+  m := (x - ip) * 1000000000000000.0;
+  r := m + 4503599627370496.0;
+  m := r - 4503599627370496.0;
+  if m = 1000000000000000.0 then  { frac rounded up to 1.0: carry }
+  begin
+    m := 0.0;
+    ip := ip + 1.0;
+  end;
+  PXXWriteUIntD(@ip);
+  write('.');
+  dv := 100000000000000.0;  { 10^14 }
+  for i := 0 to 14 do
+  begin
+    d := Trunc(m / dv);
+    m := m - d * dv;
+    ch := Chr(48 + d);
+    write(ch);
+    if (i < 14) and (m = 0.0) then Exit;
+    dv := dv / 10.0;
+  end;
+end;
+
+procedure PXXWriteFloatFixed(p: Pointer; decimals: Int64);
+{ [-]intpart.frac with exactly 'decimals' fractional digits (0 -> rounded
+  integer, no point). Mirrors EmitWriteFloatFixed (x86-64). }
+var x, pw, v, ip, rem, dv, r: Double; d: Integer; i: Int64; ch: Char;
+begin
+  x := PDouble(p)^;
+  if PByte(Int64(p) + 7)^ >= 128 then
+  begin
+    write('-');
+    x := -x;
+  end;
+  pw := 1.0;
+  i := 1;
+  while i <= decimals do
+  begin
+    pw := pw * 10.0;
+    i := i + 1;
+  end;
+  { v := round-even(x * pw) }
+  v := x * pw;
+  if v < 4503599627370496.0 then
+  begin
+    r := v + 4503599627370496.0;
+    v := r - 4503599627370496.0;
+  end;
+  if decimals <= 0 then
+  begin
+    PXXWriteUIntD(@v);
+    Exit;
+  end;
+  { exact integer split v = ip*pw + rem (correct the rounded quotient) }
+  r := v / pw;
+  if r < 4503599627370496.0 then
+  begin
+    ip := r + 4503599627370496.0;
+    ip := ip - 4503599627370496.0;
+  end
+  else
+    ip := r;
+  rem := v - ip * pw;
+  if rem < 0.0 then
+  begin
+    ip := ip - 1.0;
+    rem := rem + pw;
+  end;
+  if rem >= pw then
+  begin
+    ip := ip + 1.0;
+    rem := rem - pw;
+  end;
+  PXXWriteUIntD(@ip);
+  write('.');
+  dv := pw / 10.0;
+  i := 1;
+  while i <= decimals do
+  begin
+    d := Trunc(rem / dv);
+    rem := rem - d * dv;
+    ch := Chr(48 + d);
+    write(ch);
+    dv := dv / 10.0;
+    i := i + 1;
+  end;
+end;
+
+procedure PXXWriteFloatSci(p: Pointer);
+{ Pascal scientific notation <' '|'-'>d.<15 digits>E<'+'|'-'>ddd. Mirrors
+  EmitWriteFloatSci (x86-64), including the leading-space positive sign. }
+var x, m, dv, r: Double; e, d, k: Integer; ch: Char;
+begin
+  x := PDouble(p)^;
+  if PByte(Int64(p) + 7)^ >= 128 then
+  begin
+    write('-');
+    x := -x;
+  end
+  else
+    write(' ');
+  if x = 0.0 then
+  begin
+    write('0.000000000000000E+000');
+    Exit;
+  end;
+  e := 0;
+  while x >= 10.0 do
+  begin
+    x := x / 10.0;
+    e := e + 1;
+  end;
+  while x < 1.0 do
+  begin
+    x := x * 10.0;
+    e := e - 1;
+  end;
+  { m := round-even(x * 1e15): 16 significant digits. Above 2^52 the value
+    is already integral, matching cvtsd2si exactly. }
+  m := x * 1000000000000000.0;
+  if m < 4503599627370496.0 then
+  begin
+    r := m + 4503599627370496.0;
+    m := r - 4503599627370496.0;
+  end;
+  dv := 1000000000000000.0;
+  for k := 0 to 15 do
+  begin
+    d := Trunc(m / dv);
+    m := m - d * dv;
+    ch := Chr(48 + d);
+    write(ch);
+    if k = 0 then write('.');
+    dv := dv / 10.0;
+  end;
+  write('E');
+  if e < 0 then
+  begin
+    write('-');
+    e := -e;
+  end
+  else
+    write('+');
+  d := e div 100;
+  ch := Chr(48 + d);
+  write(ch);
+  e := e mod 100;
+  d := e div 10;
+  ch := Chr(48 + d);
+  write(ch);
+  d := e mod 10;
+  ch := Chr(48 + d);
+  write(ch);
+end;
+
+procedure PXXWriteVariant(v: Pointer);
+{ Tag-dispatched write of a 16-byte variant slot; mirrors EmitWriteVariant
+  (x86-64): int/int64/bool as signed integer, double natural, char raw,
+  string payload bytes, empty/object nothing. }
+var tag, iv, len, i, s: Int64; ch: Char;
+begin
+  tag := PWord(v)^;
+  if (tag = 1) or (tag = 2) or (tag = 4) then  { VT_INT / VT_INT64 / VT_BOOL }
+  begin
+    iv := PWord(Int64(v) + 8)^;
+    write(iv);
+  end
+  else if tag = 3 then  { VT_DOUBLE }
+    PXXWriteFloatNat(Pointer(Int64(v) + 8))
+  else if tag = 5 then  { VT_CHAR }
+  begin
+    ch := Chr(PByte(Int64(v) + 8)^);
+    write(ch);
+  end
+  else if tag = 6 then  { VT_STRING }
+  begin
+    s := PWord(Int64(v) + 8)^;
+    if s <> 0 then
+    begin
+      len := PWord(s - 8)^;
+      i := 0;
+      while i < len do
+      begin
+        ch := Chr(PByte(s + i)^);
+        write(ch);
+        i := i + 1;
+      end;
     end;
   end;
 end;

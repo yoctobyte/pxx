@@ -6606,6 +6606,12 @@ begin
   begin
     if Tokens[i].Kind in [tkUses, tkArray, tkClass, tkGetMem, tkFreeMem] then
       needsHeap := True;
+    { 32-bit cross targets write floats through the builtinheap Pascal
+      helpers (PXXWriteFloat*), so any float-producing token pulls the unit.
+      tkSlash counts: integer / integer yields a float. }
+    if ((TargetArch = TARGET_I386) or (TargetArch = TARGET_ARM32)) and
+       (Tokens[i].Kind in [tkFloat, tkSlash]) then
+      needsHeap := True;
     if Tokens[i].Kind = tkUses then
       needsAnsiRuntime := True;
     if Tokens[i].Kind = tkIdent then
@@ -6613,6 +6619,10 @@ begin
       name := GetTokenStr(i);
       if CaseEqual(name, 'AnsiString') or CaseEqual(name, 'Variant') then
         needsAnsiRuntime := True;
+      if ((TargetArch = TARGET_I386) or (TargetArch = TARGET_ARM32)) and
+         (CaseEqual(name, 'Single') or CaseEqual(name, 'Double') or
+          CaseEqual(name, 'Real') or CaseEqual(name, 'Extended')) then
+        needsHeap := True;
       if CaseEqual(name, 'New') or CaseEqual(name, 'Dispose') or
          CaseEqual(name, 'ReallocMem') or CaseEqual(name, 'SetLength') then
         needsHeap := True;
@@ -6706,6 +6716,17 @@ begin
     dummyNames[4] := 'isCompare'; dummyTypes[4] := tyInt64;
     i := RegisterProc('PXXVarBinOp', True, tyInt64, 5, dummyNames, dummyTypes);
 
+    dummyNames[0] := 'v';         dummyTypes[0] := tyPointer;
+    i := RegisterProc('PXXVarClear', False, tyPointer, 1, dummyNames, dummyTypes);
+    i := RegisterProc('PXXVarRetain', False, tyPointer, 1, dummyNames, dummyTypes);
+    i := RegisterProc('PXXWriteVariant', False, tyPointer, 1, dummyNames, dummyTypes);
+
+    dummyNames[0] := 'p';         dummyTypes[0] := tyPointer;
+    i := RegisterProc('PXXWriteFloatNat', False, tyPointer, 1, dummyNames, dummyTypes);
+    i := RegisterProc('PXXWriteFloatSci', False, tyPointer, 1, dummyNames, dummyTypes);
+    dummyNames[1] := 'decimals';  dummyTypes[1] := tyInt64;
+    i := RegisterProc('PXXWriteFloatFixed', False, tyPointer, 2, dummyNames, dummyTypes);
+
     CurrentUnitIdx := savedUnitIdx;
   end;
   for i := 0 to MAX_GOTO_LABELS - 1 do GotoLabelIRId[i] := -1;
@@ -6721,8 +6742,11 @@ begin
        (Tokens[i + 1].Kind = tkLParen) and
        (CaseEqual(GetTokenStr(i), 'str') or CaseEqual(GetTokenStr(i), 'val')) then
       needsBuiltin := True;
-    { Variant use needs VariantToStr (in builtin) for variant writes. }
-    if (Tokens[i].Kind = tkIdent) and CaseEqual(GetTokenStr(i), 'Variant') then
+    { Variant use needs VariantToStr (in builtin) for variant writes — on
+      x86-64. Cross targets serve variants from builtinheap (PXXVar* helpers)
+      and cannot compile the full builtin unit yet. }
+    if (Tokens[i].Kind = tkIdent) and CaseEqual(GetTokenStr(i), 'Variant') and
+       (TargetArch = TARGET_X86_64) then
       needsBuiltin := True;
     if Tokens[i].Kind = tkUses then
       needsBuiltin := True;
