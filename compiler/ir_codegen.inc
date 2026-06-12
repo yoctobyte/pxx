@@ -2511,21 +2511,33 @@ begin
               argNode := IRB[argNode];
               Inc(i);
             end;
-            for i := Procs[pi].ParamCount - 1 downto 0 do
-              case i of
-                0: EmitB($5F); { pop rdi }
-                1: EmitB($5E); { pop rsi }
-                2: EmitB($5A); { pop rdx }
-                3: EmitB($59); { pop rcx }
-                4: begin EmitB($41); EmitB($58); end; { pop r8 }
-                5: begin EmitB($41); EmitB($59); end; { pop r9 }
-              end;
+            { More than 6 params: all-stack internal convention — leave the
+              left-to-right pushes in place for the callee (which reads
+              [rbp+16+(n-1-i)*8]) and clean up after the call. The register
+              pop loop below has no case arm past r9, so it used to pop the
+              wrong (topmost) args into the registers and leak the rest
+              (bug-many-param-call-corruption). }
+            if Procs[pi].ParamCount <= 6 then
+              for i := Procs[pi].ParamCount - 1 downto 0 do
+                case i of
+                  0: EmitB($5F); { pop rdi }
+                  1: EmitB($5E); { pop rsi }
+                  2: EmitB($5A); { pop rdx }
+                  3: EmitB($59); { pop rcx }
+                  4: begin EmitB($41); EmitB($58); end; { pop r8 }
+                  5: begin EmitB($41); EmitB($59); end; { pop r9 }
+                end;
             if TypeIsAggregate(Procs[pi].RetType) then
             begin
               IREmitNode(IRC[node]);                   { rax = hidden destination }
               EmitB($49); EmitB($89); EmitB($C2);     { mov r10, rax }
             end;
             EmitCallProc(pi);
+            if Procs[pi].ParamCount > 6 then
+            begin
+              EmitB($48); EmitB($81); EmitB($C4);     { add rsp, n*8 }
+              EmitI32(Procs[pi].ParamCount * 8);
+            end;
           end;
         end
         else if pi = -Ord(tkGetMem) then
@@ -2566,25 +2578,42 @@ begin
                 argNode := IRB[argNode];
               end;
               
-              { Pop args into SysV ABI registers }
-              for i := Procs[cpi].ParamCount-1 downto 0 do
-                case i of
-                  0: EmitB($5F);
-                  1: EmitB($5E);
-                  2: EmitB($5A);
-                  3: EmitB($59);
-                  4: begin EmitB($41); EmitB($58); end;
-                  5: begin EmitB($41); EmitB($59); end;
-                end;
+              { Pop args into SysV ABI registers. More than 6 params: leave
+                the pushes in place (all-stack convention; Self was pushed
+                first = leftmost) and clean up after the call. }
+              if Procs[cpi].ParamCount <= 6 then
+                for i := Procs[cpi].ParamCount-1 downto 0 do
+                  case i of
+                    0: EmitB($5F);
+                    1: EmitB($5E);
+                    2: EmitB($5A);
+                    3: EmitB($59);
+                    4: begin EmitB($41); EmitB($58); end;
+                    5: begin EmitB($41); EmitB($59); end;
+                  end;
 
-              { Save Self across the call and return it as the constructor's
-                result (rax). Without this rax holds the constructor body's
-                garbage return, so `obj := T.Create` stores a bad pointer and a
-                later virtual call dereferences a wild VMT. rdi (= Self, arg0) is
-                unchanged by the push, so the callee still receives it. }
-              EmitB($57); { push rdi }
-              EmitCallProc(cpi);
-              EmitB($58); { pop rax }
+              if Procs[cpi].ParamCount > 6 then
+              begin
+                { Self (param 0, deepest slot) doubles as the saved result:
+                  the callee only reads the arg slots, so it is still intact
+                  after the call. }
+                EmitCallProc(cpi);
+                EmitB($48); EmitB($8B); EmitB($84); EmitB($24); { mov rax, [rsp+disp] }
+                EmitI32((Procs[cpi].ParamCount - 1) * 8);
+                EmitB($48); EmitB($81); EmitB($C4);             { add rsp, n*8 }
+                EmitI32(Procs[cpi].ParamCount * 8);
+              end
+              else
+              begin
+                { Save Self across the call and return it as the constructor's
+                  result (rax). Without this rax holds the constructor body's
+                  garbage return, so `obj := T.Create` stores a bad pointer and a
+                  later virtual call dereferences a wild VMT. rdi (= Self, arg0) is
+                  unchanged by the push, so the callee still receives it. }
+                EmitB($57); { push rdi }
+                EmitCallProc(cpi);
+                EmitB($58); { pop rax }
+              end;
             end
             else
             begin
@@ -3681,18 +3710,31 @@ begin
           argNode := IRB[argNode];
           Inc(pathIdx);
         end;
-        for i := Procs[pi].ParamCount - 1 downto 0 do
-          case i of
-            0: EmitB($5F); { pop rdi  (Self) }
-            1: EmitB($5E); { pop rsi }
-            2: EmitB($5A); { pop rdx }
-            3: EmitB($59); { pop rcx }
-            4: begin EmitB($41); EmitB($58); end; { pop r8 }
-            5: begin EmitB($41); EmitB($59); end; { pop r9 }
-          end;
+        if Procs[pi].ParamCount <= 6 then
+          for i := Procs[pi].ParamCount - 1 downto 0 do
+            case i of
+              0: EmitB($5F); { pop rdi  (Self) }
+              1: EmitB($5E); { pop rsi }
+              2: EmitB($5A); { pop rdx }
+              3: EmitB($59); { pop rcx }
+              4: begin EmitB($41); EmitB($58); end; { pop r8 }
+              5: begin EmitB($41); EmitB($59); end; { pop r9 }
+            end
+        else
+        begin
+          { All-stack convention: Self (param 0) is the deepest pushed slot;
+            fetch it for the VMT load, args stay on the stack for the callee. }
+          EmitB($48); EmitB($8B); EmitB($BC); EmitB($24); { mov rdi, [rsp+disp] }
+          EmitI32((Procs[pi].ParamCount - 1) * 8);
+        end;
         { Virtual Method Table dispatch }
         EmitB($48); EmitB($8B); EmitB($07); { mov rax, [rdi]   -- load VMT pointer }
         EmitB($FF); EmitB($90); EmitI32(slot * 8); { call [rax + slot*8] }
+        if Procs[pi].ParamCount > 6 then
+        begin
+          EmitB($48); EmitB($81); EmitB($C4);             { add rsp, n*8 }
+          EmitI32(Procs[pi].ParamCount * 8);
+        end;
       end;
 
   else

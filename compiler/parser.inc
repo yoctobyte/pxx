@@ -5835,6 +5835,39 @@ begin
     end;
   end
   else
+  if nparams > 6 then
+  begin
+    { All-stack internal convention for procs with more than 6 parameters
+      (bug-many-param-call-corruption: the register convention silently
+      shifted arguments). The caller pushed every arg left to right and
+      cleans up after the call, so param i of n sits at
+      [rbp + 16 + (n-1-i)*8]. Copy each into its frame slot. }
+    for i := 0 to nparams-1 do
+    begin
+      idx := Procs[pi].Params[i].SymIdx;
+      sz := ParamSize(idx);
+      EmitB($48); EmitB($8B); EmitB($85);
+      EmitI32(16 + (nparams - 1 - i) * 8);        { mov rax, [rbp+disp] }
+      if sz = 1 then
+      begin
+        EmitB($88); EmitB($85);                   { mov [rbp+off], al }
+      end
+      else if sz = 2 then
+      begin
+        EmitB($66); EmitB($89); EmitB($85);       { mov [rbp+off], ax }
+      end
+      else if sz = 4 then
+      begin
+        EmitB($89); EmitB($85);                   { mov [rbp+off], eax }
+      end
+      else
+      begin
+        EmitB($48); EmitB($89); EmitB($85);       { mov [rbp+off], rax }
+      end;
+      EmitI32(Syms[idx].Offset);
+    end;
+  end
+  else
   { Copy params from registers to stack: mov [rbp+off], rdi/rsi/rdx/rcx/r8/r9 }
   for i := 0 to nparams-1 do
   begin

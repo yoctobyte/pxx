@@ -204,6 +204,8 @@ test-core: $(COMPILER)
 	test "$$(/tmp/test_asm_func26)" = "14"
 	./$(COMPILER) test/test_asm_swap.pas /tmp/test_asm_swap26
 	test "$$(/tmp/test_asm_swap26)" = "$$(printf '42\n-7\n-7\n42')"
+	./$(COMPILER) test/test_many_params.pas /tmp/test_many_params26
+	test "$$(/tmp/test_many_params26)" = "$$(printf '1 2 3 4 5 6 7\n3 4 5 6 7 12 89\n8912\n7654326\n12100806\n7654321\n96\n196')"
 	./$(COMPILER) test/test_procaddr.pas /tmp/test_procaddr26
 	test "$$(/tmp/test_procaddr26)" = "1 2 3 4 5 "
 	./$(COMPILER) test/test_methodptr.pas /tmp/test_methodptr26
