@@ -50,13 +50,18 @@ begin
 end;
 
 procedure EmitFrameAddrXtensa(rd: Integer; off: Integer);
+var fp: Integer;
 begin
+  if XtensaABI = XTENSA_ABI_WINDOWED then
+    fp := reg_xtensa_a7
+  else
+    fp := reg_xtensa_a15;
   if (off >= -128) and (off <= 127) then
-    xtensa_addi(rd, reg_xtensa_a15, off)
+    xtensa_addi(rd, fp, off)
   else
   begin
     EmitLoadConstXtensa(rd, off);
-    xtensa_add(rd, reg_xtensa_a15, rd);
+    xtensa_add(rd, fp, rd);
   end;
 end;
 
@@ -340,12 +345,19 @@ begin
           Error('target xtensa: more than 6 call arguments not supported yet');
 
         for i := 0 to nArgs - 1 do
-          xtensa_l32i(reg_xtensa_a2 + i, reg_xtensa_sp, (nArgs - 1 - i) * 4);
+        begin
+          if XtensaABI = XTENSA_ABI_WINDOWED then
+            xtensa_l32i(reg_xtensa_a10 + i, reg_xtensa_sp, (nArgs - 1 - i) * 4)
+          else
+            xtensa_l32i(reg_xtensa_a2 + i, reg_xtensa_sp, (nArgs - 1 - i) * 4);
+        end;
 
         if nArgs > 0 then
           xtensa_addi(reg_xtensa_sp, reg_xtensa_sp, nArgs * 4);
 
         EmitCallProc(pi);
+        if XtensaABI = XTENSA_ABI_WINDOWED then
+          xtensa_mov(reg_xtensa_a2, reg_xtensa_a10);
       end;
 
     IR_WRITE, IR_WRITELN:

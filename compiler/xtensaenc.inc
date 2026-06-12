@@ -161,6 +161,32 @@ begin
   EmitB(0);
 end;
 
+function EncodeXtensaEntry(s, frameSize: Integer): Integer;
+var
+  imm12: Integer;
+begin
+  imm12 := (frameSize div 8) and $FFF;
+  Result := $36 or ((((imm12 and $F) shl 4) or s) shl 8) or
+            ((imm12 shr 4) shl 16);
+end;
+
+procedure xtensa_entry(s, frameSize: Integer);
+var
+  val: Integer;
+begin
+  val := EncodeXtensaEntry(s, frameSize);
+  EmitB(val and $FF);
+  EmitB((val shr 8) and $FF);
+  EmitB((val shr 16) and $FF);
+end;
+
+procedure xtensa_retw;
+begin
+  { RETW.N = density return from windowed callee, LE bytes 1D F0. }
+  EmitB($1D);
+  EmitB($F0);
+end;
+
 procedure xtensa_nop;
 begin
   EmitB($F0);
@@ -179,6 +205,14 @@ begin
   Result := (imm18 shl 6) or 5;
 end;
 
+function EncodeXtensaCall8(pc, target: Integer): Integer;
+var
+  imm18: Integer;
+begin
+  imm18 := ((target - (pc div 4) * 4 - 4) div 4) and $3FFFF;
+  Result := (imm18 shl 6) or $25;
+end;
+
 procedure xtensa_call0(offset: Integer);
 var
   val: Integer;
@@ -189,10 +223,28 @@ begin
   EmitB((val shr 16) and $FF);
 end;
 
+procedure xtensa_call8(offset: Integer);
+var
+  val: Integer;
+begin
+  val := EncodeXtensaCall8(CodeLen, CodeLen + offset);
+  EmitB(val and $FF);
+  EmitB((val shr 8) and $FF);
+  EmitB((val shr 16) and $FF);
+end;
+
 procedure xtensa_callx0(s: Integer);
 begin
   { CALLX0 as = insn word $0000C0 or (s shl 8), LE bytes C0 0s 00. }
   EmitB($C0);
+  EmitB(s);
+  EmitB(0);
+end;
+
+procedure xtensa_callx8(s: Integer);
+begin
+  { CALLX8 as = insn word $0000E0 or (s shl 8), LE bytes E0 0s 00. }
+  EmitB($E0);
   EmitB(s);
   EmitB(0);
 end;
@@ -240,4 +292,3 @@ begin
   EmitB((val shr 8) and $FF);
   EmitB((val shr 16) and $FF);
 end;
-

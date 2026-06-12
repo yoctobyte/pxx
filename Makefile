@@ -828,6 +828,11 @@ test-emit-obj: $(COMPILER)
 	readelf -s /tmp/test_emit_obj_xt.o | grep -q 'UND ext_notify'
 	readelf -r /tmp/test_emit_obj_xt.o | grep -q 'R_XTENSA_32'
 	readelf -r /tmp/test_emit_obj_xt.o | grep -q 'ext_notify + 0'
+	./$(COMPILER) --target=xtensa --xtensa-abi=windowed test/test_emit_obj.pas /tmp/test_emit_obj_xt_windowed.o
+	readelf -h /tmp/test_emit_obj_xt_windowed.o | grep -q 'REL (Relocatable file)'
+	readelf -h /tmp/test_emit_obj_xt_windowed.o | grep -q 'Xtensa'
+	readelf -s /tmp/test_emit_obj_xt_windowed.o | grep -q 'FUNC    GLOBAL DEFAULT    1 app_main'
+	readelf -r /tmp/test_emit_obj_xt_windowed.o | grep -q 'R_XTENSA_32'
 	@printf 'int captured;\nvoid ext_notify(int v) { captured = v; }\nextern void app_main(void);\nint main(void) { app_main(); return captured; }\n' > /tmp/test_emit_obj_shim.c
 	@RV=$$(ls $$HOME/.espressif/tools/riscv32-esp-elf/*/riscv32-esp-elf/bin/riscv32-esp-elf-gcc 2>/dev/null | head -1); \
 	if [ -n "$$RV" ]; then \
@@ -836,8 +841,9 @@ test-emit-obj: $(COMPILER)
 	@XT=$$(ls $$HOME/.espressif/tools/xtensa-esp-elf/*/xtensa-esp-elf/bin/xtensa-esp32s3-elf-gcc 2>/dev/null | head -1); \
 	if [ -n "$$XT" ]; then \
 	  $$XT -nostartfiles -Wl,-e,main /tmp/test_emit_obj_shim.c /tmp/test_emit_obj_xt.o -o /tmp/test_emit_obj_xt.elf && echo "xtensa .o links ok"; \
+	  $$XT -nostartfiles -Wl,-e,main /tmp/test_emit_obj_shim.c /tmp/test_emit_obj_xt_windowed.o -o /tmp/test_emit_obj_xt_windowed.elf && echo "xtensa windowed .o links ok"; \
 	else echo "xtensa-esp32s3-elf-gcc not installed; link check skipped"; fi
-	@echo "emit-obj ok (ET_REL sections/symbols/relocs sane on riscv32 + xtensa)"
+	@echo "emit-obj ok (ET_REL sections/symbols/relocs sane on riscv32 + xtensa call0/windowed)"
 
 # Cross-target test environment sanity (chore-qemu-test-env). Manual target:
 # joins 'make test' when the first cross backend exists. Validates the runner

@@ -1,7 +1,7 @@
 # Xtensa windowed ABI codegen variant (for ESP-IDF interop)
 
 - **Type:** feature
-- **Status:** backlog
+- **Status:** done
 - **Owner:** —
 - **Unblocks:** feature-esp32-idf-xtensa
 - **Opened:** 2026-06-12 (esp32-idf integration plan)
@@ -24,15 +24,12 @@ installs the window overflow/underflow handlers; we never touch them.
 - Profile flag (e.g. `--xtensa-abi=windowed`, default for the idf profile;
   Call0 stays for bare).
 - Encoder additions in `compiler/xtensaenc.inc`: `entry sp, imm12`
-  (imm scaled ×8), `retw` (`1d f0 00`? verify), `call8` / `callx8`.
-  Verify every new encoding against
-  `llvm-mc --triple=xtensa --filetype=obj` + llvm-objdump (established
-  oracle; llvm-18 has the Xtensa target).
-- Prologue: `entry a1, 16+frame` replaces the manual a0/a15 save (entry
-  allocates the frame and snapshots the caller window). Frame pointer: a15
-  stays usable inside the callee window — JTAG/GDB unwinding on windowed
-  code uses the window mechanism, not a15, so re-check the
-  frame-pointer-preservation acceptance wording.
+  (imm scaled ×8), `retw.n`, `call8`, and `callx8`. Encodings were verified
+  against Espressif `xtensa-esp32s3-elf-as`/`objdump`.
+- Prologue: `entry a1, 32` replaces the manual a0/a15 save; the existing
+  local-frame adjustment remains separate. `a15` is only a bootstrap base
+  while parameters are spilled; body frame references use `a7` so calls through
+  `call8` cannot clobber the frame base.
 - Epilogue: `retw` (result already in a2 = caller's a10).
 - Call site: args to a10–a15 (≤6 args), `call8` direct / `callx8` via
   literal-loaded address for imported symbols; read result from a10.
@@ -62,3 +59,12 @@ installs the window overflow/underflow handlers; we never touch them.
 - `entry` requires frame size ≤ 32KB (imm12×8) — fine.
 - PXX `not` is not bitwise-int (see done/feature-target-esp32 log) — keep
   using div/mul for masks in new encoder math.
+
+## Log
+
+- 2026-06-12 — Implemented `--xtensa-abi=windowed`: `entry`, `retw.n`,
+  `call8`, `callx8`, argument marshalling through caller `a10..a15`, return
+  copy-back from `a10`, and windowed direct-call fixups. `make test-emit-obj`
+  now covers xtensa Call0 and windowed objects, including an
+  `xtensa-esp32s3-elf-gcc` link check when the toolchain is installed.
+  Commit: pending.

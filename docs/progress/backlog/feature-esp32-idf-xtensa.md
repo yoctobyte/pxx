@@ -3,7 +3,6 @@
 - **Type:** feature
 - **Status:** backlog
 - **Owner:** —
-- **Blocked-by:** feature-elf-rel-writer, feature-xtensa-windowed-abi, feature-esp32-idf-riscv32
 - **Opened:** 2026-06-12 (esp32-idf integration plan)
 
 ## Motivation
@@ -48,3 +47,10 @@ the pipeline shape; this one adds the windowed-ABI object and real hardware.
   Espressif QEMU installed 2026-06-12 (see done/feature-target-esp32 log).
 - Flashing needs the board on a real /dev/ttyUSB*/ttyACM* — coordinate with
   the user for the hardware step.
+- 2026-06-12 — QEMU path works. `examples/esp32/hello-s3` compiles Pascal
+  `app_main` with `--target=xtensa --xtensa-abi=windowed`, archives it as
+  `libpxx_app.a`, links via `add_prebuilt_library` + `-u app_main`, and boots
+  under `qemu-system-xtensa -M esp32s3`. Serial output:
+  `PXX hello from Pascal S3: i=1..5`, `PXX S3 sum 1..5 = 15`, then the app
+  parks in a `vTaskDelay`/GPIO blink loop. Link map shows
+  `app_main` at `0x4200cfcc`.

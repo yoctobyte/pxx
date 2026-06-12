@@ -236,6 +236,8 @@ const
   TARGET_ARM32   = 3;
   TARGET_XTENSA  = 4;
   TARGET_RISCV32 = 5;
+  XTENSA_ABI_CALL0    = 0;
+  XTENSA_ABI_WINDOWED = 1;
   LOAD_ADDR32        = $08048000;  { classic i386 ET_EXEC base }
   ELF32_HEADER_SIZE  = 52;
   PROG32_HEADER_SIZE = 32;
@@ -659,6 +661,9 @@ var
   CurUnitDir : AnsiString;
   { Selected compile target (TARGET_*). Default TARGET_X86_64. }
   TargetArch : Integer;
+  { Xtensa ABI selector. Call0 remains the bare-target default; ESP-IDF uses
+    the windowed ABI. }
+  XtensaABI : Integer;
   { Emit a relocatable ET_REL .o instead of a linked ET_EXEC image
     (--emit-obj, or inferred from a .o output name). esp32 targets only. }
   EmitObjMode : Boolean;

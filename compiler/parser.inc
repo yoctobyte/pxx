@@ -5825,7 +5825,15 @@ begin
       sz := ParamSize(idx);
       if i >= 6 then
         Error('target xtensa: more than 6 parameters not yet supported');
-      EmitFrameAddrXtensa(reg_xtensa_a8, Syms[idx].Offset);
+      if XtensaABI = XTENSA_ABI_WINDOWED then
+      begin
+        if (Syms[idx].Offset >= -128) and (Syms[idx].Offset <= 127) then
+          xtensa_addi(reg_xtensa_a8, reg_xtensa_a15, Syms[idx].Offset)
+        else
+          Error('target xtensa windowed: parameter frame offset out of range');
+      end
+      else
+        EmitFrameAddrXtensa(reg_xtensa_a8, Syms[idx].Offset);
       if sz = 1 then
         xtensa_s8i(reg_xtensa_a2 + i, reg_xtensa_a8, 0)
       else if sz = 2 then
@@ -5833,6 +5841,8 @@ begin
       else
         xtensa_s32i(reg_xtensa_a2 + i, reg_xtensa_a8, 0);
     end;
+    if XtensaABI = XTENSA_ABI_WINDOWED then
+      xtensa_mov(reg_xtensa_a7, reg_xtensa_a15);
   end
   else
   if nparams > 6 then
@@ -6546,6 +6556,8 @@ begin
 
   patchPos := EmitProcPrologue;
   Procs[pi].FramePatch := patchPos;
+  if (TargetArch = TARGET_XTENSA) and (XtensaABI = XTENSA_ABI_WINDOWED) then
+    xtensa_mov(reg_xtensa_a7, reg_xtensa_a15);
 
   { Optional local var/const/type sections (rare in init, but harmless). }
   while CurTok.Kind in [tkVar, tkConst, tkType] do
@@ -6890,6 +6902,11 @@ begin
   end
   else if TargetArch = TARGET_XTENSA then
   begin
+    if XtensaABI = XTENSA_ABI_WINDOWED then
+    begin
+      xtensa_entry(reg_xtensa_sp, 32);
+      xtensa_mov(reg_xtensa_a7, reg_xtensa_sp);
+    end;
     { Xtensa entry stub: jump to main body. }
     jmpPatch := CodeLen;
     xtensa_j(0);

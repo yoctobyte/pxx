@@ -53,6 +53,7 @@ begin
   DumpIR := False;
   DumpRTTI := False;
   TargetArch := TARGET_X86_64;
+  XtensaABI := XTENSA_ABI_CALL0;
   TARGET_PTR_SIZE := 8;
   EmitObjMode := False;
   NoUnhandledHandler := False;
@@ -110,6 +111,16 @@ begin
     else if option = '--target=xtensa' then
     begin
       TargetArch := TARGET_XTENSA;
+      Inc(i);
+    end
+    else if option = '--xtensa-abi=call0' then
+    begin
+      XtensaABI := XTENSA_ABI_CALL0;
+      Inc(i);
+    end
+    else if option = '--xtensa-abi=windowed' then
+    begin
+      XtensaABI := XTENSA_ABI_WINDOWED;
       Inc(i);
     end
     else if option = '--target=riscv32' then

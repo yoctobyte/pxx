@@ -51,6 +51,7 @@ Options must occur before the source path.
 | --- | --- |
 | `--debug` | Print compiler lexer/parser/preprocessor diagnostics while compiling. |
 | `--target=ARCH` | Select the code generation target: `x86_64` (default), `i386`, `aarch64`, `arm32`, `xtensa`, `riscv32`. |
+| `--xtensa-abi=call0\|windowed` | Select the Xtensa call ABI. `call0` is the default bare-target ABI; `windowed` is for ESP-IDF interop. |
 | `--emit-obj` | Emit a relocatable ET_REL `.o` instead of a linked executable (esp32 targets `xtensa`/`riscv32` only). Also inferred when the output path ends in `.o`. |
 | `--experimental-ir-codegen` | Deprecated no-op, accepted for compatibility. IR is the only backend. |
 | `--dump-ir` | Print the AST-lowered IR while still emitting the normal executable. |

@@ -12,7 +12,7 @@ _none_
 
 _none_
 
-## backlog (29)
+## backlog (28)
 
 | Ticket | Type | Summary | Blocked-by |
 | --- | --- | --- | --- |
@@ -29,7 +29,7 @@ _none_
 | feature-directive-if-numeric | feature | Valued defines + numeric `{$IF}` evaluation | — |
 | feature-dynamic-soname-discovery | feature | Dynamic soname discovery (no execve) | — |
 | feature-esp32-bare-boot | feature | ESP32 bare-metal boot profile (no IDF) | — |
-| feature-esp32-idf-xtensa | feature | ESP-IDF integration: Xtensa (ESP32-S2/S3) — QEMU + real hardware | feature-elf-rel-writer, feature-esp32-idf-riscv32, feature-xtensa-windowed-abi |
+| feature-esp32-idf-xtensa | feature | ESP-IDF integration: Xtensa (ESP32-S2/S3) — QEMU + real hardware | — |
 | feature-flexcolumn-directive | feature | `flexcolumn` calling-convention directive | chore-inc-to-units |
 | feature-float-str-val | feature | Float Str / Val | — |
 | feature-inline-asm-depth | feature | Inline assembler depth | — |
@@ -42,7 +42,6 @@ _none_
 | feature-progress-transition-helpers | feature | Progress transition helpers (`claim` / `resolve`) | — |
 | feature-static-arena-profile | feature | Fixed-static-arena allocator profile | feature-unified-heap-allocator |
 | feature-threadsafe-io-serialization | feature | Statement-level I/O serialization under threads | feature-unified-heap-allocator |
-| feature-xtensa-windowed-abi | feature | Xtensa windowed ABI codegen variant (for ESP-IDF interop) | — |
 | idea-unit-rename-import | idea | `uses X as Y` unit-rename import (dialect extension) | — |
 | idea-visibility-enforcement | idea | Enforce private/protected visibility | — |
 
@@ -53,7 +52,7 @@ _none_
 | bug-nonreproducible-miscompile-2026-06-02 | bug | Non-reproducible one-off miscompile (2026-06-02) | — |
 | bug-whole-record-copy-main-body-noop | bug | Latent: whole-record array-element copy in main-program body emits store no-ops | — |
 
-## done (26)
+## done (27)
 
 | Ticket | Type | Summary | Blocked-by |
 | --- | --- | --- | --- |
@@ -82,6 +81,7 @@ _none_
 | feature-target-i386 | feature | Compile target: i386 (32-bit x86 Linux) | chore-qemu-test-env |
 | feature-typed-instruction-encoders | feature | Typed instruction encoders for codegen | — |
 | feature-unified-heap-allocator | feature | Unified syscall-free heap allocator | — |
+| feature-xtensa-windowed-abi | feature | Xtensa windowed ABI codegen variant (for ESP-IDF interop) | — |
 | idea-progress-board-md | idea | On-demand `BOARD.md` kanban grid | — |
 
 ## rejected (0)
@@ -102,6 +102,7 @@ _none_
 - feature-directive-if-numeric
 - feature-dynamic-soname-discovery
 - feature-esp32-bare-boot
+- feature-esp32-idf-xtensa
 - feature-float-str-val
 - feature-inline-asm-depth
 - feature-interfaces
@@ -111,7 +112,6 @@ _none_
 - feature-progress-transition-helpers
 - feature-static-arena-profile
 - feature-threadsafe-io-serialization
-- feature-xtensa-windowed-abi
 - idea-unit-rename-import
 - idea-visibility-enforcement
 
@@ -121,12 +121,10 @@ _none_
 - **2** — feature-target-i386
 - **2** — feature-target-aarch64
 - **2** — feature-rtti-layout-table
-- **2** — feature-elf-rel-writer
-- **1** — feature-xtensa-windowed-abi
 - **1** — feature-target-esp32
 - **1** — feature-target-arm32
 - **1** — feature-managed-exception-cleanup
-- **1** — feature-esp32-idf-riscv32
+- **1** — feature-elf-rel-writer
 - **1** — feature-directive-if-numeric
 - **1** — feature-cross-param-abi
 - **1** — feature-cross-float-variant

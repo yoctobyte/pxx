@@ -3054,13 +3054,25 @@ begin
   end;
   if TargetArch = TARGET_XTENSA then
   begin
-    { Xtensa Call0 ABI prologue: push a0, a15 (save Return Address and Frame Pointer) }
-    xtensa_addi(reg_xtensa_sp, reg_xtensa_sp, -16);
-    xtensa_s32i(reg_xtensa_a0, reg_xtensa_sp, 12);
-    xtensa_s32i(reg_xtensa_a15, reg_xtensa_sp, 8);
-    xtensa_mov(reg_xtensa_a15, reg_xtensa_sp);
-    Result := CodeLen;
-    xtensa_addi(reg_xtensa_sp, reg_xtensa_sp, 0);
+    if XtensaABI = XTENSA_ABI_WINDOWED then
+    begin
+      xtensa_entry(reg_xtensa_sp, 32);
+      { a15 is only a bootstrap frame base until params are spilled; the body
+        frame pointer moves to a7, outside call8's outgoing window. }
+      xtensa_mov(reg_xtensa_a15, reg_xtensa_sp);
+      Result := CodeLen;
+      xtensa_addi(reg_xtensa_sp, reg_xtensa_sp, 0);
+    end
+    else
+    begin
+      { Xtensa Call0 ABI prologue: push a0, a15 (save Return Address and Frame Pointer) }
+      xtensa_addi(reg_xtensa_sp, reg_xtensa_sp, -16);
+      xtensa_s32i(reg_xtensa_a0, reg_xtensa_sp, 12);
+      xtensa_s32i(reg_xtensa_a15, reg_xtensa_sp, 8);
+      xtensa_mov(reg_xtensa_a15, reg_xtensa_sp);
+      Result := CodeLen;
+      xtensa_addi(reg_xtensa_sp, reg_xtensa_sp, 0);
+    end;
     Exit;
   end;
   if TargetArch = TARGET_RISCV32 then
@@ -3268,11 +3280,19 @@ begin
         Error('target xtensa: only ordinal/pointer/string function results supported yet');
       EmitLoadVarXtensa(retSymIdx);
     end;
-    xtensa_mov(reg_xtensa_sp, reg_xtensa_a15);
-    xtensa_l32i(reg_xtensa_a15, reg_xtensa_sp, 8);
-    xtensa_l32i(reg_xtensa_a0, reg_xtensa_sp, 12);
-    xtensa_addi(reg_xtensa_sp, reg_xtensa_sp, 16);
-    xtensa_ret;
+    if XtensaABI = XTENSA_ABI_WINDOWED then
+    begin
+      xtensa_mov(reg_xtensa_sp, reg_xtensa_a7);
+      xtensa_retw;
+    end
+    else
+    begin
+      xtensa_mov(reg_xtensa_sp, reg_xtensa_a15);
+      xtensa_l32i(reg_xtensa_a15, reg_xtensa_sp, 8);
+      xtensa_l32i(reg_xtensa_a0, reg_xtensa_sp, 12);
+      xtensa_addi(reg_xtensa_sp, reg_xtensa_sp, 16);
+      xtensa_ret;
+    end;
     Exit;
   end;
   if TargetArch = TARGET_RISCV32 then
@@ -3402,7 +3422,10 @@ begin
       Inc(DynCallCount);
       EmitI32(0);
       xtensa_l32r(reg_xtensa_a8, $FFFF);
-      xtensa_callx0(reg_xtensa_a8);
+      if XtensaABI = XTENSA_ABI_WINDOWED then
+        xtensa_callx8(reg_xtensa_a8)
+      else
+        xtensa_callx0(reg_xtensa_a8);
       Exit;
     end;
     if TargetArch = TARGET_RISCV32 then
@@ -3465,14 +3488,22 @@ begin
   if TargetArch = TARGET_XTENSA then
   begin
     if Procs[pi].BodyAddr >= 0 then
-      xtensa_call0(Procs[pi].BodyAddr - CodeLen)
+    begin
+      if XtensaABI = XTENSA_ABI_WINDOWED then
+        xtensa_call8(Procs[pi].BodyAddr - CodeLen)
+      else
+        xtensa_call0(Procs[pi].BodyAddr - CodeLen);
+    end
     else
     begin
       if CallFixCount >= MAX_CALLFIX then Error('call fixup overflow');
       CallFix[CallFixCount].CodePos := CodeLen;
       CallFix[CallFixCount].ProcIdx := pi;
       Inc(CallFixCount);
-      xtensa_call0(0);
+      if XtensaABI = XTENSA_ABI_WINDOWED then
+        xtensa_call8(0)
+      else
+        xtensa_call0(0);
     end;
     Exit;
   end;
@@ -3519,7 +3550,12 @@ begin
     else if TargetArch = TARGET_AARCH64 then
       Patch32(CallFix[i].CodePos, $94000000 or (((Procs[pi].BodyAddr - CallFix[i].CodePos) div 4) and $03ffffff))
     else if TargetArch = TARGET_XTENSA then
-      Patch24(CallFix[i].CodePos, EncodeXtensaCall0(CallFix[i].CodePos, Procs[pi].BodyAddr))
+    begin
+      if XtensaABI = XTENSA_ABI_WINDOWED then
+        Patch24(CallFix[i].CodePos, EncodeXtensaCall8(CallFix[i].CodePos, Procs[pi].BodyAddr))
+      else
+        Patch24(CallFix[i].CodePos, EncodeXtensaCall0(CallFix[i].CodePos, Procs[pi].BodyAddr));
+    end
     else if TargetArch = TARGET_RISCV32 then
       Patch32(CallFix[i].CodePos, EncodeRISCVJAL(reg_ra, Procs[pi].BodyAddr - CallFix[i].CodePos))
     else
