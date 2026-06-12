@@ -57,6 +57,16 @@ Phase 1 focuses on code generation, targeting bare-metal executables for both ar
 - **JTAG / GDB tests:** verify that a debugger can attach and step/unwind correctly using the generated map files and preserved frame pointers.
 
 ## Log
+- 2026-06-12 — xtensa smoke binary EXECUTED correctly under user-mode
+  `qemu-xtensa` (dc232b core covers our core+density+mul32 subset; ESP32 LX6
+  itself absent from stock QEMU): runs to the terminal self-loop, globals
+  g=45 i=6 acc=45 — same oracle values as riscv32. Found+fixed a latent bug
+  in the shared ELF32 writer: `bssBase = dataBase + DataLen` was byte-granular
+  so word globals landed misaligned → Xtensa s32i SIGBUS (riscv32 QEMU only
+  tolerated it); bssBase now AlignTo 8, i386/arm32 oracles unaffected.
+  Debug recipe: `qemu-xtensa -d in_asm -D log BIN` for execution trace
+  (gdb-multiarch's xtensa register readout vs qemu is unreliable — pc reads 0;
+  memory reads work fine).
 - 2026-06-12 — riscv32 smoke binary EXECUTED correctly under user-mode
   `qemu-riscv32` (loads our ET_EXEC ELF32 directly; no board setup needed):
   `-g` gdb stub + gdb-multiarch breakpoint on the terminal self-loop, then

@@ -514,10 +514,13 @@ begin
 
   codeOffset := CODE_OFFSET32;
   dataBase := LOAD_ADDR32 + codeOffset + CodeLen;
-  bssBase  := dataBase + DataLen;
+  { BSS holds word-sized globals laid out with AlignTo offsets, so the base
+    itself must be aligned — Xtensa s32i/l32i (and strict RV32 cores) trap on
+    misaligned word access. Code+data lengths are byte-granular, so pad. }
+  bssBase  := AlignTo(dataBase + DataLen, 8);
   entry    := LOAD_ADDR32 + codeOffset;
   filesz   := codeOffset + CodeLen + DataLen;
-  memsz    := filesz + BSSSize;
+  memsz    := (bssBase - LOAD_ADDR32) + BSSSize;
 
   { Data fixups: 4-byte absolute on this target (EmitDataRef emitted 4 bytes). }
   for i := 0 to FixCount-1 do
