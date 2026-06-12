@@ -3,6 +3,7 @@
 procedure EnsureSpaces; forward;
 procedure EmitLoadImmArm32(rd: Integer; v: Int32); forward;
 procedure EmitwriteSyscallArm32(dataOff, len: Integer); forward;
+procedure xtensa_j(offset: Integer); forward;
 
 procedure EmitB(b: Byte); inline;
 begin
@@ -25,6 +26,12 @@ begin
   Code[pos+2] := Byte((v shr 16) and $FF); Code[pos+3] := Byte((v shr 24) and $FF);
 end;
 
+procedure Patch24(pos: Integer; v: Integer);
+begin
+  Code[pos]   := Byte(v and $FF); Code[pos+1] := Byte((v shr 8) and $FF);
+  Code[pos+2] := Byte((v shr 16) and $FF);
+end;
+
 procedure Patch8(pos: Integer; v: Byte);
 begin
   Code[pos] := v;
@@ -45,7 +52,11 @@ begin
   if FixCount >= MAX_FIXUPS then Error('fixup overflow');
   Fixups[FixCount].CodePos := CodeLen; Fixups[FixCount].DataOff := dataOff;
   Inc(FixCount);
-  if (TargetArch = TARGET_I386) or (TargetArch = TARGET_ARM32) then EmitI32(0) else EmitI64(0);
+  if (TargetArch = TARGET_I386) or (TargetArch = TARGET_ARM32) or
+     (TargetArch = TARGET_XTENSA) or (TargetArch = TARGET_RISCV32) then
+    EmitI32(0)
+  else
+    EmitI64(0);
 end;
 
 procedure EmitGlobRef(bssOff: Integer);
@@ -85,6 +96,11 @@ begin
     EmitwriteSyscallArm32(dataOff, len);
     Exit;
   end;
+  if (TargetArch = TARGET_XTENSA) or (TargetArch = TARGET_RISCV32) then
+  begin
+    { Bare-metal: hosted write syscall not supported. }
+    Exit;
+  end;
   if TargetArch = TARGET_AARCH64 then
   begin
     EmitwriteSyscallA64(dataOff, len);
@@ -100,6 +116,10 @@ procedure EmitMmapArena;
   address. Clobbers rax, rcx, r11, rdi, rdx, r10, r8, r9 (mmap syscall ABI);
   rsi is preserved by the kernel. }
 begin
+  if (TargetArch = TARGET_XTENSA) or (TargetArch = TARGET_RISCV32) then
+  begin
+    Error('mmap not supported on bare-metal target');
+  end;
   MovRdiImm(0);                          { addr = NULL }
   MovRdxImm(3);                          { PROT_READ | PROT_WRITE }
   EmitB($49); EmitB($BA); EmitI64($22);  { mov r10, MAP_PRIVATE|MAP_ANONYMOUS }
@@ -129,6 +149,18 @@ procedure EmitExit(code: Int64);
   gtk_init / GLib) would leave the process alive after main returns. For a
   single-threaded program the two are equivalent. }
 begin
+  if TargetArch = TARGET_XTENSA then
+  begin
+    { Bare-metal: no exit syscall — park in a self-loop. }
+    xtensa_j(0);
+    Exit;
+  end;
+  if TargetArch = TARGET_RISCV32 then
+  begin
+    { Bare-metal: no exit syscall — park in a self-loop. }
+    EmitI32($0000006F); { jal zero, 0 }
+    Exit;
+  end;
   if TargetArch = TARGET_I386 then
   begin
     { i386 int 0x80 ABI: eax=252 (exit_group), ebx=code }

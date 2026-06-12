@@ -3726,6 +3726,16 @@ begin
     IREmitMachineCodeAarch64;
     Exit;
   end;
+  if TargetArch = TARGET_RISCV32 then
+  begin
+    IREmitMachineCodeRISCV32;
+    Exit;
+  end;
+  if TargetArch = TARGET_XTENSA then
+  begin
+    IREmitMachineCodeXtensa;
+    Exit;
+  end;
   for i := 0 to MAX_IR - 1 do
     LabelPositions[i] := -1;
   LabelFixupCount := 0;

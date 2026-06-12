@@ -234,5 +234,12 @@ begin
       EmitI32($D4000001);                                       { svc #0 }
     end;
     EmitExit(1);
+  end
+  else if (TargetArch = TARGET_XTENSA) or (TargetArch = TARGET_RISCV32) then
+  begin
+    ExcSetJmpAddr := CodeLen;
+    ExcLongJmpAddr := CodeLen;
+    ExcRaiseAddr := CodeLen;
+    EmitExit(1);
   end;
 end;

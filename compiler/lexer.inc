@@ -450,6 +450,24 @@ begin
     PasDefine(name);
     name := 'CPU_I386';
     PasDefine(name);
+  end
+  else if TargetArch = TARGET_XTENSA then
+  begin
+    name := 'CPU32';
+    PasDefine(name);
+    name := 'CPUXTENSA';
+    PasDefine(name);
+    name := 'CPU_XTENSA';
+    PasDefine(name);
+  end
+  else if TargetArch = TARGET_RISCV32 then
+  begin
+    name := 'CPU32';
+    PasDefine(name);
+    name := 'CPURISCV32';
+    PasDefine(name);
+    name := 'CPU_RISCV32';
+    PasDefine(name);
   end;
 end;
 

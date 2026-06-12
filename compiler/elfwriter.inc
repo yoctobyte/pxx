@@ -504,6 +504,13 @@ begin
     if (MethodFixCount > 0) or (ProcAddrFixCount > 0) then
       Error('target arm32: method/proc-address fixups not yet supported');
   end;
+  if (TargetArch = TARGET_XTENSA) or (TargetArch = TARGET_RISCV32) then
+  begin
+    if ExternalCount > 0 then
+      Error('target esp32: external (dynamic) symbols not yet supported');
+    if (MethodFixCount > 0) or (ProcAddrFixCount > 0) then
+      Error('target esp32: method/proc-address fixups not yet supported');
+  end;
 
   codeOffset := CODE_OFFSET32;
   dataBase := LOAD_ADDR32 + codeOffset + CodeLen;
@@ -544,7 +551,10 @@ begin
   writeU8(f,0);writeU8(f,0);writeU8(f,0);writeU8(f,0);
   writeU8(f,0);writeU8(f,0);writeU8(f,0);writeU8(f,0);
   writeU16(f,2);
-  if TargetArch = TARGET_ARM32 then writeU16(f,40) else writeU16(f,3);
+  if TargetArch = TARGET_ARM32 then writeU16(f,40)
+  else if TargetArch = TARGET_RISCV32 then writeU16(f,243)
+  else if TargetArch = TARGET_XTENSA then writeU16(f,94)
+  else writeU16(f,3);
   writeU32(f,1);            { ET_EXEC, EM_ARM/EM_386 }
   writeU32(f,entry);writeU32(f,ELF32_HEADER_SIZE);writeU32(f,0);
   if TargetArch = TARGET_ARM32 then writeU32(f,$05000000) else writeU32(f,0);

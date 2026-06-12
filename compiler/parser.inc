@@ -5584,6 +5584,8 @@ begin
   ProcRetPtrElemTk[pi] := retPtrElemTk;
   ProcRetPtrElemRec[pi] := retPtrElemRec;
   if retIsDynArr then Procs[pi].RetType := tyPointer; { 8-byte heap handle ABI }
+  if TargetArch = TARGET_XTENSA then
+    while (CodeLen mod 4) <> 0 do xtensa_nop; { CALL0 targets must be 4-aligned }
   Procs[pi].BodyAddr := CodeLen;
   for i := 0 to nparams-1 do
   begin
@@ -5794,6 +5796,44 @@ begin
       end;
     end;
   end
+  else if TargetArch = TARGET_RISCV32 then
+  begin
+    { RV32 convention: args arrive in a0..a7; spill each into its frame slot.
+      8-byte ordinals store the low word only (fat-slot model, like i386). }
+    for i := 0 to nparams-1 do
+    begin
+      idx := Procs[pi].Params[i].SymIdx;
+      sz := ParamSize(idx);
+      if i >= 8 then
+        Error('target riscv32: more than 8 parameters not yet supported');
+      EmitLoadImmRISCV32(reg_t0, Syms[idx].Offset);
+      rv32_add(reg_t0, reg_s0, reg_t0);
+      if sz = 1 then
+        rv32_sb(reg_a0 + i, reg_t0, 0)
+      else if sz = 2 then
+        rv32_sh(reg_a0 + i, reg_t0, 0)
+      else
+        rv32_sw(reg_a0 + i, reg_t0, 0);
+    end;
+  end
+  else if TargetArch = TARGET_XTENSA then
+  begin
+    { Call0 ABI: args arrive in a2..a7; spill each into its frame slot. }
+    for i := 0 to nparams-1 do
+    begin
+      idx := Procs[pi].Params[i].SymIdx;
+      sz := ParamSize(idx);
+      if i >= 6 then
+        Error('target xtensa: more than 6 parameters not yet supported');
+      EmitFrameAddrXtensa(reg_xtensa_a8, Syms[idx].Offset);
+      if sz = 1 then
+        xtensa_s8i(reg_xtensa_a2 + i, reg_xtensa_a8, 0)
+      else if sz = 2 then
+        xtensa_s16i(reg_xtensa_a2 + i, reg_xtensa_a8, 0)
+      else
+        xtensa_s32i(reg_xtensa_a2 + i, reg_xtensa_a8, 0);
+    end;
+  end
   else
   { Copy params from registers to stack: mov [rbp+off], rdi/rsi/rdx/rcx/r8/r9 }
   for i := 0 to nparams-1 do
@@ -5923,6 +5963,10 @@ begin
         EmitLoadImmA64(9, Syms[i].Offset);
         EmitI32($8B0903A9);                                          { add x9, x29, x9 }
         EmitI32($F900013F);                                          { str xzr, [x9] }
+      end
+      else if (zeroBytes = TARGET_PTR_SIZE) and ((TargetArch = TARGET_XTENSA) or (TargetArch = TARGET_RISCV32)) then
+      begin
+        { Bare-metal target managed local initialization placeholder }
       end
       else if zeroBytes = TARGET_PTR_SIZE then
       begin
@@ -6455,6 +6499,8 @@ var
   dummyTypes: array[0..0] of TTypeKind;
 begin
   pi := RegisterProc('__init_' + uname, False, tyInteger, 0, dummyNames, dummyTypes);
+  if TargetArch = TARGET_XTENSA then
+    while (CodeLen mod 4) <> 0 do xtensa_nop; { CALL0 targets must be 4-aligned }
   Procs[pi].BodyAddr := CodeLen;
 
   savedSC := SymCount; savedFS := FrameSize;
@@ -6640,7 +6686,8 @@ begin
     { 32-bit cross targets write floats through the builtinheap Pascal
       helpers (PXXWriteFloat*), so any float-producing token pulls the unit.
       tkSlash counts: integer / integer yields a float. }
-    if ((TargetArch = TARGET_I386) or (TargetArch = TARGET_ARM32)) and
+    if ((TargetArch = TARGET_I386) or (TargetArch = TARGET_ARM32) or
+        (TargetArch = TARGET_XTENSA) or (TargetArch = TARGET_RISCV32)) and
        (Tokens[i].Kind in [tkFloat, tkSlash]) then
       needsHeap := True;
     if Tokens[i].Kind = tkUses then
@@ -6650,7 +6697,8 @@ begin
       name := GetTokenStr(i);
       if CaseEqual(name, 'AnsiString') or CaseEqual(name, 'Variant') then
         needsAnsiRuntime := True;
-      if ((TargetArch = TARGET_I386) or (TargetArch = TARGET_ARM32)) and
+      if ((TargetArch = TARGET_I386) or (TargetArch = TARGET_ARM32) or
+          (TargetArch = TARGET_XTENSA) or (TargetArch = TARGET_RISCV32)) and
          (CaseEqual(name, 'Single') or CaseEqual(name, 'Double') or
           CaseEqual(name, 'Real') or CaseEqual(name, 'Extended')) then
         needsHeap := True;
@@ -6699,6 +6747,8 @@ begin
   { Plain AnsiString needs only builtinheap (allocator + PXXStr*), not the full
     builtin conversions. Variant/Str/Val/uses pull builtin in the token loop. }
   needHeapUnit := needsHeap or needsAnsiRuntime;
+  if (TargetArch = TARGET_XTENSA) or (TargetArch = TARGET_RISCV32) then
+    needHeapUnit := False; { bare-metal stage 1: no allocator / managed runtime }
 
   if needHeapUnit then
   begin
@@ -6805,6 +6855,18 @@ begin
     jmpPatch := CodeLen;
     EmitI32($14000000);
   end
+  else if TargetArch = TARGET_XTENSA then
+  begin
+    { Xtensa entry stub: jump to main body. }
+    jmpPatch := CodeLen;
+    xtensa_j(0);
+  end
+  else if TargetArch = TARGET_RISCV32 then
+  begin
+    { RISC-V entry stub: jump to main body. }
+    jmpPatch := CodeLen;
+    EmitI32($0000006F);
+  end
   else
   begin
     { Emit entry stub: save rsp then jmp to main body }
@@ -6880,6 +6942,10 @@ begin
     Patch32(jmpPatch, $EA000000 or ((((CodeLen - jmpPatch) div 4) - 2) and $00ffffff))
   else if TargetArch = TARGET_AARCH64 then
     Patch32(jmpPatch, $14000000 or (((CodeLen - jmpPatch) div 4) and $03ffffff))
+  else if TargetArch = TARGET_XTENSA then
+    Patch24(jmpPatch, EncodeXtensaJ(CodeLen - jmpPatch))
+  else if TargetArch = TARGET_RISCV32 then
+    Patch32(jmpPatch, EncodeRISCVJAL(0, CodeLen - jmpPatch))
   else
     Patch32(jmpPatch, CodeLen - (jmpPatch + 4));
 

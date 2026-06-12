@@ -57,6 +57,23 @@ Phase 1 focuses on code generation, targeting bare-metal executables for both ar
 - **JTAG / GDB tests:** verify that a debugger can attach and step/unwind correctly using the generated map files and preserved frame pointers.
 
 ## Log
+- 2026-06-12 — Stage-1 code generation working for both targets. Wired
+  `ir_codegen_riscv32.inc` + new `ir_codegen_xtensa.inc` into the IR dispatch;
+  param spill in prologues (RV32: a0–a7, Call0: a2–a7); bare-metal exit =
+  self-loop; `builtinheap` skipped on these targets (no allocator yet).
+  Encoder fixes vs. the earlier draft: J imm18 is at insn bits [23:6] (was
+  shl 4), RET is LE bytes `80 00 00` (was byte-swapped), CALL0 is relative to
+  `align4(PC)+4` and needs 4-aligned proc entries (entries now NOP-padded),
+  L32R offsets are one-extended (negative only) so 32-bit literals/addresses
+  use a jump-over-literal-then-`l32r rd, $FFFF` island, not a forward L32R.
+  All Xtensa encodings cross-checked against llvm-mc (Xtensa target, LLVM 18);
+  MULL ($82 sub-op) is ISA-documented but not verifiable with stock llvm-18.
+  RV32 smoke binary fully disassembles clean under binutils objdump: prologue,
+  spill, literal pools, calls, slt-based comparisons, self-loop. Remaining for
+  acceptance: QEMU boot, UART write path, .map files + ELF symbol tables,
+  div/mod/shift on Xtensa (needs QUOS/SSL-family or runtime helpers).
+  Landmine: PXX `not` is not a bitwise integer op — never write
+  `x and (not 3)`; use `(x div 4) * 4`.
 - 2026-06-12 — Claimed by Antigravity; transitioned to working. Updated scope to include both Xtensa (primary focus) and RISC-V in Phase 1 due to shared code-emission library structures, prioritizing frame pointer and symbol table support for debugging.
 - 2026-06-11 — revised with user after ESP-IDF/FreeRTOS discussion and actual hardware inventory. Do not skip Xtensa for the practical IDF path: user has ESP32-S2/S3 boards. Use Espressif's toolchain/build system when the goal is Wi-Fi/networking/vendor drivers.
 - 2026-06-10 — scope decision with user: target the ISA. RISC-V RV32IMC covers forward roadmap; ESP32-C3 reference chip.

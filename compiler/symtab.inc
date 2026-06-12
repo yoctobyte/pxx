@@ -8,6 +8,10 @@ procedure EmitAcquireHeapLock; forward;
 procedure EmitReleaseHeapLock; forward;
 procedure EmitLoadVarA64(idx: Integer); forward;
 procedure EmitLoadVarArm32(idx: Integer); forward;
+procedure EmitLoadVarXtensa(idx: Integer); forward;
+procedure EmitLoadVarRISCV32(idx: Integer); forward;
+procedure EmitLoadImmRISCV32(rd: Integer; v: Int32); forward;
+procedure EmitFrameAddrXtensa(rd: Integer; off: Integer); forward;
 procedure EmitCallProc(pi: Integer); forward;
 procedure EmitManagedLocalCleanup(retSymIdx: Integer); forward;
 function ProcHasManagedLocalCleanup(pi, retSymIdx: Integer): Boolean; forward;
@@ -3048,6 +3052,28 @@ begin
     EmitI32($D10003FF);  { sub sp, sp, #0 }
     Exit;
   end;
+  if TargetArch = TARGET_XTENSA then
+  begin
+    { Xtensa Call0 ABI prologue: push a0, a15 (save Return Address and Frame Pointer) }
+    xtensa_addi(reg_xtensa_sp, reg_xtensa_sp, -16);
+    xtensa_s32i(reg_xtensa_a0, reg_xtensa_sp, 12);
+    xtensa_s32i(reg_xtensa_a15, reg_xtensa_sp, 8);
+    xtensa_mov(reg_xtensa_a15, reg_xtensa_sp);
+    Result := CodeLen;
+    xtensa_addi(reg_xtensa_sp, reg_xtensa_sp, 0);
+    Exit;
+  end;
+  if TargetArch = TARGET_RISCV32 then
+  begin
+    { RISC-V prologue: push ra, s0 (save Return Address and Frame Pointer) }
+    rv32_addi(reg_sp, reg_sp, -16);
+    rv32_sw(reg_ra, reg_sp, 12);
+    rv32_sw(reg_s0, reg_sp, 8);
+    rv32_addi(reg_s0, reg_sp, 0);
+    Result := CodeLen;
+    rv32_addi(reg_sp, reg_sp, 0);
+    Exit;
+  end;
   EmitB($55);
   EmitB($48); EmitB($89); EmitB($E5);
   EmitB($48); EmitB($81); EmitB($EC);
@@ -3062,6 +3088,10 @@ begin
     Patch32(patchPos, $E24DD000 or aligned)
   else if TargetArch = TARGET_AARCH64 then
     Patch32(patchPos, $D10003FF or (aligned shl 10))
+  else if TargetArch = TARGET_XTENSA then
+    Patch24(patchPos, EncodeXtensaAddi(reg_xtensa_sp, reg_xtensa_sp, -aligned))
+  else if TargetArch = TARGET_RISCV32 then
+    Patch32(patchPos, EncodeRISCVAddi(reg_sp, reg_sp, -aligned))
   else
     Patch32(patchPos, aligned);
 end;
@@ -3228,6 +3258,40 @@ begin
     EmitI32($D65F03C0);  { ret }
     Exit;
   end;
+  if TargetArch = TARGET_XTENSA then
+  begin
+    if retSymIdx >= 0 then
+    begin
+      if Syms[retSymIdx].IsArray or (Syms[retSymIdx].Kind <> skLocal) or
+         not (TypeIsOrdinal(Syms[retSymIdx].TypeKind) or
+              (Syms[retSymIdx].TypeKind in [tyAnsiString, tyPointer, tyClass])) then
+        Error('target xtensa: only ordinal/pointer/string function results supported yet');
+      EmitLoadVarXtensa(retSymIdx);
+    end;
+    xtensa_mov(reg_xtensa_sp, reg_xtensa_a15);
+    xtensa_l32i(reg_xtensa_a15, reg_xtensa_sp, 8);
+    xtensa_l32i(reg_xtensa_a0, reg_xtensa_sp, 12);
+    xtensa_addi(reg_xtensa_sp, reg_xtensa_sp, 16);
+    xtensa_ret;
+    Exit;
+  end;
+  if TargetArch = TARGET_RISCV32 then
+  begin
+    if retSymIdx >= 0 then
+    begin
+      if Syms[retSymIdx].IsArray or (Syms[retSymIdx].Kind <> skLocal) or
+         not (TypeIsOrdinal(Syms[retSymIdx].TypeKind) or
+              (Syms[retSymIdx].TypeKind in [tyAnsiString, tyPointer, tyClass])) then
+        Error('target riscv32: only ordinal/pointer/string function results supported yet');
+      EmitLoadVarRISCV32(retSymIdx);
+    end;
+    rv32_addi(reg_sp, reg_s0, 0);
+    rv32_lw(reg_s0, reg_sp, 8);
+    rv32_lw(reg_ra, reg_sp, 12);
+    rv32_addi(reg_sp, reg_sp, 16);
+    rv32_jalr(reg_zero, reg_ra, 0);
+    Exit;
+  end;
   { Release local managed variables before returning }
   if ProcExceptionCleanupFrameActive then
     EmitLeaveExceptionFrameX64;
@@ -3369,6 +3433,34 @@ begin
     end;
     Exit;
   end;
+  if TargetArch = TARGET_XTENSA then
+  begin
+    if Procs[pi].BodyAddr >= 0 then
+      xtensa_call0(Procs[pi].BodyAddr - CodeLen)
+    else
+    begin
+      if CallFixCount >= MAX_CALLFIX then Error('call fixup overflow');
+      CallFix[CallFixCount].CodePos := CodeLen;
+      CallFix[CallFixCount].ProcIdx := pi;
+      Inc(CallFixCount);
+      xtensa_call0(0);
+    end;
+    Exit;
+  end;
+  if TargetArch = TARGET_RISCV32 then
+  begin
+    if Procs[pi].BodyAddr >= 0 then
+      rv32_jal(reg_ra, Procs[pi].BodyAddr - CodeLen)
+    else
+    begin
+      if CallFixCount >= MAX_CALLFIX then Error('call fixup overflow');
+      CallFix[CallFixCount].CodePos := CodeLen;
+      CallFix[CallFixCount].ProcIdx := pi;
+      Inc(CallFixCount);
+      rv32_jal(reg_ra, 0);
+    end;
+    Exit;
+  end;
   EmitB($E8);
   if Procs[pi].BodyAddr >= 0 then
     EmitI32(Procs[pi].BodyAddr - (CodeLen + 4))
@@ -3397,10 +3489,15 @@ begin
       Patch32(CallFix[i].CodePos, $EB000000 or ((((Procs[pi].BodyAddr - CallFix[i].CodePos) div 4) - 2) and $00ffffff))
     else if TargetArch = TARGET_AARCH64 then
       Patch32(CallFix[i].CodePos, $94000000 or (((Procs[pi].BodyAddr - CallFix[i].CodePos) div 4) and $03ffffff))
+    else if TargetArch = TARGET_XTENSA then
+      Patch24(CallFix[i].CodePos, EncodeXtensaCall0(CallFix[i].CodePos, Procs[pi].BodyAddr))
+    else if TargetArch = TARGET_RISCV32 then
+      Patch32(CallFix[i].CodePos, EncodeRISCVJAL(reg_ra, Procs[pi].BodyAddr - CallFix[i].CodePos))
     else
       Patch32(CallFix[i].CodePos, Procs[pi].BodyAddr - (CallFix[i].CodePos + 4));
   end;
 end;
+
 
 function GetASTStrVal(node: Integer): AnsiString;
 var s: AnsiString; i, off, len, j: Integer;

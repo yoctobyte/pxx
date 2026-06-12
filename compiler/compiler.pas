@@ -22,6 +22,8 @@ procedure AsmI16(v: Int64); forward;
 procedure AsmI32(v: Int64); forward;
 procedure AsmI64(v: Int64); forward;
 {$include x64enc.inc}
+{$include rv32enc.inc}
+{$include xtensaenc.inc}
 {$include symtab.inc}
 {$include exception_emit.inc}
 {$include asmenc.inc}
@@ -32,6 +34,8 @@ function GetOrAllocSymRTTI(symIdx: Integer): Integer; forward;
 {$include ir_codegen_aarch64.inc}
 {$include ir_codegen386.inc}
 {$include ir_codegen_arm32.inc}
+{$include ir_codegen_riscv32.inc}
+{$include ir_codegen_xtensa.inc}
 {$include ir_codegen.inc}
 {$include cparser.inc}
 {$include bparser.inc}
@@ -102,6 +106,16 @@ begin
       TargetArch := TARGET_ARM32;
       Inc(i);
     end
+    else if option = '--target=xtensa' then
+    begin
+      TargetArch := TARGET_XTENSA;
+      Inc(i);
+    end
+    else if option = '--target=riscv32' then
+    begin
+      TargetArch := TARGET_RISCV32;
+      Inc(i);
+    end
     else if option = '--strict-overload' then
     begin
       StrictOverload := True;
@@ -163,7 +177,8 @@ begin
     else
       readingOptions := False;
   end;
-  if (TargetArch = TARGET_I386) or (TargetArch = TARGET_ARM32) then
+  if (TargetArch = TARGET_I386) or (TargetArch = TARGET_ARM32) or
+     (TargetArch = TARGET_XTENSA) or (TargetArch = TARGET_RISCV32) then
     TARGET_PTR_SIZE := 4
   else
     TARGET_PTR_SIZE := 8;
@@ -326,7 +341,8 @@ begin
   end;
   for i := 0 to ProcCount - 1 do
     writeln('proc ', i, ': ', Procs[i].Name, ' at ', Procs[i].BodyAddr);
-  if (TargetArch = TARGET_I386) or (TargetArch = TARGET_ARM32) then
+  if (TargetArch = TARGET_I386) or (TargetArch = TARGET_ARM32) or
+     (TargetArch = TARGET_XTENSA) or (TargetArch = TARGET_RISCV32) then
     writeELF32(outFile)
   else
     writeELF(outFile);
