@@ -57,6 +57,14 @@ Phase 1 focuses on code generation, targeting bare-metal executables for both ar
 - **JTAG / GDB tests:** verify that a debugger can attach and step/unwind correctly using the generated map files and preserved frame pointers.
 
 ## Log
+- 2026-06-12 — riscv32 smoke binary EXECUTED correctly under user-mode
+  `qemu-riscv32` (loads our ET_EXEC ELF32 directly; no board setup needed):
+  `-g` gdb stub + gdb-multiarch breakpoint on the terminal self-loop, then
+  dump globals. Result g=45, i=6, acc=45 — exact expected values, proving
+  loop/branch/call/param/result/global-store codegen end to end. Recipe:
+  `qemu-riscv32 -g 1234 BIN` + `gdb-multiarch -ex "target remote :1234"
+  -ex "break *<self-loop vaddr>" -ex continue -ex "x/3dw <bss globals>"`.
+  Globals start at bssBase+4176 (7 qwords reserved + LINE_BUF 4096 + INTBUF 24).
 - 2026-06-12 — Stage-1 code generation working for both targets. Wired
   `ir_codegen_riscv32.inc` + new `ir_codegen_xtensa.inc` into the IR dispatch;
   param spill in prologues (RV32: a0–a7, Call0: a2–a7); bare-metal exit =
