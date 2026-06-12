@@ -67,7 +67,7 @@ _none_
 | bug-record-byvalue-arg-truncation | bug | By-value record args >8 bytes truncate (and operator operand edges) | — |
 | bug-threadsafe-layout-rtti-helper-races | bug | Thread-safe layout RTTI helper races | feature-rtti-layout-table |
 | chore-qemu-test-env | chore | QEMU cross-target test environment | — |
-| feature-cross-bootstrap | feature | feature-cross-bootstrap | — |
+| feature-cross-bootstrap | feature | Cross-architecture compiler bootstrap (AArch64/ARM32 → byte-identical self-compile) | — |
 | feature-cross-exceptions | feature | Exception runtime on cross targets (i386 / ARM32 / AArch64) | — |
 | feature-cross-managed-aggregates | feature | Cross-target managed aggregates (records + dynamic arrays) | feature-rtti-layout-table |
 | feature-progress-check-makefile | feature | Wire `progress.sh check` into a make target | — |

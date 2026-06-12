@@ -5,7 +5,7 @@ blocked-by: []
 owner: claude
 ---
 
-# feature-cross-bootstrap
+# Cross-architecture compiler bootstrap (AArch64/ARM32 → byte-identical self-compile)
 
 ## Log
 - 2026-06-11 (i386 managed string gaps closed). Resolved target i386 managed string gaps (commit 38a0f87): fixed character/string assignments and argument conversions to AnsiString, restored total length calculation during inline tyString concat, and enabled scope-exit release of AnsiString locals. The cross test suite is fully green and identical to x86-64 output. Bootstrapping complete.

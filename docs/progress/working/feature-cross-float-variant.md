@@ -2,7 +2,7 @@
 
 - **Type:** feature
 - **Status:** working
-- **Owner:** Antigravity <antigravity@google.com>
+- **Owner:** claude
 - **Unblocks:** feature-cross-bootstrap-selfhost
 - **Opened:** 2026-06-11 (user request)
 
