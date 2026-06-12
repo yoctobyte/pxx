@@ -244,6 +244,126 @@ begin
   EmitB($CD); EmitB($80);                                { int 0x80 }
 end;
 
+{ ---- Float support (SSE2). Value model: float-typed IR nodes leave their
+  value in xmm0 (a second channel besides eax); spills go through an 8-byte
+  stack slot. Float -> text goes through the portable builtinheap helpers
+  (PXXWriteFloat*), not per-arch emitters. ---- }
+
+procedure EmitFloatSpill386;
+{ sub esp, 8 ; movsd [esp], xmm0 }
+begin
+  EmitB($83); EmitB($EC); EmitB($08);
+  EmitB($F2); EmitB($0F); EmitB($11); EmitB($04); EmitB($24);
+end;
+
+procedure EmitFloatUnspill386;
+{ movsd xmm0, [esp] ; add esp, 8 }
+begin
+  EmitB($F2); EmitB($0F); EmitB($10); EmitB($04); EmitB($24);
+  EmitB($83); EmitB($C4); EmitB($08);
+end;
+
+procedure EmitFloatCallWriter386(const name: AnsiString; decs: Integer);
+{ Value in xmm0. Spill to a stack slot, pass its address (plus decimals for
+  the fixed writer) to the builtinheap float writer. }
+var pi: Integer;
+begin
+  EmitFloatSpill386;
+  EmitB($89); EmitB($E0);                       { mov eax, esp (slot addr) }
+  EmitB($50);                                   { push eax = arg0 (p) }
+  if decs >= 0 then
+  begin
+    EmitB($68); EmitI32(decs);                  { push decimals = arg1 }
+  end;
+  pi := FindProc(name);
+  if pi < 0 then Error('compiler error: float writer helper not found');
+  EmitCallProc(pi);
+  if decs >= 0 then
+    begin EmitB($81); EmitB($C4); EmitI32(16); end  { args + slot }
+  else
+    begin EmitB($81); EmitB($C4); EmitI32(12); end;
+end;
+
+procedure EmitVarHelperCall386(const name: AnsiString);
+{ eax = variant slot address; call helper(name)(eax), preserve eax. }
+var pi: Integer;
+begin
+  EmitB($50);                                   { push eax (arg0 = v) }
+  pi := FindProc(name);
+  if pi < 0 then Error('compiler error: variant helper not found');
+  EmitCallProc(pi);
+  EmitB($58);                                   { pop eax (restore addr) }
+end;
+
+procedure EmitLoadVariantAddr386(node: Integer);
+{ Address of a variant slot for value-position variant nodes (mirrors
+  EmitLoadVariantAddress on x86-64). }
+var symIdx: Integer;
+begin
+  if IRKind[node] = IR_LOAD_SYM then
+  begin
+    symIdx := IRA[node];
+    if Syms[symIdx].Kind = skGlobal then
+      begin EmitB($B8); EmitGlobRef(Syms[symIdx].Offset); end          { mov eax, abs }
+    else if (Syms[symIdx].Kind = skParam) and Syms[symIdx].IsRef then
+      begin EmitB($8B); EmitB($85); EmitI32(Syms[symIdx].Offset); end  { mov eax, [ebp+off] }
+    else
+      begin EmitB($8D); EmitB($85); EmitI32(Syms[symIdx].Offset); end; { lea eax, [ebp+off] }
+  end
+  else if IRKind[node] = IR_LOAD_MEM then
+    IREmitNode386(IRA[node])
+  else
+    IREmitNode386(node);
+end;
+
+function VariantTagForTk386(tk: TTypeKind; const what: AnsiString): Integer;
+begin
+  case tk of
+    tyInteger, tyInt8, tyInt16, tyInt32: Result := VT_INT;
+    tyInt64, tyNativeInt:                Result := VT_INT64;
+    tyUInt8, tyUInt16, tyUInt32, tyUInt64,
+    tyNativeUInt, tyPointer:             Result := VT_INT64;
+    tyBoolean:                           Result := VT_BOOL;
+    tyChar:                              Result := VT_CHAR;
+    tyDouble:                            Result := VT_DOUBLE;
+    tyString, tyAnsiString:              Result := VT_STRING;
+  else
+    Error(what + ': this scalar type not yet supported (single/extended pending)');
+  end;
+end;
+
+procedure EmitVariantFill386(tag: Integer; payloadTk: TTypeKind);
+{ eax = variant slot address; payload pushed on the stack: 8 bytes for a
+  double (spilled xmm0), else 4 bytes (eax pushed). Clears the old value,
+  stores tag + payload, leaves the slot address in eax. }
+begin
+  EmitVarHelperCall386('PXXVarClear');
+  EmitB($C7); EmitB($00); EmitI32(tag);             { mov dword [eax], tag }
+  EmitB($C7); EmitB($40); EmitB($04); EmitI32(0);   { mov dword [eax+4], 0 }
+  if payloadTk = tyDouble then
+  begin
+    EmitB($F2); EmitB($0F); EmitB($10); EmitB($04); EmitB($24);  { movsd xmm0, [esp] }
+    EmitB($83); EmitB($C4); EmitB($08);                          { add esp, 8 }
+    EmitB($F2); EmitB($0F); EmitB($11); EmitB($40); EmitB($08);  { movsd [eax+8], xmm0 }
+  end
+  else
+  begin
+    EmitB($59);                                     { pop ecx (payload) }
+    EmitB($89); EmitB($48); EmitB($08);             { mov [eax+8], ecx }
+    if tag = VT_INT then
+    begin
+      { sign-extend the 32-bit payload into the high dword }
+      EmitB($50);                                   { push eax (slot addr) }
+      EmitB($89); EmitB($C8);                       { mov eax, ecx }
+      EmitB($99);                                   { cdq (edx = sign) }
+      EmitB($58);                                   { pop eax }
+      EmitB($89); EmitB($50); EmitB($0C);           { mov [eax+12], edx }
+    end
+    else
+      begin EmitB($C7); EmitB($40); EmitB($0C); EmitI32(0); end; { mov dword [eax+12], 0 }
+  end;
+end;
+
 procedure IREmit386CheckScalarSym(symIdx: Integer; const what: AnsiString);
 { "Fat slot" symbol model: the parser still lays out 8-byte slots (BSS and
   frame, 64-bit TypeSize), and i386 code reads/writes only the low 4 bytes.
@@ -258,9 +378,11 @@ begin
     Error('target i386: arrays not yet supported');
   { Ordinals plus pointer-sized handles (managed-string/pointer/class): the
     handle is a TARGET_PTR_SIZE scalar in the slot. Refcount bookkeeping for
-    managed strings happens in the IR_STORE_MEM publish path, not here. }
+    managed strings happens in the IR_STORE_MEM publish path, not here.
+    Floats ride the 8-byte slot via xmm0; variants are addressed in place. }
   if not (TypeIsOrdinal(Syms[symIdx].TypeKind) or
-          (Syms[symIdx].TypeKind in [tyAnsiString, tyPointer, tyClass])) then
+          (Syms[symIdx].TypeKind in [tyAnsiString, tyPointer, tyClass,
+           tySingle, tyDouble, tyExtended, tyVariant])) then
     Error('target i386: only ordinal/pointer/string variables supported yet');
 end;
 
@@ -280,6 +402,14 @@ begin
 
     IR_CONST_INT:
       begin
+        if TypeIsFloat(IntToTypeKind(IRTk[node])) then
+        begin
+          { Float literal: IRIVal carries the raw double bits -> xmm0. }
+          EmitB($68); EmitI32(Integer(IRIVal[node] shr 32));         { push hi }
+          EmitB($68); EmitI32(Integer(IRIVal[node] and $FFFFFFFF));  { push lo }
+          EmitFloatUnspill386;
+          Exit;
+        end;
         if (IRIVal[node] > 2147483647) or (IRIVal[node] < -2147483648) then
           Error('target i386: integer constant exceeds 32 bits');
         EmitB($B8); EmitI32(IRIVal[node]);           { mov eax, imm32 }
@@ -298,6 +428,41 @@ begin
         IREmit386CheckScalarSym(IRA[node], 'load');
         si := IRA[node];
         tk := Syms[si].TypeKind;
+        if TypeIsFloat(tk) then
+        begin
+          { Float load -> xmm0 (Single widened to double). }
+          if Syms[si].Kind = skGlobal then
+          begin
+            if tk = tySingle then
+              begin EmitB($F3); EmitB($0F); EmitB($10); EmitB($05); EmitGlobRef(Syms[si].Offset); end  { movss xmm0,[abs] }
+            else
+              begin EmitB($F2); EmitB($0F); EmitB($10); EmitB($05); EmitGlobRef(Syms[si].Offset); end; { movsd xmm0,[abs] }
+          end
+          else if (Syms[si].Kind = skParam) and Syms[si].IsRef then
+          begin
+            EmitB($8B); EmitB($85); EmitI32(Syms[si].Offset);  { mov eax, [ebp+off] }
+            if tk = tySingle then
+              begin EmitB($F3); EmitB($0F); EmitB($10); EmitB($00); end  { movss xmm0,[eax] }
+            else
+              begin EmitB($F2); EmitB($0F); EmitB($10); EmitB($00); end; { movsd xmm0,[eax] }
+          end
+          else
+          begin
+            if tk = tySingle then
+              begin EmitB($F3); EmitB($0F); EmitB($10); EmitB($85); EmitI32(Syms[si].Offset); end  { movss xmm0,[ebp+off] }
+            else
+              begin EmitB($F2); EmitB($0F); EmitB($10); EmitB($85); EmitI32(Syms[si].Offset); end; { movsd xmm0,[ebp+off] }
+          end;
+          if tk = tySingle then
+            begin EmitB($F3); EmitB($0F); EmitB($5A); EmitB($C0); end;   { cvtss2sd xmm0, xmm0 }
+          Exit;
+        end;
+        if tk = tyVariant then
+        begin
+          { Variant in value position = its slot address. }
+          EmitLoadVariantAddr386(node);
+          Exit;
+        end;
         sz := TypeSize(tk);
         sgn := TypeSigned(tk);
         if Syms[si].Kind = skGlobal then
@@ -462,9 +627,40 @@ begin
           Exit;
         end;
         IREmit386CheckScalarSym(IRA[node], 'store');
-        IREmitNode386(IRB[node]);
         si := IRA[node];
         tk := Syms[si].TypeKind;
+        if TypeIsFloat(tk) then
+        begin
+          IREmitNode386(IRB[node]);
+          if not TypeIsFloat(IntToTypeKind(IRTk[IRB[node]])) then
+            begin EmitB($F2); EmitB($0F); EmitB($2A); EmitB($C0); end;   { cvtsi2sd xmm0, eax }
+          if tk = tySingle then
+            begin EmitB($F2); EmitB($0F); EmitB($5A); EmitB($C0); end;   { cvtsd2ss xmm0, xmm0 }
+          if Syms[si].Kind = skGlobal then
+          begin
+            if tk = tySingle then
+              begin EmitB($F3); EmitB($0F); EmitB($11); EmitB($05); EmitGlobRef(Syms[si].Offset); end  { movss [abs],xmm0 }
+            else
+              begin EmitB($F2); EmitB($0F); EmitB($11); EmitB($05); EmitGlobRef(Syms[si].Offset); end; { movsd [abs],xmm0 }
+          end
+          else if (Syms[si].Kind = skParam) and Syms[si].IsRef then
+          begin
+            EmitB($8B); EmitB($85); EmitI32(Syms[si].Offset);            { mov eax, [ebp+off] }
+            if tk = tySingle then
+              begin EmitB($F3); EmitB($0F); EmitB($11); EmitB($00); end  { movss [eax],xmm0 }
+            else
+              begin EmitB($F2); EmitB($0F); EmitB($11); EmitB($00); end; { movsd [eax],xmm0 }
+          end
+          else
+          begin
+            if tk = tySingle then
+              begin EmitB($F3); EmitB($0F); EmitB($11); EmitB($85); EmitI32(Syms[si].Offset); end  { movss [ebp+off],xmm0 }
+            else
+              begin EmitB($F2); EmitB($0F); EmitB($11); EmitB($85); EmitI32(Syms[si].Offset); end; { movsd [ebp+off],xmm0 }
+          end;
+          Exit;
+        end;
+        IREmitNode386(IRB[node]);
         sz := TypeSize(tk);
         if Syms[si].Kind = skGlobal then
         begin
@@ -907,6 +1103,40 @@ begin
           Exit;
         end;
 
+        lhsTk := IntToTypeKind(IRTk[left]);
+        rhsTk := IntToTypeKind(IRTk[right]);
+        if TypeIsFloat(lhsTk) or TypeIsFloat(rhsTk) or (op = Ord(tkSlash)) then
+        begin
+          IREmitNode386(left);
+          if not TypeIsFloat(lhsTk) then
+            begin EmitB($F2); EmitB($0F); EmitB($2A); EmitB($C0); end;   { cvtsi2sd xmm0, eax }
+          EmitFloatSpill386;
+          IREmitNode386(right);
+          if TypeIsFloat(rhsTk) then
+            begin EmitB($F2); EmitB($0F); EmitB($10); EmitB($C8); end    { movsd xmm1, xmm0 }
+          else
+            begin EmitB($F2); EmitB($0F); EmitB($2A); EmitB($C8); end;   { cvtsi2sd xmm1, eax }
+          EmitFloatUnspill386;                                           { left -> xmm0 }
+
+          if op = Ord(tkPlus) then
+            begin EmitB($F2); EmitB($0F); EmitB($58); EmitB($C1); end    { addsd xmm0, xmm1 }
+          else if op = Ord(tkMinus) then
+            begin EmitB($F2); EmitB($0F); EmitB($5C); EmitB($C1); end    { subsd xmm0, xmm1 }
+          else if op = Ord(tkStar) then
+            begin EmitB($F2); EmitB($0F); EmitB($59); EmitB($C1); end    { mulsd xmm0, xmm1 }
+          else if op = Ord(tkSlash) then
+            begin EmitB($F2); EmitB($0F); EmitB($5E); EmitB($C1); end    { divsd xmm0, xmm1 }
+          else if (op = Ord(tkEq)) or (op = Ord(tkNeq)) or (op = Ord(tkLt)) or
+                  (op = Ord(tkLe)) or (op = Ord(tkGt)) or (op = Ord(tkGe)) then
+          begin
+            EmitB($66); EmitB($0F); EmitB($2E); EmitB($C1);              { ucomisd xmm0, xmm1 }
+            EmitSetcc(op, False);                                        { unsigned forms }
+          end
+          else
+            Error('target i386: unsupported float binop');
+          Exit;
+        end;
+
         { tyUnknown: synthesized integer nodes (e.g. the for-loop increment)
           carry tk=0; x86-64 treats them as integers, so do we. }
         if not (TypeIsOrdinal(tk) or (tk = tyBoolean) or (tk = tyUnknown)) then
@@ -1009,7 +1239,80 @@ begin
           Exit;
         end;
         if pi < 0 then
-          Error('target i386: builtin/special call not yet supported');
+        begin
+          j := -pi;
+          if (j = Ord(tkOrd)) or (j = Ord(tkChr)) or
+             (j = Ord(tkInteger_T)) or (j = Ord(tkLongWord_T)) then
+          begin
+            { type-pun passthrough: evaluate the argument in place }
+            argNode := IRB[node];
+            IREmitNode386(IRA[argNode]);
+            Exit;
+          end;
+          if j = 200 then
+          begin
+            { int(x): float/Variant -> integer }
+            argNode := IRB[node];
+            valNode := IRA[argNode];
+            if IntToTypeKind(IRTk[valNode]) = tyVariant then
+            begin
+              EmitLoadVariantAddr386(valNode);            { eax = slot addr }
+              EmitB($8B); EmitB($08);                     { mov ecx, [eax] (tag low) }
+              EmitB($83); EmitB($F9); EmitB(VT_DOUBLE);   { cmp ecx, VT_DOUBLE }
+              EmitB($75); nextJmp := CodeLen; EmitB(0);   { jne .not_double }
+              EmitB($F2); EmitB($0F); EmitB($10); EmitB($40); EmitB($08); { movsd xmm0,[eax+8] }
+              EmitB($F2); EmitB($0F); EmitB($2C); EmitB($C0);             { cvttsd2si eax, xmm0 }
+              EmitB($EB); nextJmp2 := CodeLen; EmitB(0);  { jmp .done }
+              Code[nextJmp] := Byte(CodeLen - (nextJmp + 1));
+              EmitB($8B); EmitB($40); EmitB($08);         { mov eax, [eax+8] (payload low) }
+              Code[nextJmp2] := Byte(CodeLen - (nextJmp2 + 1));
+              Exit;
+            end;
+            IREmitNode386(valNode);
+            if TypeIsFloat(IntToTypeKind(IRTk[valNode])) then
+              begin EmitB($F2); EmitB($0F); EmitB($2C); EmitB($C0); end;  { cvttsd2si eax, xmm0 }
+            Exit;
+          end
+          else if (j = 203) or (j = 204) or (j = 205) or (j = 206) then
+          begin
+            { Float intrinsics: 203 Trunc, 204 Round, 205 Frac, 206 Int }
+            argNode := IRB[node];
+            valNode := IRA[argNode];
+            IREmitNode386(valNode);
+            if TypeIsFloat(IntToTypeKind(IRTk[valNode])) then
+            begin
+              if j = 203 then
+                begin EmitB($F2); EmitB($0F); EmitB($2C); EmitB($C0); end  { cvttsd2si eax, xmm0 }
+              else if j = 204 then
+                begin EmitB($F2); EmitB($0F); EmitB($2D); EmitB($C0); end  { cvtsd2si eax, xmm0 }
+              else if j = 205 then
+              begin
+                { Frac = x - trunc(x) }
+                EmitB($F2); EmitB($0F); EmitB($2C); EmitB($C0);            { cvttsd2si eax, xmm0 }
+                EmitB($F2); EmitB($0F); EmitB($2A); EmitB($C8);            { cvtsi2sd xmm1, eax }
+                EmitB($F2); EmitB($0F); EmitB($5C); EmitB($C1);            { subsd xmm0, xmm1 }
+              end
+              else
+              begin
+                { Int = trunc as float }
+                EmitB($F2); EmitB($0F); EmitB($2C); EmitB($C0);            { cvttsd2si eax, xmm0 }
+                EmitB($F2); EmitB($0F); EmitB($2A); EmitB($C0);            { cvtsi2sd xmm0, eax }
+              end;
+            end
+            else
+            begin
+              { integer argument }
+              if j = 205 then
+                begin EmitB($66); EmitB($0F); EmitB($EF); EmitB($C0); end  { pxor xmm0, xmm0 = 0.0 }
+              else if j = 206 then
+                begin EmitB($F2); EmitB($0F); EmitB($2A); EmitB($C0); end; { cvtsi2sd xmm0, eax }
+              { 203/204: eax already holds the value }
+            end;
+            Exit;
+          end
+          else
+            Error('target i386: builtin/special call not yet supported');
+        end;
         if ProcExternal[pi] then
           Error('target i386: external calls not yet supported');
         if TypeIsAggregate(Procs[pi].RetType) then
@@ -1104,6 +1407,17 @@ begin
       begin
         IREmitNode386(IRA[node]);                    { address -> eax }
         tk := IntToTypeKind(IRTk[node]);
+        if TypeIsFloat(tk) then
+        begin
+          if tk = tySingle then
+          begin
+            EmitB($F3); EmitB($0F); EmitB($10); EmitB($00);   { movss xmm0, [eax] }
+            EmitB($F3); EmitB($0F); EmitB($5A); EmitB($C0);   { cvtss2sd xmm0, xmm0 }
+          end
+          else
+            begin EmitB($F2); EmitB($0F); EmitB($10); EmitB($00); end; { movsd xmm0, [eax] }
+          Exit;
+        end;
         if not (TypeIsOrdinal(tk) or (tk = tyBoolean) or (tk = tyPointer) or
                 (tk = tyChar) or (tk = tyUnknown) or
                 (tk = tyAnsiString) or (tk = tyClass)) then
@@ -1203,6 +1517,23 @@ begin
           EmitCallProc(pi);
           EmitB($81); EmitB($C4); EmitI32(4);           { add esp, 4 }
           EmitB($58);                                   { pop eax (new, discard) }
+          Exit;
+        end;
+        if TypeIsFloat(tk) then
+        begin
+          IREmitNode386(IRB[node]);                  { value -> xmm0 }
+          if not TypeIsFloat(IntToTypeKind(IRTk[IRB[node]])) then
+            begin EmitB($F2); EmitB($0F); EmitB($2A); EmitB($C0); end;   { cvtsi2sd xmm0, eax }
+          EmitFloatSpill386;
+          IREmitNode386(IRA[node]);                  { address -> eax }
+          EmitFloatUnspill386;
+          if tk = tySingle then
+          begin
+            EmitB($F2); EmitB($0F); EmitB($5A); EmitB($C0);              { cvtsd2ss xmm0, xmm0 }
+            EmitB($F3); EmitB($0F); EmitB($11); EmitB($00);              { movss [eax], xmm0 }
+          end
+          else
+            begin EmitB($F2); EmitB($0F); EmitB($11); EmitB($00); end;   { movsd [eax], xmm0 }
           Exit;
         end;
         if not (TypeIsOrdinal(tk) or (tk = tyBoolean) or (tk = tyPointer) or
@@ -1325,7 +1656,17 @@ begin
     IR_NEG:
       begin
         IREmitNode386(IRA[node]);
-        EmitB($F7); EmitB($D8);                      { neg eax }
+        if TypeIsFloat(IntToTypeKind(IRTk[node])) then
+        begin
+          { flip the sign bit: xmm0 ^= 0x8000000000000000 }
+          EmitB($68); EmitI32(Integer($80000000));   { push hi }
+          EmitB($6A); EmitB($00);                    { push 0 (lo) }
+          EmitB($F2); EmitB($0F); EmitB($10); EmitB($0C); EmitB($24);  { movsd xmm1, [esp] }
+          EmitB($83); EmitB($C4); EmitB($08);        { add esp, 8 }
+          EmitB($66); EmitB($0F); EmitB($57); EmitB($C1);              { xorpd xmm0, xmm1 }
+        end
+        else
+          begin EmitB($F7); EmitB($D8); end;         { neg eax }
       end;
 
     IR_NOT:
@@ -1365,7 +1706,24 @@ begin
         else
         begin
           tk := IntToTypeKind(IRTk[node]);
-          if tk = tyChar then
+          if tk = tyVariant then
+          begin
+            EmitLoadVariantAddr386(valNode);             { eax = slot addr }
+            EmitB($50);                                  { push eax (arg0 = v) }
+            pi := FindProc('PXXWriteVariant');
+            if pi < 0 then Error('compiler error: PXXWriteVariant not found');
+            EmitCallProc(pi);
+            EmitB($81); EmitB($C4); EmitI32(4);          { add esp, 4 }
+          end
+          else if TypeIsFloat(tk) then
+          begin
+            IREmitNode386(valNode);                      { value -> xmm0 }
+            j := IRC[node];                              { decimals }
+            if j = -2 then EmitFloatCallWriter386('PXXWriteFloatNat', -1)
+            else if j >= 0 then EmitFloatCallWriter386('PXXWriteFloatFixed', j)
+            else EmitFloatCallWriter386('PXXWriteFloatSci', -1);
+          end
+          else if tk = tyChar then
           begin
             IREmitNode386(valNode);
             if wid > 1 then
@@ -1460,6 +1818,133 @@ begin
           else
             EmitExit(0);
         end;
+      end;
+
+    IR_VAR_STORE:
+      begin
+        { IRA = dest addr, IRB = value/src addr, IRC = source TTypeKind ord. }
+        tk := IntToTypeKind(IRC[node]);
+        if tk = tyVariant then
+        begin
+          { ARC-correct 16-byte variant-to-variant copy (retain before
+            release makes self-assignment safe). }
+          EmitLoadVariantAddr386(IRB[node]);         { eax = src addr }
+          EmitVarHelperCall386('PXXVarRetain');
+          EmitB($50);                                { push src addr }
+          IREmitNode386(IRA[node]);                  { eax = dest addr }
+          EmitVarHelperCall386('PXXVarClear');
+          EmitB($89); EmitB($C7);                    { mov edi, eax }
+          EmitB($5E);                                { pop esi (src) }
+          EmitB($B9); EmitI32(16);                   { mov ecx, 16 }
+          EmitB($F3); EmitB($A4);                    { rep movsb }
+        end
+        else
+        begin
+          j := VariantTagForTk386(tk, 'Variant :=');
+          if tk = tyString then
+          begin
+            IREmitNode386(IRB[node]);                { eax = inline string buffer }
+            EmitB($50);                              { push eax }
+            EmitB($8B); EmitB($08);                  { mov ecx, [eax] (len) }
+            EmitB($83); EmitB($C0); EmitB($08);      { add eax, 8 (src) }
+            EmitB($51);                              { push ecx (len) }
+            EmitB($50);                              { push eax (src) }
+            pi := FindProc('PXXStrFromLit');
+            if pi < 0 then Error('compiler error: PXXStrFromLit not found');
+            EmitCallProc(pi);                        { eax = new AnsiString }
+            EmitB($81); EmitB($C4); EmitI32(8);      { add esp, 8 }
+            EmitB($59);                              { pop ecx (drop buffer) }
+            EmitB($50);                              { push payload }
+          end
+          else if tk = tyAnsiString then
+          begin
+            IREmitNode386(IRB[node]);                { eax = handle }
+            EmitB($50);                              { push eax (arg0) }
+            pi := FindProc('PXXStrIncRef');
+            if pi < 0 then Error('compiler error: PXXStrIncRef not found');
+            EmitCallProc(pi);
+            EmitB($58);                              { pop eax }
+            EmitB($50);                              { push payload }
+          end
+          else
+          begin
+            IREmitNode386(IRB[node]);                { scalar -> eax / double -> xmm0 }
+            if tk = tyDouble then
+              EmitFloatSpill386                      { 8-byte payload on the stack }
+            else
+              EmitB($50);                            { push payload }
+          end;
+          IREmitNode386(IRA[node]);                  { eax = dest addr }
+          EmitVariantFill386(j, tk);
+        end;
+      end;
+
+    IR_VAR_BOX:
+      begin
+        { Box a scalar into a temp variant (IRA = temp addr); addr -> eax. }
+        tk := IntToTypeKind(IRC[node]);
+        j := VariantTagForTk386(tk, 'Variant operand');
+        if tk = tyString then
+        begin
+          IREmitNode386(IRB[node]);                  { eax = inline string buffer }
+          EmitB($50);
+          EmitB($8B); EmitB($08);                    { mov ecx, [eax] (len) }
+          EmitB($83); EmitB($C0); EmitB($08);        { add eax, 8 (src) }
+          EmitB($51);                                { push ecx (len) }
+          EmitB($50);                                { push eax (src) }
+          pi := FindProc('PXXStrFromLit');
+          if pi < 0 then Error('compiler error: PXXStrFromLit not found');
+          EmitCallProc(pi);
+          EmitB($81); EmitB($C4); EmitI32(8);
+          EmitB($59);                                { pop ecx (drop buffer) }
+          EmitB($50);                                { push payload }
+        end
+        else if tk = tyAnsiString then
+        begin
+          IREmitNode386(IRB[node]);
+          EmitB($50);
+          pi := FindProc('PXXStrIncRef');
+          if pi < 0 then Error('compiler error: PXXStrIncRef not found');
+          EmitCallProc(pi);
+          EmitB($58);
+          EmitB($50);                                { push payload }
+        end
+        else
+        begin
+          IREmitNode386(IRB[node]);
+          if tk = tyDouble then
+            EmitFloatSpill386
+          else
+            EmitB($50);                              { push payload }
+        end;
+        IREmitNode386(IRA[node]);                    { eax = temp addr }
+        EmitVariantFill386(j, tk);                   { leaves addr in eax }
+      end;
+
+    IR_VAR_BINOP:
+      begin
+        { PXXVarBinOp(dest, left, right, opTk, isCompare); compare -> 0/1 in
+          eax, arithmetic -> dest addr in eax. }
+        sgn := IntToTypeKind(IRTk[node]) = tyBoolean;
+        IREmitNode386(IRA[node]); EmitB($50);        { push left addr }
+        IREmitNode386(IRB[node]); EmitB($50);        { push right addr }
+        if sgn then
+          begin EmitB($6A); EmitB($00); end          { push 0 (dest unused) }
+        else
+          begin EmitB($68); EmitGlobRef(Integer(IRIVal[node])); end; { push dest temp }
+        EmitB($8B); EmitB($44); EmitB($24); EmitB($08); { mov eax, [esp+8] (left) }
+        EmitB($50);
+        EmitB($8B); EmitB($44); EmitB($24); EmitB($08); { mov eax, [esp+8] (right) }
+        EmitB($50);
+        EmitB($68); EmitI32(IRC[node]);              { push opTk }
+        if sgn then
+          begin EmitB($6A); EmitB($01); end          { push isCompare=1 }
+        else
+          begin EmitB($6A); EmitB($00); end;
+        pi := FindProc('PXXVarBinOp');
+        if pi < 0 then Error('compiler error: PXXVarBinOp not found');
+        EmitCallProc(pi);
+        EmitB($81); EmitB($C4); EmitI32(28);         { 5 args + 2 saved evals }
       end;
 
     else
