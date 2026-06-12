@@ -1,8 +1,8 @@
 # Self-hosted x86-64 backend miscompiles calls with many parameters
 
 - **Type:** bug
-- **Status:** backlog
-- **Owner:** —
+- **Status:** working
+- **Owner:** claude
 - **Found / Opened:** 2026-06-12 (while writing writeELF32Rel, feature-elf-rel-writer)
 
 ## Symptom

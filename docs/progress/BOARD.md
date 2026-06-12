@@ -8,15 +8,16 @@ lives in git, not in a timestamp._
 
 _none_
 
-## working (0)
-
-_none_
-
-## backlog (31)
+## working (1)
 
 | Ticket | Type | Summary | Blocked-by |
 | --- | --- | --- | --- |
 | bug-many-param-call-corruption | bug | Self-hosted x86-64 backend miscompiles calls with many parameters | — |
+
+## backlog (30)
+
+| Ticket | Type | Summary | Blocked-by |
+| --- | --- | --- | --- |
 | chore-inc-to-units | chore | `.inc` → real `.pas` units refactor | — |
 | chore-runtime-emission-size | chore | Finer runtime-support emission (code size) | — |
 | feature-additional-cpu-targets | feature | Additional CPU targets (rollup: i386 → aarch64 → arm32 → ESP32/RISC-V) | feature-target-aarch64, feature-target-arm32, feature-target-esp32, feature-target-i386 |
@@ -90,7 +91,6 @@ _none_
 
 ## Ready (no unmet blocker)
 
-- bug-many-param-call-corruption
 - chore-inc-to-units
 - chore-runtime-emission-size
 - feature-additional-cpu-targets
