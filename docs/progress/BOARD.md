@@ -8,16 +8,15 @@ lives in git, not in a timestamp._
 
 _none_
 
-## working (1)
+## working (0)
+
+_none_
+
+## backlog (31)
 
 | Ticket | Type | Summary | Blocked-by |
 | --- | --- | --- | --- |
-| feature-elf-rel-writer | feature | Relocatable ELF32 object writer (.o for ESP-IDF linking) | — |
-
-## backlog (30)
-
-| Ticket | Type | Summary | Blocked-by |
-| --- | --- | --- | --- |
+| bug-many-param-call-corruption | bug | Self-hosted x86-64 backend miscompiles calls with many parameters | — |
 | chore-inc-to-units | chore | `.inc` → real `.pas` units refactor | — |
 | chore-runtime-emission-size | chore | Finer runtime-support emission (code size) | — |
 | feature-additional-cpu-targets | feature | Additional CPU targets (rollup: i386 → aarch64 → arm32 → ESP32/RISC-V) | feature-target-aarch64, feature-target-arm32, feature-target-esp32, feature-target-i386 |
@@ -56,7 +55,7 @@ _none_
 | bug-nonreproducible-miscompile-2026-06-02 | bug | Non-reproducible one-off miscompile (2026-06-02) | — |
 | bug-whole-record-copy-main-body-noop | bug | Latent: whole-record array-element copy in main-program body emits store no-ops | — |
 
-## done (23)
+## done (24)
 
 | Ticket | Type | Summary | Blocked-by |
 | --- | --- | --- | --- |
@@ -71,6 +70,7 @@ _none_
 | feature-cross-exceptions | feature | Exception runtime on cross targets (i386 / ARM32 / AArch64) | — |
 | feature-cross-float-variant | feature | Float + Variant codegen on cross targets | — |
 | feature-cross-managed-aggregates | feature | Cross-target managed aggregates (records + dynamic arrays) | feature-rtti-layout-table |
+| feature-elf-rel-writer | feature | Relocatable ELF32 object writer (.o for ESP-IDF linking) | — |
 | feature-managed-exception-cleanup | feature | Finalize managed values on exception unwind | — |
 | feature-managed-string-default | feature | Promote managed AnsiString from opt-in to default | bug-managed-byref-string-param-store, feature-managed-exception-cleanup |
 | feature-progress-check-makefile | feature | Wire `progress.sh check` into a make target | — |
@@ -90,6 +90,7 @@ _none_
 
 ## Ready (no unmet blocker)
 
+- bug-many-param-call-corruption
 - chore-inc-to-units
 - chore-runtime-emission-size
 - feature-additional-cpu-targets
@@ -102,6 +103,7 @@ _none_
 - feature-directive-if-numeric
 - feature-dynamic-soname-discovery
 - feature-esp32-bare-boot
+- feature-esp32-idf-riscv32
 - feature-float-str-val
 - feature-inline-asm-depth
 - feature-interfaces

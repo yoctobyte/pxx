@@ -1,7 +1,7 @@
 # Relocatable ELF32 object writer (.o for ESP-IDF linking)
 
 - **Type:** feature
-- **Status:** working
+- **Status:** done
 - **Owner:** claude
 - **Unblocks:** feature-esp32-idf-riscv32, feature-esp32-idf-xtensa
 - **Opened:** 2026-06-12 (esp32-idf integration plan; follow-on to feature-target-esp32)
@@ -64,3 +64,23 @@ code relocations, no `R_XTENSA_SLOT0_OP`, no linker-relaxation interaction.
   `compiler/elfwriter.inc`.
 - Self-hosted compiler has no execve — validation via external tools happens
   in Makefile/test scripts, never from inside the compiler.
+
+## Log
+- 2026-06-12 — DONE (commit d30bcae). `writeELF32Rel` in compiler/elfwriter.inc;
+  `--emit-obj` flag or inferred from a `.o` output name. Acceptance held:
+  readelf clean on both targets; links against a C `main` shim with
+  xtensa-esp32s3-elf-gcc and riscv32-esp-elf-gcc (ESP-IDF toolchains under
+  ~/.espressif); objdump spot-check confirms relocated literals hit the right
+  .bss addresses (riscv32 0x123b8 = .bss+0x1050, xtensa 0x4022c8 likewise).
+  Externals: undefined GLOBAL symbols + indirect call via relocated literal
+  slot (l32r+callx0 / lw+jalr, new xtensa_callx0 encoder); also delivers the
+  stage-1 "ELF symbol tables" leftover (every proc = LOCAL FUNC symbol, entry
+  exported GLOBAL as app_main). Regression test: `make test-emit-obj`
+  (test/test_emit_obj.pas); host suite + i386/aarch64/arm32 oracles green;
+  FPC-built and self-hosted compilers emit byte-identical .o files.
+  Landmines hit: (1) self-hosted backend miscompiles ~7+-parameter calls —
+  filed bug-many-param-call-corruption, worked around with two <=6-param
+  shdr helpers; (2) self-host file path needs explicit sysfchmod (sysopen
+  O_CREAT leaves mode 000). Note for feature-esp32-idf-riscv32: app_main
+  currently never returns (bare-metal terminal self-loop) — the idf profile
+  needs a returning runtime epilogue.
