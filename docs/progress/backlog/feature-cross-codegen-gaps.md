@@ -30,6 +30,14 @@ for the cross self-host and for not leaking memory.
    works. Retry against `ir_codegen_arm32.inc` lines ~434-468.
 5. **by-ref managed-string / var-array params on cross targets** — partial;
    `SetLength` on a `var` array param and some by-ref string stores error.
+6. **Float params/results + full `builtin` unit on i386/ARM32** (moved here
+   from feature-cross-float-variant, 2026-06-12) — the 32-bit internal call
+   ABI passes every argument as one 4-byte slot, so procedures with Double
+   params or results are rejected; that in turn blocks compiling the full
+   `builtin` unit (Str/Val/FloatToStr) on those targets. Float *expressions*,
+   writes, and variants work (served from builtinheap). Ties into
+   feature-cross-param-abi. Variant locals are a related gap: 16-byte
+   zero-init of frame slots errors on all cross targets (globals work).
 
 ## Acceptance
 

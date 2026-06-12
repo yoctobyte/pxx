@@ -1,7 +1,7 @@
 # Float + Variant codegen on cross targets
 
 - **Type:** feature
-- **Status:** working
+- **Status:** done
 - **Owner:** claude
 - **Unblocks:** feature-cross-bootstrap-selfhost
 - **Opened:** 2026-06-11 (user request)
@@ -42,3 +42,23 @@ New `test/test_cross_float.pas` and `test/test_cross_variant.pas` in the suites.
 
 Floats and Variants can land as two separate slices; floats first (broader
 value, and `builtin`'s `FloatToStr` needs them).
+
+## Log
+
+- 2026-06-11 — claimed; aarch64 float slice landed (per-arch emitters:
+  EmitWriteFloatNat/Fixed/SciA64, variant emitters, PXXVarBinOp runtime,
+  test_cross_float in test-aarch64). Commits 2a98d4d, cf05aff.
+- 2026-06-12 — RESOLVED. i386 (SSE2, xmm0 channel) and ARM32 (VFP, d0
+  channel) float + Variant codegen landed; float→text and variant
+  write/clear/retain moved to portable builtinheap helpers
+  (PXXWriteFloat*/PXXVar*) — double-only arithmetic with the 2^52
+  round-even trick, so no per-arch formatting emitters and no 64-bit
+  integer registers needed. aarch64 variant write path fixed (its
+  hand-emitted tag compares were mis-encoded and untested) and switched
+  to the same helper. test_cross_float + new test_cross_variant pass on
+  i386/ARM32/AArch64 with output identical to x86-64; make bootstrap and
+  make test green. Commits 683fbc5, fc299c3, f23f4da, 592132f, 1e3f992.
+  Scope note: "full builtin unit compiles on every target" moved to
+  feature-cross-codegen-gaps item 6 — it needs float params/results in
+  the 32-bit call ABI (feature-cross-param-abi territory), not float
+  codegen. Variant locals (16-byte frame zero-init) also noted there.
