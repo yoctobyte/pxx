@@ -87,9 +87,16 @@ tooling are cleaner. Xtensa can follow once the target abstraction is proven.
    on the macro soup itself; do not hide correctness or algorithmic problems
    behind a cache.
 3. **RISC-V backend.** Target RV32 ESP32-class parts first.
+   *Status 2026-06-12: done for the stage-1 subset — and the Xtensa backend
+   landed alongside it (`--target=riscv32`, `--target=xtensa`); both proven
+   under user-mode QEMU.*
 4. **ESP-IDF integration path.** Emit an object or ELF that ESP-IDF can link and
    flash. This proves hardware behavior while reusing Espressif's image and boot
    machinery.
+   *Status 2026-06-12: the object half is done — `--emit-obj` produces ET_REL
+   `.o` files that link with the ESP cross toolchains and export `app_main`
+   (see [esp32-support.md](esp32-support.md)). The IDF component/build/flash
+   half is the open `feature-esp32-idf-riscv32` ticket.*
 5. **Fast direct path.** Once ABI, startup, memory, and image layout are stable,
    bypass more of the slow build stack.
 6. **Optional facades.** Add small friendly units only where they improve the

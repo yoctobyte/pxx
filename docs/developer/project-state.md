@@ -1,6 +1,6 @@
 # Project State Audit
 
-**Audited:** 2026-06-11
+**Audited:** 2026-06-12
 
 This is the compact current-state snapshot. Source and `make test` remain
 authoritative. Detailed design notes live in [`todo.md`](todo.md), while older
@@ -43,7 +43,11 @@ Case behavior is per origin:
 
 ## Confirmed Bugs
 
-- None. (The hang compiling `test/test_basic_lexer.bas` was resolved on 2026-06-01 by adding Block IF support to the BASIC parser).
+- The self-hosted x86-64 backend miscompiles calls with roughly seven or more
+  parameters: arguments arrive shifted in the callee (silent wrong-code). The
+  FPC-built compiler generates correct code for the same source. Repro and
+  analysis in `docs/progress/backlog/bug-many-param-call-corruption.md`;
+  found 2026-06-12.
 
 ## Latest Benchmark Snapshot
 
@@ -55,6 +59,20 @@ hello-world ELF was from the frozen inline-string path; managed-string default
 builds include managed runtime support.
 
 ## Latest Runtime Progress
+
+### 2026-06-12 — esp32 stage 1 + relocatable .o emission
+
+- `--target=riscv32` and `--target=xtensa` compile the stage-1 subset through
+  the IR path; smoke binaries execute correctly under user-mode QEMU.
+- `--emit-obj` (or a `.o` output path) emits relocatable ET_REL ELF32 for both
+  esp32 targets: literal-slot-only relocations (`R_XTENSA_32`/`R_RISCV_32`),
+  per-proc symbols, entry exported as `app_main`, externals as undefined
+  symbols with indirect literal-slot calls. Links against the ESP-IDF cross
+  toolchains; `make test-emit-obj` is the regression gate.
+- Found in the process: the self-hosted x86-64 backend miscompiles calls with
+  roughly seven or more parameters (silent argument shift) — tracked as
+  `bug-many-param-call-corruption`; keep helper signatures at six parameters
+  or fewer until fixed.
 
 ### 2026-06-12 — managed `AnsiString` default
 

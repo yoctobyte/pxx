@@ -25,7 +25,9 @@ one IR and backend.
   and supported C headers can be imported directly.
 - **Wrapper-free Nil Python C calls:** `.npy` can import `sqlite3` directly and
   run SQLite CRUD without a Pascal wrapper.
-- **Embedded direction:** ESP32/ESP-IDF is a future target; the plan is to use
+- **Embedded direction:** ESP32 codegen (Xtensa and RISC-V) compiles a growing
+  subset and emits relocatable `.o` files that link with the ESP-IDF
+  toolchains; full ESP-IDF integration is in progress. The plan remains using
   vendor C SDKs directly while keeping generated programs native.
 
 ## Quick Start

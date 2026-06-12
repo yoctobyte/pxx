@@ -22,7 +22,9 @@ Examples:
 
 If an output path is supplied, PXX writes an executable ELF file there and
 also writes `<output>.map`, containing addresses for `_start` and generated
-procedures/methods.
+procedures/methods. An output path ending in `.o` (or the `--emit-obj`
+option) instead produces a relocatable object for external linking; see
+[ESP32 support](esp32-support.md).
 
 An explicit output path is recommended. Without one, PXX strips the input
 extension (`foo.pas` becomes `foo`) and refuses to overwrite the source path.
@@ -48,6 +50,8 @@ Options must occur before the source path.
 | Option | Behavior |
 | --- | --- |
 | `--debug` | Print compiler lexer/parser/preprocessor diagnostics while compiling. |
+| `--target=ARCH` | Select the code generation target: `x86_64` (default), `i386`, `aarch64`, `arm32`, `xtensa`, `riscv32`. |
+| `--emit-obj` | Emit a relocatable ET_REL `.o` instead of a linked executable (esp32 targets `xtensa`/`riscv32` only). Also inferred when the output path ends in `.o`. |
 | `--experimental-ir-codegen` | Deprecated no-op, accepted for compatibility. IR is the only backend. |
 | `--dump-ir` | Print the AST-lowered IR while still emitting the normal executable. |
 | `-dNAME` | Define a Pascal conditional-compilation symbol. |
@@ -84,6 +88,8 @@ Run from the repository root:
 | `make` | Rebuild PXX using the checked-in self-hosted seed and require a fixedpoint. |
 | `make test` | Run regression coverage, FPC comparison, and self-hosted fixedpoint checks. |
 | `make test-frozen` | Run regression coverage with `-uPXX_MANAGED_STRING`. |
+| `make test-i386` / `test-aarch64` / `test-arm32` | Cross-target oracle suites: compile for the target, execute under QEMU user mode, compare output against the x86-64 build. |
+| `make test-emit-obj` | Validate relocatable `.o` emission for `riscv32` and `xtensa` with readelf; links against a C shim when the ESP-IDF cross toolchains are installed. |
 | `make bootstrap` | Recovery path: compile a seed with FPC, then require the PXX fixedpoint before installing it. |
 | `make bootstrap-frozen` | Recovery path for the frozen inline string ABI. |
 | `make fpc-check` | Check that an FPC-built compiler produces the same current PXX binary. |

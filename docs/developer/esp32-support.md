@@ -20,6 +20,37 @@ PXX should treat ESP32 as two explicit target profiles:
 The compiler remains independent. The IDF dependency is a platform backend
 dependency, not the identity of the compiler.
 
+## Current state (2026-06-12)
+
+Stage 1 (bare codegen) and the relocatable object writer are done:
+
+- `--target=riscv32` and `--target=xtensa` compile the stage-1 language
+  subset (procs/params/calls/loops/ifs/globals) through the IR path; both
+  smoke binaries execute correctly under user-mode QEMU
+  (`docs/progress/done/feature-target-esp32.md`).
+- `--emit-obj` (or a `.o` output path) produces an ET_REL ELF32 object for
+  either target (`writeELF32Rel` in `compiler/elfwriter.inc`;
+  `docs/progress/done/feature-elf-rel-writer.md`). Every absolute address
+  goes through a 32-bit literal slot, so all relocations are plain
+  `R_XTENSA_32` / `R_RISCV_32` data words — no code relocations and no
+  linker-relaxation interaction. Every proc is a local `FUNC` symbol, the
+  program entry is exported globally as `app_main`, and `external`
+  procedure declarations become undefined symbols called indirectly through
+  a relocated literal slot.
+- Regression: `make test-emit-obj` (readelf checks always; link checks when
+  the ESP toolchains are installed under `~/.espressif`).
+
+Link recipe against a C shim (acceptance check, not the IDF flow yet):
+
+```bash
+./compiler/pascal26 --target=riscv32 prog.pas prog.o
+riscv32-esp-elf-gcc -nostartfiles -Wl,-e,app_main shim.c prog.o -o prog.elf
+```
+
+Known gap for the IDF profile: `app_main` currently never returns — the
+bare-metal exit path parks in a self-loop. The `feature-esp32-idf-riscv32`
+ticket owns the returning runtime epilogue and the real component link.
+
 ## What ESP-IDF provides
 
 ESP-IDF is not just a compiler package. For normal ESP32 development it provides:
