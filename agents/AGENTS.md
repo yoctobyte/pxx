@@ -4,11 +4,13 @@ Shared instructions for any AI agent (Claude, Codex, agy, …) working this repo
 Read once at session start. Keep edits here terse — this loads every session.
 
 ## Access restrictions
-- Gemini Flash 3.5 through Antigravity CLI is no longer allowed to work on this
-  repository. Do not claim tickets, edit files, or run cleanup tasks with that
-  toolchain here. Reason: the 2026-06-12 run left mixed, unreviewed WIP across
-  unrelated tickets and backend work, including partial compiler changes that
-  required quarantine before other agents could safely continue.
+- Antigravity CLI is no longer allowed to work on this repository, including
+  Gemini Flash 3.5 when accessed through that toolchain. Do not claim tickets,
+  edit files, or run cleanup tasks with Antigravity CLI here. Reason: the
+  2026-06-12 run exhausted its tokens while roaming across source files, leaving
+  mixed, unreviewed WIP across unrelated tickets and backend work that required
+  quarantine before other agents could safely continue. Treat this as a tooling
+  reliability restriction, not a blanket judgment on the underlying model.
 
 ## Navigation
 - **Read `agents/codemap/symbols.md` before grepping the source.** It's a per-file index of every
