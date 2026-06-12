@@ -125,6 +125,7 @@ test-nilpy: $(COMPILER)
 	test "$$(/tmp/test_nil_python_core26)" = "$$(printf '0\n1\n1\n2\n3\n5\n10')"
 	./$(COMPILER) test/test_nilpy_import_sqlite.npy /tmp/test_nilpy_import_sqlite26
 	test "$$(/tmp/test_nilpy_import_sqlite26)" = "3045001"
+	rm -f /tmp/test_nilpy_sqlite_crud.db
 	./$(COMPILER) test/test_nilpy_sqlite_crud.npy /tmp/test_nilpy_sqlite_crud26
 	test "$$(/tmp/test_nilpy_sqlite_crud26)" = "$$(printf '1 alice\n2 bob')"
 	./$(COMPILER) test/test_nilpy_variant.npy /tmp/test_nilpy_variant26
@@ -299,8 +300,10 @@ test-core: $(COMPILER)
 	cc -shared -fPIC -o /tmp/libspill.so test/spill_lib.c
 	./$(COMPILER) test/test_c_argspill.pas /tmp/c_argspill26
 	test "$$(LD_LIBRARY_PATH=/tmp /tmp/c_argspill26)" = "$$(printf '28\n55.0\n45')"
+	rm -f /tmp/test_sqlite_crud26.db
 	./$(COMPILER) test/test_sqlite_crud.pas /tmp/sqlite_crud26
 	test "$$(/tmp/sqlite_crud26)" = "$$(printf 'open=0\nprepare=0\n1 alice\n2 bob\nfinalize=0\nclose=0')"
+	rm -f /tmp/test_string_to_pchar_auto26.db
 	./$(COMPILER) test/test_string_to_pchar_auto.pas /tmp/string_to_pchar_auto26
 	test "$$(/tmp/string_to_pchar_auto26)" = "$$(printf 'open=0\nprepare=0\n1 alice\n2 bob\nfinalize=0\nclose=0')"
 	./$(COMPILER) test/test_auto_var.pas /tmp/test_auto_var26
@@ -311,6 +314,7 @@ test-core: $(COMPILER)
 	grep -q "use of auto variable before type is inferred" /tmp/test_auto_var_fail.log
 	./$(COMPILER) test/test_lazy_var.pas /tmp/test_lazy_var26
 	test "$$(/tmp/test_lazy_var26)" = "$$(printf 'Basic tests:\na = 123\nb = hello inline\nc = 3.14\nd is True\nScoping tests:\nouter x = 10\ninner x = 20\ninner y = 30\nouter x after block = 10\nMultiple declarations:\nx = 42, y = 24\nall lazy variable tests done!')"
+	rm -f /tmp/test_sqlite_crud_lazy26.db
 	./$(COMPILER) test/test_sqlite_crud_lazy.pas /tmp/test_sqlite_crud_lazy26
 	test "$$(/tmp/test_sqlite_crud_lazy26)" = "$$(printf -- '--- File Database ---\nopen=0\nprepare=0\n1 alice alice\n2 bob bob\nfinalize=0\nclose=0\n--- In-Memory Database ---\nopen=0\nprepare=0\n1 alice alice\n2 bob bob\nfinalize=0\nclose=0')"
 	! ./$(COMPILER) test/test_lazy_var_scope_fail.pas /tmp/test_lazy_var_scope_fail26 > /tmp/test_lazy_var_scope_fail.log 2>&1
