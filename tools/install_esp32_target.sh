@@ -48,7 +48,12 @@ install_host_packages() {
   fi
 
   say "install: Debian/Ubuntu host packages"
-  sudo apt-get update
+  # apt-get update fails hard when ANY configured repo is broken (e.g. a stale
+  # third-party PPA), which has nothing to do with the packages below. Warn
+  # and continue; the install step still fails loudly if packages are missing.
+  if ! sudo apt-get update; then
+    say "warn: apt-get update failed (likely an unrelated broken repo); continuing"
+  fi
   sudo apt-get install -y \
     git wget flex bison gperf \
     python3 python3-pip python3-venv \
