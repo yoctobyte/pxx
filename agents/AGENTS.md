@@ -6,7 +6,9 @@ Read once at session start. Keep edits here terse — this loads every session.
 ## Access restrictions
 - Gemini Flash 3.5 through Antigravity CLI is no longer allowed to work on this
   repository. Do not claim tickets, edit files, or run cleanup tasks with that
-  toolchain here.
+  toolchain here. Reason: the 2026-06-12 run left mixed, unreviewed WIP across
+  unrelated tickets and backend work, including partial compiler changes that
+  required quarantine before other agents could safely continue.
 
 ## Navigation
 - **Read `agents/codemap/symbols.md` before grepping the source.** It's a per-file index of every
