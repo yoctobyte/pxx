@@ -52,9 +52,12 @@ Link recipe against a C shim (acceptance check, not the IDF flow yet):
 riscv32-esp-elf-gcc -nostartfiles -Wl,-e,app_main shim.c prog.o -o prog.elf
 ```
 
-Known gap for the IDF profile: `app_main` currently never returns — the
-bare-metal exit path parks in a self-loop. The `feature-esp32-idf-riscv32`
-ticket owns the returning runtime epilogue and the real component link.
+ESP-IDF integration is proven on ESP32-C3 (2026-06-12): see
+`examples/esp32/hello-c3` — Pascal `app_main` linked by `idf.py build` and
+booted under Espressif QEMU, printing from a Pascal loop via
+`esp_rom_printf`. PXX `app_main` never returns (bare-metal self-loop), so
+the example parks in a terminal `vTaskDelay` loop; a returning epilogue
+remains future work. Xtensa S2/S3 needs the windowed-ABI ticket.
 
 ## What ESP-IDF provides
 
