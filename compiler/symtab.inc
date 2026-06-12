@@ -3094,9 +3094,9 @@ end;
 
 procedure EmitLeaveExceptionFrameX64;
 begin
-  EmitB($48); EmitB($8B); EmitB($04); EmitB($24); { mov rax, [rsp] }
-  EmitB($48); EmitB($89); EmitB($04); EmitB($25); EmitGlobRef(BSS_EXC_TOP);
-  EmitB($48); EmitB($83); EmitB($C4); EmitB(EXC_FRAME_SIZE);
+  x64_mov_reg_mem(8, rRAX, rRSP, 0, False); { mov rax, [rsp] }
+  x64_mov_glob_reg(8, BSS_EXC_TOP, rRAX);   { mov [BSS_EXC_TOP], rax }
+  x64_add_reg_imm(8, rRSP, EXC_FRAME_SIZE);  { add rsp, EXC_FRAME_SIZE }
 end;
 
 procedure EmitManagedLocalCleanup(retSymIdx: Integer);
@@ -3110,19 +3110,19 @@ begin
       if Syms[i].TypeKind = tyAnsiString then
       begin
         { mov rax, [rbp + Offset] }
-        EmitB($48); EmitB($8B); EmitB($85); EmitI32(Syms[i].Offset);
+        x64_mov_reg_mem(8, rRAX, rRBP, Syms[i].Offset, True);
         IREmitCodeCall(AnsiStrReleaseAddr);
       end
       else if Syms[i].TypeKind = tyVariant then
       begin
         { lea rax, [rbp + Offset] }
-        EmitB($48); EmitB($8D); EmitB($85); EmitI32(Syms[i].Offset);
+        x64_lea_reg_mem(8, rRAX, rRBP, Syms[i].Offset, True);
         EmitVariantClear;
       end
       else if Syms[i].IsArray and (Syms[i].ArrLen = -1) then
       begin
         { mov rax, [rbp + Offset] }
-        EmitB($48); EmitB($8B); EmitB($85); EmitI32(Syms[i].Offset);
+        x64_mov_reg_mem(8, rRAX, rRBP, Syms[i].Offset, True);
         EmitDynArrayReleaseForSym(i);
       end
       else if (Syms[i].TypeKind = tyRecord) and not Syms[i].IsArray and
@@ -3130,12 +3130,12 @@ begin
       begin
         { Record value local with managed fields (AnsiString, dynamic-array, or
           nested): release them under the heap lock. rbx = record address. }
-        EmitB($53);                                              { push rbx }
-        EmitB($48); EmitB($8D); EmitB($9D); EmitI32(Syms[i].Offset); { lea rbx, [rbp+off] }
+        x64_push_reg(rRBX);                                      { push rbx }
+        x64_lea_reg_mem(8, rRBX, rRBP, Syms[i].Offset, True);     { lea rbx, [rbp+off] }
         EmitAcquireHeapLock;
         EmitManagedRecordReleaseLocked(Syms[i].RecName);
         EmitReleaseHeapLock;
-        EmitB($5B);                                              { pop rbx }
+        x64_pop_reg(rRBX);                                       { pop rbx }
       end;
     end;
   end;

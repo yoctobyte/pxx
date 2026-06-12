@@ -127,43 +127,33 @@ end;
   regField (an actual register, or an opcode-extension digit with regHigh=0)
   and whose r/m is the operand in AsmOp[rmSlot]. opSize selects 1/2/4/8. }
 procedure AsmPrefixAndREX(opSize, regField, regHigh, rmSlot: Integer);
-var w, r, x, b, force: Integer;
+var
+  rmReg: Integer;
 begin
-  if opSize = 2 then AsmB($66);
-  w := 0; if opSize = 8 then w := 1;
-  r := regHigh;
-  x := 0;
-  b := 0;
-  force := 0;
-  if AsmOpKind[rmSlot] = AOP_REG then
-  begin
-    if AsmOpReg[rmSlot] >= 8 then b := 1;
-    if (opSize = 1) and AsmReg8NeedsREX(AsmOpReg[rmSlot]) then force := 1;
-  end;
-  { mem operand is always [rbp+disp32]; rbp = reg 5, high bit clear }
-  if (opSize = 1) and (regHigh = 0) and (regField >= 4) and (regField <= 7) then
-    force := 1;
-  AsmREX(w, r, x, b, force);
+  rmReg := 0;
+  if AsmOpKind[rmSlot] = AOP_REG then rmReg := AsmOpReg[rmSlot]
+  else if AsmOpKind[rmSlot] = AOP_MEM then rmReg := rRBP;
+
+  EncToAsmBuffer := True;
+  EncPrefixAndREX(opSize, (regHigh shl 3) or regField, rmReg, False);
+  EncToAsmBuffer := False;
 end;
 
 { Emit ModRM (+disp) where modrm.reg = regField and r/m = AsmOp[rmSlot]. }
 procedure AsmModRM(regField, rmSlot: Integer);
-var modrm: Integer;
 begin
+  EncToAsmBuffer := True;
   if AsmOpKind[rmSlot] = AOP_REG then
   begin
-    modrm := $C0 or ((regField and 7) * 8) or (AsmOpReg[rmSlot] and 7);
-    AsmB(modrm);
+    EncModRMReg(regField, AsmOpReg[rmSlot]);
   end
   else if AsmOpKind[rmSlot] = AOP_MEM then
   begin
-    { [rbp + disp32] : mod=10, rm=101 }
-    modrm := $80 or ((regField and 7) * 8) or 5;
-    AsmB(modrm);
-    AsmI32(AsmOpVal[rmSlot]);
+    EncModRMMem(regField, rRBP, AsmOpVal[rmSlot], True);
   end
   else
     Error('asm: bad r/m operand');
+  EncToAsmBuffer := False;
 end;
 
 { Parse one operand into slot (0 or 1). Reads CurTok. }
@@ -331,34 +321,16 @@ var opSize, rf, rh: Integer;
 begin
   if (AsmOpKind[0] = AOP_REG) and (AsmOpKind[1] = AOP_IMM) then
   begin
-    opSize := AsmOpSize[0];
-    { 64-bit immediate that needs all 64 bits -> B8+r id64 }
-    if opSize = 8 then
-    begin
-      rh := 0; if AsmOpReg[0] >= 8 then rh := 1;
-      AsmREX(1, 0, 0, rh, 0);
-      AsmB($B8 + (AsmOpReg[0] and 7));
-      AsmI64(AsmOpVal[1]);
-      Exit;
-    end;
-    rf := AsmOpReg[0];
-    AsmPrefixAndREX(opSize, 0, 0, 0);  { emits REX.B for r8d..r15d via slot 0 }
-    if opSize = 1 then AsmB($B0 + (rf and 7))
-    else AsmB($B8 + (rf and 7));
-    if opSize = 1 then AsmB(Integer(AsmOpVal[1] and $FF))
-    else if opSize = 2 then AsmI16(AsmOpVal[1])
-    else AsmI32(AsmOpVal[1]);
+    EncToAsmBuffer := True;
+    x64_mov_reg_imm(AsmOpSize[0], AsmOpReg[0], AsmOpVal[1]);
+    EncToAsmBuffer := False;
     Exit;
   end;
   if (AsmOpKind[0] = AOP_MEM) and (AsmOpKind[1] = AOP_IMM) then
   begin
-    opSize := AsmOpSizeOf(1);
-    AsmPrefixAndREX(opSize, 0, 0, 0);
-    if opSize = 1 then AsmB($C6) else AsmB($C7);
-    AsmModRM(0, 0);
-    if opSize = 1 then AsmB(Integer(AsmOpVal[1] and $FF))
-    else if opSize = 2 then AsmI16(AsmOpVal[1])
-    else AsmI32(AsmOpVal[1]);
+    EncToAsmBuffer := True;
+    x64_mov_mem_imm(AsmOpSizeOf(1), rRBP, AsmOpVal[0], AsmOpVal[1], True);
+    EncToAsmBuffer := False;
     Exit;
   end;
   AsmEncodeALU($89, $8B, -1);
@@ -516,35 +488,24 @@ begin
   { ---- push / pop ---- }
   if CaseEqual(mn,'push') then
   begin
+    EncToAsmBuffer := True;
     if AsmOpKind[0] = AOP_REG then
-    begin
-      rh := 0; if AsmOpReg[0] >= 8 then rh := 1;
-      AsmREX(0,0,0,rh,0);
-      AsmB($50 + (AsmOpReg[0] and 7));
-    end
+      x64_push_reg(AsmOpReg[0])
     else if AsmOpKind[0] = AOP_IMM then
-    begin
-      AsmB($68); AsmI32(AsmOpVal[0]);
-    end
+      x64_push_imm(AsmOpVal[0])
     else
-    begin
-      AsmPrefixAndREX(8, 6, 0, 0);
-      AsmB($FF); AsmModRM(6, 0);
-    end;
+      x64_push_mem(rRBP, AsmOpVal[0], True);
+    EncToAsmBuffer := False;
     Exit;
   end;
   if CaseEqual(mn,'pop') then
   begin
+    EncToAsmBuffer := True;
     if AsmOpKind[0] = AOP_REG then
-    begin
-      rh := 0; if AsmOpReg[0] >= 8 then rh := 1;
-      AsmREX(0,0,0,rh,0);
-      AsmB($58 + (AsmOpReg[0] and 7));
-    end
+      x64_pop_reg(AsmOpReg[0])
     else
-    begin
-      AsmB($8F); AsmModRM(0, 0);
-    end;
+      x64_pop_mem(rRBP, AsmOpVal[0], True);
+    EncToAsmBuffer := False;
     Exit;
   end;
 

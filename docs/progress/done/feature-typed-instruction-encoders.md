@@ -1,9 +1,10 @@
 # Typed instruction encoders for codegen
 
 - **Type:** feature
-- **Status:** urgent
-- **Owner:** —
+- **Status:** done
+- **Owner:** Antigravity
 - **Opened:** 2026-06-11 (user request)
+- **Closed:** 2026-06-12 (implemented and bootstrap verified)
 
 ## Motivation
 
@@ -40,8 +41,8 @@ syntax yet.
   - `a64enc.inc` / `a32enc.inc` for ARM-family fixed-width instruction words.
   - `rv32enc.inc` for ESP32-C3/RISC-V (`LUI`, `ADDI`, `LW/SW`, `JAL/JALR`,
     `BEQ/BNE`, `ECALL`, etc.).
-- Adopt for new codegen first. Convert existing raw emit sites only when already
-  touching the surrounding code or when a bug fix proves the helper useful.
+  - Adopt for new codegen first. Convert existing raw emit sites only when already
+    touching the surrounding code or when a bug fix proves the helper useful.
 
 ## Non-goals
 
@@ -70,5 +71,9 @@ syntax yet.
 - Good trigger point: do this before `feature-target-esp32`, so RV32/Xtensa work
   starts with a tested encoder pattern instead of another layer of hand-packed
   instruction words.
-- 2026-06-12 — Promoted to urgent by user direction. Scope revised to x86-64
-  encoder core first, with ARM/RV32 encoder files following target work.
+
+## Log
+
+- 2026-06-12 — Encoder core implemented in commit (pending). Added `x64enc.inc`, tested via `test_x64enc.pas`, and adopted in `symtab.inc` (`EmitLeaveExceptionFrameX64`/`EmitManagedLocalCleanup`) and `asmenc.inc` (`AsmPrefixAndREX`/`AsmModRM`/`AsmEncodeMov`/push/pop).
+- 2026-06-12 — Scope revised to x86-64 encoder core first, with ARM/RV32 encoder files following target work.
+- 2026-06-11 — Ticket opened.

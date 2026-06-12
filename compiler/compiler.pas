@@ -17,6 +17,11 @@ uses SysUtils, BaseUnix;
 {$include blexer.inc}
 {$include pylexer.inc}
 {$include emit.inc}
+procedure AsmB(b: Integer); forward;
+procedure AsmI16(v: Int64); forward;
+procedure AsmI32(v: Int64); forward;
+procedure AsmI64(v: Int64); forward;
+{$include x64enc.inc}
 {$include symtab.inc}
 {$include exception_emit.inc}
 {$include asmenc.inc}
