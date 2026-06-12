@@ -15,6 +15,13 @@ begin
   EmitDataRef(dataOff);
 end;
 
+procedure EmitLoadGlobAddrA64(rd: Integer; offset: Integer);
+begin
+  EmitI32($18000040 or rd);  { ldr w[rd], [pc+8] }
+  EmitI32($14000002);        { b [pc+8] }
+  EmitGlobRef(offset);
+end;
+
 procedure IREmitLeaveExceptionFramesAarch64(count: Integer);
 var i: Integer;
 begin
@@ -159,12 +166,452 @@ begin
   Patch32(donePos, $B4000000 or countReg or ((((CodeLen - donePos) div 4) and $7FFFF) shl 5));
 end;
 
+procedure EmitWriteFloatNatA64;
+var jnsOff, jbCarry, i, nJz: Integer;
+    endJz: array[0..15] of Integer;
+begin
+  EmitI32($F81F0FF3);                                           { str x19, [sp, #-16]! }
+  EmitI32($F81F0FF4);                                           { str x20, [sp, #-16]! }
+  EmitI32($F81F0FF5);                                           { str x21, [sp, #-16]! }
+
+  EmitI32($937FFC01);                                           { asr x1, x0, #63 }
+  EmitI32($F100003F);                                           { cmp x1, #0 }
+  jnsOff := CodeLen;
+  EmitI32($5400000A);                                           { b.ge .pos }
+  
+  EmitLoadImmA64(1, $7FFFFFFFFFFFFFFF);
+  EmitI32($8A010000);                                           { and x0, x0, x1 }
+  EmitI32($F81F0FE0);                                           { str x0, [sp, #-16]! }
+  EmitLoadImmA64(0, Ord('-'));
+  EmitwriteCharA64;
+  EmitI32($F84107E0);                                           { ldr x0, [sp], #16 }
+  
+  Patch32(jnsOff, $5400000A or (((CodeLen - jnsOff) div 4) and $7FFFF) shl 5);
+
+  EmitI32($9E670000);                                           { fmov d0, x0 }
+  EmitI32($9E780001);                                           { fcvtzs x1, d0 }
+  EmitI32($9E620022);                                           { scvtf d2, x1 }
+  EmitI32($1E623800);                                           { fsub d0, d0, d2 }
+  
+  EmitLoadImmA64(3, 1000000000000000);                          { scale = 10^15 }
+  EmitI32($9E620063);                                           { scvtf d3, x3 }
+  EmitI32($1E630800);                                           { fmul d0, d0, d3 }
+  EmitI32($9E600002);                                           { fcvtns x2, d0 }
+  
+  EmitI32($EB03005F);                                           { cmp x2, x3 }
+  jbCarry := CodeLen;
+  EmitI32($5400000B);                                           { b.lt .nocarry }
+  
+  EmitI32($CB030042);                                           { sub x2, x2, x3 }
+  EmitI32($91000421);                                           { add x1, x1, #1 }
+  
+  Patch32(jbCarry, $5400000B or (((CodeLen - jbCarry) div 4) and $7FFFF) shl 5);
+
+  EmitI32($AA0103F3);                                           { mov x19, x1 }
+  EmitI32($AA0203F4);                                           { mov x20, x2 }
+
+  EmitI32($AA1303E0);                                           { mov x0, x19 }
+  EmitwriteUIntA64;
+  
+  EmitLoadImmA64(0, Ord('.'));
+  EmitwriteCharA64;
+
+  EmitLoadImmA64(21, 100000000000000);                          { divisor = 10^14 }
+  nJz := 0;
+  for i := 0 to 14 do
+  begin
+    EmitI32($AA1403E0);                                         { mov x0, x20 }
+    EmitI32($AA1503E1);                                         { mov x1, x21 }
+    EmitI32($9AC10C02);                                         { sdiv x2, x0, x1 }
+    EmitI32($9B018054);                                         { msub x20, x2, x1, x0 }
+    EmitI32($9100C040);                                         { add x0, x2, #48 }
+    EmitwriteCharA64;
+    
+    if i < 14 then
+    begin
+      EmitLoadImmA64(1, 10);
+      EmitI32($9AC10EB5);                                       { sdiv x21, x21, x1 }
+      
+      EmitI32($B4000014);                                       { cbz x20, .end }
+      endJz[nJz] := CodeLen - 4;
+      Inc(nJz);
+    end;
+  end;
+
+  for i := 0 to nJz - 1 do
+    Patch32(endJz[i], $B4000014 or ((((CodeLen - endJz[i]) div 4) and $7FFFF) shl 5));
+
+  EmitI32($F84107F5);                                           { ldr x21, [sp], #16 }
+  EmitI32($F84107F4);                                           { ldr x20, [sp], #16 }
+  EmitI32($F84107F3);                                           { ldr x19, [sp], #16 }
+end;
+
+procedure EmitWriteFloatFixedA64(decimals: Integer);
+var jnsOff, jbCarry, loopStart, i: Integer;
+    pow10, divisor: Int64;
+begin
+  pow10 := 1;
+  for i := 1 to decimals do pow10 := pow10 * 10;
+
+  EmitI32($F81F0FF3);                                           { str x19, [sp, #-16]! }
+  EmitI32($F81F0FF4);                                           { str x20, [sp, #-16]! }
+
+  EmitI32($937FFC01);                                           { asr x1, x0, #63 }
+  EmitI32($F100003F);                                           { cmp x1, #0 }
+  jnsOff := CodeLen;
+  EmitI32($5400000A);                                           { b.ge .pos }
+  
+  EmitLoadImmA64(1, $7FFFFFFFFFFFFFFF);
+  EmitI32($8A010000);                                           { and x0, x0, x1 }
+  EmitI32($F81F0FE0);                                           { str x0, [sp, #-16]! }
+  EmitLoadImmA64(0, Ord('-'));
+  EmitwriteCharA64;
+  EmitI32($F84107E0);                                           { ldr x0, [sp], #16 }
+  
+  Patch32(jnsOff, $5400000A or (((CodeLen - jnsOff) div 4) and $7FFFF) shl 5);
+
+  EmitI32($9E670000);                                           { fmov d0, x0 }
+  EmitLoadImmA64(2, pow10);
+  EmitI32($9E620042);                                           { scvtf d2, x2 }
+  EmitI32($1E620800);                                           { fmul d0, d0, d2 }
+  EmitI32($9E600000);                                           { fcvtns x0, d0 }
+
+  if decimals <= 0 then
+  begin
+    EmitwriteUIntA64;
+    EmitI32($F84107F4);                                         { ldr x20, [sp], #16 }
+    EmitI32($F84107F3);                                         { ldr x19, [sp], #16 }
+    Exit;
+  end;
+
+  EmitLoadImmA64(2, pow10);
+  EmitI32($9AC20C01);                                           { sdiv x1, x0, x2 }
+  EmitI32($9B028034);                                           { msub x20, x1, x2, x0 }
+  EmitI32($AA0103F3);                                           { mov x19, x1 }
+
+  EmitI32($AA1303E0);                                           { mov x0, x19 }
+  EmitwriteUIntA64;
+
+  EmitLoadImmA64(0, Ord('.'));
+  EmitwriteCharA64;
+
+  for i := decimals - 1 downto 0 do
+  begin
+    divisor := 1;
+    for loopStart := 1 to i do divisor := divisor * 10;
+    EmitLoadImmA64(1, divisor);
+    EmitI32($AA1403E0);                                         { mov x0, x20 }
+    EmitI32($9AC10C02);                                         { sdiv x2, x0, x1 }
+    EmitI32($9B018054);                                         { msub x20, x2, x1, x0 }
+    EmitI32($9100C040);                                         { add x0, x2, #48 }
+    EmitwriteCharA64;
+  end;
+
+  EmitI32($F84107F4);                                           { ldr x20, [sp], #16 }
+  EmitI32($F84107F3);                                           { ldr x19, [sp], #16 }
+end;
+
+procedure EmitWriteFloatSciA64;
+var jnsOff, jnzNz, jmpDone, laTop, laJb, leTop, leJge, jnsOff2, jmpSignDone, jmpExpSignDone: Integer;
+    i: Integer;
+begin
+  EmitI32($F81F0FF3);                                           { str x19, [sp, #-16]! }
+  EmitI32($F81F0FF4);                                           { str x20, [sp, #-16]! }
+  EmitI32($F81F0FF5);                                           { str x21, [sp, #-16]! }
+ 
+  EmitI32($937FFC01);                                           { asr x1, x0, #63 }
+  EmitI32($F100003F);                                           { cmp x1, #0 }
+  jnsOff := CodeLen;
+  EmitI32($5400000A);                                           { b.ge .pos }
+  
+  EmitLoadImmA64(1, $7FFFFFFFFFFFFFFF);
+  EmitI32($8A010000);                                           { and x0, x0, x1 }
+  EmitI32($F81F0FE0);                                           { str x0, [sp, #-16]! }
+  EmitLoadImmA64(0, Ord('-'));
+  EmitwriteCharA64;
+  EmitI32($F84107E0);                                           { ldr x0, [sp], #16 }
+  jmpSignDone := CodeLen;
+  EmitI32($14000000);                                           { b .sign_done (patched) }
+  
+  Patch32(jnsOff, $5400000A or (((CodeLen - jnsOff) div 4) and $7FFFF) shl 5);
+  EmitI32($F81F0FE0);                                           { str x0, [sp, #-16]! }
+  EmitLoadImmA64(0, Ord(' '));
+  EmitwriteCharA64;
+  EmitI32($F84107E0);                                           { ldr x0, [sp], #16 }
+  { .sign_done: }
+  Patch32(jmpSignDone, $14000000 or (((CodeLen - jmpSignDone) div 4) and $03FFFFFF));
+
+  EmitI32($F100001F);                                           { cmp x0, #0 }
+  jnzNz := CodeLen;
+  EmitI32($54000001);                                           { b.ne .nz }
+  
+  EmitLoadImmA64(0, Ord('0')); EmitwriteCharA64;
+  EmitLoadImmA64(0, Ord('.')); EmitwriteCharA64;
+  for i := 1 to 15 do
+  begin
+    EmitLoadImmA64(0, Ord('0')); EmitwriteCharA64;
+  end;
+  EmitLoadImmA64(0, Ord('E')); EmitwriteCharA64;
+  EmitLoadImmA64(0, Ord('+')); EmitwriteCharA64;
+  for i := 1 to 3 do
+  begin
+    EmitLoadImmA64(0, Ord('0')); EmitwriteCharA64;
+  end;
+  jmpDone := CodeLen;
+  EmitI32($14000000);                                           { b .done }
+
+  Patch32(jnzNz, $54000001 or (((CodeLen - jnzNz) div 4) and $7FFFF) shl 5);
+
+  EmitI32($9E670000);                                           { fmov d0, x0 }
+  EmitLoadImmA64(1, 10);
+  EmitI32($9E620021);                                           { scvtf d1, x1 }
+  EmitLoadImmA64(2, 1);
+  EmitI32($9E620042);                                           { scvtf d2, x2 }
+  
+  EmitI32($D2800013);                                           { movz x19, #0 }
+
+  laTop := CodeLen;
+  EmitI32($1E612000);                                           { fcmp d0, d1 }
+  laJb := CodeLen;
+  EmitI32($5400000B);                                           { b.lt .ea }
+  EmitI32($1E611800);                                           { fdiv d0, d0, d1 }
+  EmitI32($91000673);                                           { add x19, x19, #1 }
+  EmitI32($14000000 or (((laTop - CodeLen) div 4) and $03FFFFFF));
+
+  Patch32(laJb, $5400000B or (((CodeLen - laJb) div 4) and $7FFFF) shl 5);
+  
+  leTop := CodeLen;
+  EmitI32($1E622000);                                           { fcmp d0, d2 }
+  leJge := CodeLen;
+  EmitI32($5400000A);                                           { b.ge .val_done }
+  EmitI32($1E610800);                                           { fmul d0, d0, d1 }
+  EmitI32($D1000673);                                           { sub x19, x19, #1 }
+  EmitI32($14000000 or (((leTop - CodeLen) div 4) and $03FFFFFF));
+
+  Patch32(leJge, $5400000A or (((CodeLen - leJge) div 4) and $7FFFF) shl 5);
+
+  EmitI32($9E780000);                                           { fcvtzs x0, d0 }
+  EmitI32($9E620002);                                           { scvtf d2, x0 }
+  EmitI32($1E623800);                                           { fsub d0, d0, d2 }
+  EmitI32($9100C000);                                           { add x0, x0, #48 }
+  EmitwriteCharA64;
+  EmitLoadImmA64(0, Ord('.'));
+  EmitwriteCharA64;
+
+  EmitLoadImmA64(2, 1000000000000000);
+  EmitI32($9E620042);                                           { scvtf d2, x2 }
+  EmitI32($1E620800);                                           { fmul d0, d0, d2 }
+  EmitI32($9E600014);                                           { fcvtns x20, d0 }
+
+  EmitLoadImmA64(21, 100000000000000);                          { divisor = 10^14 }
+  for i := 0 to 14 do
+  begin
+    EmitI32($AA1403E0);                                         { mov x0, x20 }
+    EmitI32($AA1503E1);                                         { mov x1, x21 }
+    EmitI32($9AC10C02);                                         { sdiv x2, x0, x1 }
+    EmitI32($9B018054);                                         { msub x20, x2, x1, x0 }
+    EmitI32($9100C040);                                         { add x0, x2, #48 }
+    EmitwriteCharA64;
+    
+    if i < 14 then
+    begin
+      EmitLoadImmA64(1, 10);
+      EmitI32($9AC10EB5);                                       { sdiv x21, x21, x1 }
+    end;
+  end;
+
+  EmitLoadImmA64(0, Ord('E')); EmitwriteCharA64;
+
+  EmitI32($F100027F);                                           { cmp x19, #0 }
+  jnsOff2 := CodeLen;
+  EmitI32($5400000A);                                           { b.ge .exppos }
+  EmitLoadImmA64(0, Ord('-')); EmitwriteCharA64;
+  EmitI32($CB1303F3);                                           { neg x19, x19 }
+  jmpExpSignDone := CodeLen;
+  EmitI32($14000000);                                           { b .exp_sign_done (patched) }
+
+  Patch32(jnsOff2, $5400000A or (((CodeLen - jnsOff2) div 4) and $7FFFF) shl 5);
+  EmitLoadImmA64(0, Ord('+')); EmitwriteCharA64;
+  { .exp_sign_done: }
+  Patch32(jmpExpSignDone, $14000000 or (((CodeLen - jmpExpSignDone) div 4) and $03FFFFFF));
+
+  EmitLoadImmA64(1, 100);
+  EmitI32($AA1303E0);                                           { mov x0, x19 }
+  EmitI32($9AC10C02);                                           { sdiv x2, x0, x1 }
+  EmitI32($9B018053);                                           { msub x19, x2, x1, x0 }
+  EmitI32($9100C040);                                           { add x0, x2, #48 }
+  EmitwriteCharA64;
+
+  EmitLoadImmA64(1, 10);
+  EmitI32($AA1303E0);                                           { mov x0, x19 }
+  EmitI32($9AC10C02);                                           { sdiv x2, x0, x1 }
+  EmitI32($9B018053);                                           { msub x19, x2, x1, x0 }
+  EmitI32($9100C040);                                           { add x0, x2, #48 }
+  EmitwriteCharA64;
+
+  EmitI32($AA1303E0);                                           { mov x0, x19 }
+  EmitI32($9100C000);                                           { add x0, x0, #48 }
+  EmitwriteCharA64;
+
+  { .done: }
+  Patch32(jmpDone, $14000000 or (((CodeLen - jmpDone) div 4) and $03FFFFFF));
+
+  EmitI32($F84107F5);                                           { ldr x21, [sp], #16 }
+  EmitI32($F84107F4);                                           { ldr x20, [sp], #16 }
+  EmitI32($F84107F3);                                           { ldr x19, [sp], #16 }
+end;
+
+procedure EmitWriteVariantA64;
+var
+  pInt, pBool, pDbl, pChar, pStr, pNil: Integer;
+  jmpDefault, pEnd1, pEnd2, pEnd3, pEnd4: Integer;
+begin
+  EmitI32($F81F0FE0);                                           { str x0, [sp, #-16]! }
+  EmitI32($F9400000);                                           { ldr x0, [x0] (tag) }
+
+  EmitI32($F100021F);                                           { cmp x0, #1 (VT_INT) }
+  pInt := CodeLen;
+  EmitI32($54000000);                                           { b.eq .int }
+  
+  EmitI32($F100041F);                                           { cmp x0, #2 (VT_BOOL) }
+  pBool := CodeLen;
+  EmitI32($54000000);                                           { b.eq .bool }
+
+  EmitI32($F100061F);                                           { cmp x0, #3 (VT_DOUBLE) }
+  pDbl := CodeLen;
+  EmitI32($54000000);                                           { b.eq .dbl }
+
+  EmitI32($F1000A1F);                                           { cmp x0, #5 (VT_CHAR) }
+  pChar := CodeLen;
+  EmitI32($54000000);                                           { b.eq .char }
+
+  EmitI32($F1000C1F);                                           { cmp x0, #6 (VT_STRING) }
+  pStr := CodeLen;
+  EmitI32($54000000);                                           { b.eq .str }
+
+  jmpDefault := CodeLen;
+  EmitI32($14000000);                                           { b .default }
+
+  { .int / .bool }
+  Patch32(pInt, $54000000 or (((CodeLen - pInt) div 4) and $7FFFF) shl 5);
+  Patch32(pBool, $54000000 or (((CodeLen - pBool) div 4) and $7FFFF) shl 5);
+  EmitI32($F94003E0);                                           { ldr x0, [sp] }
+  EmitI32($F9400400);                                           { ldr x0, [x0, #8] }
+  EmitwriteIntA64;
+  pEnd1 := CodeLen;
+  EmitI32($14000000);
+
+  { .dbl }
+  Patch32(pDbl, $54000000 or (((CodeLen - pDbl) div 4) and $7FFFF) shl 5);
+  EmitI32($F94003E0);                                           { ldr x0, [sp] }
+  EmitI32($F9400400);                                           { ldr x0, [x0, #8] }
+  EmitWriteFloatNatA64;
+  pEnd2 := CodeLen;
+  EmitI32($14000000);
+
+  { .char }
+  Patch32(pChar, $54000000 or (((CodeLen - pChar) div 4) and $7FFFF) shl 5);
+  EmitI32($F94003E0);                                           { ldr x0, [sp] }
+  EmitI32($F9400400);                                           { ldr x0, [x0, #8] }
+  EmitwriteCharA64;
+  pEnd3 := CodeLen;
+  EmitI32($14000000);
+
+  { .str }
+  Patch32(pStr, $54000000 or (((CodeLen - pStr) div 4) and $7FFFF) shl 5);
+  EmitI32($F94003E0);                                           { ldr x0, [sp] }
+  EmitI32($F9400400);                                           { ldr x0, [x0, #8] }
+  pNil := CodeLen;
+  EmitI32($B4000000);                                           { cbz x0, .nil }
+  EmitI32($F85F8002);                                           { ldur x2, [x0, #-8] }
+  EmitI32($AA0003E1);                                           { mov x1, x0 }
+  EmitI32($D2800020);                                           { movz x0, #1 }
+  EmitI32($D2800808);                                           { movz x8, #64 }
+  EmitI32($D4000001);                                           { svc #0 }
+  { .nil }
+  Patch32(pNil, $B4000000 or (((CodeLen - pNil) div 4) and $7FFFF) shl 5);
+  pEnd4 := CodeLen;
+  EmitI32($14000000);
+
+  { .default / .done }
+  Patch32(jmpDefault, $14000000 or (((CodeLen - jmpDefault) div 4) and $03FFFFFF));
+  Patch32(pEnd1, $14000000 or (((CodeLen - pEnd1) div 4) and $03FFFFFF));
+  Patch32(pEnd2, $14000000 or (((CodeLen - pEnd2) div 4) and $03FFFFFF));
+  Patch32(pEnd3, $14000000 or (((CodeLen - pEnd3) div 4) and $03FFFFFF));
+  Patch32(pEnd4, $14000000 or (((CodeLen - pEnd4) div 4) and $03FFFFFF));
+
+  EmitI32($910043FF);                                           { add sp, sp, #16 }
+end;
+
+procedure EmitVariantClearA64;
+var pDone: Integer;
+begin
+  EmitI32($F81F0FE0);                                           { str x0, [sp, #-16]! }
+  EmitI32($F9400000);                                           { ldr x0, [x0] (tag) }
+  EmitI32($F100181F);                                           { cmp x0, #6 (VT_STRING) }
+  pDone := CodeLen;
+  EmitI32($54000001);                                           { b.ne .done }
+  EmitI32($F94003E0);                                           { ldr x0, [sp] (addr) }
+  EmitI32($F9400400);                                           { ldr x0, [x0, #8] }
+  EmitStrDecRefA64;
+  { .done }
+  Patch32(pDone, $54000001 or (((CodeLen - pDone) div 4) and $7FFFF) shl 5);
+  EmitI32($F94003E0);                                           { ldr x0, [sp] }
+  EmitI32($D2800001);                                           { movz x1, #0 }
+  EmitI32($F9000001);                                           { str x1, [x0] }
+  EmitI32($F9000401);                                           { str x1, [x0, #8] }
+  EmitI32($F84107E0);                                           { ldr x0, [sp], #16 }
+end;
+
+procedure EmitVariantRetainA64;
+var pDone: Integer;
+begin
+  EmitI32($F81F0FE0);                                           { str x0, [sp, #-16]! }
+  EmitI32($F9400000);                                           { ldr x0, [x0] (tag) }
+  EmitI32($F100181F);                                           { cmp x0, #6 (VT_STRING) }
+  pDone := CodeLen;
+  EmitI32($54000001);                                           { b.ne .done }
+  EmitI32($F94003E0);                                           { ldr x0, [sp] }
+  EmitI32($F9400400);                                           { ldr x0, [x0, #8] }
+  EmitStrIncRefA64;
+  { .done }
+  Patch32(pDone, $54000001 or (((CodeLen - pDone) div 4) and $7FFFF) shl 5);
+  EmitI32($F84107E0);                                           { ldr x0, [sp], #16 }
+end;
+
 procedure EmitLoadVarA64(idx: Integer);
 var tk: TTypeKind; sz: Integer; sgn: Boolean;
 begin
   tk := Syms[idx].TypeKind;
   sz := TypeSize(tk);
   sgn := TypeSigned(tk);
+
+  if tk = tySingle then
+  begin
+    if Syms[idx].Kind = skGlobal then
+    begin
+      EmitI32($18000041);  { ldr w1, [pc+8] }
+      EmitI32($14000002);  { b [pc+8] }
+      EmitGlobRef(Syms[idx].Offset);
+      EmitI32($B9400020);  { ldr w0, [x1] }
+    end
+    else
+    begin
+      EmitLoadImmA64(9, Syms[idx].Offset);
+      EmitI32($8B0903A9);  { add x9, x29, x9 }
+      if (Syms[idx].Kind = skParam) and Syms[idx].IsRef then
+      begin
+        EmitI32($F9400121);  { ldr x1, [x9] }
+        EmitI32($B9400020);  { ldr w0, [x1] }
+      end
+      else
+        EmitI32($B9400120);  { ldr w0, [x9] }
+    end;
+    EmitI32($1E270000);    { fmov s0, w0 }
+    EmitI32($1E22C000);    { fcvt d0, s0 }
+    EmitI32($9E660000);    { fmov x0, d0 }
+    Exit;
+  end;
 
   if Syms[idx].Kind = skGlobal then
   begin
@@ -227,6 +674,33 @@ var tk: TTypeKind; sz: Integer;
 begin
   tk := Syms[idx].TypeKind;
   sz := TypeSize(tk);
+
+  if tk = tySingle then
+  begin
+    EmitI32($9E670000);    { fmov d0, x0 }
+    EmitI32($1E624000);    { fcvt s0, d0 }
+    EmitI32($1E260000);    { fmov w0, s0 }
+    if Syms[idx].Kind = skGlobal then
+    begin
+      EmitI32($18000041);  { ldr w1, [pc+8] }
+      EmitI32($14000002);  { b [pc+8] }
+      EmitGlobRef(Syms[idx].Offset);
+      EmitI32($B9000020);  { str w0, [x1] }
+    end
+    else
+    begin
+      EmitLoadImmA64(9, Syms[idx].Offset);
+      EmitI32($8B0903A9);  { add x9, x29, x9 }
+      if (Syms[idx].Kind = skParam) and Syms[idx].IsRef then
+      begin
+        EmitI32($F9400121);  { ldr x1, [x9] }
+        EmitI32($B9000020);  { str w0, [x1] }
+      end
+      else
+        EmitI32($B9000120);  { str w0, [x9] }
+    end;
+    Exit;
+  end;
 
   if Syms[idx].Kind = skGlobal then
   begin
@@ -307,10 +781,10 @@ end;
 procedure IREmitNodeAarch64(node: Integer);
 var
   valNode, si, left, right, op, pi, argNode, nArgs, i, sz, wid: Integer;
-  classIdx, elemSize, lo: Integer;
+  classIdx, elemSize, lo, decs, specialId, jnsOff, jmpDone: Integer;
   sVal: AnsiString;
   tk, lhsTk, rhsTk: TTypeKind;
-  sgn: Boolean;
+  sgn, isComp: Boolean;
 begin
   if node = -1 then Exit;
   case IRKind[node] of
@@ -459,6 +933,47 @@ begin
           Exit;
         end;
 
+        lhsTk := IntToTypeKind(IRTk[left]);
+        rhsTk := IntToTypeKind(IRTk[right]);
+        if TypeIsFloat(lhsTk) or TypeIsFloat(rhsTk) or (op = Ord(tkSlash)) then
+        begin
+          IREmitNodeAarch64(left);
+          EmitI32($F81F0FE0); { str x0, [sp, #-16]! }
+          IREmitNodeAarch64(right);
+          EmitI32($AA0003E1); { mov x1, x0 }
+          EmitI32($F84107E0); { ldr x0, [sp], #16 }
+
+          if not TypeIsFloat(lhsTk) then
+            EmitI32($9E620000)  { scvtf d0, x0 }
+          else
+            EmitI32($9E670000); { fmov d0, x0 }
+
+          if not TypeIsFloat(rhsTk) then
+            EmitI32($9E620021)  { scvtf d1, x1 }
+          else
+            EmitI32($9E670021); { fmov d1, x1 }
+
+          if op = Ord(tkPlus) then EmitI32($1E612800)        { fadd d0, d0, d1 }
+          else if op = Ord(tkMinus) then EmitI32($1E613800)  { fsub d0, d0, d1 }
+          else if op = Ord(tkStar) then EmitI32($1E610800)   { fmul d0, d0, d1 }
+          else if op = Ord(tkSlash) then EmitI32($1E611800)  { fdiv d0, d0, d1 }
+          else if (op = Ord(tkEq)) or (op = Ord(tkNeq)) or (op = Ord(tkLt)) or
+                  (op = Ord(tkLe)) or (op = Ord(tkGt)) or (op = Ord(tkGe)) then
+          begin
+            EmitI32($1E612000); { fcmp d0, d1 }
+            EmitSetccA64(op);
+          end
+          else
+            Error('target aarch64: unsupported float binop');
+
+          if not ((op = Ord(tkEq)) or (op = Ord(tkNeq)) or (op = Ord(tkLt)) or
+                  (op = Ord(tkLe)) or (op = Ord(tkGt)) or (op = Ord(tkGe))) then
+          begin
+            EmitI32($9E660000); { fmov x0, d0 }
+          end;
+          Exit;
+        end;
+
         if not (TypeIsOrdinal(tk) or (tk = tyBoolean) or (tk = tyUnknown)) then
           Error('target aarch64: non-integer binop not yet supported');
         IREmitNodeAarch64(left);
@@ -547,7 +1062,91 @@ begin
           Exit;
         end;
         if pi < 0 then
-          Error('target aarch64: builtin/special call not yet supported');
+        begin
+          specialId := -pi;
+          if specialId = 200 then
+          begin
+            { int(x): float/Variant -> integer }
+            argNode := IRB[node];
+            valNode := IRA[argNode];
+            IREmitNodeAarch64(valNode); { result in x0 }
+            if TypeIsFloat(IntToTypeKind(IRTk[valNode])) then
+            begin
+              EmitI32($9E670000);   { fmov d0, x0 }
+              EmitI32($9EFA0000);   { fcvtzs x0, d0 }
+            end
+            else if IntToTypeKind(IRTk[valNode]) = tyVariant then
+            begin
+              { Variant: x0 is address of variant slot. }
+              EmitI32($F9400001);   { ldr x1, [x0] (tag) }
+              EmitI32($F100063F);   { cmp x1, #3 (VT_DOUBLE) }
+              jnsOff := CodeLen;
+              EmitI32($54000081);   { b.ne .not_double (patched) }
+              EmitI32($F9400400);   { ldr x0, [x0, #8] (payload) }
+              EmitI32($9E670000);   { fmov d0, x0 }
+              EmitI32($9EFA0000);   { fcvtzs x0, d0 }
+              jmpDone := CodeLen;
+              EmitI32($14000000);   { b .done (patched) }
+              { .not_double }
+              Patch32(jnsOff, $54000081 or (((CodeLen - jnsOff) div 4) and $7FFFF) shl 5);
+              EmitI32($F9400400);   { ldr x0, [x0, #8] (payload) }
+              { .done }
+              Patch32(jmpDone, $14000000 or (((CodeLen - jmpDone) div 4) and $03FFFFFF));
+            end;
+            Exit;
+          end
+          else if (specialId = 203) or (specialId = 204) or
+                  (specialId = 205) or (specialId = 206) then
+          begin
+            { Float intrinsics: 203 Trunc, 204 Round, 205 Frac, 206 Int }
+            argNode := IRB[node];
+            valNode := IRA[argNode];
+            IREmitNodeAarch64(valNode); { result in x0 }
+            if TypeIsFloat(IntToTypeKind(IRTk[valNode])) then
+            begin
+              EmitI32($9E670000);   { fmov d0, x0 }
+              if specialId = 203 then
+              begin
+                EmitI32($9E780000); { fcvtzs x0, d0 }
+              end
+              else if specialId = 204 then
+              begin
+                EmitI32($9E600000); { fcvtns x0, d0 }
+              end
+              else if specialId = 206 then
+              begin
+                EmitI32($9E780000); { fcvtzs x0, d0 }
+                EmitI32($9E620000); { scvtf d0, x0 }
+                EmitI32($9E660000); { fmov x0, d0 }
+              end
+              else
+              begin
+                { 205 Frac = x - trunc(x) }
+                EmitI32($9E780001); { fcvtzs x1, d0 }
+                EmitI32($9E620021); { scvtf d1, x1 }
+                EmitI32($1E613800); { fsub d0, d0, d1 }
+                EmitI32($9E660000); { fmov x0, d0 }
+              end;
+            end
+            else
+            begin
+              { integer argument }
+              if specialId = 205 then
+              begin
+                EmitLoadImmA64(0, 0); { Frac(int) = 0 }
+              end
+              else if specialId = 206 then
+              begin
+                EmitI32($9E620000); { scvtf d0, x0 }
+                EmitI32($9E660000); { fmov x0, d0 }
+              end;
+              { 203/204 Trunc/Round: x0 already holds it }
+            end;
+            Exit;
+          end
+          else
+            Error('target aarch64: builtin/special call not yet supported');
+        end;
         if ProcExternal[pi] then
           Error('target aarch64: external calls not yet supported');
         if TypeIsAggregate(Procs[pi].RetType) then
@@ -613,8 +1212,24 @@ begin
 
     IR_LOAD_MEM:
       begin
-        IREmitNodeAarch64(IRA[node]); { address -> x0 }
         tk := IntToTypeKind(IRTk[node]);
+        if tk = tySingle then
+        begin
+          IREmitNodeAarch64(IRA[node]); { address -> x0 }
+          EmitI32($B9400000);  { ldr w0, [x0] }
+          EmitI32($1E270000);  { fmov s0, w0 }
+          EmitI32($1E22C000);  { fcvt d0, s0 }
+          EmitI32($9E660000);  { fmov x0, d0 }
+          Exit;
+        end;
+        if (tk = tyDouble) or (tk = tyExtended) then
+        begin
+          IREmitNodeAarch64(IRA[node]); { address -> x0 }
+          EmitI32($F9400000);  { ldr x0, [x0] }
+          Exit;
+        end;
+        
+        IREmitNodeAarch64(IRA[node]); { address -> x0 }
         if not (TypeIsOrdinal(tk) or (tk = tyBoolean) or (tk = tyPointer) or
                 (tk = tyChar) or (tk = tyUnknown) or
                 (tk = tyAnsiString) or (tk = tyClass)) then
@@ -654,6 +1269,27 @@ begin
           EmitI32($F9000022);                   { str x2, [x1] }
           EmitStrDecRefA64;                     { release old }
           EmitI32($910043FF);                   { add sp, sp, #16 }
+          Exit;
+        end;
+        if tk = tySingle then
+        begin
+          IREmitNodeAarch64(IRB[node]); { value -> x0 }
+          EmitI32($F81F0FE0);           { str x0, [sp, #-16]! }
+          IREmitNodeAarch64(IRA[node]); { address -> x0 }
+          EmitI32($F84107E1);           { ldr x1, [sp], #16 (value) }
+          EmitI32($9E670020);           { fmov d0, x1 }
+          EmitI32($1E624000);           { fcvt s0, d0 }
+          EmitI32($1E260001);           { fmov w1, s0 }
+          EmitI32($B9000001);           { str w1, [x0] }
+          Exit;
+        end;
+        if (tk = tyDouble) or (tk = tyExtended) then
+        begin
+          IREmitNodeAarch64(IRB[node]); { value -> x0 }
+          EmitI32($F81F0FE0);           { str x0, [sp, #-16]! }
+          IREmitNodeAarch64(IRA[node]); { address -> x0 }
+          EmitI32($F84107E1);           { ldr x1, [sp], #16 (value) }
+          EmitI32($F9000001);           { str x1, [x0] }
           Exit;
         end;
         if not (TypeIsOrdinal(tk) or (tk = tyBoolean) or (tk = tyPointer) or
@@ -759,7 +1395,13 @@ begin
     IR_NEG:
       begin
         IREmitNodeAarch64(IRA[node]);
-        EmitI32($CB0003E0); { neg x0, x0 }
+        if TypeIsFloat(IntToTypeKind(IRTk[node])) then
+        begin
+          EmitLoadImmA64(1, Int64($8000000000000000));
+          EmitI32($CA010000); { eor x0, x0, x1 }
+        end
+        else
+          EmitI32($CB0003E0); { neg x0, x0 }
       end;
 
     IR_NOT:
@@ -780,7 +1422,20 @@ begin
       begin
         valNode := IRA[node];
         wid  := IRB[node];   { field width, 0 = none }
-        if IRKind[valNode] = IR_CONST_STR then
+        decs := IRC[node];   { decimals, -1 = none }
+        if IntToTypeKind(IRTk[node]) = tyVariant then
+        begin
+          IREmitNodeAarch64(valNode);
+          EmitWriteVariantA64;
+        end
+        else if TypeIsFloat(IntToTypeKind(IRTk[node])) then
+        begin
+          IREmitNodeAarch64(valNode);
+          if decs = -2 then EmitWriteFloatNatA64
+          else if decs >= 0 then EmitWriteFloatFixedA64(decs)
+          else EmitWriteFloatSciA64;
+        end
+        else if IRKind[valNode] = IR_CONST_STR then
         begin
           sVal := GetTokenStrFromRaw(IRA[valNode], IRB[valNode]);
           si := InternStr(sVal);
@@ -882,6 +1537,140 @@ begin
           else
             EmitExit(0);
         end;
+      end;
+      
+    IR_VAR_STORE:
+      begin
+        tk := IntToTypeKind(IRC[node]);
+        if tk = tyVariant then
+        begin
+          IREmitNodeAarch64(IRB[node]);                 { x0 = src addr }
+          EmitVariantRetainA64;
+          EmitI32($F81F0FE0);                           { str x0, [sp, #-16]! }
+          IREmitNodeAarch64(IRA[node]);                 { x0 = dest addr }
+          EmitVariantClearA64;
+          EmitI32($AA0003E1);                           { mov x1, x0 }
+          EmitI32($F84107E0);                           { ldr x0, [sp], #16 }
+          EmitI32($A9400C02);                           { ldp x2, x3, [x0] }
+          EmitI32($A9000C22);                           { stp x2, x3, [x1] }
+        end
+        else
+        begin
+          case tk of
+            tyInteger, tyInt8, tyInt16, tyInt32: sz := VT_INT;
+            tyInt64, tyNativeInt:                sz := VT_INT64;
+            tyUInt8, tyUInt16, tyUInt32, tyUInt64,
+            tyNativeUInt, tyPointer:             sz := VT_INT64;
+            tyBoolean:                           sz := VT_BOOL;
+            tyChar:                              sz := VT_CHAR;
+            tyDouble:                            sz := VT_DOUBLE;
+            tyString, tyAnsiString:              sz := VT_STRING;
+          else
+            Error('Variant := this type not yet supported (single/extended pending)');
+          end;
+          
+          if tk = tyString then
+          begin
+            IREmitNodeAarch64(IRB[node]);   { x0 = inline string buffer }
+            EmitI32($AA0003E2);             { mov x2, x0 }
+            EmitI32($F9400040);             { ldr x0, [x2] (len) }
+            EmitI32($91002041);             { add x1, x2, #8 (src) }
+            pi := FindProc('PXXStrFromLit');
+            if pi < 0 then Error('compiler error: PXXStrFromLit not found');
+            EmitCallProc(pi);               { x0 = new AnsiString }
+          end
+          else if tk = tyAnsiString then
+          begin
+            IREmitNodeAarch64(IRB[node]);   { x0 = handle }
+            EmitStrIncRefA64;
+          end
+          else
+          begin
+            IREmitNodeAarch64(IRB[node]);   { x0 = scalar value }
+            if (tk = tyInteger) or (tk = tyInt8) or (tk = tyInt16) or (tk = tyInt32) then
+              EmitI32($93407C00);           { sxtw x0, w0 }
+          end;
+          
+          EmitI32($F81F0FE0);               { str x0, [sp, #-16]! }
+          IREmitNodeAarch64(IRA[node]);     { x0 = dest addr }
+          EmitVariantClearA64;
+          EmitI32($F84107E1);               { ldr x1, [sp], #16 }
+          EmitLoadImmA64(2, sz);
+          EmitI32($F9000002);               { str x2, [x0] (tag) }
+          EmitI32($F9000401);               { str x1, [x0, #8] (payload) }
+        end;
+      end;
+
+    IR_VAR_BOX:
+      begin
+        tk := IntToTypeKind(IRC[node]);
+        case tk of
+          tyInteger, tyInt8, tyInt16, tyInt32: sz := VT_INT;
+          tyInt64, tyNativeInt:                sz := VT_INT64;
+          tyUInt8, tyUInt16, tyUInt32, tyUInt64,
+          tyNativeUInt, tyPointer:             sz := VT_INT64;
+          tyBoolean:                           sz := VT_BOOL;
+          tyChar:                              sz := VT_CHAR;
+          tyDouble:                            sz := VT_DOUBLE;
+          tyString, tyAnsiString:              sz := VT_STRING;
+        else
+          Error('Variant operand: this scalar type not yet supported (single/extended pending)');
+        end;
+
+        if tk = tyString then
+        begin
+          IREmitNodeAarch64(IRB[node]);   { x0 = inline string buffer }
+          EmitI32($AA0003E2);             { mov x2, x0 }
+          EmitI32($F9400040);             { ldr x0, [x2] (len) }
+          EmitI32($91002041);             { add x1, x2, #8 (src) }
+          pi := FindProc('PXXStrFromLit');
+          if pi < 0 then Error('compiler error: PXXStrFromLit not found');
+          EmitCallProc(pi);               { x0 = new AnsiString }
+        end
+        else if tk = tyAnsiString then
+        begin
+          IREmitNodeAarch64(IRB[node]);   { x0 = handle }
+          EmitStrIncRefA64;
+        end
+        else
+        begin
+          IREmitNodeAarch64(IRB[node]);   { x0 = scalar value }
+          if (tk = tyInteger) or (tk = tyInt8) or (tk = tyInt16) or (tk = tyInt32) then
+            EmitI32($93407C00);           { sxtw x0, w0 }
+        end;
+
+        EmitI32($F81F0FE0);               { str x0, [sp, #-16]! }
+        IREmitNodeAarch64(IRA[node]);     { x0 = temp addr }
+        EmitVariantClearA64;
+        EmitI32($F84107E1);               { ldr x1, [sp], #16 }
+        EmitLoadImmA64(2, sz);
+        EmitI32($F9000002);               { str x2, [x0] (tag) }
+        EmitI32($F9000401);               { str x1, [x0, #8] (payload) }
+      end;
+
+    IR_VAR_BINOP:
+      begin
+        isComp := IntToTypeKind(IRTk[node]) = tyBoolean;
+        IREmitNodeAarch64(IRA[node]);                 { x0 = left addr }
+        EmitI32($F81F0FE0);                           { str x0, [sp, #-16]! }
+        IREmitNodeAarch64(IRB[node]);                 { x0 = right addr }
+        EmitI32($AA0003E2);                           { mov x2, x0 (right) }
+        EmitI32($F84107E1);                           { ldr x1, [sp], #16 (left) }
+        
+        if isComp then
+          EmitLoadImmA64(0, 0)
+        else
+          EmitLoadGlobAddrA64(0, Integer(IRIVal[node]));
+          
+        EmitLoadImmA64(3, IRC[node]);
+        if isComp then
+          EmitLoadImmA64(4, 1)
+        else
+          EmitLoadImmA64(4, 0);
+          
+        pi := FindProc('PXXVarBinOp');
+        if pi < 0 then Error('compiler error: PXXVarBinOp not found');
+        EmitCallProc(pi);
       end;
 
     else
@@ -1041,7 +1830,7 @@ begin
 
       IR_NOP, IR_CONST_STR, IR_CONST_INT, IR_BLOCK,
       IR_LOAD_SYM, IR_BINOP, IR_NEG, IR_NOT, IR_ARG, IR_LEA, IR_SYSCALL,
-      IR_FIELD, IR_INDEX, IR_CONST_STR: ;
+      IR_FIELD, IR_INDEX, IR_CONST_STR, IR_VAR_BOX, IR_VAR_BINOP: ;
 
       else
         IREmitNodeAarch64(i);

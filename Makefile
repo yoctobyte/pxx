@@ -732,7 +732,10 @@ test-aarch64: $(COMPILER)
 	./$(COMPILER) --target=aarch64 test/test_cross_exception.pas /tmp/test_aarch64_exception
 	./$(COMPILER) test/test_cross_exception.pas /tmp/test_aarch64_exception_x64
 	test "$$(tools/run_target.sh aarch64 /tmp/test_aarch64_exception)" = "$$(/tmp/test_aarch64_exception_x64)"
-	@echo "aarch64 hello + arith + procs + loops + write + varparam + syscall + heap + string + record + dynarray + exception ok (output identical to x86-64)"
+	./$(COMPILER) --target=aarch64 test/test_cross_float.pas /tmp/test_aarch64_float
+	./$(COMPILER) test/test_cross_float.pas /tmp/test_aarch64_float_x64
+	test "$$(tools/run_target.sh aarch64 /tmp/test_aarch64_float)" = "$$(/tmp/test_aarch64_float_x64)"
+	@echo "aarch64 hello + arith + procs + loops + write + varparam + syscall + heap + string + record + dynarray + exception + float ok (output identical to x86-64)"
 
 test-arm32: $(COMPILER)
 	./$(COMPILER) --target=arm32 test/hello.pas /tmp/test_arm32_hello
