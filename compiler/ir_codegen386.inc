@@ -453,6 +453,302 @@ begin
     Error('target i386: only ordinal/pointer/string variables supported yet');
 end;
 
+{ ---- 64-bit (Int64/UInt64) value model. Unlike the low-dword fat-slot model
+  used for ordinary ordinals, true 8-byte values live in edx:eax (edx = high
+  dword) while in flight, are stored/loaded as two dwords, and have their own
+  arithmetic/shift/compare sequences below. Producers of a 64-bit-typed node
+  leave edx:eax; consumers that only need 32 bits keep eax (correct
+  truncation). ---- }
+
+function Is64Bit386(tk: TTypeKind): Boolean;
+begin
+  Result := (tk = tyInt64) or (tk = tyUInt64);
+end;
+
+procedure EmitNode64_386(node: Integer);
+{ Emit node and guarantee its full 64-bit value sits in edx:eax. A 32-bit
+  source is widened in place: sign-extend (cdq) when signed, else zero-extend. }
+var ntk: TTypeKind;
+begin
+  IREmitNode386(node);
+  ntk := IntToTypeKind(IRTk[node]);
+  if not Is64Bit386(ntk) then
+  begin
+    if TypeSigned(ntk) then
+      EmitB($99)                                  { cdq }
+    else
+      begin EmitB($31); EmitB($D2); end;          { xor edx, edx }
+  end;
+end;
+
+procedure EmitwriteUInt64_386;
+{ edx:eax = unsigned 64-bit value -> decimal on stdout. Long division by 10:
+  divide the high dword, carry the remainder into the low dword. Digit string
+  grows downward from the INTBUF tail; the count is bufend - edi. }
+var loopStart: Integer;
+begin
+  EmitB($89); EmitB($C3);                                { mov ebx, eax (lo) }
+  EmitB($89); EmitB($D6);                                { mov esi, edx (hi) }
+  EmitB($BF); EmitDataRef(INTBUF_OFFSET + INTBUF_SIZE);  { mov edi, buf end }
+  loopStart := CodeLen;
+  EmitB($89); EmitB($F0);                                { mov eax, esi (hi) }
+  EmitB($31); EmitB($D2);                                { xor edx, edx }
+  EmitB($B9); EmitI32(10);                               { mov ecx, 10 }
+  EmitB($F7); EmitB($F1);                                { div ecx -> eax=hi/10, edx=hi%10 }
+  EmitB($89); EmitB($C6);                                { mov esi, eax (new hi) }
+  EmitB($89); EmitB($D8);                                { mov eax, ebx (lo) }
+  EmitB($F7); EmitB($F1);                                { div ecx -> eax=quot, edx=digit }
+  EmitB($89); EmitB($C3);                                { mov ebx, eax (new lo) }
+  EmitB($80); EmitB($C2); EmitB($30);                    { add dl, '0' }
+  EmitB($4F);                                            { dec edi }
+  EmitB($88); EmitB($17);                                { mov [edi], dl }
+  EmitB($89); EmitB($F0);                                { mov eax, esi (hi) }
+  EmitB($09); EmitB($D8);                                { or eax, ebx (zero?) }
+  EmitB($75); EmitB(Byte(loopStart - (CodeLen + 1)));    { jnz loop }
+  EmitB($BA); EmitDataRef(INTBUF_OFFSET + INTBUF_SIZE);  { mov edx, buf end }
+  EmitB($29); EmitB($FA);                                { sub edx, edi (len) }
+  EmitB($89); EmitB($F9);                                { mov ecx, edi (buf) }
+  EmitB($BB); EmitI32(STDOUT);                           { mov ebx, 1 }
+  EmitB($B8); EmitI32(4);                                { mov eax, 4 }
+  EmitB($CD); EmitB($80);                                { int 0x80 }
+end;
+
+procedure EmitwriteInt64_386;
+{ edx:eax = signed 64-bit value -> decimal on stdout. }
+var jnsOff: Integer;
+begin
+  EmitB($85); EmitB($D2);                          { test edx, edx }
+  EmitB($79); jnsOff := CodeLen; EmitB(0);         { jns .positive }
+  EmitB($F7); EmitB($D8);                          { neg eax }
+  EmitB($83); EmitB($D2); EmitB($00);              { adc edx, 0 }
+  EmitB($F7); EmitB($DA);                          { neg edx }
+  EmitB($52);                                      { push edx (save value) }
+  EmitB($50);                                      { push eax }
+  EmitwriteSyscall(MINUS_OFFSET, 1);               { clobbers eax..edx }
+  EmitB($58);                                      { pop eax }
+  EmitB($5A);                                      { pop edx }
+  Code[jnsOff] := Byte(CodeLen - (jnsOff + 1));
+  EmitwriteUInt64_386;
+end;
+
+procedure EmitUDivMod64Core_386(wantMod: Boolean);
+{ Unsigned 64-bit divide. Precondition: the dividend is on the stack
+  ([esp]=lo, [esp+4]=hi) and the divisor is in edx:eax. Restoring binary long
+  division, 64 iterations, shifting the dividend's bits MSB-first into a running
+  remainder. Postcondition: quotient (or remainder when wantMod) in edx:eax;
+  the 8-byte dividend has been popped. Clobbers ebx, ecx, esi, edi. }
+var loopOff, skip1, jaOff, skip2: Integer;
+begin
+  EmitB($52);                                      { push edx (D.hi) }
+  EmitB($50);                                      { push eax (D.lo) }
+  { stack: [esp]=D.lo [esp+4]=D.hi [esp+8]=N.lo [esp+12]=N.hi }
+  EmitB($8B); EmitB($44); EmitB($24); EmitB($08);  { mov eax, [esp+8] (NQ.lo) }
+  EmitB($8B); EmitB($54); EmitB($24); EmitB($0C);  { mov edx, [esp+12] (NQ.hi) }
+  EmitB($31); EmitB($F6);                          { xor esi, esi (R.lo) }
+  EmitB($31); EmitB($FF);                          { xor edi, edi (R.hi) }
+  EmitB($B9); EmitI32(64);                         { mov ecx, 64 }
+  loopOff := CodeLen;
+  EmitB($D1); EmitB($E0);                          { shl eax, 1 }
+  EmitB($D1); EmitB($D2);                          { rcl edx, 1 }
+  EmitB($D1); EmitB($D6);                          { rcl esi, 1 }
+  EmitB($D1); EmitB($D7);                          { rcl edi, 1 }
+  EmitB($8B); EmitB($DF);                          { mov ebx, edi (R.hi) }
+  EmitB($3B); EmitB($5C); EmitB($24); EmitB($04);  { cmp ebx, [esp+4] (D.hi) }
+  EmitB($72); skip1 := CodeLen; EmitB(0);          { jb .skip }
+  EmitB($77); jaOff := CodeLen; EmitB(0);          { ja .sub }
+  EmitB($8B); EmitB($DE);                          { mov ebx, esi (R.lo) }
+  EmitB($3B); EmitB($1C); EmitB($24);              { cmp ebx, [esp] (D.lo) }
+  EmitB($72); skip2 := CodeLen; EmitB(0);          { jb .skip }
+  Code[jaOff] := Byte(CodeLen - (jaOff + 1));       { .sub: }
+  EmitB($2B); EmitB($34); EmitB($24);              { sub esi, [esp] }
+  EmitB($1B); EmitB($7C); EmitB($24); EmitB($04);  { sbb edi, [esp+4] }
+  EmitB($83); EmitB($C8); EmitB($01);              { or eax, 1 (set quotient bit) }
+  Code[skip1] := Byte(CodeLen - (skip1 + 1));       { .skip: }
+  Code[skip2] := Byte(CodeLen - (skip2 + 1));
+  EmitB($49);                                      { dec ecx }
+  EmitB($75); EmitB(Byte(loopOff - (CodeLen + 1))); { jnz .loop }
+  EmitB($83); EmitB($C4); EmitB($10);              { add esp, 16 (pop D + N) }
+  if wantMod then
+  begin
+    EmitB($89); EmitB($F0);                        { mov eax, esi (rem lo) }
+    EmitB($89); EmitB($FA);                        { mov edx, edi (rem hi) }
+  end;
+end;
+
+procedure EmitIDivMod64Core_386(wantMod: Boolean);
+{ Signed 64-bit divide/mod with the same calling convention as the unsigned
+  core. Truncated division: quotient sign = dividend xor divisor; remainder
+  takes the dividend's sign. Operands are made non-negative in place, the
+  unsigned core runs, then the result sign is applied. The 1-byte sign-flag
+  state is stashed in INTBUF (free during arithmetic, single-threaded). }
+var dpos, npos, doneOff: Integer;
+begin
+  EmitB($31); EmitB($DB);                          { xor ebx, ebx (flags) }
+  EmitB($85); EmitB($D2);                          { test edx, edx (divisor sign) }
+  EmitB($79); dpos := CodeLen; EmitB(0);           { jns .dpos }
+  EmitB($F7); EmitB($D8);                          { neg eax }
+  EmitB($83); EmitB($D2); EmitB($00);              { adc edx, 0 }
+  EmitB($F7); EmitB($DA);                          { neg edx (abs divisor) }
+  EmitB($83); EmitB($CB); EmitB($01);              { or ebx, 1 (quotient negate) }
+  Code[dpos] := Byte(CodeLen - (dpos + 1));         { .dpos: }
+  EmitB($8B); EmitB($34); EmitB($24);              { mov esi, [esp] (N.lo) }
+  EmitB($8B); EmitB($7C); EmitB($24); EmitB($04);  { mov edi, [esp+4] (N.hi) }
+  EmitB($85); EmitB($FF);                          { test edi, edi (dividend sign) }
+  EmitB($79); npos := CodeLen; EmitB(0);           { jns .npos }
+  EmitB($F7); EmitB($DE);                          { neg esi }
+  EmitB($83); EmitB($D7); EmitB($00);              { adc edi, 0 }
+  EmitB($F7); EmitB($DF);                          { neg edi (abs dividend) }
+  EmitB($89); EmitB($34); EmitB($24);              { mov [esp], esi }
+  EmitB($89); EmitB($7C); EmitB($24); EmitB($04);  { mov [esp+4], edi }
+  EmitB($83); EmitB($CB); EmitB($02);              { or ebx, 2 (remainder negate) }
+  EmitB($83); EmitB($F3); EmitB($01);              { xor ebx, 1 (flip quotient negate) }
+  Code[npos] := Byte(CodeLen - (npos + 1));         { .npos: }
+  EmitB($88); EmitB($1D); EmitDataRef(INTBUF_OFFSET); { mov [INTBUF], bl (stash flags) }
+  EmitUDivMod64Core_386(wantMod);                  { result in edx:eax }
+  EmitB($8A); EmitB($1D); EmitDataRef(INTBUF_OFFSET); { mov bl, [INTBUF] }
+  if wantMod then
+    begin EmitB($F6); EmitB($C3); EmitB($02); end  { test bl, 2 }
+  else
+    begin EmitB($F6); EmitB($C3); EmitB($01); end; { test bl, 1 }
+  EmitB($74); doneOff := CodeLen; EmitB(0);        { jz .done }
+  EmitB($F7); EmitB($D8);                          { neg eax }
+  EmitB($83); EmitB($D2); EmitB($00);              { adc edx, 0 }
+  EmitB($F7); EmitB($DA);                          { neg edx (apply sign) }
+  Code[doneOff] := Byte(CodeLen - (doneOff + 1));   { .done: }
+end;
+
+procedure EmitBinop64_386(left, right, op: Integer; signedOp: Boolean);
+{ Evaluate (left OP right) as a 64-bit operation. left is spilled to the stack
+  ([esp]=lo, [esp+4]=hi); right is materialized into edx:eax. Arithmetic/bit
+  ops leave the 64-bit result in edx:eax; comparisons leave 0/1 in eax. }
+var skipOff: Integer;
+begin
+  EmitNode64_386(left);
+  EmitB($52);                                      { push edx (left hi) }
+  EmitB($50);                                      { push eax (left lo) }
+  EmitNode64_386(right);                           { right -> edx:eax }
+
+  if op = Ord(tkPlus) then
+  begin
+    EmitB($03); EmitB($04); EmitB($24);            { add eax, [esp] }
+    EmitB($13); EmitB($54); EmitB($24); EmitB($04);{ adc edx, [esp+4] }
+    EmitB($83); EmitB($C4); EmitB($08);            { add esp, 8 }
+  end
+  else if op = Ord(tkMinus) then
+  begin
+    EmitB($8B); EmitB($0C); EmitB($24);            { mov ecx, [esp] (left lo) }
+    EmitB($8B); EmitB($5C); EmitB($24); EmitB($04);{ mov ebx, [esp+4] (left hi) }
+    EmitB($29); EmitB($C1);                        { sub ecx, eax }
+    EmitB($19); EmitB($D3);                        { sbb ebx, edx }
+    EmitB($89); EmitB($C8);                        { mov eax, ecx }
+    EmitB($89); EmitB($DA);                        { mov edx, ebx }
+    EmitB($83); EmitB($C4); EmitB($08);            { add esp, 8 }
+  end
+  else if op = Ord(tkAnd) then
+  begin
+    EmitB($23); EmitB($04); EmitB($24);            { and eax, [esp] }
+    EmitB($23); EmitB($54); EmitB($24); EmitB($04);{ and edx, [esp+4] }
+    EmitB($83); EmitB($C4); EmitB($08);            { add esp, 8 }
+  end
+  else if op = Ord(tkOr) then
+  begin
+    EmitB($0B); EmitB($04); EmitB($24);            { or eax, [esp] }
+    EmitB($0B); EmitB($54); EmitB($24); EmitB($04);{ or edx, [esp+4] }
+    EmitB($83); EmitB($C4); EmitB($08);            { add esp, 8 }
+  end
+  else if op = Ord(tkStar) then
+  begin
+    { A=left ([esp]=Alo,[esp+4]=Ahi), B=right (eax=Blo, edx=Bhi).
+      result.lo:hi = Alo*Blo + ((Ahi*Blo + Alo*Bhi) << 32) (low 64). }
+    EmitB($89); EmitB($D1);                        { mov ecx, edx (Bhi) }
+    EmitB($0F); EmitB($AF); EmitB($0C); EmitB($24);{ imul ecx, [esp] (Bhi*Alo) }
+    EmitB($89); EmitB($C3);                        { mov ebx, eax (Blo) }
+    EmitB($0F); EmitB($AF); EmitB($44); EmitB($24); EmitB($04); { imul eax,[esp+4] (Blo*Ahi) }
+    EmitB($01); EmitB($C1);                        { add ecx, eax (cross terms) }
+    EmitB($89); EmitB($D8);                        { mov eax, ebx (Blo) }
+    EmitB($F7); EmitB($24); EmitB($24);            { mul dword [esp] (Blo*Alo -> edx:eax) }
+    EmitB($01); EmitB($CA);                        { add edx, ecx }
+    EmitB($83); EmitB($C4); EmitB($08);            { add esp, 8 }
+  end
+  else if (op = Ord(tkShl)) or (op = Ord(tkIdent)) then
+  begin
+    { shift count in eax (right.lo) -> cl; value = left from stack. }
+    EmitB($89); EmitB($C1);                        { mov ecx, eax (count) }
+    EmitB($58);                                    { pop eax (lo) }
+    EmitB($5A);                                    { pop edx (hi) }
+    if op = Ord(tkShl) then
+    begin
+      EmitB($0F); EmitB($A5); EmitB($C2);          { shld edx, eax, cl }
+      EmitB($D3); EmitB($E0);                      { shl eax, cl }
+      EmitB($F6); EmitB($C1); EmitB($20);          { test cl, 32 }
+      EmitB($74); skipOff := CodeLen; EmitB(0);    { je .done }
+      EmitB($89); EmitB($C2);                      { mov edx, eax }
+      EmitB($31); EmitB($C0);                      { xor eax, eax }
+      Code[skipOff] := Byte(CodeLen - (skipOff + 1));
+    end
+    else
+    begin
+      { 'shr' (logical), matching FPC shr on Int64/UInt64 }
+      EmitB($0F); EmitB($AD); EmitB($D0);          { shrd eax, edx, cl }
+      EmitB($D3); EmitB($EA);                      { shr edx, cl }
+      EmitB($F6); EmitB($C1); EmitB($20);          { test cl, 32 }
+      EmitB($74); skipOff := CodeLen; EmitB(0);    { je .done }
+      EmitB($89); EmitB($D0);                      { mov eax, edx }
+      EmitB($31); EmitB($D2);                      { xor edx, edx }
+      Code[skipOff] := Byte(CodeLen - (skipOff + 1));
+    end;
+  end
+  else if (op = Ord(tkDiv)) or (op = Ord(tkMod)) then
+  begin
+    { dividend (left) is already at [esp]/[esp+4]; divisor (right) in edx:eax. }
+    if signedOp then EmitIDivMod64Core_386(op = Ord(tkMod))
+    else EmitUDivMod64Core_386(op = Ord(tkMod));
+  end
+  else if (op = Ord(tkEq)) or (op = Ord(tkNeq)) then
+  begin
+    EmitB($8B); EmitB($0C); EmitB($24);            { mov ecx, [esp] (left lo) }
+    EmitB($31); EmitB($C1);                        { xor ecx, eax }
+    EmitB($8B); EmitB($5C); EmitB($24); EmitB($04);{ mov ebx, [esp+4] (left hi) }
+    EmitB($31); EmitB($D3);                        { xor ebx, edx }
+    EmitB($83); EmitB($C4); EmitB($08);            { add esp, 8 (before the flag-setting or) }
+    EmitB($09); EmitB($D9);                        { or ecx, ebx (zero iff equal) }
+    if op = Ord(tkEq) then
+      begin EmitB($0F); EmitB($94); EmitB($C0); end   { sete al }
+    else
+      begin EmitB($0F); EmitB($95); EmitB($C0); end;  { setne al }
+    EmitB($0F); EmitB($B6); EmitB($C0);            { movzx eax, al }
+  end
+  else if (op = Ord(tkLt)) or (op = Ord(tkLe)) or
+          (op = Ord(tkGt)) or (op = Ord(tkGe)) then
+  begin
+    { Compute left - right (or right - left) via (sub lo, sbb hi); the flags of
+      the final sbb give the full 64-bit ordered comparison. setl/setb yields
+      "first operand < second"; <= and >= are derived by negating. }
+    EmitB($8B); EmitB($0C); EmitB($24);            { mov ecx, [esp] (left lo) }
+    EmitB($8B); EmitB($5C); EmitB($24); EmitB($04);{ mov ebx, [esp+4] (left hi) }
+    EmitB($83); EmitB($C4); EmitB($08);            { add esp, 8 }
+    if (op = Ord(tkGt)) or (op = Ord(tkLe)) then
+    begin
+      EmitB($29); EmitB($C8);                      { sub eax, ecx (right.lo-left.lo) }
+      EmitB($19); EmitB($DA);                      { sbb edx, ebx (right.hi-left.hi) }
+    end
+    else
+    begin
+      EmitB($29); EmitB($C1);                      { sub ecx, eax (left.lo-right.lo) }
+      EmitB($19); EmitB($DB);                      { sbb ebx, edx (left.hi-right.hi) }
+    end;
+    if signedOp then
+      begin EmitB($0F); EmitB($9C); EmitB($C0); end   { setl al }
+    else
+      begin EmitB($0F); EmitB($92); EmitB($C0); end;  { setb al }
+    if (op = Ord(tkLe)) or (op = Ord(tkGe)) then
+      begin EmitB($34); EmitB($01); end;           { xor al, 1 }
+    EmitB($0F); EmitB($B6); EmitB($C0);            { movzx eax, al }
+  end
+  else
+    Error('target i386: 64-bit binop operator not yet supported');
+end;
+
 procedure IREmitNode386(node: Integer);
 var
   valNode, si, left, right, op, pi, argNode, nArgs, argBytes, wid, sz, i, j, base: Integer;
@@ -477,8 +773,15 @@ begin
           EmitFloatUnspill386;
           Exit;
         end;
-        { i386 currently uses a low-dword scalar model for 8-byte ordinals; keep
-          constants consistent with the matching load/store paths. }
+        if Is64Bit386(IntToTypeKind(IRTk[node])) then
+        begin
+          { Full 64-bit literal -> edx:eax. }
+          EmitB($B8); EmitI32(Integer(IRIVal[node] and $FFFFFFFF));   { mov eax, lo }
+          EmitB($BA); EmitI32(Integer(IRIVal[node] shr 32));          { mov edx, hi }
+          Exit;
+        end;
+        { Ordinary ordinals use the low-dword scalar model; keep constants
+          consistent with the matching load/store paths. }
         EmitB($B8); EmitI32(IRIVal[node]);           { mov eax, imm32 }
       end;
 
@@ -528,6 +831,27 @@ begin
         begin
           { Variant in value position = its slot address. }
           EmitLoadVariantAddr386(node);
+          Exit;
+        end;
+        if Is64Bit386(tk) then
+        begin
+          { Full 8-byte load -> edx:eax (edx = high dword). }
+          if Syms[si].Kind = skGlobal then
+          begin
+            EmitB($A1); EmitGlobRef(Syms[si].Offset);              { mov eax, [slot] }
+            EmitB($8B); EmitB($15); EmitGlobRef(Syms[si].Offset + 4); { mov edx, [slot+4] }
+          end
+          else if (Syms[si].Kind = skParam) and Syms[si].IsRef then
+          begin
+            EmitB($8B); EmitB($85); EmitI32(Syms[si].Offset);      { mov eax, [ebp+off] (addr) }
+            EmitB($8B); EmitB($50); EmitB($04);                    { mov edx, [eax+4] }
+            EmitB($8B); EmitB($00);                                { mov eax, [eax] }
+          end
+          else
+          begin
+            EmitB($8B); EmitB($85); EmitI32(Syms[si].Offset);      { mov eax, [ebp+off] }
+            EmitB($8B); EmitB($95); EmitI32(Syms[si].Offset + 4);  { mov edx, [ebp+off+4] }
+          end;
           Exit;
         end;
         sz := TypeSize(tk);
@@ -730,6 +1054,27 @@ begin
               begin EmitB($F3); EmitB($0F); EmitB($11); EmitB($85); EmitI32(Syms[si].Offset); end  { movss [ebp+off],xmm0 }
             else
               begin EmitB($F2); EmitB($0F); EmitB($11); EmitB($85); EmitI32(Syms[si].Offset); end; { movsd [ebp+off],xmm0 }
+          end;
+          Exit;
+        end;
+        if Is64Bit386(tk) then
+        begin
+          EmitNode64_386(IRB[node]);                  { value -> edx:eax }
+          if Syms[si].Kind = skGlobal then
+          begin
+            EmitB($A3); EmitGlobRef(Syms[si].Offset);                  { mov [slot], eax }
+            EmitB($89); EmitB($15); EmitGlobRef(Syms[si].Offset + 4);  { mov [slot+4], edx }
+          end
+          else if (Syms[si].Kind = skParam) and Syms[si].IsRef then
+          begin
+            EmitB($8B); EmitB($8D); EmitI32(Syms[si].Offset);          { mov ecx, [ebp+off] (addr) }
+            EmitB($89); EmitB($01);                                    { mov [ecx], eax }
+            EmitB($89); EmitB($51); EmitB($04);                        { mov [ecx+4], edx }
+          end
+          else
+          begin
+            EmitB($89); EmitB($85); EmitI32(Syms[si].Offset);          { mov [ebp+off], eax }
+            EmitB($89); EmitB($95); EmitI32(Syms[si].Offset + 4);      { mov [ebp+off+4], edx }
           end;
           Exit;
         end;
@@ -1234,6 +1579,15 @@ begin
           Exit;
         end;
 
+        { 64-bit (Int64/UInt64) integer ops use the dedicated edx:eax path.
+          A comparison carries a Boolean result tk, so key off the operands. }
+        if Is64Bit386(tk) or Is64Bit386(lhsTk) or Is64Bit386(rhsTk) then
+        begin
+          EmitBinop64_386(left, right, op,
+            not ((lhsTk = tyUInt64) or (rhsTk = tyUInt64)));
+          Exit;
+        end;
+
         { tyUnknown: synthesized integer nodes (e.g. the for-loop increment)
           carry tk=0; x86-64 treats them as integers, so do we. }
         if not (TypeIsOrdinal(tk) or (tk = tyBoolean) or (tk = tyUnknown)) then
@@ -1471,9 +1825,11 @@ begin
             if TypeIsFloat(IntToTypeKind(IRTk[valNode])) then
             begin
               if j = 203 then
-                begin EmitB($F2); EmitB($0F); EmitB($2C); EmitB($C0); end  { cvttsd2si eax, xmm0 }
+                begin EmitB($F2); EmitB($0F); EmitB($2C); EmitB($C0);       { cvttsd2si eax, xmm0 }
+                  EmitB($99); end                                          { cdq (Trunc -> Int64) }
               else if j = 204 then
-                begin EmitB($F2); EmitB($0F); EmitB($2D); EmitB($C0); end  { cvtsd2si eax, xmm0 }
+                begin EmitB($F2); EmitB($0F); EmitB($2D); EmitB($C0);       { cvtsd2si eax, xmm0 }
+                  EmitB($99); end                                          { cdq (Round -> Int64) }
               else if j = 205 then
               begin
                 { Frac = x - trunc(x) }
@@ -1494,8 +1850,9 @@ begin
               if j = 205 then
                 begin EmitB($66); EmitB($0F); EmitB($EF); EmitB($C0); end  { pxor xmm0, xmm0 = 0.0 }
               else if j = 206 then
-                begin EmitB($F2); EmitB($0F); EmitB($2A); EmitB($C0); end; { cvtsi2sd xmm0, eax }
-              { 203/204: eax already holds the value }
+                begin EmitB($F2); EmitB($0F); EmitB($2A); EmitB($C0); end  { cvtsi2sd xmm0, eax }
+              else
+                EmitB($99);   { 203/204: eax already holds the value; cdq -> Int64 }
             end;
             Exit;
           end
@@ -1762,6 +2119,14 @@ begin
                 (tk = tyChar) or (tk = tyUnknown) or
                 (tk = tyAnsiString) or (tk = tyClass)) then
           Error('target i386: load through pointer of this type not yet supported');
+        if Is64Bit386(tk) then
+        begin
+          { Full 8-byte load -> edx:eax (high dword first so the address in eax
+            is still valid for the low load). }
+          EmitB($8B); EmitB($50); EmitB($04);        { mov edx, [eax+4] }
+          EmitB($8B); EmitB($00);                    { mov eax, [eax] }
+          Exit;
+        end;
         sz := TypeSize(tk);
         sgn := TypeSigned(tk);
         if sz = 1 then
@@ -1882,6 +2247,21 @@ begin
         if not (TypeIsOrdinal(tk) or (tk = tyBoolean) or (tk = tyPointer) or
                 (tk = tyChar) or (tk = tyUnknown)) then
           Error('target i386: store through pointer of this type not yet supported');
+        if Is64Bit386(tk) then
+        begin
+          EmitNode64_386(IRB[node]);                 { value -> edx:eax }
+          EmitB($52);                                { push edx (value hi) }
+          EmitB($50);                                { push eax (value lo) }
+          savedLValueWrite := InLValueWrite;
+          InLValueWrite := True;
+          IREmitNode386(IRA[node]);                  { address -> eax }
+          InLValueWrite := savedLValueWrite;
+          EmitB($59);                                { pop ecx (value lo) }
+          EmitB($5A);                                { pop edx (value hi) }
+          EmitB($89); EmitB($08);                    { mov [eax], ecx }
+          EmitB($89); EmitB($50); EmitB($04);        { mov [eax+4], edx }
+          Exit;
+        end;
         IREmitNode386(IRB[node]);                    { value -> eax }
         EmitB($50);                                  { push eax }
         savedLValueWrite := InLValueWrite;
@@ -1997,6 +2377,19 @@ begin
         begin
           EmitB($81); EmitB($C4); EmitI32(nArgs * 4); { add esp, nArgs*4 }
         end;
+        { i386 syscalls return a 32-bit value in eax. When the result is
+          consumed as Int64/UInt64 (e.g. __pxxrawsyscall -> Int64), the edx:eax
+          pair must be a valid 64-bit value matching x86-64 semantics: kernel
+          error returns (-4095..-1, i.e. unsigned > 0xFFFFF000) sign-extend to a
+          negative Int64; everything else (including high mmap addresses with
+          bit31 set) zero-extends to a positive value. edx is dead after the
+          trap, so this is unconditional (harmless for 32-bit consumers). }
+        EmitB($3D); EmitI32(Integer($FFFFF000));    { cmp eax, 0xFFFFF000 }
+        EmitB($77); EmitB($04);                     { ja .err (unsigned: error range) }
+        EmitB($31); EmitB($D2);                     { xor edx, edx (zero-extend) }
+        EmitB($EB); EmitB($02);                     { jmp .done }
+        EmitB($99);                                 { .err: cdq (sign-extend) }
+        EmitB($90);                                 { .done: nop (pad to jmp target) }
       end;
 
     IR_NEG:
@@ -2011,6 +2404,13 @@ begin
           EmitB($83); EmitB($C4); EmitB($08);        { add esp, 8 }
           EmitB($66); EmitB($0F); EmitB($57); EmitB($C1);              { xorpd xmm0, xmm1 }
         end
+        else if Is64Bit386(IntToTypeKind(IRTk[node])) then
+        begin
+          { negate edx:eax: neg eax; adc edx,0; neg edx }
+          EmitB($F7); EmitB($D8);                    { neg eax }
+          EmitB($83); EmitB($D2); EmitB($00);        { adc edx, 0 }
+          EmitB($F7); EmitB($DA);                    { neg edx }
+        end
         else
           begin EmitB($F7); EmitB($D8); end;         { neg eax }
       end;
@@ -2018,7 +2418,12 @@ begin
     IR_NOT:
       begin
         IREmitNode386(IRA[node]);
-        if TypeIsOrdinal(IntToTypeKind(IRTk[node])) and
+        if Is64Bit386(IntToTypeKind(IRTk[node])) then
+        begin
+          EmitB($F7); EmitB($D0);                    { not eax }
+          EmitB($F7); EmitB($D2);                    { not edx }
+        end
+        else if TypeIsOrdinal(IntToTypeKind(IRTk[node])) and
            (IntToTypeKind(IRTk[node]) <> tyBoolean) then
         begin
           EmitB($F7); EmitB($D0);                    { not eax }
@@ -2084,6 +2489,14 @@ begin
               EmitB($58);
             end;
             EmitwriteChar386;
+          end
+          else if Is64Bit386(tk) then
+          begin
+            { 64-bit decimal. Field-width padding for 64-bit values is not yet
+              wired; emit the plain form. }
+            IREmitNode386(valNode);                  { edx:eax = value }
+            if tk = tyUInt64 then EmitwriteUInt64_386
+            else EmitwriteInt64_386;
           end
           else if TypeIsOrdinal(tk) or (tk = tyUnknown) then
           begin

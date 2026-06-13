@@ -1929,7 +1929,14 @@ begin
   case CurTok.Kind of
     tkInteger:
     begin
-      node := AllocNode(AN_INT_LIT); ASTIVal[node] := CurTok.IVal; ASTTk[node] := Ord(tyInteger); CurASTNode := node; Next;
+      node := AllocNode(AN_INT_LIT); ASTIVal[node] := CurTok.IVal;
+      { A literal that does not fit a signed 32-bit Integer is an Int64; the
+        i386 backend keys its 64-bit codegen off this type. }
+      if (CurTok.IVal > 2147483647) or (CurTok.IVal < -2147483648) then
+        ASTTk[node] := Ord(tyInt64)
+      else
+        ASTTk[node] := Ord(tyInteger);
+      CurASTNode := node; Next;
     end;
     tkLBrack:
     begin
@@ -5759,6 +5766,19 @@ begin
         EmitB($89); EmitB($85); EmitI32(Syms[idx].Offset);
         EmitB($8B); EmitB($85); EmitI32(12 + sz);    { mov eax, [ebp+disp+4] }
         EmitB($89); EmitB($85); EmitI32(Syms[idx].Offset + 4);
+      end
+      else if (not Syms[idx].IsRef) and (not Syms[idx].IsArray) and
+              ((Syms[idx].TypeKind = tyInt64) or (Syms[idx].TypeKind = tyUInt64)) then
+      begin
+        { Int64/UInt64 by-value param: the caller pushes only the low dword
+          (i386's 4-byte arg slot), so sign-extend it across the full 8-byte
+          frame slot. Values are thus limited to 32 bits at the call boundary,
+          but the slot is then a valid 64-bit value for the codegen's edx:eax
+          load path. }
+        EmitB($8B); EmitB($85); EmitI32(8 + sz);     { mov eax, [ebp+disp] }
+        EmitB($89); EmitB($85); EmitI32(Syms[idx].Offset);            { mov [off], eax }
+        EmitB($99);                                  { cdq }
+        EmitB($89); EmitB($95); EmitI32(Syms[idx].Offset + 4);        { mov [off+4], edx }
       end
       else
       begin

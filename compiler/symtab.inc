@@ -3253,7 +3253,11 @@ begin
             begin EmitB($0F); EmitB($B7); EmitB($85); EmitI32(Syms[retSymIdx].Offset); end; { movzx eax, word [ebp+off] }
         end
         else
-          begin EmitB($8B); EmitB($85); EmitI32(Syms[retSymIdx].Offset); end;               { mov eax, [ebp+off] }
+        begin
+          EmitB($8B); EmitB($85); EmitI32(Syms[retSymIdx].Offset);                          { mov eax, [ebp+off] }
+          if sz = 8 then
+            begin EmitB($8B); EmitB($95); EmitI32(Syms[retSymIdx].Offset + 4); end;          { mov edx, [ebp+off+4] (Int64 hi) }
+        end;
       end;
     end;
     EmitB($C9); EmitB($C3);                                    { leave; ret }

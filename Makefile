@@ -702,6 +702,9 @@ test-i386: $(COMPILER)
 	./$(COMPILER) --target=i386 test/test_i386_varparam.pas /tmp/test_i386_varparam
 	./$(COMPILER) test/test_i386_varparam.pas /tmp/test_i386_varparam_x64
 	test "$$(tools/run_target.sh i386 /tmp/test_i386_varparam)" = "$$(/tmp/test_i386_varparam_x64)"
+	./$(COMPILER) --target=i386 test/test_i386_int64.pas /tmp/test_i386_int64
+	./$(COMPILER) test/test_i386_int64.pas /tmp/test_i386_int64_x64
+	test "$$(tools/run_target.sh i386 /tmp/test_i386_int64)" = "$$(/tmp/test_i386_int64_x64)"
 	./$(COMPILER) --target=i386 test/test_cross_syscall.pas /tmp/test_i386_syscall
 	./$(COMPILER) test/test_cross_syscall.pas /tmp/test_i386_syscall_x64
 	test "$$(tools/run_target.sh i386 /tmp/test_i386_syscall)" = "$$(/tmp/test_i386_syscall_x64)"
