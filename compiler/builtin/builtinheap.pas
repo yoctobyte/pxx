@@ -45,7 +45,10 @@ implementation
 
 
 type
-  PWord = ^Int64;   { machine-word access at an arbitrary address }
+  PWord = ^NativeInt;  { pointer-sized machine-word access at an arbitrary
+                         address: 8 bytes on 64-bit targets, 4 on 32-bit. Must
+                         not be ^Int64 — on i386 that writes 8 bytes into a
+                         4-byte handle/pointer slot and corrupts its neighbour. }
   PByte = ^Byte;    { byte access at an arbitrary address }
   PInt32 = ^Integer; { 32-bit integer access }
 
