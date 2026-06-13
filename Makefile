@@ -811,7 +811,10 @@ test-arm32: $(COMPILER)
 	./$(COMPILER) --target=arm32 test/test_cross_variant.pas /tmp/test_arm32_variant
 	./$(COMPILER) test/test_cross_variant.pas /tmp/test_arm32_variant_x64
 	test "$$(tools/run_target.sh arm32 /tmp/test_arm32_variant)" = "$$(/tmp/test_arm32_variant_x64)"
-	@echo "arm32 hello + arith + procs + loops + write + varparam + syscall + heap + string + record + dynarray + exception + float + variant ok (output identical to x86-64)"
+	./$(COMPILER) --target=arm32 test/test_cross_strresult.pas /tmp/test_arm32_strresult
+	./$(COMPILER) test/test_cross_strresult.pas /tmp/test_arm32_strresult_x64
+	test "$$(tools/run_target.sh arm32 /tmp/test_arm32_strresult)" = "$$(/tmp/test_arm32_strresult_x64)"
+	@echo "arm32 hello + arith + procs + loops + write + varparam + syscall + heap + string + record + dynarray + exception + float + variant + strresult ok (output identical to x86-64)"
 
 # Relocatable .o emission for the esp32-idf profile (feature-elf-rel-writer).
 # Host-only checks via binutils readelf; if the ESP cross toolchains are

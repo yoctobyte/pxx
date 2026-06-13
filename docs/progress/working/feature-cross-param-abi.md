@@ -35,6 +35,22 @@ and run on i386, ARM32, AArch64 identically to x86-64. New
 `test/test_cross_params.pas` in the suites.
 
 ## Log
+- 2026-06-13 — **arm32 string-result ABI** slice landed. The epilogue result
+  guard (`symtab.inc`) rejected a `tyString` result (legacy inline `[len][data]`
+  struct, whose `Result` slot is `skGlobal`) — the first arm32 wall when
+  cross-compiling `compiler.pas` (`StrInt`). Fixed: tyString results now return
+  the struct's *address* via `EmitLoadVarAddrArm32` (BSS for the global slot),
+  mirroring the x86-64 path. That exposed a second, entangled gap — legacy
+  tyString **variable** assignment on arm32 stored a bare pointer instead of
+  copying the struct, so strings read back empty. Fixed the arm32 `IR_STORE_SYM`
+  tyString path to copy `[len:8][data]` with `EmitArm32CopyBytes` (mirrors the
+  x86-64 len-field + rep-movsb store). Legacy strings now round-trip on arm32.
+  New oracle test `test/test_cross_strresult.pas` wired into `make test-arm32`;
+  arm32 + core + self-host/threadsafe fixedpoints green. Frozen `compiler.pas`
+  cross-compile advanced from the `StrInt` result wall (parser line 88) to the
+  shared `SetLength` wall (line 1201), reaching parity with the managed path —
+  next wall (`SetLength expects an array variable`) is feature-cross-codegen-gaps
+  territory, not this ticket.
 - 2026-06-13 — claimed. **i386 by-ref / Variant params** slice landed: the i386
   `EmitProcPrologue` param-copy guard (`parser.inc`) rejected any non-ordinal /
   non-pointer-sized param. A by-ref param (`var`/`const` aggregate, incl.

@@ -8,6 +8,7 @@ procedure EmitAcquireHeapLock; forward;
 procedure EmitReleaseHeapLock; forward;
 procedure EmitLoadVarA64(idx: Integer); forward;
 procedure EmitLoadVarArm32(idx: Integer); forward;
+procedure EmitLoadVarAddrArm32(idx: Integer); forward;
 procedure EmitLoadVarXtensa(idx: Integer); forward;
 procedure EmitLoadVarRISCV32(idx: Integer); forward;
 procedure EmitLoadImmRISCV32(rd: Integer; v: Int32); forward;
@@ -3245,11 +3246,19 @@ begin
 
     if retSymIdx >= 0 then
     begin
-      if Syms[retSymIdx].IsArray or (Syms[retSymIdx].Kind <> skLocal) or
-         not (TypeIsOrdinal(Syms[retSymIdx].TypeKind) or
-              (Syms[retSymIdx].TypeKind in [tyAnsiString, tyPointer, tyClass])) then
-        Error('target arm32: only ordinal/pointer/string function results supported yet');
-      EmitLoadVarArm32(retSymIdx);
+      if Syms[retSymIdx].TypeKind = tyString then
+        { Legacy inline string struct ([len][data]): return its address — the
+          global lives in BSS, a local on the frame (mirrors the x86-64 path).
+          Managed tyAnsiString results stay pointer-sized handles below. }
+        EmitLoadVarAddrArm32(retSymIdx)
+      else
+      begin
+        if Syms[retSymIdx].IsArray or (Syms[retSymIdx].Kind <> skLocal) or
+           not (TypeIsOrdinal(Syms[retSymIdx].TypeKind) or
+                (Syms[retSymIdx].TypeKind in [tyAnsiString, tyPointer, tyClass])) then
+          Error('target arm32: only ordinal/pointer/string function results supported yet');
+        EmitLoadVarArm32(retSymIdx);
+      end;
     end;
     EmitI32($E1A0D00B);  { mov sp, fp }
     EmitI32($E8BD8800);  { pop {fp, pc} }

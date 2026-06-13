@@ -514,6 +514,22 @@ begin
             EmitI32($ED810B00);  { vstr d0, [r1] }
           Exit;
         end;
+        if (tk = tyString) and not Syms[si].IsArray and
+           (IntToTypeKind(IRTk[IRB[node]]) in [tyString, tyAnsiString]) then
+        begin
+          { Legacy inline string struct ([len:8][data]) assignment: copy the
+            whole struct into the slot, not just a pointer (mirrors the x86-64
+            len-field + rep-movsb store). The source — a string literal or a
+            tyString-returning call result — leaves the struct's address in r0. }
+          IREmitNodeArm32(IRB[node]);                  { r0 = source struct addr }
+          EmitI32($E1A05000);                          { mov r5, r0 (src) }
+          EmitLoadVarAddrArm32(si);                    { r0 = dest slot address }
+          EmitI32($E1A06000);                          { mov r6, r0 (dst) }
+          EmitI32($E5954000);                          { ldr r4, [r5] (len low word) }
+          EmitI32($E2844008);                          { add r4, r4, #8 (len field + data) }
+          EmitArm32CopyBytes(4, 5, 6);
+          Exit;
+        end;
         IREmitNodeArm32(IRB[node]);
         EmitStoreVarArm32(IRA[node]);
       end;
