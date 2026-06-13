@@ -71,3 +71,14 @@ Self-host + threadsafe fixedpoints stay byte-identical.
   fixedpoints green. **Remaining: item 3** (epilogue release of record
   managed-fields / variants — currently leak-only, output correct) and the
   i386 / AArch64 ports of items 1+2.
+- 2026-06-13 — **arm32 item 3 done.** The arm32 epilogue release loop (symtab.inc)
+  previously released only scalar `tyAnsiString` locals; it now also clears
+  variant locals (`PXXVarClear`, r0 = address) and releases managed-field record
+  locals (`PXXRecordRelease`, r0 = address, r1 = layout descriptor via
+  `RECORD_RTTI_DATAREF_BASE`), no heap lock (matching the arm32 DEFAULT_MEM
+  release path). The managed-aggregate-locals oracle test still matches x86-64
+  (no double-free), and `compiler.pas` → arm32 advances to line 16307 now that
+  its own managed-local epilogues compile. arm32 + core + self-host/threadsafe
+  fixedpoints green. **arm32 portion complete (items 1+2+3).** Remaining: the
+  i386 / AArch64 ports (same three pieces), and array-of-managed locals (records
+  /variants done; an array-of-AnsiString local release is not wired yet).

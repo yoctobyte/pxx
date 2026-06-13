@@ -9,6 +9,7 @@ procedure EmitReleaseHeapLock; forward;
 procedure EmitLoadVarA64(idx: Integer); forward;
 procedure EmitLoadVarArm32(idx: Integer); forward;
 procedure EmitLoadVarAddrArm32(idx: Integer); forward;
+procedure EmitLoadDataRefArm32(rd, dataOff: Integer); forward;
 procedure EmitLoadVarXtensa(idx: Integer); forward;
 procedure EmitLoadVarRISCV32(idx: Integer); forward;
 procedure EmitLoadImmRISCV32(rd: Integer; v: Int32); forward;
@@ -3240,6 +3241,32 @@ begin
           if pi < 0 then Error('compiler error: PXXStrDecRef not found');
           EmitCallProc(pi);
           EmitI32($E8BD000E);                          { pop {r1,r2,r3} }
+        end
+        else if (Syms[i].Kind = skLocal) and (i <> retSymIdx) and
+                (Syms[i].TypeKind = tyVariant) then
+        begin
+          { Variant local: clear (releases any managed payload). r0 = address. }
+          EmitLoadVarAddrArm32(i);                     { r0 = variant address }
+          EmitI32($E92D000E);                          { push {r1,r2,r3} }
+          pi := FindProc('PXXVarClear');
+          if pi < 0 then Error('compiler error: PXXVarClear not found');
+          EmitCallProc(pi);
+          EmitI32($E8BD000E);                          { pop {r1,r2,r3} }
+        end
+        else if (Syms[i].Kind = skLocal) and (i <> retSymIdx) and
+                (Syms[i].TypeKind = tyRecord) and not Syms[i].IsArray and
+                RecordHasManagedFields(Syms[i].RecName) then
+        begin
+          { Record-with-managed-fields local: release each managed field via the
+            portable helper. r0 = record address, r1 = layout descriptor. }
+          EmitLoadVarAddrArm32(i);                     { r0 = record address }
+          EmitLoadDataRefArm32(1,
+            -(RECORD_RTTI_DATAREF_BASE + (Syms[i].RecName - REC_UCLASS_BASE)));
+          EmitI32($E92D000C);                          { push {r2,r3} }
+          pi := FindProc('PXXRecordRelease');
+          if pi < 0 then Error('compiler error: PXXRecordRelease not found');
+          EmitCallProc(pi);
+          EmitI32($E8BD000C);                          { pop {r2,r3} }
         end;
       end;
     end;
