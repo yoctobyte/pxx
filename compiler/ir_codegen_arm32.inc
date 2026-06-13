@@ -389,6 +389,7 @@ procedure IREmitNodeArm32(node: Integer);
 var
   valNode, si, left, right, op, pi, argNode, nArgs, i, j, wid, sz: Integer;
   classIdx, elemSize, lo: Integer;
+  itemNode, hi, p1, p2: Integer;
   lhsTk, rhsTk: TTypeKind;
   sVal: AnsiString;
   tk: TTypeKind;
@@ -961,6 +962,45 @@ begin
                 EmitIntToD0Arm32;
               { 203/204: r0 already holds the value }
             end;
+            Exit;
+          end
+          else if j = SPECIAL_IN then
+          begin
+            { x in [items]: items are constant single values or [lo..hi] ranges
+              (IR_BLOCK, lo in IRA, hi in IRB). Accumulate membership in r4 using
+              conditional execution — no shared true-label jump table needed. }
+            argNode := IRB[node];          { arg1 = the test value (IR_ARG) }
+            IREmitNodeArm32(IRA[argNode]);  { r0 = test value }
+            EmitI32($E1A01000);            { mov r1, r0 (test value) }
+            EmitI32($E3A04000);            { mov r4, #0 (result accumulator) }
+            argNode := IRB[argNode];       { first set item }
+            while argNode <> -1 do
+            begin
+              itemNode := IRA[argNode];
+              if IRKind[itemNode] = IR_BLOCK then
+              begin
+                lo := Integer(IRIVal[IRA[itemNode]]);
+                hi := Integer(IRIVal[IRB[itemNode]]);
+                EmitLoadImmArm32(2, lo);
+                EmitI32($E1510002);        { cmp r1, r2 }
+                p1 := CodeLen; EmitI32($BA000000);   { blt skip (below lo) }
+                EmitLoadImmArm32(2, hi);
+                EmitI32($E1510002);        { cmp r1, r2 }
+                p2 := CodeLen; EmitI32($CA000000);   { bgt skip (above hi) }
+                EmitI32($E3A04001);        { mov r4, #1 (in range) }
+                Patch32(p1, $BA000000 or ((((CodeLen - p1) div 4) - 2) and $00ffffff));
+                Patch32(p2, $CA000000 or ((((CodeLen - p2) div 4) - 2) and $00ffffff));
+              end
+              else
+              begin
+                lo := Integer(IRIVal[itemNode]);
+                EmitLoadImmArm32(2, lo);
+                EmitI32($E1510002);        { cmp r1, r2 }
+                EmitI32($03A04001);        { moveq r4, #1 }
+              end;
+              argNode := IRB[argNode];
+            end;
+            EmitI32($E1A00004);            { mov r0, r4 (result) }
             Exit;
           end
           else

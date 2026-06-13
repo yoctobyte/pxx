@@ -52,6 +52,11 @@ for the cross self-host and for not leaking memory.
    content) for a scalar ansistring in read mode (`not InLValueWrite`), keeping
    the slot address in write mode, mirroring the x86-64 gate. i386/aarch64 likely
    share the gap (unverified; they fail earlier walls first).
+9. **`in` set-membership operator on cross targets** — `x in [items]` errored on
+   arm32 (`builtin/special call not yet supported`, specialId `SPECIAL_IN`).
+   **arm32 done** — emits a constant compare-chain (single members + `lo..hi`
+   ranges) accumulating membership via conditional execution, no materialised
+   set. i386/aarch64 likely share the gap (they fail earlier walls first).
 
 ## Acceptance
 
@@ -80,3 +85,12 @@ grows large.
   now round-trip. New oracle test `test/test_cross_str_length_index.pas` wired
   into `make test-arm32`; full arm32 + core + self-host/threadsafe fixedpoints
   green (concat / params / results / COW unregressed).
+- 2026-06-13 — **arm32 `in` set-membership operator** (item 9) landed. `x in
+  [items]` hit `SPECIAL_IN` (specialId 999), unhandled on arm32. Emits a constant
+  compare-chain over single members and `lo..hi` ranges, accumulating membership
+  in a scratch register via conditional execution (`moveq`, `blt`/`bgt` skips) —
+  no materialised set value. New oracle test `test/test_cross_in_operator.pas`
+  wired into `make test-arm32`. `compiler.pas` → arm32 now advances from the
+  builtin-special wall (parser line 1525) all the way to line 13288 (`managed
+  aggregate locals not yet supported` — a different gap). arm32 + core +
+  self-host/threadsafe fixedpoints green.
