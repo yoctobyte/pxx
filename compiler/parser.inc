@@ -5729,9 +5729,15 @@ begin
       { Ordinals and pointer-sized handles (pointer/string/class) are passed as
         one 4-byte stack slot. 8-byte ordinals (Int64) use the low dword only,
         consistent with the rest of the i386 backend's fat-slot model. }
+      { A by-ref param (var/const aggregate) is a pointer-sized handle whatever
+        its declared type, and the caller pushes the argument's address; the
+        4-byte copy below moves that pointer into the slot. tyVariant is passed
+        the same way (pointer to the 16-byte value). Reject only true >4-byte
+        by-value payloads (records/sets/floats), still pending. }
       if Syms[idx].IsArray or
-         not (TypeIsOrdinal(Syms[idx].TypeKind) or
-              (Syms[idx].TypeKind in [tyAnsiString, tyPointer, tyClass])) then
+         not (Syms[idx].IsRef or
+              TypeIsOrdinal(Syms[idx].TypeKind) or
+              (Syms[idx].TypeKind in [tyAnsiString, tyPointer, tyClass, tyVariant])) then
         Error('target i386: only ordinal/pointer parameters supported yet');
       EmitB($8B); EmitB($85); EmitI32(8 + (nparams - 1 - i) * 4); { mov eax, [ebp+disp] }
       EmitB($89); EmitB($85); EmitI32(Syms[idx].Offset);          { mov [ebp+off], eax }

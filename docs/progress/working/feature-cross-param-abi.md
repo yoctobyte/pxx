@@ -1,8 +1,8 @@
 # Full parameter/result ABI on cross targets
 
 - **Type:** feature
-- **Status:** backlog
-- **Owner:** —
+- **Status:** working
+- **Owner:** claude
 - **Unblocks:** feature-cross-bootstrap-selfhost
 - **Opened:** 2026-06-11 (user request)
 
@@ -33,3 +33,19 @@ supported yet`. Needed for the cross self-host.
 Programs exercising record-by-value, float, open-array, and >N-arg calls compile
 and run on i386, ARM32, AArch64 identically to x86-64. New
 `test/test_cross_params.pas` in the suites.
+
+## Log
+- 2026-06-13 — claimed. **i386 by-ref / Variant params** slice landed: the i386
+  `EmitProcPrologue` param-copy guard (`parser.inc`) rejected any non-ordinal /
+  non-pointer-sized param. A by-ref param (`var`/`const` aggregate, incl.
+  `const v: Variant`) is a pointer-sized handle whatever its declared type — the
+  caller already pushes the argument's address and the 4-byte copy moves that
+  pointer into the slot. Guard now admits `IsRef` and `tyVariant`. This was the
+  *first* wall when cross-compiling `compiler.pas` to i386
+  (`VariantToStr(const v: Variant)`). New oracle test
+  `test/test_cross_byref_params.pas` wired into `make test-i386`; core + i386 +
+  self-host/threadsafe fixedpoints green. Next i386 wall is an aggregate *local
+  variable* (`only ordinal/pointer/string variables supported yet`) — that is
+  feature-cross-codegen-gaps territory, not this ticket. Record-by-value (true
+  >register payload), float params/results, and >N-arg spill on AArch64/ARM32
+  still pending here.
