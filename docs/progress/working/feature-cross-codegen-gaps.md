@@ -67,6 +67,15 @@ removed. Can be closed incrementally — split into sub-tickets if a single item
 grows large.
 
 ## Log
+- 2026-06-13 — **arm32 `SysOpen` syscall family** landed. Added lowering for
+  the public special-call tokens `SysOpen`, `SysRead`, `SysWrite`, `SysClose`,
+  and `SysFchmod` using ARM EABI syscall convention (`r7` syscall number,
+  `r0..r2` args). `SysOpen` currently accepts the managed `AnsiString` path
+  shape used by the cross-managed path; frozen inline `String` path termination
+  remains x86-64-only. New oracle `test/test_cross_sysopen_family.pas` creates a
+  temp file, writes bytes, `fchmod`s it readable, reopens, reads, and compares
+  arm32 output against x86-64. Verified with self-host fixedpoint rebuild and
+  `make test-arm32`.
 - 2026-06-13 — **arm32 `LoadFile` (specialId 100)** landed. `LoadFile(path, dst)`
   read a file into a managed AnsiString — unhandled on arm32. Routed through the
   portable `PXXStrLoadFile(path)` helper: load the path handle (a nul-terminated

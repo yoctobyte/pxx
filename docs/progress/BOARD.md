@@ -16,7 +16,7 @@ _none_
 | feature-cross-managed-aggregate-locals | feature | Managed aggregate locals on cross targets | — |
 | feature-cross-param-abi | feature | Full parameter/result ABI on cross targets | — |
 
-## backlog (27)
+## backlog (28)
 
 | Ticket | Type | Summary | Blocked-by |
 | --- | --- | --- | --- |
@@ -41,6 +41,7 @@ _none_
 | feature-mimic-fpc | feature | `mimic FPC` compatibility mode | feature-directive-if-numeric |
 | feature-networking | feature | Networking runtime | — |
 | feature-nil-python-frontend | feature | Nil Python frontend (`.npy`) | — |
+| feature-no-ansistring-profile | feature | No-AnsiString / bounded-string profile | — |
 | feature-parallel-processing | feature | Parallel processing as a language feature | feature-unified-heap-allocator |
 | feature-progress-transition-helpers | feature | Progress transition helpers (`claim` / `resolve`) | — |
 | feature-static-arena-profile | feature | Fixed-static-arena allocator profile | feature-unified-heap-allocator |
@@ -110,6 +111,7 @@ _none_
 - feature-metaclass-descendant-enforcement
 - feature-networking
 - feature-nil-python-frontend
+- feature-no-ansistring-profile
 - feature-parallel-processing
 - feature-progress-transition-helpers
 - feature-static-arena-profile

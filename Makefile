@@ -829,7 +829,10 @@ test-arm32: $(COMPILER)
 	./$(COMPILER) -dPXX_MANAGED_STRING --target=arm32 test/test_cross_loadfile.pas /tmp/test_arm32_loadfile
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_cross_loadfile.pas /tmp/test_arm32_loadfile_x64
 	test "$$(tools/run_target.sh arm32 /tmp/test_arm32_loadfile)" = "$$(/tmp/test_arm32_loadfile_x64)"
-	@echo "arm32 hello + arith + procs + loops + write + varparam + syscall + heap + string + record + dynarray + exception + float + variant + strresult + setlen-str + str-length-index + in-operator + managed-aggregate-locals + loadfile ok (output identical to x86-64)"
+	./$(COMPILER) -dPXX_MANAGED_STRING --target=arm32 test/test_cross_sysopen_family.pas /tmp/test_arm32_sysopen_family
+	./$(COMPILER) -dPXX_MANAGED_STRING test/test_cross_sysopen_family.pas /tmp/test_arm32_sysopen_family_x64
+	test "$$(tools/run_target.sh arm32 /tmp/test_arm32_sysopen_family)" = "$$(/tmp/test_arm32_sysopen_family_x64)"
+	@echo "arm32 hello + arith + procs + loops + write + varparam + syscall + heap + string + record + dynarray + exception + float + variant + strresult + setlen-str + str-length-index + in-operator + managed-aggregate-locals + loadfile + sysopen-family ok (output identical to x86-64)"
 
 # Relocatable .o emission for the esp32-idf profile (feature-elf-rel-writer).
 # Host-only checks via binutils readelf; if the ESP cross toolchains are

@@ -1028,6 +1028,84 @@ begin
             EmitI32($E1A00004);            { mov r0, r4 (result) }
             Exit;
           end
+          else if j = Ord(tkSysOpen) then
+          begin
+            { ARM EABI open(path, flags, mode): r7=5, r0=path, r1=flags,
+              r2=mode. Managed AnsiString handles are nul-terminated paths. }
+            argNode := IRB[node];
+            valNode := IRA[argNode];
+            if IntToTypeKind(IRTk[valNode]) <> tyAnsiString then
+              Error('target arm32: SysOpen expects a managed AnsiString path');
+            IREmitNodeArm32(valNode);       { r0 = path handle }
+            EmitI32($E92D0001);             { push {r0} path }
+            argNode := IRB[argNode];
+            IREmitNodeArm32(IRA[argNode]);  { r0 = flags }
+            EmitI32($E1A01000);             { mov r1, r0 }
+            EmitI32($E8BD0001);             { pop {r0} path }
+            EmitI32($E3A02000);             { mov r2, #0 }
+            EmitI32($E3A07005);             { mov r7, #5 (__NR_open) }
+            EmitI32($EF000000);             { svc #0 }
+            Exit;
+          end
+          else if j = Ord(tkSysRead) then
+          begin
+            { read(fd, buf, count): r7=3, r0=fd, r1=buf, r2=count. }
+            argNode := IRB[node];
+            IREmitNodeArm32(IRA[argNode]);  { r0 = fd }
+            EmitI32($E92D0001);             { push {r0} fd }
+            argNode := IRB[argNode];
+            IREmitNodeArm32(IRA[argNode]);  { r0 = buf address }
+            EmitI32($E92D0001);             { push {r0} buf }
+            argNode := IRB[argNode];
+            IREmitNodeArm32(IRA[argNode]);  { r0 = count }
+            EmitI32($E1A02000);             { mov r2, r0 }
+            EmitI32($E8BD0002);             { pop {r1} buf }
+            EmitI32($E8BD0001);             { pop {r0} fd }
+            EmitI32($E3A07003);             { mov r7, #3 (__NR_read) }
+            EmitI32($EF000000);             { svc #0 }
+            Exit;
+          end
+          else if j = Ord(tkSyswrite) then
+          begin
+            { write(fd, buf, count): r7=4, r0=fd, r1=buf, r2=count. }
+            argNode := IRB[node];
+            IREmitNodeArm32(IRA[argNode]);  { r0 = fd }
+            EmitI32($E92D0001);             { push {r0} fd }
+            argNode := IRB[argNode];
+            IREmitNodeArm32(IRA[argNode]);  { r0 = buf address }
+            EmitI32($E92D0001);             { push {r0} buf }
+            argNode := IRB[argNode];
+            IREmitNodeArm32(IRA[argNode]);  { r0 = count }
+            EmitI32($E1A02000);             { mov r2, r0 }
+            EmitI32($E8BD0002);             { pop {r1} buf }
+            EmitI32($E8BD0001);             { pop {r0} fd }
+            EmitI32($E3A07004);             { mov r7, #4 (__NR_write) }
+            EmitI32($EF000000);             { svc #0 }
+            Exit;
+          end
+          else if j = Ord(tkSysClose) then
+          begin
+            { close(fd): r7=6, r0=fd. }
+            argNode := IRB[node];
+            IREmitNodeArm32(IRA[argNode]);  { r0 = fd }
+            EmitI32($E3A07006);             { mov r7, #6 (__NR_close) }
+            EmitI32($EF000000);             { svc #0 }
+            Exit;
+          end
+          else if j = Ord(tkSysFchmod) then
+          begin
+            { fchmod(fd, mode): r7=94, r0=fd, r1=mode. }
+            argNode := IRB[node];
+            IREmitNodeArm32(IRA[argNode]);  { r0 = fd }
+            EmitI32($E92D0001);             { push {r0} fd }
+            argNode := IRB[argNode];
+            IREmitNodeArm32(IRA[argNode]);  { r0 = mode }
+            EmitI32($E1A01000);             { mov r1, r0 }
+            EmitI32($E8BD0001);             { pop {r0} fd }
+            EmitI32($E3A0705E);             { mov r7, #94 (__NR_fchmod) }
+            EmitI32($EF000000);             { svc #0 }
+            Exit;
+          end
           else
             Error('target arm32: builtin/special call not yet supported');
         end;
