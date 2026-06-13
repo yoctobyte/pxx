@@ -6938,7 +6938,11 @@ begin
   end
   else if TargetArch = TARGET_ARM32 then
   begin
-    { ARM32 entry stub: branch to main body. }
+    { ARM32 entry stub: save sp for argv access, then branch to main body. }
+    EmitI32($E59F1000);  { ldr r1, [pc] }
+    EmitI32($EA000000);  { b .+8 }
+    EmitGlobRef(BSS_INITIAL_RSP);
+    EmitI32($E581D000);  { str sp, [r1] }
     jmpPatch := CodeLen;
     EmitI32($EA000000);
   end

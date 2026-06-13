@@ -205,6 +205,70 @@ begin
   EmitDataRef(dataOff);
 end;
 
+procedure EmitArm32CopyBytes(countReg, srcReg, dstReg: Integer); forward;
+
+procedure EmitLoadArgvPtrArm32;
+{ On entry r0 = argv index. Returns r0 = argv[index] C-string pointer. }
+begin
+  EmitI32($E1A00100);                 { lsl r0, r0, #2 }
+  EmitI32($E59F1000);                 { ldr r1, [pc] }
+  EmitI32($EA000000);                 { b .+8 }
+  EmitGlobRef(BSS_INITIAL_RSP);
+  EmitI32($E5911000);                 { ldr r1, [r1] = initial sp }
+  EmitI32($E2811004);                 { add r1, r1, #4 (argv base) }
+  EmitI32($E0810000);                 { add r0, r1, r0 }
+  EmitI32($E5900000);                 { ldr r0, [r0] = argv[index] }
+end;
+
+procedure EmitArgvToAnsiStringArm32;
+{ On entry r0 = argv index. Returns r0 = managed string handle. }
+var pi, loopStart, donePos: Integer;
+begin
+  EmitLoadArgvPtrArm32;               { r0 = src }
+  EmitI32($E1A01000);                 { mov r1, r0 (src) }
+  EmitI32($E3A02000);                 { mov r2, #0 (len) }
+  loopStart := CodeLen;
+  EmitI32($E7D13002);                 { ldrb r3, [r1, r2] }
+  EmitI32($E3530000);                 { cmp r3, #0 }
+  donePos := CodeLen;
+  EmitI32($0A000000);                 { beq done }
+  EmitI32($E2822001);                 { add r2, r2, #1 }
+  EmitI32($EA000000 or ((((loopStart - CodeLen) div 4) - 2) and $00ffffff));
+  Patch32(donePos, $0A000000 or ((((CodeLen - donePos) div 4) - 2) and $00ffffff));
+  EmitI32($E1A00002);                 { mov r0, r2 (len) }
+  pi := FindProc('PXXStrFromLit');
+  if pi < 0 then Error('compiler error: PXXStrFromLit not found');
+  EmitCallProc(pi);                   { r0 = managed handle }
+end;
+
+procedure EmitArgvToFixedStringArm32(dstIdx: Integer);
+{ On entry r0 = argv index. Copy argv[index] into fixed string dstIdx. }
+var loopStart, donePos, capDone: Integer;
+begin
+  EmitLoadArgvPtrArm32;               { r0 = src }
+  EmitI32($E1A05000);                 { mov r5, r0 (src) }
+  EmitI32($E3A04000);                 { mov r4, #0 (len) }
+  loopStart := CodeLen;
+  EmitI32($E7D58004);                 { ldrb r8, [r5, r4] }
+  EmitI32($E3580000);                 { cmp r8, #0 }
+  donePos := CodeLen;
+  EmitI32($0A000000);                 { beq done }
+  EmitI32($E2844001);                 { add r4, r4, #1 }
+  EmitI32($EA000000 or ((((loopStart - CodeLen) div 4) - 2) and $00ffffff));
+  Patch32(donePos, $0A000000 or ((((CodeLen - donePos) div 4) - 2) and $00ffffff));
+  EmitI32($E3540C01);                 { cmp r4, #256 }
+  capDone := CodeLen;
+  EmitI32($DA000000);                 { ble cap_done }
+  EmitLoadImmArm32(4, 256);
+  Patch32(capDone, $DA000000 or ((((CodeLen - capDone) div 4) - 2) and $00ffffff));
+  EmitLoadVarAddrArm32(dstIdx);       { r0 = dst }
+  EmitI32($E5804000);                 { str r4, [r0] }
+  EmitI32($E3A01000);                 { mov r1, #0 }
+  EmitI32($E5801004);                 { str r1, [r0, #4] }
+  EmitI32($E2806008);                 { add r6, r0, #8 }
+  EmitArm32CopyBytes(4, 5, 6);
+end;
+
 { ---- Float support (VFP). Value model: float-typed IR nodes leave their
   value in d0 (a second channel besides r0); spills use vpush/vpop. Float ->
   text goes through the portable builtinheap helpers (PXXWriteFloat*). ---- }
@@ -465,7 +529,14 @@ begin
         if Syms[si].TypeKind = tyAnsiString then
         begin
           valNode := IRB[node];
-          EmitAnsiStringFromNodeArm32(valNode);       { r0 = new handle }
+          if (IRKind[valNode] = IR_CALL) and (IRA[valNode] = -Ord(tkArgStr)) then
+          begin
+            argNode := IRB[valNode];
+            IREmitNodeArm32(IRA[argNode]);            { r0 = argv index }
+            EmitArgvToAnsiStringArm32;                { r0 = new handle }
+          end
+          else
+            EmitAnsiStringFromNodeArm32(valNode);     { r0 = new handle }
           if (Syms[si].Kind = skParam) and Syms[si].IsRef then
           begin
             EmitI32($E92D0001);                       { push {r0} new }
@@ -513,6 +584,14 @@ begin
             EmitI32($ED810A00)   { vstr s0, [r1] }
           else
             EmitI32($ED810B00);  { vstr d0, [r1] }
+          Exit;
+        end;
+        if (tk = tyString) and not Syms[si].IsArray and
+           (IRKind[IRB[node]] = IR_CALL) and (IRA[IRB[node]] = -Ord(tkArgStr)) then
+        begin
+          argNode := IRB[IRB[node]];
+          IREmitNodeArm32(IRA[argNode]);              { r0 = argv index }
+          EmitArgvToFixedStringArm32(si);
           Exit;
         end;
         if (tk = tyString) and not Syms[si].IsArray and
@@ -989,6 +1068,34 @@ begin
             end;
             Exit;
           end
+          else if j = Ord(tkArgCount) then
+          begin
+            { ArgCount/ParamCount = argc - 1. Initial sp points at argc. }
+            EmitI32($E59F0000);             { ldr r0, [pc] }
+            EmitI32($EA000000);             { b .+8 }
+            EmitGlobRef(BSS_INITIAL_RSP);
+            EmitI32($E5900000);             { ldr r0, [r0] = initial sp }
+            EmitI32($E5900000);             { ldr r0, [r0] = argc }
+            EmitI32($E2400001);             { sub r0, r0, #1 }
+            Exit;
+          end
+          else if j = Ord(tkArgStr) then
+          begin
+            { ArgStr(index, strVar): fixed-string statement form. ParamStr
+              expression assignments are handled by IR_STORE_SYM. }
+            argNode := IRB[node];
+            if argNode = -1 then
+              Error('target arm32: ArgStr expects an index');
+            IREmitNodeArm32(IRA[argNode]);  { r0 = argv index }
+            argNode := IRB[argNode];
+            if argNode = -1 then
+              Error('target arm32: ParamStr expression must be assigned directly');
+            valNode := IRA[argNode];
+            if IRKind[valNode] <> IR_LEA then
+              Error('target arm32: ArgStr expects a string variable');
+            EmitArgvToFixedStringArm32(IRA[valNode]);
+            Exit;
+          end
           else if j = SPECIAL_IN then
           begin
             { x in [items]: items are constant single values or [lo..hi] ranges
@@ -1428,10 +1535,10 @@ begin
             end;
             EmitwriteCharArm32;
           end
-          else if TypeIsOrdinal(tk) then
+          else if TypeIsOrdinal(tk) or (tk = tyUnknown) then
           begin
             IREmitNodeArm32(valNode);
-            if not TypeSigned(tk) then
+            if (tk <> tyUnknown) and not TypeSigned(tk) then
             begin
               if wid > 0 then
                 EmitwriteUIntWArm32(wid)

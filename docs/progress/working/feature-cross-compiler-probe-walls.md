@@ -39,7 +39,7 @@ Current results:
 ```text
 i386    line 123   target i386: integer constant exceeds 32 bits
 aarch64 line 86    target aarch64: non-integer binop not yet supported
-arm32   line 35914 target arm32: builtin/special call not yet supported
+arm32   ok         emits /tmp/compiler_arm32
 ```
 
 Line numbers are from the expanded compiler source stream reported by
@@ -62,8 +62,8 @@ Line numbers are from the expanded compiler source stream reported by
   `Double` parameter walls have been cleared.
 - **AArch64 line 86:** non-integer binop support on an early compiler expression;
   likely a legacy-string / pointer-sized expression lowering gap.
-- **ARM32 line 35914:** remaining unhandled special call; likely around
-  `ArgCount` / `ArgStr` or another compiler main-program special.
+- **ARM32:** stage-1 emit is clear. The former line 35914 wall was
+  `ArgCount` / `ParamStr` argv handling.
 
 ## Acceptance
 
@@ -83,3 +83,7 @@ Line numbers are from the expanded compiler source stream reported by
   legacy fixed strings in the i386 scalar/result gates and adding internal
   `Single`/`Double` parameter stack handling. Added `test_i386_float_params`
   and kept `make test-i386` green.
+- 2026-06-13 — cleared the ARM32 line 35914 wall. ARM32 now saves the initial
+  stack pointer, lowers `ArgCount`, managed `ParamStr`, and fixed-string
+  `ArgStr`, and emits `compiler/compiler.pas` with `--target=arm32`. Added
+  `test_arm32_arg_runtime` and kept `make test-arm32` green.

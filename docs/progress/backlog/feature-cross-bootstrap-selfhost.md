@@ -31,12 +31,12 @@ arm32   : builtin/exception runtime not yet supported     (feature-cross-excepti
 aarch64 : load through pointer of this type not yet supported
 ```
 
-Current probe after commit `3047bdd` (2026-06-13):
+Current stage-1 probe on 2026-06-13:
 
 ```
-i386    : line 86    target i386: only ordinal/pointer/string variables supported yet
+i386    : line 123   target i386: integer constant exceeds 32 bits
 aarch64 : line 86    target aarch64: non-integer binop not yet supported
-arm32   : line 35914 target arm32: builtin/special call not yet supported
+arm32   : ok         emits a target compiler binary
 ```
 
 The current stage-1 walls are tracked in
