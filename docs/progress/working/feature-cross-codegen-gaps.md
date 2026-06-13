@@ -67,6 +67,14 @@ removed. Can be closed incrementally — split into sub-tickets if a single item
 grows large.
 
 ## Log
+- 2026-06-13 — **arm32 `LoadFile` (specialId 100)** landed. `LoadFile(path, dst)`
+  read a file into a managed AnsiString — unhandled on arm32. Routed through the
+  portable `PXXStrLoadFile(path)` helper: load the path handle (a nul-terminated
+  C string) into r0, call the helper, publish the new handle into `dst` (decref
+  old, store new). Managed dst only (compiler.pas reads into AnsiString). New
+  oracle test `test/test_cross_loadfile.pas` (reads `test/hello.pas`) wired into
+  `make test-arm32`. `compiler.pas` → arm32 advances **16307 → 32676** (a large
+  jump). arm32 + core + self-host/threadsafe fixedpoints green.
 - 2026-06-13 — claimed. **arm32 SetLength-on-managed-string** (item 7) landed.
   Cross-compiling `compiler.pas` to arm32 hit `SetLength(ansistring, n)` (an
   `IR_LOAD_SYM` of a tyAnsiString) at the shared SetLength wall (parser line

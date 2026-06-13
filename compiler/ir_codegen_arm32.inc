@@ -875,6 +875,31 @@ begin
           EmitI32($E5100008);            { ldr r0, [r0, #-8] }
           Exit;
         end;
+        if pi = -100 then
+        begin
+          { LoadFile(path, dst): read the whole file named by `path` into the
+            managed-string `dst` via the portable PXXStrLoadFile helper, then
+            publish the new handle (releasing dst's old one). Managed dst only —
+            compiler.pas reads into AnsiString. }
+          argNode := IRB[node];
+          left := IRA[argNode];          { val1 = path node }
+          valNode := IRB[argNode];       { arg2 }
+          right := IRA[valNode];         { val2 = dst node }
+          if not ((IRKind[right] = IR_LOAD_SYM) and
+                  (Syms[IRA[right]].TypeKind = tyAnsiString)) then
+            Error('target arm32: LoadFile expects a managed-string destination');
+          si := IRA[right];              { dst sym }
+          IREmitNodeArm32(left);         { r0 = path handle = nul-terminated C string }
+          pi := FindProc('PXXStrLoadFile');
+          if pi < 0 then Error('compiler error: PXXStrLoadFile not found');
+          EmitCallProc(pi);              { r0 = new managed handle (refcount 1) }
+          EmitI32($E92D0001);            { push {r0} new }
+          EmitLoadVarArm32(si);          { r0 = dst old handle }
+          EmitStrDecRefArm32;
+          EmitI32($E8BD0001);            { pop {r0} new }
+          EmitStoreVarArm32(si);
+          Exit;
+        end;
         if pi < 0 then
         begin
           j := -pi;
