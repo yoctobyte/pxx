@@ -45,13 +45,13 @@ for the cross self-host and for not leaking memory.
    same one-block wiring (the helper is shared; they currently fail earlier walls
    before reaching SetLength when compiling `compiler.pas`).
 8. **Managed-string `Length` and char-indexing on cross targets** — `Length(s)`
-   and `s[i]` on a *managed* AnsiString return garbage / 0 on arm32 (and likely
-   i386/aarch64): `IR_LEA` of a scalar ansistring yields the slot **address**,
-   not the auto-loaded heap handle, so the `[handle-8]` length read and the
-   data-pointer index base are wrong. x86-64 auto-loads the handle in read mode
-   (`InLValueWrite` gate). Surfaced while testing item 7 — the cross string
-   oracle test never exercised these. Distinct from item 7 (SetLength itself
-   round-trips correctly via writeln/concat).
+   and `s[i]` on a *managed* AnsiString returned garbage / 0 on arm32:
+   `IR_LEA` of a scalar ansistring yielded the slot **address**, not the
+   auto-loaded heap handle, so the `[handle-8]` length read and the data-pointer
+   index base were wrong. **arm32 done** — IR_LEA now loads the handle (slot
+   content) for a scalar ansistring in read mode (`not InLValueWrite`), keeping
+   the slot address in write mode, mirroring the x86-64 gate. i386/aarch64 likely
+   share the gap (unverified; they fail earlier walls first).
 
 ## Acceptance
 
@@ -71,3 +71,12 @@ grows large.
   zero, checked via writeln+concat) wired into `make test-arm32`; arm32 + core +
   self-host/threadsafe fixedpoints green. Testing exposed item 8 (managed-string
   `Length`/indexing broken on arm32) — filed above, not fixed here.
+- 2026-06-13 — **arm32 managed-string `Length` / char-indexing** (item 8) landed.
+  Root cause: arm32 `IR_LEA` of a scalar ansistring returned the slot address,
+  so `Length(s)` read `[slotaddr-8]` and `s[i]` indexed off the slot. Now
+  `IR_LEA` loads the handle (slot content) in read mode (`not InLValueWrite`) for
+  a scalar ansistring, keeping the slot address in write mode — mirrors the
+  x86-64 read/write gate. `Length`, read-index, and index-fill after `SetLength`
+  now round-trip. New oracle test `test/test_cross_str_length_index.pas` wired
+  into `make test-arm32`; full arm32 + core + self-host/threadsafe fixedpoints
+  green (concat / params / results / COW unregressed).

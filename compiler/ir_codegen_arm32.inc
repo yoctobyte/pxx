@@ -552,6 +552,26 @@ begin
             EmitI32($E5900000);  { ldr r0, [r0] = handle }
           end;
         end
+        else if (Syms[si].TypeKind = tyAnsiString) and not Syms[si].IsArray and
+                not InLValueWrite then
+        begin
+          { Scalar managed string in read position: the slot holds the heap data
+            pointer (handle); load it so Length / index / concat operate on the
+            data, not the slot. Write position keeps the slot address (else
+            branch) so a store can publish a new handle. Mirrors the x86-64
+            IR_LEA read/write gate. }
+          if Syms[si].Kind = skGlobal then
+          begin
+            EmitI32($E59F0000); EmitI32($EA000000); EmitGlobRef(Syms[si].Offset);
+            EmitI32($E5900000);  { ldr r0, [r0] = handle }
+          end
+          else
+          begin
+            EmitLoadImmArm32(0, Syms[si].Offset);
+            EmitI32($E08B0000);  { add r0, fp, r0 = slot addr }
+            EmitI32($E5900000);  { ldr r0, [r0] = handle }
+          end;
+        end
         else
           EmitLoadVarAddrArm32(si);
       end;
