@@ -31,6 +31,7 @@ function PXXDynArrayUnique(arrSlot: Pointer; desc: Pointer): Pointer;
 procedure PXXMemMove(dst: Pointer; src: Pointer; n: Int64);
 procedure PXXMemZero(dst: Pointer; n: Int64);
 procedure PXXDynSetLen(arrSlot: Pointer; newLen: Int64; desc: Pointer);
+procedure PXXStrSetLen(strSlot: Pointer; newLen: Int64);
 function PXXVarBinOp(dest: Pointer; left: Pointer; right: Pointer; opTk: Int64; isCompare: Int64): Int64;
 procedure PXXVarClear(v: Pointer);
 procedure PXXVarRetain(v: Pointer);
@@ -751,6 +752,59 @@ begin
 
   PWord(arrSlot)^ := Int64(newArrData);
   PXXDynArrayRelease(oldData, desc);
+end;
+
+{ SetLength for a managed AnsiString. strSlot = address of the handle slot
+  (holds the data pointer or nil); newLen = requested character count. Allocates
+  a fresh [refcount:8][length:8][data][nul] block, copies min(old,new) chars,
+  zero-fills the growth, nul-terminates, publishes the new handle, and releases
+  the old one. newLen <= 0 publishes nil. Target-independent — lets the cross
+  backends route SetLength(ansistring, n) through one shared implementation
+  instead of the x86-64 inline resize. }
+procedure PXXStrSetLen(strSlot: Pointer; newLen: Int64);
+var
+  oldData, newBase, newData: Pointer;
+  oldLen, copyLen, i: Int64;
+begin
+  if strSlot = nil then Exit;
+  oldData := Pointer(PWord(strSlot)^);
+
+  if newLen <= 0 then
+  begin
+    PWord(strSlot)^ := 0;
+    PXXStrDecRef(oldData);
+    Exit;
+  end;
+
+  newBase := PXXAlloc(newLen + 17, 8);
+  PWord(newBase)^ := 1;                       { refcount }
+  PWord(Int64(newBase) + 8)^ := newLen;       { length }
+  newData := Pointer(Int64(newBase) + 16);
+
+  copyLen := 0;
+  if oldData <> nil then
+  begin
+    oldLen := PWord(Int64(oldData) - 8)^;
+    copyLen := oldLen;
+    if newLen < copyLen then copyLen := newLen;
+    i := 0;
+    while i < copyLen do
+    begin
+      PByte(Int64(newData) + i)^ := PByte(Int64(oldData) + i)^;
+      i := i + 1;
+    end;
+  end;
+
+  i := copyLen;
+  while i < newLen do
+  begin
+    PByte(Int64(newData) + i)^ := 0;
+    i := i + 1;
+  end;
+  PByte(Int64(newData) + newLen)^ := 0;       { nul terminator }
+
+  PWord(strSlot)^ := Int64(newData);
+  PXXStrDecRef(oldData);
 end;
 
 type

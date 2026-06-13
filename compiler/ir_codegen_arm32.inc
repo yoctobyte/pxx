@@ -776,10 +776,43 @@ begin
         end;
         if pi = -102 then
         begin
-          { SetLength(arr, n) -> PXXDynSetLen(slotAddr, n, desc). }
-          argNode := IRB[node];          { arg1 = array lvalue (IR_LEA) }
+          { SetLength(arr, n) -> PXXDynSetLen(slotAddr, n, desc); SetLength on a
+            managed AnsiString -> PXXStrSetLen(slotAddr, n). }
+          argNode := IRB[node];          { arg1 = array/string lvalue }
           valNode := IRB[argNode];       { arg2 = new length }
-          left := IRA[argNode];          { IR_LEA node }
+          left := IRA[argNode];          { IR_LEA or IR_LOAD_SYM node }
+          if (IRKind[left] = IR_LOAD_SYM) and
+             (Syms[IRA[left]].TypeKind = tyAnsiString) then
+          begin
+            { Managed-string SetLength via the portable runtime helper. Load the
+              handle slot's address into r0 (a by-ref param slot holds the
+              caller's slot address — deref once). }
+            si := IRA[left];
+            if (Syms[si].Kind = skParam) and Syms[si].IsRef then
+            begin
+              EmitLoadImmArm32(0, Syms[si].Offset);
+              EmitI32($E08B0000);        { add r0, fp, r0 (param slot addr) }
+              EmitI32($E5900000);        { ldr r0, [r0] (caller slot addr) }
+            end
+            else if Syms[si].Kind = skGlobal then
+            begin
+              EmitI32($E59F0000); EmitI32($EA000000); EmitGlobRef(Syms[si].Offset);
+            end
+            else
+            begin
+              EmitLoadImmArm32(0, Syms[si].Offset);
+              EmitI32($E08B0000);        { add r0, fp, r0 }
+            end;
+            EmitI32($E92D0001);          { push {r0} slotAddr }
+            IREmitNodeArm32(IRA[valNode]); { r0 = n }
+            EmitI32($E92D0001);          { push {r0} n }
+            EmitI32($E8BD0002);          { pop {r1} (n) }
+            EmitI32($E8BD0001);          { pop {r0} (slotAddr) }
+            pi := FindProc('PXXStrSetLen');
+            if pi < 0 then Error('compiler error: PXXStrSetLen not found');
+            EmitCallProc(pi);
+            Exit;
+          end;
           if IRKind[left] <> IR_LEA then
             Error('target arm32: SetLength expects an array variable');
           si := IRA[left];

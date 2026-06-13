@@ -1,8 +1,8 @@
 # Cross-target codegen gaps (deferred v1 shortcuts)
 
 - **Type:** feature
-- **Status:** backlog
-- **Owner:** —
+- **Status:** working
+- **Owner:** claude
 - **Unblocks:** feature-cross-bootstrap-selfhost
 - **Opened:** 2026-06-11 (user request)
 
@@ -38,9 +38,36 @@ for the cross self-host and for not leaking memory.
    writes, and variants work (served from builtinheap). Ties into
    feature-cross-param-abi. Variant locals are a related gap: 16-byte
    zero-init of frame slots errors on all cross targets (globals work).
+7. **SetLength on a managed AnsiString** — the cross backends only accepted an
+   `IR_LEA` (dyn-array) SetLength target and errored on `SetLength(ansistring,n)`
+   (`SetLength expects an array variable`). **arm32 done** via the new portable
+   `PXXStrSetLen` runtime helper (builtinheap.pas). i386 + aarch64 still need the
+   same one-block wiring (the helper is shared; they currently fail earlier walls
+   before reaching SetLength when compiling `compiler.pas`).
+8. **Managed-string `Length` and char-indexing on cross targets** — `Length(s)`
+   and `s[i]` on a *managed* AnsiString return garbage / 0 on arm32 (and likely
+   i386/aarch64): `IR_LEA` of a scalar ansistring yields the slot **address**,
+   not the auto-loaded heap handle, so the `[handle-8]` length read and the
+   data-pointer index base are wrong. x86-64 auto-loads the handle in read mode
+   (`InLValueWrite` gate). Surfaced while testing item 7 — the cross string
+   oracle test never exercised these. Distinct from item 7 (SetLength itself
+   round-trips correctly via writeln/concat).
 
 ## Acceptance
 
 Each item has a focused cross test (oracle vs x86-64); the v1 shortcut is
 removed. Can be closed incrementally — split into sub-tickets if a single item
 grows large.
+
+## Log
+- 2026-06-13 — claimed. **arm32 SetLength-on-managed-string** (item 7) landed.
+  Cross-compiling `compiler.pas` to arm32 hit `SetLength(ansistring, n)` (an
+  `IR_LOAD_SYM` of a tyAnsiString) at the shared SetLength wall (parser line
+  1201). Added a portable `PXXStrSetLen(strSlot, newLen)` helper in
+  `builtinheap.pas` (alloc-copy-publish-release, mirrors `PXXDynSetLen`) and
+  wired the arm32 `pi=-102` path to call it for the managed-string case (global
+  / local / by-ref-param slot address). `compiler.pas` → arm32 now advances past
+  line 1201. New oracle test `test/test_cross_setlen_str.pas` (shrink / grow /
+  zero, checked via writeln+concat) wired into `make test-arm32`; arm32 + core +
+  self-host/threadsafe fixedpoints green. Testing exposed item 8 (managed-string
+  `Length`/indexing broken on arm32) — filed above, not fixed here.

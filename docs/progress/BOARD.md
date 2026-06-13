@@ -8,13 +8,14 @@ lives in git, not in a timestamp._
 
 _none_
 
-## working (1)
+## working (2)
 
 | Ticket | Type | Summary | Blocked-by |
 | --- | --- | --- | --- |
+| feature-cross-codegen-gaps | feature | Cross-target codegen gaps (deferred v1 shortcuts) | — |
 | feature-cross-param-abi | feature | Full parameter/result ABI on cross targets | — |
 
-## backlog (28)
+## backlog (27)
 
 | Ticket | Type | Summary | Blocked-by |
 | --- | --- | --- | --- |
@@ -26,7 +27,6 @@ _none_
 | feature-c-header-import-complex | feature | Import C headers for complex libraries (glib/GTK-grade) | — |
 | feature-compiler-warnings | feature | Compiler warning diagnostics facility | — |
 | feature-cross-bootstrap-selfhost | feature | Cross self-host bootstrap (compiler.pas → byte-identical under QEMU) | feature-cross-codegen-gaps, feature-cross-exceptions, feature-cross-float-variant, feature-cross-param-abi |
-| feature-cross-codegen-gaps | feature | Cross-target codegen gaps (deferred v1 shortcuts) | — |
 | feature-directive-if-numeric | feature | Valued defines + numeric `{$IF}` evaluation | — |
 | feature-dynamic-soname-discovery | feature | Dynamic soname discovery (no execve) | — |
 | feature-esp32-bare-boot | feature | ESP32 bare-metal boot profile (no IDF) | — |
@@ -99,7 +99,6 @@ _none_
 - feature-async-coroutines
 - feature-c-header-import-complex
 - feature-compiler-warnings
-- feature-cross-codegen-gaps
 - feature-directive-if-numeric
 - feature-dynamic-soname-discovery
 - feature-esp32-bare-boot
