@@ -14,30 +14,13 @@ for the cross self-host and for not leaking memory.
 
 ## Scope
 
-1. **Managed *aggregate* locals on cross targets (record-with-managed-fields /
-   variant / array-of-managed) — the next arm32 `compiler.pas` wall (parser
-   line 13288, `managed aggregate locals not yet supported`).** This is a
-   multi-part feature, not a one-spot fix; investigated 2026-06-13:
-   - **Prologue zero-init** — `parser.inc` errors when a managed local's extent
-     exceeds a pointer (`zeroBytes > TARGET_PTR_SIZE`) on non-x86-64. x86-64 does
-     `rep stosb`; a portable `PXXMemZero(addr, n)` call (or an inline arm32 byte
-     loop) covers it. *Necessary but far from sufficient* — adding zero-init
-     alone makes the code **compile but crash at runtime** (verified), so it was
-     reverted rather than shipped half-done.
-   - **Body ARC ops** — a managed *record* local's field assignment
-     (`r.name := s`) needs retain/release of the managed field; a *variant* local
-     needs assignment / clear. Even an **untouched** record-with-managed-field
-     local segfaults on arm32 today, so a path beyond the body is also wrong.
-   - **Epilogue release** — the cross epilogues only release scalar
-     `tyAnsiString` locals; record managed-fields, variants, and arrays-of-managed
-     are skipped (leak), and the x86-64 `EmitManagedLocalCleanup` walk is
-     `TARGET_X86_64`-gated. Needs a per-target managed-local release that walks
-     records/variants (mirrors the x86-64 cleanup). Interacts with
-     feature-cross-exceptions (release also runs during unwinding).
-   Tackle as its own sub-arc: zero-init + record-field ARC + variant-local ops +
-   epilogue release, each oracle-tested, landing together so the feature actually
-   runs. Closing this is the gate to the arm32 `compiler.pas` cross-compile
-   continuing past line 13288.
+1. **Managed *aggregate* locals on cross targets** (record-with-managed-fields /
+   variant / array-of-managed) — **split out into its own ticket**
+   [`feature-cross-managed-aggregate-locals`](../backlog/feature-cross-managed-aggregate-locals.md)
+   on 2026-06-13 once it grew into a multi-part sub-arc (prologue zero-init +
+   body ARC + epilogue release). It is the next arm32 `compiler.pas` wall (parser
+   line 13288). Scalar managed-local *release* at scope exit (the smaller
+   leak-only part) is folded into that ticket's epilogue item.
 2. **Copy-on-write on dynamic-array writes** — `IR_LEA` of a dyn-array in write
    mode currently loads the handle without `PXXDynArrayUnique`, so a shared
    array (`a := b; a[i] := x`) mutates both. Wire the COW call on cross targets.
