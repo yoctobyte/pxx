@@ -5734,14 +5734,38 @@ begin
         its declared type, and the caller pushes the argument's address; the
         4-byte copy below moves that pointer into the slot. tyVariant is passed
         the same way (pointer to the 16-byte value). Reject only true >4-byte
-        by-value payloads (records/sets/floats), still pending. }
-      if Syms[idx].IsArray or
+        by-value payloads (records/sets; Int64 is still low-dword only). }
+      if ((Syms[idx].TypeKind <> tyString) and Syms[idx].IsArray) or
          not (Syms[idx].IsRef or
               TypeIsOrdinal(Syms[idx].TypeKind) or
-              (Syms[idx].TypeKind in [tyAnsiString, tyPointer, tyClass, tyVariant])) then
+              TypeIsFloat(Syms[idx].TypeKind) or
+              (Syms[idx].TypeKind in [tyString, tyAnsiString, tyPointer, tyClass, tyVariant])) then
         Error('target i386: only ordinal/pointer parameters supported yet');
-      EmitB($8B); EmitB($85); EmitI32(8 + (nparams - 1 - i) * 4); { mov eax, [ebp+disp] }
-      EmitB($89); EmitB($85); EmitI32(Syms[idx].Offset);          { mov [ebp+off], eax }
+      sz := 0;
+      for j := i + 1 to nparams - 1 do
+      begin
+        if pbyref[j] or parr[j] or (ptypes[j] = tyString) or
+           (ptypes[j] in [tyAnsiString, tyPointer, tyClass, tyVariant]) then
+          Inc(sz, 4)
+        else if ptypes[j] = tyDouble then
+          Inc(sz, 8)
+        else if ptypes[j] = tySingle then
+          Inc(sz, 4)
+        else
+          Inc(sz, 4);
+      end;
+      if Syms[idx].TypeKind = tyDouble then
+      begin
+        EmitB($8B); EmitB($85); EmitI32(8 + sz);     { mov eax, [ebp+disp] }
+        EmitB($89); EmitB($85); EmitI32(Syms[idx].Offset);
+        EmitB($8B); EmitB($85); EmitI32(12 + sz);    { mov eax, [ebp+disp+4] }
+        EmitB($89); EmitB($85); EmitI32(Syms[idx].Offset + 4);
+      end
+      else
+      begin
+        EmitB($8B); EmitB($85); EmitI32(8 + sz);     { mov eax, [ebp+disp] }
+        EmitB($89); EmitB($85); EmitI32(Syms[idx].Offset);
+      end;
     end;
   end
   else if TargetArch = TARGET_AARCH64 then

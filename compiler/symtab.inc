@@ -3213,14 +3213,29 @@ begin
       end;
     end;
 
-    { Ordinal or pointer-sized (AnsiString/pointer/class handle) results. }
+    { Ordinal or pointer-sized (AnsiString/pointer/class handle) results.
+      Legacy fixed string returns the address of its inline buffer. }
     if retSymIdx >= 0 then
     begin
-      if Syms[retSymIdx].IsArray or (Syms[retSymIdx].Kind <> skLocal) or
-         not (TypeIsOrdinal(Syms[retSymIdx].TypeKind) or
-              (Syms[retSymIdx].TypeKind in [tyAnsiString, tyPointer, tyClass])) then
-        Error('target i386: only ordinal/pointer/string function results supported yet');
-      EmitB($8B); EmitB($85); EmitI32(Syms[retSymIdx].Offset); { mov eax, [ebp+off] }
+      if Syms[retSymIdx].TypeKind = tyString then
+      begin
+        if Syms[retSymIdx].Kind = skGlobal then
+          begin EmitB($B8); EmitGlobRef(Syms[retSymIdx].Offset); end          { mov eax, abs32 }
+        else if (Syms[retSymIdx].Kind = skParam) and Syms[retSymIdx].IsRef then
+          begin EmitB($8B); EmitB($85); EmitI32(Syms[retSymIdx].Offset); end  { mov eax, [ebp+off] }
+        else if Syms[retSymIdx].Kind = skLocal then
+          begin EmitB($8D); EmitB($85); EmitI32(Syms[retSymIdx].Offset); end  { lea eax, [ebp+off] }
+        else
+          Error('target i386: only local/global string function results supported yet');
+      end
+      else
+      begin
+        if Syms[retSymIdx].IsArray or (Syms[retSymIdx].Kind <> skLocal) or
+           not (TypeIsOrdinal(Syms[retSymIdx].TypeKind) or
+                (Syms[retSymIdx].TypeKind in [tyAnsiString, tyPointer, tyClass])) then
+          Error('target i386: only ordinal/pointer/string function results supported yet');
+        EmitB($8B); EmitB($85); EmitI32(Syms[retSymIdx].Offset); { mov eax, [ebp+off] }
+      end;
     end;
     EmitB($C9); EmitB($C3);                                    { leave; ret }
     Exit;

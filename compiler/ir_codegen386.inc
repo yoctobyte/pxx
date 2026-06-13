@@ -381,14 +381,14 @@ begin
     managed strings happens in the IR_STORE_MEM publish path, not here.
     Floats ride the 8-byte slot via xmm0; variants are addressed in place. }
   if not (TypeIsOrdinal(Syms[symIdx].TypeKind) or
-          (Syms[symIdx].TypeKind in [tyAnsiString, tyPointer, tyClass,
+          (Syms[symIdx].TypeKind in [tyString, tyAnsiString, tyPointer, tyClass,
            tySingle, tyDouble, tyExtended, tyVariant])) then
     Error('target i386: only ordinal/pointer/string variables supported yet');
 end;
 
 procedure IREmitNode386(node: Integer);
 var
-  valNode, si, left, right, op, pi, argNode, nArgs, wid, sz, i, j, base: Integer;
+  valNode, si, left, right, op, pi, argNode, nArgs, argBytes, wid, sz, i, j, base: Integer;
   classIdx, elemSize, lo: Integer;
   sVal: AnsiString;
   emsg: AnsiString;
@@ -1322,11 +1322,33 @@ begin
           call, then the caller pops the arg area. Result in eax. }
         argNode := IRB[node];
         nArgs := 0;
+        argBytes := 0;
         while argNode <> -1 do
         begin
           IREmitNode386(IRA[argNode]);
           if (pi >= 0) and (nArgs < Procs[pi].ParamCount) then
           begin
+            if TypeIsFloat(Procs[pi].Params[nArgs].TypeKind) then
+            begin
+              if not TypeIsFloat(IntToTypeKind(IRTk[IRA[argNode]])) then
+              begin
+                EmitB($F2); EmitB($0F); EmitB($2A); EmitB($C0); { cvtsi2sd xmm0, eax }
+              end;
+              if Procs[pi].Params[nArgs].TypeKind = tySingle then
+              begin
+                EmitB($83); EmitB($EC); EmitB($04);             { sub esp, 4 }
+                EmitB($F3); EmitB($0F); EmitB($11); EmitB($04); EmitB($24); { movss [esp], xmm0 }
+                Inc(argBytes, 4);
+              end
+              else
+              begin
+                EmitFloatSpill386;                              { push double slot }
+                Inc(argBytes, 8);
+              end;
+              Inc(nArgs);
+              argNode := IRB[argNode];
+              Continue;
+            end;
             if Procs[pi].Params[nArgs].TypeKind = tyAnsiString then
             begin
               if IntToTypeKind(IRTk[argNode]) = tyChar then
@@ -1357,15 +1379,16 @@ begin
             end;
           end;
           EmitB($50);                                { push eax }
+          Inc(argBytes, 4);
           Inc(nArgs);
           argNode := IRB[argNode];
         end;
         if nArgs <> Procs[pi].ParamCount then
           Error('target i386: call argument count mismatch (defaults not supported yet)');
         EmitCallProc(pi);                            { E8 rel32 + fixup, same as x86-64 }
-        if nArgs > 0 then
+        if argBytes > 0 then
         begin
-          EmitB($81); EmitB($C4); EmitI32(nArgs * 4); { add esp, nArgs*4 }
+          EmitB($81); EmitB($C4); EmitI32(argBytes); { add esp, argBytes }
         end;
       end;
 

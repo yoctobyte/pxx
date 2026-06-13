@@ -723,13 +723,16 @@ test-i386: $(COMPILER)
 	./$(COMPILER) --target=i386 test/test_cross_float.pas /tmp/test_i386_float
 	./$(COMPILER) test/test_cross_float.pas /tmp/test_i386_float_x64
 	test "$$(tools/run_target.sh i386 /tmp/test_i386_float)" = "$$(/tmp/test_i386_float_x64)"
+	./$(COMPILER) --target=i386 test/test_i386_float_params.pas /tmp/test_i386_float_params
+	./$(COMPILER) test/test_i386_float_params.pas /tmp/test_i386_float_params_x64
+	test "$$(tools/run_target.sh i386 /tmp/test_i386_float_params)" = "$$(/tmp/test_i386_float_params_x64)"
 	./$(COMPILER) --target=i386 test/test_cross_variant.pas /tmp/test_i386_variant
 	./$(COMPILER) test/test_cross_variant.pas /tmp/test_i386_variant_x64
 	test "$$(tools/run_target.sh i386 /tmp/test_i386_variant)" = "$$(/tmp/test_i386_variant_x64)"
 	./$(COMPILER) -dPXX_MANAGED_STRING --target=i386 test/test_cross_byref_params.pas /tmp/test_i386_byref
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_cross_byref_params.pas /tmp/test_i386_byref_x64
 	test "$$(tools/run_target.sh i386 /tmp/test_i386_byref)" = "$$(/tmp/test_i386_byref_x64)"
-	@echo "i386 hello + arith + procs + loops + write + varparam + syscall + heap + string + record + dynarray + exception + float + variant + byref-params ok (output identical to x86-64)"
+	@echo "i386 hello + arith + procs + loops + write + varparam + syscall + heap + string + record + dynarray + exception + float + float-params + variant + byref-params ok (output identical to x86-64)"
 
 test-aarch64: $(COMPILER)
 	./$(COMPILER) --target=aarch64 test/hello.pas /tmp/test_aarch64_hello

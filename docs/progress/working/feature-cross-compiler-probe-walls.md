@@ -26,10 +26,18 @@ for arch in i386 aarch64 arm32; do
 done
 ```
 
-Current results after commit `3047bdd`:
+Baseline results after commit `3047bdd`:
 
 ```text
 i386    line 86    target i386: only ordinal/pointer/string variables supported yet
+aarch64 line 86    target aarch64: non-integer binop not yet supported
+arm32   line 35914 target arm32: builtin/special call not yet supported
+```
+
+Current results:
+
+```text
+i386    line 123   target i386: integer constant exceeds 32 bits
 aarch64 line 86    target aarch64: non-integer binop not yet supported
 arm32   line 35914 target arm32: builtin/special call not yet supported
 ```
@@ -49,8 +57,9 @@ Line numbers are from the expanded compiler source stream reported by
 
 ## Likely Ownership Split
 
-- **i386 line 86:** aggregate/local variable support; related to
-  `feature-cross-managed-aggregate-locals` and `feature-cross-codegen-gaps`.
+- **i386 line 123:** Int64/large-constant support in the `FloatToStr` builtin
+  body. The previous fixed-string admission, fixed-string result, and internal
+  `Double` parameter walls have been cleared.
 - **AArch64 line 86:** non-integer binop support on an early compiler expression;
   likely a legacy-string / pointer-sized expression lowering gap.
 - **ARM32 line 35914:** remaining unhandled special call; likely around
@@ -70,3 +79,7 @@ Line numbers are from the expanded compiler source stream reported by
 
 - 2026-06-13 — ticket opened and claimed by Codex after the SysOpen-family
   milestone. Baseline probe results recorded above.
+- 2026-06-13 — advanced the i386 probe from line 86 to line 123 by admitting
+  legacy fixed strings in the i386 scalar/result gates and adding internal
+  `Single`/`Double` parameter stack handling. Added `test_i386_float_params`
+  and kept `make test-i386` green.
