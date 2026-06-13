@@ -14,9 +14,25 @@ advancing. x86-64 is the oracle for every test.
 
 ## Where things stand
 
-`compiler.pas` → arm32 currently stops at **parser line 16307**:
-`target arm32: builtin/special call not yet supported`. (Up from line 88 at the
-start of this arc.)
+`compiler.pas` → arm32 currently stops at **parser line 32676**:
+`target arm32: builtin/special call not yet supported`, **specialId `j=50` =
+`tkSysOpen`**. (Up from line 88 at the start of this arc; this session advanced
+13288 → 16307 → 32676.)
+
+**Next slice (do this first): the raw syscall builtins on arm32.**
+`tkSysOpen`(50) `tkSysRead`(51) `tkSyswrite`(52) `tkSysClose`(53)
+`tkSysFchmod`(54) — `compiler.pas` uses these to *write the output binary*
+(open/write/close + chmod +x). None are handled on arm32. The x86-64 handlers
+are in `ir_codegen.inc` ~3112–3210 (`specialId = Ord(tkSysOpen)` … emit a
+`syscall` with args marshalled from the `IR_ARG` chain). Port each as an arm32
+`svc #0`: syscall nr in **r7**, args in **r0..r5**; the arm32 EABI syscall
+numbers differ from x86-64 (open=5, read=3, write=4, close=6, fchmod=94 — but
+verify against an arm32 syscall table / how `__pxxrawsyscall` is wired in
+`builtinheap.pas` `PXXSysOpenRO`/`PXXSysLseek`/`PXXSysRead`/`PXXSysClose`, which
+already encode the arm32 numbers: open=5, lseek=19, read=3, write=4, close=6).
+Evaluate each `IR_ARG` into the right register (mirror the existing arm32
+`IR_SYSCALL` handler if present, or the `__pxxrawsyscall` lowering). Add a focused
+oracle test (write a temp file, read it back) and wire into `make test-arm32`.
 
 Reproduce the current wall:
 ```
@@ -127,14 +143,17 @@ file/line pointers.
 
 ## Recommended next steps (in order)
 
-1. **Current arm32 wall (line 16307), `builtin/special call not yet supported`.**
-   Instrument to find the specialId: in `ir_codegen_arm32.inc` at the
-   `Error('target arm32: builtin/special call not yet supported')` site (~1007),
-   `writeln('DBG j=', j)` before the Error, rebuild, re-run the cross compile.
-   Map `j` to its meaning (`SPECIAL_IN=999` etc. in `defs.inc`; ordinals via
-   `Ord(tk…)`), find the x86-64 handler in `ir_codegen.inc` (search
-   `specialId = …`), port it. This is exactly how items earlier this session were
-   done — see the `in`-operator log entry.
+1. **Current arm32 wall (line 32676) = `tkSysOpen` and the raw-syscall builtin
+   family** — see "Where things stand" above for the full porting recipe. After
+   those five, re-run the cross compile and repeat the instrument→identify→port
+   loop for the next specialId. The instrument trick (proven this session):
+   in `ir_codegen_arm32.inc` at the `builtin/special call not yet supported`
+   Error site, `writeln('DBG j=', j)` before it, rebuild seed, re-run
+   `--target=arm32 compiler/compiler.pas`. Map `j`: `Ord(tk…)` (count the
+   `TTokenKind` enum in `defs.inc` from `tkEOF=0`), or the `100/101/102/200/
+   203–206/999=SPECIAL_IN` specials. Find the x86-64 handler in `ir_codegen.inc`
+   (`specialId = …`) and port. Prefer a portable `builtinheap.pas` helper when
+   one exists (how SetLength-string and LoadFile were done this session).
 2. **Port managed-aggregate-locals to i386 + AArch64** (close that ticket):
    add their `zeroBytes > PTR` zero-init branch in `parser.inc` (mirror the arm32
    loop / or call `PXXMemZero`), and the variant/record **release** in their
