@@ -16,17 +16,31 @@ correctness proof, applied across architectures. The earlier
 `feature-cross-bootstrap` (now in `done/`) delivered the runtime *infrastructure*
 analysis; this ticket is the end-to-end gate.
 
-## Current state (2026-06-11)
+## Current state
 
-Small test programs cross-compile and are byte/output-matched to x86-64 on all
-four targets (managed runtime — heap, strings, records, dynarrays — complete).
-But cross-compiling `compiler.pas` itself fails immediately:
+Small test programs cross-compile and are byte/output-matched to x86-64 on the
+Linux cross targets (managed runtime — heap, strings, records, dynarrays —
+covered by target suites). But cross-compiling `compiler.pas` itself is still
+blocked before the QEMU self-host step.
+
+Baseline from 2026-06-11:
 
 ```
 i386    : only ordinal/pointer parameters supported yet   (feature-cross-param-abi)
 arm32   : builtin/exception runtime not yet supported     (feature-cross-exceptions)
 aarch64 : load through pointer of this type not yet supported
 ```
+
+Current probe after commit `3047bdd` (2026-06-13):
+
+```
+i386    : line 86    target i386: only ordinal/pointer/string variables supported yet
+aarch64 : line 86    target aarch64: non-integer binop not yet supported
+arm32   : line 35914 target arm32: builtin/special call not yet supported
+```
+
+The current stage-1 walls are tracked in
+[`feature-cross-compiler-probe-walls`](../working/feature-cross-compiler-probe-walls.md).
 
 `compiler.pas` uses `try/except` (exceptions), `uses SysUtils` (full builtin →
 floats/variants), and richer parameter signatures — none yet on cross targets.

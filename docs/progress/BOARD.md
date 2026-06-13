@@ -8,11 +8,12 @@ lives in git, not in a timestamp._
 
 _none_
 
-## working (3)
+## working (4)
 
 | Ticket | Type | Summary | Blocked-by |
 | --- | --- | --- | --- |
 | feature-cross-codegen-gaps | feature | Cross-target codegen gaps (deferred v1 shortcuts) | — |
+| feature-cross-compiler-probe-walls | feature | Cross compiler.pas probe walls | — |
 | feature-cross-managed-aggregate-locals | feature | Managed aggregate locals on cross targets | — |
 | feature-cross-param-abi | feature | Full parameter/result ABI on cross targets | — |
 
