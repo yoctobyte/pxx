@@ -42,3 +42,15 @@ pascal26:0: error: Pascal define storage overflow
 ## Log
 
 - 2026-06-13 — opened with current failure (`Pascal define storage overflow`).
+- 2026-06-13 — diagnosis (no code change): the LowerCase crash is NOT the COW
+  gap. AArch64 `IR_LEA` (`ir_codegen_aarch64.inc` ~799) only loads the heap
+  handle for dyn arrays (`IsArray and ArrLen=-1`); for a scalar AnsiString it
+  returns the slot ADDRESS, so `Length(s)`=0 and `s[i]` indexes the slot →
+  garbage, and LowerCase's `res[i]:=...` writes to a bad address → segfault.
+  This is exactly the already-fixed i386 bug #1 (IR_LEA scalar-AnsiString
+  handle load). Fix first by mirroring the i386 IR_LEA change (load the handle
+  for scalar AnsiString; add skParam IsArray/tyString/tySet content-load and
+  by-ref-AnsiString deref-in-Length/index), THEN tackle COW
+  (feature-cross-managed-string-cow). Repro: `var s:ansistring; s:='Hello';
+  writeln(Length(s))` prints 0 on aarch64, 5 on x86-64. AArch64 is behind
+  i386/ARM32 here — string indexing/Length isn't in its target suite yet.
