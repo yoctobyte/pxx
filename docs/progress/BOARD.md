@@ -12,7 +12,7 @@ _none_
 
 _none_
 
-## backlog (28)
+## backlog (29)
 
 | Ticket | Type | Summary | Blocked-by |
 | --- | --- | --- | --- |
@@ -38,6 +38,7 @@ _none_
 | feature-metaclass-descendant-enforcement | feature | Metaclass alias descendant-constraint enforcement | — |
 | feature-mimic-fpc | feature | `mimic FPC` compatibility mode | feature-directive-if-numeric |
 | feature-networking | feature | Networking runtime | — |
+| feature-nil-python-frontend | feature | Nil Python frontend (`.npy`) | — |
 | feature-parallel-processing | feature | Parallel processing as a language feature | feature-unified-heap-allocator |
 | feature-progress-transition-helpers | feature | Progress transition helpers (`claim` / `resolve`) | — |
 | feature-static-arena-profile | feature | Fixed-static-arena allocator profile | feature-unified-heap-allocator |
@@ -108,6 +109,7 @@ _none_
 - feature-interfaces
 - feature-metaclass-descendant-enforcement
 - feature-networking
+- feature-nil-python-frontend
 - feature-parallel-processing
 - feature-progress-transition-helpers
 - feature-static-arena-profile

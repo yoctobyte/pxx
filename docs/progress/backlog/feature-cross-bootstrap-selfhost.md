@@ -59,3 +59,9 @@ A `make cross-bootstrap-<arch>` target per cross arch:
   current blocker, so the goal is runnable and tracked rather than aspirational.
 - ESP32 / bare-metal (feature-target-esp32) is a *different* axis (no
   Linux/QEMU ELF); this gate is Linux user-space cross only.
+- **ESP32 self-host is explicitly NOT a goal.** Compiling the compiler *to*
+  ESP32 and cross-compiling *from* ESP32 would be an utterly cool demo, but
+  device RAM (a few hundred KB) won't hold the compiler's working set and the
+  practical value is ~nil. Parked as a "maybe one day" curiosity, not on any
+  roadmap. The fixedpoint gate stays on the Linux cross targets (i386 / ARM32 /
+  AArch64).
