@@ -773,11 +773,15 @@ begin
     IR_LEA:
       begin
         si := IRA[node];
-        if Syms[si].IsArray and (Syms[si].ArrLen = -1) then
+        if (Syms[si].IsArray and (Syms[si].ArrLen = -1)) or
+           ((Syms[si].TypeKind = tyAnsiString) and not Syms[si].IsArray and
+            not ((Syms[si].Kind = skParam) and Syms[si].IsRef)) then
         begin
-          { Dynamic array: the slot holds the heap data pointer; load it (mov),
-            so indexing/Length operate on the heap block. v1: no copy-on-write
-            in write mode (single-owner arrays only). }
+          { Dynamic array or scalar managed string: the slot holds the heap data
+            pointer (the string handle); load it (mov), so indexing/Length
+            operate on the heap block, not on the slot address. v1: no
+            copy-on-write in write mode (single-owner arrays only). By-ref
+            managed-string params keep the address path below. }
           if Syms[si].Kind = skGlobal then
             begin EmitB($A1); EmitGlobRef(Syms[si].Offset); end          { mov eax, [slot] }
           else
@@ -2262,6 +2266,19 @@ begin
   for i := 0 to MAX_IR - 1 do
     LabelPositions[i] := -1;
   LabelFixupCount := 0;
+
+  { Nil-init hidden owning locals synthesised for materialised managed-string
+    arguments. They are created during this body's IR lowering, after the
+    parser's prologue zero-init pass, so they would otherwise hold stale stack
+    bytes; an early-exit cleanup would then DecRef garbage and segfault.
+    Main-program temps are skGlobal (BSS, already zeroed); only skLocal needs
+    it. Mirrors the x86-64 path in IREmitMachineCode. }
+  if CurProc >= 0 then
+    for i := Procs[CurProc].ScopeBase to SymCount - 1 do
+      if SymIsHiddenArgTemp[i] and (Syms[i].Kind = skLocal) then
+      begin
+        EmitB($C7); EmitB($85); EmitI32(Syms[i].Offset); EmitI32(0); { mov dword [ebp+off], 0 }
+      end;
 
   for i := 0 to IRCount - 1 do
   begin
