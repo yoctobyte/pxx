@@ -1,3 +1,31 @@
+# Notes
+
+So, first off: I never could have developed this project alone. A, because of
+the limits of a human lifetime, and B, because I am really not smart enough.
+
+Having said that, I:
+A. Learned a lot about compiler internals, mostly on an architectural level.
+B. Learned that top-notch AI around May and June 2026 really started to perform
+well on a complex project. Not just bug hunting, but active development.
+I did give some guidance. Recently I ended up with a quick-and-dirty ticket
+system that seems to work just fine. General steering is still needed. Apart
+from that, AI solves stuff in minutes that would take me hours to study. It
+also seems to have a language of its own, especially since I installed the
+caveman tool. It is sometimes very shortened, and that last sentence is a good
+example.
+
+Multiple agents are working on this. Recently I banned Antigravity because of
+seriously poor performance. Gemini can write quite good and adequate code, but
+Antigravity's tooling is just substandard. It keeps going into loops, examining
+every file in the project, or going line by line, and never seems to
+self-reflect. It lets its agents go rogue until we run out of tokens, with no
+real work done apart from creating chaos. Gemini 3.5 is fantastic.
+antigravity-cli sucks as a tool. Even the other agents noticed and/or had to
+clean up shit. So, Google... stop antigoogling.
+
+As for the project goals: wide and ambitious. That's all I can say for now.
+They will probably be drawn back to earth by gravity. Pun not intended.
+
 # Developer Notes
 
 Rough developer notes. These are loose thoughts, not polished project
