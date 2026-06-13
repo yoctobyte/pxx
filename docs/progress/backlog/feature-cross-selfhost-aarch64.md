@@ -3,6 +3,7 @@
 - **Type:** feature
 - **Status:** backlog
 - **Owner:** —
+- **Blocked-by:** feature-cross-managed-string-cow
 - **Unblocks:** feature-cross-bootstrap-selfhost
 - **Opened:** 2026-06-13 (split from cross self-host rollup)
 
