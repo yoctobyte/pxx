@@ -799,8 +799,13 @@ begin
         begin
           EmitB($B8); EmitGlobRef(Syms[si].Offset);          { mov eax, abs32 }
         end
-        else if (Syms[si].Kind = skParam) and Syms[si].IsRef then
+        else if (Syms[si].Kind = skParam) and
+                (Syms[si].IsRef or Syms[si].IsArray or
+                 (Syms[si].TypeKind = tyString) or (Syms[si].TypeKind = tySet)) then
         begin
+          { By-ref, open-array, fixed-string, or set param: the slot holds a
+            pointer the caller passed (the array data / buffer / forwarded slot),
+            so load the pointer itself, not the slot address. Mirrors x86-64. }
           EmitB($8B); EmitB($85); EmitI32(Syms[si].Offset);  { mov eax, [ebp+off] }
         end
         else
@@ -2435,6 +2440,27 @@ begin
 
       IR_STORE_SYM, IR_WRITE, IR_WRITELN:
         IREmitNode386(i);
+
+      IR_ZERO_SYM:
+        begin
+          { Nil-init a managed local so an early-exit / epilogue cleanup never
+            DecRefs stale stack bytes. Scalars (and dyn-array handles) are one
+            pointer; arrays of AnsiString / records-with-managed-fields zero the
+            whole span. Mirrors the x86-64 IR_ZERO_SYM path. }
+          si := IRA[i];
+          if (Syms[si].Kind = skLocal) and SymNeedsZeroing(si, sz) then
+          begin
+            if sz = TARGET_PTR_SIZE then
+              begin EmitB($C7); EmitB($85); EmitI32(Syms[si].Offset); EmitI32(0); end { mov dword [ebp+off], 0 }
+            else if sz > 0 then
+            begin
+              EmitB($8D); EmitB($BD); EmitI32(Syms[si].Offset);  { lea edi, [ebp+off] }
+              EmitB($31); EmitB($C0);                            { xor eax, eax }
+              EmitB($B9); EmitI32(sz);                           { mov ecx, sz }
+              EmitB($F3); EmitB($AA);                            { rep stosb }
+            end;
+          end;
+        end;
 
       IR_NOP, IR_CONST_STR, IR_CONST_INT, IR_BLOCK,
       IR_LOAD_SYM, IR_BINOP, IR_NEG, IR_NOT, IR_ARG, IR_LEA, IR_SYSCALL,
