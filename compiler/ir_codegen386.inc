@@ -780,18 +780,12 @@ begin
             pointer (the string handle); load it (mov), so indexing/Length
             operate on the heap block, not on the slot address. v1: no
             copy-on-write in write mode (single-owner arrays only). }
+          { A by-ref managed-string param yields the forwarded slot address
+            (&callerHandle), one deref short of the data pointer; Length /
+            indexing add that final deref themselves (mirrors x86-64), and
+            forwarding the param to another var arg needs exactly this address. }
           if Syms[si].Kind = skGlobal then
             begin EmitB($A1); EmitGlobRef(Syms[si].Offset); end          { mov eax, [slot] }
-          else if (Syms[si].Kind = skParam) and Syms[si].IsRef and
-                  (Syms[si].TypeKind = tyAnsiString) and not Syms[si].IsArray then
-          begin
-            { By-ref managed-string param: the param slot holds the address of
-              the caller's handle slot, so deref twice to reach the data
-              pointer. (SetLength routes through IR_LOAD_SYM and wants the
-              single-deref slot address, so it never reaches here.) }
-            EmitB($8B); EmitB($85); EmitI32(Syms[si].Offset);  { mov eax, [ebp+off] (&callerHandle) }
-            EmitB($8B); EmitB($00);                            { mov eax, [eax] (handle) }
-          end
           else
             begin EmitB($8B); EmitB($85); EmitI32(Syms[si].Offset); end; { mov eax, [ebp+off] }
         end
@@ -1343,8 +1337,11 @@ begin
           argNode := IRB[node];
           valNode := IRA[argNode];
           IREmitNode386(valNode);        { eax = handle (data ptr) or 0 }
-          if (IRKind[valNode] = IR_INDEX) or (IRKind[valNode] = IR_FIELD) then
-            begin EmitB($8B); EmitB($00); end;  { mov eax, [eax] (deref slot to handle) }
+          if (IRKind[valNode] = IR_INDEX) or (IRKind[valNode] = IR_FIELD) or
+             ((IRKind[valNode] = IR_LEA) and (Syms[IRA[valNode]].Kind = skParam) and
+              Syms[IRA[valNode]].IsRef and (Syms[IRA[valNode]].TypeKind = tyAnsiString) and
+              not Syms[IRA[valNode]].IsArray) then
+            begin EmitB($8B); EmitB($00); end;  { mov eax, [eax] (deref slot/&handle to handle) }
           EmitB($85); EmitB($C0);        { test eax, eax }
           EmitB($74); EmitB($03);        { jz +3 }
           EmitB($8B); EmitB($40); EmitB($F8); { mov eax, [eax-8] }
@@ -1699,6 +1696,10 @@ begin
         lo := IRC[node];
         elemSize := Integer(IRIVal[node]);
         IREmitNode386(left);                          { base address -> eax }
+        if (IRKind[left] = IR_LEA) and (Syms[IRA[left]].Kind = skParam) and
+           Syms[IRA[left]].IsRef and (Syms[IRA[left]].TypeKind = tyAnsiString) and
+           not Syms[IRA[left]].IsArray then
+          begin EmitB($8B); EmitB($00); end;          { mov eax, [eax] (&handle -> handle) }
         EmitB($50);                                   { push eax }
         IREmitNode386(right);                         { index -> eax }
         if lo <> 0 then
