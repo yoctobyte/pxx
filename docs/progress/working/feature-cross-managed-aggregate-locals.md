@@ -82,3 +82,9 @@ Self-host + threadsafe fixedpoints stay byte-identical.
   fixedpoints green. **arm32 portion complete (items 1+2+3).** Remaining: the
   i386 / AArch64 ports (same three pieces), and array-of-managed locals (records
   /variants done; an array-of-AnsiString local release is not wired yet).
+- 2026-06-13 — AArch64 self-host repro confirms the next concrete wall is the
+  static array-of-managed local case. After the scalar-AnsiString `IR_LEA` fix,
+  `/tmp/compiler_aarch64` parses `test/hello.pas` but segfaults in
+  `PXXStrDecRef` from `ParseProgram` with `p = -9`. The relevant compiler local
+  is `dummyNames: array[0..7] of AnsiString`; first assignment releases stale
+  stack contents. This is the AArch64 port/array-of-managed slice of this ticket.

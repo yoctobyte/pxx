@@ -54,3 +54,12 @@ pascal26:0: error: Pascal define storage overflow
   (feature-cross-managed-string-cow). Repro: `var s:ansistring; s:='Hello';
   writeln(Length(s))` prints 0 on aarch64, 5 on x86-64. AArch64 is behind
   i386/ARM32 here — string indexing/Length isn't in its target suite yet.
+- 2026-06-13 — Codex fixed the AArch64 scalar-AnsiString `IR_LEA` gap and added
+  the existing `test_cross_str_length_index` oracle to `make test-aarch64`.
+  `make test-aarch64` is green. The generated AArch64 compiler now gets past the
+  original `Length(s)=0` class of bug, but the self-host repro still segfaults:
+  GDB maps the fault to `PXXStrDecRef`, called from `ParseProgram`, with
+  `p = -9`. The caller is releasing a stale local managed-string slot from
+  `dummyNames: array[0..7] of AnsiString`; this is the remaining managed
+  aggregate/static-array local initialization/release wall, not the old `IR_LEA`
+  scalar-string wall.

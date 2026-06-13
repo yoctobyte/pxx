@@ -805,6 +805,19 @@ begin
           EmitLoadVarAddrA64(si);               { x0 = slot address }
           EmitI32($F9400000);                   { ldr x0, [x0] = handle }
         end
+        else if (Syms[si].TypeKind = tyAnsiString) and not Syms[si].IsArray and
+                not InLValueWrite then
+        begin
+          { Scalar managed string in read position: the slot holds the heap data
+            pointer (handle); load it so Length / index / concat operate on the
+            data, not the slot. Write position keeps the slot address (else
+            branch) so a store can publish a new handle. A by-ref param keeps
+            the forwarded caller slot address; Length / index add the final
+            deref, mirroring i386. }
+          EmitLoadVarAddrA64(si);               { x0 = slot address }
+          if not ((Syms[si].Kind = skParam) and Syms[si].IsRef) then
+            EmitI32($F9400000);                 { ldr x0, [x0] = handle }
+        end
         else
           EmitLoadVarAddrA64(si);
       end;
@@ -1081,7 +1094,10 @@ begin
           argNode := IRB[node];
           valNode := IRA[argNode];
           IREmitNodeAarch64(valNode);         { x0 = handle (or 0) }
-          if (IRKind[valNode] = IR_INDEX) or (IRKind[valNode] = IR_FIELD) then
+          if (IRKind[valNode] = IR_INDEX) or (IRKind[valNode] = IR_FIELD) or
+             ((IRKind[valNode] = IR_LEA) and (Syms[IRA[valNode]].Kind = skParam) and
+              Syms[IRA[valNode]].IsRef and (Syms[IRA[valNode]].TypeKind = tyAnsiString) and
+              not Syms[IRA[valNode]].IsArray) then
             EmitI32($F9400000);               { ldr x0, [x0] (deref slot to handle) }
           EmitI32($B4000040);                 { cbz x0, +8 (skip ldur) }
           EmitI32($F85F8000);                 { ldur x0, [x0, #-8] }
@@ -1406,7 +1422,12 @@ begin
       begin
         { base[index]: addr = base + (index - lo) * elemSize. No COW (managed
           dynamic arrays use the handle loaded by IR_LEA). }
-        IREmitNodeAarch64(IRA[node]);            { base -> x0 }
+        left := IRA[node];
+        IREmitNodeAarch64(left);                 { base -> x0 }
+        if (IRKind[left] = IR_LEA) and (Syms[IRA[left]].Kind = skParam) and
+           Syms[IRA[left]].IsRef and (Syms[IRA[left]].TypeKind = tyAnsiString) and
+           not Syms[IRA[left]].IsArray then
+          EmitI32($F9400000);                    { ldr x0, [x0] (&handle -> handle) }
         EmitI32($F81F0FE0);                      { str x0, [sp, #-16]! }
         IREmitNodeAarch64(IRB[node]);            { index -> x0 }
         if IRC[node] <> 0 then

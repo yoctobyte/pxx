@@ -788,6 +788,9 @@ test-aarch64: $(COMPILER)
 	./$(COMPILER) -dPXX_MANAGED_STRING --target=aarch64 test/test_cross_setlen_str.pas /tmp/test_aarch64_setlen_str
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_cross_setlen_str.pas /tmp/test_aarch64_setlen_str_x64
 	test "$$(tools/run_target.sh aarch64 /tmp/test_aarch64_setlen_str)" = "$$(/tmp/test_aarch64_setlen_str_x64)"
+	./$(COMPILER) -dPXX_MANAGED_STRING --target=aarch64 test/test_cross_str_length_index.pas /tmp/test_aarch64_str_length_index
+	./$(COMPILER) -dPXX_MANAGED_STRING test/test_cross_str_length_index.pas /tmp/test_aarch64_str_length_index_x64
+	test "$$(tools/run_target.sh aarch64 /tmp/test_aarch64_str_length_index)" = "$$(/tmp/test_aarch64_str_length_index_x64)"
 	./$(COMPILER) --target=aarch64 test/test_cross_in_operator.pas /tmp/test_aarch64_in
 	./$(COMPILER) test/test_cross_in_operator.pas /tmp/test_aarch64_in_x64
 	test "$$(tools/run_target.sh aarch64 /tmp/test_aarch64_in)" = "$$(/tmp/test_aarch64_in_x64)"
@@ -800,7 +803,7 @@ test-aarch64: $(COMPILER)
 	./$(COMPILER) --target=aarch64 test/test_arm32_arg_runtime.pas /tmp/test_aarch64_args
 	./$(COMPILER) test/test_arm32_arg_runtime.pas /tmp/test_aarch64_args_x64
 	test "$$(tools/run_target.sh aarch64 /tmp/test_aarch64_args alpha beta)" = "$$(/tmp/test_aarch64_args_x64 alpha beta)"
-	@echo "aarch64 hello + arith + procs + loops + write + varparam + syscall + heap + string + record + dynarray + exception + float + variant + setlen-str + in-operator + loadfile + sysopen-family + args ok (output identical to x86-64)"
+	@echo "aarch64 hello + arith + procs + loops + write + varparam + syscall + heap + string + record + dynarray + exception + float + variant + setlen-str + str-length-index + in-operator + loadfile + sysopen-family + args ok (output identical to x86-64)"
 
 test-arm32: $(COMPILER)
 	./$(COMPILER) --target=arm32 test/hello.pas /tmp/test_arm32_hello
