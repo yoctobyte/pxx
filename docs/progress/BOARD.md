@@ -17,7 +17,7 @@ _none_
 | feature-cross-managed-aggregate-locals | feature | Managed aggregate locals on cross targets | — |
 | feature-cross-param-abi | feature | Full parameter/result ABI on cross targets | — |
 
-## backlog (28)
+## backlog (31)
 
 | Ticket | Type | Summary | Blocked-by |
 | --- | --- | --- | --- |
@@ -28,7 +28,10 @@ _none_
 | feature-async-coroutines | feature | Async, coroutines, and `yield` | feature-unified-heap-allocator |
 | feature-c-header-import-complex | feature | Import C headers for complex libraries (glib/GTK-grade) | — |
 | feature-compiler-warnings | feature | Compiler warning diagnostics facility | — |
-| feature-cross-bootstrap-selfhost | feature | Cross self-host bootstrap (compiler.pas → byte-identical under QEMU) | feature-cross-codegen-gaps, feature-cross-exceptions, feature-cross-float-variant, feature-cross-param-abi |
+| feature-cross-bootstrap-selfhost | feature | Cross self-host bootstrap (compiler.pas → byte-identical under QEMU) | feature-cross-selfhost-aarch64, feature-cross-selfhost-arm32, feature-cross-selfhost-i386 |
+| feature-cross-selfhost-aarch64 | feature | Cross self-host: AArch64 generated compiler runs under QEMU | — |
+| feature-cross-selfhost-arm32 | feature | Cross self-host: ARM32 generated compiler runs under QEMU | — |
+| feature-cross-selfhost-i386 | feature | Cross self-host: i386 generated compiler runs under Linux | — |
 | feature-directive-if-numeric | feature | Valued defines + numeric `{$IF}` evaluation | — |
 | feature-dynamic-soname-discovery | feature | Dynamic soname discovery (no execve) | — |
 | feature-esp32-bare-boot | feature | ESP32 bare-metal boot profile (no IDF) | — |
@@ -102,6 +105,9 @@ _none_
 - feature-async-coroutines
 - feature-c-header-import-complex
 - feature-compiler-warnings
+- feature-cross-selfhost-aarch64
+- feature-cross-selfhost-arm32
+- feature-cross-selfhost-i386
 - feature-directive-if-numeric
 - feature-dynamic-soname-discovery
 - feature-esp32-bare-boot
@@ -131,10 +137,9 @@ _none_
 - **1** — feature-managed-exception-cleanup
 - **1** — feature-elf-rel-writer
 - **1** — feature-directive-if-numeric
-- **1** — feature-cross-param-abi
-- **1** — feature-cross-float-variant
-- **1** — feature-cross-exceptions
-- **1** — feature-cross-codegen-gaps
+- **1** — feature-cross-selfhost-i386
+- **1** — feature-cross-selfhost-arm32
+- **1** — feature-cross-selfhost-aarch64
 - **1** — feature-cross-bootstrap
 - **1** — feature-compiler-warnings
 - **1** — chore-qemu-test-env

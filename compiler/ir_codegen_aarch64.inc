@@ -5,6 +5,41 @@
 
 procedure IREmitNodeAarch64(node: Integer); forward;
 
+procedure EmitLoadArgvPtrA64;
+{ On entry x0 = argv index. Returns x0 = argv[index] C-string pointer. }
+begin
+  EmitI32($D37DF000);                         { lsl x0, x0, #3 }
+  EmitI32($18000041);                         { ldr w1, [pc+8] }
+  EmitI32($14000002);                         { b [pc+8] }
+  EmitGlobRef(BSS_INITIAL_RSP);
+  EmitI32($F9400021);                         { ldr x1, [x1] = initial sp }
+  EmitI32($91002021);                         { add x1, x1, #8 (argv base) }
+  EmitI32($8B000020);                         { add x0, x1, x0 }
+  EmitI32($F9400000);                         { ldr x0, [x0] }
+end;
+
+procedure EmitArgvToAnsiStringA64;
+{ On entry x0 = argv index. Returns x0 = managed string handle. }
+var loopStart, donePos, jmpPos, pi: Integer;
+begin
+  EmitLoadArgvPtrA64;                         { x0 = src }
+  EmitI32($AA0003E1);                         { mov x1, x0 (src) }
+  EmitI32($AA0003E3);                         { mov x3, x0 (scan) }
+  EmitLoadImmA64(2, 0);                       { x2 = len }
+  loopStart := CodeLen;
+  EmitI32($39400064);                         { ldrb w4, [x3] }
+  donePos := CodeLen; EmitI32($34000004);     { cbz w4, done }
+  EmitI32($91000442);                         { add x2, x2, #1 }
+  EmitI32($91000463);                         { add x3, x3, #1 }
+  jmpPos := CodeLen; EmitI32($14000000);      { b loop }
+  Patch32(donePos, $34000004 or (((CodeLen - donePos) div 4) and $7FFFF) shl 5);
+  Patch32(jmpPos, $14000000 or (((loopStart - jmpPos) div 4) and $03FFFFFF));
+  EmitI32($AA0203E0);                         { mov x0, x2 (len) }
+  pi := FindProc('PXXStrFromLit');
+  if pi < 0 then Error('compiler error: PXXStrFromLit not found');
+  EmitCallProc(pi);                           { x0 = managed handle }
+end;
+
 procedure EmitLoadDataRefA64(rd, dataOff: Integer);
 { Load a data address (or descriptor sentinel) into x[rd]. EmitDataRef emits an
   8-byte slot on this 64-bit target, so use the 64-bit literal load and branch
@@ -699,7 +734,7 @@ end;
 procedure IREmitNodeAarch64(node: Integer);
 var
   valNode, si, left, right, op, pi, argNode, nArgs, i, sz, wid: Integer;
-  classIdx, elemSize, lo, decs, specialId, jnsOff, jmpDone: Integer;
+  classIdx, elemSize, lo, hi, decs, specialId, jnsOff, jmpDone, j, itemNode, p1, p2: Integer;
   sVal: AnsiString;
   tk, lhsTk, rhsTk: TTypeKind;
   sgn, isComp: Boolean;
@@ -720,7 +755,14 @@ begin
         if Syms[si].TypeKind = tyAnsiString then
         begin
           valNode := IRB[node];
-          EmitAnsiStringFromNodeA64(valNode);   { x0 = new handle (retained) }
+          if (IRKind[valNode] = IR_CALL) and (IRA[valNode] = -Ord(tkArgStr)) then
+          begin
+            argNode := IRB[valNode];
+            IREmitNodeAarch64(IRA[argNode]);    { x0 = argv index }
+            EmitArgvToAnsiStringA64;            { x0 = new handle }
+          end
+          else
+            EmitAnsiStringFromNodeA64(valNode); { x0 = new handle (retained) }
           if (Syms[si].Kind = skParam) and Syms[si].IsRef then
           begin
             EmitI32($F81F0FE0);                 { str x0, [sp, #-16]! (new) }
@@ -812,6 +854,43 @@ begin
           end;
           EmitI32($F84107E0);                           { ldr x0, [sp], #16 (result) }
           EmitI32($910083FF);                           { add sp, sp, #32 (drop rhs,lhs) }
+          Exit;
+        end;
+
+        if (tk = tyString) and (op = Ord(tkPlus)) then
+        begin
+          lhsTk := IntToTypeKind(IRTk[left]);
+          rhsTk := IntToTypeKind(IRTk[right]);
+          IREmitNodeAarch64(left);  EmitI32($F81F0FE0); { push lhs }
+          IREmitNodeAarch64(right); EmitI32($F81F0FE0); { push rhs }
+
+          EmitLoadImmA64(9, 272);
+          EmitI32($CB2963FF);                           { sub sp, sp, x9 }
+          EmitI32($910003E3);                           { mov x3, sp (buffer) }
+
+          EmitI32($F94093E0);                           { x0 = lhs value [sp+288] }
+          EmitA64StringParts(0, 5, 4, lhsTk, 288);      { x5=src, x4=len }
+          EmitI32($AA0403E7);                           { mov x7, x4 (left len) }
+          EmitI32($91002066);                           { add x6, x3, #8 (dst) }
+          EmitA64CopyBytes(4, 5, 6);
+
+          EmitI32($F9408BE0);                           { x0 = rhs value [sp+272] }
+          EmitA64StringParts(0, 5, 4, rhsTk, 272);      { x5=src, x4=len }
+          EmitI32($AA0403E9);                           { mov x9, x4 (right len) }
+          EmitI32($91002066);                           { add x6, x3, #8 }
+          EmitI32($8B0700C6);                           { add x6, x6, x7 }
+          EmitA64CopyBytes(4, 5, 6);
+
+          EmitI32($8B0900E7);                           { add x7, x7, x9 (total len) }
+          j := CodeLen;
+          EmitI32($F10400FF);                           { cmp x7, #256 }
+          EmitI32($5400000D);                           { b.le cap_done }
+          EmitLoadImmA64(7, 256);
+          Patch32(j + 4, $5400000D or (((CodeLen - (j + 4)) div 4) and $7FFFF) shl 5);
+          EmitI32($F9000067);                           { str x7, [x3] }
+          EmitI32($AA1F03E0);                           { mov x0, xzr }
+          EmitI32($B9000460);                           { str w0, [x3,#4] }
+          EmitI32($AA0303E0);                           { mov x0, x3 }
           Exit;
         end;
 
@@ -952,10 +1031,32 @@ begin
         end;
         if pi = -102 then
         begin
-          { SetLength(arr, n) -> PXXDynSetLen(slotAddr, n, desc). }
-          argNode := IRB[node];               { arg1 = array lvalue (IR_LEA) }
+          { SetLength(arr, n) -> PXXDynSetLen(slotAddr, n, desc). SetLength on
+            a managed AnsiString -> PXXStrSetLen(slotAddr, n). }
+          argNode := IRB[node];               { arg1 = array/string lvalue }
           valNode := IRB[argNode];            { arg2 = new length }
-          left := IRA[argNode];               { IR_LEA node }
+          left := IRA[argNode];               { IR_LEA or IR_LOAD_SYM node }
+          if (IRKind[left] = IR_LOAD_SYM) and
+             (Syms[IRA[left]].TypeKind = tyAnsiString) then
+          begin
+            si := IRA[left];
+            if (Syms[si].Kind = skParam) and Syms[si].IsRef then
+            begin
+              EmitLoadImmA64(9, Syms[si].Offset);
+              EmitI32($8B0903A9);             { add x9, x29, x9 }
+              EmitI32($F9400120);             { ldr x0, [x9] caller slot addr }
+            end
+            else
+              EmitLoadVarAddrA64(si);         { x0 = slot address }
+            EmitI32($F81F0FE0);               { str x0, [sp, #-16]! }
+            IREmitNodeAarch64(IRA[valNode]);  { x0 = n }
+            EmitI32($AA0003E1);               { mov x1, x0 (n) }
+            EmitI32($F84107E0);               { ldr x0, [sp], #16 (slotAddr) }
+            pi := FindProc('PXXStrSetLen');
+            if pi < 0 then Error('compiler error: PXXStrSetLen not found');
+            EmitCallProc(pi);
+            Exit;
+          end;
           if IRKind[left] <> IR_LEA then
             Error('target aarch64: SetLength expects an array variable');
           si := IRA[left];
@@ -986,6 +1087,28 @@ begin
           EmitI32($F85F8000);                 { ldur x0, [x0, #-8] }
           Exit;
         end;
+        if pi = -100 then
+        begin
+          { LoadFile(path, dst): read file into managed AnsiString dst. }
+          argNode := IRB[node];
+          left := IRA[argNode];               { path node }
+          valNode := IRB[argNode];            { arg2 }
+          right := IRA[valNode];              { dst node }
+          if not ((IRKind[right] = IR_LOAD_SYM) and
+                  (Syms[IRA[right]].TypeKind = tyAnsiString)) then
+            Error('target aarch64: LoadFile expects a managed-string destination');
+          si := IRA[right];
+          IREmitNodeAarch64(left);             { x0 = path handle }
+          pi := FindProc('PXXStrLoadFile');
+          if pi < 0 then Error('compiler error: PXXStrLoadFile not found');
+          EmitCallProc(pi);                    { x0 = new handle }
+          EmitI32($F81F0FE0);                  { push new }
+          EmitLoadVarA64(si);                  { x0 = old handle }
+          EmitStrDecRefA64;
+          EmitI32($F84107E0);                  { pop new }
+          EmitStoreVarA64(si);
+          Exit;
+        end;
         if pi < 0 then
         begin
           specialId := -pi;
@@ -995,6 +1118,51 @@ begin
             { type-pun passthrough: evaluate the argument in place }
             argNode := IRB[node];
             IREmitNodeAarch64(IRA[argNode]);
+            Exit;
+          end;
+          if specialId = Ord(tkArgCount) then
+          begin
+            EmitI32($18000040);                 { ldr w0, [pc+8] }
+            EmitI32($14000002);                 { b [pc+8] }
+            EmitGlobRef(BSS_INITIAL_RSP);
+            EmitI32($F9400000);                 { ldr x0, [x0] = initial sp }
+            EmitI32($F9400000);                 { ldr x0, [x0] = argc }
+            EmitI32($D1000400);                 { sub x0, x0, #1 }
+            Exit;
+          end
+          else if specialId = Ord(tkArgStr) then
+          begin
+            argNode := IRB[node];
+            if argNode = -1 then
+              Error('target aarch64: ArgStr expects an index');
+            IREmitNodeAarch64(IRA[argNode]);  { x0 = argv index }
+            argNode := IRB[argNode];
+            if argNode = -1 then
+              Error('target aarch64: ParamStr expression must be assigned directly');
+            valNode := IRA[argNode];
+            if IRKind[valNode] <> IR_LEA then
+              Error('target aarch64: ArgStr expects a string variable');
+            EmitLoadArgvPtrA64;               { x0 = src }
+            EmitI32($AA0003E5);               { mov x5, x0 (src) }
+            EmitI32($AA0003E3);               { mov x3, x0 (scan) }
+            EmitLoadImmA64(4, 0);             { x4 = len }
+            p1 := CodeLen;
+            EmitI32($39400066);               { ldrb w6, [x3] }
+            p2 := CodeLen; EmitI32($34000006); { cbz w6, done }
+            EmitI32($91000484);               { add x4, x4, #1 }
+            EmitI32($91000463);               { add x3, x3, #1 }
+            j := CodeLen; EmitI32($14000000); { b loop }
+            Patch32(p2, $34000006 or (((CodeLen - p2) div 4) and $7FFFF) shl 5);
+            Patch32(j, $14000000 or (((p1 - j) div 4) and $03FFFFFF));
+            EmitI32($F104009F);               { cmp x4, #256 }
+            j := CodeLen; EmitI32($5400000D); { b.le cap_done }
+            EmitLoadImmA64(4, 256);
+            Patch32(j, $5400000D or (((CodeLen - j) div 4) and $7FFFF) shl 5);
+            EmitLoadVarAddrA64(IRA[valNode]); { x0 = dst }
+            EmitI32($F9000004);               { str x4, [x0] }
+            EmitI32($B900041F);               { str wzr, [x0,#4] }
+            EmitI32($91002006);               { add x6, x0, #8 }
+            EmitA64CopyBytes(4, 5, 6);
             Exit;
           end;
           if specialId = 200 then
@@ -1075,6 +1243,118 @@ begin
               end;
               { 203/204 Trunc/Round: x0 already holds it }
             end;
+            Exit;
+          end
+          else if specialId = SPECIAL_IN then
+          begin
+            { x in [items]: constant single values or [lo..hi] ranges. }
+            argNode := IRB[node];             { arg1 = test value }
+            IREmitNodeAarch64(IRA[argNode]);  { x0 = test value }
+            EmitI32($AA0003E1);               { mov x1, x0 }
+            EmitLoadImmA64(4, 0);             { x4 = result accumulator }
+            argNode := IRB[argNode];          { first set item }
+            while argNode <> -1 do
+            begin
+              itemNode := IRA[argNode];
+              if IRKind[itemNode] = IR_BLOCK then
+              begin
+                lo := Integer(IRIVal[IRA[itemNode]]);
+                hi := Integer(IRIVal[IRB[itemNode]]);
+                EmitLoadImmA64(2, lo);
+                EmitI32($EB02003F);           { cmp x1, x2 }
+                p1 := CodeLen; EmitI32($5400000B); { b.lt skip }
+                EmitLoadImmA64(2, hi);
+                EmitI32($EB02003F);           { cmp x1, x2 }
+                p2 := CodeLen; EmitI32($5400000C); { b.gt skip }
+                EmitLoadImmA64(4, 1);
+                Patch32(p1, $5400000B or (((CodeLen - p1) div 4) and $7FFFF) shl 5);
+                Patch32(p2, $5400000C or (((CodeLen - p2) div 4) and $7FFFF) shl 5);
+              end
+              else
+              begin
+                lo := Integer(IRIVal[itemNode]);
+                EmitLoadImmA64(2, lo);
+                EmitI32($EB02003F);           { cmp x1, x2 }
+                EmitSetccA64(Ord(tkEq));      { x0 = equal ? 1 : 0 }
+                EmitI32($AA000084);           { orr x4, x4, x0 }
+              end;
+              argNode := IRB[argNode];
+            end;
+            EmitI32($AA0403E0);               { mov x0, x4 }
+            Exit;
+          end
+          else if specialId = Ord(tkSysOpen) then
+          begin
+            { AArch64 has openat, not open: openat(AT_FDCWD, path, flags, 0). }
+            argNode := IRB[node];
+            valNode := IRA[argNode];
+            if IntToTypeKind(IRTk[valNode]) <> tyAnsiString then
+              Error('target aarch64: SysOpen expects a managed AnsiString path');
+            IREmitNodeAarch64(valNode);        { x0 = path }
+            EmitI32($F81F0FE0);                { push path }
+            argNode := IRB[argNode];
+            IREmitNodeAarch64(IRA[argNode]);   { x0 = flags }
+            EmitI32($AA0003E2);                { mov x2, x0 }
+            EmitI32($F84107E1);                { pop x1 path }
+            EmitLoadImmA64(0, -100);           { AT_FDCWD }
+            EmitLoadImmA64(3, 0);              { mode }
+            EmitLoadImmA64(8, 56);             { __NR_openat }
+            EmitI32($D4000001);                { svc #0 }
+            Exit;
+          end
+          else if specialId = Ord(tkSysRead) then
+          begin
+            argNode := IRB[node];
+            IREmitNodeAarch64(IRA[argNode]);   { fd }
+            EmitI32($F81F0FE0);
+            argNode := IRB[argNode];
+            IREmitNodeAarch64(IRA[argNode]);   { buf }
+            EmitI32($F81F0FE0);
+            argNode := IRB[argNode];
+            IREmitNodeAarch64(IRA[argNode]);   { count }
+            EmitI32($AA0003E2);                { x2 = count }
+            EmitI32($F84107E1);                { x1 = buf }
+            EmitI32($F84107E0);                { x0 = fd }
+            EmitLoadImmA64(8, 63);             { __NR_read }
+            EmitI32($D4000001);
+            Exit;
+          end
+          else if specialId = Ord(tkSyswrite) then
+          begin
+            argNode := IRB[node];
+            IREmitNodeAarch64(IRA[argNode]);   { fd }
+            EmitI32($F81F0FE0);
+            argNode := IRB[argNode];
+            IREmitNodeAarch64(IRA[argNode]);   { buf }
+            EmitI32($F81F0FE0);
+            argNode := IRB[argNode];
+            IREmitNodeAarch64(IRA[argNode]);   { count }
+            EmitI32($AA0003E2);                { x2 = count }
+            EmitI32($F84107E1);                { x1 = buf }
+            EmitI32($F84107E0);                { x0 = fd }
+            EmitLoadImmA64(8, 64);             { __NR_write }
+            EmitI32($D4000001);
+            Exit;
+          end
+          else if specialId = Ord(tkSysClose) then
+          begin
+            argNode := IRB[node];
+            IREmitNodeAarch64(IRA[argNode]);   { fd }
+            EmitLoadImmA64(8, 57);             { __NR_close }
+            EmitI32($D4000001);
+            Exit;
+          end
+          else if specialId = Ord(tkSysFchmod) then
+          begin
+            argNode := IRB[node];
+            IREmitNodeAarch64(IRA[argNode]);   { fd }
+            EmitI32($F81F0FE0);
+            argNode := IRB[argNode];
+            IREmitNodeAarch64(IRA[argNode]);   { mode }
+            EmitI32($AA0003E1);                { x1 = mode }
+            EmitI32($F84107E0);                { x0 = fd }
+            EmitLoadImmA64(8, 52);             { __NR_fchmod }
+            EmitI32($D4000001);
             Exit;
           end
           else
@@ -1398,10 +1678,10 @@ begin
             end;
             EmitwriteCharA64;
           end
-          else if TypeIsOrdinal(tk) then
+          else if TypeIsOrdinal(tk) or (tk = tyUnknown) then
           begin
             IREmitNodeAarch64(valNode);
-            if not TypeSigned(tk) then
+            if (tk <> tyUnknown) and not TypeSigned(tk) then
             begin
               if wid > 0 then
                 EmitwriteUIntWA64(wid)

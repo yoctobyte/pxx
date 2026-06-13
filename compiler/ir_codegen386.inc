@@ -18,6 +18,73 @@ procedure EmitSetcc(opTk: Integer; signed: Boolean); forward;
 
 procedure IREmitNode386(node: Integer); forward;
 
+procedure EmitLoadArgvPtr386;
+{ On entry eax = argv index. Returns eax = argv[index] C-string pointer. }
+begin
+  EmitB($C1); EmitB($E0); EmitB($02);        { shl eax, 2 }
+  EmitB($8B); EmitB($0D); EmitGlobRef(BSS_INITIAL_RSP); { mov ecx, [initial_sp] }
+  EmitB($83); EmitB($C1); EmitB($04);        { add ecx, 4 (argv base) }
+  EmitB($01); EmitB($C8);                    { add eax, ecx }
+  EmitB($8B); EmitB($00);                    { mov eax, [eax] }
+end;
+
+procedure EmitArgvToAnsiString386;
+{ On entry eax = argv index. Returns eax = managed string handle. }
+var loopStart, donePos, pi: Integer;
+begin
+  EmitLoadArgvPtr386;                        { eax = src }
+  EmitB($89); EmitB($C6);                    { mov esi, eax (src) }
+  EmitB($31); EmitB($C9);                    { xor ecx, ecx (len) }
+  loopStart := CodeLen;
+  EmitB($80); EmitB($3C); EmitB($0E); EmitB($00); { cmp byte [esi+ecx], 0 }
+  EmitB($0F); EmitB($84); donePos := CodeLen; EmitI32(0);
+  EmitB($41);                                { inc ecx }
+  EmitB($E9); EmitI32(loopStart - (CodeLen + 4));
+  Patch32(donePos, CodeLen - (donePos + 4));
+  EmitB($51);                                { push len }
+  EmitB($56);                                { push src }
+  pi := FindProc('PXXStrFromLit');
+  if pi < 0 then Error('compiler error: PXXStrFromLit not found');
+  EmitCallProc(pi);
+  EmitB($81); EmitB($C4); EmitI32(8);
+end;
+
+procedure EmitArgvToFixedString386(dstIdx: Integer);
+{ On entry eax = argv index. Copy argv[index] into fixed string dstIdx. }
+var loopStart, donePos, capDone, copyLoop, copyDone: Integer;
+begin
+  EmitLoadArgvPtr386;                        { eax = src }
+  EmitB($89); EmitB($C6);                    { mov esi, eax }
+  EmitB($31); EmitB($C9);                    { xor ecx, ecx (len) }
+  loopStart := CodeLen;
+  EmitB($80); EmitB($3C); EmitB($0E); EmitB($00); { cmp byte [esi+ecx], 0 }
+  EmitB($0F); EmitB($84); donePos := CodeLen; EmitI32(0);
+  EmitB($41);                                { inc ecx }
+  EmitB($E9); EmitI32(loopStart - (CodeLen + 4));
+  Patch32(donePos, CodeLen - (donePos + 4));
+  EmitB($81); EmitB($F9); EmitI32(256);      { cmp ecx, 256 }
+  EmitB($0F); EmitB($8E); capDone := CodeLen; EmitI32(0); { jle cap_done }
+  EmitB($B9); EmitI32(256);                  { mov ecx, 256 }
+  Patch32(capDone, CodeLen - (capDone + 4));
+  if Syms[dstIdx].Kind = skGlobal then
+    begin EmitB($BF); EmitGlobRef(Syms[dstIdx].Offset); end
+  else
+    begin EmitB($8D); EmitB($BD); EmitI32(Syms[dstIdx].Offset); end;
+  EmitB($89); EmitB($0F);                    { mov [edi], ecx }
+  EmitB($C7); EmitB($47); EmitB($04); EmitI32(0); { mov dword [edi+4], 0 }
+  EmitB($83); EmitB($C7); EmitB($08);        { add edi, 8 }
+  copyLoop := CodeLen;
+  EmitB($85); EmitB($C9);                    { test ecx, ecx }
+  EmitB($0F); EmitB($84); copyDone := CodeLen; EmitI32(0);
+  EmitB($8A); EmitB($06);                    { mov al, [esi] }
+  EmitB($88); EmitB($07);                    { mov [edi], al }
+  EmitB($46);                                { inc esi }
+  EmitB($47);                                { inc edi }
+  EmitB($49);                                { dec ecx }
+  EmitB($E9); EmitI32(copyLoop - (CodeLen + 4));
+  Patch32(copyDone, CodeLen - (copyDone + 4));
+end;
+
 procedure IREmitLeaveExceptionFrames386(count: Integer);
 var i: Integer;
 begin
@@ -389,7 +456,7 @@ end;
 procedure IREmitNode386(node: Integer);
 var
   valNode, si, left, right, op, pi, argNode, nArgs, argBytes, wid, sz, i, j, base: Integer;
-  classIdx, elemSize, lo: Integer;
+  classIdx, elemSize, lo, hi, itemNode, p1, p2: Integer;
   sVal: AnsiString;
   emsg: AnsiString;
   tk, lhsTk, rhsTk: TTypeKind;
@@ -410,8 +477,8 @@ begin
           EmitFloatUnspill386;
           Exit;
         end;
-        if (IRIVal[node] > 2147483647) or (IRIVal[node] < -2147483648) then
-          Error('target i386: integer constant exceeds 32 bits');
+        { i386 currently uses a low-dword scalar model for 8-byte ordinals; keep
+          constants consistent with the matching load/store paths. }
         EmitB($B8); EmitI32(IRIVal[node]);           { mov eax, imm32 }
       end;
 
@@ -536,7 +603,13 @@ begin
           { Managed-string assignment to a variable: build the new handle, then
             publish into the slot (release old). }
           valNode := IRB[node];
-          if IRKind[valNode] = IR_CONST_STR then
+          if (IRKind[valNode] = IR_CALL) and (IRA[valNode] = -Ord(tkArgStr)) then
+          begin
+            argNode := IRB[valNode];
+            IREmitNode386(IRA[argNode]);                { eax = argv index }
+            EmitArgvToAnsiString386;                    { eax = new handle }
+          end
+          else if IRKind[valNode] = IR_CONST_STR then
           begin
             sVal := GetTokenStrFromRaw(IRA[valNode], IRB[valNode]);
             j := InternStr(sVal);
@@ -1198,10 +1271,32 @@ begin
         if pi = -102 then
         begin
           { SetLength(arr, n) for a depth-1 dynamic array via the portable
-            PXXDynSetLen(slotAddr, n, desc) helper. }
-          argNode := IRB[node];          { arg1 = array lvalue (IR_LEA) }
+            PXXDynSetLen(slotAddr, n, desc) helper. SetLength on a managed
+            AnsiString routes through PXXStrSetLen(slotAddr, n). }
+          argNode := IRB[node];          { arg1 = array/string lvalue }
           valNode := IRB[argNode];       { arg2 = new length }
-          left := IRA[argNode];          { IR_LEA node }
+          left := IRA[argNode];          { IR_LEA or IR_LOAD_SYM node }
+          if (IRKind[left] = IR_LOAD_SYM) and
+             (Syms[IRA[left]].TypeKind = tyAnsiString) then
+          begin
+            si := IRA[left];
+            if (Syms[si].Kind = skParam) and Syms[si].IsRef then
+            begin
+              EmitB($8B); EmitB($85); EmitI32(Syms[si].Offset); { caller slot addr }
+            end
+            else if Syms[si].Kind = skGlobal then
+              begin EmitB($B8); EmitGlobRef(Syms[si].Offset); end
+            else
+              begin EmitB($8D); EmitB($85); EmitI32(Syms[si].Offset); end;
+            EmitB($50);                    { push slot addr }
+            IREmitNode386(IRA[valNode]);   { eax = new length }
+            EmitB($50);                    { push n }
+            pi := FindProc('PXXStrSetLen');
+            if pi < 0 then Error('compiler error: PXXStrSetLen not found');
+            EmitCallProc(pi);
+            EmitB($81); EmitB($C4); EmitI32(8); { add esp, 8 }
+            Exit;
+          end;
           if IRKind[left] <> IR_LEA then
             Error('target i386: SetLength expects an array variable');
           si := IRA[left];
@@ -1238,6 +1333,51 @@ begin
           EmitB($8B); EmitB($40); EmitB($F8); { mov eax, [eax-8] }
           Exit;
         end;
+        if pi = -100 then
+        begin
+          { LoadFile(path, dst): path is a managed-string C string; dst is a
+            managed AnsiString variable. }
+          argNode := IRB[node];
+          left := IRA[argNode];          { path node }
+          valNode := IRB[argNode];       { arg2 }
+          right := IRA[valNode];         { dst node }
+          if not ((IRKind[right] = IR_LOAD_SYM) and
+                  (Syms[IRA[right]].TypeKind = tyAnsiString)) then
+            Error('target i386: LoadFile expects a managed-string destination');
+          si := IRA[right];
+          IREmitNode386(left);           { eax = path handle }
+          EmitB($50);                    { push path }
+          pi := FindProc('PXXStrLoadFile');
+          if pi < 0 then Error('compiler error: PXXStrLoadFile not found');
+          EmitCallProc(pi);              { eax = new handle }
+          EmitB($81); EmitB($C4); EmitI32(4);
+          EmitB($50);                    { push new }
+          if Syms[si].Kind = skGlobal then
+            begin EmitB($A1); EmitGlobRef(Syms[si].Offset); end
+          else if (Syms[si].Kind = skParam) and Syms[si].IsRef then
+          begin
+            EmitB($8B); EmitB($8D); EmitI32(Syms[si].Offset); { caller slot }
+            EmitB($8B); EmitB($01);                           { old }
+          end
+          else
+            begin EmitB($8B); EmitB($85); EmitI32(Syms[si].Offset); end;
+          pi := FindProc('PXXStrDecRef');
+          if pi < 0 then Error('compiler error: PXXStrDecRef not found');
+          EmitB($50);                    { push old }
+          EmitCallProc(pi);
+          EmitB($81); EmitB($C4); EmitI32(4);
+          EmitB($58);                    { pop new }
+          if Syms[si].Kind = skGlobal then
+            begin EmitB($A3); EmitGlobRef(Syms[si].Offset); end
+          else if (Syms[si].Kind = skParam) and Syms[si].IsRef then
+          begin
+            EmitB($8B); EmitB($8D); EmitI32(Syms[si].Offset); { caller slot }
+            EmitB($89); EmitB($01);                           { store new }
+          end
+          else
+            begin EmitB($89); EmitB($85); EmitI32(Syms[si].Offset); end;
+          Exit;
+        end;
         if pi < 0 then
         begin
           j := -pi;
@@ -1247,6 +1387,28 @@ begin
             { type-pun passthrough: evaluate the argument in place }
             argNode := IRB[node];
             IREmitNode386(IRA[argNode]);
+            Exit;
+          end;
+          if j = Ord(tkArgCount) then
+          begin
+            EmitB($A1); EmitGlobRef(BSS_INITIAL_RSP); { mov eax, [initial_sp] }
+            EmitB($8B); EmitB($00);                   { mov eax, [eax] argc }
+            EmitB($83); EmitB($E8); EmitB($01);       { sub eax, 1 }
+            Exit;
+          end
+          else if j = Ord(tkArgStr) then
+          begin
+            argNode := IRB[node];
+            if argNode = -1 then
+              Error('target i386: ArgStr expects an index');
+            IREmitNode386(IRA[argNode]);      { eax = argv index }
+            argNode := IRB[argNode];
+            if argNode = -1 then
+              Error('target i386: ParamStr expression must be assigned directly');
+            valNode := IRA[argNode];
+            if IRKind[valNode] <> IR_LEA then
+              Error('target i386: ArgStr expects a string variable');
+            EmitArgvToFixedString386(IRA[valNode]);
             Exit;
           end;
           if j = 200 then
@@ -1308,6 +1470,116 @@ begin
                 begin EmitB($F2); EmitB($0F); EmitB($2A); EmitB($C0); end; { cvtsi2sd xmm0, eax }
               { 203/204: eax already holds the value }
             end;
+            Exit;
+          end
+          else if j = SPECIAL_IN then
+          begin
+            { x in [items]: items are constant single values or [lo..hi] ranges
+              (IR_BLOCK, lo in IRA, hi in IRB). Accumulate membership in edx. }
+            argNode := IRB[node];          { arg1 = test value }
+            IREmitNode386(IRA[argNode]);   { eax = test value }
+            EmitB($89); EmitB($C1);        { mov ecx, eax }
+            EmitB($31); EmitB($D2);        { xor edx, edx (result) }
+            argNode := IRB[argNode];       { first set item }
+            while argNode <> -1 do
+            begin
+              itemNode := IRA[argNode];
+              if IRKind[itemNode] = IR_BLOCK then
+              begin
+                lo := Integer(IRIVal[IRA[itemNode]]);
+                hi := Integer(IRIVal[IRB[itemNode]]);
+                EmitB($81); EmitB($F9); EmitI32(lo);       { cmp ecx, lo }
+                EmitB($0F); EmitB($8C); p1 := CodeLen; EmitI32(0); { jl skip }
+                EmitB($81); EmitB($F9); EmitI32(hi);       { cmp ecx, hi }
+                EmitB($0F); EmitB($8F); p2 := CodeLen; EmitI32(0); { jg skip }
+                EmitB($BA); EmitI32(1);                    { mov edx, 1 }
+                Patch32(p1, CodeLen - (p1 + 4));
+                Patch32(p2, CodeLen - (p2 + 4));
+              end
+              else
+              begin
+                lo := Integer(IRIVal[itemNode]);
+                EmitB($81); EmitB($F9); EmitI32(lo);       { cmp ecx, lo }
+                EmitB($0F); EmitB($94); EmitB($C0);        { sete al }
+                EmitB($0F); EmitB($B6); EmitB($C0);        { movzx eax, al }
+                EmitB($09); EmitB($C2);                    { or edx, eax }
+              end;
+              argNode := IRB[argNode];
+            end;
+            EmitB($89); EmitB($D0);        { mov eax, edx }
+            Exit;
+          end
+          else if j = Ord(tkSysOpen) then
+          begin
+            argNode := IRB[node];
+            valNode := IRA[argNode];
+            if IntToTypeKind(IRTk[valNode]) <> tyAnsiString then
+              Error('target i386: SysOpen expects a managed AnsiString path');
+            IREmitNode386(valNode);          { eax = path }
+            EmitB($50);                      { push path }
+            argNode := IRB[argNode];
+            IREmitNode386(IRA[argNode]);     { eax = flags }
+            EmitB($89); EmitB($C1);          { mov ecx, eax }
+            EmitB($5B);                      { pop ebx path }
+            EmitB($31); EmitB($D2);          { xor edx, edx mode }
+            EmitB($B8); EmitI32(5);          { __NR_open }
+            EmitB($CD); EmitB($80);
+            Exit;
+          end
+          else if j = Ord(tkSysRead) then
+          begin
+            argNode := IRB[node];
+            IREmitNode386(IRA[argNode]);     { fd }
+            EmitB($50);
+            argNode := IRB[argNode];
+            IREmitNode386(IRA[argNode]);     { buf }
+            EmitB($50);
+            argNode := IRB[argNode];
+            IREmitNode386(IRA[argNode]);     { count }
+            EmitB($89); EmitB($C2);          { mov edx, eax }
+            EmitB($59);                      { pop ecx buf }
+            EmitB($5B);                      { pop ebx fd }
+            EmitB($B8); EmitI32(3);          { __NR_read }
+            EmitB($CD); EmitB($80);
+            Exit;
+          end
+          else if j = Ord(tkSyswrite) then
+          begin
+            argNode := IRB[node];
+            IREmitNode386(IRA[argNode]);     { fd }
+            EmitB($50);
+            argNode := IRB[argNode];
+            IREmitNode386(IRA[argNode]);     { buf }
+            EmitB($50);
+            argNode := IRB[argNode];
+            IREmitNode386(IRA[argNode]);     { count }
+            EmitB($89); EmitB($C2);          { mov edx, eax }
+            EmitB($59);                      { pop ecx buf }
+            EmitB($5B);                      { pop ebx fd }
+            EmitB($B8); EmitI32(4);          { __NR_write }
+            EmitB($CD); EmitB($80);
+            Exit;
+          end
+          else if j = Ord(tkSysClose) then
+          begin
+            argNode := IRB[node];
+            IREmitNode386(IRA[argNode]);     { fd }
+            EmitB($89); EmitB($C3);          { mov ebx, eax }
+            EmitB($B8); EmitI32(6);          { __NR_close }
+            EmitB($CD); EmitB($80);
+            Exit;
+          end
+          else if j = Ord(tkSysFchmod) then
+          begin
+            argNode := IRB[node];
+            IREmitNode386(IRA[argNode]);     { fd }
+            EmitB($50);
+            argNode := IRB[argNode];
+            IREmitNode386(IRA[argNode]);     { mode }
+            EmitB($89); EmitB($C1);          { mov ecx, eax }
+            EmitB($5B);                      { pop ebx fd }
+            EmitB($B8); EmitI32(94);         { __NR_fchmod }
+            EmitB($CD); EmitB($80);
             Exit;
           end
           else
@@ -1762,10 +2034,10 @@ begin
             end;
             EmitwriteChar386;
           end
-          else if TypeIsOrdinal(tk) then
+          else if TypeIsOrdinal(tk) or (tk = tyUnknown) then
           begin
             IREmitNode386(valNode);
-            if not TypeSigned(tk) then
+            if (tk <> tyUnknown) and not TypeSigned(tk) then
             begin
               if wid > 0 then EmitwriteUIntW386(wid) else EmitwriteUInt386;
             end

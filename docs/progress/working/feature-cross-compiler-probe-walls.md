@@ -37,8 +37,8 @@ arm32   line 35914 target arm32: builtin/special call not yet supported
 Current results:
 
 ```text
-i386    line 123   target i386: integer constant exceeds 32 bits
-aarch64 line 86    target aarch64: non-integer binop not yet supported
+i386    ok         emits /tmp/compiler_i386
+aarch64 ok         emits /tmp/compiler_aarch64
 arm32   ok         emits /tmp/compiler_arm32
 ```
 
@@ -87,3 +87,12 @@ Line numbers are from the expanded compiler source stream reported by
   stack pointer, lowers `ArgCount`, managed `ParamStr`, and fixed-string
   `ArgStr`, and emits `compiler/compiler.pas` with `--target=arm32`. Added
   `test_arm32_arg_runtime` and kept `make test-arm32` green.
+- 2026-06-13 — cleared the i386 and AArch64 stage-1 emit walls. The burn-down
+  covered fixed-string concat/results on AArch64, managed-string `SetLength`,
+  constant `in` lowering, managed aggregate local zero-init, `LoadFile`, the
+  `SysOpen`/`SysWrite`/`SysClose`/`SysFchmod` family, and argv runtime
+  (`ArgCount`, managed `ParamStr`, fixed `ArgStr`) on the remaining Linux cross
+  targets. `compiler/compiler.pas` now emits for i386, AArch64, and ARM32 with
+  `-dPXX_MANAGED_STRING`. Added i386/AArch64 oracle coverage for setlen-str,
+  in-operator, loadfile, sysopen-family, and args; `make test-i386
+  test-aarch64 test-arm32` is green.

@@ -5735,9 +5735,8 @@ begin
         4-byte copy below moves that pointer into the slot. tyVariant is passed
         the same way (pointer to the 16-byte value). Reject only true >4-byte
         by-value payloads (records/sets; Int64 is still low-dword only). }
-      if ((Syms[idx].TypeKind <> tyString) and Syms[idx].IsArray) or
-         not (Syms[idx].IsRef or
-              TypeIsOrdinal(Syms[idx].TypeKind) or
+      if (not Syms[idx].IsRef) and (not Syms[idx].IsArray) and
+         not (TypeIsOrdinal(Syms[idx].TypeKind) or
               TypeIsFloat(Syms[idx].TypeKind) or
               (Syms[idx].TypeKind in [tyString, tyAnsiString, tyPointer, tyClass, tyVariant])) then
         Error('target i386: only ordinal/pointer parameters supported yet');
@@ -6036,6 +6035,25 @@ begin
         EmitI32($E2411001);                  { sub r1, r1, #1 }
         EmitI32($EA000000 or ((((zfLoop - CodeLen) div 4) - 2) and $00ffffff)); { b loop }
         Patch32(zfDone, $0A000000 or ((((CodeLen - zfDone) div 4) - 2) and $00ffffff));
+      end
+      else if (zeroBytes > TARGET_PTR_SIZE) and (TargetArch = TARGET_AARCH64) then
+      begin
+        EmitLoadImmA64(9, Syms[i].Offset);
+        EmitI32($8B0903A0);                  { add x0, x29, x9 (dest) }
+        EmitLoadImmA64(1, zeroBytes);         { x1 = count }
+        pi := FindProc('PXXMemZero');
+        if pi < 0 then Error('compiler error: PXXMemZero not found');
+        EmitCallProc(pi);
+      end
+      else if (zeroBytes > TARGET_PTR_SIZE) and (TargetArch = TARGET_I386) then
+      begin
+        EmitB($8D); EmitB($85); EmitI32(Syms[i].Offset); { lea eax, [ebp+off] }
+        EmitB($50);                                      { push dest }
+        EmitB($68); EmitI32(zeroBytes);                  { push count }
+        pi := FindProc('PXXMemZero');
+        if pi < 0 then Error('compiler error: PXXMemZero not found');
+        EmitCallProc(pi);
+        EmitB($81); EmitB($C4); EmitI32(8);              { add esp, 8 }
       end
       else if (zeroBytes > TARGET_PTR_SIZE) and (TargetArch <> TARGET_X86_64) then
         Error('target: managed aggregate locals not yet supported');
@@ -6948,8 +6966,12 @@ begin
   end
   else if TargetArch = TARGET_AARCH64 then
   begin
-    { Heap + managed strings + exceptions. }
-    { AArch64 entry stub: branch to main body. }
+    { AArch64 entry stub: save sp for argv access, then branch to main body. }
+    EmitI32($18000041);  { ldr w1, [pc+8] }
+    EmitI32($14000002);  { b [pc+8] }
+    EmitGlobRef(BSS_INITIAL_RSP);
+    EmitI32($910003E0);  { mov x0, sp }
+    EmitI32($F9000020);  { str x0, [x1] }
     jmpPatch := CodeLen;
     EmitI32($14000000);
   end

@@ -3310,11 +3310,30 @@ begin
   begin
     if retSymIdx >= 0 then
     begin
-      if Syms[retSymIdx].IsArray or (Syms[retSymIdx].Kind <> skLocal) or
-         not (TypeIsOrdinal(Syms[retSymIdx].TypeKind) or
-              (Syms[retSymIdx].TypeKind in [tyAnsiString, tyPointer, tyClass])) then
-        Error('target aarch64: only ordinal/pointer/string function results supported yet');
-      EmitLoadVarA64(retSymIdx);
+      if Syms[retSymIdx].TypeKind = tyString then
+      begin
+        if Syms[retSymIdx].Kind = skGlobal then
+        begin
+          EmitI32($18000040);  { ldr w0, [pc+8] }
+          EmitI32($14000002);  { b [pc+8] }
+          EmitGlobRef(Syms[retSymIdx].Offset);
+        end
+        else if Syms[retSymIdx].Kind = skLocal then
+        begin
+          EmitLoadImmA64(9, Syms[retSymIdx].Offset);
+          EmitI32($8B0903A0);  { add x0, x29, x9 }
+        end
+        else
+          Error('target aarch64: only local/global string function results supported yet');
+      end
+      else
+      begin
+        if Syms[retSymIdx].IsArray or (Syms[retSymIdx].Kind <> skLocal) or
+           not (TypeIsOrdinal(Syms[retSymIdx].TypeKind) or
+                (Syms[retSymIdx].TypeKind in [tyAnsiString, tyPointer, tyClass])) then
+          Error('target aarch64: only ordinal/pointer/string function results supported yet');
+        EmitLoadVarA64(retSymIdx);
+      end;
     end;
     EmitI32($910003BF);  { mov sp, x29 }
     EmitI32($A8C17BFD);  { ldp x29, x30, [sp], #16 }
