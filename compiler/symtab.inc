@@ -3234,7 +3234,26 @@ begin
            not (TypeIsOrdinal(Syms[retSymIdx].TypeKind) or
                 (Syms[retSymIdx].TypeKind in [tyAnsiString, tyPointer, tyClass])) then
           Error('target i386: only ordinal/pointer/string function results supported yet');
-        EmitB($8B); EmitB($85); EmitI32(Syms[retSymIdx].Offset); { mov eax, [ebp+off] }
+        { Load at the result's width and extend to a full eax. A 1-byte
+          Boolean/Char slot loaded with a plain 4-byte mov drags in 3 garbage
+          bytes, which then defeats callers that `not`/`xor` or test eax. }
+        sz := TypeSize(Syms[retSymIdx].TypeKind);
+        if sz = 1 then
+        begin
+          if TypeSigned(Syms[retSymIdx].TypeKind) then
+            begin EmitB($0F); EmitB($BE); EmitB($85); EmitI32(Syms[retSymIdx].Offset); end  { movsx eax, byte [ebp+off] }
+          else
+            begin EmitB($0F); EmitB($B6); EmitB($85); EmitI32(Syms[retSymIdx].Offset); end; { movzx eax, byte [ebp+off] }
+        end
+        else if sz = 2 then
+        begin
+          if TypeSigned(Syms[retSymIdx].TypeKind) then
+            begin EmitB($0F); EmitB($BF); EmitB($85); EmitI32(Syms[retSymIdx].Offset); end  { movsx eax, word [ebp+off] }
+          else
+            begin EmitB($0F); EmitB($B7); EmitB($85); EmitI32(Syms[retSymIdx].Offset); end; { movzx eax, word [ebp+off] }
+        end
+        else
+          begin EmitB($8B); EmitB($85); EmitI32(Syms[retSymIdx].Offset); end;               { mov eax, [ebp+off] }
       end;
     end;
     EmitB($C9); EmitB($C3);                                    { leave; ret }

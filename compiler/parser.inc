@@ -5763,7 +5763,20 @@ begin
       else
       begin
         EmitB($8B); EmitB($85); EmitI32(8 + sz);     { mov eax, [ebp+disp] }
-        EmitB($89); EmitB($85); EmitI32(Syms[idx].Offset);
+        { Store at the param's type width: frame slots are packed by size, so a
+          1-byte char/boolean sits adjacent to the next slot. A blanket 4-byte
+          store would clobber that neighbour (e.g. a var-param pointer next to a
+          Char arg). By-ref/array/handle params are always 4-byte. }
+        if (not Syms[idx].IsRef) and (not Syms[idx].IsArray) and
+           not (Syms[idx].TypeKind in [tyString, tyAnsiString, tyPointer, tyClass, tyVariant]) and
+           (TypeSize(Syms[idx].TypeKind) = 1) then
+          begin EmitB($88); EmitB($85); EmitI32(Syms[idx].Offset); end          { mov [ebp+off], al }
+        else if (not Syms[idx].IsRef) and (not Syms[idx].IsArray) and
+           not (Syms[idx].TypeKind in [tyString, tyAnsiString, tyPointer, tyClass, tyVariant]) and
+           (TypeSize(Syms[idx].TypeKind) = 2) then
+          begin EmitB($66); EmitB($89); EmitB($85); EmitI32(Syms[idx].Offset); end { mov [ebp+off], ax }
+        else
+          begin EmitB($89); EmitB($85); EmitI32(Syms[idx].Offset); end;          { mov [ebp+off], eax }
       end;
     end;
   end

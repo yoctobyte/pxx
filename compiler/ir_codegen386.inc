@@ -774,16 +774,24 @@ begin
       begin
         si := IRA[node];
         if (Syms[si].IsArray and (Syms[si].ArrLen = -1)) or
-           ((Syms[si].TypeKind = tyAnsiString) and not Syms[si].IsArray and
-            not ((Syms[si].Kind = skParam) and Syms[si].IsRef)) then
+           ((Syms[si].TypeKind = tyAnsiString) and not Syms[si].IsArray) then
         begin
           { Dynamic array or scalar managed string: the slot holds the heap data
             pointer (the string handle); load it (mov), so indexing/Length
             operate on the heap block, not on the slot address. v1: no
-            copy-on-write in write mode (single-owner arrays only). By-ref
-            managed-string params keep the address path below. }
+            copy-on-write in write mode (single-owner arrays only). }
           if Syms[si].Kind = skGlobal then
             begin EmitB($A1); EmitGlobRef(Syms[si].Offset); end          { mov eax, [slot] }
+          else if (Syms[si].Kind = skParam) and Syms[si].IsRef and
+                  (Syms[si].TypeKind = tyAnsiString) and not Syms[si].IsArray then
+          begin
+            { By-ref managed-string param: the param slot holds the address of
+              the caller's handle slot, so deref twice to reach the data
+              pointer. (SetLength routes through IR_LOAD_SYM and wants the
+              single-deref slot address, so it never reaches here.) }
+            EmitB($8B); EmitB($85); EmitI32(Syms[si].Offset);  { mov eax, [ebp+off] (&callerHandle) }
+            EmitB($8B); EmitB($00);                            { mov eax, [eax] (handle) }
+          end
           else
             begin EmitB($8B); EmitB($85); EmitI32(Syms[si].Offset); end; { mov eax, [ebp+off] }
         end
