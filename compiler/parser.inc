@@ -5278,6 +5278,7 @@ var
   nparams  : Integer;
   pi, i, sz, retRecId, savedLastTypeRecId: Integer;
   zeroBytes : Integer;
+  zfLoop, zfDone : Integer;
   retIsDynArr : Boolean; retElemTk : TTypeKind; retElemRec : Integer;
   retPtrElemTk, retPtrElemRec : Integer;
   savedSC, savedFS, savedCurProc : Integer;
@@ -5994,7 +5995,25 @@ begin
       { i386: only pointer-sized managed handles (scalar AnsiString / dyn-array)
         are supported; the larger managed aggregates (records/variants/arrays of
         managed) are not on this target yet. }
-      if (zeroBytes > TARGET_PTR_SIZE) and (TargetArch <> TARGET_X86_64) then
+      if (zeroBytes > TARGET_PTR_SIZE) and (TargetArch = TARGET_ARM32) then
+      begin
+        { Zero the full extent of a managed-aggregate local (record with managed
+          fields / variant / array of managed) so first use sees nil fields and
+          an ARC-correct copy releases nil, not stale stack bytes. Byte loop. }
+        EmitLoadImmArm32(0, Syms[i].Offset);
+        EmitI32($E08B0000);                  { add r0, fp, r0 (dest) }
+        EmitLoadImmArm32(1, zeroBytes);       { r1 = count }
+        EmitI32($E3A02000);                  { mov r2, #0 }
+        zfLoop := CodeLen;
+        EmitI32($E3510000);                  { cmp r1, #0 }
+        zfDone := CodeLen; EmitI32($0A000000); { beq done }
+        EmitI32($E5C02000);                  { strb r2, [r0] }
+        EmitI32($E2800001);                  { add r0, r0, #1 }
+        EmitI32($E2411001);                  { sub r1, r1, #1 }
+        EmitI32($EA000000 or ((((zfLoop - CodeLen) div 4) - 2) and $00ffffff)); { b loop }
+        Patch32(zfDone, $0A000000 or ((((CodeLen - zfDone) div 4) - 2) and $00ffffff));
+      end
+      else if (zeroBytes > TARGET_PTR_SIZE) and (TargetArch <> TARGET_X86_64) then
         Error('target: managed aggregate locals not yet supported');
       if (zeroBytes = TARGET_PTR_SIZE) and (TargetArch = TARGET_I386) then
       begin
@@ -6021,7 +6040,7 @@ begin
       begin
         EmitB($48); EmitB($C7); EmitB($85); EmitI32(Syms[i].Offset); EmitI32(0); { mov qword [rbp+off], 0 }
       end
-      else if zeroBytes > 0 then
+      else if (zeroBytes > 0) and (TargetArch = TARGET_X86_64) then
       begin
         EmitB($48); EmitB($8D); EmitB($BD); EmitI32(Syms[i].Offset);  { lea rdi, [rbp+off] }
         EmitB($48); EmitB($31); EmitB($C0);                           { xor rax, rax }

@@ -1,8 +1,8 @@
 # Managed aggregate locals on cross targets
 
 - **Type:** feature
-- **Status:** backlog
-- **Owner:** —
+- **Status:** working
+- **Owner:** claude
 - **Unblocks:** feature-cross-bootstrap-selfhost
 - **Opened:** 2026-06-13 (split out of feature-cross-codegen-gaps item 1 once it
   grew into a multi-part sub-arc)
@@ -53,3 +53,21 @@ Self-host + threadsafe fixedpoints stay byte-identical.
 ## Log
 - 2026-06-13 — opened from the codegen-gaps item-1 diagnosis. Zero-init prototype
   reverted (compiles, crashes at runtime); full sub-arc captured here.
+- 2026-06-13 — claimed. **arm32 items 1 + 2 done; root cause found.** The
+  earlier "zero-init compiles but crashes" was a misdiagnosis: the real bug was
+  that the prologue zero-init's final `else if zeroBytes > 0` branch (the x86-64
+  `lea/xor/mov/rep stosb`, **19 bytes**) had no `TargetArch` guard. The original
+  `Error` for `zeroBytes > TARGET_PTR_SIZE` on non-x86 masked it; once a real
+  arm32 branch let the flow continue, those 19 x86 bytes were emitted into the
+  arm32 code stream, misaligning every following 4-byte ARM instruction (→
+  illegal-instruction / null-deref). Fix: (a) guard that branch to
+  `TargetArch = TARGET_X86_64`; (b) emit a real arm32 byte-zero loop in the
+  arm32 `zeroBytes > PTR` branch. The inline arm32 loop was correct all along.
+  Record-with-managed-field locals (incl. managed-field reassignment) and
+  variant locals now run correctly on arm32; new oracle test
+  `test/test_cross_managed_aggregate_locals.pas` wired into `make test-arm32`.
+  `compiler.pas` → arm32 advances past the line-13288 wall to line 16280 (a
+  different builtin-special). arm32 + i386 + aarch64 + core + self-host/threadsafe
+  fixedpoints green. **Remaining: item 3** (epilogue release of record
+  managed-fields / variants — currently leak-only, output correct) and the
+  i386 / AArch64 ports of items 1+2.
