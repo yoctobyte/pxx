@@ -1,10 +1,11 @@
 # Full Int64 codegen for i386
 
 - **Type:** feature
-- **Status:** backlog
-- **Owner:** —
+- **Status:** done
+- **Owner:** claude
 - **Unblocks:** feature-cross-selfhost-i386
 - **Opened:** 2026-06-13
+- **Resolved:** 2026-06-13
 
 ## Problem
 
@@ -52,3 +53,19 @@ code.
 - 2026-06-13 — opened from the i386 self-host burn-down. The repeated failures
   are no longer isolated bugs; they point to missing first-class 64-bit scalar
   support in the i386 backend.
+- 2026-06-13 — DONE (commits 7756241 feat, 68bef67 fix). Replaced the low-dword
+  model with an edx:eax value model: 64-bit const/load/store (sym + mem),
+  add/sub/mul, and/or, full shl/shr (0..63), signed+unsigned div/mod (inline
+  restoring long division, no RTL dep), neg/not, all six compares (signed and
+  unsigned), 64-bit writeln, Int64 result return + param sign-extend home,
+  syscall-result extension (errno sign- / address zero-extend), Trunc/Round
+  sign-extend. Integer literals outside signed-32 range now type as Int64.
+  New oracle test/test_i386_int64.pas in `make test-i386`; test / test-i386 /
+  test-aarch64 / test-arm32 all green. Bugs fixed while landing: 64-bit
+  eq/neq flag-clobber (`add esp` between `or` and `setcc`), signed divmod
+  off-by-4 dividend abs, and (separate commit) the builtinheap `PWord = ^Int64`
+  machine-word landmine that on i386 wrote 8 bytes into a 4-byte handle slot.
+  Acceptance #1 (oracle in make test-i386) and #2 (cross_float matches) met;
+  #3 (byte-identical self-host fixed-point) belongs to feature-cross-selfhost
+  -i386 and is unblocked but not yet reached — see that ticket for the next
+  wall (lexer/unit-dispatch token miscompile in the i386-hosted compiler).

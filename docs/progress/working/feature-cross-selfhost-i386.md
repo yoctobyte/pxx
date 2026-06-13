@@ -80,6 +80,31 @@ deeper fixed-point compile.
 
 ## Current wall
 
+2026-06-13 (Int64 codegen landed). `feature-i386-int64-codegen` is done: the
+i386 backend now has a real edx:eax model (commits 7756241, 68bef67). This
+cleared the zeroed-float-constant divergence (it was `IRIVal[node] shr 32`
+mis-lowered by the old low-dword model) and the `PWord = ^Int64` machine-word
+landmine that, once Int64 access became truly 8-byte, wrote 8 bytes into
+i386's 4-byte handle slots and corrupted neighbours.
+
+The i386-hosted compiler now starts and mmaps its heap without crashing. The
+next wall is a token/parse divergence: compiling any program (even
+`begin end.`) the i386-hosted compiler reports
+
+```
+Expected: unit, but got:  (Kind: 0, Line: 1)
+```
+
+i.e. `ParseProgram` reaches an `Expect(tkUnit)` after consuming the whole
+source, so the lexed token stream / program-vs-unit dispatch is wrong under
+the i386-hosted compiler. Isolated Int64 records, file load, managed-string
+index-write, and div/mod all match native (`make test-i386` green incl. the
+new oracle), so this is a narrower miscompile in the lexer / `LexAll` /
+dispatch path, not a general Int64 gap — suspect another machine-word /
+global-record-array width mismatch the old low-dword model masked.
+
+### Earlier note (the float-constant wall, now cleared by the Int64 work)
+
 The deeper self-fixedpoint probe now terminates and produces matching
 code/data/BSS sizes, but the binaries are not byte-identical:
 
@@ -129,3 +154,12 @@ foundation task before more self-host patching.
   quickly and reaches `cmp`; first diff is a zeroed 64-bit float constant in
   generated x86-64 float-writer code. Handover: stop adding narrow `shr 32`
   workarounds and implement real i386 `Int64` codegen/support next.
+- 2026-06-13 — real i386 Int64 codegen landed (feature-i386-int64-codegen, now
+  done; commits 7756241, 68bef67). The float-constant divergence is gone (it
+  was `shr 32` under the low-dword model). Found+fixed the `PWord = ^Int64`
+  machine-word landmine: with true 8-byte Int64 access, PXXStrUnique's
+  `PWord(slot)^ := handle` wrote 8 bytes into i386's 4-byte handle slot and
+  nulled the neighbouring managed-string handle (then crashed on deref). PWord
+  is now `^NativeInt` (pointer-sized). The i386-hosted compiler no longer
+  crashes; next wall = the `Expected: unit` token/dispatch miscompile described
+  under Current wall. `make test{,-i386,-aarch64,-arm32}` all green.

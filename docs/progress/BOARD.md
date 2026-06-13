@@ -19,7 +19,7 @@ _none_
 | feature-cross-param-abi | feature | Full parameter/result ABI on cross targets | — |
 | feature-cross-selfhost-i386 | feature | Cross self-host: i386 generated compiler runs under Linux | — |
 
-## backlog (31)
+## backlog (30)
 
 | Ticket | Type | Summary | Blocked-by |
 | --- | --- | --- | --- |
@@ -39,7 +39,6 @@ _none_
 | feature-esp32-idf-xtensa | feature | ESP-IDF integration: Xtensa (ESP32-S2/S3) — QEMU + real hardware | — |
 | feature-flexcolumn-directive | feature | `flexcolumn` calling-convention directive | chore-inc-to-units |
 | feature-float-str-val | feature | Float Str / Val | — |
-| feature-i386-int64-codegen | feature | Full Int64 codegen for i386 | — |
 | feature-inline-asm-depth | feature | Inline assembler depth | — |
 | feature-interfaces | feature | Interfaces | — |
 | feature-lazycasing-c-imports | feature | `{$LAZYCASING ON/OFF}` for C imports only | feature-compiler-warnings |
@@ -62,7 +61,7 @@ _none_
 | bug-nonreproducible-miscompile-2026-06-02 | bug | Non-reproducible one-off miscompile (2026-06-02) | — |
 | bug-whole-record-copy-main-body-noop | bug | Latent: whole-record array-element copy in main-program body emits store no-ops | — |
 
-## done (27)
+## done (28)
 
 | Ticket | Type | Summary | Blocked-by |
 | --- | --- | --- | --- |
@@ -80,6 +79,7 @@ _none_
 | feature-cross-managed-aggregates | feature | Cross-target managed aggregates (records + dynamic arrays) | feature-rtti-layout-table |
 | feature-elf-rel-writer | feature | Relocatable ELF32 object writer (.o for ESP-IDF linking) | — |
 | feature-esp32-idf-riscv32 | feature | ESP-IDF integration: riscv32 (ESP32-C3) end-to-end | feature-elf-rel-writer |
+| feature-i386-int64-codegen | feature | Full Int64 codegen for i386 | — |
 | feature-managed-exception-cleanup | feature | Finalize managed values on exception unwind | — |
 | feature-managed-string-default | feature | Promote managed AnsiString from opt-in to default | bug-managed-byref-string-param-store, feature-managed-exception-cleanup |
 | feature-progress-check-makefile | feature | Wire `progress.sh check` into a make target | — |
@@ -112,7 +112,6 @@ _none_
 - feature-esp32-bare-boot
 - feature-esp32-idf-xtensa
 - feature-float-str-val
-- feature-i386-int64-codegen
 - feature-inline-asm-depth
 - feature-interfaces
 - feature-metaclass-descendant-enforcement
