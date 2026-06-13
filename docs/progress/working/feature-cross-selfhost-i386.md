@@ -71,23 +71,37 @@ AnsiString index-write clone-if-shared handling via `PXXStrUnique`, and the
 byte-identical `compiler.pas --target=i386` then `hello.pas --target=x86_64`
 probe passes under `-dPXX_MANAGED_STRING`.
 
+2026-06-13 (latest): the apparent endless loop was quadratic include expansion,
+not parser/codegen recursion. `ExpandIncludes` appended a 1.37 MB expanded
+compiler source one byte at a time with `SetLength` on each byte; the
+i386-generated compiler made that look like an endless CPU/memory-growth run.
+Bulk span/string append now gets past include expansion and completes the
+deeper fixed-point compile.
+
 ## Current wall
 
-The deeper self-fixedpoint probe now starts but does not terminate in practice:
+The deeper self-fixedpoint probe now terminates and produces matching
+code/data/BSS sizes, but the binaries are not byte-identical:
 
 ```sh
 ./compiler/pascal26 -dPXX_MANAGED_STRING --target=i386 \
   compiler/compiler.pas /tmp/compiler_i386_native
-tools/run_target.sh i386 /tmp/compiler_i386_native -dPXX_MANAGED_STRING \
+/tmp/compiler_i386_native -dPXX_MANAGED_STRING \
   --target=i386 compiler/compiler.pas /tmp/compiler_i386_self
+cmp /tmp/compiler_i386_native /tmp/compiler_i386_self
 ```
 
-Observed 2026-06-13: `/tmp/compiler_i386_native` stays CPU-bound on one core
-and memory grows steadily without visible compile progress. User confirmed this
-same loop/memory-growth shape across the last 3-4 iterations and killed the
-run manually. This is past the COW wall and should be investigated as a new
-i386 self-host loop, likely in parser/IR/codegen state growth while compiling
-`compiler.pas` to i386.
+Observed 2026-06-13: both compilers report
+`[code=1467327B data=43304B bss=131496552B procs=794]`, but `cmp` first differs
+at byte 24194. The diff is in the emitted x86-64 float writer code embedded in
+the i386 compiler: native emits the double bits for `1000000000000000.0`
+(`0x430c6bf526340000`), while the i386-hosted compiler emits zero. This is the
+same underlying problem seen repeatedly in this burn-down: i386's scalar model
+only carries low dwords for many `Int64` operations/stores, so `shl`/`shr`,
+large integer constants, float bit patterns, pointer serialization, and related
+codegen paths keep needing local workarounds. See
+`feature-i386-int64-codegen.md`; fixing that should be treated as the next
+foundation task before more self-host patching.
 
 ## Log
 
@@ -110,3 +124,8 @@ i386 self-host loop, likely in parser/IR/codegen state growth while compiling
   fixedpoint probe reaches the next wall: apparent endless compile loop with
   steady memory growth. The process remains CPU-bound; no byte comparison is
   reached.
+- 2026-06-13 — fixed the include-expansion performance wall by adding bulk
+  append helpers for string/span copies. The same fixedpoint probe now completes
+  quickly and reaches `cmp`; first diff is a zeroed 64-bit float constant in
+  generated x86-64 float-writer code. Handover: stop adding narrow `shr 32`
+  workarounds and implement real i386 `Int64` codegen/support next.

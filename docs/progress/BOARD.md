@@ -19,7 +19,7 @@ _none_
 | feature-cross-param-abi | feature | Full parameter/result ABI on cross targets | — |
 | feature-cross-selfhost-i386 | feature | Cross self-host: i386 generated compiler runs under Linux | — |
 
-## backlog (30)
+## backlog (31)
 
 | Ticket | Type | Summary | Blocked-by |
 | --- | --- | --- | --- |
@@ -39,6 +39,7 @@ _none_
 | feature-esp32-idf-xtensa | feature | ESP-IDF integration: Xtensa (ESP32-S2/S3) — QEMU + real hardware | — |
 | feature-flexcolumn-directive | feature | `flexcolumn` calling-convention directive | chore-inc-to-units |
 | feature-float-str-val | feature | Float Str / Val | — |
+| feature-i386-int64-codegen | feature | Full Int64 codegen for i386 | — |
 | feature-inline-asm-depth | feature | Inline assembler depth | — |
 | feature-interfaces | feature | Interfaces | — |
 | feature-lazycasing-c-imports | feature | `{$LAZYCASING ON/OFF}` for C imports only | feature-compiler-warnings |
@@ -111,6 +112,7 @@ _none_
 - feature-esp32-bare-boot
 - feature-esp32-idf-xtensa
 - feature-float-str-val
+- feature-i386-int64-codegen
 - feature-inline-asm-depth
 - feature-interfaces
 - feature-metaclass-descendant-enforcement

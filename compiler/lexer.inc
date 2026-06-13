@@ -176,6 +176,22 @@ procedure AppendChar(var dst: AnsiString; c: Char);
 begin
   dst := dst + c;
 end;
+
+procedure AppendString(var dst: AnsiString; const src: AnsiString);
+begin
+  dst := dst + src;
+end;
+
+procedure AppendRange(var dst: AnsiString; const src: AnsiString; first, last: Integer);
+var oldLen, count, i: Integer;
+begin
+  if last < first then Exit;
+  count := last - first + 1;
+  oldLen := Length(dst);
+  SetLength(dst, oldLen + count);
+  for i := 0 to count - 1 do
+    dst[oldLen + i + 1] := src[first + i];
+end;
 {$else}
 procedure AppendChar(var dst: AnsiString; c: Char);
 var len: Integer;
@@ -183,6 +199,26 @@ begin
   len := Length(dst);
   SetLength(dst, len + 1);
   dst[len + 1] := c;
+end;
+
+procedure AppendString(var dst: AnsiString; const src: AnsiString);
+var oldLen, i: Integer;
+begin
+  oldLen := Length(dst);
+  SetLength(dst, oldLen + Length(src));
+  for i := 1 to Length(src) do
+    dst[oldLen + i] := src[i];
+end;
+
+procedure AppendRange(var dst: AnsiString; const src: AnsiString; first, last: Integer);
+var oldLen, count, i: Integer;
+begin
+  if last < first then Exit;
+  count := last - first + 1;
+  oldLen := Length(dst);
+  SetLength(dst, oldLen + count);
+  for i := 0 to count - 1 do
+    dst[oldLen + i + 1] := src[first + i];
 end;
 {$endif}
 

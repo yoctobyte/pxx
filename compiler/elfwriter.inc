@@ -1140,7 +1140,7 @@ begin
           end;
           NormalizePath(fullPath);
           LoadFile(fullPath, IncIncluded);
-          for k := 1 to Length(IncIncluded) do AppendChar(IncExpanded, IncIncluded[k]);
+          AppendString(IncExpanded, IncIncluded);
           i := j + 1;
         end
         else
@@ -1157,8 +1157,12 @@ begin
     end
     else
     begin
-      AppendChar(IncExpanded, src[i]);
-      Inc(i);
+      k := i;
+      while (k <= Length(src)) and
+            (not ((k < Length(src)) and (src[k] = '{') and (src[k + 1] = '$'))) do
+        Inc(k);
+      AppendRange(IncExpanded, src, i, k - 1);
+      i := k;
     end;
   end;
   if condCount <> 0 then Error('unterminated conditional directive during include expansion');
