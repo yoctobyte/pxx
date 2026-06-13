@@ -21,6 +21,7 @@ User-facing documents:
 - [ESP32 Support Setup](esp32-support.md) - install buckets, ESP-IDF tooling, QEMU layers, and the `esp32-idf` / `esp32-bare` test strategy.
 - [Limitations](limitations.md) - unsupported or only partially supported language, ABI, platform, and tooling areas.
 - [Inline Assembler](inline-asm.md) - x86-64 inline asm support, supported instruction set, variable passing, limitations, and TODO.
+- [Cross-codegen landmines](cross-codegen-landmines.md) - timeless gotchas for the non-x86-64 backends: the ARM32 4-byte-alignment / unguarded-x86-`EmitB` trap, the crash-diagnosis recipe (qemu `-d in_asm`, raw-binary objdump), and other cross gotchas. Append when bitten.
 - [GUI (GTK3 + LFM streaming)](gui.md) - LCL-compatible widgetset on GTK3, of-object events, and `.lfm`-streamed component trees.
 - [Plan: RTTI → Streaming → LFM](plan-rtti-streaming-lfm.md) - agent-executable phased plan for Lazarus/LCL enablement (RTTI, published, component streaming, resources, LFM).
 - [Project TODO](todo.md) - consolidated remaining-work list: standing bugs, the LCL arc, interfaces (detailed), language gaps, targets, and the units refactor.
