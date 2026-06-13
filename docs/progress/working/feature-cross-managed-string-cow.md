@@ -1,8 +1,8 @@
 # Copy-on-write for managed strings on cross targets (i386 / ARM32 / AArch64)
 
 - **Type:** feature
-- **Status:** backlog
-- **Owner:** —
+- **Status:** working
+- **Owner:** codex
 - **Unblocks:** feature-cross-selfhost-i386, feature-cross-selfhost-arm32, feature-cross-selfhost-aarch64
 - **Opened:** 2026-06-13 (split out of i386 self-host burn-down)
 
@@ -123,3 +123,16 @@ be a second bug on top.
   repro above; AArch64 has an additional earlier string crash. This is the
   current wall for the i386 (and very likely ARM32) self-host tickets after the
   2026-06-13 i386 codegen burn-down (7 fixes; see feature-cross-selfhost-i386).
+- 2026-06-13 — claimed by Codex; starting with the i386 `AnsiString` index-write
+  COW slice because it is the current i386 self-host wall.
+- 2026-06-13 — i386 slice implemented. Added `PXXStrUnique`, wired i386
+  `IR_LEA`/`IR_INDEX`/`IR_STORE_MEM` lvalue-write handling so `s[i] := c`
+  clone-if-shared publishes a unique handle, and added
+  `test/test_cross_string_cow.pas` to `make test-i386`. While re-probing
+  self-host, also hardened small 64-bit emission/patching paths that i386
+  self-host lowered as duplicated low dwords (`EmitI64`, ELF `writeU64`,
+  code/data `Patch*U64`, string-table length headers) and removed executable
+  float literals from the cross-runtime float writer. Result:
+  `make test-i386` passes and the i386-generated compiler now emits byte-
+  identical x86-64 `test/hello.pas` output under `-dPXX_MANAGED_STRING`.
+  ARM32 and AArch64 COW remain pending.

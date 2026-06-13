@@ -19,7 +19,18 @@ begin
 end;
 
 procedure EmitI64(v: Int64);
-begin EmitI32(v and $FFFFFFFF); EmitI32((v shr 32) and $FFFFFFFF); end;
+begin
+  EmitI32(v and $FFFFFFFF);
+  { 32-bit backends mis-lower `v shr 32` for small Int64 values when this
+    compiler self-hosts. Most emitted x86-64 immediates are small; avoid the
+    shift there and keep the wide path for native/full-width cases. }
+  if (v >= 0) and (v <= 2147483647) then
+    EmitI32(0)
+  else if (v < 0) and (v >= -2147483648) then
+    EmitI32($FFFFFFFF)
+  else
+    EmitI32((v shr 32) and $FFFFFFFF);
+end;
 
 procedure Patch32(pos: Integer; v: Int64);
 begin
@@ -203,12 +214,19 @@ begin
   Strs[StrCount].Offset := DataLen;
   Strs[StrCount].Len    := Length(s);
   
-  { Write 8-byte length prefix }
+  { Write 8-byte length prefix. String table lengths fit in 32 bits; write the
+    high dword explicitly so 32-bit self-hosts do not rely on `len shr 32`. }
   len := Length(s);
-  for j := 0 to 7 do
+  for j := 0 to 3 do
   begin
     if DataLen >= MAX_DATA then Error('data overflow');
     Data[DataLen] := Byte((len shr (j * 8)) and $FF);
+    Inc(DataLen);
+  end;
+  for j := 0 to 3 do
+  begin
+    if DataLen >= MAX_DATA then Error('data overflow');
+    Data[DataLen] := 0;
     Inc(DataLen);
   end;
   
@@ -783,6 +801,4 @@ begin
   EmitI32($E3A07004);  { mov r7, #4 }
   EmitI32($EF000000);  { svc #0 }
 end;
-
-
 

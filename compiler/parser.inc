@@ -6908,6 +6908,8 @@ begin
     dummyNames[0] := 'p';     dummyTypes[0] := tyPointer;
     i := RegisterProc('PXXStrIncRef', False, tyPointer, 1, dummyNames, dummyTypes);
     i := RegisterProc('PXXStrDecRef', False, tyPointer, 1, dummyNames, dummyTypes);
+    dummyNames[0] := 'strSlot'; dummyTypes[0] := tyPointer;
+    i := RegisterProc('PXXStrUnique', True, tyPointer, 1, dummyNames, dummyTypes);
 
     dummyNames[0] := 'lenA';  dummyTypes[0] := tyInt64;
     dummyNames[1] := 'srcA';  dummyTypes[1] := tyPointer;

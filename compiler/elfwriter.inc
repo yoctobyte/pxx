@@ -6,10 +6,27 @@ begin
   Code[pos+1] := Byte((addr shr 8) and $FF);
   Code[pos+2] := Byte((addr shr 16) and $FF);
   Code[pos+3] := Byte((addr shr 24) and $FF);
-  Code[pos+4] := Byte((addr shr 32) and $FF);
-  Code[pos+5] := Byte((addr shr 40) and $FF);
-  Code[pos+6] := Byte((addr shr 48) and $FF);
-  Code[pos+7] := Byte((addr shr 56) and $FF);
+  if (addr >= 0) and (addr <= 2147483647) then
+  begin
+    Code[pos+4] := 0;
+    Code[pos+5] := 0;
+    Code[pos+6] := 0;
+    Code[pos+7] := 0;
+  end
+  else if (addr < 0) and (addr >= -2147483648) then
+  begin
+    Code[pos+4] := 255;
+    Code[pos+5] := 255;
+    Code[pos+6] := 255;
+    Code[pos+7] := 255;
+  end
+  else
+  begin
+    Code[pos+4] := Byte((addr shr 32) and $FF);
+    Code[pos+5] := Byte((addr shr 40) and $FF);
+    Code[pos+6] := Byte((addr shr 48) and $FF);
+    Code[pos+7] := Byte((addr shr 56) and $FF);
+  end;
 end;
 
 procedure DataPutB(v: Byte);
@@ -36,7 +53,12 @@ end;
 procedure DataPutU64(v: Int64);
 begin
   DataPutU32(v and $FFFFFFFF);
-  DataPutU32((v shr 32) and $FFFFFFFF);
+  if (v >= 0) and (v <= 2147483647) then
+    DataPutU32(0)
+  else if (v < 0) and (v >= -2147483648) then
+    DataPutU32($FFFFFFFF)
+  else
+    DataPutU32((v shr 32) and $FFFFFFFF);
 end;
 
 procedure PatchDataU64(pos: Integer; v: Int64);
@@ -45,10 +67,27 @@ begin
   Data[pos+1] := Byte((v shr 8) and $FF);
   Data[pos+2] := Byte((v shr 16) and $FF);
   Data[pos+3] := Byte((v shr 24) and $FF);
-  Data[pos+4] := Byte((v shr 32) and $FF);
-  Data[pos+5] := Byte((v shr 40) and $FF);
-  Data[pos+6] := Byte((v shr 48) and $FF);
-  Data[pos+7] := Byte((v shr 56) and $FF);
+  if (v >= 0) and (v <= 2147483647) then
+  begin
+    Data[pos+4] := 0;
+    Data[pos+5] := 0;
+    Data[pos+6] := 0;
+    Data[pos+7] := 0;
+  end
+  else if (v < 0) and (v >= -2147483648) then
+  begin
+    Data[pos+4] := 255;
+    Data[pos+5] := 255;
+    Data[pos+6] := 255;
+    Data[pos+7] := 255;
+  end
+  else
+  begin
+    Data[pos+4] := Byte((v shr 32) and $FF);
+    Data[pos+5] := Byte((v shr 40) and $FF);
+    Data[pos+6] := Byte((v shr 48) and $FF);
+    Data[pos+7] := Byte((v shr 56) and $FF);
+  end;
 end;
 
 procedure PatchDataI32(pos: Integer; v: Integer);
@@ -315,10 +354,28 @@ begin
   sysbuf[1] := (v shr 8) and 255;
   sysbuf[2] := (v shr 16) and 255;
   sysbuf[3] := (v shr 24) and 255;
-  sysbuf[4] := (v shr 32) and 255;
-  sysbuf[5] := (v shr 40) and 255;
-  sysbuf[6] := (v shr 48) and 255;
-  sysbuf[7] := (v shr 56) and 255;
+  { Avoid `v shr 32` for small values: i386 self-host duplicated the low dword. }
+  if (v >= 0) and (v <= 2147483647) then
+  begin
+    sysbuf[4] := 0;
+    sysbuf[5] := 0;
+    sysbuf[6] := 0;
+    sysbuf[7] := 0;
+  end
+  else if (v < 0) and (v >= -2147483648) then
+  begin
+    sysbuf[4] := 255;
+    sysbuf[5] := 255;
+    sysbuf[6] := 255;
+    sysbuf[7] := 255;
+  end
+  else
+  begin
+    sysbuf[4] := (v shr 32) and 255;
+    sysbuf[5] := (v shr 40) and 255;
+    sysbuf[6] := (v shr 48) and 255;
+    sysbuf[7] := (v shr 56) and 255;
+  end;
   syswrite(f, sysbuf, 8);
 end;
 procedure writeStrZ(f: Integer; const s: AnsiString);

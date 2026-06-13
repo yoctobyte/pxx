@@ -460,7 +460,7 @@ var
   sVal: AnsiString;
   emsg: AnsiString;
   tk, lhsTk, rhsTk: TTypeKind;
-  sgn: Boolean;
+  sgn, savedLValueWrite: Boolean;
   pNilLhs, pLoopLhs, pNilRhs, pLoopRhs, pCap, nextJmp, nextJmp2, falseJmp: Integer;
 begin
   if node = -1 then Exit;
@@ -773,19 +773,32 @@ begin
     IR_LEA:
       begin
         si := IRA[node];
-        if (Syms[si].IsArray and (Syms[si].ArrLen = -1)) or
-           ((Syms[si].TypeKind = tyAnsiString) and not Syms[si].IsArray) then
+        if Syms[si].IsArray and (Syms[si].ArrLen = -1) then
         begin
-          { Dynamic array or scalar managed string: the slot holds the heap data
-            pointer (the string handle); load it (mov), so indexing/Length
-            operate on the heap block, not on the slot address. v1: no
-            copy-on-write in write mode (single-owner arrays only). }
-          { A by-ref managed-string param yields the forwarded slot address
-            (&callerHandle), one deref short of the data pointer; Length /
-            indexing add that final deref themselves (mirrors x86-64), and
-            forwarding the param to another var arg needs exactly this address. }
+          { Dynamic array: the slot holds the heap data pointer; load it. v1:
+            no copy-on-write in write mode (single-owner arrays only). }
           if Syms[si].Kind = skGlobal then
             begin EmitB($A1); EmitGlobRef(Syms[si].Offset); end          { mov eax, [slot] }
+          else
+            begin EmitB($8B); EmitB($85); EmitI32(Syms[si].Offset); end; { mov eax, [ebp+off] }
+        end
+        else if (Syms[si].TypeKind = tyAnsiString) and not Syms[si].IsArray then
+        begin
+          { Scalar managed string: reads need the heap handle; writes need the
+            handle slot address so PXXStrUnique can publish a cloned handle.
+            A by-ref param always yields the forwarded caller slot address; read
+            Length/index paths add the final deref. }
+          if Syms[si].Kind = skGlobal then
+          begin
+            if InLValueWrite then
+              begin EmitB($B8); EmitGlobRef(Syms[si].Offset); end        { mov eax, slot addr }
+            else
+              begin EmitB($A1); EmitGlobRef(Syms[si].Offset); end;       { mov eax, [slot] }
+          end
+          else if (Syms[si].Kind = skParam) and Syms[si].IsRef then
+            begin EmitB($8B); EmitB($85); EmitI32(Syms[si].Offset); end  { caller slot addr }
+          else if InLValueWrite then
+            begin EmitB($8D); EmitB($85); EmitI32(Syms[si].Offset); end  { lea eax, [ebp+off] }
           else
             begin EmitB($8B); EmitB($85); EmitI32(Syms[si].Offset); end; { mov eax, [ebp+off] }
         end
@@ -1688,18 +1701,32 @@ begin
 
     IR_INDEX:
       begin
-        { Static-array / pointer indexing. Managed strings and dynamic arrays
-          (which need copy-on-write) aren't available on i386 yet, so no COW
-          path here. base[index]: addr = base + (index - lo) * elemSize. }
+        { Static-array / pointer / managed-string indexing. For managed strings
+          in write position, clone-if-shared before returning the byte address. }
         left := IRA[node];
         right := IRB[node];
         lo := IRC[node];
         elemSize := Integer(IRIVal[node]);
         IREmitNode386(left);                          { base address -> eax }
-        if (IRKind[left] = IR_LEA) and (Syms[IRA[left]].Kind = skParam) and
-           Syms[IRA[left]].IsRef and (Syms[IRA[left]].TypeKind = tyAnsiString) and
-           not Syms[IRA[left]].IsArray then
-          begin EmitB($8B); EmitB($00); end;          { mov eax, [eax] (&handle -> handle) }
+        if ((IRKind[left] = IR_LEA) and (Syms[IRA[left]].TypeKind = tyAnsiString) and
+            not Syms[IRA[left]].IsArray) or
+           (((IRKind[left] = IR_FIELD) or (IRKind[left] = IR_INDEX)) and
+            (IRTk[left] = Ord(tyAnsiString)) and (elemSize = 1)) then
+        begin
+          if InLValueWrite then
+          begin
+            EmitB($50);                               { push slot addr }
+            pi := FindProc('PXXStrUnique');
+            if pi < 0 then Error('compiler error: PXXStrUnique not found');
+            EmitCallProc(pi);                         { eax = unique handle }
+            EmitB($81); EmitB($C4); EmitI32(4);       { add esp, 4 }
+          end
+          else if (IRKind[left] = IR_LEA) and (Syms[IRA[left]].Kind = skParam) and
+                  Syms[IRA[left]].IsRef then
+            begin EmitB($8B); EmitB($00); end         { mov eax, [eax] (&handle -> handle) }
+          else if (IRKind[left] = IR_FIELD) or (IRKind[left] = IR_INDEX) then
+            begin EmitB($8B); EmitB($00); end;        { mov eax, [slot] = handle }
+        end;
         EmitB($50);                                   { push eax }
         IREmitNode386(right);                         { index -> eax }
         if lo <> 0 then
@@ -1818,7 +1845,10 @@ begin
             end;
           end;
           EmitB($50);                                   { push eax (new handle) }
+          savedLValueWrite := InLValueWrite;
+          InLValueWrite := True;
           IREmitNode386(IRA[node]);                     { eax = slot address }
+          InLValueWrite := savedLValueWrite;
           EmitB($89); EmitB($C7);                       { mov edi, eax }
           EmitB($8B); EmitB($37);                       { mov esi, [edi] (old) }
           EmitB($8B); EmitB($04); EmitB($24);           { mov eax, [esp] (new) }
@@ -1854,7 +1884,10 @@ begin
           Error('target i386: store through pointer of this type not yet supported');
         IREmitNode386(IRB[node]);                    { value -> eax }
         EmitB($50);                                  { push eax }
+        savedLValueWrite := InLValueWrite;
+        InLValueWrite := True;
         IREmitNode386(IRA[node]);                    { address -> eax }
+        InLValueWrite := savedLValueWrite;
         EmitB($59);                                  { pop ecx (value) }
         sz := TypeSize(tk);
         if sz = 1 then begin EmitB($88); EmitB($08); end       { mov [eax], cl }

@@ -23,6 +23,7 @@ function PXXStrConcat(lenA: Int64; srcA: Pointer; srcB: Pointer; lenB: Int64): P
 function PXXStrLoadFile(path: Pointer): Pointer;
 procedure PXXStrIncRef(p: Pointer);
 procedure PXXStrDecRef(p: Pointer);
+function PXXStrUnique(strSlot: Pointer): Pointer;
 function PXXStrEq(lenA: Int64; srcA: Pointer; lenB: Int64; srcB: Pointer): Int64;
 procedure PXXRecordRetain(recAddr: Pointer; desc: Pointer);
 procedure PXXRecordRelease(recAddr: Pointer; desc: Pointer);
@@ -347,6 +348,36 @@ begin
   rc := PWord(base)^ - 1;
   PWord(base)^ := rc;
   if rc = 0 then PXXFree(Pointer(base));
+end;
+
+{ Ensure the managed AnsiString handle stored at strSlot is uniquely owned.
+  Returns the data pointer to index/write. }
+function PXXStrUnique(strSlot: Pointer): Pointer;
+var slotAddr, oldHandle, newHandle, rc, len: Int64;
+begin
+  if strSlot = nil then
+  begin
+    Result := nil;
+    Exit;
+  end;
+  slotAddr := Int64(strSlot);
+  oldHandle := PWord(slotAddr)^;
+  if oldHandle = 0 then
+  begin
+    Result := nil;
+    Exit;
+  end;
+  rc := PWord(oldHandle - 16)^;
+  if rc <= 1 then
+  begin
+    Result := Pointer(oldHandle);
+    Exit;
+  end;
+  len := PWord(oldHandle - 8)^;
+  newHandle := Int64(PXXStrFromLit(len, Pointer(oldHandle)));
+  PWord(slotAddr)^ := newHandle;
+  PXXStrDecRef(Pointer(oldHandle));
+  Result := Pointer(newHandle);
 end;
 
 { Byte-wise string equality for the cross targets' compare codegen. Operands are
@@ -1020,23 +1051,27 @@ procedure PXXWriteUIntD(pv: Pointer);
 var v, p: Double; d: Integer; ch: Char;
 begin
   v := PDouble(pv)^;
-  p := 1.0;
-  while p * 10.0 <= v do p := p * 10.0;
-  while p >= 1.0 do
+  p := 1;
+  while p * 10 <= v do p := p * 10;
+  while p >= 1 do
   begin
     d := Trunc(v / p);
     ch := Chr(48 + d);
     write(ch);
     v := v - d * p;
-    p := p / 10.0;
+    p := p / 10;
   end;
 end;
 
 procedure PXXWriteFloatNat(p: Pointer);
 { Natural decimal: [-]int.frac, trailing zeros trimmed, at least one
   fractional digit. Mirrors EmitWriteFloatNat (x86-64). }
-var x, ip, m, dv, r: Double; d, i: Integer; ch: Char;
+var x, ip, m, dv, r, two52, scale15: Double; d, i: Integer; ch: Char;
 begin
+  two52 := 1;
+  for i := 1 to 52 do two52 := two52 * 2;
+  scale15 := 1;
+  for i := 1 to 15 do scale15 := scale15 * 10;
   x := PDouble(p)^;
   if PByte(Int64(p) + 7)^ >= 128 then  { sign bit (handles -0.0 too) }
   begin
@@ -1044,62 +1079,69 @@ begin
     x := -x;
   end;
   { ip := trunc(x): round-even, then correct down }
-  if x >= 4503599627370496.0 then
+  if x >= two52 then
     r := x
   else
   begin
-    r := x + 4503599627370496.0;
-    r := r - 4503599627370496.0;
+    r := x + two52;
+    r := r - two52;
   end;
-  if r > x then r := r - 1.0;
+  if r > x then r := r - 1;
   ip := r;
   { m := round-even((x - ip) * 1e15); the product is < 2^52 }
-  m := (x - ip) * 1000000000000000.0;
-  r := m + 4503599627370496.0;
-  m := r - 4503599627370496.0;
-  if m = 1000000000000000.0 then  { frac rounded up to 1.0: carry }
+  m := (x - ip) * scale15;
+  r := m + two52;
+  m := r - two52;
+  if m = scale15 then  { frac rounded up to 1.0: carry }
   begin
-    m := 0.0;
-    ip := ip + 1.0;
+    m := 0;
+    ip := ip + 1;
   end;
   PXXWriteUIntD(@ip);
   write('.');
-  dv := 100000000000000.0;  { 10^14 }
+  dv := scale15 / 10;  { 10^14 }
   for i := 0 to 14 do
   begin
     d := Trunc(m / dv);
     m := m - d * dv;
     ch := Chr(48 + d);
     write(ch);
-    if (i < 14) and (m = 0.0) then Exit;
-    dv := dv / 10.0;
+    if (i < 14) and (m = 0) then Exit;
+    dv := dv / 10;
   end;
 end;
 
 procedure PXXWriteFloatFixed(p: Pointer; decimals: Int64);
 { [-]intpart.frac with exactly 'decimals' fractional digits (0 -> rounded
   integer, no point). Mirrors EmitWriteFloatFixed (x86-64). }
-var x, pw, v, ip, rem, dv, r: Double; d: Integer; i: Int64; ch: Char;
+var x, pw, v, ip, rem, dv, r, two52: Double; d: Integer; i: Int64; ch: Char;
 begin
+  two52 := 1;
+  i := 1;
+  while i <= 52 do
+  begin
+    two52 := two52 * 2;
+    i := i + 1;
+  end;
   x := PDouble(p)^;
   if PByte(Int64(p) + 7)^ >= 128 then
   begin
     write('-');
     x := -x;
   end;
-  pw := 1.0;
+  pw := 1;
   i := 1;
   while i <= decimals do
   begin
-    pw := pw * 10.0;
+    pw := pw * 10;
     i := i + 1;
   end;
   { v := round-even(x * pw) }
   v := x * pw;
-  if v < 4503599627370496.0 then
+  if v < two52 then
   begin
-    r := v + 4503599627370496.0;
-    v := r - 4503599627370496.0;
+    r := v + two52;
+    v := r - two52;
   end;
   if decimals <= 0 then
   begin
@@ -1108,27 +1150,27 @@ begin
   end;
   { exact integer split v = ip*pw + rem (correct the rounded quotient) }
   r := v / pw;
-  if r < 4503599627370496.0 then
+  if r < two52 then
   begin
-    ip := r + 4503599627370496.0;
-    ip := ip - 4503599627370496.0;
+    ip := r + two52;
+    ip := ip - two52;
   end
   else
     ip := r;
   rem := v - ip * pw;
-  if rem < 0.0 then
+  if rem < 0 then
   begin
-    ip := ip - 1.0;
+    ip := ip - 1;
     rem := rem + pw;
   end;
   if rem >= pw then
   begin
-    ip := ip + 1.0;
+    ip := ip + 1;
     rem := rem - pw;
   end;
   PXXWriteUIntD(@ip);
   write('.');
-  dv := pw / 10.0;
+  dv := pw / 10;
   i := 1;
   while i <= decimals do
   begin
@@ -1136,7 +1178,7 @@ begin
     rem := rem - d * dv;
     ch := Chr(48 + d);
     write(ch);
-    dv := dv / 10.0;
+    dv := dv / 10;
     i := i + 1;
   end;
 end;
@@ -1144,8 +1186,12 @@ end;
 procedure PXXWriteFloatSci(p: Pointer);
 { Pascal scientific notation <' '|'-'>d.<15 digits>E<'+'|'-'>ddd. Mirrors
   EmitWriteFloatSci (x86-64), including the leading-space positive sign. }
-var x, m, dv, r: Double; e, d, k: Integer; ch: Char;
+var x, m, dv, r, two52, scale15: Double; e, d, k: Integer; ch: Char;
 begin
+  two52 := 1;
+  for k := 1 to 52 do two52 := two52 * 2;
+  scale15 := 1;
+  for k := 1 to 15 do scale15 := scale15 * 10;
   x := PDouble(p)^;
   if PByte(Int64(p) + 7)^ >= 128 then
   begin
@@ -1154,31 +1200,31 @@ begin
   end
   else
     write(' ');
-  if x = 0.0 then
+  if x = 0 then
   begin
     write('0.000000000000000E+000');
     Exit;
   end;
   e := 0;
-  while x >= 10.0 do
+  while x >= 10 do
   begin
-    x := x / 10.0;
+    x := x / 10;
     e := e + 1;
   end;
-  while x < 1.0 do
+  while x < 1 do
   begin
-    x := x * 10.0;
+    x := x * 10;
     e := e - 1;
   end;
   { m := round-even(x * 1e15): 16 significant digits. Above 2^52 the value
     is already integral, matching cvtsd2si exactly. }
-  m := x * 1000000000000000.0;
-  if m < 4503599627370496.0 then
+  m := x * scale15;
+  if m < two52 then
   begin
-    r := m + 4503599627370496.0;
-    m := r - 4503599627370496.0;
+    r := m + two52;
+    m := r - two52;
   end;
-  dv := 1000000000000000.0;
+  dv := scale15;
   for k := 0 to 15 do
   begin
     d := Trunc(m / dv);
@@ -1186,7 +1232,7 @@ begin
     ch := Chr(48 + d);
     write(ch);
     if k = 0 then write('.');
-    dv := dv / 10.0;
+    dv := dv / 10;
   end;
   write('E');
   if e < 0 then
