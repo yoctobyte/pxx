@@ -63,3 +63,16 @@ pascal26:0: error: Pascal define storage overflow
   `dummyNames: array[0..7] of AnsiString`; this is the remaining managed
   aggregate/static-array local initialization/release wall, not the old `IR_LEA`
   scalar-string wall.
+- 2026-06-14 — advanced the wall. Implemented AArch64 string index-write COW
+  (`PXXStrUnique` from write-mode `IR_INDEX`), explicit zeroing for hidden
+  managed argument-temp locals allocated during IR lowering, AArch64 `IR_LEA`
+  param-pointer loading for open-array/fixed-string/set params, and signed
+  32-bit `EmitLoadVarA64` loads (`ldrsw`). `make test-aarch64` and `make test`
+  pass. The full repro:
+  `./compiler/pascal26 -dPXX_MANAGED_STRING --target=aarch64 compiler/compiler.pas /tmp/ca64`
+  succeeds, but running `/tmp/ca64` under QEMU to produce `/tmp/ca64_self` still
+  segfaults after reading `compiler/builtin/builtinheap.pas`. Latest GDB
+  snapshot: PC `0x48bda8`, fault address `0x48`, instruction `ldrb w0, [x0]`;
+  surrounding code forms a character access from a nil/wrong base plus a signed
+  local offset. Next slice: map that proc and inspect the string/index base
+  feeding the byte load.

@@ -1666,6 +1666,9 @@ begin
         begin
           hiddenArgSym := AllocVar('', tyAnsiString);
           SymIsHiddenArgTemp[hiddenArgSym] := True;
+          IRAppend(IR_DEFAULT_MEM,
+            IRAppend(IR_SLOTADDR, hiddenArgSym, -1, -1, 0, Ord(tyPointer)),
+            -1, REC_NONE, TARGET_PTR_SIZE, Ord(tyAnsiString));
           IRAppend(IR_STORE_SYM, hiddenArgSym, value, -1, 0, Ord(tyAnsiString));
           value := IRAppend(IR_LOAD_SYM, hiddenArgSym, -1, -1, 0, Ord(tyAnsiString));
           argNode := IRAppend(IR_ARG, value, -1, -1, 0, Ord(tyAnsiString));

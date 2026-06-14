@@ -140,3 +140,11 @@ be a second bug on top.
   (full `compiler.pas -> i386` self-fixedpoint byte-identical), so the i386 COW
   path (index-write `PXXStrUnique`) is exercised through the whole compiler.
   ARM32 and AArch64 COW remain pending (this ticket stays open for them).
+- 2026-06-14 — AArch64 index-write COW slice implemented. Mirrored the i386
+  write-mode `IR_INDEX` path: `IR_STORE_MEM` now emits destination addresses
+  with `InLValueWrite`, and managed-string byte writes call `PXXStrUnique` before
+  indexing. Added `test/test_cross_string_cow.pas` to `make test-aarch64`.
+  `make test-aarch64` and `make test` pass. Full AArch64 compiler self-host now
+  gets past the LowerCase/COW and stale hidden-temp walls but still crashes
+  later while parsing `builtinheap.pas`; track that under
+  `feature-cross-selfhost-aarch64`.

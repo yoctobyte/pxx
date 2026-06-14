@@ -580,7 +580,9 @@ begin
       if sgn then EmitI32($79C00020) else EmitI32($79400020);
     end
     else if sz = 4 then
-      EmitI32($B9400020)
+    begin
+      if sgn then EmitI32($B9800020) else EmitI32($B9400020);
+    end
     else
       EmitI32($F9400020);
   end
@@ -600,7 +602,9 @@ begin
         if sgn then EmitI32($79C00020) else EmitI32($79400020);
       end
       else if sz = 4 then
-        EmitI32($B9400020)
+      begin
+        if sgn then EmitI32($B9800020) else EmitI32($B9400020);
+      end
       else
         EmitI32($F9400020);
     end
@@ -615,7 +619,9 @@ begin
         if sgn then EmitI32($79C00120) else EmitI32($79400120);
       end
       else if sz = 4 then
-        EmitI32($B9400120)
+      begin
+        if sgn then EmitI32($B9800120) else EmitI32($B9400120);
+      end
       else
         EmitI32($F9400120);
     end;
@@ -737,7 +743,7 @@ var
   classIdx, elemSize, lo, hi, decs, specialId, jnsOff, jmpDone, j, itemNode, p1, p2: Integer;
   sVal: AnsiString;
   tk, lhsTk, rhsTk: TTypeKind;
-  sgn, isComp: Boolean;
+  sgn, isComp, savedLValueWrite: Boolean;
 begin
   if node = -1 then Exit;
   case IRKind[node] of
@@ -817,6 +823,18 @@ begin
           EmitLoadVarAddrA64(si);               { x0 = slot address }
           if not ((Syms[si].Kind = skParam) and Syms[si].IsRef) then
             EmitI32($F9400000);                 { ldr x0, [x0] = handle }
+        end
+        else if (Syms[si].Kind = skParam) and
+                (Syms[si].IsRef or Syms[si].IsArray or
+                 (Syms[si].TypeKind = tyString) or (Syms[si].TypeKind = tySet)) then
+        begin
+          { By-ref, open-array, fixed-string, or set param: the slot holds a
+            pointer the caller passed (the array data / buffer / forwarded slot),
+            so load the pointer itself, not the slot address. Mirrors i386. }
+          if Syms[si].IsRef then
+            EmitLoadVarAddrA64(si)
+          else
+            EmitLoadVarA64(si);
         end
         else
           EmitLoadVarAddrA64(si);
@@ -1420,14 +1438,28 @@ begin
 
     IR_INDEX:
       begin
-        { base[index]: addr = base + (index - lo) * elemSize. No COW (managed
-          dynamic arrays use the handle loaded by IR_LEA). }
+        { base[index]: addr = base + (index - lo) * elemSize. For managed
+          strings in write position, clone-if-shared before returning the byte
+          address. Dynamic arrays use the handle loaded by IR_LEA. }
         left := IRA[node];
         IREmitNodeAarch64(left);                 { base -> x0 }
-        if (IRKind[left] = IR_LEA) and (Syms[IRA[left]].Kind = skParam) and
-           Syms[IRA[left]].IsRef and (Syms[IRA[left]].TypeKind = tyAnsiString) and
-           not Syms[IRA[left]].IsArray then
-          EmitI32($F9400000);                    { ldr x0, [x0] (&handle -> handle) }
+        if ((IRKind[left] = IR_LEA) and (Syms[IRA[left]].TypeKind = tyAnsiString) and
+            not Syms[IRA[left]].IsArray) or
+           (((IRKind[left] = IR_FIELD) or (IRKind[left] = IR_INDEX)) and
+            (IRTk[left] = Ord(tyAnsiString)) and (Integer(IRIVal[node]) = 1)) then
+        begin
+          if InLValueWrite then
+          begin
+            pi := FindProc('PXXStrUnique');
+            if pi < 0 then Error('compiler error: PXXStrUnique not found');
+            EmitCallProc(pi);                    { x0 = unique handle }
+          end
+          else if (IRKind[left] = IR_LEA) and (Syms[IRA[left]].Kind = skParam) and
+                  Syms[IRA[left]].IsRef then
+            EmitI32($F9400000)                   { ldr x0, [x0] (&handle -> handle) }
+          else if (IRKind[left] = IR_FIELD) or (IRKind[left] = IR_INDEX) then
+            EmitI32($F9400000);                  { ldr x0, [x0] = handle }
+        end;
         EmitI32($F81F0FE0);                      { str x0, [sp, #-16]! }
         IREmitNodeAarch64(IRB[node]);            { index -> x0 }
         if IRC[node] <> 0 then
@@ -1496,7 +1528,10 @@ begin
           valNode := IRB[node];
           EmitAnsiStringFromNodeA64(valNode);   { x0 = new (retained) }
           EmitI32($F81F0FE0);                   { str x0, [sp, #-16]! (new) }
+          savedLValueWrite := InLValueWrite;
+          InLValueWrite := True;
           IREmitNodeAarch64(IRA[node]);         { x0 = slot address }
+          InLValueWrite := savedLValueWrite;
           EmitI32($AA0003E1);                   { mov x1, x0 }
           EmitI32($F9400020);                   { ldr x0, [x1] old }
           EmitI32($F94003E2);                   { ldr x2, [sp] new }
@@ -1509,7 +1544,10 @@ begin
         begin
           IREmitNodeAarch64(IRB[node]); { value -> x0 }
           EmitI32($F81F0FE0);           { str x0, [sp, #-16]! }
+          savedLValueWrite := InLValueWrite;
+          InLValueWrite := True;
           IREmitNodeAarch64(IRA[node]); { address -> x0 }
+          InLValueWrite := savedLValueWrite;
           EmitI32($F84107E1);           { ldr x1, [sp], #16 (value) }
           EmitI32($9E670020);           { fmov d0, x1 }
           EmitI32($1E624000);           { fcvt s0, d0 }
@@ -1521,7 +1559,10 @@ begin
         begin
           IREmitNodeAarch64(IRB[node]); { value -> x0 }
           EmitI32($F81F0FE0);           { str x0, [sp, #-16]! }
+          savedLValueWrite := InLValueWrite;
+          InLValueWrite := True;
           IREmitNodeAarch64(IRA[node]); { address -> x0 }
+          InLValueWrite := savedLValueWrite;
           EmitI32($F84107E1);           { ldr x1, [sp], #16 (value) }
           EmitI32($F9000001);           { str x1, [x0] }
           Exit;
@@ -1531,7 +1572,10 @@ begin
           Error('target aarch64: store through pointer of this type not yet supported');
         IREmitNodeAarch64(IRB[node]); { value -> x0 }
         EmitI32($F81F0FE0);           { str x0, [sp, #-16]! }
+        savedLValueWrite := InLValueWrite;
+        InLValueWrite := True;
         IREmitNodeAarch64(IRA[node]); { address -> x0 }
+        InLValueWrite := savedLValueWrite;
         EmitI32($F84107E1);           { ldr x1, [sp], #16 (value) }
         sz := TypeSize(tk);
         if sz = 1 then EmitI32($39000001)      { strb w1, [x0] }
