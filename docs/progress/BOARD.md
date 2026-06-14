@@ -18,10 +18,11 @@ _none_
 | feature-cross-managed-string-cow | feature | Copy-on-write for managed strings on cross targets (i386 / ARM32 / AArch64) | — |
 | feature-cross-param-abi | feature | Full parameter/result ABI on cross targets | — |
 
-## backlog (36)
+## backlog (37)
 
 | Ticket | Type | Summary | Blocked-by |
 | --- | --- | --- | --- |
+| chore-asmtext-per-platform-split | chore | Split `asmtext.inc` monolith into per-platform files + fix emitter tests | — |
 | chore-inc-to-units | chore | `.inc` → real `.pas` units refactor | — |
 | chore-runtime-emission-size | chore | Finer runtime-support emission (code size) | — |
 | feature-additional-cpu-targets | feature | Additional CPU targets (rollup: i386 → aarch64 → arm32 → ESP32/RISC-V) | feature-target-aarch64, feature-target-arm32, feature-target-esp32, feature-target-i386 |
@@ -111,6 +112,7 @@ _none_
 
 ## Ready (no unmet blocker)
 
+- chore-asmtext-per-platform-split
 - chore-inc-to-units
 - chore-runtime-emission-size
 - feature-additional-cpu-targets

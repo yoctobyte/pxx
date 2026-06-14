@@ -14,6 +14,15 @@ Read once at session start. Keep edits here terse — this loads every session.
   roaming across source files, leaving mixed unreviewed WIP that needed
   quarantine. The bounded scope + fixed encoding oracle (llvm-mc) are the
   guardrails for this trial. Not a judgment on the underlying model.
+- Trial outcome (2026-06-14, see `agents/discussion/antigravity-asm-emitter-retro.md`):
+  it delivered all four emitters **functionally correct** (QEMU green, bootstrap
+  byte-identical) but with poor structure — a 5x monolith in `asmtext.inc` plus
+  dead duplicate files, tests pointing at the dead copies, tests not wired into
+  `make`. Verdict: fast, useful raw output, weak engineering discipline; keep it
+  scoped + reviewed, and bake **structural** acceptance into the ticket (file
+  layout, no duplication, tests include shipped code + wired into `make`) — not
+  just functional gates. Cleanup tracked in `chore-asmtext-per-platform-split`
+  (Claude-owned).
 
 ## Navigation
 - **Read `agents/codemap/symbols.md` before grepping the source.** It's a per-file index of every
