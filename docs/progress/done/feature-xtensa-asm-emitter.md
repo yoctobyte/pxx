@@ -134,3 +134,6 @@ j     .done
   a string param is now viable, but the inline-literal form is kept (clearest).
 - **Still deferred:** L32R literal-pool sugar, 16-bit narrow encodings,
   windowed-ABI `entry`/`call8` sugar, dynamic blocks left on the typed encoders.
+- **Commits:** e4ae2e0 (feat: EmitAsmXtensa), 029301c + 0bbbed9 (refactor: cmp
+  blocks via EmitAsmXtensa, drop workaround procs), 48cf2bf (fix: nil-init aoc
+  managed temp in prologue), 8bce6e2 (fix: aoc AnsiString element as char ptr).

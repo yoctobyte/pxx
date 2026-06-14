@@ -18,7 +18,7 @@ _none_
 | feature-cross-managed-string-cow | feature | Copy-on-write for managed strings on cross targets (i386 / ARM32 / AArch64) | — |
 | feature-cross-param-abi | feature | Full parameter/result ABI on cross targets | — |
 
-## backlog (34)
+## backlog (36)
 
 | Ticket | Type | Summary | Blocked-by |
 | --- | --- | --- | --- |
@@ -35,9 +35,11 @@ _none_
 | feature-cross-selfhost-aarch64 | feature | Cross self-host: AArch64 generated compiler runs under QEMU | feature-cross-managed-string-cow |
 | feature-cross-selfhost-arm32 | feature | Cross self-host: ARM32 generated compiler runs under QEMU | feature-cross-managed-string-cow |
 | feature-directive-if-numeric | feature | Valued defines + numeric `{$IF}` evaluation | — |
+| feature-dynamic-include-paths-config | feature | Dynamic Include Paths, Configuration Files, and System Scanner | — |
 | feature-dynamic-soname-discovery | feature | Dynamic soname discovery (no execve) | — |
 | feature-esp32-bare-boot | feature | ESP32 bare-metal boot profile (no IDF) | — |
 | feature-esp32-idf-xtensa | feature | ESP-IDF integration: Xtensa (ESP32-S2/S3) — QEMU + real hardware | — |
+| feature-esp32-isr-iram | feature | ESP32: Compiler-Directed ISR and IRAM Support | — |
 | feature-flexcolumn-directive | feature | `flexcolumn` calling-convention directive | chore-inc-to-units |
 | feature-float-str-val | feature | Float Str / Val | — |
 | feature-handle-compacting-heap | feature | Handle-table compacting heap (anti-fragmentation for constrained RAM) | — |
@@ -114,9 +116,11 @@ _none_
 - feature-c-header-import-complex
 - feature-compiler-warnings
 - feature-directive-if-numeric
+- feature-dynamic-include-paths-config
 - feature-dynamic-soname-discovery
 - feature-esp32-bare-boot
 - feature-esp32-idf-xtensa
+- feature-esp32-isr-iram
 - feature-float-str-val
 - feature-handle-compacting-heap
 - feature-inline-asm-depth
