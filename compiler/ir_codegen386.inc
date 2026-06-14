@@ -735,7 +735,7 @@ begin
     else
     begin
       EmitB($29); EmitB($C1);                      { sub ecx, eax (left.lo-right.lo) }
-      EmitB($19); EmitB($DB);                      { sbb ebx, edx (left.hi-right.hi) }
+      EmitB($19); EmitB($D3);                      { sbb ebx, edx (left.hi-right.hi) }
     end;
     if signedOp then
       begin EmitB($0F); EmitB($9C); EmitB($C0); end   { setl al }

@@ -59,6 +59,25 @@ begin
   if a <= b then writeln(1) else writeln(0);
   if a >= b then writeln(1) else writeln(0);
 
+  { ordered compares that cross the sign boundary (left negative, right >= 0):
+    these exercise the high-dword sbb in left-right ordered compares. }
+  a := -9;
+  if a < 0 then writeln(1) else writeln(0);
+  if a < 5 then writeln(1) else writeln(0);
+  if a < -5 then writeln(1) else writeln(0);
+  if a >= 0 then writeln(1) else writeln(0);
+  if a >= -100 then writeln(1) else writeln(0);
+  a := -4294967296;
+  if a < 0 then writeln(1) else writeln(0);
+  if a < 1 then writeln(1) else writeln(0);
+  if a >= -4294967296 then writeln(1) else writeln(0);
+  a := 9223372036854775807;     { Int64 max }
+  if a < 0 then writeln(1) else writeln(0);
+  if a > -1 then writeln(1) else writeln(0);
+  a := -9223372036854775807;
+  if a < 0 then writeln(1) else writeln(0);
+  if a > 0 then writeln(1) else writeln(0);
+
   { add/sub that carry across the boundary }
   a := 4294967295;                   { 0xFFFFFFFF }
   b := a + 1;                        { 0x100000000 }
