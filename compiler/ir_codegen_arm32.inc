@@ -141,13 +141,13 @@ end;
 
 procedure EmitSetccArm32(opTk: Integer);
 begin
-  EmitI32($E3A00000);  { mov r0, #0 }
-  if opTk = Ord(tkEq) then EmitI32($03A00001)
-  else if opTk = Ord(tkNeq) then EmitI32($13A00001)
-  else if opTk = Ord(tkLt) then EmitI32($B3A00001)
-  else if opTk = Ord(tkLe) then EmitI32($D3A00001)
-  else if opTk = Ord(tkGt) then EmitI32($C3A00001)
-  else if opTk = Ord(tkGe) then EmitI32($A3A00001)
+  EmitAsmArm32('mov r0, #0');
+  if opTk = Ord(tkEq) then EmitAsmArm32('moveq r0, #1')
+  else if opTk = Ord(tkNeq) then EmitAsmArm32('movne r0, #1')
+  else if opTk = Ord(tkLt) then EmitAsmArm32('movlt r0, #1')
+  else if opTk = Ord(tkLe) then EmitAsmArm32('movle r0, #1')
+  else if opTk = Ord(tkGt) then EmitAsmArm32('movgt r0, #1')
+  else if opTk = Ord(tkGe) then EmitAsmArm32('movge r0, #1')
   else Error('target arm32: unsupported compare operator');
 end;
 
@@ -1748,13 +1748,13 @@ begin
         begin
           lblId := IRA[i];
           if LabelPositions[lblId] <> -1 then
-            EmitI32($EA000000 or ((((LabelPositions[lblId] - CodeLen) div 4) - 2) and $00ffffff))
+            EmitAsmArm32(['b %', LabelPositions[lblId] - CodeLen])
           else
           begin
             LabelFixupPos[LabelFixupCount] := CodeLen;
             LabelFixupTarget[LabelFixupCount] := lblId;
             Inc(LabelFixupCount);
-            EmitI32($EA000000);
+            EmitAsmArm32('b 8');
           end;
         end;
 
@@ -1762,15 +1762,15 @@ begin
         begin
           lblId := IRA[i];
           IREmitNodeArm32(IRB[i]); { condition -> r0 }
-          EmitI32($E3500000);      { cmp r0, #0 }
+          EmitAsmArm32('cmp r0, #0');
           if LabelPositions[lblId] <> -1 then
-            EmitI32($0A000000 or ((((LabelPositions[lblId] - CodeLen) div 4) - 2) and $00ffffff))
+            EmitAsmArm32(['beq %', LabelPositions[lblId] - CodeLen])
           else
           begin
             LabelFixupPos[LabelFixupCount] := CodeLen;
             LabelFixupTarget[LabelFixupCount] := lblId;
             Inc(LabelFixupCount);
-            EmitI32($0A000000);
+            EmitAsmArm32('beq 8');
           end;
         end;
 
