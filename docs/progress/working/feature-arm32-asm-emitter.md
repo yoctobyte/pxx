@@ -1,8 +1,8 @@
 # ARM32 text-assembler (`EmitAsmArm32`) for cleaner ARM32 codegen
 
 - **Type:** feature
-- **Status:** backlog
-- **Owner:** —
+- **Status:** working
+- **Owner:** Antigravity
 - **Depends-on:** feature-array-of-const (DONE), feature-asm-text-emitter
   (shared `asmtext.inc` helpers, DONE); recommended **after**
   feature-aarch64-asm-emitter (reuse its fixed-width front-end + new enc layer)
@@ -24,7 +24,7 @@ the encoding fields differ.
 ## Operand model
 
 `mnem dst, src, …`. Registers `r0..r15` (`sp`=r13, `lr`=r14, `pc`=r15).
-Loads/stores `ldr r3, [r2, #8]`. Data-processing immediates are the ARM32
+`Loads/stores ldr r3, [r2, #8]`. Data-processing immediates are the ARM32
 quirk: **8-bit value rotated by an even amount** (imm8 + rot4), not a flat
 imm12 — the encoder must find a valid rotation or reject. Markers `%` / `.label:`
 / `@data` / `@glob` as elsewhere.
@@ -73,3 +73,4 @@ beyond what blocks need, the full `ir_codegen_arm32.inc` conversion.
 - 2026-06-14 — opened. Third / last of the remaining target emitters. Fixed-width
   like AArch64; the imm8-rotate operand and the mandatory 4-byte alignment are
   the ARM32-specific traps.
+- 2026-06-14 — claimed by Antigravity; starting implementation.

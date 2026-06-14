@@ -8,17 +8,18 @@ lives in git, not in a timestamp._
 
 _none_
 
-## working (5)
+## working (6)
 
 | Ticket | Type | Summary | Blocked-by |
 | --- | --- | --- | --- |
+| feature-arm32-asm-emitter | feature | ARM32 text-assembler (`EmitAsmArm32`) for cleaner ARM32 codegen | — |
 | feature-cross-codegen-gaps | feature | Cross-target codegen gaps (deferred v1 shortcuts) | — |
 | feature-cross-compiler-probe-walls | feature | Cross compiler.pas probe walls | — |
 | feature-cross-managed-aggregate-locals | feature | Managed aggregate locals on cross targets | — |
 | feature-cross-managed-string-cow | feature | Copy-on-write for managed strings on cross targets (i386 / ARM32 / AArch64) | — |
 | feature-cross-param-abi | feature | Full parameter/result ABI on cross targets | — |
 
-## backlog (38)
+## backlog (37)
 
 | Ticket | Type | Summary | Blocked-by |
 | --- | --- | --- | --- |
@@ -26,7 +27,6 @@ _none_
 | chore-runtime-emission-size | chore | Finer runtime-support emission (code size) | — |
 | feature-additional-cpu-targets | feature | Additional CPU targets (rollup: i386 → aarch64 → arm32 → ESP32/RISC-V) | feature-target-aarch64, feature-target-arm32, feature-target-esp32, feature-target-i386 |
 | feature-allocator-quality | feature | Allocator quality: split / coalesce / bins / alignment | — |
-| feature-arm32-asm-emitter | feature | ARM32 text-assembler (`EmitAsmArm32`) for cleaner ARM32 codegen | — |
 | feature-array-of-const | feature | `array of const` (TVarRec) parameter support | — |
 | feature-asm-text-emitter | feature | Text-assembler codegen helpers (`EmitAsm386` / `EmitAsmX64` …) | feature-array-of-const |
 | feature-async-coroutines | feature | Async, coroutines, and `yield` | feature-unified-heap-allocator |
@@ -115,7 +115,6 @@ _none_
 - chore-runtime-emission-size
 - feature-additional-cpu-targets
 - feature-allocator-quality
-- feature-arm32-asm-emitter
 - feature-array-of-const
 - feature-async-coroutines
 - feature-c-header-import-complex
