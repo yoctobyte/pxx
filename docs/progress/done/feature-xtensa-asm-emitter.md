@@ -1,7 +1,7 @@
 # Xtensa text-assembler (`EmitAsmXtensa`) for ESP32
 
 - **Type:** feature
-- **Status:** backlog
+- **Status:** done (first slice)
 - **Owner:** —
 - **Depends-on:** feature-array-of-const (DONE), feature-asm-text-emitter (x86-64 precedent)
 - **Opened:** 2026-06-14
@@ -99,3 +99,24 @@ j     .done
 - 2026-06-14 — opened. Mirrors the x86-64 `EmitAsmX64` work; primary target
   Xtensa to clean up ESP32 codegen. New code over `xtensaenc.inc`; literal-pool
   sugar explicitly deferred.
+- 2026-06-14 — first slice landed. `compiler/asmtext_xtensa.inc` adds
+  `EmitAsmXtensa` (registers a0..a15/sp, `%` holes, `.name:` labels, `j` +
+  `beq/bne/blt/bge` with back/forward offset resolution, the load/store/ALU set
+  from the scope list) over the typed `xtensa_*` / `EncodeXtensa*` layer, sharing
+  the `AsmText*` helpers in `asmtext.inc`. The six IR_BINOP comparison blocks in
+  `ir_codegen_xtensa.inc` are converted (one proc each: `XtensaCmpEq/Neq/Lt/Gt/
+  Le/Ge`). Output is **byte-identical** to the prior encoder calls; verified
+  against the ESP `objdump` oracle (forward `.done` branch targets decode
+  correctly). `make bootstrap` byte-identical, `make test` + `make test-emit-obj`
+  (xtensa call0/windowed .o links) pass.
+- **Self-host landmines hit** (cost: the segfault hunt): the dialect (1)
+  miscompiles a *function carrying several `array of const` literals* — symptom
+  was a self-hosted compiler that segfaulted on EVERY xtensa compile because
+  `IREmitNodeXtensa` (which held all six literals) was mis-emitted; and (2)
+  mishandles a *non-literal `AnsiString` element* inside an `array of const`
+  (`AsmTextCStr(VAnsiString)` read garbage → "expected register"). Both are
+  PXX-only (FPC builds are fine). Workaround used here: one proc per operator,
+  each with a single all-literal `array of const`. A shared parameterised helper
+  is NOT viable until those two are fixed. See [[project_pxx_array_of_const_selfhost]].
+- **Still deferred:** L32R literal-pool sugar, 16-bit narrow encodings,
+  windowed-ABI `entry`/`call8` sugar, dynamic blocks left on the typed encoders.
