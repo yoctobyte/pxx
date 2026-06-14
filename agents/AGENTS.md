@@ -4,13 +4,16 @@ Shared instructions for any AI agent (Claude, Codex, agy, …) working this repo
 Read once at session start. Keep edits here terse — this loads every session.
 
 ## Access restrictions
-- Antigravity CLI is no longer allowed to work on this repository, including
-  Gemini Flash 3.5 when accessed through that toolchain. Do not claim tickets,
-  edit files, or run cleanup tasks with Antigravity CLI here. Reason: the
-  2026-06-12 run exhausted its tokens while roaming across source files, leaving
-  mixed, unreviewed WIP across unrelated tickets and backend work that required
-  quarantine before other agents could safely continue. Treat this as a tooling
-  reliability restriction, not a blanket judgment on the underlying model.
+- Antigravity CLI is allowed again (unbanned 2026-06-14), but **scoped**. It may
+  work only on a single, explicitly assigned per-target asm text-emitter ticket
+  (`feature-i386-asm-emitter` / `feature-rv32-asm-emitter` /
+  `feature-aarch64-asm-emitter` / `feature-arm32-asm-emitter`) — claim that one
+  ticket, touch only the files its scope names, do not roam into other tickets or
+  backends, and stop at the ticket's byte-identity acceptance gate. The earlier
+  ban (2026-06-12) was a tooling-reliability issue: that run exhausted its tokens
+  roaming across source files, leaving mixed unreviewed WIP that needed
+  quarantine. The bounded scope + fixed encoding oracle (llvm-mc) are the
+  guardrails for this trial. Not a judgment on the underlying model.
 
 ## Navigation
 - **Read `agents/codemap/symbols.md` before grepping the source.** It's a per-file index of every

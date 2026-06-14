@@ -14,14 +14,20 @@ also seems to have a language of its own, especially since I installed the
 caveman tool. It is sometimes very shortened, and that last sentence is a good
 example.
 
-Multiple agents are working on this. Recently I banned Antigravity because of
-seriously poor performance. Gemini can write quite good and adequate code, but
-Antigravity's tooling is just substandard. It keeps going into loops, examining
-every file in the project, or going line by line, and never seems to
-self-reflect. It lets its agents go rogue until we run out of tokens, with no
-real work done apart from creating chaos. Gemini 3.5 is fantastic.
-antigravity-cli sucks as a tool. Even the other agents noticed and/or had to
-clean up shit. So, Google... stop antigoogling.
+Multiple agents are working on this. I had banned Antigravity for a while
+because of seriously poor performance. Gemini can write quite good and adequate
+code, but Antigravity's tooling was just substandard. It kept going into loops,
+examining every file in the project, or going line by line, and never seemed to
+self-reflect. It let its agents go rogue until we ran out of tokens, with no
+real work done apart from creating chaos. Even the other agents noticed and/or
+had to clean up shit. Gemini 3.5 is fantastic, though.
+
+Update: Antigravity is unbanned. It gets another shot, scoped tightly — one of
+the per-target asm text emitters (EmitAsm386 / EmitAsmRv32 / EmitAsmA64 /
+EmitAsmArm32), with a clear ticket, a precedent to copy, and a hard
+byte-identity acceptance gate. Bounded scope and a fixed oracle are exactly the
+guardrails its looping needed. We'll see. So, Google... maybe stop
+antigoogling.
 
 As for the project goals: wide and ambitious. That's all I can say for now.
 They will probably be drawn back to earth by gravity. Pun not intended.
