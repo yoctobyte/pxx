@@ -1504,10 +1504,14 @@ function ParamIsVarRecArray(pi, argNo: Integer): Boolean;
   element record is TVarRec) — the signal to parse a `[...]` argument as a
   TVarRec element vector rather than a set literal. }
 begin
+  { Use the durable Proc/Param signature, not the param's frame symbol — that
+    symbol slot is reused once the callee's scope closes, so by the time a later
+    routine's call is parsed it no longer holds the param. An open array whose
+    element type is a record is, in this dialect, only ever `array of const`. }
   Result := (pi >= 0) and (TVarRecId <> REC_NONE) and
             (argNo >= 0) and (argNo < Procs[pi].ParamCount) and
             Procs[pi].Params[argNo].IsArray and
-            (Syms[Procs[pi].Params[argNo].SymIdx].ElemRecName = TVarRecId);
+            (Procs[pi].Params[argNo].TypeKind = tyRecord);
 end;
 
 procedure EmitArgvToAddr;

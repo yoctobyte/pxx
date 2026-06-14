@@ -1180,16 +1180,20 @@ end;
 procedure EmitWriteCStr;
 { rax = pointer to NUL-terminated chars (a PChar). Compute its length and write
   it to stdout. x86-64 only — the targets that lack a hosted write syscall never
-  reach a write path. }
+  reach a write path. Straight-line parts go through the EmitAsmX64 text
+  assembler; the strlen scan keeps raw bytes (its relative jumps predate label
+  support in the text assembler). }
 begin
-  EmitB($48); EmitB($89); EmitB($C6);            { mov rsi, rax }
-  EmitB($48); EmitB($31); EmitB($C9);            { xor rcx, rcx }
+  EmitAsmX64(['mov rsi, rax',
+              'xor rcx, rcx']);
   EmitB($80); EmitB($3C); EmitB($0E); EmitB($00);{ cmp byte [rsi+rcx], 0 }
   EmitB($74); EmitB($05);                        { je +5 (to mov rdx) }
   EmitB($48); EmitB($FF); EmitB($C1);            { inc rcx }
   EmitB($EB); EmitB($F5);                        { jmp -11 (to cmp) }
-  EmitB($48); EmitB($89); EmitB($CA);            { mov rdx, rcx (len) }
-  MovRaxImm(SYS_WRITE); MovRdiImm(STDOUT); EmitSyscall;
+  EmitAsmX64(['mov rdx, rcx',
+              'mov rax, %', SYS_WRITE,
+              'mov rdi, %', STDOUT,
+              'syscall']);
 end;
 
 procedure IREmitNode(node: Integer);
