@@ -19,6 +19,13 @@ and `Realloc` always copies on grow.
 - **Coalescing** — merge adjacent free blocks to fight fragmentation.
 - **In-place resize** — `Realloc` grows into a following free block when possible.
 - **Size bins / segregated free lists** — O(1)-ish fit instead of first-fit scan.
+- **Per-size / per-class object pools** — the non-moving answer to frequent
+  object create/free (the ESP32 churn case). Instance size is known at compile
+  time, so a per-size free list recycles slots O(1) with zero fragmentation for
+  the churning sizes — no GC/compaction needed for objects. This is "lane 2" of
+  the heap-fragmentation design (see `feature-handle-compacting-heap`, which
+  covers moving compaction for strings/dynarrays and the object-table escalation
+  if survivor fragmentation ever proves pools insufficient).
 - **Honor the `align` argument** (currently always 8).
 
 Do this only after measuring real fragmentation/throughput on the compiler's own
