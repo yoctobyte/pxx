@@ -1,8 +1,8 @@
 # Split `asmtext.inc` monolith into per-platform files + fix emitter tests
 
 - **Type:** chore
-- **Status:** backlog
-- **Owner:** Claude (recommended — structural factoring; see retro)
+- **Status:** done
+- **Owner:** Claude
 - **Opened:** 2026-06-14
 
 ## Why
@@ -80,3 +80,22 @@ inlined copy and include the orphan). Do not blindly trust the orphans.
 
 - 2026-06-14 — opened from the Antigravity asm-emitter trial retro. Functional
   output correct; this tracks the structural + test-wiring debt it left.
+- 2026-06-14 — done. Commits `e9c69f1` (split) + `a3376f7` (tests/make).
+  - `asmtext.inc` back to 500 lines (shared core + EmitAsmX64). `EmitAsm386`
+    moved to new `asmtext_386.inc`; rv32/a64/arm32 emitters now live in their
+    (verified byte-identical) per-platform files, duplicates deleted from the
+    monolith. `compiler.pas` includes one file per target.
+  - `AsmRv32Trim` / `AsmRv32IsLabel` were generic helpers every target reused
+    under an rv32 name → promoted to core as `AsmTextTrim` / `AsmTextIsLabel`,
+    all callers repointed. One definition per `EmitAsm*` now (verified by grep).
+  - Tests repointed to `{$include}` the shipped per-platform files (the 386 test
+    had hand-copied the whole emitter inline — a third copy — now removed).
+    Wired into a new `make test-asm-emit` target, added to `make test`
+    (386=17, rv32=12, a64=20, arm32=18 byte checks, 0 fail). `test/*.o` ignored.
+  - **Deviation:** no `test-riscv32` run target. The riscv32 Linux userland path
+    is still a stub (hello.pas emits 8 bytes, no writeln; QEMU hangs), so there
+    is nothing to run. The rv32 emitter is covered by the host byte test +
+    `test-emit-obj`. A real `test-riscv32` waits on riscv32 Linux codegen
+    (separate work, not part of this cleanup).
+  - Verified: `make bootstrap` byte-identical; `make test` (incl test-asm-emit) +
+    `test-i386` / `test-aarch64` / `test-arm32` / `test-emit-obj` all green.
