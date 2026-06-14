@@ -22,7 +22,7 @@ STABLE_MANAGED_DIR := $(STABLE_ROOT)/managed
 PXXFLAGS   :=
 FROZEN_PXXFLAGS := -uPXX_MANAGED_STRING
 
-.PHONY: all bootstrap bootstrap-check fpc-check test test-core test-nilpy qemu-env-check test-i386 test-aarch64 test-arm32 test-emit-obj stabilize check-stable revert benchmark benchmark-compiler-runtime benchmark-check clean distclean symbols \
+.PHONY: all bootstrap bootstrap-check fpc-check test test-core test-asm-emit test-nilpy qemu-env-check test-i386 test-aarch64 test-arm32 test-emit-obj stabilize check-stable revert benchmark benchmark-compiler-runtime benchmark-check clean distclean symbols \
         bootstrap-managed bootstrap-frozen test-managed test-frozen stabilize-managed stabilize-frozen check-stable-managed revert-managed test-nilpy-managed test-nilpy-frozen \
         progress-check
 
@@ -173,7 +173,20 @@ test-nilpy-managed: test-nilpy
 test-nilpy-frozen: PXXFLAGS := $(FROZEN_PXXFLAGS)
 test-nilpy-frozen: test-nilpy
 
-test: fpc-check test-core
+test: fpc-check test-core test-asm-emit
+
+# Host-side byte tests for the per-target text assemblers (EmitAsm386 / Rv32 /
+# A64 / Arm32). Each test {$include}s the SAME per-platform file the compiler
+# ships and asserts emitted bytes against llvm-mc oracle values; it Halt(1)s on
+# any mismatch. Built/run out of /tmp to keep test/ clean.
+test-asm-emit:
+	@for t in 386 rv32 a64 arm32; do \
+	  $(FPC) -FU/tmp -FE/tmp test/test_asm_emit_$$t.pas >/tmp/asmemit_$$t.log 2>&1 || \
+	    { echo "asm-emit $$t: BUILD FAIL"; cat /tmp/asmemit_$$t.log; exit 1; }; \
+	  /tmp/test_asm_emit_$$t >/dev/null || \
+	    { echo "asm-emit $$t: FAIL"; /tmp/test_asm_emit_$$t; exit 1; }; \
+	  echo "asm-emit $$t: OK"; \
+	done
 
 test-core: $(COMPILER)
 	./$(COMPILER) test/test_ansistring.pas /tmp/test_ansistring26

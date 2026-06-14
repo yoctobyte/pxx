@@ -183,6 +183,25 @@ begin
   EmitI32(0);
 end;
 
+{ Shared string helpers promoted to asmtext.inc core (mocked here). }
+function AsmTextTrim(const s: AnsiString): AnsiString;
+var i, n: Integer;
+begin
+  Result := '';
+  n := Length(s);
+  i := 1;
+  while (i <= n) and AsmTextIsSpace(AsmTextCharAt(s, i)) do Inc(i);
+  while (n >= i) and AsmTextIsSpace(AsmTextCharAt(s, n)) do Dec(n);
+  while i <= n do begin Result := Result + s[i]; Inc(i); end;
+end;
+
+function AsmTextIsLabel(const s: AnsiString): Boolean;
+var c: Char;
+begin
+  c := AsmTextCharAt(s, 1);
+  Result := (c <> '%') and (c <> '-') and ((c < '0') or (c > '9'));
+end;
+
 { Include the target encoders and text assemblers }
 {$include ../compiler/rv32enc.inc}
 {$include ../compiler/asmtext_rv32.inc}

@@ -9,6 +9,9 @@ test/hello
 test/test_*
 !test/test_*.*
 !test/test_*/
+# ...but never keep object files (the !test_*.* rule would otherwise re-add them).
+test/*.o
+test/*.ppu
 /tmp/
 __pycache__/
 *.swp

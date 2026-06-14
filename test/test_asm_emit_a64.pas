@@ -166,7 +166,7 @@ begin
 end;
 
 { Mock functions from asmtext.inc for trimmed/reg/int }
-function AsmRv32Trim(const s: AnsiString): AnsiString;
+function AsmTextTrim(const s: AnsiString): AnsiString;
 var i, n: Integer;
 begin
   Result := '';
@@ -177,7 +177,7 @@ begin
   while i <= n do begin AppendChar(Result, s[i]); Inc(i); end;
 end;
 
-function AsmRv32IsLabel(const s: AnsiString): Boolean;
+function AsmTextIsLabel(const s: AnsiString): Boolean;
 var c: Char;
 begin
   c := AsmTextCharAt(s, 1);
