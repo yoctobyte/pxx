@@ -18,7 +18,7 @@ _none_
 | feature-cross-managed-string-cow | feature | Copy-on-write for managed strings on cross targets (i386 / ARM32 / AArch64) | — |
 | feature-cross-param-abi | feature | Full parameter/result ABI on cross targets | — |
 
-## backlog (33)
+## backlog (34)
 
 | Ticket | Type | Summary | Blocked-by |
 | --- | --- | --- | --- |
@@ -51,6 +51,7 @@ _none_
 | feature-no-ansistring-profile | feature | No-AnsiString / bounded-string profile | — |
 | feature-parallel-processing | feature | Parallel processing as a language feature | feature-unified-heap-allocator |
 | feature-progress-transition-helpers | feature | Progress transition helpers (`claim` / `resolve`) | — |
+| feature-short-circuit-eval | feature | Short-circuit boolean evaluation (`and` / `or`) | — |
 | feature-static-arena-profile | feature | Fixed-static-arena allocator profile | feature-unified-heap-allocator |
 | feature-threadsafe-io-serialization | feature | Statement-level I/O serialization under threads | feature-unified-heap-allocator |
 | idea-unit-rename-import | idea | `uses X as Y` unit-rename import (dialect extension) | — |
@@ -125,6 +126,7 @@ _none_
 - feature-no-ansistring-profile
 - feature-parallel-processing
 - feature-progress-transition-helpers
+- feature-short-circuit-eval
 - feature-static-arena-profile
 - feature-threadsafe-io-serialization
 - idea-unit-rename-import
