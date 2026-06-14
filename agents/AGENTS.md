@@ -24,6 +24,44 @@ Read once at session start. Keep edits here terse — this loads every session.
   just functional gates. Cleanup tracked in `chore-asmtext-per-platform-split`
   (Claude-owned).
 
+## Operating manual for Antigravity
+
+Distilled from the 2026-06-14 emitter trial. Antigravity writes strong *local*
+code fast but has **no global stewardship**: it duplicates instead of factoring,
+ignores existing structure and precedent, and treats tests as a checkbox. Fence
+the global decisions; let it do bounded local work. Whoever dispatches it owns
+these rules.
+
+**Use it for:** mechanical, single-file, fully-specified work against a fixed
+oracle — encode-this-ISA, convert-these-N-named-blocks, fill-a-mnemonic-table,
+byte-for-byte ports. Also fine as a throwaway first draft you will refactor.
+
+**Do NOT use it for:** file layout, where shared helpers live, cross-cutting
+refactors, API/ABI design, or anything where "where does this go" is the hard
+part. It will pick wrong and duplicate.
+
+**Mandatory guardrails (put these in the ticket, not just in your head):**
+1. **Pre-declare the file map.** Name every file it may create or touch, and say
+   where each new symbol goes ("EmitAsmFoo → `asmtext_foo.inc`; shared helpers →
+   `asmtext.inc`"). If it isn't named, it's off-limits. Stops the monolith.
+2. **One ticket = one unit = its named files.** Hard file-count ceiling. Scope is
+   the leash — it roams without one.
+3. **Structural acceptance criteria, not just functional.** Spell out, as
+   pass/fail: exactly one definition per symbol (`grep -c`), no un-`{$include}`d
+   new file, no copy-pasted block (factor shared code), tests `{$include}` the
+   *shipped* file (never a copy), tests wired into `make`. Functional gates
+   (QEMU green, bootstrap byte-identical) passed last time while structure rotted
+   — they are necessary, not sufficient.
+4. **Give the precedent explicitly AND a grep gate.** It had `asmtext_xtensa.inc`
+   as the model and ignored it. A precedent alone does not bind it; pair it with
+   rule 3.
+5. **Never self-mark done. Human/Claude review gate first.** A `grep` for dup
+   defs + a quick structure diff (2 min) catches its failure mode. No commit to
+   `done/` without that pass.
+
+If a task can't be reduced to rules 1–3, don't give it to Antigravity — do it
+with a model that can own structure.
+
 ## Navigation
 - **Read `agents/codemap/symbols.md` before grepping the source.** It's a per-file index of every
   constant, type (with fields), global, and routine signature (with the
