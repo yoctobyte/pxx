@@ -1,10 +1,27 @@
 # Cross self-host: i386 generated compiler runs under Linux
 
 - **Type:** feature
-- **Status:** working
-- **Owner:** codex
+- **Status:** done
+- **Owner:** claude
 - **Unblocks:** feature-cross-bootstrap-selfhost
 - **Opened:** 2026-06-13 (split from cross self-host rollup)
+- **Resolved:** 2026-06-14
+
+## Done
+
+All four acceptance criteria met (commits 7756241, 68bef67, 1f93c42, e3b8866):
+the i386-hosted compiler compiles `test/hello.pas` to x86-64 byte-identically
+to native and the result runs, and the full self-fixedpoint
+`compiler.pas -> i386 (native) -> compiler.pas -> i386 (self)` is now
+BYTE-IDENTICAL (`[code=1574514B data=43368B bss=131496552B procs=801]`,
+`cmp` clean). Walls cleared: Int64 edx:eax codegen, the `PWord = ^Int64`
+machine-word landmine, the 64-bit ordered-compare `sbb` ModRM bug (which
+masqueraded as an `Expected: unit` lexer error via `PXXStrLoadFile`'s broken
+`if fd<0` guard), and full 8-byte Int64 by-value param passing (float-bit high
+dwords were truncated through `MovRaxImm`/`EmitI64`). The param-passing change
+moves runtime-helper size/len params to `NativeInt` and is bootstrapped via
+`make bootstrap` (FPC), not `make compiler/pascal26`, because the prior compiler
+has the old Int64 protos baked in.
 
 ## Goal
 
