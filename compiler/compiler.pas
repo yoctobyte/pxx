@@ -28,6 +28,10 @@ procedure AsmI64(v: Int64); forward;
 {$include exception_emit.inc}
 {$include asmenc.inc}
 {$include asmtext.inc}
+{$include asmtext_386.inc}
+{$include asmtext_rv32.inc}
+{$include asmtext_a64.inc}
+{$include asmtext_arm32.inc}
 {$include asmtext_xtensa.inc}
 procedure CPreprocess(var src: AnsiString; const baseDir: AnsiString); forward;
 {$include parser.inc}

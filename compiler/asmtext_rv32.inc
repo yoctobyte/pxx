@@ -5,22 +5,12 @@
   and relocations. Encodings are routed through the typed rv32_* encoders in
   rv32enc.inc. }
 
-function AsmRv32Trim(const s: AnsiString): AnsiString;
-var i, n: Integer;
-begin
-  Result := '';
-  n := Length(s);
-  i := 1;
-  while (i <= n) and AsmTextIsSpace(AsmTextCharAt(s, i)) do Inc(i);
-  while (n >= i) and AsmTextIsSpace(AsmTextCharAt(s, n)) do Dec(n);
-  while i <= n do begin AppendChar(Result, s[i]); Inc(i); end;
-end;
 
 function AsmRv32RegNum(const opIn: AnsiString; var reg: Integer): Boolean;
 var s: AnsiString; i, n, v: Integer; c: Char;
 begin
   Result := False;
-  s := AsmRv32Trim(opIn);
+  s := AsmTextTrim(opIn);
   if CaseEqual(s, 'zero') then begin reg := 0; Result := True; Exit; end;
   if CaseEqual(s, 'ra') then begin reg := 1; Result := True; Exit; end;
   if CaseEqual(s, 'sp') then begin reg := 2; Result := True; Exit; end;
@@ -78,7 +68,7 @@ end;
 function AsmRv32Int(const opIn: AnsiString; const holes: array of Int64; var holeCur: Integer): Int64;
 var s: AnsiString;
 begin
-  s := AsmRv32Trim(opIn);
+  s := AsmTextTrim(opIn);
   if AsmTextCharAt(s, 1) = '%' then
   begin
     Result := holes[holeCur]; Inc(holeCur);
@@ -92,7 +82,7 @@ var
   s, dispStr, regStr: AnsiString;
   i, n, p: Integer;
 begin
-  s := AsmRv32Trim(opIn);
+  s := AsmTextTrim(opIn);
   p := 0;
   n := Length(s);
   for i := 1 to n do
@@ -100,7 +90,7 @@ begin
   if p = 0 then
     Error('EmitAsmRv32: expected memory operand format imm(reg)');
   
-  dispStr := AsmRv32Trim(AsmTextSlice(s, 1, p - 1));
+  dispStr := AsmTextTrim(AsmTextSlice(s, 1, p - 1));
   if Length(dispStr) = 0 then
     disp := 0
   else if AsmTextCharAt(dispStr, 1) = '%' then
@@ -117,7 +107,7 @@ begin
     AppendChar(regStr, s[i]);
     Inc(i);
   end;
-  regStr := AsmRv32Trim(regStr);
+  regStr := AsmTextTrim(regStr);
   if not AsmRv32RegNum(regStr, reg) then
     Error('EmitAsmRv32: invalid base register in memory operand');
 end;
@@ -169,12 +159,6 @@ begin
   Result := (i12 shl 31) or (i10_5 shl 25) or (rs2 shl 20) or (rs1 shl 15) or (funct3 shl 12) or (i4_1 shl 8) or (i11 shl 7) or $63;
 end;
 
-function AsmRv32IsLabel(const s: AnsiString): Boolean;
-var c: Char;
-begin
-  c := AsmTextCharAt(s, 1);
-  Result := (c <> '%') and (c <> '-') and ((c < '0') or (c > '9'));
-end;
 
 procedure AsmTextLineRv32(const line: AnsiString; const holes: array of Int64; nHoles: Integer);
 var
@@ -208,7 +192,7 @@ begin
     else if partIdx = 1 then AppendChar(op1, rest[i])
     else AppendChar(op2, rest[i]);
   end;
-  op0 := AsmRv32Trim(op0); op1 := AsmRv32Trim(op1); op2 := AsmRv32Trim(op2);
+  op0 := AsmTextTrim(op0); op1 := AsmTextTrim(op1); op2 := AsmTextTrim(op2);
 
   r0 := AsmRv32RegOp(op0);
 
@@ -331,7 +315,7 @@ begin
     if items[i].VType <> vtAnsiString then
       Error('EmitAsmRv32: expected an instruction string');
     line := AsmTextCStr(items[i].VAnsiString);
-    trimmed := AsmRv32Trim(line);
+    trimmed := AsmTextTrim(line);
 
     { first word = mnemonic }
     mnem := ''; j := 1;
@@ -353,7 +337,7 @@ begin
     else if isJ then
     begin
       { jump instruction: jal rd, .label or j .label }
-      rest := AsmRv32Trim(AsmTextSlice(trimmed, j, Length(trimmed) - j + 1));
+      rest := AsmTextTrim(AsmTextSlice(trimmed, j, Length(trimmed) - j + 1));
       op0 := ''; op1 := ''; partIdx := 0;
       for k := 1 to Length(rest) do
       begin
@@ -361,8 +345,8 @@ begin
         else if partIdx = 0 then AppendChar(op0, rest[k])
         else AppendChar(op1, rest[k]);
       end;
-      op0 := AsmRv32Trim(op0);
-      op1 := AsmRv32Trim(op1);
+      op0 := AsmTextTrim(op0);
+      op1 := AsmTextTrim(op1);
 
       if partIdx = 0 then
       begin
@@ -377,7 +361,7 @@ begin
         target := op1;
       end;
 
-      if AsmRv32IsLabel(target) then
+      if AsmTextIsLabel(target) then
       begin
         branchPos := CodeLen;
         defined := False; targetPos := 0;
@@ -420,7 +404,7 @@ begin
     else if isBr then
     begin
       { conditional branch: `bXX rs1, rs2, .label` }
-      rest := AsmRv32Trim(AsmTextSlice(trimmed, j, Length(trimmed) - j + 1));
+      rest := AsmTextTrim(AsmTextSlice(trimmed, j, Length(trimmed) - j + 1));
       op0 := ''; op1 := ''; target := ''; partIdx := 0;
       for k := 1 to Length(rest) do
       begin
@@ -431,9 +415,9 @@ begin
       end;
       rs1 := AsmRv32RegOp(op0);
       rs2 := AsmRv32RegOp(op1);
-      target := AsmRv32Trim(target);
+      target := AsmTextTrim(target);
 
-      if AsmRv32IsLabel(target) then
+      if AsmTextIsLabel(target) then
       begin
         branchPos := CodeLen;
         defined := False; targetPos := 0;

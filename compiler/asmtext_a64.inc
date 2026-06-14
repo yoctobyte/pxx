@@ -10,7 +10,7 @@ var
   c: Char;
 begin
   Result := False;
-  s := AsmRv32Trim(opIn);
+  s := AsmTextTrim(opIn);
   if CaseEqual(s, 'xzr') then begin reg := 31; is64 := True; Result := True; Exit; end;
   if CaseEqual(s, 'wzr') then begin reg := 31; is64 := False; Result := True; Exit; end;
   if CaseEqual(s, 'sp')  then begin reg := 31; is64 := True; Result := True; Exit; end;
@@ -50,9 +50,9 @@ function AsmA64Int(const opIn: AnsiString; const holes: array of Int64; var hole
 var
   s: AnsiString;
 begin
-  s := AsmRv32Trim(opIn);
+  s := AsmTextTrim(opIn);
   if AsmTextCharAt(s, 1) = '#' then
-    s := AsmRv32Trim(AsmTextSlice(s, 2, Length(s) - 1));
+    s := AsmTextTrim(AsmTextSlice(s, 2, Length(s) - 1));
   if AsmTextCharAt(s, 1) = '%' then
   begin
     Result := holes[holeCur]; Inc(holeCur);
@@ -67,7 +67,7 @@ var
   pOpen, pClose, pComma, i, n: Integer;
   is64: Boolean;
 begin
-  s := AsmRv32Trim(opIn);
+  s := AsmTextTrim(opIn);
   n := Length(s);
   pOpen := 0; pClose := 0;
   for i := 1 to n do
@@ -93,15 +93,15 @@ begin
 
   if pComma = 0 then
   begin
-    baseStr := AsmRv32Trim(AsmTextSlice(s, pOpen + 1, pClose - pOpen - 1));
+    baseStr := AsmTextTrim(AsmTextSlice(s, pOpen + 1, pClose - pOpen - 1));
     disp := 0;
   end
   else
   begin
-    baseStr := AsmRv32Trim(AsmTextSlice(s, pOpen + 1, pComma - pOpen - 1));
-    dispStr := AsmRv32Trim(AsmTextSlice(s, pComma + 1, pClose - pComma - 1));
+    baseStr := AsmTextTrim(AsmTextSlice(s, pOpen + 1, pComma - pOpen - 1));
+    dispStr := AsmTextTrim(AsmTextSlice(s, pComma + 1, pClose - pComma - 1));
     if AsmTextCharAt(dispStr, 1) = '#' then
-      dispStr := AsmRv32Trim(AsmTextSlice(dispStr, 2, Length(dispStr) - 1));
+      dispStr := AsmTextTrim(AsmTextSlice(dispStr, 2, Length(dispStr) - 1));
     
     if AsmTextCharAt(dispStr, 1) = '%' then
     begin
@@ -114,11 +114,11 @@ begin
   if mode = 1 then
   begin
     { Post-indexed: offset is after the ] }
-    dispStr := AsmRv32Trim(AsmTextSlice(s, pClose + 1, n - pClose));
+    dispStr := AsmTextTrim(AsmTextSlice(s, pClose + 1, n - pClose));
     if AsmTextCharAt(dispStr, 1) = ',' then
-      dispStr := AsmRv32Trim(AsmTextSlice(dispStr, 2, Length(dispStr) - 1));
+      dispStr := AsmTextTrim(AsmTextSlice(dispStr, 2, Length(dispStr) - 1));
     if AsmTextCharAt(dispStr, 1) = '#' then
-      dispStr := AsmRv32Trim(AsmTextSlice(dispStr, 2, Length(dispStr) - 1));
+      dispStr := AsmTextTrim(AsmTextSlice(dispStr, 2, Length(dispStr) - 1));
     
     if AsmTextCharAt(dispStr, 1) = '%' then
     begin
@@ -241,7 +241,7 @@ begin
     else if partIdx = 1 then AppendChar(op1, rest[i])
     else AppendChar(op2, rest[i]);
   end;
-  op0 := AsmRv32Trim(op0); op1 := AsmRv32Trim(op1); op2 := AsmRv32Trim(op2);
+  op0 := AsmTextTrim(op0); op1 := AsmTextTrim(op1); op2 := AsmTextTrim(op2);
 
   { ret has optional operand }
   if CaseEqual(mnem, 'ret') then
@@ -366,8 +366,8 @@ begin
       begin
         if CaseEqual(AsmTextSlice(op2, 1, 3), 'lsl') then
         begin
-          dispStr := AsmRv32Trim(AsmTextSlice(op2, 4, Length(op2) - 3));
-          if AsmTextCharAt(dispStr, 1) = '#' then dispStr := AsmRv32Trim(AsmTextSlice(dispStr, 2, Length(dispStr)-1));
+          dispStr := AsmTextTrim(AsmTextSlice(op2, 4, Length(op2) - 3));
+          if AsmTextCharAt(dispStr, 1) = '#' then dispStr := AsmTextTrim(AsmTextSlice(dispStr, 2, Length(dispStr)-1));
           sh := Integer(AsmTextParseInt(dispStr));
         end
         else
@@ -619,7 +619,7 @@ begin
     if items[i].VType <> vtAnsiString then
       Error('EmitAsmA64: expected an instruction string');
     line := AsmTextCStr(items[i].VAnsiString);
-    trimmed := AsmRv32Trim(line);
+    trimmed := AsmTextTrim(line);
 
     { first word = mnemonic }
     mnem := ''; j := 1;
@@ -645,8 +645,8 @@ begin
     else if isJ then
     begin
       { unconditional branch: b/bl label }
-      target := AsmRv32Trim(AsmTextSlice(trimmed, j, Length(trimmed) - j + 1));
-      if AsmRv32IsLabel(target) then
+      target := AsmTextTrim(AsmTextSlice(trimmed, j, Length(trimmed) - j + 1));
+      if AsmTextIsLabel(target) then
       begin
         branchPos := CodeLen;
         defined := False; targetPos := 0;
@@ -688,7 +688,7 @@ begin
     else if isBr then
     begin
       { conditional branch: b.cond label, or cbz/cbnz rd, label }
-      rest := AsmRv32Trim(AsmTextSlice(trimmed, j, Length(trimmed) - j + 1));
+      rest := AsmTextTrim(AsmTextSlice(trimmed, j, Length(trimmed) - j + 1));
       if CaseEqual(mnem, 'cbz') or CaseEqual(mnem, 'cbnz') then
       begin
         op0 := ''; target := ''; partIdx := 0;
@@ -698,8 +698,8 @@ begin
           else if partIdx = 0 then AppendChar(op0, rest[k])
           else AppendChar(target, rest[k]);
         end;
-        op0 := AsmRv32Trim(op0);
-        target := AsmRv32Trim(target);
+        op0 := AsmTextTrim(op0);
+        target := AsmTextTrim(target);
         if not AsmA64RegNum(op0, rd, is64) then Error('EmitAsmA64: expected register');
       end
       else
@@ -717,7 +717,7 @@ begin
         end;
       end;
 
-      if AsmRv32IsLabel(target) then
+      if AsmTextIsLabel(target) then
       begin
         branchPos := CodeLen;
         defined := False; targetPos := 0;
@@ -785,7 +785,7 @@ begin
     else if isLdr then
     begin
       { check if PC-relative literal: ldr rd, label }
-      rest := AsmRv32Trim(AsmTextSlice(trimmed, j, Length(trimmed) - j + 1));
+      rest := AsmTextTrim(AsmTextSlice(trimmed, j, Length(trimmed) - j + 1));
       op0 := ''; target := ''; partIdx := 0;
       condCode := 0; { 0 = normal, 2 = inside memory operand (seen '[') }
       for k := 1 to Length(rest) do
@@ -795,10 +795,10 @@ begin
         else if partIdx = 0 then AppendChar(op0, rest[k])
         else AppendChar(target, rest[k]);
       end;
-      op0 := AsmRv32Trim(op0);
-      target := AsmRv32Trim(target);
+      op0 := AsmTextTrim(op0);
+      target := AsmTextTrim(target);
 
-      if AsmA64RegNum(op0, rd, is64) and (AsmTextCharAt(target, 1) <> '[') and AsmRv32IsLabel(target) and
+      if AsmA64RegNum(op0, rd, is64) and (AsmTextCharAt(target, 1) <> '[') and AsmTextIsLabel(target) and
          not CaseEqual(target, '@data') and not CaseEqual(target, '@glob') then
       begin
         branchPos := CodeLen;

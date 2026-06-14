@@ -34,7 +34,7 @@ var
   c: Char;
 begin
   Result := False;
-  s := AsmRv32Trim(opIn);
+  s := AsmTextTrim(opIn);
   if CaseEqual(s, 'sp')  then begin reg := 13; Result := True; Exit; end;
   if CaseEqual(s, 'lr')  then begin reg := 14; Result := True; Exit; end;
   if CaseEqual(s, 'pc')  then begin reg := 15; Result := True; Exit; end;
@@ -73,9 +73,9 @@ function AsmArm32Int(const opIn: AnsiString; const holes: array of Int64; var ho
 var
   s: AnsiString;
 begin
-  s := AsmRv32Trim(opIn);
+  s := AsmTextTrim(opIn);
   if AsmTextCharAt(s, 1) = '#' then
-    s := AsmRv32Trim(AsmTextSlice(s, 2, Length(s) - 1));
+    s := AsmTextTrim(AsmTextSlice(s, 2, Length(s) - 1));
   if AsmTextCharAt(s, 1) = '%' then
   begin
     Result := holes[holeCur]; Inc(holeCur);
@@ -89,7 +89,7 @@ var
   s, baseStr, dispStr: AnsiString;
   pOpen, pClose, pComma, i, n: Integer;
 begin
-  s := AsmRv32Trim(opIn);
+  s := AsmTextTrim(opIn);
   n := Length(s);
   pOpen := 0; pClose := 0;
   for i := 1 to n do
@@ -115,15 +115,15 @@ begin
 
   if pComma = 0 then
   begin
-    baseStr := AsmRv32Trim(AsmTextSlice(s, pOpen + 1, pClose - pOpen - 1));
+    baseStr := AsmTextTrim(AsmTextSlice(s, pOpen + 1, pClose - pOpen - 1));
     disp := 0;
   end
   else
   begin
-    baseStr := AsmRv32Trim(AsmTextSlice(s, pOpen + 1, pComma - pOpen - 1));
-    dispStr := AsmRv32Trim(AsmTextSlice(s, pComma + 1, pClose - pComma - 1));
+    baseStr := AsmTextTrim(AsmTextSlice(s, pOpen + 1, pComma - pOpen - 1));
+    dispStr := AsmTextTrim(AsmTextSlice(s, pComma + 1, pClose - pComma - 1));
     if AsmTextCharAt(dispStr, 1) = '#' then
-      dispStr := AsmRv32Trim(AsmTextSlice(dispStr, 2, Length(dispStr) - 1));
+      dispStr := AsmTextTrim(AsmTextSlice(dispStr, 2, Length(dispStr) - 1));
     
     if AsmTextCharAt(dispStr, 1) = '%' then
     begin
@@ -136,11 +136,11 @@ begin
   if mode = 1 then
   begin
     { Post-indexed: offset is after the ] }
-    dispStr := AsmRv32Trim(AsmTextSlice(s, pClose + 1, n - pClose));
+    dispStr := AsmTextTrim(AsmTextSlice(s, pClose + 1, n - pClose));
     if AsmTextCharAt(dispStr, 1) = ',' then
-      dispStr := AsmRv32Trim(AsmTextSlice(dispStr, 2, Length(dispStr) - 1));
+      dispStr := AsmTextTrim(AsmTextSlice(dispStr, 2, Length(dispStr) - 1));
     if AsmTextCharAt(dispStr, 1) = '#' then
-      dispStr := AsmRv32Trim(AsmTextSlice(dispStr, 2, Length(dispStr) - 1));
+      dispStr := AsmTextTrim(AsmTextSlice(dispStr, 2, Length(dispStr) - 1));
     
     if AsmTextCharAt(dispStr, 1) = '%' then
     begin
@@ -221,7 +221,7 @@ begin
     else if partIdx = 1 then AppendChar(op1, rest[i])
     else AppendChar(op2, rest[i]);
   end;
-  op0 := AsmRv32Trim(op0); op1 := AsmRv32Trim(op1); op2 := AsmRv32Trim(op2);
+  op0 := AsmTextTrim(op0); op1 := AsmTextTrim(op1); op2 := AsmTextTrim(op2);
 
   if CaseEqual(baseMnem, 'bx') then
   begin
@@ -411,7 +411,7 @@ begin
     if items[i].VType <> vtAnsiString then
       Error('EmitAsmArm32: expected an instruction string');
     line := AsmTextCStr(items[i].VAnsiString);
-    trimmed := AsmRv32Trim(line);
+    trimmed := AsmTextTrim(line);
 
     mnem := ''; j := 1;
     while (j <= Length(trimmed)) and not AsmTextIsSpace(AsmTextCharAt(trimmed, j)) do
@@ -437,8 +437,8 @@ begin
     end
     else if isJ then
     begin
-      target := AsmRv32Trim(AsmTextSlice(trimmed, j, Length(trimmed) - j + 1));
-      if AsmRv32IsLabel(target) then
+      target := AsmTextTrim(AsmTextSlice(trimmed, j, Length(trimmed) - j + 1));
+      if AsmTextIsLabel(target) then
       begin
         branchPos := CodeLen;
         defined := False; targetPos := 0;
