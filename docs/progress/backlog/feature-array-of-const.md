@@ -26,6 +26,20 @@ Remaining: `High()` (not in lexer — test uses `Length-1`); other `vt*` tags;
 i386/cross verification; the array-of-const temp heap-leaks per call (FPC builds
 it on the stack) — fine for the asm emitter, revisit if it matters.
 
+### Known divergences from FPC (half-working, by design for now)
+
+- **Single-char string literal tags wrong.** `['a']` → PXX `vtInteger` (char
+  code 97); FPC `vtChar` (VType 2). Cause: PXX types a 1-char literal as
+  `tyChar`, and the lowering routes non-string elements to `vtInteger`. Use
+  multi-char strings to stay FPC-identical (the test does). Fix needs a `tyChar`
+  → `vtChar` arm in the `AN_VARREC_ARRAY` lowering once a consumer wants chars.
+- **Only `vtInteger` + `vtAnsiString` tags wired.** Booleans, floats, chars,
+  pointers, variants in `[...]` are not tagged per FPC (chars fall into the
+  `vtInteger` bug above; the rest are untested).
+- **Heap, not stack — leaks one TVarRec vector per call** (FPC builds it on the
+  stack). Reuses the dyn-array SetLength path; no free.
+- Borrowed (non-refcounted) string elements — this part matches FPC.
+
 ## Motivation
 
 The dialect has no variadic / mixed-type argument facility. `writeln`/`read`
