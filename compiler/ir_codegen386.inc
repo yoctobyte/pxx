@@ -373,9 +373,9 @@ begin
     if Syms[symIdx].Kind = skGlobal then
       begin EmitB($B8); EmitGlobRef(Syms[symIdx].Offset); end          { mov eax, abs }
     else if (Syms[symIdx].Kind = skParam) and Syms[symIdx].IsRef then
-      begin EmitB($8B); EmitB($85); EmitI32(Syms[symIdx].Offset); end  { mov eax, [ebp+off] }
+      begin EmitAsm386(['mov eax, [ebp+%]', Syms[symIdx].Offset]); end  { mov eax, [ebp+off] }
     else
-      begin EmitB($8D); EmitB($85); EmitI32(Syms[symIdx].Offset); end; { lea eax, [ebp+off] }
+      begin EmitAsm386(['lea eax, [ebp+%]', Syms[symIdx].Offset]); end; { lea eax, [ebp+off] }
   end
   else if IRKind[node] = IR_LOAD_MEM then
     IREmitNode386(IRA[node])
@@ -485,32 +485,33 @@ procedure EmitwriteUInt64_386;
 { edx:eax = unsigned 64-bit value -> decimal on stdout. Long division by 10:
   divide the high dword, carry the remainder into the low dword. Digit string
   grows downward from the INTBUF tail; the count is bufend - edi. }
-var loopStart: Integer;
 begin
-  EmitB($89); EmitB($C3);                                { mov ebx, eax (lo) }
-  EmitB($89); EmitB($D6);                                { mov esi, edx (hi) }
-  EmitB($BF); EmitDataRef(INTBUF_OFFSET + INTBUF_SIZE);  { mov edi, buf end }
-  loopStart := CodeLen;
-  EmitB($89); EmitB($F0);                                { mov eax, esi (hi) }
-  EmitB($31); EmitB($D2);                                { xor edx, edx }
-  EmitB($B9); EmitI32(10);                               { mov ecx, 10 }
-  EmitB($F7); EmitB($F1);                                { div ecx -> eax=hi/10, edx=hi%10 }
-  EmitB($89); EmitB($C6);                                { mov esi, eax (new hi) }
-  EmitB($89); EmitB($D8);                                { mov eax, ebx (lo) }
-  EmitB($F7); EmitB($F1);                                { div ecx -> eax=quot, edx=digit }
-  EmitB($89); EmitB($C3);                                { mov ebx, eax (new lo) }
-  EmitB($80); EmitB($C2); EmitB($30);                    { add dl, '0' }
-  EmitB($4F);                                            { dec edi }
-  EmitB($88); EmitB($17);                                { mov [edi], dl }
-  EmitB($89); EmitB($F0);                                { mov eax, esi (hi) }
-  EmitB($09); EmitB($D8);                                { or eax, ebx (zero?) }
-  EmitB($75); EmitB(Byte(loopStart - (CodeLen + 1)));    { jnz loop }
-  EmitB($BA); EmitDataRef(INTBUF_OFFSET + INTBUF_SIZE);  { mov edx, buf end }
-  EmitB($29); EmitB($FA);                                { sub edx, edi (len) }
-  EmitB($89); EmitB($F9);                                { mov ecx, edi (buf) }
-  EmitB($BB); EmitI32(STDOUT);                           { mov ebx, 1 }
-  EmitB($B8); EmitI32(4);                                { mov eax, 4 }
-  EmitB($CD); EmitB($80);                                { int 0x80 }
+  EmitAsm386([
+    'mov ebx, eax',
+    'mov esi, edx',
+    'mov edi, @data', INTBUF_OFFSET + INTBUF_SIZE,
+    '.loop:',
+    'mov eax, esi',
+    'xor edx, edx',
+    'mov ecx, 10',
+    'div ecx',
+    'mov esi, eax',
+    'mov eax, ebx',
+    'div ecx',
+    'mov ebx, eax',
+    'add dl, 0x30',
+    'dec edi',
+    'mov [edi], dl',
+    'mov eax, esi',
+    'or eax, ebx',
+    'jnz .loop',
+    'mov edx, @data', INTBUF_OFFSET + INTBUF_SIZE,
+    'sub edx, edi',
+    'mov ecx, edi',
+    'mov ebx, %', STDOUT,
+    'mov eax, 4',
+    'int 0x80'
+  ]);
 end;
 
 procedure EmitwriteInt64_386;
@@ -914,7 +915,7 @@ begin
                 begin EmitB($0F); EmitB($B7); EmitB($85); EmitI32(Syms[si].Offset); end;
             end
             else
-              begin EmitB($8B); EmitB($85); EmitI32(Syms[si].Offset); end;
+              begin EmitAsm386(['mov eax, [ebp+%]', Syms[si].Offset]); end;
           end;
         end;
       end;
