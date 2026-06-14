@@ -123,12 +123,14 @@ j     .done
   Regression test `test/test_varrec_branch.pas` (aoc in not-taken branches).
   After the fix the comparison blocks use plain inline `EmitAsmXtensa` literals —
   no per-operator workaround procs. See [[project_pxx_array_of_const_selfhost]].
-- **Separate known issue (NOT fixed):** a *non-literal `AnsiString` element*
-  inside an `array of const` reads garbage under PXX — the vtAnsiString lowering
-  does `value + 8` to skip a frozen string's length prefix, wrong for a runtime
-  AnsiString whose pointer already addresses the chars. Only literal string
-  elements are safe today; a parameterised emit helper passing the branch line
-  as a string param stays off the table until that is fixed (managed-string F2
-  territory).
+- **Second bug FIXED:** a *non-literal `AnsiString` element* inside an
+  `array of const` read garbage under PXX — the vtAnsiString lowering did
+  `value + 8` to skip a frozen string's length prefix, wrong for a runtime
+  AnsiString whose value is already a char pointer (matches `PChar(s)`, which
+  only adjusts `tyString`). Fix: apply the `+8` skip only when the element node
+  is `tyString` (frozen literal); store `tyAnsiString` as-is (`ir.inc`).
+  Regression `test/test_varrec_string.pas` (literal/int/var/param/concat
+  elements, matches FPC). A parameterised emit helper passing the branch line as
+  a string param is now viable, but the inline-literal form is kept (clearest).
 - **Still deferred:** L32R literal-pool sugar, 16-bit narrow encodings,
   windowed-ABI `entry`/`call8` sugar, dynamic blocks left on the typed encoders.

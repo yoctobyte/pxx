@@ -951,6 +951,7 @@ var left, right, seq, item, value, outNode, first, last, leftAddr, argNode, argV
     lhsTk, castTk: TTypeKind;
     vrCount, vrTmp, vrIdent, vrCountLit, vrArg1, vrArg2, vrSlCall: Integer;
     vrIdxLit, vrIndex, vrTag, elemAddr, vrSavedRecId: Integer;
+    vrElemTk: TTypeKind;
 begin
   if node = -1 then
   begin
@@ -1030,8 +1031,8 @@ begin
         ASTLeft[vrIndex] := vrIdent; ASTRight[vrIndex] := vrIdxLit;
         ASTTk[vrIndex] := Ord(tyRecord);
 
-        if (IntToTypeKind(ASTTk[ASTLeft[item]]) = tyString) or
-           (IntToTypeKind(ASTTk[ASTLeft[item]]) = tyAnsiString) then
+        vrElemTk := IntToTypeKind(ASTTk[ASTLeft[item]]);
+        if (vrElemTk = tyString) or (vrElemTk = tyAnsiString) then
           vrTag := 11    { vtAnsiString }
         else
           vrTag := 0;    { vtInteger }
@@ -1048,10 +1049,12 @@ begin
           IRAppend(IR_CONST_INT, -1, -1, -1, TARGET_PTR_SIZE, Ord(tyInteger)),
           Ord(tkPlus), 0, Ord(tyPointer));
         value := IRLowerAST(ASTLeft[item]);
-        if vrTag = 11 then
-          { vtAnsiString: store a pointer to the NUL-terminated char data, like
-            FPC's VAnsiString. A frozen (inline) string value points at its
-            8-byte length prefix, so skip it; InternStr NUL-terminates the data. }
+        if vrElemTk = tyString then
+          { vtAnsiString from a frozen (inline) string literal: its value points
+            at the 8-byte length prefix, so skip to the NUL-terminated char data
+            (InternStr terminates it), like FPC's VAnsiString. A runtime
+            tyAnsiString value is ALREADY a char pointer (matches PChar(s), which
+            only adjusts tyString), so it is stored as-is. }
           value := IRAppend(IR_BINOP, value,
             IRAppend(IR_CONST_INT, -1, -1, -1, 8, Ord(tyInteger)),
             Ord(tkPlus), 0, Ord(tyPointer));
