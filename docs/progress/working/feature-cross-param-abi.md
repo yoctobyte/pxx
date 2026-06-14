@@ -65,3 +65,11 @@ and run on i386, ARM32, AArch64 identically to x86-64. New
   feature-cross-codegen-gaps territory, not this ticket. Record-by-value (true
   >register payload), float params/results, and >N-arg spill on AArch64/ARM32
   still pending here.
+- 2026-06-14 — **i386 Int64 by-value param passing landed** (commit e3b8866),
+  completing the i386 side of this ticket: Int64/UInt64 args now pass as a full
+  8-byte slot (caller pushes both dwords; prologue copies both; displacement
+  counts them as 8). Runtime helper size/len params moved to `NativeInt` so the
+  hand-emitted 4-byte pushes stay valid. This was the last param-ABI gap for the
+  i386 self-host, which is now byte-identical (feature-cross-selfhost-i386 done).
+  Record-by-value, float params/results, and >N-arg spill on AArch64/ARM32 still
+  pending here.

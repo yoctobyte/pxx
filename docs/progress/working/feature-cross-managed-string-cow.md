@@ -136,3 +136,7 @@ be a second bug on top.
   `make test-i386` passes and the i386-generated compiler now emits byte-
   identical x86-64 `test/hello.pas` output under `-dPXX_MANAGED_STRING`.
   ARM32 and AArch64 COW remain pending.
+- 2026-06-14 — i386 COW proven end-to-end: feature-cross-selfhost-i386 is DONE
+  (full `compiler.pas -> i386` self-fixedpoint byte-identical), so the i386 COW
+  path (index-write `PXXStrUnique`) is exercised through the whole compiler.
+  ARM32 and AArch64 COW remain pending (this ticket stays open for them).
