@@ -1,8 +1,8 @@
 # AArch64 text-assembler (`EmitAsmA64`) for cleaner ARM64 codegen
 
 - **Type:** feature
-- **Status:** backlog
-- **Owner:** —
+- **Status:** working
+- **Owner:** Antigravity
 - **Depends-on:** feature-array-of-const (DONE), feature-asm-text-emitter
   (shared `asmtext.inc` helpers + x86-64 precedent, DONE); recommended **after**
   feature-i386-asm-emitter (settles the shared front-end shape)
@@ -74,3 +74,4 @@ what blocks need, the full `ir_codegen_aarch64.inc` conversion.
 - 2026-06-14 — opened. Second of the three remaining target emitters. Unlike
   x86/xtensa, no typed encoder layer exists yet → grow a thin `a64enc.inc`
   first. Fixed-width ISA, simpler operands; the imm-encoding rules are the work.
+- 2026-06-14 — claimed by Antigravity; starting implementation.

@@ -8,23 +8,23 @@ lives in git, not in a timestamp._
 
 _none_
 
-## working (5)
+## working (6)
 
 | Ticket | Type | Summary | Blocked-by |
 | --- | --- | --- | --- |
+| feature-aarch64-asm-emitter | feature | AArch64 text-assembler (`EmitAsmA64`) for cleaner ARM64 codegen | — |
 | feature-cross-codegen-gaps | feature | Cross-target codegen gaps (deferred v1 shortcuts) | — |
 | feature-cross-compiler-probe-walls | feature | Cross compiler.pas probe walls | — |
 | feature-cross-managed-aggregate-locals | feature | Managed aggregate locals on cross targets | — |
 | feature-cross-managed-string-cow | feature | Copy-on-write for managed strings on cross targets (i386 / ARM32 / AArch64) | — |
 | feature-cross-param-abi | feature | Full parameter/result ABI on cross targets | — |
 
-## backlog (39)
+## backlog (38)
 
 | Ticket | Type | Summary | Blocked-by |
 | --- | --- | --- | --- |
 | chore-inc-to-units | chore | `.inc` → real `.pas` units refactor | — |
 | chore-runtime-emission-size | chore | Finer runtime-support emission (code size) | — |
-| feature-aarch64-asm-emitter | feature | AArch64 text-assembler (`EmitAsmA64`) for cleaner ARM64 codegen | — |
 | feature-additional-cpu-targets | feature | Additional CPU targets (rollup: i386 → aarch64 → arm32 → ESP32/RISC-V) | feature-target-aarch64, feature-target-arm32, feature-target-esp32, feature-target-i386 |
 | feature-allocator-quality | feature | Allocator quality: split / coalesce / bins / alignment | — |
 | feature-arm32-asm-emitter | feature | ARM32 text-assembler (`EmitAsmArm32`) for cleaner ARM32 codegen | — |
@@ -113,7 +113,6 @@ _none_
 
 - chore-inc-to-units
 - chore-runtime-emission-size
-- feature-aarch64-asm-emitter
 - feature-additional-cpu-targets
 - feature-allocator-quality
 - feature-arm32-asm-emitter
