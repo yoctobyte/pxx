@@ -80,28 +80,59 @@ deeper fixed-point compile.
 
 ## Current wall
 
-2026-06-13 (Int64 codegen landed). `feature-i386-int64-codegen` is done: the
-i386 backend now has a real edx:eax model (commits 7756241, 68bef67). This
-cleared the zeroed-float-constant divergence (it was `IRIVal[node] shr 32`
-mis-lowered by the old low-dword model) and the `PWord = ^Int64` machine-word
-landmine that, once Int64 access became truly 8-byte, wrote 8 bytes into
-i386's 4-byte handle slots and corrupted neighbours.
+ACCEPTANCE #1-3 MET (2026-06-13). The i386-hosted compiler now compiles
+`test/hello.pas` to x86-64 byte-identically to native and the result runs
+("Hello, World!"). It also compiles `empty.pas`/`compiler.pas` to i386 without
+crashing. Walls cleared along the way:
 
-The i386-hosted compiler now starts and mmaps its heap without crashing. The
-next wall is a token/parse divergence: compiling any program (even
-`begin end.`) the i386-hosted compiler reports
+- Int64 codegen (edx:eax model, commit 7756241) — float-constant divergence.
+- `PWord = ^Int64` machine-word landmine (commit 68bef67, see
+  [[project_pword_machine_word_landmine]]).
+- The `Expected: unit` wall (commit 1f93c42): it was NOT a lexer bug. The
+  64-bit ordered-compare's left-right branch emitted `19 DB` (`sbb ebx,ebx`)
+  instead of `19 D3` (`sbb ebx,edx`), so the high-dword subtraction was just
+  `-borrow`. Same-sign compares happened to work; any sign-crossing compare —
+  crucially `int64 < 0` for a negative value — was wrong. That silently broke
+  `PXXStrLoadFile`'s `if fd < 0` / `if n < 0` guards (a failed open/read no
+  longer bailed), so a missing-unit `LoadFile` returned a length -9 string and
+  unit resolution derailed with `Expected: unit`. Oracle gained sign-crossing
+  cases.
 
-```
-Expected: unit, but got:  (Kind: 0, Line: 1)
-```
+REMAINING WALL (acceptance #4, full byte-identical self-fixedpoint). The deep
+`compiler.pas -> i386 (native) -> compiler.pas -> i386 (self)` probe now
+completes with IDENTICAL sizes `[code=1570805B data=43368B bss=131496552B
+procs=801]` but the binaries differ at byte 34168 (~5237 bytes, all 64-bit
+float/immediate constants where the self build emits a zeroed or sign-collapsed
+high dword). Root cause: **Int64 by-value params are truncated to 32 bits** at
+the i386 call boundary (the current ABI homes only the low dword + sign-extend).
+So `MovRaxImm(v: Int64)` / `EmitI64(v: Int64)` — fed the 64-bit double bits of a
+float literal — lose the high dword. Minimal repro: i386-hosted compiler
+compiling a `double := 1e15` program to x86-64 emits `0.00`.
 
-i.e. `ParseProgram` reaches an `Expect(tkUnit)` after consuming the whole
-source, so the lexed token stream / program-vs-unit dispatch is wrong under
-the i386-hosted compiler. Isolated Int64 records, file load, managed-string
-index-write, and div/mod all match native (`make test-i386` green incl. the
-new oracle), so this is a narrower miscompile in the lexer / `LexAll` /
-dispatch path, not a general Int64 gap — suspect another machine-word /
-global-record-array width mismatch the old low-dword model masked.
+Fix = full 8-byte Int64 by-value param passing. Attempted and reverted twice
+this session because it needs the hand-emitted runtime-helper call sites to
+agree:
+- The caller arg-loop must push 8 bytes for an Int64 param and the prologue
+  param-home must copy both dwords + count Int64 as 8 in the displacement calc
+  (straightforward; drafts known-good in isolation).
+- But the ~41 hand-emitted helper-call push sites in `ir_codegen386.inc`
+  (PXXStrFromLit/Concat/SetLen, PXXDynSetLen, PXXAlloc, PXXMemMove/Zero,
+  PXXStrEq, PXXVarBinOp, PXXWriteFloatFixed …) push their `len`/`size`/`n`
+  Int64 args as 4 bytes. With 8-byte param-home those break (test_cross_string
+  fails first). Two options: (a) bump every hand-emitted push to 8 bytes
+  (error-prone, many sites), or (b) change those helpers' size/len params to
+  `NativeInt` (pointer-sized, 4 bytes on i386, unchanged on x64) so the 4-byte
+  pushes stay correct — semantically right since they are sizes. Option (b)
+  needs EVERY proto to match: not just the 10 RegisterProc dummyTypes in
+  `parser.inc` but also PXXStrSetLen/PXXDynSetLen/PXXMemMove/PXXMemZero/the
+  PXXSys* wrappers — a missed one yields `unresolved forward` (builtinheap is
+  compiled into the compiler because compiler.pas uses AnsiString). Finish
+  option (b) by auditing all PXX protos/forwards for Int64 size/len params.
+
+Note: a bad `git stash pop` of an unrelated stash injected merge-conflict
+markers mid-session and made builds look non-deterministically broken; if
+builds suddenly fail with `unresolved forward`/syntax errors, check
+`git status` for `UU` files and re-`make bootstrap`.
 
 ### Earlier note (the float-constant wall, now cleared by the Int64 work)
 
@@ -163,3 +194,14 @@ foundation task before more self-host patching.
   is now `^NativeInt` (pointer-sized). The i386-hosted compiler no longer
   crashes; next wall = the `Expected: unit` token/dispatch miscompile described
   under Current wall. `make test{,-i386,-aarch64,-arm32}` all green.
+- 2026-06-13/14 — `Expected: unit` wall cleared (commit 1f93c42): it was the
+  64-bit ordered-compare `sbb ebx,ebx` (DB) vs `sbb ebx,edx` (D3) ModRM bug, so
+  `int64 < 0` was wrong for negatives and `PXXStrLoadFile`'s `if fd<0`/`if n<0`
+  guards never fired → missing-unit `LoadFile` returned a length -9 string and
+  unit resolution failed. Acceptance #1-3 now MET: i386-hosted compiler compiles
+  hello → x86-64 byte-identical and runs. `make test{,-i386,-aarch64,-arm32}`
+  green. Remaining: #4 full byte-identical self-fixedpoint (identical sizes,
+  ~5237 differing bytes at 34168) blocked on Int64 by-value param truncation
+  (`MovRaxImm`/`EmitI64` lose float-bit high dwords); see Current wall for the
+  full-8-byte-param-passing plan (the hand-emitted helper push sites are the
+  sticking point — finish via NativeInt size/len params, auditing ALL protos).
