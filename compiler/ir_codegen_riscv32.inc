@@ -370,13 +370,13 @@ begin
         begin
           lblId := IRA[i];
           if LabelPositions[lblId] <> -1 then
-            rv32_jal(reg_zero, LabelPositions[lblId] - CodeLen)
+            EmitAsmRv32(['jal zero, %', LabelPositions[lblId] - CodeLen])
           else
           begin
             LabelFixupPos[LabelFixupCount] := CodeLen;
             LabelFixupTarget[LabelFixupCount] := lblId;
             Inc(LabelFixupCount);
-            rv32_jal(reg_zero, 0);
+            EmitAsmRv32('jal zero, 0');
           end;
         end;
 
@@ -385,13 +385,13 @@ begin
           lblId := IRA[i];
           IREmitNodeRISCV32(IRB[i]);
           if LabelPositions[lblId] <> -1 then
-            rv32_beq(reg_a0, reg_zero, LabelPositions[lblId] - CodeLen)
+            EmitAsmRv32(['beq a0, zero, %', LabelPositions[lblId] - CodeLen])
           else
           begin
             LabelFixupPos[LabelFixupCount] := CodeLen;
             LabelFixupTarget[LabelFixupCount] := lblId;
             Inc(LabelFixupCount);
-            rv32_beq(reg_a0, reg_zero, 0);
+            EmitAsmRv32('beq a0, zero, 0');
           end;
         end;
 
