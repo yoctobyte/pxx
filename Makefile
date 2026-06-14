@@ -809,10 +809,13 @@ test-aarch64: $(COMPILER)
 	./$(COMPILER) --target=aarch64 test/test_arm32_arg_runtime.pas /tmp/test_aarch64_args
 	./$(COMPILER) test/test_arm32_arg_runtime.pas /tmp/test_aarch64_args_x64
 	test "$$(tools/run_target.sh aarch64 /tmp/test_aarch64_args alpha beta)" = "$$(/tmp/test_aarch64_args_x64 alpha beta)"
+	./$(COMPILER) --target=aarch64 test/test_cross_open_array_params.pas /tmp/test_aarch64_open_array_params
+	./$(COMPILER) test/test_cross_open_array_params.pas /tmp/test_aarch64_open_array_params_x64
+	test "$$(tools/run_target.sh aarch64 /tmp/test_aarch64_open_array_params)" = "$$(/tmp/test_aarch64_open_array_params_x64)"
 	./$(COMPILER) -dPXX_MANAGED_STRING --target=aarch64 test/test_cross_string_cow.pas /tmp/test_aarch64_string_cow
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_cross_string_cow.pas /tmp/test_aarch64_string_cow_x64
 	test "$$(tools/run_target.sh aarch64 /tmp/test_aarch64_string_cow)" = "$$(/tmp/test_aarch64_string_cow_x64)"
-	@echo "aarch64 hello + arith + procs + loops + write + varparam + syscall + heap + string + record + dynarray + exception + float + variant + setlen-str + str-length-index + in-operator + loadfile + sysopen-family + args + string-cow ok (output identical to x86-64)"
+	@echo "aarch64 hello + arith + procs + loops + write + varparam + syscall + heap + string + record + dynarray + exception + float + variant + setlen-str + str-length-index + in-operator + loadfile + sysopen-family + args + open-array-params + string-cow ok (output identical to x86-64)"
 
 test-arm32: $(COMPILER)
 	./$(COMPILER) --target=arm32 test/hello.pas /tmp/test_arm32_hello

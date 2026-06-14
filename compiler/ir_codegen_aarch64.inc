@@ -834,7 +834,10 @@ begin
           if Syms[si].IsRef then
             EmitLoadVarAddrA64(si)
           else
-            EmitLoadVarA64(si);
+          begin
+            EmitLoadVarAddrA64(si);
+            EmitI32($F9400000);                 { ldr x0, [x0] = caller pointer }
+          end;
         end
         else
           EmitLoadVarAddrA64(si);

@@ -1,8 +1,8 @@
 # Cross self-host: AArch64 generated compiler runs under QEMU
 
 - **Type:** feature
-- **Status:** backlog
-- **Owner:** —
+- **Status:** working
+- **Owner:** codex
 - **Blocked-by:** feature-cross-managed-string-cow
 - **Unblocks:** feature-cross-bootstrap-selfhost
 - **Opened:** 2026-06-13 (split from cross self-host rollup)
@@ -23,11 +23,22 @@ tools/run_target.sh aarch64 /tmp/compiler_aarch64 -dPXX_MANAGED_STRING \
   --target=x86_64 test/hello.pas /tmp/hello_aarch64_to_x64
 ```
 
-Observed 2026-06-13: the generated AArch64 compiler starts but fails with:
+Observed 2026-06-14: the native-built AArch64 compiler is produced, and the
+AArch64-hosted self compile no longer segfaults in `FindProcOverload`. It now
+fails deterministically while compiling the built-in heap unit:
 
 ```text
-pascal26:0: error: Pascal define storage overflow
+ok: /tmp/ca64  [code=2542476B  data=43368B  bss=133171336B  procs=801]
+pascal26:82: error: invalid IR node reference in arg value ()
 ```
+
+The previous crash was PC `0x48bda8`, fault address `0x48`, instruction
+`ldrb w0, [x0]`, mapped to `FindProcOverload`. That was caused by AArch64
+`IR_LEA` loading a non-byref open-array/fixed-string/set parameter slot with
+the element width (`array of Boolean` loaded one byte, yielding pointer
+`0x48`). The current wall is past that crash and is an IR validation failure
+from an `IR_ARG` with an empty value while compiling `compiler/builtin/
+builtinheap.pas` around the `HeapMmap` raw-syscall block.
 
 ## Acceptance
 
@@ -76,3 +87,17 @@ pascal26:0: error: Pascal define storage overflow
   surrounding code forms a character access from a nil/wrong base plus a signed
   local offset. Next slice: map that proc and inspect the string/index base
   feeding the byte load.
+- 2026-06-14 — fixed the `FindProcOverload` crash. AArch64 `IR_LEA` for
+  non-byref parameter pointer slots (`array of T`, fixed string, set) now loads
+  the full pointer-sized caller slot instead of delegating to `EmitLoadVarA64`,
+  whose width follows the element type. Added
+  `test/test_cross_open_array_params.pas` to lock the `array of Boolean`
+  trigger used by `FindProcOverload(ptypes, parr, pbyref)`. `make test-aarch64`
+  passes. Clean self-host probe now advances to:
+  `pascal26:82: error: invalid IR node reference in arg value ()` while the
+  AArch64-hosted compiler is compiling `builtinheap.pas` (`HeapMmap` /
+  `__pxxrawsyscall`). A quick reduced probe showed any program still reaches
+  this via built-in heap compilation; temporary syscall-specific parser/IR
+  diagnostics did not prove a fix and were backed out. Next slice: identify the
+  general call/argument lowering node that produces `IR_ARG(IRA=-1)` under the
+  AArch64-hosted compiler.
