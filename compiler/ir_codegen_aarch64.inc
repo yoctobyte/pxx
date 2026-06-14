@@ -728,12 +728,12 @@ end;
 
 procedure EmitSetccA64(opTk: Integer);
 begin
-  if opTk = Ord(tkEq) then EmitI32($9A9F17E0)
-  else if opTk = Ord(tkNeq) then EmitI32($9A9F07E0)
-  else if opTk = Ord(tkLt) then EmitI32($9A9FA7E0)
-  else if opTk = Ord(tkLe) then EmitI32($9A9FC7E0)
-  else if opTk = Ord(tkGt) then EmitI32($9A9FD7E0)
-  else if opTk = Ord(tkGe) then EmitI32($9A9FB7E0)
+  if opTk = Ord(tkEq) then EmitAsmA64('cset x0, eq')
+  else if opTk = Ord(tkNeq) then EmitAsmA64('cset x0, ne')
+  else if opTk = Ord(tkLt) then EmitAsmA64('cset x0, lt')
+  else if opTk = Ord(tkLe) then EmitAsmA64('cset x0, le')
+  else if opTk = Ord(tkGt) then EmitAsmA64('cset x0, gt')
+  else if opTk = Ord(tkGe) then EmitAsmA64('cset x0, ge')
   else Error('target aarch64: unsupported compare operator');
 end;
 
@@ -1986,13 +1986,13 @@ begin
         begin
           lblId := IRA[i];
           if LabelPositions[lblId] <> -1 then
-            EmitI32($14000000 or (((LabelPositions[lblId] - CodeLen) div 4) and $03ffffff))
+            EmitAsmA64(['b %', LabelPositions[lblId] - CodeLen])
           else
           begin
             LabelFixupPos[LabelFixupCount] := CodeLen;
             LabelFixupTarget[LabelFixupCount] := lblId;
             Inc(LabelFixupCount);
-            EmitI32($14000000);
+            EmitAsmA64('b 0');
           end;
         end;
 
@@ -2001,13 +2001,13 @@ begin
           lblId := IRA[i];
           IREmitNodeAarch64(IRB[i]); { condition -> x0 }
           if LabelPositions[lblId] <> -1 then
-            EmitI32($B4000000 or (((LabelPositions[lblId] - CodeLen) div 4) and $7ffff) shl 5)
+            EmitAsmA64(['cbz x0, %', LabelPositions[lblId] - CodeLen])
           else
           begin
             LabelFixupPos[LabelFixupCount] := CodeLen;
             LabelFixupTarget[LabelFixupCount] := lblId;
             Inc(LabelFixupCount);
-            EmitI32($B4000000);
+            EmitAsmA64('cbz x0, 0');
           end;
         end;
 
