@@ -214,6 +214,8 @@ test-core: $(COMPILER)
 	test "$$(/tmp/test_const_record_param26)" = "111 222"
 	./$(COMPILER) test/test_array_of_const.pas /tmp/test_array_of_const26
 	test "$$(/tmp/test_array_of_const26)" = "$$(printf 'int 10\nint 20\nint 30\ncount 3\nstr hi\nint 7\nstr world\ncount 3')"
+	./$(COMPILER) test/test_varrec_branch.pas /tmp/test_varrec_branch26
+	test "$$(/tmp/test_varrec_branch26)" = "$$(printf 'none\na1\na2\na3\nb1\nb2\nc1\nd1\nd2\nd3\nd4\ne1\ne2\nnone')"
 	./$(COMPILER) test/test_asm_emit.pas /tmp/test_asm_emit26
 	test "$$(/tmp/test_asm_emit26)" = "$$(printf 'S=\nS=ab\nS=abc\nS=a longer string here\nI=0\nI=123\nI=-7\n---\nS=ww\nI=1\nS=yy\nI=2\nS=zzz\nI=3')"
 	./$(COMPILER) test/test_virtual_proc.pas /tmp/test_virtual_proc26

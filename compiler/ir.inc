@@ -991,6 +991,14 @@ begin
       vrTmp := AllocDynArray('', tyRecord, 1);
       LastTypeRecId := vrSavedRecId;
 
+      { This dyn-array temp is a managed local synthesised during lowering, after
+        the parser's prologue zero-init pass, so flag it for the codegen prologue
+        nil-init. The inline DEFAULT_MEM below only zeroes the slot when this
+        literal is actually reached; if the `[...]` sits in a branch that is not
+        taken, the slot would otherwise hold stale stack bytes and the function's
+        managed-local cleanup would free a garbage handle. }
+      SymIsHiddenArgTemp[vrTmp] := True;
+
       { Zero the handle slot (allocated after the prologue) so SetLength sees nil. }
       IRAppend(IR_DEFAULT_MEM,
         IRAppend(IR_SLOTADDR, vrTmp, -1, -1, 0, Ord(tyPointer)),
