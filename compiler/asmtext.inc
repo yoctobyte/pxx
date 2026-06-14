@@ -48,6 +48,16 @@ begin
   Result := (c = ' ') or (c = Chr(9));
 end;
 
+{ Safe character access: Chr(0) when idx is out of range. The dialect evaluates
+  `and`/`or` fully (no short-circuit) and indexing an EMPTY AnsiString derefs a
+  nil data pointer, so a guard like `(Length(s)>0) and (s[1]=..)` still touches
+  s[1]; route every conditional char read through here instead. }
+function AsmTextCharAt(const s: AnsiString; idx: Integer): Char;
+begin
+  if (idx >= 1) and (idx <= Length(s)) then Result := s[idx]
+  else Result := Chr(0);
+end;
+
 { Substring s[from..from+len-1] (1-based), built by char append — the dialect
   has no Copy. }
 function AsmTextSlice(const s: AnsiString; from, len: Integer): AnsiString;
@@ -76,10 +86,10 @@ begin
   v := 0; neg := False; hex := False;
   n := Length(s);
   i := 1;
-  if (i <= n) and (s[i] = '-') then begin neg := True; Inc(i); end;
-  if (i + 1 <= n) and (s[i] = '0') and (AsmTextLower(s[i+1]) = 'x') then
+  if (i <= n) and (AsmTextCharAt(s, i) = '-') then begin neg := True; Inc(i); end;
+  if (i + 1 <= n) and (AsmTextCharAt(s, i) = '0') and (AsmTextLower(AsmTextCharAt(s, i+1)) = 'x') then
     begin hex := True; i := i + 2; end
-  else if (i <= n) and (s[i] = '$') then
+  else if (i <= n) and (AsmTextCharAt(s, i) = '$') then
     begin hex := True; Inc(i); end;
   while i <= n do
   begin
@@ -95,58 +105,100 @@ begin
   Result := v;
 end;
 
+{ Size in bytes of an explicit-size keyword (byte/word/dword/qword), else 0. }
+function AsmTextSizeKeyword(const w: AnsiString): Integer;
+begin
+  if CaseEqual(w, 'byte') then Result := 1
+  else if CaseEqual(w, 'word') then Result := 2
+  else if CaseEqual(w, 'dword') then Result := 4
+  else if CaseEqual(w, 'qword') then Result := 8
+  else Result := 0;
+end;
+
+{ ALU r/m,imm where r/m is memory [base+disp]. ext is the opcode digit
+  (add0 or1 adc2 sbb3 and4 sub5 xor6 cmp7). }
+procedure AsmEncAluMemImm(ext, size, baseReg, disp: Integer; imm: Int64);
+begin
+  EncPrefixAndREX(size, ext, baseReg, False);
+  if size = 1 then
+  begin
+    EncB($80); EncModRMMem(ext, baseReg, disp, False); EncB(Integer(imm) and $FF);
+  end
+  else if (imm >= -128) and (imm <= 127) then
+  begin
+    EncB($83); EncModRMMem(ext, baseReg, disp, False); EncB(Integer(imm) and $FF);
+  end
+  else
+  begin
+    EncB($81); EncModRMMem(ext, baseReg, disp, False); EncI32(imm);
+  end;
+end;
+
 { Classify one operand text. Returns kind via Result: 0=register, 1=immediate,
-  2=memory [base+disp]. Fills the relevant out params. `%` immediates/disps pull
-  the next value from holes[] via holeCur. }
+  2=memory [base+disp]. Fills the relevant out params (regSize doubles as the
+  explicit memory-operand size for kind 2, 0 if unspecified). `%` immediates/
+  disps pull the next value from holes[] via holeCur. }
 function AsmTextOperand(const opIn: AnsiString;
   const holes: array of Int64; var holeCur: Integer;
   var regNum, regSize, memBase, memDisp: Integer; var immVal: Int64): Integer;
-var op, inner, baseStr, dispStr: AnsiString;
-    i, n, dummySize: Integer; sign: Integer;
+var op, inner, baseStr, dispStr, firstWord: AnsiString;
+    i, n, dummySize, memSize, p: Integer; sign: Integer;
 begin
   { trim }
   op := '';
   n := Length(opIn);
   i := 1;
-  while (i <= n) and AsmTextIsSpace(opIn[i]) do Inc(i);
-  while (n >= i) and AsmTextIsSpace(opIn[n]) do Dec(n);
+  while (i <= n) and AsmTextIsSpace(AsmTextCharAt(opIn, i)) do Inc(i);
+  while (n >= i) and AsmTextIsSpace(AsmTextCharAt(opIn, n)) do Dec(n);
   while i <= n do begin AppendChar(op, opIn[i]); Inc(i); end;
 
   if Length(op) = 0 then Error('EmitAsmX64: empty operand');
 
+  { strip a leading explicit-size keyword (byte/word/dword/qword) if present }
+  firstWord := ''; p := 1;
+  while (p <= Length(op)) and not AsmTextIsSpace(AsmTextCharAt(op, p)) do
+    begin AppendChar(firstWord, AsmTextLower(op[p])); Inc(p); end;
+  memSize := AsmTextSizeKeyword(firstWord);
+  if memSize > 0 then
+  begin
+    while (p <= Length(op)) and AsmTextIsSpace(AsmTextCharAt(op, p)) do Inc(p);
+    op := AsmTextSlice(op, p, Length(op) - p + 1);
+  end;
+
   { memory: [ base (+|-) disp ] }
-  if op[1] = '[' then
+  if AsmTextCharAt(op, 1) = '[' then
   begin
     inner := '';
     i := 2;
-    while (i <= Length(op)) and (op[i] <> ']') do begin AppendChar(inner, op[i]); Inc(i); end;
+    while (i <= Length(op)) and (AsmTextCharAt(op, i) <> ']') do begin AppendChar(inner, op[i]); Inc(i); end;
     { split on + or - }
     baseStr := ''; dispStr := ''; sign := 1;
     i := 1;
-    while (i <= Length(inner)) and (inner[i] <> '+') and (inner[i] <> '-') do
+    while (i <= Length(inner)) and (AsmTextCharAt(inner, i) <> '+') and (AsmTextCharAt(inner, i) <> '-') do
       begin AppendChar(baseStr, inner[i]); Inc(i); end;
     if i <= Length(inner) then
     begin
-      if inner[i] = '-' then sign := -1;
+      if AsmTextCharAt(inner, i) = '-' then sign := -1;
       Inc(i);
       while i <= Length(inner) do begin AppendChar(dispStr, inner[i]); Inc(i); end;
     end;
     { trim base }
-    while (Length(baseStr) > 0) and AsmTextIsSpace(baseStr[Length(baseStr)]) do
+    while AsmTextIsSpace(AsmTextCharAt(baseStr, Length(baseStr))) do
       baseStr := AsmTextSlice(baseStr, 1, Length(baseStr) - 1);
     if not AsmRegNum(baseStr, memBase, dummySize) then
       Error('EmitAsmX64: bad memory base register');
     { trim disp }
-    while (Length(dispStr) > 0) and AsmTextIsSpace(dispStr[1]) do
+    while AsmTextIsSpace(AsmTextCharAt(dispStr, 1)) do
       dispStr := AsmTextSlice(dispStr, 2, Length(dispStr) - 1);
     if Length(dispStr) = 0 then
       memDisp := 0
-    else if dispStr[1] = '%' then
+    else if AsmTextCharAt(dispStr, 1) = '%' then
     begin
       memDisp := Integer(holes[holeCur]) * sign; Inc(holeCur);
     end
     else
       memDisp := Integer(AsmTextParseInt(dispStr)) * sign;
+    regSize := memSize;   { explicit operand size, 0 if unspecified }
     Result := 2;
     Exit;
   end;
@@ -159,7 +211,7 @@ begin
   end;
 
   { immediate: % hole or literal }
-  if op[1] = '%' then
+  if AsmTextCharAt(op, 1) = '%' then
   begin
     immVal := holes[holeCur]; Inc(holeCur);
   end
@@ -181,10 +233,10 @@ begin
   n := Length(line);
   { skip leading spaces }
   i := 1;
-  while (i <= n) and AsmTextIsSpace(line[i]) do Inc(i);
+  while (i <= n) and AsmTextIsSpace(AsmTextCharAt(line, i)) do Inc(i);
   { mnemonic }
   mnem := '';
-  while (i <= n) and not AsmTextIsSpace(line[i]) do begin AppendChar(mnem, AsmTextLower(line[i])); Inc(i); end;
+  while (i <= n) and not AsmTextIsSpace(AsmTextCharAt(line, i)) do begin AppendChar(mnem, AsmTextLower(line[i])); Inc(i); end;
   { rest = operands }
   rest := '';
   while i <= n do begin AppendChar(rest, line[i]); Inc(i); end;
@@ -226,6 +278,16 @@ begin
     if AsmTextOperand(op0, holes, holeCur, r0, s0, mb0, md0, imm0) <> 0 then
       Error('EmitAsmX64: pop expects a register');
     x64_pop_reg(r0); Exit;
+  end;
+  if CaseEqual(mnem, 'inc') or CaseEqual(mnem, 'dec') then
+  begin
+    if AsmTextOperand(op0, holes, holeCur, r0, s0, mb0, md0, imm0) <> 0 then
+      Error('EmitAsmX64: inc/dec expects a register (this slice)');
+    if CaseEqual(mnem, 'dec') then i := 1 else i := 0;   { FF /0 = inc, /1 = dec }
+    EncPrefixAndREX(s0, i, r0, False);
+    if s0 = 1 then EncB($FE) else EncB($FF);
+    EncModRMReg(i, r0);
+    Exit;
   end;
 
   { two-operand forms }
@@ -273,15 +335,71 @@ begin
     Exit;
   end;
 
+  { ALU r/m(mem),imm — needs an explicit operand size (e.g. cmp byte [rdx], 0). }
+  if (k0 = 2) and (k1 = 1) then
+  begin
+    if s0 = 0 then Error('EmitAsmX64: memory ALU needs an explicit size (byte/dword/qword)');
+    if CaseEqual(mnem, 'add') then i := 0
+    else if CaseEqual(mnem, 'or')  then i := 1
+    else if CaseEqual(mnem, 'and') then i := 4
+    else if CaseEqual(mnem, 'sub') then i := 5
+    else if CaseEqual(mnem, 'xor') then i := 6
+    else if CaseEqual(mnem, 'cmp') then i := 7
+    else begin Error('EmitAsmX64: unsupported mem,imm mnemonic'); i := 0; end;
+    AsmEncAluMemImm(i, s0, mb0, md0, imm1);
+    Exit;
+  end;
+
   Error('EmitAsmX64: unsupported instruction');
 end;
 
+{ Map a jump mnemonic to its condition-code nibble; -1 via Result=False for an
+  unconditional jmp; False with cc untouched for a non-jump. }
+function AsmTextJccCode(const m: AnsiString; var cc: Integer): Boolean;
+begin
+  Result := True;
+  if CaseEqual(m, 'jo') then cc := 0
+  else if CaseEqual(m, 'jno') then cc := 1
+  else if CaseEqual(m, 'jb') or CaseEqual(m, 'jc') or CaseEqual(m, 'jnae') then cc := 2
+  else if CaseEqual(m, 'jae') or CaseEqual(m, 'jnb') or CaseEqual(m, 'jnc') then cc := 3
+  else if CaseEqual(m, 'je') or CaseEqual(m, 'jz') then cc := 4
+  else if CaseEqual(m, 'jne') or CaseEqual(m, 'jnz') then cc := 5
+  else if CaseEqual(m, 'jbe') or CaseEqual(m, 'jna') then cc := 6
+  else if CaseEqual(m, 'ja') or CaseEqual(m, 'jnbe') then cc := 7
+  else if CaseEqual(m, 'js') then cc := 8
+  else if CaseEqual(m, 'jns') then cc := 9
+  else if CaseEqual(m, 'jp') then cc := 10
+  else if CaseEqual(m, 'jnp') then cc := 11
+  else if CaseEqual(m, 'jl') or CaseEqual(m, 'jnge') then cc := 12
+  else if CaseEqual(m, 'jge') or CaseEqual(m, 'jnl') then cc := 13
+  else if CaseEqual(m, 'jle') or CaseEqual(m, 'jng') then cc := 14
+  else if CaseEqual(m, 'jg') or CaseEqual(m, 'jnle') then cc := 15
+  else Result := False;
+end;
+
+const ASM_MAX_LABELS = 32;
+
+{ Label / forward-jump bookkeeping for one EmitAsmX64 call. Module-level (not
+  locals) because the dialect's local arrays-of-AnsiString are a self-host
+  landmine — the compiler keeps such tables global, like GotoLabel*. Codegen is
+  single-threaded, so a shared scratch table is safe. }
+var
+  AsmLblName: array[0..ASM_MAX_LABELS - 1] of AnsiString;
+  AsmLblPos:  array[0..ASM_MAX_LABELS - 1] of Integer;
+  AsmLblCount: Integer;
+  AsmFwName:  array[0..ASM_MAX_LABELS - 1] of AnsiString;
+  AsmFwPatch: array[0..ASM_MAX_LABELS - 1] of Integer;
+  AsmFwCount: Integer;
+
 procedure EmitAsmX64(const items: array of const);
 var
-  i, n, h, nHoles: Integer;
-  line: AnsiString;
+  i, n, h, nHoles, j: Integer;
+  line, trimmed, mnem, target: AnsiString;
   holes: array[0..ASM_MAX_HOLES - 1] of Int64;
+  cc, k, targetPos, disp: Integer;
+  isJmp, defined: Boolean;
 begin
+  AsmLblCount := 0; AsmFwCount := 0;
   n := Length(items);
   i := 0;
   while i < n do
@@ -289,18 +407,93 @@ begin
     if items[i].VType <> vtAnsiString then
       Error('EmitAsmX64: expected an instruction string');
     line := AsmTextCStr(items[i].VAnsiString);
-    { count `%` markers; consume that many following int holes }
-    nHoles := 0;
-    for h := 1 to Length(line) do
-      if line[h] = '%' then Inc(nHoles);
-    if nHoles > ASM_MAX_HOLES then Error('EmitAsmX64: too many holes in one line');
-    for h := 0 to nHoles - 1 do
+
+    { trim for label/jump classification }
+    trimmed := '';
+    j := 1;
+    while (j <= Length(line)) and AsmTextIsSpace(AsmTextCharAt(line, j)) do Inc(j);
+    while j <= Length(line) do begin AppendChar(trimmed, line[j]); Inc(j); end;
+    while AsmTextIsSpace(AsmTextCharAt(trimmed, Length(trimmed))) do
+      trimmed := AsmTextSlice(trimmed, 1, Length(trimmed) - 1);
+
+    { first word = mnemonic }
+    mnem := ''; j := 1;
+    while (j <= Length(trimmed)) and not AsmTextIsSpace(AsmTextCharAt(trimmed, j)) do
+      begin AppendChar(mnem, AsmTextLower(trimmed[j])); Inc(j); end;
+
+    isJmp := CaseEqual(mnem, 'jmp');
+    if (Length(trimmed) >= 2) and (AsmTextCharAt(trimmed, Length(trimmed)) = ':') then
     begin
-      if (i + 1 + h >= n) or (items[i + 1 + h].VType <> vtInteger) then
-        Error('EmitAsmX64: missing integer hole value');
-      holes[h] := items[i + 1 + h].VInteger;
+      { label definition: `name:` (a bare line ending in ':') }
+      if AsmLblCount >= ASM_MAX_LABELS then Error('EmitAsmX64: too many labels');
+      AsmLblName[AsmLblCount] := AsmTextSlice(trimmed, 1, Length(trimmed) - 1);
+      AsmLblPos[AsmLblCount] := CodeLen;
+      Inc(AsmLblCount);
+      Inc(i);
+    end
+    else if isJmp or AsmTextJccCode(mnem, cc) then
+    begin
+      { operand = label name }
+      while (j <= Length(trimmed)) and AsmTextIsSpace(AsmTextCharAt(trimmed, j)) do Inc(j);
+      target := '';
+      while j <= Length(trimmed) do begin AppendChar(target, trimmed[j]); Inc(j); end;
+
+      defined := False; targetPos := 0;
+      for k := 0 to AsmLblCount - 1 do
+        if AsmLblName[k] = target then begin defined := True; targetPos := AsmLblPos[k]; end;
+
+      if defined then
+      begin
+        { backward (or same-call known) target: short form if it reaches. }
+        disp := targetPos - (CodeLen + 2);
+        if (disp >= -128) and (disp <= 127) then
+        begin
+          if isJmp then EncB($EB) else EncB($70 + cc);
+          EncB(disp and $FF);
+        end
+        else
+        begin
+          if isJmp then begin EncB($E9); EncI32(targetPos - (CodeLen + 4)); end
+          else begin EncB($0F); EncB($80 + cc); EncI32(targetPos - (CodeLen + 4)); end;
+        end;
+      end
+      else
+      begin
+        { forward target: emit the near (rel32) form and record a patch. }
+        if isJmp then EncB($E9) else begin EncB($0F); EncB($80 + cc); end;
+        if AsmFwCount >= ASM_MAX_LABELS then Error('EmitAsmX64: too many forward jumps');
+        AsmFwName[AsmFwCount] := target;
+        AsmFwPatch[AsmFwCount] := CodeLen;   { position of the rel32 displacement }
+        Inc(AsmFwCount);
+        EncI32(0);
+      end;
+      Inc(i);
+    end
+    else
+    begin
+      { ordinary instruction: count `%` markers and bind following int holes }
+      nHoles := 0;
+      for h := 1 to Length(line) do
+        if line[h] = '%' then Inc(nHoles);
+      if nHoles > ASM_MAX_HOLES then Error('EmitAsmX64: too many holes in one line');
+      for h := 0 to nHoles - 1 do
+      begin
+        if (i + 1 + h >= n) or (items[i + 1 + h].VType <> vtInteger) then
+          Error('EmitAsmX64: missing integer hole value');
+        holes[h] := items[i + 1 + h].VInteger;
+      end;
+      AsmTextLine(line, holes, nHoles);
+      i := i + 1 + nHoles;
     end;
-    AsmTextLine(line, holes, nHoles);
-    i := i + 1 + nHoles;
+  end;
+
+  { resolve forward jumps now that all labels are placed. }
+  for k := 0 to AsmFwCount - 1 do
+  begin
+    targetPos := -1;
+    for j := 0 to AsmLblCount - 1 do
+      if AsmLblName[j] = AsmFwName[k] then targetPos := AsmLblPos[j];
+    if targetPos < 0 then Error('EmitAsmX64: undefined label in jump');
+    Patch32(AsmFwPatch[k], targetPos - (AsmFwPatch[k] + 4));
   end;
 end;

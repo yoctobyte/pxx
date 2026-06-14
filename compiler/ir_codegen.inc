@@ -1180,17 +1180,19 @@ end;
 procedure EmitWriteCStr;
 { rax = pointer to NUL-terminated chars (a PChar). Compute its length and write
   it to stdout. x86-64 only — the targets that lack a hosted write syscall never
-  reach a write path. Straight-line parts go through the EmitAsmX64 text
-  assembler; the strlen scan keeps raw bytes (its relative jumps predate label
-  support in the text assembler). }
+  reach a write path. Fully expressed through the EmitAsmX64 text assembler,
+  including the strlen scan loop (back/forward label jumps). }
 begin
-  EmitAsmX64(['mov rsi, rax',
-              'xor rcx, rcx']);
-  EmitB($80); EmitB($3C); EmitB($0E); EmitB($00);{ cmp byte [rsi+rcx], 0 }
-  EmitB($74); EmitB($05);                        { je +5 (to mov rdx) }
-  EmitB($48); EmitB($FF); EmitB($C1);            { inc rcx }
-  EmitB($EB); EmitB($F5);                        { jmp -11 (to cmp) }
-  EmitAsmX64(['mov rdx, rcx',
+  EmitAsmX64(['mov rsi, rax',        { rsi = buffer (kept for the write) }
+              'xor rcx, rcx',        { rcx = length }
+              'scan:',
+              'cmp byte [rax], 0',   { rax = scan cursor, starts at buffer }
+              'je done',
+              'inc rax',
+              'inc rcx',
+              'jmp scan',
+              'done:',
+              'mov rdx, rcx',        { rdx = count }
               'mov rax, %', SYS_WRITE,
               'mov rdi, %', STDOUT,
               'syscall']);

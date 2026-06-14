@@ -3,7 +3,7 @@
 - **Type:** feature
 - **Status:** in progress (x86-64 core landed 2026-06-14)
 - **Owner:** —
-- **Blocked-by:** feature-array-of-const (DONE — int+ansistring tags)
+- **Blocked-by:** feature-array-of-const
 - **Opened:** 2026-06-14 (design discussion: readable asm emission)
 
 ## Done so far (2026-06-14)
@@ -16,16 +16,29 @@
   reg,[base±disp] | [base±disp],reg), lea reg,[base±disp], and add/sub/and/or/
   xor/cmp (reg,imm | reg,reg). `%` holes for immediates and displacements.
   Operand/register parsing reuses `AsmRegNum` from `asmenc.inc`.
-- First conversion: `EmitWriteCStr` (the new `write(PChar)` path) — its
-  straight-line `mov`/`xor`/`mov-imm64`/`syscall` run through `EmitAsmX64`,
-  encoded **byte-identically** to the old hand bytes (compiled size unchanged),
-  exercised at runtime by `test/test_array_of_const.pas`'s `writeln(PChar)`.
+- **Labels + relative jumps**: `name:` defines a label; `jmp`/`jcc name`
+  resolve back (rel8 when in range, else rel32) and forward (rel32, patched at
+  call end) — the mechanism that will delete the manual CodeLen/Patch32 jump
+  sites. Plus `inc`/`dec`, explicit memory sizes (`cmp byte [rax], 0`), and ALU
+  r/m,imm.
+- `EmitWriteCStr` is now expressed **entirely** in `EmitAsmX64`, including the
+  strlen scan loop (back+forward label jumps, `cmp byte [mem]`, `inc`),
+  exercised by `test/test_array_of_const.pas` and the new `test/test_asm_emit.pas`
+  (varied PChar lengths, FPC-parity).
 - Bootstrap stays byte-identical; full `make test` green.
 
-Remaining: labels / relative jumps (`.name:` + `jXX`) — the big win that deletes
-the manual CodeLen/Patch32 jump sites; `@data`/`@glob` reloc holes; single-line
-overload; `EmitAsmX64` for more codegen blocks; then `EmitAsm386` and the inline-
-asm unification.
+### Self-host landmine hit (fixed)
+
+PXX evaluates `and`/`or` **fully** (no short-circuit), and indexing an EMPTY
+AnsiString derefs a nil data pointer. So `(Length(s) > 0) and (s[i] = ..)` still
+touches `s[i]` and crashes on an empty string (FPC short-circuits, hence the
+divergence: FPC-built compiler fine, PXX-built segfaults). All conditional char
+reads in `asmtext.inc` go through `AsmTextCharAt` (range-checked, returns #0).
+Also: a `var AnsiString` parameter reassigned in the callee is a frozen-inline
+landmine — `AsmTextSizeKeyword` returns the size instead.
+
+Remaining: `@data`/`@glob` reloc holes; single-line overload; `EmitAsmX64` for
+more codegen blocks; then `EmitAsm386` and the inline-asm unification.
 
 ## Motivation
 
