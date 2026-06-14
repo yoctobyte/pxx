@@ -212,6 +212,8 @@ test-core: $(COMPILER)
 	test "$$(/tmp/test_methodptr26)" = "$$(printf 'code set\ndata ok')"
 	./$(COMPILER) test/test_const_record_param.pas /tmp/test_const_record_param26
 	test "$$(/tmp/test_const_record_param26)" = "111 222"
+	./$(COMPILER) test/test_array_of_const.pas /tmp/test_array_of_const26
+	test "$$(/tmp/test_array_of_const26)" = "$$(printf 'int 10\nint 20\nint 30\ncount 3\nstr hi\nint 7\nstr world\ncount 3')"
 	./$(COMPILER) test/test_virtual_proc.pas /tmp/test_virtual_proc26
 	test "$$(/tmp/test_virtual_proc26)" = "$$(printf 'B\nB')"
 	./$(COMPILER) test/test_ir_virtual_call.pas /tmp/test_ir_virtual_call26

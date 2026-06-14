@@ -1177,6 +1177,21 @@ begin
   end;
 end;
 
+procedure EmitWriteCStr;
+{ rax = pointer to NUL-terminated chars (a PChar). Compute its length and write
+  it to stdout. x86-64 only — the targets that lack a hosted write syscall never
+  reach a write path. }
+begin
+  EmitB($48); EmitB($89); EmitB($C6);            { mov rsi, rax }
+  EmitB($48); EmitB($31); EmitB($C9);            { xor rcx, rcx }
+  EmitB($80); EmitB($3C); EmitB($0E); EmitB($00);{ cmp byte [rsi+rcx], 0 }
+  EmitB($74); EmitB($05);                        { je +5 (to mov rdx) }
+  EmitB($48); EmitB($FF); EmitB($C1);            { inc rcx }
+  EmitB($EB); EmitB($F5);                        { jmp -11 (to cmp) }
+  EmitB($48); EmitB($89); EmitB($CA);            { mov rdx, rcx (len) }
+  MovRaxImm(SYS_WRITE); MovRdiImm(STDOUT); EmitSyscall;
+end;
+
 procedure IREmitNode(node: Integer);
 var left, right, valNode, symIdx, si, nextJmp2, pNil: Integer;
     op: TTokenKind;
@@ -2285,6 +2300,12 @@ begin
           if decs = -2 then EmitWriteFloatNat
           else if decs >= 0 then EmitWriteFloatFixed(decs)
           else EmitWriteFloatSci;
+        end
+        else if decs = -3 then
+        begin
+          { write(PChar): runtime NUL-terminated C string. }
+          IREmitNode(valNode);
+          EmitWriteCStr;
         end
         else if IRKind[valNode] = IR_CONST_STR then
         begin

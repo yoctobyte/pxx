@@ -1,10 +1,30 @@
 # `array of const` (TVarRec) parameter support
 
 - **Type:** feature
-- **Status:** backlog
+- **Status:** in progress (int + ansistring tags landed 2026-06-14)
 - **Owner:** —
 - **Unblocks:** feature-asm-text-emitter
 - **Opened:** 2026-06-14 (design discussion: readable asm emission)
+
+## Done so far (2026-06-14)
+
+- `TVarRec` + `vt*` constants declared in `builtinheap` (PXX-only; FPC uses
+  `system.TVarRec`). `FixupTVarRecLayout` overlaps `VAnsiString` onto the value
+  union and right-sizes to `2*TARGET_PTR_SIZE`, so layout is target-correct (16
+  on x64, 8 on i386) without a variant record (none in the dialect yet).
+- `array of const` recognised as a param type → open array of `TVarRec`.
+- Call site: `f([...])` parses to `AN_VARREC_ARRAY` (param-directed, so `[...]`
+  is not mistaken for a set literal), lowered to a heap dyn-array of `TVarRec`
+  built with the existing SetLength + record-element-store IR. `Length(items)`,
+  `items[i].VType`, `.VInteger`, `.VAnsiString` all reuse open-array-of-record
+  paths. String elements store a NUL-terminated char-data pointer (FPC-parity).
+- Added `write(PChar)` (runtime strlen + write) to make the dump test print
+  strings; `test/test_array_of_const.pas` matches FPC byte-for-byte and is wired
+  into `make test`. Bootstrap stays byte-identical.
+
+Remaining: `High()` (not in lexer — test uses `Length-1`); other `vt*` tags;
+i386/cross verification; the array-of-const temp heap-leaks per call (FPC builds
+it on the stack) — fine for the asm emitter, revisit if it matters.
 
 ## Motivation
 

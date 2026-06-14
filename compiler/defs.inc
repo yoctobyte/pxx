@@ -113,6 +113,9 @@ const
   AN_VAR_DECL     = 47;
   AN_DEFAULT      = 48;
   AN_SYSCALL      = 49; { __pxxrawsyscall(nr, a0..a5): Int64; Left = AN_ARG chain (1..7 args) }
+  AN_VARREC_ARRAY = 50; { `array of const` literal: Left = AN_ARG chain of element
+                          exprs, IVal = TVarRec record id. Lowers to a heap
+                          dyn-array of TVarRec; yields the data-pointer handle. }
 
   { Inline-asm operand kinds }
   AOP_NONE = 0;
@@ -639,6 +642,8 @@ var
   DynamicSize      : Integer;
   DynamicNeededCount : Integer; { distinct DT_NEEDED libraries }
   LastTypeRecId : Integer;
+  TVarRecId : Integer;   { record id of builtinheap.TVarRec (`array of const`
+                           element), or REC_NONE if the unit isn't loaded }
   LastTypePointerElemTk : TTypeKind;
   LastTypePointerElemRec : Integer;
   ErrorIdent : AnsiString;

@@ -15,6 +15,25 @@ unit builtinheap;
 
 interface
 
+type
+  { `array of const` element record, matching FPC's system.TVarRec on every
+    target: a pointer-sized VType tag (8 bytes on 64-bit, 4 on i386) followed by
+    the value union. The parser overlaps VAnsiString onto VInteger at the union
+    offset (see FixupTVarRecLayout) and right-sizes the record, so a string
+    element and an integer element share the 8-/4-byte value slot exactly as FPC
+    lays them out. Only the two tags the asm emitter needs are wired today. }
+  TVarRec = record
+    VType: NativeInt;
+    VInteger: NativeInt;
+    VAnsiString: Pointer;
+  end;
+
+const
+  vtInteger    = 0;
+  vtChar       = 2;
+  vtString     = 4;   { shortstring; unused with ansistrings }
+  vtAnsiString = 11;
+
 function PXXAlloc(size: NativeInt; align: Integer): Pointer;
 procedure PXXFree(p: Pointer);
 function PXXRealloc(p: Pointer; newSize: NativeInt; align: Integer): Pointer;
@@ -37,10 +56,6 @@ function PXXVarBinOp(dest: Pointer; left: Pointer; right: Pointer; opTk: NativeI
 procedure PXXVarClear(v: Pointer);
 procedure PXXVarRetain(v: Pointer);
 procedure PXXWriteVariant(v: Pointer);
-procedure PXXWriteFloatNat(p: Pointer);
-procedure PXXWriteFloatFixed(p: Pointer; decimals: NativeInt);
-procedure PXXWriteFloatSci(p: Pointer);
-
 implementation
 
 

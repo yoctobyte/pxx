@@ -265,6 +265,7 @@ procedure EmitArgvToAddr; forward;
 function ParseLValueAST(idx: Integer; identTokIdx: Integer): Integer; forward;
 function ParseSetMembershipAST(leftExpr: Integer): Integer; forward;
 function ParseSetLiteralAST: Integer; forward;
+function ParseVarRecLiteralAST: Integer; forward;
 function ParseStatementAST: Integer; forward;
 function ParseWithStatementAST: Integer; forward;
 function ParseAsmStatementAST: Integer; forward;
@@ -1466,7 +1467,48 @@ begin
   Result := node;
 end;
 
+function ParseVarRecLiteralAST: Integer;
+{ `[ e0, e1, ... ]` in an `array of const` argument position. Each element is a
+  full expression; the element's static type picks its TVarRec tag at lowering
+  time. Yields an AN_VARREC_ARRAY whose Left is the AN_ARG element chain; tagged
+  tyRecord so overload matching sees it as the open-array-of-record argument. }
+var node, argNode, lastArg: Integer; done: Boolean;
+begin
+  node := AllocNode(AN_VARREC_ARRAY);
+  ASTTk[node]   := Ord(tyRecord);
+  ASTIVal[node] := TVarRecId;
+  ASTLeft[node] := -1;
+  lastArg := -1;
+  Expect(tkLBrack, '[');
+  if CurTok.Kind <> tkRBrack then
+  begin
+    done := False;
+    while not done do
+    begin
+      ParseExpr;
+      argNode := AllocNode(AN_ARG);
+      ASTLeft[argNode] := CurASTNode;
+      ASTRight[argNode] := -1;
+      if lastArg = -1 then ASTLeft[node] := argNode
+      else ASTRight[lastArg] := argNode;
+      lastArg := argNode;
+      if not Eat(tkComma) then done := True;
+    end;
+  end;
+  Expect(tkRBrack, ']');
+  Result := node;
+end;
 
+function ParamIsVarRecArray(pi, argNo: Integer): Boolean;
+{ True when proc pi's parameter argNo is an `array of const` (open array whose
+  element record is TVarRec) — the signal to parse a `[...]` argument as a
+  TVarRec element vector rather than a set literal. }
+begin
+  Result := (pi >= 0) and (TVarRecId <> REC_NONE) and
+            (argNo >= 0) and (argNo < Procs[pi].ParamCount) and
+            Procs[pi].Params[argNo].IsArray and
+            (Syms[Procs[pi].Params[argNo].SymIdx].ElemRecName = TVarRecId);
+end;
 
 procedure EmitArgvToAddr;
 begin
@@ -4116,7 +4158,10 @@ begin
           nArgs := 0;
           while CurTok.Kind <> tkRParen do
           begin
-            ParseExpr;
+            if (CurTok.Kind = tkLBrack) and ParamIsVarRecArray(pi, nArgs) then
+              CurASTNode := ParseVarRecLiteralAST
+            else
+              ParseExpr;
             argSeq := AllocNode(AN_ARG);
             ASTLeft[argSeq] := CurASTNode;
             if argsHead = -1 then
@@ -4166,7 +4211,8 @@ begin
           for i := 0 to nArgs - 1 do
           begin
             exprNode := ASTLeft[currArg];
-            if Procs[pi].Params[i].IsRef or Procs[pi].Params[i].IsArray then
+            if (Procs[pi].Params[i].IsRef or Procs[pi].Params[i].IsArray) and
+               (ASTKind[exprNode] <> AN_VARREC_ARRAY) then
             begin
               if not ((ASTKind[exprNode] = AN_IDENT) or (ASTKind[exprNode] = AN_INDEX) or (ASTKind[exprNode] = AN_FIELD)) then
                 Error('by-reference argument must be a variable');
@@ -5388,7 +5434,19 @@ begin
       begin
         Next;
         Expect(tkOf, 'of');
-        tk := ParseTypeKind;
+        if CurTok.Kind = tkConst then
+        begin
+          { `array of const` (TVarRec open array): each element is a TVarRec
+            record from builtinheap. The callee reads it like any open array of
+            records; the call site builds the element vector (AN_VARREC_ARRAY). }
+          if TVarRecId = REC_NONE then
+            Error('array of const requires the builtinheap unit (use an array/heap feature)');
+          Next;
+          tk := tyRecord;
+          LastTypeRecId := TVarRecId;
+        end
+        else
+          tk := ParseTypeKind;
         isArr := True;
       end
       else
@@ -5658,7 +5716,15 @@ begin
   begin
     idx := AllocParam(pnames[i], ptypes[i], pbyref[i], parr[i]);
     Procs[pi].Params[i].SymIdx := idx;
-    if (ptypes[i] = tyClass) or (ptypes[i] = tyRecord) then
+    if parr[i] and (ptypes[i] = tyRecord) then
+    begin
+      { Open array of records (e.g. `array of const`): the slot holds a dyn-array
+        data pointer; element type/record live in ElemType/ElemRecName, not a
+        by-value RecName, and it must NOT be promoted to by-ref. }
+      Syms[idx].ElemType := tyRecord;
+      Syms[idx].ElemRecName := ptypesRec[i];
+    end
+    else if (ptypes[i] = tyClass) or (ptypes[i] = tyRecord) then
     begin
       Syms[idx].RecName := ptypesRec[i];
       if (ptypes[i] = tyRecord) and (RecSize(ptypesRec[i]) > 8) then
@@ -6855,6 +6921,24 @@ begin
   if needsAnsiRuntime then needsHeap := True;
 end;
 
+procedure FixupTVarRecLayout;
+{ builtinheap declares TVarRec with three sequential fields; here we overlap
+  VAnsiString onto the value union (VInteger's offset) and right-size the record
+  to a pointer-sized tag plus one pointer-sized value slot — exactly FPC's
+  system.TVarRec (SizeOf 16 on x86-64, 8 on i386). Records the resolved id in
+  TVarRecId for the `array of const` parser/lowering paths. }
+var ci, fi: Integer;
+begin
+  TVarRecId := REC_NONE;
+  ci := FindUClass('TVarRec');
+  if ci < 0 then Exit;
+  TVarRecId := REC_UCLASS_BASE + ci;
+  fi := FindUField(ci, 'VAnsiString');
+  if fi >= 0 then UFldOff_[fi] := TARGET_PTR_SIZE;
+  UClsSize_[ci] := 2 * TARGET_PTR_SIZE;
+  UClsAlign[ci] := TARGET_PTR_SIZE;
+end;
+
 procedure ParseProgram;
 var jmpPatch, i, j: Integer; doneUses, doneDecls, hasExceptions, needsBuiltin,
     needsHeap, needsAnsiRuntime, needHeapUnit: Boolean;
@@ -7044,6 +7128,7 @@ begin
     (allocator + PXXStr*) first, then the Str/Val/Variant conversions. }
   if needHeapUnit then ParseUsesUnit('builtinheap');
   if needsBuiltin then ParseUsesUnit('builtin');
+  FixupTVarRecLayout;
 
   doneDecls := False;
   while not doneDecls do

@@ -855,6 +855,14 @@ var argTk: TTypeKind;
     srcAddr: Integer;
     value: Integer;
 begin
+  { An `array of const` literal lowers to a freshly built dyn-array of TVarRec;
+    its value is the data-pointer handle, passed straight through (never the
+    record-by-value copy path below). }
+  if ASTKind[argAST] = AN_VARREC_ARRAY then
+  begin
+    Result := IRLowerAST(argAST);
+    Exit;
+  end;
   argTk := IntToTypeKind(ASTTk[argAST]);
   needTemp := False;
   argRecId := REC_NONE;
@@ -941,6 +949,8 @@ var left, right, seq, item, value, outNode, first, last, leftAddr, argNode, argV
     slFldRec, slFldDepth, slFldBaseRec: Integer; slFldName: AnsiString; slFldBaseTk: TTypeKind;
     helperPi, wrapperArg, wrapperCall: Integer;
     lhsTk, castTk: TTypeKind;
+    vrCount, vrTmp, vrIdent, vrCountLit, vrArg1, vrArg2, vrSlCall: Integer;
+    vrIdxLit, vrIndex, vrTag, elemAddr, vrSavedRecId: Integer;
 begin
   if node = -1 then
   begin
@@ -964,6 +974,87 @@ begin
 
     AN_DEFAULT:
       Error('default requires an assignment target');
+
+    AN_VARREC_ARRAY:
+    begin
+      { Lower `[e0, e1, ...]` in an `array of const` position to a heap dyn-array
+        of TVarRec and yield its data-pointer handle. Each element becomes one
+        TVarRec: VType at offset 0, the value at the union offset
+        (TARGET_PTR_SIZE). The callee walks it as an open array of records, with
+        Length/High reading the dyn-array header word — no new codegen needed. }
+      vrCount := 0;
+      item := ASTLeft[node];
+      while item <> -1 do begin Inc(vrCount); item := ASTRight[item]; end;
+
+      vrSavedRecId := LastTypeRecId;
+      LastTypeRecId := ASTIVal[node];        { TVarRecId }
+      vrTmp := AllocDynArray('', tyRecord, 1);
+      LastTypeRecId := vrSavedRecId;
+
+      { Zero the handle slot (allocated after the prologue) so SetLength sees nil. }
+      IRAppend(IR_DEFAULT_MEM,
+        IRAppend(IR_SLOTADDR, vrTmp, -1, -1, 0, Ord(tyPointer)),
+        -1, REC_NONE, TARGET_PTR_SIZE, Ord(tyPointer));
+
+      { SetLength(tmp, vrCount): synthesise the dyn-array SetLength (-102) call. }
+      vrIdent := AllocNode(AN_IDENT);
+      ASTIVal[vrIdent] := vrTmp; ASTTk[vrIdent] := Ord(tyPointer);
+      vrCountLit := AllocNode(AN_INT_LIT);
+      ASTIVal[vrCountLit] := vrCount; ASTTk[vrCountLit] := Ord(tyInteger);
+      vrArg1 := AllocNode(AN_ARG); ASTLeft[vrArg1] := vrIdent;
+      vrArg2 := AllocNode(AN_ARG); ASTLeft[vrArg2] := vrCountLit;
+      ASTRight[vrArg1] := vrArg2;
+      vrSlCall := AllocNode(AN_CALL); ASTIVal[vrSlCall] := -102;
+      ASTLeft[vrSlCall] := vrArg1;
+      value := IRLowerAST(vrSlCall);
+      IRIVal[value] := 1;   { mark the SetLength IR_CALL as a statement to emit }
+
+      { Fill each element. }
+      i := 0;
+      item := ASTLeft[node];
+      while item <> -1 do
+      begin
+        vrIdent := AllocNode(AN_IDENT);
+        ASTIVal[vrIdent] := vrTmp; ASTTk[vrIdent] := Ord(tyPointer);
+        vrIdxLit := AllocNode(AN_INT_LIT);
+        ASTIVal[vrIdxLit] := i; ASTTk[vrIdxLit] := Ord(tyInteger);
+        vrIndex := AllocNode(AN_INDEX);
+        ASTLeft[vrIndex] := vrIdent; ASTRight[vrIndex] := vrIdxLit;
+        ASTTk[vrIndex] := Ord(tyRecord);
+
+        if (IntToTypeKind(ASTTk[ASTLeft[item]]) = tyString) or
+           (IntToTypeKind(ASTTk[ASTLeft[item]]) = tyAnsiString) then
+          vrTag := 11    { vtAnsiString }
+        else
+          vrTag := 0;    { vtInteger }
+
+        { VType := tag  (element offset 0) }
+        elemAddr := IRLowerAddress(vrIndex);
+        IRAppend(IR_STORE_MEM, elemAddr,
+          IRAppend(IR_CONST_INT, -1, -1, -1, vrTag, Ord(tyNativeInt)),
+          -1, 0, Ord(tyNativeInt));
+
+        { value := elem  (element offset TARGET_PTR_SIZE) }
+        elemAddr := IRLowerAddress(vrIndex);
+        elemAddr := IRAppend(IR_BINOP, elemAddr,
+          IRAppend(IR_CONST_INT, -1, -1, -1, TARGET_PTR_SIZE, Ord(tyInteger)),
+          Ord(tkPlus), 0, Ord(tyPointer));
+        value := IRLowerAST(ASTLeft[item]);
+        if vrTag = 11 then
+          { vtAnsiString: store a pointer to the NUL-terminated char data, like
+            FPC's VAnsiString. A frozen (inline) string value points at its
+            8-byte length prefix, so skip it; InternStr NUL-terminates the data. }
+          value := IRAppend(IR_BINOP, value,
+            IRAppend(IR_CONST_INT, -1, -1, -1, 8, Ord(tyInteger)),
+            Ord(tkPlus), 0, Ord(tyPointer));
+        IRAppend(IR_STORE_MEM, elemAddr, value, -1, 0, Ord(tyNativeInt));
+
+        Inc(i);
+        item := ASTRight[item];
+      end;
+
+      Result := IRAppend(IR_LEA, vrTmp, -1, -1, 0, Ord(tyPointer));
+    end;
 
     AN_SET_LIT:
     begin
@@ -2028,7 +2119,13 @@ begin
             value := IRLowerAddress(ASTLeft[item])
           else
             value := IRLowerAST(ASTLeft[item]);
-          outNode := IRAppend(IR_WRITE, value, ASTIVal[item], ASTSOffset[item], 0, Ord(IntToTypeKind(ASTTk[ASTLeft[item]])));
+          if IsNodePChar(ASTLeft[item]) then
+            { write(PChar): tag the IR_WRITE with the -3 decimals sentinel so
+              codegen emits a runtime C-string (strlen + write) instead of
+              printing the pointer value. }
+            outNode := IRAppend(IR_WRITE, value, ASTIVal[item], -3, 0, Ord(tyPointer))
+          else
+            outNode := IRAppend(IR_WRITE, value, ASTIVal[item], ASTSOffset[item], 0, Ord(IntToTypeKind(ASTTk[ASTLeft[item]])));
         end
         else if ASTKind[item] = AN_PAIR then
         begin
