@@ -5757,6 +5757,8 @@ begin
           Inc(sz, 8)
         else if ptypes[j] = tySingle then
           Inc(sz, 4)
+        else if (ptypes[j] = tyInt64) or (ptypes[j] = tyUInt64) then
+          Inc(sz, 8)                                 { 64-bit by-value param }
         else
           Inc(sz, 4);
       end;
@@ -5770,15 +5772,12 @@ begin
       else if (not Syms[idx].IsRef) and (not Syms[idx].IsArray) and
               ((Syms[idx].TypeKind = tyInt64) or (Syms[idx].TypeKind = tyUInt64)) then
       begin
-        { Int64/UInt64 by-value param: the caller pushes only the low dword
-          (i386's 4-byte arg slot), so sign-extend it across the full 8-byte
-          frame slot. Values are thus limited to 32 bits at the call boundary,
-          but the slot is then a valid 64-bit value for the codegen's edx:eax
-          load path. }
+        { Int64/UInt64 by-value param: the caller pushes both dwords (8-byte arg
+          slot), so copy the full 64-bit value into the frame slot. }
         EmitB($8B); EmitB($85); EmitI32(8 + sz);     { mov eax, [ebp+disp] }
         EmitB($89); EmitB($85); EmitI32(Syms[idx].Offset);            { mov [off], eax }
-        EmitB($99);                                  { cdq }
-        EmitB($89); EmitB($95); EmitI32(Syms[idx].Offset + 4);        { mov [off+4], edx }
+        EmitB($8B); EmitB($85); EmitI32(12 + sz);    { mov eax, [ebp+disp+4] }
+        EmitB($89); EmitB($85); EmitI32(Syms[idx].Offset + 4);        { mov [off+4], eax }
       end
       else
       begin
@@ -6900,7 +6899,7 @@ begin
     savedUnitIdx := CurrentUnitIdx;
     CurrentUnitIdx := InternStr('builtinheap');
 
-    dummyNames[0] := 'size';  dummyTypes[0] := tyInt64;
+    dummyNames[0] := 'size';  dummyTypes[0] := tyNativeInt;
     dummyNames[1] := 'align'; dummyTypes[1] := tyInteger;
     i := RegisterProc('PXXAlloc', True, tyPointer, 2, dummyNames, dummyTypes);
 
@@ -6908,18 +6907,18 @@ begin
     i := RegisterProc('PXXFree', False, tyPointer, 1, dummyNames, dummyTypes);
 
     dummyNames[0] := 'p';     dummyTypes[0] := tyPointer;
-    dummyNames[1] := 'newSize'; dummyTypes[1] := tyInt64;
+    dummyNames[1] := 'newSize'; dummyTypes[1] := tyNativeInt;
     dummyNames[2] := 'align'; dummyTypes[2] := tyInteger;
     i := RegisterProc('PXXRealloc', True, tyPointer, 3, dummyNames, dummyTypes);
 
-    dummyNames[0] := 'len';   dummyTypes[0] := tyInt64;
+    dummyNames[0] := 'len';   dummyTypes[0] := tyNativeInt;
     dummyNames[1] := 'src';   dummyTypes[1] := tyPointer;
     i := RegisterProc('PXXStrFromLit', True, tyPointer, 2, dummyNames, dummyTypes);
 
-    dummyNames[0] := 'lenA';  dummyTypes[0] := tyInt64;
+    dummyNames[0] := 'lenA';  dummyTypes[0] := tyNativeInt;
     dummyNames[1] := 'srcA';  dummyTypes[1] := tyPointer;
     dummyNames[2] := 'srcB';  dummyTypes[2] := tyPointer;
-    dummyNames[3] := 'lenB';  dummyTypes[3] := tyInt64;
+    dummyNames[3] := 'lenB';  dummyTypes[3] := tyNativeInt;
     i := RegisterProc('PXXStrConcat', True, tyPointer, 4, dummyNames, dummyTypes);
 
     dummyNames[0] := 'path';  dummyTypes[0] := tyPointer;
@@ -6931,17 +6930,17 @@ begin
     dummyNames[0] := 'strSlot'; dummyTypes[0] := tyPointer;
     i := RegisterProc('PXXStrUnique', True, tyPointer, 1, dummyNames, dummyTypes);
 
-    dummyNames[0] := 'lenA';  dummyTypes[0] := tyInt64;
+    dummyNames[0] := 'lenA';  dummyTypes[0] := tyNativeInt;
     dummyNames[1] := 'srcA';  dummyTypes[1] := tyPointer;
-    dummyNames[2] := 'lenB';  dummyTypes[2] := tyInt64;
+    dummyNames[2] := 'lenB';  dummyTypes[2] := tyNativeInt;
     dummyNames[3] := 'srcB';  dummyTypes[3] := tyPointer;
     i := RegisterProc('PXXStrEq', True, tyInt64, 4, dummyNames, dummyTypes);
 
     dummyNames[0] := 'dest';      dummyTypes[0] := tyPointer;
     dummyNames[1] := 'left';      dummyTypes[1] := tyPointer;
     dummyNames[2] := 'right';     dummyTypes[2] := tyPointer;
-    dummyNames[3] := 'opTk';      dummyTypes[3] := tyInt64;
-    dummyNames[4] := 'isCompare'; dummyTypes[4] := tyInt64;
+    dummyNames[3] := 'opTk';      dummyTypes[3] := tyNativeInt;
+    dummyNames[4] := 'isCompare'; dummyTypes[4] := tyNativeInt;
     i := RegisterProc('PXXVarBinOp', True, tyInt64, 5, dummyNames, dummyTypes);
 
     dummyNames[0] := 'v';         dummyTypes[0] := tyPointer;
@@ -6952,7 +6951,7 @@ begin
     dummyNames[0] := 'p';         dummyTypes[0] := tyPointer;
     i := RegisterProc('PXXWriteFloatNat', False, tyPointer, 1, dummyNames, dummyTypes);
     i := RegisterProc('PXXWriteFloatSci', False, tyPointer, 1, dummyNames, dummyTypes);
-    dummyNames[1] := 'decimals';  dummyTypes[1] := tyInt64;
+    dummyNames[1] := 'decimals';  dummyTypes[1] := tyNativeInt;
     i := RegisterProc('PXXWriteFloatFixed', False, tyPointer, 2, dummyNames, dummyTypes);
 
     CurrentUnitIdx := savedUnitIdx;

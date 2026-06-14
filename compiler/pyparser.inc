@@ -1103,22 +1103,22 @@ begin
     touches the heap fails FindProc('PXXAlloc') during EmitAnsiStringRuntime. }
   savedUnitIdx := CurrentUnitIdx;
   CurrentUnitIdx := InternStr('builtinheap');
-  dummyNames[0] := 'size';  dummyTypes[0] := tyInt64;
+  dummyNames[0] := 'size';  dummyTypes[0] := tyNativeInt;
   dummyNames[1] := 'align'; dummyTypes[1] := tyInteger;
   i := RegisterProc('PXXAlloc', True, tyPointer, 2, dummyNames, dummyTypes);
   dummyNames[0] := 'p';     dummyTypes[0] := tyPointer;
   i := RegisterProc('PXXFree', False, tyPointer, 1, dummyNames, dummyTypes);
   dummyNames[0] := 'p';     dummyTypes[0] := tyPointer;
-  dummyNames[1] := 'newSize'; dummyTypes[1] := tyInt64;
+  dummyNames[1] := 'newSize'; dummyTypes[1] := tyNativeInt;
   dummyNames[2] := 'align'; dummyTypes[2] := tyInteger;
   i := RegisterProc('PXXRealloc', True, tyPointer, 3, dummyNames, dummyTypes);
-  dummyNames[0] := 'len';   dummyTypes[0] := tyInt64;
+  dummyNames[0] := 'len';   dummyTypes[0] := tyNativeInt;
   dummyNames[1] := 'src';   dummyTypes[1] := tyPointer;
   i := RegisterProc('PXXStrFromLit', True, tyPointer, 2, dummyNames, dummyTypes);
-  dummyNames[0] := 'lenA';  dummyTypes[0] := tyInt64;
+  dummyNames[0] := 'lenA';  dummyTypes[0] := tyNativeInt;
   dummyNames[1] := 'srcA';  dummyTypes[1] := tyPointer;
   dummyNames[2] := 'srcB';  dummyTypes[2] := tyPointer;
-  dummyNames[3] := 'lenB';  dummyTypes[3] := tyInt64;
+  dummyNames[3] := 'lenB';  dummyTypes[3] := tyNativeInt;
   i := RegisterProc('PXXStrConcat', True, tyPointer, 4, dummyNames, dummyTypes);
   dummyNames[0] := 'path';  dummyTypes[0] := tyPointer;
   i := RegisterProc('PXXStrLoadFile', True, tyPointer, 1, dummyNames, dummyTypes);

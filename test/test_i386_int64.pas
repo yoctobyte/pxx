@@ -1,5 +1,13 @@
 program test_i386_int64;
 
+{ Full 64-bit by-value parameter passing: the callee must receive all 64 bits,
+  not a truncated/sign-extended low dword. }
+function addhi(v: Int64; k: Int64): Int64;
+begin addhi := v + k; end;
+function hidword(v: Int64): Int64;
+begin hidword := v shr 32; end;
+
+
 { Focused Int64 oracle: shifts across the 32-bit boundary, high-dword
   constants, memory load/store of 64-bit values, and comparisons whose
   result depends on the high dword. Output must be identical to the
@@ -96,6 +104,12 @@ begin
   for i := 1 to 40 do
     c := c + 1000000000;            { 40e9 > 2^32 }
   writeln(c);
+
+  { full 64-bit by-value param passing (callee sees all 64 bits) }
+  writeln(addhi(4831834837817753600, 1));
+  writeln(hidword(4831834837817753600));     { high dword survives the call }
+  writeln(addhi(-4294967296, 4294967296));   { -2^32 + 2^32 = 0 }
+  writeln(hidword(1000000000000000));
 
   { multiply across the boundary }
   a := 1000000000;

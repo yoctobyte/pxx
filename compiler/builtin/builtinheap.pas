@@ -15,30 +15,30 @@ unit builtinheap;
 
 interface
 
-function PXXAlloc(size: Int64; align: Integer): Pointer;
+function PXXAlloc(size: NativeInt; align: Integer): Pointer;
 procedure PXXFree(p: Pointer);
-function PXXRealloc(p: Pointer; newSize: Int64; align: Integer): Pointer;
-function PXXStrFromLit(len: Int64; src: Pointer): Pointer;
-function PXXStrConcat(lenA: Int64; srcA: Pointer; srcB: Pointer; lenB: Int64): Pointer;
+function PXXRealloc(p: Pointer; newSize: NativeInt; align: Integer): Pointer;
+function PXXStrFromLit(len: NativeInt; src: Pointer): Pointer;
+function PXXStrConcat(lenA: NativeInt; srcA: Pointer; srcB: Pointer; lenB: NativeInt): Pointer;
 function PXXStrLoadFile(path: Pointer): Pointer;
 procedure PXXStrIncRef(p: Pointer);
 procedure PXXStrDecRef(p: Pointer);
 function PXXStrUnique(strSlot: Pointer): Pointer;
-function PXXStrEq(lenA: Int64; srcA: Pointer; lenB: Int64; srcB: Pointer): Int64;
+function PXXStrEq(lenA: NativeInt; srcA: Pointer; lenB: NativeInt; srcB: Pointer): Int64;
 procedure PXXRecordRetain(recAddr: Pointer; desc: Pointer);
 procedure PXXRecordRelease(recAddr: Pointer; desc: Pointer);
 procedure PXXDynArrayRelease(arrData: Pointer; desc: Pointer);
 function PXXDynArrayUnique(arrSlot: Pointer; desc: Pointer): Pointer;
-procedure PXXMemMove(dst: Pointer; src: Pointer; n: Int64);
-procedure PXXMemZero(dst: Pointer; n: Int64);
-procedure PXXDynSetLen(arrSlot: Pointer; newLen: Int64; desc: Pointer);
-procedure PXXStrSetLen(strSlot: Pointer; newLen: Int64);
-function PXXVarBinOp(dest: Pointer; left: Pointer; right: Pointer; opTk: Int64; isCompare: Int64): Int64;
+procedure PXXMemMove(dst: Pointer; src: Pointer; n: NativeInt);
+procedure PXXMemZero(dst: Pointer; n: NativeInt);
+procedure PXXDynSetLen(arrSlot: Pointer; newLen: NativeInt; desc: Pointer);
+procedure PXXStrSetLen(strSlot: Pointer; newLen: NativeInt);
+function PXXVarBinOp(dest: Pointer; left: Pointer; right: Pointer; opTk: NativeInt; isCompare: NativeInt): Int64;
 procedure PXXVarClear(v: Pointer);
 procedure PXXVarRetain(v: Pointer);
 procedure PXXWriteVariant(v: Pointer);
 procedure PXXWriteFloatNat(p: Pointer);
-procedure PXXWriteFloatFixed(p: Pointer; decimals: Int64);
+procedure PXXWriteFloatFixed(p: Pointer; decimals: NativeInt);
 procedure PXXWriteFloatSci(p: Pointer);
 
 implementation
@@ -81,7 +81,7 @@ begin
 {$endif}
 end;
 
-function PXXAlloc(size: Int64; align: Integer): Pointer;
+function PXXAlloc(size: NativeInt; align: Integer): Pointer;
 var
   cur, prev, base, need, arena, i: Int64;
 begin
@@ -139,7 +139,7 @@ begin
   FreeList := addr;
 end;
 
-function PXXRealloc(p: Pointer; newSize: Int64; align: Integer): Pointer;
+function PXXRealloc(p: Pointer; newSize: NativeInt; align: Integer): Pointer;
 var
   addr, oldSize, i, src, dst: Int64;
   np: Pointer;
@@ -177,7 +177,7 @@ end;
   (AnsiStrFromLiteralAddr); the shim holds the heap lock in threadsafe mode.
   Raw pointers only — this code IS the string runtime, so it must not use
   managed strings itself. }
-function PXXStrFromLit(len: Int64; src: Pointer): Pointer;
+function PXXStrFromLit(len: NativeInt; src: Pointer): Pointer;
 var
   base, s, d, i: Int64;
 begin
@@ -205,7 +205,7 @@ end;
   followed by srcB[0..lenB), nul-terminated. Returns the data pointer or nil
   for an empty result. Called from the AnsiStrConcatAddr shim under the heap
   lock. Raw pointers only. }
-function PXXStrConcat(lenA: Int64; srcA: Pointer; srcB: Pointer; lenB: Int64): Pointer;
+function PXXStrConcat(lenA: NativeInt; srcA: Pointer; srcB: Pointer; lenB: NativeInt): Pointer;
 var
   total, base, d, s, i: Int64;
 begin
@@ -256,7 +256,7 @@ begin
 {$endif}
 end;
 
-function PXXSysLseek(fd, offset, whence: Int64): Int64;
+function PXXSysLseek(fd, offset, whence: NativeInt): Int64;
 begin
 {$ifdef CPUX86_64}
   Result := __pxxrawsyscall(8, fd, offset, whence);
@@ -272,7 +272,7 @@ begin
 {$endif}
 end;
 
-function PXXSysRead(fd, buf, count: Int64): Int64;
+function PXXSysRead(fd, buf, count: NativeInt): Int64;
 begin
 {$ifdef CPUX86_64}
   Result := __pxxrawsyscall(0, fd, buf, count);
@@ -288,7 +288,7 @@ begin
 {$endif}
 end;
 
-function PXXSysClose(fd: Int64): Int64;
+function PXXSysClose(fd: NativeInt): Int64;
 begin
 {$ifdef CPUX86_64}
   Result := __pxxrawsyscall(3, fd);
@@ -386,7 +386,7 @@ end;
 { Byte-wise string equality for the cross targets' compare codegen. Operands are
   pre-decomposed into (length, data pointer) so it works uniformly for managed
   handles and inline strings. Returns 1 when equal, 0 otherwise. }
-function PXXStrEq(lenA: Int64; srcA: Pointer; lenB: Int64; srcB: Pointer): Int64;
+function PXXStrEq(lenA: NativeInt; srcA: Pointer; lenB: NativeInt; srcB: Pointer): Int64;
 var i, a, b: Int64;
 begin
   if lenA <> lenB then
@@ -472,7 +472,7 @@ begin
   end;
 end;
 
-procedure PXXDynArrayRetainImmediate(arrData: Pointer; len: Int64; depth: Integer; baseKind: Integer; baseRecDesc: Pointer);
+procedure PXXDynArrayRetainImmediate(arrData: Pointer; len: NativeInt; depth: Integer; baseKind: Integer; baseRecDesc: Pointer);
 var
   i: Int64;
   itemAddr: Pointer;
@@ -700,7 +700,7 @@ end;
 
 { Forward byte copy (non-overlapping or dst < src). Used by cross backends that
   lack a single-instruction block move (e.g. ARM32) for whole-record copies. }
-procedure PXXMemMove(dst: Pointer; src: Pointer; n: Int64);
+procedure PXXMemMove(dst: Pointer; src: Pointer; n: NativeInt);
 var d, s, i: Int64;
 begin
   d := Int64(dst);
@@ -714,7 +714,7 @@ begin
 end;
 
 { Zero n bytes at dst. }
-procedure PXXMemZero(dst: Pointer; n: Int64);
+procedure PXXMemZero(dst: Pointer; n: NativeInt);
 var d, i: Int64;
 begin
   d := Int64(dst);
@@ -733,7 +733,7 @@ end;
   retains the copied managed elements, publishes the new handle, and releases
   the old one. newLen <= 0 publishes nil. Target-independent — replaces the
   per-arch inline SetLength so i386/ARM32/AArch64 share one implementation. }
-procedure PXXDynSetLen(arrSlot: Pointer; newLen: Int64; desc: Pointer);
+procedure PXXDynSetLen(arrSlot: Pointer; newLen: NativeInt; desc: Pointer);
 var
   oldData, newBlock, newArrData: Pointer;
   oldLen, elSize, copyLen, i: Int64;
@@ -795,7 +795,7 @@ end;
   the old one. newLen <= 0 publishes nil. Target-independent — lets the cross
   backends route SetLength(ansistring, n) through one shared implementation
   instead of the x86-64 inline resize. }
-procedure PXXStrSetLen(strSlot: Pointer; newLen: Int64);
+procedure PXXStrSetLen(strSlot: Pointer; newLen: NativeInt);
 var
   oldData, newBase, newData: Pointer;
   oldLen, copyLen, i: Int64;
@@ -844,7 +844,7 @@ end;
 type
   PDouble = ^Double;
 
-function PXXVarBinOp(dest: Pointer; left: Pointer; right: Pointer; opTk: Int64; isCompare: Int64): Int64;
+function PXXVarBinOp(dest: Pointer; left: Pointer; right: Pointer; opTk: NativeInt; isCompare: NativeInt): Int64;
 var
   lTag, rTag, lVal, rVal, resVal: Int64;
   lDbl, rDbl, resDbl: Double;
@@ -1114,7 +1114,7 @@ begin
   end;
 end;
 
-procedure PXXWriteFloatFixed(p: Pointer; decimals: Int64);
+procedure PXXWriteFloatFixed(p: Pointer; decimals: NativeInt);
 { [-]intpart.frac with exactly 'decimals' fractional digits (0 -> rounded
   integer, no point). Mirrors EmitWriteFloatFixed (x86-64). }
 var x, pw, v, ip, rem, dv, r, two52: Double; d: Integer; i: Int64; ch: Char;

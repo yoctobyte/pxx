@@ -1982,6 +1982,24 @@ begin
         while argNode <> -1 do
         begin
           IREmitNode386(IRA[argNode]);
+          if (pi >= 0) and (nArgs < Procs[pi].ParamCount) and
+             Is64Bit386(Procs[pi].Params[nArgs].TypeKind) then
+          begin
+            { 64-bit by-value param: widen the (possibly 32-bit) value to
+              edx:eax, then push both dwords (lo at the lower address). }
+            tk := IntToTypeKind(IRTk[IRA[argNode]]);
+            if not Is64Bit386(tk) then
+            begin
+              if TypeSigned(tk) then EmitB($99)              { cdq }
+              else begin EmitB($31); EmitB($D2); end;        { xor edx, edx }
+            end;
+            EmitB($52);                                { push edx (hi) }
+            EmitB($50);                                { push eax (lo) }
+            Inc(argBytes, 8);
+            Inc(nArgs);
+            argNode := IRB[argNode];
+            Continue;
+          end;
           if (pi >= 0) and (nArgs < Procs[pi].ParamCount) then
           begin
             if TypeIsFloat(Procs[pi].Params[nArgs].TypeKind) then
