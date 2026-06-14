@@ -1,8 +1,8 @@
 # i386 text-assembler (`EmitAsm386`) for cleaner x86-32 codegen
 
 - **Type:** feature
-- **Status:** backlog
-- **Owner:** —
+- **Status:** done
+- **Owner:** Antigravity
 - **Depends-on:** feature-array-of-const (DONE), feature-asm-text-emitter
   (x86-64 core + shared `asmtext.inc` helpers, DONE)
 - **Opened:** 2026-06-14
@@ -68,3 +68,5 @@ user `asm … end` path (`asmenc.inc`) onto the shared engine (own follow-up).
   the three remaining target emitters (386 → aarch64 → arm32). Shares the x86
   core in `asmtext.inc`; primary payoff is the 970-`EmitB`/57-jump cleanup and
   the i386 self-host arc.
+- 2026-06-14 — Claimed by Antigravity.
+- 2026-06-14 — Completed. `EmitAsm386` implemented, `EmitwriteUInt64_386` and bound local/param loads converted. Verified via standalone test `test/test_asm_emit_386.pas` and compiler bootstrap. Commit: c8da1613a2df2cfbf4aa4e88cab33012bbc751d2.
