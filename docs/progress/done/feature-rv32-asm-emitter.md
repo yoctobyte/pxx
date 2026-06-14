@@ -1,8 +1,8 @@
 # RISC-V (RV32) text-assembler (`EmitAsmRv32`) for cleaner riscv32 codegen
 
 - **Type:** feature
-- **Status:** backlog
-- **Owner:** —
+- **Status:** done
+- **Owner:** Antigravity
 - **Depends-on:** feature-array-of-const (DONE), feature-asm-text-emitter
   (shared `asmtext.inc` helpers + xtensa precedent, DONE)
 - **Opened:** 2026-06-14
@@ -70,3 +70,5 @@ the full `ir_codegen_riscv32.inc` conversion.
 - 2026-06-14 — opened. Typed `rv32_*` layer already exists (`rv32enc.inc`), so
   this is the xtensa-shape text front-end — the cheapest cross emitter. Roadmap
   endgame target (bare-metal RISC-V / ESP32-C3).
+- 2026-06-14 — claimed by Antigravity; starting implementation.
+- 2026-06-14 — completed implementation in commit 8abad40. Tests passed and bootstrap is byte-identical.
