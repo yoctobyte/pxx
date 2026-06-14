@@ -1,7 +1,7 @@
 # ARM32 text-assembler (`EmitAsmArm32`) for cleaner ARM32 codegen
 
 - **Type:** feature
-- **Status:** working
+- **Status:** done
 - **Owner:** Antigravity
 - **Depends-on:** feature-array-of-const (DONE), feature-asm-text-emitter
   (shared `asmtext.inc` helpers, DONE); recommended **after**
@@ -74,3 +74,4 @@ beyond what blocks need, the full `ir_codegen_arm32.inc` conversion.
   like AArch64; the imm8-rotate operand and the mandatory 4-byte alignment are
   the ARM32-specific traps.
 - 2026-06-14 — claimed by Antigravity; starting implementation.
+- 2026-06-14 — completed implementation, verified under stage 2/3 bootstrap byte-identity and complete test suite (commit 1fa15f7b5172d513cdb49c3869f1555f573dd1ec).
