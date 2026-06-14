@@ -18,7 +18,7 @@ _none_
 | feature-cross-managed-string-cow | feature | Copy-on-write for managed strings on cross targets (i386 / ARM32 / AArch64) | — |
 | feature-cross-param-abi | feature | Full parameter/result ABI on cross targets | — |
 
-## backlog (30)
+## backlog (32)
 
 | Ticket | Type | Summary | Blocked-by |
 | --- | --- | --- | --- |
@@ -26,6 +26,8 @@ _none_
 | chore-runtime-emission-size | chore | Finer runtime-support emission (code size) | — |
 | feature-additional-cpu-targets | feature | Additional CPU targets (rollup: i386 → aarch64 → arm32 → ESP32/RISC-V) | feature-target-aarch64, feature-target-arm32, feature-target-esp32, feature-target-i386 |
 | feature-allocator-quality | feature | Allocator quality: split / coalesce / bins / alignment | — |
+| feature-array-of-const | feature | `array of const` (TVarRec) parameter support | — |
+| feature-asm-text-emitter | feature | Text-assembler codegen helpers (`EmitAsm386` / `EmitAsmX64` …) | feature-array-of-const |
 | feature-async-coroutines | feature | Async, coroutines, and `yield` | feature-unified-heap-allocator |
 | feature-c-header-import-complex | feature | Import C headers for complex libraries (glib/GTK-grade) | — |
 | feature-compiler-warnings | feature | Compiler warning diagnostics facility | — |
@@ -104,6 +106,7 @@ _none_
 - chore-runtime-emission-size
 - feature-additional-cpu-targets
 - feature-allocator-quality
+- feature-array-of-const
 - feature-async-coroutines
 - feature-c-header-import-complex
 - feature-compiler-warnings
@@ -142,6 +145,7 @@ _none_
 - **1** — feature-cross-selfhost-aarch64
 - **1** — feature-cross-bootstrap
 - **1** — feature-compiler-warnings
+- **1** — feature-array-of-const
 - **1** — chore-qemu-test-env
 - **1** — chore-inc-to-units
 - **1** — bug-managed-byref-string-param-store
