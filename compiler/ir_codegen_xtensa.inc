@@ -150,53 +150,6 @@ begin
   xtensa_addi(reg_xtensa_sp, reg_xtensa_sp, 4);
 end;
 
-{ Comparison result a2 := (a2 rel a3) ? 1 : 0, via a conditional branch over the
-  `movi a4, 0`. =, <> first compute a2 := a2 - a3 and branch on zero; the
-  ordered comparisons branch on the operands directly.
-
-  One procedure per operator, each with a single all-literal `array of const`:
-  the dialect miscompiles a function carrying several `array of const` literals,
-  and mishandles a non-literal AnsiString element, so neither a shared
-  parameterised helper nor multiple literals in one body is viable when this
-  compiler self-hosts. See feature-xtensa-asm-emitter. }
-procedure XtensaCmpEq;
-begin
-  EmitAsmXtensa([
-    'sub a2, a2, a3', 'movi a3, 0', 'movi a4, 1',
-    'beq a2, a3, .done', 'movi a4, 0', '.done:', 'mov a2, a4']);
-end;
-
-procedure XtensaCmpNeq;
-begin
-  EmitAsmXtensa([
-    'sub a2, a2, a3', 'movi a3, 0', 'movi a4, 1',
-    'bne a2, a3, .done', 'movi a4, 0', '.done:', 'mov a2, a4']);
-end;
-
-procedure XtensaCmpLt;
-begin
-  EmitAsmXtensa([
-    'movi a4, 1', 'blt a2, a3, .done', 'movi a4, 0', '.done:', 'mov a2, a4']);
-end;
-
-procedure XtensaCmpGt;
-begin
-  EmitAsmXtensa([
-    'movi a4, 1', 'blt a3, a2, .done', 'movi a4, 0', '.done:', 'mov a2, a4']);
-end;
-
-procedure XtensaCmpLe;
-begin
-  EmitAsmXtensa([
-    'movi a4, 1', 'bge a3, a2, .done', 'movi a4, 0', '.done:', 'mov a2, a4']);
-end;
-
-procedure XtensaCmpGe;
-begin
-  EmitAsmXtensa([
-    'movi a4, 1', 'bge a2, a3, .done', 'movi a4, 0', '.done:', 'mov a2, a4']);
-end;
-
 procedure IREmitNodeXtensa(node: Integer);
 var
   left, right, op, si, pi, nArgs, i, lo, elemSize, sz, argNode: Integer;
@@ -317,12 +270,21 @@ begin
         else if op = Ord(tkStar) then xtensa_mull(reg_xtensa_a2, reg_xtensa_a2, reg_xtensa_a3)
         else if op = Ord(tkAnd) then xtensa_and(reg_xtensa_a2, reg_xtensa_a2, reg_xtensa_a3)
         else if op = Ord(tkOr) then xtensa_or(reg_xtensa_a2, reg_xtensa_a2, reg_xtensa_a3)
-        else if op = Ord(tkEq) then XtensaCmpEq
-        else if op = Ord(tkNeq) then XtensaCmpNeq
-        else if op = Ord(tkLt) then XtensaCmpLt
-        else if op = Ord(tkGt) then XtensaCmpGt
-        else if op = Ord(tkLe) then XtensaCmpLe
-        else if op = Ord(tkGe) then XtensaCmpGe
+        { Comparison: a2 := (a2 rel a3) ? 1 : 0. = and <> subtract then branch on
+          zero; the ordered forms branch on the operands. The conditional branch
+          skips the `movi a4, 0` to the `.done` label. }
+        else if op = Ord(tkEq) then
+          EmitAsmXtensa(['sub a2, a2, a3','movi a3, 0','movi a4, 1','beq a2, a3, .done','movi a4, 0','.done:','mov a2, a4'])
+        else if op = Ord(tkNeq) then
+          EmitAsmXtensa(['sub a2, a2, a3','movi a3, 0','movi a4, 1','bne a2, a3, .done','movi a4, 0','.done:','mov a2, a4'])
+        else if op = Ord(tkLt) then
+          EmitAsmXtensa(['movi a4, 1','blt a2, a3, .done','movi a4, 0','.done:','mov a2, a4'])
+        else if op = Ord(tkGt) then
+          EmitAsmXtensa(['movi a4, 1','blt a3, a2, .done','movi a4, 0','.done:','mov a2, a4'])
+        else if op = Ord(tkLe) then
+          EmitAsmXtensa(['movi a4, 1','bge a3, a2, .done','movi a4, 0','.done:','mov a2, a4'])
+        else if op = Ord(tkGe) then
+          EmitAsmXtensa(['movi a4, 1','bge a2, a3, .done','movi a4, 0','.done:','mov a2, a4'])
         else
           Error('target xtensa: unsupported binary operator (div/mod/shifts pending)');
       end;

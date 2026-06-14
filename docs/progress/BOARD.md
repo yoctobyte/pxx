@@ -18,7 +18,7 @@ _none_
 | feature-cross-managed-string-cow | feature | Copy-on-write for managed strings on cross targets (i386 / ARM32 / AArch64) | — |
 | feature-cross-param-abi | feature | Full parameter/result ABI on cross targets | — |
 
-## backlog (35)
+## backlog (34)
 
 | Ticket | Type | Summary | Blocked-by |
 | --- | --- | --- | --- |
@@ -54,7 +54,6 @@ _none_
 | feature-short-circuit-eval | feature | Short-circuit boolean evaluation (`and` / `or`) | — |
 | feature-static-arena-profile | feature | Fixed-static-arena allocator profile | feature-unified-heap-allocator |
 | feature-threadsafe-io-serialization | feature | Statement-level I/O serialization under threads | feature-unified-heap-allocator |
-| feature-xtensa-asm-emitter | feature | Xtensa text-assembler (`EmitAsmXtensa`) for ESP32 | — |
 | idea-unit-rename-import | idea | `uses X as Y` unit-rename import (dialect extension) | — |
 | idea-visibility-enforcement | idea | Enforce private/protected visibility | — |
 
@@ -65,7 +64,7 @@ _none_
 | bug-nonreproducible-miscompile-2026-06-02 | bug | Non-reproducible one-off miscompile (2026-06-02) | — |
 | bug-whole-record-copy-main-body-noop | bug | Latent: whole-record array-element copy in main-program body emits store no-ops | — |
 
-## done (29)
+## done (30)
 
 | Ticket | Type | Summary | Blocked-by |
 | --- | --- | --- | --- |
@@ -96,6 +95,7 @@ _none_
 | feature-target-i386 | feature | Compile target: i386 (32-bit x86 Linux) | chore-qemu-test-env |
 | feature-typed-instruction-encoders | feature | Typed instruction encoders for codegen | — |
 | feature-unified-heap-allocator | feature | Unified syscall-free heap allocator | — |
+| feature-xtensa-asm-emitter | feature | Xtensa text-assembler (`EmitAsmXtensa`) for ESP32 | — |
 | feature-xtensa-windowed-abi | feature | Xtensa windowed ABI codegen variant (for ESP-IDF interop) | — |
 | idea-progress-board-md | idea | On-demand `BOARD.md` kanban grid | — |
 
@@ -130,7 +130,6 @@ _none_
 - feature-short-circuit-eval
 - feature-static-arena-profile
 - feature-threadsafe-io-serialization
-- feature-xtensa-asm-emitter
 - idea-unit-rename-import
 - idea-visibility-enforcement
 

@@ -109,14 +109,26 @@ j     .done
   against the ESP `objdump` oracle (forward `.done` branch targets decode
   correctly). `make bootstrap` byte-identical, `make test` + `make test-emit-obj`
   (xtensa call0/windowed .o links) pass.
-- **Self-host landmines hit** (cost: the segfault hunt): the dialect (1)
-  miscompiles a *function carrying several `array of const` literals* — symptom
-  was a self-hosted compiler that segfaulted on EVERY xtensa compile because
-  `IREmitNodeXtensa` (which held all six literals) was mis-emitted; and (2)
-  mishandles a *non-literal `AnsiString` element* inside an `array of const`
-  (`AsmTextCStr(VAnsiString)` read garbage → "expected register"). Both are
-  PXX-only (FPC builds are fine). Workaround used here: one proc per operator,
-  each with a single all-literal `array of const`. A shared parameterised helper
-  is NOT viable until those two are fixed. See [[project_pxx_array_of_const_selfhost]].
+- **Self-host bug found + FIXED (root cause).** The conversion first made the
+  self-hosted compiler segfault on EVERY xtensa compile. It looked like "several
+  `array of const` literals in one function miscompile" (threshold ~5), but the
+  real cause: an `array of const` literal lowers to a managed dyn-array temp
+  (TVarRec) that the function's exit cleanup finalizes. The temp is synthesised
+  during IR lowering, *after* the parser's prologue zero-init pass, and was only
+  zeroed inline right before use. When the `[...]` sits in a branch that is not
+  taken (the comparison cases for a non-comparison program; `IREmitNodeXtensa`),
+  the handle slot kept stale stack bytes and cleanup freed a garbage pointer →
+  segfault. Fix: flag the temp `SymIsHiddenArgTemp` so codegen's existing
+  prologue nil-init pass covers it (`ir.inc`, `defs.inc` comment broadened).
+  Regression test `test/test_varrec_branch.pas` (aoc in not-taken branches).
+  After the fix the comparison blocks use plain inline `EmitAsmXtensa` literals —
+  no per-operator workaround procs. See [[project_pxx_array_of_const_selfhost]].
+- **Separate known issue (NOT fixed):** a *non-literal `AnsiString` element*
+  inside an `array of const` reads garbage under PXX — the vtAnsiString lowering
+  does `value + 8` to skip a frozen string's length prefix, wrong for a runtime
+  AnsiString whose pointer already addresses the chars. Only literal string
+  elements are safe today; a parameterised emit helper passing the branch line
+  as a string param stays off the table until that is fixed (managed-string F2
+  territory).
 - **Still deferred:** L32R literal-pool sugar, 16-bit narrow encodings,
   windowed-ABI `entry`/`call8` sugar, dynamic blocks left on the typed encoders.
