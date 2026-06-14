@@ -1,10 +1,29 @@
 # Text-assembler codegen helpers (`EmitAsm386` / `EmitAsmX64` …)
 
 - **Type:** feature
-- **Status:** in progress (x86-64 core landed 2026-06-14)
+- **Status:** in progress (x86-64 core landed 2026-06-14; per-target emitters
+  spun off into their own tickets)
 - **Owner:** —
 - **Blocked-by:** feature-array-of-const
 - **Opened:** 2026-06-14 (design discussion: readable asm emission)
+
+## Scope split (this is now the shared-core + x86-64 + inline-asm-unify ticket)
+
+The shared `asmtext.inc` front-end (parser, `%`/`@data`/`@glob`/`.label`
+markers, hole binding, rel8/rel32 resolution) and `EmitAsmX64` are **done** here.
+Each remaining target is its own incremental ticket, all built on this core,
+recommended order (cheapest-first — targets with a typed encoder layer already
+done cost least):
+
+- feature-i386-asm-emitter — `EmitAsm386` (shares the x86 ModRM core). **next.**
+- feature-rv32-asm-emitter — `EmitAsmRv32` (typed `rv32enc.inc` exists →
+  xtensa-shape, cheap).
+- feature-aarch64-asm-emitter — `EmitAsmA64` (needs a new thin `a64enc.inc`).
+- feature-arm32-asm-emitter — `EmitAsmArm32` (new `arm32enc.inc`; 4-byte align).
+- feature-xtensa-asm-emitter — `EmitAsmXtensa` (typed `xtensaenc.inc`). **DONE.**
+
+This ticket retains: further `EmitAsmX64` block conversions + scope item 6
+(retarget the user `asm … end` path in `asmenc.inc` onto the shared engine).
 
 ## Done so far (2026-06-14)
 

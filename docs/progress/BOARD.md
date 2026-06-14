@@ -18,14 +18,16 @@ _none_
 | feature-cross-managed-string-cow | feature | Copy-on-write for managed strings on cross targets (i386 / ARM32 / AArch64) | — |
 | feature-cross-param-abi | feature | Full parameter/result ABI on cross targets | — |
 
-## backlog (36)
+## backlog (40)
 
 | Ticket | Type | Summary | Blocked-by |
 | --- | --- | --- | --- |
 | chore-inc-to-units | chore | `.inc` → real `.pas` units refactor | — |
 | chore-runtime-emission-size | chore | Finer runtime-support emission (code size) | — |
+| feature-aarch64-asm-emitter | feature | AArch64 text-assembler (`EmitAsmA64`) for cleaner ARM64 codegen | — |
 | feature-additional-cpu-targets | feature | Additional CPU targets (rollup: i386 → aarch64 → arm32 → ESP32/RISC-V) | feature-target-aarch64, feature-target-arm32, feature-target-esp32, feature-target-i386 |
 | feature-allocator-quality | feature | Allocator quality: split / coalesce / bins / alignment | — |
+| feature-arm32-asm-emitter | feature | ARM32 text-assembler (`EmitAsmArm32`) for cleaner ARM32 codegen | — |
 | feature-array-of-const | feature | `array of const` (TVarRec) parameter support | — |
 | feature-asm-text-emitter | feature | Text-assembler codegen helpers (`EmitAsm386` / `EmitAsmX64` …) | feature-array-of-const |
 | feature-async-coroutines | feature | Async, coroutines, and `yield` | feature-unified-heap-allocator |
@@ -43,6 +45,7 @@ _none_
 | feature-flexcolumn-directive | feature | `flexcolumn` calling-convention directive | chore-inc-to-units |
 | feature-float-str-val | feature | Float Str / Val | — |
 | feature-handle-compacting-heap | feature | Handle-table compacting heap (anti-fragmentation for constrained RAM) | — |
+| feature-i386-asm-emitter | feature | i386 text-assembler (`EmitAsm386`) for cleaner x86-32 codegen | — |
 | feature-inline-asm-depth | feature | Inline assembler depth | — |
 | feature-interfaces | feature | Interfaces | — |
 | feature-lazycasing-c-imports | feature | `{$LAZYCASING ON/OFF}` for C imports only | feature-compiler-warnings |
@@ -53,6 +56,7 @@ _none_
 | feature-no-ansistring-profile | feature | No-AnsiString / bounded-string profile | — |
 | feature-parallel-processing | feature | Parallel processing as a language feature | feature-unified-heap-allocator |
 | feature-progress-transition-helpers | feature | Progress transition helpers (`claim` / `resolve`) | — |
+| feature-rv32-asm-emitter | feature | RISC-V (RV32) text-assembler (`EmitAsmRv32`) for cleaner riscv32 codegen | — |
 | feature-short-circuit-eval | feature | Short-circuit boolean evaluation (`and` / `or`) | — |
 | feature-static-arena-profile | feature | Fixed-static-arena allocator profile | feature-unified-heap-allocator |
 | feature-threadsafe-io-serialization | feature | Statement-level I/O serialization under threads | feature-unified-heap-allocator |
@@ -109,8 +113,10 @@ _none_
 
 - chore-inc-to-units
 - chore-runtime-emission-size
+- feature-aarch64-asm-emitter
 - feature-additional-cpu-targets
 - feature-allocator-quality
+- feature-arm32-asm-emitter
 - feature-array-of-const
 - feature-async-coroutines
 - feature-c-header-import-complex
@@ -123,6 +129,7 @@ _none_
 - feature-esp32-isr-iram
 - feature-float-str-val
 - feature-handle-compacting-heap
+- feature-i386-asm-emitter
 - feature-inline-asm-depth
 - feature-interfaces
 - feature-metaclass-descendant-enforcement
@@ -131,6 +138,7 @@ _none_
 - feature-no-ansistring-profile
 - feature-parallel-processing
 - feature-progress-transition-helpers
+- feature-rv32-asm-emitter
 - feature-short-circuit-eval
 - feature-static-arena-profile
 - feature-threadsafe-io-serialization
