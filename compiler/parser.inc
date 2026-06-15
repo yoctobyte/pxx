@@ -5821,7 +5821,21 @@ begin
       sz := 0;
       for j := i + 1 to nparams - 1 do
       begin
-        if pbyref[j] or parr[j] or (ptypes[j] = tyString) or
+        if parr[j] then
+        begin
+          { Open-array param stack width must match how the caller pushes the
+            argument (the i386 caller dispatches on the param's element type, so
+            `ptypes[j]` here is the element type). A 64-bit element (Int64/UInt64/
+            Double) goes through the 8-byte push path; `array of const` (a single
+            dyn-array handle) and 32-bit-element open arrays are one 4-byte slot.
+            NOTE: regular open arrays don't yet carry a real high word, so
+            Length() over them is unreliable — tracked separately. }
+          if (ptypes[j] = tyInt64) or (ptypes[j] = tyUInt64) or (ptypes[j] = tyDouble) then
+            Inc(sz, 8)
+          else
+            Inc(sz, 4);
+        end
+        else if pbyref[j] or (ptypes[j] = tyString) or
            (ptypes[j] in [tyAnsiString, tyPointer, tyClass, tyVariant]) then
           Inc(sz, 4)
         else if ptypes[j] = tyDouble then
