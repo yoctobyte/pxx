@@ -947,8 +947,11 @@ begin
           argNode := IRB[node];
           valNode := IRA[argNode];
           IREmitNodeArm32(valNode);      { r0 = handle (or 0) }
-          if (IRKind[valNode] = IR_INDEX) or (IRKind[valNode] = IR_FIELD) then
-            EmitI32($E5900000);          { ldr r0, [r0] (deref slot to handle) }
+          if (IRKind[valNode] = IR_INDEX) or (IRKind[valNode] = IR_FIELD) or
+             ((IRKind[valNode] = IR_LEA) and (Syms[IRA[valNode]].Kind = skParam) and
+              Syms[IRA[valNode]].IsRef and (Syms[IRA[valNode]].TypeKind = tyAnsiString) and
+              not Syms[IRA[valNode]].IsArray) then
+            EmitI32($E5900000);          { ldr r0, [r0] (deref slot/&handle to handle) }
           EmitI32($E3500000);            { cmp r0, #0 }
           EmitI32($0A000000);            { beq +1 (skip ldr) }
           EmitI32($E5100008);            { ldr r0, [r0, #-8] }
