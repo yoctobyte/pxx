@@ -106,3 +106,11 @@ builtinheap.pas` around the `HeapMmap` raw-syscall block.
   is independent of COW: the `IR_ARG(IRA=-1)` / `invalid IR node reference in arg
   value` crash while the AArch64-hosted compiler compiles `builtinheap.pas`.
   This ticket is now Ready.
+- 2026-06-15 — latent-bug note from the ARM32 self-host work (commit 2931bf0):
+  `ir_codegen_aarch64.inc` is **missing** the prologue nil-init of hidden owning
+  managed-string arg temps (`SymIsHiddenArgTemp` skLocal) that x86-64, i386, and
+  now ARM32 all have (`ir_codegen.inc` ~3817). On ARM32 the absence caused a
+  startup `PXXStrDecRef`-on-garbage SIGSEGV. AArch64 may have masked it so far
+  (its temps may land in already-zeroed BSS, or the crash here precedes that
+  cleanup), but add the same pass to `IREmitMachineCodeAArch64` when chasing the
+  `IR_ARG(IRA=-1)` wall — it is a likely co-factor.
