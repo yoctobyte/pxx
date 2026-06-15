@@ -3042,8 +3042,13 @@ begin
   begin
     EmitI32($E92D4800);  { push {fp, lr} }
     EmitI32($E1A0B00D);  { mov fp, sp }
+    { Frame size can exceed an ARM rotated-imm8, so load it from a literal
+      into r9 (scratch, free at proc entry) and subtract. Patch the literal. }
+    EmitI32($E59F9000);  { ldr r9, [pc]  (the literal below) }
+    EmitI32($EA000000);  { b .+8         (skip the literal) }
     Result := CodeLen;
-    EmitI32($E24DD000);  { sub sp, sp, #0 }
+    EmitI32(0);          { frame-size literal (patched) }
+    EmitI32($E04DD009);  { sub sp, sp, r9 }
     Exit;
   end;
   if TargetArch = TARGET_AARCH64 then
@@ -3099,7 +3104,7 @@ var aligned: Integer;
 begin
   aligned := ((size + 15) div 16) * 16;
   if TargetArch = TARGET_ARM32 then
-    Patch32(patchPos, $E24DD000 or aligned)
+    Patch32(patchPos, aligned)  { raw frame-size literal; loaded into r9, then sub sp,sp,r9 }
   else if TargetArch = TARGET_AARCH64 then
     Patch32(patchPos, $D10003FF or (aligned shl 10))
   else if TargetArch = TARGET_XTENSA then
