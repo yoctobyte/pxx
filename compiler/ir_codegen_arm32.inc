@@ -126,8 +126,13 @@ begin
     EmitI32($EA000000);  { b .+8 }
     EmitGlobRef(Syms[idx].Offset);
   end
-  else if (Syms[idx].Kind = skParam) and Syms[idx].IsRef then
+  else if (Syms[idx].Kind = skParam) and
+          (Syms[idx].IsRef or Syms[idx].IsArray or
+           (Syms[idx].TypeKind = tyString) or (Syms[idx].TypeKind = tySet)) then
   begin
+    { By-ref, open-array, fixed-string, or set param: the slot holds a pointer
+      the caller passed (the array data / buffer / forwarded slot), so load the
+      pointer itself, not the slot address. Mirrors i386 EmitLoadVarAddr386. }
     EmitLoadImmArm32(9, Syms[idx].Offset);
     EmitI32($E08B9009);  { add r9, fp, r9 }
     EmitI32($E5990000);  { ldr r0, [r9] }
