@@ -90,4 +90,9 @@ segfaults under QEMU (`rc=139`) before producing a comparable output.
 - 2026-06-15 — **new wall:** the ARM32-hosted compiler now compiles past the
   define-overflow but SIGSEGVs deeper in
   `... -dPXX_MANAGED_STRING --target=x86_64 test/hello.pas` (no output file).
-  Next: gdb-under-qemu the new crash PC.
+  gdb-under-qemu: crash PC `0x0837cc90` on `stmfd sp!, {r0}` (a stack push),
+  r0=0, lr=`0x083b1744`. A faulting *push* points at stack exhaustion (deep
+  recursive-descent parse/codegen recursion) or sp corruption rather than a bad
+  data pointer. Next: confirm by watching sp vs the mapped stack bound under
+  qemu (and/or check for an ARM32 frame-size / sp-adjust bug in a hot recursive
+  proc); map `0x0837cc90`/`0x083b1744` to procs by structure.
