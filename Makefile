@@ -913,7 +913,10 @@ test-arm32: $(COMPILER)
 	./$(COMPILER) -dPXX_MANAGED_STRING --target=arm32 test/test_cross_openarray_string.pas /tmp/test_arm32_openarray_string
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_cross_openarray_string.pas /tmp/test_arm32_openarray_string_x64
 	test "$$(tools/run_target.sh arm32 /tmp/test_arm32_openarray_string)" = "$$(/tmp/test_arm32_openarray_string_x64)"
-	@echo "arm32 hello + arith + procs + loops + write + varparam + syscall + heap + string + record + dynarray + exception + float + args + variant + strresult + setlen-str + str-length-index + in-operator + managed-aggregate-locals + loadfile + sysopen-family + string-cow + var-string-param + openarray-string ok (output identical to x86-64)"
+	./$(COMPILER) -dPXX_MANAGED_STRING --target=arm32 test/test_cross_stack_params.pas /tmp/test_arm32_stack_params
+	./$(COMPILER) -dPXX_MANAGED_STRING test/test_cross_stack_params.pas /tmp/test_arm32_stack_params_x64
+	test "$$(tools/run_target.sh arm32 /tmp/test_arm32_stack_params)" = "$$(/tmp/test_arm32_stack_params_x64)"
+	@echo "arm32 hello + arith + procs + loops + write + varparam + syscall + heap + string + record + dynarray + exception + float + args + variant + strresult + setlen-str + str-length-index + in-operator + managed-aggregate-locals + loadfile + sysopen-family + string-cow + var-string-param + openarray-string + stack-params ok (output identical to x86-64)"
 
 # Relocatable .o emission for the esp32-idf profile (feature-elf-rel-writer).
 # Host-only checks via binutils readelf; if the ESP cross toolchains are

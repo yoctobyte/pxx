@@ -5917,8 +5917,11 @@ begin
       end
       else
       begin
-        { Stack arguments start above saved fp/lr: [fp+8], [fp+12], ... }
-        EmitI32($E59B0000 or (8 + (i - 4) * 4)); { ldr r0, [fp, #off] }
+        { Stack arguments sit above saved fp/lr. The caller pushes arg0..argN
+          with argN at the lowest address, then leaves sp at argN, so stack arg
+          i lands at [fp + 8 + (nparams-1-i)*4] (argN at [fp+8]). Matches the
+          ARM32 caller in ir_codegen_arm32.inc IR_CALL. }
+        EmitI32($E59B0000 or (8 + (nparams - 1 - i) * 4)); { ldr r0, [fp, #off] }
         if sz = 1 then
           EmitI32($E5C90000)  { strb r0, [r9] }
         else if sz = 2 then

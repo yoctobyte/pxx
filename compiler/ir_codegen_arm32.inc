@@ -1251,19 +1251,24 @@ begin
           if i < 4 then
             EmitI32($E59D0000 or (i shl 12) or ((nArgs - 1 - i) * 4)); { ldr r[i], [sp, #off] }
         end;
-        if nArgs > 0 then
+        { Args were pushed arg0..argN (arg0 at the highest address, argN at
+          [sp]). r0..r3 are loaded from the high slots above.
+          - nArgs <= 4: no stack args; drop every pushed slot now.
+          - nArgs > 4: the stack args (arg4..argN) sit at the low end with argN
+            at [sp]; leave sp there so the callee reads them as [fp+8...]. The
+            four register-arg slots stay pushed above (the callee ignores them);
+            drop all nArgs slots after the call. The callee resolves stack arg i
+            at [fp + 8 + (nparams-1-i)*4] (parser.inc spill loop). }
+        if (nArgs > 0) and (nArgs <= 4) then
         begin
-          if nArgs < 4 then
-            EmitLoadImmArm32(9, nArgs * 4)
-          else
-            EmitLoadImmArm32(9, 16);
-          EmitI32($E08DD009); { add sp, sp, r9; leaves stack args at [sp] }
+          EmitLoadImmArm32(9, nArgs * 4);
+          EmitI32($E08DD009); { add sp, sp, r9 }
         end;
 
         EmitCallProc(pi);
         if nArgs > 4 then
         begin
-          EmitLoadImmArm32(9, (nArgs - 4) * 4);
+          EmitLoadImmArm32(9, nArgs * 4);
           EmitI32($E08DD009); { add sp, sp, r9 }
         end;
       end;
