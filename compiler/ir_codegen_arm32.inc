@@ -1889,6 +1889,11 @@ begin
           else
             EmitI32($E8BD0000 or (1 shl (i - 1))); { pop {r[i-1]} }
         EmitI32($EF000000); { svc 0 }
+        { The kernel returns a 32-bit value in r0, but the node is typed Int64
+          (results are signed: a negative is -errno). Sign-extend into the high
+          word so `result < 0` and other full-64-bit uses are correct — without
+          this, a -errno return reads as a large positive Int64. }
+        EmitI32($E1A01FC0); { mov r1, r0, asr #31 }
       end;
 
     IR_NEG:
