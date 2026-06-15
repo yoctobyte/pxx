@@ -231,6 +231,8 @@ test-core: $(COMPILER)
 	test "$$(/tmp/test_varrec_branch26)" = "$$(printf 'none\na1\na2\na3\nb1\nb2\nc1\nd1\nd2\nd3\nd4\ne1\ne2\nnone')"
 	./$(COMPILER) test/test_varrec_string.pas /tmp/test_varrec_string26
 	test "$$(/tmp/test_varrec_string26)" = "$$(printf 'S=lit\nI=42\nS=hello\nS=world\nS=param\nS=tail')"
+	./$(COMPILER) test/test_varrec_alloc_after.pas /tmp/test_varrec_alloc_after26
+	test "$$(/tmp/test_varrec_alloc_after26)" = "$$(printf 'n=2: S 42\nn=4: 10 20 30 40\nn=3: 115 11 22')"
 	./$(COMPILER) test/test_asm_emit.pas /tmp/test_asm_emit26
 	test "$$(/tmp/test_asm_emit26)" = "$$(printf 'S=\nS=ab\nS=abc\nS=a longer string here\nI=0\nI=123\nI=-7\n---\nS=ww\nI=1\nS=yy\nI=2\nS=zzz\nI=3')"
 	./$(COMPILER) test/test_virtual_proc.pas /tmp/test_virtual_proc26
@@ -839,7 +841,10 @@ test-aarch64: $(COMPILER)
 	./$(COMPILER) --target=aarch64 test/test_cross_huge_frame.pas /tmp/test_aarch64_huge_frame
 	./$(COMPILER) test/test_cross_huge_frame.pas /tmp/test_aarch64_huge_frame_x64
 	test "$$(tools/run_target.sh aarch64 /tmp/test_aarch64_huge_frame)" = "$$(/tmp/test_aarch64_huge_frame_x64)"
-	@echo "aarch64 hello + arith + procs + loops + write + varparam + syscall + heap + string + record + dynarray + exception + float + variant + setlen-str + str-length-index + in-operator + loadfile + sysopen-family + args + open-array-params + string-cow + huge-frame ok (output identical to x86-64)"
+	./$(COMPILER) --target=aarch64 test/test_varrec_alloc_after.pas /tmp/test_aarch64_varrec_alloc
+	./$(COMPILER) test/test_varrec_alloc_after.pas /tmp/test_aarch64_varrec_alloc_x64
+	test "$$(tools/run_target.sh aarch64 /tmp/test_aarch64_varrec_alloc)" = "$$(/tmp/test_aarch64_varrec_alloc_x64)"
+	@echo "aarch64 hello + arith + procs + loops + write + varparam + syscall + heap + string + record + dynarray + exception + float + variant + setlen-str + str-length-index + in-operator + loadfile + sysopen-family + args + open-array-params + string-cow + huge-frame + varrec-alloc ok (output identical to x86-64)"
 
 test-arm32: $(COMPILER)
 	./$(COMPILER) --target=arm32 test/hello.pas /tmp/test_arm32_hello

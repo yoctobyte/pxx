@@ -211,6 +211,13 @@ begin
       elSize := TARGET_PTR_SIZE
     else if baseKind = 3 then
       elSize := UClsSize_[Syms[symIdx].ElemRecName - REC_UCLASS_BASE]
+    else if Syms[symIdx].ElemType = tyRecord then
+      { Unmanaged record element: TypeSize(tyRecord) is only a pointer-width
+        placeholder (8); the real stride is the full record size. Using 8 here
+        under-allocates the dyn array (e.g. a 2-element `array of const`/TVarRec
+        gets 16 bytes, so element 1 overruns into adjacent heap and is clobbered
+        by the next allocation). }
+      elSize := RecSize(Syms[symIdx].ElemRecName)
     else
       elSize := TypeSize(Syms[symIdx].ElemType);
   end;
