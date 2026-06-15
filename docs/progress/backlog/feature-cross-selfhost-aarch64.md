@@ -114,3 +114,37 @@ builtinheap.pas` around the `HeapMmap` raw-syscall block.
   (its temps may land in already-zeroed BSS, or the crash here precedes that
   cleanup), but add the same pass to `IREmitMachineCodeAArch64` when chasing the
   `IR_ARG(IRA=-1)` wall — it is a likely co-factor.
+- 2026-06-15 — **two walls cleared, hello byte-identical; one wall left.**
+  1. **Frame size > 4 KB corrupted the stack** (commit a6750e9). `PatchProcPrologue`
+     encoded `sub sp,sp,#imm` as `$D10003FF or (aligned shl 10)`, but the AArch64
+     immediate is only 12 bits (bits 21:10) with an optional LSL #12. Any frame
+     > 4095 overflowed the field, sp was decremented too little, calls/arg-pushes
+     overlapped the locals, and the saved x29/x30 were clobbered → epilog `ret`ed
+     to 0. The `IR_ARG(IRA=-1)` failure was actually this: IRVerify has a 131 KB
+     local (`seenLabel: array[0..MAX_IR-1]`), so the self-hosted compiler corrupted
+     its own frame and read garbage IR-node indices. Fix: frames > 4095 round up to
+     a 4096 multiple and use the LSL #12 form; the epilog restores via `mov sp,x29`
+     so the slack is harmless. Test `test/test_cross_huge_frame.pas`.
+  2. **nil-init hidden managed-arg temps** (commit afe94f2) — the ticket's flagged
+     missing pass; added to `IREmitMachineCodeAarch64`.
+  After (1), the AArch64-generated compiler compiles `hello.pas` → x86-64
+  **byte-identical** and runs. make test + test-aarch64 green.
+  **Remaining wall — `array of const` VType corruption when targeting aarch64.**
+  The AArch64-hosted compiler crashes compiling builtinheap.pas (`PXXAlloc`, the
+  branch emission) with `EmitAsmA64: missing integer hole value`. Root: the
+  `['b %', offset]` array-of-const that EmitAsmA64 builds has a corrupt 2nd
+  element — `items[0].VType=11` (the 'b %' string) is correct, but `items[1].VType`
+  reads 24 instead of vtInteger(0). NOTE: only the codegen *targeting aarch64*
+  exercises EmitAsmA64; hello→x86-64 doesn't, which is why hello is byte-identical
+  yet self-fixedpoint fails. Investigated and RULED OUT: (a) not a TVarRec
+  stride/size mismatch — forcing `FixupTVarRecLayout` to run before builtinheap
+  codegen (so RecSize(TVarRec)=16 not 24) did NOT change the 24; (b) the dyn-array
+  length is correct (n=2, element 0 reads fine, so the handle is valid); (c) the
+  nil-init temp pass didn't change it. So element 1's VType is genuine garbage,
+  not an offset/stride artefact. Crucially the SAME `['b %', x]` construct compiled
+  by the NATIVE compiler for an aarch64 *target* program runs correctly — so the
+  bug only manifests in the aarch64-HOSTED compiler's runtime state (suspect a heap
+  / dyn-array-of-record fill bug specific to that path). Next: add diagnostics in
+  the AArch64 dyn-array-of-record element FILL (ir.inc AN_VARREC_ARRAY → the
+  per-element IR_STORE_MEM) vs the READ to see where element 1's VType store lands
+  vs where the read looks, on the aarch64-hosted compiler.
