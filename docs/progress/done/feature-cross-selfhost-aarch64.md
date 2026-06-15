@@ -1,7 +1,7 @@
 # Cross self-host: AArch64 generated compiler runs under QEMU
 
 - **Type:** feature
-- **Status:** working
+- **Status:** done
 - **Owner:** codex
 - **Blocked-by:** feature-cross-managed-string-cow
 - **Unblocks:** feature-cross-bootstrap-selfhost
@@ -148,3 +148,29 @@ builtinheap.pas` around the `HeapMmap` raw-syscall block.
   the AArch64 dyn-array-of-record element FILL (ir.inc AN_VARREC_ARRAY → the
   per-element IR_STORE_MEM) vs the READ to see where element 1's VType store lands
   vs where the read looks, on the aarch64-hosted compiler.
+- 2026-06-15 — **DONE. AArch64 self-fixedpoint byte-identical.** Root cause of the
+  `array of const` corruption was a target-independent dyn-array element-size bug,
+  not an AArch64 codegen bug. `GetOrAllocSymRTTI` (`ir_codegen.inc` ~209) computed
+  the per-element stride for the SetLength runtime descriptor as
+  `TypeSize(Syms[..].ElemType)`; for an **unmanaged record** element (`tyRecord`
+  with no managed fields, exactly TVarRec) `TypeSize(tyRecord)` returns the
+  pointer-width placeholder **8**, not `RecSize(TVarRec)`=16. So `PXXDynSetLen`
+  allocated `n*8`: a 2-element `array of const` got 16 bytes, and element 1
+  (offset 16) overran into adjacent free heap. It survived only when read
+  immediately; `EmitAsmA64(['b %', offset])` does string work (heap allocs)
+  between constructing the array and reading the integer hole, so the overrun
+  region was clobbered → `items[1].VType` read stale garbage (24 = ord(tyAuto),
+  a red herring) → `EmitAsmA64: missing integer hole value`. (Only the managed
+  baseKind=3 record branch right-sized via `UClsSize_`; the unmanaged baseKind=0
+  branch fell through to `TypeSize`.) Diagnosis path: writer-side `DbgVarRec`
+  built element 1 correctly (`0,-220`) while the very next `EmitAsmA64`-fed build
+  read stale (`24,1`); raw-heap dump showed element 1's bytes were never near the
+  block → under-allocation. Fix: in `GetOrAllocSymRTTI` baseKind=0, use
+  `RecSize(ElemRecName)` when `ElemType=tyRecord`. Regression test
+  `test/test_varrec_alloc_after.pas` (forces allocations between construction and
+  the element reads; wired into `make test` and `make test-aarch64`). Acceptance
+  met: `compiler_aarch64` compiles `hello`→x86-64 byte-identical and it runs; the
+  AArch64-hosted compiler compiles `compiler.pas`→aarch64 **byte-identical** to
+  the native-emitted aarch64 compiler (self-fixedpoint, 871 procs), and that
+  self-emitted compiler compiles `hello` byte-identical. `make test` + all four
+  cross suites (i386/arm32/aarch64) green; x86-64 self-host fixedpoint reconverged.
