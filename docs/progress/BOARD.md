@@ -8,7 +8,7 @@ lives in git, not in a timestamp._
 
 _none_
 
-## working (4)
+## working (5)
 
 | Ticket | Type | Summary | Blocked-by |
 | --- | --- | --- | --- |
@@ -16,6 +16,7 @@ _none_
 | feature-cross-compiler-probe-walls | feature | Cross compiler.pas probe walls | — |
 | feature-cross-managed-aggregate-locals | feature | Managed aggregate locals on cross targets | — |
 | feature-cross-param-abi | feature | Full parameter/result ABI on cross targets | — |
+| feature-cross-selfhost-aarch64 | feature | Cross self-host: AArch64 generated compiler runs under QEMU | feature-cross-managed-string-cow |
 
 ## backlog (35)
 
@@ -31,7 +32,6 @@ _none_
 | feature-c-header-import-complex | feature | Import C headers for complex libraries (glib/GTK-grade) | — |
 | feature-compiler-warnings | feature | Compiler warning diagnostics facility | — |
 | feature-cross-bootstrap-selfhost | feature | Cross self-host bootstrap (compiler.pas → byte-identical under QEMU) | feature-cross-selfhost-aarch64, feature-cross-selfhost-arm32, feature-cross-selfhost-i386 |
-| feature-cross-selfhost-aarch64 | feature | Cross self-host: AArch64 generated compiler runs under QEMU | feature-cross-managed-string-cow |
 | feature-directive-if-numeric | feature | Valued defines + numeric `{$IF}` evaluation | — |
 | feature-dynamic-include-paths-config | feature | Dynamic Include Paths, Configuration Files, and System Scanner | — |
 | feature-dynamic-soname-discovery | feature | Dynamic soname discovery (no execve) | — |
@@ -53,6 +53,7 @@ _none_
 | feature-progress-transition-helpers | feature | Progress transition helpers (`claim` / `resolve`) | — |
 | feature-short-circuit-eval | feature | Short-circuit boolean evaluation (`and` / `or`) | — |
 | feature-static-arena-profile | feature | Fixed-static-arena allocator profile | feature-unified-heap-allocator |
+| feature-synthetic-feature-matrix-test | feature | Synthetic all-features stress test (cross-target conformance) | — |
 | feature-threadsafe-io-serialization | feature | Statement-level I/O serialization under threads | feature-unified-heap-allocator |
 | idea-unit-rename-import | idea | `uses X as Y` unit-rename import (dialect extension) | — |
 | idea-visibility-enforcement | idea | Enforce private/protected visibility | — |
@@ -69,7 +70,6 @@ _none_
 | Ticket | Type | Summary | Blocked-by |
 | --- | --- | --- | --- |
 | bug-c-packed-aligned-ignored | bug | C `__attribute__((packed))` / `aligned` ignored → field-offset drift | — |
-| feature-cross-selfhost-arm32 | feature | Cross self-host: ARM32 generated compiler runs under QEMU (byte-identical fixedpoint) | feature-cross-managed-string-cow |
 | bug-managed-byref-string-param-store | bug | Managed by-ref AnsiString params: store-through-var no-ops / segfaults | — |
 | bug-many-param-call-corruption | bug | Self-hosted x86-64 backend miscompiles calls with many parameters | — |
 | bug-operator-result-inferred-var | bug | Record-valued operator result is miscompiled (aggregate-return ABI) | — |
@@ -85,6 +85,7 @@ _none_
 | feature-cross-float-variant | feature | Float + Variant codegen on cross targets | — |
 | feature-cross-managed-aggregates | feature | Cross-target managed aggregates (records + dynamic arrays) | feature-rtti-layout-table |
 | feature-cross-managed-string-cow | feature | Copy-on-write for managed strings on cross targets (i386 / ARM32 / AArch64) | — |
+| feature-cross-selfhost-arm32 | feature | Cross self-host: ARM32 generated compiler runs under QEMU | feature-cross-managed-string-cow |
 | feature-cross-selfhost-i386 | feature | Cross self-host: i386 generated compiler runs under Linux | — |
 | feature-elf-rel-writer | feature | Relocatable ELF32 object writer (.o for ESP-IDF linking) | — |
 | feature-esp32-idf-riscv32 | feature | ESP-IDF integration: riscv32 (ESP32-C3) end-to-end | feature-elf-rel-writer |
@@ -120,7 +121,6 @@ _none_
 - feature-async-coroutines
 - feature-c-header-import-complex
 - feature-compiler-warnings
-- feature-cross-selfhost-aarch64
 - feature-directive-if-numeric
 - feature-dynamic-include-paths-config
 - feature-dynamic-soname-discovery
@@ -139,6 +139,7 @@ _none_
 - feature-progress-transition-helpers
 - feature-short-circuit-eval
 - feature-static-arena-profile
+- feature-synthetic-feature-matrix-test
 - feature-threadsafe-io-serialization
 - idea-unit-rename-import
 - idea-visibility-enforcement
