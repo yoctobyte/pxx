@@ -205,6 +205,26 @@ begin
   EmitB($CD); EmitB($80);                            { int 0x80 }
 end;
 
+procedure EmitWriteCStr386;
+{ eax = PChar (NUL-terminated) -> strlen + write to stdout. Mirrors the x86-64
+  EmitWriteCStr so write(PChar) prints the string, not the pointer value. }
+begin
+  EmitB($89); EmitB($C6);                 { mov esi, eax (buffer) }
+  EmitB($31); EmitB($C9);                 { xor ecx, ecx (length) }
+  { scan: }
+  EmitB($80); EmitB($38); EmitB($00);     { cmp byte [eax], 0 }
+  EmitB($74); EmitB($04);                 { je done (+4) }
+  EmitB($40);                             { inc eax }
+  EmitB($41);                             { inc ecx }
+  EmitB($EB); EmitB($F7);                 { jmp scan (-9) }
+  { done: }
+  EmitB($89); EmitB($CA);                 { mov edx, ecx (count) }
+  EmitB($89); EmitB($F1);                 { mov ecx, esi (buf) }
+  EmitB($BB); EmitI32(STDOUT);            { mov ebx, 1 }
+  EmitB($B8); EmitI32(4);                 { mov eax, 4 (write) }
+  EmitB($CD); EmitB($80);                 { int 0x80 }
+end;
+
 procedure EmitwriteUInt386;
 { eax = unsigned 32-bit int -> decimal on stdout }
 var loopStart: Integer;
@@ -2477,7 +2497,13 @@ begin
         else
         begin
           tk := IntToTypeKind(IRTk[node]);
-          if tk = tyVariant then
+          if IRC[node] = -3 then
+          begin
+            { write(PChar): runtime NUL-terminated C string (strlen + write). }
+            IREmitNode386(valNode);
+            EmitWriteCStr386;
+          end
+          else if tk = tyVariant then
           begin
             EmitLoadVariantAddr386(valNode);             { eax = slot addr }
             EmitB($50);                                  { push eax (arg0 = v) }

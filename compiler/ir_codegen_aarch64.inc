@@ -201,6 +201,24 @@ begin
   Patch32(donePos, $B4000000 or countReg or ((((CodeLen - donePos) div 4) and $7FFFF) shl 5));
 end;
 
+procedure EmitWriteCStrA64;
+{ x0 = PChar (NUL-terminated) -> strlen + write to stdout. Mirrors x86-64
+  EmitWriteCStr so write(PChar) prints the string, not the pointer value. }
+begin
+  EmitI32($AA0003E1);   { mov x1, x0 (buf) }
+  EmitI32($AA1F03E2);   { mov x2, xzr (len) }
+  { scan: }
+  EmitI32($39400003);   { ldrb w3, [x0] }
+  EmitI32($34000083);   { cbz w3, done (+4 instr) }
+  EmitI32($91000400);   { add x0, x0, #1 }
+  EmitI32($91000442);   { add x2, x2, #1 }
+  EmitI32($17FFFFFC);   { b scan (-4 instr) }
+  { done: }
+  EmitI32($D2800020);   { mov x0, #1 (stdout) }
+  EmitI32($D2800808);   { mov x8, #64 (sys_write) }
+  EmitI32($D4000001);   { svc #0 }
+end;
+
 procedure EmitWriteFloatNatA64;
 var jnsOff, jbCarry, i, nJz: Integer;
     endJz: array[0..15] of Integer;
@@ -1717,6 +1735,12 @@ begin
           if decs = -2 then EmitWriteFloatNatA64
           else if decs >= 0 then EmitWriteFloatFixedA64(decs)
           else EmitWriteFloatSciA64;
+        end
+        else if decs = -3 then
+        begin
+          { write(PChar): runtime NUL-terminated C string (strlen + write). }
+          IREmitNodeAarch64(valNode);
+          EmitWriteCStrA64;
         end
         else if IRKind[valNode] = IR_CONST_STR then
         begin

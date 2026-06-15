@@ -605,6 +605,25 @@ begin
   EmitI32($EEB80BC0);  { vcvt.f64.s32 d0, s0 }
 end;
 
+procedure EmitWriteCStrArm32;
+{ r0 = PChar (NUL-terminated) -> strlen + write to stdout. Mirrors x86-64
+  EmitWriteCStr so write(PChar) prints the string, not the pointer value. }
+begin
+  EmitI32($E1A01000);   { mov r1, r0 (buf) }
+  EmitI32($E3A02000);   { mov r2, #0 (len) }
+  { scan: }
+  EmitI32($E5D03000);   { ldrb r3, [r0] }
+  EmitI32($E3530000);   { cmp r3, #0 }
+  EmitI32($0A000002);   { beq done }
+  EmitI32($E2800001);   { add r0, r0, #1 }
+  EmitI32($E2822001);   { add r2, r2, #1 }
+  EmitI32($EAFFFFF9);   { b scan }
+  { done: }
+  EmitI32($E3A00001);   { mov r0, #1 (stdout) }
+  EmitI32($E3A07004);   { mov r7, #4 (sys_write) }
+  EmitI32($EF000000);   { svc #0 }
+end;
+
 procedure EmitFloatCallWriterArm32(const name: AnsiString; decs: Integer);
 { d0 = value. Spill to a stack slot, pass its address (plus decimals for the
   fixed writer) to the builtinheap float writer. }
@@ -1954,7 +1973,13 @@ begin
         else
         begin
           tk := IntToTypeKind(IRTk[node]);
-          if tk = tyVariant then
+          if IRC[node] = -3 then
+          begin
+            { write(PChar): runtime NUL-terminated C string (strlen + write). }
+            IREmitNodeArm32(valNode);
+            EmitWriteCStrArm32;
+          end
+          else if tk = tyVariant then
           begin
             EmitLoadVariantAddrArm32(valNode);    { r0 = slot addr }
             pi := FindProc('PXXWriteVariant');
