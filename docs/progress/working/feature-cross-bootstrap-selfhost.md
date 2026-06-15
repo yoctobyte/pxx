@@ -102,10 +102,16 @@ A `make cross-bootstrap-<arch>` target per cross arch:
   `cross-bootstrap` umbrella). i386 child ticket is marked done at acceptance
   #1-3 (hello byte-identical) but rollup acceptance #4 (full self-fixedpoint)
   is NOT met: the i386-hosted full `compiler.pas` self-compile now **segfaults**
-  (rc 139) — the compiler grew (procs 794→871) past the point the standing
-  **Int64 by-value param truncation** wall just diverged. `cross-bootstrap-i386`
-  is wired as an **xfail gate** (prints the blocker, never fails the build).
-  Remaining work to close this rollup = finish i386 8-byte Int64 by-value param
-  ABI (option (b): NativeInt size/len params across ALL PXX protos/forwards; see
-  `feature-cross-selfhost-i386` "Current wall"). Then promote the i386 gate to
-  voting and close.
+  (rc 139). `cross-bootstrap-i386` is wired as an **xfail gate** (prints the
+  blocker, never fails the build).
+- 2026-06-15 (later) — re-diagnosed the i386 #4 wall (the old Int64-param-
+  truncation note is STALE — that path is fixed). New blocker: the i386-hosted
+  compiler SIGSEGVs compiling **`writeln(<PChar>)`**, root-caused to an
+  **inconsistent i386 open-array param ABI** (`array of const` = 1 word handle;
+  `array of T` = 2 words ptr+high; the callee param-homing counts all open
+  arrays as 1 slot, so a param before a 2-word open array reads the wrong slot →
+  -1 handle → `Length` crash). Two point-patches tried and reverted (each trades
+  one open-array case for another); the real fix is a unified open-array calling
+  convention. Full diagnosis + reusable native-gdb recipe in
+  `feature-cross-selfhost-i386` (2026-06-15 Log). Remaining work to close this
+  rollup = that i386 open-array ABI unification, then promote the i386 gate.

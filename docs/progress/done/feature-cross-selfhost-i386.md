@@ -222,3 +222,56 @@ foundation task before more self-host patching.
   (`MovRaxImm`/`EmitI64` lose float-bit high dwords); see Current wall for the
   full-8-byte-param-passing plan (the hand-emitted helper push sites are the
   sticking point — finish via NativeInt size/len params, auditing ALL protos).
+
+- 2026-06-15 — **#4 wall re-diagnosed: it MOVED off Int64-param truncation.**
+  The float-bit Int64-by-value truncation described under "Current wall" is GONE
+  (an i386-hosted compiler now compiles `d := 1e15; writeln(d:0:2)` → x86-64
+  byte-identical, prints `1000000000000000.00`). The full `compiler.pas`→i386
+  self-compile now **SIGSEGVs** (the compiler grew procs 794→871; it crashes
+  rather than diverges). Minimal repro of the new wall:
+  `program c1; var s: AnsiString; begin s:='hi'; writeln(PChar(s)); end.` — the
+  i386-HOSTED compiler segfaults compiling **`writeln(<PChar>)`** (the native
+  →i386 target program of the same source does NOT crash; it just prints the
+  pointer as an int — a separate codegen gap, "issue A" below). Bisected:
+  `writeln(s)` ok, `p:=PChar(s)` ok, but `writeln(p:PChar)` / `writeln('hi':PChar)`
+  crash.
+  **Root cause = i386 open-array param ABI is inconsistent by element kind.**
+  GDB (i386 runs natively here, no QEMU): crash is `Length(handle)` with
+  `handle = -1` (the `[handle-8]` count read; the `=0` nil-guard misses -1). The
+  function is `AsmTextLine386(const line: AnsiString; const holes: array of
+  Int64; nHoles: Integer)` (asmtext_386.inc): it reads `line` from the wrong
+  stack slot (gets the holes-high word = -1, i.e. `High` of an empty open array),
+  because the callee param-homing (`parser.inc` ~5822, the `sz` displacement
+  sub-loop) counts EVERY open-array param (`parr[j]`) as ONE 4-byte slot. But a
+  regular `array of T` open array is passed as TWO slots (data ptr + high word),
+  so a param declared BEFORE it (here `line`) is homed 4 bytes short.
+  Why it's not a one-liner: open arrays are passed inconsistently on i386 —
+  - `array of const` (AN_VARREC_ARRAY): ONE word, a dyn-array handle; `Length`
+    via `[handle-8]` (works; `dump(const items: array of const)` is fine).
+  - regular `array of T` (e.g. `array of Int64`): TWO words (ptr + high).
+  - passing a FIXED array to an `array of T` open param yields `Length`=0 on
+    BOTH x86-64 and i386 (a separate, target-independent gap).
+  Counting `parr` as 8 uniformly fixes `AsmTextLine386`/`array of Int64`-before
+  cases but BREAKS `array of const`-before cases (`bar(x; const a: array of
+  const; y)` then reads x wrong). A targeted `4 for array-of-const (ElemRecName =
+  TVarRecId), 8 otherwise` fixed `bar` but `baz(...; array of Int64; ...)` then
+  misbehaved — the fixed-array→open-array path is itself half-working, so the
+  word count isn't cleanly 1-vs-2 per element kind yet. **Both attempts were
+  reverted** (tree clean) — this needs a unified i386 open-array calling
+  convention (decide a single ptr+high representation for ALL open arrays incl.
+  `array of const`, fix the caller push + callee homing + `Length`/`High` to
+  match, then audit), not a point patch.
+  Also note **issue A** (independent, lower priority): i386 `IR_WRITE` has no
+  `tyPointer`/`-3` C-string branch (`ir_codegen386.inc` ~2456), so `write(PChar)`
+  falls into the ordinal path and prints the pointer as a decimal instead of the
+  string (x86-64/aarch64 emit a strlen+write). Fix by adding the `-3` C-string
+  write to the i386 `IR_WRITE` handler.
+  Diagnostic recipe (reusable): i386 PXX binaries run natively on x86-64 (ia32),
+  so `gdb /tmp/pc_i386` works directly (no QEMU); binaries are stripped + have no
+  section headers (`readelf -S` empty, LOAD at vaddr 0x08048000 = file off 0), so
+  map a crash PC to a function by scanning the file backward for the `55 89 e5`
+  prologue (`push ebp; mov esp,ebp`) and `gdb disassemble START, END` (gdb
+  self-syncs alignment given enough runway). `writeln` in the compiler is
+  unbuffered (direct syscall), so markers before a crash do print — but i386
+  codegen is parse-interleaved (no single `IREmitMachineCode386` driver call),
+  so a marker in that whole-program driver never fires.

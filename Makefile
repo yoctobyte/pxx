@@ -959,7 +959,7 @@ cross-bootstrap-i386: $(COMPILER)
 	  && tools/run_target.sh i386 /tmp/pc_i386 $(CROSS_BOOTSTRAP_FLAGS) --target=i386 compiler/compiler.pas /tmp/pc_i386_2 >/dev/null 2>&1 \
 	  && cmp /tmp/pc_i386 /tmp/pc_i386_2 >/dev/null 2>&1 \
 	  && echo "i386 cross self-host: byte-identical self-fixedpoint OK (xfail gate now PASSES — promote it)" \
-	  || echo "i386 cross self-host: XFAIL (blocked on Int64 by-value param ABI; see feature-cross-selfhost-i386)"
+	  || echo "i386 cross self-host: XFAIL (blocked on i386 open-array param ABI; see feature-cross-selfhost-i386)"
 
 cross-bootstrap: cross-bootstrap-aarch64 cross-bootstrap-arm32 cross-bootstrap-i386
 	@echo "cross-bootstrap: aarch64 + arm32 byte-identical; i386 xfail"
