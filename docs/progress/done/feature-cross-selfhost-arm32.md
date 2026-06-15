@@ -1,7 +1,7 @@
 # Cross self-host: ARM32 generated compiler runs under QEMU
 
 - **Type:** feature
-- **Status:** working
+- **Status:** done
 - **Owner:** claude
 - **Blocked-by:** feature-cross-managed-string-cow
 - **Unblocks:** feature-cross-bootstrap-selfhost
@@ -202,3 +202,24 @@ segfaults under QEMU (`rc=139`) before producing a comparable output.
   origin — suspect a function that returns a managed string but yields -1 on an
   error/sentinel path, or an Int64/pointer value of -1 stored into a string slot;
   fix the origin, then re-attempt compiler.pas -> arm32 byte-identical fixedpoint.
+- 2026-06-15 — **-1 handle ROOT-CAUSED + FIXED → SELF-HOST COMPLETE** (commit
+  93e2510). The -1 was a **by-ref Int64 param** mis-passed. The word-based Int64
+  calling convention treated *every* tyInt64/tyUInt64 param as a 2-word value, but a
+  `var`/`const` (or open-array) Int64 param is a single pointer word (AllocParam
+  already sizes its slot as TARGET_PTR_SIZE). So the spill/caller wrote a bogus high
+  word past the 4-byte slot, clobbering the adjacent param; where that neighbour was
+  a managed string it became 0xFFFFFFFF, and the next Length() deref'd [handle-8] →
+  segfault. (Found by decoding the fault proc's prologue: `str r0,[fp-4]` then int64
+  `str r1,[fp-8]; str r2,[fp-8+4=fp-4]` — the hi word landing on the string slot.)
+  Fix: gate the 2-word path on `not IsRef and not IsArray` in caller
+  (ir_codegen_arm32.inc IR_CALL), callee word count, and callee spill (parser.inc).
+  The body already deref'd IsRef Int64 params via EmitLoadVar64/StoreVar64.
+  **ACCEPTANCE MET (all four bullets):**
+  - ARM32-generated compiler compiles test/hello.pas -> x86-64 under QEMU. ✓
+  - byte-identical to native pascal26 (and gen-3 self-emitted compiler also produces
+    a byte-identical hello). ✓
+  - emitted hello runs, prints "Hello, World!". ✓
+  - compiler.pas -> ARM32 self-fixedpoint: native-emitted and self-emitted ARM32
+    compilers are **byte-identical** (3787092 bytes, 871 procs). ✓
+  Regression test test/test_cross_int64_byref.pas wired into make test-arm32.
+  make test + test-arm32 + test-i386 all green.
