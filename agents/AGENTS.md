@@ -4,33 +4,33 @@ Shared instructions for any AI agent (Claude, Codex, agy, …) working this repo
 Read once at session start. Keep edits here terse — this loads every session.
 
 ## Access restrictions
-- Antigravity CLI is allowed again (unbanned 2026-06-14), but **scoped**. It may
-  work only on a single, explicitly assigned per-target asm text-emitter ticket
-  (`feature-i386-asm-emitter` / `feature-rv32-asm-emitter` /
-  `feature-aarch64-asm-emitter` / `feature-arm32-asm-emitter`) — claim that one
-  ticket, touch only the files its scope names, do not roam into other tickets or
-  backends, and stop at the ticket's byte-identity acceptance gate. The earlier
-  ban (2026-06-12) was a tooling-reliability issue: that run exhausted its tokens
-  roaming across source files, leaving mixed unreviewed WIP that needed
-  quarantine. The bounded scope + fixed encoding oracle (llvm-mc) are the
-  guardrails for this trial. Not a judgment on the underlying model.
-- Trial outcome (2026-06-14, see `agents/discussion/antigravity-asm-emitter-retro.md`):
-  it delivered all four emitters **functionally correct** (QEMU green, bootstrap
-  byte-identical) but with poor structure — a 5x monolith in `asmtext.inc` plus
-  dead duplicate files, tests pointing at the dead copies, tests not wired into
-  `make`. Verdict: fast, useful raw output, weak engineering discipline; keep it
-  scoped + reviewed, and bake **structural** acceptance into the ticket (file
-  layout, no duplication, tests include shipped code + wired into `make`) — not
-  just functional gates. Cleanup tracked in `chore-asmtext-per-platform-split`
-  (Claude-owned).
+- **Antigravity CLI is not allowed on this repository** (re-banned 2026-06-14
+  after a scoped trial). Do not claim tickets, edit files, or run tasks with it.
+- Why, final: it was briefly unbanned for one scoped trial (the per-target asm
+  emitters). It delivered all four **functionally correct** (QEMU green,
+  bootstrap byte-identical) — fast — but with poor structure: a 5x monolith in
+  `asmtext.inc`, dead duplicate files, tests pointing at the dead copies, no
+  `make` wiring (see `agents/discussion/antigravity-asm-emitter-retro.md`). The
+  cleanup (`chore-asmtext-per-platform-split`) cost about as much as writing the
+  emitters from scratch. Decisive reason: Antigravity needs continuous
+  babysitting, and **the goal here is to amplify thoughts into code, not to
+  supervise an agent.** A tool that nets zero after its own cleanup overhead
+  fails that goal. Re-banned — not a verdict on the raw model speed, a verdict
+  on the supervision cost.
+- The "Operating manual" below is kept as the **bar it failed** — the
+  non-negotiable conditions that would be required if it is ever reconsidered.
+  It did not meet them autonomously, and meeting them for it is the babysitting
+  we are declining.
 
-## Operating manual for Antigravity
+## Operating manual for Antigravity (currently banned — kept as the failed bar)
 
-Distilled from the 2026-06-14 emitter trial. Antigravity writes strong *local*
-code fast but has **no global stewardship**: it duplicates instead of factoring,
-ignores existing structure and precedent, and treats tests as a checkbox. Fence
-the global decisions; let it do bounded local work. Whoever dispatches it owns
-these rules.
+Antigravity is banned (see Access restrictions). This section is retained as the
+conditions that would have to hold to reconsider it — it met none of them
+autonomously. Distilled from the 2026-06-14 emitter trial. Antigravity writes
+strong *local* code fast but has **no global stewardship**: it duplicates
+instead of factoring, ignores existing structure and precedent, and treats tests
+as a checkbox. The supervision needed to compensate is the babysitting this
+project declines.
 
 **Use it for:** mechanical, single-file, fully-specified work against a fixed
 oracle — encode-this-ISA, convert-these-N-named-blocks, fill-a-mnemonic-table,

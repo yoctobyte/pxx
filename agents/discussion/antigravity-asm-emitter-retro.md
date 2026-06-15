@@ -55,7 +55,11 @@ work. Functional acceptance gates were not enough — next time the gate must al
 assert structure (file layout, no duplication, tests include shipped code, tests
 wired into `make`).
 
-Keep it unbanned but supervised, with structural acceptance baked into the
-ticket. The cleanup of this trial's output is tracked in
-`chore-asmtext-per-platform-split` — **Claude-owned**, since it is exactly the
-factoring discipline this trial showed Antigravity lacks.
+**Decision (2026-06-14): re-banned.** The supervision + cleanup overhead cost
+about as much as writing the emitters from scratch would have. The goal of this
+project's agent setup is to amplify thoughts into code, not to babysit — a tool
+that nets zero after its own mess fails that goal regardless of raw speed. The
+structural acceptance criteria are preserved as the "Operating manual" in
+`agents/AGENTS.md` (the bar it failed), not as an invitation to retry. Cleanup of
+this trial's output is tracked in `chore-asmtext-per-platform-split` (done,
+Claude-owned) — exactly the factoring discipline this trial showed it lacks.

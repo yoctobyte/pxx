@@ -22,12 +22,15 @@ self-reflect. It let its agents go rogue until we ran out of tokens, with no
 real work done apart from creating chaos. Even the other agents noticed and/or
 had to clean up shit. Gemini 3.5 is fantastic, though.
 
-Update: Antigravity is unbanned. It gets another shot, scoped tightly — one of
-the per-target asm text emitters (EmitAsm386 / EmitAsmRv32 / EmitAsmA64 /
-EmitAsmArm32), with a clear ticket, a precedent to copy, and a hard
-byte-identity acceptance gate. Bounded scope and a fixed oracle are exactly the
-guardrails its looping needed. We'll see. So, Google... maybe stop
-antigoogling.
+Update: I unbanned Antigravity for one scoped trial — a per-target asm emitter,
+clear ticket, precedent to copy, hard byte-identity gate. It delivered all four
+emitters and they work (QEMU green, byte-identical bootstrap). Fast. But it
+dumped everything into one monolith, duplicated files, and pointed its own tests
+at the dead copies. The cleanup cost about as much as writing the emitters would
+have. So I re-banned it. The point of this whole setup is to amplify my thoughts
+into code, not to babysit an agent that nets zero after its own mess. Speed
+doesn't matter if I have to supervise every line and refactor it after. So,
+Google... stop antigoogling.
 
 As for the project goals: wide and ambitious. That's all I can say for now.
 They will probably be drawn back to earth by gravity. Pun not intended.
