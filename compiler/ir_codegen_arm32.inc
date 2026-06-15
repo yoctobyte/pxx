@@ -457,7 +457,7 @@ var
   lhsTk, rhsTk: TTypeKind;
   sVal: AnsiString;
   tk: TTypeKind;
-  sgn: Boolean;
+  sgn, savedLValueWrite: Boolean;
 begin
   if node = -1 then Exit;
   case IRKind[node] of
@@ -1277,6 +1277,28 @@ begin
         lo := IRC[node];
         elemSize := Integer(IRIVal[node]);
         IREmitNodeArm32(left);      { base address -> r0 }
+        if ((IRKind[left] = IR_LEA) and (Syms[IRA[left]].TypeKind = tyAnsiString) and
+            not Syms[IRA[left]].IsArray) or
+           (((IRKind[left] = IR_FIELD) or (IRKind[left] = IR_INDEX)) and
+            (IRTk[left] = Ord(tyAnsiString)) and (elemSize = 1)) then
+        begin
+          { Managed string in write position: clone-if-shared so the index write
+            does not mutate a buffer still aliased by another handle. r0 holds the
+            slot address (write-mode IR_LEA); PXXStrUnique publishes a unique
+            handle into the slot and returns it. Read position just loads the
+            handle. Mirrors i386 IR_INDEX. }
+          if InLValueWrite then
+          begin
+            pi := FindProc('PXXStrUnique');
+            if pi < 0 then Error('compiler error: PXXStrUnique not found');
+            EmitCallProc(pi);       { r0 (slot addr) -> r0 unique handle }
+          end
+          else if (IRKind[left] = IR_LEA) and (Syms[IRA[left]].Kind = skParam) and
+                  Syms[IRA[left]].IsRef then
+            EmitI32($E5900000)      { ldr r0, [r0] (&handle -> handle) }
+          else if (IRKind[left] = IR_FIELD) or (IRKind[left] = IR_INDEX) then
+            EmitI32($E5900000);     { ldr r0, [r0] = handle }
+        end;
         EmitI32($E92D0001);         { push {r0} }
         IREmitNodeArm32(right);     { index -> r0 }
         if lo <> 0 then
@@ -1340,7 +1362,10 @@ begin
           valNode := IRB[node];
           EmitAnsiStringFromNodeArm32(valNode); { r0 = new }
           EmitI32($E92D0001);                   { push {r0} new }
+          savedLValueWrite := InLValueWrite;
+          InLValueWrite := True;
           IREmitNodeArm32(IRA[node]);           { r0 = slot address }
+          InLValueWrite := savedLValueWrite;
           EmitI32($E1A01000);                   { mov r1, r0 }
           EmitI32($E5910000);                   { ldr r0, [r1] old }
           EmitI32($E59D2000);                   { ldr r2, [sp] new }
@@ -1355,7 +1380,10 @@ begin
           if not TypeIsFloat(IntToTypeKind(IRTk[IRB[node]])) then
             EmitIntToD0Arm32;
           EmitI32($ED2D0B02);                       { vpush {d0} }
+          savedLValueWrite := InLValueWrite;
+          InLValueWrite := True;
           IREmitNodeArm32(IRA[node]);               { address -> r0 }
+          InLValueWrite := savedLValueWrite;
           EmitI32($ECBD0B02);                       { vpop {d0} }
           if tk = tySingle then
           begin
@@ -1371,7 +1399,10 @@ begin
           Error('target arm32: store through pointer of this type not yet supported');
         IREmitNodeArm32(IRB[node]); { value -> r0 }
         EmitI32($E92D0001);         { push {r0} }
+        savedLValueWrite := InLValueWrite;
+        InLValueWrite := True;
         IREmitNodeArm32(IRA[node]); { address -> r0 }
+        InLValueWrite := savedLValueWrite;
         EmitI32($E8BD0002);         { pop {r1} (value) }
         sz := TypeSize(tk);
         if sz = 1 then EmitI32($E5C01000)      { strb r1, [r0] }
