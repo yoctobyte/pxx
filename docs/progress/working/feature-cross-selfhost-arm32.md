@@ -96,3 +96,51 @@ segfaults under QEMU (`rc=139`) before producing a comparable output.
   data pointer. Next: confirm by watching sp vs the mapped stack bound under
   qemu (and/or check for an ARM32 frame-size / sp-adjust bug in a hot recursive
   proc); map `0x0837cc90`/`0x083b1744` to procs by structure.
+- 2026-06-15 — **HELLO MILESTONE ACHIEVED (byte-identical).** Chased the
+  deeper SIGSEGV; it was three distinct ARM32 codegen bugs, each surfaced and
+  fixed in turn:
+  1. **Frame size > 255 bytes corrupted sp** (commit e9290e1). The faulting
+     `stmfd sp!,{r0}` was an expression-eval push; sp was garbage because
+     `PatchProcPrologue` ORed the raw frame byte count into ARM's *rotated*
+     imm8 field. A 1376-byte (0x560) frame encoded as `0x60 ror 10 =
+     0x18000000` (384 MB). Fixed by loading the frame size from a literal pool
+     into r9 and `sub sp,sp,r9` (any 32-bit frame).
+  2. **Open-array / string / set param base address** (commit a3b1f70).
+     `EmitLoadVarAddrArm32` loaded the slot (caller pointer) only for `IsRef`
+     params; an open-array `const x: array of AnsiString` also passes a pointer
+     but ARM32 took the slot *address*. Indexing read the stack frame → empty
+     elements + a scope-exit DecRef of garbage. Extended the branch to
+     `IsRef or IsArray or tyString or tySet` (mirrors i386). Surfaced in
+     RegisterProc (`const pnames: array of AnsiString`). Test
+     `test/test_cross_openarray_string.pas`.
+  3. **Stack-passed args (5th+ parameter) corrupted** (commit 861e4c7). The
+     caller did `add sp,sp,#16` before the call to "leave stack args at [sp]",
+     but stack args sit at the *low* end, so a register arg was left at [sp]
+     and the callee read the wrong slot. With a stack-passed open array its
+     pointer came back as a scalar (1) → segfault. Fixed both sides: caller
+     keeps all args pushed for nArgs>4 (argN at [sp]) and drops nArgs*4 after
+     the call; callee reads stack arg i at `[fp+8+(nparams-1-i)*4]`. Verified
+     1/2/3 stack args. Test `test/test_cross_stack_params.pas`.
+  After all three: `tools/run_target.sh arm32 /tmp/compiler_arm32
+  -dPXX_MANAGED_STRING --target=x86_64 test/hello.pas /tmp/out` runs the ARM32
+  compiler under QEMU, emits x86-64 **byte-identical** to native pascal26, and
+  the result prints `Hello, World!`. First three acceptance bullets DONE.
+- 2026-06-15 — **self-fixedpoint wall = ARM32 has no Int64 codegen.** The
+  ARM32-hosted compiler compiles `compiler.pas -> arm32` to completion
+  (rc=0, full 3.6 MB binary, 862 procs) but the output diverges from the
+  native-emitted arm32 compiler by ~7424 code bytes. First diff (byte 51471) is
+  a double-literal constant: native emits `1e15`, the arm32-hosted compiler
+  emits `0.0`. Isolated: the arm32-hosted compiler parses **every** float
+  literal to 0.0 (even `1234.5`). Root cause is the lexer's manual float-bits
+  routine (`lexer.inc` ~240-332), which needs real 64-bit integer arithmetic —
+  and **ARM32 integer codegen is 32-bit-only**:
+  - `IR_CONST_INT` (`ir_codegen_arm32.inc` ~484) loads only the low 32 bits via
+    `EmitLoadImmArm32` (Int32 param), so `$8000000000000` (2^51) → 0.
+  - `IR_BINOP` (~832-851) is all single-register r0/r1: `mul r0,r1,r0` is 32-bit,
+    `lsl r0,r0,r1` is a 32-bit shift (shift ≥32 → 0, so `x shl 52` → 0).
+  Minimal repro: `a:=1033; b:=$10000000000000; writeln(a*b)` → arm32 prints 0
+  (x86-64: 4652218415073722368); `12345*5` is correct (fits 32-bit). Next arc:
+  implement ARM32 Int64 as an r0:r1 (lo:hi) register pair — 64-bit const load,
+  load/store, add/sub/mul/shl/shr/div/mod/compare — mirroring the i386 edx:eax
+  model. That unblocks the float-literal parser and the byte-identical
+  self-fixedpoint.
