@@ -1,7 +1,7 @@
 # Cross self-host bootstrap (compiler.pas → byte-identical under QEMU)
 
 - **Type:** feature
-- **Status:** working
+- **Status:** done
 - **Owner:** —
 - **Blocked-by:** feature-cross-selfhost-i386, feature-cross-selfhost-aarch64, feature-cross-selfhost-arm32
 - **Unblocks:** —
@@ -115,3 +115,11 @@ A `make cross-bootstrap-<arch>` target per cross arch:
   convention. Full diagnosis + reusable native-gdb recipe in
   `feature-cross-selfhost-i386` (2026-06-15 Log). Remaining work to close this
   rollup = that i386 open-array ABI unification, then promote the i386 gate.
+- 2026-06-15 (later) — **DONE. All three cross targets self-fixedpoint
+  byte-identical.** The i386 wall (open-array param ABI) was two i386 codegen
+  bugs, both fixed (commits 70be0f2 open-array param stack width; 2bbb562
+  var/by-ref Int64 arg push — see `feature-cross-selfhost-i386` Log). The i386
+  gate is promoted from xfail to VOTING. `make cross-bootstrap` now runs
+  `cross-bootstrap-{i386,aarch64,arm32}`, each compiling `compiler.pas →
+  <arch> (native) → compiler.pas → <arch> (self)` and `cmp`-ing byte-identical
+  (all procs=871). `make test{,-i386,-aarch64,-arm32}` green. Rollup closed.

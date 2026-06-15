@@ -275,3 +275,32 @@ foundation task before more self-host patching.
   unbuffered (direct syscall), so markers before a crash do print — but i386
   codegen is parse-interleaved (no single `IREmitMachineCode386` driver call),
   so a marker in that whole-program driver never fires.
+
+- 2026-06-15 (later, SAME DAY) — **#4 DONE for real: i386 self-fixedpoint
+  byte-identical again.** The open-array param ABI wall (above) was two distinct
+  i386 bugs, both now fixed:
+  1. **Open-array param stack width** (commit 70be0f2, `parser.inc` ~5822). The
+     callee param-homing counted every open-array param as one 4-byte slot when
+     computing the displacement of params declared BEFORE it. But the caller
+     dispatches an open-array argument on its element type: a 64-bit element
+     (Int64/UInt64/Double) is pushed via the 8-byte path (two slots), while
+     `array of const` (a single handle) and 32-bit-element open arrays are one
+     slot. Count 8 when the element is 64-bit, else 4 — matching the caller.
+     (This is why `line` before `holes: array of Int64` in `AsmTextLine386` read
+     a -1 handle and crashed.)
+  2. **var/by-ref Int64 arg push** (commit 2bbb562, `ir_codegen386.inc` ~1986).
+     The caller pushed ANY 64-bit-TypeKind param via the two-dword Int64 path,
+     including a by-ref `var x: Int64`, which the callee homes as a single
+     address word — so the extra word shifted every following arg. In
+     `AsmTextOperand(...; var immVal: Int64)` that handed the callee a length-0
+     `holes` and garbage `holeCur` → "empty operand". Fix: only by-value scalars
+     and open arrays take the two-word push (`IsArray or not IsRef`).
+  Result: `compiler.pas --target=i386 (native) -> compiler.pas --target=i386
+  (self)` is byte-identical (procs=871), and the self-emitted i386 compiler
+  builds hello → x86-64 byte-identical and runs. `make cross-bootstrap-i386` is
+  now a VOTING gate (no longer xfail). `make test{,-i386,-aarch64,-arm32}` green.
+  Note: `Length()` over a regular `array of T` open array is still unreliable on
+  i386 (no real high word is passed — the 64-bit-element 2-word push carries the
+  sign-extended data pointer, not the length); the compiler never calls it
+  (holes is index-accessed, nHoles passed separately), so it does not block
+  self-host. Tracked as a separate latent gap.
