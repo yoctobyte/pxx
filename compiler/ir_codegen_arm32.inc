@@ -1600,8 +1600,12 @@ begin
           end
           else if (pi >= 0) and (nArgs < Procs[pi].ParamCount) and
                   ((Procs[pi].Params[nArgs].TypeKind = tyInt64) or
-                   (Procs[pi].Params[nArgs].TypeKind = tyUInt64)) then
+                   (Procs[pi].Params[nArgs].TypeKind = tyUInt64)) and
+                  (not Procs[pi].Params[nArgs].IsRef) and
+                  (not Procs[pi].Params[nArgs].IsArray) then
           begin
+            { By-value Int64: pass the full 64 bits as two words (lo then hi).
+              A by-ref/open-array Int64 param is just a pointer (falls through). }
             EmitNode64Arm32(IRA[argNode]);  { r0=lo, r1=hi }
             EmitI32($E92D0001); { push {r0} (lo = word j) }
             EmitI32($E92D0002); { push {r1} (hi = word j+1) }

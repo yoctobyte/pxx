@@ -919,7 +919,10 @@ test-arm32: $(COMPILER)
 	./$(COMPILER) --target=arm32 test/test_cross_int64.pas /tmp/test_arm32_int64
 	./$(COMPILER) test/test_cross_int64.pas /tmp/test_arm32_int64_x64
 	test "$$(tools/run_target.sh arm32 /tmp/test_arm32_int64)" = "$$(/tmp/test_arm32_int64_x64)"
-	@echo "arm32 hello + arith + procs + loops + write + varparam + syscall + heap + string + record + dynarray + exception + float + args + variant + strresult + setlen-str + str-length-index + in-operator + managed-aggregate-locals + loadfile + sysopen-family + string-cow + var-string-param + openarray-string + stack-params + int64 ok (output identical to x86-64)"
+	./$(COMPILER) -dPXX_MANAGED_STRING --target=arm32 test/test_cross_int64_byref.pas /tmp/test_arm32_int64_byref
+	./$(COMPILER) -dPXX_MANAGED_STRING test/test_cross_int64_byref.pas /tmp/test_arm32_int64_byref_x64
+	test "$$(tools/run_target.sh arm32 /tmp/test_arm32_int64_byref)" = "$$(/tmp/test_arm32_int64_byref_x64)"
+	@echo "arm32 hello + arith + procs + loops + write + varparam + syscall + heap + string + record + dynarray + exception + float + args + variant + strresult + setlen-str + str-length-index + in-operator + managed-aggregate-locals + loadfile + sysopen-family + string-cow + var-string-param + openarray-string + stack-params + int64 + int64-byref ok (output identical to x86-64)"
 
 # Relocatable .o emission for the esp32-idf profile (feature-elf-rel-writer).
 # Host-only checks via binutils readelf; if the ESP cross toolchains are

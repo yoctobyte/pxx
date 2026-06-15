@@ -5903,10 +5903,14 @@ begin
       stack at [fp + 8 + (pnWords-1-k)*4] (the caller pushed words in index
       order, leaving the lowest-index stack word at the highest address; see
       ir_codegen_arm32.inc IR_CALL). }
+    { A by-ref or open-array Int64 param is a single pointer word, not a 64-bit
+      value, so only count/spill it as two words when passed by value. }
     pnWords := 0;
     for i := 0 to nparams-1 do
-      if (Procs[pi].Params[i].TypeKind = tyInt64) or
-         (Procs[pi].Params[i].TypeKind = tyUInt64) then Inc(pnWords, 2)
+      if ((Procs[pi].Params[i].TypeKind = tyInt64) or
+          (Procs[pi].Params[i].TypeKind = tyUInt64)) and
+         (not Procs[pi].Params[i].IsRef) and (not Procs[pi].Params[i].IsArray) then
+        Inc(pnWords, 2)
       else Inc(pnWords, 1);
     pw := 0;
     for i := 0 to nparams-1 do
@@ -5915,7 +5919,8 @@ begin
       sz := ParamSize(idx);
       EmitLoadImmArm32(9, Syms[idx].Offset);
       EmitI32($E08B9009);   { add r9, fp, r9 (slot addr) }
-      if (Syms[idx].TypeKind = tyInt64) or (Syms[idx].TypeKind = tyUInt64) then
+      if ((Syms[idx].TypeKind = tyInt64) or (Syms[idx].TypeKind = tyUInt64)) and
+         (not Syms[idx].IsRef) and (not Syms[idx].IsArray) then
       begin
         { lo = word pw -> [r9]; hi = word pw+1 -> [r9, #4] }
         if pw < 4 then EmitI32($E5890000 or (pw shl 12))
