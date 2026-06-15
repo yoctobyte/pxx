@@ -171,3 +171,34 @@ segfaults under QEMU (`rc=139`) before producing a comparable output.
   high word differs from x86-64 (suspect an uninitialised Int64 local/slot, or an
   Int64 produced by a 32-bit path without widening); fix that, then re-check hello
   byte-identical and float-literal -> self-fixedpoint.
+- 2026-06-15 — **"64-bit compare issue" ROOT-CAUSED + FIXED** (commit afc7ca0). It
+  was *not* the compare codegen — it was `IR_SYSCALL` not sign-extending its
+  result. `__pxxrawsyscall` is typed Int64, but the ARM32 emitter left the kernel's
+  32-bit r0 result with a garbage high word. Once Int64 became a true 64-bit type,
+  a negative syscall return (-errno) read as a large *positive* Int64, so
+  `if fd < 0 then Exit` in PXXStrLoadFile/PXXSysOpenRO never fired: a failed open
+  (-2) gave `0x00000000FFFFFFFE > 0`, and the helper ran lseek/read/close on a dead
+  fd, corrupting state during every failed unit-path probe → couldn't find
+  builtinheap.pas → "unexpected character". Fix: `mov r1, r0, asr #31` after `svc`.
+  Diagnosis method that cracked it: `qemu-arm -strace` of the broken vs the
+  compares-routed-to-32bit build, diffed at the first divergent syscall — broken did
+  lseek/read on fd=-2 where working skipped them (guard failed). Result: hello
+  self-host **byte-identical** again AND float literals now parse correctly on the
+  arm32-hosted compiler (1e15 / 1234.5 / 3.14159265, not 0.0). make test +
+  test-arm32 + test-i386 green. (Lesson: every signed value that arrives in a single
+  register but is typed Int64 — syscall returns especially — must be sign-extended
+  into the high word; the compares were a red herring, they just *read* the bad
+  high word.)
+- 2026-06-15 — **new wall: full self-fixedpoint SIGSEGV (deep).** With the syscall
+  fix, the arm32-hosted compiler now reads compiler.pas + all its `.inc`s and
+  compiles deep, then SIGSEGVs at `ldr r0,[r0,#-8]` (managed-string Length) with the
+  handle = `0xFFFFFFFF` (-1) — the nil guard only checks `=0`, so a -1 handle slips
+  through and derefs `[-9]`. fp-chain: fault proc `0x8190c2c` (its 1st param, a
+  managed string, is -1) <- `0x819d43c` <- `0x819e0d4` <- `0x82e4098` <- `0x82fa6e8`.
+  Single 256 MB heap mmap (no alloc failure). So a managed-string ARG of -1 is built
+  several call levels up. This is an Int64-introduced regression (before the Int64
+  arc the full self-compile *completed*, rc=0, only diverging on the 0.0 floats).
+  Next: walk the caller chain (the -1 string is the caller's local `[fp-32]`) to the
+  origin — suspect a function that returns a managed string but yields -1 on an
+  error/sentinel path, or an Int64/pointer value of -1 stored into a string slot;
+  fix the origin, then re-attempt compiler.pas -> arm32 byte-identical fixedpoint.
