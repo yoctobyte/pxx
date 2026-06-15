@@ -144,3 +144,30 @@ segfaults under QEMU (`rc=139`) before producing a comparable output.
   load/store, add/sub/mul/shl/shr/div/mod/compare — mirroring the i386 edx:eax
   model. That unblocks the float-literal parser and the byte-identical
   self-fixedpoint.
+- 2026-06-15 — **ARM32 Int64 codegen implemented** (commit 53456f3): r0:r1
+  register-pair model — const/load/store/add/sub/mul/shl/shr/div/mod/compare,
+  Int64 args+returns (word-based calling convention), writeln, Trunc/Round->Int64.
+  Verified vs the x86-64 oracle (test/test_cross_int64.pas + edge-case compare and
+  param/return stress tests, wired into make test-arm32). make test + test-arm32 +
+  test-i386 all green.
+  **This regressed the hello self-host milestone.** Enabling true 64-bit *compares*
+  makes the arm32-emitted compiler fail to load builtinheap.pas
+  (`pascal26:1: error: unexpected character ()`); the source reads fine (22 bytes)
+  but the unit search's LoadFile then issues a corrupted `read(-2,buf,-9)`.
+  Bisection: routing Int64 compares back to a 32-bit low-word comparison makes the
+  self-host work again — but then the float-literal parser reparses everything to
+  0.0 (it needs real 64-bit compares). So the self-host needs *correct* 64-bit
+  compares yet can't survive them.
+  Diagnosis: the compare LOGIC is correct (matches the oracle on all signed/unsigned
+  edge cases) and i386 uses the identical scheme and self-hosts, so the cause is a
+  wrong/uninitialised Int64 **high word** produced by some compiler-internal path,
+  only observed once compares read the full 64 bits (a 32-bit low-word compare
+  ignores it). NOT a register clobber (r2..r12 preservation around EmitBinop64
+  tested, no effect). NOT the boolean result high word (clearing r1 after compares,
+  no effect). Every isolated Int64 pattern tested (mem compares with bit31-set/
+  negative values, returns-in-compares, params) matches the oracle — the breaking
+  pattern is compiler-specific and not yet reproduced small.
+  Next: gdb the arm32-hosted compiler to find the first Int64 compare whose operand
+  high word differs from x86-64 (suspect an uninitialised Int64 local/slot, or an
+  Int64 produced by a 32-bit path without widening); fix that, then re-check hello
+  byte-identical and float-literal -> self-fixedpoint.
