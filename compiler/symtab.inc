@@ -3101,13 +3101,25 @@ begin
 end;
 
 procedure PatchProcPrologue(patchPos, size: Integer);
-var aligned: Integer;
+var aligned, a64imm: Integer;
 begin
   aligned := ((size + 15) div 16) * 16;
   if TargetArch = TARGET_ARM32 then
     Patch32(patchPos, aligned)  { raw frame-size literal; loaded into r9, then sub sp,sp,r9 }
   else if TargetArch = TARGET_AARCH64 then
-    Patch32(patchPos, $D10003FF or (aligned shl 10))
+  begin
+    { AArch64 `sub sp,sp,#imm` is a 12-bit immediate optionally shifted left 12.
+      Frames <= 4095 use it directly; larger frames round up to a 4096 multiple
+      and use the LSL #12 form (sh bit = bit 22). The epilog restores via
+      `mov sp, x29`, so over-reserving the round-up slack is harmless. }
+    if aligned <= 4095 then
+      Patch32(patchPos, $D10003FF or (aligned shl 10))
+    else
+    begin
+      a64imm := (aligned + 4095) div 4096;   { units of 4096, <= 4095 (frame < 16 MB) }
+      Patch32(patchPos, $D14003FF or (a64imm shl 10));
+    end;
+  end
   else if TargetArch = TARGET_XTENSA then
     Patch24(patchPos, EncodeXtensaAddi(reg_xtensa_sp, reg_xtensa_sp, -aligned))
   else if TargetArch = TARGET_RISCV32 then
