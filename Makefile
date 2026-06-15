@@ -24,7 +24,7 @@ FROZEN_PXXFLAGS := -uPXX_MANAGED_STRING
 
 .PHONY: all bootstrap bootstrap-check fpc-check test test-core test-asm-emit test-nilpy qemu-env-check test-i386 test-aarch64 test-arm32 test-emit-obj stabilize check-stable revert benchmark benchmark-compiler-runtime benchmark-check clean distclean symbols \
         bootstrap-managed bootstrap-frozen test-managed test-frozen stabilize-managed stabilize-frozen check-stable-managed revert-managed test-nilpy-managed test-nilpy-frozen \
-        progress-check
+        progress-check cross-bootstrap cross-bootstrap-aarch64 cross-bootstrap-arm32 cross-bootstrap-i386
 
 all: $(COMPILER)
 
@@ -931,6 +931,38 @@ test-arm32: $(COMPILER)
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_cross_int64_byref.pas /tmp/test_arm32_int64_byref_x64
 	test "$$(tools/run_target.sh arm32 /tmp/test_arm32_int64_byref)" = "$$(/tmp/test_arm32_int64_byref_x64)"
 	@echo "arm32 hello + arith + procs + loops + write + varparam + syscall + heap + string + record + dynarray + exception + float + args + variant + strresult + setlen-str + str-length-index + in-operator + managed-aggregate-locals + loadfile + sysopen-family + string-cow + var-string-param + openarray-string + stack-params + int64 + int64-byref ok (output identical to x86-64)"
+
+# ----- Cross self-host bootstrap gates (feature-cross-bootstrap-selfhost) -----
+# Triple-stage proof: native cross-compiles compiler.pas -> <arch>; that binary,
+# run under QEMU, compiles compiler.pas -> <arch> again; the two outputs must be
+# byte-identical. Managed runtime (-dPXX_MANAGED_STRING) is required.
+CROSS_BOOTSTRAP_FLAGS := -dPXX_MANAGED_STRING
+
+cross-bootstrap-aarch64: $(COMPILER)
+	./$(COMPILER) $(CROSS_BOOTSTRAP_FLAGS) --target=aarch64 compiler/compiler.pas /tmp/pc_aarch64
+	tools/run_target.sh aarch64 /tmp/pc_aarch64 $(CROSS_BOOTSTRAP_FLAGS) --target=aarch64 compiler/compiler.pas /tmp/pc_aarch64_2
+	cmp /tmp/pc_aarch64 /tmp/pc_aarch64_2
+	@echo "aarch64 cross self-host: byte-identical self-fixedpoint OK"
+
+cross-bootstrap-arm32: $(COMPILER)
+	./$(COMPILER) $(CROSS_BOOTSTRAP_FLAGS) --target=arm32 compiler/compiler.pas /tmp/pc_arm32
+	tools/run_target.sh arm32 /tmp/pc_arm32 $(CROSS_BOOTSTRAP_FLAGS) --target=arm32 compiler/compiler.pas /tmp/pc_arm32_2
+	cmp /tmp/pc_arm32 /tmp/pc_arm32_2
+	@echo "arm32 cross self-host: byte-identical self-fixedpoint OK"
+
+# i386 is an xfail gate: stage-1 emits, but the i386-hosted compiler still
+# truncates Int64 by-value params (float-bit high dwords), so the full
+# compiler.pas self-compile diverges/crashes. Prints the blocker, never fails
+# the build. See feature-cross-selfhost-i386 "Current wall".
+cross-bootstrap-i386: $(COMPILER)
+	@./$(COMPILER) $(CROSS_BOOTSTRAP_FLAGS) --target=i386 compiler/compiler.pas /tmp/pc_i386 >/dev/null 2>&1 \
+	  && tools/run_target.sh i386 /tmp/pc_i386 $(CROSS_BOOTSTRAP_FLAGS) --target=i386 compiler/compiler.pas /tmp/pc_i386_2 >/dev/null 2>&1 \
+	  && cmp /tmp/pc_i386 /tmp/pc_i386_2 >/dev/null 2>&1 \
+	  && echo "i386 cross self-host: byte-identical self-fixedpoint OK (xfail gate now PASSES — promote it)" \
+	  || echo "i386 cross self-host: XFAIL (blocked on Int64 by-value param ABI; see feature-cross-selfhost-i386)"
+
+cross-bootstrap: cross-bootstrap-aarch64 cross-bootstrap-arm32 cross-bootstrap-i386
+	@echo "cross-bootstrap: aarch64 + arm32 byte-identical; i386 xfail"
 
 # Relocatable .o emission for the esp32-idf profile (feature-elf-rel-writer).
 # Host-only checks via binutils readelf; if the ESP cross toolchains are

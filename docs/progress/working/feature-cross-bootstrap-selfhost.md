@@ -1,7 +1,7 @@
 # Cross self-host bootstrap (compiler.pas → byte-identical under QEMU)
 
 - **Type:** feature
-- **Status:** backlog
+- **Status:** working
 - **Owner:** —
 - **Blocked-by:** feature-cross-selfhost-i386, feature-cross-selfhost-aarch64, feature-cross-selfhost-arm32
 - **Unblocks:** —
@@ -93,3 +93,19 @@ A `make cross-bootstrap-<arch>` target per cross arch:
   but the full chain is not. Opened per-platform child tickets for i386,
   AArch64, and ARM32 after direct probes showed i386/ARM32 segfaulting and
   AArch64 failing with `Pascal define storage overflow`.
+- 2026-06-15 — **AArch64 + ARM32 full self-fixedpoint byte-identical; i386 still
+  blocked.** Both child tickets `feature-cross-selfhost-arm32` and
+  `feature-cross-selfhost-aarch64` are done; verified end-to-end here:
+  `compiler.pas → <arch> (native) → compiler.pas → <arch> (self)` is
+  byte-identical for aarch64 (procs=871) and arm32 (procs=871). Wired voting
+  gates `make cross-bootstrap-aarch64` and `make cross-bootstrap-arm32` (plus a
+  `cross-bootstrap` umbrella). i386 child ticket is marked done at acceptance
+  #1-3 (hello byte-identical) but rollup acceptance #4 (full self-fixedpoint)
+  is NOT met: the i386-hosted full `compiler.pas` self-compile now **segfaults**
+  (rc 139) — the compiler grew (procs 794→871) past the point the standing
+  **Int64 by-value param truncation** wall just diverged. `cross-bootstrap-i386`
+  is wired as an **xfail gate** (prints the blocker, never fails the build).
+  Remaining work to close this rollup = finish i386 8-byte Int64 by-value param
+  ABI (option (b): NativeInt size/len params across ALL PXX protos/forwards; see
+  `feature-cross-selfhost-i386` "Current wall"). Then promote the i386 gate to
+  voting and close.
