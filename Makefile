@@ -950,19 +950,14 @@ cross-bootstrap-arm32: $(COMPILER)
 	cmp /tmp/pc_arm32 /tmp/pc_arm32_2
 	@echo "arm32 cross self-host: byte-identical self-fixedpoint OK"
 
-# i386 is an xfail gate: stage-1 emits, but the i386-hosted compiler still
-# truncates Int64 by-value params (float-bit high dwords), so the full
-# compiler.pas self-compile diverges/crashes. Prints the blocker, never fails
-# the build. See feature-cross-selfhost-i386 "Current wall".
 cross-bootstrap-i386: $(COMPILER)
-	@./$(COMPILER) $(CROSS_BOOTSTRAP_FLAGS) --target=i386 compiler/compiler.pas /tmp/pc_i386 >/dev/null 2>&1 \
-	  && tools/run_target.sh i386 /tmp/pc_i386 $(CROSS_BOOTSTRAP_FLAGS) --target=i386 compiler/compiler.pas /tmp/pc_i386_2 >/dev/null 2>&1 \
-	  && cmp /tmp/pc_i386 /tmp/pc_i386_2 >/dev/null 2>&1 \
-	  && echo "i386 cross self-host: byte-identical self-fixedpoint OK (xfail gate now PASSES — promote it)" \
-	  || echo "i386 cross self-host: XFAIL (blocked on i386 open-array param ABI; see feature-cross-selfhost-i386)"
+	./$(COMPILER) $(CROSS_BOOTSTRAP_FLAGS) --target=i386 compiler/compiler.pas /tmp/pc_i386
+	tools/run_target.sh i386 /tmp/pc_i386 $(CROSS_BOOTSTRAP_FLAGS) --target=i386 compiler/compiler.pas /tmp/pc_i386_2
+	cmp /tmp/pc_i386 /tmp/pc_i386_2
+	@echo "i386 cross self-host: byte-identical self-fixedpoint OK"
 
 cross-bootstrap: cross-bootstrap-aarch64 cross-bootstrap-arm32 cross-bootstrap-i386
-	@echo "cross-bootstrap: aarch64 + arm32 byte-identical; i386 xfail"
+	@echo "cross-bootstrap: i386 + aarch64 + arm32 all byte-identical self-fixedpoint"
 
 # Relocatable .o emission for the esp32-idf profile (feature-elf-rel-writer).
 # Host-only checks via binutils readelf; if the ESP cross toolchains are

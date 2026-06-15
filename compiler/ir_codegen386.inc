@@ -1984,7 +1984,8 @@ begin
         begin
           IREmitNode386(IRA[argNode]);
           if (pi >= 0) and (nArgs < Procs[pi].ParamCount) and
-             Is64Bit386(Procs[pi].Params[nArgs].TypeKind) then
+             Is64Bit386(Procs[pi].Params[nArgs].TypeKind) and
+             (Procs[pi].Params[nArgs].IsArray or not Procs[pi].Params[nArgs].IsRef) then
           begin
             { 64-bit by-value param: widen the (possibly 32-bit) value to
               edx:eax, then push both dwords (lo at the lower address). }
