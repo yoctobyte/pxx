@@ -1,7 +1,7 @@
 # Copy-on-write for managed strings on cross targets (i386 / ARM32 / AArch64)
 
 - **Type:** feature
-- **Status:** working
+- **Status:** done
 - **Owner:** codex
 - **Unblocks:** feature-cross-selfhost-i386, feature-cross-selfhost-arm32, feature-cross-selfhost-aarch64
 - **Opened:** 2026-06-13 (split out of i386 self-host burn-down)
@@ -148,3 +148,15 @@ be a second bug on top.
   gets past the LowerCase/COW and stale hidden-temp walls but still crashes
   later while parsing `builtinheap.pas`; track that under
   `feature-cross-selfhost-aarch64`.
+- 2026-06-15 — ARM32 index-write COW slice implemented (commit 2fbaca4);
+  **ticket DONE.** Mirrored
+  the i386/AArch64 path in `ir_codegen_arm32.inc`: `IR_STORE_MEM` (string/float/
+  scalar dest) now emits destination addresses with `InLValueWrite := True`, and
+  the `IR_INDEX` managed-string write branch calls `PXXStrUnique` (r0 = slot addr
+  → unique handle, AAPCS arg0) before computing the byte address; read position
+  loads the handle (with the by-ref-param deref case mirrored). Added
+  `test/test_cross_string_cow.pas` to `make test-arm32`. Verified the ticket
+  repro now prints `afterwrite=ZeapMmap` on all four targets (x86_64 / i386 /
+  arm32 / aarch64); `make test test-i386 test-arm32 test-aarch64` all green. COW
+  is complete for every cross target. Remaining self-host crashes are tracked in
+  `feature-cross-selfhost-arm32` / `feature-cross-selfhost-aarch64`, not here.

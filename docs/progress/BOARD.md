@@ -8,14 +8,13 @@ lives in git, not in a timestamp._
 
 _none_
 
-## working (5)
+## working (4)
 
 | Ticket | Type | Summary | Blocked-by |
 | --- | --- | --- | --- |
 | feature-cross-codegen-gaps | feature | Cross-target codegen gaps (deferred v1 shortcuts) | — |
 | feature-cross-compiler-probe-walls | feature | Cross compiler.pas probe walls | — |
 | feature-cross-managed-aggregate-locals | feature | Managed aggregate locals on cross targets | — |
-| feature-cross-managed-string-cow | feature | Copy-on-write for managed strings on cross targets (i386 / ARM32 / AArch64) | — |
 | feature-cross-param-abi | feature | Full parameter/result ABI on cross targets | — |
 
 ## backlog (36)
@@ -66,7 +65,7 @@ _none_
 | bug-nonreproducible-miscompile-2026-06-02 | bug | Non-reproducible one-off miscompile (2026-06-02) | — |
 | bug-whole-record-copy-main-body-noop | bug | Latent: whole-record array-element copy in main-program body emits store no-ops | — |
 
-## done (35)
+## done (36)
 
 | Ticket | Type | Summary | Blocked-by |
 | --- | --- | --- | --- |
@@ -85,6 +84,7 @@ _none_
 | feature-cross-exceptions | feature | Exception runtime on cross targets (i386 / ARM32 / AArch64) | — |
 | feature-cross-float-variant | feature | Float + Variant codegen on cross targets | — |
 | feature-cross-managed-aggregates | feature | Cross-target managed aggregates (records + dynamic arrays) | feature-rtti-layout-table |
+| feature-cross-managed-string-cow | feature | Copy-on-write for managed strings on cross targets (i386 / ARM32 / AArch64) | — |
 | feature-cross-selfhost-i386 | feature | Cross self-host: i386 generated compiler runs under Linux | — |
 | feature-elf-rel-writer | feature | Relocatable ELF32 object writer (.o for ESP-IDF linking) | — |
 | feature-esp32-idf-riscv32 | feature | ESP-IDF integration: riscv32 (ESP32-C3) end-to-end | feature-elf-rel-writer |
@@ -120,6 +120,8 @@ _none_
 - feature-async-coroutines
 - feature-c-header-import-complex
 - feature-compiler-warnings
+- feature-cross-selfhost-aarch64
+- feature-cross-selfhost-arm32
 - feature-directive-if-numeric
 - feature-dynamic-include-paths-config
 - feature-dynamic-soname-discovery
