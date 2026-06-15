@@ -8,6 +8,7 @@ procedure EmitAcquireHeapLock; forward;
 procedure EmitReleaseHeapLock; forward;
 procedure EmitLoadVarA64(idx: Integer); forward;
 procedure EmitLoadVarArm32(idx: Integer); forward;
+procedure EmitLoadVar64Arm32(idx: Integer); forward;
 procedure EmitLoadVarAddrArm32(idx: Integer); forward;
 procedure EmitLoadDataRefArm32(rd, dataOff: Integer); forward;
 procedure EmitLoadVarXtensa(idx: Integer); forward;
@@ -3327,7 +3328,11 @@ begin
            not (TypeIsOrdinal(Syms[retSymIdx].TypeKind) or
                 (Syms[retSymIdx].TypeKind in [tyAnsiString, tyPointer, tyClass])) then
           Error('target arm32: only ordinal/pointer/string function results supported yet');
-        EmitLoadVarArm32(retSymIdx);
+        if (Syms[retSymIdx].TypeKind = tyInt64) or
+           (Syms[retSymIdx].TypeKind = tyUInt64) then
+          EmitLoadVar64Arm32(retSymIdx)   { Int64 result in r0:r1 }
+        else
+          EmitLoadVarArm32(retSymIdx);
       end;
     end;
     EmitI32($E1A0D00B);  { mov sp, fp }

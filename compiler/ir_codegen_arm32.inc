@@ -210,6 +210,326 @@ begin
   EmitDataRef(dataOff);
 end;
 
+{ ===== 64-bit (Int64/UInt64) value model: r0:r1 = lo:hi register pair =====
+  Unlike the low-word fat-slot model for ordinary ordinals, true 8-byte values
+  live in r0(low):r1(high) while in flight, are loaded/stored as two words, and
+  have their own arithmetic/shift/compare sequences below. Mirrors the i386
+  edx:eax model (ir_codegen386.inc). Producers of a 64-bit-typed node leave
+  r0:r1; consumers needing only 32 bits keep r0 (correct truncation). }
+
+function Is64BitArm32(tk: TTypeKind): Boolean;
+begin
+  Result := (tk = tyInt64) or (tk = tyUInt64);
+end;
+
+procedure EmitLoadVar64Arm32(idx: Integer);
+{ Load an 8-byte slot into r0:r1 (lo:hi). r9 is the address scratch. }
+begin
+  if Syms[idx].Kind = skGlobal then
+  begin
+    EmitI32($E59F9000);  { ldr r9, [pc] }
+    EmitI32($EA000000);  { b .+8 }
+    EmitGlobRef(Syms[idx].Offset);
+  end
+  else
+  begin
+    EmitLoadImmArm32(9, Syms[idx].Offset);
+    EmitI32($E08B9009);  { add r9, fp, r9 }
+    if (Syms[idx].Kind = skParam) and Syms[idx].IsRef then
+      EmitI32($E5999000);  { ldr r9, [r9] (forwarded slot addr) }
+  end;
+  EmitI32($E5990000);  { ldr r0, [r9] (lo) }
+  EmitI32($E5991004);  { ldr r1, [r9, #4] (hi) }
+end;
+
+procedure EmitStoreVar64Arm32(idx: Integer);
+{ Store r0:r1 (lo:hi) into an 8-byte slot. r9 is the address scratch. }
+begin
+  if Syms[idx].Kind = skGlobal then
+  begin
+    EmitI32($E59F9000);  { ldr r9, [pc] }
+    EmitI32($EA000000);  { b .+8 }
+    EmitGlobRef(Syms[idx].Offset);
+  end
+  else
+  begin
+    EmitLoadImmArm32(9, Syms[idx].Offset);
+    EmitI32($E08B9009);  { add r9, fp, r9 }
+    if (Syms[idx].Kind = skParam) and Syms[idx].IsRef then
+      EmitI32($E5999000);  { ldr r9, [r9] }
+  end;
+  EmitI32($E5890000);  { str r0, [r9] (lo) }
+  EmitI32($E5891004);  { str r1, [r9, #4] (hi) }
+end;
+
+procedure EmitNode64Arm32(node: Integer);
+{ Emit node; guarantee its full 64-bit value sits in r0:r1. A 32-bit source is
+  widened: sign-extend (signed) or zero-extend (unsigned) into r1. }
+var ntk: TTypeKind;
+begin
+  IREmitNodeArm32(node);
+  ntk := IntToTypeKind(IRTk[node]);
+  if not Is64BitArm32(ntk) then
+  begin
+    if TypeSigned(ntk) then
+      EmitI32($E1A01FC0)   { mov r1, r0, asr #31 }
+    else
+      EmitI32($E3A01000);  { mov r1, #0 }
+  end;
+end;
+
+procedure EmitUDivMod64Arm32(wantMod: Boolean);
+{ Unsigned 64-bit divide. Pre: [sp]=N.lo, [sp+4]=N.hi (dividend); divisor in
+  r0:r1. Restoring binary long division, 64 iterations MSB-first. Post: the
+  8-byte dividend is popped; quotient (or remainder when wantMod) in r0:r1.
+  Clobbers r2..r6, r9. }
+var loopOff, skip1, jaOff, skip2: Integer;
+begin
+  EmitI32($E59D2000);  { ldr r2, [sp]    (NQ.lo) }
+  EmitI32($E59D3004);  { ldr r3, [sp, #4] (NQ.hi) }
+  EmitI32($E3A04000);  { mov r4, #0  (R.lo) }
+  EmitI32($E3A05000);  { mov r5, #0  (R.hi) }
+  EmitI32($E3A06040);  { mov r6, #64 (count) }
+  loopOff := CodeLen;
+  EmitI32($E1B02082);  { lsls r2, r2, #1 }
+  EmitI32($E0B33003);  { adcs r3, r3, r3 }
+  EmitI32($E0B44004);  { adcs r4, r4, r4 }
+  EmitI32($E0A55005);  { adc  r5, r5, r5 }
+  EmitI32($E1550001);  { cmp r5, r1  (R.hi vs D.hi) }
+  skip1 := CodeLen; EmitI32($3A000000);  { bcc .skip (R.hi < D.hi) }
+  jaOff := CodeLen;  EmitI32($8A000000);  { bhi .sub (R.hi > D.hi) }
+  EmitI32($E1540000);  { cmp r4, r0  (R.lo vs D.lo) }
+  skip2 := CodeLen; EmitI32($3A000000);  { bcc .skip }
+  Patch32(jaOff, $8A000000 or ((((CodeLen - jaOff) div 4) - 2) and $00ffffff));  { .sub: }
+  EmitI32($E0544000);  { subs r4, r4, r0 }
+  EmitI32($E0C55001);  { sbc  r5, r5, r1 }
+  EmitI32($E3822001);  { orr  r2, r2, #1 (quotient bit) }
+  Patch32(skip1, $3A000000 or ((((CodeLen - skip1) div 4) - 2) and $00ffffff));  { .skip: }
+  Patch32(skip2, $3A000000 or ((((CodeLen - skip2) div 4) - 2) and $00ffffff));
+  EmitI32($E2566001);  { subs r6, r6, #1 }
+  EmitI32($1A000000 or ((((loopOff - CodeLen) div 4) - 2) and $00ffffff));  { bne .loop }
+  EmitI32($E28DD008);  { add sp, sp, #8 (pop dividend) }
+  if wantMod then
+  begin
+    EmitI32($E1A00004);  { mov r0, r4 }
+    EmitI32($E1A01005);  { mov r1, r5 }
+  end
+  else
+  begin
+    EmitI32($E1A00002);  { mov r0, r2 }
+    EmitI32($E1A01003);  { mov r1, r3 }
+  end;
+end;
+
+procedure EmitIDivMod64Arm32(wantMod: Boolean);
+{ Signed 64-bit divide/mod, same calling convention as the unsigned core.
+  Truncated division: quotient sign = dividend xor divisor, remainder takes the
+  dividend's sign. Operands are made non-negative in place, the unsigned core
+  runs, then the result sign is applied. Sign flags live in r7 across the core
+  (the core does not touch r7). }
+var dpos, npos, doneOff: Integer;
+begin
+  EmitI32($E3A07000);  { mov r7, #0 (flags) }
+  EmitI32($E3510000);  { cmp r1, #0 (divisor sign) }
+  dpos := CodeLen; EmitI32($5A000000);  { bpl .dpos }
+  EmitI32($E2700000);  { rsbs r0, r0, #0 }
+  EmitI32($E2E11000);  { rsc  r1, r1, #0 (abs divisor) }
+  EmitI32($E2277001);  { eor  r7, r7, #1 (negate quotient) }
+  Patch32(dpos, $5A000000 or ((((CodeLen - dpos) div 4) - 2) and $00ffffff));  { .dpos: }
+  EmitI32($E59D2000);  { ldr r2, [sp]    (N.lo) }
+  EmitI32($E59D3004);  { ldr r3, [sp, #4] (N.hi) }
+  EmitI32($E3530000);  { cmp r3, #0 (dividend sign) }
+  npos := CodeLen; EmitI32($5A000000);  { bpl .npos }
+  EmitI32($E2722000);  { rsbs r2, r2, #0 }
+  EmitI32($E2E33000);  { rsc  r3, r3, #0 (abs dividend) }
+  EmitI32($E58D2000);  { str r2, [sp] }
+  EmitI32($E58D3004);  { str r3, [sp, #4] }
+  EmitI32($E2277001);  { eor r7, r7, #1 (flip quotient negate) }
+  EmitI32($E3877002);  { orr r7, r7, #2 (negate remainder) }
+  Patch32(npos, $5A000000 or ((((CodeLen - npos) div 4) - 2) and $00ffffff));  { .npos: }
+  EmitUDivMod64Arm32(wantMod);  { result in r0:r1 }
+  if wantMod then
+    EmitI32($E3170002)   { tst r7, #2 }
+  else
+    EmitI32($E3170001);  { tst r7, #1 }
+  doneOff := CodeLen; EmitI32($0A000000);  { beq .done }
+  EmitI32($E2700000);  { rsbs r0, r0, #0 }
+  EmitI32($E2E11000);  { rsc  r1, r1, #0 (apply sign) }
+  Patch32(doneOff, $0A000000 or ((((CodeLen - doneOff) div 4) - 2) and $00ffffff));  { .done: }
+end;
+
+procedure EmitBinop64Arm32(left, right, op: Integer; signedOp: Boolean);
+{ Evaluate (left OP right) as a 64-bit operation. left is spilled to the stack
+  ([sp]=lo, [sp+4]=hi); right is materialised into r0:r1. Arithmetic/bit ops
+  leave the 64-bit result in r0:r1; comparisons leave 0/1 in r0. }
+begin
+  EmitNode64Arm32(left);
+  EmitI32($E92D0003);   { push {r0, r1} (left lo, hi) }
+  EmitNode64Arm32(right);  { right -> r0:r1 }
+
+  if (op = Ord(tkDiv)) or (op = Ord(tkMod)) then
+  begin
+    if signedOp then EmitIDivMod64Arm32(op = Ord(tkMod))
+    else EmitUDivMod64Arm32(op = Ord(tkMod));
+    Exit;
+  end;
+
+  if (op = Ord(tkShl)) or (op = Ord(tkIdent)) then
+  begin
+    { shift count in r0 (right.lo); value = left popped into r2:r3. }
+    EmitI32($E8BD000C);  { pop {r2, r3} (value lo, hi) }
+    EmitI32($E250C020);  { subs r12, r0, #32 (n-32) }
+    if op = Ord(tkShl) then
+    begin
+      { n>=32: hi = lo << (n-32); lo = 0 }
+      EmitI32($51A01C12);  { lslpl r1, r2, r12 }
+      EmitI32($53A00000);  { movpl r0, #0 }
+      { n<32: hi = (hi<<n)|(lo>>(32-n)); lo = lo<<n }
+      EmitI32($4260C020);  { rsbmi r12, r0, #32 }
+      EmitI32($41A01013);  { lslmi r1, r3, r0 }
+      EmitI32($41811C32);  { orrmi r1, r1, r2, lsr r12 }
+      EmitI32($41A00012);  { lslmi r0, r2, r0 }
+    end
+    else
+    begin
+      { logical shr (FPC shr on Int64/UInt64). n>=32: lo = hi>>(n-32); hi = 0 }
+      EmitI32($51A00C33);  { lsrpl r0, r3, r12 }
+      EmitI32($53A01000);  { movpl r1, #0 }
+      { n<32: lo = (lo>>n)|(hi<<(32-n)); hi = hi>>n }
+      EmitI32($4260C020);  { rsbmi r12, r0, #32 }
+      EmitI32($41A04C13);  { lslmi r4, r3, r12 (hi<<(32-n)) }
+      EmitI32($41A01033);  { lsrmi r1, r3, r0  (hi>>n) }
+      EmitI32($41A00032);  { lsrmi r0, r2, r0  (lo>>n) }
+      EmitI32($41800004);  { orrmi r0, r0, r4 }
+    end;
+    Exit;
+  end;
+
+  EmitI32($E8BD000C);  { pop {r2, r3} (left lo, hi) }
+
+  if op = Ord(tkPlus) then
+  begin
+    EmitI32($E0920000);  { adds r0, r2, r0 }
+    EmitI32($E0A31001);  { adc  r1, r3, r1 }
+  end
+  else if op = Ord(tkMinus) then
+  begin
+    EmitI32($E0520000);  { subs r0, r2, r0 }
+    EmitI32($E0C31001);  { sbc  r1, r3, r1 }
+  end
+  else if op = Ord(tkStar) then
+  begin
+    { A=left(r2:r3), B=right(r0:r1). low 64 of A*B. }
+    EmitI32($E0010192);  { mul r1, r2, r1  (Alo*Bhi) }
+    EmitI32($E0030093);  { mul r3, r3, r0  (Ahi*Blo) }
+    EmitI32($E0811003);  { add r1, r1, r3  (cross) }
+    EmitI32($E08C3092);  { umull r3, r12, r2, r0 (Alo*Blo) }
+    EmitI32($E08C1001);  { add r1, r12, r1 (hi += high(Alo*Blo)) }
+    EmitI32($E1A00003);  { mov r0, r3 (lo) }
+  end
+  else if op = Ord(tkAnd) then
+  begin
+    EmitI32($E0020000);  { and r0, r2, r0 }
+    EmitI32($E0031001);  { and r1, r3, r1 }
+  end
+  else if op = Ord(tkOr) then
+  begin
+    EmitI32($E1820000);  { orr r0, r2, r0 }
+    EmitI32($E1831001);  { orr r1, r3, r1 }
+  end
+  else if (op = Ord(tkEq)) or (op = Ord(tkNeq)) then
+  begin
+    EmitI32($E0222000);  { eor r2, r2, r0 (lo diff) }
+    EmitI32($E0233001);  { eor r3, r3, r1 (hi diff) }
+    EmitI32($E1822003);  { orr r2, r2, r3 (0 iff equal) }
+    EmitI32($E3520000);  { cmp r2, #0 }
+    EmitI32($E3A00000);  { mov r0, #0 }
+    if op = Ord(tkEq) then EmitI32($03A00001)   { moveq r0, #1 }
+    else EmitI32($13A00001);                     { movne r0, #1 }
+  end
+  else if (op = Ord(tkLt)) or (op = Ord(tkLe)) or
+          (op = Ord(tkGt)) or (op = Ord(tkGe)) then
+  begin
+    { Avoid relying on Z (sbcs sets Z from the high word only). lt/ge subtract
+      left-right; gt/le subtract right-left, so the result uses only the
+      Z-free conditions lt/lo (for lt,gt) or ge/hs (for le,ge). }
+    if (op = Ord(tkLt)) or (op = Ord(tkGe)) then
+    begin
+      EmitI32($E0522000);  { subs r2, r2, r0 (left.lo-right.lo) }
+      EmitI32($E0D33001);  { sbcs r3, r3, r1 (left.hi-right.hi) }
+    end
+    else
+    begin
+      EmitI32($E0500002);  { subs r0, r0, r2 (right.lo-left.lo) }
+      EmitI32($E0D11003);  { sbcs r1, r1, r3 (right.hi-left.hi) }
+    end;
+    EmitI32($E3A00000);  { mov r0, #0 }
+    if (op = Ord(tkLt)) or (op = Ord(tkGt)) then
+    begin
+      if signedOp then EmitI32($B3A00001)   { movlt r0, #1 }
+      else EmitI32($33A00001);               { movlo r0, #1 }
+    end
+    else
+    begin
+      if signedOp then EmitI32($A3A00001)   { movge r0, #1 }
+      else EmitI32($23A00001);               { movhs r0, #1 }
+    end;
+  end
+  else
+    Error('target arm32: 64-bit binop operator not yet supported');
+end;
+
+procedure EmitwriteUInt64Arm32;
+{ r0:r1 = unsigned 64-bit value -> decimal on stdout. Repeated divide-by-10 via
+  a 64-iteration bit loop; digits grow downward from the INTBUF tail. }
+var digitLoop, bitLoop, noSub: Integer;
+begin
+  EmitI32($E3A08000);  { mov r8, #0 (digit count) }
+  EmitI32($E59F5000);  { ldr r5, [pc] }
+  EmitI32($EA000000);  { b .+8 }
+  EmitGlobRef(BSS_INTBUF + INTBUF_SIZE);
+  digitLoop := CodeLen;
+  EmitI32($E3A02000);  { mov r2, #0 (remainder) }
+  EmitI32($E3A03040);  { mov r3, #64 (bit count) }
+  bitLoop := CodeLen;
+  EmitI32($E1B00080);  { lsls r0, r0, #1 }
+  EmitI32($E0B11001);  { adcs r1, r1, r1 }
+  EmitI32($E0A22002);  { adc  r2, r2, r2 }
+  EmitI32($E352000A);  { cmp r2, #10 }
+  noSub := CodeLen; EmitI32($3A000000);  { blo .nosub }
+  EmitI32($E242200A);  { sub r2, r2, #10 }
+  EmitI32($E3800001);  { orr r0, r0, #1 }
+  Patch32(noSub, $3A000000 or ((((CodeLen - noSub) div 4) - 2) and $00ffffff));  { .nosub: }
+  EmitI32($E2533001);  { subs r3, r3, #1 }
+  EmitI32($1A000000 or ((((bitLoop - CodeLen) div 4) - 2) and $00ffffff));  { bne .bitLoop }
+  EmitI32($E2822030);  { add r2, r2, #48 (ascii) }
+  EmitI32($E2455001);  { sub r5, r5, #1 }
+  EmitI32($E5C52000);  { strb r2, [r5] }
+  EmitI32($E2888001);  { add r8, r8, #1 }
+  EmitI32($E1903001);  { orrs r3, r0, r1 (quotient == 0 ?) }
+  EmitI32($1A000000 or ((((digitLoop - CodeLen) div 4) - 2) and $00ffffff));  { bne .digitLoop }
+  EmitI32($E1A02008);  { mov r2, r8 (len) }
+  EmitI32($E1A01005);  { mov r1, r5 (buf) }
+  EmitI32($E3A00001);  { mov r0, #1 (stdout) }
+  EmitI32($E3A07004);  { mov r7, #4 (write) }
+  EmitI32($EF000000);  { svc #0 }
+end;
+
+procedure EmitwriteInt64Arm32;
+{ r0:r1 = signed 64-bit value -> decimal on stdout. }
+var posOff: Integer;
+begin
+  EmitI32($E3510000);  { cmp r1, #0 }
+  posOff := CodeLen; EmitI32($5A000000);  { bpl .positive }
+  EmitI32($E2700000);  { rsbs r0, r0, #0 }
+  EmitI32($E2E11000);  { rsc  r1, r1, #0 (negate) }
+  EmitI32($E92D0003);  { push {r0, r1} }
+  EmitwriteSyscallArm32(MINUS_OFFSET, 1);
+  EmitI32($E8BD0003);  { pop {r0, r1} }
+  Patch32(posOff, $5A000000 or ((((CodeLen - posOff) div 4) - 2) and $00ffffff));  { .positive: }
+  EmitwriteUInt64Arm32;
+end;
+
 procedure EmitArm32CopyBytes(countReg, srcReg, dstReg: Integer); forward;
 
 procedure EmitLoadArgvPtrArm32;
@@ -481,6 +801,13 @@ begin
           EmitI32($EC410B10);                                  { vmov d0, r0, r1 }
           Exit;
         end;
+        if Is64BitArm32(IntToTypeKind(IRTk[node])) then
+        begin
+          { Full 64-bit literal -> r0:r1 (lo:hi). }
+          EmitLoadImmArm32(0, Integer(IRIVal[node] and $FFFFFFFF));
+          EmitLoadImmArm32(1, Integer(IRIVal[node] shr 32));
+          Exit;
+        end;
         EmitLoadImmArm32(0, IRIVal[node]);
       end;
 
@@ -523,6 +850,11 @@ begin
         if tk = tyVariant then
         begin
           EmitLoadVariantAddrArm32(node);
+          Exit;
+        end;
+        if Is64BitArm32(tk) then
+        begin
+          EmitLoadVar64Arm32(si);
           Exit;
         end;
         EmitLoadVarArm32(si);
@@ -613,6 +945,12 @@ begin
           EmitI32($E5954000);                          { ldr r4, [r5] (len low word) }
           EmitI32($E2844008);                          { add r4, r4, #8 (len field + data) }
           EmitArm32CopyBytes(4, 5, 6);
+          Exit;
+        end;
+        if Is64BitArm32(tk) then
+        begin
+          EmitNode64Arm32(IRB[node]);
+          EmitStoreVar64Arm32(IRA[node]);
           Exit;
         end;
         IREmitNodeArm32(IRB[node]);
@@ -824,6 +1162,15 @@ begin
           end
           else
             Error('target arm32: unsupported float binop');
+          Exit;
+        end;
+
+        { 64-bit (Int64/UInt64) ops use the dedicated r0:r1 path. A comparison
+          carries a Boolean result tk, so key off the operands too. }
+        if Is64BitArm32(tk) or Is64BitArm32(lhsTk) or Is64BitArm32(rhsTk) then
+        begin
+          EmitBinop64Arm32(left, right, op,
+            not ((lhsTk = tyUInt64) or (rhsTk = tyUInt64)));
           Exit;
         end;
 
@@ -1040,11 +1387,15 @@ begin
               begin
                 EmitI32($EEBD0BC0);                 { vcvt.s32.f64 s0, d0 (round-zero) }
                 EmitI32($EE100A10);                 { vmov r0, s0 }
+                if Is64BitArm32(IntToTypeKind(IRTk[node])) then
+                  EmitI32($E1A01FC0);               { mov r1, r0, asr #31 (widen to Int64) }
               end
               else if j = 204 then
               begin
                 EmitI32($EEBD0B40);                 { vcvtr.s32.f64 s0, d0 (FPSCR RN = half-even) }
                 EmitI32($EE100A10);                 { vmov r0, s0 }
+                if Is64BitArm32(IntToTypeKind(IRTk[node])) then
+                  EmitI32($E1A01FC0);               { mov r1, r0, asr #31 (widen to Int64) }
               end
               else if j = 205 then
               begin
@@ -1229,47 +1580,60 @@ begin
         if TypeIsAggregate(Procs[pi].RetType) then
           Error('target arm32: aggregate-valued results not yet supported');
 
+        { Word-based argument passing: each scalar arg is one machine word, an
+          Int64/UInt64 by-value arg is two (lo then hi, lo at the lower word
+          index). j counts total words. Words are pushed in index order so word
+          k sits at [sp + (j-1-k)*4]; words 0..3 load into r0..r3, the rest stay
+          on the stack for the callee. Mirrors the parser.inc spill loop. }
         argNode := IRB[node];
         nArgs := 0;
+        j := 0;
         while argNode <> -1 do
         begin
           if (pi >= 0) and (nArgs < Procs[pi].ParamCount) and
              (Procs[pi].Params[nArgs].TypeKind = tyAnsiString) and
              (IntToTypeKind(IRTk[argNode]) in [tyChar, tyString]) then
-            EmitAnsiStringFromNodeArm32(IRA[argNode])
+          begin
+            EmitAnsiStringFromNodeArm32(IRA[argNode]);
+            EmitI32($E92D0001); { push {r0} }
+            Inc(j, 1);
+          end
+          else if (pi >= 0) and (nArgs < Procs[pi].ParamCount) and
+                  ((Procs[pi].Params[nArgs].TypeKind = tyInt64) or
+                   (Procs[pi].Params[nArgs].TypeKind = tyUInt64)) then
+          begin
+            EmitNode64Arm32(IRA[argNode]);  { r0=lo, r1=hi }
+            EmitI32($E92D0001); { push {r0} (lo = word j) }
+            EmitI32($E92D0002); { push {r1} (hi = word j+1) }
+            Inc(j, 2);
+          end
           else
+          begin
             IREmitNodeArm32(IRA[argNode]);
-          EmitI32($E92D0001); { push {r0} }
+            EmitI32($E92D0001); { push {r0} }
+            Inc(j, 1);
+          end;
           Inc(nArgs);
           argNode := IRB[argNode];
         end;
         if nArgs <> Procs[pi].ParamCount then
           Error('target arm32: call argument count mismatch');
 
-        for i := 0 to nArgs - 1 do
-        begin
+        for i := 0 to j - 1 do
           if i < 4 then
-            EmitI32($E59D0000 or (i shl 12) or ((nArgs - 1 - i) * 4)); { ldr r[i], [sp, #off] }
-        end;
-        { Args were pushed arg0..argN (arg0 at the highest address, argN at
-          [sp]). r0..r3 are loaded from the high slots above.
-          - nArgs <= 4: no stack args; drop every pushed slot now.
-          - nArgs > 4: the stack args (arg4..argN) sit at the low end with argN
-            at [sp]; leave sp there so the callee reads them as [fp+8...]. The
-            four register-arg slots stay pushed above (the callee ignores them);
-            drop all nArgs slots after the call. The callee resolves stack arg i
-            at [fp + 8 + (nparams-1-i)*4] (parser.inc spill loop). }
-        if (nArgs > 0) and (nArgs <= 4) then
+            EmitI32($E59D0000 or (i shl 12) or ((j - 1 - i) * 4)); { ldr r[i], [sp, #off] }
+
+        if (j > 0) and (j <= 4) then
         begin
-          EmitLoadImmArm32(9, nArgs * 4);
-          EmitI32($E08DD009); { add sp, sp, r9 }
+          EmitLoadImmArm32(9, j * 4);
+          EmitI32($E08DD009); { add sp, sp, r9 (no stack words; drop all) }
         end;
 
         EmitCallProc(pi);
-        if nArgs > 4 then
+        if j > 4 then
         begin
-          EmitLoadImmArm32(9, nArgs * 4);
-          EmitI32($E08DD009); { add sp, sp, r9 }
+          EmitLoadImmArm32(9, j * 4);
+          EmitI32($E08DD009); { add sp, sp, r9 (drop all pushed words) }
         end;
       end;
 
@@ -1363,8 +1727,13 @@ begin
         begin
           if sgn then EmitI32($E1D000F0) else EmitI32($E1D000B0); { ldrsh/ldrh r0, [r0] }
         end
+        else if Is64BitArm32(tk) then
+        begin
+          EmitI32($E5901004);  { ldr r1, [r0, #4] (hi first, r0 is the addr) }
+          EmitI32($E5900000);  { ldr r0, [r0]     (lo) }
+        end
         else
-          EmitI32($E5900000); { ldr r0, [r0] (4- and low word of 8-byte) }
+          EmitI32($E5900000); { ldr r0, [r0] (4-byte) }
       end;
 
     IR_STORE_MEM:
@@ -1410,6 +1779,19 @@ begin
         if not (TypeIsOrdinal(tk) or (tk = tyBoolean) or (tk = tyPointer) or
                 (tk = tyChar) or (tk = tyUnknown)) then
           Error('target arm32: store through pointer of this type not yet supported');
+        if Is64BitArm32(tk) then
+        begin
+          EmitNode64Arm32(IRB[node]);  { value -> r0:r1 }
+          EmitI32($E92D0003);          { push {r0, r1} }
+          savedLValueWrite := InLValueWrite;
+          InLValueWrite := True;
+          IREmitNodeArm32(IRA[node]);  { address -> r0 }
+          InLValueWrite := savedLValueWrite;
+          EmitI32($E8BD0006);          { pop {r1, r2} (value lo, hi) }
+          EmitI32($E5801000);          { str r1, [r0] }
+          EmitI32($E5802004);          { str r2, [r0, #4] }
+          Exit;
+        end;
         IREmitNodeArm32(IRB[node]); { value -> r0 }
         EmitI32($E92D0001);         { push {r0} }
         savedLValueWrite := InLValueWrite;
@@ -1511,11 +1893,23 @@ begin
 
     IR_NEG:
       begin
-        IREmitNodeArm32(IRA[node]);
-        if TypeIsFloat(IntToTypeKind(IRTk[node])) then
-          EmitI32($EEB10B40)  { vneg.f64 d0, d0 }
+        tk := IntToTypeKind(IRTk[node]);
+        if TypeIsFloat(tk) then
+        begin
+          IREmitNodeArm32(IRA[node]);
+          EmitI32($EEB10B40);  { vneg.f64 d0, d0 }
+        end
+        else if Is64BitArm32(tk) then
+        begin
+          EmitNode64Arm32(IRA[node]);  { value -> r0:r1 }
+          EmitI32($E2700000);  { rsbs r0, r0, #0 }
+          EmitI32($E2E11000);  { rsc  r1, r1, #0 (negate 64-bit) }
+        end
         else
+        begin
+          IREmitNodeArm32(IRA[node]);
           EmitI32($E2600000); { rsb r0, r0, #0 }
+        end;
       end;
 
     IR_NOT:
@@ -1578,6 +1972,12 @@ begin
               EmitI32($E8BD0001); { pop {r0} }
             end;
             EmitwriteCharArm32;
+          end
+          else if Is64BitArm32(tk) then
+          begin
+            EmitNode64Arm32(valNode);   { r0:r1 = value }
+            if tk = tyUInt64 then EmitwriteUInt64Arm32
+            else EmitwriteInt64Arm32;
           end
           else if TypeIsOrdinal(tk) or (tk = tyUnknown) then
           begin

@@ -5350,6 +5350,7 @@ var
   startIdx, idx: Integer;
   tokKindOrd: Integer;
   methOwnerCi, methOwnerRec, methSNOff, methSNLen, mmi, slot, otherCi: Integer;
+  pw, pnWords, wlo, whi: Integer;   { ARM32 word-based param spill (int64 = 2 words) }
   methName: AnsiString;
   extLib: AnsiString;
 begin
@@ -5897,37 +5898,49 @@ begin
   end
   else if TargetArch = TARGET_ARM32 then
   begin
+    { Word-based spill: each scalar param is one machine word, an Int64/UInt64
+      param is two (lo then hi). Word k arrives in r[k] when k<4, else on the
+      stack at [fp + 8 + (pnWords-1-k)*4] (the caller pushed words in index
+      order, leaving the lowest-index stack word at the highest address; see
+      ir_codegen_arm32.inc IR_CALL). }
+    pnWords := 0;
+    for i := 0 to nparams-1 do
+      if (Procs[pi].Params[i].TypeKind = tyInt64) or
+         (Procs[pi].Params[i].TypeKind = tyUInt64) then Inc(pnWords, 2)
+      else Inc(pnWords, 1);
+    pw := 0;
     for i := 0 to nparams-1 do
     begin
       idx := Procs[pi].Params[i].SymIdx;
       sz := ParamSize(idx);
-      { Load local offset into r9 }
       EmitLoadImmArm32(9, Syms[idx].Offset);
-      { add r9, fp, r9 }
-      EmitI32($E08B9009);
-      if i < 4 then
+      EmitI32($E08B9009);   { add r9, fp, r9 (slot addr) }
+      if (Syms[idx].TypeKind = tyInt64) or (Syms[idx].TypeKind = tyUInt64) then
       begin
-        { Store parameter register i (r0..r3) into [r9] }
-        if sz = 1 then
-          EmitI32($E5C90000 or (i shl 12))  { strb r[i], [r9] }
-        else if sz = 2 then
-          EmitI32($E1C900B0 or (i shl 12))  { strh r[i], [r9] }
-        else
-          EmitI32($E5890000 or (i shl 12)); { str r[i], [r9] }
+        { lo = word pw -> [r9]; hi = word pw+1 -> [r9, #4] }
+        if pw < 4 then EmitI32($E5890000 or (pw shl 12))
+        else begin EmitI32($E59B0000 or (8 + (pnWords-1-pw)*4)); EmitI32($E5890000); end;
+        whi := pw + 1;
+        if whi < 4 then EmitI32($E5890004 or (whi shl 12))
+        else begin EmitI32($E59B0000 or (8 + (pnWords-1-whi)*4)); EmitI32($E5890004); end;
+        Inc(pw, 2);
       end
       else
       begin
-        { Stack arguments sit above saved fp/lr. The caller pushes arg0..argN
-          with argN at the lowest address, then leaves sp at argN, so stack arg
-          i lands at [fp + 8 + (nparams-1-i)*4] (argN at [fp+8]). Matches the
-          ARM32 caller in ir_codegen_arm32.inc IR_CALL. }
-        EmitI32($E59B0000 or (8 + (nparams - 1 - i) * 4)); { ldr r0, [fp, #off] }
-        if sz = 1 then
-          EmitI32($E5C90000)  { strb r0, [r9] }
-        else if sz = 2 then
-          EmitI32($E1C900B0)  { strh r0, [r9] }
+        if pw < 4 then
+        begin
+          if sz = 1 then EmitI32($E5C90000 or (pw shl 12))  { strb r[pw], [r9] }
+          else if sz = 2 then EmitI32($E1C900B0 or (pw shl 12))
+          else EmitI32($E5890000 or (pw shl 12));            { str r[pw], [r9] }
+        end
         else
-          EmitI32($E5890000); { str r0, [r9] }
+        begin
+          EmitI32($E59B0000 or (8 + (pnWords - 1 - pw) * 4)); { ldr r0, [fp, #off] }
+          if sz = 1 then EmitI32($E5C90000)
+          else if sz = 2 then EmitI32($E1C900B0)
+          else EmitI32($E5890000);
+        end;
+        Inc(pw, 1);
       end;
     end;
   end
