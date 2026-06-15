@@ -41,3 +41,9 @@ segfaults under QEMU (`rc=139`) before producing a comparable output.
 ## Log
 
 - 2026-06-13 — opened with current failure (`rc=139` segfault).
+- 2026-06-15 — blocker cleared: `feature-cross-managed-string-cow` is DONE
+  (commit 2fbaca4), so ARM32 now has AnsiString index-write copy-on-write. This
+  ticket is now Ready. Next: re-probe the `rc=139` segfault — the LowerCase/COW
+  corruption that defeated the i386 self-host was a likely contributor, so
+  re-run the ARM32-hosted `hello.pas -> x86_64` probe before chasing anything
+  else.

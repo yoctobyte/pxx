@@ -101,3 +101,8 @@ builtinheap.pas` around the `HeapMmap` raw-syscall block.
   diagnostics did not prove a fix and were backed out. Next slice: identify the
   general call/argument lowering node that produces `IR_ARG(IRA=-1)` under the
   AArch64-hosted compiler.
+- 2026-06-15 — blocker `feature-cross-managed-string-cow` is DONE (commit
+  2fbaca4); AArch64 string COW was already in place, so the remaining wall here
+  is independent of COW: the `IR_ARG(IRA=-1)` / `invalid IR node reference in arg
+  value` crash while the AArch64-hosted compiler compiles `builtinheap.pas`.
+  This ticket is now Ready.
