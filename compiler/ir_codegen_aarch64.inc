@@ -1972,6 +1972,20 @@ begin
     LabelPositions[i] := -1;
   LabelFixupCount := 0;
 
+  { Nil-init hidden owning locals synthesised for materialised managed-string
+    arguments (and the TVarRec array temp behind `array of const`). They are
+    created during this body's IR lowering, after the parser's prologue
+    zero-init pass, so they otherwise hold stale stack bytes — a conditional
+    build / scope-exit cleanup would then read or DecRef garbage. skLocal only;
+    main-program temps are skGlobal (BSS). Mirrors x86-64/i386/ARM32. }
+  if CurProc >= 0 then
+    for i := Procs[CurProc].ScopeBase to SymCount - 1 do
+      if SymIsHiddenArgTemp[i] and (Syms[i].Kind = skLocal) then
+      begin
+        EmitI32($D2800000);    { movz x0, #0 }
+        EmitStoreVarA64(i);    { store 0 into the local slot }
+      end;
+
   for i := 0 to IRCount - 1 do
   begin
     case IRKind[i] of
