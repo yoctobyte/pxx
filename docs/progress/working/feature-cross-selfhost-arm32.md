@@ -75,3 +75,19 @@ segfaults under QEMU (`rc=139`) before producing a comparable output.
 - 2026-06-15 — sibling note: `ir_codegen_aarch64.inc` is also missing this
   hidden-arg-temp nil-init pass (only x86-64/i386/arm32 have it now). Latent on
   AArch64; flagged in `feature-cross-selfhost-aarch64`.
+- 2026-06-15 — define-overflow wall **fixed** (commit 55ac9f7). It was NOT a
+  const-param bug — it was `Length()` on a *var* (by-ref) managed-string param
+  returning 0. A by-ref param slot holds the forwarded caller slot address
+  (`&handle`), one deref short of the handle; the ARM32 `Length` builtin derefed
+  only for `IR_INDEX`/`IR_FIELD` operands, not for an `IR_LEA` of a by-ref
+  managed-string param. So `AppendChar`'s `len := Length(dst)` always saw 0,
+  `PasOptionTail` ballooned the `-d` define name, and the guard fired. Added the
+  `IR_LEA skParam IsRef tyAnsiString` clause to the ARM32 Length builtin,
+  mirroring i386 (`ir_codegen386.inc` ~1708) and AArch64 (`ir_codegen_aarch64.inc`
+  ~1118), which both already had it. Minimal repro: `Length(var s)` returns 0
+  (const + direct return correct). Added `test/test_cross_var_string_param.pas`
+  to `make test-arm32`.
+- 2026-06-15 — **new wall:** the ARM32-hosted compiler now compiles past the
+  define-overflow but SIGSEGVs deeper in
+  `... -dPXX_MANAGED_STRING --target=x86_64 test/hello.pas` (no output file).
+  Next: gdb-under-qemu the new crash PC.
