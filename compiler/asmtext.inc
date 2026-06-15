@@ -23,6 +23,7 @@
 
 type
   PAsmTextByte = ^Byte;
+  PHoleI64 = ^Int64;   { deref a boxed vtInt64 `array of const` hole value }
 
 const
   ASM_MAX_HOLES = 8;
@@ -499,9 +500,9 @@ begin
       if nHoles > ASM_MAX_HOLES then Error('EmitAsmX64: too many holes in one line');
       for h := 0 to nHoles - 1 do
       begin
-        if (i + 1 + h >= n) or (items[i + 1 + h].VType <> vtInteger) then
+        if (i + 1 + h >= n) or (items[i + 1 + h].VType <> vtInteger) and (items[i + 1 + h].VType <> vtInt64) then
           Error('EmitAsmX64: missing integer hole value');
-        holes[h] := items[i + 1 + h].VInteger;
+        if items[i + 1 + h].VType = vtInt64 then holes[h] := PHoleI64(items[i + 1 + h].VInt64)^ else holes[h] := items[i + 1 + h].VInteger;
       end;
       AsmTextLine(line, holes, nHoles);
       i := i + 1 + nHoles;

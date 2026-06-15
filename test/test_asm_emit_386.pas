@@ -384,6 +384,7 @@ begin
 end;
 
 { Use the real shipped emitter — same file the compiler includes. }
+type PHoleI64 = ^Int64;  { mock: real def lives in asmtext.inc }
 {$include ../compiler/asmtext_386.inc}
 
 { Test runner }

@@ -950,7 +950,7 @@ var left, right, seq, item, value, outNode, first, last, leftAddr, argNode, argV
     helperPi, wrapperArg, wrapperCall: Integer;
     lhsTk, castTk: TTypeKind;
     vrCount, vrTmp, vrIdent, vrCountLit, vrArg1, vrArg2, vrSlCall: Integer;
-    vrIdxLit, vrIndex, vrTag, elemAddr, vrSavedRecId: Integer;
+    vrIdxLit, vrIndex, vrTag, elemAddr, vrSavedRecId, vrBoxSym: Integer;
     vrElemTk: TTypeKind;
 begin
   if node = -1 then
@@ -1031,11 +1031,26 @@ begin
         ASTLeft[vrIndex] := vrIdent; ASTRight[vrIndex] := vrIdxLit;
         ASTTk[vrIndex] := Ord(tyRecord);
 
+        { Element tag from the element's static type. The value union is one
+          pointer-sized slot, so types wider than a pointer (Int64 — also on
+          64-bit where it fits, for uniformity — and floats) are boxed: stored in
+          a hidden local and the slot holds a pointer to it (FPC's VInt64/
+          VExtended convention). }
         vrElemTk := IntToTypeKind(ASTTk[ASTLeft[item]]);
         if (vrElemTk = tyString) or (vrElemTk = tyAnsiString) then
-          vrTag := 11    { vtAnsiString }
+          vrTag := 11             { vtAnsiString }
+        else if vrElemTk = tyBoolean then
+          vrTag := 1              { vtBoolean }
+        else if vrElemTk = tyChar then
+          vrTag := 2              { vtChar }
+        else if vrElemTk = tyPointer then
+          vrTag := 5              { vtPointer }
+        else if (vrElemTk = tyInt64) or (vrElemTk = tyUInt64) then
+          vrTag := 16             { vtInt64 (boxed) }
+        else if (vrElemTk = tySingle) or (vrElemTk = tyDouble) or (vrElemTk = tyExtended) then
+          vrTag := 3             { vtExtended (boxed) }
         else
-          vrTag := 0;    { vtInteger }
+          vrTag := 0;            { vtInteger }
 
         { VType := tag  (element offset 0) }
         elemAddr := IRLowerAddress(vrIndex);
@@ -1048,16 +1063,34 @@ begin
         elemAddr := IRAppend(IR_BINOP, elemAddr,
           IRAppend(IR_CONST_INT, -1, -1, -1, TARGET_PTR_SIZE, Ord(tyInteger)),
           Ord(tkPlus), 0, Ord(tyPointer));
-        value := IRLowerAST(ASTLeft[item]);
-        if vrElemTk = tyString then
-          { vtAnsiString from a frozen (inline) string literal: its value points
-            at the 8-byte length prefix, so skip to the NUL-terminated char data
-            (InternStr terminates it), like FPC's VAnsiString. A runtime
-            tyAnsiString value is ALREADY a char pointer (matches PChar(s), which
-            only adjusts tyString), so it is stored as-is. }
-          value := IRAppend(IR_BINOP, value,
-            IRAppend(IR_CONST_INT, -1, -1, -1, 8, Ord(tyInteger)),
-            Ord(tkPlus), 0, Ord(tyPointer));
+        if (vrTag = 16) or (vrTag = 3) then
+        begin
+          { Boxed value (Int64/float): a pointer-sized union slot can't hold a
+            64-bit value on 32-bit targets, so store the element in a hidden local
+            and put its address in the slot — FPC's VInt64/VExtended convention.
+            The asm-text emitters (which build tyInt64 `%`-hole vectors like
+            `['b %', LabelPositions[i] - CodeLen]`) dereference boxed Int64 holes,
+            so this stays correct for both user `array of const` and internal asm.
+            The local is unmanaged and written before any read — no nil-init. }
+          vrBoxSym := AllocVar('', vrElemTk);
+          IRAppend(IR_STORE_MEM,
+            IRAppend(IR_SLOTADDR, vrBoxSym, -1, -1, 0, Ord(tyPointer)),
+            IRLowerAST(ASTLeft[item]), -1, 0, Ord(vrElemTk));
+          value := IRAppend(IR_SLOTADDR, vrBoxSym, -1, -1, 0, Ord(tyPointer));
+        end
+        else
+        begin
+          value := IRLowerAST(ASTLeft[item]);
+          if vrElemTk = tyString then
+            { vtAnsiString from a frozen (inline) string literal: its value points
+              at the 8-byte length prefix, so skip to the NUL-terminated char data
+              (InternStr terminates it), like FPC's VAnsiString. A runtime
+              tyAnsiString value is ALREADY a char pointer (matches PChar(s), which
+              only adjusts tyString), so it is stored as-is. }
+            value := IRAppend(IR_BINOP, value,
+              IRAppend(IR_CONST_INT, -1, -1, -1, 8, Ord(tyInteger)),
+              Ord(tkPlus), 0, Ord(tyPointer));
+        end;
         IRAppend(IR_STORE_MEM, elemAddr, value, -1, 0, Ord(tyNativeInt));
 
         Inc(i);

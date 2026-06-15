@@ -203,6 +203,7 @@ begin
 end;
 
 { Include the target encoders and text assemblers }
+type PHoleI64 = ^Int64;  { mock: real def lives in asmtext.inc }
 {$include ../compiler/asmtext_a64.inc}
 
 { Test runner }

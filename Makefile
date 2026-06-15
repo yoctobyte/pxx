@@ -233,6 +233,8 @@ test-core: $(COMPILER)
 	test "$$(/tmp/test_varrec_string26)" = "$$(printf 'S=lit\nI=42\nS=hello\nS=world\nS=param\nS=tail')"
 	./$(COMPILER) test/test_varrec_alloc_after.pas /tmp/test_varrec_alloc_after26
 	test "$$(/tmp/test_varrec_alloc_after26)" = "$$(printf 'n=2: S 42\nn=4: 10 20 30 40\nn=3: 115 11 22')"
+	./$(COMPILER) -dPXX_MANAGED_STRING test/test_array_of_const_types.pas /tmp/test_aoc_types26
+	test "$$(/tmp/test_aoc_types26)" = "$$(printf 'vt0: 42\nvt1: 1\nvt2: Q\nvt16: 5000000000\nvt3: 3.50\nvt11: hi')"
 	./$(COMPILER) test/test_asm_emit.pas /tmp/test_asm_emit26
 	test "$$(/tmp/test_asm_emit26)" = "$$(printf 'S=\nS=ab\nS=abc\nS=a longer string here\nI=0\nI=123\nI=-7\n---\nS=ww\nI=1\nS=yy\nI=2\nS=zzz\nI=3')"
 	./$(COMPILER) test/test_virtual_proc.pas /tmp/test_virtual_proc26
@@ -776,7 +778,10 @@ test-i386: $(COMPILER)
 	./$(COMPILER) -dPXX_MANAGED_STRING --target=i386 test/test_cross_string_cow.pas /tmp/test_i386_string_cow
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_cross_string_cow.pas /tmp/test_i386_string_cow_x64
 	test "$$(tools/run_target.sh i386 /tmp/test_i386_string_cow)" = "$$(/tmp/test_i386_string_cow_x64)"
-	@echo "i386 hello + arith + procs + loops + write + varparam + syscall + heap + string + record + dynarray + exception + float + float-params + variant + byref-params + setlen-str + in-operator + loadfile + sysopen-family + args + string-cow ok (output identical to x86-64)"
+	./$(COMPILER) -dPXX_MANAGED_STRING --target=i386 test/test_array_of_const_types.pas /tmp/test_i386_aoc_types
+	./$(COMPILER) -dPXX_MANAGED_STRING test/test_array_of_const_types.pas /tmp/test_i386_aoc_types_x64
+	test "$$(tools/run_target.sh i386 /tmp/test_i386_aoc_types)" = "$$(/tmp/test_i386_aoc_types_x64)"
+	@echo "i386 hello + arith + procs + loops + write + varparam + syscall + heap + string + record + dynarray + exception + float + float-params + variant + byref-params + setlen-str + in-operator + loadfile + sysopen-family + args + string-cow + aoc-types ok (output identical to x86-64)"
 
 test-aarch64: $(COMPILER)
 	./$(COMPILER) --target=aarch64 test/hello.pas /tmp/test_aarch64_hello
@@ -844,7 +849,10 @@ test-aarch64: $(COMPILER)
 	./$(COMPILER) --target=aarch64 test/test_varrec_alloc_after.pas /tmp/test_aarch64_varrec_alloc
 	./$(COMPILER) test/test_varrec_alloc_after.pas /tmp/test_aarch64_varrec_alloc_x64
 	test "$$(tools/run_target.sh aarch64 /tmp/test_aarch64_varrec_alloc)" = "$$(/tmp/test_aarch64_varrec_alloc_x64)"
-	@echo "aarch64 hello + arith + procs + loops + write + varparam + syscall + heap + string + record + dynarray + exception + float + variant + setlen-str + str-length-index + in-operator + loadfile + sysopen-family + args + open-array-params + string-cow + huge-frame + varrec-alloc ok (output identical to x86-64)"
+	./$(COMPILER) -dPXX_MANAGED_STRING --target=aarch64 test/test_array_of_const_types.pas /tmp/test_aarch64_aoc_types
+	./$(COMPILER) -dPXX_MANAGED_STRING test/test_array_of_const_types.pas /tmp/test_aarch64_aoc_types_x64
+	test "$$(tools/run_target.sh aarch64 /tmp/test_aarch64_aoc_types)" = "$$(/tmp/test_aarch64_aoc_types_x64)"
+	@echo "aarch64 hello + arith + procs + loops + write + varparam + syscall + heap + string + record + dynarray + exception + float + variant + setlen-str + str-length-index + in-operator + loadfile + sysopen-family + args + open-array-params + string-cow + huge-frame + varrec-alloc + aoc-types ok (output identical to x86-64)"
 
 test-arm32: $(COMPILER)
 	./$(COMPILER) --target=arm32 test/hello.pas /tmp/test_arm32_hello
@@ -930,7 +938,10 @@ test-arm32: $(COMPILER)
 	./$(COMPILER) -dPXX_MANAGED_STRING --target=arm32 test/test_cross_int64_byref.pas /tmp/test_arm32_int64_byref
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_cross_int64_byref.pas /tmp/test_arm32_int64_byref_x64
 	test "$$(tools/run_target.sh arm32 /tmp/test_arm32_int64_byref)" = "$$(/tmp/test_arm32_int64_byref_x64)"
-	@echo "arm32 hello + arith + procs + loops + write + varparam + syscall + heap + string + record + dynarray + exception + float + args + variant + strresult + setlen-str + str-length-index + in-operator + managed-aggregate-locals + loadfile + sysopen-family + string-cow + var-string-param + openarray-string + stack-params + int64 + int64-byref ok (output identical to x86-64)"
+	./$(COMPILER) -dPXX_MANAGED_STRING --target=arm32 test/test_array_of_const_types.pas /tmp/test_arm32_aoc_types
+	./$(COMPILER) -dPXX_MANAGED_STRING test/test_array_of_const_types.pas /tmp/test_arm32_aoc_types_x64
+	test "$$(tools/run_target.sh arm32 /tmp/test_arm32_aoc_types)" = "$$(/tmp/test_arm32_aoc_types_x64)"
+	@echo "arm32 hello + arith + procs + loops + write + varparam + syscall + heap + string + record + dynarray + exception + float + args + variant + strresult + setlen-str + str-length-index + in-operator + managed-aggregate-locals + loadfile + sysopen-family + string-cow + var-string-param + openarray-string + stack-params + int64 + int64-byref + aoc-types ok (output identical to x86-64)"
 
 # ----- Cross self-host bootstrap gates (feature-cross-bootstrap-selfhost) -----
 # Triple-stage proof: native cross-compiles compiler.pas -> <arch>; that binary,

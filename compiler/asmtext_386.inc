@@ -375,9 +375,9 @@ begin
       if nHoles > ASM_MAX_HOLES then Error('EmitAsm386: too many holes in one line');
       for h := 0 to nHoles - 1 do
       begin
-        if (i + 1 + h >= n) or (items[i + 1 + h].VType <> vtInteger) then
+        if (i + 1 + h >= n) or (items[i + 1 + h].VType <> vtInteger) and (items[i + 1 + h].VType <> vtInt64) then
           Error('EmitAsm386: missing integer hole value');
-        holes[h] := items[i + 1 + h].VInteger;
+        if items[i + 1 + h].VType = vtInt64 then holes[h] := PHoleI64(items[i + 1 + h].VInt64)^ else holes[h] := items[i + 1 + h].VInteger;
       end;
       AsmTextLine386(line, holes, nHoles);
       i := i + 1 + nHoles;

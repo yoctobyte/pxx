@@ -26,13 +26,24 @@ type
     VType: NativeInt;
     VInteger: NativeInt;
     VAnsiString: Pointer;
+    VBoolean: Boolean;
+    VChar: Char;
+    VPointer: Pointer;
+    VPChar: Pointer;
+    VInt64: Pointer;      { PInt64 — value boxed because the union slot is pointer-sized }
+    VExtended: Pointer;   { PDouble — likewise boxed }
   end;
 
 const
   vtInteger    = 0;
+  vtBoolean    = 1;
   vtChar       = 2;
+  vtExtended   = 3;
   vtString     = 4;   { shortstring; unused with ansistrings }
+  vtPointer    = 5;
+  vtPChar      = 6;
   vtAnsiString = 11;
+  vtInt64      = 16;
 
 function PXXAlloc(size: NativeInt; align: Integer): Pointer;
 procedure PXXFree(p: Pointer);

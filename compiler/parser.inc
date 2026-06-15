@@ -6972,8 +6972,13 @@ begin
   ci := FindUClass('TVarRec');
   if ci < 0 then Exit;
   TVarRecId := REC_UCLASS_BASE + ci;
-  fi := FindUField(ci, 'VAnsiString');
-  if fi >= 0 then UFldOff_[fi] := TARGET_PTR_SIZE;
+  { Overlap every value-union field onto the single pointer-sized value slot at
+    offset TARGET_PTR_SIZE (field 0 = VType stays at offset 0). VInteger already
+    lands there from the sequential layout; VAnsiString/VBoolean/VChar/VPointer/
+    VPChar/VInt64/VExtended are forced onto it so `array of const` element reads
+    by tag all hit the same slot — exactly FPC's variant TVarRec. }
+  for fi := UClsFBase[ci] + 1 to UClsFBase[ci] + UClsFCount[ci] - 1 do
+    UFldOff_[fi] := TARGET_PTR_SIZE;
   UClsSize_[ci] := 2 * TARGET_PTR_SIZE;
   UClsAlign[ci] := TARGET_PTR_SIZE;
 end;
