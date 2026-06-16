@@ -1338,6 +1338,20 @@ begin
         IREmitCodeCall(CoSwitchAddr);
       end;
 
+    IR_YIELD:
+      begin
+        { Evaluate the yielded value into rax, store it into the instance's
+          current slot, then CoSwitch back to the consumer. IRIVal = the
+          generator's hidden self-pointer local sym idx. }
+        IREmitNode(IRA[node]);                    { rax = value }
+        { rcx = self }
+        EmitB($48); EmitB($8B); EmitB($8D); EmitI32(Syms[IRIVal[node]].Offset); { mov rcx, [rbp+selfOff] }
+        EmitB($48); EmitB($89); EmitB($41); EmitB(CO_OFF_CURRENT);              { mov [rcx+CURRENT], rax }
+        EmitB($48); EmitB($8D); EmitB($79); EmitB(CO_OFF_GENCTX);               { lea rdi, [rcx+genctx]   (from) }
+        EmitB($48); EmitB($8D); EmitB($71); EmitB(CO_OFF_CALLERCTX);            { lea rsi, [rcx+callerctx] (to) }
+        IREmitCodeCall(CoSwitchAddr);
+      end;
+
     IR_LOAD_SYM:
       begin
         EmitLoadVar(IRA[node]);
@@ -3975,7 +3989,7 @@ begin
       IR_READLINE, IR_READ_VAR, IR_READ_DISCARD, IR_COPY_REC, IR_COPY_REC_MANAGED, IR_SET_COPY, IR_VAR_STORE,
       IR_SETLEN_DYN, IR_DEFAULT_MEM,
       IR_EXC_LEAVE, IR_RAISE, IR_EXC_STORE, IR_EXC_CLEAR, IR_TERMINATE,
-      IR_COSWITCH,
+      IR_COSWITCH, IR_YIELD,
       IR_ASM:
         begin
           IREmitNode(i);

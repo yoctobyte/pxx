@@ -123,6 +123,9 @@ const
                           context switch. Left = AN_ARG chain of 2 pointer exprs
                           (address of the from/to TCoroCtx). Calls the bare
                           CoSwitch runtime stub. }
+  AN_YIELD        = 52; { yield E inside a `; generator;` routine. Left = value
+                          expr. Lowers to: store E into the generator instance's
+                          `current` slot, then CoSwitch back to the consumer. }
 
   { Inline-asm operand kinds }
   AOP_NONE = 0;
@@ -187,6 +190,23 @@ const
   IR_READ_DISCARD = 53;
   IR_SYSCALL      = 54;  { IRA = first IR_ARG (nr, then up to 6 args); raw target syscall; result in accumulator }
   IR_COSWITCH     = 55;  { IRA = first IR_ARG (pfrom, pto); emits a call to the bare CoSwitch runtime stub }
+  IR_YIELD        = 56;  { IRA = value node; IRIVal = generator self-pointer local sym idx. Stores value to [self+16] then CoSwitch(self+0 -> self+8) }
+
+  { Generator-instance heap layout (see lib/rtl/coroutine.pas + the generator
+    body lowering). A TCoroCtx is a single saved sp, so genCtx/callerCtx are one
+    qword each. CO_OFF_SELF doubles as the rbx-slot handoff in the initial frame
+    (CoAlloc stores the instance ptr there; CoSwitch pops it into rbx; the body
+    prologue copies rbx -> its hidden self local). }
+  CO_OFF_GENCTX    = 0;    { gen context saved sp }
+  CO_OFF_CALLERCTX = 8;    { consumer context saved sp }
+  CO_OFF_CURRENT   = 16;   { last yielded value (<= 8 bytes in v1) }
+  CO_OFF_DONE      = 24;   { 0 = suspended/live, 1 = exhausted }
+  CO_OFF_STACKBASE = 32;   { heap stack base, for FreeMem at exhaustion }
+  CO_OFF_SELF      = 40;   { instance ptr (= rbx-slot handoff) }
+  CO_OFF_PARAMS    = 48;   { first generator parameter; params are 8 bytes each }
+  CO_HDR_BYTES     = 48;   { header size before params }
+  CO_STACK_BYTES   = 65536;{ per-generator heap stack }
+  CO_MAX_PARAMS    = 4;    { v1: generators take up to 4 (Int64-width) params }
 
   { Variant tag (VType) values, stored in the first 8 bytes of a tyVariant slot.
     Payload (next 8 bytes) interpreted per tag. Closed scalar set; vtObject is a
@@ -608,6 +628,7 @@ var
   ProcRetRecId : array[0..MAX_PROCS-1] of Integer; { record id for tyRecord results }
   ProcAggregateDestSym : array[0..MAX_PROCS-1] of Integer; { hidden caller-result pointer local, or -1 }
   ProcRetIsDynArray : array[0..MAX_PROCS-1] of Boolean; { result is `array of T` (pointer-sized heap handle) }
+  ProcIsGenerator : array[0..MAX_PROCS-1] of Boolean;   { `; generator;` routine — compiled as a stackful-coroutine body (see coroutine.pas) }
   ProcRetElemTk : array[0..MAX_PROCS-1] of TTypeKind;    { element type of a dyn-array result }
   ProcRetElemRec : array[0..MAX_PROCS-1] of Integer;     { element record id of a dyn-array result }
   ProcRetPtrElemTk : array[0..MAX_PROCS-1] of Integer;   { pointed-at TTypeKind ord when the result is a typed pointer (tyUnknown otherwise) }
@@ -803,6 +824,10 @@ var
   ExcRaiseAddr    : Integer;
   CoroutineUsed   : Boolean;
   CoSwitchAddr    : Integer;  { code address of the bare CoSwitch context-switch stub }
+  CurProcIsGenerator : Boolean; { parsing the body of a `; generator;` routine }
+  CurGenSelfSym   : Integer;  { sym idx of the generator body's hidden self-pointer local }
+  CurGenSeenYield : Boolean;  { a yield was seen in the current generator body (validation) }
+  GenTryDepth     : Integer;  { try-nesting while parsing a generator body (yield-in-try is illegal in v1) }
   AnsiStrReleaseAddr : Integer;
   AnsiStrRetainAddr  : Integer;
   AnsiStrFromLiteralAddr : Integer;

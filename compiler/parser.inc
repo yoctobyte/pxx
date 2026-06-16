@@ -267,6 +267,7 @@ function ParseSetMembershipAST(leftExpr: Integer): Integer; forward;
 function ParseSetLiteralAST: Integer; forward;
 function ParseVarRecLiteralAST: Integer; forward;
 function ParseStatementAST: Integer; forward;
+procedure EnableCoroutineRuntime; forward;
 function ParseWithStatementAST: Integer; forward;
 function ParseAsmStatementAST: Integer; forward;
 function ParseBlockAST: Integer; forward;
@@ -3455,16 +3456,144 @@ begin
   Result := node;
 end;
 
+{ Synthesis helpers for the for-in generator desugar. }
+function GenMakeIdent(symIdx: Integer; tk: TTypeKind): Integer;
+begin
+  Result := AllocNode(AN_IDENT);
+  ASTIVal[Result] := symIdx;
+  ASTTk[Result] := Ord(tk);
+end;
+
+function GenMakeCall(procIdx: Integer; retTk: TTypeKind; const args: array of Integer; nargs: Integer): Integer;
+var k, an, prev: Integer;
+begin
+  Result := AllocNode(AN_CALL);
+  ASTIVal[Result] := procIdx;
+  ASTTk[Result] := Ord(retTk);
+  prev := -1;
+  for k := 0 to nargs - 1 do
+  begin
+    an := AllocNode(AN_ARG);
+    ASTLeft[an] := args[k];
+    if prev = -1 then ASTLeft[Result] := an
+    else ASTRight[prev] := an;
+    prev := an;
+  end;
+end;
+
+function GenMakeSeq(stmt, next: Integer): Integer;
+begin
+  Result := AllocNode(AN_SEQ);
+  ASTLeft[Result] := stmt;
+  ASTRight[Result] := next;
+end;
+
+function GenMakeAssign(lhs, rhs: Integer): Integer;
+begin
+  Result := AllocNode(AN_ASSIGN);
+  ASTLeft[Result] := lhs;
+  ASTRight[Result] := rhs;
+end;
+
+{ Desugar `for x in Gen(args) do BODY` (Gen a `; generator;` routine) into:
+    __g := CoAlloc(@Gen, nargs, a0,a1,a2,a3);
+    while CoNext(__g) do begin x := CoCurrent(__g); BODY end;
+    CoFree(__g);
+  Returns the synthesised AN_SEQ. Called from ParseForStatementAST once `in`
+  is seen after the loop variable. }
+function ParseForInGeneratorAST(varIdx, gpi: Integer): Integer;
+var
+  bodyNode, nargs, gIdx, k: Integer;
+  argNodes: array[0..3] of Integer;
+  allocArgs: array[0..5] of Integer;
+  nextArgs, curArgs, freeArgs: array[0..0] of Integer;
+  procAddr, nargsLit, callAlloc, callNext, callCur, callFree: Integer;
+  assignG, assignX, whileNode, innerSeq: Integer;
+  paCoAlloc, paCoNext, paCoCurrent, paCoFree: Integer;
+begin
+  paCoAlloc   := FindProc('CoAlloc');
+  paCoNext    := FindProc('CoNext');
+  paCoCurrent := FindProc('CoCurrent');
+  paCoFree    := FindProc('CoFree');
+  if (paCoAlloc < 0) or (paCoNext < 0) or (paCoCurrent < 0) or (paCoFree < 0) then
+    Error('for-in generator: the coroutine unit is not in scope (add `uses coroutine;`)');
+
+  { unused args default to 0 }
+  for k := 0 to 3 do
+  begin
+    argNodes[k] := AllocNode(AN_INT_LIT);
+    ASTIVal[argNodes[k]] := 0;
+    ASTTk[argNodes[k]] := Ord(tyInt64);
+  end;
+  nargs := 0;
+  if Eat(tkLParen) then
+  begin
+    if CurTok.Kind <> tkRParen then
+      repeat
+        if nargs >= 4 then Error('for-in generator: at most 4 arguments (v1)');
+        ParseExpr;
+        argNodes[nargs] := CurASTNode;
+        Inc(nargs);
+      until not Eat(tkComma);
+    Expect(tkRParen, ')');
+  end;
+  Expect(tkDo, 'do');
+  bodyNode := ParseStatementAST;
+
+  gIdx := AllocVar('', tyPointer);
+
+  procAddr := AllocNode(AN_PROCADDR); ASTIVal[procAddr] := gpi; ASTTk[procAddr] := Ord(tyPointer);
+  nargsLit := AllocNode(AN_INT_LIT);  ASTIVal[nargsLit] := nargs; ASTTk[nargsLit] := Ord(tyInt64);
+  allocArgs[0] := procAddr;
+  allocArgs[1] := nargsLit;
+  allocArgs[2] := argNodes[0];
+  allocArgs[3] := argNodes[1];
+  allocArgs[4] := argNodes[2];
+  allocArgs[5] := argNodes[3];
+  callAlloc := GenMakeCall(paCoAlloc, tyPointer, allocArgs, 6);
+  assignG := GenMakeAssign(GenMakeIdent(gIdx, tyPointer), callAlloc);
+
+  nextArgs[0] := GenMakeIdent(gIdx, tyPointer);
+  callNext := GenMakeCall(paCoNext, tyBoolean, nextArgs, 1);
+
+  curArgs[0] := GenMakeIdent(gIdx, tyPointer);
+  callCur := GenMakeCall(paCoCurrent, tyInt64, curArgs, 1);
+  assignX := GenMakeAssign(GenMakeIdent(varIdx, Syms[varIdx].TypeKind), callCur);
+
+  innerSeq := GenMakeSeq(assignX, GenMakeSeq(bodyNode, -1));
+  whileNode := AllocNode(AN_WHILE);
+  ASTLeft[whileNode] := callNext;
+  ASTRight[whileNode] := innerSeq;
+
+  freeArgs[0] := GenMakeIdent(gIdx, tyPointer);
+  callFree := GenMakeCall(paCoFree, tyPointer, freeArgs, 1);
+
+  Result := GenMakeSeq(assignG, GenMakeSeq(whileNode, GenMakeSeq(callFree, -1)));
+end;
+
 function ParseForStatementAST: Integer;
 var
   varIdx, initNode, limitNode, bodyNode, node: Integer;
   pair1, pair2, pair3, isDownNode: Integer;
+  gpi, fsym: Integer;
   down: Boolean;
 begin
   if CurTok.Kind <> tkIdent then Error('for: expected variable');
   varIdx := FindSym(CurTok.SVal);
   if varIdx < 0 then Error('for: undefined');
   Next;
+  if CurTok.Kind = tkIn then
+  begin
+    { for x in <generator-call> (v1: generators only) }
+    Next;
+    if CurTok.Kind <> tkIdent then Error('for-in: expected a generator call');
+    gpi := FindProc(CurTok.SVal);
+    if (gpi < 0) or not ProcIsGenerator[gpi] then
+      Error('for-in: only generator calls are supported (v1)');
+    Next;
+    Result := ParseForInGeneratorAST(varIdx, gpi);
+    Exit;
+  end;
   Expect(tkAssign, ':=');
   ParseExpr; initNode := CurASTNode;
   down := CurTok.Kind = tkDownto;
@@ -3762,6 +3891,9 @@ var
   handlerHead, lastHandler, handlerNode, handlerVar, ci, recId: Integer;
   handlerName, className: AnsiString;
 begin
+  { yield inside try/except/finally is rejected in v1 — track nesting so a yield
+    anywhere within (body, handler, or finally) is caught. }
+  Inc(GenTryDepth);
   trySeq := AllocNode(AN_SEQ);
   tryLast := trySeq;
   while not (CurTok.Kind in [tkExcept, tkFinally, tkEnd, tkEOF]) do
@@ -3851,6 +3983,7 @@ begin
   end;
   ASTLeft[node] := trySeq;
   ASTRight[node] := actionSeq;
+  Dec(GenTryDepth);
   Result := node;
 end;
 
@@ -4262,6 +4395,21 @@ begin
       end;
       if CaseEqual(name, 'inherited') then
         node := ParseInheritedCallAST
+      else if CaseEqual(name, 'yield') then
+      begin
+        { `yield E` — only inside a generator body; forbidden inside try/except/
+          finally in v1 (sidesteps the cross-stack exception-frame swap). }
+        if not CurProcIsGenerator then
+          Error('yield outside a generator');
+        if GenTryDepth > 0 then
+          Error('yield inside try/except/finally is not allowed (v1)');
+        Next;
+        ParseExpr;
+        node := AllocNode(AN_YIELD);
+        ASTLeft[node] := CurASTNode;
+        ASTIVal[node] := CurGenSelfSym;
+        CurGenSeenYield := True;
+      end
       else if CaseEqual(name, '__pxxcoswitch') then
       begin
         { Statement form of the low-level coroutine switch:
@@ -5958,6 +6106,9 @@ var
   doneArgs, doneParam, isArr, isByRef, isConst, declOverload, isClassKeyword, isStaticMethod: Boolean;
   needsProcCleanupFrame, savedProcCleanupFrameActive: Boolean;
   isAsmFunc: Boolean;
+  isGenerator: Boolean;
+  savedGenIsGen, savedGenSeen: Boolean; savedGenSelf, savedGenTry: Integer;
+  genSelfIdx, gpi: Integer;
   asmNode: Integer;
   startIdx, idx: Integer;
   tokKindOrd: Integer;
@@ -5968,6 +6119,7 @@ var
 begin
   isClassKeyword := False;
   isAsmFunc := False;
+  isGenerator := False;
   if CurTok.Kind = tkClass then
   begin
     isClassKeyword := True;
@@ -6149,14 +6301,25 @@ begin
          ((CurTok.SVal = 'inline') or (CurTok.SVal = 'Inline') or (CurTok.SVal = 'INLINE') or
           (CurTok.SVal = 'register') or (CurTok.SVal = 'Register') or (CurTok.SVal = 'REGISTER') or
           (CurTok.SVal = 'cdecl') or (CurTok.SVal = 'Cdecl') or (CurTok.SVal = 'CDECL') or
-          CaseEqual(CurTok.SVal, 'assembler'))) or
+          CaseEqual(CurTok.SVal, 'assembler') or
+          CaseEqual(CurTok.SVal, 'generator') or
+          CaseEqual(CurTok.SVal, 'stackful') or
+          CaseEqual(CurTok.SVal, 'stackless'))) or
         (CurTok.Kind = tkOverload) do
   begin
     if CurTok.Kind = tkOverload then declOverload := True;
     if (CurTok.Kind = tkIdent) and CaseEqual(CurTok.SVal, 'assembler') then isAsmFunc := True;
+    if (CurTok.Kind = tkIdent) and CaseEqual(CurTok.SVal, 'generator') then isGenerator := True;
+    if (CurTok.Kind = tkIdent) and CaseEqual(CurTok.SVal, 'stackless') then
+      Error('generator: stackless backend not implemented yet (v1 is stackful only)');
+    { `stackful` is the only implemented v1 strategy; accept it as a no-op modifier. }
     Next;
     Eat(tkSemicolon);
   end;
+  if isGenerator and not isFunc then
+    Error('generator must be a function (its result type is the yielded element type)');
+  if isGenerator and isAsmFunc then
+    Error('a routine cannot be both generator and assembler');
 
   { External binding: `procedure foo(...); cdecl; external 'libname.so' [name 'sym'];`
     Marks the routine as a dynamically-linked import. Symbol defaults to the
@@ -6302,6 +6465,9 @@ begin
   ProcRetElemRec[pi] := retElemRec;
   ProcRetPtrElemTk[pi] := retPtrElemTk;
   ProcRetPtrElemRec[pi] := retPtrElemRec;
+  ProcIsGenerator[pi] := isGenerator;
+  if isGenerator and (nparams > CO_MAX_PARAMS) then
+    Error('generator: at most 4 parameters in v1');
   if retIsDynArr then Procs[pi].RetType := tyPointer; { 8-byte heap handle ABI }
   if TargetArch = TARGET_XTENSA then
     while (CodeLen mod 4) <> 0 do xtensa_nop; { CALL0 targets must be 4-aligned }
@@ -6440,6 +6606,28 @@ begin
       idx := AllocVar('', tyPointer);
       ProcAggregateDestSym[pi] := idx;
     end;
+  end;
+
+  { Generator body context: a `; generator;` routine is compiled as a stackful
+    coroutine body (see lib/rtl/coroutine.pas). Allocate a hidden self-pointer
+    local; the body prologue copies the instance ptr (handed off in rbx by
+    CoSwitch) into it, then loads params from the instance. yield/finish use it.
+    Save/restore any enclosing generator context for nested routine defs. }
+  savedGenIsGen := CurProcIsGenerator;
+  savedGenSelf  := CurGenSelfSym;
+  savedGenSeen  := CurGenSeenYield;
+  savedGenTry   := GenTryDepth;
+  CurProcIsGenerator := isGenerator;
+  CurGenSelfSym := -1;
+  CurGenSeenYield := False;
+  GenTryDepth := 0;
+  if isGenerator then
+  begin
+    if TargetArch <> TARGET_X86_64 then
+      Error('generator: only the x86-64 target is supported in v1');
+    EnableCoroutineRuntime;
+    genSelfIdx := AllocVar('', tyPointer);   { hidden self pointer }
+    CurGenSelfSym := genSelfIdx;
   end;
 
   { Prologue }
@@ -6934,6 +7122,37 @@ begin
     ProcExceptionCleanupFrameActive := True;
   end;
 
+  { Generator body prologue: this proc is entered not by a normal `call` but by
+    CoSwitch `ret`ing into it, with the instance pointer handed off in rbx (the
+    initial frame's rbx slot, set by CoAlloc). Copy it into the hidden self
+    local, then load each declared param from the instance (the ABI param regs
+    hold garbage since there was no real call). }
+  if isGenerator then
+  begin
+    { mov [rbp+selfOff], rbx }
+    EmitB($48); EmitB($89); EmitB($9D); EmitI32(Syms[CurGenSelfSym].Offset);
+    for i := 0 to nparams - 1 do
+    begin
+      gpi := Procs[pi].Params[i].SymIdx;
+      sz := ParamSize(gpi);
+      { rax = self }
+      EmitB($48); EmitB($8B); EmitB($85); EmitI32(Syms[CurGenSelfSym].Offset);
+      { rax = [rax + CO_OFF_PARAMS + 8*i]  (instance stores each param as a qword) }
+      EmitB($48); EmitB($8B); EmitB($80); EmitI32(CO_OFF_PARAMS + 8 * i);
+      { Store only the param's own width into its frame slot — slots are packed by
+        size, so a qword store would clobber the adjacent param slot. }
+      if sz = 1 then
+        begin EmitB($88); EmitB($85); end                  { mov [rbp+off], al }
+      else if sz = 2 then
+        begin EmitB($66); EmitB($89); EmitB($85); end       { mov [rbp+off], ax }
+      else if sz = 4 then
+        begin EmitB($89); EmitB($85); end                   { mov [rbp+off], eax }
+      else
+        begin EmitB($48); EmitB($89); EmitB($85); end;       { mov [rbp+off], rax }
+      EmitI32(Syms[gpi].Offset);
+    end;
+  end;
+
   { Body }
   if isAsmFunc then
   begin
@@ -6952,6 +7171,22 @@ begin
     ParseBlock;
     Expect(tkEnd, 'end');
     Eat(tkSemicolon);
+  end;
+
+  { Generator body epilogue: falling off the end means exhaustion. Mark done and
+    CoSwitch back to the consumer; this never returns (the consumer's CoNext
+    sees done and stops, never resuming this stack). Emitted before the normal
+    epilogue, which is therefore unreachable for a generator. Validation: a
+    generator with no yield is almost certainly a mistake. }
+  if isGenerator then
+  begin
+    if not CurGenSeenYield then
+      Error('generator has no yield');
+    EmitB($48); EmitB($8B); EmitB($85); EmitI32(Syms[CurGenSelfSym].Offset);  { mov rax, [rbp+selfOff] }
+    EmitB($48); EmitB($C7); EmitB($80); EmitI32(CO_OFF_DONE); EmitI32(1);      { mov qword [rax+DONE], 1 }
+    EmitB($48); EmitB($8D); EmitB($78); EmitB(CO_OFF_GENCTX);                  { lea rdi, [rax+genctx]  (from) }
+    EmitB($48); EmitB($8D); EmitB($70); EmitB(CO_OFF_CALLERCTX);               { lea rsi, [rax+callerctx] (to) }
+    IREmitCodeCall(CoSwitchAddr);
   end;
 
   if needsProcCleanupFrame then
@@ -6992,6 +7227,10 @@ begin
   GotoFixupCount := savedGFC;
   CurProc   := -1;
   CurSelfClass := REC_NONE;
+  CurProcIsGenerator := savedGenIsGen;
+  CurGenSelfSym := savedGenSelf;
+  CurGenSeenYield := savedGenSeen;
+  GenTryDepth := savedGenTry;
 end;
 
 function LowerCase(const s: AnsiString): AnsiString;
@@ -7395,6 +7634,10 @@ begin
     while i < TokCount do
     begin
       if Tokens[i].Kind in [tkTry, tkRaise] then EnableExceptionRuntime;
+      { A unit (e.g. coroutine.pas) using the low-level __pxxcoswitch intrinsic
+        needs the CoSwitch stub emitted before its body compiles. }
+      if (Tokens[i].Kind = tkIdent) and CaseEqual(GetTokenStr(i), '__pxxcoswitch') then
+        EnableCoroutineRuntime;
       Inc(i);
     end;
 

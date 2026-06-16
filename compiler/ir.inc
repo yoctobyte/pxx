@@ -89,6 +89,7 @@ begin
     IR_VAR_BOX: Result := 'var_box';
     IR_SYSCALL: Result := 'syscall';
     IR_COSWITCH: Result := 'coswitch';
+    IR_YIELD: Result := 'yield';
   else
     Result := 'unknown';
   end;
@@ -307,6 +308,9 @@ begin
 
       IR_COSWITCH:
         IRRequireNode(IRA[i], 'coswitch first arg');
+
+      IR_YIELD:
+        IRRequireNode(IRA[i], 'yield value');
 
       IR_EXC_ENTER, IR_EXC_MATCH:
       begin
@@ -1310,6 +1314,14 @@ begin
         item := ASTRight[item];
       end;
       Result := IRAppend(IR_COSWITCH, first, -1, -1, 0, ASTTk[node]);
+    end;
+
+    AN_YIELD:
+    begin
+      { value -> [self+CO_OFF_CURRENT], then CoSwitch(self+GENCTX -> self+CALLERCTX).
+        IRIVal carries the generator self-pointer local sym idx. }
+      value := IRLowerAST(ASTLeft[node]);
+      Result := IRAppend(IR_YIELD, value, -1, -1, ASTIVal[node], ASTTk[ASTLeft[node]]);
     end;
 
     AN_ADDR:
