@@ -78,7 +78,7 @@ circuit would make robust.
   it crashes the FPC build (compiler.pas relies on short-circuit), so reverted;
   no interim. Emitter guarded with `AsmTextCharAt`.
 
-- 2026-06-16 — **DONE.** Lowered logical and/or to short-circuit control flow in
+- 2026-06-16 — **DONE** (commit c01af32, ticket close 87946f1). Lowered logical and/or to short-circuit control flow in
   the shared IR (`ir.inc` AN_BINOP): the parser already tags a both-boolean
   and/or with `ASTTk = tyBoolean` (bitwise integer and/or keep an ordinal type),
   so lowering stores the left into a temp, branches (`and` skips right when left
