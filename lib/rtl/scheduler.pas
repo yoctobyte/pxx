@@ -23,6 +23,11 @@ type
   TCoroEntry = procedure(arg: Pointer);
 
 procedure Spawn(entry: TCoroEntry; arg: Pointer);
+{ Like Spawn but with an explicit per-coroutine heap-stack size in bytes — the
+  RAM-cheap path for constrained devices (e.g. 4-8 KB stacks fit many coroutines
+  in little RAM). A canary word at the low end of every stack is checked when the
+  coroutine finishes; an overflow that reaches the base aborts with a message. }
+procedure SpawnSized(entry: TCoroEntry; arg: Pointer; stackBytes: Int64);
 procedure CoYield;
 procedure RunUntilDone;
 
@@ -44,7 +49,8 @@ implementation
 
 const
   MAX_CO = 64;
-  CO_STK = 65536;   { per-coroutine heap stack }
+  CO_STK = 65536;   { default per-coroutine heap stack }
+  CO_CANARY = $C0DECAFE;  { 32-bit so it round-trips through one machine word on i386 too }
 
 {$ifdef CPUX86_64}
 const
@@ -109,11 +115,17 @@ end;
   then the return address (= CoStart). PW = ^NativeInt writes one machine word,
   so the slot stride is the target pointer size automatically. }
 procedure Spawn(entry: TCoroEntry; arg: Pointer);
+begin
+  SpawnSized(entry, arg, CO_STK);
+end;
+
+procedure SpawnSized(entry: TCoroEntry; arg: Pointer; stackBytes: Int64);
 var id: Integer; stk, top: Int64;
 begin
   id := coCount; Inc(coCount);
-  stk := Int64(GetMem(CO_STK));
-  top := stk + CO_STK;
+  stk := Int64(GetMem(stackBytes));
+  PW(stk)^ := CO_CANARY;          { overflow guard at the low end of the stack }
+  top := stk + stackBytes;
   top := top - (top mod 16);   { 16-align down }
 {$ifdef CPU_I386}
   { i386 pops: exc, edi, esi, ebx, ebp, ret — 6 dwords. }
@@ -243,7 +255,14 @@ begin
         gArg := coArg[i];
         __pxxcoswitch(@schedSp, @coSp[i]);   { run i until it yields or finishes }
         if coState[i] = 2 then
+        begin
+          if PW(coStk[i])^ <> CO_CANARY then
+          begin
+            writeln('fatal: coroutine stack overflow (canary clobbered)');
+            Halt(217);
+          end;
           FreeMem(Pointer(coStk[i]));
+        end;
       end;
     anyBlocked := 0;
     for i := 0 to coCount - 1 do
