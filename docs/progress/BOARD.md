@@ -14,7 +14,7 @@ _none_
 | --- | --- | --- | --- |
 | feature-synthetic-feature-matrix-test | feature | Synthetic all-features stress test (cross-target conformance) | — |
 
-## backlog (34)
+## backlog (33)
 
 | Ticket | Type | Summary | Blocked-by |
 | --- | --- | --- | --- |
@@ -47,7 +47,6 @@ _none_
 | feature-no-ansistring-profile | feature | No-AnsiString / bounded-string profile | — |
 | feature-parallel-processing | feature | Parallel processing as a language feature | feature-unified-heap-allocator |
 | feature-progress-transition-helpers | feature | Progress transition helpers (`claim` / `resolve`) | — |
-| feature-short-circuit-eval | feature | Short-circuit boolean evaluation (`and` / `or`) | — |
 | feature-static-arena-profile | feature | Fixed-static-arena allocator profile | feature-unified-heap-allocator |
 | feature-threadsafe-io-serialization | feature | Statement-level I/O serialization under threads | feature-unified-heap-allocator |
 | idea-unit-rename-import | idea | `uses X as Y` unit-rename import (dialect extension) | — |
@@ -60,7 +59,7 @@ _none_
 | bug-nonreproducible-miscompile-2026-06-02 | bug | Non-reproducible one-off miscompile (2026-06-02) | — |
 | bug-whole-record-copy-main-body-noop | bug | Latent: whole-record array-element copy in main-program body emits store no-ops | — |
 
-## done (43)
+## done (44)
 
 | Ticket | Type | Summary | Blocked-by |
 | --- | --- | --- | --- |
@@ -98,6 +97,7 @@ _none_
 | feature-relative-path-units | feature | Relative/absolute path support in `uses`/`includes` | — |
 | feature-rtti-layout-table | feature | Target-independent layout RTTI (Tier B) | feature-cross-bootstrap |
 | feature-rv32-asm-emitter | feature | RISC-V (RV32) text-assembler (`EmitAsmRv32`) for cleaner riscv32 codegen | — |
+| feature-short-circuit-eval | feature | Short-circuit boolean evaluation (`and` / `or`) | — |
 | feature-target-aarch64 | feature | Compile target: ARM64 / AArch64 Linux | feature-target-i386 |
 | feature-target-arm32 | feature | Compile target: ARM32 Linux | feature-target-aarch64 |
 | feature-target-esp32 | feature | Compile target: ESP32 / embedded | — |
@@ -139,7 +139,6 @@ _none_
 - feature-no-ansistring-profile
 - feature-parallel-processing
 - feature-progress-transition-helpers
-- feature-short-circuit-eval
 - feature-static-arena-profile
 - feature-threadsafe-io-serialization
 - idea-unit-rename-import
