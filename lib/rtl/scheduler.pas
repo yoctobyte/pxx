@@ -35,6 +35,11 @@ procedure WaitReadable(fd: Integer);
 procedure WaitWritable(fd: Integer);
 procedure SetNonBlocking(fd: Integer);
 
+{ Suspend the current coroutine for ms milliseconds without blocking the thread
+  (a timerfd parked on the same reactor). On non-reactor targets it degrades to
+  a plain CoYield (no real delay). }
+procedure CoSleep(ms: Integer);
+
 implementation
 
 const
@@ -43,16 +48,22 @@ const
 
 {$ifdef CPUX86_64}
 const
-  SYS_fcntl         = 72;
-  SYS_epoll_create1 = 291;
-  SYS_epoll_ctl     = 233;
-  SYS_epoll_wait    = 232;
+  SYS_fcntl          = 72;
+  SYS_epoll_create1  = 291;
+  SYS_epoll_ctl      = 233;
+  SYS_epoll_wait     = 232;
+  SYS_read           = 0;
+  SYS_close          = 3;
+  SYS_timerfd_create = 283;
+  SYS_timerfd_settime = 286;
   O_NONBLOCK    = $800;
   F_SETFL       = 4;
   EPOLL_CTL_ADD = 1;
   EPOLL_CTL_DEL = 2;
   EPOLLIN       = $001;
   EPOLLOUT      = $004;
+  CLOCK_MONOTONIC = 1;
+  TFD_NONBLOCK    = $800;
 
 type
   { Linux epoll_event is packed: u32 events then u64 data = 12 bytes. The data
@@ -188,10 +199,27 @@ end;
 
 procedure WaitReadable(fd: Integer); begin WaitIO(fd, EPOLLIN);  end;
 procedure WaitWritable(fd: Integer); begin WaitIO(fd, EPOLLOUT); end;
+
+{ One-shot relative timer as a readable fd: arm a timerfd, park on the reactor
+  until it fires, drain the expiration count, close. }
+procedure CoSleep(ms: Integer);
+var tfd, i: Integer; spec: array[0..31] of Byte; base, rc: Int64;
+begin
+  tfd := Integer(__pxxrawsyscall(SYS_timerfd_create, CLOCK_MONOTONIC, TFD_NONBLOCK, 0, 0, 0, 0));
+  for i := 0 to 31 do spec[i] := 0;        { it_interval = 0 (one-shot) }
+  base := Int64(@spec[0]);
+  PW(base + 16)^ := ms div 1000;           { it_value.tv_sec }
+  PW(base + 24)^ := (ms mod 1000) * 1000000; { it_value.tv_nsec }
+  rc := __pxxrawsyscall(SYS_timerfd_settime, tfd, 0, base, 0, 0, 0);
+  WaitReadable(tfd);
+  rc := __pxxrawsyscall(SYS_read, tfd, base, 8, 0, 0, 0);  { drain expirations }
+  rc := __pxxrawsyscall(SYS_close, tfd, 0, 0, 0, 0, 0);
+end;
 {$else}
 { No reactor on this target yet: degrade to a cooperative yield (busy-poll). }
 procedure WaitReadable(fd: Integer); begin CoYield; end;
 procedure WaitWritable(fd: Integer); begin CoYield; end;
+procedure CoSleep(ms: Integer); begin CoYield; end;
 {$endif}
 
 { Round-robin every runnable coroutine; when none are runnable but some are

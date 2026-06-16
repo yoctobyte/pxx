@@ -233,6 +233,8 @@ test-core: $(COMPILER)
 	test "$$(/tmp/test_reactor26)" = "$$(printf 'reader: start\nreader: would-block, parking\nwriter: writing\nreader: got 2 bytes: hi\ndone')"
 	./$(COMPILER) test/test_asyncecho.pas /tmp/test_asyncecho26
 	test "$$(/tmp/test_asyncecho26)" = "$$(printf 'client 1 ok\nclient 2 ok\ndone')"
+	./$(COMPILER) test/test_timer.pas /tmp/test_timer26
+	test "$$(/tmp/test_timer26)" = "$$(printf 'woke 50\nwoke 100\nwoke 150\ndone')"
 	./$(COMPILER) test/test_many_params.pas /tmp/test_many_params26
 	test "$$(/tmp/test_many_params26)" = "$$(printf '1 2 3 4 5 6 7\n3 4 5 6 7 12 89\n8912\n7654326\n12100806\n7654321\n96\n196')"
 	./$(COMPILER) test/test_procaddr.pas /tmp/test_procaddr26
