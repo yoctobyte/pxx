@@ -6,13 +6,15 @@ pipeline, and no `execve` of any tool.
 
 ## Output format
 
-Every target emits a **static, syscall-only ELF**. The binary talks to the
-kernel directly; it links **no libc and no dynamic loader**. Consequences:
+By default a program that imports no shared objects compiles to a **static,
+syscall-only ELF**: it talks to the kernel directly and links **no libc and no
+dynamic loader**. So it runs on any Linux of the right architecture regardless
+of distro or libc — no AppImage/snap/flatpak.
 
-- It runs on any Linux of the right architecture, regardless of distro or libc —
-  no AppImage/snap/flatpak needed.
-- C libraries are reached only through explicit `external` bindings to shared
-  objects (then the binary *is* dynamically linked for those), not through libc.
+A program *may* still use shared libraries: an `external 'lib.so'` binding pulls
+in that `.so` and the resulting binary is then **dynamically linked** for those
+symbols (never through libc). Dynamic linking is currently an **x86-64**
+capability; the cross targets emit static syscall-only binaries only.
 
 ## Cross-compilation
 

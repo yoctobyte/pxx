@@ -20,7 +20,7 @@ than prose.
 
 | Page | What it covers |
 | --- | --- |
-| [Targets & binaries](targets.md) | The six CPU targets, `--target`, static syscall-only ELF, predefined CPU symbols. |
+| [Targets & binaries](targets.md) | The six CPU targets, `--target`, static syscall-only (or shared-object-linked) ELF, predefined CPU symbols. |
 | [Types](types.md) | Ordinals, strings (managed vs frozen), dynamic arrays, sets, records, variants, `array of const`. |
 | [Routines](routines.md) | Procedures/functions, parameters, overloads, operator overloading, generics, auto-typed & inline `var`. |
 | [Classes & RTTI](classes.md) | Classes, VMT, properties, metaclasses, published RTTI, `.lfm` streaming. |

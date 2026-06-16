@@ -1,7 +1,9 @@
 # PXX Documentation
 
-`PXX` is a small self-hosting Object Pascal compiler. It emits static,
-syscall-only ELF executables directly — no assembler, no linker, no libc. It
+`PXX` is a small self-hosting Object Pascal compiler. It emits ELF executables
+directly — no external assembler or linker. A program that imports no shared
+objects is **static and syscall-only** (no libc, no loader); importing a shared
+library (`external 'lib.so'`, x86-64) makes that binary dynamically linked. It
 targets x86-64, i386, aarch64, arm32 (Linux) and riscv32/xtensa (embedded); see
 [Targets](dialect/targets.md). The installed executable is still
 `compiler/pascal26`.
