@@ -14,6 +14,7 @@ const
   MAX_EXTERNAL = 16384;
   MAX_CPREP_MACROS = 32768;
   MAX_DECL_NAMES = 256;  { comma-separated names in one var declaration line }
+  MAX_ARR_DIMS = 6;      { max dimensions of a fixed multidimensional array }
   MAX_PENDING_INITS = 16384;  { constant global-var initializer assignments }
   MAX_CPREP_PARAMS = 131072;
   MAX_CPREP_CONDS = 256;
@@ -576,10 +577,12 @@ var
   SymDynDepth : array[0..MAX_SYMS-1] of Integer; { dynamic-array nesting: 0=not dynamic, 1=array of T, 2=array of array of T, ... }
   { 2-D fixed array flattened to 1-D storage: m[i,j] / m[i][j] index as
     (i-lo1)*span2 + (j-lo2). Default False/0 (single-dimension array). }
-  SymArr2     : array[0..MAX_SYMS-1] of Boolean;
-  SymArr2Lo1  : array[0..MAX_SYMS-1] of Integer;
-  SymArr2Lo2  : array[0..MAX_SYMS-1] of Integer;
-  SymArr2Span2: array[0..MAX_SYMS-1] of Integer;
+  { N-D fixed array flattened to 1-D storage; element [i0..iN-1] linearises to
+    Horner( (i_d - lo_d) over span_d ). NDims=0 means single-dimension. Per-dim
+    lo/span live in flat side tables indexed [sym*MAX_ARR_DIMS + d]. }
+  SymArrNDims  : array[0..MAX_SYMS-1] of Integer;
+  SymArrDimLo  : array[0..MAX_SYMS*MAX_ARR_DIMS-1] of Integer;
+  SymArrDimSpan: array[0..MAX_SYMS*MAX_ARR_DIMS-1] of Integer;
   SymRTTIOff  : array[0..MAX_SYMS-1] of Integer; { Data[] offset of layout RTTI descriptor, -1 if none }
   SymIsHiddenArgTemp : array[0..MAX_SYMS-1] of Boolean; { compiler-synthesised owning managed local created during IR lowering (materialised managed-string call argument, or an `array of const` TVarRec dyn-array temp); allocated after the parser's prologue zero-init pass, so codegen nil-inits it before the body }
   SymBlockId : array[0..MAX_SYMS-1] of Integer;
@@ -901,10 +904,9 @@ var
   UFldPub    : array[0..MAX_UFIELD-1] of Integer;  { 1 = published, 0 = other }
   { 2-D fixed-array fields: `m: array[a..b, c..d] of T`, flattened to 1-D
     storage; r.m[i,j] / r.m[i][j] index via (i-lo1)*span2 + (j-lo2). }
-  UFldArr2     : array[0..MAX_UFIELD-1] of Boolean;
-  UFldArr2Lo1  : array[0..MAX_UFIELD-1] of Integer;
-  UFldArr2Lo2  : array[0..MAX_UFIELD-1] of Integer;
-  UFldArr2Span2: array[0..MAX_UFIELD-1] of Integer;
+  UFldArrNDims  : array[0..MAX_UFIELD-1] of Integer;
+  UFldArrDimLo  : array[0..MAX_UFIELD*MAX_ARR_DIMS-1] of Integer;
+  UFldArrDimSpan: array[0..MAX_UFIELD*MAX_ARR_DIMS-1] of Integer;
   UFldCount  : Integer;
 
   UMthNOff   : array[0..MAX_UMETH-1] of Integer;
@@ -965,11 +967,16 @@ var
   ArrTypeHi     : array[0..MAX_TYPEALIAS-1] of Integer;
   ArrTypeElemTk : array[0..MAX_TYPEALIAS-1] of Integer;
   ArrTypeElemRec: array[0..MAX_TYPEALIAS-1] of Integer;
-  ArrTypeIsArr2 : array[0..MAX_TYPEALIAS-1] of Boolean;
-  ArrTypeLo1    : array[0..MAX_TYPEALIAS-1] of Integer;
-  ArrTypeLo2    : array[0..MAX_TYPEALIAS-1] of Integer;
-  ArrTypeSpan2  : array[0..MAX_TYPEALIAS-1] of Integer;
+  ArrTypeNDims  : array[0..MAX_TYPEALIAS-1] of Integer;
+  ArrTypeDimLo  : array[0..MAX_TYPEALIAS*MAX_ARR_DIMS-1] of Integer;
+  ArrTypeDimSpan: array[0..MAX_TYPEALIAS*MAX_ARR_DIMS-1] of Integer;
   ArrTypeCount  : Integer;
+
+  { Scratch filled by NodeArrNDInfo for the multidim array a node references. }
+  NDInfoNDims : Integer;
+  NDInfoLo    : array[0..MAX_ARR_DIMS-1] of Integer;
+  NDInfoSpan  : array[0..MAX_ARR_DIMS-1] of Integer;
+  NDIdxNode   : array[0..MAX_ARR_DIMS-1] of Integer; { parsed index exprs for a multidim ref }
 
   CurSelfClass : Integer;
 

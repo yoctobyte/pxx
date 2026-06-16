@@ -386,7 +386,7 @@ begin
   UFldIsArray[fi] := False;
   UFldArrLen[fi] := 1;
   UFldDynDepth[fi] := 0;
-  UFldArr2[fi] := False;
+  UFldArrNDims[fi] := 0;
   UFldPub[fi] := 0;
   UFldCount := UFldCount + 1;
   UClsFCount[ci] := UClsFCount[ci] + 1;
@@ -1404,7 +1404,7 @@ begin
   Syms[SymCount].IsArray  := True;
   Syms[SymCount].ArrLen   := hi - lo + 1;
   SymDynDepth[SymCount] := 0;
-  SymArr2[SymCount] := False;
+  SymArrNDims[SymCount] := 0;
   SymRTTIOff[SymCount] := -1;
   Syms[SymCount].ElemType := elemType;
   Syms[SymCount].ElemRecName := LastTypeRecId;

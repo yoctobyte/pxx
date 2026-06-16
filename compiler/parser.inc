@@ -830,38 +830,44 @@ begin
   RegisterOpOverload(Ord(opKind), opTypeKind, recId, procIdx);
 end;
 
-{ Linear index of a 2-D fixed array element: (i - lo1) * span2 + (j - lo2),
-  built from AST nodes so it feeds the ordinary 1-D AN_INDEX (no codegen
-  change). iNode/jNode are the two parsed index expressions. }
-function BuildFlat2DIndex(lo1, lo2, span2, iNode, jNode: Integer): Integer;
-var lo1Lit, lo2Lit, spanLit, di, scaled, dj: Integer;
+{ Linear (row-major) index of an N-D fixed array element, built from AST nodes so
+  it feeds the ordinary 1-D AN_INDEX (no codegen change). Reads the dims from
+  NDInfoLo/Span and the parsed index exprs from NDIdxNode; nd dimensions.
+  Horner form: acc = (i0-lo0); acc = acc*span_d + (i_d - lo_d) for d = 1..nd-1. }
+function BuildFlatNDIndex(nd: Integer): Integer;
+var d, loLit, spanLit, diff, scaled, acc: Integer;
 begin
-  lo1Lit := AllocNode(AN_INT_LIT); ASTIVal[lo1Lit] := lo1; ASTTk[lo1Lit] := Ord(tyInteger);
-  di := AllocNode(AN_BINOP); ASTIVal[di] := Ord(tkMinus);
-  ASTLeft[di] := iNode; ASTRight[di] := lo1Lit; ASTTk[di] := Ord(tyInteger);
-
-  spanLit := AllocNode(AN_INT_LIT); ASTIVal[spanLit] := span2; ASTTk[spanLit] := Ord(tyInteger);
-  scaled := AllocNode(AN_BINOP); ASTIVal[scaled] := Ord(tkStar);
-  ASTLeft[scaled] := di; ASTRight[scaled] := spanLit; ASTTk[scaled] := Ord(tyInteger);
-
-  lo2Lit := AllocNode(AN_INT_LIT); ASTIVal[lo2Lit] := lo2; ASTTk[lo2Lit] := Ord(tyInteger);
-  dj := AllocNode(AN_BINOP); ASTIVal[dj] := Ord(tkMinus);
-  ASTLeft[dj] := jNode; ASTRight[dj] := lo2Lit; ASTTk[dj] := Ord(tyInteger);
-
-  Result := AllocNode(AN_BINOP); ASTIVal[Result] := Ord(tkPlus);
-  ASTLeft[Result] := scaled; ASTRight[Result] := dj; ASTTk[Result] := Ord(tyInteger);
+  loLit := AllocNode(AN_INT_LIT); ASTIVal[loLit] := NDInfoLo[0]; ASTTk[loLit] := Ord(tyInteger);
+  acc := AllocNode(AN_BINOP); ASTIVal[acc] := Ord(tkMinus);
+  ASTLeft[acc] := NDIdxNode[0]; ASTRight[acc] := loLit; ASTTk[acc] := Ord(tyInteger);
+  for d := 1 to nd - 1 do
+  begin
+    spanLit := AllocNode(AN_INT_LIT); ASTIVal[spanLit] := NDInfoSpan[d]; ASTTk[spanLit] := Ord(tyInteger);
+    scaled := AllocNode(AN_BINOP); ASTIVal[scaled] := Ord(tkStar);   { acc * span_d }
+    ASTLeft[scaled] := acc; ASTRight[scaled] := spanLit; ASTTk[scaled] := Ord(tyInteger);
+    loLit := AllocNode(AN_INT_LIT); ASTIVal[loLit] := NDInfoLo[d]; ASTTk[loLit] := Ord(tyInteger);
+    diff := AllocNode(AN_BINOP); ASTIVal[diff] := Ord(tkMinus);    { i_d - lo_d }
+    ASTLeft[diff] := NDIdxNode[d]; ASTRight[diff] := loLit; ASTTk[diff] := Ord(tyInteger);
+    acc := AllocNode(AN_BINOP); ASTIVal[acc] := Ord(tkPlus);       { scaled + diff }
+    ASTLeft[acc] := scaled; ASTRight[acc] := diff; ASTTk[acc] := Ord(tyInteger);
+  end;
+  Result := acc;
 end;
 
-{ If `node` is a 2-D fixed array reference (a SymArr2 ident or an UFldArr2 record
-  field), return True and its dims. Lets m[i,j] and r.m[i,j] share one path. }
-function NodeArr2Info(node: Integer; var lo1, lo2, span2: Integer): Boolean;
-var baseRec, fIdx: Integer; fname: AnsiString;
+{ If `node` is an N-D fixed array reference (a SymArrNDims ident or an
+  UFldArrNDims record field), fill NDInfo* and return True. Lets m[..] and
+  r.m[..] share one path. }
+function NodeArrNDInfo(node: Integer): Boolean;
+var baseRec, fIdx, sym, d, base: Integer; fname: AnsiString;
 begin
   Result := False;
-  if (ASTKind[node] = AN_IDENT) and (ASTIVal[node] >= 0) and SymArr2[ASTIVal[node]] then
+  if (ASTKind[node] = AN_IDENT) and (ASTIVal[node] >= 0) and (SymArrNDims[ASTIVal[node]] >= 2) then
   begin
-    lo1 := SymArr2Lo1[ASTIVal[node]]; lo2 := SymArr2Lo2[ASTIVal[node]];
-    span2 := SymArr2Span2[ASTIVal[node]];
+    sym := ASTIVal[node];
+    NDInfoNDims := SymArrNDims[sym];
+    base := sym * MAX_ARR_DIMS;
+    for d := 0 to NDInfoNDims - 1 do
+    begin NDInfoLo[d] := SymArrDimLo[base + d]; NDInfoSpan[d] := SymArrDimSpan[base + d]; end;
     Result := True;
   end
   else if ASTKind[node] = AN_FIELD then
@@ -871,9 +877,12 @@ begin
     begin
       fname := GetASTIdentName(node);
       fIdx := FindUField(baseRec - REC_UCLASS_BASE, fname);
-      if (fIdx >= 0) and UFldArr2[fIdx] then
+      if (fIdx >= 0) and (UFldArrNDims[fIdx] >= 2) then
       begin
-        lo1 := UFldArr2Lo1[fIdx]; lo2 := UFldArr2Lo2[fIdx]; span2 := UFldArr2Span2[fIdx];
+        NDInfoNDims := UFldArrNDims[fIdx];
+        base := fIdx * MAX_ARR_DIMS;
+        for d := 0 to NDInfoNDims - 1 do
+        begin NDInfoLo[d] := UFldArrDimLo[base + d]; NDInfoSpan[d] := UFldArrDimSpan[base + d]; end;
         Result := True;
       end;
     end;
@@ -884,7 +893,7 @@ function ParseLValueAST(idx: Integer; identTokIdx: Integer): Integer;
 var
   node, indexNode, fieldNode, prevTok, recName, i: Integer;
   baseNode, baseRec, fIdx, aliasIdx, firstIdxNode: Integer;
-  is2D: Boolean; a2lo1, a2lo2, a2span2: Integer;
+  isND: Boolean; nIdx: Integer;
   tk: TTypeKind;
   fieldName: AnsiString;
   mci, mmi, mpi, mcallNode, mselfArg, mlastArg, margSeq, margIdx, mexprNode, mai, pri, ci: Integer;
@@ -1138,27 +1147,35 @@ begin
       indexNode := AllocNode(AN_INDEX);
       ASTLeft[indexNode] := node;
       ParseExpr;
-      { 2-D fixed array (variable or record field), both syntaxes folded into one
-        flattened 1-D index: m[i,j]/r.m[i,j] (comma) and m[i][j]/r.m[i][j]
-        (consecutive brackets). Handled in this bracket so the bogus intermediate
-        m[i] is never built. }
-      is2D := NodeArr2Info(node, a2lo1, a2lo2, a2span2);
-      if is2D and (CurTok.Kind = tkComma) then
+      { N-D fixed array (variable or record field), both syntaxes folded into one
+        flattened 1-D index: m[i0,i1,..]/r.m[..] (commas) and m[i0][i1]..
+        (consecutive brackets). Handled here so no bogus intermediate m[i0] is
+        built. NodeArrNDInfo fills NDInfo* (dims) for the base. }
+      isND := NodeArrNDInfo(node);
+      if isND and (CurTok.Kind = tkComma) then
       begin
-        firstIdxNode := CurASTNode;
-        Eat(tkComma);
-        ParseExpr;
-        ASTRight[indexNode] := BuildFlat2DIndex(a2lo1, a2lo2, a2span2, firstIdxNode, CurASTNode);
+        NDIdxNode[0] := CurASTNode; nIdx := 1;
+        while Eat(tkComma) do
+        begin
+          if nIdx >= NDInfoNDims then Error('too many subscripts for array');
+          ParseExpr; NDIdxNode[nIdx] := CurASTNode; Inc(nIdx);
+        end;
+        if nIdx <> NDInfoNDims then Error('wrong number of array subscripts');
+        ASTRight[indexNode] := BuildFlatNDIndex(nIdx);
         Expect(tkRBrack, ']');
       end
-      else if is2D and (CurTok.Kind = tkRBrack) and (Tokens[TokPos].Kind = tkLBrack) then
+      else if isND and (CurTok.Kind = tkRBrack) and (Tokens[TokPos].Kind = tkLBrack) then
       begin
-        firstIdxNode := CurASTNode;
+        NDIdxNode[0] := CurASTNode; nIdx := 1;
         Expect(tkRBrack, ']');
-        Expect(tkLBrack, '[');
-        ParseExpr;
-        ASTRight[indexNode] := BuildFlat2DIndex(a2lo1, a2lo2, a2span2, firstIdxNode, CurASTNode);
-        Expect(tkRBrack, ']');
+        while (CurTok.Kind = tkLBrack) and (nIdx < NDInfoNDims) do
+        begin
+          Expect(tkLBrack, '[');
+          ParseExpr; NDIdxNode[nIdx] := CurASTNode; Inc(nIdx);
+          Expect(tkRBrack, ']');
+        end;
+        if nIdx <> NDInfoNDims then Error('wrong number of array subscripts');
+        ASTRight[indexNode] := BuildFlatNDIndex(nIdx);
       end
       else
       begin
@@ -4755,7 +4772,8 @@ procedure ParseVarSection;
 var names: array[0..MAX_DECL_NAMES-1] of AnsiString; n, i, idx: Integer; tk: TTypeKind;
     isArr, isDyn: Boolean; arrLo, arrHi: Integer; elemTk: TTypeKind; dynDepth: Integer;
     initElem: Integer; initVal: Int64;
-    isArr2: Boolean; arr2Lo1, arr2Lo2, arr2Span2, d2hi, ai: Integer;
+    isArrND: Boolean; ndCnt, dLo, dHi, di, flatLen, ai: Integer;
+    ndDimLo, ndDimSpan: array[0..MAX_ARR_DIMS-1] of Integer;
 begin
   Next;
   { Stop at section keywords: these are plain identifiers in this dialect, so
@@ -4773,21 +4791,25 @@ begin
     until not Eat(tkComma);
     Expect(tkColon, ':');
     isArr := False; isDyn := False; arrLo := 0; arrHi := 0; elemTk := tyInteger;
-    isArr2 := False;
+    isArrND := False; ndCnt := 0;
     ai := -1;
     if CurTok.Kind = tkIdent then ai := FindArrayType(CurTok.SVal);
     if ai >= 0 then
     begin
       { Variable of a named fixed-array type — pull the (flattened) bounds and
-        2-D dims from the registry. }
+        N-D dims from the registry. }
       isArr := True;
       arrLo := ArrTypeLo[ai]; arrHi := ArrTypeHi[ai];
       elemTk := IntToTypeKind(ArrTypeElemTk[ai]); tk := elemTk;
       LastTypeRecId := ArrTypeElemRec[ai];
-      isArr2 := ArrTypeIsArr2[ai];
-      if isArr2 then
+      if ArrTypeNDims[ai] >= 2 then
       begin
-        arr2Lo1 := ArrTypeLo1[ai]; arr2Lo2 := ArrTypeLo2[ai]; arr2Span2 := ArrTypeSpan2[ai];
+        isArrND := True; ndCnt := ArrTypeNDims[ai];
+        for di := 0 to ndCnt - 1 do
+        begin
+          ndDimLo[di]   := ArrTypeDimLo[ai * MAX_ARR_DIMS + di];
+          ndDimSpan[di] := ArrTypeDimSpan[ai * MAX_ARR_DIMS + di];
+        end;
       end;
       Next; { consume the type name }
     end
@@ -4797,25 +4819,26 @@ begin
       if CurTok.Kind = tkLBrack then
       begin
         Next;
-        arrLo := ConstEval;
-        Expect(tkDotDot, '..');
-        arrHi := ConstEval;
-        if CurTok.Kind = tkComma then
-        begin
-          { 2-D fixed array `array[lo1..hi1, lo2..hi2] of T` -> flatten to a 1-D
-            array of span1*span2 elements; m[i,j] indexes via BuildFlat2DIndex. }
-          isArr2 := True;
-          arr2Lo1 := arrLo;
-          Eat(tkComma);
-          arr2Lo2 := ConstEval;
-          Expect(tkDotDot, '..');
-          d2hi := ConstEval;
-          arr2Span2 := d2hi - arr2Lo2 + 1;
-          arrHi := (arrHi - arrLo + 1) * arr2Span2 - 1;
-          arrLo := 0;
-        end;
+        { One or more comma-separated dimensions: `array[a..b, c..d, ...] of T`.
+          1 dimension is an ordinary array; >=2 flattens to 1-D (N-D indexing via
+          BuildFlatNDIndex). }
+        ndCnt := 0;
+        repeat
+          dLo := ConstEval; Expect(tkDotDot, '..'); dHi := ConstEval;
+          if ndCnt >= MAX_ARR_DIMS then Error('too many array dimensions');
+          ndDimLo[ndCnt] := dLo; ndDimSpan[ndCnt] := dHi - dLo + 1; Inc(ndCnt);
+        until not Eat(tkComma);
         Expect(tkRBrack, ']');
         Expect(tkOf, 'of');
+        if ndCnt = 1 then
+        begin arrLo := ndDimLo[0]; arrHi := ndDimLo[0] + ndDimSpan[0] - 1; end
+        else
+        begin
+          isArrND := True;
+          flatLen := 1;
+          for di := 0 to ndCnt - 1 do flatLen := flatLen * ndDimSpan[di];
+          arrLo := 0; arrHi := flatLen - 1;
+        end;
       end
       else
       begin
@@ -4855,12 +4878,14 @@ begin
 	          idx := AllocArray(names[i], elemTk, arrLo, arrHi);
 	          if elemTk = tyRecord then
 	            Syms[idx].ElemRecName := LastTypeRecId;
-	          if isArr2 then
+	          if isArrND then
 	          begin
-	            SymArr2[idx] := True;
-	            SymArr2Lo1[idx] := arr2Lo1;
-	            SymArr2Lo2[idx] := arr2Lo2;
-	            SymArr2Span2[idx] := arr2Span2;
+	            SymArrNDims[idx] := ndCnt;
+	            for di := 0 to ndCnt - 1 do
+	            begin
+	              SymArrDimLo[idx * MAX_ARR_DIMS + di]   := ndDimLo[di];
+	              SymArrDimSpan[idx * MAX_ARR_DIMS + di] := ndDimSpan[di];
+	            end;
 	          end;
 	        end;
 	      end
@@ -5005,8 +5030,9 @@ var
   curPublished: Integer;  { 1 while inside a published section of the current class body }
   etid, propEnumId, propSetEnumId: Integer;
   mFullName: AnsiString;
-  aLo, aHi, aLo1, aLo2, aSpan2, ad2hi: Integer; aIsArr2: Boolean; aElemTk: TTypeKind;
-  fIsArr2: Boolean; fLo1, fLo2, fSpan2, fhi2: Integer;
+  aLo, aHi: Integer; aElemTk: TTypeKind;
+  tdCnt, tdLo, tdHi, tdi, tflatLen, fNDims: Integer;
+  tdDimLo, tdDimSpan: array[0..MAX_ARR_DIMS-1] of Integer;
   mPNames: array[0..15] of AnsiString;
   mPTypes: array[0..15] of TTypeKind;
   mPTypesRec: array[0..15] of Integer;
@@ -5355,7 +5381,7 @@ begin
             arrLen := 1;
             fIsDyn := False;
             fDynDepth := 0;
-            fIsArr2 := False;
+            fNDims := 0;
             if CurTok.Kind = tkArray then
             begin
               Next;
@@ -5373,17 +5399,19 @@ begin
                     arrLen := hiVal - loVal + 1;
                     Next;
                   end;
-                end;
-                if CurTok.Kind = tkComma then
-                begin
-                  { 2-D fixed-array field: array[lo1..hi1, lo2..hi2] of T. }
-                  fIsArr2 := True; fLo1 := loVal;
-                  Eat(tkComma);
-                  if CurTok.Kind = tkInteger then begin fLo2 := CurTok.IVal; Next; end;
-                  Expect(tkDotDot, '..');
-                  if CurTok.Kind = tkInteger then begin fhi2 := CurTok.IVal; Next; end;
-                  fSpan2 := fhi2 - fLo2 + 1;
-                  arrLen := arrLen * fSpan2;
+                  { N-D field: collect dim0 then any comma dims. }
+                  fNDims := 1; tdDimLo[0] := loVal; tdDimSpan[0] := hiVal - loVal + 1;
+                  while CurTok.Kind = tkComma do
+                  begin
+                    Eat(tkComma);
+                    if CurTok.Kind = tkInteger then begin tdLo := CurTok.IVal; Next; end;
+                    Expect(tkDotDot, '..');
+                    if CurTok.Kind = tkInteger then begin tdHi := CurTok.IVal; Next; end;
+                    if fNDims >= MAX_ARR_DIMS then Error('too many array dimensions');
+                    tdDimLo[fNDims] := tdLo; tdDimSpan[fNDims] := tdHi - tdLo + 1;
+                    arrLen := arrLen * tdDimSpan[fNDims];
+                    Inc(fNDims);
+                  end;
                 end;
                 Expect(tkRBrack, ']');
                 Expect(tkOf, 'of');
@@ -5443,12 +5471,14 @@ begin
               if fIsDyn then UFldArrLen[UFldCount-1] := -1
               else UFldArrLen[UFldCount-1] := arrLen;
               UFldDynDepth[UFldCount-1] := fDynDepth;
-              UFldArr2[UFldCount-1] := fIsArr2;
-              if fIsArr2 then
+              if fNDims >= 2 then
               begin
-                UFldArr2Lo1[UFldCount-1] := fLo1;
-                UFldArr2Lo2[UFldCount-1] := fLo2;
-                UFldArr2Span2[UFldCount-1] := fSpan2;
+                UFldArrNDims[UFldCount-1] := fNDims;
+                for tdi := 0 to fNDims - 1 do
+                begin
+                  UFldArrDimLo[(UFldCount-1) * MAX_ARR_DIMS + tdi]   := tdDimLo[tdi];
+                  UFldArrDimSpan[(UFldCount-1) * MAX_ARR_DIMS + tdi] := tdDimSpan[tdi];
+                end;
               end;
               UFldPub[UFldCount-1] := curPublished;
               curFieldOff := curFieldOff + fSize;
@@ -5524,7 +5554,7 @@ begin
             arrLen := 1;
             fIsDyn := False;
             fDynDepth := 0;
-            fIsArr2 := False;
+            fNDims := 0;
             if CurTok.Kind = tkArray then
             begin
               Next;
@@ -5542,17 +5572,19 @@ begin
                     arrLen := hiVal - loVal + 1;
                     Next;
                   end;
-                end;
-                if CurTok.Kind = tkComma then
-                begin
-                  { 2-D fixed-array field: array[lo1..hi1, lo2..hi2] of T. }
-                  fIsArr2 := True; fLo1 := loVal;
-                  Eat(tkComma);
-                  if CurTok.Kind = tkInteger then begin fLo2 := CurTok.IVal; Next; end;
-                  Expect(tkDotDot, '..');
-                  if CurTok.Kind = tkInteger then begin fhi2 := CurTok.IVal; Next; end;
-                  fSpan2 := fhi2 - fLo2 + 1;
-                  arrLen := arrLen * fSpan2;
+                  { N-D field: collect dim0 then any comma dims. }
+                  fNDims := 1; tdDimLo[0] := loVal; tdDimSpan[0] := hiVal - loVal + 1;
+                  while CurTok.Kind = tkComma do
+                  begin
+                    Eat(tkComma);
+                    if CurTok.Kind = tkInteger then begin tdLo := CurTok.IVal; Next; end;
+                    Expect(tkDotDot, '..');
+                    if CurTok.Kind = tkInteger then begin tdHi := CurTok.IVal; Next; end;
+                    if fNDims >= MAX_ARR_DIMS then Error('too many array dimensions');
+                    tdDimLo[fNDims] := tdLo; tdDimSpan[fNDims] := tdHi - tdLo + 1;
+                    arrLen := arrLen * tdDimSpan[fNDims];
+                    Inc(fNDims);
+                  end;
                 end;
                 Expect(tkRBrack, ']');
                 Expect(tkOf, 'of');
@@ -5618,12 +5650,14 @@ begin
               if fIsDyn then UFldArrLen[UFldCount-1] := -1
               else UFldArrLen[UFldCount-1] := arrLen;
               UFldDynDepth[UFldCount-1] := fDynDepth;
-              UFldArr2[UFldCount-1] := fIsArr2;
-              if fIsArr2 then
+              if fNDims >= 2 then
               begin
-                UFldArr2Lo1[UFldCount-1] := fLo1;
-                UFldArr2Lo2[UFldCount-1] := fLo2;
-                UFldArr2Span2[UFldCount-1] := fSpan2;
+                UFldArrNDims[UFldCount-1] := fNDims;
+                for tdi := 0 to fNDims - 1 do
+                begin
+                  UFldArrDimLo[(UFldCount-1) * MAX_ARR_DIMS + tdi]   := tdDimLo[tdi];
+                  UFldArrDimSpan[(UFldCount-1) * MAX_ARR_DIMS + tdi] := tdDimSpan[tdi];
+                end;
               end;
               curFieldOff := curFieldOff + fSize;
             end;
@@ -5661,35 +5695,40 @@ begin
         Next; { consume 'array' }
         if CurTok.Kind = tkLBrack then
         begin
-          { Named fixed-array type `TA = array[lo..hi (, lo2..hi2)] of T` —
+          { Named fixed-array type `TA = array[a..b (, c..d, ...)] of T` —
             register it so a var/field/param of type TA becomes a real array
-            (1-D or flattened 2-D). Previously skipped → TA was not an array. }
+            (1-D or flattened N-D). Previously skipped → TA was not an array. }
           Next;
-          aLo := ConstEval;
-          Expect(tkDotDot, '..');
-          aHi := ConstEval;
-          aIsArr2 := False; aLo1 := 0; aLo2 := 0; aSpan2 := 0;
-          if CurTok.Kind = tkComma then
-          begin
-            aIsArr2 := True; aLo1 := aLo;
-            Eat(tkComma);
-            aLo2 := ConstEval; Expect(tkDotDot, '..'); ad2hi := ConstEval;
-            aSpan2 := ad2hi - aLo2 + 1;
-            aHi := (aHi - aLo + 1) * aSpan2 - 1; aLo := 0;
-          end;
+          tdCnt := 0;
+          repeat
+            tdLo := ConstEval; Expect(tkDotDot, '..'); tdHi := ConstEval;
+            if tdCnt >= MAX_ARR_DIMS then Error('too many array dimensions');
+            tdDimLo[tdCnt] := tdLo; tdDimSpan[tdCnt] := tdHi - tdLo + 1; Inc(tdCnt);
+          until not Eat(tkComma);
           Expect(tkRBrack, ']');
           Expect(tkOf, 'of');
           aElemTk := ParseTypeKind;
+          if tdCnt = 1 then
+          begin aLo := tdDimLo[0]; aHi := tdDimLo[0] + tdDimSpan[0] - 1; end
+          else
+          begin
+            tflatLen := 1;
+            for tdi := 0 to tdCnt - 1 do tflatLen := tflatLen * tdDimSpan[tdi];
+            aLo := 0; aHi := tflatLen - 1;
+          end;
           if ArrTypeCount >= MAX_TYPEALIAS then Error('too many array types');
           ArrTypeName[ArrTypeCount] := tname;
           ArrTypeLo[ArrTypeCount] := aLo;
           ArrTypeHi[ArrTypeCount] := aHi;
           ArrTypeElemTk[ArrTypeCount] := Ord(aElemTk);
           ArrTypeElemRec[ArrTypeCount] := LastTypeRecId;
-          ArrTypeIsArr2[ArrTypeCount] := aIsArr2;
-          ArrTypeLo1[ArrTypeCount] := aLo1;
-          ArrTypeLo2[ArrTypeCount] := aLo2;
-          ArrTypeSpan2[ArrTypeCount] := aSpan2;
+          if tdCnt >= 2 then ArrTypeNDims[ArrTypeCount] := tdCnt
+          else ArrTypeNDims[ArrTypeCount] := 0;
+          for tdi := 0 to tdCnt - 1 do
+          begin
+            ArrTypeDimLo[ArrTypeCount * MAX_ARR_DIMS + tdi]   := tdDimLo[tdi];
+            ArrTypeDimSpan[ArrTypeCount * MAX_ARR_DIMS + tdi] := tdDimSpan[tdi];
+          end;
           Inc(ArrTypeCount);
         end
         else
@@ -5739,11 +5778,11 @@ var
   ptypesPtrElemRec : array[0..15] of Integer;
   parr      : array[0..15] of Boolean;
   pbyref    : array[0..15] of Boolean;
-  pArr2     : array[0..15] of Boolean;
-  pArr2Lo1  : array[0..15] of Integer;
-  pArr2Lo2  : array[0..15] of Integer;
-  pArr2Span2: array[0..15] of Integer;
-  paramIsArr2: Boolean; pa2Lo1, pa2Lo2, pa2Span2, paramAi: Integer;
+  pNDims    : array[0..15] of Integer;
+  pDimLo    : array[0..16*MAX_ARR_DIMS-1] of Integer;
+  pDimSpan  : array[0..16*MAX_ARR_DIMS-1] of Integer;
+  paramNDims, paramAi, pdi: Integer;
+  psLo, psSpan: array[0..MAX_ARR_DIMS-1] of Integer;
   nparams  : Integer;
   pi, i, sz, retRecId, savedLastTypeRecId: Integer;
   zeroBytes : Integer;
@@ -5845,7 +5884,7 @@ begin
       end;
       Expect(tkColon, ':');
       isArr := False;
-      paramIsArr2 := False;
+      paramNDims := 0;
       tokKindOrd := Ord(CurTok.Kind);
       if DebugTrace then writeln('After colon, CurTok.Kind = ', tokKindOrd, ', CurTok.SVal = ', CurTok.SVal);
       paramAi := -1;
@@ -5853,16 +5892,20 @@ begin
       if paramAi >= 0 then
       begin
         { Named fixed-array type param — pass like an open array (by the data
-          pointer); the element type drives indexing, 2-D dims drive flattening.
+          pointer); the element type drives indexing, N-D dims drive flattening.
           (Previously ParseTypeKind didn't know the name was an array, so the
           param was scalar and indexing it read garbage.) }
         tk := IntToTypeKind(ArrTypeElemTk[paramAi]);
         LastTypeRecId := ArrTypeElemRec[paramAi];
         isArr := True;
-        paramIsArr2 := ArrTypeIsArr2[paramAi];
-        if paramIsArr2 then
+        if ArrTypeNDims[paramAi] >= 2 then
         begin
-          pa2Lo1 := ArrTypeLo1[paramAi]; pa2Lo2 := ArrTypeLo2[paramAi]; pa2Span2 := ArrTypeSpan2[paramAi];
+          paramNDims := ArrTypeNDims[paramAi];
+          for pdi := 0 to paramNDims - 1 do
+          begin
+            psLo[pdi]   := ArrTypeDimLo[paramAi * MAX_ARR_DIMS + pdi];
+            psSpan[pdi] := ArrTypeDimSpan[paramAi * MAX_ARR_DIMS + pdi];
+          end;
         end;
         Next;
       end
@@ -5899,10 +5942,11 @@ begin
         ptypesPtrElemRec[i] := LastTypePointerElemRec;
         parr[i] := isArr;
         pbyref[i] := isByRef;
-        pArr2[i] := paramIsArr2;
-        if paramIsArr2 then
+        pNDims[i] := paramNDims;
+        for pdi := 0 to paramNDims - 1 do
         begin
-          pArr2Lo1[i] := pa2Lo1; pArr2Lo2[i] := pa2Lo2; pArr2Span2[i] := pa2Span2;
+          pDimLo[i * MAX_ARR_DIMS + pdi]   := psLo[pdi];
+          pDimSpan[i * MAX_ARR_DIMS + pdi] := psSpan[pdi];
         end;
       end;
       if not Eat(tkSemicolon) then doneArgs := True;
@@ -6004,8 +6048,12 @@ begin
       ptypesPtrElemRec[i] := ptypesPtrElemRec[i-1];
       parr[i]   := parr[i-1];
       pbyref[i] := pbyref[i-1];
-      pArr2[i]  := pArr2[i-1];
-      pArr2Lo1[i] := pArr2Lo1[i-1]; pArr2Lo2[i] := pArr2Lo2[i-1]; pArr2Span2[i] := pArr2Span2[i-1];
+      pNDims[i] := pNDims[i-1];
+      for pdi := 0 to MAX_ARR_DIMS - 1 do
+      begin
+        pDimLo[i * MAX_ARR_DIMS + pdi]   := pDimLo[(i-1) * MAX_ARR_DIMS + pdi];
+        pDimSpan[i * MAX_ARR_DIMS + pdi] := pDimSpan[(i-1) * MAX_ARR_DIMS + pdi];
+      end;
     end;
     pnames[0] := 'Self';
     ptypes[0] := tyClass;
@@ -6014,7 +6062,7 @@ begin
     ptypesPtrElemRec[0] := REC_NONE;
     parr[0]   := False;
     pbyref[0] := False;
-    pArr2[0]  := False;
+    pNDims[0] := 0;
     nparams := nparams + 1;
   end;
 
@@ -6160,12 +6208,14 @@ begin
   begin
     idx := AllocParam(pnames[i], ptypes[i], pbyref[i], parr[i]);
     Procs[pi].Params[i].SymIdx := idx;
-    if pArr2[i] then
+    if pNDims[i] >= 2 then
     begin
-      SymArr2[idx] := True;
-      SymArr2Lo1[idx] := pArr2Lo1[i];
-      SymArr2Lo2[idx] := pArr2Lo2[i];
-      SymArr2Span2[idx] := pArr2Span2[i];
+      SymArrNDims[idx] := pNDims[i];
+      for pdi := 0 to pNDims[i] - 1 do
+      begin
+        SymArrDimLo[idx * MAX_ARR_DIMS + pdi]   := pDimLo[i * MAX_ARR_DIMS + pdi];
+        SymArrDimSpan[idx * MAX_ARR_DIMS + pdi] := pDimSpan[i * MAX_ARR_DIMS + pdi];
+      end;
     end;
     if parr[i] and (ptypes[i] = tyRecord) then
     begin
