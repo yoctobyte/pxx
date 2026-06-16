@@ -1,9 +1,22 @@
 # Codegen miscompiles nested integer-array index load width under register pressure
 
 - **Type:** bug
-- **Status:** backlog
+- **Status:** done (fixed indirectly)
 - **Owner:** —
 - **Opened:** 2026-06-16 (found while landing static-array→open-array Length, ac6d98f)
+- **Closed:** 2026-06-16
+
+## Resolution — fixed indirectly by this cycle's sign-extension work
+
+The landmine was a lost 32→64 sign-extension on a nested index load inside the
+oversized `IRLowerCallArg`. This cycle's pointer-arith / parenthesised-deref fixes
+(notably `d3e12d0` — the grouped-expression deref + element-scaled pointer
+arithmetic that had been miscompiling negative/unextended index values) addressed
+the same sign-extension class. Re-inlined the `TryStaticToOpenArray` guard back
+into `IRLowerCallArg` (the exact indexing-heavy shape that used to crash the
+self-host) and `make bootstrap` + all four suites + `make cross-bootstrap` are
+**byte-identical, no crash**. The helper workaround is removed; the guard lives
+inline again.
 
 ## Symptom
 

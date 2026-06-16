@@ -14,11 +14,10 @@ _none_
 | --- | --- | --- | --- |
 | feature-synthetic-feature-matrix-test | feature | Synthetic all-features stress test (cross-target conformance) | — |
 
-## backlog (33)
+## backlog (32)
 
 | Ticket | Type | Summary | Blocked-by |
 | --- | --- | --- | --- |
-| bug-codegen-nested-index-load-width-pressure | bug | Codegen miscompiles nested integer-array index load width under register pressure | — |
 | chore-inc-to-units | chore | `.inc` → real `.pas` units refactor | — |
 | chore-runtime-emission-size | chore | Finer runtime-support emission (code size) | — |
 | feature-additional-cpu-targets | feature | Additional CPU targets (rollup: i386 → aarch64 → arm32 → ESP32/RISC-V) | feature-target-aarch64, feature-target-arm32, feature-target-esp32, feature-target-i386 |
@@ -59,10 +58,11 @@ _none_
 | bug-nonreproducible-miscompile-2026-06-02 | bug | Non-reproducible one-off miscompile (2026-06-02) | — |
 | bug-whole-record-copy-main-body-noop | bug | Latent: whole-record array-element copy in main-program body emits store no-ops | — |
 
-## done (46)
+## done (47)
 
 | Ticket | Type | Summary | Blocked-by |
 | --- | --- | --- | --- |
+| bug-codegen-nested-index-load-width-pressure | bug | Codegen miscompiles nested integer-array index load width under register pressure | — |
 | bug-c-packed-aligned-ignored | bug | C `__attribute__((packed))` / `aligned` ignored → field-offset drift | — |
 | bug-managed-byref-string-param-store | bug | Managed by-ref AnsiString params: store-through-var no-ops / segfaults | — |
 | bug-many-param-call-corruption | bug | Self-hosted x86-64 backend miscompiles calls with many parameters | — |
@@ -116,7 +116,6 @@ _none_
 
 ## Ready (no unmet blocker)
 
-- bug-codegen-nested-index-load-width-pressure
 - chore-inc-to-units
 - chore-runtime-emission-size
 - feature-additional-cpu-targets
