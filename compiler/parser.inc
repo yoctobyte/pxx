@@ -4233,13 +4233,25 @@ begin
         ASTLeft[node] := valNode; ASTRight[node] := opNode;
       end
       else if (CurProc >= 0) and Procs[CurProc].IsFunc and
-              (Tokens[TokPos].Kind = tkAssign) and
+              (Tokens[TokPos].Kind in [tkAssign, tkDot, tkLBrack, tkCaret]) and
               ((name = Procs[CurProc].Name) or
                CaseEqual(name, LastDotName(Procs[CurProc].Name))) then
       begin
-        Next; Expect(tkAssign, ':=');
-        valNode := AllocNode(AN_IDENT);
-        ASTIVal[valNode] := Procs[CurProc].RetSymIdx;
+        Next;
+        if CurTok.Kind = tkAssign then
+        begin
+          Expect(tkAssign, ':=');
+          valNode := AllocNode(AN_IDENT);
+          ASTIVal[valNode] := Procs[CurProc].RetSymIdx;
+        end
+        else
+        begin
+          { `FuncName.field := ` / `FuncName[i] := ` — assign through the result
+            value's lvalue (FPC allows the function name as a synonym for Result;
+            `Result.field` already worked). }
+          valNode := ParseLValueAST(Procs[CurProc].RetSymIdx, TokPos - 2);
+          Expect(tkAssign, ':=');
+        end;
 
         ParseExpr;
         node := AllocNode(AN_ASSIGN);

@@ -1,9 +1,19 @@
 # Typed constant arrays (initialized const arrays)
 
 - **Type:** feature
-- **Status:** backlog
+- **Status:** done
 - **Owner:** —
 - **Opened:** 2026-06-16 (found via conformance feature-probing)
+- **Closed:** 2026-06-16
+
+## Done
+
+Landed alongside the `var = init` global-initializer fix: typed constants reuse
+the pending-init machinery (storage allocated, elements compiled as assignments
+before `main begin`). Scalar ordinal/Int64 + parenthesised ordinal/Int64 array
+constants, globals only. `test_cross_typed_const` byte-identical all 4 targets,
+matches FPC (incl. writing through a typed const — FPC semantics). Out of scope:
+string/float/record-initializer constants, local typed consts.
 
 ## Gap
 
