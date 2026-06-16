@@ -122,6 +122,37 @@ Bootstrap + cross-bootstrap stay byte-identical.
   position (statement form parses a full — possibly void — call statement).
 
 ## Log
+- 2026-06-16 — **Step #3 (stackless coroutine backend) DONE — all 4 targets,
+  zero asm** (commit 05fa2a9). `; async; stackless;` compiles to a state-machine
+  step function `function(self): Boolean`, reusing the stackless-**generator**
+  transform wholesale: `SLHasYield` now detects `AN_AWAIT`; a new `SLLowerAwait`
+  mirrors `SLLowerYield` minus the produced-value store (`await Stmt` runs Stmt,
+  checkpoints locals, returns True = "resume me"; fall-off returns False = done).
+  The ABI-rewrite + body-compile branch generalised to async (a `procedure`
+  becomes the step function; v1 takes **no declared params** — state lives in
+  persistent locals). `await` may be bare (`await;` = pure suspension) or wrap a
+  statement. Eligibility = the same local rule as generators (await only at top
+  level / for / while / if; try/case/etc. is a clear error) — this is what bounds
+  transitive suspension **locally**, no whole-program analysis.
+  - Driver: `lib/rtl/slsched.pas` (PXX-only) — `SLSpawn`/`SLRunUntilDone`
+    round-robin the live set, resuming each coroutine one await-step per pass via
+    an **indirect (proc-typed) call** to its stored step fn (possible now that
+    procedural types exist — the original generator note "PXX can't call a stored
+    fn-ptr with args" is obsolete). Spawn surface: the compiler-recognised
+    `AsyncGo(@Body)` desugars to `SLSpawn(@Body, SlAlloc(instSize, ...))`
+    (instance from slgen; instance layout SL_OFF_* shared with generators).
+  - `test/test_async_sl.pas`: two stackless coroutines interleave at their await
+    points, **byte-identical x86-64/i386/aarch64/arm32** (the no-asm claim).
+    Validation fires for no-await / await-in-try / params / AsyncGo-on-non-async.
+    Bootstrap + cross-bootstrap byte-identical (procs=917); `make test` +
+    `test-i386/aarch64/arm32` green.
+  - **Auto-selection (eligible→stackless else stackful) deliberately deferred**
+    (matches the generator v3 decision); default stays stackful, `stackless`
+    forces. v1 stackless async = no params, no result, ordinal/pointer locals
+    only (same restrictions as the stackless generator). Follow-ups: params via
+    instance slots (mirror the generator for-in arg store); a Task/Future for
+    `await`-with-result (build-order #5); Nil Python `async def`/`await` shim
+    (build-order #4) over `AsyncGo`/`SLRunUntilDone`.
 - 2026-06-16 — **Warmup (build-order #1) DONE — configurable coroutine stack +
   overflow canary** (commit 2e54b14). `SpawnSized(entry, arg, stackBytes)` in
   `lib/rtl/scheduler.pas` runs a coroutine on a small heap stack (the RAM-cheap
