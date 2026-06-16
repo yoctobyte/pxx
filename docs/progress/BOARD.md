@@ -34,7 +34,7 @@ _none_
 | feature-flexcolumn-directive | feature | `flexcolumn` calling-convention directive | chore-inc-to-units |
 | feature-float-str-val | feature | Float Str / Val | — |
 | feature-fpc-vs-pxx-feature-boundary | feature | Policy: FPC-bootstrap subset vs PXX-only library features | — |
-| feature-generators-yield | feature | Generators and `yield` (the coroutine on-ramp) | feature-unified-heap-allocator, generator), (heap, per, stack |
+| feature-generators-yield | feature | Generators and `yield` (the coroutine on-ramp) | feature-unified-heap-allocator |
 | feature-handle-compacting-heap | feature | Handle-table compacting heap (anti-fragmentation for constrained RAM) | — |
 | feature-inline-asm-depth | feature | Inline assembler depth | — |
 | feature-interfaces | feature | Interfaces | — |
@@ -135,6 +135,7 @@ _none_
 - feature-esp32-isr-iram
 - feature-float-str-val
 - feature-fpc-vs-pxx-feature-boundary
+- feature-generators-yield
 - feature-handle-compacting-heap
 - feature-inline-asm-depth
 - feature-interfaces
@@ -158,10 +159,6 @@ _none_
 - **2** — feature-target-aarch64
 - **2** — feature-rtti-layout-table
 - **2** — feature-cross-managed-string-cow
-- **1** — stack
-- **1** — per
-- **1** — (heap
-- **1** — generator)
 - **1** — feature-target-esp32
 - **1** — feature-target-arm32
 - **1** — feature-managed-exception-cleanup

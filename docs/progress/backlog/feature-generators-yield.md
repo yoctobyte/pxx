@@ -2,7 +2,7 @@
 
 - **Type:** feature
 - **Status:** backlog
-- **Blocked-by:** feature-unified-heap-allocator (heap stack per generator)
+- **Blocked-by:** feature-unified-heap-allocator
 - **Opened:** 2026-06-16
 
 ## Why generators first
