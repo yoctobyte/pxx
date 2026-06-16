@@ -1,7 +1,7 @@
 # Cross-target codegen gaps (deferred v1 shortcuts)
 
 - **Type:** feature
-- **Status:** working
+- **Status:** done
 - **Owner:** claude
 - **Unblocks:** feature-cross-bootstrap-selfhost
 - **Opened:** 2026-06-11 (user request)
@@ -113,3 +113,14 @@ grows large.
   builtin-special wall (parser line 1525) all the way to line 13288 (`managed
   aggregate locals not yet supported` — a different gap). arm32 + core +
   self-host/threadsafe fixedpoints green.
+
+## Closure (2026-06-16)
+
+`feature-cross-bootstrap-selfhost` is DONE — byte-identical self-fixedpoint on
+i386/aarch64/arm32 (and x86-64). This ticket existed to unblock that gate, so its
+blocking purpose is met: every code path `compiler.pas` itself exercises now
+works byte-identically on all cross targets. Residual gaps are only in language
+features the compiler does NOT self-use (e.g. classes, interfaces, some param/
+ABI shapes user code hits) — those move to the language-surface hardening effort
+driven by the synthetic conformance harness
+([[feature-synthetic-feature-matrix-test]]). Closed.

@@ -8,20 +8,17 @@ lives in git, not in a timestamp._
 
 _none_
 
-## working (5)
+## working (1)
 
 | Ticket | Type | Summary | Blocked-by |
 | --- | --- | --- | --- |
-| feature-cross-codegen-gaps | feature | Cross-target codegen gaps (deferred v1 shortcuts) | — |
-| feature-cross-compiler-probe-walls | feature | Cross compiler.pas probe walls | — |
-| feature-cross-managed-aggregate-locals | feature | Managed aggregate locals on cross targets | — |
-| feature-cross-param-abi | feature | Full parameter/result ABI on cross targets | — |
 | feature-synthetic-feature-matrix-test | feature | Synthetic all-features stress test (cross-target conformance) | — |
 
-## backlog (33)
+## backlog (34)
 
 | Ticket | Type | Summary | Blocked-by |
 | --- | --- | --- | --- |
+| bug-codegen-nested-index-load-width-pressure | bug | Codegen miscompiles nested integer-array index load width under register pressure | — |
 | chore-inc-to-units | chore | `.inc` → real `.pas` units refactor | — |
 | chore-runtime-emission-size | chore | Finer runtime-support emission (code size) | — |
 | feature-additional-cpu-targets | feature | Additional CPU targets (rollup: i386 → aarch64 → arm32 → ESP32/RISC-V) | feature-target-aarch64, feature-target-arm32, feature-target-esp32, feature-target-i386 |
@@ -63,7 +60,7 @@ _none_
 | bug-nonreproducible-miscompile-2026-06-02 | bug | Non-reproducible one-off miscompile (2026-06-02) | — |
 | bug-whole-record-copy-main-body-noop | bug | Latent: whole-record array-element copy in main-program body emits store no-ops | — |
 
-## done (39)
+## done (43)
 
 | Ticket | Type | Summary | Blocked-by |
 | --- | --- | --- | --- |
@@ -80,10 +77,14 @@ _none_
 | feature-arm32-asm-emitter | feature | ARM32 text-assembler (`EmitAsmArm32`) for cleaner ARM32 codegen | — |
 | feature-cross-bootstrap | feature | Cross-architecture compiler bootstrap (AArch64/ARM32 → byte-identical self-compile) | — |
 | feature-cross-bootstrap-selfhost | feature | Cross self-host bootstrap (compiler.pas → byte-identical under QEMU) | feature-cross-selfhost-aarch64, feature-cross-selfhost-arm32, feature-cross-selfhost-i386 |
+| feature-cross-codegen-gaps | feature | Cross-target codegen gaps (deferred v1 shortcuts) | — |
+| feature-cross-compiler-probe-walls | feature | Cross compiler.pas probe walls | — |
 | feature-cross-exceptions | feature | Exception runtime on cross targets (i386 / ARM32 / AArch64) | — |
 | feature-cross-float-variant | feature | Float + Variant codegen on cross targets | — |
+| feature-cross-managed-aggregate-locals | feature | Managed aggregate locals on cross targets | — |
 | feature-cross-managed-aggregates | feature | Cross-target managed aggregates (records + dynamic arrays) | feature-rtti-layout-table |
 | feature-cross-managed-string-cow | feature | Copy-on-write for managed strings on cross targets (i386 / ARM32 / AArch64) | — |
+| feature-cross-param-abi | feature | Full parameter/result ABI on cross targets | — |
 | feature-cross-selfhost-aarch64 | feature | Cross self-host: AArch64 generated compiler runs under QEMU | feature-cross-managed-string-cow |
 | feature-cross-selfhost-arm32 | feature | Cross self-host: ARM32 generated compiler runs under QEMU | feature-cross-managed-string-cow |
 | feature-cross-selfhost-i386 | feature | Cross self-host: i386 generated compiler runs under Linux | — |
@@ -113,6 +114,7 @@ _none_
 
 ## Ready (no unmet blocker)
 
+- bug-codegen-nested-index-load-width-pressure
 - chore-inc-to-units
 - chore-runtime-emission-size
 - feature-additional-cpu-targets
