@@ -14,7 +14,7 @@ _none_
 | --- | --- | --- | --- |
 | feature-synthetic-feature-matrix-test | feature | Synthetic all-features stress test (cross-target conformance) | — |
 
-## backlog (33)
+## backlog (35)
 
 | Ticket | Type | Summary | Blocked-by |
 | --- | --- | --- | --- |
@@ -42,6 +42,7 @@ _none_
 | feature-lazycasing-c-imports | feature | `{$LAZYCASING ON/OFF}` for C imports only | feature-compiler-warnings |
 | feature-metaclass-descendant-enforcement | feature | Metaclass alias descendant-constraint enforcement | — |
 | feature-mimic-fpc | feature | `mimic FPC` compatibility mode | feature-directive-if-numeric |
+| feature-multidim-fixed-arrays | feature | Multidimensional fixed arrays | — |
 | feature-networking | feature | Networking runtime | — |
 | feature-nil-python-frontend | feature | Nil Python frontend (`.npy`) | — |
 | feature-no-ansistring-profile | feature | No-AnsiString / bounded-string profile | — |
@@ -49,6 +50,7 @@ _none_
 | feature-progress-transition-helpers | feature | Progress transition helpers (`claim` / `resolve`) | — |
 | feature-static-arena-profile | feature | Fixed-static-arena allocator profile | feature-unified-heap-allocator |
 | feature-threadsafe-io-serialization | feature | Statement-level I/O serialization under threads | feature-unified-heap-allocator |
+| feature-typed-const-arrays | feature | Typed constant arrays (initialized const arrays) | — |
 | idea-unit-rename-import | idea | `uses X as Y` unit-rename import (dialect extension) | — |
 | idea-visibility-enforcement | idea | Enforce private/protected visibility | — |
 
@@ -134,6 +136,7 @@ _none_
 - feature-inline-asm-depth
 - feature-interfaces
 - feature-metaclass-descendant-enforcement
+- feature-multidim-fixed-arrays
 - feature-networking
 - feature-nil-python-frontend
 - feature-no-ansistring-profile
@@ -141,6 +144,7 @@ _none_
 - feature-progress-transition-helpers
 - feature-static-arena-profile
 - feature-threadsafe-io-serialization
+- feature-typed-const-arrays
 - idea-unit-rename-import
 - idea-visibility-enforcement
 

@@ -138,3 +138,12 @@ appear in compiler.pas.
      (`test_cross_ptr_arith`, byte-identical all 4 targets).
   The load-width landmine itself stays open (not reproduced by synthetics; see its
   ticket for the probe write-up). All suites + cross-bootstrap green.
+- 2026-06-16 — differential feature-probing (PXX vs FPC) continued. Landed
+  **case-statement ranges** (`lo..hi` labels; commit in feat(lang) case-range) —
+  shared parser+IR, byte-identical all 4, `test_cross_case_range` wired. Probing
+  also turned up two genuine *missing features* (not miscompiles), filed as
+  backlog tickets: **multidim fixed arrays** (`array[..] of array[..]` /
+  `array[i,j]`) and **typed const arrays** (`const A: array[..] of T = (...)`).
+  Stress probes that PASS (no divergence): sets/in, nested records, array-of-
+  record field assign, for-downto, string index write, `not`, pointer-to-record,
+  Int64 overflow, neg div/mod, while+break, enum Ord.
