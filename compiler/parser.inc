@@ -2286,15 +2286,29 @@ begin
     begin
       Next; ParseFactor;
       left := CurASTNode;
-      { `not` is logical (boolean). A previous attempt to also emit bitwise `not`
-        for ordinals keyed off the global LastExprTk tracker, but that tracker is
-        not reliably set for every factor shape, so some boolean `not <expr>` in
-        the compiler's own source was mistyped as a bitwise ~, turning a
-        `while not done` into an endless loop and hanging self-compile. Until
-        `not` typing is driven by real per-node expression types, keep it logical
-        (matches the long-standing behavior the bootstrap relies on). }
-      LastExprTk := tyBoolean;
-      node := AllocNode(AN_NOT); ASTLeft[node] := left; ASTTk[node] := Ord(tyBoolean); CurASTNode := node;
+      { `not` is bitwise complement for integer operands (matches FPC), logical
+        for Boolean and everything else. The earlier all-logical rule existed
+        because a prior attempt keyed bitwise-vs-logical off the GLOBAL
+        LastExprTk tracker, which is clobbered between factors — so a boolean
+        `while not done` was mistyped as bitwise and hung self-compile. Drive it
+        instead off the operand node's OWN type (ASTTk[left], per-node and
+        stable), and ONLY promote to bitwise for a true integer type
+        (ord 1 = tyInteger, 7..16 = tyInt8..tyNativeUInt). Boolean, char,
+        pointer and unknown operands keep the long-standing logical behaviour the
+        bootstrap relies on, so this changes nothing for them. The IR_NOT codegen
+        already emits `not rax` for ordinal-non-boolean types. }
+      node := AllocNode(AN_NOT); ASTLeft[node] := left;
+      if (ASTTk[left] = 1) or ((ASTTk[left] >= 7) and (ASTTk[left] <= 16)) then
+      begin
+        ASTTk[node] := ASTTk[left];
+        LastExprTk := IntToTypeKind(ASTTk[left]);
+      end
+      else
+      begin
+        ASTTk[node] := Ord(tyBoolean);
+        LastExprTk := tyBoolean;
+      end;
+      CurASTNode := node;
     end;
     tkOrd, tkChr:
     begin

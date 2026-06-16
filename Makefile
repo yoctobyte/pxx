@@ -219,6 +219,8 @@ test-core: $(COMPILER)
 	test "$$(/tmp/test_asm_swap26)" = "$$(printf '42\n-7\n-7\n42')"
 	./$(COMPILER) test/test_coswitch.pas /tmp/test_coswitch26
 	test "$$(/tmp/test_coswitch26)" = "$$(printf 'main: 1\ngen: 1\nmain: 2\ngen: 2\nmain: 3\ngen: 3\nmain: 4\ngen: 4\nmain: 5\ngen: 5\ndone')"
+	./$(COMPILER) test/test_not.pas /tmp/test_not26
+	test "$$(/tmp/test_not26)" = "$$(printf -- '-1\n-16\n-256\n4\nok')"
 	./$(COMPILER) test/test_many_params.pas /tmp/test_many_params26
 	test "$$(/tmp/test_many_params26)" = "$$(printf '1 2 3 4 5 6 7\n3 4 5 6 7 12 89\n8912\n7654326\n12100806\n7654321\n96\n196')"
 	./$(COMPILER) test/test_procaddr.pas /tmp/test_procaddr26
