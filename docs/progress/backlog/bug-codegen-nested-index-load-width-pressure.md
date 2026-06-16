@@ -51,6 +51,37 @@ source past a size threshold. Likely related to register allocation / spill or
 to the inner-index value's IR type losing `tyInteger` (4-byte signed) under
 pressure. Fixing it removes a whole class of size-sensitive miscompiles.
 
+## 2026-06-16 — probe session (still open)
+
+Hunted for a standalone repro with synthetic large functions doing nested
+array-of-record indexing (`tab[idxs[j]].c`) under local-count pressure. The
+load-width miscompile itself did **not** reproduce: once the unrelated bugs below
+were out of the way, the array-of-record nested index produced correct output on
+a clean (FPC-built) compiler regardless of function size, and self-host stayed
+byte-identical. So the specific `mov`-instead-of-`movsxd` inner-load flip is still
+unpinned — it may need the exact compiler.pas shape, or my codegen changes this
+cycle (short-circuit and/or) shifted whatever threshold it sat on.
+
+Two **distinct** real bugs were found and fixed while probing (do not conflate
+with this one):
+- **>64 names in one `var` line overflowed `names: array[0..63]`** in
+  ParseVarSection / ParseLazyVarDeclAST, silently corrupting the compiler (flipped
+  isAsmFunc → "expected asm", or SIGSEGV depending on the build). Fixed: bounded
+  to MAX_DECL_NAMES (256) + a guard error. (My first synthetic put all locals on
+  one line, hitting this instead.)
+- **`(p)^` / `(p + k)^` deref of a parenthesised expression** was miscompiled —
+  the grouping-paren case ran no postfix `^`/`.`/`[` loop, so the `^` dangled and
+  the pointer (not the pointee) was used; negative offsets in pointer arithmetic
+  then read wild addresses. Fixed in ParseFactor (test_cross_ptr_arith).
+
+Both were sign/width/pointer-adjacent, which is why the probe kept surfacing them,
+but neither is the size-threshold inner-load-width flip this ticket describes.
+
+Next idea if resumed: revert the `TryStaticToOpenArray` helper (re-inline the
+guard into IRLowerCallArg) on the current tree and gdb the FPC-built BUILD stage
+directly — the FPC build crashes too, so it does not need self-host, and it has
+symbols.
+
 ## Acceptance
 
 - A minimal standalone repro (no self-host needed) that miscompiles on a clean

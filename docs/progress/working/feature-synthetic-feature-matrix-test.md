@@ -126,3 +126,15 @@ appear in compiler.pas.
      cross-bootstrap still byte-identical on i386/aarch64/arm32.
   Remaining on this ticket: root-cause the nested-index load-width codegen
   landmine (bug-codegen-nested-index-load-width-pressure).
+- 2026-06-16 — probing for the load-width landmine surfaced **two more distinct
+  bugs**, both fixed + cross-tested:
+  1. **>64 comma-separated names in one `var` line overflowed a fixed
+     `array[0..63]`** in the parser → silent corruption (SIGSEGV or a bogus
+     "expected asm"). Bounded to MAX_DECL_NAMES (256) + guard
+     (`test_many_local_names`).
+  2. **`(p)^` / `(p + k)^` — deref of a parenthesised expression** dropped the
+     postfix `^`/`.`/`[` (returned the pointer, not the pointee; negative pointer
+     offsets read wild addresses). Fixed in ParseFactor
+     (`test_cross_ptr_arith`, byte-identical all 4 targets).
+  The load-width landmine itself stays open (not reproduced by synthetics; see its
+  ticket for the probe write-up). All suites + cross-bootstrap green.
