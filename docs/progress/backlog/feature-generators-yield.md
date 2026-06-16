@@ -163,10 +163,23 @@ stackful — no grammar change to add it.
   - LANDMINE found while building the test: **`not 15` mis-evaluates to `14`**
     in PXX (some constant-fold/width bug in unary `not`). Worked around with
     `top - (top mod 16)` for align-down. Separate bug — ticket if it bites again.
+  - DESIGN NOTE for Phase 2: PXX does **not** support calling through a
+    procedure-typed variable with arguments (`p(42)` is a parse error — only
+    `p := @Proc` / method-ptr round-trips exist). So a generic library
+    trampoline `CoCreate(bodyPtr, arg)` cannot call the body. The generator's
+    entry + argument wiring must be **compiler-emitted** (the compiler knows the
+    body proc and its params and can emit `mov rdi,<instance>; call <body>`
+    directly). The library supplies the protocol pieces (CoYield/CoNext/heap
+    stack), but the entry/arg glue lives in the surface lowering. Phase 2 is
+    therefore a compiler-surface effort (grammar change → bootstrap reseed), not
+    cleanly splittable into a library-only sub-phase.
   - TODO next: Phase 2 surface (`generator`/`yield`/`for-in` + iterator
-    protocol) + the PXX-only RTL glue (heap stack alloc, entry trampoline +
-    arg passing, generator-exhaustion switch-back & stack free). Then port
-    CoSwitch to the other 5 targets.
+    protocol) with compiler-emitted entry/arg glue + the PXX-only RTL helpers
+    (heap stack alloc + canary, exhaustion switch-back & stack free). Then port
+    CoSwitch to the other 5 targets (mechanical, mirror exception_emit.inc +
+    add IR_COSWITCH lowering per backend). When a library unit (not the main
+    file) uses `__pxxcoswitch`, also trigger `EnableCoroutineRuntime` from the
+    per-unit token scan in `ParseUsesUnit` (mirror the tkTry/tkRaise scan).
 
 ## Acceptance
 
