@@ -1,7 +1,7 @@
 # Synthetic all-features stress test (cross-target conformance)
 
 - **Type:** feature
-- **Status:** backlog
+- **Status:** working
 - **Owner:** —
 - **Opened:** 2026-06-15
 
@@ -69,3 +69,26 @@ appear in compiler.pas.
   per line, not realism.
 - Gate features that a target doesn't support yet behind defines so the harness
   can grow per target rather than all-or-nothing.
+
+## Log
+
+- 2026-06-16 — first harness drafted: `test/test_conformance_1.pas` (classes +
+  inheritance + virtual dispatch mixed with Int64, managed strings, records,
+  dynamic arrays, `array of const`, variant, exceptions, float formatting, case).
+  **It already fails — on x86-64 itself, before any cross-diff.** Not debugged
+  (deliberately, per workflow); NOT wired into `make` so the suite stays green.
+  Findings to triage later:
+  1. **Directly-instantiated BASE class with a managed-string field reads
+     garbage.** A derived instance works (`TSquare.Create` → fields/virtuals/
+     Int64 tag all correct), but a base-class instance created right after
+     (`TShape.Create('generic', 7); writeln(sh.Name)`) prints a corrupt string —
+     `sh.Name` ('generic') comes back with a bad length and `writeln` dumps the
+     heap, producing ~24 MB of runaway output. Minimal repro: two classes
+     (base + derived override), instantiate the derived then the base, write the
+     base instance's string field. Suspect base-class field layout / managed
+     field init when the base is instantiated directly (classes are NOT used by
+     the compiler itself, so self-host never exercised this).
+  This is exactly the class of gap the harness is meant to surface (a supported
+  feature the compiler never self-uses). DECISION PENDING: fix the class bug(s)
+  first, or shelve and continue other work — the harness + repro are in place to
+  resume from.
