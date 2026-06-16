@@ -267,6 +267,8 @@ test-core: $(COMPILER)
 	test "$$(/tmp/test_param_2darray26)" = "$$(printf 'vsum=14\ngsum=30\nafter=1338 m23=123')"
 	./$(COMPILER) test/test_cross_multidim3d.pas /tmp/test_multidim3d26
 	test "$$(/tmp/test_multidim3d26)" = "$$(printf 'var3d=1476000000 c123=123000000\nparam3d=1476 n123=123\nfield3d=28 rc=7 tag=9')"
+	./$(COMPILER) test/test_cross_const_alias.pas /tmp/test_const_alias26
+	test "$$(/tmp/test_const_alias26)" = "$$(printf 'Hello, World! len=13\nalist=55 len=6\nrlist=46 len=4')"
 	./$(COMPILER) test/test_asm_emit.pas /tmp/test_asm_emit26
 	test "$$(/tmp/test_asm_emit26)" = "$$(printf 'S=\nS=ab\nS=abc\nS=a longer string here\nI=0\nI=123\nI=-7\n---\nS=ww\nI=1\nS=yy\nI=2\nS=zzz\nI=3')"
 	./$(COMPILER) test/test_virtual_proc.pas /tmp/test_virtual_proc26
@@ -855,7 +857,10 @@ test-i386: $(COMPILER)
 	./$(COMPILER) --target=i386 test/test_cross_multidim3d.pas /tmp/test_i386_d3
 	./$(COMPILER) test/test_cross_multidim3d.pas /tmp/test_i386_d3_x64
 	test "$$(tools/run_target.sh i386 /tmp/test_i386_d3)" = "$$(/tmp/test_i386_d3_x64)"
-	@echo "i386 hello + arith + procs + loops + write + varparam + syscall + heap + string + record + dynarray + exception + float + float-params + variant + byref-params + setlen-str + in-operator + loadfile + sysopen-family + args + string-cow + aoc-types + many-params + conformance2 + shortcircuit + ptr-arith + case-range + global-init + typed-const + multidim + named-array + record-2darray + param-2darray + multidim3d ok (output identical to x86-64)"
+	./$(COMPILER) --target=i386 test/test_cross_const_alias.pas /tmp/test_i386_ca
+	./$(COMPILER) test/test_cross_const_alias.pas /tmp/test_i386_ca_x64
+	test "$$(tools/run_target.sh i386 /tmp/test_i386_ca)" = "$$(/tmp/test_i386_ca_x64)"
+	@echo "i386 hello + arith + procs + loops + write + varparam + syscall + heap + string + record + dynarray + exception + float + float-params + variant + byref-params + setlen-str + in-operator + loadfile + sysopen-family + args + string-cow + aoc-types + many-params + conformance2 + shortcircuit + ptr-arith + case-range + global-init + typed-const + multidim + named-array + record-2darray + param-2darray + multidim3d + const-alias ok (output identical to x86-64)"
 
 test-aarch64: $(COMPILER)
 	./$(COMPILER) --target=aarch64 test/hello.pas /tmp/test_aarch64_hello
@@ -968,7 +973,10 @@ test-aarch64: $(COMPILER)
 	./$(COMPILER) --target=aarch64 test/test_cross_multidim3d.pas /tmp/test_aarch64_d3
 	./$(COMPILER) test/test_cross_multidim3d.pas /tmp/test_aarch64_d3_x64
 	test "$$(tools/run_target.sh aarch64 /tmp/test_aarch64_d3)" = "$$(/tmp/test_aarch64_d3_x64)"
-	@echo "aarch64 hello + arith + procs + loops + write + varparam + syscall + heap + string + record + dynarray + exception + float + variant + setlen-str + str-length-index + in-operator + loadfile + sysopen-family + args + open-array-params + string-cow + huge-frame + varrec-alloc + aoc-types + many-params + conformance2 + shortcircuit + ptr-arith + case-range + global-init + typed-const + multidim + named-array + record-2darray + param-2darray + multidim3d ok (output identical to x86-64)"
+	./$(COMPILER) --target=aarch64 test/test_cross_const_alias.pas /tmp/test_aarch64_ca
+	./$(COMPILER) test/test_cross_const_alias.pas /tmp/test_aarch64_ca_x64
+	test "$$(tools/run_target.sh aarch64 /tmp/test_aarch64_ca)" = "$$(/tmp/test_aarch64_ca_x64)"
+	@echo "aarch64 hello + arith + procs + loops + write + varparam + syscall + heap + string + record + dynarray + exception + float + variant + setlen-str + str-length-index + in-operator + loadfile + sysopen-family + args + open-array-params + string-cow + huge-frame + varrec-alloc + aoc-types + many-params + conformance2 + shortcircuit + ptr-arith + case-range + global-init + typed-const + multidim + named-array + record-2darray + param-2darray + multidim3d + const-alias ok (output identical to x86-64)"
 
 test-arm32: $(COMPILER)
 	./$(COMPILER) --target=arm32 test/hello.pas /tmp/test_arm32_hello
@@ -1099,7 +1107,10 @@ test-arm32: $(COMPILER)
 	./$(COMPILER) --target=arm32 test/test_cross_multidim3d.pas /tmp/test_arm32_d3
 	./$(COMPILER) test/test_cross_multidim3d.pas /tmp/test_arm32_d3_x64
 	test "$$(tools/run_target.sh arm32 /tmp/test_arm32_d3)" = "$$(/tmp/test_arm32_d3_x64)"
-	@echo "arm32 hello + arith + procs + loops + write + varparam + syscall + heap + string + record + dynarray + exception + float + args + variant + strresult + setlen-str + str-length-index + in-operator + managed-aggregate-locals + loadfile + sysopen-family + string-cow + var-string-param + openarray-string + stack-params + int64 + int64-byref + aoc-types + many-params + conformance2 + shortcircuit + ptr-arith + case-range + global-init + typed-const + multidim + named-array + record-2darray + param-2darray + multidim3d ok (output identical to x86-64)"
+	./$(COMPILER) --target=arm32 test/test_cross_const_alias.pas /tmp/test_arm32_ca
+	./$(COMPILER) test/test_cross_const_alias.pas /tmp/test_arm32_ca_x64
+	test "$$(tools/run_target.sh arm32 /tmp/test_arm32_ca)" = "$$(/tmp/test_arm32_ca_x64)"
+	@echo "arm32 hello + arith + procs + loops + write + varparam + syscall + heap + string + record + dynarray + exception + float + args + variant + strresult + setlen-str + str-length-index + in-operator + managed-aggregate-locals + loadfile + sysopen-family + string-cow + var-string-param + openarray-string + stack-params + int64 + int64-byref + aoc-types + many-params + conformance2 + shortcircuit + ptr-arith + case-range + global-init + typed-const + multidim + named-array + record-2darray + param-2darray + multidim3d + const-alias ok (output identical to x86-64)"
 
 # ----- Cross self-host bootstrap gates (feature-cross-bootstrap-selfhost) -----
 # Triple-stage proof: native cross-compiles compiler.pas -> <arch>; that binary,

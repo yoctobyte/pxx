@@ -970,7 +970,16 @@ var
   ArrTypeNDims  : array[0..MAX_TYPEALIAS-1] of Integer;
   ArrTypeDimLo  : array[0..MAX_TYPEALIAS*MAX_ARR_DIMS-1] of Integer;
   ArrTypeDimSpan: array[0..MAX_TYPEALIAS*MAX_ARR_DIMS-1] of Integer;
+  ArrTypeIsDyn  : array[0..MAX_TYPEALIAS-1] of Boolean;   { `array of T` alias }
+  ArrTypeDynDepth: array[0..MAX_TYPEALIAS-1] of Integer;
   ArrTypeCount  : Integer;
+
+  { Untyped string constants `const Name = 'literal'`. Stored as the literal's
+    source span; a use of the name builds an AN_STR_LIT over that span. }
+  StrConstName : array[0..MAX_TYPEALIAS-1] of AnsiString;
+  StrConstSOff : array[0..MAX_TYPEALIAS-1] of Integer;
+  StrConstSLen : array[0..MAX_TYPEALIAS-1] of Integer;
+  StrConstCount: Integer;
 
   { Scratch filled by NodeArrNDInfo for the multidim array a node references. }
   NDInfoNDims : Integer;

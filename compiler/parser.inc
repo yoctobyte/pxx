@@ -2061,7 +2061,7 @@ var name: AnsiString; recName: Integer; idx, pi, i, node, left, prevTok, valNode
     aliasIdx, fieldNode, indexNode, baseNode, baseRec, fIdx, mci, margSeq, margIdx, mexprNode, mai, pri, qUnit: Integer;
     fieldName, methName: AnsiString; isAssign: Boolean; castTk: TTypeKind;
     liftedVar, identNode, addrNode: Integer;
-    helperPi, wrapperArg, wrapperCall: Integer;
+    helperPi, wrapperArg, wrapperCall, sci: Integer;
     isLiftedCall, isCStringCall: Boolean;
 begin
   LastExprTk := tyInteger;
@@ -2888,7 +2888,15 @@ begin
           end;
         end;
       end;
-      if (idx >= 0) and (Syms[idx].Kind = skConst) then
+      sci := FindStrConst(name);
+      if sci >= 0 then
+      begin
+        { Untyped string constant — expand to a string literal over its span. }
+        node := AllocNode(AN_STR_LIT);
+        ASTSOffset[node] := StrConstSOff[sci]; ASTSLen[node] := StrConstSLen[sci];
+        ASTTk[node] := Ord(tyString); CurASTNode := node; Next;
+      end
+      else if (idx >= 0) and (Syms[idx].Kind = skConst) then
       begin
         node := AllocNode(AN_INT_LIT); ASTIVal[node] := Syms[idx].ConstVal; ASTTk[node] := Ord(Syms[idx].TypeKind); CurASTNode := node; Next;
       end
@@ -4796,19 +4804,26 @@ begin
     if CurTok.Kind = tkIdent then ai := FindArrayType(CurTok.SVal);
     if ai >= 0 then
     begin
-      { Variable of a named fixed-array type — pull the (flattened) bounds and
-        N-D dims from the registry. }
+      { Variable of a named array type. }
       isArr := True;
-      arrLo := ArrTypeLo[ai]; arrHi := ArrTypeHi[ai];
       elemTk := IntToTypeKind(ArrTypeElemTk[ai]); tk := elemTk;
       LastTypeRecId := ArrTypeElemRec[ai];
-      if ArrTypeNDims[ai] >= 2 then
+      if ArrTypeIsDyn[ai] then
       begin
-        isArrND := True; ndCnt := ArrTypeNDims[ai];
-        for di := 0 to ndCnt - 1 do
+        { dynamic-array alias -> AllocDynArray below }
+        isDyn := True; dynDepth := ArrTypeDynDepth[ai];
+      end
+      else
+      begin
+        arrLo := ArrTypeLo[ai]; arrHi := ArrTypeHi[ai];
+        if ArrTypeNDims[ai] >= 2 then
         begin
-          ndDimLo[di]   := ArrTypeDimLo[ai * MAX_ARR_DIMS + di];
-          ndDimSpan[di] := ArrTypeDimSpan[ai * MAX_ARR_DIMS + di];
+          isArrND := True; ndCnt := ArrTypeNDims[ai];
+          for di := 0 to ndCnt - 1 do
+          begin
+            ndDimLo[di]   := ArrTypeDimLo[ai * MAX_ARR_DIMS + di];
+            ndDimSpan[di] := ArrTypeDimSpan[ai * MAX_ARR_DIMS + di];
+          end;
         end;
       end;
       Next; { consume the type name }
@@ -5004,8 +5019,22 @@ begin
     else
     begin
       Expect(tkEq, '=');
-      v := ConstEval;
-      AddConst(name, tyInteger, v);
+      if CurTok.Kind = tkString then
+      begin
+        { Untyped string constant: remember the literal's source span; a use of
+          the name builds an AN_STR_LIT over it. }
+        if StrConstCount >= MAX_TYPEALIAS then Error('too many string constants');
+        StrConstName[StrConstCount] := name;
+        StrConstSOff[StrConstCount] := Tokens[TokPos-1].SOffset;
+        StrConstSLen[StrConstCount] := Tokens[TokPos-1].SLen;
+        Inc(StrConstCount);
+        Next;
+      end
+      else
+      begin
+        v := ConstEval;
+        AddConst(name, tyInteger, v);
+      end;
     end;
     Eat(tkSemicolon);
   end;
@@ -5729,11 +5758,27 @@ begin
             ArrTypeDimLo[ArrTypeCount * MAX_ARR_DIMS + tdi]   := tdDimLo[tdi];
             ArrTypeDimSpan[ArrTypeCount * MAX_ARR_DIMS + tdi] := tdDimSpan[tdi];
           end;
+          ArrTypeIsDyn[ArrTypeCount] := False;
           Inc(ArrTypeCount);
         end
         else
-          { dynamic-array type alias — not registered yet; skip }
-          while not (CurTok.Kind in [tkSemicolon,tkEOF]) do Next;
+        begin
+          { Dynamic-array type alias `TArr = array of T` (nested: array of array
+            of T). Register it so `var a: TArr` becomes a real dynamic array. }
+          Expect(tkOf, 'of');
+          tdCnt := 1; { reuse as dyn depth }
+          while CurTok.Kind = tkArray do
+          begin Next; Inc(tdCnt); Expect(tkOf, 'of'); end;
+          aElemTk := ParseTypeKind;
+          if ArrTypeCount >= MAX_TYPEALIAS then Error('too many array types');
+          ArrTypeName[ArrTypeCount] := tname;
+          ArrTypeElemTk[ArrTypeCount] := Ord(aElemTk);
+          ArrTypeElemRec[ArrTypeCount] := LastTypeRecId;
+          ArrTypeNDims[ArrTypeCount] := 0;
+          ArrTypeIsDyn[ArrTypeCount] := True;
+          ArrTypeDynDepth[ArrTypeCount] := tdCnt;
+          Inc(ArrTypeCount);
+        end;
       end
       else if (CurTok.Kind = tkProcedure) or (CurTok.Kind = tkFunction) then
       begin
@@ -7542,6 +7587,7 @@ var jmpPatch, i, j: Integer; doneUses, doneDecls, hasExceptions, needsBuiltin,
 begin
   PendingInitCount := 0;
   ArrTypeCount := 0;
+  StrConstCount := 0;
   Expect(tkProgram, 'program');
   if CurTok.Kind = tkEOF then Error('expected program name');
   Next;  { program name can be any identifier (even keyword) }
