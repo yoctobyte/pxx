@@ -119,6 +119,10 @@ const
   AN_VARREC_ARRAY = 50; { `array of const` literal: Left = AN_ARG chain of element
                           exprs, IVal = TVarRec record id. Lowers to a heap
                           dyn-array of TVarRec; yields the data-pointer handle. }
+  AN_COSWITCH     = 51; { __pxxcoswitch(pfrom, pto: Pointer): low-level coroutine
+                          context switch. Left = AN_ARG chain of 2 pointer exprs
+                          (address of the from/to TCoroCtx). Calls the bare
+                          CoSwitch runtime stub. }
 
   { Inline-asm operand kinds }
   AOP_NONE = 0;
@@ -182,6 +186,7 @@ const
   IR_DEFAULT_MEM  = 52;  { IRA = dest addr node; IRC = managed record id or REC_NONE; IRIVal = bytes to zero }
   IR_READ_DISCARD = 53;
   IR_SYSCALL      = 54;  { IRA = first IR_ARG (nr, then up to 6 args); raw target syscall; result in accumulator }
+  IR_COSWITCH     = 55;  { IRA = first IR_ARG (pfrom, pto); emits a call to the bare CoSwitch runtime stub }
 
   { Variant tag (VType) values, stored in the first 8 bytes of a tyVariant slot.
     Payload (next 8 bytes) interpreted per tag. Closed scalar set; vtObject is a
@@ -796,6 +801,8 @@ var
   ExcSetJmpAddr   : Integer;
   ExcLongJmpAddr  : Integer;
   ExcRaiseAddr    : Integer;
+  CoroutineUsed   : Boolean;
+  CoSwitchAddr    : Integer;  { code address of the bare CoSwitch context-switch stub }
   AnsiStrReleaseAddr : Integer;
   AnsiStrRetainAddr  : Integer;
   AnsiStrFromLiteralAddr : Integer;

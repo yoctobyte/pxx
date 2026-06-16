@@ -1324,6 +1324,20 @@ begin
         EmitB($0F); EmitB($05); { syscall }
       end;
 
+    IR_COSWITCH:
+      begin
+        { __pxxcoswitch(pfrom, pto): evaluate both pointer args left-to-right
+          onto the stack, pop into rdi (pfrom) / rsi (pto), then call the bare
+          CoSwitch stub. }
+        argNode := IRA[node];
+        IREmitNode(IRA[argNode]);  EmitB($50);   { pfrom -> push rax }
+        argNode := IRB[argNode];
+        IREmitNode(IRA[argNode]);  EmitB($50);   { pto   -> push rax }
+        EmitB($5E);                              { pop rsi = pto }
+        EmitB($5F);                              { pop rdi = pfrom }
+        IREmitCodeCall(CoSwitchAddr);
+      end;
+
     IR_LOAD_SYM:
       begin
         EmitLoadVar(IRA[node]);
@@ -3961,6 +3975,7 @@ begin
       IR_READLINE, IR_READ_VAR, IR_READ_DISCARD, IR_COPY_REC, IR_COPY_REC_MANAGED, IR_SET_COPY, IR_VAR_STORE,
       IR_SETLEN_DYN, IR_DEFAULT_MEM,
       IR_EXC_LEAVE, IR_RAISE, IR_EXC_STORE, IR_EXC_CLEAR, IR_TERMINATE,
+      IR_COSWITCH,
       IR_ASM:
         begin
           IREmitNode(i);

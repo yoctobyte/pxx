@@ -2635,6 +2635,36 @@ begin
         Exit;
       end;
 
+      if CaseEqual(name, '__pxxcoswitch') then
+      begin
+        { Low-level coroutine context switch: __pxxcoswitch(pfrom, pto: Pointer).
+          Both args are the addresses of the from/to TCoroCtx records. Lowers to
+          a call to the bare CoSwitch runtime stub. }
+        Next; { consume '__pxxcoswitch' }
+        Expect(tkLParen, '(');
+        node := AllocNode(AN_COSWITCH);
+        ASTTk[node] := Ord(tyPointer);
+        lastArg := -1;
+        nArgs := 0;
+        repeat
+          ParseExpr;
+          exprNode := CurASTNode;
+          argSeq := AllocNode(AN_ARG);
+          ASTLeft[argSeq] := exprNode;
+          if lastArg = -1 then
+            ASTLeft[node] := argSeq
+          else
+            ASTRight[lastArg] := argSeq;
+          lastArg := argSeq;
+          Inc(nArgs);
+        until not Eat(tkComma);
+        Expect(tkRParen, ')');
+        if nArgs <> 2 then Error('__pxxcoswitch: expects exactly 2 arguments (pfrom, pto)');
+        LastExprTk := tyPointer;
+        CurASTNode := node;
+        Exit;
+      end;
+
       if CaseEqual(name, '__resources') then
       begin
         Next; { consume '__resources' }
@@ -4218,6 +4248,22 @@ begin
       end;
       if CaseEqual(name, 'inherited') then
         node := ParseInheritedCallAST
+      else if CaseEqual(name, '__pxxcoswitch') then
+      begin
+        { Statement form of the low-level coroutine switch:
+          __pxxcoswitch(pfrom, pto). }
+        Next; Expect(tkLParen, '(');
+        node := AllocNode(AN_COSWITCH);
+        ASTTk[node] := Ord(tyPointer);
+        ParseExpr;
+        argSeq := AllocNode(AN_ARG); ASTLeft[argSeq] := CurASTNode;
+        ASTLeft[node] := argSeq;
+        Expect(tkComma, ',');
+        ParseExpr;
+        exprNode := AllocNode(AN_ARG); ASTLeft[exprNode] := CurASTNode;
+        ASTRight[argSeq] := exprNode;
+        Expect(tkRParen, ')');
+      end
       else if (name = 'LoadFile') or (name = 'loadfile') then
       begin
         Next; Expect(tkLParen, '(');
@@ -6978,6 +7024,18 @@ begin
   end;
 end;
 
+procedure EnableCoroutineRuntime;
+begin
+  if not CoroutineUsed then
+  begin
+    CoroutineUsed := True;
+    { CoSwitch saves/restores BSS_EXC_TOP, so the exception slot must exist even
+      if the program itself has no try/except. }
+    EnableExceptionRuntime;
+    EmitCoroutineRuntime;
+  end;
+end;
+
 procedure ParseUsesUnit(const name: AnsiString);
 var
   lo, path: AnsiString;
@@ -7636,7 +7694,7 @@ end;
 
 procedure ParseProgram;
 var jmpPatch, i, j: Integer; doneUses, doneDecls, hasExceptions, needsBuiltin,
-    needsHeap, needsAnsiRuntime, needHeapUnit: Boolean;
+    needsHeap, needsAnsiRuntime, needHeapUnit, hasCoroutine: Boolean;
     savedUnitIdx: Integer;
     dummyNames: array[0..7] of AnsiString;
     dummyTypes: array[0..7] of TTypeKind;
@@ -7662,7 +7720,9 @@ begin
   BSS_LINE_BUF    := BSSSize; Inc(BSSSize, LINE_BUF_SIZE);
   BSS_INTBUF      := BSSSize; Inc(BSSSize, INTBUF_SIZE);
   ExceptionUsed := False;
+  CoroutineUsed := False;
   hasExceptions := False;
+  hasCoroutine := False;
   needsBuiltin := False;
   DetectPascalRuntimeNeeds(needsHeap, needsAnsiRuntime);
   { Full builtin (Str/Val/Variant) is pulled only for AnsiString/exception
@@ -7743,6 +7803,11 @@ begin
   while i < TokCount do
   begin
     if Tokens[i].Kind in [tkTry, tkRaise] then hasExceptions := True;
+    { The coroutine context-switch stub must be emitted before the main body
+      (it is reached only by `call`), so detect any use of the low-level
+      __pxxcoswitch intrinsic up front. }
+    if (Tokens[i].Kind = tkIdent) and CaseEqual(GetTokenStr(i), '__pxxcoswitch') then
+      hasCoroutine := True;
     { Pull in the builtin unit (Str/Val backing) only if the program calls
       Str(...) or Val(...) — name immediately followed by '(', so plain
       variables/params named str/val don't drag it in. No DCE, so this keeps it
@@ -7820,6 +7885,7 @@ begin
     emission there (its AnsiStr*Addr labels stay 0 and are never referenced). }
   if needsAnsiRuntime and (TargetArch = TARGET_X86_64) then EmitAnsiStringRuntime;
   if hasExceptions then EnableExceptionRuntime;
+  if hasCoroutine then EnableCoroutineRuntime;
 
   { Compile the runtime units before user declarations, so their proc bodies
     land in the proc region after the entry jump and are resolvable. builtinheap

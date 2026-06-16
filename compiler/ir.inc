@@ -88,6 +88,7 @@ begin
     IR_VAR_BINOP: Result := 'var_binop';
     IR_VAR_BOX: Result := 'var_box';
     IR_SYSCALL: Result := 'syscall';
+    IR_COSWITCH: Result := 'coswitch';
   else
     Result := 'unknown';
   end;
@@ -303,6 +304,9 @@ begin
 
       IR_SYSCALL:
         IRRequireNode(IRA[i], 'syscall number arg');
+
+      IR_COSWITCH:
+        IRRequireNode(IRA[i], 'coswitch first arg');
 
       IR_EXC_ENTER, IR_EXC_MATCH:
       begin
@@ -1287,6 +1291,25 @@ begin
         item := ASTRight[item];
       end;
       Result := IRAppend(IR_SYSCALL, first, -1, -1, 0, ASTTk[node]);
+    end;
+
+    AN_COSWITCH:
+    begin
+      { Two pointer args (pfrom, pto) as an IR_ARG chain; backend moves them into
+        rdi/rsi and calls the bare CoSwitch stub. }
+      first := -1;
+      last := -1;
+      item := ASTLeft[node];
+      while item <> -1 do
+      begin
+        value := IRLowerAST(ASTLeft[item]);
+        argNode := IRAppend(IR_ARG, value, -1, -1, 0, ASTTk[ASTLeft[item]]);
+        if first < 0 then first := argNode
+        else IRB[last] := argNode;
+        last := argNode;
+        item := ASTRight[item];
+      end;
+      Result := IRAppend(IR_COSWITCH, first, -1, -1, 0, ASTTk[node]);
     end;
 
     AN_ADDR:
