@@ -231,6 +231,8 @@ test-core: $(COMPILER)
 	test "$$(/tmp/test_scheduler_exc26)" = "$$(printf 'w1 try\nw2 try\nw1 caught\nw2 caught\ndone')"
 	./$(COMPILER) test/test_costack.pas /tmp/test_costack26
 	test "$$(/tmp/test_costack26)" = "$$(printf 'w1:55\nw2:210\nw3:465\nw1:55\nw2:210\nw3:465\nall done')"
+	./$(COMPILER) test/test_async.pas /tmp/test_async26
+	test "$$(/tmp/test_async26)" = "$$(printf 'a1:1\na2:1\na1:2\na2:2\ndone1=102\ndone2=202\nall done')"
 	./$(COMPILER) test/test_reactor.pas /tmp/test_reactor26
 	test "$$(/tmp/test_reactor26)" = "$$(printf 'reader: start\nreader: would-block, parking\nwriter: writing\nreader: got 2 bytes: hi\ndone')"
 	./$(COMPILER) test/test_asyncecho.pas /tmp/test_asyncecho26

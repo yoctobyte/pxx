@@ -130,6 +130,11 @@ const
                           v(args) where v is a proc-typed var. ASTLeft = AN_ARG
                           chain; ASTRight = callee expr (yields the code address);
                           ASTIVal = signature proc index (param/ret marshalling). }
+  AN_AWAIT        = 54; { await E inside an `; async;` routine. Left = awaited
+                          expr. STACKFUL (default): documentary — lowers straight
+                          to its operand (the underlying call suspends on its own
+                          via the reactor/CoYield). STACKLESS (later): the marker
+                          that bounds the state-machine split locally. }
 
   { Inline-asm operand kinds }
   AOP_NONE = 0;
@@ -647,6 +652,7 @@ var
   ProcRetRecId : array[0..MAX_PROCS-1] of Integer; { record id for tyRecord results }
   ProcAggregateDestSym : array[0..MAX_PROCS-1] of Integer; { hidden caller-result pointer local, or -1 }
   ProcRetIsDynArray : array[0..MAX_PROCS-1] of Boolean; { result is `array of T` (pointer-sized heap handle) }
+  ProcIsAsync     : array[0..MAX_PROCS-1] of Boolean;   { `; async;` routine — non-viral hint; legalises `await` in the body (stackful: documentary; stackless transform later) }
   ProcIsGenerator : array[0..MAX_PROCS-1] of Boolean;   { `; generator;` routine — compiled as a stackful-coroutine body (see coroutine.pas) }
   ProcIsStackless : array[0..MAX_PROCS-1] of Boolean;   { `; generator; stackless;` — compiled as a state-machine step fn (see slgen.pas) }
   ProcGenElemTk   : array[0..MAX_PROCS-1] of TTypeKind; { stackless: declared (yielded) element type; the proc's own RetType is Boolean (has-next) }
@@ -851,6 +857,7 @@ var
   ExcRaiseAddr    : Integer;
   CoroutineUsed   : Boolean;
   CoSwitchAddr    : Integer;  { code address of the bare CoSwitch context-switch stub }
+  CurProcIsAsync  : Boolean;  { parsing the body of an `; async;` routine (legalises `await`) }
   CurProcIsGenerator : Boolean; { parsing the body of a `; generator;` routine }
   CurGenSelfSym   : Integer;  { sym idx of the generator body's hidden self-pointer local }
   CurGenSeenYield : Boolean;  { a yield was seen in the current generator body (validation) }

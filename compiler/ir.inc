@@ -1331,6 +1331,14 @@ begin
       Result := IRAppend(IR_YIELD, value, -1, -1, ASTIVal[node], ASTTk[ASTLeft[node]]);
     end;
 
+    AN_AWAIT:
+    begin
+      { Stackful (v1): documentary — `await E` evaluates exactly as `E`. The
+        awaited call suspends on its own (reactor/CoYield). The stackless backend
+        will instead split the state machine here. }
+      Result := IRLowerAST(ASTLeft[node]);
+    end;
+
     AN_ADDR:
     begin
       Result := IRLowerAddress(ASTLeft[node]);

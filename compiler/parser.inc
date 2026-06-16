@@ -2508,6 +2508,20 @@ begin
     tkIdent:
     begin
       name := CurTok.SVal;
+      if CaseEqual(name, 'await') and CurProcIsAsync then
+      begin
+        { `await E` as an expression. Binds tightly (a unary/primary operand, like
+          Python) so `await f() + 1` is `(await f()) + 1`. STACKFUL: documentary —
+          AN_AWAIT lowers straight to its operand; the awaited call suspends on its
+          own via the reactor/CoYield. STACKLESS (later): the transform split point. }
+        Next;
+        ParseFactor;
+        node := AllocNode(AN_AWAIT);
+        ASTLeft[node] := CurASTNode;
+        ASTTk[node]   := Ord(LastExprTk);
+        CurASTNode := node;
+        Exit;
+      end;
       if isNilPy and (name = 'int') then
       begin
         Next; Expect(tkLParen, '('); ParseExpr; Expect(tkRParen, ')');
@@ -4914,6 +4928,16 @@ begin
         ASTIVal[node] := CurGenSelfSym;
         CurGenSeenYield := True;
       end
+      else if CaseEqual(name, 'await') and CurProcIsAsync then
+      begin
+        { `await Call(...)` as a statement (the awaited call may be void, so parse
+          it as a full statement, not an expression factor). STACKFUL: documentary
+          — AN_AWAIT lowers to its operand. STACKLESS (later): split point. }
+        Next;
+        node := AllocNode(AN_AWAIT);
+        ASTLeft[node] := ParseStatementAST;
+        ASTTk[node]   := Ord(tyUnknown);
+      end
       else if CaseEqual(name, '__pxxcoswitch') then
       begin
         { Statement form of the low-level coroutine switch:
@@ -6685,8 +6709,8 @@ var
   doneArgs, doneParam, isArr, isByRef, isConst, declOverload, isClassKeyword, isStaticMethod: Boolean;
   needsProcCleanupFrame, savedProcCleanupFrameActive: Boolean;
   isAsmFunc: Boolean;
-  isGenerator, isStackless: Boolean;
-  savedGenIsGen, savedGenSeen, savedGenStackless: Boolean;
+  isGenerator, isStackless, isAsync: Boolean;
+  savedGenIsGen, savedGenSeen, savedGenStackless, savedProcIsAsync: Boolean;
   savedGenSelf, savedGenTry, savedGenStateCtr, savedGenSlotNext: Integer;
   genBodyAST, genStepAST, declElemTk: Integer;
   genSelfIdx, gpi: Integer;
@@ -6702,6 +6726,7 @@ begin
   isAsmFunc := False;
   isGenerator := False;
   isStackless := False;
+  isAsync := False;
   if CurTok.Kind = tkClass then
   begin
     isClassKeyword := True;
@@ -6886,6 +6911,7 @@ begin
           (CurTok.SVal = 'cdecl') or (CurTok.SVal = 'Cdecl') or (CurTok.SVal = 'CDECL') or
           CaseEqual(CurTok.SVal, 'assembler') or
           CaseEqual(CurTok.SVal, 'generator') or
+          CaseEqual(CurTok.SVal, 'async') or
           CaseEqual(CurTok.SVal, 'stackful') or
           CaseEqual(CurTok.SVal, 'stackless'))) or
         (CurTok.Kind = tkOverload) do
@@ -6893,6 +6919,7 @@ begin
     if CurTok.Kind = tkOverload then declOverload := True;
     if (CurTok.Kind = tkIdent) and CaseEqual(CurTok.SVal, 'assembler') then isAsmFunc := True;
     if (CurTok.Kind = tkIdent) and CaseEqual(CurTok.SVal, 'generator') then isGenerator := True;
+    if (CurTok.Kind = tkIdent) and CaseEqual(CurTok.SVal, 'async') then isAsync := True;
     if (CurTok.Kind = tkIdent) and CaseEqual(CurTok.SVal, 'stackless') then isStackless := True;
     { `stackful` is the implemented default strategy; accept it as a no-op modifier. }
     Next;
@@ -6902,6 +6929,14 @@ begin
     Error('generator must be a function (its result type is the yielded element type)');
   if isGenerator and isAsmFunc then
     Error('a routine cannot be both generator and assembler');
+  if isAsync and isGenerator then
+    Error('a routine cannot be both async and generator');
+  if isAsync and isAsmFunc then
+    Error('a routine cannot be both async and assembler');
+  if isAsync and isStackless then
+    Error('async stackless backend not implemented yet (v1: stackful only)');
+  { `stackless` after `generator` selects the state-machine backend; on its own it
+    is meaningless. (async stackless is rejected above.) }
   if isStackless and not isGenerator then
     Error('stackless directive is only valid on a generator');
 
@@ -7092,6 +7127,7 @@ begin
   ProcRetElemRec[pi] := retElemRec;
   ProcRetPtrElemTk[pi] := retPtrElemTk;
   ProcRetPtrElemRec[pi] := retPtrElemRec;
+  ProcIsAsync[pi] := isAsync;
   ProcIsGenerator[pi] := isGenerator;
   ProcIsStackless[pi] := isStackless;
   if isStackless then
@@ -7256,6 +7292,8 @@ begin
   savedGenStackless := CurProcIsStackless;
   savedGenStateCtr  := CurGenStateCtr;
   savedGenSlotNext  := CurGenSlotNext;
+  savedProcIsAsync  := CurProcIsAsync;
+  CurProcIsAsync := isAsync;
   CurProcIsGenerator := isGenerator;
   CurProcIsStackless := isStackless;
   CurGenSelfSym := -1;
@@ -7888,6 +7926,7 @@ begin
   GotoFixupCount := savedGFC;
   CurProc   := -1;
   CurSelfClass := REC_NONE;
+  CurProcIsAsync := savedProcIsAsync;
   CurProcIsGenerator := savedGenIsGen;
   CurProcIsStackless := savedGenStackless;
   CurGenSelfSym := savedGenSelf;
