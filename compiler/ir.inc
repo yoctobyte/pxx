@@ -1333,6 +1333,46 @@ begin
 
     AN_BINOP:
     begin
+      { Short-circuit boolean and/or (FPC default {$B-}): evaluate the right
+        operand only when the left has not already decided the result. The parser
+        tags a logical (both-operands-boolean) and/or with ASTTk = tyBoolean;
+        bitwise integer and/or keep an ordinal type and fall through to the
+        unconditional IR_BINOP below. The result is held in a temp (a local when
+        inside a proc, so recursion stays reentrant); the right operand's IR is
+        lowered AFTER the conditional jump, so it sits past the branch in the
+        linear statement stream and is skipped at runtime. }
+      if ((Integer(ASTIVal[node]) = Ord(tkAnd)) or (Integer(ASTIVal[node]) = Ord(tkOr))) and
+         (IntToTypeKind(ASTTk[node]) = tyBoolean) then
+      begin
+        varIdx := AllocVar('', tyBoolean);
+        endLabel := IRNewLabel;
+        left := IRLowerAST(ASTLeft[node]);
+        IRAppend(IR_STORE_SYM, varIdx, left, -1, 0, Ord(tyBoolean));
+        value := IRAppend(IR_LOAD_SYM, varIdx, -1, -1, 0, Ord(tyBoolean));
+        if Integer(ASTIVal[node]) = Ord(tkAnd) then
+        begin
+          { left false -> skip right (result already false) }
+          IRAppend(IR_JUMP_IF_FALSE, endLabel, value, -1, 0, 0);
+          right := IRLowerAST(ASTRight[node]);
+          IRAppend(IR_STORE_SYM, varIdx, right, -1, 0, Ord(tyBoolean));
+          IRAppend(IR_LABEL, -1, -1, -1, endLabel, 0);
+        end
+        else
+        begin
+          { left true -> skip right (result already true). Only JUMP_IF_FALSE
+            exists, so branch to an "evaluate right" label when left is false,
+            else jump straight to the end. }
+          elseLabel := IRNewLabel;
+          IRAppend(IR_JUMP_IF_FALSE, elseLabel, value, -1, 0, 0);
+          IRAppend(IR_JUMP, endLabel, -1, -1, 0, 0);
+          IRAppend(IR_LABEL, -1, -1, -1, elseLabel, 0);
+          right := IRLowerAST(ASTRight[node]);
+          IRAppend(IR_STORE_SYM, varIdx, right, -1, 0, Ord(tyBoolean));
+          IRAppend(IR_LABEL, -1, -1, -1, endLabel, 0);
+        end;
+        Result := IRAppend(IR_LOAD_SYM, varIdx, -1, -1, 0, Ord(tyBoolean));
+        Exit;
+      end;
       { Operator overloading: a <op> b on a class/record operand resolves to a
         call to the registered operator proc (lhs, rhs), mirroring the direct
         backend. Args are passed by value (rdi=lhs, rsi=rhs). }
