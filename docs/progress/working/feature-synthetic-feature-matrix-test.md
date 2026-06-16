@@ -92,3 +92,19 @@ appear in compiler.pas.
   feature the compiler never self-uses). DECISION PENDING: fix the class bug(s)
   first, or shelve and continue other work — the harness + repro are in place to
   resume from.
+- 2026-06-16 — **class base-managed-string bug FIXED** (commit 56b0bd0). Root
+  cause: the direct-instantiation ctor path (`TShape.Create('generic', 7)`)
+  lowers explicit args through a bespoke push loop in the GetMem/new case of
+  `ir_codegen.inc` that, unlike the normal internal-call path, never converted a
+  frozen `tyString`/`tyChar` literal into a managed `tyAnsiString` when the
+  matching ctor param is AnsiString. The callee read a raw frozen `[len][chars]`
+  pointer as a managed string → empty for a param-1 string, runaway heap dump for
+  a later param. Derived instances were fine because `inherited Create(...)`
+  routes its args through the normal call path. Fix mirrors that path's
+  conversion in the ctor loop, indexing params from 1 (param 0 = implicit Self).
+  `test_conformance_1` now passes; **wired into `make test-core` (x86-64 only)**
+  with a golden output (commit after 56b0bd0). Cross targets still reject the file
+  early — i386 has no class instantiation, and aarch64/arm32 lack Double function
+  results — so a cross-portable `test_conformance_2` (Int64/string/record/dynarray/
+  array-of-const/case/exceptions subset) is the next harness piece for the
+  4-target byte-identical diff. Short-circuit and/or still to fold in.
