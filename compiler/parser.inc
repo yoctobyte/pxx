@@ -832,20 +832,19 @@ end;
 
 { Linear index of a 2-D fixed array element: (i - lo1) * span2 + (j - lo2),
   built from AST nodes so it feeds the ordinary 1-D AN_INDEX (no codegen
-  change). sym is the array symbol (SymArr2 set); iNode/jNode are the two
-  parsed index expressions. }
-function BuildFlat2DIndex(sym, iNode, jNode: Integer): Integer;
+  change). iNode/jNode are the two parsed index expressions. }
+function BuildFlat2DIndex(lo1, lo2, span2, iNode, jNode: Integer): Integer;
 var lo1Lit, lo2Lit, spanLit, di, scaled, dj: Integer;
 begin
-  lo1Lit := AllocNode(AN_INT_LIT); ASTIVal[lo1Lit] := SymArr2Lo1[sym]; ASTTk[lo1Lit] := Ord(tyInteger);
+  lo1Lit := AllocNode(AN_INT_LIT); ASTIVal[lo1Lit] := lo1; ASTTk[lo1Lit] := Ord(tyInteger);
   di := AllocNode(AN_BINOP); ASTIVal[di] := Ord(tkMinus);
   ASTLeft[di] := iNode; ASTRight[di] := lo1Lit; ASTTk[di] := Ord(tyInteger);
 
-  spanLit := AllocNode(AN_INT_LIT); ASTIVal[spanLit] := SymArr2Span2[sym]; ASTTk[spanLit] := Ord(tyInteger);
+  spanLit := AllocNode(AN_INT_LIT); ASTIVal[spanLit] := span2; ASTTk[spanLit] := Ord(tyInteger);
   scaled := AllocNode(AN_BINOP); ASTIVal[scaled] := Ord(tkStar);
   ASTLeft[scaled] := di; ASTRight[scaled] := spanLit; ASTTk[scaled] := Ord(tyInteger);
 
-  lo2Lit := AllocNode(AN_INT_LIT); ASTIVal[lo2Lit] := SymArr2Lo2[sym]; ASTTk[lo2Lit] := Ord(tyInteger);
+  lo2Lit := AllocNode(AN_INT_LIT); ASTIVal[lo2Lit] := lo2; ASTTk[lo2Lit] := Ord(tyInteger);
   dj := AllocNode(AN_BINOP); ASTIVal[dj] := Ord(tkMinus);
   ASTLeft[dj] := jNode; ASTRight[dj] := lo2Lit; ASTTk[dj] := Ord(tyInteger);
 
@@ -853,10 +852,39 @@ begin
   ASTLeft[Result] := scaled; ASTRight[Result] := dj; ASTTk[Result] := Ord(tyInteger);
 end;
 
+{ If `node` is a 2-D fixed array reference (a SymArr2 ident or an UFldArr2 record
+  field), return True and its dims. Lets m[i,j] and r.m[i,j] share one path. }
+function NodeArr2Info(node: Integer; var lo1, lo2, span2: Integer): Boolean;
+var baseRec, fIdx: Integer; fname: AnsiString;
+begin
+  Result := False;
+  if (ASTKind[node] = AN_IDENT) and (ASTIVal[node] >= 0) and SymArr2[ASTIVal[node]] then
+  begin
+    lo1 := SymArr2Lo1[ASTIVal[node]]; lo2 := SymArr2Lo2[ASTIVal[node]];
+    span2 := SymArr2Span2[ASTIVal[node]];
+    Result := True;
+  end
+  else if ASTKind[node] = AN_FIELD then
+  begin
+    baseRec := ResolveNodeRec(ASTLeft[node]);
+    if baseRec >= REC_UCLASS_BASE then
+    begin
+      fname := GetASTIdentName(node);
+      fIdx := FindUField(baseRec - REC_UCLASS_BASE, fname);
+      if (fIdx >= 0) and UFldArr2[fIdx] then
+      begin
+        lo1 := UFldArr2Lo1[fIdx]; lo2 := UFldArr2Lo2[fIdx]; span2 := UFldArr2Span2[fIdx];
+        Result := True;
+      end;
+    end;
+  end;
+end;
+
 function ParseLValueAST(idx: Integer; identTokIdx: Integer): Integer;
 var
   node, indexNode, fieldNode, prevTok, recName, i: Integer;
   baseNode, baseRec, fIdx, aliasIdx, firstIdxNode: Integer;
+  is2D: Boolean; a2lo1, a2lo2, a2span2: Integer;
   tk: TTypeKind;
   fieldName: AnsiString;
   mci, mmi, mpi, mcallNode, mselfArg, mlastArg, margSeq, margIdx, mexprNode, mai, pri, ci: Integer;
@@ -1110,26 +1138,26 @@ begin
       indexNode := AllocNode(AN_INDEX);
       ASTLeft[indexNode] := node;
       ParseExpr;
-      { 2-D fixed array, both syntaxes, folded into one flattened 1-D index:
-        m[i,j] (comma) and m[i][j] (consecutive brackets). Handled in this
-        bracket so the bogus intermediate m[i] is never built. }
-      if (ASTKind[node] = AN_IDENT) and SymArr2[ASTIVal[node]] and
-         (CurTok.Kind = tkComma) then
+      { 2-D fixed array (variable or record field), both syntaxes folded into one
+        flattened 1-D index: m[i,j]/r.m[i,j] (comma) and m[i][j]/r.m[i][j]
+        (consecutive brackets). Handled in this bracket so the bogus intermediate
+        m[i] is never built. }
+      is2D := NodeArr2Info(node, a2lo1, a2lo2, a2span2);
+      if is2D and (CurTok.Kind = tkComma) then
       begin
         firstIdxNode := CurASTNode;
         Eat(tkComma);
         ParseExpr;
-        ASTRight[indexNode] := BuildFlat2DIndex(ASTIVal[node], firstIdxNode, CurASTNode);
+        ASTRight[indexNode] := BuildFlat2DIndex(a2lo1, a2lo2, a2span2, firstIdxNode, CurASTNode);
         Expect(tkRBrack, ']');
       end
-      else if (ASTKind[node] = AN_IDENT) and SymArr2[ASTIVal[node]] and
-              (CurTok.Kind = tkRBrack) and (Tokens[TokPos].Kind = tkLBrack) then
+      else if is2D and (CurTok.Kind = tkRBrack) and (Tokens[TokPos].Kind = tkLBrack) then
       begin
         firstIdxNode := CurASTNode;
         Expect(tkRBrack, ']');
         Expect(tkLBrack, '[');
         ParseExpr;
-        ASTRight[indexNode] := BuildFlat2DIndex(ASTIVal[node], firstIdxNode, CurASTNode);
+        ASTRight[indexNode] := BuildFlat2DIndex(a2lo1, a2lo2, a2span2, firstIdxNode, CurASTNode);
         Expect(tkRBrack, ']');
       end
       else
@@ -4978,6 +5006,7 @@ var
   etid, propEnumId, propSetEnumId: Integer;
   mFullName: AnsiString;
   aLo, aHi, aLo1, aLo2, aSpan2, ad2hi: Integer; aIsArr2: Boolean; aElemTk: TTypeKind;
+  fIsArr2: Boolean; fLo1, fLo2, fSpan2, fhi2: Integer;
   mPNames: array[0..15] of AnsiString;
   mPTypes: array[0..15] of TTypeKind;
   mPTypesRec: array[0..15] of Integer;
@@ -5326,6 +5355,7 @@ begin
             arrLen := 1;
             fIsDyn := False;
             fDynDepth := 0;
+            fIsArr2 := False;
             if CurTok.Kind = tkArray then
             begin
               Next;
@@ -5343,6 +5373,17 @@ begin
                     arrLen := hiVal - loVal + 1;
                     Next;
                   end;
+                end;
+                if CurTok.Kind = tkComma then
+                begin
+                  { 2-D fixed-array field: array[lo1..hi1, lo2..hi2] of T. }
+                  fIsArr2 := True; fLo1 := loVal;
+                  Eat(tkComma);
+                  if CurTok.Kind = tkInteger then begin fLo2 := CurTok.IVal; Next; end;
+                  Expect(tkDotDot, '..');
+                  if CurTok.Kind = tkInteger then begin fhi2 := CurTok.IVal; Next; end;
+                  fSpan2 := fhi2 - fLo2 + 1;
+                  arrLen := arrLen * fSpan2;
                 end;
                 Expect(tkRBrack, ']');
                 Expect(tkOf, 'of');
@@ -5402,6 +5443,13 @@ begin
               if fIsDyn then UFldArrLen[UFldCount-1] := -1
               else UFldArrLen[UFldCount-1] := arrLen;
               UFldDynDepth[UFldCount-1] := fDynDepth;
+              UFldArr2[UFldCount-1] := fIsArr2;
+              if fIsArr2 then
+              begin
+                UFldArr2Lo1[UFldCount-1] := fLo1;
+                UFldArr2Lo2[UFldCount-1] := fLo2;
+                UFldArr2Span2[UFldCount-1] := fSpan2;
+              end;
               UFldPub[UFldCount-1] := curPublished;
               curFieldOff := curFieldOff + fSize;
             end;
@@ -5476,6 +5524,7 @@ begin
             arrLen := 1;
             fIsDyn := False;
             fDynDepth := 0;
+            fIsArr2 := False;
             if CurTok.Kind = tkArray then
             begin
               Next;
@@ -5493,6 +5542,17 @@ begin
                     arrLen := hiVal - loVal + 1;
                     Next;
                   end;
+                end;
+                if CurTok.Kind = tkComma then
+                begin
+                  { 2-D fixed-array field: array[lo1..hi1, lo2..hi2] of T. }
+                  fIsArr2 := True; fLo1 := loVal;
+                  Eat(tkComma);
+                  if CurTok.Kind = tkInteger then begin fLo2 := CurTok.IVal; Next; end;
+                  Expect(tkDotDot, '..');
+                  if CurTok.Kind = tkInteger then begin fhi2 := CurTok.IVal; Next; end;
+                  fSpan2 := fhi2 - fLo2 + 1;
+                  arrLen := arrLen * fSpan2;
                 end;
                 Expect(tkRBrack, ']');
                 Expect(tkOf, 'of');
@@ -5558,6 +5618,13 @@ begin
               if fIsDyn then UFldArrLen[UFldCount-1] := -1
               else UFldArrLen[UFldCount-1] := arrLen;
               UFldDynDepth[UFldCount-1] := fDynDepth;
+              UFldArr2[UFldCount-1] := fIsArr2;
+              if fIsArr2 then
+              begin
+                UFldArr2Lo1[UFldCount-1] := fLo1;
+                UFldArr2Lo2[UFldCount-1] := fLo2;
+                UFldArr2Span2[UFldCount-1] := fSpan2;
+              end;
               curFieldOff := curFieldOff + fSize;
             end;
             if fAlign > classAlign then classAlign := fAlign;

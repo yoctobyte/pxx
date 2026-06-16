@@ -261,6 +261,8 @@ test-core: $(COMPILER)
 	test "$$(/tmp/test_multidim26)" = "$$(printf 'sum=138 m12=12 m12b=12\nm23=99\ngsum=12000000009 g32=3000000002')"
 	./$(COMPILER) test/test_cross_named_array.pas /tmp/test_named_array26
 	test "$$(/tmp/test_named_array26)" = "$$(printf 'vsum=30\ngsum=138 g23=23\nbsum=6000000000')"
+	./$(COMPILER) test/test_cross_record_2darray.pas /tmp/test_record_2darray26
+	test "$$(/tmp/test_record_2darray26)" = "$$(printf 'msum=138 m23=23 tag=7\nm11=99\ngsum=6000000006 g22=2000000002')"
 	./$(COMPILER) test/test_asm_emit.pas /tmp/test_asm_emit26
 	test "$$(/tmp/test_asm_emit26)" = "$$(printf 'S=\nS=ab\nS=abc\nS=a longer string here\nI=0\nI=123\nI=-7\n---\nS=ww\nI=1\nS=yy\nI=2\nS=zzz\nI=3')"
 	./$(COMPILER) test/test_virtual_proc.pas /tmp/test_virtual_proc26
@@ -840,7 +842,10 @@ test-i386: $(COMPILER)
 	./$(COMPILER) --target=i386 test/test_cross_named_array.pas /tmp/test_i386_na
 	./$(COMPILER) test/test_cross_named_array.pas /tmp/test_i386_na_x64
 	test "$$(tools/run_target.sh i386 /tmp/test_i386_na)" = "$$(/tmp/test_i386_na_x64)"
-	@echo "i386 hello + arith + procs + loops + write + varparam + syscall + heap + string + record + dynarray + exception + float + float-params + variant + byref-params + setlen-str + in-operator + loadfile + sysopen-family + args + string-cow + aoc-types + many-params + conformance2 + shortcircuit + ptr-arith + case-range + global-init + typed-const + multidim + named-array ok (output identical to x86-64)"
+	./$(COMPILER) --target=i386 test/test_cross_record_2darray.pas /tmp/test_i386_r2
+	./$(COMPILER) test/test_cross_record_2darray.pas /tmp/test_i386_r2_x64
+	test "$$(tools/run_target.sh i386 /tmp/test_i386_r2)" = "$$(/tmp/test_i386_r2_x64)"
+	@echo "i386 hello + arith + procs + loops + write + varparam + syscall + heap + string + record + dynarray + exception + float + float-params + variant + byref-params + setlen-str + in-operator + loadfile + sysopen-family + args + string-cow + aoc-types + many-params + conformance2 + shortcircuit + ptr-arith + case-range + global-init + typed-const + multidim + named-array + record-2darray ok (output identical to x86-64)"
 
 test-aarch64: $(COMPILER)
 	./$(COMPILER) --target=aarch64 test/hello.pas /tmp/test_aarch64_hello
@@ -944,7 +949,10 @@ test-aarch64: $(COMPILER)
 	./$(COMPILER) --target=aarch64 test/test_cross_named_array.pas /tmp/test_aarch64_na
 	./$(COMPILER) test/test_cross_named_array.pas /tmp/test_aarch64_na_x64
 	test "$$(tools/run_target.sh aarch64 /tmp/test_aarch64_na)" = "$$(/tmp/test_aarch64_na_x64)"
-	@echo "aarch64 hello + arith + procs + loops + write + varparam + syscall + heap + string + record + dynarray + exception + float + variant + setlen-str + str-length-index + in-operator + loadfile + sysopen-family + args + open-array-params + string-cow + huge-frame + varrec-alloc + aoc-types + many-params + conformance2 + shortcircuit + ptr-arith + case-range + global-init + typed-const + multidim + named-array ok (output identical to x86-64)"
+	./$(COMPILER) --target=aarch64 test/test_cross_record_2darray.pas /tmp/test_aarch64_r2
+	./$(COMPILER) test/test_cross_record_2darray.pas /tmp/test_aarch64_r2_x64
+	test "$$(tools/run_target.sh aarch64 /tmp/test_aarch64_r2)" = "$$(/tmp/test_aarch64_r2_x64)"
+	@echo "aarch64 hello + arith + procs + loops + write + varparam + syscall + heap + string + record + dynarray + exception + float + variant + setlen-str + str-length-index + in-operator + loadfile + sysopen-family + args + open-array-params + string-cow + huge-frame + varrec-alloc + aoc-types + many-params + conformance2 + shortcircuit + ptr-arith + case-range + global-init + typed-const + multidim + named-array + record-2darray ok (output identical to x86-64)"
 
 test-arm32: $(COMPILER)
 	./$(COMPILER) --target=arm32 test/hello.pas /tmp/test_arm32_hello
@@ -1066,7 +1074,10 @@ test-arm32: $(COMPILER)
 	./$(COMPILER) --target=arm32 test/test_cross_named_array.pas /tmp/test_arm32_na
 	./$(COMPILER) test/test_cross_named_array.pas /tmp/test_arm32_na_x64
 	test "$$(tools/run_target.sh arm32 /tmp/test_arm32_na)" = "$$(/tmp/test_arm32_na_x64)"
-	@echo "arm32 hello + arith + procs + loops + write + varparam + syscall + heap + string + record + dynarray + exception + float + args + variant + strresult + setlen-str + str-length-index + in-operator + managed-aggregate-locals + loadfile + sysopen-family + string-cow + var-string-param + openarray-string + stack-params + int64 + int64-byref + aoc-types + many-params + conformance2 + shortcircuit + ptr-arith + case-range + global-init + typed-const + multidim + named-array ok (output identical to x86-64)"
+	./$(COMPILER) --target=arm32 test/test_cross_record_2darray.pas /tmp/test_arm32_r2
+	./$(COMPILER) test/test_cross_record_2darray.pas /tmp/test_arm32_r2_x64
+	test "$$(tools/run_target.sh arm32 /tmp/test_arm32_r2)" = "$$(/tmp/test_arm32_r2_x64)"
+	@echo "arm32 hello + arith + procs + loops + write + varparam + syscall + heap + string + record + dynarray + exception + float + args + variant + strresult + setlen-str + str-length-index + in-operator + managed-aggregate-locals + loadfile + sysopen-family + string-cow + var-string-param + openarray-string + stack-params + int64 + int64-byref + aoc-types + many-params + conformance2 + shortcircuit + ptr-arith + case-range + global-init + typed-const + multidim + named-array + record-2darray ok (output identical to x86-64)"
 
 # ----- Cross self-host bootstrap gates (feature-cross-bootstrap-selfhost) -----
 # Triple-stage proof: native cross-compiles compiler.pas -> <arch>; that binary,

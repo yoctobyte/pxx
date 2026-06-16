@@ -386,6 +386,7 @@ begin
   UFldIsArray[fi] := False;
   UFldArrLen[fi] := 1;
   UFldDynDepth[fi] := 0;
+  UFldArr2[fi] := False;
   UFldPub[fi] := 0;
   UFldCount := UFldCount + 1;
   UClsFCount[ci] := UClsFCount[ci] + 1;

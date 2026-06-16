@@ -899,6 +899,12 @@ var
   UFldArrLen  : array[0..MAX_UFIELD-1] of Integer;
   UFldDynDepth : array[0..MAX_UFIELD-1] of Integer; { dynamic-array field nesting: 0 = not a dynamic array, 1 = array of T, 2 = array of array of T, ... (UFldArrLen = -1 also marks dynamic, mirroring the symbol convention) }
   UFldPub    : array[0..MAX_UFIELD-1] of Integer;  { 1 = published, 0 = other }
+  { 2-D fixed-array fields: `m: array[a..b, c..d] of T`, flattened to 1-D
+    storage; r.m[i,j] / r.m[i][j] index via (i-lo1)*span2 + (j-lo2). }
+  UFldArr2     : array[0..MAX_UFIELD-1] of Boolean;
+  UFldArr2Lo1  : array[0..MAX_UFIELD-1] of Integer;
+  UFldArr2Lo2  : array[0..MAX_UFIELD-1] of Integer;
+  UFldArr2Span2: array[0..MAX_UFIELD-1] of Integer;
   UFldCount  : Integer;
 
   UMthNOff   : array[0..MAX_UMETH-1] of Integer;
