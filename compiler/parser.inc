@@ -2084,7 +2084,70 @@ begin
         LastExprTk := tyString;
       end;
     end;
-    tkLParen:  begin Next; if PyExprMode then PyParseBoolExpr else ParseExpr; Expect(tkRParen, ')'); end;
+    tkLParen:
+    begin
+      Next; if PyExprMode then PyParseBoolExpr else ParseExpr; Expect(tkRParen, ')');
+      { Postfix suffix on a parenthesised expression: `(p)^`, `(p+k)^`, `(r).f`,
+        `(a)[i]`. Without this the `^`/`.`/`[` were left dangling and the grouped
+        value was used as-is (e.g. `(p)^` returned the pointer, not the pointee). }
+      node := CurASTNode;
+      while CurTok.Kind in [tkCaret, tkDot, tkLBrack] do
+      begin
+        if CurTok.Kind = tkCaret then
+        begin
+          Next;
+          indexNode := AllocNode(AN_DEREF);
+          ASTLeft[indexNode] := node;
+          { Resolve the pointee type from the inner node, mirroring the direct
+            `ident^` path. A non-trivial pointer expression (binop/cast) carries
+            no element-type tag, so default to Integer (matches `else` below). }
+          tk := tyInteger; recName := REC_NONE;
+          if IntToTypeKind(ASTTk[node]) = tyPointer then
+          begin
+            if ASTKind[node] = AN_IDENT then
+            begin
+              tk := Syms[ASTIVal[node]].PtrElemTk;
+              recName := Syms[ASTIVal[node]].PtrElemRec;
+            end
+            else if (ASTKind[node] = AN_INDEX) and (ASTKind[ASTLeft[node]] = AN_IDENT) then
+            begin
+              tk := Syms[ASTIVal[ASTLeft[node]]].PtrElemTk;
+              recName := Syms[ASTIVal[ASTLeft[node]]].PtrElemRec;
+            end;
+          end;
+          ASTTk[indexNode] := Ord(tk);
+          node := indexNode;
+        end
+        else if CurTok.Kind = tkLBrack then
+        begin
+          Next;
+          indexNode := AllocNode(AN_INDEX);
+          ASTLeft[indexNode] := node;
+          ParseExpr;
+          ASTRight[indexNode] := CurASTNode;
+          Expect(tkRBrack, ']');
+          ASTTk[indexNode] := ASTTk[node];
+          node := indexNode;
+        end
+        else { tkDot — field of the grouped record/class value }
+        begin
+          Next;
+          if CurTok.Kind in [tkEOF, tkSemicolon, tkAssign, tkRBrack, tkRParen] then
+            Error('expected field name after .');
+          prevTok := TokPos - 1;
+          fieldName := GetTokenStr(prevTok);
+          fieldNode := AllocNode(AN_FIELD);
+          ASTLeft[fieldNode] := node;
+          ASTSOffset[fieldNode] := Tokens[prevTok].SOffset;
+          ASTSLen[fieldNode] := Tokens[prevTok].SLen;
+          baseRec := ResolveNodeRec(node);
+          ASTTk[fieldNode] := Ord(RecFieldType(baseRec, fieldName));
+          Next;
+          node := fieldNode;
+        end;
+      end;
+      CurASTNode := node;
+    end;
     tkMinus:
     begin
       Next; ParseFactor;
