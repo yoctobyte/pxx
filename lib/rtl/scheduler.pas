@@ -82,6 +82,22 @@ begin
   PW(top + 16)^ := 0;                { ebp }
   PW(top + 20)^ := Int64(@CoStart);  { return address -> CoStart }
 {$else}
+{$ifdef PXX_TARGET_AARCH64}
+  { aarch64 restores: exc(16B slot), then x29/x30, x27/x28 ... x19/x20 — 112
+    bytes. Only exc_top (0) and the x30 slot (= CoStart) must be set; the other
+    callee-saved slots are dead on first entry. CoSwitch ret jumps to x30. }
+  top := top - 112;
+  PW(top + 0)^  := 0;                { exc_top }
+  PW(top + 24)^ := Int64(@CoStart);  { x30 -> CoStart }
+{$else}
+{$ifdef PXX_TARGET_ARM32}
+  { arm32 restores: exc, then r4..r11, lr — 40 bytes. Only exc_top (0) and the
+    lr slot (= CoStart) matter; the rest are dead on first entry. CoSwitch
+    bx lr jumps to lr. }
+  top := top - 40;
+  PW(top + 0)^  := 0;                { exc_top }
+  PW(top + 36)^ := Int64(@CoStart);  { lr -> CoStart }
+{$else}
   { x86-64 pops: exc, r15, r14, r13, r12, rbx, rbp, ret — 8 qwords; rsp at
     CoStart entry must be == 8 (mod 16). }
   top := top - 8;
@@ -94,6 +110,8 @@ begin
   PW(top + 40)^ := 0;                { rbx }
   PW(top + 48)^ := 0;                { rbp }
   PW(top + 56)^ := Int64(@CoStart);  { return address -> CoStart }
+{$endif}
+{$endif}
 {$endif}
   coSp[id]    := top;
   coStk[id]   := stk;

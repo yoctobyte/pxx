@@ -1016,6 +1016,12 @@ test-aarch64: $(COMPILER)
 	./$(COMPILER) --target=aarch64 test/test_cross_float_const.pas /tmp/test_aarch64_fc
 	./$(COMPILER) test/test_cross_float_const.pas /tmp/test_aarch64_fc_x64
 	test "$$(tools/run_target.sh aarch64 /tmp/test_aarch64_fc)" = "$$(/tmp/test_aarch64_fc_x64)"
+	./$(COMPILER) --target=aarch64 test/test_scheduler.pas /tmp/test_aarch64_sched
+	./$(COMPILER) test/test_scheduler.pas /tmp/test_aarch64_sched_x64
+	test "$$(tools/run_target.sh aarch64 /tmp/test_aarch64_sched)" = "$$(/tmp/test_aarch64_sched_x64)"
+	./$(COMPILER) --target=aarch64 test/test_scheduler_exc.pas /tmp/test_aarch64_sexc
+	./$(COMPILER) test/test_scheduler_exc.pas /tmp/test_aarch64_sexc_x64
+	test "$$(tools/run_target.sh aarch64 /tmp/test_aarch64_sexc)" = "$$(/tmp/test_aarch64_sexc_x64)"
 	@echo "aarch64 hello + arith + procs + loops + write + varparam + syscall + heap + string + record + dynarray + exception + float + variant + setlen-str + str-length-index + in-operator + loadfile + sysopen-family + args + open-array-params + string-cow + huge-frame + varrec-alloc + aoc-types + many-params + conformance2 + shortcircuit + ptr-arith + case-range + global-init + typed-const + multidim + named-array + record-2darray + param-2darray + multidim3d + const-alias + float-const ok (output identical to x86-64)"
 
 test-arm32: $(COMPILER)
@@ -1153,6 +1159,12 @@ test-arm32: $(COMPILER)
 	./$(COMPILER) --target=arm32 test/test_cross_float_const.pas /tmp/test_arm32_fc
 	./$(COMPILER) test/test_cross_float_const.pas /tmp/test_arm32_fc_x64
 	test "$$(tools/run_target.sh arm32 /tmp/test_arm32_fc)" = "$$(/tmp/test_arm32_fc_x64)"
+	./$(COMPILER) --target=arm32 test/test_scheduler.pas /tmp/test_arm32_sched
+	./$(COMPILER) test/test_scheduler.pas /tmp/test_arm32_sched_x64
+	test "$$(tools/run_target.sh arm32 /tmp/test_arm32_sched)" = "$$(/tmp/test_arm32_sched_x64)"
+	./$(COMPILER) --target=arm32 test/test_scheduler_exc.pas /tmp/test_arm32_sexc
+	./$(COMPILER) test/test_scheduler_exc.pas /tmp/test_arm32_sexc_x64
+	test "$$(tools/run_target.sh arm32 /tmp/test_arm32_sexc)" = "$$(/tmp/test_arm32_sexc_x64)"
 	@echo "arm32 hello + arith + procs + loops + write + varparam + syscall + heap + string + record + dynarray + exception + float + args + variant + strresult + setlen-str + str-length-index + in-operator + managed-aggregate-locals + loadfile + sysopen-family + string-cow + var-string-param + openarray-string + stack-params + int64 + int64-byref + aoc-types + many-params + conformance2 + shortcircuit + ptr-arith + case-range + global-init + typed-const + multidim + named-array + record-2darray + param-2darray + multidim3d + const-alias + float-const ok (output identical to x86-64)"
 
 # ----- Cross self-host bootstrap gates (feature-cross-bootstrap-selfhost) -----

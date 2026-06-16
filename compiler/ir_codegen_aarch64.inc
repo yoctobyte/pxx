@@ -1492,6 +1492,19 @@ begin
         EmitI32($D63F0200);                          { blr x16 }
       end;
 
+    IR_COSWITCH:
+      begin
+        { __pxxcoswitch(pfrom, pto): pfrom -> x0, pto -> x1, bl CoSwitch. }
+        argNode := IRA[node];                        { IR_ARG pfrom }
+        IREmitNodeAarch64(IRA[argNode]);
+        EmitI32($F81F0FE0);                          { str x0, [sp, #-16]! (push pfrom) }
+        argNode := IRB[argNode];                     { IR_ARG pto }
+        IREmitNodeAarch64(IRA[argNode]);
+        EmitI32($AA0003E1);                          { mov x1, x0 (pto) }
+        EmitI32($F84107E0);                          { ldr x0, [sp], #16 (pfrom) }
+        EmitI32($94000000 or (((CoSwitchAddr - CodeLen) div 4) and $03ffffff)); { bl CoSwitch }
+      end;
+
     IR_PROCADDR:
       begin
         { @proc -> x0 = absolute code address, via a PC-relative load of an

@@ -104,6 +104,32 @@ self-host fixedpoint + cross-bootstrap unaffected (library-only).
     arm32) — latent-correct for when classes land cross. `test/test_methcall.pas`
     in test-core. Note: bare `p;` (no-paren proc-var call) not supported; use
     `p()`.
-  - **Still TODO:** Phase C — port CoSwitch to i386/aarch64/arm32, the library
-    `CoStart` trampoline (calls `entry(arg)` via the proc-var call), and the
-    cooperative scheduler (Spawn/Yield/RunUntilDone).
+  - **Phase C DONE — cooperative scheduler on ALL 4 Linux targets** (commits:
+    x86-64 scheduler, i386 port, aarch64+arm32 port). `lib/rtl/scheduler.pas`
+    (PXX-only): `Spawn(entry, arg)` / `CoYield` / `RunUntilDone`, a heap stack +
+    saved sp per coroutine, round-robin over the runnable set, stack freed at
+    completion. Spawn plants `@CoStart` as the fresh stack's first return
+    address; the scheduler hands entry+arg to `CoStart` via globals before the
+    first switch-in, and `CoStart` calls `entry(arg)` through a proc-typed
+    variable — **no per-target asm entry shim** (the whole point of the
+    proc-types detour). `CoYield` not `Yield` (the latter is the generator
+    keyword).
+    - **CoSwitch ported to i386 + aarch64 + arm32** (coroutine_emit.inc), each
+      saving its callee-saved set + BSS_EXC_TOP and swapping sp; IR_COSWITCH
+      call-site codegen added per backend. aarch64/arm32 encodings via llvm-mc;
+      &BSS_EXC_TOP loaded with the per-target IR_EXC_ENTER literal pattern. The
+      initial-frame builder is target-aware via a new **PXX_TARGET_<arch>**
+      define (set in compiler.pas on `--target`) + `{$ifdef}` in scheduler.pas;
+      only exc_top(0) and the return-address slot must be set, other saved-reg
+      slots are dead on first entry. NOTE: aarch64/arm32 save GP callee-saved
+      only (no d8-d15) — matches x86-64 (no callee-saved FP saved) and PXX's
+      scratch-only FP use; revisit if a coroutine keeps a live d8-d15 across a
+      CoYield.
+    - Proven under QEMU on i386/aarch64/arm32 (output identical to x86-64):
+      `test/test_scheduler.pas` (multi-coroutine interleave) and
+      `test/test_scheduler_exc.pas` (cross-coroutine raise / per-stack
+      BSS_EXC_TOP swap). Wired into test-core + test-i386/aarch64/arm32.
+      Bootstrap + cross-bootstrap byte-identical.
+  - **Next (stretch):** the async-I/O reactor (epoll-driven Yield on a blocked
+    fd) — the real payoff; likely its own goal. Channels/mailboxes optional.
+    riscv32/xtensa CoSwitch later (embedded).
