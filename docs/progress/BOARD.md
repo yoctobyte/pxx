@@ -12,7 +12,7 @@ _none_
 
 _none_
 
-## backlog (35)
+## backlog (36)
 
 | Ticket | Type | Summary | Blocked-by |
 | --- | --- | --- | --- |
@@ -34,6 +34,7 @@ _none_
 | feature-flexcolumn-directive | feature | `flexcolumn` calling-convention directive | chore-inc-to-units |
 | feature-float-str-val | feature | Float Str / Val | — |
 | feature-fpc-vs-pxx-feature-boundary | feature | Policy: FPC-bootstrap subset vs PXX-only library features | — |
+| feature-generators-yield | feature | Generators and `yield` (the coroutine on-ramp) | feature-unified-heap-allocator, generator), (heap, per, stack |
 | feature-handle-compacting-heap | feature | Handle-table compacting heap (anti-fragmentation for constrained RAM) | — |
 | feature-inline-asm-depth | feature | Inline assembler depth | — |
 | feature-interfaces | feature | Interfaces | — |
@@ -152,11 +153,15 @@ _none_
 
 ## Leverage (tickets each one unblocks)
 
-- **4** — feature-unified-heap-allocator
+- **5** — feature-unified-heap-allocator
 - **2** — feature-target-i386
 - **2** — feature-target-aarch64
 - **2** — feature-rtti-layout-table
 - **2** — feature-cross-managed-string-cow
+- **1** — stack
+- **1** — per
+- **1** — (heap
+- **1** — generator)
 - **1** — feature-target-esp32
 - **1** — feature-target-arm32
 - **1** — feature-managed-exception-cleanup
