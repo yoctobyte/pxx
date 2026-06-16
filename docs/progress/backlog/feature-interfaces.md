@@ -1,16 +1,27 @@
 # Interfaces
 
 - **Type:** feature
-- **Status:** backlog
+- **Status:** backlog (deprioritized — bottom of the list)
 - **Owner:** —
 - **Opened:** 2026-06-06 (from todo.md §3 — intentionally deferred)
 
-## Motivation
+## Priority note (2026-06-16)
+
+**Deprioritized to last by project owner.** Interfaces are largely a COM-era
+binary-contract mechanism — cross-application/cross-binary ABI stability (Windows
+COM, OLE). PXX targets **standalone, all-in-one-binary applications** with no
+cross-binary contracts, so that primary value does not apply here. The secondary
+value (inheritance-free polymorphic abstraction + ARC lifetime) is adequately
+covered by classes, abstract methods, and the proposed `object` reference type
+(feature-object-reference-type). Revisit only if a concrete external-compatibility
+target (e.g. a real COM/OLE interop need) ever forces it. Until then: last.
+
+## Motivation (original)
 
 A real language gap, but not active: no current target source requires
 interfaces, and even a lightweight Linux-native model adds substantial dispatch,
-ABI, and lifetime surface. Revisit when a concrete compatibility target needs
-them. Ordered **after** the LFM arc (reuses its class registry / RTTI).
+ABI, and lifetime surface. Ordered **after** the LFM arc (reuses its class
+registry / RTTI) if ever taken up.
 
 ## Decisions to lock first
 
