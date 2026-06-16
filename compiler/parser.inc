@@ -893,7 +893,7 @@ function ParseLValueAST(idx: Integer; identTokIdx: Integer): Integer;
 var
   node, indexNode, fieldNode, prevTok, recName, i: Integer;
   baseNode, baseRec, fIdx, aliasIdx, firstIdxNode: Integer;
-  isND: Boolean; nIdx: Integer;
+  isND: Boolean; nIdx: Integer; alreadyResolved: Boolean;
   tk: TTypeKind;
   fieldName: AnsiString;
   mci, mmi, mpi, mcallNode, mselfArg, mlastArg, margSeq, margIdx, mexprNode, mai, pri, ci: Integer;
@@ -1144,6 +1144,7 @@ begin
     else if CurTok.Kind = tkLBrack then
     begin
       Next;
+      alreadyResolved := False;
       indexNode := AllocNode(AN_INDEX);
       ASTLeft[indexNode] := node;
       ParseExpr;
@@ -1177,12 +1178,46 @@ begin
         if nIdx <> NDInfoNDims then Error('wrong number of array subscripts');
         ASTRight[indexNode] := BuildFlatNDIndex(nIdx);
       end
+      else if CurTok.Kind = tkComma then
+      begin
+        { Comma sugar m[i,j,..] == m[i][j].. for jagged / dynamic arrays: build
+          the same nested AN_INDEX chain the bracket form does. (Fixed N-D arrays
+          took the isND branch above; this is the dynamic / jagged path.) }
+        ASTRight[indexNode] := CurASTNode;
+        if IsNodeArray(node) then
+        begin
+          if ASTKind[node] = AN_IDENT then
+          begin tk := Syms[ASTIVal[node]].ElemType; recName := Syms[ASTIVal[node]].ElemRecName; end
+          else recName := ResolveNodeRec(node);
+        end;
+        ASTTk[indexNode] := Ord(tk);
+        node := indexNode;
+        while Eat(tkComma) do
+        begin
+          ParseExpr;
+          indexNode := AllocNode(AN_INDEX);
+          ASTLeft[indexNode] := node;
+          ASTRight[indexNode] := CurASTNode;
+          if IsNodeArray(node) then
+          begin
+            if ASTKind[node] = AN_IDENT then
+            begin tk := Syms[ASTIVal[node]].ElemType; recName := Syms[ASTIVal[node]].ElemRecName; end
+            else recName := ResolveNodeRec(node);
+          end;
+          ASTTk[indexNode] := Ord(tk);
+          node := indexNode;
+        end;
+        Expect(tkRBrack, ']');
+        alreadyResolved := True;
+      end
       else
       begin
         ASTRight[indexNode] := CurASTNode;
         Expect(tkRBrack, ']');
       end;
-      if IsNodeArray(node) then
+      if alreadyResolved then
+        { type + node already set by the comma-sugar chain above }
+      else if IsNodeArray(node) then
       begin
         if ASTKind[node] = AN_IDENT then
         begin
