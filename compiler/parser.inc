@@ -3366,6 +3366,15 @@ begin
   Result := r;
 end;
 
+{ Parse one constant initializer value (scalar). A float literal yields its IEEE
+  754 bit pattern (carried as Int64, same as AN_FLOAT_LIT); everything else goes
+  through the integer ConstEval. Lets a `Double` initializer like 3.14 work. }
+function ParseInitVal: Int64;
+begin
+  if CurTok.Kind = tkFloat then begin Result := CurTok.IVal; Next; end
+  else Result := ConstEval;
+end;
+
 { ===== Statement parser ===== }
 
 procedure ParseStatement; forward;
@@ -4981,7 +4990,7 @@ begin
 	        repeat
 	          if PendingInitCount >= MAX_PENDING_INITS then Error('too many global initializers');
 	          if initElem > (arrHi - arrLo) then Error('too many array initializer elements');
-	          initVal := ConstEval;
+	          initVal := ParseInitVal;
 	          PendingInitSym[PendingInitCount]  := idx;
 	          PendingInitElem[PendingInitCount] := arrLo + initElem;
 	          PendingInitVal[PendingInitCount]  := initVal;
@@ -4995,7 +5004,7 @@ begin
 	      begin
 	        if isArr then Error('array initializer must be parenthesised');
 	        if PendingInitCount >= MAX_PENDING_INITS then Error('too many global initializers');
-	        initVal := ConstEval;
+	        initVal := ParseInitVal;
 	        PendingInitSym[PendingInitCount]  := idx;
 	        PendingInitElem[PendingInitCount] := -1;
 	        PendingInitVal[PendingInitCount]  := initVal;
@@ -5043,7 +5052,7 @@ begin
           if cElem > (cHi - cLo) then Error('too many array constant elements');
           PendingInitSym[PendingInitCount]  := cIdx;
           PendingInitElem[PendingInitCount] := cLo + cElem;
-          PendingInitVal[PendingInitCount]  := ConstEval;
+          PendingInitVal[PendingInitCount]  := ParseInitVal;
           PendingInitTk[PendingInitCount]   := Ord(cElemTk);
           Inc(PendingInitCount);
           Inc(cElem);
@@ -5058,7 +5067,7 @@ begin
         if PendingInitCount >= MAX_PENDING_INITS then Error('too many global initializers');
         PendingInitSym[PendingInitCount]  := cIdx;
         PendingInitElem[PendingInitCount] := -1;
-        PendingInitVal[PendingInitCount]  := ConstEval;
+        PendingInitVal[PendingInitCount]  := ParseInitVal;
         PendingInitTk[PendingInitCount]   := Ord(cTk);
         Inc(PendingInitCount);
       end;
