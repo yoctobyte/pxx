@@ -951,6 +951,20 @@ var
   AliasTargetNLen : array[0..MAX_TYPEALIAS-1] of Integer;
   AliasCount   : Integer;
 
+  { Named fixed-array types: `type TA = array[lo..hi (, lo2..hi2)] of T`.
+    Resolved when a var/field/param uses the name. Flattened bounds in Lo/Hi
+    (0..span1*span2-1 for 2-D); 2-D dims in the Arr2* fields. }
+  ArrTypeName   : array[0..MAX_TYPEALIAS-1] of AnsiString;
+  ArrTypeLo     : array[0..MAX_TYPEALIAS-1] of Integer;
+  ArrTypeHi     : array[0..MAX_TYPEALIAS-1] of Integer;
+  ArrTypeElemTk : array[0..MAX_TYPEALIAS-1] of Integer;
+  ArrTypeElemRec: array[0..MAX_TYPEALIAS-1] of Integer;
+  ArrTypeIsArr2 : array[0..MAX_TYPEALIAS-1] of Boolean;
+  ArrTypeLo1    : array[0..MAX_TYPEALIAS-1] of Integer;
+  ArrTypeLo2    : array[0..MAX_TYPEALIAS-1] of Integer;
+  ArrTypeSpan2  : array[0..MAX_TYPEALIAS-1] of Integer;
+  ArrTypeCount  : Integer;
+
   CurSelfClass : Integer;
 
 {$ifdef FPC}

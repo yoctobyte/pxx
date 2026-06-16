@@ -4727,7 +4727,7 @@ procedure ParseVarSection;
 var names: array[0..MAX_DECL_NAMES-1] of AnsiString; n, i, idx: Integer; tk: TTypeKind;
     isArr, isDyn: Boolean; arrLo, arrHi: Integer; elemTk: TTypeKind; dynDepth: Integer;
     initElem: Integer; initVal: Int64;
-    isArr2: Boolean; arr2Lo1, arr2Lo2, arr2Span2, d2hi: Integer;
+    isArr2: Boolean; arr2Lo1, arr2Lo2, arr2Span2, d2hi, ai: Integer;
 begin
   Next;
   { Stop at section keywords: these are plain identifiers in this dialect, so
@@ -4746,7 +4746,24 @@ begin
     Expect(tkColon, ':');
     isArr := False; isDyn := False; arrLo := 0; arrHi := 0; elemTk := tyInteger;
     isArr2 := False;
-    if CurTok.Kind = tkArray then
+    ai := -1;
+    if CurTok.Kind = tkIdent then ai := FindArrayType(CurTok.SVal);
+    if ai >= 0 then
+    begin
+      { Variable of a named fixed-array type — pull the (flattened) bounds and
+        2-D dims from the registry. }
+      isArr := True;
+      arrLo := ArrTypeLo[ai]; arrHi := ArrTypeHi[ai];
+      elemTk := IntToTypeKind(ArrTypeElemTk[ai]); tk := elemTk;
+      LastTypeRecId := ArrTypeElemRec[ai];
+      isArr2 := ArrTypeIsArr2[ai];
+      if isArr2 then
+      begin
+        arr2Lo1 := ArrTypeLo1[ai]; arr2Lo2 := ArrTypeLo2[ai]; arr2Span2 := ArrTypeSpan2[ai];
+      end;
+      Next; { consume the type name }
+    end
+    else if CurTok.Kind = tkArray then
     begin
       isArr := True; Next;
       if CurTok.Kind = tkLBrack then
@@ -4960,6 +4977,7 @@ var
   curPublished: Integer;  { 1 while inside a published section of the current class body }
   etid, propEnumId, propSetEnumId: Integer;
   mFullName: AnsiString;
+  aLo, aHi, aLo1, aLo2, aSpan2, ad2hi: Integer; aIsArr2: Boolean; aElemTk: TTypeKind;
   mPNames: array[0..15] of AnsiString;
   mPTypes: array[0..15] of TTypeKind;
   mPTypesRec: array[0..15] of Integer;
@@ -5571,9 +5589,49 @@ begin
         RegisterSetAlias(tnOff, tnLen, propEnumId);
         while not (CurTok.Kind in [tkSemicolon,tkEOF]) do Next;
       end
-      else if (CurTok.Kind = tkArray) or (CurTok.Kind = tkProcedure) or (CurTok.Kind = tkFunction) then
+      else if CurTok.Kind = tkArray then
       begin
-        { Skip named array/subroutine type defs (not supported as simple aliases) }
+        Next; { consume 'array' }
+        if CurTok.Kind = tkLBrack then
+        begin
+          { Named fixed-array type `TA = array[lo..hi (, lo2..hi2)] of T` —
+            register it so a var/field/param of type TA becomes a real array
+            (1-D or flattened 2-D). Previously skipped → TA was not an array. }
+          Next;
+          aLo := ConstEval;
+          Expect(tkDotDot, '..');
+          aHi := ConstEval;
+          aIsArr2 := False; aLo1 := 0; aLo2 := 0; aSpan2 := 0;
+          if CurTok.Kind = tkComma then
+          begin
+            aIsArr2 := True; aLo1 := aLo;
+            Eat(tkComma);
+            aLo2 := ConstEval; Expect(tkDotDot, '..'); ad2hi := ConstEval;
+            aSpan2 := ad2hi - aLo2 + 1;
+            aHi := (aHi - aLo + 1) * aSpan2 - 1; aLo := 0;
+          end;
+          Expect(tkRBrack, ']');
+          Expect(tkOf, 'of');
+          aElemTk := ParseTypeKind;
+          if ArrTypeCount >= MAX_TYPEALIAS then Error('too many array types');
+          ArrTypeName[ArrTypeCount] := tname;
+          ArrTypeLo[ArrTypeCount] := aLo;
+          ArrTypeHi[ArrTypeCount] := aHi;
+          ArrTypeElemTk[ArrTypeCount] := Ord(aElemTk);
+          ArrTypeElemRec[ArrTypeCount] := LastTypeRecId;
+          ArrTypeIsArr2[ArrTypeCount] := aIsArr2;
+          ArrTypeLo1[ArrTypeCount] := aLo1;
+          ArrTypeLo2[ArrTypeCount] := aLo2;
+          ArrTypeSpan2[ArrTypeCount] := aSpan2;
+          Inc(ArrTypeCount);
+        end
+        else
+          { dynamic-array type alias — not registered yet; skip }
+          while not (CurTok.Kind in [tkSemicolon,tkEOF]) do Next;
+      end
+      else if (CurTok.Kind = tkProcedure) or (CurTok.Kind = tkFunction) then
+      begin
+        { Skip named subroutine-type defs (not supported as simple aliases) }
         while not (CurTok.Kind in [tkSemicolon,tkEOF]) do Next;
       end
       else
@@ -7327,6 +7385,7 @@ var jmpPatch, i, j: Integer; doneUses, doneDecls, hasExceptions, needsBuiltin,
     dummyTypes: array[0..7] of TTypeKind;
 begin
   PendingInitCount := 0;
+  ArrTypeCount := 0;
   Expect(tkProgram, 'program');
   if CurTok.Kind = tkEOF then Error('expected program name');
   Next;  { program name can be any identifier (even keyword) }
