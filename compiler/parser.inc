@@ -5739,6 +5739,11 @@ var
   ptypesPtrElemRec : array[0..15] of Integer;
   parr      : array[0..15] of Boolean;
   pbyref    : array[0..15] of Boolean;
+  pArr2     : array[0..15] of Boolean;
+  pArr2Lo1  : array[0..15] of Integer;
+  pArr2Lo2  : array[0..15] of Integer;
+  pArr2Span2: array[0..15] of Integer;
+  paramIsArr2: Boolean; pa2Lo1, pa2Lo2, pa2Span2, paramAi: Integer;
   nparams  : Integer;
   pi, i, sz, retRecId, savedLastTypeRecId: Integer;
   zeroBytes : Integer;
@@ -5840,9 +5845,28 @@ begin
       end;
       Expect(tkColon, ':');
       isArr := False;
+      paramIsArr2 := False;
       tokKindOrd := Ord(CurTok.Kind);
       if DebugTrace then writeln('After colon, CurTok.Kind = ', tokKindOrd, ', CurTok.SVal = ', CurTok.SVal);
-      if CurTok.Kind = tkArray then
+      paramAi := -1;
+      if CurTok.Kind = tkIdent then paramAi := FindArrayType(CurTok.SVal);
+      if paramAi >= 0 then
+      begin
+        { Named fixed-array type param — pass like an open array (by the data
+          pointer); the element type drives indexing, 2-D dims drive flattening.
+          (Previously ParseTypeKind didn't know the name was an array, so the
+          param was scalar and indexing it read garbage.) }
+        tk := IntToTypeKind(ArrTypeElemTk[paramAi]);
+        LastTypeRecId := ArrTypeElemRec[paramAi];
+        isArr := True;
+        paramIsArr2 := ArrTypeIsArr2[paramAi];
+        if paramIsArr2 then
+        begin
+          pa2Lo1 := ArrTypeLo1[paramAi]; pa2Lo2 := ArrTypeLo2[paramAi]; pa2Span2 := ArrTypeSpan2[paramAi];
+        end;
+        Next;
+      end
+      else if CurTok.Kind = tkArray then
       begin
         Next;
         Expect(tkOf, 'of');
@@ -5875,6 +5899,11 @@ begin
         ptypesPtrElemRec[i] := LastTypePointerElemRec;
         parr[i] := isArr;
         pbyref[i] := isByRef;
+        pArr2[i] := paramIsArr2;
+        if paramIsArr2 then
+        begin
+          pArr2Lo1[i] := pa2Lo1; pArr2Lo2[i] := pa2Lo2; pArr2Span2[i] := pa2Span2;
+        end;
       end;
       if not Eat(tkSemicolon) then doneArgs := True;
     end;
@@ -5975,6 +6004,8 @@ begin
       ptypesPtrElemRec[i] := ptypesPtrElemRec[i-1];
       parr[i]   := parr[i-1];
       pbyref[i] := pbyref[i-1];
+      pArr2[i]  := pArr2[i-1];
+      pArr2Lo1[i] := pArr2Lo1[i-1]; pArr2Lo2[i] := pArr2Lo2[i-1]; pArr2Span2[i] := pArr2Span2[i-1];
     end;
     pnames[0] := 'Self';
     ptypes[0] := tyClass;
@@ -5983,6 +6014,7 @@ begin
     ptypesPtrElemRec[0] := REC_NONE;
     parr[0]   := False;
     pbyref[0] := False;
+    pArr2[0]  := False;
     nparams := nparams + 1;
   end;
 
@@ -6128,6 +6160,13 @@ begin
   begin
     idx := AllocParam(pnames[i], ptypes[i], pbyref[i], parr[i]);
     Procs[pi].Params[i].SymIdx := idx;
+    if pArr2[i] then
+    begin
+      SymArr2[idx] := True;
+      SymArr2Lo1[idx] := pArr2Lo1[i];
+      SymArr2Lo2[idx] := pArr2Lo2[i];
+      SymArr2Span2[idx] := pArr2Span2[i];
+    end;
     if parr[i] and (ptypes[i] = tyRecord) then
     begin
       { Open array of records (e.g. `array of const`): the slot holds a dyn-array

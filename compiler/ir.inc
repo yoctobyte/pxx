@@ -859,6 +859,9 @@ begin
   Result := False;
   if (cpi < 0) or (pathIdx < 0) or (pathIdx >= Procs[cpi].ParamCount) then Exit;
   if not Procs[cpi].Params[pathIdx].IsArray then Exit;
+  { A `var` (by-ref) array param must alias the caller's array, not a copy —
+    pass its address through the normal isRefArg path instead of cloning it. }
+  if Procs[cpi].Params[pathIdx].IsRef then Exit;
   if ASTKind[argAST] <> AN_IDENT then Exit;
   caArgSym := ASTIVal[argAST];
   if (caArgSym < 0) or (caArgSym >= SymCount) then Exit;
