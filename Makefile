@@ -225,6 +225,10 @@ test-core: $(COMPILER)
 	test "$$(/tmp/test_generator26)" = "$$(printf '1 4 9 16 25 \n25\n0 1 1 2 3 5 8 13 \n1 2 3 ')"
 	./$(COMPILER) test/test_stackless_gen.pas /tmp/test_stackless_gen26
 	test "$$(/tmp/test_stackless_gen26)" = "$$(printf '1 4 9 16 25 \n25\n5 4 3 2 1 \n0 2 4 6 8 \n10 20 30 \n1 2 3 ')"
+	./$(COMPILER) test/test_scheduler.pas /tmp/test_scheduler26
+	test "$$(/tmp/test_scheduler26)" = "$$(printf 'c2:1\nc3:1\nonce 7\nc2:2\nc3:2\nc3:3\nall done')"
+	./$(COMPILER) test/test_scheduler_exc.pas /tmp/test_scheduler_exc26
+	test "$$(/tmp/test_scheduler_exc26)" = "$$(printf 'w1 try\nw2 try\nw1 caught\nw2 caught\ndone')"
 	./$(COMPILER) test/test_many_params.pas /tmp/test_many_params26
 	test "$$(/tmp/test_many_params26)" = "$$(printf '1 2 3 4 5 6 7\n3 4 5 6 7 12 89\n8912\n7654326\n12100806\n7654321\n96\n196')"
 	./$(COMPILER) test/test_procaddr.pas /tmp/test_procaddr26
