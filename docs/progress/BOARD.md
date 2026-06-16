@@ -14,7 +14,7 @@ _none_
 | --- | --- | --- | --- |
 | feature-synthetic-feature-matrix-test | feature | Synthetic all-features stress test (cross-target conformance) | — |
 
-## backlog (32)
+## backlog (33)
 
 | Ticket | Type | Summary | Blocked-by |
 | --- | --- | --- | --- |
@@ -48,6 +48,7 @@ _none_
 | feature-progress-transition-helpers | feature | Progress transition helpers (`claim` / `resolve`) | — |
 | feature-static-arena-profile | feature | Fixed-static-arena allocator profile | feature-unified-heap-allocator |
 | feature-threadsafe-io-serialization | feature | Statement-level I/O serialization under threads | feature-unified-heap-allocator |
+| feature-writeln-as-library | feature | write/writeln as a library function (via `array of const` + variadic sugar) | — |
 | idea-unit-rename-import | idea | `uses X as Y` unit-rename import (dialect extension) | — |
 | idea-visibility-enforcement | idea | Enforce private/protected visibility | — |
 
@@ -142,6 +143,7 @@ _none_
 - feature-progress-transition-helpers
 - feature-static-arena-profile
 - feature-threadsafe-io-serialization
+- feature-writeln-as-library
 - idea-unit-rename-import
 - idea-visibility-enforcement
 
