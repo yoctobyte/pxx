@@ -143,6 +143,31 @@ stackful — no grammar change to add it.
 6. (Later) lift the `yield`-in-`try` restriction together with the coroutine
    exc-top save/restore work.
 
+## Log
+
+- 2026-06-16 — **Phase 1 (CoSwitch) DONE on x86-64.** `coroutine_emit.inc`
+  emits a bare `CoSwitch` stub (saves rbp + rbx + r12–r15 + `BSS_EXC_TOP` onto
+  the current stack, swaps `rsp` via `[pfrom]`/`[pto]`, restores, `ret`).
+  **TCoroCtx layout = just `{ sp: Pointer }`** — all callee-saved state and the
+  per-stack exception-chain head live ON the switched stack, so a TCoroCtx is a
+  single saved sp. Exposed via the low-level `__pxxcoswitch(pfrom, pto)`
+  intrinsic (`AN_COSWITCH` → `IR_COSWITCH` → `call CoSwitchAddr`), recognised in
+  both the expression and statement parser paths. Runtime stub emitted before
+  the main body, gated on a token scan; pulls in the exception runtime so the
+  exc slot exists. `test/test_coswitch.pas` proves a two-context ping-pong with
+  a hand-built initial frame; wired into `test-core`. Fixedpoint byte-identical
+  (procs=882). Commit `bad554a`.
+  - Initial-stack frame the first switch-in pops (low→high):
+    `exc_top(0), r15, r14, r13, r12, rbx, rbp, retaddr`. `rsp` at entry must be
+    `≡ 8 (mod 16)`: align top to 16, `-8`, then `-64` for the 8 qwords.
+  - LANDMINE found while building the test: **`not 15` mis-evaluates to `14`**
+    in PXX (some constant-fold/width bug in unary `not`). Worked around with
+    `top - (top mod 16)` for align-down. Separate bug — ticket if it bites again.
+  - TODO next: Phase 2 surface (`generator`/`yield`/`for-in` + iterator
+    protocol) + the PXX-only RTL glue (heap stack alloc, entry trampoline +
+    arg passing, generator-exhaustion switch-back & stack free). Then port
+    CoSwitch to the other 5 targets.
+
 ## Acceptance
 
 `for x in g()` over a `generator` routine yields the correct sequence, suspends/
