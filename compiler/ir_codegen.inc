@@ -2602,14 +2602,36 @@ begin
               { Push Self first }
               EmitB($57); { push rdi }
               
-              { Push explicit constructor arguments }
+              { Push explicit constructor arguments. Param 0 is the implicit
+                Self, so explicit args map to constructor params 1,2,... A frozen
+                tyString / tyChar literal passed to a tyAnsiString param must be
+                converted to a managed string the same way the normal internal
+                call path does (lines below); the bespoke push loop used to omit
+                this, so a base ctor invoked directly received a raw frozen
+                pointer and read garbage (bug-ctor-managed-string-arg). }
               argNode := IRB[node]; { size arg }
               argNode := IRB[argNode]; { first explicit constructor arg }
+              i := 1;
               while argNode <> -1 do
               begin
                 IREmitNode(IRA[argNode]); { evaluates arg -> rax }
+                if (i < Procs[cpi].ParamCount) and
+                   (Procs[cpi].Params[i].TypeKind = tyAnsiString) then
+                begin
+                  if IntToTypeKind(IRTk[argNode]) = tyString then
+                    EmitAnsiStrFromInlineString
+                  else if IntToTypeKind(IRTk[argNode]) = tyChar then
+                  begin
+                    EmitB($50);                                     { push rax (char code) }
+                    EmitB($48); EmitB($89); EmitB($E6);             { mov rsi, rsp }
+                    EmitB($48); EmitB($C7); EmitB($C7); EmitI32(1);  { mov rdi, 1 }
+                    IREmitCodeCall(AnsiStrFromLiteralAddr);
+                    EmitB($59);                                     { pop rcx (restore stack) }
+                  end;
+                end;
                 EmitB($50); { push rax }
                 argNode := IRB[argNode];
+                Inc(i);
               end;
               
               { Pop args into SysV ABI registers. More than 6 params: leave
