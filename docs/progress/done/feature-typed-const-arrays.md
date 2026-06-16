@@ -6,7 +6,7 @@
 - **Opened:** 2026-06-16 (found via conformance feature-probing)
 - **Closed:** 2026-06-16
 
-## Done
+## Done (commit 54d5dda)
 
 Landed alongside the `var = init` global-initializer fix: typed constants reuse
 the pending-init machinery (storage allocated, elements compiled as assignments

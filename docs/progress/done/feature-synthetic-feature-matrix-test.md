@@ -1,9 +1,25 @@
 # Synthetic all-features stress test (cross-target conformance)
 
 - **Type:** feature
-- **Status:** working
-- **Owner:** —
+- **Status:** done
+- **Owner:** language-hardening cycle
 - **Opened:** 2026-06-15
+- **Closed:** 2026-06-16
+
+## Outcome
+
+Acceptance met and far exceeded. `test_conformance_1` (classes/virtual/variant/
+float, x86-64) + cross-portable `test_conformance_2` and a large family of cross
+tests (many_params, shortcircuit, ptr_arith, case_range, global_init, typed_const,
+const_alias, multidim/multidim3d, named_array, record_2darray, param_2darray,
+dyn_comma, set_subrange, float_const) are wired into `make test` and the three
+cross suites, byte-identical and FPC-matching. The harness drove a long string of
+fixes/features over this cycle (class ctor managed-string, short-circuit and/or,
+aarch64 >8 params, paren-deref, case ranges, global/typed/float/string constants,
+dynamic-array aliases, 1-D..N-D fixed arrays across var/named/field/param,
+set-of-subrange crash, and — fixed indirectly — the nested-index load-width
+landmine). Closing as done; further language-surface work continues under its own
+tickets.
 
 ## Goal
 

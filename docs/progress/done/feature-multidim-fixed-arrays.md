@@ -1,12 +1,12 @@
 # Multidimensional fixed arrays
 
 - **Type:** feature
-- **Status:** done (2-D var-section)
+- **Status:** done (N-D, all contexts)
 - **Owner:** —
 - **Opened:** 2026-06-16 (found via conformance feature-probing)
 - **Closed:** 2026-06-16
 
-## Done
+## Done (commits 48401d9 2-D, 121c913 N-D)
 
 2-D fixed arrays in `var` sections landed via the flatten-to-1-D design below:
 both `m[i,j]` and `m[i][j]` fold into one linear `AN_INDEX` at parse time (dims in
@@ -23,7 +23,10 @@ Follow-ups landed same day:
   UFldArr2* per-field dims; one `NodeArr2Info` helper resolves both var and field
   bases. `test_cross_record_2darray`.
 
-Still open: 2-D **param** arrays, 3-D+, dynamic-array type aliases.
+ALL landed (2026-06-16): **param** arrays (const+var, commit), **N-D** to
+arbitrary rank (121c913), **dynamic-array type aliases** (separate commit). The
+"## Gap / ## Scope / ## Recommended design" sections below are the original plan,
+kept for history — fully delivered.
 
 ## Gap
 
