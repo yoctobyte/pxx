@@ -14,6 +14,7 @@ const
   MAX_EXTERNAL = 16384;
   MAX_CPREP_MACROS = 32768;
   MAX_DECL_NAMES = 256;  { comma-separated names in one var declaration line }
+  MAX_PENDING_INITS = 16384;  { constant global-var initializer assignments }
   MAX_CPREP_PARAMS = 131072;
   MAX_CPREP_CONDS = 256;
   MAX_CPREP_INCLUDES = 128;
@@ -819,6 +820,15 @@ var
   GotoFixupNOff   : array[0..255] of Integer; { name offset }
   GotoFixupNLen   : array[0..255] of Integer; { name length }
   GotoFixupCount  : Integer;
+
+  { Constant global-var initializers (`var x: T = v;` / `= (e0,e1,...)`). Each
+    entry is one assignment `sym` or `sym[elem] := value`, compiled into the
+    program entry just before `main begin`. }
+  PendingInitSym  : array[0..MAX_PENDING_INITS-1] of Integer;  { target symbol }
+  PendingInitElem : array[0..MAX_PENDING_INITS-1] of Integer;  { array index, or -1 for a scalar }
+  PendingInitVal  : array[0..MAX_PENDING_INITS-1] of Int64;    { constant value }
+  PendingInitTk   : array[0..MAX_PENDING_INITS-1] of Integer;  { value type kind }
+  PendingInitCount: Integer;
 
   BFixupTargetLines : array[0..255] of Int64;
   BFixupCodePoss    : array[0..255] of Integer;

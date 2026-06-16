@@ -251,6 +251,8 @@ test-core: $(COMPILER)
 	test "$$(/tmp/test_ptr_arith26)" = "$$(printf 'deref=44\nparen=44\nplus1=55\nminus1=33\nplus0=44\nminus2=22\nvarneg=11\nfn+2=66\nfn-4=0\nsweep=308')"
 	./$(COMPILER) test/test_cross_case_range.pas /tmp/test_case_range26
 	test "$$(/tmp/test_case_range26)" = "$$(printf 'ints=8436\nchars=206\nbucket=LLLMMMMHHH')"
+	./$(COMPILER) test/test_cross_global_init.pas /tmp/test_global_init26
+	test "$$(/tmp/test_global_init26)" = "$$(printf 'k=42 q=5000000000 flag=1\ntabsum=150\nlutsum=6000000000')"
 	./$(COMPILER) test/test_asm_emit.pas /tmp/test_asm_emit26
 	test "$$(/tmp/test_asm_emit26)" = "$$(printf 'S=\nS=ab\nS=abc\nS=a longer string here\nI=0\nI=123\nI=-7\n---\nS=ww\nI=1\nS=yy\nI=2\nS=zzz\nI=3')"
 	./$(COMPILER) test/test_virtual_proc.pas /tmp/test_virtual_proc26
@@ -818,7 +820,10 @@ test-i386: $(COMPILER)
 	./$(COMPILER) --target=i386 test/test_cross_case_range.pas /tmp/test_i386_cr
 	./$(COMPILER) test/test_cross_case_range.pas /tmp/test_i386_cr_x64
 	test "$$(tools/run_target.sh i386 /tmp/test_i386_cr)" = "$$(/tmp/test_i386_cr_x64)"
-	@echo "i386 hello + arith + procs + loops + write + varparam + syscall + heap + string + record + dynarray + exception + float + float-params + variant + byref-params + setlen-str + in-operator + loadfile + sysopen-family + args + string-cow + aoc-types + many-params + conformance2 + shortcircuit + ptr-arith + case-range ok (output identical to x86-64)"
+	./$(COMPILER) --target=i386 test/test_cross_global_init.pas /tmp/test_i386_gi
+	./$(COMPILER) test/test_cross_global_init.pas /tmp/test_i386_gi_x64
+	test "$$(tools/run_target.sh i386 /tmp/test_i386_gi)" = "$$(/tmp/test_i386_gi_x64)"
+	@echo "i386 hello + arith + procs + loops + write + varparam + syscall + heap + string + record + dynarray + exception + float + float-params + variant + byref-params + setlen-str + in-operator + loadfile + sysopen-family + args + string-cow + aoc-types + many-params + conformance2 + shortcircuit + ptr-arith + case-range + global-init ok (output identical to x86-64)"
 
 test-aarch64: $(COMPILER)
 	./$(COMPILER) --target=aarch64 test/hello.pas /tmp/test_aarch64_hello
@@ -910,7 +915,10 @@ test-aarch64: $(COMPILER)
 	./$(COMPILER) --target=aarch64 test/test_cross_case_range.pas /tmp/test_aarch64_cr
 	./$(COMPILER) test/test_cross_case_range.pas /tmp/test_aarch64_cr_x64
 	test "$$(tools/run_target.sh aarch64 /tmp/test_aarch64_cr)" = "$$(/tmp/test_aarch64_cr_x64)"
-	@echo "aarch64 hello + arith + procs + loops + write + varparam + syscall + heap + string + record + dynarray + exception + float + variant + setlen-str + str-length-index + in-operator + loadfile + sysopen-family + args + open-array-params + string-cow + huge-frame + varrec-alloc + aoc-types + many-params + conformance2 + shortcircuit + ptr-arith + case-range ok (output identical to x86-64)"
+	./$(COMPILER) --target=aarch64 test/test_cross_global_init.pas /tmp/test_aarch64_gi
+	./$(COMPILER) test/test_cross_global_init.pas /tmp/test_aarch64_gi_x64
+	test "$$(tools/run_target.sh aarch64 /tmp/test_aarch64_gi)" = "$$(/tmp/test_aarch64_gi_x64)"
+	@echo "aarch64 hello + arith + procs + loops + write + varparam + syscall + heap + string + record + dynarray + exception + float + variant + setlen-str + str-length-index + in-operator + loadfile + sysopen-family + args + open-array-params + string-cow + huge-frame + varrec-alloc + aoc-types + many-params + conformance2 + shortcircuit + ptr-arith + case-range + global-init ok (output identical to x86-64)"
 
 test-arm32: $(COMPILER)
 	./$(COMPILER) --target=arm32 test/hello.pas /tmp/test_arm32_hello
@@ -1020,7 +1028,10 @@ test-arm32: $(COMPILER)
 	./$(COMPILER) --target=arm32 test/test_cross_case_range.pas /tmp/test_arm32_cr
 	./$(COMPILER) test/test_cross_case_range.pas /tmp/test_arm32_cr_x64
 	test "$$(tools/run_target.sh arm32 /tmp/test_arm32_cr)" = "$$(/tmp/test_arm32_cr_x64)"
-	@echo "arm32 hello + arith + procs + loops + write + varparam + syscall + heap + string + record + dynarray + exception + float + args + variant + strresult + setlen-str + str-length-index + in-operator + managed-aggregate-locals + loadfile + sysopen-family + string-cow + var-string-param + openarray-string + stack-params + int64 + int64-byref + aoc-types + many-params + conformance2 + shortcircuit + ptr-arith + case-range ok (output identical to x86-64)"
+	./$(COMPILER) --target=arm32 test/test_cross_global_init.pas /tmp/test_arm32_gi
+	./$(COMPILER) test/test_cross_global_init.pas /tmp/test_arm32_gi_x64
+	test "$$(tools/run_target.sh arm32 /tmp/test_arm32_gi)" = "$$(/tmp/test_arm32_gi_x64)"
+	@echo "arm32 hello + arith + procs + loops + write + varparam + syscall + heap + string + record + dynarray + exception + float + args + variant + strresult + setlen-str + str-length-index + in-operator + managed-aggregate-locals + loadfile + sysopen-family + string-cow + var-string-param + openarray-string + stack-params + int64 + int64-byref + aoc-types + many-params + conformance2 + shortcircuit + ptr-arith + case-range + global-init ok (output identical to x86-64)"
 
 # ----- Cross self-host bootstrap gates (feature-cross-bootstrap-selfhost) -----
 # Triple-stage proof: native cross-compiles compiler.pas -> <arch>; that binary,

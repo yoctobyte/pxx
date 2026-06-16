@@ -4666,6 +4666,7 @@ end;
 procedure ParseVarSection;
 var names: array[0..MAX_DECL_NAMES-1] of AnsiString; n, i, idx: Integer; tk: TTypeKind;
     isArr, isDyn: Boolean; arrLo, arrHi: Integer; elemTk: TTypeKind; dynDepth: Integer;
+    initElem: Integer; initVal: Int64;
 begin
   Next;
   { Stop at section keywords: these are plain identifiers in this dialect, so
@@ -4715,8 +4716,9 @@ begin
     end
     else
     begin
-      { Skip qualifiers like pointer, ^, etc. }
-      while not (CurTok.Kind in [tkSemicolon, tkBegin, tkVar, tkConst, tkType,
+      { Skip qualifiers like pointer, ^, etc. Stop at `=` so a scalar
+        initializer (`var x: Integer = 5`) is left for the init handler below. }
+      while not (CurTok.Kind in [tkSemicolon, tkEq, tkBegin, tkVar, tkConst, tkType,
                  tkProcedure, tkFunction, tkEOF]) do
       begin
         tk := ParseTypeKind;
@@ -4748,7 +4750,43 @@ begin
 	      end;
 	    if Eat(tkEq) then
 	    begin
-	      while not (CurTok.Kind in [tkSemicolon, tkEOF]) do Next;
+	      { Constant initializer `= v` / `= (e0,e1,...)`. Recorded as pending
+	        assignments compiled into the program entry just before `main begin`
+	        (was silently discarded → globals read 0). Constants only; globals
+	        only — a local section initializer should use inline `var x := v`. }
+	      if n <> 1 then Error('initializer requires a single variable');
+	      if CurProc >= 0 then
+	        Error('local var-section initializer not supported; use `var x := value;`');
+	      if isDyn then Error('dynamic array initializer not supported');
+	      if CurTok.Kind = tkLParen then
+	      begin
+	        if not isArr then Error('parenthesised initializer requires an array variable');
+	        Next;
+	        initElem := 0;
+	        repeat
+	          if PendingInitCount >= MAX_PENDING_INITS then Error('too many global initializers');
+	          if initElem > (arrHi - arrLo) then Error('too many array initializer elements');
+	          initVal := ConstEval;
+	          PendingInitSym[PendingInitCount]  := idx;
+	          PendingInitElem[PendingInitCount] := arrLo + initElem;
+	          PendingInitVal[PendingInitCount]  := initVal;
+	          PendingInitTk[PendingInitCount]   := Ord(elemTk);
+	          Inc(PendingInitCount);
+	          Inc(initElem);
+	        until not Eat(tkComma);
+	        Expect(tkRParen, ')');
+	      end
+	      else
+	      begin
+	        if isArr then Error('array initializer must be parenthesised');
+	        if PendingInitCount >= MAX_PENDING_INITS then Error('too many global initializers');
+	        initVal := ConstEval;
+	        PendingInitSym[PendingInitCount]  := idx;
+	        PendingInitElem[PendingInitCount] := -1;
+	        PendingInitVal[PendingInitCount]  := initVal;
+	        PendingInitTk[PendingInitCount]   := Ord(tk);
+	        Inc(PendingInitCount);
+	      end;
 	    end;
 	    Eat(tkSemicolon);
 	  end;
@@ -7109,6 +7147,43 @@ begin
   UClsAlign[ci] := TARGET_PTR_SIZE;
 end;
 
+procedure CompilePendingGlobalInits;
+{ Emit the recorded constant global-var initializers as assignments, at the
+  current code position (just before `main begin`). }
+var i, identNode, valNode, idxLit, target, assignNode: Integer;
+begin
+  for i := 0 to PendingInitCount - 1 do
+  begin
+    identNode := AllocNode(AN_IDENT);
+    ASTIVal[identNode] := PendingInitSym[i];
+    ASTTk[identNode] := Ord(Syms[PendingInitSym[i]].TypeKind);
+
+    if PendingInitElem[i] >= 0 then
+    begin
+      idxLit := AllocNode(AN_INT_LIT);
+      ASTIVal[idxLit] := PendingInitElem[i];
+      ASTTk[idxLit] := Ord(tyInteger);
+      target := AllocNode(AN_INDEX);
+      ASTLeft[target] := identNode;
+      ASTRight[target] := idxLit;
+      ASTTk[target] := PendingInitTk[i];
+    end
+    else
+      target := identNode;
+
+    valNode := AllocNode(AN_INT_LIT);
+    ASTIVal[valNode] := PendingInitVal[i];
+    ASTTk[valNode] := PendingInitTk[i];
+
+    assignNode := AllocNode(AN_ASSIGN);
+    ASTLeft[assignNode] := target;
+    ASTRight[assignNode] := valNode;
+
+    CompileAST(assignNode);
+    ASTNodeCount := 0;
+  end;
+end;
+
 procedure ParseProgram;
 var jmpPatch, i, j: Integer; doneUses, doneDecls, hasExceptions, needsBuiltin,
     needsHeap, needsAnsiRuntime, needHeapUnit: Boolean;
@@ -7116,6 +7191,7 @@ var jmpPatch, i, j: Integer; doneUses, doneDecls, hasExceptions, needsBuiltin,
     dummyNames: array[0..7] of AnsiString;
     dummyTypes: array[0..7] of TTypeKind;
 begin
+  PendingInitCount := 0;
   Expect(tkProgram, 'program');
   if CurTok.Kind = tkEOF then Error('expected program name');
   Next;  { program name can be any identifier (even keyword) }
@@ -7368,6 +7444,9 @@ begin
     the using unit). This is where e.g. the LCL `Forms` unit creates Application. }
   for i := 0 to InitProcCount - 1 do
     EmitCallProc(InitProcs[i]);
+
+  { Constant global-var initializers run after unit init, before the body. }
+  CompilePendingGlobalInits;
 
   Expect(tkBegin, 'begin');
   ParseBlock;
