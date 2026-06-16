@@ -185,6 +185,35 @@ stackful — no grammar change to add it.
     file) uses `__pxxcoswitch`, also trigger `EnableCoroutineRuntime` from the
     per-unit token scan in `ParseUsesUnit` (mirror the tkTry/tkRaise scan).
 
+- 2026-06-16 — **Phase 2 (surface) DONE on x86-64** (commits 0e2a57a + fix
+  ca0b8df). `function F(...): Integer; generator;` + `yield E` + `for x in F(a)`
+  all work end-to-end; the acceptance test (`Squares(5)` → 1 4 9 16 25) and
+  multi-param generators (`Range`, `Fibs`) pass. Validation rules all fire
+  (no-yield, yield-outside, yield-in-try, >4 params, non-x86-64 target, forced
+  stackless). `test/test_generator.pas` wired into test-core. Bootstrap
+  fixedpoint byte-identical (procs=889); **cross-bootstrap i386+aarch64+arm32
+  byte-identical**; full `make test` green.
+  - Lowering (minimal custom codegen): a generator function compiles as a
+    coroutine body — hidden self-pointer local; body prologue `mov [self],rbx`
+    (instance handed off in the initial frame's rbx slot) then per-param loads
+    from the instance **at each param's own width** (slots are size-packed — a
+    qword store clobbers the adjacent param; that was a real bug, found via
+    raw-byte disasm); `yield E` → AN_YIELD/IR_YIELD (store current + CoSwitch);
+    fall-off epilogue marks done + CoSwitches back (never returns). `for-in`
+    desugars to `CoAlloc(@F,n,a0..a3)` + `while CoNext do x:=CoCurrent; BODY` +
+    `CoFree`, all in `lib/rtl/coroutine.pas` (PXX-only).
+  - LANDMINES (both bit cross-bootstrap, NOT x86-64 fixedpoint — so `make
+    bootstrap` alone misses them; always run `make cross-bootstrap`):
+    (1) **No local fixed arrays in compiler.pas** — i386/arm32/aarch64 codegen
+    only supports ordinal/pointer/string locals. Use scalar locals + helpers.
+    (2) **`not` typing trap** (the original all-logical comment was right): PXX
+    tags some boolean `AN_BINOP`/`AN_CALL` results as tyInteger, so the bitwise
+    `not` promotion must be restricted to `AN_INT_LIT`/`AN_IDENT` operands only.
+  - Requires `uses coroutine;` (v1). Direct (non-for-in) generator calls are not
+    guarded yet — would run the body via the normal ABI with garbage self.
+  - TODO: port CoSwitch + generator codegen to the other 5 targets; lift
+    yield-in-try; `generator function` prefix form; stackless backend (v2).
+
 ## Acceptance
 
 `for x in g()` over a `generator` routine yields the correct sequence, suspends/
