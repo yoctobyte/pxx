@@ -2291,15 +2291,21 @@ begin
         for Boolean and everything else. The earlier all-logical rule existed
         because a prior attempt keyed bitwise-vs-logical off the GLOBAL
         LastExprTk tracker, which is clobbered between factors — so a boolean
-        `while not done` was mistyped as bitwise and hung self-compile. Drive it
-        instead off the operand node's OWN type (ASTTk[left], per-node and
-        stable), and ONLY promote to bitwise for a true integer type
-        (ord 1 = tyInteger, 7..16 = tyInt8..tyNativeUInt). Boolean, char,
-        pointer and unknown operands keep the long-standing logical behaviour the
-        bootstrap relies on, so this changes nothing for them. The IR_NOT codegen
-        already emits `not rax` for ordinal-non-boolean types. }
+        `while not done` was mistyped as bitwise and hung self-compile.
+
+        Drive it off the operand node's OWN type, but ONLY trust that type for
+        operand node kinds whose type is authoritative: an integer LITERAL or an
+        IDENTIFIER (its symbol's declared type). Computed expressions — AN_BINOP
+        (comparisons / boolean ops) and AN_CALL (boolean-returning functions) —
+        are NOT trusted here: PXX tags some of them tyInteger/tyInt64 even when
+        they are logically Boolean (e.g. `not (a = b)`, `not Eat(...)` appear in
+        compiler.pas with ASTTk = tyInteger), and promoting those to bitwise
+        diverges from FPC and breaks self-host / cross-bootstrap. So those keep
+        the long-standing logical behaviour. The IR_NOT codegen already emits
+        `not rax` for ordinal-non-boolean types. }
       node := AllocNode(AN_NOT); ASTLeft[node] := left;
-      if (ASTTk[left] = 1) or ((ASTTk[left] >= 7) and (ASTTk[left] <= 16)) then
+      if ((ASTKind[left] = AN_INT_LIT) or (ASTKind[left] = AN_IDENT)) and
+         ((ASTTk[left] = 1) or ((ASTTk[left] >= 7) and (ASTTk[left] <= 16))) then
       begin
         ASTTk[node] := ASTTk[left];
         LastExprTk := IntToTypeKind(ASTTk[left]);
@@ -3464,21 +3470,33 @@ begin
   ASTTk[Result] := Ord(tk);
 end;
 
-function GenMakeCall(procIdx: Integer; retTk: TTypeKind; const args: array of Integer; nargs: Integer): Integer;
-var k, an, prev: Integer;
+{ Build an AN_CALL with up to 6 positional arg value-nodes (-1 = absent). No
+  local arrays/open-arrays — the cross-target codegens (i386/arm32/aarch64) only
+  support ordinal/pointer/string locals, and compiler.pas must cross-compile. }
+function GenAddArg(callNode, prev, valNode: Integer): Integer;
+var an: Integer;
+begin
+  if valNode < 0 then begin Result := prev; Exit; end;
+  an := AllocNode(AN_ARG);
+  ASTLeft[an] := valNode;
+  if prev = -1 then ASTLeft[callNode] := an
+  else ASTRight[prev] := an;
+  Result := an;
+end;
+
+function GenMakeCall6(procIdx: Integer; retTk: TTypeKind; a0, a1, a2, a3, a4, a5: Integer): Integer;
+var prev: Integer;
 begin
   Result := AllocNode(AN_CALL);
   ASTIVal[Result] := procIdx;
   ASTTk[Result] := Ord(retTk);
   prev := -1;
-  for k := 0 to nargs - 1 do
-  begin
-    an := AllocNode(AN_ARG);
-    ASTLeft[an] := args[k];
-    if prev = -1 then ASTLeft[Result] := an
-    else ASTRight[prev] := an;
-    prev := an;
-  end;
+  prev := GenAddArg(Result, prev, a0);
+  prev := GenAddArg(Result, prev, a1);
+  prev := GenAddArg(Result, prev, a2);
+  prev := GenAddArg(Result, prev, a3);
+  prev := GenAddArg(Result, prev, a4);
+  prev := GenAddArg(Result, prev, a5);
 end;
 
 function GenMakeSeq(stmt, next: Integer): Integer;
@@ -3501,12 +3519,17 @@ end;
     CoFree(__g);
   Returns the synthesised AN_SEQ. Called from ParseForStatementAST once `in`
   is seen after the loop variable. }
+function GenZeroLit: Integer;
+begin
+  Result := AllocNode(AN_INT_LIT);
+  ASTIVal[Result] := 0;
+  ASTTk[Result] := Ord(tyInt64);
+end;
+
 function ParseForInGeneratorAST(varIdx, gpi: Integer): Integer;
 var
-  bodyNode, nargs, gIdx, k: Integer;
-  argNodes: array[0..3] of Integer;
-  allocArgs: array[0..5] of Integer;
-  nextArgs, curArgs, freeArgs: array[0..0] of Integer;
+  bodyNode, nargs, gIdx: Integer;
+  a0, a1, a2, a3: Integer;
   procAddr, nargsLit, callAlloc, callNext, callCur, callFree: Integer;
   assignG, assignX, whileNode, innerSeq: Integer;
   paCoAlloc, paCoNext, paCoCurrent, paCoFree: Integer;
@@ -3518,21 +3541,21 @@ begin
   if (paCoAlloc < 0) or (paCoNext < 0) or (paCoCurrent < 0) or (paCoFree < 0) then
     Error('for-in generator: the coroutine unit is not in scope (add `uses coroutine;`)');
 
-  { unused args default to 0 }
-  for k := 0 to 3 do
-  begin
-    argNodes[k] := AllocNode(AN_INT_LIT);
-    ASTIVal[argNodes[k]] := 0;
-    ASTTk[argNodes[k]] := Ord(tyInt64);
-  end;
+  { unused args default to 0 (no local array — must cross-compile) }
+  a0 := GenZeroLit; a1 := GenZeroLit; a2 := GenZeroLit; a3 := GenZeroLit;
   nargs := 0;
   if Eat(tkLParen) then
   begin
     if CurTok.Kind <> tkRParen then
       repeat
-        if nargs >= 4 then Error('for-in generator: at most 4 arguments (v1)');
         ParseExpr;
-        argNodes[nargs] := CurASTNode;
+        case nargs of
+          0: a0 := CurASTNode;
+          1: a1 := CurASTNode;
+          2: a2 := CurASTNode;
+          3: a3 := CurASTNode;
+          else Error('for-in generator: at most 4 arguments (v1)');
+        end;
         Inc(nargs);
       until not Eat(tkComma);
     Expect(tkRParen, ')');
@@ -3544,20 +3567,13 @@ begin
 
   procAddr := AllocNode(AN_PROCADDR); ASTIVal[procAddr] := gpi; ASTTk[procAddr] := Ord(tyPointer);
   nargsLit := AllocNode(AN_INT_LIT);  ASTIVal[nargsLit] := nargs; ASTTk[nargsLit] := Ord(tyInt64);
-  allocArgs[0] := procAddr;
-  allocArgs[1] := nargsLit;
-  allocArgs[2] := argNodes[0];
-  allocArgs[3] := argNodes[1];
-  allocArgs[4] := argNodes[2];
-  allocArgs[5] := argNodes[3];
-  callAlloc := GenMakeCall(paCoAlloc, tyPointer, allocArgs, 6);
+
+  callAlloc := GenMakeCall6(paCoAlloc, tyPointer, procAddr, nargsLit, a0, a1, a2, a3);
   assignG := GenMakeAssign(GenMakeIdent(gIdx, tyPointer), callAlloc);
 
-  nextArgs[0] := GenMakeIdent(gIdx, tyPointer);
-  callNext := GenMakeCall(paCoNext, tyBoolean, nextArgs, 1);
+  callNext := GenMakeCall6(paCoNext, tyBoolean, GenMakeIdent(gIdx, tyPointer), -1, -1, -1, -1, -1);
 
-  curArgs[0] := GenMakeIdent(gIdx, tyPointer);
-  callCur := GenMakeCall(paCoCurrent, tyInt64, curArgs, 1);
+  callCur := GenMakeCall6(paCoCurrent, tyInt64, GenMakeIdent(gIdx, tyPointer), -1, -1, -1, -1, -1);
   assignX := GenMakeAssign(GenMakeIdent(varIdx, Syms[varIdx].TypeKind), callCur);
 
   innerSeq := GenMakeSeq(assignX, GenMakeSeq(bodyNode, -1));
@@ -3565,8 +3581,7 @@ begin
   ASTLeft[whileNode] := callNext;
   ASTRight[whileNode] := innerSeq;
 
-  freeArgs[0] := GenMakeIdent(gIdx, tyPointer);
-  callFree := GenMakeCall(paCoFree, tyPointer, freeArgs, 1);
+  callFree := GenMakeCall6(paCoFree, tyPointer, GenMakeIdent(gIdx, tyPointer), -1, -1, -1, -1, -1);
 
   Result := GenMakeSeq(assignG, GenMakeSeq(whileNode, GenMakeSeq(callFree, -1)));
 end;
