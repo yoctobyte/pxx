@@ -265,6 +265,61 @@ stackful — no grammar change to add it.
     overrides); port the *stackful* CoSwitch to the other 5 targets; lift
     yield-in-try; managed-typed yields/locals in stackless.
 
+## Post-Phase-4 design notes (managed types, yield-in-try, next steps)
+
+Decision 2026-06-16: **async next** (port the stackful CoSwitch + scheduler),
+before stackless auto-selection (v3) and before lifting any restrictions.
+Auto-selection is cheap and additive — fold it in after the lowerings stabilise.
+
+### Managed types in a stackless generator — how hard
+
+Two independent questions:
+
+- **(A) Managed *yield* type** (`generator: AnsiString` / dyn-array element):
+  *moderate.* The yielded value sits in the instance `CURRENT` word; today it's a
+  raw machine word. For a managed value it must be a fresh **owned** reference:
+  retain on `yield` (store into CURRENT), release the previous CURRENT each
+  for-in step, release the last CURRENT at `SlFree`. Reuses the existing
+  `AnsiStrRetain/Release` addrs + the per-element ARC helpers. ~1–2 days, no
+  structural change. Loop var `x` then gets a borrowed/retained copy per the
+  normal managed-assign path.
+
+- **(B) Managed *locals* that persist across a yield** (`var s: AnsiString` live
+  over `yield`): **hard, and it fights the current model.** The stackless design
+  save/restores each persistent local as a machine word at the step boundary,
+  but the step function returns normally on every yield — so its epilogue runs
+  managed-local cleanup (release) on that local, while the *same pointer* is
+  saved in the instance for the next resume → use-after-free. Fixing it needs one
+  of:
+    1. **Borrow semantics:** the instance OWNS the managed slots; stack locals are
+       borrows; suppress the step epilogue's release for persisted managed locals;
+       `SlFree` releases them. But the body's own ARC on `s := s + 'x'` assumes
+       the local owns its ref — so in-body managed assignments would
+       double-free / mismatch unless they too are rewritten to operate on the
+       owning slot.
+    2. **Redirect managed locals to instance fields:** rewrite each managed-local
+       `AN_IDENT` to an instance field access and make the instance a real
+       *managed record* (RTTI + zero-init + whole-record release at `SlFree`).
+       Correct, but it's the invasive AST-rewrite the save/restore model was
+       chosen to avoid, and it ties into the zero-init contract + RTTI.
+  Either path is several days and risky.
+
+  **Recommendation:** don't chase managed locals in *stackless*. The **stackful**
+  backend gets them almost for free — a coroutine runs on a real stack, so
+  managed locals live there with ordinary ARC and *no* save/restore. So:
+  managed-heavy generators → stackful; stackless stays the lean ordinal/pointer
+  path (its niche is embedded/ESP32, where you wouldn't lean on managed types).
+  Revisit stackless-managed only if a concrete need appears, and start with (A).
+
+### yield-in-try
+
+- **Stackless:** keep forbidden **permanently**. PXX exceptions are setjmp-style
+  with the jmp_buf/frame on the *stack*; a stackless step returns between yields,
+  so a try-frame straddling a yield can't survive (its frame is on the transient
+  step stack). Not a v1 limitation — a structural one for this lowering.
+- **Stackful:** liftable, together with the coroutine `BSS_EXC_TOP` save/restore
+  (the exc-chain head is per-stack). Do it as part of the async arc.
+
 ## Acceptance
 
 `for x in g()` over a `generator` routine yields the correct sequence, suspends/
