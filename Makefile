@@ -235,6 +235,8 @@ test-core: $(COMPILER)
 	test "$$(/tmp/test_asyncecho26)" = "$$(printf 'client 1 ok\nclient 2 ok\ndone')"
 	./$(COMPILER) test/test_timer.pas /tmp/test_timer26
 	test "$$(/tmp/test_timer26)" = "$$(printf 'woke 50\nwoke 100\nwoke 150\ndone')"
+	./$(COMPILER) test/test_channel.pas /tmp/test_channel26
+	test "$$(/tmp/test_channel26)" = "$$(printf 'recv 1\nrecv 2\nrecv 3\nrecv 4\nrecv 5\nrecv 6\ndone')"
 	./$(COMPILER) test/test_many_params.pas /tmp/test_many_params26
 	test "$$(/tmp/test_many_params26)" = "$$(printf '1 2 3 4 5 6 7\n3 4 5 6 7 12 89\n8912\n7654326\n12100806\n7654321\n96\n196')"
 	./$(COMPILER) test/test_procaddr.pas /tmp/test_procaddr26
@@ -903,6 +905,9 @@ test-i386: $(COMPILER)
 	./$(COMPILER) --target=i386 test/test_scheduler_exc.pas /tmp/test_i386_sexc
 	./$(COMPILER) test/test_scheduler_exc.pas /tmp/test_i386_sexc_x64
 	test "$$(tools/run_target.sh i386 /tmp/test_i386_sexc)" = "$$(/tmp/test_i386_sexc_x64)"
+	./$(COMPILER) --target=i386 test/test_channel.pas /tmp/test_i386_chan
+	./$(COMPILER) test/test_channel.pas /tmp/test_i386_chan_x64
+	test "$$(tools/run_target.sh i386 /tmp/test_i386_chan)" = "$$(/tmp/test_i386_chan_x64)"
 	@echo "i386 hello + arith + procs + loops + write + varparam + syscall + heap + string + record + dynarray + exception + float + float-params + variant + byref-params + setlen-str + in-operator + loadfile + sysopen-family + args + string-cow + aoc-types + many-params + conformance2 + shortcircuit + ptr-arith + case-range + global-init + typed-const + multidim + named-array + record-2darray + param-2darray + multidim3d + const-alias + float-const + stackless-generator + proctype + scheduler + scheduler-exc ok (output identical to x86-64)"
 
 test-aarch64: $(COMPILER)
@@ -1028,6 +1033,9 @@ test-aarch64: $(COMPILER)
 	./$(COMPILER) --target=aarch64 test/test_scheduler_exc.pas /tmp/test_aarch64_sexc
 	./$(COMPILER) test/test_scheduler_exc.pas /tmp/test_aarch64_sexc_x64
 	test "$$(tools/run_target.sh aarch64 /tmp/test_aarch64_sexc)" = "$$(/tmp/test_aarch64_sexc_x64)"
+	./$(COMPILER) --target=aarch64 test/test_channel.pas /tmp/test_aarch64_chan
+	./$(COMPILER) test/test_channel.pas /tmp/test_aarch64_chan_x64
+	test "$$(tools/run_target.sh aarch64 /tmp/test_aarch64_chan)" = "$$(/tmp/test_aarch64_chan_x64)"
 	@echo "aarch64 hello + arith + procs + loops + write + varparam + syscall + heap + string + record + dynarray + exception + float + variant + setlen-str + str-length-index + in-operator + loadfile + sysopen-family + args + open-array-params + string-cow + huge-frame + varrec-alloc + aoc-types + many-params + conformance2 + shortcircuit + ptr-arith + case-range + global-init + typed-const + multidim + named-array + record-2darray + param-2darray + multidim3d + const-alias + float-const ok (output identical to x86-64)"
 
 test-arm32: $(COMPILER)
@@ -1171,6 +1179,9 @@ test-arm32: $(COMPILER)
 	./$(COMPILER) --target=arm32 test/test_scheduler_exc.pas /tmp/test_arm32_sexc
 	./$(COMPILER) test/test_scheduler_exc.pas /tmp/test_arm32_sexc_x64
 	test "$$(tools/run_target.sh arm32 /tmp/test_arm32_sexc)" = "$$(/tmp/test_arm32_sexc_x64)"
+	./$(COMPILER) --target=arm32 test/test_channel.pas /tmp/test_arm32_chan
+	./$(COMPILER) test/test_channel.pas /tmp/test_arm32_chan_x64
+	test "$$(tools/run_target.sh arm32 /tmp/test_arm32_chan)" = "$$(/tmp/test_arm32_chan_x64)"
 	@echo "arm32 hello + arith + procs + loops + write + varparam + syscall + heap + string + record + dynarray + exception + float + args + variant + strresult + setlen-str + str-length-index + in-operator + managed-aggregate-locals + loadfile + sysopen-family + string-cow + var-string-param + openarray-string + stack-params + int64 + int64-byref + aoc-types + many-params + conformance2 + shortcircuit + ptr-arith + case-range + global-init + typed-const + multidim + named-array + record-2darray + param-2darray + multidim3d + const-alias + float-const ok (output identical to x86-64)"
 
 # ----- Cross self-host bootstrap gates (feature-cross-bootstrap-selfhost) -----

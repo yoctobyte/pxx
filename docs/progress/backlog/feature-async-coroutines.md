@@ -144,7 +144,24 @@ self-host fixedpoint + cross-bootstrap unaffected (library-only).
     (busy-poll) so the cross builds still compile. LANDMINES: `__pxxrawsyscall`
     is recognised only in expression position (assign the result to a dummy, not
     a bare statement); the comment-brace `}` trap bit again.
-  - **Next:** a clean Pascal socket/listener layer over WaitReadable/WaitWritable
-    (accept loop, async recv/send) — the thing real servers use; then Synapse
-    integration. Timers (epoll_wait timeout) + channels/mailboxes optional.
-    riscv32/xtensa CoSwitch + cross-target reactor syscall numbers later.
+  - **Tooling trio DONE (each a deterministic suite test):**
+    - **Async sockets** `lib/rtl/asyncnet.pas` (x86-64): TcpListen/TcpAccept/
+      TcpConnect/TcpRecv/TcpSend/TcpClose, non-blocking + WaitReadable/Writable
+      on EAGAIN; loopback IPv4, sockaddr_in built by hand.
+      `test/test_asyncecho.pas` = a real concurrent TCP echo server (server
+      coroutine accepts 2, spawns an echo coroutine each; 2 client coroutines
+      verify) on one thread. Per-client results printed in id order →
+      deterministic. **This is the arc's payoff made concrete.**
+    - **Timers** `CoSleep(ms)` in scheduler.pas (x86-64): a one-shot relative
+      timerfd parked on the SAME reactor (a timer is just a readable fd — no
+      scheduler-core change). `test/test_timer.pas`: 3 nappers spawned out of
+      order wake in duration order in ~150ms total (concurrent, not serial).
+    - **Channels** `lib/rtl/channel.pas` (ALL 4 targets): bounded Int64 ring,
+      ChanSend/ChanRecv block via CoYield (pure cooperative, no epoll).
+      `test/test_channel.pas`: cap-4 ring, producer 1..6 must block when full,
+      consumer drains FIFO. In test-core + test-i386/aarch64/arm32.
+    - LANDMINE: array bounds take a literal, not a const expr (`array[0..3]`,
+      not `array[0..CHAN_CAP-1]`).
+  - **Next:** Synapse integration over asyncnet (the real higher-level protocol
+    stacks); proper channel blocking (mark channel-blocked vs busy-CoYield);
+    riscv32/xtensa CoSwitch + cross-target reactor/socket syscall numbers.
