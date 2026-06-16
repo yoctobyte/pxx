@@ -13,8 +13,22 @@ specific compatibility statement covers it.
 
 ## Platform And Output
 
-- Output target is Linux x86-64 ELF only.
-- Cross-compilation targets such as ARM64 or 32-bit are not implemented.
+- Output is a static, syscall-only Linux ELF for four targets: **x86-64, i386,
+  aarch64, arm32** (select with `--target=`). All four self-host byte-identical
+  (`make cross-bootstrap`). RISC-V/Xtensa (ESP32) codegen exists but is not a
+  self-host target.
+- **Feature coverage is uneven across targets.** Some capabilities are x86-64
+  only today and the cross test suites skip them — closing this is the active
+  `feature-cross-target-feature-parity` ticket:
+  - **Classes / objects** — instantiation (`T.Create`), methods, virtual
+    dispatch are x86-64 only (i386/aarch64/arm32 error *"class instantiation not
+    yet supported"*). Records work everywhere.
+  - **Method pointers** (`of object`) — x86-64 only (ride on classes).
+  - **Async I/O** — the epoll reactor, `asyncnet` sockets, and `CoSleep` timers
+    are x86-64 only (per-arch syscall numbers pending). The coroutine scheduler
+    and channels run on all four targets.
+  - **C / dynamic-library imports** — x86-64 only (the i386/arm32 ELF writer
+    does not yet emit dynamic symbols).
 - There is no claim of FPC object, unit-file, package, or linker ABI
   compatibility.
 

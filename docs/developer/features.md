@@ -13,13 +13,18 @@ the seed.
 
 ## Native Executable Output
 
-PXX emits x86-64 Linux ELF executables directly:
+PXX emits Linux ELF executables directly for four CPU targets — **x86-64, i386,
+aarch64, arm32** (`--target=`), all self-hosting byte-identical:
 
 - No assembler invocation.
 - No external linker invocation.
 - Static output for programs without external calls.
-- Dynamic loader sections when imported shared-library calls are required.
+- Dynamic loader sections when imported shared-library calls are required
+  (x86-64; the i386/arm32 writer does not yet emit dynamic symbols).
 - A generated `.map` file for `_start` and procedures/methods.
+
+Feature coverage is uneven across targets — some capabilities (classes, async
+I/O, C imports) are x86-64 only today; see [Limitations](limitations.md).
 
 ## Pascal Frontend
 
@@ -29,6 +34,11 @@ Implemented Pascal capabilities include:
 - Classes with fields and methods, virtual/override dispatch, and properties.
 - Class visibility sections and minimal published RTTI (`System.TypInfo`-named).
 - Procedure and method references (`@routine`, `@obj.method` → `TMethod`).
+- Procedural types and indirect calls — `type T = procedure(...)` /
+  `function(...): R` [`of object`]; `v(args)` through a proc-typed variable.
+- Generators (`; generator;` + `yield` + `for x in`), a coroutine scheduler
+  (`Spawn`/`CoYield`), channels, and an epoll async-I/O reactor with async TCP
+  sockets and timers. See the concurrency section of the dialect doc.
 - Generic classes and explicitly specialized generic routines.
 - Routine overloading and opt-in strict declaration checking.
 - Class/record operator implementations.

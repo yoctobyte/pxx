@@ -87,3 +87,4 @@ DNS deferred to a later milestone.
   PXX-aware branch in install step, or `-d FPC` only for foreign code). After
   that: RTL availability (synafpc, termio, sockets, netdb, Classes surface).
 - 2026-06-10 — platform-branch decision made: opt-in mimic mode, see feature-mimic-fpc (35345a3). Synapse compatibility milestones wait on it; the syscall net.pas milestone does not.
+- 2026-06-16 — the syscall net.pas milestone has a concrete start: `lib/rtl/asyncnet.pas` — an **async** TCP socket layer (TcpListen/Accept/Connect/Recv/Send/Close) over the coroutine epoll reactor (feature-async-coroutines), x86-64, raw Linux syscalls, no libc. Proven by `test/test_asyncecho.pas` (concurrent echo server). Not yet the target-neutral `TNetSocket`/`TNetAddress` API or the cross/esp32 backends; asyncnet is the Linux-x86-64 async backend the abstraction will wrap. Cross-target parity tracked in feature-cross-target-feature-parity.

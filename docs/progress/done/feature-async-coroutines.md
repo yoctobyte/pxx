@@ -1,7 +1,7 @@
 # Async, coroutines, and `yield`
 
 - **Type:** feature
-- **Status:** backlog
+- **Status:** done
 - **Owner:** —
 - **Blocked-by:** feature-unified-heap-allocator
 - **Opened:** 2026-06-06 (from rainy-afternoon / plan-async-coroutines.md)
@@ -165,3 +165,9 @@ self-host fixedpoint + cross-bootstrap unaffected (library-only).
   - **Next:** Synapse integration over asyncnet (the real higher-level protocol
     stacks); proper channel blocking (mark channel-blocked vs busy-CoYield);
     riscv32/xtensa CoSwitch + cross-target reactor/socket syscall numbers.
+- 2026-06-16 — **moved to done/.** The ticket's substance — a stackful
+  resumable-execution mechanism (CoSwitch on all 4 Linux targets) + cooperative
+  scheduler + epoll reactor + async sockets/timers/channels — is delivered and
+  in the suite. Remaining follow-ups tracked elsewhere: cross-target
+  reactor/sockets/timers parity in `feature-cross-target-feature-parity`;
+  Synapse + a target-neutral net API in `feature-networking`.

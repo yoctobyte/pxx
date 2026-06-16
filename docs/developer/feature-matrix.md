@@ -10,6 +10,12 @@ This matrix tracks proposed dialect additions, standard extensions, and compiler
 | **Nested Subroutines** | **Standard** (Wirth Pascal core) | **High** | **Medium** / Structural modularity | ⬜ Deferred | Functions declared inside functions. Requires lexical scoping (passing a stack frame static-link pointer to inner scopes). |
 | **Out-Param Return-Lifting** | **Dialect** | **None** (Shared with Python) | **Done** | ✅ Delivered | Trailing `T**` C out-parameters are lifted to the call's return value (e.g., `db := sqlite3_open(path)`). |
 | **Dynamic `any` Type** | **Dialect** (Variant concept) | **Very High** | **Low** / Scripting helper | ⬜ Excluded | Dynamic types with runtime tagging and dispatch. Discarded to keep compiler bootstrap lightweight. |
+| **Procedural types** (`procedure(...)` / `function(...): R`) | **Standard** (Wirth/Delphi) | **Medium** | **High** / Callbacks, dispatch tables, the coroutine spawn ABI | ✅ Delivered (all 4 targets) | Proc-typed var/param/global/local, `@Proc`/`nil` assign, `v(args)` indirect call (statement + expression). |
+| **Method pointers** (`of object`) | **Standard** (Delphi) | **Medium** | **Medium** / Event handlers | ✅ Delivered (**x86-64 only** — needs cross classes) | 16-byte Code/Data value; `m := @obj.Method`; calling injects `Self`. |
+| **Generators** (`; generator;` + `yield` + `for x in g`) | **Dialect** (Python-shaped) | **High** | **High** / Lazy sequences, iterators | ✅ Delivered (all 4 targets) | Two lowerings: stackless (all targets, state machine) + stackful (x86-64, coroutine). |
+| **Coroutines + cooperative scheduler** (`Spawn`/`CoYield`/`RunUntilDone`) | **Dialect** (library) | **High** | **High** / Concurrency without threads | ✅ Delivered (all 4 targets) | Stackful fibers over the `CoSwitch` primitive; one thread, per-stack exception chain. `lib/rtl/scheduler.pas`. |
+| **Async I/O** (epoll reactor, `asyncnet` sockets, `CoSleep` timers) | **Dialect** (library) | **High** | **High** / Concurrent servers on one thread | ✅ Delivered (**x86-64 only** — per-arch syscall numbers pending) | `WaitReadable`/`WaitWritable` park a coroutine on epoll; blocking concentrated into one `epoll_wait`. |
+| **Channels** (`ChanSend`/`ChanRecv`) | **Dialect** (library) | **Low** | **Medium** / Coroutine messaging | ✅ Delivered (all 4 targets) | Bounded ring; send blocks when full, recv when empty (pure cooperative). `lib/rtl/channel.pas`. |
 
 ---
 

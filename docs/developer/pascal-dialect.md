@@ -258,6 +258,28 @@ which is what an `of object` event such as `OnClick` stores. Taking the
 address of an external routine is rejected (it has no link-time address);
 wrap it in a local routine instead.
 
+**Procedural types and calling through them.** A named procedural type holds a
+routine and can be called with arguments:
+
+```pascal
+type
+  TBinOp  = function(a, b: Integer): Integer;        { plain proc pointer }
+  TNotify = procedure(sender: Pointer) of object;    { method pointer (Self bound) }
+var
+  op: TBinOp;
+  ev: TNotify;
+begin
+  op := @Add;        writeln(op(2, 3));   { indirect call, statement or expression }
+  ev := @form.Click; ev(nil);            { calling a method pointer injects Self }
+```
+
+A plain procedural type is pointer-sized; an `of object` method pointer is a
+16-byte `{code, data}` value. Indirect calls (`v(args)`) work in both statement
+and expression position; the argument count is checked against the signature. A
+parameterless proc variable must be called as `p()` (bare `p;` is not a call).
+Plain procedural types work on all four targets; method pointers are x86-64 only
+(they need class instances — see [limitations](limitations.md)).
+
 ## Classes, Virtual Methods, And RTTI
 
 Classes support fields, methods, single inheritance, virtual/override dispatch
@@ -293,6 +315,45 @@ procedure gtk_init(argc, argv: Pointer); cdecl; external 'libgtk-3.so.0';
 ```
 
 See [C Interoperability](c-interop.md).
+
+## Concurrency: Generators, Coroutines, Channels, Async I/O
+
+PXX has a stackful-coroutine concurrency stack. The only machine-code part is a
+tiny per-target context-switch (`CoSwitch`); everything above it is a PXX-only
+library (never used in the self-hosting compiler).
+
+**Generators** — a routine marked `; generator;` produces a lazy sequence with
+`yield`, consumed by `for x in`:
+
+```pascal
+function Squares(n: Integer): Integer; generator;
+var i: Integer;
+begin
+  for i := 1 to n do yield i * i;
+end;
+...
+for x in Squares(5) do writeln(x);   { 1 4 9 16 25 }
+```
+
+Two lowerings share one surface: stackless (a state machine; all four targets,
+`; generator; stackless;`) and stackful (a coroutine; x86-64). `yield` inside a
+`try` is a compile error.
+
+**Coroutines + scheduler** (`uses scheduler;`) — cooperative, single-thread,
+race-free. `Spawn(@Body, arg)` schedules a coroutine; `CoYield` suspends back to
+the scheduler; `RunUntilDone` round-robins until all finish. Each coroutine runs
+on its own heap stack, so blocking code, loops, and `try` work unchanged (no
+function coloring). Runs on all four targets.
+
+**Channels** (`uses channel;`) — a bounded ring between coroutines; `ChanSend`
+blocks when full, `ChanRecv` when empty. All four targets.
+
+**Async I/O** (x86-64) — the scheduler embeds an epoll reactor: `WaitReadable` /
+`WaitWritable` park a coroutine on an fd, and `RunUntilDone`'s idle path
+`epoll_wait`s and wakes ready coroutines. `lib/rtl/asyncnet.pas` builds async
+TCP (`TcpListen`/`TcpAccept`/`TcpConnect`/`TcpRecv`/`TcpSend`) on top, and
+`CoSleep(ms)` is a timer parked on the same reactor — so one OS thread serves
+many connections with blocking concentrated into a single `epoll_wait`.
 
 ## Compatibility Claim
 

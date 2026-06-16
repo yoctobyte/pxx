@@ -1,7 +1,7 @@
 # Generators and `yield` (the coroutine on-ramp)
 
 - **Type:** feature
-- **Status:** backlog
+- **Status:** done
 - **Blocked-by:** feature-unified-heap-allocator
 - **Opened:** 2026-06-16
 
@@ -326,3 +326,10 @@ Two independent questions:
 resumes across loop iterations, frees its stack at exhaustion; `yield` inside a
 `try` is a clear compile error; self-host fixedpoint + cross-bootstrap unaffected
 (library-only feature).
+
+## Log (close)
+- 2026-06-16 — **moved to done/.** Both lowerings ship: stackless on all 4
+  targets, stackful on x86-64. Optional follow-ups (v3 auto strategy selection;
+  porting the *stackful* generator codegen to cross targets — redundant since
+  stackless already covers them; managed yields/locals in stackless) are minor.
+  `; generator;` / `yield` / `for-in` work end-to-end.
