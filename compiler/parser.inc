@@ -3796,11 +3796,12 @@ begin
     GenMakeIdent(selfSym, tyPointer), GenMakeIntLit(off), valNode, -1, -1, -1);
 end;
 
-{ Does the subtree contain a `yield`? }
+{ Does the subtree contain a suspension point — `yield` (generator) or `await`
+  (async)? Both split the state machine the same way. }
 function SLHasYield(node: Integer): Boolean;
 begin
   if node < 0 then begin Result := False; Exit; end;
-  if ASTKind[node] = AN_YIELD then begin Result := True; Exit; end;
+  if (ASTKind[node] = AN_YIELD) or (ASTKind[node] = AN_AWAIT) then begin Result := True; Exit; end;
   Result := SLHasYield(ASTLeft[node]) or SLHasYield(ASTRight[node]);
 end;
 
@@ -3816,6 +3817,7 @@ begin
     AN_SEQ:
       begin SLCheckEligible(ASTLeft[node]); SLCheckEligible(ASTRight[node]); end;
     AN_YIELD: ; { reached only via a good position }
+    AN_AWAIT: ; { reached only via a good position }
     AN_IF:
       begin
         if SLHasYield(ASTLeft[node]) then
@@ -3901,6 +3903,32 @@ begin
   exitNode := AllocNode(AN_EXIT); ASTLeft[exitNode] := -1;
 
   Result := GenMakeSeq(setCur,
+            GenMakeSeq(setState,
+            chainSeq(saveSeq,
+            GenMakeSeq(setRes,
+            GenMakeSeq(exitNode,
+            GenMakeSeq(GenMakeLabel(resumeLbl), -1))))));
+end;
+
+{ await Stmt -> Stmt; state:=k; save locals; Result:=True; Exit; Lk:
+  The awaited statement runs for its side effects, then the coroutine suspends
+  (returns True = "resume me"); the scheduler re-enters and dispatch jumps to Lk.
+  Unlike yield there is no produced value, so no CURRENT store. }
+function SLLowerAwait(node, selfSym, retSym: Integer): Integer;
+var k, resumeLbl, setState, saveSeq, setRes, exitNode: Integer;
+begin
+  k := CurGenStateCtr; Inc(CurGenStateCtr);
+  if k >= MAX_GEN_STATES then Error('stackless async: too many await points');
+  resumeLbl := NewSyntheticLabel;
+  GenStateLabelIdx[k] := resumeLbl;
+
+  setState := GenSlSetStmt(selfSym, SL_OFF_STATE, GenMakeIntLit(k));
+  saveSeq  := SLSaveLocals(selfSym);
+  setRes   := GenMakeAssign(GenMakeIdent(retSym, tyBoolean), GenMakeBoolLit(1));
+  exitNode := AllocNode(AN_EXIT); ASTLeft[exitNode] := -1;
+
+  { ASTLeft[node] is the awaited statement (a possibly-void call). }
+  Result := chainSeq(ASTLeft[node],
             GenMakeSeq(setState,
             chainSeq(saveSeq,
             GenMakeSeq(setRes,
@@ -4010,6 +4038,7 @@ begin
   if not SLHasYield(node) then begin Result := node; Exit; end;
   case ASTKind[node] of
     AN_YIELD: Result := SLLowerYield(node, selfSym, retSym);
+    AN_AWAIT: Result := SLLowerAwait(node, selfSym, retSym);
     AN_IF:    Result := SLLowerIf(node, selfSym, retSym);
     AN_WHILE: Result := SLLowerWhile(node, selfSym, retSym);
     AN_FOR:   Result := SLLowerFor(node, selfSym, retSym);
@@ -4932,11 +4961,40 @@ begin
       begin
         { `await Call(...)` as a statement (the awaited call may be void, so parse
           it as a full statement, not an expression factor). STACKFUL: documentary
-          — AN_AWAIT lowers to its operand. STACKLESS (later): split point. }
+          — AN_AWAIT lowers to its operand. STACKLESS: the state-machine split
+          point (SLLowerAwait). }
         Next;
         node := AllocNode(AN_AWAIT);
-        ASTLeft[node] := ParseStatementAST;
+        if CurTok.Kind = tkSemicolon then
+          ASTLeft[node] := -1          { bare `await;` — a pure suspension point }
+        else
+          ASTLeft[node] := ParseStatementAST;
         ASTTk[node]   := Ord(tyUnknown);
+      end
+      else if CaseEqual(name, 'AsyncGo') then
+      begin
+        { Spawn a `; async; stackless;` coroutine onto the stackless scheduler.
+          AsyncGo(@Body) desugars to SLSpawn(@Body, SlAlloc(instSize,0,0,0,0,0)):
+          the compiler supplies the step fn (the rewritten Body) and a zero-inited
+          heap instance; the scheduler resumes it via an indirect (proc-typed)
+          call (SLRunUntilDone). v1: the routine takes no params. }
+        Next;
+        Expect(tkLParen, '(');
+        Expect(tkAt, '@');
+        if CurTok.Kind <> tkIdent then Error('AsyncGo: expected @<an async stackless routine>');
+        pi := FindProc(CurTok.SVal);
+        if (pi < 0) or not ProcIsAsync[pi] or not ProcIsStackless[pi] then
+          Error('AsyncGo: argument must be @<an `; async; stackless;` routine>');
+        Next;
+        Expect(tkRParen, ')');
+        if (FindProc('SLSpawn') < 0) or (FindProc('SlAlloc') < 0) then
+          Error('AsyncGo: slsched/slgen not in scope (add `uses slgen, slsched;`)');
+        idx := AllocNode(AN_PROCADDR); ASTIVal[idx] := pi; ASTTk[idx] := Ord(tyPointer);
+        valNode := AllocNode(AN_INT_LIT); ASTIVal[valNode] := ProcGenInstSize[pi]; ASTTk[valNode] := Ord(tyInt64);
+        node := GenMakeCall6(FindProc('SLSpawn'), tyPointer, idx,
+                  GenMakeCall6(FindProc('SlAlloc'), tyPointer, valNode,
+                    GenZeroLit, GenZeroLit, GenZeroLit, GenZeroLit, GenZeroLit),
+                  -1, -1, -1, -1);
       end
       else if CaseEqual(name, '__pxxcoswitch') then
       begin
@@ -6933,12 +6991,10 @@ begin
     Error('a routine cannot be both async and generator');
   if isAsync and isAsmFunc then
     Error('a routine cannot be both async and assembler');
-  if isAsync and isStackless then
-    Error('async stackless backend not implemented yet (v1: stackful only)');
-  { `stackless` after `generator` selects the state-machine backend; on its own it
-    is meaningless. (async stackless is rejected above.) }
-  if isStackless and not isGenerator then
-    Error('stackless directive is only valid on a generator');
+  { `stackless` selects the state-machine backend; valid after `generator` or
+    `async`, meaningless on its own. }
+  if isStackless and not (isGenerator or isAsync) then
+    Error('stackless directive is only valid on a generator or async routine');
 
   { External binding: `procedure foo(...); cdecl; external 'libname.so' [name 'sym'];`
     Marks the routine as a dynamically-linked import. Symbol defaults to the
@@ -7020,7 +7076,15 @@ begin
   if isStackless then
   begin
     if methOwnerCi >= 0 then
-      Error('stackless generator methods are not supported (v1)');
+      Error('stackless generator/async methods are not supported (v1)');
+    if isAsync then
+    begin
+      { async stackless takes no declared params in v1 (the coroutine carries its
+        own state in persistent locals); the spawn surface allocs the instance. }
+      if nparams > 0 then
+        Error('async stackless: parameters are not supported in v1');
+      isFunc := True;     { a procedure becomes the function(self): Boolean step }
+    end;
     declElemTk := Ord(retType);
     for i := nparams downto 1 do
     begin
@@ -7855,7 +7919,12 @@ begin
     genBodyAST := ParseBlockAST;
     Expect(tkEnd, 'end');
     Eat(tkSemicolon);
-    if not CurGenSeenYield then
+    if isAsync then
+    begin
+      if not SLHasYield(genBodyAST) then
+        Error('async stackless routine has no await (cannot suspend)');
+    end
+    else if not CurGenSeenYield then
       Error('generator has no yield');
     SLCheckEligible(genBodyAST);
     AssignStacklessSlots(pi);

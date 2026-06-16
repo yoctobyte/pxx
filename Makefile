@@ -233,6 +233,8 @@ test-core: $(COMPILER)
 	test "$$(/tmp/test_costack26)" = "$$(printf 'w1:55\nw2:210\nw3:465\nw1:55\nw2:210\nw3:465\nall done')"
 	./$(COMPILER) test/test_async.pas /tmp/test_async26
 	test "$$(/tmp/test_async26)" = "$$(printf 'a1:1\na2:1\na1:2\na2:2\ndone1=102\ndone2=202\nall done')"
+	./$(COMPILER) test/test_async_sl.pas /tmp/test_async_sl26
+	test "$$(/tmp/test_async_sl26)" = "$$(printf 'A0\nB0\nA1\nB1\nA2\ndone')"
 	./$(COMPILER) test/test_reactor.pas /tmp/test_reactor26
 	test "$$(/tmp/test_reactor26)" = "$$(printf 'reader: start\nreader: would-block, parking\nwriter: writing\nreader: got 2 bytes: hi\ndone')"
 	./$(COMPILER) test/test_asyncecho.pas /tmp/test_asyncecho26
@@ -900,6 +902,9 @@ test-i386: $(COMPILER)
 	./$(COMPILER) --target=i386 test/test_stackless_gen.pas /tmp/test_i386_slg
 	./$(COMPILER) test/test_stackless_gen.pas /tmp/test_i386_slg_x64
 	test "$$(tools/run_target.sh i386 /tmp/test_i386_slg)" = "$$(/tmp/test_i386_slg_x64)"
+	./$(COMPILER) --target=i386 test/test_async_sl.pas /tmp/test_i386_asl
+	./$(COMPILER) test/test_async_sl.pas /tmp/test_i386_asl_x64
+	test "$$(tools/run_target.sh i386 /tmp/test_i386_asl)" = "$$(/tmp/test_i386_asl_x64)"
 	./$(COMPILER) --target=i386 test/test_proctype.pas /tmp/test_i386_proctype
 	./$(COMPILER) test/test_proctype.pas /tmp/test_i386_proctype_x64
 	test "$$(tools/run_target.sh i386 /tmp/test_i386_proctype)" = "$$(/tmp/test_i386_proctype_x64)"
@@ -1040,6 +1045,9 @@ test-aarch64: $(COMPILER)
 	./$(COMPILER) --target=aarch64 test/test_channel.pas /tmp/test_aarch64_chan
 	./$(COMPILER) test/test_channel.pas /tmp/test_aarch64_chan_x64
 	test "$$(tools/run_target.sh aarch64 /tmp/test_aarch64_chan)" = "$$(/tmp/test_aarch64_chan_x64)"
+	./$(COMPILER) --target=aarch64 test/test_async_sl.pas /tmp/test_aarch64_asl
+	./$(COMPILER) test/test_async_sl.pas /tmp/test_aarch64_asl_x64
+	test "$$(tools/run_target.sh aarch64 /tmp/test_aarch64_asl)" = "$$(/tmp/test_aarch64_asl_x64)"
 	@echo "aarch64 hello + arith + procs + loops + write + varparam + syscall + heap + string + record + dynarray + exception + float + variant + setlen-str + str-length-index + in-operator + loadfile + sysopen-family + args + open-array-params + string-cow + huge-frame + varrec-alloc + aoc-types + many-params + conformance2 + shortcircuit + ptr-arith + case-range + global-init + typed-const + multidim + named-array + record-2darray + param-2darray + multidim3d + const-alias + float-const ok (output identical to x86-64)"
 
 test-arm32: $(COMPILER)
@@ -1183,6 +1191,9 @@ test-arm32: $(COMPILER)
 	./$(COMPILER) --target=arm32 test/test_scheduler_exc.pas /tmp/test_arm32_sexc
 	./$(COMPILER) test/test_scheduler_exc.pas /tmp/test_arm32_sexc_x64
 	test "$$(tools/run_target.sh arm32 /tmp/test_arm32_sexc)" = "$$(/tmp/test_arm32_sexc_x64)"
+	./$(COMPILER) --target=arm32 test/test_async_sl.pas /tmp/test_arm32_asl
+	./$(COMPILER) test/test_async_sl.pas /tmp/test_arm32_asl_x64
+	test "$$(tools/run_target.sh arm32 /tmp/test_arm32_asl)" = "$$(/tmp/test_arm32_asl_x64)"
 	./$(COMPILER) --target=arm32 test/test_channel.pas /tmp/test_arm32_chan
 	./$(COMPILER) test/test_channel.pas /tmp/test_arm32_chan_x64
 	test "$$(tools/run_target.sh arm32 /tmp/test_arm32_chan)" = "$$(/tmp/test_arm32_chan_x64)"
