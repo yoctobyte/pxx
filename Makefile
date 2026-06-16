@@ -241,6 +241,8 @@ test-core: $(COMPILER)
 	test "$$(/tmp/test_static_open26)" = "$$(printf 'len=4 high=3 sum=100 a0=10\nlen=2 high=1 sum=15 a0=7')"
 	./$(COMPILER) test/test_conformance_1.pas /tmp/test_conformance_1_26
 	test "$$(/tmp/test_conformance_1_26)" = "$$(printf 'shape 0 square area=9.00 tag=5000000004\nshape 1 circle area=12.00 tag=1000000000\nshape 2 generic area=0.00 tag=1000000007\ntotal area=21.00\npts len=3 high=2\n  pt p 0,0\n  pt p 2,1\n  pt p 4,4\n  i 42\n  q 9000000000\n  b 1\n  s mixed\nv int=1\ncaught: boom\ncaught=1\nconcat=abcdef len=6\nV...V.')"
+	./$(COMPILER) test/test_conformance_2.pas /tmp/test_conformance_2_26
+	test "$$(/tmp/test_conformance_2_26)" = "$$(printf 'q=7000000005 mix=111000000083\nfact20=2432902008176640000\neven10=1 odd7=1\nsum9=45 big=97864\n  rec r A=1000000000 B=0 sum=1000000000\n  rec r A=2000000000 B=1 sum=2000000001\n  rec r A=3000000000 B=4 sum=3000000004\ncopy A=3000000000 B=99 orig B=4\nopensum=100\n  i 42\n  q 9000000000\n  b 1\n  s mixed\nconcat=abcdef len=6\nV.--V.\ncaught=11 gdiv=5 gzero=-1')"
 	./$(COMPILER) test/test_asm_emit.pas /tmp/test_asm_emit26
 	test "$$(/tmp/test_asm_emit26)" = "$$(printf 'S=\nS=ab\nS=abc\nS=a longer string here\nI=0\nI=123\nI=-7\n---\nS=ww\nI=1\nS=yy\nI=2\nS=zzz\nI=3')"
 	./$(COMPILER) test/test_virtual_proc.pas /tmp/test_virtual_proc26
@@ -793,7 +795,13 @@ test-i386: $(COMPILER)
 	./$(COMPILER) --target=i386 test/test_cross_static_open_array.pas /tmp/test_i386_static_open
 	./$(COMPILER) test/test_cross_static_open_array.pas /tmp/test_i386_static_open_x64
 	test "$$(tools/run_target.sh i386 /tmp/test_i386_static_open)" = "$$(/tmp/test_i386_static_open_x64)"
-	@echo "i386 hello + arith + procs + loops + write + varparam + syscall + heap + string + record + dynarray + exception + float + float-params + variant + byref-params + setlen-str + in-operator + loadfile + sysopen-family + args + string-cow + aoc-types ok (output identical to x86-64)"
+	./$(COMPILER) --target=i386 test/test_cross_many_params.pas /tmp/test_i386_many_params
+	./$(COMPILER) test/test_cross_many_params.pas /tmp/test_i386_many_params_x64
+	test "$$(tools/run_target.sh i386 /tmp/test_i386_many_params)" = "$$(/tmp/test_i386_many_params_x64)"
+	./$(COMPILER) --target=i386 test/test_conformance_2.pas /tmp/test_i386_conf2
+	./$(COMPILER) test/test_conformance_2.pas /tmp/test_i386_conf2_x64
+	test "$$(tools/run_target.sh i386 /tmp/test_i386_conf2)" = "$$(/tmp/test_i386_conf2_x64)"
+	@echo "i386 hello + arith + procs + loops + write + varparam + syscall + heap + string + record + dynarray + exception + float + float-params + variant + byref-params + setlen-str + in-operator + loadfile + sysopen-family + args + string-cow + aoc-types + many-params + conformance2 ok (output identical to x86-64)"
 
 test-aarch64: $(COMPILER)
 	./$(COMPILER) --target=aarch64 test/hello.pas /tmp/test_aarch64_hello
@@ -870,7 +878,13 @@ test-aarch64: $(COMPILER)
 	./$(COMPILER) --target=aarch64 test/test_cross_static_open_array.pas /tmp/test_aarch64_static_open
 	./$(COMPILER) test/test_cross_static_open_array.pas /tmp/test_aarch64_static_open_x64
 	test "$$(tools/run_target.sh aarch64 /tmp/test_aarch64_static_open)" = "$$(/tmp/test_aarch64_static_open_x64)"
-	@echo "aarch64 hello + arith + procs + loops + write + varparam + syscall + heap + string + record + dynarray + exception + float + variant + setlen-str + str-length-index + in-operator + loadfile + sysopen-family + args + open-array-params + string-cow + huge-frame + varrec-alloc + aoc-types ok (output identical to x86-64)"
+	./$(COMPILER) --target=aarch64 test/test_cross_many_params.pas /tmp/test_aarch64_many_params
+	./$(COMPILER) test/test_cross_many_params.pas /tmp/test_aarch64_many_params_x64
+	test "$$(tools/run_target.sh aarch64 /tmp/test_aarch64_many_params)" = "$$(/tmp/test_aarch64_many_params_x64)"
+	./$(COMPILER) --target=aarch64 test/test_conformance_2.pas /tmp/test_aarch64_conf2
+	./$(COMPILER) test/test_conformance_2.pas /tmp/test_aarch64_conf2_x64
+	test "$$(tools/run_target.sh aarch64 /tmp/test_aarch64_conf2)" = "$$(/tmp/test_aarch64_conf2_x64)"
+	@echo "aarch64 hello + arith + procs + loops + write + varparam + syscall + heap + string + record + dynarray + exception + float + variant + setlen-str + str-length-index + in-operator + loadfile + sysopen-family + args + open-array-params + string-cow + huge-frame + varrec-alloc + aoc-types + many-params + conformance2 ok (output identical to x86-64)"
 
 test-arm32: $(COMPILER)
 	./$(COMPILER) --target=arm32 test/hello.pas /tmp/test_arm32_hello
@@ -965,7 +979,13 @@ test-arm32: $(COMPILER)
 	./$(COMPILER) --target=arm32 test/test_cross_static_open_array.pas /tmp/test_arm32_static_open
 	./$(COMPILER) test/test_cross_static_open_array.pas /tmp/test_arm32_static_open_x64
 	test "$$(tools/run_target.sh arm32 /tmp/test_arm32_static_open)" = "$$(/tmp/test_arm32_static_open_x64)"
-	@echo "arm32 hello + arith + procs + loops + write + varparam + syscall + heap + string + record + dynarray + exception + float + args + variant + strresult + setlen-str + str-length-index + in-operator + managed-aggregate-locals + loadfile + sysopen-family + string-cow + var-string-param + openarray-string + stack-params + int64 + int64-byref + aoc-types ok (output identical to x86-64)"
+	./$(COMPILER) --target=arm32 test/test_cross_many_params.pas /tmp/test_arm32_many_params
+	./$(COMPILER) test/test_cross_many_params.pas /tmp/test_arm32_many_params_x64
+	test "$$(tools/run_target.sh arm32 /tmp/test_arm32_many_params)" = "$$(/tmp/test_arm32_many_params_x64)"
+	./$(COMPILER) --target=arm32 test/test_conformance_2.pas /tmp/test_arm32_conf2
+	./$(COMPILER) test/test_conformance_2.pas /tmp/test_arm32_conf2_x64
+	test "$$(tools/run_target.sh arm32 /tmp/test_arm32_conf2)" = "$$(/tmp/test_arm32_conf2_x64)"
+	@echo "arm32 hello + arith + procs + loops + write + varparam + syscall + heap + string + record + dynarray + exception + float + args + variant + strresult + setlen-str + str-length-index + in-operator + managed-aggregate-locals + loadfile + sysopen-family + string-cow + var-string-param + openarray-string + stack-params + int64 + int64-byref + aoc-types + many-params + conformance2 ok (output identical to x86-64)"
 
 # ----- Cross self-host bootstrap gates (feature-cross-bootstrap-selfhost) -----
 # Triple-stage proof: native cross-compiles compiler.pas -> <arch>; that binary,
