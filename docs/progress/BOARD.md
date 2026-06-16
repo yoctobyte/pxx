@@ -14,7 +14,7 @@ _none_
 | --- | --- | --- | --- |
 | feature-synthetic-feature-matrix-test | feature | Synthetic all-features stress test (cross-target conformance) | — |
 
-## backlog (33)
+## backlog (35)
 
 | Ticket | Type | Summary | Blocked-by |
 | --- | --- | --- | --- |
@@ -35,6 +35,7 @@ _none_
 | feature-esp32-isr-iram | feature | ESP32: Compiler-Directed ISR and IRAM Support | — |
 | feature-flexcolumn-directive | feature | `flexcolumn` calling-convention directive | chore-inc-to-units |
 | feature-float-str-val | feature | Float Str / Val | — |
+| feature-fpc-vs-pxx-feature-boundary | feature | Policy: FPC-bootstrap subset vs PXX-only library features | — |
 | feature-handle-compacting-heap | feature | Handle-table compacting heap (anti-fragmentation for constrained RAM) | — |
 | feature-inline-asm-depth | feature | Inline assembler depth | — |
 | feature-interfaces | feature | Interfaces | — |
@@ -44,6 +45,7 @@ _none_
 | feature-networking | feature | Networking runtime | — |
 | feature-nil-python-frontend | feature | Nil Python frontend (`.npy`) | — |
 | feature-no-ansistring-profile | feature | No-AnsiString / bounded-string profile | — |
+| feature-object-reference-type | feature | `object` — a rooted object-reference type | — |
 | feature-parallel-processing | feature | Parallel processing as a language feature | feature-unified-heap-allocator |
 | feature-progress-transition-helpers | feature | Progress transition helpers (`claim` / `resolve`) | — |
 | feature-static-arena-profile | feature | Fixed-static-arena allocator profile | feature-unified-heap-allocator |
@@ -132,6 +134,7 @@ _none_
 - feature-esp32-idf-xtensa
 - feature-esp32-isr-iram
 - feature-float-str-val
+- feature-fpc-vs-pxx-feature-boundary
 - feature-handle-compacting-heap
 - feature-inline-asm-depth
 - feature-interfaces
@@ -139,6 +142,7 @@ _none_
 - feature-networking
 - feature-nil-python-frontend
 - feature-no-ansistring-profile
+- feature-object-reference-type
 - feature-parallel-processing
 - feature-progress-transition-helpers
 - feature-static-arena-profile
