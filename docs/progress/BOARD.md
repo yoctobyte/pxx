@@ -12,7 +12,7 @@ _none_
 
 _none_
 
-## backlog (36)
+## backlog (37)
 
 | Ticket | Type | Summary | Blocked-by |
 | --- | --- | --- | --- |
@@ -45,6 +45,7 @@ _none_
 | feature-nil-python-frontend | feature | Nil Python frontend (`.npy`) | — |
 | feature-no-ansistring-profile | feature | No-AnsiString / bounded-string profile | — |
 | feature-object-reference-type | feature | `object` — a rooted object-reference type | — |
+| feature-os-targets-bsd-mac | feature | Additional OS targets (BSD / macOS via syscall mapping; Windows deprioritized) | — |
 | feature-parallel-processing | feature | Parallel processing as a language feature | feature-unified-heap-allocator |
 | feature-progress-transition-helpers | feature | Progress transition helpers (`claim` / `resolve`) | — |
 | feature-static-arena-profile | feature | Fixed-static-arena allocator profile | feature-unified-heap-allocator |
@@ -144,6 +145,7 @@ _none_
 - feature-nil-python-frontend
 - feature-no-ansistring-profile
 - feature-object-reference-type
+- feature-os-targets-bsd-mac
 - feature-parallel-processing
 - feature-progress-transition-helpers
 - feature-static-arena-profile
