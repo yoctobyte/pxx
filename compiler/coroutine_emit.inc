@@ -43,8 +43,32 @@ begin
     EmitB($5B);                                                 { pop rbx }
     EmitB($5D);                                                 { pop rbp }
     EmitB($C3);                                                 { ret }
+  end
+  else if TargetArch = TARGET_I386 then
+  begin
+    { i386: args on the stack (pfrom=[esp+4], pto=[esp+8] at entry). Callee-saved
+      set = ebx,esi,edi,ebp; plus BSS_EXC_TOP. Load the two pointer args into
+      scratch (ecx/edx) before the pushes move esp, then mirror the x86-64 swap. }
+    CoSwitchAddr := CodeLen;
+    EmitB($8B); EmitB($4C); EmitB($24); EmitB($04);             { mov ecx, [esp+4]  (pfrom) }
+    EmitB($8B); EmitB($54); EmitB($24); EmitB($08);             { mov edx, [esp+8]  (pto) }
+    EmitB($55);                                                 { push ebp }
+    EmitB($53);                                                 { push ebx }
+    EmitB($56);                                                 { push esi }
+    EmitB($57);                                                 { push edi }
+    EmitB($A1); EmitGlobRef(BSS_EXC_TOP);                       { mov eax, [BSS_EXC_TOP] }
+    EmitB($50);                                                 { push eax }
+    EmitB($89); EmitB($21);                                     { mov [ecx], esp }
+    EmitB($8B); EmitB($22);                                     { mov esp, [edx] }
+    EmitB($58);                                                 { pop eax }
+    EmitB($A3); EmitGlobRef(BSS_EXC_TOP);                       { mov [BSS_EXC_TOP], eax }
+    EmitB($5F);                                                 { pop edi }
+    EmitB($5E);                                                 { pop esi }
+    EmitB($5B);                                                 { pop ebx }
+    EmitB($5D);                                                 { pop ebp }
+    EmitB($C3);                                                 { ret }
   end;
-  { Other targets land in later phases (i386/aarch64/arm32/riscv32/xtensa). }
+  { Other targets land in later phases (aarch64/arm32/riscv32/xtensa). }
 end;
 { EnableCoroutineRuntime lives in parser.inc (it must call EnableExceptionRuntime,
   defined there) — see near EnableExceptionRuntime. }

@@ -2124,6 +2124,21 @@ begin
         EmitI32(0);
       end;
 
+    IR_COSWITCH:
+      begin
+        { __pxxcoswitch(pfrom, pto): cdecl — push pto then pfrom (pfrom ends at
+          [esp+4], pto at [esp+8] as the stub expects), call the CoSwitch stub,
+          drop the two args. }
+        argNode := IRB[IRA[node]];                   { IR_ARG for pto }
+        IREmitNode386(IRA[argNode]);                 { eax = pto }
+        EmitB($50);                                  { push pto }
+        argNode := IRA[node];                        { IR_ARG for pfrom }
+        IREmitNode386(IRA[argNode]);                 { eax = pfrom }
+        EmitB($50);                                  { push pfrom }
+        EmitB($E8); EmitI32(CoSwitchAddr - (CodeLen + 4)); { call CoSwitch }
+        EmitB($81); EmitB($C4); EmitI32(8);          { add esp, 8 }
+      end;
+
     IR_FIELD:
       begin
         IREmitNode386(IRA[node]);                    { base address -> eax }
