@@ -1285,6 +1285,7 @@ begin
   Syms[SymCount].IsArray  := False;
   Syms[SymCount].ArrLen   := 0;
   SymDynDepth[SymCount] := 0;
+  SymGenSlot[SymCount] := -1;
   SymRTTIOff[SymCount] := -1;
   SymIsHiddenArgTemp[SymCount] := False;
   SymBlockId[SymCount] := CurBlockId;
@@ -1360,6 +1361,7 @@ begin
   Syms[SymCount].ArrLen   := 0;
   if isArray then Syms[SymCount].ArrLen := 1000;
   SymDynDepth[SymCount] := 0;
+  SymGenSlot[SymCount] := -1;
   SymRTTIOff[SymCount] := -1;
   Syms[SymCount].ElemType := tk;
   Syms[SymCount].RecName  := LastTypeRecId;

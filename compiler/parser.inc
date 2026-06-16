@@ -3531,16 +3531,10 @@ var
   bodyNode, nargs, gIdx: Integer;
   a0, a1, a2, a3: Integer;
   procAddr, nargsLit, callAlloc, callNext, callCur, callFree: Integer;
-  assignG, assignX, whileNode, innerSeq: Integer;
+  assignG, assignX, whileNode, innerSeq, instLit: Integer;
+  sa1, sa2, sa3, sa4: Integer;
   paCoAlloc, paCoNext, paCoCurrent, paCoFree: Integer;
 begin
-  paCoAlloc   := FindProc('CoAlloc');
-  paCoNext    := FindProc('CoNext');
-  paCoCurrent := FindProc('CoCurrent');
-  paCoFree    := FindProc('CoFree');
-  if (paCoAlloc < 0) or (paCoNext < 0) or (paCoCurrent < 0) or (paCoFree < 0) then
-    Error('for-in generator: the coroutine unit is not in scope (add `uses coroutine;`)');
-
   { unused args default to 0 (no local array — must cross-compile) }
   a0 := GenZeroLit; a1 := GenZeroLit; a2 := GenZeroLit; a3 := GenZeroLit;
   nargs := 0;
@@ -3564,9 +3558,55 @@ begin
   bodyNode := ParseStatementAST;
 
   gIdx := AllocVar('', tyPointer);
+  nargsLit := AllocNode(AN_INT_LIT);  ASTIVal[nargsLit] := nargs; ASTTk[nargsLit] := Ord(tyInt64);
+
+  if ProcIsStackless[gpi] then
+  begin
+    { Stackless: alloc + zero an instance, store args; advance by calling the
+      generator's step function directly (the compiler knows it — PXX cannot call
+      through a stored proc pointer with args). CoCurrent/free are shared shape.
+        __g := SlAlloc(instSize, nargs, a0..a3);
+        while Gen(__g) do begin x := SlCurrent(__g); BODY end;
+        SlFree(__g); }
+    if (FindProc('SlAlloc') < 0) or (FindProc('SlCurrent') < 0) or (FindProc('SlFree') < 0) then
+      Error('for-in generator: the slgen unit is not in scope (add `uses slgen;`)');
+    instLit := AllocNode(AN_INT_LIT); ASTIVal[instLit] := ProcGenInstSize[gpi]; ASTTk[instLit] := Ord(tyInt64);
+    callAlloc := GenMakeCall6(FindProc('SlAlloc'), tyPointer, instLit, nargsLit, a0, a1, a2, a3);
+    assignG := GenMakeAssign(GenMakeIdent(gIdx, tyPointer), callAlloc);
+
+    { advance = a direct call to the step function with the instance pointer.
+      The step proc's ABI is (self + the declared params); only self is real (the
+      declared params are restored from the instance), but the call must provide
+      one arg per param — the internal-call codegen pops ParamCount registers, so
+      a short arg list would unbalance the stack. Pad with zeros. }
+    sa1 := -1; sa2 := -1; sa3 := -1; sa4 := -1;
+    if ProcGenParamCnt[gpi] >= 1 then sa1 := GenZeroLit;
+    if ProcGenParamCnt[gpi] >= 2 then sa2 := GenZeroLit;
+    if ProcGenParamCnt[gpi] >= 3 then sa3 := GenZeroLit;
+    if ProcGenParamCnt[gpi] >= 4 then sa4 := GenZeroLit;
+    callNext := GenMakeCall6(gpi, tyBoolean, GenMakeIdent(gIdx, tyPointer), sa1, sa2, sa3, sa4, -1);
+    callCur := GenMakeCall6(FindProc('SlCurrent'), tyInt64, GenMakeIdent(gIdx, tyPointer), -1, -1, -1, -1, -1);
+    assignX := GenMakeAssign(GenMakeIdent(varIdx, Syms[varIdx].TypeKind), callCur);
+
+    innerSeq := GenMakeSeq(assignX, GenMakeSeq(bodyNode, -1));
+    whileNode := AllocNode(AN_WHILE);
+    ASTLeft[whileNode] := callNext;
+    ASTRight[whileNode] := innerSeq;
+
+    callFree := GenMakeCall6(FindProc('SlFree'), tyPointer, GenMakeIdent(gIdx, tyPointer), -1, -1, -1, -1, -1);
+    Result := GenMakeSeq(assignG, GenMakeSeq(whileNode, GenMakeSeq(callFree, -1)));
+    Exit;
+  end;
+
+  { Stackful: CoAlloc / while CoNext / CoCurrent / CoFree (heap coroutine stack). }
+  paCoAlloc   := FindProc('CoAlloc');
+  paCoNext    := FindProc('CoNext');
+  paCoCurrent := FindProc('CoCurrent');
+  paCoFree    := FindProc('CoFree');
+  if (paCoAlloc < 0) or (paCoNext < 0) or (paCoCurrent < 0) or (paCoFree < 0) then
+    Error('for-in generator: the coroutine unit is not in scope (add `uses coroutine;`)');
 
   procAddr := AllocNode(AN_PROCADDR); ASTIVal[procAddr] := gpi; ASTTk[procAddr] := Ord(tyPointer);
-  nargsLit := AllocNode(AN_INT_LIT);  ASTIVal[nargsLit] := nargs; ASTTk[nargsLit] := Ord(tyInt64);
 
   callAlloc := GenMakeCall6(paCoAlloc, tyPointer, procAddr, nargsLit, a0, a1, a2, a3);
   assignG := GenMakeAssign(GenMakeIdent(gIdx, tyPointer), callAlloc);
@@ -3584,6 +3624,401 @@ begin
   callFree := GenMakeCall6(paCoFree, tyPointer, GenMakeIdent(gIdx, tyPointer), -1, -1, -1, -1, -1);
 
   Result := GenMakeSeq(assignG, GenMakeSeq(whileNode, GenMakeSeq(callFree, -1)));
+end;
+
+{ ===== Stackless-generator state-machine transform =====
+  Turns a `; generator; stackless;` body into a flat goto/label state machine
+  compiled into the generator's own proc, whose ABI is `function(self): Boolean`
+  (has-next). Persistent locals/params live in the heap instance (offsets
+  SL_OFF_SLOTS + 8*SymGenSlot); the step fn restores them on entry, dispatches to
+  the resume point, runs to the next `yield` (which saves state + returns True),
+  and on fall-off marks done + returns False. Library-/user-only — never used in
+  compiler.pas (FPC has no generators). Targets ALL backends with zero asm: the
+  whole thing lowers through the existing cross-target IR (goto/if/for/while +
+  ordinary calls to the slgen RTL helpers). }
+
+function GenMakeIntLit(v: Integer): Integer;
+begin
+  Result := AllocNode(AN_INT_LIT);
+  ASTIVal[Result] := v;
+  ASTTk[Result] := Ord(tyInt64);
+end;
+
+function GenMakeBoolLit(v: Integer): Integer;
+begin
+  Result := AllocNode(AN_BOOL_LIT);
+  ASTIVal[Result] := v;
+  ASTTk[Result] := Ord(tyBoolean);
+end;
+
+{ Concatenate two statements/sequences (-1 = empty) into one. AN_SEQ nests fine. }
+function chainSeq(a, b: Integer): Integer;
+begin
+  if a < 0 then Result := b
+  else if b < 0 then Result := a
+  else Result := GenMakeSeq(a, b);
+end;
+
+function GenMakeCmp(opTok, l, r: Integer): Integer;
+begin
+  Result := AllocNode(AN_BINOP);
+  ASTIVal[Result] := opTok;
+  ASTLeft[Result] := l;
+  ASTRight[Result] := r;
+  ASTTk[Result] := Ord(tyBoolean);
+end;
+
+function GenMakeArith(opTok, l, r: Integer): Integer;
+begin
+  Result := AllocNode(AN_BINOP);
+  ASTIVal[Result] := opTok;
+  ASTLeft[Result] := l;
+  ASTRight[Result] := r;
+  ASTTk[Result] := Ord(tyInt64);
+end;
+
+{ Synthetic label: a GotoLabel slot with no name; AN_LABEL/AN_GOTO reference it
+  directly via ASTIVal (ASTSOffset = -1 sentinel, see ir.inc). }
+function NewSyntheticLabel: Integer;
+begin
+  if GotoLabelCount >= MAX_GOTO_LABELS then Error('too many labels (stackless generator)');
+  Result := GotoLabelCount;
+  GotoLabelNOff[Result] := -1;
+  GotoLabelNLen[Result] := 0;
+  GotoLabelCodePos[Result] := -1;
+  GotoLabelIRId[Result] := -1;
+  Inc(GotoLabelCount);
+end;
+
+function GenMakeGoto(lblIdx: Integer): Integer;
+begin
+  Result := AllocNode(AN_GOTO);
+  ASTSOffset[Result] := -1;
+  ASTSLen[Result] := 0;
+  ASTIVal[Result] := lblIdx;
+end;
+
+function GenMakeLabel(lblIdx: Integer): Integer;
+begin
+  Result := AllocNode(AN_LABEL);
+  ASTSOffset[Result] := -1;
+  ASTSLen[Result] := 0;
+  ASTIVal[Result] := lblIdx;
+end;
+
+{ if condNode then goto lblIdx; }
+function GenMakeIfGoto(condNode, lblIdx: Integer): Integer;
+var pairNode: Integer;
+begin
+  Result := AllocNode(AN_IF);
+  ASTLeft[Result] := condNode;
+  pairNode := AllocNode(AN_PAIR);
+  ASTLeft[pairNode] := GenMakeGoto(lblIdx);
+  ASTRight[pairNode] := -1;
+  ASTRight[Result] := pairNode;
+end;
+
+{ SlGet(self, off): Int64 — read a machine word from the instance. }
+function GenSlGet(selfSym, off: Integer): Integer;
+begin
+  Result := GenMakeCall6(FindProc('SlGet'), tyInt64,
+    GenMakeIdent(selfSym, tyPointer), GenMakeIntLit(off), -1, -1, -1, -1);
+end;
+
+{ SlSet(self, off, val) — write a machine word into the instance (statement). }
+function GenSlSetStmt(selfSym, off, valNode: Integer): Integer;
+begin
+  Result := GenMakeCall6(FindProc('SlSet'), tyInt64,
+    GenMakeIdent(selfSym, tyPointer), GenMakeIntLit(off), valNode, -1, -1, -1);
+end;
+
+{ Does the subtree contain a `yield`? }
+function SLHasYield(node: Integer): Boolean;
+begin
+  if node < 0 then begin Result := False; Exit; end;
+  if ASTKind[node] = AN_YIELD then begin Result := True; Exit; end;
+  Result := SLHasYield(ASTLeft[node]) or SLHasYield(ASTRight[node]);
+end;
+
+{ Eligibility: every yield must sit only in flattenable statement positions —
+  top-level / sequence / for-body / while-body / if-branch. A yield anywhere else
+  (case/repeat/with/try, a loop condition or for-bound expression, a call arg) is
+  a hard error under forced `stackless`. }
+procedure SLCheckEligible(node: Integer);
+var pairNode: Integer;
+begin
+  if node < 0 then Exit;
+  case ASTKind[node] of
+    AN_SEQ:
+      begin SLCheckEligible(ASTLeft[node]); SLCheckEligible(ASTRight[node]); end;
+    AN_YIELD: ; { reached only via a good position }
+    AN_IF:
+      begin
+        if SLHasYield(ASTLeft[node]) then
+          Error('stackless generator: yield not allowed in an if-condition');
+        pairNode := ASTRight[node];
+        SLCheckEligible(ASTLeft[pairNode]);
+        SLCheckEligible(ASTRight[pairNode]);
+      end;
+    AN_WHILE:
+      begin
+        if SLHasYield(ASTLeft[node]) then
+          Error('stackless generator: yield not allowed in a while-condition');
+        SLCheckEligible(ASTRight[node]);
+      end;
+    AN_FOR:
+      begin
+        pairNode := ASTRight[node];        { pair3: Left=pair1(init,limit), Right=pair2(isDown,body) }
+        if SLHasYield(ASTLeft[pairNode]) then
+          Error('stackless generator: yield not allowed in a for-bound expression');
+        SLCheckEligible(ASTRight[ASTRight[pairNode]]);
+      end;
+    else
+      if SLHasYield(node) then
+        Error('stackless generator: yield only allowed at top level or inside for/while/if (not in this construct)');
+  end;
+end;
+
+{ Build a sequence of SlSet(self, slotOff, localValue) for every persistent slot
+  allocated so far — called at each yield to checkpoint live locals. }
+function SLSaveLocals(selfSym: Integer): Integer;
+var i, head, tail, stmt: Integer;
+begin
+  head := -1; tail := -1;
+  for i := CurGenScopeBase to SymCount - 1 do
+    if SymGenSlot[i] >= 0 then
+    begin
+      stmt := GenSlSetStmt(selfSym, SL_OFF_SLOTS + 8 * SymGenSlot[i],
+                           GenMakeIdent(i, Syms[i].TypeKind));
+      if head < 0 then begin head := GenMakeSeq(stmt, -1); tail := head; end
+      else begin ASTRight[tail] := GenMakeSeq(stmt, -1); tail := ASTRight[tail]; end;
+    end;
+  Result := head;
+end;
+
+{ Build assignments restoring every persistent slot into its local at step entry. }
+function SLRestoreLocals(selfSym: Integer): Integer;
+var i, head, tail, stmt: Integer;
+begin
+  head := -1; tail := -1;
+  for i := CurGenScopeBase to SymCount - 1 do
+    if SymGenSlot[i] >= 0 then
+    begin
+      stmt := GenMakeAssign(GenMakeIdent(i, Syms[i].TypeKind),
+                            GenSlGet(selfSym, SL_OFF_SLOTS + 8 * SymGenSlot[i]));
+      if head < 0 then begin head := GenMakeSeq(stmt, -1); tail := head; end
+      else begin ASTRight[tail] := GenMakeSeq(stmt, -1); tail := ASTRight[tail]; end;
+    end;
+  Result := head;
+end;
+
+function SLNewSlotVar(tk: TTypeKind): Integer;
+begin
+  Result := AllocVar('', tk);
+  SymGenSlot[Result] := CurGenSlotNext;
+  Inc(CurGenSlotNext);
+end;
+
+function SLLower(node, selfSym, retSym: Integer): Integer; forward;
+
+{ yield E -> current:=E; state:=k; save locals; Result:=True; Exit; Lk: }
+function SLLowerYield(node, selfSym, retSym: Integer): Integer;
+var k, resumeLbl, setCur, setState, saveSeq, setRes, exitNode: Integer;
+begin
+  k := CurGenStateCtr; Inc(CurGenStateCtr);
+  if k >= MAX_GEN_STATES then Error('stackless generator: too many yields');
+  resumeLbl := NewSyntheticLabel;
+  GenStateLabelIdx[k] := resumeLbl;
+
+  setCur   := GenSlSetStmt(selfSym, SL_OFF_CURRENT, ASTLeft[node]);
+  setState := GenSlSetStmt(selfSym, SL_OFF_STATE, GenMakeIntLit(k));
+  saveSeq  := SLSaveLocals(selfSym);
+  setRes   := GenMakeAssign(GenMakeIdent(retSym, tyBoolean), GenMakeBoolLit(1));
+  exitNode := AllocNode(AN_EXIT); ASTLeft[exitNode] := -1;
+
+  Result := GenMakeSeq(setCur,
+            GenMakeSeq(setState,
+            chainSeq(saveSeq,
+            GenMakeSeq(setRes,
+            GenMakeSeq(exitNode,
+            GenMakeSeq(GenMakeLabel(resumeLbl), -1))))));
+end;
+
+function SLLowerIf(node, selfSym, retSym: Integer): Integer;
+var pairNode, cond, thenN, elseN, elseLbl, endLbl: Integer;
+    test, thenLo, elseLo: Integer;
+begin
+  pairNode := ASTRight[node];
+  cond  := ASTLeft[node];
+  thenN := ASTLeft[pairNode];
+  elseN := ASTRight[pairNode];
+  elseLbl := NewSyntheticLabel;
+  endLbl  := NewSyntheticLabel;
+  { if (cond = false) goto elseLbl }
+  test := GenMakeIfGoto(GenMakeCmp(Ord(tkEq), cond, GenMakeBoolLit(0)), elseLbl);
+  thenLo := SLLower(thenN, selfSym, retSym);
+  elseLo := SLLower(elseN, selfSym, retSym);
+  Result := GenMakeSeq(test,
+            chainSeq(thenLo,
+            GenMakeSeq(GenMakeGoto(endLbl),
+            GenMakeSeq(GenMakeLabel(elseLbl),
+            chainSeq(elseLo,
+            GenMakeSeq(GenMakeLabel(endLbl), -1))))));
+end;
+
+function SLLowerWhile(node, selfSym, retSym: Integer): Integer;
+var cond, body, topLbl, endLbl, test, bodyLo: Integer;
+begin
+  cond := ASTLeft[node];
+  body := ASTRight[node];
+  topLbl := NewSyntheticLabel;
+  endLbl := NewSyntheticLabel;
+  test := GenMakeIfGoto(GenMakeCmp(Ord(tkEq), cond, GenMakeBoolLit(0)), endLbl);
+  bodyLo := SLLower(body, selfSym, retSym);
+  Result := GenMakeSeq(GenMakeLabel(topLbl),
+            GenMakeSeq(test,
+            chainSeq(bodyLo,
+            GenMakeSeq(GenMakeGoto(topLbl),
+            GenMakeSeq(GenMakeLabel(endLbl), -1)))));
+end;
+
+function SLLowerFor(node, selfSym, retSym: Integer): Integer;
+var pair1, pair2, forVarNode, varSym: Integer;
+    initN, limitN, isDown, body: Integer;
+    limSym, topLbl, endLbl: Integer;
+    setVar, setLim, test, bodyLo, incN, cmpOp: Integer;
+    vTk: TTypeKind;
+begin
+  forVarNode := ASTLeft[node];
+  varSym := ASTIVal[forVarNode];
+  vTk := Syms[varSym].TypeKind;
+  pair1 := ASTLeft[ASTRight[node]];      { (init, limit) }
+  pair2 := ASTRight[ASTRight[node]];     { (isDown, body) }
+  initN  := ASTLeft[pair1];
+  limitN := ASTRight[pair1];
+  isDown := ASTIVal[ASTLeft[pair2]];
+  body   := ASTRight[pair2];
+
+  limSym := SLNewSlotVar(tyInt64);       { evaluate limit once (persistent) }
+  topLbl := NewSyntheticLabel;
+  endLbl := NewSyntheticLabel;
+
+  setVar := GenMakeAssign(GenMakeIdent(varSym, vTk), initN);
+  setLim := GenMakeAssign(GenMakeIdent(limSym, tyInt64), limitN);
+
+  if isDown <> 0 then cmpOp := Ord(tkLt) else cmpOp := Ord(tkGt);
+  { ascending: exit when var > limit; descending: exit when var < limit }
+  test := GenMakeIfGoto(
+            GenMakeCmp(cmpOp, GenMakeIdent(varSym, vTk), GenMakeIdent(limSym, tyInt64)),
+            endLbl);
+
+  bodyLo := SLLower(body, selfSym, retSym);
+
+  if isDown <> 0 then
+    incN := GenMakeAssign(GenMakeIdent(varSym, vTk),
+              GenMakeArith(Ord(tkMinus), GenMakeIdent(varSym, vTk), GenMakeIntLit(1)))
+  else
+    incN := GenMakeAssign(GenMakeIdent(varSym, vTk),
+              GenMakeArith(Ord(tkPlus), GenMakeIdent(varSym, vTk), GenMakeIntLit(1)));
+
+  Result := GenMakeSeq(setVar,
+            GenMakeSeq(setLim,
+            GenMakeSeq(GenMakeLabel(topLbl),
+            GenMakeSeq(test,
+            chainSeq(bodyLo,
+            GenMakeSeq(incN,
+            GenMakeSeq(GenMakeGoto(topLbl),
+            GenMakeSeq(GenMakeLabel(endLbl), -1))))))));
+end;
+
+{ Lower one statement (recursively). Constructs WITHOUT a yield are emitted
+  verbatim — they reference the restored stack locals like any code. Constructs
+  that (transitively) contain a yield are flattened to goto/label form. }
+function SLLower(node, selfSym, retSym: Integer): Integer;
+begin
+  if node < 0 then begin Result := -1; Exit; end;
+  if ASTKind[node] = AN_SEQ then
+  begin
+    Result := GenMakeSeq(SLLower(ASTLeft[node], selfSym, retSym),
+                         SLLower(ASTRight[node], selfSym, retSym));
+    Exit;
+  end;
+  if not SLHasYield(node) then begin Result := node; Exit; end;
+  case ASTKind[node] of
+    AN_YIELD: Result := SLLowerYield(node, selfSym, retSym);
+    AN_IF:    Result := SLLowerIf(node, selfSym, retSym);
+    AN_WHILE: Result := SLLowerWhile(node, selfSym, retSym);
+    AN_FOR:   Result := SLLowerFor(node, selfSym, retSym);
+    else      Error('stackless generator: unsupported construct around yield');
+  end;
+end;
+
+{ Build the full step-function body AST for a stackless generator proc `pi`.
+  Persistent slots for the declared params + body locals must already be assigned
+  (SymGenSlot). Returns the AST to CompileAST; sets CurGenSlotNext to its final
+  value (caller derives ProcGenInstSize). }
+function BuildStacklessStep(bodyAST, pi: Integer): Integer;
+var selfSym, retSym, bodyLo, dispatch, dtail, restore: Integer;
+    setDone, setRes, k, stmt: Integer;
+begin
+  if (FindProc('SlGet') < 0) or (FindProc('SlSet') < 0) then
+    Error('stackless generator: the slgen unit is not in scope (add `uses slgen;`)');
+  selfSym := Procs[pi].Params[0].SymIdx;
+  retSym  := Procs[pi].RetSymIdx;
+
+  CurGenStateCtr := 1;                   { state 0 = first entry (falls through) }
+  bodyLo := SLLower(bodyAST, selfSym, retSym);
+
+  { Dispatch: for each yield-state k, if state=k goto its resume label. }
+  dispatch := -1; dtail := -1;
+  for k := 1 to CurGenStateCtr - 1 do
+  begin
+    stmt := GenMakeIfGoto(
+              GenMakeCmp(Ord(tkEq), GenSlGet(selfSym, SL_OFF_STATE), GenMakeIntLit(k)),
+              GenStateLabelIdx[k]);
+    if dispatch < 0 then begin dispatch := GenMakeSeq(stmt, -1); dtail := dispatch; end
+    else begin ASTRight[dtail] := GenMakeSeq(stmt, -1); dtail := ASTRight[dtail]; end;
+  end;
+
+  restore := SLRestoreLocals(selfSym);
+
+  { Fall-off: mark exhausted, return False. }
+  setDone := GenSlSetStmt(selfSym, SL_OFF_DONE, GenMakeIntLit(1));
+  setRes  := GenMakeAssign(GenMakeIdent(retSym, tyBoolean), GenMakeBoolLit(0));
+
+  Result := chainSeq(restore,
+            chainSeq(dispatch,
+            chainSeq(bodyLo,
+            GenMakeSeq(setDone,
+            GenMakeSeq(setRes, -1)))));
+end;
+
+{ Assign a persistent instance slot to each declared param + body local of a
+  stackless generator proc (skipping the hidden self param and the Boolean
+  Result). Order = sym-allocation order, so declared params land in slots
+  0..paramCnt-1 — matching how SlAlloc stores the for-in arguments. Sets
+  CurGenSlotNext; the transform appends synthetic temps after these. v1: only
+  ordinal/pointer-sized locals (managed/aggregate locals would need per-element
+  ARC across yields — a documented later restriction). }
+procedure AssignStacklessSlots(pi: Integer);
+var i, selfS, retS: Integer; tk: TTypeKind;
+begin
+  selfS := Procs[pi].Params[0].SymIdx;
+  retS  := Procs[pi].RetSymIdx;
+  CurGenSlotNext := 0;
+  CurGenScopeBase := Procs[pi].ScopeBase;
+  for i := Procs[pi].ScopeBase to SymCount - 1 do
+  begin
+    if (i = selfS) or (i = retS) then Continue;
+    if (Syms[i].Kind <> skParam) and (Syms[i].Kind <> skLocal) then Continue;
+    tk := Syms[i].TypeKind;
+    if Syms[i].IsArray or Syms[i].IsRef or
+       (tk = tyString) or (tk = tyAnsiString) or (tk = tyRecord) or
+       (tk = tySet) or (tk = tyVariant) then
+      Error('stackless generator: only ordinal/pointer locals are supported (v1)');
+    SymGenSlot[i] := CurGenSlotNext;
+    Inc(CurGenSlotNext);
+  end;
 end;
 
 function ParseForStatementAST: Integer;
@@ -6121,8 +6556,10 @@ var
   doneArgs, doneParam, isArr, isByRef, isConst, declOverload, isClassKeyword, isStaticMethod: Boolean;
   needsProcCleanupFrame, savedProcCleanupFrameActive: Boolean;
   isAsmFunc: Boolean;
-  isGenerator: Boolean;
-  savedGenIsGen, savedGenSeen: Boolean; savedGenSelf, savedGenTry: Integer;
+  isGenerator, isStackless: Boolean;
+  savedGenIsGen, savedGenSeen, savedGenStackless: Boolean;
+  savedGenSelf, savedGenTry, savedGenStateCtr, savedGenSlotNext: Integer;
+  genBodyAST, genStepAST, declElemTk: Integer;
   genSelfIdx, gpi: Integer;
   asmNode: Integer;
   startIdx, idx: Integer;
@@ -6135,6 +6572,7 @@ begin
   isClassKeyword := False;
   isAsmFunc := False;
   isGenerator := False;
+  isStackless := False;
   if CurTok.Kind = tkClass then
   begin
     isClassKeyword := True;
@@ -6325,9 +6763,8 @@ begin
     if CurTok.Kind = tkOverload then declOverload := True;
     if (CurTok.Kind = tkIdent) and CaseEqual(CurTok.SVal, 'assembler') then isAsmFunc := True;
     if (CurTok.Kind = tkIdent) and CaseEqual(CurTok.SVal, 'generator') then isGenerator := True;
-    if (CurTok.Kind = tkIdent) and CaseEqual(CurTok.SVal, 'stackless') then
-      Error('generator: stackless backend not implemented yet (v1 is stackful only)');
-    { `stackful` is the only implemented v1 strategy; accept it as a no-op modifier. }
+    if (CurTok.Kind = tkIdent) and CaseEqual(CurTok.SVal, 'stackless') then isStackless := True;
+    { `stackful` is the implemented default strategy; accept it as a no-op modifier. }
     Next;
     Eat(tkSemicolon);
   end;
@@ -6335,6 +6772,8 @@ begin
     Error('generator must be a function (its result type is the yielded element type)');
   if isGenerator and isAsmFunc then
     Error('a routine cannot be both generator and assembler');
+  if isStackless and not isGenerator then
+    Error('stackless directive is only valid on a generator');
 
   { External binding: `procedure foo(...); cdecl; external 'libname.so' [name 'sym'];`
     Marks the routine as a dynamically-linked import. Symbol defaults to the
@@ -6403,6 +6842,45 @@ begin
     pbyref[0] := False;
     pNDims[0] := 0;
     nparams := nparams + 1;
+  end;
+
+  { Stackless generator: rewrite the ABI to `function(__genself: Pointer): Boolean`.
+    The declared params/result describe the produced SEQUENCE; the step function
+    itself takes the heap-instance pointer and returns has-next. Declared params
+    shift to 1..n and become persistent locals (restored from the instance each
+    step); the declared (yielded) element type is remembered for for-in loop-var
+    typing. }
+  if isStackless then
+  begin
+    if methOwnerCi >= 0 then
+      Error('stackless generator methods are not supported (v1)');
+    declElemTk := Ord(retType);
+    for i := nparams downto 1 do
+    begin
+      pnames[i] := pnames[i-1];
+      ptypes[i] := ptypes[i-1];
+      ptypesRec[i] := ptypesRec[i-1];
+      ptypesPtrElemTk[i] := ptypesPtrElemTk[i-1];
+      ptypesPtrElemRec[i] := ptypesPtrElemRec[i-1];
+      parr[i]   := parr[i-1];
+      pbyref[i] := pbyref[i-1];
+      pNDims[i] := pNDims[i-1];
+      for pdi := 0 to MAX_ARR_DIMS - 1 do
+      begin
+        pDimLo[i * MAX_ARR_DIMS + pdi]   := pDimLo[(i-1) * MAX_ARR_DIMS + pdi];
+        pDimSpan[i * MAX_ARR_DIMS + pdi] := pDimSpan[(i-1) * MAX_ARR_DIMS + pdi];
+      end;
+    end;
+    pnames[0] := '__genself';
+    ptypes[0] := tyPointer;
+    ptypesRec[0] := REC_NONE;
+    ptypesPtrElemTk[0] := tyUnknown;
+    ptypesPtrElemRec[0] := REC_NONE;
+    parr[0]   := False;
+    pbyref[0] := False;
+    pNDims[0] := 0;
+    nparams := nparams + 1;
+    retType := tyBoolean;
   end;
 
   if (name = 'LoadFile') or (name = 'loadfile') then
@@ -6481,7 +6959,15 @@ begin
   ProcRetPtrElemTk[pi] := retPtrElemTk;
   ProcRetPtrElemRec[pi] := retPtrElemRec;
   ProcIsGenerator[pi] := isGenerator;
-  if isGenerator and (nparams > CO_MAX_PARAMS) then
+  ProcIsStackless[pi] := isStackless;
+  if isStackless then
+  begin
+    ProcGenElemTk[pi] := IntToTypeKind(declElemTk);
+    ProcGenParamCnt[pi] := nparams - 1;   { exclude the injected __genself }
+    if (nparams - 1) > CO_MAX_PARAMS then
+      Error('generator: at most 4 parameters in v1');
+  end
+  else if isGenerator and (nparams > CO_MAX_PARAMS) then
     Error('generator: at most 4 parameters in v1');
   if retIsDynArr then Procs[pi].RetType := tyPointer; { 8-byte heap handle ABI }
   if TargetArch = TARGET_XTENSA then
@@ -6632,14 +7118,20 @@ begin
   savedGenSelf  := CurGenSelfSym;
   savedGenSeen  := CurGenSeenYield;
   savedGenTry   := GenTryDepth;
+  savedGenStackless := CurProcIsStackless;
+  savedGenStateCtr  := CurGenStateCtr;
+  savedGenSlotNext  := CurGenSlotNext;
   CurProcIsGenerator := isGenerator;
+  CurProcIsStackless := isStackless;
   CurGenSelfSym := -1;
   CurGenSeenYield := False;
   GenTryDepth := 0;
-  if isGenerator then
+  if isGenerator and not isStackless then
   begin
+    { Stackful lowering: the body runs on a heap coroutine stack, swapped in by
+      CoSwitch (x86-64 asm). The instance pointer arrives in the rbx slot. }
     if TargetArch <> TARGET_X86_64 then
-      Error('generator: only the x86-64 target is supported in v1');
+      Error('generator: only the x86-64 target is supported for the stackful backend (use `stackless` for other targets)');
     EnableCoroutineRuntime;
     genSelfIdx := AllocVar('', tyPointer);   { hidden self pointer }
     CurGenSelfSym := genSelfIdx;
@@ -7142,7 +7634,7 @@ begin
     initial frame's rbx slot, set by CoAlloc). Copy it into the hidden self
     local, then load each declared param from the instance (the ABI param regs
     hold garbage since there was no real call). }
-  if isGenerator then
+  if isGenerator and not isStackless then
   begin
     { mov [rbp+selfOff], rbx }
     EmitB($48); EmitB($89); EmitB($9D); EmitI32(Syms[CurGenSelfSym].Offset);
@@ -7180,6 +7672,25 @@ begin
     CompileAST(asmNode);
     ASTNodeCount := 0;
   end
+  else if isStackless then
+  begin
+    { Stackless generator: parse the body to AST, verify yield placement, assign
+      persistent instance slots, transform to a flat goto/label state machine,
+      and compile that as the step function. No asm, no coroutine stack — runs on
+      every target through the shared IR. }
+    Expect(tkBegin, 'begin');
+    genBodyAST := ParseBlockAST;
+    Expect(tkEnd, 'end');
+    Eat(tkSemicolon);
+    if not CurGenSeenYield then
+      Error('generator has no yield');
+    SLCheckEligible(genBodyAST);
+    AssignStacklessSlots(pi);
+    genStepAST := BuildStacklessStep(genBodyAST, pi);
+    ProcGenInstSize[pi] := SL_OFF_SLOTS + 8 * CurGenSlotNext;
+    CompileAST(genStepAST);
+    ASTNodeCount := 0;
+  end
   else
   begin
     Expect(tkBegin, 'begin');
@@ -7193,7 +7704,7 @@ begin
     sees done and stops, never resuming this stack). Emitted before the normal
     epilogue, which is therefore unreachable for a generator. Validation: a
     generator with no yield is almost certainly a mistake. }
-  if isGenerator then
+  if isGenerator and not isStackless then
   begin
     if not CurGenSeenYield then
       Error('generator has no yield');
@@ -7243,9 +7754,12 @@ begin
   CurProc   := -1;
   CurSelfClass := REC_NONE;
   CurProcIsGenerator := savedGenIsGen;
+  CurProcIsStackless := savedGenStackless;
   CurGenSelfSym := savedGenSelf;
   CurGenSeenYield := savedGenSeen;
   GenTryDepth := savedGenTry;
+  CurGenStateCtr := savedGenStateCtr;
+  CurGenSlotNext := savedGenSlotNext;
 end;
 
 function LowerCase(const s: AnsiString): AnsiString;

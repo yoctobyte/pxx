@@ -208,6 +208,18 @@ const
   CO_STACK_BYTES   = 65536;{ per-generator heap stack }
   CO_MAX_PARAMS    = 4;    { v1: generators take up to 4 (Int64-width) params }
 
+  { Stackless-generator instance layout (see lib/rtl/slgen.pas + the stackless
+    state-machine transform in parser.inc). Shares CURRENT/DONE offsets with the
+    stackful layout so for-in reads the value/done flag identically for either
+    strategy; only the advance step differs (CoSwitch vs a direct step call).
+    SL_OFF_STATE reuses the unused GENCTX slot. Persistent slots (declared params
+    then body locals, one machine word each) start at SL_OFF_SLOTS. }
+  SL_OFF_STATE     = 0;    { resume state; 0 = not yet started }
+  SL_OFF_CURRENT   = 16;   { = CO_OFF_CURRENT }
+  SL_OFF_DONE      = 24;   { = CO_OFF_DONE }
+  SL_OFF_SLOTS     = 48;   { = CO_OFF_PARAMS; params+locals, 8 bytes each }
+  MAX_GEN_STATES   = 1024; { max yields in one stackless generator body }
+
   { Variant tag (VType) values, stored in the first 8 bytes of a tyVariant slot.
     Payload (next 8 bytes) interpreted per tag. Closed scalar set; vtObject is a
     reserved seam for the future class-boxing tier (see lib/rtl/anybox.pas). }
@@ -600,6 +612,7 @@ var
   SymCaseSensitive : array[0..MAX_SYMS-1] of Boolean; { match this symbol name case-sensitively }
   SymUnitIdx : array[0..MAX_SYMS-1] of Integer; { Strs[] unit name, or -1 for main/local compiler-generated symbols }
   SymDynDepth : array[0..MAX_SYMS-1] of Integer; { dynamic-array nesting: 0=not dynamic, 1=array of T, 2=array of array of T, ... }
+  SymGenSlot  : array[0..MAX_SYMS-1] of Integer; { stackless generator: persistent-slot index for a local that must survive yields; -1 = not persisted }
   { 2-D fixed array flattened to 1-D storage: m[i,j] / m[i][j] index as
     (i-lo1)*span2 + (j-lo2). Default False/0 (single-dimension array). }
   { N-D fixed array flattened to 1-D storage; element [i0..iN-1] linearises to
@@ -629,6 +642,10 @@ var
   ProcAggregateDestSym : array[0..MAX_PROCS-1] of Integer; { hidden caller-result pointer local, or -1 }
   ProcRetIsDynArray : array[0..MAX_PROCS-1] of Boolean; { result is `array of T` (pointer-sized heap handle) }
   ProcIsGenerator : array[0..MAX_PROCS-1] of Boolean;   { `; generator;` routine — compiled as a stackful-coroutine body (see coroutine.pas) }
+  ProcIsStackless : array[0..MAX_PROCS-1] of Boolean;   { `; generator; stackless;` — compiled as a state-machine step fn (see slgen.pas) }
+  ProcGenElemTk   : array[0..MAX_PROCS-1] of TTypeKind; { stackless: declared (yielded) element type; the proc's own RetType is Boolean (has-next) }
+  ProcGenParamCnt : array[0..MAX_PROCS-1] of Integer;   { stackless: declared param count (the ABI param is the single hidden instance ptr) }
+  ProcGenInstSize : array[0..MAX_PROCS-1] of Integer;   { stackless: instance byte size (header + persistent slots) }
   ProcRetElemTk : array[0..MAX_PROCS-1] of TTypeKind;    { element type of a dyn-array result }
   ProcRetElemRec : array[0..MAX_PROCS-1] of Integer;     { element record id of a dyn-array result }
   ProcRetPtrElemTk : array[0..MAX_PROCS-1] of Integer;   { pointed-at TTypeKind ord when the result is a typed pointer (tyUnknown otherwise) }
@@ -828,6 +845,11 @@ var
   CurGenSelfSym   : Integer;  { sym idx of the generator body's hidden self-pointer local }
   CurGenSeenYield : Boolean;  { a yield was seen in the current generator body (validation) }
   GenTryDepth     : Integer;  { try-nesting while parsing a generator body (yield-in-try is illegal in v1) }
+  CurProcIsStackless : Boolean; { parsing the body of a `; generator; stackless;` routine }
+  CurGenStateCtr  : Integer;  { next state number to assign to a yield in the current stackless body }
+  CurGenSlotNext  : Integer;  { next persistent-slot index (offset = SL_OFF_SLOTS + 8*idx) }
+  CurGenScopeBase : Integer;  { first sym idx of the current stackless generator's scope (save/restore only its own slots, never leaked globals) }
+  GenStateLabelIdx : array[0..MAX_GEN_STATES-1] of Integer; { resume label (GotoLabel slot) per state }
   AnsiStrReleaseAddr : Integer;
   AnsiStrRetainAddr  : Integer;
   AnsiStrFromLiteralAddr : Integer;

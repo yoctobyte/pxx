@@ -2428,35 +2428,55 @@ begin
 
     AN_LABEL:
     begin
-      off := ASTSOffset[node];
-      len := ASTSLen[node];
-      lbId := -1;
-      for i := 0 to GotoLabelCount - 1 do
-        if TokSlicesMatch(GotoLabelNOff[i], GotoLabelNLen[i], off, len) then
-        begin
-          if GotoLabelIRId[i] = -1 then
-            GotoLabelIRId[i] := IRNewLabel;
-          lbId := GotoLabelIRId[i];
-          Break;
-        end;
-      if lbId = -1 then Error('AN_LABEL: undeclared label');
-      Result := IRAppend(IR_LABEL, -1, -1, -1, lbId, 0);
+      { Synthetic label (stackless generator transform): ASTSOffset = -1 sentinel,
+        ASTIVal carries the GotoLabel slot index directly (no name match). }
+      if ASTSOffset[node] = -1 then
+      begin
+        i := ASTIVal[node];
+        if GotoLabelIRId[i] = -1 then GotoLabelIRId[i] := IRNewLabel;
+        Result := IRAppend(IR_LABEL, -1, -1, -1, GotoLabelIRId[i], 0);
+      end
+      else
+      begin
+        off := ASTSOffset[node];
+        len := ASTSLen[node];
+        lbId := -1;
+        for i := 0 to GotoLabelCount - 1 do
+          if TokSlicesMatch(GotoLabelNOff[i], GotoLabelNLen[i], off, len) then
+          begin
+            if GotoLabelIRId[i] = -1 then
+              GotoLabelIRId[i] := IRNewLabel;
+            lbId := GotoLabelIRId[i];
+            Break;
+          end;
+        if lbId = -1 then Error('AN_LABEL: undeclared label');
+        Result := IRAppend(IR_LABEL, -1, -1, -1, lbId, 0);
+      end;
     end;
     AN_GOTO:
     begin
-      off := ASTSOffset[node];
-      len := ASTSLen[node];
-      lbId := -1;
-      for i := 0 to GotoLabelCount - 1 do
-        if TokSlicesMatch(GotoLabelNOff[i], GotoLabelNLen[i], off, len) then
-        begin
-          if GotoLabelIRId[i] = -1 then
-            GotoLabelIRId[i] := IRNewLabel;
-          lbId := GotoLabelIRId[i];
-          Break;
-        end;
-      if lbId = -1 then Error('AN_GOTO: undefined label');
-      Result := IRAppend(IR_JUMP, lbId, -1, -1, 0, 0);
+      if ASTSOffset[node] = -1 then
+      begin
+        i := ASTIVal[node];
+        if GotoLabelIRId[i] = -1 then GotoLabelIRId[i] := IRNewLabel;
+        Result := IRAppend(IR_JUMP, GotoLabelIRId[i], -1, -1, 0, 0);
+      end
+      else
+      begin
+        off := ASTSOffset[node];
+        len := ASTSLen[node];
+        lbId := -1;
+        for i := 0 to GotoLabelCount - 1 do
+          if TokSlicesMatch(GotoLabelNOff[i], GotoLabelNLen[i], off, len) then
+          begin
+            if GotoLabelIRId[i] = -1 then
+              GotoLabelIRId[i] := IRNewLabel;
+            lbId := GotoLabelIRId[i];
+            Break;
+          end;
+        if lbId = -1 then Error('AN_GOTO: undefined label');
+        Result := IRAppend(IR_JUMP, lbId, -1, -1, 0, 0);
+      end;
     end;
     AN_PAIR, AN_SEQ:
     begin
