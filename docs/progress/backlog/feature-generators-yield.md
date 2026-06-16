@@ -135,7 +135,8 @@ stackful — no grammar change to add it.
    iterator protocol + `for-in` + all validation rules (no-yield, yield-outside,
    type-mismatch, no-yield-in-try). Stackful lowering only.
 3. Make arrays / collections implement the same iterator protocol (general
-   `for-in`).
+   `for-in`). **Split out → feature-for-in-iteration.md** (additive; generators
+   do not depend on it).
 4. **v2 stackless backend** behind `; generator; stackless;` — the state-machine
    transform. Same surface.
 5. **v3 auto-selection** (eligible → stackless, else stackful); keep the force
