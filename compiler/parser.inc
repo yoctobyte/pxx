@@ -3337,9 +3337,9 @@ end;
 function ParseCaseStatementAST: Integer;
 var
   condNode, branchSeq, lastBranch, branchPair, labelsHead, lastLabel, labelValNode: Integer;
-  stmtNode, node, si: Integer;
+  stmtNode, node, si, hiNode: Integer;
   hasElse: Boolean;
-  cv: Int64;
+  cv, cvHi: Int64;
 begin
   ParseExpr; condNode := CurASTNode;
   Expect(tkOf, 'of');
@@ -3392,6 +3392,30 @@ begin
 
         labelValNode := AllocNode(AN_INT_LIT);
         ASTIVal[labelValNode] := cv;
+
+        { Range label `lo..hi`: stash hi in a second AN_INT_LIT hung off
+          ASTRight of the value node; the IR lowering reads it as a [lo,hi]
+          inclusive range test instead of a single equality. }
+        if Eat(tkDotDot) then
+        begin
+          if CurTok.Kind = tkInteger then cvHi := CurTok.IVal
+          else if CurTok.Kind = tkString then
+          begin
+            if Length(CurTok.SVal) = 0 then Error('case string label must not be empty');
+            cvHi := Ord(CurTok.SVal[1]);
+          end
+          else if CurTok.Kind = tkIdent then
+          begin
+            si := FindSym(CurTok.SVal);
+            if (si >= 0) and (Syms[si].Kind = skConst) then cvHi := Syms[si].ConstVal
+            else Error('case range upper bound must be constant');
+          end
+          else Error('expected case range upper bound');
+          Next;
+          hiNode := AllocNode(AN_INT_LIT);
+          ASTIVal[hiNode] := cvHi;
+          ASTRight[labelValNode] := hiNode;
+        end;
 
         if ASTLeft[lastLabel] = -1 then
           ASTLeft[lastLabel] := labelValNode

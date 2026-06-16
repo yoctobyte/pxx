@@ -2102,12 +2102,32 @@ begin
           while labelNode <> -1 do
           begin
             cv := ASTIVal[ASTLeft[labelNode]];
-            constValNode := IRAppend(IR_CONST_INT, -1, -1, -1, cv, Ord(tyInteger));
-            cmpNode := IRAppend(IR_BINOP, selectorValNode, constValNode, Ord(tkNeq), 0, Ord(tyBoolean));
-            condJmpNode := IRAppend(IR_JUMP_IF_FALSE, clauseBodyLabel, cmpNode, -1, 0, 0);
-            if first < 0 then first := condJmpNode;
-            last := condJmpNode;
-            
+            if ASTRight[ASTLeft[labelNode]] <> -1 then
+            begin
+              { Range label lo..hi: enter the body when lo <= selector <= hi.
+                Skip to elseLabel (this label-test's exit) when either bound
+                fails; reaching the unconditional jump means in-range. }
+              hi := ASTIVal[ASTRight[ASTLeft[labelNode]]];
+              elseLabel := IRNewLabel;
+              constValNode := IRAppend(IR_CONST_INT, -1, -1, -1, cv, Ord(tyInteger));
+              cmpNode := IRAppend(IR_BINOP, selectorValNode, constValNode, Ord(tkGe), 0, Ord(tyBoolean));
+              condJmpNode := IRAppend(IR_JUMP_IF_FALSE, elseLabel, cmpNode, -1, 0, 0);
+              if first < 0 then first := condJmpNode;
+              constValNode := IRAppend(IR_CONST_INT, -1, -1, -1, hi, Ord(tyInteger));
+              cmpNode := IRAppend(IR_BINOP, selectorValNode, constValNode, Ord(tkLe), 0, Ord(tyBoolean));
+              IRAppend(IR_JUMP_IF_FALSE, elseLabel, cmpNode, -1, 0, 0);
+              IRAppend(IR_JUMP, clauseBodyLabel, -1, -1, 0, 0);
+              last := IRAppend(IR_LABEL, -1, -1, -1, elseLabel, 0);
+            end
+            else
+            begin
+              constValNode := IRAppend(IR_CONST_INT, -1, -1, -1, cv, Ord(tyInteger));
+              cmpNode := IRAppend(IR_BINOP, selectorValNode, constValNode, Ord(tkNeq), 0, Ord(tyBoolean));
+              condJmpNode := IRAppend(IR_JUMP_IF_FALSE, clauseBodyLabel, cmpNode, -1, 0, 0);
+              if first < 0 then first := condJmpNode;
+              last := condJmpNode;
+            end;
+
             labelNode := ASTRight[labelNode];
           end;
           
