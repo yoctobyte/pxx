@@ -556,7 +556,8 @@ begin
     PatchDataU64(MethodFixups[i].DataPos, addr);
   end;
 
-  { @proc: patch each `mov rax, imm64` with the routine's absolute code address }
+  { @proc: patch each `mov rax, imm64` (x86-64) / 8-byte literal (aarch64) with
+    the routine's absolute code address. }
   for i := 0 to ProcAddrFixCount-1 do
   begin
     addr := entry + Procs[ProcAddrFix[i].ProcIdx].BodyAddr;
@@ -619,15 +620,15 @@ begin
   begin
     if ExternalCount > 0 then
       Error('target i386: external (dynamic) symbols not yet supported');
-    if (MethodFixCount > 0) or (ProcAddrFixCount > 0) then
-      Error('target i386: method/proc-address fixups not yet supported');
+    if MethodFixCount > 0 then
+      Error('target i386: method-pointer fixups not yet supported');
   end;
   if TargetArch = TARGET_ARM32 then
   begin
     if ExternalCount > 0 then
       Error('target arm32: external (dynamic) symbols not yet supported');
-    if (MethodFixCount > 0) or (ProcAddrFixCount > 0) then
-      Error('target arm32: method/proc-address fixups not yet supported');
+    if MethodFixCount > 0 then
+      Error('target arm32: method-pointer fixups not yet supported');
   end;
   if (TargetArch = TARGET_XTENSA) or (TargetArch = TARGET_RISCV32) then
   begin
@@ -659,6 +660,14 @@ begin
   begin
     addr := bssBase + GlobFix[i].BSSoff;
     Patch32(GlobFix[i].CodePos, addr);
+  end;
+
+  { @proc: 32-bit absolute code address (i386 `mov eax,imm32` / arm32 literal
+    word) patched in place. }
+  for i := 0 to ProcAddrFixCount-1 do
+  begin
+    addr := entry + Procs[ProcAddrFix[i].ProcIdx].BodyAddr;
+    Patch32(ProcAddrFix[i].CodePos, addr);
   end;
 
   { Data->data pointer relocations (RTTI/layout blobs). Slots are 8 bytes; the

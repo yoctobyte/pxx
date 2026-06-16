@@ -2088,6 +2088,42 @@ begin
         end;
       end;
 
+    IR_CALL_IND:
+      begin
+        { Indirect call through a proc-typed value. Same caller-cleanup cdecl
+          push convention as IR_CALL; the callee address is evaluated last (args
+          already on the stack, so a simple proc-var load can't disturb them)
+          and reached via `call eax`. }
+        argBytes := 0;
+        argNode := IRB[node];
+        while argNode <> -1 do
+        begin
+          IREmitNode386(IRA[argNode]);               { eax = arg }
+          EmitB($50);                                { push eax }
+          Inc(argBytes, 4);
+          argNode := IRB[argNode];
+        end;
+        IREmitNode386(IRA[node]);                    { eax = callee addr }
+        EmitB($FF); EmitB($D0);                      { call eax }
+        if argBytes > 0 then
+        begin
+          EmitB($81); EmitB($C4); EmitI32(argBytes); { add esp, argBytes }
+        end;
+      end;
+
+    IR_PROCADDR:
+      begin
+        { @proc -> mov eax, imm32 (absolute code address, patched at finalize). }
+        if ProcExternal[IRA[node]] then
+          Error('@ on external routine not supported; wrap it in a local routine');
+        EmitB($B8);                                  { mov eax, imm32 }
+        if ProcAddrFixCount >= MAX_CALLFIX then Error('proc addr fixup overflow');
+        ProcAddrFix[ProcAddrFixCount].CodePos := CodeLen;
+        ProcAddrFix[ProcAddrFixCount].ProcIdx := IRA[node];
+        Inc(ProcAddrFixCount);
+        EmitI32(0);
+      end;
+
     IR_FIELD:
       begin
         IREmitNode386(IRA[node]);                    { base address -> eax }
@@ -2831,6 +2867,12 @@ begin
       IR_CALL:
         begin
           if IRIVal[i] = 1 then                      { statement-level call }
+            IREmitNode386(i);
+        end;
+
+      IR_CALL_IND:
+        begin
+          if IRStmtRoot[i] then                      { statement-level indirect call }
             IREmitNode386(i);
         end;
 

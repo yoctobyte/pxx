@@ -1660,6 +1660,51 @@ begin
         end;
       end;
 
+    IR_CALL_IND:
+      begin
+        { Indirect call through a proc-typed value. Word-based args (<=4 words,
+          one per scalar/pointer arg). Push the callee first (deepest), push args,
+          load r0..r3 from the arg slots, load the callee into r9, drop the whole
+          block, then `blx r9`. (Int64-by-value / managed args via a proc pointer
+          are not handled in v1.) }
+        pi := Integer(IRIVal[node]);                 { signature proc index }
+        if Procs[pi].ParamCount > 4 then
+          Error('target arm32: indirect call with more than 4 parameters not supported');
+        IREmitNodeArm32(IRA[node]);                  { r0 = callee address }
+        EmitI32($E92D0001);                          { push {r0} (callee, deepest) }
+        argNode := IRB[node];
+        j := 0;
+        while argNode <> -1 do
+        begin
+          IREmitNodeArm32(IRA[argNode]);
+          EmitI32($E92D0001);                        { push {r0} }
+          Inc(j, 1);
+          argNode := IRB[argNode];
+        end;
+        for i := 0 to j - 1 do
+          if i < 4 then
+            EmitI32($E59D0000 or (i shl 12) or ((j - 1 - i) * 4)); { ldr r[i], [sp, #off] }
+        EmitI32($E59D9000 or (j * 4));               { ldr r9, [sp, #j*4] (callee) }
+        EmitLoadImmArm32(8, (j + 1) * 4);
+        EmitI32($E08DD008);                          { add sp, sp, r8 (drop args + callee) }
+        EmitI32($E12FFF39);                          { blx r9 }
+      end;
+
+    IR_PROCADDR:
+      begin
+        { @proc -> r0 = absolute code address, via a PC-relative load of a 4-byte
+          literal patched at finalize. }
+        if ProcExternal[IRA[node]] then
+          Error('@ on external routine not supported; wrap it in a local routine');
+        EmitI32($E59F0000);                          { ldr r0, [pc] (literal below) }
+        EmitI32($EA000000);                          { b .+8 (skip the 4-byte literal) }
+        if ProcAddrFixCount >= MAX_CALLFIX then Error('proc addr fixup overflow');
+        ProcAddrFix[ProcAddrFixCount].CodePos := CodeLen;
+        ProcAddrFix[ProcAddrFixCount].ProcIdx := IRA[node];
+        Inc(ProcAddrFixCount);
+        EmitI32(0);                                  { 4-byte literal (patched) }
+      end;
+
     IR_FIELD:
       begin
         IREmitNodeArm32(IRA[node]); { base address -> r0 }
@@ -2269,6 +2314,12 @@ begin
       IR_CALL:
         begin
           if IRIVal[i] = 1 then
+            IREmitNodeArm32(i);
+        end;
+
+      IR_CALL_IND:
+        begin
+          if IRStmtRoot[i] then
             IREmitNodeArm32(i);
         end;
 

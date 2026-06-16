@@ -1467,6 +1467,46 @@ begin
         end;
       end;
 
+    IR_CALL_IND:
+      begin
+        { Indirect call through a proc-typed value. Push the callee address first
+          (deepest temp slot) so arg evaluation can't disturb it, push args, pop
+          args into x0..x7, pop the callee into x16, and `blr x16`. }
+        pi := Integer(IRIVal[node]);                 { signature proc index }
+        if Procs[pi].ParamCount > 8 then
+          Error('target aarch64: indirect call with more than 8 parameters not supported');
+        IREmitNodeAarch64(IRA[node]);                { x0 = callee address }
+        EmitI32($F81F0FE0);                          { str x0, [sp, #-16]! (callee) }
+        argNode := IRB[node];
+        nArgs := 0;
+        while argNode <> -1 do
+        begin
+          IREmitNodeAarch64(IRA[argNode]);
+          EmitI32($F81F0FE0);                        { str x0, [sp, #-16]! }
+          Inc(nArgs);
+          argNode := IRB[argNode];
+        end;
+        for i := nArgs - 1 downto 0 do
+          EmitI32($F84107E0 + i);                    { ldr x[i], [sp], #16 }
+        EmitI32($F84107F0);                          { ldr x16, [sp], #16 (callee) }
+        EmitI32($D63F0200);                          { blr x16 }
+      end;
+
+    IR_PROCADDR:
+      begin
+        { @proc -> x0 = absolute code address, via a PC-relative load of an
+          8-byte literal patched at finalize. }
+        if ProcExternal[IRA[node]] then
+          Error('@ on external routine not supported; wrap it in a local routine');
+        EmitI32($58000040);                          { ldr x0, [pc, #8] (literal below) }
+        EmitI32($14000003);                          { b .+12 (skip 8-byte literal) }
+        if ProcAddrFixCount >= MAX_CALLFIX then Error('proc addr fixup overflow');
+        ProcAddrFix[ProcAddrFixCount].CodePos := CodeLen;
+        ProcAddrFix[ProcAddrFixCount].ProcIdx := IRA[node];
+        Inc(ProcAddrFixCount);
+        EmitI32(0); EmitI32(0);                      { 8-byte literal (patched) }
+      end;
+
     IR_CONST_STR:
       begin
         sVal := GetTokenStrFromRaw(IRA[node], IRB[node]);
@@ -2079,6 +2119,12 @@ begin
       IR_CALL:
         begin
           if IRIVal[i] = 1 then
+            IREmitNodeAarch64(i);
+        end;
+
+      IR_CALL_IND:
+        begin
+          if IRStmtRoot[i] then
             IREmitNodeAarch64(i);
         end;
 

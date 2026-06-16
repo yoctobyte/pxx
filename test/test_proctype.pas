@@ -26,7 +26,9 @@ begin Mul := a * b; end;
 
 procedure Greet(arg: Pointer);
 begin
-  writeln('greet ', Int64(arg));
+  { Integer cast = low 32 bits = 99 on every target (avoids reading 8 bytes from
+    a 4-byte pointer on i386). }
+  writeln('greet ', Integer(arg));
 end;
 
 { Call a proc-typed parameter directly. }
