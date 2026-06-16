@@ -4794,14 +4794,66 @@ begin
 
 procedure ParseConstSection;
 var name: AnsiString; v: Int64;
+    cTk, cElemTk: TTypeKind; cLo, cHi, cIdx, cElem: Integer;
 begin
   Next;
   while CurTok.Kind = tkIdent do
   begin
     name := CurTok.SVal; Next;
-    Expect(tkEq, '=');
-    v := ConstEval;
-    AddConst(name, tyInteger, v);
+    if CurTok.Kind = tkColon then
+    begin
+      { Typed constant: `const Name: type = value | (e0,e1,...)`. FPC typed
+        constants are writable globals with an initial value, so allocate
+        storage and reuse the pending-init machinery (same as a `var = init`).
+        Globals only; constants of ordinal/Int64 element type. }
+      if CurProc >= 0 then
+        Error('local typed constant not supported; use a const expression or a var');
+      Next;
+      if CurTok.Kind = tkArray then
+      begin
+        Next;
+        Expect(tkLBrack, '[');
+        cLo := ConstEval;
+        Expect(tkDotDot, '..');
+        cHi := ConstEval;
+        Expect(tkRBrack, ']');
+        Expect(tkOf, 'of');
+        cElemTk := ParseTypeKind;
+        cIdx := AllocArray(name, cElemTk, cLo, cHi);
+        Expect(tkEq, '=');
+        Expect(tkLParen, '(');
+        cElem := 0;
+        repeat
+          if PendingInitCount >= MAX_PENDING_INITS then Error('too many global initializers');
+          if cElem > (cHi - cLo) then Error('too many array constant elements');
+          PendingInitSym[PendingInitCount]  := cIdx;
+          PendingInitElem[PendingInitCount] := cLo + cElem;
+          PendingInitVal[PendingInitCount]  := ConstEval;
+          PendingInitTk[PendingInitCount]   := Ord(cElemTk);
+          Inc(PendingInitCount);
+          Inc(cElem);
+        until not Eat(tkComma);
+        Expect(tkRParen, ')');
+      end
+      else
+      begin
+        cTk := ParseTypeKind;
+        cIdx := AllocVar(name, cTk);
+        Expect(tkEq, '=');
+        if PendingInitCount >= MAX_PENDING_INITS then Error('too many global initializers');
+        PendingInitSym[PendingInitCount]  := cIdx;
+        PendingInitElem[PendingInitCount] := -1;
+        PendingInitVal[PendingInitCount]  := ConstEval;
+        PendingInitTk[PendingInitCount]   := Ord(cTk);
+        Inc(PendingInitCount);
+      end;
+    end
+    else
+    begin
+      Expect(tkEq, '=');
+      v := ConstEval;
+      AddConst(name, tyInteger, v);
+    end;
     Eat(tkSemicolon);
   end;
 end;
