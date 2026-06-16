@@ -82,6 +82,20 @@ guard into IRLowerCallArg) on the current tree and gdb the FPC-built BUILD stage
 directly — the FPC build crashes too, so it does not need self-host, and it has
 symbols.
 
+Update (later same day): **re-inlined the guard and it no longer reproduces.** A
+flag-based inline (boolean `caHandled` + `not (...)` guards, the body's nested
+`Syms[...]`/`ASTIVal[...]` reads kept shallow, no indexing-heavy early-`Exit`
+expression) self-hosts byte-identical (two-gen fixedpoint OK, code=2002931B). So
+the trigger is sensitive to the *exact* expression shape in the hot function, not
+merely its size — consistent with a wrong-load-width-under-expression-pressure
+mechanism. The original ac6d98f inline (indexing expressions placed directly in
+the arg-lowering path) is what tipped it; this cycle's codegen changes
+(short-circuit, paren-deref) may also have moved the threshold. The
+`TryStaticToOpenArray` helper workaround is kept (committed); the underlying
+load-width selection bug remains latent and unpinned. To pin it, reconstruct the
+*original* indexing-heavy inline shape (not a flag-based rewrite) and gdb the
+FPC-`-g` BUILD stage.
+
 ## Acceptance
 
 - A minimal standalone repro (no self-host needed) that miscompiles on a clean
