@@ -14,7 +14,7 @@ _none_
 | --- | --- | --- | --- |
 | feature-synthetic-feature-matrix-test | feature | Synthetic all-features stress test (cross-target conformance) | — |
 
-## backlog (35)
+## backlog (34)
 
 | Ticket | Type | Summary | Blocked-by |
 | --- | --- | --- | --- |
@@ -50,7 +50,6 @@ _none_
 | feature-progress-transition-helpers | feature | Progress transition helpers (`claim` / `resolve`) | — |
 | feature-static-arena-profile | feature | Fixed-static-arena allocator profile | feature-unified-heap-allocator |
 | feature-threadsafe-io-serialization | feature | Statement-level I/O serialization under threads | feature-unified-heap-allocator |
-| feature-typed-const-arrays | feature | Typed constant arrays (initialized const arrays) | — |
 | idea-unit-rename-import | idea | `uses X as Y` unit-rename import (dialect extension) | — |
 | idea-visibility-enforcement | idea | Enforce private/protected visibility | — |
 
@@ -61,7 +60,7 @@ _none_
 | bug-nonreproducible-miscompile-2026-06-02 | bug | Non-reproducible one-off miscompile (2026-06-02) | — |
 | bug-whole-record-copy-main-body-noop | bug | Latent: whole-record array-element copy in main-program body emits store no-ops | — |
 
-## done (44)
+## done (45)
 
 | Ticket | Type | Summary | Blocked-by |
 | --- | --- | --- | --- |
@@ -104,6 +103,7 @@ _none_
 | feature-target-arm32 | feature | Compile target: ARM32 Linux | feature-target-aarch64 |
 | feature-target-esp32 | feature | Compile target: ESP32 / embedded | — |
 | feature-target-i386 | feature | Compile target: i386 (32-bit x86 Linux) | chore-qemu-test-env |
+| feature-typed-const-arrays | feature | Typed constant arrays (initialized const arrays) | — |
 | feature-typed-instruction-encoders | feature | Typed instruction encoders for codegen | — |
 | feature-unified-heap-allocator | feature | Unified syscall-free heap allocator | — |
 | feature-xtensa-asm-emitter | feature | Xtensa text-assembler (`EmitAsmXtensa`) for ESP32 | — |
@@ -144,7 +144,6 @@ _none_
 - feature-progress-transition-helpers
 - feature-static-arena-profile
 - feature-threadsafe-io-serialization
-- feature-typed-const-arrays
 - idea-unit-rename-import
 - idea-visibility-enforcement
 
