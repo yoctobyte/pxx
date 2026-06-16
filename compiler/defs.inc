@@ -126,6 +126,10 @@ const
   AN_YIELD        = 52; { yield E inside a `; generator;` routine. Left = value
                           expr. Lowers to: store E into the generator instance's
                           `current` slot, then CoSwitch back to the consumer. }
+  AN_CALL_IND     = 53; { Indirect call through a procedural-type value:
+                          v(args) where v is a proc-typed var. ASTLeft = AN_ARG
+                          chain; ASTRight = callee expr (yields the code address);
+                          ASTIVal = signature proc index (param/ret marshalling). }
 
   { Inline-asm operand kinds }
   AOP_NONE = 0;
@@ -191,6 +195,7 @@ const
   IR_SYSCALL      = 54;  { IRA = first IR_ARG (nr, then up to 6 args); raw target syscall; result in accumulator }
   IR_COSWITCH     = 55;  { IRA = first IR_ARG (pfrom, pto); emits a call to the bare CoSwitch runtime stub }
   IR_YIELD        = 56;  { IRA = value node; IRIVal = generator self-pointer local sym idx. Stores value to [self+16] then CoSwitch(self+0 -> self+8) }
+  IR_CALL_IND     = 57;  { Indirect call. IRA = callee value node (code addr); IRB = first IR_ARG; IRIVal = signature proc index (Params/RetType); IRStmtRoot marks a statement-level call (result discarded) }
 
   { Generator-instance heap layout (see lib/rtl/coroutine.pas + the generator
     body lowering). A TCoroCtx is a single saved sp, so genCtx/callerCtx are one
@@ -613,6 +618,7 @@ var
   SymUnitIdx : array[0..MAX_SYMS-1] of Integer; { Strs[] unit name, or -1 for main/local compiler-generated symbols }
   SymDynDepth : array[0..MAX_SYMS-1] of Integer; { dynamic-array nesting: 0=not dynamic, 1=array of T, 2=array of array of T, ... }
   SymGenSlot  : array[0..MAX_SYMS-1] of Integer; { stackless generator: persistent-slot index for a local that must survive yields; -1 = not persisted }
+  SymProcSig  : array[0..MAX_SYMS-1] of Integer; { procedural-type var/param: signature proc index (Procs[] entry, BodyAddr=-1) for indirect-call marshalling; -1 = not a proc-typed value }
   { 2-D fixed array flattened to 1-D storage: m[i,j] / m[i][j] index as
     (i-lo1)*span2 + (j-lo2). Default False/0 (single-dimension array). }
   { N-D fixed array flattened to 1-D storage; element [i0..iN-1] linearises to
@@ -701,6 +707,7 @@ var
                            element), or REC_NONE if the unit isn't loaded }
   LastTypePointerElemTk : TTypeKind;
   LastTypePointerElemRec : Integer;
+  LastTypeProcSig : Integer;  { set by ParseTypeKind when a name resolves to a procedural type: signature proc index, else -1 }
   ErrorIdent : AnsiString;
   LastExprTk : TTypeKind;
   InInterface : Boolean;
@@ -1009,6 +1016,7 @@ var
   AliasTk      : array[0..MAX_TYPEALIAS-1] of Integer;  { resolved TTypeKind ordinal }
   AliasElemTk  : array[0..MAX_TYPEALIAS-1] of Integer;  { pointer element TTypeKind ordinal }
   AliasElemRec : array[0..MAX_TYPEALIAS-1] of Integer;  { pointer element record/class id }
+  AliasProcSig : array[0..MAX_TYPEALIAS-1] of Integer;  { procedural-type alias: signature proc index (Procs[] entry, BodyAddr=-1); -1 = not a proc type }
   AliasTargetNOff : array[0..MAX_TYPEALIAS-1] of Integer;
   AliasTargetNLen : array[0..MAX_TYPEALIAS-1] of Integer;
   AliasCount   : Integer;

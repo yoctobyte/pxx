@@ -90,6 +90,7 @@ begin
     IR_SYSCALL: Result := 'syscall';
     IR_COSWITCH: Result := 'coswitch';
     IR_YIELD: Result := 'yield';
+    IR_CALL_IND: Result := 'call_ind';
   else
     Result := 'unknown';
   end;
@@ -312,6 +313,12 @@ begin
       IR_YIELD:
         IRRequireNode(IRA[i], 'yield value');
 
+      IR_CALL_IND:
+      begin
+        IRRequireNode(IRA[i], 'call_ind callee');
+        IRRequireOptionalNode(IRB[i], 'call_ind first arg');
+      end;
+
       IR_EXC_ENTER, IR_EXC_MATCH:
       begin
         lblId := IRA[i];
@@ -404,7 +411,7 @@ begin
   begin
     if IRKind[irNode] = IR_CALL then
       IRIVal[irNode] := 1
-    else if IRKind[irNode] = IR_VIRTUAL_CALL then
+    else if (IRKind[irNode] = IR_VIRTUAL_CALL) or (IRKind[irNode] = IR_CALL_IND) then
       IRStmtRoot[irNode] := True;
   end;
 end;
@@ -1954,6 +1961,30 @@ begin
       end
       else
         Result := IRAppendCall(ASTIVal[node], first, classIdx, ASTTk[node]);
+    end;
+
+    AN_CALL_IND:
+    begin
+      { Indirect call through a proc-typed value. Marshal args by the signature
+        (ASTIVal = signature Procs[] index), lower the callee to a code-address
+        value, and emit IR_CALL_IND (IRA = callee, IRB = args, IRIVal = sig). }
+      cpi := ASTIVal[node];
+      first := -1; last := -1;
+      item := ASTLeft[node];
+      pathIdx := 0;
+      while item <> -1 do
+      begin
+        isRefArg := (pathIdx < Procs[cpi].ParamCount) and Procs[cpi].Params[pathIdx].IsRef;
+        value := IRLowerCallArg(cpi, pathIdx, ASTLeft[item], isRefArg);
+        argNode := IRAppend(IR_ARG, value, -1, -1, 0, ASTTk[ASTLeft[item]]);
+        if first < 0 then first := argNode
+        else IRB[last] := argNode;
+        last := argNode;
+        item := ASTRight[item];
+        Inc(pathIdx);
+      end;
+      callVal := IRLowerAST(ASTRight[node]);   { callee code address }
+      Result := IRAppend(IR_CALL_IND, callVal, first, -1, cpi, ASTTk[node]);
     end;
 
     AN_IF:

@@ -1352,6 +1352,36 @@ begin
         IREmitCodeCall(CoSwitchAddr);
       end;
 
+    IR_CALL_IND:
+      begin
+        { Indirect call through a proc-typed value. Internal Pascal convention
+          (all args in integer registers, <=6). Evaluate the callee first and
+          keep it deepest on the stack so arg evaluation cannot clobber it; pop
+          args into the ABI registers, then pop the callee into r11 and call. }
+        cpi := IRIVal[node];                       { signature proc index }
+        if Procs[cpi].ParamCount > 6 then
+          Error('indirect call with more than 6 parameters is not supported');
+        IREmitNode(IRA[node]); EmitB($50);         { push rax = callee addr }
+        argNode := IRB[node];
+        while argNode <> -1 do
+        begin
+          IREmitNode(IRA[argNode]);
+          EmitB($50);                              { push rax }
+          argNode := IRB[argNode];
+        end;
+        for i := Procs[cpi].ParamCount - 1 downto 0 do
+          case i of
+            0: EmitB($5F);                          { pop rdi }
+            1: EmitB($5E);                          { pop rsi }
+            2: EmitB($5A);                          { pop rdx }
+            3: EmitB($59);                          { pop rcx }
+            4: begin EmitB($41); EmitB($58); end;   { pop r8 }
+            5: begin EmitB($41); EmitB($59); end;   { pop r9 }
+          end;
+        EmitB($41); EmitB($5B);                     { pop r11 = callee }
+        EmitB($41); EmitB($FF); EmitB($D3);         { call r11 }
+      end;
+
     IR_LOAD_SYM:
       begin
         EmitLoadVar(IRA[node]);
@@ -3981,6 +4011,13 @@ begin
       IR_VIRTUAL_CALL:
         begin
           { Statement-level virtual (procedure) call — result discarded. }
+          if IRStmtRoot[i] then
+            IREmitNode(i);
+        end;
+
+      IR_CALL_IND:
+        begin
+          { Statement-level indirect (proc-var) call — result discarded. }
           if IRStmtRoot[i] then
             IREmitNode(i);
         end;

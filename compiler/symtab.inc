@@ -102,6 +102,7 @@ begin
   AliasElemRec[AliasCount] := elemRec;
   AliasTargetNOff[AliasCount] := targetNOff;
   AliasTargetNLen[AliasCount] := targetNLen;
+  AliasProcSig[AliasCount] := -1;
   Inc(AliasCount);
 end;
 
@@ -115,6 +116,25 @@ begin
   AliasElemRec[AliasCount] := rec;
   AliasTargetNOff[AliasCount] := 0;
   AliasTargetNLen[AliasCount] := 0;
+  AliasProcSig[AliasCount] := -1;
+  Inc(AliasCount);
+end;
+
+procedure RegisterProcTypeAlias(noff, nlen, sigPi: Integer);
+{ Named procedural type: `T = procedure(...)` / `function(...): R`. The runtime
+  value is a code address (pointer-sized), so reuse the pointer alias shape;
+  AliasProcSig carries the signature Procs[] index used to marshal an indirect
+  call's arguments and return type. }
+begin
+  if AliasCount >= MAX_TYPEALIAS then Error('too many type aliases');
+  AliasNOff[AliasCount] := noff;
+  AliasNLen[AliasCount] := nlen;
+  AliasTk[AliasCount] := Ord(tyPointer);
+  AliasElemTk[AliasCount] := Ord(tyUnknown);
+  AliasElemRec[AliasCount] := REC_NONE;
+  AliasTargetNOff[AliasCount] := 0;
+  AliasTargetNLen[AliasCount] := 0;
+  AliasProcSig[AliasCount] := sigPi;
   Inc(AliasCount);
 end;
 
@@ -146,6 +166,7 @@ begin
   AliasElemRec[AliasCount] := REC_NONE;
   AliasTargetNOff[AliasCount] := 0;
   AliasTargetNLen[AliasCount] := 0;
+  AliasProcSig[AliasCount] := -1;
   Inc(AliasCount);
 end;
 
@@ -171,6 +192,7 @@ begin
   AliasTk[AliasCount] := Ord(tyPointer);
   AliasElemTk[AliasCount] := Ord(tyClass);
   AliasElemRec[AliasCount] := classRec;
+  AliasProcSig[AliasCount] := -1;
   Inc(AliasCount);
 end;
 
@@ -1286,6 +1308,7 @@ begin
   Syms[SymCount].ArrLen   := 0;
   SymDynDepth[SymCount] := 0;
   SymGenSlot[SymCount] := -1;
+  SymProcSig[SymCount] := -1;
   SymRTTIOff[SymCount] := -1;
   SymIsHiddenArgTemp[SymCount] := False;
   SymBlockId[SymCount] := CurBlockId;
@@ -1362,6 +1385,7 @@ begin
   if isArray then Syms[SymCount].ArrLen := 1000;
   SymDynDepth[SymCount] := 0;
   SymGenSlot[SymCount] := -1;
+  SymProcSig[SymCount] := -1;
   SymRTTIOff[SymCount] := -1;
   Syms[SymCount].ElemType := tk;
   Syms[SymCount].RecName  := LastTypeRecId;
@@ -1415,6 +1439,7 @@ begin
   Syms[SymCount].ArrLen   := hi - lo + 1;
   SymDynDepth[SymCount] := 0;
   SymArrNDims[SymCount] := 0;
+  SymProcSig[SymCount] := -1;
   SymRTTIOff[SymCount] := -1;
   Syms[SymCount].ElemType := elemType;
   Syms[SymCount].ElemRecName := LastTypeRecId;
@@ -1458,6 +1483,7 @@ begin
   Syms[SymCount].IsArray     := True;
   Syms[SymCount].ArrLen      := -1;           { -1 = dynamic }
   SymDynDepth[SymCount] := depth;
+  SymProcSig[SymCount] := -1;
   SymRTTIOff[SymCount] := -1;
   Syms[SymCount].ElemType    := elemType;
   Syms[SymCount].ElemRecName := LastTypeRecId;

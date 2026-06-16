@@ -2090,6 +2090,42 @@ begin
   LastExprTk := tk;
 end;
 
+function ParseProcVarCallAST(calleeSym, sigPi: Integer): Integer;
+{ Parse an indirect call `v(args)` through a procedural-type variable. CurTok is
+  the variable identifier; consume it and the argument list. Builds AN_CALL_IND
+  whose callee value (ASTRight) is the proc-var (a code address) and whose ASTIVal
+  is the signature proc index used to marshal the arguments and the return type. }
+var node, calleeNode, argsHead, lastArg, argSeq, nArgs: Integer;
+begin
+  Next;                                  { consume the variable name }
+  calleeNode := AllocNode(AN_IDENT);
+  ASTIVal[calleeNode] := calleeSym;
+  ASTTk[calleeNode] := Ord(tyPointer);
+  Expect(tkLParen, '(');
+  argsHead := -1; lastArg := -1; nArgs := 0;
+  while CurTok.Kind <> tkRParen do
+  begin
+    ParseExpr;
+    argSeq := AllocNode(AN_ARG);
+    ASTLeft[argSeq] := CurASTNode;
+    if argsHead = -1 then argsHead := argSeq
+    else ASTRight[lastArg] := argSeq;
+    lastArg := argSeq;
+    Inc(nArgs);
+    if CurTok.Kind = tkComma then Next
+    else if CurTok.Kind <> tkRParen then Error('expected comma or close parenthesis');
+  end;
+  Expect(tkRParen, ')');
+  if nArgs <> Procs[sigPi].ParamCount then
+    Error('procedural call: wrong number of arguments');
+  node := AllocNode(AN_CALL_IND);
+  ASTLeft[node]  := argsHead;
+  ASTRight[node] := calleeNode;
+  ASTIVal[node]  := sigPi;
+  ASTTk[node]    := Ord(Procs[sigPi].RetType);
+  Result := node;
+end;
+
 procedure ParseFactor;
 var name: AnsiString; recName: Integer; idx, pi, i, node, left, prevTok, valNode: Integer; tk: TTypeKind; op, argSeq, argSeq2, argSeq3, lastArg, argIdx, exprNode, szArg: Integer;
     nArgs, argsHead, currArg: Integer; argTypes: array[0..15] of TTypeKind;
@@ -2727,6 +2763,15 @@ begin
 
       if (idx >= 0) and (Syms[idx].TypeKind = tyAuto) then
         Error('use of auto variable before type is inferred');
+
+      { Indirect call through a procedural-type variable: v(args) as an expression. }
+      if (idx >= 0) and (SymProcSig[idx] >= 0) and (Tokens[TokPos].Kind = tkLParen) then
+      begin
+        node := ParseProcVarCallAST(idx, SymProcSig[idx]);
+        CurASTNode := node;
+        LastExprTk := IntToTypeKind(ASTTk[node]);
+        Exit;
+      end;
 
       { C4: pointer-type-alias cast — PFoo(expr) where PFoo = ^TFoo }
       if (idx < 0) and (pi < 0) and (Tokens[TokPos].Kind = tkLParen) then
@@ -4843,7 +4888,11 @@ begin
         Result := node;
         Exit;
       end;
-      if CaseEqual(name, 'inherited') then
+      { Indirect call through a procedural-type variable: v(args) as a statement. }
+      si := FindSym(name);
+      if (si >= 0) and (SymProcSig[si] >= 0) and (Tokens[TokPos].Kind = tkLParen) then
+        node := ParseProcVarCallAST(si, SymProcSig[si])
+      else if CaseEqual(name, 'inherited') then
         node := ParseInheritedCallAST
       else if CaseEqual(name, 'yield') then
       begin
@@ -5345,6 +5394,7 @@ begin
   LastTypeRecId := REC_NONE;
   LastTypePointerElemTk := tyUnknown;
   LastTypePointerElemRec := REC_NONE;
+  LastTypeProcSig := -1;
   LastTypeEnumId := -1;
   case CurTok.Kind of
     tkCaret:
@@ -5469,6 +5519,7 @@ begin
               begin
                 LastTypePointerElemTk := IntToTypeKind(AliasElemTk[aliasIdx]);
                 LastTypePointerElemRec := AliasElemRec[aliasIdx];
+                LastTypeProcSig := AliasProcSig[aliasIdx];
                 Result := tyPointer;
               end
               else
@@ -5628,6 +5679,7 @@ begin
 	        begin
 	          Syms[idx].PtrElemTk := LastTypePointerElemTk;
 	          Syms[idx].PtrElemRec := LastTypePointerElemRec;
+	          SymProcSig[idx] := LastTypeProcSig;
 	        end;
 	      end;
 	    if Eat(tkEq) then
@@ -6496,8 +6548,69 @@ begin
       end
       else if (CurTok.Kind = tkProcedure) or (CurTok.Kind = tkFunction) then
       begin
-        { Skip named subroutine-type defs (not supported as simple aliases) }
-        while not (CurTok.Kind in [tkSemicolon,tkEOF]) do Next;
+        { Procedural type: `T = procedure(...)` / `function(...): R [of object]`.
+          The signature is parsed into a body-less Procs[] entry; the alias keeps
+          its index (AliasProcSig) so an indirect call `v(args)` through a var of
+          this type marshals args/return via the same machinery as a direct call. }
+        mIsFunc := (CurTok.Kind = tkFunction);
+        Next;
+        mNParams := 0;
+        mRetType := tyInteger;
+        if CurTok.Kind = tkLParen then
+        begin
+          Next;
+          mDoneArgs := False;
+          while (CurTok.Kind <> tkRParen) and not mDoneArgs do
+          begin
+            mIsByRef := False;
+            if (CurTok.Kind = tkVar) or
+               ((CurTok.Kind = tkIdent) and CaseEqual(CurTok.SVal, 'out')) then
+            begin mIsByRef := True; Next; end
+            else if CurTok.Kind = tkConst then
+              Next;
+            mStartIdx := mNParams;
+            mDoneParam := False;
+            while (CurTok.Kind = tkIdent) and not mDoneParam do
+            begin
+              mPNames[mNParams] := CurTok.SVal; Inc(mNParams); Next;
+              if not Eat(tkComma) then mDoneParam := True;
+              if CurTok.Kind = tkColon then mDoneParam := True;
+            end;
+            Expect(tkColon, ':');
+            mIsArr := False;
+            if CurTok.Kind = tkArray then
+            begin
+              Next; Expect(tkOf, 'of'); mTk := ParseTypeKind; mIsArr := True;
+            end
+            else
+              mTk := ParseTypeKind;
+            for i := mStartIdx to mNParams-1 do
+            begin
+              mPTypes[i] := mTk;
+              mPTypesRec[i] := LastTypeRecId;
+              mPArr[i] := mIsArr;
+              mPByRef[i] := mIsByRef;
+            end;
+            if not Eat(tkSemicolon) then mDoneArgs := True;
+          end;
+          Expect(tkRParen, ')');
+        end;
+        if mIsFunc then
+        begin
+          Expect(tkColon, ':');
+          mRetType := ParseTypeKind;
+        end;
+        { `of object` (method pointer) — Phase B; consumed but treated as a plain
+          code pointer for now. }
+        if CurTok.Kind = tkOf then begin Next; if CurTok.Kind = tkIdent then Next; end;
+        mpi := RegisterProc('$proctype', mIsFunc, mRetType, mNParams, mPNames, mPTypes);
+        Procs[mpi].BodyAddr := -1;
+        for i := 0 to mNParams-1 do
+        begin
+          Procs[mpi].Params[i].IsArray := mPArr[i];
+          Procs[mpi].Params[i].IsRef := mPByRef[i];
+        end;
+        RegisterProcTypeAlias(tnOff, tnLen, mpi);
       end
       else
       begin
@@ -6535,6 +6648,7 @@ var
   ptypesRec : array[0..15] of Integer;
   ptypesPtrElemTk : array[0..15] of TTypeKind;
   ptypesPtrElemRec : array[0..15] of Integer;
+  ptypesProcSig : array[0..15] of Integer;  { proc-typed param: signature index, -1 otherwise }
   parr      : array[0..15] of Boolean;
   pbyref    : array[0..15] of Boolean;
   pNDims    : array[0..15] of Integer;
@@ -6706,6 +6820,7 @@ begin
         ptypesRec[i] := LastTypeRecId;
         ptypesPtrElemTk[i] := LastTypePointerElemTk;
         ptypesPtrElemRec[i] := LastTypePointerElemRec;
+        ptypesProcSig[i] := LastTypeProcSig;
         parr[i] := isArr;
         pbyref[i] := isByRef;
         pNDims[i] := paramNDims;
@@ -6824,6 +6939,7 @@ begin
       ptypesRec[i] := ptypesRec[i-1];
       ptypesPtrElemTk[i] := ptypesPtrElemTk[i-1];
       ptypesPtrElemRec[i] := ptypesPtrElemRec[i-1];
+      ptypesProcSig[i] := ptypesProcSig[i-1];
       parr[i]   := parr[i-1];
       pbyref[i] := pbyref[i-1];
       pNDims[i] := pNDims[i-1];
@@ -6838,6 +6954,7 @@ begin
     ptypesRec[0] := REC_NONE;   { Self's RecName is wired to the owner class below }
     ptypesPtrElemTk[0] := tyUnknown;
     ptypesPtrElemRec[0] := REC_NONE;
+    ptypesProcSig[0] := -1;
     parr[0]   := False;
     pbyref[0] := False;
     pNDims[0] := 0;
@@ -6862,6 +6979,7 @@ begin
       ptypesRec[i] := ptypesRec[i-1];
       ptypesPtrElemTk[i] := ptypesPtrElemTk[i-1];
       ptypesPtrElemRec[i] := ptypesPtrElemRec[i-1];
+      ptypesProcSig[i] := ptypesProcSig[i-1];
       parr[i]   := parr[i-1];
       pbyref[i] := pbyref[i-1];
       pNDims[i] := pNDims[i-1];
@@ -6876,6 +6994,7 @@ begin
     ptypesRec[0] := REC_NONE;
     ptypesPtrElemTk[0] := tyUnknown;
     ptypesPtrElemRec[0] := REC_NONE;
+    ptypesProcSig[0] := -1;
     parr[0]   := False;
     pbyref[0] := False;
     pNDims[0] := 0;
@@ -7066,6 +7185,7 @@ begin
     begin
       Syms[idx].PtrElemTk := ptypesPtrElemTk[i];
       Syms[idx].PtrElemRec := ptypesPtrElemRec[i];
+      SymProcSig[idx] := ptypesProcSig[i];
     end;
   end;
   { Wire Self's RecName so field lookups resolve against the owner class }

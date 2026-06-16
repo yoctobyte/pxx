@@ -229,6 +229,8 @@ test-core: $(COMPILER)
 	test "$$(/tmp/test_many_params26)" = "$$(printf '1 2 3 4 5 6 7\n3 4 5 6 7 12 89\n8912\n7654326\n12100806\n7654321\n96\n196')"
 	./$(COMPILER) test/test_procaddr.pas /tmp/test_procaddr26
 	test "$$(/tmp/test_procaddr26)" = "1 2 3 4 5 "
+	./$(COMPILER) test/test_proctype.pas /tmp/test_proctype26
+	test "$$(/tmp/test_proctype26)" = "$$(printf 'hello 1\nadd 7\nmul 30\nexpr ok\nhello 7\ngreet 99')"
 	./$(COMPILER) test/test_methodptr.pas /tmp/test_methodptr26
 	test "$$(/tmp/test_methodptr26)" = "$$(printf 'code set\ndata ok')"
 	./$(COMPILER) test/test_const_record_param.pas /tmp/test_const_record_param26
