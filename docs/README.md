@@ -1,8 +1,10 @@
 # PXX Documentation
 
-`PXX` is a small self-hosting Object Pascal compiler for Linux x86-64. It emits
-ELF executables directly — no assembler, no linker. The installed executable is
-still `compiler/pascal26`.
+`PXX` is a small self-hosting Object Pascal compiler. It emits static,
+syscall-only ELF executables directly — no assembler, no linker, no libc. It
+targets x86-64, i386, aarch64, arm32 (Linux) and riscv32/xtensa (embedded); see
+[Targets](dialect/targets.md). The installed executable is still
+`compiler/pascal26`.
 
 These pages are deliberately short. PXX compiles a subset of Object Pascal, so
 **for the language itself, use the [Free Pascal documentation](https://www.freepascal.org/docs.html)**.
@@ -12,7 +14,9 @@ what is not yet stable, and the dialect extras PXX adds.
 ## User docs
 
 - [Command Line](cli.md) — how to invoke the compiler.
-- [Dialect](dialect.md) — PXX-specific language features and switches.
+- [Dialect](dialect/README.md) — PXX-specific language features and switches
+  (folder: targets, types, routines, classes, exceptions, generators, inline
+  asm, directives).
 - [Not Implemented](not-implemented.md) — FPC features PXX does not support.
 - [Not Stable](not-stable.md) — implemented but unfinished; may change or break.
 

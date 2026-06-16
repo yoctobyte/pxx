@@ -6,7 +6,8 @@ regression test should be treated as unverified. See
 
 ## Platform / ABI
 
-- Output is Linux x86-64 ELF only. No cross targets (ARM64, 32-bit).
+- Output is static, syscall-only ELF for x86-64/i386/aarch64/arm32 (Linux) and
+  riscv32/xtensa (embedded). No other OSes (BSD/macOS/Windows) yet.
 - No FPC object-file, unit-file, package, or linker ABI compatibility.
 
 ## Language

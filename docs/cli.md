@@ -28,6 +28,9 @@ Options come before the source path.
 
 | Option | Effect |
 | --- | --- |
+| `--target=ARCH` | Cross-compile for `x86_64`/`i386`/`aarch64`/`arm32`/`riscv32`/`xtensa` (default `x86_64`). See [Targets](dialect/targets.md). |
+| `--xtensa-abi=…` | Xtensa call-ABI variant. |
+| `--emit-obj` | Emit a relocatable object instead of an executable (unstable). |
 | `--debug` | Print lexer/parser/preprocessor diagnostics. |
 | `--dump-ir` | Print lowered IR while still emitting the executable. |
 | `--dump-rtti` | Print generated RTTI tables while still emitting the executable. |
@@ -35,7 +38,7 @@ Options come before the source path.
 | `-Mobjfpc` | Accept the Object Pascal mode marker (no semantic change). |
 | `--strict-overload` / `--permissive-overload` | Require / relax `overload;` on overloaded routines. |
 | `--threadsafe` | Atomic refcounts for managed strings/arrays. |
-| `--no-auto-var` / `--no-lazy-var` | Disable auto-typed / inline `var` declarations (both on by default). See [Dialect](dialect.md). |
+| `--no-auto-var` / `--no-lazy-var` | Disable auto-typed / inline `var` declarations (both on by default). See [Dialect](dialect/README.md). |
 | `--no-unhandled-handler` | Exit status 1 silently on an unhandled exception. |
 | `--experimental-ir-codegen` | Deprecated no-op; IR is the only backend. |
 
