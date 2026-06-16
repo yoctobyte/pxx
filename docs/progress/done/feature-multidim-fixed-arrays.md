@@ -1,9 +1,20 @@
 # Multidimensional fixed arrays
 
 - **Type:** feature
-- **Status:** backlog
+- **Status:** done (2-D var-section)
 - **Owner:** —
 - **Opened:** 2026-06-16 (found via conformance feature-probing)
+- **Closed:** 2026-06-16
+
+## Done
+
+2-D fixed arrays in `var` sections landed via the flatten-to-1-D design below:
+both `m[i,j]` and `m[i][j]` fold into one linear `AN_INDEX` at parse time (dims in
+parallel arrays `SymArr2*`), so the 1-D path handles codegen unchanged.
+`test_cross_multidim` byte-identical on all 4 targets, matches FPC. The single
+chokepoint was `ParseLValueAST` (both reads and writes of identifier indexing
+route through it), so the "~6 sites" worry was overstated. Remaining follow-ups:
+named array types / record-field / param 2-D, and 3-D+.
 
 ## Gap
 
