@@ -74,3 +74,24 @@ self-host fixedpoint + cross-bootstrap unaffected (library-only).
   coroutines (library + 6 asm `CoSwitch` stubs); generators (feature-
   generators-yield) split out as the on-ramp; stackless deferred to an embedded
   optimization.
+- 2026-06-16 — **spawn/entry ABI decided: real procedural types instead of an
+  asm entry shim.** The original DESIGN NOTE (PXX can't call a proc-var with
+  args) was true, so the plan was a per-target shim that moves an rbx-slot arg
+  into the ABI register. Instead implemented **procedural types** (standard
+  Pascal, reusable) so a library `CoStart` can call `entry(arg)` directly — no
+  shim, no rbx handoff, no compiler-emitted entry glue. CoStart will read the
+  starting coroutine from a global (set by the scheduler before the first
+  switch-in) and call `entry(arg)`; the initial frame's return address is just
+  `@CoStart`.
+  - **Phase A DONE (commits 59e1f4d + 8fe957e):** `type T = procedure(...)` /
+    `function(...): R`, proc-typed var/param/global/local, `@Proc`/`nil` assign,
+    `v(args)` indirect call (statement + expression) on **all 4 Linux targets**
+    (x86-64/i386/aarch64/arm32), byte-identical, `test/test_proctype.pas` in
+    test-core + test-i386. AN_CALL_IND/IR_CALL_IND; signature stored as a
+    body-less Procs[] entry referenced by AliasProcSig/SymProcSig parallel
+    arrays (TSymbol-field landmine). **Side-fix:** `@proc` (IR_PROCADDR) was
+    x86-64-only; now implemented on i386/aarch64/arm32 (+ writeELF32 32-bit
+    ProcAddrFix). `of object` method pointers (2-word) parsed-but-ignored —
+    Phase B. >6/>8/>4 params per target not yet supported (async needs 1).
+  - **Still TODO:** Phase C (port CoSwitch to i386/aarch64/arm32, CoStart
+    trampoline, cooperative scheduler) and Phase B (method pointers).
