@@ -26,11 +26,42 @@ procedure Spawn(entry: TCoroEntry; arg: Pointer);
 procedure CoYield;
 procedure RunUntilDone;
 
+{ Async-I/O reactor (x86-64 only for now). The fd must be non-blocking; on an
+  EAGAIN, the coroutine calls WaitReadable/WaitWritable, which parks it on the
+  scheduler's epoll instance and yields. RunUntilDone's idle path epoll_waits
+  and wakes the coroutines whose fds became ready. On other targets these
+  degrade to a plain CoYield (busy-poll). }
+procedure WaitReadable(fd: Integer);
+procedure WaitWritable(fd: Integer);
+procedure SetNonBlocking(fd: Integer);
+
 implementation
 
 const
   MAX_CO = 64;
   CO_STK = 65536;   { per-coroutine heap stack }
+
+{$ifdef CPUX86_64}
+const
+  SYS_fcntl         = 72;
+  SYS_epoll_create1 = 291;
+  SYS_epoll_ctl     = 233;
+  SYS_epoll_wait    = 232;
+  O_NONBLOCK    = $800;
+  F_SETFL       = 4;
+  EPOLL_CTL_ADD = 1;
+  EPOLL_CTL_DEL = 2;
+  EPOLLIN       = $001;
+  EPOLLOUT      = $004;
+
+type
+  { Linux epoll_event is packed: u32 events then u64 data = 12 bytes. The data
+    word carries the waiting coroutine's id straight back from epoll_wait. }
+  TEpollEvent = packed record
+    events : LongWord;
+    data   : Int64;
+  end;
+{$endif}
 
 type
   PW = ^NativeInt;  { pointer-sized machine-word access at an address }
@@ -38,7 +69,7 @@ type
 var
   coSp    : array[0..MAX_CO-1] of Int64;       { saved stack pointer }
   coStk   : array[0..MAX_CO-1] of Int64;       { heap stack base (for FreeMem) }
-  coState : array[0..MAX_CO-1] of Integer;     { 0=free 1=runnable 2=done }
+  coState : array[0..MAX_CO-1] of Integer;     { 0=free 1=runnable 2=done 3=io-blocked }
   coEntry : array[0..MAX_CO-1] of TCoroEntry;  { body to run on first switch-in }
   coArg   : array[0..MAX_CO-1] of Pointer;
   coCount : Integer;
@@ -46,6 +77,7 @@ var
   schedSp : Int64;                             { scheduler's own saved sp }
   gEntry  : TCoroEntry;                        { handoff to CoStart }
   gArg    : Pointer;
+  epfd    : Integer;                           { epoll instance, -1 = not created }
 
 { First-entry trampoline. Runs on the coroutine's own stack the first time the
   scheduler switches into it; the scheduler set gEntry/gArg just before. After
@@ -126,16 +158,58 @@ begin
   __pxxcoswitch(@coSp[curCo], @schedSp);
 end;
 
-{ Round-robin every runnable coroutine until all have finished. }
+{ Mark fd non-blocking so read/write return EAGAIN instead of blocking the whole
+  scheduler thread. (v1 sets only O_NONBLOCK; it does not preserve other flags.) }
+procedure SetNonBlocking(fd: Integer);
+{$ifdef CPUX86_64}
+var rc: Int64;
+{$endif}
+begin
+{$ifdef CPUX86_64}
+  rc := __pxxrawsyscall(SYS_fcntl, fd, F_SETFL, O_NONBLOCK, 0, 0, 0);
+{$endif}
+end;
+
+{$ifdef CPUX86_64}
+{ Park the current coroutine on epoll until fd is ready for the given event,
+  then yield. On resume the fd is removed from the set (one-shot add/del). }
+procedure WaitIO(fd, events: Integer);
+var ev: TEpollEvent; rc: Int64;
+begin
+  if epfd = 0 then
+    epfd := Integer(__pxxrawsyscall(SYS_epoll_create1, 0, 0, 0, 0, 0, 0));
+  ev.events := events;
+  ev.data := curCo;
+  rc := __pxxrawsyscall(SYS_epoll_ctl, epfd, EPOLL_CTL_ADD, fd, Int64(@ev), 0, 0);
+  coState[curCo] := 3;                         { io-blocked }
+  __pxxcoswitch(@coSp[curCo], @schedSp);       { -> scheduler }
+  rc := __pxxrawsyscall(SYS_epoll_ctl, epfd, EPOLL_CTL_DEL, fd, 0, 0, 0);
+end;
+
+procedure WaitReadable(fd: Integer); begin WaitIO(fd, EPOLLIN);  end;
+procedure WaitWritable(fd: Integer); begin WaitIO(fd, EPOLLOUT); end;
+{$else}
+{ No reactor on this target yet: degrade to a cooperative yield (busy-poll). }
+procedure WaitReadable(fd: Integer); begin CoYield; end;
+procedure WaitWritable(fd: Integer); begin CoYield; end;
+{$endif}
+
+{ Round-robin every runnable coroutine; when none are runnable but some are
+  blocked on I/O, epoll_wait for readiness and wake them. Ends when nothing is
+  runnable and nothing is blocked. }
 procedure RunUntilDone;
-var i, any: Integer;
+var i, anyRunnable, anyBlocked: Integer;
+{$ifdef CPUX86_64}
+    n, k, cid: Integer;
+    evs: array[0..MAX_CO-1] of TEpollEvent;
+{$endif}
 begin
   repeat
-    any := 0;
+    anyRunnable := 0;
     for i := 0 to coCount - 1 do
       if coState[i] = 1 then
       begin
-        any := 1;
+        anyRunnable := 1;
         curCo := i;
         gEntry := coEntry[i];
         gArg := coArg[i];
@@ -143,7 +217,23 @@ begin
         if coState[i] = 2 then
           FreeMem(Pointer(coStk[i]));
       end;
-  until any = 0;
+    anyBlocked := 0;
+    for i := 0 to coCount - 1 do
+      if coState[i] = 3 then anyBlocked := 1;
+{$ifdef CPUX86_64}
+    if (anyRunnable = 0) and (anyBlocked = 1) then
+    begin
+      { Nothing to run but coroutines wait on I/O: block here until an fd is
+        ready, then mark the parked coroutines runnable (data = their id). }
+      n := Integer(__pxxrawsyscall(SYS_epoll_wait, epfd, Int64(@evs[0]), MAX_CO, -1, 0, 0));
+      for k := 0 to n - 1 do
+      begin
+        cid := Integer(evs[k].data);
+        coState[cid] := 1;
+      end;
+    end;
+{$endif}
+  until (anyRunnable = 0) and (anyBlocked = 0);
   curCo := -1;
 end;
 

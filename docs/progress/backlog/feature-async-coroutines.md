@@ -130,6 +130,21 @@ self-host fixedpoint + cross-bootstrap unaffected (library-only).
       `test/test_scheduler_exc.pas` (cross-coroutine raise / per-stack
       BSS_EXC_TOP swap). Wired into test-core + test-i386/aarch64/arm32.
       Bootstrap + cross-bootstrap byte-identical.
-  - **Next (stretch):** the async-I/O reactor (epoll-driven Yield on a blocked
-    fd) — the real payoff; likely its own goal. Channels/mailboxes optional.
-    riscv32/xtensa CoSwitch later (embedded).
+  - **Reactor DONE (x86-64):** epoll-driven async I/O in `lib/rtl/scheduler.pas`.
+    Coroutine state `3 = io-blocked`; `WaitReadable(fd)` / `WaitWritable(fd)`
+    `epoll_ctl(ADD)` the fd (data = coroutine id), set blocked, CoYield;
+    `RunUntilDone`'s idle path (nothing runnable, something blocked)
+    `epoll_wait`s and marks the ready coroutines runnable (`evs[k].data`); on
+    resume the fd is `epoll_ctl(DEL)`'d. `SetNonBlocking(fd)` helper. epoll
+    `epoll_event` modelled as a `packed record` (u32 events + u64 data = 12 B);
+    the right coroutine waking proves the data round-trip. `test/test_reactor.pas`
+    (non-blocking pipe: reader EAGAIN → park → writer writes → epoll wakes reader)
+    in test-core. x86-64 only — syscall numbers are `{$ifdef CPUX86_64}`-guarded;
+    on other targets WaitReadable/WaitWritable degrade to a plain CoYield
+    (busy-poll) so the cross builds still compile. LANDMINES: `__pxxrawsyscall`
+    is recognised only in expression position (assign the result to a dummy, not
+    a bare statement); the comment-brace `}` trap bit again.
+  - **Next:** a clean Pascal socket/listener layer over WaitReadable/WaitWritable
+    (accept loop, async recv/send) — the thing real servers use; then Synapse
+    integration. Timers (epoll_wait timeout) + channels/mailboxes optional.
+    riscv32/xtensa CoSwitch + cross-target reactor syscall numbers later.
