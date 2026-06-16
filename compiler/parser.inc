@@ -4716,7 +4716,19 @@ begin
         Next;
         Expect(tkOf, 'of');
         LastTypeEnumId := -1;
-        elemTk := ParseTypeKind();
+        if CurTok.Kind = tkInteger then
+        begin
+          { `set of <subrange>` e.g. `set of 1..10` — consume lo..hi (the element
+            is an integer subrange). Without this the `..hi` leaked and the
+            type-skip loop in ParseVarSection corrupted the variable's type away
+            from tySet, so set ops/membership read garbage. }
+          ConstEval;
+          Expect(tkDotDot, '..');
+          ConstEval;
+          elemTk := tyInteger;
+        end
+        else
+          elemTk := ParseTypeKind();
         { inline `set of TFoo`: the element parse records the enum identity in
           LastTypeEnumId; carry it as the set's element enum for RTTI. }
         LastTypeSetEnumId := LastTypeEnumId;
