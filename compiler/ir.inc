@@ -845,6 +845,66 @@ begin
               (ASTKind[node] = AN_DEREF);
 end;
 
+{ Static array -> `array of T` open param: open arrays read their length from
+  the dyn-array header at [data-8], which a static array lacks, so copy it into a
+  fresh dyn array (with header) and yield that handle. All guard checks + the copy
+  live here (not inlined into IRLowerCallArg) — that hot function is large enough
+  that adding indexing expressions to its body perturbs codegen. Returns True and
+  sets outVal when it handled the arg. }
+function TryStaticToOpenArray(cpi, pathIdx, argAST: Integer; var outVal: Integer): Boolean;
+var caCount, caElemRec, caElemSz, caSym, savedRec, caArgSym: Integer;
+    caElemTk: TTypeKind;
+    caIdent, caCountLit, caArg1, caArg2, caSlCall, value: Integer;
+begin
+  Result := False;
+  if (cpi < 0) or (pathIdx < 0) or (pathIdx >= Procs[cpi].ParamCount) then Exit;
+  if not Procs[cpi].Params[pathIdx].IsArray then Exit;
+  if ASTKind[argAST] <> AN_IDENT then Exit;
+  caArgSym := ASTIVal[argAST];
+  if (caArgSym < 0) or (caArgSym >= SymCount) then Exit;
+  if not Syms[caArgSym].IsArray then Exit;
+  if Syms[caArgSym].ArrLen < 0 then Exit;
+  if Syms[caArgSym].Kind = skParam then Exit;
+  caElemTk := Syms[caArgSym].ElemType;
+  caElemRec := Syms[caArgSym].ElemRecName;
+  if caElemTk = tyAnsiString then Exit;
+  if (caElemTk = tyRecord) and RecordHasManagedFields(caElemRec) then Exit;
+
+  caCount := Syms[caArgSym].ArrLen;
+  if caElemTk = tyRecord then caElemSz := RecSize(caElemRec)
+  else caElemSz := TypeSize(caElemTk);
+
+  savedRec := LastTypeRecId;
+  if caElemTk = tyRecord then LastTypeRecId := caElemRec;
+  caSym := AllocDynArray('', caElemTk, 1);
+  LastTypeRecId := savedRec;
+  SymIsHiddenArgTemp[caSym] := True;
+
+  IRAppend(IR_DEFAULT_MEM,
+    IRAppend(IR_SLOTADDR, caSym, -1, -1, 0, Ord(tyPointer)),
+    -1, REC_NONE, TARGET_PTR_SIZE, Ord(tyPointer));
+
+  caIdent := AllocNode(AN_IDENT);
+  ASTIVal[caIdent] := caSym; ASTTk[caIdent] := Ord(tyPointer);
+  caCountLit := AllocNode(AN_INT_LIT);
+  ASTIVal[caCountLit] := caCount; ASTTk[caCountLit] := Ord(tyInteger);
+  caArg1 := AllocNode(AN_ARG); ASTLeft[caArg1] := caIdent;
+  caArg2 := AllocNode(AN_ARG); ASTLeft[caArg2] := caCountLit;
+  ASTRight[caArg1] := caArg2;
+  caSlCall := AllocNode(AN_CALL); ASTIVal[caSlCall] := -102;
+  ASTLeft[caSlCall] := caArg1;
+  value := IRLowerAST(caSlCall);
+  IRIVal[value] := 1;
+
+  IRAppend(IR_COPY_REC,
+    IRAppend(IR_LEA, caSym, -1, -1, 0, Ord(tyPointer)),
+    IRAppend(IR_LEA, caArgSym, -1, -1, 0, Ord(tyPointer)),
+    -1, caCount * caElemSz, Ord(tyRecord));
+
+  outVal := IRAppend(IR_LEA, caSym, -1, -1, 0, Ord(tyPointer));
+  Result := True;
+end;
+
 function IRLowerCallArg(cpi: Integer; pathIdx: Integer; argAST: Integer; isRefArg: Boolean): Integer;
 var argTk: TTypeKind;
     needTemp: Boolean;
@@ -855,6 +915,7 @@ var argTk: TTypeKind;
     srcAddr: Integer;
     value: Integer;
 begin
+  if TryStaticToOpenArray(cpi, pathIdx, argAST, value) then begin Result := value; Exit; end;
   { An `array of const` literal lowers to a freshly built dyn-array of TVarRec;
     its value is the data-pointer handle, passed straight through (never the
     record-by-value copy path below). }
