@@ -12,7 +12,7 @@ var i, s: Integer;
 begin
   s := 0;
   for i := 0 to Length(a) - 1 do s := s + a[i];
-  writeln('len=', Length(a), ' sum=', s, ' a0=', a[0]);
+  writeln('len=', Length(a), ' high=', High(a), ' sum=', s, ' a0=', a[0]);
 end;
 
 var arr: array[0..3] of Integer;

@@ -2139,6 +2139,26 @@ begin
       ASTLeft[node] := argSeq;
       CurASTNode := node;
     end;
+    tkHigh:
+    begin
+      { High(arr) := Length(arr) - 1. Reuses the Length call + a subtraction, so
+        no new IR/codegen — works for open arrays, dyn arrays and (via Length)
+        static arrays alike. }
+      Next; Expect(tkLParen, '(');
+      if CurTok.Kind <> tkIdent then Error('High: expected array variable');
+      idx := FindSym(CurTok.SVal); Next;
+      valNode := ParseLValueAST(idx, TokPos - 2);
+      if idx < 0 then Error('High: undefined variable');
+      Expect(tkRParen, ')');
+      node := AllocNode(AN_CALL); ASTIVal[node] := -Ord(tkLength); ASTTk[node] := Ord(tyInteger);
+      argSeq := AllocNode(AN_ARG); ASTLeft[argSeq] := valNode;
+      ASTLeft[node] := argSeq;
+      valNode := AllocNode(AN_INT_LIT); ASTIVal[valNode] := 1; ASTTk[valNode] := Ord(tyInteger);
+      CurASTNode := AllocNode(AN_BINOP);
+      ASTIVal[CurASTNode] := Ord(tkMinus);
+      ASTLeft[CurASTNode] := node; ASTRight[CurASTNode] := valNode;
+      ASTTk[CurASTNode] := Ord(tyInteger);
+    end;
     tkGetMem:
     begin
       Next; Expect(tkLParen, '(');

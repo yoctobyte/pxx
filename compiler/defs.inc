@@ -290,7 +290,8 @@ type
       not collapsed into tkInteger_T). `int`->tkInteger_T, `char`->tkChar_T
       stay as before. }
     tkCVoid, tkCShort, tkCLong, tkCSigned, tkCUnsigned, tkCFloat, tkCDouble, tkCBool,
-    tkIndent, tkDedent, tkNewline
+    tkIndent, tkDedent, tkNewline,
+    tkHigh
   );
 
   TToken = record

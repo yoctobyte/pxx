@@ -67,6 +67,8 @@ begin
     if (s[1]='r') and (s[2]='e') and (s[3]='a') and (s[4]='d') then Result := tkRead;
     if (s[1]='h') and (s[2]='a') and (s[3]='l') and (s[4]='t') then Result := tkHalt;
     if (s[1]='H') and (s[2]='a') and (s[3]='l') and (s[4]='t') then Result := tkHalt;
+    if (s[1]='h') and (s[2]='i') and (s[3]='g') and (s[4]='h') then Result := tkHigh;
+    if (s[1]='H') and (s[2]='i') and (s[3]='g') and (s[4]='h') then Result := tkHigh;
     if (s[1]='e') and (s[2]='x') and (s[3]='i') and (s[4]='t') then Result := tkExit;
     if (s[1]='E') and (s[2]='x') and (s[3]='i') and (s[4]='t') then Result := tkExit;
     if (s[1]='c') and (s[2]='h') and (s[3]='a') and (s[4]='r') then Result := tkChar_T;

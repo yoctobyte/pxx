@@ -238,7 +238,7 @@ test-core: $(COMPILER)
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_cross_write_pchar.pas /tmp/test_write_pchar26
 	test "$$(/tmp/test_write_pchar26)" = "$$(printf 'hello\nhello\nhello world')"
 	./$(COMPILER) test/test_cross_static_open_array.pas /tmp/test_static_open26
-	test "$$(/tmp/test_static_open26)" = "$$(printf 'len=4 sum=100 a0=10\nlen=2 sum=15 a0=7')"
+	test "$$(/tmp/test_static_open26)" = "$$(printf 'len=4 high=3 sum=100 a0=10\nlen=2 high=1 sum=15 a0=7')"
 	./$(COMPILER) test/test_asm_emit.pas /tmp/test_asm_emit26
 	test "$$(/tmp/test_asm_emit26)" = "$$(printf 'S=\nS=ab\nS=abc\nS=a longer string here\nI=0\nI=123\nI=-7\n---\nS=ww\nI=1\nS=yy\nI=2\nS=zzz\nI=3')"
 	./$(COMPILER) test/test_virtual_proc.pas /tmp/test_virtual_proc26
