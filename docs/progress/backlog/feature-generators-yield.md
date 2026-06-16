@@ -215,6 +215,56 @@ stackful — no grammar change to add it.
   - TODO: port CoSwitch + generator codegen to the other 5 targets; lift
     yield-in-try; `generator function` prefix form; stackless backend (v2).
 
+- 2026-06-16 — **Phase 4 (v2 stackless backend) DONE — `; generator; stackless;`
+  on ALL targets, zero per-target asm** (commit 147b3a0). It's a compiler
+  TRANSFORM, not asm: the body becomes a state-machine *step function* with the
+  ABI `function(self): Boolean` (has-next); persistent params/locals live in a
+  heap instance (offsets `SL_OFF_* = CO_OFF_*`, so for-in reads value/done the
+  same for either strategy), restored on entry and saved at each yield. `yield E`
+  → set current/state, checkpoint locals, `Result:=True; Exit;`, resume label;
+  re-entry dispatches `if state=k goto Lk`. `for`/`while`/`if` containing a yield
+  are flattened to goto/label form; yield-free statements pass through verbatim.
+  Everything lowers through the shared cross-target IR → runs on x86-64 + i386 +
+  arm32 + aarch64 (all verified, output identical), proving the no-asm claim
+  (i386/arm32/aarch64 under QEMU). Ideal for ESP32 (no heap stack, no CoSwitch).
+  - Surface/validation: `stackless` is now a real directive (was a hard error).
+    Errors fire for stackless-without-generator, no-yield, and ineligibility —
+    yield is only allowed at top level / `for` / `while` / `if`; yield in
+    `try`/`case`/`repeat`/`with` is a clear compile error. Forced only (auto
+    selection is v3, deliberately deferred).
+  - for-in unified (option (a)): `ParseForInGeneratorAST` branches on
+    `ProcIsStackless` — stackful → `CoAlloc`/`CoNext`; stackless → `SlAlloc` +
+    a *direct* call to the step fn in the loop (PXX can't call a stored fn-ptr
+    with args, but the compiler knows the proc). `SlCurrent`/`SlFree` are the
+    shared-shape reads. RTL: `lib/rtl/slgen.pas` (`SlAlloc/SlGet/SlSet/SlCurrent/
+    SlFree`) — pure Pascal, all targets, NO `__pxxcoswitch` dependency (so it
+    works where coroutine.pas's x86-64 CoSwitch can't). Requires `uses slgen;`.
+  - Implementation notes / landmines:
+    (1) Step-call ABI: declared params become persistent locals but stay ABI
+        params; the for-in call **pads to ParamCount with zero args** — the
+        internal x86-64 call codegen pops `ParamCount` registers, so a short arg
+        list unbalances the stack (corrupt return addr → SIGSEGV; that was the
+        first crash found).
+    (2) Save/restore enumerate ONLY the generator's own scope
+        (`CurGenScopeBase..SymCount`), never globals — `SymGenSlot` defaults to 0
+        (a valid slot index) for syms not created via AllocVar/AllocParam, so a
+        global like `StdErr` leaked into the restore and produced
+        `cannot assign to constant`. `SymGenSlot` is now `-1`-initialised in
+        AllocVar/AllocParam AND the enumeration is scope-bounded.
+    (3) Synthetic labels: AN_LABEL/AN_GOTO gained a name-free direct form
+        (`ASTSOffset = -1` sentinel, `ASTIVal` = GotoLabel slot index) so the
+        transform reuses the existing goto machinery without inventing token-char
+        names.
+    (4) v1 restriction: only ordinal/pointer-sized locals persist (managed/
+        aggregate locals across a yield would need per-element ARC — deferred).
+  - Bootstrap byte-identical (procs=912); **cross-bootstrap i386+aarch64+arm32
+    byte-identical**; full `make test` + `make test-i386` green. test wired:
+    `test/test_stackless_gen.pas` (Squares/Range/CountDown(downto)/EvensUpTo
+    (while+if)/Three(straightline)/reuse) in test-core + test-i386.
+  - TODO: v3 auto-selection (eligible→stackless else stackful, keep force
+    overrides); port the *stackful* CoSwitch to the other 5 targets; lift
+    yield-in-try; managed-typed yields/locals in stackless.
+
 ## Acceptance
 
 `for x in g()` over a `generator` routine yields the correct sequence, suspends/

@@ -877,7 +877,10 @@ test-i386: $(COMPILER)
 	./$(COMPILER) --target=i386 test/test_cross_float_const.pas /tmp/test_i386_fc
 	./$(COMPILER) test/test_cross_float_const.pas /tmp/test_i386_fc_x64
 	test "$$(tools/run_target.sh i386 /tmp/test_i386_fc)" = "$$(/tmp/test_i386_fc_x64)"
-	@echo "i386 hello + arith + procs + loops + write + varparam + syscall + heap + string + record + dynarray + exception + float + float-params + variant + byref-params + setlen-str + in-operator + loadfile + sysopen-family + args + string-cow + aoc-types + many-params + conformance2 + shortcircuit + ptr-arith + case-range + global-init + typed-const + multidim + named-array + record-2darray + param-2darray + multidim3d + const-alias + float-const ok (output identical to x86-64)"
+	./$(COMPILER) --target=i386 test/test_stackless_gen.pas /tmp/test_i386_slg
+	./$(COMPILER) test/test_stackless_gen.pas /tmp/test_i386_slg_x64
+	test "$$(tools/run_target.sh i386 /tmp/test_i386_slg)" = "$$(/tmp/test_i386_slg_x64)"
+	@echo "i386 hello + arith + procs + loops + write + varparam + syscall + heap + string + record + dynarray + exception + float + float-params + variant + byref-params + setlen-str + in-operator + loadfile + sysopen-family + args + string-cow + aoc-types + many-params + conformance2 + shortcircuit + ptr-arith + case-range + global-init + typed-const + multidim + named-array + record-2darray + param-2darray + multidim3d + const-alias + float-const + stackless-generator ok (output identical to x86-64)"
 
 test-aarch64: $(COMPILER)
 	./$(COMPILER) --target=aarch64 test/hello.pas /tmp/test_aarch64_hello
