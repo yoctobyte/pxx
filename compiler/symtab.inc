@@ -1395,6 +1395,7 @@ begin
   Syms[SymCount].IsArray  := True;
   Syms[SymCount].ArrLen   := hi - lo + 1;
   SymDynDepth[SymCount] := 0;
+  SymArr2[SymCount] := False;
   SymRTTIOff[SymCount] := -1;
   Syms[SymCount].ElemType := elemType;
   Syms[SymCount].ElemRecName := LastTypeRecId;

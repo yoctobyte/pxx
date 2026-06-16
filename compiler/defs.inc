@@ -574,6 +574,12 @@ var
   SymCaseSensitive : array[0..MAX_SYMS-1] of Boolean; { match this symbol name case-sensitively }
   SymUnitIdx : array[0..MAX_SYMS-1] of Integer; { Strs[] unit name, or -1 for main/local compiler-generated symbols }
   SymDynDepth : array[0..MAX_SYMS-1] of Integer; { dynamic-array nesting: 0=not dynamic, 1=array of T, 2=array of array of T, ... }
+  { 2-D fixed array flattened to 1-D storage: m[i,j] / m[i][j] index as
+    (i-lo1)*span2 + (j-lo2). Default False/0 (single-dimension array). }
+  SymArr2     : array[0..MAX_SYMS-1] of Boolean;
+  SymArr2Lo1  : array[0..MAX_SYMS-1] of Integer;
+  SymArr2Lo2  : array[0..MAX_SYMS-1] of Integer;
+  SymArr2Span2: array[0..MAX_SYMS-1] of Integer;
   SymRTTIOff  : array[0..MAX_SYMS-1] of Integer; { Data[] offset of layout RTTI descriptor, -1 if none }
   SymIsHiddenArgTemp : array[0..MAX_SYMS-1] of Boolean; { compiler-synthesised owning managed local created during IR lowering (materialised managed-string call argument, or an `array of const` TVarRec dyn-array temp); allocated after the parser's prologue zero-init pass, so codegen nil-inits it before the body }
   SymBlockId : array[0..MAX_SYMS-1] of Integer;

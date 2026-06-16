@@ -830,10 +830,33 @@ begin
   RegisterOpOverload(Ord(opKind), opTypeKind, recId, procIdx);
 end;
 
+{ Linear index of a 2-D fixed array element: (i - lo1) * span2 + (j - lo2),
+  built from AST nodes so it feeds the ordinary 1-D AN_INDEX (no codegen
+  change). sym is the array symbol (SymArr2 set); iNode/jNode are the two
+  parsed index expressions. }
+function BuildFlat2DIndex(sym, iNode, jNode: Integer): Integer;
+var lo1Lit, lo2Lit, spanLit, di, scaled, dj: Integer;
+begin
+  lo1Lit := AllocNode(AN_INT_LIT); ASTIVal[lo1Lit] := SymArr2Lo1[sym]; ASTTk[lo1Lit] := Ord(tyInteger);
+  di := AllocNode(AN_BINOP); ASTIVal[di] := Ord(tkMinus);
+  ASTLeft[di] := iNode; ASTRight[di] := lo1Lit; ASTTk[di] := Ord(tyInteger);
+
+  spanLit := AllocNode(AN_INT_LIT); ASTIVal[spanLit] := SymArr2Span2[sym]; ASTTk[spanLit] := Ord(tyInteger);
+  scaled := AllocNode(AN_BINOP); ASTIVal[scaled] := Ord(tkStar);
+  ASTLeft[scaled] := di; ASTRight[scaled] := spanLit; ASTTk[scaled] := Ord(tyInteger);
+
+  lo2Lit := AllocNode(AN_INT_LIT); ASTIVal[lo2Lit] := SymArr2Lo2[sym]; ASTTk[lo2Lit] := Ord(tyInteger);
+  dj := AllocNode(AN_BINOP); ASTIVal[dj] := Ord(tkMinus);
+  ASTLeft[dj] := jNode; ASTRight[dj] := lo2Lit; ASTTk[dj] := Ord(tyInteger);
+
+  Result := AllocNode(AN_BINOP); ASTIVal[Result] := Ord(tkPlus);
+  ASTLeft[Result] := scaled; ASTRight[Result] := dj; ASTTk[Result] := Ord(tyInteger);
+end;
+
 function ParseLValueAST(idx: Integer; identTokIdx: Integer): Integer;
 var
   node, indexNode, fieldNode, prevTok, recName, i: Integer;
-  baseNode, baseRec, fIdx, aliasIdx: Integer;
+  baseNode, baseRec, fIdx, aliasIdx, firstIdxNode: Integer;
   tk: TTypeKind;
   fieldName: AnsiString;
   mci, mmi, mpi, mcallNode, mselfArg, mlastArg, margSeq, margIdx, mexprNode, mai, pri, ci: Integer;
@@ -1087,8 +1110,33 @@ begin
       indexNode := AllocNode(AN_INDEX);
       ASTLeft[indexNode] := node;
       ParseExpr;
-      ASTRight[indexNode] := CurASTNode;
-      Expect(tkRBrack, ']');
+      { 2-D fixed array, both syntaxes, folded into one flattened 1-D index:
+        m[i,j] (comma) and m[i][j] (consecutive brackets). Handled in this
+        bracket so the bogus intermediate m[i] is never built. }
+      if (ASTKind[node] = AN_IDENT) and SymArr2[ASTIVal[node]] and
+         (CurTok.Kind = tkComma) then
+      begin
+        firstIdxNode := CurASTNode;
+        Eat(tkComma);
+        ParseExpr;
+        ASTRight[indexNode] := BuildFlat2DIndex(ASTIVal[node], firstIdxNode, CurASTNode);
+        Expect(tkRBrack, ']');
+      end
+      else if (ASTKind[node] = AN_IDENT) and SymArr2[ASTIVal[node]] and
+              (CurTok.Kind = tkRBrack) and (Tokens[TokPos].Kind = tkLBrack) then
+      begin
+        firstIdxNode := CurASTNode;
+        Expect(tkRBrack, ']');
+        Expect(tkLBrack, '[');
+        ParseExpr;
+        ASTRight[indexNode] := BuildFlat2DIndex(ASTIVal[node], firstIdxNode, CurASTNode);
+        Expect(tkRBrack, ']');
+      end
+      else
+      begin
+        ASTRight[indexNode] := CurASTNode;
+        Expect(tkRBrack, ']');
+      end;
       if IsNodeArray(node) then
       begin
         if ASTKind[node] = AN_IDENT then
@@ -4679,6 +4727,7 @@ procedure ParseVarSection;
 var names: array[0..MAX_DECL_NAMES-1] of AnsiString; n, i, idx: Integer; tk: TTypeKind;
     isArr, isDyn: Boolean; arrLo, arrHi: Integer; elemTk: TTypeKind; dynDepth: Integer;
     initElem: Integer; initVal: Int64;
+    isArr2: Boolean; arr2Lo1, arr2Lo2, arr2Span2, d2hi: Integer;
 begin
   Next;
   { Stop at section keywords: these are plain identifiers in this dialect, so
@@ -4696,6 +4745,7 @@ begin
     until not Eat(tkComma);
     Expect(tkColon, ':');
     isArr := False; isDyn := False; arrLo := 0; arrHi := 0; elemTk := tyInteger;
+    isArr2 := False;
     if CurTok.Kind = tkArray then
     begin
       isArr := True; Next;
@@ -4705,6 +4755,20 @@ begin
         arrLo := ConstEval;
         Expect(tkDotDot, '..');
         arrHi := ConstEval;
+        if CurTok.Kind = tkComma then
+        begin
+          { 2-D fixed array `array[lo1..hi1, lo2..hi2] of T` -> flatten to a 1-D
+            array of span1*span2 elements; m[i,j] indexes via BuildFlat2DIndex. }
+          isArr2 := True;
+          arr2Lo1 := arrLo;
+          Eat(tkComma);
+          arr2Lo2 := ConstEval;
+          Expect(tkDotDot, '..');
+          d2hi := ConstEval;
+          arr2Span2 := d2hi - arr2Lo2 + 1;
+          arrHi := (arrHi - arrLo + 1) * arr2Span2 - 1;
+          arrLo := 0;
+        end;
         Expect(tkRBrack, ']');
         Expect(tkOf, 'of');
       end
@@ -4746,6 +4810,13 @@ begin
 	          idx := AllocArray(names[i], elemTk, arrLo, arrHi);
 	          if elemTk = tyRecord then
 	            Syms[idx].ElemRecName := LastTypeRecId;
+	          if isArr2 then
+	          begin
+	            SymArr2[idx] := True;
+	            SymArr2Lo1[idx] := arr2Lo1;
+	            SymArr2Lo2[idx] := arr2Lo2;
+	            SymArr2Span2[idx] := arr2Span2;
+	          end;
 	        end;
 	      end
 	    else
