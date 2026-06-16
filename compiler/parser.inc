@@ -2093,14 +2093,18 @@ end;
 function ParseProcVarCallAST(calleeSym, sigPi: Integer): Integer;
 { Parse an indirect call `v(args)` through a procedural-type variable. CurTok is
   the variable identifier; consume it and the argument list. Builds AN_CALL_IND
-  whose callee value (ASTRight) is the proc-var (a code address) and whose ASTIVal
-  is the signature proc index used to marshal the arguments and the return type. }
-var node, calleeNode, argsHead, lastArg, argSeq, nArgs: Integer;
+  whose callee value (ASTRight) is the proc-var and whose ASTIVal is the signature
+  proc index (marshalling + return type). A method-pointer var is a 16-byte
+  {Code,Data} record (TypeKind tyRecord): ASTSLen[node]=1 flags it so lowering
+  injects Self (Data) and calls Code. }
+var node, calleeNode, argsHead, lastArg, argSeq, nArgs: Integer; isMethod: Boolean;
 begin
+  isMethod := (Syms[calleeSym].TypeKind = tyRecord);
   Next;                                  { consume the variable name }
   calleeNode := AllocNode(AN_IDENT);
   ASTIVal[calleeNode] := calleeSym;
-  ASTTk[calleeNode] := Ord(tyPointer);
+  if isMethod then ASTTk[calleeNode] := Ord(tyRecord)
+  else ASTTk[calleeNode] := Ord(tyPointer);
   Expect(tkLParen, '(');
   argsHead := -1; lastArg := -1; nArgs := 0;
   while CurTok.Kind <> tkRParen do
@@ -2123,6 +2127,7 @@ begin
   ASTRight[node] := calleeNode;
   ASTIVal[node]  := sigPi;
   ASTTk[node]    := Ord(Procs[sigPi].RetType);
+  if isMethod then ASTSLen[node] := 1 else ASTSLen[node] := 0;
   Result := node;
 end;
 
@@ -5525,6 +5530,7 @@ begin
               else
               begin
                 LastTypeRecId := AliasElemRec[aliasIdx];
+                LastTypeProcSig := AliasProcSig[aliasIdx];  { method-pointer record carries a call signature }
                 Result := IntToTypeKind(AliasTk[aliasIdx]);
               end;
             end
@@ -5674,7 +5680,10 @@ begin
 	      begin
 	        idx := AllocVar(names[i], tk);
 	        if (tk = tyRecord) or (tk = tyClass) then
-	          Syms[idx].RecName := LastTypeRecId
+	        begin
+	          Syms[idx].RecName := LastTypeRecId;
+	          SymProcSig[idx] := LastTypeProcSig;   { method-pointer record: callable }
+	        end
 	        else if tk = tyPointer then
 	        begin
 	          Syms[idx].PtrElemTk := LastTypePointerElemTk;
@@ -6600,9 +6609,6 @@ begin
           Expect(tkColon, ':');
           mRetType := ParseTypeKind;
         end;
-        { `of object` (method pointer) — Phase B; consumed but treated as a plain
-          code pointer for now. }
-        if CurTok.Kind = tkOf then begin Next; if CurTok.Kind = tkIdent then Next; end;
         mpi := RegisterProc('$proctype', mIsFunc, mRetType, mNParams, mPNames, mPTypes);
         Procs[mpi].BodyAddr := -1;
         for i := 0 to mNParams-1 do
@@ -6610,7 +6616,16 @@ begin
           Procs[mpi].Params[i].IsArray := mPArr[i];
           Procs[mpi].Params[i].IsRef := mPByRef[i];
         end;
-        RegisterProcTypeAlias(tnOff, tnLen, mpi);
+        if CurTok.Kind = tkOf then
+        begin
+          { `of object` — a method pointer: a 16-byte {Code,Data} value. The
+            signature drives arg marshalling; Self (Data) is injected at the call. }
+          Next;
+          if CurTok.Kind = tkIdent then Next;   { consume `object` }
+          RegisterMethodPtrTypeAlias(tnOff, tnLen, mpi, EnsureMethodPtrRec);
+        end
+        else
+          RegisterProcTypeAlias(tnOff, tnLen, mpi);
       end
       else
       begin

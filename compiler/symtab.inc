@@ -120,6 +120,23 @@ begin
   Inc(AliasCount);
 end;
 
+procedure RegisterMethodPtrTypeAlias(noff, nlen, sigPi, methodRec: Integer);
+{ Named method-pointer type: `T = procedure(...) of object`. The value is a
+  16-byte {Code,Data} record (methodRec); AliasProcSig carries the call
+  signature so an indirect `v(args)` injects Self (Data) and calls Code. }
+begin
+  if AliasCount >= MAX_TYPEALIAS then Error('too many type aliases');
+  AliasNOff[AliasCount] := noff;
+  AliasNLen[AliasCount] := nlen;
+  AliasTk[AliasCount] := Ord(tyRecord);
+  AliasElemTk[AliasCount] := Ord(tyRecord);
+  AliasElemRec[AliasCount] := methodRec;
+  AliasTargetNOff[AliasCount] := 0;
+  AliasTargetNLen[AliasCount] := 0;
+  AliasProcSig[AliasCount] := sigPi;
+  Inc(AliasCount);
+end;
+
 procedure RegisterProcTypeAlias(noff, nlen, sigPi: Integer);
 { Named procedural type: `T = procedure(...)` / `function(...): R`. The runtime
   value is a code address (pointer-sized), so reuse the pointer alias shape;
@@ -394,6 +411,22 @@ begin
   UClsVMTOffset[UClsCount] := -1;
   UClsIsRecord[UClsCount] := False;
   UClsCount := UClsCount + 1;
+end;
+
+function EnsureMethodPtrRec: Integer;
+{ Record id of the shared 16-byte method-pointer layout {Code@0, Data@8}. Minted
+  lazily on the first `procedure(...) of object` type. No named fields are needed:
+  the method-pointer assignment (@obj.method) and call read Code/Data by fixed
+  offset, so only the 16-byte size + 8-byte alignment matter. }
+var ci: Integer;
+begin
+  if MethodPtrRecId <> REC_NONE then begin Result := MethodPtrRecId; Exit; end;
+  ci := AddUClass(0, 0);
+  UClsSize_[ci]    := 16;
+  UClsAlign[ci]    := 8;
+  UClsIsRecord[ci] := True;
+  MethodPtrRecId := REC_UCLASS_BASE + ci;
+  Result := MethodPtrRecId;
 end;
 
 procedure AddUField(ci, noff, nlen, byteOff, tk, recId: Integer);

@@ -1473,7 +1473,7 @@ begin
           (deepest temp slot) so arg evaluation can't disturb it, push args, pop
           args into x0..x7, pop the callee into x16, and `blr x16`. }
         pi := Integer(IRIVal[node]);                 { signature proc index }
-        if Procs[pi].ParamCount > 8 then
+        if Procs[pi].ParamCount + Integer(IRC[node]) > 8 then
           Error('target aarch64: indirect call with more than 8 parameters not supported');
         IREmitNodeAarch64(IRA[node]);                { x0 = callee address }
         EmitI32($F81F0FE0);                          { str x0, [sp, #-16]! (callee) }

@@ -233,6 +233,8 @@ test-core: $(COMPILER)
 	test "$$(/tmp/test_proctype26)" = "$$(printf 'hello 1\nadd 7\nmul 30\nexpr ok\nhello 7\ngreet 99')"
 	./$(COMPILER) test/test_methodptr.pas /tmp/test_methodptr26
 	test "$$(/tmp/test_methodptr26)" = "$$(printf 'code set\ndata ok')"
+	./$(COMPILER) test/test_methcall.pas /tmp/test_methcall26
+	test "$$(/tmp/test_methcall26)" = "$$(printf 'show 42 base=100\nadd 105\nexpr ok\nping base=100')"
 	./$(COMPILER) test/test_const_record_param.pas /tmp/test_const_record_param26
 	test "$$(/tmp/test_const_record_param26)" = "111 222"
 	./$(COMPILER) test/test_array_of_const.pas /tmp/test_array_of_const26

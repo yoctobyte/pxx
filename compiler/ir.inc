@@ -1966,10 +1966,22 @@ begin
     AN_CALL_IND:
     begin
       { Indirect call through a proc-typed value. Marshal args by the signature
-        (ASTIVal = signature Procs[] index), lower the callee to a code-address
-        value, and emit IR_CALL_IND (IRA = callee, IRB = args, IRIVal = sig). }
+        (ASTIVal = signature Procs[] index) and emit IR_CALL_IND (IRA = callee
+        code address, IRB = args, IRIVal = sig, IRC = extra leading Self args:
+        0 for a plain proc pointer, 1 for a method pointer). A method pointer is
+        a 16-byte {Code@0, Data@8} record: load Self (Data) as arg0, call Code. }
       cpi := ASTIVal[node];
       first := -1; last := -1;
+      if ASTSLen[node] = 1 then
+      begin
+        { Method pointer: prepend Self loaded from the record's Data field. }
+        leftAddr := IRLowerAddress(ASTRight[node]);          { addr of {Code,Data} }
+        right := IRAppend(IR_CONST_INT, -1, -1, -1, 8, Ord(tyInteger));
+        outNode := IRAppend(IR_BINOP, leftAddr, right, Ord(tkPlus), 0, Ord(tyPointer));
+        value := IRAppend(IR_LOAD_MEM, outNode, -1, -1, 0, Ord(tyPointer)); { Self = [addr+8] }
+        first := IRAppend(IR_ARG, value, -1, -1, 0, Ord(tyPointer));
+        last := first;
+      end;
       item := ASTLeft[node];
       pathIdx := 0;
       while item <> -1 do
@@ -1983,8 +1995,12 @@ begin
         item := ASTRight[item];
         Inc(pathIdx);
       end;
-      callVal := IRLowerAST(ASTRight[node]);   { callee code address }
-      Result := IRAppend(IR_CALL_IND, callVal, first, -1, cpi, ASTTk[node]);
+      if ASTSLen[node] = 1 then
+        { callee = Code field (record base address, offset 0). }
+        callVal := IRAppend(IR_LOAD_MEM, IRLowerAddress(ASTRight[node]), -1, -1, 0, Ord(tyPointer))
+      else
+        callVal := IRLowerAST(ASTRight[node]);   { plain: load the code-address value }
+      Result := IRAppend(IR_CALL_IND, callVal, first, ASTSLen[node], cpi, ASTTk[node]);
     end;
 
     AN_IF:

@@ -93,5 +93,17 @@ self-host fixedpoint + cross-bootstrap unaffected (library-only).
     x86-64-only; now implemented on i386/aarch64/arm32 (+ writeELF32 32-bit
     ProcAddrFix). `of object` method pointers (2-word) parsed-but-ignored —
     Phase B. >6/>8/>4 params per target not yet supported (async needs 1).
-  - **Still TODO:** Phase C (port CoSwitch to i386/aarch64/arm32, CoStart
-    trampoline, cooperative scheduler) and Phase B (method pointers).
+  - **Phase B DONE (x86-64):** `procedure(...) of object` / `function(...): R
+    of object` method pointers. A method-pointer value is a 16-byte
+    Code@0/Data@8 record (lazily-minted `MethodPtrRecId`); `m := @obj.Method`
+    reuses the existing AN_METHODREF 2-word store; `m(args)` injects Self (Data)
+    as arg0 and calls Code (IR_CALL_IND with IRC = extra-Self count). The cross
+    backends' IR_CALL_IND method path is in place (guards count Self), but
+    **method pointers are x86-64-only because class instances are x86-64-only**
+    on this compiler ("class instantiation not yet supported" on i386/aarch64/
+    arm32) — latent-correct for when classes land cross. `test/test_methcall.pas`
+    in test-core. Note: bare `p;` (no-paren proc-var call) not supported; use
+    `p()`.
+  - **Still TODO:** Phase C — port CoSwitch to i386/aarch64/arm32, the library
+    `CoStart` trampoline (calls `entry(arg)` via the proc-var call), and the
+    cooperative scheduler (Spawn/Yield/RunUntilDone).

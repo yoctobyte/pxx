@@ -1668,7 +1668,7 @@ begin
           block, then `blx r9`. (Int64-by-value / managed args via a proc pointer
           are not handled in v1.) }
         pi := Integer(IRIVal[node]);                 { signature proc index }
-        if Procs[pi].ParamCount > 4 then
+        if Procs[pi].ParamCount + Integer(IRC[node]) > 4 then
           Error('target arm32: indirect call with more than 4 parameters not supported');
         IREmitNodeArm32(IRA[node]);                  { r0 = callee address }
         EmitI32($E92D0001);                          { push {r0} (callee, deepest) }

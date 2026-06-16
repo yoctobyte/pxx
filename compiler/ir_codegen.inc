@@ -1359,7 +1359,8 @@ begin
           keep it deepest on the stack so arg evaluation cannot clobber it; pop
           args into the ABI registers, then pop the callee into r11 and call. }
         cpi := IRIVal[node];                       { signature proc index }
-        if Procs[cpi].ParamCount > 6 then
+        nArgs := Procs[cpi].ParamCount + IRC[node]; { + injected Self for method ptr }
+        if nArgs > 6 then
           Error('indirect call with more than 6 parameters is not supported');
         IREmitNode(IRA[node]); EmitB($50);         { push rax = callee addr }
         argNode := IRB[node];
@@ -1369,7 +1370,7 @@ begin
           EmitB($50);                              { push rax }
           argNode := IRB[argNode];
         end;
-        for i := Procs[cpi].ParamCount - 1 downto 0 do
+        for i := nArgs - 1 downto 0 do
           case i of
             0: EmitB($5F);                          { pop rdi }
             1: EmitB($5E);                          { pop rsi }

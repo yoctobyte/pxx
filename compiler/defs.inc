@@ -705,6 +705,9 @@ var
   LastTypeRecId : Integer;
   TVarRecId : Integer;   { record id of builtinheap.TVarRec (`array of const`
                            element), or REC_NONE if the unit isn't loaded }
+  MethodPtrRecId : Integer; { record id of the 16-byte method-pointer layout
+                           {Code@0, Data@8} minted on first `of object` proc
+                           type; REC_NONE until then }
   LastTypePointerElemTk : TTypeKind;
   LastTypePointerElemRec : Integer;
   LastTypeProcSig : Integer;  { set by ParseTypeKind when a name resolves to a procedural type: signature proc index, else -1 }
