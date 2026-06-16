@@ -98,25 +98,21 @@ begin
     else if option = '--target=x86_64' then
     begin
       TargetArch := TARGET_X86_64;
-      PasDefine('PXX_TARGET_X86_64');
       Inc(i);
     end
     else if option = '--target=i386' then
     begin
       TargetArch := TARGET_I386;
-      PasDefine('PXX_TARGET_I386');
       Inc(i);
     end
     else if option = '--target=aarch64' then
     begin
       TargetArch := TARGET_AARCH64;
-      PasDefine('PXX_TARGET_AARCH64');
       Inc(i);
     end
     else if option = '--target=arm32' then
     begin
       TargetArch := TARGET_ARM32;
-      PasDefine('PXX_TARGET_ARM32');
       Inc(i);
     end
     else if option = '--target=xtensa' then

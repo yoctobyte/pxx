@@ -14,8 +14,8 @@ unit scheduler;
   the scheduler) or its entry returns (marked done, stack freed). RunUntilDone
   round-robins the runnable set until all finish.
 
-  x86-64 only for now; CoSwitch + the initial-frame builder are ported per
-  target in later phases. }
+  Works on x86-64, i386, aarch64 and arm32 — the only per-target piece is the
+  initial-frame layout below (CoSwitch itself lives in the compiler). }
 
 interface
 
@@ -72,7 +72,7 @@ begin
   stk := Int64(GetMem(CO_STK));
   top := stk + CO_STK;
   top := top - (top mod 16);   { 16-align down }
-{$ifdef PXX_TARGET_I386}
+{$ifdef CPU_I386}
   { i386 pops: exc, edi, esi, ebx, ebp, ret — 6 dwords. }
   top := top - 24;
   PW(top + 0)^  := 0;                { exc_top }
@@ -82,7 +82,7 @@ begin
   PW(top + 16)^ := 0;                { ebp }
   PW(top + 20)^ := Int64(@CoStart);  { return address -> CoStart }
 {$else}
-{$ifdef PXX_TARGET_AARCH64}
+{$ifdef CPU_AARCH64}
   { aarch64 restores: exc(16B slot), then x29/x30, x27/x28 ... x19/x20 — 112
     bytes. Only exc_top (0) and the x30 slot (= CoStart) must be set; the other
     callee-saved slots are dead on first entry. CoSwitch ret jumps to x30. }
@@ -90,7 +90,7 @@ begin
   PW(top + 0)^  := 0;                { exc_top }
   PW(top + 24)^ := Int64(@CoStart);  { x30 -> CoStart }
 {$else}
-{$ifdef PXX_TARGET_ARM32}
+{$ifdef CPU_ARM32}
   { arm32 restores: exc, then r4..r11, lr — 40 bytes. Only exc_top (0) and the
     lr slot (= CoStart) matter; the rest are dead on first entry. CoSwitch
     bx lr jumps to lr. }
