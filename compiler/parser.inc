@@ -3626,8 +3626,8 @@ end;
 
 function ParseLazyVarDeclAST: Integer;
 var
-  names: array[0..63] of AnsiString;
-  nameTokIdx: array[0..63] of Integer;
+  names: array[0..MAX_DECL_NAMES-1] of AnsiString;
+  nameTokIdx: array[0..MAX_DECL_NAMES-1] of Integer;
   n, i, idx, assignNode, seqNode, lastSeq, node, valueNode, declNode: Integer;
   tk: TTypeKind;
   isArr: Boolean;
@@ -3636,6 +3636,7 @@ begin
   n := 0;
   repeat
     if CurTok.Kind <> tkIdent then Error('expected identifier in var declaration');
+    if n >= MAX_DECL_NAMES then Error('too many comma-separated names in one var declaration');
     names[n] := CurTok.SVal;
     nameTokIdx[n] := TokPos - 1;
     Inc(n); Next;
@@ -4576,7 +4577,7 @@ begin
 end;
 
 procedure ParseVarSection;
-var names: array[0..63] of AnsiString; n, i, idx: Integer; tk: TTypeKind;
+var names: array[0..MAX_DECL_NAMES-1] of AnsiString; n, i, idx: Integer; tk: TTypeKind;
     isArr, isDyn: Boolean; arrLo, arrHi: Integer; elemTk: TTypeKind; dynDepth: Integer;
 begin
   Next;
@@ -4590,6 +4591,7 @@ begin
   begin
     n := 0;
     repeat
+      if n >= MAX_DECL_NAMES then Error('too many comma-separated names in one var declaration');
       names[n] := CurTok.SVal; Inc(n); Next;
     until not Eat(tkComma);
     Expect(tkColon, ':');

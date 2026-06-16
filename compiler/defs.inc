@@ -13,6 +13,7 @@ const
   MAX_GLOBFIX = 32768;
   MAX_EXTERNAL = 16384;
   MAX_CPREP_MACROS = 32768;
+  MAX_DECL_NAMES = 256;  { comma-separated names in one var declaration line }
   MAX_CPREP_PARAMS = 131072;
   MAX_CPREP_CONDS = 256;
   MAX_CPREP_INCLUDES = 128;
