@@ -109,7 +109,48 @@ the stackless generator does); a configurable small coroutine stack runs the
 scheduler suite; Nil Python `async def`/`await` lowers to the same engine.
 Bootstrap + cross-bootstrap stay byte-identical.
 
+## Decided spelling (locked 2026-06-16)
+
+- Directive: **`; async;`** (+ `; async; stackful;` default / `; async; stackless;`
+  later) — parsed exactly like `generator`/`assembler`: a `CaseEqual` identifier
+  in the directive position, **not** a reserved word, so FPC keeps compiling
+  `compiler.pas` (the keyword is never *used* there).
+- Marker: **`await E`** — a new `AN_AWAIT` AST node, gated on `CurProcIsAsync`
+  (so `await` stays a usable identifier outside async routines; an `await` outside
+  async falls through to ordinary identifier lookup). Binds tightly like Python
+  (`await f() + 1` ≡ `(await f()) + 1`); legal in expression *and* statement
+  position (statement form parses a full — possibly void — call statement).
+
 ## Log
+- 2026-06-16 — **Warmup (build-order #1) DONE — configurable coroutine stack +
+  overflow canary** (commit 2e54b14). `SpawnSized(entry, arg, stackBytes)` in
+  `lib/rtl/scheduler.pas` runs a coroutine on a small heap stack (the RAM-cheap
+  ESP path); `Spawn` now just calls it with the 64 KB `CO_STK` default. Every
+  stack carries a `CO_CANARY` word at its low end, checked when the coroutine
+  finishes — an overflow that reaches the base aborts with a message instead of
+  silently corrupting the heap. Pure library (PXX-only), no compiler change.
+  `test/test_costack.pas` (three workers on 8 KB stacks) runs byte-identical on
+  x86-64/i386/aarch64/arm32.
+- 2026-06-16 — **Step #2 (Pascal async surface) DONE — stackful** (commit
+  429bf7f). `; async;` directive + `await` marker per the spelling above.
+  `ProcIsAsync[]` + `CurProcIsAsync` (saved/restored alongside the generator body
+  context). v1 backend is **stackful**: `await` is documentary — `AN_AWAIT`
+  lowers straight to its operand in the IR (`IRLowerAST`), and the awaited call
+  suspends on its own via the reactor / `CoYield`. The node is in place for the
+  stackless backend to use as the split point. Validation: async ⊄ generator/
+  assembler; `async stackless` errors (not implemented). `test/test_async.pas`
+  (two async workers each `await` a suspending async helper) interleaves + ends
+  on the cooperative scheduler. Bootstrap + cross-bootstrap byte-identical
+  (procs=916); `make test` green.
+  - Notes / non-blocking gotchas hit while testing (orthogonal to this work):
+    `CoSleep(0)` arms a *disarmed* timerfd (it_value all-zero) → never fires;
+    and a *single* coroutine that yields once then finishes hangs `RunUntilDone`
+    (reproduces on the pre-change compiler too — a pre-existing scheduler edge
+    case, not caused by the async surface). Multi-coroutine cases are fine.
+  - **Next: step #3 — the stackless coroutine backend** (the hard part): the
+    state-machine transform behind `; async; stackless;`, reusing the
+    stackless-*generator* transform shape (`parser.inc` SL* helpers). `await`
+    becomes the required local split marker; default stays stackful.
 - 2026-06-16 — opened from the async-ergonomics design discussion. Key
   conclusions: stackful needs no keywords (a feature); `await` is required only
   for the stackless transform (bounds transitive suspension locally) but is
