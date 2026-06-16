@@ -5927,7 +5927,24 @@ begin
           EmitI32($F9000100 + i);
       end
       else
-        Error('target aarch64: more than 8 parameters not yet supported');
+      begin
+        { Stack-passed param (AAPCS): the caller left args 8.. in an outgoing
+          block; after the prologue `stp x29,x30,[sp,#-16]!` the incoming block
+          sits at [x29 + 16 + (i-8)*8]. Copy it into this param's local slot. }
+        EmitLoadImmA64(9, 16 + (i - 8) * 8);
+        EmitI32($8B0903A8);              { add x8, x29, x9  -> &incoming arg }
+        EmitI32($F9400109);              { ldr x9, [x8]     -> arg value }
+        EmitLoadImmA64(10, Syms[idx].Offset);
+        EmitI32($8B0A03A8);              { add x8, x29, x10 -> &local slot }
+        if sz = 1 then
+          EmitI32($39000109)            { strb w9, [x8] }
+        else if sz = 2 then
+          EmitI32($79000109)            { strh w9, [x8] }
+        else if sz = 4 then
+          EmitI32($B9000109)            { str w9, [x8] }
+        else
+          EmitI32($F9000109);           { str x9, [x8] }
+      end;
     end;
   end
   else if TargetArch = TARGET_ARM32 then

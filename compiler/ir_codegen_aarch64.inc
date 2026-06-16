@@ -1425,19 +1425,46 @@ begin
         while argNode <> -1 do
         begin
           IREmitNodeAarch64(IRA[argNode]);
-          EmitI32($F81F0FE0); { str x0, [sp, #-16]! }
+          EmitI32($F81F0FE0); { str x0, [sp, #-16]! (16-byte temp slot, arg0 deepest) }
           Inc(nArgs);
           argNode := IRB[argNode];
         end;
         if nArgs <> Procs[pi].ParamCount then
           Error('target aarch64: call argument count mismatch');
-        if nArgs > 8 then
-          Error('target aarch64: procedures with more than 8 arguments not yet supported');
 
-        for i := nArgs - 1 downto 0 do
-          EmitI32($F84107E0 + i); { ldr x[i], [sp], #16 }
-
-        EmitCallProc(pi);
+        if nArgs <= 8 then
+        begin
+          { All args fit in x0..x7: pop each temp into its register (unchanged). }
+          for i := nArgs - 1 downto 0 do
+            EmitI32($F84107E0 + i); { ldr x[i], [sp], #16 }
+          EmitCallProc(pi);
+        end
+        else
+        begin
+          { AAPCS: args 0..7 in x0..x7, args 8.. in an outgoing stack block at sp.
+            Build the block from the temp slots without consuming them, load the
+            register args by offset, then drop block + temps after the call.
+            (No proc in compiler.pas has >8 params, so this path never fires
+            during self-host — the <=8 path above stays byte-identical.) }
+          lo := nArgs - 8;                              { stack-arg count }
+          hi := ((lo * 8 + 15) div 16) * 16;            { outgoing block bytes (16-aligned) }
+          EmitI32($D10003FF or (hi shl 10));            { sub sp, sp, #hi }
+          { temp slot for arg k is at [sp + hi + (nArgs-1-k)*16] }
+          for i := 8 to nArgs - 1 do
+          begin
+            sz  := hi + (nArgs - 1 - i) * 16;           { temp byte offset }
+            wid := (i - 8) * 8;                         { outgoing byte offset }
+            EmitI32($F94003E9 or ((sz div 8) shl 10));  { ldr x9, [sp, #sz] }
+            EmitI32($F90003E9 or ((wid div 8) shl 10)); { str x9, [sp, #wid] }
+          end;
+          for i := 0 to 7 do
+          begin
+            sz := hi + (nArgs - 1 - i) * 16;
+            EmitI32($F94003E0 or i or ((sz div 8) shl 10)); { ldr x[i], [sp, #sz] }
+          end;
+          EmitCallProc(pi);
+          EmitI32($910003FF or ((hi + nArgs * 16) shl 10)); { add sp, sp, #(hi+nArgs*16) }
+        end;
       end;
 
     IR_CONST_STR:
