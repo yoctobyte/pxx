@@ -160,9 +160,13 @@ stackful — no grammar change to add it.
   - Initial-stack frame the first switch-in pops (low→high):
     `exc_top(0), r15, r14, r13, r12, rbx, rbp, retaddr`. `rsp` at entry must be
     `≡ 8 (mod 16)`: align top to 16, `-8`, then `-64` for the 8 qwords.
-  - LANDMINE found while building the test: **`not 15` mis-evaluates to `14`**
-    in PXX (some constant-fold/width bug in unary `not`). Worked around with
-    `top - (top mod 16)` for align-down. Separate bug — ticket if it bites again.
+  - LANDMINE found while building the test: **`not 15` mis-evaluated to `14`**
+    in PXX — `not` was always logical (xor bit 0) regardless of operand type.
+    **FIXED 2026-06-16 (commit 606abec):** parser now types `AN_NOT` from the
+    operand node's own type and promotes to bitwise complement for true integer
+    operands (ord 1, 7..16); Boolean/char/pointer/unknown stay logical. Matches
+    FPC; fixedpoint byte-identical. (The test's align-down still uses
+    `top - (top mod 16)`, which is fine.)
   - DESIGN NOTE for Phase 2: PXX does **not** support calling through a
     procedure-typed variable with arguments (`p(42)` is a parse error — only
     `p := @Proc` / method-ptr round-trips exist). So a generic library
