@@ -13,8 +13,17 @@ both `m[i,j]` and `m[i][j]` fold into one linear `AN_INDEX` at parse time (dims 
 parallel arrays `SymArr2*`), so the 1-D path handles codegen unchanged.
 `test_cross_multidim` byte-identical on all 4 targets, matches FPC. The single
 chokepoint was `ParseLValueAST` (both reads and writes of identifier indexing
-route through it), so the "~6 sites" worry was overstated. Remaining follow-ups:
-named array types / record-field / param 2-D, and 3-D+.
+route through it), so the "~6 sites" worry was overstated.
+
+Follow-ups landed same day:
+- **Named fixed-array types** (`type TA = array[..] of T`, 1-D + 2-D) — were
+  skipped → silent miscompile; now an ArrType* registry resolved in
+  ParseVarSection. `test_cross_named_array`.
+- **2-D record/class fields** (`m: array[a..b,c..d] of T`, `r.m[i,j]`) —
+  UFldArr2* per-field dims; one `NodeArr2Info` helper resolves both var and field
+  bases. `test_cross_record_2darray`.
+
+Still open: 2-D **param** arrays, 3-D+, dynamic-array type aliases.
 
 ## Gap
 
