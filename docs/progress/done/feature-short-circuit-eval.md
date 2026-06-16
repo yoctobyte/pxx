@@ -1,9 +1,10 @@
 # Short-circuit boolean evaluation (`and` / `or`)
 
 - **Type:** feature
-- **Status:** backlog
+- **Status:** done
 - **Owner:** —
 - **Opened:** 2026-06-14 (found while landing the asm text emitter)
+- **Closed:** 2026-06-16
 
 ## Current behaviour
 
@@ -76,3 +77,18 @@ circuit would make robust.
   complete-evaluates `and`/`or`. Tried `{$B+}` on the FPC path to force parity —
   it crashes the FPC build (compiler.pas relies on short-circuit), so reverted;
   no interim. Emitter guarded with `AsmTextCharAt`.
+
+- 2026-06-16 — **DONE.** Lowered logical and/or to short-circuit control flow in
+  the shared IR (`ir.inc` AN_BINOP): the parser already tags a both-boolean
+  and/or with `ASTTk = tyBoolean` (bitwise integer and/or keep an ordinal type),
+  so lowering stores the left into a temp, branches (`and` skips right when left
+  false; `or` skips when left true via a JUMP_IF_FALSE→eval-right / JUMP→end
+  pair), then lowers the right operand AFTER the branch so its IR sits past the
+  jump in the linear statement stream. Temp is a proc-local (recursion-safe).
+  One IR change → all four targets; byte-identical on x86-64/i386/aarch64/arm32,
+  cross-bootstrap self-fixedpoint still byte-identical on all 3. Self-host
+  reseeded via `make bootstrap` (codegen change; +~82 KB code from the branches).
+  `test_cross_shortcircuit` wired into all four suites. Scope item 2 ({$B+}
+  complete-eval opt-in) deferred as a rarely-used follow-up. Landmine confirmed:
+  a literal `{$B-}` inside a `{ }` comment is lexed as a directive — keep
+  `{$...}` out of comments (see project_rtl_dialect_landmines).

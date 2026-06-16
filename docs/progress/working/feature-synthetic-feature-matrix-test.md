@@ -108,3 +108,21 @@ appear in compiler.pas.
   results — so a cross-portable `test_conformance_2` (Int64/string/record/dynarray/
   array-of-const/case/exceptions subset) is the next harness piece for the
   4-target byte-identical diff. Short-circuit and/or still to fold in.
+- 2026-06-16 — **cross-portable conformance_2 + short-circuit landed.**
+  `test_conformance_2.pas` (Int64 by-val/ref + shifts/div/mod mixed with 32-bit,
+  frozen strings concat/index/case, records >8 bytes with managed fields by-value/
+  whole-copy/dyn-array-of-record, open arrays of Int64, array of const, recursion +
+  mutual recursion, a 9-arg call, an 8 KB frame, raise/try/finally/except) is
+  byte-identical on all four targets and wired into test-core + the three cross
+  suites (diffed vs the x86-64 oracle), with `test_cross_many_params`.
+  Two gaps the harness surfaced and I fixed:
+  1. **aarch64 had no >8-parameter support** (Sum9) — implemented the AAPCS
+     stack-arg path (caller in `ir_codegen_aarch64.inc`, callee prologue in
+     `parser.inc`; stack arg i read from `[x29 + 16 + (i-8)*8]`). The <=8 path is
+     byte-identical, so self-host/cross-bootstrap bytes are unchanged.
+  2. **Short-circuit `and`/`or`** (was full-eval; feature-short-circuit-eval) —
+     lowered in the shared IR so all four targets get it; `test_cross_shortcircuit`
+     wired into all suites; self-host reseeded via `make bootstrap`;
+     cross-bootstrap still byte-identical on i386/aarch64/arm32.
+  Remaining on this ticket: root-cause the nested-index load-width codegen
+  landmine (bug-codegen-nested-index-load-width-pressure).
