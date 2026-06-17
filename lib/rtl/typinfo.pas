@@ -11,29 +11,46 @@ type
   end;
   PMethod = ^TMethod;
 
+  { The RTTI blob (rtti_emit.inc) is emitted with uniform 8-byte field slots on
+    every target (pointers and Int64 counts alike). To keep these reader records
+    byte-compatible on 32-bit targets, a 4-byte stub follows each Pointer field
+    under the CPU32 conditional so the pointer occupies a full 8-byte slot (the
+    low 4 bytes hold the 32-bit address, the stub is the zeroed high half). This is
+    plain conditional compilation — no compiler/dialect change. TMethod is left
+    unpadded: it is a runtime method-pointer value (8 bytes = 2 ptrs on i386),
+    not a blob record. }
   TMethInfo = record
     NamePtr: PString;
+    {$ifdef CPU32} _pad_name: LongInt; {$endif}
     Code:    Pointer;
+    {$ifdef CPU32} _pad_code: LongInt; {$endif}
   end;
   PMethInfo = ^TMethInfo;
 
   TFieldInfo = record
     NamePtr: PString;
+    {$ifdef CPU32} _pad_name: LongInt; {$endif}
     Offset:  Int64;       { byte offset of the field within the instance }
   end;
   PFieldInfo = ^TFieldInfo;
 
   TClassRTTI = record
     NamePtr:      PString;
+    {$ifdef CPU32} _pad_name: LongInt; {$endif}
     ParentRTTI:   Pointer; { actually PClassRTTI }
+    {$ifdef CPU32} _pad_parent: LongInt; {$endif}
     InstanceSize: Int64;
     VMTPtr:       Pointer;
+    {$ifdef CPU32} _pad_vmt: LongInt; {$endif}
     PropCount:    Int64;
     PropsPtr:     Pointer; { actually PPropInfo }
+    {$ifdef CPU32} _pad_props: LongInt; {$endif}
     MethCount:    Int64;
     MethsPtr:     PMethInfo;
+    {$ifdef CPU32} _pad_meths: LongInt; {$endif}
     FieldCount:   Int64;
     FieldsPtr:    PFieldInfo;
+    {$ifdef CPU32} _pad_fields: LongInt; {$endif}
   end;
   PClassRTTI = ^TClassRTTI;
 
@@ -45,15 +62,19 @@ type
       +16 ValuesPtr -> array[Count] of PString (member names, by ordinal) }
   TEnumRTTI = record
     NamePtr:   PString;
+    {$ifdef CPU32} _pad_name: LongInt; {$endif}
     Count:     Int64;
     ValuesPtr: Pointer; { actually PStringArr }
+    {$ifdef CPU32} _pad_values: LongInt; {$endif}
   end;
   PEnumRTTI = ^TEnumRTTI;
 
   TPropInfo = record
     NamePtr: PString;
+    {$ifdef CPU32} _pad_name: LongInt; {$endif}
     Kind:    Int64;      { 0=int, 1=string, 2=class, 3=enum, 4=set, 5=method }
     TypeRef: Pointer;    { pointer to EnumRTTI or ClassRTTI or nil }
+    {$ifdef CPU32} _pad_typeref: LongInt; {$endif}
     GetKind: Int64;      { 0=field, 1=method }
     GetRef:  Int64;      { field offset or method code ptr }
     SetKind: Int64;      { 0=field, 1=method }
@@ -64,7 +85,9 @@ type
 
   TRTTIEntry = record
     NamePtr: PString;
+    {$ifdef CPU32} _pad_name: LongInt; {$endif}
     RTTIPtr: PClassRTTI;
+    {$ifdef CPU32} _pad_rtti: LongInt; {$endif}
   end;
   PRTTIEntry = ^TRTTIEntry;
 
