@@ -2290,6 +2290,32 @@ begin
     IR_STORE_MEM:
       begin
         tk := IntToTypeKind(IRTk[node]);
+        if tk = tyString then
+        begin
+          { Frozen inline-string store through a pointer (e.g. PString(p)^ := s):
+            copy the 8-byte length prefix, then rep movsb the `length` chars.
+            Mirrors the x86-64 path. }
+          valNode := IRB[node];
+          IREmitNode386(valNode);                     { eax = source string addr }
+          EmitB($50);                                 { push eax (source) }
+          savedLValueWrite := InLValueWrite;
+          InLValueWrite := True;
+          IREmitNode386(IRA[node]);                   { eax = dest addr }
+          InLValueWrite := savedLValueWrite;
+          EmitB($89); EmitB($C7);                     { mov edi, eax }
+          EmitB($5E);                                 { pop esi }
+          if IntToTypeKind(IRTk[valNode]) = tyChar then
+            Error('target i386: char-to-inline-string store through pointer not yet supported');
+          EmitB($8B); EmitB($0E);                     { mov ecx, [esi] (len lo) }
+          EmitB($89); EmitB($0F);                     { mov [edi], ecx }
+          EmitB($8B); EmitB($4E); EmitB($04);         { mov ecx, [esi+4] (len hi) }
+          EmitB($89); EmitB($4F); EmitB($04);         { mov [edi+4], ecx }
+          EmitB($8B); EmitB($0E);                     { mov ecx, [esi] (count) }
+          EmitB($83); EmitB($C6); EmitB($08);         { add esi, 8 }
+          EmitB($83); EmitB($C7); EmitB($08);         { add edi, 8 }
+          EmitB($F3); EmitB($A4);                     { rep movsb }
+          Exit;
+        end;
         if tk = tyAnsiString then
         begin
           { Managed-string assignment: produce the new handle in eax, then
