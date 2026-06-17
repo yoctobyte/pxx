@@ -376,3 +376,13 @@ test-core; bootstrap + cross-bootstrap stay byte-identical.
   deferred. **Item 3 (external C calls + dynamic symbols) now complete on all
   four hosted targets** — the cross-target-feature-parity ticket's three items
   (collections depth, async reactor, external calls) are all done.
+- 2026-06-17 — **all three core cross-parity items complete on all four hosted
+  targets** (collections/dynarray-of-record depth; async I/O reactor + sockets +
+  timers; external C calls + dynamic symbols). The per-target matrix has no
+  unexplained ✗ for the scalar/object/async/external feature set; the remaining
+  cross ✗/◐ are tracked by their own arcs (interfaces → feature-interfaces;
+  GTK/LCL → needs interfaces + the external path now landed; Variant
+  single/extended on aarch64). External-call **ABI breadth** (float/Int64 C args,
+  float returns, i386 stack 16-alignment) is deliberately out of v1 and spun out
+  to **feature-cross-extern-abi-breadth** (backlog). Embedded targets
+  (Xtensa/RV32) remain deferred per the scope decision above.
