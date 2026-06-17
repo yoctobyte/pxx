@@ -1,10 +1,40 @@
 # ESP32 managed strings (tyAnsiString runtime on xtensa + riscv32)
 
 - **Type:** feature
-- **Status:** backlog
+- **Status:** backlog (in progress — core + concat done)
 - **Owner:** —
 - **Opened:** 2026-06-17 (from feature-esp32-managed-features)
 - **Depends-on:** feature-esp32-managed-features
+
+## Progress
+
+- 2026-06-17 — **core done** (commit eb849b3): builtinheap restructured so the
+  target-independent ARC runtime (PXXStrFromLit/Concat/IncRef/DecRef/Unique/Eq/
+  SetLen + MemMove/MemZero + PXXDynSetLen) is no longer behind the blanket
+  `{$ifndef PXX_ESP}` — only file I/O, managed-element dynarray/record retain,
+  variant and float formatting stay ESP-excluded. Codegen on both ESP backends:
+  IR_STORE_SYM tyAnsiString (literal/char/frozen/handle build + DecRef-old
+  publish), IR_LEA scalar tyAnsiString (read=load handle, write=slot addr),
+  Length `[handle-8]`, index `handle+(i-1)`. test_esp_string → 3/PXX/PXX both
+  ISAs == oracle.
+- 2026-06-17 — **concat done** (commit dd91333): `a + b` → PXXStrConcat on both
+  backends (handle/tyString/char operands, fresh-temp DecRef, nested concat).
+  test_esp_strcat → "PXX rocks"/"PXX rocks!"/9 both ISAs == oracle.
+
+## Remaining
+
+- **Comparison** `s = t` / `s <> t` → PXXStrEq(lenA,srcA,lenB,srcB) (1/0;
+  tkNeq xor 1). Same operand decomposition as concat (factor a helper to share
+  it across concat/compare on each backend). Gate on op tkEq/tkNeq AND an
+  operand of tyAnsiString (result is tyBoolean, so can't gate on IRTk[node]).
+- **SetLength(s, n)** → PXXStrSetLen(slotAddr, n) (already registered/compiled;
+  wire the -102 path to route tyAnsiString to PXXStrSetLen, like aarch64).
+- **s[i] write** (COW): write position must clone-if-shared via PXXStrUnique
+  before returning the byte address (IR_LEA write already keeps the slot addr).
+- **Scope-exit DecRef** of local managed strings (ARC bookkeeping on proc exit)
+  — verify EmitProcEpilog releases tyAnsiString locals on ESP.
+- xtensa char-concat operand uses `addi a6, sp, off` (±128 imm) — deep nesting
+  with a char operand could overflow; revisit if hit.
 
 ## Motivation
 
