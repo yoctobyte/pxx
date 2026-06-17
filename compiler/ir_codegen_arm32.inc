@@ -1897,6 +1897,31 @@ begin
     IR_STORE_MEM:
       begin
         tk := IntToTypeKind(IRTk[node]);
+        if tk = tyString then
+        begin
+          { Frozen inline-string store through a pointer (PString(p)^ := s): copy
+            the 8-byte length prefix, then the `length` chars. Mirrors i386. }
+          valNode := IRB[node];
+          IREmitNodeArm32(valNode);                { r0 = source string addr }
+          EmitI32($E92D0001);                      { push {r0} (src) }
+          savedLValueWrite := InLValueWrite;
+          InLValueWrite := True;
+          IREmitNodeArm32(IRA[node]);              { r0 = dest addr }
+          InLValueWrite := savedLValueWrite;
+          EmitI32($E1A06000);                      { mov r6, r0 (dst) }
+          EmitI32($E8BD0020);                      { pop {r5} (src) }
+          if IntToTypeKind(IRTk[valNode]) = tyChar then
+            Error('target arm32: char-to-inline-string store through pointer not yet supported');
+          EmitI32($E5959000);                      { ldr r9, [r5] (len lo) }
+          EmitI32($E5869000);                      { str r9, [r6] }
+          EmitI32($E5959004);                      { ldr r9, [r5,#4] (len hi) }
+          EmitI32($E5869004);                      { str r9, [r6,#4] }
+          EmitI32($E5954000);                      { ldr r4, [r5] (count) }
+          EmitI32($E2855008);                      { add r5, r5, #8 }
+          EmitI32($E2866008);                      { add r6, r6, #8 }
+          EmitArm32CopyBytes(4, 5, 6);
+          Exit;
+        end;
         if tk = tyAnsiString then
         begin
           valNode := IRB[node];

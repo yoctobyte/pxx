@@ -1686,6 +1686,29 @@ begin
     IR_STORE_MEM:
       begin
         tk := IntToTypeKind(IRTk[node]);
+        if tk = tyString then
+        begin
+          { Frozen inline-string store through a pointer (PString(p)^ := s): copy
+            the 8-byte length prefix, then the `length` chars. Mirrors i386. }
+          valNode := IRB[node];
+          IREmitNodeAarch64(valNode);              { x0 = source string addr }
+          EmitI32($F81F0FE0);                      { str x0, [sp,#-16]! (push src) }
+          savedLValueWrite := InLValueWrite;
+          InLValueWrite := True;
+          IREmitNodeAarch64(IRA[node]);            { x0 = dest addr }
+          InLValueWrite := savedLValueWrite;
+          EmitI32($AA0003E6);                      { mov x6, x0 (dst) }
+          EmitI32($F84107E5);                      { ldr x5, [sp],#16 (src) }
+          if IntToTypeKind(IRTk[valNode]) = tyChar then
+            Error('target aarch64: char-to-inline-string store through pointer not yet supported');
+          EmitI32($F94000A9);                      { ldr x9, [x5] (len prefix) }
+          EmitI32($F90000C9);                      { str x9, [x6] }
+          EmitI32($AA0903E4);                      { mov x4, x9 (count) }
+          EmitI32($910020A5);                      { add x5, x5, #8 }
+          EmitI32($910020C6);                      { add x6, x6, #8 }
+          EmitA64CopyBytes(4, 5, 6);
+          Exit;
+        end;
         if tk = tyAnsiString then
         begin
           { Managed-string store through an address (field/slot): publish new,
