@@ -180,7 +180,7 @@ test: fpc-check test-core test-asm-emit
 # ships and asserts emitted bytes against llvm-mc oracle values; it Halt(1)s on
 # any mismatch. Built/run out of /tmp to keep test/ clean.
 test-asm-emit:
-	@for t in 386 rv32 a64 arm32; do \
+	@for t in x64 386 rv32 a64 arm32; do \
 	  $(FPC) -FU/tmp -FE/tmp test/test_asm_emit_$$t.pas >/tmp/asmemit_$$t.log 2>&1 || \
 	    { echo "asm-emit $$t: BUILD FAIL"; cat /tmp/asmemit_$$t.log; exit 1; }; \
 	  /tmp/test_asm_emit_$$t >/dev/null || \

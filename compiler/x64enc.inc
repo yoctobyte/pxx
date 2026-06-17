@@ -53,6 +53,25 @@ begin
   end;
 end;
 
+{ Prefix/REX for a MEMORY-operand instruction. Differs from EncPrefixAndREX in
+  the byte-size case: the "force REX for spl/bpl/sil/dil" rule applies only to an
+  8-bit *register operand* (regField when regIsByteOperand), never to the memory
+  base register — a base in 4..7 (rsp/rbp/rsi/rdi) must NOT pull in a REX. }
+procedure EncPrefixAndREXMem(size, regField, baseReg: Integer; regIsByteOperand: Boolean);
+var w, r, b, rex: Integer;
+begin
+  if size = 2 then EncB($66);
+  w := 0; if size = 8 then w := 1;
+  r := 0; if regField >= 8 then r := 1;
+  b := 0; if baseReg >= 8 then b := 1;
+  if (w <> 0) or (r <> 0) or (b <> 0) or
+     (regIsByteOperand and (regField >= 4) and (regField <= 7)) then
+  begin
+    rex := $40 or (w shl 3) or (r shl 2) or b;
+    EncB(rex);
+  end;
+end;
+
 procedure EncModRMReg(regField, rmReg: Integer);
 begin
   EncB($C0 or ((regField and 7) shl 3) or (rmReg and 7));
@@ -413,4 +432,151 @@ procedure x64_call_rel32(disp: Integer);
 begin
   EncB($E8);
   EncI32(disp);
+end;
+
+{ --- Call / jump indirect (FF /2 = call, /4 = jmp; default 64-bit oper) --- }
+procedure x64_call_reg(reg: Integer);
+begin
+  if reg >= 8 then EncB($41);   { REX.B; no REX.W (call r/m64 is 64-bit by default) }
+  EncB($FF);
+  EncModRMReg(2, reg);
+end;
+
+procedure x64_jmp_reg(reg: Integer);
+begin
+  if reg >= 8 then EncB($41);
+  EncB($FF);
+  EncModRMReg(4, reg);
+end;
+
+{ --- Unary F6/F7 group on a register.
+  ext: 2=not 3=neg 4=mul 5=imul 6=div 7=idiv. --- }
+procedure x64_unary_reg(size, ext, reg: Integer);
+begin
+  EncPrefixAndREX(size, ext, reg, False);
+  if size = 1 then EncB($F6) else EncB($F7);
+  EncModRMReg(ext, reg);
+end;
+
+{ --- imul reg, reg (two-operand signed multiply, 0F AF /r) --- }
+procedure x64_imul_reg_reg(size, destReg, srcReg: Integer);
+begin
+  EncPrefixAndREX(size, destReg, srcReg, False);
+  EncB($0F); EncB($AF);
+  EncModRMReg(destReg, srcReg);
+end;
+
+{ --- Shifts: ext 4=shl/sal 5=shr 7=sar. reg by imm (or by 1) --- }
+procedure x64_shift_reg_imm(size, ext, reg, imm: Integer);
+begin
+  EncPrefixAndREX(size, ext, reg, False);
+  if imm = 1 then
+  begin
+    if size = 1 then EncB($D0) else EncB($D1);
+    EncModRMReg(ext, reg);
+  end
+  else
+  begin
+    if size = 1 then EncB($C0) else EncB($C1);
+    EncModRMReg(ext, reg);
+    EncB(imm and $FF);
+  end;
+end;
+
+{ --- Shifts by CL (D2/D3) --- }
+procedure x64_shift_reg_cl(size, ext, reg: Integer);
+begin
+  EncPrefixAndREX(size, ext, reg, False);
+  if size = 1 then EncB($D2) else EncB($D3);
+  EncModRMReg(ext, reg);
+end;
+
+{ --- movzx / movsx reg, reg. srcSize 1 or 2; destSize sets 66/REX.W.
+  signed=False → movzx (0F B6/B7); True → movsx (0F BE/BF). --- }
+procedure x64_movx_reg_reg(destSize, srcSize, destReg, srcReg: Integer; signed: Boolean);
+var force: Boolean;
+begin
+  { 32-bit signed source is MOVSXD (one-byte 0x63), not the 0F-prefixed form;
+    32-bit unsigned source is just a plain `mov r32,r32` (zero-extends) — caller
+    should use mov for that, so reject it here. }
+  if srcSize = 4 then
+  begin
+    if not signed then Error('x64_movx: use mov for 32-bit zero-extend');
+    EncPrefixAndREX(destSize, destReg, srcReg, False);
+    EncB($63);
+    EncModRMReg(destReg, srcReg);
+    Exit;
+  end;
+  { an 8-bit src in 4..7 (spl/bpl/sil/dil) needs a REX to escape ah/ch/dh/bh }
+  force := (srcSize = 1) and (srcReg >= 4) and (srcReg <= 7);
+  EncPrefixAndREX(destSize, destReg, srcReg, force);
+  EncB($0F);
+  if signed then begin if srcSize = 1 then EncB($BE) else EncB($BF); end
+  else begin if srcSize = 1 then EncB($B6) else EncB($B7); end;
+  EncModRMReg(destReg, srcReg);
+end;
+
+{ --- movzx / movsx reg, [mem]. srcSize from explicit byte/word keyword. --- }
+procedure x64_movx_reg_mem(destSize, srcSize, destReg, baseReg, disp: Integer;
+  signed: Boolean; force32: Boolean);
+begin
+  EncPrefixAndREX(destSize, destReg, baseReg, False);
+  EncB($0F);
+  if signed then begin if srcSize = 1 then EncB($BE) else EncB($BF); end
+  else begin if srcSize = 1 then EncB($B6) else EncB($B7); end;
+  EncModRMMem(destReg, baseReg, disp, force32);
+end;
+
+{ --- setcc reg8 (0F 90+cc, /0) --- }
+procedure x64_setcc_reg(cc, reg: Integer);
+begin
+  EncPrefixAndREX(1, 0, reg, False);   { size=1 forces REX for spl/bpl/sil/dil }
+  EncB($0F); EncB($90 + (cc and 15));
+  EncModRMReg(0, reg);
+end;
+
+{ --- String ops (operate on [rdi]/[rsi]); F3 = rep prefix --- }
+procedure x64_movsb; begin EncB($A4); end;
+procedure x64_stosb; begin EncB($AA); end;
+procedure x64_rep_movsb; begin EncB($F3); EncB($A4); end;
+procedure x64_rep_stosb; begin EncB($F3); EncB($AA); end;
+
+{ --- ALU reg, [mem] and [mem], reg.
+  opRM = the r,m opcode (03/0B/23/2B/33/3B; cmp=3B). opMR = the m,r opcode
+  (01/09/21/29/31/39; cmp=39). --- }
+procedure x64_alu_reg_mem(opRM, size, destReg, baseReg, disp: Integer; force32: Boolean);
+begin
+  EncPrefixAndREXMem(size, destReg, baseReg, size = 1);
+  EncB(opRM and $FF);
+  EncModRMMem(destReg, baseReg, disp, force32);
+end;
+
+procedure x64_alu_mem_reg(opMR, size, baseReg, disp, srcReg: Integer; force32: Boolean);
+begin
+  EncPrefixAndREXMem(size, srcReg, baseReg, size = 1);
+  EncB(opMR and $FF);
+  EncModRMMem(srcReg, baseReg, disp, force32);
+end;
+
+{ --- test reg, [mem] (85 /r) --- }
+procedure x64_test_reg_mem(size, reg, baseReg, disp: Integer; force32: Boolean);
+begin
+  EncPrefixAndREXMem(size, reg, baseReg, size = 1);
+  if size = 1 then EncB($84) else EncB($85);
+  EncModRMMem(reg, baseReg, disp, force32);
+end;
+
+{ --- test [mem], imm (F6/F7 /0) --- }
+procedure x64_test_mem_imm(size, baseReg, disp: Integer; imm: Int64; force32: Boolean);
+begin
+  EncPrefixAndREXMem(size, 0, baseReg, False);
+  if size = 1 then
+  begin
+    EncB($F6); EncModRMMem(0, baseReg, disp, force32); EncB(Integer(imm) and $FF);
+  end
+  else
+  begin
+    EncB($F7); EncModRMMem(0, baseReg, disp, force32);
+    if size = 2 then EncI16(imm) else EncI32(imm);
+  end;
 end;

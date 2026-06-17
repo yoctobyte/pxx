@@ -242,6 +242,30 @@ begin
   Result := 1;
 end;
 
+{ Map a jump mnemonic to its condition-code nibble; Result=False for a
+  non-jump. Shared by the label-jump path and setcc decoding. }
+function AsmTextJccCode(const m: AnsiString; var cc: Integer): Boolean;
+begin
+  Result := True;
+  if CaseEqual(m, 'jo') then cc := 0
+  else if CaseEqual(m, 'jno') then cc := 1
+  else if CaseEqual(m, 'jb') or CaseEqual(m, 'jc') or CaseEqual(m, 'jnae') then cc := 2
+  else if CaseEqual(m, 'jae') or CaseEqual(m, 'jnb') or CaseEqual(m, 'jnc') then cc := 3
+  else if CaseEqual(m, 'je') or CaseEqual(m, 'jz') then cc := 4
+  else if CaseEqual(m, 'jne') or CaseEqual(m, 'jnz') then cc := 5
+  else if CaseEqual(m, 'jbe') or CaseEqual(m, 'jna') then cc := 6
+  else if CaseEqual(m, 'ja') or CaseEqual(m, 'jnbe') then cc := 7
+  else if CaseEqual(m, 'js') then cc := 8
+  else if CaseEqual(m, 'jns') then cc := 9
+  else if CaseEqual(m, 'jp') then cc := 10
+  else if CaseEqual(m, 'jnp') then cc := 11
+  else if CaseEqual(m, 'jl') or CaseEqual(m, 'jnge') then cc := 12
+  else if CaseEqual(m, 'jge') or CaseEqual(m, 'jnl') then cc := 13
+  else if CaseEqual(m, 'jle') or CaseEqual(m, 'jng') then cc := 14
+  else if CaseEqual(m, 'jg') or CaseEqual(m, 'jnle') then cc := 15
+  else Result := False;
+end;
+
 { Assemble one instruction line, binding its `%` holes from holes[0..nHoles-1]. }
 procedure AsmTextLine(const line: AnsiString; const holes: array of Int64; nHoles: Integer);
 var
@@ -271,6 +295,17 @@ begin
   if CaseEqual(mnem, 'nop') then begin EncB($90); Exit; end;
   if CaseEqual(mnem, 'cqo') then begin EncB($48); EncB($99); Exit; end;
   if CaseEqual(mnem, 'cdq') then begin EncB($99); Exit; end;
+  if CaseEqual(mnem, 'movsb') then begin x64_movsb; Exit; end;
+  if CaseEqual(mnem, 'stosb') then begin x64_stosb; Exit; end;
+
+  { rep prefix: `rep movsb` / `rep stosb` (rest holds the string op) }
+  if CaseEqual(mnem, 'rep') then
+  begin
+    rest := AsmTextTrim(rest);
+    if CaseEqual(rest, 'movsb') then begin x64_rep_movsb; Exit; end;
+    if CaseEqual(rest, 'stosb') then begin x64_rep_stosb; Exit; end;
+    Error('EmitAsmX64: unsupported rep string op');
+  end;
 
   if not haveOps then Error('EmitAsmX64: unknown 0-operand mnemonic');
 
@@ -287,6 +322,10 @@ begin
     op0 := AsmTextSlice(rest, 1, commaPos - 1);
     op1 := AsmTextSlice(rest, commaPos + 1, Length(rest) - commaPos);
   end;
+  { trim so marker/keyword compares (e.g. @data) see no leading space;
+    AsmTextOperand also trims, so this is harmless for the operand path. }
+  op0 := AsmTextTrim(op0);
+  op1 := AsmTextTrim(op1);
 
   { single-operand: push / pop }
   if CaseEqual(mnem, 'push') then
@@ -312,10 +351,127 @@ begin
     Exit;
   end;
 
+  { unary F6/F7 group (single register operand): not/neg/mul/div/idiv, and the
+    one-operand imul (full-width result). ext digit per mnemonic. }
+  if (Length(op1) = 0) and (CaseEqual(mnem, 'not') or CaseEqual(mnem, 'neg') or
+     CaseEqual(mnem, 'mul') or CaseEqual(mnem, 'div') or
+     CaseEqual(mnem, 'idiv') or CaseEqual(mnem, 'imul')) then
+  begin
+    if AsmTextOperand(op0, holes, holeCur, r0, s0, mb0, md0, imm0) <> 0 then
+      Error('EmitAsmX64: unary op expects a register (this slice)');
+    if CaseEqual(mnem, 'not') then i := 2
+    else if CaseEqual(mnem, 'neg') then i := 3
+    else if CaseEqual(mnem, 'mul') then i := 4
+    else if CaseEqual(mnem, 'imul') then i := 5
+    else if CaseEqual(mnem, 'div') then i := 6
+    else i := 7;   { idiv }
+    x64_unary_reg(s0, i, r0);
+    Exit;
+  end;
+
+  { call reg (indirect) }
+  if CaseEqual(mnem, 'call') then
+  begin
+    if AsmTextOperand(op0, holes, holeCur, r0, s0, mb0, md0, imm0) <> 0 then
+      Error('EmitAsmX64: call expects a register (this slice)');
+    x64_call_reg(r0);
+    Exit;
+  end;
+
+  { setcc reg8: map the cc suffix through the jcc table (set<cc> -> j<cc>). }
+  if (Length(mnem) >= 4) and (AsmTextCharAt(mnem, 1) = 's') and
+     (AsmTextCharAt(mnem, 2) = 'e') and (AsmTextCharAt(mnem, 3) = 't') then
+  begin
+    rest := 'j' + AsmTextSlice(mnem, 4, Length(mnem) - 3);
+    if not AsmTextJccCode(rest, i) then
+      Error('EmitAsmX64: unknown setcc');
+    if AsmTextOperand(op0, holes, holeCur, r0, s0, mb0, md0, imm0) <> 0 then
+      Error('EmitAsmX64: setcc expects a register');
+    x64_setcc_reg(i, r0);
+    Exit;
+  end;
+
   { two-operand forms }
   if Length(op1) = 0 then Error('EmitAsmX64: instruction needs two operands');
+
+  { Relocations: mov reg, @data (abs 8-byte) / mov reg, @glob (abs 4-byte).
+    @data follows the target pointer size via EmitDataRef; @glob is BSS, low 4G,
+    encoded as a 32-bit mov (B8+r) so the high half zero-extends. }
+  if CaseEqual(mnem, 'mov') and (CaseEqual(op1, '@data') or CaseEqual(op1, '@glob')) then
+  begin
+    if not AsmRegNum(op0, r0, s0) then
+      Error('EmitAsmX64: reloc mov expects a destination register');
+    imm0 := holes[holeCur]; Inc(holeCur);
+    if CaseEqual(op1, '@data') then
+    begin
+      EncPrefixAndREX(8, 0, r0, False);   { REX.W for the imm64 form }
+      EncB($B8 + (r0 and 7));
+      EmitDataRef(Integer(imm0));
+    end
+    else
+    begin
+      if r0 >= 8 then EncB($41);   { REX.B only; 32-bit mov zero-extends }
+      EncB($B8 + (r0 and 7));
+      EmitGlobRef(Integer(imm0));
+    end;
+    Exit;
+  end;
+
   k0 := AsmTextOperand(op0, holes, holeCur, r0, s0, mb0, md0, imm0);
   k1 := AsmTextOperand(op1, holes, holeCur, r1, s1, mb1, md1, imm1);
+
+  { shifts: shl/sal, shr, sar — reg by imm or by cl }
+  if CaseEqual(mnem, 'shl') or CaseEqual(mnem, 'sal') or
+     CaseEqual(mnem, 'shr') or CaseEqual(mnem, 'sar') then
+  begin
+    if k0 <> 0 then Error('EmitAsmX64: shift expects a register dest (this slice)');
+    if CaseEqual(mnem, 'shr') then i := 5
+    else if CaseEqual(mnem, 'sar') then i := 7
+    else i := 4;   { shl / sal }
+    if (k1 = 0) and (r1 = 1) then x64_shift_reg_cl(s0, i, r0)   { ,cl (reg 1) }
+    else if k1 = 1 then x64_shift_reg_imm(s0, i, r0, Integer(imm1))
+    else Error('EmitAsmX64: shift count must be imm or cl');
+    Exit;
+  end;
+
+  { imul reg, reg (two-operand signed multiply) }
+  if CaseEqual(mnem, 'imul') then
+  begin
+    if (k0 = 0) and (k1 = 0) then x64_imul_reg_reg(s0, r0, r1)
+    else Error('EmitAsmX64: unsupported imul form');
+    Exit;
+  end;
+
+  { movzx / movsx reg, reg|mem }
+  if CaseEqual(mnem, 'movzx') or CaseEqual(mnem, 'movsx') then
+  begin
+    if k0 <> 0 then Error('EmitAsmX64: movzx/movsx dest must be a register');
+    if k1 = 0 then
+      x64_movx_reg_reg(s0, s1, r0, r1, CaseEqual(mnem, 'movsx'))
+    else if k1 = 2 then
+    begin
+      if s1 = 0 then Error('EmitAsmX64: movzx/movsx mem needs an explicit size (byte/word)');
+      x64_movx_reg_mem(s0, s1, r0, mb1, md1, CaseEqual(mnem, 'movsx'), False);
+    end
+    else Error('EmitAsmX64: unsupported movzx/movsx form');
+    Exit;
+  end;
+
+  { test: reg,reg | reg,imm | reg,[mem] | [mem],imm }
+  if CaseEqual(mnem, 'test') then
+  begin
+    if (k0 = 0) and (k1 = 0) then x64_test_reg_reg(s0, r0, r1)
+    else if (k0 = 0) and (k1 = 1) then x64_test_reg_imm(s0, r0, imm1)
+    else if (k0 = 0) and (k1 = 2) then x64_test_reg_mem(s0, r0, mb1, md1, False)
+    else if (k0 = 2) and (k1 = 0) then x64_test_reg_mem(s1, r1, mb0, md0, False)
+    else if (k0 = 2) and (k1 = 1) then
+    begin
+      if s0 = 0 then Error('EmitAsmX64: test mem,imm needs an explicit size');
+      x64_test_mem_imm(s0, mb0, md0, imm1, False);
+    end
+    else Error('EmitAsmX64: unsupported test form');
+    Exit;
+  end;
 
   if CaseEqual(mnem, 'mov') then
   begin
@@ -357,6 +513,21 @@ begin
     Exit;
   end;
 
+  { ALU reg,[mem] and [mem],reg. opMR = even (m,r) opcode; r,m = opMR+2. }
+  if ((k0 = 0) and (k1 = 2)) or ((k0 = 2) and (k1 = 0)) then
+  begin
+    if CaseEqual(mnem, 'add') then i := $01
+    else if CaseEqual(mnem, 'or')  then i := $09
+    else if CaseEqual(mnem, 'and') then i := $21
+    else if CaseEqual(mnem, 'sub') then i := $29
+    else if CaseEqual(mnem, 'xor') then i := $31
+    else if CaseEqual(mnem, 'cmp') then i := $39
+    else begin Error('EmitAsmX64: unsupported reg/mem ALU mnemonic'); i := 0; end;
+    if k1 = 2 then x64_alu_reg_mem(i + 2, s0, r0, mb1, md1, False)   { reg,[mem] }
+    else x64_alu_mem_reg(i, s1, mb0, md0, r1, False);               { [mem],reg }
+    Exit;
+  end;
+
   { ALU r/m(mem),imm — needs an explicit operand size (e.g. cmp byte [rdx], 0). }
   if (k0 = 2) and (k1 = 1) then
   begin
@@ -375,30 +546,6 @@ begin
   Error('EmitAsmX64: unsupported instruction');
 end;
 
-{ Map a jump mnemonic to its condition-code nibble; -1 via Result=False for an
-  unconditional jmp; False with cc untouched for a non-jump. }
-function AsmTextJccCode(const m: AnsiString; var cc: Integer): Boolean;
-begin
-  Result := True;
-  if CaseEqual(m, 'jo') then cc := 0
-  else if CaseEqual(m, 'jno') then cc := 1
-  else if CaseEqual(m, 'jb') or CaseEqual(m, 'jc') or CaseEqual(m, 'jnae') then cc := 2
-  else if CaseEqual(m, 'jae') or CaseEqual(m, 'jnb') or CaseEqual(m, 'jnc') then cc := 3
-  else if CaseEqual(m, 'je') or CaseEqual(m, 'jz') then cc := 4
-  else if CaseEqual(m, 'jne') or CaseEqual(m, 'jnz') then cc := 5
-  else if CaseEqual(m, 'jbe') or CaseEqual(m, 'jna') then cc := 6
-  else if CaseEqual(m, 'ja') or CaseEqual(m, 'jnbe') then cc := 7
-  else if CaseEqual(m, 'js') then cc := 8
-  else if CaseEqual(m, 'jns') then cc := 9
-  else if CaseEqual(m, 'jp') then cc := 10
-  else if CaseEqual(m, 'jnp') then cc := 11
-  else if CaseEqual(m, 'jl') or CaseEqual(m, 'jnge') then cc := 12
-  else if CaseEqual(m, 'jge') or CaseEqual(m, 'jnl') then cc := 13
-  else if CaseEqual(m, 'jle') or CaseEqual(m, 'jng') then cc := 14
-  else if CaseEqual(m, 'jg') or CaseEqual(m, 'jnle') then cc := 15
-  else Result := False;
-end;
-
 const ASM_MAX_LABELS = 32;
 
 { Label / forward-jump bookkeeping for one EmitAsmX64 call. Module-level (not
@@ -413,7 +560,7 @@ var
   AsmFwPatch: array[0..ASM_MAX_LABELS - 1] of Integer;
   AsmFwCount: Integer;
 
-procedure EmitAsmX64(const items: array of const);
+procedure EmitAsmX64(const items: array of const); overload;
 var
   i, n, h, nHoles, j: Integer;
   line, trimmed, mnem, target: AnsiString;
@@ -493,10 +640,15 @@ begin
     end
     else
     begin
-      { ordinary instruction: count `%` markers and bind following int holes }
+      { ordinary instruction: count `%` markers and bind following int holes.
+        `@data` / `@glob` also each consume one int (the offset). }
       nHoles := 0;
       for h := 1 to Length(line) do
         if line[h] = '%' then Inc(nHoles);
+      for h := 1 to Length(line) - 4 do
+        if (line[h] = '@') and
+           ((AsmTextSlice(line, h, 5) = '@data') or (AsmTextSlice(line, h, 5) = '@glob')) then
+          Inc(nHoles);
       if nHoles > ASM_MAX_HOLES then Error('EmitAsmX64: too many holes in one line');
       for h := 0 to nHoles - 1 do
       begin
@@ -518,5 +670,12 @@ begin
     if targetPos < 0 then Error('EmitAsmX64: undefined label in jump');
     Patch32(AsmFwPatch[k], targetPos - (AsmFwPatch[k] + 4));
   end;
+end;
+
+{ Single-line convenience overload: EmitAsmX64('ret') / EmitAsmX64('mov rax, %', v)
+  needs the bracket form; this covers the no-hole trivial case. }
+procedure EmitAsmX64(const s: AnsiString); overload;
+begin
+  EmitAsmX64([s]);
 end;
 
