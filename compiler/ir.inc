@@ -1629,13 +1629,14 @@ begin
       if ASTKind[ASTRight[node]] = AN_METHODREF then
       begin
         { @obj.method assigned to a TMethod target: write the two pointers
-          directly — Code at field+0, Data at field+8. }
+          directly — Code at field+0, Data at field+TARGET_PTR_SIZE (8 on
+          64-bit, 4 on i386/arm32, matching the user TMethod's Data offset). }
         left := ASTRight[node];
         leftAddr := IRLowerAddress(ASTLeft[node]);
         value := IRAppend(IR_PROCADDR, Integer(ASTIVal[left]), -1, -1, 0, Ord(tyPointer));
         IRAppend(IR_STORE_MEM, leftAddr, value, -1, 0, Ord(tyPointer));
         right := IRLowerAddress(ASTLeft[node]);
-        item := IRAppend(IR_CONST_INT, -1, -1, -1, 8, Ord(tyInteger));
+        item := IRAppend(IR_CONST_INT, -1, -1, -1, TARGET_PTR_SIZE, Ord(tyInteger));
         outNode := IRAppend(IR_BINOP, right, item, Ord(tkPlus), 0, Ord(tyPointer));
         seq := IRLowerAST(ASTLeft[left]);
         Result := IRAppend(IR_STORE_MEM, outNode, seq, -1, 0, Ord(tyPointer));
@@ -1984,9 +1985,9 @@ begin
       begin
         { Method pointer: prepend Self loaded from the record's Data field. }
         leftAddr := IRLowerAddress(ASTRight[node]);          { addr of {Code,Data} }
-        right := IRAppend(IR_CONST_INT, -1, -1, -1, 8, Ord(tyInteger));
+        right := IRAppend(IR_CONST_INT, -1, -1, -1, TARGET_PTR_SIZE, Ord(tyInteger));
         outNode := IRAppend(IR_BINOP, leftAddr, right, Ord(tkPlus), 0, Ord(tyPointer));
-        value := IRAppend(IR_LOAD_MEM, outNode, -1, -1, 0, Ord(tyPointer)); { Self = [addr+8] }
+        value := IRAppend(IR_LOAD_MEM, outNode, -1, -1, 0, Ord(tyPointer)); { Self = [addr+ptrsize] }
         first := IRAppend(IR_ARG, value, -1, -1, 0, Ord(tyPointer));
         last := first;
       end;
