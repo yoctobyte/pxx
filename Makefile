@@ -940,7 +940,7 @@ test-i386: $(COMPILER)
 	./$(COMPILER) --target=i386 test/test_inheritance_dispatch.pas /tmp/test_i386_cls
 	./$(COMPILER) test/test_inheritance_dispatch.pas /tmp/test_i386_cls_x64
 	test "$$(tools/run_target.sh i386 /tmp/test_i386_cls)" = "$$(/tmp/test_i386_cls_x64)"
-	@echo "i386 hello + arith + procs + loops + write + varparam + syscall + heap + string + record + dynarray + exception + float + float-params + variant + byref-params + setlen-str + in-operator + loadfile + sysopen-family + args + string-cow + aoc-types + many-params + conformance2 + shortcircuit + ptr-arith + case-range + global-init + typed-const + multidim + named-array + record-2darray + param-2darray + multidim3d + const-alias + float-const + stackless-generator + proctype + scheduler + scheduler-exc + classes + method-pointers + aggregate-return + metaclass-rtti ok (output identical to x86-64)"
+	@echo "i386 hello + arith + procs + loops + write + varparam + syscall + heap + string + record + dynarray + exception + float + float-params + variant + byref-params + setlen-str + in-operator + loadfile + sysopen-family + args + string-cow + aoc-types + many-params + conformance2 + shortcircuit + ptr-arith + case-range + global-init + typed-const + multidim + named-array + record-2darray + param-2darray + multidim3d + const-alias + float-const + stackless-generator + proctype + scheduler + scheduler-exc + classes + method-pointers + aggregate-return + metaclass-rtti + sets ok (output identical to x86-64)"
 
 test-aarch64: $(COMPILER)
 	./$(COMPILER) --target=aarch64 test/hello.pas /tmp/test_aarch64_hello
@@ -1077,6 +1077,9 @@ test-aarch64: $(COMPILER)
 	./$(COMPILER) --target=aarch64 test/test_methcall.pas /tmp/test_aarch64_mcall
 	./$(COMPILER) test/test_methcall.pas /tmp/test_aarch64_mcall_x64
 	test "$$(tools/run_target.sh aarch64 /tmp/test_aarch64_mcall)" = "$$(/tmp/test_aarch64_mcall_x64)"
+	./$(COMPILER) --target=aarch64 test/test_cross_sets.pas /tmp/test_aarch64_sets
+	./$(COMPILER) test/test_cross_sets.pas /tmp/test_aarch64_sets_x64
+	test "$$(tools/run_target.sh aarch64 /tmp/test_aarch64_sets)" = "$$(/tmp/test_aarch64_sets_x64)"
 	./$(COMPILER) --target=aarch64 test/test_classref.pas /tmp/test_aarch64_classref
 	./$(COMPILER) test/test_classref.pas /tmp/test_aarch64_classref_x64
 	test "$$(tools/run_target.sh aarch64 /tmp/test_aarch64_classref)" = "$$(/tmp/test_aarch64_classref_x64)"
@@ -1089,7 +1092,7 @@ test-aarch64: $(COMPILER)
 	./$(COMPILER) --target=aarch64 test/test_inheritance_dispatch.pas /tmp/test_aarch64_cls
 	./$(COMPILER) test/test_inheritance_dispatch.pas /tmp/test_aarch64_cls_x64
 	test "$$(tools/run_target.sh aarch64 /tmp/test_aarch64_cls)" = "$$(/tmp/test_aarch64_cls_x64)"
-	@echo "aarch64 hello + arith + procs + loops + write + varparam + syscall + heap + string + record + dynarray + exception + float + variant + setlen-str + str-length-index + in-operator + loadfile + sysopen-family + args + open-array-params + string-cow + huge-frame + varrec-alloc + aoc-types + many-params + conformance2 + shortcircuit + ptr-arith + case-range + global-init + typed-const + multidim + named-array + record-2darray + param-2darray + multidim3d + const-alias + float-const + classes + method-pointers + aggregate-return + metaclass-rtti ok (output identical to x86-64)"
+	@echo "aarch64 hello + arith + procs + loops + write + varparam + syscall + heap + string + record + dynarray + exception + float + variant + setlen-str + str-length-index + in-operator + loadfile + sysopen-family + args + open-array-params + string-cow + huge-frame + varrec-alloc + aoc-types + many-params + conformance2 + shortcircuit + ptr-arith + case-range + global-init + typed-const + multidim + named-array + record-2darray + param-2darray + multidim3d + const-alias + float-const + classes + method-pointers + aggregate-return + metaclass-rtti + sets ok (output identical to x86-64)"
 
 test-arm32: $(COMPILER)
 	./$(COMPILER) --target=arm32 test/hello.pas /tmp/test_arm32_hello
@@ -1244,6 +1247,9 @@ test-arm32: $(COMPILER)
 	./$(COMPILER) --target=arm32 test/test_methcall.pas /tmp/test_arm32_mcall
 	./$(COMPILER) test/test_methcall.pas /tmp/test_arm32_mcall_x64
 	test "$$(tools/run_target.sh arm32 /tmp/test_arm32_mcall)" = "$$(/tmp/test_arm32_mcall_x64)"
+	./$(COMPILER) --target=arm32 test/test_cross_sets.pas /tmp/test_arm32_sets
+	./$(COMPILER) test/test_cross_sets.pas /tmp/test_arm32_sets_x64
+	test "$$(tools/run_target.sh arm32 /tmp/test_arm32_sets)" = "$$(/tmp/test_arm32_sets_x64)"
 	./$(COMPILER) --target=arm32 test/test_classref.pas /tmp/test_arm32_classref
 	./$(COMPILER) test/test_classref.pas /tmp/test_arm32_classref_x64
 	test "$$(tools/run_target.sh arm32 /tmp/test_arm32_classref)" = "$$(/tmp/test_arm32_classref_x64)"
@@ -1256,7 +1262,7 @@ test-arm32: $(COMPILER)
 	./$(COMPILER) --target=arm32 test/test_inheritance_dispatch.pas /tmp/test_arm32_cls
 	./$(COMPILER) test/test_inheritance_dispatch.pas /tmp/test_arm32_cls_x64
 	test "$$(tools/run_target.sh arm32 /tmp/test_arm32_cls)" = "$$(/tmp/test_arm32_cls_x64)"
-	@echo "arm32 hello + arith + procs + loops + write + varparam + syscall + heap + string + record + dynarray + exception + float + args + variant + strresult + setlen-str + str-length-index + in-operator + managed-aggregate-locals + loadfile + sysopen-family + string-cow + var-string-param + openarray-string + stack-params + int64 + int64-byref + aoc-types + many-params + conformance2 + shortcircuit + ptr-arith + case-range + global-init + typed-const + multidim + named-array + record-2darray + param-2darray + multidim3d + const-alias + float-const + classes + method-pointers + aggregate-return + metaclass-rtti ok (output identical to x86-64)"
+	@echo "arm32 hello + arith + procs + loops + write + varparam + syscall + heap + string + record + dynarray + exception + float + args + variant + strresult + setlen-str + str-length-index + in-operator + managed-aggregate-locals + loadfile + sysopen-family + string-cow + var-string-param + openarray-string + stack-params + int64 + int64-byref + aoc-types + many-params + conformance2 + shortcircuit + ptr-arith + case-range + global-init + typed-const + multidim + named-array + record-2darray + param-2darray + multidim3d + const-alias + float-const + classes + method-pointers + aggregate-return + metaclass-rtti + sets ok (output identical to x86-64)"
 
 # ----- Cross self-host bootstrap gates (feature-cross-bootstrap-selfhost) -----
 # Triple-stage proof: native cross-compiles compiler.pas -> <arch>; that binary,

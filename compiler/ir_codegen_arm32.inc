@@ -1266,6 +1266,24 @@ begin
           EmitI32($E1500001); { cmp r0, r1 }
           EmitSetccArm32(op);
         end
+        else if op = Ord(tkIn) then
+        begin
+          { Set membership: r0 = element, r1 = set address. Result (0/1) -> r0. }
+          EmitI32($E35000FF);                   { cmp r0, #255 }
+          p1 := CodeLen; EmitI32($8A000000);    { bhi out-of-range (patched) }
+          EmitI32($E1A021A0);                   { lsr r2, r0, #3 (byte index) }
+          EmitI32($E7D12002);                   { ldrb r2, [r1, r2] (set byte) }
+          EmitI32($E2003007);                   { and r3, r0, #7 (bit index) }
+          EmitI32($E3A00001);                   { mov r0, #1 }
+          EmitI32($E1A00310);                   { lsl r0, r0, r3 }
+          EmitI32($E1120000);                   { tst r2, r0 }
+          EmitI32($13A00001);                   { movne r0, #1 }
+          EmitI32($03A00000);                   { moveq r0, #0 }
+          p2 := CodeLen; EmitI32($EA000000);    { b done (patched) }
+          Patch32(p1, $8A000000 or (((CodeLen - p1 - 8) div 4) and $00FFFFFF));
+          EmitI32($E3A00000);                   { mov r0, #0 }
+          Patch32(p2, $EA000000 or (((CodeLen - p2 - 8) div 4) and $00FFFFFF));
+        end
         else
           Error('target arm32: binop operator not yet supported');
       end;
@@ -2113,6 +2131,102 @@ begin
     IR_CLASSREF:
       EmitLoadDataRefArm32(0, -(CLASSREF_DATAREF_BASE + IRA[node])); { r0 = class RTTI blob addr }
 
+    IR_SET_LIT:
+      EmitLoadDataRefArm32(0, IRIVal[node]);   { r0 = set-literal blob addr }
+
+    IR_SET_COPY:
+      begin
+        { Copy 32-byte set from src (IRB) to dest (IRA). }
+        IREmitNodeArm32(IRB[node]);              { r0 = source addr }
+        EmitI32($E92D0001);                      { push {r0} }
+        IREmitNodeArm32(IRA[node]);              { r0 = dest addr }
+        EmitI32($E1A06000);                      { mov r6, r0 (dst) }
+        EmitI32($E8BD0020);                      { pop {r5} (src) }
+        EmitLoadImmArm32(4, 32);                 { r4 = 32 }
+        EmitArm32CopyBytes(4, 5, 6);
+      end;
+
+    IR_SET_BINOP:
+      begin
+        { Set +/-/* over 8 dwords into the BSS scratch (IRIVal). }
+        IREmitNodeArm32(IRA[node]);              { r0 = lhs addr }
+        EmitI32($E92D0001);                      { push {r0} }
+        IREmitNodeArm32(IRB[node]);              { r0 = rhs addr }
+        EmitI32($E1A02000);                      { mov r2, r0 (rhs) }
+        EmitI32($E8BD0002);                      { pop {r1} (lhs) }
+        EmitI32($E59F3000);                      { ldr r3, [pc] (scratch addr) }
+        EmitI32($EA000000);                      { b .+8 }
+        EmitGlobRef(IRIVal[node]);
+        for i := 0 to 7 do
+        begin
+          EmitI32($E5914000 or (i * 4));         { ldr r4, [r1, #i*4] }
+          EmitI32($E5925000 or (i * 4));         { ldr r5, [r2, #i*4] }
+          if IntToTokenKind(IRC[node]) = tkPlus then EmitI32($E1844005)   { orr r4,r4,r5 }
+          else if IntToTokenKind(IRC[node]) = tkStar then EmitI32($E0044005) { and r4,r4,r5 }
+          else if IntToTokenKind(IRC[node]) = tkMinus then EmitI32($E1C44005); { bic r4,r4,r5 }
+          EmitI32($E5834000 or (i * 4));         { str r4, [r3, #i*4] }
+        end;
+        EmitI32($E1A00003);                      { mov r0, r3 (result addr) }
+      end;
+
+    IR_SET_CMP:
+      begin
+        { Compare two 32-byte sets (8 dwords). r6 = differences, r7 = subset
+          violations. }
+        IREmitNodeArm32(IRA[node]);              { r0 = lhs addr }
+        EmitI32($E92D0001);                      { push {r0} }
+        IREmitNodeArm32(IRB[node]);              { r0 = rhs addr }
+        EmitI32($E1A02000);                      { mov r2, r0 (rhs) }
+        EmitI32($E8BD0002);                      { pop {r1} (lhs) }
+        EmitI32($E3A06000);                      { mov r6, #0 (differences) }
+        EmitI32($E3A07000);                      { mov r7, #0 (violations) }
+        for i := 0 to 7 do
+        begin
+          EmitI32($E5914000 or (i * 4));         { ldr r4, [r1, #i*4] (lhs) }
+          EmitI32($E5925000 or (i * 4));         { ldr r5, [r2, #i*4] (rhs) }
+          EmitI32($E0248005);                    { eor r8, r4, r5 }
+          EmitI32($E1866008);                    { orr r6, r6, r8 }
+          if (IRC[node] = Ord(tkLe)) or (IRC[node] = Ord(tkLt)) then
+          begin
+            EmitI32($E1C48005);                  { bic r8, r4, r5 (lhs and not rhs) }
+            EmitI32($E1877008);                  { orr r7, r7, r8 }
+          end
+          else if (IRC[node] = Ord(tkGe)) or (IRC[node] = Ord(tkGt)) then
+          begin
+            EmitI32($E1C58004);                  { bic r8, r5, r4 (rhs and not lhs) }
+            EmitI32($E1877008);                  { orr r7, r7, r8 }
+          end;
+        end;
+        if IRC[node] = Ord(tkEq) then
+        begin
+          EmitI32($E3560000);                    { cmp r6, #0 }
+          EmitI32($03A00001);                    { moveq r0, #1 }
+          EmitI32($13A00000);                    { movne r0, #0 }
+        end
+        else if IRC[node] = Ord(tkNeq) then
+        begin
+          EmitI32($E3560000);                    { cmp r6, #0 }
+          EmitI32($13A00001);                    { movne r0, #1 }
+          EmitI32($03A00000);                    { moveq r0, #0 }
+        end
+        else if (IRC[node] = Ord(tkLe)) or (IRC[node] = Ord(tkGe)) then
+        begin
+          EmitI32($E3570000);                    { cmp r7, #0 }
+          EmitI32($03A00001);                    { moveq r0, #1 }
+          EmitI32($13A00000);                    { movne r0, #0 }
+        end
+        else { tkLt / tkGt: proper = subset AND unequal }
+        begin
+          EmitI32($E3570000);                    { cmp r7, #0 }
+          EmitI32($03A00001);                    { moveq r0, #1 }
+          EmitI32($13A00000);                    { movne r0, #0 }
+          EmitI32($E3560000);                    { cmp r6, #0 }
+          EmitI32($13A03001);                    { movne r3, #1 }
+          EmitI32($03A03000);                    { moveq r3, #0 }
+          EmitI32($E0000003);                    { and r0, r0, r3 }
+        end;
+      end;
+
     IR_RTTI_REG:
       EmitLoadDataRefArm32(0, -100);   { r0 = RTTI-registry addr (sentinel) }
 
@@ -2608,6 +2722,7 @@ begin
 
       IR_NOP, IR_CONST_STR, IR_CONST_INT, IR_BLOCK,
       IR_LOAD_SYM, IR_BINOP, IR_NEG, IR_NOT, IR_ARG, IR_LEA, IR_SYSCALL,
+      IR_SET_LIT, IR_SET_BINOP, IR_SET_CMP,
       IR_SLOTADDR, IR_FIELD, IR_INDEX: ;
 
       else

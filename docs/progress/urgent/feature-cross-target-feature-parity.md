@@ -228,3 +228,16 @@ test-core; bootstrap + cross-bootstrap stay byte-identical.
        itself uses managed AnsiString, so compiler.pas needs no change. Keep this
        model in mind for further frozen-string work. Do NOT add a third string
        type.
+- 2026-06-17 — **sets work on all 4 targets.** Ported the full set-of-ordinal
+  surface (32-byte bitset) to i386/aarch64/arm32: IR_SET_LIT (load precomputed
+  blob addr), IR_SET_COPY (32-byte copy), IR_SET_BINOP (`+`/`-`/`*` via
+  or/and/bic over 8 dwords on 32-bit, 4 qwords on aarch64, into the BSS scratch),
+  IR_SET_CMP (`=`/`<>`/`<=`/`>=`/`<`/`>` via XOR-difference + bic subset-violation
+  accumulators), and the `in` membership test in the IR_BINOP path (byte=elem>>3,
+  bit=elem&7). Added the SET operand nodes to each statement-loop skip list.
+  ARM encodings verified with `llvm-mc -show-encoding` as an oracle.
+  test_cross_sets (literal/in/union/inter/diff/subset/eq) byte-identical to
+  x86-64 on all four; wired into the three suites. make test + cross-bootstrap
+  byte-identical (compiler.pas's own char-sets exercise the path). **Unblocks
+  `for..in (set)`** (feature-for-in-iteration). Remaining collections gap:
+  `setlen_dyn` / `dynunique` (dynarray-of-record depth) on cross.

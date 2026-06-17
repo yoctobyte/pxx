@@ -91,7 +91,8 @@ Each ✗ is a checklist item below the table. Seeded by grepping
 | Metaclass value (`cref := TFoo`, IR_CLASSREF) | ✓ | ✓ | ✓ | ✓ | done 2026-06-17 |
 | Metaclass / RTTI streaming (field+name reads) | ✓ | ✓ | ✓ | ✓ | done 2026-06-17 (CPU32 blob padding + frozen-string fixes) |
 | Frozen `string` copy / `Length` on cross | ✓ | ✓ | ✓ | ✓ | done 2026-06-17 (was managed-only); future: ShortString-255 sizing |
-| Collections / dynarray-of-record depth | ✓ | ✗ | ✗ | ✗ | `setlen_dyn` / `dynunique` / `set_lit` IR ops unported (test_rtti needs sets) |
+| Sets (`set of`, literal, `in`, `+`/`-`/`*`, `=`/`<>`/`<=`/`>=`) | ✓ | ✓ | ✓ | ✓ | done 2026-06-17 (32-byte bitset; unblocks `for..in (set)`) |
+| Collections / dynarray-of-record depth | ✓ | ✗ | ✗ | ✗ | `setlen_dyn` / `dynunique` IR ops still unported |
 | Interfaces | ◐ | ✗ | ✗ | ✗ | feature-interfaces; classes now unblock it |
 | External (C-library) calls | ✓ | ✗ | ✗ | ✗ | `386:1994` `aarch64:1419` `arm32:1598` |
 | External/dynamic symbols (ELF) | ✓ | ✗ | n/a | ✗ | `elfwriter.inc:622,628` |
