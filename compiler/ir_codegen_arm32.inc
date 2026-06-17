@@ -1230,12 +1230,41 @@ begin
         pi := IRA[node];
         if pi = -Ord(tkGetMem) then
         begin
+          { GetMem / New / class instantiation. For a class: alloc, store the
+            VMT pointer at offset 0, run the ctor, return Self in r0. AAPCS:
+            word-push each arg (Self deepest), load r0..r3, drop the block. }
           classIdx := IRC[node];
-          if classIdx >= REC_UCLASS_BASE then
-            Error('target arm32: class instantiation not yet supported');
           argNode := IRB[node];          { size arg }
           IREmitNodeArm32(IRA[argNode]); { size -> r0 }
           EmitHeapAllocLockedArm32;      { r0 = payload pointer }
+          if classIdx < REC_UCLASS_BASE then
+            Exit;                        { plain GetMem: pointer in r0 }
+          EmitLoadDataRefArm32(9, UClsVMTOffset[classIdx - REC_UCLASS_BASE]); { r9 = VMT addr }
+          EmitI32($E5809000);            { str r9, [r0] (VMT pointer) }
+          j := FindUMeth(classIdx - REC_UCLASS_BASE, 'create');
+          if j < 0 then
+            Exit;                        { no ctor: instance pointer in r0 }
+          p1 := UMthProc_[j];            { ctor proc index }
+          EmitI32($E92D0001);            { push {r0} (Self = word 0, deepest) }
+          nArgs := 1;                    { total arg words }
+          argNode := IRB[node];          { size arg }
+          argNode := IRB[argNode];       { first explicit ctor arg }
+          while argNode <> -1 do
+          begin
+            IREmitNodeArm32(IRA[argNode]);
+            EmitI32($E92D0001);          { push {r0} }
+            Inc(nArgs);
+            argNode := IRB[argNode];
+          end;
+          if nArgs > 4 then
+            Error('target arm32: constructor with more than 4 parameter words not supported');
+          for i := 0 to nArgs - 1 do
+            EmitI32($E59D0000 or (i shl 12) or ((nArgs - 1 - i) * 4)); { ldr r[i], [sp, #off] }
+          EmitLoadImmArm32(9, nArgs * 4);
+          EmitI32($E08DD009);            { add sp, sp, r9 (drop pushed words) }
+          EmitI32($E92D0001);            { push {r0} (save Self) }
+          EmitCallProc(p1);
+          EmitI32($E8BD0001);            { pop {r0} (Self = constructor result) }
           Exit;
         end;
         if pi = -Ord(tkFreeMem) then
@@ -1687,6 +1716,34 @@ begin
         EmitI32($E59D9000 or (j * 4));               { ldr r9, [sp, #j*4] (callee) }
         EmitLoadImmArm32(8, (j + 1) * 4);
         EmitI32($E08DD008);                          { add sp, sp, r8 (drop args + callee) }
+        EmitI32($E12FFF39);                          { blx r9 }
+      end;
+
+    IR_VIRTUAL_CALL:
+      begin
+        { VMT dispatch. IRA=first arg, IRB=last arg, IRC=proc idx, IRIVal=slot.
+          Word-push args (Self = param 0, deepest), load r0..r3, drop the block,
+          load the VMT pointer from [Self], call through [VMT + slot*8]. The data
+          blob keeps 8-byte slots; the 32-bit address is in the low word. }
+        pi := IRC[node];
+        j := Integer(IRIVal[node]);                  { VMT slot }
+        argNode := IRA[node];
+        nArgs := 0;                                  { total arg words }
+        while argNode <> -1 do
+        begin
+          IREmitNodeArm32(IRA[argNode]);
+          EmitI32($E92D0001);                        { push {r0} }
+          Inc(nArgs);
+          argNode := IRB[argNode];
+        end;
+        if nArgs > 4 then
+          Error('target arm32: virtual call with more than 4 parameter words not supported');
+        for i := 0 to nArgs - 1 do
+          EmitI32($E59D0000 or (i shl 12) or ((nArgs - 1 - i) * 4)); { ldr r[i], [sp, #off] }
+        EmitLoadImmArm32(8, nArgs * 4);
+        EmitI32($E08DD008);                          { add sp, sp, r8 (drop pushed words) }
+        EmitI32($E5909000);                          { ldr r9, [r0] (VMT ptr) }
+        EmitI32($E5999000 or (j * 8));               { ldr r9, [r9, #slot*8] }
         EmitI32($E12FFF39);                          { blx r9 }
       end;
 
@@ -2331,6 +2388,12 @@ begin
         end;
 
       IR_CALL_IND:
+        begin
+          if IRStmtRoot[i] then
+            IREmitNodeArm32(i);
+        end;
+
+      IR_VIRTUAL_CALL:
         begin
           if IRStmtRoot[i] then
             IREmitNodeArm32(i);

@@ -1066,12 +1066,39 @@ begin
         pi := IRA[node];
         if pi = -Ord(tkGetMem) then
         begin
-          si := IRC[node];
-          if si >= REC_UCLASS_BASE then
-            Error('target aarch64: class instantiation not yet supported');
+          { GetMem / New / class instantiation. For a class: alloc, store the
+            VMT pointer at offset 0, run the ctor, return Self in x0. AAPCS:
+            push each arg to a 16-byte temp (Self deepest), pop into x0..x7. }
+          classIdx := IRC[node];
           argNode := IRB[node];               { size arg }
           IREmitNodeAarch64(IRA[argNode]);    { size -> x0 }
           EmitHeapAllocLockedA64;             { x0 = payload pointer }
+          if classIdx < REC_UCLASS_BASE then
+            Exit;                             { plain GetMem: pointer in x0 }
+          EmitLoadDataRefA64(9, UClsVMTOffset[classIdx - REC_UCLASS_BASE]); { x9 = VMT addr }
+          EmitI32($F9000009);                 { str x9, [x0] (VMT pointer) }
+          j := FindUMeth(classIdx - REC_UCLASS_BASE, 'create');
+          if j < 0 then
+            Exit;                             { no ctor: instance pointer in x0 }
+          p1 := UMthProc_[j];                 { ctor proc index }
+          EmitI32($F81F0FE0);                 { str x0, [sp,#-16]! (Self, deepest) }
+          nArgs := 1;
+          argNode := IRB[node];               { size arg }
+          argNode := IRB[argNode];            { first explicit ctor arg }
+          while argNode <> -1 do
+          begin
+            IREmitNodeAarch64(IRA[argNode]);
+            EmitI32($F81F0FE0);               { str x0, [sp,#-16]! }
+            Inc(nArgs);
+            argNode := IRB[argNode];
+          end;
+          if nArgs > 8 then
+            Error('target aarch64: constructor with more than 8 parameters not supported');
+          for i := nArgs - 1 downto 0 do
+            EmitI32($F84107E0 + i);           { ldr x[i], [sp], #16 }
+          EmitI32($F81F0FE0);                 { str x0, [sp,#-16]! (save Self) }
+          EmitCallProc(p1);
+          EmitI32($F84107E0);                 { ldr x0, [sp], #16 (Self = result) }
           Exit;
         end;
         if pi = -Ord(tkFreeMem) then
@@ -1490,6 +1517,32 @@ begin
           EmitI32($F84107E0 + i);                    { ldr x[i], [sp], #16 }
         EmitI32($F84107F0);                          { ldr x16, [sp], #16 (callee) }
         EmitI32($D63F0200);                          { blr x16 }
+      end;
+
+    IR_VIRTUAL_CALL:
+      begin
+        { VMT dispatch. IRA=first arg, IRB=last arg, IRC=proc idx, IRIVal=slot.
+          Push args to 16-byte temps (Self = param 0, deepest), pop into x0..x7,
+          load the VMT pointer from [Self], call through [VMT + slot*8]. The data
+          blob keeps 8-byte slots, so the scaled ldr reads the full address. }
+        pi := IRC[node];
+        j := Integer(IRIVal[node]);                  { VMT slot }
+        argNode := IRA[node];
+        nArgs := 0;
+        while argNode <> -1 do
+        begin
+          IREmitNodeAarch64(IRA[argNode]);
+          EmitI32($F81F0FE0);                        { str x0, [sp,#-16]! }
+          Inc(nArgs);
+          argNode := IRB[argNode];
+        end;
+        if nArgs > 8 then
+          Error('target aarch64: virtual call with more than 8 parameters not supported');
+        for i := nArgs - 1 downto 0 do
+          EmitI32($F84107E0 + i);                    { ldr x[i], [sp], #16 }
+        EmitI32($F9400009);                          { ldr x9, [x0] (VMT ptr) }
+        EmitI32($F9400129 or (j shl 10));            { ldr x9, [x9, #slot*8] }
+        EmitI32($D63F0120);                          { blr x9 }
       end;
 
     IR_COSWITCH:
@@ -2136,6 +2189,12 @@ begin
         end;
 
       IR_CALL_IND:
+        begin
+          if IRStmtRoot[i] then
+            IREmitNodeAarch64(i);
+        end;
+
+      IR_VIRTUAL_CALL:
         begin
           if IRStmtRoot[i] then
             IREmitNodeAarch64(i);
