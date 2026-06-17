@@ -119,6 +119,13 @@ begin
   if l = 'bl'  then begin AsmRegNum := M(3,1); Exit; end;
   if l = 'sil' then begin AsmRegNum := M(6,1); Exit; end;
   if l = 'dil' then begin AsmRegNum := M(7,1); Exit; end;
+  { xmm0..xmm15 (size 16 marker) }
+  if l = 'xmm0' then begin AsmRegNum := M(0,16); Exit; end;
+  if l = 'xmm1' then begin AsmRegNum := M(1,16); Exit; end;
+  if l = 'xmm2' then begin AsmRegNum := M(2,16); Exit; end;
+  if l = 'xmm3' then begin AsmRegNum := M(3,16); Exit; end;
+  if l = 'xmm8' then begin AsmRegNum := M(8,16); Exit; end;
+  if l = 'xmm9' then begin AsmRegNum := M(9,16); Exit; end;
   Result := False;
 end;
 
@@ -221,6 +228,24 @@ begin
   ResetCode; EmitAsmX64(['mov edx, @glob', 200]);
   AssertBytes('mov edx,@glob', [$BA,$00,$00,$00,$00]);
   if (GlobFixCount <> 1) or (GlobFix[0].BSSoff <> 200) then Error('glob reloc failed');
+
+  { --- SSE scalar double --- }
+  ResetCode; EmitAsmX64('movsd xmm0, xmm1'); AssertBytes('movsd xmm0,xmm1', [$F2,$0F,$10,$C1]);
+  ResetCode; EmitAsmX64('movsd xmm0, [rbp - 8]'); AssertBytes('movsd xmm0,[rbp-8]', [$F2,$0F,$10,$45,$F8]);
+  ResetCode; EmitAsmX64('movsd [rbp - 8], xmm0'); AssertBytes('movsd [rbp-8],xmm0', [$F2,$0F,$11,$45,$F8]);
+  ResetCode; EmitAsmX64('addsd xmm0, xmm1'); AssertBytes('addsd xmm0,xmm1', [$F2,$0F,$58,$C1]);
+  ResetCode; EmitAsmX64('subsd xmm0, xmm1'); AssertBytes('subsd xmm0,xmm1', [$F2,$0F,$5C,$C1]);
+  ResetCode; EmitAsmX64('mulsd xmm2, xmm3'); AssertBytes('mulsd xmm2,xmm3', [$F2,$0F,$59,$D3]);
+  ResetCode; EmitAsmX64('divsd xmm0, xmm1'); AssertBytes('divsd xmm0,xmm1', [$F2,$0F,$5E,$C1]);
+  ResetCode; EmitAsmX64('addsd xmm0, [rbp - 8]'); AssertBytes('addsd xmm0,[rbp-8]', [$F2,$0F,$58,$45,$F8]);
+  ResetCode; EmitAsmX64('cvtsi2sd xmm0, rax'); AssertBytes('cvtsi2sd xmm0,rax', [$F2,$48,$0F,$2A,$C0]);
+  ResetCode; EmitAsmX64('cvtsi2sd xmm0, eax'); AssertBytes('cvtsi2sd xmm0,eax', [$F2,$0F,$2A,$C0]);
+  ResetCode; EmitAsmX64('cvttsd2si rax, xmm0'); AssertBytes('cvttsd2si rax,xmm0', [$F2,$48,$0F,$2C,$C0]);
+  ResetCode; EmitAsmX64('cvttsd2si eax, xmm1'); AssertBytes('cvttsd2si eax,xmm1', [$F2,$0F,$2C,$C1]);
+  ResetCode; EmitAsmX64('comisd xmm0, xmm1'); AssertBytes('comisd xmm0,xmm1', [$66,$0F,$2F,$C1]);
+  ResetCode; EmitAsmX64('ucomisd xmm0, xmm1'); AssertBytes('ucomisd xmm0,xmm1', [$66,$0F,$2E,$C1]);
+  ResetCode; EmitAsmX64('xorps xmm0, xmm0'); AssertBytes('xorps xmm0,xmm0', [$0F,$57,$C0]);
+  ResetCode; EmitAsmX64('movsd xmm8, xmm9'); AssertBytes('movsd xmm8,xmm9', [$F2,$45,$0F,$10,$C1]);
 
   writeln('ALL X64 ASM EMIT TESTS PASSED');
 end.

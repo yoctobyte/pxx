@@ -272,6 +272,7 @@ var
   mnem, rest, op0, op1: AnsiString;
   i, n, holeCur, commaPos: Integer;
   k0, k1, r0, s0, r1, s1, mb0, md0, mb1, md1: Integer;
+  ssePfx, sseOp: Integer;
   imm0, imm1: Int64;
   haveOps: Boolean;
 begin
@@ -470,6 +471,48 @@ begin
       x64_test_mem_imm(s0, mb0, md0, imm1, False);
     end
     else Error('EmitAsmX64: unsupported test form');
+    Exit;
+  end;
+
+  { SSE scalar-double arithmetic + compare + packed xor (zeroing idiom).
+    movsd has a distinct store opcode (11) for the [mem],xmm direction. }
+  if CaseEqual(mnem, 'movsd') or CaseEqual(mnem, 'addsd') or CaseEqual(mnem, 'subsd') or
+     CaseEqual(mnem, 'mulsd') or CaseEqual(mnem, 'divsd') or
+     CaseEqual(mnem, 'comisd') or CaseEqual(mnem, 'ucomisd') or CaseEqual(mnem, 'xorps') then
+  begin
+    ssePfx := $F2;
+    if CaseEqual(mnem, 'comisd') or CaseEqual(mnem, 'ucomisd') then ssePfx := $66
+    else if CaseEqual(mnem, 'xorps') then ssePfx := 0;
+    if CaseEqual(mnem, 'movsd') then sseOp := $10
+    else if CaseEqual(mnem, 'addsd') then sseOp := $58
+    else if CaseEqual(mnem, 'subsd') then sseOp := $5C
+    else if CaseEqual(mnem, 'mulsd') then sseOp := $59
+    else if CaseEqual(mnem, 'divsd') then sseOp := $5E
+    else if CaseEqual(mnem, 'comisd') then sseOp := $2F
+    else if CaseEqual(mnem, 'ucomisd') then sseOp := $2E
+    else sseOp := $57;   { xorps }
+    if (k0 = 0) and (k1 = 0) then x64_sse_rr(ssePfx, sseOp, r0, r1, False)
+    else if (k0 = 0) and (k1 = 2) then x64_sse_rm(ssePfx, sseOp, r0, mb1, md1, False, False)
+    else if (k0 = 2) and (k1 = 0) and CaseEqual(mnem, 'movsd') then
+      x64_sse_rm(ssePfx, $11, r1, mb0, md0, False, False)   { store xmm -> [mem] }
+    else Error('EmitAsmX64: unsupported SSE form');
+    Exit;
+  end;
+
+  { int<->double conversions. cvtsi2sd dest=xmm, src=GP (REX.W if 64-bit src);
+    cvttsd2si dest=GP, src=xmm (REX.W if 64-bit dest). }
+  if CaseEqual(mnem, 'cvtsi2sd') then
+  begin
+    if (k0 = 0) and (k1 = 0) then x64_sse_rr($F2, $2A, r0, r1, s1 = 8)
+    else if (k0 = 0) and (k1 = 2) then x64_sse_rm($F2, $2A, r0, mb1, md1, s1 = 8, False)
+    else Error('EmitAsmX64: unsupported cvtsi2sd form');
+    Exit;
+  end;
+  if CaseEqual(mnem, 'cvttsd2si') then
+  begin
+    if (k0 = 0) and (k1 = 0) then x64_sse_rr($F2, $2C, r0, r1, s0 = 8)
+    else if (k0 = 0) and (k1 = 2) then x64_sse_rm($F2, $2C, r0, mb1, md1, s0 = 8, False)
+    else Error('EmitAsmX64: unsupported cvttsd2si form');
     Exit;
   end;
 

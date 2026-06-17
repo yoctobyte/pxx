@@ -566,6 +566,29 @@ begin
   EncModRMMem(reg, baseReg, disp, force32);
 end;
 
+{ --- SSE scalar (xmm) ops: [prefix] [REX] 0F opcode ModRM.
+  prefix: 0 = none, else the mandatory byte (F2 for *sd, 66 for comisd...).
+  rexW forces REX.W (cvtsi2sd from r64 / cvttsd2si to r64). regField/rmReg are
+  the encoded register numbers (xmm or GP); R/B come from >=8. --- }
+procedure x64_sse_rr(prefix, opcode, regField, rmReg: Integer; rexW: Boolean);
+begin
+  if prefix <> 0 then EncB(prefix);
+  if rexW then EncPrefixAndREX(8, regField, rmReg, False)
+  else EncPrefixAndREX(4, regField, rmReg, False);
+  EncB($0F); EncB(opcode and $FF);
+  EncModRMReg(regField, rmReg);
+end;
+
+procedure x64_sse_rm(prefix, opcode, regField, baseReg, disp: Integer;
+  rexW: Boolean; force32: Boolean);
+begin
+  if prefix <> 0 then EncB(prefix);
+  if rexW then EncPrefixAndREXMem(8, regField, baseReg, False)
+  else EncPrefixAndREXMem(4, regField, baseReg, False);
+  EncB($0F); EncB(opcode and $FF);
+  EncModRMMem(regField, baseReg, disp, force32);
+end;
+
 { --- test [mem], imm (F6/F7 /0) --- }
 procedure x64_test_mem_imm(size, baseReg, disp: Integer; imm: Int64; force32: Boolean);
 begin

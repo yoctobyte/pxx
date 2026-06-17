@@ -100,6 +100,16 @@ begin
     if CaseEqual(nm, nm2) then begin num:=i; size:=2; Exit; end;
     if CaseEqual(nm, nm1) then begin num:=i; size:=1; Exit; end;
   end;
+  { xmm0..xmm15 — SSE registers, flagged with size 16 (built by append; string
+    '+' is unreliable when this compiler self-compiles). }
+  for i := 0 to 15 do
+  begin
+    nm8 := '';
+    AppendChar(nm8, 'x'); AppendChar(nm8, 'm'); AppendChar(nm8, 'm');
+    if i < 10 then AppendChar(nm8, Chr(Ord('0') + i))
+    else begin AppendChar(nm8, '1'); AppendChar(nm8, Chr(Ord('0') + (i - 10))); end;
+    if CaseEqual(nm, nm8) then begin num := i; size := 16; Exit; end;
+  end;
   Result := False;
 end;
 
