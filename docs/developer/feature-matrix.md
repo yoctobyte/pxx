@@ -68,7 +68,7 @@ Each ✗ is a checklist item below the table. Seeded by grepping
 | Integer arith (8/16/32) | ✓ | ✓ | ✓ | ✓ | |
 | Int64 / UInt64 arith | ✓ | ✓ | ✓ | ✓ | i386 r-pair, arm32 r0:r1, aarch64 native |
 | Float (single/double) | ✓ | ✓ | ✓ | ✓ | feature-cross-float-variant |
-| Variant | ✓ | ✓ | ◐ | ◐ | aarch64 single/extended pending (`aarch64.inc:1956,2004`) |
+| Variant | ✓ | ✓ | ✓ | ✓ | single/extended box as VT_DOUBLE all 4 (test_cross_variant_single) |
 | Managed AnsiString (COW) | ✓ | ✓ | ✓ | ✓ | feature-cross-managed-string-cow |
 | Records (by-val / copy / fields) | ✓ | ✓ | ✓ | ✓ | feature-cross-managed-aggregates |
 | Dynamic arrays | ✓ | ✓ | ✓ | ✓ | |
@@ -136,7 +136,7 @@ Dominant blocker first; items sharing a fix are grouped.
 5. **`SetLength` on var-array param**: i386 `1705`, aarch64 `1118`, arm32 `1293`.
 6. **Async I/O reactor cross**: per-arch syscall numbers + reactor/asyncnet/CoSleep
    gating; run reactor/asyncecho/timer suites under QEMU.
-7. **Variant edge types** (aarch64): single/extended — `1956`, `2004`.
+7. **Variant edge types**: single/extended — DONE all 4 (box as VT_DOUBLE).
 8. **Interfaces** on all four (depends on classes) — feature-interfaces.
 
 Items marked **—** (indirect-call param cap) are shared structural limits, not
