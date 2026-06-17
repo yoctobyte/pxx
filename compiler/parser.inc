@@ -7379,10 +7379,13 @@ begin
   Procs[pi].FramePatch := patchPos;
   if ProcAggregateDestSym[pi] >= 0 then
   begin
-    if TargetArch = TARGET_I386 then
-      Error('target i386: aggregate-valued results not yet supported');
     idx := ProcAggregateDestSym[pi];
-    EmitB($4C); EmitB($89); EmitB($95); EmitI32(Syms[idx].Offset); { mov [rbp+off], r10 }
+    if TargetArch = TARGET_I386 then
+      { i386 carries the hidden destination pointer in ecx; stash it before the
+        param-copy loop clobbers ecx. }
+      begin EmitB($89); EmitB($8D); EmitI32(Syms[idx].Offset); end { mov [ebp+off], ecx }
+    else
+      begin EmitB($4C); EmitB($89); EmitB($95); EmitI32(Syms[idx].Offset); end; { mov [rbp+off], r10 }
   end;
 
   if TargetArch = TARGET_I386 then

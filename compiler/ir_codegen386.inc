@@ -2016,8 +2016,6 @@ begin
         end;
         if ProcExternal[pi] then
           Error('target i386: external calls not yet supported');
-        if TypeIsAggregate(Procs[pi].RetType) then
-          Error('target i386: aggregate-valued results not yet supported');
         { Internal i386 convention: evaluate and push args left to right
           (leftmost ends up deepest, matching the callee's spill formula),
           call, then the caller pops the arg area. Result in eax. }
@@ -2105,6 +2103,14 @@ begin
         end;
         if nArgs <> Procs[pi].ParamCount then
           Error('target i386: call argument count mismatch (defaults not supported yet)');
+        if TypeIsAggregate(Procs[pi].RetType) then
+        begin
+          { Aggregate result: pass the caller's hidden destination buffer in ecx
+            (args already pushed; computing the address only touches eax). The
+            callee copies Result there and returns the pointer in eax. }
+          IREmitNode386(IRC[node]);                  { eax = hidden destination }
+          EmitB($89); EmitB($C1);                    { mov ecx, eax }
+        end;
         EmitCallProc(pi);                            { E8 rel32 + fixup, same as x86-64 }
         if argBytes > 0 then
         begin

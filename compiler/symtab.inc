@@ -3314,7 +3314,23 @@ begin
       Legacy fixed string returns the address of its inline buffer. }
     if retSymIdx >= 0 then
     begin
-      if Syms[retSymIdx].TypeKind = tyString then
+      if TypeIsAggregate(Syms[retSymIdx].TypeKind) and
+         (CurProc >= 0) and (ProcAggregateDestSym[CurProc] >= 0) then
+      begin
+        { Aggregate result: copy the Result local into the caller's hidden
+          destination (pointer the prologue stashed in the dest-sym slot from
+          ecx), return that pointer in eax. Mirrors the x86-64 rep-movsb path. }
+        EmitB($8B); EmitB($BD); EmitI32(Syms[ProcAggregateDestSym[CurProc]].Offset); { mov edi, [ebp+destOff] }
+        EmitB($89); EmitB($F8);                                  { mov eax, edi (return value) }
+        EmitB($8D); EmitB($B5); EmitI32(Syms[retSymIdx].Offset); { lea esi, [ebp+resultOff] }
+        if Syms[retSymIdx].TypeKind = tyRecord then
+          sz := RecSize(Syms[retSymIdx].RecName)
+        else
+          sz := TypeSize(Syms[retSymIdx].TypeKind);
+        EmitB($B9); EmitI32(sz);                                 { mov ecx, sz }
+        EmitB($F3); EmitB($A4);                                  { rep movsb }
+      end
+      else if Syms[retSymIdx].TypeKind = tyString then
       begin
         if Syms[retSymIdx].Kind = skGlobal then
           begin EmitB($B8); EmitGlobRef(Syms[retSymIdx].Offset); end          { mov eax, abs32 }
