@@ -1079,6 +1079,43 @@ begin
         end;
       end;
 
+    IR_SETLEN_DYN:
+      begin
+        { Nested / record-or-class-field SetLength via the portable
+          PXXDynSetLen(slotAddr, n, desc). IRA = slot-address node, IRB = length;
+          descriptor allocated from the node metadata. }
+        savedLValueWrite := InLValueWrite;
+        InLValueWrite := True;
+        IREmitNodeArm32(IRA[node]);    { r0 = slot addr }
+        InLValueWrite := savedLValueWrite;
+        EmitI32($E92D0001);            { push {r0} slotAddr }
+        IREmitNodeArm32(IRB[node]);    { r0 = n }
+        EmitI32($E92D0001);            { push {r0} n }
+        EmitI32($E8BD0002);            { pop {r1} (n) }
+        EmitI32($E8BD0001);            { pop {r0} (slotAddr) }
+        EmitLoadDataRefArm32(2, GetOrAllocNodeDynDesc(node)); { r2 = desc }
+        pi := FindProc('PXXDynSetLen');
+        if pi < 0 then Error('compiler error: PXXDynSetLen not found');
+        EmitCallProc(pi);
+      end;
+
+    IR_DYNUNIQUE:
+      begin
+        { Nested dyn-array copy-on-write. IRA = slot-address node. Read: load the
+          level's data pointer; write: clone-if-shared via
+          PXXDynArrayUnique(slotAddr, desc), returning the data pointer in r0. }
+        IREmitNodeArm32(IRA[node]);    { r0 = slot addr }
+        if InLValueWrite then
+        begin
+          EmitLoadDataRefArm32(1, GetOrAllocDynUniqueDesc(node)); { r1 = desc }
+          pi := FindProc('PXXDynArrayUnique');
+          if pi < 0 then Error('compiler error: PXXDynArrayUnique not found');
+          EmitCallProc(pi);            { r0 = unique data ptr }
+        end
+        else
+          EmitI32($E5900000);          { ldr r0, [r0] }
+      end;
+
     IR_BINOP:
       begin
         left := IRA[node];
@@ -2723,7 +2760,7 @@ begin
       IR_NOP, IR_CONST_STR, IR_CONST_INT, IR_BLOCK,
       IR_LOAD_SYM, IR_BINOP, IR_NEG, IR_NOT, IR_ARG, IR_LEA, IR_SYSCALL,
       IR_SET_LIT, IR_SET_BINOP, IR_SET_CMP,
-      IR_SLOTADDR, IR_FIELD, IR_INDEX: ;
+      IR_SLOTADDR, IR_DYNUNIQUE, IR_FIELD, IR_INDEX: ;
 
       else
         IREmitNodeArm32(i);

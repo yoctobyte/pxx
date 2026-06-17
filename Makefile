@@ -940,7 +940,13 @@ test-i386: $(COMPILER)
 	./$(COMPILER) --target=i386 test/test_inheritance_dispatch.pas /tmp/test_i386_cls
 	./$(COMPILER) test/test_inheritance_dispatch.pas /tmp/test_i386_cls_x64
 	test "$$(tools/run_target.sh i386 /tmp/test_i386_cls)" = "$$(/tmp/test_i386_cls_x64)"
-	@echo "i386 hello + arith + procs + loops + write + varparam + syscall + heap + string + record + dynarray + exception + float + float-params + variant + byref-params + setlen-str + in-operator + loadfile + sysopen-family + args + string-cow + aoc-types + many-params + conformance2 + shortcircuit + ptr-arith + case-range + global-init + typed-const + multidim + named-array + record-2darray + param-2darray + multidim3d + const-alias + float-const + stackless-generator + proctype + scheduler + scheduler-exc + classes + method-pointers + aggregate-return + metaclass-rtti + sets ok (output identical to x86-64)"
+	./$(COMPILER) -dPXX_MANAGED_STRING --target=i386 test/test_dynarray_field.pas /tmp/test_i386_dynfield
+	./$(COMPILER) -dPXX_MANAGED_STRING test/test_dynarray_field.pas /tmp/test_i386_dynfield_x64
+	test "$$(tools/run_target.sh i386 /tmp/test_i386_dynfield)" = "$$(/tmp/test_i386_dynfield_x64)"
+	./$(COMPILER) -dPXX_MANAGED_STRING --target=i386 test/test_collections.pas /tmp/test_i386_collections
+	./$(COMPILER) -dPXX_MANAGED_STRING test/test_collections.pas /tmp/test_i386_collections_x64
+	test "$$(tools/run_target.sh i386 /tmp/test_i386_collections)" = "$$(/tmp/test_i386_collections_x64)"
+	@echo "i386 hello + arith + procs + loops + write + varparam + syscall + heap + string + record + dynarray + exception + float + float-params + variant + byref-params + setlen-str + in-operator + loadfile + sysopen-family + args + string-cow + aoc-types + many-params + conformance2 + shortcircuit + ptr-arith + case-range + global-init + typed-const + multidim + named-array + record-2darray + param-2darray + multidim3d + const-alias + float-const + stackless-generator + proctype + scheduler + scheduler-exc + classes + method-pointers + aggregate-return + metaclass-rtti + dynarray-field + collections ok (output identical to x86-64)"
 
 test-aarch64: $(COMPILER)
 	./$(COMPILER) --target=aarch64 test/hello.pas /tmp/test_aarch64_hello
@@ -1092,7 +1098,13 @@ test-aarch64: $(COMPILER)
 	./$(COMPILER) --target=aarch64 test/test_inheritance_dispatch.pas /tmp/test_aarch64_cls
 	./$(COMPILER) test/test_inheritance_dispatch.pas /tmp/test_aarch64_cls_x64
 	test "$$(tools/run_target.sh aarch64 /tmp/test_aarch64_cls)" = "$$(/tmp/test_aarch64_cls_x64)"
-	@echo "aarch64 hello + arith + procs + loops + write + varparam + syscall + heap + string + record + dynarray + exception + float + variant + setlen-str + str-length-index + in-operator + loadfile + sysopen-family + args + open-array-params + string-cow + huge-frame + varrec-alloc + aoc-types + many-params + conformance2 + shortcircuit + ptr-arith + case-range + global-init + typed-const + multidim + named-array + record-2darray + param-2darray + multidim3d + const-alias + float-const + classes + method-pointers + aggregate-return + metaclass-rtti + sets ok (output identical to x86-64)"
+	./$(COMPILER) -dPXX_MANAGED_STRING --target=aarch64 test/test_dynarray_field.pas /tmp/test_aarch64_dynfield
+	./$(COMPILER) -dPXX_MANAGED_STRING test/test_dynarray_field.pas /tmp/test_aarch64_dynfield_x64
+	test "$$(tools/run_target.sh aarch64 /tmp/test_aarch64_dynfield)" = "$$(/tmp/test_aarch64_dynfield_x64)"
+	./$(COMPILER) -dPXX_MANAGED_STRING --target=aarch64 test/test_collections.pas /tmp/test_aarch64_collections
+	./$(COMPILER) -dPXX_MANAGED_STRING test/test_collections.pas /tmp/test_aarch64_collections_x64
+	test "$$(tools/run_target.sh aarch64 /tmp/test_aarch64_collections)" = "$$(/tmp/test_aarch64_collections_x64)"
+	@echo "aarch64 hello + arith + procs + loops + write + varparam + syscall + heap + string + record + dynarray + exception + float + variant + setlen-str + str-length-index + in-operator + loadfile + sysopen-family + args + open-array-params + string-cow + huge-frame + varrec-alloc + aoc-types + many-params + conformance2 + shortcircuit + ptr-arith + case-range + global-init + typed-const + multidim + named-array + record-2darray + param-2darray + multidim3d + const-alias + float-const + classes + method-pointers + aggregate-return + metaclass-rtti + dynarray-field + collections ok (output identical to x86-64)"
 
 test-arm32: $(COMPILER)
 	./$(COMPILER) --target=arm32 test/hello.pas /tmp/test_arm32_hello
@@ -1262,7 +1274,13 @@ test-arm32: $(COMPILER)
 	./$(COMPILER) --target=arm32 test/test_inheritance_dispatch.pas /tmp/test_arm32_cls
 	./$(COMPILER) test/test_inheritance_dispatch.pas /tmp/test_arm32_cls_x64
 	test "$$(tools/run_target.sh arm32 /tmp/test_arm32_cls)" = "$$(/tmp/test_arm32_cls_x64)"
-	@echo "arm32 hello + arith + procs + loops + write + varparam + syscall + heap + string + record + dynarray + exception + float + args + variant + strresult + setlen-str + str-length-index + in-operator + managed-aggregate-locals + loadfile + sysopen-family + string-cow + var-string-param + openarray-string + stack-params + int64 + int64-byref + aoc-types + many-params + conformance2 + shortcircuit + ptr-arith + case-range + global-init + typed-const + multidim + named-array + record-2darray + param-2darray + multidim3d + const-alias + float-const + classes + method-pointers + aggregate-return + metaclass-rtti + sets ok (output identical to x86-64)"
+	./$(COMPILER) -dPXX_MANAGED_STRING --target=arm32 test/test_dynarray_field.pas /tmp/test_arm32_dynfield
+	./$(COMPILER) -dPXX_MANAGED_STRING test/test_dynarray_field.pas /tmp/test_arm32_dynfield_x64
+	test "$$(tools/run_target.sh arm32 /tmp/test_arm32_dynfield)" = "$$(/tmp/test_arm32_dynfield_x64)"
+	./$(COMPILER) -dPXX_MANAGED_STRING --target=arm32 test/test_collections.pas /tmp/test_arm32_collections
+	./$(COMPILER) -dPXX_MANAGED_STRING test/test_collections.pas /tmp/test_arm32_collections_x64
+	test "$$(tools/run_target.sh arm32 /tmp/test_arm32_collections)" = "$$(/tmp/test_arm32_collections_x64)"
+	@echo "arm32 hello + arith + procs + loops + write + varparam + syscall + heap + string + record + dynarray + exception + float + args + variant + strresult + setlen-str + str-length-index + in-operator + managed-aggregate-locals + loadfile + sysopen-family + string-cow + var-string-param + openarray-string + stack-params + int64 + int64-byref + aoc-types + many-params + conformance2 + shortcircuit + ptr-arith + case-range + global-init + typed-const + multidim + named-array + record-2darray + param-2darray + multidim3d + const-alias + float-const + classes + method-pointers + aggregate-return + metaclass-rtti + dynarray-field + collections ok (output identical to x86-64)"
 
 # ----- Cross self-host bootstrap gates (feature-cross-bootstrap-selfhost) -----
 # Triple-stage proof: native cross-compiles compiler.pas -> <arch>; that binary,

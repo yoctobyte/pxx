@@ -901,6 +901,42 @@ begin
     IR_SLOTADDR:
       EmitLoadVarAddrA64(IRA[node]);            { always the slot address }
 
+    IR_SETLEN_DYN:
+      begin
+        { Nested / record-or-class-field SetLength via the portable
+          PXXDynSetLen(slotAddr, n, desc). IRA = slot-address node, IRB = length;
+          descriptor allocated from the node metadata. }
+        savedLValueWrite := InLValueWrite;
+        InLValueWrite := True;
+        IREmitNodeAarch64(IRA[node]);     { x0 = slot addr }
+        InLValueWrite := savedLValueWrite;
+        EmitI32($F81F0FE0);               { str x0, [sp, #-16]! }
+        IREmitNodeAarch64(IRB[node]);     { x0 = n }
+        EmitI32($AA0003E1);               { mov x1, x0 (n) }
+        EmitI32($F84107E0);               { ldr x0, [sp], #16 (slotAddr) }
+        EmitLoadDataRefA64(2, GetOrAllocNodeDynDesc(node)); { x2 = desc }
+        pi := FindProc('PXXDynSetLen');
+        if pi < 0 then Error('compiler error: PXXDynSetLen not found');
+        EmitCallProc(pi);
+      end;
+
+    IR_DYNUNIQUE:
+      begin
+        { Nested dyn-array copy-on-write. IRA = slot-address node. Read: load the
+          level's data pointer; write: clone-if-shared via
+          PXXDynArrayUnique(slotAddr, desc), returning the data pointer in x0. }
+        IREmitNodeAarch64(IRA[node]);     { x0 = slot addr }
+        if InLValueWrite then
+        begin
+          EmitLoadDataRefA64(1, GetOrAllocDynUniqueDesc(node)); { x1 = desc }
+          pi := FindProc('PXXDynArrayUnique');
+          if pi < 0 then Error('compiler error: PXXDynArrayUnique not found');
+          EmitCallProc(pi);              { x0 = unique data ptr }
+        end
+        else
+          EmitI32($F9400000);            { ldr x0, [x0] }
+      end;
+
     IR_BINOP:
       begin
         left := IRA[node];
@@ -2497,6 +2533,7 @@ begin
       IR_NOP, IR_CONST_STR, IR_CONST_INT, IR_BLOCK,
       IR_LOAD_SYM, IR_BINOP, IR_NEG, IR_NOT, IR_ARG, IR_LEA, IR_SYSCALL,
       IR_SET_LIT, IR_SET_BINOP, IR_SET_CMP,
+      IR_SLOTADDR, IR_DYNUNIQUE,
       IR_FIELD, IR_INDEX, IR_VAR_BOX, IR_VAR_BINOP: ;
 
       else

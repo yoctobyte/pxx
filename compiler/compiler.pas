@@ -38,6 +38,8 @@ procedure CPreprocess(var src: AnsiString; const baseDir: AnsiString); forward;
 {$include parser.inc}
 {$include ir.inc}
 function GetOrAllocSymRTTI(symIdx: Integer): Integer; forward;
+function GetOrAllocNodeDynDesc(node: Integer): Integer; forward;
+function GetOrAllocDynUniqueDesc(node: Integer): Integer; forward;
 {$include ir_codegen_aarch64.inc}
 {$include ir_codegen386.inc}
 {$include ir_codegen_arm32.inc}

@@ -241,3 +241,29 @@ test-core; bootstrap + cross-bootstrap stay byte-identical.
   byte-identical (compiler.pas's own char-sets exercise the path). **Unblocks
   `for..in (set)`** (feature-for-in-iteration). Remaining collections gap:
   `setlen_dyn` / `dynunique` (dynarray-of-record depth) on cross.
+- 2026-06-17 — **collections / dynarray-of-record depth on all 4 targets.**
+  Ported `setlen_dyn` (IR_SETLEN_DYN) and `dynunique` (IR_DYNUNIQUE) to
+  i386 / aarch64 / arm32. These are the field-slot and nested (depth>=2) SetLength
+  + copy-on-write path; plain depth-1 top-level dyn arrays already worked cross.
+  Approach: the x86-64 backend inlines the whole SetLength (alloc/zero/copy/retain/
+  release) and the COW clone, but the cross depth-1 path already routes through the
+  *portable* runtime helpers `PXXDynSetLen(slotAddr, n, desc)` /
+  `PXXDynArrayUnique(slotAddr, desc)` (builtinheap.pas, target-independent, fixed
+  16-byte [refcount][length] header). So each cross IR_SETLEN_DYN / IR_DYNUNIQUE
+  just computes the slot address (lvalue-write mode), builds the 20-byte layout
+  descriptor, and calls the helper per each arch's ABI (i386 push slot/n/desc;
+  aarch64 x0/x1/x2; arm32 r0/r1/r2). Two shared descriptor builders added in
+  ir_codegen.inc (forward-declared in compiler.pas) — `GetOrAllocNodeDynDesc`
+  (SETLEN_DYN symbol-or-field target) and `GetOrAllocDynUniqueDesc` (DYNUNIQUE
+  node metadata) — both reuse the existing AnonDynArray* registry that
+  rtti_emit.inc populates with TARGET_PTR_SIZE-aware strides. Added IR_DYNUNIQUE
+  (and IR_SLOTADDR, missing on aarch64) to each backend's operand-skip list so
+  the `else`-fallback statement loop does not double-emit them. test_dynarray_field
+  (class/record dynarray fields, doubling growth, COW record-copy independence,
+  200k-scope-exit finalization) + test_collections byte-identical to x86-64 on all
+  four under QEMU; wired into the three suites. make test + cross-bootstrap (all 3)
+  byte-identical. **Note:** ir_codegen.inc:3038 (`SetLength: dynamic array of
+  record/string not yet supported`) is an x86-64-*only* limitation of its inline
+  depth-1 path for *frozen* `string`-element arrays — the cross targets handle
+  that case via PXXDynSetLen, so it is not a cross gap. Remaining cross gaps:
+  external C calls + ELF32 dynamic symbols, then the async I/O reactor.

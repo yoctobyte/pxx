@@ -232,6 +232,84 @@ begin
   Result := SymRTTIOff[symIdx];
 end;
 
+{ Descriptor for an IR_SETLEN_DYN target. Symbol root -> reuse the symbol's
+  descriptor; field/nested root -> allocate an anonymous 20-byte descriptor from
+  the metadata carried on the node (IRC = depth, IRTk = base type, IRSetLenBaseRec
+  = base record). Target-independent: shared by all backends. rtti_emit.inc fills
+  in the populated descriptor using TARGET_PTR_SIZE. }
+function GetOrAllocNodeDynDesc(node: Integer): Integer;
+var anonIdx, depth, baseKind, elSize, i, symIdx, baseTk, baseRec: Integer;
+begin
+  symIdx := Integer(IRIVal[node]);
+  if symIdx >= 0 then
+  begin
+    Result := GetOrAllocSymRTTI(symIdx);
+    Exit;
+  end;
+  depth := IRC[node];
+  baseTk := IRTk[node];
+  baseRec := IRSetLenBaseRec[node];
+
+  if AnonDynArrayCount >= 8192 then Error('too many anonymous dynamic arrays');
+  anonIdx := AnonDynArrayCount;
+  AnonDynArrayOff[anonIdx] := DataLen;
+  AnonDynArrayDepth[anonIdx] := depth;
+  AnonDynArrayBaseTk[anonIdx] := baseTk;
+  AnonDynArrayBaseRec[anonIdx] := baseRec;
+
+  if baseTk = Ord(tyAnsiString) then
+    baseKind := 1
+  else if (baseTk = Ord(tyRecord)) and RecordHasManagedFields(baseRec) then
+    baseKind := 3
+  else
+    baseKind := 0;
+
+  if depth > 1 then
+    elSize := TARGET_PTR_SIZE
+  else if baseKind = 1 then
+    elSize := TARGET_PTR_SIZE
+  else if baseKind = 3 then
+    elSize := UClsSize_[baseRec - REC_UCLASS_BASE]
+  else if baseTk = Ord(tyRecord) then
+    elSize := RecSize(baseRec)
+  else
+    elSize := TypeSize(IntToTypeKind(baseTk));
+  AnonDynArrayElSize[anonIdx] := elSize;
+
+  for i := 0 to 19 do
+  begin
+    if DataLen >= MAX_DATA then Error('data overflow');
+    Data[DataLen] := 0;
+    Inc(DataLen);
+  end;
+  Inc(AnonDynArrayCount);
+  Result := AnonDynArrayOff[anonIdx];
+end;
+
+{ Descriptor for an IR_DYNUNIQUE node. The node already carries the resolved
+  element metadata (IRB = depth, IRTk = base type, IRC = base record,
+  IRIVal = element size); allocate an anonymous 20-byte descriptor from it.
+  Target-independent. }
+function GetOrAllocDynUniqueDesc(node: Integer): Integer;
+var anonIdx, i: Integer;
+begin
+  if AnonDynArrayCount >= 8192 then Error('too many anonymous dynamic arrays');
+  anonIdx := AnonDynArrayCount;
+  AnonDynArrayOff[anonIdx] := DataLen;
+  AnonDynArrayDepth[anonIdx] := IRB[node];
+  AnonDynArrayBaseTk[anonIdx] := IRTk[node];
+  AnonDynArrayBaseRec[anonIdx] := IRC[node];
+  AnonDynArrayElSize[anonIdx] := Integer(IRIVal[node]);
+  for i := 0 to 19 do
+  begin
+    if DataLen >= MAX_DATA then Error('data overflow');
+    Data[DataLen] := 0;
+    Inc(DataLen);
+  end;
+  Inc(AnonDynArrayCount);
+  Result := AnonDynArrayOff[anonIdx];
+end;
+
 procedure EmitDynArrayReleaseLockedForSym(symIdx: Integer);
 var pi: Integer;
 begin

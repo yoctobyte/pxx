@@ -1235,6 +1235,45 @@ begin
         end;
       end;
 
+    IR_SETLEN_DYN:
+      begin
+        { Nested / record-or-class-field SetLength via the portable
+          PXXDynSetLen(slotAddr, n, desc) helper. IRA = slot-address node,
+          IRB = new length; descriptor allocated from the node metadata. }
+        savedLValueWrite := InLValueWrite;
+        InLValueWrite := True;
+        IREmitNode386(IRA[node]);              { eax = slot addr }
+        InLValueWrite := savedLValueWrite;
+        EmitB($50);                            { push slot addr }
+        IREmitNode386(IRB[node]);              { eax = new length }
+        EmitB($50);                            { push n }
+        EmitB($68); EmitDataRef(GetOrAllocNodeDynDesc(node)); { push desc }
+        pi := FindProc('PXXDynSetLen');
+        if pi < 0 then Error('compiler error: PXXDynSetLen not found');
+        EmitCallProc(pi);
+        EmitB($81); EmitB($C4); EmitI32(12);   { add esp, 12 }
+      end;
+
+    IR_DYNUNIQUE:
+      begin
+        { Nested dyn-array copy-on-write. IRA = slot-address node. On a read just
+          load the level's data pointer; on a write clone-if-shared via
+          PXXDynArrayUnique(slotAddr, desc), publishing the unique handle and
+          returning the data pointer. }
+        IREmitNode386(IRA[node]);              { eax = slot addr }
+        if InLValueWrite then
+        begin
+          EmitB($50);                          { push slot addr }
+          EmitB($68); EmitDataRef(GetOrAllocDynUniqueDesc(node)); { push desc }
+          pi := FindProc('PXXDynArrayUnique');
+          if pi < 0 then Error('compiler error: PXXDynArrayUnique not found');
+          EmitCallProc(pi);
+          EmitB($81); EmitB($C4); EmitI32(8);  { add esp, 8 }
+        end
+        else
+          begin EmitB($8B); EmitB($00); end;   { mov eax, [eax] }
+      end;
+
     IR_BINOP:
       begin
         left := IRA[node];
@@ -3286,7 +3325,7 @@ begin
       IR_NOP, IR_CONST_STR, IR_CONST_INT, IR_BLOCK,
       IR_LOAD_SYM, IR_BINOP, IR_NEG, IR_NOT, IR_ARG, IR_LEA, IR_SYSCALL,
       IR_SET_LIT, IR_SET_BINOP, IR_SET_CMP,
-      IR_SLOTADDR, IR_FIELD, IR_INDEX: ; { operands, emitted by parents }
+      IR_SLOTADDR, IR_DYNUNIQUE, IR_FIELD, IR_INDEX: ; { operands, emitted by parents }
 
       else
         IREmitNode386(i); { unknown statement op -> hard error inside }
