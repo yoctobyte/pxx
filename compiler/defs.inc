@@ -1,6 +1,6 @@
 const
 
-  MAX_CODE      = 4194304;
+  MAX_CODE      = 8388608;  { 8 MB; arm32's literal-pool-heavy self-host code exceeds 4 MB }
   LOCAL_STR_CAP = 256;     { max string length for local/stack variables }
   LINE_BUF_SIZE = 4096;    { readln stdin line buffer }
   MAX_DATA    = 2097152;      { 2 MB }
