@@ -829,6 +829,9 @@ test-i386: $(COMPILER)
 	./$(COMPILER) --target=i386 test/test_cross_variant.pas /tmp/test_i386_variant
 	./$(COMPILER) test/test_cross_variant.pas /tmp/test_i386_variant_x64
 	test "$$(tools/run_target.sh i386 /tmp/test_i386_variant)" = "$$(/tmp/test_i386_variant_x64)"
+	./$(COMPILER) --target=i386 test/test_cross_variant_single.pas /tmp/test_i386_variant_single
+	./$(COMPILER) test/test_cross_variant_single.pas /tmp/test_i386_variant_single_x64
+	test "$$(tools/run_target.sh i386 /tmp/test_i386_variant_single)" = "$$(/tmp/test_i386_variant_single_x64)"
 	./$(COMPILER) -dPXX_MANAGED_STRING --target=i386 test/test_cross_byref_params.pas /tmp/test_i386_byref
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_cross_byref_params.pas /tmp/test_i386_byref_x64
 	test "$$(tools/run_target.sh i386 /tmp/test_i386_byref)" = "$$(/tmp/test_i386_byref_x64)"
@@ -993,6 +996,9 @@ test-aarch64: $(COMPILER)
 	./$(COMPILER) --target=aarch64 test/test_cross_variant.pas /tmp/test_aarch64_variant
 	./$(COMPILER) test/test_cross_variant.pas /tmp/test_aarch64_variant_x64
 	test "$$(tools/run_target.sh aarch64 /tmp/test_aarch64_variant)" = "$$(/tmp/test_aarch64_variant_x64)"
+	./$(COMPILER) --target=aarch64 test/test_cross_variant_single.pas /tmp/test_aarch64_variant_single
+	./$(COMPILER) test/test_cross_variant_single.pas /tmp/test_aarch64_variant_single_x64
+	test "$$(tools/run_target.sh aarch64 /tmp/test_aarch64_variant_single)" = "$$(/tmp/test_aarch64_variant_single_x64)"
 	./$(COMPILER) -dPXX_MANAGED_STRING --target=aarch64 test/test_cross_setlen_str.pas /tmp/test_aarch64_setlen_str
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_cross_setlen_str.pas /tmp/test_aarch64_setlen_str_x64
 	test "$$(tools/run_target.sh aarch64 /tmp/test_aarch64_setlen_str)" = "$$(/tmp/test_aarch64_setlen_str_x64)"
@@ -1169,6 +1175,9 @@ test-arm32: $(COMPILER)
 	./$(COMPILER) --target=arm32 test/test_cross_variant.pas /tmp/test_arm32_variant
 	./$(COMPILER) test/test_cross_variant.pas /tmp/test_arm32_variant_x64
 	test "$$(tools/run_target.sh arm32 /tmp/test_arm32_variant)" = "$$(/tmp/test_arm32_variant_x64)"
+	./$(COMPILER) --target=arm32 test/test_cross_variant_single.pas /tmp/test_arm32_variant_single
+	./$(COMPILER) test/test_cross_variant_single.pas /tmp/test_arm32_variant_single_x64
+	test "$$(tools/run_target.sh arm32 /tmp/test_arm32_variant_single)" = "$$(/tmp/test_arm32_variant_single_x64)"
 	./$(COMPILER) --target=arm32 test/test_cross_strresult.pas /tmp/test_arm32_strresult
 	./$(COMPILER) test/test_cross_strresult.pas /tmp/test_arm32_strresult_x64
 	test "$$(tools/run_target.sh arm32 /tmp/test_arm32_strresult)" = "$$(/tmp/test_arm32_strresult_x64)"

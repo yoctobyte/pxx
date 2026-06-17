@@ -2268,10 +2268,10 @@ begin
             tyNativeUInt, tyPointer:             sz := VT_INT64;
             tyBoolean:                           sz := VT_BOOL;
             tyChar:                              sz := VT_CHAR;
-            tyDouble:                            sz := VT_DOUBLE;
+            tyDouble, tySingle, tyExtended:      sz := VT_DOUBLE;
             tyString, tyAnsiString:              sz := VT_STRING;
           else
-            Error('Variant := this type not yet supported (single/extended pending)');
+            Error('Variant := this type not yet supported');
           end;
           
           if tk = tyString then
@@ -2316,10 +2316,10 @@ begin
           tyNativeUInt, tyPointer:             sz := VT_INT64;
           tyBoolean:                           sz := VT_BOOL;
           tyChar:                              sz := VT_CHAR;
-          tyDouble:                            sz := VT_DOUBLE;
+          tyDouble, tySingle, tyExtended:      sz := VT_DOUBLE;
           tyString, tyAnsiString:              sz := VT_STRING;
         else
-          Error('Variant operand: this scalar type not yet supported (single/extended pending)');
+          Error('Variant operand: this scalar type not yet supported');
         end;
 
         if tk = tyString then

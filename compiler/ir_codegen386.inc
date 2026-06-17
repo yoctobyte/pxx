@@ -412,10 +412,10 @@ begin
     tyNativeUInt, tyPointer:             Result := VT_INT64;
     tyBoolean:                           Result := VT_BOOL;
     tyChar:                              Result := VT_CHAR;
-    tyDouble:                            Result := VT_DOUBLE;
+    tyDouble, tySingle, tyExtended:      Result := VT_DOUBLE;
     tyString, tyAnsiString:              Result := VT_STRING;
   else
-    Error(what + ': this scalar type not yet supported (single/extended pending)');
+    Error(what + ': this scalar type not yet supported');
   end;
 end;
 
@@ -427,7 +427,7 @@ begin
   EmitVarHelperCall386('PXXVarClear');
   EmitB($C7); EmitB($00); EmitI32(tag);             { mov dword [eax], tag }
   EmitB($C7); EmitB($40); EmitB($04); EmitI32(0);   { mov dword [eax+4], 0 }
-  if payloadTk = tyDouble then
+  if TypeIsFloat(payloadTk) then
   begin
     EmitB($F2); EmitB($0F); EmitB($10); EmitB($04); EmitB($24);  { movsd xmm0, [esp] }
     EmitB($83); EmitB($C4); EmitB($08);                          { add esp, 8 }
@@ -3075,7 +3075,7 @@ begin
           else
           begin
             IREmitNode386(IRB[node]);                { scalar -> eax / double -> xmm0 }
-            if tk = tyDouble then
+            if TypeIsFloat(tk) then
               EmitFloatSpill386                      { 8-byte payload on the stack }
             else
               EmitB($50);                            { push payload }
@@ -3118,7 +3118,7 @@ begin
         else
         begin
           IREmitNode386(IRB[node]);
-          if tk = tyDouble then
+          if TypeIsFloat(tk) then
             EmitFloatSpill386
           else
             EmitB($50);                              { push payload }

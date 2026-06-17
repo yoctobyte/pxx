@@ -3446,10 +3446,10 @@ begin
             tyNativeUInt, tyPointer:             size := VT_INT64;
             tyBoolean:                           size := VT_BOOL;
             tyChar:                              size := VT_CHAR;
-            tyDouble:                            size := VT_DOUBLE;
+            tyDouble, tySingle, tyExtended:      size := VT_DOUBLE;
             tyString, tyAnsiString:               size := VT_STRING;
           else
-            Error('Variant := this type not yet supported (single/extended pending)');
+            Error('Variant := this type not yet supported');
           end;
           IREmitNode(IRB[node]);                 { rax = scalar value (float: double bits) }
           if tk = tyString then
@@ -3479,10 +3479,10 @@ begin
           tyNativeUInt, tyPointer:             size := VT_INT64;
           tyBoolean:                           size := VT_BOOL;
           tyChar:                              size := VT_CHAR;
-          tyDouble:                            size := VT_DOUBLE;
+          tyDouble, tySingle, tyExtended:      size := VT_DOUBLE;
           tyString, tyAnsiString:               size := VT_STRING;
         else
-          Error('Variant operand: this scalar type not yet supported (single/extended pending)');
+          Error('Variant operand: this scalar type not yet supported');
         end;
         IREmitNode(IRB[node]);                 { rax = scalar value }
         if tk = tyString then

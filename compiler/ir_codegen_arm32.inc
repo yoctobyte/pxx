@@ -659,7 +659,7 @@ begin
   EmitI32($E5801000);                  { str r1, [r0] }
   EmitI32($E3A01000);                  { mov r1, #0 }
   EmitI32($E5801004);                  { str r1, [r0, #4] }
-  if payloadTk = tyDouble then
+  if TypeIsFloat(payloadTk) then
   begin
     EmitI32($ECBD0B02);                { vpop {d0} }
     EmitI32($ED800B02);                { vstr d0, [r0, #8] }
@@ -2539,7 +2539,7 @@ begin
           else
           begin
             IREmitNodeArm32(IRB[node]);               { scalar -> r0 / double -> d0 }
-            if tk = tyDouble then
+            if TypeIsFloat(tk) then
               EmitI32($ED2D0B02)                      { vpush {d0} }
             else
               EmitI32($E92D0001);                     { push {r0} }
@@ -2568,7 +2568,7 @@ begin
         else
         begin
           IREmitNodeArm32(IRB[node]);
-          if tk = tyDouble then
+          if TypeIsFloat(tk) then
             EmitI32($ED2D0B02)                        { vpush {d0} }
           else
             EmitI32($E92D0001);                       { push {r0} }
