@@ -1915,7 +1915,7 @@ begin
           Exit;
         end;
         if not (TypeIsOrdinal(tk) or (tk = tyBoolean) or (tk = tyPointer) or
-                (tk = tyChar) or (tk = tyUnknown)) then
+                (tk = tyChar) or (tk = tyClass) or (tk = tyUnknown)) then
           Error('target arm32: store through pointer of this type not yet supported');
         if Is64BitArm32(tk) then
         begin

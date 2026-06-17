@@ -1722,7 +1722,7 @@ begin
           Exit;
         end;
         if not (TypeIsOrdinal(tk) or (tk = tyBoolean) or (tk = tyPointer) or
-                (tk = tyChar) or (tk = tyUnknown)) then
+                (tk = tyChar) or (tk = tyClass) or (tk = tyUnknown)) then
           Error('target aarch64: store through pointer of this type not yet supported');
         IREmitNodeAarch64(IRB[node]); { value -> x0 }
         EmitI32($F81F0FE0);           { str x0, [sp, #-16]! }
