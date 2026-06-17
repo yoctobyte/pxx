@@ -291,6 +291,10 @@ const
   TARGET_RISCV32 = 5;
   XTENSA_ABI_CALL0    = 0;
   XTENSA_ABI_WINDOWED = 1;
+  { Bytes reserved below the windowed locals frame for the constant-sp
+    expression/argument spill stack. Stage-1 nesting is shallow; 256 = 64
+    slots is ample and keeps every offset inside the s32i/l32i imm range. }
+  XT_EXPR_REGION = 256;
   LOAD_ADDR32        = $08048000;  { classic i386 ET_EXEC base }
   ELF32_HEADER_SIZE  = 52;
   PROG32_HEADER_SIZE = 32;
@@ -743,6 +747,12 @@ var
   { Xtensa ABI selector. Call0 remains the bare-target default; ESP-IDF uses
     the windowed ABI. }
   XtensaABI : Integer;
+  { Windowed-ABI expression stack: a constant-sp function keeps its stack
+    pointer fixed (the window overflow/underflow handlers spill the caller's
+    a0-a3 to [sp-16], so sp must not move). Temporaries live at sp-relative
+    positive offsets inside a reserved frame region; XtSpillDepth is the
+    current byte offset, reset per proc. Call0 keeps the moving-sp stack. }
+  XtSpillDepth : Integer;
   { Emit a relocatable ET_REL .o instead of a linked ET_EXEC image
     (--emit-obj, or inferred from a .o output name). esp32 targets only. }
   EmitObjMode : Boolean;

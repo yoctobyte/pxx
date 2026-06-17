@@ -3147,7 +3147,11 @@ begin
     begin
       xtensa_entry(reg_xtensa_sp, 32);
       { a15 is only a bootstrap frame base until params are spilled; the body
-        frame pointer moves to a7, outside call8's outgoing window. }
+        frame pointer moves to a7, outside call8's outgoing window. The
+        patchable addi lowers sp once to reserve locals + the constant-sp
+        expression-stack region; sp then stays fixed for the whole body so the
+        window spill area at [sp-16] never desyncs. }
+      XtSpillDepth := 0;
       xtensa_mov(reg_xtensa_a15, reg_xtensa_sp);
       Result := CodeLen;
       xtensa_addi(reg_xtensa_sp, reg_xtensa_sp, 0);
@@ -3185,6 +3189,16 @@ procedure PatchProcPrologue(patchPos, size: Integer);
 var aligned, a64imm: Integer;
 begin
   aligned := ((size + 15) div 16) * 16;
+  { Windowed xtensa keeps sp constant and runs its expression/argument stack in
+    a reserved region below the locals. Round the one-shot frame (locals +
+    region) up to 256 and lower sp with a single ADDMI — ADDI's +-128 immediate
+    cannot reach it, and a too-large ADDI silently truncates. }
+  if (TargetArch = TARGET_XTENSA) and (XtensaABI = XTENSA_ABI_WINDOWED) then
+  begin
+    aligned := ((size + XT_EXPR_REGION + 255) div 256) * 256;
+    Patch24(patchPos, EncodeXtensaAddmi(reg_xtensa_sp, reg_xtensa_sp, -aligned));
+    Exit;
+  end;
   if TargetArch = TARGET_ARM32 then
     Patch32(patchPos, aligned)  { raw frame-size literal; loaded into r9, then sub sp,sp,r9 }
   else if TargetArch = TARGET_AARCH64 then
@@ -3529,7 +3543,9 @@ begin
     end;
     if XtensaABI = XTENSA_ABI_WINDOWED then
     begin
-      xtensa_mov(reg_xtensa_sp, reg_xtensa_a7);
+      { sp stayed constant through the body, and the window spill area for our
+        caller lives at [sp-16], so retw must keep sp as entry set it — no
+        restore (matches gcc's bare `retw.n`). }
       xtensa_retw;
     end
     else

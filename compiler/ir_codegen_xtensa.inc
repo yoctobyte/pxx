@@ -139,20 +139,42 @@ begin
 end;
 
 procedure XtensaPushA2;
+{ Spill a2 to the next expression-stack slot. Windowed: sp is constant, so the
+  slot is sp-relative at the running XtSpillDepth offset (never move sp, or the
+  window spill area at [sp-16] desyncs). Call0: classic moving-sp push. }
 begin
-  xtensa_addi(reg_xtensa_sp, reg_xtensa_sp, -4);
-  xtensa_s32i(reg_xtensa_a2, reg_xtensa_sp, 0);
+  if XtensaABI = XTENSA_ABI_WINDOWED then
+  begin
+    if XtSpillDepth + 4 > XT_EXPR_REGION then
+      Error('target xtensa: expression/argument stack exceeds reserved frame');
+    xtensa_s32i(reg_xtensa_a2, reg_xtensa_sp, XtSpillDepth);
+    Inc(XtSpillDepth, 4);
+  end
+  else
+  begin
+    xtensa_addi(reg_xtensa_sp, reg_xtensa_sp, -4);
+    xtensa_s32i(reg_xtensa_a2, reg_xtensa_sp, 0);
+  end;
 end;
 
 procedure XtensaPopA3;
+{ Pop the top expression-stack slot into a3 (windowed: sp constant). }
 begin
-  xtensa_l32i(reg_xtensa_a3, reg_xtensa_sp, 0);
-  xtensa_addi(reg_xtensa_sp, reg_xtensa_sp, 4);
+  if XtensaABI = XTENSA_ABI_WINDOWED then
+  begin
+    Dec(XtSpillDepth, 4);
+    xtensa_l32i(reg_xtensa_a3, reg_xtensa_sp, XtSpillDepth);
+  end
+  else
+  begin
+    xtensa_l32i(reg_xtensa_a3, reg_xtensa_sp, 0);
+    xtensa_addi(reg_xtensa_sp, reg_xtensa_sp, 4);
+  end;
 end;
 
 procedure IREmitNodeXtensa(node: Integer);
 var
-  left, right, op, si, pi, nArgs, i, lo, elemSize, sz, argNode: Integer;
+  left, right, op, si, pi, nArgs, i, lo, elemSize, sz, argNode, argBase: Integer;
   tk: TTypeKind;
   sgn: Boolean;
   sVal: AnsiString;
@@ -261,8 +283,17 @@ begin
         XtensaPushA2;
         IREmitNodeXtensa(right);
         xtensa_mov(reg_xtensa_a3, reg_xtensa_a2);
-        xtensa_l32i(reg_xtensa_a2, reg_xtensa_sp, 0);
-        xtensa_addi(reg_xtensa_sp, reg_xtensa_sp, 4);
+        { pop the saved left operand into a2 }
+        if XtensaABI = XTENSA_ABI_WINDOWED then
+        begin
+          Dec(XtSpillDepth, 4);
+          xtensa_l32i(reg_xtensa_a2, reg_xtensa_sp, XtSpillDepth);
+        end
+        else
+        begin
+          xtensa_l32i(reg_xtensa_a2, reg_xtensa_sp, 0);
+          xtensa_addi(reg_xtensa_sp, reg_xtensa_sp, 4);
+        end;
         { a2 = left, a3 = right }
 
         if op = Ord(tkPlus) then xtensa_add(reg_xtensa_a2, reg_xtensa_a2, reg_xtensa_a3)
@@ -312,6 +343,7 @@ begin
 
         argNode := IRB[node];
         nArgs := 0;
+        argBase := XtSpillDepth;   { windowed: base offset of this call's arg block }
         while argNode <> -1 do
         begin
           IREmitNodeXtensa(IRA[argNode]);
@@ -327,16 +359,23 @@ begin
         if nArgs > 6 then
           Error('target xtensa: more than 6 call arguments not supported yet');
 
-        for i := 0 to nArgs - 1 do
+        { Load the outgoing argument registers. Windowed keeps sp constant, so
+          the args sit at sp-relative offsets wid..wid+(n-1)*4 (arg0 lowest);
+          pop them off the expression stack by resetting XtSpillDepth. Call0
+          uses the moving-sp slots (arg0 deepest) and frees them with addi. }
+        if XtensaABI = XTENSA_ABI_WINDOWED then
         begin
-          if XtensaABI = XTENSA_ABI_WINDOWED then
-            xtensa_l32i(reg_xtensa_a10 + i, reg_xtensa_sp, (nArgs - 1 - i) * 4)
-          else
+          for i := 0 to nArgs - 1 do
+            xtensa_l32i(reg_xtensa_a10 + i, reg_xtensa_sp, argBase + i * 4);
+          XtSpillDepth := argBase;
+        end
+        else
+        begin
+          for i := 0 to nArgs - 1 do
             xtensa_l32i(reg_xtensa_a2 + i, reg_xtensa_sp, (nArgs - 1 - i) * 4);
+          if nArgs > 0 then
+            xtensa_addi(reg_xtensa_sp, reg_xtensa_sp, nArgs * 4);
         end;
-
-        if nArgs > 0 then
-          xtensa_addi(reg_xtensa_sp, reg_xtensa_sp, nArgs * 4);
 
         EmitCallProc(pi);
         if XtensaABI = XTENSA_ABI_WINDOWED then

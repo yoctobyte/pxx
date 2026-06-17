@@ -8906,8 +8906,12 @@ begin
   begin
     if XtensaABI = XTENSA_ABI_WINDOWED then
     begin
-      xtensa_entry(reg_xtensa_sp, 32);
+      { app_main: program-level vars are globals (BSS), so no stack locals --
+        but the body still uses the constant-sp expression stack, so reserve
+        the spill region up front (no patchable addi on this path). }
+      xtensa_entry(reg_xtensa_sp, 32 + XT_EXPR_REGION);
       xtensa_mov(reg_xtensa_a7, reg_xtensa_sp);
+      XtSpillDepth := 0;
     end;
     { Xtensa entry stub: jump to main body. }
     jmpPatch := CodeLen;

@@ -30,6 +30,14 @@ begin
   Result := ((imm and $FF) shl 16) or ((($C shl 4) or s) shl 8) or ((t shl 4) or 2);
 end;
 
+function EncodeXtensaAddmi(t, s, imm: Integer): Integer;
+{ ADDMI t, s, imm — imm must be a multiple of 256 (encoded as imm8<<8), giving a
+  -32768..32512 range. Same RRI8 frame as ADDI but op1 = D. Lets a single
+  instruction reserve a frame larger than ADDI's +-128. }
+begin
+  Result := (((imm div 256) and $FF) shl 16) or ((($D shl 4) or s) shl 8) or ((t shl 4) or 2);
+end;
+
 procedure xtensa_addi(t, s, imm: Integer);
 var
   val: Integer;
