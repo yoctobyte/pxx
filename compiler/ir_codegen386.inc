@@ -1672,6 +1672,27 @@ begin
           EmitB($39); EmitB($C8);                    { cmp eax, ecx }
           EmitSetcc(op, True);                       { REX-free; shared with x86-64 }
         end
+        else if op = Ord(tkIn) then
+        begin
+          { Set membership: eax = element, ecx = set address. Byte = element>>3,
+            bit = element and 7. Result (0/1) -> eax. }
+          EmitB($3D); EmitI32(255);                  { cmp eax, 255 }
+          EmitB($0F); EmitB($87); nextJmp := CodeLen; EmitI32(0); { ja out-of-range }
+          EmitB($89); EmitB($C2);                    { mov edx, eax }
+          EmitB($C1); EmitB($EA); EmitB($03);        { shr edx, 3 (byte index) }
+          EmitB($0F); EmitB($B6); EmitB($14); EmitB($11); { movzx edx, byte [ecx+edx] }
+          EmitB($83); EmitB($E0); EmitB($07);        { and eax, 7 (bit index) }
+          EmitB($89); EmitB($C1);                    { mov ecx, eax }
+          EmitB($B8); EmitI32(1);                    { mov eax, 1 }
+          EmitB($D3); EmitB($E0);                    { shl eax, cl }
+          EmitB($85); EmitB($D0);                    { test eax, edx }
+          EmitB($0F); EmitB($95); EmitB($C0);        { setnz al }
+          EmitB($0F); EmitB($B6); EmitB($C0);        { movzx eax, al }
+          EmitB($E9); falseJmp := CodeLen; EmitI32(0); { jmp done }
+          Patch32(nextJmp, CodeLen - (nextJmp + 4));
+          EmitB($B8); EmitI32(0);                    { mov eax, 0 }
+          Patch32(falseJmp, CodeLen - (falseJmp + 4));
+        end
         else
           Error('target i386: binop operator not yet supported');
       end;
@@ -2560,6 +2581,113 @@ begin
     IR_CLASSREF:
       begin EmitB($B8); EmitDataRef(-(CLASSREF_DATAREF_BASE + IRA[node])); end; { mov eax, class RTTI blob addr }
 
+    IR_SET_LIT:
+      begin EmitB($B8); EmitDataRef(IRIVal[node]); end;   { mov eax, set-literal blob addr }
+
+    IR_SET_COPY:
+      begin
+        { Copy the full 32-byte set from src (IRB) to dest (IRA). }
+        IREmitNode386(IRB[node]);                    { eax = source addr }
+        EmitB($50);                                  { push src }
+        IREmitNode386(IRA[node]);                    { eax = dest addr }
+        EmitB($89); EmitB($C7);                      { mov edi, eax }
+        EmitB($5E);                                  { pop esi }
+        EmitB($B9); EmitI32(32);                     { mov ecx, 32 }
+        EmitB($F3); EmitB($A4);                      { rep movsb }
+      end;
+
+    IR_SET_BINOP:
+      begin
+        { Set +/-/* over 32 bytes = 8 dwords, into the BSS scratch (IRIVal).
+          eax holds [lhs+i], ecx holds [rhs+i]; result -> [scratch+i]. }
+        IREmitNode386(IRA[node]);                    { lhs addr }
+        EmitB($50);                                  { push lhs }
+        IREmitNode386(IRB[node]);                    { eax = rhs addr }
+        EmitB($89); EmitB($C6);                      { mov esi, eax (rhs) }
+        EmitB($5A);                                  { pop edx (lhs) }
+        EmitB($BF); EmitGlobRef(IRIVal[node]);       { mov edi, scratch }
+        for i := 0 to 7 do
+        begin
+          EmitB($8B); EmitB($42); EmitB(i * 4);      { mov eax, [edx+i*4] (lhs) }
+          EmitB($8B); EmitB($4E); EmitB(i * 4);      { mov ecx, [esi+i*4] (rhs) }
+          if IntToTokenKind(IRC[node]) = tkMinus then
+          begin
+            EmitB($F7); EmitB($D1);                  { not ecx }
+            EmitB($21); EmitB($C8);                  { and eax, ecx }
+          end
+          else if IntToTokenKind(IRC[node]) = tkPlus then
+            begin EmitB($09); EmitB($C8); end        { or eax, ecx }
+          else if IntToTokenKind(IRC[node]) = tkStar then
+            begin EmitB($21); EmitB($C8); end;       { and eax, ecx }
+          EmitB($89); EmitB($47); EmitB(i * 4);      { mov [edi+i*4], eax }
+        end;
+        EmitB($B8); EmitGlobRef(IRIVal[node]);       { mov eax, scratch (result addr) }
+      end;
+
+    IR_SET_CMP:
+      begin
+        { Compare two 32-byte sets (8 dwords). ebx accumulates subset
+          violations, edx accumulates differences (any set bit => unequal). }
+        EmitB($53);                                  { push ebx }
+        IREmitNode386(IRA[node]);                    { lhs addr }
+        EmitB($50);                                  { push lhs }
+        IREmitNode386(IRB[node]);                    { eax = rhs addr }
+        EmitB($89); EmitB($C6);                      { mov esi, eax (rhs) }
+        EmitB($5F);                                  { pop edi (lhs) }
+        EmitB($31); EmitB($DB);                      { xor ebx, ebx (violations) }
+        EmitB($31); EmitB($D2);                      { xor edx, edx (differences) }
+        for i := 0 to 7 do
+        begin
+          EmitB($8B); EmitB($47); EmitB(i * 4);      { mov eax, [edi+i*4] (lhs) }
+          EmitB($8B); EmitB($4E); EmitB(i * 4);      { mov ecx, [esi+i*4] (rhs) }
+          { differences: edx |= (lhs xor rhs) — preserve the lhs dword in eax }
+          EmitB($50);                                { push eax (save lhs dword) }
+          EmitB($31); EmitB($C8);                    { xor eax, ecx }
+          EmitB($09); EmitB($C2);                    { or edx, eax }
+          EmitB($58);                                { pop eax (lhs dword) }
+          if (IRC[node] = Ord(tkLe)) or (IRC[node] = Ord(tkLt)) then
+          begin
+            { lhs subset of rhs: lhs and not rhs must be 0 }
+            EmitB($F7); EmitB($D1);                  { not ecx }
+            EmitB($21); EmitB($C8);                  { and eax, ecx }
+            EmitB($09); EmitB($C3);                  { or ebx, eax }
+          end
+          else if (IRC[node] = Ord(tkGe)) or (IRC[node] = Ord(tkGt)) then
+          begin
+            { rhs subset of lhs: rhs and not lhs must be 0 }
+            EmitB($F7); EmitB($D0);                  { not eax }
+            EmitB($21); EmitB($C1);                  { and ecx, eax }
+            EmitB($09); EmitB($CB);                  { or ebx, ecx }
+          end;
+        end;
+        { Build the Boolean result in eax from edx (differences) / ebx (viol). }
+        if IRC[node] = Ord(tkEq) then
+        begin
+          EmitB($85); EmitB($D2);                    { test edx, edx }
+          EmitB($0F); EmitB($94); EmitB($C0);        { sete al }
+        end
+        else if IRC[node] = Ord(tkNeq) then
+        begin
+          EmitB($85); EmitB($D2);                    { test edx, edx }
+          EmitB($0F); EmitB($95); EmitB($C0);        { setne al }
+        end
+        else if (IRC[node] = Ord(tkLe)) or (IRC[node] = Ord(tkGe)) then
+        begin
+          EmitB($85); EmitB($DB);                    { test ebx, ebx }
+          EmitB($0F); EmitB($94); EmitB($C0);        { sete al (subset/superset) }
+        end
+        else { tkLt / tkGt: proper subset = subset AND unequal }
+        begin
+          EmitB($85); EmitB($DB);                    { test ebx, ebx }
+          EmitB($0F); EmitB($94); EmitB($C0);        { sete al }
+          EmitB($85); EmitB($D2);                    { test edx, edx }
+          EmitB($0F); EmitB($95); EmitB($C1);        { setne cl }
+          EmitB($20); EmitB($C8);                    { and al, cl }
+        end;
+        EmitB($0F); EmitB($B6); EmitB($C0);          { movzx eax, al }
+        EmitB($5B);                                  { pop ebx }
+      end;
+
     IR_RTTI_REG:
       begin EmitB($B8); EmitDataRef(-100); end;   { mov eax, RTTI-registry addr }
 
@@ -3157,6 +3285,7 @@ begin
 
       IR_NOP, IR_CONST_STR, IR_CONST_INT, IR_BLOCK,
       IR_LOAD_SYM, IR_BINOP, IR_NEG, IR_NOT, IR_ARG, IR_LEA, IR_SYSCALL,
+      IR_SET_LIT, IR_SET_BINOP, IR_SET_CMP,
       IR_SLOTADDR, IR_FIELD, IR_INDEX: ; { operands, emitted by parents }
 
       else

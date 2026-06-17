@@ -925,6 +925,9 @@ test-i386: $(COMPILER)
 	./$(COMPILER) --target=i386 test/test_methcall.pas /tmp/test_i386_mcall
 	./$(COMPILER) test/test_methcall.pas /tmp/test_i386_mcall_x64
 	test "$$(tools/run_target.sh i386 /tmp/test_i386_mcall)" = "$$(/tmp/test_i386_mcall_x64)"
+	./$(COMPILER) --target=i386 test/test_cross_sets.pas /tmp/test_i386_sets
+	./$(COMPILER) test/test_cross_sets.pas /tmp/test_i386_sets_x64
+	test "$$(tools/run_target.sh i386 /tmp/test_i386_sets)" = "$$(/tmp/test_i386_sets_x64)"
 	./$(COMPILER) --target=i386 test/test_classref.pas /tmp/test_i386_classref
 	./$(COMPILER) test/test_classref.pas /tmp/test_i386_classref_x64
 	test "$$(tools/run_target.sh i386 /tmp/test_i386_classref)" = "$$(/tmp/test_i386_classref_x64)"
