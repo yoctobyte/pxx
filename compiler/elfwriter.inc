@@ -620,15 +620,11 @@ begin
   begin
     if ExternalCount > 0 then
       Error('target i386: external (dynamic) symbols not yet supported');
-    if MethodFixCount > 0 then
-      Error('target i386: method-pointer fixups not yet supported');
   end;
   if TargetArch = TARGET_ARM32 then
   begin
     if ExternalCount > 0 then
       Error('target arm32: external (dynamic) symbols not yet supported');
-    if MethodFixCount > 0 then
-      Error('target arm32: method-pointer fixups not yet supported');
   end;
   if (TargetArch = TARGET_XTENSA) or (TargetArch = TARGET_RISCV32) then
   begin
@@ -669,6 +665,13 @@ begin
     addr := entry + Procs[ProcAddrFix[i].ProcIdx].BodyAddr;
     Patch32(ProcAddrFix[i].CodePos, addr);
   end;
+
+  { Method-pointer fixups: patch the 32-bit code address into each VMT slot
+    (data blob). Slots are 8 bytes; the address fits in the low dword, the high
+    dword stays zero (PatchDataU64 writes the full Int64 and addr < 2^32). The
+    esp32 targets are still rejected by the guard above. }
+  for i := 0 to MethodFixCount-1 do
+    PatchDataU64(MethodFixups[i].DataPos, entry + Procs[MethodFixups[i].ProcIdx].BodyAddr);
 
   { Data->data pointer relocations (RTTI/layout blobs). Slots are 8 bytes; the
     32-bit absolute target fits in the low dword, high dword stays zero. }

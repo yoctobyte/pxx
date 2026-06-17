@@ -1646,16 +1646,40 @@ begin
         pi := IRA[node];
         if pi = -Ord(tkGetMem) then
         begin
-          { GetMem / New. Evaluate size -> eax, then Alloc. Class
-            instantiation (VMT + constructor) is not supported on i386 yet. }
+          { GetMem / New / class instantiation. Evaluate size -> eax, Alloc.
+            For a class: set the VMT pointer at offset 0, then run the ctor and
+            return Self in eax (mirrors the x86-64 path; i386 is all-stack cdecl,
+            so args are pushed leftmost-deepest and the caller cleans up). }
           classIdx := IRC[node];
-          if classIdx >= REC_UCLASS_BASE then
-            Error('target i386: class instantiation not yet supported');
           EmitAcquireHeapLock386;
           argNode := IRB[node];          { size arg }
           IREmitNode386(IRA[argNode]);   { size -> eax }
           EmitHeapAllocLocked386;        { eax = payload pointer }
           EmitReleaseHeapLock386;
+          if classIdx < REC_UCLASS_BASE then
+            Exit;                        { plain GetMem: pointer already in eax }
+          { VMT pointer at offset 0 (4 bytes; the 8-byte reserved slot's high
+            dword stays zero, matching the data-blob layout). }
+          EmitB($C7); EmitB($00); EmitDataRef(UClsVMTOffset[classIdx - REC_UCLASS_BASE]); { mov dword [eax], VMT_addr }
+          j := FindUMeth(classIdx - REC_UCLASS_BASE, 'create');
+          if j < 0 then
+            Exit;                        { no ctor: instance pointer in eax }
+          p1 := UMthProc_[j];            { ctor proc index }
+          EmitB($50);                    { push eax (Self = param 0, deepest) }
+          argBytes := 4;
+          argNode := IRB[node];          { size arg }
+          argNode := IRB[argNode];       { first explicit ctor arg }
+          while argNode <> -1 do
+          begin
+            IREmitNode386(IRA[argNode]); { arg -> eax }
+            EmitB($50);                  { push eax }
+            Inc(argBytes, 4);
+            argNode := IRB[argNode];
+          end;
+          EmitCallProc(p1);
+          { Reload Self (deepest pushed slot) as the constructor result. }
+          EmitB($8B); EmitB($84); EmitB($24); EmitI32(argBytes - 4); { mov eax, [esp+disp] }
+          EmitB($81); EmitB($C4); EmitI32(argBytes);                 { add esp, argBytes }
           Exit;
         end;
         if pi = -Ord(tkFreeMem) then
@@ -2105,6 +2129,33 @@ begin
         end;
         IREmitNode386(IRA[node]);                    { eax = callee addr }
         EmitB($FF); EmitB($D0);                      { call eax }
+        if argBytes > 0 then
+        begin
+          EmitB($81); EmitB($C4); EmitI32(argBytes); { add esp, argBytes }
+        end;
+      end;
+
+    IR_VIRTUAL_CALL:
+      begin
+        { VMT dispatch. IRA=first arg, IRB=last arg, IRC=proc idx, IRIVal=slot.
+          cdecl: push args leftmost-deepest (Self is param 0, deepest), load the
+          VMT pointer from [Self], call through [VMT + slot*8] (the data blob
+          keeps 8-byte slots on every target; the 32-bit address sits in the low
+          dword, so a 4-byte indirect call reads it). Caller cleans up. }
+        pi := IRC[node];
+        j := Integer(IRIVal[node]);                  { VMT slot }
+        argBytes := 0;
+        argNode := IRA[node];
+        while argNode <> -1 do
+        begin
+          IREmitNode386(IRA[argNode]);               { eax = arg }
+          EmitB($50);                                { push eax }
+          Inc(argBytes, 4);
+          argNode := IRB[argNode];
+        end;
+        EmitB($8B); EmitB($84); EmitB($24); EmitI32(argBytes - 4); { mov eax, [esp+disp] (Self) }
+        EmitB($8B); EmitB($00);                      { mov eax, [eax] (VMT ptr) }
+        EmitB($FF); EmitB($90); EmitI32(j * 8);      { call dword [eax + slot*8] }
         if argBytes > 0 then
         begin
           EmitB($81); EmitB($C4); EmitI32(argBytes); { add esp, argBytes }
@@ -2888,6 +2939,12 @@ begin
       IR_CALL_IND:
         begin
           if IRStmtRoot[i] then                      { statement-level indirect call }
+            IREmitNode386(i);
+        end;
+
+      IR_VIRTUAL_CALL:
+        begin
+          if IRStmtRoot[i] then                      { statement-level virtual call }
             IREmitNode386(i);
         end;
 
