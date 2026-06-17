@@ -268,6 +268,21 @@ begin
         if op = Ord(tkPlus) then xtensa_add(reg_xtensa_a2, reg_xtensa_a2, reg_xtensa_a3)
         else if op = Ord(tkMinus) then xtensa_sub(reg_xtensa_a2, reg_xtensa_a2, reg_xtensa_a3)
         else if op = Ord(tkStar) then xtensa_mull(reg_xtensa_a2, reg_xtensa_a2, reg_xtensa_a3)
+        else if op = Ord(tkDiv) then xtensa_quos(reg_xtensa_a2, reg_xtensa_a2, reg_xtensa_a3)
+        else if op = Ord(tkMod) then xtensa_rems(reg_xtensa_a2, reg_xtensa_a2, reg_xtensa_a3)
+        else if op = Ord(tkShl) then
+        begin
+          { a2 := a2 << a3 : SAR from a3, then SLL takes the value in s=a2. }
+          xtensa_ssl(reg_xtensa_a3);
+          xtensa_sll(reg_xtensa_a2, reg_xtensa_a2);
+        end
+        else if op = Ord(tkIdent) then
+        begin
+          { 'shr' parses as an identifier operator (logical right shift, like the
+            riscv path): SAR from a3, then SRL takes the value in t=a2. }
+          xtensa_ssr(reg_xtensa_a3);
+          xtensa_srl(reg_xtensa_a2, reg_xtensa_a2);
+        end
         else if op = Ord(tkAnd) then xtensa_and(reg_xtensa_a2, reg_xtensa_a2, reg_xtensa_a3)
         else if op = Ord(tkOr) then xtensa_or(reg_xtensa_a2, reg_xtensa_a2, reg_xtensa_a3)
         { Comparison: a2 := (a2 rel a3) ? 1 : 0. = and <> subtract then branch on

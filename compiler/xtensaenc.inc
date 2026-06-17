@@ -153,6 +153,73 @@ begin
   EmitB((8 shl 4) or 2);
 end;
 
+procedure xtensa_quos(r, s, t: Integer);
+{ QUOS r, s, t  ->  r = s div t (signed). Requires the 32-bit integer divide
+  option, present on ESP32-S2/S3 (LX7) and later, NOT on ESP32 classic (LX6).
+  Same RRR layout as MULL; only op2/op1 (byte2 = $D2) differs. Encodings
+  taken from xtensa-esp32s3-elf-as (llvm-mc 18 lacks the divide mnemonics). }
+begin
+  EmitB((t shl 4) or 0);
+  EmitB((r shl 4) or s);
+  EmitB($D2);
+end;
+
+procedure xtensa_quou(r, s, t: Integer);
+{ QUOU r, s, t  ->  r = s div t (unsigned). byte2 = $C2. }
+begin
+  EmitB((t shl 4) or 0);
+  EmitB((r shl 4) or s);
+  EmitB($C2);
+end;
+
+procedure xtensa_rems(r, s, t: Integer);
+{ REMS r, s, t  ->  r = s mod t (signed). byte2 = $F2. }
+begin
+  EmitB((t shl 4) or 0);
+  EmitB((r shl 4) or s);
+  EmitB($F2);
+end;
+
+procedure xtensa_remu(r, s, t: Integer);
+{ REMU r, s, t  ->  r = s mod t (unsigned). byte2 = $E2. }
+begin
+  EmitB((t shl 4) or 0);
+  EmitB((r shl 4) or s);
+  EmitB($E2);
+end;
+
+procedure xtensa_ssl(s: Integer);
+{ SSL s -> SAR := 32 - (s & 31), so a following SLL left-shifts by (s & 31). }
+begin
+  EmitB(0);
+  EmitB((1 shl 4) or s);
+  EmitB($40);
+end;
+
+procedure xtensa_sll(r, s: Integer);
+{ SLL r, s -> r := s << (32 - SAR) (value in the s field). op2=A, op1=1. }
+begin
+  EmitB(0);
+  EmitB((r shl 4) or s);
+  EmitB($A1);
+end;
+
+procedure xtensa_ssr(s: Integer);
+{ SSR s -> SAR := s & 31, so a following SRL right-shifts by (s & 31). }
+begin
+  EmitB(0);
+  EmitB(s);
+  EmitB($40);
+end;
+
+procedure xtensa_srl(r, t: Integer);
+{ SRL r, t -> r := t >> SAR (logical; value in the t field, not s). op2=9, op1=1. }
+begin
+  EmitB((t shl 4) or 0);
+  EmitB((r shl 4) or 0);
+  EmitB($91);
+end;
+
 procedure xtensa_ret;
 begin
   { RET = insn word $000080 (op0=0, t=8: SNM0/JR group), LE bytes 80 00 00. }
