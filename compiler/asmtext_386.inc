@@ -20,6 +20,7 @@ var
   mnem, rest, op0, op1: AnsiString;
   i, n, holeCur, commaPos: Integer;
   k0, k1, r0, s0, r1, s1, mb0, md0, mb1, md1: Integer;
+  ssePfx, sseOp: Integer;
   imm0, imm1: Int64;
   haveOps: Boolean;
 begin
@@ -283,6 +284,57 @@ begin
         if s0 = 2 then EncI16(imm1) else EncI32(imm1); end;
     end
     else Error('EmitAsm386: unsupported test form');
+    Exit;
+  end;
+
+  { SSE scalar (i386 uses SSE2 for float, not x87). [prefix] 0F opcode ModRM,
+    no REX. movsd/movss have a store opcode (11) for the [mem],xmm direction;
+    cvtsi2sd/cvttsd2si/cvt*2* share the regField=op0 rm=op1 shape. }
+  if CaseEqual(mnem, 'movsd') or CaseEqual(mnem, 'movss') or
+     CaseEqual(mnem, 'addsd') or CaseEqual(mnem, 'subsd') or
+     CaseEqual(mnem, 'mulsd') or CaseEqual(mnem, 'divsd') or
+     CaseEqual(mnem, 'addss') or CaseEqual(mnem, 'subss') or
+     CaseEqual(mnem, 'mulss') or CaseEqual(mnem, 'divss') or
+     CaseEqual(mnem, 'comisd') or CaseEqual(mnem, 'ucomisd') or
+     CaseEqual(mnem, 'cvtsi2sd') or CaseEqual(mnem, 'cvttsd2si') or
+     CaseEqual(mnem, 'cvtsd2ss') or CaseEqual(mnem, 'cvtss2sd') or
+     CaseEqual(mnem, 'xorps') or CaseEqual(mnem, 'xorpd') or CaseEqual(mnem, 'pxor') then
+  begin
+    if CaseEqual(mnem, 'movss') or CaseEqual(mnem, 'addss') or CaseEqual(mnem, 'subss') or
+       CaseEqual(mnem, 'mulss') or CaseEqual(mnem, 'divss') or CaseEqual(mnem, 'cvtss2sd') then
+      ssePfx := $F3
+    else if CaseEqual(mnem, 'comisd') or CaseEqual(mnem, 'ucomisd') or
+            CaseEqual(mnem, 'xorpd') or CaseEqual(mnem, 'pxor') then ssePfx := $66
+    else if CaseEqual(mnem, 'xorps') then ssePfx := 0
+    else ssePfx := $F2;
+    if CaseEqual(mnem, 'movsd') or CaseEqual(mnem, 'movss') then sseOp := $10
+    else if CaseEqual(mnem, 'addsd') or CaseEqual(mnem, 'addss') then sseOp := $58
+    else if CaseEqual(mnem, 'subsd') or CaseEqual(mnem, 'subss') then sseOp := $5C
+    else if CaseEqual(mnem, 'mulsd') or CaseEqual(mnem, 'mulss') then sseOp := $59
+    else if CaseEqual(mnem, 'divsd') or CaseEqual(mnem, 'divss') then sseOp := $5E
+    else if CaseEqual(mnem, 'comisd') then sseOp := $2F
+    else if CaseEqual(mnem, 'ucomisd') then sseOp := $2E
+    else if CaseEqual(mnem, 'cvtsi2sd') then sseOp := $2A
+    else if CaseEqual(mnem, 'cvttsd2si') then sseOp := $2C
+    else if CaseEqual(mnem, 'cvtsd2ss') or CaseEqual(mnem, 'cvtss2sd') then sseOp := $5A
+    else if CaseEqual(mnem, 'pxor') then sseOp := $EF
+    else sseOp := $57;   { xorps / xorpd }
+    if (k0 = 0) and (k1 = 0) then
+    begin
+      if ssePfx <> 0 then EncB(ssePfx);
+      EncB($0F); EncB(sseOp); EncModRMReg(r0, r1);
+    end
+    else if (k0 = 0) and (k1 = 2) then
+    begin
+      if ssePfx <> 0 then EncB(ssePfx);
+      EncB($0F); EncB(sseOp); EncModRMMem(r0, mb1, md1, False);
+    end
+    else if (k0 = 2) and (k1 = 0) and (CaseEqual(mnem, 'movsd') or CaseEqual(mnem, 'movss')) then
+    begin
+      if ssePfx <> 0 then EncB(ssePfx);
+      EncB($0F); EncB($11); EncModRMMem(r1, mb0, md0, False);   { store xmm -> [mem] }
+    end
+    else Error('EmitAsm386: unsupported SSE form');
     Exit;
   end;
 

@@ -246,6 +246,16 @@ begin
   ResetCode; EmitAsmX64('ucomisd xmm0, xmm1'); AssertBytes('ucomisd xmm0,xmm1', [$66,$0F,$2E,$C1]);
   ResetCode; EmitAsmX64('xorps xmm0, xmm0'); AssertBytes('xorps xmm0,xmm0', [$0F,$57,$C0]);
   ResetCode; EmitAsmX64('movsd xmm8, xmm9'); AssertBytes('movsd xmm8,xmm9', [$F2,$45,$0F,$10,$C1]);
+  ResetCode; EmitAsmX64('cvtsd2ss xmm0, xmm1'); AssertBytes('cvtsd2ss xmm0,xmm1', [$F2,$0F,$5A,$C1]);
+
+  { --- movq (xmm<->gp / xmm<->xmm / xmm<->mem) --- }
+  ResetCode; EmitAsmX64('movq xmm0, rax'); AssertBytes('movq xmm0,rax', [$66,$48,$0F,$6E,$C0]);
+  ResetCode; EmitAsmX64('movq rax, xmm0'); AssertBytes('movq rax,xmm0', [$66,$48,$0F,$7E,$C0]);
+  ResetCode; EmitAsmX64('movq xmm0, xmm1'); AssertBytes('movq xmm0,xmm1', [$F3,$0F,$7E,$C1]);
+  ResetCode; EmitAsmX64('movq xmm0, [rbp - 8]'); AssertBytes('movq xmm0,[rbp-8]', [$F3,$0F,$7E,$45,$F8]);
+  ResetCode; EmitAsmX64('movq [rbp - 8], xmm0'); AssertBytes('movq [rbp-8],xmm0', [$66,$0F,$D6,$45,$F8]);
+  ResetCode; EmitAsmX64('movq xmm0, r10'); AssertBytes('movq xmm0,r10', [$66,$49,$0F,$6E,$C2]);
+  ResetCode; EmitAsmX64('movq r11, xmm2'); AssertBytes('movq r11,xmm2', [$66,$49,$0F,$7E,$D3]);
 
   writeln('ALL X64 ASM EMIT TESTS PASSED');
 end.

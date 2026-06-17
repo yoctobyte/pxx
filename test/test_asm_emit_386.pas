@@ -211,6 +211,10 @@ begin
   if CaseEqual(nm,'cl')  then begin num:=1; size:=1; Exit; end;
   if CaseEqual(nm,'dl')  then begin num:=2; size:=1; Exit; end;
   if CaseEqual(nm,'bl')  then begin num:=3; size:=1; Exit; end;
+  if CaseEqual(nm,'xmm0') then begin num:=0; size:=16; Exit; end;
+  if CaseEqual(nm,'xmm1') then begin num:=1; size:=16; Exit; end;
+  if CaseEqual(nm,'xmm2') then begin num:=2; size:=16; Exit; end;
+  if CaseEqual(nm,'xmm3') then begin num:=3; size:=16; Exit; end;
   Result := False;
 end;
 
@@ -577,6 +581,20 @@ begin
   ResetCode; EmitAsm386('sub [ebp - 8], ecx'); AssertBytes('sub [ebp-8],ecx', [$29,$4D,$F8]);
   ResetCode; EmitAsm386('cmp eax, [esi]'); AssertBytes('cmp eax,[esi]', [$3B,$06]);
   ResetCode; EmitAsm386('xor [edi], eax'); AssertBytes('xor [edi],eax', [$31,$07]);
+
+  { SSE2 scalar float }
+  ResetCode; EmitAsm386('movsd xmm0, xmm1'); AssertBytes('movsd xmm0,xmm1', [$F2,$0F,$10,$C1]);
+  ResetCode; EmitAsm386('movss xmm0, xmm1'); AssertBytes('movss xmm0,xmm1', [$F3,$0F,$10,$C1]);
+  ResetCode; EmitAsm386('movss xmm0, [ebp - 8]'); AssertBytes('movss xmm0,[ebp-8]', [$F3,$0F,$10,$45,$F8]);
+  ResetCode; EmitAsm386('movss [ebp - 8], xmm0'); AssertBytes('movss [ebp-8],xmm0', [$F3,$0F,$11,$45,$F8]);
+  ResetCode; EmitAsm386('addsd xmm0, xmm1'); AssertBytes('addsd xmm0,xmm1', [$F2,$0F,$58,$C1]);
+  ResetCode; EmitAsm386('cvtsi2sd xmm0, eax'); AssertBytes('cvtsi2sd xmm0,eax', [$F2,$0F,$2A,$C0]);
+  ResetCode; EmitAsm386('cvttsd2si eax, xmm0'); AssertBytes('cvttsd2si eax,xmm0', [$F2,$0F,$2C,$C0]);
+  ResetCode; EmitAsm386('cvtsd2ss xmm0, xmm1'); AssertBytes('cvtsd2ss xmm0,xmm1', [$F2,$0F,$5A,$C1]);
+  ResetCode; EmitAsm386('cvtss2sd xmm0, xmm1'); AssertBytes('cvtss2sd xmm0,xmm1', [$F3,$0F,$5A,$C1]);
+  ResetCode; EmitAsm386('comisd xmm0, xmm1'); AssertBytes('comisd xmm0,xmm1', [$66,$0F,$2F,$C1]);
+  ResetCode; EmitAsm386('pxor xmm0, xmm0'); AssertBytes('pxor xmm0,xmm0', [$66,$0F,$EF,$C0]);
+  ResetCode; EmitAsm386('xorpd xmm0, xmm1'); AssertBytes('xorpd xmm0,xmm1', [$66,$0F,$57,$C1]);
 
   writeln('ALL I386 ASM EMIT TESTS PASSED');
 end.

@@ -474,26 +474,59 @@ begin
     Exit;
   end;
 
-  { SSE scalar-double arithmetic + compare + packed xor (zeroing idiom).
-    movsd has a distinct store opcode (11) for the [mem],xmm direction. }
-  if CaseEqual(mnem, 'movsd') or CaseEqual(mnem, 'addsd') or CaseEqual(mnem, 'subsd') or
-     CaseEqual(mnem, 'mulsd') or CaseEqual(mnem, 'divsd') or
-     CaseEqual(mnem, 'comisd') or CaseEqual(mnem, 'ucomisd') or CaseEqual(mnem, 'xorps') then
+  { movq — five encodings selected by operand kind (xmm flagged size 16):
+    xmm,gp (66 [W] 0F 6E) / gp,xmm (66 [W] 0F 7E) / xmm,xmm (F3 0F 7E) /
+    xmm,[mem] (F3 0F 7E) / [mem],xmm (66 0F D6). }
+  if CaseEqual(mnem, 'movq') then
   begin
-    ssePfx := $F2;
-    if CaseEqual(mnem, 'comisd') or CaseEqual(mnem, 'ucomisd') then ssePfx := $66
-    else if CaseEqual(mnem, 'xorps') then ssePfx := 0;
-    if CaseEqual(mnem, 'movsd') then sseOp := $10
-    else if CaseEqual(mnem, 'addsd') then sseOp := $58
-    else if CaseEqual(mnem, 'subsd') then sseOp := $5C
-    else if CaseEqual(mnem, 'mulsd') then sseOp := $59
-    else if CaseEqual(mnem, 'divsd') then sseOp := $5E
+    if (k0 = 0) and (k1 = 0) and (s0 = 16) and (s1 = 16) then
+      x64_sse_rr($F3, $7E, r0, r1, False)               { xmm, xmm }
+    else if (k0 = 0) and (k1 = 0) and (s0 = 16) then
+      x64_sse_rr($66, $6E, r0, r1, s1 = 8)              { xmm, gp }
+    else if (k0 = 0) and (k1 = 0) and (s1 = 16) then
+      x64_sse_rr($66, $7E, r1, r0, s0 = 8)              { gp, xmm }
+    else if (k0 = 0) and (k1 = 2) and (s0 = 16) then
+      x64_sse_rm($F3, $7E, r0, mb1, md1, False, False)  { xmm, [mem] }
+    else if (k0 = 2) and (k1 = 0) and (s1 = 16) then
+      x64_sse_rm($66, $D6, r1, mb0, md0, False, False)  { [mem], xmm }
+    else Error('EmitAsmX64: unsupported movq form');
+    Exit;
+  end;
+
+  { SSE scalar arithmetic / move / compare / convert / packed-logical.
+    Prefix: F2 (double *sd), F3 (single *ss), 66 (packed-double / pxor), or
+    none (xorps). move ops have a distinct store opcode (11/D6) for [mem],xmm. }
+  if CaseEqual(mnem, 'movsd') or CaseEqual(mnem, 'movss') or
+     CaseEqual(mnem, 'addsd') or CaseEqual(mnem, 'subsd') or
+     CaseEqual(mnem, 'mulsd') or CaseEqual(mnem, 'divsd') or
+     CaseEqual(mnem, 'addss') or CaseEqual(mnem, 'subss') or
+     CaseEqual(mnem, 'mulss') or CaseEqual(mnem, 'divss') or
+     CaseEqual(mnem, 'comisd') or CaseEqual(mnem, 'ucomisd') or
+     CaseEqual(mnem, 'cvtsd2ss') or CaseEqual(mnem, 'cvtss2sd') or
+     CaseEqual(mnem, 'xorps') or CaseEqual(mnem, 'xorpd') or CaseEqual(mnem, 'pxor') then
+  begin
+    { prefix }
+    if CaseEqual(mnem, 'movss') or CaseEqual(mnem, 'addss') or CaseEqual(mnem, 'subss') or
+       CaseEqual(mnem, 'mulss') or CaseEqual(mnem, 'divss') or CaseEqual(mnem, 'cvtss2sd') then
+      ssePfx := $F3
+    else if CaseEqual(mnem, 'comisd') or CaseEqual(mnem, 'ucomisd') or
+            CaseEqual(mnem, 'xorpd') or CaseEqual(mnem, 'pxor') then ssePfx := $66
+    else if CaseEqual(mnem, 'xorps') then ssePfx := 0
+    else ssePfx := $F2;
+    { opcode }
+    if CaseEqual(mnem, 'movsd') or CaseEqual(mnem, 'movss') then sseOp := $10
+    else if CaseEqual(mnem, 'addsd') or CaseEqual(mnem, 'addss') then sseOp := $58
+    else if CaseEqual(mnem, 'subsd') or CaseEqual(mnem, 'subss') then sseOp := $5C
+    else if CaseEqual(mnem, 'mulsd') or CaseEqual(mnem, 'mulss') then sseOp := $59
+    else if CaseEqual(mnem, 'divsd') or CaseEqual(mnem, 'divss') then sseOp := $5E
     else if CaseEqual(mnem, 'comisd') then sseOp := $2F
     else if CaseEqual(mnem, 'ucomisd') then sseOp := $2E
-    else sseOp := $57;   { xorps }
+    else if CaseEqual(mnem, 'cvtsd2ss') or CaseEqual(mnem, 'cvtss2sd') then sseOp := $5A
+    else if CaseEqual(mnem, 'pxor') then sseOp := $EF
+    else sseOp := $57;   { xorps / xorpd }
     if (k0 = 0) and (k1 = 0) then x64_sse_rr(ssePfx, sseOp, r0, r1, False)
     else if (k0 = 0) and (k1 = 2) then x64_sse_rm(ssePfx, sseOp, r0, mb1, md1, False, False)
-    else if (k0 = 2) and (k1 = 0) and CaseEqual(mnem, 'movsd') then
+    else if (k0 = 2) and (k1 = 0) and (CaseEqual(mnem, 'movsd') or CaseEqual(mnem, 'movss')) then
       x64_sse_rm(ssePfx, $11, r1, mb0, md0, False, False)   { store xmm -> [mem] }
     else Error('EmitAsmX64: unsupported SSE form');
     Exit;
