@@ -40,6 +40,18 @@ begin
   if CaseEqual(mnem, 'ret') then begin EncB($C3); Exit; end;
   if CaseEqual(mnem, 'leave') then begin EncB($C9); Exit; end;
   if CaseEqual(mnem, 'nop') then begin EncB($90); Exit; end;
+  if CaseEqual(mnem, 'cdq') then begin EncB($99); Exit; end;
+  if CaseEqual(mnem, 'movsb') then begin EncB($A4); Exit; end;
+  if CaseEqual(mnem, 'stosb') then begin EncB($AA); Exit; end;
+
+  { rep prefix: `rep movsb` / `rep stosb` }
+  if CaseEqual(mnem, 'rep') then
+  begin
+    rest := AsmTextTrim(rest);
+    if CaseEqual(rest, 'movsb') then begin EncB($F3); EncB($A4); Exit; end;
+    if CaseEqual(rest, 'stosb') then begin EncB($F3); EncB($AA); Exit; end;
+    Error('EmitAsm386: unsupported rep string op');
+  end;
 
   if not haveOps then Error('EmitAsm386: unknown 0-operand mnemonic');
 
@@ -112,6 +124,45 @@ begin
     Exit;
   end;
 
+  { unary F6/F7 group on a register: not/neg/mul/idiv, plus one-operand imul
+    (the two-operand imul reg,reg is handled below). ext digit per mnemonic. }
+  if (Length(op1) = 0) and (CaseEqual(mnem, 'not') or CaseEqual(mnem, 'neg') or
+     CaseEqual(mnem, 'mul') or CaseEqual(mnem, 'idiv') or CaseEqual(mnem, 'imul')) then
+  begin
+    if AsmTextOperand(op0, holes, holeCur, r0, s0, mb0, md0, imm0) <> 0 then
+      Error('EmitAsm386: unary op expects a register');
+    if CaseEqual(mnem, 'not') then i := 2
+    else if CaseEqual(mnem, 'neg') then i := 3
+    else if CaseEqual(mnem, 'mul') then i := 4
+    else if CaseEqual(mnem, 'imul') then i := 5
+    else i := 7;   { idiv }
+    if s0 = 2 then EncB($66);
+    if s0 = 1 then EncB($F6) else EncB($F7);
+    EncModRMReg(i, r0);
+    Exit;
+  end;
+
+  { call reg (indirect, FF /2) }
+  if CaseEqual(mnem, 'call') then
+  begin
+    if AsmTextOperand(op0, holes, holeCur, r0, s0, mb0, md0, imm0) <> 0 then
+      Error('EmitAsm386: call expects a register');
+    EncB($FF); EncModRMReg(2, r0);
+    Exit;
+  end;
+
+  { setcc reg8 (0F 90+cc, /0): map the cc suffix through the jcc table. }
+  if (Length(mnem) >= 4) and (AsmTextCharAt(mnem, 1) = 's') and
+     (AsmTextCharAt(mnem, 2) = 'e') and (AsmTextCharAt(mnem, 3) = 't') then
+  begin
+    rest := 'j' + AsmTextSlice(mnem, 4, Length(mnem) - 3);
+    if not AsmTextJccCode(rest, i) then Error('EmitAsm386: unknown setcc');
+    if AsmTextOperand(op0, holes, holeCur, r0, s0, mb0, md0, imm0) <> 0 then
+      Error('EmitAsm386: setcc expects a register');
+    EncB($0F); EncB($90 + (i and 15)); EncModRMReg(0, r0);
+    Exit;
+  end;
+
   { Two-operand forms }
   if Length(op1) = 0 then Error('EmitAsm386: instruction needs two operands');
 
@@ -129,6 +180,111 @@ begin
 
   k0 := AsmTextOperand(op0, holes, holeCur, r0, s0, mb0, md0, imm0);
   k1 := AsmTextOperand(op1, holes, holeCur, r1, s1, mb1, md1, imm1);
+
+  { shifts: shl/sal, shr, sar — reg by imm, by 1, or by cl }
+  if CaseEqual(mnem, 'shl') or CaseEqual(mnem, 'sal') or
+     CaseEqual(mnem, 'shr') or CaseEqual(mnem, 'sar') then
+  begin
+    if k0 <> 0 then Error('EmitAsm386: shift expects a register dest');
+    if CaseEqual(mnem, 'shr') then i := 5
+    else if CaseEqual(mnem, 'sar') then i := 7
+    else i := 4;   { shl / sal }
+    if s0 = 2 then EncB($66);
+    if (k1 = 0) and (r1 = 1) then   { ,cl }
+    begin
+      if s0 = 1 then EncB($D2) else EncB($D3);
+      EncModRMReg(i, r0);
+    end
+    else if (k1 = 1) and (imm1 = 1) then
+    begin
+      if s0 = 1 then EncB($D0) else EncB($D1);
+      EncModRMReg(i, r0);
+    end
+    else if k1 = 1 then
+    begin
+      if s0 = 1 then EncB($C0) else EncB($C1);
+      EncModRMReg(i, r0); EncB(Integer(imm1) and $FF);
+    end
+    else Error('EmitAsm386: shift count must be imm or cl');
+    Exit;
+  end;
+
+  { imul reg, reg (two-operand, 0F AF /r) }
+  if CaseEqual(mnem, 'imul') then
+  begin
+    if (k0 = 0) and (k1 = 0) then
+    begin
+      if s0 = 2 then EncB($66);
+      EncB($0F); EncB($AF); EncModRMReg(r0, r1);
+      Exit;
+    end;
+    Error('EmitAsm386: unsupported imul form');
+  end;
+
+  { movzx / movsx reg, reg|mem. srcSize 1 or 2. }
+  if CaseEqual(mnem, 'movzx') or CaseEqual(mnem, 'movsx') then
+  begin
+    if k0 <> 0 then Error('EmitAsm386: movzx/movsx dest must be a register');
+    if s0 = 2 then EncB($66);
+    EncB($0F);
+    if k1 = 0 then
+    begin
+      if CaseEqual(mnem, 'movsx') then
+        begin if s1 = 1 then EncB($BE) else EncB($BF); end
+      else begin if s1 = 1 then EncB($B6) else EncB($B7); end;
+      EncModRMReg(r0, r1);
+    end
+    else if k1 = 2 then
+    begin
+      if s1 = 0 then Error('EmitAsm386: movzx/movsx mem needs an explicit size (byte/word)');
+      if CaseEqual(mnem, 'movsx') then
+        begin if s1 = 1 then EncB($BE) else EncB($BF); end
+      else begin if s1 = 1 then EncB($B6) else EncB($B7); end;
+      EncModRMMem(r0, mb1, md1, False);
+    end
+    else Error('EmitAsm386: unsupported movzx/movsx form');
+    Exit;
+  end;
+
+  { test: reg,reg | reg,imm | reg,[mem] | [mem],reg | [mem],imm }
+  if CaseEqual(mnem, 'test') then
+  begin
+    if (k0 = 0) and (k1 = 0) then
+    begin
+      if s0 = 2 then EncB($66);
+      if s0 = 1 then EncB($84) else EncB($85);
+      EncModRMReg(r1, r0);
+    end
+    else if (k0 = 0) and (k1 = 1) then
+    begin
+      if s0 = 2 then EncB($66);
+      if s0 = 1 then begin EncB($F6); EncModRMReg(0, r0); EncB(Integer(imm1) and $FF); end
+      else begin EncB($F7); EncModRMReg(0, r0);
+        if s0 = 2 then EncI16(imm1) else EncI32(imm1); end;
+    end
+    else if (k0 = 0) and (k1 = 2) then
+    begin
+      if s0 = 2 then EncB($66);
+      if s0 = 1 then EncB($84) else EncB($85);
+      EncModRMMem(r0, mb1, md1, False);
+    end
+    else if (k0 = 2) and (k1 = 0) then
+    begin
+      if s1 = 2 then EncB($66);
+      if s1 = 1 then EncB($84) else EncB($85);
+      EncModRMMem(r1, mb0, md0, False);
+    end
+    else if (k0 = 2) and (k1 = 1) then
+    begin
+      if s0 = 0 then Error('EmitAsm386: test mem,imm needs an explicit size');
+      if s0 = 2 then EncB($66);
+      if s0 = 1 then begin EncB($F6); EncModRMMem(0, mb0, md0, False); EncB(Integer(imm1) and $FF); end
+      else begin EncB($F7); EncModRMMem(0, mb0, md0, False);
+        if s0 = 2 then EncI16(imm1) else EncI32(imm1); end;
+    end
+    else Error('EmitAsm386: unsupported test form');
+    Exit;
+  end;
 
   if CaseEqual(mnem, 'mov') then
   begin
@@ -244,6 +400,31 @@ begin
     if s0 = 2 then EncB($66);
     if s0 = 1 then EncB(mb0 - 1) else EncB(mb0);
     EncModRMReg(r1, r0);
+    Exit;
+  end;
+
+  { ALU reg,[mem] and [mem],reg. i = even (m,r) opcode; r,m = i+2. }
+  if ((k0 = 0) and (k1 = 2)) or ((k0 = 2) and (k1 = 0)) then
+  begin
+    if CaseEqual(mnem, 'add') then i := $01
+    else if CaseEqual(mnem, 'or')  then i := $09
+    else if CaseEqual(mnem, 'and') then i := $21
+    else if CaseEqual(mnem, 'sub') then i := $29
+    else if CaseEqual(mnem, 'xor') then i := $31
+    else if CaseEqual(mnem, 'cmp') then i := $39
+    else begin Error('EmitAsm386: unsupported reg/mem ALU mnemonic'); i := 0; end;
+    if k1 = 2 then   { reg,[mem] — r,m opcode = even+2 }
+    begin
+      if s0 = 2 then EncB($66);
+      if s0 = 1 then EncB(i + 1) else EncB(i + 2);
+      EncModRMMem(r0, mb1, md1, False);
+    end
+    else             { [mem],reg — m,r opcode = even }
+    begin
+      if s1 = 2 then EncB($66);
+      if s1 = 1 then EncB(i - 1) else EncB(i);
+      EncModRMMem(r1, mb0, md0, False);
+    end;
     Exit;
   end;
 

@@ -530,5 +530,53 @@ begin
   EmitAsm386('lea eax, [ebp - 8]');
   AssertBytes('lea eax, [ebp - 8]', [$8D, $45, $F8]);
 
+  { ===== extended instruction families (oracle: llvm-mc-18 -triple=i386) ===== }
+
+  { test }
+  ResetCode; EmitAsm386('test ebx, ebx'); AssertBytes('test ebx,ebx', [$85,$DB]);
+  ResetCode; EmitAsm386('test ebx, 1'); AssertBytes('test ebx,1', [$F7,$C3,$01,$00,$00,$00]);
+  ResetCode; EmitAsm386('test byte [edi], 1'); AssertBytes('test byte[edi],1', [$F6,$07,$01]);
+  ResetCode; EmitAsm386('test ecx, [esi]'); AssertBytes('test ecx,[esi]', [$85,$0E]);
+
+  { unary F6/F7 group }
+  ResetCode; EmitAsm386('not eax');  AssertBytes('not eax', [$F7,$D0]);
+  ResetCode; EmitAsm386('neg ebx');  AssertBytes('neg ebx', [$F7,$DB]);
+  ResetCode; EmitAsm386('mul ecx');  AssertBytes('mul ecx', [$F7,$E1]);
+  ResetCode; EmitAsm386('imul ecx'); AssertBytes('imul ecx', [$F7,$E9]);
+  ResetCode; EmitAsm386('idiv ecx'); AssertBytes('idiv ecx', [$F7,$F9]);
+  ResetCode; EmitAsm386('imul eax, ecx'); AssertBytes('imul eax,ecx', [$0F,$AF,$C1]);
+
+  { shifts }
+  ResetCode; EmitAsm386('shl eax, 4');  AssertBytes('shl eax,4', [$C1,$E0,$04]);
+  ResetCode; EmitAsm386('shr ebx, 1');  AssertBytes('shr ebx,1', [$D1,$EB]);
+  ResetCode; EmitAsm386('sar edx, 31'); AssertBytes('sar edx,31', [$C1,$FA,$1F]);
+  ResetCode; EmitAsm386('shl eax, cl'); AssertBytes('shl eax,cl', [$D3,$E0]);
+
+  { movzx / movsx }
+  ResetCode; EmitAsm386('movzx eax, bl'); AssertBytes('movzx eax,bl', [$0F,$B6,$C3]);
+  ResetCode; EmitAsm386('movzx ecx, byte [ebp - 8]'); AssertBytes('movzx ecx,byte[ebp-8]', [$0F,$B6,$4D,$F8]);
+  ResetCode; EmitAsm386('movsx edx, byte [ebp - 4]'); AssertBytes('movsx edx,byte[ebp-4]', [$0F,$BE,$55,$FC]);
+  ResetCode; EmitAsm386('movzx eax, word [esi]'); AssertBytes('movzx eax,word[esi]', [$0F,$B7,$06]);
+
+  { setcc }
+  ResetCode; EmitAsm386('sete al');  AssertBytes('sete al', [$0F,$94,$C0]);
+  ResetCode; EmitAsm386('setne bl'); AssertBytes('setne bl', [$0F,$95,$C3]);
+  ResetCode; EmitAsm386('setb cl');  AssertBytes('setb cl', [$0F,$92,$C1]);
+  ResetCode; EmitAsm386('setl dl');  AssertBytes('setl dl', [$0F,$9C,$C2]);
+
+  { call reg, cdq, string ops }
+  ResetCode; EmitAsm386('call eax'); AssertBytes('call eax', [$FF,$D0]);
+  ResetCode; EmitAsm386('cdq');      AssertBytes('cdq', [$99]);
+  ResetCode; EmitAsm386('movsb');    AssertBytes('movsb', [$A4]);
+  ResetCode; EmitAsm386('stosb');    AssertBytes('stosb', [$AA]);
+  ResetCode; EmitAsm386('rep movsb'); AssertBytes('rep movsb', [$F3,$A4]);
+  ResetCode; EmitAsm386('rep stosb'); AssertBytes('rep stosb', [$F3,$AA]);
+
+  { ALU reg,[mem] and [mem],reg }
+  ResetCode; EmitAsm386('add eax, [ebp - 8]'); AssertBytes('add eax,[ebp-8]', [$03,$45,$F8]);
+  ResetCode; EmitAsm386('sub [ebp - 8], ecx'); AssertBytes('sub [ebp-8],ecx', [$29,$4D,$F8]);
+  ResetCode; EmitAsm386('cmp eax, [esi]'); AssertBytes('cmp eax,[esi]', [$3B,$06]);
+  ResetCode; EmitAsm386('xor [edi], eax'); AssertBytes('xor [edi],eax', [$31,$07]);
+
   writeln('ALL I386 ASM EMIT TESTS PASSED');
 end.
