@@ -98,7 +98,7 @@ Each ✗ is a checklist item below the table. Seeded by grepping
 | External/dynamic symbols (ELF) | ✓ | ✗ | n/a | ✗ | `elfwriter.inc:622,628` |
 | Method-pointer fixups (ELF) | ✓ | ✓ | ✓ | ✓ | done 2026-06-17 (writeELF32 + 64-bit writeELF) |
 | `SetLength` on var-array param | ✓ | ✗ | ✗ | ✗ | `386:1705` `aarch64:1118` `arm32:1293` |
-| Async I/O reactor (epoll/asyncnet/CoSleep) | ✓ | ✗ | ✗ | ✗ | per-arch syscalls (epoll_pwait, socketcall) |
+| Async I/O reactor (epoll/asyncnet/CoSleep) | ✓ | ✓ | ✓ | ✓ | done 2026-06-17 (per-arch SYS_*; aarch64/arm32 epoll_pwait; i386 socketcall; epoll_event pad on aarch64/arm32) |
 | RTTI / streaming / LFM | ✓ | ◐ | ◐ | ◐ | needs ELF method fixups |
 | GTK / LCL GUI | ✓ | ✗ | ✗ | ✗ | needs classes + external calls |
 

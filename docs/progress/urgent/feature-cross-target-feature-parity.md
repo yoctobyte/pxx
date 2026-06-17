@@ -267,3 +267,32 @@ test-core; bootstrap + cross-bootstrap stay byte-identical.
   depth-1 path for *frozen* `string`-element arrays — the cross targets handle
   that case via PXXDynSetLen, so it is not a cross gap. Remaining cross gaps:
   external C calls + ELF32 dynamic symbols, then the async I/O reactor.
+- 2026-06-17 — **async I/O reactor + asyncnet sockets on all 4 targets.**
+  The scheduler/CoSwitch/channels already ran on all four; only the epoll reactor,
+  CoSleep timers, and asyncnet sockets were x86-64-only (hardcoded x86-64 syscall
+  numbers; everything else degraded to a busy-poll CoYield). Made portable:
+  - **scheduler.pas:** per-arch SYS_* number blocks (fcntl / epoll_create1 /
+    epoll_ctl / read / close / timerfd_create / timerfd_settime, verified against
+    the FPC RTL sysnr tables). aarch64/arm32 have no epoll_wait -> RunUntilDone's
+    idle path uses epoll_pwait (sigmask=0, sigsetsize=0) there, epoll_wait on x86.
+    TEpollEvent layout per arch: x86 packs it (data@4, 12B); aarch64/arm32 leave
+    the u64 naturally 8-aligned so an explicit pad word puts data@8 (16B) and the
+    array stride matches what the kernel writes. CoSleep itimerspec offsets per
+    word width (it_value at one timespec in: 16B on 64-bit, 8B on 32-bit; PW =
+    ^NativeInt writes the matching width). WaitIO/WaitReadable/WaitWritable/
+    CoSleep/RunUntilDone now compile for all four (no fallback).
+  - **asyncnet.pas:** per-arch socket family. Direct syscalls on x86-64/aarch64/
+    arm32; i386 has no direct socket syscalls so a SockCall(callnr,&args) helper
+    multiplexes them through socketcall(102). read/write/close are direct on every
+    target. Introduced a Sock{Socket,SetReuse,Bind,Listen,Accept4,Connect} layer
+    that isolates the direct-vs-socketcall split; the Tcp* API is unchanged.
+  - **tests:** test_reactor parametrised with per-arch read/write/pipe2 numbers;
+    test_timer + test_asyncecho already used only the scheduler/asyncnet APIs so
+    they were portable once the RTL was. All three (reactor / timer / asyncecho)
+    byte-identical to x86-64 on i386/aarch64/arm32 under QEMU; wired into the three
+    cross suites. Landmine hit + fixed: a doc comment containing a literal
+    `{ tv_sec; tv_nsec }` closed the brace comment early ("unexpected character").
+  This was an RTL-only change (compiler bytes unaffected; compiler.pas does not use
+  scheduler), so the self-host fixedpoint is untouched. Remaining cross gaps:
+  external C calls + ELF32 dynamic symbols (codegen386:2084 / aarch64:1512 /
+  arm32:1700; elfwriter:622/627).
