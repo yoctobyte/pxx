@@ -457,7 +457,18 @@ begin
           Exit;
         end;
         if pi < 0 then
+        begin
+          { Type-pun passthroughs: Ord/Chr/Integer()/LongWord() are identity on
+            the value already in a2 (char/int share the register model). }
+          if (pi = -Ord(tkOrd)) or (pi = -Ord(tkChr)) or
+             (pi = -Ord(tkInteger_T)) or (pi = -Ord(tkLongWord_T)) then
+          begin
+            argNode := IRB[node];
+            IREmitNodeXtensa(IRA[argNode]);
+            Exit;
+          end;
           Error('target xtensa: builtin calls not supported in bare-metal stage 1');
+        end;
 
         argNode := IRB[node];
         nArgs := 0;

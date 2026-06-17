@@ -379,7 +379,18 @@ begin
           Exit;
         end;
         if pi < 0 then
+        begin
+          { Type-pun passthroughs: Ord/Chr/Integer()/LongWord() are identity on
+            the value already in a0 (char/int share the register model). }
+          if (pi = -Ord(tkOrd)) or (pi = -Ord(tkChr)) or
+             (pi = -Ord(tkInteger_T)) or (pi = -Ord(tkLongWord_T)) then
+          begin
+            argNode := IRB[node];
+            IREmitNodeRISCV32(IRA[argNode]);
+            Exit;
+          end;
           Error('target riscv32: standard builtin calls not supported in bare-metal stage 1');
+        end;
 
         argNode := IRB[node];
         nArgs := 0;
