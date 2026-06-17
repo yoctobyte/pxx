@@ -183,3 +183,25 @@ Provide a **single-line overload** so trivial cases skip the brackets:
   width-inferred holes, single-line overload, x86-first shared ModRM core,
   incremental mix-with-`EmitB`, inline-asm unification as the double-win.
   Gated on feature-array-of-const (the binding vehicle).
+- 2026-06-17 — **x86 instruction surface completed** so new codegen can write
+  assembly text instead of raw `EmitB` runs. `EmitAsmX64` (asmtext.inc) and
+  `EmitAsm386` (asmtext_386.inc) now both cover: integer ALU in every operand
+  direction (reg,imm | reg,reg | reg,[mem] | [mem],reg | [mem],imm) incl.
+  adc/sbb; test; the unary F6/F7 group (not/neg/mul/imul/idiv); imul reg,reg;
+  shifts (imm/1/cl); movzx/movsx (reg + mem, incl. x64 movsxd); setcc; call reg;
+  cdq/cqo; string ops + rep prefix; `@data`/`@glob` relocation holes; movabs
+  (x64); and the full SSE/SSE2 scalar-float family — movsd/movss, add/sub/mul/div
+  sd+ss, comisd/ucomisd, cvtsi2sd, cvttsd2si, cvtsd2ss, cvtss2sd, xorps/xorpd,
+  pxor, and x64 `movq` in all five operand shapes (xmm flagged size 16 in
+  AsmRegNum). Single-line `EmitAsmX64('...')` overload added (386 already had it).
+  Fixed a latent REX bug: the spl/bpl/sil/dil byte-register REX-forcing must not
+  fire for a memory *base* register — new `EncPrefixAndREXMem` (x64enc.inc).
+  Added `test/test_asm_emit_x64.pas` (x64 had no standalone encoder unit test)
+  and extended `test_asm_emit_386.pas`; both assert every form against
+  `llvm-mc-18`, wired into `make test-asm-emit`. The four RISC targets (a64,
+  arm32, rv32, xtensa) already emit zero raw bytes via their text assemblers.
+  All five commits keep the per-target self-fixedpoint byte-identical (no
+  codegen call sites converted yet — pure capability growth). **Remaining:**
+  retarget existing `EmitB` blocks onto the assembler (scope item 5/6) and the
+  inline-asm `asm…end` unification; one bespoke `lock xchg [@glob],reg` atomic
+  needs an absolute-memory operand form the [base±disp] model lacks.
