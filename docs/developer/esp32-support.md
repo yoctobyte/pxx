@@ -30,6 +30,21 @@ are the user's boards. Software fallbacks for ESP32-classic (LX6, no divide
 option) and similar are deferred — see
 `docs/progress/backlog/feature-esp-isa-baseline-softfallback.md`.
 
+## Managed-feature spine (2026-06-17)
+
+Well beyond stage 1: the managed-runtime spine runs on **both** ESP ISAs,
+validated on Espressif QEMU against the x86-64 oracle (see
+`docs/progress/done/feature-esp32-managed-features.md`). Output-equality harness
+`tools/esp_run.sh [--chip esp32s3|esp32c3] <prog.pas>` (needs
+`. ~/esp/esp-idf/export.sh`; heavy, not in `make test`). Working: native
+div/mod + shifts, the xtensa windowed-ABI constant-sp fix (nested/recursive
+calls), static-arena heap (New/GetMem/Dispose), dynamic arrays
+(SetLength/Length/index), `array of const` → portable writeln, and
+Ord/Chr/Integer/LongWord passthroughs. Not yet ported: **managed strings**
+(`tyAnsiString` `PXXStr*` runtime — the PXX default; see
+`feature-esp32-managed-strings`), records-by-value, classes/VMT, sets,
+exceptions, RTTI.
+
 ## Current state (2026-06-12)
 
 Stage 1 (bare codegen) and the relocatable object writer are done:

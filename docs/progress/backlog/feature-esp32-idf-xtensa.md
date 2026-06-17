@@ -54,3 +54,11 @@ the pipeline shape; this one adds the windowed-ABI object and real hardware.
   `PXX hello from Pascal S3: i=1..5`, `PXX S3 sum 1..5 = 15`, then the app
   parks in a `vTaskDelay`/GPIO blink loop. Link map shows
   `app_main` at `0x4200cfcc`.
+- 2026-06-17 — QEMU feature coverage proven well beyond the flat hello, via
+  `tools/esp_run.sh --chip esp32s3` (feature-esp32-managed-features): native
+  div/mod, the windowed-ABI constant-sp fix (nested/recursive calls), heap,
+  dynamic arrays, and array-of-const writeln all run on `-M esp32s3` with output
+  identical to x86-64. **Remaining for this ticket = real S2/S3 hardware**:
+  `idf.py flash monitor` over `/dev/ttyUSB*`, LED blink via gpio_set_*, and a
+  debugger backtrace through windowed Pascal frames. Coordinate with the user
+  for the board step.
