@@ -108,3 +108,16 @@ test-core; bootstrap + cross-bootstrap stay byte-identical.
   now the single umbrella for "finish all language features on the Intel + ARM
   targets." Next concrete step: the audit pass (per-target feature matrix) →
   classes-on-cross.
+- 2026-06-17 — **audit pass done.** Built the per-target codegen parity matrix
+  in `docs/developer/feature-matrix.md` (x86-64 / i386 / aarch64 / arm32),
+  seeded by grepping the four backends + `elfwriter.inc` for
+  `not yet supported` / `not supported`. Confirmed the dominant blocker:
+  **class instantiation** hard-errors on all three cross targets
+  (`386:1653`, `aarch64:1071`, `arm32:1235`), gating fields/methods/virtual
+  dispatch/method-pointers/interfaces/GUI. Other cross ✗: external C calls,
+  aggregate-valued fn results, `SetLength` on var-array param, ELF32
+  dynamic-symbols + method-fixups (i386/arm32 only — the 64-bit writeELF already
+  handles both, so aarch64 is blocked only at codegen), async I/O reactor
+  syscalls, aarch64 Variant single/extended. Indirect-call param caps are a
+  shared structural limit (—), out of scope. Each ✗ is a checklist item in the
+  matrix. Next: classes-on-cross sub-arc, starting with instantiation.

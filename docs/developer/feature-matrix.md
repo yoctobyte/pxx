@@ -43,3 +43,82 @@ While it is tempting to implement `PChar` as a regular library function, it **mu
 The test suite now demonstrates both Pascal C-interop styles:
 1. **Static typing:** explicit typenames parsed from the imported header.
 2. **Auto-typed locals:** deferred static type inference locks C handle locals on first assignment.
+
+---
+
+## Per-target codegen parity matrix (Intel + ARM)
+
+Authoritative parity audit for ticket
+`feature-cross-target-feature-parity`. Scope is the four hosted Linux targets:
+Intel (**x86-64**, **i386**) and ARM (**aarch64**, **arm32**). Xtensa / RISC-V
+(ESP32) are deferred and intentionally omitted.
+
+Legend: **✓** works (byte-identical self-host where applicable) · **✗** hard
+`Error('… not yet supported')` in the backend or ELF writer · **◐** partial /
+edge cases pending · **—** structural limit shared by *all* targets (not a cross
+gap).
+
+Each ✗ is a checklist item below the table. Seeded by grepping
+`ir_codegen.inc` / `ir_codegen386.inc` / `ir_codegen_aarch64.inc` /
+`ir_codegen_arm32.inc` / `elfwriter.inc` for `not yet supported` /
+`not supported` (2026-06-17).
+
+| Feature | x86-64 | i386 | aarch64 | arm32 | Notes / blocker site |
+|---|:--:|:--:|:--:|:--:|---|
+| Integer arith (8/16/32) | ✓ | ✓ | ✓ | ✓ | |
+| Int64 / UInt64 arith | ✓ | ✓ | ✓ | ✓ | i386 r-pair, arm32 r0:r1, aarch64 native |
+| Float (single/double) | ✓ | ✓ | ✓ | ✓ | feature-cross-float-variant |
+| Variant | ✓ | ✓ | ◐ | ◐ | aarch64 single/extended pending (`aarch64.inc:1956,2004`) |
+| Managed AnsiString (COW) | ✓ | ✓ | ✓ | ✓ | feature-cross-managed-string-cow |
+| Records (by-val / copy / fields) | ✓ | ✓ | ✓ | ✓ | feature-cross-managed-aggregates |
+| Dynamic arrays | ✓ | ✓ | ✓ | ✓ | |
+| Open-array params + `Length` | ✓ | ✓ | ✓ | ✓ | feature-open-array-length-gap |
+| `array of const` (TVarRec) | ✓ | ✓ | ✓ | ✓ | |
+| Multidim fixed arrays | ✓ | ✓ | ✓ | ✓ | |
+| Short-circuit `and`/`or` | ✓ | ✓ | ✓ | ✓ | lowered in shared IR |
+| Exceptions (try/except/finally) | ✓ | ✓ | ✓ | ✓ | feature-cross-exceptions |
+| Generators / coroutines / async **surface** | ✓ | ✓ | ✓ | ✓ | stackful + stackless |
+| Channels | ✓ | ✓ | ✓ | ✓ | |
+| Procedural types / indirect call | ✓ | ✓ | ✓ | ✓ | param-count cap is shared (—) below |
+| Indirect call > N params | — | — | — | — | x86-64 >6, aarch64 >8, arm32 >4: structural, all targets |
+| **Class instantiation (VMT + ctor)** | ✓ | ✗ | ✗ | ✗ | `386:1653` `aarch64:1071` `arm32:1235` |
+| Class fields / methods / virtual dispatch | ✓ | ✗ | ✗ | ✗ | gated by instantiation above |
+| Method pointers (`of object`) | ✓ | ✗ | ✗ | ✗ | codegen cross-ready; needs classes |
+| Interfaces | ◐ | ✗ | ✗ | ✗ | feature-interfaces; needs classes |
+| External (C-library) calls | ✓ | ✗ | ✗ | ✗ | `386:1994` `aarch64:1419` `arm32:1598` |
+| External/dynamic symbols (ELF) | ✓ | ✗ | n/a | ✗ | `elfwriter.inc:622,628` |
+| Method-pointer fixups (ELF) | ✓ | ✗ | n/a | ✗ | `elfwriter.inc:623,630` |
+| Aggregate-valued fn results | ✓ | ✗ | ✗ | ✗ | `386:1996` `aarch64:1421` `arm32:1600` |
+| `SetLength` on var-array param | ✓ | ✗ | ✗ | ✗ | `386:1705` `aarch64:1118` `arm32:1293` |
+| Async I/O reactor (epoll/asyncnet/CoSleep) | ✓ | ✗ | ✗ | ✗ | per-arch syscalls (epoll_pwait, socketcall) |
+| RTTI / streaming / LFM | ✓ | ◐ | ◐ | ◐ | needs ELF method fixups |
+| GTK / LCL GUI | ✓ | ✗ | ✗ | ✗ | needs classes + external calls |
+
+Notes on aarch64 ELF: the 64-bit ELF writer (`writeELF` path) already applies
+`MethodFixups` and external symbols, so aarch64 is **not** blocked at the
+writer — only at codegen (instantiation/external). The `writeELF32` blocks are
+i386/arm32-only.
+
+### Checklist (each ✗ → close-out item)
+
+Dominant blocker first; items sharing a fix are grouped.
+
+1. **Classes on cross** (the gating item — unblocks the next three rows):
+   - [ ] i386: class instantiation (VMT init + ctor call) — `ir_codegen386.inc:1653`
+   - [ ] aarch64: class instantiation — `ir_codegen_aarch64.inc:1071`
+   - [ ] arm32: class instantiation — `ir_codegen_arm32.inc:1235`
+   - [ ] class field / method access + virtual dispatch on all three
+   - [ ] method pointers (`of object`) on all three (codegen already cross-ready)
+2. **ELF32 dynamic-link path** (i386/arm32):
+   - [ ] external (dynamic) symbols — `elfwriter.inc:622,628`
+   - [ ] method-pointer fixups — `elfwriter.inc:623,630`
+3. **External calls in codegen** (C imports): i386 `1994`, aarch64 `1419`, arm32 `1598`.
+4. **Aggregate-valued fn results**: i386 `1996`, aarch64 `1421`, arm32 `1600`.
+5. **`SetLength` on var-array param**: i386 `1705`, aarch64 `1118`, arm32 `1293`.
+6. **Async I/O reactor cross**: per-arch syscall numbers + reactor/asyncnet/CoSleep
+   gating; run reactor/asyncecho/timer suites under QEMU.
+7. **Variant edge types** (aarch64): single/extended — `1956`, `2004`.
+8. **Interfaces** on all four (depends on classes) — feature-interfaces.
+
+Items marked **—** (indirect-call param cap) are shared structural limits, not
+cross gaps, and are out of scope for this arc.
