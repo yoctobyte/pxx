@@ -1735,40 +1735,90 @@ begin
         end;
         if ProcExternal[pi] then
         begin
-          { External C call (AAPCS32): integer/pointer args in r0..r3, result in
-            r0. v1 = up to 4 single-word scalar/pointer args + integer/pointer
-            return (the C-import surface); float/Int64 args, >4 args, or float
-            returns are a hard error. Args are pushed word-by-word then loaded
-            into r0..r3 (mirroring the internal/indirect paths); the call goes
+          { External C call (armel / base AAPCS soft-float): the cross sysroot is
+            armel (gnueabi, ld-linux.so.3), so FP and 64-bit values pass in the
+            CORE registers r0..r3, not VFP. Build a contiguous argument block in a
+            16-byte stack temp using AAPCS placement rules — 4 bytes for
+            int/single/pointer, 8 bytes (8-byte aligned) for double/extended and
+            Int64/UInt64 — then load words 0..3 into r0..r3. The value model keeps
+            floats as doubles in d0, so a single arg is fcvt'd to s0 and a double
+            stored from d0; results come back in r0 (int/single) or r0:r1
+            (double/Int64) and are bridged back to the value model. Stack
+            arguments (block > 16 bytes) are not supported yet — the validated
+            C-import / libm surface fits in the four core registers. The call goes
             through the external's GOT slot via EmitExternalCallArm32. }
-          if Procs[pi].ParamCount > 4 then
-            Error('target arm32: external call with more than 4 parameters not supported');
-          if TypeIsFloat(Procs[pi].RetType) then
-            Error('target arm32: external call float return not yet supported');
+          { Pass 1: compute the AAPCS block size. }
+          sz := 0;   { running block offset }
+          for i := 0 to Procs[pi].ParamCount - 1 do
+          begin
+            tk := Procs[pi].Params[i].TypeKind;
+            if (tk = tyDouble) or (tk = tyExtended) or (tk = tyInt64) or (tk = tyUInt64) then
+            begin
+              if (sz and 4) <> 0 then Inc(sz, 4);   { 8-byte align }
+              Inc(sz, 8);
+            end
+            else
+              Inc(sz, 4);
+          end;
+          if sz > 16 then
+            Error('target arm32: external call argument block exceeds 4 core registers (stack args not supported yet)');
+          EmitI32($E24DD010);                       { sub sp, sp, #16 }
+          { Pass 2: evaluate each arg and store its word(s) at the block offset. }
           argNode := IRB[node];
           nArgs := 0;
+          j := 0;   { running block offset }
           while argNode <> -1 do
           begin
-            if (nArgs < Procs[pi].ParamCount) and
-               (TypeIsFloat(Procs[pi].Params[nArgs].TypeKind) or
-                Is64Bit386(Procs[pi].Params[nArgs].TypeKind)) then
-              Error('target arm32: external call float/Int64 argument not yet supported');
-            IREmitNodeArm32(IRA[argNode]);       { r0 = arg }
-            EmitI32($E92D0001);                  { push {r0} }
+            tk := Procs[pi].Params[nArgs].TypeKind;
+            if (tk = tyDouble) or (tk = tyExtended) then
+            begin
+              if (j and 4) <> 0 then Inc(j, 4);
+              IREmitNodeArm32(IRA[argNode]);        { d0 = double }
+              EmitI32($ED8D0B00 or (j shr 2));      { vstr d0, [sp, #j] }
+              Inc(j, 8);
+            end
+            else if (tk = tyInt64) or (tk = tyUInt64) then
+            begin
+              if (j and 4) <> 0 then Inc(j, 4);
+              EmitNode64Arm32(IRA[argNode]);        { r0=lo, r1=hi }
+              EmitI32($E58D0000 or j);              { str r0, [sp, #j] }
+              EmitI32($E58D1000 or (j + 4));        { str r1, [sp, #j+4] }
+              Inc(j, 8);
+            end
+            else if tk = tySingle then
+            begin
+              IREmitNodeArm32(IRA[argNode]);        { d0 = double }
+              EmitI32($EEB70BC0);                   { vcvt.f32.f64 s0, d0 }
+              EmitI32($ED8D0A00 or (j shr 2));      { vstr s0, [sp, #j] }
+              Inc(j, 4);
+            end
+            else
+            begin
+              IREmitNodeArm32(IRA[argNode]);        { r0 = arg }
+              EmitI32($E58D0000 or j);              { str r0, [sp, #j] }
+              Inc(j, 4);
+            end;
             Inc(nArgs);
             argNode := IRB[argNode];
           end;
           if nArgs <> Procs[pi].ParamCount then
             Error('target arm32: external call argument count mismatch');
-          for i := 0 to nArgs - 1 do
-            if i < 4 then
-              EmitI32($E59D0000 or (i shl 12) or ((nArgs - 1 - i) * 4)); { ldr r[i], [sp,#off] }
-          if nArgs > 0 then
+          { Load r0..r3 from the block (one word each; padding words are harmless). }
+          i := 0;
+          while (i * 4) < sz do
           begin
-            EmitLoadImmArm32(9, nArgs * 4);
-            EmitI32($E08DD009);                  { add sp, sp, r9 (drop pushed words) }
+            EmitI32($E59D0000 or (i shl 12) or (i * 4)); { ldr r[i], [sp, #i*4] }
+            Inc(i);
           end;
+          EmitI32($E28DD010);                       { add sp, sp, #16 }
           EmitExternalCallArm32(RegisterExternal(pi));
+          if Procs[pi].RetType = tySingle then
+          begin
+            EmitI32($EE000A10);                     { vmov s0, r0 }
+            EmitI32($EEB70AC0);                     { vcvt.f64.f32 d0, s0 }
+          end
+          else if TypeIsFloat(Procs[pi].RetType) then
+            EmitI32($EC410B10);                     { vmov d0, r0, r1 (double result) }
           Exit;
         end;
 

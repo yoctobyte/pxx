@@ -2122,48 +2122,102 @@ begin
         if ProcExternal[pi] then
         begin
           { External C call (cdecl): args at [esp+0], [esp+4], ... (arg0 lowest);
-            caller cleans the stack; result in eax. v1 handles 4-byte scalar /
-            pointer args + an integer/pointer return (the C-import surface used by
-            the SQLite/header tests); float/Int64 args or float returns are a hard
-            error. Stack 16-alignment is deferred (v1), matching the grow-op-by-op
-            i386 policy. The call goes through the external's GOT slot via the
-            same FF/14/25 indirect-call encoding as x86-64 (valid on i386 too);
-            writeELF32 patches the abs32 operand to the slot VA and the dynamic
-            linker fills the slot. }
+            caller cleans the stack. Each arg occupies its natural cdecl width:
+            8 bytes for double/extended and Int64/UInt64, 4 bytes for single
+            (prototyped C `float`), int, char and pointer. Integer/pointer
+            returns come back in eax, Int64/UInt64 in edx:eax (matching the
+            internal 64-bit pair model), and float/double returns in st0 — which
+            we bridge to xmm0 (the i386 float value model). The call site is
+            16-byte aligned per SysV i386: save the caller esp, `and esp,-16`,
+            reserve a 16-rounded frame holding the arg block plus the saved-esp
+            slot, then restore esp from that slot after the call. The call goes
+            through the external's GOT slot via the same FF/14/25 indirect-call
+            encoding as x86-64; writeELF32 patches the abs32 operand to the slot
+            VA and the dynamic linker fills it. }
           argNode := IRB[node];
           nArgs := 0;
+          argBytes := 0;
           while argNode <> -1 do
           begin
-            tk := IntToTypeKind(IRTk[IRA[argNode]]);
-            if (nArgs < Procs[pi].ParamCount) and
-               (TypeIsFloat(Procs[pi].Params[nArgs].TypeKind) or
-                Is64Bit386(Procs[pi].Params[nArgs].TypeKind)) then
-              Error('target i386: external call float/Int64 argument not yet supported');
+            if nArgs < Procs[pi].ParamCount then
+            begin
+              tk := Procs[pi].Params[nArgs].TypeKind;
+              if (tk = tyDouble) or (tk = tyExtended) or Is64Bit386(tk) then
+                Inc(argBytes, 8)
+              else
+                Inc(argBytes, 4);
+            end;
             Inc(nArgs);
             argNode := IRB[argNode];
           end;
           if nArgs <> Procs[pi].ParamCount then
             Error('target i386: external call argument count mismatch');
-          if TypeIsFloat(Procs[pi].RetType) then
-            Error('target i386: external call float return not yet supported');
-          argBytes := nArgs * 4;
-          if argBytes > 0 then
-          begin
-            EmitB($81); EmitB($EC); EmitI32(argBytes);   { sub esp, argBytes }
-          end;
+          { Reserve a 16-rounded frame: arg block + 4-byte saved-esp slot. }
+          base := ((argBytes + 4 + 15) div 16) * 16;
+          EmitB($89); EmitB($E1);                        { mov ecx, esp }
+          EmitB($83); EmitB($E4); EmitB($F0);            { and esp, -16 }
+          EmitB($81); EmitB($EC); EmitI32(base);         { sub esp, base }
+          EmitB($89); EmitB($8C); EmitB($24); EmitI32(argBytes); { mov [esp+argBytes], ecx }
           argNode := IRB[node];
           i := 0;
+          sz := 0;                                       { running arg offset }
           while argNode <> -1 do
           begin
-            IREmitNode386(IRA[argNode]);                 { eax = arg i }
-            EmitB($89); EmitB($84); EmitB($24); EmitI32(i * 4); { mov [esp+i*4], eax }
+            tk := Procs[pi].Params[i].TypeKind;
+            if (tk = tyDouble) or (tk = tyExtended) then
+            begin
+              IREmitNode386(IRA[argNode]);               { float -> xmm0 (double) }
+              if not TypeIsFloat(IntToTypeKind(IRTk[IRA[argNode]])) then
+                begin EmitB($F2); EmitB($0F); EmitB($2A); EmitB($C0); end; { cvtsi2sd xmm0, eax }
+              EmitB($F2); EmitB($0F); EmitB($11); EmitB($84); EmitB($24); EmitI32(sz); { movsd [esp+off], xmm0 }
+              Inc(sz, 8);
+            end
+            else if tk = tySingle then
+            begin
+              IREmitNode386(IRA[argNode]);               { -> xmm0 (double) }
+              if not TypeIsFloat(IntToTypeKind(IRTk[IRA[argNode]])) then
+                begin EmitB($F2); EmitB($0F); EmitB($2A); EmitB($C0); end; { cvtsi2sd xmm0, eax }
+              EmitB($F2); EmitB($0F); EmitB($5A); EmitB($C0);             { cvtsd2ss xmm0, xmm0 }
+              EmitB($F3); EmitB($0F); EmitB($11); EmitB($84); EmitB($24); EmitI32(sz); { movss [esp+off], xmm0 }
+              Inc(sz, 4);
+            end
+            else if Is64Bit386(tk) then
+            begin
+              IREmitNode386(IRA[argNode]);               { -> edx:eax }
+              if not Is64Bit386(IntToTypeKind(IRTk[IRA[argNode]])) then
+              begin
+                if TypeSigned(IntToTypeKind(IRTk[IRA[argNode]])) then EmitB($99) { cdq }
+                else begin EmitB($31); EmitB($D2); end;  { xor edx, edx }
+              end;
+              EmitB($89); EmitB($84); EmitB($24); EmitI32(sz);       { mov [esp+off], eax }
+              EmitB($89); EmitB($94); EmitB($24); EmitI32(sz + 4);   { mov [esp+off+4], edx }
+              Inc(sz, 8);
+            end
+            else
+            begin
+              IREmitNode386(IRA[argNode]);               { eax = arg }
+              EmitB($89); EmitB($84); EmitB($24); EmitI32(sz);       { mov [esp+off], eax }
+              Inc(sz, 4);
+            end;
             Inc(i);
             argNode := IRB[argNode];
           end;
           EmitExternalIndirectCall(RegisterExternal(pi)); { call dword [GOT slot] }
-          if argBytes > 0 then
+          EmitB($8B); EmitB($A4); EmitB($24); EmitI32(argBytes); { mov esp, [esp+argBytes] }
+          if Procs[pi].RetType = tySingle then
           begin
-            EmitB($81); EmitB($C4); EmitI32(argBytes);   { add esp, argBytes }
+            EmitB($83); EmitB($EC); EmitB($04);          { sub esp, 4 }
+            EmitB($D9); EmitB($5C); EmitB($24); EmitB($00); { fstp dword [esp] }
+            EmitB($F3); EmitB($0F); EmitB($10); EmitB($04); EmitB($24); { movss xmm0, [esp] }
+            EmitB($F3); EmitB($0F); EmitB($5A); EmitB($C0); { cvtss2sd xmm0, xmm0 }
+            EmitB($83); EmitB($C4); EmitB($04);          { add esp, 4 }
+          end
+          else if TypeIsFloat(Procs[pi].RetType) then
+          begin
+            EmitB($83); EmitB($EC); EmitB($08);          { sub esp, 8 }
+            EmitB($DD); EmitB($5C); EmitB($24); EmitB($00); { fstp qword [esp] }
+            EmitB($F2); EmitB($0F); EmitB($10); EmitB($04); EmitB($24); { movsd xmm0, [esp] }
+            EmitB($83); EmitB($C4); EmitB($08);          { add esp, 8 }
           end;
           Exit;
         end;

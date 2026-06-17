@@ -94,7 +94,7 @@ Each ✗ is a checklist item below the table. Seeded by grepping
 | Sets (`set of`, literal, `in`, `+`/`-`/`*`, `=`/`<>`/`<=`/`>=`) | ✓ | ✓ | ✓ | ✓ | done 2026-06-17 (32-byte bitset; unblocks `for..in (set)`) |
 | Collections / dynarray-of-record depth | ✓ | ✓ | ✓ | ✓ | done 2026-06-17 (`setlen_dyn` / `dynunique` ported; field/nested targets via portable `PXXDynSetLen`/`PXXDynArrayUnique`) |
 | Interfaces | ◐ | ✗ | ✗ | ✗ | feature-interfaces; classes now unblock it |
-| External (C-library) calls | ✓ | ✓ | ✓ | ✓ | done 2026-06-17 (i386 cdecl / aarch64 AAPCS x0-x7 / arm32 r0-r3; GOT-slot call). v1: 4/8-byte int/ptr args + int/ptr return |
+| External (C-library) calls | ✓ | ✓ | ✓ | ✓ | done 2026-06-17 (i386 cdecl / aarch64 AAPCS x0-x7+v0-v7 / arm32 armel r0-r3; GOT-slot call). Full ABI: float/single/double + Int64/UInt64 args & returns; i386 16-aligned; validated vs libc/libm (test_extern_c_float) |
 | External/dynamic symbols (ELF) | ✓ | ✓ | ✓ | ✓ | done 2026-06-17 (ELF32 PrepareDynamicData32 i386/arm32; 64-bit writeELF interp+GLOB_DAT per-arch for aarch64) |
 | Method-pointer fixups (ELF) | ✓ | ✓ | ✓ | ✓ | done 2026-06-17 (writeELF32 + 64-bit writeELF) |
 | `SetLength` on var-array param | ✓ | ✗ | ✗ | ✗ | `386:1705` `aarch64:1118` `arm32:1293` |

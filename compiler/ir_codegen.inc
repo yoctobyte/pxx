@@ -2647,7 +2647,10 @@ begin
             EmitB($48); EmitB($8B); EmitB($A4); EmitB($24); EmitI32(restoreOff); { mov rsp, [rsp+off] }
             if TypeIsFloat(Procs[pi].RetType) then
             begin
-              { float/double returned in xmm0; bridge to rax bits. }
+              { float/double returned in xmm0; the value model carries doubles,
+                so widen a single (C `float`) result before bridging to rax. }
+              if Procs[pi].RetType = tySingle then
+                begin EmitB($F3); EmitB($0F); EmitB($5A); EmitB($C0); end; { cvtss2sd xmm0, xmm0 }
               EmitB($66); EmitB($48); EmitB($0F); EmitB($7E); EmitB($C0); { movq rax, xmm0 }
             end;
           end

@@ -1546,33 +1546,58 @@ begin
         end;
         if ProcExternal[pi] then
         begin
-          { External C call (AAPCS): integer/pointer args in x0..x7, result in
-            x0. v1 = up to 8 4/8-byte scalar/pointer args + integer/pointer
-            return (the C-import surface); float/aggregate args or float returns
-            are a hard error. Args are pushed to 16-byte temp slots then popped
-            into x0..x7 (same as the internal/indirect paths), then the call goes
-            through the external's GOT slot via EmitExternalCallA64. }
+          { External C call (AAPCS): integer/pointer args in x0..x7, FP args in
+            v0..v7 (the two classes are allocated independently, mirroring the
+            x86-64 SysV split), result in x0 / v0. The value model carries floats
+            as double bits in a GPR, so a float arg is fmov'd into d[n] (single
+            params then fcvt'd to s[n]); a single return is fcvt-widened back to
+            double before bridging d0 -> x0. Args are pushed to 16-byte temp
+            slots in order, then popped (reverse) into their target register; the
+            per-arg register index is the count of preceding same-class params.
+            The call goes through the external's GOT slot via EmitExternalCallA64. }
           if Procs[pi].ParamCount > 8 then
             Error('target aarch64: external call with more than 8 parameters not supported');
-          if TypeIsFloat(Procs[pi].RetType) then
-            Error('target aarch64: external call float return not yet supported');
+          { Independent class counts: AAPCS has 8 of each register class. }
+          lo := 0; hi := 0;   { lo = int param count, hi = fp param count }
+          for i := 0 to Procs[pi].ParamCount - 1 do
+            if TypeIsFloat(Procs[pi].Params[i].TypeKind) then Inc(hi) else Inc(lo);
+          if (lo > 8) or (hi > 8) then
+            Error('target aarch64: external call exceeds 8 int or 8 fp argument registers');
           argNode := IRB[node];
           nArgs := 0;
           while argNode <> -1 do
           begin
-            if (nArgs < Procs[pi].ParamCount) and
-               TypeIsFloat(Procs[pi].Params[nArgs].TypeKind) then
-              Error('target aarch64: external call float argument not yet supported');
             IREmitNodeAarch64(IRA[argNode]);
-            EmitI32($F81F0FE0);                  { str x0, [sp, #-16]! }
+            EmitI32($F81F0FE0);                  { str x0, [sp, #-16]! (arg0 deepest) }
             Inc(nArgs);
             argNode := IRB[argNode];
           end;
           if nArgs <> Procs[pi].ParamCount then
             Error('target aarch64: external call argument count mismatch');
+          { Pop reverse (top = last arg) into the target register. }
           for i := nArgs - 1 downto 0 do
-            EmitI32($F84107E0 + i);              { ldr x[i], [sp], #16 }
+          begin
+            { Count preceding same-class params to get this arg's register slot. }
+            lo := 0; hi := 0;
+            for j := 0 to i - 1 do
+              if TypeIsFloat(Procs[pi].Params[j].TypeKind) then Inc(hi) else Inc(lo);
+            EmitI32($F84107E9);                  { ldr x9, [sp], #16 }
+            if TypeIsFloat(Procs[pi].Params[i].TypeKind) then
+            begin
+              EmitI32($9E670120 + hi);           { fmov d[hi], x9 }
+              if Procs[pi].Params[i].TypeKind = tySingle then
+                EmitI32($1E624000 + (hi shl 5) + hi); { fcvt s[hi], d[hi] }
+            end
+            else
+              EmitI32($AA0903E0 + lo);           { mov x[lo], x9 }
+          end;
           EmitExternalCallA64(RegisterExternal(pi));
+          if TypeIsFloat(Procs[pi].RetType) then
+          begin
+            if Procs[pi].RetType = tySingle then
+              EmitI32($1E22C000);                { fcvt d0, s0 (widen single result) }
+            EmitI32($9E660000);                  { fmov x0, d0 (bridge to GPR bits) }
+          end;
           Exit;
         end;
 

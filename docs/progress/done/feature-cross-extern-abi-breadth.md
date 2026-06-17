@@ -1,7 +1,7 @@
 # Cross external-C-call ABI breadth (float/Int64 args, float returns, stack align)
 
 - **Type:** feature
-- **Status:** backlog
+- **Status:** done
 - **Owner:** —
 - **Opened:** 2026-06-17 (follow-up from feature-cross-target-feature-parity item 3)
 - **Depends-on:** feature-cross-target-feature-parity (external C calls v1 — done all 4 targets)
@@ -76,3 +76,23 @@ the three cross suites + `make cross-bootstrap` stay green.
   39681b8 i386, c70001f aarch64+arm32). The three hard-error guards to lift live
   at ir_codegen386.inc / ir_codegen_aarch64.inc / ir_codegen_arm32.inc (the
   `external call float/Int64 … not yet supported` paths).
+- 2026-06-17 — DONE. All three cross targets now accept float/single/double and
+  Int64/UInt64 external args and returns, output-identical to x86-64 against
+  libc/libm (`test/test_extern_c_float.pas`: atof, pow, sqrtf, atoll, llabs).
+  - **i386:** cdecl arg block with natural widths (8 for double/extended/Int64,
+    4 for single/int/ptr); call site now 16-byte aligned (save esp / `and esp,-16`
+    / 16-rounded frame + saved-esp slot, restore after); float return bridged
+    from st0 (`fstp`), Int64 return in edx:eax, single return fcvt-widened.
+  - **aarch64:** AAPCS two-class split (x0..x7 int + v0..v7 fp, independent
+    counts, mirroring SysV); float args fmov'd into d[n] (single → fcvt s[n]);
+    float return bridged d0→x0 (single fcvt-widened first).
+  - **arm32:** sysroot is **armel** (gnueabi, ld-linux.so.3) → base AAPCS
+    soft-float: FP/64-bit values pass in **core** registers. Built a contiguous
+    16-byte AAPCS arg block (8-byte-aligned 64-bit slots), loaded r0..r3; single
+    via `vcvt.f32.f64`+`vstr s0`, double via `vstr d0`, Int64 via lo/hi words;
+    results bridged r0→d0 (single), r0:r1→d0 (double), r0:r1 (Int64). Stack args
+    (block > 16 bytes) deferred — the validated surface fits the four core regs.
+  - Also fixed a latent **x86-64** bug: single (`float`) external returns were not
+    widened (`movq rax,xmm0` on a 32-bit single) — added `cvtss2sd` first.
+  - `make test` + `make cross-bootstrap` (byte-identical self-fixedpoint on all
+    three cross targets) green.
