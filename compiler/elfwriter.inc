@@ -1170,9 +1170,28 @@ begin
     else
     begin
       k := i;
-      while (k <= Length(src)) and
-            (not ((k < Length(src)) and (src[k] = '{') and (src[k + 1] = '$'))) do
-        Inc(k);
+      while k <= Length(src) do
+      begin
+        if (k < Length(src)) and (src[k] = '{') and (src[k + 1] = '$') then
+          Break;                            { real directive boundary }
+        if src[k] = '{' then
+        begin
+          { Brace comment: skip to its matching close-brace, nesting on an inner
+            directive-looking open-brace-dollar so its close-brace does not end
+            the comment early and its directive text is not taken for a real one.
+            The comment is still copied through for the real lexer pass. }
+          j := 1;
+          Inc(k);
+          while (k <= Length(src)) and (j > 0) do
+          begin
+            if (src[k] = '{') and (k < Length(src)) and (src[k + 1] = '$') then Inc(j)
+            else if src[k] = '}' then Dec(j);
+            Inc(k);
+          end;
+        end
+        else
+          Inc(k);
+      end;
       AppendRange(IncExpanded, src, i, k - 1);
       i := k;
     end;

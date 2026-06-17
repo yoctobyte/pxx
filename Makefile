@@ -581,6 +581,8 @@ test-core: $(COMPILER)
 	test "$$(/tmp/test_inline_register26 | tail -1)" = "all inline/register tests completed!"
 	./$(COMPILER) test/test_pascal_directives.pas /tmp/test_pascal_directives26
 	test "$$(/tmp/test_pascal_directives26)" = "$$(printf '1\n0\n1\n1\n1\n0\n1\n1\n1\n1\n1\n1')"
+	./$(COMPILER) test/test_comment_directive.pas /tmp/test_comment_directive26
+	test "$$(/tmp/test_comment_directive26)" = "42"
 	./$(COMPILER) -dCLI_FLAG test/test_pascal_directives.pas /tmp/test_pascal_directives_defined26
 	test "$$(/tmp/test_pascal_directives_defined26)" = "$$(printf '1\n0\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1')"
 	./$(COMPILER) test/test_pascal_directive_messages.pas /tmp/test_pascal_directive_messages26 > /tmp/test_pascal_directive_messages.log

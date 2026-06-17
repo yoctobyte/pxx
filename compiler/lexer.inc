@@ -987,7 +987,14 @@ begin
             while (SrcPos <= Length(Source)) and (commentDepth > 0) do
             begin
               if Source[SrcPos] = #10 then Inc(SrcLine)
-              else if NestedComments and (Source[SrcPos] = '{') then Inc(commentDepth)
+              else if (Source[SrcPos] = '{') and
+                      (NestedComments or
+                       ((SrcPos < Length(Source)) and (Source[SrcPos + 1] = '$'))) then
+                { Nest on an inner open-brace under NestedComments, and always on
+                  a directive-looking open-brace-dollar so its close-brace does
+                  not prematurely end the comment (lets prose mention conditional
+                  directives inside comments safely). }
+                Inc(commentDepth)
               else if Source[SrcPos] = '}' then Dec(commentDepth);
               Inc(SrcPos);
             end;

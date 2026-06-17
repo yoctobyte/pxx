@@ -14,8 +14,8 @@ type
   { The RTTI blob (rtti_emit.inc) is emitted with uniform 8-byte field slots on
     every target (pointers and Int64 counts alike). To keep these reader records
     byte-compatible on 32-bit targets, a 4-byte stub follows each Pointer field
-    under the CPU32 conditional so the pointer occupies a full 8-byte slot (the
-    low 4 bytes hold the 32-bit address, the stub is the zeroed high half). This is
+    under {$ifdef CPU32} so the pointer occupies a full 8-byte slot (the low 4
+    bytes hold the 32-bit address, the stub is the zeroed high half). This is
     plain conditional compilation — no compiler/dialect change. TMethod is left
     unpadded: it is a runtime method-pointer value (8 bytes = 2 ptrs on i386),
     not a blob record. }
