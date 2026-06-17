@@ -14,7 +14,7 @@ lives in git, not in a timestamp._
 
 _none_
 
-## backlog (41)
+## backlog (43)
 
 | Ticket | Type | Summary | Blocked-by |
 | --- | --- | --- | --- |
@@ -27,6 +27,7 @@ _none_
 | feature-async-language-surface | feature | Async language surface + stackless coroutine backend | feature-cross-target-feature-parity |
 | feature-c-header-import-complex | feature | Import C headers for complex libraries (glib/GTK-grade) | — |
 | feature-compiler-warnings | feature | Compiler warning diagnostics facility | — |
+| feature-c-source-frontend | feature | C source frontend — compile C function bodies (statements + expressions) | feature-cross-target-feature-parity |
 | feature-demo-chess | feature | Flagship demo — chess engine (real-world app + cross-target oracle + benchmark) | — |
 | feature-directive-if-numeric | feature | Valued defines + numeric `{$IF}` evaluation | — |
 | feature-dynamic-include-paths-config | feature | Dynamic Include Paths, Configuration Files, and System Scanner | — |
@@ -46,6 +47,7 @@ _none_
 | feature-metaclass-descendant-enforcement | feature | Metaclass alias descendant-constraint enforcement | — |
 | feature-mimic-fpc | feature | `mimic FPC` compatibility mode | feature-directive-if-numeric |
 | feature-networking | feature | Networking runtime | — |
+| feature-nilpy-idf-import | feature | nilpy includes anything from ESP-IDF and it just works | feature-c-source-frontend, feature-esp32-idf-xtensa |
 | feature-nil-python-frontend | feature | Nil Python frontend (`.npy`) | — |
 | feature-no-ansistring-profile | feature | No-AnsiString / bounded-string profile | — |
 | feature-object-reference-type | feature | `object` — a rooted object-reference type | — |
@@ -174,13 +176,15 @@ _none_
 - **2** — feature-target-i386
 - **2** — feature-target-aarch64
 - **2** — feature-rtti-layout-table
+- **2** — feature-cross-target-feature-parity
 - **2** — feature-cross-managed-string-cow
 - **1** — feature-target-esp32
 - **1** — feature-target-arm32
 - **1** — feature-managed-exception-cleanup
+- **1** — feature-esp32-idf-xtensa
 - **1** — feature-elf-rel-writer
 - **1** — feature-directive-if-numeric
-- **1** — feature-cross-target-feature-parity
+- **1** — feature-c-source-frontend
 - **1** — feature-cross-selfhost-i386
 - **1** — feature-cross-selfhost-arm32
 - **1** — feature-cross-selfhost-aarch64
