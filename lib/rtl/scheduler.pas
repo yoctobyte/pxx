@@ -52,16 +52,9 @@ const
   CO_STK = 65536;   { default per-coroutine heap stack }
   CO_CANARY = $C0DECAFE;  { 32-bit so it round-trips through one machine word on i386 too }
 
-{$ifdef CPUX86_64}
+{ Reactor flags are identical across all Linux targets; only the syscall
+  numbers and the epoll_event layout vary per arch. }
 const
-  SYS_fcntl          = 72;
-  SYS_epoll_create1  = 291;
-  SYS_epoll_ctl      = 233;
-  SYS_epoll_wait     = 232;
-  SYS_read           = 0;
-  SYS_close          = 3;
-  SYS_timerfd_create = 283;
-  SYS_timerfd_settime = 286;
   O_NONBLOCK    = $800;
   F_SETFL       = 4;
   EPOLL_CTL_ADD = 1;
@@ -71,13 +64,70 @@ const
   CLOCK_MONOTONIC = 1;
   TFD_NONBLOCK    = $800;
 
+{ Per-arch Linux syscall numbers (verified against the FPC RTL sysnr tables).
+  aarch64 / arm32 have no epoll_wait — they use epoll_pwait (two extra args:
+  sigmask, sigsetsize, both 0 here). }
+{$ifdef CPUX86_64}
+const
+  SYS_fcntl           = 72;
+  SYS_epoll_create1   = 291;
+  SYS_epoll_ctl       = 233;
+  SYS_epoll_wait      = 232;
+  SYS_read            = 0;
+  SYS_close           = 3;
+  SYS_timerfd_create  = 283;
+  SYS_timerfd_settime = 286;
+{$endif}
+{$ifdef CPU_I386}
+const
+  SYS_fcntl           = 55;
+  SYS_epoll_create1   = 329;
+  SYS_epoll_ctl       = 255;
+  SYS_epoll_wait      = 256;
+  SYS_read            = 3;
+  SYS_close           = 6;
+  SYS_timerfd_create  = 322;
+  SYS_timerfd_settime = 325;
+{$endif}
+{$ifdef CPU_AARCH64}
+const
+  SYS_fcntl           = 25;
+  SYS_epoll_create1   = 20;
+  SYS_epoll_ctl       = 21;
+  SYS_epoll_pwait     = 22;
+  SYS_read            = 63;
+  SYS_close           = 57;
+  SYS_timerfd_create  = 85;
+  SYS_timerfd_settime = 86;
+{$endif}
+{$ifdef CPU_ARM32}
+const
+  SYS_fcntl           = 55;
+  SYS_epoll_create1   = 357;
+  SYS_epoll_ctl       = 251;
+  SYS_epoll_pwait     = 346;
+  SYS_read            = 3;
+  SYS_close           = 6;
+  SYS_timerfd_create  = 350;
+  SYS_timerfd_settime = 353;
+{$endif}
+
 type
-  { Linux epoll_event is packed: u32 events then u64 data = 12 bytes. The data
-    word carries the waiting coroutine's id straight back from epoll_wait. }
-  TEpollEvent = packed record
-    events : LongWord;
-    data   : Int64;
-  end;
+  { Linux epoll_event: u32 events then u64 data. Only x86 packs it (data at
+    offset 4, size 12); on aarch64/arm32 the u64 is naturally 8-aligned, so an
+    explicit pad word puts data at offset 8 (size 16). The data word carries the
+    waiting coroutine's id straight back from epoll_wait/epoll_pwait. }
+{$ifdef CPUX86_64}
+  TEpollEvent = packed record events: LongWord; data: Int64; end;
+{$endif}
+{$ifdef CPU_I386}
+  TEpollEvent = packed record events: LongWord; data: Int64; end;
+{$endif}
+{$ifdef CPU_AARCH64}
+  TEpollEvent = record events: LongWord; _pad: LongWord; data: Int64; end;
+{$endif}
+{$ifdef CPU_ARM32}
+  TEpollEvent = record events: LongWord; _pad: LongWord; data: Int64; end;
 {$endif}
 
 type
@@ -184,18 +234,14 @@ end;
 { Mark fd non-blocking so read/write return EAGAIN instead of blocking the whole
   scheduler thread. (v1 sets only O_NONBLOCK; it does not preserve other flags.) }
 procedure SetNonBlocking(fd: Integer);
-{$ifdef CPUX86_64}
 var rc: Int64;
-{$endif}
 begin
-{$ifdef CPUX86_64}
   rc := __pxxrawsyscall(SYS_fcntl, fd, F_SETFL, O_NONBLOCK, 0, 0, 0);
-{$endif}
 end;
 
-{$ifdef CPUX86_64}
 { Park the current coroutine on epoll until fd is ready for the given event,
-  then yield. On resume the fd is removed from the set (one-shot add/del). }
+  then yield. On resume the fd is removed from the set (one-shot add/del).
+  Portable across all four targets via the per-arch SYS_* numbers. }
 procedure WaitIO(fd, events: Integer);
 var ev: TEpollEvent; rc: Int64;
 begin
@@ -213,36 +259,36 @@ procedure WaitReadable(fd: Integer); begin WaitIO(fd, EPOLLIN);  end;
 procedure WaitWritable(fd: Integer); begin WaitIO(fd, EPOLLOUT); end;
 
 { One-shot relative timer as a readable fd: arm a timerfd, park on the reactor
-  until it fires, drain the expiration count, close. }
+  until it fires, drain the expiration count, close. itimerspec is two timespecs
+  (it_interval, it_value); timespec is tv_sec then tv_nsec with the machine word
+  width, so it_value starts at one timespec (16 bytes on 64-bit, 8 on 32-bit).
+  PW = ^NativeInt writes the matching word width. }
 procedure CoSleep(ms: Integer);
 var tfd, i: Integer; spec: array[0..31] of Byte; base, rc: Int64;
 begin
   tfd := Integer(__pxxrawsyscall(SYS_timerfd_create, CLOCK_MONOTONIC, TFD_NONBLOCK, 0, 0, 0, 0));
   for i := 0 to 31 do spec[i] := 0;        { it_interval = 0 (one-shot) }
   base := Int64(@spec[0]);
-  PW(base + 16)^ := ms div 1000;           { it_value.tv_sec }
+{$ifdef CPU64}
+  PW(base + 16)^ := ms div 1000;             { it_value.tv_sec }
   PW(base + 24)^ := (ms mod 1000) * 1000000; { it_value.tv_nsec }
+{$else}
+  PW(base + 8)^  := ms div 1000;             { it_value.tv_sec  (8-byte timespec) }
+  PW(base + 12)^ := (ms mod 1000) * 1000000; { it_value.tv_nsec }
+{$endif}
   rc := __pxxrawsyscall(SYS_timerfd_settime, tfd, 0, base, 0, 0, 0);
   WaitReadable(tfd);
   rc := __pxxrawsyscall(SYS_read, tfd, base, 8, 0, 0, 0);  { drain expirations }
   rc := __pxxrawsyscall(SYS_close, tfd, 0, 0, 0, 0, 0);
 end;
-{$else}
-{ No reactor on this target yet: degrade to a cooperative yield (busy-poll). }
-procedure WaitReadable(fd: Integer); begin CoYield; end;
-procedure WaitWritable(fd: Integer); begin CoYield; end;
-procedure CoSleep(ms: Integer); begin CoYield; end;
-{$endif}
 
 { Round-robin every runnable coroutine; when none are runnable but some are
   blocked on I/O, epoll_wait for readiness and wake them. Ends when nothing is
   runnable and nothing is blocked. }
 procedure RunUntilDone;
 var i, anyRunnable, anyBlocked: Integer;
-{$ifdef CPUX86_64}
     n, k, cid: Integer;
     evs: array[0..MAX_CO-1] of TEpollEvent;
-{$endif}
 begin
   repeat
     anyRunnable := 0;
@@ -267,19 +313,30 @@ begin
     anyBlocked := 0;
     for i := 0 to coCount - 1 do
       if coState[i] = 3 then anyBlocked := 1;
-{$ifdef CPUX86_64}
     if (anyRunnable = 0) and (anyBlocked = 1) then
     begin
       { Nothing to run but coroutines wait on I/O: block here until an fd is
-        ready, then mark the parked coroutines runnable (data = their id). }
+        ready, then mark the parked coroutines runnable (data = their id).
+        x86 uses epoll_wait; aarch64/arm32 only have epoll_pwait (sigmask=0,
+        sigsetsize=0). }
+{$ifdef CPUX86_64}
       n := Integer(__pxxrawsyscall(SYS_epoll_wait, epfd, Int64(@evs[0]), MAX_CO, -1, 0, 0));
+{$endif}
+{$ifdef CPU_I386}
+      n := Integer(__pxxrawsyscall(SYS_epoll_wait, epfd, Int64(@evs[0]), MAX_CO, -1, 0, 0));
+{$endif}
+{$ifdef CPU_AARCH64}
+      n := Integer(__pxxrawsyscall(SYS_epoll_pwait, epfd, Int64(@evs[0]), MAX_CO, -1, 0, 0));
+{$endif}
+{$ifdef CPU_ARM32}
+      n := Integer(__pxxrawsyscall(SYS_epoll_pwait, epfd, Int64(@evs[0]), MAX_CO, -1, 0, 0));
+{$endif}
       for k := 0 to n - 1 do
       begin
         cid := Integer(evs[k].data);
         coState[cid] := 1;
       end;
     end;
-{$endif}
   until (anyRunnable = 0) and (anyBlocked = 0);
   curCo := -1;
 end;
