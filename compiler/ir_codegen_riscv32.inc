@@ -107,6 +107,18 @@ begin
   end;
 end;
 
+procedure EmitSlotAddrRISCV32(rd, si: Integer);
+{ rd = address of the variable's storage slot (global abs / frame-relative). }
+begin
+  if Syms[si].Kind = skGlobal then
+    EmitLoadGlobAddrRISCV32(rd, Syms[si].Offset)
+  else
+  begin
+    EmitLoadImmRISCV32(rd, Syms[si].Offset);
+    rv32_add(rd, reg_s0, rd);
+  end;
+end;
+
 procedure EmitHeapAllocLockedRISCV32;
 { a0 = requested payload bytes -> a0 = payload pointer. PXXAlloc(size, align=8). }
 var pi: Integer;
@@ -128,7 +140,7 @@ end;
 
 procedure IREmitNodeRISCV32(node: Integer);
 var
-  left, right, op, si, pi, nArgs, i, lo, elemSize, sz, argNode: Integer;
+  left, right, op, si, pi, nArgs, i, lo, elemSize, sz, argNode, valNode: Integer;
   tk: TTypeKind;
   sgn: Boolean;
   sVal: AnsiString;
@@ -156,13 +168,12 @@ begin
     IR_LEA:
       begin
         si := IRA[node];
-        if Syms[si].Kind = skGlobal then
-          EmitLoadGlobAddrRISCV32(reg_a0, Syms[si].Offset)
-        else
-        begin
-          EmitLoadImmRISCV32(reg_a0, Syms[si].Offset);
-          rv32_add(reg_a0, reg_s0, reg_a0);
-        end;
+        EmitSlotAddrRISCV32(reg_a0, si);
+        { Dynamic array: the slot holds the heap data pointer (handle), so in a
+          read/index position load it (no COW yet). SetLength keeps the slot
+          address by computing it directly, not via IR_LEA. }
+        if Syms[si].IsArray and (Syms[si].ArrLen = -1) then
+          rv32_lw(reg_a0, reg_a0, 0);
       end;
 
     IR_FIELD:
@@ -326,6 +337,40 @@ begin
           argNode := IRB[node];               { pointer arg }
           IREmitNodeRISCV32(IRA[argNode]);    { p -> a0 }
           EmitHeapFreeLockedRISCV32;
+          Exit;
+        end;
+        if pi = -102 then
+        begin
+          { SetLength(arr, n) -> PXXDynSetLen(slotAddr, n, desc). Dynamic arrays
+            of unmanaged elements only on ESP (AnsiString SetLength deferred). }
+          argNode := IRB[node];               { arg1 = array lvalue (IR_LEA) }
+          valNode := IRB[argNode];            { arg2 = new length }
+          left := IRA[argNode];
+          if IRKind[left] <> IR_LEA then
+            Error('target riscv32: SetLength expects an array variable');
+          si := IRA[left];
+          if not (Syms[si].IsArray and (Syms[si].ArrLen = -1)) then
+            Error('target riscv32: SetLength only supports dynamic arrays yet');
+          if (Syms[si].Kind = skParam) and Syms[si].IsRef then
+            Error('target riscv32: SetLength on a var-array parameter not yet supported');
+          EmitSlotAddrRISCV32(reg_a0, si);    { a0 = slot address (not the handle) }
+          rv32_addi(reg_sp, reg_sp, -4); rv32_sw(reg_a0, reg_sp, 0);  { push slot }
+          IREmitNodeRISCV32(IRA[valNode]);    { a0 = n }
+          rv32_addi(reg_a1, reg_a0, 0);       { a1 = n }
+          rv32_lw(reg_a0, reg_sp, 0); rv32_addi(reg_sp, reg_sp, 4);   { pop slot -> a0 }
+          EmitLoadDataRefRISCV32(reg_a2, GetOrAllocSymRTTI(si));      { a2 = desc }
+          pi := FindProc('PXXDynSetLen');
+          if pi < 0 then Error('compiler error: PXXDynSetLen not found');
+          EmitCallProc(pi);
+          Exit;
+        end;
+        if pi = -Ord(tkLength) then
+        begin
+          { Length(arr): a0 = handle; count at [handle-8], nil handle -> 0. }
+          argNode := IRB[node];
+          IREmitNodeRISCV32(IRA[argNode]);    { a0 = handle (or 0) }
+          rv32_beq(reg_a0, reg_zero, 8);      { if nil, skip the load (result 0) }
+          rv32_lw(reg_a0, reg_a0, -8);
           Exit;
         end;
         if pi < 0 then

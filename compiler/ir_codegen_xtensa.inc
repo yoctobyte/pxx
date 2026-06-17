@@ -172,6 +172,15 @@ begin
   end;
 end;
 
+procedure EmitSlotAddrXtensa(rd, si: Integer);
+{ rd = address of the variable's storage slot (global abs / frame-relative). }
+begin
+  if Syms[si].Kind = skGlobal then
+    EmitLoadGlobAddrXtensa(rd, Syms[si].Offset)
+  else
+    EmitFrameAddrXtensa(rd, Syms[si].Offset);
+end;
+
 procedure EmitHeapAllocLockedXtensa;
 { a2 = requested payload bytes -> a2 = payload pointer. Delegates to the Pascal
   PXXAlloc(size, align=8). No threadsafe lock (x86-64-only). }
@@ -206,7 +215,7 @@ end;
 
 procedure IREmitNodeXtensa(node: Integer);
 var
-  left, right, op, si, pi, nArgs, i, lo, elemSize, sz, argNode, argBase: Integer;
+  left, right, op, si, pi, nArgs, i, lo, elemSize, sz, argNode, argBase, valNode: Integer;
   tk: TTypeKind;
   sgn: Boolean;
   sVal: AnsiString;
@@ -238,6 +247,10 @@ begin
           EmitLoadGlobAddrXtensa(reg_xtensa_a2, Syms[si].Offset)
         else
           EmitFrameAddrXtensa(reg_xtensa_a2, Syms[si].Offset);
+        { Dynamic array: slot holds the heap data pointer (handle); load it in a
+          read/index position (no COW yet). SetLength keeps the slot address. }
+        if Syms[si].IsArray and (Syms[si].ArrLen = -1) then
+          xtensa_l32i(reg_xtensa_a2, reg_xtensa_a2, 0);
       end;
 
     IR_FIELD:
@@ -385,6 +398,56 @@ begin
           argNode := IRB[node];                 { pointer arg }
           IREmitNodeXtensa(IRA[argNode]);       { p -> a2 }
           EmitHeapFreeLockedXtensa;
+          Exit;
+        end;
+        if pi = -102 then
+        begin
+          { SetLength(arr, n) -> PXXDynSetLen(slotAddr, n, desc). Dynamic arrays
+            of unmanaged elements only on ESP (AnsiString SetLength deferred). }
+          argNode := IRB[node];                 { arg1 = array lvalue (IR_LEA) }
+          valNode := IRB[argNode];              { arg2 = new length }
+          left := IRA[argNode];
+          if IRKind[left] <> IR_LEA then
+            Error('target xtensa: SetLength expects an array variable');
+          si := IRA[left];
+          if not (Syms[si].IsArray and (Syms[si].ArrLen = -1)) then
+            Error('target xtensa: SetLength only supports dynamic arrays yet');
+          if (Syms[si].Kind = skParam) and Syms[si].IsRef then
+            Error('target xtensa: SetLength on a var-array parameter not yet supported');
+          argBase := XtSpillDepth;
+          EmitSlotAddrXtensa(reg_xtensa_a2, si); { a2 = slot address (not the handle) }
+          XtensaPushA2;
+          IREmitNodeXtensa(IRA[valNode]);       { a2 = n }
+          XtensaPushA2;
+          EmitLoadDataRefXtensa(reg_xtensa_a2, GetOrAllocSymRTTI(si)); { a2 = desc }
+          XtensaPushA2;
+          pi := FindProc('PXXDynSetLen');
+          if pi < 0 then Error('compiler error: PXXDynSetLen not found');
+          if XtensaABI = XTENSA_ABI_WINDOWED then
+          begin
+            xtensa_l32i(reg_xtensa_a10, reg_xtensa_sp, argBase + 0);
+            xtensa_l32i(reg_xtensa_a11, reg_xtensa_sp, argBase + 4);
+            xtensa_l32i(reg_xtensa_a12, reg_xtensa_sp, argBase + 8);
+            XtSpillDepth := argBase;
+          end
+          else
+          begin
+            xtensa_l32i(reg_xtensa_a2, reg_xtensa_sp, 8);
+            xtensa_l32i(reg_xtensa_a3, reg_xtensa_sp, 4);
+            xtensa_l32i(reg_xtensa_a4, reg_xtensa_sp, 0);
+            xtensa_addi(reg_xtensa_sp, reg_xtensa_sp, 12);
+          end;
+          EmitCallProc(pi);
+          Exit;
+        end;
+        if pi = -Ord(tkLength) then
+        begin
+          { Length(arr): a2 = handle; count at [handle-8], nil handle -> 0.
+            (l32i has no negative offset, so address via addi first.) }
+          argNode := IRB[node];
+          IREmitNodeXtensa(IRA[argNode]);       { a2 = handle (or 0) }
+          EmitAsmXtensa(['movi a4, 0', 'beq a2, a4, .lzero',
+                         'addi a2, a2, -8', 'l32i a2, a2, 0', '.lzero:']);
           Exit;
         end;
         if pi < 0 then

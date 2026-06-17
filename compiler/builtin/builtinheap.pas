@@ -53,8 +53,13 @@ const
 function PXXAlloc(size: NativeInt; align: Integer): Pointer;
 procedure PXXFree(p: Pointer);
 function PXXRealloc(p: Pointer; newSize: NativeInt; align: Integer): Pointer;
-{ ESP gets only the allocator for now; the managed-string / variant / dynarray /
-  float helpers are not yet ported there (guarded in the body too). }
+{ ESP gets the allocator plus a lean unmanaged-element dynarray (SetLength).
+  Managed-element retain/release (strings/records/nested arrays) is not ported
+  yet, so the ESP PXXDynSetLen skips it; the string/variant/float helpers stay
+  fully guarded out. }
+{$ifdef PXX_ESP}
+procedure PXXDynSetLen(arrSlot: Pointer; newLen: NativeInt; desc: Pointer);
+{$endif}
 {$ifndef PXX_ESP}
 function PXXStrFromLit(len: NativeInt; src: Pointer): Pointer;
 function PXXStrConcat(lenA: NativeInt; srcA: Pointer; srcB: Pointer; lenB: NativeInt): Pointer;
@@ -227,6 +232,62 @@ begin
   PXXFree(p);
   Result := np;
 end;
+
+{$ifdef PXX_ESP}
+{ ESP lean dynamic array: unmanaged elements only (no per-element retain/release
+  -- strings/records/nested arrays are not on ESP yet). Block layout matches the
+  shared runtime: [refcount:word][length:word][data], handle = data pointer,
+  length read at [handle-8]. desc layout: +4 elSize. }
+procedure PXXDynArrayReleaseEsp(arrData: Pointer);
+var block, rc: Int64;
+begin
+  if arrData = nil then Exit;
+  block := Int64(arrData) - 16;            { refcount word at block base }
+  rc := PWord(block)^ - 1;
+  PWord(block)^ := rc;
+  if rc <= 0 then PXXFree(Pointer(block));
+end;
+
+procedure PXXDynSetLen(arrSlot: Pointer; newLen: NativeInt; desc: Pointer);
+var
+  oldData, newBlock, newArrData: Pointer;
+  oldLen, elSize, copyLen, i: Int64;
+begin
+  if (arrSlot = nil) or (desc = nil) then Exit;
+  oldData := Pointer(PWord(arrSlot)^);
+  elSize := PInt32(Int64(desc) + 4)^;
+  if newLen <= 0 then
+  begin
+    PWord(arrSlot)^ := 0;
+    PXXDynArrayReleaseEsp(oldData);
+    Exit;
+  end;
+  newBlock := PXXAlloc(16 + newLen * elSize, 8);
+  PWord(newBlock)^ := 1;                          { refcount }
+  PWord(Int64(newBlock) + 8)^ := newLen;          { length }
+  newArrData := Pointer(Int64(newBlock) + 16);
+  i := 0;
+  while i < newLen * elSize do
+  begin
+    PByte(Int64(newArrData) + i)^ := 0;
+    i := i + 1;
+  end;
+  if oldData <> nil then
+  begin
+    oldLen := PWord(Int64(oldData) - 8)^;
+    copyLen := oldLen;
+    if newLen < copyLen then copyLen := newLen;
+    i := 0;
+    while i < copyLen * elSize do
+    begin
+      PByte(Int64(newArrData) + i)^ := PByte(Int64(oldData) + i)^;
+      i := i + 1;
+    end;
+  end;
+  PWord(arrSlot)^ := Int64(newArrData);
+  PXXDynArrayReleaseEsp(oldData);
+end;
+{$endif}
 
 {$ifndef PXX_ESP}
 { Managed-string constructor: allocate a [refcount:8][length:8][data][nul]
