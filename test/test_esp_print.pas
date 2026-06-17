@@ -7,7 +7,11 @@ program test_esp_print;
   runs on the riscv32 stage-1 subset, the bootstrap output path for the ESP
   harness. PutC takes a raw ASCII code so no Char/Ord/Chr lowering is needed. }
 
-{$ifdef CPU_RISCV32}
+{ Both esp ISAs (xtensa S2/S3 + riscv32 C3) share the IDF ROM-console path. }
+{$ifdef CPU_XTENSA}{$define PXX_ESP}{$endif}
+{$ifdef CPU_RISCV32}{$define PXX_ESP}{$endif}
+
+{$ifdef PXX_ESP}
 procedure esp_rom_printf(fmt: string; v: Integer); external;
 procedure vTaskDelay(ticks: Integer); external;
 
@@ -61,7 +65,7 @@ begin
     sum := sum + i;
   end;
   PrintLnInt(sum);
-{$ifdef CPU_RISCV32}
+{$ifdef PXX_ESP}
   { app_main has no returning epilogue on esp yet; park politely so the
     FreeRTOS idle task keeps feeding the watchdog while qemu is captured. }
   while True do
