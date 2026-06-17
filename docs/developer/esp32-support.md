@@ -20,6 +20,16 @@ PXX should treat ESP32 as two explicit target profiles:
 The compiler remains independent. The IDF dependency is a platform backend
 dependency, not the identity of the compiler.
 
+## ISA baseline
+
+The ESP backends emit native hardware opcodes for a modern-part baseline,
+matching the Espressif gcc toolchains: **Xtensa = ESP32-S2/S3 (LX7) and
+later** (32-bit multiply + divide options: `mull`, `quos`/`rems`, SAR
+shifts); **RISC-V = ESP32-C3 and later** (RV32IMC, `mul`/`div`/`rem`). These
+are the user's boards. Software fallbacks for ESP32-classic (LX6, no divide
+option) and similar are deferred — see
+`docs/progress/backlog/feature-esp-isa-baseline-softfallback.md`.
+
 ## Current state (2026-06-12)
 
 Stage 1 (bare codegen) and the relocatable object writer are done:
