@@ -199,3 +199,32 @@ test-core; bootstrap + cross-bootstrap stay byte-identical.
   Recommended order: bug 1 (codegen, validates on aarch64) → bug 2 (typinfo
   CPU32 padding, i386/arm32) → bug 3 (sets). CPU32/CPU64 defines exist
   (lexer.inc) for the padding guard.
+- 2026-06-17 — **RTTI metaclass works on all 4 targets** (bug 1 + bug 2 closed;
+  bug 3 = sets still pending for test_rtti).
+  - **Bug 2 (blob stride):** fixed reader-side via 4-byte stubs after each
+    Pointer field in the typinfo RTTI records under the CPU32 conditional
+    (standard conditional compilation; CPU32 is a real define, no
+    dialect/compiler change; x86-64/aarch64 untouched -> byte-identical).
+    Researched first: FPC's PACKRECORDS/ALIGN are alignment *caps*, not floors —
+    they cannot pad a 4-byte field into an 8-byte slot — so a force-align
+    directive would have been non-standard; the conditional padding is the
+    standard-Pascal way.
+  - **Bug 1 was "frozen strings broadly under-supported on cross"**, not
+    RTTI-specific: plain `s := t` and `Length(t)` on a frozen `string` returned
+    garbage on i386/aarch64 (the cross suites only exercised managed AnsiString
+    via -dPXX_MANAGED_STRING). Root cause: cross IR_STORE_SYM had no
+    frozen-tyString copy path (scalar-stored the source ADDRESS into the slot,
+    clobbering [len]); cross `Length` used the managed `[handle-8]` formula
+    instead of the frozen `[buf+0]`. Fixed both on all three cross targets
+    (store-sym copy incl. char->string; Length frozen branch), mirroring x86-64.
+    test_classref / test_class_of / test_class / inheritance / methcall /
+    methodptr now byte-identical on i386/aarch64/arm32; wired into the suites.
+  - **Rainy-afternoon notes (decided, not yet actioned):**
+    1. The CPU32 RTTI padding wastes a few bytes per blob record on 32-bit
+       (irrelevant even on ESP32). Acceptable; revisit only if it ever matters.
+    2. Frozen `string` capacity: historically huge fixed buffers (wasteful).
+       Future direction = old-school ShortString semantics: `string` defaults to
+       255 bytes, `string[N]` for explicit sizing (FPC-compatible). The compiler
+       itself uses managed AnsiString, so compiler.pas needs no change. Keep this
+       model in mind for further frozen-string work. Do NOT add a third string
+       type.

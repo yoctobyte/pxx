@@ -914,6 +914,52 @@ begin
           end;
           Exit;
         end;
+        if (Syms[si].TypeKind = tyString) and not Syms[si].IsArray then
+        begin
+          { Frozen inline-string assignment (s := <string>): copy [len:8][chars]
+            from the source into s's buffer (r6=dst, r5=src, r4=count). Without
+            this the scalar store below dropped the source address into s. }
+          valNode := IRB[node];
+          IREmitNodeArm32(valNode);                   { r0 = source addr (or char) }
+          EmitI32($E92D0001);                         { push {r0} }
+          if Syms[si].Kind = skGlobal then
+          begin
+            EmitI32($E59F6000);                       { ldr r6, [pc] }
+            EmitI32($EA000000);                       { b .+8 }
+            EmitGlobRef(Syms[si].Offset);
+          end
+          else if Syms[si].Kind = skParam then
+          begin
+            EmitLoadImmArm32(9, Syms[si].Offset);
+            EmitI32($E08B9009);                       { add r9, fp, r9 }
+            EmitI32($E5996000);                       { ldr r6, [r9] (forwarded ptr) }
+          end
+          else
+          begin
+            EmitLoadImmArm32(9, Syms[si].Offset);
+            EmitI32($E08B6009);                       { add r6, fp, r9 (local buffer) }
+          end;
+          EmitI32($E8BD0020);                         { pop {r5} (src/char) }
+          if IntToTypeKind(IRTk[valNode]) = tyChar then
+          begin
+            { r5 = char ordinal -> [len=1][char] }
+            EmitLoadImmArm32(9, 1);
+            EmitI32($E5869000);                       { str r9, [r6] (len=1) }
+            EmitLoadImmArm32(9, 0);
+            EmitI32($E5869004);                       { str r9, [r6,#4] }
+            EmitI32($E5C65008);                       { strb r5, [r6,#8] }
+            Exit;
+          end;
+          EmitI32($E5959000);                         { ldr r9, [r5] (len lo) }
+          EmitI32($E5869000);                         { str r9, [r6] }
+          EmitI32($E5959004);                         { ldr r9, [r5,#4] (len hi) }
+          EmitI32($E5869004);                         { str r9, [r6,#4] }
+          EmitI32($E5954000);                         { ldr r4, [r5] (count) }
+          EmitI32($E2855008);                         { add r5, r5, #8 }
+          EmitI32($E2866008);                         { add r6, r6, #8 }
+          EmitArm32CopyBytes(4, 5, 6);
+          Exit;
+        end;
         tk := Syms[si].TypeKind;
         if TypeIsFloat(tk) then
         begin
@@ -1345,6 +1391,16 @@ begin
           { Length(arr): IR_LEA auto-loaded the data pointer; count at [handle-8]. }
           argNode := IRB[node];
           valNode := IRA[argNode];
+          if (IntToTypeKind(IRTk[valNode]) = tyString) or
+             ((IRKind[valNode] = IR_LEA) and
+              (Syms[IRA[valNode]].TypeKind = tyString) and
+              not Syms[IRA[valNode]].IsArray) then
+          begin
+            { Frozen inline string: length is the 8-byte prefix at [buffer+0]. }
+            IREmitNodeArm32(valNode);    { r0 = frozen buffer addr }
+            EmitI32($E5900000);          { ldr r0, [r0] }
+            Exit;
+          end;
           IREmitNodeArm32(valNode);      { r0 = handle (or 0) }
           if (IRKind[valNode] = IR_INDEX) or (IRKind[valNode] = IR_FIELD) or
              ((IRKind[valNode] = IR_LEA) and (Syms[IRA[valNode]].Kind = skParam) and

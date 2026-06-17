@@ -88,9 +88,10 @@ Each ✗ is a checklist item below the table. Seeded by grepping
 | Method pointers (`of object`) | ✓ | ✓ | ✓ | ✓ | done 2026-06-17 (TARGET_PTR_SIZE TMethod.Data) |
 | Aggregate-valued fn results (records/sets) | ✓ | ✓ | ✓ | ✓ | done 2026-06-17 (hidden-dest ABI; ecx/x8/r12) |
 | Frozen inline-string store-through-ptr | ✓ | ✓ | ✓ | ✓ | done 2026-06-17 (typinfo SetStrProp) |
-| Metaclass value (`cref := TFoo`, IR_CLASSREF) | ✓ | ✓ | ✓ | ✓ | op done; blob layout below blocks correct reads |
-| Metaclass / RTTI streaming (field reads) | ✓ | ◐ | ◐ | ◐ | RTTI blob uses fixed 8-byte strides; needs target-aware layout for 32-bit (aarch64 separate DIFF) |
-| Collections / dynarray-of-record depth | ✓ | ✗ | ✗ | ✗ | `setlen_dyn` / `dynunique` / `set_lit` IR ops unported |
+| Metaclass value (`cref := TFoo`, IR_CLASSREF) | ✓ | ✓ | ✓ | ✓ | done 2026-06-17 |
+| Metaclass / RTTI streaming (field+name reads) | ✓ | ✓ | ✓ | ✓ | done 2026-06-17 (CPU32 blob padding + frozen-string fixes) |
+| Frozen `string` copy / `Length` on cross | ✓ | ✓ | ✓ | ✓ | done 2026-06-17 (was managed-only); future: ShortString-255 sizing |
+| Collections / dynarray-of-record depth | ✓ | ✗ | ✗ | ✗ | `setlen_dyn` / `dynunique` / `set_lit` IR ops unported (test_rtti needs sets) |
 | Interfaces | ◐ | ✗ | ✗ | ✗ | feature-interfaces; classes now unblock it |
 | External (C-library) calls | ✓ | ✗ | ✗ | ✗ | `386:1994` `aarch64:1419` `arm32:1598` |
 | External/dynamic symbols (ELF) | ✓ | ✗ | n/a | ✗ | `elfwriter.inc:622,628` |

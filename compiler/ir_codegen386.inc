@@ -1044,6 +1044,41 @@ begin
           end;
           Exit;
         end;
+        if (Syms[si].TypeKind = tyString) and not Syms[si].IsArray then
+        begin
+          { Frozen inline-string assignment (s := <string>): copy [len:8][chars]
+            from the source into s's buffer. Without this the scalar store below
+            dropped the source ADDRESS into s's slot, clobbering [len]. }
+          valNode := IRB[node];
+          IREmitNode386(valNode);                     { eax = source string addr (or char ordinal) }
+          EmitB($50);                                 { push source/char }
+          if Syms[si].Kind = skGlobal then
+            begin EmitB($B8); EmitGlobRef(Syms[si].Offset); end          { mov eax, globaddr }
+          else if Syms[si].Kind = skParam then
+            begin EmitB($8B); EmitB($85); EmitI32(Syms[si].Offset); end  { mov eax, [ebp+off] (forwarded ptr) }
+          else
+            begin EmitB($8D); EmitB($85); EmitI32(Syms[si].Offset); end; { lea eax, [ebp+off] }
+          EmitB($89); EmitB($C7);                     { mov edi, eax (dst) }
+          EmitB($5E);                                 { pop esi (src/char) }
+          if IntToTypeKind(IRTk[valNode]) = tyChar then
+          begin
+            { esi = char ordinal -> [len=1][char] }
+            EmitB($C7); EmitB($07); EmitI32(1);       { mov dword [edi], 1 }
+            EmitB($C7); EmitB($47); EmitB($04); EmitI32(0); { mov dword [edi+4], 0 }
+            EmitB($89); EmitB($F0);                   { mov eax, esi }
+            EmitB($88); EmitB($47); EmitB($08);       { mov byte [edi+8], al }
+            Exit;
+          end;
+          EmitB($8B); EmitB($0E);                     { mov ecx, [esi] (len lo) }
+          EmitB($89); EmitB($0F);                     { mov [edi], ecx }
+          EmitB($8B); EmitB($4E); EmitB($04);         { mov ecx, [esi+4] (len hi) }
+          EmitB($89); EmitB($4F); EmitB($04);         { mov [edi+4], ecx }
+          EmitB($8B); EmitB($0E);                     { mov ecx, [esi] (count) }
+          EmitB($83); EmitB($C6); EmitB($08);         { add esi, 8 }
+          EmitB($83); EmitB($C7); EmitB($08);         { add edi, 8 }
+          EmitB($F3); EmitB($A4);                     { rep movsb }
+          Exit;
+        end;
         IREmit386CheckScalarSym(IRA[node], 'store');
         si := IRA[node];
         tk := Syms[si].TypeKind;
@@ -1748,6 +1783,16 @@ begin
             element count lives at [handle-8] (0 when nil). }
           argNode := IRB[node];
           valNode := IRA[argNode];
+          if (IntToTypeKind(IRTk[valNode]) = tyString) or
+             ((IRKind[valNode] = IR_LEA) and
+              (Syms[IRA[valNode]].TypeKind = tyString) and
+              not Syms[IRA[valNode]].IsArray) then
+          begin
+            { Frozen inline string: length is the 8-byte prefix at [buffer+0]. }
+            IREmitNode386(valNode);      { eax = frozen buffer addr }
+            EmitB($8B); EmitB($00);      { mov eax, [eax] }
+            Exit;
+          end;
           IREmitNode386(valNode);        { eax = handle (data ptr) or 0 }
           if (IRKind[valNode] = IR_INDEX) or (IRKind[valNode] = IR_FIELD) or
              ((IRKind[valNode] = IR_LEA) and (Syms[IRA[valNode]].Kind = skParam) and
