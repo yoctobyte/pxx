@@ -1,9 +1,28 @@
-# Cross-target feature parity (close the x86-64-only gaps)
+# Cross-target language-feature parity (Intel + ARM)
 
 - **Type:** feature
 - **Status:** urgent
 - **Owner:** —
 - **Opened:** 2026-06-16 (user request: "cross targets next — new features AND old ones, incl object support; validate we don't overlook something")
+- **Combines:** feature-async-language-surface — its remaining open items are
+  folded in here as a sub-track (see "Async sub-track" below); that ticket keeps
+  the async design detail.
+
+## Target scope (decided 2026-06-17)
+
+In scope **now** — the four Linux targets, in two families:
+
+- **Intel:** x86-64, i386
+- **ARM:** aarch64, arm32
+
+**Deferred** until Intel + ARM parity is done **and tested**: the embedded
+targets — **Xtensa** and **RISC-V (RV32)** / ESP32. They already self-host
+codegen, but the language-feature port (classes, async I/O, external symbols, …)
+is *not* chased on them in this arc. Reopen the ESP/embedded path
+(feature-esp32-*) once x86-64/i386/aarch64/arm32 are at full parity. Rationale:
+keep the audit bounded to the four hosted targets where QEMU oracles are cheap
+and the byte-identical fixedpoint is already proven; embedded RAM/ABI
+constraints are a separate concern, best handled after the feature set is settled.
 
 ## Motivation
 
@@ -35,6 +54,25 @@ missed.
 4. **Method-pointer data fixups** (`MethodFixups`) — i386/arm32 ELF writer
    blocks them; needed for class VMTs / streaming on cross.
 
+## Async sub-track (folded in from feature-async-language-surface)
+
+The async **language surface** is already shipped byte-identical on all four
+targets: `; async;` directive + `await` marker, the stackful default, the
+stackless state-machine backend (`; async; stackless;`), configurable small
+coroutine stacks + overflow canary, scheduler/channels. So async is **not** a
+cross gap at the language-surface level. What remains (open items inherited from
+that ticket, now tracked here):
+
+- **Async I/O on cross** — same as Known-gap #2 above (the epoll reactor /
+  `asyncnet` / `CoSleep` are x86-64-only; need per-arch syscall numbers, incl.
+  `epoll_pwait` on aarch64/arm32 and i386 `socketcall`). This is the real
+  cross-parity item for async.
+- Stackless v1 follow-ups (params via instance slots; a `Task`/`Future` for
+  `await`-with-result) and the Nil-Python `async def`/`await` shim — feature
+  depth, **not** target parity; do opportunistically, not gating.
+
+See feature-async-language-surface for the locked spelling and transform detail.
+
 ## Plan
 
 1. **Audit pass:** extend `docs/developer/feature-matrix.md` into a real
@@ -62,3 +100,11 @@ test-core; bootstrap + cross-bootstrap stay byte-identical.
 - 2026-06-16 — opened. Seeded from the procedural-types/async arc, where method
   pointers and the reactor landed x86-64-only and surfaced the classes-on-cross
   gap as the dominant blocker.
+- 2026-06-17 — **scoped + combined.** Target scope locked to Intel (x86-64,
+  i386) + ARM (aarch64, arm32); Xtensa / RISC-V (ESP32) deferred until those four
+  are at parity and tested. Folded feature-async-language-surface's open items in
+  as the "Async sub-track" (the async surface itself is already shipped on all
+  four targets; only the cross async-I/O reactor is a real parity gap). This is
+  now the single umbrella for "finish all language features on the Intel + ARM
+  targets." Next concrete step: the audit pass (per-target feature matrix) →
+  classes-on-cross.

@@ -8,7 +8,7 @@ lives in git, not in a timestamp._
 
 | Ticket | Type | Summary | Blocked-by |
 | --- | --- | --- | --- |
-| feature-cross-target-feature-parity | feature | Cross-target feature parity (close the x86-64-only gaps) | — |
+| feature-cross-target-feature-parity | feature | Cross-target language-feature parity (Intel + ARM) | — |
 
 ## working (0)
 

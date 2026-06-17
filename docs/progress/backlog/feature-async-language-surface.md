@@ -1,10 +1,19 @@
 # Async language surface + stackless coroutine backend
 
 - **Type:** feature
-- **Status:** backlog
+- **Status:** backlog (surface shipped; open items folded into
+  feature-cross-target-feature-parity)
 - **Owner:** —
 - **Blocked-by:** feature-cross-target-feature-parity
 - **Opened:** 2026-06-16 (design discussion — async ergonomics, ESP, Nil Python)
+
+> **Combined 2026-06-17.** The async language surface (`; async;` + `await`,
+> stackful default, stackless backend, small stacks) is **shipped byte-identical
+> on all four targets**. The remaining open items — cross async-I/O reactor,
+> stackless params, `Task`/`Future`, Nil-Python `async def` shim — are now
+> tracked under **feature-cross-target-feature-parity** (its "Async sub-track").
+> This file is retained for the locked spelling + transform design detail; do
+> not work it independently.
 
 ## Motivation
 
