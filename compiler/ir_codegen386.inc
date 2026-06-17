@@ -2512,6 +2512,9 @@ begin
         EmitB($F3); EmitB($AA);                      { rep stosb }
       end;
 
+    IR_CLASSREF:
+      begin EmitB($B8); EmitDataRef(-(CLASSREF_DATAREF_BASE + IRA[node])); end; { mov eax, class RTTI blob addr }
+
     IR_RTTI_REG:
       begin EmitB($B8); EmitDataRef(-100); end;   { mov eax, RTTI-registry addr }
 

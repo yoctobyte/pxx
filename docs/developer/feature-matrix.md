@@ -85,14 +85,16 @@ Each ✗ is a checklist item below the table. Seeded by grepping
 | Class fields / methods / virtual dispatch | ✓ | ✓ | ✓ | ✓ | incl. inheritance + properties |
 | `__rttireg` / `__resources` ops | ✓ | ✓ | ✓ | ✓ | done 2026-06-17 |
 | Class-reference field/var store (`tyClass`) | ✓ | ✓ | ✓ | ✓ | done 2026-06-17 |
-| Method pointers (`of object`) | ✓ | ✗ | ✓ | ✗ | i386/arm32 DIFF (32-bit Code/Data value); aarch64 OK |
-| Metaclass / `class of` / RTTI streaming | ✓ | ◐ | ◐ | ◐ | hit a deeper store-through-ptr gap; sub-arc |
-| Collections / dynarray-of-record depth | ✓ | ✗ | ✗ | ✗ | `setlen_dyn` / `dynunique` IR ops unported |
+| Method pointers (`of object`) | ✓ | ✓ | ✓ | ✓ | done 2026-06-17 (TARGET_PTR_SIZE TMethod.Data) |
+| Aggregate-valued fn results (records/sets) | ✓ | ✓ | ✓ | ✓ | done 2026-06-17 (hidden-dest ABI; ecx/x8/r12) |
+| Frozen inline-string store-through-ptr | ✓ | ✓ | ✓ | ✓ | done 2026-06-17 (typinfo SetStrProp) |
+| Metaclass value (`cref := TFoo`, IR_CLASSREF) | ✓ | ✓ | ✓ | ✓ | op done; blob layout below blocks correct reads |
+| Metaclass / RTTI streaming (field reads) | ✓ | ◐ | ◐ | ◐ | RTTI blob uses fixed 8-byte strides; needs target-aware layout for 32-bit (aarch64 separate DIFF) |
+| Collections / dynarray-of-record depth | ✓ | ✗ | ✗ | ✗ | `setlen_dyn` / `dynunique` / `set_lit` IR ops unported |
 | Interfaces | ◐ | ✗ | ✗ | ✗ | feature-interfaces; classes now unblock it |
 | External (C-library) calls | ✓ | ✗ | ✗ | ✗ | `386:1994` `aarch64:1419` `arm32:1598` |
 | External/dynamic symbols (ELF) | ✓ | ✗ | n/a | ✗ | `elfwriter.inc:622,628` |
 | Method-pointer fixups (ELF) | ✓ | ✓ | ✓ | ✓ | done 2026-06-17 (writeELF32 + 64-bit writeELF) |
-| Aggregate-valued fn results | ✓ | ✗ | ✗ | ✗ | `386:1996` `aarch64:1421` `arm32:1600` |
 | `SetLength` on var-array param | ✓ | ✗ | ✗ | ✗ | `386:1705` `aarch64:1118` `arm32:1293` |
 | Async I/O reactor (epoll/asyncnet/CoSleep) | ✓ | ✗ | ✗ | ✗ | per-arch syscalls (epoll_pwait, socketcall) |
 | RTTI / streaming / LFM | ✓ | ◐ | ◐ | ◐ | needs ELF method fixups |
@@ -112,9 +114,15 @@ Dominant blocker first; items sharing a fix are grouped.
    - [x] class field / method access + virtual dispatch (incl. inheritance, properties)
    - [x] `__rttireg` / `__resources` ops on all three
    - [x] class-reference field/var stores (`tyClass`) on all three
-   - [ ] method pointers (`of object`) on i386 + arm32 (DIFF — 32-bit Code/Data value layout; aarch64 OK)
-   - [ ] metaclass / `class of` / RTTI streaming (deeper store-through-ptr gap)
-   - [ ] collections / dynarray-of-record (`setlen_dyn`, `dynunique` IR ops)
+   - [x] method pointers (`of object`) on all four (TARGET_PTR_SIZE TMethod.Data)
+   - [x] aggregate-valued fn results (records/sets) on all four (hidden-dest ABI)
+   - [x] frozen inline-string store-through-ptr on all three cross targets
+   - [x] `IR_CLASSREF` metaclass value (`cref := TFoo`) on all three
+   - [ ] **RTTI blob target-aware layout** — blob strides are fixed 8-byte
+     (`rtti_emit.inc` hdr+0/8/16/24/32/40, `RTTI_CLS_SIZE`/`RTTI_PROP_SIZE`);
+     32-bit `PClassRTTI` reads at 4-byte offsets → garbage on i386/arm32.
+     Re-check aarch64 (DIFF despite 64-bit). Blocks test_classref/class_of/rtti.
+   - [ ] collections / dynarray-of-record (`setlen_dyn`, `dynunique`, `set_lit`)
    - [ ] interfaces (now unblocked by classes) — feature-interfaces
 2. **ELF32 dynamic-link path** (i386/arm32):
    - [x] method-pointer fixups — done (writeELF32 apply loop)

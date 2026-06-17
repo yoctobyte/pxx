@@ -144,3 +144,25 @@ test-core; bootstrap + cross-bootstrap stay byte-identical.
   dynarray-of-record (`setlen_dyn` / `dynunique` IR ops), interfaces (now
   unblocked). Then external C calls + ELF32 external symbols, then the async
   reactor.
+- 2026-06-17 — **method pointers + aggregate-return + frozen-string store on
+  cross.** (1) Method pointers (`of object`): the @obj.method store and the
+  method-ptr call hardcoded TMethod.Data at +8 (x86-64) — switched both to
+  `TARGET_PTR_SIZE`, so i386/arm32 read/write Data at +4. test_methodptr +
+  test_methcall byte-identical on all four. (2) **Aggregate-valued results**
+  (records/sets by value) on i386/aarch64/arm32: hidden-destination ABI mirroring
+  x86-64 — caller passes the result-buffer addr in a per-arch reg (i386 ecx,
+  aarch64 x8/AAPCS XR, arm32 r12/ip) pushed deepest before args; prologue stashes
+  it; epilog rep-copies the Result local into [dest] and returns the pointer.
+  test_cross_aggregate_return byte-identical all four. (3) Frozen inline-string
+  store-through-pointer (`PString(p)^ := s`) on all three cross targets (prefix +
+  byte copy). (4) `IR_CLASSREF` (metaclass value `cref := TFoo`) on all three
+  (sentinel data-ref, resolved in compiler.pas). All wired into suites;
+  `make test` + `cross-bootstrap` byte-identical throughout. **RTTI/metaclass
+  remaining blocker:** the RTTI class blob (rtti_emit.inc) uses *fixed 8-byte*
+  field strides (`hdr+0/8/16/24/32/40`, `RTTI_CLS_SIZE`/`RTTI_PROP_SIZE`),
+  correct on 64-bit but mismatching the 4-byte-pointer `PClassRTTI` record that
+  typinfo reads on i386/arm32 → metaclass field reads return garbage (test_classref
+  / test_class_of now compile but DIFF). Fix = make the blob strides/sizes
+  target-aware (`TARGET_PTR_SIZE`); also re-check aarch64 (DIFF despite 64-bit —
+  separate registry/prop issue). test_rtti additionally needs sets on cross
+  (`set_lit` / `dynunique`) — the collections sub-track.

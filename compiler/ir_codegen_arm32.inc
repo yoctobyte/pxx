@@ -2054,6 +2054,9 @@ begin
         end;
       end;
 
+    IR_CLASSREF:
+      EmitLoadDataRefArm32(0, -(CLASSREF_DATAREF_BASE + IRA[node])); { r0 = class RTTI blob addr }
+
     IR_RTTI_REG:
       EmitLoadDataRefArm32(0, -100);   { r0 = RTTI-registry addr (sentinel) }
 
