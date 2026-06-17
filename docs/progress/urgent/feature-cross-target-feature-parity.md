@@ -296,3 +296,27 @@ test-core; bootstrap + cross-bootstrap stay byte-identical.
   scheduler), so the self-host fixedpoint is untouched. Remaining cross gaps:
   external C calls + ELF32 dynamic symbols (codegen386:2084 / aarch64:1512 /
   arm32:1700; elfwriter:622/627).
+- 2026-06-17 — **item 3 (external C calls + ELF32 dynamic symbols) scoped; not
+  started — environment blocker for ARM.** Mapped the x86-64 dynamic-link design:
+  RegisterExternal (symtab.inc) allocs a pointer-sized GOT slot in .data per
+  external; EmitExternalIndirectCall emits `call qword [abs32]` (FF 14 25) +
+  records a DynCall fixup (code pos + extIdx); writeELF's PrepareDynamicData /
+  PatchDynamicData (elfwriter.inc) build .dynsym/.dynstr/relocations + GOT and
+  patch the abs32 call operands to the GOT slot VAs. The whole mechanism is built
+  on x86-64's absolute-addressed indirect call (ET_EXEC, low fixed VA in 32 bits)
+  — there is no equivalent single instruction on aarch64/arm32, so each needs (a)
+  a GOT-slot call sequence (e.g. aarch64 movz/movk x16 = slot VA; ldr x16,[x16];
+  blr x16 — patchable as absolute under ET_EXEC) and (b) arch-aware DynCall fixup
+  patching in writeELF. i386 additionally needs the full ELF32 dynamic section
+  (elfwriter.inc:622) ported from the 64-bit writeELF. aarch64 is cheapest at the
+  ELF layer (64-bit writeELF already emits dynamic symbols → blocked only at
+  codegen), i386 the most (codegen + ELF32 dyn).
+  **Blocker:** cross dynamic loaders are absent in this environment —
+  `ld-linux-aarch64.so.1` and the arm sysroot are missing (only i386
+  `/lib/ld-linux.so.2` is present). PXX binaries are static/syscall-only by design
+  (tools/run_target.sh), so dynamically-linked aarch64/arm32 output cannot be run
+  under QEMU here → byte-identical-is-law cannot be satisfied for those two until
+  a cross libc + loader is installed. Only i386 external calls are validatable
+  locally. Recommend tackling i386 first (validatable end-to-end), and gating
+  aarch64/arm32 external calls behind installing the cross runtimes (or accept
+  ELF-structural-only validation). No code changed for item 3 this session.
