@@ -456,6 +456,85 @@ begin
         right := IRB[node];
         op := IRC[node];
 
+        if (IntToTypeKind(IRTk[node]) = tyAnsiString) and (op = Ord(tkPlus)) then
+        begin
+          { Managed-string concat -> PXXStrConcat(lenA, srcA, srcB, lenB). Operand
+            len/src into a4=lenA,a5=srcA,a6=srcB,a7=lenB (a2-a7 survive call8). }
+          argBase := XtSpillDepth;
+          IREmitNodeXtensa(left);  XtensaPushA2;       { lhs @ argBase }
+          IREmitNodeXtensa(right); XtensaPushA2;       { rhs @ argBase+4 }
+          { rhs -> srcB(a6)/lenB(a7) }
+          xtensa_l32i(reg_xtensa_a8, reg_xtensa_sp, argBase + 4);
+          if IntToTypeKind(IRTk[right]) = tyAnsiString then
+          begin
+            xtensa_mov(reg_xtensa_a6, reg_xtensa_a8);
+            EmitAsmXtensa(['movi a7, 0', 'movi a9, 0', 'beq a8, a9, .cb',
+                           'addi a9, a8, -8', 'l32i a7, a9, 0', '.cb:']);
+          end
+          else if IntToTypeKind(IRTk[right]) = tyString then
+          begin
+            xtensa_l32i(reg_xtensa_a7, reg_xtensa_a8, 0);
+            xtensa_addi(reg_xtensa_a6, reg_xtensa_a8, 8);
+          end
+          else
+          begin
+            xtensa_addi(reg_xtensa_a6, reg_xtensa_sp, argBase + 4);
+            EmitLoadConstXtensa(reg_xtensa_a7, 1);
+          end;
+          { lhs -> srcA(a5)/lenA(a4) }
+          xtensa_l32i(reg_xtensa_a8, reg_xtensa_sp, argBase + 0);
+          if IntToTypeKind(IRTk[left]) = tyAnsiString then
+          begin
+            xtensa_mov(reg_xtensa_a5, reg_xtensa_a8);
+            EmitAsmXtensa(['movi a4, 0', 'movi a9, 0', 'beq a8, a9, .ca',
+                           'addi a9, a8, -8', 'l32i a4, a9, 0', '.ca:']);
+          end
+          else if IntToTypeKind(IRTk[left]) = tyString then
+          begin
+            xtensa_l32i(reg_xtensa_a4, reg_xtensa_a8, 0);
+            xtensa_addi(reg_xtensa_a5, reg_xtensa_a8, 8);
+          end
+          else
+          begin
+            xtensa_addi(reg_xtensa_a5, reg_xtensa_sp, argBase + 0);
+            EmitLoadConstXtensa(reg_xtensa_a4, 1);
+          end;
+          pi := FindProc('PXXStrConcat');
+          if pi < 0 then Error('compiler error: PXXStrConcat not found');
+          if XtensaABI = XTENSA_ABI_WINDOWED then
+          begin
+            xtensa_mov(reg_xtensa_a10, reg_xtensa_a4);
+            xtensa_mov(reg_xtensa_a11, reg_xtensa_a5);
+            xtensa_mov(reg_xtensa_a12, reg_xtensa_a6);
+            xtensa_mov(reg_xtensa_a13, reg_xtensa_a7);
+            EmitCallProc(pi);
+            xtensa_mov(reg_xtensa_a2, reg_xtensa_a10);
+          end
+          else
+          begin
+            xtensa_mov(reg_xtensa_a2, reg_xtensa_a4);   { a2=lenA }
+            xtensa_mov(reg_xtensa_a3, reg_xtensa_a5);   { a3=srcA }
+            xtensa_mov(reg_xtensa_a4, reg_xtensa_a6);   { a4=srcB }
+            xtensa_mov(reg_xtensa_a5, reg_xtensa_a7);   { a5=lenB }
+            EmitCallProc(pi);                           { result a2 }
+          end;
+          { release fresh tyAnsiString BINOP operand temporaries }
+          XtensaPushA2;                                 { result @ argBase+8 }
+          if (IRKind[left] = IR_BINOP) and (IntToTypeKind(IRTk[left]) = tyAnsiString) then
+          begin
+            xtensa_l32i(reg_xtensa_a2, reg_xtensa_sp, argBase + 0);
+            EmitStrRefCallXtensa('PXXStrDecRef');
+          end;
+          if (IRKind[right] = IR_BINOP) and (IntToTypeKind(IRTk[right]) = tyAnsiString) then
+          begin
+            xtensa_l32i(reg_xtensa_a2, reg_xtensa_sp, argBase + 4);
+            EmitStrRefCallXtensa('PXXStrDecRef');
+          end;
+          xtensa_l32i(reg_xtensa_a2, reg_xtensa_sp, argBase + 8);   { result }
+          XtSpillDepth := argBase;                                  { drop result, rhs, lhs }
+          Exit;
+        end;
+
         IREmitNodeXtensa(left);
         XtensaPushA2;
         IREmitNodeXtensa(right);

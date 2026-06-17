@@ -350,6 +350,72 @@ begin
         right := IRB[node];
         op := IRC[node];
 
+        if (IntToTypeKind(IRTk[node]) = tyAnsiString) and (op = Ord(tkPlus)) then
+        begin
+          { Managed-string concat -> PXXStrConcat(lenA, srcA, srcB, lenB). Each
+            operand is a handle (len [h-8], 0 if nil), a frozen tyString (len
+            [buf], src buf+8), or a char (len 1, src &slot). Operands pushed:
+            [sp]=rhs, [sp+4]=lhs. }
+          IREmitNodeRISCV32(left);  rv32_addi(reg_sp, reg_sp, -4); rv32_sw(reg_a0, reg_sp, 0);
+          IREmitNodeRISCV32(right); rv32_addi(reg_sp, reg_sp, -4); rv32_sw(reg_a0, reg_sp, 0);
+          { srcB(t2)/lenB(t1) from rhs at [sp] }
+          rv32_lw(reg_t2, reg_sp, 0);
+          if IntToTypeKind(IRTk[right]) = tyAnsiString then
+          begin
+            rv32_addi(reg_t1, reg_zero, 0);
+            rv32_beq(reg_t2, reg_zero, 8);
+            rv32_lw(reg_t1, reg_t2, -8);
+          end
+          else if IntToTypeKind(IRTk[right]) = tyString then
+          begin
+            rv32_lw(reg_t1, reg_t2, 0);
+            rv32_addi(reg_t2, reg_t2, 8);
+          end
+          else
+          begin
+            rv32_addi(reg_t2, reg_sp, 0);
+            rv32_addi(reg_t1, reg_zero, 1);
+          end;
+          { srcA(a1)/lenA(a0) from lhs at [sp+4] }
+          rv32_lw(reg_a1, reg_sp, 4);
+          if IntToTypeKind(IRTk[left]) = tyAnsiString then
+          begin
+            rv32_addi(reg_a0, reg_zero, 0);
+            rv32_beq(reg_a1, reg_zero, 8);
+            rv32_lw(reg_a0, reg_a1, -8);
+          end
+          else if IntToTypeKind(IRTk[left]) = tyString then
+          begin
+            rv32_lw(reg_a0, reg_a1, 0);
+            rv32_addi(reg_a1, reg_a1, 8);
+          end
+          else
+          begin
+            rv32_addi(reg_a1, reg_sp, 4);
+            rv32_addi(reg_a0, reg_zero, 1);
+          end;
+          rv32_addi(reg_a2, reg_t2, 0);    { a2 = srcB }
+          rv32_addi(reg_a3, reg_t1, 0);    { a3 = lenB }
+          pi := FindProc('PXXStrConcat');
+          if pi < 0 then Error('compiler error: PXXStrConcat not found');
+          EmitCallProc(pi);                { a0 = result handle }
+          { release fresh tyAnsiString BINOP operands (nested concat temporaries) }
+          rv32_addi(reg_sp, reg_sp, -4); rv32_sw(reg_a0, reg_sp, 0);  { push result; [sp+4]=rhs,[sp+8]=lhs }
+          if (IRKind[left] = IR_BINOP) and (IntToTypeKind(IRTk[left]) = tyAnsiString) then
+          begin
+            rv32_lw(reg_a0, reg_sp, 8);
+            pi := FindProc('PXXStrDecRef'); EmitCallProc(pi);
+          end;
+          if (IRKind[right] = IR_BINOP) and (IntToTypeKind(IRTk[right]) = tyAnsiString) then
+          begin
+            rv32_lw(reg_a0, reg_sp, 4);
+            pi := FindProc('PXXStrDecRef'); EmitCallProc(pi);
+          end;
+          rv32_lw(reg_a0, reg_sp, 0); rv32_addi(reg_sp, reg_sp, 4);   { pop result }
+          rv32_addi(reg_sp, reg_sp, 8);                               { drop rhs, lhs }
+          Exit;
+        end;
+
         IREmitNodeRISCV32(left);
         rv32_addi(reg_sp, reg_sp, -4);
         rv32_sw(reg_a0, reg_sp, 0);
