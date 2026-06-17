@@ -166,3 +166,36 @@ test-core; bootstrap + cross-bootstrap stay byte-identical.
   target-aware (`TARGET_PTR_SIZE`); also re-check aarch64 (DIFF despite 64-bit —
   separate registry/prop issue). test_rtti additionally needs sets on cross
   (`set_lit` / `dynunique`) — the collections sub-track.
+- 2026-06-17 — **RTTI-on-cross diagnosed into THREE distinct bugs** (deeper than
+  the earlier "blob layout" framing). Reproduced with a minimal probe
+  (`s := c^.NamePtr^`; print Length(s)/s): x86-64 len=4 "TFoo"; aarch64 + i386
+  both return a garbage length ≈ an address.
+  1. **Frozen-string-through-pointer read (DOMINANT, all cross targets incl.
+     aarch64 where the blob layout already matches).** Reading a frozen `string`
+     via a pointer (`PString^` / `c^.NamePtr^`) yields a wrong length — the
+     symptom (length ≈ a pointer value) suggests codegen reads the *field/slot*
+     bytes as the string instead of dereferencing the pointer to the buffer, or
+     the frozen-string copy-in from a *computed* source address is broken on
+     cross. The IR lowering looks correct (`IRLowerAddress(AN_DEREF)` →
+     load-pointer-value → string value), so this is a per-target **codegen** bug
+     in the frozen-string load/copy from a register-held address. (Related to the
+     earlier synthetic `^string` Length=0 observation.) This blocks class-NAME
+     reads on ALL cross targets — fixing it is the prerequisite for any
+     metaclass/RTTI win, and validates first on aarch64 (no layout issue there).
+  2. **RTTI blob 8-byte-stride layout on i386/arm32.** The blob is uniformly
+     8-byte (PatchDataU64/AddDataPtrFix always write 8). The 32-bit typinfo
+     records are mixed-width (Pointer=4, Int64=8). SAFE fix = pad the typinfo
+     RTTI-blob records to an 8-byte stride under `{$ifdef CPU32}` (a 4-byte pad
+     after each Pointer field) — leaves the compiler/blob untouched (x86-64
+     byte-identical guaranteed) and only changes the reader. Empirically verified
+     i386 `TClassRTTI` offsets are 0,4,8,16,24,32,40,48,56,64 (size 72) vs the
+     blob's 0,8,…,72 (size 80); the padding closes the gap. Do NOT pad `TMethod`
+     (a runtime method-pointer value, 8 bytes on i386). Adjacent-pointer records
+     needing the pad: TClassRTTI(name+parent), TMethInfo, TRTTIEntry; the
+     pointer-then-Int64 records (TPropInfo/TFieldInfo/TEnumRTTI) are already
+     8-strided via Int64 alignment but their leading pointer still benefits.
+  3. **Sets on cross** (`set_lit` / `dynunique` / `IR_SET_*`) — needed by
+     test_rtti (published `set` property). Separate collections sub-track.
+  Recommended order: bug 1 (codegen, validates on aarch64) → bug 2 (typinfo
+  CPU32 padding, i386/arm32) → bug 3 (sets). CPU32/CPU64 defines exist
+  (lexer.inc) for the padding guard.

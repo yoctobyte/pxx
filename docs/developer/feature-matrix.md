@@ -118,10 +118,12 @@ Dominant blocker first; items sharing a fix are grouped.
    - [x] aggregate-valued fn results (records/sets) on all four (hidden-dest ABI)
    - [x] frozen inline-string store-through-ptr on all three cross targets
    - [x] `IR_CLASSREF` metaclass value (`cref := TFoo`) on all three
-   - [ ] **RTTI blob target-aware layout** — blob strides are fixed 8-byte
-     (`rtti_emit.inc` hdr+0/8/16/24/32/40, `RTTI_CLS_SIZE`/`RTTI_PROP_SIZE`);
-     32-bit `PClassRTTI` reads at 4-byte offsets → garbage on i386/arm32.
-     Re-check aarch64 (DIFF despite 64-bit). Blocks test_classref/class_of/rtti.
+   - [ ] **RTTI on cross — 3 distinct bugs** (see ticket Log 2026-06-17):
+     (1) frozen-string-through-pointer read (`c^.NamePtr^`) garbage on ALL cross
+     targets incl. aarch64 — dominant, a codegen bug, fix first;
+     (2) RTTI blob 8-byte stride vs 32-bit typinfo records (i386/arm32) — fix via
+     `{$ifdef CPU32}` 4-byte padding in typinfo records (compiler/blob untouched);
+     (3) sets (`set_lit`/`dynunique`) for test_rtti's published `set` property.
    - [ ] collections / dynarray-of-record (`setlen_dyn`, `dynunique`, `set_lit`)
    - [ ] interfaces (now unblocked by classes) — feature-interfaces
 2. **ELF32 dynamic-link path** (i386/arm32):
