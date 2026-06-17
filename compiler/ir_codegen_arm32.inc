@@ -1734,7 +1734,43 @@ begin
             Error('target arm32: builtin/special call not yet supported');
         end;
         if ProcExternal[pi] then
-          Error('target arm32: external calls not yet supported');
+        begin
+          { External C call (AAPCS32): integer/pointer args in r0..r3, result in
+            r0. v1 = up to 4 single-word scalar/pointer args + integer/pointer
+            return (the C-import surface); float/Int64 args, >4 args, or float
+            returns are a hard error. Args are pushed word-by-word then loaded
+            into r0..r3 (mirroring the internal/indirect paths); the call goes
+            through the external's GOT slot via EmitExternalCallArm32. }
+          if Procs[pi].ParamCount > 4 then
+            Error('target arm32: external call with more than 4 parameters not supported');
+          if TypeIsFloat(Procs[pi].RetType) then
+            Error('target arm32: external call float return not yet supported');
+          argNode := IRB[node];
+          nArgs := 0;
+          while argNode <> -1 do
+          begin
+            if (nArgs < Procs[pi].ParamCount) and
+               (TypeIsFloat(Procs[pi].Params[nArgs].TypeKind) or
+                Is64Bit386(Procs[pi].Params[nArgs].TypeKind)) then
+              Error('target arm32: external call float/Int64 argument not yet supported');
+            IREmitNodeArm32(IRA[argNode]);       { r0 = arg }
+            EmitI32($E92D0001);                  { push {r0} }
+            Inc(nArgs);
+            argNode := IRB[argNode];
+          end;
+          if nArgs <> Procs[pi].ParamCount then
+            Error('target arm32: external call argument count mismatch');
+          for i := 0 to nArgs - 1 do
+            if i < 4 then
+              EmitI32($E59D0000 or (i shl 12) or ((nArgs - 1 - i) * 4)); { ldr r[i], [sp,#off] }
+          if nArgs > 0 then
+          begin
+            EmitLoadImmArm32(9, nArgs * 4);
+            EmitI32($E08DD009);                  { add sp, sp, r9 (drop pushed words) }
+          end;
+          EmitExternalCallArm32(RegisterExternal(pi));
+          Exit;
+        end;
 
         { Aggregate result: push the caller's hidden destination first (deepest
           word) so arg evaluation can't disturb it; it is loaded into r12 (ip,

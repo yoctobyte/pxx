@@ -1545,7 +1545,36 @@ begin
             Error('target aarch64: builtin/special call not yet supported');
         end;
         if ProcExternal[pi] then
-          Error('target aarch64: external calls not yet supported');
+        begin
+          { External C call (AAPCS): integer/pointer args in x0..x7, result in
+            x0. v1 = up to 8 4/8-byte scalar/pointer args + integer/pointer
+            return (the C-import surface); float/aggregate args or float returns
+            are a hard error. Args are pushed to 16-byte temp slots then popped
+            into x0..x7 (same as the internal/indirect paths), then the call goes
+            through the external's GOT slot via EmitExternalCallA64. }
+          if Procs[pi].ParamCount > 8 then
+            Error('target aarch64: external call with more than 8 parameters not supported');
+          if TypeIsFloat(Procs[pi].RetType) then
+            Error('target aarch64: external call float return not yet supported');
+          argNode := IRB[node];
+          nArgs := 0;
+          while argNode <> -1 do
+          begin
+            if (nArgs < Procs[pi].ParamCount) and
+               TypeIsFloat(Procs[pi].Params[nArgs].TypeKind) then
+              Error('target aarch64: external call float argument not yet supported');
+            IREmitNodeAarch64(IRA[argNode]);
+            EmitI32($F81F0FE0);                  { str x0, [sp, #-16]! }
+            Inc(nArgs);
+            argNode := IRB[argNode];
+          end;
+          if nArgs <> Procs[pi].ParamCount then
+            Error('target aarch64: external call argument count mismatch');
+          for i := nArgs - 1 downto 0 do
+            EmitI32($F84107E0 + i);              { ldr x[i], [sp], #16 }
+          EmitExternalCallA64(RegisterExternal(pi));
+          Exit;
+        end;
 
         { Aggregate result: push the caller's hidden destination first (deepest
           temp) so arg evaluation can't disturb it; it is popped into x8 (the

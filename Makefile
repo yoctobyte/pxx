@@ -952,8 +952,8 @@ test-i386: $(COMPILER)
 	test "$$(tools/run_target.sh i386 /tmp/test_i386_reactor)" = "$$(printf 'reader: start\nreader: would-block, parking\nwriter: writing\nreader: got 2 bytes: hi\ndone')"
 	./$(COMPILER) --target=i386 test/test_asyncecho.pas /tmp/test_i386_asyncecho
 	test "$$(tools/run_target.sh i386 /tmp/test_i386_asyncecho)" = "$$(printf 'client 1 ok\nclient 2 ok\ndone')"
-	./$(COMPILER) --target=i386 test/test_i386_extern.pas /tmp/test_i386_extern
-	./$(COMPILER) test/test_i386_extern.pas /tmp/test_i386_extern_x64
+	./$(COMPILER) --target=i386 test/test_extern_c.pas /tmp/test_i386_extern
+	./$(COMPILER) test/test_extern_c.pas /tmp/test_i386_extern_x64
 	test "$$(tools/run_target.sh i386 /tmp/test_i386_extern)" = "$$(/tmp/test_i386_extern_x64)"
 	@echo "i386 hello + arith + procs + loops + write + varparam + syscall + heap + string + record + dynarray + exception + float + float-params + variant + byref-params + setlen-str + in-operator + loadfile + sysopen-family + args + string-cow + aoc-types + many-params + conformance2 + shortcircuit + ptr-arith + case-range + global-init + typed-const + multidim + named-array + record-2darray + param-2darray + multidim3d + const-alias + float-const + stackless-generator + proctype + scheduler + scheduler-exc + classes + method-pointers + aggregate-return + metaclass-rtti + dynarray-field + collections + timer + reactor + asyncecho + extern-c ok (output identical to x86-64)"
 
@@ -1119,7 +1119,10 @@ test-aarch64: $(COMPILER)
 	test "$$(tools/run_target.sh aarch64 /tmp/test_aarch64_reactor)" = "$$(printf 'reader: start\nreader: would-block, parking\nwriter: writing\nreader: got 2 bytes: hi\ndone')"
 	./$(COMPILER) --target=aarch64 test/test_asyncecho.pas /tmp/test_aarch64_asyncecho
 	test "$$(tools/run_target.sh aarch64 /tmp/test_aarch64_asyncecho)" = "$$(printf 'client 1 ok\nclient 2 ok\ndone')"
-	@echo "aarch64 hello + arith + procs + loops + write + varparam + syscall + heap + string + record + dynarray + exception + float + variant + setlen-str + str-length-index + in-operator + loadfile + sysopen-family + args + open-array-params + string-cow + huge-frame + varrec-alloc + aoc-types + many-params + conformance2 + shortcircuit + ptr-arith + case-range + global-init + typed-const + multidim + named-array + record-2darray + param-2darray + multidim3d + const-alias + float-const + classes + method-pointers + aggregate-return + metaclass-rtti + dynarray-field + collections + timer + reactor + asyncecho ok (output identical to x86-64)"
+	./$(COMPILER) --target=aarch64 test/test_extern_c.pas /tmp/test_aarch64_extern
+	./$(COMPILER) test/test_extern_c.pas /tmp/test_aarch64_extern_x64
+	test "$$(tools/run_target.sh aarch64 /tmp/test_aarch64_extern)" = "$$(/tmp/test_aarch64_extern_x64)"
+	@echo "aarch64 hello + arith + procs + loops + write + varparam + syscall + heap + string + record + dynarray + exception + float + variant + setlen-str + str-length-index + in-operator + loadfile + sysopen-family + args + open-array-params + string-cow + huge-frame + varrec-alloc + aoc-types + many-params + conformance2 + shortcircuit + ptr-arith + case-range + global-init + typed-const + multidim + named-array + record-2darray + param-2darray + multidim3d + const-alias + float-const + classes + method-pointers + aggregate-return + metaclass-rtti + dynarray-field + collections + timer + reactor + asyncecho + extern-c ok (output identical to x86-64)"
 
 test-arm32: $(COMPILER)
 	./$(COMPILER) --target=arm32 test/hello.pas /tmp/test_arm32_hello
@@ -1301,7 +1304,10 @@ test-arm32: $(COMPILER)
 	test "$$(tools/run_target.sh arm32 /tmp/test_arm32_reactor)" = "$$(printf 'reader: start\nreader: would-block, parking\nwriter: writing\nreader: got 2 bytes: hi\ndone')"
 	./$(COMPILER) --target=arm32 test/test_asyncecho.pas /tmp/test_arm32_asyncecho
 	test "$$(tools/run_target.sh arm32 /tmp/test_arm32_asyncecho)" = "$$(printf 'client 1 ok\nclient 2 ok\ndone')"
-	@echo "arm32 hello + arith + procs + loops + write + varparam + syscall + heap + string + record + dynarray + exception + float + args + variant + strresult + setlen-str + str-length-index + in-operator + managed-aggregate-locals + loadfile + sysopen-family + string-cow + var-string-param + openarray-string + stack-params + int64 + int64-byref + aoc-types + many-params + conformance2 + shortcircuit + ptr-arith + case-range + global-init + typed-const + multidim + named-array + record-2darray + param-2darray + multidim3d + const-alias + float-const + classes + method-pointers + aggregate-return + metaclass-rtti + dynarray-field + collections + timer + reactor + asyncecho ok (output identical to x86-64)"
+	./$(COMPILER) --target=arm32 test/test_extern_c.pas /tmp/test_arm32_extern
+	./$(COMPILER) test/test_extern_c.pas /tmp/test_arm32_extern_x64
+	test "$$(tools/run_target.sh arm32 /tmp/test_arm32_extern)" = "$$(/tmp/test_arm32_extern_x64)"
+	@echo "arm32 hello + arith + procs + loops + write + varparam + syscall + heap + string + record + dynarray + exception + float + args + variant + strresult + setlen-str + str-length-index + in-operator + managed-aggregate-locals + loadfile + sysopen-family + string-cow + var-string-param + openarray-string + stack-params + int64 + int64-byref + aoc-types + many-params + conformance2 + shortcircuit + ptr-arith + case-range + global-init + typed-const + multidim + named-array + record-2darray + param-2darray + multidim3d + const-alias + float-const + classes + method-pointers + aggregate-return + metaclass-rtti + dynarray-field + collections + timer + reactor + asyncecho + extern-c ok (output identical to x86-64)"
 
 # ----- Cross self-host bootstrap gates (feature-cross-bootstrap-selfhost) -----
 # Triple-stage proof: native cross-compiles compiler.pas -> <arch>; that binary,

@@ -21,6 +21,16 @@ fi
 arch="$1"; shift
 bin="$1"; shift
 
+# Dynamically linked PXX binaries (external C calls) need the guest ld.so + libc.
+# If a sysroot was provisioned (tools/install_cross_sysroot.sh) and the caller
+# did not already set QEMU_LD_PREFIX, point QEMU at it. Harmless for the common
+# static/syscall-only binaries.
+xroot="${PXX_CROSS_SYSROOT:-$HOME/.cache/pxx-cross}"
+if [ -z "${QEMU_LD_PREFIX:-}" ] && [ -d "$xroot/$arch" ]; then
+  QEMU_LD_PREFIX="$xroot/$arch"
+  export QEMU_LD_PREFIX
+fi
+
 need() {
   if ! command -v "$1" >/dev/null 2>&1; then
     echo "$1 not found; run tools/install_qemu.sh" >&2

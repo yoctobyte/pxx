@@ -123,14 +123,17 @@ end;
 
 procedure PrepareDynamicData;
 var
-  i, j, libIdx: Integer;
+  i, j, libIdx, relType: Integer;
   found: Boolean;
   nameOff: array[0..MAX_EXTERNAL-1] of Integer;
   neededLibStr : array[0..MAX_EXTERNAL-1] of Integer; { distinct Strs[] indices }
   neededLibOff : array[0..MAX_EXTERNAL-1] of Integer; { their dynstr offsets }
 begin
   DynamicInterpOff := DataLen;
-  DataPutZ('/lib64/ld-linux-x86-64.so.2');
+  if TargetArch = TARGET_AARCH64 then
+    DataPutZ('/lib/ld-linux-aarch64.so.1')
+  else
+    DataPutZ('/lib64/ld-linux-x86-64.so.2');
   DynamicInterpSize := DataLen - DynamicInterpOff;
 
   DynamicStrOff := DataLen;
@@ -184,11 +187,13 @@ begin
     if i < ExternalCount then DataPutU32(i + 1) else DataPutU32(0);
   end;
 
+  { RELA r_info = (sym << 32) | type. GLOB_DAT: x86-64=6, aarch64=1025. }
+  if TargetArch = TARGET_AARCH64 then relType := 1025 else relType := 6;
   DynamicRelaOff := DataLen;
   for i := 0 to ExternalCount-1 do
   begin
     DataPutU64(0); { patched to the GOT slot address below }
-    DataPutU64(((i + 1) * 4294967296) + 6); { R_X86_64_GLOB_DAT }
+    DataPutU64(((i + 1) * 4294967296) + relType); { GLOB_DAT }
     DataPutU64(0);
   end;
 
@@ -229,14 +234,17 @@ end;
   REL table offset here. }
 procedure PrepareDynamicData32;
 var
-  i, j, libIdx: Integer;
+  i, j, libIdx, relType: Integer;
   found: Boolean;
   nameOff: array[0..MAX_EXTERNAL-1] of Integer;
   neededLibStr : array[0..MAX_EXTERNAL-1] of Integer;
   neededLibOff : array[0..MAX_EXTERNAL-1] of Integer;
 begin
   DynamicInterpOff := DataLen;
-  DataPutZ('/lib/ld-linux.so.2');
+  if TargetArch = TARGET_ARM32 then
+    DataPutZ('/lib/ld-linux.so.3')          { arm EABI (armel) loader }
+  else
+    DataPutZ('/lib/ld-linux.so.2');         { i386 loader }
   DynamicInterpSize := DataLen - DynamicInterpOff;
 
   DynamicStrOff := DataLen;
@@ -287,12 +295,14 @@ begin
     if i < ExternalCount then DataPutU32(i + 1) else DataPutU32(0);
   end;
 
-  { REL table: Elf32_Rel = offset(4) info(4). info = (sym<<8) | R_386_GLOB_DAT. }
+  { REL table: Elf32_Rel = offset(4) info(4). info = (sym<<8) | type.
+    GLOB_DAT: i386=R_386_GLOB_DAT(6), arm32=R_ARM_GLOB_DAT(21). }
+  if TargetArch = TARGET_ARM32 then relType := 21 else relType := 6;
   DynamicRelaOff := DataLen;
   for i := 0 to ExternalCount-1 do
   begin
     DataPutU32(0);                              { patched to the GOT slot VA }
-    DataPutU32(((i + 1) * 256) + 6);            { (sym<<8) | R_386_GLOB_DAT }
+    DataPutU32(((i + 1) * 256) + relType);      { (sym<<8) | GLOB_DAT }
   end;
 
   { Elf32_Dyn = tag(4) val(4). }
@@ -326,6 +336,26 @@ begin
   PatchDataI32(p + 4, Integer(dataBase + DynamicHashOff));  { DT_HASH }
   Inc(p, 8);
   PatchDataI32(p + 4, Integer(dataBase + DynamicRelaOff));  { DT_REL }
+end;
+
+{ Point each external indirect call at its resolved GOT slot. x86-64 uses a
+  `call qword [abs32]`, so the 32-bit operand is the slot VA. aarch64 builds the
+  slot VA into x16 via movz/movk (the slot VA is < 2^32 under ET_EXEC), so patch
+  both imm16 fields; the following ldr/blr are emitted at codegen time. }
+procedure PatchDynCallSites(dataBase: Int64);
+var i: Integer; slotVA: Int64;
+begin
+  for i := 0 to DynCallCount-1 do
+  begin
+    slotVA := dataBase + ExternalGotOff[DynCallExtIdx[i]];
+    if TargetArch = TARGET_AARCH64 then
+    begin
+      Patch32(DynCallCodePos[i],     $D2800010 or ((slotVA and $FFFF) shl 5));
+      Patch32(DynCallCodePos[i] + 4, $F2A00010 or (((slotVA shr 16) and $FFFF) shl 5));
+    end
+    else
+      Patch32(DynCallCodePos[i], slotVA);
+  end;
 end;
 
 function IntToHexStr(val: Int64; digits: Integer): AnsiString;
@@ -560,8 +590,7 @@ begin
   end;
   if ExternalCount > 0 then
   begin
-    for i := 0 to DynCallCount-1 do
-      Patch32(DynCallCodePos[i], dataBase + ExternalGotOff[DynCallExtIdx[i]]);
+    PatchDynCallSites(dataBase);
     PatchDynamicData(dataBase);
   end;
 
@@ -652,8 +681,7 @@ begin
   end;
   if ExternalCount > 0 then
   begin
-    for i := 0 to DynCallCount-1 do
-      Patch32(DynCallCodePos[i], dataBase + ExternalGotOff[DynCallExtIdx[i]]);
+    PatchDynCallSites(dataBase);
     PatchDynamicData(dataBase);
   end;
 
@@ -725,14 +753,9 @@ var
 {$endif}
 begin
   isDyn := False;
-  if TargetArch = TARGET_I386 then
+  if (TargetArch = TARGET_I386) or (TargetArch = TARGET_ARM32) then
   begin
     if ExternalCount > 0 then isDyn := True;
-  end;
-  if TargetArch = TARGET_ARM32 then
-  begin
-    if ExternalCount > 0 then
-      Error('target arm32: external (dynamic) symbols not yet supported');
   end;
   if (TargetArch = TARGET_XTENSA) or (TargetArch = TARGET_RISCV32) then
   begin
@@ -798,7 +821,19 @@ begin
   if isDyn then
   begin
     for i := 0 to DynCallCount-1 do
-      Patch32(DynCallCodePos[i], dataBase + ExternalGotOff[DynCallExtIdx[i]]);
+    begin
+      addr := dataBase + ExternalGotOff[DynCallExtIdx[i]];
+      if TargetArch = TARGET_ARM32 then
+      begin
+        { movw ip,#lo16 ; movt ip,#hi16 — A2 encoding imm4:imm12 fields. }
+        Patch32(DynCallCodePos[i],
+          $E300C000 or (((addr and $F000) shl 4) or (addr and $FFF)));
+        Patch32(DynCallCodePos[i] + 4,
+          $E340C000 or ((((addr shr 16) and $F000) shl 4) or ((addr shr 16) and $FFF)));
+      end
+      else
+        Patch32(DynCallCodePos[i], addr);   { i386 call dword [abs32] operand }
+    end;
     PatchDynamicData32(dataBase);
   end;
 

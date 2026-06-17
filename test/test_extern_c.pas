@@ -1,5 +1,5 @@
-program test_i386_extern;
-{ External C calls on i386: dynamic linking against libc.so.6 (ELF32 dynamic
+program test_extern_c;
+{ External C calls (cross):  dynamic linking against libc.so.6 (ELF32 dynamic
   symbols + GOT-slot indirect call + cdecl marshalling). atoi/strlen exercise a
   pointer arg (PChar) and a 4-byte integer return. The same program links the
   64-bit libc.so.6 on x86-64, so its output is the reference. }

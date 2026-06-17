@@ -345,3 +345,34 @@ test-core; bootstrap + cross-bootstrap stay byte-identical.
     libc.so.6 + /lib/ld-linux.so.2 are present** — aarch64/arm32 external calls
     remain blocked on missing cross loaders (and aarch64/arm32 codegen
     ir_codegen_aarch64.inc:1548 / arm32:1737, plus arm32 ELF32 dynamic).
+- 2026-06-17 — **external C calls on ALL 4 targets (aarch64 + arm32 added).**
+  Correction logged: byte-identical is the *self-host* law; feature tests assert
+  behavioural output-equality vs x86-64 (not byte-identity). And ARM dynamic
+  linking IS testable — the guest ld.so/libc just had to be provisioned.
+  - **aarch64 codegen (ir_codegen_aarch64.inc):** AAPCS external path — args to
+    16-byte temps then x0..x7, call via the GOT slot through EmitExternalCallA64
+    (movz/movk x16 = slot VA, both imm16 fields patched by writeELF; ldr x16,[x16];
+    blr x16). The 64-bit writeELF already emitted dynamic symbols; made its interp
+    string + RELA GLOB_DAT type per-arch (aarch64 /lib/ld-linux-aarch64.so.1,
+    R_AARCH64_GLOB_DAT=1025) and the DynCall patch arch-aware (PatchDynCallSites:
+    movz/movk imm16 vs x86-64 abs32 operand).
+  - **arm32 codegen (ir_codegen_arm32.inc):** AAPCS32 external path — args to
+    r0..r3, call via EmitExternalCallArm32 (movw/movt ip = slot VA, patched;
+    ldr ip,[ip]; blx ip). Extended writeELF32's isDyn path to arm32: interp
+    /lib/ld-linux.so.3 (armel EABI), R_ARM_GLOB_DAT=21, EM_ARM, and an arm-aware
+    DynCall patch (movw/movt A2 imm4:imm12 fields). PrepareDynamicData32
+    generalised (interp + reloc type per arch).
+  - **validation:** test_extern_c (atoi/strlen via libc.so.6 → PChar arg + int
+    return) compiled for all four targets prints identical output; the cross
+    binaries are real dynamic ELFs (interpreters /lib64/ld-linux-x86-64.so.2,
+    /lib/ld-linux.so.2, /lib/ld-linux-aarch64.so.1, /lib/ld-linux.so.3). Wired
+    into all three cross suites. Guest runtimes provisioned non-invasively by
+    tools/install_cross_sysroot.sh (apt-get download + dpkg-deb -x of
+    libc6-{arm64,armel}-cross into ~/.cache/pxx-cross/<arch>); run_target.sh
+    auto-sets QEMU_LD_PREFIX to that dir when present (harmless for static
+    binaries). make test + all 3 cross suites green.
+  v1 scope (all targets): 4/8-byte scalar/pointer args + integer/pointer return;
+  float/Int64 args and float returns are a hard error; i386 stack 16-alignment
+  deferred. **Item 3 (external C calls + dynamic symbols) now complete on all
+  four hosted targets** — the cross-target-feature-parity ticket's three items
+  (collections depth, async reactor, external calls) are all done.

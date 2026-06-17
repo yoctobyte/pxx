@@ -3650,6 +3650,37 @@ begin
   EmitI32(0);
 end;
 
+{ aarch64 external call through the GOT slot. The slot's absolute VA (< 2^32
+  under ET_EXEC) is built into x16 with movz/movk — both imm16 fields are patched
+  by the writeELF DynCall pass (PatchDynCallSites) — then the resolved pointer is
+  loaded and called. Caller marshals args into x0..x7 (AAPCS) first. }
+procedure EmitExternalCallA64(extIdx: Integer);
+begin
+  if DynCallCount >= MAX_CALLFIX then Error('external call fixup overflow');
+  DynCallCodePos[DynCallCount] := CodeLen;
+  DynCallExtIdx[DynCallCount] := extIdx;
+  Inc(DynCallCount);
+  EmitI32($D2800010);   { movz x16, #0      (lo16 patched) }
+  EmitI32($F2A00010);   { movk x16, #0, lsl 16  (hi16 patched) }
+  EmitI32($F9400210);   { ldr  x16, [x16]   (resolved fn ptr) }
+  EmitI32($D63F0200);   { blr  x16 }
+end;
+
+{ arm32 external call through the GOT slot. The slot's absolute VA is built into
+  ip (r12) with movw/movt (both patched by the writeELF32 DynCall pass), then the
+  resolved pointer is loaded and called. Caller marshals args into r0..r3 first. }
+procedure EmitExternalCallArm32(extIdx: Integer);
+begin
+  if DynCallCount >= MAX_CALLFIX then Error('external call fixup overflow');
+  DynCallCodePos[DynCallCount] := CodeLen;
+  DynCallExtIdx[DynCallCount] := extIdx;
+  Inc(DynCallCount);
+  EmitI32($E300C000);   { movw ip, #0    (lo16 patched) }
+  EmitI32($E340C000);   { movt ip, #0    (hi16 patched) }
+  EmitI32($E59CC000);   { ldr  ip, [ip]  (resolved fn ptr) }
+  EmitI32($E12FFF3C);   { blx  ip }
+end;
+
 procedure EmitCallProc(pi: Integer);
 var extIdx: Integer;
 begin
