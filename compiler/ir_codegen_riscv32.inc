@@ -140,7 +140,7 @@ end;
 
 procedure IREmitNodeRISCV32(node: Integer);
 var
-  left, right, op, si, pi, nArgs, i, lo, elemSize, sz, argNode, valNode: Integer;
+  left, right, op, si, pi, nArgs, i, lo, elemSize, sz, argNode, valNode, j: Integer;
   tk: TTypeKind;
   sgn: Boolean;
   sVal: AnsiString;
@@ -161,6 +161,73 @@ begin
 
     IR_STORE_SYM:
       begin
+        si := IRA[node];
+        if Syms[si].TypeKind = tyAnsiString then
+        begin
+          { Managed-string assignment: build the new handle in a0, then publish
+            into the slot (DecRef old). Mirrors i386. }
+          valNode := IRB[node];
+          if IRKind[valNode] = IR_CONST_STR then
+          begin
+            sVal := GetTokenStrFromRaw(IRA[valNode], IRB[valNode]);
+            j := InternStr(sVal);
+            EmitLoadImmRISCV32(reg_a0, Strs[j].Len);          { arg0 = len }
+            EmitLoadDataRefRISCV32(reg_a1, Strs[j].Offset + 8); { arg1 = chars }
+            pi := FindProc('PXXStrFromLit'); if pi < 0 then Error('compiler error: PXXStrFromLit not found');
+            EmitCallProc(pi);                                 { a0 = handle }
+          end
+          else if IntToTypeKind(IRTk[valNode]) = tyChar then
+          begin
+            IREmitNodeRISCV32(valNode);                       { a0 = char code }
+            rv32_addi(reg_sp, reg_sp, -8); rv32_sw(reg_a0, reg_sp, 0); { [sp] = char }
+            rv32_addi(reg_a1, reg_sp, 0);                     { arg1 = &char }
+            rv32_addi(reg_a0, reg_zero, 1);                   { arg0 = len 1 }
+            pi := FindProc('PXXStrFromLit'); EmitCallProc(pi);
+            rv32_addi(reg_sp, reg_sp, 8);
+          end
+          else if IntToTypeKind(IRTk[valNode]) = tyString then
+          begin
+            IREmitNodeRISCV32(valNode);                       { a0 = inline buffer addr }
+            rv32_lw(reg_a2, reg_a0, 0);                       { len = [buf] }
+            rv32_addi(reg_a1, reg_a0, 8);                     { arg1 = buf+8 }
+            rv32_addi(reg_a0, reg_a2, 0);                     { arg0 = len }
+            pi := FindProc('PXXStrFromLit'); EmitCallProc(pi);
+          end
+          else
+          begin
+            IREmitNodeRISCV32(valNode);                       { a0 = source handle }
+            { A fresh result (concat / user-call) already carries its +1; a plain
+              copy of another handle must IncRef. }
+            if not (((IRKind[valNode] = IR_BINOP) and (IntToTypeKind(IRTk[valNode]) = tyAnsiString)) or
+                    ((IRKind[valNode] = IR_CALL) and (IRA[valNode] >= 0))) then
+            begin
+              rv32_addi(reg_sp, reg_sp, -4); rv32_sw(reg_a0, reg_sp, 0); { save handle }
+              pi := FindProc('PXXStrIncRef'); EmitCallProc(pi);          { a0 = p }
+              rv32_lw(reg_a0, reg_sp, 0); rv32_addi(reg_sp, reg_sp, 4);  { restore handle }
+            end;
+          end;
+          { Publish: store new, DecRef old. }
+          if (Syms[si].Kind = skParam) and Syms[si].IsRef then
+          begin
+            rv32_addi(reg_sp, reg_sp, -4); rv32_sw(reg_a0, reg_sp, 0);   { push new }
+            rv32_lw(reg_t0, reg_s0, Syms[si].Offset);                    { t0 = caller slot addr }
+            rv32_lw(reg_a1, reg_t0, 0);                                  { a1 = old }
+            rv32_lw(reg_a0, reg_sp, 0);                                  { a0 = new }
+            rv32_sw(reg_a0, reg_t0, 0);                                  { [slot] := new }
+            rv32_addi(reg_a0, reg_a1, 0);                                { a0 = old }
+            pi := FindProc('PXXStrDecRef'); EmitCallProc(pi);
+            rv32_addi(reg_sp, reg_sp, 4);
+          end
+          else
+          begin
+            rv32_addi(reg_sp, reg_sp, -4); rv32_sw(reg_a0, reg_sp, 0);   { push new }
+            EmitLoadVarRISCV32(si);                                      { a0 = old handle }
+            pi := FindProc('PXXStrDecRef'); EmitCallProc(pi);
+            rv32_lw(reg_a0, reg_sp, 0); rv32_addi(reg_sp, reg_sp, 4);    { pop new }
+            EmitStoreVarRISCV32(si);                                     { slot := new }
+          end;
+          Exit;
+        end;
         IREmitNodeRISCV32(IRB[node]);
         EmitStoreVarRISCV32(IRA[node]);
       end;
@@ -175,6 +242,13 @@ begin
           (No COW / by-ref open arrays yet.) }
         if (Syms[si].IsArray and (Syms[si].ArrLen = -1)) or
            ((Syms[si].Kind = skParam) and Syms[si].IsArray and not Syms[si].IsRef) then
+          rv32_lw(reg_a0, reg_a0, 0)
+        { Scalar managed string: read position needs the heap handle; write
+          position keeps the slot address so the store can publish a new handle.
+          A by-ref param's slot already holds the forwarded caller slot addr. }
+        else if (Syms[si].TypeKind = tyAnsiString) and not Syms[si].IsArray and
+                not InLValueWrite and
+                not ((Syms[si].Kind = skParam) and Syms[si].IsRef) then
           rv32_lw(reg_a0, reg_a0, 0);
       end;
 

@@ -172,6 +172,21 @@ begin
   end;
 end;
 
+procedure XtensaPopA2;
+{ Pop the top expression-stack slot into a2 (windowed: sp constant). }
+begin
+  if XtensaABI = XTENSA_ABI_WINDOWED then
+  begin
+    Dec(XtSpillDepth, 4);
+    xtensa_l32i(reg_xtensa_a2, reg_xtensa_sp, XtSpillDepth);
+  end
+  else
+  begin
+    xtensa_l32i(reg_xtensa_a2, reg_xtensa_sp, 0);
+    xtensa_addi(reg_xtensa_sp, reg_xtensa_sp, 4);
+  end;
+end;
+
 procedure EmitSlotAddrXtensa(rd, si: Integer);
 { rd = address of the variable's storage slot (global abs / frame-relative). }
 begin
@@ -213,9 +228,37 @@ begin
   EmitCallProc(pi);
 end;
 
+procedure EmitStrFromLitXtensa;
+{ a2 = len, a3 = src -> a2 = new managed-string handle (PXXStrFromLit). }
+var pi: Integer;
+begin
+  pi := FindProc('PXXStrFromLit');
+  if pi < 0 then Error('compiler error: PXXStrFromLit not found');
+  if XtensaABI = XTENSA_ABI_WINDOWED then
+  begin
+    xtensa_mov(reg_xtensa_a10, reg_xtensa_a2);   { arg0 = len }
+    xtensa_mov(reg_xtensa_a11, reg_xtensa_a3);   { arg1 = src }
+    EmitCallProc(pi);
+    xtensa_mov(reg_xtensa_a2, reg_xtensa_a10);   { handle }
+  end
+  else
+    EmitCallProc(pi);                            { a2=len, a3=src; result a2 }
+end;
+
+procedure EmitStrRefCallXtensa(const name: AnsiString);
+{ a2 = handle -> call proc(handle). a2 is NOT preserved (DecRef path). }
+var pi: Integer;
+begin
+  pi := FindProc(name);
+  if pi < 0 then Error('compiler error: string refcount helper not found');
+  if XtensaABI = XTENSA_ABI_WINDOWED then
+    xtensa_mov(reg_xtensa_a10, reg_xtensa_a2);
+  EmitCallProc(pi);
+end;
+
 procedure IREmitNodeXtensa(node: Integer);
 var
-  left, right, op, si, pi, nArgs, i, lo, elemSize, sz, argNode, argBase, valNode: Integer;
+  left, right, op, si, pi, nArgs, i, lo, elemSize, sz, argNode, argBase, valNode, j: Integer;
   tk: TTypeKind;
   sgn: Boolean;
   sVal: AnsiString;
@@ -236,6 +279,83 @@ begin
 
     IR_STORE_SYM:
       begin
+        si := IRA[node];
+        if Syms[si].TypeKind = tyAnsiString then
+        begin
+          { Managed-string assignment: build the new handle in a2, then publish
+            into the slot (DecRef old). Mirrors i386/riscv32. }
+          valNode := IRB[node];
+          if IRKind[valNode] = IR_CONST_STR then
+          begin
+            sVal := GetTokenStrFromRaw(IRA[valNode], IRB[valNode]);
+            j := InternStr(sVal);
+            EmitLoadConstXtensa(reg_xtensa_a2, Strs[j].Len);          { len }
+            EmitLoadDataRefXtensa(reg_xtensa_a3, Strs[j].Offset + 8); { src }
+            EmitStrFromLitXtensa;                                     { a2 = handle }
+          end
+          else if IntToTypeKind(IRTk[valNode]) = tyChar then
+          begin
+            IREmitNodeXtensa(valNode);                  { a2 = char code }
+            XtensaPushA2;                               { spill char to the frame }
+            { a3 = address of the spilled char slot. }
+            if XtensaABI = XTENSA_ABI_WINDOWED then
+              xtensa_addi(reg_xtensa_a3, reg_xtensa_sp, XtSpillDepth - 4)
+            else
+              xtensa_addi(reg_xtensa_a3, reg_xtensa_sp, 0);
+            EmitLoadConstXtensa(reg_xtensa_a2, 1);      { len 1 }
+            EmitStrFromLitXtensa;                       { a2 = handle }
+            { drop the char slot }
+            if XtensaABI = XTENSA_ABI_WINDOWED then Dec(XtSpillDepth, 4)
+            else xtensa_addi(reg_xtensa_sp, reg_xtensa_sp, 4);
+          end
+          else if IntToTypeKind(IRTk[valNode]) = tyString then
+          begin
+            IREmitNodeXtensa(valNode);                  { a2 = inline buffer addr }
+            xtensa_l32i(reg_xtensa_a4, reg_xtensa_a2, 0); { len = [buf] }
+            xtensa_addi(reg_xtensa_a3, reg_xtensa_a2, 8); { src = buf+8 }
+            xtensa_mov(reg_xtensa_a2, reg_xtensa_a4);     { len }
+            EmitStrFromLitXtensa;
+          end
+          else
+          begin
+            IREmitNodeXtensa(valNode);                  { a2 = source handle }
+            if not (((IRKind[valNode] = IR_BINOP) and (IntToTypeKind(IRTk[valNode]) = tyAnsiString)) or
+                    ((IRKind[valNode] = IR_CALL) and (IRA[valNode] >= 0))) then
+            begin
+              XtensaPushA2;                             { save handle }
+              EmitStrRefCallXtensa('PXXStrIncRef');
+              XtensaPopA2;                              { restore handle }
+            end;
+          end;
+          { Publish: save new, DecRef the old handle in the slot, then store new.
+            The slot address can't be held in a8 across the windowed DecRef call
+            (call8 rotates a8-a15 out), so recompute it before the store. }
+          XtensaPushA2;                                 { save new handle }
+          { a2 = old handle from the slot }
+          if (Syms[si].Kind = skParam) and Syms[si].IsRef then
+          begin
+            EmitFrameAddrXtensa(reg_xtensa_a2, Syms[si].Offset);
+            xtensa_l32i(reg_xtensa_a2, reg_xtensa_a2, 0);  { caller slot addr }
+            xtensa_l32i(reg_xtensa_a2, reg_xtensa_a2, 0);  { old handle }
+          end
+          else
+          begin
+            EmitSlotAddrXtensa(reg_xtensa_a2, si);
+            xtensa_l32i(reg_xtensa_a2, reg_xtensa_a2, 0);  { old handle }
+          end;
+          EmitStrRefCallXtensa('PXXStrDecRef');            { DecRef(old) }
+          XtensaPopA2;                                     { a2 = new handle }
+          { recompute slot addr into a8 (no calls follow) and store }
+          if (Syms[si].Kind = skParam) and Syms[si].IsRef then
+          begin
+            EmitFrameAddrXtensa(reg_xtensa_a8, Syms[si].Offset);
+            xtensa_l32i(reg_xtensa_a8, reg_xtensa_a8, 0);  { caller slot addr }
+          end
+          else
+            EmitSlotAddrXtensa(reg_xtensa_a8, si);          { slot addr }
+          xtensa_s32i(reg_xtensa_a2, reg_xtensa_a8, 0);     { slot := new }
+          Exit;
+        end;
         IREmitNodeXtensa(IRB[node]);
         EmitStoreVarXtensa(IRA[node]);
       end;
@@ -253,6 +373,12 @@ begin
           (No COW / by-ref open arrays yet.) }
         if (Syms[si].IsArray and (Syms[si].ArrLen = -1)) or
            ((Syms[si].Kind = skParam) and Syms[si].IsArray and not Syms[si].IsRef) then
+          xtensa_l32i(reg_xtensa_a2, reg_xtensa_a2, 0)
+        { Scalar managed string: read position loads the handle; write position
+          keeps the slot address for the store to publish a new handle. }
+        else if (Syms[si].TypeKind = tyAnsiString) and not Syms[si].IsArray and
+                not InLValueWrite and
+                not ((Syms[si].Kind = skParam) and Syms[si].IsRef) then
           xtensa_l32i(reg_xtensa_a2, reg_xtensa_a2, 0);
       end;
 

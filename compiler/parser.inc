@@ -8797,35 +8797,38 @@ begin
     dummyNames[2] := 'align'; dummyTypes[2] := tyInteger;
     i := RegisterProc('PXXRealloc', True, tyPointer, 3, dummyNames, dummyTypes);
 
-  { ESP (xtensa/riscv32) gets only the allocator for now; the managed-string,
-    variant and float-format helpers are not yet ported, and are guarded out of
-    builtinheap's body the same way (PXX_ESP). }
+  { Managed-string ARC helpers are target-independent (allocator-backed), so
+    register them on every target including ESP. }
+  dummyNames[0] := 'len';   dummyTypes[0] := tyNativeInt;
+  dummyNames[1] := 'src';   dummyTypes[1] := tyPointer;
+  i := RegisterProc('PXXStrFromLit', True, tyPointer, 2, dummyNames, dummyTypes);
+
+  dummyNames[0] := 'lenA';  dummyTypes[0] := tyNativeInt;
+  dummyNames[1] := 'srcA';  dummyTypes[1] := tyPointer;
+  dummyNames[2] := 'srcB';  dummyTypes[2] := tyPointer;
+  dummyNames[3] := 'lenB';  dummyTypes[3] := tyNativeInt;
+  i := RegisterProc('PXXStrConcat', True, tyPointer, 4, dummyNames, dummyTypes);
+
+  dummyNames[0] := 'p';     dummyTypes[0] := tyPointer;
+  i := RegisterProc('PXXStrIncRef', False, tyPointer, 1, dummyNames, dummyTypes);
+  i := RegisterProc('PXXStrDecRef', False, tyPointer, 1, dummyNames, dummyTypes);
+  dummyNames[0] := 'strSlot'; dummyTypes[0] := tyPointer;
+  i := RegisterProc('PXXStrUnique', True, tyPointer, 1, dummyNames, dummyTypes);
+  dummyNames[0] := 'strSlot'; dummyTypes[0] := tyPointer;
+  dummyNames[1] := 'newLen';  dummyTypes[1] := tyNativeInt;
+  i := RegisterProc('PXXStrSetLen', False, tyPointer, 2, dummyNames, dummyTypes);
+
+  dummyNames[0] := 'lenA';  dummyTypes[0] := tyNativeInt;
+  dummyNames[1] := 'srcA';  dummyTypes[1] := tyPointer;
+  dummyNames[2] := 'lenB';  dummyTypes[2] := tyNativeInt;
+  dummyNames[3] := 'srcB';  dummyTypes[3] := tyPointer;
+  i := RegisterProc('PXXStrEq', True, tyInt64, 4, dummyNames, dummyTypes);
+
+  { File load, variant and float-format helpers are not on ESP yet. }
   if (TargetArch <> TARGET_XTENSA) and (TargetArch <> TARGET_RISCV32) then
   begin
-    dummyNames[0] := 'len';   dummyTypes[0] := tyNativeInt;
-    dummyNames[1] := 'src';   dummyTypes[1] := tyPointer;
-    i := RegisterProc('PXXStrFromLit', True, tyPointer, 2, dummyNames, dummyTypes);
-
-    dummyNames[0] := 'lenA';  dummyTypes[0] := tyNativeInt;
-    dummyNames[1] := 'srcA';  dummyTypes[1] := tyPointer;
-    dummyNames[2] := 'srcB';  dummyTypes[2] := tyPointer;
-    dummyNames[3] := 'lenB';  dummyTypes[3] := tyNativeInt;
-    i := RegisterProc('PXXStrConcat', True, tyPointer, 4, dummyNames, dummyTypes);
-
     dummyNames[0] := 'path';  dummyTypes[0] := tyPointer;
     i := RegisterProc('PXXStrLoadFile', True, tyPointer, 1, dummyNames, dummyTypes);
-
-    dummyNames[0] := 'p';     dummyTypes[0] := tyPointer;
-    i := RegisterProc('PXXStrIncRef', False, tyPointer, 1, dummyNames, dummyTypes);
-    i := RegisterProc('PXXStrDecRef', False, tyPointer, 1, dummyNames, dummyTypes);
-    dummyNames[0] := 'strSlot'; dummyTypes[0] := tyPointer;
-    i := RegisterProc('PXXStrUnique', True, tyPointer, 1, dummyNames, dummyTypes);
-
-    dummyNames[0] := 'lenA';  dummyTypes[0] := tyNativeInt;
-    dummyNames[1] := 'srcA';  dummyTypes[1] := tyPointer;
-    dummyNames[2] := 'lenB';  dummyTypes[2] := tyNativeInt;
-    dummyNames[3] := 'srcB';  dummyTypes[3] := tyPointer;
-    i := RegisterProc('PXXStrEq', True, tyInt64, 4, dummyNames, dummyTypes);
 
     dummyNames[0] := 'dest';      dummyTypes[0] := tyPointer;
     dummyNames[1] := 'left';      dummyTypes[1] := tyPointer;

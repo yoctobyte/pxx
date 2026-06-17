@@ -53,30 +53,28 @@ const
 function PXXAlloc(size: NativeInt; align: Integer): Pointer;
 procedure PXXFree(p: Pointer);
 function PXXRealloc(p: Pointer; newSize: NativeInt; align: Integer): Pointer;
-{ ESP gets the allocator plus a lean unmanaged-element dynarray (SetLength).
-  Managed-element retain/release (strings/records/nested arrays) is not ported
-  yet, so the ESP PXXDynSetLen skips it; the string/variant/float helpers stay
-  fully guarded out. }
-{$ifdef PXX_ESP}
-procedure PXXDynSetLen(arrSlot: Pointer; newLen: NativeInt; desc: Pointer);
-procedure PXXMemZero(dst: Pointer; n: NativeInt);
-{$endif}
-{$ifndef PXX_ESP}
+{ Target-independent runtime: managed-string ARC helpers, mem copy/zero, and the
+  dynamic-array SetLength. These use only PXXAlloc/PXXFree, so they build on
+  every target including ESP. (PXXDynSetLen has an ESP-lean body that skips
+  managed-element retain/release; same signature.) }
 function PXXStrFromLit(len: NativeInt; src: Pointer): Pointer;
 function PXXStrConcat(lenA: NativeInt; srcA: Pointer; srcB: Pointer; lenB: NativeInt): Pointer;
-function PXXStrLoadFile(path: Pointer): Pointer;
 procedure PXXStrIncRef(p: Pointer);
 procedure PXXStrDecRef(p: Pointer);
 function PXXStrUnique(strSlot: Pointer): Pointer;
 function PXXStrEq(lenA: NativeInt; srcA: Pointer; lenB: NativeInt; srcB: Pointer): Int64;
+procedure PXXStrSetLen(strSlot: Pointer; newLen: NativeInt);
+procedure PXXMemMove(dst: Pointer; src: Pointer; n: NativeInt);
+procedure PXXMemZero(dst: Pointer; n: NativeInt);
+procedure PXXDynSetLen(arrSlot: Pointer; newLen: NativeInt; desc: Pointer);
+{ Not yet on ESP: file I/O, managed-element dynarray/record retain/release,
+  variant, float formatting. }
+{$ifndef PXX_ESP}
+function PXXStrLoadFile(path: Pointer): Pointer;
 procedure PXXRecordRetain(recAddr: Pointer; desc: Pointer);
 procedure PXXRecordRelease(recAddr: Pointer; desc: Pointer);
 procedure PXXDynArrayRelease(arrData: Pointer; desc: Pointer);
 function PXXDynArrayUnique(arrSlot: Pointer; desc: Pointer): Pointer;
-procedure PXXMemMove(dst: Pointer; src: Pointer; n: NativeInt);
-procedure PXXMemZero(dst: Pointer; n: NativeInt);
-procedure PXXDynSetLen(arrSlot: Pointer; newLen: NativeInt; desc: Pointer);
-procedure PXXStrSetLen(strSlot: Pointer; newLen: NativeInt);
 function PXXVarBinOp(dest: Pointer; left: Pointer; right: Pointer; opTk: NativeInt; isCompare: NativeInt): Int64;
 procedure PXXVarClear(v: Pointer);
 procedure PXXVarRetain(v: Pointer);
@@ -249,19 +247,6 @@ begin
   if rc <= 0 then PXXFree(Pointer(block));
 end;
 
-{ Zero n bytes at dst (pure; IR_DEFAULT_MEM backing for unmanaged temps). }
-procedure PXXMemZero(dst: Pointer; n: NativeInt);
-var d, i: Int64;
-begin
-  d := Int64(dst);
-  i := 0;
-  while i < n do
-  begin
-    PByte(d + i)^ := 0;
-    i := i + 1;
-  end;
-end;
-
 procedure PXXDynSetLen(arrSlot: Pointer; newLen: NativeInt; desc: Pointer);
 var
   oldData, newBlock, newArrData: Pointer;
@@ -303,7 +288,6 @@ begin
 end;
 {$endif}
 
-{$ifndef PXX_ESP}
 { Managed-string constructor: allocate a [refcount:8][length:8][data][nul]
   block and copy len bytes from src. Returns the data pointer (base+16) or
   nil for an empty string. Called from the emitted runtime shim
@@ -370,9 +354,11 @@ begin
   Result := Pointer(d);
 end;
 
+{$ifndef PXX_ESP}
 { Per-target syscall wrappers for the file-load helper. AArch64 has no plain
   open/lseek/read/close in the legacy slots, so it uses openat(AT_FDCWD=-100).
-  i386/arm32 use 32-bit lseek (files < 2 GiB); good enough for source loads. }
+  i386/arm32 use 32-bit lseek (files < 2 GiB); good enough for source loads.
+  ESP has no filesystem here, so the whole group is excluded. }
 function PXXSysOpenRO(path: Pointer): Int64;
 begin
 {$ifdef CPUX86_64}
@@ -463,6 +449,8 @@ begin
   Result := Pointer(d);
 end;
 
+{$endif}
+
 { Managed-string refcount retain/release for targets without the hand-emitted
   atomic blob (i386 and other cross targets). p = data pointer; refcount lives
   at [p-16], length at [p-8]. NON-atomic — threadsafe mode is x86-64 only and
@@ -542,6 +530,9 @@ begin
   Result := 1;
 end;
 
+{$ifndef PXX_ESP}
+{ Managed-element dynarray + record retain/release (strings/records/nested
+  arrays). Not on ESP yet -- the ESP dynarray (above) is unmanaged-element only. }
 procedure PXXDynArrayIncRef(p: Pointer);
 var base: Int64;
 begin
@@ -830,6 +821,7 @@ begin
 
   Result := newArrData;
 end;
+{$endif}
 
 { Forward byte copy (non-overlapping or dst < src). Used by cross backends that
   lack a single-instruction block move (e.g. ARM32) for whole-record copies. }
@@ -859,13 +851,15 @@ begin
   end;
 end;
 
+{$ifndef PXX_ESP}
 { SetLength for a depth-1 dynamic array. arrSlot = address of the handle slot;
   newLen = requested element count; desc = the array's layout descriptor
   (+4 elSize, +8 depth, +12 baseKind, +16 baseTypeRef). Allocates a fresh
   [refcount:8][length:8][data] block, zeroes it, copies min(old,new) elements,
   retains the copied managed elements, publishes the new handle, and releases
   the old one. newLen <= 0 publishes nil. Target-independent — replaces the
-  per-arch inline SetLength so i386/ARM32/AArch64 share one implementation. }
+  per-arch inline SetLength so i386/ARM32/AArch64 share one implementation.
+  ESP uses the lean unmanaged-element PXXDynSetLen above instead. }
 procedure PXXDynSetLen(arrSlot: Pointer; newLen: NativeInt; desc: Pointer);
 var
   oldData, newBlock, newArrData: Pointer;
@@ -920,6 +914,7 @@ begin
   PWord(arrSlot)^ := Int64(newArrData);
   PXXDynArrayRelease(oldData, desc);
 end;
+{$endif}
 
 { SetLength for a managed AnsiString. strSlot = address of the handle slot
   (holds the data pointer or nil); newLen = requested character count. Allocates
@@ -974,6 +969,8 @@ begin
   PXXStrDecRef(oldData);
 end;
 
+{$ifndef PXX_ESP}
+{ Variant + float-formatting runtime (not on ESP yet). }
 type
   PDouble = ^Double;
 
