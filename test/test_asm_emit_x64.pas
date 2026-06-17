@@ -265,5 +265,14 @@ begin
   ResetCode; EmitAsmX64('sbb edi, [rsp + 4]'); AssertBytes('sbb edi,[rsp+4]', [$1B,$7C,$24,$04]);
   ResetCode; EmitAsmX64(['movabs rcx, %', 0]); AssertBytes('movabs rcx,0', [$48,$B9,$00,$00,$00,$00,$00,$00,$00,$00]);
 
+  { --- xchg + absolute [@glob] r/m (atomic mutex slot) --- }
+  ResetCode; EmitAsmX64('xchg eax, [rbp - 8]'); AssertBytes('xchg eax,[rbp-8]', [$87,$45,$F8]);
+  ResetCode; EmitAsmX64(['lock xchg [@glob], eax', 4096]);
+  AssertBytes('lock xchg [@glob],eax', [$F0,$87,$04,$25,$00,$00,$00,$00]);
+  if (GlobFixCount <> 1) or (GlobFix[0].BSSoff <> 4096) then Error('lock-xchg glob reloc failed');
+  ResetCode; EmitAsmX64(['mov dword [@glob], 0', 4096]);
+  AssertBytes('mov dword [@glob],0', [$C7,$04,$25,$00,$00,$00,$00,$00,$00,$00,$00]);
+  if (GlobFixCount <> 1) or (GlobFix[0].BSSoff <> 4096) then Error('mov-abs glob reloc failed');
+
   writeln('ALL X64 ASM EMIT TESTS PASSED');
 end.

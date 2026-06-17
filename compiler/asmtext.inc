@@ -156,8 +156,19 @@ begin
   end;
 end;
 
+{ Absolute-address r/m: ModRM mod=00 rm=100 + SIB=$25 (no base/index, disp32)
+  followed by a 4-byte relocation. kind 3 = glob (BSS), 4 = data. The r/m form
+  the atomic mutex slot and zeroing store use ([@glob]). }
+procedure AsmEncAbsRM(regField, kind, off: Integer);
+begin
+  EncB(((regField and 7) shl 3) or 4);
+  EncB($25);
+  if kind = 4 then EmitDataRef(off) else EmitGlobRef(off);
+end;
+
 { Classify one operand text. Returns kind via Result: 0=register, 1=immediate,
-  2=memory [base+disp]. Fills the relevant out params (regSize doubles as the
+  2=memory [base+disp], 3=absolute [@glob], 4=absolute [@data]. Fills the
+  relevant out params (regSize doubles as the
   explicit memory-operand size for kind 2, 0 if unspecified). `%` immediates/
   disps pull the next value from holes[] via holeCur. }
 function AsmTextOperand(const opIn: AnsiString;
@@ -193,6 +204,21 @@ begin
     inner := '';
     i := 2;
     while (i <= Length(op)) and (AsmTextCharAt(op, i) <> ']') do begin AppendChar(inner, op[i]); Inc(i); end;
+    inner := AsmTextTrim(inner);
+
+    { absolute-address r/m: [@glob] / [@data] — the disp32 is a reloc hole, no
+      base register. Kind 3 = glob (BSS), kind 4 = data; offset returned in
+      memDisp (consumes one hole). Used by the atomic mutex slot. }
+    if AsmTextCharAt(inner, 1) = '@' then
+    begin
+      memDisp := Integer(holes[holeCur]); Inc(holeCur);
+      regSize := memSize;
+      if CaseEqual(inner, '@glob') then Result := 3
+      else if CaseEqual(inner, '@data') then Result := 4
+      else begin Error('EmitAsmX64: bad absolute memory operand'); Result := 3; end;
+      Exit;
+    end;
+
     { split on + or - }
     baseStr := ''; dispStr := ''; sign := 1;
     i := 1;
@@ -306,6 +332,15 @@ begin
     if CaseEqual(rest, 'movsb') then begin x64_rep_movsb; Exit; end;
     if CaseEqual(rest, 'stosb') then begin x64_rep_stosb; Exit; end;
     Error('EmitAsmX64: unsupported rep string op');
+  end;
+
+  { lock prefix: `lock xchg ...` etc — emit F0, then assemble the rest as a
+    fresh line (the recursion re-binds holes from holes[0], and lock takes none). }
+  if CaseEqual(mnem, 'lock') then
+  begin
+    EncB($F0);
+    AsmTextLine(AsmTextTrim(rest), holes, nHoles);
+    Exit;
   end;
 
   if not haveOps then Error('EmitAsmX64: unknown 0-operand mnemonic');
@@ -474,6 +509,45 @@ begin
     Exit;
   end;
 
+  { xchg (87 /r; 86 for byte). Supports reg,reg | reg,[mem] | [mem],reg and the
+    absolute [@glob]/[@data] r/m used by the atomic mutex slot. The operand size
+    comes from the register operand. }
+  if CaseEqual(mnem, 'xchg') then
+  begin
+    if (k0 = 0) and (k1 = 0) then
+    begin
+      EncPrefixAndREX(s0, r0, r1, False);
+      if s0 = 1 then EncB($86) else EncB($87);
+      EncModRMReg(r0, r1);
+    end
+    else if (k0 = 0) and (k1 = 2) then
+    begin
+      EncPrefixAndREXMem(s0, r0, mb1, s0 = 1);
+      if s0 = 1 then EncB($86) else EncB($87);
+      EncModRMMem(r0, mb1, md1, False);
+    end
+    else if (k0 = 2) and (k1 = 0) then
+    begin
+      EncPrefixAndREXMem(s1, r1, mb0, s1 = 1);
+      if s1 = 1 then EncB($86) else EncB($87);
+      EncModRMMem(r1, mb0, md0, False);
+    end
+    else if ((k0 = 3) or (k0 = 4)) and (k1 = 0) then
+    begin
+      EncPrefixAndREX(s1, r1, 0, False);
+      if s1 = 1 then EncB($86) else EncB($87);
+      AsmEncAbsRM(r1, k0, md0);
+    end
+    else if (k0 = 0) and ((k1 = 3) or (k1 = 4)) then
+    begin
+      EncPrefixAndREX(s0, r0, 0, False);
+      if s0 = 1 then EncB($86) else EncB($87);
+      AsmEncAbsRM(r0, k1, md1);
+    end
+    else Error('EmitAsmX64: unsupported xchg form');
+    Exit;
+  end;
+
   { movq — five encodings selected by operand kind (xmm flagged size 16):
     xmm,gp (66 [W] 0F 6E) / gp,xmm (66 [W] 0F 7E) / xmm,xmm (F3 0F 7E) /
     xmm,[mem] (F3 0F 7E) / [mem],xmm (66 0F D6). }
@@ -566,6 +640,28 @@ begin
     else if (k0 = 0) and (k1 = 1) then x64_mov_reg_imm(s0, r0, imm1)
     else if (k0 = 0) and (k1 = 2) then x64_mov_reg_mem(s0, r0, mb1, md1, False)
     else if (k0 = 2) and (k1 = 0) then x64_mov_mem_reg(s1, mb0, md0, r1, False)
+    { absolute [@glob]/[@data] r/m forms }
+    else if ((k0 = 3) or (k0 = 4)) and (k1 = 1) then
+    begin
+      if s0 = 0 then Error('EmitAsmX64: mov [@..] needs an explicit size');
+      EncPrefixAndREX(s0, 0, 0, False);
+      if s0 = 1 then EncB($C6) else EncB($C7);
+      AsmEncAbsRM(0, k0, md0);
+      if s0 = 1 then EncB(Integer(imm1) and $FF)
+      else if s0 = 2 then EncI16(imm1) else EncI32(imm1);
+    end
+    else if ((k0 = 3) or (k0 = 4)) and (k1 = 0) then
+    begin
+      EncPrefixAndREX(s1, r1, 0, False);
+      if s1 = 1 then EncB($88) else EncB($89);
+      AsmEncAbsRM(r1, k0, md0);
+    end
+    else if (k0 = 0) and ((k1 = 3) or (k1 = 4)) then
+    begin
+      EncPrefixAndREX(s0, r0, 0, False);
+      if s0 = 1 then EncB($8A) else EncB($8B);
+      AsmEncAbsRM(r0, k1, md1);
+    end
     else Error('EmitAsmX64: unsupported mov form');
     Exit;
   end;

@@ -9,26 +9,23 @@ begin
 end;
 
 procedure EmitAcquireHeapLock;
-var start: Integer;
 begin
   if ThreadSafeMode then
-  begin
-    EmitB($50);                                     { push rax }
-    start := CodeLen;
-    EmitB($B8); EmitI32(1);                         { mov eax, 1 }
-    EmitB($F0); EmitB($87); EmitB($04); EmitB($25); EmitGlobRef(BSS_HEAP_LOCK); { lock xchg [BSS_HEAP_LOCK], eax }
-    EmitB($85); EmitB($C0);                         { test eax, eax }
-    EmitB($75); EmitB(Byte(start - (CodeLen + 1))); { jnz start }
-    EmitB($58);                                     { pop rax }
-  end;
+    EmitAsmX64([
+      'push rax',
+    '.spin:',
+      'mov eax, 1',
+      'lock xchg [@glob], eax',  BSS_HEAP_LOCK,
+      'test eax, eax',
+      'jnz .spin',
+      'pop rax'
+    ]);
 end;
 
 procedure EmitReleaseHeapLock;
 begin
   if ThreadSafeMode then
-  begin
-    EmitB($C7); EmitB($04); EmitB($25); EmitGlobRef(BSS_HEAP_LOCK); EmitI32(0); { mov dword [BSS_HEAP_LOCK], 0 }
-  end;
+    EmitAsmX64(['mov dword [@glob], 0', BSS_HEAP_LOCK]);
 end;
 
 procedure EmitHeapAllocLocked;
