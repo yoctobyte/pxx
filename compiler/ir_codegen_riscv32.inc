@@ -107,6 +107,25 @@ begin
   end;
 end;
 
+procedure EmitHeapAllocLockedRISCV32;
+{ a0 = requested payload bytes -> a0 = payload pointer. PXXAlloc(size, align=8). }
+var pi: Integer;
+begin
+  pi := FindProc('PXXAlloc');
+  if pi < 0 then Error('compiler error: Alloc helper not found in builtin unit');
+  rv32_addi(reg_a1, reg_zero, 8);   { a1 = align (a0 = size already) }
+  EmitCallProc(pi);                 { result in a0 }
+end;
+
+procedure EmitHeapFreeLockedRISCV32;
+{ a0 = payload pointer -> PXXFree(p). nil ignored inside. }
+var pi: Integer;
+begin
+  pi := FindProc('PXXFree');
+  if pi < 0 then Error('compiler error: Free helper not found in builtin unit');
+  EmitCallProc(pi);
+end;
+
 procedure IREmitNodeRISCV32(node: Integer);
 var
   left, right, op, si, pi, nArgs, i, lo, elemSize, sz, argNode: Integer;
@@ -292,6 +311,23 @@ begin
     IR_CALL:
       begin
         pi := IRA[node];
+        if pi = -Ord(tkGetMem) then
+        begin
+          { GetMem / New. Class instantiation (VMT + ctor) is a later step. }
+          if IRC[node] >= REC_UCLASS_BASE then
+            Error('target riscv32: class instantiation not yet supported');
+          argNode := IRB[node];               { size arg }
+          IREmitNodeRISCV32(IRA[argNode]);    { size -> a0 }
+          EmitHeapAllocLockedRISCV32;         { a0 = payload pointer }
+          Exit;
+        end;
+        if pi = -Ord(tkFreeMem) then
+        begin
+          argNode := IRB[node];               { pointer arg }
+          IREmitNodeRISCV32(IRA[argNode]);    { p -> a0 }
+          EmitHeapFreeLockedRISCV32;
+          Exit;
+        end;
         if pi < 0 then
           Error('target riscv32: standard builtin calls not supported in bare-metal stage 1');
 
@@ -326,6 +362,16 @@ begin
     IR_WRITE, IR_WRITELN:
       begin
         { Bare-metal: write/writeln does nothing. }
+      end;
+
+    IR_TERMINATE:
+      begin
+        if IRIVal[node] = AN_HALT then
+          EmitExit(0)                            { bare-metal: park in a self-loop }
+        else if CurProc >= 0 then
+          EmitProcEpilog(Procs[CurProc].RetSymIdx) { early Exit via epilogue }
+        else
+          EmitExit(0);
       end;
 
     IR_NEG:

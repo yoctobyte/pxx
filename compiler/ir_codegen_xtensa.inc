@@ -172,6 +172,38 @@ begin
   end;
 end;
 
+procedure EmitHeapAllocLockedXtensa;
+{ a2 = requested payload bytes -> a2 = payload pointer. Delegates to the Pascal
+  PXXAlloc(size, align=8). No threadsafe lock (x86-64-only). }
+var pi: Integer;
+begin
+  pi := FindProc('PXXAlloc');
+  if pi < 0 then Error('compiler error: Alloc helper not found in builtin unit');
+  if XtensaABI = XTENSA_ABI_WINDOWED then
+  begin
+    xtensa_mov(reg_xtensa_a10, reg_xtensa_a2);   { arg0 = size }
+    xtensa_movi(reg_xtensa_a11, 8);              { arg1 = align }
+    EmitCallProc(pi);
+    xtensa_mov(reg_xtensa_a2, reg_xtensa_a10);   { result }
+  end
+  else
+  begin
+    xtensa_movi(reg_xtensa_a3, 8);               { a2 = size already; arg1 = align }
+    EmitCallProc(pi);                            { result in a2 }
+  end;
+end;
+
+procedure EmitHeapFreeLockedXtensa;
+{ a2 = payload pointer -> PXXFree(p). nil ignored inside. }
+var pi: Integer;
+begin
+  pi := FindProc('PXXFree');
+  if pi < 0 then Error('compiler error: Free helper not found in builtin unit');
+  if XtensaABI = XTENSA_ABI_WINDOWED then
+    xtensa_mov(reg_xtensa_a10, reg_xtensa_a2);
+  EmitCallProc(pi);
+end;
+
 procedure IREmitNodeXtensa(node: Integer);
 var
   left, right, op, si, pi, nArgs, i, lo, elemSize, sz, argNode, argBase: Integer;
@@ -338,6 +370,23 @@ begin
     IR_CALL:
       begin
         pi := IRA[node];
+        if pi = -Ord(tkGetMem) then
+        begin
+          { GetMem / New. Class instantiation (VMT + ctor) is a later step. }
+          if IRC[node] >= REC_UCLASS_BASE then
+            Error('target xtensa: class instantiation not yet supported');
+          argNode := IRB[node];                 { size arg }
+          IREmitNodeXtensa(IRA[argNode]);       { size -> a2 }
+          EmitHeapAllocLockedXtensa;            { a2 = payload pointer }
+          Exit;
+        end;
+        if pi = -Ord(tkFreeMem) then
+        begin
+          argNode := IRB[node];                 { pointer arg }
+          IREmitNodeXtensa(IRA[argNode]);       { p -> a2 }
+          EmitHeapFreeLockedXtensa;
+          Exit;
+        end;
         if pi < 0 then
           Error('target xtensa: builtin calls not supported in bare-metal stage 1');
 
@@ -387,6 +436,16 @@ begin
         { Bare-metal: write/writeln does nothing. }
       end;
 
+    IR_TERMINATE:
+      begin
+        if IRIVal[node] = AN_HALT then
+          EmitExit(0)                            { bare-metal: park in a self-loop }
+        else if CurProc >= 0 then
+          EmitProcEpilog(Procs[CurProc].RetSymIdx) { early Exit: jump out via epilogue }
+        else
+          EmitExit(0);
+      end;
+
     IR_NEG:
       begin
         IREmitNodeXtensa(IRA[node]);
@@ -402,7 +461,7 @@ begin
       end;
 
     else
-      Error('target xtensa: unsupported node in IR codegen');
+      Error('target xtensa: unsupported node in IR codegen: ' + IROpName(IRKind[node]));
   end;
 end;
 

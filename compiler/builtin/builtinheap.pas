@@ -1,5 +1,10 @@
 unit builtinheap;
 
+{ ESP (xtensa/riscv32) has no mmap and no OS heap of its own here; back the
+  allocator with a fixed static arena instead. One marker for both ESP ISAs. }
+{$ifdef CPU_XTENSA}{$define PXX_ESP}{$endif}
+{$ifdef CPU_RISCV32}{$define PXX_ESP}{$endif}
+
 { Heap allocator + managed-string runtime helpers, split out of `builtin` so a
   program that only needs the heap (New/Dispose/GetMem) or the managed-string
   runtime does not drag in the Str/Val/Variant conversion routines (which use
@@ -48,6 +53,9 @@ const
 function PXXAlloc(size: NativeInt; align: Integer): Pointer;
 procedure PXXFree(p: Pointer);
 function PXXRealloc(p: Pointer; newSize: NativeInt; align: Integer): Pointer;
+{ ESP gets only the allocator for now; the managed-string / variant / dynarray /
+  float helpers are not yet ported there (guarded in the body too). }
+{$ifndef PXX_ESP}
 function PXXStrFromLit(len: NativeInt; src: Pointer): Pointer;
 function PXXStrConcat(lenA: NativeInt; srcA: Pointer; srcB: Pointer; lenB: NativeInt): Pointer;
 function PXXStrLoadFile(path: Pointer): Pointer;
@@ -67,6 +75,7 @@ function PXXVarBinOp(dest: Pointer; left: Pointer; right: Pointer; opTk: NativeI
 procedure PXXVarClear(v: Pointer);
 procedure PXXVarRetain(v: Pointer);
 procedure PXXWriteVariant(v: Pointer);
+{$endif}
 implementation
 
 
@@ -79,12 +88,22 @@ type
   PInt32 = ^Integer; { 32-bit integer access }
 
 const
+{$ifdef PXX_ESP}
+  HEAP_ARENA = 65536;       { single 64 KiB static arena (fits ESP SRAM) }
+{$else}
   HEAP_ARENA = 268435456;   { 256 MiB mmap chunk; anon pages fault in lazily }
+{$endif}
 
 var
   HeapPtr  : Int64;   { next free byte in the current arena (0 = none yet) }
   HeapEnd  : Int64;   { end address of the current arena }
   FreeList : Int64;   { head of the free list (payload address), 0 = empty }
+{$ifdef PXX_ESP}
+  { 64 KiB static arena as Int64 cells so its base is 8-aligned (payloads sit
+    at base+8, also 8-aligned). Handed out once; HeapMmap returns 0 after. }
+  EspArena     : array[0..8191] of Int64;
+  EspArenaUsed : Integer;
+{$endif}
 
 { Anonymous mmap of len bytes; returns the base address (or the kernel's
   negative errno, which a subsequent access would fault on). }
@@ -104,6 +123,18 @@ begin
 {$endif}
 {$ifdef CPU_I386}
   Result := __pxxrawsyscall(192, 0, len, 3, 34, -1, 0);
+{$endif}
+{$ifdef PXX_ESP}
+  { Static arena: hand out the fixed buffer once (len is HEAP_ARENA here, so
+    HeapEnd lines up). A second request means the arena is exhausted -> 0,
+    which faults on the next access, signalling out-of-memory. }
+  if EspArenaUsed <> 0 then
+    Result := 0
+  else
+  begin
+    EspArenaUsed := 1;
+    Result := Int64(@EspArena[0]);
+  end;
 {$endif}
 end;
 
@@ -197,6 +228,7 @@ begin
   Result := np;
 end;
 
+{$ifndef PXX_ESP}
 { Managed-string constructor: allocate a [refcount:8][length:8][data][nul]
   block and copy len bytes from src. Returns the data pointer (base+16) or
   nil for an empty string. Called from the emitted runtime shim
@@ -1318,5 +1350,6 @@ begin
     end;
   end;
 end;
+{$endif}
 
 end.

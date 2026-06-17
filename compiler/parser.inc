@@ -8779,8 +8779,6 @@ begin
   { Plain AnsiString needs only builtinheap (allocator + PXXStr*), not the full
     builtin conversions. Variant/Str/Val/uses pull builtin in the token loop. }
   needHeapUnit := needsHeap or needsAnsiRuntime;
-  if (TargetArch = TARGET_XTENSA) or (TargetArch = TARGET_RISCV32) then
-    needHeapUnit := False; { bare-metal stage 1: no allocator / managed runtime }
 
   if needHeapUnit then
   begin
@@ -8799,6 +8797,11 @@ begin
     dummyNames[2] := 'align'; dummyTypes[2] := tyInteger;
     i := RegisterProc('PXXRealloc', True, tyPointer, 3, dummyNames, dummyTypes);
 
+  { ESP (xtensa/riscv32) gets only the allocator for now; the managed-string,
+    variant and float-format helpers are not yet ported, and are guarded out of
+    builtinheap's body the same way (PXX_ESP). }
+  if (TargetArch <> TARGET_XTENSA) and (TargetArch <> TARGET_RISCV32) then
+  begin
     dummyNames[0] := 'len';   dummyTypes[0] := tyNativeInt;
     dummyNames[1] := 'src';   dummyTypes[1] := tyPointer;
     i := RegisterProc('PXXStrFromLit', True, tyPointer, 2, dummyNames, dummyTypes);
@@ -8841,6 +8844,7 @@ begin
     i := RegisterProc('PXXWriteFloatSci', False, tyPointer, 1, dummyNames, dummyTypes);
     dummyNames[1] := 'decimals';  dummyTypes[1] := tyNativeInt;
     i := RegisterProc('PXXWriteFloatFixed', False, tyPointer, 2, dummyNames, dummyTypes);
+  end;
 
     CurrentUnitIdx := savedUnitIdx;
   end;
