@@ -530,7 +530,6 @@ begin
   EmitwriteUInt64Arm32;
 end;
 
-procedure EmitArm32CopyBytes(countReg, srcReg, dstReg: Integer); forward;
 
 procedure EmitLoadArgvPtrArm32;
 { On entry r0 = argv index. Returns r0 = argv[index] C-string pointer. }
@@ -1625,8 +1624,15 @@ begin
         end;
         if ProcExternal[pi] then
           Error('target arm32: external calls not yet supported');
+
+        { Aggregate result: push the caller's hidden destination first (deepest
+          word) so arg evaluation can't disturb it; it is loaded into r12 (ip,
+          a scratch reg) just before the call. }
         if TypeIsAggregate(Procs[pi].RetType) then
-          Error('target arm32: aggregate-valued results not yet supported');
+        begin
+          IREmitNodeArm32(IRC[node]);   { r0 = hidden destination }
+          EmitI32($E92D0001);           { push {r0} }
+        end;
 
         { Word-based argument passing: each scalar arg is one machine word, an
           Int64/UInt64 by-value arg is two (lo then hi, lo at the lower word
@@ -1675,17 +1681,31 @@ begin
           if i < 4 then
             EmitI32($E59D0000 or (i shl 12) or ((j - 1 - i) * 4)); { ldr r[i], [sp, #off] }
 
-        if (j > 0) and (j <= 4) then
+        if TypeIsAggregate(Procs[pi].RetType) then
         begin
-          EmitLoadImmArm32(9, j * 4);
-          EmitI32($E08DD009); { add sp, sp, r9 (no stack words; drop all) }
-        end;
+          { Hidden dest is the deepest word, at [sp + j*4]; load it into r12,
+            drop args + dest, call. Callee returns the dest pointer in r0. }
+          if j > 4 then
+            Error('target arm32: aggregate result with more than 4 param words not supported');
+          EmitI32($E59DC000 or (j * 4));  { ldr r12, [sp, #j*4] (hidden dest) }
+          EmitLoadImmArm32(9, (j + 1) * 4);
+          EmitI32($E08DD009);             { add sp, sp, r9 (drop args + dest) }
+          EmitCallProc(pi);
+        end
+        else
+        begin
+          if (j > 0) and (j <= 4) then
+          begin
+            EmitLoadImmArm32(9, j * 4);
+            EmitI32($E08DD009); { add sp, sp, r9 (no stack words; drop all) }
+          end;
 
-        EmitCallProc(pi);
-        if j > 4 then
-        begin
-          EmitLoadImmArm32(9, j * 4);
-          EmitI32($E08DD009); { add sp, sp, r9 (drop all pushed words) }
+          EmitCallProc(pi);
+          if j > 4 then
+          begin
+            EmitLoadImmArm32(9, j * 4);
+            EmitI32($E08DD009); { add sp, sp, r9 (drop all pushed words) }
+          end;
         end;
       end;
 

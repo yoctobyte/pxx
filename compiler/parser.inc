@@ -7384,6 +7384,20 @@ begin
       { i386 carries the hidden destination pointer in ecx; stash it before the
         param-copy loop clobbers ecx. }
       begin EmitB($89); EmitB($8D); EmitI32(Syms[idx].Offset); end { mov [ebp+off], ecx }
+    else if TargetArch = TARGET_AARCH64 then
+    begin
+      { aarch64 carries the hidden destination in x8 (AAPCS XR). }
+      EmitLoadImmA64(9, Syms[idx].Offset);
+      EmitI32($8B0903A9);                                 { add x9, x29, x9 }
+      EmitI32($F9000128);                                 { str x8, [x9] }
+    end
+    else if TargetArch = TARGET_ARM32 then
+    begin
+      { arm32 carries the hidden destination in r12 (ip, a scratch reg). }
+      EmitLoadImmArm32(9, Syms[idx].Offset);
+      EmitI32($E08B9009);                                 { add r9, fp, r9 }
+      EmitI32($E589C000);                                 { str r12, [r9] }
+    end
     else
       begin EmitB($4C); EmitB($89); EmitB($95); EmitI32(Syms[idx].Offset); end; { mov [rbp+off], r10 }
   end;

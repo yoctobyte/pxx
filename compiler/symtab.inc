@@ -7,6 +7,8 @@ procedure EmitManagedRecordReleaseLocked(recId: Integer); forward;
 procedure EmitAcquireHeapLock; forward;
 procedure EmitReleaseHeapLock; forward;
 procedure EmitLoadVarA64(idx: Integer); forward;
+procedure EmitA64CopyBytes(countReg, srcReg, dstReg: Integer); forward;
+procedure EmitArm32CopyBytes(countReg, srcReg, dstReg: Integer); forward;
 procedure EmitLoadVarArm32(idx: Integer); forward;
 procedure EmitLoadVar64Arm32(idx: Integer); forward;
 procedure EmitLoadVarAddrArm32(idx: Integer); forward;
@@ -3424,7 +3426,25 @@ begin
 
     if retSymIdx >= 0 then
     begin
-      if Syms[retSymIdx].TypeKind = tyString then
+      if TypeIsAggregate(Syms[retSymIdx].TypeKind) and
+         (CurProc >= 0) and (ProcAggregateDestSym[CurProc] >= 0) then
+      begin
+        { Aggregate result: copy the Result local into the caller's hidden
+          destination (pointer the prologue stashed from r12), return the
+          pointer in r0. r5=src, r6=dst, r4=count for EmitArm32CopyBytes. }
+        EmitLoadVarArm32(ProcAggregateDestSym[CurProc]);  { r0 = dest ptr }
+        EmitI32($E1A06000);                               { mov r6, r0 (dst) }
+        EmitLoadVarAddrArm32(retSymIdx);                  { r0 = &Result }
+        EmitI32($E1A05000);                               { mov r5, r0 (src) }
+        if Syms[retSymIdx].TypeKind = tyRecord then
+          sz := RecSize(Syms[retSymIdx].RecName)
+        else
+          sz := TypeSize(Syms[retSymIdx].TypeKind);
+        EmitLoadImmArm32(4, sz);                          { r4 = byte count }
+        EmitArm32CopyBytes(4, 5, 6);
+        EmitLoadVarArm32(ProcAggregateDestSym[CurProc]);  { r0 = dest (return value) }
+      end
+      else if Syms[retSymIdx].TypeKind = tyString then
         { Legacy inline string struct ([len][data]): return its address — the
           global lives in BSS, a local on the frame (mirrors the x86-64 path).
           Managed tyAnsiString results stay pointer-sized handles below. }
@@ -3450,7 +3470,24 @@ begin
   begin
     if retSymIdx >= 0 then
     begin
-      if Syms[retSymIdx].TypeKind = tyString then
+      if TypeIsAggregate(Syms[retSymIdx].TypeKind) and
+         (CurProc >= 0) and (ProcAggregateDestSym[CurProc] >= 0) then
+      begin
+        { Aggregate result: copy the Result local into the caller's hidden
+          destination (pointer the prologue stashed from x8), return the pointer
+          in x0. EmitA64CopyBytes uses x4/x5/x6 + w8, leaving x0 intact. }
+        EmitLoadVarA64(ProcAggregateDestSym[CurProc]);   { x0 = dest ptr }
+        EmitI32($AA0003E6);                              { mov x6, x0 (dst) }
+        EmitLoadImmA64(9, Syms[retSymIdx].Offset);
+        EmitI32($8B0903A5);                              { add x5, x29, x9 (src = &Result) }
+        if Syms[retSymIdx].TypeKind = tyRecord then
+          sz := RecSize(Syms[retSymIdx].RecName)
+        else
+          sz := TypeSize(Syms[retSymIdx].TypeKind);
+        EmitLoadImmA64(4, sz);                           { x4 = byte count }
+        EmitA64CopyBytes(4, 5, 6);
+      end
+      else if Syms[retSymIdx].TypeKind = tyString then
       begin
         if Syms[retSymIdx].Kind = skGlobal then
         begin

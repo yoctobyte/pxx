@@ -1444,8 +1444,15 @@ begin
         end;
         if ProcExternal[pi] then
           Error('target aarch64: external calls not yet supported');
+
+        { Aggregate result: push the caller's hidden destination first (deepest
+          temp) so arg evaluation can't disturb it; it is popped into x8 (the
+          AAPCS indirect-result register) just before the call. }
         if TypeIsAggregate(Procs[pi].RetType) then
-          Error('target aarch64: aggregate-valued results not yet supported');
+        begin
+          IREmitNodeAarch64(IRC[node]);   { x0 = hidden destination }
+          EmitI32($F81F0FE0);             { str x0, [sp, #-16]! }
+        end;
 
         argNode := IRB[node];
         nArgs := 0;
@@ -1464,10 +1471,14 @@ begin
           { All args fit in x0..x7: pop each temp into its register (unchanged). }
           for i := nArgs - 1 downto 0 do
             EmitI32($F84107E0 + i); { ldr x[i], [sp], #16 }
+          if TypeIsAggregate(Procs[pi].RetType) then
+            EmitI32($F84107E8);   { ldr x8, [sp], #16 (hidden destination) }
           EmitCallProc(pi);
         end
         else
         begin
+          if TypeIsAggregate(Procs[pi].RetType) then
+            Error('target aarch64: aggregate result with more than 8 params not supported');
           { AAPCS: args 0..7 in x0..x7, args 8.. in an outgoing stack block at sp.
             Build the block from the temp slots without consuming them, load the
             register args by offset, then drop block + temps after the call.
