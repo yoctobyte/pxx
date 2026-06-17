@@ -2009,6 +2009,12 @@ begin
         end;
       end;
 
+    IR_RTTI_REG:
+      EmitLoadDataRefArm32(0, -100);   { r0 = RTTI-registry addr (sentinel) }
+
+    IR_RESOURCES:
+      EmitLoadDataRefArm32(0, -101);   { r0 = resource-table addr (sentinel) }
+
     IR_SYSCALL:
       begin
         { Raw syscall (EABI): args (nr, a0..a5) pushed left-to-right, then

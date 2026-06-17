@@ -2480,6 +2480,12 @@ begin
         EmitB($F3); EmitB($AA);                      { rep stosb }
       end;
 
+    IR_RTTI_REG:
+      begin EmitB($B8); EmitDataRef(-100); end;   { mov eax, RTTI-registry addr }
+
+    IR_RESOURCES:
+      begin EmitB($B8); EmitDataRef(-101); end;   { mov eax, resource-table addr }
+
     IR_SYSCALL:
       begin
         { Raw syscall (int 0x80): args (nr, a0..a5) pushed left-to-right,

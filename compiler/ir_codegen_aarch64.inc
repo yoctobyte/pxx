@@ -1804,6 +1804,12 @@ begin
         end;
       end;
 
+    IR_RTTI_REG:
+      EmitLoadDataRefA64(0, -100);     { x0 = RTTI-registry addr (sentinel) }
+
+    IR_RESOURCES:
+      EmitLoadDataRefA64(0, -101);     { x0 = resource-table addr (sentinel) }
+
     IR_SYSCALL:
       begin
         { Raw syscall: args (nr, a0..a5) pushed left-to-right, then popped
