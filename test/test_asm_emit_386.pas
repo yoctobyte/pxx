@@ -596,5 +596,11 @@ begin
   ResetCode; EmitAsm386('pxor xmm0, xmm0'); AssertBytes('pxor xmm0,xmm0', [$66,$0F,$EF,$C0]);
   ResetCode; EmitAsm386('xorpd xmm0, xmm1'); AssertBytes('xorpd xmm0,xmm1', [$66,$0F,$57,$C1]);
 
+  { adc / sbb }
+  ResetCode; EmitAsm386('adc edx, 0'); AssertBytes('adc edx,0', [$83,$D2,$00]);
+  ResetCode; EmitAsm386('adc eax, ebx'); AssertBytes('adc eax,ebx', [$11,$D8]);
+  ResetCode; EmitAsm386('sbb eax, ebx'); AssertBytes('sbb eax,ebx', [$19,$D8]);
+  ResetCode; EmitAsm386('sbb edi, [esp + 4]'); AssertBytes('sbb edi,[esp+4]', [$1B,$7C,$24,$04]);
+
   writeln('ALL I386 ASM EMIT TESTS PASSED');
 end.

@@ -416,6 +416,8 @@ begin
   begin
     if CaseEqual(mnem, 'add') then i := 0
     else if CaseEqual(mnem, 'or')  then i := 1
+    else if CaseEqual(mnem, 'adc') then i := 2
+    else if CaseEqual(mnem, 'sbb') then i := 3
     else if CaseEqual(mnem, 'and') then i := 4
     else if CaseEqual(mnem, 'sub') then i := 5
     else if CaseEqual(mnem, 'xor') then i := 6
@@ -443,6 +445,8 @@ begin
   begin
     if CaseEqual(mnem, 'add') then mb0 := $01
     else if CaseEqual(mnem, 'or')  then mb0 := $09
+    else if CaseEqual(mnem, 'adc') then mb0 := $11
+    else if CaseEqual(mnem, 'sbb') then mb0 := $19
     else if CaseEqual(mnem, 'and') then mb0 := $21
     else if CaseEqual(mnem, 'sub') then mb0 := $29
     else if CaseEqual(mnem, 'xor') then mb0 := $31
@@ -460,6 +464,8 @@ begin
   begin
     if CaseEqual(mnem, 'add') then i := $01
     else if CaseEqual(mnem, 'or')  then i := $09
+    else if CaseEqual(mnem, 'adc') then i := $11
+    else if CaseEqual(mnem, 'sbb') then i := $19
     else if CaseEqual(mnem, 'and') then i := $21
     else if CaseEqual(mnem, 'sub') then i := $29
     else if CaseEqual(mnem, 'xor') then i := $31
@@ -486,6 +492,8 @@ begin
     if s0 = 0 then Error('EmitAsm386: memory ALU needs an explicit size (byte/word/dword)');
     if CaseEqual(mnem, 'add') then i := 0
     else if CaseEqual(mnem, 'or')  then i := 1
+    else if CaseEqual(mnem, 'adc') then i := 2
+    else if CaseEqual(mnem, 'sbb') then i := 3
     else if CaseEqual(mnem, 'and') then i := 4
     else if CaseEqual(mnem, 'sub') then i := 5
     else if CaseEqual(mnem, 'xor') then i := 6

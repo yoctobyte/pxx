@@ -257,5 +257,13 @@ begin
   ResetCode; EmitAsmX64('movq xmm0, r10'); AssertBytes('movq xmm0,r10', [$66,$49,$0F,$6E,$C2]);
   ResetCode; EmitAsmX64('movq r11, xmm2'); AssertBytes('movq r11,xmm2', [$66,$49,$0F,$7E,$D3]);
 
+  { --- adc / sbb / movabs --- }
+  ResetCode; EmitAsmX64('adc edx, 0'); AssertBytes('adc edx,0', [$83,$D2,$00]);
+  ResetCode; EmitAsmX64('adc rax, rcx'); AssertBytes('adc rax,rcx', [$48,$11,$C8]);
+  ResetCode; EmitAsmX64('adc eax, ebx'); AssertBytes('adc eax,ebx', [$11,$D8]);
+  ResetCode; EmitAsmX64('sbb rax, rcx'); AssertBytes('sbb rax,rcx', [$48,$19,$C8]);
+  ResetCode; EmitAsmX64('sbb edi, [rsp + 4]'); AssertBytes('sbb edi,[rsp+4]', [$1B,$7C,$24,$04]);
+  ResetCode; EmitAsmX64(['movabs rcx, %', 0]); AssertBytes('movabs rcx,0', [$48,$B9,$00,$00,$00,$00,$00,$00,$00,$00]);
+
   writeln('ALL X64 ASM EMIT TESTS PASSED');
 end.

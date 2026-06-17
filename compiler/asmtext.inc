@@ -549,6 +549,17 @@ begin
     Exit;
   end;
 
+  { movabs reg, imm64 — the explicit 10-byte REX.W B8+r imm64 form. }
+  if CaseEqual(mnem, 'movabs') then
+  begin
+    if k0 <> 0 then Error('EmitAsmX64: movabs expects a register dest');
+    if k1 <> 1 then Error('EmitAsmX64: movabs expects an immediate');
+    EncPrefixAndREX(8, 0, r0, False);
+    EncB($B8 + (r0 and 7));
+    EncI64(imm1);
+    Exit;
+  end;
+
   if CaseEqual(mnem, 'mov') then
   begin
     if (k0 = 0) and (k1 = 0) then x64_mov_reg_reg(s0, r0, r1)
@@ -574,6 +585,8 @@ begin
     else if CaseEqual(mnem, 'or')  then x64_or_reg_imm(s0, r0, imm1)
     else if CaseEqual(mnem, 'xor') then x64_xor_reg_imm(s0, r0, imm1)
     else if CaseEqual(mnem, 'cmp') then x64_cmp_reg_imm(s0, r0, imm1)
+    else if CaseEqual(mnem, 'adc') then EncALUImm(s0, r0, imm1, 2)
+    else if CaseEqual(mnem, 'sbb') then EncALUImm(s0, r0, imm1, 3)
     else Error('EmitAsmX64: unsupported reg,imm mnemonic');
     Exit;
   end;
@@ -585,6 +598,8 @@ begin
     else if CaseEqual(mnem, 'or')  then x64_or_reg_reg(s0, r0, r1)
     else if CaseEqual(mnem, 'xor') then x64_xor_reg_reg(s0, r0, r1)
     else if CaseEqual(mnem, 'cmp') then x64_cmp_reg_reg(s0, r0, r1)
+    else if CaseEqual(mnem, 'adc') then EncALURegReg($11, $13, s0, r0, r1)
+    else if CaseEqual(mnem, 'sbb') then EncALURegReg($19, $1B, s0, r0, r1)
     else Error('EmitAsmX64: unsupported reg,reg mnemonic');
     Exit;
   end;
@@ -594,6 +609,8 @@ begin
   begin
     if CaseEqual(mnem, 'add') then i := $01
     else if CaseEqual(mnem, 'or')  then i := $09
+    else if CaseEqual(mnem, 'adc') then i := $11
+    else if CaseEqual(mnem, 'sbb') then i := $19
     else if CaseEqual(mnem, 'and') then i := $21
     else if CaseEqual(mnem, 'sub') then i := $29
     else if CaseEqual(mnem, 'xor') then i := $31
@@ -610,6 +627,8 @@ begin
     if s0 = 0 then Error('EmitAsmX64: memory ALU needs an explicit size (byte/dword/qword)');
     if CaseEqual(mnem, 'add') then i := 0
     else if CaseEqual(mnem, 'or')  then i := 1
+    else if CaseEqual(mnem, 'adc') then i := 2
+    else if CaseEqual(mnem, 'sbb') then i := 3
     else if CaseEqual(mnem, 'and') then i := 4
     else if CaseEqual(mnem, 'sub') then i := 5
     else if CaseEqual(mnem, 'xor') then i := 6
