@@ -210,8 +210,14 @@ Provide a **single-line overload** so trivial cases skip the brackets:
     already editing + retesting a given block. No bulk sweep.
   - Inline-asm `asm…end` unification onto the shared engine: **low priority.**
     Nice-to-have, not blocking.
-  - The only remaining *feature* gap is the mutexed `lock xchg [@glob], reg`
-    atomic: it needs an **absolute-memory operand** form (`[@glob]` as the r/m,
-    via ModRMAbs/SIB) that the current `[base±disp]` operand model lacks. That
-    operand form is the one concrete thing worth building when the atomic path
-    is next touched.
+  - ~~The only remaining *feature* gap is the mutexed `lock xchg [@glob], reg`
+    atomic~~ — **DONE** (see next entry).
+- 2026-06-17 — **mutexed xchg / absolute-mem operand landed.** EmitAsmX64 now
+  parses `[@glob]`/`[@data]` as an absolute-address r/m (operand kinds 3/4 →
+  ModRM mod00 rm100 + SIB $25 + 4-byte reloc), plus the `lock` prefix, `xchg`
+  (reg,reg | reg,[mem] | [mem],reg | [@abs],reg), and `mov` to/from `[@abs]`.
+  The two heap-lock sites (`EmitAcquireHeapLock` spin loop, `EmitReleaseHeapLock`
+  zero-store) are converted onto it. Regular + `--threadsafe` self-fixedpoint
+  byte-identical; `test_multithreading` green. The remaining items are now only
+  the (opportunistic) EmitB-block retargeting and the (low-priority) inline-asm
+  unification — no feature gaps left in the x86 assemblers.
