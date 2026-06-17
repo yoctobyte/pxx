@@ -247,11 +247,17 @@ begin
           EmitLoadGlobAddrXtensa(reg_xtensa_a2, Syms[si].Offset)
         else
           EmitFrameAddrXtensa(reg_xtensa_a2, Syms[si].Offset);
-        { Dynamic array: slot holds the heap data pointer (handle); load it in a
-          read/index position (no COW yet). SetLength keeps the slot address. }
-        if Syms[si].IsArray and (Syms[si].ArrLen = -1) then
+        { Slot holds a heap data pointer (handle) that must be loaded in a
+          read/index position: a local dynamic array, or an open-array value
+          param (the caller passed the handle). SetLength keeps the slot address.
+          (No COW / by-ref open arrays yet.) }
+        if (Syms[si].IsArray and (Syms[si].ArrLen = -1)) or
+           ((Syms[si].Kind = skParam) and Syms[si].IsArray and not Syms[si].IsRef) then
           xtensa_l32i(reg_xtensa_a2, reg_xtensa_a2, 0);
       end;
+
+    IR_SLOTADDR:
+      EmitSlotAddrXtensa(reg_xtensa_a2, IRA[node]);   { always the slot address }
 
     IR_FIELD:
       begin
@@ -507,6 +513,23 @@ begin
           EmitProcEpilog(Procs[CurProc].RetSymIdx) { early Exit: jump out via epilogue }
         else
           EmitExit(0);
+      end;
+
+    IR_DEFAULT_MEM:
+      begin
+        { Zero IRIVal bytes at dest. ESP has no managed records yet, so skip the
+          PXXRecordRelease path the hosted targets take for managed fields. }
+        IREmitNodeXtensa(IRA[node]);             { a2 = dest }
+        pi := FindProc('PXXMemZero');
+        if pi < 0 then Error('compiler error: PXXMemZero not found');
+        if XtensaABI = XTENSA_ABI_WINDOWED then
+        begin
+          xtensa_mov(reg_xtensa_a10, reg_xtensa_a2);        { arg0 = dest }
+          EmitLoadConstXtensa(reg_xtensa_a11, Integer(IRIVal[node])); { arg1 = count }
+        end
+        else
+          EmitLoadConstXtensa(reg_xtensa_a3, Integer(IRIVal[node])); { a2=dest; arg1=count }
+        EmitCallProc(pi);
       end;
 
     IR_NEG:

@@ -59,6 +59,7 @@ function PXXRealloc(p: Pointer; newSize: NativeInt; align: Integer): Pointer;
   fully guarded out. }
 {$ifdef PXX_ESP}
 procedure PXXDynSetLen(arrSlot: Pointer; newLen: NativeInt; desc: Pointer);
+procedure PXXMemZero(dst: Pointer; n: NativeInt);
 {$endif}
 {$ifndef PXX_ESP}
 function PXXStrFromLit(len: NativeInt; src: Pointer): Pointer;
@@ -246,6 +247,19 @@ begin
   rc := PWord(block)^ - 1;
   PWord(block)^ := rc;
   if rc <= 0 then PXXFree(Pointer(block));
+end;
+
+{ Zero n bytes at dst (pure; IR_DEFAULT_MEM backing for unmanaged temps). }
+procedure PXXMemZero(dst: Pointer; n: NativeInt);
+var d, i: Int64;
+begin
+  d := Int64(dst);
+  i := 0;
+  while i < n do
+  begin
+    PByte(d + i)^ := 0;
+    i := i + 1;
+  end;
 end;
 
 procedure PXXDynSetLen(arrSlot: Pointer; newLen: NativeInt; desc: Pointer);

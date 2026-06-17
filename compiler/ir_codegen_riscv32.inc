@@ -169,12 +169,17 @@ begin
       begin
         si := IRA[node];
         EmitSlotAddrRISCV32(reg_a0, si);
-        { Dynamic array: the slot holds the heap data pointer (handle), so in a
-          read/index position load it (no COW yet). SetLength keeps the slot
-          address by computing it directly, not via IR_LEA. }
-        if Syms[si].IsArray and (Syms[si].ArrLen = -1) then
+        { Slot holds a heap data pointer (handle) loaded in read/index position:
+          a local dynamic array, or an open-array value param (caller passed the
+          handle). SetLength keeps the slot address by computing it directly.
+          (No COW / by-ref open arrays yet.) }
+        if (Syms[si].IsArray and (Syms[si].ArrLen = -1)) or
+           ((Syms[si].Kind = skParam) and Syms[si].IsArray and not Syms[si].IsRef) then
           rv32_lw(reg_a0, reg_a0, 0);
       end;
+
+    IR_SLOTADDR:
+      EmitSlotAddrRISCV32(reg_a0, IRA[node]);   { always the slot address }
 
     IR_FIELD:
       begin
@@ -417,6 +422,17 @@ begin
           EmitProcEpilog(Procs[CurProc].RetSymIdx) { early Exit via epilogue }
         else
           EmitExit(0);
+      end;
+
+    IR_DEFAULT_MEM:
+      begin
+        { Zero IRIVal bytes at dest. ESP has no managed records yet, so skip the
+          PXXRecordRelease path the hosted targets take for managed fields. }
+        IREmitNodeRISCV32(IRA[node]);            { a0 = dest }
+        EmitLoadImmRISCV32(reg_a1, Integer(IRIVal[node]));  { a1 = byte count }
+        pi := FindProc('PXXMemZero');
+        if pi < 0 then Error('compiler error: PXXMemZero not found');
+        EmitCallProc(pi);
       end;
 
     IR_NEG:
