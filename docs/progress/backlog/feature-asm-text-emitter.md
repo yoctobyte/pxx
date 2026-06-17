@@ -201,7 +201,17 @@ Provide a **single-line overload** so trivial cases skip the brackets:
   `llvm-mc-18`, wired into `make test-asm-emit`. The four RISC targets (a64,
   arm32, rv32, xtensa) already emit zero raw bytes via their text assemblers.
   All five commits keep the per-target self-fixedpoint byte-identical (no
-  codegen call sites converted yet — pure capability growth). **Remaining:**
-  retarget existing `EmitB` blocks onto the assembler (scope item 5/6) and the
-  inline-asm `asm…end` unification; one bespoke `lock xchg [@glob],reg` atomic
-  needs an absolute-memory operand form the [base±disp] model lacks.
+  codegen call sites converted yet — pure capability growth).
+- 2026-06-17 — **policy on what's left (decided):**
+  - Retargeting existing `EmitB` blocks onto the assembler is **deferred, not a
+    campaign.** It is mechanically trivial but each conversion shifts emitted
+    bytes and so carries reseed/regression risk for no behavioural gain. Do it
+    **only opportunistically** — when writing genuinely new codegen, or when
+    already editing + retesting a given block. No bulk sweep.
+  - Inline-asm `asm…end` unification onto the shared engine: **low priority.**
+    Nice-to-have, not blocking.
+  - The only remaining *feature* gap is the mutexed `lock xchg [@glob], reg`
+    atomic: it needs an **absolute-memory operand** form (`[@glob]` as the r/m,
+    via ModRMAbs/SIB) that the current `[base±disp]` operand model lacks. That
+    operand form is the one concrete thing worth building when the atomic path
+    is next touched.
