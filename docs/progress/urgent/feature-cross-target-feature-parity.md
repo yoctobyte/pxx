@@ -121,3 +121,26 @@ test-core; bootstrap + cross-bootstrap stay byte-identical.
   syscalls, aarch64 Variant single/extended. Indirect-call param caps are a
   shared structural limit (—), out of scope. Each ✗ is a checklist item in the
   matrix. Next: classes-on-cross sub-arc, starting with instantiation.
+- 2026-06-17 — **classes-on-cross core landed (byte-identical, all 4 targets).**
+  Ported the x86-64 class machinery to i386 / aarch64 / arm32: instantiation
+  (heap alloc + VMT pointer init at offset 0 + ctor call returning Self) and
+  `IR_VIRTUAL_CALL` (load VMT from `[Self]`, call `[VMT + slot*8]`) in each
+  backend's expr emitter + statement loop, following each arch's call ABI
+  (i386 cdecl all-stack; aarch64 16-byte temp -> x0..x7; arm32 word-push ->
+  r0..r3). The VMT/field layout was already target-independent (8-byte slots,
+  field base 8), so no parser/layout change was needed. Enabled `MethodFixups`
+  in `writeELF32` (i386/arm32; the 64-bit `writeELF` already did it) so VMT
+  slots link. Also ported `IR_RTTI_REG`/`IR_RESOURCES` (sentinel address loads)
+  and allowed `tyClass` stores-through-pointer. `test_inheritance_dispatch`
+  (ctor/fields/non-virtual+virtual methods/properties/inheritance) +
+  `test_field_chain` run byte-identical to x86-64 on all four under QEMU; wired
+  into test-i386/-aarch64/-arm32. `make test` + `make cross-bootstrap` (all 3)
+  byte-identical. Side fix: bumped `MAX_CODE` 4->8 MB — compiler.pas grew to
+  procs=939 and its arm32 self-host code crossed 4 MB ('code overflow',
+  pre-existing, broke arm32 cross-bootstrap); buffer-only, no emitted-byte
+  change. **Remaining class sub-gaps** (next): method pointers on i386/arm32
+  (32-bit Code/Data value DIFF; aarch64 already OK), metaclass / `class of` /
+  RTTI streaming (a deeper store-through-ptr type), collections /
+  dynarray-of-record (`setlen_dyn` / `dynunique` IR ops), interfaces (now
+  unblocked). Then external C calls + ELF32 external symbols, then the async
+  reactor.

@@ -81,13 +81,17 @@ Each ✗ is a checklist item below the table. Seeded by grepping
 | Channels | ✓ | ✓ | ✓ | ✓ | |
 | Procedural types / indirect call | ✓ | ✓ | ✓ | ✓ | param-count cap is shared (—) below |
 | Indirect call > N params | — | — | — | — | x86-64 >6, aarch64 >8, arm32 >4: structural, all targets |
-| **Class instantiation (VMT + ctor)** | ✓ | ✗ | ✗ | ✗ | `386:1653` `aarch64:1071` `arm32:1235` |
-| Class fields / methods / virtual dispatch | ✓ | ✗ | ✗ | ✗ | gated by instantiation above |
-| Method pointers (`of object`) | ✓ | ✗ | ✗ | ✗ | codegen cross-ready; needs classes |
-| Interfaces | ◐ | ✗ | ✗ | ✗ | feature-interfaces; needs classes |
+| **Class instantiation (VMT + ctor)** | ✓ | ✓ | ✓ | ✓ | done 2026-06-17; byte-identical |
+| Class fields / methods / virtual dispatch | ✓ | ✓ | ✓ | ✓ | incl. inheritance + properties |
+| `__rttireg` / `__resources` ops | ✓ | ✓ | ✓ | ✓ | done 2026-06-17 |
+| Class-reference field/var store (`tyClass`) | ✓ | ✓ | ✓ | ✓ | done 2026-06-17 |
+| Method pointers (`of object`) | ✓ | ✗ | ✓ | ✗ | i386/arm32 DIFF (32-bit Code/Data value); aarch64 OK |
+| Metaclass / `class of` / RTTI streaming | ✓ | ◐ | ◐ | ◐ | hit a deeper store-through-ptr gap; sub-arc |
+| Collections / dynarray-of-record depth | ✓ | ✗ | ✗ | ✗ | `setlen_dyn` / `dynunique` IR ops unported |
+| Interfaces | ◐ | ✗ | ✗ | ✗ | feature-interfaces; classes now unblock it |
 | External (C-library) calls | ✓ | ✗ | ✗ | ✗ | `386:1994` `aarch64:1419` `arm32:1598` |
 | External/dynamic symbols (ELF) | ✓ | ✗ | n/a | ✗ | `elfwriter.inc:622,628` |
-| Method-pointer fixups (ELF) | ✓ | ✗ | n/a | ✗ | `elfwriter.inc:623,630` |
+| Method-pointer fixups (ELF) | ✓ | ✓ | ✓ | ✓ | done 2026-06-17 (writeELF32 + 64-bit writeELF) |
 | Aggregate-valued fn results | ✓ | ✗ | ✗ | ✗ | `386:1996` `aarch64:1421` `arm32:1600` |
 | `SetLength` on var-array param | ✓ | ✗ | ✗ | ✗ | `386:1705` `aarch64:1118` `arm32:1293` |
 | Async I/O reactor (epoll/asyncnet/CoSleep) | ✓ | ✗ | ✗ | ✗ | per-arch syscalls (epoll_pwait, socketcall) |
@@ -103,15 +107,18 @@ i386/arm32-only.
 
 Dominant blocker first; items sharing a fix are grouped.
 
-1. **Classes on cross** (the gating item — unblocks the next three rows):
-   - [ ] i386: class instantiation (VMT init + ctor call) — `ir_codegen386.inc:1653`
-   - [ ] aarch64: class instantiation — `ir_codegen_aarch64.inc:1071`
-   - [ ] arm32: class instantiation — `ir_codegen_arm32.inc:1235`
-   - [ ] class field / method access + virtual dispatch on all three
-   - [ ] method pointers (`of object`) on all three (codegen already cross-ready)
+1. **Classes on cross** (the gating item) — **core DONE 2026-06-17**:
+   - [x] i386 / aarch64 / arm32: class instantiation (VMT init + ctor call)
+   - [x] class field / method access + virtual dispatch (incl. inheritance, properties)
+   - [x] `__rttireg` / `__resources` ops on all three
+   - [x] class-reference field/var stores (`tyClass`) on all three
+   - [ ] method pointers (`of object`) on i386 + arm32 (DIFF — 32-bit Code/Data value layout; aarch64 OK)
+   - [ ] metaclass / `class of` / RTTI streaming (deeper store-through-ptr gap)
+   - [ ] collections / dynarray-of-record (`setlen_dyn`, `dynunique` IR ops)
+   - [ ] interfaces (now unblocked by classes) — feature-interfaces
 2. **ELF32 dynamic-link path** (i386/arm32):
+   - [x] method-pointer fixups — done (writeELF32 apply loop)
    - [ ] external (dynamic) symbols — `elfwriter.inc:622,628`
-   - [ ] method-pointer fixups — `elfwriter.inc:623,630`
 3. **External calls in codegen** (C imports): i386 `1994`, aarch64 `1419`, arm32 `1598`.
 4. **Aggregate-valued fn results**: i386 `1996`, aarch64 `1421`, arm32 `1600`.
 5. **`SetLength` on var-array param**: i386 `1705`, aarch64 `1118`, arm32 `1293`.
