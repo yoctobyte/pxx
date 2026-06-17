@@ -94,8 +94,8 @@ Each ✗ is a checklist item below the table. Seeded by grepping
 | Sets (`set of`, literal, `in`, `+`/`-`/`*`, `=`/`<>`/`<=`/`>=`) | ✓ | ✓ | ✓ | ✓ | done 2026-06-17 (32-byte bitset; unblocks `for..in (set)`) |
 | Collections / dynarray-of-record depth | ✓ | ✓ | ✓ | ✓ | done 2026-06-17 (`setlen_dyn` / `dynunique` ported; field/nested targets via portable `PXXDynSetLen`/`PXXDynArrayUnique`) |
 | Interfaces | ◐ | ✗ | ✗ | ✗ | feature-interfaces; classes now unblock it |
-| External (C-library) calls | ✓ | ✗ | ✗ | ✗ | `386:1994` `aarch64:1419` `arm32:1598` |
-| External/dynamic symbols (ELF) | ✓ | ✗ | n/a | ✗ | `elfwriter.inc:622,628` |
+| External (C-library) calls | ✓ | ✓ | ✗ | ✗ | i386 done 2026-06-17 (cdecl + GOT-slot call); aarch64/arm32 codegen pending |
+| External/dynamic symbols (ELF) | ✓ | ✓ | n/a | ✗ | i386 ELF32 dynamic done 2026-06-17 (PrepareDynamicData32; REL/R_386_GLOB_DAT); arm32 pending |
 | Method-pointer fixups (ELF) | ✓ | ✓ | ✓ | ✓ | done 2026-06-17 (writeELF32 + 64-bit writeELF) |
 | `SetLength` on var-array param | ✓ | ✗ | ✗ | ✗ | `386:1705` `aarch64:1118` `arm32:1293` |
 | Async I/O reactor (epoll/asyncnet/CoSleep) | ✓ | ✓ | ✓ | ✓ | done 2026-06-17 (per-arch SYS_*; aarch64/arm32 epoll_pwait; i386 socketcall; epoll_event pad on aarch64/arm32) |

@@ -221,6 +221,113 @@ begin
   PatchDataU64(p + 8, dataBase + DynamicRelaOff);
 end;
 
+{ ELF32 dynamic-link tables (i386). Mirrors PrepareDynamicData but with 32-bit
+  structures: Elf32_Sym=16B, REL (not RELA, 8B) with R_386_GLOB_DAT=6, and
+  Elf32_Dyn=8B. The dynamic linker resolves each imported symbol and writes its
+  address into the 4-byte GOT slot the call indirects through. Reuses the shared
+  Dynamic* globals (only one writer runs per compile); DynamicRelaOff holds the
+  REL table offset here. }
+procedure PrepareDynamicData32;
+var
+  i, j, libIdx: Integer;
+  found: Boolean;
+  nameOff: array[0..MAX_EXTERNAL-1] of Integer;
+  neededLibStr : array[0..MAX_EXTERNAL-1] of Integer;
+  neededLibOff : array[0..MAX_EXTERNAL-1] of Integer;
+begin
+  DynamicInterpOff := DataLen;
+  DataPutZ('/lib/ld-linux.so.2');
+  DynamicInterpSize := DataLen - DynamicInterpOff;
+
+  DynamicStrOff := DataLen;
+  DataPutB(0);
+  DynamicNeededCount := 0;
+  for i := 0 to ExternalCount-1 do
+  begin
+    libIdx := ProcLibrary[ExternalProc[i]];
+    found := False;
+    for j := 0 to DynamicNeededCount-1 do
+      if neededLibStr[j] = libIdx then begin found := True; break; end;
+    if not found then
+    begin
+      neededLibStr[DynamicNeededCount] := libIdx;
+      neededLibOff[DynamicNeededCount] := DataLen - DynamicStrOff;
+      DataPutZ(Strs[libIdx].Text);
+      Inc(DynamicNeededCount);
+    end;
+  end;
+  for i := 0 to ExternalCount-1 do
+  begin
+    nameOff[i] := DataLen - DynamicStrOff;
+    DataPutZ(Procs[ExternalProc[i]].Name);
+  end;
+  DynamicStrSize := DataLen - DynamicStrOff;
+  while (DataLen mod 4) <> 0 do DataPutB(0);
+
+  { dynsym: Elf32_Sym = name(4) value(4) size(4) info(1) other(1) shndx(2). }
+  DynamicSymOff := DataLen;
+  for i := 1 to 16 do DataPutB(0);              { null symbol }
+  for i := 0 to ExternalCount-1 do
+  begin
+    DataPutU32(nameOff[i]);
+    DataPutU32(0);                              { value }
+    DataPutU32(0);                              { size }
+    DataPutB($12);                              { STB_GLOBAL, STT_FUNC }
+    DataPutB(0);                                { other }
+    DataPutU16(0);                              { shndx = SHN_UNDEF }
+  end;
+
+  DynamicHashOff := DataLen;
+  DataPutU32(1);                                { nbucket }
+  DataPutU32(ExternalCount + 1);                { nchain }
+  if ExternalCount > 0 then DataPutU32(1) else DataPutU32(0);
+  DataPutU32(0);                                { chain[0] }
+  for i := 1 to ExternalCount do
+  begin
+    if i < ExternalCount then DataPutU32(i + 1) else DataPutU32(0);
+  end;
+
+  { REL table: Elf32_Rel = offset(4) info(4). info = (sym<<8) | R_386_GLOB_DAT. }
+  DynamicRelaOff := DataLen;
+  for i := 0 to ExternalCount-1 do
+  begin
+    DataPutU32(0);                              { patched to the GOT slot VA }
+    DataPutU32(((i + 1) * 256) + 6);            { (sym<<8) | R_386_GLOB_DAT }
+  end;
+
+  { Elf32_Dyn = tag(4) val(4). }
+  DynamicOff := DataLen;
+  for i := 0 to DynamicNeededCount-1 do
+  begin
+    DataPutU32(1); DataPutU32(neededLibOff[i]); { DT_NEEDED }
+  end;
+  DataPutU32(5);  DataPutU32(0);                { DT_STRTAB }
+  DataPutU32(10); DataPutU32(DynamicStrSize);   { DT_STRSZ }
+  DataPutU32(6);  DataPutU32(0);                { DT_SYMTAB }
+  DataPutU32(11); DataPutU32(16);               { DT_SYMENT }
+  DataPutU32(4);  DataPutU32(0);                { DT_HASH }
+  DataPutU32(17); DataPutU32(0);                { DT_REL }
+  DataPutU32(18); DataPutU32(ExternalCount * 8);{ DT_RELSZ }
+  DataPutU32(19); DataPutU32(8);                { DT_RELENT }
+  DataPutU32(0);  DataPutU32(0);                { DT_NULL }
+  DynamicSize := DataLen - DynamicOff;
+end;
+
+procedure PatchDynamicData32(dataBase: Int64);
+var i, p: Integer;
+begin
+  for i := 0 to ExternalCount-1 do
+    PatchDataI32(DynamicRelaOff + (i * 8), Integer(dataBase + ExternalGotOff[i]));
+  p := DynamicOff + (DynamicNeededCount * 8);
+  PatchDataI32(p + 4, Integer(dataBase + DynamicStrOff));   { DT_STRTAB }
+  Inc(p, 16);
+  PatchDataI32(p + 4, Integer(dataBase + DynamicSymOff));   { DT_SYMTAB }
+  Inc(p, 16);
+  PatchDataI32(p + 4, Integer(dataBase + DynamicHashOff));  { DT_HASH }
+  Inc(p, 8);
+  PatchDataI32(p + 4, Integer(dataBase + DynamicRelaOff));  { DT_REL }
+end;
+
 function IntToHexStr(val: Int64; digits: Integer): AnsiString;
 var
   i, temp: Integer;
@@ -608,7 +715,8 @@ procedure writeELF32(const outPath: AnsiString);
   offset 0 (the gen_arch_probe.py lesson). v1 constraints are enforced, not
   assumed: anything needing 64-bit-only fixup machinery is a hard error. }
 var
-  i, codeOffset: Integer;
+  i, codeOffset, phnum: Integer;
+  isDyn: Boolean;
   dataBase, bssBase, entry, filesz, memsz, addr: Int64;
 {$ifdef FPC}
   f: File;
@@ -616,10 +724,10 @@ var
   f: Integer;
 {$endif}
 begin
+  isDyn := False;
   if TargetArch = TARGET_I386 then
   begin
-    if ExternalCount > 0 then
-      Error('target i386: external (dynamic) symbols not yet supported');
+    if ExternalCount > 0 then isDyn := True;
   end;
   if TargetArch = TARGET_ARM32 then
   begin
@@ -634,7 +742,14 @@ begin
       Error('target esp32: method/proc-address fixups not yet supported');
   end;
 
+  phnum := 1;
   codeOffset := CODE_OFFSET32;
+  if isDyn then
+  begin
+    PrepareDynamicData32;          { appends interp/dynstr/dynsym/hash/rel/dynamic }
+    phnum := 3;
+    codeOffset := DYNAMIC_CODE_OFFSET32;
+  end;
   dataBase := LOAD_ADDR32 + codeOffset + CodeLen;
   { BSS holds word-sized globals laid out with AlignTo offsets, so the base
     itself must be aligned — Xtensa s32i/l32i (and strict RV32 cores) trap on
@@ -678,6 +793,15 @@ begin
   for i := 0 to DataPtrFixCount-1 do
     PatchDataU64(DataPtrFix[i].DataPos, dataBase + DataPtrFix[i].TargetOff);
 
+  { Dynamic externals: point each FF/14/25 indirect call at its GOT slot VA, and
+    fill the dynamic-section absolute pointers (STRTAB/SYMTAB/HASH/REL). }
+  if isDyn then
+  begin
+    for i := 0 to DynCallCount-1 do
+      Patch32(DynCallCodePos[i], dataBase + ExternalGotOff[DynCallExtIdx[i]]);
+    PatchDynamicData32(dataBase);
+  end;
+
 {$ifdef FPC}
   Assign(f, outPath); Rewrite(f, 1);
 {$else}
@@ -699,13 +823,32 @@ begin
   writeU32(f,entry);writeU32(f,ELF32_HEADER_SIZE);writeU32(f,0);
   if TargetArch = TARGET_ARM32 then writeU32(f,$05000000) else writeU32(f,0);
   writeU16(f,ELF32_HEADER_SIZE);writeU16(f,PROG32_HEADER_SIZE);
-  writeU16(f,1);writeU16(f,0);writeU16(f,0);writeU16(f,0);
+  writeU16(f,phnum);writeU16(f,0);writeU16(f,0);writeU16(f,0);
 
   { phdr32 (32 bytes): PT_LOAD RWX, whole file at LOAD_ADDR32 }
   writeU32(f,1);writeU32(f,0);                          { type, offset }
   writeU32(f,LOAD_ADDR32);writeU32(f,LOAD_ADDR32);
   writeU32(f,filesz);writeU32(f,memsz);
   writeU32(f,7);writeU32(f,$1000);                      { flags, align }
+  if isDyn then
+  begin
+    { PT_INTERP (R): the dynamic loader path. }
+    writeU32(f,3);                                      { p_type = PT_INTERP }
+    writeU32(f,codeOffset + CodeLen + DynamicInterpOff);{ p_offset }
+    writeU32(f,dataBase + DynamicInterpOff);            { p_vaddr }
+    writeU32(f,dataBase + DynamicInterpOff);            { p_paddr }
+    writeU32(f,DynamicInterpSize);                      { p_filesz }
+    writeU32(f,DynamicInterpSize);                      { p_memsz }
+    writeU32(f,4);writeU32(f,1);                        { flags=R, align }
+    { PT_DYNAMIC (RW). }
+    writeU32(f,2);                                      { p_type = PT_DYNAMIC }
+    writeU32(f,codeOffset + CodeLen + DynamicOff);      { p_offset }
+    writeU32(f,dataBase + DynamicOff);                  { p_vaddr }
+    writeU32(f,dataBase + DynamicOff);                  { p_paddr }
+    writeU32(f,DynamicSize);                            { p_filesz }
+    writeU32(f,DynamicSize);                            { p_memsz }
+    writeU32(f,6);writeU32(f,4);                        { flags=RW, align }
+  end;
 
 {$ifdef FPC}
   if CodeLen > 0 then Blockwrite(f,Code[0],CodeLen);

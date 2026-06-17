@@ -2120,7 +2120,53 @@ begin
             Error('target i386: builtin/special call not yet supported');
         end;
         if ProcExternal[pi] then
-          Error('target i386: external calls not yet supported');
+        begin
+          { External C call (cdecl): args at [esp+0], [esp+4], ... (arg0 lowest);
+            caller cleans the stack; result in eax. v1 handles 4-byte scalar /
+            pointer args + an integer/pointer return (the C-import surface used by
+            the SQLite/header tests); float/Int64 args or float returns are a hard
+            error. Stack 16-alignment is deferred (v1), matching the grow-op-by-op
+            i386 policy. The call goes through the external's GOT slot via the
+            same FF/14/25 indirect-call encoding as x86-64 (valid on i386 too);
+            writeELF32 patches the abs32 operand to the slot VA and the dynamic
+            linker fills the slot. }
+          argNode := IRB[node];
+          nArgs := 0;
+          while argNode <> -1 do
+          begin
+            tk := IntToTypeKind(IRTk[IRA[argNode]]);
+            if (nArgs < Procs[pi].ParamCount) and
+               (TypeIsFloat(Procs[pi].Params[nArgs].TypeKind) or
+                Is64Bit386(Procs[pi].Params[nArgs].TypeKind)) then
+              Error('target i386: external call float/Int64 argument not yet supported');
+            Inc(nArgs);
+            argNode := IRB[argNode];
+          end;
+          if nArgs <> Procs[pi].ParamCount then
+            Error('target i386: external call argument count mismatch');
+          if TypeIsFloat(Procs[pi].RetType) then
+            Error('target i386: external call float return not yet supported');
+          argBytes := nArgs * 4;
+          if argBytes > 0 then
+          begin
+            EmitB($81); EmitB($EC); EmitI32(argBytes);   { sub esp, argBytes }
+          end;
+          argNode := IRB[node];
+          i := 0;
+          while argNode <> -1 do
+          begin
+            IREmitNode386(IRA[argNode]);                 { eax = arg i }
+            EmitB($89); EmitB($84); EmitB($24); EmitI32(i * 4); { mov [esp+i*4], eax }
+            Inc(i);
+            argNode := IRB[argNode];
+          end;
+          EmitExternalIndirectCall(RegisterExternal(pi)); { call dword [GOT slot] }
+          if argBytes > 0 then
+          begin
+            EmitB($81); EmitB($C4); EmitI32(argBytes);   { add esp, argBytes }
+          end;
+          Exit;
+        end;
         { Internal i386 convention: evaluate and push args left to right
           (leftmost ends up deepest, matching the callee's spill formula),
           call, then the caller pops the arg area. Result in eax. }

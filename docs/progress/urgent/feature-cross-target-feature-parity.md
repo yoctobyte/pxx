@@ -320,3 +320,28 @@ test-core; bootstrap + cross-bootstrap stay byte-identical.
   locally. Recommend tackling i386 first (validatable end-to-end), and gating
   aarch64/arm32 external calls behind installing the cross runtimes (or accept
   ELF-structural-only validation). No code changed for item 3 this session.
+- 2026-06-17 — **i386 external C calls + ELF32 dynamic symbols DONE.** First cross
+  target with dynamic linking.
+  - **codegen (ir_codegen386.inc):** i386 cdecl external path — `sub esp, nArgs*4`,
+    evaluate args left-to-right storing each at `[esp+i*4]` (arg0 lowest, cdecl
+    order; no temp array, two linked-list walks), call through the GOT slot, caller
+    cleans the stack, result in eax. Reuses EmitExternalIndirectCall — its
+    `FF/14/25 [abs32]` indirect-call encoding is `call dword ptr [disp32]` on i386,
+    so the same DynCall fixup works (Patch32 → slot VA). v1 scope: 4-byte
+    scalar/pointer args + integer/pointer return (the SQLite/header C-import
+    surface); float/Int64 args + float returns are a hard error; stack 16-alignment
+    deferred (matches grow-op-by-op i386 policy).
+  - **ELF32 dynamic (elfwriter.inc):** PrepareDynamicData32 / PatchDynamicData32
+    mirror the 64-bit builders with 32-bit structures — interp /lib/ld-linux.so.2,
+    Elf32_Sym (16B), REL (8B, R_386_GLOB_DAT=6, no addend), Elf32_Dyn (8B,
+    DT_REL/RELSZ/RELENT). writeELF32 gained an isDyn path: PrepareDynamicData32,
+    codeOffset=DYNAMIC_CODE_OFFSET32 (ehdr+3 phdrs), phnum=3, DynCall + dynamic
+    pointer patching, and PT_INTERP + PT_DYNAMIC program headers. Reuses the shared
+    Dynamic* globals (one writer per compile; DynamicRelaOff holds the REL offset).
+  - test_i386_extern (atoi/strlen via libc.so.6: PChar arg + int return) links a
+    real dynamic ELF32 (`interpreter /lib/ld-linux.so.2`) and prints identical
+    output to the x86-64 build; wired into test-i386. make test (x86-64 sqlite +
+    argspill dynamic path unaffected) green. **Validatable here because the 32-bit
+    libc.so.6 + /lib/ld-linux.so.2 are present** — aarch64/arm32 external calls
+    remain blocked on missing cross loaders (and aarch64/arm32 codegen
+    ir_codegen_aarch64.inc:1548 / arm32:1737, plus arm32 ELF32 dynamic).
