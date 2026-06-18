@@ -14,7 +14,7 @@ lives in git, not in a timestamp._
 
 _none_
 
-## backlog (49)
+## backlog (48)
 
 | Ticket | Type | Summary | Blocked-by |
 | --- | --- | --- | --- |
@@ -41,7 +41,6 @@ _none_
 | feature-explicit-typecasts | feature | Explicit type-casts (`Char`/`Boolean`/`String` and a general `TypeName(expr)`) | — |
 | feature-flexcolumn-directive | feature | `flexcolumn` calling-convention directive | chore-inc-to-units |
 | feature-float-str-val | feature | Float Str / Val | — |
-| feature-for-in-iteration | feature | `for x in ...` iteration — FPC-exact (arrays, sets, strings, enums, enumerators) | — |
 | feature-fpc-vs-pxx-feature-boundary | feature | Policy: FPC-bootstrap subset vs PXX-only library features | — |
 | feature-handle-compacting-heap | feature | Handle-table compacting heap (anti-fragmentation for constrained RAM) | — |
 | feature-inline-asm-depth | feature | Inline assembler depth | — |
@@ -75,7 +74,7 @@ _none_
 | bug-nonreproducible-miscompile-2026-06-02 | bug | Non-reproducible one-off miscompile (2026-06-02) | — |
 | bug-whole-record-copy-main-body-noop | bug | Latent: whole-record array-element copy in main-program body emits store no-ops | — |
 
-## done (56)
+## done (57)
 
 | Ticket | Type | Summary | Blocked-by |
 | --- | --- | --- | --- |
@@ -112,6 +111,7 @@ _none_
 | feature-esp32-managed-features | feature | ESP32 managed-feature port (xtensa + riscv32, qemu-validated) | — |
 | feature-esp32-managed-strings | feature | ESP32 managed strings (tyAnsiString runtime on xtensa + riscv32) | — |
 | feature-esp-isa-baseline-softfallback | feature | ESP ISA baseline + software fallbacks for older parts | — |
+| feature-for-in-iteration | feature | `for x in ...` iteration — FPC-exact (arrays, sets, strings, enums, enumerators) | — |
 | feature-generators-yield | feature | Generators and `yield` (the coroutine on-ramp) | feature-unified-heap-allocator |
 | feature-i386-asm-emitter | feature | i386 text-assembler (`EmitAsm386`) for cleaner x86-32 codegen | — |
 | feature-i386-int64-codegen | feature | Full Int64 codegen for i386 | — |
@@ -161,7 +161,6 @@ _none_
 - feature-esp32-isr-iram
 - feature-explicit-typecasts
 - feature-float-str-val
-- feature-for-in-iteration
 - feature-fpc-vs-pxx-feature-boundary
 - feature-handle-compacting-heap
 - feature-inline-asm-depth

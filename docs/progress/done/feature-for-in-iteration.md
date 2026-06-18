@@ -1,8 +1,11 @@
 # `for x in ...` iteration — FPC-exact (arrays, sets, strings, enums, enumerators)
 
 - **Type:** feature
-- **Status:** backlog
+- **Status:** done
 - **Opened:** 2026-06-16
+- **Resolved:** 2026-06-18 (commits 944792b, e6496d3, 45997e5) — native tier
+  (arrays/strings/enum-type/sets) + structural enumerator. Generator-bridge
+  (Slice C) intentionally deferred; generators already work via their own desugar.
 - **Relation:** extends the `for-in` driver added for generators
   (feature-generators-yield). Generators do NOT depend on this — the current
   `for-in` parser special-cases a generator call and is self-contained. This
@@ -142,6 +145,13 @@ byte-identical (run `make cross-bootstrap` — the generator work proved x86-64
 fixedpoint alone misses cross regressions).
 
 ## Log
+- 2026-06-18 — **Set iteration landed** (commit 45997e5), closing the Slice A
+  native tier. `for X in S` over `set of <enum>` and `set of Char` via the `in`
+  membership op (no bitset-layout knowledge); separate Integer scan ordinal so a
+  Char loop var can't wrap at 255. New SymSetEnumId/SymSetElemTk parallel arrays.
+  Integer-subrange sets error (bounds discarded at parse). FPC byte-identical;
+  cross-bootstrap byte-identical i386+aarch64+arm32. **Native + enumerator tiers
+  complete; only the deferred generator-bridge (Slice C) remains, by choice.**
 - 2026-06-18 — **Slice B landed** (commit e6496d3): structural enumerator
   desugar. `for X in C` with a `GetEnumerator` method → FPC's duck-typed
   protocol (GetEnumerator/MoveNext/Current, `try..finally __e.Free` only when the
