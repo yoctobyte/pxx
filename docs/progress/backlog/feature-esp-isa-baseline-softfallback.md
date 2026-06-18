@@ -1,9 +1,21 @@
 # ESP ISA baseline + software fallbacks for older parts
 
 - **Type:** feature
-- **Status:** backlog
+- **Status:** done (xtensa LX6 software divide landed 2026-06-18)
 - **Owner:** —
 - **Opened:** 2026-06-17 (from the xtensa div/mod work)
+
+## Status 2026-06-18 — DONE (xtensa soft divide)
+
+`--xtensa-cpu=lx6` (alias `--xtensa-soft-divide`) routes div/mod through
+`__pxx_udivsi3`/`__pxx_divsi3`/`__pxx_modsi3` (builtinheap, CPU_XTENSA-gated,
+registered+emitted only when the flag is set so LX7 images keep native
+quos/rems and stay lean). Helpers are shift/sub/add/branch + `mull` (present on
+LX6) — none use div/mod. Codegen calls them via `EmitXtensaSoftDivCall`.
+Validated (test_esp_softdiv, pos/neg operands): esp32s3 image has 0 quos/rems
+with the flag (13 without) and prints the same as the native LX7 build under
+qemu == x86-64 oracle. Acceptance met. (No-multiply `__pxx_mulsi3` still not
+needed — all baseline parts have mul.)
 
 ## Baseline (current policy)
 
