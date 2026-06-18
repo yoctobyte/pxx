@@ -898,6 +898,251 @@ begin
 {$endif}
 end;
 
+function CodePosToIramOff(cp: Integer): Integer;
+{ If cp falls inside an iram proc's body range, return its offset within
+  .iram1.text; otherwise -1 (the position stays in flash .text). }
+var i: Integer;
+begin
+  Result := -1;
+  for i := 0 to ProcCount-1 do
+    if ProcIram[i] and (Procs[i].BodyAddr >= 0) and
+       (cp >= Procs[i].BodyAddr) and (cp < ProcBodyEnd[i]) then
+    begin
+      Result := ObjProcIramOff[i] + (cp - Procs[i].BodyAddr);
+      Exit;
+    end;
+end;
+
+procedure writeELF32RelIram(const outPath: AnsiString);
+{ Extended ET_REL writer used when the program has `iram;` procedures: emits a
+  second executable section `.iram1.text` (the IDF linker script routes it to
+  internal IRAM). The byte image of each iram proc is duplicated out of the main
+  Code[] buffer into .iram1.text (its dead twin stays in .text so flash
+  PC-relative call offsets computed at emit time remain valid). Cross-section
+  calls were emitted as indirect literal loads (IramCallFix) and are relocated
+  here against the callee proc's own local symbol. Sections (11):
+  0 null,1 .text,2 .rela.text,3 .iram1.text,4 .rela.iram1.text,5 .data,
+  6 .rela.data,7 .bss,8 .symtab,9 .strtab,10 .shstrtab. }
+var
+  i, machine, iramSize, mapped: Integer;
+  numProcSyms, numSyms, firstGlobal, symIdx: Integer;
+  textOff, iramOff, dataOff, symOff, strOff: Integer;
+  relaTextOff, relaIramOff, relaDataOff, shstrOff, shOff, strSize: Integer;
+  relaTextCount, relaIramCount, relaDataCount, appMainOff: Integer;
+{$ifdef FPC}
+  f: File;
+{$else}
+  f: Integer;
+{$endif}
+begin
+  if TargetArch = TARGET_XTENSA then machine := 94 else machine := 243;
+
+  { Assign each iram proc a contiguous offset within .iram1.text. }
+  iramSize := 0;
+  for i := 0 to ProcCount-1 do
+    if ProcIram[i] and (Procs[i].BodyAddr >= 0) and (not ProcExternal[i]) then
+    begin
+      ObjProcIramOff[i] := iramSize;
+      iramSize := iramSize + (ProcBodyEnd[i] - Procs[i].BodyAddr);
+    end;
+
+  { .strtab: 0 empty, proc names, app_main, external names. Also assign each
+    proc's .symtab index (section syms occupy 1..4). }
+  strSize := 1;
+  numProcSyms := 0;
+  for i := 0 to ProcCount-1 do
+    if (Procs[i].BodyAddr >= 0) and (not ProcExternal[i]) then
+    begin
+      ObjProcStrOff[i] := strSize;
+      strSize := strSize + Length(Procs[i].Name) + 1;
+      ObjProcSymIdx[i] := 5 + numProcSyms;
+      Inc(numProcSyms);
+    end
+    else
+      ObjProcStrOff[i] := -1;
+  appMainOff := strSize;
+  strSize := strSize + 9;
+  for i := 0 to ExternalCount-1 do
+  begin
+    ObjExtStrOff[i] := strSize;
+    strSize := strSize + Length(Procs[ExternalProc[i]].Name) + 1;
+  end;
+
+  firstGlobal := 5 + numProcSyms;        { null + 4 section syms + procs }
+  numSyms := firstGlobal + 1 + ExternalCount;
+
+  { Partition relocation counts by which text section their CodePos lands in. }
+  relaTextCount := 0; relaIramCount := 0;
+  for i := 0 to FixCount-1 do
+    if CodePosToIramOff(Fixups[i].CodePos) >= 0 then Inc(relaIramCount) else Inc(relaTextCount);
+  for i := 0 to GlobFixCount-1 do
+    if CodePosToIramOff(GlobFix[i].CodePos) >= 0 then Inc(relaIramCount) else Inc(relaTextCount);
+  for i := 0 to DynCallCount-1 do
+    if CodePosToIramOff(DynCallCodePos[i]) >= 0 then Inc(relaIramCount) else Inc(relaTextCount);
+  for i := 0 to IramCallFixCount-1 do
+    if CodePosToIramOff(IramCallFix[i].CodePos) >= 0 then Inc(relaIramCount) else Inc(relaTextCount);
+  relaDataCount := DataPtrFixCount + MethodFixCount;
+
+  textOff := ELF32_HEADER_SIZE;
+  iramOff := AlignTo(textOff + CodeLen, 4);
+  dataOff := AlignTo(iramOff + iramSize, 8);
+  symOff  := AlignTo(dataOff + DataLen, 4);
+  strOff  := symOff + numSyms * 16;
+  relaTextOff := AlignTo(strOff + strSize, 4);
+  relaIramOff := relaTextOff + relaTextCount * 12;
+  relaDataOff := relaIramOff + relaIramCount * 12;
+  shstrOff := relaDataOff + relaDataCount * 12;
+  shOff := AlignTo(shstrOff + 95, 4);    { 95 = .shstrtab blob size }
+
+{$ifdef FPC}
+  Assign(f, outPath); Rewrite(f, 1);
+{$else}
+  AssignPath := outPath;
+  f := sysopen(AssignPath, 577);
+{$endif}
+
+  { ehdr (ET_REL), 11 sections, shstrndx 10 }
+  writeU8(f,$7F);writeU8(f,$45);writeU8(f,$4C);writeU8(f,$46);
+  writeU8(f,1);writeU8(f,1);writeU8(f,1);writeU8(f,0);
+  writeU8(f,0);writeU8(f,0);writeU8(f,0);writeU8(f,0);
+  writeU8(f,0);writeU8(f,0);writeU8(f,0);writeU8(f,0);
+  writeU16(f,1);writeU16(f,machine);writeU32(f,1);
+  writeU32(f,0);writeU32(f,0);writeU32(f,shOff);
+  writeU32(f,0);
+  writeU16(f,ELF32_HEADER_SIZE);writeU16(f,0);writeU16(f,0);
+  writeU16(f,40);writeU16(f,11);writeU16(f,10);
+
+  { .text = full Code[] (iram procs keep a dead twin here so flash PC-relative
+    offsets stay valid); .iram1.text = the live copy of each iram proc body. }
+{$ifdef FPC}
+  if CodeLen > 0 then Blockwrite(f,Code[0],CodeLen);
+  writePad(f, iramOff - (textOff + CodeLen));
+  for i := 0 to ProcCount-1 do
+    if ProcIram[i] and (Procs[i].BodyAddr >= 0) and (not ProcExternal[i]) then
+      Blockwrite(f, Code[Procs[i].BodyAddr], ProcBodyEnd[i] - Procs[i].BodyAddr);
+  writePad(f, dataOff - (iramOff + iramSize));
+  if DataLen > 0 then Blockwrite(f,Data[0],DataLen);
+{$else}
+  if CodeLen > 0 then syswrite(f,Code,CodeLen);
+  writePad(f, iramOff - (textOff + CodeLen));
+  for i := 0 to ProcCount-1 do
+    if ProcIram[i] and (Procs[i].BodyAddr >= 0) and (not ProcExternal[i]) then
+      syswrite(f, Code[Procs[i].BodyAddr], ProcBodyEnd[i] - Procs[i].BodyAddr);
+  writePad(f, dataOff - (iramOff + iramSize));
+  if DataLen > 0 then syswrite(f,Data,DataLen);
+{$endif}
+  writePad(f, symOff - (dataOff + DataLen));
+
+  { .symtab: null, 4 section syms (.text/.iram1.text/.data/.bss), procs, app_main, externals. }
+  writeSym32(f, 0, 0, 0, 0, 0);
+  writeSym32(f, 0, 0, 0, 3, 1);   { .text }
+  writeSym32(f, 0, 0, 0, 3, 3);   { .iram1.text }
+  writeSym32(f, 0, 0, 0, 3, 5);   { .data }
+  writeSym32(f, 0, 0, 0, 3, 7);   { .bss }
+  for i := 0 to ProcCount-1 do
+    if ObjProcStrOff[i] >= 0 then
+    begin
+      if ProcIram[i] then
+        writeSym32(f, ObjProcStrOff[i], ObjProcIramOff[i], 0, 2, 3)  { LOCAL FUNC in .iram1.text }
+      else
+        writeSym32(f, ObjProcStrOff[i], Procs[i].BodyAddr, 0, 2, 1); { LOCAL FUNC in .text }
+    end;
+  writeSym32(f, appMainOff, 0, 0, $12, 1);
+  for i := 0 to ExternalCount-1 do
+    writeSym32(f, ObjExtStrOff[i], 0, 0, $10, 0);
+
+  { .strtab }
+  writeU8(f, 0);
+  for i := 0 to ProcCount-1 do
+    if ObjProcStrOff[i] >= 0 then writeStrZ(f, Procs[i].Name);
+  writeStrZ(f, 'app_main');
+  for i := 0 to ExternalCount-1 do
+    writeStrZ(f, Procs[ExternalProc[i]].Name);
+  writePad(f, relaTextOff - (strOff + strSize));
+
+  { .rela.text — only relocs whose CodePos stays in flash .text.
+    Section syms: 3 = .data, 4 = .bss. }
+  for i := 0 to FixCount-1 do
+    if CodePosToIramOff(Fixups[i].CodePos) < 0 then
+      writeRela32(f, Fixups[i].CodePos, 3, 1, Fixups[i].DataOff);
+  for i := 0 to GlobFixCount-1 do
+    if CodePosToIramOff(GlobFix[i].CodePos) < 0 then
+      writeRela32(f, GlobFix[i].CodePos, 4, 1, GlobFix[i].BSSoff);
+  for i := 0 to DynCallCount-1 do
+    if CodePosToIramOff(DynCallCodePos[i]) < 0 then
+      writeRela32(f, DynCallCodePos[i], firstGlobal + 1 + DynCallExtIdx[i], 1, 0);
+  for i := 0 to IramCallFixCount-1 do
+    if CodePosToIramOff(IramCallFix[i].CodePos) < 0 then
+      writeRela32(f, IramCallFix[i].CodePos, ObjProcSymIdx[IramCallFix[i].ProcIdx], 1, 0);
+
+  { .rela.iram1.text — relocs whose CodePos was duplicated into .iram1.text;
+    offsets remapped to the section-local position. }
+  for i := 0 to FixCount-1 do
+  begin
+    mapped := CodePosToIramOff(Fixups[i].CodePos);
+    if mapped >= 0 then writeRela32(f, mapped, 3, 1, Fixups[i].DataOff);
+  end;
+  for i := 0 to GlobFixCount-1 do
+  begin
+    mapped := CodePosToIramOff(GlobFix[i].CodePos);
+    if mapped >= 0 then writeRela32(f, mapped, 4, 1, GlobFix[i].BSSoff);
+  end;
+  for i := 0 to DynCallCount-1 do
+  begin
+    mapped := CodePosToIramOff(DynCallCodePos[i]);
+    if mapped >= 0 then writeRela32(f, mapped, firstGlobal + 1 + DynCallExtIdx[i], 1, 0);
+  end;
+  for i := 0 to IramCallFixCount-1 do
+  begin
+    mapped := CodePosToIramOff(IramCallFix[i].CodePos);
+    if mapped >= 0 then writeRela32(f, mapped, ObjProcSymIdx[IramCallFix[i].ProcIdx], 1, 0);
+  end;
+
+  { .rela.data (unchanged from the base writer; iram method targets use the
+    .iram1.text section sym). }
+  for i := 0 to DataPtrFixCount-1 do
+    writeRela32(f, DataPtrFix[i].DataPos, 3, 1, DataPtrFix[i].TargetOff);
+  for i := 0 to MethodFixCount-1 do
+    if ProcIram[MethodFixups[i].ProcIdx] then
+      writeRela32(f, MethodFixups[i].DataPos, 2, 1, ObjProcIramOff[MethodFixups[i].ProcIdx])
+    else
+      writeRela32(f, MethodFixups[i].DataPos, 1, 1, Procs[MethodFixups[i].ProcIdx].BodyAddr);
+
+  { .shstrtab: 95-byte blob }
+  writeU8(f, 0);
+  writeStrZ(f, '.text');            { 1 }
+  writeStrZ(f, '.rela.text');       { 7 }
+  writeStrZ(f, '.iram1.text');      { 18 }
+  writeStrZ(f, '.rela.iram1.text'); { 30 }
+  writeStrZ(f, '.data');            { 47 }
+  writeStrZ(f, '.rela.data');       { 53 }
+  writeStrZ(f, '.bss');             { 64 }
+  writeStrZ(f, '.symtab');          { 69 }
+  writeStrZ(f, '.strtab');          { 77 }
+  writeStrZ(f, '.shstrtab');        { 85 }
+  writePad(f, shOff - (shstrOff + 95));
+
+  { Section headers. $40 = SHF_INFO_LINK on rela sections. }
+  writeShdrA(f, 0, 0, 0, 0, 0);                              writeShdrB(f, 0, 0, 0, 0);
+  writeShdrA(f, 1, 1, 6, textOff, CodeLen);                  writeShdrB(f, 0, 0, 4, 0);
+  writeShdrA(f, 7, 4, $40, relaTextOff, relaTextCount*12);   writeShdrB(f, 8, 1, 4, 12);
+  writeShdrA(f, 18, 1, 6, iramOff, iramSize);                writeShdrB(f, 0, 0, 4, 0);
+  writeShdrA(f, 30, 4, $40, relaIramOff, relaIramCount*12);  writeShdrB(f, 8, 3, 4, 12);
+  writeShdrA(f, 47, 1, 3, dataOff, DataLen);                 writeShdrB(f, 0, 0, 8, 0);
+  writeShdrA(f, 53, 4, $40, relaDataOff, relaDataCount*12);  writeShdrB(f, 8, 5, 4, 12);
+  writeShdrA(f, 64, 8, 3, dataOff + DataLen, BSSSize);       writeShdrB(f, 0, 0, 8, 0);
+  writeShdrA(f, 69, 2, 0, symOff, numSyms*16);               writeShdrB(f, 9, firstGlobal, 4, 16);
+  writeShdrA(f, 77, 3, 0, strOff, strSize);                  writeShdrB(f, 0, 0, 1, 0);
+  writeShdrA(f, 85, 3, 0, shstrOff, 95);                     writeShdrB(f, 0, 0, 1, 0);
+
+{$ifdef FPC}
+  Close(f);
+{$else}
+  sysfchmod(f, 420);
+  sysclose(f);
+{$endif}
+end;
+
 procedure writeELF32Rel(const outPath: AnsiString);
 { Relocatable ELF32 object writer (feature-elf-rel-writer): ET_REL .o for the
   esp32-idf profile. Both ESP backends route every absolute address through a
@@ -925,6 +1170,13 @@ begin
     Error('--emit-obj: only xtensa/riscv32 targets are supported');
   if ProcAddrFixCount > 0 then
     Error('--emit-obj: proc-address fixups not yet supported');
+  { Programs with `iram;` procedures need the two-text-section writer. }
+  for i := 0 to ProcCount-1 do
+    if ProcIram[i] and (Procs[i].BodyAddr >= 0) then
+    begin
+      writeELF32RelIram(outPath);
+      Exit;
+    end;
   if TargetArch = TARGET_XTENSA then machine := 94 else machine := 243;
 
   { .strtab layout: 0 = empty, then proc names, app_main, external names }

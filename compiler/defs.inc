@@ -624,6 +624,12 @@ var
     absolute runtime address of an internal proc (entry + BodyAddr). }
   ProcAddrFix : array[0..MAX_CALLFIX-1] of TCallFix;
   ProcAddrFixCount : Integer;
+  { Cross-section internal calls (a flash<->iram pair). The call is emitted as an
+    indirect load of a 32-bit literal slot (like an external call); the literal
+    at CodePos is relocated R_*_32 against the target proc's own local symbol so
+    the linker fills the final absolute address. }
+  IramCallFix : array[0..MAX_CALLFIX-1] of TCallFix;
+  IramCallFixCount : Integer;
 
   Syms      : array[0..MAX_SYMS-1]  of TSymbol;
   SymCaseSensitive : array[0..MAX_SYMS-1] of Boolean; { match this symbol name case-sensitively }
@@ -662,6 +668,9 @@ var
   ProcIsAsync     : array[0..MAX_PROCS-1] of Boolean;   { `; async;` routine — non-viral hint; legalises `await` in the body (stackful: documentary; stackless transform later) }
   ProcIsGenerator : array[0..MAX_PROCS-1] of Boolean;   { `; generator;` routine — compiled as a stackful-coroutine body (see coroutine.pas) }
   ProcIsStackless : array[0..MAX_PROCS-1] of Boolean;   { `; generator; stackless;` — compiled as a state-machine step fn (see slgen.pas) }
+  ProcIram        : array[0..MAX_PROCS-1] of Boolean;   { `; iram;` — body placed in the ELF .iram1.text section (ESP IRAM) }
+  ProcIsInterrupt : array[0..MAX_PROCS-1] of Boolean;   { `; interrupt;` — raw hardware interrupt handler (reserved; full reg-save/iret not yet emitted) }
+  ProcBodyEnd     : array[0..MAX_PROCS-1] of Integer;   { Code[] offset just past this proc's body (set at proc end); the iram byte-range is [BodyAddr, ProcBodyEnd) }
   ProcGenElemTk   : array[0..MAX_PROCS-1] of TTypeKind; { stackless: declared (yielded) element type; the proc's own RetType is Boolean (has-next) }
   ProcGenParamCnt : array[0..MAX_PROCS-1] of Integer;   { stackless: declared param count (the ABI param is the single hidden instance ptr) }
   ProcGenInstSize : array[0..MAX_PROCS-1] of Integer;   { stackless: instance byte size (header + persistent slots) }
@@ -765,6 +774,8 @@ var
     (globals, not locals — 64KB each would strain the self-hosted stack). }
   ObjProcStrOff : array[0..MAX_PROCS-1] of Integer;
   ObjExtStrOff  : array[0..MAX_EXTERNAL-1] of Integer;
+  ObjProcSymIdx : array[0..MAX_PROCS-1] of Integer; { .symtab index of each proc (extended iram writer) }
+  ObjProcIramOff: array[0..MAX_PROCS-1] of Integer; { offset of an iram proc's body within .iram1.text }
   { Directory of the compiler binary itself (from ParamStr(0)); RTL/LCL units are
     located relative to it so the compiler works from any CWD, not just the repo
     root. Empty if the path has no directory part (then CWD-relative is used). }

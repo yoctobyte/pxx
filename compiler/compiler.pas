@@ -266,6 +266,7 @@ begin
   BSSSize  := 0;
   StrCount := 0; FixCount := 0;
   GlobFixCount := 0; CallFixCount := 0; ProcAddrFixCount := 0;
+  IramCallFixCount := 0;
   SymCount := 0; ProcCount := 0;
   CurrentUnitIdx := -1;
   CTypedefCount := 0;

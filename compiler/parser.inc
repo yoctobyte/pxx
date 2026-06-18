@@ -6768,6 +6768,7 @@ var
   needsProcCleanupFrame, savedProcCleanupFrameActive: Boolean;
   isAsmFunc: Boolean;
   isGenerator, isStackless, isAsync: Boolean;
+  isIram, isInterrupt: Boolean;
   savedGenIsGen, savedGenSeen, savedGenStackless, savedProcIsAsync: Boolean;
   savedGenSelf, savedGenTry, savedGenStateCtr, savedGenSlotNext: Integer;
   genBodyAST, genStepAST, declElemTk: Integer;
@@ -6785,6 +6786,8 @@ begin
   isGenerator := False;
   isStackless := False;
   isAsync := False;
+  isIram := False;
+  isInterrupt := False;
   if CurTok.Kind = tkClass then
   begin
     isClassKeyword := True;
@@ -6971,7 +6974,9 @@ begin
           CaseEqual(CurTok.SVal, 'generator') or
           CaseEqual(CurTok.SVal, 'async') or
           CaseEqual(CurTok.SVal, 'stackful') or
-          CaseEqual(CurTok.SVal, 'stackless'))) or
+          CaseEqual(CurTok.SVal, 'stackless') or
+          CaseEqual(CurTok.SVal, 'iram') or
+          CaseEqual(CurTok.SVal, 'interrupt'))) or
         (CurTok.Kind = tkOverload) do
   begin
     if CurTok.Kind = tkOverload then declOverload := True;
@@ -6979,6 +6984,12 @@ begin
     if (CurTok.Kind = tkIdent) and CaseEqual(CurTok.SVal, 'generator') then isGenerator := True;
     if (CurTok.Kind = tkIdent) and CaseEqual(CurTok.SVal, 'async') then isAsync := True;
     if (CurTok.Kind = tkIdent) and CaseEqual(CurTok.SVal, 'stackless') then isStackless := True;
+    if (CurTok.Kind = tkIdent) and CaseEqual(CurTok.SVal, 'iram') then isIram := True;
+    if (CurTok.Kind = tkIdent) and CaseEqual(CurTok.SVal, 'interrupt') then
+    begin
+      isInterrupt := True;
+      isIram := True;   { interrupt handlers must also be IRAM-resident }
+    end;
     { `stackful` is the implemented default strategy; accept it as a no-op modifier. }
     Next;
     Eat(tkSemicolon);
@@ -7194,6 +7205,12 @@ begin
   ProcIsAsync[pi] := isAsync;
   ProcIsGenerator[pi] := isGenerator;
   ProcIsStackless[pi] := isStackless;
+  if isInterrupt then
+    Error('interrupt directive: raw hardware-vector codegen (full register save/restore + iret) not yet implemented; use `iram;` for an IDF-registered ISR');
+  { `iram;` places the body in .iram1.text on ESP; on other targets (e.g. the
+    x86-64 oracle build of a shared test) it is an accepted no-op. }
+  ProcIram[pi] := isIram and ((TargetArch = TARGET_XTENSA) or (TargetArch = TARGET_RISCV32));
+  ProcIsInterrupt[pi] := isInterrupt;
   if isStackless then
   begin
     ProcGenElemTk[pi] := IntToTypeKind(declElemTk);
@@ -8011,6 +8028,9 @@ begin
   else
     EmitProcEpilog(Procs[pi].RetSymIdx);
   ProcExceptionCleanupFrameActive := savedProcCleanupFrameActive;
+
+  { End of this proc's body bytes — the iram byte-range is [BodyAddr, ProcBodyEnd). }
+  ProcBodyEnd[pi] := CodeLen;
 
   { Patch frame size }
   PatchProcPrologue(patchPos, FrameSize);

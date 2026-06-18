@@ -3779,6 +3779,42 @@ begin
     EmitB($4C); EmitB($89); EmitB($DC);             { mov rsp, r11 }
     Exit;
   end;
+  { Cross-section internal call (flash <-> iram): a direct PC-relative call can't
+    span the two ELF sections (the linker places .iram1.text far from flash
+    .text), so load the callee's absolute address from a relocated 32-bit literal
+    and call indirect — same shape as an external call, but the literal is
+    relocated against the callee proc's own local symbol (IramCallFix). ESP only;
+    flash<->flash and iram<->iram stay direct PC-relative below. }
+  if (TargetArch = TARGET_XTENSA) or (TargetArch = TARGET_RISCV32) then
+    if (((CurProc >= 0) and ProcIram[CurProc]) <> ProcIram[pi]) then
+    begin
+      if IramCallFixCount >= MAX_CALLFIX then Error('iram call fixup overflow');
+      if TargetArch = TARGET_RISCV32 then
+      begin
+        rv32_auipc(reg_t0, 0);
+        rv32_jal(reg_zero, 8);
+        IramCallFix[IramCallFixCount].CodePos := CodeLen;
+        IramCallFix[IramCallFixCount].ProcIdx := pi;
+        Inc(IramCallFixCount);
+        EmitI32(0);
+        rv32_lw(reg_t0, reg_t0, 8);
+        rv32_jalr(reg_ra, reg_t0, 0);
+      end
+      else
+      begin
+        XtensaEmitLitHeader;
+        IramCallFix[IramCallFixCount].CodePos := CodeLen;
+        IramCallFix[IramCallFixCount].ProcIdx := pi;
+        Inc(IramCallFixCount);
+        EmitI32(0);
+        xtensa_l32r(reg_xtensa_a8, $FFFF);
+        if XtensaABI = XTENSA_ABI_WINDOWED then
+          xtensa_callx8(reg_xtensa_a8)
+        else
+          xtensa_callx0(reg_xtensa_a8);
+      end;
+      Exit;
+    end;
   if TargetArch = TARGET_ARM32 then
   begin
     if Procs[pi].BodyAddr >= 0 then
