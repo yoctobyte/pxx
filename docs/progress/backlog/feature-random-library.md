@@ -90,6 +90,52 @@ Seed expansion via SplitMix64 from the user seed.
   dispatch selects the right backend on each platform and that fallbacks chain
   correctly (HW-fail → OS → software).
 
+## Design mandate: ONE elegant library file (arch hidden in the compiler)
+
+Hard requirement: the unit is a **single elegant `.pas` file**, no per-arch
+`{$ifdef}` soup. The per-target instruction mess (RDRAND opcodes, CPUID, RNDR
+`MRS`, ESP RNG-reg address) lives in **`builtinheap` compiler intrinsics**, not
+in the library. The library then reads clean:
+
+```pascal
+unit Random;
+// 1. software PRNG core — pure Pascal (xoshiro256++ + SplitMix64). The bulk.
+// 2. thin source dispatch (one-liners over intrinsics / syscall):
+function HWRand64(out v: UInt64): Boolean;  // = __rdrand intrinsic; compiler emits per target
+function OSRand64: UInt64;                  // = getrandom syscall
+// software path = the PRNG core
+```
+
+`__rdrand`/`__cpuid`/`__rndr` resolve differently per target inside the
+compiler; the `.pas` never sees an arch branch. (More elegant than FPC, whose
+System-unit random is scattered per platform.)
+
+## Compiler switch: preference, NOT a replacement for the safety fallback
+
+A switch picks the **default UNSEEDED source** — e.g. `{$RNG AUTO|HARDWARE|
+SOFTWARE}` (or `--rng=`):
+
+- **AUTO** (default) — runtime probe: HW if present, else OS, else software. The
+  portable, safe path.
+- **SOFTWARE** — always the deterministic-capable PRNG. Smallest, fully
+  reproducible.
+- **HARDWARE** — prefer HW.
+
+**Critical safety rule:** on portable (multi-CPU) binaries the switch must NOT
+make HW purely compile-time — a `HARDWARE` binary on a CPU without RDRAND would
+hit an illegal instruction. So in portable builds, `HARDWARE` still keeps the
+**runtime probe + software fallback**. The switch tunes preference; it does not
+delete the safety net.
+
+**Exception — fixed platforms (ESP32):** the HW RNG is known to exist, so the
+switch MAY **hard-select** HW and **elide the probe + software path** entirely →
+smaller code. This is the embedded win: one library source, but on a known
+target it compiles down to just the HW read.
+
+**Orthogonal:** the seed rule (`RandSeed`/`RandomSeed` → software) is runtime
+state, independent of the switch. The switch sets the *unseeded* default source;
+seeding always flips to the deterministic PRNG. No conflict.
+
 ## Dependency: HW-instruction emission (and how to avoid blocking on it)
 
 Tiers 1 (HW) need a few fixed CPU instructions emitted (CPUID, RDRAND, `MRS
