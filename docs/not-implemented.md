@@ -16,9 +16,9 @@ regression test should be treated as unverified. See
 
 - Full FPC Object Pascal — only a tested subset is supported.
 - Delphi mode and other alternate modes.
-- `is` and `as` class type-tests now work for plain classes (done 2026-06-18,
-  closed-world VMT-set). `Supports` (interface query) is still open — folds into
-  feature-interfaces.
+- `is` and `as` class type-tests work for plain classes (done 2026-06-18,
+  closed-world VMT-set); `obj is IFoo` and `Supports(obj, IFoo)` work for
+  interfaces too. `as IFoo` (cast to an interface value) is open (feature-interfaces).
 - Assignment to a parenthesised-expression LHS — `(expr).field := x` does not
   store (the statement parser only treats an identifier-rooted LHS as assignable;
   true even without a cast). Workaround: `t := expr; t.field := x`.
