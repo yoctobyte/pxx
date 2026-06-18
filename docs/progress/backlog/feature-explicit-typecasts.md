@@ -51,3 +51,17 @@ grows (`PChar`->string already works for imports). Filed so the gap is tracked.
 - Additive / target-independent, so byte-identity-safe.
 - Related: the ESP literal-string-concat fold (commit e1c9198) and the
   managed-string typing work — same family of char/string conversions.
+
+## Log
+- 2026-06-18 — **Char(x) + Boolean(x) landed** (commit a7e8dd4). Factor-parser
+  cases tkChar_T/tkBoolean_T → AN_CALL value-pun (result tyChar/tyBoolean);
+  passthrough id added to all backends (x86-64/i386/aarch64/arm32/riscv32/xtensa).
+  Test test_cast_char_bool.pas byte-identical to FPC; make test +
+  cross-bootstrap byte-identical.
+  **String(x) still open:** unlike the int/char puns, it must materialise a
+  *string value* from an arbitrary expression. The frozen-string model only
+  builds a string at assignment store sites (`s := c` works); there is no helper
+  turning a Char/ordinal into a string rvalue (PCharToString/PXXStrFromLit cover
+  PChar/literal only). Belongs with the managed-string right-sizing arc
+  ([[project_managed_string_f2_direction]]). General `TypeName(expr)` reinterpret
+  cast also still open (separate larger sub-task).
