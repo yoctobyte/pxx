@@ -90,3 +90,8 @@ self-host fixedpoint holds.
   remaining open items: `as IFoo`/`Supports` (checked cast to an interface
   value), implicit class→interface coercion at call sites, 16-byte interface
   params on i386 (32-bit aggregate-param ABI), interface inheritance, COM ARC.
+- 2026-06-18 — **Supports(obj, IFoo) landed** (commit 59d5ccc): function form of
+  the interface is-query (same AN_IS_TEST). is + Supports now both work for
+  interfaces. Still open: `as IFoo` (checked cast to an interface VALUE),
+  implicit class→interface call-arg coercion, i386 16-byte interface params,
+  interface inheritance, COM ARC, identity `=`/`<>`.

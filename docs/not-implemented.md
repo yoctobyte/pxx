@@ -23,8 +23,10 @@ regression test should be treated as unverified. See
   store (the statement parser only treats an identifier-rooted LHS as assignable;
   true even without a cast). Workaround: `t := expr; t.field := x`.
 - Interfaces: CORBA vertical slice works (declare/implement/assign/call, done
-  2026-06-18). Open: is/as/Supports on interfaces, interface params/results,
-  interface inheritance, polymorphic class→interface, COM ARC (feature-interfaces).
+  2026-06-18); `obj is IFoo` + `Supports(obj,IFoo)` work; interface params/results
+  work on 64-bit targets. Open: `as IFoo` (cast to interface value), implicit
+  class→interface call-arg coercion, i386 16-byte interface params, interface
+  inheritance, COM ARC (feature-interfaces).
 - Sets can't be built from runtime values: `s := s + [v]` / `[v]` with a variable
   `v` errors ("set item must be constant"), and `Include`/`Exclude` are
   unimplemented. Set literals take constants only; use an integer bitmask for
