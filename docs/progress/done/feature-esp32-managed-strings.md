@@ -1,7 +1,7 @@
 # ESP32 managed strings (tyAnsiString runtime on xtensa + riscv32)
 
 - **Type:** feature
-- **Status:** backlog (in progress — core + concat done)
+- **Status:** done 2026-06-18 (all core paths; also exercised on bare-metal in feature-esp32-bare-boot)
 - **Owner:** —
 - **Opened:** 2026-06-17 (from feature-esp32-managed-features)
 - **Depends-on:** feature-esp32-managed-features

@@ -3903,7 +3903,7 @@ begin
   begin
     pi := CallFix[i].ProcIdx;
     if Procs[pi].BodyAddr < 0 then
-      Error('unresolved forward');
+      Error('unresolved forward: ' + Procs[pi].Name);
     if TargetArch = TARGET_ARM32 then
       Patch32(CallFix[i].CodePos, $EB000000 or ((((Procs[pi].BodyAddr - CallFix[i].CodePos) div 4) - 2) and $00ffffff))
     else if TargetArch = TARGET_AARCH64 then

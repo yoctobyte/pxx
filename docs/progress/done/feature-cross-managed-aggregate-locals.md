@@ -99,3 +99,6 @@ features the compiler does NOT self-use (e.g. classes, interfaces, some param/
 ABI shapes user code hits) — those move to the language-surface hardening effort
 driven by the synthetic conformance harness
 ([[feature-synthetic-feature-matrix-test]]). Closed.
+
+Closing commit: 0006af2 (fix(arm32): managed aggregate locals — guard x86
+zero-init, real arm32 loop); scoped/split in bbaf440, b1939c7.

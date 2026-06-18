@@ -124,3 +124,7 @@ features the compiler does NOT self-use (e.g. classes, interfaces, some param/
 ABI shapes user code hits) — those move to the language-surface hardening effort
 driven by the synthetic conformance harness
 ([[feature-synthetic-feature-matrix-test]]). Closed.
+
+Closing commits: rolled up under the cross self-host bootstrap — 65921c1 (cross
+self-host bootstrap DONE i386+aarch64+arm32), 5b0e3c0 (cross-bootstrap gates),
+ca0b8df (bootstrap restore). Per-item fixes logged with their dates above.
