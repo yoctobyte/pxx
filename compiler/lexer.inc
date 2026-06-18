@@ -236,7 +236,7 @@ function StrToDoubleBits(const s: AnsiString): Int64;
 { Pure-integer IEEE 754 double. ~18 significant digits.
   Subnormals flushed to zero; overflow = +/-Inf. No shl (not self-hostable). }
 var
-  i, len, fracDigits, expSign, expVal, decExp, bexp: Integer;
+  i, len, fracDigits, expSign, expVal, decExp, bexp, intDropped: Integer;
   hasDot: Boolean;
   coeff, N, D, mant, biasedExp, signBit, bitval, be: Int64;
   c: Char;
@@ -249,15 +249,28 @@ begin
   if s[i] = '-' then begin signBit := $8000000000000000; Inc(i); end
   else if s[i] = '+' then Inc(i);
 
-  coeff := 0; fracDigits := 0; hasDot := False;
+  coeff := 0; fracDigits := 0; hasDot := False; intDropped := 0;
   while i <= len do
   begin
     c := s[i];
     if (c = '.') and not hasDot then begin hasDot := True; Inc(i); continue; end;
     if (c < '0') or (c > '9') then break;
     if coeff <= 999999999999999999 then
+    begin
+      { Absorb the digit. Only count a fractional digit toward fracDigits when it
+        is actually absorbed — otherwise a high-precision literal (e.g. 21 sig
+        figs) over-counts fracDigits while coeff saturates, scaling the value off
+        by powers of ten. }
       coeff := coeff * 10 + (Ord(c) - 48);
-    if hasDot then Inc(fracDigits);
+      if hasDot then Inc(fracDigits);
+    end
+    else
+    begin
+      { coeff saturated (~18 digits is already past double precision): drop extra
+        digits. A dropped INTEGER-part digit still multiplies magnitude by ten; a
+        dropped FRACTIONAL digit is simply ignored. }
+      if not hasDot then Inc(intDropped);
+    end;
     Inc(i);
   end;
 
@@ -274,7 +287,7 @@ begin
     end;
   end;
 
-  decExp := expSign * expVal - fracDigits;
+  decExp := expSign * expVal - fracDigits + intDropped;
   if coeff = 0 then begin Result := signBit; Exit; end;
 
   N := coeff; D := 1; bexp := 0;
