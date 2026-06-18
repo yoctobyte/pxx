@@ -14,10 +14,11 @@ lives in git, not in a timestamp._
 
 _none_
 
-## backlog (44)
+## backlog (46)
 
 | Ticket | Type | Summary | Blocked-by |
 | --- | --- | --- | --- |
+| bug-xtensa-call0-large-frame-truncates | bug | Xtensa Call0 / non-windowed frame >128 bytes silently truncates | — |
 | chore-inc-to-units | chore | `.inc` → real `.pas` units refactor | — |
 | chore-runtime-emission-size | chore | Finer runtime-support emission (code size) | — |
 | feature-additional-cpu-targets | feature | Additional CPU targets (rollup: i386 → aarch64 → arm32 → ESP32/RISC-V) | feature-target-aarch64, feature-target-arm32, feature-target-esp32, feature-target-i386 |
@@ -37,6 +38,7 @@ _none_
 | feature-esp32-isr-iram | feature | ESP32: Compiler-Directed ISR and IRAM Support | — |
 | feature-esp32-managed-strings | feature | ESP32 managed strings (tyAnsiString runtime on xtensa + riscv32) | — |
 | feature-esp-isa-baseline-softfallback | feature | ESP ISA baseline + software fallbacks for older parts | — |
+| feature-explicit-typecasts | feature | Explicit type-casts (`Char`/`Boolean`/`String` and a general `TypeName(expr)`) | — |
 | feature-flexcolumn-directive | feature | `flexcolumn` calling-convention directive | chore-inc-to-units |
 | feature-float-str-val | feature | Float Str / Val | — |
 | feature-for-in-iteration | feature | `for x in ...` iteration — FPC-exact (arrays, sets, strings, enums, enumerators) | — |
@@ -134,6 +136,7 @@ _none_
 
 ## Ready (no unmet blocker)
 
+- bug-xtensa-call0-large-frame-truncates
 - chore-inc-to-units
 - chore-runtime-emission-size
 - feature-additional-cpu-targets
@@ -150,6 +153,7 @@ _none_
 - feature-esp32-isr-iram
 - feature-esp32-managed-strings
 - feature-esp-isa-baseline-softfallback
+- feature-explicit-typecasts
 - feature-float-str-val
 - feature-for-in-iteration
 - feature-fpc-vs-pxx-feature-boundary
