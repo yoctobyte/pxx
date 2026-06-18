@@ -14,7 +14,7 @@ lives in git, not in a timestamp._
 
 _none_
 
-## backlog (49)
+## backlog (48)
 
 | Ticket | Type | Summary | Blocked-by |
 | --- | --- | --- | --- |
@@ -28,7 +28,6 @@ _none_
 | feature-async-auto-backend | feature | Auto stackless/stackful backend selection | — |
 | feature-async-language-surface | feature | Async language surface + stackless coroutine backend | feature-cross-target-feature-parity |
 | feature-c-header-import-complex | feature | Import C headers for complex libraries (glib/GTK-grade) | — |
-| feature-class-is-as | feature | `is` / `as` / `Supports` — runtime class type-tests | — |
 | feature-compiler-warnings | feature | Compiler warning diagnostics facility | — |
 | feature-c-source-frontend | feature | C source frontend — compile C function bodies (statements + expressions) | feature-cross-target-feature-parity |
 | feature-demo-chess | feature | Flagship demo — chess engine (real-world app + cross-target oracle + benchmark) | — |
@@ -75,7 +74,7 @@ _none_
 | bug-nonreproducible-miscompile-2026-06-02 | bug | Non-reproducible one-off miscompile (2026-06-02) | — |
 | bug-whole-record-copy-main-body-noop | bug | Latent: whole-record array-element copy in main-program body emits store no-ops | — |
 
-## done (58)
+## done (59)
 
 | Ticket | Type | Summary | Blocked-by |
 | --- | --- | --- | --- |
@@ -92,6 +91,7 @@ _none_
 | feature-aarch64-asm-emitter | feature | AArch64 text-assembler (`EmitAsmA64`) for cleaner ARM64 codegen | — |
 | feature-arm32-asm-emitter | feature | ARM32 text-assembler (`EmitAsmArm32`) for cleaner ARM32 codegen | — |
 | feature-async-coroutines | feature | Async, coroutines, and `yield` | feature-unified-heap-allocator |
+| feature-class-is-as | feature | `is` / `as` / `Supports` — runtime class type-tests | — |
 | feature-cross-bootstrap | feature | Cross-architecture compiler bootstrap (AArch64/ARM32 → byte-identical self-compile) | — |
 | feature-cross-bootstrap-selfhost | feature | Cross self-host bootstrap (compiler.pas → byte-identical under QEMU) | feature-cross-selfhost-aarch64, feature-cross-selfhost-arm32, feature-cross-selfhost-i386 |
 | feature-cross-codegen-gaps | feature | Cross-target codegen gaps (deferred v1 shortcuts) | — |
@@ -152,7 +152,6 @@ _none_
 - feature-array-of-const
 - feature-async-auto-backend
 - feature-c-header-import-complex
-- feature-class-is-as
 - feature-compiler-warnings
 - feature-demo-chess
 - feature-demo-sudoku

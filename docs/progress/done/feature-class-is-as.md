@@ -1,9 +1,28 @@
 # `is` / `as` / `Supports` — runtime class type-tests
 
 - **Type:** feature
-- **Status:** backlog
+- **Status:** done
 - **Owner:** —
 - **Opened:** 2026-06-18 (extracted from feature-interfaces item 5 — useful on its own)
+- **Resolved:** 2026-06-18 (commit e4a4833) — `is` + `as` for classes, closed-world
+  VMT-set test, FPC byte-identical on all 4 Linux targets, cross-bootstrap clean.
+  `Supports` (interface query) deferred into feature-interfaces.
+
+## Resolution notes
+
+- Mechanism shipped is **closed-world** rather than a runtime parent-walk: `obj
+  is T` ⟺ obj's VMT address ∈ {VMT(T)} ∪ {VMT(descendants)}, the set enumerated at
+  codegen from the compile-time parent chain (whole-program compile, no separate
+  linking). Simpler than a runtime walk and needs no RTTI (which only exists for
+  published classes). New IR primitive `IR_VMTADDR`; shared IR lowering.
+- Required making every class VMT reserve ≥1 slot — classes with no virtual
+  methods previously got 0-byte VMTs that aliased to one address, so any `is`
+  matched every class.
+- `Supports` not done (interface-only); the class `is`/`as` walk it would reuse
+  is now in place. The general unchecked `TClass(obj)` reinterpret lives in
+  [[feature-general-typename-cast]]; keep checked (`as`) vs unchecked distinct.
+- Pre-existing gap surfaced: `(expr).field := x` parenthesised-LHS assignment
+  doesn't store (not is/as-specific); logged in docs/not-implemented.md.
 
 ## Motivation
 
