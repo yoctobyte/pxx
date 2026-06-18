@@ -48,3 +48,12 @@ float value, FPC byte-identical; `make test` + `make cross-bootstrap` stay green
 
 ## Log
 - 2026-06-18 — opened from the float Str/Val arc; ValFloat works around it.
+- 2026-06-18 — attempted a quick fix (in AN_ASSIGN, when LHS is float and RHS is
+  integer, lower RHS as `value + 0.0` to reuse the binop cvtsi2sd path). It
+  produced correct values in isolation but **broke compiler self-fixedpoint**
+  (the two self-compiles differed at byte 97 — non-deterministic codegen),
+  reverted. So the blanket conversion interacts badly with the compiler's own
+  float assignments / a tyDouble-tagged int-0 const. The proper fix needs a
+  dedicated int→float IR op (or a narrower trigger) plus a cross-bootstrap check —
+  not the `+0.0` hack. Do it in a focused session, not blind. Workaround stands:
+  use float literals / `x := n * 1.0`.
