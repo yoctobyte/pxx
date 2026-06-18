@@ -3690,6 +3690,128 @@ begin
   Result := GenMakeSeq(assignG, GenMakeSeq(whileNode, GenMakeSeq(callFree, -1)));
 end;
 
+{ ===== Native `for x in <array|string|enum-type>` (Slice A) =====
+  Desugars the FPC native-tier for-in sources into a plain indexed while loop in
+  the AST, so all targets get it from shared lowering (no per-target codegen).
+  Element semantics are by value: `x := C[__i]` per iteration. }
+
+function GenMakeIntLit(v: Int64): Integer;
+begin
+  Result := AllocNode(AN_INT_LIT);
+  ASTIVal[Result] := v;
+  ASTTk[Result] := Ord(tyInt64);
+end;
+
+function GenMakeBinop(op: TTokenKind; l, r: Integer; tk: TTypeKind): Integer;
+begin
+  Result := AllocNode(AN_BINOP);
+  ASTIVal[Result] := Ord(op);
+  ASTLeft[Result] := l;
+  ASTRight[Result] := r;
+  ASTTk[Result] := Ord(tk);
+end;
+
+{ Length(symIdx) as an AST call node, matching what tkLength parsing builds: the
+  argument is the container lvalue (by-ref). Works for ansistring/dynarray/open-
+  array; the IR Length lowering reads the right header per the base symbol. }
+function GenMakeLengthCall(symIdx: Integer; tk: TTypeKind): Integer;
+var argSeq: Integer;
+begin
+  Result := AllocNode(AN_CALL);
+  ASTIVal[Result] := -Ord(tkLength);
+  ASTTk[Result] := Ord(tyInteger);
+  argSeq := AllocNode(AN_ARG);
+  ASTLeft[argSeq] := GenMakeIdent(symIdx, tk);
+  ASTLeft[Result] := argSeq;
+end;
+
+{ for x in <string|static array|dynarray|open-array var> do BODY:
+    __i := lo;
+    while __i <= hi do begin x := C[__i]; BODY; __i := __i + 1; end;
+  lo/hi pick the right base: strings 1..Length, arrays 0..count-1. }
+function ParseForInVarAST(varIdx, contSym: Integer): Integer;
+var
+  bodyNode, idxSym, loNode, hiNode, elemTk: Integer;
+  condNode, elemAccess, assignX, incNode, whileNode, innerSeq, initI: Integer;
+  isString, isStaticArr: Boolean;
+  contTk: TTypeKind;
+begin
+  Expect(tkDo, 'do');
+  bodyNode := ParseStatementAST;
+
+  contTk := Syms[contSym].TypeKind;
+  isString := (contTk = tyString) or (contTk = tyAnsiString);
+  isStaticArr := Syms[contSym].IsArray and (Syms[contSym].ArrLen >= 0);
+  idxSym := AllocVar('', tyInteger);
+
+  if isString then
+  begin
+    loNode := GenMakeIntLit(1);
+    elemTk := Ord(tyChar);
+  end
+  else if Syms[contSym].IsArray then
+  begin
+    loNode := GenMakeIntLit(0);
+    elemTk := Ord(Syms[contSym].ElemType);
+  end
+  else
+    Error('for-in: variable is not a string or array');
+
+  initI := GenMakeAssign(GenMakeIdent(idxSym, tyInteger), loNode);
+
+  if isStaticArr then
+    hiNode := GenMakeIntLit(Syms[contSym].ArrLen - 1)
+  else if isString then
+    hiNode := GenMakeLengthCall(contSym, contTk)
+  else
+    hiNode := GenMakeBinop(tkMinus, GenMakeLengthCall(contSym, contTk),
+                           GenMakeIntLit(1), tyInteger);
+
+  condNode := GenMakeBinop(tkLe, GenMakeIdent(idxSym, tyInteger), hiNode, tyBoolean);
+
+  elemAccess := AllocNode(AN_INDEX);
+  ASTLeft[elemAccess] := GenMakeIdent(contSym, contTk);
+  ASTRight[elemAccess] := GenMakeIdent(idxSym, tyInteger);
+  ASTTk[elemAccess] := elemTk;
+  assignX := GenMakeAssign(GenMakeIdent(varIdx, Syms[varIdx].TypeKind), elemAccess);
+
+  incNode := GenMakeAssign(GenMakeIdent(idxSym, tyInteger),
+    GenMakeBinop(tkPlus, GenMakeIdent(idxSym, tyInteger), GenMakeIntLit(1), tyInteger));
+
+  innerSeq := GenMakeSeq(assignX, GenMakeSeq(bodyNode, GenMakeSeq(incNode, -1)));
+  whileNode := AllocNode(AN_WHILE);
+  ASTLeft[whileNode] := condNode;
+  ASTRight[whileNode] := innerSeq;
+
+  Result := GenMakeSeq(initI, GenMakeSeq(whileNode, -1));
+end;
+
+{ for x in <EnumType> do BODY iterates ALL enum ordinals low..high. The loop
+  variable itself holds the ordinal (enum vars are integer-sized), so no separate
+  index is needed:  x := 0; while x <= count-1 do begin BODY; x := x + 1; end; }
+function ParseForInEnumTypeAST(varIdx, etid: Integer): Integer;
+var
+  bodyNode, initN, condN, incN, whileN, innerSeq: Integer;
+  cnt, vtk: Integer;
+begin
+  Expect(tkDo, 'do');
+  bodyNode := ParseStatementAST;
+
+  cnt := EnumTypeValCount[etid];
+  vtk := Ord(Syms[varIdx].TypeKind);
+  initN := GenMakeAssign(GenMakeIdent(varIdx, IntToTypeKind(vtk)), GenMakeIntLit(0));
+  condN := GenMakeBinop(tkLe, GenMakeIdent(varIdx, IntToTypeKind(vtk)),
+                        GenMakeIntLit(cnt - 1), tyBoolean);
+  incN := GenMakeAssign(GenMakeIdent(varIdx, IntToTypeKind(vtk)),
+    GenMakeBinop(tkPlus, GenMakeIdent(varIdx, IntToTypeKind(vtk)),
+                 GenMakeIntLit(1), tyInteger));
+  innerSeq := GenMakeSeq(bodyNode, GenMakeSeq(incN, -1));
+  whileN := AllocNode(AN_WHILE);
+  ASTLeft[whileN] := condN;
+  ASTRight[whileN] := innerSeq;
+  Result := GenMakeSeq(initN, GenMakeSeq(whileN, -1));
+end;
+
 { ===== Stackless-generator state-machine transform =====
   Turns a `; generator; stackless;` body into a flat goto/label state machine
   compiled into the generator's own proc, whose ABI is `function(self): Boolean`
@@ -4127,15 +4249,33 @@ begin
   Next;
   if CurTok.Kind = tkIn then
   begin
-    { for x in <generator-call> (v1: generators only) }
     Next;
-    if CurTok.Kind <> tkIdent then Error('for-in: expected a generator call');
+    if CurTok.Kind <> tkIdent then Error('for-in: expected a generator, enum type, or iterable variable');
+    { generator call → existing coroutine/stackless desugar }
     gpi := FindProc(CurTok.SVal);
-    if (gpi < 0) or not ProcIsGenerator[gpi] then
-      Error('for-in: only generator calls are supported (v1)');
-    Next;
-    Result := ParseForInGeneratorAST(varIdx, gpi);
-    Exit;
+    if (gpi >= 0) and ProcIsGenerator[gpi] then
+    begin
+      Next;
+      Result := ParseForInGeneratorAST(varIdx, gpi);
+      Exit;
+    end;
+    { enum type name → iterate all ordinals }
+    fsym := FindEnumType(CurTok.SVal);
+    if fsym >= 0 then
+    begin
+      Next;
+      Result := ParseForInEnumTypeAST(varIdx, fsym);
+      Exit;
+    end;
+    { iterable variable (string / array / dynarray / open-array param) }
+    fsym := FindSym(CurTok.SVal);
+    if fsym >= 0 then
+    begin
+      Next;
+      Result := ParseForInVarAST(varIdx, fsym);
+      Exit;
+    end;
+    Error('for-in: not a generator, enum type, or iterable variable');
   end;
   Expect(tkAssign, ':=');
   ParseExpr; initNode := CurASTNode;

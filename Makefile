@@ -223,6 +223,8 @@ test-core: $(COMPILER)
 	test "$$(/tmp/test_not26)" = "$$(printf -- '-1\n-16\n-256\n4\nok')"
 	./$(COMPILER) test/test_generator.pas /tmp/test_generator26
 	test "$$(/tmp/test_generator26)" = "$$(printf '1 4 9 16 25 \n25\n0 1 1 2 3 5 8 13 \n1 2 3 ')"
+	./$(COMPILER) test/test_forin_native.pas /tmp/test_forin_native26
+	test "$$(/tmp/test_forin_native26)" = "$$(printf 'static sum=150\ndyn sum=600\nchar=a\nchar=b\nchar=c\nday=0\nday=1\nday=2\nday=3\nday=4')"
 	./$(COMPILER) test/test_stackless_gen.pas /tmp/test_stackless_gen26
 	test "$$(/tmp/test_stackless_gen26)" = "$$(printf '1 4 9 16 25 \n25\n5 4 3 2 1 \n0 2 4 6 8 \n10 20 30 \n1 2 3 ')"
 	./$(COMPILER) test/test_scheduler.pas /tmp/test_scheduler26
