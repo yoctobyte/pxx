@@ -20,6 +20,26 @@
 - 2026-06-17 — **concat done** (commit dd91333): `a + b` → PXXStrConcat on both
   backends (handle/tyString/char operands, fresh-temp DecRef, nested concat).
   test_esp_strcat → "PXX rocks"/"PXX rocks!"/9 both ISAs == oracle.
+- 2026-06-18 — **riscv32 compare + harness fix** (commit c7309b0): PXXStrEq on
+  riscv32 (Y/N/Y/Y/N == oracle); shared EmitStrOperandRISCV32 decomposition;
+  esp_run.sh force-relinks (was running stale images — see Known bugs). xtensa
+  compare + the concat-of-two-string-literals bug remain (below).
+
+## Known bugs (found 2026-06-18)
+
+- **concat of two multi-char string literals crashes** (both ISAs). `b := 'fo'
+  + 'oo'` (a runtime PXXStrConcat of two `tyString` const_strs — single-char
+  literals are `tyChar`, so the `tyString` operand branch went untested until
+  now) faults (riscv32: store fault, A0=0 — looks like an over-allocation /
+  arena-exhaustion from a bad `len`). The `tyString` branch of the
+  EmitStrOperand decomposition (`len = [value]`, `src = value+8`) is suspect —
+  disasm the emitted PXXStrConcat setup vs the actual interned `[len][chars]`
+  layout. Concat with at least one var operand works (test_esp_strcat).
+- **xtensa string compare not wired.** `s = t` on xtensa falls through to the
+  integer binop (compares handle pointers) -> wrong result (test_esp_strcmp
+  gives N/N/Y/N/Y vs Y/N/Y/Y/N). Mirror the riscv32 compare: add an
+  EmitStrOperandXtensa helper + the PXXStrEq path in the xtensa binop (like the
+  committed xtensa concat).
 
 ## Remaining
 
