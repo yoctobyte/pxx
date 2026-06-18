@@ -17,10 +17,27 @@ rename-import. A rename would be a deliberate dialect extension.
 - Interaction with qualified `UnitName.Symbol` lookup (already works).
 - Syntax: `uses X as Y` vs something less Python-flavored.
 
+## Frontend parity note (2026-06-18)
+
+The same capability is missing on **both** frontends, and would land as one
+feature if adopted:
+
+- Pascal: no `uses X as Y` (idea only).
+- Nil Python: `import X` works (rewritten to `uses`), but **`import X as Y`
+  (alias) and `from X import Y` are not supported** — pyparser takes only
+  `import name[, name]`.
+
+There is **no `as`-for-import AST node anywhere**; `import`/`uses` just feed names
+to the unit resolver. (Confirms the `as` token is free for the is/as type-cast —
+the only other `as` is the contextual ident in `specialize ... as Name`.)
+
 ## Status
 
 Idea only — decide whether to adopt before scoping. Not standard; no current
-source needs it.
+source needs it. If adopted, cover both the Pascal `uses` and Python `import`
+forms together.
 
 ## Log
 - 2026-06-06 — ticket opened from todo.md §4.
+- 2026-06-18 — recorded Python `import as` is the same missing capability; no
+  import-alias AST node exists on either frontend.
