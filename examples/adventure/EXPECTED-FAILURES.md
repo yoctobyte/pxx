@@ -81,6 +81,27 @@ Date: 2026-06-18. Files: `engine.pas`, `adventure.pas`, `world.dat`.
 - **Honest fix:** add `StrToIntDef`, or replace with a local int parser (we
   already hand-rolled `NumStr`; a `StrToInt` twin is trivial).
 
+### F9. Unsigned 32-bit PRNG (`LongWord` + `shl`/`shr`/`mod` + `Integer()` cast)
+- **Where:** `TGame.NextRand` (engine.pas) — xorshift32 over `Seed: LongWord`.
+- **Why predicted:** needs an unsigned 32-bit type (`LongWord`/`Cardinal`) with
+  logical (not arithmetic) `shr`, `shl` wrap, unsigned `mod`, and a
+  `LongWord`→`Integer` cast. Native shifts landed (xtensa/rv32 work), but
+  unsigned-type semantics + the cast are untested here. On 32-bit targets watch
+  for sign-extension creeping into `shr`.
+- **Honest fix:** ensure `LongWord`/`Cardinal` logical shifts + unsigned `mod`.
+- **Note:** the PRNG is a deliberate stopgap; the `feature-random-library`
+  ticket replaces it. `NextRand` is the single swap point.
+
+### F10. Nested procedure (inside a method) touching `Self` fields
+- **Where:** `AddExit` nested in `TGame.LoadWorld`, indexing `Rooms[...]`
+  (i.e. `Self.Rooms`).
+- **Why predicted:** like F3 (frame capture) but the captured frame is a
+  *method's*, so the nested proc must also reach the enclosing `Self`. Two
+  stacked challenges. If F3 works but this doesn't, that's the `Self`-in-nested
+  gap specifically.
+- **Honest fix:** propagate `Self` into nested procedures of methods. Sidestep:
+  make `AddExit` a private method of `TGame`.
+
 ## 🟢 Low — expected to work (classes/cross already done)
 
 - Inheritance + `virtual`/`override` (`TBoss.Taunt` over `TMonster.Taunt`),

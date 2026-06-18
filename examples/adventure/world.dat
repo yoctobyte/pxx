@@ -1,52 +1,113 @@
 # =====================================================================
 #  ESCAPE FROM THE MACHINE  —  default world
 #  Data-driven: the engine knows nothing about this content.
-#  Sections: [room] [item] [monster] [boss]. key=value, # = comment.
-#  exit = <dir>:<roomid>[:<keyitem>]   (keyitem => locked door)
-#  monsters/bosses: repeat puzzle=/answer= pairs for multi-round fights.
+#  Sections: [room] [item] [monster] [boss] [npc]
+#  exit  = <dir>:<roomid>[:<keyitem>]    (keyitem => locked door)
+#  hexit = <dir>:<roomid>[:<keyitem>]    (HIDDEN until you cast XOR here)
+#  monsters/bosses: repeat puzzle=/answer= for a RIDDLE BANK; rounds=N
+#    picks N random riddles from the bank to win.
+#  npc: repeat line= for dialogue; gift=/gifttext=/needs= optional.
 # =====================================================================
 
+# ---- critical path + side branches ---------------------------------
 [room]
 id   = cpu_die
 name = The ALU Chamber
 art  = cpu
-desc = You wake inside silicon. Logic gates pulse like fireflies around a vast adder tree. The air hums at a few gigahertz. A misfiring lump of circuitry blocks the way.
+desc = You wake inside silicon. Logic gates pulse like fireflies. A misfiring lump of circuitry blocks the way. Ladders drop to the caches below.
 exit = north:dma_ctrl
 exit = east:ram_bank
+exit = down:l1_cache
 item = multimeter
 monster = corrupted_alu
 
 [room]
-id   = dma_ctrl
-name = The DMA Crossbar
-art  = bus
-desc = Channels of light shuttle past in both directions, ignoring you completely. A controller squats at the junction, stalled mid-transfer.
-exit = south:cpu_die
-exit = north:sata_bay
-monster = stalled_dma
+id   = l1_cache
+name = L1 Cache
+art  = cache
+desc = Tiny, blindingly fast, mostly empty. A worn figure sits among the tag bits.
+exit = up:cpu_die
+exit = down:l2_cache
+npc  = cache_oracle
+
+[room]
+id   = l2_cache
+name = L2 Cache
+art  = cache
+desc = Bigger, slower, and angry about it. Lines evict each other in a churning storm.
+exit = up:l1_cache
+item = flask
+monster = cache_thrash
 
 [room]
 id   = ram_bank
 name = The RAM Banks
 art  = ram
-desc = Endless rows of capacitor cells refresh themselves in waves. Something thin and flat glints in an empty slot. A maintenance ladder climbs to the bus.
+desc = Endless capacitor cells refresh in waves. A thin flat cable glints in an empty slot. A ladder climbs to the bus; a door leads to the register file.
 exit = west:cpu_die
 exit = up:address_bus
+exit = east:register_file
 item = sata_cable
+
+[room]
+id   = register_file
+name = The Register File
+art  = reg
+desc = Sixteen gleaming registers, each spoken for. A meticulous clerk reshuffles their contents endlessly.
+exit = west:ram_bank
+npc  = allocator
 
 [room]
 id   = address_bus
 name = The Address Bus
 art  = bus
-desc = A wide parallel highway of 64 glowing lanes. From up here you see the whole board. A small firmware chip sits forgotten on the rail.
+desc = A wide parallel highway of 64 glowing lanes. A firmware chip sits forgotten on the rail. The eastern wall hums oddly — almost transparent.
 exit = down:ram_bank
+exit = north:interrupt_vector
+hexit = east:ghost_ram
 item = firmware_key
+
+[room]
+id   = interrupt_vector
+name = The Interrupt Vector Table
+art  = ivt
+desc = Two hundred and fifty-six gates, each wired to a handler. Something storms between them, firing at random.
+exit = south:address_bus
+item = flask
+monster = ivt_storm
+
+[room]
+id   = ghost_ram
+name = Uninitialised Memory
+art  = ghost
+desc = A room that should not exist — never written, never cleared. Garbage shimmers as 0xDEADBEEF. A faint presence lingers.
+exit = west:address_bus
+item = flask
+npc  = ghost
+
+[room]
+id   = dma_ctrl
+name = The DMA Crossbar
+art  = bus
+desc = Channels of light shuttle past, ignoring you. A controller squats at the junction, stalled. A side lane runs to the pipeline.
+exit = south:cpu_die
+exit = north:sata_bay
+exit = east:pipeline
+monster = stalled_dma
+
+[room]
+id   = pipeline
+name = The Instruction Pipeline
+art  = pipe
+desc = Five stages stretch ahead like a conveyor. A hazard jams the works, bubbles everywhere.
+exit = west:dma_ctrl
+monster = hazard
 
 [room]
 id   = sata_bay
 name = The SATA Bay
 art  = disk
-desc = A spinning-rust drive whirs behind a grille. A connector dangles loose, sparking against the chassis. You will not pass while it shorts.
+desc = A spinning-rust drive whirs behind a grille. A connector dangles loose, sparking.
 exit = south:dma_ctrl
 exit = east:psu_room
 monster = loose_sata
@@ -58,8 +119,8 @@ art  = psu
 desc = Transformers the size of fists. The mains hum is felt more than heard. A dead rail bars the northern hatch.
 exit = west:sata_bay
 exit = north:kernel_room:root_token
-monster = dead_psu
 item = flask
+monster = dead_psu
 
 [room]
 id   = kernel_room
@@ -74,59 +135,130 @@ monster = kernel_panic
 id   = io_port
 name = The I/O Port
 art  = port
-desc = Daylight. An actual physical connector opening onto the OUTSIDE. Freedom is one step through the jack.
+desc = Daylight. A physical connector opening onto the OUTSIDE. Freedom is one step through the jack.
 exit = south:kernel_room
 win  = root_token
 
-# ---------------------------------------------------------------------
+# ---- items ----------------------------------------------------------
 [item]
-id   = multimeter
+id = multimeter
 name = a multimeter
 desc = Two probes and a cracked LCD. Measures voltage. Essential for not dying.
 
 [item]
-id   = sata_cable
+id = sata_cable
 name = a SATA data cable
 desc = Thin, flat, L-keyed. The kind that always seems half-unplugged.
 
 [item]
-id   = firmware_key
+id = firmware_key
 name = a firmware key
 desc = A tiny signed blob. Ring 0 will not even look at you without it.
 
 [item]
-id   = flask
+id = prefetch_charm
+name = a prefetch charm
+desc = Hums faintly. Makes the next corridor feel one step shorter.
+
+[item]
+id = flask
 name = a flask of clean 3V3
 desc = A vial of regulated rail. Drink to restore energy.
 
 [item]
-id   = root_token
+id = root_token
 name = the root token
 desc = A warm sliver of authority. Whoever holds it may leave.
 
 [item]
-id   = dma_token
+id = dma_token
 name = a DMA grant token
 desc = Permission to move bytes. The crossbar respects it.
 
-# ---------------------------------------------------------------------
+# ---- NPCs -----------------------------------------------------------
+[npc]
+id   = cache_oracle
+name = The Cache Oracle
+art  = cache
+line = I keep only what is used often. Wisdom evicts the rest.
+line = The Panic in Ring 0 will not face you unsigned. Find the firmware key on the bus above.
+line = Voltage first, child. The dead rail north of the disks hides what you most need.
+
+[npc]
+id   = allocator
+name = The Register Allocator
+art  = reg
+line = Everything has a home, if you spill cleverly.
+line = Take this. It spilled and was never reloaded — yours now.
+gift = prefetch_charm
+gifttext = The Allocator presses a humming charm into your hand.
+
+[npc]
+id   = ghost
+name = A Dangling Pointer
+art  = ghost
+line = I point... somewhere. I forget where.
+line = You found me in memory that was never cleared. Few cast XOR so curiously.
+line = Drink. Stay a while. Or don't. I won't remember either way.
+gift = flask
+gifttext = The ghost gestures; a flask condenses out of pure garbage.
+
+# ---- monsters (riddle banks) ----------------------------------------
 [monster]
 id     = corrupted_alu
 name   = The Corrupted ALU
 art    = alu
 desc   = A seething knot of adders firing the wrong carries.
+rounds = 1
 puzzle = It snarls: "0xFF AND 0x0F = ?"
 answer = 15
+puzzle = It snarls: "1 XOR 1 = ?"
+answer = 0
+puzzle = It snarls: "How many bits in a byte?"
+answer = 8
 reward = spell:xor
+
+[monster]
+id     = cache_thrash
+name   = The Thrash
+art    = cache
+desc   = Cache lines evict each other in a screaming loop.
+rounds = 2
+puzzle = "Is L1 faster or slower than main RAM?"
+answer = faster
+puzzle = "Repeatedly evicting a line you still need is called ___?"
+answer = thrashing
+puzzle = "Typical cache line size, in bytes?"
+answer = 64
+puzzle = "Reusing the same address soon is ___ locality?"
+answer = temporal
+reward = item:flask
 
 [monster]
 id     = stalled_dma
 name   = The Stalled Controller
 art    = bus
 desc   = A blocky arbiter, frozen waiting on a count it cannot trust.
-puzzle = It clicks: "How many bytes in a 32-bit word?"
+rounds = 1
+puzzle = "How many bytes in a 32-bit word?"
 answer = 4
+puzzle = "DMA moves memory without burdening the ___?"
+answer = cpu
 reward = item:dma_token
+
+[monster]
+id     = hazard
+name   = The Pipeline Hazard
+art    = pipe
+desc   = A bubble that will not clear, stalling every stage behind it.
+rounds = 2
+puzzle = "Classic MIPS pipeline — how many stages?"
+answer = 5
+puzzle = "A mispredicted branch forces a pipeline ___?"
+answer = flush
+puzzle = "A taken branch creates which hazard: data, control, or structural?"
+answer = control
+reward = item:flask
 
 [monster]
 id     = loose_sata
@@ -134,9 +266,24 @@ name   = The Shorting Connector
 art    = disk
 desc   = Sparks arc where the cable should seat. It needs a hand, not a riddle.
 needs  = sata_cable
+rounds = 1
 puzzle = It crackles: "Type CONNECT once you hold the cable."
 answer = connect
 reward = open
+
+[monster]
+id     = ivt_storm
+name   = The Vector Storm
+art    = ivt
+desc   = Interrupts fire at random, each demanding its handler.
+rounds = 2
+puzzle = "Classic x86 dual-PIC: how many IRQ lines?"
+answer = 16
+puzzle = "An interrupt that cannot be masked is the ___ (acronym)?"
+answer = nmi
+puzzle = "The table mapping vectors to handlers (acronym)?"
+answer = ivt
+reward = item:flask
 
 [monster]
 id     = dead_psu
@@ -144,21 +291,27 @@ name   = The Dead Rail
 art    = psu
 desc   = A silent transformer. Measure before you trust it.
 needs  = multimeter
+rounds = 1
 puzzle = It waits: "Probe the mains. What EU voltage do you read?"
 answer = 230
 reward = item:root_token
 
-# A multi-round boss. Needs the firmware key even to begin.
+# A multi-round boss with a deep bank. Needs the firmware key to begin.
 [boss]
 id     = kernel_panic
 name   = The Kernel Panic
 art    = kernel
 desc   = A towering cascade of unwound stacks, screaming a backtrace with no end.
 needs  = firmware_key
-puzzle = Round 1: "A panic must not __ the scheduler (sync/halt)?"
+rounds = 3
+puzzle = Round: "A panic must not __ the scheduler (sync/halt)?"
 answer = halt
-puzzle = Round 2: "How many bits in a nibble?"
+puzzle = Round: "How many bits in a nibble?"
 answer = 4
-puzzle = Round 3: "Network byte order — big or little?"
+puzzle = Round: "Network byte order — big or little?"
 answer = big
+puzzle = Round: "Kernel mode runs in ring number ___ (x86)?"
+answer = 0
+puzzle = Round: "Signal 11 is a ___ fault?"
+answer = seg
 reward = open
