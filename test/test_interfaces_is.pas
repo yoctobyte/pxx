@@ -36,4 +36,8 @@ begin
 
   foo := a;
   writeln('call=', foo.F);
+
+  { Supports(obj, IFoo) — function form of `obj is IFoo` }
+  if Supports(a, IFoo) then writeln('sup IFoo') else writeln('sup no');
+  if Supports(z, IFoo) then writeln('z sup') else writeln('z sup no');
 end.

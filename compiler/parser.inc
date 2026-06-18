@@ -2873,6 +2873,24 @@ begin
       if (idx >= 0) and (Syms[idx].TypeKind = tyAuto) then
         Error('use of auto variable before type is inferred');
 
+      { `Supports(obj, IFoo): Boolean` — the function form of `obj is IFoo`.
+        Reuses the interface implementation query (AN_IS_TEST). }
+      if CaseEqual(name, 'Supports') and (pi < 0) and (Tokens[TokPos].Kind = tkLParen) then
+      begin
+        Next; Expect(tkLParen, '(');
+        ParseExpr; exprNode := CurASTNode;
+        Expect(tkComma, ',');
+        if CurTok.Kind <> tkIdent then Error('Supports: expected interface name');
+        ci := FindUClass(CurTok.SVal);
+        if (ci < 0) or not UClsIsInterface[ci] then Error('Supports: second argument must be an interface');
+        Next;
+        Expect(tkRParen, ')');
+        node := AllocNode(AN_IS_TEST);
+        ASTLeft[node] := exprNode; ASTIVal[node] := ci; ASTTk[node] := Ord(tyBoolean);
+        CurASTNode := node; LastExprTk := tyBoolean;
+        Exit;
+      end;
+
       { Indirect call through a procedural-type variable: v(args) as an expression. }
       if (idx >= 0) and (SymProcSig[idx] >= 0) and (Tokens[TokPos].Kind = tkLParen) then
       begin
