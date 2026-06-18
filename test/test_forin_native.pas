@@ -8,6 +8,8 @@ var
   i, sum: Integer;
   c: Char;
   d: TWeekday;
+  ws: set of TWeekday;
+  cs: set of Char;
 begin
   { static array }
   for i := 0 to 4 do sa[i] := (i + 1) * 10;
@@ -28,4 +30,12 @@ begin
 
   { enum type iteration }
   for d in TWeekday do writeln('day=', Ord(d));
+
+  { set of enum iteration (present members in ordinal order) }
+  ws := [Mon, Wed, Fri];
+  for d in ws do writeln('wd=', Ord(d));
+
+  { set of Char iteration }
+  cs := ['x', 'a', 'm'];
+  for c in cs do writeln('cs=', c);
 end.

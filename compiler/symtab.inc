@@ -1345,6 +1345,8 @@ begin
   SymDynDepth[SymCount] := 0;
   SymGenSlot[SymCount] := -1;
   SymProcSig[SymCount] := -1;
+  SymSetEnumId[SymCount] := -1;
+  SymSetElemTk[SymCount] := 0;
   SymRTTIOff[SymCount] := -1;
   SymIsHiddenArgTemp[SymCount] := False;
   SymBlockId[SymCount] := CurBlockId;
@@ -1422,6 +1424,8 @@ begin
   SymDynDepth[SymCount] := 0;
   SymGenSlot[SymCount] := -1;
   SymProcSig[SymCount] := -1;
+  SymSetEnumId[SymCount] := -1;
+  SymSetElemTk[SymCount] := 0;
   SymRTTIOff[SymCount] := -1;
   Syms[SymCount].ElemType := tk;
   Syms[SymCount].RecName  := LastTypeRecId;

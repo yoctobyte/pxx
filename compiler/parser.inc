@@ -3832,11 +3832,75 @@ begin
     Result := GenMakeSeq(assignE, GenMakeSeq(whileNode, -1));
 end;
 
+{ for X in <set var> do BODY iterates present members in ordinal order. Reuses
+  the `in` membership operator over the element base-type range, so no knowledge
+  of the 32-byte bitset layout is needed:
+    X := lo;
+    while X <= hi do begin if X in S then BODY; X := X + 1; end;
+  X (the loop var) doubles as the scan ordinal. Range from the set element type:
+  `set of <enum>` → 0..count-1; `set of Char` → 0..255. }
+function ParseForInSetAST(varIdx, setSym: Integer): Integer;
+var
+  bodyNode, loV, hiV, vtk, oSym, isChar: Integer;
+  initN, scanCond, condIn, pairN, ifN, incN, innerSeq, whileN: Integer;
+  valNode, assignE, chrArg: Integer;
+begin
+  Expect(tkDo, 'do');
+  bodyNode := ParseStatementAST;
+
+  isChar := 0;
+  if SymSetEnumId[setSym] >= 0 then
+  begin loV := 0; hiV := EnumTypeValCount[SymSetEnumId[setSym]] - 1; end
+  else if SymSetElemTk[setSym] = Ord(tyChar) then
+  begin loV := 0; hiV := 255; isChar := 1; end
+  else
+    Error('for-in: set iteration supports `set of <enum>` or `set of Char` only');
+
+  { Scan with a separate Integer ordinal so the `<= hi` test cannot wrap on a
+    narrow loop var (a Char counter overflows 255 -> 0 and loops forever). }
+  oSym := AllocVar('', tyInteger);
+  vtk := Ord(Syms[varIdx].TypeKind);
+  initN := GenMakeAssign(GenMakeIdent(oSym, tyInteger), GenMakeIntLit(loV));
+  scanCond := GenMakeBinop(tkLe, GenMakeIdent(oSym, tyInteger), GenMakeIntLit(hiV), tyBoolean);
+
+  { loop var := ordinal (Chr() for char elements, plain ordinal for enums) }
+  if isChar = 1 then
+  begin
+    valNode := AllocNode(AN_CALL);
+    ASTIVal[valNode] := -Ord(tkChr);
+    ASTTk[valNode] := Ord(tyChar);
+    chrArg := AllocNode(AN_ARG);
+    ASTLeft[chrArg] := GenMakeIdent(oSym, tyInteger);
+    ASTLeft[valNode] := chrArg;
+  end
+  else
+    valNode := GenMakeIdent(oSym, tyInteger);
+  assignE := GenMakeAssign(GenMakeIdent(varIdx, IntToTypeKind(vtk)), valNode);
+
+  condIn := GenMakeBinop(tkIn, GenMakeIdent(oSym, tyInteger),
+                         GenMakeIdent(setSym, tySet), tyBoolean);
+  ifN := AllocNode(AN_IF);
+  ASTLeft[ifN] := condIn;
+  pairN := AllocNode(AN_PAIR);
+  ASTLeft[pairN] := bodyNode;
+  ASTRight[pairN] := -1;
+  ASTRight[ifN] := pairN;
+
+  incN := GenMakeAssign(GenMakeIdent(oSym, tyInteger),
+    GenMakeBinop(tkPlus, GenMakeIdent(oSym, tyInteger), GenMakeIntLit(1), tyInteger));
+  innerSeq := GenMakeSeq(assignE, GenMakeSeq(ifN, GenMakeSeq(incN, -1)));
+  whileN := AllocNode(AN_WHILE);
+  ASTLeft[whileN] := scanCond;
+  ASTRight[whileN] := innerSeq;
+  Result := GenMakeSeq(initN, GenMakeSeq(whileN, -1));
+end;
+
 { for x in <string|static array|dynarray|open-array var> do BODY:
     __i := lo;
     while __i <= hi do begin x := C[__i]; BODY; __i := __i + 1; end;
   lo/hi pick the right base: strings 1..Length, arrays 0..count-1.
-  A class/record container with GetEnumerator routes to the enumerator desugar. }
+  A class/record container with GetEnumerator routes to the enumerator desugar;
+  a set var routes to the membership-scan desugar. }
 function ParseForInVarAST(varIdx, contSym: Integer): Integer;
 var
   bodyNode, idxSym, loNode, hiNode, elemTk: Integer;
@@ -3845,6 +3909,13 @@ var
   contTk: TTypeKind;
   recId: Integer;
 begin
+  { set var → membership-scan over the element base-type range }
+  if Syms[contSym].TypeKind = tySet then
+  begin
+    Result := ParseForInSetAST(varIdx, contSym);
+    Exit;
+  end;
+
   { class/record container with GetEnumerator → structural enumerator (Slice B) }
   recId := Syms[contSym].RecName;
   if (not ((Syms[contSym].TypeKind = tyString) or (Syms[contSym].TypeKind = tyAnsiString)))
@@ -5795,6 +5866,7 @@ begin
         { inline `set of TFoo`: the element parse records the enum identity in
           LastTypeEnumId; carry it as the set's element enum for RTTI. }
         LastTypeSetEnumId := LastTypeEnumId;
+        LastTypeSetElemTk := Ord(elemTk);
         Result := tySet;
         Exit;
       end;
@@ -6030,6 +6102,11 @@ begin
 	          Syms[idx].PtrElemTk := LastTypePointerElemTk;
 	          Syms[idx].PtrElemRec := LastTypePointerElemRec;
 	          SymProcSig[idx] := LastTypeProcSig;
+	        end
+	        else if tk = tySet then
+	        begin
+	          SymSetEnumId[idx] := LastTypeSetEnumId;
+	          SymSetElemTk[idx] := LastTypeSetElemTk;
 	        end;
 	      end;
 	    if Eat(tkEq) then
