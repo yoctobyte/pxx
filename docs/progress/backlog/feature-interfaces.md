@@ -1,7 +1,7 @@
 # Interfaces
 
 - **Type:** feature
-- **Status:** backlog (deprioritized — bottom of the list)
+- **Status:** backlog (CORBA vertical slice landed 2026-06-18; follow-ups open — see Log)
 - **Owner:** —
 - **Opened:** 2026-06-06 (from todo.md §3 — intentionally deferred)
 
@@ -64,3 +64,22 @@ self-host fixedpoint holds.
 
 ## Log
 - 2026-06-06 — ticket opened from todo.md §3.
+- 2026-06-18 — **CORBA vertical slice landed** (commit 3a7b0c5). Working end to
+  end on all 4 Linux targets, byte-identical to FPC {$interfaces corba}: declare
+  `IFoo = interface ... end`, class implements via the parent list, interface var
+  (fat pointer {IMT, instance}, 2*TARGET_PTR_SIZE), class→interface assignment,
+  and interface method dispatch (0-arg + args, procedure-as-statement, Self field
+  read/mutation, same-instance identity). Per-(class,interface) IMT emitted in
+  Data[] and wired via MethodFixups like the VMT; call dispatches through the
+  existing IR_CALL_IND. New: UClsIsInterface, IMT table + FindIMT, IR_IMTADDR,
+  AN_INTF_CALL. make test + cross-bootstrap byte-identical.
+  **Mechanism decisions locked:** CORBA/no-refcount; fat pointer (not Delphi
+  thunks); GUIDs parsed+ignored; IMT slot = interface method declaration order.
+  **Still open (decide/build next):** is/as/Supports on interfaces (reuse the
+  feature-class-is-as VMT walk — but interface identity is the IMT, needs a
+  per-instance interface-table lookup or a Supports helper); interface-typed
+  params/results across function calls; interface inheritance; assigning a
+  base-class-typed value (dynamic dispatch through interface); COM ARC; operator
+  `=`/`<>` identity. The slice captures the IMT from the RHS *static* class, so
+  polymorphic class→interface through a base-typed var uses the base's IMT
+  (acceptable v1; revisit with dynamic IMT lookup).

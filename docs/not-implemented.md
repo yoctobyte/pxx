@@ -22,7 +22,9 @@ regression test should be treated as unverified. See
 - Assignment to a parenthesised-expression LHS — `(expr).field := x` does not
   store (the statement parser only treats an identifier-rooted LHS as assignable;
   true even without a cast). Workaround: `t := expr; t.field := x`.
-- Interfaces (low priority — the OOP-family capstone; feature-interfaces).
+- Interfaces: CORBA vertical slice works (declare/implement/assign/call, done
+  2026-06-18). Open: is/as/Supports on interfaces, interface params/results,
+  interface inheritance, polymorphic class→interface, COM ARC (feature-interfaces).
 - Private/protected access enforcement (parsed, not enforced).
 - Built-in `Exception` hierarchy, inherited handler matching, message
   constructors, class/message unhandled reports (low priority).
