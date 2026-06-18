@@ -24,6 +24,21 @@
   riscv32 (Y/N/Y/Y/N == oracle); shared EmitStrOperandRISCV32 decomposition;
   esp_run.sh force-relinks (was running stale images — see Known bugs). xtensa
   compare + the concat-of-two-string-literals bug remain (below).
+- 2026-06-18 — **xtensa compare done**: PXXStrEq path in the xtensa IR_BINOP
+  (operand decompose mirrors concat: a4=lenA,a5=srcA,a6=lenB,a7=srcB; xor for
+  tkNeq). test_esp_strcmp Y/N/Y/Y/N both ISAs == oracle.
+- 2026-06-18 — **SetLength + s[i] COW + scope-exit DecRef done** (both ISAs).
+  SetLength(s,n)->PXXStrSetLen (tyAnsiString IR_LOAD_SYM lvalue, mirrors
+  aarch64). s[i] write COW: IR_INDEX clones-if-shared via PXXStrUnique when base
+  is an IR_LEA scalar tyAnsiString in write position; IR_STORE_MEM now sets
+  InLValueWrite around the address eval so the IR_LEA keeps the slot addr.
+  Scope-exit DecRef of tyAnsiString locals in EmitProcEpilog (xtensa+riscv32).
+  **ROOT-CAUSE FIX**: the ESP prologue managed-local nil-init (parser.inc) was a
+  no-op placeholder -> uninitialised local strings held stack garbage and
+  scope-exit DecRef wild-freed them (Guru Meditation / Load access fault). Now
+  zeroes the pointer-sized handle slot. Tests: test_esp_strmut
+  (QXX/QYX/QXX/QY), test_esp_strscope (4000-churn arena survival -> OK4/kept).
+  Full ESP suite byte-equal to x86-64 oracle both ISAs; make test green.
 
 ## Known bugs (found 2026-06-18)
 
@@ -36,26 +51,22 @@
   single interned literal at IR-lowering (ESP-gated; self-host byte-identical).
   Residual unfolded tyString concat (nested pure-literal `'a'+'b'+'c'`) raises a
   clear ESP-backend error instead of miscompiling.
-- **xtensa string compare not wired.** `s = t` on xtensa falls through to the
-  integer binop (compares handle pointers) -> wrong result (test_esp_strcmp
-  gives N/N/Y/N/Y vs Y/N/Y/Y/N). Mirror the riscv32 compare: add an
-  EmitStrOperandXtensa helper + the PXXStrEq path in the xtensa binop (like the
-  committed xtensa concat).
+- ~~xtensa string compare not wired~~ **FIXED 2026-06-18.** PXXStrEq path added
+  to the xtensa IR_BINOP (decomposition inlined like the xtensa concat, no
+  shared helper). test_esp_strcmp Y/N/Y/Y/N both ISAs.
 
 ## Remaining
 
-- **Comparison** `s = t` / `s <> t` → PXXStrEq(lenA,srcA,lenB,srcB) (1/0;
-  tkNeq xor 1). Same operand decomposition as concat (factor a helper to share
-  it across concat/compare on each backend). Gate on op tkEq/tkNeq AND an
-  operand of tyAnsiString (result is tyBoolean, so can't gate on IRTk[node]).
-- **SetLength(s, n)** → PXXStrSetLen(slotAddr, n) (already registered/compiled;
-  wire the -102 path to route tyAnsiString to PXXStrSetLen, like aarch64).
-- **s[i] write** (COW): write position must clone-if-shared via PXXStrUnique
-  before returning the byte address (IR_LEA write already keeps the slot addr).
-- **Scope-exit DecRef** of local managed strings (ARC bookkeeping on proc exit)
-  — verify EmitProcEpilog releases tyAnsiString locals on ESP.
+All core paths done (compare, SetLength, s[i] COW, scope-exit DecRef). Ticket
+ready to close pending board move. Open follow-ups (minor):
+
+- Managed-aggregate locals on ESP (array of AnsiString / record-with-managed
+  fields) still raise "managed aggregate locals not yet supported" in the
+  prologue zero-init — only the scalar pointer-sized handle is nil-inited.
 - xtensa char-concat operand uses `addi a6, sp, off` (±128 imm) — deep nesting
   with a char operand could overflow; revisit if hit.
+- Scope-exit DecRef on ESP only releases scalar tyAnsiString locals (not local
+  dynarrays — those leak on the static arena, harmless; mirror later if needed).
 
 ## Motivation
 
