@@ -1060,8 +1060,13 @@ begin
            IRAppend(IR_LOAD_MEM, IRAppend(IR_LOAD_SYM, instSym, -1, -1, 0, Ord(tyPointer)),
                     -1, -1, 0, Ord(tyPointer)),
            -1, 0, Ord(tyPointer));
+  { Match set: for a class target, c is the class or a descendant; for an
+    interface target, c is any class that implements it (directly or inherited,
+    via FindIMT). So `obj is IFoo` is true iff obj's class implements IFoo. }
   for c := 0 to UClsCount - 1 do
-    if IsClassDescOrSelf(c, targetCi) and (UClsVMTOffset[c] >= 0) then
+    if (UClsVMTOffset[c] >= 0) and
+       ( (UClsIsInterface[targetCi] and (FindIMT(c, targetCi) >= 0)) or
+         ((not UClsIsInterface[targetCi]) and IsClassDescOrSelf(c, targetCi)) ) then
     begin
       lv := IRAppend(IR_LOAD_SYM, vmtSym, -1, -1, 0, Ord(tyPointer));
       va := IRAppend(IR_VMTADDR, c, -1, -1, 0, Ord(tyPointer));
