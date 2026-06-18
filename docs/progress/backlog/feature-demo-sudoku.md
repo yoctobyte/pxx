@@ -62,3 +62,15 @@ integer-deterministic so it doubles as a cross-target regression + benchmark
 
 Language features first (see board). Build after the near-term feature ticks
 (`for-in`, explicit casts, any set-op gaps a clean implementation surfaces).
+
+## Log
+- 2026-06-18 — **Solver slice landed** (commit 5687546). Backtracking + MRV
+  heuristic, integer bitmask candidate sets; solves 3 published puzzles to unique
+  solutions, byte-identical to FPC across x86-64/i386/aarch64/arm32; in `make
+  test`. **Deferred:** generator (needs seeded RNG — feature-random-library),
+  interactive CLI (scripted stdin transcript), ESP-over-UART.
+  **Gap surfaced:** `set of 1..9` cannot be built from runtime values —
+  `s := s + [v]` with a variable v errors ("set item must be constant") and
+  `Include`/`Exclude` are unimplemented, so the solver uses an integer bitmask
+  instead of the set lane. Worth a ticket (Include/Exclude + variable set
+  literal elements) if the set lane is wanted.

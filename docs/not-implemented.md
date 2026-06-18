@@ -25,6 +25,10 @@ regression test should be treated as unverified. See
 - Interfaces: CORBA vertical slice works (declare/implement/assign/call, done
   2026-06-18). Open: is/as/Supports on interfaces, interface params/results,
   interface inheritance, polymorphic class→interface, COM ARC (feature-interfaces).
+- Sets can't be built from runtime values: `s := s + [v]` / `[v]` with a variable
+  `v` errors ("set item must be constant"), and `Include`/`Exclude` are
+  unimplemented. Set literals take constants only; use an integer bitmask for
+  runtime-driven membership (feature-demo-sudoku surfaced this).
 - Private/protected access enforcement (parsed, not enforced).
 - Built-in `Exception` hierarchy, inherited handler matching, message
   constructors, class/message unhandled reports (low priority).
