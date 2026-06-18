@@ -836,7 +836,8 @@ begin
             the value already in a2 (char/int share the register model). }
           if (pi = -Ord(tkOrd)) or (pi = -Ord(tkChr)) or
              (pi = -Ord(tkInteger_T)) or (pi = -Ord(tkLongWord_T)) or
-             (pi = -Ord(tkChar_T)) or (pi = -Ord(tkBoolean_T)) then
+             (pi = -Ord(tkChar_T)) or (pi = -Ord(tkBoolean_T)) or
+             (pi = -Ord(tkString_T)) then
           begin
             argNode := IRB[node];
             IREmitNodeXtensa(IRA[argNode]);

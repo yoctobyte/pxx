@@ -135,6 +135,9 @@ const
                           to its operand (the underlying call suspends on its own
                           via the reactor/CoYield). STACKLESS (later): the marker
                           that bounds the state-machine split locally. }
+  AN_STR_FROM_CHAR = 55; { String(c) rvalue: materialise a 1-char string. Left =
+                           char expr; ASTIVal = hidden string temp sym. Lowered in
+                           shared IR by reusing the `s := c` store + a var read. }
 
   { Inline-asm operand kinds }
   AOP_NONE = 0;

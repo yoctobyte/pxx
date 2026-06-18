@@ -2392,6 +2392,48 @@ begin
       ASTLeft[node] := argSeq;
       CurASTNode := node;
     end;
+    tkString_T:
+    begin
+      { `String(x)`. For a string operand it is identity (passthrough). For a Char
+        operand it must produce a *string value*; route through AN_STR_FROM_CHAR
+        which reuses the `s := c` store into a hidden temp, then yields the temp —
+        so it works in both frozen and managed string modes with no backend code. }
+      LastExprTk := tyString;
+      Next; Expect(tkLParen, '('); ParseExpr; Expect(tkRParen, ')');
+      if (IntToTypeKind(ASTTk[CurASTNode]) = tyString) or
+         (IntToTypeKind(ASTTk[CurASTNode]) = tyAnsiString) then
+      begin
+        node := AllocNode(AN_CALL); ASTIVal[node] := -Ord(tkString_T);
+        ASTTk[node] := ASTTk[CurASTNode];
+        argSeq := AllocNode(AN_ARG); ASTLeft[argSeq] := CurASTNode;
+        ASTLeft[node] := argSeq;
+        CurASTNode := node;
+      end
+      else if IntToTypeKind(ASTTk[CurASTNode]) = tyChar then
+      begin
+        { Build the desugar at parse time so it goes through the same AST passes
+          as hand-written code: a hidden string temp, `__t := c` (char->string
+          store), and a read of __t. AN_STR_FROM_CHAR.Left = the assign (side
+          effect), .Right = the temp read (the yielded value). The temp is tyString
+          to match the `String` keyword (always frozen tyString in this dialect,
+          even under PXX_MANAGED_STRING where only `AnsiString` is managed). }
+        op := AllocVar('', tyString);
+        node := AllocNode(AN_STR_FROM_CHAR);
+        argSeq := AllocNode(AN_IDENT);       { LHS of the store }
+        ASTIVal[argSeq] := op; ASTTk[argSeq] := Ord(Syms[op].TypeKind);
+        left := AllocNode(AN_ASSIGN);
+        ASTLeft[left] := argSeq; ASTRight[left] := CurASTNode;
+        ASTTk[left] := Ord(Syms[op].TypeKind);
+        ASTLeft[node] := left;
+        identNode := AllocNode(AN_IDENT);     { the yielded value }
+        ASTIVal[identNode] := op; ASTTk[identNode] := Ord(Syms[op].TypeKind);
+        ASTRight[node] := identNode;
+        ASTTk[node] := Ord(Syms[op].TypeKind);
+        CurASTNode := node;
+      end
+      else
+        Error('String(): operand must be Char or string');
+    end;
     tkLength:
     begin
       Next; Expect(tkLParen, '(');

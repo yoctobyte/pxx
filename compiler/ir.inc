@@ -1360,6 +1360,16 @@ begin
       Result := IRLowerAST(ASTLeft[node]);
     end;
 
+    AN_STR_FROM_CHAR:
+    begin
+      { String(c): Left is the `__t := c` store (a 1-char string materialised into
+        a hidden temp via the ordinary assignment path, frozen or managed); Right
+        is the read of __t that yields the string value. No backend code — both
+        sub-nodes are ordinary IR built at parse time. }
+      IRLowerAST(ASTLeft[node]);          { side-effect: char -> hidden string temp }
+      Result := IRLowerAST(ASTRight[node]);
+    end;
+
     AN_ADDR:
     begin
       Result := IRLowerAddress(ASTLeft[node]);

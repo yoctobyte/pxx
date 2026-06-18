@@ -1914,7 +1914,8 @@ begin
           j := -pi;
           if (j = Ord(tkOrd)) or (j = Ord(tkChr)) or
              (j = Ord(tkInteger_T)) or (j = Ord(tkLongWord_T)) or
-             (j = Ord(tkChar_T)) or (j = Ord(tkBoolean_T)) then
+             (j = Ord(tkChar_T)) or (j = Ord(tkBoolean_T)) or
+             (j = Ord(tkString_T)) then
           begin
             { type-pun passthrough: evaluate the argument in place }
             argNode := IRB[node];

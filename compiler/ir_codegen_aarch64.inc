@@ -1298,7 +1298,8 @@ begin
           specialId := -pi;
           if (specialId = Ord(tkOrd)) or (specialId = Ord(tkChr)) or
              (specialId = Ord(tkInteger_T)) or (specialId = Ord(tkLongWord_T)) or
-             (specialId = Ord(tkChar_T)) or (specialId = Ord(tkBoolean_T)) then
+             (specialId = Ord(tkChar_T)) or (specialId = Ord(tkBoolean_T)) or
+             (specialId = Ord(tkString_T)) then
           begin
             { type-pun passthrough: evaluate the argument in place }
             argNode := IRB[node];
