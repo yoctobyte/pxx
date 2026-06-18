@@ -14,7 +14,7 @@ lives in git, not in a timestamp._
 
 _none_
 
-## backlog (48)
+## backlog (49)
 
 | Ticket | Type | Summary | Blocked-by |
 | --- | --- | --- | --- |
@@ -57,6 +57,7 @@ _none_
 | feature-parallel-processing | feature | Parallel processing as a language feature | feature-unified-heap-allocator |
 | feature-progress-transition-helpers | feature | Progress transition helpers (`claim` / `resolve`) | — |
 | feature-random-library | feature | Random library — HW/OS/software tiered RNG (cross-target capability test) | — |
+| feature-result-in-loop | feature | Function `Result` (float) read-modified inside a loop miscompiles to 0 | — |
 | feature-stackful-coro-port | feature | Port the stackful coroutine backend to all targets | — |
 | feature-static-arena-profile | feature | Fixed-static-arena allocator profile | feature-unified-heap-allocator |
 | feature-threadsafe-io-serialization | feature | Statement-level I/O serialization under threads | feature-unified-heap-allocator |
@@ -74,7 +75,7 @@ _none_
 | bug-nonreproducible-miscompile-2026-06-02 | bug | Non-reproducible one-off miscompile (2026-06-02) | — |
 | bug-whole-record-copy-main-body-noop | bug | Latent: whole-record array-element copy in main-program body emits store no-ops | — |
 
-## done (60)
+## done (61)
 
 | Ticket | Type | Summary | Blocked-by |
 | --- | --- | --- | --- |
@@ -132,6 +133,7 @@ _none_
 | feature-target-arm32 | feature | Compile target: ARM32 Linux | feature-target-aarch64 |
 | feature-target-esp32 | feature | Compile target: ESP32 / embedded | — |
 | feature-target-i386 | feature | Compile target: i386 (32-bit x86 Linux) | chore-qemu-test-env |
+| feature-transcendental-math | feature | Transcendental math library (Sqrt/Sin/Cos/Ln/Exp/ArcTan/Power/Pi/Abs) | — |
 | feature-typed-const-arrays | feature | Typed constant arrays (initialized const arrays) | — |
 | feature-typed-instruction-encoders | feature | Typed instruction encoders for codegen | — |
 | feature-unified-heap-allocator | feature | Unified syscall-free heap allocator | — |
@@ -177,6 +179,7 @@ _none_
 - feature-parallel-processing
 - feature-progress-transition-helpers
 - feature-random-library
+- feature-result-in-loop
 - feature-stackful-coro-port
 - feature-static-arena-profile
 - feature-threadsafe-io-serialization
