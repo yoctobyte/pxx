@@ -83,3 +83,10 @@ self-host fixedpoint holds.
   `=`/`<>` identity. The slice captures the IMT from the RHS *static* class, so
   polymorphic class→interface through a base-typed var uses the base's IMT
   (acceptable v1; revisit with dynamic IMT lookup).
+- 2026-06-18 — **`obj is IFoo` landed** (commit b8f9289): real implementation
+  query via the closed-world VMT-set (interface target → classes with a matching
+  IMT). All 4 targets; cross-bootstrap byte-identical. Verified already-working:
+  interface params + results (64-bit targets), method dispatch. Narrowed the
+  remaining open items: `as IFoo`/`Supports` (checked cast to an interface
+  value), implicit class→interface coercion at call sites, 16-byte interface
+  params on i386 (32-bit aggregate-param ABI), interface inheritance, COM ARC.
