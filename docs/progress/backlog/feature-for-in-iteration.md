@@ -142,6 +142,17 @@ byte-identical (run `make cross-bootstrap` — the generator work proved x86-64
 fixedpoint alone misses cross regressions).
 
 ## Log
+- 2026-06-18 — **Slice A landed** (commit 944792b): native for-in over static
+  arrays, dynamic arrays, open-array params, strings (char-by-char) and enum-type
+  (`for d in TWeekday`). Parser desugars to an indexed while loop (shared IR, no
+  per-target codegen). `make test` green, output byte-identical to FPC, and
+  `make cross-bootstrap` byte-identical on i386 + aarch64 + arm32.
+  **Set for-in deferred within Slice A:** plain set/enum *vars* have no
+  per-symbol element-type/range tracking (only properties carry UPropSetEnumId).
+  Cleanest fix = desugar `for e in someSet` to `for ord := lo to hi do if ord in
+  someSet then begin e := ord; Body end` (reuses the existing `in` membership
+  op), but needs a SymSetEnumId / SymEnumId parallel array to recover lo..hi from
+  the loop var's enum type. Add when set iteration is actually needed.
 - 2026-06-16 — opened, split out of feature-generators-yield. Generators need
   nothing from this; it is additive `for-in` breadth.
 - 2026-06-17 — design review with user. Locked: clone FPC's for-in surface
