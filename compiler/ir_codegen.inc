@@ -1356,6 +1356,10 @@ begin
         so the data-ref is direct — same as instance construction. }
       begin EmitB($48); EmitB($B8); EmitDataRef(UClsVMTOffset[IRA[node]]); end;
 
+    IR_IMTADDR:
+      { rax = address of the (class,interface) IMT for fat-pointer construction. }
+      begin EmitB($48); EmitB($B8); EmitDataRef(IMTOff[IRA[node]]); end;
+
     IR_SET_LIT:
       begin
         EmitB($48); EmitB($B8); EmitDataRef(IRIVal[node]);

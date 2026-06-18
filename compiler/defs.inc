@@ -35,6 +35,7 @@ const
   MAX_UCLASS      = 512;   { user-defined class/record slots (incl. imported C structs) }
   MAX_UFIELD      = 16384; { field slots across all user classes/records }
   MAX_UMETH       = 256;   { method slots across all user classes }
+  MAX_IMT         = 512;   { per-(class,interface) interface method tables }
   MAX_UPROP       = 64;
   MAX_ENUMTYPE = 512;
   MAX_ENUMVAL  = 4096;
@@ -142,6 +143,11 @@ const
                            Boolean = X's VMT is T's or a descendant's (closed-world). }
   AN_AS_CAST       = 57; { `X as T`: Left = instance expr; ASTIVal = target class ci.
                            Checked downcast — yields X typed as T, traps on mismatch. }
+  AN_INTF_CALL     = 58; { CORBA interface method call `iface.M(args)`. Left = arg
+                           chain; Right = interface value (fat ptr {IMT,instance});
+                           ASTIVal = signature proc idx; ASTSOffset = IMT slot. }
+  AN_INTF_FROM_CLASS = 59; { class -> interface fat-pointer build. Left = class
+                             instance expr; ASTIVal = IMT-table entry index. }
 
   { Inline-asm operand kinds }
   AOP_NONE = 0;
@@ -209,6 +215,7 @@ const
   IR_YIELD        = 56;  { IRA = value node; IRIVal = generator self-pointer local sym idx. Stores value to [self+16] then CoSwitch(self+0 -> self+8) }
   IR_CALL_IND     = 57;  { Indirect call. IRA = callee value node (code addr); IRB = first IR_ARG; IRIVal = signature proc index (Params/RetType); IRStmtRoot marks a statement-level call (result discarded) }
   IR_VMTADDR      = 58;  { IRA = class index (ci); load the runtime address of that class's VMT (= the per-class identity stored at [instance+0]). Used by is/as type-tests. }
+  IR_IMTADDR      = 59;  { IRA = IMT-table entry index; load the runtime address of that (class,interface) Interface Method Table. Captured as the fat pointer's first word. }
 
   { Generator-instance heap layout (see lib/rtl/coroutine.pas + the generator
     body lowering). A TCoroCtx is a single saved sp, so genCtx/callerCtx are one
@@ -1016,7 +1023,17 @@ var
   UClsPBase  : array[0..MAX_UCLASS-1] of Integer;
   UClsPCount : array[0..MAX_UCLASS-1] of Integer;
   UClsIsRecord : array[0..MAX_UCLASS-1] of Boolean;
+  UClsIsInterface : array[0..MAX_UCLASS-1] of Boolean; { CORBA interface type: methods are slot signatures (no bodies/fields); a var of it is a 16-byte fat pointer {IMT, instance} }
   UClsCount  : Integer;
+
+  { Per-(class, interface) Interface Method Table: a Data[] array of code
+    addresses, one per interface method slot, filled (like the VMT) via
+    MethodFixups to the class's implementing methods. A class->interface
+    assignment captures IMTOff as the fat pointer's first word. }
+  IMTClass : array[0..MAX_IMT-1] of Integer;  { implementing class ci }
+  IMTIntf  : array[0..MAX_IMT-1] of Integer;  { interface ci }
+  IMTOff   : array[0..MAX_IMT-1] of Integer;  { Data[] offset of the IMT }
+  IMTCount : Integer;
 
   UFldNOff   : array[0..MAX_UFIELD-1] of Integer;
   UFldNLen   : array[0..MAX_UFIELD-1] of Integer;

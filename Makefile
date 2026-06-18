@@ -235,6 +235,8 @@ test-core: $(COMPILER)
 	test "$$(/tmp/test_cast_string26)" = "$$(printf '[Q]\nA\neq\nhello\nhello\nXYZ')"
 	./$(COMPILER) test/test_class_is_as.pas /tmp/test_class_is_as26
 	test "$$(/tmp/test_class_is_as26)" = "$$(printf 'is TDog\nis TAnimal\nnot TCat\nnot TPuppy\nnil not\nv=42\ncast read=42\npuppy is TDog\npuppy is TAnimal\npuppy not TCat')"
+	./$(COMPILER) test/test_interfaces.pas /tmp/test_interfaces26
+	test "$$(/tmp/test_interfaces26)" = "$$(printf 'area=20\nscaled=60\narea2=42\ndirect=42')"
 	./$(COMPILER) test/test_stackless_gen.pas /tmp/test_stackless_gen26
 	test "$$(/tmp/test_stackless_gen26)" = "$$(printf '1 4 9 16 25 \n25\n5 4 3 2 1 \n0 2 4 6 8 \n10 20 30 \n1 2 3 ')"
 	./$(COMPILER) test/test_scheduler.pas /tmp/test_scheduler26

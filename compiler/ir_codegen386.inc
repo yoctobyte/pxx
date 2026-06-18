@@ -2725,6 +2725,9 @@ begin
     IR_VMTADDR:
       begin EmitB($B8); EmitDataRef(UClsVMTOffset[IRA[node]]); end; { mov eax, class VMT addr (is/as identity) }
 
+    IR_IMTADDR:
+      begin EmitB($B8); EmitDataRef(IMTOff[IRA[node]]); end; { mov eax, interface method table addr }
+
     IR_SET_LIT:
       begin EmitB($B8); EmitDataRef(IRIVal[node]); end;   { mov eax, set-literal blob addr }
 

@@ -1406,6 +1406,41 @@ begin
       begin
         mpi := UMthProc_[mmi];
         Next; { consume method name }
+        if (mci >= 0) and UClsIsInterface[mci] then
+        begin
+          { CORBA interface call `iface.M(args)`: dispatch through the IMT slot.
+            Self comes from the fat pointer's instance word at call time. }
+          mcallNode := AllocNode(AN_INTF_CALL);
+          ASTRight[mcallNode] := node;                 { the interface value }
+          ASTIVal[mcallNode] := mpi;                   { signature proc (marshalling) }
+          ASTSOffset[mcallNode] := UMthVirSlot[mmi];   { IMT slot }
+          ASTTk[mcallNode] := Ord(Procs[mpi].RetType);
+          mlastArg := -1;
+          if CurTok.Kind = tkLParen then
+          begin
+            Next;
+            mai := 1; { param 0 = Self (provided by the fat pointer) }
+            while mai <= Procs[mpi].ParamCount-1 do
+            begin
+              if Procs[mpi].Params[mai].IsRef or Procs[mpi].Params[mai].IsArray then
+              begin
+                if CurTok.Kind <> tkIdent then Error('expected variable');
+                margIdx := FindSym(CurTok.SVal); Next;
+                mexprNode := ParseLValueAST(margIdx, TokPos - 2);
+              end
+              else begin ParseExpr; mexprNode := CurASTNode; end;
+              margSeq := AllocNode(AN_ARG); ASTLeft[margSeq] := mexprNode;
+              if mlastArg = -1 then ASTLeft[mcallNode] := margSeq
+              else ASTRight[mlastArg] := margSeq;
+              mlastArg := margSeq;
+              if mai < Procs[mpi].ParamCount-1 then Expect(tkComma, ',');
+              Inc(mai);
+            end;
+            Expect(tkRParen, ')');
+          end;
+          node := mcallNode;
+          Result := node; Exit;
+        end;
         if UMthIsStatic[mmi] then
         begin
           mcallNode := AllocNode(AN_CALL);
@@ -5824,7 +5859,8 @@ begin
                 idx := FindSym(name);
               Next;
               valNode := ParseLValueAST(idx, TokPos - 2);
-              if (ASTKind[valNode] = AN_CALL) or (ASTKind[valNode] = AN_VIRTUAL_CALL) then
+              if (ASTKind[valNode] = AN_CALL) or (ASTKind[valNode] = AN_VIRTUAL_CALL) or
+                 (ASTKind[valNode] = AN_INTF_CALL) then
                 node := valNode
               else
               begin
@@ -5987,7 +6023,15 @@ begin
       else if EnableAutoVar and CaseEqual(lo, 'auto') then Result := tyAuto
       else
       begin
-        if IsClassType(lo) then
+        ci := FindUClass(lo);
+        if (ci >= 0) and UClsIsInterface[ci] then
+        begin
+          { Interface-typed variable: a 16-byte fat pointer {IMT, instance}.
+            Modelled as a tyRecord whose rec id is the interface's UCls entry. }
+          LastTypeRecId := REC_UCLASS_BASE + ci;
+          Result := tyRecord;
+        end
+        else if IsClassType(lo) then
         begin
           if CaseEqual(lo, 'TMyClass') then
             LastTypeRecId := REC_TMYCLASS
@@ -6329,6 +6373,8 @@ var
   tnOff, tnLen, ci, fnOff, fnLen, curFieldOff, fRec, fSize, fAlign, classAlign, depth, targetNOff, targetNLen: Integer;
   fTk: TTypeKind;
   parentCi, slot, mmi, mnOff, mnLen, pnOff, pnLen, rFOff, rFLen, rMOff, rMLen, wFOff, wFLen, wMOff, wMLen, rnOff, rnLen, wnOff, wnLen, propRec, i, vmtSlots: Integer;
+  implIntf: array[0..15] of Integer; implCnt, tmpCi, ii, imSlot, imProc: Integer;
+  imName: AnsiString;
   isConstructor, isDestructor, isVirtual, isOverride, isAbstract, isClassMethod: Boolean;
   mname, propName, readName, writeName: AnsiString;
   propTk: TTypeKind;
@@ -6386,6 +6432,79 @@ begin
         Expect(tkRParen, ')');
         EnumTypeValCount[etid] := EnumValCount - EnumTypeValBase[etid];
       end
+      else if (CurTok.Kind = tkIdent) and CaseEqual(CurTok.SVal, 'interface') then
+      begin
+        { `IFoo = interface [guid] <method signatures> end;` — CORBA-style.
+          The interface is a UCls entry with no fields; its methods are slot
+          signatures (declaration order = IMT slot). A var of it is a 16-byte
+          fat pointer {IMT, instance}. }
+        Next;
+        ci := AddUClass(tnOff, tnLen);
+        UClsIsInterface[ci] := True;
+        UClsSize_[ci] := 2 * TARGET_PTR_SIZE;   { fat pointer {IMT, instance} }
+        UClsAlign[ci] := TARGET_PTR_SIZE;
+        { optional GUID literal ['{...}'] — parsed and ignored (v1) }
+        if CurTok.Kind = tkLBrack then
+        begin
+          while (CurTok.Kind <> tkRBrack) and (CurTok.Kind <> tkEOF) do Next;
+          Expect(tkRBrack, ']');
+        end;
+        while (CurTok.Kind = tkProcedure) or (CurTok.Kind = tkFunction) do
+        begin
+          mIsFunc := CurTok.Kind = tkFunction;
+          Next;
+          if CurTok.Kind <> tkIdent then Error('expected interface method name');
+          mname := CurTok.SVal;
+          mnOff := Tokens[TokPos-1].SOffset; mnLen := Tokens[TokPos-1].SLen;
+          Next;
+          mNParams := 0; mRetType := tyInteger;
+          if CurTok.Kind = tkLParen then
+          begin
+            Next; mDoneArgs := False;
+            while (CurTok.Kind <> tkRParen) and not mDoneArgs do
+            begin
+              mIsByRef := False;
+              if (CurTok.Kind = tkVar) or ((CurTok.Kind = tkIdent) and CaseEqual(CurTok.SVal, 'out')) then
+              begin mIsByRef := True; Next; end
+              else if CurTok.Kind = tkConst then Next;
+              mStartIdx := mNParams; mDoneParam := False;
+              while (CurTok.Kind = tkIdent) and not mDoneParam do
+              begin
+                mPNames[mNParams] := CurTok.SVal; Inc(mNParams); Next;
+                if not Eat(tkComma) then mDoneParam := True;
+                if CurTok.Kind = tkColon then mDoneParam := True;
+              end;
+              Expect(tkColon, ':');
+              mIsArr := False;
+              if CurTok.Kind = tkArray then begin Next; Expect(tkOf, 'of'); mTk := ParseTypeKind; mIsArr := True; end
+              else mTk := ParseTypeKind;
+              for i := mStartIdx to mNParams-1 do
+              begin mPTypes[i] := mTk; mPTypesRec[i] := LastTypeRecId; mPArr[i] := mIsArr; mPByRef[i] := mIsByRef; end;
+              if not Eat(tkSemicolon) then mDoneArgs := True;
+            end;
+            Expect(tkRParen, ')');
+          end;
+          if mIsFunc then begin Expect(tkColon, ':'); mRetType := ParseTypeKind; end;
+          Eat(tkSemicolon);
+          { inject implicit Self (the instance) at param 0, like a class method }
+          for i := mNParams downto 1 do
+          begin mPNames[i] := mPNames[i-1]; mPTypes[i] := mPTypes[i-1]; mPArr[i] := mPArr[i-1]; mPByRef[i] := mPByRef[i-1]; end;
+          mPNames[0] := 'Self'; mPTypes[0] := tyClass; mPArr[0] := False; mPByRef[0] := False;
+          mNParams := mNParams + 1;
+          mFullName := tname; AppendChar(mFullName, '.');
+          for i := 1 to Length(mname) do AppendChar(mFullName, mname[i]);
+          mpi := RegisterProc(mFullName, mIsFunc, mRetType, mNParams, mPNames, mPTypes);
+          Procs[mpi].BodyAddr := -1;
+          for i := 0 to mNParams-1 do
+          begin Procs[mpi].Params[i].IsArray := mPArr[i]; Procs[mpi].Params[i].IsRef := mPByRef[i]; end;
+          AddUMeth(ci, mnOff, mnLen, mpi);
+          { slot = method position within this interface (IMT index) }
+          UMthVirSlot[UMthCount-1] := UClsMCount[ci] - 1;
+          UMthIsStatic[UMthCount-1] := False;
+        end;
+        Expect(tkEnd, 'end');
+        Eat(tkSemicolon);
+      end
       else if (CurTok.Kind = tkClass) and (Tokens[TokPos].Kind = tkOf) then
       begin
         { Named metaclass alias: TFooClass = class of TFoo. Values use the
@@ -6403,12 +6522,27 @@ begin
       begin
         Next;
         parentCi := -1;
+        implCnt := 0;
         if Eat(tkLParen) then
         begin
-          if CurTok.Kind <> tkIdent then Error('expected parent class name');
-          parentCi := FindUClass(CurTok.SVal);
-          if parentCi < 0 then Error('parent class not found: ' + CurTok.SVal);
-          Next;
+          { (ParentClass) and/or (Iface1, Iface2, ...): an interface name in the
+            list is an implemented interface; a class name is the parent. }
+          repeat
+            if CurTok.Kind <> tkIdent then Error('expected base class or interface name');
+            tmpCi := FindUClass(CurTok.SVal);
+            if tmpCi < 0 then Error('base type not found: ' + CurTok.SVal);
+            if UClsIsInterface[tmpCi] then
+            begin
+              if implCnt > 15 then Error('too many implemented interfaces (v1: max 16)');
+              implIntf[implCnt] := tmpCi; Inc(implCnt);
+            end
+            else
+            begin
+              if parentCi >= 0 then Error('a class may have only one parent class');
+              parentCi := tmpCi;
+            end;
+            Next;
+          until not Eat(tkComma);
           Expect(tkRParen, ')');
         end;
 
@@ -6829,6 +6963,34 @@ begin
             MethodFixups[MethodFixCount].DataPos := UClsVMTOffset[ci] + i * 8;
             MethodFixups[MethodFixCount].ProcIdx := slot;
             Inc(MethodFixCount);
+          end;
+        end;
+
+        { Build one Interface Method Table per implemented interface: a Data[]
+          array of code addresses, slot k = the class method implementing the
+          interface's method k (matched by name), wired via MethodFixups like the
+          VMT. A class->interface assignment captures the IMT address. }
+        for ii := 0 to implCnt - 1 do
+        begin
+          tmpCi := implIntf[ii];
+          if IMTCount >= MAX_IMT then Error('too many interface method tables');
+          IMTClass[IMTCount] := ci;
+          IMTIntf[IMTCount] := tmpCi;
+          IMTOff[IMTCount] := DataLen;
+          Inc(IMTCount);
+          for imSlot := 0 to UClsMCount[tmpCi] - 1 do
+          begin
+            imName := '';
+            for i := 0 to UMthNLen[UClsMBase[tmpCi] + imSlot] - 1 do
+              AppendChar(imName, TokChars[UMthNOff[UClsMBase[tmpCi] + imSlot] + i]);
+            mmi := FindUMeth(ci, imName);
+            if mmi < 0 then Error('class does not implement interface method: ' + imName);
+            imProc := UMthProc_[mmi];
+            if MethodFixCount >= MAX_METHFIX then Error('too many method fixups (IMT)');
+            MethodFixups[MethodFixCount].DataPos := DataLen;
+            MethodFixups[MethodFixCount].ProcIdx := imProc;
+            Inc(MethodFixCount);
+            for i := 0 to 7 do begin if DataLen >= MAX_DATA then Error('data overflow'); Data[DataLen] := 0; Inc(DataLen); end;
           end;
         end;
       end

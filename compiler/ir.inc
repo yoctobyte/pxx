@@ -361,6 +361,10 @@ begin
         if (IRA[i] < 0) or (IRA[i] >= UClsCount) then
           Error('invalid class index in vmtaddr');
 
+      IR_IMTADDR:
+        if (IRA[i] < 0) or (IRA[i] >= IMTCount) then
+          Error('invalid IMT index in imtaddr');
+
       IR_UNSUPPORTED:
         begin end;
 
@@ -1754,6 +1758,31 @@ begin
         end;
       end;
 
+      { Class -> interface: build the CORBA fat pointer {IMT, instance} into the
+        LHS. The IMT for (RHS static class, interface) is captured here; the
+        instance pointer is the RHS value. (interface := interface falls through
+        to the 16-byte record copy below.) }
+      if lhsTk = tyRecord then
+      begin
+        varIdx := ResolveNodeRec(ASTLeft[node]);
+        if (varIdx >= REC_UCLASS_BASE) and UClsIsInterface[varIdx - REC_UCLASS_BASE] and
+           (IntToTypeKind(ASTTk[ASTRight[node]]) = tyClass) then
+        begin
+          classIdx := ResolveNodeRec(ASTRight[node]);
+          pi := FindIMT(classIdx - REC_UCLASS_BASE, varIdx - REC_UCLASS_BASE);
+          if pi < 0 then Error('class does not implement the interface');
+          leftAddr := IRLowerAddress(ASTLeft[node]);
+          IRAppend(IR_STORE_MEM, leftAddr,
+                   IRAppend(IR_IMTADDR, pi, -1, -1, 0, Ord(tyPointer)), -1, 0, Ord(tyPointer));
+          value := IRLowerAST(ASTRight[node]);
+          outNode := IRAppend(IR_BINOP, IRLowerAddress(ASTLeft[node]),
+                              IRAppend(IR_CONST_INT, -1, -1, -1, TARGET_PTR_SIZE, Ord(tyInteger)),
+                              Ord(tkPlus), 0, Ord(tyPointer));
+          Result := IRAppend(IR_STORE_MEM, outNode, value, -1, 0, Ord(tyPointer));
+          Exit;
+        end;
+      end;
+
       { Whole-record copy: the scalar store paths move only a qword (8 bytes),
         which truncates records larger than 8 bytes. When the RHS is an lvalue,
         copy the full RecSize via IR_COPY_REC (rep movsb). }
@@ -2145,6 +2174,41 @@ begin
       else
         callVal := IRLowerAST(ASTRight[node]);   { plain: load the code-address value }
       Result := IRAppend(IR_CALL_IND, callVal, first, ASTSLen[node], cpi, ASTTk[node]);
+    end;
+
+    AN_INTF_CALL:
+    begin
+      { CORBA interface call. The interface value is a fat pointer {IMT@0,
+        instance@8}. Self = [iface+8] (prepended like a method-pointer call);
+        code = [[iface+0] + slot*8]. Marshal explicit args by the signature. }
+      cpi := ASTIVal[node];
+      { self = [iface+8] }
+      leftAddr := IRLowerAddress(ASTRight[node]);
+      right := IRAppend(IR_CONST_INT, -1, -1, -1, TARGET_PTR_SIZE, Ord(tyInteger));
+      outNode := IRAppend(IR_BINOP, leftAddr, right, Ord(tkPlus), 0, Ord(tyPointer));
+      value := IRAppend(IR_LOAD_MEM, outNode, -1, -1, 0, Ord(tyPointer));
+      first := IRAppend(IR_ARG, value, -1, -1, 0, Ord(tyPointer));
+      last := first;
+      { explicit args: signature params 1.. (param 0 is Self) }
+      item := ASTLeft[node];
+      pathIdx := 1;
+      while item <> -1 do
+      begin
+        isRefArg := (pathIdx < Procs[cpi].ParamCount) and Procs[cpi].Params[pathIdx].IsRef;
+        value := IRLowerCallArg(cpi, pathIdx, ASTLeft[item], isRefArg);
+        argNode := IRAppend(IR_ARG, value, -1, -1, 0, ASTTk[ASTLeft[item]]);
+        IRB[last] := argNode; last := argNode;
+        item := ASTRight[item];
+        Inc(pathIdx);
+      end;
+      { code = [[iface+0] + slot*8] }
+      value := IRAppend(IR_LOAD_MEM, IRLowerAddress(ASTRight[node]), -1, -1, 0, Ord(tyPointer)); { IMT ptr }
+      right := IRAppend(IR_CONST_INT, -1, -1, -1, ASTSOffset[node] * 8, Ord(tyInteger));
+      outNode := IRAppend(IR_BINOP, value, right, Ord(tkPlus), 0, Ord(tyPointer));
+      callVal := IRAppend(IR_LOAD_MEM, outNode, -1, -1, 0, Ord(tyPointer));
+      { IRC=0: the interface signature's ParamCount already counts Self (param 0),
+        and Self is the first node in the arg chain, so no extra injected-Self. }
+      Result := IRAppend(IR_CALL_IND, callVal, first, 0, cpi, ASTTk[node]);
     end;
 
     AN_IF:

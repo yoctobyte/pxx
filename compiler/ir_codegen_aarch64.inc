@@ -2002,6 +2002,9 @@ begin
     IR_VMTADDR:
       EmitLoadDataRefA64(0, UClsVMTOffset[IRA[node]]); { x0 = class VMT addr (is/as identity) }
 
+    IR_IMTADDR:
+      EmitLoadDataRefA64(0, IMTOff[IRA[node]]); { x0 = interface method table addr }
+
     IR_SET_LIT:
       EmitLoadDataRefA64(0, IRIVal[node]);   { x0 = set-literal blob addr }
 

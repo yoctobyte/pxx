@@ -266,6 +266,21 @@ begin
   end;
 end;
 
+function FindIMT(classCi, intfCi: Integer): Integer;
+{ Index into the IMT table for (classCi, intfCi), walking the parent chain so a
+  subclass inherits a parent's interface implementation. -1 if none. }
+var i, cur: Integer;
+begin
+  Result := -1;
+  cur := classCi;
+  while cur >= 0 do
+  begin
+    for i := 0 to IMTCount - 1 do
+      if (IMTClass[i] = cur) and (IMTIntf[i] = intfCi) then begin Result := i; Exit; end;
+    cur := UClsParent[cur];
+  end;
+end;
+
 function FindUField(ci: Integer; const name: AnsiString): Integer;
 var i, base, cnt: Integer; lo, name2: AnsiString; curr: Integer;
 begin
@@ -413,6 +428,7 @@ begin
   UClsVirtCount[UClsCount] := 0;
   UClsVMTOffset[UClsCount] := -1;
   UClsIsRecord[UClsCount] := False;
+  UClsIsInterface[UClsCount] := False;
   UClsCount := UClsCount + 1;
 end;
 
