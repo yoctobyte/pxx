@@ -2914,7 +2914,8 @@ begin
             end;
           end
           else if (specialId = Ord(tkOrd)) or (specialId = Ord(tkChr)) or
-                  (specialId = Ord(tkInteger_T)) or (specialId = Ord(tkLongWord_T)) then
+                  (specialId = Ord(tkInteger_T)) or (specialId = Ord(tkLongWord_T)) or
+                  (specialId = Ord(tkChar_T)) or (specialId = Ord(tkBoolean_T)) then
           begin
             arg1Node := IRB[node];
             IREmitNode(IRA[arg1Node]);

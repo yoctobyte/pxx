@@ -227,6 +227,8 @@ test-core: $(COMPILER)
 	test "$$(/tmp/test_forin_native26)" = "$$(printf 'static sum=150\ndyn sum=600\nchar=a\nchar=b\nchar=c\nday=0\nday=1\nday=2\nday=3\nday=4\nwd=0\nwd=2\nwd=4\ncs=a\ncs=m\ncs=x')"
 	./$(COMPILER) test/test_forin_enumerator.pas /tmp/test_forin_enumerator26
 	test "$$(/tmp/test_forin_enumerator26)" = "$$(printf 'x=11\nx=22\nx=33\nsum=66')"
+	./$(COMPILER) test/test_cast_char_bool.pas /tmp/test_cast_char_bool26
+	test "$$(/tmp/test_cast_char_bool26)" = "$$(printf 'A\ncharcmp\n67\nbtrue\nbfalse\nHIJ')"
 	./$(COMPILER) test/test_stackless_gen.pas /tmp/test_stackless_gen26
 	test "$$(/tmp/test_stackless_gen26)" = "$$(printf '1 4 9 16 25 \n25\n5 4 3 2 1 \n0 2 4 6 8 \n10 20 30 \n1 2 3 ')"
 	./$(COMPILER) test/test_scheduler.pas /tmp/test_scheduler26

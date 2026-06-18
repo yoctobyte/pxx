@@ -582,7 +582,8 @@ begin
           { Type-pun passthroughs: Ord/Chr/Integer()/LongWord() are identity on
             the value already in a0 (char/int share the register model). }
           if (pi = -Ord(tkOrd)) or (pi = -Ord(tkChr)) or
-             (pi = -Ord(tkInteger_T)) or (pi = -Ord(tkLongWord_T)) then
+             (pi = -Ord(tkInteger_T)) or (pi = -Ord(tkLongWord_T)) or
+             (pi = -Ord(tkChar_T)) or (pi = -Ord(tkBoolean_T)) then
           begin
             argNode := IRB[node];
             IREmitNodeRISCV32(IRA[argNode]);

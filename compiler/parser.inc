@@ -2379,6 +2379,19 @@ begin
       ASTLeft[node] := argSeq;
       CurASTNode := node;
     end;
+    tkChar_T, tkBoolean_T:
+    begin
+      { `Char(x)` / `Boolean(x)` value-puns — same passthrough model as Chr/Ord:
+        the result type is the cast type, the bit pattern is the operand's. }
+      op := Ord(CurTok.Kind);
+      if CurTok.Kind = tkChar_T then LastExprTk := tyChar else LastExprTk := tyBoolean;
+      Next; Expect(tkLParen, '('); ParseExpr; Expect(tkRParen, ')');
+      node := AllocNode(AN_CALL); ASTIVal[node] := -op;
+      if op = Ord(tkChar_T) then ASTTk[node] := Ord(tyChar) else ASTTk[node] := Ord(tyBoolean);
+      argSeq := AllocNode(AN_ARG); ASTLeft[argSeq] := CurASTNode;
+      ASTLeft[node] := argSeq;
+      CurASTNode := node;
+    end;
     tkLength:
     begin
       Next; Expect(tkLParen, '(');
