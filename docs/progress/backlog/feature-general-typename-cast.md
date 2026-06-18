@@ -48,3 +48,15 @@ user type name falls through to "expected expression" or is misparsed.
 
 - Lower-value than `is`/`as` (which is the real OOP gap); schedule after the
   class-cast work so the checked/unchecked split is designed together.
+
+## Log
+- 2026-06-18 — surveyed during the autonomous run. **Pointer-type-alias casts
+  already work** end to end: `PFoo(expr)`, `PFoo(expr)^.field`, `PFoo(addr)[i]`
+  via the AN_PTR_CAST branch in ParseFactor (with its own ^/./[] suffix loop).
+  So the record-via-pointer reinterpret case (`PRec(addr)^`) is covered today.
+  **Still open:** the bare unchecked **class** reinterpret `TClass(obj)` with a
+  trailing `.member` — needs class-cast detection in ParseFactor plus postfix
+  member/method integration on the cast result. Low value: the *checked* form
+  `(obj as TClass).member` already works (feature-class-is-as), and unchecked
+  reinterpret is mainly for type-punning. Deferred behind the float-correctness
+  bugs (feature-int-to-float-assign, feature-result-in-loop).
