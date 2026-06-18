@@ -5150,6 +5150,7 @@ var
   smci, smmii, smpii, smcallNode, smselfArg, smLastArg, smArgSeq, smMai, smSelfIdx: Integer;
   aliasIdx, fieldNode, indexNode, castPrevTok, qUnit: Integer;
   castFieldName: AnsiString; castTk: TTypeKind; castRec: Integer;
+  decVal, decNode: Integer; strIsFloat: Boolean;
 begin
   node := -1;
   case CurTok.Kind of
@@ -5592,6 +5593,7 @@ begin
         Next; Expect(tkLParen, '(');
         ParseExpr; exprNode := CurASTNode;        { value }
         castPrevTok := 0;                          { width default }
+        decVal := -1;                              { decimals: -1 = none (natural for float) }
         if CurTok.Kind = tkColon then
         begin
           Next;
@@ -5601,7 +5603,7 @@ begin
           begin
             Next;
             if CurTok.Kind <> tkInteger then Error('Str: expected integer decimals after :');
-            Next;                                  { decimals: parsed, ignored }
+            decVal := CurTok.IVal; Next;
           end;
         end;
         Expect(tkComma, ',');
@@ -5610,17 +5612,55 @@ begin
         valNode := ParseLValueAST(idx, identTokIdx);
         Expect(tkRParen, ')');
 
-        pi := FindProc('StrInt');
+        { Float value -> StrFloat(x, width, decimals); integer -> StrInt(x, width).
+          (decimals is ignored by StrInt, used by StrFloat.) }
+        strIsFloat := TypeIsFloat(IntToTypeKind(ASTTk[exprNode]));
+        if strIsFloat then pi := FindProc('StrFloat') else pi := FindProc('StrInt');
         if pi < 0 then Error('Str: builtin unit not loaded');
         stepsNode := AllocNode(AN_INT_LIT);
         ASTIVal[stepsNode] := castPrevTok; ASTTk[stepsNode] := Ord(tyInteger);
         argSeq := AllocNode(AN_ARG); ASTLeft[argSeq] := exprNode;
         ASTRight[argSeq] := AllocNode(AN_ARG);
         ASTLeft[ASTRight[argSeq]] := stepsNode;
+        if strIsFloat then
+        begin
+          { third arg: decimals }
+          decNode := AllocNode(AN_INT_LIT);
+          ASTIVal[decNode] := decVal; ASTTk[decNode] := Ord(tyInteger);
+          ASTRight[ASTRight[argSeq]] := AllocNode(AN_ARG);
+          ASTLeft[ASTRight[ASTRight[argSeq]]] := decNode;
+        end;
         opNode := AllocNode(AN_CALL);
         ASTIVal[opNode] := pi; ASTLeft[opNode] := argSeq; ASTTk[opNode] := Ord(tyString);
         node := AllocNode(AN_ASSIGN);
         ASTLeft[node] := valNode; ASTRight[node] := opNode;
+      end
+      else if ((name = 'Val') or (name = 'val')) and (Tokens[TokPos].Kind = tkLParen) then
+      begin
+        { Val(s, dest, code): dispatch on the destination variable's type — a
+          float dest -> ValFloat (string->Double), otherwise the integer Val.
+          dest and code are by-ref; their marshalling follows the chosen proc's
+          param flags at lowering time. }
+        Next; Expect(tkLParen, '(');
+        ParseExpr; exprNode := CurASTNode;                 { source string }
+        Expect(tkComma, ',');
+        if CurTok.Kind <> tkIdent then Error('Val: expected destination variable');
+        idx := FindSym(CurTok.SVal); identTokIdx := TokPos - 1; Next;
+        valNode := ParseLValueAST(idx, identTokIdx);        { dest value }
+        Expect(tkComma, ',');
+        if CurTok.Kind <> tkIdent then Error('Val: expected code variable');
+        si := FindSym(CurTok.SVal); argIdx := TokPos - 1; Next;
+        stepsNode := ParseLValueAST(si, argIdx);            { code }
+        Expect(tkRParen, ')');
+
+        if (idx >= 0) and TypeIsFloat(Syms[idx].TypeKind) then pi := FindProc('ValFloat')
+        else pi := FindProc('Val');
+        if pi < 0 then Error('Val: builtin unit not loaded');
+        argSeq := AllocNode(AN_ARG); ASTLeft[argSeq] := exprNode;
+        lastArg := AllocNode(AN_ARG); ASTLeft[lastArg] := valNode; ASTRight[argSeq] := lastArg;
+        opNode := AllocNode(AN_ARG); ASTLeft[opNode] := stepsNode; ASTRight[lastArg] := opNode;
+        node := AllocNode(AN_CALL);
+        ASTIVal[node] := pi; ASTLeft[node] := argSeq; ASTTk[node] := Ord(Procs[pi].RetType);
       end
       else if (CurProc >= 0) and Procs[CurProc].IsFunc and
               (Tokens[TokPos].Kind in [tkAssign, tkDot, tkLBrack, tkCaret]) and
