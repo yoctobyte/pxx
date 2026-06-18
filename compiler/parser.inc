@@ -3985,7 +3985,11 @@ begin
   bodyNode := ParseStatementAST;
 
   contTk := Syms[contSym].TypeKind;
-  isString := (contTk = tyString) or (contTk = tyAnsiString);
+  { A real string container is a non-array string var. For `array of String` /
+    `array of AnsiString` the var's TypeKind is the element base type
+    (tyAnsiString), so the array check MUST win — otherwise it is mis-iterated
+    char-by-char. }
+  isString := (not Syms[contSym].IsArray) and ((contTk = tyString) or (contTk = tyAnsiString));
   isStaticArr := Syms[contSym].IsArray and (Syms[contSym].ArrLen >= 0);
   idxSym := AllocVar('', tyInteger);
 

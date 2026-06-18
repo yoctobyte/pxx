@@ -227,6 +227,8 @@ test-core: $(COMPILER)
 	test "$$(/tmp/test_forin_native26)" = "$$(printf 'static sum=150\ndyn sum=600\nchar=a\nchar=b\nchar=c\nday=0\nday=1\nday=2\nday=3\nday=4\nwd=0\nwd=2\nwd=4\ncs=a\ncs=m\ncs=x')"
 	./$(COMPILER) test/test_forin_enumerator.pas /tmp/test_forin_enumerator26
 	test "$$(/tmp/test_forin_enumerator26)" = "$$(printf 'x=11\nx=22\nx=33\nsum=66')"
+	./$(COMPILER) test/test_forin_aggr_elems.pas /tmp/test_forin_aggr_elems26
+	test "$$(/tmp/test_forin_aggr_elems26)" = "$$(printf 'rec=33\ncls=30\nstr=aabbcc')"
 	./$(COMPILER) test/test_cast_char_bool.pas /tmp/test_cast_char_bool26
 	test "$$(/tmp/test_cast_char_bool26)" = "$$(printf 'A\ncharcmp\n67\nbtrue\nbfalse\nHIJ')"
 	./$(COMPILER) test/test_cast_string.pas /tmp/test_cast_string26
