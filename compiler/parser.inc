@@ -3725,17 +3725,136 @@ begin
   ASTLeft[Result] := argSeq;
 end;
 
+{ ===== Structural enumerator for-in (Slice B) =====
+  A zero-extra-arg method call C.M (self only). Handles virtual dispatch. }
+function GenMakeMethodCall0(instNode, classIdx: Integer; const methName: AnsiString): Integer;
+var mmi, mpi, selfArg: Integer;
+begin
+  mmi := FindUMeth(classIdx, methName);
+  if mmi < 0 then Error('for-in: enumerator missing method ' + methName);
+  mpi := UMthProc_[mmi];
+  if UMthVirSlot[mmi] >= 0 then
+  begin
+    Result := AllocNode(AN_VIRTUAL_CALL);
+    ASTRight[Result] := UMthVirSlot[mmi];
+  end
+  else
+    Result := AllocNode(AN_CALL);
+  ASTIVal[Result] := mpi;
+  ASTTk[Result] := Ord(Procs[mpi].RetType);
+  selfArg := AllocNode(AN_ARG);
+  ASTLeft[selfArg] := instNode;
+  ASTLeft[Result] := selfArg;
+end;
+
+{ Read `__e.Current`: a property (getter method OR backing field) or a plain
+  public field. Returns the value node. }
+function GenMakeCurrentRead(eSym, enumIdx, enumRec: Integer): Integer;
+var pri, fIdx, i, fnode: Integer; mname: AnsiString;
+begin
+  pri := FindUProp(enumIdx, 'Current');
+  if pri >= 0 then
+  begin
+    if UPropReadMLen[pri] > 0 then
+    begin
+      mname := '';
+      for i := 0 to UPropReadMLen[pri] - 1 do AppendChar(mname, TokChars[UPropReadMOff[pri] + i]);
+      Result := GenMakeMethodCall0(GenMakeIdent(eSym, tyClass), enumIdx, mname);
+      Exit;
+    end
+    else if UPropReadFLen[pri] > 0 then
+    begin
+      fnode := AllocNode(AN_FIELD);
+      ASTLeft[fnode] := GenMakeIdent(eSym, tyClass);
+      ASTSOffset[fnode] := UPropReadFOff[pri];
+      ASTSLen[fnode] := UPropReadFLen[pri];
+      ASTTk[fnode] := Ord(UPropTk[pri]);
+      Result := fnode;
+      Exit;
+    end;
+  end;
+  fIdx := FindUField(enumIdx, 'Current');
+  if fIdx < 0 then Error('for-in: enumerator has no readable Current');
+  fnode := AllocNode(AN_FIELD);
+  ASTLeft[fnode] := GenMakeIdent(eSym, tyClass);
+  ASTSOffset[fnode] := UFldNOff[fIdx];
+  ASTSLen[fnode] := UFldNLen[fIdx];
+  ASTTk[fnode] := Ord(RecFieldType(enumRec, 'Current'));
+  Result := fnode;
+end;
+
+{ for X in C do BODY where C has GetEnumerator (FPC structural enumerator):
+    __e := C.GetEnumerator;
+    try while __e.MoveNext do begin X := __e.Current; BODY end;
+    finally __e.Free end;       { __e.Free only when the enumerator has one }
+  Duck-typed on the three names; no base class required. }
+function ParseForInEnumeratorAST(varIdx, contSym, contClassIdx: Integer): Integer;
+var
+  bodyNode, gepi, enumRec, enumIdx, eSym: Integer;
+  geCall, assignE, mnCall, curNode, assignX, innerSeq, whileNode: Integer;
+  freeCall, tryNode: Integer;
+  contTk: TTypeKind;
+begin
+  Expect(tkDo, 'do');
+  bodyNode := ParseStatementAST;
+
+  contTk := Syms[contSym].TypeKind;
+  gepi := UMthProc_[FindUMeth(contClassIdx, 'GetEnumerator')];
+  enumRec := ProcRetRecId[gepi];
+  if enumRec < REC_UCLASS_BASE then Error('for-in: GetEnumerator must return a class/record');
+  enumIdx := enumRec - REC_UCLASS_BASE;
+
+  eSym := AllocVar('', tyClass);
+  Syms[eSym].RecName := enumRec;
+
+  geCall := GenMakeMethodCall0(GenMakeIdent(contSym, contTk), contClassIdx, 'GetEnumerator');
+  assignE := GenMakeAssign(GenMakeIdent(eSym, tyClass), geCall);
+
+  mnCall := GenMakeMethodCall0(GenMakeIdent(eSym, tyClass), enumIdx, 'MoveNext');
+
+  curNode := GenMakeCurrentRead(eSym, enumIdx, enumRec);
+  assignX := GenMakeAssign(GenMakeIdent(varIdx, Syms[varIdx].TypeKind), curNode);
+
+  innerSeq := GenMakeSeq(assignX, GenMakeSeq(bodyNode, -1));
+  whileNode := AllocNode(AN_WHILE);
+  ASTLeft[whileNode] := mnCall;
+  ASTRight[whileNode] := innerSeq;
+
+  if FindUMeth(enumIdx, 'Free') >= 0 then
+  begin
+    freeCall := GenMakeMethodCall0(GenMakeIdent(eSym, tyClass), enumIdx, 'Free');
+    tryNode := AllocNode(AN_TRY_FINALLY);
+    ASTLeft[tryNode] := whileNode;
+    ASTRight[tryNode] := freeCall;
+    Result := GenMakeSeq(assignE, GenMakeSeq(tryNode, -1));
+  end
+  else
+    Result := GenMakeSeq(assignE, GenMakeSeq(whileNode, -1));
+end;
+
 { for x in <string|static array|dynarray|open-array var> do BODY:
     __i := lo;
     while __i <= hi do begin x := C[__i]; BODY; __i := __i + 1; end;
-  lo/hi pick the right base: strings 1..Length, arrays 0..count-1. }
+  lo/hi pick the right base: strings 1..Length, arrays 0..count-1.
+  A class/record container with GetEnumerator routes to the enumerator desugar. }
 function ParseForInVarAST(varIdx, contSym: Integer): Integer;
 var
   bodyNode, idxSym, loNode, hiNode, elemTk: Integer;
   condNode, elemAccess, assignX, incNode, whileNode, innerSeq, initI: Integer;
   isString, isStaticArr: Boolean;
   contTk: TTypeKind;
+  recId: Integer;
 begin
+  { class/record container with GetEnumerator → structural enumerator (Slice B) }
+  recId := Syms[contSym].RecName;
+  if (not ((Syms[contSym].TypeKind = tyString) or (Syms[contSym].TypeKind = tyAnsiString)))
+     and (not Syms[contSym].IsArray) and (recId >= REC_UCLASS_BASE)
+     and (FindUMeth(recId - REC_UCLASS_BASE, 'GetEnumerator') >= 0) then
+  begin
+    Result := ParseForInEnumeratorAST(varIdx, contSym, recId - REC_UCLASS_BASE);
+    Exit;
+  end;
+
   Expect(tkDo, 'do');
   bodyNode := ParseStatementAST;
 
@@ -7094,7 +7213,7 @@ begin
     else
     begin
       retType := ParseTypeKind;
-      if retType = tyRecord then
+      if (retType = tyRecord) or (retType = tyClass) then
         retRecId := LastTypeRecId;
       if retType = tyPointer then
       begin
