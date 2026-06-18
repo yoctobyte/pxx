@@ -66,6 +66,7 @@ begin
   XtensaSoftDivide := False;
   TARGET_PTR_SIZE := 8;
   EmitObjMode := False;
+  EspBareBoot := False;
   NoUnhandledHandler := False;
   ThreadSafeMode := False;
   ProcExceptionCleanupFrameActive := False;
@@ -150,6 +151,13 @@ begin
       EmitObjMode := True;
       Inc(i);
     end
+    else if option = '--esp-profile=bare' then
+    begin
+      { Bare-metal ESP32 image: SoC SRAM map, sp-init startup, UART MMIO output,
+        no ESP-IDF. Linked ET_EXEC (do NOT set EmitObjMode). xtensa/riscv32. }
+      EspBareBoot := True;
+      Inc(i);
+    end
     else if option = '--strict-overload' then
     begin
       StrictOverload := True;
@@ -216,6 +224,8 @@ begin
     TARGET_PTR_SIZE := 4
   else
     TARGET_PTR_SIZE := 8;
+  if EspBareBoot and (TargetArch <> TARGET_RISCV32) then
+  begin writeln(StdErr, '--esp-profile=bare currently requires --target=riscv32 (esp32c3); xtensa bare-boot pending'); Halt(1); end;
   PasApplyTargetDefines;
   if ParamCount < i then
     begin writeln(StdErr,'usage: pascal26/PXX [--debug] [--dump-ir] [-dNAME] [-uNAME] [-Mobjfpc] [--strict-overload] [--no-unhandled-handler] <src> [out]'); Halt(1); end;

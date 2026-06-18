@@ -745,7 +745,7 @@ procedure writeELF32(const outPath: AnsiString);
 var
   i, codeOffset, phnum: Integer;
   isDyn: Boolean;
-  dataBase, bssBase, entry, filesz, memsz, addr: Int64;
+  loadBase, dataBase, bssBase, entry, filesz, memsz, addr: Int64;
 {$ifdef FPC}
   f: File;
 {$else}
@@ -773,14 +773,17 @@ begin
     phnum := 3;
     codeOffset := DYNAMIC_CODE_OFFSET32;
   end;
-  dataBase := LOAD_ADDR32 + codeOffset + CodeLen;
+  { Bare-metal ESP image loads into the SoC SRAM (one RWX region under qemu);
+    everything else uses the classic i386 ET_EXEC base. }
+  if EspBareBoot then loadBase := ESP_BARE_IRAM_BASE else loadBase := LOAD_ADDR32;
+  dataBase := loadBase + codeOffset + CodeLen;
   { BSS holds word-sized globals laid out with AlignTo offsets, so the base
     itself must be aligned — Xtensa s32i/l32i (and strict RV32 cores) trap on
     misaligned word access. Code+data lengths are byte-granular, so pad. }
   bssBase  := AlignTo(dataBase + DataLen, 8);
-  entry    := LOAD_ADDR32 + codeOffset;
+  entry    := loadBase + codeOffset;
   filesz   := codeOffset + CodeLen + DataLen;
-  memsz    := (bssBase - LOAD_ADDR32) + BSSSize;
+  memsz    := (bssBase - loadBase) + BSSSize;
 
   { Data fixups: 4-byte absolute on this target (EmitDataRef emitted 4 bytes). }
   for i := 0 to FixCount-1 do
@@ -860,9 +863,9 @@ begin
   writeU16(f,ELF32_HEADER_SIZE);writeU16(f,PROG32_HEADER_SIZE);
   writeU16(f,phnum);writeU16(f,0);writeU16(f,0);writeU16(f,0);
 
-  { phdr32 (32 bytes): PT_LOAD RWX, whole file at LOAD_ADDR32 }
+  { phdr32 (32 bytes): PT_LOAD RWX, whole file at loadBase }
   writeU32(f,1);writeU32(f,0);                          { type, offset }
-  writeU32(f,LOAD_ADDR32);writeU32(f,LOAD_ADDR32);
+  writeU32(f,loadBase);writeU32(f,loadBase);
   writeU32(f,filesz);writeU32(f,memsz);
   writeU32(f,7);writeU32(f,$1000);                      { flags, align }
   if isDyn then

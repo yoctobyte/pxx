@@ -1,7 +1,7 @@
 # ESP32 bare-metal boot profile (no IDF)
 
 - **Type:** feature
-- **Status:** backlog
+- **Status:** in progress (esp32c3/riscv32 DONE 2026-06-18; esp32s3/xtensa pending)
 - **Owner:** —
 - **Opened:** 2026-06-12 (split from feature-target-esp32; parks the bare face)
 
@@ -34,9 +34,43 @@ profile — useful for compiler control, tiny images, and education.
   and prints over emulated UART; same recipe documented for `-M esp32s3`.
 - Frame-pointer-preserved stack walk confirmed in gdb against the bare image.
 
+## Progress log
+
+### 2026-06-18 — esp32c3/riscv32 bare-boot DONE
+
+`--esp-profile=bare` (riscv32) ships. Acceptance for the C3 met:
+
+- **Boots + prints over UART** under `qemu-system-riscv32 -M esp32c3 -kernel`,
+  byte-identical to the x86-64 oracle (`make test-esp-bare`,
+  `test/test_esp_bare.pas`, harness `tools/esp_run_bare.sh`).
+- **Frame-pointer stack walk confirmed** in `riscv32-esp-elf-gdb`: the `s0`
+  fp-chain unwinds a deep recursion cleanly to `main` (fp terminates at 0).
+
+Settled load path (the key open question): Espressif qemu accepts a raw `ET_EXEC`
+ELF via `-kernel` — it honors the program-header load address and sets `pc` to
+the ELF entry. **No flash image / `esptool merge-bin` / second-stage header
+needed.** The C3 SRAM is mapped twice (IRAM/DRAM) but qemu models it as one RWX
+region, so a single PT_LOAD at `ESP_BARE_IRAM_BASE = 0x40380000` holds
+code+data+bss+stack. Startup stub sets `sp = ESP_BARE_STACK_TOP = 0x403C0000`.
+UART0 TX FIFO MMIO at `0x60000000`. Static-arena heap + managed AnsiString work
+unchanged on bare metal. ESP-gated; `make test` + `make cross-bootstrap` stay
+byte-identical. Full write-up in `docs/developer/esp32-support.md`
+(§ Bare-metal boot).
+
+Implementation: `EspBareBoot` flag (compiler.pas) → `PXX_ESP_BARE` define
+(lexer.inc); ESP base in `writeELF32` (elfwriter.inc); sp-init in the riscv32
+entry stub (parser.inc). `.map`/symtab emission for the bare path is not done
+(gdb works via stepi + manual fp-walk; the IDF profile already gets maps).
+
+### Remaining (esp32s3 / xtensa)
+
+Same image shape; xtensa windowed entry stub must set `sp` before its `entry`
+instruction; per-SoC UART0 base. `-M esp32s3 -kernel` load path.
+
 ## Notes
 
 - Espressif QEMU + toolchains installed 2026-06-12 (see
   done/feature-target-esp32 log).
 - Keep using qemu-user for fast logic oracles; system mode only proves boot
   + MMIO.
+- This qemu gdbstub does not honor breakpoints (`continue` hangs); use `stepi`.

@@ -296,6 +296,15 @@ const
     slots is ample and keeps every offset inside the s32i/l32i imm range. }
   XT_EXPR_REGION = 256;
   LOAD_ADDR32        = $08048000;  { classic i386 ET_EXEC base }
+  { ESP32 bare-metal SRAM map (--esp-profile=bare). On ESP32-C3 the internal
+    SRAM is mapped twice: instruction bus (IRAM) at 0x4037C000 and data bus
+    (DRAM) at 0x3FC7C000. qemu's esp32c3 machine models it as one RWX region,
+    so the whole image (code+data+bss) loads at the IRAM org just past the
+    16 KiB ICache, and the stack grows down from the top. ESP32-S3 reuses the
+    same IRAM org; see the writer for the per-SoC base. UART0 FIFO is MMIO at
+    0x60000000 on both. }
+  ESP_BARE_IRAM_BASE = $40380000;  { SRAM_IRAM_START(0x4037C000)+ICACHE(0x4000) }
+  ESP_BARE_STACK_TOP = $403C0000;  { top of stack (grows down toward image) }
   ELF32_HEADER_SIZE  = 52;
   PROG32_HEADER_SIZE = 32;
   CODE_OFFSET32      = ELF32_HEADER_SIZE + PROG32_HEADER_SIZE;
@@ -770,6 +779,12 @@ var
   { Emit a relocatable ET_REL .o instead of a linked ET_EXEC image
     (--emit-obj, or inferred from a .o output name). esp32 targets only. }
   EmitObjMode : Boolean;
+  { ESP32 bare-metal profile (--esp-profile=bare): emit a self-contained
+    ET_EXEC image targeting the SoC SRAM map (code/data/bss/stack in IRAM),
+    bootable directly via `qemu-system-* -M esp32c3 -kernel`, with no ESP-IDF
+    runtime. The entry stub sets sp; output (PutC) goes to UART0 MMIO from the
+    program itself. Defines PXX_ESP_BARE for the source. xtensa/riscv32 only. }
+  EspBareBoot : Boolean;
   { writeELF32Rel scratch: per-proc / per-external .strtab name offsets
     (globals, not locals — 64KB each would strain the self-hosted stack). }
   ObjProcStrOff : array[0..MAX_PROCS-1] of Integer;

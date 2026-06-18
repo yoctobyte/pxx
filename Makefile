@@ -24,7 +24,7 @@ FROZEN_PXXFLAGS := -uPXX_MANAGED_STRING
 
 .PHONY: all bootstrap bootstrap-check fpc-check test test-core test-asm-emit test-nilpy qemu-env-check test-i386 test-aarch64 test-arm32 test-emit-obj stabilize check-stable revert benchmark benchmark-compiler-runtime benchmark-check clean distclean symbols \
         bootstrap-managed bootstrap-frozen test-managed test-frozen stabilize-managed stabilize-frozen check-stable-managed revert-managed test-nilpy-managed test-nilpy-frozen \
-        progress-check cross-bootstrap cross-bootstrap-aarch64 cross-bootstrap-arm32 cross-bootstrap-i386
+        progress-check cross-bootstrap cross-bootstrap-aarch64 cross-bootstrap-arm32 cross-bootstrap-i386 test-esp-bare
 
 all: $(COMPILER)
 
@@ -1388,6 +1388,20 @@ test-emit-obj: $(COMPILER)
 	  $$XT -nostartfiles -Wl,-e,main /tmp/test_emit_obj_shim.c /tmp/test_emit_obj_xt_windowed.o -o /tmp/test_emit_obj_xt_windowed.elf && echo "xtensa windowed .o links ok"; \
 	else echo "xtensa-esp32s3-elf-gcc not installed; link check skipped"; fi
 	@echo "emit-obj ok (ET_REL sections/symbols/relocs sane on riscv32 + xtensa call0/windowed)"
+
+# Bare-metal ESP32-C3 boot (feature-esp32-bare-boot). Links a self-contained
+# ET_EXEC at the SoC SRAM map (--esp-profile=bare), boots it directly under the
+# Espressif qemu fork via `-kernel` (no ESP-IDF), and diffs the raw UART output
+# against the x86-64 oracle run. Skipped when the Espressif riscv32 qemu is
+# absent (it is not part of the base toolchain).
+test-esp-bare: $(COMPILER)
+	@QEMU=$$(ls $$HOME/.espressif/tools/qemu-riscv32/*/qemu/bin/qemu-system-riscv32 2>/dev/null | head -1); \
+	if [ -z "$$QEMU" ]; then echo "Espressif qemu-system-riscv32 not installed; bare-boot run skipped"; exit 0; fi; \
+	./$(COMPILER) test/test_esp_bare.pas /tmp/test_esp_bare_oracle >/dev/null && /tmp/test_esp_bare_oracle > /tmp/test_esp_bare.oracle; \
+	ESP_RUN_TIMEOUT=8 tools/esp_run_bare.sh test/test_esp_bare.pas > /tmp/test_esp_bare.bare 2>/dev/null; \
+	if diff -u /tmp/test_esp_bare.oracle /tmp/test_esp_bare.bare; then \
+	  echo "esp32c3 bare-boot ok (UART output == x86-64 oracle)"; \
+	else echo "esp32c3 bare-boot MISMATCH"; exit 1; fi
 
 # Cross-target test environment sanity (chore-qemu-test-env). Manual target:
 # joins 'make test' when the first cross backend exists. Validates the runner

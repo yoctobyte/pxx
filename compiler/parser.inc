@@ -8970,6 +8970,14 @@ begin
   end
   else if TargetArch = TARGET_RISCV32 then
   begin
+    { Bare-metal: no kernel set up a stack, so establish sp at the top of SRAM
+      (grows down toward the image) before entering main. lui+addi covers any
+      low bits in the stack-top constant. }
+    if EspBareBoot then
+    begin
+      EmitI32((((ESP_BARE_STACK_TOP + $800) shr 12) shl 12) or (2 shl 7) or $37); { lui sp,hi }
+      EmitI32(((ESP_BARE_STACK_TOP and $FFF) shl 20) or (2 shl 15) or (2 shl 7) or $13); { addi sp,sp,lo }
+    end;
     { RISC-V entry stub: jump to main body. }
     jmpPatch := CodeLen;
     EmitI32($0000006F);

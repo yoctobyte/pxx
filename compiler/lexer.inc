@@ -507,6 +507,13 @@ begin
     name := 'CPU_RISCV32';
     PasDefine(name);
   end;
+  { Bare-metal ESP profile: let the source select UART MMIO output / drop the
+    IDF externals via {$ifdef PXX_ESP_BARE}. }
+  if EspBareBoot then
+  begin
+    name := 'PXX_ESP_BARE';
+    PasDefine(name);
+  end;
 end;
 
 procedure PasDefineCommandOption(first: Integer);
