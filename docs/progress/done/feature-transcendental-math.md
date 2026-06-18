@@ -4,8 +4,8 @@
 - **Status:** done
 - **Owner:** —
 - **Opened:** 2026-06-18 (companion to feature-float-str-val, #5 of the language arc)
-- **Resolved:** 2026-06-18 — added to lib/rtl/math.pas, byte-identical to FPC at
-  8 decimals, cross-bootstrap clean.
+- **Resolved:** 2026-06-18 (commit 5e8436e) — added to lib/rtl/math.pas,
+  byte-identical to FPC at 8 decimals, cross-bootstrap clean.
 
 ## Scope
 
