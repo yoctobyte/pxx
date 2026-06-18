@@ -1999,6 +1999,9 @@ begin
     IR_CLASSREF:
       EmitLoadDataRefA64(0, -(CLASSREF_DATAREF_BASE + IRA[node])); { x0 = class RTTI blob addr }
 
+    IR_VMTADDR:
+      EmitLoadDataRefA64(0, UClsVMTOffset[IRA[node]]); { x0 = class VMT addr (is/as identity) }
+
     IR_SET_LIT:
       EmitLoadDataRefA64(0, IRIVal[node]);   { x0 = set-literal blob addr }
 

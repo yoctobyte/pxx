@@ -357,6 +357,10 @@ begin
         if (IRA[i] < 0) or (IRA[i] >= UClsCount) then
           Error('invalid class index in classref');
 
+      IR_VMTADDR:
+        if (IRA[i] < 0) or (IRA[i] >= UClsCount) then
+          Error('invalid class index in vmtaddr');
+
       IR_UNSUPPORTED:
         begin end;
 
@@ -1013,6 +1017,60 @@ begin
   end;
 end;
 
+function IsClassDescOrSelf(c, target: Integer): Boolean;
+{ True if class c is `target` or transitively descends it (closed-world walk of
+  the compile-time parent chain). Drives the is/as VMT-set test. }
+var cur: Integer;
+begin
+  Result := False;
+  cur := c;
+  while cur >= 0 do
+  begin
+    if cur = target then begin Result := True; Exit; end;
+    cur := UClsParent[cur];
+  end;
+end;
+
+{ Emit IR that evaluates `instExpr` once into a hidden pointer temp (returned in
+  instSym) and computes a Boolean temp = (inst <> nil) and (VMT(inst) is the VMT
+  of `targetCi` or any descendant). Returns the Boolean temp's sym index. The
+  descendant set is enumerated here, at codegen, so classes declared after the
+  is/as site are included (whole-program closed world). Shared by `is` and `as`. }
+function IRLowerClassMatch(instExpr, targetCi: Integer; var instSym: Integer): Integer;
+var rvar, instVal, endLbl, skipLbl, c, li, znode, notnil, vmtSym, lv, va, eq: Integer;
+begin
+  rvar := AllocVar('', tyBoolean);
+  instSym := AllocVar('', tyPointer);
+  vmtSym := AllocVar('', tyPointer);
+  instVal := IRLowerAST(instExpr);
+  IRAppend(IR_STORE_SYM, instSym, instVal, -1, 0, Ord(tyPointer));
+  IRAppend(IR_STORE_SYM, rvar, IRAppend(IR_CONST_INT, -1, -1, -1, 0, Ord(tyBoolean)), -1, 0, Ord(tyBoolean));
+  endLbl := IRNewLabel;
+  { nil instance: leave rvar false }
+  li := IRAppend(IR_LOAD_SYM, instSym, -1, -1, 0, Ord(tyPointer));
+  znode := IRAppend(IR_CONST_INT, -1, -1, -1, 0, Ord(tyPointer));
+  notnil := IRAppend(IR_BINOP, li, znode, Ord(tkNeq), 0, Ord(tyBoolean));
+  IRAppend(IR_JUMP_IF_FALSE, endLbl, notnil, -1, 0, 0);
+  { vmt := [inst+0] }
+  IRAppend(IR_STORE_SYM, vmtSym,
+           IRAppend(IR_LOAD_MEM, IRAppend(IR_LOAD_SYM, instSym, -1, -1, 0, Ord(tyPointer)),
+                    -1, -1, 0, Ord(tyPointer)),
+           -1, 0, Ord(tyPointer));
+  for c := 0 to UClsCount - 1 do
+    if IsClassDescOrSelf(c, targetCi) and (UClsVMTOffset[c] >= 0) then
+    begin
+      lv := IRAppend(IR_LOAD_SYM, vmtSym, -1, -1, 0, Ord(tyPointer));
+      va := IRAppend(IR_VMTADDR, c, -1, -1, 0, Ord(tyPointer));
+      eq := IRAppend(IR_BINOP, lv, va, Ord(tkEq), 0, Ord(tyBoolean));
+      skipLbl := IRNewLabel;
+      IRAppend(IR_JUMP_IF_FALSE, skipLbl, eq, -1, 0, 0);
+      IRAppend(IR_STORE_SYM, rvar, IRAppend(IR_CONST_INT, -1, -1, -1, 1, Ord(tyBoolean)), -1, 0, Ord(tyBoolean));
+      IRAppend(IR_LABEL, -1, -1, -1, skipLbl, 0);
+    end;
+  IRAppend(IR_LABEL, -1, -1, -1, endLbl, 0);
+  Result := rvar;
+end;
+
 function IRLowerAST(node: Integer): Integer;
 var left, right, seq, item, value, outNode, first, last, leftAddr, argNode, argVal, intCallNode, intArgSeq, argNode2, zeroVal, pi, zeroBytes: Integer;
     pairNode, condNode, specialId, classIdx, slot, cpi, pathIdx: Integer;
@@ -1368,6 +1426,32 @@ begin
         sub-nodes are ordinary IR built at parse time. }
       IRLowerAST(ASTLeft[node]);          { side-effect: char -> hidden string temp }
       Result := IRLowerAST(ASTRight[node]);
+    end;
+
+    AN_IS_TEST:
+    begin
+      varIdx := IRLowerClassMatch(ASTLeft[node], Integer(ASTIVal[node]), classIdx);
+      Result := IRAppend(IR_LOAD_SYM, varIdx, -1, -1, 0, Ord(tyBoolean));
+    end;
+
+    AN_AS_CAST:
+    begin
+      { Checked downcast: compute the match, then yield the instance typed as T.
+        nil passes through (nil as T = nil); a non-nil mismatch traps (Halt). }
+      varIdx := IRLowerClassMatch(ASTLeft[node], Integer(ASTIVal[node]), classIdx);
+      endLabel := IRNewLabel;     { continue (yield instance) }
+      elseLabel := IRNewLabel;    { trap }
+      left := IRAppend(IR_LOAD_SYM, classIdx, -1, -1, 0, Ord(tyPointer));
+      value := IRAppend(IR_BINOP, left, IRAppend(IR_CONST_INT, -1, -1, -1, 0, Ord(tyPointer)),
+                        Ord(tkNeq), 0, Ord(tyBoolean));
+      IRAppend(IR_JUMP_IF_FALSE, endLabel, value, -1, 0, 0);   { nil -> pass through }
+      right := IRAppend(IR_LOAD_SYM, varIdx, -1, -1, 0, Ord(tyBoolean));
+      IRAppend(IR_JUMP_IF_FALSE, elseLabel, right, -1, 0, 0);  { non-nil mismatch -> trap }
+      IRAppend(IR_JUMP, endLabel, -1, -1, 0, 0);
+      IRAppend(IR_LABEL, -1, -1, -1, elseLabel, 0);
+      IRAppend(IR_TERMINATE, IRAppend(IR_CONST_INT, -1, -1, -1, 1, Ord(tyInteger)), -1, -1, AN_HALT, 0);
+      IRAppend(IR_LABEL, -1, -1, -1, endLabel, 0);
+      Result := IRAppend(IR_LOAD_SYM, classIdx, -1, -1, 0, Ord(tyClass));
     end;
 
     AN_ADDR:

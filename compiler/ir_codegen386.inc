@@ -2722,6 +2722,9 @@ begin
     IR_CLASSREF:
       begin EmitB($B8); EmitDataRef(-(CLASSREF_DATAREF_BASE + IRA[node])); end; { mov eax, class RTTI blob addr }
 
+    IR_VMTADDR:
+      begin EmitB($B8); EmitDataRef(UClsVMTOffset[IRA[node]]); end; { mov eax, class VMT addr (is/as identity) }
+
     IR_SET_LIT:
       begin EmitB($B8); EmitDataRef(IRIVal[node]); end;   { mov eax, set-literal blob addr }
 

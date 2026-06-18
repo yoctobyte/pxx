@@ -3964,6 +3964,9 @@ var baseNode, baseRec, fIdx, innerNode: Integer; fieldName: AnsiString;
 begin
   if ASTKind[node] = AN_IDENT then
     Result := Syms[ASTIVal[node]].RecName
+  else if ASTKind[node] = AN_AS_CAST then
+    { `obj as T` yields type T — so (obj as T).field/.method resolves against T. }
+    Result := REC_UCLASS_BASE + Integer(ASTIVal[node])
   else if ASTKind[node] = AN_FIELD then
   begin
     Result := RecFieldRecId(ResolveNodeRec(ASTLeft[node]), GetASTIdentName(node));

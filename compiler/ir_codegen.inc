@@ -1350,6 +1350,12 @@ begin
         EmitB($48); EmitB($B8); EmitDataRef(-(CLASSREF_DATAREF_BASE + IRA[node]));
       end;
 
+    IR_VMTADDR:
+      { rax = address of class ci's VMT (the per-class identity stored at
+        [instance+0]). VMT offsets are final at codegen (emitted during parse),
+        so the data-ref is direct — same as instance construction. }
+      begin EmitB($48); EmitB($B8); EmitDataRef(UClsVMTOffset[IRA[node]]); end;
+
     IR_SET_LIT:
       begin
         EmitB($48); EmitB($B8); EmitDataRef(IRIVal[node]);

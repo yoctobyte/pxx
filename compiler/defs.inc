@@ -138,6 +138,10 @@ const
   AN_STR_FROM_CHAR = 55; { String(c) rvalue: materialise a 1-char string. Left =
                            char expr; ASTIVal = hidden string temp sym. Lowered in
                            shared IR by reusing the `s := c` store + a var read. }
+  AN_IS_TEST       = 56; { `X is T`: Left = instance expr; ASTIVal = target class ci.
+                           Boolean = X's VMT is T's or a descendant's (closed-world). }
+  AN_AS_CAST       = 57; { `X as T`: Left = instance expr; ASTIVal = target class ci.
+                           Checked downcast — yields X typed as T, traps on mismatch. }
 
   { Inline-asm operand kinds }
   AOP_NONE = 0;
@@ -204,6 +208,7 @@ const
   IR_COSWITCH     = 55;  { IRA = first IR_ARG (pfrom, pto); emits a call to the bare CoSwitch runtime stub }
   IR_YIELD        = 56;  { IRA = value node; IRIVal = generator self-pointer local sym idx. Stores value to [self+16] then CoSwitch(self+0 -> self+8) }
   IR_CALL_IND     = 57;  { Indirect call. IRA = callee value node (code addr); IRB = first IR_ARG; IRIVal = signature proc index (Params/RetType); IRStmtRoot marks a statement-level call (result discarded) }
+  IR_VMTADDR      = 58;  { IRA = class index (ci); load the runtime address of that class's VMT (= the per-class identity stored at [instance+0]). Used by is/as type-tests. }
 
   { Generator-instance heap layout (see lib/rtl/coroutine.pas + the generator
     body lowering). A TCoroCtx is a single saved sp, so genCtx/callerCtx are one

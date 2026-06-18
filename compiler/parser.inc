@@ -3455,9 +3455,36 @@ begin
 end;
 
 procedure ParseExpr;
-var op: TTokenKind; left, right, node: Integer;
+var op: TTokenKind; left, right, node, isci: Integer; isIsTest: Boolean;
 begin
   ParseSimpleExpr;
+  { `X is T` / `X as T` — is/as are contextual identifiers (not reserved tokens),
+    treated as operators only when followed by a known class name, so a stray
+    identifier is never hijacked. Parser-resolved into their own AST nodes (per
+    the and/or lesson: never key behaviour off a global flag). }
+  if (CurTok.Kind = tkIdent) and
+     (CaseEqual(CurTok.SVal, 'is') or CaseEqual(CurTok.SVal, 'as')) and
+     (TokPos < TokCount) and (Tokens[TokPos].Kind = tkIdent) and
+     (FindUClass(GetTokenStr(TokPos)) >= 0) then
+  begin
+    isIsTest := CaseEqual(CurTok.SVal, 'is');
+    Next;
+    isci := FindUClass(CurTok.SVal);
+    Next;
+    left := CurASTNode;
+    if isIsTest then
+    begin
+      node := AllocNode(AN_IS_TEST);
+      ASTLeft[node] := left; ASTIVal[node] := isci; ASTTk[node] := Ord(tyBoolean);
+    end
+    else
+    begin
+      node := AllocNode(AN_AS_CAST);
+      ASTLeft[node] := left; ASTIVal[node] := isci; ASTTk[node] := Ord(tyClass);
+    end;
+    CurASTNode := node;
+    Exit;
+  end;
   if CurTok.Kind = tkIn then
   begin
     Next;
@@ -6301,7 +6328,7 @@ var
   fIsDyn: Boolean; fDynDepth: Integer;
   tnOff, tnLen, ci, fnOff, fnLen, curFieldOff, fRec, fSize, fAlign, classAlign, depth, targetNOff, targetNLen: Integer;
   fTk: TTypeKind;
-  parentCi, slot, mmi, mnOff, mnLen, pnOff, pnLen, rFOff, rFLen, rMOff, rMLen, wFOff, wFLen, wMOff, wMLen, rnOff, rnLen, wnOff, wnLen, propRec, i: Integer;
+  parentCi, slot, mmi, mnOff, mnLen, pnOff, pnLen, rFOff, rFLen, rMOff, rMLen, wFOff, wFLen, wMOff, wMLen, rnOff, rnLen, wnOff, wnLen, propRec, i, vmtSlots: Integer;
   isConstructor, isDestructor, isVirtual, isOverride, isAbstract, isClassMethod: Boolean;
   mname, propName, readName, writeName: AnsiString;
   propTk: TTypeKind;
@@ -6774,7 +6801,15 @@ begin
         Expect(tkEnd, 'end');
 
         UClsVMTOffset[ci] := DataLen;
-        for i := 0 to UClsVirtCount[ci] * 8 - 1 do
+        { Always reserve at least one slot so every class has a DISTINCT VMT
+          address — that address is the per-class runtime identity used by is/as
+          and stored at [instance+0]. Without this, classes with no virtual
+          methods get 0-byte VMTs that all alias the same offset, so `obj is
+          AnyClass` would match every class. The padding slot is never dispatched
+          (the class has no virtuals), so it is harmless. }
+        vmtSlots := UClsVirtCount[ci];
+        if vmtSlots < 1 then vmtSlots := 1;
+        for i := 0 to vmtSlots * 8 - 1 do
         begin
           if DataLen >= MAX_DATA then Error('data overflow');
           Data[DataLen] := 0;
