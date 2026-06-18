@@ -14,7 +14,7 @@ lives in git, not in a timestamp._
 
 _none_
 
-## backlog (47)
+## backlog (48)
 
 | Ticket | Type | Summary | Blocked-by |
 | --- | --- | --- | --- |
@@ -28,6 +28,7 @@ _none_
 | feature-async-auto-backend | feature | Auto stackless/stackful backend selection | — |
 | feature-async-language-surface | feature | Async language surface + stackless coroutine backend | feature-cross-target-feature-parity |
 | feature-c-header-import-complex | feature | Import C headers for complex libraries (glib/GTK-grade) | — |
+| feature-class-is-as | feature | `is` / `as` / `Supports` — runtime class type-tests | — |
 | feature-compiler-warnings | feature | Compiler warning diagnostics facility | — |
 | feature-c-source-frontend | feature | C source frontend — compile C function bodies (statements + expressions) | feature-cross-target-feature-parity |
 | feature-demo-chess | feature | Flagship demo — chess engine (real-world app + cross-target oracle + benchmark) | — |
@@ -148,6 +149,7 @@ _none_
 - feature-array-of-const
 - feature-async-auto-backend
 - feature-c-header-import-complex
+- feature-class-is-as
 - feature-compiler-warnings
 - feature-demo-chess
 - feature-demo-sudoku

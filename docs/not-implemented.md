@@ -16,11 +16,14 @@ regression test should be treated as unverified. See
 
 - Full FPC Object Pascal — only a tested subset is supported.
 - Delphi mode and other alternate modes.
-- Interfaces (deferred until a concrete target needs them).
+- `is` / `as` / `Supports` runtime type-tests — not implemented even for plain
+  classes (ticketed: feature-class-is-as).
+- Interfaces (low priority — the OOP-family capstone; feature-interfaces).
 - Private/protected access enforcement (parsed, not enforced).
 - Built-in `Exception` hierarchy, inherited handler matching, message
-  constructors, class/message unhandled reports.
-- Cast intrinsics (`Trunc`, `Round`, ...).
+  constructors, class/message unhandled reports (low priority).
+- Cast intrinsics (`Trunc`, `Round`, ...) and explicit type-casts
+  (`Char()`/`Boolean()`/`String()`/`TypeName(expr)`; feature-explicit-typecasts).
 - Overflow/range checking — integer arithmetic wraps unchecked.
 - `WideChar` and broader ordinal/range conformance.
 - Generic call-site specialization sugar (`Max<Integer>(a, b)`).
@@ -31,6 +34,9 @@ regression test should be treated as unverified. See
 - The FPC RTL and its units. `SysUtils`, containers, streams, rich exception
   classes, and the package ecosystem cannot be assumed to compile.
 - Only tested built-ins and project units are available.
+- Float **core works** (arithmetic + formatted `writeln(x:w:d)`, all targets);
+  **missing** = transcendental math (`Sqrt`/`Sin`/`Cos`/…, a fallback math
+  library) and float `Str`/`Val` (feature-float-str-val).
 
 ## C interop
 

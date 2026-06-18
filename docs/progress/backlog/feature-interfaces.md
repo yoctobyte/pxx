@@ -5,16 +5,28 @@
 - **Owner:** —
 - **Opened:** 2026-06-06 (from todo.md §3 — intentionally deferred)
 
-## Priority note (2026-06-16)
+## Priority note (2026-06-16, refined 2026-06-18)
 
-**Deprioritized to last by project owner.** Interfaces are largely a COM-era
-binary-contract mechanism — cross-application/cross-binary ABI stability (Windows
-COM, OLE). PXX targets **standalone, all-in-one-binary applications** with no
-cross-binary contracts, so that primary value does not apply here. The secondary
-value (inheritance-free polymorphic abstraction + ARC lifetime) is adequately
-covered by classes, abstract methods, and the proposed `object` reference type
-(feature-object-reference-type). Revisit only if a concrete external-compatibility
-target (e.g. a real COM/OLE interop need) ever forces it. Until then: last.
+**Low priority, but the OOP-family capstone — not "never".** Interfaces are
+largely a COM-era binary-contract mechanism (cross-binary ABI stability: Windows
+COM, OLE). PXX targets **standalone, all-in-one-binary applications**, so that
+primary value does not apply, and the secondary value (inheritance-free
+polymorphic abstraction + ARC lifetime) is covered by classes, abstract methods,
+and `object` (feature-object-reference-type). So it stays **low** — but it is the
+last gap in the OOP feature set, and deferring it forever means repeatedly
+bumping into it. Do it eventually, after the other OOP pieces; pull forward only
+if a concrete interop need appears.
+
+**Effort is MEDIUM, not the scary arc the original note implied** — the expensive
+substrate already exists: VMT + virtual dispatch, the RTTI class registry, ARC
+refcounts (managed-string `IncRef`/`DecRef`), and scope-exit + exception-unwind
+finalisation. CORBA-style (no refcount, fat-pointer `{IMT, instance}`, `is`/`as`/
+`Supports` via the RTTI walk) is ~2–4 focused days; COM-style ARC is an
+incremental add reusing the existing ARC + scope-cleanup machinery.
+
+**Item 5 is extracted.** Class `is`/`as`/`Supports` (the runtime type-walk) is now
+its own ticket **feature-class-is-as** — useful independently (class downcasts,
+the demos) and a prerequisite this ticket reuses.
 
 ## Motivation (original)
 
