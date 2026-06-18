@@ -107,6 +107,31 @@ begin
   end;
 end;
 
+procedure EmitStrOperandRISCV32(operandTk: TTypeKind; slotOff, lenReg, srcReg: Integer);
+{ Decompose a string-valued operand sitting at [sp+slotOff] into (len -> lenReg,
+  src -> srcReg) for PXXStrConcat / PXXStrEq. A handle gives len [h-8] (nil->0)
+  + src h; a frozen tyString gives len [buf] + src buf+8; a char gives len 1 +
+  src &slot. lenReg/srcReg must differ from each other and from sp. }
+begin
+  rv32_lw(srcReg, reg_sp, slotOff);          { operand value }
+  if operandTk = tyAnsiString then
+  begin
+    rv32_addi(lenReg, reg_zero, 0);
+    rv32_beq(srcReg, reg_zero, 8);           { nil -> len 0 }
+    rv32_lw(lenReg, srcReg, -8);
+  end
+  else if operandTk = tyString then
+  begin
+    rv32_lw(lenReg, srcReg, 0);              { len = [buf] }
+    rv32_addi(srcReg, srcReg, 8);            { src = buf+8 }
+  end
+  else
+  begin
+    rv32_addi(srcReg, reg_sp, slotOff);      { src = &slot (char) }
+    rv32_addi(lenReg, reg_zero, 1);
+  end;
+end;
+
 procedure EmitSlotAddrRISCV32(rd, si: Integer);
 { rd = address of the variable's storage slot (global abs / frame-relative). }
 begin
@@ -358,42 +383,8 @@ begin
             [sp]=rhs, [sp+4]=lhs. }
           IREmitNodeRISCV32(left);  rv32_addi(reg_sp, reg_sp, -4); rv32_sw(reg_a0, reg_sp, 0);
           IREmitNodeRISCV32(right); rv32_addi(reg_sp, reg_sp, -4); rv32_sw(reg_a0, reg_sp, 0);
-          { srcB(t2)/lenB(t1) from rhs at [sp] }
-          rv32_lw(reg_t2, reg_sp, 0);
-          if IntToTypeKind(IRTk[right]) = tyAnsiString then
-          begin
-            rv32_addi(reg_t1, reg_zero, 0);
-            rv32_beq(reg_t2, reg_zero, 8);
-            rv32_lw(reg_t1, reg_t2, -8);
-          end
-          else if IntToTypeKind(IRTk[right]) = tyString then
-          begin
-            rv32_lw(reg_t1, reg_t2, 0);
-            rv32_addi(reg_t2, reg_t2, 8);
-          end
-          else
-          begin
-            rv32_addi(reg_t2, reg_sp, 0);
-            rv32_addi(reg_t1, reg_zero, 1);
-          end;
-          { srcA(a1)/lenA(a0) from lhs at [sp+4] }
-          rv32_lw(reg_a1, reg_sp, 4);
-          if IntToTypeKind(IRTk[left]) = tyAnsiString then
-          begin
-            rv32_addi(reg_a0, reg_zero, 0);
-            rv32_beq(reg_a1, reg_zero, 8);
-            rv32_lw(reg_a0, reg_a1, -8);
-          end
-          else if IntToTypeKind(IRTk[left]) = tyString then
-          begin
-            rv32_lw(reg_a0, reg_a1, 0);
-            rv32_addi(reg_a1, reg_a1, 8);
-          end
-          else
-          begin
-            rv32_addi(reg_a1, reg_sp, 4);
-            rv32_addi(reg_a0, reg_zero, 1);
-          end;
+          EmitStrOperandRISCV32(IntToTypeKind(IRTk[right]), 0, reg_t1, reg_t2);  { lenB, srcB }
+          EmitStrOperandRISCV32(IntToTypeKind(IRTk[left]),  4, reg_a0, reg_a1);  { lenA, srcA }
           rv32_addi(reg_a2, reg_t2, 0);    { a2 = srcB }
           rv32_addi(reg_a3, reg_t1, 0);    { a3 = lenB }
           pi := FindProc('PXXStrConcat');
@@ -413,6 +404,37 @@ begin
           end;
           rv32_lw(reg_a0, reg_sp, 0); rv32_addi(reg_sp, reg_sp, 4);   { pop result }
           rv32_addi(reg_sp, reg_sp, 8);                               { drop rhs, lhs }
+          Exit;
+        end;
+
+        if ((op = Ord(tkEq)) or (op = Ord(tkNeq))) and
+           ((IntToTypeKind(IRTk[left]) = tyAnsiString) or (IntToTypeKind(IRTk[right]) = tyAnsiString)) then
+        begin
+          { Managed-string equality -> PXXStrEq(lenA, srcA, lenB, srcB) -> 1/0. }
+          IREmitNodeRISCV32(left);  rv32_addi(reg_sp, reg_sp, -4); rv32_sw(reg_a0, reg_sp, 0);
+          IREmitNodeRISCV32(right); rv32_addi(reg_sp, reg_sp, -4); rv32_sw(reg_a0, reg_sp, 0);
+          EmitStrOperandRISCV32(IntToTypeKind(IRTk[right]), 0, reg_t1, reg_t2);  { lenB, srcB }
+          EmitStrOperandRISCV32(IntToTypeKind(IRTk[left]),  4, reg_a0, reg_a1);  { lenA, srcA }
+          rv32_addi(reg_a2, reg_t1, 0);    { a2 = lenB }
+          rv32_addi(reg_a3, reg_t2, 0);    { a3 = srcB }
+          pi := FindProc('PXXStrEq');
+          if pi < 0 then Error('compiler error: PXXStrEq not found');
+          EmitCallProc(pi);                { a0 = 1/0 }
+          { release fresh operand temporaries }
+          rv32_addi(reg_sp, reg_sp, -4); rv32_sw(reg_a0, reg_sp, 0);  { push result }
+          if (IRKind[left] = IR_BINOP) and (IntToTypeKind(IRTk[left]) = tyAnsiString) then
+          begin
+            rv32_lw(reg_a0, reg_sp, 8);
+            pi := FindProc('PXXStrDecRef'); EmitCallProc(pi);
+          end;
+          if (IRKind[right] = IR_BINOP) and (IntToTypeKind(IRTk[right]) = tyAnsiString) then
+          begin
+            rv32_lw(reg_a0, reg_sp, 4);
+            pi := FindProc('PXXStrDecRef'); EmitCallProc(pi);
+          end;
+          rv32_lw(reg_a0, reg_sp, 0); rv32_addi(reg_sp, reg_sp, 4);   { pop result }
+          rv32_addi(reg_sp, reg_sp, 8);                               { drop rhs, lhs }
+          if op = Ord(tkNeq) then rv32_xori(reg_a0, reg_a0, 1);
           Exit;
         end;
 

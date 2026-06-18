@@ -56,11 +56,18 @@ esac
 
 cd "$PROJ"
 # shellcheck disable=SC2086
-"$PXX" $PXXFLAGS "$PAS" main/main.o >/dev/null
+"$PXX" $PXXFLAGS ${ESP_PXXFLAGS:-} "$PAS" main/main.o >/dev/null
 ar rcs main/libpxx_app.a main/main.o
-# Reuse the configured build dir; full reconfigure only if it is missing.
-if [ -f build/build.ninja ]; then ninja -C build >/dev/null
-else idf.py set-target "$CHIP" >/dev/null && idf.py build >/dev/null; fi
+# The Pascal code arrives via add_prebuilt_library (libpxx_app.a), which ninja
+# does NOT track for content changes -- so force a relink by removing the app
+# image, or a stale binary from a previous program would boot instead. Build
+# errors (e.g. an undefined external) must abort, not silently run the old image.
+if [ -f build/build.ninja ]; then
+  rm -f build/*.elf build/*.bin
+  ninja -C build >/dev/null || { echo "esp_run: build failed" >&2; exit 1; }
+else
+  idf.py set-target "$CHIP" >/dev/null && idf.py build >/dev/null || { echo "esp_run: build failed" >&2; exit 1; }
+fi
 
 cd build
 python -m esptool --chip "$CHIP" merge-bin -o /tmp/esp_run_flash.bin \
