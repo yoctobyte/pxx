@@ -90,6 +90,28 @@ Seed expansion via SplitMix64 from the user seed.
   dispatch selects the right backend on each platform and that fallbacks chain
   correctly (HW-fail → OS → software).
 
+## Dependency: HW-instruction emission (and how to avoid blocking on it)
+
+Tiers 1 (HW) need a few fixed CPU instructions emitted (CPUID, RDRAND, `MRS
+RNDR`, ESP RNG-reg / MMIO read). **Tiers 2 (getrandom) and 3 (software) need no
+asm at all** — so slices 1–3 ship a useful library before any asm work. Only
+slices 4–6 touch instructions.
+
+Two ways to satisfy the HW tier; **prefer the second:**
+
+1. **General inline asm** (feature-inline-asm-depth) — currently x86-64-only +
+   rudimentary. Heavy: needs a per-target asm frontend to mature. Over-kill for
+   ~4 fixed sequences.
+2. **Dedicated compiler intrinsics in `builtinheap`** (RECOMMENDED) — emit the
+   fixed sequences directly via EmitB as builtins (`__rdrand`, `__cpuid`,
+   `__rndr`, raw MMIO read), exactly like the existing `__pxxrawsyscall`. No
+   asm-frontend dependency; reuses a proven mechanism; scoped to the handful of
+   ops the lib needs.
+
+So this ticket is **not hard-blocked** on feature-inline-asm-depth: slices 1–3
+are asm-free, and slices 4–6 use intrinsics (option 2). Full inline-asm-depth is
+only needed if a user writes arbitrary asm — out of scope here.
+
 ## Slices
 
 1. **Software PRNG core** — xoshiro256++ + SplitMix64 seed; deterministic;
@@ -114,6 +136,11 @@ programs compile and run unmodified.
 - 2026-06-18 — opened. Tiered HW→OS→software RNG with init-time capability probe
   (proc-typed dispatch), seed-forces-software rule, xoshiro256++ core, FPC
   surface + PXX extensions. Chosen as a broad cross-target test (CPUID/feature-
-  reg probing, per-target inline asm, getrandom syscall, deterministic software
-  oracle). Per-target landmines + dual-mode test (deterministic-software-oracle
-  + statistical-HW) recorded.
+  reg probing, per-target HW-instruction emission, getrandom syscall,
+  deterministic software oracle). Per-target landmines + dual-mode test
+  (deterministic-software-oracle + statistical-HW) recorded.
+- 2026-06-18 — clarified asm dependency: only HW tiers (slices 4–6) need
+  instruction emission; tiers 2–3 (slices 1–3) are asm-free, so the lib ships
+  useful first. HW tier should use dedicated `builtinheap` intrinsics
+  (`__rdrand`/`__cpuid`/`__rndr`, à la `__pxxrawsyscall`), NOT block on the
+  general feature-inline-asm-depth frontend. Not hard-blocked.
