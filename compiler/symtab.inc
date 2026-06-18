@@ -3533,6 +3533,21 @@ begin
   end;
   if TargetArch = TARGET_XTENSA then
   begin
+    { Release local managed strings before returning (ARC scope-exit DecRef).
+      Must precede the result load: each DecRef call clobbers a2. The returned
+      Result handle is skipped (ownership transfers to the caller). }
+    if CurProc >= 0 then
+      for i := Procs[CurProc].ScopeBase to SymCount - 1 do
+        if (Syms[i].Kind = skLocal) and (i <> retSymIdx) and
+           (Syms[i].TypeKind = tyAnsiString) and not Syms[i].IsArray then
+        begin
+          EmitLoadVarXtensa(i);                  { a2 = handle }
+          pi := FindProc('PXXStrDecRef');
+          if pi < 0 then Error('compiler error: PXXStrDecRef not found');
+          if XtensaABI = XTENSA_ABI_WINDOWED then
+            xtensa_mov(reg_xtensa_a10, reg_xtensa_a2);
+          EmitCallProc(pi);
+        end;
     if retSymIdx >= 0 then
     begin
       if Syms[retSymIdx].IsArray or (Syms[retSymIdx].Kind <> skLocal) or
@@ -3560,6 +3575,19 @@ begin
   end;
   if TargetArch = TARGET_RISCV32 then
   begin
+    { Release local managed strings before returning (ARC scope-exit DecRef).
+      Must precede the result load: each DecRef call clobbers a0. The returned
+      Result handle is skipped (ownership transfers to the caller). }
+    if CurProc >= 0 then
+      for i := Procs[CurProc].ScopeBase to SymCount - 1 do
+        if (Syms[i].Kind = skLocal) and (i <> retSymIdx) and
+           (Syms[i].TypeKind = tyAnsiString) and not Syms[i].IsArray then
+        begin
+          EmitLoadVarRISCV32(i);                 { a0 = handle }
+          pi := FindProc('PXXStrDecRef');
+          if pi < 0 then Error('compiler error: PXXStrDecRef not found');
+          EmitCallProc(pi);
+        end;
     if retSymIdx >= 0 then
     begin
       if Syms[retSymIdx].IsArray or (Syms[retSymIdx].Kind <> skLocal) or

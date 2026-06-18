@@ -7834,9 +7834,19 @@ begin
         EmitI32($8B0903A9);                                          { add x9, x29, x9 }
         EmitI32($F900013F);                                          { str xzr, [x9] }
       end
-      else if (zeroBytes = TARGET_PTR_SIZE) and ((TargetArch = TARGET_XTENSA) or (TargetArch = TARGET_RISCV32)) then
+      else if (zeroBytes = TARGET_PTR_SIZE) and (TargetArch = TARGET_XTENSA) then
       begin
-        { Bare-metal target managed local initialization placeholder }
+        { Nil the pointer-sized managed handle so an uninitialised local reads as
+          nil (Length 0, scope-exit DecRef is a no-op rather than a wild free). }
+        EmitFrameAddrXtensa(reg_xtensa_a8, Syms[i].Offset);
+        xtensa_movi(reg_xtensa_a9, 0);
+        xtensa_s32i(reg_xtensa_a9, reg_xtensa_a8, 0);
+      end
+      else if (zeroBytes = TARGET_PTR_SIZE) and (TargetArch = TARGET_RISCV32) then
+      begin
+        EmitLoadImmRISCV32(reg_t0, Syms[i].Offset);
+        rv32_add(reg_t0, reg_s0, reg_t0);
+        rv32_sw(reg_zero, reg_t0, 0);
       end
       else if zeroBytes = TARGET_PTR_SIZE then
       begin

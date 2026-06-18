@@ -167,7 +167,7 @@ procedure IREmitNodeRISCV32(node: Integer);
 var
   left, right, op, si, pi, nArgs, i, lo, elemSize, sz, argNode, valNode, j: Integer;
   tk: TTypeKind;
-  sgn: Boolean;
+  sgn, savedLVW: Boolean;
   sVal: AnsiString;
 begin
   case IRKind[node] of
@@ -297,7 +297,17 @@ begin
         lo := IRC[node];
         elemSize := Integer(IRIVal[node]);
 
-        IREmitNodeRISCV32(left);
+        IREmitNodeRISCV32(left);              { base: handle (read) / slot addr (write) }
+        { Managed-string index: read position already has the handle (IR_LEA
+          loaded it); write position holds the slot address -> clone-if-shared
+          via PXXStrUnique to get a writable handle (COW). }
+        if (IRKind[left] = IR_LEA) and (Syms[IRA[left]].TypeKind = tyAnsiString) and
+           not Syms[IRA[left]].IsArray and InLValueWrite then
+        begin
+          pi := FindProc('PXXStrUnique');
+          if pi < 0 then Error('compiler error: PXXStrUnique not found');
+          EmitCallProc(pi);                   { a0 = unique handle }
+        end;
         rv32_addi(reg_sp, reg_sp, -4);
         rv32_sw(reg_a0, reg_sp, 0);
 
@@ -355,7 +365,10 @@ begin
         rv32_addi(reg_sp, reg_sp, -4);
         rv32_sw(reg_a0, reg_sp, 0);
 
+        savedLVW := InLValueWrite;
+        InLValueWrite := True;
         IREmitNodeRISCV32(IRA[node]);
+        InLValueWrite := savedLVW;
         rv32_lw(reg_a1, reg_sp, 0);
         rv32_addi(reg_sp, reg_sp, 4);
 
@@ -511,11 +524,32 @@ begin
         end;
         if pi = -102 then
         begin
-          { SetLength(arr, n) -> PXXDynSetLen(slotAddr, n, desc). Dynamic arrays
-            of unmanaged elements only on ESP (AnsiString SetLength deferred). }
-          argNode := IRB[node];               { arg1 = array lvalue (IR_LEA) }
+          { SetLength(arr, n) -> PXXDynSetLen(slotAddr, n, desc). SetLength on a
+            managed AnsiString -> PXXStrSetLen(slotAddr, n). }
+          argNode := IRB[node];               { arg1 = array/string lvalue }
           valNode := IRB[argNode];            { arg2 = new length }
           left := IRA[argNode];
+          if (IRKind[left] = IR_LOAD_SYM) and
+             (Syms[IRA[left]].TypeKind = tyAnsiString) then
+          begin
+            si := IRA[left];
+            if (Syms[si].Kind = skParam) and Syms[si].IsRef then
+            begin
+              EmitLoadImmRISCV32(reg_a0, Syms[si].Offset);
+              rv32_add(reg_a0, reg_s0, reg_a0);
+              rv32_lw(reg_a0, reg_a0, 0);      { a0 = caller slot addr }
+            end
+            else
+              EmitSlotAddrRISCV32(reg_a0, si); { a0 = slot address }
+            rv32_addi(reg_sp, reg_sp, -4); rv32_sw(reg_a0, reg_sp, 0);  { push slot }
+            IREmitNodeRISCV32(IRA[valNode]);   { a0 = n }
+            rv32_addi(reg_a1, reg_a0, 0);      { a1 = n }
+            rv32_lw(reg_a0, reg_sp, 0); rv32_addi(reg_sp, reg_sp, 4);   { pop slot -> a0 }
+            pi := FindProc('PXXStrSetLen');
+            if pi < 0 then Error('compiler error: PXXStrSetLen not found');
+            EmitCallProc(pi);
+            Exit;
+          end;
           if IRKind[left] <> IR_LEA then
             Error('target riscv32: SetLength expects an array variable');
           si := IRA[left];

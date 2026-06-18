@@ -260,7 +260,7 @@ procedure IREmitNodeXtensa(node: Integer);
 var
   left, right, op, si, pi, nArgs, i, lo, elemSize, sz, argNode, argBase, valNode, j: Integer;
   tk: TTypeKind;
-  sgn: Boolean;
+  sgn, savedLVW: Boolean;
   sVal: AnsiString;
 begin
   case IRKind[node] of
@@ -402,7 +402,24 @@ begin
         lo := IRC[node];
         elemSize := Integer(IRIVal[node]);
 
-        IREmitNodeXtensa(left);
+        IREmitNodeXtensa(left);               { base: handle (read) / slot addr (write) }
+        { Managed-string index: read position already has the handle (IR_LEA
+          loaded it); write position holds the slot address -> clone-if-shared
+          via PXXStrUnique to get a writable handle (COW). }
+        if (IRKind[left] = IR_LEA) and (Syms[IRA[left]].TypeKind = tyAnsiString) and
+           not Syms[IRA[left]].IsArray and InLValueWrite then
+        begin
+          pi := FindProc('PXXStrUnique');
+          if pi < 0 then Error('compiler error: PXXStrUnique not found');
+          if XtensaABI = XTENSA_ABI_WINDOWED then
+          begin
+            xtensa_mov(reg_xtensa_a10, reg_xtensa_a2);
+            EmitCallProc(pi);
+            xtensa_mov(reg_xtensa_a2, reg_xtensa_a10);   { a2 = unique handle }
+          end
+          else
+            EmitCallProc(pi);                            { a2 = unique handle }
+        end;
         XtensaPushA2;
 
         IREmitNodeXtensa(right);
@@ -443,7 +460,10 @@ begin
       begin
         IREmitNodeXtensa(IRB[node]);
         XtensaPushA2;
+        savedLVW := InLValueWrite;
+        InLValueWrite := True;
         IREmitNodeXtensa(IRA[node]);
+        InLValueWrite := savedLVW;
         XtensaPopA3;
         tk := IntToTypeKind(IRTk[node]);
         sz := TypeSize(tk);
@@ -704,11 +724,43 @@ begin
         end;
         if pi = -102 then
         begin
-          { SetLength(arr, n) -> PXXDynSetLen(slotAddr, n, desc). Dynamic arrays
-            of unmanaged elements only on ESP (AnsiString SetLength deferred). }
-          argNode := IRB[node];                 { arg1 = array lvalue (IR_LEA) }
+          { SetLength(arr, n) -> PXXDynSetLen(slotAddr, n, desc). SetLength on a
+            managed AnsiString -> PXXStrSetLen(slotAddr, n). }
+          argNode := IRB[node];                 { arg1 = array/string lvalue }
           valNode := IRB[argNode];              { arg2 = new length }
           left := IRA[argNode];
+          if (IRKind[left] = IR_LOAD_SYM) and
+             (Syms[IRA[left]].TypeKind = tyAnsiString) then
+          begin
+            si := IRA[left];
+            argBase := XtSpillDepth;
+            if (Syms[si].Kind = skParam) and Syms[si].IsRef then
+            begin
+              EmitFrameAddrXtensa(reg_xtensa_a2, Syms[si].Offset);
+              xtensa_l32i(reg_xtensa_a2, reg_xtensa_a2, 0); { caller slot addr }
+            end
+            else
+              EmitSlotAddrXtensa(reg_xtensa_a2, si);        { slot address }
+            XtensaPushA2;                                    { slot @ argBase }
+            IREmitNodeXtensa(IRA[valNode]);                  { a2 = n }
+            XtensaPushA2;                                    { n @ argBase+4 }
+            pi := FindProc('PXXStrSetLen');
+            if pi < 0 then Error('compiler error: PXXStrSetLen not found');
+            if XtensaABI = XTENSA_ABI_WINDOWED then
+            begin
+              xtensa_l32i(reg_xtensa_a10, reg_xtensa_sp, argBase + 0);
+              xtensa_l32i(reg_xtensa_a11, reg_xtensa_sp, argBase + 4);
+              XtSpillDepth := argBase;
+            end
+            else
+            begin
+              xtensa_l32i(reg_xtensa_a2, reg_xtensa_sp, argBase + 0);
+              xtensa_l32i(reg_xtensa_a3, reg_xtensa_sp, argBase + 4);
+              XtSpillDepth := argBase;
+            end;
+            EmitCallProc(pi);
+            Exit;
+          end;
           if IRKind[left] <> IR_LEA then
             Error('target xtensa: SetLength expects an array variable');
           si := IRA[left];
