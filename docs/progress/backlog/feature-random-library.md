@@ -1,0 +1,119 @@
+# Random library — HW/OS/software tiered RNG (cross-target capability test)
+
+- **Type:** feature
+- **Status:** backlog
+- **Relation:** a real, reusable RTL library that doubles as a broad
+  cross-target test: runtime capability probing, per-target inline asm, a
+  syscall entropy path, procedural-type dispatch, an `initialization` section,
+  and a deterministic software path that is byte-identical across all 6 targets
+  (a perft-style oracle). Touches feature-threadsafe-io-serialization (global
+  state under threads) and the ESP profiles (HW RNG register / esp_random).
+
+## Goal
+
+A `Random` unit that gives good random numbers with **no per-platform code from
+the caller**: hardware RNG by default when available, OS CSPRNG otherwise,
+software PRNG as the fallback — and the deterministic software PRNG whenever the
+user seeds. Modern 256-bit-state / 64-bit-output internals, not a legacy
+16/32-bit LCG. FPC-compatible surface so existing code (and the Lazarus line)
+is unaffected.
+
+## Three-tier entropy source (chosen once at unit init)
+
+| Tier | Source | Selected when |
+| --- | --- | --- |
+| 1 — HW instruction | x86 `RDRAND`/`RDSEED`; aarch64 `RNDR` (FEAT_RNG); ESP RNG register / `esp_random` | capability probe says present |
+| 2 — OS CSPRNG | `getrandom(2)` syscall (Linux, kernel-ABI — fits the no-libc design); `/dev/urandom` fallback | hosted, no usable HW instruction |
+| 3 — Software PRNG | seeded from the best available tier above | fallback, **and forced whenever the user seeds** |
+
+The init probe selects a backend and stores it in a **proc-typed var**
+(indirect dispatch — exercises procedural types); the `initialization` section
+runs the probe once.
+
+## Seed forces software (key rule)
+
+Hardware RNG is not reproducible or seedable. Therefore:
+- `Randomize` → uses tier 1/2 (best available, non-reproducible).
+- `RandomSeed(x)` / assigning `RandSeed` → switches to **tier 3 deterministic**
+  so the stream is reproducible. This is intentional and documented, not a
+  limitation.
+
+## PRNG choice
+
+**xoshiro256++** (256-bit state, 64-bit output) — modern, fast, well-tested.
+(PCG64 acceptable alternative; decide in design.) No legacy LCG. The seeded
+software stream is **identical across all targets** → the cross-target oracle.
+Seed expansion via SplitMix64 from the user seed.
+
+## API surface
+
+**FPC-compatible (keep the Lazarus line):**
+- `function Random: Double;` — [0,1)
+- `function Random(L: Integer): Integer;` — [0, L)
+- `procedure Randomize;`
+- `RandSeed` variable (assignment → tier 3, reproducible)
+
+**PXX extensions (on top):**
+- `function Random64: UInt64;` / `function Random128: <128-bit>;`
+- `procedure RandomBytes(var buf; n: Integer);`
+- `function RandomRange(lo, hi: Int64): Int64;`
+- `procedure RandomSeed(seed: UInt64);` (explicit deterministic entry)
+
+## Per-target capability detail / landmines
+
+- **x86-64 / i386:** `CPUID` leaf 1 ECX bit 30 = RDRAND; leaf 7 EBX bit 18 =
+  RDSEED. `RDRAND` can **fail** (CF=0) → bounded retry loop, then fall to next
+  tier. Inline asm (CPUID + RDRAND).
+- **aarch64:** `RNDR`/`RNDRRS` are **optional** (FEAT_RNG); probe
+  `ID_AA64ISAR0_EL1` RNDR field; `MRS` reads the system reg at EL0. Fall back if
+  absent.
+- **arm32:** no standard user HW RNG instruction → OS tier only.
+- **riscv32 (user):** Zkr entropy source is an M-mode CSR, not user-accessible →
+  OS tier (or ESP HW register on device).
+- **ESP32 (xtensa / riscv32, bare + IDF):** read the RNG data register (bare) or
+  `esp_random` (IDF). **Caveat:** ESP RNG is only truly random with the RF/WiFi
+  clock enabled — document; do not claim CSPRNG quality in bare profile without
+  it.
+- **`getrandom`** may be absent (old kernel) or block at early boot → fall to
+  `/dev/urandom`, then software.
+- **Thread safety:** global PRNG state under threads → per-thread state or a
+  lock (coordinate with feature-threadsafe-io-serialization).
+
+## Testing strategy
+
+- **Software path (seeded) — the deterministic oracle.** Fixed seed → a fixed
+  stream; assert **byte-identical across all 6 targets** (cross-bootstrap-style
+  run). This is the primary regression check.
+- **HW / OS path — statistical smoke** (can't byte-compare true randomness):
+  nonzero, varies run-to-run, rough uniformity over a large sample.
+- **Capability matrix:** a debug override to force each tier; verify the init
+  dispatch selects the right backend on each platform and that fallbacks chain
+  correctly (HW-fail → OS → software).
+
+## Slices
+
+1. **Software PRNG core** — xoshiro256++ + SplitMix64 seed; deterministic;
+   cross-target byte-identical oracle. Pure, no platform code. Lands first.
+2. **FPC surface** — `Random`/`Random(L)`/`Randomize`/`RandSeed` over the core.
+3. **OS tier** — `getrandom` syscall (+ `/dev/urandom` fallback); used by
+   `Randomize`.
+4. **HW tier x86** — CPUID probe + RDRAND (+ retry); inline asm.
+5. **HW tier aarch64** — RNDR probe + read.
+6. **ESP tier** — RNG register (bare) / esp_random (IDF).
+7. **Thread-safe state** — per-thread or locked (with the threadsafe-io work).
+
+## Acceptance
+
+`Random*` works with zero caller platform code; init auto-selects the best tier
+per platform; seeding switches to a reproducible software stream that is
+byte-identical across all 6 targets; HW/OS tiers pass statistical smoke; the
+capability matrix shows correct selection + fallback chaining. FPC-surface
+programs compile and run unmodified.
+
+## Log
+- 2026-06-18 — opened. Tiered HW→OS→software RNG with init-time capability probe
+  (proc-typed dispatch), seed-forces-software rule, xoshiro256++ core, FPC
+  surface + PXX extensions. Chosen as a broad cross-target test (CPUID/feature-
+  reg probing, per-target inline asm, getrandom syscall, deterministic software
+  oracle). Per-target landmines + dual-mode test (deterministic-software-oracle
+  + statistical-HW) recorded.
