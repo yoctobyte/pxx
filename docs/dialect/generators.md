@@ -81,8 +81,11 @@ Restrictions (enforced — a violation is a clear compile error):
 ### Choosing
 
 Bare `; generator;` currently uses the stackful backend. Automatic
-stackful/stackless selection (stackless when eligible, else stackful) is planned;
-until then use the explicit `stackful` / `stackless` directive to force one.
+stackful/stackless selection (stackless when eligible, else stackful) is planned
+([feature-async-auto-backend](../progress/backlog/feature-async-auto-backend.md));
+until then use the explicit `stackful` / `stackless` directive to force one. The
+memory model and the target-aware selection rule are written up in
+[developer/concurrency-memory-model.md](../developer/concurrency-memory-model.md).
 
 ## Validation summary
 

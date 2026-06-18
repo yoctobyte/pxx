@@ -91,7 +91,7 @@ procedure Imp(v: Integer); cdecl; external 'libfoo.so' name 'imp';
 | `stackful` | effective (default) | Heap-coroutine backend for `generator`/`async`. Documentary when it is already the default. |
 | `stackless` | effective | State-machine backend; only valid together with `generator`/`async`. |
 | `iram` | effective (ESP) | Place the routine's code in IRAM (`.iram1.text`) — ESP32 only. See [Targets](targets.md). |
-| `inline` | accepted, **no-op** | Reserved; the routine is **not** inlined today. |
+| `inline` | accepted, **no-op** | Reserved; the routine is **not** inlined today (planned: [feature-inline-routines](../progress/backlog/feature-inline-routines.md)). |
 | `register` | accepted, **no-op** | See *Calling conventions* below. |
 | `cdecl` | accepted, **no-op** | See *Calling conventions* below. |
 | `interrupt` | parsed, **not implemented** | Raw hardware-vector codegen errors out (see *Interrupt handlers*). |

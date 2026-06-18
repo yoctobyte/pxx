@@ -42,12 +42,50 @@ unified allocator. Parallel code doing I/O also wants
 `feature-threadsafe-io-serialization` (statement-atomic `write`/`writeln`) — not
 a hard blocker, but expect to need it in the same breath.
 
+## ESP32 / FreeRTOS (decided 2026-06-18)
+
+Threads route through the OS/RTOS — **PXX will not ship a bare-metal scheduler**.
+Rationale: anyone wanting threads on ESP is, in practice, already pulling in
+ESP-IDF for Wi-Fi / BLE / drivers, so threads = **FreeRTOS tasks** (the IDF
+profile). See
+[developer/concurrency-memory-model.md](../../developer/concurrency-memory-model.md).
+
+- **`threads ⇒ idf`.** A bare program (`--esp-profile=bare`) that uses the thread
+  surface is a **hard error** pointing at `--esp-profile=idf`. Bare stays
+  self-contained — FreeRTOS must never become a hidden dependency of the bare
+  profile.
+- **Binding, not syntax.** Expose FreeRTOS task create/join + **optional core
+  pin** under the same spawn/join surface, not new keywords.
+- **Dual-core SMP.** ESP32 is dual-core (PRO/APP). The "core 0 = networking,
+  core 1 = app" split is an IDF pinning **convention, not hardware-enforced** —
+  tasks pin to a core or float. Surface the pin as an option on spawn.
+- **Memory model.** Each FreeRTOS task is a **statically-sized stack** (no MMU
+  growth) — same discipline as a stackful coroutine, chosen at task creation.
+- `--threadsafe` already emits atomic refcounts; reuse for the ESP path.
+
+Distinct from the coroutine work: stackless/stackful coroutines are *cooperative*
+and the RAM-cheap default for embedded (feature-async-auto-backend /
+feature-stackful-coro-port). Threads are the *preemptive multicore* axis and only
+make sense on the IDF profile.
+
+## ESP target profile default (related)
+
+Formalise `--esp-profile={idf,bare}` with **`idf` as the default** (≈99% of real
+apps use something from IDF) and `bare` a first-class one-flag opt-in (tiny
+images, no IDF toolchain, fast language testing under qemu). Tracked here because
+the `threads ⇒ idf` rule needs the profile to be an explicit, queryable selector.
+Today the IDF path is implied by `.o`/`--emit-obj` output and bare by
+`--esp-profile=bare`; unify them under one flag.
+
 ## Acceptance
 
 A program spawns workers, joins results, and shares data through the chosen
 primitives with correct results under repeated runs (data-race-free for the
 covered surface); self-host fixedpoint holds; `--threadsafe` covers the atomic
-paths.
+paths. On ESP: the thread surface compiles+runs under the IDF profile (FreeRTOS
+tasks, optional core pin) and is a clear error under `--esp-profile=bare`.
 
 ## Log
 - 2026-06-06 — ticket opened from user request.
+- 2026-06-18 — ESP/FreeRTOS strategy + `threads ⇒ idf` + profile-default decision
+  recorded (design discussion); see developer/concurrency-memory-model.md.

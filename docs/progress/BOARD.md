@@ -14,7 +14,7 @@ lives in git, not in a timestamp._
 
 _none_
 
-## backlog (43)
+## backlog (46)
 
 | Ticket | Type | Summary | Blocked-by |
 | --- | --- | --- | --- |
@@ -25,6 +25,7 @@ _none_
 | feature-allocator-quality | feature | Allocator quality: split / coalesce / bins / alignment | — |
 | feature-array-of-const | feature | `array of const` (TVarRec) parameter support | — |
 | feature-asm-text-emitter | feature | Text-assembler codegen helpers (`EmitAsm386` / `EmitAsmX64` …) | feature-array-of-const |
+| feature-async-auto-backend | feature | Auto stackless/stackful backend selection | — |
 | feature-async-language-surface | feature | Async language surface + stackless coroutine backend | feature-cross-target-feature-parity |
 | feature-c-header-import-complex | feature | Import C headers for complex libraries (glib/GTK-grade) | — |
 | feature-compiler-warnings | feature | Compiler warning diagnostics facility | — |
@@ -42,6 +43,7 @@ _none_
 | feature-fpc-vs-pxx-feature-boundary | feature | Policy: FPC-bootstrap subset vs PXX-only library features | — |
 | feature-handle-compacting-heap | feature | Handle-table compacting heap (anti-fragmentation for constrained RAM) | — |
 | feature-inline-asm-depth | feature | Inline assembler depth | — |
+| feature-inline-routines | feature | Inline routine expansion (`inline;`) | — |
 | feature-interfaces | feature | Interfaces | — |
 | feature-lazycasing-c-imports | feature | `{$LAZYCASING ON/OFF}` for C imports only | feature-compiler-warnings |
 | feature-metaclass-descendant-enforcement | feature | Metaclass alias descendant-constraint enforcement | — |
@@ -54,6 +56,7 @@ _none_
 | feature-os-targets-bsd-mac | feature | Additional OS targets (BSD / macOS via syscall mapping; Windows deprioritized) | — |
 | feature-parallel-processing | feature | Parallel processing as a language feature | feature-unified-heap-allocator |
 | feature-progress-transition-helpers | feature | Progress transition helpers (`claim` / `resolve`) | — |
+| feature-stackful-coro-port | feature | Port the stackful coroutine backend to all targets | — |
 | feature-static-arena-profile | feature | Fixed-static-arena allocator profile | feature-unified-heap-allocator |
 | feature-threadsafe-io-serialization | feature | Statement-level I/O serialization under threads | feature-unified-heap-allocator |
 | feature-writeln-as-library | feature | write/writeln as a library function (via `array of const` + variadic sugar) | — |
@@ -142,6 +145,7 @@ _none_
 - feature-additional-cpu-targets
 - feature-allocator-quality
 - feature-array-of-const
+- feature-async-auto-backend
 - feature-c-header-import-complex
 - feature-compiler-warnings
 - feature-demo-chess
@@ -156,6 +160,7 @@ _none_
 - feature-fpc-vs-pxx-feature-boundary
 - feature-handle-compacting-heap
 - feature-inline-asm-depth
+- feature-inline-routines
 - feature-interfaces
 - feature-metaclass-descendant-enforcement
 - feature-networking
@@ -165,6 +170,7 @@ _none_
 - feature-os-targets-bsd-mac
 - feature-parallel-processing
 - feature-progress-transition-helpers
+- feature-stackful-coro-port
 - feature-static-arena-profile
 - feature-threadsafe-io-serialization
 - feature-writeln-as-library
