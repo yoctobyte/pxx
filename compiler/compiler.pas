@@ -63,6 +63,7 @@ begin
   DumpRTTI := False;
   TargetArch := TARGET_X86_64;
   XtensaABI := XTENSA_ABI_CALL0;
+  XtensaSoftDivide := False;
   TARGET_PTR_SIZE := 8;
   EmitObjMode := False;
   NoUnhandledHandler := False;
@@ -130,6 +131,13 @@ begin
     else if option = '--xtensa-abi=windowed' then
     begin
       XtensaABI := XTENSA_ABI_WINDOWED;
+      Inc(i);
+    end
+    else if (option = '--xtensa-cpu=lx6') or (option = '--xtensa-soft-divide') then
+    begin
+      { ESP32 classic (LX6): no hardware divide option. Route div/mod through
+        the software shift-subtract helpers. }
+      XtensaSoftDivide := True;
       Inc(i);
     end
     else if option = '--target=riscv32' then

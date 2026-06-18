@@ -747,6 +747,11 @@ var
   { Xtensa ABI selector. Call0 remains the bare-target default; ESP-IDF uses
     the windowed ABI. }
   XtensaABI : Integer;
+  { Xtensa integer divide policy. Default False = native quos/rems (LX7 / ESP32
+    -S2/-S3 baseline). True (via --xtensa-cpu=lx6) routes div/mod through the
+    software shift-subtract helpers __pxx_divsi3/__pxx_modsi3 for ESP32 classic
+    (LX6), which has the multiply option but not the divide option. }
+  XtensaSoftDivide : Boolean;
   { Windowed-ABI expression stack: a constant-sp function keeps its stack
     pointer fixed (the window overflow/underflow handlers spill the caller's
     a0-a3 to [sp-16], so sp must not move). Temporaries live at sp-relative

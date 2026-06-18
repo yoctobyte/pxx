@@ -8834,6 +8834,20 @@ begin
   dummyNames[3] := 'srcB';  dummyTypes[3] := tyPointer;
   i := RegisterProc('PXXStrEq', True, tyInt64, 4, dummyNames, dummyTypes);
 
+  { Xtensa software integer-divide helpers: only when targeting an LX6 part
+    (--xtensa-cpu=lx6). Registered (hence emitted) only then so LX7 images
+    stay lean and keep their native quos/rems. }
+  if (TargetArch = TARGET_XTENSA) and XtensaSoftDivide then
+  begin
+    dummyNames[0] := 'n'; dummyTypes[0] := tyUInt32;
+    dummyNames[1] := 'd'; dummyTypes[1] := tyUInt32;
+    i := RegisterProc('__pxx_udivsi3', True, tyUInt32, 2, dummyNames, dummyTypes);
+    dummyNames[0] := 'a'; dummyTypes[0] := tyInteger;
+    dummyNames[1] := 'b'; dummyTypes[1] := tyInteger;
+    i := RegisterProc('__pxx_divsi3', True, tyInteger, 2, dummyNames, dummyTypes);
+    i := RegisterProc('__pxx_modsi3', True, tyInteger, 2, dummyNames, dummyTypes);
+  end;
+
   { File load, variant and float-format helpers are not on ESP yet. }
   if (TargetArch <> TARGET_XTENSA) and (TargetArch <> TARGET_RISCV32) then
   begin

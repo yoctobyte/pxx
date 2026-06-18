@@ -256,6 +256,24 @@ begin
   EmitCallProc(pi);
 end;
 
+procedure EmitXtensaSoftDivCall(const name: AnsiString);
+{ a2 = dividend (arg0), a3 = divisor (arg1) -> call helper -> result in a2.
+  LX6 software div/mod path (--xtensa-cpu=lx6). }
+var pi: Integer;
+begin
+  pi := FindProc(name);
+  if pi < 0 then Error('compiler error: xtensa soft-divide helper not found');
+  if XtensaABI = XTENSA_ABI_WINDOWED then
+  begin
+    xtensa_mov(reg_xtensa_a10, reg_xtensa_a2);
+    xtensa_mov(reg_xtensa_a11, reg_xtensa_a3);
+    EmitCallProc(pi);
+    xtensa_mov(reg_xtensa_a2, reg_xtensa_a10);
+  end
+  else
+    EmitCallProc(pi);   { a2, a3 already hold arg0, arg1; result in a2 }
+end;
+
 procedure IREmitNodeXtensa(node: Integer);
 var
   left, right, op, si, pi, nArgs, i, lo, elemSize, sz, argNode, argBase, valNode, j: Integer;
@@ -666,8 +684,16 @@ begin
         if op = Ord(tkPlus) then xtensa_add(reg_xtensa_a2, reg_xtensa_a2, reg_xtensa_a3)
         else if op = Ord(tkMinus) then xtensa_sub(reg_xtensa_a2, reg_xtensa_a2, reg_xtensa_a3)
         else if op = Ord(tkStar) then xtensa_mull(reg_xtensa_a2, reg_xtensa_a2, reg_xtensa_a3)
-        else if op = Ord(tkDiv) then xtensa_quos(reg_xtensa_a2, reg_xtensa_a2, reg_xtensa_a3)
-        else if op = Ord(tkMod) then xtensa_rems(reg_xtensa_a2, reg_xtensa_a2, reg_xtensa_a3)
+        else if op = Ord(tkDiv) then
+        begin
+          if XtensaSoftDivide then EmitXtensaSoftDivCall('__pxx_divsi3')
+          else xtensa_quos(reg_xtensa_a2, reg_xtensa_a2, reg_xtensa_a3);
+        end
+        else if op = Ord(tkMod) then
+        begin
+          if XtensaSoftDivide then EmitXtensaSoftDivCall('__pxx_modsi3')
+          else xtensa_rems(reg_xtensa_a2, reg_xtensa_a2, reg_xtensa_a3);
+        end
         else if op = Ord(tkShl) then
         begin
           { a2 := a2 << a3 : SAR from a3, then SLL takes the value in s=a2. }

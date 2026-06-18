@@ -67,6 +67,16 @@ procedure PXXStrSetLen(strSlot: Pointer; newLen: NativeInt);
 procedure PXXMemMove(dst: Pointer; src: Pointer; n: NativeInt);
 procedure PXXMemZero(dst: Pointer; n: NativeInt);
 procedure PXXDynSetLen(arrSlot: Pointer; newLen: NativeInt; desc: Pointer);
+{$ifdef CPU_XTENSA}
+{ Xtensa software integer divide for ESP32 classic (LX6), which lacks the
+  hardware divide option (it has multiply). Selected by --xtensa-cpu=lx6; the
+  codegen routes div/mod here instead of quos/rems. Built from shift/sub/add/
+  branch (+ mull for the modulo fixup) — none use the div/mod operators, so they
+  cannot recurse into themselves. }
+function __pxx_udivsi3(n: LongWord; d: LongWord): LongWord;
+function __pxx_divsi3(a: Integer; b: Integer): Integer;
+function __pxx_modsi3(a: Integer; b: Integer): Integer;
+{$endif}
 { Not yet on ESP: file I/O, managed-element dynarray/record retain/release,
   variant, float formatting. }
 {$ifndef PXX_ESP}
@@ -968,6 +978,53 @@ begin
   PWord(strSlot)^ := Int64(newData);
   PXXStrDecRef(oldData);
 end;
+
+{$ifdef CPU_XTENSA}
+{ Unsigned 32-bit divide: restoring shift-subtract. No div/mod operator used. }
+function __pxx_udivsi3(n: LongWord; d: LongWord): LongWord;
+var q, r, bit: LongWord; i: Integer;
+begin
+  q := 0;
+  r := 0;
+  if d = 0 then
+  begin
+    Result := 0;   { HW would trap; return 0 rather than loop forever }
+    Exit;
+  end;
+  i := 31;
+  while i >= 0 do
+  begin
+    r := r shl 1;
+    bit := (n shr i) and 1;
+    r := r or bit;
+    if r >= d then
+    begin
+      r := r - d;
+      q := q or (LongWord(1) shl i);
+    end;
+    i := i - 1;
+  end;
+  Result := q;
+end;
+
+{ Signed 32-bit divide: magnitude divide + sign fixup. }
+function __pxx_divsi3(a: Integer; b: Integer): Integer;
+var na, nb, q: LongWord; neg: Boolean;
+begin
+  neg := (a < 0) <> (b < 0);
+  if a < 0 then na := LongWord(-a) else na := LongWord(a);
+  if b < 0 then nb := LongWord(-b) else nb := LongWord(b);
+  q := __pxx_udivsi3(na, nb);
+  if neg then Result := -Integer(q) else Result := Integer(q);
+end;
+
+{ Signed 32-bit modulo: a - (a div b) * b. The multiply (mull) is present on
+  LX6; only the divide option is missing. }
+function __pxx_modsi3(a: Integer; b: Integer): Integer;
+begin
+  Result := a - __pxx_divsi3(a, b) * b;
+end;
+{$endif}
 
 {$ifndef PXX_ESP}
 { Variant + float-formatting runtime (not on ESP yet). }
