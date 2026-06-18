@@ -1,9 +1,12 @@
 # Float Str / Val
 
 - **Type:** feature
-- **Status:** backlog
+- **Status:** done
 - **Owner:** —
 - **Opened:** 2026-06-06 (from todo.md §4)
+- **Resolved:** 2026-06-18 (commit b744ab6) — float Str/Val, byte-identical to
+  FPC, cross-bootstrap clean. Found+filed a pre-existing int→float assignment bug
+  (feature-int-to-float-assign); ValFloat works around it with float literals.
 
 ## Motivation
 
@@ -31,3 +34,4 @@ unchanged.
 
 ## Log
 - 2026-06-06 — ticket opened from todo.md §4.
+- 2026-06-18 — implemented per spec; resolved. See header.
