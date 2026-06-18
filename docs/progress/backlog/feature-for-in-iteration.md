@@ -142,6 +142,18 @@ byte-identical (run `make cross-bootstrap` — the generator work proved x86-64
 fixedpoint alone misses cross regressions).
 
 ## Log
+- 2026-06-18 — **Slice B landed** (commit e6496d3): structural enumerator
+  desugar. `for X in C` with a `GetEnumerator` method → FPC's duck-typed
+  protocol (GetEnumerator/MoveNext/Current, `try..finally __e.Free` only when the
+  enumerator has Free). MoveNext/Free via FindUMeth (virtual-aware); Current as
+  property (getter method or field) or plain field. Drive-by fix: ProcRetRecId
+  now recorded for tyClass results too (was tyRecord-only), so a class-returning
+  function carries its result-class id. Test test_forin_enumerator.pas
+  byte-identical to FPC {$mode objfpc}.
+  **Slice C (generator bridge) deferred:** generator for-in already works through
+  its own dedicated CoAlloc/CoNext/SlAlloc desugar; routing it through the
+  GetEnumerator resolution is cosmetic uniformity with no new capability and would
+  risk the working concurrency path. Revisit only if the duplication bites.
 - 2026-06-18 — **Slice A landed** (commit 944792b): native for-in over static
   arrays, dynamic arrays, open-array params, strings (char-by-char) and enum-type
   (`for d in TWeekday`). Parser desugars to an indexed while loop (shared IR, no
