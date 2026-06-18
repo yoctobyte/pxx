@@ -994,12 +994,33 @@ begin
   Result := value;
 end;
 
+function IsConstStrLitNode(n: Integer): Boolean;
+{ A compile-time string-or-char literal (foldable in an ESP tyString concat). }
+begin
+  Result := (ASTKind[n] = AN_STR_LIT) or
+            ((ASTKind[n] = AN_INT_LIT) and (IntToTypeKind(ASTTk[n]) = tyChar));
+end;
+
+function ConstStrLitValue(n: Integer): AnsiString;
+{ The string value of a node accepted by IsConstStrLitNode. }
+begin
+  if ASTKind[n] = AN_STR_LIT then
+    Result := GetTokenStrFromRaw(ASTSOffset[n], ASTSLen[n])
+  else
+  begin
+    Result := '';
+    AppendChar(Result, Chr(Integer(ASTIVal[n])));
+  end;
+end;
+
 function IRLowerAST(node: Integer): Integer;
 var left, right, seq, item, value, outNode, first, last, leftAddr, argNode, argVal, intCallNode, intArgSeq, argNode2, zeroVal, pi, zeroBytes: Integer;
     pairNode, condNode, specialId, classIdx, slot, cpi, pathIdx: Integer;
     isRefArg: Boolean; argTk: TTypeKind; callRetType: TTypeKind; callVal: Integer;
     startLabel, elseLabel, endLabel, startLabelNode, endLabelNode: Integer;
     lhsNode, pair3, pair1, pair2, initNode, limitNode, isDownNode, bodyNode: Integer;
+    foldOff, foldK: Integer;
+    foldStr: AnsiString;
     down: Boolean;
     varIdx: Integer;
     initValNode, storeNode, limitValNode, cmpNode, condJmpNode, bodyIRNode: Integer;
@@ -1376,6 +1397,26 @@ begin
 
     AN_BINOP:
     begin
+      { ESP has no frozen-string concat path, and in managed-string mode the
+        only `tyString + tyString` operands are string literals (a `String` var
+        is tyAnsiString). Fold `'a' + 'b'` to a single interned literal here so
+        no runtime concat is needed. ESP-gated so hosted/cross IR — and thus the
+        byte-identical self-host — is unchanged. }
+      if ((TargetArch = TARGET_XTENSA) or (TargetArch = TARGET_RISCV32)) and
+         (Integer(ASTIVal[node]) = Ord(tkPlus)) and
+         IsConstStrLitNode(ASTLeft[node]) and IsConstStrLitNode(ASTRight[node]) then
+      begin
+        foldStr := ConstStrLitValue(ASTLeft[node]) + ConstStrLitValue(ASTRight[node]);
+        foldOff := TokCharLen;
+        for foldK := 1 to Length(foldStr) do
+        begin
+          TokChars[TokCharLen] := foldStr[foldK];
+          Inc(TokCharLen);
+        end;
+        Result := IRAppend(IR_CONST_STR, foldOff, Length(foldStr), -1, 0, ASTTk[node]);
+        Exit;
+      end;
+
       { Short-circuit boolean and/or (FPC default {$B-}): evaluate the right
         operand only when the left has not already decided the result. The parser
         tags a logical (both-operands-boolean) and/or with ASTTk = tyBoolean;

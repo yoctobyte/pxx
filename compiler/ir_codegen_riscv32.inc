@@ -438,6 +438,9 @@ begin
           Exit;
         end;
 
+        if (op = Ord(tkPlus)) and (IntToTypeKind(IRTk[node]) = tyString) then
+          Error('target riscv32: frozen tyString concat unsupported; only literal+literal folds (combine nested string literals)');
+
         IREmitNodeRISCV32(left);
         rv32_addi(reg_sp, reg_sp, -4);
         rv32_sw(reg_a0, reg_sp, 0);

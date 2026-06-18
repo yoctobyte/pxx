@@ -535,6 +535,9 @@ begin
           Exit;
         end;
 
+        if (op = Ord(tkPlus)) and (IntToTypeKind(IRTk[node]) = tyString) then
+          Error('target xtensa: frozen tyString concat unsupported; only literal+literal folds (combine nested string literals)');
+
         IREmitNodeXtensa(left);
         XtensaPushA2;
         IREmitNodeXtensa(right);
