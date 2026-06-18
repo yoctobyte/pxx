@@ -1,7 +1,8 @@
 # Explicit type-casts (`Char`/`Boolean`/`String` and a general `TypeName(expr)`)
 
 - **Type:** feature
-- **Status:** backlog
+- **Status:** done
+- **Resolved:** 2026-06-18 (commits a7e8dd4, 9ff4ac1) — Char/Boolean/String casts wired; general TypeName() reinterpret split to a separate future ticket.
 - **Owner:** —
 - **Opened:** 2026-06-18
 
@@ -65,3 +66,14 @@ grows (`PChar`->string already works for imports). Filed so the gap is tracked.
   PChar/literal only). Belongs with the managed-string right-sizing arc
   ([[project_managed_string_f2_direction]]). General `TypeName(expr)` reinterpret
   cast also still open (separate larger sub-task).
+- 2026-06-18 — **String(x) landed** (commit 9ff4ac1). Solved the rvalue-
+  materialisation: new AN_STR_FROM_CHAR node desugars `String(c)` (parse time) to
+  a hidden tyString temp + `__t := c` store + temp read; IR lowers Left then
+  yields Right (no backend code). `String(s)` identity = value-pun passthrough
+  (tkString_T added to all six backends). Temp is tyString (matches the `String`
+  keyword, always frozen even under managed mode — a managed temp mismatched on
+  copy). All three table gaps (Char/Boolean/String) now closed; FPC byte-identical;
+  cross-bootstrap byte-identical i386+aarch64+arm32.
+  **Resolved.** The general `TypeName(expr)` named-record/class/pointer
+  reinterpret cast (scope §3) is split out as its own future ticket — the cast
+  *token allowlist* gap (the actual motivation) is fully closed.
