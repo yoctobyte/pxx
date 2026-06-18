@@ -14,7 +14,7 @@ lives in git, not in a timestamp._
 
 _none_
 
-## backlog (48)
+## backlog (49)
 
 | Ticket | Type | Summary | Blocked-by |
 | --- | --- | --- | --- |
@@ -41,6 +41,7 @@ _none_
 | feature-flexcolumn-directive | feature | `flexcolumn` calling-convention directive | chore-inc-to-units |
 | feature-float-str-val | feature | Float Str / Val | — |
 | feature-fpc-vs-pxx-feature-boundary | feature | Policy: FPC-bootstrap subset vs PXX-only library features | — |
+| feature-general-typename-cast | feature | General `TypeName(expr)` reinterpret cast (named record/class/pointer) | — |
 | feature-handle-compacting-heap | feature | Handle-table compacting heap (anti-fragmentation for constrained RAM) | — |
 | feature-inline-asm-depth | feature | Inline assembler depth | — |
 | feature-inline-routines | feature | Inline routine expansion (`inline;`) | — |
@@ -162,6 +163,7 @@ _none_
 - feature-esp32-isr-iram
 - feature-float-str-val
 - feature-fpc-vs-pxx-feature-boundary
+- feature-general-typename-cast
 - feature-handle-compacting-heap
 - feature-inline-asm-depth
 - feature-inline-routines

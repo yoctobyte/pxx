@@ -22,8 +22,10 @@ regression test should be treated as unverified. See
 - Private/protected access enforcement (parsed, not enforced).
 - Built-in `Exception` hierarchy, inherited handler matching, message
   constructors, class/message unhandled reports (low priority).
-- Cast intrinsics (`Trunc`, `Round`, ...) and explicit type-casts
-  (`Char()`/`Boolean()`/`String()`/`TypeName(expr)`; feature-explicit-typecasts).
+- Cast intrinsics (`Trunc`, `Round`, ...). Explicit value-casts
+  `Char()`/`Boolean()`/`String()` now work (done 2026-06-18); the general
+  `TypeName(expr)` reinterpret cast for user-named types is still open
+  (feature-general-typename-cast).
 - Overflow/range checking — integer arithmetic wraps unchecked.
 - `WideChar` and broader ordinal/range conformance.
 - Generic call-site specialization sugar (`Max<Integer>(a, b)`).

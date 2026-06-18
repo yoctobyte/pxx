@@ -145,6 +145,12 @@ byte-identical (run `make cross-bootstrap` — the generator work proved x86-64
 fixedpoint alone misses cross regressions).
 
 ## Log
+- 2026-06-18 — **Bugfix** (commit 1cd2316): `for x in <array of String|AnsiString>`
+  was iterated char-by-char (a dynarray's TypeKind is its element base type, so
+  the isString test fired before the array test → wrong element type/bounds).
+  Guarded isString with `not IsArray`. array-of-record / -class / -AnsiString
+  for-in all verified FPC-identical (test_forin_aggr_elems.pas). Found while
+  checking the adventure demo's predicted F5.
 - 2026-06-18 — **Set iteration landed** (commit 45997e5), closing the Slice A
   native tier. `for X in S` over `set of <enum>` and `set of Char` via the `in`
   membership op (no bitset-layout knowledge); separate Integer scan ordinal so a
