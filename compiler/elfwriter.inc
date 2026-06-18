@@ -775,7 +775,12 @@ begin
   end;
   { Bare-metal ESP image loads into the SoC SRAM (one RWX region under qemu);
     everything else uses the classic i386 ET_EXEC base. }
-  if EspBareBoot then loadBase := ESP_BARE_IRAM_BASE else loadBase := LOAD_ADDR32;
+  if EspBareBoot then
+  begin
+    if TargetArch = TARGET_XTENSA then loadBase := ESP_BARE_IRAM_BASE_XT
+    else loadBase := ESP_BARE_IRAM_BASE;
+  end
+  else loadBase := LOAD_ADDR32;
   dataBase := loadBase + codeOffset + CodeLen;
   { BSS holds word-sized globals laid out with AlignTo offsets, so the base
     itself must be aligned — Xtensa s32i/l32i (and strict RV32 cores) trap on

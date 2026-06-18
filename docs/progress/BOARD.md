@@ -14,7 +14,7 @@ lives in git, not in a timestamp._
 
 _none_
 
-## backlog (46)
+## backlog (45)
 
 | Ticket | Type | Summary | Blocked-by |
 | --- | --- | --- | --- |
@@ -33,7 +33,6 @@ _none_
 | feature-directive-if-numeric | feature | Valued defines + numeric `{$IF}` evaluation | — |
 | feature-dynamic-include-paths-config | feature | Dynamic Include Paths, Configuration Files, and System Scanner | — |
 | feature-dynamic-soname-discovery | feature | Dynamic soname discovery (no execve) | — |
-| feature-esp32-bare-boot | feature | ESP32 bare-metal boot profile (no IDF) | — |
 | feature-esp32-idf-xtensa | feature | ESP-IDF integration: Xtensa (ESP32-S2/S3) — QEMU + real hardware | — |
 | feature-esp32-isr-iram | feature | ESP32: Compiler-Directed ISR and IRAM Support | — |
 | feature-esp32-managed-strings | feature | ESP32 managed strings (tyAnsiString runtime on xtensa + riscv32) | — |
@@ -72,7 +71,7 @@ _none_
 | bug-nonreproducible-miscompile-2026-06-02 | bug | Non-reproducible one-off miscompile (2026-06-02) | — |
 | bug-whole-record-copy-main-body-noop | bug | Latent: whole-record array-element copy in main-program body emits store no-ops | — |
 
-## done (53)
+## done (54)
 
 | Ticket | Type | Summary | Blocked-by |
 | --- | --- | --- | --- |
@@ -104,6 +103,7 @@ _none_
 | feature-cross-selfhost-arm32 | feature | Cross self-host: ARM32 generated compiler runs under QEMU | feature-cross-managed-string-cow |
 | feature-cross-selfhost-i386 | feature | Cross self-host: i386 generated compiler runs under Linux | — |
 | feature-elf-rel-writer | feature | Relocatable ELF32 object writer (.o for ESP-IDF linking) | — |
+| feature-esp32-bare-boot | feature | ESP32 bare-metal boot profile (no IDF) | — |
 | feature-esp32-idf-riscv32 | feature | ESP-IDF integration: riscv32 (ESP32-C3) end-to-end | feature-elf-rel-writer |
 | feature-esp32-managed-features | feature | ESP32 managed-feature port (xtensa + riscv32, qemu-validated) | — |
 | feature-generators-yield | feature | Generators and `yield` (the coroutine on-ramp) | feature-unified-heap-allocator |
@@ -148,7 +148,6 @@ _none_
 - feature-directive-if-numeric
 - feature-dynamic-include-paths-config
 - feature-dynamic-soname-discovery
-- feature-esp32-bare-boot
 - feature-esp32-idf-xtensa
 - feature-esp32-isr-iram
 - feature-esp32-managed-strings

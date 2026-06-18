@@ -224,8 +224,10 @@ begin
     TARGET_PTR_SIZE := 4
   else
     TARGET_PTR_SIZE := 8;
-  if EspBareBoot and (TargetArch <> TARGET_RISCV32) then
-  begin writeln(StdErr, '--esp-profile=bare currently requires --target=riscv32 (esp32c3); xtensa bare-boot pending'); Halt(1); end;
+  if EspBareBoot and (TargetArch <> TARGET_RISCV32) and (TargetArch <> TARGET_XTENSA) then
+  begin writeln(StdErr, '--esp-profile=bare requires --target=riscv32 (esp32c3) or --target=xtensa (esp32s3)'); Halt(1); end;
+  if EspBareBoot and (TargetArch = TARGET_XTENSA) and (XtensaABI = XTENSA_ABI_WINDOWED) then
+  begin writeln(StdErr, '--esp-profile=bare on xtensa requires Call0 (omit --xtensa-abi=windowed): the windowed ABI needs window-overflow exception handlers + vecbase that bare-metal does not install'); Halt(1); end;
   PasApplyTargetDefines;
   if ParamCount < i then
     begin writeln(StdErr,'usage: pascal26/PXX [--debug] [--dump-ir] [-dNAME] [-uNAME] [-Mobjfpc] [--strict-overload] [--no-unhandled-handler] <src> [out]'); Halt(1); end;

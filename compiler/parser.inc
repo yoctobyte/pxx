@@ -8955,6 +8955,11 @@ begin
   end
   else if TargetArch = TARGET_XTENSA then
   begin
+    { Bare-metal (Call0 only): no kernel set up a stack, so establish sp at the
+      top of SRAM before entering main. EmitLoadConstXtensa drops a literal
+      island for the 32-bit address. Must run before any call. }
+    if EspBareBoot then
+      EmitLoadConstXtensa(reg_xtensa_sp, ESP_BARE_STACK_TOP);
     if XtensaABI = XTENSA_ABI_WINDOWED then
     begin
       { app_main: program-level vars are globals (BSS), so no stack locals --

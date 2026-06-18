@@ -52,7 +52,7 @@ begin
 end;
 
 begin
-  PutS('hello esp32c3');
+  PutS('hello esp32 bare');
   PutC(10);
   PutInt(12345); PutC(10);
   PutInt(-42); PutC(10);

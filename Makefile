@@ -1389,19 +1389,23 @@ test-emit-obj: $(COMPILER)
 	else echo "xtensa-esp32s3-elf-gcc not installed; link check skipped"; fi
 	@echo "emit-obj ok (ET_REL sections/symbols/relocs sane on riscv32 + xtensa call0/windowed)"
 
-# Bare-metal ESP32-C3 boot (feature-esp32-bare-boot). Links a self-contained
+# Bare-metal ESP32 boot (feature-esp32-bare-boot). Links a self-contained
 # ET_EXEC at the SoC SRAM map (--esp-profile=bare), boots it directly under the
 # Espressif qemu fork via `-kernel` (no ESP-IDF), and diffs the raw UART output
-# against the x86-64 oracle run. Skipped when the Espressif riscv32 qemu is
-# absent (it is not part of the base toolchain).
+# against the x86-64 oracle run. Each chip is skipped when its Espressif qemu is
+# absent (they are not part of the base toolchain). esp32c3=riscv32, esp32s3=xtensa.
 test-esp-bare: $(COMPILER)
-	@QEMU=$$(ls $$HOME/.espressif/tools/qemu-riscv32/*/qemu/bin/qemu-system-riscv32 2>/dev/null | head -1); \
-	if [ -z "$$QEMU" ]; then echo "Espressif qemu-system-riscv32 not installed; bare-boot run skipped"; exit 0; fi; \
-	./$(COMPILER) test/test_esp_bare.pas /tmp/test_esp_bare_oracle >/dev/null && /tmp/test_esp_bare_oracle > /tmp/test_esp_bare.oracle; \
-	ESP_RUN_TIMEOUT=8 tools/esp_run_bare.sh test/test_esp_bare.pas > /tmp/test_esp_bare.bare 2>/dev/null; \
-	if diff -u /tmp/test_esp_bare.oracle /tmp/test_esp_bare.bare; then \
-	  echo "esp32c3 bare-boot ok (UART output == x86-64 oracle)"; \
-	else echo "esp32c3 bare-boot MISMATCH"; exit 1; fi
+	@./$(COMPILER) test/test_esp_bare.pas /tmp/test_esp_bare_oracle >/dev/null && /tmp/test_esp_bare_oracle > /tmp/test_esp_bare.oracle
+	@RV=$$(ls $$HOME/.espressif/tools/qemu-riscv32/*/qemu/bin/qemu-system-riscv32 2>/dev/null | head -1); \
+	if [ -z "$$RV" ]; then echo "Espressif qemu-system-riscv32 not installed; esp32c3 bare-boot run skipped"; else \
+	  ESP_RUN_TIMEOUT=8 tools/esp_run_bare.sh --chip esp32c3 test/test_esp_bare.pas > /tmp/test_esp_bare.c3 2>/dev/null; \
+	  if diff -u /tmp/test_esp_bare.oracle /tmp/test_esp_bare.c3; then echo "esp32c3 bare-boot ok (UART output == x86-64 oracle)"; \
+	  else echo "esp32c3 bare-boot MISMATCH"; exit 1; fi; fi
+	@XT=$$(ls $$HOME/.espressif/tools/qemu-xtensa/*/qemu/bin/qemu-system-xtensa 2>/dev/null | head -1); \
+	if [ -z "$$XT" ]; then echo "Espressif qemu-system-xtensa not installed; esp32s3 bare-boot run skipped"; else \
+	  ESP_RUN_TIMEOUT=8 tools/esp_run_bare.sh --chip esp32s3 test/test_esp_bare.pas > /tmp/test_esp_bare.s3 2>/dev/null; \
+	  if diff -u /tmp/test_esp_bare.oracle /tmp/test_esp_bare.s3; then echo "esp32s3 bare-boot ok (UART output == x86-64 oracle)"; \
+	  else echo "esp32s3 bare-boot MISMATCH"; exit 1; fi; fi
 
 # Cross-target test environment sanity (chore-qemu-test-env). Manual target:
 # joins 'make test' when the first cross backend exists. Validates the runner

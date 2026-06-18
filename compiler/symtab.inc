@@ -17,6 +17,7 @@ procedure EmitLoadVarXtensa(idx: Integer); forward;
 procedure EmitLoadVarRISCV32(idx: Integer); forward;
 procedure EmitLoadImmRISCV32(rd: Integer; v: Int32); forward;
 procedure EmitFrameAddrXtensa(rd: Integer; off: Integer); forward;
+procedure EmitLoadConstXtensa(rd: Integer; v: Int32); forward;
 procedure EmitCallProc(pi: Integer); forward;
 procedure EmitManagedLocalCleanup(retSymIdx: Integer); forward;
 function ProcHasManagedLocalCleanup(pi, retSymIdx: Integer): Boolean; forward;

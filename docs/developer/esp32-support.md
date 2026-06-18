@@ -49,47 +49,52 @@ exceptions, RTTI.
 
 The `esp32-bare` profile now boots a self-contained image with **no ESP-IDF** —
 no FreeRTOS, no second-stage bootloader, no `esp_rom_printf`. Enable it with
-`--esp-profile=bare` (currently `--target=riscv32` / ESP32-C3 only; xtensa
-bare-boot is pending).
+`--esp-profile=bare`: `--target=riscv32` (ESP32-C3) or `--target=xtensa`
+(ESP32-S3, Call0 only).
 
 How it works:
 
 - **Image / load path.** `writeELF32` links a linked `ET_EXEC` at the SoC SRAM
-  map instead of the Linux base: `ESP_BARE_IRAM_BASE = 0x40380000` (the
-  ESP32-C3 instruction-bus SRAM org, just past the 16 KiB ICache). The C3
-  internal SRAM is mapped twice (IRAM `0x4037C000`, DRAM `0x3FC7C000`); qemu's
-  `esp32c3` machine models it as one RWX region, so the whole image
-  (code + data + bss) plus the stack live in that single window — no separate
-  IRAM/DRAM segments needed. Espressif QEMU loads the raw ELF directly with
-  `-kernel` (it honors the program-header load address and sets `pc` to the ELF
-  entry — no flash image / `esptool merge-bin` required).
-- **Startup.** No kernel set up a stack, so the RISC-V entry stub establishes
-  `sp` at the top of SRAM (`ESP_BARE_STACK_TOP = 0x403C0000`, grows down toward
-  the image) via `lui`/`addi` before jumping to `main`. BSS is zero-filled by
-  the loader (`memsz > filesz`).
+  map instead of the Linux base: `ESP_BARE_IRAM_BASE = 0x40380000` on C3 (the
+  instruction-bus SRAM org past the 16 KiB ICache) / `0x40378000` on S3 (the
+  shared I/D SRAM org). The internal SRAM is mapped twice (C3: IRAM
+  `0x4037C000`, DRAM `0x3FC7C000`); qemu models it as one RWX region, so the
+  whole image (code + data + bss) plus the stack live in that single window — no
+  separate IRAM/DRAM segments needed. Espressif QEMU loads the raw ELF directly
+  with `-kernel` (it honors the program-header load address and sets `pc` to the
+  ELF entry — no flash image / `esptool merge-bin` / second-stage header).
+- **Startup.** No kernel set up a stack, so the entry stub establishes `sp` at
+  the top of SRAM (`ESP_BARE_STACK_TOP = 0x403C0000`, valid IRAM on both C3 and
+  S3, grows down toward the image) before jumping to `main`: RISC-V via
+  `lui`/`addi`, Xtensa via an `l32r` literal-island load into `a1`. BSS is
+  zero-filled by the loader (`memsz > filesz`).
+- **Xtensa is Call0-only on bare metal.** The windowed ABI's `entry`/`retw`
+  raise window overflow/underflow exceptions that need handlers installed at
+  `vecbase`; bare metal installs none. Call0 has no register windows, so it
+  needs no exception handlers and no `vecbase`/`PS` setup — `--esp-profile=bare`
+  rejects `--xtensa-abi=windowed`.
 - **Output.** No ROM printf — the program writes bytes straight to the UART0
-  transmit FIFO, MMIO at `0x60000000` (`PByte(Int64($60000000))^ := b`). The
-  static-arena heap and managed `AnsiString` work unchanged on bare metal.
+  transmit FIFO, MMIO at `0x60000000` (both SoCs) via
+  `PByte(Int64($60000000))^ := b`. The static-arena heap and managed
+  `AnsiString` work unchanged on bare metal, both ISAs.
 
-Run + validate (no IDF needed, just the Espressif riscv32 qemu fork):
+Run + validate (no IDF needed, just the Espressif qemu forks):
 
 ```bash
-tools/esp_run_bare.sh test/test_esp_bare.pas    # prints raw UART bytes
-make test-esp-bare                              # diffs UART output vs x86-64 oracle
+tools/esp_run_bare.sh --chip esp32c3 test/test_esp_bare.pas   # riscv32, raw UART bytes
+tools/esp_run_bare.sh --chip esp32s3 test/test_esp_bare.pas   # xtensa Call0
+make test-esp-bare                                            # both, diff vs x86-64 oracle
 ```
 
-`test/test_esp_bare.pas` prints `hello esp32c3` + signed integers; the bytes
-match the x86-64 oracle exactly. A frame-pointer (`s0`) stack walk was confirmed
-in `riscv32-esp-elf-gdb` against the bare image: the prologue saves the caller
-frame pointer at `[s0+8]` and the return address at `[s0+12]`, and chasing that
-chain from a deep recursion unwinds cleanly through every frame back to `main`
-(fp terminates at 0). NB: this qemu `gdbstub` does not honor breakpoints
-(`continue` hangs) but `stepi` works — step to the target pc, then walk `s0`.
-
-**esp32s3 (xtensa) recipe (pending).** The same image shape applies, with two
-differences: the xtensa windowed entry stub must set `sp` *before* its
-`entry` instruction, and the per-SoC UART0 base (S3 also uses `0x60000000`).
-`-M esp32s3 -kernel` is the expected load path. Tracked under the same ticket.
+`test/test_esp_bare.pas` prints a string + signed integers; the bytes match the
+x86-64 oracle exactly on both chips. A frame-pointer (`s0`) stack walk was
+confirmed in `riscv32-esp-elf-gdb` against the C3 bare image: the prologue saves
+the caller frame pointer at `[s0+8]` and the return address at `[s0+12]`, and
+chasing that chain from a deep recursion unwinds cleanly through every frame
+back to `main` (fp terminates at 0). NB: this qemu `gdbstub` does not honor
+breakpoints (`continue` hangs) but `stepi` works — step to the target pc, then
+walk `s0`. (Xtensa Call0 keeps no dedicated frame pointer, so the riscv32 walk
+is the canonical fp-unwind proof.)
 
 ## Current state (2026-06-12)
 

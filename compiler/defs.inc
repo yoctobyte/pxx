@@ -303,8 +303,10 @@ const
     16 KiB ICache, and the stack grows down from the top. ESP32-S3 reuses the
     same IRAM org; see the writer for the per-SoC base. UART0 FIFO is MMIO at
     0x60000000 on both. }
-  ESP_BARE_IRAM_BASE = $40380000;  { SRAM_IRAM_START(0x4037C000)+ICACHE(0x4000) }
-  ESP_BARE_STACK_TOP = $403C0000;  { top of stack (grows down toward image) }
+  ESP_BARE_IRAM_BASE = $40380000;  { C3: SRAM_IRAM_START(0x4037C000)+ICACHE(0x4000) }
+  ESP_BARE_IRAM_BASE_XT = $40378000; { S3: SRAM_DIRAM_I_START (shared I/D SRAM) }
+  ESP_BARE_STACK_TOP = $403C0000;  { top of stack (grows down toward image);
+                                     valid IRAM on both C3 and S3 }
   ELF32_HEADER_SIZE  = 52;
   PROG32_HEADER_SIZE = 32;
   CODE_OFFSET32      = ELF32_HEADER_SIZE + PROG32_HEADER_SIZE;

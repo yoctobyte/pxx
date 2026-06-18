@@ -1,7 +1,7 @@
 # ESP32 bare-metal boot profile (no IDF)
 
 - **Type:** feature
-- **Status:** in progress (esp32c3/riscv32 DONE 2026-06-18; esp32s3/xtensa pending)
+- **Status:** DONE 2026-06-18 (esp32c3/riscv32 + esp32s3/xtensa Call0, qemu-validated)
 - **Owner:** —
 - **Opened:** 2026-06-12 (split from feature-target-esp32; parks the bare face)
 
@@ -62,10 +62,23 @@ Implementation: `EspBareBoot` flag (compiler.pas) → `PXX_ESP_BARE` define
 entry stub (parser.inc). `.map`/symtab emission for the bare path is not done
 (gdb works via stepi + manual fp-walk; the IDF profile already gets maps).
 
-### Remaining (esp32s3 / xtensa)
+### 2026-06-18 — esp32s3/xtensa bare-boot DONE (same session)
 
-Same image shape; xtensa windowed entry stub must set `sp` before its `entry`
-instruction; per-SoC UART0 base. `-M esp32s3 -kernel` load path.
+Same image shape, **Call0 ABI only**. `--esp-profile=bare --target=xtensa`
+boots under `qemu-system-xtensa -M esp32s3 -kernel`, UART output byte-identical
+to the oracle (`make test-esp-bare` runs both chips). Image base
+`ESP_BARE_IRAM_BASE_XT = 0x40378000` (S3 shared I/D SRAM org); same stack top
+`0x403C0000` and UART `0x60000000`. The entry stub loads `sp = a1` from an
+`l32r` literal island before `main`. Windowed ABI is rejected on bare (no
+window-exception handlers / vecbase) — Call0 sidesteps register windows
+entirely, so managed strings + heap + recursion all run with no vecbase/PS
+setup. `-kernel` honors the ELF load address here too (the xtensa qemu warns
+about a default `-bios` but loads our kernel). Forward-decl of
+`EmitLoadConstXtensa` added in symtab.inc so the parser entry stub can call it.
+
+The whole bare-boot ticket is now complete for the user's two boards
+(esp32c3 + esp32s3). `.map`/symtab emission for the bare path remains the one
+deferred scope item (not needed for the gdb proof; the IDF profile gets maps).
 
 ## Notes
 
