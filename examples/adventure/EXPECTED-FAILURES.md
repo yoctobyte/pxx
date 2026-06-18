@@ -1,0 +1,106 @@
+# Expected compiler failures — adventure demo
+
+This demo is **platonic code**: written to be idiomatic and feature-rich, NOT
+yet compiled. Per project policy, where it does not yet compile the fix is to
+implement the feature, not to dumb down the game. This file logs **exactly where
+the compiler is predicted to fail**, so the implement-until-it-runs loop has a
+checklist. Ordered by predicted severity.
+
+Date: 2026-06-18. Files: `engine.pas`, `adventure.pas`, `world.dat`.
+
+## 🔴 High — likely hard blockers
+
+### F1. Text file I/O (`Assign`/`Reset`/`Rewrite`/`ReadLn(f,…)`/`Eof`/`Close`)
+- **Where:** `TGame.LoadWorld`, `TGame.SaveTo`, `TGame.LoadFrom` (engine.pas).
+- **Why predicted:** PXX RTL has stdin `ReadLn`/`WriteLn` (library-work-queue
+  done) but file-backed `Text` I/O has not been exercised. `Assign`/`Reset`/
+  `Rewrite`/`Eof`/`Close` and the `Text` type may be absent.
+- **Honest fix:** implement `Text` file I/O in the RTL (open/read/write/close
+  over the existing kernel-ABI file syscalls — fits the no-libc design).
+- **Fallback (only if you say so):** embed `world.dat` as a const string and
+  parse from memory; drop save/load. Not preferred — file I/O is the point of
+  "all in config files."
+
+### F2. `{$I-}`/`{$I+}` + `IOResult` (soft file-open check)
+- **Where:** `TGame.LoadFrom` (guarding a missing save file).
+- **Why predicted:** depends on F1 plus I/O-checking directive + `IOResult`
+  intrinsic, which almost certainly does not exist yet.
+- **Honest fix:** support `{$I-/+}` and `IOResult`. Or replace with a
+  `FileExists`-style probe once one exists.
+
+### F3. Nested procedure capturing a parent local
+- **Where:** `AddVerb` nested inside `TGame.Run`, mutating the enclosing
+  `verbs: array of TVerb` local.
+- **Why predicted:** this is one of the structural gates flagged in
+  `goal-compile-fpc-compiler` — nested-proc frame access (static link/display).
+  May not be implemented.
+- **Honest fix:** implement nested-proc parent-frame capture (worth having;
+  FPC uses it). Cheap sidestep if needed: hoist `verbs` to a field or pass it
+  `var` to a top-level `AddVerb`.
+
+## 🟡 Medium — feature breadth, may or may not be in yet
+
+### F4. Unit system (`unit … interface/implementation`, `uses Engine`)
+- **Where:** `engine.pas` is a unit; `adventure.pas` does `uses Engine`.
+- **Why predicted:** PXX supports multi-unit (RTTI multi-unit work), but a
+  hand-written user unit with this surface (cross-unit classes, sets, enums in
+  the interface) may trip something.
+- **Honest fix:** whatever the first cross-unit error is — capture it.
+
+### F5. `for..in` over dynamic-array-of-record / -of-class / set
+- **Where:** everywhere — `for r in Rooms` (class), `for ex in r.Exits`
+  (record), `for it in Player.Inventory` (record), `for sp in Player.Spells`
+  (set).
+- **Why predicted:** `for..in` Slice A (native arrays/sets) + Slice B
+  (enumerator) landed, but element binding for **record** and **class** element
+  types, and **set** iteration, need confirming. Copy-vs-alias semantics for
+  record elements is the subtle bit.
+- **Honest fix:** ensure native `for..in` binds record/class/set element types
+  correctly (Slice A scope).
+
+### F6. Procedural-type table + `@proc` + indirect call passing `Self`
+- **Where:** `TCmd = procedure(g: TGame; const arg: AnsiString)`; `@CmdLook`;
+  `v.Run(Self, rest)` in `TGame.Run`.
+- **Why predicted:** procedural types Phase A done + `@proc` cross-target, but
+  storing standalone-proc addresses in a record field, iterating the table with
+  `for..in`, and passing `Self` (a class instance) as the first arg combine
+  several paths.
+- **Honest fix:** verify proc-typed record fields + indirect call ABI.
+
+### F7. Property with getter
+- **Where:** `TPlayer.Alive: Boolean read GetAlive`; used in `Run`'s
+  `while … and Player.Alive`.
+- **Why predicted:** properties work on the RTTI/LFM path; a plain read-getter
+  property on a user class in a loop condition should be fine, but is untested
+  here.
+- **Honest fix:** confirm read-property lowering.
+
+### F8. `StrToIntDef`
+- **Where:** `TGame.LoadFrom` (`energy=` parse).
+- **Why predicted:** may not exist in the PXX RTL.
+- **Honest fix:** add `StrToIntDef`, or replace with a local int parser (we
+  already hand-rolled `NumStr`; a `StrToInt` twin is trivial).
+
+## 🟢 Low — expected to work (classes/cross already done)
+
+- Inheritance + `virtual`/`override` (`TBoss.Taunt` over `TMonster.Taunt`),
+  constructors (`TGame.Create`, `TBoss.Create`), `nil` checks — classes-on-cross
+  is done.
+- Sets: `+`, `in`, literals `[spNop]`, `set of` enum.
+- Enums + exhaustive `case`.
+- Dynamic arrays: `SetLength`/`Length`/`High`, element assignment, record
+  elements by value, in-place field mutation (`Rooms[i].Exits[n].Dir := …`).
+- Records with managed (`AnsiString`) fields copied in/out of arrays.
+- Strings: `Copy`, `Pos`, `Length`, `s[i]`, char compare, concatenation,
+  `Chr`/`Ord`.
+- ANSI escape output incl. 256-color (`ESC[38;5;Nm`) — just bytes to stdout.
+
+## Notes for the loop
+
+- Start by compiling `adventure.pas` (pulls `engine.pas`); the **first** error
+  is almost certainly F1 (file I/O) or F4 (unit). Capture it verbatim as the
+  first concrete sub-ticket.
+- F1 and F3 are the two genuinely structural items; the rest is breadth/RTL.
+- If `for..in` over record/class elements (F5) miscompiles, suspect the same
+  lost-sign-extension / element-binding landmine noted in the open-array work
+  (`project_open_array_length_gap`) — keep the lowering in shared IR.

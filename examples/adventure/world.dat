@@ -1,0 +1,164 @@
+# =====================================================================
+#  ESCAPE FROM THE MACHINE  —  default world
+#  Data-driven: the engine knows nothing about this content.
+#  Sections: [room] [item] [monster] [boss]. key=value, # = comment.
+#  exit = <dir>:<roomid>[:<keyitem>]   (keyitem => locked door)
+#  monsters/bosses: repeat puzzle=/answer= pairs for multi-round fights.
+# =====================================================================
+
+[room]
+id   = cpu_die
+name = The ALU Chamber
+art  = cpu
+desc = You wake inside silicon. Logic gates pulse like fireflies around a vast adder tree. The air hums at a few gigahertz. A misfiring lump of circuitry blocks the way.
+exit = north:dma_ctrl
+exit = east:ram_bank
+item = multimeter
+monster = corrupted_alu
+
+[room]
+id   = dma_ctrl
+name = The DMA Crossbar
+art  = bus
+desc = Channels of light shuttle past in both directions, ignoring you completely. A controller squats at the junction, stalled mid-transfer.
+exit = south:cpu_die
+exit = north:sata_bay
+monster = stalled_dma
+
+[room]
+id   = ram_bank
+name = The RAM Banks
+art  = ram
+desc = Endless rows of capacitor cells refresh themselves in waves. Something thin and flat glints in an empty slot. A maintenance ladder climbs to the bus.
+exit = west:cpu_die
+exit = up:address_bus
+item = sata_cable
+
+[room]
+id   = address_bus
+name = The Address Bus
+art  = bus
+desc = A wide parallel highway of 64 glowing lanes. From up here you see the whole board. A small firmware chip sits forgotten on the rail.
+exit = down:ram_bank
+item = firmware_key
+
+[room]
+id   = sata_bay
+name = The SATA Bay
+art  = disk
+desc = A spinning-rust drive whirs behind a grille. A connector dangles loose, sparking against the chassis. You will not pass while it shorts.
+exit = south:dma_ctrl
+exit = east:psu_room
+monster = loose_sata
+
+[room]
+id   = psu_room
+name = The Power Supply
+art  = psu
+desc = Transformers the size of fists. The mains hum is felt more than heard. A dead rail bars the northern hatch.
+exit = west:sata_bay
+exit = north:kernel_room:root_token
+monster = dead_psu
+item = flask
+
+[room]
+id   = kernel_room
+name = Ring 0
+art  = kernel
+desc = The innermost ring. Stack frames tower like cliffs. Something enormous and unstable stirs between you and the light.
+exit = south:psu_room
+exit = north:io_port
+monster = kernel_panic
+
+[room]
+id   = io_port
+name = The I/O Port
+art  = port
+desc = Daylight. An actual physical connector opening onto the OUTSIDE. Freedom is one step through the jack.
+exit = south:kernel_room
+win  = root_token
+
+# ---------------------------------------------------------------------
+[item]
+id   = multimeter
+name = a multimeter
+desc = Two probes and a cracked LCD. Measures voltage. Essential for not dying.
+
+[item]
+id   = sata_cable
+name = a SATA data cable
+desc = Thin, flat, L-keyed. The kind that always seems half-unplugged.
+
+[item]
+id   = firmware_key
+name = a firmware key
+desc = A tiny signed blob. Ring 0 will not even look at you without it.
+
+[item]
+id   = flask
+name = a flask of clean 3V3
+desc = A vial of regulated rail. Drink to restore energy.
+
+[item]
+id   = root_token
+name = the root token
+desc = A warm sliver of authority. Whoever holds it may leave.
+
+[item]
+id   = dma_token
+name = a DMA grant token
+desc = Permission to move bytes. The crossbar respects it.
+
+# ---------------------------------------------------------------------
+[monster]
+id     = corrupted_alu
+name   = The Corrupted ALU
+art    = alu
+desc   = A seething knot of adders firing the wrong carries.
+puzzle = It snarls: "0xFF AND 0x0F = ?"
+answer = 15
+reward = spell:xor
+
+[monster]
+id     = stalled_dma
+name   = The Stalled Controller
+art    = bus
+desc   = A blocky arbiter, frozen waiting on a count it cannot trust.
+puzzle = It clicks: "How many bytes in a 32-bit word?"
+answer = 4
+reward = item:dma_token
+
+[monster]
+id     = loose_sata
+name   = The Shorting Connector
+art    = disk
+desc   = Sparks arc where the cable should seat. It needs a hand, not a riddle.
+needs  = sata_cable
+puzzle = It crackles: "Type CONNECT once you hold the cable."
+answer = connect
+reward = open
+
+[monster]
+id     = dead_psu
+name   = The Dead Rail
+art    = psu
+desc   = A silent transformer. Measure before you trust it.
+needs  = multimeter
+puzzle = It waits: "Probe the mains. What EU voltage do you read?"
+answer = 230
+reward = item:root_token
+
+# A multi-round boss. Needs the firmware key even to begin.
+[boss]
+id     = kernel_panic
+name   = The Kernel Panic
+art    = kernel
+desc   = A towering cascade of unwound stacks, screaming a backtrace with no end.
+needs  = firmware_key
+puzzle = Round 1: "A panic must not __ the scheduler (sync/halt)?"
+answer = halt
+puzzle = Round 2: "How many bits in a nibble?"
+answer = 4
+puzzle = Round 3: "Network byte order — big or little?"
+answer = big
+reward = open
