@@ -14,7 +14,7 @@ lives in git, not in a timestamp._
 
 _none_
 
-## backlog (48)
+## backlog (49)
 
 | Ticket | Type | Summary | Blocked-by |
 | --- | --- | --- | --- |
@@ -63,6 +63,7 @@ _none_
 | feature-threadsafe-io-serialization | feature | Statement-level I/O serialization under threads | feature-unified-heap-allocator |
 | feature-writeln-as-library | feature | write/writeln as a library function (via `array of const` + variadic sugar) | — |
 | feature-zero-init-contract | feature | Zero-init contract — one library-owned managed-slot zeroing guarantee | — |
+| goal-compile-fpc-compiler | goal | 🗼 Lighthouse — compile the FPC compiler (`pp.pas`) with PXX | — |
 | idea-demo-app-candidates | idea | Demo / test application candidates — selection criteria + catalog | — |
 | idea-unit-rename-import | idea | `uses X as Y` unit-rename import (dialect extension) | — |
 | idea-visibility-enforcement | idea | Enforce private/protected visibility | — |
@@ -180,6 +181,7 @@ _none_
 - feature-threadsafe-io-serialization
 - feature-writeln-as-library
 - feature-zero-init-contract
+- goal-compile-fpc-compiler
 - idea-demo-app-candidates
 - idea-unit-rename-import
 - idea-visibility-enforcement
