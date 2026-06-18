@@ -27,14 +27,15 @@
 
 ## Known bugs (found 2026-06-18)
 
-- **concat of two multi-char string literals crashes** (both ISAs). `b := 'fo'
-  + 'oo'` (a runtime PXXStrConcat of two `tyString` const_strs — single-char
-  literals are `tyChar`, so the `tyString` operand branch went untested until
-  now) faults (riscv32: store fault, A0=0 — looks like an over-allocation /
-  arena-exhaustion from a bad `len`). The `tyString` branch of the
-  EmitStrOperand decomposition (`len = [value]`, `src = value+8`) is suspect —
-  disasm the emitted PXXStrConcat setup vs the actual interned `[len][chars]`
-  layout. Concat with at least one var operand works (test_esp_strcat).
+- ~~concat of two string literals crashes~~ **FIXED (commit e1c9198).** Root
+  cause was not the EmitStrOperand decomposition: `tyString + tyString` has no
+  frozen-concat codegen on ESP, so it fell through to the *integer* binop
+  (adding two const_str addresses), then the sum was read as a string ->
+  garbage len -> arena overflow -> crash. In managed mode the only tyString
+  operands are literals, so `'a' + 'b'` (string/char literals) now folds to a
+  single interned literal at IR-lowering (ESP-gated; self-host byte-identical).
+  Residual unfolded tyString concat (nested pure-literal `'a'+'b'+'c'`) raises a
+  clear ESP-backend error instead of miscompiling.
 - **xtensa string compare not wired.** `s = t` on xtensa falls through to the
   integer binop (compares handle pointers) -> wrong result (test_esp_strcmp
   gives N/N/Y/N/Y vs Y/N/Y/Y/N). Mirror the riscv32 compare: add an
