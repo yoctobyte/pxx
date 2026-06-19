@@ -1,9 +1,10 @@
 # `Length()` of a pointer-dereferenced frozen `string` returns 0 on the cross targets
 
 - **Type:** bug
-- **Status:** backlog
+- **Status:** done
 - **Owner:** —
 - **Opened:** 2026-06-19 (found while porting streaming/LFM, feature-cross-streaming-lfm)
+- **Resolved:** 2026-06-19
 
 ## Symptom
 
@@ -67,7 +68,27 @@ length on i386 / aarch64 / arm32 (output-equal to x86-64); a regression test
 covers the local-pointer and pointer-field forms on all four targets; bootstrap
 + cross-bootstrap stay byte-identical.
 
+## Resolution
+
+Fixed in the three cross `Length` handlers (`ir_codegen386.inc`,
+`ir_codegen_aarch64.inc`, `ir_codegen_arm32.inc`). The frozen-string `[buf+0]`
+branch now also fires when the operand is a bare pointer load (`IR_LOAD_SYM` or
+`IR_LOAD_MEM`) tagged `tyPointer` — exactly the deref'd-frozen-string shape
+(`ps^` lowers to a `load_sym` of the pointer var; `r.np^` to a `load_mem` of the
+pointer field), whose value already IS the buffer address. This mirrors x86-64,
+where those same operands fall to the `else` catch-all that reads `[buf+0]`. The
+genuine dynamic-array / managed-handle cases keep their `[value-8]` path: they
+arrive as `tyAnsiString`, `IR_LEA`-of-`IsArray`, `IR_INDEX`/`IR_FIELD`, or a
+by-ref `AnsiString` param, none of which match the new bare-`tyPointer`-load
+guard. No frontend / shared-IR change was needed (an earlier attempt to retag
+the value node to `tyString` broke its emission — the value-producing load then
+took a string-load path). `make test`, the three cross suites, and
+cross-bootstrap all stay byte-identical; new regression test
+`test/test_cross_frozen_strlen_deref.pas` wired into all three cross suites.
+
 ## Log
 - 2026-06-19 — opened. Found during the streaming/LFM cross port; the sibling
   string-equality manifestation of the same tyPointer-tag root was fixed in
   25eb50d, but `Length` was left (not exercised by the streaming RTL).
+- 2026-06-19 — fixed. Cross `Length` handlers read `[buf+0]` for bare
+  `tyPointer` loads, mirroring x86-64. Regression test added + wired. Resolved.

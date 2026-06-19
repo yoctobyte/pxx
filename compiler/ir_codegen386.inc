@@ -1881,9 +1881,14 @@ begin
           if (IntToTypeKind(IRTk[valNode]) = tyString) or
              ((IRKind[valNode] = IR_LEA) and
               (Syms[IRA[valNode]].TypeKind = tyString) and
-              not Syms[IRA[valNode]].IsArray) then
+              not Syms[IRA[valNode]].IsArray) or
+             (((IRKind[valNode] = IR_LOAD_SYM) or (IRKind[valNode] = IR_LOAD_MEM)) and
+              (IntToTypeKind(IRTk[valNode]) = tyPointer)) then
           begin
-            { Frozen inline string: length is the 8-byte prefix at [buffer+0]. }
+            { Frozen inline string: length is the 8-byte prefix at [buffer+0]. A
+              frozen string reached through a pointer deref (`ps^`, `rec.pf^`)
+              lowers to a bare pointer load whose value IS the buffer address;
+              read the prefix there, mirroring x86-64's else catch-all. }
             IREmitNode386(valNode);      { eax = frozen buffer addr }
             EmitB($8B); EmitB($00);      { mov eax, [eax] }
             Exit;
