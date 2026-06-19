@@ -88,7 +88,25 @@ vectors). **Interim:** intermediate variables.
   canonical RTL home is open — migrate the conversion helpers into
   lib/rtl/sysutils.pas.**
 
-Next pull candidates: item 4 (generic Copy), item 5 (sets from runtime values).
+**Stable v10 pinned (`93ad58a`)** — items 1-3 + COM/ARC interfaces are in track
+B's pinned binary (binary+builtin coherent; v9->v10).
+
+### Recommended next-pull order (track A)
+
+0. **Re-verify the codegen crashes on v10 first** (cheap, high-info). The
+   bignum/maze segfaults were last seen against pinned v9 mid-WIP; v10 is freshly
+   stabilized + builtin-coherent. Reconstruct the crashing shape from
+   `bug-record-fn-codegen-crash` and run it. Either it is GONE (close that ticket
+   + the maze segfault, drop B's `BigMulSmall` workaround) or it is REAL (now
+   bisectable on a clean compiler). `bug-const-byref-record-param-temp` (item 7)
+   can be spot-checked in the same pass.
+1. **Item 5 — sets from runtime values** (`feature-language-gaps-from-demos`
+   Gap 1): `[v]` with a variable + `Include`/`Exclude`. Self-contained codegen;
+   unblocks THREE demos at once (SAT solver, maze set-lane, sudoku set-lane), all
+   on bitmask/boolean-grid stand-ins today. Highest demos-per-hour.
+2. **Item 4 — generic `Copy`** (+ `Delete`/`Insert`/`Concat`): unblocks the JSON
+   library + string-heavy code. Bigger (needs by-type overload/generic
+   resolution), so third not second.
 
 ## Log
 - 2026-06-19 — opened by track B as the prioritized pull-list. Top unlock is
@@ -96,3 +114,6 @@ Next pull candidates: item 4 (generic Copy), item 5 (sets from runtime values).
   Items 2-3 are cheap and free the FPC-idiomatic demo + the canonical RTL home.
 - 2026-06-19 — **items 1-3 all landed by track A** (commits above). Items 4-8
   remain.
+- 2026-06-19 — **stable v10 pinned** (1-3 + interfaces handed to B). Next-pull
+  order set: re-verify crashes on v10, then item 5 (sets) for max demo unlock,
+  then item 4 (Copy) for JSON.

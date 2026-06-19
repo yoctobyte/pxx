@@ -64,3 +64,11 @@ register-pressure landmines already seen in the compiler history.
 ## Log
 - 2026-06-19 — opened by track B. Inline + minimal-unit repros do NOT crash; only
   the full `bignum` unit does. Worked around in the lib; needs a real fix.
+
+## Re-verify on v10 (2026-06-19)
+
+Last seen against pinned **v9 mid-WIP**. Track A pinned **v10** (`93ad58a`) —
+freshly stabilized, binary+builtin coherent (the v9 era had the
+bug-pinned-stable-reads-live-builtin mix). **Before bisecting, reproduce against
+v10**: the crash may have been a WIP artifact and already be gone. If gone,
+close; if it reproduces, bisect on the clean compiler.

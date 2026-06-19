@@ -41,3 +41,11 @@ require a true variable.)
 ## Log
 - 2026-06-19 — opened by track B from the bignum lib; worked around with named
   locals in the test, but the lib's public API still forces that on callers.
+
+## Re-verify on v10 (2026-06-19)
+
+Last seen against pinned **v9 mid-WIP**. Track A pinned **v10** (`93ad58a`) —
+freshly stabilized, binary+builtin coherent (the v9 era had the
+bug-pinned-stable-reads-live-builtin mix). **Before bisecting, reproduce against
+v10**: the crash may have been a WIP artifact and already be gone. If gone,
+close; if it reproduces, bisect on the clean compiler.
