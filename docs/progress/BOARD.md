@@ -14,7 +14,7 @@ _none_
 | --- | --- | --- | --- |
 | feature-interface-refcounting | feature | Interface reference counting (IInterface / ARC) | — |
 
-## backlog (65)
+## backlog (66)
 
 | Ticket | Type | Summary | Blocked-by |
 | --- | --- | --- | --- |
@@ -83,6 +83,7 @@ _none_
 | idea-demo-app-candidates | idea | Demo / test application candidates — selection criteria + catalog | — |
 | idea-unit-rename-import | idea | `uses X as Y` unit-rename import (dialect extension) | — |
 | idea-visibility-enforcement | idea | Enforce private/protected visibility | — |
+| meta-track-b-compiler-wishlist | meta | Track-B wishlist — compiler features most wanted to unblock libraries + demos | — |
 
 ## blocked (0)
 
@@ -236,6 +237,7 @@ _none_
 - idea-demo-app-candidates
 - idea-unit-rename-import
 - idea-visibility-enforcement
+- meta-track-b-compiler-wishlist
 
 ## Leverage (tickets each one unblocks)
 
