@@ -69,7 +69,7 @@ Maintainer shortlist marked ★ (current favourites — not binding).
 - Pyx — small round container; echoes `pxx`; pronounced "picks"
 - ★ Flint — strikes the spark; hard stone
 - ★ Spark — the ignition / galvanic jolt (clashes: Apache Spark, SPARK/Ada)
-- ★ Nyx — goddess of night; backronym "Not Your freepascal Xcross compiler"; aligns with nil-python (.npy)
+- ★ Nyx — goddess of night; backronym "Not Your Xcross compiler"; aligns with nil-python (.npy)
 - ★ Nix — same idea, alt spelling (Latin "snow"/"nothing"; clashes with NixOS)
 - Onyx — black gemstone; sleek
 - Pascaline — Blaise Pascal's mechanical calculating machine
@@ -183,7 +183,7 @@ Top 7 by 👍 → native Poll, single choice.
 | Pyx | small round container; echoes `pxx`; "picks" |
 | Flint ★ | strikes the spark; hard stone |
 | Spark ★ | the ignition / galvanic jolt (clashes: Apache Spark, SPARK/Ada) |
-| Nyx ★ | goddess of night; backronym "Not Your freepascal Xcross compiler"; aligns with nil-python (.npy) |
+| Nyx ★ | goddess of night; backronym "Not Your Xcross compiler"; aligns with nil-python (.npy) |
 | Nix ★ | alt spelling; Latin snow/nothing (clashes with NixOS) |
 | Onyx | black gemstone; sleek |
 | Pascaline | Pascal's mechanical calculating machine |
