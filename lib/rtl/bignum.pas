@@ -9,7 +9,7 @@ unit bignum;
 
 interface
 
-uses strutils;   { IntToStr }
+uses sysutils;   { IntToStr }
 
 const
   BIG_BASE   = 1000000000;   { 1e9 per limb }

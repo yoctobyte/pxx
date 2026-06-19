@@ -3,14 +3,14 @@ program Maze;
 
   Track B demo. Exercises: the lib RNG (lib/rtl/random, seeded -> reproducible),
   2-D arrays, recursion (recursive-backtracker carve), an explicit BFS queue,
-  and managed-string rendering (lib/rtl/strutils IntToStr). Integer-deterministic:
+  and managed-string rendering (lib/rtl/sysutils IntToStr). Integer-deterministic:
   a fixed seed yields a fixed maze and a fixed solution path length.
 
   Deliberately uses a boolean visited-grid (not a runtime `set`) to avoid the
   set-from-runtime gap (feature-language-gaps-from-demos Gap 1); the set lane is
   a separate exercise, not this demo's point. }
 
-uses random, strutils;
+uses random, sysutils;
 
 const
   MW = 12;            { cells wide }

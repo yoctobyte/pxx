@@ -113,7 +113,7 @@ type
 
 implementation
 
-uses strutils;   { Copy }
+uses sysutils;   { Copy }
 
 const
   ESC = #27;

@@ -6,7 +6,7 @@ program Factorial;
   begins 4023872600..., and ends in 249 zeros. Integer-deterministic, so the
   output is byte-identical across targets. Track B; pinned stable. }
 
-uses bignum, strutils;
+uses bignum, sysutils;
 
 var
   acc: TBigInt;
