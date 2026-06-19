@@ -1,7 +1,7 @@
 # Component streaming + LFM loading on the cross targets
 
 - **Type:** feature
-- **Status:** backlog
+- **Status:** done
 - **Owner:** —
 - **Opened:** 2026-06-19 (spun out of feature-cross-target-feature-parity — the
   metaclass/typinfo *read* surface is at parity; full component streaming is not)
@@ -45,3 +45,28 @@ the three cross suites; bootstrap + cross-bootstrap stay byte-identical.
   through-pointer read, CPU32 blob stride, sets) are all closed; the remaining
   gap is the streaming-layer special calls above, which is a distinct, larger
   port than the read surface and was scoped out of the parity close-out.
+- 2026-06-19 — **DONE** (commit 25eb50d). The first cross failure turned out to
+  be the frozen-string `SetLength` special (`-101`), not the `GetMethodProp`
+  lowering (that pattern already worked — test_streaming binds `OnGo` on i386).
+  Four gaps closed, in order of discovery:
+  1. `-101` (frozen-string SetLength) ported to i386/aarch64/arm32: store the
+     new length into the inline 8-byte prefix (i386/arm32 zero the high dword;
+     aarch64 stores the full xN). Local/global buffer + string-param-slot cases,
+     mirroring x86-64 `EmitStoreStrLen`.
+  2. `typinfo.pas` enum value-name table read via a new 8-byte-padded
+     `TEnumValSlot` — the blob uses uniform 8-byte slots, but `array of PString`
+     stepped the native 4-byte pointer on 32-bit and read every other entry as
+     the zeroed high half (nil) → `GetEnumValue` crashed (enum + set streaming).
+  3. `resources.pas` `TResEntry` padded on CPU32 (24-byte stride) so
+     `FindResource` walks the `{$R}` table correctly (test_lfm).
+  4. arm32/aarch64 string equality: aarch64 had **no** frozen `string=string`
+     path (compared buffer addresses → always unequal); and a frozen string
+     reached through a pointer deref / pointer field (`pstr^`,
+     GetClass's `entries[i].NamePtr^ = name`) is tagged `tyPointer`, which both
+     backends rejected from their string-eq branch and fell to an integer
+     compare. Both now decode a `tyPointer` operand as a frozen string when the
+     other operand is a genuine string (matches i386/x86-64). These two were
+     pre-existing latent cross bugs surfaced by GetClass.
+  `test_streaming` / `test_streaming_enumset` / `test_lfm` are wired into the
+  three cross suites (output-equal to x86-64). `make test` byte-identical
+  fixedpoint + `--threadsafe`; `make cross-bootstrap` byte-identical on all 3.
