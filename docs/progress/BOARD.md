@@ -12,7 +12,7 @@ _none_
 
 _none_
 
-## backlog (49)
+## backlog (48)
 
 | Ticket | Type | Summary | Blocked-by |
 | --- | --- | --- | --- |
@@ -55,7 +55,6 @@ _none_
 | feature-progress-transition-helpers | feature | Progress transition helpers (`claim` / `resolve`) | — |
 | feature-random-library | feature | Random library — HW/OS/software tiered RNG (cross-target capability test) | — |
 | feature-result-in-loop | feature | Function `Result` (float) read-modified inside a loop miscompiles to 0 | — |
-| feature-setlength-var-array-param-abi | feature | `SetLength` on a `var` dynamic-array parameter (cross-cutting ABI) | — |
 | feature-stackful-coro-port | feature | Port the stackful coroutine backend to all targets | — |
 | feature-static-arena-profile | feature | Fixed-static-arena allocator profile | feature-unified-heap-allocator |
 | feature-threadsafe-io-serialization | feature | Statement-level I/O serialization under threads | feature-unified-heap-allocator |
@@ -73,7 +72,7 @@ _none_
 | bug-nonreproducible-miscompile-2026-06-02 | bug | Non-reproducible one-off miscompile (2026-06-02) | — |
 | bug-whole-record-copy-main-body-noop | bug | Latent: whole-record array-element copy in main-program body emits store no-ops | — |
 
-## done (65)
+## done (66)
 
 | Ticket | Type | Summary | Blocked-by |
 | --- | --- | --- | --- |
@@ -129,6 +128,7 @@ _none_
 | feature-relative-path-units | feature | Relative/absolute path support in `uses`/`includes` | — |
 | feature-rtti-layout-table | feature | Target-independent layout RTTI (Tier B) | feature-cross-bootstrap |
 | feature-rv32-asm-emitter | feature | RISC-V (RV32) text-assembler (`EmitAsmRv32`) for cleaner riscv32 codegen | — |
+| feature-setlength-var-array-param-abi | feature | `SetLength` on a `var` dynamic-array parameter (cross-cutting ABI) | — |
 | feature-short-circuit-eval | feature | Short-circuit boolean evaluation (`and` / `or`) | — |
 | feature-synthetic-feature-matrix-test | feature | Synthetic all-features stress test (cross-target conformance) | — |
 | feature-target-aarch64 | feature | Compile target: ARM64 / AArch64 Linux | feature-target-i386 |
@@ -184,7 +184,6 @@ _none_
 - feature-progress-transition-helpers
 - feature-random-library
 - feature-result-in-loop
-- feature-setlength-var-array-param-abi
 - feature-stackful-coro-port
 - feature-static-arena-profile
 - feature-threadsafe-io-serialization

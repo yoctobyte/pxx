@@ -1036,7 +1036,12 @@ begin
           begin
             EmitLoadImmArm32(0, Syms[si].Offset);
             EmitI32($E08B0000);  { add r0, fp, r0 = slot addr }
-            EmitI32($E5900000);  { ldr r0, [r0] = handle }
+            EmitI32($E5900000);  { ldr r0, [r0] = handle (or &caller_slot if by-ref) }
+            if (Syms[si].Kind = skParam) and Syms[si].IsRef then
+              { by-ref (var/out) named-dynarray param: the slot holds &caller_slot;
+                deref once more to reach the data pointer (no COW, so Length/indexing
+                want the data ptr in both modes; SetLength reads the slot itself). }
+              EmitI32($E5900000);  { ldr r0, [r0] = data ptr }
           end;
         end
         else if (Syms[si].TypeKind = tyAnsiString) and not Syms[si].IsArray and
@@ -1418,9 +1423,9 @@ begin
           si := IRA[left];
           if not (Syms[si].IsArray and (Syms[si].ArrLen = -1)) then
             Error('target arm32: SetLength only supports dynamic arrays yet');
-          if (Syms[si].Kind = skParam) and Syms[si].IsRef then
-            Error('target arm32: SetLength on a var-array parameter not yet supported');
-          { slot address -> r0, push }
+          { slot address -> r0, push. For a by-ref (var/out) param the slot holds
+            &caller_slot, so deref to it; PXXDynSetLen resizes and publishes the
+            new handle into caller_slot. }
           if Syms[si].Kind = skGlobal then
           begin
             EmitI32($E59F0000); EmitI32($EA000000); EmitGlobRef(Syms[si].Offset);
@@ -1430,6 +1435,8 @@ begin
             EmitLoadImmArm32(0, Syms[si].Offset);
             EmitI32($E08B0000);          { add r0, fp, r0 }
           end;
+          if (Syms[si].Kind = skParam) and Syms[si].IsRef then
+            EmitI32($E5900000);          { ldr r0, [r0] = &caller_slot }
           EmitI32($E92D0001);            { push {r0} slotAddr }
           IREmitNodeArm32(IRA[valNode]); { r0 = n }
           EmitI32($E92D0001);            { push {r0} n }

@@ -1664,7 +1664,18 @@ begin
               (Syms[symIdx].IsRef or Syms[symIdx].IsArray or
                (Syms[symIdx].TypeKind = tyString) or (Syms[symIdx].TypeKind = tySet))) then
           begin
-            if InLValueWrite and (Syms[symIdx].Kind = skParam) and Syms[symIdx].IsRef and
+            if (Syms[symIdx].Kind = skParam) and Syms[symIdx].IsRef and
+               Syms[symIdx].IsArray and (Syms[symIdx].ArrLen = -1) then
+            begin
+              { by-ref (var/out) named-dynamic-array param: the slot holds the
+                ADDRESS of the caller's handle slot. Load it once → &caller_slot
+                (what COW/SetLength want, a write); on a read deref once more to
+                reach the data pointer (what Length/indexing want). }
+              EmitB($48); EmitB($8B); EmitB($85); EmitI32(Syms[symIdx].Offset); { mov rax,[rbp+off] = &caller_slot }
+              if not InLValueWrite then
+                begin EmitB($48); EmitB($8B); EmitB($00); end;                  { mov rax,[rax] = data ptr }
+            end
+            else if InLValueWrite and (Syms[symIdx].Kind = skParam) and Syms[symIdx].IsRef and
                (Syms[symIdx].TypeKind = tyAnsiString) and not Syms[symIdx].IsArray then
               { by-ref (var/out) managed string write: the param slot holds the
                 ADDRESS of the caller's handle slot; load it so AnsiStrUnique/COW

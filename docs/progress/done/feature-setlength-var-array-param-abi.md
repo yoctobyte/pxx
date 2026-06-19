@@ -1,7 +1,7 @@
 # `SetLength` on a `var` dynamic-array parameter (cross-cutting ABI)
 
 - **Type:** feature
-- **Status:** backlog
+- **Status:** done
 - **Owner:** —
 - **Opened:** 2026-06-19 (spun out of feature-cross-target-feature-parity — the
   matrix had this mislabelled as "x86-64 ✓ / cross ✗"; investigation showed it
@@ -138,3 +138,35 @@ param errors cleanly on all four.
   dynamic-array type = resizable by-ref-handle ABI). No monomorphization / jacket
   / copy. Wrote the 5-step implementation plan above. Ready to implement in a
   clean session; status stays backlog until then.
+- 2026-06-19 — **DONE**, all 5 steps, byte-identical on all four hosted targets.
+  Pre-flight confirmed `compiler.pas` declares no named dynamic-array param
+  (no self-host regression risk). Implementation:
+  1. Parser (`parser.inc` ~7621): named-array param branch now reads
+     `ArrTypeIsDyn`/`ArrTypeDynDepth` into a new per-param `pDynDepth`; the alloc
+     loop stamps `ArrLen = -1` + `SymDynDepth` (and persists the depth in a new
+     `ProcParamDynDepth[pi*16+j]` array, since param syms are reused across procs).
+     Open `array of T` literal params stay `ArrLen = 1000`. `SetLength` classifier
+     (`parser.inc` ~5584) now hard-errors on a non-dynamic array target
+     ("declare the parameter as a named dynamic-array type to resize it").
+  2. Call site (`ir.inc` `IRLowerCallArg`): a by-ref arg whose target param has
+     `ProcParamDynDepth>0` is passed via `IR_SLOTADDR` (= &caller_slot), not the
+     `IRLowerAddress`→IR_LEA handle value. A forwarded by-ref param takes the
+     normal address path.
+  3. Read paths — one extra deref for the by-ref dynarray param, per backend:
+     - x86-64 (`ir_codegen.inc` IR_LEA): write mode → `&caller_slot` (one load,
+       for COW/SetLength); read mode → data ptr (second load).
+     - i386 / arm32: no COW; IR_LEA always loads to the data ptr (two loads for
+       by-ref). SetLength reads the frame slot directly, then one extra load to
+       reach `&caller_slot`.
+     - aarch64: `EmitLoadVarAddrA64` already bakes the by-ref deref (yields
+       `&caller_slot`), so the existing single ldr already reaches the data ptr —
+       no extra deref, and SetLength uses `&caller_slot` as-is. (Initial port
+       over-derefed here; fixed.)
+  4. `SetLength` (-102): x86-64 IsRef branch already published to `&caller_slot`;
+     i386/aarch64/arm32 `not yet supported` guards replaced with the
+     `&caller_slot` deref + existing `PXXDynSetLen(slotAddr, n, desc)` call.
+  5. Open-array `SetLength` is a clean hard error on all four.
+  Acceptance met: `test_cross_setlen_varparam` (int + AnsiString element types,
+  grow/shrink/zero) output-equal to FPC on all four hosted targets; wired into
+  test-core + the i386/aarch64/arm32 cross suites. `make test` byte-identical
+  fixedpoint + `--threadsafe`; `make cross-bootstrap` byte-identical on all 3.

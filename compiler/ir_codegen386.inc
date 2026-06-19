@@ -1180,6 +1180,15 @@ begin
             no copy-on-write in write mode (single-owner arrays only). }
           if Syms[si].Kind = skGlobal then
             begin EmitB($A1); EmitGlobRef(Syms[si].Offset); end          { mov eax, [slot] }
+          else if (Syms[si].Kind = skParam) and Syms[si].IsRef then
+          begin
+            { by-ref (var/out) named-dynarray param: the slot holds &caller_slot;
+              load it, then deref once more to reach the data pointer (no COW on
+              i386, so Length/indexing want the data ptr in both modes; SetLength
+              reads the slot itself, bypassing IR_LEA). }
+            EmitB($8B); EmitB($85); EmitI32(Syms[si].Offset); { mov eax, [ebp+off] = &caller_slot }
+            EmitB($8B); EmitB($00);                           { mov eax, [eax] = data ptr }
+          end
           else
             begin EmitB($8B); EmitB($85); EmitI32(Syms[si].Offset); end; { mov eax, [ebp+off] }
         end
@@ -1820,10 +1829,12 @@ begin
           si := IRA[left];
           if not (Syms[si].IsArray and (Syms[si].ArrLen = -1)) then
             Error('target i386: SetLength only supports dynamic arrays yet');
+          { arg0 = slot address. For a by-ref (var/out) param the slot holds
+            &caller_slot, so load it; PXXDynSetLen resizes and publishes the new
+            handle back into the caller's slot. }
           if (Syms[si].Kind = skParam) and Syms[si].IsRef then
-            Error('target i386: SetLength on a var-array parameter not yet supported');
-          { arg0 = slot address }
-          if Syms[si].Kind = skGlobal then
+            begin EmitB($8B); EmitB($85); EmitI32(Syms[si].Offset); end  { mov eax, [ebp+off] = &caller_slot }
+          else if Syms[si].Kind = skGlobal then
             begin EmitB($B8); EmitGlobRef(Syms[si].Offset); end          { mov eax, slot addr }
           else
             begin EmitB($8D); EmitB($85); EmitI32(Syms[si].Offset); end; { lea eax, [ebp+off] }

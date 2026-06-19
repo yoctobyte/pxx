@@ -5581,8 +5581,15 @@ begin
         else if ASTKind[valNode] = AN_INDEX then
           slIsArrTarget := True   { nested dynamic sub-array }
         else if idx >= 0 then
+        begin
+          { An open `array of T` param (ArrLen=1000) or a fixed array (ArrLen>=0)
+            is not resizable — SetLength on it is a hard error, as in FPC. Declare
+            the param/var as a named dynamic-array type to resize it. }
+          if Syms[idx].IsArray and (Syms[idx].ArrLen <> -1) then
+            Error('SetLength: not a dynamic array (declare the parameter as a named dynamic-array type to resize it)');
           slIsArrTarget := (Syms[idx].IsArray and (Syms[idx].ArrLen = -1)) or
                            (Syms[idx].TypeKind = tyAnsiString);
+        end;
         if slIsArrTarget then
           ASTIVal[node] := -102
         else
@@ -7497,9 +7504,10 @@ var
   parr      : array[0..15] of Boolean;
   pbyref    : array[0..15] of Boolean;
   pNDims    : array[0..15] of Integer;
+  pDynDepth : array[0..15] of Integer;  { named dynamic-array param: dyn nesting depth (>0), 0 = not a dyn-array param }
   pDimLo    : array[0..16*MAX_ARR_DIMS-1] of Integer;
   pDimSpan  : array[0..16*MAX_ARR_DIMS-1] of Integer;
-  paramNDims, paramAi, pdi: Integer;
+  paramNDims, paramDynDepth, paramAi, pdi: Integer;
   psLo, psSpan: array[0..MAX_ARR_DIMS-1] of Integer;
   nparams  : Integer;
   pi, i, sz, retRecId, savedLastTypeRecId: Integer;
@@ -7614,6 +7622,7 @@ begin
       Expect(tkColon, ':');
       isArr := False;
       paramNDims := 0;
+      paramDynDepth := 0;
       tokKindOrd := Ord(CurTok.Kind);
       if DebugTrace then writeln('After colon, CurTok.Kind = ', tokKindOrd, ', CurTok.SVal = ', CurTok.SVal);
       paramAi := -1;
@@ -7627,6 +7636,12 @@ begin
         tk := IntToTypeKind(ArrTypeElemTk[paramAi]);
         LastTypeRecId := ArrTypeElemRec[paramAi];
         isArr := True;
+        { Named dynamic-array type param (`TDynArr = array of T`): mark it a real
+          dynamic array so SetLength routes to -102 and (when var/out) the
+          by-ref-handle ABI applies. Distinct from a named *fixed* array, which
+          stays an open-array fat-ptr param. }
+        if ArrTypeIsDyn[paramAi] then
+          paramDynDepth := ArrTypeDynDepth[paramAi];
         if ArrTypeNDims[paramAi] >= 2 then
         begin
           paramNDims := ArrTypeNDims[paramAi];
@@ -7673,6 +7688,7 @@ begin
         parr[i] := isArr;
         pbyref[i] := isByRef;
         pNDims[i] := paramNDims;
+        pDynDepth[i] := paramDynDepth;
         for pdi := 0 to paramNDims - 1 do
         begin
           pDimLo[i * MAX_ARR_DIMS + pdi]   := psLo[pdi];
@@ -7808,6 +7824,7 @@ begin
       parr[i]   := parr[i-1];
       pbyref[i] := pbyref[i-1];
       pNDims[i] := pNDims[i-1];
+      pDynDepth[i] := pDynDepth[i-1];
       for pdi := 0 to MAX_ARR_DIMS - 1 do
       begin
         pDimLo[i * MAX_ARR_DIMS + pdi]   := pDimLo[(i-1) * MAX_ARR_DIMS + pdi];
@@ -7823,6 +7840,7 @@ begin
     parr[0]   := False;
     pbyref[0] := False;
     pNDims[0] := 0;
+    pDynDepth[0] := 0;
     nparams := nparams + 1;
   end;
 
@@ -7856,6 +7874,7 @@ begin
       parr[i]   := parr[i-1];
       pbyref[i] := pbyref[i-1];
       pNDims[i] := pNDims[i-1];
+      pDynDepth[i] := pDynDepth[i-1];
       for pdi := 0 to MAX_ARR_DIMS - 1 do
       begin
         pDimLo[i * MAX_ARR_DIMS + pdi]   := pDimLo[(i-1) * MAX_ARR_DIMS + pdi];
@@ -7871,6 +7890,7 @@ begin
     parr[0]   := False;
     pbyref[0] := False;
     pNDims[0] := 0;
+    pDynDepth[0] := 0;
     nparams := nparams + 1;
     retType := tyBoolean;
   end;
@@ -8035,6 +8055,16 @@ begin
   begin
     idx := AllocParam(pnames[i], ptypes[i], pbyref[i], parr[i]);
     Procs[pi].Params[i].SymIdx := idx;
+    if pDynDepth[i] > 0 then
+    begin
+      { Named dynamic-array type param: a real dynamic array, NOT an open-array
+        fat ptr. ArrLen = -1 routes SetLength to -102; SymDynDepth drives nested
+        element typing. When var/out, the slot will hold &caller_slot (see the
+        call-site lowering + the IsRef read-deref). }
+      Syms[idx].ArrLen := -1;
+      SymDynDepth[idx] := pDynDepth[i];
+      if (pi >= 0) and (i < 16) then ProcParamDynDepth[pi * 16 + i] := pDynDepth[i];
+    end;
     if pNDims[i] >= 2 then
     begin
       SymArrNDims[idx] := pNDims[i];

@@ -1010,7 +1010,19 @@ begin
   begin
     if isRefArg then
     begin
-      if (cpi >= 0) and
+      if (cpi >= 0) and (pathIdx >= 0) and (pathIdx < 16) and
+         (ProcParamDynDepth[cpi * 16 + pathIdx] > 0) and
+         (ASTKind[argAST] = AN_IDENT) and
+         not ((Syms[ASTIVal[argAST]].Kind = skParam) and
+              Syms[ASTIVal[argAST]].IsRef) then
+        { var/out named-dynamic-array param: pass the ADDRESS of the caller's
+          handle slot (&caller_slot) so SetLength can publish a resized handle
+          back. IR_LEA over a dyn-array ident would instead yield the handle
+          VALUE, so use IR_SLOTADDR explicitly (mirrors the by-ref AnsiString
+          arg below). A forwarded by-ref param already holds &caller_slot in its
+          slot, so it takes the IRLowerAddress path. }
+        value := IRAppend(IR_SLOTADDR, ASTIVal[argAST], -1, -1, 0, Ord(tyPointer))
+      else if (cpi >= 0) and
          (ASTKind[argAST] = AN_IDENT) and
          (Syms[ASTIVal[argAST]].TypeKind = tyAnsiString) and
          not ((Syms[ASTIVal[argAST]].Kind = skParam) and

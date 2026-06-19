@@ -862,9 +862,12 @@ begin
         si := IRA[node];
         if Syms[si].IsArray and (Syms[si].ArrLen = -1) then
         begin
-          { Dynamic array: slot holds the heap data pointer; load it (v1: no COW). }
-          EmitLoadVarAddrA64(si);               { x0 = slot address }
-          EmitI32($F9400000);                   { ldr x0, [x0] = handle }
+          { Dynamic array: slot holds the heap data pointer; load it (v1: no COW).
+            For a by-ref (var/out) named-dynarray param EmitLoadVarAddrA64 already
+            yields &caller_slot (it bakes in the by-ref deref), so the single ldr
+            below reaches the data pointer in both cases. }
+          EmitLoadVarAddrA64(si);               { x0 = slot address (&caller_slot if by-ref) }
+          EmitI32($F9400000);                   { ldr x0, [x0] = data ptr }
         end
         else if (Syms[si].TypeKind = tyAnsiString) and not Syms[si].IsArray and
                 not InLValueWrite then
@@ -1233,9 +1236,10 @@ begin
           si := IRA[left];
           if not (Syms[si].IsArray and (Syms[si].ArrLen = -1)) then
             Error('target aarch64: SetLength only supports dynamic arrays yet');
-          if (Syms[si].Kind = skParam) and Syms[si].IsRef then
-            Error('target aarch64: SetLength on a var-array parameter not yet supported');
-          EmitLoadVarAddrA64(si);             { x0 = slot address }
+          { x0 = slot address. For a by-ref (var/out) param EmitLoadVarAddrA64
+            already yields &caller_slot, exactly what PXXDynSetLen needs to resize
+            and publish the new handle back into the caller's slot. }
+          EmitLoadVarAddrA64(si);             { x0 = slot address (&caller_slot if by-ref) }
           EmitI32($F81F0FE0);                 { str x0, [sp, #-16]! }
           IREmitNodeAarch64(IRA[valNode]);    { x0 = n }
           EmitI32($AA0003E1);                 { mov x1, x0 (n) }
