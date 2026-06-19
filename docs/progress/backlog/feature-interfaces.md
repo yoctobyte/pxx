@@ -1,7 +1,10 @@
 # Interfaces
 
 - **Type:** feature
-- **Status:** backlog (CORBA vertical slice landed 2026-06-18; follow-ups open — see Log)
+- **Status:** backlog (CORBA surface COMPLETE 2026-06-19 — declare/implement/assign/
+  call, is/as/Supports, implicit coercion, identity, nil, inheritance, all 4
+  targets. Only remaining work = automatic interface refcounting, split out to
+  feature-interface-refcounting. See Log.)
 - **Owner:** —
 - **Opened:** 2026-06-06 (from todo.md §3 — intentionally deferred)
 

@@ -14,7 +14,7 @@ lives in git, not in a timestamp._
 
 _none_
 
-## backlog (49)
+## backlog (50)
 
 | Ticket | Type | Summary | Blocked-by |
 | --- | --- | --- | --- |
@@ -43,6 +43,7 @@ _none_
 | feature-handle-compacting-heap | feature | Handle-table compacting heap (anti-fragmentation for constrained RAM) | — |
 | feature-inline-asm-depth | feature | Inline assembler depth | — |
 | feature-inline-routines | feature | Inline routine expansion (`inline;`) | — |
+| feature-interface-refcounting | feature | Interface reference counting (IInterface / ARC) | — |
 | feature-interfaces | feature | Interfaces | — |
 | feature-int-to-float-assign | feature | Integer → Float assignment / coercion missing the int→float conversion | — |
 | feature-lazycasing-c-imports | feature | `{$LAZYCASING ON/OFF}` for C imports only | feature-compiler-warnings |
@@ -168,6 +169,7 @@ _none_
 - feature-handle-compacting-heap
 - feature-inline-asm-depth
 - feature-inline-routines
+- feature-interface-refcounting
 - feature-interfaces
 - feature-int-to-float-assign
 - feature-metaclass-descendant-enforcement
