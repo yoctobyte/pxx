@@ -3412,7 +3412,17 @@ begin
       begin
         if (Syms[i].Kind = skLocal) and (i <> retSymIdx) then
         begin
-          if Syms[i].TypeKind = tyAnsiString then
+          if SymIsComInterface(i) then
+          begin
+            { COM/ARC interface local: _Release the held reference (nil-safe). }
+            EmitB($8D); EmitB($85); EmitI32(Syms[i].Offset);  { lea eax, [ebp+off] }
+            EmitB($50);                                        { push eax }
+            pi := FindProc('PXXIntfRelease');
+            if pi < 0 then Error('compiler error: PXXIntfRelease not found');
+            EmitCallProc(pi);
+            EmitB($81); EmitB($C4); EmitI32(4);                { add esp, 4 }
+          end
+          else if Syms[i].TypeKind = tyAnsiString then
           begin
             { mov eax, [ebp + Offset] }
             EmitB($8B); EmitB($85); EmitI32(Syms[i].Offset);
@@ -3501,7 +3511,17 @@ begin
     begin
       for i := Procs[CurProc].ScopeBase to SymCount - 1 do
       begin
-        if (Syms[i].Kind = skLocal) and (i <> retSymIdx) and
+        if (Syms[i].Kind = skLocal) and (i <> retSymIdx) and SymIsComInterface(i) then
+        begin
+          { COM/ARC interface local: _Release the held reference (nil-safe). }
+          EmitLoadVarAddrArm32(i);                     { r0 = fat pointer address }
+          EmitI32($E92D000E);                          { push {r1,r2,r3} }
+          pi := FindProc('PXXIntfRelease');
+          if pi < 0 then Error('compiler error: PXXIntfRelease not found');
+          EmitCallProc(pi);
+          EmitI32($E8BD000E);                          { pop {r1,r2,r3} }
+        end
+        else if (Syms[i].Kind = skLocal) and (i <> retSymIdx) and
            (Syms[i].TypeKind = tyAnsiString) then
         begin
           EmitLoadVarArm32(i);                         { r0 = handle }
@@ -3584,6 +3604,18 @@ begin
   end;
   if TargetArch = TARGET_AARCH64 then
   begin
+    { Release local COM/ARC interface references before returning (nil-safe).
+      Must precede the result load: each call clobbers x0. }
+    if CurProc >= 0 then
+      for i := Procs[CurProc].ScopeBase to SymCount - 1 do
+        if (Syms[i].Kind = skLocal) and (i <> retSymIdx) and SymIsComInterface(i) then
+        begin
+          EmitLoadImmA64(9, Syms[i].Offset);
+          EmitI32($8B0903A0);  { add x0, x29, x9  (x0 = fat pointer address) }
+          pi := FindProc('PXXIntfRelease');
+          if pi < 0 then Error('compiler error: PXXIntfRelease not found');
+          EmitCallProc(pi);
+        end;
     if retSymIdx >= 0 then
     begin
       if TypeIsAggregate(Syms[retSymIdx].TypeKind) and

@@ -109,6 +109,14 @@ type
                        Self in arg0 and return the new refcount. }
 
 const
+  { IMT slots are a fixed 8 bytes wide on every target (the parser lays out
+    8-byte slots and the dispatch reads [[iface]+slot*8]); a 32-bit target stores
+    its 4-byte code address in the low half. This is NOT SizeOf(Pointer). The fat
+    pointer's own fields, by contrast, ARE pointer-sized. }
+  IMT_ADDREF_OFF  = 8;    { slot 1 = _AddRef }
+  IMT_RELEASE_OFF = 16;   { slot 2 = _Release }
+
+const
 {$ifdef PXX_ESP}
   HEAP_ARENA = 65536;       { single 64 KiB static arena (fits ESP SRAM) }
 {$else}
@@ -507,7 +515,7 @@ begin
   if inst = nil then Exit;
   imt := Pointer(PWord(fatptr)^);
   if imt = nil then Exit;
-  fn := TPXXIntfMethod(Pointer(PWord(Pointer(Int64(imt) + SizeOf(Pointer)))^));
+  fn := TPXXIntfMethod(Pointer(PWord(Pointer(Int64(imt) + IMT_ADDREF_OFF))^));
   Result := fn(inst);
 end;
 
@@ -520,7 +528,7 @@ begin
   if inst = nil then Exit;
   imt := Pointer(PWord(fatptr)^);
   if imt = nil then Exit;
-  fn := TPXXIntfMethod(Pointer(PWord(Pointer(Int64(imt) + 2 * SizeOf(Pointer)))^));
+  fn := TPXXIntfMethod(Pointer(PWord(Pointer(Int64(imt) + IMT_RELEASE_OFF))^));
   Result := fn(inst);
 end;
 
@@ -531,7 +539,7 @@ var fn: TPXXIntfMethod;
 begin
   Result := 0;
   if (inst = nil) or (imt = nil) then Exit;
-  fn := TPXXIntfMethod(Pointer(PWord(Pointer(Int64(imt) + SizeOf(Pointer)))^));
+  fn := TPXXIntfMethod(Pointer(PWord(Pointer(Int64(imt) + IMT_ADDREF_OFF))^));
   Result := fn(inst);
 end;
 

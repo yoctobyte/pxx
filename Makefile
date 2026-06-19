@@ -1003,6 +1003,9 @@ test-i386: $(COMPILER)
 	./$(COMPILER) --target=i386 test/test_interfaces.pas /tmp/test_i386_iface
 	./$(COMPILER) test/test_interfaces.pas /tmp/test_i386_iface_x64
 	test "$$(tools/run_target.sh i386 /tmp/test_i386_iface)" = "$$(/tmp/test_i386_iface_x64)"
+	./$(COMPILER) --target=i386 test/test_interface_arc.pas /tmp/test_i386_iarc
+	./$(COMPILER) test/test_interface_arc.pas /tmp/test_i386_iarc_x64
+	test "$$(tools/run_target.sh i386 /tmp/test_i386_iarc)" = "$$(/tmp/test_i386_iarc_x64)"
 	./$(COMPILER) --target=i386 test/test_interfaces_is.pas /tmp/test_i386_iface_is
 	./$(COMPILER) test/test_interfaces_is.pas /tmp/test_i386_iface_is_x64
 	test "$$(tools/run_target.sh i386 /tmp/test_i386_iface_is)" = "$$(/tmp/test_i386_iface_is_x64)"
@@ -1212,6 +1215,9 @@ test-aarch64: $(COMPILER)
 	./$(COMPILER) --target=aarch64 test/test_interfaces.pas /tmp/test_aarch64_iface
 	./$(COMPILER) test/test_interfaces.pas /tmp/test_aarch64_iface_x64
 	test "$$(tools/run_target.sh aarch64 /tmp/test_aarch64_iface)" = "$$(/tmp/test_aarch64_iface_x64)"
+	./$(COMPILER) --target=aarch64 test/test_interface_arc.pas /tmp/test_aarch64_iarc
+	./$(COMPILER) test/test_interface_arc.pas /tmp/test_aarch64_iarc_x64
+	test "$$(tools/run_target.sh aarch64 /tmp/test_aarch64_iarc)" = "$$(/tmp/test_aarch64_iarc_x64)"
 	./$(COMPILER) --target=aarch64 test/test_interfaces_is.pas /tmp/test_aarch64_iface_is
 	./$(COMPILER) test/test_interfaces_is.pas /tmp/test_aarch64_iface_is_x64
 	test "$$(tools/run_target.sh aarch64 /tmp/test_aarch64_iface_is)" = "$$(/tmp/test_aarch64_iface_is_x64)"
@@ -1439,6 +1445,9 @@ test-arm32: $(COMPILER)
 	./$(COMPILER) --target=arm32 test/test_interfaces.pas /tmp/test_arm32_iface
 	./$(COMPILER) test/test_interfaces.pas /tmp/test_arm32_iface_x64
 	test "$$(tools/run_target.sh arm32 /tmp/test_arm32_iface)" = "$$(/tmp/test_arm32_iface_x64)"
+	./$(COMPILER) --target=arm32 test/test_interface_arc.pas /tmp/test_arm32_iarc
+	./$(COMPILER) test/test_interface_arc.pas /tmp/test_arm32_iarc_x64
+	test "$$(tools/run_target.sh arm32 /tmp/test_arm32_iarc)" = "$$(/tmp/test_arm32_iarc_x64)"
 	./$(COMPILER) --target=arm32 test/test_interfaces_is.pas /tmp/test_arm32_iface_is
 	./$(COMPILER) test/test_interfaces_is.pas /tmp/test_arm32_iface_is_x64
 	test "$$(tools/run_target.sh arm32 /tmp/test_arm32_iface_is)" = "$$(/tmp/test_arm32_iface_is_x64)"
