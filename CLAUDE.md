@@ -27,11 +27,12 @@ discovery→ticket loop, and shared-checkout coordination, is in
 
 ### Track A in one line
 Own `compiler/**`. Gate = `make test` + self-host fixedpoint (byte-identical).
-When a feature B needs lands, `make stabilize` to publish a new stable `vN`, then
-commit `stable_linux_amd64/**`.
+When a feature B needs lands: `make stabilize` (records a checkpoint, moves
+`latest`) then `make pin` (blesses it for B, moves `pinned`), then commit
+`stable_linux_amd64/**`. `make stabilize` alone does NOT move B's ground.
 
 ### Track B in one line
-Build everything with `$(PXX_STABLE)` (= `stable_linux_amd64/default/latest`);
+Build everything with `$(PXX_STABLE)` (= `stable_linux_amd64/default/pinned`);
 never rebuild the compiler. `make lib-test` (green smoke) / `make demos`
 (dashboard). Compiler/language gaps → file a ticket in `docs/progress/backlog`.
 

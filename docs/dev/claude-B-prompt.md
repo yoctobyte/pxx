@@ -13,18 +13,21 @@ split, the stable-compiler boundary, and shared-checkout coordination.
 
 Your rules:
 - **Build everything with the pinned stable compiler**, never rebuild the
-  compiler: `$(PXX_STABLE)` = `stable_linux_amd64/default/latest` (currently v9).
-  Use `make lib-test` (curated green smoke) and `make demos` (compile-smoke
-  dashboard). Do NOT run `make bootstrap` / edit `compiler/**`.
+  compiler: `$(PXX_STABLE)` = `stable_linux_amd64/default/pinned` (currently v9).
+  `pinned` only moves when A runs `make pin`, so your compiler is stable mid-task
+  even while A keeps stabilizing. Use `make lib-test` (curated green smoke) and
+  `make demos` (compile-smoke dashboard). Do NOT run `make bootstrap` / edit
+  `compiler/**`.
 - **Own** `lib/rtl`, `lib/lcl`, `examples/**`, and new `test/lib_*`. Add your
   build/test steps to the fenced "Library / demo track" block in the `Makefile`.
 - When you hit a **compiler or language gap** (a missing operator, a parser
   error, a codegen bug), do not work around it silently — **file a ticket** in
   `docs/progress/backlog/` (Claude A picks it up) and pick a different library
   task that the current stable already supports.
-- If the stable lacks a feature you need and there's a ticket for it, check
-  `stable_linux_amd64/default/history.log`; ping the user to ask A to
-  `make stabilize` once it lands.
+- If the pinned stable lacks a feature you need and there's a ticket for it,
+  check `stable_linux_amd64/default/history.log` (checkpoints) and `pin.log`
+  (blessings); ping the user to ask A to `make stabilize && make pin` once it
+  lands.
 
 Coordination: work on `master`, commit in small units, `git pull --rebase`
 before pushing, push promptly. `git log --oneline -5` at start to see what A just

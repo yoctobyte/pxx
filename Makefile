@@ -19,16 +19,19 @@ VERIFY_COMPILER_MANAGED := /tmp/pascal26-managed-verify
 STABLE_ROOT := stable_linux_amd64
 STABLE_DEFAULT_DIR := $(STABLE_ROOT)/default
 STABLE_MANAGED_DIR := $(STABLE_ROOT)/managed
-# Pinned compiler for the library/demo track (Claude B). Defaults to the latest
-# recorded stable; override to pin a specific version, e.g.
+# Pinned compiler for the library/demo track (Claude B). Points at the `pinned`
+# pointer, which track A advances DELIBERATELY with `make pin` -- distinct from
+# `latest`, which `make stabilize` moves on every checkpoint. So A can record new
+# stables without yanking B's ground; B only moves when A blesses a version.
+# Override to pin a specific version ad hoc, e.g.
 #   make lib-test PXX_STABLE=stable_linux_amd64/default/v9
-PXX_STABLE ?= $(STABLE_DEFAULT_DIR)/latest
+PXX_STABLE ?= $(STABLE_DEFAULT_DIR)/pinned
 PXXFLAGS   :=
 FROZEN_PXXFLAGS := -uPXX_MANAGED_STRING
 
 .PHONY: all bootstrap bootstrap-check fpc-check test test-core test-asm-emit test-nilpy qemu-env-check test-i386 test-aarch64 test-arm32 test-emit-obj stabilize check-stable revert benchmark benchmark-compiler-runtime benchmark-check clean distclean symbols \
         bootstrap-managed bootstrap-frozen test-managed test-frozen stabilize-managed stabilize-frozen check-stable-managed revert-managed test-nilpy-managed test-nilpy-frozen \
-        pxx-stable-check lib-test demos \
+        pxx-stable-check pin lib-test demos \
         progress-check cross-bootstrap cross-bootstrap-aarch64 cross-bootstrap-arm32 cross-bootstrap-i386 test-esp-bare
 
 all: $(COMPILER)
@@ -1680,14 +1683,34 @@ distclean: clean
 # Guard + report which stable the library track is pinned to.
 pxx-stable-check:
 	@test -x $(PXX_STABLE) || \
-	  (echo "No stable compiler at $(PXX_STABLE). Run: make stabilize"; exit 1)
-	@echo "lib track pinned to: $(PXX_STABLE)  (stable v$$(cat $(STABLE_DEFAULT_DIR)/VERSION 2>/dev/null || echo '?'))"
-	@SC=$$(awk 'END{print $$4}' $(STABLE_DEFAULT_DIR)/history.log 2>/dev/null); \
-	 HC=$$(git log -1 --format='%H' 2>/dev/null); \
-	 if [ -n "$$SC" ] && [ "$$SC" != "$$HC" ]; then \
-	   echo "note: stable was recorded at commit $$SC; HEAD is $$HC."; \
-	   echo "      run 'make stabilize' to publish a fresh baseline if the lib track needs newer compiler features."; \
+	  (echo "No pinned stable at $(PXX_STABLE). Run: make stabilize && make pin"; exit 1)
+	@PV=$$(readlink $(STABLE_DEFAULT_DIR)/pinned 2>/dev/null || echo '?'); \
+	 LV=$$(readlink $(STABLE_DEFAULT_DIR)/latest 2>/dev/null || echo '?'); \
+	 echo "lib track pinned to: $(PXX_STABLE) -> $$PV   (newest checkpoint: latest -> $$LV)"; \
+	 if [ "$$PV" != "$$LV" ] && [ "$$PXX_STABLE" = "$(STABLE_DEFAULT_DIR)/pinned" ]; then \
+	   echo "note: a newer stable ($$LV) exists than the pinned one ($$PV)."; \
+	   echo "      track A can bless it for B with 'make pin'."; \
 	 fi
+
+# Advance the `pinned` pointer that track B builds against (PXX_STABLE -> pinned).
+# Default target = current `latest`; override with VERSION=N to pin a specific
+# recorded stable. Records the move in pin.log for audit. This is the deliberate
+# 'hand B a new compiler' step, separate from `make stabilize` (which only
+# records a checkpoint + moves `latest`).
+pin:
+	@test -e $(STABLE_DEFAULT_DIR)/latest || \
+	  (echo "No stable yet. Run: make stabilize"; exit 1)
+	@TGT="$${VERSION:+v$${VERSION}}"; \
+	 TGT="$${TGT:-$$(readlink $(STABLE_DEFAULT_DIR)/latest)}"; \
+	 test -f $(STABLE_DEFAULT_DIR)/$$TGT || \
+	   (echo "$(STABLE_DEFAULT_DIR)/$$TGT does not exist"; exit 1); \
+	 OLD=$$(readlink $(STABLE_DEFAULT_DIR)/pinned 2>/dev/null || echo 'none'); \
+	 ln -sfn $$TGT $(STABLE_DEFAULT_DIR)/pinned; \
+	 printf '%s  pinned %s  (was %s)  %s\n' \
+	   "$$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$$TGT" "$$OLD" \
+	   "$$(git log -1 --format='%H' 2>/dev/null)" \
+	   >> $(STABLE_DEFAULT_DIR)/pin.log; \
+	 echo "pinned -> $$TGT (was $$OLD). Commit stable_linux_amd64/ to hand it to track B."
 
 # Curated GREEN smoke for the library surface, against the pinned stable. May
 # hard-fail (a smoke gate for track B). Keep every entry here passing; move

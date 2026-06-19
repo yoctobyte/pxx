@@ -30,14 +30,25 @@ track's defaults.
 ## The boundary
 
 ```
-                stabilize (publish)              compile with
-   track A  ───────────────────────▶  stable_linux_amd64/default/latest  ◀───────  track B
-  compiler/**                          (frozen, git-tracked pascal26)              lib/**, examples/**
+            stabilize          pin              compile with
+  track A ──────────▶ vN ──────────▶ pinned ──────────────▶  track B
+ compiler/**     (latest->vN)    (pinned->vN)              lib/**, examples/**
+                 checkpoint      blessed-for-B
 ```
 
-- **`$(PXX_STABLE)`** = `stable_linux_amd64/default/latest` (override per build:
-  `make lib-test PXX_STABLE=stable_linux_amd64/default/v9`).
-- B auto-follows `latest`. A pin is only for chasing a regression.
+Two pointers in `stable_linux_amd64/default/`:
+
+- **`latest`** → the newest recorded checkpoint. `make stabilize` moves it on
+  every run. Bookkeeping; B does *not* follow it.
+- **`pinned`** → the version blessed for track B. Moves only when A runs
+  `make pin` (default = current `latest`, or `make pin VERSION=N`). Audited in
+  `pin.log`.
+
+- **`$(PXX_STABLE)`** = `stable_linux_amd64/default/pinned` (override per build:
+  `make lib-test PXX_STABLE=stable_linux_amd64/default/vN`).
+- This decouples *recording* a stable from *handing it to B*: A can checkpoint
+  freely; B's ground only shifts on a deliberate `make pin`. `pxx-stable-check`
+  tells A when `latest` is ahead of `pinned` (a checkpoint waiting to be blessed).
 - Current platform (x86-64) only. Cross-compile is a later concern; the cross
   suites (`make test-i386 / test-aarch64 / test-arm32 / cross-bootstrap`)
   discover any per-target gaps after the fact.
@@ -53,12 +64,15 @@ Publishing a new baseline, when a feature B needs lands:
 make stabilize        # runs `make test` + 4-iteration fixedpoint, then records:
                       #   stable_linux_amd64/default/v{N+1}, latest -> vN+1,
                       #   last.sha256, history.log (ts, vN, sha, commit, subject)
-git add stable_linux_amd64 && git commit -m "chore(stable): record vN"
+make pin              # bless it for B: pinned -> latest (or VERSION=N), -> pin.log
+git add stable_linux_amd64 && git commit -m "chore(stable): record vN, pin for B"
 ```
 
-`history.log` is the changelog and the sync signal — its last line tells B which
-commit the current `latest` was built from. Roll back with `make revert
-VERSION=N` (restores `compiler/pascal26` from a recorded binary).
+`make stabilize` only records a checkpoint (moves `latest`); it does **not**
+touch `pinned`, so B is unaffected until you `make pin`. Bless deliberately when
+a feature B is waiting on has landed. `history.log` is the checkpoint changelog;
+`pin.log` records each blessing. Roll back the working compiler with `make revert
+VERSION=N`; move B back with `make pin VERSION=N`.
 
 The **authoritative gate is unchanged**: `make test` + self-host fixedpoint.
 A feature is not "done" until it passes that. `make stabilize` will not record a
@@ -71,7 +85,7 @@ Owns (ideal): `lib/**`, `examples/**`, new `test/lib_*`, and the `lib-test` /
 the compiler.
 
 ```sh
-make pxx-stable-check   # shows the pinned version; warns if it lags HEAD
+make pxx-stable-check   # shows pinned vs latest; notes if a newer stable awaits blessing
 make lib-test           # curated GREEN smoke (may hard-fail; keep it green)
 make demos              # compile-smoke dashboard for every example (exit 0)
 ```
