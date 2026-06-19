@@ -886,7 +886,28 @@ var argTk: TTypeKind;
     caCount, caElemRec, caElemSz, caSym, savedRec, caArgSym: Integer;
     caElemTk: TTypeKind;
     caIdent, caCountLit, caArg1, caArg2, caSlCall: Integer;
+  coerceParamSym, coerceIntfCi, coerceCast: Integer;
 begin
+  { Implicit class -> interface coercion: a class argument given to an interface
+    parameter is wrapped in the same fat-pointer build as an explicit `obj as
+    IFoo`, then marshalled by the ordinary record-param ABI (re-entry below). }
+  if (cpi >= 0) and (pathIdx >= 0) and (pathIdx < Procs[cpi].ParamCount) and
+     (Procs[cpi].Params[pathIdx].TypeKind = tyRecord) and
+     (IntToTypeKind(ASTTk[argAST]) = tyClass) then
+  begin
+    coerceParamSym := ProcParamRecId[cpi * 16 + pathIdx];
+    if (coerceParamSym >= REC_UCLASS_BASE) and
+       UClsIsInterface[coerceParamSym - REC_UCLASS_BASE] then
+    begin
+      coerceIntfCi := coerceParamSym - REC_UCLASS_BASE;
+      coerceCast := AllocNode(AN_AS_CAST);
+      ASTLeft[coerceCast] := argAST;
+      ASTIVal[coerceCast] := coerceIntfCi;
+      ASTTk[coerceCast] := Ord(tyRecord);
+      Result := IRLowerCallArg(cpi, pathIdx, coerceCast, isRefArg);
+      Exit;
+    end;
+  end;
   { Static array -> `array of T` open param: copy the bounds-less static array into
     a fresh dyn array (with a length header) and pass that handle, so Length()/
     indexing over the param work. A `var` (by-ref) array param must alias the
@@ -1149,6 +1170,32 @@ begin
     IRAppend(IR_TERMINATE, IRAppend(IR_CONST_INT, -1, -1, -1, 1, Ord(tyInteger)), -1, -1, AN_HALT, 0);
   IRAppend(IR_LABEL, -1, -1, -1, endLbl, 0);
   Result := tmpSym;
+end;
+
+function NodeIsInterface(node: Integer): Boolean;
+{ True iff the node is an interface-typed value (a CORBA fat pointer). }
+var rec: Integer;
+begin
+  Result := False;
+  if node < 0 then Exit;
+  if IntToTypeKind(ASTTk[node]) <> tyRecord then Exit;
+  rec := ResolveNodeRec(node);
+  Result := (rec >= REC_UCLASS_BASE) and UClsIsInterface[rec - REC_UCLASS_BASE];
+end;
+
+function IRIntfInstanceWord(node: Integer): Integer;
+{ The instance pointer of an interface value (fat pointer's word at offset
+  TARGET_PTR_SIZE), used for identity comparison. A non-interface operand (a nil
+  literal) lowers to its plain value, so `iface = nil` compares against 0. }
+begin
+  if NodeIsInterface(node) then
+    Result := IRAppend(IR_LOAD_MEM,
+                IRAppend(IR_BINOP, IRLowerAddress(node),
+                  IRAppend(IR_CONST_INT, -1, -1, -1, TARGET_PTR_SIZE, Ord(tyInteger)),
+                  Ord(tkPlus), 0, Ord(tyPointer)),
+                -1, -1, 0, Ord(tyPointer))
+  else
+    Result := IRLowerAST(node);
 end;
 
 function IRLowerAST(node: Integer): Integer;
@@ -1651,6 +1698,17 @@ begin
         IRB[first] := last;
         Result := IRAppendCall(cpi, first, -1, ASTTk[node]);
       end
+      else if ((Integer(ASTIVal[node]) = Ord(tkEq)) or (Integer(ASTIVal[node]) = Ord(tkNeq))) and
+              (NodeIsInterface(ASTLeft[node]) or NodeIsInterface(ASTRight[node])) then
+      begin
+        { Interface identity: two interface values are equal iff they reference
+          the same instance, so compare the fat pointers' instance words (not the
+          IMT word, which is shared by every instance of a class). `iface = nil`
+          compares the instance word against 0. }
+        left := IRIntfInstanceWord(ASTLeft[node]);
+        right := IRIntfInstanceWord(ASTRight[node]);
+        Result := IRAppend(IR_BINOP, left, right, Integer(ASTIVal[node]), 0, Ord(tyBoolean));
+      end
       else if (ASTIVal[node] <> Ord(tkIn)) and
               ((IntToTypeKind(ASTTk[ASTLeft[node]]) = tySet) or
                (IntToTypeKind(ASTTk[ASTRight[node]]) = tySet)) then
@@ -1848,6 +1906,17 @@ begin
       if lhsTk = tyRecord then
       begin
         varIdx := ResolveNodeRec(ASTLeft[node]);
+        { interface := nil — zero the whole fat pointer {nil, nil}. The RHS is a
+          pointer/ordinal nil, not a class or interface, so it never reaches the
+          record-copy path (which would dereference a bogus source). }
+        if (varIdx >= REC_UCLASS_BASE) and UClsIsInterface[varIdx - REC_UCLASS_BASE] and
+           (IntToTypeKind(ASTTk[ASTRight[node]]) <> tyClass) and
+           (IntToTypeKind(ASTTk[ASTRight[node]]) <> tyRecord) then
+        begin
+          Result := IRAppend(IR_DEFAULT_MEM, IRLowerAddress(ASTLeft[node]),
+                             -1, REC_NONE, RecSize(varIdx), Ord(tyRecord));
+          Exit;
+        end;
         if (varIdx >= REC_UCLASS_BASE) and UClsIsInterface[varIdx - REC_UCLASS_BASE] and
            (IntToTypeKind(ASTTk[ASTRight[node]]) = tyClass) then
         begin

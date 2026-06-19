@@ -2519,6 +2519,20 @@ begin
   Result := False;
 end;
 
+function ProcParamIsInterface(pi, j: Integer): Boolean;
+{ True iff parameter j of proc pi is a CORBA interface type (a fat-pointer
+  record), so overload matching can accept a class argument that implements it.
+  The param's rec id comes from ProcParamRecId, not the param symbol: param sym
+  slots are reused across procs, so Syms[SymIdx].RecName is unreliable here. }
+var rec: Integer;
+begin
+  Result := False;
+  if (j < 0) or (j >= Procs[pi].ParamCount) then Exit;
+  if Procs[pi].Params[j].TypeKind <> tyRecord then Exit;
+  rec := ProcParamRecId[pi * 16 + j];
+  Result := (rec >= REC_UCLASS_BASE) and UClsIsInterface[rec - REC_UCLASS_BASE];
+end;
+
 function MatchProcCall(const name: AnsiString; nArgs: Integer; const argTypes: array of TTypeKind): Integer;
 var i, j: Integer; match: Boolean;
 begin
@@ -2606,6 +2620,28 @@ begin
           Result := i;
           Exit;
         end;
+      end;
+    end;
+  end;
+
+  { Phase 2c: a class argument given to an interface parameter (the implicit
+    class->interface coercion). Only fires when the param is a CORBA interface,
+    so existing record/class overloads are unaffected. }
+  for i := 0 to ProcCount-1 do
+  begin
+    if (Procs[i].Name = name) and (Procs[i].ParamCount = nArgs) then
+    begin
+      match := True;
+      for j := 0 to nArgs-1 do
+      begin
+        if not (TypesCompatible(Procs[i].Params[j].TypeKind, argTypes[j]) or
+                (ProcParamIsInterface(i, j) and (argTypes[j] = tyClass))) then
+          match := False;
+      end;
+      if match then
+      begin
+        Result := i;
+        Exit;
       end;
     end;
   end;

@@ -8006,7 +8006,17 @@ begin
     else if (ptypes[i] = tyClass) or (ptypes[i] = tyRecord) then
     begin
       Syms[idx].RecName := ptypesRec[i];
-      if (ptypes[i] = tyRecord) and (RecSize(ptypesRec[i]) > 8) then
+      { Persist the param's rec id: param sym slots are reused across procs, so
+        overload matching / call-arg coercion cannot read it back from the sym. }
+      if (pi >= 0) and (i < 16) then ProcParamRecId[pi * 16 + i] := ptypesRec[i];
+      { Records larger than a qword are passed by reference. A CORBA interface is
+        a fat pointer ({IMT, instance}); on 64-bit that is 16 bytes (already >8),
+        but on 32-bit targets it is only 8 bytes — force by-ref there too so the
+        whole fat pointer crosses the call uniformly instead of being squeezed
+        into one machine word. (No-op on 64-bit, so self-host stays identical.) }
+      if (ptypes[i] = tyRecord) and
+         ((RecSize(ptypesRec[i]) > 8) or
+          ((ptypesRec[i] >= REC_UCLASS_BASE) and UClsIsInterface[ptypesRec[i] - REC_UCLASS_BASE])) then
       begin
         Syms[idx].IsRef := True;
         Procs[pi].Params[i].IsRef := True;
