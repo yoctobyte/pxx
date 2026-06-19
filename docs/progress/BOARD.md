@@ -12,10 +12,11 @@ _none_
 
 _none_
 
-## backlog (47)
+## backlog (48)
 
 | Ticket | Type | Summary | Blocked-by |
 | --- | --- | --- | --- |
+| bug-frozen-string-length-pointer-deref-cross | bug | `Length()` of a pointer-dereferenced frozen `string` returns 0 on the cross targets | — |
 | bug-xtensa-call0-large-frame-truncates | bug | Xtensa Call0 / non-windowed frame >128 bytes silently truncates | — |
 | chore-inc-to-units | chore | `.inc` → real `.pas` units refactor | — |
 | chore-runtime-emission-size | chore | Finer runtime-support emission (code size) | — |
@@ -149,6 +150,7 @@ _none_
 
 ## Ready (no unmet blocker)
 
+- bug-frozen-string-length-pointer-deref-cross
 - bug-xtensa-call0-large-frame-truncates
 - chore-inc-to-units
 - chore-runtime-emission-size
