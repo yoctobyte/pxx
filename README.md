@@ -35,10 +35,10 @@ choose to ignore this, you do so entirely at your own risk.
   seed and requires a byte-identical fixedpoint before replacing it.
 - **Small direct ELF output:** benchmarks report Pascal Hello World in both the
   managed-default string mode and the frozen `-uPXX_MANAGED_STRING`
-  compatibility mode; see the
-  [runtime-gate benchmark](benchmarks/2026-06-02-runtime-gate.md).
+  compatibility mode; see the newest run in the
+  [benchmarks directory](benchmarks/).
 - **Fast pipeline:** one in-memory frontend-to-ELF path, no assembler or linker
-  subprocess. See the [compiler-runtime benchmark](benchmarks/2026-06-03-compiler-runtime.md).
+  subprocess. See the newest run in the [benchmarks directory](benchmarks/).
 - **Pascal + C interop:** local C files can be compiled into the same output,
   and supported C headers can be imported directly.
 - **Wrapper-free Nil Python C calls:** `.npy` can import `sqlite3` directly and
