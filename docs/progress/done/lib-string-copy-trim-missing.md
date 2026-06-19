@@ -35,3 +35,7 @@ fold `examples/adventure` toward green in `make demos`.
   blocker. Adventure still FAILs on later compiler gaps (mixed-case builtins —
   bug-builtin-write-case-sensitive; then Text-file I/O per its
   EXPECTED-FAILURES.md F1), not on Copy/Trim.
+- 2026-06-19 — note: the *generic* `Copy` (dynarray sub-array, 2-arg form,
+  string-family overloads, by-type call-site resolution) is beyond a non-generic
+  RTL function → tracked as feature-copy-intrinsic (track A). The lib AnsiString
+  `Copy` here is the interim path.

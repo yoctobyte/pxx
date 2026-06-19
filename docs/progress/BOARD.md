@@ -12,7 +12,7 @@ _none_
 
 _none_
 
-## backlog (61)
+## backlog (62)
 
 | Ticket | Type | Summary | Blocked-by |
 | --- | --- | --- | --- |
@@ -28,6 +28,7 @@ _none_
 | feature-c-header-import-complex | feature | Import C headers for complex libraries (glib/GTK-grade) | — |
 | feature-compiler-warnings | feature | Compiler warning diagnostics facility | — |
 | feature-compression-library | feature | Compression library — Huffman / LZ77 (roundtrip test app) | — |
+| feature-copy-intrinsic | feature | `Copy` as a generic overloaded intrinsic (string + dynarray families) | — |
 | feature-c-source-frontend | feature | C source frontend — compile C function bodies (statements + expressions) | feature-cross-target-feature-parity |
 | feature-demo-calc | feature | Demo — RPN / expression calculator (mini spreadsheet) | — |
 | feature-demo-chess | feature | Flagship demo — chess engine (real-world app + cross-target oracle + benchmark) | — |
@@ -181,6 +182,7 @@ _none_
 - feature-c-header-import-complex
 - feature-compiler-warnings
 - feature-compression-library
+- feature-copy-intrinsic
 - feature-c-source-frontend
 - feature-demo-calc
 - feature-demo-chess
