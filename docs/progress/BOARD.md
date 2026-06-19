@@ -63,11 +63,9 @@ _none_
 | idea-unit-rename-import | idea | `uses X as Y` unit-rename import (dialect extension) | — |
 | idea-visibility-enforcement | idea | Enforce private/protected visibility | — |
 
-## blocked (1)
+## blocked (0)
 
-| Ticket | Type | Summary | Blocked-by |
-| --- | --- | --- | --- |
-| bug-nonreproducible-miscompile-2026-06-02 | bug | Non-reproducible one-off miscompile (2026-06-02) | — |
+_none_
 
 ## done (70)
 
@@ -144,9 +142,11 @@ _none_
 | feature-xtensa-windowed-abi | feature | Xtensa windowed ABI codegen variant (for ESP-IDF interop) | — |
 | idea-progress-board-md | idea | On-demand `BOARD.md` kanban grid | — |
 
-## rejected (0)
+## rejected (1)
 
-_none_
+| Ticket | Type | Summary | Blocked-by |
+| --- | --- | --- | --- |
+| bug-nonreproducible-miscompile-2026-06-02 | bug | Non-reproducible one-off miscompile (2026-06-02) | — |
 
 ## Ready (no unmet blocker)
 

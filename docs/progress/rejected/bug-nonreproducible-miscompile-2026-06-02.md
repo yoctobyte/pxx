@@ -1,9 +1,10 @@
 # Non-reproducible one-off miscompile (2026-06-02)
 
 - **Type:** bug
-- **Status:** blocked (can't reproduce; suspected hardware)
+- **Status:** rejected (not a code defect; suspected transient hardware fault)
 - **Owner:** —
 - **Opened:** 2026-06-06 (from rainy-afternoon / anomaly report)
+- **Closed:** 2026-06-19 (rejected — ignore unless it recurs)
 
 ## Symptom
 
@@ -37,6 +38,7 @@ Full forensics: `../../developer/anomaly_2026-06-02_2000.md` (+ evidence dir).
 - 2026-06-06 — ticket opened, parked in blocked/ (non-reproducible).
 - 2026-06-19 — bug-hunt re-check: determinism canary byte-identical (60×
   `hello.pas` self-compiles, zero divergence), `make bootstrap` byte-identical,
-  no `mce`/`edac`/hardware-error lines in `journalctl -k`. Still no code defect
-  to fix; stays blocked (suspected transient hardware fault). The host remains
-  non-ECC, so the recurrence/forensics guidance above still stands.
+  no `mce`/`edac`/hardware-error lines in `journalctl -k`. No code defect to fix.
+- 2026-06-19 — moved blocked/ → rejected/. Not a compiler defect; ignore in
+  future bug hunts. The recurrence/forensics guidance above still stands if the
+  exact image-size corruption ever reappears (then reopen as a real ticket).
