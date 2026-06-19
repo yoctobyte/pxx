@@ -11,11 +11,10 @@ _none_
 
 _none_
 
-## backlog (63)
+## backlog (62)
 
 | Ticket | Type | Summary | Blocked-by |
 | --- | --- | --- | --- |
-| bug-builtin-val-miscompiles | bug | Builtin `Val` mis-lowers — wrong error code + segfault | — |
 | bug-const-managed-record-param-byref-crash | bug | const record param with a managed (dynarray) field crashes by-ref on i386 + aarch64 | — |
 | bug-pinned-stable-reads-live-builtin-rtl | bug | Pinned stable reads LIVE builtin RTL source — track A WIP breaks track B | — |
 | bug-proc-local-managed-record-uninit | bug | Proc-local managed record not zero-initialised on entry → first-call miscompute | — |
@@ -83,11 +82,12 @@ _none_
 
 _none_
 
-## done (82)
+## done (83)
 
 | Ticket | Type | Summary | Blocked-by |
 | --- | --- | --- | --- |
 | bug-64bit-shift-xor-literal-gaps | bug | 64-bit gaps in pinned v9: `xor` operator, large shifts, 64-bit hex literals | — |
+| bug-builtin-val-miscompiles | bug | Builtin `Val` mis-lowers — wrong error code + segfault | — |
 | bug-builtin-write-case-sensitive | bug | Builtin write/writeln matched case-sensitively (only lowercase resolves) | — |
 | bug-codegen-nested-index-load-width-pressure | bug | Codegen miscompiles nested integer-array index load width under register pressure | — |
 | bug-const-byref-record-param-temp | bug | Can't pass a function-result temporary to a const/by-ref record param | — |
@@ -178,7 +178,6 @@ _none_
 
 ## Ready (no unmet blocker)
 
-- bug-builtin-val-miscompiles
 - bug-const-managed-record-param-byref-crash
 - bug-pinned-stable-reads-live-builtin-rtl
 - bug-proc-local-managed-record-uninit

@@ -5353,6 +5353,7 @@ var
   aliasIdx, fieldNode, indexNode, castPrevTok, qUnit: Integer;
   castFieldName: AnsiString; castTk: TTypeKind; castRec: Integer;
   decVal, decNode: Integer; strIsFloat: Boolean;
+  valTmpSym, valTmpAssign, valTmpIdent: Integer;
 begin
   node := -1;
   case CurTok.Kind of
@@ -5883,11 +5884,44 @@ begin
         if (idx >= 0) and TypeIsFloat(Syms[idx].TypeKind) then pi := FindProc('ValFloat')
         else pi := FindProc('Val');
         if pi < 0 then Error('Val: builtin unit not loaded');
+        { A 1-char source literal (e.g. `Val('5', ...)`) parses as a Char; the
+          builtin's first param is a string, so promote it to a string literal —
+          the same coercion a normal call applies. Without it the Char is passed
+          where a string pointer is expected and Length(s)/s[i] segfault. }
+        if (ASTKind[exprNode] = AN_INT_LIT) and (IntToTypeKind(ASTTk[exprNode]) = tyChar) then
+        begin
+          ASTKind[exprNode] := AN_STR_LIT;
+          ASTTk[exprNode] := Ord(tyString);
+        end;
+        { The integer `Val` writes an Int64 (8 bytes) through its `var v` param.
+          A narrower destination (the common `var v: Integer`) would be overrun,
+          clobbering the neighbouring `code`/stack and crashing. Marshal through a
+          hidden Int64 temp and truncate into the real destination afterwards. }
+        valTmpSym := -1;
+        if (idx >= 0) and (not TypeIsFloat(Syms[idx].TypeKind)) and
+           TypeIsOrdinal(Syms[idx].TypeKind) and (TypeSize(Syms[idx].TypeKind) < 8) then
+        begin
+          valTmpSym := AllocVar('', tyInt64);
+          valTmpIdent := AllocNode(AN_IDENT);
+          ASTIVal[valTmpIdent] := valTmpSym; ASTTk[valTmpIdent] := Ord(tyInt64);
+        end;
         argSeq := AllocNode(AN_ARG); ASTLeft[argSeq] := exprNode;
-        lastArg := AllocNode(AN_ARG); ASTLeft[lastArg] := valNode; ASTRight[argSeq] := lastArg;
+        lastArg := AllocNode(AN_ARG);
+        if valTmpSym >= 0 then ASTLeft[lastArg] := valTmpIdent
+        else ASTLeft[lastArg] := valNode;
+        ASTRight[argSeq] := lastArg;
         opNode := AllocNode(AN_ARG); ASTLeft[opNode] := stepsNode; ASTRight[lastArg] := opNode;
         node := AllocNode(AN_CALL);
         ASTIVal[node] := pi; ASTLeft[node] := argSeq; ASTTk[node] := Ord(Procs[pi].RetType);
+        if valTmpSym >= 0 then
+        begin
+          { dest := tmp  (truncates the Int64 result into the narrower dest). }
+          valTmpIdent := AllocNode(AN_IDENT);
+          ASTIVal[valTmpIdent] := valTmpSym; ASTTk[valTmpIdent] := Ord(tyInt64);
+          valTmpAssign := AllocNode(AN_ASSIGN);
+          ASTLeft[valTmpAssign] := valNode; ASTRight[valTmpAssign] := valTmpIdent;
+          node := GenMakeSeq(node, GenMakeSeq(valTmpAssign, -1));
+        end;
       end
       else if (CurProc >= 0) and Procs[CurProc].IsFunc and
               (Tokens[TokPos].Kind in [tkAssign, tkDot, tkLBrack, tkCaret]) and

@@ -225,6 +225,8 @@ test-core: $(COMPILER)
 	test "$$(/tmp/test_set_runtime26)" = "$$(printf '1 1 0\n1\n0 1\n0 1 1 0\n1 1 1 0\n1 0 1')"
 	./$(COMPILER) test/test_dynarray_copy.pas /tmp/test_dynarray_copy26
 	test "$$(/tmp/test_dynarray_copy26)" = "$$(printf '3\n30\n40\n50\n2\n50\n60\n2\n30 60\n3\n1 10 100\n2 20 200\n3 30 300\n6 60')"
+	./$(COMPILER) test/test_val_builtin.pas /tmp/test_val_builtin26
+	test "$$(/tmp/test_val_builtin26)" = "$$(printf '5 0\n55 0\n0 2\n-42 0\n88 0\n0 1\n1000000000000 0\n0')"
 	./$(COMPILER) test/hello.pas /tmp/hello26
 	test "$$(/tmp/hello26)" = "Hello, World!"
 	./$(COMPILER) test/hello.c /tmp/hello_c26
