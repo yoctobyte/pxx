@@ -166,8 +166,10 @@ runtime dependencies.
 
 ## Major Missing Pascal Features
 
-- Interfaces are intentionally deferred until a concrete compatibility target
-  needs them; see `todo.md` section 3.
+- CORBA-style interfaces are implemented on all four targets (decl/implement/
+  call, is/as/Supports, implicit coercion, identity, inheritance — 2026-06-19).
+  Automatic reference counting (COM-style ARC) is deferred — see
+  `feature-interface-refcounting`.
 - Metaclass aliases are pointer-backed and do not yet enforce every descendant
   constraint against arbitrary pointer-compatible assignments.
 - Float conversion intrinsics such as `Trunc`, `Round`, `Int`, and float

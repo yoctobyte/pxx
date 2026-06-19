@@ -42,8 +42,10 @@ specific compatibility statement covers it.
   aliases, explicit `inherited` calls, and virtual/override dispatch are
   implemented for the covered subset. Metaclass aliases reuse pointer-backed
   class-reference storage; stricter descendant-assignment enforcement and
-  broader class semantics remain incomplete. Interfaces are intentionally
-  deferred until a concrete target requires their dispatch and lifetime model.
+  broader class semantics remain incomplete. CORBA-style interfaces are
+  implemented (decl/implement/call, is/as/Supports, implicit coercion, identity,
+  inheritance — all four targets); automatic reference counting (COM-style ARC)
+  is deferred.
 - Visibility sections are parsed because `published` drives RTTI.
   Private/protected access restrictions are intentionally not enforced:
   enforcing them enables no new programs and is deferred until compatibility

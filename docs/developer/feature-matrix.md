@@ -93,14 +93,14 @@ Each ✗ is a checklist item below the table. Seeded by grepping
 | Frozen `string` copy / `Length` on cross | ✓ | ✓ | ✓ | ✓ | done 2026-06-17 (was managed-only); future: ShortString-255 sizing |
 | Sets (`set of`, literal, `in`, `+`/`-`/`*`, `=`/`<>`/`<=`/`>=`) | ✓ | ✓ | ✓ | ✓ | done 2026-06-17 (32-byte bitset; unblocks `for..in (set)`) |
 | Collections / dynarray-of-record depth | ✓ | ✓ | ✓ | ✓ | done 2026-06-17 (`setlen_dyn` / `dynunique` ported; field/nested targets via portable `PXXDynSetLen`/`PXXDynArrayUnique`) |
-| Interfaces | ◐ | ✗ | ✗ | ✗ | feature-interfaces; classes now unblock it |
+| Interfaces (CORBA) | ✓ | ✓ | ✓ | ✓ | done 2026-06-19 (decl/implement/call, fat pointer, is/as/Supports, implicit coercion, identity, nil, inheritance; 32-bit fat-ptr param ABI forced by-ref). ARC deferred → feature-interface-refcounting |
 | External (C-library) calls | ✓ | ✓ | ✓ | ✓ | done 2026-06-17 (i386 cdecl / aarch64 AAPCS x0-x7+v0-v7 / arm32 armel r0-r3; GOT-slot call). Full ABI: float/single/double + Int64/UInt64 args & returns; i386 16-aligned; validated vs libc/libm (test_extern_c_float) |
 | External/dynamic symbols (ELF) | ✓ | ✓ | ✓ | ✓ | done 2026-06-17 (ELF32 PrepareDynamicData32 i386/arm32; 64-bit writeELF interp+GLOB_DAT per-arch for aarch64) |
 | Method-pointer fixups (ELF) | ✓ | ✓ | ✓ | ✓ | done 2026-06-17 (writeELF32 + 64-bit writeELF) |
 | `SetLength` on var-array param | ✓ | ✗ | ✗ | ✗ | `386:1705` `aarch64:1118` `arm32:1293` |
 | Async I/O reactor (epoll/asyncnet/CoSleep) | ✓ | ✓ | ✓ | ✓ | done 2026-06-17 (per-arch SYS_*; aarch64/arm32 epoll_pwait; i386 socketcall; epoll_event pad on aarch64/arm32) |
 | RTTI / streaming / LFM | ✓ | ◐ | ◐ | ◐ | needs ELF method fixups |
-| GTK / LCL GUI | ✓ | ✗ | ✗ | ✗ | needs classes + external calls |
+| GTK / LCL GUI | ✓ | ◐ | ◐ | ◐ | classes + external calls now done on cross; untested on i386/aarch64/arm32, likely needs extern-ABI breadth (float C args) — feature-cross-extern-abi-breadth. NB: uses our own stub units, not real LCL |
 
 Notes on aarch64 ELF: the 64-bit ELF writer (`writeELF` path) already applies
 `MethodFixups` and external symbols, so aarch64 is **not** blocked at the
@@ -127,7 +127,7 @@ Dominant blocker first; items sharing a fix are grouped.
      `{$ifdef CPU32}` 4-byte padding in typinfo records (compiler/blob untouched);
      (3) sets (`set_lit`/`dynunique`) for test_rtti's published `set` property.
    - [ ] collections / dynarray-of-record (`setlen_dyn`, `dynunique`, `set_lit`)
-   - [ ] interfaces (now unblocked by classes) — feature-interfaces
+   - [x] interfaces (CORBA) on all four — done 2026-06-19 (feature-interfaces)
 2. **ELF32 dynamic-link path** (i386/arm32):
    - [x] method-pointer fixups — done (writeELF32 apply loop)
    - [ ] external (dynamic) symbols — `elfwriter.inc:622,628`
@@ -137,7 +137,8 @@ Dominant blocker first; items sharing a fix are grouped.
 6. **Async I/O reactor cross**: per-arch syscall numbers + reactor/asyncnet/CoSleep
    gating; run reactor/asyncecho/timer suites under QEMU.
 7. **Variant edge types**: single/extended — DONE all 4 (box as VT_DOUBLE).
-8. **Interfaces** on all four (depends on classes) — feature-interfaces.
+8. **Interfaces (CORBA)** on all four — DONE 2026-06-19 (feature-interfaces).
+   ARC (`IInterface`/refcount) deferred → feature-interface-refcounting.
 
 Items marked **—** (indirect-call param cap) are shared structural limits, not
 cross gaps, and are out of scope for this arc.

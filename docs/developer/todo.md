@@ -225,13 +225,15 @@ Dynamic-array continuation checklist:
 
 ---
 
-## 3. Interfaces  ⬜  (intentionally deferred)
+## 3. Interfaces  ✅  (CORBA surface DONE 2026-06-19)
 
-Interfaces remain a real language gap, but they are not active work. No
-current target source requires them, and even a lightweight Linux-native
-model adds substantial dispatch, ABI, and lifetime-design surface. Revisit
-when a concrete compatibility target needs them. The scoping outline below
-keeps that future decision explicit.
+**Done** — the fat-pointer (option 4b below) CORBA model shipped on all four
+targets: declare/implement/call, `is`/`as`/`Supports`, implicit class→interface
+coercion (call args + Result), identity `=`/`<>`, `:= nil`, interface inheritance
+`interface(IParent)` + widening, 32-bit fat-ptr param ABI. Byte-identical
+self-host + cross-bootstrap. The **only** remaining piece is automatic reference
+counting (COM-style ARC), deferred as low-priority → `feature-interface-refcounting`.
+The original scoping outline is kept below as the historical design record.
 
 ### Decisions to lock (in that session)
 
@@ -279,8 +281,10 @@ class registry — reuse it). Hence ordered **after** the LFM arc. Interfaces ar
 **Synergy:** the `Self`-adjusting IMT thunks are a clean use of the new inline
 asm, or a small dedicated IR op.
 
-**Out of scope / decide later:** `implements` delegation, interface
-inheritance depth, method-resolution clauses, COM ARC.
+**Delivered choices (2026-06-19):** fat-pointer representation (option 4b); GUIDs
+parsed+ignored; interface inheritance IS done (inherited methods at leading IMT
+slots). **Still out of scope:** `implements` delegation, method-resolution
+clauses. **Deferred:** COM ARC (feature-interface-refcounting).
 
 ---
 

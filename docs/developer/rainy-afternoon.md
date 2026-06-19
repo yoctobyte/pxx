@@ -103,8 +103,9 @@ those longer documents are refreshed.
 
 ## Language Breadth
 
-- Interfaces remain intentionally deferred until a concrete compatibility
-  target needs their dispatch and lifetime model.
+- CORBA interfaces are done (all four targets, 2026-06-19); only automatic
+  reference counting (COM-style ARC) remains, deferred as a rainy-afternoon item
+  — feature-interface-refcounting (not needed; high cost).
 - Visibility sections are parsed for RTTI, but private/protected access is not
   enforced.
 - Metaclass aliases do not yet enforce every descendant constraint against

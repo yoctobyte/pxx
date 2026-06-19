@@ -50,12 +50,13 @@ allocator-dependent depth work.
 
 ## 2. Parked / Excluded Features
 
-### Interfaces (`interface` types)
-* **Status**: **Intentionally deferred.** No current target source requires
-  interfaces, while even a no-refcount model adds substantial dispatch, ABI,
-  and lifetime-design surface. See [`todo.md`](todo.md) §3 for the retained
-  scoping outline.
+### Interfaces (`interface` types) — ✅ CORBA done 2026-06-19
+* **Status**: CORBA-style interfaces implemented on all four targets (fat
+  pointer; decl/implement/call, `is`/`as`/`Supports`, implicit class→interface
+  coercion, identity, `:= nil`, interface inheritance + widening). Only automatic
+  reference counting (COM-style ARC) is deferred → `feature-interface-refcounting`.
+  See [`todo.md`](todo.md) §3.
 
-> Of the four core features above, floats, sets, and the covered typed-pointer
-> surface are implemented; interfaces are intentionally deferred.
-> [`todo.md`](todo.md) is the authoritative consolidated status list.
+> Of the four core features above, floats, sets, the covered typed-pointer
+> surface, and CORBA interfaces are implemented; only interface ARC remains
+> deferred. [`todo.md`](todo.md) is the authoritative consolidated status list.
