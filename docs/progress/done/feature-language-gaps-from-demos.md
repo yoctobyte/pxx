@@ -84,8 +84,45 @@ for-in; the *generator* element path is the unverified one).
 - A `generator of <record>` consumed by `for x in` compiles and runs; chess
   movegen validated against perft constants (in feature-demo-chess).
 
+## Gap 3 — generator yielding a record  (DONE 2026-06-19)
+
+**Confirmed real (segfaulted) and fixed.** A `; generator;` routine can now yield
+a record element consumed by `for x in`. A record does not fit the one-word
+"current" slot, so `yield m` stores the record's ADDRESS (the stackful
+generator's frame keeps it alive until the next resume) and the for-in desugar
+derefs that address into the loop variable:
+- ir.inc `AN_YIELD`: a `tyRecord` value lowers its address (`IRLowerAddress`).
+- parser.inc `ParseForInGeneratorAST`: a record loop var assigns from an
+  `AN_DEREF` of the `CoCurrent` address, with the record id carried on the deref
+  node so the copy is sized.
+- symtab.inc `ResolveNodeRec`: an `AN_DEREF` carrying a positive rec id on the
+  node resolves to it (the base is an untyped Int64 call result).
+
+Validated x86-64 (`test/test_generator_record.pas`, in test-core) for 16- and
+24-byte records + accumulation; self-host + cross-bootstrap byte-identical.
+Scope: the stackful (coroutine) path — stackful generators are x86-64-only
+(CoSwitch). Stackless `; generator; stackless;` record-yield would need the same
+deref in the SlCurrent path (separate, lower priority). Unblocks chess movegen
+(`yield`ing a `TMove`).
+
+## Gap 2 — yield from a nested routine  (documented limitation 2026-06-19)
+
+**Confirmed:** `yield` inside a nested routine of a generator does not parse
+(`yield` is only valid lexically in the generator's own body). Threading the
+generator self-pointer into nested routines (stackful-only) is invasive and
+deferred; the error now states the limitation clearly ("yield must appear
+directly in a generator body, not in a nested routine — inline the helper for
+now"). Chess already matches this (promotion expansion is inlined), so the
+acceptance criterion ("the limitation is documented and the chess source matches
+it") is met.
+
 ## Log
 - 2026-06-19 — Opened from the demo apps. Gap 1 confirmed (carried over from
   feature-demo-sudoku, no prior dedicated ticket). Gaps 2 + 3 are suspicions
   from writing `examples/chess/chess.pas`; not built/tested here, so flagged for
   verification rather than asserted.
+- 2026-06-19 — Gap 1 DONE (runtime sets + Include/Exclude, v11). Gap 3 verified
+  (segfaulted) + DONE (record yield, stackful x86-64). Gap 2 verified (won't
+  parse) + documented as a limitation with a clear error. This ticket is now
+  effectively closed: Gap 1 + Gap 3 implemented, Gap 2 documented. Remaining
+  follow-on (own ticket if pursued): nested yield, stackless record-yield.

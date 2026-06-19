@@ -4134,7 +4134,12 @@ begin
   else if ASTKind[node] = AN_DEREF then
   begin
     baseNode := ASTLeft[node];
-    if ASTKind[baseNode] = AN_IDENT then
+    if ASTIVal[node] > 0 then
+      { Synthesised record deref (e.g. the for-in generator desugar derefs the
+        CoCurrent address into the loop var): the record id is carried directly
+        on the deref node, since the base is an untyped Int64 call result. }
+      Result := ASTIVal[node]
+    else if ASTKind[baseNode] = AN_IDENT then
       Result := Syms[ASTIVal[baseNode]].PtrElemRec
     else if ASTKind[baseNode] = AN_FIELD then
     begin

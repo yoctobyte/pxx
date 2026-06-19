@@ -1769,8 +1769,14 @@ begin
     AN_YIELD:
     begin
       { value -> [self+CO_OFF_CURRENT], then CoSwitch(self+GENCTX -> self+CALLERCTX).
-        IRIVal carries the generator self-pointer local sym idx. }
-      value := IRLowerAST(ASTLeft[node]);
+        IRIVal carries the generator self-pointer local sym idx. A record element
+        does not fit the one-word current slot, so yield its ADDRESS instead — the
+        stackful generator's frame keeps the record alive until the next resume,
+        and the for-in desugar derefs the address into the loop variable. }
+      if IntToTypeKind(ASTTk[ASTLeft[node]]) = tyRecord then
+        value := IRLowerAddress(ASTLeft[node])
+      else
+        value := IRLowerAST(ASTLeft[node]);
       Result := IRAppend(IR_YIELD, value, -1, -1, ASTIVal[node], ASTTk[ASTLeft[node]]);
     end;
 

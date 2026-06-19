@@ -11,7 +11,7 @@ _none_
 
 _none_
 
-## backlog (65)
+## backlog (64)
 
 | Ticket | Type | Summary | Blocked-by |
 | --- | --- | --- | --- |
@@ -54,7 +54,6 @@ _none_
 | feature-interfaces | feature | Interfaces | — |
 | feature-int-to-float-assign | feature | Integer → Float assignment / coercion missing the int→float conversion | — |
 | feature-json-library | feature | JSON library — parser + serializer (with a roundtrip test app) | — |
-| feature-language-gaps-from-demos | feature | Language gaps surfaced by the demo apps (sudoku / sieve / chess) | — |
 | feature-lazycasing-c-imports | feature | `{$LAZYCASING ON/OFF}` for C imports only | feature-compiler-warnings |
 | feature-metaclass-descendant-enforcement | feature | Metaclass alias descendant-constraint enforcement | — |
 | feature-mimic-fpc | feature | `mimic FPC` compatibility mode | feature-directive-if-numeric |
@@ -85,7 +84,7 @@ _none_
 
 _none_
 
-## done (80)
+## done (81)
 
 | Ticket | Type | Summary | Blocked-by |
 | --- | --- | --- | --- |
@@ -144,6 +143,7 @@ _none_
 | feature-i386-asm-emitter | feature | i386 text-assembler (`EmitAsm386`) for cleaner x86-32 codegen | — |
 | feature-i386-int64-codegen | feature | Full Int64 codegen for i386 | — |
 | feature-interface-refcounting | feature | Interface reference counting (IInterface / ARC) | — |
+| feature-language-gaps-from-demos | feature | Language gaps surfaced by the demo apps (sudoku / sieve / chess) | — |
 | feature-managed-exception-cleanup | feature | Finalize managed values on exception unwind | — |
 | feature-managed-string-default | feature | Promote managed AnsiString from opt-in to default | bug-managed-byref-string-param-store, feature-managed-exception-cleanup |
 | feature-multidim-fixed-arrays | feature | Multidimensional fixed arrays | — |
@@ -216,7 +216,6 @@ _none_
 - feature-interfaces
 - feature-int-to-float-assign
 - feature-json-library
-- feature-language-gaps-from-demos
 - feature-metaclass-descendant-enforcement
 - feature-networking
 - feature-nil-python-frontend

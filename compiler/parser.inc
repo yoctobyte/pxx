@@ -3904,6 +3904,7 @@ var
   assignG, assignX, whileNode, innerSeq, instLit: Integer;
   sa1, sa2, sa3, sa4: Integer;
   paCoAlloc, paCoNext, paCoCurrent, paCoFree: Integer;
+  curDeref: Integer;
 begin
   { unused args default to 0 (no local array — must cross-compile) }
   a0 := GenZeroLit; a1 := GenZeroLit; a2 := GenZeroLit; a3 := GenZeroLit;
@@ -3984,7 +3985,19 @@ begin
   callNext := GenMakeCall6(paCoNext, tyBoolean, GenMakeIdent(gIdx, tyPointer), -1, -1, -1, -1, -1);
 
   callCur := GenMakeCall6(paCoCurrent, tyInt64, GenMakeIdent(gIdx, tyPointer), -1, -1, -1, -1, -1);
-  assignX := GenMakeAssign(GenMakeIdent(varIdx, Syms[varIdx].TypeKind), callCur);
+  if Syms[varIdx].TypeKind = tyRecord then
+  begin
+    { Record element: CoCurrent returns the address of the yielded record (in the
+      generator's preserved frame); deref it and copy into the loop variable. The
+      record id is carried on the deref node so ResolveNodeRec sizes the copy. }
+    curDeref := AllocNode(AN_DEREF);
+    ASTLeft[curDeref] := callCur;
+    ASTTk[curDeref] := Ord(tyRecord);
+    ASTIVal[curDeref] := Syms[varIdx].RecName;
+    assignX := GenMakeAssign(GenMakeIdent(varIdx, tyRecord), curDeref);
+  end
+  else
+    assignX := GenMakeAssign(GenMakeIdent(varIdx, Syms[varIdx].TypeKind), callCur);
 
   innerSeq := GenMakeSeq(assignX, GenMakeSeq(bodyNode, -1));
   whileNode := AllocNode(AN_WHILE);
@@ -5588,7 +5601,8 @@ begin
         { `yield E` — only inside a generator body; forbidden inside try/except/
           finally in v1 (sidesteps the cross-stack exception-frame swap). }
         if not CurProcIsGenerator then
-          Error('yield outside a generator');
+          Error('yield must appear directly in a generator body, not in a ' +
+                'nested routine (inline the helper for now)');
         if GenTryDepth > 0 then
           Error('yield inside try/except/finally is not allowed (v1)');
         Next;
