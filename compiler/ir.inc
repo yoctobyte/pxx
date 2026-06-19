@@ -734,6 +734,15 @@ begin
       LastTypeRecId := ProcRetRecId[procIdx];
     scratchSym := AllocVar('', Procs[procIdx].RetType);
     LastTypeRecId := savedRecId;
+    { This hidden aggregate-result temp is allocated during IR lowering, after the
+      parser's prologue zero-init pass. If the call sits on a branch that is not
+      taken (e.g. `Result := F(0); Exit` in an untaken early-exit), the temp is
+      never filled, yet the proc's scope-exit cleanup would release its managed
+      fields and free stack garbage. Mark it so codegen nil-inits its full extent
+      before the body. }
+    if (Procs[procIdx].RetType = tyRecord) and
+       RecordHasManagedFields(ProcRetRecId[procIdx]) then
+      SymIsHiddenArgTemp[scratchSym] := True;
     scratchAddr := IRAppend(IR_LEA, scratchSym, -1, -1, 0, Ord(tyPointer));
     Result := IRAppend(IR_CALL, procIdx, firstArg, scratchAddr, 0, tk);
   end

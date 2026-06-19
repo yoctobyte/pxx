@@ -3964,7 +3964,7 @@ begin
 end;
 
 procedure IREmitMachineCode;
-var i, lblId, pos, targetOffset, f: Integer;
+var i, lblId, pos, targetOffset, f, pi: Integer;
     LabelPositions: array[0..MAX_IR-1] of Integer;
     LabelFixupPos: array[0..2047] of Integer;
     LabelFixupTarget: array[0..2047] of Integer;
@@ -4008,7 +4008,19 @@ begin
     for i := Procs[CurProc].ScopeBase to SymCount - 1 do
       if SymIsHiddenArgTemp[i] and (Syms[i].Kind = skLocal) then
       begin
-        EmitB($48); EmitB($C7); EmitB($85); EmitI32(Syms[i].Offset); EmitI32(0); { mov qword [rbp+off], 0 }
+        if (Syms[i].TypeKind = tyRecord) and not Syms[i].IsArray and
+           (RecSize(Syms[i].RecName) > TARGET_PTR_SIZE) then
+        begin
+          { Managed-record temp (e.g. a hidden aggregate-result dest): zero the
+            full record so every managed field starts nil, not just the first
+            qword. }
+          EmitB($48); EmitB($8D); EmitB($BD); EmitI32(Syms[i].Offset);   { lea rdi, [rbp+off] }
+          EmitB($48); EmitB($31); EmitB($C0);                            { xor rax, rax }
+          EmitB($48); EmitB($C7); EmitB($C1); EmitI32(RecSize(Syms[i].RecName)); { mov rcx, RecSize }
+          EmitB($F3); EmitB($AA);                                        { rep stosb }
+        end
+        else
+          begin EmitB($48); EmitB($C7); EmitB($85); EmitI32(Syms[i].Offset); EmitI32(0); end; { mov qword [rbp+off], 0 }
       end;
 
   for i := 0 to IRCount - 1 do

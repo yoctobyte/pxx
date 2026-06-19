@@ -227,6 +227,8 @@ test-core: $(COMPILER)
 	test "$$(/tmp/test_dynarray_copy26)" = "$$(printf '3\n30\n40\n50\n2\n50\n60\n2\n30 60\n3\n1 10 100\n2 20 200\n3 30 300\n6 60')"
 	./$(COMPILER) test/test_val_builtin.pas /tmp/test_val_builtin26
 	test "$$(/tmp/test_val_builtin26)" = "$$(printf '5 0\n55 0\n0 2\n-42 0\n88 0\n0 1\n1000000000000 0\n0')"
+	./$(COMPILER) test/test_managed_record_temp_init.pas /tmp/test_managed_record_temp_init26
+	test "$$(/tmp/test_managed_record_temp_init26)" = "$$(printf '5! = 120\n5! = 120\n6! = 720')"
 	./$(COMPILER) test/hello.pas /tmp/hello26
 	test "$$(/tmp/hello26)" = "Hello, World!"
 	./$(COMPILER) test/hello.c /tmp/hello_c26
@@ -1525,6 +1527,9 @@ test-arm32: $(COMPILER)
 	./$(COMPILER) -dPXX_MANAGED_STRING --target=arm32 test/test_set_runtime.pas /tmp/test_arm32_setrt
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_set_runtime.pas /tmp/test_arm32_setrt_x64
 	test "$$(tools/run_target.sh arm32 /tmp/test_arm32_setrt)" = "$$(/tmp/test_arm32_setrt_x64)"
+	./$(COMPILER) -dPXX_MANAGED_STRING --target=arm32 test/test_managed_record_temp_init.pas /tmp/test_arm32_mrti
+	./$(COMPILER) -dPXX_MANAGED_STRING test/test_managed_record_temp_init.pas /tmp/test_arm32_mrti_x64
+	test "$$(tools/run_target.sh arm32 /tmp/test_arm32_mrti)" = "$$(/tmp/test_arm32_mrti_x64)"
 	./$(COMPILER) -dPXX_MANAGED_STRING --target=arm32 test/test_dynarray_copy.pas /tmp/test_arm32_dyncopy
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_dynarray_copy.pas /tmp/test_arm32_dyncopy_x64
 	test "$$(tools/run_target.sh arm32 /tmp/test_arm32_dyncopy)" = "$$(/tmp/test_arm32_dyncopy_x64)"

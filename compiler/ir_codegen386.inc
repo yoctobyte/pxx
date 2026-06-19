@@ -3286,7 +3286,7 @@ begin
 end;
 
 procedure IREmitMachineCode386;
-var i, lblId, pos, targetOffset, f, si, classIdx, sz: Integer;
+var i, lblId, pos, targetOffset, f, si, classIdx, sz, pi: Integer;
     tk: TTypeKind;
     LabelPositions: array[0..MAX_IR-1] of Integer;
     LabelFixupPos: array[0..2047] of Integer;
@@ -3307,7 +3307,21 @@ begin
     for i := Procs[CurProc].ScopeBase to SymCount - 1 do
       if SymIsHiddenArgTemp[i] and (Syms[i].Kind = skLocal) then
       begin
-        EmitB($C7); EmitB($85); EmitI32(Syms[i].Offset); EmitI32(0); { mov dword [ebp+off], 0 }
+        if (Syms[i].TypeKind = tyRecord) and not Syms[i].IsArray and
+           (RecSize(Syms[i].RecName) > TARGET_PTR_SIZE) then
+        begin
+          { Managed-record temp: zero the full record (PXXMemZero) so every
+            managed field starts nil, not just the first pointer-sized slot. }
+          EmitB($8D); EmitB($85); EmitI32(Syms[i].Offset);          { lea eax, [ebp+off] }
+          EmitB($50);                                               { push dest }
+          EmitB($68); EmitI32(RecSize(Syms[i].RecName));            { push count }
+          pi := FindProc('PXXMemZero');
+          if pi < 0 then Error('compiler error: PXXMemZero not found');
+          EmitCallProc(pi);
+          EmitB($81); EmitB($C4); EmitI32(8);                       { add esp, 8 }
+        end
+        else
+          begin EmitB($C7); EmitB($85); EmitI32(Syms[i].Offset); EmitI32(0); end; { mov dword [ebp+off], 0 }
       end;
 
   for i := 0 to IRCount - 1 do

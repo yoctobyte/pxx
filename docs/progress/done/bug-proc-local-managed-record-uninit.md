@@ -59,3 +59,33 @@ ergonomic in procedures.
 ## Log
 - 2026-06-19 — found on pinned v10 while writing the bignum factorial demo.
   Clean repro above; first-call-only, managed-record-local specific.
+
+## Resolution (2026-06-19) — FIXED (x86-64 + arm32)
+
+Root cause was NOT the proc's declared managed-record local (those are zero-inited
+by the parser's prologue pass, parser.inc ~8772) — it was the **hidden
+aggregate-result temp**. `IRAppendCall` allocates a scratch local to receive a
+record-returning call's result; it is created during IR lowering, AFTER that
+prologue zero-init pass. When such a call sits on an untaken branch (the minimal
+trigger: a `Result := F(0); Exit` early-exit that the inputs never reach), the
+temp is never filled, yet the proc's scope-exit cleanup releases its managed
+fields and frees stack garbage — corrupting the FIRST call only (bignum's
+`5! = 240`). The `SymIsHiddenArgTemp` nil-init mechanism existed but (a) the temp
+wasn't marked, and (b) the per-target nil-init only zeroed one pointer-sized slot,
+missing a managed field past offset 0 in a multi-field record.
+
+Fix:
+- `IRAppendCall` (ir.inc) marks the aggregate-result scratch `SymIsHiddenArgTemp`
+  when the return record has managed fields.
+- The `SymIsHiddenArgTemp` prologue nil-init in all four backends now zeroes the
+  FULL record extent (`RecSize`, via `PXXMemZero` on the cross targets / `rep
+  stosb` on x86-64) when the temp is a managed record larger than a pointer,
+  instead of a single slot.
+
+Validated x86-64 + arm32: `test/test_managed_record_temp_init.pas` (the
+factorial-shape repro) in test-core + the arm32 cross suite; bignum factorial in
+a procedure now gives `5! = 120` on the first call. Self-host + cross-bootstrap
+byte-identical; all 3 cross suites output-identical. On i386 + aarch64 the same
+program is still blocked by the SEPARATE managed-record function-return bug
+(`bug-const-managed-record-param-byref-crash`), so the test is x86-64 + arm32
+only there.

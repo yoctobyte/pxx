@@ -11,13 +11,12 @@ _none_
 
 _none_
 
-## backlog (62)
+## backlog (61)
 
 | Ticket | Type | Summary | Blocked-by |
 | --- | --- | --- | --- |
 | bug-const-managed-record-param-byref-crash | bug | const record param with a managed (dynarray) field crashes by-ref on i386 + aarch64 | — |
 | bug-pinned-stable-reads-live-builtin-rtl | bug | Pinned stable reads LIVE builtin RTL source — track A WIP breaks track B | — |
-| bug-proc-local-managed-record-uninit | bug | Proc-local managed record not zero-initialised on entry → first-call miscompute | — |
 | chore-inc-to-units | chore | `.inc` → real `.pas` units refactor | — |
 | chore-runtime-emission-size | chore | Finer runtime-support emission (code size) | — |
 | feature-additional-cpu-targets | feature | Additional CPU targets (rollup: i386 → aarch64 → arm32 → ESP32/RISC-V) | feature-target-aarch64, feature-target-arm32, feature-target-esp32, feature-target-i386 |
@@ -82,7 +81,7 @@ _none_
 
 _none_
 
-## done (83)
+## done (84)
 
 | Ticket | Type | Summary | Blocked-by |
 | --- | --- | --- | --- |
@@ -98,6 +97,7 @@ _none_
 | bug-managed-byref-string-param-store | bug | Managed by-ref AnsiString params: store-through-var no-ops / segfaults | — |
 | bug-many-param-call-corruption | bug | Self-hosted x86-64 backend miscompiles calls with many parameters | — |
 | bug-operator-result-inferred-var | bug | Record-valued operator result is miscompiled (aggregate-return ABI) | — |
+| bug-proc-local-managed-record-uninit | bug | Proc-local managed record not zero-initialised on entry → first-call miscompute | — |
 | bug-read-preserves-line-remainder | bug | `read` consumes a whole line like `readln` | — |
 | bug-record-byvalue-arg-truncation | bug | By-value record args >8 bytes truncate (and operator operand edges) | — |
 | bug-record-fn-codegen-crash | bug | Context-sensitive runtime crash: record-returning fn with nested loops over dynarray fields | — |
@@ -180,7 +180,6 @@ _none_
 
 - bug-const-managed-record-param-byref-crash
 - bug-pinned-stable-reads-live-builtin-rtl
-- bug-proc-local-managed-record-uninit
 - chore-inc-to-units
 - chore-runtime-emission-size
 - feature-additional-cpu-targets
