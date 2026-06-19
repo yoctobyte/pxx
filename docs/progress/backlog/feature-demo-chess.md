@@ -126,6 +126,20 @@ candidates — selection criteria, hard filters, and why each alternative was ke
 or rejected — lives in its own ticket: **idea-demo-app-candidates**.
 
 ## Log
+- 2026-06-19 — **Platonic engine source landed** (`examples/chess/chess.pas`).
+  One coherent mailbox engine combining slices 1–4: FEN parse (exceptions),
+  pseudo-legal **movegen as a `generator` driven by `for m in GenMoves(pos)`**,
+  make/unmake, `perft` recursion (the oracle), negamax + alpha-beta with an
+  open-addressed **transposition table** keyed by **UInt64 Zobrist** hashing,
+  evaluation via a **procedural-typed term table** (`@TermMaterial` etc.), and a
+  `TEngine` **class with a virtual `ScorePosition`** overridden by
+  `TGreedyEngine` (VMT). Sets used for castling rights + move flags; a UCI-ish
+  REPL (`perft`/`go`/`fen`/`print`) gives the interactive/serial surface.
+  Written platonically, **not built or tested here** (per the demo policy).
+  **Gaps surfaced** beyond feature-rtl-conversion-and-bitset-library
+  (IntToStr/StrToInt): `UpCase`, `Eof` (stdin), `Copy` — assumed present, RTL to
+  follow. Validation (perft constants byte-identical across targets, self-host
+  build, benchmark numbers) remains; reopen scope unchanged.
 - 2026-06-17 — opened. Chosen after design review: flagship demo doubling as
   cross-target correctness oracle (perft) + performance benchmark (nodes/sec,
   cycles/node). Intentionally consumes feature-for-in-iteration +
