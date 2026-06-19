@@ -80,11 +80,29 @@ the compiler. Selection criteria, in order:
 - **Z-machine-lite VM** — needs a hand-authored story file + game; authoring
   overhead exceeds what it proves. Out.
 
+## Spawned library tickets (organization pass 2026-06-19)
+
+Several survivors are really **reusable libraries** whose acceptance test *is*
+the demo (build the lib, the test app is its oracle). Tracked as library tickets,
+not just demos:
+
+- feature-json-library — parser + serializer (roundtrip oracle)
+- feature-hashing-library — CRC32 / MD5 / SHA-256 (known-vector oracle)
+- feature-compression-library — Huffman / LZ77 (roundtrip + size; needs bit-set)
+- feature-bignum-library — arbitrary-precision integers (factorial(1000) oracle)
+- feature-sat-solver-library — DPLL over CNF (known SAT/UNSAT instances)
+
+**Interpreters stay demo-class, not library:** VM / Lisp / Lua are *applications*
+(or, for Lua, a whole frontend/target arc), not RTL units — keep them as
+`feature-demo-*` if chosen, not library tickets. Lua-as-compile-target is a large
+separate arc, deliberately parked.
+
 ## Use
 
-When a new demo is wanted, pick from the survivors (JSON next-most-likely) and
-open its own `feature-demo-*` ticket. Update this catalog if criteria change or
-a new candidate appears.
+When a new demo is wanted, pick from the survivors and open its own
+`feature-demo-*` ticket; if it is library-shaped, open / use the matching
+`feature-*-library` ticket above instead. Update this catalog if criteria change
+or a new candidate appears.
 
 ## Log
 - 2026-06-17 — opened. Split out of feature-demo-chess (appendix moved here).

@@ -12,7 +12,7 @@ _none_
 
 _none_
 
-## backlog (51)
+## backlog (56)
 
 | Ticket | Type | Summary | Blocked-by |
 | --- | --- | --- | --- |
@@ -23,8 +23,10 @@ _none_
 | feature-allocator-quality | feature | Allocator quality: split / coalesce / bins / alignment | — |
 | feature-async-auto-backend | feature | Auto stackless/stackful backend selection | — |
 | feature-async-language-surface | feature | Async language surface + stackless coroutine backend | feature-cross-target-feature-parity |
+| feature-bignum-library | feature | Bignum library — arbitrary-precision integers (deterministic test app) | — |
 | feature-c-header-import-complex | feature | Import C headers for complex libraries (glib/GTK-grade) | — |
 | feature-compiler-warnings | feature | Compiler warning diagnostics facility | — |
+| feature-compression-library | feature | Compression library — Huffman / LZ77 (roundtrip test app) | — |
 | feature-c-source-frontend | feature | C source frontend — compile C function bodies (statements + expressions) | feature-cross-target-feature-parity |
 | feature-demo-chess | feature | Flagship demo — chess engine (real-world app + cross-target oracle + benchmark) | — |
 | feature-directive-if-numeric | feature | Valued defines + numeric `{$IF}` evaluation | — |
@@ -36,11 +38,13 @@ _none_
 | feature-fpc-vs-pxx-feature-boundary | feature | Policy: FPC-bootstrap subset vs PXX-only library features | — |
 | feature-general-typename-cast | feature | General `TypeName(expr)` reinterpret cast (named record/class/pointer) | — |
 | feature-handle-compacting-heap | feature | Handle-table compacting heap (anti-fragmentation for constrained RAM) | — |
+| feature-hashing-library | feature | Hashing library — CRC32 / MD5 / SHA-256 (known-vector test app) | — |
 | feature-inline-asm-depth | feature | Inline assembler depth | — |
 | feature-inline-routines | feature | Inline routine expansion (`inline;`) | — |
 | feature-interface-refcounting | feature | Interface reference counting (IInterface / ARC) | — |
 | feature-interfaces | feature | Interfaces | — |
 | feature-int-to-float-assign | feature | Integer → Float assignment / coercion missing the int→float conversion | — |
+| feature-json-library | feature | JSON library — parser + serializer (with a roundtrip test app) | — |
 | feature-language-gaps-from-demos | feature | Language gaps surfaced by the demo apps (sudoku / sieve / chess) | — |
 | feature-lazycasing-c-imports | feature | `{$LAZYCASING ON/OFF}` for C imports only | feature-compiler-warnings |
 | feature-metaclass-descendant-enforcement | feature | Metaclass alias descendant-constraint enforcement | — |
@@ -56,6 +60,7 @@ _none_
 | feature-random-library | feature | Random library — HW/OS/software tiered RNG (cross-target capability test) | — |
 | feature-result-in-loop | feature | Function `Result` (float) read-modified inside a loop miscompiles to 0 | — |
 | feature-rtl-conversion-and-bitset-library | feature | RTL gaps — string/number conversion + a bit-set type (surfaced by the demos) | — |
+| feature-sat-solver-library | feature | SAT solver library — DPLL over CNF (known-instance test app) | — |
 | feature-stackful-coro-port | feature | Port the stackful coroutine backend to all targets | — |
 | feature-static-arena-profile | feature | Fixed-static-arena allocator profile | feature-unified-heap-allocator |
 | feature-threadsafe-io-serialization | feature | Statement-level I/O serialization under threads | feature-unified-heap-allocator |
@@ -163,8 +168,10 @@ _none_
 - feature-allocator-quality
 - feature-async-auto-backend
 - feature-async-language-surface
+- feature-bignum-library
 - feature-c-header-import-complex
 - feature-compiler-warnings
+- feature-compression-library
 - feature-c-source-frontend
 - feature-demo-chess
 - feature-directive-if-numeric
@@ -175,11 +182,13 @@ _none_
 - feature-fpc-vs-pxx-feature-boundary
 - feature-general-typename-cast
 - feature-handle-compacting-heap
+- feature-hashing-library
 - feature-inline-asm-depth
 - feature-inline-routines
 - feature-interface-refcounting
 - feature-interfaces
 - feature-int-to-float-assign
+- feature-json-library
 - feature-language-gaps-from-demos
 - feature-metaclass-descendant-enforcement
 - feature-networking
@@ -192,6 +201,7 @@ _none_
 - feature-random-library
 - feature-result-in-loop
 - feature-rtl-conversion-and-bitset-library
+- feature-sat-solver-library
 - feature-stackful-coro-port
 - feature-static-arena-profile
 - feature-threadsafe-io-serialization
