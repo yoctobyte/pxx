@@ -117,3 +117,19 @@ managed-record return path is incomplete.
 Both are independent of `Copy` and of the `const` param. x86-64 self-host is
 unaffected. Repro: `SetLength(Result.limbs,1); ...; t := MakeR(7);
 Writeln(Length(t.limbs))` — expect 1, get 0 on i386/aarch64.
+
+## Further narrowing (2026-06-19, session 2)
+
+Decisive: `SetLength(Result.limbs, 1)` works INSIDE the callee — adding a
+`Writeln(Length(Result.limbs))` before the return prints 1 with the value
+correct on both i386 and aarch64. The handle is only lost in the **aggregate
+return copy** (Result local → caller's hidden dest, a `RecSize`-sized raw move at
+symtab.inc ~3456 i386 / the aarch64 epilogue). So the dynarray handle field lives
+at an offset the `RecSize`-sized copy does not span — i.e. the record's field
+offset for the managed field and `RecSize` disagree for this layout (the field is
+at/after `RecSize`). Confirm by disassembling the callee: compare the byte offset
+SetLength writes the handle to against `RecSize` (the copy length) and the
+caller's field-read offset; align the three. (`@r.limbs` to probe the offset from
+user code is rejected — "undefined variable (NativeInt)" on the cast — so use a
+disassembly or a non-managed proxy field.) This is independent of the now-fixed
+hidden-temp nil-init (`bug-proc-local-managed-record-uninit`).
