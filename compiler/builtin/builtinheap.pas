@@ -61,6 +61,10 @@ function PXXStrFromLit(len: NativeInt; src: Pointer): Pointer;
 function PXXStrConcat(lenA: NativeInt; srcA: Pointer; srcB: Pointer; lenB: NativeInt): Pointer;
 procedure PXXStrIncRef(p: Pointer);
 procedure PXXStrDecRef(p: Pointer);
+function PXXIntfAddRef(fatptr: Pointer): NativeInt;
+function PXXIntfRelease(fatptr: Pointer): NativeInt;
+function PXXIntfAddRefRaw(imt, inst: Pointer): NativeInt;
+procedure PXXIntfAssign(dest, src: Pointer);
 function PXXStrUnique(strSlot: Pointer): Pointer;
 function PXXStrEq(lenA: NativeInt; srcA: Pointer; lenB: NativeInt; srcB: Pointer): Int64;
 procedure PXXStrSetLen(strSlot: Pointer; newLen: NativeInt);
@@ -100,6 +104,9 @@ type
                          4-byte handle/pointer slot and corrupts its neighbour. }
   PByte = ^Byte;    { byte access at an arbitrary address }
   PInt32 = ^Integer; { 32-bit integer access }
+  TPXXIntfMethod = function(AInst: Pointer): NativeInt;  { COM/ARC interface IMT
+                       slot signature: _AddRef/_Release take only the implicit
+                       Self in arg0 and return the new refcount. }
 
 const
 {$ifdef PXX_ESP}
@@ -482,6 +489,62 @@ begin
   rc := PWord(base)^ - 1;
   PWord(base)^ := rc;
   if rc = 0 then PXXFree(Pointer(base));
+end;
+
+{ COM/ARC interface refcount helpers. `fatptr` is the ADDRESS of a 16-/8-byte
+  interface fat pointer (word 0 = IMT, word 1 = instance). The IMT is the
+  implementing class's Interface Method Table: a vector of code addresses,
+  slot 1 = _AddRef, slot 2 = _Release (slot 0 = QueryInterface), so the call
+  dispatches polymorphically into the concrete TInterfacedObject-derived method.
+  Both are nil-safe (an uninitialised interface var is all-zero); _Release at
+  zero frees the instance inside the dispatched method. }
+function PXXIntfAddRef(fatptr: Pointer): NativeInt;
+var imt, inst: Pointer; fn: TPXXIntfMethod;
+begin
+  Result := 0;
+  if fatptr = nil then Exit;
+  inst := Pointer(PWord(Pointer(Int64(fatptr) + SizeOf(Pointer)))^);
+  if inst = nil then Exit;
+  imt := Pointer(PWord(fatptr)^);
+  if imt = nil then Exit;
+  fn := TPXXIntfMethod(Pointer(PWord(Pointer(Int64(imt) + SizeOf(Pointer)))^));
+  Result := fn(inst);
+end;
+
+function PXXIntfRelease(fatptr: Pointer): NativeInt;
+var imt, inst: Pointer; fn: TPXXIntfMethod;
+begin
+  Result := 0;
+  if fatptr = nil then Exit;
+  inst := Pointer(PWord(Pointer(Int64(fatptr) + SizeOf(Pointer)))^);
+  if inst = nil then Exit;
+  imt := Pointer(PWord(fatptr)^);
+  if imt = nil then Exit;
+  fn := TPXXIntfMethod(Pointer(PWord(Pointer(Int64(imt) + 2 * SizeOf(Pointer)))^));
+  Result := fn(inst);
+end;
+
+{ _AddRef from a raw (IMT, instance) pair — used by class -> COM-interface
+  assignment, where the new value is not yet stored as a fat pointer. }
+function PXXIntfAddRefRaw(imt, inst: Pointer): NativeInt;
+var fn: TPXXIntfMethod;
+begin
+  Result := 0;
+  if (inst = nil) or (imt = nil) then Exit;
+  fn := TPXXIntfMethod(Pointer(PWord(Pointer(Int64(imt) + SizeOf(Pointer)))^));
+  Result := fn(inst);
+end;
+
+{ ARC-correct interface->interface assignment: retain the source reference, then
+  release the old destination (this order is safe when dest and src alias), then
+  copy the fat pointer (IMT word then instance word). }
+procedure PXXIntfAssign(dest, src: Pointer);
+begin
+  PXXIntfAddRef(src);
+  PXXIntfRelease(dest);
+  PWord(dest)^ := PWord(src)^;
+  PWord(Pointer(Int64(dest) + SizeOf(Pointer)))^ :=
+    PWord(Pointer(Int64(src) + SizeOf(Pointer)))^;
 end;
 
 { Ensure the managed AnsiString handle stored at strSlot is uniquely owned.

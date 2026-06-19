@@ -255,6 +255,8 @@ test-core: $(COMPILER)
 	test "$$(/tmp/test_interfaces_param26)" = "$$(printf 'viaparam=7\nresult=7\nfg same\nfh diff\nfh ne\nf set\nnow nil')"
 	./$(COMPILER) test/test_interfaces_inherit.pas /tmp/test_interfaces_inherit26
 	test "$$(/tmp/test_interfaces_inherit26)" = "$$(printf 'bar.B=9\nbar.F=7\nfoo.F=7\nwiden=7\nwf=7\na is IFoo\na is IBar\nsup IFoo')"
+	./$(COMPILER) test/test_interface_arc.pas /tmp/test_interface_arc26
+	test "$$(/tmp/test_interface_arc26)" = "$$(printf 'hello\nhello\nhello\nfreed=3')"
 	./$(COMPILER) test/test_float_str_val.pas /tmp/test_float_str_val26
 	test "$$(/tmp/test_float_str_val26)" = "$$(printf '[3.14]\n[    3.1416]\n[-2.750]\n[1000.5]\n42.7500 code=0\n-1.5000 code=0\n100.00 code=0\n350.00 code=0\n0.1250 code=0\ncode=1\n[   42]\n-99 code=0')"
 	./$(COMPILER) test/test_math.pas /tmp/test_math26

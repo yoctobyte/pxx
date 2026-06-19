@@ -6583,8 +6583,22 @@ begin
           Next;
           Expect(tkRParen, ')');
         end;
+        { COM/ARC interface ({$interfaces com}): with no explicit parent, derive
+          implicitly from IInterface so the three reserved slots QueryInterface /
+          _AddRef / _Release occupy IMT slots 0..2 (ARC dispatches _Release via
+          slot 2). IInterface's own declaration finds no prior IInterface, so it
+          does not self-parent and supplies the three slots itself. }
+        if InterfacesComMode and (parentIntfCi < 0) then
+        begin
+          parentIntfCi := FindUClass('IInterface');
+          if parentIntfCi < 0 then parentIntfCi := FindUClass('IUnknown');
+          if (parentIntfCi >= 0) and not UClsIsInterface[parentIntfCi] then
+            parentIntfCi := -1;
+        end;
         ci := AddUClass(tnOff, tnLen);
         UClsIsInterface[ci] := True;
+        UClsIsComInterface[ci] := InterfacesComMode;
+        if InterfacesComMode then ComInterfaceUsed := True;
         UClsSize_[ci] := 2 * TARGET_PTR_SIZE;   { fat pointer {IMT, instance} }
         UClsAlign[ci] := TARGET_PTR_SIZE;
         UClsParent[ci] := parentIntfCi;
@@ -8593,7 +8607,12 @@ begin
         zeroBytes := RecSize(Syms[i].RecName)
       else if (Syms[i].TypeKind = tyRecord) and Syms[i].IsArray and
               RecordHasManagedFields(Syms[i].ElemRecName) then
-        zeroBytes := Syms[i].ArrLen * RecSize(Syms[i].ElemRecName);
+        zeroBytes := Syms[i].ArrLen * RecSize(Syms[i].ElemRecName)
+      else if SymIsComInterface(i) then
+        { COM/ARC interface fat pointer: must start nil so the ARC release at
+          first overwrite / scope exit sees an empty slot, not stale stack bytes
+          (a garbage IMT would dispatch _Release into nowhere). }
+        zeroBytes := RecSize(Syms[i].RecName);
       { i386: only pointer-sized managed handles (scalar AnsiString / dyn-array)
         are supported; the larger managed aggregates (records/variants/arrays of
         managed) are not on this target yet. }
@@ -9610,7 +9629,7 @@ begin
     features not yet on every target). }
   { Plain AnsiString needs only builtinheap (allocator + PXXStr*), not the full
     builtin conversions. Variant/Str/Val/uses pull builtin in the token loop. }
-  needHeapUnit := needsHeap or needsAnsiRuntime;
+  needHeapUnit := needsHeap or needsAnsiRuntime or ComInterfaceUsed;
 
   if needHeapUnit then
   begin
@@ -9644,6 +9663,15 @@ begin
   dummyNames[0] := 'p';     dummyTypes[0] := tyPointer;
   i := RegisterProc('PXXStrIncRef', False, tyPointer, 1, dummyNames, dummyTypes);
   i := RegisterProc('PXXStrDecRef', False, tyPointer, 1, dummyNames, dummyTypes);
+  dummyNames[0] := 'fatptr'; dummyTypes[0] := tyPointer;
+  i := RegisterProc('PXXIntfAddRef', True, tyNativeInt, 1, dummyNames, dummyTypes);
+  i := RegisterProc('PXXIntfRelease', True, tyNativeInt, 1, dummyNames, dummyTypes);
+  dummyNames[0] := 'imt';  dummyTypes[0] := tyPointer;
+  dummyNames[1] := 'inst'; dummyTypes[1] := tyPointer;
+  i := RegisterProc('PXXIntfAddRefRaw', True, tyNativeInt, 2, dummyNames, dummyTypes);
+  dummyNames[0] := 'dest'; dummyTypes[0] := tyPointer;
+  dummyNames[1] := 'src';  dummyTypes[1] := tyPointer;
+  i := RegisterProc('PXXIntfAssign', False, tyPointer, 2, dummyNames, dummyTypes);
   dummyNames[0] := 'strSlot'; dummyTypes[0] := tyPointer;
   i := RegisterProc('PXXStrUnique', True, tyPointer, 1, dummyNames, dummyTypes);
   dummyNames[0] := 'strSlot'; dummyTypes[0] := tyPointer;

@@ -603,6 +603,8 @@ var
   DumpIR : Boolean;
   StrictOverload : Boolean;
   ThreadSafeMode : Boolean;
+  InterfacesComMode : Boolean; { {$interfaces com}: interfaces declared while on are COM/ARC (reference-counted). Default off = CORBA (no refcount). }
+  ComInterfaceUsed : Boolean; { set when any COM/ARC interface is declared; forces the builtinheap unit (PXXIntfAddRef/Release live there) and the ARC cleanup path. }
   EnableAutoVar : Boolean;
   EnableLazyVar : Boolean;
   CStyleComments : Boolean;   { CSTYLECOMMENTS directive: enable C slash-star comments }
@@ -1026,6 +1028,7 @@ var
   UClsPCount : array[0..MAX_UCLASS-1] of Integer;
   UClsIsRecord : array[0..MAX_UCLASS-1] of Boolean;
   UClsIsInterface : array[0..MAX_UCLASS-1] of Boolean; { CORBA interface type: methods are slot signatures (no bodies/fields); a var of it is a 16-byte fat pointer {IMT, instance} }
+  UClsIsComInterface : array[0..MAX_UCLASS-1] of Boolean; { COM/ARC interface ({$interfaces com}): reference-counted via the IMT _Release slot (slot 2). Compiler inserts _AddRef/_Release at assign/param/result/scope-exit/unwind. Default off (CORBA, no refcount). }
   UClsCount  : Integer;
 
   { Per-(class, interface) Interface Method Table: a Data[] array of code

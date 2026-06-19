@@ -281,6 +281,19 @@ begin
   end;
 end;
 
+function SymIsComInterface(symIdx: Integer): Boolean;
+{ True iff the local/var symbol is a COM/ARC interface value (a reference-counted
+  fat pointer): modelled as a tyRecord whose rec id is a COM-interface UCls. }
+var ci: Integer;
+begin
+  Result := False;
+  if (symIdx < 0) or (Syms[symIdx].TypeKind <> tyRecord) or Syms[symIdx].IsArray then Exit;
+  if Syms[symIdx].RecName < REC_UCLASS_BASE then Exit;
+  ci := Syms[symIdx].RecName - REC_UCLASS_BASE;
+  if (ci < 0) or (ci >= UClsCount) then Exit;
+  Result := UClsIsInterface[ci] and UClsIsComInterface[ci];
+end;
+
 function FindUField(ci: Integer; const name: AnsiString): Integer;
 var i, base, cnt: Integer; lo, name2: AnsiString; curr: Integer;
 begin
@@ -1115,6 +1128,14 @@ begin
   else if Syms[i].TypeKind = tyVariant then
   begin
     zeroBytes := TypeSize(tyVariant);
+    Result := True;
+  end
+  else if SymIsComInterface(i) then
+  begin
+    { COM/ARC interface value: a fat pointer that the ARC path releases on
+      overwrite and at scope exit, so it must start nil (all-zero) — otherwise the
+      first release dispatches through a garbage IMT. }
+    zeroBytes := RecSize(Syms[i].RecName);
     Result := True;
   end
   else if (Syms[i].TypeKind = tyRecord) and not Syms[i].IsArray and
@@ -3330,14 +3351,22 @@ begin
 end;
 
 procedure EmitManagedLocalCleanup(retSymIdx: Integer);
-var i: Integer;
+var i, pi: Integer;
 begin
   if CurProc < 0 then Exit;
   for i := Procs[CurProc].ScopeBase to SymCount - 1 do
   begin
     if (Syms[i].Kind = skLocal) and (i <> retSymIdx) then
     begin
-      if Syms[i].TypeKind = tyAnsiString then
+      if SymIsComInterface(i) then
+      begin
+        { COM/ARC interface local: _Release the held reference (nil-safe). }
+        pi := FindProc('PXXIntfRelease');
+        if pi < 0 then Error('compiler error: PXXIntfRelease not found');
+        x64_lea_reg_mem(8, rRDI, rRBP, Syms[i].Offset, True);  { lea rdi, [rbp+off] }
+        EmitCallProc(pi);
+      end
+      else if Syms[i].TypeKind = tyAnsiString then
       begin
         { mov rax, [rbp + Offset] }
         x64_mov_reg_mem(8, rRAX, rRBP, Syms[i].Offset, True);

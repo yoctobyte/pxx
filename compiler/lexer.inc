@@ -449,6 +449,8 @@ begin
   PasCondCount := 0;
   StrictOverload := False;
   ThreadSafeMode := False;
+  InterfacesComMode := False;
+  ComInterfaceUsed := False;
   CStyleComments := False;
   NestedComments := False;
   CaseSensitiveMode := False;
@@ -909,6 +911,12 @@ begin
       if CaseEqual(name, 'on') then ThreadSafeMode := True
       else if CaseEqual(name, 'off') then ThreadSafeMode := False
       else Error('threadsafe requires on or off');
+    end
+    else if CaseEqual(command, 'interfaces') then
+    begin
+      if CaseEqual(name, 'com') then InterfacesComMode := True
+      else if CaseEqual(name, 'corba') then InterfacesComMode := False
+      else Error('interfaces requires com or corba');
     end
     else if CaseEqual(command, 'cstylecomments') then
     begin

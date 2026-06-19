@@ -1227,6 +1227,8 @@ var left, right, seq, item, value, outNode, first, last, leftAddr, argNode, argV
     branchSeq, branchPair, labelsHead, stmtNode, labelNode: Integer;
     clauseBodyLabel, nextClauseLabel, selectorValNode: Integer;
     rhsIsLValue: Boolean;
+    isComIntf: Boolean;
+    intfTmpImt, intfTmpInst: Integer;
     cv: Int64;
     constValNode, clauseBodyLabelNode, exitJmpNode, nextClauseLabelNode: Integer;
     beforeCount, handlerLabel, handlerNode, handlerNextLabel, savedDepth: Integer;
@@ -1918,6 +1920,9 @@ begin
       if lhsTk = tyRecord then
       begin
         varIdx := ResolveNodeRec(ASTLeft[node]);
+        isComIntf := (varIdx >= REC_UCLASS_BASE) and
+                     UClsIsInterface[varIdx - REC_UCLASS_BASE] and
+                     UClsIsComInterface[varIdx - REC_UCLASS_BASE];
         { interface := nil — zero the whole fat pointer {nil, nil}. The RHS is a
           pointer/ordinal nil, not a class or interface, so it never reaches the
           record-copy path (which would dereference a bogus source). }
@@ -1925,6 +1930,13 @@ begin
            (IntToTypeKind(ASTTk[ASTRight[node]]) <> tyClass) and
            (IntToTypeKind(ASTTk[ASTRight[node]]) <> tyRecord) then
         begin
+          { COM/ARC: release the old reference before discarding the slot. }
+          if isComIntf then
+          begin
+            first := IRAppend(IR_ARG, IRLowerAddress(ASTLeft[node]), -1, -1, 0, Ord(tyPointer));
+            seq := IRAppendCall(FindProc('PXXIntfRelease'), first, -1, Ord(tyNativeInt));
+            IRIVal[seq] := 1;  { statement-level: side-effect call, result discarded }
+          end;
           Result := IRAppend(IR_DEFAULT_MEM, IRLowerAddress(ASTLeft[node]),
                              -1, REC_NONE, RecSize(varIdx), Ord(tyRecord));
           Exit;
@@ -1935,6 +1947,34 @@ begin
           classIdx := ResolveNodeRec(ASTRight[node]);
           pi := FindIMT(classIdx - REC_UCLASS_BASE, varIdx - REC_UCLASS_BASE);
           if pi < 0 then Error('class does not implement the interface');
+          if isComIntf then
+          begin
+            { COM/ARC class -> interface. Stash the new (IMT, instance) in scratch
+              slots, retain the new reference, release the old slot, then publish.
+              Retain-before-release keeps re-assigning the same object safe. }
+            intfTmpImt := AllocVar('', tyPointer);
+            IRAppend(IR_STORE_SYM, intfTmpImt,
+                     IRAppend(IR_IMTADDR, pi, -1, -1, 0, Ord(tyPointer)), -1, 0, Ord(tyPointer));
+            intfTmpInst := AllocVar('', tyPointer);
+            IRAppend(IR_STORE_SYM, intfTmpInst, IRLowerAST(ASTRight[node]), -1, 0, Ord(tyPointer));
+            first := IRAppend(IR_ARG, IRAppend(IR_LOAD_SYM, intfTmpImt, -1, -1, 0, Ord(tyPointer)), -1, -1, 0, Ord(tyPointer));
+            argNode := IRAppend(IR_ARG, IRAppend(IR_LOAD_SYM, intfTmpInst, -1, -1, 0, Ord(tyPointer)), -1, -1, 0, Ord(tyPointer));
+            IRB[first] := argNode;
+            seq := IRAppendCall(FindProc('PXXIntfAddRefRaw'), first, -1, Ord(tyNativeInt));
+            IRIVal[seq] := 1;
+            first := IRAppend(IR_ARG, IRLowerAddress(ASTLeft[node]), -1, -1, 0, Ord(tyPointer));
+            seq := IRAppendCall(FindProc('PXXIntfRelease'), first, -1, Ord(tyNativeInt));
+            IRIVal[seq] := 1;
+            leftAddr := IRLowerAddress(ASTLeft[node]);
+            IRAppend(IR_STORE_MEM, leftAddr,
+                     IRAppend(IR_LOAD_SYM, intfTmpImt, -1, -1, 0, Ord(tyPointer)), -1, 0, Ord(tyPointer));
+            outNode := IRAppend(IR_BINOP, IRLowerAddress(ASTLeft[node]),
+                                IRAppend(IR_CONST_INT, -1, -1, -1, TARGET_PTR_SIZE, Ord(tyInteger)),
+                                Ord(tkPlus), 0, Ord(tyPointer));
+            Result := IRAppend(IR_STORE_MEM, outNode,
+                               IRAppend(IR_LOAD_SYM, intfTmpInst, -1, -1, 0, Ord(tyPointer)), -1, 0, Ord(tyPointer));
+            Exit;
+          end;
           leftAddr := IRLowerAddress(ASTLeft[node]);
           IRAppend(IR_STORE_MEM, leftAddr,
                    IRAppend(IR_IMTADDR, pi, -1, -1, 0, Ord(tyPointer)), -1, 0, Ord(tyPointer));
@@ -1943,6 +1983,22 @@ begin
                               IRAppend(IR_CONST_INT, -1, -1, -1, TARGET_PTR_SIZE, Ord(tyInteger)),
                               Ord(tkPlus), 0, Ord(tyPointer));
           Result := IRAppend(IR_STORE_MEM, outNode, value, -1, 0, Ord(tyPointer));
+          Exit;
+        end;
+        { COM/ARC interface -> interface (RHS is another interface lvalue):
+          retain source, release old dest, copy the fat pointer — all in the
+          ARC-correct order inside PXXIntfAssign. }
+        if isComIntf and
+           ((ASTKind[ASTRight[node]] = AN_IDENT) or (ASTKind[ASTRight[node]] = AN_FIELD) or
+            (ASTKind[ASTRight[node]] = AN_INDEX) or (ASTKind[ASTRight[node]] = AN_DEREF)) and
+           (ResolveNodeRec(ASTRight[node]) >= REC_UCLASS_BASE) and
+           UClsIsInterface[ResolveNodeRec(ASTRight[node]) - REC_UCLASS_BASE] then
+        begin
+          first := IRAppend(IR_ARG, IRLowerAddress(ASTLeft[node]), -1, -1, 0, Ord(tyPointer));
+          argNode := IRAppend(IR_ARG, IRLowerAddress(ASTRight[node]), -1, -1, 0, Ord(tyPointer));
+          IRB[first] := argNode;
+          Result := IRAppendCall(FindProc('PXXIntfAssign'), first, -1, Ord(tyPointer));
+          IRIVal[Result] := 1;
           Exit;
         end;
       end;
