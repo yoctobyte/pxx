@@ -1,9 +1,10 @@
 # Latent: whole-record array-element copy in main-program body emits store no-ops
 
 - **Type:** bug
-- **Status:** blocked (cannot reproduce)
+- **Status:** done (fixed; non-reproducible, guarded by regression test)
 - **Owner:** —
 - **Opened:** 2026-06-06 (from todo.md §2 Phase 5 note)
+- **Resolved:** 2026-06-19
 
 ## Update (2026-06-06)
 
@@ -42,5 +43,18 @@ A direct test that does `arr[i] := someRecord` in the main-program body
 round-trips all fields without the field-by-field workaround; self-host
 fixedpoint holds.
 
+## Resolution (2026-06-19)
+
+Still non-reproducible — confirmed fixed by the record-copy>8 / `IR_COPY_REC`
+work. The acceptance repro (`arr[i] := someRecord` in the main-program body over
+a 4-field record with a managed `string` field, no field-by-field workaround)
+round-trips every field correctly on all four targets (x86-64 / i386 / aarch64 /
+arm32), output-equal to x86-64. Added as a permanent regression guard
+`test/test_cross_record_array_store.pas`, wired into the i386 / aarch64 / arm32
+cross suites. Closing as fixed; if the exact historical `__rttireg`
+sentinel-drop `Fixups[]` trigger ever resurfaces, reopen with that live shape.
+
 ## Log
 - 2026-06-06 — ticket opened from todo.md §2 Phase 5 latent-bug note.
+- 2026-06-19 — acceptance repro passes all 4 targets; regression test added +
+  wired into the cross suites. Resolved as fixed (non-reproducible).

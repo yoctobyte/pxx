@@ -63,14 +63,13 @@ _none_
 | idea-unit-rename-import | idea | `uses X as Y` unit-rename import (dialect extension) | — |
 | idea-visibility-enforcement | idea | Enforce private/protected visibility | — |
 
-## blocked (2)
+## blocked (1)
 
 | Ticket | Type | Summary | Blocked-by |
 | --- | --- | --- | --- |
 | bug-nonreproducible-miscompile-2026-06-02 | bug | Non-reproducible one-off miscompile (2026-06-02) | — |
-| bug-whole-record-copy-main-body-noop | bug | Latent: whole-record array-element copy in main-program body emits store no-ops | — |
 
-## done (69)
+## done (70)
 
 | Ticket | Type | Summary | Blocked-by |
 | --- | --- | --- | --- |
@@ -83,6 +82,7 @@ _none_
 | bug-read-preserves-line-remainder | bug | `read` consumes a whole line like `readln` | — |
 | bug-record-byvalue-arg-truncation | bug | By-value record args >8 bytes truncate (and operator operand edges) | — |
 | bug-threadsafe-layout-rtti-helper-races | bug | Thread-safe layout RTTI helper races | feature-rtti-layout-table |
+| bug-whole-record-copy-main-body-noop | bug | Latent: whole-record array-element copy in main-program body emits store no-ops | — |
 | bug-xtensa-call0-large-frame-truncates | bug | Xtensa Call0 / non-windowed frame >128 bytes silently truncates | — |
 | chore-asmtext-per-platform-split | chore | Split `asmtext.inc` monolith into per-platform files + fix emitter tests | — |
 | chore-qemu-test-env | chore | QEMU cross-target test environment | — |
