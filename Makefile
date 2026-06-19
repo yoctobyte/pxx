@@ -3,7 +3,7 @@ FPCFLAGS = -O2 -Tlinux -Px86_64
 HYPERFINE ?= hyperfine
 BENCH_RUNS ?= 10
 BENCH_HELLO_RUNS ?= 10
-BENCH_BATCH ?= 20
+BENCH_BATCH ?= 3
 BENCH_RUNTIME_RUNS ?= 30
 
 COMPILER     := compiler/pascal26
