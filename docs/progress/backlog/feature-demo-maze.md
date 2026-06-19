@@ -40,3 +40,13 @@ self-host / cross regression.
 
 ## Log
 - 2026-06-19 — Opened in the demo-ticket organization pass.
+
+## Status 2026-06-19 (track B, v10)
+
+Compiles on v10 and **Generate + Render work** (prints the maze). **`Solve`
+(BFS) segfaults at runtime** — isolated: replacing the `Solve` call with a
+constant renders fine; a minimal function with the same large 2-D static-array
+locals does NOT crash, so it's specific to Solve's BFS/path logic (a subtle OOB
+on my side, or a context-sensitive codegen issue — no clean standalone repro
+yet). In `demos` it shows compile-OK; runtime solve is the open item. Revisit
+with gdb / step-through once there's time; not a clean track-A ticket yet.
