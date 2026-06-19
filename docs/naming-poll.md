@@ -67,7 +67,8 @@ Maintainer shortlist marked ★ (current favourites — not binding).
 - Ingot — cast block = compiled output
 - Vertex — geometry / graph node
 - Pyx — small round container; echoes `pxx`; pronounced "picks"
-- Flint — strikes the spark; hard stone
+- ★ Flint — strikes the spark; hard stone
+- ★ Spark — the ignition / galvanic jolt (clashes: Apache Spark, SPARK/Ada)
 - ★ Nyx — Greek goddess of night; short, mythic (spelling: 'Nix' collides with NixOS)
 - Onyx — black gemstone; sleek
 - Pascaline — Blaise Pascal's mechanical calculating machine
@@ -179,7 +180,8 @@ Top 7 by 👍 → native Poll, single choice.
 | Name | Read |
 |---|---|
 | Pyx | small round container; echoes `pxx`; "picks" |
-| Flint | strikes the spark; hard stone |
+| Flint ★ | strikes the spark; hard stone |
+| Spark ★ | the ignition / galvanic jolt (clashes: Apache Spark, SPARK/Ada) |
 | Nyx ★ | Greek goddess of night; mythic ('Nix' = NixOS clash) |
 | Onyx | black gemstone; sleek |
 | Pascaline | Pascal's mechanical calculating machine |
