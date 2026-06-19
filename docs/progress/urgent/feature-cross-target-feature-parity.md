@@ -380,9 +380,21 @@ test-core; bootstrap + cross-bootstrap stay byte-identical.
   targets** (collections/dynarray-of-record depth; async I/O reactor + sockets +
   timers; external C calls + dynamic symbols). The per-target matrix has no
   unexplained ✗ for the scalar/object/async/external feature set; the remaining
-  cross ✗/◐ are tracked by their own arcs (interfaces → feature-interfaces;
-  GTK/LCL → needs interfaces + the external path now landed; Variant
-  single/extended on aarch64). External-call **ABI breadth** (float/Int64 C args,
+  cross ✗/◐ are tracked by their own arcs (interfaces → feature-interfaces, now
+  done; GTK/LCL → see correction below; Variant single/extended on aarch64).
+  External-call **ABI breadth** (float/Int64 C args,
   float returns, i386 stack 16-alignment) is deliberately out of v1 and spun out
   to **feature-cross-extern-abi-breadth** (backlog). Embedded targets
   (Xtensa/RV32) remain deferred per the scope decision above.
+- 2026-06-19 — **GTK/LCL blocker correction.** Earlier notes said GTK/LCL "needs
+  interfaces" — wrong. The stock Lazarus helloworld compiled+ran UNMODIFIED on
+  x86-64 at c36b005/3c51739, BEFORE language interfaces existed (CORBA slice
+  3a7b0c5 came later). It used the LCL stub unit literally named `Interfaces`,
+  which is the LCL **widgetset** glue (`TWidgetSet`), not Object Pascal `interface`
+  types — a name collision. So closing feature-interfaces did NOT unblock GTK.
+  The real GTK-on-cross blocker is the **external/dynamic-symbol C-call path**
+  (GTK is all `external` calls into libgtk) plus likely **extern-ABI breadth**
+  (float args for coords/sizes; spun out to feature-cross-extern-abi-breadth).
+  Separately: compiling the REAL (non-stub) LCL is a standalone **wish-goal**, of
+  which language interfaces is ONE prerequisite among many (RTTI/streaming depth,
+  full widgetset, property/event system, extern breadth, …) — not in this ticket.
