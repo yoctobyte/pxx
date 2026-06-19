@@ -1584,8 +1584,43 @@ begin
   Result := node;
 end;
 
+function ParseSetElementAST: Integer;
+{ One set-literal element. A compile-time constant (integer / 1-char string /
+  const identifier — exactly what ParseSetConst accepts) folds to an AN_INT_LIT
+  so an all-constant literal keeps the baked-blob fast path (byte-identical).
+  Anything else (a variable, a computed expression) is parsed as a full
+  expression for a runtime element; the lowering then builds the set at runtime
+  with Include/range loops. }
+var n, sci: Integer;
+begin
+  if CurTok.Kind = tkInteger then
+  begin
+    n := AllocNode(AN_INT_LIT); ASTIVal[n] := CurTok.IVal; ASTTk[n] := Ord(tyInteger); Next;
+    Result := n;
+  end
+  else if CurTok.Kind = tkString then
+  begin
+    if Length(CurTok.SVal) <> 1 then Error('set item must be one character');
+    n := AllocNode(AN_INT_LIT); ASTIVal[n] := Ord(CurTok.SVal[1]); ASTTk[n] := Ord(tyChar); Next;
+    Result := n;
+  end
+  else if (CurTok.Kind = tkIdent) and (FindSym(CurTok.SVal) >= 0) and
+          (Syms[FindSym(CurTok.SVal)].Kind = skConst) then
+  begin
+    sci := FindSym(CurTok.SVal);
+    n := AllocNode(AN_INT_LIT); ASTIVal[n] := Syms[sci].ConstVal; ASTTk[n] := Ord(Syms[sci].TypeKind); Next;
+    Result := n;
+  end
+  else
+  begin
+    { Runtime element: a variable or an arbitrary expression. }
+    ParseExpr;
+    Result := CurASTNode;
+  end;
+end;
+
 function ParseSetLiteralAST: Integer;
-var node, argNode, lastArg, loVal, hiVal, itemNode: Integer; done: Boolean;
+var node, argNode, lastArg, itemNode: Integer; done: Boolean;
 begin
   node := AllocNode(AN_SET_LIT);
   ASTTk[node] := Ord(tySet);
@@ -1598,20 +1633,14 @@ begin
     done := False;
     while not done do
     begin
-      loVal := ParseSetConst;
+      itemNode := ParseSetElementAST;
       if Eat(tkDotDot) then
       begin
-        hiVal := ParseSetConst;
-        itemNode := AllocNode(AN_PAIR);
-        ASTLeft[itemNode] := AllocNode(AN_INT_LIT);
-        ASTIVal[ASTLeft[itemNode]] := loVal;
-        ASTRight[itemNode] := AllocNode(AN_INT_LIT);
-        ASTIVal[ASTRight[itemNode]] := hiVal;
-      end
-      else
-      begin
-        itemNode := AllocNode(AN_INT_LIT);
-        ASTIVal[itemNode] := loVal;
+        { Range lo..hi. Either bound may be constant or runtime. }
+        argNode := AllocNode(AN_PAIR);
+        ASTLeft[argNode] := itemNode;
+        ASTRight[argNode] := ParseSetElementAST;
+        itemNode := argNode;
       end;
 
       argNode := AllocNode(AN_ARG);
@@ -5574,6 +5603,23 @@ begin
         node := AllocNode(AN_CALL);
         ASTIVal[node] := -100;
         ASTLeft[node] := argSeq;
+      end
+      else if CaseEqual(name, 'Include') or CaseEqual(name, 'Exclude') then
+      begin
+        { Include(s, v) / Exclude(s, v): set/clear bit v in set s at runtime.
+          Left = set lvalue, Right = value expr (lowered via IRLowerSetBitMutate). }
+        Next; Expect(tkLParen, '(');
+        if CurTok.Kind <> tkIdent then Error('Include/Exclude: expected set variable');
+        idx := FindSym(CurTok.SVal); identTokIdx := TokPos - 1; Next;
+        valNode := ParseLValueAST(idx, identTokIdx);
+        Expect(tkComma, ',');
+        ParseExpr; Expect(tkRParen, ')');
+        if CaseEqual(name, 'Include') then
+          node := AllocNode(AN_SET_INCL)
+        else
+          node := AllocNode(AN_SET_EXCL);
+        ASTLeft[node] := valNode;
+        ASTRight[node] := CurASTNode;
       end
       else if (name = 'SetLength') or (name = 'setlength') then
       begin

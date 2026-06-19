@@ -1210,6 +1210,79 @@ begin
     Result := IRLowerAST(node);
 end;
 
+{ Runtime mutation of one bit of a 32-byte set: set (isIncl) or clear bit `val`
+  in the set at `setAddrNode`. The value is masked to 0..255 so the byte index
+  always lands inside the 32-byte set — out-of-range elements are ignored, like
+  the constant set-literal bake path. setAddrNode is an already-lowered address
+  node; valNode is an already-lowered integer value. Emits the load/modify/store
+  as a statement. Target-independent: only IR_BINOP / IR_LOAD_MEM / IR_STORE_MEM
+  primitives, which every backend already implements. (`shr` is IR_BINOP with op
+  Ord(tkIdent), matching the term parser.) }
+procedure IRLowerSetBitMutate(setAddrNode, valNode: Integer; isIncl: Boolean);
+var vTmp, ptrTmp, mask, curByte, newByte: Integer;
+begin
+  { Evaluate the value once. }
+  vTmp := AllocVar('', tyInteger);
+  IRAppend(IR_STORE_SYM, vTmp, valNode, -1, 0, Ord(tyInteger));
+  { byteAddr := setAddr + ((val and 255) shr 3); cache in a pointer temp so the
+    address is computed once and reused by the load and the store. }
+  ptrTmp := AllocVar('', tyPointer);
+  IRAppend(IR_STORE_SYM, ptrTmp,
+    IRAppend(IR_BINOP, setAddrNode,
+      IRAppend(IR_BINOP,
+        IRAppend(IR_BINOP, IRAppend(IR_LOAD_SYM, vTmp, -1, -1, 0, Ord(tyInteger)),
+          IRAppend(IR_CONST_INT, -1, -1, -1, 255, Ord(tyInteger)), Ord(tkAnd), 0, Ord(tyInteger)),
+        IRAppend(IR_CONST_INT, -1, -1, -1, 3, Ord(tyInteger)), Ord(tkIdent), 0, Ord(tyInteger)),
+      Ord(tkPlus), 0, Ord(tyPointer)),
+    -1, 0, Ord(tyPointer));
+  { mask := 1 shl ((val and 255) and 7). }
+  mask := IRAppend(IR_BINOP,
+            IRAppend(IR_CONST_INT, -1, -1, -1, 1, Ord(tyInteger)),
+            IRAppend(IR_BINOP,
+              IRAppend(IR_BINOP, IRAppend(IR_LOAD_SYM, vTmp, -1, -1, 0, Ord(tyInteger)),
+                IRAppend(IR_CONST_INT, -1, -1, -1, 255, Ord(tyInteger)), Ord(tkAnd), 0, Ord(tyInteger)),
+              IRAppend(IR_CONST_INT, -1, -1, -1, 7, Ord(tyInteger)), Ord(tkAnd), 0, Ord(tyInteger)),
+            Ord(tkShl), 0, Ord(tyInteger));
+  curByte := IRAppend(IR_LOAD_MEM, IRAppend(IR_LOAD_SYM, ptrTmp, -1, -1, 0, Ord(tyPointer)),
+               -1, -1, 0, Ord(tyUInt8));
+  if isIncl then
+    newByte := IRAppend(IR_BINOP, curByte, mask, Ord(tkOr), 0, Ord(tyInteger))
+  else
+    newByte := IRAppend(IR_BINOP, curByte,
+                 IRAppend(IR_NOT, mask, -1, -1, 0, Ord(tyInteger)), Ord(tkAnd), 0, Ord(tyInteger));
+  IRAppend(IR_STORE_MEM, IRAppend(IR_LOAD_SYM, ptrTmp, -1, -1, 0, Ord(tyPointer)),
+    newByte, -1, 0, Ord(tyUInt8));
+end;
+
+{ Runtime `lo..hi` range into a set: a counter loop calling IRLowerSetBitMutate.
+  lo/hi are already-lowered integer values. Always Include (set literals only
+  add). }
+procedure IRLowerSetRangeMutate(setSym, loNode, hiNode: Integer);
+var iSym, hiSym, topLbl, endLbl: Integer;
+begin
+  iSym := AllocVar('', tyInteger);
+  hiSym := AllocVar('', tyInteger);
+  IRAppend(IR_STORE_SYM, iSym, loNode, -1, 0, Ord(tyInteger));
+  IRAppend(IR_STORE_SYM, hiSym, hiNode, -1, 0, Ord(tyInteger));
+  topLbl := IRNewLabel;
+  endLbl := IRNewLabel;
+  IRAppend(IR_LABEL, -1, -1, -1, topLbl, 0);
+  { while i <= hi }
+  IRAppend(IR_JUMP_IF_FALSE, endLbl,
+    IRAppend(IR_BINOP, IRAppend(IR_LOAD_SYM, iSym, -1, -1, 0, Ord(tyInteger)),
+      IRAppend(IR_LOAD_SYM, hiSym, -1, -1, 0, Ord(tyInteger)), Ord(tkLe), 0, Ord(tyBoolean)),
+    -1, 0, 0);
+  IRLowerSetBitMutate(IRAppend(IR_LEA, setSym, -1, -1, 0, Ord(tyPointer)),
+    IRAppend(IR_LOAD_SYM, iSym, -1, -1, 0, Ord(tyInteger)), True);
+  { i := i + 1 }
+  IRAppend(IR_STORE_SYM, iSym,
+    IRAppend(IR_BINOP, IRAppend(IR_LOAD_SYM, iSym, -1, -1, 0, Ord(tyInteger)),
+      IRAppend(IR_CONST_INT, -1, -1, -1, 1, Ord(tyInteger)), Ord(tkPlus), 0, Ord(tyInteger)),
+    -1, 0, Ord(tyInteger));
+  IRAppend(IR_JUMP, topLbl, -1, -1, 0, 0);
+  IRAppend(IR_LABEL, -1, -1, -1, endLbl, 0);
+end;
+
 function IRLowerAST(node: Integer): Integer;
 var left, right, seq, item, value, outNode, first, last, leftAddr, argNode, argVal, intCallNode, intArgSeq, argNode2, zeroVal, pi, zeroBytes: Integer;
     pairNode, condNode, specialId, classIdx, slot, cpi, pathIdx: Integer;
@@ -1241,6 +1314,7 @@ var left, right, seq, item, value, outNode, first, last, leftAddr, argNode, argV
     vrCount, vrTmp, vrIdent, vrCountLit, vrArg1, vrArg2, vrSlCall: Integer;
     vrIdxLit, vrIndex, vrTag, elemAddr, vrSavedRecId, vrBoxSym: Integer;
     vrElemTk: TTypeKind;
+    setAllConst: Boolean; setSym: Integer;
 begin
   if node = -1 then
   begin
@@ -1391,47 +1465,95 @@ begin
 
     AN_SET_LIT:
     begin
-      { Align DataLen to 8 bytes }
-      while (DataLen mod 8) <> 0 do
-      begin
-        if DataLen >= MAX_DATA then Error('data overflow');
-        Data[DataLen] := 0;
-        Inc(DataLen);
-      end;
-      idx := DataLen;
-      for i := 0 to 31 do
-      begin
-        if DataLen >= MAX_DATA then Error('data overflow');
-        Data[DataLen] := 0;
-        Inc(DataLen);
-      end;
+      { An all-constant set literal is baked into a 32-byte Data[] blob (the
+        original fast path, kept byte-identical). The parser leaves a constant
+        element as an AN_INT_LIT (a constant range as an AN_PAIR of two of them);
+        any other element kind means a runtime value, so the whole literal is
+        built at runtime into a zeroed set temp with Include/range loops. }
+      setAllConst := True;
       argNode := ASTLeft[node];
       while argNode <> -1 do
       begin
         itemNode := ASTLeft[argNode];
         if ASTKind[itemNode] = AN_PAIR then
         begin
-          lo := ASTIVal[ASTLeft[itemNode]];
-          hi := ASTIVal[ASTRight[itemNode]];
-          if lo < 0 then lo := 0;
-          if hi > 255 then hi := 255;
-          for val1 := lo to hi do
-          begin
-            Data[idx + (val1 div 8)] := Data[idx + (val1 div 8)] or Shl8_(val1 mod 8);
-          end;
+          if (ASTKind[ASTLeft[itemNode]] <> AN_INT_LIT) or
+             (ASTKind[ASTRight[itemNode]] <> AN_INT_LIT) then setAllConst := False;
         end
-        else
-        begin
-          val1 := ASTIVal[itemNode];
-          if (val1 >= 0) and (val1 <= 255) then
-          begin
-            Data[idx + (val1 div 8)] := Data[idx + (val1 div 8)] or Shl8_(val1 mod 8);
-          end;
-        end;
+        else if ASTKind[itemNode] <> AN_INT_LIT then
+          setAllConst := False;
         argNode := ASTRight[argNode];
       end;
-      Result := IRAppend(IR_SET_LIT, -1, -1, -1, idx, ASTTk[node]);
+
+      if setAllConst then
+      begin
+        { Align DataLen to 8 bytes }
+        while (DataLen mod 8) <> 0 do
+        begin
+          if DataLen >= MAX_DATA then Error('data overflow');
+          Data[DataLen] := 0;
+          Inc(DataLen);
+        end;
+        idx := DataLen;
+        for i := 0 to 31 do
+        begin
+          if DataLen >= MAX_DATA then Error('data overflow');
+          Data[DataLen] := 0;
+          Inc(DataLen);
+        end;
+        argNode := ASTLeft[node];
+        while argNode <> -1 do
+        begin
+          itemNode := ASTLeft[argNode];
+          if ASTKind[itemNode] = AN_PAIR then
+          begin
+            lo := ASTIVal[ASTLeft[itemNode]];
+            hi := ASTIVal[ASTRight[itemNode]];
+            if lo < 0 then lo := 0;
+            if hi > 255 then hi := 255;
+            for val1 := lo to hi do
+            begin
+              Data[idx + (val1 div 8)] := Data[idx + (val1 div 8)] or Shl8_(val1 mod 8);
+            end;
+          end
+          else
+          begin
+            val1 := ASTIVal[itemNode];
+            if (val1 >= 0) and (val1 <= 255) then
+            begin
+              Data[idx + (val1 div 8)] := Data[idx + (val1 div 8)] or Shl8_(val1 mod 8);
+            end;
+          end;
+          argNode := ASTRight[argNode];
+        end;
+        Result := IRAppend(IR_SET_LIT, -1, -1, -1, idx, ASTTk[node]);
+      end
+      else
+      begin
+        setSym := AllocVar('', tySet);
+        IRAppend(IR_DEFAULT_MEM, IRAppend(IR_LEA, setSym, -1, -1, 0, Ord(tyPointer)),
+          -1, REC_NONE, 32, Ord(tySet));
+        argNode := ASTLeft[node];
+        while argNode <> -1 do
+        begin
+          itemNode := ASTLeft[argNode];
+          if ASTKind[itemNode] = AN_PAIR then
+            IRLowerSetRangeMutate(setSym, IRLowerAST(ASTLeft[itemNode]),
+              IRLowerAST(ASTRight[itemNode]))
+          else
+            IRLowerSetBitMutate(IRAppend(IR_LEA, setSym, -1, -1, 0, Ord(tyPointer)),
+              IRLowerAST(itemNode), True);
+          argNode := ASTRight[argNode];
+        end;
+        Result := IRAppend(IR_LEA, setSym, -1, -1, 0, Ord(tySet));
+      end;
     end;
+
+    AN_SET_INCL:
+      IRLowerSetBitMutate(IRLowerAddress(ASTLeft[node]), IRLowerAST(ASTRight[node]), True);
+
+    AN_SET_EXCL:
+      IRLowerSetBitMutate(IRLowerAddress(ASTLeft[node]), IRLowerAST(ASTRight[node]), False);
 
     AN_ASM:
       Result := IRAppend(IR_ASM, ASTLeft[node], ASTRight[node], -1, 0, Ord(tyUnknown));

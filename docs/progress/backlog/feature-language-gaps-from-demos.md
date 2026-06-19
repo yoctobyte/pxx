@@ -16,7 +16,30 @@ The demos are written platonically (idiomatic code, no workarounds). Library
 holes go in the RTL ticket. A few gaps are in the language/compiler itself —
 either confirmed or strongly suspected while writing — collected here.
 
-## Gap 1 — `set of` built from runtime values  (CONFIRMED)
+## Gap 1 — `set of` built from runtime values  (DONE 2026-06-19)
+
+**Resolved.** Runtime set construction + mutation landed:
+- `[v]` and `[a..b]` with variable elements/bounds (any mix of constant and
+  runtime items in one literal). All-constant literals keep the baked-blob fast
+  path, so self-host stays byte-identical.
+- `Include(s, v)` / `Exclude(s, v)` builtins.
+
+Lowered entirely in the shared IR (`IRLowerSetBitMutate` / `IRLowerSetRangeMutate`
+in `compiler/ir.inc`) from `IR_BINOP` / `IR_LOAD_MEM` / `IR_STORE_MEM` primitives
+— no new IR ops, no per-backend asm, no builtinheap dependency. The value is
+masked to 0..255 so the byte index always lands inside the 32-byte set
+(out-of-range elements ignored, matching the constant path). Parser: a constant
+element still folds to `AN_INT_LIT` (`ParseSetElementAST`), a non-constant one is
+parsed as a full expression; `AN_SET_INCL` / `AN_SET_EXCL` carry Include/Exclude.
+
+Validated on all 4 targets: `test/test_set_runtime.pas` in test-core +
+i386/aarch64/arm32 cross suites (output identical to x86-64); self-host +
+cross-bootstrap byte-identical. The sudoku/maze/chess candidate-set lanes can now
+use real `set of 1..9` + `Include`/`Exclude` instead of integer bitmasks.
+
+Original report below.
+
+### (original) `set of` built from runtime values  (CONFIRMED)
 
 From feature-demo-sudoku: `s := s + [v]` with a *variable* `v` errors
 ("set item must be constant"), and `Include` / `Exclude` are unimplemented. So

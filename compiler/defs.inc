@@ -148,6 +148,8 @@ const
                            ASTIVal = signature proc idx; ASTSOffset = IMT slot. }
   AN_INTF_FROM_CLASS = 59; { class -> interface fat-pointer build. Left = class
                              instance expr; ASTIVal = IMT-table entry index. }
+  AN_SET_INCL      = 60; { Include(s, v): Left = set lvalue, Right = value expr. }
+  AN_SET_EXCL      = 61; { Exclude(s, v): Left = set lvalue, Right = value expr. }
 
   { Inline-asm operand kinds }
   AOP_NONE = 0;
