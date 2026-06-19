@@ -9,7 +9,14 @@ program Pascal26;
 {$CASESENSITIVE ON}
 {$NESTEDCOMMENTS ON}
 
+{ Real FPC only: the FPC-seeded bootstrap pulls SysUtils/BaseUnix. Under PXX
+  self-host these were always a no-op (builtins cover what little is used), and
+  must stay unloaded now that `uses sysutils` can resolve a real
+  lib/rtl/sysutils.pas — the compiler must not drag a user RTL unit into its own
+  build. {$ifdef FPC} is true only under real FPC (never under PXX). }
+{$ifdef FPC}
 uses SysUtils, BaseUnix;
+{$endif}
 
 {$include defs.inc}
 {$include lexer.inc}

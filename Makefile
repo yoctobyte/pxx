@@ -263,6 +263,8 @@ test-core: $(COMPILER)
 	test "$$(/tmp/test_uint64_ops26)" = "$$(printf '9600629759793949339\n0\n8846114313915602276\n4344256703880665856\n8\n1099511627776\n1\n0\n6')"
 	./$(COMPILER) test/test_case_io.pas /tmp/test_case_io26
 	test "$$(/tmp/test_case_io26)" = "$$(printf 'one\nab\ntwo\nthree\n42')"
+	./$(COMPILER) test/test_uses_sysutils.pas /tmp/test_uses_sysutils26
+	test "$$(/tmp/test_uses_sysutils26)" = "sysutils noop ok"
 	./$(COMPILER) test/test_float_str_val.pas /tmp/test_float_str_val26
 	test "$$(/tmp/test_float_str_val26)" = "$$(printf '[3.14]\n[    3.1416]\n[-2.750]\n[1000.5]\n42.7500 code=0\n-1.5000 code=0\n100.00 code=0\n350.00 code=0\n0.1250 code=0\ncode=1\n[   42]\n-99 code=0')"
 	./$(COMPILER) test/test_math.pas /tmp/test_math26

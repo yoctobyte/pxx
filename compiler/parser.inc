@@ -8943,7 +8943,7 @@ var
   cdir, bdir, rtldir, lcldir: AnsiString;
   basePath, ext, emsg: AnsiString;
   lastSlash, lastDot: Integer;
-  isCompiled, isCUnit, isCHeader, isPath, savedCaseMode: Boolean;
+  isCompiled, isCUnit, isCHeader, isPath, savedCaseMode, softMissOK: Boolean;
 begin
   isPath := False;
   for i := 1 to Length(name) do
@@ -8952,7 +8952,12 @@ begin
     lo := LowerCase(GetFileBaseName(name))
   else
     lo := LowerCase(name);
-  if (lo = 'sysutils') or (lo = 'baseunix') or (lo = 'unix') then Exit;
+  { sysutils/baseunix/unix: FPC RTL units that PXX programs historically `uses`
+    purely to satisfy FPC source while relying on builtins. Load a real
+    lib/rtl/<name> source if one exists (the canonical home for the conversion
+    helpers); otherwise the miss is a graceful no-op (today's behavior), not an
+    error — see the not-found handler below. }
+  softMissOK := (lo = 'sysutils') or (lo = 'baseunix') or (lo = 'unix');
 
   { Check if already compiled }
   strIdx := InternStr(lo);
@@ -9173,6 +9178,9 @@ begin
 
   if Length(UnitContent) = 0 then
   begin
+    { sysutils/baseunix/unix with no source on the path: pass as a no-op so
+      builtin-only FPC code keeps compiling (the historical behavior). }
+    if softMissOK then Exit;
     ConcatThree('uses: unit source not found: ', lo, '', emsg);
     Error(emsg);
   end;
