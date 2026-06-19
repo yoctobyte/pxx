@@ -8,11 +8,9 @@ lives in git, not in a timestamp._
 
 _none_
 
-## working (1)
+## working (0)
 
-| Ticket | Type | Summary | Blocked-by |
-| --- | --- | --- | --- |
-| feature-interface-refcounting | feature | Interface reference counting (IInterface / ARC) | — |
+_none_
 
 ## backlog (66)
 
@@ -89,7 +87,7 @@ _none_
 
 _none_
 
-## done (74)
+## done (75)
 
 | Ticket | Type | Summary | Blocked-by |
 | --- | --- | --- | --- |
@@ -142,6 +140,7 @@ _none_
 | feature-generators-yield | feature | Generators and `yield` (the coroutine on-ramp) | feature-unified-heap-allocator |
 | feature-i386-asm-emitter | feature | i386 text-assembler (`EmitAsm386`) for cleaner x86-32 codegen | — |
 | feature-i386-int64-codegen | feature | Full Int64 codegen for i386 | — |
+| feature-interface-refcounting | feature | Interface reference counting (IInterface / ARC) | — |
 | feature-managed-exception-cleanup | feature | Finalize managed values on exception unwind | — |
 | feature-managed-string-default | feature | Promote managed AnsiString from opt-in to default | bug-managed-byref-string-param-store, feature-managed-exception-cleanup |
 | feature-multidim-fixed-arrays | feature | Multidimensional fixed arrays | — |

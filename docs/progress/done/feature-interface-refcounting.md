@@ -1,8 +1,8 @@
 # Interface reference counting (IInterface / ARC)
 
 - **Type:** feature
-- **Status:** backlog — **GREENLIT, scope locked (2026-06-19)**. Next track-A
-  big feature; pick up in a fresh context.
+- **Status:** **DONE (2026-06-19)** — all 4 targets green; self-host
+  byte-identical. See "Implementation (2026-06-19)" at the bottom.
 - **Owner:** — (track A)
 - **Opened:** 2026-06-19 (split from feature-interfaces)
 
@@ -109,3 +109,52 @@ byte-identical.
   locked (mode/refcount-location/release-path/insertion-points/threadsafe);
   default stays corba so it can't regress existing code. Pick up in a fresh
   track-A context.
+
+## Implementation (2026-06-19) — DONE
+
+Landed across three commits (ce95f52 x86-64 core, 798bc4f cross targets,
+bb286df exception-unwind + result). All five locked decisions implemented to
+spec; default stays corba so existing code is untouched and the compiler's own
+self-host is byte-identical (it uses no COM interfaces).
+
+### How it works
+- `{$interfaces com|corba}` directive → `InterfacesComMode` (lexer); a COM
+  interface is flagged `UClsIsComInterface[ci]` at declaration and, with no
+  explicit parent, implicitly derives from `IInterface` so the reserved slots
+  QueryInterface/_AddRef/_Release occupy IMT slots 0..2.
+- Dispatch is **target-independent**: builtinheap helpers `PXXIntfAddRef`,
+  `PXXIntfRelease`, `PXXIntfAddRefRaw`, `PXXIntfAssign` indirect-call through the
+  IMT (slot 1 = _AddRef, slot 2 = _Release) via a proc-typed cast. No per-target
+  asm for the dispatch itself.
+- ARC insertion (ir.inc AN_ASSIGN): retain-before-release on class->interface
+  (AddRefRaw via scratch IMT/instance temps) and interface->interface
+  (PXXIntfAssign); release-old on nil-assign; result/rvalue assignment transfers
+  (no double count). Side-effect calls marked statement-level (IRIVal:=1) so they
+  emit.
+- Scope-exit release: x86-64 via EmitManagedLocalCleanup; per-target loops added
+  for i386/arm32/aarch64 in EmitProcEpilog (aarch64 gained its first managed-
+  local cleanup loop). Exception-unwind release rides the x86-64 proc cleanup
+  frame (SymNeedsManagedCleanup now counts interfaces); x64-only, like strings.
+- Prologue nil-init of COM-interface fat-pointer locals via the shared zeroing
+  pass + SymNeedsZeroing.
+
+### LANDMINES found
+- **IMT slot stride is a fixed 8 bytes on every target**, NOT SizeOf(Pointer).
+  The parser lays out 8-byte IMT slots (`for i := 0 to 7`) and dispatch reads
+  `[[iface]+slot*8]`; a 32-bit target stores its 4-byte code address in the low
+  half. Using SizeOf(Pointer)=4 on i386 read mid-slot and called a garbage
+  address. The fat pointer's own fields ARE pointer-sized — don't conflate.
+- **Proc var-sections do NOT go through AN_VAR_DECL/SymNeedsZeroing** for the
+  prologue zero-init; the real pass is the inline loop in ParseProcBody
+  (parser.inc ~8590). Managed records/interfaces must be added there.
+- The standard IInterface contract (QueryInterface, _AddRef, _Release in that
+  order) is required: the helpers hardcode AddRef=slot1/Release=slot2. A COM
+  interface whose base omits QueryInterface shifts the slots and misdispatches.
+- `{IMT, instance}` inside a `{ }` comment closes it early (the `}`); write
+  "(IMT word, instance word)".
+
+### Acceptance — met
+test_interface_arc (single / shared-alias / nil-reassign) freed exactly once on
+all 4 targets; wired into test-core + i386/aarch64/arm32 cross suites.
+test_interface_arc_exc (result transfer / reassign-releases-old / exception
+unwind) green on x86-64 (test-core). self-host byte-identical.
