@@ -35,3 +35,8 @@ Full forensics: `../../developer/anomaly_2026-06-02_2000.md` (+ evidence dir).
 
 ## Log
 - 2026-06-06 — ticket opened, parked in blocked/ (non-reproducible).
+- 2026-06-19 — bug-hunt re-check: determinism canary byte-identical (60×
+  `hello.pas` self-compiles, zero divergence), `make bootstrap` byte-identical,
+  no `mce`/`edac`/hardware-error lines in `journalctl -k`. Still no code defect
+  to fix; stays blocked (suspected transient hardware fault). The host remains
+  non-ECC, so the recurrence/forensics guidance above still stands.
