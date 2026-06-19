@@ -6481,6 +6481,7 @@ var
   fTk: TTypeKind;
   parentCi, slot, mmi, mnOff, mnLen, pnOff, pnLen, rFOff, rFLen, rMOff, rMLen, wFOff, wFLen, wMOff, wMLen, rnOff, rnLen, wnOff, wnLen, propRec, i, vmtSlots: Integer;
   implIntf: array[0..15] of Integer; implCnt, tmpCi, ii, imSlot, imProc: Integer;
+  parentIntfCi, ancCur, ij, implOrig: Integer; alreadyImpl: Boolean;
   imName: AnsiString;
   isConstructor, isDestructor, isVirtual, isOverride, isAbstract, isClassMethod: Boolean;
   mname, propName, readName, writeName: AnsiString;
@@ -6546,10 +6547,37 @@ begin
           signatures (declaration order = IMT slot). A var of it is a 16-byte
           fat pointer {IMT, instance}. }
         Next;
+        { optional parent interface: `IBar = interface(IFoo)`. IFoo's method
+          signatures are inherited at the leading IMT slots, so a value of IBar
+          dispatches its inherited methods and a class implementing IBar also
+          satisfies IFoo (the ancestor IMTs are built at the class below). }
+        parentIntfCi := -1;
+        if CurTok.Kind = tkLParen then
+        begin
+          Next;
+          if CurTok.Kind <> tkIdent then Error('expected parent interface name');
+          parentIntfCi := FindUClass(CurTok.SVal);
+          if (parentIntfCi < 0) or not UClsIsInterface[parentIntfCi] then
+            Error('the parent of an interface must be an interface');
+          Next;
+          Expect(tkRParen, ')');
+        end;
         ci := AddUClass(tnOff, tnLen);
         UClsIsInterface[ci] := True;
         UClsSize_[ci] := 2 * TARGET_PTR_SIZE;   { fat pointer {IMT, instance} }
         UClsAlign[ci] := TARGET_PTR_SIZE;
+        UClsParent[ci] := parentIntfCi;
+        { Inherit the parent interface's methods first (contiguously, before this
+          interface's own), so IMT slot order is [parent methods..., own...]. }
+        if parentIntfCi >= 0 then
+          for i := 0 to UClsMCount[parentIntfCi] - 1 do
+          begin
+            AddUMeth(ci, UMthNOff[UClsMBase[parentIntfCi] + i],
+                     UMthNLen[UClsMBase[parentIntfCi] + i],
+                     UMthProc_[UClsMBase[parentIntfCi] + i]);
+            UMthVirSlot[UMthCount - 1] := UClsMCount[ci] - 1;
+            UMthIsStatic[UMthCount - 1] := False;
+          end;
         { optional GUID literal ['{...}'] — parsed and ignored (v1) }
         if CurTok.Kind = tkLBrack then
         begin
@@ -6651,6 +6679,27 @@ begin
             Next;
           until not Eat(tkComma);
           Expect(tkRParen, ')');
+        end;
+
+        { A class implementing a derived interface also implements every ancestor
+          interface — add the ancestors so an IMT is built for each, making
+          `is`/`as`/`Supports` and class->base-interface assignment work. }
+        implOrig := implCnt;
+        for ii := 0 to implOrig - 1 do
+        begin
+          ancCur := UClsParent[implIntf[ii]];
+          while ancCur >= 0 do
+          begin
+            alreadyImpl := False;
+            for ij := 0 to implCnt - 1 do
+              if implIntf[ij] = ancCur then alreadyImpl := True;
+            if not alreadyImpl then
+            begin
+              if implCnt > 15 then Error('too many implemented interfaces (v1: max 16)');
+              implIntf[implCnt] := ancCur; Inc(implCnt);
+            end;
+            ancCur := UClsParent[ancCur];
+          end;
         end;
 
         ci := AddUClass(tnOff, tnLen);
