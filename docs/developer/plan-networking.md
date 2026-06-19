@@ -143,10 +143,19 @@ real wrappers; `NetinetIn` is pure data; the rest are tiny. No libc.
 
 ### Build order for the Synapse goal
 
-`feature-directive-if-numeric` → `feature-mimic-fpc` define profile → the
-`Posix.*` shim (6 units over our syscalls) → `{$mode delphi}` `@`-relax knob →
-Synapse units (`synautil`/`synaip`/`synsock`/`blcksock`, then clients). SSL
-(`ssl_openssl`) deferred — pluggable, and blocking is acceptable there.
+`feature-directive-if-numeric` → per-library **scoped manifest** delivering the
+define set (`feature-dynamic-include-paths-config` "Per-library scoped
+configuration" + `feature-mimic-fpc` for the set itself) → the `Posix.*` shim
+(6 units over our syscalls) → `{$mode delphi}` `@`-relax knob → Synapse units
+(`synautil`/`synaip`/`synsock`/`blcksock`, then clients). SSL (`ssl_openssl`)
+deferred — pluggable, and blocking is acceptable there.
+
+The Synapse define profile (`define POSIX/LINUX/UNIX`, `undef FPC`, `mode delphi`,
+include path) lives in a per-directory manifest (e.g. `lib/synapse/pxxlib.cfg`)
+applied ONLY to units under that folder — never viral to user code or sibling
+libraries. `undef FPC` both selects Synapse's Delphi-Posix branch and dodges the
+`{$ifdef FPC}`=real-FPC landmine, and being scoped it cannot leak. No CLI flags,
+no Synapse source edits.
 
 Manual inventory helper:
 

@@ -139,3 +139,16 @@ semantics will fail loudly at parse — that is the correct failure shape.
   operator (Delphi untyped `{$T-}` vs objfpc strict) — teach PXX to recognise
   `{$mode delphi}` and relax `@` to untyped (cheaper than per-site fixes). See
   plan-networking.md "Reaching the Delphi-Posix path" for the full unit list.
+
+- 2026-06-19 — **reframed as a per-library SCOPED manifest, not a global flag.**
+  The Synapse define profile (define POSIX/LINUX/UNIX, `undef FPC`, `mode delphi`)
+  belongs in a per-directory library manifest (e.g. `lib/synapse/pxxlib.cfg`)
+  applied ONLY to units under that folder, via per-unit define-scope save/restore
+  keyed to the unit's source directory. See feature-dynamic-include-paths-config
+  "Per-library scoped configuration". This dissolves the central worry of this
+  ticket: `undef FPC` (which both selects Synapse's Delphi-Posix branch and dodges
+  the {$ifdef FPC}=real-FPC landmine) is SCOPED to lib/synapse, so it can never
+  leak into our own code in the same build. The global `--mimic` profile becomes a
+  fallback; the scoped manifest is the primary mechanism. This ticket's remaining
+  content = the actual define SET Synapse's Posix branch needs + the `{$mode
+  delphi}` @-operator relax knob; the delivery vehicle is the scoped manifest.
