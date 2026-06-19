@@ -37,3 +37,14 @@ helpers from `strutils` into `lib/rtl/sysutils.pas`.
 ## Log
 - 2026-06-19 — opened by track B. Confirmed `strutils` (non-skipped name) loads
   fine; only the three skip-listed names are blocked.
+
+## Resolution (2026-06-19) — DONE (commit 66a3dec)
+
+ParseUsesUnit no longer hard-skips sysutils/baseunix/unix: it runs the normal
+unit search and loads a real source if present (lib/rtl/sysutils.pas), falling
+back to a graceful no-op only when none is found. The compiler's own `uses
+SysUtils, BaseUnix` is now {$ifdef FPC}-guarded so PXX self-host never loads a
+user sysutils into the compiler build (else B adding the unit would break it).
+Verified: self-build ignores a present sysutils.pas; byte-identical. test_uses_
+sysutils (no-op path) in test-core. **Track B: lib/rtl/sysutils.pas now loads —
+migrate the conversion helpers there.**

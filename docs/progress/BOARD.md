@@ -12,16 +12,13 @@ _none_
 
 _none_
 
-## backlog (66)
+## backlog (63)
 
 | Ticket | Type | Summary | Blocked-by |
 | --- | --- | --- | --- |
-| bug-64bit-shift-xor-literal-gaps | bug | 64-bit gaps in pinned v9: `xor` operator, large shifts, 64-bit hex literals | — |
-| bug-builtin-write-case-sensitive | bug | Builtin write/writeln matched case-sensitively (only lowercase resolves) | — |
 | bug-const-byref-record-param-temp | bug | Can't pass a function-result temporary to a const/by-ref record param | — |
 | bug-pinned-stable-reads-live-builtin-rtl | bug | Pinned stable reads LIVE builtin RTL source — track A WIP breaks track B | — |
 | bug-record-fn-codegen-crash | bug | Context-sensitive runtime crash: record-returning fn with nested loops over dynarray fields | — |
-| bug-sysutils-unit-hard-skipped | bug | `uses sysutils` is hard-skipped — a real lib/rtl/sysutils can't load | — |
 | chore-inc-to-units | chore | `.inc` → real `.pas` units refactor | — |
 | chore-runtime-emission-size | chore | Finer runtime-support emission (code size) | — |
 | feature-additional-cpu-targets | feature | Additional CPU targets (rollup: i386 → aarch64 → arm32 → ESP32/RISC-V) | feature-target-aarch64, feature-target-arm32, feature-target-esp32, feature-target-i386 |
@@ -87,10 +84,12 @@ _none_
 
 _none_
 
-## done (75)
+## done (78)
 
 | Ticket | Type | Summary | Blocked-by |
 | --- | --- | --- | --- |
+| bug-64bit-shift-xor-literal-gaps | bug | 64-bit gaps in pinned v9: `xor` operator, large shifts, 64-bit hex literals | — |
+| bug-builtin-write-case-sensitive | bug | Builtin write/writeln matched case-sensitively (only lowercase resolves) | — |
 | bug-codegen-nested-index-load-width-pressure | bug | Codegen miscompiles nested integer-array index load width under register pressure | — |
 | bug-const-expr-shl-shr-not-folded | bug | `shl` / `shr` in a constant expression not accepted | — |
 | bug-c-packed-aligned-ignored | bug | C `__attribute__((packed))` / `aligned` ignored → field-offset drift | — |
@@ -100,6 +99,7 @@ _none_
 | bug-operator-result-inferred-var | bug | Record-valued operator result is miscompiled (aggregate-return ABI) | — |
 | bug-read-preserves-line-remainder | bug | `read` consumes a whole line like `readln` | — |
 | bug-record-byvalue-arg-truncation | bug | By-value record args >8 bytes truncate (and operator operand edges) | — |
+| bug-sysutils-unit-hard-skipped | bug | `uses sysutils` is hard-skipped — a real lib/rtl/sysutils can't load | — |
 | bug-threadsafe-layout-rtti-helper-races | bug | Thread-safe layout RTTI helper races | feature-rtti-layout-table |
 | bug-whole-record-copy-main-body-noop | bug | Latent: whole-record array-element copy in main-program body emits store no-ops | — |
 | bug-xtensa-call0-large-frame-truncates | bug | Xtensa Call0 / non-windowed frame >128 bytes silently truncates | — |
@@ -175,12 +175,9 @@ _none_
 
 ## Ready (no unmet blocker)
 
-- bug-64bit-shift-xor-literal-gaps
-- bug-builtin-write-case-sensitive
 - bug-const-byref-record-param-temp
 - bug-pinned-stable-reads-live-builtin-rtl
 - bug-record-fn-codegen-crash
-- bug-sysutils-unit-hard-skipped
 - chore-inc-to-units
 - chore-runtime-emission-size
 - feature-additional-cpu-targets

@@ -60,3 +60,18 @@ via hex, shift it, xor it, compare to the decimal form) would cover all three.
 - 2026-06-19 — opened by track B while writing the RNG library. Shipped a 32-bit
   LCG interim so the RNG/dice work could proceed; the modern 64-bit generator,
   hashing, and 64-bit bignum limbs wait on these fixes.
+
+## Resolution (2026-06-19) — DONE (commit 7d4ea89)
+
+All three defects fixed; splitmix64 now byte-identical across all 4 targets.
+- **xor**: new `tkXor` token + add-level precedence (AST + ConstEval) + codegen
+  on all 5 ISAs; boolean xor too. (Compiler's own ConstEval folds xor bitwise so
+  an older seed can still bootstrap.)
+- **shl/shr >= 31 -> 0** and **"hex literal truncation"** had a single root: the
+  `UInt64` *type name* was unrecognized (only `qword` was), so `var u: UInt64`
+  got a 4-byte signed slot — every store/load truncated to 32 bits. The shift +
+  literal codegen was already 64-bit. Added UInt8/16/32/64 aliases at the
+  type-name, cast, and SizeOf sites.
+- Bonus: aarch64 unsigned writer used `sdiv` (garbage for values >= 2^63);
+  switched to `udiv`.
+test_uint64_ops in test-core + the 3 cross suites. Self-host byte-identical.

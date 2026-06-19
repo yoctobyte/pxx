@@ -40,3 +40,11 @@ for ordinary identifiers (respecting `CaseSensitiveMode` when the
 - 2026-06-19 — opened by track B while advancing the adventure demo (after
   IntToStr + Copy/Trim landed, this is the next blocker before the Text-file I/O
   gap).
+
+## Resolution (2026-06-19) — DONE (commit 3de5d05)
+
+The four I/O intrinsics (Write/WriteLn/Read/ReadLn) now match case-insensitively
+in the lexer (via CaseEqual) unless {$CASESENSITIVE ON}, where the exact
+lowercase spelling still applies. No mixed-case Write/Read identifiers exist in
+the compiler source (verified) so self-host stays byte-identical. test_case_io in
+test-core.

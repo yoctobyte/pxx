@@ -77,8 +77,22 @@ vectors). **Interim:** intermediate variables.
 ## Already landed (track A)
 
 - const-expr `shl`/`shr`/`mod` folding (`632f1c8`) — done.
+- **Item 1 — 64-bit ops (`7d4ea89`) — DONE.** xor + UInt64 alias + aarch64 udiv.
+  splitmix64 byte-identical on all 4 targets. Frees hashing / real RNG / 64-bit
+  bignum.
+- **Item 2 — case-insensitive Write/WriteLn/Read/ReadLn (`3de5d05`) — DONE.**
+  Frees the FPC-idiomatic / mixed-case demos (adventure, lisp, calc...).
+- **Item 3 — loadable `sysutils` (`66a3dec`) — DONE.** `uses sysutils` loads
+  lib/rtl/sysutils.pas if present (graceful no-op otherwise); compiler's own
+  uses is {$ifdef FPC}-guarded so it can't pull a user RTL unit. **Track B: the
+  canonical RTL home is open — migrate the conversion helpers into
+  lib/rtl/sysutils.pas.**
+
+Next pull candidates: item 4 (generic Copy), item 5 (sets from runtime values).
 
 ## Log
 - 2026-06-19 — opened by track B as the prioritized pull-list. Top unlock is
   item 1 (64-bit ops): it frees hashing, real RNG, and 64-bit bignum at once.
   Items 2-3 are cheap and free the FPC-idiomatic demo + the canonical RTL home.
+- 2026-06-19 — **items 1-3 all landed by track A** (commits above). Items 4-8
+  remain.
