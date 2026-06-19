@@ -3326,6 +3326,8 @@ begin
     Result := True
   else if Syms[i].IsArray and (Syms[i].ArrLen = -1) then
     Result := True
+  else if SymIsComInterface(i) then
+    Result := True
   else if (Syms[i].TypeKind = tyRecord) and not Syms[i].IsArray and
           RecordHasManagedFields(Syms[i].RecName) then
     Result := True;
