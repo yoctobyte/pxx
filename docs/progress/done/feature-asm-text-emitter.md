@@ -1,8 +1,10 @@
 # Text-assembler codegen helpers (`EmitAsm386` / `EmitAsmX64` …)
 
 - **Type:** feature
-- **Status:** in progress (x86-64 core landed 2026-06-14; per-target emitters
-  spun off into their own tickets)
+- **Status:** done (2026-06-19) — text assemblers complete for all five targets
+  (x64/386/rv32/a64/arm32; `make test` asm-emit checks all green); no feature
+  gaps left. The only residue is opportunistic (EmitB-block retargeting) and
+  low-priority (inline-asm unification) — not blocking, left as notes.
 - **Owner:** —
 - **Blocked-by:** feature-array-of-const
 - **Opened:** 2026-06-14 (design discussion: readable asm emission)

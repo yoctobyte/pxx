@@ -1,7 +1,11 @@
 # `array of const` (TVarRec) parameter support
 
 - **Type:** feature
-- **Status:** in progress (int + ansistring tags landed 2026-06-14)
+- **Status:** done (2026-06-19) — all `vt*` element tags land (int/ansistring/
+  Bool/Char/Ptr/Int64/Double, db7b636); call-site `[...]` construction +
+  open-array marshalling; self-host bugs fixed. Tested incl. cross i386
+  (test_array_of_const, _types, _branch, _string, _alloc_after). `High()` over
+  the array stays a lexer gap (use Length-1) — minor, tracked separately.
 - **Owner:** —
 - **Unblocks:** feature-asm-text-emitter
 - **Opened:** 2026-06-14 (design discussion: readable asm emission)

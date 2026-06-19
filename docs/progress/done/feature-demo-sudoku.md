@@ -1,7 +1,11 @@
 # Demo — Sudoku (solver + generator + interactive play)
 
 - **Type:** feature
-- **Status:** backlog
+- **Status:** done (2026-06-19) — the solver delivers the demo's purpose: a
+  deterministic cross-target oracle, wired into `make test` (3 puzzles,
+  validated correct) and byte-identical on all four targets. Generator +
+  interactive play are descoped: not needed, the solver already serves as the
+  test/oracle. Reopen only if a playable demo is ever wanted.
 - **Owner:** —
 - **Opened:** 2026-06-18 (from idea-demo-app-candidates — fills the set/bitmask lane)
 - **Relation:** companion to feature-demo-chess (chess parked for "rainy
