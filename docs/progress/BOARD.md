@@ -12,7 +12,7 @@ _none_
 
 _none_
 
-## backlog (56)
+## backlog (61)
 
 | Ticket | Type | Summary | Blocked-by |
 | --- | --- | --- | --- |
@@ -28,7 +28,12 @@ _none_
 | feature-compiler-warnings | feature | Compiler warning diagnostics facility | — |
 | feature-compression-library | feature | Compression library — Huffman / LZ77 (roundtrip test app) | — |
 | feature-c-source-frontend | feature | C source frontend — compile C function bodies (statements + expressions) | feature-cross-target-feature-parity |
+| feature-demo-calc | feature | Demo — RPN / expression calculator (mini spreadsheet) | — |
 | feature-demo-chess | feature | Flagship demo — chess engine (real-world app + cross-target oracle + benchmark) | — |
+| feature-demo-life | feature | Demo — Conway's Game of Life | — |
+| feature-demo-lisp | feature | Demo — Lisp / Scheme interpreter | — |
+| feature-demo-maze | feature | Demo — maze generator + solver | — |
+| feature-demo-vm | feature | Demo — bytecode VM + assembler (small ISA) | — |
 | feature-directive-if-numeric | feature | Valued defines + numeric `{$IF}` evaluation | — |
 | feature-dynamic-include-paths-config | feature | Dynamic Include Paths, Configuration Files, and System Scanner | — |
 | feature-dynamic-soname-discovery | feature | Dynamic soname discovery (no execve) | — |
@@ -173,7 +178,12 @@ _none_
 - feature-compiler-warnings
 - feature-compression-library
 - feature-c-source-frontend
+- feature-demo-calc
 - feature-demo-chess
+- feature-demo-life
+- feature-demo-lisp
+- feature-demo-maze
+- feature-demo-vm
 - feature-directive-if-numeric
 - feature-dynamic-include-paths-config
 - feature-dynamic-soname-discovery

@@ -55,13 +55,24 @@ the compiler. Selection criteria, in order:
 2. **JSON parser + serializer** — headless; trivial deterministic roundtrip
    oracle (parse → emit → reparse == identity); real-world; heavy managed-string
    + dynarray + recursion stress. Unlike regex, JSON parsers *are* commonly
-   hand-written, so it does not undermine the library story. Strongest #2.
+   hand-written, so it does not undermine the library story. → **library**:
+   feature-json-library.
 3. **Lisp / Scheme interpreter** — headless; eval-suite oracle; deep coverage
    (collections, recursion, GC pressure, strings, eval). Flagship-tier but
-   larger; self-hosting flavor.
+   larger; self-hosting flavor. → **demo ticket**: feature-demo-lisp.
 4. **RPN / spreadsheet calculator** — headless; deterministic formula-result
    oracle; parser + expression eval + procedural-type op tables; compact. Solid
-   mid-size demo. Float optional (keep out of oracle path).
+   mid-size demo. Float optional (keep out of oracle path). → **demo ticket**:
+   feature-demo-calc.
+5. **Bytecode VM + assembler** — small ISA, deterministic program output;
+   enums/proc-type dispatch/arrays/Int64; self-hosting flavor; little-brother to
+   the parked Lua-as-target arc. → **demo ticket**: feature-demo-vm.
+6. **Maze generator + solver** — seeded deterministic; 2-D arrays / sets
+   (visited) / queue / recursion; ASCII over serial. → **demo ticket**:
+   feature-demo-maze.
+7. **Conway's Game of Life** — tiny deterministic oracle + benchmark; 2-D arrays
+   + bit packing; shallow coverage but cheap and classic. → **demo ticket**:
+   feature-demo-life.
 
 ### Rejected (with reason — kept so we don't re-litigate)
 
