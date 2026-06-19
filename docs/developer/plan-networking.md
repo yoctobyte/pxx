@@ -1,9 +1,40 @@
 # Plan: Networking Runtime
 
-Status: feature request / design seed.
+Status: feature request / design seed. Strategy locked 2026-06-19 (see below).
 
 Goal: add a small target-neutral networking API without tying user code to
 Linux syscall structs, libc, or ESP-IDF/lwIP details.
+
+## Strategy (locked 2026-06-19) — twofold, two-layer
+
+The networking effort is **twofold**, and the two parts stay deliberately
+separate (different tools for different jobs):
+
+1. **Own socket layer + primitives.** Async, syscall-first (no libc on Linux),
+   ESP32-friendly (lwIP/IDF). This is the destination for async servers and the
+   PXX-native API. Build it independently — it has no Synapse dependency.
+2. **Compile Synapse** via its **Delphi-`Posix.*` path** (not its FPC/`BaseUnix`
+   path), to reuse Synapse's higher-level clients (HTTP / FTP / SMTP / POP3 /
+   DNS). This yields **blocking** clients (Synapse's `THTTPSend` etc. are welded
+   to the blocking `TBlockSocket`), which is fine for one-shot client tasks but
+   is **not** the async path. Do not expect to drive Synapse clients on the
+   async reactor.
+
+**Two API faces, one transport core.** Build the raw syscall socket ops once,
+then expose two surfaces over them: (a) the PXX-native async API (part 1), and
+(b) the `Posix.*` compatibility shape Synapse expects (part 2's shim). The shim
+units map straight onto the same syscalls — so part-2 work reuses part-1's core.
+
+### Layering
+
+- **Protocols** (HTTP/FTP/SMTP/DNS parsing) — transport-agnostic; Synapse reuse
+  candidate. Notably `synadns` (pure-Pascal DNS protocol over UDP) is reusable
+  *independent* of the blocking question and fills the one real gap in
+  syscall-only networking.
+- **Transport** (sockets + multiplexing) — we own it: syscall + epoll-async on
+  Linux (the reactor in `lib/rtl/asyncnet.pas`, already on all four targets),
+  lwIP/IDF on ESP. Synapse's transport is blocking-only; that is the part we do
+  **not** keep.
 
 ## Public API Shape
 
@@ -65,6 +96,58 @@ Non-blocking support is interesting for the async/coroutine roadmap, but it
 should not drive the first milestone. Start with blocking loopback tests; later
 audit Synapse's limited non-blocking paths against PXX async support.
 
+### Reaching the Delphi-`Posix.*` path (the chosen route)
+
+Synapse's Linux backend has two branches: the **FPC** branch (`{$ifdef FPC}` →
+`synafpc` + `BaseUnix`/`Sockets`) and the **Delphi-POSIX** branch (gated on
+Delphi platform defines → the `Posix.*` namespace). We target the Delphi-POSIX
+branch because its surface is a small, well-bounded set of thin header units we
+can back with our own syscalls.
+
+The `Posix.*` units Synapse's posix path pulls in, and our mapping:
+
+| Unit | Header | Contents | Our backing | Syscall-only? |
+| --- | --- | --- | --- | --- |
+| `Posix.SysSocket` | `<sys/socket.h>` | socket/bind/listen/accept/connect/send/recv/sendto/recvfrom/setsockopt/shutdown, `sockaddr`, `msghdr` | our socket syscalls | yes |
+| `Posix.NetinetIn` | `<netinet/in.h>` | `sockaddr_in/in6`, `in_addr`, `htons`/`ntohs`/`htonl`/`ntohl`, `IPPROTO_*`, `INADDR_*` | pure structs + byte-swap | yes — no syscalls, just data |
+| `Posix.SysSelect` | `<sys/select.h>` | `select`, `fd_set`, `FD_SET`/`ISSET`/`ZERO` | `select`/`pselect6` syscall | yes (but blocking — see below) |
+| `Posix.SysTime` | `<sys/time.h>` | `timeval`, `gettimeofday` | `clock_gettime`/`gettimeofday` | yes |
+| `Posix.StrOpts` | `<stropts.h>` | `ioctl` (Synapse uses `FIONBIO`) | `ioctl` syscall | yes |
+| `Posix.Errno` | `<errno.h>` | `errno`, `EAGAIN`/`EWOULDBLOCK`/`EINTR`/`EINPROGRESS` | constant table + a mapping shim (our syscalls return `-errno`, no global) | yes |
+
+So a **syscall-only Synapse is achievable** — only `SysSocket`/`SysSelect` need
+real wrappers; `NetinetIn` is pure data; the rest are tiny. No libc.
+
+### The two sharp edges (mind these)
+
+1. **Define cheating + `mimic FPC`.** PXX predefines *neither* `FPC` nor the
+   Delphi platform symbols (the `{$ifdef FPC}` = real-FPC landmine —
+   [feedback_fpc_define_landmine]). So selecting the `Posix.*` branch is not just
+   "define FPC": it is a **curated define profile** (feature-mimic-fpc) that (a)
+   defines the Delphi-POSIX symbols so Synapse picks `Posix.*`, (b) steers around
+   the `BaseUnix` branch, yet (c) still provides the `synafpc` shims the rest of
+   Synapse expects. Expect a `{$ifdef FPC}` tangle that may need a tight profile
+   or a small `synafpc`/include override. (Blocked on feature-directive-if-numeric
+   → feature-mimic-fpc.)
+
+2. **`{$mode delphi}`.** Synapse sets Delphi mode under FPC. PXX currently
+   **swallows `{$mode ...}` as a no-op** (lexer.inc) and parses one objfpc-ish
+   dialect — a *superset* of most Delphi syntax, so Synapse mostly parses. The
+   one real divergence to watch is the **`@` operator**: Delphi defaults to
+   *untyped* `@` (`{$T-}`) — `@proc`/`@var` yield a bare `Pointer` assignable
+   anywhere — while objfpc is stricter. Verify PXX is permissive there (or teach
+   PXX to recognise `{$mode delphi}` and relax `@` to untyped — cheaper than
+   per-site fixes, folds into mimic-FPC). Other Delphi/objfpc differences (string
+   base, `Result`, properties) do not bite; the only risk is a Delphi-only
+   construct PXX lacks, which old-school Synapse mostly avoids.
+
+### Build order for the Synapse goal
+
+`feature-directive-if-numeric` → `feature-mimic-fpc` define profile → the
+`Posix.*` shim (6 units over our syscalls) → `{$mode delphi}` `@`-relax knob →
+Synapse units (`synautil`/`synaip`/`synsock`/`blcksock`, then clients). SSL
+(`ssl_openssl`) deferred — pluggable, and blocking is acceptable there.
+
 Manual inventory helper:
 
 ```sh
@@ -99,5 +182,10 @@ Implement Linux syscall-only IPv4:
 - Focused tests that avoid external network dependency where possible
   (loopback only).
 
-DNS should be a later milestone. Options: small UDP resolver over configured
-nameservers, or backend-provided resolution via libc/ESP-IDF.
+DNS should be a later milestone, but it is **not** blocked on libc: DNS is just
+UDP datagrams to port 53 (RFC 1035 wire format), and the nameserver comes from
+`/etc/resolv.conf` (an `open`/`read`). So syscall-only DNS is achievable. Reuse
+**Synapse's `synadns`** protocol logic (pure-Pascal query build + answer parse)
+over our own UDP syscalls — that is the right reuse: the protocol, not a libc
+binding. The same UDP code runs over lwIP on ESP32. Alternative: backend-provided
+resolution via libc `getaddrinfo` / ESP-IDF where a libc dependency is acceptable.

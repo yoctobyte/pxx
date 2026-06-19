@@ -88,3 +88,17 @@ DNS deferred to a later milestone.
   that: RTL availability (synafpc, termio, sockets, netdb, Classes surface).
 - 2026-06-10 — platform-branch decision made: opt-in mimic mode, see feature-mimic-fpc (35345a3). Synapse compatibility milestones wait on it; the syscall net.pas milestone does not.
 - 2026-06-16 — the syscall net.pas milestone has a concrete start: `lib/rtl/asyncnet.pas` — an **async** TCP socket layer (TcpListen/Accept/Connect/Recv/Send/Close) over the coroutine epoll reactor (feature-async-coroutines), x86-64, raw Linux syscalls, no libc. Proven by `test/test_asyncecho.pas` (concurrent echo server). Not yet the target-neutral `TNetSocket`/`TNetAddress` API or the cross/esp32 backends; asyncnet is the Linux-x86-64 async backend the abstraction will wrap. Cross-target parity tracked in feature-cross-target-feature-parity.
+- 2026-06-19 — **strategy locked twofold** (see plan-networking.md "Strategy"
+  section). (1) Own async/syscall/ESP socket layer — the `asyncnet.pas` reactor
+  is its Linux-x86-64 start; build the target-neutral `TNetSocket`/`TNetAddress`
+  + cross/esp32 backends independently of Synapse. (2) Compile Synapse via its
+  **Delphi-`Posix.*`** path (not the FPC/BaseUnix path) to reuse its HTTP/FTP/
+  SMTP/POP3/DNS clients — yields BLOCKING clients (welded to `TBlockSocket`),
+  good for one-shot client tasks, not async. Build one transport core, expose two
+  faces (native async API + `Posix.*` compat shim). The `Posix.*` shim is 6 thin
+  units over our syscalls (`SysSocket`/`SysSelect`/`SysTime`/`StrOpts`/`Errno` +
+  pure-data `NetinetIn`) — syscall-only achievable, no libc. **DNS** is not
+  libc-blocked: reuse Synapse `synadns` (UDP/RFC1035) over our UDP syscalls,
+  nameserver from `/etc/resolv.conf`. Synapse goal depends on feature-mimic-fpc
+  (curated define profile to select `Posix.*`) + `{$mode delphi}` handling (mainly
+  relax `@` to untyped). SSL deferred (pluggable `ssl_openssl`, blocking ok).

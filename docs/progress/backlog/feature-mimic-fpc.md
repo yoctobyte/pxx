@@ -126,3 +126,16 @@ semantics will fail loudly at parse — that is the correct failure shape.
 
 - 2026-06-10 — ticket opened; design + drawbacks locked with user ("our
   approach is sane, yet for compatibility it seems unavoidable").
+
+- 2026-06-19 — **concrete driver = Synapse's Delphi-`Posix.*` path.** The mimic
+  profile's job for Synapse is not "be FPC" but a curated define set that makes
+  Synapse pick its **Delphi-POSIX** branch (`Posix.*` namespace) rather than the
+  FPC/`BaseUnix` branch: (a) define the Delphi platform symbols so `Posix.*` is
+  selected, (b) steer around `BaseUnix`, (c) still supply the `synafpc` shims the
+  rest of Synapse needs. Likely needs a tight profile or a small `synafpc`/include
+  override for the `{$ifdef FPC}` tangle. Pairs with a `{$mode delphi}` knob:
+  PXX currently swallows `{$mode}` as a no-op and parses one objfpc-ish dialect
+  (a superset, so Synapse mostly parses); the one real divergence is the `@`
+  operator (Delphi untyped `{$T-}` vs objfpc strict) — teach PXX to recognise
+  `{$mode delphi}` and relax `@` to untyped (cheaper than per-site fixes). See
+  plan-networking.md "Reaching the Delphi-Posix path" for the full unit list.
