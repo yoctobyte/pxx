@@ -11,6 +11,24 @@ component streaming groundwork, C interop, and early BASIC / Nil Python
 frontends. The long-term direction is a multi-language native compiler sharing
 one IR and backend.
 
+## ⚠️ Security warning — do not expose to a network
+
+PXX is early, unaudited, experimental software. The compiler, its runtime, and
+its networking code almost certainly contain bugs — including ones that could be
+exploited over a network connection, whether the program acts as a **server or a
+client**, and whether the input comes from a remote peer or a file it fetches.
+
+**Do not build or run any publicly reachable network service with software
+compiled by PXX**, and do not point a PXX-built client at untrusted remote hosts.
+Treat anything it produces as suitable only for local experimentation on inputs
+you fully control.
+
+This restriction stands until the compiler, runtime, and networking stack have
+been independently tested, hardened, and reach a mature, reviewed state — and
+even then the software is provided **without any warranty and with no liability
+on the authors** (see [License](#license) and [LICENSE.md](LICENSE.md)). If you
+choose to ignore this, you do so entirely at your own risk.
+
 ## Highlights
 
 - **Self-hosting:** `make` rebuilds the compiler through the checked-in PXX
@@ -118,7 +136,9 @@ ln -sfn "$PWD/stable_linux_amd64/default/latest" "$HOME/.local/bin/pxx"
 No license has been selected or granted yet. This public repository is for
 inspection, study, discussion, and project collaboration while the compiler
 remains experimental. Do not use it for important, security-sensitive,
-safety-sensitive, financial, legal, medical, or infrastructure work.
+safety-sensitive, financial, legal, medical, or infrastructure work, and do not
+expose software built with it to a network (see the **Security warning** near the
+top of this README).
 
 See [LICENSE.md](LICENSE.md) for the full notice.
 
