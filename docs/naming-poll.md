@@ -55,7 +55,7 @@ Maintainer shortlist marked ★ (current favourites — not binding).
 - Forge — makes things from raw parts; common
 - Crucible — where elements fuse; dramatic
 - Weld — fuse metal parts into one
-- Loom — machine weaving parts into a whole; ominous undertone
+- ★ Loom — machine weaving parts into a whole; ominous undertone
 - Rivet — fastener joining parts
 - Lattice — interlocking structure
 - Cleave — contronym: both split and join
@@ -143,7 +143,7 @@ Top 7 by 👍 → native Poll, single choice.
 | Name | Read |
 |---|---|
 | Weld | fuse metal parts into one |
-| Loom | weaves parts into a whole; ominous undertone |
+| Loom ★ | weaves parts into a whole; ominous undertone |
 | Rivet | fastener joining parts (Bolt sibling) |
 | Lattice | interlocking structure |
 | Cleave | contronym: split AND join |
