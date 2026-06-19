@@ -98,11 +98,22 @@ audit Synapse's limited non-blocking paths against PXX async support.
 
 ### Reaching the Delphi-`Posix.*` path (the chosen route)
 
-Synapse's Linux backend has two branches: the **FPC** branch (`{$ifdef FPC}` →
-`synafpc` + `BaseUnix`/`Sockets`) and the **Delphi-POSIX** branch (gated on
-Delphi platform defines → the `Posix.*` namespace). We target the Delphi-POSIX
-branch because its surface is a small, well-bounded set of thin header units we
-can back with our own syscalls.
+Synapse's Linux/Unix backend actually has **three** branches: the **FPC** branch
+(`{$ifdef FPC}` → `synafpc` + `BaseUnix`/`Sockets`), the legacy **Kylix** branch
+(Borland Kylix 2001–2003, dead — its monolithic `Libc` unit, `uses libc`), and
+the modern **Delphi-POSIX** branch (the `Posix.*` namespace). Do not confuse the
+last two: `Posix.*` is **current Embarcadero Delphi** — introduced in Delphi XE2
+(2011) for the cross-platform LLVM compilers, still the POSIX RTL in Delphi 12
+today (Linux64 via `DCCLinux64`, macOS/iOS/Android). On real Delphi these units
+are thin **libc** import bindings; we provide the *same API surface* backed by
+**syscalls** instead — the caller (Synapse) cannot tell the difference.
+
+We target the Delphi-`Posix.*` branch because its surface is a small,
+well-bounded set of thin header units (only the six below — Synapse does not pull
+the whole `Posix.*` RTL). The scoped manifest's `undef FPC` + Delphi-platform
+defines steer **away from both** the FPC/`BaseUnix` branch and the dead
+Kylix/`libc` branch, onto the modern `Posix.*` one. (Earlier ticket notes about
+PXX "picking the Kylix path" describe the *bug* we are steering out of.)
 
 The `Posix.*` units Synapse's posix path pulls in, and our mapping:
 
