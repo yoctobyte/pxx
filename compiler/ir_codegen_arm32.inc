@@ -1202,13 +1202,21 @@ begin
         end;
 
         if ((op = Ord(tkEq)) or (op = Ord(tkNeq))) and
-           ((IntToTypeKind(IRTk[left]) in [tyAnsiString, tyString, tyChar]) or
-            (IntToTypeKind(IRTk[right]) in [tyAnsiString, tyString, tyChar])) and
-           ((IntToTypeKind(IRTk[left]) in [tyAnsiString, tyString, tyChar]) and
-            (IntToTypeKind(IRTk[right]) in [tyAnsiString, tyString, tyChar])) then
+           ((IntToTypeKind(IRTk[left]) in [tyAnsiString, tyString]) or
+            (IntToTypeKind(IRTk[right]) in [tyAnsiString, tyString])) and
+           ((IntToTypeKind(IRTk[left]) in [tyAnsiString, tyString, tyChar, tyPointer]) and
+            (IntToTypeKind(IRTk[right]) in [tyAnsiString, tyString, tyChar, tyPointer])) then
         begin
           lhsTk := IntToTypeKind(IRTk[left]);
           rhsTk := IntToTypeKind(IRTk[right]);
+          { A frozen-string operand reached through a pointer deref or a pointer
+            field (`pstr^`, `rec.pstrField^`) is tagged tyPointer, but its value is
+            the buffer address — decode it as a frozen string. The condition above
+            still requires the other side to be a genuine string, so a real
+            pointer/integer compare never lands here. Mirrors i386/x86-64, which
+            tolerate the tyPointer tag in their string-equality path. }
+          if lhsTk = tyPointer then lhsTk := tyString;
+          if rhsTk = tyPointer then rhsTk := tyString;
           IREmitNodeArm32(left);  EmitI32($E92D0001); { push lhs }
           IREmitNodeArm32(right); EmitI32($E92D0001); { push rhs }
 
@@ -1446,6 +1454,27 @@ begin
           pi := FindProc('PXXDynSetLen');
           if pi < 0 then Error('compiler error: PXXDynSetLen not found');
           EmitCallProc(pi);
+          Exit;
+        end;
+        if pi = -101 then
+        begin
+          { SetLength(s, n) on a frozen inline string: store n into the 8-byte
+            length prefix at [buffer+0] (hi dword = 0, length < 4GB). The buffer
+            address comes straight from EmitLoadVarAddrArm32 (which already loads
+            the pointer P for a string param). Mirrors x86-64 EmitStoreStrLen. }
+          argNode := IRB[node];
+          valNode := IRB[argNode];
+          left := IRA[argNode];
+          if IRKind[left] <> IR_LEA then
+            Error('target arm32: SetLength expects a string variable');
+          si := IRA[left];
+          EmitLoadVarAddrArm32(si);    { r0 = buffer addr }
+          EmitI32($E92D0001);          { push {r0} buffer addr }
+          IREmitNodeArm32(IRA[valNode]); { r0 = new length }
+          EmitI32($E8BD0002);          { pop {r1} buffer addr }
+          EmitI32($E5810000);          { str r0, [r1] (len lo) }
+          EmitI32($E3A02000);          { mov r2, #0 }
+          EmitI32($E5812004);          { str r2, [r1, #4] (len hi) }
           Exit;
         end;
         if pi = -Ord(tkLength) then

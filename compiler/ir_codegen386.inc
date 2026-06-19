@@ -1848,6 +1848,30 @@ begin
           EmitB($81); EmitB($C4); EmitI32(12); { add esp, 12 }
           Exit;
         end;
+        if pi = -101 then
+        begin
+          { SetLength(s, n) on a frozen inline string: store n into the 8-byte
+            length prefix at [buffer+0] (hi dword = 0, length < 4GB). The buffer
+            is the symbol slot itself for a local/global; for a string param the
+            slot holds a pointer P to the buffer. Mirrors x86-64 EmitStoreStrLen. }
+          argNode := IRB[node];
+          valNode := IRB[argNode];
+          left := IRA[argNode];
+          if IRKind[left] <> IR_LEA then
+            Error('target i386: SetLength expects a string variable');
+          si := IRA[left];
+          IREmitNode386(IRA[valNode]);   { eax = new length }
+          { ecx = buffer base address }
+          if (Syms[si].Kind = skParam) and (Syms[si].TypeKind = tyString) then
+            begin EmitB($8B); EmitB($8D); EmitI32(Syms[si].Offset); end  { mov ecx, [ebp+off] = P }
+          else if Syms[si].Kind = skGlobal then
+            begin EmitB($B9); EmitGlobRef(Syms[si].Offset); end          { mov ecx, buffer addr }
+          else
+            begin EmitB($8D); EmitB($8D); EmitI32(Syms[si].Offset); end; { lea ecx, [ebp+off] }
+          EmitB($89); EmitB($01);                          { mov [ecx], eax (len lo) }
+          EmitB($C7); EmitB($41); EmitB($04); EmitI32(0);  { mov dword [ecx+4], 0 (len hi) }
+          Exit;
+        end;
         if pi = -Ord(tkLength) then
         begin
           { Length(arr): IR_LEA auto-loaded the data pointer (handle); the

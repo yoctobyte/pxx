@@ -973,6 +973,15 @@ test-i386: $(COMPILER)
 	./$(COMPILER) -dPXX_MANAGED_STRING --target=i386 test/test_rtti.pas /tmp/test_i386_rtti
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_rtti.pas /tmp/test_i386_rtti_x64
 	test "$$(tools/run_target.sh i386 /tmp/test_i386_rtti | grep -vE 'pointer:|RTTI value:|InstanceSize:')" = "$$(/tmp/test_i386_rtti_x64 | grep -vE 'pointer:|RTTI value:|InstanceSize:')"
+	./$(COMPILER) --target=i386 test/test_streaming.pas /tmp/test_i386_streaming
+	./$(COMPILER) test/test_streaming.pas /tmp/test_i386_streaming_x64
+	test "$$(tools/run_target.sh i386 /tmp/test_i386_streaming)" = "$$(/tmp/test_i386_streaming_x64)"
+	./$(COMPILER) --target=i386 test/test_streaming_enumset.pas /tmp/test_i386_streaming_enumset
+	./$(COMPILER) test/test_streaming_enumset.pas /tmp/test_i386_streaming_enumset_x64
+	test "$$(tools/run_target.sh i386 /tmp/test_i386_streaming_enumset)" = "$$(/tmp/test_i386_streaming_enumset_x64)"
+	./$(COMPILER) --target=i386 test/test_lfm.pas /tmp/test_i386_lfm
+	./$(COMPILER) test/test_lfm.pas /tmp/test_i386_lfm_x64
+	test "$$(tools/run_target.sh i386 /tmp/test_i386_lfm)" = "$$(/tmp/test_i386_lfm_x64)"
 	./$(COMPILER) --target=i386 test/test_interfaces.pas /tmp/test_i386_iface
 	./$(COMPILER) test/test_interfaces.pas /tmp/test_i386_iface_x64
 	test "$$(tools/run_target.sh i386 /tmp/test_i386_iface)" = "$$(/tmp/test_i386_iface_x64)"
@@ -1012,7 +1021,7 @@ test-i386: $(COMPILER)
 	./$(COMPILER) --target=i386 test/test_extern_c_float.pas /tmp/test_i386_extern_float
 	./$(COMPILER) test/test_extern_c_float.pas /tmp/test_i386_extern_float_x64
 	test "$$(tools/run_target.sh i386 /tmp/test_i386_extern_float)" = "$$(/tmp/test_i386_extern_float_x64)"
-	@echo "i386 hello + arith + procs + loops + write + varparam + syscall + heap + string + record + dynarray + exception + float + float-params + variant + variant-single + byref-params + setlen-str + setlen-varparam + in-operator + loadfile + sysopen-family + args + string-cow + aoc-types + many-params + conformance2 + shortcircuit + ptr-arith + case-range + global-init + typed-const + multidim + named-array + record-2darray + param-2darray + multidim3d + const-alias + float-const + stackless-generator + proctype + scheduler + scheduler-exc + classes + method-pointers + aggregate-return + metaclass-rtti + rtti-typinfo + interfaces + dynarray-field + collections + timer + reactor + asyncecho + extern-c + extern-c-float ok (output identical to x86-64)"
+	@echo "i386 hello + arith + procs + loops + write + varparam + syscall + heap + string + record + dynarray + exception + float + float-params + variant + variant-single + byref-params + setlen-str + setlen-varparam + in-operator + loadfile + sysopen-family + args + string-cow + aoc-types + many-params + conformance2 + shortcircuit + ptr-arith + case-range + global-init + typed-const + multidim + named-array + record-2darray + param-2darray + multidim3d + const-alias + float-const + stackless-generator + proctype + scheduler + scheduler-exc + classes + method-pointers + aggregate-return + metaclass-rtti + rtti-typinfo + streaming + streaming-enumset + lfm + interfaces + dynarray-field + collections + timer + reactor + asyncecho + extern-c + extern-c-float ok (output identical to x86-64)"
 
 test-aarch64: $(COMPILER)
 	./$(COMPILER) --target=aarch64 test/hello.pas /tmp/test_aarch64_hello
@@ -1167,6 +1176,15 @@ test-aarch64: $(COMPILER)
 	./$(COMPILER) -dPXX_MANAGED_STRING --target=aarch64 test/test_rtti.pas /tmp/test_aarch64_rtti
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_rtti.pas /tmp/test_aarch64_rtti_x64
 	test "$$(tools/run_target.sh aarch64 /tmp/test_aarch64_rtti | grep -vE 'pointer:|RTTI value:|InstanceSize:')" = "$$(/tmp/test_aarch64_rtti_x64 | grep -vE 'pointer:|RTTI value:|InstanceSize:')"
+	./$(COMPILER) --target=aarch64 test/test_streaming.pas /tmp/test_aarch64_streaming
+	./$(COMPILER) test/test_streaming.pas /tmp/test_aarch64_streaming_x64
+	test "$$(tools/run_target.sh aarch64 /tmp/test_aarch64_streaming)" = "$$(/tmp/test_aarch64_streaming_x64)"
+	./$(COMPILER) --target=aarch64 test/test_streaming_enumset.pas /tmp/test_aarch64_streaming_enumset
+	./$(COMPILER) test/test_streaming_enumset.pas /tmp/test_aarch64_streaming_enumset_x64
+	test "$$(tools/run_target.sh aarch64 /tmp/test_aarch64_streaming_enumset)" = "$$(/tmp/test_aarch64_streaming_enumset_x64)"
+	./$(COMPILER) --target=aarch64 test/test_lfm.pas /tmp/test_aarch64_lfm
+	./$(COMPILER) test/test_lfm.pas /tmp/test_aarch64_lfm_x64
+	test "$$(tools/run_target.sh aarch64 /tmp/test_aarch64_lfm)" = "$$(/tmp/test_aarch64_lfm_x64)"
 	./$(COMPILER) --target=aarch64 test/test_interfaces.pas /tmp/test_aarch64_iface
 	./$(COMPILER) test/test_interfaces.pas /tmp/test_aarch64_iface_x64
 	test "$$(tools/run_target.sh aarch64 /tmp/test_aarch64_iface)" = "$$(/tmp/test_aarch64_iface_x64)"
@@ -1206,7 +1224,7 @@ test-aarch64: $(COMPILER)
 	./$(COMPILER) --target=aarch64 test/test_extern_c_float.pas /tmp/test_aarch64_extern_float
 	./$(COMPILER) test/test_extern_c_float.pas /tmp/test_aarch64_extern_float_x64
 	test "$$(tools/run_target.sh aarch64 /tmp/test_aarch64_extern_float)" = "$$(/tmp/test_aarch64_extern_float_x64)"
-	@echo "aarch64 hello + arith + procs + loops + write + varparam + syscall + heap + string + record + dynarray + exception + float + variant + variant-single + setlen-str + setlen-varparam + str-length-index + in-operator + loadfile + sysopen-family + args + open-array-params + string-cow + huge-frame + varrec-alloc + aoc-types + many-params + conformance2 + shortcircuit + ptr-arith + case-range + global-init + typed-const + multidim + named-array + record-2darray + param-2darray + multidim3d + const-alias + float-const + classes + method-pointers + aggregate-return + metaclass-rtti + rtti-typinfo + interfaces + dynarray-field + collections + timer + reactor + asyncecho + extern-c + extern-c-float ok (output identical to x86-64)"
+	@echo "aarch64 hello + arith + procs + loops + write + varparam + syscall + heap + string + record + dynarray + exception + float + variant + variant-single + setlen-str + setlen-varparam + str-length-index + in-operator + loadfile + sysopen-family + args + open-array-params + string-cow + huge-frame + varrec-alloc + aoc-types + many-params + conformance2 + shortcircuit + ptr-arith + case-range + global-init + typed-const + multidim + named-array + record-2darray + param-2darray + multidim3d + const-alias + float-const + classes + method-pointers + aggregate-return + metaclass-rtti + rtti-typinfo + streaming + streaming-enumset + lfm + interfaces + dynarray-field + collections + timer + reactor + asyncecho + extern-c + extern-c-float ok (output identical to x86-64)"
 
 test-arm32: $(COMPILER)
 	./$(COMPILER) --target=arm32 test/hello.pas /tmp/test_arm32_hello
@@ -1379,6 +1397,15 @@ test-arm32: $(COMPILER)
 	./$(COMPILER) -dPXX_MANAGED_STRING --target=arm32 test/test_rtti.pas /tmp/test_arm32_rtti
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_rtti.pas /tmp/test_arm32_rtti_x64
 	test "$$(tools/run_target.sh arm32 /tmp/test_arm32_rtti | grep -vE 'pointer:|RTTI value:|InstanceSize:')" = "$$(/tmp/test_arm32_rtti_x64 | grep -vE 'pointer:|RTTI value:|InstanceSize:')"
+	./$(COMPILER) --target=arm32 test/test_streaming.pas /tmp/test_arm32_streaming
+	./$(COMPILER) test/test_streaming.pas /tmp/test_arm32_streaming_x64
+	test "$$(tools/run_target.sh arm32 /tmp/test_arm32_streaming)" = "$$(/tmp/test_arm32_streaming_x64)"
+	./$(COMPILER) --target=arm32 test/test_streaming_enumset.pas /tmp/test_arm32_streaming_enumset
+	./$(COMPILER) test/test_streaming_enumset.pas /tmp/test_arm32_streaming_enumset_x64
+	test "$$(tools/run_target.sh arm32 /tmp/test_arm32_streaming_enumset)" = "$$(/tmp/test_arm32_streaming_enumset_x64)"
+	./$(COMPILER) --target=arm32 test/test_lfm.pas /tmp/test_arm32_lfm
+	./$(COMPILER) test/test_lfm.pas /tmp/test_arm32_lfm_x64
+	test "$$(tools/run_target.sh arm32 /tmp/test_arm32_lfm)" = "$$(/tmp/test_arm32_lfm_x64)"
 	./$(COMPILER) --target=arm32 test/test_interfaces.pas /tmp/test_arm32_iface
 	./$(COMPILER) test/test_interfaces.pas /tmp/test_arm32_iface_x64
 	test "$$(tools/run_target.sh arm32 /tmp/test_arm32_iface)" = "$$(/tmp/test_arm32_iface_x64)"
@@ -1418,7 +1445,7 @@ test-arm32: $(COMPILER)
 	./$(COMPILER) --target=arm32 test/test_extern_c_float.pas /tmp/test_arm32_extern_float
 	./$(COMPILER) test/test_extern_c_float.pas /tmp/test_arm32_extern_float_x64
 	test "$$(tools/run_target.sh arm32 /tmp/test_arm32_extern_float)" = "$$(/tmp/test_arm32_extern_float_x64)"
-	@echo "arm32 hello + arith + procs + loops + write + varparam + syscall + heap + string + record + dynarray + exception + float + args + variant + variant-single + strresult + setlen-str + setlen-varparam + str-length-index + in-operator + managed-aggregate-locals + loadfile + sysopen-family + string-cow + var-string-param + openarray-string + stack-params + int64 + int64-byref + aoc-types + many-params + conformance2 + shortcircuit + ptr-arith + case-range + global-init + typed-const + multidim + named-array + record-2darray + param-2darray + multidim3d + const-alias + float-const + classes + method-pointers + aggregate-return + metaclass-rtti + rtti-typinfo + interfaces + dynarray-field + collections + timer + reactor + asyncecho + extern-c + extern-c-float ok (output identical to x86-64)"
+	@echo "arm32 hello + arith + procs + loops + write + varparam + syscall + heap + string + record + dynarray + exception + float + args + variant + variant-single + strresult + setlen-str + setlen-varparam + str-length-index + in-operator + managed-aggregate-locals + loadfile + sysopen-family + string-cow + var-string-param + openarray-string + stack-params + int64 + int64-byref + aoc-types + many-params + conformance2 + shortcircuit + ptr-arith + case-range + global-init + typed-const + multidim + named-array + record-2darray + param-2darray + multidim3d + const-alias + float-const + classes + method-pointers + aggregate-return + metaclass-rtti + rtti-typinfo + streaming + streaming-enumset + lfm + interfaces + dynarray-field + collections + timer + reactor + asyncecho + extern-c + extern-c-float ok (output identical to x86-64)"
 
 # ----- Cross self-host bootstrap gates (feature-cross-bootstrap-selfhost) -----
 # Triple-stage proof: native cross-compiles compiler.pas -> <arch>; that binary,

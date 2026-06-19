@@ -56,6 +56,18 @@ type
 
   PPString = ^PString;   { indexable array of PString (enum value-name table) }
 
+  { The enum value-name table is emitted in the blob with the same uniform
+    8-byte slots as every other RTTI pointer (see rtti_emit.inc EmitEnumRTTI:
+    `cnt * 8` reservation, `i * 8` fixups). Read it through an 8-byte-padded
+    slot so the stride matches on 32-bit too — a plain `array of PString` would
+    step the native 4-byte pointer size on i386 and read every other slot as the
+    zeroed high half (nil). Mirrors the TClassRTTI/TPropInfo padding. }
+  TEnumValSlot = record
+    P: PString;
+    {$ifdef CPU32} _pad: LongInt; {$endif}
+  end;
+  PEnumValArr = ^TEnumValSlot;
+
   { Enum type RTTI blob (see rtti_emit.inc EmitEnumRTTI):
       +0  NamePtr   -> enum type name
       +8  Count     : Int64
@@ -362,19 +374,20 @@ end;
 { Map an enum member name to its ordinal via the enum RTTI. -1 if not found. }
 function GetEnumValue(et: PEnumRTTI; const name: string): Integer;
 var
-  arr: PPString;
+  arr: PEnumValArr;
   sp: PString;
   i: Integer;
 begin
   GetEnumValue := -1;
   if et = nil then Exit;
-  arr := PPString(et^.ValuesPtr);
+  arr := PEnumValArr(et^.ValuesPtr);
   if arr = nil then Exit;
   for i := 0 to Integer(et^.Count) - 1 do
   begin
     { copy the element pointer to a local before deref: inline index-then-deref
-      (arr[i]^) of a pointer-array miscompiles in this dialect. }
-    sp := arr[i];
+      (arr[i]^) of a pointer-array miscompiles in this dialect. The 8-byte-padded
+      slot keeps the array stride uniform across targets (see PEnumValArr). }
+    sp := arr[i].P;
     if sp^ = name then
     begin
       GetEnumValue := i;

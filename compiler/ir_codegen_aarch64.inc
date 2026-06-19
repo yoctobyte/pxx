@@ -1023,15 +1023,25 @@ begin
         end;
 
         if ((op = Ord(tkEq)) or (op = Ord(tkNeq))) and
-           ((IntToTypeKind(IRTk[left]) in [tyAnsiString, tyString, tyChar]) and
-            (IntToTypeKind(IRTk[right]) in [tyAnsiString, tyString, tyChar])) and
-           ((IntToTypeKind(IRTk[left]) = tyAnsiString) or
-            (IntToTypeKind(IRTk[right]) = tyAnsiString)) then
+           ((IntToTypeKind(IRTk[left]) in [tyAnsiString, tyString, tyChar, tyPointer]) and
+            (IntToTypeKind(IRTk[right]) in [tyAnsiString, tyString, tyChar, tyPointer])) and
+           ((IntToTypeKind(IRTk[left]) in [tyAnsiString, tyString]) or
+            (IntToTypeKind(IRTk[right]) in [tyAnsiString, tyString])) then
         begin
-          { String/char equality via PXXStrEq(lenA, srcA, lenB, srcB). At least
-            one operand is a managed handle. }
+          { String/char equality via PXXStrEq(lenA, srcA, lenB, srcB). At least one
+            operand is a string (managed handle or frozen inline); the other may be
+            a frozen string, managed handle, or a single char. EmitA64StringParts
+            decomposes each per its type. Without this, two frozen strings fell to
+            the integer path below and compared buffer addresses (always unequal). }
           lhsTk := IntToTypeKind(IRTk[left]);
           rhsTk := IntToTypeKind(IRTk[right]);
+          { A frozen string reached through a pointer deref / pointer field
+            (`pstr^`, `rec.pstrField^`) is tagged tyPointer but its value is the
+            buffer address — decode it as a frozen string (the condition above
+            still requires the other side to be a genuine string, so a real
+            pointer compare never lands here). Mirrors i386/x86-64. }
+          if lhsTk = tyPointer then lhsTk := tyString;
+          if rhsTk = tyPointer then rhsTk := tyString;
           IREmitNodeAarch64(left);  EmitI32($F81F0FE0); { push lhs }
           IREmitNodeAarch64(right); EmitI32($F81F0FE0); { push rhs }
           EmitI32($F94003E0);                           { ldr x0, [sp] (rhs) }
@@ -1248,6 +1258,28 @@ begin
           pi := FindProc('PXXDynSetLen');
           if pi < 0 then Error('compiler error: PXXDynSetLen not found');
           EmitCallProc(pi);
+          Exit;
+        end;
+        if pi = -101 then
+        begin
+          { SetLength(s, n) on a frozen inline string: store n into the 8-byte
+            length prefix at [buffer+0]. The buffer is the symbol slot for a
+            local/global; for a string param the slot holds a pointer P to it.
+            Mirrors x86-64 EmitStoreStrLen. }
+          argNode := IRB[node];
+          valNode := IRB[argNode];
+          left := IRA[argNode];
+          if IRKind[left] <> IR_LEA then
+            Error('target aarch64: SetLength expects a string variable');
+          si := IRA[left];
+          EmitLoadVarAddrA64(si);              { x0 = buffer addr (or &slot for a string param) }
+          if (Syms[si].Kind = skParam) and (Syms[si].TypeKind = tyString) and
+             not Syms[si].IsArray then
+            EmitI32($F9400000);                { ldr x0, [x0] = P (param slot holds the pointer) }
+          EmitI32($F81F0FE0);                  { str x0, [sp, #-16]! (push buffer addr) }
+          IREmitNodeAarch64(IRA[valNode]);     { x0 = new length }
+          EmitI32($F84107E1);                  { ldr x1, [sp], #16 (buffer addr) }
+          EmitI32($F9000020);                  { str x0, [x1] (8-byte length prefix) }
           Exit;
         end;
         if pi = -Ord(tkLength) then

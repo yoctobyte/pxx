@@ -9,9 +9,15 @@ interface
 uses typinfo;   { PString — declaring it here too would duplicate the type and corrupt RTTI }
 
 type
+  { Emitted (resources_emit.inc) as uniform 8-byte slots: nameptr(8), dataptr(8),
+    len(8) = 24 bytes/entry. Pad the pointer fields on 32-bit so the reader stride
+    matches the blob (else `e[i]` steps 16 bytes and reads garbage). Mirrors the
+    typinfo RTTI-record padding. }
   TResEntry = record
     NamePtr: PString;
+    {$ifdef CPU32} _pad_name: LongInt; {$endif}
     DataPtr: Pointer;
+    {$ifdef CPU32} _pad_data: LongInt; {$endif}
     Len:     Int64;
   end;
   PResEntry = ^TResEntry;
