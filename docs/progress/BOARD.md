@@ -12,11 +12,10 @@ _none_
 
 _none_
 
-## backlog (47)
+## backlog (46)
 
 | Ticket | Type | Summary | Blocked-by |
 | --- | --- | --- | --- |
-| bug-xtensa-call0-large-frame-truncates | bug | Xtensa Call0 / non-windowed frame >128 bytes silently truncates | — |
 | chore-inc-to-units | chore | `.inc` → real `.pas` units refactor | — |
 | chore-runtime-emission-size | chore | Finer runtime-support emission (code size) | — |
 | feature-additional-cpu-targets | feature | Additional CPU targets (rollup: i386 → aarch64 → arm32 → ESP32/RISC-V) | feature-target-aarch64, feature-target-arm32, feature-target-esp32, feature-target-i386 |
@@ -71,7 +70,7 @@ _none_
 | bug-nonreproducible-miscompile-2026-06-02 | bug | Non-reproducible one-off miscompile (2026-06-02) | — |
 | bug-whole-record-copy-main-body-noop | bug | Latent: whole-record array-element copy in main-program body emits store no-ops | — |
 
-## done (68)
+## done (69)
 
 | Ticket | Type | Summary | Blocked-by |
 | --- | --- | --- | --- |
@@ -84,6 +83,7 @@ _none_
 | bug-read-preserves-line-remainder | bug | `read` consumes a whole line like `readln` | — |
 | bug-record-byvalue-arg-truncation | bug | By-value record args >8 bytes truncate (and operator operand edges) | — |
 | bug-threadsafe-layout-rtti-helper-races | bug | Thread-safe layout RTTI helper races | feature-rtti-layout-table |
+| bug-xtensa-call0-large-frame-truncates | bug | Xtensa Call0 / non-windowed frame >128 bytes silently truncates | — |
 | chore-asmtext-per-platform-split | chore | Split `asmtext.inc` monolith into per-platform files + fix emitter tests | — |
 | chore-qemu-test-env | chore | QEMU cross-target test environment | — |
 | feature-aarch64-asm-emitter | feature | AArch64 text-assembler (`EmitAsmA64`) for cleaner ARM64 codegen | — |
@@ -150,7 +150,6 @@ _none_
 
 ## Ready (no unmet blocker)
 
-- bug-xtensa-call0-large-frame-truncates
 - chore-inc-to-units
 - chore-runtime-emission-size
 - feature-additional-cpu-targets

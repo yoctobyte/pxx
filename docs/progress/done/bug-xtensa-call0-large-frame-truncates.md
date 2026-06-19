@@ -1,9 +1,10 @@
 # Xtensa Call0 / non-windowed frame >128 bytes silently truncates
 
 - **Type:** bug
-- **Status:** backlog
+- **Status:** done
 - **Owner:** —
 - **Opened:** 2026-06-18 (noted during the windowed constant-sp fix)
+- **Resolved:** 2026-06-19
 
 ## Symptom
 
@@ -28,9 +29,29 @@ Apply the same ADDMI (or ADDMI + ADDI remainder) treatment to the Call0
 prologue patch in `PatchProcPrologue` (symtab.inc), or at minimum raise a clear
 compiler error when a Call0 xtensa frame exceeds 128 bytes instead of wrapping.
 
+## Resolution
+
+Fixed in `PatchProcPrologue` (`symtab.inc`), the Call0 branch. Small frames
+(`aligned <= 128`) keep the exact `ADDI` encoding so existing bare-boot images
+stay byte-identical; larger frames round up to 256 and lower `sp` with a single
+`ADDMI` (imm8<<8, reaching -32768), mirroring the windowed path. A frame beyond
+ADDMI's reach (> 32 KB) now raises a clear compiler error instead of wrapping.
+The Call0 epilog already restores `sp` via `mov sp, a15`, so the round-up slack
+is harmless.
+
+Regression test `test/test_esp_bare_largeframe.pas` (a Call0 proc with a
+~256-byte local array, summing it) boots on esp32s3 under qemu and matches the
+x86-64 oracle (`4096`); wired into `make test-esp-bare`. `make bootstrap` stays
+byte-identical and the existing small-frame bare-boot images are unchanged.
+
 ## Notes
 
 - Low practical impact today: ESP work runs the **windowed** ABI (IDF), which
   is fixed; Call0 is only the bare-metal/no-IDF path and stage-1 procs have
   small frames. Filed so the silent-wrap doesn't bite later.
 - Related: feature-esp32-bare-boot (the Call0 / bare profile).
+
+## Log
+- 2026-06-18 — opened.
+- 2026-06-19 — fixed. Call0 prologue uses ADDMI for frames > 128 bytes (errors
+  > 32 KB); regression test added + wired into test-esp-bare. Resolved.

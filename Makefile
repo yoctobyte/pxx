@@ -1535,6 +1535,12 @@ test-esp-bare: $(COMPILER)
 	  ESP_RUN_TIMEOUT=8 tools/esp_run_bare.sh --chip esp32s3 test/test_esp_bare.pas > /tmp/test_esp_bare.s3 2>/dev/null; \
 	  if diff -u /tmp/test_esp_bare.oracle /tmp/test_esp_bare.s3; then echo "esp32s3 bare-boot ok (UART output == x86-64 oracle)"; \
 	  else echo "esp32s3 bare-boot MISMATCH"; exit 1; fi; fi
+	@./$(COMPILER) test/test_esp_bare_largeframe.pas /tmp/test_esp_bare_lf_oracle >/dev/null && /tmp/test_esp_bare_lf_oracle > /tmp/test_esp_bare_lf.oracle
+	@XT=$$(ls $$HOME/.espressif/tools/qemu-xtensa/*/qemu/bin/qemu-system-xtensa 2>/dev/null | head -1); \
+	if [ -z "$$XT" ]; then echo "Espressif qemu-system-xtensa not installed; esp32s3 large-frame run skipped"; else \
+	  ESP_RUN_TIMEOUT=8 tools/esp_run_bare.sh --chip esp32s3 test/test_esp_bare_largeframe.pas > /tmp/test_esp_bare_lf.s3 2>/dev/null; \
+	  if diff -u /tmp/test_esp_bare_lf.oracle /tmp/test_esp_bare_lf.s3; then echo "esp32s3 call0 large-frame ok (>128B frame via ADDMI == x86-64 oracle)"; \
+	  else echo "esp32s3 call0 large-frame MISMATCH"; exit 1; fi; fi
 
 # Cross-target test environment sanity (chore-qemu-test-env). Manual target:
 # joins 'make test' when the first cross backend exists. Validates the runner

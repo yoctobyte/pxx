@@ -3273,7 +3273,23 @@ begin
     end;
   end
   else if TargetArch = TARGET_XTENSA then
-    Patch24(patchPos, EncodeXtensaAddi(reg_xtensa_sp, reg_xtensa_sp, -aligned))
+  begin
+    { Call0 ABI: the prologue saved a0/a15 and set a15 as a frame pointer; the
+      epilog restores via `mov sp, a15`, so over-reserving the frame is harmless.
+      ADDI's immediate is 8-bit signed (+-128); a larger frame silently wraps.
+      Keep the exact ADDI encoding for small frames, and for anything beyond its
+      reach round up to 256 and lower sp with a single ADDMI (imm8<<8, reaching
+      -32768), mirroring the windowed path. }
+    if aligned <= 128 then
+      Patch24(patchPos, EncodeXtensaAddi(reg_xtensa_sp, reg_xtensa_sp, -aligned))
+    else
+    begin
+      aligned := ((aligned + 255) div 256) * 256;
+      if aligned > 32768 then
+        Error('target xtensa (call0): stack frame too large (> 32 KB) for a single ADDMI');
+      Patch24(patchPos, EncodeXtensaAddmi(reg_xtensa_sp, reg_xtensa_sp, -aligned));
+    end;
+  end
   else if TargetArch = TARGET_RISCV32 then
     Patch32(patchPos, EncodeRISCVAddi(reg_sp, reg_sp, -aligned))
   else
