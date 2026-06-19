@@ -117,3 +117,16 @@ B's pinned binary (binary+builtin coherent; v9->v10).
 - 2026-06-19 — **stable v10 pinned** (1-3 + interfaces handed to B). Next-pull
   order set: re-verify crashes on v10, then item 5 (sets) for max demo unlock,
   then item 4 (Copy) for JSON.
+- 2026-06-19 — **stable v11 pinned (`90f706a`)**: items 4, 5, 6, 7 all landed.
+  Item 6 (`bug-record-fn-codegen-crash`) was GONE on v10 (v9 mid-WIP artifact),
+  closed. Item 7 (const-record-temp) fixed. Item 5 (runtime sets +
+  Include/Exclude) done. Item 4 — **dynarray `Copy` done**; string-family
+  overloads + `Delete`/`Insert`/`Concat` siblings still open under
+  `feature-copy-intrinsic`. **Items 1-7 now all in B's pinned binary.**
+  Remaining wishlist: **item 8** (generator record-yield + nested-yield, Gaps 2-3,
+  UNVERIFIED — needs a build) and the Copy siblings. Two pre-existing cross bugs
+  surfaced + filed (`bug-const-managed-record-param-byref-crash`,
+  `bug-dynarray-whole-var-assign-cross`; both i386+aarch64, x86-64 fine).
+  Suggested next: **item 8** (verify/enable generator record + nested yield →
+  unblocks chess movegen) or the `Copy` siblings (`Delete`/`Insert`/`Concat`) for
+  JSON breadth.
