@@ -113,6 +113,8 @@ type
 
 implementation
 
+uses strutils;   { Copy }
+
 const
   ESC = #27;
   RED = 31; GRN = 32; YEL = 33; BLU = 34; MAG = 35; CYN = 36;

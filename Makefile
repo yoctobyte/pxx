@@ -1727,7 +1727,7 @@ lib-test: pxx-stable-check
 	$(PXX_STABLE) test/test_math.pas /tmp/lib_math
 	/tmp/lib_math >/dev/null
 	$(PXX_STABLE) test/lib_strutils.pas /tmp/lib_strutils
-	test "$$(/tmp/lib_strutils)" = "$$(printf '0\n7\n42\n-5\n1000000\n-123456789')"
+	test "$$(/tmp/lib_strutils)" = "$$(printf '0\n7\n42\n-5\n1000000\n-123456789\nhello\nworld\n[]\n[pad me]\n[]')"
 	@echo "lib-test ok (sudoku exact + collections + math + strutils smoke) against stable v$$(cat $(STABLE_DEFAULT_DIR)/VERSION 2>/dev/null || echo '?')"
 
 # Compile-smoke DASHBOARD for every demo app, against the pinned stable. Prints

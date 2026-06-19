@@ -3652,14 +3652,28 @@ begin
   begin
     Next; r := ConstEval; Expect(tkRParen, ')');
   end;
-  while CurTok.Kind in [tkPlus, tkMinus, tkStar, tkDiv] do
+  while (CurTok.Kind in [tkPlus, tkMinus, tkStar, tkDiv, tkMod, tkAnd, tkOr, tkShl]) or
+        ((CurTok.Kind = tkIdent) and (CurTok.SVal = 'shr')) do
   begin
-    op := CurTok.Kind; Next; v := ConstEval();
-    case op of
-      tkPlus:  r := r + v;
-      tkMinus: r := r - v;
-      tkStar:  r := r * v;
-      tkDiv:   r := r div v;
+    { `shr` is lexed as an identifier (no tkShr token), like the runtime term
+      parser; everything else is a real operator token. }
+    if CurTok.Kind = tkIdent then
+    begin
+      Next; v := ConstEval(); r := r shr v;
+    end
+    else
+    begin
+      op := CurTok.Kind; Next; v := ConstEval();
+      case op of
+        tkPlus:  r := r + v;
+        tkMinus: r := r - v;
+        tkStar:  r := r * v;
+        tkDiv:   r := r div v;
+        tkMod:   r := r mod v;
+        tkAnd:   r := r and v;
+        tkOr:    r := r or v;
+        tkShl:   r := r shl v;
+      end;
     end;
   end;
   Result := r;
