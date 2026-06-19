@@ -37,7 +37,7 @@ Maintainer shortlist marked ★ (current favourites — not binding).
 - Chimera — monster of parts + many-natured (multi-target)
 - Golem — assembled, animated artificial being
 - Patchwork — assembled from pieces
-- Graft — fuse living parts into one whole
+- ★ Graft — fuse living parts into one whole
 - Suture — the surgical stitch itself
 - Galvani — galvanism = electricity-reanimates-tissue science
 - Galvanize — verb form; "bring to life"
@@ -54,6 +54,18 @@ Maintainer shortlist marked ★ (current favourites — not binding).
 - Wager — Pascal's Wager (his philosophy); oblique
 - Forge — makes things from raw parts; common
 - Crucible — where elements fuse; dramatic
+- Weld — fuse metal parts into one
+- Loom — machine weaving parts into a whole; ominous undertone
+- Rivet — fastener joining parts
+- Lattice — interlocking structure
+- Cleave — contronym: both split and join
+- Phoenix — reanimation / rebirth
+- Manticore — mythic beast made of parts
+- Wyvern — dragon-kin; short, brandable
+- Quench — smithing: harden hot metal
+- Temper — smithing: heat-treat for strength
+- Ingot — cast block = compiled output
+- Vertex — geometry / graph node
 
 ## Round 2 (fill after round 1)
 
@@ -90,7 +102,7 @@ Top 7 by 👍 → native Poll, single choice.
 | Hydra ★ | many heads = many targets |
 | Stitch ★ | stitched parts; friendly |
 | Patchwork | assembled from pieces |
-| Graft | fuse living parts into one |
+| Graft ★ | fuse living parts into one |
 | Suture | the surgical stitch |
 
 ### Reanimation / galvanism
@@ -126,6 +138,30 @@ Top 7 by 👍 → native Poll, single choice.
 | Forge | from raw parts; common |
 | Crucible | where elements fuse |
 | Kiln ★ | fires raw into solid |
+
+### Craft / binding / process (2026-06-19 round)
+| Name | Read |
+|---|---|
+| Weld | fuse metal parts into one |
+| Loom | weaves parts into a whole; ominous undertone |
+| Rivet | fastener joining parts (Bolt sibling) |
+| Lattice | interlocking structure |
+| Cleave | contronym: split AND join |
+| Quench | smithing: harden hot metal (Kiln sibling) |
+| Temper | smithing: heat-treat for strength |
+| Ingot | cast block = compiled output |
+
+### More mythic / reanimation (2026-06-19 round)
+| Name | Read |
+|---|---|
+| Phoenix | reanimation / rebirth |
+| Manticore | mythic beast made of parts |
+| Wyvern | dragon-kin; short, brandable |
+
+### More Pascal / math (2026-06-19 round)
+| Name | Read |
+|---|---|
+| Vertex | geometry / graph node (Triangle sibling) |
 
 ### Dropped
 - Reanimator — too human
