@@ -63,7 +63,7 @@ Maintainer shortlist marked ★ (current favourites — not binding).
 - Manticore — mythic beast made of parts
 - Wyvern — dragon-kin; short, brandable
 - Quench — smithing: harden hot metal
-- Temper — smithing: heat-treat for strength
+- ★ Temper — smithing: heat-treat for strength
 - Ingot — cast block = compiled output
 - Vertex — geometry / graph node
 
@@ -148,7 +148,7 @@ Top 7 by 👍 → native Poll, single choice.
 | Lattice | interlocking structure |
 | Cleave | contronym: split AND join |
 | Quench | smithing: harden hot metal (Kiln sibling) |
-| Temper | smithing: heat-treat for strength |
+| Temper ★ | smithing: heat-treat for strength |
 | Ingot | cast block = compiled output |
 
 ### More mythic / reanimation (2026-06-19 round)
