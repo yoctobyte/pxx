@@ -1,8 +1,8 @@
 # String `Copy` / `Trim` not available
 
 - **Type:** feature (library / builtin)
-- **Status:** backlog
-- **Owner:** —
+- **Status:** done (2026-06-19)
+- **Owner:** Claude B
 - **Opened:** 2026-06-19 (discovered by `make demos`: examples/adventure)
 
 ## Symptom
@@ -27,3 +27,11 @@ fold `examples/adventure` toward green in `make demos`.
 
 ## Log
 - 2026-06-19 — opened from the demos compile-smoke dashboard.
+- 2026-06-19 — **done.** `Copy(s, index, count)` (1-based, count clamped to
+  end, out-of-range -> '') and `Trim(s)` (strip <= ' ' both ends) added in
+  `lib/rtl/strutils.pas`; `Copy` is definable as a plain unit function (not a
+  reserved builtin). `test/lib_strutils` asserts both in `make lib-test` (green).
+  `examples/adventure/engine.pas` now `uses strutils` and clears the Copy
+  blocker. Adventure still FAILs on later compiler gaps (mixed-case builtins —
+  bug-builtin-write-case-sensitive; then Text-file I/O per its
+  EXPECTED-FAILURES.md F1), not on Copy/Trim.

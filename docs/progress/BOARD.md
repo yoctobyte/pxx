@@ -16,6 +16,8 @@ _none_
 
 | Ticket | Type | Summary | Blocked-by |
 | --- | --- | --- | --- |
+| bug-builtin-write-case-sensitive | bug | Builtin write/writeln matched case-sensitively (only lowercase resolves) | — |
+| bug-sysutils-unit-hard-skipped | bug | `uses sysutils` is hard-skipped — a real lib/rtl/sysutils can't load | — |
 | chore-inc-to-units | chore | `.inc` → real `.pas` units refactor | — |
 | chore-runtime-emission-size | chore | Finer runtime-support emission (code size) | — |
 | feature-additional-cpu-targets | feature | Additional CPU targets (rollup: i386 → aarch64 → arm32 → ESP32/RISC-V) | feature-target-aarch64, feature-target-arm32, feature-target-esp32, feature-target-i386 |
@@ -75,14 +77,12 @@ _none_
 | idea-demo-app-candidates | idea | Demo / test application candidates — selection criteria + catalog | — |
 | idea-unit-rename-import | idea | `uses X as Y` unit-rename import (dialect extension) | — |
 | idea-visibility-enforcement | idea | Enforce private/protected visibility | — |
-| lib-intToStr-missing | lib | `IntToStr` not available | — |
-| lib-string-copy-trim-missing | lib | String `Copy` / `Trim` not available | — |
 
 ## blocked (0)
 
 _none_
 
-## done (72)
+## done (74)
 
 | Ticket | Type | Summary | Blocked-by |
 | --- | --- | --- | --- |
@@ -158,6 +158,8 @@ _none_
 | feature-xtensa-asm-emitter | feature | Xtensa text-assembler (`EmitAsmXtensa`) for ESP32 | — |
 | feature-xtensa-windowed-abi | feature | Xtensa windowed ABI codegen variant (for ESP-IDF interop) | — |
 | idea-progress-board-md | idea | On-demand `BOARD.md` kanban grid | — |
+| lib-intToStr-missing | lib | `IntToStr` not available | — |
+| lib-string-copy-trim-missing | lib | String `Copy` / `Trim` not available | — |
 
 ## rejected (1)
 
@@ -167,6 +169,8 @@ _none_
 
 ## Ready (no unmet blocker)
 
+- bug-builtin-write-case-sensitive
+- bug-sysutils-unit-hard-skipped
 - chore-inc-to-units
 - chore-runtime-emission-size
 - feature-additional-cpu-targets
@@ -222,8 +226,6 @@ _none_
 - idea-demo-app-candidates
 - idea-unit-rename-import
 - idea-visibility-enforcement
-- lib-intToStr-missing
-- lib-string-copy-trim-missing
 
 ## Leverage (tickets each one unblocks)
 
