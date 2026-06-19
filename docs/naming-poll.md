@@ -18,72 +18,44 @@ several.
 
 ---
 
-## Round 1 seed (paste each as its own comment, then 👍)
+## Combined ranking (maintainer order; ★ = shortlist)
 
-Maintainer shortlist marked ★ (current favourites — not binding).
+Round-1 seed: paste each as its own comment, then 👍. Voters 👍 any they like
+**and may add a comment to suggest a new name** — that comment thread *is* the
+"Other / type your own" path (native reactions allow write-ins). Top 7 advance.
 
-- frankonpiler — current name; Franken + compiler, Pascal-ish
-- frankenpiler — cleaner Frankenstein pun; more generic
-- steinpile — -stein + compile/pile; cryptic
-- steinpiler — same, but signals "compiler"
-- pxx — the project's DNA (`PXX_` macros, profiles, binary lineage)
-- pxxc — pxx + c for compiler
-- Igor — Frankenstein's builder-assistant
-- ★ Hydra — many heads = many backends/targets
-- ★ Stitch — Frankenstein = stitched parts; short, friendly
-- ★ Bolt — the neck bolt; short, strong
-- ★ Triangle — Pascal's triangle; clean
-- ★ Kiln — fires raw into solid; short, unusual
-- Chimera — monster of parts + many-natured (multi-target)
-- Golem — assembled, animated artificial being
-- Patchwork — assembled from pieces
-- ★ Graft — fuse living parts into one whole
-- Suture — the surgical stitch itself
-- Galvani — galvanism = electricity-reanimates-tissue science
-- Galvanize — verb form; "bring to life"
-- Volt — the spark
-- Arc — the electric arc; also "arc" of code
-- Promethean — book subtitle "The Modern Prometheus"
-- Frankenpile — Franken + pile/compile
-- Frankopile — tighter variant
-- Steincode — -stein + code
-- Boltneck — the neck bolt, literal
-- Pascalith — Pascal + monolith
-- Pascalite — mineral-ish, clean
-- Neopascal — "new Pascal"; clear but generic
-- Wager — Pascal's Wager (his philosophy); oblique
-- Forge — makes things from raw parts; common
-- Crucible — where elements fuse; dramatic
-- Weld — fuse metal parts into one
-- ★ Loom — machine weaving parts into a whole; ominous undertone
-- Rivet — fastener joining parts
-- Lattice — interlocking structure
-- Cleave — contronym: both split and join
-- Phoenix — reanimation / rebirth
-- Manticore — mythic beast made of parts
-- Wyvern — dragon-kin; short, brandable
-- Quench — smithing: harden hot metal
-- ★ Temper — smithing: heat-treat for strength
-- Ingot — cast block = compiled output
-- Vertex — geometry / graph node
-- Pyx — small round container; echoes `pxx`; pronounced "picks"
-- ★ Flint — strikes the spark; hard stone
-- ★ Spark — the ignition / galvanic jolt (clashes: Apache Spark, SPARK/Ada)
-- ★ Nyx — goddess of night; backronym "Not Your Xcross compiler"; aligns with nil-python (.npy); rhymes with Dutch "niks" (~nothing)
-- ★ Nix — same idea, alt spelling (Latin "snow"/"nothing"; clashes with NixOS)
-- Onyx — black gemstone; sleek
-- Pascaline — Blaise Pascal's mechanical calculating machine
-- Roulette — Pascal's cycloid / probability; a wheel
-- Fixpoint — the self-host fixed point this compiler reaches
-- Quine — a program that outputs itself; self-hosting spirit
-- Thunk — classic compiler term (deferred computation)
-- Prism — one source refracted into many targets
-- ★ Atlas — book of many maps = many targets
-- ★ Ent — Dutch "graft/scion" + Tolkien tree-being
+1.  ★ Nyx — night goddess · NYX "Not Your Xcross compiler" · nil/.npy · Dutch "niks" (~nothing)
+2.  pxx — project DNA (`PXX_` macros, binary lineage); phonetic cousin of Nyx
+3.  ★ Hydra — many heads = many targets
+4.  ★ Stitch — stitched-together parts
+5.  ★ Graft — fuse parts into one (Dutch "enten")
+6.  ★ Ent — Dutch graft/scion + Tolkien tree-being
+7.  ★ Bolt — the neck bolt
+8.  ★ Loom — weaves parts into a whole; ominous undertone
+9.  ★ Temper — smithing: heat-treat for strength
+10. ★ Kiln — fires raw into solid
+11. ★ Flint — strikes the spark; hard stone
+12. ★ Atlas — many maps = many targets (common-ish)
+13. frankonpiler — current name; Franken + compiler (long)
+14. ★ Triangle — Pascal's triangle (a bit generic)
+15. frankenpiler — cleaner Franken pun
+16. steinpile — -stein + pile
+17. steinpiler — signals "compiler"
+18. pxxc — pxx + c
+19. Igor — Frankenstein's assistant
+20. ★ Spark — ignition (⚠ clash: Apache Spark, SPARK/Ada)
+21. ★ Nix — alt spelling of Nyx (⚠ clash: NixOS)
++   **Other — comment your own suggestion below**
+
+(Full reasoned record of every candidate, incl. the ones below the line —
+Chimera, Golem, Pyx, Pascaline, Quine, Fixpoint, etc. — is in the tables further
+down.)
 
 ## Round 2 (fill after round 1)
 
-Top 7 by 👍 → native Poll, single choice.
+Top 7 by 👍 → native **Poll** (single choice, max 8 options). Use the 8th slot
+for **"Other — see comments"** so write-in momentum from round 1 still has a
+home (native polls have no text entry).
 
 1. _tbd_
 2. _tbd_
@@ -92,6 +64,7 @@ Top 7 by 👍 → native Poll, single choice.
 5. _tbd_
 6. _tbd_
 7. _tbd_
+8. Other — see comments
 
 ---
 
