@@ -4,6 +4,29 @@ Two work streams proceed in parallel, decoupled by a **pinned stable compiler**.
 The point: A can rebuild and temporarily regress the compiler while B keeps
 building libraries and demo apps against a known-good baseline.
 
+The user runs **two Claude agents at once** against this same repo/branch — one
+per track. Most sessions are one or the other.
+
+## Which agent am I? (mode A/B auto-detection)
+
+At the start of a session, infer the track from the user's request:
+
+- **Track A — compiler.** Signals: compiler internals, codegen / IR / backends,
+  a target (i386 / aarch64 / arm32 / xtensa / riscv / ESP), parser / lexer /
+  ABI / ELF, bootstrap / self-host / fixedpoint / `make stabilize`, fixing a
+  compiler bug, adding a *language* feature, `compiler/**` files.
+- **Track B — libraries/demos.** Signals: `lib/rtl` / `lib/lcl`, `examples/**`,
+  writing or fixing a *library* (JSON, hashing, `IntToStr`, `Copy`, collections),
+  demo apps, `make lib-test` / `make demos`, a ticket tagged "(library)".
+
+If the request is genuinely ambiguous, **ask**: "Am I on track A (compiler) or
+track B (libraries/demos) this session?" Don't guess when unsure — the two
+tracks have opposite rules about rebuilding the compiler.
+
+Once known, follow that track's section below. Lanes are soft (see the end), so
+crossing over is allowed when a task needs it — but start from the inferred
+track's defaults.
+
 ## The boundary
 
 ```
@@ -72,3 +95,21 @@ test` + self-host fixedpoint**, and a fresh `make stabilize` is what hands B a
 compiler with new features. Coordinate through commits on `master` and the
 `history.log` baseline; keep cross-edits to the shared `Makefile` inside each
 track's fenced section to avoid collisions.
+
+## Shared checkout — coordination
+
+Both agents work the **same checkout** on `master` (no worktrees, no clones, per
+the user's repo workflow). To avoid clobbering each other:
+
+- **Commit early and often, in small units.** Uncommitted edits are the only
+  thing the other agent can stomp; committed work is safe.
+- **Stay in your lane's files.** A → `compiler/**`; B → `lib/**`, `examples/**`,
+  `test/lib_*`. File overlap is then near zero. The shared `Makefile` is fenced
+  per track.
+- **`git pull --rebase` before you push**, and push promptly after committing —
+  the other agent may have pushed in between. Resolve in your own files.
+- **`git log --oneline -5` at session start** to see what the other track just
+  landed (e.g. a new stable `vN`, a freshly closed ticket).
+- B never needs to rebuild the compiler; A's in-progress `compiler/pascal26` is
+  irrelevant to B because B uses `$(PXX_STABLE)`. So a half-built compiler in the
+  tree does not block B.
