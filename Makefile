@@ -1,10 +1,10 @@
 FPC     ?= fpc
 FPCFLAGS = -O2 -Tlinux -Px86_64
 HYPERFINE ?= hyperfine
-BENCH_RUNS ?= 10
-BENCH_HELLO_RUNS ?= 10
+BENCH_RUNS ?= 3
+BENCH_HELLO_RUNS ?= 3
 BENCH_BATCH ?= 3
-BENCH_RUNTIME_RUNS ?= 30
+BENCH_RUNTIME_RUNS ?= 3
 
 COMPILER     := compiler/pascal26
 COMPILER_MANAGED := compiler/pascal26-managed
