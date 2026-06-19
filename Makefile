@@ -239,6 +239,8 @@ test-core: $(COMPILER)
 	test "$$(/tmp/test_interfaces26)" = "$$(printf 'area=20\nscaled=60\narea2=42\ndirect=42')"
 	./$(COMPILER) test/test_interfaces_is.pas /tmp/test_interfaces_is26
 	test "$$(/tmp/test_interfaces_is26)" = "$$(printf 'a IFoo\na noBar\nc IFoo\nz no\nnil no\ncall=7\nsup IFoo\nz sup no')"
+	./$(COMPILER) test/test_interfaces_as.pas /tmp/test_interfaces_as26
+	test "$$(/tmp/test_interfaces_as26)" = "$$(printf 'a.F=7\nc.F=7\ndirect=7\ndone')"
 	./$(COMPILER) test/test_float_str_val.pas /tmp/test_float_str_val26
 	test "$$(/tmp/test_float_str_val26)" = "$$(printf '[3.14]\n[    3.1416]\n[-2.750]\n[1000.5]\n42.7500 code=0\n-1.5000 code=0\n100.00 code=0\n350.00 code=0\n0.1250 code=0\ncode=1\n[   42]\n-99 code=0')"
 	./$(COMPILER) test/test_math.pas /tmp/test_math26

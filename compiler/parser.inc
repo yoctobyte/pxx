@@ -2334,21 +2334,66 @@ begin
           ASTTk[indexNode] := ASTTk[node];
           node := indexNode;
         end
-        else { tkDot — field of the grouped record/class value }
+        else { tkDot — field or method of the grouped record/class value }
         begin
           Next;
           if CurTok.Kind in [tkEOF, tkSemicolon, tkAssign, tkRBrack, tkRParen] then
             Error('expected field name after .');
           prevTok := TokPos - 1;
           fieldName := GetTokenStr(prevTok);
-          fieldNode := AllocNode(AN_FIELD);
-          ASTLeft[fieldNode] := node;
-          ASTSOffset[fieldNode] := Tokens[prevTok].SOffset;
-          ASTSLen[fieldNode] := Tokens[prevTok].SLen;
           baseRec := ResolveNodeRec(node);
-          ASTTk[fieldNode] := Ord(RecFieldType(baseRec, fieldName));
-          Next;
-          node := fieldNode;
+          mci := -1; mmi := -1;
+          if baseRec >= REC_UCLASS_BASE then
+          begin
+            mci := baseRec - REC_UCLASS_BASE;
+            mmi := FindUMeth(mci, fieldName);
+          end;
+          if (mmi >= 0) and (mci >= 0) and UClsIsInterface[mci] then
+          begin
+            { `(iface-expr).M(args)` — dispatch through the IMT slot, exactly like
+              the direct `iface.M` path. The grouped node is the interface value. }
+            mpi := UMthProc_[mmi];
+            Next; { consume method name }
+            mcallNode := AllocNode(AN_INTF_CALL);
+            ASTRight[mcallNode] := node;
+            ASTIVal[mcallNode] := mpi;
+            ASTSOffset[mcallNode] := UMthVirSlot[mmi];
+            ASTTk[mcallNode] := Ord(Procs[mpi].RetType);
+            mlastArg := -1;
+            if CurTok.Kind = tkLParen then
+            begin
+              Next;
+              mai := 1; { param 0 = Self (provided by the fat pointer) }
+              while mai <= Procs[mpi].ParamCount-1 do
+              begin
+                if Procs[mpi].Params[mai].IsRef or Procs[mpi].Params[mai].IsArray then
+                begin
+                  if CurTok.Kind <> tkIdent then Error('expected variable');
+                  margIdx := FindSym(CurTok.SVal); Next;
+                  mexprNode := ParseLValueAST(margIdx, TokPos - 2);
+                end
+                else begin ParseExpr; mexprNode := CurASTNode; end;
+                margSeq := AllocNode(AN_ARG); ASTLeft[margSeq] := mexprNode;
+                if mlastArg = -1 then ASTLeft[mcallNode] := margSeq
+                else ASTRight[mlastArg] := margSeq;
+                mlastArg := margSeq;
+                if mai < Procs[mpi].ParamCount-1 then Expect(tkComma, ',');
+                Inc(mai);
+              end;
+              Expect(tkRParen, ')');
+            end;
+            node := mcallNode;
+          end
+          else
+          begin
+            fieldNode := AllocNode(AN_FIELD);
+            ASTLeft[fieldNode] := node;
+            ASTSOffset[fieldNode] := Tokens[prevTok].SOffset;
+            ASTSLen[fieldNode] := Tokens[prevTok].SLen;
+            ASTTk[fieldNode] := Ord(RecFieldType(baseRec, fieldName));
+            Next;
+            node := fieldNode;
+          end;
         end;
       end;
       CurASTNode := node;
@@ -3533,7 +3578,11 @@ begin
     else
     begin
       node := AllocNode(AN_AS_CAST);
-      ASTLeft[node] := left; ASTIVal[node] := isci; ASTTk[node] := Ord(tyClass);
+      ASTLeft[node] := left; ASTIVal[node] := isci;
+      { `obj as IFoo` yields an interface VALUE (a CORBA fat pointer, a 2-word
+        record); `obj as TClass` yields a class reference. }
+      if UClsIsInterface[isci] then ASTTk[node] := Ord(tyRecord)
+      else ASTTk[node] := Ord(tyClass);
     end;
     CurASTNode := node;
     Exit;

@@ -393,6 +393,7 @@ begin
 end;
 
 function IRLowerAST(node: Integer): Integer; forward;
+function IRMaterializeIntfCast(node: Integer; doTrap: Boolean): Integer; forward;
 
 procedure IRLowerCleanupToDepth(targetDepth: Integer);
 var current, bodyNode, savedDepth: Integer;
@@ -711,6 +712,11 @@ begin
     { The cast result is the pointer value itself; use it as the address.
       IRLowerAST(inner) evaluates the integer/pointer expression -> rax = address. }
     Result := IRLowerAST(ASTLeft[node]);
+  end
+  else if (ASTKind[node] = AN_AS_CAST) and UClsIsInterface[Integer(ASTIVal[node])] then
+  begin
+    { `obj as IFoo` is an interface lvalue: the address of its fat-pointer temp. }
+    Result := IRAppend(IR_LEA, IRMaterializeIntfCast(node, True), -1, -1, 0, Ord(tyPointer));
   end
   else
     Result := IRAppend(IR_UNSUPPORTED, ASTKind[node], ASTLeft[node], ASTRight[node], ASTIVal[node], ASTTk[node]);
@@ -1080,6 +1086,71 @@ begin
   Result := rvar;
 end;
 
+function IRMaterializeIntfCast(node: Integer; doTrap: Boolean): Integer;
+{ Build the CORBA fat pointer {IMT@0, instance@PTR} for `obj as IFoo` (or an
+  implicit class->interface coercion) into a hidden interface temp; return the
+  temp's symbol. The IMT is chosen by a closed-world DYNAMIC lookup: match the
+  instance's VMT against every class that implements the interface, so the cast
+  is correct even when the source is typed as a base class. nil -> {nil,nil};
+  a non-nil class that does not implement the interface traps (Halt 1) when
+  doTrap. Memoised in ASTLiftedVar: the interface-call path takes the fat
+  pointer's address twice, so this must build it once. }
+var intfCi, tmpSym, instSym, instVal, endLbl, c, skipLbl, savedRec: Integer;
+    li, vmtSym, lv, va, eq, imtPi, w1Addr: Integer;
+begin
+  if ASTLiftedVar[node] >= 0 then begin Result := ASTLiftedVar[node]; Exit; end;
+  intfCi := Integer(ASTIVal[node]);
+  savedRec := LastTypeRecId;
+  LastTypeRecId := REC_UCLASS_BASE + intfCi;
+  tmpSym := AllocVar('', tyRecord);          { size = 2*TARGET_PTR_SIZE }
+  LastTypeRecId := savedRec;
+  ASTLiftedVar[node] := tmpSym;
+
+  instSym := AllocVar('', tyPointer);
+  instVal := IRLowerAST(ASTLeft[node]);
+  IRAppend(IR_STORE_SYM, instSym, instVal, -1, 0, Ord(tyPointer));
+
+  { Zero both fat-pointer words: IMT@0 := nil, instance@PTR := instance. }
+  IRAppend(IR_STORE_MEM, IRAppend(IR_LEA, tmpSym, -1, -1, 0, Ord(tyPointer)),
+           IRAppend(IR_CONST_INT, -1, -1, -1, 0, Ord(tyPointer)), -1, 0, Ord(tyPointer));
+  w1Addr := IRAppend(IR_BINOP, IRAppend(IR_LEA, tmpSym, -1, -1, 0, Ord(tyPointer)),
+                     IRAppend(IR_CONST_INT, -1, -1, -1, TARGET_PTR_SIZE, Ord(tyInteger)),
+                     Ord(tkPlus), 0, Ord(tyPointer));
+  IRAppend(IR_STORE_MEM, w1Addr, IRAppend(IR_LOAD_SYM, instSym, -1, -1, 0, Ord(tyPointer)),
+           -1, 0, Ord(tyPointer));
+
+  endLbl := IRNewLabel;
+  { nil instance: leave {nil,nil}, never trap. }
+  li := IRAppend(IR_LOAD_SYM, instSym, -1, -1, 0, Ord(tyPointer));
+  IRAppend(IR_JUMP_IF_FALSE, endLbl,
+           IRAppend(IR_BINOP, li, IRAppend(IR_CONST_INT, -1, -1, -1, 0, Ord(tyPointer)),
+                    Ord(tkNeq), 0, Ord(tyBoolean)), -1, 0, 0);
+  { vmt := [inst]. }
+  vmtSym := AllocVar('', tyPointer);
+  IRAppend(IR_STORE_SYM, vmtSym,
+           IRAppend(IR_LOAD_MEM, IRAppend(IR_LOAD_SYM, instSym, -1, -1, 0, Ord(tyPointer)),
+                    -1, -1, 0, Ord(tyPointer)), -1, 0, Ord(tyPointer));
+  for c := 0 to UClsCount - 1 do
+    if (UClsVMTOffset[c] >= 0) and (FindIMT(c, intfCi) >= 0) then
+    begin
+      lv := IRAppend(IR_LOAD_SYM, vmtSym, -1, -1, 0, Ord(tyPointer));
+      va := IRAppend(IR_VMTADDR, c, -1, -1, 0, Ord(tyPointer));
+      eq := IRAppend(IR_BINOP, lv, va, Ord(tkEq), 0, Ord(tyBoolean));
+      skipLbl := IRNewLabel;
+      IRAppend(IR_JUMP_IF_FALSE, skipLbl, eq, -1, 0, 0);
+      imtPi := FindIMT(c, intfCi);
+      IRAppend(IR_STORE_MEM, IRAppend(IR_LEA, tmpSym, -1, -1, 0, Ord(tyPointer)),
+               IRAppend(IR_IMTADDR, imtPi, -1, -1, 0, Ord(tyPointer)), -1, 0, Ord(tyPointer));
+      IRAppend(IR_JUMP, endLbl, -1, -1, 0, 0);     { matched -> skip the trap }
+      IRAppend(IR_LABEL, -1, -1, -1, skipLbl, 0);
+    end;
+  { Non-nil instance whose class implements no matching IMT: a bad cast. }
+  if doTrap then
+    IRAppend(IR_TERMINATE, IRAppend(IR_CONST_INT, -1, -1, -1, 1, Ord(tyInteger)), -1, -1, AN_HALT, 0);
+  IRAppend(IR_LABEL, -1, -1, -1, endLbl, 0);
+  Result := tmpSym;
+end;
+
 function IRLowerAST(node: Integer): Integer;
 var left, right, seq, item, value, outNode, first, last, leftAddr, argNode, argVal, intCallNode, intArgSeq, argNode2, zeroVal, pi, zeroBytes: Integer;
     pairNode, condNode, specialId, classIdx, slot, cpi, pathIdx: Integer;
@@ -1445,6 +1516,13 @@ begin
 
     AN_AS_CAST:
     begin
+      if UClsIsInterface[Integer(ASTIVal[node])] then
+      begin
+        { `obj as IFoo`: yield the address of the materialised fat pointer (the
+          aggregate-by-reference convention, like a record-returning call). }
+        Result := IRAppend(IR_LEA, IRMaterializeIntfCast(node, True), -1, -1, 0, Ord(tyPointer));
+        Exit;
+      end;
       { Checked downcast: compute the match, then yield the instance typed as T.
         nil passes through (nil as T = nil); a non-nil mismatch traps (Halt). }
       varIdx := IRLowerClassMatch(ASTLeft[node], Integer(ASTIVal[node]), classIdx);
