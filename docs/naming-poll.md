@@ -68,7 +68,7 @@ Maintainer shortlist marked ★ (current favourites — not binding).
 - Vertex — geometry / graph node
 - Pyx — small round container; echoes `pxx`; pronounced "picks"
 - Flint — strikes the spark; hard stone
-- Nyx — Greek goddess of night; short, mythic
+- ★ Nyx — Greek goddess of night; short, mythic (spelling: 'Nix' collides with NixOS)
 - Onyx — black gemstone; sleek
 - Pascaline — Blaise Pascal's mechanical calculating machine
 - Roulette — Pascal's cycloid / probability; a wheel
@@ -76,8 +76,8 @@ Maintainer shortlist marked ★ (current favourites — not binding).
 - Quine — a program that outputs itself; self-hosting spirit
 - Thunk — classic compiler term (deferred computation)
 - Prism — one source refracted into many targets
-- Atlas — book of many maps = many targets
-- Ent — Dutch "graft/scion" + Tolkien tree-being
+- ★ Atlas — book of many maps = many targets
+- ★ Ent — Dutch "graft/scion" + Tolkien tree-being
 
 ## Round 2 (fill after round 1)
 
@@ -180,7 +180,7 @@ Top 7 by 👍 → native Poll, single choice.
 |---|---|
 | Pyx | small round container; echoes `pxx`; "picks" |
 | Flint | strikes the spark; hard stone |
-| Nyx | Greek goddess of night; short, mythic |
+| Nyx ★ | Greek goddess of night; mythic ('Nix' = NixOS clash) |
 | Onyx | black gemstone; sleek |
 | Pascaline | Pascal's mechanical calculating machine |
 | Roulette | Pascal's cycloid / probability; a wheel |
@@ -188,8 +188,8 @@ Top 7 by 👍 → native Poll, single choice.
 | Quine | program that outputs itself; self-hosting |
 | Thunk | classic compiler term (deferred computation) |
 | Prism | one source refracted into many targets |
-| Atlas | book of many maps = many targets |
-| Ent | Dutch graft/scion + Tolkien tree-being |
+| Atlas ★ | book of many maps = many targets |
+| Ent ★ | Dutch graft/scion + Tolkien tree-being |
 
 ### Dropped
 - Reanimator — too human
