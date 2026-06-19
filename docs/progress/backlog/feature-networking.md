@@ -114,3 +114,14 @@ DNS deferred to a later milestone.
   as Unix porting facades. DNS: FPC `netdb` (pure-Pascal resolver, syscall-shaped)
   joins `synadns` as a reference. Linux net config via `/proc`+`/sys` reads (no
   libc/ioctl). FPC RTL itself is largely libc-free — validates the syscall model.
+- 2026-06-19 — **layering refined: `Posix.*` is the canonical base; FPC wraps it.**
+  Posix.* base API has a SELECTABLE backend — `posix_syscall` (default, "just
+  works") and `posix_libc` (opt-in via `define PXX_POSIX_LIBC`), same interface so
+  the user picks syscall vs libc. Cost is ~1.3x not 2x: types/structs shared in one
+  include (NetinetIn is pure data), only function bodies differ (syscall = the meaty
+  impl we want; libc = trivial externs). FPC-named units (BaseUnix/Sockets/UnixType)
+  are thin wrappers OVER Posix.* (master question settled: Posix is master). ESP seam
+  softened: lwIP's BSD-socket API is Posix-shaped, so a 3rd backend `posix_lwip` lets
+  Posix.*/FPC reach ESP with documented gaps — "backend differs", not "API absent".
+  Portable cross surface stays TNetSocket; async stays the epoll reactor (Posix/FPC
+  are blocking compat surfaces, coexist not merge).

@@ -36,34 +36,47 @@ units map straight onto the same syscalls — so part-2 work reuses part-1's cor
   lwIP/IDF on ESP. Synapse's transport is blocking-only; that is the part we do
   **not** keep.
 
-### Three API layers — decision 2026-06-19
+### Layering — decision 2026-06-19 (refined: Posix.* is the canonical base)
 
-We expose **both** naming conventions, as thin facades over **one private
-syscall transport core** (neither facade calls the other; both call the core —
-no cross-coupling, and the ESP divergence lives in the core):
+`Posix.*` is the **canonical base API** (the clear, well-defined, stable C-header
+surface). Everything else is a thin layer on top. The base has a **selectable
+backend**, so the user chooses syscall vs libc:
 
-1. **Private core** (e.g. `net_linux_sys` / lwIP backend) — the real syscall (or
-   lwIP) implementation. Not for direct user use.
-2. **FPC-native facade** — `BaseUnix` / `Sockets` / `UnixType` shapes (`fpSocket`
-   etc.). We need these anyway for the own-RTL strategy and the eventual
-   compile-FPC-source goal; FPC's own versions are syscall-based, matching us.
-3. **`Posix.*` facade** — `Posix.SysSocket` / `SysSelect` / `NetinetIn` / … . The
-   clear, well-bounded C-header surface; libc-backed on real Delphi, syscall-
-   backed here.
+```
+        FPC-named units  (BaseUnix / Sockets / UnixType)   <- thin wrappers/aliases
+        TNetSocket / TNetAddress  (portable async API)
+                       |  both sit over v
+                 Posix.*  (canonical API; one set of types, selectable impl)
+        +--------------+----------------+
+   posix_syscall   posix_libc     posix_lwip (ESP)         <- selectable backend
+        +--------- shared types/structs (one include) -----+
+```
 
-So compatibility reaches **left or right**: a library taking Synapse's FPC branch
-gets facade 2; one taking the Delphi-Posix branch gets facade 3; the per-library
-scoped manifest selects which branch each library compiles against. (If a single
-facade-as-master is ever preferred over the shared-core design, make the
-**FPC-native** layer master — it is the one we must build regardless — and let
-`Posix.*` wrap it. Default remains: both are siblings over the private core.)
+- **`Posix.*` base, two (later three) interchangeable backends.** Same interface;
+  pick one per build via the scoped manifest / a define. **Default = syscall**
+  (the project goal — "just works" means syscall); **`define PXX_POSIX_LIBC`**
+  flips to the libc backend (a fallback for the genuinely-hard-without-libc bits,
+  or for users who just want to link libc and move on).
+- **"Twice" is ~1.3x, not 2x.** The types/structs (`sockaddr_in`, `fd_set`,
+  constants — `Posix.NetinetIn` is pure data) live in ONE shared include, used by
+  both backends. Only the function bodies differ: the syscall impl (the meaty one
+  we want anyway) vs the libc impl (just `external` bindings — trivial).
+- **FPC-named units wrap `Posix.*`.** `BaseUnix`/`Sockets`/`UnixType` are thin
+  aliases over the base — implemented once, not a second socket binding. Needed
+  for the own-RTL strategy + the eventual compile-FPC-source goal. So the
+  master question is settled: **`Posix.*` is master; FPC names wrap it.**
+- Compatibility reaches **left or right**: Synapse's Delphi-Posix branch consumes
+  `Posix.*` directly; its FPC branch consumes the FPC wrappers; the per-library
+  scoped manifest selects which branch each library compiles against.
 
-**ESP32 caveat (where the abstraction diverges):** `Posix.*` is **Unix-only** —
-it does **not** exist on ESP. On ESP the portable **`TNetSocket`** API (below) and
-the FPC-native facade (over lwIP) are what exist; the `Posix.*` facade is a Linux/
-Unix porting surface, not part of the cross-target portable layer. This is the
-expected seam: the portable API is `TNetSocket`/`TNetAddress`; `Posix.*` and the
-FPC-native units are *compat facades* for porting existing Unix/Pascal libraries.
+**ESP32 (the seam moved — softer than before).** lwIP exposes a **BSD-socket API**
+(`socket`/`bind`/`connect`/`select`) that is essentially Posix-shaped, so a third
+backend **`posix_lwip`** is plausible — meaning `Posix.*` and the FPC wrappers can
+reach ESP too, with documented gaps (lwIP's limited `select`/`poll`, no
+Unix-domain sockets, no `/proc`). The seam is now "backend differs", not "API
+absent". The fully portable cross-target surface remains **`TNetSocket`**; the
+async path stays the epoll-coroutine reactor (Posix.*/FPC are blocking/`select`-
+shaped compat surfaces — they coexist with the async transport, they do not merge).
 
 ### Linux network config via `/proc` and `/sys` (syscall-only)
 
