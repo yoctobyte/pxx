@@ -1,7 +1,9 @@
 # Interface reference counting (IInterface / ARC)
 
 - **Type:** feature
-- **Status:** backlog (next interface arc after CORBA surface completed 2026-06-19)
+- **Status:** backlog — **deferred, low priority** ("rainy afternoon next winter").
+  Nothing we plan to port needs it; cost is high. Do it only if a concrete
+  smart-pointer/auto-free need actually shows up.
 - **Owner:** —
 - **Opened:** 2026-06-19 (split from feature-interfaces)
 
@@ -15,10 +17,21 @@ across DLLs, no registry, no `CoCreateInstance`, no marshalling/apartments). The
 the binary-COM machinery has no use, but ARC interfaces are FPC/Delphi/Lazarus
 bread-and-butter and fully platform-independent.
 
-## Why FPC's RTL leans on it
+## Reality check — do we need it? (2026-06-19)
 
-(populate from the FPC reading) — smart-pointer idiom, value-semantics object
-lifetime, `TInterfacedObject`, fpjson / Lazarus / LCL usage, etc.
+**No, not soon.** Initial claim that "the FPC RTL leans on interfaces heavily"
+was wrong (checked: fpjson, fgl, most fcl-* are plain class OOP with manual
+`Free`). FPC *core* RTL uses interfaces only narrowly: `Classes`
+(`IInterface`/`IUnknown`, `TInterfacedObject`, `IInterfaceList`,
+`IFPObserved`/`IFPObserver`), the variants plumbing, and the Windows-only
+ActiveX/COM units. The genuine interface+ARC payoff lives in the **Delphi**
+ecosystem — smart-pointer/auto-free idiom, DI containers (Spring4D) — not in
+anything PXX plans to port.
+
+So the value here is one nice-to-have idiom (deterministic auto-free via interface
+value lifetime), **not** an RTL dependency. The CORBA surface already done
+(2026-06-19) covers polymorphic abstraction. This stays parked until a concrete
+need appears.
 
 ## Scope
 
@@ -62,3 +75,6 @@ byte-identical.
 
 - 2026-06-19 — split from feature-interfaces (CORBA surface complete). Renamed
   away from "COM ARC" to name the actual feature.
+- 2026-06-19 — reality-checked and **deferred**. The "FPC RTL needs interfaces"
+  premise was false (fpjson etc. are plain OOP); real ARC value is a Delphi-side
+  smart-pointer idiom we don't need. Parked for a rainy afternoon.

@@ -1,10 +1,11 @@
 # Interfaces
 
 - **Type:** feature
-- **Status:** backlog (CORBA surface COMPLETE 2026-06-19 — declare/implement/assign/
-  call, is/as/Supports, implicit coercion, identity, nil, inheritance, all 4
-  targets. Only remaining work = automatic interface refcounting, split out to
-  feature-interface-refcounting. See Log.)
+- **Status:** backlog — **effectively done.** CORBA surface COMPLETE 2026-06-19
+  (declare/implement/assign/call, is/as/Supports, implicit coercion, identity,
+  nil, inheritance, all 4 targets). The only remaining work — automatic interface
+  refcounting (ARC) — is split to feature-interface-refcounting and **deferred
+  (low priority, not needed)**. See Log.
 - **Owner:** —
 - **Opened:** 2026-06-06 (from todo.md §3 — intentionally deferred)
 
