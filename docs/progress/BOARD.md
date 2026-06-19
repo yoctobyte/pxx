@@ -12,7 +12,7 @@ _none_
 
 _none_
 
-## backlog (46)
+## backlog (47)
 
 | Ticket | Type | Summary | Blocked-by |
 | --- | --- | --- | --- |
@@ -53,6 +53,7 @@ _none_
 | feature-progress-transition-helpers | feature | Progress transition helpers (`claim` / `resolve`) | — |
 | feature-random-library | feature | Random library — HW/OS/software tiered RNG (cross-target capability test) | — |
 | feature-result-in-loop | feature | Function `Result` (float) read-modified inside a loop miscompiles to 0 | — |
+| feature-rtl-conversion-and-bitset-library | feature | RTL gaps — string/number conversion + a bit-set type (surfaced by the demos) | — |
 | feature-stackful-coro-port | feature | Port the stackful coroutine backend to all targets | — |
 | feature-static-arena-profile | feature | Fixed-static-arena allocator profile | feature-unified-heap-allocator |
 | feature-threadsafe-io-serialization | feature | Statement-level I/O serialization under threads | feature-unified-heap-allocator |
@@ -183,6 +184,7 @@ _none_
 - feature-progress-transition-helpers
 - feature-random-library
 - feature-result-in-loop
+- feature-rtl-conversion-and-bitset-library
 - feature-stackful-coro-port
 - feature-static-arena-profile
 - feature-threadsafe-io-serialization

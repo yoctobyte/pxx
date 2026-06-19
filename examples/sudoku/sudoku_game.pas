@@ -220,7 +220,7 @@ begin
   IsSolved := True;
 end;
 
-{ ---- Tiny line parser (no RTL StrToInt dependency) ---- }
+{ ---- Line tokenizer + command dispatch ---- }
 
 function NextToken(const s: AnsiString; var pos: Integer; var tok: AnsiString): Boolean;
 begin
@@ -239,30 +239,14 @@ begin
   NextToken := True;
 end;
 
-function ParseInt(const t: AnsiString; var ok: Boolean): Integer;
-var i, v: Integer; c: Char;
-begin
-  v := 0;
-  ok := Length(t) > 0;
-  for i := 1 to Length(t) do
-  begin
-    c := t[i];
-    if (c >= '0') and (c <= '9') then v := v * 10 + (Ord(c) - Ord('0'))
-    else ok := False;
-  end;
-  ParseInt := v;
-end;
-
 procedure DoMove(const t0, line: AnsiString; var pos: Integer);
-var r, c, v, cell: Integer; t1, t2: AnsiString; okr, okc, okv: Boolean;
+var r, c, v, cell, er, ec, ev: Integer; t1, t2: AnsiString;
 begin
-  r := ParseInt(t0, okr);
-  okc := NextToken(line, pos, t1);
-  if okc then c := ParseInt(t1, okc);
-  okv := NextToken(line, pos, t2);
-  if okv then v := ParseInt(t2, okv);
+  Val(t0, r, er);
+  if (NextToken(line, pos, t1)) then Val(t1, c, ec) else ec := 1;
+  if (NextToken(line, pos, t2)) then Val(t2, v, ev) else ev := 1;
 
-  if not (okr and okc and okv) then
+  if (er <> 0) or (ec <> 0) or (ev <> 0) then
   begin
     writeln('? need: r c v   (e.g. 3 5 7)');
     Exit;

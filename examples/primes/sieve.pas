@@ -41,24 +41,6 @@ begin
   IsComposite := (bits[w] and (1 shl b)) <> 0;
 end;
 
-function NumStr(n: Integer): AnsiString;
-{ Decimal text for n >= 0, built by hand (no RTL IntToStr dependency). }
-var s: AnsiString;
-begin
-  if n = 0 then
-  begin
-    NumStr := '0';
-    Exit;
-  end;
-  s := '';
-  while n > 0 do
-  begin
-    s := Chr(Ord('0') + (n mod 10)) + s;
-    n := n div 10;
-  end;
-  NumStr := s;
-end;
-
 procedure Sieve;
 var i, j: Integer;
 begin
@@ -107,7 +89,7 @@ begin
       if shown < SHOWFIRST then
       begin
         if line <> '' then line := line + ' ';
-        line := line + NumStr(n);
+        line := line + IntToStr(n);
         shown := shown + 1;
       end;
     end;
