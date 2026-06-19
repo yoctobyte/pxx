@@ -66,6 +66,18 @@ Maintainer shortlist marked ★ (current favourites — not binding).
 - ★ Temper — smithing: heat-treat for strength
 - Ingot — cast block = compiled output
 - Vertex — geometry / graph node
+- Pyx — small round container; echoes `pxx`; pronounced "picks"
+- Flint — strikes the spark; hard stone
+- Nyx — Greek goddess of night; short, mythic
+- Onyx — black gemstone; sleek
+- Pascaline — Blaise Pascal's mechanical calculating machine
+- Roulette — Pascal's cycloid / probability; a wheel
+- Fixpoint — the self-host fixed point this compiler reaches
+- Quine — a program that outputs itself; self-hosting spirit
+- Thunk — classic compiler term (deferred computation)
+- Prism — one source refracted into many targets
+- Atlas — book of many maps = many targets
+- Ent — Dutch "graft/scion" + Tolkien tree-being
 
 ## Round 2 (fill after round 1)
 
@@ -162,6 +174,22 @@ Top 7 by 👍 → native Poll, single choice.
 | Name | Read |
 |---|---|
 | Vertex | geometry / graph node (Triangle sibling) |
+
+### Out-of-the-box (2026-06-19 round)
+| Name | Read |
+|---|---|
+| Pyx | small round container; echoes `pxx`; "picks" |
+| Flint | strikes the spark; hard stone |
+| Nyx | Greek goddess of night; short, mythic |
+| Onyx | black gemstone; sleek |
+| Pascaline | Pascal's mechanical calculating machine |
+| Roulette | Pascal's cycloid / probability; a wheel |
+| Fixpoint | the self-host fixed point this compiler reaches |
+| Quine | program that outputs itself; self-hosting |
+| Thunk | classic compiler term (deferred computation) |
+| Prism | one source refracted into many targets |
+| Atlas | book of many maps = many targets |
+| Ent | Dutch graft/scion + Tolkien tree-being |
 
 ### Dropped
 - Reanimator — too human
