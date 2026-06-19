@@ -8,11 +8,13 @@ lives in git, not in a timestamp._
 
 _none_
 
-## working (0)
+## working (1)
 
-_none_
+| Ticket | Type | Summary | Blocked-by |
+| --- | --- | --- | --- |
+| feature-parallel-tracks-stable-compiler | feature | Parallel tracks: pin libraries/demos to a "stable" compiler | — |
 
-## backlog (47)
+## backlog (48)
 
 | Ticket | Type | Summary | Blocked-by |
 | --- | --- | --- | --- |
@@ -40,6 +42,7 @@ _none_
 | feature-interface-refcounting | feature | Interface reference counting (IInterface / ARC) | — |
 | feature-interfaces | feature | Interfaces | — |
 | feature-int-to-float-assign | feature | Integer → Float assignment / coercion missing the int→float conversion | — |
+| feature-language-gaps-from-demos | feature | Language gaps surfaced by the demo apps (sudoku / sieve / chess) | — |
 | feature-lazycasing-c-imports | feature | `{$LAZYCASING ON/OFF}` for C imports only | feature-compiler-warnings |
 | feature-metaclass-descendant-enforcement | feature | Metaclass alias descendant-constraint enforcement | — |
 | feature-mimic-fpc | feature | `mimic FPC` compatibility mode | feature-directive-if-numeric |
@@ -174,6 +177,7 @@ _none_
 - feature-interface-refcounting
 - feature-interfaces
 - feature-int-to-float-assign
+- feature-language-gaps-from-demos
 - feature-metaclass-descendant-enforcement
 - feature-networking
 - feature-nil-python-frontend
