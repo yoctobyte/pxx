@@ -73,6 +73,13 @@ the compiler. Selection criteria, in order:
 7. **Conway's Game of Life** — tiny deterministic oracle + benchmark; 2-D arrays
    + bit packing; shallow coverage but cheap and classic. → **demo ticket**:
    feature-demo-life.
+8. **Console Klondike solitaire** — *user-requested*; the most entertaining test
+   app for a human on a Linux host. A documented **exception to the
+   headless/pure-oracle filter** (it is interactive entertainment), but kept
+   dependency-free: ANSI = strings (no ncurses), line-input avoids termios, so it
+   still runs over ESP serial. Oracle via seeded deal + scripted transcript. Not
+   a "please-user" pixel/audio toy — text + stateful logic. → **demo ticket**:
+   feature-demo-solitaire.
 
 ### Rejected (with reason — kept so we don't re-litigate)
 

@@ -12,7 +12,7 @@ _none_
 
 _none_
 
-## backlog (61)
+## backlog (62)
 
 | Ticket | Type | Summary | Blocked-by |
 | --- | --- | --- | --- |
@@ -33,6 +33,7 @@ _none_
 | feature-demo-life | feature | Demo — Conway's Game of Life | — |
 | feature-demo-lisp | feature | Demo — Lisp / Scheme interpreter | — |
 | feature-demo-maze | feature | Demo — maze generator + solver | — |
+| feature-demo-solitaire | feature | Demo — console Klondike solitaire (user-requested entertainment test app) | — |
 | feature-demo-vm | feature | Demo — bytecode VM + assembler (small ISA) | — |
 | feature-directive-if-numeric | feature | Valued defines + numeric `{$IF}` evaluation | — |
 | feature-dynamic-include-paths-config | feature | Dynamic Include Paths, Configuration Files, and System Scanner | — |
@@ -183,6 +184,7 @@ _none_
 - feature-demo-life
 - feature-demo-lisp
 - feature-demo-maze
+- feature-demo-solitaire
 - feature-demo-vm
 - feature-directive-if-numeric
 - feature-dynamic-include-paths-config
