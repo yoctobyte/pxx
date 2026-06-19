@@ -12,12 +12,13 @@ _none_
 
 _none_
 
-## backlog (63)
+## backlog (64)
 
 | Ticket | Type | Summary | Blocked-by |
 | --- | --- | --- | --- |
 | bug-const-byref-record-param-temp | bug | Can't pass a function-result temporary to a const/by-ref record param | — |
 | bug-pinned-stable-reads-live-builtin-rtl | bug | Pinned stable reads LIVE builtin RTL source — track A WIP breaks track B | — |
+| bug-proc-local-managed-record-uninit | bug | Proc-local managed record not zero-initialised on entry → first-call miscompute | — |
 | bug-record-fn-codegen-crash | bug | Context-sensitive runtime crash: record-returning fn with nested loops over dynarray fields | — |
 | chore-inc-to-units | chore | `.inc` → real `.pas` units refactor | — |
 | chore-runtime-emission-size | chore | Finer runtime-support emission (code size) | — |
@@ -177,6 +178,7 @@ _none_
 
 - bug-const-byref-record-param-temp
 - bug-pinned-stable-reads-live-builtin-rtl
+- bug-proc-local-managed-record-uninit
 - bug-record-fn-codegen-crash
 - chore-inc-to-units
 - chore-runtime-emission-size

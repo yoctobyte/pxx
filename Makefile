@@ -1758,7 +1758,9 @@ lib-test: pxx-stable-check
 	test "$$(/tmp/lib_strutils)" = "$$(printf '0\n7\n42\n-5\n1000000\n-123456789\nhello\nworld\n[]\n[pad me]\n[]')"
 	$(PXX_STABLE) test/lib_random.pas /tmp/lib_random
 	test "$$(/tmp/lib_random)" = "$$(printf '5 3 5 2 1 1 3 1 \n5 3 5 2 1 1 3 1 \n537 775 832 585 619 ')"
-	@echo "lib-test ok (sudoku exact + collections + math + strutils + random smoke) against stable v$$(cat $(STABLE_DEFAULT_DIR)/VERSION 2>/dev/null || echo '?')"
+	$(PXX_STABLE) examples/bignum/factorial.pas /tmp/lib_factorial
+	test "$$(/tmp/lib_factorial)" = "$$(printf '5! = 120\n10! = 3628800\n20! = 2432902008176640000\n1000! digits      = 2568\n1000! first 10    = 4023872600\n1000! trailing 0s = 249')"
+	@echo "lib-test ok (sudoku exact + collections + math + strutils + random + bignum smoke) against stable v$$(cat $(STABLE_DEFAULT_DIR)/VERSION 2>/dev/null || echo '?')"
 
 # Compile-smoke DASHBOARD for every demo app, against the pinned stable. Prints
 # an OK/FAIL table and always exits 0 -- a discovery view, not a gate. FAILs are
@@ -1766,7 +1768,7 @@ lib-test: pxx-stable-check
 demos: pxx-stable-check
 	@echo "=== demos: compile-smoke examples/* against $(PXX_STABLE) ==="
 	@rc=0; for src in examples/primes/sieve.pas examples/sudoku/sudoku.pas \
-	    examples/maze/maze.pas \
+	    examples/maze/maze.pas examples/bignum/factorial.pas \
 	    examples/chess/chess.pas examples/adventure/adventure.pas; do \
 	  if $(PXX_STABLE) "$$src" /tmp/demo_$$(basename $$src .pas) >/tmp/demo.log 2>&1; then \
 	    printf '  OK    %s\n' "$$src"; \

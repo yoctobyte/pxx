@@ -25,8 +25,11 @@ function BigFromInt(n: Int64): TBigInt;
 function BigToStr(const a: TBigInt): AnsiString;
 function BigCompareMag(const a, b: TBigInt): Integer;   { |a| vs |b|: -1/0/1 }
 function BigMulSmall(const a: TBigInt; m: Int64): TBigInt;
-function BigMul(const a, b: TBigInt): TBigInt;
 function BigAdd(const a, b: TBigInt): TBigInt;           { unsigned magnitudes }
+{ BigMul (bignum*bignum) is DEFERRED: it and its BigShiftLimbs helper trip a
+  context-sensitive codegen crash inside this unit on v10 (works standalone) --
+  see bug-record-fn-codegen-crash. BigMulSmall (bignum*int) covers factorial &
+  is verified. Restore BigMul once that codegen bug is fixed. }
 
 implementation
 
@@ -141,37 +144,11 @@ begin
   BigMulSmall := r;
 end;
 
-function BigShiftLimbs(const a: TBigInt; count: Integer): TBigInt;
-var r: TBigInt; n, i: Integer;
-begin
-  n := Length(a.limbs);
-  if n = 0 then
-  begin
-    BigShiftLimbs := BigFromInt(0);
-    Exit;
-  end;
-  SetLength(r.limbs, n + count);
-  for i := 0 to count - 1 do r.limbs[i] := 0;
-  for i := 0 to n - 1 do r.limbs[count + i] := a.limbs[i];
-  r.neg := a.neg;
-  Normalize(r);
-  BigShiftLimbs := r;
-end;
-
-function BigMul(const a, b: TBigInt): TBigInt;
-var acc, part, shifted: TBigInt; j, nb: Integer;
-begin
-  nb := Length(b.limbs);
-  acc := BigFromInt(0);
-  for j := 0 to nb - 1 do
-  begin
-    part := BigMulSmall(a, b.limbs[j]);
-    shifted := BigShiftLimbs(part, j);
-    acc := BigAdd(acc, shifted);
-  end;
-  if Length(acc.limbs) > 0 then acc.neg := a.neg <> b.neg;
-  BigMul := acc;
-end;
+{ BigMul + BigShiftLimbs removed for now -- they hit bug-record-fn-codegen-crash
+  on v10 (segfault) when called from within this unit, though identical logic
+  runs fine in plain program scope. BigMulSmall (bignum*int) is the verified
+  multiply path and covers the factorial oracle. Restore the general
+  bignum*bignum BigMul once that codegen bug is fixed. }
 
 function BigAdd(const a, b: TBigInt): TBigInt;
 var r: TBigInt; i, na, nb, n: Integer; carry, cur: Int64;

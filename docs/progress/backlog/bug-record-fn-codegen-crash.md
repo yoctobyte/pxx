@@ -72,3 +72,12 @@ freshly stabilized, binary+builtin coherent (the v9 era had the
 bug-pinned-stable-reads-live-builtin mix). **Before bisecting, reproduce against
 v10**: the crash may have been a WIP artifact and already be gone. If gone,
 close; if it reproduces, bisect on the clean compiler.
+
+## Re-verified: REPRODUCES on v10 (2026-06-19, track B)
+
+Confirmed on the coherent pinned **v10** — not a v9 WIP artifact. Inside the full
+`lib/rtl/bignum.pas` unit, calling `BigShiftLimbs` (or `BigMul`, which uses it)
+segfaults; the identical function body in plain `program` scope does NOT crash.
+Still context-sensitive (full-unit only). `BigMul`/`BigShiftLimbs` were removed
+from the bignum interface for now; `BigMulSmall` (the verified path) covers the
+factorial oracle. Restore `BigMul` once this is fixed.
