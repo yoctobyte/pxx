@@ -47,3 +47,34 @@ this work (or spin a sibling ticket) rather than re-filing each from a demo.
   `lib/rtl/strutils.pas`; this ticket covers the generic intrinsic the lib can't
   express (dynarray `Copy`, 2-arg form, string-family overloads, by-type
   resolution).
+
+## Progress (2026-06-19) — dynamic-array Copy DONE
+
+The real blocker (generic dynamic-array `Copy(arr, index, count)` → fresh
+`array of T`, element-type-aware) is implemented, plus the 2-arg
+`Copy(arr, index)` form and call-site resolution by argument type:
+
+- New `AN_DYN_COPY` node. The intrinsic fires only when the first argument is a
+  dynamic array; a string `Copy` keeps the `sysutils.Copy` RTL path (resolved
+  whether or not a `Copy` proc is in scope — handled both at the no-Copy-proc
+  factor point and at the no-overload-match point, so a string `Copy` is never
+  shadowed).
+- Lowered (ir.inc) into: clamp the count to the source bounds (`PXXClampLen`),
+  SetLength a fresh dyn-array local of the source element type, then raw-copy
+  `count*elemSize` bytes from `source[index]` (`PXXMemCopy`). Element size comes
+  from the source symbol, so it is generic over `T` (validated for Integer and a
+  24-byte record). Index is 0-based (FPC dynamic-array Copy).
+
+Validated x86-64 (test-core, `test/test_dynarray_copy.pas`) + arm32 cross suite;
+self-host + cross-bootstrap byte-identical. NOTE: a raw byte copy, so an array of
+a *managed* element type (AnsiString / managed record) is shallow — deep element
+copy is a later extension.
+
+Landmines recorded: a bare runtime-helper call whose result is unused is NOT
+emitted (only statement-linked nodes are) — store the result into a temp; and the
+result must be tagged so the assignment stores the full 8-byte handle.
+
+Remaining: string-family overloads beyond the RTL `Copy` (ShortString /
+UnicodeString), and the `Delete` / `Insert` / `Concat` siblings. On i386/aarch64
+`b := Copy(...)` is additionally blocked by a separate pre-existing whole-dynamic-
+array assignment gap (`bug-dynarray-whole-var-assign-cross`).

@@ -11,12 +11,13 @@ _none_
 
 _none_
 
-## backlog (64)
+## backlog (65)
 
 | Ticket | Type | Summary | Blocked-by |
 | --- | --- | --- | --- |
 | bug-builtin-val-miscompiles | bug | Builtin `Val` mis-lowers — wrong error code + segfault | — |
 | bug-const-managed-record-param-byref-crash | bug | const record param with a managed (dynarray) field crashes by-ref on i386 + aarch64 | — |
+| bug-dynarray-whole-var-assign-cross | bug | Whole dynamic-array variable assignment (`b := a`) unsupported on i386 + aarch64 | — |
 | bug-pinned-stable-reads-live-builtin-rtl | bug | Pinned stable reads LIVE builtin RTL source — track A WIP breaks track B | — |
 | bug-proc-local-managed-record-uninit | bug | Proc-local managed record not zero-initialised on entry → first-call miscompute | — |
 | chore-inc-to-units | chore | `.inc` → real `.pas` units refactor | — |
@@ -179,6 +180,7 @@ _none_
 
 - bug-builtin-val-miscompiles
 - bug-const-managed-record-param-byref-crash
+- bug-dynarray-whole-var-assign-cross
 - bug-pinned-stable-reads-live-builtin-rtl
 - bug-proc-local-managed-record-uninit
 - chore-inc-to-units

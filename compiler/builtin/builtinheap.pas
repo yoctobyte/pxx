@@ -1050,6 +1050,41 @@ begin
   PXXStrDecRef(oldData);
 end;
 
+{ Generic dynamic-array Copy support. The compiler can't express Copy(arr, ...)
+  as one non-generic routine (element type varies), so it lowers Copy into a
+  SetLength + raw byte copy of the element bytes, and these two helpers do the
+  element-type-agnostic parts. Raw pointers only. }
+
+{ Clamp a Copy element count to the source array's bounds. srcData = the dyn
+  array's data pointer (or nil for an empty array); index/count are 0-based.
+  Returns how many elements are actually available from `index` (0 if the
+  index is past the end or the array is empty). }
+function PXXClampLen(srcData: Pointer; index: NativeInt; count: NativeInt): NativeInt;
+var len, avail: Int64;
+begin
+  if srcData = nil then len := 0 else len := PWord(Int64(srcData) - 8)^;
+  if index < 0 then index := 0;
+  if index >= len then begin Result := 0; Exit; end;
+  avail := len - index;
+  if count > avail then count := avail;
+  if count < 0 then count := 0;
+  Result := count;
+end;
+
+{ Raw forward byte copy. Copy always writes into a freshly allocated block, so
+  source and destination never overlap. }
+function PXXMemCopy(dest: Pointer; src: Pointer; n: NativeInt): Pointer;
+var i: Int64;
+begin
+  i := 0;
+  while i < n do
+  begin
+    PByte(Int64(dest) + i)^ := PByte(Int64(src) + i)^;
+    i := i + 1;
+  end;
+  Result := dest;
+end;
+
 {$ifdef CPU_XTENSA}
 { Unsigned 32-bit divide: restoring shift-subtract. No div/mod operator used. }
 function __pxx_udivsi3(n: LongWord; d: LongWord): LongWord;

@@ -150,6 +150,9 @@ const
                              instance expr; ASTIVal = IMT-table entry index. }
   AN_SET_INCL      = 60; { Include(s, v): Left = set lvalue, Right = value expr. }
   AN_SET_EXCL      = 61; { Exclude(s, v): Left = set lvalue, Right = value expr. }
+  AN_DYN_COPY      = 62; { Copy(arr, index [, count]) over a dynamic array → fresh
+                           array of T. Left = source array ident; Right = AN_ARG
+                           chain [index, count]. }
 
   { Inline-asm operand kinds }
   AOP_NONE = 0;

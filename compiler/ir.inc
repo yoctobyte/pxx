@@ -1315,6 +1315,10 @@ var left, right, seq, item, value, outNode, first, last, leftAddr, argNode, argV
     vrIdxLit, vrIndex, vrTag, elemAddr, vrSavedRecId, vrBoxSym: Integer;
     vrElemTk: TTypeKind;
     setAllConst: Boolean; setSym: Integer;
+    dcSrcSym, dcElemRec, dcElemSz, dcIdxAst, dcCntAst, dcSrcTmp, dcIdxTmp: Integer;
+    dcCntTmp, dcTempSym, dcTempIdent, dcCountIdent, dcSlArg1, dcSlArg2: Integer;
+    dcSlCall, dcSetlenVal, dcDestData, dcSrcStart, dcNbytes, dcSavedRec: Integer;
+    dcElemTk: TTypeKind;
 begin
   if node = -1 then
   begin
@@ -1554,6 +1558,103 @@ begin
 
     AN_SET_EXCL:
       IRLowerSetBitMutate(IRLowerAddress(ASTLeft[node]), IRLowerAST(ASTRight[node]), False);
+
+    AN_DYN_COPY:
+    begin
+      { Copy(arr, index, count) over a dynamic array -> a fresh `array of T`.
+        Element type/size come from the source symbol, so this is generic over T
+        (what a non-generic RTL routine cannot express). Build: clamp the count
+        to the source bounds (PXXClampLen), SetLength a fresh dyn-array local to
+        that, then raw-copy count*elemSize bytes from source[index] (PXXMemCopy).
+        Index is 0-based (FPC dynamic-array Copy semantics). The result behaves
+        like a dyn-array variable read, so the caller's assignment retains it and
+        the local's scope-exit release balances it. NOTE: a raw byte copy, so an
+        array of a managed element type (AnsiString / managed record) is shallow
+        — deep element copy is a later extension. }
+      dcSrcSym := ASTIVal[ASTLeft[node]];
+      dcElemTk := Syms[dcSrcSym].ElemType;
+      dcElemRec := Syms[dcSrcSym].ElemRecName;
+      if dcElemTk = tyRecord then dcElemSz := RecSize(dcElemRec)
+      else dcElemSz := TypeSize(dcElemTk);
+      dcIdxAst := ASTLeft[ASTRight[node]];
+      dcCntAst := ASTLeft[ASTRight[ASTRight[node]]];
+
+      { Materialize source data pointer and index once. (IR_LEA on a dyn-array
+        symbol in read context loads the handle = data pointer, like indexing.) }
+      dcSrcTmp := AllocVar('', tyPointer);
+      IRAppend(IR_STORE_SYM, dcSrcTmp,
+        IRAppend(IR_LEA, dcSrcSym, -1, -1, 0, Ord(tyPointer)), -1, 0, Ord(tyPointer));
+      dcIdxTmp := AllocVar('', tyInteger);
+      IRAppend(IR_STORE_SYM, dcIdxTmp, IRLowerAST(dcIdxAst), -1, 0, Ord(tyInteger));
+
+      { clampedCount := PXXClampLen(srcData, index, count). }
+      pi := FindProc('PXXClampLen');
+      if pi < 0 then Error('compiler error: PXXClampLen not found');
+      first := IRAppend(IR_ARG, IRAppend(IR_LOAD_SYM, dcSrcTmp, -1, -1, 0, Ord(tyPointer)),
+                 -1, -1, 0, Ord(tyPointer));
+      last := IRAppend(IR_ARG, IRAppend(IR_LOAD_SYM, dcIdxTmp, -1, -1, 0, Ord(tyInteger)),
+                -1, -1, 0, Ord(tyInteger));
+      IRB[first] := last;
+      argNode := IRAppend(IR_ARG, IRLowerAST(dcCntAst), -1, -1, 0, Ord(tyInteger));
+      IRB[last] := argNode;
+      dcCntTmp := AllocVar('', tyInteger);
+      IRAppend(IR_STORE_SYM, dcCntTmp, IRAppendCall(pi, first, -1, Ord(tyNativeInt)),
+        -1, 0, Ord(tyInteger));
+
+      { Fresh dyn-array local of the source element type; zero its handle slot. }
+      dcSavedRec := LastTypeRecId;
+      if dcElemTk = tyRecord then LastTypeRecId := dcElemRec;
+      dcTempSym := AllocDynArray('', dcElemTk, 1);
+      LastTypeRecId := dcSavedRec;
+      IRAppend(IR_DEFAULT_MEM, IRAppend(IR_SLOTADDR, dcTempSym, -1, -1, 0, Ord(tyPointer)),
+        -1, REC_NONE, TARGET_PTR_SIZE, Ord(tyPointer));
+
+      { SetLength(temp, clampedCount) via the -102 dyn-array SetLength call. }
+      dcTempIdent := AllocNode(AN_IDENT); ASTIVal[dcTempIdent] := dcTempSym;
+      ASTTk[dcTempIdent] := Ord(tyPointer);
+      dcCountIdent := AllocNode(AN_IDENT); ASTIVal[dcCountIdent] := dcCntTmp;
+      ASTTk[dcCountIdent] := Ord(tyInteger);
+      dcSlArg1 := AllocNode(AN_ARG); ASTLeft[dcSlArg1] := dcTempIdent;
+      dcSlArg2 := AllocNode(AN_ARG); ASTLeft[dcSlArg2] := dcCountIdent;
+      ASTRight[dcSlArg1] := dcSlArg2;
+      dcSlCall := AllocNode(AN_CALL); ASTIVal[dcSlCall] := -102; ASTLeft[dcSlCall] := dcSlArg1;
+      dcSetlenVal := IRLowerAST(dcSlCall);
+      IRIVal[dcSetlenVal] := 1;
+
+      { PXXMemCopy(destData, srcData + index*elemSize, clampedCount*elemSize).
+        Materialize the dest data pointer into a temp first: lea on the dyn-array
+        symbol must be evaluated here in read context (handle = data pointer);
+        feeding it straight into the call-arg position lowered it as an lvalue
+        (the slot address) instead, so the copy missed the data block. }
+      pi := FindProc('PXXMemCopy');
+      if pi < 0 then Error('compiler error: PXXMemCopy not found');
+      dcDestData := AllocVar('', tyPointer);
+      IRAppend(IR_STORE_SYM, dcDestData,
+        IRAppend(IR_LEA, dcTempSym, -1, -1, 0, Ord(tyPointer)), -1, 0, Ord(tyPointer));
+      dcSrcStart := IRAppend(IR_BINOP,
+        IRAppend(IR_LOAD_SYM, dcSrcTmp, -1, -1, 0, Ord(tyPointer)),
+        IRAppend(IR_BINOP, IRAppend(IR_LOAD_SYM, dcIdxTmp, -1, -1, 0, Ord(tyInteger)),
+          IRAppend(IR_CONST_INT, -1, -1, -1, dcElemSz, Ord(tyInteger)), Ord(tkStar), 0, Ord(tyInteger)),
+        Ord(tkPlus), 0, Ord(tyPointer));
+      dcNbytes := IRAppend(IR_BINOP, IRAppend(IR_LOAD_SYM, dcCntTmp, -1, -1, 0, Ord(tyInteger)),
+        IRAppend(IR_CONST_INT, -1, -1, -1, dcElemSz, Ord(tyInteger)), Ord(tkStar), 0, Ord(tyInteger));
+      first := IRAppend(IR_ARG, IRAppend(IR_LOAD_SYM, dcDestData, -1, -1, 0, Ord(tyPointer)),
+                 -1, -1, 0, Ord(tyPointer));
+      last := IRAppend(IR_ARG, dcSrcStart, -1, -1, 0, Ord(tyPointer));
+      IRB[first] := last;
+      argNode := IRAppend(IR_ARG, dcNbytes, -1, -1, 0, Ord(tyInteger));
+      IRB[last] := argNode;
+      { Store the (ignored) result so the call is linked into the statement
+        stream — a bare call whose result is unused is not emitted. }
+      IRAppend(IR_STORE_SYM, dcDestData, IRAppendCall(pi, first, -1, Ord(tyPointer)),
+        -1, 0, Ord(tyPointer));
+
+      { Like a dyn-array variable read: lea on the dyn-array symbol loads the
+        handle (pointer-sized), so tag it tyPointer (an element-typed tag would
+        make the assignment store only the element's width and truncate the
+        64-bit handle). }
+      Result := IRAppend(IR_LEA, dcTempSym, -1, -1, 0, Ord(tyPointer));
+    end;
 
     AN_ASM:
       Result := IRAppend(IR_ASM, ASTLeft[node], ASTRight[node], -1, 0, Ord(tyUnknown));

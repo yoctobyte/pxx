@@ -223,6 +223,8 @@ test-core: $(COMPILER)
 	test "$$(/tmp/test_const_record_temp_managed26)" = "$$(printf '7\n42\n42')"
 	./$(COMPILER) test/test_set_runtime.pas /tmp/test_set_runtime26
 	test "$$(/tmp/test_set_runtime26)" = "$$(printf '1 1 0\n1\n0 1\n0 1 1 0\n1 1 1 0\n1 0 1')"
+	./$(COMPILER) test/test_dynarray_copy.pas /tmp/test_dynarray_copy26
+	test "$$(/tmp/test_dynarray_copy26)" = "$$(printf '3\n30\n40\n50\n2\n50\n60\n2\n30 60\n3\n1 10 100\n2 20 200\n3 30 300\n6 60')"
 	./$(COMPILER) test/hello.pas /tmp/hello26
 	test "$$(/tmp/hello26)" = "Hello, World!"
 	./$(COMPILER) test/hello.c /tmp/hello_c26
@@ -1513,6 +1515,9 @@ test-arm32: $(COMPILER)
 	./$(COMPILER) -dPXX_MANAGED_STRING --target=arm32 test/test_set_runtime.pas /tmp/test_arm32_setrt
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_set_runtime.pas /tmp/test_arm32_setrt_x64
 	test "$$(tools/run_target.sh arm32 /tmp/test_arm32_setrt)" = "$$(/tmp/test_arm32_setrt_x64)"
+	./$(COMPILER) -dPXX_MANAGED_STRING --target=arm32 test/test_dynarray_copy.pas /tmp/test_arm32_dyncopy
+	./$(COMPILER) -dPXX_MANAGED_STRING test/test_dynarray_copy.pas /tmp/test_arm32_dyncopy_x64
+	test "$$(tools/run_target.sh arm32 /tmp/test_arm32_dyncopy)" = "$$(/tmp/test_arm32_dyncopy_x64)"
 	./$(COMPILER) --target=arm32 test/test_timer.pas /tmp/test_arm32_timer
 	test "$$(tools/run_target.sh arm32 /tmp/test_arm32_timer)" = "$$(printf 'woke 50\nwoke 100\nwoke 150\ndone')"
 	./$(COMPILER) --target=arm32 test/test_reactor.pas /tmp/test_arm32_reactor

@@ -2965,6 +2965,44 @@ begin
         Exit;
       end;
 
+      { Generic dynamic-array Copy(arr, index [, count]) intrinsic, when no Copy
+        function is in scope (a string `sysutils.Copy` keeps the proc path; that
+        case, and Copy(dynarray) shadowed by a string Copy, are handled at the
+        no-overload-match point below). Lowered into a fresh element-type-aware
+        `array of T` via AN_DYN_COPY. }
+      if CaseEqual(name, 'Copy') and (pi < 0) and (Tokens[TokPos].Kind = tkLParen) then
+      begin
+        Next; Expect(tkLParen, '(');
+        ParseExpr; exprNode := CurASTNode;            { source array }
+        Expect(tkComma, ',');
+        ParseExpr; node := CurASTNode;                { index }
+        addrNode := -1;
+        if Eat(tkComma) then begin ParseExpr; addrNode := CurASTNode; end;  { count }
+        Expect(tkRParen, ')');
+        if (ASTKind[exprNode] = AN_IDENT) and (ASTIVal[exprNode] >= 0) and
+           Syms[ASTIVal[exprNode]].IsArray and (Syms[ASTIVal[exprNode]].ArrLen = -1) then
+        begin
+          if addrNode = -1 then
+          begin
+            addrNode := AllocNode(AN_INT_LIT);
+            ASTIVal[addrNode] := 2147483647; ASTTk[addrNode] := Ord(tyInteger);
+          end;
+          argSeq := AllocNode(AN_DYN_COPY);
+          ASTLeft[argSeq] := exprNode;
+          lastArg := AllocNode(AN_ARG); ASTLeft[lastArg] := node;
+          ci := AllocNode(AN_ARG); ASTLeft[ci] := addrNode;
+          ASTRight[lastArg] := ci;
+          ASTRight[argSeq] := lastArg;
+          { Pointer-typed: the result is a dyn-array handle, so the assignment
+            stores all 8 bytes (an element-typed tag would truncate it). }
+          ASTTk[argSeq] := Ord(tyPointer);
+          CurASTNode := argSeq;
+          Exit;
+        end;
+        Error('Copy: dynamic-array Copy needs a dynamic-array first argument ' +
+              '(string Copy needs the strutils/sysutils unit)');
+      end;
+
       { Indirect call through a procedural-type variable: v(args) as an expression. }
       if (idx >= 0) and (SymProcSig[idx] >= 0) and (Tokens[TokPos].Kind = tkLParen) then
       begin
@@ -3270,7 +3308,39 @@ begin
         else
           pi := MatchProcCall(name, nArgs, argTypes);
         if pi < 0 then
+        begin
+          { Generic dynamic-array Copy(arr, index [, count]) intrinsic. Only when
+            no Copy function matches (so a string `sysutils.Copy` is never
+            shadowed) and the first argument is a dynamic array. Lowered into a
+            fresh element-type-aware `array of T` (AN_DYN_COPY). String Copy keeps
+            the RTL path. }
+          if CaseEqual(name, 'Copy') and (nArgs >= 2) and (nArgs <= 3) and
+             (ASTKind[ASTLeft[argsHead]] = AN_IDENT) and
+             (ASTIVal[ASTLeft[argsHead]] >= 0) and
+             Syms[ASTIVal[ASTLeft[argsHead]]].IsArray and
+             (Syms[ASTIVal[ASTLeft[argsHead]]].ArrLen = -1) then
+          begin
+            node := AllocNode(AN_DYN_COPY);
+            ASTLeft[node] := ASTLeft[argsHead];                 { source array }
+            exprNode := ASTLeft[ASTRight[argsHead]];            { index }
+            if nArgs = 3 then
+              addrNode := ASTLeft[ASTRight[ASTRight[argsHead]]] { count }
+            else
+            begin
+              addrNode := AllocNode(AN_INT_LIT);
+              ASTIVal[addrNode] := 2147483647; ASTTk[addrNode] := Ord(tyInteger);
+            end;
+            argSeq := AllocNode(AN_ARG); ASTLeft[argSeq] := exprNode;
+            lastArg := AllocNode(AN_ARG); ASTLeft[lastArg] := addrNode;
+            ASTRight[argSeq] := lastArg;
+            ASTRight[node] := argSeq;
+            { Pointer-typed: dyn-array handle result, stored full-width on assign. }
+            ASTTk[node] := Ord(tyPointer);
+            CurASTNode := node;
+            Exit;
+          end;
           Error('no overload of ' + name + ' matches these arguments');
+        end;
 
         isLiftedCall := (pi >= 0) and (Procs[pi].ParamCount > nArgs) and
                         (ProcParamPtrDepth[pi * 16 + nArgs] = 2);
@@ -9725,6 +9795,17 @@ begin
   dummyNames[0] := 'len';   dummyTypes[0] := tyNativeInt;
   dummyNames[1] := 'src';   dummyTypes[1] := tyPointer;
   i := RegisterProc('PXXStrFromLit', True, tyPointer, 2, dummyNames, dummyTypes);
+
+  { Generic dynamic-array Copy support helpers (clamp count + raw byte copy). }
+  dummyNames[0] := 'srcData'; dummyTypes[0] := tyPointer;
+  dummyNames[1] := 'index';   dummyTypes[1] := tyNativeInt;
+  dummyNames[2] := 'count';   dummyTypes[2] := tyNativeInt;
+  i := RegisterProc('PXXClampLen', True, tyNativeInt, 3, dummyNames, dummyTypes);
+
+  dummyNames[0] := 'dest';  dummyTypes[0] := tyPointer;
+  dummyNames[1] := 'src';   dummyTypes[1] := tyPointer;
+  dummyNames[2] := 'n';     dummyTypes[2] := tyNativeInt;
+  i := RegisterProc('PXXMemCopy', True, tyPointer, 3, dummyNames, dummyTypes);
 
   dummyNames[0] := 'lenA';  dummyTypes[0] := tyNativeInt;
   dummyNames[1] := 'srcA';  dummyTypes[1] := tyPointer;
