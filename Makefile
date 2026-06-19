@@ -19,11 +19,16 @@ VERIFY_COMPILER_MANAGED := /tmp/pascal26-managed-verify
 STABLE_ROOT := stable_linux_amd64
 STABLE_DEFAULT_DIR := $(STABLE_ROOT)/default
 STABLE_MANAGED_DIR := $(STABLE_ROOT)/managed
+# Pinned compiler for the library/demo track (Claude B). Defaults to the latest
+# recorded stable; override to pin a specific version, e.g.
+#   make lib-test PXX_STABLE=stable_linux_amd64/default/v9
+PXX_STABLE ?= $(STABLE_DEFAULT_DIR)/latest
 PXXFLAGS   :=
 FROZEN_PXXFLAGS := -uPXX_MANAGED_STRING
 
 .PHONY: all bootstrap bootstrap-check fpc-check test test-core test-asm-emit test-nilpy qemu-env-check test-i386 test-aarch64 test-arm32 test-emit-obj stabilize check-stable revert benchmark benchmark-compiler-runtime benchmark-check clean distclean symbols \
         bootstrap-managed bootstrap-frozen test-managed test-frozen stabilize-managed stabilize-frozen check-stable-managed revert-managed test-nilpy-managed test-nilpy-frozen \
+        pxx-stable-check lib-test demos \
         progress-check cross-bootstrap cross-bootstrap-aarch64 cross-bootstrap-arm32 cross-bootstrap-i386 test-esp-bare
 
 all: $(COMPILER)
@@ -1661,3 +1666,54 @@ clean:
 
 distclean: clean
 	rm -f $(COMPILER)
+
+# ============================================================================
+# Library / demo track (Claude B). These build against the PINNED stable
+# compiler ($(PXX_STABLE)), NOT the in-flux compiler/pascal26, so library and
+# demo-app work is decoupled from compiler churn. NEITHER target is the
+# authoritative gate -- that stays `make test` + self-host fixedpoint. They are
+# discovery/smoke harnesses: when they surface missing or bugged library or
+# language support, file a ticket (docs/progress/backlog) rather than treating
+# the red as a hard CI failure. See docs/dev/parallel-tracks.md.
+# ============================================================================
+
+# Guard + report which stable the library track is pinned to.
+pxx-stable-check:
+	@test -x $(PXX_STABLE) || \
+	  (echo "No stable compiler at $(PXX_STABLE). Run: make stabilize"; exit 1)
+	@echo "lib track pinned to: $(PXX_STABLE)  (stable v$$(cat $(STABLE_DEFAULT_DIR)/VERSION 2>/dev/null || echo '?'))"
+	@SC=$$(awk 'END{print $$4}' $(STABLE_DEFAULT_DIR)/history.log 2>/dev/null); \
+	 HC=$$(git log -1 --format='%H' 2>/dev/null); \
+	 if [ -n "$$SC" ] && [ "$$SC" != "$$HC" ]; then \
+	   echo "note: stable was recorded at commit $$SC; HEAD is $$HC."; \
+	   echo "      run 'make stabilize' to publish a fresh baseline if the lib track needs newer compiler features."; \
+	 fi
+
+# Curated GREEN smoke for the library surface, against the pinned stable. May
+# hard-fail (a smoke gate for track B). Keep every entry here passing; move
+# anything broken to a ticket instead of letting this go red.
+lib-test: pxx-stable-check
+	@echo "=== lib-test: library smoke against $(PXX_STABLE) ==="
+	$(PXX_STABLE) examples/sudoku/sudoku.pas /tmp/lib_sudoku
+	test "$$(/tmp/lib_sudoku)" = "$$(printf '534678912672195348198342567859761423426853791713924856961537284287419635345286179\n987654321246173985351928746128537694634892157795461832519286473472319568863745219\n812753649943682175675491283154237896369845721287169534521974368438526917796318452')"
+	$(PXX_STABLE) -dPXX_MANAGED_STRING test/test_collections.pas /tmp/lib_collections
+	@test -n "$$(/tmp/lib_collections)" || (echo "lib smoke: collections produced no output"; exit 1)
+	/tmp/lib_collections >/dev/null
+	$(PXX_STABLE) test/test_math.pas /tmp/lib_math
+	/tmp/lib_math >/dev/null
+	@echo "lib-test ok (sudoku exact + collections + math smoke) against stable v$$(cat $(STABLE_DEFAULT_DIR)/VERSION 2>/dev/null || echo '?')"
+
+# Compile-smoke DASHBOARD for every demo app, against the pinned stable. Prints
+# an OK/FAIL table and always exits 0 -- a discovery view, not a gate. FAILs are
+# expected (they map to library/feature gaps -> tickets), not build breakers.
+demos: pxx-stable-check
+	@echo "=== demos: compile-smoke examples/* against $(PXX_STABLE) ==="
+	@rc=0; for src in examples/primes/sieve.pas examples/sudoku/sudoku.pas \
+	    examples/chess/chess.pas examples/adventure/adventure.pas; do \
+	  if $(PXX_STABLE) "$$src" /tmp/demo_$$(basename $$src .pas) >/tmp/demo.log 2>&1; then \
+	    printf '  OK    %s\n' "$$src"; \
+	  else \
+	    printf '  FAIL  %s  -- %s\n' "$$src" "$$(tail -1 /tmp/demo.log)"; \
+	  fi; \
+	done; \
+	echo "(demos is a dashboard, not a gate; FAILs -> file a ticket)"; exit 0
