@@ -471,6 +471,7 @@ begin
         else if op = Ord(tkMod) then rv32_rem(reg_a0, reg_a0, reg_a1)
         else if op = Ord(tkAnd) then rv32_and(reg_a0, reg_a0, reg_a1)
         else if op = Ord(tkOr) then rv32_or(reg_a0, reg_a0, reg_a1)
+        else if op = Ord(tkXor) then rv32_xor(reg_a0, reg_a0, reg_a1)
         else if op = Ord(tkShl) then rv32_sll(reg_a0, reg_a0, reg_a1)
         else if op = Ord(tkIdent) then rv32_srl(reg_a0, reg_a0, reg_a1) { 'shr' parses as ident }
         else if op = Ord(tkEq) then

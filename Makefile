@@ -259,6 +259,8 @@ test-core: $(COMPILER)
 	test "$$(/tmp/test_interface_arc26)" = "$$(printf 'hello\nhello\nhello\nfreed=3')"
 	./$(COMPILER) test/test_interface_arc_exc.pas /tmp/test_interface_arc_exc26
 	test "$$(/tmp/test_interface_arc_exc26)" = "$$(printf 'reassign created=2 freed=2\ncaught\nunwind freed=3')"
+	./$(COMPILER) test/test_uint64_ops.pas /tmp/test_uint64_ops26
+	test "$$(/tmp/test_uint64_ops26)" = "$$(printf '9600629759793949339\n0\n8846114313915602276\n4344256703880665856\n8\n1099511627776\n1\n0\n6')"
 	./$(COMPILER) test/test_float_str_val.pas /tmp/test_float_str_val26
 	test "$$(/tmp/test_float_str_val26)" = "$$(printf '[3.14]\n[    3.1416]\n[-2.750]\n[1000.5]\n42.7500 code=0\n-1.5000 code=0\n100.00 code=0\n350.00 code=0\n0.1250 code=0\ncode=1\n[   42]\n-99 code=0')"
 	./$(COMPILER) test/test_math.pas /tmp/test_math26
@@ -1008,6 +1010,9 @@ test-i386: $(COMPILER)
 	./$(COMPILER) --target=i386 test/test_interface_arc.pas /tmp/test_i386_iarc
 	./$(COMPILER) test/test_interface_arc.pas /tmp/test_i386_iarc_x64
 	test "$$(tools/run_target.sh i386 /tmp/test_i386_iarc)" = "$$(/tmp/test_i386_iarc_x64)"
+	./$(COMPILER) --target=i386 test/test_uint64_ops.pas /tmp/test_i386_u64
+	./$(COMPILER) test/test_uint64_ops.pas /tmp/test_i386_u64_x64
+	test "$$(tools/run_target.sh i386 /tmp/test_i386_u64)" = "$$(/tmp/test_i386_u64_x64)"
 	./$(COMPILER) --target=i386 test/test_interfaces_is.pas /tmp/test_i386_iface_is
 	./$(COMPILER) test/test_interfaces_is.pas /tmp/test_i386_iface_is_x64
 	test "$$(tools/run_target.sh i386 /tmp/test_i386_iface_is)" = "$$(/tmp/test_i386_iface_is_x64)"
@@ -1220,6 +1225,9 @@ test-aarch64: $(COMPILER)
 	./$(COMPILER) --target=aarch64 test/test_interface_arc.pas /tmp/test_aarch64_iarc
 	./$(COMPILER) test/test_interface_arc.pas /tmp/test_aarch64_iarc_x64
 	test "$$(tools/run_target.sh aarch64 /tmp/test_aarch64_iarc)" = "$$(/tmp/test_aarch64_iarc_x64)"
+	./$(COMPILER) --target=aarch64 test/test_uint64_ops.pas /tmp/test_aarch64_u64
+	./$(COMPILER) test/test_uint64_ops.pas /tmp/test_aarch64_u64_x64
+	test "$$(tools/run_target.sh aarch64 /tmp/test_aarch64_u64)" = "$$(/tmp/test_aarch64_u64_x64)"
 	./$(COMPILER) --target=aarch64 test/test_interfaces_is.pas /tmp/test_aarch64_iface_is
 	./$(COMPILER) test/test_interfaces_is.pas /tmp/test_aarch64_iface_is_x64
 	test "$$(tools/run_target.sh aarch64 /tmp/test_aarch64_iface_is)" = "$$(/tmp/test_aarch64_iface_is_x64)"
@@ -1450,6 +1458,9 @@ test-arm32: $(COMPILER)
 	./$(COMPILER) --target=arm32 test/test_interface_arc.pas /tmp/test_arm32_iarc
 	./$(COMPILER) test/test_interface_arc.pas /tmp/test_arm32_iarc_x64
 	test "$$(tools/run_target.sh arm32 /tmp/test_arm32_iarc)" = "$$(/tmp/test_arm32_iarc_x64)"
+	./$(COMPILER) --target=arm32 test/test_uint64_ops.pas /tmp/test_arm32_u64
+	./$(COMPILER) test/test_uint64_ops.pas /tmp/test_arm32_u64_x64
+	test "$$(tools/run_target.sh arm32 /tmp/test_arm32_u64)" = "$$(/tmp/test_arm32_u64_x64)"
 	./$(COMPILER) --target=arm32 test/test_interfaces_is.pas /tmp/test_arm32_iface_is
 	./$(COMPILER) test/test_interfaces_is.pas /tmp/test_arm32_iface_is_x64
 	test "$$(tools/run_target.sh arm32 /tmp/test_arm32_iface_is)" = "$$(/tmp/test_arm32_iface_is_x64)"

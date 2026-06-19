@@ -33,6 +33,7 @@ begin
     if (s[1]='v') and (s[2]='a') and (s[3]='r') then Result := tkVar;
     if (s[1]='f') and (s[2]='o') and (s[3]='r') then Result := tkFor;
     if (s[1]='a') and (s[2]='n') and (s[3]='d') then Result := tkAnd;
+    if ((s[1]='x') or (s[1]='X')) and ((s[2]='o') or (s[2]='O')) and ((s[3]='r') or (s[3]='R')) then Result := tkXor;
     if (s[1]='n') and (s[2]='o') and (s[3]='t') then Result := tkNot;
     if (s[1]='d') and (s[2]='i') and (s[3]='v') then Result := tkDiv;
     if (s[1]='m') and (s[2]='o') and (s[3]='d') then Result := tkMod;

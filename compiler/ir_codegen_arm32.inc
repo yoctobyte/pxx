@@ -437,6 +437,11 @@ begin
     EmitI32($E1820000);  { orr r0, r2, r0 }
     EmitI32($E1831001);  { orr r1, r3, r1 }
   end
+  else if op = Ord(tkXor) then
+  begin
+    EmitI32($E0220000);  { eor r0, r2, r0 }
+    EmitI32($E0231001);  { eor r1, r3, r1 }
+  end
   else if (op = Ord(tkEq)) or (op = Ord(tkNeq)) then
   begin
     EmitI32($E0222000);  { eor r2, r2, r0 (lo diff) }
@@ -1308,6 +1313,7 @@ begin
         end
         else if op = Ord(tkAnd) then EmitI32($E0000001)    { and r0, r0, r1 }
         else if op = Ord(tkOr) then EmitI32($E1800001)     { orr r0, r0, r1 }
+        else if op = Ord(tkXor) then EmitI32($E0200001)    { eor r0, r0, r1 }
         else if op = Ord(tkShl) then EmitI32($E1A00110)    { lsl r0, r0, r1 }
         else if op = Ord(tkIdent) then EmitI32($E1A00130)  { lsr r0, r0, r1 }
         else if (op = Ord(tkEq)) or (op = Ord(tkNeq)) or (op = Ord(tkLt)) or

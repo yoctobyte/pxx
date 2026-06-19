@@ -345,7 +345,7 @@ begin
   EmitGlobRef(BSS_INTBUF + INTBUF_SIZE);
   
   loopStart := CodeLen;
-  EmitI32($9AC20C04);  { sdiv x4, x0, x2 }
+  EmitI32($9AC20804);  { udiv x4, x0, x2 }
   EmitI32($9B028085);  { msub x5, x4, x2, x0 }
   EmitI32($AA0403E0);  { mov x0, x4 }
   EmitI32($9100C0A5);  { add x5, x5, #48 }
@@ -479,7 +479,7 @@ begin
   EmitGlobRef(BSS_INTBUF + INTBUF_SIZE);
   
   loopStart := CodeLen;
-  EmitI32($9AC20C04);  { sdiv x4, x0, x2 }
+  EmitI32($9AC20804);  { udiv x4, x0, x2 }
   EmitI32($9B028085);  { msub x5, x4, x2, x0 }
   EmitI32($AA0403E0);  { mov x0, x4 }
   EmitI32($9100C0A5);  { add x5, x5, #48 }

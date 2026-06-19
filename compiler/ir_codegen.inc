@@ -2260,6 +2260,7 @@ begin
             end;
           tkAnd:   begin EmitB($48); EmitB($21); EmitB($C8); end; { and rax, rcx }
           tkOr:    begin EmitB($48); EmitB($09); EmitB($C8); end; { or rax, rcx }
+          tkXor:   begin EmitB($48); EmitB($31); EmitB($C8); end; { xor rax, rcx }
           tkIdent: begin EmitB($48); EmitB($D3); EmitB($E8); end; { shr rax, cl }
           tkShl:   begin EmitB($48); EmitB($D3); EmitB($E0); end; { shl rax, cl }
 

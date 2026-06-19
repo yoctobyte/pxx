@@ -677,6 +677,12 @@ begin
     EmitB($0B); EmitB($54); EmitB($24); EmitB($04);{ or edx, [esp+4] }
     EmitB($83); EmitB($C4); EmitB($08);            { add esp, 8 }
   end
+  else if op = Ord(tkXor) then
+  begin
+    EmitB($33); EmitB($04); EmitB($24);            { xor eax, [esp] }
+    EmitB($33); EmitB($54); EmitB($24); EmitB($04);{ xor edx, [esp+4] }
+    EmitB($83); EmitB($C4); EmitB($08);            { add esp, 8 }
+  end
   else if op = Ord(tkStar) then
   begin
     { A=left ([esp]=Alo,[esp+4]=Ahi), B=right (eax=Blo, edx=Bhi).
@@ -1712,6 +1718,7 @@ begin
         end
         else if op = Ord(tkAnd) then begin EmitB($21); EmitB($C8); end   { and eax, ecx }
         else if op = Ord(tkOr) then begin EmitB($09); EmitB($C8); end    { or eax, ecx }
+        else if op = Ord(tkXor) then begin EmitB($31); EmitB($C8); end   { xor eax, ecx }
         else if op = Ord(tkShl) then begin EmitB($D3); EmitB($E0); end   { shl eax, cl }
         else if op = Ord(tkIdent) then begin EmitB($D3); EmitB($E8); end { 'shr' parses as ident; shr eax, cl }
         else if (op = Ord(tkEq)) or (op = Ord(tkNeq)) or (op = Ord(tkLt)) or

@@ -1135,6 +1135,7 @@ begin
         end
         else if op = Ord(tkAnd) then EmitI32($8A010000)    { and x0, x0, x1 }
         else if op = Ord(tkOr) then EmitI32($AA010000)     { orr x0, x0, x1 }
+        else if op = Ord(tkXor) then EmitI32($CA010000)    { eor x0, x0, x1 }
         else if op = Ord(tkShl) then EmitI32($9AC12000)    { lsl x0, x0, x1 }
         else if op = Ord(tkIdent) then EmitI32($9AC12400)  { lsr x0, x0, x1 }
         else if (op = Ord(tkEq)) or (op = Ord(tkNeq)) or (op = Ord(tkLt)) or

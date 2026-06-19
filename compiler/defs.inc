@@ -374,7 +374,8 @@ type
       stay as before. }
     tkCVoid, tkCShort, tkCLong, tkCSigned, tkCUnsigned, tkCFloat, tkCDouble, tkCBool,
     tkIndent, tkDedent, tkNewline,
-    tkHigh
+    tkHigh,
+    tkXor
   );
 
   TToken = record

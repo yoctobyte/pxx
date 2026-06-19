@@ -709,6 +709,7 @@ begin
         end
         else if op = Ord(tkAnd) then xtensa_and(reg_xtensa_a2, reg_xtensa_a2, reg_xtensa_a3)
         else if op = Ord(tkOr) then xtensa_or(reg_xtensa_a2, reg_xtensa_a2, reg_xtensa_a3)
+        else if op = Ord(tkXor) then xtensa_xor(reg_xtensa_a2, reg_xtensa_a2, reg_xtensa_a3)
         { Comparison: a2 := (a2 rel a3) ? 1 : 0. = and <> subtract then branch on
           zero; the ordered forms branch on the operands. The conditional branch
           skips the `movi a4, 0` to the `.done` label. }

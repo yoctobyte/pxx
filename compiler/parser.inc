@@ -2751,19 +2751,19 @@ begin
           { Named type: check for known types by name }
           if CaseEqual(name, 'shortint') then
             prevTok := TypeSize(tyInt8)
-          else if CaseEqual(name, 'byte') then
+          else if CaseEqual(name, 'byte') or CaseEqual(name, 'uint8') then
             prevTok := TypeSize(tyUInt8)
           else if CaseEqual(name, 'smallint') then
             prevTok := TypeSize(tyInt16)
-          else if CaseEqual(name, 'word') then
+          else if CaseEqual(name, 'word') or CaseEqual(name, 'uint16') then
             prevTok := TypeSize(tyUInt16)
           else if CaseEqual(name, 'longint') or CaseEqual(name, 'integer') then
             prevTok := TypeSize(tyInt32)
-          else if CaseEqual(name, 'cardinal') or CaseEqual(name, 'longword') then
+          else if CaseEqual(name, 'cardinal') or CaseEqual(name, 'longword') or CaseEqual(name, 'uint32') then
             prevTok := TypeSize(tyUInt32)
           else if CaseEqual(name, 'int64') then
             prevTok := TypeSize(tyInt64)
-          else if CaseEqual(name, 'qword') then
+          else if CaseEqual(name, 'qword') or CaseEqual(name, 'uint64') then
             prevTok := TypeSize(tyUInt64)
           else if CaseEqual(name, 'nativeint') or CaseEqual(name, 'ptrint') then
             prevTok := TypeSize(tyNativeInt)
@@ -3044,13 +3044,13 @@ begin
           end;
           if CaseEqual(name, 'pointer') then castTk := tyPointer
           else if CaseEqual(name, 'int64') then castTk := tyInt64
-          else if CaseEqual(name, 'qword') then castTk := tyUInt64
+          else if CaseEqual(name, 'qword') or CaseEqual(name, 'uint64') then castTk := tyUInt64
           else if CaseEqual(name, 'integer') or CaseEqual(name, 'longint') then castTk := tyInteger
-          else if CaseEqual(name, 'cardinal') or CaseEqual(name, 'longword') then castTk := tyUInt32
+          else if CaseEqual(name, 'cardinal') or CaseEqual(name, 'longword') or CaseEqual(name, 'uint32') then castTk := tyUInt32
           else if CaseEqual(name, 'smallint') then castTk := tyInt16
-          else if CaseEqual(name, 'word') then castTk := tyUInt16
+          else if CaseEqual(name, 'word') or CaseEqual(name, 'uint16') then castTk := tyUInt16
           else if CaseEqual(name, 'shortint') then castTk := tyInt8
-          else if CaseEqual(name, 'byte') then castTk := tyUInt8
+          else if CaseEqual(name, 'byte') or CaseEqual(name, 'uint8') then castTk := tyUInt8
           else if CaseEqual(name, 'char') or CaseEqual(name, 'ansichar') then castTk := tyChar
           else if CaseEqual(name, 'boolean') then castTk := tyBoolean
           else if CaseEqual(name, 'ansistring') then
@@ -3501,7 +3501,7 @@ begin
   begin
     node := AllocNode(AN_NEG); ASTLeft[node] := CurASTNode; ASTTk[node] := ASTTk[CurASTNode]; CurASTNode := node;
   end;
-  while (CurTok.Kind in [tkPlus, tkMinus, tkOr]) and
+  while (CurTok.Kind in [tkPlus, tkMinus, tkOr, tkXor]) and
         not (PyExprMode and (CurTok.Kind = tkOr)) do
   begin
     op := CurTok.Kind; Next;
@@ -3534,7 +3534,7 @@ begin
       ASTTk[node] := Ord(tyPointer)
     else if (ASTTk[left] = Ord(tySet)) or (ASTTk[right] = Ord(tySet)) then
       ASTTk[node] := Ord(tySet)
-    else if (op = tkOr) and (ASTTk[left] = Ord(tyBoolean)) and (ASTTk[right] = Ord(tyBoolean)) then
+    else if ((op = tkOr) or (op = tkXor)) and (ASTTk[left] = Ord(tyBoolean)) and (ASTTk[right] = Ord(tyBoolean)) then
       ASTTk[node] := Ord(tyBoolean)
     else if (ASTTk[left] = Ord(tySingle)) or (ASTTk[left] = Ord(tyDouble)) or (ASTTk[left] = Ord(tyExtended)) or
             (ASTTk[right] = Ord(tySingle)) or (ASTTk[right] = Ord(tyDouble)) or (ASTTk[right] = Ord(tyExtended)) then
@@ -3652,7 +3652,7 @@ begin
   begin
     Next; r := ConstEval; Expect(tkRParen, ')');
   end;
-  while (CurTok.Kind in [tkPlus, tkMinus, tkStar, tkDiv, tkMod, tkAnd, tkOr, tkShl]) or
+  while (CurTok.Kind in [tkPlus, tkMinus, tkStar, tkDiv, tkMod, tkAnd, tkOr, tkXor, tkShl]) or
         ((CurTok.Kind = tkIdent) and (CurTok.SVal = 'shr')) do
   begin
     { `shr` is lexed as an identifier (no tkShr token), like the runtime term
@@ -3672,6 +3672,8 @@ begin
         tkMod:   r := r mod v;
         tkAnd:   r := r and v;
         tkOr:    r := r or v;
+        tkXor:   r := (r or v) and not (r and v);  { a xor b; the compiler must
+                   stay buildable by an older seed that lacks the xor operator }
         tkShl:   r := r shl v;
       end;
     end;
@@ -6132,13 +6134,13 @@ begin
       else if CaseEqual(lo, 'double') then Result := tyDouble
       else if CaseEqual(lo, 'extended') then Result := tyExtended
       else if CaseEqual(lo, 'shortint') then Result := tyInt8
-      else if CaseEqual(lo, 'byte') then Result := tyUInt8
+      else if CaseEqual(lo, 'byte') or CaseEqual(lo, 'uint8') then Result := tyUInt8
       else if CaseEqual(lo, 'smallint') then Result := tyInt16
-      else if CaseEqual(lo, 'word') then Result := tyUInt16
+      else if CaseEqual(lo, 'word') or CaseEqual(lo, 'uint16') then Result := tyUInt16
       else if CaseEqual(lo, 'longint') then Result := tyInt32
-      else if CaseEqual(lo, 'cardinal') or CaseEqual(lo, 'longword') then Result := tyUInt32
+      else if CaseEqual(lo, 'cardinal') or CaseEqual(lo, 'longword') or CaseEqual(lo, 'uint32') then Result := tyUInt32
       else if CaseEqual(lo, 'int64') then Result := tyInt64
-      else if CaseEqual(lo, 'qword') then Result := tyUInt64
+      else if CaseEqual(lo, 'qword') or CaseEqual(lo, 'uint64') then Result := tyUInt64
       else if CaseEqual(lo, 'nativeint') or CaseEqual(lo, 'ptrint') then Result := tyNativeInt
       else if CaseEqual(lo, 'nativeuint') or CaseEqual(lo, 'ptruint') then Result := tyNativeUInt
       else if CaseEqual(lo, 'pointer') then Result := tyPointer
