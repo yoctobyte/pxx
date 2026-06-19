@@ -1,37 +1,131 @@
-# Project naming poll
+# Project naming — candidate record + two-round poll plan
 
-Ready-to-paste content for a **GitHub Discussions → Poll**.
+A from-scratch Pascal compiler (own RTL, multi-target, ESP32-capable). This file
+records **all** name suggestions and the plan to choose one.
 
-Setup: repo **Settings → Features → enable Discussions**, then **Discussions →
-New discussion → Poll**, paste the question + options below (GitHub polls allow
-up to 8 options, single choice, public results, one vote per GitHub account).
+## Why two rounds
+
+GitHub native **Poll** = single-choice, max 8 options, **no write-in, no
+multi-select**. To let people vote freely *and* widen the field:
+
+- **Round 1 — Discussion + 👍 reactions** (not a Poll). One comment per
+  candidate; voters 👍 **as many as they like** (multi-select), and anyone can
+  **add a comment** (write-in / "other"). State up front: **top 7 advance.**
+- **Round 2 — native Poll** with the 7 finalists, single choice → clean winner.
+
+This dodges both poll limits in round 1 and makes voters feel free to like
+several.
 
 ---
 
-## Question
+## Round 1 seed (paste each as its own comment, then 👍)
 
-**What should this project be called?**
+Maintainer shortlist marked ★ (current favourites — not binding).
 
-A from-scratch Pascal compiler (own RTL, multi-target, ESP32-capable). Pick the
-name that should stick. Short "brand" vs long "repo" name both welcome — vote for
-your favourite; comment if you want one for the tool and another for the repo.
+- frankonpiler — current name; Franken + compiler, Pascal-ish
+- frankenpiler — cleaner Frankenstein pun; more generic
+- steinpile — -stein + compile/pile; cryptic
+- steinpiler — same, but signals "compiler"
+- pxx — the project's DNA (`PXX_` macros, profiles, binary lineage)
+- pxxc — pxx + c for compiler
+- Igor — Frankenstein's builder-assistant
+- ★ Hydra — many heads = many backends/targets
+- ★ Stitch — Frankenstein = stitched parts; short, friendly
+- ★ Bolt — the neck bolt; short, strong
+- ★ Triangle — Pascal's triangle; clean
+- ★ Kiln — fires raw into solid; short, unusual
+- Chimera — monster of parts + many-natured (multi-target)
+- Golem — assembled, animated artificial being
+- Patchwork — assembled from pieces
+- Graft — fuse living parts into one whole
+- Suture — the surgical stitch itself
+- Galvani — galvanism = electricity-reanimates-tissue science
+- Galvanize — verb form; "bring to life"
+- Volt — the spark
+- Arc — the electric arc; also "arc" of code
+- Promethean — book subtitle "The Modern Prometheus"
+- Frankenpile — Franken + pile/compile
+- Frankopile — tighter variant
+- Steincode — -stein + code
+- Boltneck — the neck bolt, literal
+- Pascalith — Pascal + monolith
+- Pascalite — mineral-ish, clean
+- Neopascal — "new Pascal"; clear but generic
+- Wager — Pascal's Wager (his philosophy); oblique
+- Forge — makes things from raw parts; common
+- Crucible — where elements fuse; dramatic
 
-## Options
+## Round 2 (fill after round 1)
 
-1. **frankonpiler** — current name. Franken + compiler, Pascal-flavoured. Distinct
-   and googleable; slightly tricky to spell.
-2. **frankenpiler** — cleaner Frankenstein pun. Easier to say; more generic.
-3. **steinpile** — `-stein` + compile/pile. Short and cryptic; no explicit
-   "compiler" signal.
-4. **steinpiler** — same theme, but signals "compiler".
-5. **pxx** — already the project's DNA (`PXX_` macros, profiles, binary lineage).
-   Short, typeable, brandable; little meaning on its own.
-6. **pxxc** — `pxx` + `c` for compiler.
-7. **Igor** — Frankenstein's builder-assistant; fits a compiler that *assembles*.
+Top 7 by 👍 → native Poll, single choice.
 
-(Reanimator dropped — too human.)
+1. _tbd_
+2. _tbd_
+3. _tbd_
+4. _tbd_
+5. _tbd_
+6. _tbd_
+7. _tbd_
 
-## Maintainer lean
+---
 
-`pxx` as the short tool/brand name (already baked into the codebase), with
-`frankonpiler` as the long repo name. Votes decide.
+## Full candidate record (all suggestions + rationale)
+
+### Already in original 7
+| Name | Read |
+|---|---|
+| frankonpiler | current; Franken+compiler+Pascal |
+| frankenpiler | cleaner Franken pun; generic |
+| steinpile | -stein + compile/pile; cryptic |
+| steinpiler | same, signals "compiler" |
+| pxx | project DNA; short, brandable |
+| pxxc | pxx + c |
+| Igor | Frankenstein's assistant |
+
+### Monster-assembled-from-parts
+| Name | Read |
+|---|---|
+| Chimera | parts + many-natured = multi-target |
+| Golem | assembled, animated being |
+| Hydra ★ | many heads = many targets |
+| Stitch ★ | stitched parts; friendly |
+| Patchwork | assembled from pieces |
+| Graft | fuse living parts into one |
+| Suture | the surgical stitch |
+
+### Reanimation / galvanism
+| Name | Read |
+|---|---|
+| Galvani | the reanimation science |
+| Galvanize | "bring to life" |
+| Volt | the spark |
+| Arc | electric arc; code "arc" |
+| Promethean | "The Modern Prometheus" |
+
+### Frankenstein puns
+| Name | Read |
+|---|---|
+| Frankenpile | Franken + pile |
+| Frankopile | tighter variant |
+| Steincode | -stein + code |
+| Bolt ★ | the neck bolt |
+| Boltneck | literal neck bolt |
+
+### Pascal heritage
+| Name | Read |
+|---|---|
+| Pascalith | Pascal + monolith |
+| Pascalite | mineral-ish |
+| Neopascal | "new Pascal"; generic |
+| Wager | Pascal's Wager (philosophy) |
+| Triangle ★ | Pascal's triangle |
+
+### Forge / build
+| Name | Read |
+|---|---|
+| Forge | from raw parts; common |
+| Crucible | where elements fuse |
+| Kiln ★ | fires raw into solid |
+
+### Dropped
+- Reanimator — too human
