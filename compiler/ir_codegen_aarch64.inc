@@ -651,6 +651,11 @@ var tk: TTypeKind; sz: Integer;
 begin
   tk := Syms[idx].TypeKind;
   sz := TypeSize(tk);
+  { A dynamic array's slot holds a pointer-sized heap handle, not an element.
+    TypeSize(elementType) (e.g. 4 for `array of Integer`) would truncate the
+    64-bit handle to 32 bits — `b := a` then stores a bad pointer and segfaults.
+    Force a full pointer-width store. }
+  if Syms[idx].IsArray and (Syms[idx].ArrLen = -1) then sz := TARGET_PTR_SIZE;
 
   if tk = tySingle then
   begin

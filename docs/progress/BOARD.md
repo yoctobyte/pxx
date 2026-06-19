@@ -11,13 +11,12 @@ _none_
 
 _none_
 
-## backlog (64)
+## backlog (63)
 
 | Ticket | Type | Summary | Blocked-by |
 | --- | --- | --- | --- |
 | bug-builtin-val-miscompiles | bug | Builtin `Val` mis-lowers — wrong error code + segfault | — |
 | bug-const-managed-record-param-byref-crash | bug | const record param with a managed (dynarray) field crashes by-ref on i386 + aarch64 | — |
-| bug-dynarray-whole-var-assign-cross | bug | Whole dynamic-array variable assignment (`b := a`) unsupported on i386 + aarch64 | — |
 | bug-pinned-stable-reads-live-builtin-rtl | bug | Pinned stable reads LIVE builtin RTL source — track A WIP breaks track B | — |
 | bug-proc-local-managed-record-uninit | bug | Proc-local managed record not zero-initialised on entry → first-call miscompute | — |
 | chore-inc-to-units | chore | `.inc` → real `.pas` units refactor | — |
@@ -84,7 +83,7 @@ _none_
 
 _none_
 
-## done (81)
+## done (82)
 
 | Ticket | Type | Summary | Blocked-by |
 | --- | --- | --- | --- |
@@ -94,6 +93,7 @@ _none_
 | bug-const-byref-record-param-temp | bug | Can't pass a function-result temporary to a const/by-ref record param | — |
 | bug-const-expr-shl-shr-not-folded | bug | `shl` / `shr` in a constant expression not accepted | — |
 | bug-c-packed-aligned-ignored | bug | C `__attribute__((packed))` / `aligned` ignored → field-offset drift | — |
+| bug-dynarray-whole-var-assign-cross | bug | Whole dynamic-array variable assignment (`b := a`) unsupported on i386 + aarch64 | — |
 | bug-frozen-string-length-pointer-deref-cross | bug | `Length()` of a pointer-dereferenced frozen `string` returns 0 on the cross targets | — |
 | bug-managed-byref-string-param-store | bug | Managed by-ref AnsiString params: store-through-var no-ops / segfaults | — |
 | bug-many-param-call-corruption | bug | Self-hosted x86-64 backend miscompiles calls with many parameters | — |
@@ -180,7 +180,6 @@ _none_
 
 - bug-builtin-val-miscompiles
 - bug-const-managed-record-param-byref-crash
-- bug-dynarray-whole-var-assign-cross
 - bug-pinned-stable-reads-live-builtin-rtl
 - bug-proc-local-managed-record-uninit
 - chore-inc-to-units

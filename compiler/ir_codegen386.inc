@@ -1085,6 +1085,20 @@ begin
           EmitB($F3); EmitB($A4);                     { rep movsb }
           Exit;
         end;
+        if Syms[IRA[node]].IsArray and (Syms[IRA[node]].ArrLen = -1) then
+        begin
+          { Whole dynamic-array handle assignment (`b := a`, `b := Copy(...)`).
+            i386 dyn arrays are not refcounted here (no x86-64-style scope-exit
+            retain/release), so a plain 4-byte handle store is correct: move the
+            new data pointer into the slot. }
+          si := IRA[node];
+          IREmitNode386(IRB[node]);                              { eax = handle }
+          if Syms[si].Kind = skGlobal then
+            begin EmitB($A3); EmitGlobRef(Syms[si].Offset); end  { mov [slot], eax }
+          else
+            begin EmitB($89); EmitB($85); EmitI32(Syms[si].Offset); end; { mov [ebp+off], eax }
+          Exit;
+        end;
         IREmit386CheckScalarSym(IRA[node], 'store');
         si := IRA[node];
         tk := Syms[si].TypeKind;

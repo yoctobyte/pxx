@@ -1057,6 +1057,9 @@ test-i386: $(COMPILER)
 	./$(COMPILER) -dPXX_MANAGED_STRING --target=i386 test/test_set_runtime.pas /tmp/test_i386_setrt
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_set_runtime.pas /tmp/test_i386_setrt_x64
 	test "$$(tools/run_target.sh i386 /tmp/test_i386_setrt)" = "$$(/tmp/test_i386_setrt_x64)"
+	./$(COMPILER) -dPXX_MANAGED_STRING --target=i386 test/test_dynarray_copy.pas /tmp/test_i386_dyncopy
+	./$(COMPILER) -dPXX_MANAGED_STRING test/test_dynarray_copy.pas /tmp/test_i386_dyncopy_x64
+	test "$$(tools/run_target.sh i386 /tmp/test_i386_dyncopy)" = "$$(/tmp/test_i386_dyncopy_x64)"
 	./$(COMPILER) --target=i386 test/test_timer.pas /tmp/test_i386_timer
 	test "$$(tools/run_target.sh i386 /tmp/test_i386_timer)" = "$$(printf 'woke 50\nwoke 100\nwoke 150\ndone')"
 	./$(COMPILER) --target=i386 test/test_reactor.pas /tmp/test_i386_reactor
@@ -1278,6 +1281,9 @@ test-aarch64: $(COMPILER)
 	./$(COMPILER) -dPXX_MANAGED_STRING --target=aarch64 test/test_set_runtime.pas /tmp/test_aarch64_setrt
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_set_runtime.pas /tmp/test_aarch64_setrt_x64
 	test "$$(tools/run_target.sh aarch64 /tmp/test_aarch64_setrt)" = "$$(/tmp/test_aarch64_setrt_x64)"
+	./$(COMPILER) -dPXX_MANAGED_STRING --target=aarch64 test/test_dynarray_copy.pas /tmp/test_aarch64_dyncopy
+	./$(COMPILER) -dPXX_MANAGED_STRING test/test_dynarray_copy.pas /tmp/test_aarch64_dyncopy_x64
+	test "$$(tools/run_target.sh aarch64 /tmp/test_aarch64_dyncopy)" = "$$(/tmp/test_aarch64_dyncopy_x64)"
 	./$(COMPILER) --target=aarch64 test/test_timer.pas /tmp/test_aarch64_timer
 	test "$$(tools/run_target.sh aarch64 /tmp/test_aarch64_timer)" = "$$(printf 'woke 50\nwoke 100\nwoke 150\ndone')"
 	./$(COMPILER) --target=aarch64 test/test_reactor.pas /tmp/test_aarch64_reactor

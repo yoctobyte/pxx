@@ -56,3 +56,18 @@ the scalar-ordinal store that refuses array syms. On i386 the handle is a single
 - 2026-06-19 — opened by track A. Isolated from the dynamic-array `Copy` cross
   tests: plain `b := a` reproduces it without `Copy`. i386 compile error +
   aarch64 segfault; x86-64 + arm32 fine.
+
+## Resolution (2026-06-19) — FIXED
+
+Both targets store the pointer-sized handle now:
+- **i386:** `IR_STORE_SYM` gets a dynamic-array case before the scalar check —
+  a plain 4-byte handle store (i386 dyn arrays are not refcounted here, so no
+  retain/release needed). ir_codegen386.inc.
+- **aarch64:** `EmitStoreVarA64` was storing `TypeSize(elementType)` (4 for
+  `array of Integer`), truncating the 64-bit handle to 32 bits → bad pointer →
+  segfault. Forced a full `TARGET_PTR_SIZE` store for dyn-array syms.
+  ir_codegen_aarch64.inc.
+
+`b := a` and `b := Copy(...)` now work on all four targets. `test_dynarray_copy.pas`
+re-added to the i386 + aarch64 cross suites (was x86-64 + arm32 only); all 3 cross
+suites output-identical to x86-64; self-host + cross-bootstrap byte-identical.
