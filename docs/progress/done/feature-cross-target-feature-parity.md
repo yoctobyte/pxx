@@ -1,7 +1,7 @@
 # Cross-target language-feature parity (Intel + ARM)
 
 - **Type:** feature
-- **Status:** urgent
+- **Status:** done
 - **Owner:** —
 - **Opened:** 2026-06-16 (user request: "cross targets next — new features AND old ones, incl object support; validate we don't overlook something")
 - **Combines:** feature-async-language-surface — its remaining open items are
@@ -405,3 +405,42 @@ test-core; bootstrap + cross-bootstrap stay byte-identical.
   Separately: compiling the REAL (non-stub) LCL is a standalone **wish-goal**, of
   which language interfaces is ONE prerequisite among many (RTTI/streaming depth,
   full widgetset, property/event system, extern breadth, …) — not in this ticket.
+- 2026-06-19 — **close-out pass: residue resolved or spun out; ticket DONE.**
+  Audited the three remaining matrix items and landed/dispositioned each:
+  1. **RTTI / streaming / LFM on cross.** The three diagnosed bugs (frozen-string-
+     through-pointer read, CPU32 blob stride, sets) were already closed on
+     2026-06-17. Verified the full **typinfo read surface** runs output-equal to
+     x86-64 on i386/aarch64/arm32 (`GetOrdProp`/`GetStrProp`, published `set`
+     membership, prop enumeration, event-method-thunk identity) and **wired
+     `test_rtti` into all three cross suites** (managed mode; oracle strips the
+     address-bearing lines that legitimately differ by word size). The higher
+     **component-streaming + LFM** layer (`test_streaming`/`_enumset`/`test_lfm`)
+     still fails on cross at `GetMethodProp` (the `-101` frozen-string SetLength,
+     `-103` ReallocMem, and the typed-pointer-index/by-value-record-return
+     lowering are x86-64-only) — a distinct, larger port, spun out to
+     **feature-cross-streaming-lfm** (backlog). Matrix split into "RTTI typinfo
+     reads" (✓ all 4) and "Component streaming + LFM" (✓ x86-64 / ◐ cross).
+  2. **`SetLength` on a var-array param.** Investigation showed the matrix's
+     "x86-64 ✓ / cross ✗" was **wrong**: it is broken on **all four** targets
+     (x86-64 prints len=0 then SIGSEGV). Root cause is a cross-cutting param-ABI
+     contradiction — the call site passes the open-array data pointer, but
+     `SetLength` needs `&caller_slot` to publish the new handle back (only managed
+     `AnsiString` var params use that by-ref-handle ABI today). Plus the parser
+     misclassifies it (`AllocParam` always sets array params `ArrLen=1000`, never
+     `-1`, so `SetLength` routes to the string path). This is a from-scratch ABI
+     decision across Length/index/store on all targets, **not** a cross port, so
+     it was *not* guessed at — spun out to **feature-setlength-var-array-param-abi**
+     (backlog) with the full diagnosis. Matrix corrected to ✗ on all four; the
+     cross backends keep their explicit `not yet supported` guard.
+  3. **Cross test wiring.** Wired the five-test CORBA interface suite
+     (`test_interfaces{,_is,_as,_param,_inherit}`) into i386/aarch64/arm32 — all
+     output-equal to x86-64 (the 32-bit fat-pointer param ABI was already forced
+     by-ref when interfaces landed). With `test_rtti` + interfaces added, the
+     cross suites now exercise the same object/RTTI/interface feature set as
+     test-core.
+  **State:** `make test` green (incl. byte-identical fixedpoint + `--threadsafe`
+  pair); all three cross suites green; `make cross-bootstrap` byte-identical on
+  i386 + aarch64 + arm32. No compiler bytes changed this pass (test wiring +
+  docs only). The matrix has no **unexplained** ✗ for the four hosted targets:
+  the two remaining gaps each carry a dedicated backlog ticket. Ticket resolved
+  → moved to `docs/progress/done/`.

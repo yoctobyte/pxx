@@ -97,9 +97,10 @@ Each ✗ is a checklist item below the table. Seeded by grepping
 | External (C-library) calls | ✓ | ✓ | ✓ | ✓ | done 2026-06-17 (i386 cdecl / aarch64 AAPCS x0-x7+v0-v7 / arm32 armel r0-r3; GOT-slot call). Full ABI: float/single/double + Int64/UInt64 args & returns; i386 16-aligned; validated vs libc/libm (test_extern_c_float) |
 | External/dynamic symbols (ELF) | ✓ | ✓ | ✓ | ✓ | done 2026-06-17 (ELF32 PrepareDynamicData32 i386/arm32; 64-bit writeELF interp+GLOB_DAT per-arch for aarch64) |
 | Method-pointer fixups (ELF) | ✓ | ✓ | ✓ | ✓ | done 2026-06-17 (writeELF32 + 64-bit writeELF) |
-| `SetLength` on var-array param | ✓ | ✗ | ✗ | ✗ | `386:1705` `aarch64:1118` `arm32:1293` |
+| `SetLength` on var-array param | ✗ | ✗ | ✗ | ✗ | broken on ALL targets (incl. x86-64): param ABI passes the open-array data ptr, but `SetLength` needs `&caller_slot` to publish back → no-op/segfault. Cross-cutting ABI gap, not a cross port → feature-setlength-var-array-param-abi |
 | Async I/O reactor (epoll/asyncnet/CoSleep) | ✓ | ✓ | ✓ | ✓ | done 2026-06-17 (per-arch SYS_*; aarch64/arm32 epoll_pwait; i386 socketcall; epoll_event pad on aarch64/arm32) |
-| RTTI / streaming / LFM | ✓ | ◐ | ◐ | ◐ | needs ELF method fixups |
+| RTTI typinfo reads (props/ordinals/strings/sets/events) | ✓ | ✓ | ✓ | ✓ | done 2026-06-19; `test_rtti` wired into all 3 cross suites |
+| Component streaming + LFM loading | ✓ | ◐ | ◐ | ◐ | typinfo reads done cross; streaming layer (`GetMethodProp` + `-101`/`-103` specials) not yet ported → feature-cross-streaming-lfm |
 | GTK / LCL GUI | ✓ | ◐ | ◐ | ◐ | classes + external calls now done on cross; untested on i386/aarch64/arm32, likely needs extern-ABI breadth (float C args) — feature-cross-extern-abi-breadth. NB: uses our own stub units, not real LCL |
 
 Notes on aarch64 ELF: the 64-bit ELF writer (`writeELF` path) already applies
@@ -120,20 +121,24 @@ Dominant blocker first; items sharing a fix are grouped.
    - [x] aggregate-valued fn results (records/sets) on all four (hidden-dest ABI)
    - [x] frozen inline-string store-through-ptr on all three cross targets
    - [x] `IR_CLASSREF` metaclass value (`cref := TFoo`) on all three
-   - [ ] **RTTI on cross — 3 distinct bugs** (see ticket Log 2026-06-17):
-     (1) frozen-string-through-pointer read (`c^.NamePtr^`) garbage on ALL cross
-     targets incl. aarch64 — dominant, a codegen bug, fix first;
-     (2) RTTI blob 8-byte stride vs 32-bit typinfo records (i386/arm32) — fix via
-     `{$ifdef CPU32}` 4-byte padding in typinfo records (compiler/blob untouched);
-     (3) sets (`set_lit`/`dynunique`) for test_rtti's published `set` property.
-   - [ ] collections / dynarray-of-record (`setlen_dyn`, `dynunique`, `set_lit`)
-   - [x] interfaces (CORBA) on all four — done 2026-06-19 (feature-interfaces)
+   - [x] **RTTI typinfo reads on cross** — all 3 bugs from the original arc are
+     closed: (1) frozen-string-through-pointer read, (2) CPU32 blob stride, (3)
+     sets. `test_rtti` (props/ordinals/strings/published-set/event-thunk) wired
+     into all 3 cross suites 2026-06-19, output-equal to x86-64.
+   - [ ] **component streaming + LFM on cross** — `test_streaming`/`_enumset`/
+     `test_lfm` still fail at `GetMethodProp` (`-101`/`-103` + typed-ptr-index
+     specials not on cross) → feature-cross-streaming-lfm.
+   - [x] collections / dynarray-of-record (`setlen_dyn`, `dynunique`, `set_lit`)
+   - [x] interfaces (CORBA) on all four — done 2026-06-19 (feature-interfaces);
+     all 5 interface tests wired into the cross suites 2026-06-19
 2. **ELF32 dynamic-link path** (i386/arm32):
    - [x] method-pointer fixups — done (writeELF32 apply loop)
    - [ ] external (dynamic) symbols — `elfwriter.inc:622,628`
 3. **External calls in codegen** (C imports): i386 `1994`, aarch64 `1419`, arm32 `1598`.
 4. **Aggregate-valued fn results**: i386 `1996`, aarch64 `1421`, arm32 `1600`.
-5. **`SetLength` on var-array param**: i386 `1705`, aarch64 `1118`, arm32 `1293`.
+5. **`SetLength` on var-array param**: broken on ALL targets (incl. x86-64) —
+   cross-cutting param-ABI gap, spun out to feature-setlength-var-array-param-abi.
+   The cross backends keep the explicit `not yet supported` guard.
 6. **Async I/O reactor cross**: per-arch syscall numbers + reactor/asyncnet/CoSleep
    gating; run reactor/asyncecho/timer suites under QEMU.
 7. **Variant edge types**: single/extended — DONE all 4 (box as VT_DOUBLE).
