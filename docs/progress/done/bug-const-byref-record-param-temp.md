@@ -49,3 +49,31 @@ freshly stabilized, binary+builtin coherent (the v9 era had the
 bug-pinned-stable-reads-live-builtin mix). **Before bisecting, reproduce against
 v10**: the crash may have been a WIP artifact and already be gone. If gone,
 close; if it reproduces, bisect on the clean compiler.
+
+## Resolution (2026-06-19) — FIXED
+
+Reproduced on v10, then fixed. The codegen (`IRLowerCallArg`, ir.inc ~973-1008)
+already materializes a non-lvalue record argument into a hidden local and passes
+its address when the param is by-ref (the `needTemp` path) — the only thing
+blocking the temp was a parse-time check that rejected any non-IDENT/INDEX/FIELD
+arg to a by-ref param.
+
+Fix: persist whether each param was declared `const` (new parallel array
+`ProcParamIsConst[pi*16+i]`, mirroring `ProcParamRecId` — param sym slots are
+reused across procs so it can't live on the sym), and relax the two AST-path
+call-arg checks (parser.inc ~3328 and ~5862) to allow a **record temporary** for
+a `const` param. `var`/`out` params still require a true lvalue (write-back), and
+the legacy `--legacy-codegen` ParseCallArg path is unchanged.
+
+Validated: direct/nested/mixed temp args (`AddR(MakeR(40), MakeR(2))`,
+`AddR(AddR(...), AddR(...))`) all correct; `var` param still errors on a temp;
+self-host + threadsafe fixedpoint byte-identical; `make cross-bootstrap` all 4
+byte-identical. Tests: `test/test_const_record_temp.pas` (plain record, in
+test-core + i386/aarch64/arm32 cross suites) and
+`test/test_const_record_temp_managed.pas` (bignum-shape managed record, x86-64
+test-core only).
+
+NOTE: writing the managed-record cross test surfaced a **separate pre-existing**
+crash — passing a `const` record *with a managed (dynarray) field* by-ref
+segfaults on i386 + aarch64 (arm32 + x86-64 fine), independent of temporaries.
+Filed as `bug-const-managed-record-param-byref-crash`.

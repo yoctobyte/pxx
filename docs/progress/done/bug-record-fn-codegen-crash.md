@@ -81,3 +81,19 @@ segfaults; the identical function body in plain `program` scope does NOT crash.
 Still context-sensitive (full-unit only). `BigMul`/`BigShiftLimbs` were removed
 from the bignum interface for now; `BigMulSmall` (the verified path) covers the
 factorial oracle. Restore `BigMul` once this is fixed.
+
+## Resolution (2026-06-19) — GONE on v10, closing
+
+Reproduced faithfully against freshly-built **v10**: copied the full `bignum`
+unit, swapped the worked-around `BigMul` back to the original fused
+nested-loop/while-carry version (the exact crashing shape above), compiled a
+driver and ran it. **No crash.** Verified correct:
+
+- `BigMul(999999999, 123456789) = 123456788876543211`
+- `50! = 30414093201713378043612608166064768844377641568960512000000000000`
+- `200!` (42 limbs) + repeated-squaring stress, 3 runs, all exit 0, correct.
+
+Was a v9 mid-WIP artifact (the v9-era binary/builtin incoherence —
+`bug-pinned-stable-reads-live-builtin-rtl`); the v10 stabilize cured it. No
+codegen change needed. Moved to done/. The lib's `BigMul` can keep its current
+proven implementation; the fused form is now safe to use too.

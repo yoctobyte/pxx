@@ -2786,7 +2786,10 @@ begin
   ProcRetPtrElemTk[ProcCount]  := Ord(tyUnknown);
   ProcRetPtrElemRec[ProcCount] := REC_NONE;
   for i := 0 to 15 do
+  begin
     ProcParamPtrDepth[ProcCount * 16 + i] := 0;
+    ProcParamIsConst[ProcCount * 16 + i] := False;
+  end;
   for i := 0 to nParams-1 do
   begin
     Procs[ProcCount].Params[i].Name     := pnames[i];

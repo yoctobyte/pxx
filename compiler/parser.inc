@@ -3326,7 +3326,14 @@ begin
           if Procs[pi].Params[i].IsRef or Procs[pi].Params[i].IsArray then
           begin
             if not ((ASTKind[exprNode] = AN_IDENT) or (ASTKind[exprNode] = AN_INDEX) or (ASTKind[exprNode] = AN_FIELD)) then
-              Error('by-reference argument must be a variable');
+            begin
+              { A `const` record param may bind a non-lvalue temporary (e.g. a
+                function result): the call-arg lowering materializes it into a
+                hidden local and passes its address (FPC behaviour). `var`/`out`
+                still require a true lvalue so write-back has somewhere to land. }
+              if not (ProcParamIsConst[pi * 16 + i] and (IntToTypeKind(ASTTk[exprNode]) = tyRecord)) then
+                Error('by-reference argument must be a variable');
+            end;
           end;
           currArg := ASTRight[currArg];
         end;
@@ -5859,7 +5866,13 @@ begin
                (ASTKind[exprNode] <> AN_VARREC_ARRAY) then
             begin
               if not ((ASTKind[exprNode] = AN_IDENT) or (ASTKind[exprNode] = AN_INDEX) or (ASTKind[exprNode] = AN_FIELD)) then
-                Error('by-reference argument must be a variable');
+              begin
+                { `const` record param accepts a non-lvalue temporary (FPC) — the
+                  call-arg lowering copies it into a hidden local and passes its
+                  address. `var`/`out` still need a true lvalue. }
+                if not (ProcParamIsConst[pi * 16 + i] and (IntToTypeKind(ASTTk[exprNode]) = tyRecord)) then
+                  Error('by-reference argument must be a variable');
+              end;
             end;
             currArg := ASTRight[currArg];
           end;
@@ -7533,6 +7546,7 @@ var
   ptypesProcSig : array[0..15] of Integer;  { proc-typed param: signature index, -1 otherwise }
   parr      : array[0..15] of Boolean;
   pbyref    : array[0..15] of Boolean;
+  pconst    : array[0..15] of Boolean;  { param declared `const` (read-only by-ref) — lets a temporary bind to it }
   pNDims    : array[0..15] of Integer;
   pDynDepth : array[0..15] of Integer;  { named dynamic-array param: dyn nesting depth (>0), 0 = not a dyn-array param }
   pDimLo    : array[0..16*MAX_ARR_DIMS-1] of Integer;
@@ -7717,6 +7731,7 @@ begin
         ptypesProcSig[i] := LastTypeProcSig;
         parr[i] := isArr;
         pbyref[i] := isByRef;
+        pconst[i] := isConst;
         pNDims[i] := paramNDims;
         pDynDepth[i] := paramDynDepth;
         for pdi := 0 to paramNDims - 1 do
@@ -8085,6 +8100,7 @@ begin
   begin
     idx := AllocParam(pnames[i], ptypes[i], pbyref[i], parr[i]);
     Procs[pi].Params[i].SymIdx := idx;
+    if (pi >= 0) and (i < 16) then ProcParamIsConst[pi * 16 + i] := pconst[i];
     if pDynDepth[i] > 0 then
     begin
       { Named dynamic-array type param: a real dynamic array, NOT an open-array

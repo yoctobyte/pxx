@@ -217,6 +217,10 @@ test-core: $(COMPILER)
 	test "$$(/tmp/test_default_keyword26)" = "$$(printf '1\n1\n1\n1\n1\n1\n1\n1')"
 	./$(COMPILER) test/test_op_record_result.pas /tmp/test_op_record_result26
 	test "$$(/tmp/test_op_record_result26)" = "$$(printf '4 6\n4 6\n5 8\n4 6\n4 6\n4 6\n5 8\n110 220 330\n110 220 330')"
+	./$(COMPILER) test/test_const_record_temp.pas /tmp/test_const_record_temp26
+	test "$$(/tmp/test_const_record_temp26)" = "$$(printf '77\n42\n420\n42\n101')"
+	./$(COMPILER) test/test_const_record_temp_managed.pas /tmp/test_const_record_temp_managed26
+	test "$$(/tmp/test_const_record_temp_managed26)" = "$$(printf '7\n42\n42')"
 	./$(COMPILER) test/hello.pas /tmp/hello26
 	test "$$(/tmp/hello26)" = "Hello, World!"
 	./$(COMPILER) test/hello.c /tmp/hello_c26
@@ -1041,6 +1045,9 @@ test-i386: $(COMPILER)
 	./$(COMPILER) -dPXX_MANAGED_STRING --target=i386 test/test_collections.pas /tmp/test_i386_collections
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_collections.pas /tmp/test_i386_collections_x64
 	test "$$(tools/run_target.sh i386 /tmp/test_i386_collections)" = "$$(/tmp/test_i386_collections_x64)"
+	./$(COMPILER) -dPXX_MANAGED_STRING --target=i386 test/test_const_record_temp.pas /tmp/test_i386_constrectemp
+	./$(COMPILER) -dPXX_MANAGED_STRING test/test_const_record_temp.pas /tmp/test_i386_constrectemp_x64
+	test "$$(tools/run_target.sh i386 /tmp/test_i386_constrectemp)" = "$$(/tmp/test_i386_constrectemp_x64)"
 	./$(COMPILER) --target=i386 test/test_timer.pas /tmp/test_i386_timer
 	test "$$(tools/run_target.sh i386 /tmp/test_i386_timer)" = "$$(printf 'woke 50\nwoke 100\nwoke 150\ndone')"
 	./$(COMPILER) --target=i386 test/test_reactor.pas /tmp/test_i386_reactor
@@ -1256,6 +1263,9 @@ test-aarch64: $(COMPILER)
 	./$(COMPILER) -dPXX_MANAGED_STRING --target=aarch64 test/test_collections.pas /tmp/test_aarch64_collections
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_collections.pas /tmp/test_aarch64_collections_x64
 	test "$$(tools/run_target.sh aarch64 /tmp/test_aarch64_collections)" = "$$(/tmp/test_aarch64_collections_x64)"
+	./$(COMPILER) -dPXX_MANAGED_STRING --target=aarch64 test/test_const_record_temp.pas /tmp/test_aarch64_constrectemp
+	./$(COMPILER) -dPXX_MANAGED_STRING test/test_const_record_temp.pas /tmp/test_aarch64_constrectemp_x64
+	test "$$(tools/run_target.sh aarch64 /tmp/test_aarch64_constrectemp)" = "$$(/tmp/test_aarch64_constrectemp_x64)"
 	./$(COMPILER) --target=aarch64 test/test_timer.pas /tmp/test_aarch64_timer
 	test "$$(tools/run_target.sh aarch64 /tmp/test_aarch64_timer)" = "$$(printf 'woke 50\nwoke 100\nwoke 150\ndone')"
 	./$(COMPILER) --target=aarch64 test/test_reactor.pas /tmp/test_aarch64_reactor
@@ -1489,6 +1499,9 @@ test-arm32: $(COMPILER)
 	./$(COMPILER) -dPXX_MANAGED_STRING --target=arm32 test/test_collections.pas /tmp/test_arm32_collections
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_collections.pas /tmp/test_arm32_collections_x64
 	test "$$(tools/run_target.sh arm32 /tmp/test_arm32_collections)" = "$$(/tmp/test_arm32_collections_x64)"
+	./$(COMPILER) -dPXX_MANAGED_STRING --target=arm32 test/test_const_record_temp.pas /tmp/test_arm32_constrectemp
+	./$(COMPILER) -dPXX_MANAGED_STRING test/test_const_record_temp.pas /tmp/test_arm32_constrectemp_x64
+	test "$$(tools/run_target.sh arm32 /tmp/test_arm32_constrectemp)" = "$$(/tmp/test_arm32_constrectemp_x64)"
 	./$(COMPILER) --target=arm32 test/test_timer.pas /tmp/test_arm32_timer
 	test "$$(tools/run_target.sh arm32 /tmp/test_arm32_timer)" = "$$(printf 'woke 50\nwoke 100\nwoke 150\ndone')"
 	./$(COMPILER) --target=arm32 test/test_reactor.pas /tmp/test_arm32_reactor

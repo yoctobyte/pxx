@@ -712,6 +712,7 @@ var
   ProcParamPtrDepth : array[0..MAX_PARAM_DEPTHS-1] of Integer; { C interop: pointer depth for parameters }
   ProcParamRecId : array[0..MAX_PARAM_DEPTHS-1] of Integer; { record/class/interface rec id per param (param syms are reused across procs, so this must persist); REC_NONE if not a record/class }
   ProcParamDynDepth : array[0..MAX_PARAM_DEPTHS-1] of Integer; { named dynamic-array param: dyn nesting depth (>0); 0 = not a named dynarray param. Persists because param syms are reused across procs. Distinguishes a resizable `TDynArr=array of T` param from an open `array of T` param at the call site. }
+  ProcParamIsConst : array[0..MAX_PARAM_DEPTHS-1] of Boolean; { param declared `const` (read-only by-ref). Persists because param syms are reused across procs. At a call site, a `const` record param may bind a non-lvalue temporary (FPC behaviour) — the temp is materialized into a hidden local and its address passed; a `var`/`out` param still requires a true lvalue for write-back. }
   CurrentCLibrary : AnsiString;
   CTypeIsVoid : Boolean; { last ParseCDeclType saw bare void (no pointer) }
   CTypePtrDepth : Integer;   { pointer-star count of the last ParseCDeclType (0 = not a pointer) }
