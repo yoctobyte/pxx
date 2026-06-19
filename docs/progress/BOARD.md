@@ -12,10 +12,11 @@ _none_
 
 _none_
 
-## backlog (62)
+## backlog (63)
 
 | Ticket | Type | Summary | Blocked-by |
 | --- | --- | --- | --- |
+| bug-64bit-shift-xor-literal-gaps | bug | 64-bit gaps in pinned v9: `xor` operator, large shifts, 64-bit hex literals | — |
 | bug-builtin-write-case-sensitive | bug | Builtin write/writeln matched case-sensitively (only lowercase resolves) | — |
 | bug-sysutils-unit-hard-skipped | bug | `uses sysutils` is hard-skipped — a real lib/rtl/sysutils can't load | — |
 | chore-inc-to-units | chore | `.inc` → real `.pas` units refactor | — |
@@ -170,6 +171,7 @@ _none_
 
 ## Ready (no unmet blocker)
 
+- bug-64bit-shift-xor-literal-gaps
 - bug-builtin-write-case-sensitive
 - bug-sysutils-unit-hard-skipped
 - chore-inc-to-units

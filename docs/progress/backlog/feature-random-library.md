@@ -190,3 +190,11 @@ programs compile and run unmodified.
   useful first. HW tier should use dedicated `builtinheap` intrinsics
   (`__rdrand`/`__cpuid`/`__rndr`, à la `__pxxrawsyscall`), NOT block on the
   general feature-inline-asm-depth frontend. Not hard-blocked.
+- 2026-06-19 — **interim software slice landed** (track B): `lib/rtl/random.pas`,
+  a deterministic 32-bit Numerical-Recipes LCG (`RandSeed`/`RandU32`/`Random(n)`/
+  `RandRange`), reproducible-from-seed, asserted in `make lib-test`. Uses an
+  `initialization` section for a lively default seed. **NOT** the planned
+  256-bit-state / 64-bit-output xoshiro256**: pinned v9 lacks the 64-bit ops
+  needed (`xor`, large shifts, 64-bit hex literals) — see
+  bug-64bit-shift-xor-literal-gaps. Upgrade the software tier to xoshiro256** +
+  splitmix64 seeding once those land; HW/OS tiers (slices 4–6) still as scoped.
