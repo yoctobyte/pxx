@@ -69,7 +69,8 @@ Maintainer shortlist marked ★ (current favourites — not binding).
 - Pyx — small round container; echoes `pxx`; pronounced "picks"
 - ★ Flint — strikes the spark; hard stone
 - ★ Spark — the ignition / galvanic jolt (clashes: Apache Spark, SPARK/Ada)
-- ★ Nyx — Greek goddess of night; short, mythic (spelling: 'Nix' collides with NixOS)
+- ★ Nyx — Greek goddess of night; short, mythic
+- ★ Nix — same idea, alt spelling (Latin "snow"/"nothing"; clashes with NixOS)
 - Onyx — black gemstone; sleek
 - Pascaline — Blaise Pascal's mechanical calculating machine
 - Roulette — Pascal's cycloid / probability; a wheel
@@ -182,7 +183,8 @@ Top 7 by 👍 → native Poll, single choice.
 | Pyx | small round container; echoes `pxx`; "picks" |
 | Flint ★ | strikes the spark; hard stone |
 | Spark ★ | the ignition / galvanic jolt (clashes: Apache Spark, SPARK/Ada) |
-| Nyx ★ | Greek goddess of night; mythic ('Nix' = NixOS clash) |
+| Nyx ★ | Greek goddess of night; mythic |
+| Nix ★ | alt spelling; Latin snow/nothing (clashes with NixOS) |
 | Onyx | black gemstone; sleek |
 | Pascaline | Pascal's mechanical calculating machine |
 | Roulette | Pascal's cycloid / probability; a wheel |
