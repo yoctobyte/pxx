@@ -65,7 +65,7 @@ begin
     if (s[1]='c') and (s[2]='a') and (s[3]='s') and (s[4]='e') then Result := tkCase;
     if (s[1]='t') and (s[2]='r') and (s[3]='u') and (s[4]='e') then Result := tkTrue;
     if (s[1]='T') and (s[2]='r') and (s[3]='u') and (s[4]='e') then Result := tkTrue;
-    if (s[1]='r') and (s[2]='e') and (s[3]='a') and (s[4]='d') then Result := tkRead;
+    if (s = 'read') or ((not CaseSensitiveMode) and CaseEqual(s, 'read')) then Result := tkRead;
     if (s[1]='h') and (s[2]='a') and (s[3]='l') and (s[4]='t') then Result := tkHalt;
     if (s[1]='H') and (s[2]='a') and (s[3]='l') and (s[4]='t') then Result := tkHalt;
     if (s[1]='h') and (s[2]='i') and (s[3]='g') and (s[4]='h') then Result := tkHigh;
@@ -90,7 +90,7 @@ begin
     if (s[1]='a') and (s[2]='r') and (s[3]='r') and (s[4]='a') and (s[5]='y') then Result := tkArray;
     if (s[1]='f') and (s[2]='a') and (s[3]='l') and (s[4]='s') and (s[5]='e') then Result := tkFalse;
     if (s[1]='F') and (s[2]='a') and (s[3]='l') and (s[4]='s') and (s[5]='e') then Result := tkFalse;
-    if (s[1]='w') and (s[2]='r') and (s[3]='i') and (s[4]='t') and (s[5]='e') then Result := tkwrite;
+    if (s = 'write') or ((not CaseSensitiveMode) and CaseEqual(s, 'write')) then Result := tkwrite;
     if (s[1]='c') and (s[2]='l') and (s[3]='a') and (s[4]='s') and (s[5]='s') then Result := tkClass;
     if (s[1]='C') and (s[2]='l') and (s[3]='a') and (s[4]='s') and (s[5]='s') then Result := tkClass;
     if (s[1]='r') and (s[2]='a') and (s[3]='i') and (s[4]='s') and (s[5]='e') then Result := tkRaise;
@@ -103,7 +103,7 @@ begin
     if (s[1]='p') and (s[2]='a') and (s[3]='c') and (s[4]='k') and (s[5]='e') and (s[6]='d') then Result := tkPacked;
     if (s[1]='P') and (s[2]='a') and (s[3]='c') and (s[4]='k') and (s[5]='e') and (s[6]='d') then Result := tkPacked;
     if (s[1]='r') and (s[2]='e') and (s[3]='c') and (s[4]='o') and (s[5]='r') and (s[6]='d') then Result := tkRecord;
-    if (s[1]='r') and (s[2]='e') and (s[3]='a') and (s[4]='d') and (s[5]='l') and (s[6]='n') then Result := tkReadln;
+    if (s = 'readln') or ((not CaseSensitiveMode) and CaseEqual(s, 'readln')) then Result := tkReadln;
     if (s[1]='l') and (s[2]='e') and (s[3]='n') and (s[4]='g') and (s[5]='t') and (s[6]='h') then Result := tkLength;
     if (s[1]='L') and (s[2]='e') and (s[3]='n') and (s[4]='g') and (s[5]='t') and (s[6]='h') then Result := tkLength;
     if (s[1]='g') and (s[2]='e') and (s[3]='t') and (s[4]='m') and (s[5]='e') and (s[6]='m') then Result := tkGetMem;
@@ -127,7 +127,7 @@ begin
     if (s[1]='f') and (s[2]='o') and (s[3]='r') and (s[4]='w') and (s[5]='a') and (s[6]='r') and (s[7]='d') then Result := tkForward;
     if (s[1]='f') and (s[2]='r') and (s[3]='e') and (s[4]='e') and (s[5]='m') and (s[6]='e') and (s[7]='m') then Result := tkFreeMem;
     if (s[1]='F') and (s[2]='r') and (s[3]='e') and (s[4]='e') and (s[5]='M') and (s[6]='e') and (s[7]='m') then Result := tkFreeMem;
-    if (s[1]='w') and (s[2]='r') and (s[3]='i') and (s[4]='t') and (s[5]='e') and (s[6]='l') and (s[7]='n') then Result := tkwriteln;
+    if (s = 'writeln') or ((not CaseSensitiveMode) and CaseEqual(s, 'writeln')) then Result := tkwriteln;
     if (s[1]='s') and (s[2]='y') and (s[3]='s') and (s[4]='o') and (s[5]='p') and (s[6]='e') and (s[7]='n') then Result := tkSysOpen;
     if (s[1]='S') and (s[2]='y') and (s[3]='s') and (s[4]='O') and (s[5]='p') and (s[6]='e') and (s[7]='n') then Result := tkSysOpen;
     if (s[1]='s') and (s[2]='y') and (s[3]='s') and (s[4]='r') and (s[5]='e') and (s[6]='a') and (s[7]='d') then Result := tkSysRead;
