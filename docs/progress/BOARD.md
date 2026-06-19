@@ -14,13 +14,15 @@ _none_
 | --- | --- | --- | --- |
 | feature-interface-refcounting | feature | Interface reference counting (IInterface / ARC) | — |
 
-## backlog (63)
+## backlog (65)
 
 | Ticket | Type | Summary | Blocked-by |
 | --- | --- | --- | --- |
 | bug-64bit-shift-xor-literal-gaps | bug | 64-bit gaps in pinned v9: `xor` operator, large shifts, 64-bit hex literals | — |
 | bug-builtin-write-case-sensitive | bug | Builtin write/writeln matched case-sensitively (only lowercase resolves) | — |
+| bug-const-byref-record-param-temp | bug | Can't pass a function-result temporary to a const/by-ref record param | — |
 | bug-pinned-stable-reads-live-builtin-rtl | bug | Pinned stable reads LIVE builtin RTL source — track A WIP breaks track B | — |
+| bug-record-fn-codegen-crash | bug | Context-sensitive runtime crash: record-returning fn with nested loops over dynarray fields | — |
 | bug-sysutils-unit-hard-skipped | bug | `uses sysutils` is hard-skipped — a real lib/rtl/sysutils can't load | — |
 | chore-inc-to-units | chore | `.inc` → real `.pas` units refactor | — |
 | chore-runtime-emission-size | chore | Finer runtime-support emission (code size) | — |
@@ -175,7 +177,9 @@ _none_
 
 - bug-64bit-shift-xor-literal-gaps
 - bug-builtin-write-case-sensitive
+- bug-const-byref-record-param-temp
 - bug-pinned-stable-reads-live-builtin-rtl
+- bug-record-fn-codegen-crash
 - bug-sysutils-unit-hard-skipped
 - chore-inc-to-units
 - chore-runtime-emission-size

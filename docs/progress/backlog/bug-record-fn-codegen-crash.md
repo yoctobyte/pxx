@@ -1,0 +1,66 @@
+# Context-sensitive runtime crash: record-returning fn with nested loops over dynarray fields
+
+- **Type:** bug (compiler / codegen)
+- **Status:** backlog
+- **Owner:** — (track A)
+- **Opened:** 2026-06-19 (track B, building lib/rtl/bignum)
+- **Relation:** referenced from `lib/rtl/bignum.pas` (the original fused BigMul was
+  rewritten to avoid this); possibly the same root cause as the maze demo runtime
+  segfault (unconfirmed — see demo(maze) commit).
+
+## Symptom
+
+A unit function that returns a record containing a dynamic array, and builds it
+via a nested `for`/`for` + `while`-carry loop reading two dynarray-field operands
+(`a.limbs[i] * b.limbs[j]`), **segfaults at runtime** — even though:
+
+- the identical algorithm runs correctly when written inline in `program` scope
+  (not as a unit function), and
+- a *minimal* unit reproduction of the same function body does NOT crash.
+
+So it is context-sensitive: it appears only inside the full `bignum` unit
+(surrounded by the other routines), which points at register pressure / codegen
+state rather than the algorithm. Compiles clean; crashes only when run.
+
+The crashing shape (schematically):
+
+```pascal
+function BigMul(const a, b: TBigInt): TBigInt;   { TBigInt = record neg: Boolean; limbs: array of Int64; end }
+var r: TBigInt; i, j, k, na, nb: Integer; carry, cur: Int64;
+begin
+  ...
+  for i := 0 to na - 1 do
+  begin
+    carry := 0;
+    for j := 0 to nb - 1 do
+    begin
+      cur := r.limbs[i + j] + a.limbs[i] * b.limbs[j] + carry;
+      r.limbs[i + j] := cur mod BIG_BASE;
+      carry := cur div BIG_BASE;
+    end;
+    k := i + nb;
+    while carry > 0 do begin cur := r.limbs[k] + carry; r.limbs[k] := cur mod BIG_BASE; carry := cur div BIG_BASE; k := k + 1; end;
+  end;
+  ...
+  BigMul := r;
+end;
+```
+
+## Workaround in place
+
+`bignum.BigMul` was reimplemented on the proven primitives (`BigMulSmall` +
+limb-shift + `BigAdd`), which does not crash. That keeps the lib correct but
+hides the codegen bug; it should still be fixed (it will bite other
+record-returning numeric kernels).
+
+## Direction
+
+Reproduce against a freshly stabilized compiler (the bignum WIP was last built
+against pinned v9; confirm it still reproduces post interface-refcounting), then
+bisect the codegen for nested-loop dynarray-field index expressions inside a
+record-returning function. Likely related to the nested-index load-width /
+register-pressure landmines already seen in the compiler history.
+
+## Log
+- 2026-06-19 — opened by track B. Inline + minimal-unit repros do NOT crash; only
+  the full `bignum` unit does. Worked around in the lib; needs a real fix.
