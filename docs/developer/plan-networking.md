@@ -36,6 +36,44 @@ units map straight onto the same syscalls — so part-2 work reuses part-1's cor
   lwIP/IDF on ESP. Synapse's transport is blocking-only; that is the part we do
   **not** keep.
 
+### Three API layers — decision 2026-06-19
+
+We expose **both** naming conventions, as thin facades over **one private
+syscall transport core** (neither facade calls the other; both call the core —
+no cross-coupling, and the ESP divergence lives in the core):
+
+1. **Private core** (e.g. `net_linux_sys` / lwIP backend) — the real syscall (or
+   lwIP) implementation. Not for direct user use.
+2. **FPC-native facade** — `BaseUnix` / `Sockets` / `UnixType` shapes (`fpSocket`
+   etc.). We need these anyway for the own-RTL strategy and the eventual
+   compile-FPC-source goal; FPC's own versions are syscall-based, matching us.
+3. **`Posix.*` facade** — `Posix.SysSocket` / `SysSelect` / `NetinetIn` / … . The
+   clear, well-bounded C-header surface; libc-backed on real Delphi, syscall-
+   backed here.
+
+So compatibility reaches **left or right**: a library taking Synapse's FPC branch
+gets facade 2; one taking the Delphi-Posix branch gets facade 3; the per-library
+scoped manifest selects which branch each library compiles against. (If a single
+facade-as-master is ever preferred over the shared-core design, make the
+**FPC-native** layer master — it is the one we must build regardless — and let
+`Posix.*` wrap it. Default remains: both are siblings over the private core.)
+
+**ESP32 caveat (where the abstraction diverges):** `Posix.*` is **Unix-only** —
+it does **not** exist on ESP. On ESP the portable **`TNetSocket`** API (below) and
+the FPC-native facade (over lwIP) are what exist; the `Posix.*` facade is a Linux/
+Unix porting surface, not part of the cross-target portable layer. This is the
+expected seam: the portable API is `TNetSocket`/`TNetAddress`; `Posix.*` and the
+FPC-native units are *compat facades* for porting existing Unix/Pascal libraries.
+
+### Linux network config via `/proc` and `/sys` (syscall-only)
+
+Network introspection on Linux needs no libc/ioctl: read `/proc` and `/sys` as
+plain files (`open`/`read` syscalls). Sources: `/etc/resolv.conf` (nameservers),
+`/proc/net/route` (routing), `/proc/net/dev` (interface stats), `/proc/net/tcp`
++ `/proc/net/udp` (live sockets), `/sys/class/net/*` (interfaces, MAC, MTU,
+up/down). Prefer these over `ioctl(SIOCGIF*)` where possible — pure reads, no
+binding surface.
+
 ## Public API Shape
 
 Start with a Pascal unit such as `net.pas`:
@@ -204,8 +242,15 @@ Implement Linux syscall-only IPv4:
 
 DNS should be a later milestone, but it is **not** blocked on libc: DNS is just
 UDP datagrams to port 53 (RFC 1035 wire format), and the nameserver comes from
-`/etc/resolv.conf` (an `open`/`read`). So syscall-only DNS is achievable. Reuse
-**Synapse's `synadns`** protocol logic (pure-Pascal query build + answer parse)
-over our own UDP syscalls — that is the right reuse: the protocol, not a libc
-binding. The same UDP code runs over lwIP on ESP32. Alternative: backend-provided
-resolution via libc `getaddrinfo` / ESP-IDF where a libc dependency is acceptable.
+`/etc/resolv.conf` (an `open`/`read`). So syscall-only DNS is achievable. Two
+pure-Pascal references, both FPC-named-or-portable:
+
+- **FPC's `netdb`** — resolves in pure Pascal already (reads `/etc/resolv.conf` +
+  `/etc/hosts`, sends its own DNS queries, no libc `getaddrinfo`). Syscall-shaped
+  and matches our naming — the closest model.
+- **Synapse's `synadns`** — pure-Pascal query build + answer parse, reusable
+  independent of Synapse's blocking transport.
+
+Port one over our UDP syscalls; the same UDP code runs over lwIP on ESP32.
+Alternative: backend-provided resolution via libc `getaddrinfo` / ESP-IDF where a
+libc dependency is acceptable.

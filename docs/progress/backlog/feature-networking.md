@@ -102,3 +102,15 @@ DNS deferred to a later milestone.
   nameserver from `/etc/resolv.conf`. Synapse goal depends on feature-mimic-fpc
   (curated define profile to select `Posix.*`) + `{$mode delphi}` handling (mainly
   relax `@` to untyped). SSL deferred (pluggable `ssl_openssl`, blocking ok).
+- 2026-06-19 — **dual-facade decision.** Expose BOTH naming layers as thin
+  facades over one private syscall transport core (siblings, neither calls the
+  other): (2) FPC-native `BaseUnix`/`Sockets`/`UnixType` — built anyway for
+  own-RTL + compile-FPC-source, and FPC's own versions are already syscall-based;
+  (3) `Posix.*` — the clear C-header surface (libc-backed on real Delphi,
+  syscall-backed here). The scoped manifest picks which branch each library
+  compiles against → reach compat "left or right". If ever collapsing to one
+  master, FPC-native is master (Posix.* wraps it). **ESP caveat:** `Posix.*` is
+  Unix-only (no ESP); the portable layer is `TNetSocket`, with Posix.*/FPC-native
+  as Unix porting facades. DNS: FPC `netdb` (pure-Pascal resolver, syscall-shaped)
+  joins `synadns` as a reference. Linux net config via `/proc`+`/sys` reads (no
+  libc/ioctl). FPC RTL itself is largely libc-free — validates the syscall model.
