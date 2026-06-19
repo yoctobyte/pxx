@@ -59,32 +59,82 @@ Two independent problems, the second structural:
    thread the extra deref through `Length` / indexing / read / `SetLength` on
    **all four targets**.
 
-## Why it is a backlog item, not a quick fix
+## Decision (LOCKED 2026-06-19) — mirror FPC: split the two param forms by declaration
 
-It is a from-scratch ABI decision with breadth across every array operation and
-every backend, plus self-host risk (whether `compiler.pas` uses any
-`var <named-dynarray>` params must be checked before flipping the param ABI).
-It is **not** a localized cross port, so it was deliberately *not* guessed at
-during the cross-parity close-out. FPC's behaviour (a `var` dynamic-array param
-*is* resizable and publishes back) is the target semantics.
+The two array-param "kinds" are **not** polymorphic over each other and must be
+distinguished at the *declaration*, exactly as FPC does. No monomorphization, no
+static→dynamic jacket, no up/down-typing, no copy.
 
-## Decision needed
+| Declaration form | Kind | ABI (the slot holds) | Resizable (`SetLength`) | Accepts |
+|---|---|---|---|---|
+| `array of T` (literal in the param list) | **open array** | borrowed **data pointer** (+ high, when wired) | **no** — hard error (matches FPC) | static array, dynamic array, or single element |
+| named `TDynArr = array of T` | **dynamic-array param** | by value: the **handle**; by `var`/`out`: **`&caller_slot`** | **yes** | only a dynamic array of `TDynArr` |
 
-Adopt the managed-string by-ref-handle ABI for `var`/`out` dynamic-array params
-(mark `ArrLen = -1`; pass `&caller_slot`; add the read-path deref everywhere)?
-This is the FPC-correct model but touches Length/index/store/SetLength on all
-four targets. Until decided, the cross backends keep the explicit
-`not yet supported` guard and x86-64 keeps its (also non-functional) `-102`
-`IsRef` branch — i.e. the feature is uniformly absent, which is at least honest.
+Why this dodges every trap (recorded so we don't relitigate):
+- **No jacket / no overhead** — open arrays keep borrowing the data pointer;
+  fixed-memory apps unaffected. The open-array path is left untouched.
+- **No double-compile / no coroutine sabotage** — each form has exactly one ABI;
+  nothing monomorphizes, so the stackless/spawn transform still sees one body.
+- **No up/down-type + copy** — the resizable form accepts *only* a matching
+  dynamic-array handle; a static array passed to a `var TDynArr` param is a
+  **type mismatch rejected at the call** (as in FPC), so no conversion ever runs.
+- **No "chicken error on mixed types"** — splitting by declaration removes the
+  ambiguity that would have forced it.
+
+The resizable form reuses the **managed-`AnsiString`-var-param machinery** as its
+template (the slot holds `&caller_slot`; the read path derefs once — see the
+`IR_LEA` write-mode special case in `ir_codegen.inc` and
+`test_managed_setlength_var`).
+
+## Implementation plan (4 targets; mechanical, but real — do in a clean session)
+
+Pre-flight: confirm `compiler.pas` passes **no** named dynamic-array type by
+`var`/`out` (grep the param decls). If true, the self-host fixedpoint cannot
+regress from this change; if false, those call sites convert to the new ABI and
+must be re-validated. (Open-array `array of T` params in `compiler.pas` are
+unaffected — their path does not change.)
+
+1. **Parser — classify (the foundational fix).** In the named-array-type param
+   branch (`parser.inc` ~7621), when `ArrTypeIsDyn[paramAi]`, mark the param a
+   true dynamic array: set its symbol `ArrLen = -1` (and `SymDynDepth`/element
+   type) instead of letting `AllocParam` stamp the open-array `ArrLen = 1000`.
+   The `SetLength` classifier (`parser.inc` ~5584) then routes it to `-102`
+   automatically. Open `array of T` literal params stay `ArrLen = 1000`.
+2. **Call site — pass `&caller_slot`.** For a `var`/`out` param whose type is a
+   named dynamic array, the IR call-arg lowering must pass the **address of the
+   caller's slot** (not the borrowed data pointer). For a *by-value* dynamic-array
+   param, pass the handle (current behaviour is fine). Mirror how managed
+   `AnsiString` var args are already lowered.
+3. **Read paths — one extra deref for the by-ref dynarray param.** Thread the
+   `IsRef`-param deref (slot → caller_slot → handle) through `Length`, indexing,
+   and element load/store, on **all four** backends — copy the shape of the
+   existing managed-`AnsiString`-var `IR_LEA` read/write gate
+   (`ir_codegen.inc:1661-1679` and the three cross equivalents).
+4. **`SetLength` (`-102`).** The x86-64 `IsRef` branch (`ir_codegen.inc:3066`)
+   already assumes `&caller_slot` — once (2) actually passes that, it works.
+   Replace the cross backends' `not yet supported` guards with the
+   `&caller_slot` deref + `PXXDynSetLen(slotAddr, n, desc)` call (the speculative
+   cross edits written + reverted on 2026-06-19 are the right shape; re-derive
+   them against the corrected ABI).
+5. **Open-array `SetLength` stays a hard error** on all four targets (you cannot
+   `SetLength` an open array — FPC errors too). Make the message say "declare the
+   param as a named dynamic-array type to resize it."
 
 ## Acceptance
 
-`SetLength(a, n)` inside `procedure P(var a: TArr)` resizes the caller's array
-and preserves `min(old,new)` elements (grow/shrink/zero), with `Length` and
-indexing consistent, on all four hosted targets — verified output-equal to a
-reference and byte-identical self-host preserved.
+`SetLength(a, n)` inside `procedure P(var a: TDynArr)` resizes the caller's array
+and preserves `min(old,new)` elements (grow / shrink / zero), with `Length` and
+indexing consistent, on all four hosted targets — output-equal to a reference
+(`test_cross_setlen_varparam`, int + AnsiString element types) and byte-identical
+self-host + `cross-bootstrap` preserved. `SetLength` on an `array of T` open-array
+param errors cleanly on all four.
 
 ## Log
 - 2026-06-19 — opened; root-caused both the misclassification and the ABI
-  contradiction (see above). No code changed (a speculative cross port was
-  written, then reverted once the x86-64 path was found equally broken).
+  contradiction. No code changed (a speculative cross port was written, then
+  reverted once the x86-64 path was found equally broken).
+- 2026-06-19 — **design LOCKED** (with the user): mirror FPC by splitting the
+  two param forms by declaration (open array = non-resizable fat ptr; named
+  dynamic-array type = resizable by-ref-handle ABI). No monomorphization / jacket
+  / copy. Wrote the 5-step implementation plan above. Ready to implement in a
+  clean session; status stays backlog until then.
