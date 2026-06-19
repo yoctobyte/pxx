@@ -95,3 +95,28 @@ self-host fixedpoint holds.
   interfaces. Still open: `as IFoo` (checked cast to an interface VALUE),
   implicit class→interface call-arg coercion, i386 16-byte interface params,
   interface inheritance, COM ARC, identity `=`/`<>`.
+- 2026-06-19 — **all non-COM follow-ups landed** (commits 711dd11, 29c9565,
+  266a750). Done, all four targets byte-identical self-host + cross-bootstrap:
+  - `obj as IFoo` — checked cast to an interface value (IRMaterializeIntfCast:
+    closed-world DYNAMIC IMT lookup, so a base-typed source still picks the
+    derived class's IMT; nil -> null fat pointer; bad cast traps). Wired into
+    IRLowerAST + IRLowerAddress; the parenthesised-postfix `.` handler now routes
+    `(expr).M(args)` to AN_INTF_CALL.
+  - implicit class→interface coercion at call sites and into a Result
+    (MatchProcCall phase 2c gated on the param being an interface; IRLowerCallArg
+    synthesises the `as` cast). Param rec ids now persist in ProcParamRecId
+    (pi*16+j) — param sym slots are reused across procs, so Syms[SymIdx].RecName
+    is unreliable at a call site (root cause of the first failed attempt).
+  - identity `=`/`<>` compares the fat pointer INSTANCE word (not the shared IMT
+    word); `iface = nil` works; `iface := nil` zeroes the whole fat pointer.
+  - 32-bit fat-pointer param ABI (the mislabelled "i386 16-byte" item — actually
+    an 8-byte fat pointer on 32-bit): interface params are forced by-ref on every
+    target (no-op on 64-bit, where 2*PTR=16 was already >8).
+  - interface inheritance `IBar = interface(IFoo)`: parent methods inherited at
+    leading IMT slots; a class implementing IBar also gets ancestor IMTs so
+    is/as/Supports + class→base-interface assignment work; interface widening
+    (foo := bar) and passing a derived interface to a base-interface param both
+    work because inherited methods lead the IMT (base layout is a prefix).
+  Tests: test_interfaces_as / _param / _inherit. **Remaining open = COM ARC only**
+  (refcounting), plus the out-of-scope `implements` delegation + method-resolution
+  clauses. The non-COM CORBA surface is complete.

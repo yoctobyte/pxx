@@ -17,16 +17,17 @@ regression test should be treated as unverified. See
 - Full FPC Object Pascal — only a tested subset is supported.
 - Delphi mode and other alternate modes.
 - `is` and `as` class type-tests work for plain classes (done 2026-06-18,
-  closed-world VMT-set); `obj is IFoo` and `Supports(obj, IFoo)` work for
-  interfaces too. `as IFoo` (cast to an interface value) is open (feature-interfaces).
+  closed-world VMT-set); `obj is IFoo`, `Supports(obj, IFoo)` and `obj as IFoo`
+  (cast to an interface value) all work for interfaces too.
 - Assignment to a parenthesised-expression LHS — `(expr).field := x` does not
   store (the statement parser only treats an identifier-rooted LHS as assignable;
   true even without a cast). Workaround: `t := expr; t.field := x`.
-- Interfaces: CORBA vertical slice works (declare/implement/assign/call, done
-  2026-06-18); `obj is IFoo` + `Supports(obj,IFoo)` work; interface params/results
-  work on 64-bit targets. Open: `as IFoo` (cast to interface value), implicit
-  class→interface call-arg coercion, i386 16-byte interface params, interface
-  inheritance, COM ARC (feature-interfaces).
+- Interfaces (CORBA): declare/implement/assign/call, `is`/`as`/`Supports`,
+  implicit class→interface coercion (call args + Result), identity `=`/`<>`,
+  `:= nil`, interface inheritance (`interface(IParent)` + widening), and
+  interface params/results all work on all four targets (done 2026-06-19).
+  Open: COM ARC (refcounting), `implements` delegation, method-resolution
+  clauses (feature-interfaces).
 - Sets can't be built from runtime values: `s := s + [v]` / `[v]` with a variable
   `v` errors ("set item must be constant"), and `Include`/`Exclude` are
   unimplemented. Set literals take constants only; use an integer bitmask for
