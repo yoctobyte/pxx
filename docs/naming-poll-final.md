@@ -1,5 +1,8 @@
 # PASTE-READY — naming poll (native GitHub Poll)
 
+> **LIVE:** https://github.com/yoctobyte/pxx/discussions/1
+
+
 Create: **Discussions → New discussion → Poll** (enable Discussions in
 Settings → Features first). Paste the question + description, add the 8 options.
 Comments stay open for write-ins / discussion.
