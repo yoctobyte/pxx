@@ -1,9 +1,10 @@
 # Parallel tracks: pin libraries/demos to a "stable" compiler
 
 - **Type:** feature
-- **Status:** working
+- **Status:** done
 - **Owner:** —
 - **Opened:** 2026-06-19
+- **Resolved:** 2026-06-19
 
 ## Goal
 
@@ -71,3 +72,10 @@ and self-host fixedpoint stay green.
 ## Log
 - 2026-06-19 — opened and implementing immediately (user request to set up
   parallel compiler/library tracks).
+- 2026-06-19 — done. `PXX_STABLE` var + `pxx-stable-check` / `lib-test` /
+  `demos` targets landed; `docs/dev/parallel-tracks.md` written; stable
+  refreshed v8 → v9 at current HEAD. `lib-test` green (sudoku exact +
+  collections + math); `demos` dashboard runs. The dashboard immediately
+  surfaced three real gaps, filed as discovery tickets:
+  `lib-intToStr-missing`, `lib-string-copy-trim-missing`,
+  `bug-const-expr-shl-shr-not-folded`. Resolved.

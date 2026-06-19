@@ -8,16 +8,15 @@ lives in git, not in a timestamp._
 
 _none_
 
-## working (1)
+## working (0)
+
+_none_
+
+## backlog (51)
 
 | Ticket | Type | Summary | Blocked-by |
 | --- | --- | --- | --- |
-| feature-parallel-tracks-stable-compiler | feature | Parallel tracks: pin libraries/demos to a "stable" compiler | — |
-
-## backlog (48)
-
-| Ticket | Type | Summary | Blocked-by |
-| --- | --- | --- | --- |
+| bug-const-expr-shl-shr-not-folded | bug | `shl` / `shr` in a constant expression not accepted | — |
 | chore-inc-to-units | chore | `.inc` → real `.pas` units refactor | — |
 | chore-runtime-emission-size | chore | Finer runtime-support emission (code size) | — |
 | feature-additional-cpu-targets | feature | Additional CPU targets (rollup: i386 → aarch64 → arm32 → ESP32/RISC-V) | feature-target-aarch64, feature-target-arm32, feature-target-esp32, feature-target-i386 |
@@ -66,12 +65,14 @@ _none_
 | idea-demo-app-candidates | idea | Demo / test application candidates — selection criteria + catalog | — |
 | idea-unit-rename-import | idea | `uses X as Y` unit-rename import (dialect extension) | — |
 | idea-visibility-enforcement | idea | Enforce private/protected visibility | — |
+| lib-intToStr-missing | lib | `IntToStr` not available | — |
+| lib-string-copy-trim-missing | lib | String `Copy` / `Trim` not available | — |
 
 ## blocked (0)
 
 _none_
 
-## done (70)
+## done (71)
 
 | Ticket | Type | Summary | Blocked-by |
 | --- | --- | --- | --- |
@@ -126,6 +127,7 @@ _none_
 | feature-managed-exception-cleanup | feature | Finalize managed values on exception unwind | — |
 | feature-managed-string-default | feature | Promote managed AnsiString from opt-in to default | bug-managed-byref-string-param-store, feature-managed-exception-cleanup |
 | feature-multidim-fixed-arrays | feature | Multidimensional fixed arrays | — |
+| feature-parallel-tracks-stable-compiler | feature | Parallel tracks: pin libraries/demos to a "stable" compiler | — |
 | feature-procedural-types | feature | Procedural types and method pointers | — |
 | feature-progress-check-makefile | feature | Wire `progress.sh check` into a make target | — |
 | feature-relative-path-units | feature | Relative/absolute path support in `uses`/`includes` | — |
@@ -154,6 +156,7 @@ _none_
 
 ## Ready (no unmet blocker)
 
+- bug-const-expr-shl-shr-not-folded
 - chore-inc-to-units
 - chore-runtime-emission-size
 - feature-additional-cpu-targets
@@ -198,6 +201,8 @@ _none_
 - idea-demo-app-candidates
 - idea-unit-rename-import
 - idea-visibility-enforcement
+- lib-intToStr-missing
+- lib-string-copy-trim-missing
 
 ## Leverage (tickets each one unblocks)
 
