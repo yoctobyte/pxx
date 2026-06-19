@@ -34,7 +34,14 @@ feature, build a parity matrix, and bring the cross backends up to it — provin
 by making the cross suites run the *same* feature set, that nothing major was
 missed.
 
-## Known gaps (x86-64-only today)
+## Known gaps (original audit 2026-06-16 — most now RESOLVED; see Log)
+
+> Historical enumeration. Classes-on-cross (#1), external/dynamic symbols (#3),
+> method-pointer fixups (#4), the async-I/O reactor and interfaces are **done on
+> all four targets** (see Log 2026-06-17 / 2026-06-19). For the authoritative
+> current per-target residue (e.g. `SetLength` on a var-array param, RTTI/LFM on
+> cross) consult `docs/developer/feature-matrix.md`, not this list. Kept below as
+> the original scope record.
 
 1. **Classes / objects — the big one.** i386/aarch64/arm32 codegen errors with
    *"class instantiation not yet supported"*. Blocks: `T.Create`, fields/methods
