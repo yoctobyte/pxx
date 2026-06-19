@@ -323,6 +323,8 @@ test-core: $(COMPILER)
 	test "$$(/tmp/test_global_init26)" = "$$(printf 'k=42 q=5000000000 flag=1\ntabsum=150\nlutsum=6000000000')"
 	./$(COMPILER) test/test_cross_typed_const.pas /tmp/test_typed_const26
 	test "$$(/tmp/test_typed_const26)" = "$$(printf 'limit=100 big=9000000000\ntabsum=14\nlutsum=6000000000\ntab2=40')"
+	./$(COMPILER) test/test_const_bitwise_shift.pas /tmp/test_const_bitshift26
+	test "$$(/tmp/test_const_bitshift26)" = "$$(printf '65536\n128\n2\n8\n15\n511\n65536')"
 	./$(COMPILER) test/test_funcname_field.pas /tmp/test_funcname_field26
 	test "$$(/tmp/test_funcname_field26)" = "$$(printf 'a=1000000000 b=2000000000 n=7\na=3 b=6 n=9')"
 	./$(COMPILER) test/test_cross_multidim.pas /tmp/test_multidim26
@@ -1724,7 +1726,9 @@ lib-test: pxx-stable-check
 	/tmp/lib_collections >/dev/null
 	$(PXX_STABLE) test/test_math.pas /tmp/lib_math
 	/tmp/lib_math >/dev/null
-	@echo "lib-test ok (sudoku exact + collections + math smoke) against stable v$$(cat $(STABLE_DEFAULT_DIR)/VERSION 2>/dev/null || echo '?')"
+	$(PXX_STABLE) test/lib_strutils.pas /tmp/lib_strutils
+	test "$$(/tmp/lib_strutils)" = "$$(printf '0\n7\n42\n-5\n1000000\n-123456789')"
+	@echo "lib-test ok (sudoku exact + collections + math + strutils smoke) against stable v$$(cat $(STABLE_DEFAULT_DIR)/VERSION 2>/dev/null || echo '?')"
 
 # Compile-smoke DASHBOARD for every demo app, against the pinned stable. Prints
 # an OK/FAIL table and always exits 0 -- a discovery view, not a gate. FAILs are

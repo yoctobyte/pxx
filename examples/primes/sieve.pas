@@ -1,4 +1,5 @@
 program PrimeSieve;
+uses strutils;   { IntToStr }
 { Sieve of Eratosthenes with manual bit packing.
 
   Platonic test app: it does the bit-twiddling by hand on a plain
