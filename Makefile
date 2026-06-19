@@ -968,6 +968,21 @@ test-i386: $(COMPILER)
 	./$(COMPILER) -dPXX_MANAGED_STRING --target=i386 test/test_rtti.pas /tmp/test_i386_rtti
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_rtti.pas /tmp/test_i386_rtti_x64
 	test "$$(tools/run_target.sh i386 /tmp/test_i386_rtti | grep -vE 'pointer:|RTTI value:|InstanceSize:')" = "$$(/tmp/test_i386_rtti_x64 | grep -vE 'pointer:|RTTI value:|InstanceSize:')"
+	./$(COMPILER) --target=i386 test/test_interfaces.pas /tmp/test_i386_iface
+	./$(COMPILER) test/test_interfaces.pas /tmp/test_i386_iface_x64
+	test "$$(tools/run_target.sh i386 /tmp/test_i386_iface)" = "$$(/tmp/test_i386_iface_x64)"
+	./$(COMPILER) --target=i386 test/test_interfaces_is.pas /tmp/test_i386_iface_is
+	./$(COMPILER) test/test_interfaces_is.pas /tmp/test_i386_iface_is_x64
+	test "$$(tools/run_target.sh i386 /tmp/test_i386_iface_is)" = "$$(/tmp/test_i386_iface_is_x64)"
+	./$(COMPILER) --target=i386 test/test_interfaces_as.pas /tmp/test_i386_iface_as
+	./$(COMPILER) test/test_interfaces_as.pas /tmp/test_i386_iface_as_x64
+	test "$$(tools/run_target.sh i386 /tmp/test_i386_iface_as)" = "$$(/tmp/test_i386_iface_as_x64)"
+	./$(COMPILER) --target=i386 test/test_interfaces_param.pas /tmp/test_i386_iface_param
+	./$(COMPILER) test/test_interfaces_param.pas /tmp/test_i386_iface_param_x64
+	test "$$(tools/run_target.sh i386 /tmp/test_i386_iface_param)" = "$$(/tmp/test_i386_iface_param_x64)"
+	./$(COMPILER) --target=i386 test/test_interfaces_inherit.pas /tmp/test_i386_iface_inh
+	./$(COMPILER) test/test_interfaces_inherit.pas /tmp/test_i386_iface_inh_x64
+	test "$$(tools/run_target.sh i386 /tmp/test_i386_iface_inh)" = "$$(/tmp/test_i386_iface_inh_x64)"
 	./$(COMPILER) --target=i386 test/test_cross_aggregate_return.pas /tmp/test_i386_aggret
 	./$(COMPILER) test/test_cross_aggregate_return.pas /tmp/test_i386_aggret_x64
 	test "$$(tools/run_target.sh i386 /tmp/test_i386_aggret)" = "$$(/tmp/test_i386_aggret_x64)"
@@ -992,7 +1007,7 @@ test-i386: $(COMPILER)
 	./$(COMPILER) --target=i386 test/test_extern_c_float.pas /tmp/test_i386_extern_float
 	./$(COMPILER) test/test_extern_c_float.pas /tmp/test_i386_extern_float_x64
 	test "$$(tools/run_target.sh i386 /tmp/test_i386_extern_float)" = "$$(/tmp/test_i386_extern_float_x64)"
-	@echo "i386 hello + arith + procs + loops + write + varparam + syscall + heap + string + record + dynarray + exception + float + float-params + variant + variant-single + byref-params + setlen-str + in-operator + loadfile + sysopen-family + args + string-cow + aoc-types + many-params + conformance2 + shortcircuit + ptr-arith + case-range + global-init + typed-const + multidim + named-array + record-2darray + param-2darray + multidim3d + const-alias + float-const + stackless-generator + proctype + scheduler + scheduler-exc + classes + method-pointers + aggregate-return + metaclass-rtti + rtti-typinfo + dynarray-field + collections + timer + reactor + asyncecho + extern-c + extern-c-float ok (output identical to x86-64)"
+	@echo "i386 hello + arith + procs + loops + write + varparam + syscall + heap + string + record + dynarray + exception + float + float-params + variant + variant-single + byref-params + setlen-str + in-operator + loadfile + sysopen-family + args + string-cow + aoc-types + many-params + conformance2 + shortcircuit + ptr-arith + case-range + global-init + typed-const + multidim + named-array + record-2darray + param-2darray + multidim3d + const-alias + float-const + stackless-generator + proctype + scheduler + scheduler-exc + classes + method-pointers + aggregate-return + metaclass-rtti + rtti-typinfo + interfaces + dynarray-field + collections + timer + reactor + asyncecho + extern-c + extern-c-float ok (output identical to x86-64)"
 
 test-aarch64: $(COMPILER)
 	./$(COMPILER) --target=aarch64 test/hello.pas /tmp/test_aarch64_hello
@@ -1144,6 +1159,21 @@ test-aarch64: $(COMPILER)
 	./$(COMPILER) -dPXX_MANAGED_STRING --target=aarch64 test/test_rtti.pas /tmp/test_aarch64_rtti
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_rtti.pas /tmp/test_aarch64_rtti_x64
 	test "$$(tools/run_target.sh aarch64 /tmp/test_aarch64_rtti | grep -vE 'pointer:|RTTI value:|InstanceSize:')" = "$$(/tmp/test_aarch64_rtti_x64 | grep -vE 'pointer:|RTTI value:|InstanceSize:')"
+	./$(COMPILER) --target=aarch64 test/test_interfaces.pas /tmp/test_aarch64_iface
+	./$(COMPILER) test/test_interfaces.pas /tmp/test_aarch64_iface_x64
+	test "$$(tools/run_target.sh aarch64 /tmp/test_aarch64_iface)" = "$$(/tmp/test_aarch64_iface_x64)"
+	./$(COMPILER) --target=aarch64 test/test_interfaces_is.pas /tmp/test_aarch64_iface_is
+	./$(COMPILER) test/test_interfaces_is.pas /tmp/test_aarch64_iface_is_x64
+	test "$$(tools/run_target.sh aarch64 /tmp/test_aarch64_iface_is)" = "$$(/tmp/test_aarch64_iface_is_x64)"
+	./$(COMPILER) --target=aarch64 test/test_interfaces_as.pas /tmp/test_aarch64_iface_as
+	./$(COMPILER) test/test_interfaces_as.pas /tmp/test_aarch64_iface_as_x64
+	test "$$(tools/run_target.sh aarch64 /tmp/test_aarch64_iface_as)" = "$$(/tmp/test_aarch64_iface_as_x64)"
+	./$(COMPILER) --target=aarch64 test/test_interfaces_param.pas /tmp/test_aarch64_iface_param
+	./$(COMPILER) test/test_interfaces_param.pas /tmp/test_aarch64_iface_param_x64
+	test "$$(tools/run_target.sh aarch64 /tmp/test_aarch64_iface_param)" = "$$(/tmp/test_aarch64_iface_param_x64)"
+	./$(COMPILER) --target=aarch64 test/test_interfaces_inherit.pas /tmp/test_aarch64_iface_inh
+	./$(COMPILER) test/test_interfaces_inherit.pas /tmp/test_aarch64_iface_inh_x64
+	test "$$(tools/run_target.sh aarch64 /tmp/test_aarch64_iface_inh)" = "$$(/tmp/test_aarch64_iface_inh_x64)"
 	./$(COMPILER) --target=aarch64 test/test_cross_aggregate_return.pas /tmp/test_aarch64_aggret
 	./$(COMPILER) test/test_cross_aggregate_return.pas /tmp/test_aarch64_aggret_x64
 	test "$$(tools/run_target.sh aarch64 /tmp/test_aarch64_aggret)" = "$$(/tmp/test_aarch64_aggret_x64)"
@@ -1168,7 +1198,7 @@ test-aarch64: $(COMPILER)
 	./$(COMPILER) --target=aarch64 test/test_extern_c_float.pas /tmp/test_aarch64_extern_float
 	./$(COMPILER) test/test_extern_c_float.pas /tmp/test_aarch64_extern_float_x64
 	test "$$(tools/run_target.sh aarch64 /tmp/test_aarch64_extern_float)" = "$$(/tmp/test_aarch64_extern_float_x64)"
-	@echo "aarch64 hello + arith + procs + loops + write + varparam + syscall + heap + string + record + dynarray + exception + float + variant + variant-single + setlen-str + str-length-index + in-operator + loadfile + sysopen-family + args + open-array-params + string-cow + huge-frame + varrec-alloc + aoc-types + many-params + conformance2 + shortcircuit + ptr-arith + case-range + global-init + typed-const + multidim + named-array + record-2darray + param-2darray + multidim3d + const-alias + float-const + classes + method-pointers + aggregate-return + metaclass-rtti + rtti-typinfo + dynarray-field + collections + timer + reactor + asyncecho + extern-c + extern-c-float ok (output identical to x86-64)"
+	@echo "aarch64 hello + arith + procs + loops + write + varparam + syscall + heap + string + record + dynarray + exception + float + variant + variant-single + setlen-str + str-length-index + in-operator + loadfile + sysopen-family + args + open-array-params + string-cow + huge-frame + varrec-alloc + aoc-types + many-params + conformance2 + shortcircuit + ptr-arith + case-range + global-init + typed-const + multidim + named-array + record-2darray + param-2darray + multidim3d + const-alias + float-const + classes + method-pointers + aggregate-return + metaclass-rtti + rtti-typinfo + interfaces + dynarray-field + collections + timer + reactor + asyncecho + extern-c + extern-c-float ok (output identical to x86-64)"
 
 test-arm32: $(COMPILER)
 	./$(COMPILER) --target=arm32 test/hello.pas /tmp/test_arm32_hello
@@ -1338,6 +1368,21 @@ test-arm32: $(COMPILER)
 	./$(COMPILER) -dPXX_MANAGED_STRING --target=arm32 test/test_rtti.pas /tmp/test_arm32_rtti
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_rtti.pas /tmp/test_arm32_rtti_x64
 	test "$$(tools/run_target.sh arm32 /tmp/test_arm32_rtti | grep -vE 'pointer:|RTTI value:|InstanceSize:')" = "$$(/tmp/test_arm32_rtti_x64 | grep -vE 'pointer:|RTTI value:|InstanceSize:')"
+	./$(COMPILER) --target=arm32 test/test_interfaces.pas /tmp/test_arm32_iface
+	./$(COMPILER) test/test_interfaces.pas /tmp/test_arm32_iface_x64
+	test "$$(tools/run_target.sh arm32 /tmp/test_arm32_iface)" = "$$(/tmp/test_arm32_iface_x64)"
+	./$(COMPILER) --target=arm32 test/test_interfaces_is.pas /tmp/test_arm32_iface_is
+	./$(COMPILER) test/test_interfaces_is.pas /tmp/test_arm32_iface_is_x64
+	test "$$(tools/run_target.sh arm32 /tmp/test_arm32_iface_is)" = "$$(/tmp/test_arm32_iface_is_x64)"
+	./$(COMPILER) --target=arm32 test/test_interfaces_as.pas /tmp/test_arm32_iface_as
+	./$(COMPILER) test/test_interfaces_as.pas /tmp/test_arm32_iface_as_x64
+	test "$$(tools/run_target.sh arm32 /tmp/test_arm32_iface_as)" = "$$(/tmp/test_arm32_iface_as_x64)"
+	./$(COMPILER) --target=arm32 test/test_interfaces_param.pas /tmp/test_arm32_iface_param
+	./$(COMPILER) test/test_interfaces_param.pas /tmp/test_arm32_iface_param_x64
+	test "$$(tools/run_target.sh arm32 /tmp/test_arm32_iface_param)" = "$$(/tmp/test_arm32_iface_param_x64)"
+	./$(COMPILER) --target=arm32 test/test_interfaces_inherit.pas /tmp/test_arm32_iface_inh
+	./$(COMPILER) test/test_interfaces_inherit.pas /tmp/test_arm32_iface_inh_x64
+	test "$$(tools/run_target.sh arm32 /tmp/test_arm32_iface_inh)" = "$$(/tmp/test_arm32_iface_inh_x64)"
 	./$(COMPILER) --target=arm32 test/test_cross_aggregate_return.pas /tmp/test_arm32_aggret
 	./$(COMPILER) test/test_cross_aggregate_return.pas /tmp/test_arm32_aggret_x64
 	test "$$(tools/run_target.sh arm32 /tmp/test_arm32_aggret)" = "$$(/tmp/test_arm32_aggret_x64)"
@@ -1362,7 +1407,7 @@ test-arm32: $(COMPILER)
 	./$(COMPILER) --target=arm32 test/test_extern_c_float.pas /tmp/test_arm32_extern_float
 	./$(COMPILER) test/test_extern_c_float.pas /tmp/test_arm32_extern_float_x64
 	test "$$(tools/run_target.sh arm32 /tmp/test_arm32_extern_float)" = "$$(/tmp/test_arm32_extern_float_x64)"
-	@echo "arm32 hello + arith + procs + loops + write + varparam + syscall + heap + string + record + dynarray + exception + float + args + variant + variant-single + strresult + setlen-str + str-length-index + in-operator + managed-aggregate-locals + loadfile + sysopen-family + string-cow + var-string-param + openarray-string + stack-params + int64 + int64-byref + aoc-types + many-params + conformance2 + shortcircuit + ptr-arith + case-range + global-init + typed-const + multidim + named-array + record-2darray + param-2darray + multidim3d + const-alias + float-const + classes + method-pointers + aggregate-return + metaclass-rtti + rtti-typinfo + dynarray-field + collections + timer + reactor + asyncecho + extern-c + extern-c-float ok (output identical to x86-64)"
+	@echo "arm32 hello + arith + procs + loops + write + varparam + syscall + heap + string + record + dynarray + exception + float + args + variant + variant-single + strresult + setlen-str + str-length-index + in-operator + managed-aggregate-locals + loadfile + sysopen-family + string-cow + var-string-param + openarray-string + stack-params + int64 + int64-byref + aoc-types + many-params + conformance2 + shortcircuit + ptr-arith + case-range + global-init + typed-const + multidim + named-array + record-2darray + param-2darray + multidim3d + const-alias + float-const + classes + method-pointers + aggregate-return + metaclass-rtti + rtti-typinfo + interfaces + dynarray-field + collections + timer + reactor + asyncecho + extern-c + extern-c-float ok (output identical to x86-64)"
 
 # ----- Cross self-host bootstrap gates (feature-cross-bootstrap-selfhost) -----
 # Triple-stage proof: native cross-compiles compiler.pas -> <arch>; that binary,
