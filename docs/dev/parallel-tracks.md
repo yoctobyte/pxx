@@ -125,5 +125,12 @@ the user's repo workflow). To avoid clobbering each other:
 - **`git log --oneline -5` at session start** to see what the other track just
   landed (e.g. a new stable `vN`, a freshly closed ticket).
 - B never needs to rebuild the compiler; A's in-progress `compiler/pascal26` is
-  irrelevant to B because B uses `$(PXX_STABLE)`. So a half-built compiler in the
-  tree does not block B.
+  irrelevant to B because B uses `$(PXX_STABLE)`. So a half-built compiler binary
+  in the tree does not block B.
+  - **EXCEPTION — runtime-read builtin RTL.** The pinned binary still reads
+    `compiler/builtin/*.pas` (e.g. `builtinheap`) from the **live tree** at
+    runtime, so A's uncommitted WIP there *does* break B. Until that is frozen
+    with the binary (bug-pinned-stable-reads-live-builtin-rtl), this is a
+    **halt-and-wait** grey zone: if `compiler/builtin/**` shows uncommitted
+    edits, the other agent stops and waits rather than working around or
+    stomping. Safer to halt than to make a mess.

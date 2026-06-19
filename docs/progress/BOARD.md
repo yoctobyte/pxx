@@ -8,9 +8,11 @@ lives in git, not in a timestamp._
 
 _none_
 
-## working (0)
+## working (1)
 
-_none_
+| Ticket | Type | Summary | Blocked-by |
+| --- | --- | --- | --- |
+| feature-interface-refcounting | feature | Interface reference counting (IInterface / ARC) | — |
 
 ## backlog (63)
 
@@ -18,6 +20,7 @@ _none_
 | --- | --- | --- | --- |
 | bug-64bit-shift-xor-literal-gaps | bug | 64-bit gaps in pinned v9: `xor` operator, large shifts, 64-bit hex literals | — |
 | bug-builtin-write-case-sensitive | bug | Builtin write/writeln matched case-sensitively (only lowercase resolves) | — |
+| bug-pinned-stable-reads-live-builtin-rtl | bug | Pinned stable reads LIVE builtin RTL source — track A WIP breaks track B | — |
 | bug-sysutils-unit-hard-skipped | bug | `uses sysutils` is hard-skipped — a real lib/rtl/sysutils can't load | — |
 | chore-inc-to-units | chore | `.inc` → real `.pas` units refactor | — |
 | chore-runtime-emission-size | chore | Finer runtime-support emission (code size) | — |
@@ -50,7 +53,6 @@ _none_
 | feature-hashing-library | feature | Hashing library — CRC32 / MD5 / SHA-256 (known-vector test app) | — |
 | feature-inline-asm-depth | feature | Inline assembler depth | — |
 | feature-inline-routines | feature | Inline routine expansion (`inline;`) | — |
-| feature-interface-refcounting | feature | Interface reference counting (IInterface / ARC) | — |
 | feature-interfaces | feature | Interfaces | — |
 | feature-int-to-float-assign | feature | Integer → Float assignment / coercion missing the int→float conversion | — |
 | feature-json-library | feature | JSON library — parser + serializer (with a roundtrip test app) | — |
@@ -173,6 +175,7 @@ _none_
 
 - bug-64bit-shift-xor-literal-gaps
 - bug-builtin-write-case-sensitive
+- bug-pinned-stable-reads-live-builtin-rtl
 - bug-sysutils-unit-hard-skipped
 - chore-inc-to-units
 - chore-runtime-emission-size
@@ -204,7 +207,6 @@ _none_
 - feature-hashing-library
 - feature-inline-asm-depth
 - feature-inline-routines
-- feature-interface-refcounting
 - feature-interfaces
 - feature-int-to-float-assign
 - feature-json-library
