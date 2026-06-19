@@ -1738,6 +1738,7 @@ lib-test: pxx-stable-check
 demos: pxx-stable-check
 	@echo "=== demos: compile-smoke examples/* against $(PXX_STABLE) ==="
 	@rc=0; for src in examples/primes/sieve.pas examples/sudoku/sudoku.pas \
+	    examples/maze/maze.pas \
 	    examples/chess/chess.pas examples/adventure/adventure.pas; do \
 	  if $(PXX_STABLE) "$$src" /tmp/demo_$$(basename $$src .pas) >/tmp/demo.log 2>&1; then \
 	    printf '  OK    %s\n' "$$src"; \
