@@ -2,7 +2,7 @@
 
 - **Type:** feature
 - **Track:** A
-- **Status:** backlog
+- **Status:** done
 - **Owner:** —
 - **Opened:** 2026-06-20
 - **Relation:** surfaced by `examples/chess` after `SysUtils.Exception` landed.
@@ -41,3 +41,8 @@ end;
 - 2026-06-20 - Opened after adding the Track B `Exception` base class to
   `lib/rtl/sysutils.pas`. The chess discovery gap moved from missing base class
   to this syntax form.
+- 2026-06-20 - DONE (Track A). parser.inc: `if CurTok.Kind <> tkSemicolon` guard
+  wraps the class body while-loop + `Expect(tkEnd)`. Semicolon seen after
+  `class(TBase)` → skip body entirely, UClsSize still set from curFieldOff.
+  `make test` green, byte-identical self-host. chess.pas now past EChess line
+  (next gap: UpCase RTL). test/test_empty_class_shorthand.pas added.

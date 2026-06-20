@@ -7342,6 +7342,10 @@ begin
           `published`. We don't track $M+, so this applies to every class; the
           only effect is extra RTTI, which is harmless. }
         curPublished := 1;
+        { FPC shorthand: `TFoo = class(TBase);` — semicolon closes the type
+          declaration immediately with an empty body; no `end` needed. }
+        if CurTok.Kind <> tkSemicolon then
+        begin
         while (CurTok.Kind <> tkEnd) and (CurTok.Kind <> tkEOF) do
         begin
           { Visibility section markers. Not reserved words, so treat as section
@@ -7706,8 +7710,9 @@ begin
           else
             Next;
         end;
-        UClsSize_[ci] := AlignTo(curFieldOff, classAlign);
         Expect(tkEnd, 'end');
+        end; { end of non-shorthand body block }
+        UClsSize_[ci] := AlignTo(curFieldOff, classAlign);
 
         UClsVMTOffset[ci] := DataLen;
         { Always reserve at least one slot so every class has a DISTINCT VMT
