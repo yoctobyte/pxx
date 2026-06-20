@@ -1,7 +1,7 @@
 # Pinned stable reads LIVE builtin RTL source — track A WIP breaks track B
 
 - **Type:** bug (infra / build isolation)
-- **Status:** backlog
+- **Status:** done
 - **Owner:** — (track A / shared infra)
 - **Opened:** 2026-06-19 (track B, hard-blocked mid-session)
 
@@ -60,3 +60,16 @@ mess. (Kept deliberately simple — no heavier protocol.)
 - 2026-06-19 — opened by track B after being hard-blocked. Diagnosed the
   runtime-read dependency; B is holding until `compiler/builtin/builtinheap.pas`
   is valid again. Recommend the snapshot fix so this cannot recur.
+- 2026-06-20 — **FIXED (Track A).** `make pin` now snapshots
+  `compiler/builtin/*.pas` into `stable_linux_amd64/default/builtin/`. The pinned
+  binary already resolves `uses builtinheap`/`builtin` via its `ExeDir`
+  (`<stabledir>/builtin/`), which `LoadUnit` (parser.inc ~9523) checks BEFORE the
+  CWD-relative fallback to the live `compiler/builtin/` — so populating the frozen
+  dir closes the hole with **no compiler-source change** (no reseed). Only
+  `compiler/builtin/` (track A's lane) is frozen; `lib/rtl` + `lib/lcl` are
+  deliberately left LIVE because they are track B's own editable lane (freezing
+  them would hide B's library edits). `pxx-stable-check` now reports the frozen
+  dir (or warns if missing). Verified: corrupting the live
+  `compiler/builtin/builtinheap.pas` no longer affects a pinned compile, while a
+  `uses sysutils` program still picks up live `lib/rtl`. The interim
+  halt-and-wait protocol for `compiler/builtin/**` is no longer required.
