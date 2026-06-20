@@ -64,7 +64,50 @@ aarch64 needed neither (bits-in-x0 = both arg and return reg already). Each
 remaining target is its own ABI slice; do one at a time, QEMU-tested, then add it
 to that target's cross suite.
 
+## Next-session prompt (continue: float returns on all remaining targets)
+
+> Track A. Continue `feature-cross-float-returns` (docs/progress/working/).
+> aarch64 is DONE (commit f7feaad). Finish **arm32, i386, xtensa, riscv32** — each
+> needs float-typed function **params AND returns** on internal calls (params were
+> never exercised because the return guard blocked every float-param fn). Do ONE
+> target at a time, QEMU-tested, commit per target.
+>
+> Per-target recipe:
+> 1. Reproduce: `function Half(x:Double):Double; begin Half:=x/2.0 end;` +
+>    `function NoParam:Double; begin NoParam:=3.14 end;` Compile `--target=<t>`,
+>    run via `tools/run_target.sh <t>`. NoParam tests return-only; Half tests
+>    params. (On arm32 today NoParam works, Half gives garbage.)
+> 2. Learn the target's float value model: how IR_LOAD_SYM loads a float
+>    (ir_codegen_<t>.inc) and which reg the value model uses (arm32=d0 VFP;
+>    i386=? check x87/SSE; xtensa/riscv=? likely soft-float core regs). The
+>    return + arg conventions must match what the CALLER consumes.
+> 3. Callee epilogue (symtab.inc EmitProcEpilog, per-target block): relax the
+>    guard to allow `TypeIsFloat`; load the float result into the convention reg
+>    (arm32 Double->d0 worked; i386 Double=eax:edx via the existing sz=8 path;
+>    map each).
+> 4. Caller arg-pass (ir_codegen_<t>.inc, the generic internal IR_CALL arg loop —
+>    past the special cases): place each float arg in the call-arg reg(s)
+>    (arm32: d0 -> r0:r1 Double / d0->s0->r0 Single, push as words). The prologue
+>    word-spill (parser.inc ~7987) likely already reconstructs an 8-byte Double
+>    param slot from 2 words — VERIFY before adding code; IR_LOAD_SYM then reads
+>    the slot via the float load.
+> 5. Add the target's line to test/test_cross_float_return.pas's cross-suite entry
+>    (Makefile, mirror the aarch64 block at the test_cross_float entry).
+> 6. Gate per target: `make test` (x86-64 untouched -> should stay byte-identical,
+>    NO reseed; if a shared path changed and fixedpoint breaks, it's a reseed —
+>    `make bootstrap` then retest, do NOT call it non-determinism), then
+>    `make test-<t>` (or cross-bootstrap if shared code touched). Commit.
+> Rule: if a target's params can't be made correct yet, leave that target ERRORING
+> (don't ship silent garbage). Single-literal->Single-param narrowing is a
+> SEPARATE ticket (feature-double-to-single-narrowing) — don't fold it in; keep
+> the test Double-only unless you also do that ticket.
+> Landmines: shared checkout w/ Track B — `git commit -- <paths>`, verify
+> `git show --stat`; never push without the user's OK.
+
 ## Log
 - 2026-06-20 — Opened from the result-in-loop / int-to-float arc, which found the
   guard. Scoped: value model already float-bits-in-int-reg, so this is guard
   relaxation + result-load width per target, not new float infrastructure.
+- 2026-06-20 — aarch64 slice landed (f7feaad). Found float PARAMS also unwired on
+  non-aarch64 targets; documented the per-target recipe + next-session prompt
+  above.
