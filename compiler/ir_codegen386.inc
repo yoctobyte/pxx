@@ -2384,6 +2384,20 @@ begin
         begin
           EmitB($81); EmitB($C4); EmitI32(argBytes); { add esp, argBytes }
         end;
+        { Float result: the callee returned the bits in eax(:edx); move into xmm0
+          for the SSE value model. A Single (eax) is widened to double. }
+        if Procs[procIdx].RetType = tySingle then
+        begin
+          EmitB($66); EmitB($0F); EmitB($6E); EmitB($C0); { movd xmm0, eax }
+          EmitB($F3); EmitB($0F); EmitB($5A); EmitB($C0); { cvtss2sd xmm0, xmm0 }
+        end
+        else if TypeIsFloat(Procs[procIdx].RetType) then
+        begin
+          EmitB($52);                                     { push edx (hi) }
+          EmitB($50);                                     { push eax (lo) }
+          EmitB($F2); EmitB($0F); EmitB($10); EmitB($04); EmitB($24); { movsd xmm0, [esp] }
+          EmitB($83); EmitB($C4); EmitB($08);             { add esp, 8 }
+        end;
       end;
 
     IR_CALL_IND:

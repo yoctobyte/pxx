@@ -3492,9 +3492,12 @@ begin
       else
       begin
         if Syms[retSymIdx].IsArray or (Syms[retSymIdx].Kind <> skLocal) or
-           not (TypeIsOrdinal(Syms[retSymIdx].TypeKind) or
+           not (TypeIsOrdinal(Syms[retSymIdx].TypeKind) or TypeIsFloat(Syms[retSymIdx].TypeKind) or
                 (Syms[retSymIdx].TypeKind in [tyAnsiString, tyPointer, tyClass])) then
           Error('target i386: only ordinal/pointer/string function results supported yet');
+        { Float result: the 8-byte Double slot loads into eax:edx (the sz=8 path
+          below); a 4-byte Single loads into eax. The caller moves eax(:edx) ->
+          xmm0 for the SSE value model. See feature-cross-float-returns. }
         { Load at the result's width and extend to a full eax. A 1-byte
           Boolean/Char slot loaded with a plain 4-byte mov drags in 3 garbage
           bytes, which then defeats callers that `not`/`xor` or test eax. }

@@ -48,7 +48,12 @@ Internal calls only — external C float returns have their own ABI path
   `vmov r0,r1,d0`, pushes 2 words (Single: vcvt s0,d0 -> r0, 1 word). Guard
   relaxed for TypeIsFloat. test wired into test-arm32; make test byte-identical
   (no reseed).
-- [ ] i386 — same: needs param + return (errors cleanly today).
+- [x] **i386 — DONE.** Float PARAMS were already wired (prologue copies the
+  8-byte Double slot, caller pushes the spilled xmm0 double). Only the RETURN was
+  missing: guard relaxed for TypeIsFloat; the existing sz=8 result-load returns a
+  Double in eax:edx (Single in eax); caller moves eax:edx -> xmm0 (Single: movd +
+  cvtss2sd) for the SSE value model. test wired into test-i386; make test
+  byte-identical (no reseed).
 - [ ] xtensa — needs param + return (errors cleanly today).
 - [ ] riscv32 — needs param + return (errors cleanly today).
 - [ ] gate: make test + cross-bootstrap + cross suites green
