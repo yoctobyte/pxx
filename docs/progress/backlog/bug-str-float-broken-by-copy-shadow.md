@@ -1,10 +1,10 @@
 # Str() builtin breaks for float formatting when a unit shadows Copy
 
 - **Type:** bug
-- **Status:** backlog
+- **Status:** backlog — **NOT REPRODUCIBLE on pinned v25 / live; needs the lib agent's exact failing source or close**
 - **Owner:** —
 - **Opened:** 2026-06-20
-- **Relation:** surfaced while implementing `FloatToStr` in feature-rtl-conversion-and-bitset-library. Workaround already applied there.
+- **Relation:** surfaced while implementing `FloatToStr` in feature-rtl-conversion-and-bitset-library. Workaround already applied there. Mechanism context: [[design-overloadable-intrinsics]].
 
 ## Problem
 
@@ -62,3 +62,12 @@ float-decimal conversion inline without relying on a `Copy` intercept at all.
 ## Log
 - 2026-06-20 — opened. Discovered while implementing `FloatToStr` in
   sysutils.pas; worked around with manual Trunc/Frac/Round conversion.
+- 2026-06-20 — **Track A: cannot reproduce on pinned v25 or the live compiler.**
+  The exact ticket repro (`uses sysutils;` — which DOES declare
+  `function Copy(const s: AnsiString; index, count: Integer): AnsiString` at
+  sysutils.pas:22/97 — plus `Str(d:0:2, s)`) compiles and runs, printing the
+  correct `3.14`. The `Copy` resolution is `procIdx`-gated so the user routine
+  and the dynarray intrinsic no longer collide (see
+  [[design-overloadable-intrinsics]]). Either fixed since the v20-era filing or
+  the original repro was incomplete. NEXT: lib agent to supply the precise
+  failing source (specific arg shapes / nested `uses` order), else close.

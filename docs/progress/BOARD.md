@@ -15,7 +15,7 @@ _none_
 | feature-c-runtime-library | B | feature | C runtime/library layer (`lib/crtl`) plus direct C-library packages | — |
 | feature-platform-abstraction-layer | B | feature | Platform Abstraction Layer (PAL): per-platform RTL port at one seam | — |
 
-## backlog (76)
+## backlog (77)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -24,6 +24,7 @@ _none_
 | bug-string-type-size-mismatch | A | bug | String type size mismatch in TypeSize vs codegen copies | — |
 | chore-inc-to-units | A | chore | `.inc` → real `.pas` units refactor | — |
 | chore-runtime-emission-size | A | chore | Finer runtime-support emission (code size) | — |
+| design-overloadable-intrinsics | A | design | Design question: overloadable compiler intrinsics (the `Copy` precedent) | — |
 | feature-additional-cpu-targets | A | feature | Additional CPU targets (rollup: i386 → aarch64 → arm32 → ESP32/RISC-V) | feature-target-aarch64, feature-target-arm32, feature-target-esp32, feature-target-i386 |
 | feature-adventure-scene-asset-pipeline | B | feature | Adventure scene asset pipeline | feature-image-ascii-renderer-library |
 | feature-allocator-quality | A | feature | Allocator quality: split / coalesce / bins / alignment | — |
@@ -220,6 +221,7 @@ _none_
 - [A] bug-string-type-size-mismatch
 - [A] chore-inc-to-units
 - [A] chore-runtime-emission-size
+- [A] design-overloadable-intrinsics
 - [A] feature-additional-cpu-targets
 - [A] feature-allocator-quality
 - [A] feature-async-auto-backend
