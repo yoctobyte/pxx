@@ -60,8 +60,7 @@ Internal calls only — external C float returns have their own ABI path
   (`unsupported node in IR codegen: call_ind` / float literal). Float RETURN can't
   be enabled before float ARITHMETIC exists. xtensa has a single-precision FPU
   (do single in hardware) but Double needs soft-float. Tracked in
-  feature-esp-float (+ feature-single-first-class + feature-softfloat-lib).
-  Errors cleanly today.
+  feature-esp-float (+ feature-softfloat-lib). Errors cleanly today.
 - [n/a] riscv32 — same: no float value model (`unsupported node in IR codegen`);
   ESP32-C3 has no FPU, so both single AND double are soft-float. Tracked in
   feature-esp-float (+ deps). Errors cleanly today.
@@ -137,7 +136,8 @@ to that target's cross suite.
   suite, make test byte-identical. xtensa + riscv32 turned out to have NO float
   value model at all (basic float arithmetic errors — they were never part of
   feature-cross-float-variant, which covered only the Linux trio). Enabling float
-  returns there first requires a full ESP soft-float arc (no/limited hardware FPU)
-  — split out to feature-esp-float + feature-single-first-class +
-  feature-softfloat-lib (backlog). Both ESP targets error cleanly
-  today (no silent garbage), satisfying the error-not-miscompile rule.
+  returns there first requires soft-double arithmetic (riscv has no FPU; xtensa
+  has only a single FPU, no hardware double) — split out to feature-esp-float +
+  feature-softfloat-lib (backlog). Single stays storage-only/widen-to-double
+  everywhere (the right model). Both ESP targets error cleanly today (no silent
+  garbage), satisfying the error-not-miscompile rule.

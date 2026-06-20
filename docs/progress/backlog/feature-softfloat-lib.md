@@ -1,4 +1,4 @@
-# Soft-float library (IEEE-754 single + double kernels)
+# Soft-float library (IEEE-754 double kernels + conversions)
 
 - **Type:** feature (builtin library, target-independent)
 - **Status:** backlog
@@ -13,37 +13,40 @@ soft-integer-divide lives in `compiler/builtin/builtinheap.pas`, but soft-float 
 substantial and conceptually distinct — it gets **its own library file**, not a
 graft onto builtinheap.
 
-## Goal
+## Scope — DOUBLE only (single rides the widen path)
 
-A standalone `compiler/builtin/softfloat.pas` of plain-Pascal IEEE-754 kernels,
-target-independent (integer bit-twiddling only, so it cross-compiles to any
-backend). Single + double:
+PXX models `Single` as storage-only: it widens to Double for all arithmetic and
+narrows on store (this is the right model — see [[feature-esp-float]]). So a
+no-FPU target's Single code just widens to a **soft-double**, computes there, and
+narrows. That means this library needs **no separate soft-single arithmetic** —
+only double kernels plus the width conversions:
 
-- `__pxx_sadd/ssub/smul/sdiv` and `__pxx_dadd/dsub/dmul/ddiv`
-- `__pxx_scmp/dcmp` (-1 / 0 / 1; ordered, NaN-aware)
-- conversions: `__pxx_i2s/s2i/i2d/d2i/s2d/d2s` (and u-variants as needed)
+- `__pxx_dadd/dsub/dmul/ddiv`
+- `__pxx_dcmp` (-1 / 0 / 1; ordered, NaN-aware)
+- conversions: `__pxx_i2d/d2i` (+ u-variants), `__pxx_s2d/d2s` (single<->double bit
+  repack — pure integer, no FPU)
 
 Round-to-nearest-even. Inf/NaN/zero handled; denormals can be a documented
-follow-up (stub/flush-to-zero first) — but the **rounding in mul/div must be
-correct** or formatted decimal output diverges from the x86-64 SSE oracle.
+follow-up (flush-to-zero first) — but **mul/div rounding must be correct** or
+formatted decimal output diverges from the x86-64 SSE oracle.
 
 ## Approach
 
 1. Pure library first, no codegen wiring: implement + unit-test the kernels by
-   calling them directly from a test program on x86-64, comparing results to
-   native SSE `+ - * /` over a value grid (including subnormal-adjacent, large,
-   tiny, signed-zero, NaN/Inf inputs). This validates the math independent of any
-   ESP backend.
-2. Reuse the existing `PXXWriteFloat*` formatters for the comparison harness once
-   a double can be produced.
-3. The codegen lowering that *calls* these helpers is a separate ticket per
-   no-FPU target — see [[feature-esp-float]].
+   calling them directly from a test program on x86-64, comparing to native SSE
+   `+ - * /` over a value grid (large, tiny, signed-zero, NaN/Inf,
+   subnormal-adjacent). Validates the math independent of any ESP backend.
+2. Reuse the existing `PXXWriteFloat*` formatters for the harness once a double can
+   be produced.
+3. The codegen lowering that *calls* these helpers is per no-FPU target —
+   [[feature-esp-float]].
 
 ## Notes
 
-- Lives in builtin (compiler-emitted helper calls), Track A's lane — not lib/rtl.
-- Keep it allocation-free and syscall-free (runs on bare metal).
-- Decompose/normalize/round is the bulk; ~a few hundred lines. Bounded, like the
-  soft-divide already in builtinheap.pas (the template to mirror).
-- Consumers: [[feature-esp-float]] (riscv soft single+double, xtensa soft double).
-  Hardware-FPU targets never call these.
+- New file `compiler/builtin/softfloat.pas`. Builtin (compiler-emitted helper
+  calls), Track A's lane — not lib/rtl.
+- Allocation-free, syscall-free (runs bare metal).
+- Decompose/normalize/round is the bulk; ~a few hundred lines. Bounded, mirrors the
+  soft-divide already in builtinheap.pas.
+- Consumers: [[feature-esp-float]] (riscv all-soft; xtensa soft-double only —
+  xtensa single uses its hardware single FPU, not this lib).
