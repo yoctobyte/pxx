@@ -15,7 +15,7 @@ _none_
 | feature-c-runtime-library | B | feature | C runtime/library layer (`lib/crtl`) plus direct C-library packages | — |
 | feature-platform-abstraction-layer | B | feature | Platform Abstraction Layer (PAL): per-platform RTL port at one seam | — |
 
-## backlog (74)
+## backlog (73)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -54,7 +54,6 @@ _none_
 | feature-extended-alias-or-reject | A | feature | Extended: formalize as Double alias (or reject) | — |
 | feature-flexcolumn-directive | A | feature | `flexcolumn` calling-convention directive | chore-inc-to-units |
 | feature-fpc-vs-pxx-feature-boundary | A | feature | Policy: FPC-bootstrap subset vs PXX-only library features | — |
-| feature-general-typename-cast | A | feature | General `TypeName(expr)` reinterpret cast (named record/class/pointer) | — |
 | feature-handle-compacting-heap | A | feature | Handle-table compacting heap (anti-fragmentation for constrained RAM) | — |
 | feature-hashing-library | B | feature | Hashing library — CRC32 / MD5 / SHA-256 (known-vector test app) | — |
 | feature-image-ascii-renderer-library | B | feature | Image to ANSI ASCII renderer library | feature-rtl-image-bitmap-library, feature-terminal-ansi-library |
@@ -98,7 +97,7 @@ _none_
 
 _none_
 
-## done (108)
+## done (109)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -175,6 +174,7 @@ _none_
 | feature-float-str-val | A | feature | Float Str / Val | — |
 | feature-for-in-iteration | A | feature | `for x in ...` iteration — FPC-exact (arrays, sets, strings, enums, enumerators) | — |
 | feature-forin-member-access-source | A | feature | `for-in` over a qualified member-access source (`obj.field`, `Self.field`) | — |
+| feature-general-typename-cast | B | feature | General `TypeName(expr)` reinterpret cast (named record/class/pointer) | — |
 | feature-generators-yield | A | feature | Generators and `yield` (the coroutine on-ramp) | feature-unified-heap-allocator |
 | feature-i386-asm-emitter | A | feature | i386 text-assembler (`EmitAsm386`) for cleaner x86-32 codegen | — |
 | feature-i386-int64-codegen | A | feature | Full Int64 codegen for i386 | — |
@@ -253,7 +253,6 @@ _none_
 - [B] feature-exception-base-class
 - [A] feature-extended-alias-or-reject
 - [A] feature-fpc-vs-pxx-feature-boundary
-- [A] feature-general-typename-cast
 - [A] feature-handle-compacting-heap
 - [B] feature-hashing-library
 - [A] feature-inline-asm-depth

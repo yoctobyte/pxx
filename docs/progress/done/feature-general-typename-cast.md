@@ -60,3 +60,21 @@ user type name falls through to "expected expression" or is misparsed.
   `(obj as TClass).member` already works (feature-class-is-as), and unchecked
   reinterpret is mainly for type-punning. Deferred behind the float-correctness
   bugs (feature-int-to-float-assign, feature-result-in-loop).
+
+## RESOLVED 2026-06-20 (Track A)
+
+All the acceptance forms now work:
+- `PRec(addr)` typed-pointer reinterpret — already worked (pointer-alias cast).
+- `TClass(obj).method` / `.field` — already worked (AN_CLASS_CAST).
+- `TRec(ptr)^.field` record-name reinterpret — ADDED, read and write. A record
+  name followed by `(` is reinterpreted as a pointer to that record; the pointee
+  rec id is carried on the AN_DEREF node (ResolveNodeRec AN_DEREF ASTIVal>0 path)
+  so trailing `.field` offsets resolve. Added in both the factor parser
+  (expression/read) and the statement parser (lvalue/write), mirroring the
+  existing class- and pointer-alias-cast branches.
+
+Verified: `TRec(p)^.a/.b` read and `TRec(p)^.a := v` write hit the right field
+offsets. make test + cross-bootstrap (i386/aarch64/arm32) byte-identical;
+test/test_record_typecast.pas added. (A bare value reinterpret `TRec(x)` without
+`^` — record value cast — is not part of this; the `^.field` form covers the
+typed-pointer use the ticket and Track B reflection/binding code want.)
