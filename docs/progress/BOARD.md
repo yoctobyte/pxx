@@ -11,11 +11,11 @@ _none_
 
 _none_
 
-## backlog (61)
+## backlog (62)
 
 | Ticket | Type | Summary | Blocked-by |
 | --- | --- | --- | --- |
-| bug-const-managed-record-param-byref-crash | bug | const record param with a managed (dynarray) field crashes by-ref on i386 + aarch64 | — |
+| bug-implicit-self-dynarray-length | bug | `Length` on implicit-`Self` dynamic-array field fails in methods | — |
 | bug-pinned-stable-reads-live-builtin-rtl | bug | Pinned stable reads LIVE builtin RTL source — track A WIP breaks track B | — |
 | chore-inc-to-units | chore | `.inc` → real `.pas` units refactor | — |
 | chore-runtime-emission-size | chore | Finer runtime-support emission (code size) | — |
@@ -41,6 +41,7 @@ _none_
 | feature-dynamic-soname-discovery | feature | Dynamic soname discovery (no execve) | — |
 | feature-esp32-idf-xtensa | feature | ESP-IDF integration: Xtensa (ESP32-S2/S3) — QEMU + real hardware | — |
 | feature-esp32-isr-iram | feature | ESP32: Compiler-Directed ISR and IRAM Support | — |
+| feature-exception-base-class | feature | Built-in / RTL `Exception` base class | — |
 | feature-flexcolumn-directive | feature | `flexcolumn` calling-convention directive | chore-inc-to-units |
 | feature-fpc-vs-pxx-feature-boundary | feature | Policy: FPC-bootstrap subset vs PXX-only library features | — |
 | feature-general-typename-cast | feature | General `TypeName(expr)` reinterpret cast (named record/class/pointer) | — |
@@ -81,7 +82,7 @@ _none_
 
 _none_
 
-## done (84)
+## done (85)
 
 | Ticket | Type | Summary | Blocked-by |
 | --- | --- | --- | --- |
@@ -91,6 +92,7 @@ _none_
 | bug-codegen-nested-index-load-width-pressure | bug | Codegen miscompiles nested integer-array index load width under register pressure | — |
 | bug-const-byref-record-param-temp | bug | Can't pass a function-result temporary to a const/by-ref record param | — |
 | bug-const-expr-shl-shr-not-folded | bug | `shl` / `shr` in a constant expression not accepted | — |
+| bug-const-managed-record-param-byref-crash | bug | const record param with a managed (dynarray) field crashes by-ref on i386 + aarch64 | — |
 | bug-c-packed-aligned-ignored | bug | C `__attribute__((packed))` / `aligned` ignored → field-offset drift | — |
 | bug-dynarray-whole-var-assign-cross | bug | Whole dynamic-array variable assignment (`b := a`) unsupported on i386 + aarch64 | — |
 | bug-frozen-string-length-pointer-deref-cross | bug | `Length()` of a pointer-dereferenced frozen `string` returns 0 on the cross targets | — |
@@ -178,7 +180,7 @@ _none_
 
 ## Ready (no unmet blocker)
 
-- bug-const-managed-record-param-byref-crash
+- bug-implicit-self-dynarray-length
 - bug-pinned-stable-reads-live-builtin-rtl
 - chore-inc-to-units
 - chore-runtime-emission-size
@@ -204,6 +206,7 @@ _none_
 - feature-dynamic-soname-discovery
 - feature-esp32-idf-xtensa
 - feature-esp32-isr-iram
+- feature-exception-base-class
 - feature-fpc-vs-pxx-feature-boundary
 - feature-general-typename-cast
 - feature-handle-compacting-heap
