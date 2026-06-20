@@ -201,6 +201,10 @@ test-core: $(COMPILER)
 	test "$$(/tmp/test_ansistring26)" = "$$(printf '0\nInitially empty ok\nHello\n5\nHello\nAssignment equal ok\nhello\nHello\nCOW index write ok\nLocalString\n11\nLocal equal ok\nX\nChar assign ok\nHello World!\nHello\nHello World!\n0\nClear empty ok')"
 	./$(COMPILER) test/test_dynarray_field.pas /tmp/test_dynarray_field26
 	test "$$(/tmp/test_dynarray_field26)" = "$$(printf '1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1')"
+	./$(COMPILER) test/test_method_implicit_field.pas /tmp/test_method_implicit_field26
+	test "$$(/tmp/test_method_implicit_field26)" = "$$(printf '3\n2\n42\n0\n-1')"
+	./$(COMPILER) test/test_forin_implicit_field.pas /tmp/test_forin_implicit_field26
+	test "$$(/tmp/test_forin_implicit_field26)" = "$$(printf '10\n42\n3\n121')"
 	./$(COMPILER) test/test_collections.pas /tmp/test_collections26
 	test "$$(/tmp/test_collections26)" = "$$(printf '100\n0\n81\n9801\n7\n328276\n0\n3\nalpha\ngamma\nBETA')"
 	./$(COMPILER) test/test_managed_var_param.pas /tmp/test_managed_var_param26
@@ -1052,6 +1056,12 @@ test-i386: $(COMPILER)
 	./$(COMPILER) -dPXX_MANAGED_STRING --target=i386 test/test_dynarray_field.pas /tmp/test_i386_dynfield
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_dynarray_field.pas /tmp/test_i386_dynfield_x64
 	test "$$(tools/run_target.sh i386 /tmp/test_i386_dynfield)" = "$$(/tmp/test_i386_dynfield_x64)"
+	./$(COMPILER) -dPXX_MANAGED_STRING --target=i386 test/test_method_implicit_field.pas /tmp/test_i386_mif
+	./$(COMPILER) -dPXX_MANAGED_STRING test/test_method_implicit_field.pas /tmp/test_i386_mif_x64
+	test "$$(tools/run_target.sh i386 /tmp/test_i386_mif)" = "$$(/tmp/test_i386_mif_x64)"
+	./$(COMPILER) -dPXX_MANAGED_STRING --target=i386 test/test_forin_implicit_field.pas /tmp/test_i386_fif
+	./$(COMPILER) -dPXX_MANAGED_STRING test/test_forin_implicit_field.pas /tmp/test_i386_fif_x64
+	test "$$(tools/run_target.sh i386 /tmp/test_i386_fif)" = "$$(/tmp/test_i386_fif_x64)"
 	./$(COMPILER) -dPXX_MANAGED_STRING --target=i386 test/test_collections.pas /tmp/test_i386_collections
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_collections.pas /tmp/test_i386_collections_x64
 	test "$$(tools/run_target.sh i386 /tmp/test_i386_collections)" = "$$(/tmp/test_i386_collections_x64)"
@@ -1082,7 +1092,7 @@ test-i386: $(COMPILER)
 	./$(COMPILER) --target=i386 test/test_extern_c_float.pas /tmp/test_i386_extern_float
 	./$(COMPILER) test/test_extern_c_float.pas /tmp/test_i386_extern_float_x64
 	test "$$(tools/run_target.sh i386 /tmp/test_i386_extern_float)" = "$$(/tmp/test_i386_extern_float_x64)"
-	@echo "i386 hello + arith + procs + loops + write + varparam + syscall + heap + string + record + dynarray + exception + float + float-params + variant + variant-single + byref-params + setlen-str + setlen-varparam + in-operator + loadfile + sysopen-family + args + string-cow + frozen-strlen-deref + rec-arr-store + aoc-types + many-params + conformance2 + shortcircuit + ptr-arith + case-range + global-init + typed-const + multidim + named-array + record-2darray + param-2darray + multidim3d + const-alias + float-const + stackless-generator + proctype + scheduler + scheduler-exc + classes + method-pointers + aggregate-return + metaclass-rtti + rtti-typinfo + streaming + streaming-enumset + lfm + interfaces + dynarray-field + collections + timer + reactor + asyncecho + extern-c + extern-c-float ok (output identical to x86-64)"
+	@echo "i386 hello + arith + procs + loops + write + varparam + syscall + heap + string + record + dynarray + exception + float + float-params + variant + variant-single + byref-params + setlen-str + setlen-varparam + in-operator + loadfile + sysopen-family + args + string-cow + frozen-strlen-deref + rec-arr-store + aoc-types + many-params + conformance2 + shortcircuit + ptr-arith + case-range + global-init + typed-const + multidim + named-array + record-2darray + param-2darray + multidim3d + const-alias + float-const + stackless-generator + proctype + scheduler + scheduler-exc + classes + method-pointers + aggregate-return + metaclass-rtti + rtti-typinfo + streaming + streaming-enumset + lfm + interfaces + dynarray-field + method-implicit-field + forin-implicit-field + collections + timer + reactor + asyncecho + extern-c + extern-c-float ok (output identical to x86-64)"
 
 test-aarch64: $(COMPILER)
 	./$(COMPILER) --target=aarch64 test/hello.pas /tmp/test_aarch64_hello
@@ -1282,6 +1292,12 @@ test-aarch64: $(COMPILER)
 	./$(COMPILER) -dPXX_MANAGED_STRING --target=aarch64 test/test_dynarray_field.pas /tmp/test_aarch64_dynfield
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_dynarray_field.pas /tmp/test_aarch64_dynfield_x64
 	test "$$(tools/run_target.sh aarch64 /tmp/test_aarch64_dynfield)" = "$$(/tmp/test_aarch64_dynfield_x64)"
+	./$(COMPILER) -dPXX_MANAGED_STRING --target=aarch64 test/test_method_implicit_field.pas /tmp/test_aarch64_mif
+	./$(COMPILER) -dPXX_MANAGED_STRING test/test_method_implicit_field.pas /tmp/test_aarch64_mif_x64
+	test "$$(tools/run_target.sh aarch64 /tmp/test_aarch64_mif)" = "$$(/tmp/test_aarch64_mif_x64)"
+	./$(COMPILER) -dPXX_MANAGED_STRING --target=aarch64 test/test_forin_implicit_field.pas /tmp/test_aarch64_fif
+	./$(COMPILER) -dPXX_MANAGED_STRING test/test_forin_implicit_field.pas /tmp/test_aarch64_fif_x64
+	test "$$(tools/run_target.sh aarch64 /tmp/test_aarch64_fif)" = "$$(/tmp/test_aarch64_fif_x64)"
 	./$(COMPILER) -dPXX_MANAGED_STRING --target=aarch64 test/test_collections.pas /tmp/test_aarch64_collections
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_collections.pas /tmp/test_aarch64_collections_x64
 	test "$$(tools/run_target.sh aarch64 /tmp/test_aarch64_collections)" = "$$(/tmp/test_aarch64_collections_x64)"
@@ -1312,7 +1328,7 @@ test-aarch64: $(COMPILER)
 	./$(COMPILER) --target=aarch64 test/test_extern_c_float.pas /tmp/test_aarch64_extern_float
 	./$(COMPILER) test/test_extern_c_float.pas /tmp/test_aarch64_extern_float_x64
 	test "$$(tools/run_target.sh aarch64 /tmp/test_aarch64_extern_float)" = "$$(/tmp/test_aarch64_extern_float_x64)"
-	@echo "aarch64 hello + arith + procs + loops + write + varparam + syscall + heap + string + record + dynarray + exception + float + variant + variant-single + setlen-str + setlen-varparam + str-length-index + in-operator + loadfile + sysopen-family + args + open-array-params + string-cow + frozen-strlen-deref + rec-arr-store + huge-frame + varrec-alloc + aoc-types + many-params + conformance2 + shortcircuit + ptr-arith + case-range + global-init + typed-const + multidim + named-array + record-2darray + param-2darray + multidim3d + const-alias + float-const + classes + method-pointers + aggregate-return + metaclass-rtti + rtti-typinfo + streaming + streaming-enumset + lfm + interfaces + dynarray-field + collections + timer + reactor + asyncecho + extern-c + extern-c-float ok (output identical to x86-64)"
+	@echo "aarch64 hello + arith + procs + loops + write + varparam + syscall + heap + string + record + dynarray + exception + float + variant + variant-single + setlen-str + setlen-varparam + str-length-index + in-operator + loadfile + sysopen-family + args + open-array-params + string-cow + frozen-strlen-deref + rec-arr-store + huge-frame + varrec-alloc + aoc-types + many-params + conformance2 + shortcircuit + ptr-arith + case-range + global-init + typed-const + multidim + named-array + record-2darray + param-2darray + multidim3d + const-alias + float-const + classes + method-pointers + aggregate-return + metaclass-rtti + rtti-typinfo + streaming + streaming-enumset + lfm + interfaces + dynarray-field + method-implicit-field + forin-implicit-field + collections + timer + reactor + asyncecho + extern-c + extern-c-float ok (output identical to x86-64)"
 
 test-arm32: $(COMPILER)
 	./$(COMPILER) --target=arm32 test/hello.pas /tmp/test_arm32_hello
@@ -1530,6 +1546,12 @@ test-arm32: $(COMPILER)
 	./$(COMPILER) -dPXX_MANAGED_STRING --target=arm32 test/test_dynarray_field.pas /tmp/test_arm32_dynfield
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_dynarray_field.pas /tmp/test_arm32_dynfield_x64
 	test "$$(tools/run_target.sh arm32 /tmp/test_arm32_dynfield)" = "$$(/tmp/test_arm32_dynfield_x64)"
+	./$(COMPILER) -dPXX_MANAGED_STRING --target=arm32 test/test_method_implicit_field.pas /tmp/test_arm32_mif
+	./$(COMPILER) -dPXX_MANAGED_STRING test/test_method_implicit_field.pas /tmp/test_arm32_mif_x64
+	test "$$(tools/run_target.sh arm32 /tmp/test_arm32_mif)" = "$$(/tmp/test_arm32_mif_x64)"
+	./$(COMPILER) -dPXX_MANAGED_STRING --target=arm32 test/test_forin_implicit_field.pas /tmp/test_arm32_fif
+	./$(COMPILER) -dPXX_MANAGED_STRING test/test_forin_implicit_field.pas /tmp/test_arm32_fif_x64
+	test "$$(tools/run_target.sh arm32 /tmp/test_arm32_fif)" = "$$(/tmp/test_arm32_fif_x64)"
 	./$(COMPILER) -dPXX_MANAGED_STRING --target=arm32 test/test_collections.pas /tmp/test_arm32_collections
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_collections.pas /tmp/test_arm32_collections_x64
 	test "$$(tools/run_target.sh arm32 /tmp/test_arm32_collections)" = "$$(/tmp/test_arm32_collections_x64)"
@@ -1560,7 +1582,7 @@ test-arm32: $(COMPILER)
 	./$(COMPILER) --target=arm32 test/test_extern_c_float.pas /tmp/test_arm32_extern_float
 	./$(COMPILER) test/test_extern_c_float.pas /tmp/test_arm32_extern_float_x64
 	test "$$(tools/run_target.sh arm32 /tmp/test_arm32_extern_float)" = "$$(/tmp/test_arm32_extern_float_x64)"
-	@echo "arm32 hello + arith + procs + loops + write + varparam + syscall + heap + string + record + dynarray + exception + float + args + variant + variant-single + strresult + setlen-str + setlen-varparam + str-length-index + in-operator + managed-aggregate-locals + loadfile + sysopen-family + string-cow + frozen-strlen-deref + rec-arr-store + var-string-param + openarray-string + stack-params + int64 + int64-byref + aoc-types + many-params + conformance2 + shortcircuit + ptr-arith + case-range + global-init + typed-const + multidim + named-array + record-2darray + param-2darray + multidim3d + const-alias + float-const + classes + method-pointers + aggregate-return + metaclass-rtti + rtti-typinfo + streaming + streaming-enumset + lfm + interfaces + dynarray-field + collections + timer + reactor + asyncecho + extern-c + extern-c-float ok (output identical to x86-64)"
+	@echo "arm32 hello + arith + procs + loops + write + varparam + syscall + heap + string + record + dynarray + exception + float + args + variant + variant-single + strresult + setlen-str + setlen-varparam + str-length-index + in-operator + managed-aggregate-locals + loadfile + sysopen-family + string-cow + frozen-strlen-deref + rec-arr-store + var-string-param + openarray-string + stack-params + int64 + int64-byref + aoc-types + many-params + conformance2 + shortcircuit + ptr-arith + case-range + global-init + typed-const + multidim + named-array + record-2darray + param-2darray + multidim3d + const-alias + float-const + classes + method-pointers + aggregate-return + metaclass-rtti + rtti-typinfo + streaming + streaming-enumset + lfm + interfaces + dynarray-field + method-implicit-field + forin-implicit-field + collections + timer + reactor + asyncecho + extern-c + extern-c-float ok (output identical to x86-64)"
 
 # ----- Cross self-host bootstrap gates (feature-cross-bootstrap-selfhost) -----
 # Triple-stage proof: native cross-compiles compiler.pas -> <arch>; that binary,

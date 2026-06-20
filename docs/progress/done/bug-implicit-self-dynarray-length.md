@@ -1,8 +1,8 @@
 # `Length` on implicit-`Self` dynamic-array field fails in methods
 
 - **Type:** bug (compiler / resolver)
-- **Status:** backlog
-- **Owner:** —
+- **Status:** done
+- **Owner:** Track A
 - **Opened:** 2026-06-20 (demo dashboard against pinned v14)
 - **Relation:** blocks `examples/adventure`; related to dynamic-array field
   support, which works when the field is explicitly qualified as `Self.Field`.
@@ -69,3 +69,22 @@ field-address path used by `Self.Field`.
 
 ## Log
 - 2026-06-20 — Opened after `make demos` on pinned v14 failed on adventure.
+- 2026-06-20 — Fixed. Root cause was narrower than the direction note: the
+  shared `ParseLValueAST` *already* resolves an implicit-`Self` field when its
+  `idx` arg is `<0` (parser.inc ~957–985) and errors itself
+  ('undefined variable') when the name is truly unknown. The `Length` and
+  `High` intrinsics each carried a redundant trailing
+  `if idx < 0 then Error('… undefined variable')` *after* calling
+  `ParseLValueAST` — so they rejected a field that had just resolved
+  successfully. `SetLength` had no such guard, so it was already correct (the
+  ticket's `SetLength(o.Items, …)` repro was qualified, masking that). Fix =
+  drop the two redundant guards. Repro now prints `2` (and `1` for `High`).
+  Added `test/test_method_implicit_field.pas` (Length/SetLength/High over an
+  implicit-`Self` dyn-array field + a scalar-field regression), wired into
+  test-core + the i386/aarch64/arm32 cross suites. Gate green: `make test`
+  byte-identical fixedpoint + `--threadsafe`; all 3 cross suites output-equal to
+  x86-64; `make cross-bootstrap` byte-identical on all 3.
+- 2026-06-20 — Follow-on discovery filed as `bug-for-in-implicit-self-field`:
+  `for x in <field>` (implicit `Self`) is the *next* adventure blocker
+  (`engine.pas:349`). Same family but a deeper fix (`ParseForInVarAST` is keyed
+  on a symbol index, not an AST node), so kept as a separate ticket.

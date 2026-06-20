@@ -2548,8 +2548,10 @@ begin
       Next; Expect(tkLParen, '(');
       if CurTok.Kind <> tkIdent then Error('Length: expected string variable');
       idx := FindSym(CurTok.SVal); Next;
+      { ParseLValueAST resolves implicit-Self fields when idx<0 and errors
+        ('undefined variable') if the name is truly unknown, so no extra
+        idx<0 guard here — that would reject a valid implicit-Self field. }
       valNode := ParseLValueAST(idx, TokPos - 2);
-      if idx < 0 then Error('Length: undefined variable');
       Expect(tkRParen, ')');
       node := AllocNode(AN_CALL); ASTIVal[node] := -Ord(tkLength); ASTTk[node] := Ord(tyInteger);
       argSeq := AllocNode(AN_ARG); ASTLeft[argSeq] := valNode;
@@ -2564,8 +2566,8 @@ begin
       Next; Expect(tkLParen, '(');
       if CurTok.Kind <> tkIdent then Error('High: expected array variable');
       idx := FindSym(CurTok.SVal); Next;
+      { See Length above: ParseLValueAST handles implicit-Self + undefined. }
       valNode := ParseLValueAST(idx, TokPos - 2);
-      if idx < 0 then Error('High: undefined variable');
       Expect(tkRParen, ')');
       node := AllocNode(AN_CALL); ASTIVal[node] := -Ord(tkLength); ASTTk[node] := Ord(tyInteger);
       argSeq := AllocNode(AN_ARG); ASTLeft[argSeq] := valNode;
@@ -4044,6 +4046,21 @@ begin
   ASTLeft[Result] := argSeq;
 end;
 
+{ Length(<arbitrary value node>): same intrinsic call as GenMakeLengthCall but
+  wraps a caller-supplied node (e.g. an AN_FIELD over Self) instead of a bare
+  symbol. Used by the for-in loop builder so the container can be either a plain
+  variable or an implicit-Self field. }
+function GenMakeLengthCallNode(valNode: Integer): Integer;
+var argSeq: Integer;
+begin
+  Result := AllocNode(AN_CALL);
+  ASTIVal[Result] := -Ord(tkLength);
+  ASTTk[Result] := Ord(tyInteger);
+  argSeq := AllocNode(AN_ARG);
+  ASTLeft[argSeq] := valNode;
+  ASTLeft[Result] := argSeq;
+end;
+
 { ===== Structural enumerator for-in (Slice B) =====
   A zero-extra-arg method call C.M (self only). Handles virtual dispatch. }
 function GenMakeMethodCall0(instNode, classIdx: Integer; const methName: AnsiString): Integer;
@@ -4220,10 +4237,77 @@ end;
   lo/hi pick the right base: strings 1..Length, arrays 0..count-1.
   A class/record container with GetEnumerator routes to the enumerator desugar;
   a set var routes to the membership-scan desugar. }
+
+{ Build a fresh container value-node for the for-in array/string loop.
+  ckind=0 → a plain symbol (GenMakeIdent); ckind=1 → an implicit-Self field
+  (AN_FIELD over Self). A fresh node is built per call so the container is not
+  aliased between the Length() bound and the element access (codegen walks the
+  AST as a tree, not a DAG). }
+function GenMakeContainerNode(ckind, csym, cselfSym, cfOff, cfLen: Integer; ctk: TTypeKind): Integer;
+var fn: Integer;
+begin
+  if ckind = 0 then
+    Result := GenMakeIdent(csym, ctk)
+  else
+  begin
+    fn := AllocNode(AN_FIELD);
+    ASTLeft[fn] := GenMakeIdent(cselfSym, tyClass);
+    ASTSOffset[fn] := cfOff;
+    ASTSLen[fn] := cfLen;
+    ASTTk[fn] := Ord(ctk);
+    Result := fn;
+  end;
+end;
+
+{ Shared while-loop desugar for `for x in <array|string>`. The container is
+  described abstractly (see GenMakeContainerNode) so the source can be either a
+  plain variable (ParseForInVarAST) or an implicit-Self field
+  (ParseForInFieldAST). Flags + elemTk are computed by the caller from whichever
+  metadata table applies (Syms[...] vs UFld...). }
+function BuildForInArrayLoop(varIdx, ckind, csym, cselfSym, cfOff, cfLen: Integer;
+  contTk: TTypeKind; isString, isStaticArr, isArr: Boolean;
+  staticLen, elemTk, bodyNode: Integer): Integer;
+var
+  idxSym, loNode, hiNode, condNode, elemAccess: Integer;
+  assignX, incNode, whileNode, innerSeq, initI: Integer;
+begin
+  idxSym := AllocVar('', tyInteger);
+  if isString then loNode := GenMakeIntLit(1)
+  else if isArr then loNode := GenMakeIntLit(0)
+  else begin Error('for-in: variable is not a string or array'); loNode := GenMakeIntLit(0); end;
+  initI := GenMakeAssign(GenMakeIdent(idxSym, tyInteger), loNode);
+
+  if isStaticArr then
+    hiNode := GenMakeIntLit(staticLen - 1)
+  else if isString then
+    hiNode := GenMakeLengthCallNode(GenMakeContainerNode(ckind, csym, cselfSym, cfOff, cfLen, contTk))
+  else
+    hiNode := GenMakeBinop(tkMinus,
+      GenMakeLengthCallNode(GenMakeContainerNode(ckind, csym, cselfSym, cfOff, cfLen, contTk)),
+      GenMakeIntLit(1), tyInteger);
+
+  condNode := GenMakeBinop(tkLe, GenMakeIdent(idxSym, tyInteger), hiNode, tyBoolean);
+
+  elemAccess := AllocNode(AN_INDEX);
+  ASTLeft[elemAccess] := GenMakeContainerNode(ckind, csym, cselfSym, cfOff, cfLen, contTk);
+  ASTRight[elemAccess] := GenMakeIdent(idxSym, tyInteger);
+  ASTTk[elemAccess] := elemTk;
+  assignX := GenMakeAssign(GenMakeIdent(varIdx, Syms[varIdx].TypeKind), elemAccess);
+
+  incNode := GenMakeAssign(GenMakeIdent(idxSym, tyInteger),
+    GenMakeBinop(tkPlus, GenMakeIdent(idxSym, tyInteger), GenMakeIntLit(1), tyInteger));
+
+  innerSeq := GenMakeSeq(assignX, GenMakeSeq(bodyNode, GenMakeSeq(incNode, -1)));
+  whileNode := AllocNode(AN_WHILE);
+  ASTLeft[whileNode] := condNode;
+  ASTRight[whileNode] := innerSeq;
+
+  Result := GenMakeSeq(initI, GenMakeSeq(whileNode, -1));
+end;
+
 function ParseForInVarAST(varIdx, contSym: Integer): Integer;
 var
-  bodyNode, idxSym, loNode, hiNode, elemTk: Integer;
-  condNode, elemAccess, assignX, incNode, whileNode, innerSeq, initI: Integer;
+  bodyNode, elemTk: Integer;
   isString, isStaticArr: Boolean;
   contTk: TTypeKind;
   recId: Integer;
@@ -4255,48 +4339,43 @@ begin
     char-by-char. }
   isString := (not Syms[contSym].IsArray) and ((contTk = tyString) or (contTk = tyAnsiString));
   isStaticArr := Syms[contSym].IsArray and (Syms[contSym].ArrLen >= 0);
-  idxSym := AllocVar('', tyInteger);
 
-  if isString then
-  begin
-    loNode := GenMakeIntLit(1);
-    elemTk := Ord(tyChar);
-  end
-  else if Syms[contSym].IsArray then
-  begin
-    loNode := GenMakeIntLit(0);
-    elemTk := Ord(Syms[contSym].ElemType);
-  end
-  else
-    Error('for-in: variable is not a string or array');
+  if isString then elemTk := Ord(tyChar)
+  else if Syms[contSym].IsArray then elemTk := Ord(Syms[contSym].ElemType)
+  else begin Error('for-in: variable is not a string or array'); elemTk := Ord(tyInteger); end;
 
-  initI := GenMakeAssign(GenMakeIdent(idxSym, tyInteger), loNode);
+  Result := BuildForInArrayLoop(varIdx, 0, contSym, -1, 0, 0, contTk,
+    isString, isStaticArr, Syms[contSym].IsArray,
+    Syms[contSym].ArrLen, elemTk, bodyNode);
+end;
 
-  if isStaticArr then
-    hiNode := GenMakeIntLit(Syms[contSym].ArrLen - 1)
-  else if isString then
-    hiNode := GenMakeLengthCall(contSym, contTk)
-  else
-    hiNode := GenMakeBinop(tkMinus, GenMakeLengthCall(contSym, contTk),
-                           GenMakeIntLit(1), tyInteger);
+{ for x in <implicit-Self array/string field> — same desugar as
+  ParseForInVarAST, but the container is an AN_FIELD over Self rather than a
+  plain symbol. Reached when an unqualified for-in source resolves to a field of
+  the enclosing method's class (FindSym missed it). v1 covers dyn/static array
+  and string fields; set / GetEnumerator container forms are not yet reachable
+  through an unqualified field. }
+function ParseForInFieldAST(varIdx, selfSym, fldIdx, fOff, fLen: Integer): Integer;
+var
+  bodyNode, elemTk, staticLen: Integer;
+  contTk: TTypeKind;
+  isString, isStaticArr, isArr: Boolean;
+begin
+  Expect(tkDo, 'do');
+  bodyNode := ParseStatementAST;
 
-  condNode := GenMakeBinop(tkLe, GenMakeIdent(idxSym, tyInteger), hiNode, tyBoolean);
+  contTk := IntToTypeKind(UFldTk[fldIdx]);
+  isArr := UFldIsArray[fldIdx];
+  staticLen := UFldArrLen[fldIdx];
+  isStaticArr := isArr and (staticLen >= 0);
+  isString := (not isArr) and ((contTk = tyString) or (contTk = tyAnsiString));
 
-  elemAccess := AllocNode(AN_INDEX);
-  ASTLeft[elemAccess] := GenMakeIdent(contSym, contTk);
-  ASTRight[elemAccess] := GenMakeIdent(idxSym, tyInteger);
-  ASTTk[elemAccess] := elemTk;
-  assignX := GenMakeAssign(GenMakeIdent(varIdx, Syms[varIdx].TypeKind), elemAccess);
+  if isString then elemTk := Ord(tyChar)
+  else if isArr then elemTk := UFldTk[fldIdx]
+  else begin Error('for-in: implicit-Self field is not a string or array'); elemTk := Ord(tyInteger); end;
 
-  incNode := GenMakeAssign(GenMakeIdent(idxSym, tyInteger),
-    GenMakeBinop(tkPlus, GenMakeIdent(idxSym, tyInteger), GenMakeIntLit(1), tyInteger));
-
-  innerSeq := GenMakeSeq(assignX, GenMakeSeq(bodyNode, GenMakeSeq(incNode, -1)));
-  whileNode := AllocNode(AN_WHILE);
-  ASTLeft[whileNode] := condNode;
-  ASTRight[whileNode] := innerSeq;
-
-  Result := GenMakeSeq(initI, GenMakeSeq(whileNode, -1));
+  Result := BuildForInArrayLoop(varIdx, 1, -1, selfSym, fOff, fLen, contTk,
+    isString, isStaticArr, isArr, staticLen, elemTk, bodyNode);
 end;
 
 { for x in <EnumType> do BODY iterates ALL enum ordinals low..high. The loop
@@ -4754,6 +4833,7 @@ var
   varIdx, initNode, limitNode, bodyNode, node: Integer;
   pair1, pair2, pair3, isDownNode: Integer;
   gpi, fsym: Integer;
+  selfClassCi, fldIdx, fldTokIdx, selfSym: Integer;
   down: Boolean;
 begin
   if CurTok.Kind <> tkIdent then Error('for: expected variable');
@@ -4787,6 +4867,26 @@ begin
       Next;
       Result := ParseForInVarAST(varIdx, fsym);
       Exit;
+    end;
+    { implicit-Self array/string field as the iterable (unqualified `Items`
+      inside a method, the same resolution `Self.Items` gets). FindSym only
+      sees locals/globals, so a field lands here. Only a *bare* field (next
+      token `do`) is taken — `for x in Self.Field` and `for x in obj.field`
+      qualified member-access sources are a separate, broader feature. }
+    if (CurSelfClass >= REC_UCLASS_BASE) and (CurProc >= 0) and (Procs[CurProc].ParamCount > 0)
+       and (TokPos < TokCount) and (Tokens[TokPos].Kind = tkDo) then
+    begin
+      selfClassCi := CurSelfClass - REC_UCLASS_BASE;
+      fldIdx := FindUField(selfClassCi, CurTok.SVal);
+      if fldIdx >= 0 then
+      begin
+        selfSym := Procs[CurProc].Params[0].SymIdx;
+        fldTokIdx := TokPos - 1;
+        Next;
+        Result := ParseForInFieldAST(varIdx, selfSym, fldIdx,
+                    Tokens[fldTokIdx].SOffset, Tokens[fldTokIdx].SLen);
+        Exit;
+      end;
     end;
     Error('for-in: not a generator, enum type, or iterable variable');
   end;
