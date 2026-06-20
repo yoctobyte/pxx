@@ -57,3 +57,11 @@ adventure need write + read.
   first consumer for the new PAL byte-handle layer: implement classic text-file
   RTL on `PalOpen`/`PalRead`/`PalWrite`/`PalClose`, splitting a Track A ticket
   only if the file-handle `WriteLn(f, ...)` surface needs compiler lowering.
+- 2026-06-20 — First Track B slice landed locally: `lib/rtl/textfile.pas`
+  defines `Text`, `Assign`/`AssignFile`, `Reset`, `Rewrite`, `Append`, `Close`/
+  `CloseFile`, `Eof`, `IOResult`, and explicit `TextReadLn`/`TextWriteLn` on the
+  PAL byte-handle API. `test/lib_textfile.pas` round-trips lines through a POSIX
+  PAL file and is wired into the library suite. Remaining adventure-compatible
+  syntax is not pure library today because `ReadLn`/`WriteLn` are lexer keywords;
+  add a small Track A hook for first-argument `Text` dispatch or relax keyword
+  interception before this ticket can close.

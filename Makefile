@@ -1908,6 +1908,8 @@ lib-test: pxx-stable-check
 	test "$$(/tmp/lib_platform)" = "$$(printf 'posix\nfiles\nsockets\nthreads\ndynlib\npal-write=3\nfile=io:2\nunsupported=-38')"
 	$(PXX_STABLE) --platform=esp -Fulib/rtl/platform/esp test/lib_platform_esp.pas /tmp/lib_platform_esp
 	test "$$(/tmp/lib_platform_esp)" = "$$(printf 'esp-idf\nopen=-38\nread=-38\nunsupported=-38')"
+	$(PXX_STABLE) -Fulib/rtl/platform/posix test/lib_textfile.pas /tmp/lib_textfile
+	test "$$(/tmp/lib_textfile)" = "$$(printf 'alpha\nbeta\ncount=2\nio=0')"
 	$(PXX_STABLE) examples/bignum/factorial.pas /tmp/lib_factorial
 	test "$$(/tmp/lib_factorial)" = "$$(printf '5! = 120\n10! = 3628800\n20! = 2432902008176640000\n1000! digits      = 2568\n1000! first 10    = 4023872600\n1000! trailing 0s = 249')"
 	@echo "lib-test ok (sudoku exact + collections + math + sysutils + random + platform + bignum smoke) against stable v$$(cat $(STABLE_DEFAULT_DIR)/VERSION 2>/dev/null || echo '?')"
