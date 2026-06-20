@@ -15,3 +15,4 @@
 2026-06-20T06:49:21Z  v15  4bac688c87a11c30cb9aff9eb808e05d956b2ad5671eab5a41416c4cda0c7d4b  bb94412fc905fe45e820537922daacdd6f5fba4d  feat(parser,ir): member access on a function/method call result
 2026-06-20T07:45:26Z  v16  edb3e3e0baf99338e78048bec124b0a0fbb1d43e508abb2c12f980714f649835  517c456e348cda47586c690de7a3f5f817b1faec  docs(ticket): pin a5afebb as the bug-c-quoted-include commit ref
 2026-06-20T08:13:58Z  v17  7d09790ec6b637c8b3ab2fca7b68a8c988a73c9a26ce5e8722cf4e43df434729  6da40d6b5f0b76453c3e42d1dce7d3c85da66f76  feat(compiler): platform + capability define axis (PAL step 1)
+2026-06-20T08:38:52Z  v18  7d09790ec6b637c8b3ab2fca7b68a8c988a73c9a26ce5e8722cf4e43df434729  24c696927afd046b1e2a8dbd67ef8211fd54e1bd  feat(crtl): cover POSIX regex headers
