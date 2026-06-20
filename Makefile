@@ -291,6 +291,8 @@ test-core: $(COMPILER)
 	test "$$(/tmp/test_shortstring26)" = "$$(printf 'hello world\n11\nApple\nBanana\nCherry\narr0-ok\narr1-ok')"
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_str_val_managed.pas /tmp/test_str_val_managed26
 	test "$$(/tmp/test_str_val_managed26)" = "$$(printf '[42]\n42 code=0\n3.5 code=0\n0 code=2')"
+	./$(COMPILER) test/test_managed_string_flip.pas /tmp/test_managed_string_flip26
+	test "$$(/tmp/test_managed_string_flip26)" = "$$(printf 'hello world long enough\nhello world long enough!\nhello world long enough!\nhello world long enough!\nhello world long enough!')"
 	./$(COMPILER) test/test_interfaces.pas /tmp/test_interfaces26
 	test "$$(/tmp/test_interfaces26)" = "$$(printf 'area=20\nscaled=60\narea2=42\ndirect=42')"
 	./$(COMPILER) test/test_interfaces_is.pas /tmp/test_interfaces_is26

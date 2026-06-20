@@ -3,7 +3,17 @@ unit typinfo;
 interface
 
 type
-  PString = ^string;
+  { RTTI metadata name strings are emitted into the static blob as frozen,
+    word-length-prefixed strings (rtti_emit.inc points NamePtr at Strs[].Offset).
+    Under the managed-string default `string` is a refcounted handle, so a name
+    pointer must be a FROZEN string pointer to read the inline [len][chars] blob
+    correctly — `^string` would misread the length word as a managed handle and
+    crash. string[255] is the frozen (tyFixedString) word-prefix kind. }
+  TRttiStr = string[255];
+  PString = ^TRttiStr;
+  { Managed-string pointer for live instance string FIELDS (Get/SetStrProp): a
+    `string` property field holds a managed handle under the default model. }
+  PAnsiStr = ^string;
 
   TMethod = record
     Code: Pointer;
@@ -322,7 +332,7 @@ begin
   if p^.GetKind = 0 then
   begin
     addr := @PUInt8(instance)[p^.GetRef];
-    GetStrProp := PString(addr)^;
+    GetStrProp := PAnsiStr(addr)^;
   end;
 end;
 
@@ -333,7 +343,7 @@ begin
   if p^.SetKind = 0 then
   begin
     addr := @PUInt8(instance)[p^.SetRef];
-    PString(addr)^ := v;
+    PAnsiStr(addr)^ := v;
   end;
 end;
 

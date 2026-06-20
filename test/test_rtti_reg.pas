@@ -15,7 +15,12 @@ procedure TBase.Notify; begin end;
 procedure TChild.Callback; begin end;
 
 type
-  PString = ^string;
+  { RTTI names are frozen, word-length-prefixed blobs; under the managed-string
+    default a name pointer must be a frozen-string pointer (string[255]) to read
+    the inline [len][chars] correctly — `^string` would treat the length word as
+    a managed handle and crash. }
+  TRttiStr = string[255];
+  PString = ^TRttiStr;
   TRTTIEntry = record
     NamePtr: PString;
     RTTIPtr: Pointer;
