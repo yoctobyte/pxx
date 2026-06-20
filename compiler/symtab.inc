@@ -1210,6 +1210,15 @@ begin
   Result := (tk = tyRecord) or (tk = tySet);
 end;
 
+function TypeIsFrozenString(tk: TTypeKind): Boolean;
+{ True for the inline (non-managed) frozen string kinds: the legacy overloaded
+  tyString, the classic byte-prefixed tyShortString, and the word-prefixed sized
+  tyFixedString. Widen existing `= tyString` codegen checks to this predicate so
+  the new kinds route through the frozen-string path without 250 new arms. }
+begin
+  Result := (tk = tyString) or (tk = tyShortString) or (tk = tyFixedString);
+end;
+
 function TypeCompareUnsigned(lhs, rhs: TTypeKind): Boolean;
 { The wider operand determines the comparison domain; at equal width a signed
   operand wins. Values are still evaluated in 64-bit registers. }

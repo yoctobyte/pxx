@@ -460,7 +460,12 @@ type
     tySet,       { 21: Set — 32-byte bitset }
     tyVariant,    { 22: Variant — 16-byte tagged scalar value (8-byte tag + 8-byte payload) }
     tyAnsiString, { 23: Managed refcounted AnsiString }
-    tyAuto        { 24: Statically typed variable with inferred type }
+    tyAuto,       { 24: Statically typed variable with inferred type }
+    { Ordinals 25+: frozen fixed-length string kinds (disambiguate the old
+      overloaded tyString). Appended at the tail so bootstrap-stable low ordinals
+      do not shift. tyString stays a legacy frozen alias during migration. }
+    tyShortString, { 25: classic Pascal shortstring — byte length prefix, cap 255, 256B total }
+    tyFixedString  { 26: string[N] — NativeInt length word prefix, capacity N (SymStrCap) }
   );
 
   TSymKind  = (skLocal, skGlobal, skParam, skConst);
