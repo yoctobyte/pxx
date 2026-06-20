@@ -15,7 +15,7 @@ _none_
 | feature-c-runtime-library | B | feature | C runtime/library layer (`lib/crtl`) plus direct C-library packages | — |
 | feature-platform-abstraction-layer | B | feature | Platform Abstraction Layer (PAL): per-platform RTL port at one seam | — |
 
-## backlog (75)
+## backlog (74)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -31,7 +31,6 @@ _none_
 | feature-c-header-import-complex | A | feature | Import C headers for complex libraries (glib/GTK-grade) | — |
 | feature-compiler-warnings | A | feature | Compiler warning diagnostics facility | — |
 | feature-compression-library | B | feature | Compression library — Huffman / LZ77 (roundtrip test app) | — |
-| feature-const-eval-typecast-int64 | A | feature | ConstEval: typed casts + 64-bit folding in const initializers | — |
 | feature-copy-intrinsic | B | feature | `Copy` as a generic overloaded intrinsic (string + dynarray families) | — |
 | feature-c-regex-library-devtest | A | feature | C regex library dev-test import | — |
 | feature-c-source-frontend | A | feature | C source frontend — compile C function bodies (statements + expressions) | feature-cross-target-feature-parity |
@@ -99,7 +98,7 @@ _none_
 
 _none_
 
-## done (107)
+## done (108)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -146,6 +145,7 @@ _none_
 | feature-async-coroutines | A | feature | Async, coroutines, and `yield` | feature-unified-heap-allocator |
 | feature-class-is-as | A | feature | `is` / `as` / `Supports` — runtime class type-tests | — |
 | feature-compiler-search-path-pcl | A | feature | feature-compiler-search-path-pcl (Track A) | — |
+| feature-const-eval-typecast-int64 | A | feature | ConstEval: typed casts + 64-bit folding in const initializers | — |
 | feature-cross-bootstrap | A | feature | Cross-architecture compiler bootstrap (AArch64/ARM32 → byte-identical self-compile) | — |
 | feature-cross-bootstrap-selfhost | A | feature | Cross self-host bootstrap (compiler.pas → byte-identical under QEMU) | feature-cross-selfhost-aarch64, feature-cross-selfhost-arm32, feature-cross-selfhost-i386 |
 | feature-cross-codegen-gaps | A | feature | Cross-target codegen gaps (deferred v1 shortcuts) | — |
@@ -231,7 +231,6 @@ _none_
 - [A] feature-c-header-import-complex
 - [A] feature-compiler-warnings
 - [B] feature-compression-library
-- [A] feature-const-eval-typecast-int64
 - [B] feature-copy-intrinsic
 - [A] feature-c-regex-library-devtest
 - [A] feature-c-source-frontend

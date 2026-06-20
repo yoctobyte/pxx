@@ -57,3 +57,18 @@ test/test_cross_float_return.pas (or a dedicated test).
   case is orthogonal to function-return enablement so split out here. Related:
   feature-int-to-float-assign (the widening counterpart, done x86-64),
   feature-cross-float-returns.
+
+## Investigation 2026-06-20 (Track A) — blocked on Single internal-call ABI
+
+Overload matching is NOT the only gap. Even passing a `Single` VARIABLE to a
+`Single` parameter on an INTERNAL (PXX-ABI) call returns 0.00 — the internal
+call's float-arg marshalling does not handle `tySingle` params (it carries
+floats as double bits and never narrows/widens at the param boundary; only the
+EXTERNAL C-call path does cvtsd2ss for Single params, ir_codegen.inc ~2732).
+Double->Single ASSIGN already works (EmitStoreVar narrows). So the real fix is
+the internal-call Single ABI (caller arg width + callee prologue + Single param
+load + Single result), i.e. the feature-single-first-class arc — NOT just the
+MatchProcCall clause. Tried adding the float widen/narrow clause to
+TypesCompatible: `ScaleS(1.5,3)` then compiles but prints 0.00 (silently wrong),
+which is worse than the clean overload error, so reverted. Keep this ticket
+under the Single-first-class arc; do the ABI first, then the overload clause.
