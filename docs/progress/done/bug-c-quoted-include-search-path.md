@@ -66,7 +66,7 @@ may still be useful for candidate-library builds.
     host headers, wrong for any cross target; cross builds resolve solely from
     the including-file dir + `-I` roots.
   - Test `test/cinc/cinc_main.c` (same-dir `+` `-I` include) wired into test-core
-    with `-Itest/cinc/inc`. commit reference (board checker): see the
-    feature-dynamic-include-paths-config slice commit.
+    with `-Itest/cinc/inc`. commit reference (board checker): landed in a5afebb
+    (the C-include search-path slice of feature-dynamic-include-paths-config).
   - Remaining (config-file / `pxx.cfg` / per-dir manifest form of "project
     include dirs") stays tracked in feature-dynamic-include-paths-config.
