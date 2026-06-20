@@ -26,7 +26,7 @@ begin
 end;
 
 procedure InferSymTypeFromNode(symIdx: Integer; node: Integer);
-var tk: TTypeKind; pi, recId, varIdx: Integer;
+var tk: TTypeKind; procIdx, recId, varIdx: Integer;
 begin
   tk := IntToTypeKind(ASTTk[node]);
   Syms[symIdx].TypeKind := tk;
@@ -60,11 +60,11 @@ begin
     { If it's a function call }
     else if ASTKind[node] = AN_CALL then
     begin
-      pi := ASTIVal[node];
-      if (pi >= 0) and (pi < ProcCount) then
+      procIdx := ASTIVal[node];
+      if (procIdx >= 0) and (procIdx < ProcCount) then
       begin
-        Syms[symIdx].PtrElemTk := IntToTypeKind(ProcRetPtrElemTk[pi]);
-        Syms[symIdx].PtrElemRec := ProcRetPtrElemRec[pi];
+        Syms[symIdx].PtrElemTk := IntToTypeKind(ProcRetPtrElemTk[procIdx]);
+        Syms[symIdx].PtrElemRec := ProcRetPtrElemRec[procIdx];
       end;
     end
     { If it's a typecast }
@@ -1692,8 +1692,8 @@ begin
   Result := node;
 end;
 
-function ParamIsVarRecArray(pi, argNo: Integer): Boolean;
-{ True when proc pi's parameter argNo is an `array of const` (open array whose
+function ParamIsVarRecArray(procIdx, argNo: Integer): Boolean;
+{ True when proc procIdx's parameter argNo is an `array of const` (open array whose
   element record is TVarRec) — the signal to parse a `[...]` argument as a
   TVarRec element vector rather than a set literal. }
 begin
@@ -1701,10 +1701,10 @@ begin
     symbol slot is reused once the callee's scope closes, so by the time a later
     routine's call is parsed it no longer holds the param. An open array whose
     element type is a record is, in this dialect, only ever `array of const`. }
-  Result := (pi >= 0) and (TVarRecId <> REC_NONE) and
-            (argNo >= 0) and (argNo < Procs[pi].ParamCount) and
-            Procs[pi].Params[argNo].IsArray and
-            (Procs[pi].Params[argNo].TypeKind = tyRecord);
+  Result := (procIdx >= 0) and (TVarRecId <> REC_NONE) and
+            (argNo >= 0) and (argNo < Procs[procIdx].ParamCount) and
+            Procs[procIdx].Params[argNo].IsArray and
+            (Procs[procIdx].Params[argNo].TypeKind = tyRecord);
 end;
 
 procedure EmitArgvToAddr;
@@ -2019,10 +2019,10 @@ begin
   end;
 end;
 
-procedure ParseCallArg(pi, argNo: Integer);
+procedure ParseCallArg(procIdx, argNo: Integer);
 var idx: Integer; tk: TTypeKind; recName: Integer;
 begin
-  if Procs[pi].Params[argNo].IsRef or Procs[pi].Params[argNo].IsArray then
+  if Procs[procIdx].Params[argNo].IsRef or Procs[procIdx].Params[argNo].IsArray then
   begin
     if CurTok.Kind <> tkIdent then Error('by-reference argument must be a variable');
     idx := FindSym(CurTok.SVal);
@@ -2099,13 +2099,13 @@ end;
   Lets `f()^`, `f()^.field`, and `f()[i]` resolve without a typed intermediate
   variable. Sets CurASTNode and LastExprTk; consumes nothing when the result is
   not a typed pointer. }
-procedure ApplyCallResultPtrSuffix(node, pi: Integer);
+procedure ApplyCallResultPtrSuffix(node, procIdx: Integer);
 var tk: TTypeKind; elemTk, elemRec, recId, sub, prevTok: Integer; fieldName: AnsiString;
 begin
-  tk := Procs[pi].RetType;
+  tk := Procs[procIdx].RetType;
   recId := REC_NONE;
-  elemTk := ProcRetPtrElemTk[pi];
-  elemRec := ProcRetPtrElemRec[pi];
+  elemTk := ProcRetPtrElemTk[procIdx];
+  elemRec := ProcRetPtrElemRec[procIdx];
   if (tk = tyPointer) and (elemTk <> Ord(tyUnknown)) then
   begin
     while CurTok.Kind in [tkCaret, tkDot, tkLBrack] do
@@ -2196,7 +2196,7 @@ begin
 end;
 
 procedure ParseFactor;
-var name: AnsiString; recName: Integer; idx, pi, i, node, left, prevTok, valNode: Integer; tk: TTypeKind; op, argSeq, argSeq2, argSeq3, lastArg, argIdx, exprNode, szArg: Integer;
+var name: AnsiString; recName: Integer; idx, procIdx, i, node, left, prevTok, valNode: Integer; tk: TTypeKind; op, argSeq, argSeq2, argSeq3, lastArg, argIdx, exprNode, szArg: Integer;
     nArgs, argsHead, currArg: Integer; argTypes: array[0..15] of TTypeKind;
     ci, mmi, mpi, mcallNode, mlastArg, smSelfIdx, smselfArg: Integer;
     aliasIdx, fieldNode, indexNode, baseNode, baseRec, fIdx, mci, margSeq, margIdx, mexprNode, mai, pri, qUnit: Integer;
@@ -2936,12 +2936,12 @@ begin
       if qUnit >= 0 then
       begin
         idx := FindSymInUnit(name, qUnit);
-        pi := FindProcInUnit(name, qUnit);
+        procIdx := FindProcInUnit(name, qUnit);
       end
       else
       begin
         idx := FindSym(name);
-        pi := FindProc(name);
+        procIdx := FindProc(name);
       end;
 
       if (idx >= 0) and (Syms[idx].TypeKind = tyAuto) then
@@ -2949,7 +2949,7 @@ begin
 
       { `Supports(obj, IFoo): Boolean` — the function form of `obj is IFoo`.
         Reuses the interface implementation query (AN_IS_TEST). }
-      if CaseEqual(name, 'Supports') and (pi < 0) and (Tokens[TokPos].Kind = tkLParen) then
+      if CaseEqual(name, 'Supports') and (procIdx < 0) and (Tokens[TokPos].Kind = tkLParen) then
       begin
         Next; Expect(tkLParen, '(');
         ParseExpr; exprNode := CurASTNode;
@@ -2970,7 +2970,7 @@ begin
         case, and Copy(dynarray) shadowed by a string Copy, are handled at the
         no-overload-match point below). Lowered into a fresh element-type-aware
         `array of T` via AN_DYN_COPY. }
-      if CaseEqual(name, 'Copy') and (pi < 0) and (Tokens[TokPos].Kind = tkLParen) then
+      if CaseEqual(name, 'Copy') and (procIdx < 0) and (Tokens[TokPos].Kind = tkLParen) then
       begin
         Next; Expect(tkLParen, '(');
         ParseExpr; exprNode := CurASTNode;            { source array }
@@ -3013,7 +3013,7 @@ begin
       end;
 
       { C4: pointer-type-alias cast — PFoo(expr) where PFoo = ^TFoo }
-      if (idx < 0) and (pi < 0) and (Tokens[TokPos].Kind = tkLParen) then
+      if (idx < 0) and (procIdx < 0) and (Tokens[TokPos].Kind = tkLParen) then
       begin
         aliasIdx := FindTypeAlias(name);
         if aliasIdx >= 0 then
@@ -3146,7 +3146,7 @@ begin
         end;
       end;
 
-      if (idx < 0) and (pi < 0) and IsClassType(name) and
+      if (idx < 0) and (procIdx < 0) and IsClassType(name) and
          (CurTok.Kind = tkIdent) and (Tokens[TokPos].Kind = tkDot) and
          (Tokens[TokPos+1].Kind = tkIdent) and
          ((GetTokenStr(TokPos+1) = 'Create') or (GetTokenStr(TokPos+1) = 'create')) then
@@ -3209,7 +3209,7 @@ begin
         CurASTNode := node;
         Exit;
       end;
-      if (idx < 0) and (pi < 0) and IsClassType(name) and
+      if (idx < 0) and (procIdx < 0) and IsClassType(name) and
          (Tokens[TokPos].Kind = tkDot) and (Tokens[TokPos+1].Kind = tkIdent) then
       begin
         ci := FindUClass(name);
@@ -3270,7 +3270,7 @@ begin
       begin
         node := AllocNode(AN_INT_LIT); ASTIVal[node] := Syms[idx].ConstVal; ASTTk[node] := Ord(Syms[idx].TypeKind); CurASTNode := node; Next;
       end
-      else if (pi >= 0) and Procs[pi].IsFunc and (Tokens[TokPos].Kind = tkLParen) then
+      else if (procIdx >= 0) and Procs[procIdx].IsFunc and (Tokens[TokPos].Kind = tkLParen) then
       begin
         Next;
         Expect(tkLParen, '(');
@@ -3304,10 +3304,10 @@ begin
         end;
 
         if qUnit >= 0 then
-          pi := MatchProcCallInUnit(name, qUnit, nArgs, argTypes)
+          procIdx := MatchProcCallInUnit(name, qUnit, nArgs, argTypes)
         else
-          pi := MatchProcCall(name, nArgs, argTypes);
-        if pi < 0 then
+          procIdx := MatchProcCall(name, nArgs, argTypes);
+        if procIdx < 0 then
         begin
           { Generic dynamic-array Copy(arr, index [, count]) intrinsic. Only when
             no Copy function matches (so a string `sysutils.Copy` is never
@@ -3342,8 +3342,8 @@ begin
           Error('no overload of ' + name + ' matches these arguments');
         end;
 
-        isLiftedCall := (pi >= 0) and (Procs[pi].ParamCount > nArgs) and
-                        (ProcParamPtrDepth[pi * 16 + nArgs] = 2);
+        isLiftedCall := (procIdx >= 0) and (Procs[procIdx].ParamCount > nArgs) and
+                        (ProcParamPtrDepth[procIdx * 16 + nArgs] = 2);
 
         if isLiftedCall then
         begin
@@ -3373,7 +3373,7 @@ begin
           argTypes[nArgs] := tyPointer;
           Inc(nArgs);
 
-          while nArgs < Procs[pi].ParamCount do
+          while nArgs < Procs[procIdx].ParamCount do
           begin
             addrNode := AllocNode(AN_INT_LIT);
             ASTIVal[addrNode] := 0;
@@ -3398,16 +3398,16 @@ begin
           end;
         end;
 
-        isCStringCall := PyExprMode and (Procs[pi].RetType = tyPointer) and
-                         ((ProcRetPtrElemTk[pi] = Ord(tyChar)) or
-                          (ProcRetPtrElemTk[pi] = Ord(tyUInt8)) or
-                          (ProcRetPtrElemTk[pi] = Ord(tyInt8)));
+        isCStringCall := PyExprMode and (Procs[procIdx].RetType = tyPointer) and
+                         ((ProcRetPtrElemTk[procIdx] = Ord(tyChar)) or
+                          (ProcRetPtrElemTk[procIdx] = Ord(tyUInt8)) or
+                          (ProcRetPtrElemTk[procIdx] = Ord(tyInt8)));
 
         currArg := argsHead;
         for i := 0 to nArgs - 1 do
         begin
           exprNode := ASTLeft[currArg];
-          if (Procs[pi].Params[i].TypeKind = tyString) and (IntToTypeKind(ASTTk[exprNode]) = tyChar) then
+          if (Procs[procIdx].Params[i].TypeKind = tyString) and (IntToTypeKind(ASTTk[exprNode]) = tyChar) then
           begin
             if ASTKind[exprNode] = AN_INT_LIT then
             begin
@@ -3422,7 +3422,7 @@ begin
         for i := 0 to nArgs - 1 do
         begin
           exprNode := ASTLeft[currArg];
-          if Procs[pi].Params[i].IsRef or Procs[pi].Params[i].IsArray then
+          if Procs[procIdx].Params[i].IsRef or Procs[procIdx].Params[i].IsArray then
           begin
             if not ((ASTKind[exprNode] = AN_IDENT) or (ASTKind[exprNode] = AN_INDEX) or (ASTKind[exprNode] = AN_FIELD)) then
             begin
@@ -3430,7 +3430,7 @@ begin
                 function result): the call-arg lowering materializes it into a
                 hidden local and passes its address (FPC behaviour). `var`/`out`
                 still require a true lvalue so write-back has somewhere to land. }
-              if not (ProcParamIsConst[pi * 16 + i] and (IntToTypeKind(ASTTk[exprNode]) = tyRecord)) then
+              if not (ProcParamIsConst[procIdx * 16 + i] and (IntToTypeKind(ASTTk[exprNode]) = tyRecord)) then
                 Error('by-reference argument must be a variable');
             end;
           end;
@@ -3438,8 +3438,8 @@ begin
         end;
 
         node := AllocNode(AN_CALL);
-        ASTIVal[node] := pi;
-        ASTTk[node] := Ord(Procs[pi].RetType);
+        ASTIVal[node] := procIdx;
+        ASTTk[node] := Ord(Procs[procIdx].RetType);
         ASTLeft[node] := argsHead;
         if isLiftedCall then
         begin
@@ -3464,7 +3464,7 @@ begin
         end
         else
         begin
-          ApplyCallResultPtrSuffix(node, pi);  { f(...)^ / ^.field / [i] }
+          ApplyCallResultPtrSuffix(node, procIdx);  { f(...)^ / ^.field / [i] }
           if isLiftedCall then
           begin
             CurASTNode := node;
@@ -3473,20 +3473,20 @@ begin
         end;
         Exit;
       end
-      else if (pi >= 0) and Procs[pi].IsFunc and (Procs[pi].ParamCount = 0) then
+      else if (procIdx >= 0) and Procs[procIdx].IsFunc and (Procs[procIdx].ParamCount = 0) then
       begin
         Next;
         node := AllocNode(AN_CALL);
-        ASTIVal[node] := pi;
-        ASTTk[node] := Ord(Procs[pi].RetType);
-        ApplyCallResultPtrSuffix(node, pi);  { f()^ / ^.field / [i] }
+        ASTIVal[node] := procIdx;
+        ASTTk[node] := Ord(Procs[procIdx].RetType);
+        ApplyCallResultPtrSuffix(node, procIdx);  { f()^ / ^.field / [i] }
         Exit;
       end
       else
       begin
         { Implicit Self.method dispatch for methods called bare inside a class body in expression context }
         node := -1;
-        if (idx < 0) and (pi < 0) and (CurSelfClass >= REC_UCLASS_BASE) then
+        if (idx < 0) and (procIdx < 0) and (CurSelfClass >= REC_UCLASS_BASE) then
         begin
           ci := CurSelfClass - REC_UCLASS_BASE;
           mmi := FindUMeth(ci, name);
@@ -4681,18 +4681,18 @@ begin
   end;
 end;
 
-{ Build the full step-function body AST for a stackless generator proc `pi`.
+{ Build the full step-function body AST for a stackless generator proc `procIdx`.
   Persistent slots for the declared params + body locals must already be assigned
   (SymGenSlot). Returns the AST to CompileAST; sets CurGenSlotNext to its final
   value (caller derives ProcGenInstSize). }
-function BuildStacklessStep(bodyAST, pi: Integer): Integer;
+function BuildStacklessStep(bodyAST, procIdx: Integer): Integer;
 var selfSym, retSym, bodyLo, dispatch, dtail, restore: Integer;
     setDone, setRes, k, stmt: Integer;
 begin
   if (FindProc('SlGet') < 0) or (FindProc('SlSet') < 0) then
     Error('stackless generator: the slgen unit is not in scope (add `uses slgen;`)');
-  selfSym := Procs[pi].Params[0].SymIdx;
-  retSym  := Procs[pi].RetSymIdx;
+  selfSym := Procs[procIdx].Params[0].SymIdx;
+  retSym  := Procs[procIdx].RetSymIdx;
 
   CurGenStateCtr := 1;                   { state 0 = first entry (falls through) }
   bodyLo := SLLower(bodyAST, selfSym, retSym);
@@ -4728,14 +4728,14 @@ end;
   CurGenSlotNext; the transform appends synthetic temps after these. v1: only
   ordinal/pointer-sized locals (managed/aggregate locals would need per-element
   ARC across yields — a documented later restriction). }
-procedure AssignStacklessSlots(pi: Integer);
+procedure AssignStacklessSlots(procIdx: Integer);
 var i, selfS, retS: Integer; tk: TTypeKind;
 begin
-  selfS := Procs[pi].Params[0].SymIdx;
-  retS  := Procs[pi].RetSymIdx;
+  selfS := Procs[procIdx].Params[0].SymIdx;
+  retS  := Procs[procIdx].RetSymIdx;
   CurGenSlotNext := 0;
-  CurGenScopeBase := Procs[pi].ScopeBase;
-  for i := Procs[pi].ScopeBase to SymCount - 1 do
+  CurGenScopeBase := Procs[procIdx].ScopeBase;
+  for i := Procs[procIdx].ScopeBase to SymCount - 1 do
   begin
     if (i = selfS) or (i = retS) then Continue;
     if (Syms[i].Kind <> skParam) and (Syms[i].Kind <> skLocal) then Continue;
@@ -5346,7 +5346,7 @@ end;
 function ParseStatementAST: Integer;
 var
   name: AnsiString;
-   idx, pi, i, si, node, valNode, stepsNode, opNode, argSeq, argIdx, exprNode, lastArg, identTokIdx: Integer;
+   idx, procIdx, i, si, node, valNode, stepsNode, opNode, argSeq, argIdx, exprNode, lastArg, identTokIdx: Integer;
   nArgs, argsHead, currArg: Integer; argTypes: array[0..15] of TTypeKind;
   isLn, slIsArrTarget: Boolean;
   smci, smmii, smpii, smcallNode, smselfArg, smLastArg, smArgSeq, smMai, smSelfIdx: Integer;
@@ -5638,15 +5638,15 @@ begin
         Expect(tkLParen, '(');
         Expect(tkAt, '@');
         if CurTok.Kind <> tkIdent then Error('AsyncGo: expected @<an async stackless routine>');
-        pi := FindProc(CurTok.SVal);
-        if (pi < 0) or not ProcIsAsync[pi] or not ProcIsStackless[pi] then
+        procIdx := FindProc(CurTok.SVal);
+        if (procIdx < 0) or not ProcIsAsync[procIdx] or not ProcIsStackless[procIdx] then
           Error('AsyncGo: argument must be @<an `; async; stackless;` routine>');
         Next;
         Expect(tkRParen, ')');
         if (FindProc('SLSpawn') < 0) or (FindProc('SlAlloc') < 0) then
           Error('AsyncGo: slsched/slgen not in scope (add `uses slgen, slsched;`)');
-        idx := AllocNode(AN_PROCADDR); ASTIVal[idx] := pi; ASTTk[idx] := Ord(tyPointer);
-        valNode := AllocNode(AN_INT_LIT); ASTIVal[valNode] := ProcGenInstSize[pi]; ASTTk[valNode] := Ord(tyInt64);
+        idx := AllocNode(AN_PROCADDR); ASTIVal[idx] := procIdx; ASTTk[idx] := Ord(tyPointer);
+        valNode := AllocNode(AN_INT_LIT); ASTIVal[valNode] := ProcGenInstSize[procIdx]; ASTTk[valNode] := Ord(tyInt64);
         node := GenMakeCall6(FindProc('SLSpawn'), tyPointer, idx,
                   GenMakeCall6(FindProc('SlAlloc'), tyPointer, valNode,
                     GenZeroLit, GenZeroLit, GenZeroLit, GenZeroLit, GenZeroLit),
@@ -5843,8 +5843,8 @@ begin
         { Float value -> StrFloat(x, width, decimals); integer -> StrInt(x, width).
           (decimals is ignored by StrInt, used by StrFloat.) }
         strIsFloat := TypeIsFloat(IntToTypeKind(ASTTk[exprNode]));
-        if strIsFloat then pi := FindProc('StrFloat') else pi := FindProc('StrInt');
-        if pi < 0 then Error('Str: builtin unit not loaded');
+        if strIsFloat then procIdx := FindProc('StrFloat') else procIdx := FindProc('StrInt');
+        if procIdx < 0 then Error('Str: builtin unit not loaded');
         stepsNode := AllocNode(AN_INT_LIT);
         ASTIVal[stepsNode] := castPrevTok; ASTTk[stepsNode] := Ord(tyInteger);
         argSeq := AllocNode(AN_ARG); ASTLeft[argSeq] := exprNode;
@@ -5859,7 +5859,7 @@ begin
           ASTLeft[ASTRight[ASTRight[argSeq]]] := decNode;
         end;
         opNode := AllocNode(AN_CALL);
-        ASTIVal[opNode] := pi; ASTLeft[opNode] := argSeq; ASTTk[opNode] := Ord(tyString);
+        ASTIVal[opNode] := procIdx; ASTLeft[opNode] := argSeq; ASTTk[opNode] := Ord(tyString);
         node := AllocNode(AN_ASSIGN);
         ASTLeft[node] := valNode; ASTRight[node] := opNode;
       end
@@ -5881,9 +5881,9 @@ begin
         stepsNode := ParseLValueAST(si, argIdx);            { code }
         Expect(tkRParen, ')');
 
-        if (idx >= 0) and TypeIsFloat(Syms[idx].TypeKind) then pi := FindProc('ValFloat')
-        else pi := FindProc('Val');
-        if pi < 0 then Error('Val: builtin unit not loaded');
+        if (idx >= 0) and TypeIsFloat(Syms[idx].TypeKind) then procIdx := FindProc('ValFloat')
+        else procIdx := FindProc('Val');
+        if procIdx < 0 then Error('Val: builtin unit not loaded');
         { A 1-char source literal (e.g. `Val('5', ...)`) parses as a Char; the
           builtin's first param is a string, so promote it to a string literal —
           the same coercion a normal call applies. Without it the Char is passed
@@ -5912,7 +5912,7 @@ begin
         ASTRight[argSeq] := lastArg;
         opNode := AllocNode(AN_ARG); ASTLeft[opNode] := stepsNode; ASTRight[lastArg] := opNode;
         node := AllocNode(AN_CALL);
-        ASTIVal[node] := pi; ASTLeft[node] := argSeq; ASTTk[node] := Ord(Procs[pi].RetType);
+        ASTIVal[node] := procIdx; ASTLeft[node] := argSeq; ASTTk[node] := Ord(Procs[procIdx].RetType);
         if valTmpSym >= 0 then
         begin
           { dest := tmp  (truncates the Int64 result into the narrower dest). }
@@ -5961,10 +5961,10 @@ begin
       else
       begin
         if qUnit >= 0 then
-          pi := FindProcInUnit(name, qUnit)
+          procIdx := FindProcInUnit(name, qUnit)
         else
-          pi := FindProc(name);
-        if (pi >= 0) and (Tokens[TokPos].Kind = tkLParen) then
+          procIdx := FindProc(name);
+        if (procIdx >= 0) and (Tokens[TokPos].Kind = tkLParen) then
         begin
           Next;
           Expect(tkLParen, '(');
@@ -5973,7 +5973,7 @@ begin
           nArgs := 0;
           while CurTok.Kind <> tkRParen do
           begin
-            if (CurTok.Kind = tkLBrack) and ParamIsVarRecArray(pi, nArgs) then
+            if (CurTok.Kind = tkLBrack) and ParamIsVarRecArray(procIdx, nArgs) then
               CurASTNode := ParseVarRecLiteralAST
             else
               ParseExpr;
@@ -6001,17 +6001,17 @@ begin
           end;
 
           if qUnit >= 0 then
-            pi := MatchProcCallInUnit(name, qUnit, nArgs, argTypes)
+            procIdx := MatchProcCallInUnit(name, qUnit, nArgs, argTypes)
           else
-            pi := MatchProcCall(name, nArgs, argTypes);
-          if pi < 0 then
+            procIdx := MatchProcCall(name, nArgs, argTypes);
+          if procIdx < 0 then
             Error('no overload of ' + name + ' matches these arguments');
 
           currArg := argsHead;
           for i := 0 to nArgs - 1 do
           begin
             exprNode := ASTLeft[currArg];
-            if (Procs[pi].Params[i].TypeKind = tyString) and (IntToTypeKind(ASTTk[exprNode]) = tyChar) then
+            if (Procs[procIdx].Params[i].TypeKind = tyString) and (IntToTypeKind(ASTTk[exprNode]) = tyChar) then
             begin
               if ASTKind[exprNode] = AN_INT_LIT then
               begin
@@ -6026,7 +6026,7 @@ begin
           for i := 0 to nArgs - 1 do
           begin
             exprNode := ASTLeft[currArg];
-            if (Procs[pi].Params[i].IsRef or Procs[pi].Params[i].IsArray) and
+            if (Procs[procIdx].Params[i].IsRef or Procs[procIdx].Params[i].IsArray) and
                (ASTKind[exprNode] <> AN_VARREC_ARRAY) then
             begin
               if not ((ASTKind[exprNode] = AN_IDENT) or (ASTKind[exprNode] = AN_INDEX) or (ASTKind[exprNode] = AN_FIELD)) then
@@ -6034,7 +6034,7 @@ begin
                 { `const` record param accepts a non-lvalue temporary (FPC) — the
                   call-arg lowering copies it into a hidden local and passes its
                   address. `var`/`out` still need a true lvalue. }
-                if not (ProcParamIsConst[pi * 16 + i] and (IntToTypeKind(ASTTk[exprNode]) = tyRecord)) then
+                if not (ProcParamIsConst[procIdx * 16 + i] and (IntToTypeKind(ASTTk[exprNode]) = tyRecord)) then
                   Error('by-reference argument must be a variable');
               end;
             end;
@@ -6042,14 +6042,14 @@ begin
           end;
 
           node := AllocNode(AN_CALL);
-          ASTIVal[node] := pi;
+          ASTIVal[node] := procIdx;
           ASTLeft[node] := argsHead;
         end
-        else if (pi >= 0) and (Procs[pi].ParamCount = 0) then
+        else if (procIdx >= 0) and (Procs[procIdx].ParamCount = 0) then
         begin
           Next;
           node := AllocNode(AN_CALL);
-          ASTIVal[node] := pi;
+          ASTIVal[node] := procIdx;
         end;
 
         if node = -1 then
@@ -7718,7 +7718,7 @@ var
   paramNDims, paramDynDepth, paramAi, pdi: Integer;
   psLo, psSpan: array[0..MAX_ARR_DIMS-1] of Integer;
   nparams  : Integer;
-  pi, helperPi, i, sz, retRecId, savedLastTypeRecId: Integer;
+  procIdx, helperPi, i, sz, retRecId, savedLastTypeRecId: Integer;
   zeroBytes : Integer;
   zfLoop, zfDone : Integer;
   retIsDynArr : Boolean; retElemTk : TTypeKind; retElemRec : Integer;
@@ -7995,18 +7995,18 @@ begin
       if CurTok.Kind = tkString then begin name := CurTok.SVal; Next; end;
     end;
     Eat(tkSemicolon);
-    pi := FindProcOverload(name, nparams, ptypes, parr, pbyref);
-    if pi < 0 then
-      pi := RegisterProc(name, isFunc, retType, nparams, pnames, ptypes);
-    ProcRetRecId[pi] := retRecId;
+    procIdx := FindProcOverload(name, nparams, ptypes, parr, pbyref);
+    if procIdx < 0 then
+      procIdx := RegisterProc(name, isFunc, retType, nparams, pnames, ptypes);
+    ProcRetRecId[procIdx] := retRecId;
     for i := 0 to nparams-1 do
     begin
-      Procs[pi].Params[i].IsArray := parr[i];
-      Procs[pi].Params[i].IsRef := pbyref[i];
+      Procs[procIdx].Params[i].IsArray := parr[i];
+      Procs[procIdx].Params[i].IsRef := pbyref[i];
     end;
-    Procs[pi].BodyAddr := -1;
-    ProcExternal[pi] := True;
-    ProcLibrary[pi] := InternStr(extLib);
+    Procs[procIdx].BodyAddr := -1;
+    ProcExternal[procIdx] := True;
+    ProcLibrary[procIdx] := InternStr(extLib);
     Exit;
   end;
 
@@ -8129,82 +8129,82 @@ begin
     begin
       Next; Eat(tkSemicolon);
     end;
-    pi := FindProcOverload(name, nparams, ptypes, parr, pbyref);
-    if pi < 0 then
+    procIdx := FindProcOverload(name, nparams, ptypes, parr, pbyref);
+    if procIdx < 0 then
     begin
       if StrictOverload and (FindProc(name) >= 0) then
       begin
         if not declOverload then Error('overloaded routine requires overload directive');
         if HasNonOverloadProc(name) then Error('all overloaded routines require overload directive');
       end;
-      pi := RegisterProc(name, isFunc, retType, nparams, pnames, ptypes);
-      ProcRetRecId[pi] := retRecId;
-      ProcOverloadDirective[pi] := declOverload;
-      Procs[pi].BodyAddr := -1;
+      procIdx := RegisterProc(name, isFunc, retType, nparams, pnames, ptypes);
+      ProcRetRecId[procIdx] := retRecId;
+      ProcOverloadDirective[procIdx] := declOverload;
+      Procs[procIdx].BodyAddr := -1;
       for i := 0 to nparams-1 do
       begin
-        Procs[pi].Params[i].IsArray := parr[i];
-        Procs[pi].Params[i].IsRef := pbyref[i];
+        Procs[procIdx].Params[i].IsArray := parr[i];
+        Procs[procIdx].Params[i].IsRef := pbyref[i];
       end;
     end
     else if declOverload then
-      ProcOverloadDirective[pi] := True;
-    ProcRetRecId[pi] := retRecId;
-    ProcRetIsDynArray[pi] := retIsDynArr;
-    ProcRetElemTk[pi] := retElemTk;
-    ProcRetElemRec[pi] := retElemRec;
-    ProcRetPtrElemTk[pi] := retPtrElemTk;
-    ProcRetPtrElemRec[pi] := retPtrElemRec;
-    if retIsDynArr then Procs[pi].RetType := tyPointer; { 8-byte heap handle ABI }
+      ProcOverloadDirective[procIdx] := True;
+    ProcRetRecId[procIdx] := retRecId;
+    ProcRetIsDynArray[procIdx] := retIsDynArr;
+    ProcRetElemTk[procIdx] := retElemTk;
+    ProcRetElemRec[procIdx] := retElemRec;
+    ProcRetPtrElemTk[procIdx] := retPtrElemTk;
+    ProcRetPtrElemRec[procIdx] := retPtrElemRec;
+    if retIsDynArr then Procs[procIdx].RetType := tyPointer; { 8-byte heap handle ABI }
     Exit;
   end;
 
   { Register or resolve }
-  pi := FindProcOverload(name, nparams, ptypes, parr, pbyref);
-  if pi < 0 then
+  procIdx := FindProcOverload(name, nparams, ptypes, parr, pbyref);
+  if procIdx < 0 then
   begin
     if StrictOverload and (FindProc(name) >= 0) then
     begin
       if not declOverload then Error('overloaded routine requires overload directive');
       if HasNonOverloadProc(name) then Error('all overloaded routines require overload directive');
     end;
-    pi := RegisterProc(name, isFunc, retType, nparams, pnames, ptypes);
-    ProcOverloadDirective[pi] := declOverload;
+    procIdx := RegisterProc(name, isFunc, retType, nparams, pnames, ptypes);
+    ProcOverloadDirective[procIdx] := declOverload;
   end
   else if declOverload then
-    ProcOverloadDirective[pi] := True;
-  ProcRetRecId[pi] := retRecId;
-  ProcRetIsDynArray[pi] := retIsDynArr;
-  ProcRetElemTk[pi] := retElemTk;
-  ProcRetElemRec[pi] := retElemRec;
-  ProcRetPtrElemTk[pi] := retPtrElemTk;
-  ProcRetPtrElemRec[pi] := retPtrElemRec;
-  ProcIsAsync[pi] := isAsync;
-  ProcIsGenerator[pi] := isGenerator;
-  ProcIsStackless[pi] := isStackless;
+    ProcOverloadDirective[procIdx] := True;
+  ProcRetRecId[procIdx] := retRecId;
+  ProcRetIsDynArray[procIdx] := retIsDynArr;
+  ProcRetElemTk[procIdx] := retElemTk;
+  ProcRetElemRec[procIdx] := retElemRec;
+  ProcRetPtrElemTk[procIdx] := retPtrElemTk;
+  ProcRetPtrElemRec[procIdx] := retPtrElemRec;
+  ProcIsAsync[procIdx] := isAsync;
+  ProcIsGenerator[procIdx] := isGenerator;
+  ProcIsStackless[procIdx] := isStackless;
   if isInterrupt then
     Error('interrupt directive: raw hardware-vector codegen (full register save/restore + iret) not yet implemented; use `iram;` for an IDF-registered ISR');
   { `iram;` places the body in .iram1.text on ESP; on other targets (e.g. the
     x86-64 oracle build of a shared test) it is an accepted no-op. }
-  ProcIram[pi] := isIram and ((TargetArch = TARGET_XTENSA) or (TargetArch = TARGET_RISCV32));
-  ProcIsInterrupt[pi] := isInterrupt;
+  ProcIram[procIdx] := isIram and ((TargetArch = TARGET_XTENSA) or (TargetArch = TARGET_RISCV32));
+  ProcIsInterrupt[procIdx] := isInterrupt;
   if isStackless then
   begin
-    ProcGenElemTk[pi] := IntToTypeKind(declElemTk);
-    ProcGenParamCnt[pi] := nparams - 1;   { exclude the injected __genself }
+    ProcGenElemTk[procIdx] := IntToTypeKind(declElemTk);
+    ProcGenParamCnt[procIdx] := nparams - 1;   { exclude the injected __genself }
     if (nparams - 1) > CO_MAX_PARAMS then
       Error('generator: at most 4 parameters in v1');
   end
   else if isGenerator and (nparams > CO_MAX_PARAMS) then
     Error('generator: at most 4 parameters in v1');
-  if retIsDynArr then Procs[pi].RetType := tyPointer; { 8-byte heap handle ABI }
+  if retIsDynArr then Procs[procIdx].RetType := tyPointer; { 8-byte heap handle ABI }
   if TargetArch = TARGET_XTENSA then
     while (CodeLen mod 4) <> 0 do xtensa_nop; { CALL0 targets must be 4-aligned }
-  Procs[pi].BodyAddr := CodeLen;
+  Procs[procIdx].BodyAddr := CodeLen;
   for i := 0 to nparams-1 do
   begin
-    Procs[pi].Params[i].IsArray := parr[i];
-    Procs[pi].Params[i].IsRef := pbyref[i];
+    Procs[procIdx].Params[i].IsArray := parr[i];
+    Procs[procIdx].Params[i].IsRef := pbyref[i];
   end;
 
   { Save scope }
@@ -8218,8 +8218,8 @@ begin
   GotoFixupCount := 0;
   for j := 0 to MAX_GOTO_LABELS - 1 do GotoLabelIRId[j] := -1;
   FrameSize := 0;
-  CurProc := pi;
-  Procs[pi].ScopeBase := SymCount;
+  CurProc := procIdx;
+  Procs[procIdx].ScopeBase := SymCount;
 
   { Set method context before allocating params }
   if methOwnerCi >= 0 then
@@ -8227,11 +8227,11 @@ begin
     mmi := FindUMeth(methOwnerCi, methName);
     if mmi >= 0 then
     begin
-      UMthProc_[mmi] := pi;
+      UMthProc_[mmi] := procIdx;
     end
     else
     begin
-      AddUMeth(methOwnerCi, methSNOff, methSNLen, pi);
+      AddUMeth(methOwnerCi, methSNOff, methSNLen, procIdx);
       mmi := UMthCount - 1;
     end;
 
@@ -8243,7 +8243,7 @@ begin
       slot := UMthVirSlot[mmi];
       if MethodFixCount >= MAX_METHFIX then Error('too many virtual method fixups');
       MethodFixups[MethodFixCount].DataPos := UClsVMTOffset[methOwnerCi] + slot * 8;
-      MethodFixups[MethodFixCount].ProcIdx := pi;
+      MethodFixups[MethodFixCount].ProcIdx := procIdx;
       Inc(MethodFixCount);
 
       for otherCi := 0 to UClsCount-1 do
@@ -8252,7 +8252,7 @@ begin
         begin
           if MethodFixCount >= MAX_METHFIX then Error('too many virtual method fixups');
           MethodFixups[MethodFixCount].DataPos := UClsVMTOffset[otherCi] + slot * 8;
-          MethodFixups[MethodFixCount].ProcIdx := pi;
+          MethodFixups[MethodFixCount].ProcIdx := procIdx;
           Inc(MethodFixCount);
         end;
       end;
@@ -8263,8 +8263,8 @@ begin
   for i := 0 to nparams-1 do
   begin
     idx := AllocParam(pnames[i], ptypes[i], pbyref[i], parr[i]);
-    Procs[pi].Params[i].SymIdx := idx;
-    if (pi >= 0) and (i < 16) then ProcParamIsConst[pi * 16 + i] := pconst[i];
+    Procs[procIdx].Params[i].SymIdx := idx;
+    if (procIdx >= 0) and (i < 16) then ProcParamIsConst[procIdx * 16 + i] := pconst[i];
     if pDynDepth[i] > 0 then
     begin
       { Named dynamic-array type param: a real dynamic array, NOT an open-array
@@ -8273,7 +8273,7 @@ begin
         call-site lowering + the IsRef read-deref). }
       Syms[idx].ArrLen := -1;
       SymDynDepth[idx] := pDynDepth[i];
-      if (pi >= 0) and (i < 16) then ProcParamDynDepth[pi * 16 + i] := pDynDepth[i];
+      if (procIdx >= 0) and (i < 16) then ProcParamDynDepth[procIdx * 16 + i] := pDynDepth[i];
     end;
     if pNDims[i] >= 2 then
     begin
@@ -8297,7 +8297,7 @@ begin
       Syms[idx].RecName := ptypesRec[i];
       { Persist the param's rec id: param sym slots are reused across procs, so
         overload matching / call-arg coercion cannot read it back from the sym. }
-      if (pi >= 0) and (i < 16) then ProcParamRecId[pi * 16 + i] := ptypesRec[i];
+      if (procIdx >= 0) and (i < 16) then ProcParamRecId[procIdx * 16 + i] := ptypesRec[i];
       { Records larger than a qword are passed by reference. A CORBA interface is
         a fat pointer ({IMT, instance}); on 64-bit that is 16 bytes (already >8),
         but on 32-bit targets it is only 8 bytes — force by-ref there too so the
@@ -8308,7 +8308,7 @@ begin
           ((ptypesRec[i] >= REC_UCLASS_BASE) and UClsIsInterface[ptypesRec[i] - REC_UCLASS_BASE])) then
       begin
         Syms[idx].IsRef := True;
-        Procs[pi].Params[i].IsRef := True;
+        Procs[procIdx].Params[i].IsRef := True;
       end;
     end;
     if ptypes[i] = tyPointer then
@@ -8320,21 +8320,21 @@ begin
   end;
   { Wire Self's RecName so field lookups resolve against the owner class }
   if (methOwnerCi >= 0) and not isStaticMethod then
-    Syms[Procs[pi].Params[0].SymIdx].RecName := methOwnerRec;
+    Syms[Procs[procIdx].Params[0].SymIdx].RecName := methOwnerRec;
 
   { Return value slot }
   if isFunc then
   begin
     savedLastTypeRecId := LastTypeRecId;
     if retType = tyRecord then
-      LastTypeRecId := ProcRetRecId[pi];
+      LastTypeRecId := ProcRetRecId[procIdx];
     if retIsDynArr then
     begin
       { Result is a dynamic array: a pointer-sized local heap handle. Indexing,
         Length, and SetLength operate on it like any dyn-array local. }
       LastTypeRecId := retElemRec;
       idx := AllocDynArray('Result', retElemTk, 1);
-      Procs[pi].RetSymIdx := idx;
+      Procs[procIdx].RetSymIdx := idx;
     end
     else if retType = tyString then
     begin
@@ -8342,20 +8342,20 @@ begin
       CurProc := -1;
       AllocVar('Result', retType);
       CurProc := savedCurProc;
-      Procs[pi].RetSymIdx := SymCount - 1;
+      Procs[procIdx].RetSymIdx := SymCount - 1;
       Syms[SymCount-1].Kind := skGlobal;
     end
     else
     begin
       AllocVar('Result', retType);
-      Procs[pi].RetSymIdx := SymCount - 1;
+      Procs[procIdx].RetSymIdx := SymCount - 1;
       Syms[SymCount-1].Kind := skLocal;
     end;
     LastTypeRecId := savedLastTypeRecId;
     if not retIsDynArr and TypeIsAggregate(retType) then
     begin
       idx := AllocVar('', tyPointer);
-      ProcAggregateDestSym[pi] := idx;
+      ProcAggregateDestSym[procIdx] := idx;
     end;
   end;
 
@@ -8391,10 +8391,10 @@ begin
 
   { Prologue }
   patchPos := EmitProcPrologue;
-  Procs[pi].FramePatch := patchPos;
-  if ProcAggregateDestSym[pi] >= 0 then
+  Procs[procIdx].FramePatch := patchPos;
+  if ProcAggregateDestSym[procIdx] >= 0 then
   begin
-    idx := ProcAggregateDestSym[pi];
+    idx := ProcAggregateDestSym[procIdx];
     if TargetArch = TARGET_I386 then
       { i386 carries the hidden destination pointer in ecx; stash it before the
         param-copy loop clobbers ecx. }
@@ -8425,7 +8425,7 @@ begin
       the arg area after the call. Ordinal by-value params only for now. }
     for i := 0 to nparams-1 do
     begin
-      idx := Procs[pi].Params[i].SymIdx;
+      idx := Procs[procIdx].Params[i].SymIdx;
       { Ordinals and pointer-sized handles (pointer/string/class) are passed as
         one 4-byte stack slot. 8-byte ordinals (Int64) use the low dword only,
         consistent with the rest of the i386 backend's fat-slot model. }
@@ -8509,7 +8509,7 @@ begin
   begin
     for i := 0 to nparams-1 do
     begin
-      idx := Procs[pi].Params[i].SymIdx;
+      idx := Procs[procIdx].Params[i].SymIdx;
       sz := ParamSize(idx);
       if i < 8 then
       begin
@@ -8559,15 +8559,15 @@ begin
       value, so only count/spill it as two words when passed by value. }
     pnWords := 0;
     for i := 0 to nparams-1 do
-      if ((Procs[pi].Params[i].TypeKind = tyInt64) or
-          (Procs[pi].Params[i].TypeKind = tyUInt64)) and
-         (not Procs[pi].Params[i].IsRef) and (not Procs[pi].Params[i].IsArray) then
+      if ((Procs[procIdx].Params[i].TypeKind = tyInt64) or
+          (Procs[procIdx].Params[i].TypeKind = tyUInt64)) and
+         (not Procs[procIdx].Params[i].IsRef) and (not Procs[procIdx].Params[i].IsArray) then
         Inc(pnWords, 2)
       else Inc(pnWords, 1);
     pw := 0;
     for i := 0 to nparams-1 do
     begin
-      idx := Procs[pi].Params[i].SymIdx;
+      idx := Procs[procIdx].Params[i].SymIdx;
       sz := ParamSize(idx);
       EmitLoadImmArm32(9, Syms[idx].Offset);
       EmitI32($E08B9009);   { add r9, fp, r9 (slot addr) }
@@ -8607,7 +8607,7 @@ begin
       8-byte ordinals store the low word only (fat-slot model, like i386). }
     for i := 0 to nparams-1 do
     begin
-      idx := Procs[pi].Params[i].SymIdx;
+      idx := Procs[procIdx].Params[i].SymIdx;
       sz := ParamSize(idx);
       if i >= 8 then
         Error('target riscv32: more than 8 parameters not yet supported');
@@ -8626,7 +8626,7 @@ begin
     { Call0 ABI: args arrive in a2..a7; spill each into its frame slot. }
     for i := 0 to nparams-1 do
     begin
-      idx := Procs[pi].Params[i].SymIdx;
+      idx := Procs[procIdx].Params[i].SymIdx;
       sz := ParamSize(idx);
       if i >= 6 then
         Error('target xtensa: more than 6 parameters not yet supported');
@@ -8659,7 +8659,7 @@ begin
       [rbp + 16 + (n-1-i)*8]. Copy each into its frame slot. }
     for i := 0 to nparams-1 do
     begin
-      idx := Procs[pi].Params[i].SymIdx;
+      idx := Procs[procIdx].Params[i].SymIdx;
       sz := ParamSize(idx);
       EmitB($48); EmitB($8B); EmitB($85);
       EmitI32(16 + (nparams - 1 - i) * 8);        { mov rax, [rbp+disp] }
@@ -8686,7 +8686,7 @@ begin
   { Copy params from registers to stack: mov [rbp+off], rdi/rsi/rdx/rcx/r8/r9 }
   for i := 0 to nparams-1 do
   begin
-    idx := Procs[pi].Params[i].SymIdx;
+    idx := Procs[procIdx].Params[i].SymIdx;
     sz := ParamSize(idx);
     if i < 4 then
     begin
@@ -8898,7 +8898,7 @@ begin
   end;
 
   needsProcCleanupFrame := (TargetArch = TARGET_X86_64) and ExceptionUsed and
-                           (not isAsmFunc) and ProcHasManagedLocalCleanup(pi, -1);
+                           (not isAsmFunc) and ProcHasManagedLocalCleanup(procIdx, -1);
   if needsProcCleanupFrame then
   begin
     EmitB($48); EmitB($83); EmitB($EC); EmitB(EXC_FRAME_SIZE);
@@ -8924,7 +8924,7 @@ begin
     EmitB($48); EmitB($89); EmitB($9D); EmitI32(Syms[CurGenSelfSym].Offset);
     for i := 0 to nparams - 1 do
     begin
-      gpi := Procs[pi].Params[i].SymIdx;
+      gpi := Procs[procIdx].Params[i].SymIdx;
       sz := ParamSize(gpi);
       { rax = self }
       EmitB($48); EmitB($8B); EmitB($85); EmitI32(Syms[CurGenSelfSym].Offset);
@@ -8974,9 +8974,9 @@ begin
     else if not CurGenSeenYield then
       Error('generator has no yield');
     SLCheckEligible(genBodyAST);
-    AssignStacklessSlots(pi);
-    genStepAST := BuildStacklessStep(genBodyAST, pi);
-    ProcGenInstSize[pi] := SL_OFF_SLOTS + 8 * CurGenSlotNext;
+    AssignStacklessSlots(procIdx);
+    genStepAST := BuildStacklessStep(genBodyAST, procIdx);
+    ProcGenInstSize[procIdx] := SL_OFF_SLOTS + 8 * CurGenSlotNext;
     CompileAST(genStepAST);
     ASTNodeCount := 0;
   end
@@ -9029,11 +9029,11 @@ begin
   if isAsmFunc then
     EmitProcEpilog(-1)
   else
-    EmitProcEpilog(Procs[pi].RetSymIdx);
+    EmitProcEpilog(Procs[procIdx].RetSymIdx);
   ProcExceptionCleanupFrameActive := savedProcCleanupFrameActive;
 
   { End of this proc's body bytes — the iram byte-range is [BodyAddr, ProcBodyEnd). }
-  ProcBodyEnd[pi] := CodeLen;
+  ProcBodyEnd[procIdx] := CodeLen;
 
   { Patch frame size }
   PatchProcPrologue(patchPos, FrameSize);
@@ -9499,26 +9499,26 @@ end;
   `finalization`. Leaves the parser positioned at that terminator. }
 procedure ParseInitializationSection(const uname: AnsiString);
 var
-  pi, savedSC, savedFS, savedGLC, savedGFC, j, patchPos: Integer;
+  procIdx, savedSC, savedFS, savedGLC, savedGFC, j, patchPos: Integer;
   seqNode, lastSeq, stmtNode: Integer;
   dummyNames: array[0..0] of AnsiString;
   dummyTypes: array[0..0] of TTypeKind;
 begin
-  pi := RegisterProc('__init_' + uname, False, tyInteger, 0, dummyNames, dummyTypes);
+  procIdx := RegisterProc('__init_' + uname, False, tyInteger, 0, dummyNames, dummyTypes);
   if TargetArch = TARGET_XTENSA then
     while (CodeLen mod 4) <> 0 do xtensa_nop; { CALL0 targets must be 4-aligned }
-  Procs[pi].BodyAddr := CodeLen;
+  Procs[procIdx].BodyAddr := CodeLen;
 
   savedSC := SymCount; savedFS := FrameSize;
   savedGLC := GotoLabelCount; savedGFC := GotoFixupCount;
   GotoLabelCount := 0; GotoFixupCount := 0;
   for j := 0 to MAX_GOTO_LABELS - 1 do GotoLabelIRId[j] := -1;
   FrameSize := 0;
-  CurProc := pi;
-  Procs[pi].ScopeBase := SymCount;
+  CurProc := procIdx;
+  Procs[procIdx].ScopeBase := SymCount;
 
   patchPos := EmitProcPrologue;
-  Procs[pi].FramePatch := patchPos;
+  Procs[procIdx].FramePatch := patchPos;
   if (TargetArch = TARGET_XTENSA) and (XtensaABI = XTENSA_ABI_WINDOWED) then
     xtensa_mov(reg_xtensa_a7, reg_xtensa_a15);
 
@@ -9564,7 +9564,7 @@ begin
 
   if InitProcCount < 256 then
   begin
-    InitProcs[InitProcCount] := pi;
+    InitProcs[InitProcCount] := procIdx;
     Inc(InitProcCount);
   end;
 end;

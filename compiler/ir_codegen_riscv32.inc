@@ -146,26 +146,26 @@ end;
 
 procedure EmitHeapAllocLockedRISCV32;
 { a0 = requested payload bytes -> a0 = payload pointer. PXXAlloc(size, align=8). }
-var pi: Integer;
+var procIdx: Integer;
 begin
-  pi := FindProc('PXXAlloc');
-  if pi < 0 then Error('compiler error: Alloc helper not found in builtin unit');
+  procIdx := FindProc('PXXAlloc');
+  if procIdx < 0 then Error('compiler error: Alloc helper not found in builtin unit');
   rv32_addi(reg_a1, reg_zero, 8);   { a1 = align (a0 = size already) }
-  EmitCallProc(pi);                 { result in a0 }
+  EmitCallProc(procIdx);                 { result in a0 }
 end;
 
 procedure EmitHeapFreeLockedRISCV32;
 { a0 = payload pointer -> PXXFree(p). nil ignored inside. }
-var pi: Integer;
+var procIdx: Integer;
 begin
-  pi := FindProc('PXXFree');
-  if pi < 0 then Error('compiler error: Free helper not found in builtin unit');
-  EmitCallProc(pi);
+  procIdx := FindProc('PXXFree');
+  if procIdx < 0 then Error('compiler error: Free helper not found in builtin unit');
+  EmitCallProc(procIdx);
 end;
 
 procedure IREmitNodeRISCV32(node: Integer);
 var
-  left, right, op, si, pi, nArgs, i, lo, elemSize, sz, argNode, valNode, j: Integer;
+  left, right, op, si, procIdx, nArgs, i, lo, elemSize, sz, argNode, valNode, j: Integer;
   tk: TTypeKind;
   sgn, savedLVW: Boolean;
   sVal: AnsiString;
@@ -198,8 +198,8 @@ begin
             j := InternStr(sVal);
             EmitLoadImmRISCV32(reg_a0, Strs[j].Len);          { arg0 = len }
             EmitLoadDataRefRISCV32(reg_a1, Strs[j].Offset + 8); { arg1 = chars }
-            pi := FindProc('PXXStrFromLit'); if pi < 0 then Error('compiler error: PXXStrFromLit not found');
-            EmitCallProc(pi);                                 { a0 = handle }
+            procIdx := FindProc('PXXStrFromLit'); if procIdx < 0 then Error('compiler error: PXXStrFromLit not found');
+            EmitCallProc(procIdx);                                 { a0 = handle }
           end
           else if IntToTypeKind(IRTk[valNode]) = tyChar then
           begin
@@ -207,7 +207,7 @@ begin
             rv32_addi(reg_sp, reg_sp, -8); rv32_sw(reg_a0, reg_sp, 0); { [sp] = char }
             rv32_addi(reg_a1, reg_sp, 0);                     { arg1 = &char }
             rv32_addi(reg_a0, reg_zero, 1);                   { arg0 = len 1 }
-            pi := FindProc('PXXStrFromLit'); EmitCallProc(pi);
+            procIdx := FindProc('PXXStrFromLit'); EmitCallProc(procIdx);
             rv32_addi(reg_sp, reg_sp, 8);
           end
           else if IntToTypeKind(IRTk[valNode]) = tyString then
@@ -216,7 +216,7 @@ begin
             rv32_lw(reg_a2, reg_a0, 0);                       { len = [buf] }
             rv32_addi(reg_a1, reg_a0, 8);                     { arg1 = buf+8 }
             rv32_addi(reg_a0, reg_a2, 0);                     { arg0 = len }
-            pi := FindProc('PXXStrFromLit'); EmitCallProc(pi);
+            procIdx := FindProc('PXXStrFromLit'); EmitCallProc(procIdx);
           end
           else
           begin
@@ -227,7 +227,7 @@ begin
                     ((IRKind[valNode] = IR_CALL) and (IRA[valNode] >= 0))) then
             begin
               rv32_addi(reg_sp, reg_sp, -4); rv32_sw(reg_a0, reg_sp, 0); { save handle }
-              pi := FindProc('PXXStrIncRef'); EmitCallProc(pi);          { a0 = p }
+              procIdx := FindProc('PXXStrIncRef'); EmitCallProc(procIdx);          { a0 = p }
               rv32_lw(reg_a0, reg_sp, 0); rv32_addi(reg_sp, reg_sp, 4);  { restore handle }
             end;
           end;
@@ -240,14 +240,14 @@ begin
             rv32_lw(reg_a0, reg_sp, 0);                                  { a0 = new }
             rv32_sw(reg_a0, reg_t0, 0);                                  { [slot] := new }
             rv32_addi(reg_a0, reg_a1, 0);                                { a0 = old }
-            pi := FindProc('PXXStrDecRef'); EmitCallProc(pi);
+            procIdx := FindProc('PXXStrDecRef'); EmitCallProc(procIdx);
             rv32_addi(reg_sp, reg_sp, 4);
           end
           else
           begin
             rv32_addi(reg_sp, reg_sp, -4); rv32_sw(reg_a0, reg_sp, 0);   { push new }
             EmitLoadVarRISCV32(si);                                      { a0 = old handle }
-            pi := FindProc('PXXStrDecRef'); EmitCallProc(pi);
+            procIdx := FindProc('PXXStrDecRef'); EmitCallProc(procIdx);
             rv32_lw(reg_a0, reg_sp, 0); rv32_addi(reg_sp, reg_sp, 4);    { pop new }
             EmitStoreVarRISCV32(si);                                     { slot := new }
           end;
@@ -304,9 +304,9 @@ begin
         if (IRKind[left] = IR_LEA) and (Syms[IRA[left]].TypeKind = tyAnsiString) and
            not Syms[IRA[left]].IsArray and InLValueWrite then
         begin
-          pi := FindProc('PXXStrUnique');
-          if pi < 0 then Error('compiler error: PXXStrUnique not found');
-          EmitCallProc(pi);                   { a0 = unique handle }
+          procIdx := FindProc('PXXStrUnique');
+          if procIdx < 0 then Error('compiler error: PXXStrUnique not found');
+          EmitCallProc(procIdx);                   { a0 = unique handle }
         end;
         rv32_addi(reg_sp, reg_sp, -4);
         rv32_sw(reg_a0, reg_sp, 0);
@@ -400,20 +400,20 @@ begin
           EmitStrOperandRISCV32(IntToTypeKind(IRTk[left]),  4, reg_a0, reg_a1);  { lenA, srcA }
           rv32_addi(reg_a2, reg_t2, 0);    { a2 = srcB }
           rv32_addi(reg_a3, reg_t1, 0);    { a3 = lenB }
-          pi := FindProc('PXXStrConcat');
-          if pi < 0 then Error('compiler error: PXXStrConcat not found');
-          EmitCallProc(pi);                { a0 = result handle }
+          procIdx := FindProc('PXXStrConcat');
+          if procIdx < 0 then Error('compiler error: PXXStrConcat not found');
+          EmitCallProc(procIdx);                { a0 = result handle }
           { release fresh tyAnsiString BINOP operands (nested concat temporaries) }
           rv32_addi(reg_sp, reg_sp, -4); rv32_sw(reg_a0, reg_sp, 0);  { push result; [sp+4]=rhs,[sp+8]=lhs }
           if (IRKind[left] = IR_BINOP) and (IntToTypeKind(IRTk[left]) = tyAnsiString) then
           begin
             rv32_lw(reg_a0, reg_sp, 8);
-            pi := FindProc('PXXStrDecRef'); EmitCallProc(pi);
+            procIdx := FindProc('PXXStrDecRef'); EmitCallProc(procIdx);
           end;
           if (IRKind[right] = IR_BINOP) and (IntToTypeKind(IRTk[right]) = tyAnsiString) then
           begin
             rv32_lw(reg_a0, reg_sp, 4);
-            pi := FindProc('PXXStrDecRef'); EmitCallProc(pi);
+            procIdx := FindProc('PXXStrDecRef'); EmitCallProc(procIdx);
           end;
           rv32_lw(reg_a0, reg_sp, 0); rv32_addi(reg_sp, reg_sp, 4);   { pop result }
           rv32_addi(reg_sp, reg_sp, 8);                               { drop rhs, lhs }
@@ -430,20 +430,20 @@ begin
           EmitStrOperandRISCV32(IntToTypeKind(IRTk[left]),  4, reg_a0, reg_a1);  { lenA, srcA }
           rv32_addi(reg_a2, reg_t1, 0);    { a2 = lenB }
           rv32_addi(reg_a3, reg_t2, 0);    { a3 = srcB }
-          pi := FindProc('PXXStrEq');
-          if pi < 0 then Error('compiler error: PXXStrEq not found');
-          EmitCallProc(pi);                { a0 = 1/0 }
+          procIdx := FindProc('PXXStrEq');
+          if procIdx < 0 then Error('compiler error: PXXStrEq not found');
+          EmitCallProc(procIdx);                { a0 = 1/0 }
           { release fresh operand temporaries }
           rv32_addi(reg_sp, reg_sp, -4); rv32_sw(reg_a0, reg_sp, 0);  { push result }
           if (IRKind[left] = IR_BINOP) and (IntToTypeKind(IRTk[left]) = tyAnsiString) then
           begin
             rv32_lw(reg_a0, reg_sp, 8);
-            pi := FindProc('PXXStrDecRef'); EmitCallProc(pi);
+            procIdx := FindProc('PXXStrDecRef'); EmitCallProc(procIdx);
           end;
           if (IRKind[right] = IR_BINOP) and (IntToTypeKind(IRTk[right]) = tyAnsiString) then
           begin
             rv32_lw(reg_a0, reg_sp, 4);
-            pi := FindProc('PXXStrDecRef'); EmitCallProc(pi);
+            procIdx := FindProc('PXXStrDecRef'); EmitCallProc(procIdx);
           end;
           rv32_lw(reg_a0, reg_sp, 0); rv32_addi(reg_sp, reg_sp, 4);   { pop result }
           rv32_addi(reg_sp, reg_sp, 8);                               { drop rhs, lhs }
@@ -505,8 +505,8 @@ begin
 
     IR_CALL:
       begin
-        pi := IRA[node];
-        if pi = -Ord(tkGetMem) then
+        procIdx := IRA[node];
+        if procIdx = -Ord(tkGetMem) then
         begin
           { GetMem / New. Class instantiation (VMT + ctor) is a later step. }
           if IRC[node] >= REC_UCLASS_BASE then
@@ -516,14 +516,14 @@ begin
           EmitHeapAllocLockedRISCV32;         { a0 = payload pointer }
           Exit;
         end;
-        if pi = -Ord(tkFreeMem) then
+        if procIdx = -Ord(tkFreeMem) then
         begin
           argNode := IRB[node];               { pointer arg }
           IREmitNodeRISCV32(IRA[argNode]);    { p -> a0 }
           EmitHeapFreeLockedRISCV32;
           Exit;
         end;
-        if pi = -102 then
+        if procIdx = -102 then
         begin
           { SetLength(arr, n) -> PXXDynSetLen(slotAddr, n, desc). SetLength on a
             managed AnsiString -> PXXStrSetLen(slotAddr, n). }
@@ -546,9 +546,9 @@ begin
             IREmitNodeRISCV32(IRA[valNode]);   { a0 = n }
             rv32_addi(reg_a1, reg_a0, 0);      { a1 = n }
             rv32_lw(reg_a0, reg_sp, 0); rv32_addi(reg_sp, reg_sp, 4);   { pop slot -> a0 }
-            pi := FindProc('PXXStrSetLen');
-            if pi < 0 then Error('compiler error: PXXStrSetLen not found');
-            EmitCallProc(pi);
+            procIdx := FindProc('PXXStrSetLen');
+            if procIdx < 0 then Error('compiler error: PXXStrSetLen not found');
+            EmitCallProc(procIdx);
             Exit;
           end;
           if IRKind[left] <> IR_LEA then
@@ -564,12 +564,12 @@ begin
           rv32_addi(reg_a1, reg_a0, 0);       { a1 = n }
           rv32_lw(reg_a0, reg_sp, 0); rv32_addi(reg_sp, reg_sp, 4);   { pop slot -> a0 }
           EmitLoadDataRefRISCV32(reg_a2, GetOrAllocSymRTTI(si));      { a2 = desc }
-          pi := FindProc('PXXDynSetLen');
-          if pi < 0 then Error('compiler error: PXXDynSetLen not found');
-          EmitCallProc(pi);
+          procIdx := FindProc('PXXDynSetLen');
+          if procIdx < 0 then Error('compiler error: PXXDynSetLen not found');
+          EmitCallProc(procIdx);
           Exit;
         end;
-        if pi = -Ord(tkLength) then
+        if procIdx = -Ord(tkLength) then
         begin
           { Length(arr): a0 = handle; count at [handle-8], nil handle -> 0. }
           argNode := IRB[node];
@@ -578,14 +578,14 @@ begin
           rv32_lw(reg_a0, reg_a0, -8);
           Exit;
         end;
-        if pi < 0 then
+        if procIdx < 0 then
         begin
           { Type-pun passthroughs: Ord/Chr/Integer()/LongWord() are identity on
             the value already in a0 (char/int share the register model). }
-          if (pi = -Ord(tkOrd)) or (pi = -Ord(tkChr)) or
-             (pi = -Ord(tkInteger_T)) or (pi = -Ord(tkLongWord_T)) or
-             (pi = -Ord(tkChar_T)) or (pi = -Ord(tkBoolean_T)) or
-             (pi = -Ord(tkString_T)) then
+          if (procIdx = -Ord(tkOrd)) or (procIdx = -Ord(tkChr)) or
+             (procIdx = -Ord(tkInteger_T)) or (procIdx = -Ord(tkLongWord_T)) or
+             (procIdx = -Ord(tkChar_T)) or (procIdx = -Ord(tkBoolean_T)) or
+             (procIdx = -Ord(tkString_T)) then
           begin
             argNode := IRB[node];
             IREmitNodeRISCV32(IRA[argNode]);
@@ -602,7 +602,7 @@ begin
           { External C call: a Pascal string literal is stored as an 8-byte
             length prefix + NUL-terminated chars; pass the char data so the
             callee sees a const char* (same auto-marshal as x86-64). }
-          if ProcExternal[pi] and (IntToTypeKind(IRTk[argNode]) = tyString) then
+          if ProcExternal[procIdx] and (IntToTypeKind(IRTk[argNode]) = tyString) then
             rv32_addi(reg_a0, reg_a0, 8);
           rv32_addi(reg_sp, reg_sp, -4);
           rv32_sw(reg_a0, reg_sp, 0);
@@ -619,7 +619,7 @@ begin
         if nArgs > 0 then
           rv32_addi(reg_sp, reg_sp, nArgs * 4);
 
-        EmitCallProc(pi);
+        EmitCallProc(procIdx);
       end;
 
     IR_WRITE, IR_WRITELN:
@@ -643,9 +643,9 @@ begin
           PXXRecordRelease path the hosted targets take for managed fields. }
         IREmitNodeRISCV32(IRA[node]);            { a0 = dest }
         EmitLoadImmRISCV32(reg_a1, Integer(IRIVal[node]));  { a1 = byte count }
-        pi := FindProc('PXXMemZero');
-        if pi < 0 then Error('compiler error: PXXMemZero not found');
-        EmitCallProc(pi);
+        procIdx := FindProc('PXXMemZero');
+        if procIdx < 0 then Error('compiler error: PXXMemZero not found');
+        EmitCallProc(procIdx);
       end;
 
     IR_NEG:

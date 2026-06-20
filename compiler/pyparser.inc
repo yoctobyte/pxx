@@ -276,7 +276,7 @@ begin
 end;
 
 function PyInferExprType(startIdx, endIdx: Integer): TTypeKind;
-var i, ci, si, pi, depth: Integer; tk: TTypeKind; name: AnsiString;
+var i, ci, si, procIdx, depth: Integer; tk: TTypeKind; name: AnsiString;
 begin
   Result := tyUnknown;
   if (startIdx < endIdx) and (Tokens[startIdx].Kind = tkIdent) and
@@ -300,8 +300,8 @@ begin
         if (i + 1 < endIdx) and (Tokens[i + 1].Kind = tkLParen) and
            not IsClassType(name) then
         begin
-          pi := FindProc(name);
-          if pi >= 0 then tk := Procs[pi].RetType
+          procIdx := FindProc(name);
+          if procIdx >= 0 then tk := Procs[procIdx].RetType
           else tk := PyDefReturnType(name);
           if tk = tyUnknown then tk := tyVariant;
           i := i + 1; depth := 0;
@@ -801,7 +801,7 @@ end;
 procedure PyParseDef;
 var name: AnsiString; pnames: array[0..15] of AnsiString;
     ptypes: array[0..15] of TTypeKind;
-    nparams, i, pi, idx, savedSC, savedFS, patchPos, bodyStart, bodyEnd, bodyNode: Integer;
+    nparams, i, procIdx, idx, savedSC, savedFS, patchPos, bodyStart, bodyEnd, bodyNode: Integer;
     retType: TTypeKind;
 begin
   if CurTok.Kind <> tkFunction then Error('Nil Python: expected def');
@@ -832,29 +832,29 @@ begin
   bodyStart := TokPos - 1;
   bodyEnd := PyFindBodyEnd(bodyStart);
 
-  pi := RegisterProc(name, True, retType, nparams, pnames, ptypes);
-  Procs[pi].BodyAddr := CodeLen;
+  procIdx := RegisterProc(name, True, retType, nparams, pnames, ptypes);
+  Procs[procIdx].BodyAddr := CodeLen;
   savedSC := SymCount;
   savedFS := FrameSize;
   FrameSize := 0;
-  CurProc := pi;
-  Procs[pi].ScopeBase := SymCount;
+  CurProc := procIdx;
+  Procs[procIdx].ScopeBase := SymCount;
   for i := 0 to nparams - 1 do
   begin
     idx := AllocParam(pnames[i], ptypes[i], False, False);
-    Procs[pi].Params[i].SymIdx := idx;
+    Procs[procIdx].Params[i].SymIdx := idx;
   end;
   idx := AllocVar('Result', retType);
-  Procs[pi].RetSymIdx := idx;
+  Procs[procIdx].RetSymIdx := idx;
   PyCollectLocals(bodyStart, bodyEnd);
   for i := 0 to PyLocalCount - 1 do
     if FindSym(PyLocals[i].Name) < 0 then AllocVar(PyLocals[i].Name, PyLocals[i].TypeKind);
 
   patchPos := EmitProcPrologue;
-  Procs[pi].FramePatch := patchPos;
+  Procs[procIdx].FramePatch := patchPos;
   for i := 0 to nparams - 1 do
   begin
-    idx := Procs[pi].Params[i].SymIdx;
+    idx := Procs[procIdx].Params[i].SymIdx;
     EmitB($89);
     case i of
       0: EmitB($BD);
@@ -865,11 +865,11 @@ begin
     end;
     EmitI32(Syms[idx].Offset);
   end;
-  PyInitVariantLocals(Procs[pi].ScopeBase);
+  PyInitVariantLocals(Procs[procIdx].ScopeBase);
   bodyNode := PyParseBlock;
   Expect(tkDedent, 'dedent');
   CompileAST(bodyNode);
-  EmitProcEpilog(Procs[pi].RetSymIdx);
+  EmitProcEpilog(Procs[procIdx].RetSymIdx);
   PatchProcPrologue(patchPos, FrameSize);
   SymCount := savedSC;
   FrameSize := savedFS;
@@ -895,7 +895,7 @@ begin
 end;
 
 procedure PyRegisterClassMembers(ci, bodyStart, bodyEnd: Integer);
-var i, j, k, depth, methodStart, nparams, pi, mmi, slot, curOff, align, sz: Integer;
+var i, j, k, depth, methodStart, nparams, procIdx, mmi, slot, curOff, align, sz: Integer;
     origName, name, fullName, rhsName: AnsiString; isCtor: Boolean;
     pnames: array[0..15] of AnsiString; ptypes: array[0..15] of TTypeKind;
     tk: TTypeKind;
@@ -942,14 +942,14 @@ begin
       fullName := PyRawName(UClsNOff[ci], UClsNLen[ci]);
       AppendChar(fullName, '.');
       for k := 1 to Length(name) do AppendChar(fullName, name[k]);
-      pi := RegisterProc(fullName, not isCtor, tyInteger, nparams, pnames, ptypes);
+      procIdx := RegisterProc(fullName, not isCtor, tyInteger, nparams, pnames, ptypes);
       if isCtor then
       begin
         k := PyStoredName('create');
-        AddUMeth(ci, k, 6, pi);
+        AddUMeth(ci, k, 6, procIdx);
       end
       else
-        AddUMeth(ci, Tokens[i + 1].SOffset, Tokens[i + 1].SLen, pi);
+        AddUMeth(ci, Tokens[i + 1].SOffset, Tokens[i + 1].SLen, procIdx);
       mmi := UMthCount - 1;
       if not isCtor then
       begin
@@ -1006,7 +1006,7 @@ begin
 end;
 
 procedure PyParseMethod(ci: Integer);
-var origName, name, fullName: AnsiString; pi, i, idx, nparams, savedSC, savedFS,
+var origName, name, fullName: AnsiString; procIdx, i, idx, nparams, savedSC, savedFS,
     savedSelf, patchPos, bodyNode: Integer; pnames: array[0..15] of AnsiString;
     ptypes: array[0..15] of TTypeKind; isCtor: Boolean;
 begin
@@ -1028,30 +1028,30 @@ begin
   Expect(tkColon, ':'); Expect(tkNewline, 'newline'); Expect(tkIndent, 'indent');
   fullName := PyRawName(UClsNOff[ci], UClsNLen[ci]); AppendChar(fullName, '.');
   for i := 1 to Length(name) do AppendChar(fullName, name[i]);
-  pi := FindProc(fullName);
+  procIdx := FindProc(fullName);
   savedSC := SymCount; savedFS := FrameSize; savedSelf := CurSelfClass;
-  FrameSize := 0; CurProc := pi; CurSelfClass := REC_UCLASS_BASE + ci;
-  Procs[pi].ScopeBase := SymCount;
+  FrameSize := 0; CurProc := procIdx; CurSelfClass := REC_UCLASS_BASE + ci;
+  Procs[procIdx].ScopeBase := SymCount;
   for i := 0 to nparams - 1 do
   begin
     idx := AllocParam(pnames[i], ptypes[i], False, False);
-    Procs[pi].Params[i].SymIdx := idx;
+    Procs[procIdx].Params[i].SymIdx := idx;
     if i = 0 then Syms[idx].RecName := REC_UCLASS_BASE + ci;
   end;
-  if not isCtor then begin idx := AllocVar('Result', Procs[pi].RetType); Procs[pi].RetSymIdx := idx; end;
-  Procs[pi].BodyAddr := CodeLen;
-  patchPos := EmitProcPrologue; Procs[pi].FramePatch := patchPos;
+  if not isCtor then begin idx := AllocVar('Result', Procs[procIdx].RetType); Procs[procIdx].RetSymIdx := idx; end;
+  Procs[procIdx].BodyAddr := CodeLen;
+  patchPos := EmitProcPrologue; Procs[procIdx].FramePatch := patchPos;
   for i := 0 to nparams - 1 do
   begin
-    idx := Procs[pi].Params[i].SymIdx;
+    idx := Procs[procIdx].Params[i].SymIdx;
     if TypeSize(Syms[idx].TypeKind) = 8 then EmitB($48);
     EmitB($89);
     case i of 0: EmitB($BD); 1: EmitB($B5); 2: EmitB($95); 3: EmitB($8D); end;
     EmitI32(Syms[idx].Offset);
   end;
-  PyInitVariantLocals(Procs[pi].ScopeBase);
+  PyInitVariantLocals(Procs[procIdx].ScopeBase);
   bodyNode := PyParseBlock; Expect(tkDedent, 'dedent');
-  CompileAST(bodyNode); EmitProcEpilog(Procs[pi].RetSymIdx); PatchProcPrologue(patchPos, FrameSize);
+  CompileAST(bodyNode); EmitProcEpilog(Procs[procIdx].RetSymIdx); PatchProcPrologue(patchPos, FrameSize);
   SymCount := savedSC; FrameSize := savedFS; CurProc := -1; CurSelfClass := savedSelf;
 end;
 

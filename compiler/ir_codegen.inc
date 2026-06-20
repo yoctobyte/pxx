@@ -31,7 +31,7 @@ end;
 procedure EmitHeapAllocLocked;
 { rax = requested payload bytes. Returns payload pointer in rax. Caller holds
   the heap lock when threading is enabled. }
-var pi: Integer;
+var procIdx: Integer;
 begin
   EmitB($56);                                     { push rsi }
   EmitB($57);                                     { push rdi }
@@ -44,9 +44,9 @@ begin
 
   EmitB($48); EmitB($89); EmitB($C7);             { mov rdi, rax  (size) }
   EmitB($48); EmitB($C7); EmitB($C6); EmitI32(8);  { mov rsi, 8    (alignment) }
-  pi := FindProc('PXXAlloc');
-  if pi < 0 then Error('compiler error: Alloc helper not found in builtin unit');
-  EmitCallProc(pi);                               { rax = returned pointer }
+  procIdx := FindProc('PXXAlloc');
+  if procIdx < 0 then Error('compiler error: Alloc helper not found in builtin unit');
+  EmitCallProc(procIdx);                               { rax = returned pointer }
 
   EmitB($41); EmitB($5B);                         { pop r11 }
   EmitB($41); EmitB($5A);                         { pop r10 }
@@ -61,7 +61,7 @@ end;
 procedure EmitHeapFreeLocked;
 { rax = payload pointer from EmitHeapAllocLocked/GetMem. Caller holds the heap
   lock when threading is enabled. nil is ignored. }
-var pi: Integer;
+var procIdx: Integer;
 begin
   EmitB($56);                                     { push rsi }
   EmitB($57);                                     { push rdi }
@@ -73,9 +73,9 @@ begin
   EmitB($41); EmitB($53);                         { push r11 }
 
   EmitB($48); EmitB($89); EmitB($C7);             { mov rdi, rax  (pointer) }
-  pi := FindProc('PXXFree');
-  if pi < 0 then Error('compiler error: Free helper not found in builtin unit');
-  EmitCallProc(pi);
+  procIdx := FindProc('PXXFree');
+  if procIdx < 0 then Error('compiler error: Free helper not found in builtin unit');
+  EmitCallProc(procIdx);
 
   EmitB($41); EmitB($5B);                         { pop r11 }
   EmitB($41); EmitB($5A);                         { pop r10 }
@@ -151,29 +151,29 @@ begin
 end;
 
 procedure EmitManagedRecordRetain(recId: Integer);
-var pi: Integer;
+var procIdx: Integer;
 begin
   if recId < REC_UCLASS_BASE then Exit;
   if not RecordHasManagedFields(recId) then Exit;
-  pi := FindProc('PXXRecordRetain');
-  if pi < 0 then Error('compiler error: PXXRecordRetain not found');
+  procIdx := FindProc('PXXRecordRetain');
+  if procIdx < 0 then Error('compiler error: PXXRecordRetain not found');
 
   EmitB($48); EmitB($89); EmitB($DF); { mov rdi, rbx }
   EmitB($48); EmitB($BE); EmitDataRef(-(RECORD_RTTI_DATAREF_BASE + (recId - REC_UCLASS_BASE))); { mov rsi, desc }
-  EmitCallProc(pi);
+  EmitCallProc(procIdx);
 end;
 
 procedure EmitManagedRecordReleaseLocked(recId: Integer);
-var pi: Integer;
+var procIdx: Integer;
 begin
   if recId < REC_UCLASS_BASE then Exit;
   if not RecordHasManagedFields(recId) then Exit;
-  pi := FindProc('PXXRecordRelease');
-  if pi < 0 then Error('compiler error: PXXRecordRelease not found');
+  procIdx := FindProc('PXXRecordRelease');
+  if procIdx < 0 then Error('compiler error: PXXRecordRelease not found');
 
   EmitB($48); EmitB($89); EmitB($DF); { mov rdi, rbx }
   EmitB($48); EmitB($BE); EmitDataRef(-(RECORD_RTTI_DATAREF_BASE + (recId - REC_UCLASS_BASE))); { mov rsi, desc }
-  EmitCallProc(pi);
+  EmitCallProc(procIdx);
 end;
 
 function GetOrAllocSymRTTI(symIdx: Integer): Integer;
@@ -311,14 +311,14 @@ begin
 end;
 
 procedure EmitDynArrayReleaseLockedForSym(symIdx: Integer);
-var pi: Integer;
+var procIdx: Integer;
 begin
-  pi := FindProc('PXXDynArrayRelease');
-  if pi < 0 then Error('compiler error: PXXDynArrayRelease not found');
+  procIdx := FindProc('PXXDynArrayRelease');
+  if procIdx < 0 then Error('compiler error: PXXDynArrayRelease not found');
 
   EmitB($48); EmitB($89); EmitB($C7); { mov rdi, rax }
   EmitB($48); EmitB($BE); EmitDataRef(GetOrAllocSymRTTI(symIdx)); { mov rsi, desc }
-  EmitCallProc(pi);
+  EmitCallProc(procIdx);
 end;
 
 procedure EmitDynArrayReleaseForSym(symIdx: Integer);
@@ -329,20 +329,20 @@ begin
 end;
 
 procedure EmitDynArrayUnique(symIdx: Integer; elemSize: Integer);
-var pi: Integer;
+var procIdx: Integer;
 begin
-  pi := FindProc('PXXDynArrayUnique');
-  if pi < 0 then Error('compiler error: PXXDynArrayUnique not found');
+  procIdx := FindProc('PXXDynArrayUnique');
+  if procIdx < 0 then Error('compiler error: PXXDynArrayUnique not found');
 
   EmitAcquireHeapLock;
   EmitB($48); EmitB($89); EmitB($C7); { mov rdi, rax  (arrSlot) }
   EmitB($48); EmitB($BE); EmitDataRef(GetOrAllocSymRTTI(symIdx)); { mov rsi, desc }
-  EmitCallProc(pi);
+  EmitCallProc(procIdx);
   EmitReleaseHeapLock;
 end;
 
 procedure EmitAnsiStrFromLiteral;
-var pi: Integer;
+var procIdx: Integer;
 begin
   AnsiStrFromLiteralAddr := CodeLen;
   { Shim: keep the historical blob contract (rdi = len, rsi = src, every GPR
@@ -362,9 +362,9 @@ begin
   EmitB($41); EmitB($53); { push r11 }
 
   EmitAcquireHeapLock;
-  pi := FindProc('PXXStrFromLit');
-  if pi < 0 then Error('compiler error: PXXStrFromLit helper not found in builtin unit');
-  EmitCallProc(pi);       { rax = managed string pointer (or nil) }
+  procIdx := FindProc('PXXStrFromLit');
+  if procIdx < 0 then Error('compiler error: PXXStrFromLit helper not found in builtin unit');
+  EmitCallProc(procIdx);       { rax = managed string pointer (or nil) }
   EmitReleaseHeapLock;
 
   EmitB($41); EmitB($5B); { pop r11 }
@@ -1289,7 +1289,7 @@ var left, right, valNode, symIdx, si, nextJmp2, pNil: Integer;
     size: Integer;
     isSigned: Boolean;
     baseAddr, indexNode, lo, elemSize, offset, addressNode, valueNode: Integer;
-    argNode, pathIdx, pi, specialId, classIdx, slot, cpi, i, jbePatch, anonIdx: Integer;
+    argNode, pathIdx, procIdx, specialId, classIdx, slot, cpi, i, jbePatch, anonIdx: Integer;
     searchTop, pJzBump, pJaeTake, pJmpDone, pJbeNoGrow, pFreeNil, pNotDouble, pDone: Integer;
     pAnsiAlloc, pAnsiShared, pAnsiTooSmall, pAnsiNoZeroGrow, pAnsiFastDone: Integer;
     pAnsiUseNeededNil, pAnsiUseNeededSmall, pAnsiMinDone, pAnsiCapDone: Integer;
@@ -1789,10 +1789,10 @@ begin
 
           Inc(AnonDynArrayCount);
 
-          pi := FindProc('PXXDynArrayUnique');
-          if pi < 0 then Error('compiler error: PXXDynArrayUnique not found');
+          procIdx := FindProc('PXXDynArrayUnique');
+          if procIdx < 0 then Error('compiler error: PXXDynArrayUnique not found');
           EmitAcquireHeapLock;
-          EmitCallProc(pi);
+          EmitCallProc(procIdx);
           EmitReleaseHeapLock;
         end
         else
@@ -2550,10 +2550,10 @@ begin
       
     IR_CALL:
       begin
-        pi := IRA[node];
-        if pi >= 0 then
+        procIdx := IRA[node];
+        if procIdx >= 0 then
         begin
-          if ProcExternal[pi] then
+          if ProcExternal[procIdx] then
           begin
             { External C call — SysV AMD64 ABI. Integer/pointer args fill
               rdi,rsi,rdx,rcx,r8,r9; floating args fill xmm0..xmm7 (the two
@@ -2568,9 +2568,9 @@ begin
               argNode := IRB[argNode];
             end;
             intIdx := 0; sseIdx := 0; mStack := 0;
-            for i := 0 to Procs[pi].ParamCount - 1 do
+            for i := 0 to Procs[procIdx].ParamCount - 1 do
             begin
-              if TypeIsFloat(Procs[pi].Params[i].TypeKind) then
+              if TypeIsFloat(Procs[procIdx].Params[i].TypeKind) then
               begin
                 argIsSse[i] := True;
                 if sseIdx < 8 then
@@ -2585,7 +2585,7 @@ begin
                 else begin argIsStack[i] := True; Inc(mStack); end;
               end;
             end;
-            extIdx := RegisterExternal(pi);
+            extIdx := RegisterExternal(procIdx);
             { Align the stack and reserve the outgoing stack-arg area in one
               self-contained sequence (EmitCallProc's realign path cannot be
               used here — it would move rsp away from the stack args). Save the
@@ -2606,11 +2606,11 @@ begin
             else
               padBytes := 0;
             { Stack args, right-to-left (leftmost ends at the lowest address). }
-            for i := Procs[pi].ParamCount - 1 downto 0 do
+            for i := Procs[procIdx].ParamCount - 1 downto 0 do
               if argIsStack[i] then
               begin
                 if (IntToTypeKind(IRTk[argNodeArr[i]]) = tyVariant) and
-                   (TypeIsOrdinal(Procs[pi].Params[i].TypeKind) or TypeIsFloat(Procs[pi].Params[i].TypeKind)) then
+                   (TypeIsOrdinal(Procs[procIdx].Params[i].TypeKind) or TypeIsFloat(Procs[procIdx].Params[i].TypeKind)) then
                 begin
                   EmitLoadVariantAddress(argNodeArr[i]);
                   EmitB($48); EmitB($8B); EmitB($40); EmitB($08); { mov rax, [rax+8] }
@@ -2621,11 +2621,11 @@ begin
               end;
             { Register args: push right-to-left, then pop left-to-right into the
               target registers (each arg evaluated once, no register clobber). }
-            for i := Procs[pi].ParamCount - 1 downto 0 do
+            for i := Procs[procIdx].ParamCount - 1 downto 0 do
               if not argIsStack[i] then
               begin
                 if (IntToTypeKind(IRTk[argNodeArr[i]]) = tyVariant) and
-                   (TypeIsOrdinal(Procs[pi].Params[i].TypeKind) or TypeIsFloat(Procs[pi].Params[i].TypeKind)) then
+                   (TypeIsOrdinal(Procs[procIdx].Params[i].TypeKind) or TypeIsFloat(Procs[procIdx].Params[i].TypeKind)) then
                 begin
                   EmitLoadVariantAddress(argNodeArr[i]);
                   EmitB($48); EmitB($8B); EmitB($40); EmitB($08); { mov rax, [rax+8] }
@@ -2634,7 +2634,7 @@ begin
                   IREmitNode(argNodeArr[i]);
                 EmitB($50); { push rax }
               end;
-            for i := 0 to Procs[pi].ParamCount - 1 do
+            for i := 0 to Procs[procIdx].ParamCount - 1 do
               if not argIsStack[i] then
               begin
                 if argIsSse[i] then
@@ -2642,7 +2642,7 @@ begin
                   EmitB($58); { pop rax }
                   EmitB($66); EmitB($48); EmitB($0F); EmitB($6E);
                   EmitB($C0 + argRegIdx[i] * 8);           { movq xmm[n], rax }
-                  if Procs[pi].Params[i].TypeKind = tySingle then
+                  if Procs[procIdx].Params[i].TypeKind = tySingle then
                   begin
                     EmitB($F2); EmitB($0F); EmitB($5A);
                     EmitB($C0 + argRegIdx[i] * 9);          { cvtsd2ss xmm[n],xmm[n] }
@@ -2667,11 +2667,11 @@ begin
               padBytes + mStack*8 above the current (post-call) rsp. }
             restoreOff := padBytes + mStack * 8;
             EmitB($48); EmitB($8B); EmitB($A4); EmitB($24); EmitI32(restoreOff); { mov rsp, [rsp+off] }
-            if TypeIsFloat(Procs[pi].RetType) then
+            if TypeIsFloat(Procs[procIdx].RetType) then
             begin
               { float/double returned in xmm0; the value model carries doubles,
                 so widen a single (C `float`) result before bridging to rax. }
-              if Procs[pi].RetType = tySingle then
+              if Procs[procIdx].RetType = tySingle then
                 begin EmitB($F3); EmitB($0F); EmitB($5A); EmitB($C0); end; { cvtss2sd xmm0, xmm0 }
               EmitB($66); EmitB($48); EmitB($0F); EmitB($7E); EmitB($C0); { movq rax, xmm0 }
             end;
@@ -2684,9 +2684,9 @@ begin
             while argNode <> -1 do
             begin
               IREmitNode(IRA[argNode]); { -> rax }
-              if (pi >= 0) and (i < Procs[pi].ParamCount) then
+              if (procIdx >= 0) and (i < Procs[procIdx].ParamCount) then
               begin
-                if Procs[pi].Params[i].TypeKind = tyAnsiString then
+                if Procs[procIdx].Params[i].TypeKind = tyAnsiString then
                 begin
                   if IntToTypeKind(IRTk[argNode]) = tyString then
                     EmitAnsiStrFromInlineString
@@ -2710,8 +2710,8 @@ begin
               pop loop below has no case arm past r9, so it used to pop the
               wrong (topmost) args into the registers and leak the rest
               (bug-many-param-call-corruption). }
-            if Procs[pi].ParamCount <= 6 then
-              for i := Procs[pi].ParamCount - 1 downto 0 do
+            if Procs[procIdx].ParamCount <= 6 then
+              for i := Procs[procIdx].ParamCount - 1 downto 0 do
                 case i of
                   0: EmitB($5F); { pop rdi }
                   1: EmitB($5E); { pop rsi }
@@ -2720,20 +2720,20 @@ begin
                   4: begin EmitB($41); EmitB($58); end; { pop r8 }
                   5: begin EmitB($41); EmitB($59); end; { pop r9 }
                 end;
-            if TypeIsAggregate(Procs[pi].RetType) then
+            if TypeIsAggregate(Procs[procIdx].RetType) then
             begin
               IREmitNode(IRC[node]);                   { rax = hidden destination }
               EmitB($49); EmitB($89); EmitB($C2);     { mov r10, rax }
             end;
-            EmitCallProc(pi);
-            if Procs[pi].ParamCount > 6 then
+            EmitCallProc(procIdx);
+            if Procs[procIdx].ParamCount > 6 then
             begin
               EmitB($48); EmitB($81); EmitB($C4);     { add rsp, n*8 }
-              EmitI32(Procs[pi].ParamCount * 8);
+              EmitI32(Procs[procIdx].ParamCount * 8);
             end;
           end;
         end
-        else if pi = -Ord(tkGetMem) then
+        else if procIdx = -Ord(tkGetMem) then
         begin
           { GetMem or class instantiation. Evaluate size -> rax, then Alloc. }
           EmitAcquireHeapLock;
@@ -2842,7 +2842,7 @@ begin
             EmitB($48); EmitB($89); EmitB($F8); { mov rax, rdi }
           end;
         end
-        else if pi = -Ord(tkFreeMem) then
+        else if procIdx = -Ord(tkFreeMem) then
         begin
           { FreeMem(p): hand the payload back to the pure-Pascal allocator's
             Free, matching GetMem -> Alloc. nil is ignored inside Free. (Was a
@@ -2854,7 +2854,7 @@ begin
           EmitHeapFreeLocked;       { Free(rax) }
           EmitReleaseHeapLock;
         end
-        else if pi = -103 then
+        else if procIdx = -103 then
         begin
           { ReallocMem(oldp, newsize) }
           EmitAcquireHeapLock;
@@ -2869,9 +2869,9 @@ begin
           EmitB($5F);                                     { pop rdi (oldp) }
           EmitB($48); EmitB($C7); EmitB($C2); EmitI32(8);  { mov rdx, 8 (align) }
 
-          pi := FindProc('PXXRealloc');
-          if pi < 0 then Error('compiler error: Realloc helper not found in builtin unit');
-          EmitCallProc(pi);                               { rax = new pointer }
+          procIdx := FindProc('PXXRealloc');
+          if procIdx < 0 then Error('compiler error: Realloc helper not found in builtin unit');
+          EmitCallProc(procIdx);                               { rax = new pointer }
 
           EmitB($5B);                                     { pop rbx }
           EmitReleaseHeapLock;
@@ -2879,7 +2879,7 @@ begin
         else
         begin
           { Special/built-in calls }
-          specialId := -pi;
+          specialId := -procIdx;
           if specialId = Ord(tkLength) then
           begin
             arg1Node := IRB[node];
@@ -3740,9 +3740,9 @@ begin
         EmitB($48); EmitB($8B); EmitB($44); EmitB($24); EmitB($08); { mov rax,[rsp+8] = old }
         EmitB($48); EmitB($89); EmitB($C7); { mov rdi, rax }
         EmitB($48); EmitB($BE); EmitDataRef(AnonDynArrayOff[anonIdx]); { mov rsi, desc }
-        pi := FindProc('PXXDynArrayRelease');
-        if pi < 0 then Error('compiler error: PXXDynArrayRelease not found');
-        EmitCallProc(pi);
+        procIdx := FindProc('PXXDynArrayRelease');
+        if procIdx < 0 then Error('compiler error: PXXDynArrayRelease not found');
+        EmitCallProc(procIdx);
         EmitB($48); EmitB($8B); EmitB($04); EmitB($24);        { mov rax,[rsp] = new data (result) }
         EmitB($48); EmitB($83); EmitB($C4); EmitB($20);        { add rsp,32 }
         EmitB($E9); pJmpDone := CodeLen; EmitI32(0);           { jmp done }
@@ -3755,9 +3755,9 @@ begin
         EmitB($48); EmitB($8B); EmitB($04); EmitB($24);        { mov rax,[rsp] = old }
         EmitB($48); EmitB($89); EmitB($C7); { mov rdi, rax }
         EmitB($48); EmitB($BE); EmitDataRef(AnonDynArrayOff[anonIdx]); { mov rsi, desc }
-        pi := FindProc('PXXDynArrayRelease');
-        if pi < 0 then Error('compiler error: PXXDynArrayRelease not found');
-        EmitCallProc(pi);
+        procIdx := FindProc('PXXDynArrayRelease');
+        if procIdx < 0 then Error('compiler error: PXXDynArrayRelease not found');
+        EmitCallProc(procIdx);
         EmitB($48); EmitB($83); EmitB($C4); EmitB($18);        { add rsp,24 }
 
         Patch32(pJmpDone, CodeLen - (pJmpDone + 4));
@@ -3916,7 +3916,7 @@ begin
     IR_VIRTUAL_CALL:
       begin
         { IRA=first arg, IRB=last arg, IRC=proc idx, IRIVal=VMT slot }
-        pi := IRC[node];
+        procIdx := IRC[node];
         slot := Integer(IRIVal[node]);
         argNode := IRA[node];
         pathIdx := 0;
@@ -3927,8 +3927,8 @@ begin
           argNode := IRB[argNode];
           Inc(pathIdx);
         end;
-        if Procs[pi].ParamCount <= 6 then
-          for i := Procs[pi].ParamCount - 1 downto 0 do
+        if Procs[procIdx].ParamCount <= 6 then
+          for i := Procs[procIdx].ParamCount - 1 downto 0 do
             case i of
               0: EmitB($5F); { pop rdi  (Self) }
               1: EmitB($5E); { pop rsi }
@@ -3942,15 +3942,15 @@ begin
           { All-stack convention: Self (param 0) is the deepest pushed slot;
             fetch it for the VMT load, args stay on the stack for the callee. }
           EmitB($48); EmitB($8B); EmitB($BC); EmitB($24); { mov rdi, [rsp+disp] }
-          EmitI32((Procs[pi].ParamCount - 1) * 8);
+          EmitI32((Procs[procIdx].ParamCount - 1) * 8);
         end;
         { Virtual Method Table dispatch }
         EmitB($48); EmitB($8B); EmitB($07); { mov rax, [rdi]   -- load VMT pointer }
         EmitB($FF); EmitB($90); EmitI32(slot * 8); { call [rax + slot*8] }
-        if Procs[pi].ParamCount > 6 then
+        if Procs[procIdx].ParamCount > 6 then
         begin
           EmitB($48); EmitB($81); EmitB($C4);             { add rsp, n*8 }
-          EmitI32(Procs[pi].ParamCount * 8);
+          EmitI32(Procs[procIdx].ParamCount * 8);
         end;
       end;
 
@@ -3964,7 +3964,7 @@ begin
 end;
 
 procedure IREmitMachineCode;
-var i, lblId, pos, targetOffset, f, pi: Integer;
+var i, lblId, pos, targetOffset, f, procIdx: Integer;
     LabelPositions: array[0..MAX_IR-1] of Integer;
     LabelFixupPos: array[0..2047] of Integer;
     LabelFixupTarget: array[0..2047] of Integer;

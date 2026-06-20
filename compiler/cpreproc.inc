@@ -419,13 +419,13 @@ begin
 end;
 
 function CPParamIndex(mi, off, len: Integer): Integer;
-var i, pi: Integer;
+var i, procIdx: Integer;
 begin
   Result := -1;
   for i := 0 to CPMParamCount[mi] - 1 do
   begin
-    pi := CPMParamBase[mi] + i;
-    if CPPoolNameEquals(CPPNameOff[pi], CPPNameLen[pi], off, len) then
+    procIdx := CPMParamBase[mi] + i;
+    if CPPoolNameEquals(CPPNameOff[procIdx], CPPNameLen[procIdx], off, len) then
     begin
       Result := i;
       Exit;

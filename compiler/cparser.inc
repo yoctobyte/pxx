@@ -475,7 +475,7 @@ var
   retType, ptype: TTypeKind;
   name: AnsiString;
   isFunc: Boolean;
-  nparams, pi, i, idx, patchPos, sz: Integer;
+  nparams, procIdx, i, idx, patchPos, sz: Integer;
   retPtrElemTk, retPtrElemRec: Integer;
   ptypes: array[0..15] of TTypeKind;
   pnames: array[0..15] of AnsiString;
@@ -546,64 +546,64 @@ begin
   isFunc := True; { In C, everything is a function }
   
   { Register or locate Proc }
-  pi := FindProc(name);
-  if pi < 0 then
-    pi := RegisterProc(name, isFunc, retType, nparams, pnames, ptypes);
+  procIdx := FindProc(name);
+  if procIdx < 0 then
+    procIdx := RegisterProc(name, isFunc, retType, nparams, pnames, ptypes);
   for i := 0 to nparams - 1 do
-    ProcParamPtrDepth[pi * 16 + i] := pdepths[i];
-  ProcRetPtrElemTk[pi] := retPtrElemTk;
-  ProcRetPtrElemRec[pi] := retPtrElemRec;
+    ProcParamPtrDepth[procIdx * 16 + i] := pdepths[i];
+  ProcRetPtrElemTk[procIdx] := retPtrElemTk;
+  ProcRetPtrElemRec[procIdx] := retPtrElemRec;
 
   { If it is just a declaration (ends with ';'), we are done! }
   while (CurTok.Kind <> tkSemicolon) and (CurTok.Kind <> tkBegin) and
         (CurTok.Kind <> tkEOF) do Next;
   if CurTok.Kind = tkSemicolon then
   begin
-    ProcExternal[pi] := True;
-    ProcLibrary[pi] := InternStr(CurrentCLibrary);
+    ProcExternal[procIdx] := True;
+    ProcLibrary[procIdx] := InternStr(CurrentCLibrary);
     Next;
     Exit;
   end;
 
   if CHeaderMode then
   begin
-    ProcExternal[pi] := True;
-    ProcLibrary[pi] := InternStr(CurrentCLibrary);
+    ProcExternal[procIdx] := True;
+    ProcLibrary[procIdx] := InternStr(CurrentCLibrary);
     SkipBraceBlock;
     Exit;
   end;
   
   { Otherwise, it has a body! }
-  ProcExternal[pi] := False;
-  Procs[pi].BodyAddr := CodeLen;
+  ProcExternal[procIdx] := False;
+  Procs[procIdx].BodyAddr := CodeLen;
   
   { Save scope }
   savedSC := SymCount;
   savedFS := FrameSize;
   FrameSize := 0;
-  CurProc := pi;
-  Procs[pi].ScopeBase := SymCount;
+  CurProc := procIdx;
+  Procs[procIdx].ScopeBase := SymCount;
   
   { Allocate parameter slots }
   for i := 0 to nparams-1 do
   begin
     idx := AllocParam(pnames[i], ptypes[i], False, False);
-    Procs[pi].Params[i].SymIdx := idx;
+    Procs[procIdx].Params[i].SymIdx := idx;
   end;
   
   { Return value slot }
   AllocVar('Result', retType);
-  Procs[pi].RetSymIdx := SymCount - 1;
+  Procs[procIdx].RetSymIdx := SymCount - 1;
   Syms[SymCount-1].Kind := skLocal;
   
   { Prologue }
   patchPos := EmitProcPrologue;
-  Procs[pi].FramePatch := patchPos;
+  Procs[procIdx].FramePatch := patchPos;
   
   { Copy registers to stack params }
   for i := 0 to nparams-1 do
   begin
-    idx := Procs[pi].Params[i].SymIdx;
+    idx := Procs[procIdx].Params[i].SymIdx;
     sz := ParamSize(idx);
     if i < 4 then
     begin
@@ -680,7 +680,7 @@ begin
   CompileAST(node);
   
   { Epilogue }
-  EmitProcEpilog(Procs[pi].RetSymIdx);
+  EmitProcEpilog(Procs[procIdx].RetSymIdx);
   PatchProcPrologue(patchPos, FrameSize);
   
   { Restore scope }
