@@ -107,3 +107,19 @@ Out of scope (separate tickets):
   axes (CPU vs platform), one porting seam (PAL), capabilities over platform
   names, compile-time backend selection via the unit search path. Step 1 (the
   compiler define axis) is the small Track-A foundation; the layering is Track B.
+- 2026-06-20 — **Step 1 DONE (Track A, commit 6da40d6; pinned v17 in 87250c6).**
+  `--platform=posix|esp` in compiler.pas (mirrors `--target=`); default derived
+  from target (esp targets / `--esp-profile=bare` → esp, else posix), explicit
+  flag overrides via `PlatformExplicit`. Globals `TargetPlatform`/`PlatformExplicit`
+  + `PLATFORM_*` consts in defs.inc. `PasApplyPlatformDefines` (lexer.inc)
+  predefines `PXX_PLATFORM_POSIX/_ESP` + caps `PXX_HAS_FILES/_SOCKETS/_THREADS/
+  _DYNLIB` (posix = all, esp = minimal). Test `test/test_platform_defines.pas`
+  wired into test-core (asserts posix + `--platform=esp` define sets).
+  LANDMINE: `PasApplyTargetDefines` early-`Exit`s for x86_64, so the platform
+  call must NOT live at its tail — it is a separate `PasApplyPlatformDefines`
+  call right after it in compiler.pas. Gate green: make test byte-identical
+  fixedpoint + `--threadsafe`; make cross-bootstrap (i386/aarch64/arm32
+  byte-identical); all 3 cross suites pass.
+  **Remaining (Track B):** PAL interface (byte-handle IO / transport / clock /
+  yield), posix backend, esp stub, IO re-homing, interim `lib/rtl/platform.pas`
+  single `{$ifdef PXX_PLATFORM_ESP}` switch.
