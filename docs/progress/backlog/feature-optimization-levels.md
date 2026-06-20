@@ -1,0 +1,138 @@
+# Optimization levels (`-O0/-O1/-O2/-O3/-Os`) + pass framework
+
+- **Type:** feature
+- **Status:** backlog
+- **Owner:** —
+- **Opened:** 2026-06-20 (design discussion — optimization strategy)
+- **Priority:** last. Correctness, breadth and self-host come first; optimization
+  is the final arc, not a detour. Do not start until the language/RTL surface is
+  settled.
+
+## Motivation
+
+PXX is single-pass and emits straightforward code: full prologue/epilogue per
+call, naive register use, no cross-statement reasoning. That is correct and
+keeps self-host byte-identical tractable, but leaves easy cycles on the floor —
+especially in hot loops and on the cycle-starved ESP targets. We already do
+*partial constant folding at -O0* (kept, it is local and invisible). The goal of
+this ticket is a **deliberate, level-gated optimizer**: a small set of cheap,
+safe, deterministic passes, each independently landed, tested, and self-host
+verified, organised behind the conventional `-O` flag.
+
+## No standard, but a conventional shape
+
+There is no ISO/standard mandate for what `-O1/2/3` must do — GCC/Clang/MSVC only
+loosely agree. We adopt the convention and assign passes per-feature by the
+**safe vs. some-risk** axis, not by a rulebook:
+
+| Level | Contract | Notes |
+|-------|----------|-------|
+| `-O0` | none beyond existing partial const-fold; **1:1 source↔asm**, debuggable | dev default; protect this contract |
+| `-O1` | cheap, safe everywhere, **no code-size blowup**, deterministic | candidate to become the *default* once proven |
+| `-O2` | full speed; code size may grow; some heuristics | release default |
+| `-O3` | aggressive; may not always pay (icache, codegen risk); benchmark-gated | opt-in |
+| `-Os` | size-first; O2 minus anything that grows code; inline only if net-smaller | matters for ESP/xtensa/riscv |
+
+Level assignment is **not written in stone** — per pass we pick the level by
+whether it is *proven safe with issue detection* (then it can sit at O1) vs.
+*correct but carrying some risk* (O2). Example: `inline;` (see
+[feature-inline-routines](feature-inline-routines.md)) graduates from O2 to O1
+once it reliably detects ineligible bodies and degrades to a call.
+
+## Architecture decisions
+
+- **Optimize on the shared IR, not per-backend.** One pass implementation
+  benefits all five targets at once and gives a single uniform self-host gate.
+  AST-level only for things that genuinely need source shape (existing const
+  fold). Backend-specific wins (shift-strength reduction, addressing modes) =
+  peephole on shared IR, never duplicated into each emitter — that keeps
+  byte-identical tractable.
+- **Pass framework first.** A thin ordered pass pipeline keyed off the `-O`
+  level, so each optimization lands as one self-contained pass with its own
+  enable level. Avoids a monolithic "O1 mode".
+- **Per-feature override knob from day one.** Global `-O2` but local
+  `{$optimize off}` / `{$O-}`..`{$O+}` scope (FPC-compatible), so a user can
+  disable optimization around a miscompiling hot spot without dropping the whole
+  build.
+
+## Hard gates (ticket-level, non-negotiable)
+
+1. **Determinism.** No heuristic may depend on pointer values, allocation
+   addresses, or hash/map iteration order. Cost models count IR nodes (stable),
+   nothing address-derived. Non-determinism breaks self-host fixedpoint.
+2. **Self-host byte-identical at every shipped `-O` level.** The compiler must
+   self-compile byte-identical at each level it offers. This is an N×M matrix
+   (levels × targets) — start O1-only to keep it small, grow deliberately.
+3. **Cross-level output-equality oracle.** The cheapest strong test: the same
+   program compiled `-O0` vs `-O1` vs `-O2` must produce **identical runtime
+   output**. Any behaviour change = optimizer bug, caught immediately. Wire into
+   `make test` per pass.
+4. **`-O0` stays 1:1 debuggable.** Do not sneak in folds/motions at O0 that
+   disturb source↔asm line mapping. Existing local const-fold is fine.
+
+## Candidate passes (assign levels as proven)
+
+**O1 (cheap, safe, no growth):**
+- Complete constant folding (incl. the gaps — e.g. `Int64()` const cast can't
+  fold today, see [feature-const-eval-typecast-int64](feature-const-eval-typecast-int64.md)).
+- Dead-code elimination — unreachable after `exit`, `if false`, etc.
+- Local copy propagation / redundant-load elimination (single block).
+- Algebraic identities (`x*1`, `x+0`, `x*2`→`shl`) — shift-strength as IR peephole.
+- Jump-to-jump / branch threading.
+- Tiny-leaf auto-inline — only where inlining is *provably not larger* (call
+  sequence ≥ body), no cost-model measurement needed.
+
+**O2 (speed, size may grow):**
+- `inline;` honored generally + aggressive auto-inline behind a node-count cost
+  model ("comparable or shorter code" heuristic). Hosted by
+  [feature-inline-routines](feature-inline-routines.md).
+- Common subexpression elimination (cross-block).
+- Loop-invariant code motion.
+- Strength reduction in loops.
+- Register-allocation upgrade if the current naive scheme proves spill-heavy.
+
+**O3 (aggressive, gated):**
+- Loop unrolling.
+- Inline-everything-non-recursive.
+- (Vectorization — far off, listed only for completeness.)
+
+**-Os (ESP/embedded):**
+- O2 set minus any code-growing pass; inline only when net-smaller; favour
+  `chore-runtime-emission-size` wins.
+
+## Build-out order (split into sub-tickets only when work starts)
+
+Keep this as a single umbrella for now — do not flood the board. When work
+begins, split per pass so each lands + reseeds (`make bootstrap`) + self-host
+verifies independently, matching the fine-grained-commit norm. Suggested first
+four (each independently testable, low risk):
+
+1. Pass framework + `-O` flag plumbing + `{$O±}` scope + cross-level oracle harness.
+2. Constant-folding completion.
+3. Dead-code after `exit` / `if false`.
+4. Tiny-leaf provably-not-larger auto-inline (ties into feature-inline-routines).
+
+## Acceptance
+
+- `-O0/-O1` selectable; `-O1` passes run, `-O0` output unchanged from today.
+- Cross-level output-equality oracle green; `make test` green.
+- Compiler self-compiles **byte-identical at each shipped level**;
+  `make cross-bootstrap` byte-identical on i386 + aarch64 + arm32.
+- A measured win (cycles and/or code size) on at least one real workload with no
+  correctness regression.
+
+## Related
+
+- [feature-inline-routines](feature-inline-routines.md) — inlining mechanics; a
+  pass this framework hosts and gates by level.
+- [feature-allocator-quality](feature-allocator-quality.md),
+  [chore-runtime-emission-size](chore-runtime-emission-size.md) — adjacent
+  "make it smaller/faster" work, measured not speculative.
+- [feature-const-eval-typecast-int64](feature-const-eval-typecast-int64.md) —
+  a known const-fold gap to absorb.
+
+## Log
+- 2026-06-20 — ticket opened from optimization design discussion. Decisions:
+  optimize on shared IR; pass framework keyed off `-O`; per-pass level by
+  safe-vs-risk not rulebook; four hard gates (determinism, per-level self-host,
+  cross-level output oracle, O0 stays 1:1). Optimization is the last arc.

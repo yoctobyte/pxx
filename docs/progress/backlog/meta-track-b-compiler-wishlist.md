@@ -130,3 +130,12 @@ B's pinned binary (binary+builtin coherent; v9->v10).
   Suggested next: **item 8** (verify/enable generator record + nested yield →
   unblocks chess movegen) or the `Copy` siblings (`Delete`/`Insert`/`Concat`) for
   JSON breadth.
+- 2026-06-20 — **track B library upgrades using landed wishlist items:**
+  - `random.pas` upgraded from interim 32-bit LCG to xoshiro256** + SplitMix64
+    (enabled by item 1 — 64-bit ops). LCG retained for constrained targets.
+    Slices 1–2 of feature-random-library done.
+  - `bignum.pas` gained `BigMul` (schoolbook) and `BigSub` (enabled by item 6 —
+    record-fn codegen crash fixed). `BigMulSmall` kept as fast path.
+  - `sysutils.pas` gained `FloatToStr`, `FloatToStrF`, `StrToFloatDef`,
+    `StrToFloat`, `Pos`, `PadLeft`, `PadRight`. Discovered that the `Str` builtin
+    breaks when sysutils's `Copy` is in scope — filed as a compiler gap.
