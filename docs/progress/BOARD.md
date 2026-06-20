@@ -15,12 +15,11 @@ _none_
 | feature-c-runtime-library | feature | C runtime/library layer (`lib/crtl`) plus direct C-library packages | — |
 | feature-platform-abstraction-layer | feature | Platform Abstraction Layer (PAL): per-platform RTL port at one seam | — |
 
-## backlog (69)
+## backlog (67)
 
 | Ticket | Type | Summary | Blocked-by |
 | --- | --- | --- | --- |
 | bug-str-float-broken-by-copy-shadow | bug | Str() builtin breaks for float formatting when a unit shadows Copy | — |
-| bug-subclass-field-offset-calculation | bug | bug-subclass-field-offset-calculation (Track A) | — |
 | chore-inc-to-units | chore | `.inc` → real `.pas` units refactor | — |
 | chore-runtime-emission-size | chore | Finer runtime-support emission (code size) | — |
 | feature-additional-cpu-targets | feature | Additional CPU targets (rollup: i386 → aarch64 → arm32 → ESP32/RISC-V) | feature-target-aarch64, feature-target-arm32, feature-target-esp32, feature-target-i386 |
@@ -29,7 +28,6 @@ _none_
 | feature-async-language-surface | feature | Async language surface + stackless coroutine backend | feature-cross-target-feature-parity |
 | feature-bignum-library | feature | Bignum library — arbitrary-precision integers (deterministic test app) | — |
 | feature-c-header-import-complex | feature | Import C headers for complex libraries (glib/GTK-grade) | — |
-| feature-compiler-search-path-pcl | feature | feature-compiler-search-path-pcl (Track A) | — |
 | feature-compiler-warnings | feature | Compiler warning diagnostics facility | — |
 | feature-compression-library | feature | Compression library — Huffman / LZ77 (roundtrip test app) | — |
 | feature-const-eval-typecast-int64 | feature | ConstEval: typed casts + 64-bit folding in const initializers | — |
@@ -93,7 +91,7 @@ _none_
 
 _none_
 
-## done (97)
+## done (99)
 
 | Ticket | Type | Summary | Blocked-by |
 | --- | --- | --- | --- |
@@ -119,6 +117,7 @@ _none_
 | bug-read-preserves-line-remainder | bug | `read` consumes a whole line like `readln` | — |
 | bug-record-byvalue-arg-truncation | bug | By-value record args >8 bytes truncate (and operator operand edges) | — |
 | bug-record-fn-codegen-crash | bug | Context-sensitive runtime crash: record-returning fn with nested loops over dynarray fields | — |
+| bug-subclass-field-offset-calculation | bug | bug-subclass-field-offset-calculation (Track A) | — |
 | bug-sysutils-unit-hard-skipped | bug | `uses sysutils` is hard-skipped — a real lib/rtl/sysutils can't load | — |
 | bug-threadsafe-layout-rtti-helper-races | bug | Thread-safe layout RTTI helper races | feature-rtti-layout-table |
 | bug-whole-record-copy-main-body-noop | bug | Latent: whole-record array-element copy in main-program body emits store no-ops | — |
@@ -131,6 +130,7 @@ _none_
 | feature-asm-text-emitter | feature | Text-assembler codegen helpers (`EmitAsm386` / `EmitAsmX64` …) | feature-array-of-const |
 | feature-async-coroutines | feature | Async, coroutines, and `yield` | feature-unified-heap-allocator |
 | feature-class-is-as | feature | `is` / `as` / `Supports` — runtime class type-tests | — |
+| feature-compiler-search-path-pcl | feature | feature-compiler-search-path-pcl (Track A) | — |
 | feature-cross-bootstrap | feature | Cross-architecture compiler bootstrap (AArch64/ARM32 → byte-identical self-compile) | — |
 | feature-cross-bootstrap-selfhost | feature | Cross self-host bootstrap (compiler.pas → byte-identical under QEMU) | feature-cross-selfhost-aarch64, feature-cross-selfhost-arm32, feature-cross-selfhost-i386 |
 | feature-cross-codegen-gaps | feature | Cross-target codegen gaps (deferred v1 shortcuts) | — |
@@ -204,7 +204,6 @@ _none_
 ## Ready (no unmet blocker)
 
 - bug-str-float-broken-by-copy-shadow
-- bug-subclass-field-offset-calculation
 - chore-inc-to-units
 - chore-runtime-emission-size
 - feature-additional-cpu-targets
@@ -213,7 +212,6 @@ _none_
 - feature-async-language-surface
 - feature-bignum-library
 - feature-c-header-import-complex
-- feature-compiler-search-path-pcl
 - feature-compiler-warnings
 - feature-compression-library
 - feature-const-eval-typecast-int64

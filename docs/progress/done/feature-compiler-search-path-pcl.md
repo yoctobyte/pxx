@@ -1,7 +1,7 @@
 # feature-compiler-search-path-pcl (Track A)
 
 - **Type:** feature
-- **Status:** backlog
+- **Status:** DONE 2026-06-20
 - **Owner:** —
 - **Opened:** 2026-06-20
 
@@ -25,3 +25,11 @@ In `compiler/parser.inc`:
 
 ## Log
 - 2026-06-20 — Opened during Track B renaming of LCL to PCL.
+
+## DONE 2026-06-20 (commit f9e0069)
+
+Updated the 4 default unit-search fallbacks in parser.inc from `lib/lcl/` to
+`lib/pcl/` (+ the ExeDir-relative `../lib/pcl/` and the two CWD-relative .pas/.pp
+fallbacks, + comments). GUI programs now resolve PCL units without an explicit
+`-Fulib/pcl`. (lib/lcl no longer exists — Track B's rename landed.) x86-64
+self-host byte-identical.
