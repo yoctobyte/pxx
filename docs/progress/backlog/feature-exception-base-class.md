@@ -41,3 +41,7 @@ handlers (`test/test_exception_typed.pas`), but there is no canonical
 
 ## Log
 - 2026-06-20 — Opened after `make demos` on pinned v14 failed on chess.
+- 2026-06-20 — Added to `make library-suite-discovery` as `demo_chess`.
+  Current pinned v18 output remains `base type not found: Exception`; the suite
+  tags it as Track B if a minimal RTL `Exception` class is sufficient, Track A
+  if default-scope / exception-runtime behavior needs compiler support.

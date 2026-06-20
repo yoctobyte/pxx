@@ -87,14 +87,15 @@ the compiler.
 ```sh
 make pxx-stable-check   # shows pinned vs latest; notes if a newer stable awaits blessing
 make lib-test           # curated GREEN smoke (may hard-fail; keep it green)
+make library-suite      # Track-B library suite: green gate + non-gating discovery
 make demos              # compile-smoke dashboard for every example (exit 0)
 ```
 
-`lib-test` and `demos` are **discovery harnesses, not gates**. When they surface
-missing or bugged library / language support (e.g. a demo needs `Copy` or
-`IntToStr`, or a parse error), **file a ticket** in `docs/progress/backlog`
-rather than treating the red as a hard failure. Keep `lib-test` itself green —
-move anything broken out to a ticket.
+`lib-test` / `library-suite-green` are the curated green library gate. Keep them
+green. `library-suite-discovery`, `c-interop-devtest`, and `demos` are discovery
+dashboards. When they surface missing or bugged library / language support
+(e.g. a demo needs `Copy` or `IntToStr`, or a parse error), **file a ticket** in
+`docs/progress/backlog` rather than treating the red as a hard failure.
 
 ## Lanes are soft, not walls
 

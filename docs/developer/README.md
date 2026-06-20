@@ -22,6 +22,8 @@ User-facing documents:
 - [Platform Abstraction Layer](pal.md) - RTL porting seam for posix and
   ESP-IDF-hosted backends; keep platform conditionals here, not in higher
   libraries.
+- [Library Test Suite](library-testing.md) - Track B library-suite workflow,
+  green vs discovery lanes, and when to file Track A/B tickets.
 - [Limitations](limitations.md) - unsupported or only partially supported language, ABI, platform, and tooling areas.
 - [Inline Assembler](inline-asm.md) - x86-64 inline asm support, supported instruction set, variable passing, limitations, and TODO.
 - [Cross-codegen landmines](cross-codegen-landmines.md) - timeless gotchas for the non-x86-64 backends: the ARM32 4-byte-alignment / unguarded-x86-`EmitB` trap, the crash-diagnosis recipe (qemu `-d in_asm`, raw-binary objdump), and other cross gotchas. Append when bitten.
@@ -47,6 +49,8 @@ Architecture and current state:
 - [Allocator Platform Design](allocator-platform-design.md) - syscall-free internal heap with optional hosted or RTOS hooks.
 - [Platform Abstraction Layer](pal.md) - current PAL interface and backend
   rules for IO/time/thread/network-facing RTL.
+- [Library Test Suite](library-testing.md) - pinned-compiler tests for library
+  behavior, separate from the compiler regression gate.
 - [Garbage Collection Thoughts](garbage-collection-thoughts.md) - why GC is not the default (root-finding cost, bare-metal tension) and the per-target/per-frontend memory profile decision (ARC / arena / hosted collector).
 - [Runtime Emission Size Audit (2026-06-02)](runtime-emission-size-audit-2026-06-02.md) - measured hello-world overhead and deferred feature-reachability cleanup for embedded targets.
 - [Plan: Async, Coroutines, And Yield](plan-async-coroutines.md) - deferred shared state-machine design for Pascal, Nil Python, and future frontends.

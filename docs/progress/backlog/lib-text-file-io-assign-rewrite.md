@@ -52,3 +52,8 @@ adventure need write + read.
 - 2026-06-20 — Opened. Surfaced after `feature-member-access-on-call-result`
   unblocked `engine.pas:446`/`462`; the next adventure line (`563`,
   `Assign(f, path)`) needs text-file RTL.
+- 2026-06-20 — Added to `make library-suite-discovery` as `demo_adventure`.
+  Current pinned v18 output remains `undefined variable (Assign)`. This is the
+  first consumer for the new PAL byte-handle layer: implement classic text-file
+  RTL on `PalOpen`/`PalRead`/`PalWrite`/`PalClose`, splitting a Track A ticket
+  only if the file-handle `WriteLn(f, ...)` surface needs compiler lowering.

@@ -1,0 +1,149 @@
+#!/usr/bin/env bash
+# Track B library test suite.
+#
+# Modes:
+#   green      hard-fail curated library regressions
+#   discovery  non-gating probes that should turn into Track A/B tickets
+#   all        green + discovery
+
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+PXX_STABLE="${PXX_STABLE:-"$ROOT/stable_linux_amd64/default/pinned"}"
+MODE="${1:-green}"
+
+fail=0
+
+say() {
+  printf '%s\n' "$*"
+}
+
+compiler_check() {
+  if [ ! -x "$PXX_STABLE" ]; then
+    say "missing pinned stable compiler: $PXX_STABLE"
+    exit 1
+  fi
+  say "library suite pinned to: $PXX_STABLE"
+}
+
+case_out() {
+  local label="$1"
+  printf '/tmp/pxx_libsuite_%s' "$label"
+}
+
+run_expect() {
+  local label="$1"
+  local expected="$2"
+  shift 2
+  local out actual
+  out="$(case_out "$label")"
+  if ! "$PXX_STABLE" "$@" "$out" >/tmp/pxx_libsuite_"$label".compile.log 2>&1; then
+    say "FAIL  $label -- compile: $(tail -1 /tmp/pxx_libsuite_"$label".compile.log)"
+    fail=1
+    return
+  fi
+  actual="$("$out")"
+  if [ "$actual" = "$expected" ]; then
+    say "OK    $label"
+  else
+    say "FAIL  $label -- output mismatch"
+    diff -u <(printf '%s\n' "$expected") <(printf '%s\n' "$actual") || true
+    fail=1
+  fi
+}
+
+run_smoke() {
+  local label="$1"
+  shift
+  local out actual
+  out="$(case_out "$label")"
+  if ! "$PXX_STABLE" "$@" "$out" >/tmp/pxx_libsuite_"$label".compile.log 2>&1; then
+    say "FAIL  $label -- compile: $(tail -1 /tmp/pxx_libsuite_"$label".compile.log)"
+    fail=1
+    return
+  fi
+  if ! actual="$("$out")"; then
+    say "FAIL  $label -- runtime exit"
+    fail=1
+    return
+  fi
+  if [ -z "$actual" ]; then
+    say "FAIL  $label -- empty output"
+    fail=1
+    return
+  fi
+  say "OK    $label"
+}
+
+probe_compile() {
+  local label="$1"
+  local track_hint="$2"
+  shift 2
+  local out log
+  out="$(case_out "$label")"
+  log="/tmp/pxx_libsuite_${label}.compile.log"
+  if "$PXX_STABLE" "$@" "$out" >"$log" 2>&1; then
+    say "OK    $label"
+  else
+    say "GAP   $label -- $(tail -1 "$log")"
+    say "      request: $track_hint"
+  fi
+}
+
+run_green() {
+  say "=== library suite: green ==="
+  run_expect sudoku \
+    $'534678912672195348198342567859761423426853791713924856961537284287419635345286179\n987654321246173985351928746128537694634892157795461832519286473472319568863745219\n812753649943682175675491283154237896369845721287169534521974368438526917796318452' \
+    "$ROOT/examples/sudoku/sudoku.pas"
+  run_smoke collections -dPXX_MANAGED_STRING "$ROOT/test/test_collections.pas"
+  run_smoke math "$ROOT/test/test_math.pas"
+  run_expect sysutils \
+    $'0\n-123456789\n10000000000\nhello\nworld\n[]\n[pad]\n42\n-7\n-1\n100\nAB3Z\nab3z' \
+    "$ROOT/test/lib_sysutils.pas"
+  run_expect random \
+    $'5 3 5 2 1 1 3 1 \n5 3 5 2 1 1 3 1 \n537 775 832 585 619 ' \
+    "$ROOT/test/lib_random.pas"
+  run_expect platform_posix \
+    $'posix\nfiles\nsockets\nthreads\ndynlib\npal-write=3\nfile=io:2\nunsupported=-38' \
+    "$ROOT/test/lib_platform.pas"
+  run_expect platform_esp_unsupported \
+    $'esp-idf\nopen=-38\nread=-38\nunsupported=-38' \
+    --platform=esp "$ROOT/test/lib_platform_esp.pas"
+  run_expect bignum_factorial \
+    $'5! = 120\n10! = 3628800\n20! = 2432902008176640000\n1000! digits      = 2568\n1000! first 10    = 4023872600\n1000! trailing 0s = 249' \
+    "$ROOT/examples/bignum/factorial.pas"
+}
+
+run_discovery() {
+  say "=== library suite: discovery ==="
+  probe_compile demo_chess \
+    "Track B if an RTL Exception class is enough; Track A if language/runtime exception surface blocks it" \
+    "$ROOT/examples/chess/chess.pas"
+  probe_compile demo_adventure \
+    "Track B: implement text file IO on PAL (Assign/Reset/Rewrite/ReadLn/WriteLn/Close)" \
+    "$ROOT/examples/adventure/adventure.pas"
+  say "(discovery is non-gating; GAP lines should map to docs/progress tickets)"
+}
+
+compiler_check
+
+case "$MODE" in
+  green)
+    run_green
+    ;;
+  discovery)
+    run_discovery
+    ;;
+  all)
+    run_green
+    run_discovery
+    ;;
+  *)
+    say "usage: tools/library_suite.sh [green|discovery|all]"
+    exit 2
+    ;;
+esac
+
+if [ "$fail" -ne 0 ]; then
+  exit 1
+fi
