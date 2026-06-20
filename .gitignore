@@ -25,3 +25,4 @@ test/gui/helloworld/backup/
 test/gui/helloworld/helloworld
 *.lps
 *.map
+library_candidates/
