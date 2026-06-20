@@ -79,6 +79,7 @@ begin
   ProcExceptionCleanupFrameActive := False;
   EnableAutoVar := True;
   EnableLazyVar := True;
+  CIncludeDirCount := 0;
   PasInitDefines;
   i := 1;
   readingOptions := True;
@@ -196,6 +197,12 @@ begin
             (option = '-fno-lazy-var') then
     begin
       EnableLazyVar := False;
+      Inc(i);
+    end
+    else if (Length(option) > 2) and (option[1] = '-') and (option[2] = 'I') then
+    begin
+      { -I<dir>: add a C `#include` search root (project / library dir). }
+      AddCIncludeDir(PasOptionTail(option, 3));
       Inc(i);
     end
     else if (Length(option) > 2) and (option[1] = '-') and

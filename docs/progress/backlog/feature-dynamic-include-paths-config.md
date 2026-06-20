@@ -94,3 +94,16 @@ strictly better — the viral-leak / FPC-define-landmine worry disappears becaus
 **Cost:** (1) stackable define scope (push/pop), (2) resolver tracks the current
 unit's directory + nearest-ancestor manifest lookup, (3) a tiny manifest parser.
 Medium, but it is the general solution for ALL third-party libs, not a one-off.
+
+## Log
+- 2026-06-20 — First slice landed (C-include search path). `-I<dir>` flag →
+  ordered `CIncludeDirs` list (defs.inc), searched after the including file's own
+  directory and before system dirs. The hardcoded `/usr/include…/clang` fallback
+  chain in `cpreproc.inc` is now gated to native (`TargetArch = TARGET_X86_64`)
+  so cross targets never pull host headers. This resolves
+  `bug-c-quoted-include-search-path` (moved to done) and gives candidate C libs a
+  project include-root mechanism. STILL OPEN here: `pxx.cfg` config file,
+  per-directory library manifests (the scoped define/mode/incpath primitive),
+  `tools/pxx-scan` scanner, Pascal-unit (`uses`) search-path refactor, and
+  dynamic system-library soname mapping. The `-I` plumbing + native gate are the
+  shared foundation those build on.

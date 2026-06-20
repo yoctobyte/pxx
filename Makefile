@@ -243,6 +243,8 @@ test-core: $(COMPILER)
 	test "$$(/tmp/hello26)" = "Hello, World!"
 	./$(COMPILER) test/hello.c /tmp/hello_c26
 	test "$$(/tmp/hello_c26)" = "Hello, World!"
+	./$(COMPILER) -Itest/cinc/inc test/cinc/cinc_main.c /tmp/cinc_main26
+	test "$$(/tmp/cinc_main26)" = "$$(printf 'local-ok\ninc-ok')"
 	./$(COMPILER) test/test_asm.pas /tmp/test_asm26
 	/tmp/test_asm26; test "$$?" = "42"
 	./$(COMPILER) test/test_asm_func.pas /tmp/test_asm_func26

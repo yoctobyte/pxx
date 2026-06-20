@@ -995,9 +995,21 @@ begin
   end;
 end;
 
+{ Register a `-I` C include search root. Normalised to a trailing '/'. }
+procedure AddCIncludeDir(const dir: AnsiString);
+var s: AnsiString; j: Integer;
+begin
+  if CIncludeDirCount >= MAX_C_INCLUDE_DIRS then Error('too many -I include directories');
+  s := '';
+  for j := 1 to Length(dir) do AppendChar(s, dir[j]);
+  if (Length(s) > 0) and (s[Length(s)] <> '/') then AppendChar(s, '/');
+  CIncludeDirs[CIncludeDirCount] := s;
+  Inc(CIncludeDirCount);
+end;
+
 procedure CPInclude(const line: AnsiString; p, last, depth: Integer;
   const baseDir: AnsiString);
-var a, b: Integer;
+var a, b, k: Integer;
 begin
   if depth >= MAX_CPREP_INCLUDES then Error('C include nesting overflow');
   while (p <= last) and (line[p] in [' ', #9]) do Inc(p);
@@ -1008,9 +1020,26 @@ begin
     Inc(p);
     a := p;
     while (p <= last) and (Ord(line[p]) <> b) do Inc(p);
+    { 1. The including file's own directory (baseDir is threaded as the resolved
+         dir of each nested include via CPProcessInclude below). }
     CPConcat2(baseDir, '', CPrepPath);
     CPAppendRange(CPrepPath, line, a, p - 1);
     CPLoadInclude(depth);
+    { 2. User `-I` project/library roots, in order — these win over any system
+         header so a project's own header (e.g. our zlib.h) is not shadowed. }
+    k := 0;
+    while (CPIncludeLength(depth) = 0) and (k < CIncludeDirCount) do
+    begin
+      CPConcat2(CIncludeDirs[k], '', CPrepPath);
+      CPAppendRange(CPrepPath, line, a, p - 1);
+      CPLoadInclude(depth);
+      Inc(k);
+    end;
+    { 3. Host system fallbacks. Only for a native (x86_64) build: these are the
+         host's headers, wrong for any cross target — our libraries are meant to
+         be cross-platform and must resolve from project/-I roots, not /usr. }
+    if (CPIncludeLength(depth) = 0) and (TargetArch = TARGET_X86_64) then
+    begin
     if CPIncludeLength(depth) = 0 then
     begin
       SetLength(CPrepPath, 0);
@@ -1123,6 +1152,7 @@ begin
       CPAppendRange(CPrepPath, line, a, p - 1);
       CPLoadInclude(depth);
     end;
+    end;  { native (x86_64) system-fallback block }
     if CPIncludeLength(depth) = 0 then
     begin
       ErrorIdent := CPrepPath;

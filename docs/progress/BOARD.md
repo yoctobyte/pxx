@@ -16,7 +16,6 @@ _none_
 
 | Ticket | Type | Summary | Blocked-by |
 | --- | --- | --- | --- |
-| bug-c-quoted-include-search-path | bug | C quoted includes do not search the including file directory | — |
 | bug-pinned-stable-reads-live-builtin-rtl | bug | Pinned stable reads LIVE builtin RTL source — track A WIP breaks track B | — |
 | chore-inc-to-units | chore | `.inc` → real `.pas` units refactor | — |
 | chore-runtime-emission-size | chore | Finer runtime-support emission (code size) | — |
@@ -30,6 +29,7 @@ _none_
 | feature-compression-library | feature | Compression library — Huffman / LZ77 (roundtrip test app) | — |
 | feature-copy-intrinsic | feature | `Copy` as a generic overloaded intrinsic (string + dynarray families) | — |
 | feature-c-regex-library-devtest | feature | C regex library dev-test import | — |
+| feature-c-runtime-library | feature | C runtime/library layer (`lib/crtl`) plus direct C-library packages | — |
 | feature-c-source-frontend | feature | C source frontend — compile C function bodies (statements + expressions) | feature-cross-target-feature-parity |
 | feature-demo-calc | feature | Demo — RPN / expression calculator (mini spreadsheet) | — |
 | feature-demo-chess | feature | Flagship demo — chess engine (real-world app + cross-target oracle + benchmark) | — |
@@ -85,7 +85,7 @@ _none_
 
 _none_
 
-## done (90)
+## done (91)
 
 | Ticket | Type | Summary | Blocked-by |
 | --- | --- | --- | --- |
@@ -97,6 +97,7 @@ _none_
 | bug-const-expr-shl-shr-not-folded | bug | `shl` / `shr` in a constant expression not accepted | — |
 | bug-const-managed-record-param-byref-crash | bug | const record param with a managed (dynarray) field crashes by-ref on i386 + aarch64 | — |
 | bug-c-packed-aligned-ignored | bug | C `__attribute__((packed))` / `aligned` ignored → field-offset drift | — |
+| bug-c-quoted-include-search-path | bug | C quoted includes do not search the including file directory | — |
 | bug-dynarray-whole-var-assign-cross | bug | Whole dynamic-array variable assignment (`b := a`) unsupported on i386 + aarch64 | — |
 | bug-for-in-implicit-self-field | bug | `for-in` over an implicit-`Self` array field fails in methods | — |
 | bug-forin-in-method-global-var-corruption | bug | `for-in` inside a method corrupts a dyn-array global declared after it | — |
@@ -188,7 +189,6 @@ _none_
 
 ## Ready (no unmet blocker)
 
-- bug-c-quoted-include-search-path
 - bug-pinned-stable-reads-live-builtin-rtl
 - chore-inc-to-units
 - chore-runtime-emission-size
@@ -202,6 +202,7 @@ _none_
 - feature-compression-library
 - feature-copy-intrinsic
 - feature-c-regex-library-devtest
+- feature-c-runtime-library
 - feature-c-source-frontend
 - feature-demo-calc
 - feature-demo-chess
