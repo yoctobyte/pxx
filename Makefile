@@ -280,7 +280,7 @@ test-core: $(COMPILER)
 	./$(COMPILER) test/test_class_is_as.pas /tmp/test_class_is_as26
 	test "$$(/tmp/test_class_is_as26)" = "$$(printf 'is TDog\nis TAnimal\nnot TCat\nnot TPuppy\nnil not\nv=42\ncast read=42\npuppy is TDog\npuppy is TAnimal\npuppy not TCat')"
 	./$(COMPILER) test/test_class_cast_field.pas /tmp/test_class_cast_field26
-	test "$$(/tmp/test_class_cast_field26)" = "$$(printf '166408768\n7\n42\n99')"
+	test "$$(/tmp/test_class_cast_field26)" = "$$(printf '166408768\n7\n42\n99\n555\n555\n2')"
 	./$(COMPILER) test/test_interfaces.pas /tmp/test_interfaces26
 	test "$$(/tmp/test_interfaces26)" = "$$(printf 'area=20\nscaled=60\narea2=42\ndirect=42')"
 	./$(COMPILER) test/test_interfaces_is.pas /tmp/test_interfaces_is26

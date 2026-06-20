@@ -2131,6 +2131,7 @@ end;
   resolve their trailing members. }
 function ParseClassRecordSelectors(node, recId: Integer; var outTk: TTypeKind): Integer;
 var sub, prevTok: Integer; fieldName: AnsiString; tk: TTypeKind;
+    ci, mmi, mpi, callN, selfArg, lastA, aSeq, aNode, aIdx, mai: Integer;
 begin
   tk := IntToTypeKind(ASTTk[node]);
   while CurTok.Kind in [tkDot, tkLBrack] do
@@ -2142,6 +2143,63 @@ begin
         Error('expected field name after .');
       prevTok := TokPos - 1;
       fieldName := GetTokenStr(prevTok);
+
+      { Method call on the value: `.M(args)` (or 0-arg `.M`). Checked before the
+        field path so a method name isn't mistaken for a field. Mirrors the
+        instance-method arg parsing (ref/array params taken by lvalue). Self =
+        the current node; virtual methods dispatch dynamically on the real object
+        (a hard cast doesn't change the dynamic type). }
+      ci := -1;
+      if recId >= REC_UCLASS_BASE then ci := recId - REC_UCLASS_BASE;
+      mmi := -1;
+      if (ci >= 0) and (FindUProp(ci, fieldName) < 0) then mmi := FindUMeth(ci, fieldName);
+      if mmi >= 0 then
+      begin
+        mpi := UMthProc_[mmi];
+        if UMthVirSlot[mmi] >= 0 then
+        begin
+          callN := AllocNode(AN_VIRTUAL_CALL);
+          ASTRight[callN] := UMthVirSlot[mmi];
+        end
+        else
+          callN := AllocNode(AN_CALL);
+        ASTIVal[callN] := mpi;
+        ASTTk[callN] := Ord(Procs[mpi].RetType);
+        selfArg := AllocNode(AN_ARG);
+        ASTLeft[selfArg] := node;
+        ASTLeft[callN] := selfArg;
+        lastA := selfArg;
+        Next; { consume method name }
+        if CurTok.Kind = tkLParen then
+        begin
+          Next;
+          mai := 1;  { param 0 = Self }
+          while mai <= Procs[mpi].ParamCount - 1 do
+          begin
+            if Procs[mpi].Params[mai].IsRef or Procs[mpi].Params[mai].IsArray then
+            begin
+              if CurTok.Kind <> tkIdent then Error('expected variable');
+              aIdx := FindSym(CurTok.SVal); Next;
+              aNode := ParseLValueAST(aIdx, TokPos - 2);
+            end
+            else
+            begin
+              ParseExpr; aNode := CurASTNode;
+            end;
+            aSeq := AllocNode(AN_ARG); ASTLeft[aSeq] := aNode;
+            ASTRight[lastA] := aSeq; lastA := aSeq;
+            if mai < Procs[mpi].ParamCount - 1 then Expect(tkComma, ',');
+            Inc(mai);
+          end;
+          Expect(tkRParen, ')');
+        end;
+        tk := Procs[mpi].RetType;
+        if (tk = tyClass) or (tk = tyRecord) then recId := ProcRetRecId[mpi]
+        else recId := REC_NONE;
+        node := callN;
+        Continue;
+      end;
+
       sub := AllocNode(AN_FIELD);
       ASTLeft[sub] := node;
       ASTSOffset[sub] := Tokens[prevTok].SOffset;
@@ -6393,11 +6451,17 @@ begin
               castTk := tyClass;
               if CurTok.Kind in [tkDot, tkLBrack] then
                 valNode := ParseClassRecordSelectors(valNode, REC_UCLASS_BASE + smci, castTk);
-              Expect(tkAssign, ':=');
-              ParseExpr;
-              node := AllocNode(AN_ASSIGN);
-              ASTLeft[node]  := valNode;
-              ASTRight[node] := CurASTNode;
+              if (ASTKind[valNode] = AN_CALL) or (ASTKind[valNode] = AN_VIRTUAL_CALL) then
+                { TClass(x).Method(args); — a method-call statement, not an assign }
+                node := valNode
+              else
+              begin
+                Expect(tkAssign, ':=');
+                ParseExpr;
+                node := AllocNode(AN_ASSIGN);
+                ASTLeft[node]  := valNode;
+                ASTRight[node] := CurASTNode;
+              end;
             end;
           end;
 
