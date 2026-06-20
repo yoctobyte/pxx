@@ -15,7 +15,7 @@ _none_
 | feature-c-runtime-library | feature | C runtime/library layer (`lib/crtl`) plus direct C-library packages | — |
 | feature-platform-abstraction-layer | feature | Platform Abstraction Layer (PAL): per-platform RTL port at one seam | — |
 
-## backlog (63)
+## backlog (66)
 
 | Ticket | Type | Summary | Blocked-by |
 | --- | --- | --- | --- |
@@ -45,8 +45,9 @@ _none_
 | feature-dynamic-soname-discovery | feature | Dynamic soname discovery (no execve) | — |
 | feature-esp32-idf-xtensa | feature | ESP-IDF integration: Xtensa (ESP32-S2/S3) — QEMU + real hardware | — |
 | feature-esp32-isr-iram | feature | ESP32: Compiler-Directed ISR and IRAM Support | — |
-| feature-esp-soft-float | feature | ESP soft-float (xtensa + riscv32 float value model) | — |
+| feature-esp-float | feature | ESP float wiring (xtensa hardware-single + soft-double; riscv32 all-soft) | — |
 | feature-exception-base-class | feature | Built-in / RTL `Exception` base class | — |
+| feature-extended-alias-or-reject | feature | Extended: formalize as Double alias (or reject) | — |
 | feature-flexcolumn-directive | feature | `flexcolumn` calling-convention directive | chore-inc-to-units |
 | feature-fpc-vs-pxx-feature-boundary | feature | Policy: FPC-bootstrap subset vs PXX-only library features | — |
 | feature-general-typename-cast | feature | General `TypeName(expr)` reinterpret cast (named record/class/pointer) | — |
@@ -70,6 +71,8 @@ _none_
 | feature-random-library | feature | Random library — HW/OS/software tiered RNG (cross-target capability test) | — |
 | feature-rtl-conversion-and-bitset-library | feature | RTL gaps — string/number conversion + a bit-set type (surfaced by the demos) | — |
 | feature-sat-solver-library | feature | SAT solver library — DPLL over CNF (known-instance test app) | — |
+| feature-single-first-class | feature | First-class Single (native single-precision arithmetic) | — |
+| feature-softfloat-lib | feature | Soft-float library (IEEE-754 single + double kernels) | — |
 | feature-stackful-coro-port | feature | Port the stackful coroutine backend to all targets | — |
 | feature-static-arena-profile | feature | Fixed-static-arena allocator profile | feature-unified-heap-allocator |
 | feature-textfile-keyword-io-dispatch | feature | Default `Text` file surface and file-handle IO dispatch | — |
@@ -222,8 +225,9 @@ _none_
 - feature-dynamic-soname-discovery
 - feature-esp32-idf-xtensa
 - feature-esp32-isr-iram
-- feature-esp-soft-float
+- feature-esp-float
 - feature-exception-base-class
+- feature-extended-alias-or-reject
 - feature-fpc-vs-pxx-feature-boundary
 - feature-general-typename-cast
 - feature-handle-compacting-heap
@@ -243,6 +247,8 @@ _none_
 - feature-random-library
 - feature-rtl-conversion-and-bitset-library
 - feature-sat-solver-library
+- feature-single-first-class
+- feature-softfloat-lib
 - feature-stackful-coro-port
 - feature-static-arena-profile
 - feature-textfile-keyword-io-dispatch
