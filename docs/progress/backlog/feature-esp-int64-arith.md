@@ -1,10 +1,34 @@
 # 64-bit integer arithmetic for the ESP backends (riscv32 + xtensa)
 
 - **Type:** feature (cross codegen depth, ESP targets)
-- **Status:** backlog
+- **Status:** riscv32 DONE 2026-06-20; xtensa remaining
 - **Owner:** Track A
 - **Opened:** 2026-06-20
 - **Blocks:** [[feature-esp-float]] (soft-float kernels are heavy Int64)
+
+## riscv32 DONE 2026-06-20 (commit 54c5ed7)
+
+Full a0:a1 (lo:hi) 64-bit value model on riscv32: add/sub (sltu carry/borrow,
+no flags), mul (mulhu + 32-bit limb partials), and/or/xor, shl/shr (cross-word
+incl. n>=32 / n==0, via the EmitAsmRv32 label assembler), all six compares
+(hi-then-unsigned-lo), and restoring-division div/mod (unsigned core + signed
+sign-fixup, mirrors arm32 EmitUDivMod64). Word-based call marshalling + callee
+spill (Int64 = 2 words lo:hi, ≤8 words) and 64-bit returns in a0:a1. Encoders
+mulhu/slli/srli/srai added. Also fixed: ESP no longer pulls the `builtin`
+Str/Val unit on a bare `uses` clause (its frozen-string concat can't lower on
+riscv32 — the last blocker for `uses softfloat`).
+
+Validated on esp32c3 QEMU vs the x86-64 oracle: 64-bit add/sub/mul/div/mod
+(signed+unsigned), compares, Int64 params/returns, AND the full softfloat
+library (test_esp_softfloat_probe.pas) byte-identical. x86-64 self-host
+unchanged, make test green, ESP bare-boot intact.
+
+**Remaining: xtensa.** Same value model but the Call0/windowed ABI, different
+register set (a2..a15, a-pair for 64-bit), and the xtensa text assembler
+(asmtext_xtensa.inc). Mirror the riscv32 EmitBinop64 structure; xtensa has no
+flags either. Then feature-esp-float can wire single→HW-FPU / double→soft on
+xtensa. (riscv float wiring — Real resolver, value model, IR lowering — is now
+the immediate next step there, since its Int64 substrate is ready.)
 
 ## Problem
 
