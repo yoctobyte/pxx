@@ -13,3 +13,4 @@
 2026-06-19T20:19:56Z  v13  ee8cb8abf6b405fd6c759c64224aaa0aa6b1b6c62562daccdd6b38242e22fa3f  6f0865c33af5c54fd2dbf97659a4e535add282ea  fix(codegen): nil-init hidden aggregate-result record temps (full extent)
 2026-06-20T02:02:32Z  v14  28453d6ebd82757771d0fafc6c8fe165c674a3210807a3560908b6fef5d36a1f  1df5c762957f1389fb19f5cd2332abd35d8ae92f  fix(parser): preserve proc index during managed zeroing
 2026-06-20T06:49:21Z  v15  4bac688c87a11c30cb9aff9eb808e05d956b2ad5671eab5a41416c4cda0c7d4b  bb94412fc905fe45e820537922daacdd6f5fba4d  feat(parser,ir): member access on a function/method call result
+2026-06-20T07:45:26Z  v16  edb3e3e0baf99338e78048bec124b0a0fbb1d43e508abb2c12f980714f649835  517c456e348cda47586c690de7a3f5f817b1faec  docs(ticket): pin a5afebb as the bug-c-quoted-include commit ref
