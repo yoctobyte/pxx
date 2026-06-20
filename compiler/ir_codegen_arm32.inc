@@ -1911,6 +1911,32 @@ begin
             EmitI32($E92D0002); { push {r1} (hi = word j+1) }
             Inc(j, 2);
           end
+          else if (procIdx >= 0) and (nArgs < Procs[procIdx].ParamCount) and
+                  TypeIsFloat(Procs[procIdx].Params[nArgs].TypeKind) and
+                  (not Procs[procIdx].Params[nArgs].IsRef) and
+                  (not Procs[procIdx].Params[nArgs].IsArray) then
+          begin
+            { By-value float param: evaluate the arg into d0 (widen an int arg),
+              then move d0 -> r0:r1 and push as words. A Double is two words; a
+              Single narrows to s0 -> r0, one word. See feature-cross-float-returns. }
+            IREmitNodeArm32(IRA[argNode]);
+            if not TypeIsFloat(IntToTypeKind(IRTk[IRA[argNode]])) then
+              EmitIntToD0Arm32;
+            if Procs[procIdx].Params[nArgs].TypeKind = tySingle then
+            begin
+              EmitI32($EEB70BC0);  { vcvt.f32.f64 s0, d0 }
+              EmitI32($EE100A10);  { vmov r0, s0 }
+              EmitI32($E92D0001);  { push {r0} (word j) }
+              Inc(j, 1);
+            end
+            else
+            begin
+              EmitI32($EC510B10);  { vmov r0, r1, d0 (r0=lo, r1=hi) }
+              EmitI32($E92D0001);  { push {r0} (lo = word j) }
+              EmitI32($E92D0002);  { push {r1} (hi = word j+1) }
+              Inc(j, 2);
+            end;
+          end
           else
           begin
             IREmitNodeArm32(IRA[argNode]);
@@ -1952,6 +1978,15 @@ begin
             EmitLoadImmArm32(9, j * 4);
             EmitI32($E08DD009); { add sp, sp, r9 (drop all pushed words) }
           end;
+          { Float result: callee returned the bits in r0(:r1); move into d0 for
+            the value model (mirrors the external-call path). }
+          if Procs[procIdx].RetType = tySingle then
+          begin
+            EmitI32($EE000A10);                     { vmov s0, r0 }
+            EmitI32($EEB70AC0);                     { vcvt.f64.f32 d0, s0 }
+          end
+          else if TypeIsFloat(Procs[procIdx].RetType) then
+            EmitI32($EC410B10);                     { vmov d0, r0, r1 (double result) }
         end;
       end;
 

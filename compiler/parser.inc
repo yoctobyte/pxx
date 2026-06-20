@@ -8803,9 +8803,11 @@ begin
     pnWords := 0;
     for i := 0 to nparams-1 do
       if ((Procs[procIdx].Params[i].TypeKind = tyInt64) or
-          (Procs[procIdx].Params[i].TypeKind = tyUInt64)) and
+          (Procs[procIdx].Params[i].TypeKind = tyUInt64) or
+          (Procs[procIdx].Params[i].TypeKind = tyDouble) or
+          (Procs[procIdx].Params[i].TypeKind = tyExtended)) and
          (not Procs[procIdx].Params[i].IsRef) and (not Procs[procIdx].Params[i].IsArray) then
-        Inc(pnWords, 2)
+        Inc(pnWords, 2)   { by-value 8-byte param (Int64/Double): two words }
       else Inc(pnWords, 1);
     pw := 0;
     for i := 0 to nparams-1 do
@@ -8814,7 +8816,8 @@ begin
       sz := ParamSize(idx);
       EmitLoadImmArm32(9, Syms[idx].Offset);
       EmitI32($E08B9009);   { add r9, fp, r9 (slot addr) }
-      if ((Syms[idx].TypeKind = tyInt64) or (Syms[idx].TypeKind = tyUInt64)) and
+      if ((Syms[idx].TypeKind = tyInt64) or (Syms[idx].TypeKind = tyUInt64) or
+          (Syms[idx].TypeKind = tyDouble) or (Syms[idx].TypeKind = tyExtended)) and
          (not Syms[idx].IsRef) and (not Syms[idx].IsArray) then
       begin
         { lo = word pw -> [r9]; hi = word pw+1 -> [r9, #4] }

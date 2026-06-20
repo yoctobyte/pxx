@@ -1410,6 +1410,9 @@ test-arm32: $(COMPILER)
 	./$(COMPILER) --target=arm32 test/test_cross_float.pas /tmp/test_arm32_float
 	./$(COMPILER) test/test_cross_float.pas /tmp/test_arm32_float_x64
 	test "$$(tools/run_target.sh arm32 /tmp/test_arm32_float)" = "$$(/tmp/test_arm32_float_x64)"
+	./$(COMPILER) --target=arm32 test/test_cross_float_return.pas /tmp/test_arm32_fret
+	./$(COMPILER) test/test_cross_float_return.pas /tmp/test_arm32_fret_x64
+	test "$$(tools/run_target.sh arm32 /tmp/test_arm32_fret)" = "$$(/tmp/test_arm32_fret_x64)"
 	./$(COMPILER) --target=arm32 test/test_arm32_arg_runtime.pas /tmp/test_arm32_args
 	./$(COMPILER) test/test_arm32_arg_runtime.pas /tmp/test_arm32_args_x64
 	test "$$(tools/run_target.sh arm32 /tmp/test_arm32_args alpha beta)" = "$$(/tmp/test_arm32_args_x64 alpha beta)"

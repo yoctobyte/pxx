@@ -3608,13 +3608,17 @@ begin
       else
       begin
         if Syms[retSymIdx].IsArray or (Syms[retSymIdx].Kind <> skLocal) or
-           not (TypeIsOrdinal(Syms[retSymIdx].TypeKind) or
+           not (TypeIsOrdinal(Syms[retSymIdx].TypeKind) or TypeIsFloat(Syms[retSymIdx].TypeKind) or
                 (Syms[retSymIdx].TypeKind in [tyAnsiString, tyPointer, tyClass])) then
           Error('target arm32: only ordinal/pointer/string function results supported yet');
         if (Syms[retSymIdx].TypeKind = tyInt64) or
-           (Syms[retSymIdx].TypeKind = tyUInt64) then
-          EmitLoadVar64Arm32(retSymIdx)   { Int64 result in r0:r1 }
+           (Syms[retSymIdx].TypeKind = tyUInt64) or
+           (Syms[retSymIdx].TypeKind = tyDouble) or (Syms[retSymIdx].TypeKind = tyExtended) then
+          { Int64 / Double result: raw 8 bytes in r0:r1 (lo:hi). The caller moves
+            r0:r1 -> d0 for the float value model. See feature-cross-float-returns. }
+          EmitLoadVar64Arm32(retSymIdx)
         else
+          { ordinal / pointer / Single (4-byte bits in r0). }
           EmitLoadVarArm32(retSymIdx);
       end;
     end;

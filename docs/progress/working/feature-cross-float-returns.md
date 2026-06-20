@@ -41,11 +41,13 @@ Internal calls only — external C float returns have their own ABI path
   reg); guard relaxed to allow `TypeIsFloat`, EmitLoadVarA64 already loads the
   Double's 8 bytes / widens a Single into x0. Float PARAMS already worked on
   aarch64. test/test_cross_float_return.pas wired into the aarch64 cross suite.
-- [ ] arm32 — float RETURN alone works (d0 convention; verified `NoParam:Double`),
-  BUT float PARAMS are broken on internal calls (verified: `OneDbl(9.0)` →
-  garbage). Reverted to erroring for now (the project rule is error-not-miscompile,
-  and a half-enable would silently mis-pass float-param functions). Needs BOTH
-  param-passing + return together.
+- [x] **arm32 — DONE.** Both params + return. Return: Double bits in r0:r1
+  (EmitLoadVar64Arm32), caller moves r0:r1->d0 (mirrors the external-call path);
+  Single bits in r0 -> s0->d0. Params: by-value Double counted/spilled as 2 words
+  in the prologue (parser.inc, alongside Int64); caller evaluates the arg to d0,
+  `vmov r0,r1,d0`, pushes 2 words (Single: vcvt s0,d0 -> r0, 1 word). Guard
+  relaxed for TypeIsFloat. test wired into test-arm32; make test byte-identical
+  (no reseed).
 - [ ] i386 — same: needs param + return (errors cleanly today).
 - [ ] xtensa — needs param + return (errors cleanly today).
 - [ ] riscv32 — needs param + return (errors cleanly today).
