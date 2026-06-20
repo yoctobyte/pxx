@@ -12,12 +12,11 @@ _none_
 
 _none_
 
-## backlog (65)
+## backlog (64)
 
 | Ticket | Type | Summary | Blocked-by |
 | --- | --- | --- | --- |
 | bug-c-quoted-include-search-path | bug | C quoted includes do not search the including file directory | — |
-| bug-forin-in-method-global-var-corruption | bug | `for-in` inside a method corrupts a dyn-array global declared after it | — |
 | bug-pinned-stable-reads-live-builtin-rtl | bug | Pinned stable reads LIVE builtin RTL source — track A WIP breaks track B | — |
 | chore-inc-to-units | chore | `.inc` → real `.pas` units refactor | — |
 | chore-runtime-emission-size | chore | Finer runtime-support emission (code size) | — |
@@ -86,7 +85,7 @@ _none_
 
 _none_
 
-## done (87)
+## done (88)
 
 | Ticket | Type | Summary | Blocked-by |
 | --- | --- | --- | --- |
@@ -100,6 +99,7 @@ _none_
 | bug-c-packed-aligned-ignored | bug | C `__attribute__((packed))` / `aligned` ignored → field-offset drift | — |
 | bug-dynarray-whole-var-assign-cross | bug | Whole dynamic-array variable assignment (`b := a`) unsupported on i386 + aarch64 | — |
 | bug-for-in-implicit-self-field | bug | `for-in` over an implicit-`Self` array field fails in methods | — |
+| bug-forin-in-method-global-var-corruption | bug | `for-in` inside a method corrupts a dyn-array global declared after it | — |
 | bug-frozen-string-length-pointer-deref-cross | bug | `Length()` of a pointer-dereferenced frozen `string` returns 0 on the cross targets | — |
 | bug-implicit-self-dynarray-length | bug | `Length` on implicit-`Self` dynamic-array field fails in methods | — |
 | bug-managed-byref-string-param-store | bug | Managed by-ref AnsiString params: store-through-var no-ops / segfaults | — |
@@ -187,7 +187,6 @@ _none_
 ## Ready (no unmet blocker)
 
 - bug-c-quoted-include-search-path
-- bug-forin-in-method-global-var-corruption
 - bug-pinned-stable-reads-live-builtin-rtl
 - chore-inc-to-units
 - chore-runtime-emission-size

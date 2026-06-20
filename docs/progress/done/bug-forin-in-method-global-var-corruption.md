@@ -1,8 +1,8 @@
 # `for-in` inside a method corrupts a dyn-array global declared after it
 
 - **Type:** bug (compiler / symbol table)
-- **Status:** backlog
-- **Owner:** —
+- **Status:** done
+- **Owner:** Track A
 - **Opened:** 2026-06-20 (found while fixing `bug-for-in-implicit-self-field`)
 - **Relation:** pre-existing latent bug, independent of the for-in resolver
   work — confirmed to reproduce on the HEAD compiler *before* the for-in
@@ -76,3 +76,20 @@ The corruption is in symbol-table accounting, not in for-in itself.
   confirmed pre-existing by reproducing on the HEAD compiler built without the
   for-in change. The for-in implicit-field test orders its globals to dodge this
   bug so the two issues stay decoupled.
+- 2026-06-20 — Fixed. Root cause: `AllocDynArray` and `AllocArray`
+  (symtab.inc) never reset `SymBlockId` — nor the other recycled parallel-array
+  fields `AllocVar` resets (`SymGenSlot`, `SymSetEnumId`, `SymSetElemTk`,
+  `SymIsHiddenArgTemp`). Symbol slots are reused after a proc body restores
+  `SymCount`, so a dyn-array global declared after a method whose for-in had
+  allocated an anonymous index temp into that slot inherited the slot's stale
+  block id and failed `IsBlockVisible` in `FindSym` → "undefined variable". (The
+  guess about a "symbol-count / scope-base boundary" was wrong; it was the
+  per-symbol block id.) Fix = add the missing field resets to both allocators,
+  matching `AllocVar`. Reseed note: this changes how `compiler.pas` itself
+  compiles (a recycled-slot array global converges to correct field values), so
+  the self-build needs one reconvergence generation — verified converged
+  (gen2 == gen3), then reseeded `compiler/pascal26`. Repro prints `7` / `121`.
+  Regression test `test/test_dynarray_global_after_method.pas` wired into
+  test-core + the 3 cross suites. Gate green: `make test` byte-identical
+  fixedpoint + `--threadsafe`; cross suites output-equal to x86-64;
+  `make cross-bootstrap` byte-identical on all 3.

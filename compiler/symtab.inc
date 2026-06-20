@@ -1518,6 +1518,12 @@ begin
   SymArrNDims[SymCount] := 0;
   SymProcSig[SymCount] := -1;
   SymRTTIOff[SymCount] := -1;
+  { Match AllocVar: reset recycled parallel-array fields (see AllocDynArray). }
+  SymGenSlot[SymCount] := -1;
+  SymSetEnumId[SymCount] := -1;
+  SymSetElemTk[SymCount] := 0;
+  SymIsHiddenArgTemp[SymCount] := False;
+  SymBlockId[SymCount] := CurBlockId;
   Syms[SymCount].ElemType := elemType;
   Syms[SymCount].ElemRecName := LastTypeRecId;
   Syms[SymCount].IsRef    := False;
@@ -1562,6 +1568,15 @@ begin
   SymDynDepth[SymCount] := depth;
   SymProcSig[SymCount] := -1;
   SymRTTIOff[SymCount] := -1;
+  { Reset the same recycled parallel-array fields AllocVar does — symbol slots
+    are reused after a proc body restores SymCount, so a stale SymBlockId here
+    would make a dyn-array global declared after a method (whose for-in/locals
+    occupied this slot) invisible to FindSym ('undefined variable'). }
+  SymGenSlot[SymCount] := -1;
+  SymSetEnumId[SymCount] := -1;
+  SymSetElemTk[SymCount] := 0;
+  SymIsHiddenArgTemp[SymCount] := False;
+  SymBlockId[SymCount] := CurBlockId;
   Syms[SymCount].ElemType    := elemType;
   Syms[SymCount].ElemRecName := LastTypeRecId;
   Syms[SymCount].IsRef       := False;
