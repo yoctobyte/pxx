@@ -1,9 +1,41 @@
 # Soft-float library (IEEE-754 double kernels + conversions)
 
 - **Type:** feature (builtin library, target-independent)
-- **Status:** backlog
+- **Status:** DONE 2026-06-20
 - **Owner:** Track A
 - **Opened:** 2026-06-20
+
+## DONE 2026-06-20
+
+`compiler/builtin/softfloat.pas` implemented + validated standalone on x86-64:
+
+- soft single: `__pxx_sadd/ssub/smul/sdiv/scmp`, `__pxx_i2s/s2i`
+- soft double: `__pxx_dadd/dsub/dmul/ddiv/dcmp`, `__pxx_i2d/d2i`
+- repacks: `__pxx_s2d` (exact widen), `__pxx_d2s` (round-near-even narrow)
+
+All kernels operate purely on the integer bit encodings (single=LongWord,
+double=Int64) — no float type, no `div`/`mod` operator (division is restoring
+shift-subtract). Round-to-nearest-even; inf/nan/signed-zero handled; subnormals
+flush to zero (documented follow-up). The 53x53 double mul uses 26-bit limbs
+(partials < 2^54) assembled into a (phi,plo) 128-bit value, all non-negative
+Int64.
+
+Validators `test/test_softfloat_single.pas` + `test/test_softfloat_double.pas`:
+21-value grids (signed-zero/inf/nan) + 200k random normal-range pairs per width,
+diffing result bit patterns vs native arithmetic. Double oracle is true hardware
+binary64 → exact match on +-*/ (incl div) and conversions, 0 failures. Single
+oracle is native widen-to-double (exact for +-*; <=1 ulp slack reserved for div
+double-rounding, 0 needed in practice). Committed 86e4a23 (single), 57215a2
+(double). No compiler source touched → x86-64 self-host unchanged.
+
+LANDMINES surfaced:
+- single/double fn params AND returns are storage-only/unreliable on x86-64
+  (a Single value param arrives widened in xmm; `@s` reads garbage). Tests load
+  bit patterns into LOCAL float vars via typed pointers, never through params.
+- a `const` initializer can't fold an `Int64()` cast (ConstEval errors); use a
+  tiny function returning the mask instead (see D_MANT/D_EXPF).
+
+Next: [[feature-esp-float]] wires the IR codegen on xtensa/riscv to call these.
 
 ## Problem
 

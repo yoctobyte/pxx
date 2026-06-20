@@ -15,10 +15,12 @@ _none_
 | feature-c-runtime-library | feature | C runtime/library layer (`lib/crtl`) plus direct C-library packages | — |
 | feature-platform-abstraction-layer | feature | Platform Abstraction Layer (PAL): per-platform RTL port at one seam | — |
 
-## backlog (65)
+## backlog (66)
 
 | Ticket | Type | Summary | Blocked-by |
 | --- | --- | --- | --- |
+| bug-str-float-broken-by-copy-shadow | bug | Str() builtin breaks for float formatting when a unit shadows Copy | — |
+| bug-subclass-field-offset-calculation | bug | bug-subclass-field-offset-calculation (Track A) | — |
 | chore-inc-to-units | chore | `.inc` → real `.pas` units refactor | — |
 | chore-runtime-emission-size | chore | Finer runtime-support emission (code size) | — |
 | feature-additional-cpu-targets | feature | Additional CPU targets (rollup: i386 → aarch64 → arm32 → ESP32/RISC-V) | feature-target-aarch64, feature-target-arm32, feature-target-esp32, feature-target-i386 |
@@ -71,7 +73,6 @@ _none_
 | feature-random-library | feature | Random library — HW/OS/software tiered RNG (cross-target capability test) | — |
 | feature-rtl-conversion-and-bitset-library | feature | RTL gaps — string/number conversion + a bit-set type (surfaced by the demos) | — |
 | feature-sat-solver-library | feature | SAT solver library — DPLL over CNF (known-instance test app) | — |
-| feature-softfloat-lib | feature | Soft-float library (IEEE-754 double kernels + conversions) | — |
 | feature-stackful-coro-port | feature | Port the stackful coroutine backend to all targets | — |
 | feature-static-arena-profile | feature | Fixed-static-arena allocator profile | feature-unified-heap-allocator |
 | feature-textfile-keyword-io-dispatch | feature | Default `Text` file surface and file-handle IO dispatch | — |
@@ -89,7 +90,7 @@ _none_
 
 _none_
 
-## done (96)
+## done (97)
 
 | Ticket | Type | Summary | Blocked-by |
 | --- | --- | --- | --- |
@@ -175,6 +176,7 @@ _none_
 | feature-rv32-asm-emitter | feature | RISC-V (RV32) text-assembler (`EmitAsmRv32`) for cleaner riscv32 codegen | — |
 | feature-setlength-var-array-param-abi | feature | `SetLength` on a `var` dynamic-array parameter (cross-cutting ABI) | — |
 | feature-short-circuit-eval | feature | Short-circuit boolean evaluation (`and` / `or`) | — |
+| feature-softfloat-lib | feature | Soft-float library (IEEE-754 double kernels + conversions) | — |
 | feature-synthetic-feature-matrix-test | feature | Synthetic all-features stress test (cross-target conformance) | — |
 | feature-target-aarch64 | feature | Compile target: ARM64 / AArch64 Linux | feature-target-i386 |
 | feature-target-arm32 | feature | Compile target: ARM32 Linux | feature-target-aarch64 |
@@ -198,6 +200,8 @@ _none_
 
 ## Ready (no unmet blocker)
 
+- bug-str-float-broken-by-copy-shadow
+- bug-subclass-field-offset-calculation
 - chore-inc-to-units
 - chore-runtime-emission-size
 - feature-additional-cpu-targets
@@ -246,7 +250,6 @@ _none_
 - feature-random-library
 - feature-rtl-conversion-and-bitset-library
 - feature-sat-solver-library
-- feature-softfloat-lib
 - feature-stackful-coro-port
 - feature-static-arena-profile
 - feature-textfile-keyword-io-dispatch
