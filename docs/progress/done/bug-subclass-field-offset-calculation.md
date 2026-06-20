@@ -52,6 +52,9 @@ symtab.inc (ResolveNodeRec), ir.inc (passthrough lowering), parser.inc (both
 parse sites). Validated x86-64 + i386; `test/test_class_cast_field.pas` in
 test-core; self-host byte-identical.
 
-Known remaining gap (separate, low pri): a METHOD call on a hard cast —
-`TClass(x).Method(args)` — isn't handled by the field/index selector walker
-(`as` covers checked method dispatch). File a follow-up if needed.
+Method calls on a hard cast — `TClass(x).Method(args)`, static + virtual —
+landed in a follow-up commit (355192a, pinned v22): ParseClassRecordSelectors
+now also dispatches method calls (Self = the cast node; virtual stays dynamic on
+the real object; ref/array args by lvalue), and the statement parser accepts a
+method-call result as a call statement. Validated x86-64 + i386 incl. dynamic
+dispatch through an upcast. No remaining known gap.
