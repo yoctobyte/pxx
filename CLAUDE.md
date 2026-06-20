@@ -39,6 +39,11 @@ never rebuild the compiler. `make lib-test` (green smoke) / `make demos`
 ## Workflow norms (both tracks)
 - Work directly on `master` (no worktrees/clones). Commit in small units.
 - `git pull --rebase` before pushing; push promptly. Stay in your lane's files.
-- Never push without the user's ok if they haven't already said so.
+- **Push freely when the tree is stable** — green where it matters (your lane's
+  gate: Track A `make test` + self-host; Track B `make lib-test`/`demos`), no
+  half-finished edit committed. History is reversible, so a stable push is always
+  safe; you do NOT need to ask each time. The old "never push without ok" rule is
+  retired. Still: don't push a known-broken or mid-refactor state, and don't push
+  another agent's in-flight uncommitted work — only what you committed.
 - Tickets live in `docs/progress/{urgent,working,backlog,blocked,done,rejected}/`;
   regenerate `BOARD.md` after moving them.

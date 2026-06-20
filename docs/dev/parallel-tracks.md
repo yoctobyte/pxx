@@ -123,6 +123,12 @@ the user's repo workflow). To avoid clobbering each other:
   per track.
 - **`git pull --rebase` before you push**, and push promptly after committing —
   the other agent may have pushed in between. Resolve in your own files.
+- **Push freely when stable; you don't need to ask.** History is reversible, so a
+  push of a green, lane-gated state is always safe. The bar is: your lane's gate
+  passes (A = `make test` + self-host byte-identical; B = `make lib-test` /
+  `demos`) and nothing half-finished is committed. Do NOT push a known-broken or
+  mid-refactor tree, and never sweep the *other* agent's uncommitted in-flight
+  work into your push — push only what you committed (`git commit -- <paths>`).
 - **`git log --oneline -5` at session start** to see what the other track just
   landed (e.g. a new stable `vN`, a freshly closed ticket).
 - B never needs to rebuild the compiler; A's in-progress `compiler/pascal26` is
@@ -135,3 +141,26 @@ the user's repo workflow). To avoid clobbering each other:
     **halt-and-wait** grey zone: if `compiler/builtin/**` shows uncommitted
     edits, the other agent stops and waits rather than working around or
     stomping. Safer to halt than to make a mess.
+
+## Future consideration: split dev trees (not adopted yet)
+
+Today both agents share one working tree on `master`. It works because the lanes
+barely overlap and we commit in small units. But the coupling we *do* hit — the
+runtime-read builtin RTL grey zone above, the stable-binary re-pin handshake, the
+"don't sweep the other agent's uncommitted work" caveat — all stem from the
+single shared checkout.
+
+An alternative worth weighing when the friction justifies it: **per-concern dev
+trees** — `compiler`, `libs`, `demos` (roughly Track A / Track B-rtl /
+Track B-apps) — each its own worktree or clone, with an **auto-merge / conflict
+resolver** integrating them back to `master`. The lanes are already file-disjoint
+enough that most merges would be trivial (different directories); a small merge
+driver could auto-resolve the few shared touchpoints (`Makefile` fences, `BOARD.md`
+regeneration, the `stable_linux_amd64/` pin bump) deterministically.
+
+Trade-off: it removes the shared-checkout stomp risk and lets each agent push its
+own tree without coordination, at the cost of a merge layer and losing the
+zero-latency "see the other agent's commit instantly" property. **Not adopted** —
+recorded here so the option is on the table, not rediscovered cold. Revisit if
+shared-tree contention (halt-and-wait on builtin RTL, re-pin stalls) starts
+costing real time.
