@@ -15,7 +15,7 @@ _none_
 | feature-c-runtime-library | feature | C runtime/library layer (`lib/crtl`) plus direct C-library packages | — |
 | feature-platform-abstraction-layer | feature | Platform Abstraction Layer (PAL): per-platform RTL port at one seam | — |
 
-## backlog (66)
+## backlog (67)
 
 | Ticket | Type | Summary | Blocked-by |
 | --- | --- | --- | --- |
@@ -31,6 +31,7 @@ _none_
 | feature-c-header-import-complex | feature | Import C headers for complex libraries (glib/GTK-grade) | — |
 | feature-compiler-warnings | feature | Compiler warning diagnostics facility | — |
 | feature-compression-library | feature | Compression library — Huffman / LZ77 (roundtrip test app) | — |
+| feature-const-eval-typecast-int64 | feature | ConstEval: typed casts + 64-bit folding in const initializers | — |
 | feature-copy-intrinsic | feature | `Copy` as a generic overloaded intrinsic (string + dynarray families) | — |
 | feature-c-regex-library-devtest | feature | C regex library dev-test import | — |
 | feature-c-source-frontend | feature | C source frontend — compile C function bodies (statements + expressions) | feature-cross-target-feature-parity |
@@ -212,6 +213,7 @@ _none_
 - feature-c-header-import-complex
 - feature-compiler-warnings
 - feature-compression-library
+- feature-const-eval-typecast-int64
 - feature-copy-intrinsic
 - feature-c-regex-library-devtest
 - feature-c-source-frontend
