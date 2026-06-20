@@ -62,6 +62,7 @@ adventure need write + read.
   `CloseFile`, `Eof`, `IOResult`, and explicit `TextReadLn`/`TextWriteLn` on the
   PAL byte-handle API. `test/lib_textfile.pas` round-trips lines through a POSIX
   PAL file and is wired into the library suite. Remaining adventure-compatible
-  syntax is not pure library today because `ReadLn`/`WriteLn` are lexer keywords;
-  add a small Track A hook for first-argument `Text` dispatch or relax keyword
-  interception before this ticket can close.
+  syntax is not pure library today: FPC-style `Text`/`Assign` needs a default
+  surface decision, and `ReadLn`/`WriteLn` are lexer keywords. Track the
+  compiler/default-surface follow-up in `feature-textfile-keyword-io-dispatch`
+  before this ticket can close.

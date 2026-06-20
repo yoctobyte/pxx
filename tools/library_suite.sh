@@ -123,7 +123,7 @@ run_discovery() {
     "Track B if an RTL Exception class is enough; Track A if language/runtime exception surface blocks it" \
     "$ROOT/examples/chess/chess.pas"
   probe_compile demo_adventure \
-    "Track B: implement text file IO on PAL (Assign/Reset/Rewrite/ReadLn/WriteLn/Close)" \
+    "Track A/B boundary: expose Text/Assign default surface and dispatch ReadLn/WriteLn(file, ...) to PAL-backed textfile RTL" \
     "$ROOT/examples/adventure/adventure.pas"
   say "(discovery is non-gating; GAP lines should map to docs/progress tickets)"
 }
