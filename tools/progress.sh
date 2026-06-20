@@ -141,44 +141,49 @@ cmd_check() {
     exists["$(slug "$f")"]="$f"
   done < <(find "$PROG" -name '*.md' ! -name 'README.md' ! -name 'BOARD.md')
 
+  # Build the blocker graph once. The old cycle check repeatedly rescanned every
+  # ticket while removing nodes, which made check time grow quadratically.
+  declare -A indeg dependents
+  for s in "${!exists[@]}"; do
+    indeg["$s"]=0
+    dependents["$s"]=""
+  done
+
   # 1. Dangling Blocked-by slugs.
   for s in "${!exists[@]}"; do
     while read -r b; do
       [ -z "$b" ] && continue
       if [ -z "${exists[$b]+x}" ]; then
         echo "DANGLING: $s blocked-by '$b' — no such ticket"; problems=1
+      else
+        dependents["$b"]+="$s"$'\n'
+        indeg["$s"]=$(( indeg["$s"] + 1 ))
       fi
     done < <(blockers_of "${exists[$s]}")
   done
 
   # 2. Cycle detection via Kahn's algorithm over in-board edges.
-  declare -A indeg
-  for s in "${!exists[@]}"; do indeg["$s"]=0; done
+  local total=${#exists[@]} gone=0 head=0 tail=0
+  local -a queue=()
   for s in "${!exists[@]}"; do
-    while read -r b; do
-      [ -z "$b" ] && continue
-      [ -n "${exists[$b]+x}" ] && indeg["$s"]=$(( indeg["$s"] + 1 ))
-    done < <(blockers_of "${exists[$s]}")
+    if [ "${indeg[$s]}" -eq 0 ]; then
+      queue[tail]="$s"; tail=$(( tail + 1 ))
+    fi
   done
-  local removed=1 total=${#exists[@]} gone=0
-  declare -A done_node
-  while [ "$removed" -eq 1 ]; do
-    removed=0
-    for s in "${!exists[@]}"; do
-      [ -n "${done_node[$s]+x}" ] && continue
-      if [ "${indeg[$s]}" -eq 0 ]; then
-        done_node["$s"]=1; gone=$(( gone + 1 )); removed=1
-        # decrement dependents (tickets that list s as a blocker)
-        local t
-        for t in "${!exists[@]}"; do
-          [ -n "${done_node[$t]+x}" ] && continue
-          while read -r b; do
-            [ "$b" = "$s" ] && indeg["$t"]=$(( indeg["$t"] - 1 ))
-          done < <(blockers_of "${exists[$t]}")
-        done
+
+  local t
+  while [ "$head" -lt "$tail" ]; do
+    s="${queue[$head]}"; head=$(( head + 1 ))
+    gone=$(( gone + 1 ))
+    while read -r t; do
+      [ -z "$t" ] && continue
+      indeg["$t"]=$(( indeg["$t"] - 1 ))
+      if [ "${indeg[$t]}" -eq 0 ]; then
+        queue[tail]="$t"; tail=$(( tail + 1 ))
       fi
-    done
+    done <<<"${dependents[$s]}"
   done
+
   if [ "$gone" -ne "$total" ]; then
     echo "CYCLE: dependency graph is not a DAG ($(( total - gone )) tickets in a cycle)"; problems=1
   fi
