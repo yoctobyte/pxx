@@ -587,7 +587,7 @@ test-core: $(COMPILER)
 	grep -q "class TChild" /tmp/test_rtti_emit_dump26.log
 	grep -q "prop Id tk=1 getField@8 setField@8" /tmp/test_rtti_emit_dump26.log
 	grep -q "meth Notify proc=" /tmp/test_rtti_emit_dump26.log
-	grep -q "prop Caption tk=4" /tmp/test_rtti_emit_dump26.log
+	grep -q "prop Caption tk=23" /tmp/test_rtti_emit_dump26.log
 	grep -q "prop Owner tk=6" /tmp/test_rtti_emit_dump26.log
 	grep -q "prop Align tk=1 enum=TAlign" /tmp/test_rtti_emit_dump26.log
 	./$(COMPILER) test/test_rtti_reg.pas /tmp/test_rtti_reg26
@@ -1937,7 +1937,11 @@ lib-test: pxx-stable-check
 	test "$$(/tmp/lib_textfile)" = "$$(printf 'alpha\nbeta\ncount=2\nio=0')"
 	$(PXX_STABLE) examples/bignum/factorial.pas /tmp/lib_factorial
 	test "$$(/tmp/lib_factorial)" = "$$(printf '5! = 120\n10! = 3628800\n20! = 2432902008176640000\n1000! digits      = 2568\n1000! first 10    = 4023872600\n1000! trailing 0s = 249')"
-	@echo "lib-test ok (sudoku exact + collections + math + sysutils + random + bitset + platform + bignum smoke) against stable v$$(cat $(STABLE_DEFAULT_DIR)/VERSION 2>/dev/null || echo '?')"
+	$(PXX_STABLE) test/lib_zlib.pas /tmp/lib_zlib
+	test "$$(/tmp/lib_zlib)" = "$$(printf 'OK stored roundtrip\nOK fixed huffman\nOK dynamic huffman\nOK bad header checksum\nOK bad adler32\nOK truncated stream\nOK reserved block type')"
+	$(PXX_STABLE) test/lib_png.pas /tmp/lib_png
+	test "$$(/tmp/lib_png)" = "$$(printf '86\n137 80 78 71\n1\n2x2\n255,0,0,255\n0,255,0,128\n0,0,255,64\n255,255,255,0\n0\nbad chunk crc')"
+	@echo "lib-test ok (sudoku exact + collections + math + sysutils + random + bitset + platform + bignum + zlib + png smoke) against stable v$$(cat $(STABLE_DEFAULT_DIR)/VERSION 2>/dev/null || echo '?')"}
 
 # Full Track-B library suite, distinct from compiler `make test`.
 library-suite-green: pxx-stable-check
