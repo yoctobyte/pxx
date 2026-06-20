@@ -167,3 +167,22 @@ Library units moved out of `compiler/` into `lib/rtl` (RTL) and `lib/pcl`
 demos: `test_pcl_showmessage.pas` (a message dialog) and
 `test_pcl_helloworld.pas` (the full mile, mirroring `helloworld` but
 self-terminating: synthetic click → `ShowMessage` → dismiss → quit).
+
+## PCL Library Priorities & Roadmap
+
+### 1. Widgetset & Graphics Expansion (High Priority)
+We are focusing on extending PCL with the most common components and basic graphics capabilities:
+- **`TMemo`**: Multi-line entry control wrapping GTK `GtkTextView`.
+- **`TListBox` & `TComboBox`**: Selection and lists wrapping GTK `GtkListBox` / `GtkComboBoxText`.
+- **`TMainMenu` & `TMenuItem`**: Window menu hierarchies.
+- **`graphics.pas`**: Build out initial graphics support, defining standard classes/types (`TColor`, `TFont`, `TCanvas`) and mapping them to GTK/Cairo context calls for custom canvas drawing.
+
+### 2. Test Suite Integration (Medium Priority)
+Once the new widgets are established, we can expand the automated test suite coverage:
+- Optimize timeouts for `test_pcl_window.pas`, `test_pcl_showmessage.pas`, and `test_pcl_helloworld.pas` to run under ~100–200ms.
+- Add them to `tools/gui_suite.sh` so `make gui-test` checks metaclasses, dialog blocking, and resource loading.
+
+### 3. Cross-Target Parity & C Header Imports (Low Priority / Long-term)
+- **Cross-Target Parity**: Postponed. Needs target verification environments with GTK3/X11 libraries installed.
+- **C Header Imports**: Hand-written bindings in `lib/pcl/gtk3.pas` with explicit `external` declarations remain fully acceptable for now. Moving to real system header imports (e.g. `uses gtk`) is postponed until the compiler preprocessor can ingest heavy glib/GTK headers.
+
