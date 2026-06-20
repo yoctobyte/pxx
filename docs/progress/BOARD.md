@@ -8,14 +8,15 @@ lives in git, not in a timestamp._
 
 _none_
 
-## working (2)
+## working (3)
 
 | Ticket | Type | Summary | Blocked-by |
 | --- | --- | --- | --- |
+| feature-cross-float-returns | feature | Cross-target float function results | — |
 | feature-c-runtime-library | feature | C runtime/library layer (`lib/crtl`) plus direct C-library packages | — |
 | feature-platform-abstraction-layer | feature | Platform Abstraction Layer (PAL): per-platform RTL port at one seam | — |
 
-## backlog (60)
+## backlog (62)
 
 | Ticket | Type | Summary | Blocked-by |
 | --- | --- | --- | --- |
@@ -40,6 +41,7 @@ _none_
 | feature-demo-solitaire | feature | Demo — console Klondike solitaire (user-requested entertainment test app) | — |
 | feature-demo-vm | feature | Demo — bytecode VM + assembler (small ISA) | — |
 | feature-directive-if-numeric | feature | Valued defines + numeric `{$IF}` evaluation | — |
+| feature-double-to-single-narrowing | feature | Double literal / value → Single narrowing on assign and argument | — |
 | feature-dynamic-include-paths-config | feature | Dynamic Include Paths, Configuration Files, and System Scanner | — |
 | feature-dynamic-soname-discovery | feature | Dynamic soname discovery (no execve) | — |
 | feature-esp32-idf-xtensa | feature | ESP-IDF integration: Xtensa (ESP32-S2/S3) — QEMU + real hardware | — |
@@ -70,6 +72,7 @@ _none_
 | feature-sat-solver-library | feature | SAT solver library — DPLL over CNF (known-instance test app) | — |
 | feature-stackful-coro-port | feature | Port the stackful coroutine backend to all targets | — |
 | feature-static-arena-profile | feature | Fixed-static-arena allocator profile | feature-unified-heap-allocator |
+| feature-textfile-keyword-io-dispatch | feature | Default `Text` file surface and file-handle IO dispatch | — |
 | feature-threadsafe-io-serialization | feature | Statement-level I/O serialization under threads | feature-unified-heap-allocator |
 | feature-writeln-as-library | feature | write/writeln as a library function (via `array of const` + variadic sugar) | — |
 | feature-zero-init-contract | feature | Zero-init contract — one library-owned managed-slot zeroing guarantee | — |
@@ -213,6 +216,7 @@ _none_
 - feature-demo-solitaire
 - feature-demo-vm
 - feature-directive-if-numeric
+- feature-double-to-single-narrowing
 - feature-dynamic-include-paths-config
 - feature-dynamic-soname-discovery
 - feature-esp32-idf-xtensa
@@ -239,6 +243,7 @@ _none_
 - feature-sat-solver-library
 - feature-stackful-coro-port
 - feature-static-arena-profile
+- feature-textfile-keyword-io-dispatch
 - feature-threadsafe-io-serialization
 - feature-writeln-as-library
 - feature-zero-init-contract
