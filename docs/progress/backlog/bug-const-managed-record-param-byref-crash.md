@@ -133,3 +133,38 @@ caller's field-read offset; align the three. (`@r.limbs` to probe the offset fro
 user code is rejected — "undefined variable (NativeInt)" on the cast — so use a
 disassembly or a non-managed proxy field.) This is independent of the now-fixed
 hidden-temp nil-init (`bug-proc-local-managed-record-uninit`).
+
+## Disassembly findings (2026-06-20, session 3) — ROOT CAUSE localized
+
+Disassembled i386 `MakeR` (a record-returning function). It builds `Result` in a
+local (ebp-0x10), stores the handle into `Result.limbs` correctly — and then
+**`leave; ret` with NO aggregate-return copy**. The Result is never written to the
+caller's hidden destination (the dest pointer is saved at prologue to ebp-0x14 but
+never read back). So the caller's `t := MakeR(...)` copies from an uninitialised
+hidden-dest temp → `t.limbs` is nil → Length 0 → segfault on deref. (i386 field
+offset for `limbs` = 4, RecSize = 8, so the copy WOULD span it — the copy is just
+absent.)
+
+The copy is absent because `EmitProcEpilog` (symtab.inc ~3448) receives
+**`retSymIdx = -1`** for `MakeR` on i386, so the aggregate branch (3450, which
+emits `mov edi,[dest]; lea esi,[Result]; rep movsb; mov eax,dest`) is skipped and
+only `leave; ret` is emitted. On x86-64 the same proc gets `retSymIdx = 17`
+(valid) and works.
+
+`Procs[MakeR].RetSymIdx` is **17 at parse-set (parser.inc ~8351), 17 at the
+prologue, 17 through `CompileAST` post-`IRLowerAST`, then -1 by the time the
+epilog runs** — i.e. it is reset to -1 *during* `IREmitMachineCode` (i386), before
+the epilogue. `ProcAggregateDestSym[MakeR]` stays valid (18) throughout. `MakeR`
+is registered exactly once (no re-registration), and the only `RetSymIdx := -1`
+is the proc-init at symtab.inc:2774 — which did NOT re-fire. So an UNIDENTIFIED
+write resets `Procs[41].RetSymIdx` (Name stays "MakeR") during i386 emission.
+
+Also unresolved: the `EmitProcEpilog` call that emits MakeR's bare `leave;ret` is
+NOT `ir_codegen386.inc:3148` (the IR_TERMINATE handler — instrumented, did not
+fire for MakeR) nor `parser.inc:9038` (instrumented, did not fire). Find the
+actual caller. NEXT SESSION (fresh): (1) find what writes `Procs[*].RetSymIdx`
+during i386 `IREmitMachineCode` — likely a stray field write via a wrong
+proc/offset, or a lazy helper-proc registration that reuses the slot; (2) find the
+real epilog call path for a record-returning proc on i386. The aarch64 variant is
+separate (segfaults rather than nil) and needs its own pass. x86-64 self-host is
+unaffected throughout.
