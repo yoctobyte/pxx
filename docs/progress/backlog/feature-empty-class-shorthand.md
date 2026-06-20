@@ -1,6 +1,7 @@
 # Empty class descendant shorthand
 
 - **Type:** feature
+- **Track:** A
 - **Status:** backlog
 - **Owner:** —
 - **Opened:** 2026-06-20

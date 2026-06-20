@@ -1,6 +1,7 @@
 # Image to ANSI ASCII renderer library
 
 - **Type:** feature
+- **Track:** B
 - **Status:** backlog
 - **Owner:** —
 - **Opened:** 2026-06-20
@@ -43,4 +44,3 @@ truecolor half-block rendering, with plain ASCII as a portable fallback.
 - Runtime rendering and offline asset generation should share the same algorithm
   eventually.
 - Keep the first slice deterministic; art quality tweaks can come later.
-

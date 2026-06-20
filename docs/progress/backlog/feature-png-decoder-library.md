@@ -1,6 +1,7 @@
 # PNG decoder library
 
 - **Type:** feature
+- **Track:** B
 - **Status:** backlog
 - **Owner:** —
 - **Opened:** 2026-06-20
@@ -39,4 +40,3 @@ use an offline converter so this ticket does not block improving the demo.
 - PNG is not just "read pixels"; deflate and CRC make this a real library stack.
 - If full zlib is not ready, start with a host-side/offline converter for demos
   and land runtime PNG decoding when compression/hash foundations are ready.
-

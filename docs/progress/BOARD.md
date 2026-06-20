@@ -10,92 +10,92 @@ _none_
 
 ## working (2)
 
-| Ticket | Type | Summary | Blocked-by |
-| --- | --- | --- | --- |
-| feature-c-runtime-library | feature | C runtime/library layer (`lib/crtl`) plus direct C-library packages | — |
-| feature-platform-abstraction-layer | feature | Platform Abstraction Layer (PAL): per-platform RTL port at one seam | — |
+| Ticket | Track | Type | Summary | Blocked-by |
+| --- | --- | --- | --- | --- |
+| feature-c-runtime-library | B | feature | C runtime/library layer (`lib/crtl`) plus direct C-library packages | — |
+| feature-platform-abstraction-layer | B | feature | Platform Abstraction Layer (PAL): per-platform RTL port at one seam | — |
 
 ## backlog (77)
 
-| Ticket | Type | Summary | Blocked-by |
-| --- | --- | --- | --- |
-| bug-rtti-offset-static-array | bug | RTTI offset corruption when class/record definitions contain large static arrays | — |
-| bug-str-float-broken-by-copy-shadow | bug | Str() builtin breaks for float formatting when a unit shadows Copy | — |
-| bug-string-type-size-mismatch | bug | String type size mismatch in TypeSize vs codegen copies | — |
-| chore-inc-to-units | chore | `.inc` → real `.pas` units refactor | — |
-| chore-runtime-emission-size | chore | Finer runtime-support emission (code size) | — |
-| feature-additional-cpu-targets | feature | Additional CPU targets (rollup: i386 → aarch64 → arm32 → ESP32/RISC-V) | feature-target-aarch64, feature-target-arm32, feature-target-esp32, feature-target-i386 |
-| feature-adventure-scene-asset-pipeline | feature | Adventure scene asset pipeline | feature-image-ascii-renderer-library |
-| feature-allocator-quality | feature | Allocator quality: split / coalesce / bins / alignment | — |
-| feature-async-auto-backend | feature | Auto stackless/stackful backend selection | — |
-| feature-async-language-surface | feature | Async language surface + stackless coroutine backend | feature-cross-target-feature-parity |
-| feature-bignum-library | feature | Bignum library — arbitrary-precision integers (deterministic test app) | — |
-| feature-c-header-import-complex | feature | Import C headers for complex libraries (glib/GTK-grade) | — |
-| feature-c-regex-library-devtest | feature | C regex library dev-test import | — |
-| feature-c-source-frontend | feature | C source frontend — compile C function bodies (statements + expressions) | feature-cross-target-feature-parity |
-| feature-compiler-warnings | feature | Compiler warning diagnostics facility | — |
-| feature-compression-library | feature | Compression library — Huffman / LZ77 (roundtrip test app) | — |
-| feature-const-eval-typecast-int64 | feature | ConstEval: typed casts + 64-bit folding in const initializers | — |
-| feature-copy-intrinsic | feature | `Copy` as a generic overloaded intrinsic (string + dynarray families) | — |
-| feature-demo-calc | feature | Demo — RPN / expression calculator (mini spreadsheet) | — |
-| feature-demo-chess | feature | Flagship demo — chess engine (real-world app + cross-target oracle + benchmark) | — |
-| feature-demo-life | feature | Demo — Conway's Game of Life | — |
-| feature-demo-lisp | feature | Demo — Lisp / Scheme interpreter | — |
-| feature-demo-maze | feature | Demo — maze generator + solver | — |
-| feature-demo-solitaire | feature | Demo — console Klondike solitaire (user-requested entertainment test app) | — |
-| feature-demo-vm | feature | Demo — bytecode VM + assembler (small ISA) | — |
-| feature-directive-if-numeric | feature | Valued defines + numeric `{$IF}` evaluation | — |
-| feature-double-to-single-narrowing | feature | Double literal / value → Single narrowing on assign and argument | — |
-| feature-dynamic-include-paths-config | feature | Dynamic Include Paths, Configuration Files, and System Scanner | — |
-| feature-dynamic-soname-discovery | feature | Dynamic soname discovery (no execve) | — |
-| feature-empty-class-shorthand | feature | Empty class descendant shorthand | — |
-| feature-esp-float | feature | ESP float wiring (xtensa + riscv32 float value model) | — |
-| feature-esp-int64-arith | feature | 64-bit integer arithmetic for the ESP backends (riscv32 + xtensa) | — |
-| feature-esp32-idf-xtensa | feature | ESP-IDF integration: Xtensa (ESP32-S2/S3) — QEMU + real hardware | — |
-| feature-esp32-isr-iram | feature | ESP32: Compiler-Directed ISR and IRAM Support | — |
-| feature-exception-base-class | feature | Built-in / RTL `Exception` base class | — |
-| feature-extended-alias-or-reject | feature | Extended: formalize as Double alias (or reject) | — |
-| feature-flexcolumn-directive | feature | `flexcolumn` calling-convention directive | chore-inc-to-units |
-| feature-fpc-vs-pxx-feature-boundary | feature | Policy: FPC-bootstrap subset vs PXX-only library features | — |
-| feature-general-typename-cast | feature | General `TypeName(expr)` reinterpret cast (named record/class/pointer) | — |
-| feature-handle-compacting-heap | feature | Handle-table compacting heap (anti-fragmentation for constrained RAM) | — |
-| feature-hashing-library | feature | Hashing library — CRC32 / MD5 / SHA-256 (known-vector test app) | — |
-| feature-image-ascii-renderer-library | feature | Image to ANSI ASCII renderer library | feature-rtl-image-bitmap-library, feature-terminal-ansi-library |
-| feature-inline-asm-depth | feature | Inline assembler depth | — |
-| feature-inline-routines | feature | Inline routine expansion (`inline;`) | — |
-| feature-interfaces | feature | Interfaces | — |
-| feature-json-library | feature | JSON library — parser + serializer (with a roundtrip test app) | — |
-| feature-lazycasing-c-imports | feature | `{$LAZYCASING ON/OFF}` for C imports only | feature-compiler-warnings |
-| feature-metaclass-descendant-enforcement | feature | Metaclass alias descendant-constraint enforcement | — |
-| feature-mimic-fpc | feature | `mimic FPC` compatibility mode | feature-directive-if-numeric |
-| feature-networking | feature | Networking runtime | — |
-| feature-nil-python-frontend | feature | Nil Python frontend (`.npy`) | — |
-| feature-nilpy-idf-import | feature | nilpy includes anything from ESP-IDF and it just works | feature-c-source-frontend, feature-esp32-idf-xtensa |
-| feature-no-ansistring-profile | feature | No-AnsiString / bounded-string profile | — |
-| feature-object-reference-type | feature | `object` — a rooted object-reference type | — |
-| feature-optimization-levels | feature | Optimization levels (`-O0/-O1/-O2/-O3/-Os`) + pass framework | — |
-| feature-os-targets-bsd-mac | feature | Additional OS targets (BSD / macOS via syscall mapping; Windows deprioritized) | — |
-| feature-parallel-processing | feature | Parallel processing as a language feature | feature-unified-heap-allocator |
-| feature-png-decoder-library | feature | PNG decoder library | feature-compression-library, feature-hashing-library, feature-rtl-image-bitmap-library |
-| feature-progress-transition-helpers | feature | Progress transition helpers (`claim` / `resolve`) | — |
-| feature-random-library | feature | Random library — HW/OS/software tiered RNG (cross-target capability test) | — |
-| feature-rtl-conversion-and-bitset-library | feature | RTL gaps — string/number conversion + a bit-set type (surfaced by the demos) | — |
-| feature-rtl-image-bitmap-library | feature | RTL image bitmap library | — |
-| feature-sat-solver-library | feature | SAT solver library — DPLL over CNF (known-instance test app) | — |
-| feature-stackful-coro-port | feature | Port the stackful coroutine backend to all targets | — |
-| feature-static-arena-profile | feature | Fixed-static-arena allocator profile | feature-unified-heap-allocator |
-| feature-string-model-tyfixedstring | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
-| feature-terminal-ansi-library | feature | Terminal ANSI library | — |
-| feature-textfile-keyword-io-dispatch | feature | Default `Text` file surface and file-handle IO dispatch | — |
-| feature-threadsafe-io-serialization | feature | Statement-level I/O serialization under threads | feature-unified-heap-allocator |
-| feature-writeln-as-library | feature | write/writeln as a library function (via `array of const` + variadic sugar) | — |
-| feature-zero-init-contract | feature | Zero-init contract — one library-owned managed-slot zeroing guarantee | — |
-| goal-compile-fpc-compiler | goal | 🗼 Lighthouse — compile the FPC compiler (`pp.pas`) with PXX | — |
-| idea-demo-app-candidates | idea | Demo / test application candidates — selection criteria + catalog | — |
-| idea-unit-rename-import | idea | `uses X as Y` unit-rename import (dialect extension) | — |
-| idea-visibility-enforcement | idea | Enforce private/protected visibility | — |
-| lib-text-file-io-assign-rewrite | lib | Text file I/O: `Assign`/`Rewrite`/`Reset`/`WriteLn(f,…)`/`CloseFile` missing | — |
-| meta-track-b-compiler-wishlist | meta | Track-B wishlist — compiler features most wanted to unblock libraries + demos | — |
+| Ticket | Track | Type | Summary | Blocked-by |
+| --- | --- | --- | --- | --- |
+| bug-rtti-offset-static-array | A | bug | RTTI offset corruption when class/record definitions contain large static arrays | — |
+| bug-str-float-broken-by-copy-shadow | A | bug | Str() builtin breaks for float formatting when a unit shadows Copy | — |
+| bug-string-type-size-mismatch | A | bug | String type size mismatch in TypeSize vs codegen copies | — |
+| chore-inc-to-units | A | chore | `.inc` → real `.pas` units refactor | — |
+| chore-runtime-emission-size | A | chore | Finer runtime-support emission (code size) | — |
+| feature-additional-cpu-targets | A | feature | Additional CPU targets (rollup: i386 → aarch64 → arm32 → ESP32/RISC-V) | feature-target-aarch64, feature-target-arm32, feature-target-esp32, feature-target-i386 |
+| feature-adventure-scene-asset-pipeline | B | feature | Adventure scene asset pipeline | feature-image-ascii-renderer-library |
+| feature-allocator-quality | A | feature | Allocator quality: split / coalesce / bins / alignment | — |
+| feature-async-auto-backend | A | feature | Auto stackless/stackful backend selection | — |
+| feature-async-language-surface | A | feature | Async language surface + stackless coroutine backend | feature-cross-target-feature-parity |
+| feature-bignum-library | B | feature | Bignum library — arbitrary-precision integers (deterministic test app) | — |
+| feature-c-header-import-complex | A | feature | Import C headers for complex libraries (glib/GTK-grade) | — |
+| feature-c-regex-library-devtest | A | feature | C regex library dev-test import | — |
+| feature-c-source-frontend | A | feature | C source frontend — compile C function bodies (statements + expressions) | feature-cross-target-feature-parity |
+| feature-compiler-warnings | A | feature | Compiler warning diagnostics facility | — |
+| feature-compression-library | B | feature | Compression library — Huffman / LZ77 (roundtrip test app) | — |
+| feature-const-eval-typecast-int64 | A | feature | ConstEval: typed casts + 64-bit folding in const initializers | — |
+| feature-copy-intrinsic | B | feature | `Copy` as a generic overloaded intrinsic (string + dynarray families) | — |
+| feature-demo-calc | B | feature | Demo — RPN / expression calculator (mini spreadsheet) | — |
+| feature-demo-chess | B | feature | Flagship demo — chess engine (real-world app + cross-target oracle + benchmark) | — |
+| feature-demo-life | B | feature | Demo — Conway's Game of Life | — |
+| feature-demo-lisp | B | feature | Demo — Lisp / Scheme interpreter | — |
+| feature-demo-maze | B | feature | Demo — maze generator + solver | — |
+| feature-demo-solitaire | B | feature | Demo — console Klondike solitaire (user-requested entertainment test app) | — |
+| feature-demo-vm | B | feature | Demo — bytecode VM + assembler (small ISA) | — |
+| feature-directive-if-numeric | A | feature | Valued defines + numeric `{$IF}` evaluation | — |
+| feature-double-to-single-narrowing | A | feature | Double literal / value → Single narrowing on assign and argument | — |
+| feature-dynamic-include-paths-config | A | feature | Dynamic Include Paths, Configuration Files, and System Scanner | — |
+| feature-dynamic-soname-discovery | A | feature | Dynamic soname discovery (no execve) | — |
+| feature-empty-class-shorthand | A | feature | Empty class descendant shorthand | — |
+| feature-esp-float | A | feature | ESP float wiring (xtensa + riscv32 float value model) | — |
+| feature-esp-int64-arith | A | feature | 64-bit integer arithmetic for the ESP backends (riscv32 + xtensa) | — |
+| feature-esp32-idf-xtensa | A | feature | ESP-IDF integration: Xtensa (ESP32-S2/S3) — QEMU + real hardware | — |
+| feature-esp32-isr-iram | A | feature | ESP32: Compiler-Directed ISR and IRAM Support | — |
+| feature-exception-base-class | B | feature | Built-in / RTL `Exception` base class | — |
+| feature-extended-alias-or-reject | A | feature | Extended: formalize as Double alias (or reject) | — |
+| feature-flexcolumn-directive | A | feature | `flexcolumn` calling-convention directive | chore-inc-to-units |
+| feature-fpc-vs-pxx-feature-boundary | A | feature | Policy: FPC-bootstrap subset vs PXX-only library features | — |
+| feature-general-typename-cast | A | feature | General `TypeName(expr)` reinterpret cast (named record/class/pointer) | — |
+| feature-handle-compacting-heap | A | feature | Handle-table compacting heap (anti-fragmentation for constrained RAM) | — |
+| feature-hashing-library | B | feature | Hashing library — CRC32 / MD5 / SHA-256 (known-vector test app) | — |
+| feature-image-ascii-renderer-library | B | feature | Image to ANSI ASCII renderer library | feature-rtl-image-bitmap-library, feature-terminal-ansi-library |
+| feature-inline-asm-depth | A | feature | Inline assembler depth | — |
+| feature-inline-routines | A | feature | Inline routine expansion (`inline;`) | — |
+| feature-interfaces | A | feature | Interfaces | — |
+| feature-json-library | B | feature | JSON library — parser + serializer (with a roundtrip test app) | — |
+| feature-lazycasing-c-imports | A | feature | `{$LAZYCASING ON/OFF}` for C imports only | feature-compiler-warnings |
+| feature-metaclass-descendant-enforcement | A | feature | Metaclass alias descendant-constraint enforcement | — |
+| feature-mimic-fpc | A | feature | `mimic FPC` compatibility mode | feature-directive-if-numeric |
+| feature-networking | B | feature | Networking runtime | — |
+| feature-nil-python-frontend | A | feature | Nil Python frontend (`.npy`) | — |
+| feature-nilpy-idf-import | A | feature | nilpy includes anything from ESP-IDF and it just works | feature-c-source-frontend, feature-esp32-idf-xtensa |
+| feature-no-ansistring-profile | A | feature | No-AnsiString / bounded-string profile | — |
+| feature-object-reference-type | A | feature | `object` — a rooted object-reference type | — |
+| feature-optimization-levels | A | feature | Optimization levels (`-O0/-O1/-O2/-O3/-Os`) + pass framework | — |
+| feature-os-targets-bsd-mac | A | feature | Additional OS targets (BSD / macOS via syscall mapping; Windows deprioritized) | — |
+| feature-parallel-processing | A | feature | Parallel processing as a language feature | feature-unified-heap-allocator |
+| feature-png-decoder-library | B | feature | PNG decoder library | feature-compression-library, feature-hashing-library, feature-rtl-image-bitmap-library |
+| feature-progress-transition-helpers | A | feature | Progress transition helpers (`claim` / `resolve`) | — |
+| feature-random-library | B | feature | Random library — HW/OS/software tiered RNG (cross-target capability test) | — |
+| feature-rtl-conversion-and-bitset-library | B | feature | RTL gaps — string/number conversion + a bit-set type (surfaced by the demos) | — |
+| feature-rtl-image-bitmap-library | B | feature | RTL image bitmap library | — |
+| feature-sat-solver-library | B | feature | SAT solver library — DPLL over CNF (known-instance test app) | — |
+| feature-stackful-coro-port | A | feature | Port the stackful coroutine backend to all targets | — |
+| feature-static-arena-profile | A | feature | Fixed-static-arena allocator profile | feature-unified-heap-allocator |
+| feature-string-model-tyfixedstring | B | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
+| feature-terminal-ansi-library | B | feature | Terminal ANSI library | — |
+| feature-textfile-keyword-io-dispatch | A+B | feature | Default `Text` file surface and file-handle IO dispatch | — |
+| feature-threadsafe-io-serialization | A | feature | Statement-level I/O serialization under threads | feature-unified-heap-allocator |
+| feature-writeln-as-library | B | feature | write/writeln as a library function (via `array of const` + variadic sugar) | — |
+| feature-zero-init-contract | A | feature | Zero-init contract — one library-owned managed-slot zeroing guarantee | — |
+| goal-compile-fpc-compiler | A | goal | 🗼 Lighthouse — compile the FPC compiler (`pp.pas`) with PXX | — |
+| idea-demo-app-candidates | B | idea | Demo / test application candidates — selection criteria + catalog | — |
+| idea-unit-rename-import | B | idea | `uses X as Y` unit-rename import (dialect extension) | — |
+| idea-visibility-enforcement | B | idea | Enforce private/protected visibility | — |
+| lib-text-file-io-assign-rewrite | B | lib | Text file I/O: `Assign`/`Rewrite`/`Reset`/`WriteLn(f,…)`/`CloseFile` missing | — |
+| meta-track-b-compiler-wishlist | B | meta | Track-B wishlist — compiler features most wanted to unblock libraries + demos | — |
 
 ## blocked (0)
 
@@ -103,188 +103,188 @@ _none_
 
 ## done (101)
 
-| Ticket | Type | Summary | Blocked-by |
-| --- | --- | --- | --- |
-| bug-64bit-shift-xor-literal-gaps | bug | 64-bit gaps in pinned v9: `xor` operator, large shifts, 64-bit hex literals | — |
-| bug-builtin-val-miscompiles | bug | Builtin `Val` mis-lowers — wrong error code + segfault | — |
-| bug-builtin-write-case-sensitive | bug | Builtin write/writeln matched case-sensitively (only lowercase resolves) | — |
-| bug-c-packed-aligned-ignored | bug | C `__attribute__((packed))` / `aligned` ignored → field-offset drift | — |
-| bug-c-quoted-include-search-path | bug | C quoted includes do not search the including file directory | — |
-| bug-codegen-nested-index-load-width-pressure | bug | Codegen miscompiles nested integer-array index load width under register pressure | — |
-| bug-const-byref-record-param-temp | bug | Can't pass a function-result temporary to a const/by-ref record param | — |
-| bug-const-expr-shl-shr-not-folded | bug | `shl` / `shr` in a constant expression not accepted | — |
-| bug-const-managed-record-param-byref-crash | bug | const record param with a managed (dynarray) field crashes by-ref on i386 + aarch64 | — |
-| bug-dynarray-whole-var-assign-cross | bug | Whole dynamic-array variable assignment (`b := a`) unsupported on i386 + aarch64 | — |
-| bug-for-in-implicit-self-field | bug | `for-in` over an implicit-`Self` array field fails in methods | — |
-| bug-forin-in-method-global-var-corruption | bug | `for-in` inside a method corrupts a dyn-array global declared after it | — |
-| bug-frozen-string-length-pointer-deref-cross | bug | `Length()` of a pointer-dereferenced frozen `string` returns 0 on the cross targets | — |
-| bug-implicit-self-dynarray-length | bug | `Length` on implicit-`Self` dynamic-array field fails in methods | — |
-| bug-managed-byref-string-param-store | bug | Managed by-ref AnsiString params: store-through-var no-ops / segfaults | — |
-| bug-many-param-call-corruption | bug | Self-hosted x86-64 backend miscompiles calls with many parameters | — |
-| bug-operator-result-inferred-var | bug | Record-valued operator result is miscompiled (aggregate-return ABI) | — |
-| bug-pinned-stable-reads-live-builtin-rtl | bug | Pinned stable reads LIVE builtin RTL source — track A WIP breaks track B | — |
-| bug-pointer-cast-custom-alias | bug | Pointer cast on custom Char pointer aliases fails to skip string length prefix | — |
-| bug-proc-local-managed-record-uninit | bug | Proc-local managed record not zero-initialised on entry → first-call miscompute | — |
-| bug-read-preserves-line-remainder | bug | `read` consumes a whole line like `readln` | — |
-| bug-record-byvalue-arg-truncation | bug | By-value record args >8 bytes truncate (and operator operand edges) | — |
-| bug-record-fn-codegen-crash | bug | Context-sensitive runtime crash: record-returning fn with nested loops over dynarray fields | — |
-| bug-stack-corruption-inline-string-concat | bug | Stack frame corruption on inline string concatenation assignments | — |
-| bug-subclass-field-offset-calculation | bug | bug-subclass-field-offset-calculation (Track A) | — |
-| bug-sysutils-unit-hard-skipped | bug | `uses sysutils` is hard-skipped — a real lib/rtl/sysutils can't load | — |
-| bug-threadsafe-layout-rtti-helper-races | bug | Thread-safe layout RTTI helper races | feature-rtti-layout-table |
-| bug-whole-record-copy-main-body-noop | bug | Latent: whole-record array-element copy in main-program body emits store no-ops | — |
-| bug-xtensa-call0-large-frame-truncates | bug | Xtensa Call0 / non-windowed frame >128 bytes silently truncates | — |
-| chore-asmtext-per-platform-split | chore | Split `asmtext.inc` monolith into per-platform files + fix emitter tests | — |
-| chore-qemu-test-env | chore | QEMU cross-target test environment | — |
-| feature-aarch64-asm-emitter | feature | AArch64 text-assembler (`EmitAsmA64`) for cleaner ARM64 codegen | — |
-| feature-arm32-asm-emitter | feature | ARM32 text-assembler (`EmitAsmArm32`) for cleaner ARM32 codegen | — |
-| feature-array-of-const | feature | `array of const` (TVarRec) parameter support | — |
-| feature-asm-text-emitter | feature | Text-assembler codegen helpers (`EmitAsm386` / `EmitAsmX64` …) | feature-array-of-const |
-| feature-async-coroutines | feature | Async, coroutines, and `yield` | feature-unified-heap-allocator |
-| feature-class-is-as | feature | `is` / `as` / `Supports` — runtime class type-tests | — |
-| feature-compiler-search-path-pcl | feature | feature-compiler-search-path-pcl (Track A) | — |
-| feature-cross-bootstrap-selfhost | feature | Cross self-host bootstrap (compiler.pas → byte-identical under QEMU) | feature-cross-selfhost-aarch64, feature-cross-selfhost-arm32, feature-cross-selfhost-i386 |
-| feature-cross-bootstrap | feature | Cross-architecture compiler bootstrap (AArch64/ARM32 → byte-identical self-compile) | — |
-| feature-cross-codegen-gaps | feature | Cross-target codegen gaps (deferred v1 shortcuts) | — |
-| feature-cross-compiler-probe-walls | feature | Cross compiler.pas probe walls | — |
-| feature-cross-exceptions | feature | Exception runtime on cross targets (i386 / ARM32 / AArch64) | — |
-| feature-cross-extern-abi-breadth | feature | Cross external-C-call ABI breadth (float/Int64 args, float returns, stack align) | — |
-| feature-cross-float-returns | feature | Cross-target float function results | — |
-| feature-cross-float-variant | feature | Float + Variant codegen on cross targets | — |
-| feature-cross-managed-aggregate-locals | feature | Managed aggregate locals on cross targets | — |
-| feature-cross-managed-aggregates | feature | Cross-target managed aggregates (records + dynamic arrays) | feature-rtti-layout-table |
-| feature-cross-managed-string-cow | feature | Copy-on-write for managed strings on cross targets (i386 / ARM32 / AArch64) | — |
-| feature-cross-param-abi | feature | Full parameter/result ABI on cross targets | — |
-| feature-cross-selfhost-aarch64 | feature | Cross self-host: AArch64 generated compiler runs under QEMU | feature-cross-managed-string-cow |
-| feature-cross-selfhost-arm32 | feature | Cross self-host: ARM32 generated compiler runs under QEMU | feature-cross-managed-string-cow |
-| feature-cross-selfhost-i386 | feature | Cross self-host: i386 generated compiler runs under Linux | — |
-| feature-cross-streaming-lfm | feature | Component streaming + LFM loading on the cross targets | — |
-| feature-cross-target-feature-parity | feature | Cross-target language-feature parity (Intel + ARM) | — |
-| feature-demo-sudoku | feature | Demo — Sudoku (solver + generator + interactive play) | — |
-| feature-elf-rel-writer | feature | Relocatable ELF32 object writer (.o for ESP-IDF linking) | — |
-| feature-esp-isa-baseline-softfallback | feature | ESP ISA baseline + software fallbacks for older parts | — |
-| feature-esp32-bare-boot | feature | ESP32 bare-metal boot profile (no IDF) | — |
-| feature-esp32-idf-riscv32 | feature | ESP-IDF integration: riscv32 (ESP32-C3) end-to-end | feature-elf-rel-writer |
-| feature-esp32-managed-features | feature | ESP32 managed-feature port (xtensa + riscv32, qemu-validated) | — |
-| feature-esp32-managed-strings | feature | ESP32 managed strings (tyAnsiString runtime on xtensa + riscv32) | — |
-| feature-explicit-typecasts | feature | Explicit type-casts (`Char`/`Boolean`/`String` and a general `TypeName(expr)`) | — |
-| feature-float-str-val | feature | Float Str / Val | — |
-| feature-for-in-iteration | feature | `for x in ...` iteration — FPC-exact (arrays, sets, strings, enums, enumerators) | — |
-| feature-forin-member-access-source | feature | `for-in` over a qualified member-access source (`obj.field`, `Self.field`) | — |
-| feature-generators-yield | feature | Generators and `yield` (the coroutine on-ramp) | feature-unified-heap-allocator |
-| feature-i386-asm-emitter | feature | i386 text-assembler (`EmitAsm386`) for cleaner x86-32 codegen | — |
-| feature-i386-int64-codegen | feature | Full Int64 codegen for i386 | — |
-| feature-int-to-float-assign | feature | Integer → Float assignment / coercion missing the int→float conversion | — |
-| feature-interface-refcounting | feature | Interface reference counting (IInterface / ARC) | — |
-| feature-language-gaps-from-demos | feature | Language gaps surfaced by the demo apps (sudoku / sieve / chess) | — |
-| feature-library-test-suite | feature | Track B library test suite | — |
-| feature-managed-exception-cleanup | feature | Finalize managed values on exception unwind | — |
-| feature-managed-string-default | feature | Promote managed AnsiString from opt-in to default | bug-managed-byref-string-param-store, feature-managed-exception-cleanup |
-| feature-member-access-on-call-result | feature | Member access on a function-call result (`f(args).field`) | — |
-| feature-multidim-fixed-arrays | feature | Multidimensional fixed arrays | — |
-| feature-parallel-tracks-stable-compiler | feature | Parallel tracks: pin libraries/demos to a "stable" compiler | — |
-| feature-procedural-types | feature | Procedural types and method pointers | — |
-| feature-progress-check-makefile | feature | Wire `progress.sh check` into a make target | — |
-| feature-relative-path-units | feature | Relative/absolute path support in `uses`/`includes` | — |
-| feature-result-in-loop | feature | Function `Result` (float) read-modified inside a loop miscompiles to 0 | — |
-| feature-rtti-layout-table | feature | Target-independent layout RTTI (Tier B) | feature-cross-bootstrap |
-| feature-rv32-asm-emitter | feature | RISC-V (RV32) text-assembler (`EmitAsmRv32`) for cleaner riscv32 codegen | — |
-| feature-setlength-var-array-param-abi | feature | `SetLength` on a `var` dynamic-array parameter (cross-cutting ABI) | — |
-| feature-short-circuit-eval | feature | Short-circuit boolean evaluation (`and` / `or`) | — |
-| feature-softfloat-lib | feature | Soft-float library (IEEE-754 double kernels + conversions) | — |
-| feature-synthetic-feature-matrix-test | feature | Synthetic all-features stress test (cross-target conformance) | — |
-| feature-target-aarch64 | feature | Compile target: ARM64 / AArch64 Linux | feature-target-i386 |
-| feature-target-arm32 | feature | Compile target: ARM32 Linux | feature-target-aarch64 |
-| feature-target-esp32 | feature | Compile target: ESP32 / embedded | — |
-| feature-target-i386 | feature | Compile target: i386 (32-bit x86 Linux) | chore-qemu-test-env |
-| feature-transcendental-math | feature | Transcendental math library (Sqrt/Sin/Cos/Ln/Exp/ArcTan/Power/Pi/Abs) | — |
-| feature-typed-const-arrays | feature | Typed constant arrays (initialized const arrays) | — |
-| feature-typed-instruction-encoders | feature | Typed instruction encoders for codegen | — |
-| feature-unified-heap-allocator | feature | Unified syscall-free heap allocator | — |
-| feature-xtensa-asm-emitter | feature | Xtensa text-assembler (`EmitAsmXtensa`) for ESP32 | — |
-| feature-xtensa-windowed-abi | feature | Xtensa windowed ABI codegen variant (for ESP-IDF interop) | — |
-| idea-progress-board-md | idea | On-demand `BOARD.md` kanban grid | — |
-| lib-intToStr-missing | lib | `IntToStr` not available | — |
-| lib-string-copy-trim-missing | lib | String `Copy` / `Trim` not available | — |
+| Ticket | Track | Type | Summary | Blocked-by |
+| --- | --- | --- | --- | --- |
+| bug-64bit-shift-xor-literal-gaps | A | bug | 64-bit gaps in pinned v9: `xor` operator, large shifts, 64-bit hex literals | — |
+| bug-builtin-val-miscompiles | A | bug | Builtin `Val` mis-lowers — wrong error code + segfault | — |
+| bug-builtin-write-case-sensitive | A | bug | Builtin write/writeln matched case-sensitively (only lowercase resolves) | — |
+| bug-c-packed-aligned-ignored | A | bug | C `__attribute__((packed))` / `aligned` ignored → field-offset drift | — |
+| bug-c-quoted-include-search-path | A | bug | C quoted includes do not search the including file directory | — |
+| bug-codegen-nested-index-load-width-pressure | A | bug | Codegen miscompiles nested integer-array index load width under register pressure | — |
+| bug-const-byref-record-param-temp | A | bug | Can't pass a function-result temporary to a const/by-ref record param | — |
+| bug-const-expr-shl-shr-not-folded | A | bug | `shl` / `shr` in a constant expression not accepted | — |
+| bug-const-managed-record-param-byref-crash | A | bug | const record param with a managed (dynarray) field crashes by-ref on i386 + aarch64 | — |
+| bug-dynarray-whole-var-assign-cross | A | bug | Whole dynamic-array variable assignment (`b := a`) unsupported on i386 + aarch64 | — |
+| bug-for-in-implicit-self-field | A | bug | `for-in` over an implicit-`Self` array field fails in methods | — |
+| bug-forin-in-method-global-var-corruption | A | bug | `for-in` inside a method corrupts a dyn-array global declared after it | — |
+| bug-frozen-string-length-pointer-deref-cross | A | bug | `Length()` of a pointer-dereferenced frozen `string` returns 0 on the cross targets | — |
+| bug-implicit-self-dynarray-length | A | bug | `Length` on implicit-`Self` dynamic-array field fails in methods | — |
+| bug-managed-byref-string-param-store | A | bug | Managed by-ref AnsiString params: store-through-var no-ops / segfaults | — |
+| bug-many-param-call-corruption | A | bug | Self-hosted x86-64 backend miscompiles calls with many parameters | — |
+| bug-operator-result-inferred-var | A | bug | Record-valued operator result is miscompiled (aggregate-return ABI) | — |
+| bug-pinned-stable-reads-live-builtin-rtl | A | bug | Pinned stable reads LIVE builtin RTL source — track A WIP breaks track B | — |
+| bug-pointer-cast-custom-alias | A | bug | Pointer cast on custom Char pointer aliases fails to skip string length prefix | — |
+| bug-proc-local-managed-record-uninit | A | bug | Proc-local managed record not zero-initialised on entry → first-call miscompute | — |
+| bug-read-preserves-line-remainder | A | bug | `read` consumes a whole line like `readln` | — |
+| bug-record-byvalue-arg-truncation | A | bug | By-value record args >8 bytes truncate (and operator operand edges) | — |
+| bug-record-fn-codegen-crash | A | bug | Context-sensitive runtime crash: record-returning fn with nested loops over dynarray fields | — |
+| bug-stack-corruption-inline-string-concat | A | bug | Stack frame corruption on inline string concatenation assignments | — |
+| bug-subclass-field-offset-calculation | A | bug | bug-subclass-field-offset-calculation (Track A) | — |
+| bug-sysutils-unit-hard-skipped | A | bug | `uses sysutils` is hard-skipped — a real lib/rtl/sysutils can't load | — |
+| bug-threadsafe-layout-rtti-helper-races | A | bug | Thread-safe layout RTTI helper races | feature-rtti-layout-table |
+| bug-whole-record-copy-main-body-noop | A | bug | Latent: whole-record array-element copy in main-program body emits store no-ops | — |
+| bug-xtensa-call0-large-frame-truncates | A | bug | Xtensa Call0 / non-windowed frame >128 bytes silently truncates | — |
+| chore-asmtext-per-platform-split | A | chore | Split `asmtext.inc` monolith into per-platform files + fix emitter tests | — |
+| chore-qemu-test-env | A | chore | QEMU cross-target test environment | — |
+| feature-aarch64-asm-emitter | A | feature | AArch64 text-assembler (`EmitAsmA64`) for cleaner ARM64 codegen | — |
+| feature-arm32-asm-emitter | A | feature | ARM32 text-assembler (`EmitAsmArm32`) for cleaner ARM32 codegen | — |
+| feature-array-of-const | A | feature | `array of const` (TVarRec) parameter support | — |
+| feature-asm-text-emitter | A | feature | Text-assembler codegen helpers (`EmitAsm386` / `EmitAsmX64` …) | feature-array-of-const |
+| feature-async-coroutines | A | feature | Async, coroutines, and `yield` | feature-unified-heap-allocator |
+| feature-class-is-as | A | feature | `is` / `as` / `Supports` — runtime class type-tests | — |
+| feature-compiler-search-path-pcl | A | feature | feature-compiler-search-path-pcl (Track A) | — |
+| feature-cross-bootstrap-selfhost | A | feature | Cross self-host bootstrap (compiler.pas → byte-identical under QEMU) | feature-cross-selfhost-aarch64, feature-cross-selfhost-arm32, feature-cross-selfhost-i386 |
+| feature-cross-bootstrap | A | feature | Cross-architecture compiler bootstrap (AArch64/ARM32 → byte-identical self-compile) | — |
+| feature-cross-codegen-gaps | A | feature | Cross-target codegen gaps (deferred v1 shortcuts) | — |
+| feature-cross-compiler-probe-walls | A | feature | Cross compiler.pas probe walls | — |
+| feature-cross-exceptions | A | feature | Exception runtime on cross targets (i386 / ARM32 / AArch64) | — |
+| feature-cross-extern-abi-breadth | A | feature | Cross external-C-call ABI breadth (float/Int64 args, float returns, stack align) | — |
+| feature-cross-float-returns | A | feature | Cross-target float function results | — |
+| feature-cross-float-variant | A | feature | Float + Variant codegen on cross targets | — |
+| feature-cross-managed-aggregate-locals | A | feature | Managed aggregate locals on cross targets | — |
+| feature-cross-managed-aggregates | A | feature | Cross-target managed aggregates (records + dynamic arrays) | feature-rtti-layout-table |
+| feature-cross-managed-string-cow | A | feature | Copy-on-write for managed strings on cross targets (i386 / ARM32 / AArch64) | — |
+| feature-cross-param-abi | A | feature | Full parameter/result ABI on cross targets | — |
+| feature-cross-selfhost-aarch64 | A | feature | Cross self-host: AArch64 generated compiler runs under QEMU | feature-cross-managed-string-cow |
+| feature-cross-selfhost-arm32 | A | feature | Cross self-host: ARM32 generated compiler runs under QEMU | feature-cross-managed-string-cow |
+| feature-cross-selfhost-i386 | A | feature | Cross self-host: i386 generated compiler runs under Linux | — |
+| feature-cross-streaming-lfm | A | feature | Component streaming + LFM loading on the cross targets | — |
+| feature-cross-target-feature-parity | A | feature | Cross-target language-feature parity (Intel + ARM) | — |
+| feature-demo-sudoku | B | feature | Demo — Sudoku (solver + generator + interactive play) | — |
+| feature-elf-rel-writer | A | feature | Relocatable ELF32 object writer (.o for ESP-IDF linking) | — |
+| feature-esp-isa-baseline-softfallback | A | feature | ESP ISA baseline + software fallbacks for older parts | — |
+| feature-esp32-bare-boot | A | feature | ESP32 bare-metal boot profile (no IDF) | — |
+| feature-esp32-idf-riscv32 | A | feature | ESP-IDF integration: riscv32 (ESP32-C3) end-to-end | feature-elf-rel-writer |
+| feature-esp32-managed-features | A | feature | ESP32 managed-feature port (xtensa + riscv32, qemu-validated) | — |
+| feature-esp32-managed-strings | A | feature | ESP32 managed strings (tyAnsiString runtime on xtensa + riscv32) | — |
+| feature-explicit-typecasts | A | feature | Explicit type-casts (`Char`/`Boolean`/`String` and a general `TypeName(expr)`) | — |
+| feature-float-str-val | A | feature | Float Str / Val | — |
+| feature-for-in-iteration | A | feature | `for x in ...` iteration — FPC-exact (arrays, sets, strings, enums, enumerators) | — |
+| feature-forin-member-access-source | A | feature | `for-in` over a qualified member-access source (`obj.field`, `Self.field`) | — |
+| feature-generators-yield | A | feature | Generators and `yield` (the coroutine on-ramp) | feature-unified-heap-allocator |
+| feature-i386-asm-emitter | A | feature | i386 text-assembler (`EmitAsm386`) for cleaner x86-32 codegen | — |
+| feature-i386-int64-codegen | A | feature | Full Int64 codegen for i386 | — |
+| feature-int-to-float-assign | A | feature | Integer → Float assignment / coercion missing the int→float conversion | — |
+| feature-interface-refcounting | A | feature | Interface reference counting (IInterface / ARC) | — |
+| feature-language-gaps-from-demos | A | feature | Language gaps surfaced by the demo apps (sudoku / sieve / chess) | — |
+| feature-library-test-suite | A+B | feature | Track B library test suite | — |
+| feature-managed-exception-cleanup | A | feature | Finalize managed values on exception unwind | — |
+| feature-managed-string-default | A | feature | Promote managed AnsiString from opt-in to default | bug-managed-byref-string-param-store, feature-managed-exception-cleanup |
+| feature-member-access-on-call-result | B | feature | Member access on a function-call result (`f(args).field`) | — |
+| feature-multidim-fixed-arrays | A | feature | Multidimensional fixed arrays | — |
+| feature-parallel-tracks-stable-compiler | A | feature | Parallel tracks: pin libraries/demos to a "stable" compiler | — |
+| feature-procedural-types | A | feature | Procedural types and method pointers | — |
+| feature-progress-check-makefile | A | feature | Wire `progress.sh check` into a make target | — |
+| feature-relative-path-units | A | feature | Relative/absolute path support in `uses`/`includes` | — |
+| feature-result-in-loop | A | feature | Function `Result` (float) read-modified inside a loop miscompiles to 0 | — |
+| feature-rtti-layout-table | A | feature | Target-independent layout RTTI (Tier B) | feature-cross-bootstrap |
+| feature-rv32-asm-emitter | A | feature | RISC-V (RV32) text-assembler (`EmitAsmRv32`) for cleaner riscv32 codegen | — |
+| feature-setlength-var-array-param-abi | A | feature | `SetLength` on a `var` dynamic-array parameter (cross-cutting ABI) | — |
+| feature-short-circuit-eval | A | feature | Short-circuit boolean evaluation (`and` / `or`) | — |
+| feature-softfloat-lib | B | feature | Soft-float library (IEEE-754 double kernels + conversions) | — |
+| feature-synthetic-feature-matrix-test | A | feature | Synthetic all-features stress test (cross-target conformance) | — |
+| feature-target-aarch64 | A | feature | Compile target: ARM64 / AArch64 Linux | feature-target-i386 |
+| feature-target-arm32 | A | feature | Compile target: ARM32 Linux | feature-target-aarch64 |
+| feature-target-esp32 | A | feature | Compile target: ESP32 / embedded | — |
+| feature-target-i386 | A | feature | Compile target: i386 (32-bit x86 Linux) | chore-qemu-test-env |
+| feature-transcendental-math | A | feature | Transcendental math library (Sqrt/Sin/Cos/Ln/Exp/ArcTan/Power/Pi/Abs) | — |
+| feature-typed-const-arrays | A | feature | Typed constant arrays (initialized const arrays) | — |
+| feature-typed-instruction-encoders | A | feature | Typed instruction encoders for codegen | — |
+| feature-unified-heap-allocator | A | feature | Unified syscall-free heap allocator | — |
+| feature-xtensa-asm-emitter | A | feature | Xtensa text-assembler (`EmitAsmXtensa`) for ESP32 | — |
+| feature-xtensa-windowed-abi | A | feature | Xtensa windowed ABI codegen variant (for ESP-IDF interop) | — |
+| idea-progress-board-md | B | idea | On-demand `BOARD.md` kanban grid | — |
+| lib-intToStr-missing | B | lib | `IntToStr` not available | — |
+| lib-string-copy-trim-missing | B | lib | String `Copy` / `Trim` not available | — |
 
 ## rejected (1)
 
-| Ticket | Type | Summary | Blocked-by |
-| --- | --- | --- | --- |
-| bug-nonreproducible-miscompile-2026-06-02 | bug | Non-reproducible one-off miscompile (2026-06-02) | — |
+| Ticket | Track | Type | Summary | Blocked-by |
+| --- | --- | --- | --- | --- |
+| bug-nonreproducible-miscompile-2026-06-02 | A | bug | Non-reproducible one-off miscompile (2026-06-02) | — |
 
 ## Ready (no unmet blocker)
 
-- bug-rtti-offset-static-array
-- bug-str-float-broken-by-copy-shadow
-- bug-string-type-size-mismatch
-- chore-inc-to-units
-- chore-runtime-emission-size
-- feature-additional-cpu-targets
-- feature-allocator-quality
-- feature-async-auto-backend
-- feature-async-language-surface
-- feature-bignum-library
-- feature-c-header-import-complex
-- feature-c-regex-library-devtest
-- feature-c-source-frontend
-- feature-compiler-warnings
-- feature-compression-library
-- feature-const-eval-typecast-int64
-- feature-copy-intrinsic
-- feature-demo-calc
-- feature-demo-chess
-- feature-demo-life
-- feature-demo-lisp
-- feature-demo-maze
-- feature-demo-solitaire
-- feature-demo-vm
-- feature-directive-if-numeric
-- feature-double-to-single-narrowing
-- feature-dynamic-include-paths-config
-- feature-dynamic-soname-discovery
-- feature-empty-class-shorthand
-- feature-esp-float
-- feature-esp-int64-arith
-- feature-esp32-idf-xtensa
-- feature-esp32-isr-iram
-- feature-exception-base-class
-- feature-extended-alias-or-reject
-- feature-fpc-vs-pxx-feature-boundary
-- feature-general-typename-cast
-- feature-handle-compacting-heap
-- feature-hashing-library
-- feature-inline-asm-depth
-- feature-inline-routines
-- feature-interfaces
-- feature-json-library
-- feature-metaclass-descendant-enforcement
-- feature-networking
-- feature-nil-python-frontend
-- feature-no-ansistring-profile
-- feature-object-reference-type
-- feature-optimization-levels
-- feature-os-targets-bsd-mac
-- feature-parallel-processing
-- feature-progress-transition-helpers
-- feature-random-library
-- feature-rtl-conversion-and-bitset-library
-- feature-rtl-image-bitmap-library
-- feature-sat-solver-library
-- feature-stackful-coro-port
-- feature-static-arena-profile
-- feature-string-model-tyfixedstring
-- feature-terminal-ansi-library
-- feature-textfile-keyword-io-dispatch
-- feature-threadsafe-io-serialization
-- feature-writeln-as-library
-- feature-zero-init-contract
-- goal-compile-fpc-compiler
-- idea-demo-app-candidates
-- idea-unit-rename-import
-- idea-visibility-enforcement
-- lib-text-file-io-assign-rewrite
-- meta-track-b-compiler-wishlist
+- [A] bug-rtti-offset-static-array
+- [A] bug-str-float-broken-by-copy-shadow
+- [A] bug-string-type-size-mismatch
+- [A] chore-inc-to-units
+- [A] chore-runtime-emission-size
+- [A] feature-additional-cpu-targets
+- [A] feature-allocator-quality
+- [A] feature-async-auto-backend
+- [A] feature-async-language-surface
+- [B] feature-bignum-library
+- [A] feature-c-header-import-complex
+- [A] feature-c-regex-library-devtest
+- [A] feature-c-source-frontend
+- [A] feature-compiler-warnings
+- [B] feature-compression-library
+- [A] feature-const-eval-typecast-int64
+- [B] feature-copy-intrinsic
+- [B] feature-demo-calc
+- [B] feature-demo-chess
+- [B] feature-demo-life
+- [B] feature-demo-lisp
+- [B] feature-demo-maze
+- [B] feature-demo-solitaire
+- [B] feature-demo-vm
+- [A] feature-directive-if-numeric
+- [A] feature-double-to-single-narrowing
+- [A] feature-dynamic-include-paths-config
+- [A] feature-dynamic-soname-discovery
+- [A] feature-empty-class-shorthand
+- [A] feature-esp-float
+- [A] feature-esp-int64-arith
+- [A] feature-esp32-idf-xtensa
+- [A] feature-esp32-isr-iram
+- [B] feature-exception-base-class
+- [A] feature-extended-alias-or-reject
+- [A] feature-fpc-vs-pxx-feature-boundary
+- [A] feature-general-typename-cast
+- [A] feature-handle-compacting-heap
+- [B] feature-hashing-library
+- [A] feature-inline-asm-depth
+- [A] feature-inline-routines
+- [A] feature-interfaces
+- [B] feature-json-library
+- [A] feature-metaclass-descendant-enforcement
+- [B] feature-networking
+- [A] feature-nil-python-frontend
+- [A] feature-no-ansistring-profile
+- [A] feature-object-reference-type
+- [A] feature-optimization-levels
+- [A] feature-os-targets-bsd-mac
+- [A] feature-parallel-processing
+- [A] feature-progress-transition-helpers
+- [B] feature-random-library
+- [B] feature-rtl-conversion-and-bitset-library
+- [B] feature-rtl-image-bitmap-library
+- [B] feature-sat-solver-library
+- [A] feature-stackful-coro-port
+- [A] feature-static-arena-profile
+- [B] feature-string-model-tyfixedstring
+- [B] feature-terminal-ansi-library
+- [A+B] feature-textfile-keyword-io-dispatch
+- [A] feature-threadsafe-io-serialization
+- [B] feature-writeln-as-library
+- [A] feature-zero-init-contract
+- [A] goal-compile-fpc-compiler
+- [B] idea-demo-app-candidates
+- [B] idea-unit-rename-import
+- [B] idea-visibility-enforcement
+- [B] lib-text-file-io-assign-rewrite
+- [B] meta-track-b-compiler-wishlist
 
 ## Leverage (tickets each one unblocks)
 

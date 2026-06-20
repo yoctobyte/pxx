@@ -1,6 +1,7 @@
 # Adventure scene asset pipeline
 
 - **Type:** feature
+- **Track:** B
 - **Status:** backlog
 - **Owner:** —
 - **Opened:** 2026-06-20
@@ -60,4 +61,3 @@ The engine should:
 - This intentionally makes the demo more attractive while preserving the
   library boundary.
 - Runtime PNG decoding is not required for this ticket.
-

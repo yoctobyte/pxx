@@ -6,7 +6,8 @@
 #     (or it has no Blocked-by line);
 #   - LEVERAGE = how many tickets name a slug in their Blocked-by.
 #
-# Usage: tools/progress.sh [ready|leverage|board|board-md|check|all]  (default: all)
+# Usage: tools/progress.sh [ready|leverage|board|board-md|check|all] [--track A|B]
+#   ready --track B  list ready Track-B tickets only
 #   board-md  regenerate the committed docs/progress/BOARD.md (run after changes)
 #   check     validate the board; fails on a stale BOARD.md
 
@@ -15,6 +16,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PROG="$ROOT/docs/progress"
 [ -d "$PROG" ] || { echo "no $PROG" >&2; exit 1; }
+TRACK_FILTER=""
 
 slug() { basename "$1" .md; }
 
@@ -92,12 +94,93 @@ ticket_owner() {
   echo "$o"
 }
 
+normalize_track() {
+  echo "$1" | tr '[:lower:]' '[:upper:]' \
+    | sed -E 's/TRACK//g; s/[^AB+\/]//g; s#A/B#A+B#g; s#B/A#A+B#g'
+}
+
+# Track from frontmatter/bullet, then a conservative fallback. A+B means the
+# ticket crosses the compiler/library boundary and should show up for both.
+ticket_track() {
+  local f="$1" s t line
+  t="$(fm_field "$f" track)"
+  if [ -z "$t" ]; then
+    line="$(grep -m1 -iE '^\s*-?\s*\*\*Track:\*\*' "$f" 2>/dev/null || true)"
+    if [ -n "$line" ]; then
+      t="$(echo "$line" | sed -E 's/.*\*\*Track:\*\*[[:space:]]*//')"
+    fi
+  fi
+  t="$(normalize_track "$t")"
+  if [ -n "$t" ]; then echo "$t"; return; fi
+
+  s="$(slug "$f")"
+  line="$(grep -m1 -iE '^\s*-?\s*\*\*Type:\*\*' "$f" 2>/dev/null || true)"
+  if echo "$line" | grep -qiE '\bTrack[ -]?A/B\b|\bTrack[ -]?B/A\b'; then
+    echo "A+B"; return
+  fi
+  if echo "$line" | grep -qiE '\bTrack[ -]?B\b'; then
+    echo "B"; return
+  fi
+  if echo "$line" | grep -qiE '\bTrack[ -]?A\b'; then
+    echo "A"; return
+  fi
+
+  case "$s" in
+    lib-*|feature-*-library|feature-rtl-*|feature-terminal-*|feature-png-*|\
+    feature-image-*|feature-adventure-*|feature-demo-*|idea-demo-*|\
+    feature-platform-abstraction-layer|feature-c-runtime-library|\
+    feature-networking|feature-sat-solver-library)
+      echo "B"; return ;;
+    bug-*|feature-*compiler*|feature-*parser*|feature-*syntax*|\
+    feature-*codegen*|feature-*lower*|feature-*abi*|feature-cross-*|\
+    feature-target-*|feature-*target*|feature-asm-*|feature-*-asm-*|\
+    feature-elf-*|feature-empty-class-shorthand|feature-directive-*|\
+    feature-c-source-frontend|\
+    feature-array-of-const|feature-explicit-typecasts|feature-class-is-as|\
+    feature-for-*|feature-forin-*|feature-int-to-float-assign|\
+    feature-interface-*|feature-managed-exception-cleanup|\
+    feature-procedural-types|feature-short-circuit-eval|\
+    goal-compile-fpc-compiler)
+      echo "A"; return ;;
+  esac
+
+  if grep -qiE '\bTrack[ -]?A/B\b|\bTrack[ -]?B/A\b' "$f"; then
+    echo "A+B"; return
+  fi
+  if grep -qiE '\bTrack[ -]?B\b' "$f"; then
+    echo "B"; return
+  fi
+  if grep -qiE '\bTrack[ -]?A\b' "$f"; then
+    echo "A"; return
+  fi
+
+  case "${s%%-*}" in
+    lib|meta|idea) echo "B" ;;
+    *) echo "A" ;;
+  esac
+}
+
+track_matches_filter() {
+  local t="$1"
+  [ -z "$TRACK_FILTER" ] && return 0
+  case "$t" in
+    *"$TRACK_FILTER"*) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
 cmd_ready() {
-  echo "== READY (no unmet blocker; pull from here) =="
+  if [ -n "$TRACK_FILTER" ]; then
+    echo "== READY (Track $TRACK_FILTER; no unmet blocker; pull from here) =="
+  else
+    echo "== READY (no unmet blocker; pull from here) =="
+  fi
   local done_list; done_list="$(done_slugs)"
-  local f s b unmet
+  local f s b unmet tr
   for f in "$PROG"/backlog/*.md "$PROG"/urgent/*.md; do
     [ -e "$f" ] || continue
+    tr="$(ticket_track "$f")"
+    track_matches_filter "$tr" || continue
     unmet=0
     while read -r b; do
       [ -z "$b" ] && continue
@@ -105,7 +188,7 @@ cmd_ready() {
     done < <(blockers_of "$f")
     if [ "$unmet" -eq 0 ]; then
       s="$(slug "$f")"
-      case "$f" in *"/urgent/"*) printf '  [urgent] %s\n' "$s";; *) printf '  %s\n' "$s";; esac
+      case "$f" in *"/urgent/"*) printf '  [urgent] [%s] %s\n' "$tr" "$s";; *) printf '  [%s] %s\n' "$tr" "$s";; esac
     fi
   done
 }
@@ -237,7 +320,7 @@ ticket_blockers_csv() {
   echo "$out"
 }
 
-# Render a per-status board (ticket / type / summary / blocked-by) plus the
+# Render a per-status board (ticket / track / type / summary / blocked-by) plus the
 # ready queue and leverage, as Markdown to stdout. Deterministic (no timestamp)
 # so the committed BOARD.md diffs cleanly and `check` can detect staleness; git
 # history supplies the dates.
@@ -257,11 +340,11 @@ render_board_md() {
     if [ "$n" -eq 0 ]; then
       echo "_none_"; echo; continue
     fi
-    echo "| Ticket | Type | Summary | Blocked-by |"
-    echo "| --- | --- | --- | --- |"
+    echo "| Ticket | Track | Type | Summary | Blocked-by |"
+    echo "| --- | --- | --- | --- | --- |"
     while IFS= read -r f; do
       s="$(slug "$f")"
-      echo "| $s | $(ticket_type "$f") | $(ticket_summary "$f") | $(ticket_blockers_csv "$f") |"
+      echo "| $s | $(ticket_track "$f") | $(ticket_type "$f") | $(ticket_summary "$f") | $(ticket_blockers_csv "$f") |"
     done < <(find "$PROG/$st" -name '*.md' 2>/dev/null | sort)
     echo
   done
@@ -279,12 +362,29 @@ cmd_board_md() {
   echo "wrote $PROG/BOARD.md"
 }
 
-case "${1:-all}" in
+cmd="${1:-all}"
+if [ "$#" -gt 0 ]; then shift; fi
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --track)
+      [ "$#" -ge 2 ] || { echo "--track needs A or B" >&2; exit 2; }
+      TRACK_FILTER="$(normalize_track "$2")"; shift 2 ;;
+    --track=*)
+      TRACK_FILTER="$(normalize_track "${1#--track=}")"; shift ;;
+    *) echo "usage: $0 [ready|leverage|board|board-md|check|all] [--track A|B]" >&2; exit 2 ;;
+  esac
+done
+case "$TRACK_FILTER" in
+  ""|A|B) ;;
+  *) echo "--track must be A or B" >&2; exit 2 ;;
+esac
+
+case "$cmd" in
   ready)    cmd_ready ;;
   leverage) cmd_leverage ;;
   board)    cmd_board ;;
   board-md) cmd_board_md ;;
   check)    cmd_check ;;
   all)      cmd_board; echo; cmd_leverage; echo; cmd_ready ;;
-  *) echo "usage: $0 [ready|leverage|board|board-md|check|all]" >&2; exit 2 ;;
+  *) echo "usage: $0 [ready|leverage|board|board-md|check|all] [--track A|B]" >&2; exit 2 ;;
 esac

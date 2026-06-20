@@ -1,6 +1,7 @@
 # Terminal ANSI library
 
 - **Type:** feature
+- **Track:** B
 - **Status:** backlog
 - **Owner:** —
 - **Opened:** 2026-06-20
@@ -38,4 +39,3 @@ their own engines.
 - Keep this independent from image rendering. Image-to-ANSI should consume this
   layer, not own terminal control itself.
 - ESP/serial consoles may only support a subset; the API should degrade cleanly.
-

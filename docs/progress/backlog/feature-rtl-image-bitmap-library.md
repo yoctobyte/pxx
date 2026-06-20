@@ -1,6 +1,7 @@
 # RTL image bitmap library
 
 - **Type:** feature
+- **Track:** B
 - **Status:** backlog
 - **Owner:** —
 - **Opened:** 2026-06-20
@@ -40,4 +41,3 @@ slice.
 - Keep the first version byte-oriented and simple: 8-bit channels, row-major
   layout.
 - Avoid GUI concepts such as canvases, handles, fonts, or windows in this unit.
-
