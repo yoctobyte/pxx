@@ -11,3 +11,4 @@
 2026-06-19T17:27:33Z  v11  73600eef4ae71ad8f7565667819dc74fdbbbfe4ba745c74540d3e69f1edf21a5  a214f60b4ec8486bac8b04d2d536415d410a9c81  feat(copy): generic dynamic-array Copy(arr, index[, count]) intrinsic
 2026-06-19T19:25:29Z  v12  f0b479a7bebe4b92bfe5bda5a7f8c47ec455262be8af36d4f30305c1fc8f8729  361163ceafb6d8503c66bc3538afe4efba9394df  feat(generator): yield a record element from a generator
 2026-06-19T20:19:56Z  v13  ee8cb8abf6b405fd6c759c64224aaa0aa6b1b6c62562daccdd6b38242e22fa3f  6f0865c33af5c54fd2dbf97659a4e535add282ea  fix(codegen): nil-init hidden aggregate-result record temps (full extent)
+2026-06-20T02:02:32Z  v14  28453d6ebd82757771d0fafc6c8fe165c674a3210807a3560908b6fef5d36a1f  1df5c762957f1389fb19f5cd2332abd35d8ae92f  fix(parser): preserve proc index during managed zeroing
