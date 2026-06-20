@@ -8,15 +8,14 @@ lives in git, not in a timestamp._
 
 _none_
 
-## working (3)
+## working (2)
 
 | Ticket | Type | Summary | Blocked-by |
 | --- | --- | --- | --- |
-| feature-cross-float-returns | feature | Cross-target float function results | — |
 | feature-c-runtime-library | feature | C runtime/library layer (`lib/crtl`) plus direct C-library packages | — |
 | feature-platform-abstraction-layer | feature | Platform Abstraction Layer (PAL): per-platform RTL port at one seam | — |
 
-## backlog (62)
+## backlog (63)
 
 | Ticket | Type | Summary | Blocked-by |
 | --- | --- | --- | --- |
@@ -46,6 +45,7 @@ _none_
 | feature-dynamic-soname-discovery | feature | Dynamic soname discovery (no execve) | — |
 | feature-esp32-idf-xtensa | feature | ESP-IDF integration: Xtensa (ESP32-S2/S3) — QEMU + real hardware | — |
 | feature-esp32-isr-iram | feature | ESP32: Compiler-Directed ISR and IRAM Support | — |
+| feature-esp-soft-float | feature | ESP soft-float (xtensa + riscv32 float value model) | — |
 | feature-exception-base-class | feature | Built-in / RTL `Exception` base class | — |
 | feature-flexcolumn-directive | feature | `flexcolumn` calling-convention directive | chore-inc-to-units |
 | feature-fpc-vs-pxx-feature-boundary | feature | Policy: FPC-bootstrap subset vs PXX-only library features | — |
@@ -87,7 +87,7 @@ _none_
 
 _none_
 
-## done (95)
+## done (96)
 
 | Ticket | Type | Summary | Blocked-by |
 | --- | --- | --- | --- |
@@ -131,6 +131,7 @@ _none_
 | feature-cross-compiler-probe-walls | feature | Cross compiler.pas probe walls | — |
 | feature-cross-exceptions | feature | Exception runtime on cross targets (i386 / ARM32 / AArch64) | — |
 | feature-cross-extern-abi-breadth | feature | Cross external-C-call ABI breadth (float/Int64 args, float returns, stack align) | — |
+| feature-cross-float-returns | feature | Cross-target float function results | — |
 | feature-cross-float-variant | feature | Float + Variant codegen on cross targets | — |
 | feature-cross-managed-aggregate-locals | feature | Managed aggregate locals on cross targets | — |
 | feature-cross-managed-aggregates | feature | Cross-target managed aggregates (records + dynamic arrays) | feature-rtti-layout-table |
@@ -221,6 +222,7 @@ _none_
 - feature-dynamic-soname-discovery
 - feature-esp32-idf-xtensa
 - feature-esp32-isr-iram
+- feature-esp-soft-float
 - feature-exception-base-class
 - feature-fpc-vs-pxx-feature-boundary
 - feature-general-typename-cast

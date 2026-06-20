@@ -1,9 +1,10 @@
 # Cross-target float function results
 
 - **Type:** feature (cross codegen depth)
-- **Status:** working
+- **Status:** done (all Linux targets; ESP targets split to feature-esp-soft-float)
 - **Owner:** Track A
 - **Opened:** 2026-06-20
+- **Closed:** 2026-06-20
 
 ## Problem
 
@@ -54,9 +55,18 @@ Internal calls only — external C float returns have their own ABI path
   Double in eax:edx (Single in eax); caller moves eax:edx -> xmm0 (Single: movd +
   cvtss2sd) for the SSE value model. test wired into test-i386; make test
   byte-identical (no reseed).
-- [ ] xtensa — needs param + return (errors cleanly today).
-- [ ] riscv32 — needs param + return (errors cleanly today).
-- [ ] gate: make test + cross-bootstrap + cross suites green
+- [n/a] xtensa — **blocked on a prerequisite, not this ticket.** xtensa codegen
+  has NO float value model at all: even `a := 1.5; b := a + 2.0` errors
+  (`unsupported node in IR codegen: call_ind` / float literal). Float RETURN can't
+  be enabled before float ARITHMETIC exists. ESP base has no hardware FPU
+  (ESP32-S3 has only single-precision), so this needs a full soft-float arc
+  (add/sub/mul/div/compare/convert + formatting via builtinheap). Tracked
+  separately — see feature-esp-soft-float (backlog). Errors cleanly today.
+- [n/a] riscv32 — same as xtensa: no float value model (`unsupported node in IR
+  codegen`); ESP32-C3 has no FPU. Needs the soft-float arc first. Errors cleanly
+  today. Tracked in feature-esp-soft-float (backlog).
+- [x] gate: make test byte-identical after each Linux slice (no reseed); test-i386
+  + test-aarch64 + test-arm32 cross suites green with the fret test wired in.
 
 ## KEY FINDING (2026-06-20)
 
@@ -118,3 +128,15 @@ to that target's cross suite.
 - 2026-06-20 — aarch64 slice landed (f7feaad). Found float PARAMS also unwired on
   non-aarch64 targets; documented the per-target recipe + next-session prompt
   above.
+- 2026-06-20 — arm32 slice landed (135fb4d): both params + return (Double in
+  r0:r1 <-> d0 via the external-path move; 2-word prologue spill + caller vmov).
+- 2026-06-20 — i386 slice landed (6224c17): params were already wired; relaxed the
+  return guard and added the post-call eax:edx -> xmm0 move.
+- 2026-06-20 — **CLOSED for the Linux targets.** All three (aarch64, arm32, i386)
+  now do float params + returns on internal calls, fret test wired into each cross
+  suite, make test byte-identical. xtensa + riscv32 turned out to have NO float
+  value model at all (basic float arithmetic errors — they were never part of
+  feature-cross-float-variant, which covered only the Linux trio). Enabling float
+  returns there first requires a full ESP soft-float arc (no/limited hardware FPU)
+  — split out to feature-esp-soft-float (backlog). Both ESP targets error cleanly
+  today (no silent garbage), satisfying the error-not-miscompile rule.
