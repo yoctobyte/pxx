@@ -6,7 +6,7 @@ type
   ELocal = class(Exception)
   end;
 
-var e: Exception;
+var s: AnsiString; e: Exception;
 begin
   { IntToStr (Int64 range) }
   writeln(IntToStr(0));
@@ -24,8 +24,43 @@ begin
   writeln(StrToIntDef('x', -1));         { -1 }
   writeln(StrToInt('100'));              { 100 }
   { case }
+  writeln(UpCase('q'));                  { Q }
+  writeln(UpCase('7'));                  { 7 }
   writeln(UpperCase('aB3z'));            { AB3Z }
   writeln(LowerCase('aB3z'));            { ab3z }
+  { Delete }
+  s := 'hello world';
+  Delete(s, 6, 6);
+  writeln(s);                            { hello }
+  s := 'abcde';
+  Delete(s, 3, 99);
+  writeln(s);                            { ab }
+  s := 'abcde';
+  Delete(s, 1, 1);
+  writeln(s);                            { bcde }
+  s := 'abcde';
+  Delete(s, 10, 1);
+  writeln(s);                            { abcde (no-op: index > length) }
+  s := 'abcde';
+  Delete(s, 3, 0);
+  writeln(s);                            { abcde (no-op: count <= 0) }
+  { Insert }
+  s := 'heworld';
+  Insert('llo ', s, 3);
+  writeln(s);                            { hello world }
+  s := 'end';
+  Insert('start ', s, 1);
+  writeln(s);                            { start end }
+  s := 'start';
+  Insert(' end', s, 99);
+  writeln(s);                            { start end }
+  s := 'abc';
+  Insert('', s, 2);
+  writeln(s);                            { abc (no-op: empty src) }
+  { Concat }
+  writeln(Concat('foo', 'bar'));         { foobar }
+  writeln(Concat('', 'x'));              { x }
+  writeln(Concat('x', ''));              { x }
   { Exception base class }
   e := Exception.Create('base');
   writeln(e.Message);

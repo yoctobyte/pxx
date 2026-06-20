@@ -98,7 +98,7 @@ run_green() {
   run_smoke collections -dPXX_MANAGED_STRING "$ROOT/test/test_collections.pas"
   run_smoke math "$ROOT/test/test_math.pas"
   run_expect sysutils \
-    $'0\n-123456789\n10000000000\nhello\nworld\n[]\n[pad]\n42\n-7\n-1\n100\nAB3Z\nab3z\nhello\nab\nbcde\nabcde\nabcde\nhello world\nstart end\nstart end\nabc\nfoobar\nx\nx\nbase\n77\nderived' \
+    $'0\n-123456789\n10000000000\nhello\nworld\n[]\n[pad]\n42\n-7\n-1\n100\nQ\n7\nAB3Z\nab3z\nhello\nab\nbcde\nabcde\nabcde\nhello world\nstart end\nstart end\nabc\nfoobar\nx\nx\nbase\n77\nderived' \
     "$ROOT/test/lib_sysutils.pas"
   run_expect random \
     $'5 6 6 2 6 4 2 5 \n5 6 6 2 6 4 2 5 \n359 891 105 979 687 ' \

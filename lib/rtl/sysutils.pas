@@ -34,8 +34,36 @@ function StrToInt(const s: AnsiString): Integer;
   bug-builtin-val-miscompiles. Use StrToIntDef / StrToInt instead. }
 
 { ASCII case conversion. }
+function UpCase(c: Char): Char;
 function UpperCase(const s: AnsiString): AnsiString;
 function LowerCase(const s: AnsiString): AnsiString;
+
+{ Float -> string. FloatToStr gives a compact representation; FloatToStrF
+  gives fixed-point with precision digits after the decimal point. }
+function FloatToStr(value: Double): AnsiString;
+function FloatToStrF(value: Double; precision: Integer): AnsiString;
+
+{ String -> float. StrToFloatDef returns def on malformed; StrToFloat returns 0. }
+function StrToFloatDef(const s: AnsiString; def: Double): Double;
+function StrToFloat(const s: AnsiString): Double;
+
+{ Return the position of substr in s, 1-based; 0 if not found. }
+function Pos(const substr, s: AnsiString): Integer;
+
+{ Left-pad/Right-pad s to len chars with ch (default space). }
+function PadLeft(const s: AnsiString; len: Integer; ch: Char): AnsiString;
+function PadRight(const s: AnsiString; len: Integer; ch: Char): AnsiString;
+
+{ Remove count chars from s starting at 1-based index. No-op if index < 1,
+  index > Length(s), or count <= 0. Count is clamped to the end of s. }
+procedure Delete(var s: AnsiString; index, count: Integer);
+
+{ Insert src into dst at 1-based index. If index < 1, inserts at 1;
+  if index > Length(dst)+1, appends. No-op if src is empty. }
+procedure Insert(const src: AnsiString; var dst: AnsiString; index: Integer);
+
+{ Concatenate two strings. For more than two, chain with + or nest calls. }
+function Concat(const s1, s2: AnsiString): AnsiString;
 
 implementation
 
@@ -125,6 +153,14 @@ begin
   Result := StrToIntDef(s, 0);
 end;
 
+function UpCase(c: Char): Char;
+begin
+  if (c >= 'a') and (c <= 'z') then
+    Result := Chr(Ord(c) - 32)
+  else
+    Result := c;
+end;
+
 function UpperCase(const s: AnsiString): AnsiString;
 var i: Integer; r: AnsiString; c: Char;
 begin
@@ -149,6 +185,172 @@ begin
     r := r + c;
   end;
   Result := r;
+end;
+
+function Pos(const substr, s: AnsiString): Integer;
+var i, j, m, n: Integer; match: Boolean;
+begin
+  m := Length(substr);
+  n := Length(s);
+  if m = 0 then begin Result := 1; Exit; end;
+  for i := 1 to n - m + 1 do
+  begin
+    match := True;
+    for j := 1 to m do
+    begin
+      if s[i + j - 1] <> substr[j] then
+      begin
+        match := False;
+        Break;
+      end;
+    end;
+    if match then begin Result := i; Exit; end;
+  end;
+  Result := 0;
+end;
+
+function FloatToStr(value: Double): AnsiString;
+var intPart, fracPart: Int64; neg: Boolean; s, fs: AnsiString; i: Integer;
+begin
+  if value <> value then begin Result := 'NaN'; Exit; end;
+  neg := value < 0.0;
+  if neg then value := -value;
+  intPart := Trunc(value);
+  fracPart := Round(Frac(value) * 1000000);
+  if fracPart >= 1000000 then begin intPart := intPart + 1; fracPart := 0; end;
+  s := IntToStr(intPart);
+  if fracPart > 0 then
+  begin
+    fs := IntToStr(fracPart);
+    { left-pad fractional digits to 6 places }
+    while Length(fs) < 6 do fs := '0' + fs;
+    { trim trailing zeros }
+    i := Length(fs);
+    while (i > 0) and (fs[i] = '0') do i := i - 1;
+    fs := Copy(fs, 1, i);
+    s := s + '.' + fs;
+  end;
+  if neg then s := '-' + s;
+  Result := s;
+end;
+
+function FloatToStrF(value: Double; precision: Integer): AnsiString;
+var scale: Double; intPart, fracPart: Int64; neg: Boolean; s, fs: AnsiString; i: Integer;
+begin
+  if precision < 0 then precision := 0;
+  if value <> value then begin Result := 'NaN'; Exit; end;
+  neg := value < 0.0;
+  if neg then value := -value;
+  intPart := Trunc(value);
+  scale := 1.0;
+  for i := 1 to precision do scale := scale * 10.0;
+  fracPart := Round(Frac(value) * scale);
+  if fracPart >= Trunc(scale) then begin intPart := intPart + 1; fracPart := 0; end;
+  s := IntToStr(intPart);
+  if precision > 0 then
+  begin
+    fs := IntToStr(fracPart);
+    while Length(fs) < precision do fs := '0' + fs;
+    i := Length(fs);
+    while (i > 0) and (fs[i] = '0') do i := i - 1;
+    if i > 0 then
+      s := s + '.' + Copy(fs, 1, i)
+    else
+      s := s + '.0';
+  end;
+  if neg then s := '-' + s;
+  Result := s;
+end;
+
+function StrToFloatDef(const s: AnsiString; def: Double): Double;
+var i, digit: Integer; c: Char; neg: Boolean; w, frac, divsor: Double; in_frac: Boolean; started: Boolean;
+begin
+  Result := def;
+  i := 1; neg := False; w := 0.0; frac := 0.0; divsor := 1.0; in_frac := False; started := False;
+  while (i <= Length(s)) and (s[i] = ' ') do i := i + 1;
+  if (i <= Length(s)) and ((s[i] = '-') or (s[i] = '+')) then
+  begin
+    if s[i] = '-' then neg := True;
+    i := i + 1;
+  end;
+  while i <= Length(s) do
+  begin
+    c := s[i];
+    if (c >= '0') and (c <= '9') then
+    begin
+      digit := Ord(c) - Ord('0');
+      if in_frac then
+      begin
+        divsor := divsor * 10.0;
+        frac := frac + (digit * 1.0 / divsor);
+      end
+      else
+        w := w * 10.0 + digit * 1.0;
+      started := True;
+      i := i + 1;
+    end
+    else if (c = '.') and (not in_frac) then
+    begin
+      in_frac := True;
+      i := i + 1;
+    end
+    else
+      Exit;
+  end;
+  if not started then Exit;
+  if neg then
+    Result := -(w + frac)
+  else
+    Result := w + frac;
+end;
+
+function StrToFloat(const s: AnsiString): Double;
+begin
+  Result := StrToFloatDef(s, 0.0);
+end;
+
+function PadLeft(const s: AnsiString; len: Integer; ch: Char): AnsiString;
+var r: AnsiString; i, n: Integer;
+begin
+  n := Length(s);
+  if n >= len then begin Result := s; Exit; end;
+  r := '';
+  for i := 1 to len - n do r := r + ch;
+  Result := r + s;
+end;
+
+function PadRight(const s: AnsiString; len: Integer; ch: Char): AnsiString;
+var r: AnsiString; i, n: Integer;
+begin
+  n := Length(s);
+  if n >= len then begin Result := s; Exit; end;
+  r := s;
+  for i := 1 to len - n do r := r + ch;
+  Result := r;
+end;
+
+procedure Delete(var s: AnsiString; index, count: Integer);
+var n: Integer;
+begin
+  n := Length(s);
+  if (index < 1) or (index > n) or (count <= 0) then Exit;
+  if index + count - 1 > n then count := n - index + 1;
+  s := Copy(s, 1, index - 1) + Copy(s, index + count, n);
+end;
+
+procedure Insert(const src: AnsiString; var dst: AnsiString; index: Integer);
+var n: Integer;
+begin
+  if src = '' then Exit;
+  n := Length(dst);
+  if index < 1 then index := 1;
+  if index > n + 1 then index := n + 1;
+  dst := Copy(dst, 1, index - 1) + src + Copy(dst, index, n);
+end;
+
+function Concat(const s1, s2: AnsiString): AnsiString;
+begin
+  Result := s1 + s2;
 end;
 
 end.

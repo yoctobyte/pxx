@@ -1924,7 +1924,7 @@ lib-test: pxx-stable-check
 	$(PXX_STABLE) test/test_math.pas /tmp/lib_math
 	/tmp/lib_math >/dev/null
 	$(PXX_STABLE) test/lib_sysutils.pas /tmp/lib_sysutils
-	test "$$(/tmp/lib_sysutils)" = "$$(printf '0\n-123456789\n10000000000\nhello\nworld\n[]\n[pad]\n42\n-7\n-1\n100\nAB3Z\nab3z\nhello\nab\nbcde\nabcde\nabcde\nhello world\nstart end\nstart end\nabc\nfoobar\nx\nx\nbase\n77\nderived')"
+	test "$$(/tmp/lib_sysutils)" = "$$(printf '0\n-123456789\n10000000000\nhello\nworld\n[]\n[pad]\n42\n-7\n-1\n100\nQ\n7\nAB3Z\nab3z\nhello\nab\nbcde\nabcde\nabcde\nhello world\nstart end\nstart end\nabc\nfoobar\nx\nx\nbase\n77\nderived')"
 	$(PXX_STABLE) test/lib_random.pas /tmp/lib_random
 	test "$$(/tmp/lib_random)" = "$$(printf '5 6 6 2 6 4 2 5 \n5 6 6 2 6 4 2 5 \n359 891 105 979 687 ')"
 	$(PXX_STABLE) test/lib_bitset.pas /tmp/lib_bitset

@@ -75,6 +75,26 @@ emitted (only statement-linked nodes are) — store the result into a temp; and 
 result must be tagged so the assignment stores the full 8-byte handle.
 
 Remaining: string-family overloads beyond the RTL `Copy` (ShortString /
-UnicodeString), and the `Delete` / `Insert` / `Concat` siblings. On i386/aarch64
-`b := Copy(...)` is additionally blocked by a separate pre-existing whole-dynamic-
-array assignment gap (`bug-dynarray-whole-var-assign-cross`).
+UnicodeString), and the dynarray `Delete`/`Insert`/`Concat` variants. On
+i386/aarch64 `b := Copy(...)` is additionally blocked by a separate pre-existing
+whole-dynamic-array assignment gap (`bug-dynarray-whole-var-assign-cross`).
+
+## Progress (2026-06-20) — string Delete / Insert / Concat in sysutils
+
+The AnsiString `Delete`, `Insert`, and `Concat` siblings are now in
+`lib/rtl/sysutils.pas` as pure-Pascal library functions (not compiler
+intrinsics). Design decision: `Copy` stays compiler-owned (it has intercept
+entanglements with `Str`); `Delete`/`Insert`/`Concat` are library-side since
+the compiler doesn't depend on them internally.
+
+- `procedure Delete(var s: AnsiString; index, count: Integer)` — FPC-compatible
+  no-op on out-of-range or non-positive count; count clamped to end of string.
+- `procedure Insert(const src: AnsiString; var dst: AnsiString; index: Integer)`
+  — FPC-compatible: index < 1 → 1, index > Length+1 → append, empty src → no-op.
+- `function Concat(const s1, s2: AnsiString): AnsiString` — 2-arg wrapper over
+  `+`. Variadic Concat can't be expressed in this compiler; `+` chains for more.
+
+All three tested in `test/lib_sysutils.pas` with golden-output verification
+(`make lib-test`). Remaining scope under this ticket: the **dynarray**
+variants of Delete/Insert/Concat (these need compiler intrinsics, same as
+dynarray Copy), and string-family overloads for ShortString/UnicodeString.
