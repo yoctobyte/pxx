@@ -3185,7 +3185,14 @@ begin
           Expect(tkRParen, ')');
           node := AllocNode(AN_PTR_CAST);
           ASTLeft[node] := CurASTNode;
-          ASTIVal[node] := aliasIdx;
+          { A custom alias to ^Char/^AnsiChar (e.g. `type PC = ^Char; PC(s)`)
+            must behave like PChar(s): the -2 adapter skips the 8-byte length
+            prefix for a string operand (and is a plain reinterpret otherwise),
+            instead of pointing at the prefix. See bug-pointer-cast-custom-alias. }
+          if AliasElemTk[aliasIdx] = Ord(tyChar) then
+            ASTIVal[node] := -2
+          else
+            ASTIVal[node] := aliasIdx;
           ASTTk[node]   := Ord(tyPointer);
           { Set locals so the suffix loop below can resolve ^ and .field }
           tk      := tyPointer;

@@ -1,7 +1,7 @@
 # Pointer cast on custom Char pointer aliases fails to skip string length prefix
 
 - **Type:** bug
-- **Status:** backlog
+- **Status:** DONE 2026-06-20
 - **Owner:** —
 - **Opened:** 2026-06-20
 - **Relation:** surfaced in gtk3widgets.pas when using typed pointer casts of custom aliases (like `PC = ^Char; PC(s)`) instead of literally `PChar(s)` or `PAnsiChar(s)`.
@@ -45,3 +45,16 @@ The compiler should check if the target cast type resolved is a pointer to `Char
 
 ## Log
 - 2026-06-20 — opened. Discovered in gtk3widgets.pas.
+
+## DONE 2026-06-20
+
+Fixed in parser.inc: the type-alias cast path now uses the `-2` PChar adapter
+(skip the 8-byte length prefix for a string operand; plain reinterpret
+otherwise) when the alias resolves to `^Char` (`AliasElemTk = tyChar`), instead
+of a raw pointer reinterpret. `PC(s)` with `type PC = ^Char` now points at the
+char data like `PChar(s)`. Non-Char aliases unchanged. Validated; self-host
+byte-identical, make test green.
+
+(Aside, pre-existing & unrelated: `writeln(p^)` on an alias-cast pointer whose
+pointee is dereferenced directly can segfault — `PI(@n)^` with `type PI=^Integer`
+crashes too, independent of this fix. Worth a separate ticket if it bites.)
