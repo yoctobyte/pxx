@@ -15,10 +15,12 @@ _none_
 | feature-c-runtime-library | B | feature | C runtime/library layer (`lib/crtl`) plus direct C-library packages | — |
 | feature-platform-abstraction-layer | B | feature | Platform Abstraction Layer (PAL): per-platform RTL port at one seam | — |
 
-## backlog (77)
+## backlog (79)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
+| bug-compiler-tmyclass-hardcoded-clash | A | bug | Hardcoded 'TMyClass' name clash in compiler type resolution | — |
+| bug-managed-to-frozen-string-assign-crash | A | bug | Assigning a managed string (tyAnsiString) into a frozen `string` (tyString) miscompiles → segfault | — |
 | bug-rtti-offset-static-array | A | bug | RTTI offset corruption when class/record definitions contain large static arrays | — |
 | bug-str-float-broken-by-copy-shadow | A | bug | Str() builtin breaks for float formatting when a unit shadows Copy | — |
 | bug-string-type-size-mismatch | A | bug | String type size mismatch in TypeSize vs codegen copies | — |
@@ -216,6 +218,8 @@ _none_
 
 ## Ready (no unmet blocker)
 
+- [A] bug-compiler-tmyclass-hardcoded-clash
+- [A] bug-managed-to-frozen-string-assign-crash
 - [A] bug-rtti-offset-static-array
 - [A] bug-str-float-broken-by-copy-shadow
 - [A] bug-string-type-size-mismatch
