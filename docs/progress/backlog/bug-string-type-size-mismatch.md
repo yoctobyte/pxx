@@ -45,3 +45,44 @@ If `PXX_MANAGED_STRING` is defined, the keyword `string` should map to `tyAnsiSt
 
 ## Log
 - 2026-06-20 — opened. Discovered while testing TListBox and TComboBox items.
+
+## Investigation 2026-06-20 (design clarified; fix is a multi-part arc)
+
+Reproduced + clarified with the user. Intended model:
+- `string` = the managed AnsiString in managed-string mode (the DEFAULT;
+  `-uPXX_MANAGED_STRING` selects frozen). Today the bare `string` keyword
+  (parser.inc ParseTypeKind `tkString_T`) always returns tyString, ignoring the
+  mode — only the `ansistring` keyword honors it. THIS is the gap.
+- `string[N]` = a frozen fixed-length string (already right-sizes; e.g. bss ~64).
+- `shortstring` = the explicit unmanaged short string (255). NOT currently a real
+  keyword — it falls through and Length()/writeln on it return garbage.
+- The 8 MB `STRING_CAP` is wired as the frozen-string GLOBAL var default size
+  (symtab.inc:1419) AND as the compiler's token buffer — same constant, two jobs.
+  A frozen bare-`string` global reserves 8 MB. Relic; should be ~255 via a
+  separate small constant.
+
+Tried the one-line flip (tkString_T -> tyAnsiString under PXX_MANAGED_STRING,
+keeping `string[N]` frozen): `array of string` then works and the GUI bug is
+fixed, BUT `make test` SEGFAULTS — `Str(x, s)` / `Val` and likely other string
+builtins do not support AnsiString as the `string` type. So the global flip
+surfaces real incompleteness in the managed-string path; reverted to keep master
+green.
+
+So this is a multi-step arc, not a one-liner:
+1. (this) Either flip `string`->AnsiString in managed mode AND make Str/Val (+
+   any frozen-buffer-assuming builtin) work with AnsiString; OR take a per-use
+   path: only ARRAY/DYNARRAY/RECORD-FIELD `string` elements resolve to
+   AnsiString, leaving scalar `var s: string` frozen (scalar Str/Val unaffected).
+   The per-use path fixes array-of-string / the GUI without the Str/Val breakage.
+2. `shortstring` -> real frozen-255 keyword (depends on the frozen-sized-string
+   output bug below).
+3. Frozen-string global default size: STRING_CAP(8MB) -> a small DEFAULT_STR_CAP.
+4. Separate pre-existing bug: writeln/Length of a frozen SIZED string
+   (`string[N]` / current `shortstring`) returns garbage (a code address). Plain
+   `var s: string` frozen writeln works; the sized path does not.
+5. User's idea: an internal `tyFixedString` kind to disambiguate the frozen
+   fixed/short string from managed AnsiString (today tyString is overloaded). A
+   clean refactor that likely also fixes (4).
+
+The cross-link to bug-rtti-offset-static-array (#4): same string-size model; a
+large `array[0..255] of string` field inherits the per-element sizing decision.
