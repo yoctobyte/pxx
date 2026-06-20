@@ -12,3 +12,4 @@
 2026-06-19T19:25:29Z  v12  f0b479a7bebe4b92bfe5bda5a7f8c47ec455262be8af36d4f30305c1fc8f8729  361163ceafb6d8503c66bc3538afe4efba9394df  feat(generator): yield a record element from a generator
 2026-06-19T20:19:56Z  v13  ee8cb8abf6b405fd6c759c64224aaa0aa6b1b6c62562daccdd6b38242e22fa3f  6f0865c33af5c54fd2dbf97659a4e535add282ea  fix(codegen): nil-init hidden aggregate-result record temps (full extent)
 2026-06-20T02:02:32Z  v14  28453d6ebd82757771d0fafc6c8fe165c674a3210807a3560908b6fef5d36a1f  1df5c762957f1389fb19f5cd2332abd35d8ae92f  fix(parser): preserve proc index during managed zeroing
+2026-06-20T06:49:21Z  v15  4bac688c87a11c30cb9aff9eb808e05d956b2ad5671eab5a41416c4cda0c7d4b  bb94412fc905fe45e820537922daacdd6f5fba4d  feat(parser,ir): member access on a function/method call result
