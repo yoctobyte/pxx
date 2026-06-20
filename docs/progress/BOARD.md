@@ -15,13 +15,11 @@ _none_
 | feature-c-runtime-library | feature | C runtime/library layer (`lib/crtl`) plus direct C-library packages | — |
 | feature-platform-abstraction-layer | feature | Platform Abstraction Layer (PAL): per-platform RTL port at one seam | — |
 
-## backlog (72)
+## backlog (71)
 
 | Ticket | Type | Summary | Blocked-by |
 | --- | --- | --- | --- |
-| bug-pointer-cast-custom-alias | bug | Pointer cast on custom Char pointer aliases fails to skip string length prefix | — |
 | bug-rtti-offset-static-array | bug | RTTI offset corruption when class/record definitions contain large static arrays | — |
-| bug-stack-corruption-inline-string-concat | bug | Stack frame corruption on inline string concatenation assignments | — |
 | bug-str-float-broken-by-copy-shadow | bug | Str() builtin breaks for float formatting when a unit shadows Copy | — |
 | bug-string-type-size-mismatch | bug | String type size mismatch in TypeSize vs codegen copies | — |
 | chore-inc-to-units | chore | `.inc` → real `.pas` units refactor | — |
@@ -81,6 +79,7 @@ _none_
 | feature-sat-solver-library | feature | SAT solver library — DPLL over CNF (known-instance test app) | — |
 | feature-stackful-coro-port | feature | Port the stackful coroutine backend to all targets | — |
 | feature-static-arena-profile | feature | Fixed-static-arena allocator profile | feature-unified-heap-allocator |
+| feature-string-model-tyfixedstring | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 | feature-textfile-keyword-io-dispatch | feature | Default `Text` file surface and file-handle IO dispatch | — |
 | feature-threadsafe-io-serialization | feature | Statement-level I/O serialization under threads | feature-unified-heap-allocator |
 | feature-writeln-as-library | feature | write/writeln as a library function (via `array of const` + variadic sugar) | — |
@@ -96,7 +95,7 @@ _none_
 
 _none_
 
-## done (99)
+## done (101)
 
 | Ticket | Type | Summary | Blocked-by |
 | --- | --- | --- | --- |
@@ -118,10 +117,12 @@ _none_
 | bug-many-param-call-corruption | bug | Self-hosted x86-64 backend miscompiles calls with many parameters | — |
 | bug-operator-result-inferred-var | bug | Record-valued operator result is miscompiled (aggregate-return ABI) | — |
 | bug-pinned-stable-reads-live-builtin-rtl | bug | Pinned stable reads LIVE builtin RTL source — track A WIP breaks track B | — |
+| bug-pointer-cast-custom-alias | bug | Pointer cast on custom Char pointer aliases fails to skip string length prefix | — |
 | bug-proc-local-managed-record-uninit | bug | Proc-local managed record not zero-initialised on entry → first-call miscompute | — |
 | bug-read-preserves-line-remainder | bug | `read` consumes a whole line like `readln` | — |
 | bug-record-byvalue-arg-truncation | bug | By-value record args >8 bytes truncate (and operator operand edges) | — |
 | bug-record-fn-codegen-crash | bug | Context-sensitive runtime crash: record-returning fn with nested loops over dynarray fields | — |
+| bug-stack-corruption-inline-string-concat | bug | Stack frame corruption on inline string concatenation assignments | — |
 | bug-subclass-field-offset-calculation | bug | bug-subclass-field-offset-calculation (Track A) | — |
 | bug-sysutils-unit-hard-skipped | bug | `uses sysutils` is hard-skipped — a real lib/rtl/sysutils can't load | — |
 | bug-threadsafe-layout-rtti-helper-races | bug | Thread-safe layout RTTI helper races | feature-rtti-layout-table |
@@ -208,9 +209,7 @@ _none_
 
 ## Ready (no unmet blocker)
 
-- bug-pointer-cast-custom-alias
 - bug-rtti-offset-static-array
-- bug-stack-corruption-inline-string-concat
 - bug-str-float-broken-by-copy-shadow
 - bug-string-type-size-mismatch
 - chore-inc-to-units
@@ -266,6 +265,7 @@ _none_
 - feature-sat-solver-library
 - feature-stackful-coro-port
 - feature-static-arena-profile
+- feature-string-model-tyfixedstring
 - feature-textfile-keyword-io-dispatch
 - feature-threadsafe-io-serialization
 - feature-writeln-as-library
