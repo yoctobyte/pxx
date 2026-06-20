@@ -285,6 +285,10 @@ test-core: $(COMPILER)
 	test "$$(/tmp/test_inline_concat_arg26)" = "$$(printf '[aabb] len=4\n[Line 1\nLine 2] len=13\n[xyz] len=3')"
 	./$(COMPILER) test/test_array_of_string.pas /tmp/test_array_of_string26
 	test "$$(/tmp/test_array_of_string26)" = "$$(printf 'Apple\nBanana\nCherry\nx|yy|2\nscalar')"
+	./$(COMPILER) test/test_string_sized.pas /tmp/test_string_sized26
+	test "$$(/tmp/test_string_sized26)" = "$$(printf 'Apple\nBanana\nCherry-and-then-some\n5\n6\n20\na-ok\nb-ok\nApple')"
+	./$(COMPILER) test/test_shortstring.pas /tmp/test_shortstring26
+	test "$$(/tmp/test_shortstring26)" = "$$(printf 'hello world\n11\nApple\nBanana\nCherry\narr0-ok\narr1-ok')"
 	./$(COMPILER) test/test_interfaces.pas /tmp/test_interfaces26
 	test "$$(/tmp/test_interfaces26)" = "$$(printf 'area=20\nscaled=60\narea2=42\ndirect=42')"
 	./$(COMPILER) test/test_interfaces_is.pas /tmp/test_interfaces_is26
@@ -1916,9 +1920,11 @@ lib-test: pxx-stable-check
 	$(PXX_STABLE) test/test_math.pas /tmp/lib_math
 	/tmp/lib_math >/dev/null
 	$(PXX_STABLE) test/lib_sysutils.pas /tmp/lib_sysutils
-	test "$$(/tmp/lib_sysutils)" = "$$(printf '0\n-123456789\n10000000000\nhello\nworld\n[]\n[pad]\n42\n-7\n-1\n100\nAB3Z\nab3z\nbase\n77\nderived')"
+	test "$$(/tmp/lib_sysutils)" = "$$(printf '0\n-123456789\n10000000000\nhello\nworld\n[]\n[pad]\n42\n-7\n-1\n100\nAB3Z\nab3z\nhello\nab\nbcde\nabcde\nabcde\nhello world\nstart end\nstart end\nabc\nfoobar\nx\nx\nbase\n77\nderived')"
 	$(PXX_STABLE) test/lib_random.pas /tmp/lib_random
-	test "$$(/tmp/lib_random)" = "$$(printf '5 3 5 2 1 1 3 1 \n5 3 5 2 1 1 3 1 \n537 775 832 585 619 ')"
+	test "$$(/tmp/lib_random)" = "$$(printf '5 6 6 2 6 4 2 5 \n5 6 6 2 6 4 2 5 \n359 891 105 979 687 ')"
+	$(PXX_STABLE) test/lib_bitset.pas /tmp/lib_bitset
+	test "$$(/tmp/lib_bitset)" = "$$(printf '1\n1\n0\n1\n1\n0\n1\n0\n0\n0\n1\n0\n6\n5 10 70 150 \n4\n-1\n10\n70')"
 	$(PXX_STABLE) -Fulib/rtl/platform/posix test/lib_platform.pas /tmp/lib_platform
 	test "$$(/tmp/lib_platform)" = "$$(printf 'posix\nfiles\nsockets\nthreads\ndynlib\npal-write=3\nfile=io:2\nunsupported=-38')"
 	$(PXX_STABLE) --platform=esp -Fulib/rtl/platform/esp test/lib_platform_esp.pas /tmp/lib_platform_esp
@@ -1927,7 +1933,7 @@ lib-test: pxx-stable-check
 	test "$$(/tmp/lib_textfile)" = "$$(printf 'alpha\nbeta\ncount=2\nio=0')"
 	$(PXX_STABLE) examples/bignum/factorial.pas /tmp/lib_factorial
 	test "$$(/tmp/lib_factorial)" = "$$(printf '5! = 120\n10! = 3628800\n20! = 2432902008176640000\n1000! digits      = 2568\n1000! first 10    = 4023872600\n1000! trailing 0s = 249')"
-	@echo "lib-test ok (sudoku exact + collections + math + sysutils + random + platform + bignum smoke) against stable v$$(cat $(STABLE_DEFAULT_DIR)/VERSION 2>/dev/null || echo '?')"
+	@echo "lib-test ok (sudoku exact + collections + math + sysutils + random + bitset + platform + bignum smoke) against stable v$$(cat $(STABLE_DEFAULT_DIR)/VERSION 2>/dev/null || echo '?')"
 
 # Full Track-B library suite, distinct from compiler `make test`.
 library-suite-green: pxx-stable-check

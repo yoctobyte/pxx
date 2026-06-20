@@ -1219,6 +1219,20 @@ begin
   Result := (tk = tyString) or (tk = tyShortString) or (tk = tyFixedString);
 end;
 
+function StrValTk(tk: TTypeKind): Integer;
+{ Value (expression) kind of a symbol whose STORAGE kind is given. A frozen
+  fixed/short string presents as a plain frozen tyString *value* — they are
+  codegen-identical (same inline word-prefixed layout); only the slot SIZE
+  differs, and that is carried by the storage kind + SymStrCap. Normalising the
+  node value-kind here keeps every existing `= tyString` value check (write,
+  concat, compare, ...) working without widening ~150 sites. Returns an Ord. }
+begin
+  if (tk = tyFixedString) or (tk = tyShortString) then
+    Result := Ord(tyString)
+  else
+    Result := Ord(tk);
+end;
+
 function FrozenStrSlotSize(tk: TTypeKind; cap: Integer): Integer;
 { Byte size of an inline frozen fixed-string slot.
   tyFixedString = 8-byte NativeInt length word + cap chars (matches today's

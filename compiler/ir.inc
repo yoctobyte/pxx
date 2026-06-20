@@ -138,7 +138,7 @@ begin
   { Pass 1: populate seen labels and verify uniqueness }
   for i := 0 to IRCount - 1 do
   begin
-    if (IRTk[i] < 0) or (IRTk[i] > Ord(tyAnsiString)) then
+    if (IRTk[i] < 0) or (IRTk[i] > Ord(tyFixedString)) then
       Error('invalid type kind in IR node');
 
     if IRKind[i] = IR_LABEL then
@@ -650,7 +650,7 @@ begin
       tk := tyChar;
       recName := REC_NONE;
     end
-    else if (tk = tyString) and not isArr then
+    else if TypeIsFrozenString(tk) and not isArr then
     begin
       lo := -7;
       elemSize := 1;
@@ -665,6 +665,15 @@ begin
           elemSize := STRING_CAP + 8
         else
           elemSize := LOCAL_STR_CAP + 8;
+      end
+      else if (tk = tyFixedString) or (tk = tyShortString) then
+      begin
+        { array-of-string[N] element stride: the per-element frozen slot size,
+          from the array symbol's capacity (matches AllocArray's sizing). }
+        if ASTKind[baseNode] = AN_IDENT then
+          elemSize := FrozenStrSlotSize(tk, SymStrCap[ASTIVal[baseNode]])
+        else
+          elemSize := FrozenStrSlotSize(tk, 0);
       end
       else if tk = tyRecord then
         elemSize := RecSize(recName)
@@ -1698,7 +1707,7 @@ begin
     AN_IDENT:
     begin
       varIdx := ASTIVal[node];
-      if (Syms[varIdx].TypeKind = tyString) or (Syms[varIdx].TypeKind = tySet) or Syms[varIdx].IsArray then
+      if TypeIsFrozenString(Syms[varIdx].TypeKind) or (Syms[varIdx].TypeKind = tySet) or Syms[varIdx].IsArray then
         Result := IRAppend(IR_LEA, varIdx, -1, -1, 0, ASTTk[node])
       else
         Result := IRAppend(IR_LOAD_SYM, varIdx, -1, -1, 0, ASTTk[node]);

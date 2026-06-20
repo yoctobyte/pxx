@@ -1585,7 +1585,7 @@ begin
           end;
           end;
         end
-        else if (Syms[symIdx].TypeKind = tyString) and not Syms[symIdx].IsArray then
+        else if TypeIsFrozenString(Syms[symIdx].TypeKind) and not Syms[symIdx].IsArray then
         begin
           valueNode := IRB[node];
           if (IRKind[valueNode] = IR_CALL) and (IRA[valueNode] = -Ord(tkArgStr)) then
@@ -1671,7 +1671,7 @@ begin
              ((Syms[symIdx].TypeKind = tyAnsiString) and not Syms[symIdx].IsArray) or
              ((Syms[symIdx].Kind = skParam) and
               (Syms[symIdx].IsRef or Syms[symIdx].IsArray or
-               (Syms[symIdx].TypeKind = tyString) or (Syms[symIdx].TypeKind = tySet))) then
+               TypeIsFrozenString(Syms[symIdx].TypeKind) or (Syms[symIdx].TypeKind = tySet))) then
           begin
             if (Syms[symIdx].Kind = skParam) and Syms[symIdx].IsRef and
                Syms[symIdx].IsArray and (Syms[symIdx].ArrLen = -1) then

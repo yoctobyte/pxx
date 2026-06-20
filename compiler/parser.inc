@@ -1098,7 +1098,7 @@ begin
     ASTSLen[node] := Tokens[prevTok].SLen;
     tk := Syms[idx].TypeKind;
     recName := Syms[idx].RecName;
-    ASTTk[node] := Ord(tk);
+    ASTTk[node] := StrValTk(tk);   { frozen fixed/short string presents as a tyString value }
   end;
   end;
 
@@ -1157,7 +1157,7 @@ begin
       end
       else
         Error('dereferenced value is not a pointer');
-      ASTTk[indexNode] := Ord(tk);
+      ASTTk[indexNode] := StrValTk(tk);
       node := indexNode;
     end
     else if CurTok.Kind = tkLBrack then
@@ -1209,7 +1209,7 @@ begin
           begin tk := Syms[ASTIVal[node]].ElemType; recName := Syms[ASTIVal[node]].ElemRecName; end
           else recName := ResolveNodeRec(node);
         end;
-        ASTTk[indexNode] := Ord(tk);
+        ASTTk[indexNode] := StrValTk(tk);
         node := indexNode;
         while Eat(tkComma) do
         begin
@@ -1223,7 +1223,7 @@ begin
             begin tk := Syms[ASTIVal[node]].ElemType; recName := Syms[ASTIVal[node]].ElemRecName; end
             else recName := ResolveNodeRec(node);
           end;
-          ASTTk[indexNode] := Ord(tk);
+          ASTTk[indexNode] := StrValTk(tk);
           node := indexNode;
         end;
         Expect(tkRBrack, ']');
@@ -1246,7 +1246,7 @@ begin
         else
           recName := ResolveNodeRec(node);
       end
-      else if (tk = tyString) or (tk = tyAnsiString) then
+      else if TypeIsFrozenString(tk) or (tk = tyAnsiString) then
         tk := tyChar
       else if (tk = tyPointer) and (ASTKind[node] = AN_IDENT) then
       begin
@@ -1294,7 +1294,7 @@ begin
           recName := REC_NONE;
         end;
       end;
-      ASTTk[indexNode] := Ord(tk);
+      ASTTk[indexNode] := StrValTk(tk);
       node := indexNode;
     end
     else
@@ -1776,7 +1776,7 @@ begin
   begin
     { Local variable or parameter base address }
     if (Syms[idx].Kind = skParam) and
-       (Syms[idx].IsRef or Syms[idx].IsArray or (Syms[idx].TypeKind = tyString)) then
+       (Syms[idx].IsRef or Syms[idx].IsArray or TypeIsFrozenString(Syms[idx].TypeKind)) then
     begin
       { param slot holds pointer P; address of string/array struct = P }
       EmitB($48); EmitB($8B); EmitB($85); EmitI32(Syms[idx].Offset); { mov rax, [rbp+off] = P }
@@ -1926,7 +1926,7 @@ begin
   if not isComplex then
   begin
     Expect(tkAssign, ':=');
-    if Syms[idx].TypeKind = tyString then
+    if TypeIsFrozenString(Syms[idx].TypeKind) then
     begin
       if CurTok.Kind = tkString then
       begin
@@ -1943,7 +1943,7 @@ begin
       else
       begin
         si2 := FindSym(CurTok.SVal);
-        if (si2 >= 0) and (Syms[si2].TypeKind = tyString) then
+        if (si2 >= 0) and TypeIsFrozenString(Syms[si2].TypeKind) then
         begin
           EmitStrAssignVar(idx, si2); Next;
         end
@@ -2480,7 +2480,7 @@ begin
               recName := Syms[ASTIVal[ASTLeft[node]]].PtrElemRec;
             end;
           end;
-          ASTTk[indexNode] := Ord(tk);
+          ASTTk[indexNode] := StrValTk(tk);
           node := indexNode;
         end
         else if CurTok.Kind = tkLBrack then
@@ -2726,7 +2726,7 @@ begin
       if CurTok.Kind <> tkIdent then Error('SysOpen: expected string var');
       idx := FindSym(CurTok.SVal); Next;
       valNode := ParseLValueAST(idx, TokPos - 2);
-      if (idx < 0) or ((Syms[idx].TypeKind <> tyString) and
+      if (idx < 0) or ((not TypeIsFrozenString(Syms[idx].TypeKind)) and
                        (Syms[idx].TypeKind <> tyAnsiString)) then Error('SysOpen: not a string var');
       Expect(tkComma, ',');
 
@@ -3208,7 +3208,7 @@ begin
               { After ^, type becomes the pointee }
               tk      := IntToTypeKind(AliasElemTk[aliasIdx]);
               recName := AliasElemRec[aliasIdx];
-              ASTTk[indexNode] := Ord(tk);
+              ASTTk[indexNode] := StrValTk(tk);
               node := indexNode;
             end
             else if CurTok.Kind = tkLBrack then
@@ -3229,7 +3229,7 @@ begin
                 tk := tyUnknown;
                 recName := REC_NONE;
               end;
-              ASTTk[indexNode] := Ord(tk);
+              ASTTk[indexNode] := StrValTk(tk);
               node := indexNode;
             end
             else { tkDot }
@@ -3575,7 +3575,7 @@ begin
         for i := 0 to nArgs - 1 do
         begin
           exprNode := ASTLeft[currArg];
-          if (Procs[procIdx].Params[i].TypeKind = tyString) and (IntToTypeKind(ASTTk[exprNode]) = tyChar) then
+          if (TypeIsFrozenString(Procs[procIdx].Params[i].TypeKind)) and (IntToTypeKind(ASTTk[exprNode]) = tyChar) then
           begin
             if ASTKind[exprNode] = AN_INT_LIT then
             begin
@@ -4495,7 +4495,7 @@ begin
 
   { class/record container with GetEnumerator → structural enumerator (Slice B) }
   recId := Syms[contSym].RecName;
-  if (not ((Syms[contSym].TypeKind = tyString) or (Syms[contSym].TypeKind = tyAnsiString)))
+  if (not (TypeIsFrozenString(Syms[contSym].TypeKind) or (Syms[contSym].TypeKind = tyAnsiString)))
      and (not Syms[contSym].IsArray) and (recId >= REC_UCLASS_BASE)
      and (FindUMeth(recId - REC_UCLASS_BASE, 'GetEnumerator') >= 0) then
   begin
@@ -5886,7 +5886,7 @@ begin
       if CurTok.Kind <> tkIdent then Error('ArgStr: expected string var');
       argIdx := FindSym(CurTok.SVal); identTokIdx := TokPos - 1; Next;
       valNode := ParseLValueAST(argIdx, identTokIdx);
-      if (argIdx < 0) or (Syms[argIdx].TypeKind <> tyString) then Error('ArgStr: not a string var');
+      if (argIdx < 0) or (not TypeIsFrozenString(Syms[argIdx].TypeKind)) then Error('ArgStr: not a string var');
       Expect(tkRParen, ')');
 
       ASTRight[argSeq] := AllocNode(AN_ARG);
@@ -6347,7 +6347,7 @@ begin
           for i := 0 to nArgs - 1 do
           begin
             exprNode := ASTLeft[currArg];
-            if (Procs[procIdx].Params[i].TypeKind = tyString) and (IntToTypeKind(ASTTk[exprNode]) = tyChar) then
+            if (TypeIsFrozenString(Procs[procIdx].Params[i].TypeKind)) and (IntToTypeKind(ASTTk[exprNode]) = tyChar) then
             begin
               if ASTKind[exprNode] = AN_INT_LIT then
               begin
@@ -6612,6 +6612,7 @@ begin
   LastTypePointerElemRec := REC_NONE;
   LastTypeProcSig := -1;
   LastTypeEnumId := -1;
+  LastTypeStrCap := 0;
   case CurTok.Kind of
     tkCaret:
     begin
@@ -6647,7 +6648,17 @@ begin
         (the full string-model arc / tyFixedString handles the rest). `string[N]`
         stays a frozen fixed-length string. }
       if (Tokens[TokPos].Kind = tkLBrack) then
-        Result := tyString
+      begin
+        { `string[N]` -> frozen fixed-length string (tyFixedString: NativeInt
+          length word + N chars, capacity N). We consume our own `[N]` here, so
+          Exit before the trailing Next that the simple cases rely on. }
+        Next;                          { consume `string` }
+        Expect(tkLBrack, '[');
+        LastTypeStrCap := ConstEval;
+        Expect(tkRBrack, ']');
+        Result := tyFixedString;
+        Exit;
+      end
       else if PasDefineExists('PXX_MANAGED_STRING') and
               (TokPos >= 2) and (Tokens[TokPos - 2].Kind = tkOf) then
         Result := tyAnsiString
@@ -6691,6 +6702,14 @@ begin
           Result := tyAnsiString
         else
           Result := tyString;
+      end
+      else if CaseEqual(lo, 'shortstring') then
+      begin
+        { Interim: `shortstring` maps to a 255-cap tyFixedString (word-prefix
+          layout, so sizing matches the reused frozen codegen). The true
+          byte-length-prefix tyShortString (FPC ABI) is a later codegen slice. }
+        LastTypeStrCap := 255;
+        Result := tyFixedString;
       end
       else if CaseEqual(lo, 'real') then Result := tyDouble
       else if CaseEqual(lo, 'single') then Result := tySingle
