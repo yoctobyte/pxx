@@ -19,8 +19,8 @@ interface
 function StrInt(v: Int64; width: Integer): string;
 function FloatToStr(v: Double): string;
 function StrFloat(v: Double; width: Integer; decimals: Integer): string;
-procedure Val(const s: string; var v: Int64; var code: Integer);
-procedure ValFloat(const s: string; var v: Double; var code: Integer);
+procedure Val(const s: AnsiString; var v: Int64; var code: Integer);
+procedure ValFloat(const s: AnsiString; var v: Double; var code: Integer);
 function VariantToStr(const v: Variant): AnsiString;
 function PCharToString(p: PChar): string;
 
@@ -159,7 +159,7 @@ begin
     Result := ' ' + Result;
 end;
 
-procedure Val(const s: string; var v: Int64; var code: Integer);
+procedure Val(const s: AnsiString; var v: Int64; var code: Integer);
 var
   i, len: Integer;
   neg, started: Boolean;
@@ -204,7 +204,7 @@ begin
   code := 0;
 end;
 
-procedure ValFloat(const s: string; var v: Double; var code: Integer);
+procedure ValFloat(const s: AnsiString; var v: Double; var code: Integer);
 { Parse [sign] digits [.digits] [(e|E)[sign]digits] into a Double. code = 0 on
   success, else the 1-based position of the first offending character (FPC
   convention). Pure float arithmetic — no libc. }
