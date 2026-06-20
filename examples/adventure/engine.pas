@@ -599,7 +599,7 @@ end;
 procedure TGame.LoadWorld(const path: AnsiString);
 var
   f: Text; line, key, val, h, t: AnsiString;
-  kind, ridx, midx, nidx, n: Integer; d: TDirection; pendingQ: AnsiString;
+  kind, ridx, midx, nidx, n: Integer; pendingQ: AnsiString;
 
   procedure AddExit(roomI: Integer; hidden: Boolean; const spec: AnsiString);
   var dd: TDirection; a, b, c: AnsiString; k: Integer;
@@ -753,17 +753,96 @@ procedure CmdSolve(g: TGame; const arg: AnsiString); begin g.Solve; end;
 procedure CmdTalk(g: TGame; const arg: AnsiString); begin g.Talk(arg); end;
 
 procedure CmdDrink(g: TGame; const arg: AnsiString);
-var i: Integer;
+var i, j: Integer;
 begin
   for i := 0 to High(g.Player.Inventory) do
     if g.Player.Inventory[i].Id = 'flask' then
     begin
       g.Player.Energy := g.Player.Energy + E_FLASK;
       WriteLn(Col('  You drink the 3V3. (+' + NumStr(E_FLASK) + ' energy)', GRN));
-      for i := i to High(g.Player.Inventory) - 1 do g.Player.Inventory[i] := g.Player.Inventory[i + 1];
+      for j := i to High(g.Player.Inventory) - 1 do g.Player.Inventory[j] := g.Player.Inventory[j + 1];
       SetLength(g.Player.Inventory, Length(g.Player.Inventory) - 1); Exit;
     end;
   WriteLn(Col('  You have no flask.', YEL));
+end;
+
+function WantsItem(g: TGame; const want, id: AnsiString): Boolean;
+var it: TItem;
+begin
+  it := g.CatalogItem(id);
+  Result := (want <> '') and ((want = id) or (Pos(want, LowerStr(it.Name)) > 0));
+end;
+
+procedure CmdUse(g: TGame; const arg: AnsiString);
+var want: AnsiString; r: TRoom; m: TMonster;
+begin
+  want := LowerStr(Trim(arg));
+  if want = '' then begin WriteLn(Col('  Use what?', YEL)); Exit; end;
+
+  if WantsItem(g, want, 'flask') then begin CmdDrink(g, arg); Exit; end;
+
+  if WantsItem(g, want, 'sata_cable') then
+  begin
+    if not g.Has('sata_cable') then begin WriteLn(Col('  You do not have a SATA cable.', YEL)); Exit; end;
+    r := g.CurRoom;
+    if r.Id = 'sata_bay' then
+    begin
+      m := g.FindMonster('loose_sata');
+      if (m <> nil) and (not m.Defeated) then
+      begin
+        m.Defeated := True;
+        WriteLn(Col('  You seat the cable. The sparking connector relaxes into a steady link.', GRN));
+      end
+      else WriteLn(Col('  The cable is already seated.', GREY));
+    end
+    else WriteLn(Col('  You wave the cable. It looks most useful near a drive bay.', GREY));
+    Exit;
+  end;
+
+  if WantsItem(g, want, 'multimeter') then
+  begin
+    if not g.Has('multimeter') then begin WriteLn(Col('  You are not carrying the multimeter.', YEL)); Exit; end;
+    r := g.CurRoom;
+    if r.Id = 'psu_room' then
+      WriteLn(Col('  The probes read 230V in, but the north rail is dead without a clean solve.', CYN))
+    else if r.Id = 'thermal_zone' then
+      WriteLn(Col('  The meter chirps: heat is pulling the rail down under load.', CYN))
+    else
+      WriteLn(Col('  The meter finds noise, ground, and a few suspicious ghosts of voltage.', GREY));
+    Exit;
+  end;
+
+  if WantsItem(g, want, 'prefetch_charm') then
+  begin
+    if not g.Has('prefetch_charm') then begin WriteLn(Col('  You do not have the prefetch charm.', YEL)); Exit; end;
+    r := g.CurRoom;
+    if r.Id = 'pipeline' then
+      WriteLn(Col('  The charm tugs toward an unseen side stage. XOR may expose the lane.', MAG))
+    else if r.Id = 'branch_predictor' then
+      WriteLn(Col('  The charm warms. For once, the future feels cached.', MAG))
+    else
+      WriteLn(Col('  The charm hums, but predicts nothing useful here.', GREY));
+    Exit;
+  end;
+
+  if WantsItem(g, want, 'firmware_key') then
+  begin
+    if not g.Has('firmware_key') then begin WriteLn(Col('  You have no firmware key.', YEL)); Exit; end;
+    if g.CurRoom.Id = 'kernel_room' then
+      WriteLn(Col('  The key signature verifies. The panic turns and recognizes a worthy crash.', MAG))
+    else
+      WriteLn(Col('  The signed blob glints. Ring 0 is where it matters.', GREY));
+    Exit;
+  end;
+
+  if WantsItem(g, want, 'root_token') then
+  begin
+    if not g.Has('root_token') then begin WriteLn(Col('  You do not hold root.', YEL)); Exit; end;
+    WriteLn(Col('  The token pulses with authority. The I/O port will open for it.', GRN));
+    Exit;
+  end;
+
+  WriteLn(Col('  That does not seem useful right now.', GREY));
 end;
 
 procedure CmdCast(g: TGame; const arg: AnsiString);
@@ -800,7 +879,7 @@ begin
   WriteLn(Bold('Commands:'));
   WriteLn('  look | n/s/e/w/u/d | go <dir>');
   WriteLn('  take [thing] | inventory(i) | examine(x) <thing>');
-  WriteLn('  talk [who] | solve | cast <spell> | drink');
+  WriteLn('  talk [who] | solve | cast <spell> | use <thing> | drink');
   WriteLn('  save | load | help | quit');
 end;
 
@@ -829,6 +908,7 @@ begin
   AddVerb('talk', @CmdTalk);       AddVerb('t', @CmdTalk);
   AddVerb('solve', @CmdSolve);     AddVerb('fight', @CmdSolve);
   AddVerb('cast', @CmdCast);       AddVerb('drink', @CmdDrink);
+  AddVerb('use', @CmdUse);
   AddVerb('go', @CmdGo);           AddVerb('help', @CmdHelp);
   AddVerb('save', @CmdSave);       AddVerb('load', @CmdLoad);
   AddVerb('quit', @CmdQuit);
