@@ -283,6 +283,8 @@ test-core: $(COMPILER)
 	test "$$(/tmp/test_class_cast_field26)" = "$$(printf '166408768\n7\n42\n99\n555\n555\n2')"
 	./$(COMPILER) test/test_inline_concat_arg.pas /tmp/test_inline_concat_arg26
 	test "$$(/tmp/test_inline_concat_arg26)" = "$$(printf '[aabb] len=4\n[Line 1\nLine 2] len=13\n[xyz] len=3')"
+	./$(COMPILER) test/test_array_of_string.pas /tmp/test_array_of_string26
+	test "$$(/tmp/test_array_of_string26)" = "$$(printf 'Apple\nBanana\nCherry\nx|yy|2\nscalar')"
 	./$(COMPILER) test/test_interfaces.pas /tmp/test_interfaces26
 	test "$$(/tmp/test_interfaces26)" = "$$(printf 'area=20\nscaled=60\narea2=42\ndirect=42')"
 	./$(COMPILER) test/test_interfaces_is.pas /tmp/test_interfaces_is26

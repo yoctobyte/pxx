@@ -6636,7 +6636,23 @@ begin
     tkLongWord_T: Result := tyUInt32;
     tkBoolean_T: Result := tyBoolean;
     tkChar_T:    Result := tyChar;
-    tkString_T:  Result := tyString;
+    tkString_T:
+      { Bare `string`: per-use promotion to managed AnsiString for AGGREGATE
+        ELEMENTS only (the token right before `string` is `of`, as in `array of
+        string` / `array[..] of string`), in managed-string mode (the default).
+        A frozen `string` element is huge inline and can't be a dynarray element,
+        so promoting it to a managed handle is what makes `array of string` work
+        (bug-string-type-size-mismatch / the PCL list controls). SCALAR `string`
+        stays frozen so Str/Val and other frozen-buffer builtins keep working
+        (the full string-model arc / tyFixedString handles the rest). `string[N]`
+        stays a frozen fixed-length string. }
+      if (Tokens[TokPos].Kind = tkLBrack) then
+        Result := tyString
+      else if PasDefineExists('PXX_MANAGED_STRING') and
+              (TokPos >= 2) and (Tokens[TokPos - 2].Kind = tkOf) then
+        Result := tyAnsiString
+      else
+        Result := tyString;
     tkReal_T:     Result := tyDouble;
     tkSingle_T:   Result := tySingle;
     tkDouble_T:   Result := tyDouble;

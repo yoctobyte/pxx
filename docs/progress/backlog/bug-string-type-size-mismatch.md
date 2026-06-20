@@ -86,3 +86,17 @@ So this is a multi-step arc, not a one-liner:
 
 The cross-link to bug-rtti-offset-static-array (#4): same string-size model; a
 large `array[0..255] of string` field inherits the per-element sizing decision.
+
+## Per-use quick fix DONE 2026-06-20 (Track B unblocked; full arc still open)
+
+ParseTypeKind `tkString_T`: a bare `string` whose preceding token is `of` (an
+aggregate element, `array of string` / `array[..] of string`) is promoted to
+managed AnsiString in managed mode. Scalar `string` (preceded by `:`) stays
+frozen, so Str/Val and other frozen-buffer builtins are untouched (that was the
+make-test segfault). `string[N]` stays frozen fixed. `array of string` and class
+fields like `FItems: array of string` now work. Byte-identical self-host,
+make test green. test/test_array_of_string.pas added.
+
+STILL OPEN (the full arc): scalar `string`->AnsiString flip + Str/Val managed
+support, `shortstring` keyword, STRING_CAP->small default, frozen-sized-string
+writeln bug, and the `tyFixedString` disambiguation.
