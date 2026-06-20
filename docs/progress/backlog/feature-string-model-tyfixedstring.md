@@ -83,3 +83,58 @@ each should keep make test green.
 - The compiler itself uses AnsiString (not bare `string`), so the scalar flip
   does not perturb self-host — but Str/Val in the RTL/tests do use frozen
   strings; update or route them through the managed path.
+
+## Next-session prompt (start the tyFixedString arc here)
+
+> Track A (compiler). Execute the string-model overhaul: introduce `tyFixedString`
+> and make `string` follow the mode. Read THIS ticket
+> (docs/progress/backlog/feature-string-model-tyfixedstring.md) and
+> [[bug-string-type-size-mismatch]] first.
+>
+> Target model: `string` = managed AnsiString in managed mode (the DEFAULT;
+> `-uPXX_MANAGED_STRING` = frozen); `string` in frozen mode + `string[N]` +
+> `shortstring` = the NEW `tyFixedString` (frozen, inline, right-sized, 255
+> default); `ansistring` = tyAnsiString (already correct). `tyFixedString` exists
+> to end the tyString overload (frozen-default vs sized) that caused the
+> size/offset bugs.
+>
+> Already done (don't redo): the per-use stopgap — `array of string` ELEMENTS
+> promote to AnsiString in managed mode (ParseTypeKind tkString_T, gated on the
+> preceding `of` token), scalar `string` stays frozen so Str/Val work. Commit
+> f7c9dc5, pinned v23. This arc supersedes it; drop the `of`-peek once scalars
+> flip safely.
+>
+> Blast radius: tyString is special-cased ~250x across parser.inc(53),
+> symtab.inc(38), ir.inc(24), ir_codegen*.inc (x64 27 / i386 25 / arm32 24 /
+> aarch64 20 / riscv32 7 / xtensa 9). Do NOT add 250 tyFixedString arms — add a
+> predicate `TypeIsFrozenString(tk) := (tk=tyString) or (tk=tyFixedString)` and
+> widen the existing `= tyString` (frozen) checks to it. Keep tyString as the
+> legacy frozen alias during migration.
+>
+> Slices, each must keep `make test` green and reseed cleanly via `make bootstrap`
+> (codegen change = 1-gen reseed, NOT non-determinism):
+> 1. Append `tyFixedString` to the TTypeKind enum (defs.inc) at the END (low
+>    ordinals are bootstrap-stable; inserting breaks the seed). Add the predicate.
+>    No resolver/codegen change yet -> byte-identical.
+> 2. Per-symbol capacity for fixed strings: a parallel array (NOT a TSymbol field
+>    — MAX_UFIELD overflow landmine), default 255. AllocVar/AllocArray/field-alloc
+>    size the slot from it. STRING_CAP stays ONLY the compiler token buffer (kills
+>    the 8MB global-string relic at symtab.inc:1419 etc).
+> 3. Resolver (parser.inc ParseTypeKind): `shortstring` -> tyFixedString(255);
+>    `string[N]` -> tyFixedString(N); bare `string` -> tyAnsiString (managed) /
+>    tyFixedString (frozen). Route tyFixedString through the frozen-string codegen
+>    via the predicate in every backend.
+> 4. Str/Val managed support: `Str(x,s)` / `Val(s,x)` must accept a tyAnsiString
+>    dest/source (this is what segfaulted test_float_str_val under the global
+>    flip). Then flip scalar `string` -> AnsiString in managed mode and drop the
+>    `of`-peek stopgap.
+> 5. Fix the pre-existing frozen SIZED-string writeln/Length bug (`string[N]` /
+>    current `shortstring` print a code address; plain frozen `string` works) —
+>    likely falls out of clean tyFixedString codegen; add a test either way.
+> 6. Validate per target: byte-identical self-host BOTH builds (frozen `-u`
+>    exercises tyFixedString; managed exercises AnsiString). Cross + ESP must
+>    still build (riscv/xtensa have the leanest string support — keep tyFixedString
+>    within what they already do for tyString). New tests:
+>    test/test_shortstring.pas, test/test_string_sized.pas, extend
+>    test_array_of_string.pas. Commit each slice; stay in compiler/**, `git commit
+>    -- <paths>`, shared checkout with Track B (owns lib/**). No push without OK.
