@@ -126,57 +126,64 @@ All four: make test green, self-host fixedpoint byte-identical.
   does not perturb self-host — but Str/Val in the RTL/tests do use frozen
   strings; update or route them through the managed path.
 
-## Next-session prompt (start the tyFixedString arc here)
+## Next-session prompt (slice 4p2 — the HELD scalar-string managed flip)
 
-> Track A (compiler). Execute the string-model overhaul: introduce `tyFixedString`
-> and make `string` follow the mode. Read THIS ticket
-> (docs/progress/backlog/feature-string-model-tyfixedstring.md) and
-> [[bug-string-type-size-mismatch]] first.
+> **Track A (compiler) — string-model slice 4p2: flip scalar `string` ->
+> managed default.**
 >
-> Target model: `string` = managed AnsiString in managed mode (the DEFAULT;
-> `-uPXX_MANAGED_STRING` = frozen); `string` in frozen mode + `string[N]` +
-> `shortstring` = the NEW `tyFixedString` (frozen, inline, right-sized, 255
-> default); `ansistring` = tyAnsiString (already correct). `tyFixedString` exists
-> to end the tyString overload (frozen-default vs sized) that caused the
-> size/offset bugs.
+> Pinned stable is **v25**. The string-model arc is done through slice 4p1:
+> `tyShortString`/`tyFixedString` exist, `StrValTk` splits storage-vs-value kind,
+> `SymStrCap[]` sizing, `string[N]`->`tyFixedString`, `Val`/`ValFloat` params
+> widened to `AnsiString`. Read THIS ticket (the Progress + Remaining sections
+> above), [[bug-managed-to-frozen-string-assign-crash]], and
+> [[design-overloadable-intrinsics]] first. **This slice was deliberately HELD
+> because it changes the pinned binary's behavior — Track B must re-pin after.**
 >
-> Already done (don't redo): the per-use stopgap — `array of string` ELEMENTS
-> promote to AnsiString in managed mode (ParseTypeKind tkString_T, gated on the
-> preceding `of` token), scalar `string` stays frozen so Str/Val work. Commit
-> f7c9dc5, pinned v23. This arc supersedes it; drop the `of`-peek once scalars
-> flip safely.
+> **The change (one site).** `compiler/parser.inc`, `ParseTypeKind`, `tkString_T`
+> arm (~line 6663). Today:
+> ```pascal
+> else if PasDefineExists('PXX_MANAGED_STRING') and
+>         (TokPos >= 2) and (Tokens[TokPos - 2].Kind = tkOf) then
+>   Result := tyAnsiString          { only array-of-string ELEMENTS flip }
+> else
+>   Result := tyString;
+> ```
+> Drop the `of`-peek restriction so **scalar bare `string` also resolves to
+> `tyAnsiString`** when `PXX_MANAGED_STRING` is defined (the default — set in
+> `lexer.inc:461`). `string[N]`/`shortstring` stay `tyFixedString`;
+> `-uPXX_MANAGED_STRING` stays all-frozen.
 >
-> Blast radius: tyString is special-cased ~250x across parser.inc(53),
-> symtab.inc(38), ir.inc(24), ir_codegen*.inc (x64 27 / i386 25 / arm32 24 /
-> aarch64 20 / riscv32 7 / xtensa 9). Do NOT add 250 tyFixedString arms — add a
-> predicate `TypeIsFrozenString(tk) := (tk=tyString) or (tk=tyFixedString)` and
-> widen the existing `= tyString` (frozen) checks to it. Keep tyString as the
-> legacy frozen alias during migration.
+> **Why it's not a one-liner.** The naive drop previously segfaulted
+> `test_float_str_val` — scalar frozen-buffer builtins (`Str`, `Val`, char-index,
+> concat) assumed a frozen layout. 4p1 widened `Val`/`ValFloat`; this slice must
+> verify **every** scalar `string` use survives as managed: `Str(x,s)`, `s[i]`,
+> `s := a+b`, `for c in s`, length/compare, var/const/by-ref params, function
+> returns. Where a frozen buffer is genuinely required, route through
+> `tyFixedString` explicitly.
 >
-> Slices, each must keep `make test` green and reseed cleanly via `make bootstrap`
-> (codegen change = 1-gen reseed, NOT non-determinism):
-> 1. Append `tyFixedString` to the TTypeKind enum (defs.inc) at the END (low
->    ordinals are bootstrap-stable; inserting breaks the seed). Add the predicate.
->    No resolver/codegen change yet -> byte-identical.
-> 2. Per-symbol capacity for fixed strings: a parallel array (NOT a TSymbol field
->    — MAX_UFIELD overflow landmine), default 255. AllocVar/AllocArray/field-alloc
->    size the slot from it. STRING_CAP stays ONLY the compiler token buffer (kills
->    the 8MB global-string relic at symtab.inc:1419 etc).
-> 3. Resolver (parser.inc ParseTypeKind): `shortstring` -> tyFixedString(255);
->    `string[N]` -> tyFixedString(N); bare `string` -> tyAnsiString (managed) /
->    tyFixedString (frozen). Route tyFixedString through the frozen-string codegen
->    via the predicate in every backend.
-> 4. Str/Val managed support: `Str(x,s)` / `Val(s,x)` must accept a tyAnsiString
->    dest/source (this is what segfaulted test_float_str_val under the global
->    flip). Then flip scalar `string` -> AnsiString in managed mode and drop the
->    `of`-peek stopgap.
-> 5. Fix the pre-existing frozen SIZED-string writeln/Length bug (`string[N]` /
->    current `shortstring` print a code address; plain frozen `string` works) —
->    likely falls out of clean tyFixedString codegen; add a test either way.
-> 6. Validate per target: byte-identical self-host BOTH builds (frozen `-u`
->    exercises tyFixedString; managed exercises AnsiString). Cross + ESP must
->    still build (riscv/xtensa have the leanest string support — keep tyFixedString
->    within what they already do for tyString). New tests:
->    test/test_shortstring.pas, test/test_string_sized.pas, extend
->    test_array_of_string.pas. Commit each slice; stay in compiler/**, `git commit
->    -- <paths>`, shared checkout with Track B (owns lib/**). No push without OK.
+> **The payoff (acceptance):** the crash in
+> [[bug-managed-to-frozen-string-assign-crash]] must vanish — this repro prints,
+> not segfaults:
+> ```pascal
+> program r; var a: array of string; s: string;
+> begin SetLength(a,1); a[0]:='hello world long enough'; s:=a[0]; writeln(s); end.
+> ```
+> (currently exit 139 under `-dPXX_MANAGED_STRING`). Add it as a regression test
+> both directions (managed<->frozen).
+>
+> **Hard gates:** `make test` green; self-host **byte-identical** (codegen change
+> = 1-gen reseed -> `make bootstrap`, NOT non-determinism); cross
+> (i386/aarch64/arm32) + ESP still build. Compiler source uses `AnsiString` not
+> bare `string`, so self-host shape is unperturbed — but RTL/builtin/tests use
+> bare `string`, audit those.
+>
+> **Coordination (the whole reason this was held):** after green + byte-identical,
+> `make stabilize` -> `make pin` -> commit `stable_linux_amd64/`. **This moves
+> Track B's ground** — bare `string` now means managed in everything they build.
+> Announce the re-pin; Track B re-runs `make lib-test` / `make demos` against the
+> new pinned and drops the explicit-`AnsiString` workaround in
+> `lib/pcl/stdctrls.pas` (commit 6355d7d). Once both tracks rebuild clean, the
+> held flip is done and A/B continue normally.
+>
+> Stay in `compiler/**`; `git commit -- <paths>`; push freely once stable
+> (lane gate green) per the updated workflow norm.
