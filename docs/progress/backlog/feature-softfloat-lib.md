@@ -13,16 +13,16 @@ soft-integer-divide lives in `compiler/builtin/builtinheap.pas`, but soft-float 
 substantial and conceptually distinct — it gets **its own library file**, not a
 graft onto builtinheap.
 
-## Scope — soft SINGLE (primary) + soft DOUBLE (explicit-Double path)
+## Scope — soft SINGLE + soft DOUBLE + conversions
 
-Drives off the `Real` mapping (see [[feature-esp-float]] — open decision): FPC
-maps `Real` to **Single** on no-FPU processors (double only where there's hardware
-FP). If PXX follows FPC, the *common* float on riscv lowers to soft-**single** —
-cheaper (32-bit mantissa math) and the precision FPC promises there. Explicit
-`Double` still has to work, so soft-double is also needed, just not the hot path.
+Settled by the `Real`-mapping decision (see [[feature-esp-float]]): `Real` = the
+target's native float depth, so on no-FPU riscv the common float lowers to
+soft-**single** (cheaper, and what `Real` resolves to there). Explicit `Double`
+must work on every target, so soft-double is needed too. Land single first (it's
+the riscv `Real` hot path and smaller).
 
-Kernels (both widths; single is the one to land first):
-- single: `__pxx_sadd/ssub/smul/sdiv`, `__pxx_scmp`
+Kernels:
+- single (land first): `__pxx_sadd/ssub/smul/sdiv`, `__pxx_scmp`
 - double: `__pxx_dadd/dsub/dmul/ddiv`, `__pxx_dcmp`
 - conversions: `__pxx_i2s/s2i/i2d/d2i` (+ u-variants), `__pxx_s2d/d2s` (single<->
   double bit repack — pure integer)
@@ -32,10 +32,8 @@ denormals can be a documented follow-up (flush-to-zero first) — but **mul/div
 rounding must be correct** or formatted decimal output diverges from the x86-64
 oracle.
 
-NOTE: if the project instead keeps `Real`=Double on all targets (numeric-
-portability over FPC-fidelity), this collapses to double-kernels-only and single
-rides the widen-to-soft-double path. That mapping decision gates this scope —
-resolve it in [[feature-esp-float]] first.
+(xtensa never calls the single kernels — its `Real`/Single use the hardware single
+FPU; it calls only the soft-DOUBLE kernels for explicit `Double`.)
 
 ## Approach
 
