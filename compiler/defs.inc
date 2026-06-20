@@ -2,6 +2,7 @@ const
 
   MAX_CODE      = 8388608;  { 8 MB; arm32's literal-pool-heavy self-host code exceeds 4 MB }
   LOCAL_STR_CAP = 256;     { max string length for local/stack variables }
+  DEFAULT_STR_CAP = 255;   { default capacity (max chars) for tyFixedString/tyShortString when no string[N] size given }
   LINE_BUF_SIZE = 4096;    { readln stdin line buffer }
   MAX_DATA    = 2097152;      { 2 MB }
   MAX_STRS    = 8192;
@@ -692,6 +693,7 @@ var
   SymProcSig  : array[0..MAX_SYMS-1] of Integer; { procedural-type var/param: signature proc index (Procs[] entry, BodyAddr=-1) for indirect-call marshalling; -1 = not a proc-typed value }
   SymSetEnumId : array[0..MAX_SYMS-1] of Integer; { set var: element enum type index for `set of TEnum`, else -1. Drives `for e in set` range }
   SymSetElemTk : array[0..MAX_SYMS-1] of Integer; { set var: element TTypeKind ordinal (tyChar/tyInteger/enum-as-integer), else 0 }
+  SymStrCap : array[0..MAX_SYMS-1] of Integer; { frozen fixed-string capacity (max chars) for tyFixedString/tyShortString slots; 0 = use the kind default (DEFAULT_STR_CAP) }
   { 2-D fixed array flattened to 1-D storage: m[i,j] / m[i][j] index as
     (i-lo1)*span2 + (j-lo2). Default False/0 (single-dimension array). }
   { N-D fixed array flattened to 1-D storage; element [i0..iN-1] linearises to
@@ -783,6 +785,7 @@ var
   DynamicSize      : Integer;
   DynamicNeededCount : Integer; { distinct DT_NEEDED libraries }
   LastTypeRecId : Integer;
+  LastTypeStrCap : Integer; { frozen fixed-string capacity from the most recent string[N] type parse (0 = default); consumed by AllocVar/AllocArray, then reset }
   TVarRecId : Integer;   { record id of builtinheap.TVarRec (`array of const`
                            element), or REC_NONE if the unit isn't loaded }
   MethodPtrRecId : Integer; { record id of the 16-byte method-pointer layout

@@ -1219,6 +1219,19 @@ begin
   Result := (tk = tyString) or (tk = tyShortString) or (tk = tyFixedString);
 end;
 
+function FrozenStrSlotSize(tk: TTypeKind; cap: Integer): Integer;
+{ Byte size of an inline frozen fixed-string slot.
+  tyFixedString = 8-byte NativeInt length word + cap chars (matches today's
+  frozen tyString layout, so it reuses the existing tyString codegen unchanged).
+  tyShortString = 1 length byte + cap chars (classic FPC shortstring, cap<=255). }
+begin
+  if cap <= 0 then cap := DEFAULT_STR_CAP;
+  if tk = tyShortString then
+    Result := cap + 1
+  else
+    Result := cap + 8;
+end;
+
 function TypeCompareUnsigned(lhs, rhs: TTypeKind): Boolean;
 { The wider operand determines the comparison domain; at equal width a signed
   operand wins. Values are still evaluated in 64-bit registers. }
@@ -1394,6 +1407,9 @@ begin
   SymProcSig[SymCount] := -1;
   SymSetEnumId[SymCount] := -1;
   SymSetElemTk[SymCount] := 0;
+  SymStrCap[SymCount] := 0;
+  if TypeIsFrozenString(tk) and (tk <> tyString) then
+    SymStrCap[SymCount] := LastTypeStrCap;
   SymRTTIOff[SymCount] := -1;
   SymIsHiddenArgTemp[SymCount] := False;
   SymBlockId[SymCount] := CurBlockId;
@@ -1428,6 +1444,8 @@ begin
       if CurProc < 0 then sz := STRING_CAP + 8
       else sz := LOCAL_STR_CAP + 8;
     end
+    else if (tk = tyFixedString) or (tk = tyShortString) then
+      sz := FrozenStrSlotSize(tk, SymStrCap[SymCount])
     else if tk = tyRecord then sz := RecSize(LastTypeRecId);
     align := TypeAlign(tk);
 
@@ -1473,6 +1491,9 @@ begin
   SymProcSig[SymCount] := -1;
   SymSetEnumId[SymCount] := -1;
   SymSetElemTk[SymCount] := 0;
+  SymStrCap[SymCount] := 0;
+  if TypeIsFrozenString(tk) and (tk <> tyString) then
+    SymStrCap[SymCount] := LastTypeStrCap;
   SymRTTIOff[SymCount] := -1;
   Syms[SymCount].ElemType := tk;
   Syms[SymCount].RecName  := LastTypeRecId;
@@ -1511,9 +1532,11 @@ begin
     if CurProc < 0 then elemSize := STRING_CAP + 8
     else elemSize := LOCAL_STR_CAP + 8;
   end
+  else if (elemType = tyFixedString) or (elemType = tyShortString) then
+    elemSize := FrozenStrSlotSize(elemType, LastTypeStrCap)
   else if elemType = tyRecord then elemSize := RecSize(LastTypeRecId)
   else elemSize := TypeSize(elemType);
-  if (elemType = tyString) or (elemType = tyRecord) then
+  if (elemType = tyString) or (elemType = tyFixedString) or (elemType = tyShortString) or (elemType = tyRecord) then
     align := TARGET_PTR_SIZE
   else
     align := TypeAlign(elemType);
@@ -1532,6 +1555,9 @@ begin
   SymGenSlot[SymCount] := -1;
   SymSetEnumId[SymCount] := -1;
   SymSetElemTk[SymCount] := 0;
+  SymStrCap[SymCount] := 0;
+  if (elemType = tyFixedString) or (elemType = tyShortString) then
+    SymStrCap[SymCount] := LastTypeStrCap;
   SymIsHiddenArgTemp[SymCount] := False;
   SymBlockId[SymCount] := CurBlockId;
   Syms[SymCount].ElemType := elemType;
@@ -1585,6 +1611,9 @@ begin
   SymGenSlot[SymCount] := -1;
   SymSetEnumId[SymCount] := -1;
   SymSetElemTk[SymCount] := 0;
+  SymStrCap[SymCount] := 0;
+  if (elemType = tyFixedString) or (elemType = tyShortString) then
+    SymStrCap[SymCount] := LastTypeStrCap;
   SymIsHiddenArgTemp[SymCount] := False;
   SymBlockId[SymCount] := CurBlockId;
   Syms[SymCount].ElemType    := elemType;
