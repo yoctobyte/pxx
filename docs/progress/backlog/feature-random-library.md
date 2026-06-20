@@ -198,3 +198,12 @@ programs compile and run unmodified.
   needed (`xor`, large shifts, 64-bit hex literals) — see
   bug-64bit-shift-xor-literal-gaps. Upgrade the software tier to xoshiro256** +
   splitmix64 seeding once those land; HW/OS tiers (slices 4–6) still as scoped.
+- 2026-06-20 — **xoshiro256** software core landed** (track B, slice 1 done):
+  `lib/rtl/random.pas` upgraded from the interim LCG to xoshiro256** with
+  SplitMix64 seed expansion. 64-bit ops (xor, large shifts, hex literals) now
+  available on pinned v20. Output verified byte-identical against a C reference
+  implementation. The LCG is retained alongside as `LCGSeed`/`LCGNext` for
+  constrained targets (ESP32). Public surface (`RandSeed`/`Random(n)`/`RandRange`)
+  now delegates to xoshiro. `RandU32` replaced by `XoshiroNext`/`LCGNext`.
+  Slices 1–2 done (software core + FPC surface). Remaining: OS tier (slice 3),
+  HW tiers (slices 4–6), thread safety (slice 7).
