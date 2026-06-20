@@ -1058,9 +1058,15 @@ test-i386: $(COMPILER)
 	./$(COMPILER) -dPXX_MANAGED_STRING --target=i386 test/test_const_record_temp.pas /tmp/test_i386_constrectemp
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_const_record_temp.pas /tmp/test_i386_constrectemp_x64
 	test "$$(tools/run_target.sh i386 /tmp/test_i386_constrectemp)" = "$$(/tmp/test_i386_constrectemp_x64)"
+	./$(COMPILER) -dPXX_MANAGED_STRING --target=i386 test/test_const_record_temp_managed.pas /tmp/test_i386_constrectemp_managed
+	./$(COMPILER) -dPXX_MANAGED_STRING test/test_const_record_temp_managed.pas /tmp/test_i386_constrectemp_managed_x64
+	test "$$(tools/run_target.sh i386 /tmp/test_i386_constrectemp_managed)" = "$$(/tmp/test_i386_constrectemp_managed_x64)"
 	./$(COMPILER) -dPXX_MANAGED_STRING --target=i386 test/test_set_runtime.pas /tmp/test_i386_setrt
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_set_runtime.pas /tmp/test_i386_setrt_x64
 	test "$$(tools/run_target.sh i386 /tmp/test_i386_setrt)" = "$$(/tmp/test_i386_setrt_x64)"
+	./$(COMPILER) -dPXX_MANAGED_STRING --target=i386 test/test_managed_record_temp_init.pas /tmp/test_i386_mrti
+	./$(COMPILER) -dPXX_MANAGED_STRING test/test_managed_record_temp_init.pas /tmp/test_i386_mrti_x64
+	test "$$(tools/run_target.sh i386 /tmp/test_i386_mrti)" = "$$(/tmp/test_i386_mrti_x64)"
 	./$(COMPILER) -dPXX_MANAGED_STRING --target=i386 test/test_dynarray_copy.pas /tmp/test_i386_dyncopy
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_dynarray_copy.pas /tmp/test_i386_dyncopy_x64
 	test "$$(tools/run_target.sh i386 /tmp/test_i386_dyncopy)" = "$$(/tmp/test_i386_dyncopy_x64)"
@@ -1282,9 +1288,15 @@ test-aarch64: $(COMPILER)
 	./$(COMPILER) -dPXX_MANAGED_STRING --target=aarch64 test/test_const_record_temp.pas /tmp/test_aarch64_constrectemp
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_const_record_temp.pas /tmp/test_aarch64_constrectemp_x64
 	test "$$(tools/run_target.sh aarch64 /tmp/test_aarch64_constrectemp)" = "$$(/tmp/test_aarch64_constrectemp_x64)"
+	./$(COMPILER) -dPXX_MANAGED_STRING --target=aarch64 test/test_const_record_temp_managed.pas /tmp/test_aarch64_constrectemp_managed
+	./$(COMPILER) -dPXX_MANAGED_STRING test/test_const_record_temp_managed.pas /tmp/test_aarch64_constrectemp_managed_x64
+	test "$$(tools/run_target.sh aarch64 /tmp/test_aarch64_constrectemp_managed)" = "$$(/tmp/test_aarch64_constrectemp_managed_x64)"
 	./$(COMPILER) -dPXX_MANAGED_STRING --target=aarch64 test/test_set_runtime.pas /tmp/test_aarch64_setrt
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_set_runtime.pas /tmp/test_aarch64_setrt_x64
 	test "$$(tools/run_target.sh aarch64 /tmp/test_aarch64_setrt)" = "$$(/tmp/test_aarch64_setrt_x64)"
+	./$(COMPILER) -dPXX_MANAGED_STRING --target=aarch64 test/test_managed_record_temp_init.pas /tmp/test_aarch64_mrti
+	./$(COMPILER) -dPXX_MANAGED_STRING test/test_managed_record_temp_init.pas /tmp/test_aarch64_mrti_x64
+	test "$$(tools/run_target.sh aarch64 /tmp/test_aarch64_mrti)" = "$$(/tmp/test_aarch64_mrti_x64)"
 	./$(COMPILER) -dPXX_MANAGED_STRING --target=aarch64 test/test_dynarray_copy.pas /tmp/test_aarch64_dyncopy
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_dynarray_copy.pas /tmp/test_aarch64_dyncopy_x64
 	test "$$(tools/run_target.sh aarch64 /tmp/test_aarch64_dyncopy)" = "$$(/tmp/test_aarch64_dyncopy_x64)"
@@ -1524,6 +1536,9 @@ test-arm32: $(COMPILER)
 	./$(COMPILER) -dPXX_MANAGED_STRING --target=arm32 test/test_const_record_temp.pas /tmp/test_arm32_constrectemp
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_const_record_temp.pas /tmp/test_arm32_constrectemp_x64
 	test "$$(tools/run_target.sh arm32 /tmp/test_arm32_constrectemp)" = "$$(/tmp/test_arm32_constrectemp_x64)"
+	./$(COMPILER) -dPXX_MANAGED_STRING --target=arm32 test/test_const_record_temp_managed.pas /tmp/test_arm32_constrectemp_managed
+	./$(COMPILER) -dPXX_MANAGED_STRING test/test_const_record_temp_managed.pas /tmp/test_arm32_constrectemp_managed_x64
+	test "$$(tools/run_target.sh arm32 /tmp/test_arm32_constrectemp_managed)" = "$$(/tmp/test_arm32_constrectemp_managed_x64)"
 	./$(COMPILER) -dPXX_MANAGED_STRING --target=arm32 test/test_set_runtime.pas /tmp/test_arm32_setrt
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_set_runtime.pas /tmp/test_arm32_setrt_x64
 	test "$$(tools/run_target.sh arm32 /tmp/test_arm32_setrt)" = "$$(/tmp/test_arm32_setrt_x64)"

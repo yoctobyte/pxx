@@ -7718,7 +7718,7 @@ var
   paramNDims, paramDynDepth, paramAi, pdi: Integer;
   psLo, psSpan: array[0..MAX_ARR_DIMS-1] of Integer;
   nparams  : Integer;
-  pi, i, sz, retRecId, savedLastTypeRecId: Integer;
+  pi, helperPi, i, sz, retRecId, savedLastTypeRecId: Integer;
   zeroBytes : Integer;
   zfLoop, zfDone : Integer;
   retIsDynArr : Boolean; retElemTk : TTypeKind; retElemRec : Integer;
@@ -8821,18 +8821,18 @@ begin
         EmitLoadImmA64(9, Syms[i].Offset);
         EmitI32($8B0903A0);                  { add x0, x29, x9 (dest) }
         EmitLoadImmA64(1, zeroBytes);         { x1 = count }
-        pi := FindProc('PXXMemZero');
-        if pi < 0 then Error('compiler error: PXXMemZero not found');
-        EmitCallProc(pi);
+        helperPi := FindProc('PXXMemZero');
+        if helperPi < 0 then Error('compiler error: PXXMemZero not found');
+        EmitCallProc(helperPi);
       end
       else if (zeroBytes > TARGET_PTR_SIZE) and (TargetArch = TARGET_I386) then
       begin
         EmitB($8D); EmitB($85); EmitI32(Syms[i].Offset); { lea eax, [ebp+off] }
         EmitB($50);                                      { push dest }
         EmitB($68); EmitI32(zeroBytes);                  { push count }
-        pi := FindProc('PXXMemZero');
-        if pi < 0 then Error('compiler error: PXXMemZero not found');
-        EmitCallProc(pi);
+        helperPi := FindProc('PXXMemZero');
+        if helperPi < 0 then Error('compiler error: PXXMemZero not found');
+        EmitCallProc(helperPi);
         EmitB($81); EmitB($C4); EmitI32(8);              { add esp, 8 }
       end
       else if (zeroBytes > TARGET_PTR_SIZE) and (TargetArch <> TARGET_X86_64) then

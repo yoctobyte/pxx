@@ -2,9 +2,7 @@
   (dynamic-array) field, built by a function and passed as a temporary to a
   `const` record parameter. Materialized into a hidden local; its address is
   passed. Proves bug-const-byref-record-param-temp on the real managed-record
-  case. NOT in the cross suites: a separate pre-existing const managed-record
-  by-ref crash on i386/aarch64 (bug-const-managed-record-param-byref-crash)
-  would mask this until that is fixed. }
+  case, including the aggregate managed-record return path on cross targets. }
 program test_const_record_temp_managed;
 
 type

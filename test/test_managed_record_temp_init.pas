@@ -5,8 +5,8 @@
   never filled — yet the proc's scope-exit cleanup would release its managed
   field and free stack garbage, corrupting the FIRST call only. Codegen must
   nil-init the full extent of such temps. Closes
-  bug-proc-local-managed-record-uninit. (x86-64 + arm32; i386/aarch64 also need
-  the separate managed-record function-return fix.) }
+  bug-proc-local-managed-record-uninit, and covers the managed-record
+  aggregate-return path on cross targets. }
 program test_managed_record_temp_init;
 
 type
