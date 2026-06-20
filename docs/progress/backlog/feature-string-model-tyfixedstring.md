@@ -73,6 +73,48 @@ enum + predicate (no behaviour change, byte-identical) -> per-symbol cap + sizin
 managed -> sized-writeln fix -> drop the `of`-peek stopgap. Commit each slice;
 each should keep make test green.
 
+## Progress 2026-06-20 (slices 1-4 part1 DONE; scalar flip HELD)
+
+Three frozen beasts confirmed with the user (NOT two): `tyShortString` (byte len
+prefix, cap<=255, FPC ABI), `tyFixedString` (NativeInt length-WORD prefix, any
+cap N), `tyAnsiString` (managed, exists). KEY finding: today's frozen `tyString`
+is already WORD-prefix (`mov [rdi],rcx` 8 bytes at offset 0, then chars at +8) —
+so `tyFixedString` is a *relabel* of the existing frozen codegen (reuses it
+unchanged); `tyShortString` is the genuinely-new byte-prefix layout.
+
+- **Slice 1** (6cc85fc): `tyShortString`(25)+`tyFixedString`(26) appended to
+  TTypeKind tail; `TypeIsFrozenString(tk)` predicate. Byte-identical.
+- **Slice 2** (fc27f3a): `SymStrCap[]` parallel array + `DEFAULT_STR_CAP=255` +
+  `FrozenStrSlotSize(tk,cap)` (Fixed=cap+8, Short=cap+1). Alloc* size+reset it.
+  Legacy tyString keeps its 8MB-global relic (dies with the alias).
+- **Slice 3** (1c8fa71): resolver `string[N]`->tyFixedString(N) (consumes its own
+  `[N]`), `shortstring`->tyFixedString(255) INTERIM (word layout; true
+  byte-prefix tyShortString deferred). `StrValTk(tk)` splits STORAGE kind
+  (tyFixedString, for sizing + symbol-direct checks) from VALUE kind (presents as
+  tyString, so ~150 value-checks work unwidened). Widened the symbol-direct /
+  addressing frozen checks to the predicate (IRVerify bound, AN_IDENT LEA, string
+  char-index lo=-7, array-of-string[N] element stride from SymStrCap). x64 path.
+  Slice 5 (sized-string writeln/Length bug) FELL OUT here — string[N] now correct.
+- **Slice 4 part 1** (2f55bfb): Val/ValFloat source param `string`->`AnsiString`
+  (frozen args coerce, managed pass through; one proc). Str already worked
+  (frozen->managed assign). test_str_val_managed added.
+
+All four: make test green, self-host fixedpoint byte-identical.
+
+### REMAINING
+- **Slice 4 part 2 (HELD, needs coordination):** flip scalar bare `string` ->
+  tyAnsiString in managed mode + drop the `of`-peek stopgap (parser.inc
+  ParseTypeKind tkString_T). Makes managed the DEFAULT string model -> Track B
+  must re-pin the stable binary. User wants managed-default as the end state but
+  the flip is gated on re-pin coordination.
+- **Slice 3b (cross backends):** widen the symbol-direct frozen `= tyString`
+  checks in ir_codegen386/arm32/aarch64/riscv32/xtensa for tyFixedString. Value
+  checks already work via StrValTk normalisation. Only affects cross FEATURE
+  builds (x64 + cross self-host unaffected — compiler.pas uses AnsiString).
+- **tyShortString true codegen:** byte-length-prefix layout for FPC-ABI shortstring
+  (varargs/TVarRec). `shortstring` keyword currently aliases tyFixedString(255).
+- **Slice 6:** byte-identical BOTH builds, cross+ESP build, extend tests.
+
 ## Landmines
 
 - TTypeKind enum: append only (low ordinals are bootstrap-stable; the seed
