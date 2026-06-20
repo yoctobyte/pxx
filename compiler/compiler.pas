@@ -74,6 +74,8 @@ begin
   TARGET_PTR_SIZE := 8;
   EmitObjMode := False;
   EspBareBoot := False;
+  TargetPlatform := PLATFORM_POSIX;
+  PlatformExplicit := False;
   NoUnhandledHandler := False;
   ThreadSafeMode := False;
   ProcExceptionCleanupFrameActive := False;
@@ -130,6 +132,18 @@ begin
     else if option = '--target=xtensa' then
     begin
       TargetArch := TARGET_XTENSA;
+      Inc(i);
+    end
+    else if option = '--platform=posix' then
+    begin
+      TargetPlatform := PLATFORM_POSIX;
+      PlatformExplicit := True;
+      Inc(i);
+    end
+    else if option = '--platform=esp' then
+    begin
+      TargetPlatform := PLATFORM_ESP;
+      PlatformExplicit := True;
       Inc(i);
     end
     else if option = '--xtensa-abi=call0' then
@@ -242,7 +256,19 @@ begin
   begin writeln(StdErr, '--esp-profile=bare requires --target=riscv32 (esp32c3) or --target=xtensa (esp32s3)'); Halt(1); end;
   if EspBareBoot and (TargetArch = TARGET_XTENSA) and (XtensaABI = XTENSA_ABI_WINDOWED) then
   begin writeln(StdErr, '--esp-profile=bare on xtensa requires Call0 (omit --xtensa-abi=windowed): the windowed ABI needs window-overflow exception handlers + vecbase that bare-metal does not install'); Halt(1); end;
+  { Derive the platform from the target unless --platform= set it explicitly.
+    esp targets (xtensa/riscv32) and bare-metal profiles are esp; all else is
+    posix. The platform axis stays independent: an explicit --platform overrides
+    this (e.g. a hosted RTOS on xtensa later). }
+  if not PlatformExplicit then
+  begin
+    if EspBareBoot or (TargetArch = TARGET_XTENSA) or (TargetArch = TARGET_RISCV32) then
+      TargetPlatform := PLATFORM_ESP
+    else
+      TargetPlatform := PLATFORM_POSIX;
+  end;
   PasApplyTargetDefines;
+  PasApplyPlatformDefines;
   if ParamCount < i then
     begin writeln(StdErr,'usage: pascal26/PXX [--debug] [--dump-ir] [-dNAME] [-uNAME] [-Mobjfpc] [--strict-overload] [--no-unhandled-handler] <src> [out]'); Halt(1); end;
 

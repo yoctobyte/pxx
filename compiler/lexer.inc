@@ -468,6 +468,36 @@ begin
   PasDefine(name);
 end;
 
+procedure PasApplyPlatformDefines;
+var name: AnsiString;
+begin
+  { Platform/OS axis (independent of CPU). Predefine PXX_PLATFORM_* plus the
+    capability set. RTL/IO code gates on the capability defines (PXX_HAS_*),
+    NOT the platform names, so a new platform degrades gracefully by declaring
+    its own capability subset. posix (hosted) = all capabilities; esp (bare)
+    = minimal (no filesystem / sockets / threads / dynamic linking yet).
+    See docs/progress/*/feature-platform-abstraction-layer.md. }
+  if TargetPlatform = PLATFORM_ESP then
+  begin
+    name := 'PXX_PLATFORM_ESP';
+    PasDefine(name);
+    { esp: minimal capability set — backends fill these in as drivers land. }
+  end
+  else
+  begin
+    name := 'PXX_PLATFORM_POSIX';
+    PasDefine(name);
+    name := 'PXX_HAS_FILES';
+    PasDefine(name);
+    name := 'PXX_HAS_SOCKETS';
+    PasDefine(name);
+    name := 'PXX_HAS_THREADS';
+    PasDefine(name);
+    name := 'PXX_HAS_DYNLIB';
+    PasDefine(name);
+  end;
+end;
+
 procedure PasApplyTargetDefines;
 var name: AnsiString;
 begin

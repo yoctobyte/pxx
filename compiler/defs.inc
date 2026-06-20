@@ -312,6 +312,12 @@ const
   TARGET_RISCV32 = 5;
   XTENSA_ABI_CALL0    = 0;
   XTENSA_ABI_WINDOWED = 1;
+  { Platform / OS axis — independent of the CPU axis above. posix = hosted
+    (syscalls, fd IO, sockets, dlopen); esp = bare-metal esp32 (MMIO, no
+    filesystem/sockets yet). Do NOT derive platform from CPU: aarch64 can be
+    posix or bare. See docs/progress/*/feature-platform-abstraction-layer.md. }
+  PLATFORM_POSIX = 0;
+  PLATFORM_ESP   = 1;
   { Bytes reserved below the windowed locals frame for the constant-sp
     expression/argument spill stack. Stage-1 nesting is shallow; 256 = 64
     slots is ample and keeps every offset inside the s32i/l32i imm range. }
@@ -793,6 +799,11 @@ var
   CurUnitDir : AnsiString;
   { Selected compile target (TARGET_*). Default TARGET_X86_64. }
   TargetArch : Integer;
+  { Selected platform/OS (PLATFORM_*). Default PLATFORM_POSIX; derived from the
+    target (esp targets / --esp-profile=bare -> PLATFORM_ESP) unless --platform=
+    overrides. Set explicitly = PlatformExplicit True (suppresses derivation). }
+  TargetPlatform : Integer;
+  PlatformExplicit : Boolean;
   { Xtensa ABI selector. Call0 remains the bare-target default; ESP-IDF uses
     the windowed ABI. }
   XtensaABI : Integer;
