@@ -11,30 +11,50 @@ xtensa + riscv32 have **no float value model at all** — even `a:=1.5; b:=a+2.0
 errors `unsupported node in IR codegen`. This is why float function returns
 couldn't be enabled there in [[feature-cross-float-returns]] (Linux targets done).
 
-## Design — Single stays storage-only; Double is the work
+## OPEN DECISION — what does `Real` map to on no-FPU targets?
 
-The universal rule (every target, incl. these) is: `Single` is a 4-byte storage
-type that **widens to Double for all arithmetic** and narrows on store. PXX has no
-native single math and doesn't want any on double-capable hardware (the convert
-overhead is cheaper than maintaining a second ALU path). So the real job on the
-ESP targets is making **Double** work:
+Per FPC docs: "`real` maps to the **double** type on processors which support
+floating point operations, while it maps to the **single** type on processors
+which do not support floating point operations in hardware." So in FPC `Real` is
+FPU-presence-dependent. **PXX currently deviates** — `Real` is hardwired to
+`tyDouble` on every target (parser.inc:6513,6552), no-FPU included.
 
-| target                     | double arithmetic | single |
-|----------------------------|-------------------|--------|
-| riscv32 (ESP32-C3, no FPU) | soft-float lib    | widen to soft-double |
-| xtensa (ESP32 / S3)        | soft-float lib    | widen to soft-double (baseline) |
+Two coherent options; pick before scoping [[feature-softfloat-lib]]:
 
-So the MVP is the same for both: a soft-double value model that calls
-[[feature-softfloat-lib]]. Single just rides the widen path into soft-double.
+- **(A) FPC-faithful — no-FPU `Real` = Single.** Common float code on riscv lowers
+  to soft-**single** (cheaper, 32-bit; the precision FPC gives there). Explicit
+  `Double` still needs soft-double, but it's the rare path. Pro: matches FPC,
+  cheaper hot path. Con: same `Real` source yields different precision per target
+  (FPC already accepts this); a small parser change to make `Real` target-aware.
+- **(B) Keep `Real`=Double everywhere.** Numeric portability (identical precision
+  all targets) over FPC-fidelity. soft-float lib collapses to double-only; single
+  (rare, explicit) widens to soft-double. Simpler lib, slower/heavier no-FPU
+  arithmetic, documented FPC-deviation.
+
+Recommendation: **(A)** — it's both FPC-correct and the cheaper MVP, and PXX
+already forks numeric width on the integer side (NativeInt/PtrInt). The only real
+cost is a target-aware `Real` mapping in the parser.
+
+## Design (under option A)
+
+`Single` is still storage-only with widen-for-math **on double-capable targets**
+(x86-64/i386/aarch64/arm32 — unchanged, that's the right model there). On no-FPU
+riscv, `Real`→Single means the common path is native soft-single; explicit Double
+is soft-double.
+
+| target                     | hot path (`Real`) | double (explicit) | single |
+|----------------------------|-------------------|-------------------|--------|
+| riscv32 (ESP32-C3, no FPU) | soft-single       | soft-double       | soft-single |
+| xtensa (ESP32 / S3)        | soft-double*      | soft-double       | widen→soft-double (baseline) |
+
+*xtensa has hardware FP, so by the FPC rule `Real`=Double there.
 
 ### Optional optimization (xtensa only, defer)
 
 xtensa has a hardware **single-precision** FPU. Pure-single code could run on it
 instead of widening to soft-double — a speed win for single-heavy ESP workloads.
-This is an OPTIMIZATION, not correctness, and only pays off on xtensa (riscv has no
-FPU; double-capable targets already widen cheaply). Do it after the soft-double
-baseline works, if/when single-on-ESP performance matters. Not on the critical
-path.
+OPTIMIZATION, not correctness; do it after the soft baseline works. Not on the
+critical path.
 
 ## Dependencies
 

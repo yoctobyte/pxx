@@ -13,22 +13,29 @@ soft-integer-divide lives in `compiler/builtin/builtinheap.pas`, but soft-float 
 substantial and conceptually distinct — it gets **its own library file**, not a
 graft onto builtinheap.
 
-## Scope — DOUBLE only (single rides the widen path)
+## Scope — soft SINGLE (primary) + soft DOUBLE (explicit-Double path)
 
-PXX models `Single` as storage-only: it widens to Double for all arithmetic and
-narrows on store (this is the right model — see [[feature-esp-float]]). So a
-no-FPU target's Single code just widens to a **soft-double**, computes there, and
-narrows. That means this library needs **no separate soft-single arithmetic** —
-only double kernels plus the width conversions:
+Drives off the `Real` mapping (see [[feature-esp-float]] — open decision): FPC
+maps `Real` to **Single** on no-FPU processors (double only where there's hardware
+FP). If PXX follows FPC, the *common* float on riscv lowers to soft-**single** —
+cheaper (32-bit mantissa math) and the precision FPC promises there. Explicit
+`Double` still has to work, so soft-double is also needed, just not the hot path.
 
-- `__pxx_dadd/dsub/dmul/ddiv`
-- `__pxx_dcmp` (-1 / 0 / 1; ordered, NaN-aware)
-- conversions: `__pxx_i2d/d2i` (+ u-variants), `__pxx_s2d/d2s` (single<->double bit
-  repack — pure integer, no FPU)
+Kernels (both widths; single is the one to land first):
+- single: `__pxx_sadd/ssub/smul/sdiv`, `__pxx_scmp`
+- double: `__pxx_dadd/dsub/dmul/ddiv`, `__pxx_dcmp`
+- conversions: `__pxx_i2s/s2i/i2d/d2i` (+ u-variants), `__pxx_s2d/d2s` (single<->
+  double bit repack — pure integer)
 
-Round-to-nearest-even. Inf/NaN/zero handled; denormals can be a documented
-follow-up (flush-to-zero first) — but **mul/div rounding must be correct** or
-formatted decimal output diverges from the x86-64 SSE oracle.
+Ordered, NaN-aware compares; round-to-nearest-even. Inf/NaN/zero handled;
+denormals can be a documented follow-up (flush-to-zero first) — but **mul/div
+rounding must be correct** or formatted decimal output diverges from the x86-64
+oracle.
+
+NOTE: if the project instead keeps `Real`=Double on all targets (numeric-
+portability over FPC-fidelity), this collapses to double-kernels-only and single
+rides the widen-to-soft-double path. That mapping decision gates this scope —
+resolve it in [[feature-esp-float]] first.
 
 ## Approach
 
