@@ -25,6 +25,13 @@ around in the suite.
 should go into `tools/library_suite.sh`; `lib-test` can stay short or eventually
 delegate to `library-suite-green`.
 
+## Ticket Discipline
+
+Library-suite work should have a `docs/progress/` ticket like any other feature.
+If a suite change is small enough to happen inline, add the ticket in the same
+commit. When a discovery case reports a new `GAP`, either map it to an existing
+ticket in that ticket's log or create a new backlog ticket before moving on.
+
 ## Track Hints
 
 File Track A tickets when a library test needs compiler, language, codegen,
