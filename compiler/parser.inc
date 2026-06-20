@@ -8969,22 +8969,35 @@ begin
   end
   else if TargetArch = TARGET_RISCV32 then
   begin
-    { RV32 convention: args arrive in a0..a7; spill each into its frame slot.
-      8-byte ordinals store the low word only (fat-slot model, like i386). }
+    { RV32 word-based convention: args arrive in a0..a7 (word k in a[k]); each
+      scalar param is one word, a by-value Int64/UInt64 is two (lo then hi). The
+      call side (ir_codegen_riscv32.inc IR_CALL) pushes the matching word layout.
+      Up to 8 words total (no stack args yet). }
+    pw := 0;
     for i := 0 to nparams-1 do
     begin
       idx := Procs[procIdx].Params[i].SymIdx;
       sz := ParamSize(idx);
-      if i >= 8 then
-        Error('target riscv32: more than 8 parameters not yet supported');
+      if pw >= 8 then
+        Error('target riscv32: more than 8 parameter words not yet supported');
       EmitLoadImmRISCV32(reg_t0, Syms[idx].Offset);
       rv32_add(reg_t0, reg_s0, reg_t0);
-      if sz = 1 then
-        rv32_sb(reg_a0 + i, reg_t0, 0)
-      else if sz = 2 then
-        rv32_sh(reg_a0 + i, reg_t0, 0)
+      if ((Syms[idx].TypeKind = tyInt64) or (Syms[idx].TypeKind = tyUInt64)) and
+         (not Syms[idx].IsRef) and (not Syms[idx].IsArray) then
+      begin
+        rv32_sw(reg_a0 + pw, reg_t0, 0);       { lo (word pw) }
+        if pw + 1 >= 8 then
+          Error('target riscv32: more than 8 parameter words not yet supported');
+        rv32_sw(reg_a0 + pw + 1, reg_t0, 4);   { hi (word pw+1) }
+        Inc(pw, 2);
+      end
       else
-        rv32_sw(reg_a0 + i, reg_t0, 0);
+      begin
+        if sz = 1 then rv32_sb(reg_a0 + pw, reg_t0, 0)
+        else if sz = 2 then rv32_sh(reg_a0 + pw, reg_t0, 0)
+        else rv32_sw(reg_a0 + pw, reg_t0, 0);
+        Inc(pw, 1);
+      end;
     end;
   end
   else if TargetArch = TARGET_XTENSA then
@@ -10341,9 +10354,14 @@ begin
       Str(...) or Val(...) — name immediately followed by '(', so plain
       variables/params named str/val don't drag it in. No DCE, so this keeps it
       out of programs that never use them. }
+    { The full `builtin` unit (Str/Val/Variant) uses frozen-string concat, which
+      the ESP backends (xtensa/riscv32) cannot lower, so it is never pulled there
+      — a program that genuinely needs Str/Val on ESP fails at the call site
+      instead of dragging in an uncompilable unit. }
     if (Tokens[i].Kind = tkIdent) and (i + 1 < TokCount) and
        (Tokens[i + 1].Kind = tkLParen) and
-       (CaseEqual(GetTokenStr(i), 'str') or CaseEqual(GetTokenStr(i), 'val')) then
+       (CaseEqual(GetTokenStr(i), 'str') or CaseEqual(GetTokenStr(i), 'val')) and
+       (TargetArch <> TARGET_XTENSA) and (TargetArch <> TARGET_RISCV32) then
       needsBuiltin := True;
     { Variant use needs VariantToStr (in builtin) for variant writes — on
       x86-64. Cross targets serve variants from builtinheap (PXXVar* helpers)
@@ -10351,7 +10369,8 @@ begin
     if (Tokens[i].Kind = tkIdent) and CaseEqual(GetTokenStr(i), 'Variant') and
        (TargetArch = TARGET_X86_64) then
       needsBuiltin := True;
-    if Tokens[i].Kind = tkUses then
+    if (Tokens[i].Kind = tkUses) and
+       (TargetArch <> TARGET_XTENSA) and (TargetArch <> TARGET_RISCV32) then
       needsBuiltin := True;
     Inc(i);
   end;

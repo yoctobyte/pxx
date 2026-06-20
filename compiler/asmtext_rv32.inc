@@ -207,6 +207,7 @@ begin
   else if CaseEqual(mnem, 'slt') then begin r1 := AsmRv32RegOp(op1); r2 := AsmRv32RegOp(op2); rv32_slt(r0, r1, r2); end
   else if CaseEqual(mnem, 'sltu') then begin r1 := AsmRv32RegOp(op1); r2 := AsmRv32RegOp(op2); rv32_sltu(r0, r1, r2); end
   else if CaseEqual(mnem, 'mul') then begin r1 := AsmRv32RegOp(op1); r2 := AsmRv32RegOp(op2); rv32_mul(r0, r1, r2); end
+  else if CaseEqual(mnem, 'mulhu') then begin r1 := AsmRv32RegOp(op1); r2 := AsmRv32RegOp(op2); rv32_mulhu(r0, r1, r2); end
   else if CaseEqual(mnem, 'div') then begin r1 := AsmRv32RegOp(op1); r2 := AsmRv32RegOp(op2); rv32_div(r0, r1, r2); end
   else if CaseEqual(mnem, 'rem') then begin r1 := AsmRv32RegOp(op1); r2 := AsmRv32RegOp(op2); rv32_rem(r0, r1, r2); end
 

@@ -15,6 +15,7 @@ procedure EmitLoadVarAddrArm32(idx: Integer); forward;
 procedure EmitLoadDataRefArm32(rd, dataOff: Integer); forward;
 procedure EmitLoadVarXtensa(idx: Integer); forward;
 procedure EmitLoadVarRISCV32(idx: Integer); forward;
+procedure EmitLoadVar64RISCV32(idx: Integer); forward;
 procedure EmitLoadImmRISCV32(rd: Integer; v: Int32); forward;
 procedure EmitFrameAddrXtensa(rd: Integer; off: Integer); forward;
 procedure EmitLoadConstXtensa(rd: Integer; v: Int32); forward;
@@ -3758,7 +3759,10 @@ begin
          not (TypeIsOrdinal(Syms[retSymIdx].TypeKind) or
               (Syms[retSymIdx].TypeKind in [tyAnsiString, tyPointer, tyClass])) then
         Error('target riscv32: only ordinal/pointer/string function results supported yet');
-      EmitLoadVarRISCV32(retSymIdx);
+      if (Syms[retSymIdx].TypeKind = tyInt64) or (Syms[retSymIdx].TypeKind = tyUInt64) then
+        EmitLoadVar64RISCV32(retSymIdx)   { 64-bit result in a0:a1 }
+      else
+        EmitLoadVarRISCV32(retSymIdx);
     end;
     rv32_addi(reg_sp, reg_s0, 0);
     rv32_lw(reg_s0, reg_sp, 8);

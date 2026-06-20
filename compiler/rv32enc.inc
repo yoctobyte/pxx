@@ -85,6 +85,7 @@ procedure rv32_andi(rd, rs1, imm: Integer); begin EmitIType(imm, rs1, 7, rd, $13
 procedure rv32_jal(rd, offset: Integer);    begin EmitJType(offset, rd, $6F); end;
 procedure rv32_jalr(rd, rs1, imm: Integer); begin EmitIType(imm, rs1, 0, rd, $67); end;
 procedure rv32_mul(rd, rs1, rs2: Integer);  begin EmitRType(1, rs2, rs1, 0, rd, $33); end;
+procedure rv32_mulhu(rd, rs1, rs2: Integer);begin EmitRType(1, rs2, rs1, 3, rd, $33); end;
 procedure rv32_div(rd, rs1, rs2: Integer);  begin EmitRType(1, rs2, rs1, 4, rd, $33); end;
 procedure rv32_rem(rd, rs1, rs2: Integer);  begin EmitRType(1, rs2, rs1, 6, rd, $33); end;
 procedure rv32_and(rd, rs1, rs2: Integer);  begin EmitRType(0, rs2, rs1, 7, rd, $33); end;
@@ -95,6 +96,9 @@ procedure rv32_srl(rd, rs1, rs2: Integer);  begin EmitRType(0, rs2, rs1, 5, rd, 
 procedure rv32_sra(rd, rs1, rs2: Integer);  begin EmitRType($20, rs2, rs1, 5, rd, $33); end;
 procedure rv32_slt(rd, rs1, rs2: Integer);  begin EmitRType(0, rs2, rs1, 2, rd, $33); end;
 procedure rv32_sltu(rd, rs1, rs2: Integer); begin EmitRType(0, rs2, rs1, 3, rd, $33); end;
+procedure rv32_slli(rd, rs1, sh: Integer);  begin EmitIType(sh and $1F, rs1, 1, rd, $13); end;
+procedure rv32_srli(rd, rs1, sh: Integer);  begin EmitIType(sh and $1F, rs1, 5, rd, $13); end;
+procedure rv32_srai(rd, rs1, sh: Integer);  begin EmitIType((sh and $1F) or $400, rs1, 5, rd, $13); end;
 
 function EncodeRISCVBEQ(rs1, rs2, offset: Integer): Integer;
 var i12, i11, i10_5, i4_1: Integer;

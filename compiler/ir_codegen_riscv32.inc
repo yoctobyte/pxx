@@ -163,6 +163,310 @@ begin
   EmitCallProc(procIdx);
 end;
 
+procedure IREmitNodeRISCV32(node: Integer); forward;
+
+{ ===== 64-bit (Int64/UInt64) value model: a0:a1 = lo:hi register pair =====
+  True 8-byte values live in a0(low):a1(high) in flight, are loaded/stored as two
+  words, and have their own arithmetic/shift/compare sequences (RISC-V has no
+  condition flags, so carry/borrow are synthesised with sltu). Mirrors the arm32
+  r0:r1 / i386 edx:eax models. A 32-bit source widens into a1 (sign/zero-ext);
+  consumers needing only 32 bits keep a0. Scratch: t0:t1 = popped left operand,
+  t2..t6 = temporaries. 64-bit div/mod is intentionally not provided yet (the
+  soft-float kernels avoid the div operator); it errors until added. }
+
+function Is64BitRISCV32(tk: TTypeKind): Boolean;
+begin
+  Result := (tk = tyInt64) or (tk = tyUInt64);
+end;
+
+procedure EmitLoadConst64RISCV32(v: Int64);
+begin
+  EmitLoadImmRISCV32(reg_a0, Integer(v and $FFFFFFFF));
+  EmitLoadImmRISCV32(reg_a1, Integer((v shr 32) and $FFFFFFFF));
+end;
+
+procedure EmitSlotAddr64RISCV32(rd, idx: Integer);
+{ rd = address of an 8-byte slot (global abs / frame-relative; ref forwarded). }
+begin
+  if Syms[idx].Kind = skGlobal then
+    EmitLoadGlobAddrRISCV32(rd, Syms[idx].Offset)
+  else
+  begin
+    EmitLoadImmRISCV32(rd, Syms[idx].Offset);
+    rv32_add(rd, reg_s0, rd);
+    if (Syms[idx].Kind = skParam) and Syms[idx].IsRef then
+      rv32_lw(rd, rd, 0);
+  end;
+end;
+
+procedure EmitLoadVar64RISCV32(idx: Integer);
+begin
+  EmitSlotAddr64RISCV32(reg_t0, idx);
+  rv32_lw(reg_a0, reg_t0, 0);   { lo }
+  rv32_lw(reg_a1, reg_t0, 4);   { hi }
+end;
+
+procedure EmitStoreVar64RISCV32(idx: Integer);
+begin
+  EmitSlotAddr64RISCV32(reg_t0, idx);  { value in a0:a1; addr in t0 }
+  rv32_sw(reg_a0, reg_t0, 0);   { lo }
+  rv32_sw(reg_a1, reg_t0, 4);   { hi }
+end;
+
+procedure EmitNode64RISCV32(node: Integer);
+{ Emit node; guarantee its full 64-bit value sits in a0:a1, widening a 32-bit
+  source (sign-extend signed, zero-extend unsigned) into a1. }
+var ntk: TTypeKind;
+begin
+  IREmitNodeRISCV32(node);
+  ntk := IntToTypeKind(IRTk[node]);
+  if not Is64BitRISCV32(ntk) then
+  begin
+    if TypeSigned(ntk) then
+      rv32_srai(reg_a1, reg_a0, 31)
+    else
+      rv32_addi(reg_a1, reg_zero, 0);
+  end;
+end;
+
+procedure EmitUDivMod64RISCV32(wantMod: Boolean);
+{ Unsigned 64-bit divide. Pre: dividend in t0:t1 (lo:hi), divisor in a0:a1.
+  Restoring binary long division, 64 iterations MSB-first: the dividend doubles
+  as the quotient register (t0:t1), the remainder builds in t2:t3. Post: result
+  (quotient, or remainder when wantMod) in a0:a1. Clobbers t0..t6. }
+begin
+  EmitAsmRv32([
+    'addi t2, zero, 0',     { R.lo = 0 }
+    'addi t3, zero, 0',     { R.hi = 0 }
+    'addi t4, zero, 64',    { count }
+    '.loop:',
+    { shift {R.hi:R.lo:NQ.hi:NQ.lo} left by 1, MSB first }
+    'srli t5, t0, 31',      { NQ.lo top bit }
+    'add t0, t0, t0',       { NQ.lo <<= 1 }
+    'srli t6, t1, 31',      { NQ.hi top bit }
+    'add t1, t1, t1',       { NQ.hi <<= 1 }
+    'or t1, t1, t5',        { NQ.hi |= old NQ.lo top }
+    'srli t5, t2, 31',      { R.lo top bit }
+    'add t2, t2, t2',       { R.lo <<= 1 }
+    'or t2, t2, t6',        { R.lo |= old NQ.hi top }
+    'add t3, t3, t3',       { R.hi <<= 1 }
+    'or t3, t3, t5',        { R.hi |= old R.lo top }
+    { if R (t3:t2) >= divisor (a1:a0) unsigned: subtract, set quotient bit }
+    'bltu t3, a1, .nosub',  { R.hi < D.hi }
+    'bne t3, a1, .sub',     { R.hi > D.hi }
+    'bltu t2, a0, .nosub',  { R.hi == D.hi and R.lo < D.lo }
+    '.sub:',
+    'sltu t5, t2, a0',      { borrow }
+    'sub t2, t2, a0',       { R.lo -= D.lo }
+    'sub t3, t3, a1',       { R.hi -= D.hi }
+    'sub t3, t3, t5',       { R.hi -= borrow }
+    'ori t0, t0, 1',        { quotient bit }
+    '.nosub:',
+    'addi t4, t4, -1',
+    'bne t4, zero, .loop'
+  ]);
+  if wantMod then
+  begin
+    rv32_addi(reg_a0, reg_t2, 0);
+    rv32_addi(reg_a1, reg_t3, 0);
+  end
+  else
+  begin
+    rv32_addi(reg_a0, reg_t0, 0);
+    rv32_addi(reg_a1, reg_t1, 0);
+  end;
+end;
+
+procedure EmitIDivMod64RISCV32(wantMod: Boolean);
+{ Signed 64-bit divide/mod. Truncated: quotient sign = dividend xor divisor,
+  remainder takes the dividend's sign. Operands made non-negative in place, the
+  unsigned core runs, then the sign is applied. Flags live in a3 (the core does
+  not touch a3). Pre/post same regs as the unsigned core. }
+begin
+  EmitAsmRv32([
+    'addi a3, zero, 0',     { flags: bit0 negate-quotient, bit1 negate-remainder }
+    { divisor sign }
+    'bge a1, zero, .dpos',
+    'sltu t6, zero, a0',    { borrow for negate }
+    'sub a0, zero, a0',
+    'sub a1, zero, a1',
+    'sub a1, a1, t6',       { a0:a1 = -divisor }
+    'xori a3, a3, 1',
+    '.dpos:',
+    { dividend sign }
+    'bge t1, zero, .npos',
+    'sltu t6, zero, t0',
+    'sub t0, zero, t0',
+    'sub t1, zero, t1',
+    'sub t1, t1, t6',       { t0:t1 = -dividend }
+    'xori a3, a3, 1',
+    'ori a3, a3, 2',
+    '.npos:'
+  ]);
+  EmitUDivMod64RISCV32(wantMod);   { result in a0:a1; a3 preserved }
+  if wantMod then
+    EmitAsmRv32(['andi t5, a3, 2'])
+  else
+    EmitAsmRv32(['andi t5, a3, 1']);
+  EmitAsmRv32([
+    'beq t5, zero, .done',
+    'sltu t6, zero, a0',
+    'sub a0, zero, a0',
+    'sub a1, zero, a1',
+    'sub a1, a1, t6',       { apply sign }
+    '.done:'
+  ]);
+end;
+
+procedure EmitBinop64RISCV32(left, right, op: Integer; signedOp: Boolean);
+{ (left OP right) as a 64-bit op. left spilled to the stack, right -> a0:a1, left
+  popped into t0:t1. Arithmetic/bit ops leave a0:a1; comparisons leave 0/1 in a0. }
+begin
+  EmitNode64RISCV32(left);
+  rv32_addi(reg_sp, reg_sp, -8);
+  rv32_sw(reg_a0, reg_sp, 0);
+  rv32_sw(reg_a1, reg_sp, 4);
+  EmitNode64RISCV32(right);             { right -> a0:a1 }
+  rv32_lw(reg_t0, reg_sp, 0);           { left.lo (dividend.lo) }
+  rv32_lw(reg_t1, reg_sp, 4);           { left.hi }
+  rv32_addi(reg_sp, reg_sp, 8);
+
+  if (op = Ord(tkDiv)) or (op = Ord(tkMod)) then
+  begin
+    { dividend in t0:t1, divisor in a0:a1 }
+    if signedOp then EmitIDivMod64RISCV32(op = Ord(tkMod))
+    else EmitUDivMod64RISCV32(op = Ord(tkMod));
+  end
+  else if op = Ord(tkPlus) then
+  begin
+    rv32_add(reg_t2, reg_t0, reg_a0);   { lo = t0 + a0 }
+    rv32_sltu(reg_t3, reg_t2, reg_t0);  { carry }
+    rv32_add(reg_a1, reg_t1, reg_a1);   { hi = t1 + a1 }
+    rv32_add(reg_a1, reg_a1, reg_t3);   { hi += carry }
+    rv32_addi(reg_a0, reg_t2, 0);
+  end
+  else if op = Ord(tkMinus) then
+  begin
+    rv32_sltu(reg_t3, reg_t0, reg_a0);  { borrow }
+    rv32_sub(reg_t2, reg_t0, reg_a0);   { lo }
+    rv32_sub(reg_a1, reg_t1, reg_a1);   { hi }
+    rv32_sub(reg_a1, reg_a1, reg_t3);   { hi -= borrow }
+    rv32_addi(reg_a0, reg_t2, 0);
+  end
+  else if op = Ord(tkStar) then
+  begin
+    { low 64 of (t1:t0) * (a1:a0) }
+    rv32_mul(reg_t2, reg_t0, reg_a0);    { lo = low(Alo*Blo) }
+    rv32_mulhu(reg_t3, reg_t0, reg_a0);  { high(Alo*Blo) }
+    rv32_mul(reg_t4, reg_t0, reg_a1);    { low(Alo*Bhi) }
+    rv32_mul(reg_t5, reg_t1, reg_a0);    { low(Ahi*Blo) }
+    rv32_add(reg_a1, reg_t3, reg_t4);
+    rv32_add(reg_a1, reg_a1, reg_t5);
+    rv32_addi(reg_a0, reg_t2, 0);
+  end
+  else if op = Ord(tkAnd) then
+  begin
+    rv32_and(reg_a0, reg_t0, reg_a0);
+    rv32_and(reg_a1, reg_t1, reg_a1);
+  end
+  else if op = Ord(tkOr) then
+  begin
+    rv32_or(reg_a0, reg_t0, reg_a0);
+    rv32_or(reg_a1, reg_t1, reg_a1);
+  end
+  else if op = Ord(tkXor) then
+  begin
+    rv32_xor(reg_a0, reg_t0, reg_a0);
+    rv32_xor(reg_a1, reg_t1, reg_a1);
+  end
+  else if op = Ord(tkShl) then
+  begin
+    { count = a0 (& 63); value = t0:t1 -> a0:a1 }
+    EmitAsmRv32([
+      'andi t5, a0, 63',
+      'addi t2, zero, 32',
+      'bgeu t5, t2, .big',
+      'beq t5, zero, .zero',
+      'sub t3, t2, t5',      { 32 - n }
+      'srl t4, t0, t3',      { lo >> (32-n) }
+      'sll a1, t1, t5',      { hi << n }
+      'or a1, a1, t4',
+      'sll a0, t0, t5',      { lo << n }
+      'j .end',
+      '.big:',
+      'sub t3, t5, t2',      { n - 32 }
+      'sll a1, t0, t3',      { lo << (n-32) }
+      'addi a0, zero, 0',
+      'j .end',
+      '.zero:',
+      'addi a0, t0, 0',
+      'addi a1, t1, 0',
+      '.end:'
+    ]);
+  end
+  else if op = Ord(tkIdent) then   { 'shr' parses as ident; logical on Int64/UInt64 }
+  begin
+    EmitAsmRv32([
+      'andi t5, a0, 63',
+      'addi t2, zero, 32',
+      'bgeu t5, t2, .big',
+      'beq t5, zero, .zero',
+      'sub t3, t2, t5',      { 32 - n }
+      'sll t4, t1, t3',      { hi << (32-n) }
+      'srl a0, t0, t5',      { lo >> n }
+      'or a0, a0, t4',
+      'srl a1, t1, t5',      { hi >> n }
+      'j .end',
+      '.big:',
+      'sub t3, t5, t2',      { n - 32 }
+      'srl a0, t1, t3',      { hi >> (n-32) }
+      'addi a1, zero, 0',
+      'j .end',
+      '.zero:',
+      'addi a0, t0, 0',
+      'addi a1, t1, 0',
+      '.end:'
+    ]);
+  end
+  else if (op = Ord(tkEq)) or (op = Ord(tkNeq)) then
+  begin
+    rv32_xor(reg_t3, reg_t0, reg_a0);
+    rv32_xor(reg_t4, reg_t1, reg_a1);
+    rv32_or(reg_t3, reg_t3, reg_t4);
+    rv32_sltu(reg_t3, reg_zero, reg_t3);   { t3 = (a <> b) }
+    if op = Ord(tkEq) then rv32_xori(reg_a0, reg_t3, 1)
+    else rv32_addi(reg_a0, reg_t3, 0);
+  end
+  else if (op = Ord(tkLt)) or (op = Ord(tkGe)) then
+  begin
+    { a0 = (left < right): hi compare (signed/unsigned) then unsigned lo tiebreak }
+    if signedOp then rv32_slt(reg_t3, reg_t1, reg_a1)
+    else rv32_sltu(reg_t3, reg_t1, reg_a1);
+    rv32_sltu(reg_t4, reg_t0, reg_a0);
+    rv32_xor(reg_t5, reg_t1, reg_a1);
+    rv32_sltu(reg_t5, reg_zero, reg_t5);
+    rv32_xori(reg_t5, reg_t5, 1);          { hi equal }
+    rv32_and(reg_t4, reg_t5, reg_t4);
+    rv32_or(reg_a0, reg_t3, reg_t4);
+    if op = Ord(tkGe) then rv32_xori(reg_a0, reg_a0, 1);   { ge = not lt }
+  end
+  else if (op = Ord(tkGt)) or (op = Ord(tkLe)) then
+  begin
+    { a0 = (left > right) = (right < left) }
+    if signedOp then rv32_slt(reg_t3, reg_a1, reg_t1)
+    else rv32_sltu(reg_t3, reg_a1, reg_t1);
+    rv32_sltu(reg_t4, reg_a0, reg_t0);
+    rv32_xor(reg_t5, reg_t1, reg_a1);
+    rv32_sltu(reg_t5, reg_zero, reg_t5);
+    rv32_xori(reg_t5, reg_t5, 1);
+    rv32_and(reg_t4, reg_t5, reg_t4);
+    rv32_or(reg_a0, reg_t3, reg_t4);
+    if op = Ord(tkLe) then rv32_xori(reg_a0, reg_a0, 1);   { le = not gt }
+  end
+  else
+    Error('target riscv32: 64-bit binop operator not yet supported');
+end;
+
 procedure IREmitNodeRISCV32(node: Integer);
 var
   left, right, op, si, procIdx, nArgs, i, lo, elemSize, sz, argNode, valNode, j: Integer;
@@ -172,7 +476,10 @@ var
 begin
   case IRKind[node] of
     IR_CONST_INT:
-      EmitLoadImmRISCV32(reg_a0, IRIVal[node]);
+      if Is64BitRISCV32(IntToTypeKind(IRTk[node])) then
+        EmitLoadConst64RISCV32(IRIVal[node])
+      else
+        EmitLoadImmRISCV32(reg_a0, IRIVal[node]);
 
     IR_CONST_STR:
       begin
@@ -182,7 +489,10 @@ begin
       end;
 
     IR_LOAD_SYM:
-      EmitLoadVarRISCV32(IRA[node]);
+      if Is64BitRISCV32(Syms[IRA[node]].TypeKind) then
+        EmitLoadVar64RISCV32(IRA[node])
+      else
+        EmitLoadVarRISCV32(IRA[node]);
 
     IR_STORE_SYM:
       begin
@@ -253,8 +563,16 @@ begin
           end;
           Exit;
         end;
-        IREmitNodeRISCV32(IRB[node]);
-        EmitStoreVarRISCV32(IRA[node]);
+        if Is64BitRISCV32(Syms[IRA[node]].TypeKind) then
+        begin
+          EmitNode64RISCV32(IRB[node]);
+          EmitStoreVar64RISCV32(IRA[node]);
+        end
+        else
+        begin
+          IREmitNodeRISCV32(IRB[node]);
+          EmitStoreVarRISCV32(IRA[node]);
+        end;
       end;
 
     IR_LEA:
@@ -451,6 +769,17 @@ begin
           Exit;
         end;
 
+        { 64-bit (Int64/UInt64) ops use the dedicated a0:a1 path. A comparison
+          carries a Boolean result tk, so key off the operands too. }
+        if Is64BitRISCV32(IntToTypeKind(IRTk[node])) or
+           Is64BitRISCV32(IntToTypeKind(IRTk[left])) or
+           Is64BitRISCV32(IntToTypeKind(IRTk[right])) then
+        begin
+          EmitBinop64RISCV32(left, right, op,
+            not ((IntToTypeKind(IRTk[left]) = tyUInt64) or (IntToTypeKind(IRTk[right]) = tyUInt64)));
+          Exit;
+        end;
+
         if (op = Ord(tkPlus)) and (IntToTypeKind(IRTk[node]) = tyString) then
           Error('target riscv32: frozen tyString concat unsupported; only literal+literal folds (combine nested string literals)');
 
@@ -594,24 +923,45 @@ begin
           Error('target riscv32: standard builtin calls not supported in bare-metal stage 1');
         end;
 
+        { Word-based argument passing (matches the callee spill in parser.inc):
+          each scalar arg is one word, a by-value Int64/UInt64 is two (lo then
+          hi). nArgs counts WORDS here; word k is pushed in index order so it
+          lands at [sp + (nWords-1-k)*4], then loads into a[k] (<=8 words). }
         argNode := IRB[node];
-        nArgs := 0;
+        nArgs := 0;     { word count }
+        i := 0;         { argument index }
         while argNode <> -1 do
         begin
-          IREmitNodeRISCV32(IRA[argNode]);
-          { External C call: a Pascal string literal is stored as an 8-byte
-            length prefix + NUL-terminated chars; pass the char data so the
-            callee sees a const char* (same auto-marshal as x86-64). }
-          if ProcExternal[procIdx] and (IntToTypeKind(IRTk[argNode]) = tyString) then
-            rv32_addi(reg_a0, reg_a0, 8);
-          rv32_addi(reg_sp, reg_sp, -4);
-          rv32_sw(reg_a0, reg_sp, 0);
-          Inc(nArgs);
+          if (procIdx >= 0) and (not ProcExternal[procIdx]) and
+             (i < Procs[procIdx].ParamCount) and
+             ((Procs[procIdx].Params[i].TypeKind = tyInt64) or
+              (Procs[procIdx].Params[i].TypeKind = tyUInt64)) and
+             (not Procs[procIdx].Params[i].IsRef) and
+             (not Procs[procIdx].Params[i].IsArray) then
+          begin
+            EmitNode64RISCV32(IRA[argNode]);        { a0=lo, a1=hi }
+            rv32_addi(reg_sp, reg_sp, -4); rv32_sw(reg_a0, reg_sp, 0);  { lo, word nArgs }
+            rv32_addi(reg_sp, reg_sp, -4); rv32_sw(reg_a1, reg_sp, 0);  { hi, word nArgs+1 }
+            Inc(nArgs, 2);
+          end
+          else
+          begin
+            IREmitNodeRISCV32(IRA[argNode]);
+            { External C call: a Pascal string literal is stored as an 8-byte
+              length prefix + NUL-terminated chars; pass the char data so the
+              callee sees a const char*. }
+            if ProcExternal[procIdx] and (IntToTypeKind(IRTk[argNode]) = tyString) then
+              rv32_addi(reg_a0, reg_a0, 8);
+            rv32_addi(reg_sp, reg_sp, -4);
+            rv32_sw(reg_a0, reg_sp, 0);
+            Inc(nArgs, 1);
+          end;
+          Inc(i);
           argNode := IRB[argNode];
         end;
 
         if nArgs > 8 then
-          Error('target riscv32: more than 8 call arguments not supported yet');
+          Error('target riscv32: more than 8 call argument words not supported yet');
 
         for i := 0 to nArgs - 1 do
           rv32_lw(reg_a0 + i, reg_sp, (nArgs - 1 - i) * 4);
