@@ -15,7 +15,7 @@ _none_
 | feature-c-runtime-library | feature | C runtime/library layer (`lib/crtl`) plus direct C-library packages | — |
 | feature-platform-abstraction-layer | feature | Platform Abstraction Layer (PAL): per-platform RTL port at one seam | — |
 
-## backlog (61)
+## backlog (60)
 
 | Ticket | Type | Summary | Blocked-by |
 | --- | --- | --- | --- |
@@ -53,7 +53,6 @@ _none_
 | feature-inline-asm-depth | feature | Inline assembler depth | — |
 | feature-inline-routines | feature | Inline routine expansion (`inline;`) | — |
 | feature-interfaces | feature | Interfaces | — |
-| feature-int-to-float-assign | feature | Integer → Float assignment / coercion missing the int→float conversion | — |
 | feature-json-library | feature | JSON library — parser + serializer (with a roundtrip test app) | — |
 | feature-lazycasing-c-imports | feature | `{$LAZYCASING ON/OFF}` for C imports only | feature-compiler-warnings |
 | feature-metaclass-descendant-enforcement | feature | Metaclass alias descendant-constraint enforcement | — |
@@ -85,7 +84,7 @@ _none_
 
 _none_
 
-## done (94)
+## done (95)
 
 | Ticket | Type | Summary | Blocked-by |
 | --- | --- | --- | --- |
@@ -154,6 +153,7 @@ _none_
 | feature-i386-asm-emitter | feature | i386 text-assembler (`EmitAsm386`) for cleaner x86-32 codegen | — |
 | feature-i386-int64-codegen | feature | Full Int64 codegen for i386 | — |
 | feature-interface-refcounting | feature | Interface reference counting (IInterface / ARC) | — |
+| feature-int-to-float-assign | feature | Integer → Float assignment / coercion missing the int→float conversion | — |
 | feature-language-gaps-from-demos | feature | Language gaps surfaced by the demo apps (sudoku / sieve / chess) | — |
 | feature-library-test-suite | feature | Track B library test suite | — |
 | feature-managed-exception-cleanup | feature | Finalize managed values on exception unwind | — |
@@ -225,7 +225,6 @@ _none_
 - feature-inline-asm-depth
 - feature-inline-routines
 - feature-interfaces
-- feature-int-to-float-assign
 - feature-json-library
 - feature-metaclass-descendant-enforcement
 - feature-networking
