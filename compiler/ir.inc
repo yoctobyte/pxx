@@ -904,6 +904,26 @@ var argTk: TTypeKind;
     caIdent, caCountLit, caArg1, caArg2, caSlCall: Integer;
   coerceParamSym, coerceIntfCi, coerceCast: Integer;
 begin
+  { A frozen-string concatenation used as a call argument builds its result in a
+    272-byte buffer carved off the stack (`sub rsp, 272`, no restore), leaving the
+    pointer at rsp. In a multi-argument call (a method's implicit Self plus the
+    string is the common case) that punches a hole between the argument pushes, so
+    the push/pop marshalling pops buffer bytes instead of the real arguments and
+    corrupts the call. Spill it to a hidden local first — the automatic form of the
+    `s := a + b; f(s)` workaround — and pass the local by ADDRESS: a frozen-string
+    argument is the slot address (IR_LEA), not the loaded value, which for a local
+    would be the inline length word. Managed AnsiString concat returns a heap
+    handle (no stack temp), so this targets only frozen tyString. See
+    bug-stack-corruption-inline-string-concat. }
+  if (IntToTypeKind(ASTTk[argAST]) = tyString) and
+     (ASTKind[argAST] = AN_BINOP) and (Integer(ASTIVal[argAST]) = Ord(tkPlus)) then
+  begin
+    tmpSym := AllocVar('', tyString);
+    value := IRLowerAST(argAST);
+    IRAppend(IR_STORE_SYM, tmpSym, value, -1, 0, Ord(tyString));
+    Result := IRAppend(IR_LEA, tmpSym, -1, -1, 0, Ord(tyString));
+    Exit;
+  end;
   { Implicit class -> interface coercion: a class argument given to an interface
     parameter is wrapped in the same fat-pointer build as an explicit `obj as
     IFoo`, then marshalled by the ordinary record-param ABI (re-entry below). }
