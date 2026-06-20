@@ -45,3 +45,12 @@ handlers (`test/test_exception_typed.pas`), but there is no canonical
   Current pinned v18 output remains `base type not found: Exception`; the suite
   tags it as Track B if a minimal RTL `Exception` class is sufficient, Track A
   if default-scope / exception-runtime behavior needs compiler support.
+- 2026-06-20 — Track B slice implemented in `lib/rtl/sysutils.pas`, matching
+  FPC's home for the base class: `Exception = class` with `Message`,
+  `HelpContext`, and `Create(const msg)`. `test/lib_sysutils.pas` now verifies
+  inherited construction, property access, `raise`, and typed catch via a local
+  descendant.
+- 2026-06-20 — Verified `make library-suite` green with the SysUtils base class.
+  `demo_chess` now gets past the missing base class and fails on the next FPC
+  syntax gap, `EChess = class(Exception);` as an empty descendant shorthand.
+  Tracked separately in `feature-empty-class-shorthand`.

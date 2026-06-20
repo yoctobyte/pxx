@@ -98,7 +98,7 @@ run_green() {
   run_smoke collections -dPXX_MANAGED_STRING "$ROOT/test/test_collections.pas"
   run_smoke math "$ROOT/test/test_math.pas"
   run_expect sysutils \
-    $'0\n-123456789\n10000000000\nhello\nworld\n[]\n[pad]\n42\n-7\n-1\n100\nAB3Z\nab3z\nhello\nab\nbcde\nabcde\nabcde\nhello world\nstart end\nstart end\nabc\nfoobar\nx\nx' \
+    $'0\n-123456789\n10000000000\nhello\nworld\n[]\n[pad]\n42\n-7\n-1\n100\nAB3Z\nab3z\nhello\nab\nbcde\nabcde\nabcde\nhello world\nstart end\nstart end\nabc\nfoobar\nx\nx\nbase\n77\nderived' \
     "$ROOT/test/lib_sysutils.pas"
   run_expect random \
     $'5 6 6 2 6 4 2 5 \n5 6 6 2 6 4 2 5 \n359 891 105 979 687 ' \
@@ -120,7 +120,7 @@ run_green() {
 run_discovery() {
   say "=== library suite: discovery ==="
   probe_compile demo_chess \
-    "Track B if an RTL Exception class is enough; Track A if language/runtime exception surface blocks it" \
+    "Track A: support FPC empty descendant shorthand T = class(TBase); (SysUtils.Exception now exists)" \
     "$ROOT/examples/chess/chess.pas"
   probe_compile demo_adventure \
     "Track A/B boundary: expose Text/Assign default surface and dispatch ReadLn/WriteLn(file, ...) to PAL-backed textfile RTL" \

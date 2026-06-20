@@ -1,6 +1,12 @@
 program lib_sysutils;
 { Unit test for lib/rtl/sysutils. Track B. Build with the pinned stable. }
 uses sysutils;
+
+type
+  ELocal = class(Exception)
+  end;
+
+var e: Exception;
 begin
   { IntToStr (Int64 range) }
   writeln(IntToStr(0));
@@ -20,4 +26,14 @@ begin
   { case }
   writeln(UpperCase('aB3z'));            { AB3Z }
   writeln(LowerCase('aB3z'));            { ab3z }
+  { Exception base class }
+  e := Exception.Create('base');
+  writeln(e.Message);
+  e.HelpContext := 77;
+  writeln(e.HelpContext);
+  try
+    raise ELocal.Create('derived');
+  except
+    on ex: ELocal do writeln(ex.Message);
+  end;
 end.

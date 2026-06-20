@@ -6,6 +6,15 @@ unit sysutils;
 
 interface
 
+type
+  Exception = class
+    FMessage: string;
+    FHelpContext: Integer;
+    constructor Create(const msg: string);
+    property HelpContext: Integer read FHelpContext write FHelpContext;
+    property Message: string read FMessage write FMessage;
+  end;
+
 { Int64 -> decimal string (covers Integer via widening). Handles negatives. }
 function IntToStr(value: Int64): AnsiString;
 
@@ -29,6 +38,12 @@ function UpperCase(const s: AnsiString): AnsiString;
 function LowerCase(const s: AnsiString): AnsiString;
 
 implementation
+
+constructor Exception.Create(const msg: string);
+begin
+  FMessage := msg;
+  FHelpContext := 0;
+end;
 
 function IntToStr(value: Int64): AnsiString;
 var s: AnsiString; neg: Boolean; d: Int64;
