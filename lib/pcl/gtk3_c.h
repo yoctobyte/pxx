@@ -115,8 +115,31 @@ void cairo_select_font_face(void* cr, char* family, int slant, int weight);
 void cairo_set_font_size(void* cr, double size);
 void cairo_show_text(void* cr, char* utf8);
 
+// Menus
+void* gtk_menu_bar_new(void);
+void* gtk_menu_new(void);
+void* gtk_menu_item_new_with_label(char* label);
+void* gtk_menu_item_new_with_mnemonic(char* label);
+void gtk_menu_item_set_submenu(void* menu_item, void* submenu);
+void gtk_menu_shell_append(void* menu_shell, void* menu_item);
+void gtk_menu_item_activate(void* menu_item);
+
+// Box & Container Layout
+void* gtk_box_new(int orientation, int spacing);
+void gtk_box_pack_start(void* box, void* child, int expand, int fill, unsigned int padding);
+void gtk_box_reorder_child(void* box, void* child, int position);
+void gtk_container_remove(void* container, void* widget);
+
+// Widget name (used for data association)
+void gtk_widget_set_name(void* widget, char* name);
+char* gtk_widget_get_name(void* widget);
+
+// Widget visibility
+void gtk_widget_show(void* widget);
+
 // Libc
 int usleep(unsigned int usec);
 
 #endif
+
 

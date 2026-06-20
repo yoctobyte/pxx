@@ -21,11 +21,12 @@ type
   public
     procedure CreateHandle; virtual;
     procedure HandleNeeded;
-    procedure Realize;
-    procedure ApplyCaption; virtual;
+    function Realize: Integer; virtual;
+    function ApplyCaption: Integer; virtual;
     procedure Show;
     procedure ConnectClick;
     procedure SetBounds(ALeft, ATop, AWidth, AHeight: Integer);
+    function GetHandle: Pointer;
     property Handle: Pointer read FHandle write FHandle;
     property Parent: TControl read FParent write SetParent;
   published
@@ -106,6 +107,11 @@ begin
   WidgetSet.ConnectClick(Self);
 end;
 
+function TControl.GetHandle: Pointer;
+begin
+  Result := FHandle;
+end;
+
 procedure TControl.CreateHandle;
 begin
   { Base: no widget. }
@@ -117,8 +123,48 @@ begin
     Self.CreateHandle;
 end;
 
-procedure TControl.Realize;
-var i, n: Integer; c: TComponent; ctl: TControl;
+function GetInstanceClassName(inst: Pointer): string;
+var
+  reg: PRegistry;
+  entries: PRTTIEntry;
+  vmt: Pointer;
+  i: Integer;
+begin
+  Result := '';
+  if inst = nil then Exit;
+  vmt := PPointer(inst)^;
+  reg := __rttireg();
+  if reg = nil then Exit;
+  entries := @reg^.Dummy;
+  for i := 0 to Integer(reg^.Count) - 1 do
+  begin
+    if entries[i].RTTIPtr^.VMTPtr = vmt then
+    begin
+      Result := entries[i].NamePtr^;
+      Exit;
+    end;
+  end;
+end;
+
+function IsSubclassOf(cls: PClassRTTI; const ABaseName: string): Boolean;
+var
+  curr: PClassRTTI;
+begin
+  Result := False;
+  curr := cls;
+  while curr <> nil do
+  begin
+    if curr^.NamePtr^ = ABaseName then
+    begin
+      Result := True;
+      Exit;
+    end;
+    curr := PClassRTTI(curr^.ParentRTTI);
+  end;
+end;
+
+function TControl.Realize: Integer;
+var i, n: Integer; c: TComponent; ctl: TControl; cls: PClassRTTI;
 begin
   Self.HandleNeeded;
   Self.ApplyCaption;
@@ -129,16 +175,22 @@ begin
   for i := 0 to n - 1 do
   begin
     c := Child(i);
-    ctl := c;
-    ctl.Realize;
-    WidgetSet.SetParent(ctl, Self);
+    cls := GetClass(GetInstanceClassName(Pointer(c)));
+    if IsSubclassOf(cls, 'TControl') then
+    begin
+      ctl := TControl(c);
+      ctl.Realize;
+      WidgetSet.SetParent(ctl, Self);
+    end;
   end;
+  Result := 0;
 end;
 
-procedure TControl.ApplyCaption;
+function TControl.ApplyCaption: Integer;
 begin
   if FHandle <> nil then
     WidgetSet.SetText(Self, FCaption);
+  Result := 0;
 end;
 
 procedure TControl.SetParent(p: TControl);

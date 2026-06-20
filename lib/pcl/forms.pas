@@ -2,14 +2,19 @@ unit forms;
 
 interface
 
-uses controls, classes_lite, typinfo, lfm, interfaces, uwidgetset;
+uses controls, classes_lite, typinfo, lfm, interfaces, uwidgetset, menus;
 
 type
   TForm = class(TWinControl)
+  private
+    FMenu: TMainMenu;
+    procedure SetMenu(v: TMainMenu);
   public
     constructor Create;
     procedure CreateHandle; override;
-    procedure ApplyCaption; override;
+    function ApplyCaption: Integer; override;
+    function Realize: Integer; override;
+    property Menu: TMainMenu read FMenu write SetMenu;
   end;
 
   TFormClass = class of TForm;
@@ -31,12 +36,23 @@ var
 
 implementation
 
-
+procedure TForm.SetMenu(v: TMainMenu);
+begin
+  writeln('TForm.SetMenu: Self=', Int64(Self), ' FHandle=', Int64(FHandle), ' v=', Int64(v));
+  FMenu := v;
+  if FHandle <> nil then
+  begin
+    writeln('TForm.SetMenu calling WidgetSet.SetFormMenu');
+    WidgetSet.SetFormMenu(Self, v);
+  end;
+end;
 
 procedure TForm.CreateHandle;
 begin
   Self.Handle := WidgetSet.CreateForm(Self);
   writeln('TForm.CreateHandle: Handle=', Int64(Self.Handle));
+  if FMenu <> nil then
+    WidgetSet.SetFormMenu(Self, FMenu);
 end;
 
 constructor TForm.Create;
@@ -44,10 +60,26 @@ begin
   Self.HandleNeeded;
 end;
 
-procedure TForm.ApplyCaption;
+function TForm.ApplyCaption: Integer;
 begin
   if Self.Handle <> nil then
     WidgetSet.SetText(Self, Self.Caption);
+  Result := 0;
+end;
+
+function TForm.Realize: Integer;
+var dummy: Integer;
+begin
+  writeln('TForm.Realize start');
+  dummy := inherited Realize;
+  writeln('TForm.Realize inherited done, FMenu=', Int64(FMenu));
+  if FMenu <> nil then
+  begin
+    writeln('TForm.Realize calling SetFormMenu');
+    dummy := WidgetSet.SetFormMenu(Self, FMenu);
+  end;
+  writeln('TForm.Realize done');
+  Result := 0;
 end;
 
 procedure TApplication.Initialize;

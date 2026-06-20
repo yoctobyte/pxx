@@ -50,6 +50,7 @@ type
     
     function StartTimer(AInterval: Integer; ACallback: Pointer; AData: Pointer): LongWord; virtual;
     procedure StopTimer(AId: LongWord); virtual;
+    function SetFormMenu(AForm: TComponent; AMenu: TComponent): Integer; virtual;
   end;
 
 var
@@ -100,5 +101,6 @@ procedure TWidgetSet.ClearCombo(AComboBox: TComponent); begin end;
 
 function TWidgetSet.StartTimer(AInterval: Integer; ACallback: Pointer; AData: Pointer): LongWord; begin StartTimer := 0; end;
 procedure TWidgetSet.StopTimer(AId: LongWord); begin end;
+function TWidgetSet.SetFormMenu(AForm: TComponent; AMenu: TComponent): Integer; begin SetFormMenu := 0; end;
 
 end.

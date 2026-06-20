@@ -41,20 +41,21 @@ type
     function GetListIndex(AListBox: TComponent): Integer; override;
     procedure SetListIndex(AListBox: TComponent; AIndex: Integer); override;
     procedure ClearList(AListBox: TComponent); override;
+    procedure DestroyWidget(AWidget: Pointer); override;
     
     procedure AddComboItem(AComboBox: TComponent; const AText: string); override;
     function GetActiveIndex(AComboBox: TComponent): Integer; override;
     procedure SetActiveIndex(AComboBox: TComponent; AIndex: Integer); override;
     procedure ClearCombo(AComboBox: TComponent); override;
-    procedure DestroyWidget(AWidget: Pointer); override;
     
     function StartTimer(AInterval: Integer; ACallback: Pointer; AData: Pointer): LongWord; override;
     procedure StopTimer(AId: LongWord); override;
+    function SetFormMenu(AForm: TComponent; AMenu: TComponent): Integer; override;
   end;
 
 implementation
 
-uses gtk3_c, gtk3, controls, typinfo, graphics, extctrls;
+uses gtk3_c, gtk3, controls, typinfo, graphics, extctrls, menus;
 
 function PCharToStr(p: Pointer): string;
 var
@@ -73,6 +74,174 @@ begin
     end;
   end;
   Result := s;
+end;
+
+function PointerToString(p: Pointer): string;
+var
+  val: Int64;
+  s: string;
+  digit: Integer;
+begin
+  val := Int64(p);
+  s := '';
+  if val = 0 then
+  begin
+    Result := '0';
+    Exit;
+  end;
+  while val > 0 do
+  begin
+    digit := val mod 16;
+    if digit < 10 then
+      s := Chr(48 + digit) + s
+    else
+      s := Chr(55 + digit) + s;
+    val := val div 16;
+  end;
+  Result := s;
+end;
+
+function StringToPointer(const s: string): Pointer;
+var
+  val: Int64;
+  i, digit: Integer;
+begin
+  val := 0;
+  for i := 1 to Length(s) do
+  begin
+    digit := Ord(s[i]);
+    if (digit >= 48) and (digit <= 57) then
+      val := val * 16 + (digit - 48)
+    else if (digit >= 65) and (digit <= 70) then
+      val := val * 16 + (digit - 55)
+    else if (digit >= 97) and (digit <= 102) then
+      val := val * 16 + (digit - 87);
+  end;
+  Result := Pointer(val);
+end;
+
+function GetSubStr(const s: string; start: Integer): string;
+var
+  i: Integer;
+  r: string;
+begin
+  r := '';
+  for i := start to Length(s) do
+    r := r + s[i];
+  Result := r;
+end;
+
+function GetVBoxPtr(win: Pointer): Pointer;
+var
+  namePtr: Pointer;
+  s: string;
+begin
+  writeln('GetVBoxPtr start: win=', Int64(win));
+  Result := nil;
+  namePtr := gtk_widget_get_name(win);
+  writeln('GetVBoxPtr got namePtr=', Int64(namePtr));
+  if namePtr <> nil then
+  begin
+    s := PCharToStr(namePtr);
+    writeln('GetVBoxPtr name string: ', s);
+    if (Length(s) > 5) and (s[1] = 'V') and (s[2] = 'B') and (s[3] = 'O') and (s[4] = 'X') and (s[5] = '_') then
+    begin
+      Result := StringToPointer(GetSubStr(s, 6));
+      writeln('GetVBoxPtr parsed: ', Int64(Result));
+    end;
+  end;
+end;
+
+procedure SetVBoxPtr(win: Pointer; vbox: Pointer);
+var
+  s: string;
+begin
+  writeln('SetVBoxPtr start: win=', Int64(win), ' vbox=', Int64(vbox));
+  if vbox = nil then
+    gtk_widget_set_name(win, PChar(''))
+  else
+  begin
+    s := 'VBOX_' + PointerToString(vbox);
+    writeln('SetVBoxPtr setting name: ', s);
+    gtk_widget_set_name(win, PChar(s));
+  end;
+  writeln('SetVBoxPtr done');
+end;
+
+function GetMenuBarPtr(vbox: Pointer): Pointer;
+var
+  namePtr: Pointer;
+  s: string;
+begin
+  Result := nil;
+  namePtr := gtk_widget_get_name(vbox);
+  if namePtr <> nil then
+  begin
+    s := PCharToStr(namePtr);
+    if (Length(s) > 5) and (s[1] = 'M') and (s[2] = 'B') and (s[3] = 'A') and (s[4] = 'R') and (s[5] = '_') then
+      Result := StringToPointer(GetSubStr(s, 6));
+  end;
+end;
+
+procedure SetMenuBarPtr(vbox: Pointer; menubar: Pointer);
+var
+  s: string;
+begin
+  if menubar = nil then
+    gtk_widget_set_name(vbox, PChar(''))
+  else
+  begin
+    s := 'MBAR_' + PointerToString(menubar);
+    gtk_widget_set_name(vbox, PChar(s));
+  end;
+end;
+
+function GetFixedPtr(widget: Pointer): Pointer;
+var
+  namePtr: Pointer;
+  s: string;
+begin
+  Result := nil;
+  namePtr := gtk_widget_get_name(widget);
+  if namePtr <> nil then
+  begin
+    s := PCharToStr(namePtr);
+    if (Length(s) > 6) and (s[1] = 'F') and (s[2] = 'I') and (s[3] = 'X') and (s[4] = 'E') and (s[5] = 'D') and (s[6] = '_') then
+      Result := StringToPointer(GetSubStr(s, 7));
+  end;
+end;
+
+procedure SetFixedPtr(widget: Pointer; fixed: Pointer);
+var
+  s: string;
+begin
+  if fixed = nil then
+    gtk_widget_set_name(widget, PChar(''))
+  else
+  begin
+    s := 'FIXED_' + PointerToString(fixed);
+    gtk_widget_set_name(widget, PChar(s));
+  end;
+end;
+
+function GetContainerFixed(ph: Pointer; cls: PClassRTTI): Pointer;
+var
+  vbox: Pointer;
+begin
+  if IsSubclassOf(cls, 'TForm') then
+  begin
+    vbox := GetVBoxPtr(ph);
+    if vbox <> nil then
+      Result := GetFixedPtr(vbox)
+    else
+      Result := GetFixedPtr(ph);
+  end
+  else if IsSubclassOf(cls, 'TPanel') then
+  begin
+    Result := GetFixedPtr(ph);
+  end
+  else
+    Result := ph;
 end;
 
 function GetInstanceClassName(inst: Pointer): string;
@@ -136,6 +305,15 @@ var ctl: TControl; m: TMethod;
 begin
   ctl := userdata;
   m := ctl.OnClick;
+  if m.Code <> nil then
+    CallMethod(m.Code, m.Data, userdata);
+end;
+
+procedure MenuItemActivateTramp(widget: Pointer; userdata: Pointer); cdecl;
+var item: TMenuItem; m: TMethod;
+begin
+  item := TMenuItem(userdata);
+  m := item.OnClick;
   if m.Code <> nil then
     CallMethod(m.Code, m.Data, userdata);
 end;
@@ -228,13 +406,17 @@ begin
 end;
 
 function TGtk3WidgetSet.CreateForm(AForm: TComponent): Pointer;
-var win, fixed: Pointer;
+var win, vbox, fixed: Pointer;
 begin
   win := gtk_window_new(GTK_WINDOW_TOPLEVEL);
   writeln('TGtk3WidgetSet.CreateForm: win=', Int64(win));
   gtk_window_set_default_size(win, 320, 240);
+  vbox := gtk_box_new(1, 0);
+  gtk_container_add(win, vbox);
+  SetVBoxPtr(win, vbox);
   fixed := gtk_fixed_new();
-  gtk_container_add(win, fixed);
+  gtk_box_pack_start(vbox, fixed, 1, 1, 0);
+  SetFixedPtr(vbox, fixed);
   Result := win;
 end;
 
@@ -319,7 +501,7 @@ begin
       cls := GetClass(GetInstanceClassName(Pointer(pctl)));
       if IsSubclassOf(cls, 'TForm') or IsSubclassOf(cls, 'TPanel') then
       begin
-        container := gtk_bin_get_child(ph);
+        container := GetContainerFixed(ph, cls);
         if (container <> nil) and (gtk_widget_get_parent(ch) = container) then
           gtk_fixed_move(container, ch, ALeft, ATop);
       end;
@@ -341,10 +523,7 @@ begin
   if (ch = nil) or (ph = nil) then Exit;
   
   cls := GetClass(GetInstanceClassName(Pointer(pctl)));
-  if IsSubclassOf(cls, 'TForm') or IsSubclassOf(cls, 'TPanel') then
-    container := gtk_bin_get_child(ph)
-  else
-    container := ph;
+  container := GetContainerFixed(ph, cls);
     
   gtk_fixed_put(container, ch, ctl.Left, ctl.Top);
 end;
@@ -615,6 +794,109 @@ procedure TGtk3WidgetSet.DestroyWidget(AWidget: Pointer);
 begin
   if AWidget <> nil then
     gtk_widget_destroy(AWidget);
+end;
+
+function ConvertAmpersand(const s: string): string;
+var i: Integer; r: string;
+begin
+  r := '';
+  for i := 1 to Length(s) do
+    if s[i] = '&' then
+      r := r + '_'
+    else
+      r := r + s[i];
+  Result := r;
+end;
+
+procedure BuildSubMenu(parentItem: TMenuItem; parentMenuWidget: Pointer);
+var
+  i: Integer;
+  childItem: TMenuItem;
+  childWidget, submenuWidget: Pointer;
+begin
+  for i := 0 to parentItem.Count - 1 do
+  begin
+    childItem := parentItem.Item(i);
+    childWidget := gtk_menu_item_new_with_mnemonic(PChar(ConvertAmpersand(childItem.Caption)));
+    childItem.Handle := childWidget;
+    gtk_menu_shell_append(parentMenuWidget, childWidget);
+    
+    SignalConnectData(childWidget, 'activate', @MenuItemActivateTramp, Pointer(childItem));
+    
+    if childItem.Count > 0 then
+    begin
+      submenuWidget := gtk_menu_new();
+      gtk_menu_item_set_submenu(childWidget, submenuWidget);
+      BuildSubMenu(childItem, submenuWidget);
+    end;
+    gtk_widget_show(childWidget);
+  end;
+end;
+
+function TGtk3WidgetSet.SetFormMenu(AForm: TComponent; AMenu: TComponent): Integer;
+var
+  win, vbox, menubar, topWidget, submenuWidget: Pointer;
+  menu: TMainMenu;
+  topLevelItem: TMenuItem;
+  i: Integer;
+  ctl: TControl;
+begin
+  writeln('SetFormMenu start: AForm=', Int64(AForm), ' AMenu=', Int64(AMenu));
+  ctl := TControl(AForm);
+  win := ctl.GetHandle;
+  writeln('SetFormMenu: win=', Int64(win));
+  if win = nil then begin writeln('SetFormMenu: win is nil'); Result := 0; Exit; end;
+  menu := TMainMenu(AMenu);
+  if menu = nil then begin writeln('SetFormMenu: menu is nil'); Result := 0; Exit; end;
+  
+  vbox := GetVBoxPtr(win);
+  writeln('SetFormMenu vbox=', Int64(vbox));
+  if vbox = nil then begin writeln('SetFormMenu: vbox is nil'); Result := 0; Exit; end;
+  
+  writeln('SetFormMenu checking old menubar');
+  menubar := GetMenuBarPtr(vbox);
+  if menubar <> nil then
+  begin
+    writeln('SetFormMenu destroying old menubar');
+    gtk_widget_destroy(menubar);
+  end;
+    
+  writeln('SetFormMenu creating new menubar');
+  menubar := gtk_menu_bar_new();
+  writeln('SetFormMenu new menubar=', Int64(menubar));
+  SetMenuBarPtr(vbox, menubar);
+  
+  writeln('SetFormMenu building items: count=', menu.Items.Count);
+  for i := 0 to menu.Items.Count - 1 do
+  begin
+    topLevelItem := menu.Items.Item(i);
+    writeln('SetFormMenu top-level item ', i, ' addr=', Int64(topLevelItem), ' class=', GetInstanceClassName(Pointer(topLevelItem)), ' name=', topLevelItem.Name, ' caption=', topLevelItem.Caption);
+    topWidget := gtk_menu_item_new_with_mnemonic(PChar(ConvertAmpersand(topLevelItem.Caption)));
+    topLevelItem.Handle := topWidget;
+    gtk_menu_shell_append(menubar, topWidget);
+    
+    if topLevelItem.Count > 0 then
+    begin
+      writeln('SetFormMenu item ', i, ' has submenu');
+      submenuWidget := gtk_menu_new();
+      gtk_menu_item_set_submenu(topWidget, submenuWidget);
+      BuildSubMenu(topLevelItem, submenuWidget);
+    end
+    else
+    begin
+      SignalConnectData(topWidget, 'activate', @MenuItemActivateTramp, Pointer(topLevelItem));
+    end;
+    gtk_widget_show(topWidget);
+  end;
+  
+  writeln('SetFormMenu packing menubar into vbox');
+  gtk_box_pack_start(vbox, menubar, 0, 0, 0);
+  writeln('SetFormMenu reordering menubar to top');
+  gtk_box_reorder_child(vbox, menubar, 0);
+  writeln('SetFormMenu showing menubar');
+  gtk_widget_show(menubar);
+  writeln('SetFormMenu done');
+  Result := 0;
 end;
 
 initialization
