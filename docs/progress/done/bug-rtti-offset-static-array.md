@@ -39,3 +39,14 @@ The compiler's RTTI/layout generation in `compiler/symtab.inc` and `compiler/rtt
 
 ## Log
 - 2026-06-20 — opened. Discovered while implementing TListBox/TComboBox.
+
+## RESOLVED 2026-06-20 (Track A) — by the string-size-model arc
+
+Root cause was the same string-size mismatch as bug-string-type-size-mismatch:
+`array[0..255] of string` mis-sized its element stride (frozen tyString claimed
+8 bytes for layout but copied a large inline buffer), corrupting fields after
+the array. With the managed-default flip (slices 4p1+4p2) a `string` element is
+a managed 8-byte handle, so the static-array field is sized/laid out correctly.
+Verified: a class with `FItems: array[0..255] of string; FCount: Integer;` reads
+FCount correctly before and after writing FItems[0]/FItems[255] (no offset
+corruption). Closed with the string-model arc.

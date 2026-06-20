@@ -47,3 +47,14 @@ Do not name user-defined classes `TMyClass`. Use a different name (e.g. `TTestCo
 ## Fix Direction
 
 Remove the hardcoded references to `'TMyClass'` and `REC_TMYCLASS` from the compiler source files (`compiler/symtab.inc`, `compiler/parser.inc`, etc.) and ensure that `TMyClass` is resolved dynamically as a user class like any other type.
+
+## RESOLVED 2026-06-20 (Track A)
+
+Removed the hardcoded `'TMyClass'` -> REC_TMYCLASS mappings from IsClassType +
+IsRecordType (symtab.inc) and ParseTypeKind (parser.inc). A user class named
+TMyClass now resolves as a normal user class (REC_UCLASS_BASE+ci), so method
+calls work. The REC_TMYCLASS=10 constant and its dead builtin-layout self-check
+stay (harmless; RecSize still returns 16) to avoid renumbering the bootstrap-
+stable REC_* ordinals. test/test_class.pas (declares TMyClass) still passes via
+user-class resolution; test/test_tmyclass_name.pas adds the method-call case.
+Byte-identical self-host, make test green.

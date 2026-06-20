@@ -69,3 +69,17 @@ should learn this lvalue shape.
 
 - 2026-06-20 — opened from Track B PNG library work. Reproduces with pinned
   stable when compiling `test/lib_png.pas`.
+
+## RESOLVED 2026-06-20 (Track A)
+
+Function-return-type parsing only set `retIsDynArr` for a literal `array of T`
+result; a NAMED dynamic-array alias (e.g. `TByteArray = array of Byte`) fell
+through to the scalar path, so `Result` was a non-array local and SetLength
+routed to the string path (-101) -> "expects a string variable". Fix: in the
+isFunc return-type block (parser.inc), detect a named dyn-array alias via
+FindArrayType + ArrTypeIsDyn and set retIsDynArr/retElemTk/retElemRec, so
+Result is allocated as a resizable dyn-array local. SetLength(Result, n) and
+indexed writes now work for both literal and named-alias dyn-array results.
+test/test_setlength_dynarray_result.pas added; byte-identical self-host,
+make test green. (NOTE: inline indexing of a dyn-array-returning CALL —
+`MakeBytes(1)[0]` — is a separate parser gap, not this bug.)

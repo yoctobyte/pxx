@@ -71,3 +71,11 @@ float-decimal conversion inline without relying on a `Copy` intercept at all.
   [[design-overloadable-intrinsics]]). Either fixed since the v20-era filing or
   the original repro was incomplete. NEXT: lib agent to supply the precise
   failing source (specific arg shapes / nested `uses` order), else close.
+
+## CLOSED (non-reproducible) 2026-06-20 — pinned v26
+
+Re-verified on v26: the exact repro (`uses sysutils` declaring `Copy` + `Str(d:0:2, s)`)
+compiles and prints `3.14`. The `Copy` resolution is procIdx-gated so a user
+`Copy` and the dynarray intrinsic no longer collide ([[design-overloadable-intrinsics]]).
+No failing source was supplied since the v20-era filing. Closing as non-repro;
+reopen with exact failing source (arg shapes / nested uses order) if it recurs.

@@ -100,3 +100,15 @@ make test green. test/test_array_of_string.pas added.
 STILL OPEN (the full arc): scalar `string`->AnsiString flip + Str/Val managed
 support, `shortstring` keyword, STRING_CAP->small default, frozen-sized-string
 writeln bug, and the `tyFixedString` disambiguation.
+
+## RESOLVED 2026-06-20 (string-model slices 4p1+4p2, commits ca85010/1786e36, pinned v26)
+
+Closed by the full string-model arc. Scalar bare `string` now resolves to
+managed `tyAnsiString` in managed mode (the default); `string[N]`/`shortstring`
+stay frozen `tyFixedString`; `-uPXX_MANAGED_STRING` keeps everything frozen.
+Str/Val/StrInt/FloatToStr/PCharToString and the array/record/field paths all
+handle the managed kind. The `array of string` repro above prints
+Apple/Banana/Cherry (no overlap/corruption). Byte-identical self-host + cross
+(i386/aarch64/arm32) + ESP green. Remaining sub-items (tyShortString true
+byte-prefix, STRING_CAP->small default for the legacy frozen-global relic) are
+tracked under feature-string-model-tyfixedstring (slice 6).

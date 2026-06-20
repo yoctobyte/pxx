@@ -99,3 +99,15 @@ Part of the string-model arc. Two viable end states:
   (commit 6355d7d); the underlying `tyAnsiString -> tyString` codegen bug was
   left unfiled — this ticket records it. Tied to the managed-default flip
   (4p2 HELD) and the cross-kind-assign coercion in the string-model arc.
+
+## RESOLVED 2026-06-20 (string-model slice 4p2, commits ca85010/1786e36, pinned v26)
+
+The managed-default flip makes scalar `string` resolve to `tyAnsiString`, so
+`array of string` and `s: string` agree and the silent cross-kind assign is
+gone for normal code. For the genuinely-mixed case a real coercion was added:
+managed source -> frozen `string[N]` store materialises the handle's chars into
+the inline buffer (ir_codegen.inc IR_STORE_SYM frozen path), and the dual
+frozen->managed (incl. via pointer deref `m := p^`) materialises a managed
+handle. Regression test/test_managed_string_flip.pas covers both directions +
+the original repro; wired into `make test`. PCL stdctrls.pas can now drop the
+explicit-AnsiString workaround (6355d7d) — handed to Track B with the v26 re-pin.
