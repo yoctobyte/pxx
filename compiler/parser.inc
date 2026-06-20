@@ -10140,15 +10140,20 @@ begin
   dummyNames[0] := 'p';     dummyTypes[0] := tyPointer;
   i := RegisterProc('PXXStrIncRef', False, tyPointer, 1, dummyNames, dummyTypes);
   i := RegisterProc('PXXStrDecRef', False, tyPointer, 1, dummyNames, dummyTypes);
-  dummyNames[0] := 'fatptr'; dummyTypes[0] := tyPointer;
-  i := RegisterProc('PXXIntfAddRef', True, tyNativeInt, 1, dummyNames, dummyTypes);
-  i := RegisterProc('PXXIntfRelease', True, tyNativeInt, 1, dummyNames, dummyTypes);
-  dummyNames[0] := 'imt';  dummyTypes[0] := tyPointer;
-  dummyNames[1] := 'inst'; dummyTypes[1] := tyPointer;
-  i := RegisterProc('PXXIntfAddRefRaw', True, tyNativeInt, 2, dummyNames, dummyTypes);
-  dummyNames[0] := 'dest'; dummyTypes[0] := tyPointer;
-  dummyNames[1] := 'src';  dummyTypes[1] := tyPointer;
-  i := RegisterProc('PXXIntfAssign', False, tyPointer, 2, dummyNames, dummyTypes);
+  { COM/ARC interface ARC helpers: not on ESP (indirect IMT dispatch the ESP
+    backends can't lower; bodies are {$ifndef PXX_ESP}-guarded in builtinheap). }
+  if (TargetArch <> TARGET_XTENSA) and (TargetArch <> TARGET_RISCV32) then
+  begin
+    dummyNames[0] := 'fatptr'; dummyTypes[0] := tyPointer;
+    i := RegisterProc('PXXIntfAddRef', True, tyNativeInt, 1, dummyNames, dummyTypes);
+    i := RegisterProc('PXXIntfRelease', True, tyNativeInt, 1, dummyNames, dummyTypes);
+    dummyNames[0] := 'imt';  dummyTypes[0] := tyPointer;
+    dummyNames[1] := 'inst'; dummyTypes[1] := tyPointer;
+    i := RegisterProc('PXXIntfAddRefRaw', True, tyNativeInt, 2, dummyNames, dummyTypes);
+    dummyNames[0] := 'dest'; dummyTypes[0] := tyPointer;
+    dummyNames[1] := 'src';  dummyTypes[1] := tyPointer;
+    i := RegisterProc('PXXIntfAssign', False, tyPointer, 2, dummyNames, dummyTypes);
+  end;
   dummyNames[0] := 'strSlot'; dummyTypes[0] := tyPointer;
   i := RegisterProc('PXXStrUnique', True, tyPointer, 1, dummyNames, dummyTypes);
   dummyNames[0] := 'strSlot'; dummyTypes[0] := tyPointer;

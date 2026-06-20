@@ -61,10 +61,16 @@ function PXXStrFromLit(len: NativeInt; src: Pointer): Pointer;
 function PXXStrConcat(lenA: NativeInt; srcA: Pointer; srcB: Pointer; lenB: NativeInt): Pointer;
 procedure PXXStrIncRef(p: Pointer);
 procedure PXXStrDecRef(p: Pointer);
+{ COM/ARC interface ARC helpers dispatch through the IMT via an indirect call,
+  which the ESP (xtensa/riscv32) backends cannot lower yet; ESP has no COM
+  interfaces anyway, so exclude them there (their RegisterProc is likewise
+  gated in parser.inc). }
+{$ifndef PXX_ESP}
 function PXXIntfAddRef(fatptr: Pointer): NativeInt;
 function PXXIntfRelease(fatptr: Pointer): NativeInt;
 function PXXIntfAddRefRaw(imt, inst: Pointer): NativeInt;
 procedure PXXIntfAssign(dest, src: Pointer);
+{$endif}
 function PXXStrUnique(strSlot: Pointer): Pointer;
 function PXXStrEq(lenA: NativeInt; srcA: Pointer; lenB: NativeInt; srcB: Pointer): Int64;
 procedure PXXStrSetLen(strSlot: Pointer; newLen: NativeInt);
@@ -506,6 +512,7 @@ end;
   dispatches polymorphically into the concrete TInterfacedObject-derived method.
   Both are nil-safe (an uninitialised interface var is all-zero); _Release at
   zero frees the instance inside the dispatched method. }
+{$ifndef PXX_ESP}
 function PXXIntfAddRef(fatptr: Pointer): NativeInt;
 var imt, inst: Pointer; fn: TPXXIntfMethod;
 begin
@@ -554,6 +561,7 @@ begin
   PWord(Pointer(Int64(dest) + SizeOf(Pointer)))^ :=
     PWord(Pointer(Int64(src) + SizeOf(Pointer)))^;
 end;
+{$endif}
 
 { Ensure the managed AnsiString handle stored at strSlot is uniquely owned.
   Returns the data pointer to index/write. }
