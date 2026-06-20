@@ -143,9 +143,15 @@ end;
 
 procedure TControl.SetParent(p: TControl);
 begin
+  writeln('TControl.SetParent start: Self=', Int64(Self), ' p=', Int64(p));
   FParent := p;
   if p <> nil then
+  begin
+    writeln('TControl.SetParent calling AddChild');
     p.AddChild(Self);
+    writeln('TControl.SetParent returned from AddChild');
+  end;
+  writeln('TControl.SetParent done');
 end;
 
 procedure TControl.Show;

@@ -2,7 +2,7 @@ unit extctrls;
 
 interface
 
-uses classes_lite, controls, uwidgetset, typinfo;
+uses classes_lite, controls, uwidgetset, typinfo, graphics;
 
 type
   TPanel = class(TWinControl)
@@ -27,6 +27,19 @@ type
     property Interval: Integer read FInterval write SetInterval;
     property Enabled: Boolean read FEnabled write SetEnabled;
     property OnTimer: TMethod read FOnTimer write FOnTimer;
+  end;
+
+  TPaintBox = class(TControl)
+  private
+    FCanvas: TCanvas;
+    FOnPaint: TMethod;
+  public
+    constructor Create;
+    destructor Destroy;
+    procedure CreateHandle; override;
+    property Canvas: TCanvas read FCanvas;
+  published
+    property OnPaint: TMethod read FOnPaint write FOnPaint;
   end;
 
 implementation
@@ -88,6 +101,24 @@ begin
   begin
     FTimerId := WidgetSet.StartTimer(FInterval, nil, Self);
   end;
+end;
+
+{ TPaintBox }
+
+constructor TPaintBox.Create;
+begin
+  FCanvas := TCanvas.Create;
+  Self.HandleNeeded;
+end;
+
+destructor TPaintBox.Destroy;
+begin
+  FCanvas.Destroy;
+end;
+
+procedure TPaintBox.CreateHandle;
+begin
+  Self.Handle := WidgetSet.CreatePaintBox(Self);
 end;
 
 end.

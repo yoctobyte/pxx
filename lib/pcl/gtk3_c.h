@@ -53,6 +53,7 @@ void* gtk_frame_new(char* label);
 void* gtk_fixed_new(void);
 void gtk_fixed_put(void* container, void* widget, int x, int y);
 void gtk_fixed_move(void* container, void* widget, int x, int y);
+void* gtk_widget_get_parent(void* widget);
 void gtk_widget_set_size_request(void* widget, int width, int height);
 void* gtk_bin_get_child(void* bin);
 
@@ -62,6 +63,57 @@ int gtk_dialog_run(void* dialog);
 
 // Timer source removal
 int g_source_remove(unsigned int tag);
+
+// Scrolled Window & Text View (TMemo)
+#define GTK_POLICY_ALWAYS 0
+#define GTK_POLICY_AUTOMATIC 1
+#define GTK_POLICY_NEVER 2
+
+void* gtk_scrolled_window_new(void* hadjustment, void* vadjustment);
+void gtk_scrolled_window_set_policy(void* scrolled_window, int hpolicy, int vpolicy);
+void* gtk_text_view_new(void);
+void* gtk_text_view_get_buffer(void* text_view);
+void gtk_text_buffer_set_text(void* buffer, char* text, int len);
+char* gtk_text_buffer_get_text(void* buffer, void* start, void* end, int include_hidden);
+void gtk_text_buffer_get_start_iter(void* buffer, void* iter);
+void gtk_text_buffer_get_end_iter(void* buffer, void* iter);
+
+// List Box (TListBox)
+void* gtk_list_box_new(void);
+void* gtk_list_box_row_new(void);
+void gtk_list_box_insert(void* list_box, void* widget, int position);
+void* gtk_list_box_get_selected_row(void* list_box);
+int gtk_list_box_row_get_index(void* row);
+void* gtk_list_box_get_row_at_index(void* list_box, int index_);
+void gtk_list_box_select_row(void* list_box, void* row);
+
+// Combo Box (TComboBox)
+void* gtk_combo_box_text_new(void);
+void gtk_combo_box_text_append_text(void* combo_box_text, char* text);
+int gtk_combo_box_get_active(void* combo_box);
+void gtk_combo_box_set_active(void* combo_box, int index_);
+void gtk_combo_box_text_remove_all(void* combo_box_text);
+
+// Drawing Area (TPaintBox)
+void* gtk_drawing_area_new(void);
+
+// Cairo drawing functions
+void cairo_save(void* cr);
+void cairo_restore(void* cr);
+void cairo_translate(void* cr, double tx, double ty);
+void cairo_scale(void* cr, double sx, double sy);
+void cairo_move_to(void* cr, double x, double y);
+void cairo_line_to(void* cr, double x, double y);
+void cairo_stroke(void* cr);
+void cairo_set_source_rgb(void* cr, double r, double g, double b);
+void cairo_set_line_width(void* cr, double width);
+void cairo_rectangle(void* cr, double x, double y, double width, double height);
+void cairo_fill(void* cr);
+void cairo_fill_preserve(void* cr);
+void cairo_arc(void* cr, double xc, double yc, double radius, double angle1, double angle2);
+void cairo_select_font_face(void* cr, char* family, int slant, int weight);
+void cairo_set_font_size(void* cr, double size);
+void cairo_show_text(void* cr, char* utf8);
 
 // Libc
 int usleep(unsigned int usec);

@@ -17,6 +17,10 @@ type
     function CreateEdit(AEdit: TComponent): Pointer; override;
     function CreateCheckBox(ACheckBox: TComponent): Pointer; override;
     function CreatePanel(APanel: TComponent): Pointer; override;
+    function CreateMemo(AMemo: TComponent): Pointer; override;
+    function CreateListBox(AListBox: TComponent): Pointer; override;
+    function CreateComboBox(AComboBox: TComponent): Pointer; override;
+    function CreatePaintBox(APaintBox: TComponent): Pointer; override;
     
     procedure SetText(AControl: TComponent; const AText: string); override;
     procedure SetBounds(AControl: TComponent; ALeft, ATop, AWidth, AHeight: Integer); override;
@@ -30,21 +34,32 @@ type
     procedure SetChecked(AControl: TComponent; AChecked: Boolean); override;
     function GetChecked(AControl: TComponent): Boolean; override;
     
+    function GetMemoText(AMemo: TComponent): string; override;
+    procedure SetMemoText(AMemo: TComponent; const AText: string); override;
+    
+    function AddListItem(AListBox: TComponent; const AText: string): Pointer; override;
+    function GetListIndex(AListBox: TComponent): Integer; override;
+    procedure SetListIndex(AListBox: TComponent; AIndex: Integer); override;
+    procedure ClearList(AListBox: TComponent); override;
+    
+    procedure AddComboItem(AComboBox: TComponent; const AText: string); override;
+    function GetActiveIndex(AComboBox: TComponent): Integer; override;
+    procedure SetActiveIndex(AComboBox: TComponent; AIndex: Integer); override;
+    procedure ClearCombo(AComboBox: TComponent); override;
+    procedure DestroyWidget(AWidget: Pointer); override;
+    
     function StartTimer(AInterval: Integer; ACallback: Pointer; AData: Pointer): LongWord; override;
     procedure StopTimer(AId: LongWord); override;
   end;
 
 implementation
 
-uses gtk3_c, gtk3, controls, typinfo;
-
-type
-  PC = ^Char;
+uses gtk3_c, gtk3, controls, typinfo, graphics, extctrls;
 
 function PCharToStr(p: Pointer): string;
 var
   s: string;
-  c: PC;
+  c: PChar;
 begin
   s := '';
   if p <> nil then
@@ -123,6 +138,27 @@ begin
   m := ctl.OnClick;
   if m.Code <> nil then
     CallMethod(m.Code, m.Data, userdata);
+end;
+
+function ControlDrawTramp(widget: Pointer; cr: Pointer; userdata: Pointer): Boolean; cdecl;
+var
+  ctl: TControl;
+  paintBox: TPaintBox;
+  m: TMethod;
+  cls: PClassRTTI;
+begin
+  Result := False;
+  ctl := TControl(userdata);
+  cls := GetClass(GetInstanceClassName(userdata));
+  if IsSubclassOf(cls, 'TPaintBox') then
+  begin
+    paintBox := TPaintBox(userdata);
+    paintBox.Canvas.Handle := cr;
+    m := paintBox.OnPaint;
+    if m.Code <> nil then
+      CallMethod(m.Code, m.Data, userdata);
+    paintBox.Canvas.Handle := nil;
+  end;
 end;
 
 procedure ControlToggleTramp(widget: Pointer; userdata: Pointer); cdecl;
@@ -204,12 +240,12 @@ end;
 
 function TGtk3WidgetSet.CreateButton(AButton: TComponent): Pointer;
 begin
-  Result := gtk_button_new_with_label(PC(''));
+  Result := gtk_button_new_with_label(PChar(''));
 end;
 
 function TGtk3WidgetSet.CreateLabel(ALabel: TComponent): Pointer;
 begin
-  Result := gtk_label_new(PC(''));
+  Result := gtk_label_new(PChar(''));
 end;
 
 function TGtk3WidgetSet.CreateEdit(AEdit: TComponent): Pointer;
@@ -219,7 +255,7 @@ end;
 
 function TGtk3WidgetSet.CreateCheckBox(ACheckBox: TComponent): Pointer;
 begin
-  Result := gtk_check_button_new_with_label(PC(''));
+  Result := gtk_check_button_new_with_label(PChar(''));
 end;
 
 function TGtk3WidgetSet.CreatePanel(APanel: TComponent): Pointer;
@@ -241,19 +277,23 @@ begin
   if h = nil then Exit;
   
   className := GetInstanceClassName(Pointer(AControl));
+  writeln('TGtk3WidgetSet.SetText: className=', className);
+  writeln('IsSubclassOf address = ', Int64(@IsSubclassOf));
   cls := GetClass(className);
+  writeln('TGtk3WidgetSet.SetText: cls=', Int64(cls));
   if IsSubclassOf(cls, 'TForm') then
-    gtk_window_set_title(h, PC(AText))
+    gtk_window_set_title(h, PChar(AText))
   else if IsSubclassOf(cls, 'TButton') then
-    gtk_button_set_label(h, PC(AText))
+    gtk_button_set_label(h, PChar(AText))
   else if IsSubclassOf(cls, 'TLabel') then
-    gtk_label_set_text(h, PC(AText))
+    gtk_label_set_text(h, PChar(AText))
   else if IsSubclassOf(cls, 'TEdit') then
-    gtk_entry_set_text(h, PC(AText))
+    gtk_entry_set_text(h, PChar(AText))
   else if IsSubclassOf(cls, 'TCheckBox') then
-    gtk_button_set_label(h, PC(AText))
+    gtk_button_set_label(h, PChar(AText))
   else if IsSubclassOf(cls, 'TPanel') then
-    gtk_button_set_label(h, PC(AText));
+    gtk_button_set_label(h, PChar(AText));
+  writeln('TGtk3WidgetSet.SetText done');
 end;
 
 procedure TGtk3WidgetSet.SetBounds(AControl: TComponent; ALeft, ATop, AWidth, AHeight: Integer);
@@ -280,7 +320,7 @@ begin
       if IsSubclassOf(cls, 'TForm') or IsSubclassOf(cls, 'TPanel') then
       begin
         container := gtk_bin_get_child(ph);
-        if container <> nil then
+        if (container <> nil) and (gtk_widget_get_parent(ch) = container) then
           gtk_fixed_move(container, ch, ALeft, ATop);
       end;
     end;
@@ -418,6 +458,163 @@ procedure TGtk3WidgetSet.StopTimer(AId: LongWord);
 begin
   if AId <> 0 then
     g_source_remove(AId);
+end;
+
+function TGtk3WidgetSet.CreateMemo(AMemo: TComponent): Pointer;
+var scroll, tv: Pointer;
+begin
+  scroll := gtk_scrolled_window_new(nil, nil);
+  gtk_scrolled_window_set_policy(scroll, GTK_POLICY_AUTOMATIC, GTK_POLICY_AUTOMATIC);
+  tv := gtk_text_view_new();
+  gtk_container_add(scroll, tv);
+  Result := scroll;
+end;
+
+function TGtk3WidgetSet.CreateListBox(AListBox: TComponent): Pointer;
+begin
+  Result := gtk_list_box_new();
+end;
+
+function TGtk3WidgetSet.CreateComboBox(AComboBox: TComponent): Pointer;
+begin
+  Result := gtk_combo_box_text_new();
+end;
+
+function TGtk3WidgetSet.CreatePaintBox(APaintBox: TComponent): Pointer;
+begin
+  writeln('TGtk3WidgetSet.CreatePaintBox start');
+  Result := gtk_drawing_area_new();
+  writeln('TGtk3WidgetSet.CreatePaintBox widget created: ', Int64(Result));
+  SignalConnectData(Result, 'draw', @ControlDrawTramp, Pointer(APaintBox));
+  writeln('TGtk3WidgetSet.CreatePaintBox done');
+end;
+
+function TGtk3WidgetSet.GetMemoText(AMemo: TComponent): string;
+var
+  h, tv, buf: Pointer;
+  startIter, endIter: array[0..19] of Pointer;
+  textPtr: Pointer;
+  ctl: TControl;
+begin
+  ctl := TControl(AMemo);
+  h := ctl.Handle;
+  if h = nil then begin Result := ''; Exit; end;
+  tv := gtk_bin_get_child(h);
+  buf := gtk_text_view_get_buffer(tv);
+  gtk_text_buffer_get_start_iter(buf, @startIter);
+  gtk_text_buffer_get_end_iter(buf, @endIter);
+  textPtr := gtk_text_buffer_get_text(buf, @startIter, @endIter, 0);
+  Result := PCharToStr(textPtr);
+end;
+
+procedure TGtk3WidgetSet.SetMemoText(AMemo: TComponent; const AText: string);
+var
+  h, tv, buf: Pointer;
+  ctl: TControl;
+begin
+  ctl := TControl(AMemo);
+  h := ctl.Handle;
+  if h = nil then Exit;
+  tv := gtk_bin_get_child(h);
+  buf := gtk_text_view_get_buffer(tv);
+  gtk_text_buffer_set_text(buf, PChar(AText), -1);
+end;
+
+function TGtk3WidgetSet.AddListItem(AListBox: TComponent; const AText: string): Pointer;
+var
+  h, row, label_: Pointer;
+  ctl: TControl;
+begin
+  ctl := TControl(AListBox);
+  h := ctl.Handle;
+  if h = nil then begin Result := nil; Exit; end;
+  row := gtk_list_box_row_new();
+  label_ := gtk_label_new(PChar(AText));
+  gtk_container_add(row, label_);
+  gtk_list_box_insert(h, row, -1);
+  gtk_widget_show_all(row);
+  Result := row;
+end;
+
+function TGtk3WidgetSet.GetListIndex(AListBox: TComponent): Integer;
+var
+  h, row: Pointer;
+  ctl: TControl;
+begin
+  ctl := TControl(AListBox);
+  h := ctl.Handle;
+  if h = nil then begin Result := -1; Exit; end;
+  row := gtk_list_box_get_selected_row(h);
+  if row = nil then
+    Result := -1
+  else
+    Result := gtk_list_box_row_get_index(row);
+end;
+
+procedure TGtk3WidgetSet.SetListIndex(AListBox: TComponent; AIndex: Integer);
+var
+  h, row: Pointer;
+  ctl: TControl;
+begin
+  ctl := TControl(AListBox);
+  h := ctl.Handle;
+  if h = nil then Exit;
+  if AIndex < 0 then
+    gtk_list_box_select_row(h, nil)
+  else
+  begin
+    row := gtk_list_box_get_row_at_index(h, AIndex);
+    if row <> nil then
+      gtk_list_box_select_row(h, row);
+  end;
+end;
+
+procedure TGtk3WidgetSet.ClearList(AListBox: TComponent);
+begin
+end;
+
+procedure TGtk3WidgetSet.AddComboItem(AComboBox: TComponent; const AText: string);
+var h: Pointer; ctl: TControl;
+begin
+  ctl := TControl(AComboBox);
+  h := ctl.Handle;
+  if h <> nil then
+    gtk_combo_box_text_append_text(h, PChar(AText));
+end;
+
+function TGtk3WidgetSet.GetActiveIndex(AComboBox: TComponent): Integer;
+var h: Pointer; ctl: TControl;
+begin
+  ctl := TControl(AComboBox);
+  h := ctl.Handle;
+  if h <> nil then
+    Result := gtk_combo_box_get_active(h)
+  else
+    Result := -1;
+end;
+
+procedure TGtk3WidgetSet.SetActiveIndex(AComboBox: TComponent; AIndex: Integer);
+var h: Pointer; ctl: TControl;
+begin
+  ctl := TControl(AComboBox);
+  h := ctl.Handle;
+  if h <> nil then
+    gtk_combo_box_set_active(h, AIndex);
+end;
+
+procedure TGtk3WidgetSet.ClearCombo(AComboBox: TComponent);
+var h: Pointer; ctl: TControl;
+begin
+  ctl := TControl(AComboBox);
+  h := ctl.Handle;
+  if h <> nil then
+    gtk_combo_box_text_remove_all(h);
+end;
+
+procedure TGtk3WidgetSet.DestroyWidget(AWidget: Pointer);
+begin
+  if AWidget <> nil then
+    gtk_widget_destroy(AWidget);
 end;
 
 initialization
