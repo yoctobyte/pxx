@@ -37,6 +37,9 @@ run_gui_test test_gtk_ffi
 run_gui_test test_pcl_click
 run_gui_test test_pcl_event_rtti
 run_gui_test test_pcl_lfm
+run_gui_test test_pcl_widgets
+run_gui_test test_pcl_drawing
+run_gui_test test_pcl_menus
 
 if [ "$fail" -ne 0 ]; then
   say "GUI suite finished with some failures (compiler bugs pending)."

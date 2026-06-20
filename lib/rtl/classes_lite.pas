@@ -37,9 +37,10 @@ type
   TComponent = class
   private
     FName: string;
-    FChildren: array[0..63] of TComponent;
+    FChildren: array of TComponent;
     FChildCount: Integer;
   public
+    constructor Create;
     procedure AddChild(c: TComponent);
     function ChildCount: Integer;
     function Child(i: Integer): TComponent;
@@ -64,8 +65,15 @@ implementation
 
 { ---------- TComponent ---------- }
 
+constructor TComponent.Create;
+begin
+  SetLength(FChildren, 64);
+end;
+
 procedure TComponent.AddChild(c: TComponent);
 begin
+  if Length(FChildren) = 0 then
+    SetLength(FChildren, 64);
   if FChildCount <= 63 then
   begin
     FChildren[FChildCount] := c;
