@@ -531,7 +531,6 @@ begin
   else if lo = 'TParam' then Result := REC_TPARAM
   else if lo = 'TProc' then Result := REC_TPROC
   else if lo = 'TRawToken' then Result := REC_TRAWTOKEN
-  else if (lo = 'TMyClass') or (lo = 'tmyclass') then Result := REC_TMYCLASS
   else if lo = 'TTemplate' then Result := REC_TTEMPLATE
   else if lo = 'TSpecialization' then Result := REC_TSPECIALIZATION
   else if lo = 'TGenericFunc' then Result := REC_TGENERICFUNC
@@ -549,13 +548,9 @@ function IsClassType(const lo: AnsiString): Boolean;
 var ci: Integer; lo2: AnsiString;
 begin
   Result := False;
-  if (lo = 'TMyClass') or (lo = 'tmyclass') then Result := True;
-  if not Result then
-  begin
-    lo2 := lo;
-    ci := FindUClass(lo2);
-    if (ci >= 0) and (not UClsIsRecord[ci]) then Result := True;
-  end;
+  lo2 := lo;
+  ci := FindUClass(lo2);
+  if (ci >= 0) and (not UClsIsRecord[ci]) then Result := True;
 end;
 
 const

@@ -565,6 +565,10 @@ test-core: $(COMPILER)
 	test "$$(/tmp/test_heap26)" = "$$(printf '1\n1\n1\n1\n1\n1')"
 	./$(COMPILER) test/test_class.pas /tmp/test_class26
 	test "$$(/tmp/test_class26)" = "$$(printf '1\n1\n1\n42\n100\n999\n888')"
+	./$(COMPILER) test/test_tmyclass_name.pas /tmp/test_tmyclass_name26
+	test "$$(/tmp/test_tmyclass_name26)" = "78"
+	./$(COMPILER) test/test_setlength_dynarray_result.pas /tmp/test_setlength_dynarray_result26
+	test "$$(/tmp/test_setlength_dynarray_result26)" = "$$(printf '42\n99\n2\n7\n3')"
 	./$(COMPILER) test/test_class_methods.pas /tmp/test_class_methods26
 	test "$$(/tmp/test_class_methods26)" = "3"
 	./$(COMPILER) test/test_visibility.pas /tmp/test_visibility26

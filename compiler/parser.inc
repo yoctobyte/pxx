@@ -6765,16 +6765,11 @@ begin
         end
         else if IsClassType(lo) then
         begin
-          if CaseEqual(lo, 'TMyClass') then
-            LastTypeRecId := REC_TMYCLASS
+          ci := FindUClass(lo);
+          if ci >= 0 then
+            LastTypeRecId := REC_UCLASS_BASE + ci
           else
-          begin
-            ci := FindUClass(lo);
-            if ci >= 0 then
-              LastTypeRecId := REC_UCLASS_BASE + ci
-            else
-              LastTypeRecId := REC_NONE;
-          end;
+            LastTypeRecId := REC_NONE;
           Result := tyClass;
         end
         else
@@ -8353,6 +8348,18 @@ begin
       retIsDynArr := True;
       retElemTk := retType;
       retElemRec := LastTypeRecId;
+    end
+    else if (CurTok.Kind = tkIdent) and (FindArrayType(CurTok.SVal) >= 0) and
+            ArrTypeIsDyn[FindArrayType(CurTok.SVal)] then
+    begin
+      { Named dynamic-array type alias as the result (e.g. TByteArray =
+        array of Byte): same handle ABI as a literal `array of T` result, so
+        Result is a resizable dyn-array local (SetLength/indexing work). }
+      paramAi := FindArrayType(CurTok.SVal);
+      retType := ParseTypeKind;            { consume the alias name }
+      retIsDynArr := True;
+      retElemTk := IntToTypeKind(ArrTypeElemTk[paramAi]);
+      retElemRec := ArrTypeElemRec[paramAi];
     end
     else
     begin
