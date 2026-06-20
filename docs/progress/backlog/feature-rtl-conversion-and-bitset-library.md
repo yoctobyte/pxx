@@ -67,3 +67,26 @@ bit-set type may be the pragmatic answer to that lane too.
 - 2026-06-19 — Opened from the two demo apps. Gaps confirmed: `IntToStr` and
   `Val` referenced by name in neither test nor lib (`grep` clean), i.e. not yet
   provided. Demos left platonic on purpose to drive this ticket.
+- 2026-06-20 — **Gap 1 expanded** (track B): `lib/rtl/sysutils.pas` gained
+  `FloatToStr`, `FloatToStrF`, `StrToFloatDef`, `StrToFloat`, `Pos`, `PadLeft`,
+  `PadRight`, `Delete`, `Insert`, `Concat`. Float conversion avoids the `Str`
+  builtin (which breaks when sysutils's own `Copy` shadows the compiler's
+  intercept). `Val` still absent (builtin name collision); `StrToFloatDef` is
+  the replacement.
+- 2026-06-20 — **Gap 2 landed** (track B): `lib/rtl/bitset.pas` ships
+  `TBitArray` with `BitArrayInit`, `BitArraySetBit`, `BitArrayClearBit`,
+  `BitArrayToggle`, `BitArrayTestBit`, `BitArrayCount`, `BitArrayNextSet`.
+  Uses 32-bit Integer words (Int64 bitwise ops — `not`, `and` on sign-bit
+  values — are unreliable on the pinned stable). `shr` on negative Integer is
+  arithmetic (sign-extending), so NextSet uses direct bit-index scanning.
+  `BitArrayClearBit` avoids `not` via conditional subtraction. Tested in
+  `test/lib_bitset.pas` with golden-output verification (`make lib-test`).
+
+  **Compiler gaps discovered:**
+  - `not` on Integer is boolean, not bitwise — cannot be used for mask
+    complement
+  - `shr` on negative Integer is arithmetic shift (sign-extending), not
+    logical — breaks bit-scanning on words with bit 31 set
+  - Int64 `and`/`or`/`not` are unreliable — 32-bit Integer is the safe word
+    type for now
+  - `ba.bits := nil` on a managed record field through `var` param segfaults
