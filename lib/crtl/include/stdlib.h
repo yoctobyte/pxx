@@ -22,4 +22,6 @@ void exit(int status);
 #define EXIT_SUCCESS 0
 #define EXIT_FAILURE 1
 
+#define MB_CUR_MAX 1
+
 #endif

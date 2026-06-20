@@ -6,5 +6,6 @@
 #define __restrict
 #define __restrict__
 #define __const const
+#define __inline
 
 #endif

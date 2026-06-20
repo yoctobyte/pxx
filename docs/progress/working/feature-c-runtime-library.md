@@ -116,3 +116,8 @@ This needs a deliberate compiler/library namespace decision before accepted
   `assert`, plus tiny `sys/cdefs.h` / `sys/_types.h`) and empty `src/`
   staging. Added `test/crtl_header_smoke.c` and `make c-interop-devtest`.
   Pinned v17 compiles and runs the header smoke (`crtl-headers-ok`).
+- 2026-06-20 — Extended the owned header surface for the FreeBSD regex source
+  include set: `sys/types.h`, `wchar.h`, `wctype.h`, `unistd.h`, plus small
+  constants / typedefs needed by those headers. Added a `freebsd_regex_regerror`
+  devtest probe; it now gets past project headers and reports a C-body frontend
+  gap instead of an include gap.

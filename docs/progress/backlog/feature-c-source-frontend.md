@@ -166,3 +166,7 @@ C"; E–F = "compile real embedded C". C++ subset tracked separately.
   `-Ilib/crtl/include` stops at `undefined variable (re_matchp)` inside
   `re_match`. Header-only regex probes compile; full source needs the planned
   multi-function/body frontend work.
+- 2026-06-20 — FreeBSD regex pressure probe now reaches source bodies too:
+  `library_candidates/freebsd-regex/regerror.c` with project `lib/crtl/include`
+  headers stops at `undefined variable (localbuf)` inside `regatoi`, another
+  C-body scope/declaration handling gap after include resolution succeeds.

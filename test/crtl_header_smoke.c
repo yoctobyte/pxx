@@ -9,6 +9,10 @@
 #include <errno.h>
 #include <signal.h>
 #include <setjmp.h>
+#include <sys/types.h>
+#include <wchar.h>
+#include <wctype.h>
+#include <unistd.h>
 
 int main(void) {
     printf("crtl-headers-ok\n");
