@@ -1,11 +1,10 @@
 unit bignum;
 { Arbitrary-precision signed integers. Schoolbook algorithms, correctness over
   speed. Limbs are base 1e9, little-endian, stored as Int64 (the partial
-  products limb*limb ~1e18 fit a 64-bit intermediate; Int64 limbs also avoid
-  narrowing casts the pinned stable rejects). Zero = empty limb list.
+  products limb*limb ~1e18 fit a 64-bit intermediate).
 
-  No 64-bit shifts / xor / hex literals are used, so this builds on pinned v9
-  despite bug-64bit-shift-xor-literal-gaps. Track B; pinned stable. }
+  Track B; pinned stable (v11+; the record-fn codegen crash that blocked BigMul
+  is fixed). }
 
 interface
 
@@ -26,10 +25,8 @@ function BigToStr(const a: TBigInt): AnsiString;
 function BigCompareMag(const a, b: TBigInt): Integer;   { |a| vs |b|: -1/0/1 }
 function BigMulSmall(const a: TBigInt; m: Int64): TBigInt;
 function BigAdd(const a, b: TBigInt): TBigInt;           { unsigned magnitudes }
-{ BigMul (bignum*bignum) is DEFERRED: it and its BigShiftLimbs helper trip a
-  context-sensitive codegen crash inside this unit on v10 (works standalone) --
-  see bug-record-fn-codegen-crash. BigMulSmall (bignum*int) covers factorial &
-  is verified. Restore BigMul once that codegen bug is fixed. }
+function BigSub(const a, b: TBigInt): TBigInt;           { unsigned |a| - |b|, assumes |a| >= |b| }
+function BigMul(const a, b: TBigInt): TBigInt;           { signed bignum*bignum }
 
 implementation
 
@@ -144,11 +141,58 @@ begin
   BigMulSmall := r;
 end;
 
-{ BigMul + BigShiftLimbs removed for now -- they hit bug-record-fn-codegen-crash
-  on v10 (segfault) when called from within this unit, though identical logic
-  runs fine in plain program scope. BigMulSmall (bignum*int) is the verified
-  multiply path and covers the factorial oracle. Restore the general
-  bignum*bignum BigMul once that codegen bug is fixed. }
+function BigSub(const a, b: TBigInt): TBigInt;
+var r: TBigInt; i, na, nb, n: Integer; borrow, cur, av: Int64;
+begin
+  na := Length(a.limbs); nb := Length(b.limbs);
+  if na > nb then n := na else n := nb;
+  SetLength(r.limbs, n);
+  borrow := 0;
+  for i := 0 to n - 1 do
+  begin
+    if i < na then av := a.limbs[i] else av := 0;
+    cur := av - borrow;
+    if i < nb then cur := cur - b.limbs[i];
+    if cur < 0 then
+    begin
+      cur := cur + BIG_BASE;
+      borrow := 1;
+    end
+    else
+      borrow := 0;
+    r.limbs[i] := cur;
+  end;
+  r.neg := False;
+  Normalize(r);
+  BigSub := r;
+end;
+
+function BigMul(const a, b: TBigInt): TBigInt;
+var r: TBigInt; i, j, na, nb: Integer; carry, cur: Int64;
+begin
+  na := Length(a.limbs); nb := Length(b.limbs);
+  if (na = 0) or (nb = 0) then
+  begin
+    BigMul := BigFromInt(0);
+    Exit;
+  end;
+  SetLength(r.limbs, na + nb);
+  for i := 0 to na + nb - 1 do r.limbs[i] := 0;
+  for i := 0 to na - 1 do
+  begin
+    carry := 0;
+    for j := 0 to nb - 1 do
+    begin
+      cur := a.limbs[i] * b.limbs[j] + r.limbs[i + j] + carry;
+      r.limbs[i + j] := cur mod BIG_BASE;
+      carry := cur div BIG_BASE;
+    end;
+    r.limbs[i + nb] := r.limbs[i + nb] + carry;
+  end;
+  r.neg := a.neg <> b.neg;
+  Normalize(r);
+  BigMul := r;
+end;
 
 function BigAdd(const a, b: TBigInt): TBigInt;
 var r: TBigInt; i, na, nb, n: Integer; carry, cur: Int64;

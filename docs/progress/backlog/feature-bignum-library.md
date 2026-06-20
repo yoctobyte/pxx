@@ -46,3 +46,8 @@ Own `.pas` unit; FPC-ish naming; no port; no self-host / cross regression.
 
 ## Log
 - 2026-06-19 — Opened from the demo/library organization pass.
+- 2026-06-20 — **BigMul + BigSub landed** (track B): `lib/rtl/bignum.pas` now has
+  full bignum×bignum multiplication (schoolbook O(n²)) and unsigned subtraction.
+  The record-fn codegen crash (bug-record-fn-codegen-crash) that blocked these is
+  fixed in pinned v11+. `BigMulSmall` remains for the small-multiply fast path.
+  Remaining: `BigDivMod`, `BigCompare` (signed), `BigNegate`, `ModPow`.
