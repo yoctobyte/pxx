@@ -96,6 +96,20 @@ unit's directory + nearest-ancestor manifest lookup, (3) a tiny manifest parser.
 Medium, but it is the general solution for ALL third-party libs, not a one-off.
 
 ## Log
+- 2026-06-20 — **Pascal-`uses` search-path slice landed (commit 723001c).**
+  Added an ordered Pascal-unit search list (`PasUnitDirs`, defs.inc; `AddPasUnitDir`,
+  cpreproc.inc), fed by `-Fu<dir>` (FPC-style) and `-I<dir>` (now feeds BOTH the
+  C `#include` path and the Pascal-unit path). `LoadUnit` (parser.inc) searches
+  these roots after the including file's own directory and before the
+  compiler-anchored builtin/RTL/LCL dirs, so a project or per-platform dir (e.g.
+  `lib/rtl/platform/posix/`) can supply or override a unit by name with no ifdefs
+  in callers — the PAL backend-selection mechanism. Deduped + trailing-'/'
+  normalised. test/test_unitpath.pas + same-named posix/esp backends prove
+  selection; in test-core. Gate green (make test byte-identical + cross-bootstrap
+  + cross suites). This is the slice feature-platform-abstraction-layer needed;
+  it replaces the interim single-`{$ifdef}` switch. STILL OPEN here: `pxx.cfg`
+  config file, per-directory library manifests (scoped define/mode/incpath),
+  `tools/pxx-scan`, dynamic system-library soname mapping.
 - 2026-06-20 — First slice landed (C-include search path). `-I<dir>` flag →
   ordered `CIncludeDirs` list (defs.inc), searched after the including file's own
   directory and before system dirs. The hardcoded `/usr/include…/clang` fallback
