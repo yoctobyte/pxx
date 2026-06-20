@@ -15,11 +15,15 @@ _none_
 | feature-c-runtime-library | feature | C runtime/library layer (`lib/crtl`) plus direct C-library packages | — |
 | feature-platform-abstraction-layer | feature | Platform Abstraction Layer (PAL): per-platform RTL port at one seam | — |
 
-## backlog (67)
+## backlog (72)
 
 | Ticket | Type | Summary | Blocked-by |
 | --- | --- | --- | --- |
+| bug-pointer-cast-custom-alias | bug | Pointer cast on custom Char pointer aliases fails to skip string length prefix | — |
+| bug-rtti-offset-static-array | bug | RTTI offset corruption when class/record definitions contain large static arrays | — |
+| bug-stack-corruption-inline-string-concat | bug | Stack frame corruption on inline string concatenation assignments | — |
 | bug-str-float-broken-by-copy-shadow | bug | Str() builtin breaks for float formatting when a unit shadows Copy | — |
+| bug-string-type-size-mismatch | bug | String type size mismatch in TypeSize vs codegen copies | — |
 | chore-inc-to-units | chore | `.inc` → real `.pas` units refactor | — |
 | chore-runtime-emission-size | chore | Finer runtime-support emission (code size) | — |
 | feature-additional-cpu-targets | feature | Additional CPU targets (rollup: i386 → aarch64 → arm32 → ESP32/RISC-V) | feature-target-aarch64, feature-target-arm32, feature-target-esp32, feature-target-i386 |
@@ -68,6 +72,7 @@ _none_
 | feature-nil-python-frontend | feature | Nil Python frontend (`.npy`) | — |
 | feature-no-ansistring-profile | feature | No-AnsiString / bounded-string profile | — |
 | feature-object-reference-type | feature | `object` — a rooted object-reference type | — |
+| feature-optimization-levels | feature | Optimization levels (`-O0/-O1/-O2/-O3/-Os`) + pass framework | — |
 | feature-os-targets-bsd-mac | feature | Additional OS targets (BSD / macOS via syscall mapping; Windows deprioritized) | — |
 | feature-parallel-processing | feature | Parallel processing as a language feature | feature-unified-heap-allocator |
 | feature-progress-transition-helpers | feature | Progress transition helpers (`claim` / `resolve`) | — |
@@ -203,7 +208,11 @@ _none_
 
 ## Ready (no unmet blocker)
 
+- bug-pointer-cast-custom-alias
+- bug-rtti-offset-static-array
+- bug-stack-corruption-inline-string-concat
 - bug-str-float-broken-by-copy-shadow
+- bug-string-type-size-mismatch
 - chore-inc-to-units
 - chore-runtime-emission-size
 - feature-additional-cpu-targets
@@ -248,6 +257,7 @@ _none_
 - feature-nil-python-frontend
 - feature-no-ansistring-profile
 - feature-object-reference-type
+- feature-optimization-levels
 - feature-os-targets-bsd-mac
 - feature-parallel-processing
 - feature-progress-transition-helpers
