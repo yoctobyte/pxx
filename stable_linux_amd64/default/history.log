@@ -17,3 +17,4 @@
 2026-06-20T08:13:58Z  v17  7d09790ec6b637c8b3ab2fca7b68a8c988a73c9a26ce5e8722cf4e43df434729  6da40d6b5f0b76453c3e42d1dce7d3c85da66f76  feat(compiler): platform + capability define axis (PAL step 1)
 2026-06-20T08:38:52Z  v18  7d09790ec6b637c8b3ab2fca7b68a8c988a73c9a26ce5e8722cf4e43df434729  24c696927afd046b1e2a8dbd67ef8211fd54e1bd  feat(crtl): cover POSIX regex headers
 2026-06-20T09:10:04Z  v19  1ab241223bfa73d54f7e65047ac3d09b261ab8c7a37aa04c002cb1ce1c2c9a6d  84a4e6f46a7cfb7350bcd3f99876b37cfd6e3146  docs(progress): log library suite ticket
+2026-06-20T09:23:17Z  v20  cdb2b2c0c1f01ecb7a4f4b0d8047ec5d58404a6c55638b22975d57f2f7f28e75  f9bdeb88ba0b62852ac3aff85de3e970ee0de146  feat(rtl): add PAL-backed text files
