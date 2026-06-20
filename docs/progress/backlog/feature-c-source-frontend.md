@@ -161,3 +161,8 @@ C"; E–F = "compile real embedded C". C++ subset tracked separately.
   E (fn-macros) → F (embedded layout). Built on the existing parser (no
   rewrite): `.h`/`.c` is convention only, body frontend = same parser with
   body-skipping off. gcc as output-equality oracle.
+- 2026-06-20 — Track B regex devtest made the multi-function gap concrete:
+  compiling `library_candidates/tiny-regex-c/re.c` against pinned v17 and
+  `-Ilib/crtl/include` stops at `undefined variable (re_matchp)` inside
+  `re_match`. Header-only regex probes compile; full source needs the planned
+  multi-function/body frontend work.

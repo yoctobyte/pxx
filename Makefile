@@ -31,7 +31,7 @@ FROZEN_PXXFLAGS := -uPXX_MANAGED_STRING
 
 .PHONY: all bootstrap bootstrap-check fpc-check test test-core test-asm-emit test-nilpy qemu-env-check test-i386 test-aarch64 test-arm32 test-emit-obj stabilize check-stable revert benchmark benchmark-compiler-runtime benchmark-check clean distclean symbols \
         bootstrap-managed bootstrap-frozen test-managed test-frozen stabilize-managed stabilize-frozen check-stable-managed revert-managed test-nilpy-managed test-nilpy-frozen \
-        pxx-stable-check pin lib-test demos \
+        pxx-stable-check pin lib-test demos c-interop-devtest \
         progress-check cross-bootstrap cross-bootstrap-aarch64 cross-bootstrap-arm32 cross-bootstrap-i386 test-esp-bare
 
 all: $(COMPILER)
@@ -1837,6 +1837,11 @@ pxx-stable-check:
 	@PV=$$(readlink $(STABLE_DEFAULT_DIR)/pinned 2>/dev/null || echo '?'); \
 	 LV=$$(readlink $(STABLE_DEFAULT_DIR)/latest 2>/dev/null || echo '?'); \
 	 echo "lib track pinned to: $(PXX_STABLE) -> $$PV   (newest checkpoint: latest -> $$LV)"; \
+	 if [ -d $(STABLE_DEFAULT_DIR)/builtin ]; then \
+	   echo "frozen builtin RTL: $(STABLE_DEFAULT_DIR)/builtin/ ($$(ls $(STABLE_DEFAULT_DIR)/builtin/*.pas 2>/dev/null | wc -l) src) -- isolates track A's compiler/builtin/ edits"; \
+	 else \
+	   echo "WARNING: no frozen builtin RTL ($(STABLE_DEFAULT_DIR)/builtin/ missing); pinned binary reads LIVE compiler/builtin/. Run 'make pin' to freeze."; \
+	 fi; \
 	 if [ "$$PV" != "$$LV" ] && [ "$$PXX_STABLE" = "$(STABLE_DEFAULT_DIR)/pinned" ]; then \
 	   echo "note: a newer stable ($$LV) exists than the pinned one ($$PV)."; \
 	   echo "      track A can bless it for B with 'make pin'."; \
@@ -1860,7 +1865,20 @@ pin:
 	   "$$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$$TGT" "$$OLD" \
 	   "$$(git log -1 --format='%H' 2>/dev/null)" \
 	   >> $(STABLE_DEFAULT_DIR)/pin.log; \
-	 echo "pinned -> $$TGT (was $$OLD). Commit stable_linux_amd64/ to hand it to track B."
+	 echo "pinned -> $$TGT (was $$OLD)."
+	@# Freeze the runtime-read builtin RTL next to the pinned binary. The pinned
+	@# binary resolves `uses builtinheap`/`builtin` via its ExeDir, i.e.
+	@# $(STABLE_DEFAULT_DIR)/builtin/, which is checked BEFORE the CWD-relative
+	@# fallback to the live compiler/builtin/. Snapshotting here closes the
+	@# isolation hole where track A's uncommitted edits in compiler/builtin/**
+	@# (its own lane) leaked into track B's pinned compiles. lib/rtl + lib/lcl are
+	@# deliberately NOT frozen -- they are track B's own editable lane, which B
+	@# expects live. See docs/progress/backlog/bug-pinned-stable-reads-live-builtin-rtl.md.
+	@rm -rf $(STABLE_DEFAULT_DIR)/builtin
+	@mkdir -p $(STABLE_DEFAULT_DIR)/builtin
+	@cp compiler/builtin/*.pas $(STABLE_DEFAULT_DIR)/builtin/
+	@echo "froze $$(ls $(STABLE_DEFAULT_DIR)/builtin/*.pas | wc -l) builtin RTL source(s) -> $(STABLE_DEFAULT_DIR)/builtin/"
+	@echo "Commit stable_linux_amd64/ to hand it to track B."
 
 # Curated GREEN smoke for the library surface, against the pinned stable. May
 # hard-fail (a smoke gate for track B). Keep every entry here passing; move
@@ -1897,3 +1915,8 @@ demos: pxx-stable-check
 	  fi; \
 	done; \
 	echo "(demos is a dashboard, not a gate; FAILs -> file a ticket)"; exit 0
+
+# C interop discovery dashboard for Track B. This intentionally exits 0 for
+# candidate-library gaps; keep `lib-test` as the green gate.
+c-interop-devtest: pxx-stable-check
+	tools/c_interop_devtest.sh

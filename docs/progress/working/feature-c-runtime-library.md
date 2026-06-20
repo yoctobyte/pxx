@@ -1,8 +1,8 @@
 # C runtime/library layer (`lib/crtl`) plus direct C-library packages
 
 - **Type:** feature (Track B library / C frontend pressure)
-- **Status:** backlog
-- **Owner:** —
+- **Status:** working
+- **Owner:** Codex
 - **Opened:** 2026-06-20
 - **Relation:** supports `feature-c-source-frontend`,
   `feature-c-regex-library-devtest`, and future C-source candidates such as INI,
@@ -110,3 +110,9 @@ This needs a deliberate compiler/library namespace decision before accepted
   compiling the layer. Per-directory manifest auto-application (so `lib/crtl`
   becomes an include root without a CLI `-I`) is tracked in
   feature-dynamic-include-paths-config.
+- 2026-06-20 — Claimed for Track B C interop slice. Added the first
+  project-owned `lib/crtl/include` surface (`stddef`, `stdint`, `stdbool`,
+  `limits`, `string`, `ctype`, `stdlib`, `stdio`, `errno`, `signal`, `setjmp`,
+  `assert`, plus tiny `sys/cdefs.h` / `sys/_types.h`) and empty `src/`
+  staging. Added `test/crtl_header_smoke.c` and `make c-interop-devtest`.
+  Pinned v17 compiles and runs the header smoke (`crtl-headers-ok`).
