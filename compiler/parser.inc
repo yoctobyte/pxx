@@ -9475,6 +9475,36 @@ begin
     if Length(UnitContent) > 0 then begin isCUnit := True; isCHeader := True; end;
   end;
 
+  { User unit search roots (`-Fu<dir>` / `-I<dir>`), in flag order. Searched
+    after the including file's own directory and before the compiler-anchored
+    builtin/RTL/LCL dirs, so a project or per-platform dir (e.g.
+    lib/rtl/platform/posix/) can supply or override a unit by name — the PAL
+    backend-selection mechanism. Dirs carry a trailing '/' (AddPasUnitDir). }
+  i := 0;
+  while (Length(UnitContent) = 0) and (i < PasUnitDirCount) do
+  begin
+    ConcatThree(PasUnitDirs[i], lo, '.pas', path);
+    LoadFile(path, UnitContent);
+    if Length(UnitContent) = 0 then
+    begin
+      ConcatThree(PasUnitDirs[i], lo, '.pp', path);
+      LoadFile(path, UnitContent);
+    end;
+    if Length(UnitContent) = 0 then
+    begin
+      ConcatThree(PasUnitDirs[i], lo, '.c', path);
+      LoadFile(path, UnitContent);
+      if Length(UnitContent) > 0 then isCUnit := True;
+    end;
+    if Length(UnitContent) = 0 then
+    begin
+      ConcatThree(PasUnitDirs[i], lo, '.h', path);
+      LoadFile(path, UnitContent);
+      if Length(UnitContent) > 0 then begin isCUnit := True; isCHeader := True; end;
+    end;
+    Inc(i);
+  end;
+
   { Library directories, anchored to the compiler binary (ExeDir) so units
     resolve regardless of CWD. ExeDir is e.g. <root>/compiler/, so the RTL/LCL
     dirs are its siblings via '../lib/...'. Falls back to CWD-relative when the

@@ -1007,6 +1007,22 @@ begin
   Inc(CIncludeDirCount);
 end;
 
+{ Register a Pascal-unit (`uses`) search root (`-Fu`, also fed by `-I`).
+  Normalised to a trailing '/'. Deduped so `-I` + `-Fu` of the same dir, or a
+  repeated flag, do not bloat the list. }
+procedure AddPasUnitDir(const dir: AnsiString);
+var s: AnsiString; j: Integer;
+begin
+  s := '';
+  for j := 1 to Length(dir) do AppendChar(s, dir[j]);
+  if (Length(s) > 0) and (s[Length(s)] <> '/') then AppendChar(s, '/');
+  for j := 0 to PasUnitDirCount - 1 do
+    if PasUnitDirs[j] = s then Exit;
+  if PasUnitDirCount >= MAX_PAS_UNIT_DIRS then Error('too many -Fu/-I unit directories');
+  PasUnitDirs[PasUnitDirCount] := s;
+  Inc(PasUnitDirCount);
+end;
+
 procedure CPInclude(const line: AnsiString; p, last, depth: Integer;
   const baseDir: AnsiString);
 var a, b, k: Integer;

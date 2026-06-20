@@ -82,6 +82,7 @@ begin
   EnableAutoVar := True;
   EnableLazyVar := True;
   CIncludeDirCount := 0;
+  PasUnitDirCount := 0;
   PasInitDefines;
   i := 1;
   readingOptions := True;
@@ -213,10 +214,18 @@ begin
       EnableLazyVar := False;
       Inc(i);
     end
+    else if (Length(option) > 3) and (option[1] = '-') and (option[2] = 'F') and (option[3] = 'u') then
+    begin
+      { -Fu<dir> (FPC-style): add a Pascal-unit (`uses`) search root only. }
+      AddPasUnitDir(PasOptionTail(option, 4));
+      Inc(i);
+    end
     else if (Length(option) > 2) and (option[1] = '-') and (option[2] = 'I') then
     begin
-      { -I<dir>: add a C `#include` search root (project / library dir). }
+      { -I<dir>: add a search root for BOTH C `#include` and Pascal `uses`
+        (project / library dir), per feature-dynamic-include-paths-config. }
       AddCIncludeDir(PasOptionTail(option, 3));
+      AddPasUnitDir(PasOptionTail(option, 3));
       Inc(i);
     end
     else if (Length(option) > 2) and (option[1] = '-') and

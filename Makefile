@@ -31,7 +31,7 @@ FROZEN_PXXFLAGS := -uPXX_MANAGED_STRING
 
 .PHONY: all bootstrap bootstrap-check fpc-check test test-core test-asm-emit test-nilpy qemu-env-check test-i386 test-aarch64 test-arm32 test-emit-obj stabilize check-stable revert benchmark benchmark-compiler-runtime benchmark-check clean distclean symbols \
         bootstrap-managed bootstrap-frozen test-managed test-frozen stabilize-managed stabilize-frozen check-stable-managed revert-managed test-nilpy-managed test-nilpy-frozen \
-        pxx-stable-check pin lib-test demos c-interop-devtest \
+        pxx-stable-check pin lib-test library-suite library-suite-green library-suite-discovery demos c-interop-devtest \
         progress-check cross-bootstrap cross-bootstrap-aarch64 cross-bootstrap-arm32 cross-bootstrap-i386 test-esp-bare
 
 all: $(COMPILER)
@@ -1907,6 +1907,16 @@ lib-test: pxx-stable-check
 	$(PXX_STABLE) examples/bignum/factorial.pas /tmp/lib_factorial
 	test "$$(/tmp/lib_factorial)" = "$$(printf '5! = 120\n10! = 3628800\n20! = 2432902008176640000\n1000! digits      = 2568\n1000! first 10    = 4023872600\n1000! trailing 0s = 249')"
 	@echo "lib-test ok (sudoku exact + collections + math + sysutils + random + platform + bignum smoke) against stable v$$(cat $(STABLE_DEFAULT_DIR)/VERSION 2>/dev/null || echo '?')"
+
+# Full Track-B library suite, distinct from compiler `make test`.
+library-suite-green: pxx-stable-check
+	PXX_STABLE=$(PXX_STABLE) tools/library_suite.sh green
+
+library-suite-discovery: pxx-stable-check
+	PXX_STABLE=$(PXX_STABLE) tools/library_suite.sh discovery
+
+library-suite: pxx-stable-check
+	PXX_STABLE=$(PXX_STABLE) tools/library_suite.sh all
 
 # Compile-smoke DASHBOARD for every demo app, against the pinned stable. Prints
 # an OK/FAIL table and always exits 0 -- a discovery view, not a gate. FAILs are

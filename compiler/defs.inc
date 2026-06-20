@@ -21,6 +21,7 @@ const
   MAX_CPREP_INCLUDES = 128;
   MAX_CPREP_CHARS = 8388608;  { 8 MB }
   MAX_C_INCLUDE_DIRS = 64;    { user `-I` C include search roots }
+  MAX_PAS_UNIT_DIRS  = 64;    { user `-Fu`/`-I` Pascal unit search roots }
   MAX_CPREP_ARGS = 4096;
   STRING_CAP  = 8388608;      { 8 MB }
   MAX_TOKENS  = 524288;
@@ -869,6 +870,14 @@ var
     fallback, so a project header (e.g. our own zlib.h) wins over a host one. }
   CIncludeDirs    : array[0..MAX_C_INCLUDE_DIRS-1] of AnsiString;
   CIncludeDirCount: Integer;
+
+  { Ordered Pascal-unit (`uses`) search roots from `-Fu<dir>` (FPC-style) and
+    `-I<dir>`. Searched in LoadUnit after the including file's own directory and
+    before the compiler-anchored builtin/RTL/LCL dirs — so a project or
+    per-platform unit dir (e.g. lib/rtl/platform/posix/) can supply or override a
+    unit by name (the PAL backend-selection mechanism). }
+  PasUnitDirs     : array[0..MAX_PAS_UNIT_DIRS-1] of AnsiString;
+  PasUnitDirCount : Integer;
 
   { C preprocessor state. Macro text is pooled to avoid string-array BSS cost. }
   CPrepOut      : AnsiString;
