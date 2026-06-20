@@ -20,3 +20,4 @@
 2026-06-20T09:23:17Z  v20  cdb2b2c0c1f01ecb7a4f4b0d8047ec5d58404a6c55638b22975d57f2f7f28e75  f9bdeb88ba0b62852ac3aff85de3e970ee0de146  feat(rtl): add PAL-backed text files
 2026-06-20T12:57:37Z  v21  6e575713da48681a6aea126af861eef839f2523ac96ae6f30fcdb2d501c59ed4  54170d2c2633170b3f17a6c2c46ec50ffa2bd18f  docs(ticket): close subclass-field-offset + pcl-search-path (DONE)
 2026-06-20T13:36:47Z  v22  37e152ead9b0b7587bc747476803a17e7ddcaeaff1792a3693e298778079a019  355192a49fe7a31b708dceb5bc713786ce94f2a3  feat(compiler): method calls on a hard class typecast TClass(x).M(args)
+2026-06-20T16:05:51Z  v23  bb8e65776ea3d7661878305a0a9e37ce200458bd0449f9e2c43f999ac880ffeb  f7c9dc5fe08977aa6ac7a5b6312880174717dfca  fix(parser): array-of-string element -> managed AnsiString (per-use)
