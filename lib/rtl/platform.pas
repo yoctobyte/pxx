@@ -16,6 +16,13 @@ const
   PAL_PLATFORM_POSIX = 1;
   PAL_PLATFORM_ESP_IDF = 2;
 
+  PAL_OPEN_READ   = 0;
+  PAL_OPEN_WRITE  = 1;
+  PAL_OPEN_RDWR   = 2;
+  PAL_OPEN_CREATE = $40;
+  PAL_OPEN_TRUNC  = $200;
+  PAL_OPEN_APPEND = $400;
+
   PAL_ERR_UNSUPPORTED = -38; { Linux ENOSYS, used as the portable "not here" }
 
 function PalPlatform: Integer;
@@ -26,6 +33,7 @@ function PalHasDynlib: Boolean;
 
 function PalUnsupported: Integer;
 
+function PalOpen(path: PChar; flags, mode: Integer): Integer;
 function PalRead(handle: Integer; buf: Pointer; len: Integer): Int64;
 function PalWrite(handle: Integer; buf: Pointer; len: Integer): Int64;
 function PalClose(handle: Integer): Integer;
@@ -98,6 +106,11 @@ procedure vTaskDelay(ticks: Integer); external;
 function esp_timer_get_time: Int64; external;
 {$endif}
 
+function PalOpen(path: PChar; flags, mode: Integer): Integer;
+begin
+  Result := PAL_ERR_UNSUPPORTED;
+end;
+
 function PalRead(handle: Integer; buf: Pointer; len: Integer): Int64;
 begin
   Result := PAL_ERR_UNSUPPORTED;
@@ -133,17 +146,23 @@ end;
 
 const
 {$ifdef CPUX86_64}
-  SYS_read = 0; SYS_write = 1; SYS_close = 3;
+  SYS_read = 0; SYS_write = 1; SYS_close = 3; SYS_openat = 257;
 {$endif}
 {$ifdef CPU_I386}
-  SYS_read = 3; SYS_write = 4; SYS_close = 6;
+  SYS_read = 3; SYS_write = 4; SYS_close = 6; SYS_openat = 295;
 {$endif}
 {$ifdef CPU_AARCH64}
-  SYS_read = 63; SYS_write = 64; SYS_close = 57;
+  SYS_read = 63; SYS_write = 64; SYS_close = 57; SYS_openat = 56;
 {$endif}
 {$ifdef CPU_ARM32}
-  SYS_read = 3; SYS_write = 4; SYS_close = 6;
+  SYS_read = 3; SYS_write = 4; SYS_close = 6; SYS_openat = 322;
 {$endif}
+  PAL_AT_FDCWD = -100;
+
+function PalOpen(path: PChar; flags, mode: Integer): Integer;
+begin
+  Result := Integer(__pxxrawsyscall(SYS_openat, PAL_AT_FDCWD, Int64(path), flags, mode, 0, 0));
+end;
 
 function PalRead(handle: Integer; buf: Pointer; len: Integer): Int64;
 begin

@@ -9,6 +9,7 @@ begin
   if PalHasSockets then writeln('sockets');
   if PalHasThreads then writeln('threads');
   if PalHasDynlib then writeln('dynlib');
+  writeln('open=', PalOpen(PChar('/tmp/no-host-fallback'), PAL_OPEN_READ, 0));
   writeln('read=', Integer(PalRead(0, nil, 0)));
   writeln('unsupported=', PalUnsupported);
 end.

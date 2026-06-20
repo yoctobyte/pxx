@@ -140,3 +140,8 @@ Out of scope (separate tickets):
   pinned v18. Cross ESP object smoke currently hits the same existing
   target-codegen wall as the ESP hello examples (`unsupported node`/`call_ind`),
   so object-level PAL validation waits on that Track A issue.
+- 2026-06-20 — Extended byte-handle PAL with `PalOpen` and portable PAL open
+  flags. Posix maps to raw `openat`; ESP-IDF backend returns unsupported until
+  VFS binding work lands. `test/lib_platform.pas` now writes and reads a small
+  file through PAL, while `test/lib_platform_esp.pas` asserts no host fallback
+  for open/read under native `--platform=esp`.

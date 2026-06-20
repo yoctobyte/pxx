@@ -249,6 +249,10 @@ test-core: $(COMPILER)
 	test "$$(/tmp/test_platform_defines_posix26)" = "$$(printf 'platform=posix\nfiles\nsockets\nthreads\ndynlib\nend')"
 	./$(COMPILER) --platform=esp test/test_platform_defines.pas /tmp/test_platform_defines_esp26
 	test "$$(/tmp/test_platform_defines_esp26)" = "$$(printf 'platform=esp\nend')"
+	./$(COMPILER) -Itest/unitpath/posix test/test_unitpath.pas /tmp/test_unitpath_posix26
+	test "$$(/tmp/test_unitpath_posix26)" = "posix"
+	./$(COMPILER) -Futest/unitpath/esp test/test_unitpath.pas /tmp/test_unitpath_esp26
+	test "$$(/tmp/test_unitpath_esp26)" = "esp"
 	./$(COMPILER) test/test_asm.pas /tmp/test_asm26
 	/tmp/test_asm26; test "$$?" = "42"
 	./$(COMPILER) test/test_asm_func.pas /tmp/test_asm_func26
@@ -1897,9 +1901,9 @@ lib-test: pxx-stable-check
 	$(PXX_STABLE) test/lib_random.pas /tmp/lib_random
 	test "$$(/tmp/lib_random)" = "$$(printf '5 3 5 2 1 1 3 1 \n5 3 5 2 1 1 3 1 \n537 775 832 585 619 ')"
 	$(PXX_STABLE) test/lib_platform.pas /tmp/lib_platform
-	test "$$(/tmp/lib_platform)" = "$$(printf 'posix\nfiles\nsockets\nthreads\ndynlib\npal-write=3\nunsupported=-38')"
+	test "$$(/tmp/lib_platform)" = "$$(printf 'posix\nfiles\nsockets\nthreads\ndynlib\npal-write=3\nfile=io:2\nunsupported=-38')"
 	$(PXX_STABLE) --platform=esp test/lib_platform_esp.pas /tmp/lib_platform_esp
-	test "$$(/tmp/lib_platform_esp)" = "$$(printf 'esp-idf\nread=-38\nunsupported=-38')"
+	test "$$(/tmp/lib_platform_esp)" = "$$(printf 'esp-idf\nopen=-38\nread=-38\nunsupported=-38')"
 	$(PXX_STABLE) examples/bignum/factorial.pas /tmp/lib_factorial
 	test "$$(/tmp/lib_factorial)" = "$$(printf '5! = 120\n10! = 3628800\n20! = 2432902008176640000\n1000! digits      = 2568\n1000! first 10    = 4023872600\n1000! trailing 0s = 249')"
 	@echo "lib-test ok (sudoku exact + collections + math + sysutils + random + platform + bignum smoke) against stable v$$(cat $(STABLE_DEFAULT_DIR)/VERSION 2>/dev/null || echo '?')"

@@ -27,6 +27,7 @@ tasks, and `esp_timer`.
   - `PalHasThreads`
   - `PalHasDynlib`
 - Byte-handle primitives:
+  - `PalOpen(path, flags, mode)`
   - `PalRead(handle, buf, len)`
   - `PalWrite(handle, buf, len)`
   - `PalClose(handle)`
@@ -39,7 +40,7 @@ result. It currently uses `-38` (`ENOSYS`).
 
 ## Current Backends
 
-The posix backend implements byte-handle read/write/close using raw Linux
+The posix backend implements byte-handle open/read/write/close using raw Linux
 syscalls on the hosted CPU targets. `PalMonotonicMillis` is a placeholder and
 currently returns `0`.
 
