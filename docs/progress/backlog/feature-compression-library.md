@@ -1,9 +1,10 @@
 # Compression library — Huffman / LZ77 (roundtrip test app)
 
 - **Type:** feature
-- **Status:** backlog
+- **Status:** done
 - **Owner:** —
 - **Opened:** 2026-06-19
+- **Closed:** 2026-06-20
 - **Relation:** demo-eligible-as-library from idea-demo-app-candidates. Sibling
   to feature-json-library et al. **Depends on** the bit-stream / bit-set work in
   feature-rtl-conversion-and-bitset-library (encode/decode is bit-granular).
@@ -43,3 +44,4 @@ the shared type). No self-host / cross regression.
 
 ## Log
 - 2026-06-19 — Opened from the demo/library organization pass.
+- 2026-06-20 — Landed `lib/rtl/zlib.pas`: RFC 1950/1951 inflate (stored, fixed Huffman, dynamic Huffman) with Adler-32 validation, plus `DeflateZlibStored` for encoding. Added `test/lib_zlib.pas` covering roundtrip, fixed/dynamic fixtures, and malformed-stream rejection. Green in `lib-test` and `library-suite-green`.

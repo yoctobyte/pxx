@@ -2,9 +2,10 @@
 
 - **Type:** feature
 - **Track:** B
-- **Status:** backlog
+- **Status:** done
 - **Owner:** —
 - **Opened:** 2026-06-20
+- **Closed:** 2026-06-20
 - **Blocked-by:** feature-rtl-image-bitmap-library, feature-compression-library, feature-hashing-library
 - **Relation:** Track B image import library. Primary consumer is the adventure
   scene asset pipeline, but the unit should be reusable and demo-independent.
@@ -40,3 +41,6 @@ use an offline converter so this ticket does not block improving the demo.
 - PNG is not just "read pixels"; deflate and CRC make this a real library stack.
 - If full zlib is not ready, start with a host-side/offline converter for demos
   and land runtime PNG decoding when compression/hash foundations are ready.
+
+## Log
+- 2026-06-20 — Landed `lib/rtl/png.pas`: 8-bit RGBA encode/decode, chunk parser with CRC32, IDAT concatenation, zlib inflate, and all five PNG scanline filters. Added `test/lib_png.pas` with a 2x2 roundtrip plus CRC-tamper rejection. Green in `lib-test` and `library-suite-green`.

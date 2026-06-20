@@ -1,9 +1,10 @@
 # Hashing library — CRC32 / MD5 / SHA-256 (known-vector test app)
 
 - **Type:** feature
-- **Status:** backlog
+- **Status:** done
 - **Owner:** —
 - **Opened:** 2026-06-19
+- **Closed:** 2026-06-20
 - **Relation:** demo-eligible-as-library from idea-demo-app-candidates (new
   catalog entry — strongest pure *oracle*). Sibling to feature-json-library et al.
   Exercises the bit-twiddling lane; pairs with the bit-packing work in
@@ -48,3 +49,4 @@ no port; no self-host / cross regression.
 
 ## Log
 - 2026-06-19 — Opened from the demo/library organization pass.
+- 2026-06-20 — Landed `lib/rtl/hashing.pas` with `CRC32*` (streaming + chunk) and `Adler32`. Used by the new `zlib` and `png` units. Wired into `lib-test` / `library-suite-green` via `test/lib_zlib.pas` and `test/lib_png.pas`.
