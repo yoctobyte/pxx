@@ -3805,6 +3805,15 @@ begin
     else
     begin
       EmitLoadVar(retSymIdx);
+      { EmitLoadVar leaves a float in xmm0, but the internal call ABI / value
+        model carries a float return as double-bits in rax (the caller bridges
+        rax->xmm0 after the call). Without this bridge the return value is only
+        correct when rax happens to still hold the bits from the last store; a
+        loop in the body clobbers rax (e.g. the condition's setcc/test) and the
+        result reads as 0. Mirrors the IR_LOAD_SYM bridge in ir_codegen.inc.
+        See feature-result-in-loop. }
+      if TypeIsFloat(Syms[retSymIdx].TypeKind) then
+        begin EmitB($66); EmitB($48); EmitB($0F); EmitB($7E); EmitB($C0); end; { movq rax, xmm0 }
     end;
   end;
   EmitB($C9); EmitB($C3);

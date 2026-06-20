@@ -301,6 +301,8 @@ test-core: $(COMPILER)
 	test "$$(/tmp/test_uses_sysutils26)" = "sysutils noop ok"
 	./$(COMPILER) test/test_float_str_val.pas /tmp/test_float_str_val26
 	test "$$(/tmp/test_float_str_val26)" = "$$(printf '[3.14]\n[    3.1416]\n[-2.750]\n[1000.5]\n42.7500 code=0\n-1.5000 code=0\n100.00 code=0\n350.00 code=0\n0.1250 code=0\ncode=1\n[   42]\n-99 code=0')"
+	./$(COMPILER) test/test_float_result_loop.pas /tmp/test_float_result_loop26
+	test "$$(/tmp/test_float_result_loop26)" = "$$(printf '8.0000\n6.0000\n2.0000')"
 	./$(COMPILER) test/test_math.pas /tmp/test_math26
 	test "$$(/tmp/test_math26)" = "$$(printf '3.14159265\n1.41421356\n4.00000000\n1.50000000\n2.71828183\n1.00000000\n12.18249396\n0.69314718\n2.30258509\n1.00000000\n0.00000000\n0.84147098\n0.00000000\n1.00000000\n0.54030231\n0.78539816\n0.46364761\n1024.00000000\n1.41421356\n3.50000000\n1.00000000')"
 	./$(COMPILER) examples/sudoku/sudoku.pas /tmp/test_sudoku26
