@@ -1,19 +1,17 @@
 unit png;
-{ PNG encoder/decoder first slice.
+{ PNG encoder/decoder.
 
   Supports non-interlaced 8-bit RGBA PNGs (color type 6). Encoding writes zlib
   streams made of uncompressed deflate blocks, so the output is valid PNG
-  without depending on a compression library. Decoding accepts the same stored
-  deflate streams and implements all standard PNG scanline filters for RGBA. }
+  without depending on a compression library. Decoding accepts any valid deflate
+  stream (stored, fixed Huffman, or dynamic Huffman) and implements all standard
+  PNG scanline filters for RGBA. }
 
 interface
 
-uses image;
+uses image, hashing, zlib;
 
-type
-  TByteArray = array of Byte;
-
-function PngEncodeRGBA(const img: TImage): TByteArray;
+procedure PngEncodeRGBA(var img: TImage; var outBytes: TByteArray);
 function PngDecodeRGBA(const data: TByteArray; var img: TImage): Boolean;
 function PngLastError: AnsiString;
 function PngSignatureValid(const data: TByteArray): Boolean;
@@ -29,12 +27,13 @@ const
   PNG_SIG5 = 10;
   PNG_SIG6 = 26;
   PNG_SIG7 = 10;
-  ADLER_MOD = 65521;
 
 var
   LastError: AnsiString;
+  gOut:  TByteArray;   { module-global encode buffer }
+  gIdat: TByteArray;   { module-global IDAT accumulator during decode }
 
-procedure SetError(const s: AnsiString);
+procedure SetErr(const s: AnsiString);
 begin
   LastError := s;
 end;
@@ -53,39 +52,41 @@ begin
             (data[6] = PNG_SIG6) and (data[7] = PNG_SIG7);
 end;
 
-procedure AppendByte(var a: TByteArray; b: Byte);
+{ ---- byte-array builder helpers ---- }
+
+procedure AbAppend(b: Byte);
 var n: Integer;
 begin
-  n := Length(a);
-  SetLength(a, n + 1);
-  a[n] := b;
+  n := Length(gOut);
+  SetLength(gOut, n + 1);
+  gOut[n] := b;
 end;
 
-procedure AppendBytes(var a: TByteArray; const b: TByteArray);
+procedure AbAppendArr(const b: TByteArray);
 var i, n, m: Integer;
 begin
-  n := Length(a);
+  n := Length(gOut);
   m := Length(b);
-  SetLength(a, n + m);
+  SetLength(gOut, n + m);
   for i := 0 to m - 1 do
-    a[n + i] := b[i];
+    gOut[n + i] := b[i];
 end;
 
-procedure AppendU16LE(var a: TByteArray; v: Integer);
+procedure AbAppendU16LE(v: Integer);
 begin
-  AppendByte(a, Byte(v and $FF));
-  AppendByte(a, Byte((v shr 8) and $FF));
+  AbAppend(Byte(v and $FF));
+  AbAppend(Byte((v shr 8) and $FF));
 end;
 
-procedure AppendU32BE(var a: TByteArray; v: LongWord);
+procedure AbAppendU32BE(v: LongWord);
 begin
-  AppendByte(a, Byte((v shr 24) and $FF));
-  AppendByte(a, Byte((v shr 16) and $FF));
-  AppendByte(a, Byte((v shr 8) and $FF));
-  AppendByte(a, Byte(v and $FF));
+  AbAppend(Byte((v shr 24) and $FF));
+  AbAppend(Byte((v shr 16) and $FF));
+  AbAppend(Byte((v shr 8) and $FF));
+  AbAppend(Byte(v and $FF));
 end;
 
-function ReadU32BE(const data: TByteArray; pos: Integer): LongWord;
+function AbReadU32BE(const data: TByteArray; pos: Integer): LongWord;
 begin
   Result := (LongWord(data[pos]) shl 24) or
             (LongWord(data[pos + 1]) shl 16) or
@@ -101,190 +102,82 @@ begin
             LongWord(Ord(d));
 end;
 
-function CRC32Update(crc: LongWord; b: Byte): LongWord;
-var i: Integer;
-begin
-  crc := crc xor LongWord(b);
-  for i := 0 to 7 do
-  begin
-    if (crc and 1) <> 0 then
-      crc := (crc shr 1) xor LongWord($EDB88320)
-    else
-      crc := crc shr 1;
-  end;
-  Result := crc;
-end;
-
-function CRC32Chunk(kind: LongWord; const payload: TByteArray): LongWord;
-var crc: LongWord; i: Integer;
-begin
-  crc := LongWord($FFFFFFFF);
-  crc := CRC32Update(crc, Byte((kind shr 24) and $FF));
-  crc := CRC32Update(crc, Byte((kind shr 16) and $FF));
-  crc := CRC32Update(crc, Byte((kind shr 8) and $FF));
-  crc := CRC32Update(crc, Byte(kind and $FF));
-  for i := 0 to Length(payload) - 1 do
-    crc := CRC32Update(crc, payload[i]);
-  Result := crc xor LongWord($FFFFFFFF);
-end;
-
-function Adler32(const data: TByteArray): LongWord;
-var a, b: LongWord; i: Integer;
-begin
-  a := 1;
-  b := 0;
-  for i := 0 to Length(data) - 1 do
-  begin
-    a := (a + LongWord(data[i])) mod ADLER_MOD;
-    b := (b + a) mod ADLER_MOD;
-  end;
-  Result := (b shl 16) or a;
-end;
-
-procedure AppendChunk(var outp: TByteArray; kind: LongWord; const payload: TByteArray);
+procedure AppendChunk(kind: LongWord; const payload: TByteArray);
 var crc: LongWord;
 begin
-  AppendU32BE(outp, LongWord(Length(payload)));
-  AppendByte(outp, Byte((kind shr 24) and $FF));
-  AppendByte(outp, Byte((kind shr 16) and $FF));
-  AppendByte(outp, Byte((kind shr 8) and $FF));
-  AppendByte(outp, Byte(kind and $FF));
-  AppendBytes(outp, payload);
+  AbAppendU32BE(LongWord(Length(payload)));
+  AbAppend(Byte((kind shr 24) and $FF));
+  AbAppend(Byte((kind shr 16) and $FF));
+  AbAppend(Byte((kind shr 8) and $FF));
+  AbAppend(Byte(kind and $FF));
+  AbAppendArr(payload);
   crc := CRC32Chunk(kind, payload);
-  AppendU32BE(outp, crc);
+  AbAppendU32BE(crc);
 end;
 
-function BuildRawRGBA(const img: TImage): TByteArray;
+procedure BuildRawRGBA(var img: TImage; var raw: TByteArray);
 var x, y, p: Integer; c: TRGBA;
 begin
-  SetLength(Result, img.Height * (1 + img.Width * 4));
+  SetLength(raw, img.Height * (1 + img.Width * 4));
   p := 0;
   for y := 0 to img.Height - 1 do
   begin
-    Result[p] := 0;  { filter type: None }
+    raw[p] := 0;  { filter type: None }
     p := p + 1;
     for x := 0 to img.Width - 1 do
     begin
       c := ImageGetPixel(img, x, y);
-      Result[p] := c.R; p := p + 1;
-      Result[p] := c.G; p := p + 1;
-      Result[p] := c.B; p := p + 1;
-      Result[p] := c.A; p := p + 1;
+      raw[p] := c.R; p := p + 1;
+      raw[p] := c.G; p := p + 1;
+      raw[p] := c.B; p := p + 1;
+      raw[p] := c.A; p := p + 1;
     end;
   end;
 end;
 
-function ZlibStore(const raw: TByteArray): TByteArray;
-var pos, remain, blockLen: Integer; final: Byte; ad: LongWord;
+{ ---- encoder ---- }
+
+procedure PngEncodeRGBA(var img: TImage; var outBytes: TByteArray);
+var ihdr, raw, z, empty: TByteArray;
+    i, n: Integer;
 begin
-  SetLength(Result, 0);
-  AppendByte(Result, $78);
-  AppendByte(Result, $01);
-  pos := 0;
-  repeat
-    remain := Length(raw) - pos;
-    if remain > 65535 then
-      blockLen := 65535
-    else
-      blockLen := remain;
-    if pos + blockLen >= Length(raw) then
-      final := 1
-    else
-      final := 0;
-    AppendByte(Result, final);
-    AppendU16LE(Result, blockLen);
-    AppendU16LE(Result, 65535 - blockLen);
-    for remain := 0 to blockLen - 1 do
-      AppendByte(Result, raw[pos + remain]);
-    pos := pos + blockLen;
-  until pos >= Length(raw);
-  ad := Adler32(raw);
-  AppendU32BE(Result, ad);
+  SetLength(gOut, 0);
+  AbAppend(PNG_SIG0); AbAppend(PNG_SIG1);
+  AbAppend(PNG_SIG2); AbAppend(PNG_SIG3);
+  AbAppend(PNG_SIG4); AbAppend(PNG_SIG5);
+  AbAppend(PNG_SIG6); AbAppend(PNG_SIG7);
+
+  SetLength(ihdr, 13);
+  ihdr[0] := Byte((img.Width shr 24) and $FF);
+  ihdr[1] := Byte((img.Width shr 16) and $FF);
+  ihdr[2] := Byte((img.Width shr 8) and $FF);
+  ihdr[3] := Byte(img.Width and $FF);
+  ihdr[4] := Byte((img.Height shr 24) and $FF);
+  ihdr[5] := Byte((img.Height shr 16) and $FF);
+  ihdr[6] := Byte((img.Height shr 8) and $FF);
+  ihdr[7] := Byte(img.Height and $FF);
+  ihdr[8] := 8;  { bit depth }
+  ihdr[9] := 6;  { RGBA }
+  ihdr[10] := 0; { compression }
+  ihdr[11] := 0; { filter }
+  ihdr[12] := 0; { no interlace }
+  AppendChunk(ChunkName('I', 'H', 'D', 'R'), ihdr);
+
+  BuildRawRGBA(img, raw);
+  DeflateZlibStored(raw, z);
+  AppendChunk(ChunkName('I', 'D', 'A', 'T'), z);
+
+  SetLength(empty, 0);
+  AppendChunk(ChunkName('I', 'E', 'N', 'D'), empty);
+
+  n := Length(gOut);
+  SetLength(outBytes, n);
+  for i := 0 to n - 1 do
+    outBytes[i] := gOut[i];
+  SetLength(gOut, 0);
 end;
 
-function PngEncodeRGBA(const img: TImage): TByteArray;
-var ihdr, raw, z: TByteArray;
-begin
-  SetLength(Result, 0);
-  AppendByte(Result, PNG_SIG0); AppendByte(Result, PNG_SIG1);
-  AppendByte(Result, PNG_SIG2); AppendByte(Result, PNG_SIG3);
-  AppendByte(Result, PNG_SIG4); AppendByte(Result, PNG_SIG5);
-  AppendByte(Result, PNG_SIG6); AppendByte(Result, PNG_SIG7);
-
-  SetLength(ihdr, 0);
-  AppendU32BE(ihdr, LongWord(img.Width));
-  AppendU32BE(ihdr, LongWord(img.Height));
-  AppendByte(ihdr, 8);  { bit depth }
-  AppendByte(ihdr, 6);  { RGBA }
-  AppendByte(ihdr, 0);  { compression }
-  AppendByte(ihdr, 0);  { filter }
-  AppendByte(ihdr, 0);  { no interlace }
-  AppendChunk(Result, ChunkName('I', 'H', 'D', 'R'), ihdr);
-
-  raw := BuildRawRGBA(img);
-  z := ZlibStore(raw);
-  AppendChunk(Result, ChunkName('I', 'D', 'A', 'T'), z);
-
-  SetLength(raw, 0);
-  AppendChunk(Result, ChunkName('I', 'E', 'N', 'D'), raw);
-end;
-
-function ReadBits(const data: TByteArray; var bitpos: Integer; nbits: Integer; var ok: Boolean): Integer;
-var i, bytePos, bit: Integer;
-begin
-  Result := 0;
-  for i := 0 to nbits - 1 do
-  begin
-    bytePos := bitpos div 8;
-    if bytePos >= Length(data) then
-    begin
-      ok := False;
-      Exit;
-    end;
-    bit := (data[bytePos] shr (bitpos mod 8)) and 1;
-    Result := Result or (bit shl i);
-    bitpos := bitpos + 1;
-  end;
-end;
-
-function InflateStoredZlib(const z: TByteArray; var raw: TByteArray): Boolean;
-var bitpos, bfinal, btype, bytePos, len, nlen, i: Integer;
-    ok: Boolean; wantAdler, gotAdler: LongWord;
-begin
-  Result := False;
-  SetLength(raw, 0);
-  if Length(z) < 6 then begin SetError('zlib stream too short'); Exit; end;
-  if ((Integer(z[0]) * 256 + Integer(z[1])) mod 31) <> 0 then
-  begin
-    SetError('bad zlib header');
-    Exit;
-  end;
-  bitpos := 16;
-  repeat
-    ok := True;
-    bfinal := ReadBits(z, bitpos, 1, ok);
-    btype := ReadBits(z, bitpos, 2, ok);
-    if not ok then begin SetError('truncated deflate header'); Exit; end;
-    if btype <> 0 then begin SetError('compressed deflate block unsupported'); Exit; end;
-    if (bitpos mod 8) <> 0 then bitpos := ((bitpos div 8) + 1) * 8;
-    bytePos := bitpos div 8;
-    if bytePos + 4 > Length(z) - 4 then begin SetError('truncated stored block'); Exit; end;
-    len := Integer(z[bytePos]) or (Integer(z[bytePos + 1]) shl 8);
-    nlen := Integer(z[bytePos + 2]) or (Integer(z[bytePos + 3]) shl 8);
-    if nlen <> 65535 - len then begin SetError('bad stored block length'); Exit; end;
-    bytePos := bytePos + 4;
-    if bytePos + len > Length(z) - 4 then begin SetError('truncated stored data'); Exit; end;
-    for i := 0 to len - 1 do
-      AppendByte(raw, z[bytePos + i]);
-    bitpos := (bytePos + len) * 8;
-  until bfinal <> 0;
-  bytePos := bitpos div 8;
-  if bytePos + 4 <> Length(z) then begin SetError('trailing zlib data'); Exit; end;
-  wantAdler := ReadU32BE(z, bytePos);
-  gotAdler := Adler32(raw);
-  if wantAdler <> gotAdler then begin SetError('bad adler32'); Exit; end;
-  Result := True;
-end;
+{ ---- filters ---- }
 
 function Paeth(a, b, c: Integer): Integer;
 var p, pa, pb, pc: Integer;
@@ -298,24 +191,25 @@ begin
   else Result := c;
 end;
 
-function UnfilterRGBA(const raw: TByteArray; width, height: Integer; var pixels: TByteArray): Boolean;
+function UnfilterRGBA(const raw: TByteArray; width, height: Integer;
+                       var pixels: TByteArray): Boolean;
 var rowBytes, x, y, p, dst, filter, val, left, up, upLeft: Integer;
 begin
   Result := False;
   rowBytes := width * 4;
   if Length(raw) <> height * (rowBytes + 1) then
   begin
-    SetError('bad raw image length');
+    SetErr('bad raw image length');
     Exit;
   end;
   SetLength(pixels, width * height * 4);
-  p := 0;
+  p   := 0;
   dst := 0;
   for y := 0 to height - 1 do
   begin
     filter := raw[p];
     p := p + 1;
-    if filter > 4 then begin SetError('bad filter'); Exit; end;
+    if filter > 4 then begin SetErr('bad filter'); Exit; end;
     for x := 0 to rowBytes - 1 do
     begin
       val := raw[p]; p := p + 1;
@@ -333,56 +227,71 @@ begin
   Result := True;
 end;
 
+{ ---- decoder ---- }
+
+procedure IdatAppend(const b: TByteArray);
+var i, n, m: Integer;
+begin
+  n := Length(gIdat);
+  m := Length(b);
+  SetLength(gIdat, n + m);
+  for i := 0 to m - 1 do
+    gIdat[n + i] := b[i];
+end;
+
 function PngDecodeRGBA(const data: TByteArray; var img: TImage): Boolean;
-var pos, chunkLen, endPos, width, height: Integer; kind, gotCrc, wantCrc: LongWord;
-    payload, idat, raw, px: TByteArray; seenIHDR, seenIEND: Boolean; i: Integer;
-    c: TRGBA;
+var pos, chunkLen, endPos, width, height: Integer;
+    kind, gotCrc, wantCrc: LongWord;
+    payload, raw, px: TByteArray;
+    seenIHDR, seenIEND: Boolean;
+    i: Integer; c: TRGBA;
+    zlibErr: AnsiString;
 begin
   Result := False;
-  SetError('');
+  SetErr('');
   ImageFree(img);
-  if not PngSignatureValid(data) then begin SetError('bad png signature'); Exit; end;
+  if not PngSignatureValid(data) then begin SetErr('bad png signature'); Exit; end;
   pos := 8;
   width := 0; height := 0;
-  SetLength(idat, 0);
+  SetLength(gIdat, 0);
   seenIHDR := False; seenIEND := False;
   while pos < Length(data) do
   begin
-    if pos + 8 > Length(data) then begin SetError('truncated chunk header'); Exit; end;
-    chunkLen := Integer(ReadU32BE(data, pos));
-    kind := ReadU32BE(data, pos + 4);
+    if pos + 8 > Length(data) then begin SetErr('truncated chunk header'); Exit; end;
+    chunkLen := Integer(AbReadU32BE(data, pos));
+    kind     := AbReadU32BE(data, pos + 4);
     pos := pos + 8;
     if (chunkLen < 0) or (pos + chunkLen + 4 > Length(data)) then
     begin
-      SetError('truncated chunk data');
+      SetErr('truncated chunk data');
       Exit;
     end;
     SetLength(payload, chunkLen);
     for i := 0 to chunkLen - 1 do payload[i] := data[pos + i];
-    gotCrc := ReadU32BE(data, pos + chunkLen);
+    gotCrc  := AbReadU32BE(data, pos + chunkLen);
     wantCrc := CRC32Chunk(kind, payload);
-    if gotCrc <> wantCrc then begin SetError('bad chunk crc'); Exit; end;
+    if gotCrc <> wantCrc then begin SetErr('bad chunk crc'); Exit; end;
     pos := pos + chunkLen + 4;
 
     if kind = ChunkName('I', 'H', 'D', 'R') then
     begin
-      if seenIHDR then begin SetError('duplicate ihdr'); Exit; end;
-      if chunkLen <> 13 then begin SetError('bad ihdr length'); Exit; end;
-      width := Integer(ReadU32BE(payload, 0));
-      height := Integer(ReadU32BE(payload, 4));
-      if (width <= 0) or (height <= 0) then begin SetError('bad dimensions'); Exit; end;
+      if seenIHDR then begin SetErr('duplicate ihdr'); Exit; end;
+      if chunkLen <> 13 then begin SetErr('bad ihdr length'); Exit; end;
+      width  := Integer(AbReadU32BE(payload, 0));
+      height := Integer(AbReadU32BE(payload, 4));
+      if (width <= 0) or (height <= 0) then begin SetErr('bad dimensions'); Exit; end;
       if (payload[8] <> 8) or (payload[9] <> 6) or (payload[10] <> 0) or
          (payload[11] <> 0) or (payload[12] <> 0) then
       begin
-        SetError('unsupported ihdr');
+        SetErr('unsupported ihdr');
         Exit;
       end;
       seenIHDR := True;
     end
     else if kind = ChunkName('I', 'D', 'A', 'T') then
     begin
-      if not seenIHDR then begin SetError('idat before ihdr'); Exit; end;
-      AppendBytes(idat, payload);
+      if not seenIHDR then begin SetErr('idat before ihdr'); Exit; end;
+      IdatAppend(payload);
     end
     else if kind = ChunkName('I', 'E', 'N', 'D') then
     begin
@@ -391,10 +300,16 @@ begin
     end;
   end;
 
-  if not seenIHDR then begin SetError('missing ihdr'); Exit; end;
-  if not seenIEND then begin SetError('missing iend'); Exit; end;
-  if Length(idat) = 0 then begin SetError('missing idat'); Exit; end;
-  if not InflateStoredZlib(idat, raw) then Exit;
+  if not seenIHDR then begin SetErr('missing ihdr'); Exit; end;
+  if not seenIEND then begin SetErr('missing iend'); Exit; end;
+  if Length(gIdat) = 0 then begin SetErr('missing idat'); Exit; end;
+
+  if not InflateZlib(gIdat, raw, zlibErr) then
+  begin
+    SetErr(zlibErr);
+    Exit;
+  end;
+
   if not UnfilterRGBA(raw, width, height, px) then Exit;
 
   ImageInit(img, width, height);

@@ -16,7 +16,7 @@ begin
   ImageSetPixel(img, 0, 1, MakeRGBA(0, 0, 255, 64));
   ImageSetPixel(img, 1, 1, MakeRGBA(255, 255, 255, 0));
 
-  bytes := PngEncodeRGBA(img);
+  PngEncodeRGBA(img, bytes);
   writeln(Length(bytes));
   writeln(bytes[0], ' ', bytes[1], ' ', bytes[2], ' ', bytes[3]);
   writeln(PngSignatureValid(bytes));

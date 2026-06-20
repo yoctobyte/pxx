@@ -20,7 +20,7 @@ procedure ImageFree(var img: TImage);
 function ImagePixelCount(const img: TImage): Integer;
 function ImageInBounds(const img: TImage; x, y: Integer): Boolean;
 procedure ImageSetPixel(var img: TImage; x, y: Integer; c: TRGBA);
-function ImageGetPixel(const img: TImage; x, y: Integer): TRGBA;
+function ImageGetPixel(var img: TImage; x, y: Integer): TRGBA;
 procedure ImageClear(var img: TImage; c: TRGBA);
 
 implementation
@@ -70,7 +70,7 @@ begin
     img.Pixels[y * img.Width + x] := c;
 end;
 
-function ImageGetPixel(const img: TImage; x, y: Integer): TRGBA;
+function ImageGetPixel(var img: TImage; x, y: Integer): TRGBA;
 begin
   if ImageInBounds(img, x, y) then
     Result := img.Pixels[y * img.Width + x]
