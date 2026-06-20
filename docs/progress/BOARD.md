@@ -12,7 +12,7 @@ _none_
 
 _none_
 
-## backlog (64)
+## backlog (65)
 
 | Ticket | Type | Summary | Blocked-by |
 | --- | --- | --- | --- |
@@ -64,6 +64,7 @@ _none_
 | feature-object-reference-type | feature | `object` — a rooted object-reference type | — |
 | feature-os-targets-bsd-mac | feature | Additional OS targets (BSD / macOS via syscall mapping; Windows deprioritized) | — |
 | feature-parallel-processing | feature | Parallel processing as a language feature | feature-unified-heap-allocator |
+| feature-platform-abstraction-layer | feature | Platform Abstraction Layer (PAL): per-platform RTL port at one seam | — |
 | feature-progress-transition-helpers | feature | Progress transition helpers (`claim` / `resolve`) | — |
 | feature-random-library | feature | Random library — HW/OS/software tiered RNG (cross-target capability test) | — |
 | feature-result-in-loop | feature | Function `Result` (float) read-modified inside a loop miscompiles to 0 | — |
@@ -233,6 +234,7 @@ _none_
 - feature-object-reference-type
 - feature-os-targets-bsd-mac
 - feature-parallel-processing
+- feature-platform-abstraction-layer
 - feature-progress-transition-helpers
 - feature-random-library
 - feature-result-in-loop
