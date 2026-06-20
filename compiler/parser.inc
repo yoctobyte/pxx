@@ -3183,6 +3183,75 @@ begin
         Exit;
       end;
 
+      { Record-name reinterpret cast: TRec(ptr)^.field. Treats TRec(ptr) as a
+        pointer reinterpret whose pointee is the record TRec, then handles the
+        trailing ^ / .field / [i] (mirrors the pointer-alias path). A class name
+        already went to AN_CLASS_CAST above; a record name is not a type alias so
+        it would otherwise fall through to "unexpected token". }
+      if (idx < 0) and (procIdx < 0) and (Tokens[TokPos].Kind = tkLParen) and
+         (IsRecordType(name) >= REC_UCLASS_BASE) then
+      begin
+        baseRec := IsRecordType(name);
+        Next;                  { consume record type name }
+        Expect(tkLParen, '(');
+        ParseExpr;
+        Expect(tkRParen, ')');
+        node := AllocNode(AN_PTR_CAST);
+        ASTLeft[node] := CurASTNode;
+        ASTIVal[node] := 0;          { plain pointer reinterpret (no char +8 adapter) }
+        ASTTk[node]   := Ord(tyPointer);
+        tk := tyPointer; recName := baseRec;
+        while CurTok.Kind in [tkCaret, tkDot, tkLBrack] do
+        begin
+          if CurTok.Kind = tkCaret then
+          begin
+            Next;
+            indexNode := AllocNode(AN_DEREF);
+            ASTLeft[indexNode] := node;
+            { Carry the pointee record id on the deref node so ResolveNodeRec
+              (AN_DEREF, ASTIVal>0 path) resolves trailing .field offsets. }
+            ASTIVal[indexNode] := baseRec;
+            tk := tyRecord; recName := baseRec;
+            ASTTk[indexNode] := Ord(tyRecord);
+            node := indexNode;
+          end
+          else if CurTok.Kind = tkLBrack then
+          begin
+            Next;
+            indexNode := AllocNode(AN_INDEX);
+            ASTLeft[indexNode] := node;
+            ParseExpr;
+            ASTRight[indexNode] := CurASTNode;
+            Expect(tkRBrack, ']');
+            tk := tyRecord; recName := baseRec;
+            ASTTk[indexNode] := Ord(tyRecord);
+            node := indexNode;
+          end
+          else { tkDot }
+          begin
+            Next;
+            if CurTok.Kind in [tkEOF, tkSemicolon, tkAssign, tkRBrack, tkRParen] then
+              Error('expected field name after .');
+            prevTok := TokPos - 1;
+            fieldName := '';
+            for i := Tokens[prevTok].SOffset to Tokens[prevTok].SOffset + Tokens[prevTok].SLen - 1 do
+              AppendChar(fieldName, TokChars[i]);
+            fieldNode := AllocNode(AN_FIELD);
+            ASTLeft[fieldNode] := node;
+            ASTSOffset[fieldNode] := Tokens[prevTok].SOffset;
+            ASTSLen[fieldNode]   := Tokens[prevTok].SLen;
+            tk      := RecFieldType(recName, fieldName);
+            recName := RecFieldRecId(recName, fieldName);
+            ASTTk[fieldNode] := Ord(tk);
+            Next;
+            node := fieldNode;
+          end;
+        end;
+        CurASTNode := node;
+        LastExprTk := tk;
+        Exit;
+      end;
+
       { C4: pointer-type-alias cast — PFoo(expr) where PFoo = ^TFoo }
       if (idx < 0) and (procIdx < 0) and (Tokens[TokPos].Kind = tkLParen) then
       begin
@@ -6543,6 +6612,64 @@ begin
                 ASTLeft[node]  := valNode;
                 ASTRight[node] := CurASTNode;
               end;
+            end;
+          end;
+
+          if node = -1 then
+          begin
+            { Record-name typecast as an lvalue statement — TRec(ptr)^.field := val.
+              Mirrors the expression-side record cast: reinterpret ptr as ^TRec and
+              carry the pointee rec on the deref node so ResolveNodeRec resolves the
+              field offset. A class name went to AN_CLASS_CAST above. }
+            if (IsRecordType(name) >= REC_UCLASS_BASE) and (Tokens[TokPos].Kind = tkLParen) then
+            begin
+              castRec := IsRecordType(name);
+              Next; { consume record type name }
+              Expect(tkLParen, '(');
+              ParseExpr;
+              Expect(tkRParen, ')');
+              indexNode := AllocNode(AN_PTR_CAST);
+              ASTLeft[indexNode] := CurASTNode;
+              ASTIVal[indexNode] := 0;
+              ASTTk[indexNode]   := Ord(tyPointer);
+              valNode := indexNode;
+              while CurTok.Kind in [tkCaret, tkDot] do
+              begin
+                if CurTok.Kind = tkCaret then
+                begin
+                  Next;
+                  fieldNode := AllocNode(AN_DEREF);
+                  ASTLeft[fieldNode] := valNode;
+                  ASTIVal[fieldNode] := castRec;   { pointee rec for ResolveNodeRec }
+                  castTk := tyRecord;
+                  ASTTk[fieldNode] := Ord(tyRecord);
+                  valNode := fieldNode;
+                end
+                else { tkDot }
+                begin
+                  Next;
+                  if CurTok.Kind in [tkEOF, tkSemicolon, tkAssign, tkRBrack, tkRParen] then
+                    Error('expected field name after .');
+                  castPrevTok := TokPos - 1;
+                  castFieldName := '';
+                  for i := Tokens[castPrevTok].SOffset to Tokens[castPrevTok].SOffset + Tokens[castPrevTok].SLen - 1 do
+                    AppendChar(castFieldName, TokChars[i]);
+                  fieldNode := AllocNode(AN_FIELD);
+                  ASTLeft[fieldNode] := valNode;
+                  ASTSOffset[fieldNode] := Tokens[castPrevTok].SOffset;
+                  ASTSLen[fieldNode]   := Tokens[castPrevTok].SLen;
+                  castTk  := RecFieldType(castRec, castFieldName);
+                  castRec := RecFieldRecId(castRec, castFieldName);
+                  ASTTk[fieldNode] := Ord(castTk);
+                  Next;
+                  valNode := fieldNode;
+                end;
+              end;
+              Expect(tkAssign, ':=');
+              ParseExpr;
+              node := AllocNode(AN_ASSIGN);
+              ASTLeft[node]  := valNode;
+              ASTRight[node] := CurASTNode;
             end;
           end;
 

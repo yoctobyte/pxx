@@ -389,6 +389,8 @@ test-core: $(COMPILER)
 	test "$$(/tmp/test_const_bitshift26)" = "$$(printf '65536\n128\n2\n8\n15\n511\n65536')"
 	./$(COMPILER) test/test_const_typecast.pas /tmp/test_const_typecast26
 	test "$$(/tmp/test_const_typecast26)" = "$$(printf '4503599627370496\n4503599627370495\n300\n1\n65535\n-56\n4294967295')"
+	./$(COMPILER) test/test_record_typecast.pas /tmp/test_record_typecast26
+	test "$$(/tmp/test_record_typecast26)" = "$$(printf '77\n88\n77\n88\n165')"
 	./$(COMPILER) test/test_funcname_field.pas /tmp/test_funcname_field26
 	test "$$(/tmp/test_funcname_field26)" = "$$(printf 'a=1000000000 b=2000000000 n=7\na=3 b=6 n=9')"
 	./$(COMPILER) test/test_cross_multidim.pas /tmp/test_multidim26
