@@ -42,11 +42,36 @@ Notes:
   Single otherwise). Small parser change. Affects no-FPU/ESP precision of `Real`
   code by design (the contract).
 
+## BLOCKED 2026-06-20 — needs [[feature-esp-int64-arith]] first
+
+The soft-float kernels are validated and ready, but they cannot run on ESP yet:
+the riscv32 + xtensa backends do **runtime integer arithmetic in 32 bits only**
+(the `IR_BINOP` handler uses single registers, no lo:hi pair), so a 64-bit
+`add`/`sub`/`mul`/`and` silently truncates. softfloat is almost all 64-bit math
+(double `shl 52`, 53x53 mul; single 48-bit products + Int64 guard math), so it
+either truncates or hits a tyString misclassification error on ESP. Verified on
+esp32c3 QEMU vs the x86-64 oracle. **Prerequisite: [[feature-esp-int64-arith]]**
+(64-bit register-pair arithmetic for the ESP backends, mirroring arm32's
+EmitNode64). Once that lands, resume the wiring below.
+
+Also fixed en route (separate commit, cb46fbd): COM/ARC interface ARC helpers
+in builtinheap were compiled unconditionally and broke ALL ESP compiles (indirect
+IMT call) — silently regressing ESP bare-boot. Now {$ifndef PXX_ESP}-guarded.
+
+The gating harness is ready: `test/test_esp_softfloat_probe.pas` calls the kernels
+(integer-exact results) and is run via `tools/esp_run_bare.sh --chip esp32c3`
+against its x86-64 oracle. It compiles + passes on x86-64 today; it will compile
+for riscv32/xtensa once 64-bit int arithmetic exists.
+
 ## Dependencies
 
-- [[feature-softfloat-lib]] — soft-**single** (riscv) + soft-**double** (both ESP)
-  kernels + i<->s / i<->d / s<->d conversions this wiring calls. (On double-native
-  targets Single stays storage-only/widen — unchanged, not part of this ticket.)
+- [[feature-esp-int64-arith]] — **runtime 64-bit integer arithmetic on the ESP
+  backends. Hard blocker; the soft-float kernels are 64-bit-heavy.** Discovered
+  2026-06-20.
+- [[feature-softfloat-lib]] — DONE. soft-**single** (riscv) + soft-**double** (both
+  ESP) kernels + i<->s / i<->d / s<->d conversions this wiring calls. (On
+  double-native targets Single stays storage-only/widen — unchanged, not part of
+  this ticket.)
 
 ## Approach (per target, after the lib lands)
 
