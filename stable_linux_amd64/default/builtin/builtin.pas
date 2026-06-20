@@ -16,13 +16,13 @@ unit builtin;
 
 interface
 
-function StrInt(v: Int64; width: Integer): string;
-function FloatToStr(v: Double): string;
-function StrFloat(v: Double; width: Integer; decimals: Integer): string;
+function StrInt(v: Int64; width: Integer): AnsiString;
+function FloatToStr(v: Double): AnsiString;
+function StrFloat(v: Double; width: Integer; decimals: Integer): AnsiString;
 procedure Val(const s: AnsiString; var v: Int64; var code: Integer);
 procedure ValFloat(const s: AnsiString; var v: Double; var code: Integer);
 function VariantToStr(const v: Variant): AnsiString;
-function PCharToString(p: PChar): string;
+function PCharToString(p: PChar): AnsiString;
 
 { The heap allocator and managed-string helpers (PXXAlloc/Free/Realloc,
   PXXStr*) moved to the `builtinheap` unit so heap-only / string-only programs
@@ -59,7 +59,7 @@ begin
 end;
 
 
-function StrInt(v: Int64; width: Integer): string;
+function StrInt(v: Int64; width: Integer): AnsiString;
 var
   neg: Boolean;
   digits: string;
@@ -87,7 +87,7 @@ begin
     Result := ' ' + Result;
 end;
 
-function FloatToStr(v: Double): string;
+function FloatToStr(v: Double): AnsiString;
 { Python-style natural decimal: [-]int.frac with trailing zeros trimmed but at
   least one fractional digit (5.0 -> "5.0"). Uses the Trunc/Frac/Round float
   intrinsics so all digit extraction is integer arithmetic. Mirrors the
@@ -124,7 +124,7 @@ begin
   Result := Result + digits;
 end;
 
-function StrFloat(v: Double; width: Integer; decimals: Integer): string;
+function StrFloat(v: Double; width: Integer; decimals: Integer): AnsiString;
 { Format a Double like write(v:width:decimals). decimals < 0 -> natural form
   (FloatToStr); decimals >= 0 -> fixed, round-to-nearest, exactly `decimals`
   fractional digits (0 -> rounded integer, no point). Then right-justify to
@@ -290,7 +290,7 @@ begin
   code := 0;
 end;
 
-function PCharToString(p: PChar): string;
+function PCharToString(p: PChar): AnsiString;
 var
   i: Integer;
   c: Char;
