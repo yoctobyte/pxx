@@ -1156,6 +1156,9 @@ test-aarch64: $(COMPILER)
 	./$(COMPILER) --target=aarch64 test/test_cross_float.pas /tmp/test_aarch64_float
 	./$(COMPILER) test/test_cross_float.pas /tmp/test_aarch64_float_x64
 	test "$$(tools/run_target.sh aarch64 /tmp/test_aarch64_float)" = "$$(/tmp/test_aarch64_float_x64)"
+	./$(COMPILER) --target=aarch64 test/test_cross_float_return.pas /tmp/test_aarch64_fret
+	./$(COMPILER) test/test_cross_float_return.pas /tmp/test_aarch64_fret_x64
+	test "$$(tools/run_target.sh aarch64 /tmp/test_aarch64_fret)" = "$$(/tmp/test_aarch64_fret_x64)"
 	./$(COMPILER) --target=aarch64 test/test_cross_variant.pas /tmp/test_aarch64_variant
 	./$(COMPILER) test/test_cross_variant.pas /tmp/test_aarch64_variant_x64
 	test "$$(tools/run_target.sh aarch64 /tmp/test_aarch64_variant)" = "$$(/tmp/test_aarch64_variant_x64)"

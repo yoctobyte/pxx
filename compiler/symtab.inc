@@ -3674,9 +3674,12 @@ begin
       else
       begin
         if Syms[retSymIdx].IsArray or (Syms[retSymIdx].Kind <> skLocal) or
-           not (TypeIsOrdinal(Syms[retSymIdx].TypeKind) or
+           not (TypeIsOrdinal(Syms[retSymIdx].TypeKind) or TypeIsFloat(Syms[retSymIdx].TypeKind) or
                 (Syms[retSymIdx].TypeKind in [tyAnsiString, tyPointer, tyClass])) then
           Error('target aarch64: only ordinal/pointer/string function results supported yet');
+        { Float result: the value model carries it as double-bits in x0 (the
+          return reg). EmitLoadVarA64 loads a Double's 8 bytes / widens a Single
+          into x0 already. See feature-cross-float-returns. }
         EmitLoadVarA64(retSymIdx);
       end;
     end;
