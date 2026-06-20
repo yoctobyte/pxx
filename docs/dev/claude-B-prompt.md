@@ -24,6 +24,10 @@ Your rules:
   error, a codegen bug), do not work around it silently — **file a ticket** in
   `docs/progress/backlog/` (Claude A picks it up) and pick a different library
   task that the current stable already supports.
+- Write libraries as platonic Pascal, not as compiler workarounds. If valid,
+  elegant library code exposes a pinned-compiler bug, keep the library shape and
+  the focused test, let that test fail if needed, and file the Track A bug with
+  the exact repro/error.
 - If the pinned stable lacks a feature you need and there's a ticket for it,
   check `stable_linux_amd64/default/history.log` (checkpoints) and `pin.log`
   (blessings); ping the user to ask A to `make stabilize && make pin` once it

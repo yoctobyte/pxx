@@ -97,6 +97,12 @@ dashboards. When they surface missing or bugged library / language support
 (e.g. a demo needs `Copy` or `IntToStr`, or a parse error), **file a ticket** in
 `docs/progress/backlog` rather than treating the red as a hard failure.
 
+Write Track B libraries platonically: prefer clear, idiomatic Pascal and the API
+shape the library should have. If the pinned compiler rejects valid source or
+miscompiles it, do **not** add compiler-appeasement workarounds to the library.
+Leave the platonic code in place, add/keep the focused test even if it fails, and
+file a Track A bug ticket with the exact compiler error or misbehavior.
+
 ## Lanes are soft, not walls
 
 The split above is the *ideal*, not a fence. This is a dialect:
