@@ -1,8 +1,8 @@
 # Platform Abstraction Layer (PAL): per-platform RTL port at one seam
 
 - **Type:** feature (compiler axis + Track B RTL architecture)
-- **Status:** backlog
-- **Owner:** —
+- **Status:** working
+- **Owner:** Codex
 - **Opened:** 2026-06-20
 - **Relation:** foundation for `lib-text-file-io-assign-rewrite`,
   `feature-networking`, and any IO-bearing stdlib. Backend selection rides the
@@ -12,20 +12,22 @@
 
 ## Problem
 
-The RTL (`lib/rtl/*`) is flat with **no platform branching**, and the compiler
-predefines only a **CPU axis** (`CPU32/64`, `CPUXTENSA`, …) plus `PXX_ESP_BARE`
-and host `LINUX`. There is no first-class **platform/OS axis**. Networking, file
-IO, time, and threading depend on the platform (posix-hosted vs esp32-bare), not
-the CPU — aarch64 can be Linux or bare; xtensa is esp. Without an explicit axis
-and a single porting seam, platform `{$ifdef}`s would scatter through every IO
-library.
+The RTL (`lib/rtl/*`) is flat with **no platform branching**, and historically
+the compiler predefined only a **CPU axis** (`CPU32/64`, `CPUXTENSA`, …) plus
+`PXX_ESP_BARE` and host `LINUX`. Networking, file IO, time, and threading depend
+on the platform (posix-hosted vs ESP-IDF/FreeRTOS-hosted), not the CPU —
+aarch64 can be Linux or bare; xtensa/riscv32 ESP code normally rides IDF.
+Without an explicit axis and a single porting seam, platform `{$ifdef}`s would
+scatter through every IO library.
 
 ## Two axes (untwine them)
 
 1. **CPU** — codegen target (exists): x86_64 / i386 / aarch64 / arm32 / xtensa /
    riscv32.
 2. **Platform** — `posix` (hosted: syscalls, fd IO, sockets, dlopen) vs `esp`
-   (bare: MMIO, no filesystem/sockets yet), extensible to other RTOS later.
+   (ESP-IDF/FreeRTOS-hosted: vendor VFS/lwIP/tasks/timers), extensible to other
+   RTOS later. Bare ESP remains a separate constrained profile, not the default
+   PAL assumption.
 
 Do **not** derive platform from CPU. Add `--platform=posix|esp` (default derived
 from target: esp targets/`--esp-profile=bare` → esp, else posix) and predefine:
@@ -78,7 +80,8 @@ In scope:
   **Track A, small, foundational — do first.**
 - RTL: define the minimal PAL interface (byte-handle IO, transport, clock,
   yield); posix backend (largely exists in the raw syscall layer + `asyncnet`),
-  esp backend stubbed/partial. **Track B.**
+  esp backend IDF-shaped but stubbed/partial where no VFS/lwIP binding exists
+  yet. **Track B.**
 - Re-home existing IO-ish RTL (`asyncnet`, streams, future file-IO) above the
   PAL. **Track B.**
 
@@ -123,3 +126,17 @@ Out of scope (separate tickets):
   **Remaining (Track B):** PAL interface (byte-handle IO / transport / clock /
   yield), posix backend, esp stub, IO re-homing, interim `lib/rtl/platform.pas`
   single `{$ifdef PXX_PLATFORM_ESP}` switch.
+- 2026-06-20 — Track B resumed. User clarified the ESP PAL assumption: ESP means
+  ESP-IDF/FreeRTOS-hosted, not bare metal. Bare remains useful for low-level
+  compiler tests, but PAL's ESP backend should target IDF services (VFS/lwIP/
+  FreeRTOS/timers) as they are bound.
+- 2026-06-20 — Added first Track B PAL slice: `lib/rtl/platform.pas` with
+  common platform code/capability queries, byte-handle read/write/close,
+  unsupported sentinel, and yield/clock hooks. Posix backend implements raw
+  read/write/close syscalls; ESP backend is IDF-shaped (`vTaskDelay`,
+  `esp_timer_get_time` on ESP CPU targets) and returns unsupported for byte IO
+  until VFS/lwIP bindings land. Added `test/lib_platform*.pas` and wired them
+  into `make lib-test`; native posix and native `--platform=esp` smokes pass on
+  pinned v18. Cross ESP object smoke currently hits the same existing
+  target-codegen wall as the ESP hello examples (`unsupported node`/`call_ind`),
+  so object-level PAL validation waits on that Track A issue.

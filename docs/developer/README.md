@@ -19,6 +19,9 @@ User-facing documents:
 - [Wrapper-Free C From Nil Python](wrapper-free-c-from-nil-python.md) - public overview of the SQLite proof: `.npy` imports `sqlite3` directly, with compiler-lifted out-params and copied C strings instead of handwritten wrappers.
 - [ESP32 And ESP-IDF Direction](esp32-esp-idf-roadmap.md) - public note on ESP32 as an embedded target, ESP-IDF C imports, FreeRTOS as a target profile, and fast native iteration.
 - [ESP32 Support Setup](esp32-support.md) - install buckets, ESP-IDF tooling, QEMU layers, and the `esp32-idf` / `esp32-bare` test strategy.
+- [Platform Abstraction Layer](pal.md) - RTL porting seam for posix and
+  ESP-IDF-hosted backends; keep platform conditionals here, not in higher
+  libraries.
 - [Limitations](limitations.md) - unsupported or only partially supported language, ABI, platform, and tooling areas.
 - [Inline Assembler](inline-asm.md) - x86-64 inline asm support, supported instruction set, variable passing, limitations, and TODO.
 - [Cross-codegen landmines](cross-codegen-landmines.md) - timeless gotchas for the non-x86-64 backends: the ARM32 4-byte-alignment / unguarded-x86-`EmitB` trap, the crash-diagnosis recipe (qemu `-d in_asm`, raw-binary objdump), and other cross gotchas. Append when bitten.
@@ -42,6 +45,8 @@ Architecture and current state:
 - [ESP32 And ESP-IDF Direction](esp32-esp-idf-roadmap.md) - embedded target strategy for ESP-IDF, FreeRTOS compatibility, and CPU-family staging.
 - [ESP32 Support Setup](esp32-support.md) - concrete host packages, ESP-IDF installer use, Espressif QEMU, and testing ladder for ESP32 work.
 - [Allocator Platform Design](allocator-platform-design.md) - syscall-free internal heap with optional hosted or RTOS hooks.
+- [Platform Abstraction Layer](pal.md) - current PAL interface and backend
+  rules for IO/time/thread/network-facing RTL.
 - [Garbage Collection Thoughts](garbage-collection-thoughts.md) - why GC is not the default (root-finding cost, bare-metal tension) and the per-target/per-frontend memory profile decision (ARC / arena / hosted collector).
 - [Runtime Emission Size Audit (2026-06-02)](runtime-emission-size-audit-2026-06-02.md) - measured hello-world overhead and deferred feature-reachability cleanup for embedded targets.
 - [Plan: Async, Coroutines, And Yield](plan-async-coroutines.md) - deferred shared state-machine design for Pascal, Nil Python, and future frontends.
