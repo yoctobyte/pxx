@@ -287,11 +287,13 @@ begin
       begin
         if (pos.board[sq].color = attacker) and
            ((pos.board[sq].kind = kind) or (pos.board[sq].kind = pkQueen)) then
+        begin
           SlideAttack := True;
+          Exit;
+        end;
         Break;   { ray blocked }
       end;
     end;
-    if SlideAttack then Exit;
   end;
 end;
 
