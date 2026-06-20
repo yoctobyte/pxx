@@ -74,7 +74,7 @@ type
     procedure ConnectChange;
     procedure AddItem(const s: string);
     procedure Clear;
-    function Item(AIndex: Integer): string;
+    function Item(AIndex: Integer): AnsiString;
     property Count: Integer read FCount;
   published
     property ItemIndex: Integer read GetItemIndex write SetItemIndex;
@@ -88,19 +88,19 @@ type
     FOnChange: TMethod;
     function GetItemIndex: Integer;
     procedure SetItemIndex(v: Integer);
-    function GetText: string;
-    procedure SetText(const s: string);
+    function GetText: AnsiString;
+    procedure SetText(const s: AnsiString);
   public
     constructor Create;
     procedure CreateHandle; override;
     procedure ConnectChange;
     procedure AddItem(const s: string);
     procedure Clear;
-    function Item(AIndex: Integer): string;
+    function Item(AIndex: Integer): AnsiString;
     property Count: Integer read FCount;
   published
     property ItemIndex: Integer read GetItemIndex write SetItemIndex;
-    property Text: string read GetText write SetText;
+    property Text: AnsiString read GetText write SetText;
     property OnChange: TMethod read FOnChange write FOnChange;
   end;
 
@@ -279,10 +279,15 @@ begin
   FCount := 0;
 end;
 
-function TListBox.Item(AIndex: Integer): string;
+function TListBox.Item(AIndex: Integer): AnsiString;
+var
+  s: AnsiString;
 begin
   if (AIndex >= 0) and (AIndex < FCount) then
-    Result := FItems[AIndex]
+  begin
+    s := FItems[AIndex];
+    Result := s;
+  end
   else
     Result := '';
 end;
@@ -342,7 +347,7 @@ begin
   FCount := 0;
 end;
 
-function TComboBox.Item(AIndex: Integer): string;
+function TComboBox.Item(AIndex: Integer): AnsiString;
 begin
   if (AIndex >= 0) and (AIndex < FCount) then
     Result := FItems[AIndex]
@@ -364,7 +369,7 @@ begin
     WidgetSet.SetActiveIndex(Self, v);
 end;
 
-function TComboBox.GetText: string;
+function TComboBox.GetText: AnsiString;
 var idx: Integer;
 begin
   idx := Self.GetItemIndex;
@@ -374,7 +379,7 @@ begin
     Result := '';
 end;
 
-procedure TComboBox.SetText(const s: string);
+procedure TComboBox.SetText(const s: AnsiString);
 var i, foundIdx: Integer;
 begin
   foundIdx := -1;
