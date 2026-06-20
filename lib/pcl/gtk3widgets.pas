@@ -83,6 +83,23 @@ begin
   end;
 end;
 
+function IsSubclassOf(cls: PClassRTTI; const ABaseName: string): Boolean;
+var
+  curr: PClassRTTI;
+begin
+  Result := False;
+  curr := cls;
+  while curr <> nil do
+  begin
+    if curr^.NamePtr^ = ABaseName then
+    begin
+      Result := True;
+      Exit;
+    end;
+    curr := PClassRTTI(curr^.ParentRTTI);
+  end;
+end;
+
 procedure CallMethod(code: Pointer; data: Pointer; sender: Pointer);
 begin
   asm
@@ -215,25 +232,27 @@ begin
 end;
 
 procedure TGtk3WidgetSet.SetText(AControl: TComponent; const AText: string);
-var h: Pointer; className: string;
+var h: Pointer; className: string; ctl: TControl; cls: PClassRTTI;
 begin
   writeln('TGtk3WidgetSet.SetText: AControl=', Int64(AControl));
-  h := TControl(AControl).Handle;
+  ctl := TControl(AControl);
+  h := ctl.Handle;
   writeln('TGtk3WidgetSet.SetText: h=', Int64(h));
   if h = nil then Exit;
   
   className := GetInstanceClassName(Pointer(AControl));
-  if className = 'TForm' then
+  cls := GetClass(className);
+  if IsSubclassOf(cls, 'TForm') then
     gtk_window_set_title(h, PC(AText))
-  else if className = 'TButton' then
+  else if IsSubclassOf(cls, 'TButton') then
     gtk_button_set_label(h, PC(AText))
-  else if className = 'TLabel' then
+  else if IsSubclassOf(cls, 'TLabel') then
     gtk_label_set_text(h, PC(AText))
-  else if className = 'TEdit' then
+  else if IsSubclassOf(cls, 'TEdit') then
     gtk_entry_set_text(h, PC(AText))
-  else if className = 'TCheckBox' then
+  else if IsSubclassOf(cls, 'TCheckBox') then
     gtk_button_set_label(h, PC(AText))
-  else if className = 'TPanel' then
+  else if IsSubclassOf(cls, 'TPanel') then
     gtk_button_set_label(h, PC(AText));
 end;
 
@@ -242,7 +261,7 @@ var
   ch, ph, container: Pointer;
   ctl: TControl;
   pctl: TControl;
-  className: string;
+  cls: PClassRTTI;
 begin
   ctl := TControl(AControl);
   ch := ctl.Handle;
@@ -257,8 +276,8 @@ begin
     ph := pctl.Handle;
     if ph <> nil then
     begin
-      className := GetInstanceClassName(Pointer(pctl));
-      if (className = 'TForm') or (className = 'TPanel') then
+      cls := GetClass(GetInstanceClassName(Pointer(pctl)));
+      if IsSubclassOf(cls, 'TForm') or IsSubclassOf(cls, 'TPanel') then
       begin
         container := gtk_bin_get_child(ph);
         if container <> nil then
@@ -273,7 +292,7 @@ var
   ch, ph, container: Pointer;
   ctl: TControl;
   pctl: TControl;
-  className: string;
+  cls: PClassRTTI;
 begin
   ctl := TControl(AControl);
   pctl := TControl(AParent);
@@ -281,8 +300,8 @@ begin
   ph := pctl.Handle;
   if (ch = nil) or (ph = nil) then Exit;
   
-  className := GetInstanceClassName(Pointer(pctl));
-  if (className = 'TForm') or (className = 'TPanel') then
+  cls := GetClass(GetInstanceClassName(Pointer(pctl)));
+  if IsSubclassOf(cls, 'TForm') or IsSubclassOf(cls, 'TPanel') then
     container := gtk_bin_get_child(ph)
   else
     container := ph;
@@ -291,17 +310,19 @@ begin
 end;
 
 procedure TGtk3WidgetSet.ShowWidget(AControl: TComponent);
-var h: Pointer;
+var h: Pointer; ctl: TControl;
 begin
-  h := TControl(AControl).Handle;
+  ctl := TControl(AControl);
+  h := ctl.Handle;
   if h <> nil then
     gtk_widget_show_all(h);
 end;
 
 procedure TGtk3WidgetSet.ConnectClick(AControl: TComponent);
-var h: Pointer;
+var h: Pointer; ctl: TControl;
 begin
-  h := TControl(AControl).Handle;
+  ctl := TControl(AControl);
+  h := ctl.Handle;
   if h <> nil then
     SignalConnectData(h, 'clicked', @ControlClickTramp, Pointer(AControl));
 end;
@@ -312,30 +333,34 @@ begin
 end;
 
 procedure TGtk3WidgetSet.ConnectAppQuit(AForm: TComponent);
-var h: Pointer;
+var h: Pointer; ctl: TControl;
 begin
-  h := TControl(AForm).Handle;
+  ctl := TControl(AForm);
+  h := ctl.Handle;
   if h <> nil then
     SignalConnect(h, 'destroy', @AppDestroy);
 end;
 
 procedure TGtk3WidgetSet.ConnectChange(AControl: TComponent);
-var h: Pointer; className: string;
+var h: Pointer; className: string; ctl: TControl; cls: PClassRTTI;
 begin
-  h := TControl(AControl).Handle;
+  ctl := TControl(AControl);
+  h := ctl.Handle;
   if h = nil then Exit;
   
   className := GetInstanceClassName(Pointer(AControl));
-  if className = 'TEdit' then
+  cls := GetClass(className);
+  if IsSubclassOf(cls, 'TEdit') then
     SignalConnectData(h, 'changed', @ControlChangeTramp, Pointer(AControl))
-  else if className = 'TCheckBox' then
+  else if IsSubclassOf(cls, 'TCheckBox') then
     SignalConnectData(h, 'toggled', @ControlToggleTramp, Pointer(AControl));
 end;
 
 procedure TGtk3WidgetSet.SetChecked(AControl: TComponent; AChecked: Boolean);
-var h: Pointer; val: Integer; current: Boolean;
+var h: Pointer; val: Integer; current: Boolean; ctl: TControl;
 begin
-  h := TControl(AControl).Handle;
+  ctl := TControl(AControl);
+  h := ctl.Handle;
   if h = nil then Exit;
   
   if AChecked then val := 1 else val := 0;
@@ -345,9 +370,10 @@ begin
 end;
 
 function TGtk3WidgetSet.GetChecked(AControl: TComponent): Boolean;
-var h: Pointer;
+var h: Pointer; ctl: TControl;
 begin
-  h := TControl(AControl).Handle;
+  ctl := TControl(AControl);
+  h := ctl.Handle;
   if (h <> nil) and (gtk_toggle_button_get_active(h) <> 0) then
     Result := True
   else
