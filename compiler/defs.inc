@@ -155,6 +155,12 @@ const
   AN_DYN_COPY      = 62; { Copy(arr, index [, count]) over a dynamic array → fresh
                            array of T. Left = source array ident; Right = AN_ARG
                            chain [index, count]. }
+  AN_CLASS_CAST    = 63; { TClass(expr): hard reinterpret class typecast (no
+                           runtime check, unlike AN_AS_CAST). Left = instance
+                           expr; ASTIVal = target class ci. Classes are pointers
+                           so the value passes through unchanged; the tag exists
+                           so trailing .field/[i] resolve offsets against TClass
+                           (ResolveNodeRec maps it to REC_UCLASS_BASE+ci). }
 
   { Inline-asm operand kinds }
   AOP_NONE = 0;

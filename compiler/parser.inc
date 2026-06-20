@@ -3087,6 +3087,34 @@ begin
         Exit;
       end;
 
+      { Class typecast as an expression: TClass(expr). A hard reinterpret (no
+        runtime check, unlike `as`); classes are pointers so the value is
+        unchanged, only the static type. Tagged AN_CLASS_CAST so a trailing
+        .field / [i] resolves its offset against TClass (ResolveNodeRec maps the
+        node to the class record). Must precede the pointer-alias cast below,
+        which would otherwise mis-handle a class name as a plain pointer cast and
+        resolve every field at offset 0. Field reads and writes both work via the
+        class-typed AN_FIELD base path in IRLowerAddress. }
+      if (idx < 0) and (procIdx < 0) and IsClassType(name) and
+         (Tokens[TokPos].Kind = tkLParen) then
+      begin
+        ci := FindUClass(name);
+        Next;                  { consume class name }
+        Expect(tkLParen, '(');
+        ParseExpr;
+        Expect(tkRParen, ')');
+        node := AllocNode(AN_CLASS_CAST);
+        ASTLeft[node] := CurASTNode;
+        ASTIVal[node] := ci;
+        ASTTk[node]   := Ord(tyClass);
+        tk := tyClass;
+        if CurTok.Kind in [tkDot, tkLBrack] then
+          node := ParseClassRecordSelectors(node, REC_UCLASS_BASE + ci, tk);
+        CurASTNode := node;
+        LastExprTk := tk;
+        Exit;
+      end;
+
       { C4: pointer-type-alias cast — PFoo(expr) where PFoo = ^TFoo }
       if (idx < 0) and (procIdx < 0) and (Tokens[TokPos].Kind = tkLParen) then
       begin
@@ -6347,6 +6375,34 @@ begin
           end;
           if node = -1 then
           begin
+            { Class typecast as an lvalue statement — TClass(expr).field := val
+              (and [i]). Mirrors the read path (AN_CLASS_CAST); the field offset
+              resolves against TClass via ResolveNodeRec. Precedes the
+              pointer-alias cast below, which would mis-handle a class name. }
+            if IsClassType(name) and (Tokens[TokPos].Kind = tkLParen) then
+            begin
+              smci := FindUClass(name);
+              Next; { consume class name }
+              Expect(tkLParen, '(');
+              ParseExpr;
+              Expect(tkRParen, ')');
+              valNode := AllocNode(AN_CLASS_CAST);
+              ASTLeft[valNode] := CurASTNode;
+              ASTIVal[valNode] := smci;
+              ASTTk[valNode]   := Ord(tyClass);
+              castTk := tyClass;
+              if CurTok.Kind in [tkDot, tkLBrack] then
+                valNode := ParseClassRecordSelectors(valNode, REC_UCLASS_BASE + smci, castTk);
+              Expect(tkAssign, ':=');
+              ParseExpr;
+              node := AllocNode(AN_ASSIGN);
+              ASTLeft[node]  := valNode;
+              ASTRight[node] := CurASTNode;
+            end;
+          end;
+
+          if node = -1 then
+          begin
             { C4: pointer-type-alias cast as lvalue statement — PFoo(expr)^.field := val }
             aliasIdx := FindTypeAlias(name);
             if (aliasIdx >= 0) and (Tokens[TokPos].Kind = tkLParen) then
@@ -9509,20 +9565,20 @@ begin
   end;
 
   { Library directories, anchored to the compiler binary (ExeDir) so units
-    resolve regardless of CWD. ExeDir is e.g. <root>/compiler/, so the RTL/LCL
+    resolve regardless of CWD. ExeDir is e.g. <root>/compiler/, so the RTL/PCL
     dirs are its siblings via '../lib/...'. Falls back to CWD-relative when the
     binary path carried no directory (run via a bare name). }
   if ExeDir = '' then
   begin
     cdir := 'compiler/'; bdir := 'compiler/builtin/';
-    rtldir := 'lib/rtl/'; lcldir := 'lib/lcl/';
+    rtldir := 'lib/rtl/'; lcldir := 'lib/pcl/';
   end
   else
   begin
     cdir := ExeDir;
     ConcatThree(ExeDir, 'builtin/', '', bdir);   { ExeDir is <root>/compiler/ }
     ConcatThree(ExeDir, '../lib/rtl/', '', rtldir);
-    ConcatThree(ExeDir, '../lib/lcl/', '', lcldir);
+    ConcatThree(ExeDir, '../lib/pcl/', '', lcldir);
   end;
 
   if Length(UnitContent) = 0 then
@@ -9582,7 +9638,7 @@ begin
 
   if Length(UnitContent) = 0 then
   begin
-    { LCL widgetset units }
+    { PCL widgetset units }
     ConcatThree(lcldir, lo, '.pas', path);
     LoadFile(path, UnitContent);
     if Length(UnitContent) = 0 then
@@ -9601,10 +9657,10 @@ begin
     LoadFile(path, UnitContent);
     if Length(UnitContent) = 0 then begin ConcatThree('compiler/builtin/', lo, '.pas', path); LoadFile(path, UnitContent); end;
     if Length(UnitContent) = 0 then begin ConcatThree('lib/rtl/', lo, '.pas', path); LoadFile(path, UnitContent); end;
-    if Length(UnitContent) = 0 then begin ConcatThree('lib/lcl/', lo, '.pas', path); LoadFile(path, UnitContent); end;
+    if Length(UnitContent) = 0 then begin ConcatThree('lib/pcl/', lo, '.pas', path); LoadFile(path, UnitContent); end;
     if Length(UnitContent) = 0 then begin ConcatThree('compiler/', lo, '.pp', path); LoadFile(path, UnitContent); end;
     if Length(UnitContent) = 0 then begin ConcatThree('lib/rtl/', lo, '.pp', path); LoadFile(path, UnitContent); end;
-    if Length(UnitContent) = 0 then begin ConcatThree('lib/lcl/', lo, '.pp', path); LoadFile(path, UnitContent); end;
+    if Length(UnitContent) = 0 then begin ConcatThree('lib/pcl/', lo, '.pp', path); LoadFile(path, UnitContent); end;
     if Length(UnitContent) = 0 then
     begin
       ConcatThree('lib/rtl/', lo, '.h', path); LoadFile(path, UnitContent);

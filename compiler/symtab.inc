@@ -4135,6 +4135,9 @@ begin
   else if ASTKind[node] = AN_AS_CAST then
     { `obj as T` yields type T — so (obj as T).field/.method resolves against T. }
     Result := REC_UCLASS_BASE + Integer(ASTIVal[node])
+  else if ASTKind[node] = AN_CLASS_CAST then
+    { `TClass(obj)` hard cast yields type TClass — same record resolution. }
+    Result := REC_UCLASS_BASE + Integer(ASTIVal[node])
   else if ASTKind[node] = AN_FIELD then
   begin
     Result := RecFieldRecId(ResolveNodeRec(ASTLeft[node]), GetASTIdentName(node));

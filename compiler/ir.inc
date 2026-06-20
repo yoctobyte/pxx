@@ -1847,6 +1847,14 @@ begin
       Result := IRAppend(IR_LOAD_SYM, classIdx, -1, -1, 0, Ord(tyClass));
     end;
 
+    AN_CLASS_CAST:
+    begin
+      { Hard class reinterpret: the instance pointer is unchanged, only the
+        static type. Pass the value through; .field/[i] on it resolve their
+        offsets against the cast's class via ResolveNodeRec(AN_CLASS_CAST). }
+      Result := IRLowerAST(ASTLeft[node]);
+    end;
+
     AN_ADDR:
     begin
       Result := IRLowerAddress(ASTLeft[node]);
