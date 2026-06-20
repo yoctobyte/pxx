@@ -55,7 +55,6 @@ _none_
 | feature-int-to-float-assign | feature | Integer → Float assignment / coercion missing the int→float conversion | — |
 | feature-json-library | feature | JSON library — parser + serializer (with a roundtrip test app) | — |
 | feature-lazycasing-c-imports | feature | `{$LAZYCASING ON/OFF}` for C imports only | feature-compiler-warnings |
-| feature-member-access-on-call-result | feature | Member access on a function-call result (`f(args).field`) | — |
 | feature-metaclass-descendant-enforcement | feature | Metaclass alias descendant-constraint enforcement | — |
 | feature-mimic-fpc | feature | `mimic FPC` compatibility mode | feature-directive-if-numeric |
 | feature-networking | feature | Networking runtime | — |
@@ -79,13 +78,14 @@ _none_
 | idea-demo-app-candidates | idea | Demo / test application candidates — selection criteria + catalog | — |
 | idea-unit-rename-import | idea | `uses X as Y` unit-rename import (dialect extension) | — |
 | idea-visibility-enforcement | idea | Enforce private/protected visibility | — |
+| lib-text-file-io-assign-rewrite | lib | Text file I/O: `Assign`/`Rewrite`/`Reset`/`WriteLn(f,…)`/`CloseFile` missing | — |
 | meta-track-b-compiler-wishlist | meta | Track-B wishlist — compiler features most wanted to unblock libraries + demos | — |
 
 ## blocked (0)
 
 _none_
 
-## done (89)
+## done (90)
 
 | Ticket | Type | Summary | Blocked-by |
 | --- | --- | --- | --- |
@@ -155,6 +155,7 @@ _none_
 | feature-language-gaps-from-demos | feature | Language gaps surfaced by the demo apps (sudoku / sieve / chess) | — |
 | feature-managed-exception-cleanup | feature | Finalize managed values on exception unwind | — |
 | feature-managed-string-default | feature | Promote managed AnsiString from opt-in to default | bug-managed-byref-string-param-store, feature-managed-exception-cleanup |
+| feature-member-access-on-call-result | feature | Member access on a function-call result (`f(args).field`) | — |
 | feature-multidim-fixed-arrays | feature | Multidimensional fixed arrays | — |
 | feature-parallel-tracks-stable-compiler | feature | Parallel tracks: pin libraries/demos to a "stable" compiler | — |
 | feature-procedural-types | feature | Procedural types and method pointers | — |
@@ -224,7 +225,6 @@ _none_
 - feature-interfaces
 - feature-int-to-float-assign
 - feature-json-library
-- feature-member-access-on-call-result
 - feature-metaclass-descendant-enforcement
 - feature-networking
 - feature-nil-python-frontend
@@ -246,6 +246,7 @@ _none_
 - idea-demo-app-candidates
 - idea-unit-rename-import
 - idea-visibility-enforcement
+- lib-text-file-io-assign-rewrite
 - meta-track-b-compiler-wishlist
 
 ## Leverage (tickets each one unblocks)

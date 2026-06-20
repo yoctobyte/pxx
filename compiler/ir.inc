@@ -690,6 +690,13 @@ begin
       class-typed, and take its address only for embedded (record) bases. }
     if ASTTk[baseNode] = Ord(tyClass) then
       baseAddr := IRLowerAST(baseNode)
+    else if ((ASTKind[baseNode] = AN_CALL) or (ASTKind[baseNode] = AN_VIRTUAL_CALL))
+            and (ASTTk[baseNode] = Ord(tyRecord)) then
+      { Record-returning call result used as a field base (f(args).field): the
+        call's IR value is the address of its hidden aggregate-result temp
+        (aggregates are returned by-reference), so use it directly rather than
+        trying to take the address of a call node. }
+      baseAddr := IRLowerAST(baseNode)
     else
       baseAddr := IRLowerAddress(baseNode);
 

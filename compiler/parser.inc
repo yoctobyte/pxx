@@ -1539,8 +1539,14 @@ begin
             end;
             Expect(tkRParen, ')');
           end;
+          { Continue the selector loop (not Exit) so trailing `.field` / `[i]` on
+            the method result are parsed: obj.M(args).field, obj.M.field, chained
+            obj.M1.M2. The result's record (ProcRetRecId) drives field
+            resolution; IR lowering materializes a record result temp. }
           node := mcallNode;
-          Result := node; Exit;
+          tk := Procs[mpi].RetType;
+          recName := ProcRetRecId[mpi];
+          Continue;
         end;
       end;
       fieldNode := AllocNode(AN_FIELD);
@@ -2117,6 +2123,52 @@ end;
   Lets `f()^`, `f()^.field`, and `f()[i]` resolve without a typed intermediate
   variable. Sets CurASTNode and LastExprTk; consumes nothing when the result is
   not a typed pointer. }
+{ Walk `.field` / `[i]` selectors on a class/record VALUE node (e.g. a call or
+  method-call result whose record is recId). Returns the final node and the
+  final element type in outTk. Method calls on the result and `^` deref are not
+  handled (a class result is already the instance). Shared by the function-call
+  suffix and the method-call sites so `f(a).x`, `Self.M(a).x`, `obj.M(a).x` all
+  resolve their trailing members. }
+function ParseClassRecordSelectors(node, recId: Integer; var outTk: TTypeKind): Integer;
+var sub, prevTok: Integer; fieldName: AnsiString; tk: TTypeKind;
+begin
+  tk := IntToTypeKind(ASTTk[node]);
+  while CurTok.Kind in [tkDot, tkLBrack] do
+  begin
+    if CurTok.Kind = tkDot then
+    begin
+      Next;
+      if CurTok.Kind in [tkEOF, tkSemicolon, tkAssign, tkRBrack, tkRParen] then
+        Error('expected field name after .');
+      prevTok := TokPos - 1;
+      fieldName := GetTokenStr(prevTok);
+      sub := AllocNode(AN_FIELD);
+      ASTLeft[sub] := node;
+      ASTSOffset[sub] := Tokens[prevTok].SOffset;
+      ASTSLen[sub] := Tokens[prevTok].SLen;
+      tk := RecFieldType(recId, fieldName);
+      recId := RecFieldRecId(recId, fieldName);
+      ASTTk[sub] := Ord(tk);
+      Next;
+      node := sub;
+    end
+    else { tkLBrack — index the array field just selected }
+    begin
+      Next;
+      sub := AllocNode(AN_INDEX);
+      ASTLeft[sub] := node;
+      ParseExpr;
+      ASTRight[sub] := CurASTNode;
+      Expect(tkRBrack, ']');
+      if (tk = tyString) or (tk = tyAnsiString) then tk := tyChar;
+      ASTTk[sub] := Ord(tk);
+      node := sub;
+    end;
+  end;
+  outTk := tk;
+  Result := node;
+end;
+
 procedure ApplyCallResultPtrSuffix(node, procIdx: Integer);
 var tk: TTypeKind; elemTk, elemRec, recId, sub, prevTok: Integer; fieldName: AnsiString;
 begin
@@ -2167,7 +2219,10 @@ begin
         node := sub;
       end;
     end;
-  end;
+  end
+  else if ((tk = tyClass) or (tk = tyRecord)) and (CurTok.Kind in [tkDot, tkLBrack]) then
+    { Member access on a class/record-returning call result: f(args).field[…]. }
+    node := ParseClassRecordSelectors(node, ProcRetRecId[procIdx], tk);
   CurASTNode := node;
   LastExprTk := tk;
 end;
@@ -3550,6 +3605,10 @@ begin
               end;
               Expect(tkRParen, ')');
             end;
+            { trailing `.field` / `[i]` on a class/record method result }
+            if (mpi >= 0) and (CurTok.Kind in [tkDot, tkLBrack]) and
+               ((Procs[mpi].RetType = tyClass) or (Procs[mpi].RetType = tyRecord)) then
+              mcallNode := ParseClassRecordSelectors(mcallNode, ProcRetRecId[mpi], tk);
             CurASTNode := mcallNode;
             node := mcallNode;
           end;
