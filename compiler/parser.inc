@@ -3907,12 +3907,68 @@ begin
   end;
 end;
 
+function ConstIntCastWidth(const nm: AnsiString; var bytes: Integer; var signed: Boolean): Boolean;
+{ True if `nm` is an integer-family type name usable as a const typecast; sets
+  the result width in bytes and whether it sign-extends. Recognises both the
+  tk*_T keyword spellings and the tkIdent type aliases (Int64/UInt64/...).
+  Uses CaseEqual (not LowerCase) so it stays callable before LowerCase is
+  declared — self-host requires declaration-before-use. }
+begin
+  Result := True; signed := True; bytes := 8;
+  if CaseEqual(nm, 'int64') or CaseEqual(nm, 'nativeint') or CaseEqual(nm, 'ptrint') then begin bytes := 8; signed := True; end
+  else if CaseEqual(nm, 'uint64') or CaseEqual(nm, 'qword') or CaseEqual(nm, 'nativeuint') or CaseEqual(nm, 'ptruint') then begin bytes := 8; signed := False; end
+  else if CaseEqual(nm, 'integer') or CaseEqual(nm, 'longint') then begin bytes := 4; signed := True; end
+  else if CaseEqual(nm, 'cardinal') or CaseEqual(nm, 'longword') or CaseEqual(nm, 'dword') then begin bytes := 4; signed := False; end
+  else if CaseEqual(nm, 'smallint') then begin bytes := 2; signed := True; end
+  else if CaseEqual(nm, 'word') then begin bytes := 2; signed := False; end
+  else if CaseEqual(nm, 'shortint') then begin bytes := 1; signed := True; end
+  else if CaseEqual(nm, 'byte') or CaseEqual(nm, 'char') then begin bytes := 1; signed := False; end
+  else Result := False;
+end;
+
+function ConstApplyCast(r: Int64; bytes: Integer; signed: Boolean): Int64;
+{ Reinterpret r to the cast width, matching the runtime wrap behaviour. Sign
+  extension uses subtraction (Result - 2^width) rather than `not`, and decimal
+  literals (which exceed signed-32 and so parse as Int64), avoiding the hex-width
+  / `not Int64()` folding pitfalls. }
+begin
+  Result := r;
+  if bytes = 1 then
+  begin
+    Result := r and 255;
+    if signed and (Result >= 128) then Result := Result - 256;
+  end
+  else if bytes = 2 then
+  begin
+    Result := r and 65535;
+    if signed and (Result >= 32768) then Result := Result - 65536;
+  end
+  else if bytes = 4 then
+  begin
+    Result := r and 4294967295;
+    if signed and (Result >= 2147483648) then Result := Result - 4294967296;
+  end;
+  { bytes = 8: full width, no change }
+end;
+
 function ConstEval: Int64;
 { Evaluate a compile-time constant expression (no code emitted) }
 var r, v: Int64; idx, i: Integer; op: TTokenKind; s: AnsiString;
+    castBytes: Integer; castSigned: Boolean;
 begin
   r := 0;
-  if CurTok.Kind = tkInteger then begin r := CurTok.IVal; Next; end
+  if (TokPos < TokCount) and (Tokens[TokPos].Kind = tkLParen) and
+     ConstIntCastWidth(CurTok.SVal, castBytes, castSigned) then
+  begin
+    { Integer typecast in a const expression, e.g. `Int64(1) shl 52`. Evaluate
+      the inner expression then reinterpret to the cast width. FPC/Delphi fold
+      these; ISO Pascal does not. NB: `ConstEval()` needs the parens — a bare
+      `ConstEval` in an assignment RHS reads the function result var, not a call. }
+    Next; Expect(tkLParen, '(');
+    r := ConstEval(); Expect(tkRParen, ')');
+    r := ConstApplyCast(r, castBytes, castSigned);
+  end
+  else if CurTok.Kind = tkInteger then begin r := CurTok.IVal; Next; end
   else if CurTok.Kind = tkTrue  then begin r := 1; Next; end
   else if CurTok.Kind = tkFalse then begin r := 0; Next; end
   else if CurTok.Kind = tkMinus then begin Next; r := -ConstEval(); end
