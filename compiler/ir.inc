@@ -792,7 +792,7 @@ begin
 end;
 
 function IsNodePChar(node: Integer): Boolean;
-var tk: TTypeKind; pi, recId, symId: Integer;
+var tk: TTypeKind; procIdx, recId, symId: Integer;
 begin
   Result := False;
   if node < 0 then Exit;
@@ -841,12 +841,12 @@ begin
   { 4. If it's a function call }
   if ASTKind[node] = AN_CALL then
   begin
-    pi := ASTIVal[node];
-    if (pi >= 0) and (pi < ProcCount) then
+    procIdx := ASTIVal[node];
+    if (procIdx >= 0) and (procIdx < ProcCount) then
     begin
-      if (ProcRetPtrElemTk[pi] = Ord(tyChar)) or
-         (ProcRetPtrElemTk[pi] = Ord(tyUInt8)) or
-         (ProcRetPtrElemTk[pi] = Ord(tyInt8)) then
+      if (ProcRetPtrElemTk[procIdx] = Ord(tyChar)) or
+         (ProcRetPtrElemTk[procIdx] = Ord(tyUInt8)) or
+         (ProcRetPtrElemTk[procIdx] = Ord(tyInt8)) then
       begin
         Result := True;
         Exit;
@@ -1293,7 +1293,7 @@ begin
 end;
 
 function IRLowerAST(node: Integer): Integer;
-var left, right, seq, item, value, outNode, first, last, leftAddr, argNode, argVal, intCallNode, intArgSeq, argNode2, zeroVal, pi, zeroBytes: Integer;
+var left, right, seq, item, value, outNode, first, last, leftAddr, argNode, argVal, intCallNode, intArgSeq, argNode2, zeroVal, procIdx, zeroBytes: Integer;
     pairNode, condNode, specialId, classIdx, slot, cpi, pathIdx: Integer;
     isRefArg: Boolean; argTk: TTypeKind; callRetType: TTypeKind; callVal: Integer;
     startLabel, elseLabel, endLabel, startLabelNode, endLabelNode: Integer;
@@ -1597,8 +1597,8 @@ begin
       IRAppend(IR_STORE_SYM, dcIdxTmp, IRLowerAST(dcIdxAst), -1, 0, Ord(tyInteger));
 
       { clampedCount := PXXClampLen(srcData, index, count). }
-      pi := FindProc('PXXClampLen');
-      if pi < 0 then Error('compiler error: PXXClampLen not found');
+      procIdx := FindProc('PXXClampLen');
+      if procIdx < 0 then Error('compiler error: PXXClampLen not found');
       first := IRAppend(IR_ARG, IRAppend(IR_LOAD_SYM, dcSrcTmp, -1, -1, 0, Ord(tyPointer)),
                  -1, -1, 0, Ord(tyPointer));
       last := IRAppend(IR_ARG, IRAppend(IR_LOAD_SYM, dcIdxTmp, -1, -1, 0, Ord(tyInteger)),
@@ -1607,7 +1607,7 @@ begin
       argNode := IRAppend(IR_ARG, IRLowerAST(dcCntAst), -1, -1, 0, Ord(tyInteger));
       IRB[last] := argNode;
       dcCntTmp := AllocVar('', tyInteger);
-      IRAppend(IR_STORE_SYM, dcCntTmp, IRAppendCall(pi, first, -1, Ord(tyNativeInt)),
+      IRAppend(IR_STORE_SYM, dcCntTmp, IRAppendCall(procIdx, first, -1, Ord(tyNativeInt)),
         -1, 0, Ord(tyInteger));
 
       { Fresh dyn-array local of the source element type; zero its handle slot. }
@@ -1635,8 +1635,8 @@ begin
         symbol must be evaluated here in read context (handle = data pointer);
         feeding it straight into the call-arg position lowered it as an lvalue
         (the slot address) instead, so the copy missed the data block. }
-      pi := FindProc('PXXMemCopy');
-      if pi < 0 then Error('compiler error: PXXMemCopy not found');
+      procIdx := FindProc('PXXMemCopy');
+      if procIdx < 0 then Error('compiler error: PXXMemCopy not found');
       dcDestData := AllocVar('', tyPointer);
       IRAppend(IR_STORE_SYM, dcDestData,
         IRAppend(IR_LEA, dcTempSym, -1, -1, 0, Ord(tyPointer)), -1, 0, Ord(tyPointer));
@@ -1655,7 +1655,7 @@ begin
       IRB[last] := argNode;
       { Store the (ignored) result so the call is linked into the statement
         stream — a bare call whose result is unused is not emitted. }
-      IRAppend(IR_STORE_SYM, dcDestData, IRAppendCall(pi, first, -1, Ord(tyPointer)),
+      IRAppend(IR_STORE_SYM, dcDestData, IRAppendCall(procIdx, first, -1, Ord(tyPointer)),
         -1, 0, Ord(tyPointer));
 
       { Like a dyn-array variable read: lea on the dyn-array symbol loads the
@@ -1693,8 +1693,8 @@ begin
       begin
         if IsNodePChar(ASTLeft[node]) then
         begin
-          pi := FindProc('PCharToString');
-          if pi < 0 then Error('compiler error: PCharToString helper not found');
+          procIdx := FindProc('PCharToString');
+          if procIdx < 0 then Error('compiler error: PCharToString helper not found');
 
           wrapperArg := AllocNode(AN_ARG);
           ASTLeft[wrapperArg] := ASTLeft[node];
@@ -1702,7 +1702,7 @@ begin
           ASTTk[wrapperArg] := Ord(tyPointer);
 
           wrapperCall := AllocNode(AN_CALL);
-          ASTIVal[wrapperCall] := pi;
+          ASTIVal[wrapperCall] := procIdx;
           ASTTk[wrapperCall] := Ord(tyString);
           ASTLeft[wrapperCall] := wrapperArg;
           ASTRight[wrapperCall] := -1;
@@ -2133,8 +2133,8 @@ begin
       begin
         if IsNodePChar(ASTRight[node]) then
         begin
-          pi := FindProc('PCharToString');
-          if pi < 0 then Error('compiler error: PCharToString helper not found');
+          procIdx := FindProc('PCharToString');
+          if procIdx < 0 then Error('compiler error: PCharToString helper not found');
 
           wrapperArg := AllocNode(AN_ARG);
           ASTLeft[wrapperArg] := ASTRight[node];
@@ -2142,7 +2142,7 @@ begin
           ASTTk[wrapperArg] := Ord(tyPointer);
 
           wrapperCall := AllocNode(AN_CALL);
-          ASTIVal[wrapperCall] := pi;
+          ASTIVal[wrapperCall] := procIdx;
           ASTTk[wrapperCall] := Ord(tyString);
           ASTLeft[wrapperCall] := wrapperArg;
           ASTRight[wrapperCall] := -1;
@@ -2183,8 +2183,8 @@ begin
            (IntToTypeKind(ASTTk[ASTRight[node]]) = tyClass) then
         begin
           classIdx := ResolveNodeRec(ASTRight[node]);
-          pi := FindIMT(classIdx - REC_UCLASS_BASE, varIdx - REC_UCLASS_BASE);
-          if pi < 0 then Error('class does not implement the interface');
+          procIdx := FindIMT(classIdx - REC_UCLASS_BASE, varIdx - REC_UCLASS_BASE);
+          if procIdx < 0 then Error('class does not implement the interface');
           if isComIntf then
           begin
             { COM/ARC class -> interface. Stash the new (IMT, instance) in scratch
@@ -2192,7 +2192,7 @@ begin
               Retain-before-release keeps re-assigning the same object safe. }
             intfTmpImt := AllocVar('', tyPointer);
             IRAppend(IR_STORE_SYM, intfTmpImt,
-                     IRAppend(IR_IMTADDR, pi, -1, -1, 0, Ord(tyPointer)), -1, 0, Ord(tyPointer));
+                     IRAppend(IR_IMTADDR, procIdx, -1, -1, 0, Ord(tyPointer)), -1, 0, Ord(tyPointer));
             intfTmpInst := AllocVar('', tyPointer);
             IRAppend(IR_STORE_SYM, intfTmpInst, IRLowerAST(ASTRight[node]), -1, 0, Ord(tyPointer));
             first := IRAppend(IR_ARG, IRAppend(IR_LOAD_SYM, intfTmpImt, -1, -1, 0, Ord(tyPointer)), -1, -1, 0, Ord(tyPointer));
@@ -2215,7 +2215,7 @@ begin
           end;
           leftAddr := IRLowerAddress(ASTLeft[node]);
           IRAppend(IR_STORE_MEM, leftAddr,
-                   IRAppend(IR_IMTADDR, pi, -1, -1, 0, Ord(tyPointer)), -1, 0, Ord(tyPointer));
+                   IRAppend(IR_IMTADDR, procIdx, -1, -1, 0, Ord(tyPointer)), -1, 0, Ord(tyPointer));
           value := IRLowerAST(ASTRight[node]);
           outNode := IRAppend(IR_BINOP, IRLowerAddress(ASTLeft[node]),
                               IRAppend(IR_CONST_INT, -1, -1, -1, TARGET_PTR_SIZE, Ord(tyInteger)),
@@ -2466,27 +2466,27 @@ begin
         argTk := IntToTypeKind(ASTTk[argVal]);
         if argTk = tyVariant then
         begin
-          pi := FindProc('VariantToStr');
-          if pi < 0 then Error('str: VariantToStr builtin not loaded');
+          procIdx := FindProc('VariantToStr');
+          if procIdx < 0 then Error('str: VariantToStr builtin not loaded');
           value := IRLowerAddress(argVal);
           argNode := IRAppend(IR_ARG, value, -1, -1, 0, Ord(tyVariant));
-          Result := IRAppendCall(pi, argNode, -1, Ord(tyAnsiString));
+          Result := IRAppendCall(procIdx, argNode, -1, Ord(tyAnsiString));
           Exit;
         end;
         if TypeIsFloat(argTk) then
         begin
           { str(float): format via the RTL FloatToStr (natural decimal). }
-          pi := FindProc('FloatToStr');
-          if pi < 0 then Error('str: builtin unit not loaded');
+          procIdx := FindProc('FloatToStr');
+          if procIdx < 0 then Error('str: builtin unit not loaded');
           value := IRLowerAST(argVal);                       { double bits in rax }
           argNode := IRAppend(IR_ARG, value, -1, -1, 0, Ord(tyDouble));
-          Result := IRAppendCall(pi, argNode, -1, Ord(tyString));
+          Result := IRAppendCall(procIdx, argNode, -1, Ord(tyString));
           Exit;
         end;
         value := IRLowerAST(argVal);
 
-        pi := FindProc('StrInt');
-        if pi < 0 then Error('str: builtin unit not loaded');
+        procIdx := FindProc('StrInt');
+        if procIdx < 0 then Error('str: builtin unit not loaded');
 
         argNode := IRAppend(IR_ARG, value, -1, -1, 0, Ord(argTk));
         first := argNode;
@@ -2495,7 +2495,7 @@ begin
         argNode2 := IRAppend(IR_ARG, zeroVal, -1, -1, 0, Ord(tyInteger));
         IRB[argNode] := argNode2;
 
-        Result := IRAppendCall(pi, first, -1, Ord(tyString));
+        Result := IRAppendCall(procIdx, first, -1, Ord(tyString));
         Exit;
       end;
       pathIdx := 0;

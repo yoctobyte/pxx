@@ -158,24 +158,24 @@ end;
 
 procedure EmitHeapAllocLockedArm32;
 { r0 = requested payload bytes. Returns payload pointer in r0. }
-var pi: Integer;
+var procIdx: Integer;
 begin
   EmitI32($E92D000E);             { push {r1,r2,r3} }
   EmitI32($E3A01008);             { mov r1, #8 (alignment) }
-  pi := FindProc('PXXAlloc');
-  if pi < 0 then Error('compiler error: Alloc helper not found in builtin unit');
-  EmitCallProc(pi);
+  procIdx := FindProc('PXXAlloc');
+  if procIdx < 0 then Error('compiler error: Alloc helper not found in builtin unit');
+  EmitCallProc(procIdx);
   EmitI32($E8BD000E);             { pop {r1,r2,r3} }
 end;
 
 procedure EmitHeapFreeLockedArm32;
 { r0 = payload pointer. nil is ignored inside PXXFree. }
-var pi: Integer;
+var procIdx: Integer;
 begin
   EmitI32($E92D000E);             { push {r1,r2,r3} }
-  pi := FindProc('PXXFree');
-  if pi < 0 then Error('compiler error: Free helper not found in builtin unit');
-  EmitCallProc(pi);
+  procIdx := FindProc('PXXFree');
+  if procIdx < 0 then Error('compiler error: Free helper not found in builtin unit');
+  EmitCallProc(procIdx);
   EmitI32($E8BD000E);             { pop {r1,r2,r3} }
 end;
 
@@ -183,23 +183,23 @@ procedure IREmitNodeArm32(node: Integer); forward;
 
 procedure EmitStrIncRefArm32;
 { r0 = managed-string handle. Preserve r0-r3 for expression callers. }
-var pi: Integer;
+var procIdx: Integer;
 begin
   EmitI32($E92D000F);             { push {r0,r1,r2,r3} }
-  pi := FindProc('PXXStrIncRef');
-  if pi < 0 then Error('compiler error: PXXStrIncRef not found');
-  EmitCallProc(pi);
+  procIdx := FindProc('PXXStrIncRef');
+  if procIdx < 0 then Error('compiler error: PXXStrIncRef not found');
+  EmitCallProc(procIdx);
   EmitI32($E8BD000F);             { pop {r0,r1,r2,r3} }
 end;
 
 procedure EmitStrDecRefArm32;
 { r0 = managed-string handle. r0 is clobbered. }
-var pi: Integer;
+var procIdx: Integer;
 begin
   EmitI32($E92D000E);             { push {r1,r2,r3} }
-  pi := FindProc('PXXStrDecRef');
-  if pi < 0 then Error('compiler error: PXXStrDecRef not found');
-  EmitCallProc(pi);
+  procIdx := FindProc('PXXStrDecRef');
+  if procIdx < 0 then Error('compiler error: PXXStrDecRef not found');
+  EmitCallProc(procIdx);
   EmitI32($E8BD000E);             { pop {r1,r2,r3} }
 end;
 
@@ -551,7 +551,7 @@ end;
 
 procedure EmitArgvToAnsiStringArm32;
 { On entry r0 = argv index. Returns r0 = managed string handle. }
-var pi, loopStart, donePos: Integer;
+var procIdx, loopStart, donePos: Integer;
 begin
   EmitLoadArgvPtrArm32;               { r0 = src }
   EmitI32($E1A01000);                 { mov r1, r0 (src) }
@@ -565,9 +565,9 @@ begin
   EmitI32($EA000000 or ((((loopStart - CodeLen) div 4) - 2) and $00ffffff));
   Patch32(donePos, $0A000000 or ((((CodeLen - donePos) div 4) - 2) and $00ffffff));
   EmitI32($E1A00002);                 { mov r0, r2 (len) }
-  pi := FindProc('PXXStrFromLit');
-  if pi < 0 then Error('compiler error: PXXStrFromLit not found');
-  EmitCallProc(pi);                   { r0 = managed handle }
+  procIdx := FindProc('PXXStrFromLit');
+  if procIdx < 0 then Error('compiler error: PXXStrFromLit not found');
+  EmitCallProc(procIdx);                   { r0 = managed handle }
 end;
 
 procedure EmitArgvToFixedStringArm32(dstIdx: Integer);
@@ -631,26 +631,26 @@ end;
 procedure EmitFloatCallWriterArm32(const name: AnsiString; decs: Integer);
 { d0 = value. Spill to a stack slot, pass its address (plus decimals for the
   fixed writer) to the builtinheap float writer. }
-var pi: Integer;
+var procIdx: Integer;
 begin
   EmitI32($ED2D0B02);            { vpush {d0} }
   EmitI32($E1A0000D);            { mov r0, sp (slot addr) }
   if decs >= 0 then
     EmitLoadImmArm32(1, decs);   { r1 = decimals }
-  pi := FindProc(name);
-  if pi < 0 then Error('compiler error: float writer helper not found');
-  EmitCallProc(pi);
+  procIdx := FindProc(name);
+  if procIdx < 0 then Error('compiler error: float writer helper not found');
+  EmitCallProc(procIdx);
   EmitI32($E28DD008);            { add sp, sp, #8 (drop slot) }
 end;
 
 procedure EmitVarHelperCallArm32(const name: AnsiString);
 { r0 = variant slot address; r0-r3 preserved. }
-var pi: Integer;
+var procIdx: Integer;
 begin
   EmitI32($E92D000F);            { push {r0-r3} }
-  pi := FindProc(name);
-  if pi < 0 then Error('compiler error: variant helper not found');
-  EmitCallProc(pi);
+  procIdx := FindProc(name);
+  if procIdx < 0 then Error('compiler error: variant helper not found');
+  EmitCallProc(procIdx);
   EmitI32($E8BD000F);            { pop {r0-r3} }
 end;
 
@@ -701,7 +701,7 @@ procedure EmitAnsiStringFromNodeArm32(valNode: Integer);
 { Build a managed AnsiString handle in r0 from a char, inline string, literal,
   or existing AnsiString-like expression. Existing handles are retained unless
   they are fresh owners produced by concat/user function results. }
-var sVal: AnsiString; si, pi: Integer; tk: TTypeKind;
+var sVal: AnsiString; si, procIdx: Integer; tk: TTypeKind;
 begin
   if IRKind[valNode] = IR_CONST_STR then
   begin
@@ -709,9 +709,9 @@ begin
     si := InternStr(sVal);
     EmitLoadImmArm32(0, Strs[si].Len);
     EmitLoadDataRefArm32(1, Strs[si].Offset + 8);
-    pi := FindProc('PXXStrFromLit');
-    if pi < 0 then Error('compiler error: PXXStrFromLit not found');
-    EmitCallProc(pi);
+    procIdx := FindProc('PXXStrFromLit');
+    if procIdx < 0 then Error('compiler error: PXXStrFromLit not found');
+    EmitCallProc(procIdx);
     Exit;
   end;
 
@@ -722,9 +722,9 @@ begin
     EmitI32($E92D0001);             { push {r0}; byte lives at [sp] }
     EmitI32($E3A00001);             { mov r0, #1 }
     EmitI32($E28D1000);             { add r1, sp, #0 }
-    pi := FindProc('PXXStrFromLit');
-    if pi < 0 then Error('compiler error: PXXStrFromLit not found');
-    EmitCallProc(pi);
+    procIdx := FindProc('PXXStrFromLit');
+    if procIdx < 0 then Error('compiler error: PXXStrFromLit not found');
+    EmitCallProc(procIdx);
     EmitI32($E28DD004);             { add sp, sp, #4 }
   end
   else if tk = tyString then
@@ -733,9 +733,9 @@ begin
     EmitI32($E1A02000);             { mov r2, r0 }
     EmitI32($E5920000);             { ldr r0, [r2] (len) }
     EmitI32($E2821008);             { add r1, r2, #8 (src) }
-    pi := FindProc('PXXStrFromLit');
-    if pi < 0 then Error('compiler error: PXXStrFromLit not found');
-    EmitCallProc(pi);
+    procIdx := FindProc('PXXStrFromLit');
+    if procIdx < 0 then Error('compiler error: PXXStrFromLit not found');
+    EmitCallProc(procIdx);
   end
   else
   begin
@@ -799,7 +799,7 @@ end;
 
 procedure IREmitNodeArm32(node: Integer);
 var
-  valNode, si, left, right, op, pi, argNode, nArgs, i, j, wid, sz: Integer;
+  valNode, si, left, right, op, procIdx, argNode, nArgs, i, j, wid, sz: Integer;
   classIdx, elemSize, lo: Integer;
   itemNode, hi, p1, p2: Integer;
   lhsTk, rhsTk: TTypeKind;
@@ -1104,9 +1104,9 @@ begin
         EmitI32($E8BD0002);            { pop {r1} (n) }
         EmitI32($E8BD0001);            { pop {r0} (slotAddr) }
         EmitLoadDataRefArm32(2, GetOrAllocNodeDynDesc(node)); { r2 = desc }
-        pi := FindProc('PXXDynSetLen');
-        if pi < 0 then Error('compiler error: PXXDynSetLen not found');
-        EmitCallProc(pi);
+        procIdx := FindProc('PXXDynSetLen');
+        if procIdx < 0 then Error('compiler error: PXXDynSetLen not found');
+        EmitCallProc(procIdx);
       end;
 
     IR_DYNUNIQUE:
@@ -1118,9 +1118,9 @@ begin
         if InLValueWrite then
         begin
           EmitLoadDataRefArm32(1, GetOrAllocDynUniqueDesc(node)); { r1 = desc }
-          pi := FindProc('PXXDynArrayUnique');
-          if pi < 0 then Error('compiler error: PXXDynArrayUnique not found');
-          EmitCallProc(pi);            { r0 = unique data ptr }
+          procIdx := FindProc('PXXDynArrayUnique');
+          if procIdx < 0 then Error('compiler error: PXXDynArrayUnique not found');
+          EmitCallProc(procIdx);            { r0 = unique data ptr }
         end
         else
           EmitI32($E5900000);          { ldr r0, [r0] }
@@ -1149,9 +1149,9 @@ begin
           EmitI32($E59D2000);                         { r2 = srcB }
           EmitI32($E59D3004);                         { r3 = lenB }
           EmitI32($E28DD008);                         { add sp, sp, #8 }
-          pi := FindProc('PXXStrConcat');
-          if pi < 0 then Error('compiler error: PXXStrConcat not found');
-          EmitCallProc(pi);                           { r0 = result }
+          procIdx := FindProc('PXXStrConcat');
+          if procIdx < 0 then Error('compiler error: PXXStrConcat not found');
+          EmitCallProc(procIdx);                           { r0 = result }
 
           EmitI32($E92D0001);                         { push result }
           if (IRKind[left] = IR_BINOP) and (IntToTypeKind(IRTk[left]) = tyAnsiString) then
@@ -1234,9 +1234,9 @@ begin
           EmitI32($E59D3000);                         { r3 = srcB }
           EmitI32($E59D2004);                         { r2 = lenB }
           EmitI32($E28DD008);                         { add sp, sp, #8 }
-          pi := FindProc('PXXStrEq');
-          if pi < 0 then Error('compiler error: PXXStrEq not found');
-          EmitCallProc(pi);
+          procIdx := FindProc('PXXStrEq');
+          if procIdx < 0 then Error('compiler error: PXXStrEq not found');
+          EmitCallProc(procIdx);
           if op = Ord(tkNeq) then
             EmitI32($E2200001);                       { eor r0, r0, #1 }
 
@@ -1346,8 +1346,8 @@ begin
 
     IR_CALL:
       begin
-        pi := IRA[node];
-        if pi = -Ord(tkGetMem) then
+        procIdx := IRA[node];
+        if procIdx = -Ord(tkGetMem) then
         begin
           { GetMem / New / class instantiation. For a class: alloc, store the
             VMT pointer at offset 0, run the ctor, return Self in r0. AAPCS:
@@ -1386,14 +1386,14 @@ begin
           EmitI32($E8BD0001);            { pop {r0} (Self = constructor result) }
           Exit;
         end;
-        if pi = -Ord(tkFreeMem) then
+        if procIdx = -Ord(tkFreeMem) then
         begin
           argNode := IRB[node];          { pointer arg }
           IREmitNodeArm32(IRA[argNode]); { p -> r0 }
           EmitHeapFreeLockedArm32;
           Exit;
         end;
-        if pi = -102 then
+        if procIdx = -102 then
         begin
           { SetLength(arr, n) -> PXXDynSetLen(slotAddr, n, desc); SetLength on a
             managed AnsiString -> PXXStrSetLen(slotAddr, n). }
@@ -1427,9 +1427,9 @@ begin
             EmitI32($E92D0001);          { push {r0} n }
             EmitI32($E8BD0002);          { pop {r1} (n) }
             EmitI32($E8BD0001);          { pop {r0} (slotAddr) }
-            pi := FindProc('PXXStrSetLen');
-            if pi < 0 then Error('compiler error: PXXStrSetLen not found');
-            EmitCallProc(pi);
+            procIdx := FindProc('PXXStrSetLen');
+            if procIdx < 0 then Error('compiler error: PXXStrSetLen not found');
+            EmitCallProc(procIdx);
             Exit;
           end;
           if IRKind[left] <> IR_LEA then
@@ -1457,12 +1457,12 @@ begin
           EmitI32($E8BD0002);            { pop {r1} (n) }
           EmitI32($E8BD0001);            { pop {r0} (slotAddr) }
           EmitLoadDataRefArm32(2, GetOrAllocSymRTTI(si)); { r2 = desc }
-          pi := FindProc('PXXDynSetLen');
-          if pi < 0 then Error('compiler error: PXXDynSetLen not found');
-          EmitCallProc(pi);
+          procIdx := FindProc('PXXDynSetLen');
+          if procIdx < 0 then Error('compiler error: PXXDynSetLen not found');
+          EmitCallProc(procIdx);
           Exit;
         end;
-        if pi = -101 then
+        if procIdx = -101 then
         begin
           { SetLength(s, n) on a frozen inline string: store n into the 8-byte
             length prefix at [buffer+0] (hi dword = 0, length < 4GB). The buffer
@@ -1483,7 +1483,7 @@ begin
           EmitI32($E5812004);          { str r2, [r1, #4] (len hi) }
           Exit;
         end;
-        if pi = -Ord(tkLength) then
+        if procIdx = -Ord(tkLength) then
         begin
           { Length(arr): IR_LEA auto-loaded the data pointer; count at [handle-8]. }
           argNode := IRB[node];
@@ -1514,7 +1514,7 @@ begin
           EmitI32($E5100008);            { ldr r0, [r0, #-8] }
           Exit;
         end;
-        if pi = -100 then
+        if procIdx = -100 then
         begin
           { LoadFile(path, dst): read the whole file named by `path` into the
             managed-string `dst` via the portable PXXStrLoadFile helper, then
@@ -1529,9 +1529,9 @@ begin
             Error('target arm32: LoadFile expects a managed-string destination');
           si := IRA[right];              { dst sym }
           IREmitNodeArm32(left);         { r0 = path handle = nul-terminated C string }
-          pi := FindProc('PXXStrLoadFile');
-          if pi < 0 then Error('compiler error: PXXStrLoadFile not found');
-          EmitCallProc(pi);              { r0 = new managed handle (refcount 1) }
+          procIdx := FindProc('PXXStrLoadFile');
+          if procIdx < 0 then Error('compiler error: PXXStrLoadFile not found');
+          EmitCallProc(procIdx);              { r0 = new managed handle (refcount 1) }
           EmitI32($E92D0001);            { push {r0} new }
           EmitLoadVarArm32(si);          { r0 = dst old handle }
           EmitStrDecRefArm32;
@@ -1539,9 +1539,9 @@ begin
           EmitStoreVarArm32(si);
           Exit;
         end;
-        if pi < 0 then
+        if procIdx < 0 then
         begin
-          j := -pi;
+          j := -procIdx;
           if (j = Ord(tkOrd)) or (j = Ord(tkChr)) or
              (j = Ord(tkInteger_T)) or (j = Ord(tkLongWord_T)) or
              (j = Ord(tkChar_T)) or (j = Ord(tkBoolean_T)) or
@@ -1782,7 +1782,7 @@ begin
           else
             Error('target arm32: builtin/special call not yet supported');
         end;
-        if ProcExternal[pi] then
+        if ProcExternal[procIdx] then
         begin
           { External C call (armel / base AAPCS soft-float): the cross sysroot is
             armel (gnueabi, ld-linux.so.3), so FP and 64-bit values pass in the
@@ -1798,9 +1798,9 @@ begin
             through the external's GOT slot via EmitExternalCallArm32. }
           { Pass 1: compute the AAPCS block size. }
           sz := 0;   { running block offset }
-          for i := 0 to Procs[pi].ParamCount - 1 do
+          for i := 0 to Procs[procIdx].ParamCount - 1 do
           begin
-            tk := Procs[pi].Params[i].TypeKind;
+            tk := Procs[procIdx].Params[i].TypeKind;
             if (tk = tyDouble) or (tk = tyExtended) or (tk = tyInt64) or (tk = tyUInt64) then
             begin
               if (sz and 4) <> 0 then Inc(sz, 4);   { 8-byte align }
@@ -1818,7 +1818,7 @@ begin
           j := 0;   { running block offset }
           while argNode <> -1 do
           begin
-            tk := Procs[pi].Params[nArgs].TypeKind;
+            tk := Procs[procIdx].Params[nArgs].TypeKind;
             if (tk = tyDouble) or (tk = tyExtended) then
             begin
               if (j and 4) <> 0 then Inc(j, 4);
@@ -1850,7 +1850,7 @@ begin
             Inc(nArgs);
             argNode := IRB[argNode];
           end;
-          if nArgs <> Procs[pi].ParamCount then
+          if nArgs <> Procs[procIdx].ParamCount then
             Error('target arm32: external call argument count mismatch');
           { Load r0..r3 from the block (one word each; padding words are harmless). }
           i := 0;
@@ -1860,13 +1860,13 @@ begin
             Inc(i);
           end;
           EmitI32($E28DD010);                       { add sp, sp, #16 }
-          EmitExternalCallArm32(RegisterExternal(pi));
-          if Procs[pi].RetType = tySingle then
+          EmitExternalCallArm32(RegisterExternal(procIdx));
+          if Procs[procIdx].RetType = tySingle then
           begin
             EmitI32($EE000A10);                     { vmov s0, r0 }
             EmitI32($EEB70AC0);                     { vcvt.f64.f32 d0, s0 }
           end
-          else if TypeIsFloat(Procs[pi].RetType) then
+          else if TypeIsFloat(Procs[procIdx].RetType) then
             EmitI32($EC410B10);                     { vmov d0, r0, r1 (double result) }
           Exit;
         end;
@@ -1874,7 +1874,7 @@ begin
         { Aggregate result: push the caller's hidden destination first (deepest
           word) so arg evaluation can't disturb it; it is loaded into r12 (ip,
           a scratch reg) just before the call. }
-        if TypeIsAggregate(Procs[pi].RetType) then
+        if TypeIsAggregate(Procs[procIdx].RetType) then
         begin
           IREmitNodeArm32(IRC[node]);   { r0 = hidden destination }
           EmitI32($E92D0001);           { push {r0} }
@@ -1890,19 +1890,19 @@ begin
         j := 0;
         while argNode <> -1 do
         begin
-          if (pi >= 0) and (nArgs < Procs[pi].ParamCount) and
-             (Procs[pi].Params[nArgs].TypeKind = tyAnsiString) and
+          if (procIdx >= 0) and (nArgs < Procs[procIdx].ParamCount) and
+             (Procs[procIdx].Params[nArgs].TypeKind = tyAnsiString) and
              (IntToTypeKind(IRTk[argNode]) in [tyChar, tyString]) then
           begin
             EmitAnsiStringFromNodeArm32(IRA[argNode]);
             EmitI32($E92D0001); { push {r0} }
             Inc(j, 1);
           end
-          else if (pi >= 0) and (nArgs < Procs[pi].ParamCount) and
-                  ((Procs[pi].Params[nArgs].TypeKind = tyInt64) or
-                   (Procs[pi].Params[nArgs].TypeKind = tyUInt64)) and
-                  (not Procs[pi].Params[nArgs].IsRef) and
-                  (not Procs[pi].Params[nArgs].IsArray) then
+          else if (procIdx >= 0) and (nArgs < Procs[procIdx].ParamCount) and
+                  ((Procs[procIdx].Params[nArgs].TypeKind = tyInt64) or
+                   (Procs[procIdx].Params[nArgs].TypeKind = tyUInt64)) and
+                  (not Procs[procIdx].Params[nArgs].IsRef) and
+                  (not Procs[procIdx].Params[nArgs].IsArray) then
           begin
             { By-value Int64: pass the full 64 bits as two words (lo then hi).
               A by-ref/open-array Int64 param is just a pointer (falls through). }
@@ -1920,14 +1920,14 @@ begin
           Inc(nArgs);
           argNode := IRB[argNode];
         end;
-        if nArgs <> Procs[pi].ParamCount then
+        if nArgs <> Procs[procIdx].ParamCount then
           Error('target arm32: call argument count mismatch');
 
         for i := 0 to j - 1 do
           if i < 4 then
             EmitI32($E59D0000 or (i shl 12) or ((j - 1 - i) * 4)); { ldr r[i], [sp, #off] }
 
-        if TypeIsAggregate(Procs[pi].RetType) then
+        if TypeIsAggregate(Procs[procIdx].RetType) then
         begin
           { Hidden dest is the deepest word, at [sp + j*4]; load it into r12,
             drop args + dest, call. Callee returns the dest pointer in r0. }
@@ -1936,7 +1936,7 @@ begin
           EmitI32($E59DC000 or (j * 4));  { ldr r12, [sp, #j*4] (hidden dest) }
           EmitLoadImmArm32(9, (j + 1) * 4);
           EmitI32($E08DD009);             { add sp, sp, r9 (drop args + dest) }
-          EmitCallProc(pi);
+          EmitCallProc(procIdx);
         end
         else
         begin
@@ -1946,7 +1946,7 @@ begin
             EmitI32($E08DD009); { add sp, sp, r9 (no stack words; drop all) }
           end;
 
-          EmitCallProc(pi);
+          EmitCallProc(procIdx);
           if j > 4 then
           begin
             EmitLoadImmArm32(9, j * 4);
@@ -1962,8 +1962,8 @@ begin
           load r0..r3 from the arg slots, load the callee into r9, drop the whole
           block, then `blx r9`. (Int64-by-value / managed args via a proc pointer
           are not handled in v1.) }
-        pi := Integer(IRIVal[node]);                 { signature proc index }
-        if Procs[pi].ParamCount + Integer(IRC[node]) > 4 then
+        procIdx := Integer(IRIVal[node]);                 { signature proc index }
+        if Procs[procIdx].ParamCount + Integer(IRC[node]) > 4 then
           Error('target arm32: indirect call with more than 4 parameters not supported');
         IREmitNodeArm32(IRA[node]);                  { r0 = callee address }
         EmitI32($E92D0001);                          { push {r0} (callee, deepest) }
@@ -1991,7 +1991,7 @@ begin
           Word-push args (Self = param 0, deepest), load r0..r3, drop the block,
           load the VMT pointer from [Self], call through [VMT + slot*8]. The data
           blob keeps 8-byte slots; the 32-bit address is in the low word. }
-        pi := IRC[node];
+        procIdx := IRC[node];
         j := Integer(IRIVal[node]);                  { VMT slot }
         argNode := IRA[node];
         nArgs := 0;                                  { total arg words }
@@ -2070,9 +2070,9 @@ begin
             handle. Mirrors i386 IR_INDEX. }
           if InLValueWrite then
           begin
-            pi := FindProc('PXXStrUnique');
-            if pi < 0 then Error('compiler error: PXXStrUnique not found');
-            EmitCallProc(pi);       { r0 (slot addr) -> r0 unique handle }
+            procIdx := FindProc('PXXStrUnique');
+            if procIdx < 0 then Error('compiler error: PXXStrUnique not found');
+            EmitCallProc(procIdx);       { r0 (slot addr) -> r0 unique handle }
           end
           else if (IRKind[left] = IR_LEA) and (Syms[IRA[left]].Kind = skParam) and
                   Syms[IRA[left]].IsRef then
@@ -2242,9 +2242,9 @@ begin
         IREmitNodeArm32(IRA[node]);          { r0 = dest }
         EmitI32($E8BD0002);                  { pop {r1} (src) }
         EmitLoadImmArm32(2, IRIVal[node]);   { r2 = count }
-        pi := FindProc('PXXMemMove');
-        if pi < 0 then Error('compiler error: PXXMemMove not found');
-        EmitCallProc(pi);
+        procIdx := FindProc('PXXMemMove');
+        if procIdx < 0 then Error('compiler error: PXXMemMove not found');
+        EmitCallProc(procIdx);
       end;
 
     IR_COPY_REC_MANAGED:
@@ -2254,22 +2254,22 @@ begin
         EmitI32($E92D0001);                  { push {r0} src at [sp+4] later }
         IREmitNodeArm32(IRA[node]);          { r0 = dest }
         EmitI32($E92D0001);                  { push {r0} dest at [sp] }
-        pi := FindProc('PXXRecordRetain');
-        if pi < 0 then Error('compiler error: PXXRecordRetain not found');
+        procIdx := FindProc('PXXRecordRetain');
+        if procIdx < 0 then Error('compiler error: PXXRecordRetain not found');
         EmitI32($E59D0004);                  { ldr r0, [sp, #4] (src) }
         EmitLoadDataRefArm32(1, -(RECORD_RTTI_DATAREF_BASE + (IRC[node] - REC_UCLASS_BASE)));
-        EmitCallProc(pi);
-        pi := FindProc('PXXRecordRelease');
-        if pi < 0 then Error('compiler error: PXXRecordRelease not found');
+        EmitCallProc(procIdx);
+        procIdx := FindProc('PXXRecordRelease');
+        if procIdx < 0 then Error('compiler error: PXXRecordRelease not found');
         EmitI32($E59D0000);                  { ldr r0, [sp] (dest) }
         EmitLoadDataRefArm32(1, -(RECORD_RTTI_DATAREF_BASE + (IRC[node] - REC_UCLASS_BASE)));
-        EmitCallProc(pi);
-        pi := FindProc('PXXMemMove');
-        if pi < 0 then Error('compiler error: PXXMemMove not found');
+        EmitCallProc(procIdx);
+        procIdx := FindProc('PXXMemMove');
+        if procIdx < 0 then Error('compiler error: PXXMemMove not found');
         EmitI32($E59D0000);                  { ldr r0, [sp] (dest) }
         EmitI32($E59D1004);                  { ldr r1, [sp, #4] (src) }
         EmitLoadImmArm32(2, IRIVal[node]);   { r2 = count }
-        EmitCallProc(pi);
+        EmitCallProc(procIdx);
         EmitI32($E28DD008);                  { add sp, sp, #8 }
       end;
 
@@ -2279,24 +2279,24 @@ begin
         if (IRC[node] >= 0) and RecordHasManagedFields(IRC[node]) then
         begin
           EmitI32($E92D0001);                { push {r0} dest }
-          pi := FindProc('PXXRecordRelease');
-          if pi < 0 then Error('compiler error: PXXRecordRelease not found');
+          procIdx := FindProc('PXXRecordRelease');
+          if procIdx < 0 then Error('compiler error: PXXRecordRelease not found');
           EmitI32($E59D0000);                { ldr r0, [sp] (dest) }
           EmitLoadDataRefArm32(1, -(RECORD_RTTI_DATAREF_BASE + (IRC[node] - REC_UCLASS_BASE)));
-          EmitCallProc(pi);
-          pi := FindProc('PXXMemZero');
-          if pi < 0 then Error('compiler error: PXXMemZero not found');
+          EmitCallProc(procIdx);
+          procIdx := FindProc('PXXMemZero');
+          if procIdx < 0 then Error('compiler error: PXXMemZero not found');
           EmitI32($E59D0000);                { ldr r0, [sp] (dest) }
           EmitLoadImmArm32(1, IRIVal[node]); { r1 = count }
-          EmitCallProc(pi);
+          EmitCallProc(procIdx);
           EmitI32($E28DD004);                { add sp, sp, #4 }
         end
         else
         begin
-          pi := FindProc('PXXMemZero');
-          if pi < 0 then Error('compiler error: PXXMemZero not found');
+          procIdx := FindProc('PXXMemZero');
+          if procIdx < 0 then Error('compiler error: PXXMemZero not found');
           EmitLoadImmArm32(1, IRIVal[node]); { r1 = count }
-          EmitCallProc(pi);
+          EmitCallProc(procIdx);
         end;
       end;
 
@@ -2499,9 +2499,9 @@ begin
           else if tk = tyVariant then
           begin
             EmitLoadVariantAddrArm32(valNode);    { r0 = slot addr }
-            pi := FindProc('PXXWriteVariant');
-            if pi < 0 then Error('compiler error: PXXWriteVariant not found');
-            EmitCallProc(pi);
+            procIdx := FindProc('PXXWriteVariant');
+            if procIdx < 0 then Error('compiler error: PXXWriteVariant not found');
+            EmitCallProc(procIdx);
           end
           else if TypeIsFloat(tk) then
           begin
@@ -2706,9 +2706,9 @@ begin
         else
           EmitLoadImmArm32(9, 0);
         EmitI32($E92D0200);                           { push {r9} (isCompare, 5th arg) }
-        pi := FindProc('PXXVarBinOp');
-        if pi < 0 then Error('compiler error: PXXVarBinOp not found');
-        EmitCallProc(pi);
+        procIdx := FindProc('PXXVarBinOp');
+        if procIdx < 0 then Error('compiler error: PXXVarBinOp not found');
+        EmitCallProc(procIdx);
         EmitI32($E28DD004);                           { add sp, sp, #4 }
       end;
 
@@ -2718,7 +2718,7 @@ begin
 end;
 
 procedure IREmitMachineCodeArm32;
-var i, lblId, pos, targetOffset, f, si, classIdx, sz, pi: Integer;
+var i, lblId, pos, targetOffset, f, si, classIdx, sz, procIdx: Integer;
     tk: TTypeKind;
     LabelPositions: array[0..MAX_IR-1] of Integer;
     LabelFixupPos: array[0..2047] of Integer;
@@ -2747,9 +2747,9 @@ begin
           EmitLoadImmArm32(0, Syms[i].Offset);
           EmitI32($E08B0000);    { add r0, fp, r0 (dest) }
           EmitLoadImmArm32(1, RecSize(Syms[i].RecName));   { r1 = count }
-          pi := FindProc('PXXMemZero');
-          if pi < 0 then Error('compiler error: PXXMemZero not found');
-          EmitCallProc(pi);
+          procIdx := FindProc('PXXMemZero');
+          if procIdx < 0 then Error('compiler error: PXXMemZero not found');
+          EmitCallProc(procIdx);
         end
         else
         begin

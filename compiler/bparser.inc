@@ -41,7 +41,7 @@ var
   stepVal: Int64;
   bodySeq: Integer;
   lhsValNode, lhsIncNode, stepConstNode, lhsValIncNode, addNode, incAssignNode, initAssignNode, curr: Integer;
-  pi: Integer;
+  procIdx: Integer;
 begin
   stmtNode := -1;
 
@@ -262,8 +262,8 @@ begin
       symIdx := FindSym(vname);
       if symIdx < 0 then
       begin
-        pi := FindProc(vname);
-        if pi >= 0 then
+        procIdx := FindProc(vname);
+        if procIdx >= 0 then
         begin
           ParseExpr;
           stmtNode := CurASTNode;

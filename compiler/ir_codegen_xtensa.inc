@@ -199,84 +199,84 @@ end;
 procedure EmitHeapAllocLockedXtensa;
 { a2 = requested payload bytes -> a2 = payload pointer. Delegates to the Pascal
   PXXAlloc(size, align=8). No threadsafe lock (x86-64-only). }
-var pi: Integer;
+var procIdx: Integer;
 begin
-  pi := FindProc('PXXAlloc');
-  if pi < 0 then Error('compiler error: Alloc helper not found in builtin unit');
+  procIdx := FindProc('PXXAlloc');
+  if procIdx < 0 then Error('compiler error: Alloc helper not found in builtin unit');
   if XtensaABI = XTENSA_ABI_WINDOWED then
   begin
     xtensa_mov(reg_xtensa_a10, reg_xtensa_a2);   { arg0 = size }
     xtensa_movi(reg_xtensa_a11, 8);              { arg1 = align }
-    EmitCallProc(pi);
+    EmitCallProc(procIdx);
     xtensa_mov(reg_xtensa_a2, reg_xtensa_a10);   { result }
   end
   else
   begin
     xtensa_movi(reg_xtensa_a3, 8);               { a2 = size already; arg1 = align }
-    EmitCallProc(pi);                            { result in a2 }
+    EmitCallProc(procIdx);                            { result in a2 }
   end;
 end;
 
 procedure EmitHeapFreeLockedXtensa;
 { a2 = payload pointer -> PXXFree(p). nil ignored inside. }
-var pi: Integer;
+var procIdx: Integer;
 begin
-  pi := FindProc('PXXFree');
-  if pi < 0 then Error('compiler error: Free helper not found in builtin unit');
+  procIdx := FindProc('PXXFree');
+  if procIdx < 0 then Error('compiler error: Free helper not found in builtin unit');
   if XtensaABI = XTENSA_ABI_WINDOWED then
     xtensa_mov(reg_xtensa_a10, reg_xtensa_a2);
-  EmitCallProc(pi);
+  EmitCallProc(procIdx);
 end;
 
 procedure EmitStrFromLitXtensa;
 { a2 = len, a3 = src -> a2 = new managed-string handle (PXXStrFromLit). }
-var pi: Integer;
+var procIdx: Integer;
 begin
-  pi := FindProc('PXXStrFromLit');
-  if pi < 0 then Error('compiler error: PXXStrFromLit not found');
+  procIdx := FindProc('PXXStrFromLit');
+  if procIdx < 0 then Error('compiler error: PXXStrFromLit not found');
   if XtensaABI = XTENSA_ABI_WINDOWED then
   begin
     xtensa_mov(reg_xtensa_a10, reg_xtensa_a2);   { arg0 = len }
     xtensa_mov(reg_xtensa_a11, reg_xtensa_a3);   { arg1 = src }
-    EmitCallProc(pi);
+    EmitCallProc(procIdx);
     xtensa_mov(reg_xtensa_a2, reg_xtensa_a10);   { handle }
   end
   else
-    EmitCallProc(pi);                            { a2=len, a3=src; result a2 }
+    EmitCallProc(procIdx);                            { a2=len, a3=src; result a2 }
 end;
 
 procedure EmitStrRefCallXtensa(const name: AnsiString);
 { a2 = handle -> call proc(handle). a2 is NOT preserved (DecRef path). }
-var pi: Integer;
+var procIdx: Integer;
 begin
-  pi := FindProc(name);
-  if pi < 0 then Error('compiler error: string refcount helper not found');
+  procIdx := FindProc(name);
+  if procIdx < 0 then Error('compiler error: string refcount helper not found');
   if XtensaABI = XTENSA_ABI_WINDOWED then
     xtensa_mov(reg_xtensa_a10, reg_xtensa_a2);
-  EmitCallProc(pi);
+  EmitCallProc(procIdx);
 end;
 
 procedure EmitXtensaSoftDivCall(const name: AnsiString);
 { a2 = dividend (arg0), a3 = divisor (arg1) -> call helper -> result in a2.
   LX6 software div/mod path (--xtensa-cpu=lx6). }
-var pi: Integer;
+var procIdx: Integer;
 begin
-  pi := FindProc(name);
-  if pi < 0 then Error('compiler error: xtensa soft-divide helper not found');
+  procIdx := FindProc(name);
+  if procIdx < 0 then Error('compiler error: xtensa soft-divide helper not found');
   if XtensaABI = XTENSA_ABI_WINDOWED then
   begin
     xtensa_mov(reg_xtensa_a10, reg_xtensa_a2);
     xtensa_mov(reg_xtensa_a11, reg_xtensa_a3);
-    EmitCallProc(pi);
+    EmitCallProc(procIdx);
     xtensa_mov(reg_xtensa_a2, reg_xtensa_a10);
   end
   else
-    EmitCallProc(pi);   { a2, a3 already hold arg0, arg1; result in a2 }
+    EmitCallProc(procIdx);   { a2, a3 already hold arg0, arg1; result in a2 }
 end;
 
 procedure IREmitNodeXtensa(node: Integer);
 var
-  left, right, op, si, pi, nArgs, i, lo, elemSize, sz, argNode, argBase, valNode, j: Integer;
+  left, right, op, si, procIdx, nArgs, i, lo, elemSize, sz, argNode, argBase, valNode, j: Integer;
   tk: TTypeKind;
   sgn, savedLVW: Boolean;
   sVal: AnsiString;
@@ -427,16 +427,16 @@ begin
         if (IRKind[left] = IR_LEA) and (Syms[IRA[left]].TypeKind = tyAnsiString) and
            not Syms[IRA[left]].IsArray and InLValueWrite then
         begin
-          pi := FindProc('PXXStrUnique');
-          if pi < 0 then Error('compiler error: PXXStrUnique not found');
+          procIdx := FindProc('PXXStrUnique');
+          if procIdx < 0 then Error('compiler error: PXXStrUnique not found');
           if XtensaABI = XTENSA_ABI_WINDOWED then
           begin
             xtensa_mov(reg_xtensa_a10, reg_xtensa_a2);
-            EmitCallProc(pi);
+            EmitCallProc(procIdx);
             xtensa_mov(reg_xtensa_a2, reg_xtensa_a10);   { a2 = unique handle }
           end
           else
-            EmitCallProc(pi);                            { a2 = unique handle }
+            EmitCallProc(procIdx);                            { a2 = unique handle }
         end;
         XtensaPushA2;
 
@@ -537,15 +537,15 @@ begin
             xtensa_addi(reg_xtensa_a5, reg_xtensa_sp, argBase + 0);
             EmitLoadConstXtensa(reg_xtensa_a4, 1);
           end;
-          pi := FindProc('PXXStrConcat');
-          if pi < 0 then Error('compiler error: PXXStrConcat not found');
+          procIdx := FindProc('PXXStrConcat');
+          if procIdx < 0 then Error('compiler error: PXXStrConcat not found');
           if XtensaABI = XTENSA_ABI_WINDOWED then
           begin
             xtensa_mov(reg_xtensa_a10, reg_xtensa_a4);
             xtensa_mov(reg_xtensa_a11, reg_xtensa_a5);
             xtensa_mov(reg_xtensa_a12, reg_xtensa_a6);
             xtensa_mov(reg_xtensa_a13, reg_xtensa_a7);
-            EmitCallProc(pi);
+            EmitCallProc(procIdx);
             xtensa_mov(reg_xtensa_a2, reg_xtensa_a10);
           end
           else
@@ -554,7 +554,7 @@ begin
             xtensa_mov(reg_xtensa_a3, reg_xtensa_a5);   { a3=srcA }
             xtensa_mov(reg_xtensa_a4, reg_xtensa_a6);   { a4=srcB }
             xtensa_mov(reg_xtensa_a5, reg_xtensa_a7);   { a5=lenB }
-            EmitCallProc(pi);                           { result a2 }
+            EmitCallProc(procIdx);                           { result a2 }
           end;
           { release fresh tyAnsiString BINOP operand temporaries }
           XtensaPushA2;                                 { result @ argBase+8 }
@@ -620,15 +620,15 @@ begin
             xtensa_addi(reg_xtensa_a5, reg_xtensa_sp, argBase + 0);
             EmitLoadConstXtensa(reg_xtensa_a4, 1);
           end;
-          pi := FindProc('PXXStrEq');
-          if pi < 0 then Error('compiler error: PXXStrEq not found');
+          procIdx := FindProc('PXXStrEq');
+          if procIdx < 0 then Error('compiler error: PXXStrEq not found');
           if XtensaABI = XTENSA_ABI_WINDOWED then
           begin
             xtensa_mov(reg_xtensa_a10, reg_xtensa_a4);
             xtensa_mov(reg_xtensa_a11, reg_xtensa_a5);
             xtensa_mov(reg_xtensa_a12, reg_xtensa_a6);
             xtensa_mov(reg_xtensa_a13, reg_xtensa_a7);
-            EmitCallProc(pi);
+            EmitCallProc(procIdx);
             xtensa_mov(reg_xtensa_a2, reg_xtensa_a10);
           end
           else
@@ -637,7 +637,7 @@ begin
             xtensa_mov(reg_xtensa_a3, reg_xtensa_a5);   { a3=srcA }
             xtensa_mov(reg_xtensa_a4, reg_xtensa_a6);   { a4=lenB }
             xtensa_mov(reg_xtensa_a5, reg_xtensa_a7);   { a5=srcB }
-            EmitCallProc(pi);                           { result a2 }
+            EmitCallProc(procIdx);                           { result a2 }
           end;
           { release fresh tyAnsiString BINOP operand temporaries }
           XtensaPushA2;                                 { result @ argBase+8 }
@@ -731,8 +731,8 @@ begin
 
     IR_CALL:
       begin
-        pi := IRA[node];
-        if pi = -Ord(tkGetMem) then
+        procIdx := IRA[node];
+        if procIdx = -Ord(tkGetMem) then
         begin
           { GetMem / New. Class instantiation (VMT + ctor) is a later step. }
           if IRC[node] >= REC_UCLASS_BASE then
@@ -742,14 +742,14 @@ begin
           EmitHeapAllocLockedXtensa;            { a2 = payload pointer }
           Exit;
         end;
-        if pi = -Ord(tkFreeMem) then
+        if procIdx = -Ord(tkFreeMem) then
         begin
           argNode := IRB[node];                 { pointer arg }
           IREmitNodeXtensa(IRA[argNode]);       { p -> a2 }
           EmitHeapFreeLockedXtensa;
           Exit;
         end;
-        if pi = -102 then
+        if procIdx = -102 then
         begin
           { SetLength(arr, n) -> PXXDynSetLen(slotAddr, n, desc). SetLength on a
             managed AnsiString -> PXXStrSetLen(slotAddr, n). }
@@ -771,8 +771,8 @@ begin
             XtensaPushA2;                                    { slot @ argBase }
             IREmitNodeXtensa(IRA[valNode]);                  { a2 = n }
             XtensaPushA2;                                    { n @ argBase+4 }
-            pi := FindProc('PXXStrSetLen');
-            if pi < 0 then Error('compiler error: PXXStrSetLen not found');
+            procIdx := FindProc('PXXStrSetLen');
+            if procIdx < 0 then Error('compiler error: PXXStrSetLen not found');
             if XtensaABI = XTENSA_ABI_WINDOWED then
             begin
               xtensa_l32i(reg_xtensa_a10, reg_xtensa_sp, argBase + 0);
@@ -785,7 +785,7 @@ begin
               xtensa_l32i(reg_xtensa_a3, reg_xtensa_sp, argBase + 4);
               XtSpillDepth := argBase;
             end;
-            EmitCallProc(pi);
+            EmitCallProc(procIdx);
             Exit;
           end;
           if IRKind[left] <> IR_LEA then
@@ -802,8 +802,8 @@ begin
           XtensaPushA2;
           EmitLoadDataRefXtensa(reg_xtensa_a2, GetOrAllocSymRTTI(si)); { a2 = desc }
           XtensaPushA2;
-          pi := FindProc('PXXDynSetLen');
-          if pi < 0 then Error('compiler error: PXXDynSetLen not found');
+          procIdx := FindProc('PXXDynSetLen');
+          if procIdx < 0 then Error('compiler error: PXXDynSetLen not found');
           if XtensaABI = XTENSA_ABI_WINDOWED then
           begin
             xtensa_l32i(reg_xtensa_a10, reg_xtensa_sp, argBase + 0);
@@ -818,10 +818,10 @@ begin
             xtensa_l32i(reg_xtensa_a4, reg_xtensa_sp, 0);
             xtensa_addi(reg_xtensa_sp, reg_xtensa_sp, 12);
           end;
-          EmitCallProc(pi);
+          EmitCallProc(procIdx);
           Exit;
         end;
-        if pi = -Ord(tkLength) then
+        if procIdx = -Ord(tkLength) then
         begin
           { Length(arr): a2 = handle; count at [handle-8], nil handle -> 0.
             (l32i has no negative offset, so address via addi first.) }
@@ -831,14 +831,14 @@ begin
                          'addi a2, a2, -8', 'l32i a2, a2, 0', '.lzero:']);
           Exit;
         end;
-        if pi < 0 then
+        if procIdx < 0 then
         begin
           { Type-pun passthroughs: Ord/Chr/Integer()/LongWord() are identity on
             the value already in a2 (char/int share the register model). }
-          if (pi = -Ord(tkOrd)) or (pi = -Ord(tkChr)) or
-             (pi = -Ord(tkInteger_T)) or (pi = -Ord(tkLongWord_T)) or
-             (pi = -Ord(tkChar_T)) or (pi = -Ord(tkBoolean_T)) or
-             (pi = -Ord(tkString_T)) then
+          if (procIdx = -Ord(tkOrd)) or (procIdx = -Ord(tkChr)) or
+             (procIdx = -Ord(tkInteger_T)) or (procIdx = -Ord(tkLongWord_T)) or
+             (procIdx = -Ord(tkChar_T)) or (procIdx = -Ord(tkBoolean_T)) or
+             (procIdx = -Ord(tkString_T)) then
           begin
             argNode := IRB[node];
             IREmitNodeXtensa(IRA[argNode]);
@@ -855,7 +855,7 @@ begin
           IREmitNodeXtensa(IRA[argNode]);
           { External C call: skip the 8-byte length prefix of a Pascal string
             literal so the callee sees a const char* (as on x86-64/riscv32). }
-          if ProcExternal[pi] and (IntToTypeKind(IRTk[argNode]) = tyString) then
+          if ProcExternal[procIdx] and (IntToTypeKind(IRTk[argNode]) = tyString) then
             xtensa_addi(reg_xtensa_a2, reg_xtensa_a2, 8);
           XtensaPushA2;
           Inc(nArgs);
@@ -883,7 +883,7 @@ begin
             xtensa_addi(reg_xtensa_sp, reg_xtensa_sp, nArgs * 4);
         end;
 
-        EmitCallProc(pi);
+        EmitCallProc(procIdx);
         if XtensaABI = XTENSA_ABI_WINDOWED then
           xtensa_mov(reg_xtensa_a2, reg_xtensa_a10);
       end;
@@ -908,8 +908,8 @@ begin
         { Zero IRIVal bytes at dest. ESP has no managed records yet, so skip the
           PXXRecordRelease path the hosted targets take for managed fields. }
         IREmitNodeXtensa(IRA[node]);             { a2 = dest }
-        pi := FindProc('PXXMemZero');
-        if pi < 0 then Error('compiler error: PXXMemZero not found');
+        procIdx := FindProc('PXXMemZero');
+        if procIdx < 0 then Error('compiler error: PXXMemZero not found');
         if XtensaABI = XTENSA_ABI_WINDOWED then
         begin
           xtensa_mov(reg_xtensa_a10, reg_xtensa_a2);        { arg0 = dest }
@@ -917,7 +917,7 @@ begin
         end
         else
           EmitLoadConstXtensa(reg_xtensa_a3, Integer(IRIVal[node])); { a2=dest; arg1=count }
-        EmitCallProc(pi);
+        EmitCallProc(procIdx);
       end;
 
     IR_NEG:

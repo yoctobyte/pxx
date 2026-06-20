@@ -18,9 +18,9 @@ procedure EmitLoadVarRISCV32(idx: Integer); forward;
 procedure EmitLoadImmRISCV32(rd: Integer; v: Int32); forward;
 procedure EmitFrameAddrXtensa(rd: Integer; off: Integer); forward;
 procedure EmitLoadConstXtensa(rd: Integer; v: Int32); forward;
-procedure EmitCallProc(pi: Integer); forward;
+procedure EmitCallProc(procIdx: Integer); forward;
 procedure EmitManagedLocalCleanup(retSymIdx: Integer); forward;
-function ProcHasManagedLocalCleanup(pi, retSymIdx: Integer): Boolean; forward;
+function ProcHasManagedLocalCleanup(procIdx, retSymIdx: Integer): Boolean; forward;
 procedure EmitLeaveExceptionFrameX64; forward;
 
 
@@ -487,11 +487,11 @@ begin
   UClsFCount[ci] := UClsFCount[ci] + 1;
 end;
 
-procedure AddUMeth(ci, noff, nlen, pi: Integer);
+procedure AddUMeth(ci, noff, nlen, procIdx: Integer);
 var mi: Integer;
 begin
   mi := UMthCount;
-  UMthNOff[mi] := noff; UMthNLen[mi] := nlen; UMthProc_[mi] := pi;
+  UMthNOff[mi] := noff; UMthNLen[mi] := nlen; UMthProc_[mi] := procIdx;
   UMthVirSlot[mi] := -1;
   UMthIsStatic[mi] := False;
   UMthPub[mi] := 0;
@@ -2540,17 +2540,17 @@ begin
   Result := False;
 end;
 
-function ProcParamIsInterface(pi, j: Integer): Boolean;
-{ True iff parameter j of proc pi is a CORBA interface type (a fat-pointer
+function ProcParamIsInterface(procIdx, j: Integer): Boolean;
+{ True iff parameter j of proc procIdx is a CORBA interface type (a fat-pointer
   record), so overload matching can accept a class argument that implements it.
   The param's rec id comes from ProcParamRecId, not the param symbol: param sym
   slots are reused across procs, so Syms[SymIdx].RecName is unreliable here. }
 var rec: Integer;
 begin
   Result := False;
-  if (j < 0) or (j >= Procs[pi].ParamCount) then Exit;
-  if Procs[pi].Params[j].TypeKind <> tyRecord then Exit;
-  rec := ProcParamRecId[pi * 16 + j];
+  if (j < 0) or (j >= Procs[procIdx].ParamCount) then Exit;
+  if Procs[procIdx].Params[j].TypeKind <> tyRecord then Exit;
+  rec := ProcParamRecId[procIdx * 16 + j];
   Result := (rec >= REC_UCLASS_BASE) and UClsIsInterface[rec - REC_UCLASS_BASE];
 end;
 
@@ -3336,11 +3336,11 @@ begin
     Result := True;
 end;
 
-function ProcHasManagedLocalCleanup(pi, retSymIdx: Integer): Boolean;
+function ProcHasManagedLocalCleanup(procIdx, retSymIdx: Integer): Boolean;
 var i: Integer;
 begin
   Result := False;
-  for i := Procs[pi].ScopeBase to SymCount - 1 do
+  for i := Procs[procIdx].ScopeBase to SymCount - 1 do
     if (Syms[i].Kind = skLocal) and (i <> retSymIdx) and SymNeedsManagedCleanup(i) then
     begin
       Result := True;
@@ -3356,7 +3356,7 @@ begin
 end;
 
 procedure EmitManagedLocalCleanup(retSymIdx: Integer);
-var i, pi: Integer;
+var i, procIdx: Integer;
 begin
   if CurProc < 0 then Exit;
   for i := Procs[CurProc].ScopeBase to SymCount - 1 do
@@ -3366,10 +3366,10 @@ begin
       if SymIsComInterface(i) then
       begin
         { COM/ARC interface local: _Release the held reference (nil-safe). }
-        pi := FindProc('PXXIntfRelease');
-        if pi < 0 then Error('compiler error: PXXIntfRelease not found');
+        procIdx := FindProc('PXXIntfRelease');
+        if procIdx < 0 then Error('compiler error: PXXIntfRelease not found');
         x64_lea_reg_mem(8, rRDI, rRBP, Syms[i].Offset, True);  { lea rdi, [rbp+off] }
-        EmitCallProc(pi);
+        EmitCallProc(procIdx);
       end
       else if Syms[i].TypeKind = tyAnsiString then
       begin
@@ -3406,7 +3406,7 @@ begin
 end;
 
 procedure EmitProcEpilog(retSymIdx: Integer);
-var sz, i, pi: Integer;
+var sz, i, procIdx: Integer;
 begin
   if TargetArch = TARGET_I386 then
   begin
@@ -3422,9 +3422,9 @@ begin
             { COM/ARC interface local: _Release the held reference (nil-safe). }
             EmitB($8D); EmitB($85); EmitI32(Syms[i].Offset);  { lea eax, [ebp+off] }
             EmitB($50);                                        { push eax }
-            pi := FindProc('PXXIntfRelease');
-            if pi < 0 then Error('compiler error: PXXIntfRelease not found');
-            EmitCallProc(pi);
+            procIdx := FindProc('PXXIntfRelease');
+            if procIdx < 0 then Error('compiler error: PXXIntfRelease not found');
+            EmitCallProc(procIdx);
             EmitB($81); EmitB($C4); EmitI32(4);                { add esp, 4 }
           end
           else if Syms[i].TypeKind = tyAnsiString then
@@ -3433,9 +3433,9 @@ begin
             EmitB($8B); EmitB($85); EmitI32(Syms[i].Offset);
             { push eax }
             EmitB($50);
-            pi := FindProc('PXXStrDecRef');
-            if pi < 0 then Error('compiler error: PXXStrDecRef not found');
-            EmitCallProc(pi);
+            procIdx := FindProc('PXXStrDecRef');
+            if procIdx < 0 then Error('compiler error: PXXStrDecRef not found');
+            EmitCallProc(procIdx);
             { add esp, 4 }
             EmitB($81); EmitB($C4); EmitI32(4);
           end;
@@ -3521,9 +3521,9 @@ begin
           { COM/ARC interface local: _Release the held reference (nil-safe). }
           EmitLoadVarAddrArm32(i);                     { r0 = fat pointer address }
           EmitI32($E92D000E);                          { push {r1,r2,r3} }
-          pi := FindProc('PXXIntfRelease');
-          if pi < 0 then Error('compiler error: PXXIntfRelease not found');
-          EmitCallProc(pi);
+          procIdx := FindProc('PXXIntfRelease');
+          if procIdx < 0 then Error('compiler error: PXXIntfRelease not found');
+          EmitCallProc(procIdx);
           EmitI32($E8BD000E);                          { pop {r1,r2,r3} }
         end
         else if (Syms[i].Kind = skLocal) and (i <> retSymIdx) and
@@ -3531,9 +3531,9 @@ begin
         begin
           EmitLoadVarArm32(i);                         { r0 = handle }
           EmitI32($E92D000E);                          { push {r1,r2,r3} }
-          pi := FindProc('PXXStrDecRef');
-          if pi < 0 then Error('compiler error: PXXStrDecRef not found');
-          EmitCallProc(pi);
+          procIdx := FindProc('PXXStrDecRef');
+          if procIdx < 0 then Error('compiler error: PXXStrDecRef not found');
+          EmitCallProc(procIdx);
           EmitI32($E8BD000E);                          { pop {r1,r2,r3} }
         end
         else if (Syms[i].Kind = skLocal) and (i <> retSymIdx) and
@@ -3542,9 +3542,9 @@ begin
           { Variant local: clear (releases any managed payload). r0 = address. }
           EmitLoadVarAddrArm32(i);                     { r0 = variant address }
           EmitI32($E92D000E);                          { push {r1,r2,r3} }
-          pi := FindProc('PXXVarClear');
-          if pi < 0 then Error('compiler error: PXXVarClear not found');
-          EmitCallProc(pi);
+          procIdx := FindProc('PXXVarClear');
+          if procIdx < 0 then Error('compiler error: PXXVarClear not found');
+          EmitCallProc(procIdx);
           EmitI32($E8BD000E);                          { pop {r1,r2,r3} }
         end
         else if (Syms[i].Kind = skLocal) and (i <> retSymIdx) and
@@ -3557,9 +3557,9 @@ begin
           EmitLoadDataRefArm32(1,
             -(RECORD_RTTI_DATAREF_BASE + (Syms[i].RecName - REC_UCLASS_BASE)));
           EmitI32($E92D000C);                          { push {r2,r3} }
-          pi := FindProc('PXXRecordRelease');
-          if pi < 0 then Error('compiler error: PXXRecordRelease not found');
-          EmitCallProc(pi);
+          procIdx := FindProc('PXXRecordRelease');
+          if procIdx < 0 then Error('compiler error: PXXRecordRelease not found');
+          EmitCallProc(procIdx);
           EmitI32($E8BD000C);                          { pop {r2,r3} }
         end;
       end;
@@ -3617,9 +3617,9 @@ begin
         begin
           EmitLoadImmA64(9, Syms[i].Offset);
           EmitI32($8B0903A0);  { add x0, x29, x9  (x0 = fat pointer address) }
-          pi := FindProc('PXXIntfRelease');
-          if pi < 0 then Error('compiler error: PXXIntfRelease not found');
-          EmitCallProc(pi);
+          procIdx := FindProc('PXXIntfRelease');
+          if procIdx < 0 then Error('compiler error: PXXIntfRelease not found');
+          EmitCallProc(procIdx);
         end;
     if retSymIdx >= 0 then
     begin
@@ -3681,11 +3681,11 @@ begin
            (Syms[i].TypeKind = tyAnsiString) and not Syms[i].IsArray then
         begin
           EmitLoadVarXtensa(i);                  { a2 = handle }
-          pi := FindProc('PXXStrDecRef');
-          if pi < 0 then Error('compiler error: PXXStrDecRef not found');
+          procIdx := FindProc('PXXStrDecRef');
+          if procIdx < 0 then Error('compiler error: PXXStrDecRef not found');
           if XtensaABI = XTENSA_ABI_WINDOWED then
             xtensa_mov(reg_xtensa_a10, reg_xtensa_a2);
-          EmitCallProc(pi);
+          EmitCallProc(procIdx);
         end;
     if retSymIdx >= 0 then
     begin
@@ -3723,9 +3723,9 @@ begin
            (Syms[i].TypeKind = tyAnsiString) and not Syms[i].IsArray then
         begin
           EmitLoadVarRISCV32(i);                 { a0 = handle }
-          pi := FindProc('PXXStrDecRef');
-          if pi < 0 then Error('compiler error: PXXStrDecRef not found');
-          EmitCallProc(pi);
+          procIdx := FindProc('PXXStrDecRef');
+          if procIdx < 0 then Error('compiler error: PXXStrDecRef not found');
+          EmitCallProc(procIdx);
         end;
     if retSymIdx >= 0 then
     begin
@@ -3797,18 +3797,18 @@ end;
 
 { ===== Call emission ===== }
 
-{ Ensure the external pi has a GOT slot; return its ExternalProc[] index. }
-function RegisterExternal(pi: Integer): Integer;
+{ Ensure the external procIdx has a GOT slot; return its ExternalProc[] index. }
+function RegisterExternal(procIdx: Integer): Integer;
 var i, extIdx: Integer;
 begin
   extIdx := -1;
   for i := 0 to ExternalCount-1 do
-    if ExternalProc[i] = pi then extIdx := i;
+    if ExternalProc[i] = procIdx then extIdx := i;
   if extIdx < 0 then
   begin
     if ExternalCount >= MAX_EXTERNAL then Error('external function overflow');
     extIdx := ExternalCount;
-    ExternalProc[extIdx] := pi;
+    ExternalProc[extIdx] := procIdx;
     ExternalGotOff[extIdx] := DataLen;
     for i := 0 to 7 do
     begin
@@ -3864,12 +3864,12 @@ begin
   EmitI32($E12FFF3C);   { blx  ip }
 end;
 
-procedure EmitCallProc(pi: Integer);
+procedure EmitCallProc(procIdx: Integer);
 var extIdx: Integer;
 begin
-  if ProcExternal[pi] then
+  if ProcExternal[procIdx] then
   begin
-    extIdx := RegisterExternal(pi);
+    extIdx := RegisterExternal(procIdx);
     { esp32 targets: indirect call through a 32-bit literal slot. The slot is
       recorded as a DynCall fixup; the ET_REL writer turns it into an
       R_XTENSA_32/R_RISCV_32 data-word reloc against the undefined symbol, so
@@ -3925,7 +3925,7 @@ begin
     relocated against the callee proc's own local symbol (IramCallFix). ESP only;
     flash<->flash and iram<->iram stay direct PC-relative below. }
   if (TargetArch = TARGET_XTENSA) or (TargetArch = TARGET_RISCV32) then
-    if (((CurProc >= 0) and ProcIram[CurProc]) <> ProcIram[pi]) then
+    if (((CurProc >= 0) and ProcIram[CurProc]) <> ProcIram[procIdx]) then
     begin
       if IramCallFixCount >= MAX_CALLFIX then Error('iram call fixup overflow');
       if TargetArch = TARGET_RISCV32 then
@@ -3933,7 +3933,7 @@ begin
         rv32_auipc(reg_t0, 0);
         rv32_jal(reg_zero, 8);
         IramCallFix[IramCallFixCount].CodePos := CodeLen;
-        IramCallFix[IramCallFixCount].ProcIdx := pi;
+        IramCallFix[IramCallFixCount].ProcIdx := procIdx;
         Inc(IramCallFixCount);
         EmitI32(0);
         rv32_lw(reg_t0, reg_t0, 8);
@@ -3943,7 +3943,7 @@ begin
       begin
         XtensaEmitLitHeader;
         IramCallFix[IramCallFixCount].CodePos := CodeLen;
-        IramCallFix[IramCallFixCount].ProcIdx := pi;
+        IramCallFix[IramCallFixCount].ProcIdx := procIdx;
         Inc(IramCallFixCount);
         EmitI32(0);
         xtensa_l32r(reg_xtensa_a8, $FFFF);
@@ -3956,13 +3956,13 @@ begin
     end;
   if TargetArch = TARGET_ARM32 then
   begin
-    if Procs[pi].BodyAddr >= 0 then
-      EmitI32($EB000000 or ((((Procs[pi].BodyAddr - CodeLen) div 4) - 2) and $00ffffff))
+    if Procs[procIdx].BodyAddr >= 0 then
+      EmitI32($EB000000 or ((((Procs[procIdx].BodyAddr - CodeLen) div 4) - 2) and $00ffffff))
     else
     begin
       if CallFixCount >= MAX_CALLFIX then Error('call fixup overflow');
       CallFix[CallFixCount].CodePos := CodeLen;
-      CallFix[CallFixCount].ProcIdx := pi;
+      CallFix[CallFixCount].ProcIdx := procIdx;
       Inc(CallFixCount);
       EmitI32($EB000000);
     end;
@@ -3970,13 +3970,13 @@ begin
   end;
   if TargetArch = TARGET_AARCH64 then
   begin
-    if Procs[pi].BodyAddr >= 0 then
-      EmitI32($94000000 or (((Procs[pi].BodyAddr - CodeLen) div 4) and $03ffffff))
+    if Procs[procIdx].BodyAddr >= 0 then
+      EmitI32($94000000 or (((Procs[procIdx].BodyAddr - CodeLen) div 4) and $03ffffff))
     else
     begin
       if CallFixCount >= MAX_CALLFIX then Error('call fixup overflow');
       CallFix[CallFixCount].CodePos := CodeLen;
-      CallFix[CallFixCount].ProcIdx := pi;
+      CallFix[CallFixCount].ProcIdx := procIdx;
       Inc(CallFixCount);
       EmitI32($94000000);
     end;
@@ -3984,18 +3984,18 @@ begin
   end;
   if TargetArch = TARGET_XTENSA then
   begin
-    if Procs[pi].BodyAddr >= 0 then
+    if Procs[procIdx].BodyAddr >= 0 then
     begin
       if XtensaABI = XTENSA_ABI_WINDOWED then
-        xtensa_call8(Procs[pi].BodyAddr - CodeLen)
+        xtensa_call8(Procs[procIdx].BodyAddr - CodeLen)
       else
-        xtensa_call0(Procs[pi].BodyAddr - CodeLen);
+        xtensa_call0(Procs[procIdx].BodyAddr - CodeLen);
     end
     else
     begin
       if CallFixCount >= MAX_CALLFIX then Error('call fixup overflow');
       CallFix[CallFixCount].CodePos := CodeLen;
-      CallFix[CallFixCount].ProcIdx := pi;
+      CallFix[CallFixCount].ProcIdx := procIdx;
       Inc(CallFixCount);
       if XtensaABI = XTENSA_ABI_WINDOWED then
         xtensa_call8(0)
@@ -4006,57 +4006,57 @@ begin
   end;
   if TargetArch = TARGET_RISCV32 then
   begin
-    if Procs[pi].BodyAddr >= 0 then
-      rv32_jal(reg_ra, Procs[pi].BodyAddr - CodeLen)
+    if Procs[procIdx].BodyAddr >= 0 then
+      rv32_jal(reg_ra, Procs[procIdx].BodyAddr - CodeLen)
     else
     begin
       if CallFixCount >= MAX_CALLFIX then Error('call fixup overflow');
       CallFix[CallFixCount].CodePos := CodeLen;
-      CallFix[CallFixCount].ProcIdx := pi;
+      CallFix[CallFixCount].ProcIdx := procIdx;
       Inc(CallFixCount);
       rv32_jal(reg_ra, 0);
     end;
     Exit;
   end;
   EmitB($E8);
-  if Procs[pi].BodyAddr >= 0 then
-    EmitI32(Procs[pi].BodyAddr - (CodeLen + 4))
+  if Procs[procIdx].BodyAddr >= 0 then
+    EmitI32(Procs[procIdx].BodyAddr - (CodeLen + 4))
   else
   begin
     if CallFixCount >= MAX_CALLFIX then Error('call fixup overflow');
     CallFix[CallFixCount].CodePos := CodeLen;
-    CallFix[CallFixCount].ProcIdx := pi;
+    CallFix[CallFixCount].ProcIdx := procIdx;
     Inc(CallFixCount);
     EmitI32(0);
   end;
 end;
 
 procedure ApplyCallFixups;
-var i, pi: Integer;
+var i, procIdx: Integer;
 begin
   if DebugTrace then
     for i := 0 to ProcCount-1 do
       writeln('Proc ', i, ': ', Procs[i].Name, ' at CodePos ', Procs[i].BodyAddr);
   for i := 0 to CallFixCount-1 do
   begin
-    pi := CallFix[i].ProcIdx;
-    if Procs[pi].BodyAddr < 0 then
-      Error('unresolved forward: ' + Procs[pi].Name);
+    procIdx := CallFix[i].ProcIdx;
+    if Procs[procIdx].BodyAddr < 0 then
+      Error('unresolved forward: ' + Procs[procIdx].Name);
     if TargetArch = TARGET_ARM32 then
-      Patch32(CallFix[i].CodePos, $EB000000 or ((((Procs[pi].BodyAddr - CallFix[i].CodePos) div 4) - 2) and $00ffffff))
+      Patch32(CallFix[i].CodePos, $EB000000 or ((((Procs[procIdx].BodyAddr - CallFix[i].CodePos) div 4) - 2) and $00ffffff))
     else if TargetArch = TARGET_AARCH64 then
-      Patch32(CallFix[i].CodePos, $94000000 or (((Procs[pi].BodyAddr - CallFix[i].CodePos) div 4) and $03ffffff))
+      Patch32(CallFix[i].CodePos, $94000000 or (((Procs[procIdx].BodyAddr - CallFix[i].CodePos) div 4) and $03ffffff))
     else if TargetArch = TARGET_XTENSA then
     begin
       if XtensaABI = XTENSA_ABI_WINDOWED then
-        Patch24(CallFix[i].CodePos, EncodeXtensaCall8(CallFix[i].CodePos, Procs[pi].BodyAddr))
+        Patch24(CallFix[i].CodePos, EncodeXtensaCall8(CallFix[i].CodePos, Procs[procIdx].BodyAddr))
       else
-        Patch24(CallFix[i].CodePos, EncodeXtensaCall0(CallFix[i].CodePos, Procs[pi].BodyAddr));
+        Patch24(CallFix[i].CodePos, EncodeXtensaCall0(CallFix[i].CodePos, Procs[procIdx].BodyAddr));
     end
     else if TargetArch = TARGET_RISCV32 then
-      Patch32(CallFix[i].CodePos, EncodeRISCVJAL(reg_ra, Procs[pi].BodyAddr - CallFix[i].CodePos))
+      Patch32(CallFix[i].CodePos, EncodeRISCVJAL(reg_ra, Procs[procIdx].BodyAddr - CallFix[i].CodePos))
     else
-      Patch32(CallFix[i].CodePos, Procs[pi].BodyAddr - (CallFix[i].CodePos + 4));
+      Patch32(CallFix[i].CodePos, Procs[procIdx].BodyAddr - (CallFix[i].CodePos + 4));
   end;
 end;
 
