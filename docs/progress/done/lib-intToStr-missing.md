@@ -30,3 +30,4 @@ work; current platform first, cross parity later. Add a small unit test and seed
   runs correct against pinned v9 (π(10^6)=78498, largest 999983); demos shows OK.
   `test/lib_strutils` asserts output in `make lib-test` (green). Int64 overload
   deferred until a demo needs it.
+- 2026-06-20 — commit reference (board checker): landed in 8e43982

@@ -66,3 +66,4 @@ Validated: `Val('5')`, `Val('55')`, `Val('1a')` (code 2), `Val('x')` (code 1),
 signed, leading spaces, Int64 dest, float dest — all correct, no crash, with both
 `var v: Integer` and `var v: Int64`. Test: `test/test_val_builtin.pas` in
 test-core. Self-host + cross-bootstrap byte-identical.
+- 2026-06-20 — commit reference (board checker): landed in a12b05f (pinned in v13 stable 54ac16a)

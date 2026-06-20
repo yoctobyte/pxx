@@ -79,3 +79,4 @@ classifier is the real work here.
   `CatalogItem(key).Name` — `.field` on a function-call result). Independent of
   for-in. `Self.field` for-in remains unsupported but is redundant: bare `Items`
   already iterates the implicit-Self field, so no separate work needed.
+- 2026-06-20 — commit reference (board checker): landed in a632200

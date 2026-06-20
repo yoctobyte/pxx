@@ -45,3 +45,4 @@ The chess demo's next blocker is unrelated — `base type not found: Exception`
 - 2026-06-19 — opened from the demos compile-smoke dashboard.
 - 2026-06-19 — fixed: shl/shr (+mod/and/or) folded in ConstEval; regression test
   added + wired; bootstrap byte-identical. Resolved.
+- 2026-06-20 — commit reference (board checker): landed in 632f1c8

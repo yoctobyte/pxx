@@ -87,3 +87,4 @@ the factor/expression path and `ParseLValueAST` so `f().field := x` works too.
   selector loop handles chained method calls through the `.` dispatch but a
   method call directly on a function-CALL primary in ParseFactor was not wired —
   note for a future ticket if a demo needs it.
+- 2026-06-20 — commit reference (board checker): landed in bb94412

@@ -126,3 +126,4 @@ it") is met.
   parse) + documented as a limitation with a clear error. This ticket is now
   effectively closed: Gap 1 + Gap 3 implemented, Gap 2 documented. Remaining
   follow-on (own ticket if pursued): nested yield, stackless record-yield.
+- 2026-06-20 — commit reference (board checker): landed in 0e2a57a + 361163c (filed in f93f8ad)

@@ -88,3 +88,4 @@ field-address path used by `Self.Field`.
   `for x in <field>` (implicit `Self`) is the *next* adventure blocker
   (`engine.pas:349`). Same family but a deeper fix (`ParseForInVarAST` is keyed
   on a symbol index, not an AST node), so kept as a separate ticket.
+- 2026-06-20 — commit reference (board checker): landed in bf317ff

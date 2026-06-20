@@ -39,3 +39,4 @@ fold `examples/adventure` toward green in `make demos`.
   string-family overloads, by-type call-site resolution) is beyond a non-generic
   RTL function → tracked as feature-copy-intrinsic (track A). The lib AnsiString
   `Copy` here is the interim path.
+- 2026-06-20 — commit reference (board checker): landed in 157c670 (strutils Copy/Trim; see 8e43982)

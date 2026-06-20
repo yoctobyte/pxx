@@ -104,3 +104,4 @@ drive the enumerator desugar off that node).
   pre-existing latent symbol-table bug (confirmed on the HEAD compiler before
   this change) where a method-body for-in plus a trailing dyn-array global
   corrupts that global's registration; this test orders its globals to dodge it.
+- 2026-06-20 — commit reference (board checker): landed in bf317ff

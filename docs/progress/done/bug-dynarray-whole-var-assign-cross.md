@@ -71,3 +71,4 @@ Both targets store the pointer-sized handle now:
 `b := a` and `b := Copy(...)` now work on all four targets. `test_dynarray_copy.pas`
 re-added to the i386 + aarch64 cross suites (was x86-64 + arm32 only); all 3 cross
 suites output-identical to x86-64; self-host + cross-bootstrap byte-identical.
+- 2026-06-20 — commit reference (board checker): landed in 49e6e20 (pinned in v13 stable 54ac16a)

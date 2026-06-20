@@ -93,3 +93,4 @@ The corruption is in symbol-table accounting, not in for-in itself.
   test-core + the 3 cross suites. Gate green: `make test` byte-identical
   fixedpoint + `--threadsafe`; cross suites output-equal to x86-64;
   `make cross-bootstrap` byte-identical on all 3.
+- 2026-06-20 — commit reference (board checker): landed in cc8feeb
