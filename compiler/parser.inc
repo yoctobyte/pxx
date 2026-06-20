@@ -25,6 +25,24 @@ begin
   Inc(ASTNodeCount);
 end;
 
+{ Deep-copy an AST subtree. Copies the full per-node field set AllocNode
+  initialises (the only AST-indexed arrays) and recurses on both children, so
+  the clone is an independent tree. Used where a value node must appear in two
+  places (e.g. a for-in container reused for both the Length bound and the
+  element access) without the two occurrences aliasing one node. }
+function CloneAST(node: Integer): Integer;
+begin
+  if node < 0 then begin Result := -1; Exit; end;
+  Result := AllocNode(ASTKind[node]);
+  ASTIVal[Result]     := ASTIVal[node];
+  ASTSOffset[Result]  := ASTSOffset[node];
+  ASTSLen[Result]     := ASTSLen[node];
+  ASTTk[Result]       := ASTTk[node];
+  ASTLiftedVar[Result] := ASTLiftedVar[node];
+  ASTLeft[Result]     := CloneAST(ASTLeft[node]);
+  ASTRight[Result]    := CloneAST(ASTRight[node]);
+end;
+
 procedure InferSymTypeFromNode(symIdx: Integer; node: Integer);
 var tk: TTypeKind; procIdx, recId, varIdx: Integer;
 begin
@@ -4243,11 +4261,15 @@ end;
   (AN_FIELD over Self). A fresh node is built per call so the container is not
   aliased between the Length() bound and the element access (codegen walks the
   AST as a tree, not a DAG). }
-function GenMakeContainerNode(ckind, csym, cselfSym, cfOff, cfLen: Integer; ctk: TTypeKind): Integer;
+function GenMakeContainerNode(ckind, csym, cselfSym, cfOff, cfLen, ctemplate: Integer; ctk: TTypeKind): Integer;
 var fn: Integer;
 begin
   if ckind = 0 then
     Result := GenMakeIdent(csym, ctk)
+  else if ckind = 2 then
+    { arbitrary lvalue expression (e.g. obj.field, Self.field) — a fresh deep
+      copy per use so the Length bound and element access don't alias. }
+    Result := CloneAST(ctemplate)
   else
   begin
     fn := AllocNode(AN_FIELD);
@@ -4264,7 +4286,7 @@ end;
   plain variable (ParseForInVarAST) or an implicit-Self field
   (ParseForInFieldAST). Flags + elemTk are computed by the caller from whichever
   metadata table applies (Syms[...] vs UFld...). }
-function BuildForInArrayLoop(varIdx, ckind, csym, cselfSym, cfOff, cfLen: Integer;
+function BuildForInArrayLoop(varIdx, ckind, csym, cselfSym, cfOff, cfLen, ctemplate: Integer;
   contTk: TTypeKind; isString, isStaticArr, isArr: Boolean;
   staticLen, elemTk, bodyNode: Integer): Integer;
 var
@@ -4280,16 +4302,16 @@ begin
   if isStaticArr then
     hiNode := GenMakeIntLit(staticLen - 1)
   else if isString then
-    hiNode := GenMakeLengthCallNode(GenMakeContainerNode(ckind, csym, cselfSym, cfOff, cfLen, contTk))
+    hiNode := GenMakeLengthCallNode(GenMakeContainerNode(ckind, csym, cselfSym, cfOff, cfLen, ctemplate, contTk))
   else
     hiNode := GenMakeBinop(tkMinus,
-      GenMakeLengthCallNode(GenMakeContainerNode(ckind, csym, cselfSym, cfOff, cfLen, contTk)),
+      GenMakeLengthCallNode(GenMakeContainerNode(ckind, csym, cselfSym, cfOff, cfLen, ctemplate, contTk)),
       GenMakeIntLit(1), tyInteger);
 
   condNode := GenMakeBinop(tkLe, GenMakeIdent(idxSym, tyInteger), hiNode, tyBoolean);
 
   elemAccess := AllocNode(AN_INDEX);
-  ASTLeft[elemAccess] := GenMakeContainerNode(ckind, csym, cselfSym, cfOff, cfLen, contTk);
+  ASTLeft[elemAccess] := GenMakeContainerNode(ckind, csym, cselfSym, cfOff, cfLen, ctemplate, contTk);
   ASTRight[elemAccess] := GenMakeIdent(idxSym, tyInteger);
   ASTTk[elemAccess] := elemTk;
   assignX := GenMakeAssign(GenMakeIdent(varIdx, Syms[varIdx].TypeKind), elemAccess);
@@ -4344,7 +4366,7 @@ begin
   else if Syms[contSym].IsArray then elemTk := Ord(Syms[contSym].ElemType)
   else begin Error('for-in: variable is not a string or array'); elemTk := Ord(tyInteger); end;
 
-  Result := BuildForInArrayLoop(varIdx, 0, contSym, -1, 0, 0, contTk,
+  Result := BuildForInArrayLoop(varIdx, 0, contSym, -1, 0, 0, -1, contTk,
     isString, isStaticArr, Syms[contSym].IsArray,
     Syms[contSym].ArrLen, elemTk, bodyNode);
 end;
@@ -4374,7 +4396,57 @@ begin
   else if isArr then elemTk := UFldTk[fldIdx]
   else begin Error('for-in: implicit-Self field is not a string or array'); elemTk := Ord(tyInteger); end;
 
-  Result := BuildForInArrayLoop(varIdx, 1, -1, selfSym, fOff, fLen, contTk,
+  Result := BuildForInArrayLoop(varIdx, 1, -1, selfSym, fOff, fLen, -1, contTk,
+    isString, isStaticArr, isArr, staticLen, elemTk, bodyNode);
+end;
+
+{ for x in <qualified member-access lvalue> — e.g. `for it in Player.Inventory`,
+  where the source is an already-parsed lvalue node (AN_FIELD / AN_IDENT) rather
+  than a bare name. Classifies the node's array/string metadata from the symbol
+  table and drives the node-based loop builder, which deep-copies the node for
+  each use (Length bound + element access) so the two occurrences don't alias.
+  v1 covers array and string fields/vars; set / GetEnumerator / nested-index
+  (jagged) sources through a member-access still fall through to an error. }
+function ParseForInNodeAST(varIdx, contNode: Integer): Integer;
+var
+  bodyNode, elemTk, staticLen, recId, fldIdx: Integer;
+  contTk: TTypeKind;
+  isString, isStaticArr, isArr: Boolean;
+  fname: AnsiString;
+begin
+  Expect(tkDo, 'do');
+  bodyNode := ParseStatementAST;
+
+  isArr := IsNodeArray(contNode);
+  staticLen := -1;
+  if ASTKind[contNode] = AN_IDENT then
+  begin
+    contTk := Syms[ASTIVal[contNode]].TypeKind;
+    if isArr then elemTk := Ord(Syms[ASTIVal[contNode]].ElemType)
+    else elemTk := Ord(contTk);
+    staticLen := Syms[ASTIVal[contNode]].ArrLen;
+  end
+  else if ASTKind[contNode] = AN_FIELD then
+  begin
+    recId := ResolveNodeRec(ASTLeft[contNode]);
+    fname := GetASTIdentName(contNode);
+    contTk := RecFieldType(recId, fname);   { element base type for arrays }
+    elemTk := Ord(contTk);
+    fldIdx := -1;
+    if recId >= REC_UCLASS_BASE then fldIdx := FindUField(recId - REC_UCLASS_BASE, fname);
+    if fldIdx >= 0 then staticLen := UFldArrLen[fldIdx];
+  end
+  else
+  begin
+    Error('for-in: unsupported iterable expression');
+    contTk := tyInteger; elemTk := Ord(tyInteger);
+  end;
+
+  isStaticArr := isArr and (staticLen >= 0);
+  isString := (not isArr) and ((contTk = tyString) or (contTk = tyAnsiString));
+  if isString then elemTk := Ord(tyChar);
+
+  Result := BuildForInArrayLoop(varIdx, 2, -1, -1, 0, 0, contNode, contTk,
     isString, isStaticArr, isArr, staticLen, elemTk, bodyNode);
 end;
 
@@ -4834,6 +4906,7 @@ var
   pair1, pair2, pair3, isDownNode: Integer;
   gpi, fsym: Integer;
   selfClassCi, fldIdx, fldTokIdx, selfSym: Integer;
+  srcIdx, srcTokIdx: Integer;
   down: Boolean;
 begin
   if CurTok.Kind <> tkIdent then Error('for: expected variable');
@@ -4844,6 +4917,17 @@ begin
   begin
     Next;
     if CurTok.Kind <> tkIdent then Error('for-in: expected a generator, enum type, or iterable variable');
+    { qualified member-access / indexed source (`obj.field`, `Self.field`,
+      `a.b[i]`...): the ident is followed by a `.`/`[` selector, so it is not a
+      bare name — parse it as a general lvalue node and drive the node-based
+      loop. Must come before the bare-name lookups: a local object var would
+      otherwise match FindSym and then choke on the trailing `.`. }
+    if (TokPos < TokCount) and (Tokens[TokPos].Kind in [tkDot, tkLBrack]) then
+    begin
+      srcIdx := FindSym(CurTok.SVal); srcTokIdx := TokPos - 1; Next;
+      Result := ParseForInNodeAST(varIdx, ParseLValueAST(srcIdx, srcTokIdx));
+      Exit;
+    end;
     { generator call → existing coroutine/stackless desugar }
     gpi := FindProc(CurTok.SVal);
     if (gpi >= 0) and ProcIsGenerator[gpi] then

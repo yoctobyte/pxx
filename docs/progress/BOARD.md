@@ -45,7 +45,6 @@ _none_
 | feature-esp32-isr-iram | feature | ESP32: Compiler-Directed ISR and IRAM Support | — |
 | feature-exception-base-class | feature | Built-in / RTL `Exception` base class | — |
 | feature-flexcolumn-directive | feature | `flexcolumn` calling-convention directive | chore-inc-to-units |
-| feature-forin-member-access-source | feature | `for-in` over a qualified member-access source (`obj.field`, `Self.field`) | — |
 | feature-fpc-vs-pxx-feature-boundary | feature | Policy: FPC-bootstrap subset vs PXX-only library features | — |
 | feature-general-typename-cast | feature | General `TypeName(expr)` reinterpret cast (named record/class/pointer) | — |
 | feature-handle-compacting-heap | feature | Handle-table compacting heap (anti-fragmentation for constrained RAM) | — |
@@ -56,6 +55,7 @@ _none_
 | feature-int-to-float-assign | feature | Integer → Float assignment / coercion missing the int→float conversion | — |
 | feature-json-library | feature | JSON library — parser + serializer (with a roundtrip test app) | — |
 | feature-lazycasing-c-imports | feature | `{$LAZYCASING ON/OFF}` for C imports only | feature-compiler-warnings |
+| feature-member-access-on-call-result | feature | Member access on a function-call result (`f(args).field`) | — |
 | feature-metaclass-descendant-enforcement | feature | Metaclass alias descendant-constraint enforcement | — |
 | feature-mimic-fpc | feature | `mimic FPC` compatibility mode | feature-directive-if-numeric |
 | feature-networking | feature | Networking runtime | — |
@@ -85,7 +85,7 @@ _none_
 
 _none_
 
-## done (88)
+## done (89)
 
 | Ticket | Type | Summary | Blocked-by |
 | --- | --- | --- | --- |
@@ -147,6 +147,7 @@ _none_
 | feature-explicit-typecasts | feature | Explicit type-casts (`Char`/`Boolean`/`String` and a general `TypeName(expr)`) | — |
 | feature-float-str-val | feature | Float Str / Val | — |
 | feature-for-in-iteration | feature | `for x in ...` iteration — FPC-exact (arrays, sets, strings, enums, enumerators) | — |
+| feature-forin-member-access-source | feature | `for-in` over a qualified member-access source (`obj.field`, `Self.field`) | — |
 | feature-generators-yield | feature | Generators and `yield` (the coroutine on-ramp) | feature-unified-heap-allocator |
 | feature-i386-asm-emitter | feature | i386 text-assembler (`EmitAsm386`) for cleaner x86-32 codegen | — |
 | feature-i386-int64-codegen | feature | Full Int64 codegen for i386 | — |
@@ -214,7 +215,6 @@ _none_
 - feature-esp32-idf-xtensa
 - feature-esp32-isr-iram
 - feature-exception-base-class
-- feature-forin-member-access-source
 - feature-fpc-vs-pxx-feature-boundary
 - feature-general-typename-cast
 - feature-handle-compacting-heap
@@ -224,6 +224,7 @@ _none_
 - feature-interfaces
 - feature-int-to-float-assign
 - feature-json-library
+- feature-member-access-on-call-result
 - feature-metaclass-descendant-enforcement
 - feature-networking
 - feature-nil-python-frontend
