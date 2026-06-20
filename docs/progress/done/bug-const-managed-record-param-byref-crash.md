@@ -1,10 +1,11 @@
 # const record param with a managed (dynarray) field crashes by-ref on i386 + aarch64
 
 - **Type:** bug (compiler / codegen, cross-target)
-- **Status:** backlog
-- **Owner:** — (track A)
+- **Status:** done
+- **Owner:** track A
 - **Opened:** 2026-06-19 (found while adding cross tests for
   bug-const-byref-record-param-temp)
+- **Closed:** 2026-06-20
 
 ## Symptom
 
@@ -50,18 +51,18 @@ tools/run_target.sh aarch64 /tmp/r_a64      # SIGSEGV
 
 ## Impact
 
-Blocks managed-record value APIs (bignum `TBigInt`, JSON nodes, etc.) from being
-exercised through `const` params on the 32-bit/aarch64 cross targets. The
-x86-64 path (the self-host gate) is unaffected, so it does not block bootstrap —
-but the cross suites can only cover the *unmanaged* const-record-temp case until
-this is fixed. Once fixed, fold the managed-record variant
-(`test/test_const_record_temp_managed.pas`) into the i386/aarch64/arm32 cross
-suites.
+Blocked managed-record value APIs (bignum `TBigInt`, JSON nodes, etc.) from
+being exercised through `const` params on the 32-bit/aarch64 cross targets. The
+x86-64 path (the self-host gate) was unaffected, so it did not block bootstrap.
+Fixed in `1df5c76`; the managed-record variants are now back in the i386,
+aarch64, and arm32 cross suites.
 
 ## Log
 - 2026-06-19 — opened by track A. Found via the const-record-temp cross tests;
   isolated to the managed-field-by-ref read (named var crashes too, not just
   temporaries). i386 + aarch64 affected; arm32 + x86-64 fine.
+- 2026-06-20 — fixed by preserving `ParseSubroutine`'s current-procedure index
+  while emitting managed aggregate local zeroing. Stable default pinned to v14.
 
 ## Diagnosis (2026-06-19) — narrowed to the managed-record FUNCTION RETURN
 
@@ -134,7 +135,7 @@ user code is rejected — "undefined variable (NativeInt)" on the cast — so us
 disassembly or a non-managed proxy field.) This is independent of the now-fixed
 hidden-temp nil-init (`bug-proc-local-managed-record-uninit`).
 
-## Disassembly findings (2026-06-20, session 3) — ROOT CAUSE localized
+## Disassembly findings (2026-06-20, session 3) — old working theory
 
 Disassembled i386 `MakeR` (a record-returning function). It builds `Result` in a
 local (ebp-0x10), stores the handle into `Result.limbs` correctly — and then
@@ -168,3 +169,45 @@ proc/offset, or a lazy helper-proc registration that reuses the slot; (2) find t
 real epilog call path for a record-returning proc on i386. The aarch64 variant is
 separate (segfaults rather than nil) and needs its own pass. x86-64 self-host is
 unaffected throughout.
+
+## Resolution (2026-06-20)
+
+The missing aggregate-return copy was real, but the `RetSymIdx` reset theory was
+wrong. An FPC debug build showed `Procs[MakeBig].RetSymIdx` stayed valid through
+codegen. At the final epilogue call, `CurProc` still pointed at the record-return
+function and `Procs[CurProc].RetSymIdx` was still 17, but the `retArg` passed to
+`EmitProcEpilog` was -1.
+
+The actual clobber was the local `pi` in `ParseSubroutine`. That variable holds
+the current procedure index and is later used by the parser epilogue:
+`EmitProcEpilog(Procs[pi].RetSymIdx)`. The managed aggregate local zeroing path
+for i386/aarch64 reused the same local for helper lookup:
+`pi := FindProc('PXXMemZero')`. After that, `pi` named the helper procedure
+(`PXXMemZero`, with `RetSymIdx = -1`) instead of `MakeR`, so the final epilogue
+skipped the record-return aggregate copy and emitted only `leave; ret`.
+
+Fix: `compiler/parser.inc` now uses a separate `helperPi` for the `PXXMemZero`
+lookup/call, preserving the current-procedure `pi` until the final epilogue.
+
+Landed:
+- `1df5c76 fix(parser): preserve proc index during managed zeroing`
+- `4e1ce6c chore(stable): pin default v14`
+
+Test coverage restored:
+- `test/test_const_record_temp_managed.pas` is back in the i386, aarch64, and
+  arm32 cross suites.
+- `test/test_managed_record_temp_init.pas` is back in the i386 and aarch64 cross
+  suites; arm32 already covered it.
+
+Validation passed:
+- Direct i386/aarch64/arm32 repros now print the expected managed-field lengths
+  and values.
+- `make test`
+- `make cross-bootstrap` (aarch64, arm32, i386 byte-identical)
+- `make test-i386`
+- `make test-aarch64`
+- `make test-arm32`
+- `make stabilize && make pin`
+
+Stable default is now v14:
+`28453d6ebd82757771d0fafc6c8fe165c674a3210807a3560908b6fef5d36a1f`.
