@@ -1,12 +1,13 @@
 unit platform;
 { Minimal Platform Abstraction Layer (PAL).
 
-  This is the only RTL unit that may branch on PXX_PLATFORM_* while the Pascal
-  unit-search-path backend selector is still missing. Higher-level IO,
-  networking, time, and CRTL units should depend on this interface rather than
-  branching on platform names themselves. }
+  This facade is platform-neutral. The implementation is selected by putting one
+  backend directory (for example lib/rtl/platform/posix or lib/rtl/platform/esp)
+  on the Pascal unit search path so `uses platform_backend` binds there. }
 
 interface
+
+uses platform_backend;
 
 const
   PAL_STDIN  = 0;
@@ -45,47 +46,27 @@ implementation
 
 function PalPlatform: Integer;
 begin
-{$ifdef PXX_PLATFORM_ESP}
-  Result := PAL_PLATFORM_ESP_IDF;
-{$else}
-  Result := PAL_PLATFORM_POSIX;
-{$endif}
+  Result := PalBackendPlatform;
 end;
 
 function PalHasFiles: Boolean;
 begin
-{$ifdef PXX_HAS_FILES}
-  Result := True;
-{$else}
-  Result := False;
-{$endif}
+  Result := PalBackendHasFiles;
 end;
 
 function PalHasSockets: Boolean;
 begin
-{$ifdef PXX_HAS_SOCKETS}
-  Result := True;
-{$else}
-  Result := False;
-{$endif}
+  Result := PalBackendHasSockets;
 end;
 
 function PalHasThreads: Boolean;
 begin
-{$ifdef PXX_HAS_THREADS}
-  Result := True;
-{$else}
-  Result := False;
-{$endif}
+  Result := PalBackendHasThreads;
 end;
 
 function PalHasDynlib: Boolean;
 begin
-{$ifdef PXX_HAS_DYNLIB}
-  Result := True;
-{$else}
-  Result := False;
-{$endif}
+  Result := PalBackendHasDynlib;
 end;
 
 function PalUnsupported: Integer;
@@ -93,102 +74,34 @@ begin
   Result := PAL_ERR_UNSUPPORTED;
 end;
 
-{$ifdef PXX_PLATFORM_ESP}
-
-{ ESP PAL is IDF/FreeRTOS-shaped. Byte handles stay unsupported until the
-  project has VFS/lwIP bindings. IDF symbols are referenced only for ESP CPU
-  targets so native `--platform=esp` smoke tests can still run. }
-{$ifdef CPU_XTENSA}{$define PXX_PAL_ESP_IDF_TARGET}{$endif}
-{$ifdef CPU_RISCV32}{$define PXX_PAL_ESP_IDF_TARGET}{$endif}
-
-{$ifdef PXX_PAL_ESP_IDF_TARGET}
-procedure vTaskDelay(ticks: Integer); external;
-function esp_timer_get_time: Int64; external;
-{$endif}
-
 function PalOpen(path: PChar; flags, mode: Integer): Integer;
 begin
-  Result := PAL_ERR_UNSUPPORTED;
+  Result := PalBackendOpen(path, flags, mode);
 end;
 
 function PalRead(handle: Integer; buf: Pointer; len: Integer): Int64;
 begin
-  Result := PAL_ERR_UNSUPPORTED;
+  Result := PalBackendRead(handle, buf, len);
 end;
 
 function PalWrite(handle: Integer; buf: Pointer; len: Integer): Int64;
 begin
-  Result := PAL_ERR_UNSUPPORTED;
+  Result := PalBackendWrite(handle, buf, len);
 end;
 
 function PalClose(handle: Integer): Integer;
 begin
-  Result := PAL_ERR_UNSUPPORTED;
+  Result := PalBackendClose(handle);
 end;
 
 function PalMonotonicMillis: Int64;
 begin
-{$ifdef PXX_PAL_ESP_IDF_TARGET}
-  Result := esp_timer_get_time div 1000;
-{$else}
-  Result := 0;
-{$endif}
+  Result := PalBackendMonotonicMillis;
 end;
 
 procedure PalYield;
 begin
-{$ifdef PXX_PAL_ESP_IDF_TARGET}
-  vTaskDelay(1);
-{$endif}
+  PalBackendYield;
 end;
-
-{$else}
-
-const
-{$ifdef CPUX86_64}
-  SYS_read = 0; SYS_write = 1; SYS_close = 3; SYS_openat = 257;
-{$endif}
-{$ifdef CPU_I386}
-  SYS_read = 3; SYS_write = 4; SYS_close = 6; SYS_openat = 295;
-{$endif}
-{$ifdef CPU_AARCH64}
-  SYS_read = 63; SYS_write = 64; SYS_close = 57; SYS_openat = 56;
-{$endif}
-{$ifdef CPU_ARM32}
-  SYS_read = 3; SYS_write = 4; SYS_close = 6; SYS_openat = 322;
-{$endif}
-  PAL_AT_FDCWD = -100;
-
-function PalOpen(path: PChar; flags, mode: Integer): Integer;
-begin
-  Result := Integer(__pxxrawsyscall(SYS_openat, PAL_AT_FDCWD, Int64(path), flags, mode, 0, 0));
-end;
-
-function PalRead(handle: Integer; buf: Pointer; len: Integer): Int64;
-begin
-  Result := __pxxrawsyscall(SYS_read, handle, Int64(buf), len, 0, 0, 0);
-end;
-
-function PalWrite(handle: Integer; buf: Pointer; len: Integer): Int64;
-begin
-  Result := __pxxrawsyscall(SYS_write, handle, Int64(buf), len, 0, 0, 0);
-end;
-
-function PalClose(handle: Integer): Integer;
-begin
-  Result := Integer(__pxxrawsyscall(SYS_close, handle, 0, 0, 0, 0, 0));
-end;
-
-function PalMonotonicMillis: Int64;
-begin
-  { Clock backends will grow here. Keep the interface stable now. }
-  Result := 0;
-end;
-
-procedure PalYield;
-begin
-end;
-
-{$endif}
 
 end.

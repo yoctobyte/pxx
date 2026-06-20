@@ -1902,9 +1902,9 @@ lib-test: pxx-stable-check
 	test "$$(/tmp/lib_sysutils)" = "$$(printf '0\n-123456789\n10000000000\nhello\nworld\n[]\n[pad]\n42\n-7\n-1\n100\nAB3Z\nab3z')"
 	$(PXX_STABLE) test/lib_random.pas /tmp/lib_random
 	test "$$(/tmp/lib_random)" = "$$(printf '5 3 5 2 1 1 3 1 \n5 3 5 2 1 1 3 1 \n537 775 832 585 619 ')"
-	$(PXX_STABLE) test/lib_platform.pas /tmp/lib_platform
+	$(PXX_STABLE) -Fulib/rtl/platform/posix test/lib_platform.pas /tmp/lib_platform
 	test "$$(/tmp/lib_platform)" = "$$(printf 'posix\nfiles\nsockets\nthreads\ndynlib\npal-write=3\nfile=io:2\nunsupported=-38')"
-	$(PXX_STABLE) --platform=esp test/lib_platform_esp.pas /tmp/lib_platform_esp
+	$(PXX_STABLE) --platform=esp -Fulib/rtl/platform/esp test/lib_platform_esp.pas /tmp/lib_platform_esp
 	test "$$(/tmp/lib_platform_esp)" = "$$(printf 'esp-idf\nopen=-38\nread=-38\nunsupported=-38')"
 	$(PXX_STABLE) examples/bignum/factorial.pas /tmp/lib_factorial
 	test "$$(/tmp/lib_factorial)" = "$$(printf '5! = 120\n10! = 3628800\n20! = 2432902008176640000\n1000! digits      = 2568\n1000! first 10    = 4023872600\n1000! trailing 0s = 249')"

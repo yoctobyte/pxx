@@ -145,3 +145,9 @@ Out of scope (separate tickets):
   VFS binding work lands. `test/lib_platform.pas` now writes and reads a small
   file through PAL, while `test/lib_platform_esp.pas` asserts no host fallback
   for open/read under native `--platform=esp`.
+- 2026-06-20 — Replaced the interim `lib/rtl/platform.pas` platform `ifdef`
+  switch with a facade plus per-platform `platform_backend` units selected by
+  the Pascal unit search path: `lib/rtl/platform/posix/` and
+  `lib/rtl/platform/esp/`. `make library-suite-green` now compiles PAL tests with
+  explicit `-Fu` backend paths, proving path-selected backend binding while
+  keeping callers on `uses platform`.

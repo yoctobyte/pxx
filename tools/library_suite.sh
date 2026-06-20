@@ -105,10 +105,10 @@ run_green() {
     "$ROOT/test/lib_random.pas"
   run_expect platform_posix \
     $'posix\nfiles\nsockets\nthreads\ndynlib\npal-write=3\nfile=io:2\nunsupported=-38' \
-    "$ROOT/test/lib_platform.pas"
+    -Fu"$ROOT/lib/rtl/platform/posix" "$ROOT/test/lib_platform.pas"
   run_expect platform_esp_unsupported \
     $'esp-idf\nopen=-38\nread=-38\nunsupported=-38' \
-    --platform=esp "$ROOT/test/lib_platform_esp.pas"
+    --platform=esp -Fu"$ROOT/lib/rtl/platform/esp" "$ROOT/test/lib_platform_esp.pas"
   run_expect bignum_factorial \
     $'5! = 120\n10! = 3628800\n20! = 2432902008176640000\n1000! digits      = 2568\n1000! first 10    = 4023872600\n1000! trailing 0s = 249' \
     "$ROOT/examples/bignum/factorial.pas"
