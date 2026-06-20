@@ -15,7 +15,7 @@ _none_
 | feature-c-runtime-library | feature | C runtime/library layer (`lib/crtl`) plus direct C-library packages | — |
 | feature-platform-abstraction-layer | feature | Platform Abstraction Layer (PAL): per-platform RTL port at one seam | — |
 
-## backlog (67)
+## backlog (68)
 
 | Ticket | Type | Summary | Blocked-by |
 | --- | --- | --- | --- |
@@ -29,6 +29,7 @@ _none_
 | feature-async-language-surface | feature | Async language surface + stackless coroutine backend | feature-cross-target-feature-parity |
 | feature-bignum-library | feature | Bignum library — arbitrary-precision integers (deterministic test app) | — |
 | feature-c-header-import-complex | feature | Import C headers for complex libraries (glib/GTK-grade) | — |
+| feature-compiler-search-path-pcl | feature | feature-compiler-search-path-pcl (Track A) | — |
 | feature-compiler-warnings | feature | Compiler warning diagnostics facility | — |
 | feature-compression-library | feature | Compression library — Huffman / LZ77 (roundtrip test app) | — |
 | feature-const-eval-typecast-int64 | feature | ConstEval: typed casts + 64-bit folding in const initializers | — |
@@ -211,6 +212,7 @@ _none_
 - feature-async-language-surface
 - feature-bignum-library
 - feature-c-header-import-complex
+- feature-compiler-search-path-pcl
 - feature-compiler-warnings
 - feature-compression-library
 - feature-const-eval-typecast-int64

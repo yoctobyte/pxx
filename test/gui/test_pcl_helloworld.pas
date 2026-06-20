@@ -1,6 +1,6 @@
-program test_lcl_helloworld;
+program test_pcl_helloworld;
 
-{ End-to-end of the LCL final mile, mirroring the stock Lazarus helloworld but
+{ End-to-end of the PCL final mile, mirroring the stock Lazarus helloworld but
   self-terminating: Application.CreateForm instantiates TForm1 from a metaclass
   and streams its *.lfm; a timeout synthesises a button click (firing the
   streamed OnClick -> ShowMessage), a second timeout dismisses the dialog and

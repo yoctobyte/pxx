@@ -1,9 +1,9 @@
 unit dialogs;
 
-{ Minimal LCL-compatible Dialogs unit over GTK message dialogs.
+{ Minimal PCL-compatible Dialogs unit over GTK message dialogs.
 
   ShowMessage pops a modal "info + OK" dialog and blocks (via gtk_dialog_run)
-  until the user closes it, matching the LCL contract.
+  until the user closes it, matching the PCL contract.
 
   Because gtk_dialog_run runs its own nested main loop, automated tests can't
   click OK. The active dialog is tracked in ActiveDialog and can be torn down

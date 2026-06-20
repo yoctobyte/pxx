@@ -31,7 +31,7 @@ FROZEN_PXXFLAGS := -uPXX_MANAGED_STRING
 
 .PHONY: all bootstrap bootstrap-check fpc-check test test-core test-asm-emit test-nilpy qemu-env-check test-i386 test-aarch64 test-arm32 test-emit-obj stabilize check-stable revert benchmark benchmark-compiler-runtime benchmark-check clean distclean symbols \
         bootstrap-managed bootstrap-frozen test-managed test-frozen stabilize-managed stabilize-frozen check-stable-managed revert-managed test-nilpy-managed test-nilpy-frozen \
-        pxx-stable-check pin lib-test library-suite library-suite-green library-suite-discovery demos c-interop-devtest \
+        pxx-stable-check pin lib-test library-suite library-suite-green library-suite-discovery gui-test demos c-interop-devtest \
         progress-check cross-bootstrap cross-bootstrap-aarch64 cross-bootstrap-arm32 cross-bootstrap-i386 test-esp-bare
 
 all: $(COMPILER)
@@ -1888,7 +1888,7 @@ pin:
 	@# $(STABLE_DEFAULT_DIR)/builtin/, which is checked BEFORE the CWD-relative
 	@# fallback to the live compiler/builtin/. Snapshotting here closes the
 	@# isolation hole where track A's uncommitted edits in compiler/builtin/**
-	@# (its own lane) leaked into track B's pinned compiles. lib/rtl + lib/lcl are
+	@# (its own lane) leaked into track B's pinned compiles. lib/rtl + lib/pcl are
 	@# deliberately NOT frozen -- they are track B's own editable lane, which B
 	@# expects live. See docs/progress/backlog/bug-pinned-stable-reads-live-builtin-rtl.md.
 	@rm -rf $(STABLE_DEFAULT_DIR)/builtin
@@ -1932,6 +1932,10 @@ library-suite-discovery: pxx-stable-check
 
 library-suite: pxx-stable-check
 	PXX_STABLE=$(PXX_STABLE) tools/library_suite.sh all
+
+# Dedicated GUI test suite for Track B.
+gui-test: pxx-stable-check
+	PXX_STABLE=$(PXX_STABLE) tools/gui_suite.sh
 
 # Compile-smoke DASHBOARD for every demo app, against the pinned stable. Prints
 # an OK/FAIL table and always exits 0 -- a discovery view, not a gate. FAILs are

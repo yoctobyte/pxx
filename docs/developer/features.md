@@ -158,9 +158,9 @@ the supported instruction set and current limits.
 
 ## GUI (GTK3 + LFM Streaming)
 
-An early LCL-compatible GUI layer runs on GTK3 (Linux/X11). It is pure library
+An early PCL-compatible GUI layer runs on GTK3 (Linux/X11). It is pure library
 code over the language: a hand-written `external` binding to `libgtk-3.so.0`,
-LCL-named classes (`TForm`, `TButton`, `TApplication`), `of object` events
+PCL-named classes (`TForm`, `TButton`, `TApplication`), `of object` events
 (`OnClick`), and binary form (`.lfm`) streaming that instantiates and wires a
 component tree by class name and event identifier. See [GUI](gui.md).
 

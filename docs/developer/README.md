@@ -27,9 +27,9 @@ User-facing documents:
 - [Limitations](limitations.md) - unsupported or only partially supported language, ABI, platform, and tooling areas.
 - [Inline Assembler](inline-asm.md) - x86-64 inline asm support, supported instruction set, variable passing, limitations, and TODO.
 - [Cross-codegen landmines](cross-codegen-landmines.md) - timeless gotchas for the non-x86-64 backends: the ARM32 4-byte-alignment / unguarded-x86-`EmitB` trap, the crash-diagnosis recipe (qemu `-d in_asm`, raw-binary objdump), and other cross gotchas. Append when bitten.
-- [GUI (GTK3 + LFM streaming)](gui.md) - LCL-compatible widgetset on GTK3, of-object events, and `.lfm`-streamed component trees.
-- [Plan: RTTI → Streaming → LFM](plan-rtti-streaming-lfm.md) - agent-executable phased plan for Lazarus/LCL enablement (RTTI, published, component streaming, resources, LFM).
-- [Project TODO](todo.md) - consolidated remaining-work list: standing bugs, the LCL arc, interfaces (detailed), language gaps, targets, and the units refactor.
+- [GUI (GTK3 + LFM streaming)](gui.md) - PCL-compatible widgetset on GTK3, of-object events, and `.lfm`-streamed component trees.
+- [Plan: RTTI → Streaming → LFM](plan-rtti-streaming-lfm.md) - agent-executable phased plan for Lazarus/PCL enablement (RTTI, published, component streaming, resources, LFM).
+- [Project TODO](todo.md) - consolidated remaining-work list: standing bugs, the PCL arc, interfaces (detailed), language gaps, targets, and the units refactor.
 - [Rainy Afternoon Backlog](rainy-afternoon.md) - compact list of known non-critical bugs, limitations, and optional cleanup work.
 - [Project State Audit](project-state.md) - dated compact inventory of verified support, confirmed bugs, missing Pascal features, design debt, and the latest benchmark snapshot.
 - [Anomaly: non-reproducible miscompile (2026-06-02)](anomaly_2026-06-02_2000.md) - forensic record of a one-off, self-cleared, deterministic-toolchain miscompile; suspected hardware bit flip. Evidence in [`anomaly-evidence-2026-06-02/`](anomaly-evidence-2026-06-02/).

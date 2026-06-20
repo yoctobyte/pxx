@@ -43,7 +43,7 @@ archived as `historic/direct-codegen-legacy.inc` on 2026-05-31. See
 
 `uses name;` searches (ExeDir-anchored, CWD fallback): local dir, `compiler/`,
 `compiler/builtin/` (the auto-included `builtin` runtime unit), `lib/rtl/`,
-`lib/lcl/`, then `/usr/include/`. `.h` → external prototype + dynamic resolve.
+`lib/pcl/`, then `/usr/include/`. `.h` → external prototype + dynamic resolve.
 `ctype` hardcoded → `libc.so.6`. Other headers default `lib<name>.so`.
 
 `uses './sub/unit';` (path-form, quoted string in the uses list) bypasses the

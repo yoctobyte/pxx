@@ -1,4 +1,4 @@
-program test_lcl_showmessage;
+program test_pcl_showmessage;
 
 { Dialogs.ShowMessage over a real GTK message dialog.
 

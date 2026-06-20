@@ -1,4 +1,4 @@
-program test_lcl_click;
+program test_pcl_click;
 
 { Slice 2b: `of object` method-pointer events. A handler object's method is
   assigned to the button's OnClick via @obj.method (a TMethod, Code+Data).

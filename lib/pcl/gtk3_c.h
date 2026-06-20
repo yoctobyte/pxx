@@ -40,11 +40,31 @@ void gtk_container_add(void* container, void* widget);
 void gtk_widget_show_all(void* widget);
 void gtk_widget_destroy(void* widget);
 
+// Additional Widgets & Layout
+void* gtk_label_new(char* text);
+void gtk_label_set_text(void* label, char* text);
+void* gtk_entry_new(void);
+void gtk_entry_set_text(void* entry, char* text);
+char* gtk_entry_get_text(void* entry);
+void* gtk_check_button_new_with_label(char* label);
+int gtk_toggle_button_get_active(void* toggle_button);
+void gtk_toggle_button_set_active(void* toggle_button, int is_active);
+void* gtk_frame_new(char* label);
+void* gtk_fixed_new(void);
+void gtk_fixed_put(void* container, void* widget, int x, int y);
+void gtk_fixed_move(void* container, void* widget, int x, int y);
+void gtk_widget_set_size_request(void* widget, int width, int height);
+void* gtk_bin_get_child(void* bin);
+
 // Dialogs
 void* gtk_message_dialog_new(void* parent, int flags, int mtype, int buttons, char* fmt, char* msg);
 int gtk_dialog_run(void* dialog);
+
+// Timer source removal
+int g_source_remove(unsigned int tag);
 
 // Libc
 int usleep(unsigned int usec);
 
 #endif
+

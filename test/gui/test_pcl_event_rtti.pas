@@ -1,4 +1,4 @@
-program test_lcl_event_rtti;
+program test_pcl_event_rtti;
 
 { Slice 3a: wire a form method to a button's OnClick through the RTTI path --
   the exact calls the LFM reader makes (GetClass, GetMethodAddr, GetPropInfo,

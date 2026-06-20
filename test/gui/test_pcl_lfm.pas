@@ -1,4 +1,4 @@
-program test_lcl_lfm;
+program test_pcl_lfm;
 
 { Slice 3b: full LFM instantiation. The form's constructor streams an embedded
   .lfm: it sets the form Caption, instantiates the child TButton (GetClass +
@@ -9,7 +9,7 @@ program test_lcl_lfm;
 
 uses typinfo, classes_lite, resources, lfm, gtk3, controls, stdctrls, forms;
 
-{$R TMainForm test_lcl_lfm.lfm}
+{$R TMainForm test_pcl_lfm.lfm}
 
 type
   TMainForm = class(TForm)

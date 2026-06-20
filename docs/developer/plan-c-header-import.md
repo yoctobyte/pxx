@@ -109,7 +109,7 @@ hardcoding sonames); Pillar 2 is the long arc.
   basic function-like macros, `#if/#ifdef/#ifndef/#elif/#else/#endif`. Missing:
   token paste `##`, stringify `#`, variadic macros, full rescanning, `defined()`
   in complex expressions, builtin/predefined macros.
-- Unit search order: source dir → `compiler/` → `lib/rtl` → `lib/lcl` →
+- Unit search order: source dir → `compiler/` → `lib/rtl` → `lib/pcl` →
   `/usr/include/`. A `.h` hit sets `isCHeader` and routes through the C path.
 
 Implication: today's importer can ingest `ctype.h`-class headers (flat int/char

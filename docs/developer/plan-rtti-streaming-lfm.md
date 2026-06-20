@@ -4,7 +4,7 @@
 record for the implemented RTTI/LFM arc. Current limits live in
 [`project-state.md`](project-state.md) and [`limitations.md`](limitations.md).
 
-Agent-executable plan for the Lazarus/LCL enablement arc. Decomposed so
+Agent-executable plan for the Lazarus/PCL enablement arc. Decomposed so
 separate agents can take individual tasks. Each task lists goal, files,
 dependencies, approach, and done-criteria. **Read the cross-cutting rules
 first — they apply to every task.**
@@ -29,7 +29,7 @@ intended shape, not a contract.
 - **Scope: stops at LFM.** Phases 0–5 below. Interfaces are a stub (see end),
   planned separately; they are **not** a streaming prerequisite.
 - **GUI is out of scope.** Deliverable is "instantiate a component tree from
-  an `.lfm`", not "draw a window". Actual LCL widget sets are pure library
+  an `.lfm`", not "draw a window". Actual PCL widget sets are pure library
   work afterward, with no further compiler ask.
 
 ## Cross-cutting rules (EVERY task)
@@ -213,7 +213,7 @@ tree using Phase 2.
 **Files.** new RTL units: `streams.pas` (memory stream over a byte blob),
 `classes_lite.pas` (TComponent-lite base + TReader).
 
-**Binary form (Delphi/LCL filer) format — summary.**
+**Binary form (Delphi/PCL filer) format — summary.**
 - Signature `'TPF0'`.
 - Then a component: prefix byte (flags: child/inherited), `ClassName` (string),
   `Name` (string), then a **property list**: repeated `{ PropName(string),
@@ -297,7 +297,7 @@ on the instances. Still no GUI rendering — that's later library work.
 
 ## After this plan
 
-- **GUI / LCL widget sets:** an early GTK3 vertical slice with `.lfm`-streamed
+- **GUI / PCL widget sets:** an early GTK3 vertical slice with `.lfm`-streamed
   UI is now built on top of Phase 5 — see [`gui.md`](gui.md). It did need some
   general compiler features (shared-library FFI, procedure/method pointers,
   virtual-procedure statements, full VMT inheritance), contrary to the

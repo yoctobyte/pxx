@@ -15,7 +15,7 @@ At the start of a session, infer the track from the user's request:
   a target (i386 / aarch64 / arm32 / xtensa / riscv / ESP), parser / lexer /
   ABI / ELF, bootstrap / self-host / fixedpoint / `make stabilize`, fixing a
   compiler bug, adding a *language* feature, `compiler/**` files.
-- **Track B — libraries/demos.** Signals: `lib/rtl` / `lib/lcl`, `examples/**`,
+- **Track B — libraries/demos.** Signals: `lib/rtl` / `lib/pcl`, `examples/**`,
   writing or fixing a *library* (JSON, hashing, `IntToStr`, `Copy`, collections),
   demo apps, `make lib-test` / `make demos`, a ticket tagged "(library)".
 

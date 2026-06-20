@@ -14,7 +14,7 @@ track. **At session start, infer your track from the request:**
 - **Track A — compiler.** codegen / IR / backends / a target, parser / lexer /
   ABI / ELF, bootstrap / self-host / `make stabilize`, compiler bugs, language
   features, `compiler/**`.
-- **Track B — libraries / demos.** `lib/rtl` · `lib/lcl`, `examples/**`, writing
+- **Track B — libraries / demos.** `lib/rtl` · `lib/pcl`, `examples/**`, writing
   or fixing a library (JSON, hashing, `IntToStr`, `Copy`…), demo apps, `make
   lib-test` / `make demos`, tickets tagged "(library)".
 

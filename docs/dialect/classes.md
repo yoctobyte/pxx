@@ -68,7 +68,7 @@ RTTI:
 - a **stock GTK3 Lazarus helloworld compiles and runs unmodified** — see
   [`developer/gui.md`](../developer/gui.md).
 
-RTL/LCL units live under `lib/rtl/` and `lib/lcl/` (`classes`, `collections`,
+RTL/PCL units live under `lib/rtl/` and `lib/pcl/` (`classes`, `collections`,
 `typinfo`, `streams`, `math`, `controls`, `forms`, `stdctrls`, `dialogs`,
 `graphics`, `gtk3`, …).
 

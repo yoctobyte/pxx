@@ -124,7 +124,7 @@ ln -sfn "$PWD/stable_linux_amd64/default/latest" "$HOME/.local/bin/pxx"
   compiler-specific runtime unit auto-included into compiled programs: heap
   allocator, `Str`/`Val`, variant helpers).
 - `docs/` - public docs, project state, plans, and historic handovers.
-- `lib/` - Pascal library units used by tests and demos (`rtl/`, `lcl/`).
+- `lib/` - Pascal library units used by tests and demos (`rtl/`, `pcl/`).
 - `stable_linux_amd64/` - stable/recovery compiler binaries. The default channel
   uses managed `AnsiString`; historical managed/frozen channels may remain for
   compatibility.

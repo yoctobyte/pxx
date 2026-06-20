@@ -37,7 +37,7 @@ planned in **[`plan-pascal-syntax-issues.md`](plan-pascal-syntax-issues.md)**.
 
 ---
 
-## 2. Active arc — Lazarus/LCL enablement
+## 2. Active arc — Lazarus/PCL enablement
 
 **RTTI → published → streaming → resources → LFM.** Full phased, agent-
 executable plan: **[`plan-rtti-streaming-lfm.md`](plan-rtti-streaming-lfm.md)**.
@@ -92,9 +92,9 @@ executable plan: **[`plan-rtti-streaming-lfm.md`](plan-rtti-streaming-lfm.md)**.
 
 ## 2b. GUI arc — GTK3 widgetset + LFM-streamed UI  ✅ (vertical slice)
 
-Full doc: **[`gui.md`](gui.md)**. An LCL-compatible GUI on GTK3 (Linux/X11)
+Full doc: **[`gui.md`](gui.md)**. A PCL-compatible GUI on GTK3 (Linux/X11)
 where a form's structure and event wiring come from an `.lfm`. Demos in
-`test/gui/` (`test_lcl_lfm.pas` is the end-to-end one). Contrary to the earlier
+`test/gui/` (`test_pcl_lfm.pas` is the end-to-end one). Contrary to the earlier
 "pure library, no compiler ask" expectation, it needed several general
 compiler features — all landed and in `make test`:
 
@@ -112,7 +112,7 @@ compiler features — all landed and in `make test`:
 
 The dropped `test/gui/helloworld` final mile landed: virtual
 `TComponent.Create(AOwner)`, `Application.CreateForm`, named `class of`
-metaclasses with runtime `ClassName`, `Dialogs.ShowMessage`, LCL unit stubs,
+metaclasses with runtime `ClassName`, `Dialogs.ShowMessage`, PCL unit stubs,
 `{$R *.lfm}` wildcard handling, and streamed-child → published-field wiring.
 The earlier plan remains as historical context in
 [`historic/handover-final-mile.md`](historic/handover-final-mile.md).

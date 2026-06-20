@@ -1,13 +1,13 @@
 # GUI (GTK3 widgetset + LFM streaming)
 
-PXX has an LCL-compatible GUI layer built on GTK3. Source and event wiring can
+PXX has a PCL-compatible GUI layer built on GTK3. Source and event wiring can
 come from an `.lfm` form resource, mirroring the Lazarus model. Everything is
 pure library work on top of the language; the only compiler features it needs
 (shared-library FFI, procedure/method pointers, RTTI, form streaming) are
 general and documented in [Pascal Dialect](pascal-dialect.md) and
 [C Interoperability](c-interop.md).
 
-This is an early vertical slice, not a full LCL. It runs on Linux/X11 with
+This is an early vertical slice, not a full PCL. It runs on Linux/X11 with
 `libgtk-3.so.0` installed (no GTK `-dev` headers required — the binding is a
 hand-written Pascal `external` unit, not a header import).
 
@@ -20,7 +20,7 @@ hand-written Pascal `external` unit, not a header import).
 ## Layers
 
 ```
-LCL units (controls / stdctrls / forms)   LCL-named API: TControl/TButton/TForm/TApplication
+PCL units (controls / stdctrls / forms)   PCL-named API: TControl/TButton/TForm/TApplication
         |
 gtk3 binding unit                          thin Pascal `external` decls into libgtk-3 / libgobject / libglib
         |
@@ -80,7 +80,7 @@ properties, instantiating child components by class name, and resolving event
 identifiers to `TMethod` values against the root form.
 
 ```pascal
-{$R TMainForm test_lcl_lfm.lfm}
+{$R TMainForm test_pcl_lfm.lfm}
 
 type
   TMainForm = class(TForm)
@@ -120,10 +120,10 @@ widgets and a click runs `Btn1Click`.
 | `test_gtk_ffi.pas` | FFI smoke test — links `libgtk-3.so.0`, prints the version. |
 | `test_gtk_window.pas` | A real window + button via the raw binding. |
 | `test_gtk_signals.pas` | GTK signal callbacks (destroy / clicked / timeout) via `@proc`. |
-| `test_lcl_window.pas` | Form + button via the LCL-style API. |
-| `test_lcl_click.pas` | `OnClick` assigned with `@obj.method`. |
-| `test_lcl_event_rtti.pas` | `OnClick` wired through the RTTI reflection path. |
-| `test_lcl_lfm.pas` | Full `.lfm` streaming — tree + events from the form text. |
+| `test_pcl_window.pas` | Form + button via the PCL-style API. |
+| `test_pcl_click.pas` | `OnClick` assigned with `@obj.method`. |
+| `test_pcl_event_rtti.pas` | `OnClick` wired through the RTTI reflection path. |
+| `test_pcl_lfm.pas` | Full `.lfm` streaming — tree + events from the form text. |
 
 The demos that need no input fire `gtk_button_clicked` synchronously so they
 terminate without a windowing robot; the windowed ones quit on a short timeout.
@@ -149,7 +149,7 @@ message box. Four features closed the gap, each with a `make test` regression:
   the directive's name field is empty the resource name is derived from the
   `.lfm` root object's class, so `InitInheritedComponent(Self, ClassName)` finds
   it.
-- **`Dialogs.ShowMessage` + LCL glue.** `ShowMessage` wraps the variadic
+- **`Dialogs.ShowMessage` + PCL glue.** `ShowMessage` wraps the variadic
   `gtk_message_dialog_new` (the external-call path now zeroes `al`, as the SysV
   ABI requires for variadic callees). `TApplication.CreateForm` instantiates the
   metaclass with `CreateInstance`, streams it by runtime `ClassName`, and keeps
@@ -162,8 +162,8 @@ A compiler bug surfaced and was fixed along the way: a property/field reached
 through a **class-typed field** base (`host.field.prop`) did not dereference the
 field's pointer before applying the next offset (`test_field_chain`).
 
-Library units moved out of `compiler/` into `lib/rtl` (RTL) and `lib/lcl`
+Library units moved out of `compiler/` into `lib/rtl` (RTL) and `lib/pcl`
 (widgetset); the unit resolver searches both after `compiler/`. Two more GUI
-demos: `test_lcl_showmessage.pas` (a message dialog) and
-`test_lcl_helloworld.pas` (the full mile, mirroring `helloworld` but
+demos: `test_pcl_showmessage.pas` (a message dialog) and
+`test_pcl_helloworld.pas` (the full mile, mirroring `helloworld` but
 self-terminating: synthetic click → `ShowMessage` → dismiss → quit).

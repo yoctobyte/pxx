@@ -18,7 +18,7 @@ Your rules:
   even while A keeps stabilizing. Use `make lib-test` (curated green smoke) and
   `make demos` (compile-smoke dashboard). Do NOT run `make bootstrap` / edit
   `compiler/**`.
-- **Own** `lib/rtl`, `lib/lcl`, `examples/**`, and new `test/lib_*`. Add your
+- **Own** `lib/rtl`, `lib/pcl`, `examples/**`, and new `test/lib_*`. Add your
   build/test steps to the fenced "Library / demo track" block in the `Makefile`.
 - When you hit a **compiler or language gap** (a missing operator, a parser
   error, a codegen bug), do not work around it silently — **file a ticket** in

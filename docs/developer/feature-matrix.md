@@ -101,7 +101,7 @@ Each ✗ is a checklist item below the table. Seeded by grepping
 | Async I/O reactor (epoll/asyncnet/CoSleep) | ✓ | ✓ | ✓ | ✓ | done 2026-06-17 (per-arch SYS_*; aarch64/arm32 epoll_pwait; i386 socketcall; epoll_event pad on aarch64/arm32) |
 | RTTI typinfo reads (props/ordinals/strings/sets/events) | ✓ | ✓ | ✓ | ✓ | done 2026-06-19; `test_rtti` wired into all 3 cross suites |
 | Component streaming + LFM loading | ✓ | ◐ | ◐ | ◐ | typinfo reads done cross; streaming layer (`GetMethodProp` + `-101`/`-103` specials) not yet ported → feature-cross-streaming-lfm |
-| GTK / LCL GUI | ✓ | ◐ | ◐ | ◐ | classes + external calls now done on cross; untested on i386/aarch64/arm32, likely needs extern-ABI breadth (float C args) — feature-cross-extern-abi-breadth. NB: uses our own stub units, not real LCL |
+| GTK / PCL GUI | ✓ | ◐ | ◐ | ◐ | classes + external calls now done on cross; untested on i386/aarch64/arm32, likely needs extern-ABI breadth (float C args) — feature-cross-extern-abi-breadth. NB: uses our own stub units, not real LCL |
 
 Notes on aarch64 ELF: the 64-bit ELF writer (`writeELF` path) already applies
 `MethodFixups` and external symbols, so aarch64 is **not** blocked at the

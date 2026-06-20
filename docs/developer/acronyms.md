@@ -23,7 +23,7 @@ sense is noted.
 | IR | Intermediate Representation | The default backend path; self-recompiles to a fixedpoint. |
 | SSA | Static Single Assignment | IR-style form where each value is assigned once. |
 | RTL | Run-Time Library | The Pascal support library (`lib/rtl`). |
-| LCL | Lazarus Component Library | GUI component library targeted by the GTK frontend (`lib/lcl`). |
+| PCL | Pxx Component Library | GUI component library targeted by the GTK frontend (`lib/pcl`). |
 | LFM | Lazarus Form Module | `.lfm` text resource describing a streamed component tree. |
 | RTTI | Run-Time Type Information | Reflection data emitted for `published` members. |
 | ARC | Automatic Reference Counting | Managed-string / managed-record lifetime model. |
@@ -71,7 +71,7 @@ sense is noted.
 | GLIBC | GNU C Library | |
 | GNU | GNU's Not Unix | |
 | POSIX | Portable Operating System Interface | |
-| GTK | GIMP Toolkit | The widgetset backing the LCL-compatible GUI. |
+| GTK | GIMP Toolkit | The widgetset backing the PCL-compatible GUI. |
 | GUI | Graphical User Interface | |
 | TUI | Text User Interface | |
 | CLI | Command Line Interface | See [`cli.md`](cli.md). |
