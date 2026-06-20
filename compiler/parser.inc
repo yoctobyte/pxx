@@ -2834,11 +2834,21 @@ begin
       begin
         Next; Expect(tkLParen, '('); ParseExpr; Expect(tkRParen, ')');
         node := AllocNode(AN_CALL); ASTIVal[node] := -201;
-        ASTTk[node] := Ord(tyString);
+        { str() lowers to StrInt/FloatToStr/VariantToStr, which return AnsiString
+          in managed mode (the default) and frozen tyString under
+          -uPXX_MANAGED_STRING. Tag to match so the write/store path treats the
+          result as the right string kind. }
+        if PasDefineExists('PXX_MANAGED_STRING') then
+        begin
+          ASTTk[node] := Ord(tyAnsiString); LastExprTk := tyAnsiString;
+        end
+        else
+        begin
+          ASTTk[node] := Ord(tyString); LastExprTk := tyString;
+        end;
         argSeq := AllocNode(AN_ARG); ASTLeft[argSeq] := CurASTNode;
         ASTLeft[node] := argSeq;
         CurASTNode := node;
-        LastExprTk := tyString;
         Exit;
       end
       else if (CaseEqual(name, 'trunc') or CaseEqual(name, 'round') or
@@ -5886,7 +5896,9 @@ begin
       if CurTok.Kind <> tkIdent then Error('ArgStr: expected string var');
       argIdx := FindSym(CurTok.SVal); identTokIdx := TokPos - 1; Next;
       valNode := ParseLValueAST(argIdx, identTokIdx);
-      if (argIdx < 0) or (not TypeIsFrozenString(Syms[argIdx].TypeKind)) then Error('ArgStr: not a string var');
+      if (argIdx < 0) or
+         (not (TypeIsFrozenString(Syms[argIdx].TypeKind) or
+               (Syms[argIdx].TypeKind = tyAnsiString))) then Error('ArgStr: not a string var');
       Expect(tkRParen, ')');
 
       ASTRight[argSeq] := AllocNode(AN_ARG);
@@ -6195,7 +6207,13 @@ begin
           ASTLeft[ASTRight[ASTRight[argSeq]]] := decNode;
         end;
         opNode := AllocNode(AN_CALL);
-        ASTIVal[opNode] := procIdx; ASTLeft[opNode] := argSeq; ASTTk[opNode] := Ord(tyString);
+        { Tag the call result with the builtin's ACTUAL return kind: StrInt/StrFloat
+          return AnsiString in managed mode (the default) and frozen tyString under
+          -uPXX_MANAGED_STRING. Hardcoding tyString miscompiled the frozen->managed
+          store when the dest `s` is managed and the proc now returns AnsiString
+          (slice 4p2). }
+        ASTIVal[opNode] := procIdx; ASTLeft[opNode] := argSeq;
+        ASTTk[opNode] := Ord(Procs[procIdx].RetType);
         node := AllocNode(AN_ASSIGN);
         ASTLeft[node] := valNode; ASTRight[node] := opNode;
       end
@@ -6659,8 +6677,10 @@ begin
         Result := tyFixedString;
         Exit;
       end
-      else if PasDefineExists('PXX_MANAGED_STRING') and
-              (TokPos >= 2) and (Tokens[TokPos - 2].Kind = tkOf) then
+      else if PasDefineExists('PXX_MANAGED_STRING') then
+        { Scalar bare `string` -> managed AnsiString (slice 4p2: managed is the
+          default string model). `string[N]`/`shortstring` stay frozen
+          tyFixedString; `-uPXX_MANAGED_STRING` keeps everything frozen tyString. }
         Result := tyAnsiString
       else
         Result := tyString;

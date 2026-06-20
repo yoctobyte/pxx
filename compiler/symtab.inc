@@ -2605,6 +2605,15 @@ begin
     Result := True;
     Exit;
   end;
+  { A managed string (tyAnsiString) likewise marshals to a const char* (Pointer)
+    parameter. Its value is already a char pointer (no inline +8 prefix), so the
+    IR side passes it as-is. Needed since scalar `string` resolves to tyAnsiString
+    in managed mode (the default). }
+  if (pType = tyPointer) and (aType = tyAnsiString) then
+  begin
+    Result := True;
+    Exit;
+  end;
   Result := False;
 end;
 

@@ -697,6 +697,33 @@ procedure EmitReadVarParse(tk: TTypeKind);
 var sz, skipLoop, digLoop, jDone, jStart, jAdv, jDigits, jNoSign: Integer;
     jEmpty, jSign, jDigEnd, jLt, jGt: Integer;
 begin
+  if tk = tyAnsiString then
+  begin
+    { Managed readln(s): build a managed string from the rest of the line and
+      publish it into the target slot (rax = slot address), releasing the old
+      handle. Without this a managed string target fell through to the integer
+      parser below and wrote garbage into the 8-byte handle slot. }
+    EmitB($50);                                                                   { push rax (target addr) }
+    EmitB($48); EmitB($8B); EmitB($04); EmitB($25); EmitGlobRef(BSS_LINE_LEN);     { mov rax,[len] }
+    EmitB($48); EmitB($2B); EmitB($04); EmitB($25); EmitGlobRef(BSS_LINE_POS);     { sub rax,[pos] }
+    EmitB($48); EmitB($89); EmitB($C7);                                           { mov rdi,rax (length) }
+    EmitB($48); EmitB($8D); EmitB($34); EmitB($25); EmitGlobRef(BSS_LINE_BUF);     { lea rsi,[buf] }
+    EmitB($48); EmitB($03); EmitB($34); EmitB($25); EmitGlobRef(BSS_LINE_POS);     { add rsi,[pos] (src) }
+    IREmitCodeCall(AnsiStrFromLiteralAddr);                                        { rax = new managed handle }
+    EmitB($48); EmitB($8B); EmitB($0C); EmitB($25); EmitGlobRef(BSS_LINE_LEN);     { mov rcx,[len] }
+    EmitB($48); EmitB($89); EmitB($0C); EmitB($25); EmitGlobRef(BSS_LINE_POS);     { mov [pos],rcx (consume line) }
+    EmitB($50);                                                                   { push rax (new); stack: new,target }
+    EmitB($48); EmitB($8B); EmitB($4C); EmitB($24); EmitB($08);                   { mov rcx,[rsp+8] = target addr }
+    EmitB($48); EmitB($8B); EmitB($01);                                           { mov rax,[rcx] = old handle }
+    EmitB($50);                                                                   { push old; stack: old,new,target }
+    EmitB($48); EmitB($8B); EmitB($44); EmitB($24); EmitB($08);                   { mov rax,[rsp+8] = new }
+    EmitB($48); EmitB($89); EmitB($01);                                           { mov [rcx],rax = store new }
+    EmitB($58);                                                                   { pop rax = old }
+    IREmitCodeCall(AnsiStrReleaseAddr);                                            { release old (nil-safe) }
+    EmitB($58);                                                                   { pop rax (new, discard) }
+    EmitB($58);                                                                   { pop rax (target, discard) }
+    Exit;
+  end;
   if tk = tyString then
   begin
     EmitB($48); EmitB($89); EmitB($C7);                                          { mov rdi,rax }
@@ -1538,8 +1565,13 @@ begin
               IREmitCodeCall(AnsiStrFromLiteralAddr);
               EmitB($59);                                     { pop rcx (restore stack) }
             end
-            else if IntToTypeKind(IRTk[valueNode]) = tyString then
+            else if TypeIsFrozenString(IntToTypeKind(IRTk[valueNode])) then
             begin
+              { Any frozen inline string source (tyString, or a tyFixedString
+                reached e.g. through a pointer deref `p^` that escapes the
+                StrValTk value-kind normalisation) materialises into a managed
+                handle. Without this a tyFixedString source fell through to the
+                bogus retain path and stored an empty/garbage handle. }
               EmitAnsiStrFromInlineString;
             end
             else if not (((IRKind[valueNode] = IR_BINOP) and
@@ -1614,6 +1646,22 @@ begin
             EmitB($5E);                         { pop rsi }
             if IntToTypeKind(IRTk[valueNode]) = tyChar then
               IREmitStoreCharAsString          { rsi = char ordinal -> [len=1][char] }
+            else if IntToTypeKind(IRTk[valueNode]) = tyAnsiString then
+            begin
+              { Managed source -> frozen inline dest (e.g. fx: string[N] := managedStr):
+                rsi = handle (char pointer), length at [rsi-8]. Materialise into the
+                inline [len][chars] buffer at rdi. nil handle -> empty string. }
+              EmitB($48); EmitB($85); EmitB($F6);              { test rsi, rsi }
+              EmitB($74); pNil := CodeLen; EmitB(0);            { jz empty }
+              EmitB($48); EmitB($8B); EmitB($4E); EmitB($F8);  { mov rcx, [rsi-8] = len }
+              EmitB($48); EmitB($89); EmitB($0F);              { mov [rdi], rcx (length word) }
+              EmitB($48); EmitB($83); EmitB($C7); EmitB($08);  { add rdi, 8 (dest chars) }
+              EmitB($F3); EmitB($A4);                           { rep movsb (rsi already at chars) }
+              EmitB($EB); pDone := CodeLen; EmitB(0);           { jmp done }
+              Code[pNil] := Byte(CodeLen - (pNil + 1));         { empty: }
+              EmitB($48); EmitB($C7); EmitB($07); EmitI32(0);  { mov qword [rdi], 0 }
+              Code[pDone] := Byte(CodeLen - (pDone + 1));       { done: }
+            end
             else
             begin
               EmitB($48); EmitB($8B); EmitB($0E); { mov rcx, [rsi] }
@@ -1995,8 +2043,13 @@ begin
               IREmitCodeCall(AnsiStrFromLiteralAddr);
               EmitB($59);                                     { pop rcx (restore stack) }
             end
-            else if IntToTypeKind(IRTk[valueNode]) = tyString then
+            else if TypeIsFrozenString(IntToTypeKind(IRTk[valueNode])) then
             begin
+              { Any frozen inline string source (tyString, or a tyFixedString
+                reached e.g. through a pointer deref `p^` that escapes the
+                StrValTk value-kind normalisation) materialises into a managed
+                handle. Without this a tyFixedString source fell through to the
+                bogus retain path and stored an empty/garbage handle. }
               EmitAnsiStrFromInlineString;
             end
             else if not (((IRKind[valueNode] = IR_BINOP) and
@@ -2532,7 +2585,22 @@ begin
           IREmitNode(valNode);
           EmitB($48); EmitB($85); EmitB($C0);            { test rax, rax }
           EmitB($74); pNil := CodeLen; EmitB(0);          { jz done }
-          EmitB($50);                                     { preserve managed expression }
+          EmitB($50);                                     { preserve managed expression (handle) }
+          if wid > 0 then
+          begin
+            { Field width: pad with max(0, wid - len) spaces before the string.
+              rax = handle, length at [rax-8]. Mirrors the runtime tyString path. }
+            EnsureSpaces;
+            EmitB($48); EmitB($8B); EmitB($48); EmitB($F8); { mov rcx, [rax-8] = len }
+            MovRaxImm(wid);
+            EmitB($48); EmitB($29); EmitB($C8);            { sub rax, rcx }
+            EmitB($7E); pDone := CodeLen; EmitB(0);         { jle skip_pad }
+            EmitB($48); EmitB($BE); EmitDataRef(SpacesOffset); { mov rsi, spaces }
+            EmitB($48); EmitB($89); EmitB($C2);            { mov rdx, rax (pad count) }
+            MovRaxImm(SYS_WRITE); MovRdiImm(STDOUT); EmitSyscall;
+            Code[pDone] := Byte(CodeLen - (pDone + 1));
+          end;
+          EmitB($48); EmitB($8B); EmitB($04); EmitB($24); { mov rax, [rsp] = handle (reload; syscall clobbered rax) }
           EmitB($48); EmitB($89); EmitB($C6);             { mov rsi, rax }
           EmitB($48); EmitB($8B); EmitB($50); EmitB($F8); { mov rdx, [rax-8] }
           MovRaxImm(SYS_WRITE); MovRdiImm(STDOUT); EmitSyscall;
@@ -3426,7 +3494,13 @@ begin
             else
               Error('ArgStr expects a string variable in IR codegen');
             IREmitNode(IRA[arg1Node]);   { rax = index }
-            EmitArgvToString(symIdx);
+            { A managed-string destination takes the heap-building path; a frozen
+              fixed/short string takes the inline-buffer path. Scalar `string` is
+              tyAnsiString in managed mode, so this is the common case. }
+            if Syms[symIdx].TypeKind = tyAnsiString then
+              EmitArgvToStringManaged(symIdx)
+            else
+              EmitArgvToString(symIdx);
           end
           else if specialId = Ord(tkSysFchmod) then
           begin
@@ -3459,7 +3533,19 @@ begin
 
     IR_READ_VAR:
       begin
-        IREmitNode(IRA[node]);   { rax = target address }
+        { A managed-string target needs its SLOT address (&handle), not the
+          loaded handle value: an AnsiString lea defaults to loading the handle
+          in read context, so force lvalue-write mode to get the slot address
+          for EmitReadVarParse's managed publish. }
+        if IntToTypeKind(IRTk[node]) = tyAnsiString then
+        begin
+          savedLValueWrite := InLValueWrite;
+          InLValueWrite := True;
+          IREmitNode(IRA[node]);   { rax = slot address }
+          InLValueWrite := savedLValueWrite;
+        end
+        else
+          IREmitNode(IRA[node]);   { rax = target address }
         EmitReadVarParse(IntToTypeKind(IRTk[node]));
       end;
 
@@ -4158,7 +4244,7 @@ begin
 
       IR_STORE_SYM, IR_STORE_MEM, IR_WRITE, IR_WRITELN,
       IR_READLINE, IR_READ_VAR, IR_READ_DISCARD, IR_COPY_REC, IR_COPY_REC_MANAGED, IR_SET_COPY, IR_VAR_STORE,
-      IR_SETLEN_DYN, IR_DEFAULT_MEM,
+      IR_SETLEN_DYN, IR_DEFAULT_MEM, IR_ZERO_SYM,
       IR_EXC_LEAVE, IR_RAISE, IR_EXC_STORE, IR_EXC_CLEAR, IR_TERMINATE,
       IR_COSWITCH, IR_YIELD,
       IR_ASM:

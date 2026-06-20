@@ -214,6 +214,12 @@ begin
       IR_DEFAULT_MEM:
         IRRequireNode(IRA[i], 'default_mem dest');
 
+      IR_ZERO_SYM:
+        { IRA = symbol index of the slot to nil/zero (e.g. a managed lazy var
+          before its initializer assign). Not a node reference. }
+        if (IRA[i] < 0) or (IRA[i] >= SymCount) then
+          Error('invalid symbol in zero_sym');
+
       IR_READ_DISCARD:
         begin end;
 
@@ -1717,7 +1723,16 @@ begin
     begin
       left := IRLowerAddress(node);
       if (IntToTypeKind(ASTTk[node]) = tyString) or (IntToTypeKind(ASTTk[node]) = tySet) then
-        Result := left
+      begin
+        { A frozen-string / set value IS its address (no load). Present the
+          address node with the value's frozen-string tag, mirroring the AN_IDENT
+          path above: otherwise it carries IRLowerAddress's tyPointer tag and a
+          consumer (e.g. `m := p^` into a managed string) misreads the address as
+          a raw pointer instead of a frozen inline string. }
+        Result := left;
+        if IntToTypeKind(ASTTk[node]) = tyString then
+          IRTk[Result] := ASTTk[node];
+      end
       else
         Result := IRAppend(IR_LOAD_MEM, left, -1, -1, 0, ASTTk[node]);
     end;
@@ -1739,7 +1754,10 @@ begin
 
           wrapperCall := AllocNode(AN_CALL);
           ASTIVal[wrapperCall] := procIdx;
-          ASTTk[wrapperCall] := Ord(tyString);
+          { Tag with PCharToString's ACTUAL return kind (AnsiString in managed
+            mode, frozen tyString under -uPXX_MANAGED_STRING). Hardcoding tyString
+            mislabelled the managed handle as frozen and miscompiled the result. }
+          ASTTk[wrapperCall] := Ord(Procs[procIdx].RetType);
           ASTLeft[wrapperCall] := wrapperArg;
           ASTRight[wrapperCall] := -1;
 
@@ -2187,7 +2205,10 @@ begin
 
           wrapperCall := AllocNode(AN_CALL);
           ASTIVal[wrapperCall] := procIdx;
-          ASTTk[wrapperCall] := Ord(tyString);
+          { Tag with PCharToString's ACTUAL return kind (AnsiString in managed
+            mode, frozen tyString under -uPXX_MANAGED_STRING). Hardcoding tyString
+            mislabelled the managed handle as frozen and miscompiled the result. }
+          ASTTk[wrapperCall] := Ord(Procs[procIdx].RetType);
           ASTLeft[wrapperCall] := wrapperArg;
           ASTRight[wrapperCall] := -1;
 
@@ -2524,7 +2545,7 @@ begin
           if procIdx < 0 then Error('str: builtin unit not loaded');
           value := IRLowerAST(argVal);                       { double bits in rax }
           argNode := IRAppend(IR_ARG, value, -1, -1, 0, Ord(tyDouble));
-          Result := IRAppendCall(procIdx, argNode, -1, Ord(tyString));
+          Result := IRAppendCall(procIdx, argNode, -1, Ord(Procs[procIdx].RetType));
           Exit;
         end;
         value := IRLowerAST(argVal);
@@ -2539,7 +2560,7 @@ begin
         argNode2 := IRAppend(IR_ARG, zeroVal, -1, -1, 0, Ord(tyInteger));
         IRB[argNode] := argNode2;
 
-        Result := IRAppendCall(procIdx, first, -1, Ord(tyString));
+        Result := IRAppendCall(procIdx, first, -1, Ord(Procs[procIdx].RetType));
         Exit;
       end;
       pathIdx := 0;
@@ -2608,6 +2629,14 @@ begin
           value := IRAppend(IR_BINOP, value, right, Ord(tkPlus), 0, Ord(tyPointer));
           argNode := IRAppend(IR_ARG, value, -1, -1, 0, Ord(tyPointer));
         end
+        else if (not isRefArg) and (cpi >= 0) and (pathIdx < Procs[cpi].ParamCount) and
+           (Procs[cpi].Params[pathIdx].TypeKind = tyPointer) and
+           (IntToTypeKind(ASTTk[ASTLeft[item]]) = tyAnsiString) then
+          { A managed string arg to a Pointer (const char*) param: the tyAnsiString
+            value is ALREADY a char pointer (no inline length prefix), so pass it
+            as-is — the dual of the frozen tyString +8 skip above. Scalar `string`
+            resolves to tyAnsiString in managed mode, so this is the common path. }
+          argNode := IRAppend(IR_ARG, value, -1, -1, 0, Ord(tyPointer))
         else if argIsManagedTemp then
         begin
           hiddenArgSym := AllocVar('', tyAnsiString);
