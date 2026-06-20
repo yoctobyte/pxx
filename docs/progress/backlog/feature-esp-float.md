@@ -66,6 +66,26 @@ Notes:
 4. Add float tests to the ESP/cross suites; QEMU output-equality vs the x86-64
    oracle (ESP self-host is not a goal — device RAM too small).
 
+## Follow-on option: `{$FASTDOUBLES ON}` (xtensa speed/precision knob)
+
+A compiler switch (default OFF) that, on targets where **Double is soft but Single
+is hardware** (xtensa today; any future single-FPU-no-double part), computes
+`Double` arithmetic by round-tripping through the hardware single FPU
+(double->single, do the op in HW, single->double) instead of calling the
+soft-double kernels. Lets the user trade precision for speed **without editing
+source** that happens to use `Double`.
+
+- Default OFF = correct IEEE double (soft) — never silently lossy.
+- ON = fast but lossy (results carry single precision). Documented as such.
+- No-op where it can't help: double-native targets (already HW) and riscv (no
+  single FPU either — both widths soft, nothing to cheat with).
+- Directive name: `{$FASTDOUBLES ON|OFF}` (alts considered: `{$DOUBLEASINGLE}`,
+  `{$LOSSYDOUBLES}`). Honest framing in the docs: it is NOT real double precision.
+- Sequencing: post-baseline — needs xtensa soft-double + the hardware single FPU
+  path working first. Implement as a lowering switch in `ir_codegen_xtensa.inc`:
+  when set, a Double binop emits convert+HW-single+convert instead of the
+  soft-double call.
+
 ## Notes
 
 - Order within: literal+load/store+`dcmp` first (unblocks comparisons/branches),
