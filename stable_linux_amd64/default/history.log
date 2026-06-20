@@ -21,3 +21,4 @@
 2026-06-20T12:57:37Z  v21  6e575713da48681a6aea126af861eef839f2523ac96ae6f30fcdb2d501c59ed4  54170d2c2633170b3f17a6c2c46ec50ffa2bd18f  docs(ticket): close subclass-field-offset + pcl-search-path (DONE)
 2026-06-20T13:36:47Z  v22  37e152ead9b0b7587bc747476803a17e7ddcaeaff1792a3693e298778079a019  355192a49fe7a31b708dceb5bc713786ce94f2a3  feat(compiler): method calls on a hard class typecast TClass(x).M(args)
 2026-06-20T16:05:51Z  v23  bb8e65776ea3d7661878305a0a9e37ce200458bd0449f9e2c43f999ac880ffeb  f7c9dc5fe08977aa6ac7a5b6312880174717dfca  fix(parser): array-of-string element -> managed AnsiString (per-use)
+2026-06-20T17:03:42Z  v24  66d0163736d0d67648a7820da6cafe0322dbea82b25b2bbe058159e0f3c1b4bc  cc6717845ef59471c21986315892c09d7b411c7e  docs(ticket): record string-model slices 1-4p1 done; flip held
