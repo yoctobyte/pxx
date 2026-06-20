@@ -1628,9 +1628,18 @@ begin
         begin
           IREmitNode(IRB[node]);
           { IR carries floats as double bits in rax; EmitStoreVar reads xmm0.
-            Bridge rax -> xmm0. }
+            A float-typed RHS is bit-copied (movq); an integer-typed RHS into a
+            float slot is converted (cvtsi2sd) — `d := 1` / `d := n`. Branching on
+            the VALUE node's type (not just the dest) keeps already-float RHS
+            unchanged, avoiding the over-broad `+0.0` coercion that broke
+            self-fixedpoint before. See feature-int-to-float-assign. }
           if TypeIsFloat(Syms[IRA[node]].TypeKind) then
-            begin EmitB($66); EmitB($48); EmitB($0F); EmitB($6E); EmitB($C0); end; { movq xmm0, rax }
+          begin
+            if TypeIsFloat(IntToTypeKind(IRTk[IRB[node]])) then
+              begin EmitB($66); EmitB($48); EmitB($0F); EmitB($6E); EmitB($C0); end  { movq xmm0, rax }
+            else
+              begin EmitB($F2); EmitB($48); EmitB($0F); EmitB($2A); EmitB($C0); end; { cvtsi2sd xmm0, rax }
+          end;
           EmitStoreVar(IRA[node]);
         end;
       end;
@@ -2027,6 +2036,16 @@ begin
           InLValueWrite := savedLValueWrite;
 
           EmitB($59); { pop rcx -- value }
+
+          { Integer value stored into a float field/element: convert (cvtsi2sd)
+            rather than bit-copy. A float-typed value is already double-bits and
+            falls through unchanged. Mirrors the IR_STORE_SYM path. See
+            feature-int-to-float-assign. }
+          if TypeIsFloat(tk) and not TypeIsFloat(IntToTypeKind(IRTk[valueNode])) then
+          begin
+            EmitB($F2); EmitB($48); EmitB($0F); EmitB($2A); EmitB($C9); { cvtsi2sd xmm1, rcx }
+            EmitB($66); EmitB($48); EmitB($0F); EmitB($7E); EmitB($C9); { movq rcx, xmm1 }
+          end;
 
           if size = 1 then
         begin
