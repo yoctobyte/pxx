@@ -9268,13 +9268,17 @@ begin
   end
   else if TargetArch = TARGET_XTENSA then
   begin
-    { Call0 ABI: args arrive in a2..a7; spill each into its frame slot. }
+    { Call0 ABI word-based convention: args arrive in a2..a7 (word k in a[2+k]);
+      each scalar param is one word, a by-value Int64/UInt64 is two (lo then hi).
+      The call side (ir_codegen_xtensa.inc IR_CALL) pushes the matching word
+      layout. Up to 6 words total (no stack args yet). }
+    pw := 0;
     for i := 0 to nparams-1 do
     begin
       idx := Procs[procIdx].Params[i].SymIdx;
       sz := ParamSize(idx);
-      if i >= 6 then
-        Error('target xtensa: more than 6 parameters not yet supported');
+      if pw >= 6 then
+        Error('target xtensa: more than 6 parameter words not yet supported');
       if XtensaABI = XTENSA_ABI_WINDOWED then
       begin
         if (Syms[idx].Offset >= -128) and (Syms[idx].Offset <= 127) then
@@ -9284,12 +9288,22 @@ begin
       end
       else
         EmitFrameAddrXtensa(reg_xtensa_a8, Syms[idx].Offset);
-      if sz = 1 then
-        xtensa_s8i(reg_xtensa_a2 + i, reg_xtensa_a8, 0)
-      else if sz = 2 then
-        xtensa_s16i(reg_xtensa_a2 + i, reg_xtensa_a8, 0)
+      if ((Syms[idx].TypeKind = tyInt64) or (Syms[idx].TypeKind = tyUInt64)) and
+         (not Syms[idx].IsRef) and (not Syms[idx].IsArray) then
+      begin
+        xtensa_s32i(reg_xtensa_a2 + pw, reg_xtensa_a8, 0);     { lo (word pw) }
+        if pw + 1 >= 6 then
+          Error('target xtensa: more than 6 parameter words not yet supported');
+        xtensa_s32i(reg_xtensa_a2 + pw + 1, reg_xtensa_a8, 4); { hi (word pw+1) }
+        Inc(pw, 2);
+      end
       else
-        xtensa_s32i(reg_xtensa_a2 + i, reg_xtensa_a8, 0);
+      begin
+        if sz = 1 then xtensa_s8i(reg_xtensa_a2 + pw, reg_xtensa_a8, 0)
+        else if sz = 2 then xtensa_s16i(reg_xtensa_a2 + pw, reg_xtensa_a8, 0)
+        else xtensa_s32i(reg_xtensa_a2 + pw, reg_xtensa_a8, 0);
+        Inc(pw, 1);
+      end;
     end;
     if XtensaABI = XTENSA_ABI_WINDOWED then
       xtensa_mov(reg_xtensa_a7, reg_xtensa_a15);

@@ -187,6 +187,44 @@ begin
   end;
 end;
 
+procedure XtensaPush64;
+{ Spill the 64-bit value in a2:a3 (lo at the lower address) to two expr-stack
+  slots, same discipline as XtensaPushA2 (windowed: constant sp + XtSpillDepth;
+  Call0: moving sp). }
+begin
+  if XtensaABI = XTENSA_ABI_WINDOWED then
+  begin
+    if XtSpillDepth + 8 > XT_EXPR_REGION then
+      Error('target xtensa: expression/argument stack exceeds reserved frame');
+    xtensa_s32i(reg_xtensa_a2, reg_xtensa_sp, XtSpillDepth);
+    xtensa_s32i(reg_xtensa_a3, reg_xtensa_sp, XtSpillDepth + 4);
+    Inc(XtSpillDepth, 8);
+  end
+  else
+  begin
+    xtensa_addi(reg_xtensa_sp, reg_xtensa_sp, -8);
+    xtensa_s32i(reg_xtensa_a2, reg_xtensa_sp, 0);
+    xtensa_s32i(reg_xtensa_a3, reg_xtensa_sp, 4);
+  end;
+end;
+
+procedure XtensaPop64ToA4A5;
+{ Pop the top 64-bit expr-stack slot into a4:a5 (lo:hi). }
+begin
+  if XtensaABI = XTENSA_ABI_WINDOWED then
+  begin
+    Dec(XtSpillDepth, 8);
+    xtensa_l32i(reg_xtensa_a4, reg_xtensa_sp, XtSpillDepth);
+    xtensa_l32i(reg_xtensa_a5, reg_xtensa_sp, XtSpillDepth + 4);
+  end
+  else
+  begin
+    xtensa_l32i(reg_xtensa_a4, reg_xtensa_sp, 0);
+    xtensa_l32i(reg_xtensa_a5, reg_xtensa_sp, 4);
+    xtensa_addi(reg_xtensa_sp, reg_xtensa_sp, 8);
+  end;
+end;
+
 procedure EmitSlotAddrXtensa(rd, si: Integer);
 { rd = address of the variable's storage slot (global abs / frame-relative). }
 begin
@@ -274,6 +312,343 @@ begin
     EmitCallProc(procIdx);   { a2, a3 already hold arg0, arg1; result in a2 }
 end;
 
+procedure IREmitNodeXtensa(node: Integer); forward;
+
+{ ===== 64-bit (Int64/UInt64) value model: a2:a3 = lo:hi register pair =====
+  True 8-byte values live in a2(low):a3(high) in flight, are loaded/stored as two
+  words, and have their own arithmetic/shift/compare sequences. Xtensa has no
+  condition flags (like riscv/arm), so carries/borrows are computed via the
+  unsigned branches bgeu/bltu. Mirrors the riscv32 a0:a1 / arm32 r0:r1 models. A
+  32-bit source widens into a3 (sign/zero-ext). Scratch: a4:a5 = popped left
+  operand, a6/a8..a14 = temporaries (a7 is the windowed frame pointer, a15 the
+  Call0 frame pointer — both avoided). The MSB of a word is extracted with `srl`
+  after presetting SAR=31 (no EXTUI needed). }
+
+function Is64BitXtensa(tk: TTypeKind): Boolean;
+begin
+  Result := (tk = tyInt64) or (tk = tyUInt64);
+end;
+
+procedure EmitLoadConst64Xtensa(v: Int64);
+begin
+  EmitLoadConstXtensa(reg_xtensa_a2, Integer(v and $FFFFFFFF));
+  EmitLoadConstXtensa(reg_xtensa_a3, Integer((v shr 32) and $FFFFFFFF));
+end;
+
+procedure EmitSlotAddr64Xtensa(rd, idx: Integer);
+{ rd = address of an 8-byte slot (global abs / frame-relative; ref forwarded). }
+begin
+  if Syms[idx].Kind = skGlobal then
+    EmitLoadGlobAddrXtensa(rd, Syms[idx].Offset)
+  else
+  begin
+    EmitFrameAddrXtensa(rd, Syms[idx].Offset);
+    if (Syms[idx].Kind = skParam) and Syms[idx].IsRef then
+      xtensa_l32i(rd, rd, 0);
+  end;
+end;
+
+procedure EmitLoadVar64Xtensa(idx: Integer);
+begin
+  EmitSlotAddr64Xtensa(reg_xtensa_a8, idx);
+  xtensa_l32i(reg_xtensa_a2, reg_xtensa_a8, 0);   { lo }
+  xtensa_l32i(reg_xtensa_a3, reg_xtensa_a8, 4);   { hi }
+end;
+
+procedure EmitStoreVar64Xtensa(idx: Integer);
+begin
+  EmitSlotAddr64Xtensa(reg_xtensa_a8, idx);       { value in a2:a3; addr in a8 }
+  xtensa_s32i(reg_xtensa_a2, reg_xtensa_a8, 0);   { lo }
+  xtensa_s32i(reg_xtensa_a3, reg_xtensa_a8, 4);   { hi }
+end;
+
+procedure EmitNode64Xtensa(node: Integer);
+{ Emit node; guarantee its full 64-bit value sits in a2:a3, widening a 32-bit
+  source (sign-extend signed, zero-extend unsigned) into a3. }
+var ntk: TTypeKind;
+begin
+  IREmitNodeXtensa(node);
+  ntk := IntToTypeKind(IRTk[node]);
+  if not Is64BitXtensa(ntk) then
+  begin
+    if TypeSigned(ntk) then
+      { a3 := (a2 < 0) ? -1 : 0 }
+      EmitAsmXtensa(['movi a3, 0', 'bge a2, a3, .pos', 'movi a3, -1', '.pos:'])
+    else
+      xtensa_movi(reg_xtensa_a3, 0);
+  end;
+end;
+
+procedure EmitUDivMod64Xtensa(wantMod: Boolean);
+{ Unsigned 64-bit divide. Pre: dividend in a4:a5 (lo:hi), divisor in a2:a3.
+  Restoring binary long division, 64 iterations MSB-first: the dividend (a4:a5)
+  doubles as the quotient register, the remainder builds in a6:a8. SAR is preset
+  to 31 so `srl` extracts a word's MSB. Post: result (quotient, or remainder when
+  wantMod) in a2:a3. Clobbers a4,a5,a6,a8,a9,a10,a11,a12. }
+begin
+  EmitAsmXtensa([
+    'movi a10, 31',
+    'ssr a10',              { SAR = 31, so `srl x, y` = y >> 31 = MSB(y) }
+    'movi a6, 0',           { R.lo }
+    'movi a8, 0',           { R.hi }
+    'movi a9, 64',          { count }
+    'movi a11, 0',          { zero (loop test) }
+    '.loop:',
+    { shift {R.hi:R.lo:NQ.hi:NQ.lo} left by 1, MSB first }
+    'srl a10, a4',          { NQ.lo top bit }
+    'add a4, a4, a4',       { NQ.lo <<= 1 }
+    'srl a12, a5',          { NQ.hi top bit }
+    'add a5, a5, a5',       { NQ.hi <<= 1 }
+    'or a5, a5, a10',       { NQ.hi |= old NQ.lo top }
+    'srl a10, a6',          { R.lo top bit }
+    'add a6, a6, a6',       { R.lo <<= 1 }
+    'or a6, a6, a12',       { R.lo |= old NQ.hi top }
+    'add a8, a8, a8',       { R.hi <<= 1 }
+    'or a8, a8, a10',       { R.hi |= old R.lo top }
+    { if R (a8:a6) >= divisor (a3:a2) unsigned: subtract, set quotient bit }
+    'bltu a8, a3, .nosub',  { R.hi < D.hi }
+    'bne a8, a3, .sub',     { R.hi > D.hi }
+    'bltu a6, a2, .nosub',  { R.hi == D.hi and R.lo < D.lo }
+    '.sub:',
+    'movi a12, 0',
+    'bgeu a6, a2, .nb',     { borrow }
+    'movi a12, 1',
+    '.nb:',
+    'sub a6, a6, a2',       { R.lo -= D.lo }
+    'sub a8, a8, a3',       { R.hi -= D.hi }
+    'sub a8, a8, a12',      { R.hi -= borrow }
+    'movi a12, 1',
+    'or a4, a4, a12',       { quotient bit }
+    '.nosub:',
+    'addi a9, a9, -1',
+    'bne a9, a11, .loop'
+  ]);
+  if wantMod then
+  begin
+    xtensa_mov(reg_xtensa_a2, reg_xtensa_a6);
+    xtensa_mov(reg_xtensa_a3, reg_xtensa_a8);
+  end
+  else
+  begin
+    xtensa_mov(reg_xtensa_a2, reg_xtensa_a4);
+    xtensa_mov(reg_xtensa_a3, reg_xtensa_a5);
+  end;
+end;
+
+procedure EmitIDivMod64Xtensa(wantMod: Boolean);
+{ Signed 64-bit divide/mod. Truncated: quotient sign = dividend xor divisor,
+  remainder takes the dividend's sign. Operands (divisor a2:a3, dividend a4:a5)
+  are made non-negative in place, the unsigned core runs, then the sign is
+  applied. Flags live in a14 (the unsigned core does not touch a14). }
+begin
+  EmitAsmXtensa([
+    'movi a14, 0',          { flags: bit0 negate-quotient, bit1 negate-remainder }
+    { divisor sign (a3 = D.hi) }
+    'movi a13, 0',
+    'bge a3, a13, .dpos',
+    'movi a12, 0',          { negate divisor a2:a3 }
+    'beq a2, a13, .db0',
+    'movi a12, 1',          { borrow if lo <> 0 }
+    '.db0:',
+    'sub a2, a13, a2',
+    'sub a3, a13, a3',
+    'sub a3, a3, a12',
+    'movi a12, 1',
+    'xor a14, a14, a12',
+    '.dpos:',
+    { dividend sign (a5 = N.hi) }
+    'movi a13, 0',
+    'bge a5, a13, .npos',
+    'movi a12, 0',          { negate dividend a4:a5 }
+    'beq a4, a13, .nb0',
+    'movi a12, 1',
+    '.nb0:',
+    'sub a4, a13, a4',
+    'sub a5, a13, a5',
+    'sub a5, a5, a12',
+    'movi a12, 1',
+    'xor a14, a14, a12',
+    'movi a12, 2',
+    'or a14, a14, a12',
+    '.npos:'
+  ]);
+  EmitUDivMod64Xtensa(wantMod);   { result in a2:a3; a14 preserved }
+  if wantMod then
+    EmitAsmXtensa(['movi a12, 2', 'and a12, a14, a12'])
+  else
+    EmitAsmXtensa(['movi a12, 1', 'and a12, a14, a12']);
+  EmitAsmXtensa([
+    'movi a13, 0',
+    'beq a12, a13, .done',
+    'movi a12, 0',          { negate result a2:a3 (a13 = 0) }
+    'beq a2, a13, .rb0',
+    'movi a12, 1',
+    '.rb0:',
+    'sub a2, a13, a2',
+    'sub a3, a13, a3',
+    'sub a3, a3, a12',
+    '.done:'
+  ]);
+end;
+
+procedure EmitBinop64Xtensa(left, right, op: Integer; signedOp: Boolean);
+{ (left OP right) as a 64-bit op. left spilled to the expr stack, right -> a2:a3,
+  left popped into a4:a5. Arithmetic/bit ops leave a2:a3; comparisons leave 0/1
+  in a2. }
+var hbr: AnsiString;
+begin
+  EmitNode64Xtensa(left);
+  XtensaPush64;
+  EmitNode64Xtensa(right);             { right -> a2:a3 }
+  XtensaPop64ToA4A5;                    { a4:a5 = left.lo:hi }
+  { now a4:a5 = left, a2:a3 = right }
+
+  if (op = Ord(tkDiv)) or (op = Ord(tkMod)) then
+  begin
+    { dividend in a4:a5, divisor in a2:a3 }
+    if signedOp then EmitIDivMod64Xtensa(op = Ord(tkMod))
+    else EmitUDivMod64Xtensa(op = Ord(tkMod));
+  end
+  else if op = Ord(tkPlus) then
+    EmitAsmXtensa([
+      'add a8, a4, a2',     { lo = left.lo + right.lo }
+      'movi a9, 0',
+      'bgeu a8, a4, .nc',   { carry if lo <u left.lo }
+      'movi a9, 1',
+      '.nc:',
+      'add a3, a5, a3',     { hi = left.hi + right.hi }
+      'add a3, a3, a9',     { hi += carry }
+      'mov a2, a8' ])
+  else if op = Ord(tkMinus) then
+    EmitAsmXtensa([
+      'movi a9, 0',
+      'bgeu a4, a2, .nb',   { borrow if left.lo <u right.lo }
+      'movi a9, 1',
+      '.nb:',
+      'sub a8, a4, a2',     { lo }
+      'sub a3, a5, a3',     { hi = left.hi - right.hi }
+      'sub a3, a3, a9',     { hi -= borrow }
+      'mov a2, a8' ])
+  else if op = Ord(tkStar) then
+    { low 64 of (a5:a4) * (a3:a2) }
+    EmitAsmXtensa([
+      'mull a8, a4, a2',    { lo = low(Llo*Rlo) }
+      'muluh a9, a4, a2',   { high(Llo*Rlo) }
+      'mull a10, a4, a3',   { low(Llo*Rhi) }
+      'mull a11, a5, a2',   { low(Lhi*Rlo) }
+      'add a9, a9, a10',
+      'add a3, a9, a11',
+      'mov a2, a8' ])
+  else if op = Ord(tkAnd) then
+    EmitAsmXtensa(['and a2, a4, a2', 'and a3, a5, a3'])
+  else if op = Ord(tkOr) then
+    EmitAsmXtensa(['or a2, a4, a2', 'or a3, a5, a3'])
+  else if op = Ord(tkXor) then
+    EmitAsmXtensa(['xor a2, a4, a2', 'xor a3, a5, a3'])
+  else if op = Ord(tkShl) then
+    { count = a2 (& 63); value = a4:a5 -> a2:a3 }
+    EmitAsmXtensa([
+      'movi a8, 63',
+      'and a8, a2, a8',     { n }
+      'movi a9, 32',
+      'bgeu a8, a9, .big',
+      'movi a10, 0',
+      'beq a8, a10, .zero',
+      'movi a12, 32',
+      'sub a12, a12, a8',   { 32 - n }
+      'ssl a8',             { SAR for << n }
+      'sll a10, a4',        { lo << n  (final lo) }
+      'sll a11, a5',        { hi << n }
+      'ssr a12',            { SAR = 32-n }
+      'srl a4, a4',         { lo >> (32-n) }
+      'or a3, a11, a4',     { final hi }
+      'mov a2, a10',        { final lo }
+      'j .end',
+      '.big:',
+      'sub a8, a8, a9',     { n - 32 }
+      'ssl a8',
+      'sll a3, a4',         { hi = lo << (n-32) }
+      'movi a2, 0',
+      'j .end',
+      '.zero:',
+      'mov a2, a4',
+      'mov a3, a5',
+      '.end:' ])
+  else if op = Ord(tkIdent) then   { 'shr' parses as ident; logical on Int64/UInt64 }
+    EmitAsmXtensa([
+      'movi a8, 63',
+      'and a8, a2, a8',     { n }
+      'movi a9, 32',
+      'bgeu a8, a9, .big',
+      'movi a10, 0',
+      'beq a8, a10, .zero',
+      'movi a12, 32',
+      'sub a12, a12, a8',   { 32 - n }
+      'ssr a8',             { SAR = n }
+      'srl a10, a4',        { lo >> n }
+      'srl a3, a5',         { hi >> n  (final hi) }
+      'ssl a12',            { SAR for << (32-n) }
+      'sll a11, a5',        { hi << (32-n) }
+      'or a2, a10, a11',    { final lo }
+      'j .end',
+      '.big:',
+      'sub a8, a8, a9',     { n - 32 }
+      'ssr a8',
+      'srl a2, a5',         { lo = hi >> (n-32) }
+      'movi a3, 0',
+      'j .end',
+      '.zero:',
+      'mov a2, a4',
+      'mov a3, a5',
+      '.end:' ])
+  else if (op = Ord(tkEq)) or (op = Ord(tkNeq)) then
+  begin
+    EmitAsmXtensa([
+      'movi a8, 0',
+      'bne a4, a2, .ne',    { lo differ -> not equal }
+      'bne a5, a3, .ne',    { hi differ -> not equal }
+      'movi a8, 1',
+      '.ne:',
+      'mov a2, a8' ]);
+    if op = Ord(tkNeq) then
+      EmitAsmXtensa(['movi a8, 1', 'xor a2, a2, a8']);
+  end
+  else if (op = Ord(tkLt)) or (op = Ord(tkGe)) then
+  begin
+    { a2 = (left < right): hi compare (signed/unsigned) then unsigned lo tiebreak }
+    if signedOp then hbr := 'blt' else hbr := 'bltu';
+    EmitAsmXtensa([
+      'movi a8, 1',
+      hbr + ' a5, a3, .lt',  { left.hi < right.hi }
+      'bne a5, a3, .lz',     { hi differ but not < -> 0 }
+      'bltu a4, a2, .lt',    { hi equal, lo unsigned < }
+      '.lz:',
+      'movi a8, 0',
+      '.lt:',
+      'mov a2, a8' ]);
+    if op = Ord(tkGe) then
+      EmitAsmXtensa(['movi a8, 1', 'xor a2, a2, a8']);   { ge = not lt }
+  end
+  else if (op = Ord(tkGt)) or (op = Ord(tkLe)) then
+  begin
+    { a2 = (left > right) = (right < left) }
+    if signedOp then hbr := 'blt' else hbr := 'bltu';
+    EmitAsmXtensa([
+      'movi a8, 1',
+      hbr + ' a3, a5, .gt',  { right.hi < left.hi }
+      'bne a3, a5, .gz',
+      'bltu a2, a4, .gt',    { hi equal, right.lo unsigned < left.lo }
+      '.gz:',
+      'movi a8, 0',
+      '.gt:',
+      'mov a2, a8' ]);
+    if op = Ord(tkLe) then
+      EmitAsmXtensa(['movi a8, 1', 'xor a2, a2, a8']);   { le = not gt }
+  end
+  else
+    Error('target xtensa: 64-bit binop operator not yet supported');
+end;
+
 procedure IREmitNodeXtensa(node: Integer);
 var
   left, right, op, si, procIdx, nArgs, i, lo, elemSize, sz, argNode, argBase, valNode, j: Integer;
@@ -283,7 +658,10 @@ var
 begin
   case IRKind[node] of
     IR_CONST_INT:
-      EmitLoadConstXtensa(reg_xtensa_a2, IRIVal[node]);
+      if Is64BitXtensa(IntToTypeKind(IRTk[node])) then
+        EmitLoadConst64Xtensa(IRIVal[node])
+      else
+        EmitLoadConstXtensa(reg_xtensa_a2, IRIVal[node]);
 
     IR_CONST_STR:
       begin
@@ -293,7 +671,10 @@ begin
       end;
 
     IR_LOAD_SYM:
-      EmitLoadVarXtensa(IRA[node]);
+      if Is64BitXtensa(Syms[IRA[node]].TypeKind) then
+        EmitLoadVar64Xtensa(IRA[node])
+      else
+        EmitLoadVarXtensa(IRA[node]);
 
     IR_STORE_SYM:
       begin
@@ -374,8 +755,16 @@ begin
           xtensa_s32i(reg_xtensa_a2, reg_xtensa_a8, 0);     { slot := new }
           Exit;
         end;
-        IREmitNodeXtensa(IRB[node]);
-        EmitStoreVarXtensa(IRA[node]);
+        if Is64BitXtensa(Syms[IRA[node]].TypeKind) then
+        begin
+          EmitNode64Xtensa(IRB[node]);
+          EmitStoreVar64Xtensa(IRA[node]);
+        end
+        else
+        begin
+          IREmitNodeXtensa(IRB[node]);
+          EmitStoreVarXtensa(IRA[node]);
+        end;
       end;
 
     IR_LEA:
@@ -661,6 +1050,17 @@ begin
           Exit;
         end;
 
+        { 64-bit (Int64/UInt64) ops use the dedicated a2:a3 path. A comparison
+          carries a Boolean result tk, so key off the operands too. }
+        if Is64BitXtensa(IntToTypeKind(IRTk[node])) or
+           Is64BitXtensa(IntToTypeKind(IRTk[left])) or
+           Is64BitXtensa(IntToTypeKind(IRTk[right])) then
+        begin
+          EmitBinop64Xtensa(left, right, op,
+            not ((IntToTypeKind(IRTk[left]) = tyUInt64) or (IntToTypeKind(IRTk[right]) = tyUInt64)));
+          Exit;
+        end;
+
         if (op = Ord(tkPlus)) and (IntToTypeKind(IRTk[node]) = tyString) then
           Error('target xtensa: frozen tyString concat unsupported; only literal+literal folds (combine nested string literals)');
 
@@ -847,23 +1247,45 @@ begin
           Error('target xtensa: builtin calls not supported in bare-metal stage 1');
         end;
 
+        { Word-based argument passing (matches the callee spill in parser.inc):
+          each scalar arg is one word, a by-value Int64/UInt64 is two (lo then
+          hi). nArgs counts WORDS; word k loads into the k-th arg register
+          (Call0 a2+k / windowed a10+k). Up to 6 words total. }
         argNode := IRB[node];
-        nArgs := 0;
+        nArgs := 0;     { word count }
+        i := 0;         { argument index }
         argBase := XtSpillDepth;   { windowed: base offset of this call's arg block }
         while argNode <> -1 do
         begin
-          IREmitNodeXtensa(IRA[argNode]);
-          { External C call: skip the 8-byte length prefix of a Pascal string
-            literal so the callee sees a const char* (as on x86-64/riscv32). }
-          if ProcExternal[procIdx] and (IntToTypeKind(IRTk[argNode]) = tyString) then
-            xtensa_addi(reg_xtensa_a2, reg_xtensa_a2, 8);
-          XtensaPushA2;
-          Inc(nArgs);
+          if (procIdx >= 0) and (not ProcExternal[procIdx]) and
+             (i < Procs[procIdx].ParamCount) and
+             ((Procs[procIdx].Params[i].TypeKind = tyInt64) or
+              (Procs[procIdx].Params[i].TypeKind = tyUInt64)) and
+             (not Procs[procIdx].Params[i].IsRef) and
+             (not Procs[procIdx].Params[i].IsArray) then
+          begin
+            EmitNode64Xtensa(IRA[argNode]);        { a2=lo, a3=hi }
+            XtensaPushA2;                           { lo, word nArgs }
+            xtensa_mov(reg_xtensa_a2, reg_xtensa_a3);
+            XtensaPushA2;                           { hi, word nArgs+1 }
+            Inc(nArgs, 2);
+          end
+          else
+          begin
+            IREmitNodeXtensa(IRA[argNode]);
+            { External C call: skip the 8-byte length prefix of a Pascal string
+              literal so the callee sees a const char* (as on x86-64/riscv32). }
+            if ProcExternal[procIdx] and (IntToTypeKind(IRTk[argNode]) = tyString) then
+              xtensa_addi(reg_xtensa_a2, reg_xtensa_a2, 8);
+            XtensaPushA2;
+            Inc(nArgs, 1);
+          end;
+          Inc(i);
           argNode := IRB[argNode];
         end;
 
         if nArgs > 6 then
-          Error('target xtensa: more than 6 call arguments not supported yet');
+          Error('target xtensa: more than 6 call argument words not supported yet');
 
         { Load the outgoing argument registers. Windowed keeps sp constant, so
           the args sit at sp-relative offsets wid..wid+(n-1)*4 (arg0 lowest);
@@ -885,7 +1307,12 @@ begin
 
         EmitCallProc(procIdx);
         if XtensaABI = XTENSA_ABI_WINDOWED then
+        begin
           xtensa_mov(reg_xtensa_a2, reg_xtensa_a10);
+          { 64-bit result returns in the callee's a2:a3, the caller's a10:a11. }
+          if Is64BitXtensa(IntToTypeKind(IRTk[node])) then
+            xtensa_mov(reg_xtensa_a3, reg_xtensa_a11);
+        end;
       end;
 
     IR_WRITE, IR_WRITELN:
@@ -921,6 +1348,21 @@ begin
       end;
 
     IR_NEG:
+      if Is64BitXtensa(IntToTypeKind(IRTk[node])) then
+      begin
+        EmitNode64Xtensa(IRA[node]);             { value -> a2:a3 }
+        { negate: lo = 0-lo (borrow if lo<>0), hi = 0-hi-borrow }
+        EmitAsmXtensa([
+          'movi a8, 0',
+          'movi a9, 0',
+          'beq a2, a8, .nb',
+          'movi a9, 1',
+          '.nb:',
+          'sub a2, a8, a2',
+          'sub a3, a8, a3',
+          'sub a3, a3, a9' ]);
+      end
+      else
       begin
         IREmitNodeXtensa(IRA[node]);
         xtensa_movi(reg_xtensa_a8, 0);
@@ -928,6 +1370,12 @@ begin
       end;
 
     IR_NOT:
+      if Is64BitXtensa(IntToTypeKind(IRTk[node])) then
+      begin
+        EmitNode64Xtensa(IRA[node]);             { value -> a2:a3 }
+        EmitAsmXtensa(['movi a8, -1', 'xor a2, a2, a8', 'xor a3, a3, a8']);
+      end
+      else
       begin
         IREmitNodeXtensa(IRA[node]);
         xtensa_movi(reg_xtensa_a8, 1);

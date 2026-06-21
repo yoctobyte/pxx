@@ -14,6 +14,7 @@ procedure EmitLoadVar64Arm32(idx: Integer); forward;
 procedure EmitLoadVarAddrArm32(idx: Integer); forward;
 procedure EmitLoadDataRefArm32(rd, dataOff: Integer); forward;
 procedure EmitLoadVarXtensa(idx: Integer); forward;
+procedure EmitLoadVar64Xtensa(idx: Integer); forward;
 procedure EmitLoadVarRISCV32(idx: Integer); forward;
 procedure EmitLoadVar64RISCV32(idx: Integer); forward;
 procedure EmitLoadImmRISCV32(rd: Integer; v: Int32); forward;
@@ -3786,7 +3787,10 @@ begin
          not (TypeIsOrdinal(Syms[retSymIdx].TypeKind) or
               (Syms[retSymIdx].TypeKind in [tyAnsiString, tyPointer, tyClass])) then
         Error('target xtensa: only ordinal/pointer/string function results supported yet');
-      EmitLoadVarXtensa(retSymIdx);
+      if (Syms[retSymIdx].TypeKind = tyInt64) or (Syms[retSymIdx].TypeKind = tyUInt64) then
+        EmitLoadVar64Xtensa(retSymIdx)   { 64-bit result in a2:a3 }
+      else
+        EmitLoadVarXtensa(retSymIdx);
     end;
     if XtensaABI = XTENSA_ABI_WINDOWED then
     begin

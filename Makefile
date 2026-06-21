@@ -32,7 +32,7 @@ FROZEN_PXXFLAGS := -uPXX_MANAGED_STRING
 .PHONY: all bootstrap bootstrap-check fpc-check test test-core test-asm-emit test-nilpy qemu-env-check test-i386 test-aarch64 test-arm32 test-emit-obj stabilize check-stable revert benchmark benchmark-compiler-runtime benchmark-check clean distclean symbols \
         bootstrap-managed bootstrap-frozen test-managed test-frozen stabilize-managed stabilize-frozen check-stable-managed revert-managed test-nilpy-managed test-nilpy-frozen \
         pxx-stable-check pin lib-test library-suite library-suite-green library-suite-discovery gui-test demos c-interop-devtest \
-        progress-check cross-bootstrap cross-bootstrap-aarch64 cross-bootstrap-arm32 cross-bootstrap-i386 test-esp-bare
+        progress-check cross-bootstrap cross-bootstrap-aarch64 cross-bootstrap-arm32 cross-bootstrap-i386 test-esp-bare test-esp-softfloat
 
 all: $(COMPILER)
 
@@ -1757,6 +1757,27 @@ test-esp-bare: $(COMPILER)
 	  ESP_RUN_TIMEOUT=8 tools/esp_run_bare.sh --chip esp32s3 test/test_esp_bare_largeframe.pas > /tmp/test_esp_bare_lf.s3 2>/dev/null; \
 	  if diff -u /tmp/test_esp_bare_lf.oracle /tmp/test_esp_bare_lf.s3; then echo "esp32s3 call0 large-frame ok (>128B frame via ADDMI == x86-64 oracle)"; \
 	  else echo "esp32s3 call0 large-frame MISMATCH"; exit 1; fi; fi
+	@$(MAKE) --no-print-directory test-esp-softfloat
+
+# Runtime 64-bit-integer gate for the ESP backends: the soft-float library is
+# almost entirely Int64 math, so it doubles as the proof that runtime 64-bit
+# arithmetic (add/sub/mul/div/mod/shifts/compares + Int64 params/returns) works
+# on BOTH ESP backends. The same kernel source runs on the x86-64 oracle and on
+# the riscv32 (esp32c3) + xtensa (esp32s3) QEMU targets; any output mismatch
+# means a 64-bit op miscompiles. Each chip is skipped when its Espressif qemu is
+# absent. (feature-esp-int64-arith)
+test-esp-softfloat: $(COMPILER)
+	@./$(COMPILER) test/test_esp_softfloat_probe.pas /tmp/test_esp_softfloat_oracle >/dev/null && /tmp/test_esp_softfloat_oracle > /tmp/test_esp_softfloat.oracle
+	@RV=$$(ls $$HOME/.espressif/tools/qemu-riscv32/*/qemu/bin/qemu-system-riscv32 2>/dev/null | head -1); \
+	if [ -z "$$RV" ]; then echo "Espressif qemu-system-riscv32 not installed; esp32c3 softfloat run skipped"; else \
+	  ESP_RUN_TIMEOUT=12 tools/esp_run_bare.sh --chip esp32c3 test/test_esp_softfloat_probe.pas > /tmp/test_esp_softfloat.c3 2>/dev/null; \
+	  if diff -u /tmp/test_esp_softfloat.oracle /tmp/test_esp_softfloat.c3; then echo "esp32c3 softfloat/int64 ok (UART output == x86-64 oracle)"; \
+	  else echo "esp32c3 softfloat/int64 MISMATCH"; exit 1; fi; fi
+	@XT=$$(ls $$HOME/.espressif/tools/qemu-xtensa/*/qemu/bin/qemu-system-xtensa 2>/dev/null | head -1); \
+	if [ -z "$$XT" ]; then echo "Espressif qemu-system-xtensa not installed; esp32s3 softfloat run skipped"; else \
+	  ESP_RUN_TIMEOUT=12 tools/esp_run_bare.sh --chip esp32s3 test/test_esp_softfloat_probe.pas > /tmp/test_esp_softfloat.s3 2>/dev/null; \
+	  if diff -u /tmp/test_esp_softfloat.oracle /tmp/test_esp_softfloat.s3; then echo "esp32s3 softfloat/int64 ok (UART output == x86-64 oracle)"; \
+	  else echo "esp32s3 softfloat/int64 MISMATCH"; exit 1; fi; fi
 
 # Cross-target test environment sanity (chore-qemu-test-env). Manual target:
 # joins 'make test' when the first cross backend exists. Validates the runner

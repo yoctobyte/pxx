@@ -79,14 +79,16 @@ begin
 end;
 
 { Map a branch mnemonic to its EncodeXtensaBranch r-code (beq=1 bne=9 blt=2
-  bge=10). Result=False for a non-branch. }
+  bltu=3 bge=10 bgeu=11). Result=False for a non-branch. }
 function AsmXtensaBranchCode(const m: AnsiString; var r: Integer): Boolean;
 begin
   Result := True;
   if CaseEqual(m, 'beq') then r := 1
   else if CaseEqual(m, 'bne') then r := 9
   else if CaseEqual(m, 'blt') then r := 2
+  else if CaseEqual(m, 'bltu') then r := 3
   else if CaseEqual(m, 'bge') then r := 10
+  else if CaseEqual(m, 'bgeu') then r := 11
   else Result := False;
 end;
 
@@ -145,6 +147,14 @@ begin
   else if CaseEqual(mnem, 'or')  then begin r1 := AsmXtensaRegOp(op1); r2 := AsmXtensaRegOp(op2); xtensa_or(r0, r1, r2); end
   else if CaseEqual(mnem, 'xor') then begin r1 := AsmXtensaRegOp(op1); r2 := AsmXtensaRegOp(op2); xtensa_xor(r0, r1, r2); end
   else if CaseEqual(mnem, 'mull') then begin r1 := AsmXtensaRegOp(op1); r2 := AsmXtensaRegOp(op2); xtensa_mull(r0, r1, r2); end
+  else if CaseEqual(mnem, 'muluh') then begin r1 := AsmXtensaRegOp(op1); r2 := AsmXtensaRegOp(op2); xtensa_muluh(r0, r1, r2); end
+  { Variable shifts route through SAR: `ssl as` / `ssr as` set the shift amount,
+    then `sll ar, as` / `srl ar, at` apply it. (r0 above is the first operand:
+    the shift-amount reg for ssl/ssr, the destination for sll/srl.) }
+  else if CaseEqual(mnem, 'ssl') then xtensa_ssl(r0)
+  else if CaseEqual(mnem, 'ssr') then xtensa_ssr(r0)
+  else if CaseEqual(mnem, 'sll') then begin r1 := AsmXtensaRegOp(op1); xtensa_sll(r0, r1); end
+  else if CaseEqual(mnem, 'srl') then begin r1 := AsmXtensaRegOp(op1); xtensa_srl(r0, r1); end
   else if CaseEqual(mnem, 'mov') then begin r1 := AsmXtensaRegOp(op1); xtensa_mov(r0, r1); end
   else if CaseEqual(mnem, 'movi') then begin imm := Integer(AsmXtensaInt(op1, holes, holeCur)); xtensa_movi(r0, imm); end
   else if CaseEqual(mnem, 'addi') then begin r1 := AsmXtensaRegOp(op1); imm := Integer(AsmXtensaInt(op2, holes, holeCur)); xtensa_addi(r0, r1, imm); end

@@ -161,6 +161,16 @@ begin
   EmitB((8 shl 4) or 2);
 end;
 
+procedure xtensa_muluh(r, s, t: Integer);
+{ MULUH r, s, t -> r = high 32 of (s * t) unsigned. 32-bit integer multiply
+  option (present on ESP32 LX6/LX7). Same RRR layout as MULL; op2=$A, op1=2
+  (byte2 = $A2). Verified vs xtensa-esp32s3-elf-as. }
+begin
+  EmitB((t shl 4) or 0);
+  EmitB((r shl 4) or s);
+  EmitB(($A shl 4) or 2);
+end;
+
 procedure xtensa_quos(r, s, t: Integer);
 { QUOS r, s, t  ->  r = s div t (signed). Requires the 32-bit integer divide
   option, present on ESP32-S2/S3 (LX7) and later, NOT on ESP32 classic (LX6).
