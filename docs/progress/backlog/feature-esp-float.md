@@ -66,6 +66,39 @@ The gating harness is ready: `test/test_esp_softfloat_probe.pas` calls the kerne
 against its x86-64 oracle. It compiles + passes on x86-64 today; it will compile
 for riscv32/xtensa once 64-bit int arithmetic exists.
 
+## PROGRESS 2026-06-21 — value model DONE on both ESP backends (pinned v31)
+
+The float **value model + IR lowering** is implemented and validated on riscv32
+AND xtensa (commits 00ab934 riscv, bc70ee2 xtensa, 323b598 params/returns,
+a56f773 Trunc+negate; pinned v31). Done:
+
+- Slice 0: `Real` resolver target-aware (Single on xtensa/riscv, Double else);
+  float binop result tk reflects operand widths on ESP (single op single ->
+  single) via `FloatBinopResultTk` in parser.inc.
+- Value model: Double = register pair (riscv a0:a1 / xtensa a2:a3, folded into
+  `Is64BitRISCV32`/`Is64BitXtensa`), Single = 32b in the low reg.
+- Arithmetic (+ - * /), comparisons (all six, NaN-correct mapping of the kernel
+  -1/0/1/2 code), conversions (i2s/i2d/s2d/d2s) at store + operand coercion,
+  float params (1 word single / 2 words double) + returns, `Trunc` (-> d2i/s2i,
+  sign-extended), float unary minus (IEEE sign-bit flip, NOT integer negate).
+- xtensa dispatch is ABI-aware (windowed a10-a13 / Call0 a2-a5).
+- Gate green: `make test` + self-host byte-identical. QEMU output-equality vs
+  the x86-64 oracle on esp32c3 + esp32s3 via `test/test_esp_float_probe.pas`
+  (operators, not direct kernel calls).
+
+### REMAINING on this ticket
+- **xtensa HW single FPU.** Single is currently SOFT on xtensa (correct, but the
+  ticket wants `add.s/sub.s/mul.s` as the native `Real` path). Swap single-width
+  ops in `EmitFloatBinopXtensa` to the HW FPU (FP regs f0-f15, wfr/rfr core<->FP
+  moves, lsi/ssi); double stays soft. Verify the esp32s3 QEMU models the FPU.
+- **Round / Frac / Int intrinsics** (procIdx -204/-205/-206) still ERROR on ESP —
+  no nearest-even / fractional soft kernel yet. Add kernels + wire (mirror the
+  Trunc path). error-not-miscompile holds meanwhile.
+- **`{$FASTDOUBLES}`** follow-on (post-baseline; see below).
+- Wire `test/test_esp_float_probe.pas` into the `make test` ESP suite (a
+  `test-esp-float` target next to `test-esp-softfloat`) — deferred: Track B has
+  uncommitted Makefile edits, don't sweep them.
+
 ## Dependencies
 
 - [[feature-esp-int64-arith]] — **runtime 64-bit integer arithmetic on the ESP
