@@ -15,7 +15,7 @@ _none_
 | feature-c-runtime-library | B | feature | C runtime/library layer (`lib/crtl`) plus direct C-library packages | — |
 | feature-platform-abstraction-layer | B | feature | Platform Abstraction Layer (PAL): per-platform RTL port at one seam | — |
 
-## backlog (73)
+## backlog (72)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -82,7 +82,6 @@ _none_
 | feature-static-arena-profile | A | feature | Fixed-static-arena allocator profile | feature-unified-heap-allocator |
 | feature-string-model-tyfixedstring | B | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 | feature-terminal-ansi-library | B | feature | Terminal ANSI library | — |
-| feature-textfile-keyword-io-dispatch | A+B | feature | Default `Text` file surface and file-handle IO dispatch | — |
 | feature-threadsafe-io-serialization | A | feature | Statement-level I/O serialization under threads | feature-unified-heap-allocator |
 | feature-writeln-as-library | B | feature | write/writeln as a library function (via `array of const` + variadic sugar) | — |
 | feature-zero-init-contract | A | feature | Zero-init contract — one library-owned managed-slot zeroing guarantee | — |
@@ -97,7 +96,7 @@ _none_
 
 _none_
 
-## done (115)
+## done (116)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -207,6 +206,7 @@ _none_
 | feature-target-arm32 | A | feature | Compile target: ARM32 Linux | feature-target-aarch64 |
 | feature-target-esp32 | A | feature | Compile target: ESP32 / embedded | — |
 | feature-target-i386 | A | feature | Compile target: i386 (32-bit x86 Linux) | chore-qemu-test-env |
+| feature-textfile-keyword-io-dispatch | A+B | feature | Default `Text` file surface and file-handle IO dispatch | — |
 | feature-transcendental-math | A | feature | Transcendental math library (Sqrt/Sin/Cos/Ln/Exp/ArcTan/Power/Pi/Abs) | — |
 | feature-typed-const-arrays | A | feature | Typed constant arrays (initialized const arrays) | — |
 | feature-typed-instruction-encoders | A | feature | Typed instruction encoders for codegen | — |
@@ -283,7 +283,6 @@ _none_
 - [A] feature-static-arena-profile
 - [B] feature-string-model-tyfixedstring
 - [B] feature-terminal-ansi-library
-- [A+B] feature-textfile-keyword-io-dispatch
 - [A] feature-threadsafe-io-serialization
 - [B] feature-writeln-as-library
 - [A] feature-zero-init-contract

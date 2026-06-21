@@ -271,6 +271,8 @@ test-core: $(COMPILER)
 	test "$$(/tmp/test_generator_yield_call26)" = "$$(printf '1 2 10\n3 4 20\n5 6 30\n60')"
 	./$(COMPILER) test/test_forin_set_member.pas /tmp/test_forin_set_member26
 	test "$$(/tmp/test_forin_set_member26)" = "$$(printf 'spell=0\nspell=2\nspell=4\ndone')"
+	./$(COMPILER) -Fulib/rtl/platform/posix test/test_textfile.pas /tmp/test_textfile26
+	test "$$(/tmp/test_textfile26)" = "$$(printf 'line0: room=hall\nline1: count=42\nio=0')"
 	./$(COMPILER) test/test_forin_native.pas /tmp/test_forin_native26
 	test "$$(/tmp/test_forin_native26)" = "$$(printf 'static sum=150\ndyn sum=600\nchar=a\nchar=b\nchar=c\nday=0\nday=1\nday=2\nday=3\nday=4\nwd=0\nwd=2\nwd=4\ncs=a\ncs=m\ncs=x')"
 	./$(COMPILER) test/test_forin_enumerator.pas /tmp/test_forin_enumerator26

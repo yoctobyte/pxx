@@ -5466,11 +5466,149 @@ begin
   Result := node;
 end;
 
+{ ===== File-handle (Text) keyword IO dispatch =====
+  When `Text` is in scope (the implicit-textfile unit was loaded by a `var f:
+  Text` declaration), Write/WriteLn/Read/ReadLn with a Text-typed first argument
+  are rewritten to calls into the textfile RTL (TextWrite/TextWriteLn/
+  TextReadLn) instead of the console builtins. The console path is untouched when
+  no `Text` record exists (IsRecordType('text') = REC_NONE), so the compiler
+  self-host output is byte-identical. }
+
+{ Convert one write value into a string-valued node for TextWrite. Strings pass
+  through; integers go via StrInt(x, width), floats via StrFloat(x, width, dec) —
+  the same builtin formatters the console Str(...) lowering uses. }
+function TextStrArg(exprNode, width, decw: Integer): Integer;
+var tk: TTypeKind; pi: Integer;
+begin
+  tk := IntToTypeKind(ASTTk[exprNode]);
+  if TypeIsFrozenString(tk) or (tk = tyAnsiString) then
+    Result := exprNode
+  else if TypeIsFloat(tk) then
+  begin
+    pi := FindProc('StrFloat');
+    if pi < 0 then Error('write(Text): StrFloat not loaded (add `uses textfile;` deps)');
+    Result := GenMakeCall6(pi, Procs[pi].RetType, exprNode,
+                GenMakeIntLit(width), GenMakeIntLit(decw), -1, -1, -1);
+  end
+  else if TypeIsOrdinal(tk) and (tk <> tyChar) then
+  begin
+    pi := FindProc('StrInt');
+    if pi < 0 then Error('write(Text): StrInt not loaded');
+    Result := GenMakeCall6(pi, Procs[pi].RetType, exprNode,
+                GenMakeIntLit(width), -1, -1, -1, -1);
+  end
+  else
+  begin
+    Error('write(Text): unsupported argument type (string/integer/float only)');
+    Result := exprNode;
+  end;
+end;
+
+{ Rewrite `write[ln](f, v0, v1, ...)` over a Text handle into a sequence of
+  TextWrite calls; for writeln the final value goes through TextWriteLn so the
+  newline lands once after the last value. `fileSym` is the Text var; the caller
+  has left CurTok on its identifier. }
+function ParseTextWriteRest(isLn: Boolean; fileSym: Integer): Integer;
+var
+  procWrite, procWriteLn, callNode, sNode, exprNode: Integer;
+  width, decw, headSeq, tailSeq, lastCall, emptyStr, newSeq: Integer;
+begin
+  Next;  { consume the Text file identifier }
+  procWrite := FindProc('TextWrite');
+  procWriteLn := FindProc('TextWriteLn');
+  if (procWrite < 0) or (procWriteLn < 0) then
+    Error('write(Text): textfile RTL not loaded');
+  headSeq := -1; tailSeq := -1; lastCall := -1;
+  while Eat(tkComma) do
+  begin
+    ParseExpr; exprNode := CurASTNode;
+    width := 0; decw := -1;
+    if CurTok.Kind = tkColon then
+    begin
+      Next;
+      if CurTok.Kind <> tkInteger then Error('write: expected integer width after :');
+      width := CurTok.IVal; Next;
+      if CurTok.Kind = tkColon then
+      begin
+        Next;
+        if CurTok.Kind <> tkInteger then Error('write: expected integer decimals after :');
+        decw := CurTok.IVal; Next;
+      end;
+    end;
+    sNode := TextStrArg(exprNode, width, decw);
+    callNode := GenMakeCall6(procWrite, tyUnknown, GenMakeIdent(fileSym, tyRecord),
+                             sNode, -1, -1, -1, -1);
+    newSeq := GenMakeSeq(callNode, -1);
+    if headSeq = -1 then headSeq := newSeq else ASTRight[tailSeq] := newSeq;
+    tailSeq := newSeq;
+    lastCall := callNode;
+  end;
+  Expect(tkRParen, ')');
+  if isLn then
+  begin
+    if lastCall >= 0 then
+      ASTIVal[lastCall] := procWriteLn   { last value carries the newline }
+    else
+    begin
+      { writeln(f) with no values — newline only. An empty string literal
+        (SLen=0) feeds TextWriteLn so just the '\n' is emitted. }
+      emptyStr := AllocNode(AN_STR_LIT);
+      ASTSOffset[emptyStr] := 0; ASTSLen[emptyStr] := 0; ASTTk[emptyStr] := Ord(tyString);
+      callNode := GenMakeCall6(procWriteLn, tyUnknown, GenMakeIdent(fileSym, tyRecord),
+                               emptyStr, -1, -1, -1, -1);
+      headSeq := GenMakeSeq(callNode, -1);
+    end;
+  end;
+  if headSeq = -1 then headSeq := GenMakeSeq(-1, -1);  { write(f) no values: no-op }
+  Result := headSeq;
+end;
+
+{ Rewrite `read[ln](f, dest0, dest1, ...)` over a Text handle into TextReadLn
+  calls (one per destination). v1 is line-oriented; read and readln map to the
+  same line read. }
+function ParseTextReadRest(fileSym: Integer): Integer;
+var procRead, callNode, destNode, headSeq, tailSeq, newSeq: Integer;
+begin
+  Next;  { consume the Text file identifier }
+  procRead := FindProc('TextReadLn');
+  if procRead < 0 then Error('read(Text): textfile RTL not loaded');
+  headSeq := -1; tailSeq := -1;
+  while Eat(tkComma) do
+  begin
+    ParseExpr; destNode := CurASTNode;
+    callNode := GenMakeCall6(procRead, tyUnknown, GenMakeIdent(fileSym, tyRecord),
+                             destNode, -1, -1, -1, -1);
+    newSeq := GenMakeSeq(callNode, -1);
+    if headSeq = -1 then headSeq := newSeq else ASTRight[tailSeq] := newSeq;
+    tailSeq := newSeq;
+  end;
+  Expect(tkRParen, ')');
+  if headSeq = -1 then headSeq := GenMakeSeq(-1, -1);
+  Result := headSeq;
+end;
+
+{ A Text-typed first argument? Only ever true once the implicit-textfile unit is
+  loaded, so the console path is unaffected otherwise. Returns the file var sym
+  or -1. }
+function TextIOFileSym: Integer;
+var textRecId, vidx: Integer;
+begin
+  Result := -1;
+  textRecId := IsRecordType('text');
+  if (textRecId = REC_NONE) or (CurTok.Kind <> tkIdent) then Exit;
+  { Must be a BARE Text handle (next token `,` or `)`), not `f.field` / `f[i]` —
+    `WriteLn(f.Name)` is a console write of the string field, not a file write. }
+  if not ((TokPos < TokCount) and (Tokens[TokPos].Kind in [tkComma, tkRParen])) then Exit;
+  vidx := FindSym(CurTok.SVal);
+  if (vidx >= 0) and (Syms[vidx].TypeKind = tyRecord) and (Syms[vidx].RecName = textRecId) then
+    Result := vidx;
+end;
+
 function ParseReadArgsAST(isLn: Boolean): Integer;
 { readln/read(target, ...): each target is an lvalue (ident/field/index). The
   args are kept as an AN_ARG chain; IR lowering takes each one's address and
   parses a value from the line buffer by the target's type. }
-var node, argNode, lastArg: Integer;
+var node, argNode, lastArg, fileSym: Integer;
 begin
   node := AllocNode(AN_READLN);
   if not isLn then ASTKind[node] := AN_READ;
@@ -5478,6 +5616,13 @@ begin
   if CurTok.Kind = tkLParen then
   begin
     Next;
+    { read[ln](f, ...) over a Text handle → textfile RTL }
+    fileSym := TextIOFileSym;
+    if fileSym >= 0 then
+    begin
+      Result := ParseTextReadRest(fileSym);
+      Exit;
+    end;
     lastArg := -1;
     repeat
       ParseExpr;
@@ -5504,6 +5649,14 @@ begin
   if CurTok.Kind = tkLParen then
   begin
     Next;
+    { write[ln](f, ...) over a Text handle → textfile RTL (must precede the
+      StdErr/console handling; a Text var is never the StdErr const). }
+    vidx := TextIOFileSym;
+    if vidx >= 0 then
+    begin
+      Result := ParseTextWriteRest(isLn, vidx);
+      Exit;
+    end;
     lastArg := -1;
     if CurTok.Kind = tkIdent then
     begin
@@ -6986,6 +7139,9 @@ begin
       else if EnableAutoVar and CaseEqual(lo, 'auto') then Result := tyAuto
       else
       begin
+        { `Text`/`TextFile` resolve here as the record from the implicitly-loaded
+          textfile unit (loaded up front in ParseProgram when a Text token is
+          present), so no special-case is needed at this point. }
         ci := FindUClass(lo);
         if (ci >= 0) and UClsIsInterface[ci] then
         begin
@@ -10552,7 +10708,7 @@ end;
 
 procedure ParseProgram;
 var jmpPatch, i, j: Integer; doneUses, doneDecls, hasExceptions, needsBuiltin,
-    needsHeap, needsAnsiRuntime, needHeapUnit, hasCoroutine: Boolean;
+    needsHeap, needsAnsiRuntime, needHeapUnit, hasCoroutine, needsTextfile: Boolean;
     savedUnitIdx: Integer;
     dummyNames: array[0..7] of AnsiString;
     dummyTypes: array[0..7] of TTypeKind;
@@ -10582,6 +10738,7 @@ begin
   hasExceptions := False;
   hasCoroutine := False;
   needsBuiltin := False;
+  needsTextfile := False;
   DetectPascalRuntimeNeeds(needsHeap, needsAnsiRuntime);
   { Full builtin (Str/Val/Variant) is pulled only for AnsiString/exception
     programs and on demand for Str/Val (token loop below). The heap allocator
@@ -10734,6 +10891,18 @@ begin
     if (Tokens[i].Kind = tkUses) and
        (TargetArch <> TARGET_XTENSA) and (TargetArch <> TARGET_RISCV32) then
       needsBuiltin := True;
+    { Implicit text-file surface: a `Text`/`TextFile` type token auto-loads the
+      textfile unit up front (here, before declaration parsing — NOT mid-proc
+      from ParseTypeKind, which would disrupt the enclosing proc's codegen state
+      and skip managed-record zero-init). Its keyword-IO dispatch formats numeric
+      write args through StrInt/StrFloat, so the builtin unit is needed too. }
+    if (Tokens[i].Kind = tkIdent) and (i > 0) and (Tokens[i - 1].Kind = tkColon) and
+       (CaseEqual(GetTokenStr(i), 'text') or CaseEqual(GetTokenStr(i), 'textfile')) and
+       (TargetArch <> TARGET_XTENSA) and (TargetArch <> TARGET_RISCV32) then
+    begin
+      needsBuiltin := True;
+      needsTextfile := True;
+    end;
     Inc(i);
   end;
 
@@ -10819,6 +10988,11 @@ begin
     (allocator + PXXStr*) first, then the Str/Val/Variant conversions. }
   if needHeapUnit then ParseUsesUnit('builtinheap');
   if needsBuiltin then ParseUsesUnit('builtin');
+  { Implicit text-file unit (classic `Text`/Assign/Reset/... surface), loaded
+    like an explicit `uses textfile` would be — before user declarations, so the
+    Text record + its procedures resolve and proc-local `var f: Text` gets normal
+    managed-field zero-init. }
+  if needsTextfile then ParseUsesUnit('textfile');
   FixupTVarRecLayout;
 
   doneDecls := False;
