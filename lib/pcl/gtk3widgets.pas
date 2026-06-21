@@ -21,7 +21,7 @@ type
     function CreateListBox(AListBox: TComponent): Pointer; override;
     function CreateComboBox(AComboBox: TComponent): Pointer; override;
     function CreatePaintBox(APaintBox: TComponent): Pointer; override;
-    
+
     procedure SetText(AControl: TComponent; const AText: string); override;
     procedure Invalidate(AControl: TComponent); override;
     procedure SetBounds(AControl: TComponent; ALeft, ATop, AWidth, AHeight: Integer); override;

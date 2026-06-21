@@ -21,7 +21,7 @@ type
     function CreateListBox(AListBox: TComponent): Pointer; virtual;
     function CreateComboBox(AComboBox: TComponent): Pointer; virtual;
     function CreatePaintBox(APaintBox: TComponent): Pointer; virtual;
-    
+
     procedure SetText(AControl: TComponent; const AText: string); virtual;
     procedure Invalidate(AControl: TComponent); virtual;
     procedure SetBounds(AControl: TComponent; ALeft, ATop, AWidth, AHeight: Integer); virtual;
