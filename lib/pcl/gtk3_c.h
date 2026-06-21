@@ -96,6 +96,7 @@ void gtk_combo_box_text_remove_all(void* combo_box_text);
 
 // Drawing Area (TPaintBox)
 void* gtk_drawing_area_new(void);
+void gtk_widget_queue_draw(void* widget);
 
 // Cairo drawing functions
 void cairo_save(void* cr);
@@ -114,6 +115,17 @@ void cairo_arc(void* cr, double xc, double yc, double radius, double angle1, dou
 void cairo_select_font_face(void* cr, char* family, int slant, int weight);
 void cairo_set_font_size(void* cr, double size);
 void cairo_show_text(void* cr, char* utf8);
+
+#define CAIRO_FORMAT_ARGB32 0
+#define CAIRO_FORMAT_RGB24 1
+
+void* cairo_image_surface_create(int format, int width, int height);
+unsigned char* cairo_image_surface_get_data(void* surface);
+void cairo_set_source_surface(void* cr, void* surface, double x, double y);
+void cairo_paint(void* cr);
+void cairo_surface_destroy(void* surface);
+void cairo_surface_flush(void* surface);
+void cairo_surface_mark_dirty(void* surface);
 
 // Menus
 void* gtk_menu_bar_new(void);

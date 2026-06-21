@@ -24,6 +24,7 @@ type
     function Realize: Integer; virtual;
     function ApplyCaption: Integer; virtual;
     procedure Show;
+    procedure Invalidate;
     procedure ConnectClick;
     procedure SetBounds(ALeft, ATop, AWidth, AHeight: Integer);
     function GetHandle: Pointer;
@@ -100,6 +101,12 @@ begin
   FHeight := AHeight;
   if FHandle <> nil then
     WidgetSet.SetBounds(Self, FLeft, FTop, FWidth, FHeight);
+end;
+
+procedure TControl.Invalidate;
+begin
+  if FHandle <> nil then
+    WidgetSet.Invalidate(Self);
 end;
 
 procedure TControl.ConnectClick;
@@ -195,15 +202,11 @@ end;
 
 procedure TControl.SetParent(p: TControl);
 begin
-  writeln('TControl.SetParent start: Self=', Int64(Self), ' p=', Int64(p));
   FParent := p;
   if p <> nil then
   begin
-    writeln('TControl.SetParent calling AddChild');
     p.AddChild(Self);
-    writeln('TControl.SetParent returned from AddChild');
   end;
-  writeln('TControl.SetParent done');
 end;
 
 procedure TControl.Show;

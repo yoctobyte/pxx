@@ -55,6 +55,27 @@ type
     property Color: TColor read FColor write FColor;
   end;
 
+  TBitmap = class
+  private
+    FWidth: Integer;
+    FHeight: Integer;
+    FSurface: Pointer;
+    FData: Pointer;
+    procedure RecreateSurface;
+    procedure SetWidth(v: Integer);
+    procedure SetHeight(v: Integer);
+  public
+    constructor Create;
+    destructor Destroy;
+    procedure Clear(Color: TColor);
+    procedure SetPixel(X, Y: Integer; Color: TColor);
+    function GetPixel(X, Y: Integer): TColor;
+    property Width: Integer read FWidth write SetWidth;
+    property Height: Integer read FHeight write SetHeight;
+    property Handle: Pointer read FSurface;
+    property Data: Pointer read FData;
+  end;
+
   TCanvas = class
   private
     FHandle: Pointer; { cairo_t }
@@ -72,6 +93,7 @@ type
     procedure Rectangle(X1, Y1, X2, Y2: Integer);
     procedure Ellipse(X1, Y1, X2, Y2: Integer);
     procedure TextOut(X, Y: Integer; const Text: string);
+    procedure Draw(X, Y: Integer; Bitmap: TBitmap);
     property Handle: Pointer read FHandle write FHandle;
     property Pen: TPen read FPen write FPen;
     property Brush: TBrush read FBrush write FBrush;
@@ -240,6 +262,113 @@ begin
     cairo_move_to(FHandle, dx, dy);
     SetCairoColor(FHandle, FFont.Color);
     cairo_show_text(FHandle, PChar(Text));
+  end;
+end;
+
+type
+  PLongWord = ^LongWord;
+
+constructor TBitmap.Create;
+begin
+  FWidth := 0;
+  FHeight := 0;
+  FSurface := nil;
+  FData := nil;
+end;
+
+destructor TBitmap.Destroy;
+begin
+  if FSurface <> nil then
+    cairo_surface_destroy(FSurface);
+end;
+
+procedure TBitmap.RecreateSurface;
+begin
+  if FSurface <> nil then
+  begin
+    cairo_surface_destroy(FSurface);
+    FSurface := nil;
+    FData := nil;
+  end;
+  if (FWidth > 0) and (FHeight > 0) then
+  begin
+    FSurface := cairo_image_surface_create(CAIRO_FORMAT_ARGB32, FWidth, FHeight);
+    if FSurface <> nil then
+      FData := cairo_image_surface_get_data(FSurface);
+  end;
+end;
+
+procedure TBitmap.SetWidth(v: Integer);
+begin
+  if FWidth <> v then
+  begin
+    FWidth := v;
+    Self.RecreateSurface;
+  end;
+end;
+
+procedure TBitmap.SetHeight(v: Integer);
+begin
+  if FHeight <> v then
+  begin
+    FHeight := v;
+    Self.RecreateSurface;
+  end;
+end;
+
+procedure TBitmap.Clear(Color: TColor);
+var
+  i, count: Integer;
+  p: PLongWord;
+  val: LongWord;
+begin
+  if FData = nil then Exit;
+  count := FWidth * FHeight;
+  val := ($FF shl 24) or ((Color and $FF) shl 16) or (((Color shr 8) and $FF) shl 8) or ((Color shr 16) and $FF);
+  p := PLongWord(FData);
+  for i := 0 to count - 1 do
+  begin
+    PLongWord(Pointer(Int64(p) + i * 4))^ := val;
+  end;
+end;
+
+procedure TBitmap.SetPixel(X, Y: Integer; Color: TColor);
+var
+  p: PLongWord;
+  val: LongWord;
+begin
+  if (X < 0) or (X >= FWidth) or (Y < 0) or (Y >= FHeight) then Exit;
+  if FData = nil then Exit;
+  p := PLongWord(Pointer(Int64(FData) + (Y * FWidth + X) * 4));
+  val := ($FF shl 24) or ((Color and $FF) shl 16) or (((Color shr 8) and $FF) shl 8) or ((Color shr 16) and $FF);
+  p^ := val;
+end;
+
+function TBitmap.GetPixel(X, Y: Integer): TColor;
+var
+  p: PLongWord;
+  val: LongWord;
+begin
+  if (X < 0) or (X >= FWidth) or (Y < 0) or (Y >= FHeight) then begin Result := 0; Exit; end;
+  if FData = nil then begin Result := 0; Exit; end;
+  p := PLongWord(Pointer(Int64(FData) + (Y * FWidth + X) * 4));
+  val := p^;
+  Result := ((val shr 16) and $FF) or (((val shr 8) and $FF) shl 8) or ((val and $FF) shl 16) or ($FF000000);
+end;
+
+procedure TCanvas.Draw(X, Y: Integer; Bitmap: TBitmap);
+var
+  dx, dy: Double;
+begin
+  if (FHandle <> nil) and (Bitmap <> nil) and (Bitmap.Handle <> nil) then
+  begin
+    dx := X;
+    dy := Y;
+    cairo_surface_mark_dirty(Bitmap.Handle);
+    cairo_save(FHandle);
+    cairo_set_source_surface(FHandle, Bitmap.Handle, dx, dy);
+    cairo_paint(FHandle);
+    cairo_restore(FHandle);
   end;
 end;
 

@@ -38,11 +38,9 @@ implementation
 
 procedure TForm.SetMenu(v: TMainMenu);
 begin
-  writeln('TForm.SetMenu: Self=', Int64(Self), ' FHandle=', Int64(FHandle), ' v=', Int64(v));
   FMenu := v;
   if FHandle <> nil then
   begin
-    writeln('TForm.SetMenu calling WidgetSet.SetFormMenu');
     WidgetSet.SetFormMenu(Self, v);
   end;
 end;
@@ -50,7 +48,6 @@ end;
 procedure TForm.CreateHandle;
 begin
   Self.Handle := WidgetSet.CreateForm(Self);
-  writeln('TForm.CreateHandle: Handle=', Int64(Self.Handle));
   if FMenu <> nil then
     WidgetSet.SetFormMenu(Self, FMenu);
 end;
@@ -70,15 +67,11 @@ end;
 function TForm.Realize: Integer;
 var dummy: Integer;
 begin
-  writeln('TForm.Realize start');
   dummy := inherited Realize;
-  writeln('TForm.Realize inherited done, FMenu=', Int64(FMenu));
   if FMenu <> nil then
   begin
-    writeln('TForm.Realize calling SetFormMenu');
     dummy := WidgetSet.SetFormMenu(Self, FMenu);
   end;
-  writeln('TForm.Realize done');
   Result := 0;
 end;
 
@@ -86,7 +79,6 @@ procedure TApplication.Initialize;
 begin
   if WidgetSet = nil then
   begin
-    writeln('WidgetSet is NIL!');
     Halt(1);
   end;
   WidgetSet.AppInit;

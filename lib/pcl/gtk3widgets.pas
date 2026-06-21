@@ -23,6 +23,7 @@ type
     function CreatePaintBox(APaintBox: TComponent): Pointer; override;
     
     procedure SetText(AControl: TComponent; const AText: string); override;
+    procedure Invalidate(AControl: TComponent); override;
     procedure SetBounds(AControl: TComponent; ALeft, ATop, AWidth, AHeight: Integer); override;
     procedure SetParent(AControl: TComponent; AParent: TComponent); override;
     procedure ShowWidget(AControl: TComponent); override;
@@ -136,18 +137,14 @@ var
   namePtr: Pointer;
   s: string;
 begin
-  writeln('GetVBoxPtr start: win=', Int64(win));
   Result := nil;
   namePtr := gtk_widget_get_name(win);
-  writeln('GetVBoxPtr got namePtr=', Int64(namePtr));
   if namePtr <> nil then
   begin
     s := PCharToStr(namePtr);
-    writeln('GetVBoxPtr name string: ', s);
     if (Length(s) > 5) and (s[1] = 'V') and (s[2] = 'B') and (s[3] = 'O') and (s[4] = 'X') and (s[5] = '_') then
     begin
       Result := StringToPointer(GetSubStr(s, 6));
-      writeln('GetVBoxPtr parsed: ', Int64(Result));
     end;
   end;
 end;
@@ -156,16 +153,13 @@ procedure SetVBoxPtr(win: Pointer; vbox: Pointer);
 var
   s: string;
 begin
-  writeln('SetVBoxPtr start: win=', Int64(win), ' vbox=', Int64(vbox));
   if vbox = nil then
     gtk_widget_set_name(win, PChar(''))
   else
   begin
     s := 'VBOX_' + PointerToString(vbox);
-    writeln('SetVBoxPtr setting name: ', s);
     gtk_widget_set_name(win, PChar(s));
   end;
-  writeln('SetVBoxPtr done');
 end;
 
 function GetMenuBarPtr(vbox: Pointer): Pointer;
@@ -287,6 +281,11 @@ end;
 procedure CallMethod(code: Pointer; data: Pointer; sender: Pointer);
 begin
   asm
+    push rbx
+    push r12
+    push r13
+    push r14
+    push r15
     mov rdi, data
     mov rsi, sender
     mov rax, code
@@ -297,6 +296,38 @@ begin
     db 255, 208
     pop r11
     mov rsp, r11
+    pop r15
+    pop r14
+    pop r13
+    pop r12
+    pop rbx
+  end;
+end;
+
+procedure CallPaintMethod(code: Pointer; data: Pointer; sender: Pointer; canvas: Pointer);
+begin
+  asm
+    push rbx
+    push r12
+    push r13
+    push r14
+    push r15
+    mov rdi, data
+    mov rsi, sender
+    mov rdx, canvas
+    mov rax, code
+    mov r11, rsp
+    db 72, 131, 228, 240   { and rsp, -16 }
+    sub rsp, 8
+    push r11
+    db 255, 208
+    pop r11
+    mov rsp, r11
+    pop r15
+    pop r14
+    pop r13
+    pop r12
+    pop rbx
   end;
 end;
 
@@ -325,6 +356,13 @@ var
   m: TMethod;
   cls: PClassRTTI;
 begin
+  asm
+    push rbx
+    push r12
+    push r13
+    push r14
+    push r15
+  end;
   Result := False;
   ctl := TControl(userdata);
   cls := GetClass(GetInstanceClassName(userdata));
@@ -334,8 +372,17 @@ begin
     paintBox.Canvas.Handle := cr;
     m := paintBox.OnPaint;
     if m.Code <> nil then
-      CallMethod(m.Code, m.Data, userdata);
+    begin
+      CallPaintMethod(m.Code, m.Data, userdata, Pointer(paintBox.Canvas));
+    end;
     paintBox.Canvas.Handle := nil;
+  end;
+  asm
+    pop r15
+    pop r14
+    pop r13
+    pop r12
+    pop rbx
   end;
 end;
 
@@ -409,7 +456,6 @@ function TGtk3WidgetSet.CreateForm(AForm: TComponent): Pointer;
 var win, vbox, fixed: Pointer;
 begin
   win := gtk_window_new(GTK_WINDOW_TOPLEVEL);
-  writeln('TGtk3WidgetSet.CreateForm: win=', Int64(win));
   gtk_window_set_default_size(win, 320, 240);
   vbox := gtk_box_new(1, 0);
   gtk_container_add(win, vbox);
@@ -452,17 +498,12 @@ end;
 procedure TGtk3WidgetSet.SetText(AControl: TComponent; const AText: string);
 var h: Pointer; className: string; ctl: TControl; cls: PClassRTTI;
 begin
-  writeln('TGtk3WidgetSet.SetText: AControl=', Int64(AControl));
   ctl := TControl(AControl);
   h := ctl.Handle;
-  writeln('TGtk3WidgetSet.SetText: h=', Int64(h));
   if h = nil then Exit;
   
   className := GetInstanceClassName(Pointer(AControl));
-  writeln('TGtk3WidgetSet.SetText: className=', className);
-  writeln('IsSubclassOf address = ', Int64(@IsSubclassOf));
   cls := GetClass(className);
-  writeln('TGtk3WidgetSet.SetText: cls=', Int64(cls));
   if IsSubclassOf(cls, 'TForm') then
     gtk_window_set_title(h, PChar(AText))
   else if IsSubclassOf(cls, 'TButton') then
@@ -475,7 +516,18 @@ begin
     gtk_button_set_label(h, PChar(AText))
   else if IsSubclassOf(cls, 'TPanel') then
     gtk_button_set_label(h, PChar(AText));
-  writeln('TGtk3WidgetSet.SetText done');
+end;
+
+procedure TGtk3WidgetSet.Invalidate(AControl: TComponent);
+var
+  ctl: TControl;
+  h: Pointer;
+begin
+  if AControl = nil then Exit;
+  ctl := TControl(AControl);
+  h := ctl.Handle;
+  if h <> nil then
+    gtk_widget_queue_draw(h);
 end;
 
 procedure TGtk3WidgetSet.SetBounds(AControl: TComponent; ALeft, ATop, AWidth, AHeight: Integer);
@@ -661,11 +713,8 @@ end;
 
 function TGtk3WidgetSet.CreatePaintBox(APaintBox: TComponent): Pointer;
 begin
-  writeln('TGtk3WidgetSet.CreatePaintBox start');
   Result := gtk_drawing_area_new();
-  writeln('TGtk3WidgetSet.CreatePaintBox widget created: ', Int64(Result));
   SignalConnectData(Result, 'draw', @ControlDrawTramp, Pointer(APaintBox));
-  writeln('TGtk3WidgetSet.CreatePaintBox done');
 end;
 
 function TGtk3WidgetSet.GetMemoText(AMemo: TComponent): string;
@@ -811,73 +860,66 @@ end;
 procedure BuildSubMenu(parentItem: TMenuItem; parentMenuWidget: Pointer);
 var
   i: Integer;
-  childItem: TMenuItem;
-  childWidget, submenuWidget: Pointer;
+  item: TMenuItem;
+  subWidget, subMenu: Pointer;
 begin
   for i := 0 to parentItem.Count - 1 do
   begin
-    childItem := parentItem.Item(i);
-    childWidget := gtk_menu_item_new_with_mnemonic(PChar(ConvertAmpersand(childItem.Caption)));
-    childItem.Handle := childWidget;
-    gtk_menu_shell_append(parentMenuWidget, childWidget);
+    item := parentItem.Item(i);
+    subWidget := gtk_menu_item_new_with_mnemonic(PChar(ConvertAmpersand(item.Caption)));
+    item.Handle := subWidget;
+    gtk_menu_shell_append(parentMenuWidget, subWidget);
     
-    SignalConnectData(childWidget, 'activate', @MenuItemActivateTramp, Pointer(childItem));
-    
-    if childItem.Count > 0 then
+    if item.Count > 0 then
     begin
-      submenuWidget := gtk_menu_new();
-      gtk_menu_item_set_submenu(childWidget, submenuWidget);
-      BuildSubMenu(childItem, submenuWidget);
+      subMenu := gtk_menu_new();
+      gtk_menu_item_set_submenu(subWidget, subMenu);
+      BuildSubMenu(item, subMenu);
+    end
+    else
+    begin
+      SignalConnectData(subWidget, 'activate', @MenuItemActivateTramp, Pointer(item));
     end;
-    gtk_widget_show(childWidget);
+    gtk_widget_show(subWidget);
   end;
 end;
 
 function TGtk3WidgetSet.SetFormMenu(AForm: TComponent; AMenu: TComponent): Integer;
 var
-  win, vbox, menubar, topWidget, submenuWidget: Pointer;
-  menu: TMainMenu;
+  win, vbox, menubar: Pointer;
   topLevelItem: TMenuItem;
+  topWidget, submenuWidget: Pointer;
+  menu: TMainMenu;
   i: Integer;
   ctl: TControl;
 begin
-  writeln('SetFormMenu start: AForm=', Int64(AForm), ' AMenu=', Int64(AMenu));
   ctl := TControl(AForm);
   win := ctl.GetHandle;
-  writeln('SetFormMenu: win=', Int64(win));
-  if win = nil then begin writeln('SetFormMenu: win is nil'); Result := 0; Exit; end;
+  if win = nil then begin Result := 0; Exit; end;
   menu := TMainMenu(AMenu);
-  if menu = nil then begin writeln('SetFormMenu: menu is nil'); Result := 0; Exit; end;
+  if menu = nil then begin Result := 0; Exit; end;
   
   vbox := GetVBoxPtr(win);
-  writeln('SetFormMenu vbox=', Int64(vbox));
-  if vbox = nil then begin writeln('SetFormMenu: vbox is nil'); Result := 0; Exit; end;
+  if vbox = nil then begin Result := 0; Exit; end;
   
-  writeln('SetFormMenu checking old menubar');
   menubar := GetMenuBarPtr(vbox);
   if menubar <> nil then
   begin
-    writeln('SetFormMenu destroying old menubar');
     gtk_widget_destroy(menubar);
   end;
-    
-  writeln('SetFormMenu creating new menubar');
+     
   menubar := gtk_menu_bar_new();
-  writeln('SetFormMenu new menubar=', Int64(menubar));
   SetMenuBarPtr(vbox, menubar);
   
-  writeln('SetFormMenu building items: count=', menu.Items.Count);
   for i := 0 to menu.Items.Count - 1 do
   begin
     topLevelItem := menu.Items.Item(i);
-    writeln('SetFormMenu top-level item ', i, ' addr=', Int64(topLevelItem), ' class=', GetInstanceClassName(Pointer(topLevelItem)), ' name=', topLevelItem.Name, ' caption=', topLevelItem.Caption);
     topWidget := gtk_menu_item_new_with_mnemonic(PChar(ConvertAmpersand(topLevelItem.Caption)));
     topLevelItem.Handle := topWidget;
     gtk_menu_shell_append(menubar, topWidget);
     
     if topLevelItem.Count > 0 then
     begin
-      writeln('SetFormMenu item ', i, ' has submenu');
       submenuWidget := gtk_menu_new();
       gtk_menu_item_set_submenu(topWidget, submenuWidget);
       BuildSubMenu(topLevelItem, submenuWidget);
@@ -889,17 +931,12 @@ begin
     gtk_widget_show(topWidget);
   end;
   
-  writeln('SetFormMenu packing menubar into vbox');
   gtk_box_pack_start(vbox, menubar, 0, 0, 0);
-  writeln('SetFormMenu reordering menubar to top');
   gtk_box_reorder_child(vbox, menubar, 0);
-  writeln('SetFormMenu showing menubar');
   gtk_widget_show(menubar);
-  writeln('SetFormMenu done');
   Result := 0;
 end;
 
 initialization
-  writeln('INITIALIZING gtk3widgets!');
   WidgetSet := TGtk3WidgetSet.Create;
 end.

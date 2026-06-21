@@ -23,6 +23,7 @@ type
     function CreatePaintBox(APaintBox: TComponent): Pointer; virtual;
     
     procedure SetText(AControl: TComponent; const AText: string); virtual;
+    procedure Invalidate(AControl: TComponent); virtual;
     procedure SetBounds(AControl: TComponent; ALeft, ATop, AWidth, AHeight: Integer); virtual;
     procedure SetParent(AControl: TComponent; AParent: TComponent); virtual;
     procedure ShowWidget(AControl: TComponent); virtual;
@@ -74,6 +75,7 @@ function TWidgetSet.CreateComboBox(AComboBox: TComponent): Pointer; begin Create
 function TWidgetSet.CreatePaintBox(APaintBox: TComponent): Pointer; begin CreatePaintBox := nil; end;
 
 procedure TWidgetSet.SetText(AControl: TComponent; const AText: string); begin end;
+procedure TWidgetSet.Invalidate(AControl: TComponent); begin end;
 procedure TWidgetSet.SetBounds(AControl: TComponent; ALeft, ATop, AWidth, AHeight: Integer); begin end;
 procedure TWidgetSet.SetParent(AControl: TComponent; AParent: TComponent); begin end;
 procedure TWidgetSet.ShowWidget(AControl: TComponent); begin end;
