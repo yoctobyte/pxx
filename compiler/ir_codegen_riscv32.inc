@@ -176,7 +176,15 @@ procedure IREmitNodeRISCV32(node: Integer); forward;
 
 function Is64BitRISCV32(tk: TTypeKind): Boolean;
 begin
-  Result := (tk = tyInt64) or (tk = tyUInt64);
+  { Double occupies an a0:a1 register pair / 8-byte slot, same storage shape as
+    Int64 — so the value-model paths (const/load/store) treat it as 64-bit.
+    Arithmetic is dispatched separately (IsFloatRISCV32, checked first). }
+  Result := (tk = tyInt64) or (tk = tyUInt64) or (tk = tyDouble);
+end;
+
+function IsFloatRISCV32(tk: TTypeKind): Boolean;
+begin
+  Result := (tk = tySingle) or (tk = tyDouble);
 end;
 
 procedure EmitLoadConst64RISCV32(v: Int64);
@@ -467,6 +475,101 @@ begin
     Error('target riscv32: 64-bit binop operator not yet supported');
 end;
 
+procedure EmitFloatConvRISCV32(srcTk, dstTk: TTypeKind);
+{ Value already in a0 (single) or a0:a1 (double). Repack in place to dstTk.
+  Both kinds are float here. }
+var procIdx: Integer;
+begin
+  if srcTk = dstTk then Exit;
+  if (srcTk = tySingle) and (dstTk = tyDouble) then
+    procIdx := FindProc('__pxx_s2d')          { a0 -> a0:a1 }
+  else if (srcTk = tyDouble) and (dstTk = tySingle) then
+    procIdx := FindProc('__pxx_d2s')          { a0:a1 -> a0 }
+  else
+  begin
+    Error('target riscv32: unsupported float-to-float conversion');
+    Exit;
+  end;
+  if procIdx < 0 then Error('compiler error: softfloat repack helper not found (uses softfloat?)');
+  EmitCallProc(procIdx);
+end;
+
+procedure EmitFloatOperandRISCV32(node: Integer; wantTk: TTypeKind);
+{ Emit node and leave its value coerced to wantTk (a float kind) in a0 / a0:a1.
+  Source may be a float (repacked) or a 32-bit integer (i2s/i2d). }
+var ntk: TTypeKind; procIdx: Integer;
+begin
+  ntk := IntToTypeKind(IRTk[node]);
+  if IsFloatRISCV32(ntk) then
+  begin
+    if ntk = tyDouble then EmitNode64RISCV32(node) else IREmitNodeRISCV32(node);
+    EmitFloatConvRISCV32(ntk, wantTk);
+  end
+  else
+  begin
+    if (ntk = tyInt64) or (ntk = tyUInt64) then
+    begin
+      Error('target riscv32: Int64-to-float conversion not yet supported');
+      Exit;
+    end;
+    IREmitNodeRISCV32(node);                   { a0 = 32-bit int }
+    if wantTk = tySingle then procIdx := FindProc('__pxx_i2s')
+    else procIdx := FindProc('__pxx_i2d');
+    if procIdx < 0 then Error('compiler error: softfloat i2s/i2d not found (uses softfloat?)');
+    EmitCallProc(procIdx);
+  end;
+end;
+
+procedure EmitFloatBinopRISCV32(node: Integer);
+{ Float arithmetic + comparison via the soft-float kernels. Result of an
+  arithmetic op lands in a0 (single) / a0:a1 (double); a comparison lands as a
+  Boolean 0/1 in a0 (NaN-correct mapping of the kernel's -1/0/1/2 code). }
+var left, right, op, procIdx: Integer; ltk, rtk: TTypeKind; isDouble: Boolean; nm: AnsiString;
+begin
+  left := IRA[node]; right := IRB[node]; op := IRC[node];
+  ltk := IntToTypeKind(IRTk[left]); rtk := IntToTypeKind(IRTk[right]);
+  isDouble := (ltk = tyDouble) or (rtk = tyDouble);
+
+  if isDouble then
+  begin
+    EmitFloatOperandRISCV32(left, tyDouble);
+    rv32_addi(reg_sp, reg_sp, -8); rv32_sw(reg_a0, reg_sp, 0); rv32_sw(reg_a1, reg_sp, 4);
+    EmitFloatOperandRISCV32(right, tyDouble);
+    rv32_addi(reg_a2, reg_a0, 0); rv32_addi(reg_a3, reg_a1, 0);          { a2:a3 = right }
+    rv32_lw(reg_a0, reg_sp, 0); rv32_lw(reg_a1, reg_sp, 4); rv32_addi(reg_sp, reg_sp, 8); { a0:a1 = left }
+    nm := '__pxx_d';
+  end
+  else
+  begin
+    EmitFloatOperandRISCV32(left, tySingle);
+    rv32_addi(reg_sp, reg_sp, -4); rv32_sw(reg_a0, reg_sp, 0);
+    EmitFloatOperandRISCV32(right, tySingle);
+    rv32_addi(reg_a1, reg_a0, 0);                                        { a1 = right }
+    rv32_lw(reg_a0, reg_sp, 0); rv32_addi(reg_sp, reg_sp, 4);            { a0 = left }
+    nm := '__pxx_s';
+  end;
+
+  if op = Ord(tkPlus) then nm := nm + 'add'
+  else if op = Ord(tkMinus) then nm := nm + 'sub'
+  else if op = Ord(tkStar) then nm := nm + 'mul'
+  else if op = Ord(tkSlash) then nm := nm + 'div'
+  else if (op = Ord(tkEq)) or (op = Ord(tkNeq)) or (op = Ord(tkLt)) or
+          (op = Ord(tkGt)) or (op = Ord(tkLe)) or (op = Ord(tkGe)) then nm := nm + 'cmp'
+  else begin Error('target riscv32: unsupported float operator'); Exit; end;
+
+  procIdx := FindProc(nm);
+  if procIdx < 0 then Error('compiler error: ' + nm + ' not found (uses softfloat?)');
+  EmitCallProc(procIdx);
+
+  { comparison kernels return -1/0/1, or 2 for NaN (unordered). }
+  if op = Ord(tkEq) then rv32_sltiu(reg_a0, reg_a0, 1)             { ==0 }
+  else if op = Ord(tkNeq) then rv32_sltu(reg_a0, reg_zero, reg_a0) { <>0 }
+  else if op = Ord(tkLt) then rv32_slti(reg_a0, reg_a0, 0)         { ==-1 }
+  else if op = Ord(tkLe) then rv32_slti(reg_a0, reg_a0, 1)         { in {-1,0} }
+  else if op = Ord(tkGt) then begin rv32_xori(reg_a0, reg_a0, 1); rv32_sltiu(reg_a0, reg_a0, 1); end { ==1 }
+  else if op = Ord(tkGe) then rv32_sltiu(reg_a0, reg_a0, 2);       { in {0,1} }
+end;
+
 procedure IREmitNodeRISCV32(node: Integer);
 var
   left, right, op, si, procIdx, nArgs, i, lo, elemSize, sz, argNode, valNode, j: Integer;
@@ -561,6 +664,19 @@ begin
             rv32_lw(reg_a0, reg_sp, 0); rv32_addi(reg_sp, reg_sp, 4);    { pop new }
             EmitStoreVarRISCV32(si);                                     { slot := new }
           end;
+          Exit;
+        end;
+        { Float destination: coerce the RHS to the slot's float width (i2s/i2d/
+          s2d/d2s as needed) before storing. Must precede the Is64Bit branch —
+          a Double slot is Is64Bit but a non-double RHS needs conversion, not a
+          raw 64-bit move. }
+        if IsFloatRISCV32(Syms[IRA[node]].TypeKind) then
+        begin
+          EmitFloatOperandRISCV32(IRB[node], Syms[IRA[node]].TypeKind);
+          if Syms[IRA[node]].TypeKind = tyDouble then
+            EmitStoreVar64RISCV32(IRA[node])
+          else
+            EmitStoreVarRISCV32(IRA[node]);
           Exit;
         end;
         if Is64BitRISCV32(Syms[IRA[node]].TypeKind) then
@@ -766,6 +882,18 @@ begin
           rv32_lw(reg_a0, reg_sp, 0); rv32_addi(reg_sp, reg_sp, 4);   { pop result }
           rv32_addi(reg_sp, reg_sp, 8);                               { drop rhs, lhs }
           if op = Ord(tkNeq) then rv32_xori(reg_a0, reg_a0, 1);
+          Exit;
+        end;
+
+        { Float arithmetic/compare via the soft-float kernels. MUST precede the
+          64-bit check below — Double is now Is64Bit (a0:a1 storage shape) but its
+          arithmetic is soft-float, not integer. Key off the operands: a compare
+          carries a Boolean result tk. }
+        if IsFloatRISCV32(IntToTypeKind(IRTk[node])) or
+           IsFloatRISCV32(IntToTypeKind(IRTk[left])) or
+           IsFloatRISCV32(IntToTypeKind(IRTk[right])) then
+        begin
+          EmitFloatBinopRISCV32(node);
           Exit;
         end;
 

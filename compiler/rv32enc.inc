@@ -96,6 +96,8 @@ procedure rv32_srl(rd, rs1, rs2: Integer);  begin EmitRType(0, rs2, rs1, 5, rd, 
 procedure rv32_sra(rd, rs1, rs2: Integer);  begin EmitRType($20, rs2, rs1, 5, rd, $33); end;
 procedure rv32_slt(rd, rs1, rs2: Integer);  begin EmitRType(0, rs2, rs1, 2, rd, $33); end;
 procedure rv32_sltu(rd, rs1, rs2: Integer); begin EmitRType(0, rs2, rs1, 3, rd, $33); end;
+procedure rv32_slti(rd, rs1, imm: Integer); begin EmitIType(imm, rs1, 2, rd, $13); end;
+procedure rv32_sltiu(rd, rs1, imm: Integer);begin EmitIType(imm, rs1, 3, rd, $13); end;
 procedure rv32_slli(rd, rs1, sh: Integer);  begin EmitIType(sh and $1F, rs1, 1, rd, $13); end;
 procedure rv32_srli(rd, rs1, sh: Integer);  begin EmitIType(sh and $1F, rs1, 5, rd, $13); end;
 procedure rv32_srai(rd, rs1, sh: Integer);  begin EmitIType((sh and $1F) or $400, rs1, 5, rd, $13); end;

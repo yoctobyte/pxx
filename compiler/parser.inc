@@ -3839,6 +3839,26 @@ begin
   end;
 end;
 
+function FloatBinopResultTk(ltk, rtk: TTypeKind): TTypeKind;
+{ Result type of a float-producing binop. On double-native targets every float
+  op widens to Double (Single is storage-only). On ESP (xtensa/riscv) Single is
+  first-class: single op single -> single, only an explicit Double operand pulls
+  the result to soft-Double. Ordinal operands count as "not Double" so int/int
+  under '/' yields the native depth (Single on ESP). }
+begin
+  if (ltk = tyExtended) or (rtk = tyExtended) then
+    FloatBinopResultTk := tyExtended
+  else if (TargetArch = TARGET_XTENSA) or (TargetArch = TARGET_RISCV32) then
+  begin
+    if (ltk = tyDouble) or (rtk = tyDouble) then
+      FloatBinopResultTk := tyDouble
+    else
+      FloatBinopResultTk := tySingle;
+  end
+  else
+    FloatBinopResultTk := tyDouble;
+end;
+
 procedure ParseTerm;
 var op: TTokenKind; left, right, node, opSOffset, opSLen, opci: Integer;
 begin
@@ -3868,7 +3888,7 @@ begin
     else if (ASTTk[left] = Ord(tySet)) or (ASTTk[right] = Ord(tySet)) then
       ASTTk[node] := Ord(tySet)
     else if op = tkSlash then
-      ASTTk[node] := Ord(tyDouble)  { '/' always produces Double }
+      ASTTk[node] := Ord(FloatBinopResultTk(IntToTypeKind(ASTTk[left]), IntToTypeKind(ASTTk[right])))  { '/' produces native-depth float }
     else if op = tkDiv then
       ASTTk[node] := Ord(TypeDivideResult(IntToTypeKind(ASTTk[left])))
     else if op = tkMod then
@@ -3877,12 +3897,7 @@ begin
       ASTTk[node] := ASTTk[left]
     else if (ASTTk[left] = Ord(tySingle)) or (ASTTk[left] = Ord(tyDouble)) or (ASTTk[left] = Ord(tyExtended)) or
             (ASTTk[right] = Ord(tySingle)) or (ASTTk[right] = Ord(tyDouble)) or (ASTTk[right] = Ord(tyExtended)) then
-    begin
-      if (ASTTk[left] = Ord(tyExtended)) or (ASTTk[right] = Ord(tyExtended)) then
-        ASTTk[node] := Ord(tyExtended)
-      else
-        ASTTk[node] := Ord(tyDouble);
-    end
+      ASTTk[node] := Ord(FloatBinopResultTk(IntToTypeKind(ASTTk[left]), IntToTypeKind(ASTTk[right])))
     else if TypeIsOrdinal(IntToTypeKind(ASTTk[left])) and TypeIsOrdinal(IntToTypeKind(ASTTk[right])) then
       ASTTk[node] := Ord(TypeArithmeticResult(IntToTypeKind(ASTTk[left]), IntToTypeKind(ASTTk[right])))
     else
@@ -3937,12 +3952,7 @@ begin
       ASTTk[node] := Ord(tyBoolean)
     else if (ASTTk[left] = Ord(tySingle)) or (ASTTk[left] = Ord(tyDouble)) or (ASTTk[left] = Ord(tyExtended)) or
             (ASTTk[right] = Ord(tySingle)) or (ASTTk[right] = Ord(tyDouble)) or (ASTTk[right] = Ord(tyExtended)) then
-    begin
-      if (ASTTk[left] = Ord(tyExtended)) or (ASTTk[right] = Ord(tyExtended)) then
-        ASTTk[node] := Ord(tyExtended)
-      else
-        ASTTk[node] := Ord(tyDouble);
-    end
+      ASTTk[node] := Ord(FloatBinopResultTk(IntToTypeKind(ASTTk[left]), IntToTypeKind(ASTTk[right])))
     else if TypeIsOrdinal(IntToTypeKind(ASTTk[left])) and TypeIsOrdinal(IntToTypeKind(ASTTk[right])) then
       ASTTk[node] := Ord(TypeArithmeticResult(IntToTypeKind(ASTTk[left]), IntToTypeKind(ASTTk[right])))
     else
@@ -7115,7 +7125,7 @@ begin
         Result := tyAnsiString
       else
         Result := tyString;
-    tkReal_T:     Result := tyDouble;
+    tkReal_T:     if (TargetArch = TARGET_XTENSA) or (TargetArch = TARGET_RISCV32) then Result := tySingle else Result := tyDouble;
     tkSingle_T:   Result := tySingle;
     tkDouble_T:   Result := tyDouble;
     tkExtended_T: Result := tyExtended;
@@ -7162,7 +7172,13 @@ begin
         LastTypeStrCap := 255;
         Result := tyFixedString;
       end
-      else if CaseEqual(lo, 'real') then Result := tyDouble
+      else if CaseEqual(lo, 'real') then
+      begin
+        if (TargetArch = TARGET_XTENSA) or (TargetArch = TARGET_RISCV32) then
+          Result := tySingle  { Real = native float depth; ESP has no HW double }
+        else
+          Result := tyDouble;
+      end
       else if CaseEqual(lo, 'single') then Result := tySingle
       else if CaseEqual(lo, 'double') then Result := tyDouble
       else if CaseEqual(lo, 'extended') then Result := tyExtended
