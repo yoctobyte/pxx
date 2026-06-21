@@ -22,7 +22,7 @@ _none_
 | feature-platform-abstraction-layer | B | feature | Platform Abstraction Layer (PAL): per-platform RTL port at one seam | — |
 | feature-sys-getdents | B | feature | Directory scanning support — sys_getdents64 (libc-free) | — |
 
-## backlog (82)
+## backlog (83)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -70,6 +70,7 @@ _none_
 | feature-inline-routines | A | feature | Inline routine expansion (`inline;`) | — |
 | feature-interfaces | A | feature | Interfaces | — |
 | feature-json-library | B | feature | JSON library — parser + serializer (with a roundtrip test app) | — |
+| feature-kernel-matrix-bootroom | B | feature | Kernel-matrix bootroom: one static PXX binary, swept across many Linux kernels | — |
 | feature-lazycasing-c-imports | A | feature | `{$LAZYCASING ON/OFF}` for C imports only | feature-compiler-warnings |
 | feature-lazy-standard-unit-emission | A | feature | Lazy standard-unit emission / routine-level dead-code elimination | — |
 | feature-metaclass-descendant-enforcement | A | feature | Metaclass alias descendant-constraint enforcement | — |
@@ -303,6 +304,7 @@ _none_
 - [A] feature-inline-routines
 - [A] feature-interfaces
 - [B] feature-json-library
+- [B] feature-kernel-matrix-bootroom
 - [A] feature-lazy-standard-unit-emission
 - [A] feature-metaclass-descendant-enforcement
 - [A] feature-mimic-fpc
