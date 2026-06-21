@@ -153,6 +153,8 @@ var
   img: TImage;
   s: AnsiString;
   path: AnsiString;
+  cols, rows: Integer;
+  destWidth, destHeight: Integer;
 begin
   Result := False;
 
@@ -170,7 +172,19 @@ begin
 
   if PngDecodeRGBA(bytes, img) then
   begin
-    s := RenderAnsiTrueColorHalfBlock(img, 40, 15);
+    if TerminalSize(cols, rows) then
+    begin
+      destWidth := cols - 6;
+      if destWidth < 40 then destWidth := 40;
+      if destWidth > 120 then destWidth := 120;
+    end
+    else
+      destWidth := 40;
+
+    destHeight := (destWidth * img.Height) div (2 * img.Width);
+    if destHeight < 5 then destHeight := 5;
+
+    s := RenderAnsiTrueColorHalfBlock(img, destWidth, destHeight);
     WriteLn(s);
     ImageFree(img);
     Result := True;
