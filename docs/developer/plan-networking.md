@@ -305,10 +305,32 @@ Implement Linux syscall-only IPv4:
 - Focused tests that avoid external network dependency where possible
   (loopback only).
 
-DNS should be a later milestone, but it is **not** blocked on libc: DNS is just
-UDP datagrams to port 53 (RFC 1035 wire format), and the nameserver comes from
-`/etc/resolv.conf` (an `open`/`read`). So syscall-only DNS is achievable. Two
-pure-Pascal references, both FPC-named-or-portable:
+DNS should be a later milestone tracked in
+`feature-dns-resolver-library`. It is **not** blocked on libc: DNS is just UDP
+datagrams to port 53 (RFC 1035 wire format), and the nameserver usually comes
+from `/etc/resolv.conf` (an `open`/`read`). So syscall-only DNS is achievable.
+The planned `dns.pas` facade has selectable resolver backends:
+
+- `dns_libc`: `getaddrinfo` / `freeaddrinfo`; most compatible with host NSS and
+  resolver policy, but external-libc and blocking.
+- `dns_wire`: pure Pascal DNS client over PAL UDP/TCP; supports blocking and
+  async facades over shared packet/parser code; reads `/etc/hosts` and
+  `/etc/resolv.conf`; no public DNS fallback by default.
+- `dns_resolved`: systemd-resolved over a minimal D-Bus client; Linux/systemd
+  only, but can preserve split-DNS/VPN policy without libc.
+- `dns_esp`: ESP-IDF/lwIP resolver API backend if validated, otherwise use
+  `dns_wire` over lwIP UDP after network bring-up.
+
+Backend selection is deployment policy, not language semantics. Prefer the
+project/profile config mechanism long term (`dns_backend = wire|libc|resolved|
+esp|auto|auto_fallback`, `dns_public_fallback = false`), with temporary defines
+acceptable for early slices. Runtime fallback should be opt-in because each
+backend can honor different DNS policy. Public fallback servers such as
+`1.1.1.1` or `8.8.8.8` must be opt-in only; defaulting to them breaks VPNs,
+private LANs, split DNS, captive portals, enterprise policy, and privacy
+expectations.
+
+Two pure-Pascal references, both FPC-named-or-portable:
 
 - **FPC's `netdb`** — resolves in pure Pascal already (reads `/etc/resolv.conf` +
   `/etc/hosts`, sends its own DNS queries, no libc `getaddrinfo`). Syscall-shaped

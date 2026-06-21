@@ -70,7 +70,7 @@ Linux syscall-only IPv4:
 - UDP `sendto` / `recvfrom`.
 - Loopback tests only.
 
-DNS deferred to a later milestone.
+DNS deferred to `feature-dns-resolver-library`.
 
 ## Log
 
@@ -148,3 +148,8 @@ DNS deferred to a later milestone.
   can matter: dotted namespace unit names (`Posix.*`, `System.Generics.*`) and
   `{$IF DECLARED(Qualified.Symbol)}`. Filed `feature-dotted-unit-names` and
   `feature-conditional-declared-directive`; no Synapse source workaround.
+- 2026-06-21 — DNS resolver policy split out to
+  `feature-dns-resolver-library`: `dns.pas` facade with selectable `dns_libc`
+  (`getaddrinfo`), `dns_wire` (pure Pascal over PAL UDP/TCP), and `dns_resolved`
+  (systemd-resolved over D-Bus) backends. Public DNS fallback is explicit opt-in
+  only, never default.
