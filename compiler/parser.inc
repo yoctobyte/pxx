@@ -10803,13 +10803,28 @@ begin
 
   if Length(UnitContent) = 0 then
   begin
-    { PCL widgetset units }
+    { PCL widgetset units (.pas/.pp), plus C-header/C-source imports that live
+      alongside them (e.g. lib/pcl/gtk3_c.h, the GTK binding pulled by gtk3.pas).
+      The RTL dir already tries .h; mirror it here so a PCL unit can `uses` a
+      sibling .h/.c with no explicit -Fu/-I. }
     ConcatThree(lcldir, lo, '.pas', path);
     LoadFile(path, UnitContent);
     if Length(UnitContent) = 0 then
     begin
       ConcatThree(lcldir, lo, '.pp', path);
       LoadFile(path, UnitContent);
+    end;
+    if Length(UnitContent) = 0 then
+    begin
+      ConcatThree(lcldir, lo, '.c', path);
+      LoadFile(path, UnitContent);
+      if Length(UnitContent) > 0 then isCUnit := True;
+    end;
+    if Length(UnitContent) = 0 then
+    begin
+      ConcatThree(lcldir, lo, '.h', path);
+      LoadFile(path, UnitContent);
+      if Length(UnitContent) > 0 then begin isCUnit := True; isCHeader := True; end;
     end;
   end;
 
@@ -10829,6 +10844,7 @@ begin
     if Length(UnitContent) = 0 then
     begin
       ConcatThree('lib/rtl/', lo, '.h', path); LoadFile(path, UnitContent);
+      if Length(UnitContent) = 0 then begin ConcatThree('lib/pcl/', lo, '.h', path); LoadFile(path, UnitContent); end;
       if Length(UnitContent) = 0 then begin ConcatThree('compiler/', lo, '.h', path); LoadFile(path, UnitContent); end;
       if Length(UnitContent) > 0 then begin isCUnit := True; isCHeader := True; end;
     end;
