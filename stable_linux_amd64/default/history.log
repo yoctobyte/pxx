@@ -27,3 +27,4 @@
 2026-06-21T11:00:00Z  v27  2ca8787544fad6e8c23a37e11691af5f6b1f727badfc37c46f4ba781f96a251f  e8a69822bef8412f74cfaa7113bef33fa1028731  docs(tickets): movslq pointer-truncation DONE; lexer suffix-keyword REJECTED
 2026-06-21T11:14:42Z  v28  1b0f9c0791b1fea67574a6b4fa301fe9bddb7ddc395fc9846055bc9c9894cafd  3bd22eb31770cae8f5e8502eaf1b9bff870fa034  fix(parser): search .h/.c for units in the lib/pcl widgetset dir
 2026-06-21T11:20:39Z  v29  5f5293f81bbd2988179cd580b7e142c32bdf2fc9e1131c8c483a4ec35636e9f8  d4dca78d33e3b3048fca1c0e098c7e8ffb3b551f  feat(tools): install.sh — `pxx` wrapper on PATH for the pinned compiler
+2026-06-21T12:01:13Z  v30  9bb56f44863a381f89e0f2f191b03badb4e74bf9e23c7c0538132b193b175ff3  90090acfb0a564efb9379012375ae88d55da9fc6  docs(tickets): Inc/Dec lvalue bug DONE (reframed from feature); file local-typed-const
