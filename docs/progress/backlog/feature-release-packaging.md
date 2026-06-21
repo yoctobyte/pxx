@@ -80,6 +80,18 @@ Asymmetry is correct: **determinism = property of (host, source)** — always te
   ground) **distinct** from the **release manifest** (all-target hashes, rare,
   user-facing, tag-bound). Different cadence, different audience — don't conflate.
 
+## Versioning — semver tags, not a custom string
+
+Tags are `vMAJOR.MINOR.PATCH` with the prerelease channel in the suffix:
+`v0.1.0-alpha.1` -> `-beta.1` -> `-rc.1` -> `v0.1.0`, GitHub `--prerelease` until
+the bare `v0.1.0`. **`0.x` already means "unstable, expect breakage"** — don't
+double-encode with `preview`/`beta` words (and `0.01` doesn't parse/sort). Semver
+sorts correctly and is parseable by the tag tooling / `git describe` selfcheck —
+a custom string like `preview-beta-0.01` is not. Pre-1.0 semantics (loose):
+MAJOR = language/emitted-ABI break, MINOR = features/new targets, PATCH = bugfix.
+Keep the internal **pin counter** (`stable_linux_amd64` `VERSION`, currently v32)
+**separate** from the public semver — pin = dev checkpoint, tag = release.
+
 ## GitHub mechanics — branch push = CI, tag = release
 
 One x86_64 runner cross-builds **all** targets (host-independent codegen → no arch
