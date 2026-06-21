@@ -28,3 +28,4 @@
 2026-06-21T11:14:42Z  v28  1b0f9c0791b1fea67574a6b4fa301fe9bddb7ddc395fc9846055bc9c9894cafd  3bd22eb31770cae8f5e8502eaf1b9bff870fa034  fix(parser): search .h/.c for units in the lib/pcl widgetset dir
 2026-06-21T11:20:39Z  v29  5f5293f81bbd2988179cd580b7e142c32bdf2fc9e1131c8c483a4ec35636e9f8  d4dca78d33e3b3048fca1c0e098c7e8ffb3b551f  feat(tools): install.sh — `pxx` wrapper on PATH for the pinned compiler
 2026-06-21T12:01:13Z  v30  9bb56f44863a381f89e0f2f191b03badb4e74bf9e23c7c0538132b193b175ff3  90090acfb0a564efb9379012375ae88d55da9fc6  docs(tickets): Inc/Dec lvalue bug DONE (reframed from feature); file local-typed-const
+2026-06-21T12:49:38Z  v31  65b6177e660e16c6342fa1588787b1dcda5feb8c3ab7c66ea399a42fb0ae1506  a56f77300fec2f08b473413d005f1af11c38c711  feat(esp-float): Trunc + float unary minus on riscv32/xtensa
