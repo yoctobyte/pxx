@@ -8522,25 +8522,39 @@ end;
   forward decl. This reuses the by-ref param ABI and forward machinery already
   byte-identical on all targets — no new per-target codegen.
 
-  Slice 1 (this code): flatten only. The lifted routine is a plain top-level
-  proc; only its own params/locals and module globals resolve. A reference to an
-  enclosing local or to Self/a field fails at top-level parse ("undefined
-  variable") — capture (Slice 2) appends those as by-ref params + a Self param.
+  Slice 1: flatten only (own params/locals + globals).
+  Slice 2a (this code): Self/field CAPTURE for a routine nested in a method. The
+  lifted proc gains a trailing by-value param `__nestself: <EnclosingClass>`;
+  implicit field/method references (and explicit `Self`) in the body are
+  rewritten to go through it (`Rooms` -> `__nestself.Rooms`); call sites in the
+  enclosing body get `Self` appended as the extra actual. Capture of an
+  enclosing local/parameter is detected and rejected with a diagnostic (Slice 2b).
 
-  PERFORMANCE: lifted nested routines are not speed-optimized — once Slice 2
-  lands, every captured variable is an extra by-ref pointer arg plus a deref per
-  access, and a captured field goes through the passed Self. Correct and fully
-  functional, just indirection a direct frame access would not pay. }
-procedure ParseNestedRoutine;
-var
-  nestedStart, hdrEnd, finalCur, cur, depth, i, remCount: Integer;
+  PERFORMANCE: lifted nested routines are not speed-optimized — a captured field
+  goes through the passed Self pointer rather than the enclosing frame's direct
+  access. Correct and fully functional, just one extra indirection. }
+
+{ Append s to TokChars and return its start offset (a fresh slice usable as a
+  token's SOffset; SLen = Length(s)). }
+function NestStrOff(const s: AnsiString): Integer;
+var j: Integer;
 begin
-  nestedStart := TokPos - 1;   { the 'procedure'/'function' token (= CurTok) }
+  Result := TokCharLen;
+  for j := 1 to Length(s) do
+  begin
+    TokChars[TokCharLen] := s[j];
+    Inc(TokCharLen);
+  end;
+end;
 
-  { Header terminator: the first ';' at parenthesis depth 0 (param-list ';'
-    separators sit at depth > 0). }
-  depth := 0;
-  cur := nestedStart;
+{ Re-scan a nested routine's header ';' (paren-depth 0), its 'begin', and its end
+  starting at nestedStart, after token edits may have shifted positions. (Kept a
+  top-level helper, not a nested routine, so the compiler can self-host without
+  needing nested-routine capture for its own source.) }
+procedure NestScanSpans(nestedStart: Integer; var hdrEnd, bodyBegin, finalCur: Integer);
+var cur, depth: Integer;
+begin
+  depth := 0; cur := nestedStart;
   while cur < TokCount do
   begin
     if Tokens[cur].Kind = tkLParen then Inc(depth)
@@ -8549,12 +8563,11 @@ begin
     Inc(cur);
   end;
   if cur >= TokCount then Error('nested routine: malformed header');
-  hdrEnd := cur;   { index of the ';' that ends the header }
-
-  { Body span: first 'begin', then match begin/case .. end depth, opt trailing ';'. }
+  hdrEnd := cur;
   cur := hdrEnd;
   while (cur < TokCount) and (Tokens[cur].Kind <> tkBegin) do Inc(cur);
   if cur >= TokCount then Error('nested routine: expected begin');
+  bodyBegin := cur;
   depth := 1; Inc(cur);
   while (cur < TokCount) and (depth > 0) do
   begin
@@ -8564,9 +8577,237 @@ begin
   end;
   if (cur < TokCount) and (Tokens[cur].Kind = tkSemicolon) then Inc(cur);
   finalCur := cur;
+end;
 
-  { Stash the full routine [nestedStart, finalCur) for top-level re-parse. Token
-    SOffsets index TokChars (never shifted), so the copy stays valid. }
+procedure ParseNestedRoutine;
+const MAX_NEST_REFS = 4096;
+var
+  nestedStart, nameTokIdx, hdrEnd, bodyBegin, finalCur, cur, depth, i, j, remCount: Integer;
+  parenOpen, parenClose: Integer;
+  ci: Integer;
+  needSelf, beforeColon, isOwnName: Boolean;
+  nsOff, nsLen, selfOff, selfLen: Integer;
+  ownN: array[0..127] of AnsiString;
+  ownCount: Integer;
+  fieldPos: array[0..MAX_NEST_REFS-1] of Integer;  { implicit field/method refs to prefix with __nestself. }
+  fieldCnt: Integer;
+  selfPos: array[0..MAX_NEST_REFS-1] of Integer;   { explicit `Self` tokens to rename to __nestself }
+  selfCnt: Integer;
+  nm, nestedName: AnsiString;
+  sidx: Integer;
+  ins: array[0..7] of TRawToken;
+  parentBegin, parentEnd: Integer;
+  k: Integer;
+begin
+  nestedStart := TokPos - 1;   { the 'procedure'/'function' token (= CurTok) }
+  nameTokIdx := nestedStart + 1;
+  if Tokens[nameTokIdx].Kind <> tkIdent then Error('nested routine: expected name');
+  nestedName := GetTokenStrFromRaw(Tokens[nameTokIdx].SOffset, Tokens[nameTokIdx].SLen);
+
+  NestScanSpans(nestedStart, hdrEnd, bodyBegin, finalCur);
+
+  { Param-list parens (if any). }
+  parenOpen := -1; parenClose := -1;
+  if Tokens[nameTokIdx + 1].Kind = tkLParen then
+  begin
+    parenOpen := nameTokIdx + 1;
+    depth := 0; cur := parenOpen;
+    while cur < hdrEnd do
+    begin
+      if Tokens[cur].Kind = tkLParen then Inc(depth)
+      else if Tokens[cur].Kind = tkRParen then
+      begin Dec(depth); if depth = 0 then begin parenClose := cur; Break; end; end;
+      Inc(cur);
+    end;
+  end;
+
+  ci := -1;
+  if CurSelfClass >= REC_UCLASS_BASE then ci := CurSelfClass - REC_UCLASS_BASE;
+
+  { Own names: the routine's own param names (idents before ':' inside the param
+    parens) and decl-section local names (idents before ':'/'=' between the
+    header and 'begin'). These shadow enclosing scope and must never be captured. }
+  ownCount := 0;
+  if parenOpen >= 0 then
+  begin
+    beforeColon := True;
+    for i := parenOpen + 1 to parenClose - 1 do
+    begin
+      if Tokens[i].Kind = tkColon then beforeColon := False
+      else if Tokens[i].Kind = tkSemicolon then beforeColon := True
+      else if (Tokens[i].Kind = tkIdent) and beforeColon and (ownCount < 128) then
+      begin ownN[ownCount] := GetTokenStrFromRaw(Tokens[i].SOffset, Tokens[i].SLen); Inc(ownCount); end;
+    end;
+  end;
+  beforeColon := True;
+  for i := hdrEnd + 1 to bodyBegin - 1 do
+  begin
+    if (Tokens[i].Kind = tkColon) or (Tokens[i].Kind = tkEq) then beforeColon := False
+    else if Tokens[i].Kind = tkSemicolon then beforeColon := True
+    else if (Tokens[i].Kind = tkVar) or (Tokens[i].Kind = tkConst) or (Tokens[i].Kind = tkType) then beforeColon := True
+    else if (Tokens[i].Kind = tkIdent) and beforeColon and (ownCount < 128) then
+    begin ownN[ownCount] := GetTokenStrFromRaw(Tokens[i].SOffset, Tokens[i].SLen); Inc(ownCount); end;
+  end;
+
+  { Free-variable analysis over the body. Classify each non-selector ident:
+    own (skip) / explicit Self (rename) / enclosing local-or-param (reject) /
+    implicit Self field-or-method (capture) / global-or-other (skip). Inner
+    nested routines are skipped wholesale — their captures are resolved when
+    they are themselves lifted. }
+  needSelf := False; fieldCnt := 0; selfCnt := 0;
+  i := bodyBegin;
+  while i < finalCur do
+  begin
+    if (Tokens[i].Kind = tkProcedure) or (Tokens[i].Kind = tkFunction) then
+    begin
+      while (i < finalCur) and (Tokens[i].Kind <> tkBegin) do Inc(i);
+      depth := 1; Inc(i);
+      while (i < finalCur) and (depth > 0) do
+      begin
+        if (Tokens[i].Kind = tkBegin) or (Tokens[i].Kind = tkCase) then Inc(depth)
+        else if Tokens[i].Kind = tkEnd then Dec(depth);
+        Inc(i);
+      end;
+      Continue;
+    end;
+    if Tokens[i].Kind = tkIdent then
+    begin
+      if (i > 0) and (Tokens[i-1].Kind = tkDot) then begin Inc(i); Continue; end;
+      nm := GetTokenStrFromRaw(Tokens[i].SOffset, Tokens[i].SLen);
+      isOwnName := False;
+      for j := 0 to ownCount - 1 do
+        if CaseEqual(ownN[j], nm) then begin isOwnName := True; Break; end;
+      if isOwnName then begin Inc(i); Continue; end;
+      if CaseEqual(nm, 'Self') then
+      begin
+        needSelf := True;
+        if selfCnt < MAX_NEST_REFS then begin selfPos[selfCnt] := i; Inc(selfCnt); end;
+      end
+      else
+      begin
+        sidx := FindSym(nm);
+        if (sidx >= 0) and ((Syms[sidx].Kind = skLocal) or (Syms[sidx].Kind = skParam)) then
+          Error('nested routine: capture of enclosing variable ''' + nm +
+                ''' not yet supported (Slice 2b)');
+        if (sidx < 0) and (ci >= 0) and
+           ((FindUField(ci, nm) >= 0) or (FindUMeth(ci, nm) >= 0)) then
+        begin
+          needSelf := True;
+          if fieldCnt < MAX_NEST_REFS then begin fieldPos[fieldCnt] := i; Inc(fieldCnt); end;
+        end;
+      end;
+    end;
+    Inc(i);
+  end;
+
+  if needSelf then
+  begin
+    if ci < 0 then Error('nested routine: Self/field used but enclosing routine is not a method');
+    nsOff := NestStrOff('__nestself'); nsLen := 10;
+
+    { Rename explicit `Self` tokens in place (no shift). }
+    for k := 0 to selfCnt - 1 do
+    begin
+      Tokens[selfPos[k]].SOffset := nsOff;
+      Tokens[selfPos[k]].SLen := nsLen;
+    end;
+
+    { Prefix `__nestself .` before each implicit field/method ref, back-to-front
+      so earlier (lower) positions stay valid as we insert. }
+    for k := fieldCnt - 1 downto 0 do
+    begin
+      ins[0].Kind := tkIdent; ins[0].IVal := 0; ins[0].Line := Tokens[fieldPos[k]].Line;
+      ins[0].SOffset := nsOff; ins[0].SLen := nsLen;
+      ins[1].Kind := tkDot; ins[1].IVal := 0; ins[1].Line := Tokens[fieldPos[k]].Line;
+      ins[1].SOffset := 0; ins[1].SLen := 0;
+      InsertTokens(fieldPos[k], ins, 2);
+    end;
+
+    { Append the `__nestself: <class>` parameter to the header. The class-name
+      token reuses the class's own name slice in TokChars. }
+    if parenClose >= 0 then
+    begin
+      { ... ; __nestself : ClassName )  — insert before ')' }
+      ins[0].Kind := tkSemicolon; ins[0].IVal := 0; ins[0].Line := Tokens[nameTokIdx].Line; ins[0].SOffset := 0; ins[0].SLen := 0;
+      ins[1].Kind := tkIdent; ins[1].IVal := 0; ins[1].Line := Tokens[nameTokIdx].Line; ins[1].SOffset := nsOff; ins[1].SLen := nsLen;
+      ins[2].Kind := tkColon; ins[2].IVal := 0; ins[2].Line := Tokens[nameTokIdx].Line; ins[2].SOffset := 0; ins[2].SLen := 0;
+      ins[3].Kind := tkIdent; ins[3].IVal := 0; ins[3].Line := Tokens[nameTokIdx].Line; ins[3].SOffset := UClsNOff[ci]; ins[3].SLen := UClsNLen[ci];
+      InsertTokens(parenClose, ins, 4);
+    end
+    else
+    begin
+      { no param list: name ( __nestself : ClassName )  — insert after the name }
+      ins[0].Kind := tkLParen; ins[0].IVal := 0; ins[0].Line := Tokens[nameTokIdx].Line; ins[0].SOffset := 0; ins[0].SLen := 0;
+      ins[1].Kind := tkIdent; ins[1].IVal := 0; ins[1].Line := Tokens[nameTokIdx].Line; ins[1].SOffset := nsOff; ins[1].SLen := nsLen;
+      ins[2].Kind := tkColon; ins[2].IVal := 0; ins[2].Line := Tokens[nameTokIdx].Line; ins[2].SOffset := 0; ins[2].SLen := 0;
+      ins[3].Kind := tkIdent; ins[3].IVal := 0; ins[3].Line := Tokens[nameTokIdx].Line; ins[3].SOffset := UClsNOff[ci]; ins[3].SLen := UClsNLen[ci];
+      ins[4].Kind := tkRParen; ins[4].IVal := 0; ins[4].Line := Tokens[nameTokIdx].Line; ins[4].SOffset := 0; ins[4].SLen := 0;
+      InsertTokens(nameTokIdx + 1, ins, 5);
+    end;
+
+    NestScanSpans(nestedStart, hdrEnd, bodyBegin, finalCur);   { header/body edits shifted positions }
+
+    { Rewrite call sites in the enclosing body: append `Self` as the extra
+      actual. Find the enclosing 'begin' by skipping any sibling nested routines
+      that still carry a body (later siblings, not yet forward-rewritten). }
+    i := finalCur; parentBegin := -1;
+    while i < TokCount do
+    begin
+      if (Tokens[i].Kind = tkProcedure) or (Tokens[i].Kind = tkFunction) then
+      begin
+        while (i < TokCount) and (Tokens[i].Kind <> tkBegin) do Inc(i);
+        depth := 1; Inc(i);
+        while (i < TokCount) and (depth > 0) do
+        begin
+          if (Tokens[i].Kind = tkBegin) or (Tokens[i].Kind = tkCase) then Inc(depth)
+          else if Tokens[i].Kind = tkEnd then Dec(depth);
+          Inc(i);
+        end;
+      end
+      else if Tokens[i].Kind = tkBegin then begin parentBegin := i; Break; end
+      else Inc(i);
+    end;
+    if parentBegin >= 0 then
+    begin
+      depth := 1; i := parentBegin + 1;
+      while (i < TokCount) and (depth > 0) do
+      begin
+        if (Tokens[i].Kind = tkBegin) or (Tokens[i].Kind = tkCase) then Inc(depth)
+        else if Tokens[i].Kind = tkEnd then Dec(depth);
+        Inc(i);
+      end;
+      parentEnd := i;
+      selfOff := NestStrOff('Self'); selfLen := 4;
+      for i := parentEnd - 1 downto parentBegin do
+        if (Tokens[i].Kind = tkIdent) and CaseEqual(GetTokenStrFromRaw(Tokens[i].SOffset, Tokens[i].SLen), nestedName) and
+           ((i = 0) or (Tokens[i-1].Kind <> tkDot)) then
+        begin
+          if Tokens[i+1].Kind = tkLParen then
+          begin
+            depth := 0; cur := i + 1;
+            while cur < TokCount do
+            begin
+              if Tokens[cur].Kind = tkLParen then Inc(depth)
+              else if Tokens[cur].Kind = tkRParen then begin Dec(depth); if depth = 0 then Break; end;
+              Inc(cur);
+            end;
+            ins[0].Kind := tkComma; ins[0].IVal := 0; ins[0].Line := Tokens[i].Line; ins[0].SOffset := 0; ins[0].SLen := 0;
+            ins[1].Kind := tkIdent; ins[1].IVal := 0; ins[1].Line := Tokens[i].Line; ins[1].SOffset := selfOff; ins[1].SLen := selfLen;
+            InsertTokens(cur, ins, 2);
+          end
+          else
+          begin
+            ins[0].Kind := tkLParen; ins[0].IVal := 0; ins[0].Line := Tokens[i].Line; ins[0].SOffset := 0; ins[0].SLen := 0;
+            ins[1].Kind := tkIdent; ins[1].IVal := 0; ins[1].Line := Tokens[i].Line; ins[1].SOffset := selfOff; ins[1].SLen := selfLen;
+            ins[2].Kind := tkRParen; ins[2].IVal := 0; ins[2].Line := Tokens[i].Line; ins[2].SOffset := 0; ins[2].SLen := 0;
+            InsertTokens(i + 1, ins, 3);
+          end;
+        end;
+    end;
+  end;
+
+  { Stash the (possibly rewritten) full routine [nestedStart, finalCur) for
+    top-level re-parse. Token SOffsets index TokChars (never shifted). }
   if PendNestCount + (finalCur - nestedStart) >= MAX_NESTED_TOKENS then
     Error('nested routine token buffer overflow');
   for i := nestedStart to finalCur - 1 do
@@ -8575,15 +8816,15 @@ begin
     Inc(PendNestCount);
   end;
 
-  { Rewrite the in-place copy to `<header>; forward;` by replacing the body
-    range (hdrEnd+1 .. finalCur-1) with the two tokens `forward ;`. }
+  { Rewrite the in-place copy to `<header>; forward;` by replacing the body range
+    (hdrEnd+1 .. finalCur-1) with the two tokens `forward ;`. }
   Tokens[hdrEnd + 1].Kind := tkForward;
   Tokens[hdrEnd + 1].IVal := 0; Tokens[hdrEnd + 1].Line := Tokens[nestedStart].Line;
   Tokens[hdrEnd + 1].SOffset := 0; Tokens[hdrEnd + 1].SLen := 0;
   Tokens[hdrEnd + 2].Kind := tkSemicolon;
   Tokens[hdrEnd + 2].IVal := 0; Tokens[hdrEnd + 2].Line := Tokens[nestedStart].Line;
   Tokens[hdrEnd + 2].SOffset := 0; Tokens[hdrEnd + 2].SLen := 0;
-  remCount := finalCur - (hdrEnd + 3);   { leftover body tokens to delete }
+  remCount := finalCur - (hdrEnd + 3);
   if remCount > 0 then
   begin
     for i := finalCur to TokCount - 1 do
