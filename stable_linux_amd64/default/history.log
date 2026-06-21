@@ -24,3 +24,4 @@
 2026-06-20T17:03:42Z  v24  66d0163736d0d67648a7820da6cafe0322dbea82b25b2bbe058159e0f3c1b4bc  cc6717845ef59471c21986315892c09d7b411c7e  docs(ticket): record string-model slices 1-4p1 done; flip held
 2026-06-20T17:35:13Z  v25  fad360a78c6203dc3c9d17f1bed16b633273f4d212926f26e723f3c6c384de58  0b28bfedc0ed5479ff43ca747f7b8b7fd96e764c  Implement PCL graphics, drawing, canvas, PaintBox, and GTK Cairo backend
 2026-06-20T20:07:04Z  v26  227a58eb627ebcf9cf85fbcbddcb2ccd03dacd28359e9f891b4969a6ac53038f  1786e3620b331f4f8599b688bdb0d519482c0f85  test(string-model): RTTI typinfo frozen-name read + managed-flip regression
+2026-06-21T11:00:00Z  v27  2ca8787544fad6e8c23a37e11691af5f6b1f727badfc37c46f4ba781f96a251f  e8a69822bef8412f74cfaa7113bef33fa1028731  docs(tickets): movslq pointer-truncation DONE; lexer suffix-keyword REJECTED
