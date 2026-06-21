@@ -408,6 +408,7 @@ begin
   PasDefineNameOff[PasDefineCount] := PasDefineCharLen;
   PasDefineNameLen[PasDefineCount] := len;
   PasDefineActive[PasDefineCount] := True;
+  PasDefineHasValue[PasDefineCount] := False;
   j := 1;
   while j <= len do
   begin
@@ -426,6 +427,41 @@ begin
   while i < PasDefineCount do
   begin
     if PasDefineMatches(i, name) then PasDefineActive[i] := False;
+    Inc(i);
+  end;
+end;
+
+{ Attach (or update) an integer value on a define. v1 callers are compiler
+  presets / mimic init only; there is no {$DEFINE X:=value} source syntax yet. }
+procedure PasSetDefineValue(const name: AnsiString; value: Int64);
+var i: Integer;
+begin
+  PasDefine(name);
+  i := 0;
+  while i < PasDefineCount do
+  begin
+    if PasDefineActive[i] and PasDefineMatches(i, name) then
+    begin
+      PasDefineValue[i] := value;
+      PasDefineHasValue[i] := True;
+    end;
+    Inc(i);
+  end;
+end;
+
+{ True iff name is an active define carrying an integer value. }
+function PasDefineLookupValue(const name: AnsiString; var value: Int64): Boolean;
+var i: Integer;
+begin
+  Result := False;
+  i := 0;
+  while i < PasDefineCount do
+  begin
+    if PasDefineActive[i] and PasDefineMatches(i, name) and PasDefineHasValue[i] then
+    begin
+      value := PasDefineValue[i];
+      Result := True;
+    end;
     Inc(i);
   end;
 end;
@@ -466,6 +502,9 @@ begin
   PasDefine(name);
   name := 'LINUX';
   PasDefine(name);
+  { Valued preset so numeric {$IF X >= N} has something to evaluate without
+    mimic mode. PXX_VERSION tracks the pinned-stable generation (v26). }
+  PasSetDefineValue('PXX_VERSION', 26);
 end;
 
 procedure PasApplyPlatformDefines;
@@ -667,16 +706,24 @@ begin
   end;
 end;
 
+{ Relational ops carry single-char tags: =  <>=#  <=l  <==L  >=g  >==G.
+  Pascal precedence: not > and > or > relational. }
 function PasCondOpPrecedence(op: Char): Integer;
 begin
-  if op = '!' then PasCondOpPrecedence := 3
-  else if op = '&' then PasCondOpPrecedence := 2
-  else if op = '|' then PasCondOpPrecedence := 1
+  if op = '!' then PasCondOpPrecedence := 4
+  else if op = '&' then PasCondOpPrecedence := 3
+  else if op = '|' then PasCondOpPrecedence := 2
+  else if (op = '=') or (op = '#') or (op = 'l') or (op = 'L') or
+          (op = 'g') or (op = 'G') then PasCondOpPrecedence := 1
   else PasCondOpPrecedence := 0;
 end;
 
 var
   PasCondValues: array[0..63] of Boolean;
+  { Tagged value stack: parallel to PasCondValues. Kind 0 = bool (payload in
+    PasCondValues), 1 = int (payload in PasCondInt). }
+  PasCondValKind: array[0..63] of Integer;
+  PasCondInt: array[0..63] of Int64;
   PasCondOps: array[0..63] of Char;
   PasCondValueCount, PasCondOpCount: Integer;
   PasCondExprText: AnsiString;
@@ -701,8 +748,54 @@ begin
   end;
 end;
 
+procedure PasCondPushBool(b: Boolean);
+begin
+  if PasCondValueCount >= 64 then Error('conditional directive expression overflow');
+  PasCondValKind[PasCondValueCount] := 0;
+  PasCondValues[PasCondValueCount] := b;
+  Inc(PasCondValueCount);
+end;
+
+procedure PasCondPushInt(v: Int64);
+begin
+  if PasCondValueCount >= 64 then Error('conditional directive expression overflow');
+  PasCondValKind[PasCondValueCount] := 1;
+  PasCondInt[PasCondValueCount] := v;
+  Inc(PasCondValueCount);
+end;
+
+function PasCondWordIsDigits(const w: AnsiString): Boolean;
+var i: Integer;
+begin
+  Result := Length(w) > 0;
+  for i := 1 to Length(w) do
+    if (w[i] < '0') or (w[i] > '9') then Result := False;
+end;
+
+function PasCondWordToInt(const w: AnsiString): Int64;
+var i: Integer; v: Int64;
+begin
+  v := 0;
+  for i := 1 to Length(w) do
+    v := v * 10 + (Ord(w[i]) - Ord('0'));
+  Result := v;
+end;
+
+{ Read a value-stack slot as a boolean. A bool slot passes through; an int
+  slot is accepted only when it is exactly 0/1 (the FPC ordinal booleans, as in
+  the legacy `(...) and 1` idiom). Any other int in a boolean op is a loud
+  type-mix error — `5 and TRUE` must not silently coerce. }
+function PasCondSlotAsBool(idx: Integer): Boolean;
+begin
+  if PasCondValKind[idx] = 0 then Result := PasCondValues[idx]
+  else if PasCondInt[idx] = 0 then Result := False
+  else if PasCondInt[idx] = 1 then Result := True
+  else begin Result := False;
+    Error('conditional directive: and/or/not require boolean operands'); end;
+end;
+
 procedure PasCondApplyOp;
-var op: Char; lhs, rhs: Boolean;
+var op: Char; lhs, rhs, res: Boolean; li, ri: Int64;
 begin
   if PasCondOpCount <= 0 then Error('conditional directive: missing operator');
   Dec(PasCondOpCount);
@@ -710,23 +803,45 @@ begin
   if op = '!' then
   begin
     if PasCondValueCount < 1 then Error('conditional directive: missing operand');
-    PasCondValues[PasCondValueCount - 1] := not PasCondValues[PasCondValueCount - 1];
+    PasCondValues[PasCondValueCount - 1] := not PasCondSlotAsBool(PasCondValueCount - 1);
+    PasCondValKind[PasCondValueCount - 1] := 0;
   end
-  else
+  else if (op = '&') or (op = '|') then
   begin
     if PasCondValueCount < 2 then Error('conditional directive: missing operand');
     Dec(PasCondValueCount);
-    rhs := PasCondValues[PasCondValueCount];
-    lhs := PasCondValues[PasCondValueCount - 1];
+    rhs := PasCondSlotAsBool(PasCondValueCount);
+    lhs := PasCondSlotAsBool(PasCondValueCount - 1);
+    PasCondValKind[PasCondValueCount - 1] := 0;
     if op = '&' then PasCondValues[PasCondValueCount - 1] := lhs and rhs
-    else if op = '|' then PasCondValues[PasCondValueCount - 1] := lhs or rhs
-    else Error('conditional directive: bad operator');
+    else PasCondValues[PasCondValueCount - 1] := lhs or rhs;
+  end
+  else
+  begin
+    { relational: =  #(<>)  l(<)  L(<=)  g(>)  G(>=) }
+    if PasCondValueCount < 2 then Error('conditional directive: missing operand');
+    Dec(PasCondValueCount);
+    if (PasCondValKind[PasCondValueCount] <> 1) or
+       (PasCondValKind[PasCondValueCount - 1] <> 1) then
+      Error('conditional directive: comparison requires integer operands');
+    ri := PasCondInt[PasCondValueCount];
+    li := PasCondInt[PasCondValueCount - 1];
+    if op = '=' then res := li = ri
+    else if op = '#' then res := li <> ri
+    else if op = 'l' then res := li < ri
+    else if op = 'L' then res := li <= ri
+    else if op = 'g' then res := li > ri
+    else if op = 'G' then res := li >= ri
+    else begin res := False; Error('conditional directive: bad operator'); end;
+    PasCondValKind[PasCondValueCount - 1] := 0;
+    PasCondValues[PasCondValueCount - 1] := res;
   end;
 end;
 
 function EvalPasCondExprText(const text: AnsiString): Boolean;
 var word, name: AnsiString;
-  op: Char;
+  op, c: Char;
+  intval: Int64;
   expectValue, done: Boolean;
 begin
   PasCondExprText := text;
@@ -758,6 +873,39 @@ begin
       Inc(PasCondExprPos);
       while (PasCondOpCount > 0) and (PasCondOps[PasCondOpCount - 1] = '!') do
         PasCondApplyOp;
+    end
+    else if (PasCondExprText[PasCondExprPos] = '<') or
+            (PasCondExprText[PasCondExprPos] = '>') or
+            (PasCondExprText[PasCondExprPos] = '=') then
+    begin
+      if expectValue then Error('conditional directive: expected operand');
+      c := PasCondExprText[PasCondExprPos];
+      Inc(PasCondExprPos);
+      if c = '=' then op := '='
+      else if c = '<' then
+      begin
+        if (PasCondExprPos <= Length(PasCondExprText)) and
+           (PasCondExprText[PasCondExprPos] = '=') then
+        begin op := 'L'; Inc(PasCondExprPos); end
+        else if (PasCondExprPos <= Length(PasCondExprText)) and
+                (PasCondExprText[PasCondExprPos] = '>') then
+        begin op := '#'; Inc(PasCondExprPos); end
+        else op := 'l';
+      end
+      else { '>' }
+      begin
+        if (PasCondExprPos <= Length(PasCondExprText)) and
+           (PasCondExprText[PasCondExprPos] = '=') then
+        begin op := 'G'; Inc(PasCondExprPos); end
+        else op := 'g';
+      end;
+      while (PasCondOpCount > 0) and (PasCondOps[PasCondOpCount - 1] <> '(') and
+            (PasCondOpPrecedence(PasCondOps[PasCondOpCount - 1]) >= PasCondOpPrecedence(op)) do
+        PasCondApplyOp;
+      if PasCondOpCount >= 64 then Error('conditional directive nesting overflow');
+      PasCondOps[PasCondOpCount] := op;
+      Inc(PasCondOpCount);
+      expectValue := True;
     end
     else
     begin
@@ -798,17 +946,20 @@ begin
              (PasCondExprText[PasCondExprPos] <> ')') then
             Error('conditional directive: defined requires (NAME)');
           Inc(PasCondExprPos);
-          if PasCondValueCount >= 64 then Error('conditional directive expression overflow');
-          PasCondValues[PasCondValueCount] := PasDefineExists(name);
+          PasCondPushBool(PasDefineExists(name));
         end
-        else
+        else if PasCondWordIsDigits(word) then
         begin
-          if PasCondValueCount >= 64 then Error('conditional directive expression overflow');
-          if word = '1' then PasCondValues[PasCondValueCount] := True
-          else if word = '0' then PasCondValues[PasCondValueCount] := False
-          else PasCondValues[PasCondValueCount] := PasDefineExists(word);
-        end;
-        Inc(PasCondValueCount);
+          { Reject float literals loudly rather than mis-evaluating. }
+          if (PasCondExprPos <= Length(PasCondExprText)) and
+             (PasCondExprText[PasCondExprPos] = '.') then
+            Error('conditional directive: float literals not supported');
+          PasCondPushInt(PasCondWordToInt(word));
+        end
+        else if PasDefineLookupValue(word, intval) then
+          PasCondPushInt(intval)
+        else
+          PasCondPushBool(PasDefineExists(word));
         expectValue := False;
         while (PasCondOpCount > 0) and (PasCondOps[PasCondOpCount - 1] = '!') do
           PasCondApplyOp;
@@ -822,7 +973,12 @@ begin
     PasCondApplyOp;
   end;
   if PasCondValueCount <> 1 then Error('conditional directive: malformed expression');
-  EvalPasCondExprText := PasCondValues[0];
+  { Top-level bare integer is FPC-truthy (0=false, nonzero=true); covers the
+    legacy {$IF 1}/{$IF 0} forms. Comparisons/idents already reduced to bool. }
+  if PasCondValKind[0] = 1 then
+    EvalPasCondExprText := PasCondInt[0] <> 0
+  else
+    EvalPasCondExprText := PasCondValues[0];
 end;
 
 function ParsePasCondExpr: Boolean;

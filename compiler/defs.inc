@@ -645,6 +645,8 @@ var
   PasDefineNameOff : array[0..MAX_PAS_DEFINES-1] of Integer;
   PasDefineNameLen : array[0..MAX_PAS_DEFINES-1] of Integer;
   PasDefineActive  : array[0..MAX_PAS_DEFINES-1] of Boolean;
+  PasDefineValue   : array[0..MAX_PAS_DEFINES-1] of Int64;
+  PasDefineHasValue: array[0..MAX_PAS_DEFINES-1] of Boolean;
   PasDefineCharLen : Integer;
   PasDefineCount   : Integer;
   PasCondParent    : array[0..MAX_PAS_CONDS-1] of Boolean;

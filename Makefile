@@ -702,6 +702,12 @@ test-core: $(COMPILER)
 	grep -q "requested failure" /tmp/test_pascal_directive_error.log
 	./$(COMPILER) test/test_pascal_conditional_include.pas /tmp/test_pascal_conditional_include26
 	test "$$(/tmp/test_pascal_conditional_include26)" = "$$(printf '42\n7')"
+	./$(COMPILER) test/test_directive_if_numeric.pas /tmp/test_directive_if_numeric26
+	test "$$(/tmp/test_directive_if_numeric26)" = "$$(printf '1\n0\n1\n0\n0\n1\n0\n1\n1')"
+	! ./$(COMPILER) test/test_directive_if_typemix.pas /tmp/test_directive_if_typemix26 > /tmp/test_directive_if_typemix.log 2>&1
+	grep -q "boolean operands" /tmp/test_directive_if_typemix.log
+	! ./$(COMPILER) test/test_directive_if_float.pas /tmp/test_directive_if_float26 > /tmp/test_directive_if_float.log 2>&1
+	grep -q "float literals not supported" /tmp/test_directive_if_float.log
 	./$(COMPILER) test/test_strict_overload.pas /tmp/test_strict_overload26
 	test "$$(/tmp/test_strict_overload26)" = "$$(printf '5\n65')"
 	! ./$(COMPILER) test/test_strict_overload_error.pas /tmp/test_strict_overload_error26 > /tmp/test_strict_overload_error.log 2>&1

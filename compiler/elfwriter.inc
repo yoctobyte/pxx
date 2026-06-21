@@ -1458,6 +1458,8 @@ var
   cond, active: Boolean;
   condParent, condActive, condTaken: array[0..MAX_PAS_CONDS-1] of Boolean;
   savedDefineActive: array[0..MAX_PAS_DEFINES-1] of Boolean;
+  savedDefineHasValue: array[0..MAX_PAS_DEFINES-1] of Boolean;
+  savedDefineValue: array[0..MAX_PAS_DEFINES-1] of Int64;
 {$ifdef FPC}
   c: Char;
 {$else}
@@ -1468,7 +1470,11 @@ begin
   savedDefineCount := PasDefineCount;
   savedDefineCharLen := PasDefineCharLen;
   for k := 0 to MAX_PAS_DEFINES - 1 do
+  begin
     savedDefineActive[k] := PasDefineActive[k];
+    savedDefineHasValue[k] := PasDefineHasValue[k];
+    savedDefineValue[k] := PasDefineValue[k];
+  end;
   condCount := 0;
   active := True;
   SetLength(IncExpanded, 0);
@@ -1638,6 +1644,10 @@ begin
   PasDefineCount := savedDefineCount;
   PasDefineCharLen := savedDefineCharLen;
   for k := 0 to MAX_PAS_DEFINES - 1 do
+  begin
     PasDefineActive[k] := savedDefineActive[k];
+    PasDefineHasValue[k] := savedDefineHasValue[k];
+    PasDefineValue[k] := savedDefineValue[k];
+  end;
   src := IncExpanded;
 end;
