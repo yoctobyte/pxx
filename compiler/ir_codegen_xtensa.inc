@@ -326,7 +326,15 @@ procedure IREmitNodeXtensa(node: Integer); forward;
 
 function Is64BitXtensa(tk: TTypeKind): Boolean;
 begin
-  Result := (tk = tyInt64) or (tk = tyUInt64);
+  { Double occupies an a2:a3 pair / 8-byte slot, same shape as Int64 — the
+    value-model paths (const/load/store) treat it as 64-bit. Float arithmetic is
+    dispatched separately (IsFloatXtensa, checked first). }
+  Result := (tk = tyInt64) or (tk = tyUInt64) or (tk = tyDouble);
+end;
+
+function IsFloatXtensa(tk: TTypeKind): Boolean;
+begin
+  Result := (tk = tySingle) or (tk = tyDouble);
 end;
 
 procedure EmitLoadConst64Xtensa(v: Int64);
@@ -649,6 +657,138 @@ begin
     Error('target xtensa: 64-bit binop operator not yet supported');
 end;
 
+procedure EmitFloatUnaryCallXtensa(const nm: AnsiString; srcDouble, dstDouble: Boolean);
+{ Argument already in a2 (single/int) or a2:a3 (double). Call the kernel and
+  leave its result in a2 (single/int) or a2:a3 (double). ABI-aware. }
+var procIdx: Integer;
+begin
+  procIdx := FindProc(nm);
+  if procIdx < 0 then Error('compiler error: ' + nm + ' not found (uses softfloat?)');
+  if XtensaABI = XTENSA_ABI_WINDOWED then
+  begin
+    xtensa_mov(reg_xtensa_a10, reg_xtensa_a2);
+    if srcDouble then xtensa_mov(reg_xtensa_a11, reg_xtensa_a3);
+    EmitCallProc(procIdx);
+    xtensa_mov(reg_xtensa_a2, reg_xtensa_a10);
+    if dstDouble then xtensa_mov(reg_xtensa_a3, reg_xtensa_a11);
+  end
+  else
+    EmitCallProc(procIdx);   { Call0: args already a2(:a3); result a2(:a3) }
+end;
+
+procedure EmitFloatConvXtensa(srcTk, dstTk: TTypeKind);
+{ Repack value (a2 / a2:a3) from one float width to the other, in place. }
+begin
+  if srcTk = dstTk then Exit;
+  if (srcTk = tySingle) and (dstTk = tyDouble) then
+    EmitFloatUnaryCallXtensa('__pxx_s2d', False, True)
+  else if (srcTk = tyDouble) and (dstTk = tySingle) then
+    EmitFloatUnaryCallXtensa('__pxx_d2s', True, False)
+  else
+    Error('target xtensa: unsupported float-to-float conversion');
+end;
+
+procedure EmitFloatOperandXtensa(node: Integer; wantTk: TTypeKind);
+{ Emit node and coerce its value to wantTk (a float kind) in a2 / a2:a3. }
+var ntk: TTypeKind;
+begin
+  ntk := IntToTypeKind(IRTk[node]);
+  if IsFloatXtensa(ntk) then
+  begin
+    if ntk = tyDouble then EmitNode64Xtensa(node) else IREmitNodeXtensa(node);
+    EmitFloatConvXtensa(ntk, wantTk);
+  end
+  else
+  begin
+    if (ntk = tyInt64) or (ntk = tyUInt64) then
+    begin
+      Error('target xtensa: Int64-to-float conversion not yet supported');
+      Exit;
+    end;
+    IREmitNodeXtensa(node);            { a2 = 32-bit int }
+    if wantTk = tySingle then EmitFloatUnaryCallXtensa('__pxx_i2s', False, False)
+    else EmitFloatUnaryCallXtensa('__pxx_i2d', False, True);
+  end;
+end;
+
+procedure EmitFloatCmpMapXtensa(op: Integer);
+{ Map a soft-float compare code in a2 (-1/0/1, or 2 for NaN/unordered) to a
+  Boolean 0/1 in a2. NaN-correct: only Eq/Neq/Lt/Le/Gt/Ge as defined for IEEE
+  (unordered makes every relation false except <>). Uses a8/a9/a10 scratch. }
+begin
+  if op = Ord(tkEq) then
+    EmitAsmXtensa(['movi a9, 0', 'movi a8, 0', 'bne a2, a9, .e', 'movi a8, 1', '.e:', 'mov a2, a8'])
+  else if op = Ord(tkNeq) then
+    EmitAsmXtensa(['movi a9, 0', 'movi a8, 1', 'bne a2, a9, .e', 'movi a8, 0', '.e:', 'mov a2, a8'])
+  else if op = Ord(tkLt) then
+    EmitAsmXtensa(['movi a9, 0', 'movi a8, 1', 'blt a2, a9, .e', 'movi a8, 0', '.e:', 'mov a2, a8'])
+  else if op = Ord(tkLe) then
+    EmitAsmXtensa(['movi a10, 1', 'movi a8, 1', 'blt a2, a10, .e', 'movi a8, 0', '.e:', 'mov a2, a8'])
+  else if op = Ord(tkGt) then
+    EmitAsmXtensa(['movi a10, 1', 'movi a8, 0', 'bne a2, a10, .e', 'movi a8, 1', '.e:', 'mov a2, a8'])
+  else if op = Ord(tkGe) then
+    EmitAsmXtensa(['movi a9, 0', 'movi a10, 2', 'movi a8, 0', 'blt a2, a9, .e', 'bge a2, a10, .e', 'movi a8, 1', '.e:', 'mov a2, a8'])
+  else
+    Error('target xtensa: unsupported float comparison');
+end;
+
+procedure EmitFloatBinopXtensa(node: Integer);
+{ Float arithmetic + comparison via the soft-float kernels (both widths soft;
+  HW single FPU is a follow-up). Arithmetic result lands in a2 / a2:a3; a
+  comparison lands as a Boolean 0/1 in a2. }
+var left, right, op, procIdx, argBase, nArgs, i: Integer; ltk, rtk, opTk: TTypeKind;
+    isDouble, isCmp: Boolean; nm: AnsiString;
+begin
+  left := IRA[node]; right := IRB[node]; op := IRC[node];
+  ltk := IntToTypeKind(IRTk[left]); rtk := IntToTypeKind(IRTk[right]);
+  isDouble := (ltk = tyDouble) or (rtk = tyDouble);
+  if isDouble then opTk := tyDouble else opTk := tySingle;
+  isCmp := (op = Ord(tkEq)) or (op = Ord(tkNeq)) or (op = Ord(tkLt)) or
+           (op = Ord(tkGt)) or (op = Ord(tkLe)) or (op = Ord(tkGe));
+
+  argBase := XtSpillDepth;
+  EmitFloatOperandXtensa(left, opTk);
+  XtensaPushA2;
+  if isDouble then begin xtensa_mov(reg_xtensa_a2, reg_xtensa_a3); XtensaPushA2; end;
+  EmitFloatOperandXtensa(right, opTk);
+  XtensaPushA2;
+  if isDouble then begin xtensa_mov(reg_xtensa_a2, reg_xtensa_a3); XtensaPushA2; end;
+  if isDouble then nArgs := 4 else nArgs := 2;
+
+  { Load outgoing argument registers (mirrors the generic IR_CALL marshalling). }
+  if XtensaABI = XTENSA_ABI_WINDOWED then
+  begin
+    for i := 0 to nArgs - 1 do
+      xtensa_l32i(reg_xtensa_a10 + i, reg_xtensa_sp, argBase + i * 4);
+    XtSpillDepth := argBase;
+  end
+  else
+  begin
+    for i := 0 to nArgs - 1 do
+      xtensa_l32i(reg_xtensa_a2 + i, reg_xtensa_sp, (nArgs - 1 - i) * 4);
+    xtensa_addi(reg_xtensa_sp, reg_xtensa_sp, nArgs * 4);
+  end;
+
+  if isDouble then nm := '__pxx_d' else nm := '__pxx_s';
+  if op = Ord(tkPlus) then nm := nm + 'add'
+  else if op = Ord(tkMinus) then nm := nm + 'sub'
+  else if op = Ord(tkStar) then nm := nm + 'mul'
+  else if op = Ord(tkSlash) then nm := nm + 'div'
+  else if isCmp then nm := nm + 'cmp'
+  else begin Error('target xtensa: unsupported float operator'); Exit; end;
+
+  procIdx := FindProc(nm);
+  if procIdx < 0 then Error('compiler error: ' + nm + ' not found (uses softfloat?)');
+  EmitCallProc(procIdx);
+  if XtensaABI = XTENSA_ABI_WINDOWED then
+  begin
+    xtensa_mov(reg_xtensa_a2, reg_xtensa_a10);
+    if isDouble and not isCmp then xtensa_mov(reg_xtensa_a3, reg_xtensa_a11);
+  end;
+
+  if isCmp then EmitFloatCmpMapXtensa(op);
+end;
+
 procedure IREmitNodeXtensa(node: Integer);
 var
   left, right, op, si, procIdx, nArgs, i, lo, elemSize, sz, argNode, argBase, valNode, j: Integer;
@@ -753,6 +893,18 @@ begin
           else
             EmitSlotAddrXtensa(reg_xtensa_a8, si);          { slot addr }
           xtensa_s32i(reg_xtensa_a2, reg_xtensa_a8, 0);     { slot := new }
+          Exit;
+        end;
+        { Float destination: coerce the RHS to the slot's float width before the
+          store. Must precede the Is64Bit branch (a Double slot is Is64Bit but a
+          non-double RHS needs conversion, not a raw 64-bit move). }
+        if IsFloatXtensa(Syms[IRA[node]].TypeKind) then
+        begin
+          EmitFloatOperandXtensa(IRB[node], Syms[IRA[node]].TypeKind);
+          if Syms[IRA[node]].TypeKind = tyDouble then
+            EmitStoreVar64Xtensa(IRA[node])
+          else
+            EmitStoreVarXtensa(IRA[node]);
           Exit;
         end;
         if Is64BitXtensa(Syms[IRA[node]].TypeKind) then
@@ -1047,6 +1199,17 @@ begin
             xtensa_movi(reg_xtensa_a8, 1);
             xtensa_xor(reg_xtensa_a2, reg_xtensa_a2, reg_xtensa_a8);
           end;
+          Exit;
+        end;
+
+        { Float arithmetic/compare via the soft-float kernels. MUST precede the
+          64-bit check — Double is Is64Bit (a2:a3 storage shape) but its
+          arithmetic is soft-float, not integer. Key off the operands. }
+        if IsFloatXtensa(IntToTypeKind(IRTk[node])) or
+           IsFloatXtensa(IntToTypeKind(IRTk[left])) or
+           IsFloatXtensa(IntToTypeKind(IRTk[right])) then
+        begin
+          EmitFloatBinopXtensa(node);
           Exit;
         end;
 
