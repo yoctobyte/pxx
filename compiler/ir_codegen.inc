@@ -660,7 +660,7 @@ end;
 procedure EmitReadLine;
 { Read one line from stdin (fd 0) into BSS_LINE_BUF, byte at a time, stopping at
   '\n' or EOF; '\r' is skipped. Sets BSS_LINE_LEN, resets BSS_LINE_POS. }
-var loopStart, j1, j2, jSkip: Integer;
+var loopStart, j1, j2, jSkip, jPeek, jHave: Integer;
 begin
   EmitB($48); EmitB($8B); EmitB($04); EmitB($25); EmitGlobRef(BSS_LINE_POS);   { mov rax,[pos] }
   EmitB($48); EmitB($8B); EmitB($0C); EmitB($25); EmitGlobRef(BSS_LINE_LEN);   { mov rcx,[len] }
@@ -673,7 +673,19 @@ begin
   EmitB($48); EmitB($8D); EmitB($34); EmitB($25); EmitGlobRef(BSS_LINE_BUF);   { lea rsi,[buf] }
   EmitB($48); EmitB($8B); EmitB($04); EmitB($25); EmitGlobRef(BSS_LINE_LEN);   { mov rax,[len] }
   EmitB($48); EmitB($01); EmitB($C6);                                          { add rsi,rax }
+  { If Eof left a pushed-back byte, consume it here instead of reading, so the
+    byte it peeked is not lost. Otherwise read one byte from stdin (fd 0). }
+  EmitB($48); EmitB($8B); EmitB($04); EmitB($25); EmitGlobRef(BSS_PEEK_VALID);  { mov rax,[peek_valid] }
+  EmitB($48); EmitB($85); EmitB($C0);                                          { test rax,rax }
+  EmitB($74); jPeek := CodeLen; EmitB(0);                                       { jz doread }
+  EmitB($8A); EmitB($04); EmitB($25); EmitGlobRef(BSS_PEEK_BYTE);               { mov al,[peek_byte] }
+  EmitB($88); EmitB($06);                                                      { mov [rsi],al }
+  EmitB($48); EmitB($C7); EmitB($04); EmitB($25); EmitGlobRef(BSS_PEEK_VALID); EmitI32(0); { mov q[peek_valid],0 }
+  EmitB($48); EmitB($C7); EmitB($C0); EmitI32(1);                              { mov rax,1 (count) }
+  EmitB($EB); jHave := CodeLen; EmitB(0);                                       { jmp havebyte }
+  Code[jPeek] := Byte(CodeLen - (jPeek + 1));                                   { doread: }
   MovRdiImm(0); MovRdxImm(1); MovRaxImm(SYS_READ); EmitSyscall;
+  Code[jHave] := Byte(CodeLen - (jHave + 1));                                   { havebyte: }
   EmitB($48); EmitB($85); EmitB($C0);                                          { test rax,rax }
   EmitB($0F); EmitB($8E); j1 := CodeLen; EmitI32(0);                           { jle done }
   EmitB($48); EmitB($0F); EmitB($B6); EmitB($0E);                              { movzx rcx,byte[rsi] }
@@ -688,6 +700,42 @@ begin
   Patch32(j1, CodeLen - (j1 + 4));
   Patch32(j2, CodeLen - (j2 + 4));
   Patch32(jSkip, CodeLen - (jSkip + 4));
+end;
+
+procedure EmitEof;
+{ Standard-input Eof: rax := 1 if stdin is at end, else 0. Boolean result.
+  Not-eof if the current line buffer still holds unparsed content (pos < len) or
+  a pushed-back byte is already held. Otherwise peek one byte from fd 0: a read of
+  <= 0 is EOF; a real byte is stashed in BSS_PEEK_BYTE (consumed by the next
+  EmitReadLine read) and reported as not-eof. }
+var jNotEof1, jNotEof2, jEof, jDone1, jDone2: Integer;
+begin
+  { pos < len -> not eof }
+  EmitB($48); EmitB($8B); EmitB($04); EmitB($25); EmitGlobRef(BSS_LINE_POS);    { mov rax,[pos] }
+  EmitB($48); EmitB($8B); EmitB($0C); EmitB($25); EmitGlobRef(BSS_LINE_LEN);    { mov rcx,[len] }
+  EmitB($48); EmitB($39); EmitB($C8);                                          { cmp rax,rcx }
+  EmitB($0F); EmitB($8C); jNotEof1 := CodeLen; EmitI32(0);                      { jl noteof }
+  { peek_valid -> not eof }
+  EmitB($48); EmitB($8B); EmitB($04); EmitB($25); EmitGlobRef(BSS_PEEK_VALID);  { mov rax,[peek_valid] }
+  EmitB($48); EmitB($85); EmitB($C0);                                          { test rax,rax }
+  EmitB($0F); EmitB($85); jNotEof2 := CodeLen; EmitI32(0);                      { jnz noteof }
+  { peek one byte into BSS_PEEK_BYTE }
+  EmitB($48); EmitB($8D); EmitB($34); EmitB($25); EmitGlobRef(BSS_PEEK_BYTE);   { lea rsi,[peek_byte] }
+  MovRdiImm(0); MovRdxImm(1); MovRaxImm(SYS_READ); EmitSyscall;
+  EmitB($48); EmitB($85); EmitB($C0);                                          { test rax,rax }
+  EmitB($0F); EmitB($8E); jEof := CodeLen; EmitI32(0);                          { jle eof }
+  { got a byte: mark held, report not eof }
+  EmitB($48); EmitB($C7); EmitB($04); EmitB($25); EmitGlobRef(BSS_PEEK_VALID); EmitI32(1); { mov q[peek_valid],1 }
+  EmitB($48); EmitB($31); EmitB($C0);                                          { xor rax,rax }
+  EmitB($EB); jDone1 := CodeLen; EmitB(0);                                      { jmp done }
+  Patch32(jEof, CodeLen - (jEof + 4));                                          { eof: }
+  EmitB($48); EmitB($C7); EmitB($C0); EmitI32(1);                              { mov rax,1 }
+  EmitB($EB); jDone2 := CodeLen; EmitB(0);                                      { jmp done }
+  Patch32(jNotEof1, CodeLen - (jNotEof1 + 4));                                  { noteof: }
+  Patch32(jNotEof2, CodeLen - (jNotEof2 + 4));
+  EmitB($48); EmitB($31); EmitB($C0);                                          { xor rax,rax }
+  Code[jDone1] := Byte(CodeLen - (jDone1 + 1));                                 { done: }
+  Code[jDone2] := Byte(CodeLen - (jDone2 + 1));
 end;
 
 procedure EmitReadVarParse(tk: TTypeKind);
@@ -3021,6 +3069,11 @@ begin
               IREmitNode(val1Node); { evaluates address -> rax }
               EmitB($48); EmitB($8B); EmitB($00); { mov rax, [rax] }
             end;
+          end
+          else if specialId = 210 then
+          begin
+            { Eof (standard input), no args -> Boolean in rax. }
+            EmitEof;
           end
           else if (specialId = Ord(tkOrd)) or (specialId = Ord(tkChr)) or
                   (specialId = Ord(tkInteger_T)) or (specialId = Ord(tkLongWord_T)) or

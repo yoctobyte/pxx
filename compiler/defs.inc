@@ -1012,6 +1012,8 @@ var
   BSS_LINE_BUF    : Integer;  { readln line buffer }
   BSS_LINE_LEN    : Integer;  { bytes currently in line buffer }
   BSS_LINE_POS    : Integer;  { parse cursor into line buffer }
+  BSS_PEEK_VALID  : Integer;  { Eof one-byte stdin pushback: 1 if a byte is held }
+  BSS_PEEK_BYTE   : Integer;  { the held pushback byte (consumed by next read) }
   ExceptionUsed   : Boolean;
   ProcExceptionCleanupFrameActive: Boolean;
   InLValueWrite   : Boolean;

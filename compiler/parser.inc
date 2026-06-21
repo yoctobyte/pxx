@@ -3132,6 +3132,37 @@ begin
       if (idx >= 0) and (Syms[idx].TypeKind = tyAuto) then
         Error('use of auto variable before type is inferred');
 
+      { `Eof` (standard input), no args -> Boolean. The textfile RTL declares
+        `Eof(var f: Text)`, but a bare `Eof` / `Eof()` cannot bind that file arg,
+        so the no-arg form routes to stdin Eof regardless of that proc; the
+        `Eof(f)` form (a `(` followed by an argument) falls through to the real
+        routine. `idx < 0` keeps a user variable named Eof winning as a var.
+        Lowers to the special-builtin call id 210 (EmitEof). }
+      if CaseEqual(name, 'Eof') and (idx < 0) and
+         (Tokens[TokPos].Kind <> tkLParen) then
+      begin
+        Next;                                  { consume Eof }
+        node := AllocNode(AN_CALL);
+        ASTIVal[node] := -210;
+        ASTTk[node] := Ord(tyBoolean);
+        ASTLeft[node] := -1;
+        CurASTNode := node;
+        LastExprTk := tyBoolean;
+        Exit;
+      end;
+      if CaseEqual(name, 'Eof') and (idx < 0) and
+         (Tokens[TokPos].Kind = tkLParen) and (Tokens[TokPos + 1].Kind = tkRParen) then
+      begin
+        Next; Next; Next;                      { consume Eof ( ) }
+        node := AllocNode(AN_CALL);
+        ASTIVal[node] := -210;
+        ASTTk[node] := Ord(tyBoolean);
+        ASTLeft[node] := -1;
+        CurASTNode := node;
+        LastExprTk := tyBoolean;
+        Exit;
+      end;
+
       { `Supports(obj, IFoo): Boolean` — the function form of `obj is IFoo`.
         Reuses the interface implementation query (AN_IS_TEST). }
       if CaseEqual(name, 'Supports') and (procIdx < 0) and (Tokens[TokPos].Kind = tkLParen) then
@@ -11442,6 +11473,8 @@ begin
   BSS_HEAP_LOCK   := BSSSize; Inc(BSSSize, 8);
   BSS_LINE_POS    := BSSSize; Inc(BSSSize, 8);
   BSS_LINE_LEN    := BSSSize; Inc(BSSSize, 8);
+  BSS_PEEK_VALID  := BSSSize; Inc(BSSSize, 8);
+  BSS_PEEK_BYTE   := BSSSize; Inc(BSSSize, 8);
   BSS_LINE_BUF    := BSSSize; Inc(BSSSize, LINE_BUF_SIZE);
   BSS_INTBUF      := BSSSize; Inc(BSSSize, INTBUF_SIZE);
   ExceptionUsed := False;

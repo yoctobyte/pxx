@@ -8,12 +8,13 @@ lives in git, not in a timestamp._
 
 _none_
 
-## working (4)
+## working (5)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
 | feature-c-runtime-library | B | feature | C runtime/library layer (`lib/crtl`) plus direct C-library packages | feature-c-source-frontend |
 | feature-demo-file-browser | B | feature | Flagship Demo — Midnight Commander-like TUI file browser (libc-free) | — |
+| feature-pcl-opengl-glarea-demo | B | feature | PCL OpenGL GLArea demo | — |
 | feature-platform-abstraction-layer | B | feature | Platform Abstraction Layer (PAL): per-platform RTL port at one seam | — |
 | feature-sys-getdents | B | feature | Directory scanning support — sys_getdents64 (libc-free) | — |
 
@@ -22,6 +23,7 @@ _none_
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
 | bug-bare-function-name-call-vs-resultvar | A | bug | Bare function name in an expression: PXX calls it, FPC/ISO reads the result var | — |
+| bug-method-call-free-tobject | A | bug | `obj.Free` rejected — built-in TObject has no `Free` method | — |
 | chess-pal-getdents-link | B | chess | examples/chess: PalBackendGetDents64 undefined (PAL backend not linked) | — |
 | chore-inc-to-units | A | chore | `.inc` → real `.pas` units refactor | — |
 | chore-runtime-emission-size | A | chore | Finer runtime-support emission (code size) | — |
@@ -52,7 +54,6 @@ _none_
 | feature-dwarf-debug-info | A | feature | DWARF debug info (`-g`) — phased, x86-64 first | — |
 | feature-dynamic-include-paths-config | A | feature | Dynamic Include Paths, Configuration Files, and System Scanner | — |
 | feature-dynamic-soname-discovery | A | feature | Dynamic soname discovery (no execve) | — |
-| feature-eof-stdin-builtin | A | feature | `Eof` (standard input) not recognized | — |
 | feature-esp32-idf-xtensa | A | feature | ESP-IDF integration: Xtensa (ESP32-S2/S3) — QEMU + real hardware | — |
 | feature-esp-peripheral-callback-api | BB//B/BAB | feature | ESP32 peripheral callback API (timer / GPIO / ADC) — the user-facing "interrupt" | — |
 | feature-extended-alias-or-reject | A | feature | Extended: formalize as Double alias (or reject) | — |
@@ -108,7 +109,7 @@ _none_
 
 _none_
 
-## done (131)
+## done (132)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -187,6 +188,7 @@ _none_
 | feature-double-to-single-narrowing | A | feature | Double literal / value → Single narrowing on assign and argument | — |
 | feature-elf-rel-writer | A | feature | Relocatable ELF32 object writer (.o for ESP-IDF linking) | — |
 | feature-empty-class-shorthand | A | feature | Empty class descendant shorthand | — |
+| feature-eof-stdin-builtin | A | feature | `Eof` (standard input) not recognized | — |
 | feature-esp32-bare-boot | A | feature | ESP32 bare-metal boot profile (no IDF) | — |
 | feature-esp32-idf-riscv32 | A | feature | ESP-IDF integration: riscv32 (ESP32-C3) end-to-end | feature-elf-rel-writer |
 | feature-esp32-isr-iram | B | feature | ESP32: Compiler-Directed ISR and IRAM Support | — |
@@ -255,6 +257,7 @@ _none_
 ## Ready (no unmet blocker)
 
 - [A] bug-bare-function-name-call-vs-resultvar
+- [A] bug-method-call-free-tobject
 - [B] chess-pal-getdents-link
 - [A] chore-inc-to-units
 - [A] chore-runtime-emission-size
@@ -285,7 +288,6 @@ _none_
 - [A] feature-dwarf-debug-info
 - [A] feature-dynamic-include-paths-config
 - [A] feature-dynamic-soname-discovery
-- [A] feature-eof-stdin-builtin
 - [A] feature-esp32-idf-xtensa
 - [BB//B/BAB] feature-esp-peripheral-callback-api
 - [A] feature-extended-alias-or-reject
