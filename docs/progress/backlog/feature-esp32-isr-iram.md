@@ -51,8 +51,32 @@ indirect call into flash (`esp_rom_printf`), the mirrored restore, and `mret`.
   `ProcAddrFix` so the handler address can be handed to a setup routine; or run on
   real esp32c3 hardware. (This is the "not qemu-validatable without a vector
   table" the deferral noted.)
-- **xtensa `interrupt;`** still errors — windowed-exception ISRs need EPC/EPS +
-  `rfi`/`rfe` + the windowed register spill, materially more involved than riscv.
+- **xtensa `interrupt;` — PRIORITY next (serves the ESP32-S3 board).** Still
+  errors (`parser.inc`, the `isInterrupt and TargetArch <> TARGET_RISCV32` guard).
+  Mirror the riscv shape but for the Xtensa exception/interrupt model:
+  - **Where:** `EmitProcPrologue` / `EmitProcEpilog` xtensa branches (`symtab.inc`,
+    same `ProcIsInterrupt[CurProc]` gate as riscv). `interrupt` already implies
+    `iram` so `.iram1.text` placement is free.
+  - **Save/restore:** preserve the interrupted caller-saved context. On the **bare
+    Call0** profile (start here, simplest — `--esp-profile=bare` forces Call0) save
+    the a-regs the body clobbers (a2-a15 less the frame regs; codegen uses a2-a8,
+    a10-a13) to a fixed save area above the frame, mirror on exit. The **windowed**
+    ABI is the hard part — an interrupt can hit mid-window; needs the window spilled
+    (or a dedicated interrupt stack) — defer windowed until Call0 works.
+  - **Return:** not a normal `ret`. Level-1 interrupt/exception returns via **`rfe`**
+    (return-from-exception, PS.EXCM) for the general exception, or **`rfi 1`** for a
+    high-priority level-1 interrupt; EPC1/EPS1 hold the restart PC/state (set by HW).
+    Pick `rfe` for the general-exception vector path; document the level assumption.
+  - **Encoders:** add `xtensa_rfe`/`xtensa_rfi`/`wsr`/`rsr` to `xtensaenc.inc`
+    (encoding oracle: `xtensa-esp32s3-elf-as` — same one used for the FP insns;
+    `llvm-mc-18` lacks Xtensa FP/CSR). `rfe`=0x003000, `rfi n`=0x003010|(n<<4)
+    (verify with the oracle).
+  - **Validate:** structural only, same as riscv (`--emit-obj` +
+    `xtensa-esp32s3-elf-objdump`: handler in `.iram1.text`, save/restore + `rfe`).
+    Live-fire needs a vector-table install (no Xtensa inline-asm/CSR from PXX yet),
+    so it's QEMU-unvalidatable without that scaffolding — same gap as riscv below.
+  - **Reference:** the riscv implementation (9ab4304) is the template; arm32's
+    register-pair save shapes are unrelated here.
 - **`@isr` proc-address fixups in the `.o`** — DONE 2026-06-21 (fef87c2) for the
   iram-writer path (`writeELF32RelIram`): each `IR_PROCADDR` literal gets an
   absolute `R_*_32` reloc against the target proc symbol, so `@MyIsr` handed to
