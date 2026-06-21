@@ -45,5 +45,12 @@ never rebuild the compiler. `make lib-test` (green smoke) / `make demos`
   safe; you do NOT need to ask each time. The old "never push without ok" rule is
   retired. Still: don't push a known-broken or mid-refactor state, and don't push
   another agent's in-flight uncommitted work — only what you committed.
-- Tickets live in `docs/progress/{urgent,working,backlog,blocked,done,rejected}/`;
-  regenerate `BOARD.md` after moving them.
+- Tickets live in
+  `docs/progress/{urgent,working,unfinished,backlog,blocked,done,rejected}/`;
+  regenerate `BOARD.md` after moving them. `working/` is a **live lock** — a
+  ticket sits there only while an agent is actively on it. When work halts with
+  the ticket incomplete (e.g. parked waiting on another fix), move it to
+  `unfinished/`. A **Track B** ticket in `unfinished/` is fine to park; a **Track
+  A** one is CRITICAL (a half-applied compiler change can break the stable-binary
+  / self-host gate) and `tools/progress.sh check` fails until it is resolved or
+  reverted.

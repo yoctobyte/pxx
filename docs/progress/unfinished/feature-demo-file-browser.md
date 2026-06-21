@@ -1,8 +1,8 @@
 # Flagship Demo — Midnight Commander-like TUI file browser (libc-free)
 
 - **Type:** feature
-- **Status:** backlog
-- **Owner:** —
+- **Status:** unfinished (halted — was working/Codex)
+- **Owner:** — (lock released; last worked by Codex)
 - **Opened:** 2026-06-21
 - **Relation:** Sibling to other flagship demos. **Depends on** the low-level directory scanning in feature-sys-getdents and unbuffered terminal input in feature-rtl-terminal-raw-mode.
 
@@ -24,3 +24,10 @@ An interactive terminal file manager (`examples/fm/`) supporting multiple pane l
 
 ## Log
 - 2026-06-21 — Opened.
+- 2026-06-21 — First source slice in progress: `examples/fm/fm.pas` lists one
+  or two terminal panes using `SysUtils.GetDirectoryContents` and ANSI rendering.
+  Current slice is non-interactive and shows names/type only; stat metadata,
+  previews, and raw-key navigation remain in this ticket or its library
+  blockers.
+
+- 2026-06-21 — HALTED → `unfinished/`. `working/` lock released (no active agent). First demo slice committed as 9d4a162 (examples/fm/fm.pas); needs stat metadata, previews, raw-key nav.

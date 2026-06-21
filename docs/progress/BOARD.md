@@ -8,7 +8,11 @@ lives in git, not in a timestamp._
 
 _none_
 
-## working (5)
+## working (0)
+
+_none_
+
+## unfinished (5)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -55,7 +59,7 @@ _none_
 | feature-dynamic-include-paths-config | A | feature | Dynamic Include Paths, Configuration Files, and System Scanner | — |
 | feature-dynamic-soname-discovery | A | feature | Dynamic soname discovery (no execve) | — |
 | feature-esp32-idf-xtensa | A | feature | ESP-IDF integration: Xtensa (ESP32-S2/S3) — QEMU + real hardware | — |
-| feature-esp-peripheral-callback-api | BB//B/BAB | feature | ESP32 peripheral callback API (timer / GPIO / ADC) — the user-facing "interrupt" | — |
+| feature-esp-peripheral-callback-api | B | feature | ESP32 peripheral callback API (timer / GPIO / ADC) — the user-facing "interrupt" | — |
 | feature-extended-alias-or-reject | A | feature | Extended: formalize as Double alias (or reject) | — |
 | feature-flexcolumn-directive | A | feature | `flexcolumn` calling-convention directive | chore-inc-to-units |
 | feature-fpc-vs-pxx-feature-boundary | A | feature | Policy: FPC-bootstrap subset vs PXX-only library features | — |
@@ -289,7 +293,7 @@ _none_
 - [A] feature-dynamic-include-paths-config
 - [A] feature-dynamic-soname-discovery
 - [A] feature-esp32-idf-xtensa
-- [BB//B/BAB] feature-esp-peripheral-callback-api
+- [B] feature-esp-peripheral-callback-api
 - [A] feature-extended-alias-or-reject
 - [A] feature-fpc-vs-pxx-feature-boundary
 - [A] feature-handle-compacting-heap

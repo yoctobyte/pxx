@@ -1,8 +1,8 @@
 # C runtime/library layer (`lib/crtl`) plus direct C-library packages
 
 - **Type:** feature (Track B library / C frontend pressure)
-- **Status:** working
-- **Owner:** Codex
+- **Status:** unfinished (halted — was working/Codex)
+- **Owner:** — (lock released; last worked by Codex)
 - **Opened:** 2026-06-20
 - **Blocked-by:** feature-c-source-frontend
 - **Relation:** supports `feature-c-source-frontend`,
@@ -130,3 +130,5 @@ This needs a deliberate compiler/library namespace decision before accepted
   `GAP crtl_src_probe -- undefined variable (strlen)`, confirming the C body
   frontend (Track A `feature-c-source-frontend`) is the remaining blocker for
   compiling the runtime source. Ticket now `Blocked-by: feature-c-source-frontend`.
+
+- 2026-06-21 — HALTED → `unfinished/`. `working/` lock released (no active agent). No uncommitted code this round; parked pending the C source frontend (feature-c-source-frontend, Track A).

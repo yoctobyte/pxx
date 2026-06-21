@@ -4,7 +4,9 @@
 - **Status:** DONE 2026-06-21 (RTL `Exception` base in `lib/rtl/sysutils.pas`;
   chess compiles past `class(Exception)`, now blocks further down on
   `feature-local-typed-constant` at `chess.pas:846`)
-- **Owner:** —
+- **Owner:** Track B
+- **Resolved-in:** ee5e568 (RTL `Exception` in lib/rtl/sysutils.pas) +
+  `feature-empty-class-shorthand`; closed 0ceee3c.
 - **Opened:** 2026-06-20 (demo dashboard against pinned v14)
 - **Relation:** blocks `feature-demo-chess` and any FPC-style code that declares
   exception classes as descendants of `Exception`.

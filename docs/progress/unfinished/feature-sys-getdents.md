@@ -1,8 +1,8 @@
 # Directory scanning support — sys_getdents64 (libc-free)
 
 - **Type:** feature
-- **Status:** backlog
-- **Owner:** —
+- **Status:** unfinished (halted — was working/Codex)
+- **Owner:** — (lock released; last worked by Codex)
 - **Opened:** 2026-06-21
 - **Relation:** Stresses low-level syscall wrappers, pointer arithmetic, and type casting in RTL. Blocker for feature-demo-file-browser.
 
@@ -31,3 +31,10 @@ In `lib/rtl/sysutils.pas`:
 
 ## Log
 - 2026-06-21 — Opened.
+- 2026-06-21 — First Track B slice in progress: added PAL
+  `PalGetDents64`, POSIX syscall numbers, ESP unsupported stub, and
+  `SysUtils.GetDirectoryContents`. Regression `test/lib_directory.pas` covers
+  one file plus one child directory on the POSIX backend. File size/metadata is
+  still missing and split to `feature-pal-file-stat-metadata`.
+
+- 2026-06-21 — HALTED → `unfinished/`. `working/` lock released (no active agent). In-flight code committed as 9f22df5 (sys_getdents64 + GetDirectoryContents + test); resume from there. Follow-up: feature-pal-file-stat-metadata.

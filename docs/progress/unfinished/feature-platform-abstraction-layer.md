@@ -1,8 +1,8 @@
 # Platform Abstraction Layer (PAL): per-platform RTL port at one seam
 
 - **Type:** feature (compiler axis + Track B RTL architecture)
-- **Status:** working
-- **Owner:** Codex
+- **Status:** unfinished (halted — was working/Codex)
+- **Owner:** — (lock released; last worked by Codex)
 - **Opened:** 2026-06-20
 - **Relation:** foundation for `lib-text-file-io-assign-rewrite`,
   `feature-networking`, and any IO-bearing stdlib. Backend selection rides the
@@ -181,3 +181,5 @@ Out of scope (separate tickets):
   native and hosted cross Makefile gates. Validation: native async echo via
   pinned v32 and live `compiler/pascal26`, i386 async echo under
   `tools/run_target.sh`, `make lib-test`, and `make library-suite-green`.
+
+- 2026-06-21 — HALTED → `unfinished/`. `working/` lock released (no active agent). No uncommitted code this round; Track A step 1 already done+pinned, Track B PAL layering remains.
