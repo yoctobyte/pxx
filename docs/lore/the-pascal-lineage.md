@@ -1,7 +1,7 @@
 # The Tale of Turbo Pascal, Delphi, and FPC
 
-*Project lore — where PXX comes from, and why it exists. Opinionated, but trying to
-be fair to everyone in it.*
+*A short, opinionated history of the Pascal lineage — trying to be fair to everyone
+in it.*
 
 ## A language built to be understood
 
@@ -73,20 +73,8 @@ That is the trade the two halves of the family made. Delphi optimized for the
 enterprise and got enterprise virtues. FPC optimized for openness and reach and got
 those. Both are honest choices. They just serve different people.
 
-## And PXX?
-
-Nowhere in this story, really — and that's the honest framing. The names above earned
-their place in the lineage through decades of work and real-world impact. PXX has
-none of that: it's an experimental, single-developer project with, frankly, zero
-impact on the world so far. It doesn't get a seat at this table, and it isn't
-claiming one. If it ever belongs in a story like this, that's for others to decide,
-not for us to write in.
-
-What it *is*: a homage built in this tradition's spirit — free, from scratch, for the
-individual, and reproducible from source so you can read and verify it rather than
-just trust it. A small thing made in the lineage's shadow, mostly for the joy and the
-learning. Nothing more is claimed.
+---
 
 With gratitude to all of them — Wirth and Pascal, Hejlsberg and the Borland and
 Delphi engineers, and the Free Pascal community — for the language, the ideas, and
-the foundation that made even a small experiment like this possible.
+the foundation.
