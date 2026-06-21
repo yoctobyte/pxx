@@ -73,18 +73,20 @@ That is the trade the two halves of the family made. Delphi optimized for the
 enterprise and got enterprise virtues. FPC optimized for openness and reach and got
 those. Both are honest choices. They just serve different people.
 
-## Where PXX fits
+## And PXX?
 
-PXX continues the open line, and pushes one value further: **verifiability.** It is
-written from scratch — its own RTL, its own widget set, its own backends, none of it
-copied or ported — bootstrapped by FPC and then self-hosting. And every binary it
-ships reproduces bit-for-bit from source on your own machine. Free, legible,
-rebuildable, checkable.
+Nowhere in this story, really — and that's the honest framing. The names above earned
+their place in the lineage through decades of work and real-world impact. PXX has
+none of that: it's an experimental, single-developer project with, frankly, zero
+impact on the world so far. It doesn't get a seat at this table, and it isn't
+claiming one. If it ever belongs in a story like this, that's for others to decide,
+not for us to write in.
 
-It is built for the maker Turbo Pascal was originally built for: the individual who
-wants a serious tool without a serious invoice, and who would like to *understand*
-the tool, not just rent it.
+What it *is*: a homage built in this tradition's spirit — free, from scratch, for the
+individual, and reproducible from source so you can read and verify it rather than
+just trust it. A small thing made in the lineage's shadow, mostly for the joy and the
+learning. Nothing more is claimed.
 
 With gratitude to all of them — Wirth and Pascal, Hejlsberg and the Borland and
 Delphi engineers, and the Free Pascal community — for the language, the ideas, and
-the foundation.
+the foundation that made even a small experiment like this possible.
