@@ -1,15 +1,18 @@
 program test_esp_interrupt;
-{ `interrupt;` directive (riscv32 / esp32c3): the handler compiles as a raw
-  hardware trap routine — its prologue saves the interrupted caller-saved context
-  (t0-t6, a0-a7; ra/s0 via the normal frame), the body runs, the epilogue restores
-  that context and returns via `mret`. The code lands in .iram1.text (interrupt
+{ `interrupt;` directive (riscv32 / esp32c3 and xtensa Call0 / esp32s3): the
+  handler compiles as a raw hardware trap routine — its prologue saves the
+  interrupted caller-saved context (riscv: t0-t6, a0-a7; xtensa Call0: a2-a8,
+  a10-a13 — plus ra/s0 resp. a0/a15 via the normal frame), the body runs, the
+  epilogue restores that context and returns via the hardware exception-return
+  insn (riscv `mret`, xtensa `rfe`). The code lands in .iram1.text (interrupt
   routines must be IRAM-resident so a trap during a flash-cache stall doesn't
-  re-fault). Installing the handler in mtvec + triggering a real trap needs a
-  vector-table / CSR setup not yet expressible in PXX, so this is a STRUCTURAL
+  re-fault). Installing the handler in the vector table + triggering a real trap
+  needs CSR / vecbase setup not yet expressible in PXX, so this is a STRUCTURAL
   probe: it forces the handler to be emitted (referenced behind a runtime-false
-  guard, never executed — calling an ISR directly would mret into nowhere) so the
-  .iram1.text section + the mret epilogue can be verified by disassembly. }
+  guard, never executed — calling an ISR directly would mret/rfe into nowhere) so
+  the .iram1.text section + the mret/rfe epilogue can be verified by disassembly. }
 {$ifdef CPU_RISCV32}{$define PXX_ESP}{$endif}
+{$ifdef CPU_XTENSA}{$define PXX_ESP}{$endif}
 
 {$ifdef PXX_ESP}
 procedure esp_rom_printf(fmt: string; v: Integer); external;

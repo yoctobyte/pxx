@@ -296,6 +296,16 @@ begin
   EmitB(0);
 end;
 
+procedure xtensa_rfe;
+begin
+  { RFE = return-from-exception (general level-1): PS.EXCM cleared, PC <- EPC1.
+    Insn word $003000, LE bytes 00 30 00. Verified vs xtensa-esp32s3-elf-as
+    (llvm-mc 18 lacks the Xtensa exception mnemonics). }
+  EmitB($00);
+  EmitB($30);
+  EmitB($00);
+end;
+
 function EncodeXtensaEntry(s, frameSize: Integer): Integer;
 var
   imm12: Integer;

@@ -9589,8 +9589,10 @@ begin
   ProcIsAsync[procIdx] := isAsync;
   ProcIsGenerator[procIdx] := isGenerator;
   ProcIsStackless[procIdx] := isStackless;
-  if isInterrupt and (TargetArch <> TARGET_RISCV32) then
-    Error('interrupt directive: raw hardware-vector codegen implemented for riscv32 (esp32c3) only so far; xtensa windowed-exception ISRs are a follow-up. Use `iram;` for an IDF-registered ISR.');
+  if isInterrupt and (TargetArch <> TARGET_RISCV32) and (TargetArch <> TARGET_XTENSA) then
+    Error('interrupt directive: raw hardware-vector codegen implemented for riscv32 (esp32c3) and xtensa Call0 (esp32s3) only. Use `iram;` for an IDF-registered ISR.');
+  if isInterrupt and (TargetArch = TARGET_XTENSA) and (XtensaABI = XTENSA_ABI_WINDOWED) then
+    Error('interrupt directive on xtensa: windowed-ABI ISRs (mid-window register-file spill) are a follow-up. Build with --esp-profile=bare (forces Call0) for a raw level-1 exception handler, or use `iram;` for an IDF-registered ISR.');
   { `iram;` places the body in .iram1.text on ESP; on other targets (e.g. the
     x86-64 oracle build of a shared test) it is an accepted no-op. }
   ProcIram[procIdx] := isIram and ((TargetArch = TARGET_XTENSA) or (TargetArch = TARGET_RISCV32));

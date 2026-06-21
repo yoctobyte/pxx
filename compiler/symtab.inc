@@ -3337,6 +3337,23 @@ begin
     end
     else
     begin
+      { Raw `interrupt;` handler (Call0): a hardware exception can preempt arbitrary
+        code, so the interrupted caller-saved a-regs the body clobbers (a2-a8,
+        a10-a13) must be preserved. a0/a1(sp)/a15 are covered by the normal Call0
+        frame below; a9/a14 are never touched by codegen. Saved in a 48-byte area
+        (11 regs, 16-byte aligned) ABOVE the normal frame; the epilogue restores
+        them and returns via `rfe` (general level-1 exception). Windowed ABI is
+        gated off in the parser (mid-window spill is a follow-up). }
+      if (CurProc >= 0) and ProcIsInterrupt[CurProc] then
+      begin
+        xtensa_addi(reg_xtensa_sp, reg_xtensa_sp, -48);
+        xtensa_s32i(reg_xtensa_a2, reg_xtensa_sp, 0);  xtensa_s32i(reg_xtensa_a3, reg_xtensa_sp, 4);
+        xtensa_s32i(reg_xtensa_a4, reg_xtensa_sp, 8);  xtensa_s32i(reg_xtensa_a5, reg_xtensa_sp, 12);
+        xtensa_s32i(reg_xtensa_a6, reg_xtensa_sp, 16); xtensa_s32i(reg_xtensa_a7, reg_xtensa_sp, 20);
+        xtensa_s32i(reg_xtensa_a8, reg_xtensa_sp, 24); xtensa_s32i(reg_xtensa_a10, reg_xtensa_sp, 28);
+        xtensa_s32i(reg_xtensa_a11, reg_xtensa_sp, 32); xtensa_s32i(reg_xtensa_a12, reg_xtensa_sp, 36);
+        xtensa_s32i(reg_xtensa_a13, reg_xtensa_sp, 40);
+      end;
       { Xtensa Call0 ABI prologue: push a0, a15 (save Return Address and Frame Pointer) }
       xtensa_addi(reg_xtensa_sp, reg_xtensa_sp, -16);
       xtensa_s32i(reg_xtensa_a0, reg_xtensa_sp, 12);
@@ -3837,7 +3854,22 @@ begin
       xtensa_l32i(reg_xtensa_a15, reg_xtensa_sp, 8);
       xtensa_l32i(reg_xtensa_a0, reg_xtensa_sp, 12);
       xtensa_addi(reg_xtensa_sp, reg_xtensa_sp, 16);
-      xtensa_ret;
+      if (CurProc >= 0) and ProcIsInterrupt[CurProc] then
+      begin
+        { Restore the interrupted context (mirror of the prologue save area, now at
+          sp after the normal frame unwound), then return from the exception via
+          `rfe` (PC <- EPC1, PS.EXCM cleared). }
+        xtensa_l32i(reg_xtensa_a2, reg_xtensa_sp, 0);  xtensa_l32i(reg_xtensa_a3, reg_xtensa_sp, 4);
+        xtensa_l32i(reg_xtensa_a4, reg_xtensa_sp, 8);  xtensa_l32i(reg_xtensa_a5, reg_xtensa_sp, 12);
+        xtensa_l32i(reg_xtensa_a6, reg_xtensa_sp, 16); xtensa_l32i(reg_xtensa_a7, reg_xtensa_sp, 20);
+        xtensa_l32i(reg_xtensa_a8, reg_xtensa_sp, 24); xtensa_l32i(reg_xtensa_a10, reg_xtensa_sp, 28);
+        xtensa_l32i(reg_xtensa_a11, reg_xtensa_sp, 32); xtensa_l32i(reg_xtensa_a12, reg_xtensa_sp, 36);
+        xtensa_l32i(reg_xtensa_a13, reg_xtensa_sp, 40);
+        xtensa_addi(reg_xtensa_sp, reg_xtensa_sp, 48);
+        xtensa_rfe;
+      end
+      else
+        xtensa_ret;
     end;
     Exit;
   end;

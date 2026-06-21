@@ -51,8 +51,25 @@ indirect call into flash (`esp_rom_printf`), the mirrored restore, and `mret`.
   `ProcAddrFix` so the handler address can be handed to a setup routine; or run on
   real esp32c3 hardware. (This is the "not qemu-validatable without a vector
   table" the deferral noted.)
-- **xtensa `interrupt;` — PRIORITY next (serves the ESP32-S3 board).** Still
-  errors (`parser.inc`, the `isInterrupt and TargetArch <> TARGET_RISCV32` guard).
+- **xtensa `interrupt;` (Call0) — DONE 2026-06-21; structurally verified.**
+  `procedure foo; interrupt;` now compiles a raw level-1 exception handler on
+  xtensa Call0. Prologue saves the interrupted caller-saved a-regs the body
+  clobbers (a2-a8, a10-a13) in a 48-byte area above the normal Call0 frame (a0/a15
+  via that frame; a9/a14 never touched by codegen); the body runs; the epilogue
+  restores them and returns via **`rfe`** (general level-1, PC<-EPC1, PS.EXCM
+  cleared) — added `xtensa_rfe` ($003000, oracle-verified) to `xtensaenc.inc`.
+  Gated on `ProcIsInterrupt` (inline check; symtab can't call backend helpers) →
+  non-interrupt xtensa codegen byte-identical, self-host fixedpoint unchanged.
+  Verified structurally (`test/test_esp_interrupt.pas` xtensa arm, `--emit-obj`,
+  `xtensa-esp32s3-elf-{readelf,objdump}`): `MyIsr` sits in `.iram1.text` with the
+  full a2-a13 save, the normal a0/a15 frame, a working cross-section indirect call
+  into flash (`callx0 a8` via a relocated literal → `esp_rom_printf`), the mirrored
+  restore, and `rfe`. **Windowed** ABI still errors with a clear message
+  (`--xtensa-abi=windowed`): mid-window register-file spill is the deferred hard
+  part. Live-fire still needs a vector-table install (no Xtensa CSR/inline-asm from
+  PXX) — same QEMU-unvalidatable gap as riscv below. Historical plan kept below:
+- **xtensa `interrupt;` — original plan (now implemented above).** Was erroring
+  (`parser.inc`, the `isInterrupt and TargetArch <> TARGET_RISCV32` guard).
   Mirror the riscv shape but for the Xtensa exception/interrupt model:
   - **Where:** `EmitProcPrologue` / `EmitProcEpilog` xtensa branches (`symtab.inc`,
     same `ProcIsInterrupt[CurProc]` gate as riscv). `interrupt` already implies
