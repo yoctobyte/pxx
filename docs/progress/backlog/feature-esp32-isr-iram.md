@@ -53,10 +53,15 @@ indirect call into flash (`esp_rom_printf`), the mirrored restore, and `mret`.
   table" the deferral noted.)
 - **xtensa `interrupt;`** still errors — windowed-exception ISRs need EPC/EPS +
   `rfi`/`rfe` + the windowed register spill, materially more involved than riscv.
-- **`@isr` proc-address fixups** in the `.o` (`ProcAddrFix`, for `esp_intr_alloc`
-  IDF-registered ISRs) still error in the `--emit-obj` relocatable writers
-  (`writeELF32Rel`/`writeELF32RelIram`) — needs an `R_RISCV_32` reloc against the
-  proc symbol. Separate follow-up; also unblocks live validation above.
+- **`@isr` proc-address fixups in the `.o`** — DONE 2026-06-21 (fef87c2) for the
+  iram-writer path (`writeELF32RelIram`): each `IR_PROCADDR` literal gets an
+  absolute `R_*_32` reloc against the target proc symbol, so `@MyIsr` handed to
+  `esp_intr_alloc` resolves to the linked handler. ISR/@isr programs always have
+  an iram routine -> that writer. (Non-iram `--emit-obj` `@proc` still guards.)
+  Verified: `test_esp_isr_register --emit-obj` shows `R_RISCV_32` vs MyIsr +
+  vs esp_intr_alloc. KNOWN MINOR wart: `IR_PROCADDR` lowers a single source `@`
+  twice (idempotent literals, one dead) — pre-existing, target-independent,
+  separate cleanup.
 
 ### `@proc` on bare riscv32 — DONE 2026-06-21 (38242eb)
 `@Routine` now yields the absolute code address on the bare ET_EXEC image:
