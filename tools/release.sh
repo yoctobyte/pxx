@@ -315,8 +315,12 @@ publish() {
 
   if [[ $LOCAL -eq 1 ]]; then
     have gh || die "--local needs the gh CLI"
+    # Prefer a hand-authored body at docs/release-notes/<tag>.md; fall back to
+    # GitHub's auto-generated notes when none is prepared.
+    local notes_args=(--generate-notes) nf="$REPO_ROOT/docs/release-notes/$tag.md"
+    [[ -f "$nf" ]] && { notes_args=(--notes-file "$nf"); echo "==> release body: $nf"; }
     gh release create "$tag" "$DIST/pxx-$tag.tar.gz" "$DIST/pxx-$tag/MANIFEST.sha256" \
-      --title "PXX $tag — $codename" --generate-notes
+      --title "PXX $tag — $codename" "${notes_args[@]}"
   else
     git tag -a "$tag" -m "PXX $tag — codename $codename"
     git push origin "$tag"     # fires .github/workflows/release.yml
