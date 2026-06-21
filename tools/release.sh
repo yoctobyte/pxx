@@ -246,28 +246,72 @@ run_gate() {
   echo "==> gate: PASS"
 }
 
-# Cross-build every host binary, hash, assemble the dist tree + manifest + tarball.
+# Assemble the one complete release: clean full source tree + every host binary +
+# manifest + tarball. A release is everything in one go — source, RTL/PCL,
+# binaries, examples, docs, build system — so a user can both run it and rebuild
+# it from the same download. Disk is cheap; there are no partial flavors.
 build_dist() {
-  # Layout mirrors dev so the compiler's ExeDir resolution holds verbatim: the
-  # binary lives in compiler/ (ExeDir), builtin/ inside it, lib/ as ../lib.
   local tag="$1" codename="$2" d="$DIST/pxx-$tag" t
-  echo "==> build: host binaries + manifest"
-  rm -rf "$d"; mkdir -p "$d/compiler"
+  echo "==> build: clean source export + host binaries + manifest"
+  rm -rf "$d"; mkdir -p "$d"
+  # The full committed tree, straight from git. .gitattributes export-ignore is the
+  # single source of truth for what a release omits (tickets, agent/dev-process
+  # docs, the dev bootstrap binaries) — so the bundle stays the product, not the
+  # workshop. Everything kept (compiler/*.pas, lib, examples, docs, Makefile,
+  # LICENSE, tools) ships, structured exactly like the repo so `make` rebuilds.
+  git -C "$REPO_ROOT" archive --format=tar HEAD | tar -x -C "$d"
+  # Freshly-built host binaries land in compiler/ (the compiler's ExeDir; builtin/
+  # sits beside them, lib/ one level up) so ExeDir resolution holds verbatim. These
+  # are what MANIFEST.sha256 pins + selfcheck reproduces.
   : > "$d/MANIFEST.sha256"
   for t in "${HOST_TARGETS[@]}"; do
     echo "    --target=$t"
     ./"$COMPILER" --target="$t" "$COMPILER_SRC" "$d/compiler/pxx-$t" >/dev/null
     ( cd "$d" && sha256sum "compiler/pxx-$t" >> MANIFEST.sha256 )
   done
-  cp -a lib "$d/lib"
-  [[ -d compiler/builtin ]] && cp -a compiler/builtin "$d/compiler/builtin"
-  cp -a examples "$d/examples" 2>/dev/null || true
+  # Top-level convenience entry points (also under tools/).
   cp -a tools/setup.sh "$d/setup.sh" 2>/dev/null || true
   cp -a tools/selfcheck.sh "$d/selfcheck.sh" 2>/dev/null || true
-  printf 'PXX %s — codename "%s"\nSelf-hosting Pascal compiler. Run ./setup.sh, then `pxx`.\n' \
-    "$tag" "$codename" > "$d/README"
+  write_release_readme "$d" "$tag" "$codename"
   ( cd "$DIST" && tar czf "pxx-$tag.tar.gz" "pxx-$tag" )
   echo "==> build: $d + pxx-$tag.tar.gz"
+}
+
+# Top-level RELEASE.md documenting the bundle layout, run, and rebuild paths — so
+# "everything in one download" is also navigable.
+write_release_readme() {
+  local d="$1" tag="$2" codename="$3"
+  cat > "$d/RELEASE.md" <<EOF
+# PXX $tag — codename "$codename"
+
+A complete, self-contained release of the PXX self-hosting Pascal-dialect
+compiler: **source, RTL/PCL libraries, prebuilt binaries, examples, and the build
+system, all in one download.** Run it as-is, or rebuild everything from the
+included source — no separate packages to fetch.
+
+## Quick start (run)
+    ./setup.sh            # puts \`pxx\` on PATH (uses the prebuilt host binary)
+    pxx examples/hello/hello.pas /tmp/hello && /tmp/hello
+
+## Layout
+    compiler/             compiler source (*.pas / *.inc) + builtin/
+    compiler/pxx-<arch>   prebuilt binaries: x86_64, i386, aarch64, arm32
+    lib/                  RTL + PCL libraries (compiled from source)
+    examples/             sample programs
+    docs/                 user documentation (CLI, dialect, release notes, …)
+    Makefile, tools/      build + verification system
+    MANIFEST.sha256       SHA-256 of each prebuilt binary (reproducible)
+    setup.sh, selfcheck.sh  install + reproduce helpers
+
+## Rebuild from source
+    make compiler/pascal26     # FPC-seed the compiler, then it self-hosts
+    make test                  # byte-identical self-host fixed point
+
+## Verify reproducibility
+    ./selfcheck.sh             # rebuild each binary, diff against MANIFEST.sha256
+
+This is a $( [[ "$tag" == *-* ]] && echo "prerelease" || echo "stable release" ); 0.x means the language, ABI, and CLI may still change.
+EOF
 }
 
 # Reproduce-from-this-host check: recompute the manifest, compare to the built one.

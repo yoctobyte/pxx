@@ -19,6 +19,9 @@ agents/               export-ignore
 thesises/             export-ignore
 library_candidates/   export-ignore
 benchmarks/           export-ignore
+# Dev bootstrap binaries (Track B's pinned stable, ~65M) — a release ships
+# freshly-built pxx-<arch> instead, so keep this dev-only artifact out.
+stable_linux_amd64/   export-ignore
 CLAUDE.md             export-ignore
 .gitattributes        export-ignore
 .github/              export-ignore
