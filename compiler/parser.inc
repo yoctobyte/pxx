@@ -4951,6 +4951,50 @@ begin
   ASTTk[Result] := Ord(tyInt64);
 end;
 
+{ Built-in TObject.Free for `obj.Free` on a class instance with no user-declared
+  `Free` method. Desugars to the nil-guarded, double-free-safe FPC idiom:
+    if obj <> nil then begin [obj.Destroy;] FreeMem(obj); obj := nil end
+  `Destroy` is dispatched (virtually when declared `virtual`/`override`) only when
+  the class or an ancestor declares one; otherwise just the instance heap block
+  (the GetMem from `TFoo.Create`) is released. Niling the var makes a second
+  `Free` a no-op. symIdx must be a non-record class-instance variable. }
+function GenMakeFreeObject(symIdx: Integer): Integer;
+var ci, freeArg, freeCall, nilLit, nilAssign, cond, thenSeq, pairNode, ifNode: Integer;
+begin
+  ci := Syms[symIdx].RecName - REC_UCLASS_BASE;
+
+  { FreeMem(obj) }
+  freeArg := AllocNode(AN_ARG);
+  ASTLeft[freeArg] := GenMakeIdent(symIdx, tyClass);
+  freeCall := AllocNode(AN_CALL);
+  ASTIVal[freeCall] := -Ord(tkFreeMem);
+  ASTLeft[freeCall] := freeArg;
+  ASTTk[freeCall] := Ord(tyInteger);
+
+  { obj := nil }
+  nilLit := AllocNode(AN_INT_LIT);
+  ASTIVal[nilLit] := 0;
+  ASTTk[nilLit] := Ord(tyPointer);
+  nilAssign := GenMakeAssign(GenMakeIdent(symIdx, tyClass), nilLit);
+
+  thenSeq := chainSeq(freeCall, nilAssign);
+  if FindUMeth(ci, 'Destroy') >= 0 then
+    thenSeq := chainSeq(GenMakeMethodCall0(GenMakeIdent(symIdx, tyClass), ci, 'Destroy'), thenSeq);
+
+  { if obj <> nil then thenSeq }
+  nilLit := AllocNode(AN_INT_LIT);
+  ASTIVal[nilLit] := 0;
+  ASTTk[nilLit] := Ord(tyPointer);
+  cond := GenMakeCmp(Ord(tkNeq), GenMakeIdent(symIdx, tyClass), nilLit);
+  pairNode := AllocNode(AN_PAIR);
+  ASTLeft[pairNode] := thenSeq;
+  ASTRight[pairNode] := -1;
+  ifNode := AllocNode(AN_IF);
+  ASTLeft[ifNode] := cond;
+  ASTRight[ifNode] := pairNode;
+  Result := ifNode;
+end;
+
 { Synthetic label: a GotoLabel slot with no name; AN_LABEL/AN_GOTO reference it
   directly via ASTIVal (ASTSOffset = -1 sentinel, see ir.inc). }
 function NewSyntheticLabel: Integer;
@@ -7050,6 +7094,22 @@ begin
                 idx := FindSymInUnit(name, qUnit)
               else
                 idx := FindSym(name);
+              { Built-in `obj.Free;` on a class instance with no user `Free` method
+                (built-in TObject has none): desugar to nil-guarded Destroy/FreeMem.
+                Restricted to the plain `obj.Free;`/`obj.Free end` form so a user
+                method named Free, or any suffix/args, falls through to the lvalue
+                path below. }
+              if (idx >= 0) and (Syms[idx].RecName >= REC_UCLASS_BASE) and
+                 (not UClsIsRecord[Syms[idx].RecName - REC_UCLASS_BASE]) and
+                 (Tokens[TokPos].Kind = tkDot) and (Tokens[TokPos+1].Kind = tkIdent) and
+                 CaseEqual(GetTokenStr(TokPos+1), 'Free') and
+                 (Tokens[TokPos+2].Kind in [tkSemicolon, tkEnd]) and
+                 (FindUMeth(Syms[idx].RecName - REC_UCLASS_BASE, 'Free') < 0) then
+              begin
+                Next; Next; Next;   { consume obj, '.', 'Free' }
+                node := GenMakeFreeObject(idx);
+                Result := node; Exit;
+              end;
               Next;
               valNode := ParseLValueAST(idx, TokPos - 2);
               if (ASTKind[valNode] = AN_CALL) or (ASTKind[valNode] = AN_VIRTUAL_CALL) or

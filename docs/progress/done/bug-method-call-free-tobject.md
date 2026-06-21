@@ -47,3 +47,15 @@ f.Free;   { error: Expected := }
 
 ## Log
 - 2026-06-21 — filed (self-discovered as the next chess blocker after Eof).
+- 2026-06-21 — DONE. Built-in `obj.Free` desugars to the nil-guarded FPC idiom
+  `if obj <> nil then begin [obj.Destroy;] FreeMem(obj); obj := nil end`
+  (`GenMakeFreeObject` in parser.inc; statement-parser intercepts plain
+  `obj.Free;`/`obj.Free end` on a non-record class instance with no user `Free`
+  method). Destroy is dispatched (virtual when declared) only when the class or an
+  ancestor has one; nil-ing the var makes a second Free a safe no-op. Verified:
+  double-free + virtual-destructor repro runs correctly; `examples/chess`
+  compiles fully (past :961) and runs. `make test` green — self-host fixedpoint
+  byte-identical, threadsafe byte-identical, asm-emit all OK.
+  Limitation: only a plain `obj.Free` where `obj` is a simple class-instance var
+  is intercepted (covers chess + the repro); `arr[i].Free` / `rec.f.Free` still
+  need a user `Free` method.

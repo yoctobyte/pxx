@@ -8,26 +8,27 @@ lives in git, not in a timestamp._
 
 _none_
 
-## working (0)
+## working (2)
 
-_none_
+| Ticket | Track | Type | Summary | Blocked-by |
+| --- | --- | --- | --- | --- |
+| feature-pal-file-stat-metadata | B | feature | PAL file stat metadata | — |
+| feature-platform-abstraction-layer | B | feature | Platform Abstraction Layer (PAL): per-platform RTL port at one seam | — |
 
-## unfinished (5)
+## unfinished (4)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
 | feature-c-runtime-library | B | feature | C runtime/library layer (`lib/crtl`) plus direct C-library packages | feature-c-source-frontend |
 | feature-demo-file-browser | B | feature | Flagship Demo — Midnight Commander-like TUI file browser (libc-free) | — |
 | feature-pcl-opengl-glarea-demo | B | feature | PCL OpenGL GLArea demo | — |
-| feature-platform-abstraction-layer | B | feature | Platform Abstraction Layer (PAL): per-platform RTL port at one seam | — |
 | feature-sys-getdents | B | feature | Directory scanning support — sys_getdents64 (libc-free) | — |
 
-## backlog (83)
+## backlog (81)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
 | bug-bare-function-name-call-vs-resultvar | A | bug | Bare function name in an expression: PXX calls it, FPC/ISO reads the result var | — |
-| bug-method-call-free-tobject | A | bug | `obj.Free` rejected — built-in TObject has no `Free` method | — |
 | chess-pal-getdents-link | B | chess | examples/chess: PalBackendGetDents64 undefined (PAL backend not linked) | — |
 | chore-inc-to-units | A | chore | `.inc` → real `.pas` units refactor | — |
 | chore-runtime-emission-size | A | chore | Finer runtime-support emission (code size) | — |
@@ -84,7 +85,6 @@ _none_
 | feature-optimization-levels | A | feature | Optimization levels (`-O0/-O1/-O2/-O3/-Os`) + pass framework | — |
 | feature-os-targets-bsd-mac | A | feature | Additional OS targets (BSD / macOS via syscall mapping; Windows deprioritized) | — |
 | feature-pal-esp-posix-fd-semantics | B | feature | ESP PAL: exact POSIX fd semantics over ESP-IDF VFS | — |
-| feature-pal-file-stat-metadata | B | feature | PAL file stat metadata | — |
 | feature-pal-network-datagram-poll-errno | B | feature | PAL network: datagrams, readiness polling, and exact errno semantics | — |
 | feature-parallel-processing | A | feature | Parallel processing as a language feature | feature-unified-heap-allocator |
 | feature-png-decoder-library | B | feature | PNG decoder library | feature-compression-library, feature-hashing-library, feature-rtl-image-bitmap-library |
@@ -114,7 +114,7 @@ _none_
 
 _none_
 
-## done (132)
+## done (133)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -140,6 +140,7 @@ _none_
 | bug-managed-byref-string-param-store | A | bug | Managed by-ref AnsiString params: store-through-var no-ops / segfaults | — |
 | bug-managed-to-frozen-string-assign-crash | A | bug | Assigning a managed string (tyAnsiString) into a frozen `string` (tyString) miscompiles → segfault | — |
 | bug-many-param-call-corruption | A | bug | Self-hosted x86-64 backend miscompiles calls with many parameters | — |
+| bug-method-call-free-tobject | A | bug | `obj.Free` rejected — built-in TObject has no `Free` method | — |
 | bug-movslq-on-64bit-pointer-load | A | bug | Bug — movslq instruction generated for 64-bit pointer/array field load | — |
 | bug-operator-result-inferred-var | A | bug | Record-valued operator result is miscompiled (aggregate-return ABI) | — |
 | bug-pinned-stable-reads-live-builtin-rtl | A | bug | Pinned stable reads LIVE builtin RTL source — track A WIP breaks track B | — |
@@ -262,7 +263,6 @@ _none_
 ## Ready (no unmet blocker)
 
 - [A] bug-bare-function-name-call-vs-resultvar
-- [A] bug-method-call-free-tobject
 - [B] chess-pal-getdents-link
 - [A] chore-inc-to-units
 - [A] chore-runtime-emission-size
@@ -316,7 +316,6 @@ _none_
 - [A] feature-optimization-levels
 - [A] feature-os-targets-bsd-mac
 - [B] feature-pal-esp-posix-fd-semantics
-- [B] feature-pal-file-stat-metadata
 - [B] feature-pal-network-datagram-poll-errno
 - [A] feature-parallel-processing
 - [A] feature-progress-transition-helpers
