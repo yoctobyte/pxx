@@ -63,8 +63,8 @@ string helpers (`Trim`, padding, search) stay in the library.
 - 2026-06-21 — filed. Recurring papercut: string `Copy` is RTL-only, so
   compiler-internal / no-RTL code cannot use it and falls back to `AppendChar`
   loops. Hit while implementing `{$IF DECLARED}` (`d35e47c`).
-- 2026-06-21 — DONE (mixed, biased compiler — the user-accepted "odd but fine"
-  solution). The substring primitive `__pxxStrCopy(const s; index, count)` lives in
+- 2026-06-21 — DONE (commit dd706ff; mixed, biased compiler — the user-accepted
+  "odd but fine" solution). The substring primitive `__pxxStrCopy(const s; index, count)` lives in
   the always-injectable `builtin` unit (`compiler/builtin/builtin.pas`, the managed-
   AnsiString home next to StrInt/FloatToStr) — body is the proven `r := r + s[i]`
   loop, so the AnsiString return uses the standard managed-result path (no manual
