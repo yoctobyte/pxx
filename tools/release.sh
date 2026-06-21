@@ -58,8 +58,12 @@ sv_parse() {
 # channel rank for ordering: alpha=1 beta=2 rc=3 stable=4
 sv_chan_rank() { case "$1" in alpha) echo 1;; beta) echo 2;; rc) echo 3;; "") echo 4;; *) echo 0;; esac; }
 
-# compute_next <current-version> <op> [<channel-for-pre-from-stable>]
-# ops: patch minor major pre channel promote
+# compute_next <current-version> <op> [<channel-for-pre*-ops>]
+# ops: patch minor major pre channel promote          (move within / off a line)
+#      prepatch preminor premajor                      (START a new prerelease line)
+# The pre* ops bump the core (like patch/minor/major) AND open a prerelease channel
+# at .1 — the ONLY way to enter a prerelease from a stable/first release. The
+# channel comes from $3 (alpha|beta|rc, default alpha).
 compute_next() {
   local cur="$1" op="$2" startchan="${3:-alpha}"
   sv_parse "$cur"
@@ -67,6 +71,13 @@ compute_next() {
     patch)   echo "v${SV_MAJ}.${SV_MIN}.$((SV_PAT+1))" ;;
     minor)   echo "v${SV_MAJ}.$((SV_MIN+1)).0" ;;
     major)   echo "v$((SV_MAJ+1)).0.0" ;;
+    prepatch|preminor|premajor)
+             case "$startchan" in alpha|beta|rc) ;; *) echo "ERR: bad channel '$startchan' (alpha|beta|rc)" >&2; return 1;; esac
+             case "$op" in
+               prepatch) echo "v${SV_MAJ}.${SV_MIN}.$((SV_PAT+1))-${startchan}.1" ;;
+               preminor) echo "v${SV_MAJ}.$((SV_MIN+1)).0-${startchan}.1" ;;
+               premajor) echo "v$((SV_MAJ+1)).0.0-${startchan}.1" ;;
+             esac ;;
     pre)     # bump the prerelease counter within the current channel
              [[ -n "$SV_CHAN" ]] || { echo "ERR: not a prerelease (no channel to bump)" >&2; return 1; }
              echo "v${SV_MAJ}.${SV_MIN}.${SV_PAT}-${SV_CHAN}.$((SV_N+1))" ;;
@@ -110,6 +121,11 @@ selftest() {
   check "$(compute_next v0.2.0-alpha.3 channel)" v0.2.0-beta.1  "advance alpha->beta"
   check "$(compute_next v0.2.0-beta.2 channel)"  v0.2.0-rc.1    "advance beta->rc"
   check "$(compute_next v0.2.0-rc.4 promote)"     v0.2.0         "promote rc->stable"
+  # start a new prerelease line (the first-prerelease path)
+  check "$(compute_next v0.0.0 preminor beta)"    v0.1.0-beta.1  "first prerelease (preminor beta)"
+  check "$(compute_next v0.1.0 prepatch alpha)"   v0.1.1-alpha.1 "prepatch alpha"
+  check "$(compute_next v0.1.9 premajor rc)"      v1.0.0-rc.1    "premajor rc"
+  check "$(compute_next v0.1.0 preminor 2>/dev/null)" v0.2.0-alpha.1 "preminor default alpha"
   # ordering
   sv_gt v0.1.1 v0.1.0          && echo "ok   gt patch"      || { echo "FAIL gt patch"; fail=1; }
   sv_gt v0.2.0-beta.1 v0.2.0-alpha.9 && echo "ok   gt channel" || { echo "FAIL gt channel"; fail=1; }
@@ -148,21 +164,38 @@ suggest_codename() {
 # Interactive version menu. Echoes the chosen tag on stdout; prompts on stderr.
 # RELEASE_BUMP env (patch|minor|major|pre|channel|promote) bypasses the prompt.
 choose_version() {
-  local cur="$1" op chosen
-  if [[ -n "${RELEASE_BUMP:-}" ]]; then op="$RELEASE_BUMP"; else
+  local cur="$1" op startchan="alpha" chosen pick
+  # RELEASE_BUMP bypasses the prompt. For pre* ops the channel rides as a suffix:
+  # RELEASE_BUMP=preminor:beta -> v<next-minor>-beta.1 (default alpha if omitted).
+  if [[ -n "${RELEASE_BUMP:-}" ]]; then
+    op="${RELEASE_BUMP%%:*}"
+    [[ "$RELEASE_BUMP" == *:* ]] && startchan="${RELEASE_BUMP#*:}"
+  else
     {
       echo "current: ${cur:-<none>}"
-      echo "  1) patch    -> $(compute_next "${cur:-v0.0.0}" patch 2>/dev/null)"
-      echo "  2) minor    -> $(compute_next "${cur:-v0.0.0}" minor 2>/dev/null)"
-      echo "  3) major    -> $(compute_next "${cur:-v0.0.0}" major 2>/dev/null)"
-      echo "  4) pre      -> $(compute_next "$cur" pre 2>/dev/null || echo '(needs a channel)')"
-      echo "  5) channel  -> $(compute_next "$cur" channel 2>/dev/null || echo '(stable/rc: n/a)')"
-      echo "  6) promote  -> $(compute_next "$cur" promote 2>/dev/null || echo '(already stable)')"
+      echo "  1) patch     -> $(compute_next "${cur:-v0.0.0}" patch 2>/dev/null)"
+      echo "  2) minor     -> $(compute_next "${cur:-v0.0.0}" minor 2>/dev/null)"
+      echo "  3) major     -> $(compute_next "${cur:-v0.0.0}" major 2>/dev/null)"
+      echo "  4) pre       -> $(compute_next "$cur" pre 2>/dev/null || echo '(needs a channel)')"
+      echo "  5) channel   -> $(compute_next "$cur" channel 2>/dev/null || echo '(stable/rc: n/a)')"
+      echo "  6) promote   -> $(compute_next "$cur" promote 2>/dev/null || echo '(already stable)')"
+      echo "  -- start a NEW prerelease line (you pick the channel next) --"
+      echo "  7) prepatch  -> $(compute_next "${cur:-v0.0.0}" prepatch alpha 2>/dev/null)  (<chan> chosen next)"
+      echo "  8) preminor  -> $(compute_next "${cur:-v0.0.0}" preminor alpha 2>/dev/null)  (<chan> chosen next)"
+      echo "  9) premajor  -> $(compute_next "${cur:-v0.0.0}" premajor alpha 2>/dev/null)  (<chan> chosen next)"
     } >&2
-    read -rp "pick [1-6]: " pick >&2
-    case "$pick" in 1) op=patch;; 2) op=minor;; 3) op=major;; 4) op=pre;; 5) op=channel;; 6) op=promote;; *) die "bad pick";; esac
+    read -rp "pick [1-9]: " pick >&2
+    case "$pick" in
+      1) op=patch;; 2) op=minor;; 3) op=major;; 4) op=pre;; 5) op=channel;; 6) op=promote;;
+      7) op=prepatch;; 8) op=preminor;; 9) op=premajor;; *) die "bad pick";;
+    esac
+    case "$op" in
+      prepatch|preminor|premajor)
+        read -rp "channel [alpha|beta|rc] (default alpha): " startchan >&2
+        startchan="${startchan:-alpha}" ;;
+    esac
   fi
-  chosen="$(compute_next "${cur:-v0.0.0}" "$op")" || die "version compute failed"
+  chosen="$(compute_next "${cur:-v0.0.0}" "$op" "$startchan")" || die "version compute failed"
   echo "$chosen"
 }
 

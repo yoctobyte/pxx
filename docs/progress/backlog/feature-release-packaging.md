@@ -239,14 +239,12 @@ the corrected chess xfail reason.
 
 **Remaining / decisions for the maintainer:**
 
-1. **First-prerelease cannot be computed from the menu.** `pre` and `channel` both
-   require an *existing* channel, so from a stable/empty base there is no op that
-   produces the first prerelease (e.g. `v0.1.0-beta.1`). The documented first
-   release is therefore only cuttable via `--build-for` (CI, externally-created
-   tag) or a hand-made tag — not the interactive flow. Decision: add a "start
-   channel" op (the unused `startchan` param in `compute_next` is the hook:
-   `<stable> + channel <chan> → v<next>-chan.1`), or accept hand-tagging the first
-   prerelease. **Not yet fixed** — it changes the menu semantics the design scoped.
+1. **First-prerelease from the menu — FIXED.** Added npm-style `prepatch` /
+   `preminor` / `premajor` ops (menu picks 7–9): bump the core AND open a
+   prerelease channel at `.1`. Channel chosen via a follow-up prompt, or as a
+   suffix on the env override (`RELEASE_BUMP=preminor:beta`). Wired through the
+   previously-unused `startchan` param. `compute_next v0.0.0 preminor beta` ->
+   `v0.1.0-beta.1` (covered by `--selftest`); the menu path emits the same.
 2. **Pinned-vs-shipped chess message.** The demos gate runs the *pinned* stable
    (v32, still rejects local typed consts); the *shipped* binary is HEAD (advances
    to `eng.Free`). The xfail reason documents shipped behavior; a `make pin` would
