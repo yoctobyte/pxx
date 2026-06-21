@@ -1,9 +1,43 @@
 # ESP32: Compiler-Directed ISR and IRAM Support
 
 - **Type:** feature
-- **Status:** backlog (`iram;` done 2026-06-18; `interrupt;` raw-vector deferred)
+- **Status:** DONE 2026-06-21 (`iram;` done 2026-06-18; `interrupt;` Call0 done
+  both ISAs 2026-06-21; windowed `interrupt;` ruled out-of-scope by design with a
+  sharpened compile-error — see Decision below). User-facing peripheral callbacks
+  split to `feature-esp-peripheral-callback-api` (Track B).
 - **Owner:** —
 - **Opened:** 2026-06-14 (from ESP32 ISR analysis)
+
+## Decision 2026-06-21 — windowed `interrupt;` is out of scope BY DESIGN (not a gap)
+
+`interrupt;` is a **raw hardware-vector** directive: the proc is entered directly
+by the CPU as a vector, saves its own context, and returns via the
+exception-return insn (riscv `mret`, xtensa `rfe`). Two independent axes decide
+where that is valid:
+
+| | Call0 | Windowed |
+|---|---|---|
+| **Bare-metal** (you install the vector) | `interrupt;` → **DONE** (rfe/mret) | **does not boot** — no vecbase / window-overflow handlers (`compiler.pas` already errors `--esp-profile=bare` + windowed) |
+| **IDF + FreeRTOS** (OS owns the vector + dispatcher) | use `iram;`+`esp_intr_alloc` | use `iram;`+`esp_intr_alloc`; FreeRTOS `_xt_context_save` spills windows once, then calls your fn normally |
+
+The **windowed + raw-vector** cell has **no valid configuration**: bare-metal
+xtensa can't boot windowed, and under IDF you never install a raw vector — you
+register a normal callback via `esp_intr_alloc`, and FreeRTOS does the window
+spill for you. A windowed raw `interrupt;` would have to emit a Tensilica-style
+window-spill **loop inside the ISR** — duplicating the FreeRTOS dispatcher,
+untestable here (bare windowed doesn't boot; IDF wouldn't use it), and a
+loop-in-ISR hazard. **Rejected.**
+
+Resolution:
+- Windowed `interrupt;` stays a **compile error**; sharpen the message to route to
+  the two real paths (bare → Call0 `interrupt;`; IDF → `iram;` + `esp_intr_alloc`).
+  *(This is the only remaining code change; then this ticket → done.)*
+- The user-facing "interrupt" (a timer/ADC/GPIO **callback**, which most users
+  mean when they say "interrupt") is a **library** concern, not this keyword →
+  filed as **`feature-esp-peripheral-callback-api`** (Track B). The `interrupt;`
+  keyword serves only the bare-metal raw-vector author.
+- `interrupt;` (Call0) on riscv32 + xtensa is **DONE** and is the complete,
+  correct scope for this keyword.
 
 ## Status 2026-06-18 — `iram;` DONE (both ISAs)
 

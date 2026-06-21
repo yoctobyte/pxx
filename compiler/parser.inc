@@ -9592,7 +9592,7 @@ begin
   if isInterrupt and (TargetArch <> TARGET_RISCV32) and (TargetArch <> TARGET_XTENSA) then
     Error('interrupt directive: raw hardware-vector codegen implemented for riscv32 (esp32c3) and xtensa Call0 (esp32s3) only. Use `iram;` for an IDF-registered ISR.');
   if isInterrupt and (TargetArch = TARGET_XTENSA) and (XtensaABI = XTENSA_ABI_WINDOWED) then
-    Error('interrupt directive on xtensa: windowed-ABI ISRs (mid-window register-file spill) are a follow-up. Build with --esp-profile=bare (forces Call0) for a raw level-1 exception handler, or use `iram;` for an IDF-registered ISR.');
+    Error('interrupt directive on xtensa requires Call0 (build with --xtensa-abi=call0, or --esp-profile=bare). A windowed raw-vector ISR is out of scope by design: bare-metal cannot boot windowed, and under IDF you do not install a raw vector -- register a normal callback via esp_intr_alloc and mark it `iram;` (FreeRTOS spills the windows for you). See docs/progress/done/feature-esp32-isr-iram.');
   { `iram;` places the body in .iram1.text on ESP; on other targets (e.g. the
     x86-64 oracle build of a shared test) it is an accepted no-op. }
   ProcIram[procIdx] := isIram and ((TargetArch = TARGET_XTENSA) or (TargetArch = TARGET_RISCV32));
