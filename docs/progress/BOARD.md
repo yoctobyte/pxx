@@ -8,18 +8,21 @@ lives in git, not in a timestamp._
 
 _none_
 
-## working (2)
+## working (4)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
 | feature-c-runtime-library | B | feature | C runtime/library layer (`lib/crtl`) plus direct C-library packages | feature-c-source-frontend |
+| feature-demo-file-browser | B | feature | Flagship Demo — Midnight Commander-like TUI file browser (libc-free) | — |
 | feature-platform-abstraction-layer | B | feature | Platform Abstraction Layer (PAL): per-platform RTL port at one seam | — |
+| feature-sys-getdents | B | feature | Directory scanning support — sys_getdents64 (libc-free) | — |
 
-## backlog (83)
+## backlog (82)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
 | bug-bare-function-name-call-vs-resultvar | A | bug | Bare function name in an expression: PXX calls it, FPC/ISO reads the result var | — |
+| chess-pal-getdents-link | B | chess | examples/chess: PalBackendGetDents64 undefined (PAL backend not linked) | — |
 | chore-inc-to-units | A | chore | `.inc` → real `.pas` units refactor | — |
 | chore-runtime-emission-size | A | chore | Finer runtime-support emission (code size) | — |
 | design-overloadable-intrinsics | A | design | Design question: overloadable compiler intrinsics (the `Copy` precedent) | — |
@@ -38,21 +41,20 @@ _none_
 | feature-declaration-prescan | A | feature | Declaration pre-scan — whole-section symbol visibility (kill declare-before-use) | — |
 | feature-demo-calc | B | feature | Demo — RPN / expression calculator (mini spreadsheet) | — |
 | feature-demo-chess | B | feature | Flagship demo — chess engine (real-world app + cross-target oracle + benchmark) | — |
-| feature-demo-file-browser | B | feature | Flagship Demo — Midnight Commander-like TUI file browser (libc-free) | — |
 | feature-demo-life | B | feature | Demo — Conway's Game of Life | — |
 | feature-demo-lisp | B | feature | Demo — Lisp / Scheme interpreter | — |
 | feature-demo-maze | B | feature | Demo — maze generator + solver | — |
 | feature-demo-solitaire | B | feature | Demo — console Klondike solitaire (user-requested entertainment test app) | — |
+| feature-demo-video-player-audio-sync | B | feature | Video player audio playback and sync | — |
 | feature-demo-vm | B | feature | Demo — bytecode VM + assembler (small ISA) | — |
 | feature-dns-resolver-library | B | feature | DNS resolver library (`dns.pas`) with selectable backends | — |
 | feature-dotted-unit-names | A | feature | Dotted / namespace unit names in `uses` | — |
 | feature-dwarf-debug-info | A | feature | DWARF debug info (`-g`) — phased, x86-64 first | — |
 | feature-dynamic-include-paths-config | A | feature | Dynamic Include Paths, Configuration Files, and System Scanner | — |
 | feature-dynamic-soname-discovery | A | feature | Dynamic soname discovery (no execve) | — |
+| feature-eof-stdin-builtin | A | feature | `Eof` (standard input) not recognized | — |
 | feature-esp32-idf-xtensa | A | feature | ESP-IDF integration: Xtensa (ESP32-S2/S3) — QEMU + real hardware | — |
-| feature-esp-float | B | feature | ESP float wiring (xtensa + riscv32 float value model) | — |
 | feature-esp-peripheral-callback-api | BB//B/BAB | feature | ESP32 peripheral callback API (timer / GPIO / ADC) — the user-facing "interrupt" | — |
-| feature-exception-base-class | B | feature | Built-in / RTL `Exception` base class | — |
 | feature-extended-alias-or-reject | A | feature | Extended: formalize as Double alias (or reject) | — |
 | feature-flexcolumn-directive | A | feature | `flexcolumn` calling-convention directive | chore-inc-to-units |
 | feature-fpc-vs-pxx-feature-boundary | A | feature | Policy: FPC-bootstrap subset vs PXX-only library features | — |
@@ -65,7 +67,6 @@ _none_
 | feature-json-library | B | feature | JSON library — parser + serializer (with a roundtrip test app) | — |
 | feature-lazycasing-c-imports | A | feature | `{$LAZYCASING ON/OFF}` for C imports only | feature-compiler-warnings |
 | feature-lazy-standard-unit-emission | A | feature | Lazy standard-unit emission / routine-level dead-code elimination | — |
-| feature-local-typed-constant | A | feature | Local typed constants (initialized const inside a routine) | — |
 | feature-metaclass-descendant-enforcement | A | feature | Metaclass alias descendant-constraint enforcement | — |
 | feature-mimic-fpc | A | feature | `mimic FPC` compatibility mode | feature-directive-if-numeric |
 | feature-mode-delphi | A | feature | `{$mode delphi}` support — incl. the @-optional proc-pointer disambiguation | — |
@@ -77,6 +78,7 @@ _none_
 | feature-optimization-levels | A | feature | Optimization levels (`-O0/-O1/-O2/-O3/-Os`) + pass framework | — |
 | feature-os-targets-bsd-mac | A | feature | Additional OS targets (BSD / macOS via syscall mapping; Windows deprioritized) | — |
 | feature-pal-esp-posix-fd-semantics | B | feature | ESP PAL: exact POSIX fd semantics over ESP-IDF VFS | — |
+| feature-pal-file-stat-metadata | B | feature | PAL file stat metadata | — |
 | feature-pal-network-datagram-poll-errno | B | feature | PAL network: datagrams, readiness polling, and exact errno semantics | — |
 | feature-parallel-processing | A | feature | Parallel processing as a language feature | feature-unified-heap-allocator |
 | feature-png-decoder-library | B | feature | PNG decoder library | feature-compression-library, feature-hashing-library, feature-rtl-image-bitmap-library |
@@ -90,7 +92,6 @@ _none_
 | feature-stackful-coro-port | A | feature | Port the stackful coroutine backend to all targets | — |
 | feature-static-arena-profile | A | feature | Fixed-static-arena allocator profile | feature-unified-heap-allocator |
 | feature-string-model-tyfixedstring | B | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
-| feature-sys-getdents | A | feature | Directory scanning support — sys_getdents64 (libc-free) | — |
 | feature-sys-process-spawning | A | feature | Process spawning and execution support — libc-free execve pipeline | — |
 | feature-threadsafe-io-serialization | A | feature | Statement-level I/O serialization under threads | feature-unified-heap-allocator |
 | feature-toolchain-cli-ux | A | feature | Toolchain CLI / user tooling (install, config, discovery, doctor, selfcheck) | — |
@@ -107,13 +108,14 @@ _none_
 
 _none_
 
-## done (127)
+## done (131)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
 | bug-64bit-shift-xor-literal-gaps | A | bug | 64-bit gaps in pinned v9: `xor` operator, large shifts, 64-bit hex literals | — |
 | bug-builtin-val-miscompiles | A | bug | Builtin `Val` mis-lowers — wrong error code + segfault | — |
 | bug-builtin-write-case-sensitive | A | bug | Builtin write/writeln matched case-sensitively (only lowercase resolves) | — |
+| bug-char-literal-in-const-expr | A | bug | Char literal in a constant expression: `ConstEval` rejected `'a'` | — |
 | bug-codegen-nested-index-load-width-pressure | A | bug | Codegen miscompiles nested integer-array index load width under register pressure | — |
 | bug-compiler-tmyclass-hardcoded-clash | A | bug | Hardcoded 'TMyClass' name clash in compiler type resolution | — |
 | bug-const-byref-record-param-temp | A | bug | Can't pass a function-result temporary to a const/by-ref record param | — |
@@ -190,8 +192,10 @@ _none_
 | feature-esp32-isr-iram | B | feature | ESP32: Compiler-Directed ISR and IRAM Support | — |
 | feature-esp32-managed-features | A | feature | ESP32 managed-feature port (xtensa + riscv32, qemu-validated) | — |
 | feature-esp32-managed-strings | A | feature | ESP32 managed strings (tyAnsiString runtime on xtensa + riscv32) | — |
+| feature-esp-float | B | feature | ESP float wiring (xtensa + riscv32 float value model) | — |
 | feature-esp-int64-arith | A | feature | 64-bit integer arithmetic for the ESP backends (riscv32 + xtensa) | — |
 | feature-esp-isa-baseline-softfallback | A | feature | ESP ISA baseline + software fallbacks for older parts | — |
+| feature-exception-base-class | B | feature | Built-in / RTL `Exception` base class | — |
 | feature-explicit-typecasts | A | feature | Explicit type-casts (`Char`/`Boolean`/`String` and a general `TypeName(expr)`) | — |
 | feature-float-str-val | A | feature | Float Str / Val | — |
 | feature-for-in-iteration | A | feature | `for x in ...` iteration — FPC-exact (arrays, sets, strings, enums, enumerators) | — |
@@ -206,6 +210,7 @@ _none_
 | feature-language-gaps-from-demos | A | feature | Language gaps surfaced by the demo apps (sudoku / sieve / chess) | — |
 | feature-library-test-suite | A+B | feature | Track B library test suite | — |
 | feature-library-var-out-lvalue-actuals | A | feature | Inc/Dec intrinsic rejects non-bare-symbol lvalue actuals | — |
+| feature-local-typed-constant | B | feature | Local typed constants (initialized const inside a routine) | — |
 | feature-managed-exception-cleanup | A | feature | Finalize managed values on exception unwind | — |
 | feature-managed-string-default | A | feature | Promote managed AnsiString from opt-in to default | bug-managed-byref-string-param-store, feature-managed-exception-cleanup |
 | feature-member-access-on-call-result | B | feature | Member access on a function-call result (`f(args).field`) | — |
@@ -250,6 +255,7 @@ _none_
 ## Ready (no unmet blocker)
 
 - [A] bug-bare-function-name-call-vs-resultvar
+- [B] chess-pal-getdents-link
 - [A] chore-inc-to-units
 - [A] chore-runtime-emission-size
 - [A] design-overloadable-intrinsics
@@ -268,21 +274,20 @@ _none_
 - [A] feature-declaration-prescan
 - [B] feature-demo-calc
 - [B] feature-demo-chess
-- [B] feature-demo-file-browser
 - [B] feature-demo-life
 - [B] feature-demo-lisp
 - [B] feature-demo-maze
 - [B] feature-demo-solitaire
+- [B] feature-demo-video-player-audio-sync
 - [B] feature-demo-vm
 - [B] feature-dns-resolver-library
 - [A] feature-dotted-unit-names
 - [A] feature-dwarf-debug-info
 - [A] feature-dynamic-include-paths-config
 - [A] feature-dynamic-soname-discovery
+- [A] feature-eof-stdin-builtin
 - [A] feature-esp32-idf-xtensa
-- [B] feature-esp-float
 - [BB//B/BAB] feature-esp-peripheral-callback-api
-- [B] feature-exception-base-class
 - [A] feature-extended-alias-or-reject
 - [A] feature-fpc-vs-pxx-feature-boundary
 - [A] feature-handle-compacting-heap
@@ -293,7 +298,6 @@ _none_
 - [A] feature-interfaces
 - [B] feature-json-library
 - [A] feature-lazy-standard-unit-emission
-- [A] feature-local-typed-constant
 - [A] feature-metaclass-descendant-enforcement
 - [A] feature-mimic-fpc
 - [A] feature-mode-delphi
@@ -304,6 +308,7 @@ _none_
 - [A] feature-optimization-levels
 - [A] feature-os-targets-bsd-mac
 - [B] feature-pal-esp-posix-fd-semantics
+- [B] feature-pal-file-stat-metadata
 - [B] feature-pal-network-datagram-poll-errno
 - [A] feature-parallel-processing
 - [A] feature-progress-transition-helpers
@@ -316,7 +321,6 @@ _none_
 - [A] feature-stackful-coro-port
 - [A] feature-static-arena-profile
 - [B] feature-string-model-tyfixedstring
-- [A] feature-sys-getdents
 - [A] feature-sys-process-spawning
 - [A] feature-threadsafe-io-serialization
 - [A] feature-toolchain-cli-ux
