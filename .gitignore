@@ -16,6 +16,9 @@ test/*.ppu
 __pycache__/
 *.swp
 *.swo
+.qoder/
+.idea/
+.vscode/
 docs/historic/user-rambling/
 thesises/
 .antigravitycli/
