@@ -24,7 +24,7 @@ _none_
 | feature-pcl-opengl-glarea-demo | B | feature | PCL OpenGL GLArea demo | — |
 | feature-sys-getdents | B | feature | Directory scanning support — sys_getdents64 (libc-free) | — |
 
-## backlog (81)
+## backlog (80)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -54,7 +54,6 @@ _none_
 | feature-demo-video-player-audio-sync | B | feature | Video player audio playback and sync | — |
 | feature-demo-vm | B | feature | Demo — bytecode VM + assembler (small ISA) | — |
 | feature-dns-resolver-library | B | feature | DNS resolver library (`dns.pas`) with selectable backends | — |
-| feature-dotted-unit-names | A | feature | Dotted / namespace unit names in `uses` | — |
 | feature-dwarf-debug-info | A | feature | DWARF debug info (`-g`) — phased, x86-64 first | — |
 | feature-dynamic-include-paths-config | A | feature | Dynamic Include Paths, Configuration Files, and System Scanner | — |
 | feature-dynamic-soname-discovery | A | feature | Dynamic soname discovery (no execve) | — |
@@ -114,7 +113,7 @@ _none_
 
 _none_
 
-## done (134)
+## done (135)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -192,6 +191,7 @@ _none_
 | feature-demo-sudoku | B | feature | Demo — Sudoku (solver + generator + interactive play) | — |
 | feature-demo-video-player | B | feature | Flagship Demo — Console Video Player (libc-free) | — |
 | feature-directive-if-numeric | A | feature | Valued defines + numeric `{$IF}` evaluation | — |
+| feature-dotted-unit-names | A | feature | Dotted / namespace unit names in `uses` | — |
 | feature-double-to-single-narrowing | A | feature | Double literal / value → Single narrowing on assign and argument | — |
 | feature-elf-rel-writer | A | feature | Relocatable ELF32 object writer (.o for ESP-IDF linking) | — |
 | feature-empty-class-shorthand | A | feature | Empty class descendant shorthand | — |
@@ -289,7 +289,6 @@ _none_
 - [B] feature-demo-video-player-audio-sync
 - [B] feature-demo-vm
 - [B] feature-dns-resolver-library
-- [A] feature-dotted-unit-names
 - [A] feature-dwarf-debug-info
 - [A] feature-dynamic-include-paths-config
 - [A] feature-dynamic-soname-discovery

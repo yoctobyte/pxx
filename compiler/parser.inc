@@ -150,21 +150,56 @@ end;
 procedure ParseExpr; forward;
 procedure PyParseBoolExpr; forward;  { Nil Python boolean layer (defined in pyparser.inc) }
 
+{ Resolve a (possibly dotted) unit qualifier at the front of a reference:
+  `Unit.Member` or `Posix.SysSocket.Member`. Greedily matches the LONGEST dotted
+  prefix that is a compiled unit and still leaves a trailing `.member`, so a
+  namespace unit (`Posix.SysSocket`) wins over its first component. Returns the
+  unit index and leaves the parser ON the member name; returns -1 and consumes
+  nothing when the leading name is not a compiled unit (e.g. `record.field`). }
 function ConsumeUnitQualifier(var name: AnsiString): Integer;
+var cand: AnsiString; bestUnit, bestExtra, extra, ti, k, u: Integer;
 begin
   Result := -1;
-  if (CurTok.Kind = tkIdent) and (TokPos + 1 < TokCount) and
-     (Tokens[TokPos].Kind = tkDot) and
-     (Tokens[TokPos + 1].Kind = tkIdent) then
+  if CurTok.Kind <> tkIdent then Exit;
+  { Need at least one `.ident` after the name to be a qualifier at all. }
+  if not ((TokPos + 1 < TokCount) and (Tokens[TokPos].Kind = tkDot) and
+          (Tokens[TokPos + 1].Kind = tkIdent)) then Exit;
+
+  cand := name;
+  bestUnit := -1; bestExtra := -1;
+  { 0-extra: the bare name is the unit, member = Tokens[TokPos+1]. }
+  u := FindCompiledUnit(cand);
+  if u >= 0 then begin bestUnit := u; bestExtra := 0; end;
+
+  { Extend with `.ident` groups; each is a unit-qualifier candidate only while a
+    further `.ident` (the member) still remains. }
+  ti := TokPos;                       { points at the first '.' }
+  extra := 1;
+  while (ti + 1 < TokCount) and (Tokens[ti].Kind = tkDot) and
+        (Tokens[ti + 1].Kind = tkIdent) do
   begin
-    Result := FindCompiledUnit(name);
-    if Result >= 0 then
+    AppendChar(cand, '.');
+    AppendString(cand, GetTokenStr(ti + 1));
+    if (ti + 3 < TokCount) and (Tokens[ti + 2].Kind = tkDot) and
+       (Tokens[ti + 3].Kind = tkIdent) then
     begin
-      Next;                 { consume unit name }
-      Expect(tkDot, '.');
-      name := CurTok.SVal;  { leave parser on the member name }
+      u := FindCompiledUnit(cand);
+      if u >= 0 then begin bestUnit := u; bestExtra := extra; end;
     end;
+    Inc(extra);
+    ti := ti + 2;
   end;
+
+  if bestUnit < 0 then Exit;
+  Result := bestUnit;
+  { Consume (bestExtra+1) identifiers, each with its trailing '.', leaving the
+    parser on the member name (mirrors the old single-dot behavior). }
+  for k := 0 to bestExtra do
+  begin
+    Next;                 { consume identifier (CurTok -> '.') }
+    Expect(tkDot, '.');   { consume '.'        (CurTok -> next ident) }
+  end;
+  name := CurTok.SVal;    { member name; parser left on it }
 end;
 
 function LastDotName(const s: AnsiString): AnsiString;
@@ -177,6 +212,26 @@ begin
   Result := '';
   for i := p + 1 to Length(s) do
     AppendChar(Result, s[i]);
+end;
+
+{ Read a (possibly dotted) unit name in a `uses` clause: ident('.'ident)* joined
+  with dots (`Posix.SysSocket`, `System.Generics.Collections`). A path/string
+  token (`uses 'foo/bar'`) is returned as-is. Consumes the whole name, leaving the
+  parser on the following token (',' / ';' / next clause). Non-dotted names are
+  returned unchanged, so existing lookup is untouched. }
+function ReadDottedUsesName: AnsiString;
+begin
+  Result := CurTok.SVal;
+  if CurTok.Kind <> tkIdent then begin Next; Exit; end;
+  Next;                                  { consume the first identifier }
+  while (CurTok.Kind = tkDot) and (TokPos < TokCount) and
+        (Tokens[TokPos].Kind = tkIdent) do
+  begin
+    Next;                                { consume '.'  (CurTok -> identifier) }
+    AppendChar(Result, '.');
+    AppendString(Result, CurTok.SVal);
+    Next;                                { consume identifier }
+  end;
 end;
 
 procedure SkipSelectors;
@@ -11305,7 +11360,7 @@ var
 begin
   Expect(tkUnit, 'unit');
   if CurTok.Kind <> tkIdent then Error('expected unit name');
-  uname := CurTok.SVal; Next;
+  uname := ReadDottedUsesName;   { accept dotted `unit Posix.SysSocket;` headers }
   Expect(tkSemicolon, ';');
 
   if CurTok.Kind <> tkIdent then Error('expected interface section');
@@ -11325,8 +11380,7 @@ begin
         doneUses := False;
         while (CurTok.Kind in [tkIdent, tkString]) and not doneUses do
         begin
-          ParseUsesUnit(CurTok.SVal);
-          Next;
+          ParseUsesUnit(ReadDottedUsesName);
           if not Eat(tkComma) then doneUses := True;
         end;
         Eat(tkSemicolon);
@@ -11369,8 +11423,7 @@ begin
           doneUses := False;
           while (CurTok.Kind in [tkIdent, tkString]) and not doneUses do
           begin
-            ParseUsesUnit(CurTok.SVal);
-            Next;
+            ParseUsesUnit(ReadDottedUsesName);
             if not Eat(tkComma) then doneUses := True;
           end;
           Eat(tkSemicolon);
@@ -11821,8 +11874,7 @@ begin
         doneUses := False;
         while (CurTok.Kind in [tkIdent, tkString]) and not doneUses do
         begin
-          ParseUsesUnit(CurTok.SVal);
-          Next;
+          ParseUsesUnit(ReadDottedUsesName);
           if not Eat(tkComma) then doneUses := True;
         end;
         Eat(tkSemicolon);

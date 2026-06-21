@@ -247,6 +247,8 @@ test-core: $(COMPILER)
 	test "$$(/tmp/cinc_main26)" = "$$(printf 'local-ok\ninc-ok')"
 	./$(COMPILER) test/test_declared_directive.pas /tmp/test_declared_directive26
 	test "$$(/tmp/test_declared_directive26)" = "$$(printf '1\n2\n3\n4\n5')"
+	./$(COMPILER) test/dotted/test_dotted_uses.pas /tmp/test_dotted_uses26
+	test "$$(/tmp/test_dotted_uses26)" = "$$(printf '2\n42\n7')"
 	./$(COMPILER) test/test_platform_defines.pas /tmp/test_platform_defines_posix26
 	test "$$(/tmp/test_platform_defines_posix26)" = "$$(printf 'platform=posix\nfiles\nsockets\nthreads\ndynlib\nend')"
 	./$(COMPILER) --platform=esp test/test_platform_defines.pas /tmp/test_platform_defines_esp26
