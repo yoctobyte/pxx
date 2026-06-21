@@ -1,11 +1,18 @@
-# Release — runs only on a semver tag (vX.Y.Z[-chan.N]). One x86_64 runner
-# cross-builds every target (codegen is host-independent — no arch matrix), runs
-# the full gate + reproduce-selfcheck for THIS tag, then publishes. A release can't
-# ship unless the gate + reproduction succeed (release.sh --build-for exits non-zero).
+# Release — MANUAL ONLY. Never fires automatically: there is deliberately NO
+# `push: tags` trigger, so pushing a v* tag (even by accident) does NOT publish.
+# A release happens only when a human explicitly dispatches this workflow with a
+# tag input — from the Actions "Run workflow" button, or via `tools/release.sh`
+# (which dispatches it after its interactive seatbelt + typed-tag confirmation).
+# The tag must already exist. One x86_64 runner cross-builds every target (codegen
+# is host-independent), runs the full gate + reproduce-selfcheck for the tag, then
+# publishes. A release can't ship unless the gate + reproduction succeed.
 name: release
 on:
-  push:
-    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Existing release tag to build & publish (vX.Y.Z[-chan.N])'
+        required: true
 
 permissions:
   contents: write          # lets gh create the Release
@@ -15,17 +22,20 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-        with: { fetch-depth: 0 }     # tags + history
+        with:
+          ref: ${{ inputs.tag }}       # build exactly the dispatched tag
+          fetch-depth: 0               # tags + history
       - name: deps (FPC seed + QEMU)
         run: sudo apt-get update && sudo apt-get install -y fpc qemu-user
       - name: build compiler
         run: make compiler/pascal26
       - name: gate + build dist + manifest + reproduce (for this tag)
-        run: tools/release.sh --build-for "${GITHUB_REF_NAME}" --no-seatbelt
+        run: tools/release.sh --build-for "${{ inputs.tag }}" --no-seatbelt
       - name: create GitHub Release
-        env: { GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} }
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          TAG="${GITHUB_REF_NAME}"
+          TAG="${{ inputs.tag }}"
           # Prefer a hand-authored body at docs/release-notes/<tag>.md; else auto.
           NOTES=(--generate-notes)
           if [ -f "docs/release-notes/$TAG.md" ]; then

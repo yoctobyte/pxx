@@ -323,8 +323,18 @@ publish() {
       --title "PXX $tag — $codename" "${notes_args[@]}"
   else
     git tag -a "$tag" -m "PXX $tag — codename $codename"
-    git push origin "$tag"     # fires .github/workflows/release.yml
-    echo "==> pushed $tag — CI release workflow will build + publish."
+    git push origin "$tag"
+    # The CI release workflow is MANUAL-ONLY (workflow_dispatch) — pushing the tag
+    # does NOT auto-publish. Dispatch it explicitly here, having already passed the
+    # interactive seatbelt + typed-tag confirmation above. No gh -> print the
+    # manual step so a release still never happens without a human action.
+    if have gh; then
+      gh workflow run release.yml -f tag="$tag"
+      echo "==> pushed $tag and dispatched the release workflow (build + publish)."
+    else
+      echo "==> pushed $tag. gh not found — finish the release by hand:"
+      echo "    Actions -> release -> Run workflow -> tag=$tag"
+    fi
   fi
 }
 
