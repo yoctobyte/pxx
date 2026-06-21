@@ -9347,7 +9347,13 @@ begin
     begin
       { Single by-value param: the arg register holds the value as DOUBLE bits
         (the IR float value model). Narrow to single before the 4-byte slot
-        store, else the low dword of the double bits is garbage. }
+        store, else the low dword of the double bits is garbage.
+        LANDMINE — the tySingle narrow point is NOT uniform across targets: x86-64
+        and aarch64 narrow HERE in the CALLEE prologue (caller pushes double bits
+        in a GPR); i386 and arm32 narrow in the CALLER before the 4-byte push
+        (ir_codegen386.inc / ir_codegen_arm32.inc). Looks innocent and local, but
+        a float-ABI change must touch the matching site on every target — see
+        docs/progress/done/feature-single-first-class.md. }
       case i of
         0: begin EmitB($48); EmitB($89); EmitB($F8); end; { mov rax, rdi }
         1: begin EmitB($48); EmitB($89); EmitB($F0); end; { mov rax, rsi }
