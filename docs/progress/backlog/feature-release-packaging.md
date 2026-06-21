@@ -164,10 +164,30 @@ free-typed version** — compute and confirm from a menu.
 - **Confirm-before-act**: show the final `{tag, codename, channel, what fires}`,
   require an explicit `yes`. Dry-run still the default; `--publish` + the confirmation
   are the only side-effecting path.
+- **Human-state prompts (half-joke, fully real — the classic "don't ship tired"
+  rule):** before a `--publish`, a couple of deadpan confirmations — "is it stable?",
+  "are you tipsy?", "is it past midnight?" — each a `[y/N]` that aborts on the wrong
+  answer. Foot-gun guard against the 1am over-confident release. Skippable with an
+  explicit `--no-seatbelt` for scripted/CI use.
 - **Guard rails (refuse to publish if):** working tree dirty; not synced with origin;
-  `make test` / `make release` not green; computed tag already exists; computed tag
-  not strictly greater than the last (regression); channel jump skips a step. Print
-  each failed guard explicitly with the fix.
+  computed tag already exists; computed tag not strictly greater than the last
+  (regression); channel jump skips a step. Print each failed guard with the fix.
+
+### Full-suite gate + explicit xfail registry
+
+A release runs the **entire** verification surface and **blocks on any failure**,
+period — *unless* that failure is explicitly registered as expected/WIP:
+
+- Run: `make test` (self-host fixedpoint + determinism), `make cross-bootstrap`
+  (all-target byte-identical), `make lib-test`, the ESP suites, and `make demos`.
+- **Turn `make demos` from "dashboard, not a gate" into a gate** by pairing it with
+  an **xfail registry** — a checked-in list of known-failing items, each with a
+  reason **and a ticket reference** (e.g. `examples/chess/chess.pas` ->
+  `local-typed-const`). A failure **in** the registry is reported but tolerated; a
+  failure **not** in the registry **blocks the release**. No silent tolerance, no
+  blanket "demos are non-fatal" — every accepted failure is named and ticketed.
+- The xfail registry doubles as the release's honest "known gaps" section in the
+  notes — the envelope is drawn from exactly what's *not* xfail.
 
 ## Non-goals
 - AppImage / snap / flatpak (wrong tool class).
