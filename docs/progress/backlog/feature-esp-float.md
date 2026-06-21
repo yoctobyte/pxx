@@ -97,14 +97,25 @@ confirmed in image). Default path + self-host byte-identical. NOTE: `--xtensa-fp
 sets CPENABLE itself; on ESP-IDF the OS also manages it per-task — fine (idempotent).
 The QEMU FPU-equality probe needs `ESP_PXXFLAGS=--xtensa-fpu`.
 
-### REMAINING on this ticket
-- **Round / Frac / Int intrinsics** (procIdx -204/-205/-206) still ERROR on ESP —
-  no nearest-even / fractional soft kernel yet. Add kernels + wire (mirror the
-  Trunc path). error-not-miscompile holds meanwhile.
-- **`{$FASTDOUBLES}`** follow-on (post-baseline; see below).
+### Round / Frac / Int — DONE 2026-06-21 (d1e0c14)
+Soft kernels added: `__pxx_d2i_rne`/`s2i_rne` (round-half-to-even, matches the SSE
+cvtsd2si oracle), `__pxx_dint`/`sint` (trunc toward zero, result stays float),
+`__pxx_dfrac`/`sfrac`. Wired on both ESP backends (Round -204 like Trunc but rne;
+Frac/Int -205/-206 promote arg to double then dfrac/dint). The last ESP float
+error path is gone. LANDMINE recorded: bitwise `not` on Int64/LongWord
+miscompiles on ESP (IR_NOT is boolean) — kernels clear low bits via shr/shl.
+
+### REMAINING (optional / chore)
+- **`{$FASTDOUBLES}`** follow-on (post-baseline, opt-in speed/precision knob; see
+  below). Not required for correctness.
 - Wire `test/test_esp_float_probe.pas` into the `make test` ESP suite (a
-  `test-esp-float` target next to `test-esp-softfloat`) — deferred: Track B has
-  uncommitted Makefile edits, don't sweep them.
+  `test-esp-float` target next to `test-esp-softfloat`, incl an
+  `ESP_PXXFLAGS=--xtensa-fpu` run) — deferred: Track B has uncommitted Makefile
+  edits, don't sweep them.
+
+The core ticket (Real native-depth model + per-target dispatch matrix + the full
+value model/arith/conv/params/returns/intrinsics) is **functionally complete** on
+riscv32 and xtensa, validated vs the x86-64 oracle on esp32c3 + esp32s3.
 
 ## Dependencies
 
