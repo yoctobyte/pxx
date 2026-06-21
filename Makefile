@@ -317,6 +317,8 @@ test-core: $(COMPILER)
 	test "$$(/tmp/test_float_str_val26)" = "$$(printf '[3.14]\n[    3.1416]\n[-2.750]\n[1000.5]\n42.7500 code=0\n-1.5000 code=0\n100.00 code=0\n350.00 code=0\n0.1250 code=0\ncode=1\n[   42]\n-99 code=0')"
 	./$(COMPILER) test/test_float_result_loop.pas /tmp/test_float_result_loop26
 	test "$$(/tmp/test_float_result_loop26)" = "$$(printf '8.0000\n6.0000\n2.0000')"
+	./$(COMPILER) test/test_single_first_class.pas /tmp/test_single_first_class26
+	test "$$(/tmp/test_single_first_class26)" = "$$(printf '4.5000\n9.0000\n3.7500\n4.0000\n7.0000\n13.0000\n0.7500')"
 	./$(COMPILER) test/test_int_to_float.pas /tmp/test_int_to_float26
 	test "$$(/tmp/test_int_to_float26)" = "$$(printf '1.0000\n7.0000\n7.0000\n3.0000\n5.0000\n0.0000\n1.0000\n2.0000\n5.0000')"
 	./$(COMPILER) test/test_math.pas /tmp/test_math26

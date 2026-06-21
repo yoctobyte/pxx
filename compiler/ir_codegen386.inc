@@ -2322,6 +2322,10 @@ begin
               end;
               if Procs[procIdx].Params[nArgs].TypeKind = tySingle then
               begin
+                { xmm0 holds the value as DOUBLE bits; narrow to single before
+                  pushing 4 bytes (movss alone would store the low dword of the
+                  double bits = garbage). }
+                EmitB($F2); EmitB($0F); EmitB($5A); EmitB($C0); { cvtsd2ss xmm0, xmm0 }
                 EmitB($83); EmitB($EC); EmitB($04);             { sub esp, 4 }
                 EmitB($F3); EmitB($0F); EmitB($11); EmitB($04); EmitB($24); { movss [esp], xmm0 }
                 Inc(argBytes, 4);

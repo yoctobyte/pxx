@@ -1,9 +1,21 @@
 # Double literal / value → Single narrowing on assign and argument
 
 - **Type:** feature (float type coercion)
-- **Status:** backlog
+- **Status:** DONE (2026-06-21) — subsumed by feature-single-first-class
 - **Owner:** —
 - **Opened:** 2026-06-20
+- **Closed:** 2026-06-21
+
+## Resolution (2026-06-21)
+
+Done as part of feature-single-first-class (see that ticket). The internal-call
+Single ABI was the real blocker, exactly as the 2026-06-20 investigation note
+predicted. Once the ABI narrows/widens at the tySingle boundary on every target,
+the `TypesCompatible` clause (a float formal accepts any float or ordinal actual,
+compatible-match only) was safe to add — `ScaleS(1.5, 3)` now prints 4.5000, not
+0.00. Assign-narrowing already worked (EmitStoreVar cvtsd2ss). Covered by
+test/test_single_first_class.pas and the re-enabled Single case in
+test/test_cross_float_return.pas. All 4 Linux targets correct + byte-identical.
 
 ## Problem
 

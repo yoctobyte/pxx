@@ -9137,8 +9137,17 @@ begin
         EmitLoadImmA64(9, Syms[idx].Offset);
         { add x8, x29, x9 }
         EmitI32($8B0903A8);
+        if (Syms[idx].TypeKind = tySingle) and
+           (not Syms[idx].IsRef) and (not Syms[idx].IsArray) then
+        begin
+          { Single by-value: x[i] holds the value as DOUBLE bits (value model);
+            narrow to single before the 4-byte slot store. }
+          EmitI32($9E670000 + (i shl 5));  { fmov d0, x[i] }
+          EmitI32($1E624000);              { fcvt s0, d0 }
+          EmitI32($BD000100);              { str s0, [x8] }
+        end
         { Store parameter register i (x0..x7) into [x8] }
-        if sz = 1 then
+        else if sz = 1 then
           EmitI32($39000100 + i)
         else if sz = 2 then
           EmitI32($79000100 + i)
@@ -9299,6 +9308,15 @@ begin
       sz := ParamSize(idx);
       EmitB($48); EmitB($8B); EmitB($85);
       EmitI32(16 + (nparams - 1 - i) * 8);        { mov rax, [rbp+disp] }
+      if (Syms[idx].TypeKind = tySingle) and
+         (not Syms[idx].IsRef) and (not Syms[idx].IsArray) then
+      begin
+        { Single by-value: rax holds double bits; narrow to single before store. }
+        EmitB($66); EmitB($48); EmitB($0F); EmitB($6E); EmitB($C0); { movq xmm0, rax }
+        EmitB($F2); EmitB($0F); EmitB($5A); EmitB($C0);             { cvtsd2ss xmm0, xmm0 }
+        EmitB($F3); EmitB($0F); EmitB($11); EmitB($85); EmitI32(Syms[idx].Offset); { movss [rbp+off], xmm0 }
+        Continue;
+      end;
       if sz = 1 then
       begin
         EmitB($88); EmitB($85);                   { mov [rbp+off], al }
@@ -9324,6 +9342,25 @@ begin
   begin
     idx := Procs[procIdx].Params[i].SymIdx;
     sz := ParamSize(idx);
+    if (Syms[idx].TypeKind = tySingle) and
+       (not Syms[idx].IsRef) and (not Syms[idx].IsArray) then
+    begin
+      { Single by-value param: the arg register holds the value as DOUBLE bits
+        (the IR float value model). Narrow to single before the 4-byte slot
+        store, else the low dword of the double bits is garbage. }
+      case i of
+        0: begin EmitB($48); EmitB($89); EmitB($F8); end; { mov rax, rdi }
+        1: begin EmitB($48); EmitB($89); EmitB($F0); end; { mov rax, rsi }
+        2: begin EmitB($48); EmitB($89); EmitB($D0); end; { mov rax, rdx }
+        3: begin EmitB($48); EmitB($89); EmitB($C8); end; { mov rax, rcx }
+        4: begin EmitB($4C); EmitB($89); EmitB($C0); end; { mov rax, r8 }
+        5: begin EmitB($4C); EmitB($89); EmitB($C8); end; { mov rax, r9 }
+      end;
+      EmitB($66); EmitB($48); EmitB($0F); EmitB($6E); EmitB($C0); { movq xmm0, rax }
+      EmitB($F2); EmitB($0F); EmitB($5A); EmitB($C0);             { cvtsd2ss xmm0, xmm0 }
+      EmitB($F3); EmitB($0F); EmitB($11); EmitB($85); EmitI32(Syms[idx].Offset); { movss [rbp+off], xmm0 }
+      Continue;
+    end;
     if i < 4 then
     begin
       if sz = 1 then

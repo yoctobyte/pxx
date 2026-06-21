@@ -2609,6 +2609,17 @@ begin
     Result := True;
     Exit;
   end;
+  { A float formal accepts any float actual (widen/narrow at the ABI boundary,
+    e.g. a Double or float-literal into a Single) or an ordinal actual (int ->
+    float). Compatible-match only (after the exact-match phase), so a true
+    same-width float arg still wins. Requires the internal-call Single ABI
+    (feature-single-first-class) — without it a Single param would silently
+    receive 0.0, which is why this clause depends on the ABI fix. }
+  if TypeIsFloat(pType) and (TypeIsFloat(aType) or TypeIsOrdinal(aType)) then
+  begin
+    Result := True;
+    Exit;
+  end;
   Result := False;
 end;
 
