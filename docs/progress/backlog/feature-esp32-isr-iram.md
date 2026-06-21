@@ -27,12 +27,35 @@ section their CodePos lands in and emits proc symbols with `st_shndx` =
 `.iram1.text` for iram procs. On non-ESP targets `iram;` is an accepted no-op
 (same source builds as the x86-64 oracle).
 
-**Deferred:** `interrupt;` (raw hardware-vector: full register save/restore +
-`mret`/`rfi`, vector-table placement) currently raises a clear "not yet
-implemented" error — it shares the IRAM placement but needs per-arch prologue/
-epilogue + isn't qemu-validatable without a vector table. Proc-address fixups
-in the .o (`@isr` passed to `esp_intr_alloc`) also still error (`ProcAddrFix`);
-needed for real IDF ISR registration — separate follow-up.
+## Status 2026-06-21 — `interrupt;` DONE on riscv32 (esp32c3); structurally verified
+
+`procedure foo; interrupt;` now compiles a raw hardware trap handler on riscv32
+(9ab4304). Prologue saves the interrupted caller-saved context (t0-t6, a0-a7;
+ra/s0 via the normal frame, 64-byte save area above the frame), the body runs,
+the epilogue restores that context and returns via `mret` (added `rv32_mret`).
+`interrupt` implies `iram`, so the handler lands in `.iram1.text` (existing
+placement + cross-section call lowering). Gated on `ProcIsInterrupt` →
+non-interrupt riscv codegen byte-identical, self-host unchanged.
+
+Verified structurally (`test/test_esp_interrupt.pas` + `--emit-obj`,
+`riscv32-esp-elf-{readelf,objdump}`): `MyIsr` sits in `.iram1.text`; the disasm
+shows the full t0-t6/a0-a7 save, the normal ra/s0 frame, a working cross-section
+indirect call into flash (`esp_rom_printf`), the mirrored restore, and `mret`.
+
+**Remaining:**
+- **Live trap validation.** Installing the handler in `mtvec` + triggering a real
+  trap isn't expressible in PXX yet — the rv32 inline-asm dialect has no CSR ops
+  (`csrw mtvec`, `csrrs mstatus`) and `@isr`/`ProcAddrFix` (below) still errors, so
+  nothing in PXX can point the vector at the handler. Options: add CSR ops +
+  `mret`/`wfi` to `asmtext_rv32.inc` for a self-contained bare trap test; or fix
+  `ProcAddrFix` so the handler address can be handed to a setup routine; or run on
+  real esp32c3 hardware. (This is the "not qemu-validatable without a vector
+  table" the deferral noted.)
+- **xtensa `interrupt;`** still errors — windowed-exception ISRs need EPC/EPS +
+  `rfi`/`rfe` + the windowed register spill, materially more involved than riscv.
+- **`@isr` proc-address fixups** in the `.o` (`ProcAddrFix`, for `esp_intr_alloc`
+  IDF-registered ISRs) still error — separate follow-up; also unblocks live
+  validation above.
 
 ## Motivation
 
