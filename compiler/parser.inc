@@ -6121,7 +6121,13 @@ begin
       Expect(tkLParen, '(');
       if CurTok.Kind <> tkIdent then Error('expected variable');
       argIdx := FindSym(CurTok.SVal); identTokIdx := TokPos - 1; Next;
-      if argIdx < 0 then Error('undefined');
+
+      { Parse the FULL target lvalue (consuming any .field / [i] / ^ selectors)
+        BEFORE the optional step and ')'. Inc/Dec accept any assignable lvalue,
+        exactly like a `var` parameter — a bare-symbol-only parse choked on
+        `Inc(rec.f)` / `Inc(Self.field)`. argIdx may be -1 (an implicit-Self
+        field): ParseLValueAST resolves it (and still errors on a true unknown). }
+      valNode := ParseLValueAST(argIdx, identTokIdx);
 
       if Eat(tkComma) then
       begin
@@ -6134,7 +6140,6 @@ begin
       end;
       Expect(tkRParen, ')');
 
-      valNode := ParseLValueAST(argIdx, identTokIdx);
       opNode := AllocNode(AN_BINOP);
       if idx = Ord(tkInc) then ASTIVal[opNode] := Ord(tkPlus) else ASTIVal[opNode] := Ord(tkMinus);
       ASTLeft[opNode] := valNode;
