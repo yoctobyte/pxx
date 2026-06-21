@@ -32,4 +32,5 @@ try_compile tiny_regex_re -I"$ROOT/lib/crtl/include" -I"$ROOT/library_candidates
 try_compile tiny_regex_header -I"$ROOT/lib/crtl/include" -I"$ROOT/library_candidates/tiny-regex-c" "$ROOT/test/crtl_tiny_regex_header_smoke.c"
 try_compile freebsd_regex_header -I"$ROOT/lib/crtl/include" -I"$ROOT/library_candidates/freebsd-regex/include" "$ROOT/test/crtl_freebsd_regex_header_smoke.c"
 try_compile freebsd_regex_regerror -I"$ROOT/lib/crtl/include" -I"$ROOT/library_candidates/freebsd-regex/include" -I"$ROOT/library_candidates/freebsd-regex" "$ROOT/library_candidates/freebsd-regex/regerror.c"
+try_compile crtl_src_probe -I"$ROOT/lib/crtl/include" "$ROOT/test/crtl_src_probe.c"
 say "(devtest is a dashboard; GAP lines are compiler/library tickets, not a gate)"

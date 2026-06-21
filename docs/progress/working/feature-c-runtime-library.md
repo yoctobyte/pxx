@@ -4,6 +4,7 @@
 - **Status:** working
 - **Owner:** Codex
 - **Opened:** 2026-06-20
+- **Blocked-by:** feature-c-source-frontend
 - **Relation:** supports `feature-c-source-frontend`,
   `feature-c-regex-library-devtest`, and future C-source candidates such as INI,
   PNG, zlib, and embedded utility libraries.
@@ -121,3 +122,11 @@ This needs a deliberate compiler/library namespace decision before accepted
   constants / typedefs needed by those headers. Added a `freebsd_regex_regerror`
   devtest probe; it now gets past project headers and reports a C-body frontend
   gap instead of an include gap.
+- 2026-06-21 — Added `fprintf` to `stdio.h` and `reallocarray` to `stdlib.h`
+  for FreeBSD regex / tiny-regex-c candidate pressure. Added first
+  `lib/crtl/src/` implementations: `string.c` (memcpy/memmove/memset/memcmp/
+  strlen/strcmp/strncmp/strcpy/strncpy/strchr) and `ctype.c` (ASCII lookup
+  table). Added `test/crtl_src_probe.c` to `make c-interop-devtest`; it reports
+  `GAP crtl_src_probe -- undefined variable (strlen)`, confirming the C body
+  frontend (Track A `feature-c-source-frontend`) is the remaining blocker for
+  compiling the runtime source. Ticket now `Blocked-by: feature-c-source-frontend`.

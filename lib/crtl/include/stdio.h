@@ -16,6 +16,7 @@ extern FILE *stdout;
 extern FILE *stderr;
 
 int printf(const char *fmt);
+int fprintf(FILE *stream, const char *fmt);
 int sprintf(char *s, const char *fmt);
 int puts(const char *s);
 int fputs(const char *s, FILE *stream);
