@@ -80,6 +80,7 @@ begin
   XtensaABI := XTENSA_ABI_CALL0;
   XtensaSoftDivide := False;
   XtensaHasFpu := False;
+  XtensaFastDoubles := False;
   TARGET_PTR_SIZE := 8;
   EmitObjMode := False;
   EspBareBoot := False;

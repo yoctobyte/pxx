@@ -1105,6 +1105,16 @@ begin
       else if CaseEqual(name, 'corba') then InterfacesComMode := False
       else Error('interfaces requires com or corba');
     end
+    else if CaseEqual(command, 'fastdoubles') then
+    begin
+      { Speed/precision knob: on targets where Double is soft but Single is
+        hardware (xtensa today), compute Double +,-,* via the HW single FPU
+        (d2s -> op.s -> s2d) instead of the soft-double kernels. Lossy (single
+        precision) — default OFF = correct IEEE double. No-op elsewhere. }
+      if CaseEqual(name, 'on') then XtensaFastDoubles := True
+      else if CaseEqual(name, 'off') then XtensaFastDoubles := False
+      else Error('fastdoubles requires on or off');
+    end
     else if CaseEqual(command, 'cstylecomments') then
     begin
       if CaseEqual(name, 'on') then CStyleComments := True

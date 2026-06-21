@@ -866,6 +866,11 @@ var
     conversions stay soft (no HW single divide/compare-to-AR path wired). Opt-in
     because FPU presence can't be inferred from the cpu flag (S2 has none). }
   XtensaHasFpu : Boolean;
+  { {$FASTDOUBLES ON} — compute Double +,-,* through the hardware single FPU
+    (round-trip d2s/op.s/s2d) instead of the soft-double kernels. Lossy (single
+    precision); default OFF. Only meaningful on xtensa with --xtensa-fpu (single
+    HW, double soft); no-op on riscv (both soft) and double-native targets. }
+  XtensaFastDoubles : Boolean;
   { Windowed-ABI expression stack: a constant-sp function keeps its stack
     pointer fixed (the window overflow/underflow handlers spill the caller's
     a0-a3 to [sp-16], so sp must not move). Temporaries live at sp-relative

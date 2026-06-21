@@ -748,20 +748,24 @@ begin
 
   { Hardware single FPU path (--xtensa-fpu, ESP32/-S3): single +,-,* via
     add.s/sub.s/mul.s. Single / and comparisons stay soft (no HW single divide /
-    no FP-compare-to-AR path wired); all Double stays soft. }
-  if XtensaHasFpu and (not isDouble) and
-     ((op = Ord(tkPlus)) or (op = Ord(tkMinus)) or (op = Ord(tkStar))) then
+    no FP-compare-to-AR path wired). Double normally stays soft, BUT under
+    {$FASTDOUBLES ON} Double +,-,* also takes this path (operands coerced to
+    single via d2s, the result repacked to double via s2d) — lossy single
+    precision, traded for speed. }
+  if XtensaHasFpu and ((op = Ord(tkPlus)) or (op = Ord(tkMinus)) or (op = Ord(tkStar))) and
+     ((not isDouble) or XtensaFastDoubles) then
   begin
-    EmitFloatOperandXtensa(left, tySingle);
+    EmitFloatOperandXtensa(left, tySingle);      { double operand -> single (d2s) }
     XtensaPushA2;
-    EmitFloatOperandXtensa(right, tySingle);     { a2 = right bits }
-    XtensaPopA3;                                  { a3 = left bits }
-    xtensa_wfr(0, reg_xtensa_a3);                 { f0 = left }
-    xtensa_wfr(1, reg_xtensa_a2);                 { f1 = right }
+    EmitFloatOperandXtensa(right, tySingle);      { a2 = right bits }
+    XtensaPopA3;                                   { a3 = left bits }
+    xtensa_wfr(0, reg_xtensa_a3);                  { f0 = left }
+    xtensa_wfr(1, reg_xtensa_a2);                  { f1 = right }
     if op = Ord(tkPlus) then xtensa_add_s(0, 0, 1)
     else if op = Ord(tkMinus) then xtensa_sub_s(0, 0, 1)
     else xtensa_mul_s(0, 0, 1);
-    xtensa_rfr(reg_xtensa_a2, 0);                 { a2 = result bits }
+    xtensa_rfr(reg_xtensa_a2, 0);                  { a2 = single result }
+    if isDouble then EmitFloatConvXtensa(tySingle, tyDouble);  { s2d -> a2:a3 }
     Exit;
   end;
 
