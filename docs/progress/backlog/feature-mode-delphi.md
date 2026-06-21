@@ -28,30 +28,34 @@ Assigning/passing a function as a procedural value (tested 2026-06-21):
 So in Delphi mode a bare function name in a **procedural-target context** means
 "the pointer", not "call it".
 
-## The rabbit hole (intention = target type)
+## NOT a rabbit hole — deterministic call-first precedence (FPC-verified 2026-06-21)
 
-`p := F` is genuinely ambiguous and is resolved by the **target type**:
+`p := F` is NOT ambiguous in FPC; it is resolved by a fixed precedence, not by
+guessing intention:
 
-- target is a procedural type  → take `@F` (address)
-- target is `F`'s result type   → call `F`
+1. **Try the call.** If `F`'s *result* type is assignment-compatible with the
+   target → **call wins** — in ALL modes, even when `@F` would also fit. Tested:
+   `function F: Pointer; var q: Pointer; q := F;` calls F (no warning) in default,
+   objfpc, and delphi, although `@F` is equally Pointer-compatible. Call has
+   priority, period.
+2. **`@F` is a pure Delphi-mode fallback,** used only when the call result does
+   NOT fit the target AND the target is procedural AND `@F` fits. Tested:
+   `function F: Pointer; var p: TFn; p := F;` → default/objfpc ERROR (Pointer ≠
+   TFn); `-Mdelphi` compiles (takes `@F`). No warnings either way.
 
-PXX builds expression values **bottom-up** with no expected-type context, so a
-naive `ParseExpr` can't tell which is meant at `F`. Do NOT try to thread an
-expected type through all of `ParseExpr` (that is the deep rabbit hole).
+So the implementer does **not** detect intention and does **not** need expected-
+type propagation through `ParseExpr`. The rule is: at the few **bind sites** where
+the target type is known, the EXISTING type check already prefers the call; just
+add, *for delphi mode only*, a fallback when that type check fails on a procedural
+target.
 
-**Bounded approach:** the @-relax only matters in a finite set of **binding
-contexts** where the target type is already known:
-
-1. assignment RHS to a proc-typed lvalue (`p := F`),
-2. a call argument bound to a proc-typed parameter (`g(F)`),
-3. comparison of a proc value (`if p = F`, `if @p = @F`), and proc-typed
-   record/array fields.
-
-At each of those bind points, special-case: *if the RHS/arg is a bare
-function-name reference (a routine with no required args, not already called/`@`'d)
-AND the target/param type is procedural → rewrite it to take the address instead
-of emitting a call.* Method pointers (`@obj.M`) carry Self — handle the 2-word
-`TMethod` shape. No global type propagation; just the bind-site check.
+**Bind sites** (where the target type is in hand): assignment RHS to a proc-typed
+lvalue (`p := F`), a call arg bound to a proc-typed parameter (`g(F)`), proc-value
+comparison (`if p = F`), proc-typed record/array fields. At each: *if the call
+interpretation type-checks → call (all modes); else if delphi AND target is
+procedural AND the operand is a bare function-name (no required args, not already
+`@`'d) AND `@F` fits → take the address.* Method pointers (`@obj.M`) carry Self —
+2-word `TMethod` shape.
 
 ## Other Delphi-mode deltas (scope, lower priority than @-relax)
 
