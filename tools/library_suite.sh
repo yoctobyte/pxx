@@ -104,10 +104,13 @@ run_green() {
     $'5 6 6 2 6 4 2 5 \n5 6 6 2 6 4 2 5 \n359 891 105 979 687 ' \
     "$ROOT/test/lib_random.pas"
   run_expect platform_posix \
-    $'posix\nfiles\nsockets\nthreads\ndynlib\npal-write=3\nfile=io:2\nunsupported=-38' \
+    $'posix\nfiles\nsockets\nthreads\ndynlib\npal-write=3\nflush=0\ntell=2\nfile=io:2:2\nrename=0\nold-missing\nnew-readable\ndelete=0\nmkdir=0\nrmdir=0\nunsupported=-38' \
     -Fu"$ROOT/lib/rtl/platform/posix" "$ROOT/test/lib_platform.pas"
+  run_expect platform_net_posix \
+    $'tcp=ok\nunsupported=-38' \
+    -Fu"$ROOT/lib/rtl/platform/posix" "$ROOT/test/lib_platform_net.pas"
   run_expect platform_esp_unsupported \
-    $'esp-idf\nopen=-38\nread=-38\nunsupported=-38' \
+    $'esp-idf\nopen=-38\nread=-38\nseek=-38\nflush=-38\ndelete=-38\nrename=-38\nmkdir=-38\nrmdir=-38\nsocket=-38\nreuse=-38\nnonblock=-38\nbind=-38\nconnect=-38\nlisten=-38\naccept=-38\nrecv=-38\nsend=-38\nshutdown=-38\nsockclose=-38\nunsupported=-38' \
     --platform=esp -Fu"$ROOT/lib/rtl/platform/esp" "$ROOT/test/lib_platform_esp.pas"
   run_expect textfile_posix \
     $'alpha\nbeta\ncount=2\nio=0' \

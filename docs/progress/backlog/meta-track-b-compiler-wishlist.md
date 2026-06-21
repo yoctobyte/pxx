@@ -74,6 +74,18 @@ vectors). **Interim:** intermediate variables.
   over the kernel-ABI file syscalls, but may need a builtin hook; see the
   adventure `EXPECTED-FAILURES.md` F1/F2.
 
+## Synapse / networking compiler asks (from Track B)
+
+- **Dotted namespace unit names** → `feature-dotted-unit-names`. Synapse's
+  Delphi-POSIX path starts with `uses Posix.SysSocket, ...`; current PXX looks
+  for only `posix`.
+- **`{$IF DECLARED(Qualified.Symbol)}`** →
+  `feature-conditional-declared-directive`. Synapse probes imported POSIX
+  constants this way in `ssposix.inc`.
+
+These are not PAL/library workaround targets. Track B can build the `Posix.*`
+shim only after the compiler can name and conditionally probe those units.
+
 ## Already landed (track A)
 
 - const-expr `shl`/`shr`/`mod` folding (`632f1c8`) — done.
@@ -139,3 +151,6 @@ B's pinned binary (binary+builtin coherent; v9->v10).
   - `sysutils.pas` gained `FloatToStr`, `FloatToStrF`, `StrToFloatDef`,
     `StrToFloat`, `Pos`, `PadLeft`, `PadRight`. Discovered that the `Str` builtin
     breaks when sysutils's `Copy` is in scope — filed as a compiler gap.
+- 2026-06-21 — Synapse/POSIX smoke exposed two new compiler asks: dotted unit
+  names and `{$IF DECLARED(...)}`. Filed detail tickets and linked them here so
+  Track A can pick them up without Track B inventing Synapse-specific shims.

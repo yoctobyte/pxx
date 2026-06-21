@@ -30,8 +30,8 @@ Full design lives in `docs/developer/plan-networking.md`. Key decisions:
 
 | Blocker | Notes |
 |---------|-------|
-| Conditional/directive parsing | Synapse smoke tests all fail on directive issues |
-| Unit resolution from source paths | `synsock` fails resolving a unit dependency |
+| Conditional/directive parsing | POSIX-profile Synapse hits missing `{$IF DECLARED(...)}` support |
+| Unit resolution from source paths | Dotted units such as `Posix.SysSocket` truncate to `posix` |
 | RTL unit availability | `SysUtils`, `Classes` stubs or equivalents needed |
 | Platform-branch selection | `{$IFDEF LINUX}` / `{$IFDEF FPC}` handling |
 
@@ -48,10 +48,10 @@ Full design lives in `docs/developer/plan-networking.md`. Key decisions:
 
 | Unit | Current state | Likely fix category |
 |------|--------------|---------------------|
-| `synautil` | directive parse fail | conditional/directive |
-| `synaip` | directive parse fail (pulls SysUtils) | directive + RTL |
-| `synsock` | unit resolution fail | resolver / path |
-| `blcksock` | directive parse fail (uses list) | directive + RTL |
+| `synautil` | default: missing `libc`; POSIX profile: missing `posix` | branch selection + dotted units |
+| `synaip` | default: missing `libc`; POSIX profile: missing `posix` | branch selection + dotted units |
+| `synsock` | default: missing `system`; POSIX profile: `{$IF DECLARED(...)}` parse fail | branch selection + directive support |
+| `blcksock` | default: missing `system`; POSIX profile: missing `system` | dotted units / later RTL availability |
 
 First pass: classify failures. Second pass: fix compiler blockers. Third pass:
 compile units successfully.
@@ -125,3 +125,26 @@ DNS deferred to a later milestone.
   Posix.*/FPC reach ESP with documented gaps — "backend differs", not "API absent".
   Portable cross surface stays TNetSocket; async stays the epoll reactor (Posix/FPC
   are blocking compat surfaces, coexist not merge).
+- 2026-06-21 — PAL network foundation landed under
+  `feature-platform-abstraction-layer`: IPv4 TCP primitives in `platform.pas`
+  with POSIX raw-syscall backend and ESP-IDF/lwIP object-shape backend. Regression
+  `test/lib_platform_net.pas` proves POSIX loopback TCP; native `--platform=esp`
+  tests assert no host fallback; C3/S3 object smokes import the expected `lwip_*`
+  symbols. Remaining PAL networking gaps (UDP, poll/select readiness, exact errno,
+  ESP-IDF run validation, IPv6/DNS hooks) are split to
+  `feature-pal-network-datagram-poll-errno`.
+- 2026-06-21 — Blocking/async layering decision documented in
+  `docs/developer/plan-networking.md`: keep one PAL socket substrate, then expose
+  two top-level libraries above it. `net.pas` is the normal blocking API;
+  `asyncnet.pas` is coroutine-backed and viral by design. PAL must stay scheduler-
+  free and provide only socket ops, nonblocking mode, readiness/error primitives,
+  and portable capabilities.
+- 2026-06-21 — Synapse support audit continued against the pinned stable
+  compiler with the manual smoke helper. `test/manual/try_synapse_compile.sh`
+  now defaults to `stable_linux_amd64/default/pinned` and has
+  `SYNAPSE_PROFILE=posix` as a temporary stand-in for the future scoped manifest.
+  Default profile still falls into the wrong/missing branch (`libc`/`system`).
+  The POSIX profile exposes two compiler blockers before the library/PAL shims
+  can matter: dotted namespace unit names (`Posix.*`, `System.Generics.*`) and
+  `{$IF DECLARED(Qualified.Symbol)}`. Filed `feature-dotted-unit-names` and
+  `feature-conditional-declared-directive`; no Synapse source workaround.

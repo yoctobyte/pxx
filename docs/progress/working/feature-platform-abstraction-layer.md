@@ -151,3 +151,25 @@ Out of scope (separate tickets):
   `lib/rtl/platform/esp/`. `make library-suite-green` now compiles PAL tests with
   explicit `-Fu` backend paths, proving path-selected backend binding while
   keeping callers on `uses platform`.
+- 2026-06-21 — Extended PAL file IO beyond open/read/write/close: added
+  `PalSeek`/`PalTell`, `PalFlush`, `PalDelete`, `PalRename`, `PalMkdir`, and
+  `PalRmdir`. POSIX maps these to raw Linux syscalls (`lseek`, `fsync`,
+  `unlinkat`, `renameat`, `mkdirat`). ESP-IDF real CPU targets now use
+  IDF/newlib stdio over VFS (`fopen`/`fread`/`fwrite`/`fseek`/`fflush`/
+  `fclose`) plus `remove`/`rename`/`mkdir`/`rmdir`; native `--platform=esp`
+  remains unsupported to prevent host fallback. Validation: `make lib-test`,
+  `make library-suite-green`, and ESP object compile smokes for both
+  `--target=riscv32 --platform=esp` and `--target=xtensa --platform=esp`.
+  `readelf -Ws` shows the ESP objects importing the expected IDF/newlib symbols.
+- 2026-06-21 — Added first PAL network slice: IPv4 TCP socket primitives
+  (`PalSocket`, reuseaddr, nonblocking, bind/connect/listen/accept, send/recv,
+  shutdown, socket close). POSIX backend uses raw Linux syscalls, including i386
+  `socketcall`; ESP-IDF real CPU targets bind to lwIP (`lwip_socket`,
+  `lwip_bind`, `lwip_connect`, `lwip_listen`, `lwip_accept`, `lwip_recv`,
+  `lwip_send`, `lwip_shutdown`, `lwip_close`, `lwip_fcntl`, `lwip_setsockopt`).
+  Native `--platform=esp` still returns unsupported for every network primitive
+  to prevent host fallback. Validation: POSIX loopback TCP roundtrip in
+  `test/lib_platform_net.pas`, `make lib-test`, `make library-suite-green`, and
+  ESP object compile smokes for `--target=riscv32 --platform=esp` and
+  `--target=xtensa --platform=esp`; `readelf -Ws` shows the expected lwIP
+  imports.

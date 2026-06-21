@@ -17,12 +17,31 @@ const
   PAL_PLATFORM_POSIX = 1;
   PAL_PLATFORM_ESP_IDF = 2;
 
+  PAL_NET_AF_INET = 2;
+  PAL_NET_SOCK_STREAM = 1;
+  PAL_NET_SOCK_DGRAM = 2;
+
+  PAL_NET_IP_ANY = 0;
+  PAL_NET_IP_LOOPBACK = $7F000001;
+
+  PAL_NET_EAGAIN = -11;
+  PAL_NET_EINPROGRESS = -115;
+
+  PAL_SHUT_RD = 0;
+  PAL_SHUT_WR = 1;
+  PAL_SHUT_RDWR = 2;
+
   PAL_OPEN_READ   = 0;
   PAL_OPEN_WRITE  = 1;
   PAL_OPEN_RDWR   = 2;
   PAL_OPEN_CREATE = $40;
+  PAL_OPEN_EXCL   = $80;
   PAL_OPEN_TRUNC  = $200;
   PAL_OPEN_APPEND = $400;
+
+  PAL_SEEK_SET = 0;
+  PAL_SEEK_CUR = 1;
+  PAL_SEEK_END = 2;
 
   PAL_ERR_UNSUPPORTED = -38; { Linux ENOSYS, used as the portable "not here" }
 
@@ -37,7 +56,26 @@ function PalUnsupported: Integer;
 function PalOpen(path: PChar; flags, mode: Integer): Integer;
 function PalRead(handle: Integer; buf: Pointer; len: Integer): Int64;
 function PalWrite(handle: Integer; buf: Pointer; len: Integer): Int64;
+function PalSeek(handle: Integer; offset: Int64; whence: Integer): Int64;
+function PalTell(handle: Integer): Int64;
+function PalFlush(handle: Integer): Integer;
 function PalClose(handle: Integer): Integer;
+function PalDelete(path: PChar): Integer;
+function PalRename(oldPath, newPath: PChar): Integer;
+function PalMkdir(path: PChar; mode: Integer): Integer;
+function PalRmdir(path: PChar): Integer;
+
+function PalSocket(domain, kind, proto: Integer): Integer;
+function PalSetSocketReuseAddr(handle, enabled: Integer): Integer;
+function PalSetSocketNonBlocking(handle, enabled: Integer): Integer;
+function PalBindIpv4(handle: Integer; hostAddr: LongWord; port: Integer): Integer;
+function PalConnectIpv4(handle: Integer; hostAddr: LongWord; port: Integer): Integer;
+function PalListen(handle, backlog: Integer): Integer;
+function PalAccept(handle: Integer): Integer;
+function PalRecv(handle: Integer; buf: Pointer; len: Integer): Int64;
+function PalSend(handle: Integer; buf: Pointer; len: Integer): Int64;
+function PalShutdown(handle, how: Integer): Integer;
+function PalSocketClose(handle: Integer): Integer;
 
 function PalMonotonicMillis: Int64;
 procedure PalYield;
@@ -89,9 +127,99 @@ begin
   Result := PalBackendWrite(handle, buf, len);
 end;
 
+function PalSeek(handle: Integer; offset: Int64; whence: Integer): Int64;
+begin
+  Result := PalBackendSeek(handle, offset, whence);
+end;
+
+function PalTell(handle: Integer): Int64;
+begin
+  Result := PalSeek(handle, 0, PAL_SEEK_CUR);
+end;
+
+function PalFlush(handle: Integer): Integer;
+begin
+  Result := PalBackendFlush(handle);
+end;
+
 function PalClose(handle: Integer): Integer;
 begin
   Result := PalBackendClose(handle);
+end;
+
+function PalDelete(path: PChar): Integer;
+begin
+  Result := PalBackendDelete(path);
+end;
+
+function PalRename(oldPath, newPath: PChar): Integer;
+begin
+  Result := PalBackendRename(oldPath, newPath);
+end;
+
+function PalMkdir(path: PChar; mode: Integer): Integer;
+begin
+  Result := PalBackendMkdir(path, mode);
+end;
+
+function PalRmdir(path: PChar): Integer;
+begin
+  Result := PalBackendRmdir(path);
+end;
+
+function PalSocket(domain, kind, proto: Integer): Integer;
+begin
+  Result := PalBackendSocket(domain, kind, proto);
+end;
+
+function PalSetSocketReuseAddr(handle, enabled: Integer): Integer;
+begin
+  Result := PalBackendSetSocketReuseAddr(handle, enabled);
+end;
+
+function PalSetSocketNonBlocking(handle, enabled: Integer): Integer;
+begin
+  Result := PalBackendSetSocketNonBlocking(handle, enabled);
+end;
+
+function PalBindIpv4(handle: Integer; hostAddr: LongWord; port: Integer): Integer;
+begin
+  Result := PalBackendBindIpv4(handle, hostAddr, port);
+end;
+
+function PalConnectIpv4(handle: Integer; hostAddr: LongWord; port: Integer): Integer;
+begin
+  Result := PalBackendConnectIpv4(handle, hostAddr, port);
+end;
+
+function PalListen(handle, backlog: Integer): Integer;
+begin
+  Result := PalBackendListen(handle, backlog);
+end;
+
+function PalAccept(handle: Integer): Integer;
+begin
+  Result := PalBackendAccept(handle);
+end;
+
+function PalRecv(handle: Integer; buf: Pointer; len: Integer): Int64;
+begin
+  Result := PalBackendRecv(handle, buf, len);
+end;
+
+function PalSend(handle: Integer; buf: Pointer; len: Integer): Int64;
+begin
+  Result := PalBackendSend(handle, buf, len);
+end;
+
+function PalShutdown(handle, how: Integer): Integer;
+begin
+  Result := PalBackendShutdown(handle, how);
+end;
+
+function PalSocketClose(handle: Integer): Integer;
+begin
+  Result := PalBackendSocketClose(handle);
 end;
 
 function PalMonotonicMillis: Int64;

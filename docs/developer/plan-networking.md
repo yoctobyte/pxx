@@ -36,6 +36,44 @@ units map straight onto the same syscalls — so part-2 work reuses part-1's cor
   lwIP/IDF on ESP. Synapse's transport is blocking-only; that is the part we do
   **not** keep.
 
+### Blocking vs async API decision (2026-06-21)
+
+Expose two top-level networking libraries over the same PAL socket substrate:
+
+```
+PAL socket substrate
+  socket/bind/connect/listen/accept/send/recv/shutdown/close
+  nonblocking switch
+  readiness wait/poll + portable error mapping (next PAL slice)
+  no scheduler, no coroutine types, no protocol policy
+
+net.pas
+  normal blocking API
+  TNetSocket, TNetAddress, Connect, Listen, Accept, Send, Recv, Close
+  optional timeouts implemented with PAL readiness, not platform ifdefs
+
+asyncnet.pas
+  async/coroutine API
+  AsyncConnect, AsyncAccept, AsyncRecv, AsyncSend
+  depends on scheduler/reactor
+  always uses nonblocking PAL sockets + readiness waits
+```
+
+Async is viral **above** the I/O boundary, not below it. The PAL must not know
+about coroutines, promises, callbacks, scheduler tasks, or `RunUntilDone`; it
+only exposes primitives that both blocking and async layers can use. The
+blocking `net.pas` layer may either use blocking sockets directly or use
+nonblocking sockets internally plus PAL readiness waits to implement timeouts.
+The async layer always uses nonblocking sockets and parks/resumes through the
+scheduler.
+
+Protocol code should be factored so parsing/state machines are shared where
+reasonable. The split happens at the byte transport boundary: blocking protocol
+facades call `net.pas`; async protocol facades call `asyncnet.pas` and return
+through the coroutine/async surface. Do not try to make Synapse's blocking
+`TBlockSocket` drive the async reactor; it is a compatibility/protocol reuse
+path, not the native async path.
+
 ### Layering — decision 2026-06-19 (refined: Posix.* is the canonical base)
 
 `Posix.*` is the **canonical base API** (the clear, well-defined, stable C-header
@@ -207,8 +245,10 @@ real wrappers; `NetinetIn` is pure data; the rest are tiny. No libc.
 
 `feature-directive-if-numeric` → per-library **scoped manifest** delivering the
 define set (`feature-dynamic-include-paths-config` "Per-library scoped
-configuration" + `feature-mimic-fpc` for the set itself) → the `Posix.*` shim
-(6 units over our syscalls) → `{$mode delphi}` `@`-relax knob → Synapse units
+configuration" + `feature-mimic-fpc` for the set itself) → dotted/namespace unit
+names (`feature-dotted-unit-names`) → `{$IF DECLARED(...)}` support
+(`feature-conditional-declared-directive`) → the `Posix.*` shim (6 units over
+our syscalls) → `{$mode delphi}` `@`-relax knob → Synapse units
 (`synautil`/`synaip`/`synsock`/`blcksock`, then clients). SSL (`ssl_openssl`)
 deferred — pluggable, and blocking is acceptable there.
 
@@ -224,21 +264,33 @@ Manual inventory helper:
 ```sh
 tools/install_externals.sh
 test/manual/try_synapse_compile.sh
+SYNAPSE_PROFILE=posix test/manual/try_synapse_compile.sh
 ```
 
 This is deliberately outside `make test`. It copies small smoke programs into
 `external/synapse/` so PXX's current source-relative unit resolver can find the
 Synapse units, then writes the full compiler log to `/tmp/pxx-synapse-compile.log`.
+By default the helper uses `stable_linux_amd64/default/pinned`; `COMPILER` or
+`PXX_STABLE` can override it. `SYNAPSE_PROFILE=posix` is only a manual stand-in
+for the future scoped library manifest: it defines the Delphi/POSIX symbols
+needed to steer Synapse toward the `Posix.*` branch. It is not a replacement for
+the manifest feature and should not become a source edit.
 
-Current baseline from Synapse `f2e705b`:
+Current baseline from Synapse `f2e705b`, pinned stable compiler, 2026-06-21:
 
-- `synapse_smoke_synautil.pas`: fails on a conditional/directive parse issue.
-- `synapse_smoke_synaip.pas`: fails on a conditional/directive parse issue
-  while pulling `SysUtils, SynaUtil`.
-- `synapse_smoke_synsock.pas`: reaches `synsock`, then fails resolving a unit
-  source dependency.
-- `synapse_smoke_blcksock.pas`: fails on a conditional/directive parse issue
-  around the `uses` list / dependent units.
+- Default profile:
+  - `synapse_smoke_synautil.pas`: `uses: unit source not found: libc`.
+  - `synapse_smoke_synaip.pas`: `uses: unit source not found: libc`.
+  - `synapse_smoke_synsock.pas`: `uses: unit source not found: system`.
+  - `synapse_smoke_blcksock.pas`: `uses: unit source not found: system`.
+- POSIX-cheat profile:
+  - `synapse_smoke_synautil.pas`: `uses: unit source not found: posix` from
+    dotted unit truncation (`Posix.*` parsed as `posix`).
+  - `synapse_smoke_synaip.pas`: same `posix` dotted-unit blocker.
+  - `synapse_smoke_synsock.pas`: `conditional directive: expected operator` at
+    `{$IF DECLARED(Posix.StrOpts.FIONREAD)}` in `ssposix.inc`.
+  - `synapse_smoke_blcksock.pas`: `uses: unit source not found: system`, likely
+    the same dotted-unit-name class for `System.Generics.*`.
 
 First investigation pass should classify these into directive support, unit
 resolution, RTL unit availability, and Synapse platform-branch selection.

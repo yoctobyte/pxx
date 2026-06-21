@@ -30,7 +30,26 @@ tasks, and `esp_timer`.
   - `PalOpen(path, flags, mode)`
   - `PalRead(handle, buf, len)`
   - `PalWrite(handle, buf, len)`
+  - `PalSeek(handle, offset, whence)`
+  - `PalTell(handle)`
+  - `PalFlush(handle)`
   - `PalClose(handle)`
+  - `PalDelete(path)`
+  - `PalRename(oldPath, newPath)`
+  - `PalMkdir(path, mode)`
+  - `PalRmdir(path)`
+- Socket primitives:
+  - `PalSocket(domain, kind, proto)`
+  - `PalSetSocketReuseAddr(handle, enabled)`
+  - `PalSetSocketNonBlocking(handle, enabled)`
+  - `PalBindIpv4(handle, hostAddr, port)`
+  - `PalConnectIpv4(handle, hostAddr, port)`
+  - `PalListen(handle, backlog)`
+  - `PalAccept(handle)`
+  - `PalRecv(handle, buf, len)`
+  - `PalSend(handle, buf, len)`
+  - `PalShutdown(handle, how)`
+  - `PalSocketClose(handle)`
 - Scheduler/clock hooks:
   - `PalYield`
   - `PalMonotonicMillis`
@@ -40,15 +59,27 @@ result. It currently uses `-38` (`ENOSYS`).
 
 ## Current Backends
 
-The posix backend implements byte-handle open/read/write/close using raw Linux
+The posix backend implements byte-handle open/read/write/seek/flush/close,
+basic filesystem mutation, and IPv4 TCP socket primitives using raw Linux
 syscalls on the hosted CPU targets. `PalMonotonicMillis` is a placeholder and
 currently returns `0`.
 
 The ESP backend is IDF-shaped. On real ESP CPU targets, `PalYield` and
 `PalMonotonicMillis` are wired to `vTaskDelay` and `esp_timer_get_time`.
-Byte-handle IO returns `PAL_ERR_UNSUPPORTED` until VFS/lwIP bindings are added.
-Native `--platform=esp` smoke tests avoid linking IDF symbols so capability and
-unsupported-path behavior can be tested on the host.
+File handles are backed by ESP-IDF/newlib stdio (`fopen`/`fread`/`fwrite`/
+`fseek`/`fflush`/`fclose`) plus VFS mutation calls (`remove`/`rename`/`mkdir`/
+`rmdir`). Socket handles are backed by ESP-IDF/lwIP BSD-socket calls
+(`lwip_socket`/`lwip_bind`/`lwip_connect`/`lwip_listen`/`lwip_accept`/
+`lwip_recv`/`lwip_send`/`lwip_shutdown`/`lwip_close`). File IO requires the app
+or board support to register/mount an actual VFS filesystem; sockets require the
+app to bring up the relevant ESP network interface. PAL only supplies the
+porting seam. Native `--platform=esp` smoke tests avoid linking IDF symbols so
+capability and unsupported-path behavior can be tested on the host without a
+host-libc fallback.
+
+The first socket slice is IPv4 TCP only. Addresses passed to `PalBindIpv4` and
+`PalConnectIpv4` are host-order IPv4 integers such as `PAL_NET_IP_LOOPBACK`
+(`127.0.0.1`) and `PAL_NET_IP_ANY`.
 
 ## Rules
 
@@ -56,5 +87,8 @@ unsupported-path behavior can be tested on the host.
 - Gate higher-level libraries on capability defines or PAL unsupported returns,
   not on CPU names.
 - Keep PAL primitives small enough to implement on both posix and ESP-IDF.
+- Keep async out of PAL. PAL exposes socket operations, nonblocking mode, and
+  readiness/error primitives; blocking `net.pas` and coroutine-backed
+  `asyncnet.pas` are separate top-level libraries above it.
 - When the Pascal unit search-path selector lands, split the backend into
   per-platform units and remove the interim single-unit branch.

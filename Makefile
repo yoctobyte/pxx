@@ -1975,9 +1975,11 @@ lib-test: pxx-stable-check
 	$(PXX_STABLE) test/lib_bitset.pas /tmp/lib_bitset
 	test "$$(/tmp/lib_bitset)" = "$$(printf '1\n1\n0\n1\n1\n0\n1\n0\n0\n0\n1\n0\n6\n5 10 70 150 \n4\n-1\n10\n70')"
 	$(PXX_STABLE) -Fulib/rtl/platform/posix test/lib_platform.pas /tmp/lib_platform
-	test "$$(/tmp/lib_platform)" = "$$(printf 'posix\nfiles\nsockets\nthreads\ndynlib\npal-write=3\nfile=io:2\nunsupported=-38')"
+	test "$$(/tmp/lib_platform)" = "$$(printf 'posix\nfiles\nsockets\nthreads\ndynlib\npal-write=3\nflush=0\ntell=2\nfile=io:2:2\nrename=0\nold-missing\nnew-readable\ndelete=0\nmkdir=0\nrmdir=0\nunsupported=-38')"
+	$(PXX_STABLE) -Fulib/rtl/platform/posix test/lib_platform_net.pas /tmp/lib_platform_net
+	test "$$(/tmp/lib_platform_net)" = "$$(printf 'tcp=ok\nunsupported=-38')"
 	$(PXX_STABLE) --platform=esp -Fulib/rtl/platform/esp test/lib_platform_esp.pas /tmp/lib_platform_esp
-	test "$$(/tmp/lib_platform_esp)" = "$$(printf 'esp-idf\nopen=-38\nread=-38\nunsupported=-38')"
+	test "$$(/tmp/lib_platform_esp)" = "$$(printf 'esp-idf\nopen=-38\nread=-38\nseek=-38\nflush=-38\ndelete=-38\nrename=-38\nmkdir=-38\nrmdir=-38\nsocket=-38\nreuse=-38\nnonblock=-38\nbind=-38\nconnect=-38\nlisten=-38\naccept=-38\nrecv=-38\nsend=-38\nshutdown=-38\nsockclose=-38\nunsupported=-38')"
 	$(PXX_STABLE) -Fulib/rtl/platform/posix test/lib_textfile.pas /tmp/lib_textfile
 	test "$$(/tmp/lib_textfile)" = "$$(printf 'alpha\nbeta\ncount=2\nio=0')"
 	$(PXX_STABLE) examples/bignum/factorial.pas /tmp/lib_factorial
@@ -2009,8 +2011,9 @@ demos: pxx-stable-check
 	@echo "=== demos: compile-smoke examples/* against $(PXX_STABLE) ==="
 	@rc=0; for src in examples/primes/sieve.pas examples/sudoku/sudoku.pas \
 	    examples/maze/maze.pas examples/bignum/factorial.pas \
-	    examples/chess/chess.pas examples/adventure/adventure.pas; do \
-	  if $(PXX_STABLE) "$$src" /tmp/demo_$$(basename $$src .pas) >/tmp/demo.log 2>&1; then \
+	    examples/chess/chess.pas examples/adventure/adventure.pas \
+	    examples/life/life.pas; do \
+	  if $(PXX_STABLE) -Fulib/pcl "$$src" /tmp/demo_$$(basename $$src .pas) >/tmp/demo.log 2>&1; then \
 	    printf '  OK    %s\n' "$$src"; \
 	  else \
 	    printf '  FAIL  %s  -- %s\n' "$$src" "$$(tail -1 /tmp/demo.log)"; \
