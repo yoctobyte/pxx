@@ -24,7 +24,7 @@ _none_
 | feature-pcl-opengl-glarea-demo | B | feature | PCL OpenGL GLArea demo | — |
 | feature-sys-getdents | B | feature | Directory scanning support — sys_getdents64 (libc-free) | — |
 
-## backlog (80)
+## backlog (79)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -95,7 +95,6 @@ _none_
 | feature-sat-solver-library | B | feature | SAT solver library — DPLL over CNF (known-instance test app) | — |
 | feature-stackful-coro-port | A | feature | Port the stackful coroutine backend to all targets | — |
 | feature-static-arena-profile | A | feature | Fixed-static-arena allocator profile | feature-unified-heap-allocator |
-| feature-string-copy-intrinsic-norter | A | feature | String `Copy` as a no-RTL compiler intrinsic (bootstrap-usable) | — |
 | feature-string-model-tyfixedstring | B | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 | feature-sys-process-spawning | A | feature | Process spawning and execution support — libc-free execve pipeline | — |
 | feature-threadsafe-io-serialization | A | feature | Statement-level I/O serialization under threads | feature-unified-heap-allocator |
@@ -113,7 +112,7 @@ _none_
 
 _none_
 
-## done (135)
+## done (136)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -236,6 +235,7 @@ _none_
 | feature-short-circuit-eval | A | feature | Short-circuit boolean evaluation (`and` / `or`) | — |
 | feature-single-first-class | A | feature | Single (32-bit float) first-class on the internal-call ABI | — |
 | feature-softfloat-lib | B | feature | Soft-float library (IEEE-754 double kernels + conversions) | — |
+| feature-string-copy-intrinsic-norter | A | feature | String `Copy` as a no-RTL compiler intrinsic (bootstrap-usable) | — |
 | feature-synthetic-feature-matrix-test | A | feature | Synthetic all-features stress test (cross-target conformance) | — |
 | feature-target-aarch64 | A | feature | Compile target: ARM64 / AArch64 Linux | feature-target-i386 |
 | feature-target-arm32 | A | feature | Compile target: ARM32 Linux | feature-target-aarch64 |
@@ -326,7 +326,6 @@ _none_
 - [B] feature-sat-solver-library
 - [A] feature-stackful-coro-port
 - [A] feature-static-arena-profile
-- [A] feature-string-copy-intrinsic-norter
 - [B] feature-string-model-tyfixedstring
 - [A] feature-sys-process-spawning
 - [A] feature-threadsafe-io-serialization

@@ -3270,6 +3270,32 @@ begin
           CurASTNode := argSeq;
           Exit;
         end;
+        { String first argument: bare `Copy(s, index[, count])` lowers to the
+          __pxxStrCopy substring helper (builtin unit, pulled by the pre-scan), so
+          string Copy needs no `uses sysutils`. 2-arg form -> count = rest (huge,
+          clamped to the end by the helper). The lib `sysutils.Copy` keeps the
+          explicit-uses overload path. }
+        ci := FindProc('__pxxStrCopy');
+        if (ci >= 0) and (IntToTypeKind(ASTTk[exprNode]) in [tyString, tyAnsiString, tyFixedString]) then
+        begin
+          if addrNode = -1 then
+          begin
+            addrNode := AllocNode(AN_INT_LIT);
+            ASTIVal[addrNode] := 2147483647; ASTTk[addrNode] := Ord(tyInteger);
+          end;
+          argSeq := AllocNode(AN_CALL);
+          ASTIVal[argSeq] := ci;
+          ASTTk[argSeq] := Ord(tyAnsiString);
+          lastArg := AllocNode(AN_ARG); ASTLeft[lastArg] := exprNode;       { s }
+          ASTLeft[argSeq] := lastArg;
+          ci := AllocNode(AN_ARG); ASTLeft[ci] := node;                     { index }
+          ASTRight[lastArg] := ci;
+          lastArg := AllocNode(AN_ARG); ASTLeft[lastArg] := addrNode;       { count }
+          ASTRight[ci] := lastArg;
+          CurASTNode := argSeq;
+          LastExprTk := tyAnsiString;
+          Exit;
+        end;
         Error('Copy: dynamic-array Copy needs a dynamic-array first argument ' +
               '(string Copy needs the strutils/sysutils unit)');
       end;
@@ -11754,6 +11780,14 @@ begin
     if (Tokens[i].Kind = tkIdent) and (i + 1 < TokCount) and
        (Tokens[i + 1].Kind = tkLParen) and
        (CaseEqual(GetTokenStr(i), 'str') or CaseEqual(GetTokenStr(i), 'val')) and
+       (TargetArch <> TARGET_XTENSA) and (TargetArch <> TARGET_RISCV32) then
+      needsBuiltin := True;
+    { Bare `Copy(...)` on a string lowers to the __pxxStrCopy substring helper in
+      the builtin unit (see ParseFactor). Pull the unit so the helper resolves;
+      the string-vs-dynarray decision is made at the call site, so a dynarray-only
+      Copy just leaves the extra helper unused. ESP can't compile builtin. }
+    if (Tokens[i].Kind = tkIdent) and (i + 1 < TokCount) and
+       (Tokens[i + 1].Kind = tkLParen) and CaseEqual(GetTokenStr(i), 'copy') and
        (TargetArch <> TARGET_XTENSA) and (TargetArch <> TARGET_RISCV32) then
       needsBuiltin := True;
     { Variant use needs VariantToStr (in builtin) for variant writes — on
