@@ -15,7 +15,7 @@ _none_
 | feature-c-runtime-library | B | feature | C runtime/library layer (`lib/crtl`) plus direct C-library packages | — |
 | feature-platform-abstraction-layer | B | feature | Platform Abstraction Layer (PAL): per-platform RTL port at one seam | — |
 
-## backlog (81)
+## backlog (82)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -60,6 +60,7 @@ _none_
 | feature-handle-compacting-heap | A | feature | Handle-table compacting heap (anti-fragmentation for constrained RAM) | — |
 | feature-hashing-library | B | feature | Hashing library — CRC32 / MD5 / SHA-256 (known-vector test app) | — |
 | feature-inline-asm-depth | A | feature | Inline assembler depth | — |
+| feature-inline-asm-multi-arch | A | feature | Inline assembly support for other architectures (i386, aarch64, arm32) | — |
 | feature-inline-routines | A | feature | Inline routine expansion (`inline;`) | — |
 | feature-interfaces | A | feature | Interfaces | — |
 | feature-json-library | B | feature | JSON library — parser + serializer (with a roundtrip test app) | — |
@@ -285,6 +286,7 @@ _none_
 - [A] feature-handle-compacting-heap
 - [B] feature-hashing-library
 - [A] feature-inline-asm-depth
+- [A] feature-inline-asm-multi-arch
 - [A] feature-inline-routines
 - [A] feature-interfaces
 - [B] feature-json-library
