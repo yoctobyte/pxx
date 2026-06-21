@@ -202,3 +202,59 @@ period — *unless* that failure is explicitly registered as expected/WIP:
   Optionally stub `make release` as the existing cross-bootstrap loop + `sha256sum`.
 - **Later (first real release):** write `make release` + `tools/release.sh` + the two
   YAMLs + `setup.sh`; then optionally signing and a scheduled nightly prerelease.
+
+## Validation — full dry-run pass (2026-06-21)
+
+The whole release path was exercised end-to-end (no publish). **Verified green:**
+
+- **Full dry-run, both entry points.** `tools/release.sh --build-for v0.1.0-beta.1`
+  (the CI path) and `RELEASE_BUMP=minor tools/release.sh` (the maintainer menu path,
+  → v0.1.0) both run clean to `REHEARSAL COMPLETE` / DRY-RUN with no side effects
+  (no tag, no `CODENAMES`, clean tree).
+- **Gate.** `make test` + `make cross-bootstrap` + `make lib-test` + `make demos`
+  all pass; `examples/chess/chess.pas` tolerated via the xfail registry, nothing
+  else fails.
+- **Assembly.** `build_dist` exports the committed tree from `git archive HEAD`
+  (`.gitattributes export-ignore` confirmed working — `docs/progress`,
+  `stable_linux_amd64`, etc. absent), builds all 4 host binaries into `compiler/`,
+  writes `MANIFEST.sha256`, and tars the bundle.
+- **Reproducibility.** `run_selfcheck` and the shipped `selfcheck.sh` both reproduce
+  every host binary **bit-for-bit** vs the manifest; `selfcheck.sh` check-1
+  (gen1==gen2) passes too.
+- **Self-contained bundle.** Unpacked under `/tmp`, the bundled `compiler/pxx-x86_64`
+  compiles+runs a bundled example resolving `lib/` + `builtin/` via `ExeDir` — no
+  repo, no env vars.
+- **Inspected (publish-only, never executed — no `--publish` by design):** the
+  `--notes-file` branch (both `release.sh --local` and `release.yml` prefer
+  `docs/release-notes/<tag>.md`, which exists for `v0.1.0-beta.1`); the dispatch path
+  `gh workflow run release.yml -f tag=$tag` (input name `tag`, checkout
+  `ref: inputs.tag` — correct); tag-then-dispatch ordering in `publish()`.
+
+**Bugs fixed (735a8f2, 96333d2):** `last_tag` fed a non-semver `git describe` tag
+into `sv_parse`; `--build-for` codename `grep` aborted under `set -euo pipefail`
+(missing `|| true`); the demos FAIL-parser matched the dashboard caption line; a
+same-statement `local tag=.. d="..$tag"` left `$tag` unbound under `set -u`;
+`RELEASE.md` referenced a nonexistent `examples/hello`. Plus codename Babbage and
+the corrected chess xfail reason.
+
+**Remaining / decisions for the maintainer:**
+
+1. **First-prerelease cannot be computed from the menu.** `pre` and `channel` both
+   require an *existing* channel, so from a stable/empty base there is no op that
+   produces the first prerelease (e.g. `v0.1.0-beta.1`). The documented first
+   release is therefore only cuttable via `--build-for` (CI, externally-created
+   tag) or a hand-made tag — not the interactive flow. Decision: add a "start
+   channel" op (the unused `startchan` param in `compute_next` is the hook:
+   `<stable> + channel <chan> → v<next>-chan.1`), or accept hand-tagging the first
+   prerelease. **Not yet fixed** — it changes the menu semantics the design scoped.
+2. **Pinned-vs-shipped chess message.** The demos gate runs the *pinned* stable
+   (v32, still rejects local typed consts); the *shipped* binary is HEAD (advances
+   to `eng.Free`). The xfail reason documents shipped behavior; a `make pin` would
+   align the gate's printed message. Non-blocking.
+3. **`tools/progress.sh` ships in the bundle** but `docs/progress/` is
+   export-ignored, so it no-ops (prints "no .../docs/progress", exits 0) in a
+   release clone. Left in intentionally (part of complete source; Makefile `check`
+   target still references it). Harmless.
+4. **Codename ledger** (`CODENAMES`) is created only at publish; `suggest_codename`
+   counts its lines. The hand-set codename in the release-notes file must match what
+   publish will append — consistent for beta.1 (Babbage = pool index 0). No change.
