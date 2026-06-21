@@ -123,7 +123,18 @@ selftest() {
 die() { echo "release: $*" >&2; exit 1; }
 have() { command -v "$1" >/dev/null 2>&1; }
 
-last_tag() { git -C "$REPO_ROOT" describe --tags --abbrev=0 2>/dev/null || echo ""; }
+# Highest existing RELEASE tag (pure semver v*.*.*), by the tool's own prerelease-
+# aware ordering. Deliberately NOT `git describe` — that returns the most recent
+# tag of ANY shape (e.g. milestone/*), which is not a version and breaks sv_parse.
+# Non-semver tags are ignored; returns "" when there is no release tag yet.
+last_tag() {
+  local t best=""
+  while IFS= read -r t; do
+    [[ -z "$t" ]] && continue
+    if [[ -z "$best" ]] || sv_gt "$t" "$best" 2>/dev/null; then best="$t"; fi
+  done < <(git -C "$REPO_ROOT" tag -l 'v*.*.*')
+  echo "$best"
+}
 
 suggest_codename() {
   # next pool entry whose initial isn't already used by an existing tag's notes;
@@ -174,7 +185,9 @@ main() {
   # CI / non-interactive: build dist + manifest + gate + selfcheck for an EXISTING
   # tag. No version menu, no tagging — the caller (release.yml) publishes dist/.
   if [[ -n "$BUILD_FOR" ]]; then
-    local cn; cn="$(grep -F "$BUILD_FOR " "$REPO_ROOT/docs/release-notes/CODENAMES" 2>/dev/null | awk '{print $2}' | head -1)"
+    # NB: keep the `|| true` — a missing/empty CODENAMES makes grep exit non-zero,
+    # which under `set -euo pipefail` would silently kill the script (exit 2).
+    local cn; cn="$(grep -F "$BUILD_FOR " "$REPO_ROOT/docs/release-notes/CODENAMES" 2>/dev/null | awk '{print $2}' | head -1 || true)"
     echo "==> build-for: $BUILD_FOR (codename ${cn:-none})"
     run_gate
     build_dist "$BUILD_FOR" "${cn:-unnamed}"
@@ -233,8 +246,10 @@ run_gate() {
   echo "$out"
   local bad=0 line src
   while IFS= read -r line; do
+    # Only a demo RESULT row (has a *.pas path) is a candidate failure. This avoids
+    # matching the dashboard's own caption line ("...FAILs -> file a ticket").
     case "$line" in
-      *FAIL*) src="$(awk '{for(i=1;i<=NF;i++) if($i ~ /\.pas$/) print $i}' <<<"$line")"
+      *FAIL*.pas*) src="$(awk '{for(i=1;i<=NF;i++) if($i ~ /\.pas$/) print $i}' <<<"$line")"
               if [[ -n "$src" ]] && grep -qxF "$src" "$x" 2>/dev/null; then
                 echo "    xfail (known): $src"
               else
@@ -251,7 +266,11 @@ run_gate() {
 # binaries, examples, docs, build system — so a user can both run it and rebuild
 # it from the same download. Disk is cheap; there are no partial flavors.
 build_dist() {
-  local tag="$1" codename="$2" d="$DIST/pxx-$tag" t
+  # NB: separate `local` for $d — a single `local tag=.. d="..$tag"` does NOT see
+  # the just-assigned $tag under `set -u` (bash evaluates the RHS before the name
+  # is in scope), which errored "tag: unbound variable".
+  local tag="$1" codename="$2" t
+  local d="$DIST/pxx-$tag"
   echo "==> build: clean source export + host binaries + manifest"
   rm -rf "$d"; mkdir -p "$d"
   # The full committed tree, straight from git. .gitattributes export-ignore is the
@@ -291,7 +310,7 @@ included source — no separate packages to fetch.
 
 ## Quick start (run)
     ./setup.sh            # puts \`pxx\` on PATH (uses the prebuilt host binary)
-    pxx examples/hello/hello.pas /tmp/hello && /tmp/hello
+    pxx examples/primes/sieve.pas /tmp/sieve && /tmp/sieve
 
 ## Layout
     compiler/             compiler source (*.pas / *.inc) + builtin/
@@ -316,7 +335,8 @@ EOF
 
 # Reproduce-from-this-host check: recompute the manifest, compare to the built one.
 run_selfcheck() {
-  local tag="$1" d="$DIST/pxx-$tag" t h1 h2 tmp
+  local tag="$1" t h1 h2 tmp        # $d split out: same-line $tag is unbound under set -u
+  local d="$DIST/pxx-$tag"
   echo "==> selfcheck: reproduce manifest from this host"
   tmp="$(mktemp -d)"
   for t in "${HOST_TARGETS[@]}"; do
