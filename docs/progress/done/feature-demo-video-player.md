@@ -1,8 +1,8 @@
 # Flagship Demo — Console Video Player (libc-free)
 
 - **Type:** feature
-- **Status:** backlog
-- **Owner:** —
+- **Status:** done
+- **Owner:** Antigravity
 - **Opened:** 2026-06-21
 - **Relation:** Sibling to other flagship demos. **Depends on** the low-level process spawning and pipe redirection in feature-sys-process-spawning and terminal input in feature-rtl-terminal-raw-mode.
 
@@ -23,3 +23,4 @@ A terminal-based video player (`examples/player/`) that spawns an external `ffmp
 
 ## Log
 - 2026-06-21 — Opened.
+- 2026-06-21 — Implemented video player with raw pipe reading, monotonic clock syncing, frame skipping, quality/mode toggles (ASCII/half-block/quadrant), and raw terminal input controls. Finished PAL-safe vfork process pipeline execution to avoid stack corruption (commit WIP).

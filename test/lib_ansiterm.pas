@@ -64,5 +64,16 @@ begin
     halt(7);
   end;
 
+  { Verify raw mode compiles and runs safely without crashing (even if stdin is not a TTY) }
+  AnsiSetRawMode(True);
+  AnsiSetRawMode(False);
+
+  { Verify ReadKey compiles and returns #0 when no input is available }
+  if AnsiReadKey <> #0 then
+  begin
+    writeln('AnsiReadKey failed (expected #0 when stdin has no input)');
+    halt(8);
+  end;
+
   writeln('OK');
 end.
