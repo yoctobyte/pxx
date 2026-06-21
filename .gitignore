@@ -26,3 +26,14 @@ test/gui/helloworld/helloworld
 *.lps
 *.map
 library_candidates/
+
+# Compiled example binaries: extensionless ELF built next to <name>.pas
+# (examples/adventure/adventure, examples/life/life, ...). Ignore one-level
+# files in each example dir, then keep sources/data (anything with an
+# extension) and subdirectories (scenes/, esp32 build trees, ...).
+examples/*/*
+!examples/*/*.*
+!examples/*/*/
+# Build artifacts anywhere under examples (esp32 IDF output, etc).
+examples/**/*.o
+examples/**/*.elf
