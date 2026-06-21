@@ -164,6 +164,35 @@ enough that most merges would be trivial (different directories); a small merge
 driver could auto-resolve the few shared touchpoints (`Makefile` fences, `BOARD.md`
 regeneration, the `stable_linux_amd64/` pin bump) deterministically.
 
+The mechanism is **`git worktree`**, not clone: `git worktree add ../fk-X -b X`
+makes a second working dir on its own branch that **shares the one `.git` object
+store** — no disk duplication, and a commit in one tree is visible to the others
+with no fetch (shared refs). One rule: a given branch can be checked out in only
+one tree at a time (git refuses otherwise), so each tree = a distinct branch.
+`clone --shared`/`--reference` also shares objects but adds a gc-on-source
+corruption footgun; plain `clone` duplicates the whole store. So worktree is the
+cheap option if this is ever adopted. Cleanup is `git worktree remove ../fk-X`.
+
+### Per-*feature* worktree (the lighter, on-demand use)
+
+The standing A/B split above is the heavyweight framing. The cheaper, undersold
+use is a **throwaway worktree for a single large or risky arc** — e.g. the DWARF
+debug-info tiers or the optimizer pass framework — that would otherwise churn
+`master` mid-flight or sit half-finished across many commits. Pattern:
+
+```
+git worktree add ../fk-dwarf -b feature-dwarf   # isolate the arc
+# ... build, commit freely on the branch, never destabilising master ...
+git worktree remove ../fk-dwarf                  # after merge to master
+```
+
+This stays inside "work on `master`" in spirit: the feature branch is short-lived
+and merges straight back, you just don't expose half-built intermediate states on
+`master` while the arc is in motion. Reach for it **only** when an arc is big
+enough that its in-progress tree would block the other agent or muddy bisect —
+small lane-local work still goes directly on `master` as today. No standing
+process, no merge driver; spin one up, fold it back, delete it.
+
 Trade-off: it removes the shared-checkout stomp risk and lets each agent push its
 own tree without coordination, at the cost of a merge layer and losing the
 zero-latency "see the other agent's commit instantly" property. **Not adopted** —
