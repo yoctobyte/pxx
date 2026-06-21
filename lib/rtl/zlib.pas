@@ -229,19 +229,18 @@ begin
   { slow path: the first FAST_BITS bits did not decode; try longer codes. }
   for codelen := FAST_BITS + 1 to ht.maxLen do
   begin
-    bits := ReadBits(codelen);
-    if not gOk then Exit;
-    { reverse bits to get canonical code }
-    code := 0;
-    i := 0;
-    while i < codelen do
+    if not Avail(codelen) then begin gOk := False; Exit; end;
+    bits := 0;
+    savedPos := gBitPos;
+    for i := 0 to codelen - 1 do
     begin
-      code := (code shl 1) or ((bits shr i) and 1);
-      i := i + 1;
+      bits := bits or (((gData[savedPos div 8] shr (savedPos mod 8)) and 1) shl i);
+      savedPos := savedPos + 1;
     end;
     for i := 0 to ht.nSlow - 1 do
-      if (ht.slowLen[i] = codelen) and (ht.slowCode[i] = LongWord(code)) then
+      if (ht.slowLen[i] = codelen) and (ht.slowCode[i] = LongWord(bits)) then
       begin
+        gBitPos := gBitPos + codelen;
         Result := ht.slowSym[i];
         Exit;
       end;

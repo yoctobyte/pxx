@@ -113,7 +113,69 @@ type
 
 implementation
 
-uses sysutils;   { Copy }
+uses sysutils, platform, hashing, png, image, ansiterm, ansirender;
+
+function LoadFileBytes(const path: AnsiString; var bytes: TByteArray): Boolean;
+var
+  handle: Integer;
+  buf: array[0..4095] of Byte;
+  readBytes: Int64;
+  currLen, i: Integer;
+  pathCStr: AnsiString;
+begin
+  Result := False;
+  SetLength(bytes, 0);
+
+  pathCStr := path + #0;
+
+  handle := PalOpen(@pathCStr[1], 0, 0);
+  if handle < 0 then Exit;
+
+  currLen := 0;
+  repeat
+    readBytes := PalRead(handle, @buf[0], 4096);
+    if readBytes > 0 then
+    begin
+      SetLength(bytes, currLen + readBytes);
+      for i := 0 to readBytes - 1 do
+        bytes[currLen + i] := buf[i];
+      currLen := currLen + readBytes;
+    end;
+  until readBytes <= 0;
+
+  PalClose(handle);
+  Result := currLen > 0;
+end;
+
+function DrawPngArt(const name: AnsiString): Boolean;
+var
+  bytes: TByteArray;
+  img: TImage;
+  s: AnsiString;
+  path: AnsiString;
+begin
+  Result := False;
+
+  path := 'scenes/' + name + '.png';
+  if not LoadFileBytes(path, bytes) then
+  begin
+    path := 'examples/adventure/scenes/' + name + '.png';
+    if not LoadFileBytes(path, bytes) then
+    begin
+      path := name + '.png';
+      if not LoadFileBytes(path, bytes) then
+        Exit;
+    end;
+  end;
+
+  if PngDecodeRGBA(bytes, img) then
+  begin
+    s := RenderAnsiTrueColorHalfBlock(img, 40, 15);
+    WriteLn(s);
+    ImageFree(img);
+    Result := True;
+  end;
+end;
 
 const
   ESC = #27;
@@ -240,6 +302,8 @@ end;
 
 procedure DrawArt(const name: AnsiString);
 begin
+  if DrawPngArt(name) then Exit;
+
   if name = 'cpu' then
   begin
     WriteLn(Col256('        .----------------.', 81));
@@ -408,6 +472,8 @@ begin
     if (m <> nil) and (not m.Defeated) then
     begin
       WriteLn;
+      DrawArt(m.Art);
+      WriteLn;
       WriteLn(Col('  ! ' + m.Taunt, RED));
       WriteLn(Col('    ' + m.Desc, GREY));
       WriteLn(Col('    (type ' + Bold('solve') + ' to face it)', GREY));
@@ -486,6 +552,8 @@ begin
     m.Asking := True;
   end;
 
+  WriteLn;
+  DrawArt(m.Art);
   WriteLn;
   WriteLn(Col('  ' + m.Riddles[m.CurIdx].Q, MAG));
   Write(Col('  > ', MAG)); ReadLn(guess);

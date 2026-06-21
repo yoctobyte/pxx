@@ -1988,7 +1988,11 @@ lib-test: pxx-stable-check
 	test "$$(/tmp/lib_zlib)" = "$$(printf 'OK stored roundtrip\nOK fixed huffman\nOK dynamic huffman\nOK bad header checksum\nOK bad adler32\nOK truncated stream\nOK reserved block type')"
 	$(PXX_STABLE) test/lib_png.pas /tmp/lib_png
 	test "$$(/tmp/lib_png)" = "$$(printf '86\n137 80 78 71\n1\n2x2\n255,0,0,255\n0,255,0,128\n0,0,255,64\n255,255,255,0\n0\nbad chunk crc')"
-	@echo "lib-test ok (sudoku exact + collections + math + sysutils + random + bitset + platform + bignum + zlib + png smoke) against stable v$$(cat $(STABLE_DEFAULT_DIR)/VERSION 2>/dev/null || echo '?')"}
+	$(PXX_STABLE) test/lib_ansiterm.pas /tmp/lib_ansiterm
+	test "$$(/tmp/lib_ansiterm)" = "OK"
+	$(PXX_STABLE) test/lib_ansirender.pas /tmp/lib_ansirender
+	test "$$(/tmp/lib_ansirender)" = "OK"
+	@echo "lib-test ok (sudoku exact + collections + math + sysutils + random + bitset + platform + bignum + zlib + png smoke + ansiterm + ansirender) against stable v$$(cat $(STABLE_DEFAULT_DIR)/VERSION 2>/dev/null || echo '?')"
 
 # Full Track-B library suite, distinct from compiler `make test`.
 library-suite-green: pxx-stable-check
