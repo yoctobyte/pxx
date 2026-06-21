@@ -38,6 +38,11 @@ const
   PAL_OPEN_EXCL   = $80;
   PAL_OPEN_TRUNC  = $200;
   PAL_OPEN_APPEND = $400;
+  PAL_OPEN_DIRECTORY = $10000;
+
+  PAL_DIRENT_UNKNOWN = 0;
+  PAL_DIRENT_FILE    = 8;
+  PAL_DIRENT_DIR     = 4;
 
   PAL_SEEK_SET = 0;
   PAL_SEEK_CUR = 1;
@@ -64,6 +69,7 @@ function PalDelete(path: PChar): Integer;
 function PalRename(oldPath, newPath: PChar): Integer;
 function PalMkdir(path: PChar; mode: Integer): Integer;
 function PalRmdir(path: PChar): Integer;
+function PalGetDents64(handle: Integer; buf: Pointer; len: Integer): Int64;
 
 function PalSocket(domain, kind, proto: Integer): Integer;
 function PalSetSocketReuseAddr(handle, enabled: Integer): Integer;
@@ -172,6 +178,11 @@ end;
 function PalRmdir(path: PChar): Integer;
 begin
   Result := PalBackendRmdir(path);
+end;
+
+function PalGetDents64(handle: Integer; buf: Pointer; len: Integer): Int64;
+begin
+  Result := PalBackendGetDents64(handle, buf, len);
 end;
 
 function PalSocket(domain, kind, proto: Integer): Integer;

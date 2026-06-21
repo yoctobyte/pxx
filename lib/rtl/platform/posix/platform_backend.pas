@@ -19,6 +19,7 @@ function PalBackendDelete(path: PChar): Integer;
 function PalBackendRename(oldPath, newPath: PChar): Integer;
 function PalBackendMkdir(path: PChar; mode: Integer): Integer;
 function PalBackendRmdir(path: PChar): Integer;
+function PalBackendGetDents64(handle: Integer; buf: Pointer; len: Integer): Int64;
 
 function PalBackendSocket(domain, kind, proto: Integer): Integer;
 function PalBackendSetSocketReuseAddr(handle, enabled: Integer): Integer;
@@ -49,7 +50,7 @@ const
 
 {$ifdef CPUX86_64}
   SYS_read = 0; SYS_write = 1; SYS_close = 3; SYS_lseek = 8;
-  SYS_fsync = 74; SYS_openat = 257; SYS_mkdirat = 258;
+  SYS_fsync = 74; SYS_openat = 257; SYS_mkdirat = 258; SYS_getdents64 = 217;
   SYS_unlinkat = 263; SYS_renameat = 264;
   SYS_socket=41; SYS_connect=42; SYS_accept4=288; SYS_bind=49; SYS_listen=50;
   SYS_setsockopt=54; SYS_shutdown=48; SYS_fcntl=72;
@@ -58,7 +59,7 @@ const
 {$endif}
 {$ifdef CPU_I386}
   SYS_read = 3; SYS_write = 4; SYS_close = 6; SYS_lseek = 19;
-  SYS_fsync = 118; SYS_openat = 295; SYS_mkdirat = 296;
+  SYS_fsync = 118; SYS_openat = 295; SYS_mkdirat = 296; SYS_getdents64 = 220;
   SYS_unlinkat = 301; SYS_renameat = 302;
   SYS_socketcall=102; SYS_fcntl=55;
   SC_SOCKET=1; SC_BIND=2; SC_CONNECT=3; SC_LISTEN=4; SC_ACCEPT4=18;
@@ -68,7 +69,7 @@ const
 {$endif}
 {$ifdef CPU_AARCH64}
   SYS_read = 63; SYS_write = 64; SYS_close = 57; SYS_lseek = 62;
-  SYS_fsync = 82; SYS_openat = 56; SYS_mkdirat = 34;
+  SYS_fsync = 82; SYS_openat = 56; SYS_mkdirat = 34; SYS_getdents64 = 61;
   SYS_unlinkat = 35; SYS_renameat = 38;
   SYS_socket=198; SYS_connect=203; SYS_accept4=242; SYS_bind=200; SYS_listen=201;
   SYS_setsockopt=208; SYS_shutdown=210; SYS_fcntl=25;
@@ -77,7 +78,7 @@ const
 {$endif}
 {$ifdef CPU_ARM32}
   SYS_read = 3; SYS_write = 4; SYS_close = 6; SYS_lseek = 19;
-  SYS_fsync = 118; SYS_openat = 322; SYS_mkdirat = 323;
+  SYS_fsync = 118; SYS_openat = 322; SYS_mkdirat = 323; SYS_getdents64 = 217;
   SYS_unlinkat = 328; SYS_renameat = 329;
   SYS_socket=281; SYS_connect=283; SYS_accept4=366; SYS_bind=282; SYS_listen=284;
   SYS_setsockopt=294; SYS_shutdown=293; SYS_fcntl=55;
@@ -192,6 +193,11 @@ function PalBackendRmdir(path: PChar): Integer;
 begin
   Result := Integer(__pxxrawsyscall(SYS_unlinkat, PAL_AT_FDCWD, Int64(path),
     PAL_AT_REMOVEDIR, 0, 0, 0));
+end;
+
+function PalBackendGetDents64(handle: Integer; buf: Pointer; len: Integer): Int64;
+begin
+  Result := __pxxrawsyscall(SYS_getdents64, handle, Int64(buf), len, 0, 0, 0);
 end;
 
 function PalBackendSocket(domain, kind, proto: Integer): Integer;

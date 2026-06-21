@@ -19,6 +19,7 @@ function PalBackendDelete(path: PChar): Integer;
 function PalBackendRename(oldPath, newPath: PChar): Integer;
 function PalBackendMkdir(path: PChar; mode: Integer): Integer;
 function PalBackendRmdir(path: PChar): Integer;
+function PalBackendGetDents64(handle: Integer; buf: Pointer; len: Integer): Int64;
 
 function PalBackendSocket(domain, kind, proto: Integer): Integer;
 function PalBackendSetSocketReuseAddr(handle, enabled: Integer): Integer;
@@ -309,6 +310,11 @@ begin
 {$else}
   Result := PAL_ERR_UNSUPPORTED;
 {$endif}
+end;
+
+function PalBackendGetDents64(handle: Integer; buf: Pointer; len: Integer): Int64;
+begin
+  Result := PAL_ERR_UNSUPPORTED;
 end;
 
 function PalBackendSocket(domain, kind, proto: Integer): Integer;

@@ -7,6 +7,13 @@ unit sysutils;
 interface
 
 type
+  TFileInfo = record
+    Name: AnsiString;
+    IsDir: Boolean;
+    Size: Int64;
+  end;
+  TFileInfoArray = array of TFileInfo;
+
   Exception = class
     FMessage: string;
     FHelpContext: Integer;
@@ -64,6 +71,10 @@ procedure Insert(const src: AnsiString; var dst: AnsiString; index: Integer);
 
 { Concatenate two strings. For more than two, chain with + or nest calls. }
 function Concat(const s1, s2: AnsiString): AnsiString;
+
+{ List directory entries, excluding "." and "..". Size is -1 until PAL stat
+  metadata exists for the active backend. }
+function GetDirectoryContents(const path: AnsiString; var list: TFileInfoArray): Boolean;
 
 { Execute a process in a pipeline, returning its PID and redirecting stdin/stdout via pipes if requested. }
 function ExecutePipeline(const cmd: AnsiString; const args: array of AnsiString; var childStdinFd, childStdoutFd: Integer): Integer;
@@ -356,6 +367,82 @@ end;
 function Concat(const s1, s2: AnsiString): AnsiString;
 begin
   Result := s1 + s2;
+end;
+
+function DirentByte(buf: Pointer; off: Integer): Byte;
+begin
+  Result := PByte(Pointer(Int64(buf) + off))^;
+end;
+
+function DirentWordLE(buf: Pointer; off: Integer): Integer;
+begin
+  Result := Integer(DirentByte(buf, off)) + Integer(DirentByte(buf, off + 1)) * 256;
+end;
+
+function DirentName(buf: Pointer; off: Integer): AnsiString;
+var s: AnsiString; b: Byte;
+begin
+  s := '';
+  b := DirentByte(buf, off);
+  while b <> 0 do
+  begin
+    s := s + Chr(b);
+    off := off + 1;
+    b := DirentByte(buf, off);
+  end;
+  Result := s;
+end;
+
+function GetDirectoryContents(const path: AnsiString; var list: TFileInfoArray): Boolean;
+var
+  fd: Integer;
+  buf: array[0..4095] of Byte;
+  n: Int64;
+  off, reclen, idx: Integer;
+  name: AnsiString;
+  dtype: Byte;
+begin
+  SetLength(list, 0);
+  fd := PalOpen(PChar(path), PAL_OPEN_READ or PAL_OPEN_DIRECTORY, 0);
+  if fd < 0 then
+  begin
+    Result := False;
+    Exit;
+  end;
+
+  Result := True;
+  n := PalGetDents64(fd, @buf[0], 4096);
+  while n > 0 do
+  begin
+    off := 0;
+    while off < Integer(n) do
+    begin
+      reclen := DirentWordLE(@buf[0], off + 16);
+      if reclen <= 0 then
+      begin
+        Result := False;
+        off := Integer(n);
+      end
+      else
+      begin
+        dtype := DirentByte(@buf[0], off + 18);
+        name := DirentName(@buf[0], off + 19);
+        if (name <> '.') and (name <> '..') then
+        begin
+          idx := Length(list);
+          SetLength(list, idx + 1);
+          list[idx].Name := name;
+          list[idx].IsDir := dtype = PAL_DIRENT_DIR;
+          list[idx].Size := -1;
+        end;
+        off := off + reclen;
+      end;
+    end;
+    n := PalGetDents64(fd, @buf[0], 4096);
+  end;
+
+  if n < 0 then Result := False;
+  fd := PalClose(fd);
 end;
 
 function ExecutePipeline(const cmd: AnsiString; const args: array of AnsiString; var childStdinFd, childStdoutFd: Integer): Integer;
