@@ -1744,6 +1744,13 @@ begin
         if IntToTypeKind(ASTTk[node]) = tyString then
           IRTk[Result] := ASTTk[node];
       end
+      else if NodeDynDepth(node) > 0 then
+        { Dynamic-array handle read (e.g. `rec.arr`, a nested sub-array): the
+          value is a pointer-sized heap handle. ASTTk tags it with the ELEMENT
+          type (Integer etc.), so an element-typed load would emit a 4-byte
+          movsxd and sign-extend-truncate the 64-bit handle — a corrupted pointer
+          whose first refcount/deref segfaults. Force a full pointer-width load. }
+        Result := IRAppend(IR_LOAD_MEM, left, -1, -1, 0, Ord(tyPointer))
       else
         Result := IRAppend(IR_LOAD_MEM, left, -1, -1, 0, ASTTk[node]);
     end;
