@@ -8547,6 +8547,27 @@ begin
   end;
 end;
 
+{ Decimal of a non-negative integer (no IntToStr in the compiler's own RTL). }
+function MangleSuffix(n: Integer): AnsiString;
+var d: array[0..15] of Char; c, m: Integer; s: AnsiString;
+begin
+  if n <= 0 then begin Result := '0'; Exit; end;
+  c := 0; m := n;
+  while m > 0 do begin d[c] := Chr(Ord('0') + (m mod 10)); Inc(c); m := m div 10; end;
+  s := '';
+  while c > 0 do begin Dec(c); AppendChar(s, d[c]); end;
+  Result := s;
+end;
+
+{ Lambda-lift descriptor lookup by (mangled, unique) routine name. }
+function FindLiftDesc(const nm: AnsiString): Integer;
+var i: Integer;
+begin
+  Result := -1;
+  for i := 0 to LiftCount - 1 do
+    if StrEqual(LiftName[i], nm) then begin Result := i; Exit; end;
+end;
+
 { Re-scan a nested routine's header ';' (paren-depth 0), its 'begin', and its end
   starting at nestedStart, after token edits may have shifted positions. (Kept a
   top-level helper, not a nested routine, so the compiler can self-host without
@@ -8580,24 +8601,38 @@ begin
 end;
 
 procedure ParseNestedRoutine;
-const MAX_NEST_REFS = 4096;
+const MAX_NEST_REFS = 4096; MAX_NEST_CAPS = 64;
 var
   nestedStart, nameTokIdx, hdrEnd, bodyBegin, finalCur, cur, depth, i, j, remCount: Integer;
   parenOpen, parenClose: Integer;
-  ci: Integer;
-  needSelf, beforeColon, isOwnName: Boolean;
-  nsOff, nsLen, selfOff, selfLen: Integer;
+  ci, descIdx: Integer;
+  needSelf, beforeColon, isOwnName, found: Boolean;
+  nsOff, nsLen, selfOff, mOff, mLen: Integer;
   ownN: array[0..127] of AnsiString;
   ownCount: Integer;
   fieldPos: array[0..MAX_NEST_REFS-1] of Integer;  { implicit field/method refs to prefix with __nestself. }
   fieldCnt: Integer;
   selfPos: array[0..MAX_NEST_REFS-1] of Integer;   { explicit `Self` tokens to rename to __nestself }
   selfCnt: Integer;
-  nm, nestedName: AnsiString;
+  namePos: array[0..MAX_NEST_REFS-1] of Integer;   { body refs to the routine's own name (result-var / recursion) -> mangled }
+  nameCnt: Integer;
+  nm, nestedName, mangled: AnsiString;
   sidx: Integer;
   ins: array[0..7] of TRawToken;
   parentBegin, parentEnd: Integer;
   k: Integer;
+  { captured enclosing locals/params (snapshot at the capture site) }
+  capNm: array[0..MAX_NEST_CAPS-1] of AnsiString;
+  capTk: array[0..MAX_NEST_CAPS-1] of TTypeKind;
+  capRec, capDyn, capPtrRec, capProcSig: array[0..MAX_NEST_CAPS-1] of Integer;
+  capPtrTk: array[0..MAX_NEST_CAPS-1] of TTypeKind;
+  capArr: array[0..MAX_NEST_CAPS-1] of Boolean;
+  capActOff: array[0..MAX_NEST_CAPS-1] of Integer;
+  capCount: Integer;
+  core: array[0..2*MAX_NEST_CAPS+3] of TRawToken;
+  coreCount, nact, emitted: Integer;
+  ins2: array[0..2*MAX_NEST_CAPS+7] of TRawToken;
+  ins2Count, rp: Integer;
 begin
   nestedStart := TokPos - 1;   { the 'procedure'/'function' token (= CurTok) }
   nameTokIdx := nestedStart + 1;
@@ -8650,11 +8685,11 @@ begin
   end;
 
   { Free-variable analysis over the body. Classify each non-selector ident:
-    own (skip) / explicit Self (rename) / enclosing local-or-param (reject) /
-    implicit Self field-or-method (capture) / global-or-other (skip). Inner
-    nested routines are skipped wholesale — their captures are resolved when
-    they are themselves lifted. }
-  needSelf := False; fieldCnt := 0; selfCnt := 0;
+    own (skip) / explicit Self (rename) / enclosing local-or-param (capture by
+    ref) / implicit Self field-or-method (capture Self) / global-or-other (skip).
+    Inner nested routines are skipped wholesale — their captures are resolved
+    when they are themselves lifted. }
+  needSelf := False; fieldCnt := 0; selfCnt := 0; capCount := 0; nameCnt := 0;
   i := bodyBegin;
   while i < finalCur do
   begin
@@ -8674,6 +8709,13 @@ begin
     begin
       if (i > 0) and (Tokens[i-1].Kind = tkDot) then begin Inc(i); Continue; end;
       nm := GetTokenStrFromRaw(Tokens[i].SOffset, Tokens[i].SLen);
+      { the routine's own name in its body = the function-result variable
+        (FuncName := expr) or a recursive self-call; both must follow the mangle. }
+      if CaseEqual(nm, nestedName) then
+      begin
+        if nameCnt < MAX_NEST_REFS then begin namePos[nameCnt] := i; Inc(nameCnt); end;
+        Inc(i); Continue;
+      end;
       isOwnName := False;
       for j := 0 to ownCount - 1 do
         if CaseEqual(ownN[j], nm) then begin isOwnName := True; Break; end;
@@ -8687,10 +8729,41 @@ begin
       begin
         sidx := FindSym(nm);
         if (sidx >= 0) and ((Syms[sidx].Kind = skLocal) or (Syms[sidx].Kind = skParam)) then
-          Error('nested routine: capture of enclosing variable ''' + nm +
-                ''' not yet supported (Slice 2b)');
-        if (sidx < 0) and (ci >= 0) and
-           ((FindUField(ci, nm) >= 0) or (FindUMeth(ci, nm) >= 0)) then
+        begin
+          { Capture an enclosing local/param by reference. Snapshot its type now —
+            the enclosing Syms slot is recycled before the lifted body is parsed.
+            The lifted param keeps the same name so body refs resolve to it. }
+          found := False;
+          for j := 0 to capCount - 1 do
+            if CaseEqual(capNm[j], nm) then begin found := True; Break; end;
+          if not found then
+          begin
+            if capCount >= MAX_NEST_CAPS then Error('nested routine: too many captured variables');
+            capNm[capCount] := Syms[sidx].Name;
+            if Syms[sidx].IsArray and (SymDynDepth[sidx] > 0) then
+            begin
+              capTk[capCount] := Syms[sidx].ElemType;
+              capRec[capCount] := Syms[sidx].ElemRecName;
+              capArr[capCount] := True;
+              capDyn[capCount] := SymDynDepth[sidx];
+            end
+            else if Syms[sidx].IsArray then
+              Error('nested routine: capture of fixed-size array ''' + nm + ''' not yet supported')
+            else
+            begin
+              capTk[capCount] := Syms[sidx].TypeKind;
+              capRec[capCount] := Syms[sidx].RecName;
+              capArr[capCount] := False;
+              capDyn[capCount] := 0;
+            end;
+            capPtrTk[capCount] := Syms[sidx].PtrElemTk;
+            capPtrRec[capCount] := Syms[sidx].PtrElemRec;
+            capProcSig[capCount] := SymProcSig[sidx];
+            Inc(capCount);
+          end;
+        end
+        else if (sidx < 0) and (ci >= 0) and
+                ((FindUField(ci, nm) >= 0) or (FindUMeth(ci, nm) >= 0)) then
         begin
           needSelf := True;
           if fieldCnt < MAX_NEST_REFS then begin fieldPos[fieldCnt] := i; Inc(fieldCnt); end;
@@ -8700,20 +8773,61 @@ begin
     Inc(i);
   end;
 
+  if needSelf and (ci < 0) then
+    Error('nested routine: Self/field used but enclosing routine is not a method');
+
+  { Mangle the routine to a unique name so the lift descriptor and forward-
+    completion can't collide with another routine (the in-place forward decl and
+    the stashed definition share this single rewritten name token). }
+  mangled := nestedName;
+  AppendChar(mangled, '$');
+  mangled := mangled + MangleSuffix(nestedStart);
+  mOff := NestStrOff(mangled); mLen := Length(mangled);
+  Tokens[nameTokIdx].SOffset := mOff;
+  Tokens[nameTokIdx].SLen := mLen;
+  { Body refs to the own name (result var / recursion) follow the mangle (in
+    place, no shift — done before the field-prefix inserts below). }
+  for k := 0 to nameCnt - 1 do
+  begin
+    Tokens[namePos[k]].SOffset := mOff;
+    Tokens[namePos[k]].SLen := mLen;
+  end;
+
+  { Record the lift descriptor consumed by ParseSubroutine to inject the captured
+    params (Self + by-ref enclosing vars). }
+  if LiftCount >= MAX_LIFTS then Error('too many lifted nested routines');
+  if LiftCapTot + capCount >= MAX_LIFT_CAPS then Error('too many nested captures');
+  descIdx := LiftCount;
+  LiftName[descIdx] := mangled;
+  LiftNeedSelf[descIdx] := needSelf;
+  LiftSelfCi[descIdx] := ci;
+  LiftCapStart[descIdx] := LiftCapTot;
+  LiftCapCount[descIdx] := capCount;
+  for k := 0 to capCount - 1 do
+  begin
+    LiftCapName[LiftCapTot]   := capNm[k];
+    LiftCapTk[LiftCapTot]     := capTk[k];
+    LiftCapRec[LiftCapTot]    := capRec[k];
+    LiftCapArr[LiftCapTot]    := capArr[k];
+    LiftCapDyn[LiftCapTot]    := capDyn[k];
+    LiftCapPtrTk[LiftCapTot]  := capPtrTk[k];
+    LiftCapPtrRec[LiftCapTot] := capPtrRec[k];
+    LiftCapProcSig[LiftCapTot]:= capProcSig[k];
+    Inc(LiftCapTot);
+  end;
+  Inc(LiftCount);
+
+  { Body rewrites for Self capture: rename explicit `Self`, prefix `__nestself .`
+    on each implicit field/method ref. Captured locals need no body rewrite — the
+    injected by-ref param shares their name. }
   if needSelf then
   begin
-    if ci < 0 then Error('nested routine: Self/field used but enclosing routine is not a method');
     nsOff := NestStrOff('__nestself'); nsLen := 10;
-
-    { Rename explicit `Self` tokens in place (no shift). }
     for k := 0 to selfCnt - 1 do
     begin
       Tokens[selfPos[k]].SOffset := nsOff;
       Tokens[selfPos[k]].SLen := nsLen;
     end;
-
-    { Prefix `__nestself .` before each implicit field/method ref, back-to-front
-      so earlier (lower) positions stay valid as we insert. }
     for k := fieldCnt - 1 downto 0 do
     begin
       ins[0].Kind := tkIdent; ins[0].IVal := 0; ins[0].Line := Tokens[fieldPos[k]].Line;
@@ -8722,88 +8836,99 @@ begin
       ins[1].SOffset := 0; ins[1].SLen := 0;
       InsertTokens(fieldPos[k], ins, 2);
     end;
+    NestScanSpans(nestedStart, hdrEnd, bodyBegin, finalCur);   { field prefixes shifted positions }
+  end;
 
-    { Append the `__nestself: <class>` parameter to the header. The class-name
-      token reuses the class's own name slice in TokChars. }
-    if parenClose >= 0 then
+  { Rewrite call sites in the enclosing body: rename to the mangled name and
+    append the extra actuals (`Self` then each captured var, by name). Find the
+    enclosing 'begin' by skipping any sibling nested routines that still carry a
+    body (later siblings, not yet forward-rewritten). }
+  selfOff := NestStrOff('Self');
+  for k := 0 to capCount - 1 do
+    capActOff[k] := NestStrOff(capNm[k]);
+  { build the comma-separated actual list `Self, cap0, cap1, ...` (no outer parens) }
+  coreCount := 0; emitted := 0;
+  if needSelf then
+  begin
+    core[coreCount].Kind := tkIdent; core[coreCount].IVal := 0; core[coreCount].Line := 0;
+    core[coreCount].SOffset := selfOff; core[coreCount].SLen := 4; Inc(coreCount); Inc(emitted);
+  end;
+  for k := 0 to capCount - 1 do
+  begin
+    if emitted > 0 then
     begin
-      { ... ; __nestself : ClassName )  — insert before ')' }
-      ins[0].Kind := tkSemicolon; ins[0].IVal := 0; ins[0].Line := Tokens[nameTokIdx].Line; ins[0].SOffset := 0; ins[0].SLen := 0;
-      ins[1].Kind := tkIdent; ins[1].IVal := 0; ins[1].Line := Tokens[nameTokIdx].Line; ins[1].SOffset := nsOff; ins[1].SLen := nsLen;
-      ins[2].Kind := tkColon; ins[2].IVal := 0; ins[2].Line := Tokens[nameTokIdx].Line; ins[2].SOffset := 0; ins[2].SLen := 0;
-      ins[3].Kind := tkIdent; ins[3].IVal := 0; ins[3].Line := Tokens[nameTokIdx].Line; ins[3].SOffset := UClsNOff[ci]; ins[3].SLen := UClsNLen[ci];
-      InsertTokens(parenClose, ins, 4);
-    end
-    else
-    begin
-      { no param list: name ( __nestself : ClassName )  — insert after the name }
-      ins[0].Kind := tkLParen; ins[0].IVal := 0; ins[0].Line := Tokens[nameTokIdx].Line; ins[0].SOffset := 0; ins[0].SLen := 0;
-      ins[1].Kind := tkIdent; ins[1].IVal := 0; ins[1].Line := Tokens[nameTokIdx].Line; ins[1].SOffset := nsOff; ins[1].SLen := nsLen;
-      ins[2].Kind := tkColon; ins[2].IVal := 0; ins[2].Line := Tokens[nameTokIdx].Line; ins[2].SOffset := 0; ins[2].SLen := 0;
-      ins[3].Kind := tkIdent; ins[3].IVal := 0; ins[3].Line := Tokens[nameTokIdx].Line; ins[3].SOffset := UClsNOff[ci]; ins[3].SLen := UClsNLen[ci];
-      ins[4].Kind := tkRParen; ins[4].IVal := 0; ins[4].Line := Tokens[nameTokIdx].Line; ins[4].SOffset := 0; ins[4].SLen := 0;
-      InsertTokens(nameTokIdx + 1, ins, 5);
+      core[coreCount].Kind := tkComma; core[coreCount].IVal := 0; core[coreCount].Line := 0;
+      core[coreCount].SOffset := 0; core[coreCount].SLen := 0; Inc(coreCount);
     end;
+    core[coreCount].Kind := tkIdent; core[coreCount].IVal := 0; core[coreCount].Line := 0;
+    core[coreCount].SOffset := capActOff[k]; core[coreCount].SLen := Length(capNm[k]); Inc(coreCount); Inc(emitted);
+  end;
+  nact := emitted;
 
-    NestScanSpans(nestedStart, hdrEnd, bodyBegin, finalCur);   { header/body edits shifted positions }
-
-    { Rewrite call sites in the enclosing body: append `Self` as the extra
-      actual. Find the enclosing 'begin' by skipping any sibling nested routines
-      that still carry a body (later siblings, not yet forward-rewritten). }
-    i := finalCur; parentBegin := -1;
-    while i < TokCount do
+  i := finalCur; parentBegin := -1;
+  while i < TokCount do
+  begin
+    if (Tokens[i].Kind = tkProcedure) or (Tokens[i].Kind = tkFunction) then
     begin
-      if (Tokens[i].Kind = tkProcedure) or (Tokens[i].Kind = tkFunction) then
-      begin
-        while (i < TokCount) and (Tokens[i].Kind <> tkBegin) do Inc(i);
-        depth := 1; Inc(i);
-        while (i < TokCount) and (depth > 0) do
-        begin
-          if (Tokens[i].Kind = tkBegin) or (Tokens[i].Kind = tkCase) then Inc(depth)
-          else if Tokens[i].Kind = tkEnd then Dec(depth);
-          Inc(i);
-        end;
-      end
-      else if Tokens[i].Kind = tkBegin then begin parentBegin := i; Break; end
-      else Inc(i);
-    end;
-    if parentBegin >= 0 then
-    begin
-      depth := 1; i := parentBegin + 1;
+      while (i < TokCount) and (Tokens[i].Kind <> tkBegin) do Inc(i);
+      depth := 1; Inc(i);
       while (i < TokCount) and (depth > 0) do
       begin
         if (Tokens[i].Kind = tkBegin) or (Tokens[i].Kind = tkCase) then Inc(depth)
         else if Tokens[i].Kind = tkEnd then Dec(depth);
         Inc(i);
       end;
-      parentEnd := i;
-      selfOff := NestStrOff('Self'); selfLen := 4;
-      for i := parentEnd - 1 downto parentBegin do
-        if (Tokens[i].Kind = tkIdent) and CaseEqual(GetTokenStrFromRaw(Tokens[i].SOffset, Tokens[i].SLen), nestedName) and
-           ((i = 0) or (Tokens[i-1].Kind <> tkDot)) then
+    end
+    else if Tokens[i].Kind = tkBegin then begin parentBegin := i; Break; end
+    else Inc(i);
+  end;
+  if parentBegin >= 0 then
+  begin
+    depth := 1; i := parentBegin + 1;
+    while (i < TokCount) and (depth > 0) do
+    begin
+      if (Tokens[i].Kind = tkBegin) or (Tokens[i].Kind = tkCase) then Inc(depth)
+      else if Tokens[i].Kind = tkEnd then Dec(depth);
+      Inc(i);
+    end;
+    parentEnd := i;
+    for i := parentEnd - 1 downto parentBegin do
+      if (Tokens[i].Kind = tkIdent) and
+         CaseEqual(GetTokenStrFromRaw(Tokens[i].SOffset, Tokens[i].SLen), nestedName) and
+         ((i = 0) or (Tokens[i-1].Kind <> tkDot)) then
+      begin
+        Tokens[i].SOffset := mOff; Tokens[i].SLen := mLen;   { rename call -> mangled }
+        if nact > 0 then
         begin
           if Tokens[i+1].Kind = tkLParen then
           begin
-            depth := 0; cur := i + 1;
-            while cur < TokCount do
+            depth := 0; rp := i + 1;
+            while rp < TokCount do
             begin
-              if Tokens[cur].Kind = tkLParen then Inc(depth)
-              else if Tokens[cur].Kind = tkRParen then begin Dec(depth); if depth = 0 then Break; end;
-              Inc(cur);
+              if Tokens[rp].Kind = tkLParen then Inc(depth)
+              else if Tokens[rp].Kind = tkRParen then begin Dec(depth); if depth = 0 then Break; end;
+              Inc(rp);
             end;
-            ins[0].Kind := tkComma; ins[0].IVal := 0; ins[0].Line := Tokens[i].Line; ins[0].SOffset := 0; ins[0].SLen := 0;
-            ins[1].Kind := tkIdent; ins[1].IVal := 0; ins[1].Line := Tokens[i].Line; ins[1].SOffset := selfOff; ins[1].SLen := selfLen;
-            InsertTokens(cur, ins, 2);
+            ins2Count := 0;
+            if Tokens[i+2].Kind <> tkRParen then   { non-empty arg list: prepend a comma }
+            begin
+              ins2[0].Kind := tkComma; ins2[0].IVal := 0; ins2[0].Line := Tokens[i].Line; ins2[0].SOffset := 0; ins2[0].SLen := 0;
+              ins2Count := 1;
+            end;
+            for k := 0 to coreCount - 1 do begin ins2[ins2Count] := core[k]; ins2[ins2Count].Line := Tokens[i].Line; Inc(ins2Count); end;
+            InsertTokens(rp, ins2, ins2Count);
           end
           else
           begin
-            ins[0].Kind := tkLParen; ins[0].IVal := 0; ins[0].Line := Tokens[i].Line; ins[0].SOffset := 0; ins[0].SLen := 0;
-            ins[1].Kind := tkIdent; ins[1].IVal := 0; ins[1].Line := Tokens[i].Line; ins[1].SOffset := selfOff; ins[1].SLen := selfLen;
-            ins[2].Kind := tkRParen; ins[2].IVal := 0; ins[2].Line := Tokens[i].Line; ins[2].SOffset := 0; ins[2].SLen := 0;
-            InsertTokens(i + 1, ins, 3);
+            { bare call `name;` -> `name( Self, ... )` }
+            ins2[0].Kind := tkLParen; ins2[0].IVal := 0; ins2[0].Line := Tokens[i].Line; ins2[0].SOffset := 0; ins2[0].SLen := 0;
+            ins2Count := 1;
+            for k := 0 to coreCount - 1 do begin ins2[ins2Count] := core[k]; ins2[ins2Count].Line := Tokens[i].Line; Inc(ins2Count); end;
+            ins2[ins2Count].Kind := tkRParen; ins2[ins2Count].IVal := 0; ins2[ins2Count].Line := Tokens[i].Line; ins2[ins2Count].SOffset := 0; ins2[ins2Count].SLen := 0; Inc(ins2Count);
+            InsertTokens(i + 1, ins2, ins2Count);
           end;
         end;
-    end;
+      end;
   end;
 
   { Stash the (possibly rewritten) full routine [nestedStart, finalCur) for
@@ -8901,6 +9026,7 @@ var
   pw, pnWords, wlo, whi: Integer;   { ARM32 word-based param spill (int64 = 2 words) }
   methName: AnsiString;
   extLib: AnsiString;
+  liftIdx, lcb: Integer;   { lambda-lift descriptor index / captured-param base }
 begin
   isClassKeyword := False;
   isAsmFunc := False;
@@ -9148,6 +9274,45 @@ begin
     `async`, meaningless on its own. }
   if isStackless and not (isGenerator or isAsync) then
     Error('stackless directive is only valid on a generator or async routine');
+
+  { Lambda-lift: a nested routine lifted to top level (matched by its mangled
+    name) gains its captured enclosing state as trailing params here, with type
+    metadata snapshotted at the capture site — no synthetic type tokens needed.
+    Runs for both the forward decl and the real definition (both pass through
+    here with the same mangled name), so their signatures match. }
+  liftIdx := FindLiftDesc(name);
+  if liftIdx >= 0 then
+  begin
+    if LiftNeedSelf[liftIdx] then
+    begin
+      if nparams >= 16 then Error('nested routine: too many params after capture');
+      pnames[nparams] := '__nestself';
+      ptypes[nparams] := tyClass;
+      ptypesRec[nparams] := REC_UCLASS_BASE + LiftSelfCi[liftIdx];
+      ptypesPtrElemTk[nparams] := tyUnknown; ptypesPtrElemRec[nparams] := REC_NONE;
+      ptypesProcSig[nparams] := -1;
+      parr[nparams] := False; pbyref[nparams] := False; pconst[nparams] := False;
+      pNDims[nparams] := 0; pDynDepth[nparams] := 0;
+      Inc(nparams);
+    end;
+    lcb := LiftCapStart[liftIdx];
+    for i := 0 to LiftCapCount[liftIdx] - 1 do
+    begin
+      if nparams >= 16 then Error('nested routine: too many params after capture');
+      pnames[nparams] := LiftCapName[lcb + i];
+      ptypes[nparams] := LiftCapTk[lcb + i];
+      ptypesRec[nparams] := LiftCapRec[lcb + i];
+      ptypesPtrElemTk[nparams] := LiftCapPtrTk[lcb + i];
+      ptypesPtrElemRec[nparams] := LiftCapPtrRec[lcb + i];
+      ptypesProcSig[nparams] := LiftCapProcSig[lcb + i];
+      parr[nparams] := LiftCapArr[lcb + i];
+      pbyref[nparams] := True;            { captured by reference }
+      pconst[nparams] := False;
+      pNDims[nparams] := 0;
+      pDynDepth[nparams] := LiftCapDyn[lcb + i];
+      Inc(nparams);
+    end;
+  end;
 
   { External binding: `procedure foo(...); cdecl; external 'libname.so' [name 'sym'];`
     Marks the routine as a dynamically-linked import. Symbol defaults to the

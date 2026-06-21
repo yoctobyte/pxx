@@ -511,6 +511,8 @@ const
   MAX_TEMPLATES = 16;
   MAX_TEMPLATE_TOKENS = 8192;
   MAX_NESTED_TOKENS = 8192;
+  MAX_LIFTS = 512;
+  MAX_LIFT_CAPS = 2048;
   MAX_GENERIC_METHODS = 64;
   MAX_PENDING_SPECS = 32;
   MAX_SPECIALIZATIONS = 32;
@@ -583,6 +585,27 @@ var
     ParseNestedRoutine / FlushPendingNestedProcs in parser.inc. }
   PendNestTok        : array[0..MAX_NESTED_TOKENS-1] of TRawToken;
   PendNestCount      : Integer;
+  { Lambda-lift descriptors: a nested routine that captures enclosing state is
+    given a mangled unique name; ParseSubroutine looks the name up here (both at
+    the forward decl and the real definition) and appends the captured state as
+    extra params, copying the type metadata snapshotted at the capture site (the
+    enclosing Syms slots are recycled by the time the lifted body is parsed, so
+    indices can't be stored — only snapshots). See ParseNestedRoutine. }
+  LiftName           : array[0..MAX_LIFTS-1] of AnsiString;
+  LiftNeedSelf       : array[0..MAX_LIFTS-1] of Boolean;
+  LiftSelfCi         : array[0..MAX_LIFTS-1] of Integer;
+  LiftCapStart       : array[0..MAX_LIFTS-1] of Integer;
+  LiftCapCount       : array[0..MAX_LIFTS-1] of Integer;
+  LiftCount          : Integer;
+  LiftCapName        : array[0..MAX_LIFT_CAPS-1] of AnsiString;
+  LiftCapTk          : array[0..MAX_LIFT_CAPS-1] of TTypeKind;
+  LiftCapRec         : array[0..MAX_LIFT_CAPS-1] of Integer;
+  LiftCapArr         : array[0..MAX_LIFT_CAPS-1] of Boolean;
+  LiftCapDyn         : array[0..MAX_LIFT_CAPS-1] of Integer;
+  LiftCapPtrTk       : array[0..MAX_LIFT_CAPS-1] of TTypeKind;
+  LiftCapPtrRec      : array[0..MAX_LIFT_CAPS-1] of Integer;
+  LiftCapProcSig     : array[0..MAX_LIFT_CAPS-1] of Integer;
+  LiftCapTot         : Integer;
   GenericFuncs       : array[0..MAX_GENERIC_FUNCS-1] of TGenericFunc;
   GenericMethods     : array[0..MAX_GENERIC_METHODS-1] of TGenericMethod;
   GenericMethodCount : Integer;
