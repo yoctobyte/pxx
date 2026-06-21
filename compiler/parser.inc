@@ -9589,8 +9589,8 @@ begin
   ProcIsAsync[procIdx] := isAsync;
   ProcIsGenerator[procIdx] := isGenerator;
   ProcIsStackless[procIdx] := isStackless;
-  if isInterrupt then
-    Error('interrupt directive: raw hardware-vector codegen (full register save/restore + iret) not yet implemented; use `iram;` for an IDF-registered ISR');
+  if isInterrupt and (TargetArch <> TARGET_RISCV32) then
+    Error('interrupt directive: raw hardware-vector codegen implemented for riscv32 (esp32c3) only so far; xtensa windowed-exception ISRs are a follow-up. Use `iram;` for an IDF-registered ISR.');
   { `iram;` places the body in .iram1.text on ESP; on other targets (e.g. the
     x86-64 oracle build of a shared test) it is an accepted no-op. }
   ProcIram[procIdx] := isIram and ((TargetArch = TARGET_XTENSA) or (TargetArch = TARGET_RISCV32));

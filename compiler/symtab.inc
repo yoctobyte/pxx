@@ -3349,6 +3349,21 @@ begin
   end;
   if TargetArch = TARGET_RISCV32 then
   begin
+    { Raw `interrupt;` handler: a hardware trap can preempt arbitrary code, so the
+      interrupted caller-saved context (t0-t6, a0-a7) must be preserved across the
+      body — the normal prologue below only saves ra/s0. Saved in a 64-byte area
+      ABOVE the normal frame; the epilogue restores them then `mret`s. ra/s0 are
+      covered by the normal prologue. (Codegen never touches s1-s11.) }
+    if (CurProc >= 0) and ProcIsInterrupt[CurProc] then
+    begin
+      rv32_addi(reg_sp, reg_sp, -64);
+      rv32_sw(reg_t0, reg_sp, 0);  rv32_sw(reg_t1, reg_sp, 4);  rv32_sw(reg_t2, reg_sp, 8);
+      rv32_sw(reg_t3, reg_sp, 12); rv32_sw(reg_t4, reg_sp, 16); rv32_sw(reg_t5, reg_sp, 20);
+      rv32_sw(reg_t6, reg_sp, 24);
+      rv32_sw(reg_a0, reg_sp, 28); rv32_sw(reg_a1, reg_sp, 32); rv32_sw(reg_a2, reg_sp, 36);
+      rv32_sw(reg_a3, reg_sp, 40); rv32_sw(reg_a4, reg_sp, 44); rv32_sw(reg_a5, reg_sp, 48);
+      rv32_sw(reg_a6, reg_sp, 52); rv32_sw(reg_a7, reg_sp, 56);
+    end;
     { RISC-V prologue: push ra, s0 (save Return Address and Frame Pointer) }
     rv32_addi(reg_sp, reg_sp, -16);
     rv32_sw(reg_ra, reg_sp, 12);
@@ -3859,7 +3874,21 @@ begin
     rv32_lw(reg_s0, reg_sp, 8);
     rv32_lw(reg_ra, reg_sp, 12);
     rv32_addi(reg_sp, reg_sp, 16);
-    rv32_jalr(reg_zero, reg_ra, 0);
+    if (CurProc >= 0) and ProcIsInterrupt[CurProc] then
+    begin
+      { Restore the interrupted caller-saved context (mirror of the prologue),
+        then return from the trap via mret (PC <- mepc). }
+      rv32_lw(reg_t0, reg_sp, 0);  rv32_lw(reg_t1, reg_sp, 4);  rv32_lw(reg_t2, reg_sp, 8);
+      rv32_lw(reg_t3, reg_sp, 12); rv32_lw(reg_t4, reg_sp, 16); rv32_lw(reg_t5, reg_sp, 20);
+      rv32_lw(reg_t6, reg_sp, 24);
+      rv32_lw(reg_a0, reg_sp, 28); rv32_lw(reg_a1, reg_sp, 32); rv32_lw(reg_a2, reg_sp, 36);
+      rv32_lw(reg_a3, reg_sp, 40); rv32_lw(reg_a4, reg_sp, 44); rv32_lw(reg_a5, reg_sp, 48);
+      rv32_lw(reg_a6, reg_sp, 52); rv32_lw(reg_a7, reg_sp, 56);
+      rv32_addi(reg_sp, reg_sp, 64);
+      rv32_mret;
+    end
+    else
+      rv32_jalr(reg_zero, reg_ra, 0);
     Exit;
   end;
   { Release local managed variables before returning }

@@ -122,6 +122,11 @@ begin
   EmitI32($00000013);
 end;
 
+procedure rv32_mret;   { return from machine-mode trap (restores PC from mepc) }
+begin
+  EmitI32($30200073);
+end;
+
 
 
 
