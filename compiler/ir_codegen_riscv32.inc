@@ -1000,12 +1000,17 @@ begin
 
     IR_NEG:
       begin
+        { LANDMINE: low-word-only — negates a0, ignores a1, so unary minus on a
+          runtime Int64/UInt64 is WRONG (high word stale). Harmless for softfloat
+          (never negates an Int64), so left as-is. The xtensa twin handles 64-bit
+          (EmitNode64Xtensa + borrow); mirror that here when esp-float needs it. }
         IREmitNodeRISCV32(IRA[node]);
         rv32_sub(reg_a0, reg_zero, reg_a0);
       end;
 
     IR_NOT:
       begin
+        { Same low-word-only caveat as IR_NEG for 64-bit bitwise not. }
         IREmitNodeRISCV32(IRA[node]);
         rv32_xori(reg_a0, reg_a0, 1);
       end;
