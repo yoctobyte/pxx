@@ -53,16 +53,29 @@ choose to ignore this, you do so entirely at your own risk.
 Prerequisites: Linux x86-64 and GNU `make`. FPC is needed only for bootstrap or
 recovery builds.
 
-Self-hosted build:
+**Latest stable** (recommended) — clone, then check out the newest stable
+release tag:
 
 ```sh
 git clone https://github.com/yoctobyte/pxx
 cd pxx
+git checkout "$(git tag -l 'v*.*.*' | awk '!/-/' | sort -V | tail -n1)"   # newest stable tag
 make
 make test
 ```
 
-Bootstrap from FPC:
+**Current** — the tip of `master` is the live tree (passes its gates; just ahead
+of the last stable tag). Skip the checkout to track it:
+
+```sh
+git clone https://github.com/yoctobyte/pxx && cd pxx
+make && make test
+```
+
+> During the `0.x` beta there may be no stable tag yet — use `master`, or check
+> out the latest prerelease with `git tag -l` + `git checkout <tag>`.
+
+Bootstrap from FPC (first build on a fresh machine, or recovery):
 
 ```sh
 sudo apt install fpc
@@ -76,6 +89,11 @@ make fpc-check
 
 The bootstrap path reseats `compiler/pascal26` only after the self-built
 compiler reaches byte-identical fixedpoint.
+
+A release is a git tag plus a prebuilt tarball (full source + RTL/PCL + host
+binaries + docs in one archive). Tags mark the stable points; the tarballs exist
+mainly for offline use, packaging, and distro repackaging — cloning is the
+primary path.
 
 ## Using The Compiler
 
