@@ -1048,30 +1048,45 @@ begin
             IREmitNodeRISCV32(IRA[argNode]);
             Exit;
           end;
-          if procIdx = -203 then
+          if (procIdx = -203) or (procIdx = -204) then
           begin
-            { Trunc(x) -> Int64 toward zero, via the soft-float d2i/s2i kernels
-              (32-bit result, sign-extended to the a0:a1 pair). Round/Frac/Int
-              have no nearest-even/fractional kernel yet -> still error below. }
+            { Trunc (-203, toward zero) / Round (-204, nearest-even) -> Int64, via
+              the soft-float d2i[_rne]/s2i[_rne] kernels (32-bit result, sign-
+              extended to the a0:a1 pair). }
             argNode := IRB[node];
             tk := IntToTypeKind(IRTk[IRA[argNode]]);
             if tk = tyDouble then
             begin
               EmitNode64RISCV32(IRA[argNode]);    { a0:a1 = double bits }
-              procIdx := FindProc('__pxx_d2i');
-              if procIdx < 0 then Error('compiler error: __pxx_d2i not found (uses softfloat?)');
-              EmitCallProc(procIdx);
+              if procIdx = -204 then sVal := '__pxx_d2i_rne' else sVal := '__pxx_d2i';
             end
             else if tk = tySingle then
             begin
               IREmitNodeRISCV32(IRA[argNode]);    { a0 = single bits }
-              procIdx := FindProc('__pxx_s2i');
-              if procIdx < 0 then Error('compiler error: __pxx_s2i not found (uses softfloat?)');
-              EmitCallProc(procIdx);
+              if procIdx = -204 then sVal := '__pxx_s2i_rne' else sVal := '__pxx_s2i';
             end
             else
-              IREmitNodeRISCV32(IRA[argNode]);     { Trunc of an integer is identity }
+            begin
+              IREmitNodeRISCV32(IRA[argNode]);     { Trunc/Round of an integer is identity }
+              rv32_srai(reg_a1, reg_a0, 31);
+              Exit;
+            end;
+            procIdx := FindProc(sVal);
+            if procIdx < 0 then Error('compiler error: ' + sVal + ' not found (uses softfloat?)');
+            EmitCallProc(procIdx);
             rv32_srai(reg_a1, reg_a0, 31);         { sign-extend to Int64 a0:a1 }
+            Exit;
+          end;
+          if (procIdx = -205) or (procIdx = -206) then
+          begin
+            { Frac (-205) / Int (-206) -> float (node tk is tyDouble). Promote the
+              arg to double, then call the fractional / integer-part kernel. }
+            argNode := IRB[node];
+            EmitFloatOperandRISCV32(IRA[argNode], tyDouble);   { a0:a1 = double }
+            if procIdx = -205 then sVal := '__pxx_dfrac' else sVal := '__pxx_dint';
+            procIdx := FindProc(sVal);
+            if procIdx < 0 then Error('compiler error: ' + sVal + ' not found (uses softfloat?)');
+            EmitCallProc(procIdx);                  { a0:a1 = double result }
             Exit;
           end;
           Error('target riscv32: standard builtin calls not supported in bare-metal stage 1');

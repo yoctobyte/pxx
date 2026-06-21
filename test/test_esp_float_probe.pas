@@ -92,4 +92,15 @@ begin
   d := 7.9;  i := Trunc(d); PutBool(i = 7);    { 1 }
   d := -3.5; i := Trunc(d); PutBool(i = -3);   { toward zero -> 1 }
   s := 5.8;  i := Trunc(s); PutBool(i = 5);    { 1 }
+
+  { Round (nearest, ties to even — matches SSE cvtsd2si oracle) }
+  d := 2.5; i := Round(d); PutBool(i = 2);     { tie -> even -> 1 }
+  d := 3.5; i := Round(d); PutBool(i = 4);     { tie -> even -> 1 }
+  d := 2.4; i := Round(d); PutBool(i = 2);     { 1 }
+  d := -2.6; i := Round(d); PutBool(i = -3);   { 1 }
+
+  { Int (integer part, as float) + Frac (fractional part) }
+  d := 3.75; e := Int(d);  PutBool(e = 3.0);   { 1 }
+  d := 3.75; e := Frac(d); PutBool(e = 0.75);  { 1 }
+  d := -3.75; e := Int(d); PutBool(e = -3.0);  { 1 }
 end.

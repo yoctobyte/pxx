@@ -1426,27 +1426,39 @@ begin
             IREmitNodeXtensa(IRA[argNode]);
             Exit;
           end;
-          if procIdx = -203 then
+          if (procIdx = -203) or (procIdx = -204) then
           begin
-            { Trunc(x) -> Int64 toward zero, via the soft-float d2i/s2i kernels
-              (32-bit result, sign-extended to the a2:a3 pair). Round/Frac/Int
-              have no nearest-even/fractional kernel yet -> still error below. }
+            { Trunc (-203, toward zero) / Round (-204, nearest-even) -> Int64, via
+              the soft-float d2i[_rne]/s2i[_rne] kernels (32-bit result, sign-
+              extended to the a2:a3 pair). }
             argNode := IRB[node];
             tk := IntToTypeKind(IRTk[IRA[argNode]]);
             if tk = tyDouble then
             begin
               EmitNode64Xtensa(IRA[argNode]);     { a2:a3 = double bits }
-              EmitFloatUnaryCallXtensa('__pxx_d2i', True, False);
+              if procIdx = -204 then EmitFloatUnaryCallXtensa('__pxx_d2i_rne', True, False)
+              else EmitFloatUnaryCallXtensa('__pxx_d2i', True, False);
             end
             else if tk = tySingle then
             begin
               IREmitNodeXtensa(IRA[argNode]);     { a2 = single bits }
-              EmitFloatUnaryCallXtensa('__pxx_s2i', False, False);
+              if procIdx = -204 then EmitFloatUnaryCallXtensa('__pxx_s2i_rne', False, False)
+              else EmitFloatUnaryCallXtensa('__pxx_s2i', False, False);
             end
             else
-              IREmitNodeXtensa(IRA[argNode]);      { Trunc of an integer is identity }
+              IREmitNodeXtensa(IRA[argNode]);      { Trunc/Round of an integer is identity }
             { sign-extend a2 -> a3 for the Int64 result pair }
             EmitAsmXtensa(['movi a3, 0', 'bge a2, a3, .p', 'movi a3, -1', '.p:']);
+            Exit;
+          end;
+          if (procIdx = -205) or (procIdx = -206) then
+          begin
+            { Frac (-205) / Int (-206) -> float (node tk tyDouble). Promote the
+              arg to double, then call the fractional / integer-part kernel. }
+            argNode := IRB[node];
+            EmitFloatOperandXtensa(IRA[argNode], tyDouble);    { a2:a3 = double }
+            if procIdx = -205 then EmitFloatUnaryCallXtensa('__pxx_dfrac', True, True)
+            else EmitFloatUnaryCallXtensa('__pxx_dint', True, True);
             Exit;
           end;
           Error('target xtensa: builtin calls not supported in bare-metal stage 1');
