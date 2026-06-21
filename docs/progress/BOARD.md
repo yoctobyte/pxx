@@ -15,7 +15,7 @@ _none_
 | feature-c-runtime-library | B | feature | C runtime/library layer (`lib/crtl`) plus direct C-library packages | — |
 | feature-platform-abstraction-layer | B | feature | Platform Abstraction Layer (PAL): per-platform RTL port at one seam | — |
 
-## backlog (76)
+## backlog (81)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -38,10 +38,12 @@ _none_
 | feature-declaration-prescan | A | feature | Declaration pre-scan — whole-section symbol visibility (kill declare-before-use) | — |
 | feature-demo-calc | B | feature | Demo — RPN / expression calculator (mini spreadsheet) | — |
 | feature-demo-chess | B | feature | Flagship demo — chess engine (real-world app + cross-target oracle + benchmark) | — |
+| feature-demo-file-browser | B | feature | Flagship Demo — Midnight Commander-like TUI file browser (libc-free) | — |
 | feature-demo-life | B | feature | Demo — Conway's Game of Life | — |
 | feature-demo-lisp | B | feature | Demo — Lisp / Scheme interpreter | — |
 | feature-demo-maze | B | feature | Demo — maze generator + solver | — |
 | feature-demo-solitaire | B | feature | Demo — console Klondike solitaire (user-requested entertainment test app) | — |
+| feature-demo-video-player | B | feature | Flagship Demo — Console Video Player (libc-free) | — |
 | feature-demo-vm | B | feature | Demo — bytecode VM + assembler (small ISA) | — |
 | feature-dns-resolver-library | B | feature | DNS resolver library (`dns.pas`) with selectable backends | — |
 | feature-dotted-unit-names | A | feature | Dotted / namespace unit names in `uses` | — |
@@ -82,10 +84,13 @@ _none_
 | feature-random-library | B | feature | Random library — HW/OS/software tiered RNG (cross-target capability test) | — |
 | feature-rtl-conversion-and-bitset-library | B | feature | RTL gaps — string/number conversion + a bit-set type (surfaced by the demos) | — |
 | feature-rtl-image-bitmap-library | B | feature | RTL image bitmap library | — |
+| feature-rtl-terminal-raw-mode | B | feature | Terminal raw mode and unbuffered input support (libc-free) | — |
 | feature-sat-solver-library | B | feature | SAT solver library — DPLL over CNF (known-instance test app) | — |
 | feature-stackful-coro-port | A | feature | Port the stackful coroutine backend to all targets | — |
 | feature-static-arena-profile | A | feature | Fixed-static-arena allocator profile | feature-unified-heap-allocator |
 | feature-string-model-tyfixedstring | B | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
+| feature-sys-getdents | A | feature | Directory scanning support — sys_getdents64 (libc-free) | — |
+| feature-sys-process-spawning | A | feature | Process spawning and execution support — libc-free execve pipeline | — |
 | feature-threadsafe-io-serialization | A | feature | Statement-level I/O serialization under threads | feature-unified-heap-allocator |
 | feature-writeln-as-library | B | feature | write/writeln as a library function (via `array of const` + variadic sugar) | — |
 | feature-zero-init-contract | A | feature | Zero-init contract — one library-owned managed-slot zeroing guarantee | — |
@@ -259,10 +264,12 @@ _none_
 - [A] feature-declaration-prescan
 - [B] feature-demo-calc
 - [B] feature-demo-chess
+- [B] feature-demo-file-browser
 - [B] feature-demo-life
 - [B] feature-demo-lisp
 - [B] feature-demo-maze
 - [B] feature-demo-solitaire
+- [B] feature-demo-video-player
 - [B] feature-demo-vm
 - [B] feature-dns-resolver-library
 - [A] feature-dotted-unit-names
@@ -299,10 +306,13 @@ _none_
 - [B] feature-random-library
 - [B] feature-rtl-conversion-and-bitset-library
 - [B] feature-rtl-image-bitmap-library
+- [B] feature-rtl-terminal-raw-mode
 - [B] feature-sat-solver-library
 - [A] feature-stackful-coro-port
 - [A] feature-static-arena-profile
 - [B] feature-string-model-tyfixedstring
+- [A] feature-sys-getdents
+- [A] feature-sys-process-spawning
 - [A] feature-threadsafe-io-serialization
 - [B] feature-writeln-as-library
 - [A] feature-zero-init-contract

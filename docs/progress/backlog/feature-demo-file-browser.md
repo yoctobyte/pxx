@@ -1,0 +1,26 @@
+# Flagship Demo — Midnight Commander-like TUI file browser (libc-free)
+
+- **Type:** feature
+- **Status:** backlog
+- **Owner:** —
+- **Opened:** 2026-06-21
+- **Relation:** Sibling to other flagship demos. **Depends on** the low-level directory scanning in feature-sys-getdents and unbuffered terminal input in feature-rtl-terminal-raw-mode.
+
+## Goal
+
+An interactive terminal file manager (`examples/fm/`) supporting multiple pane layouts (1, 2, 3, or 4 active panes) and GUI-style tile view modes with live true-color previews (text and PNG thumbnails) using ansirender's quadrant-plus-detail engine.
+
+## Specification
+
+- **Panes**: Divide terminal columns equally among active panes. Switch focus via `Tab` / `Shift-Tab`.
+- **View Modes**:
+  - `compact`: name, size, optional modification date.
+  - `tile`: tiles containing names and a live preview card.
+- **Preview Card Engine**:
+  - Text files: Display the first 10 lines.
+  - PNG files: Render a thumbnail using the true-color quadrant-plus-detail engine.
+  - Unsupported files: Display a colored placeholder icon indicating file format type.
+- **Controls**: Interactive shortcut keys (e.g. `F1`..`F4` to adjust pane counts, `Enter` to navigate folders, Arrow keys to scroll).
+
+## Log
+- 2026-06-21 — Opened.
