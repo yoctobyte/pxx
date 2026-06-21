@@ -47,7 +47,7 @@ f.Free;   { error: Expected := }
 
 ## Log
 - 2026-06-21 — filed (self-discovered as the next chess blocker after Eof).
-- 2026-06-21 — DONE. Built-in `obj.Free` desugars to the nil-guarded FPC idiom
+- 2026-06-21 — DONE (commit 562eb95). Built-in `obj.Free` desugars to the nil-guarded FPC idiom
   `if obj <> nil then begin [obj.Destroy;] FreeMem(obj); obj := nil end`
   (`GenMakeFreeObject` in parser.inc; statement-parser intercepts plain
   `obj.Free;`/`obj.Free end` on a non-record class instance with no user `Free`

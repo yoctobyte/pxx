@@ -781,6 +781,89 @@ begin
   Result := v;
 end;
 
+{ Read a possibly-qualified name inside DECLARED(...): identifier characters plus
+  dots (`Posix.StrOpts.FIONREAD`). Stops at the closing `)` or any other char. }
+function ReadPasCondQualifiedName: AnsiString;
+begin
+  Result := '';
+  SkipPasCondExprSpaces;
+  while (PasCondExprPos <= Length(PasCondExprText)) and
+        (PasCondExprText[PasCondExprPos] in ['a'..'z', 'A'..'Z', '0'..'9', '_', '.']) do
+  begin
+    AppendChar(Result, PasCondExprText[PasCondExprPos]);
+    Inc(PasCondExprPos);
+  end;
+end;
+
+{ Text of an already-emitted token (from the TokChars pool). }
+function PasCondTokText(k: Integer): AnsiString;
+var i, off, len: Integer;
+begin
+  Result := '';
+  off := Tokens[k].SOffset;
+  len := Tokens[k].SLen;
+  for i := 0 to len - 1 do AppendChar(Result, TokChars[off + i]);
+end;
+
+{ DECLARED(name) at directive-evaluation time. Conditionals are resolved during
+  LexAll/LexAppend, so the only symbols knowable here are those whose declaration
+  has already been emitted into Tokens[0..TokCount-1] — i.e. "visible at this
+  source location" in PXX's lex-ordered model. A lightweight section state machine
+  recognizes const/type/var declaration targets and routine names; the final
+  component of a dotted name is matched (namespace-precise qualified resolution is
+  deferred to the dotted-unit-names work). A symbol behind an as-yet-unselected
+  branch is not in the stream, so probes like Synapse's POSIX `Posix.StrOpts.*`
+  (no such unit under the POSIX profile) correctly evaluate false. }
+function PasCondNameDeclared(const qname: AnsiString): Boolean;
+var i, dotPos, k, sect: Integer;
+    nm, t: AnsiString;
+    expectName, expectRoutine: Boolean;
+begin
+  dotPos := 0;
+  for i := 1 to Length(qname) do
+    if qname[i] = '.' then dotPos := i;
+  nm := '';
+  for i := dotPos + 1 to Length(qname) do AppendChar(nm, qname[i]);
+  if nm = '' then begin Result := False; Exit; end;
+
+  Result := False;
+  sect := 0;              { 1 = inside a const/type/var declaration section }
+  expectName := False;    { next identifier is a declaration target }
+  expectRoutine := False; { next identifier is a routine name }
+  for k := 0 to TokCount - 1 do
+  begin
+    case Tokens[k].Kind of
+      tkConst, tkType, tkVar:
+        begin sect := 1; expectName := True; expectRoutine := False; end;
+      tkProcedure, tkFunction:
+        begin sect := 0; expectName := False; expectRoutine := True; end;
+      tkBegin, tkUses:
+        begin sect := 0; expectName := False; expectRoutine := False; end;
+      tkSemicolon:
+        if sect = 1 then expectName := True;
+      tkComma:
+        if sect = 1 then expectName := True;
+      tkIdent:
+        begin
+          t := PasCondTokText(k);
+          if expectRoutine then
+          begin
+            if CaseEqual(t, nm) then begin Result := True; Exit; end;
+            expectRoutine := False;
+          end
+          else if expectName and (sect = 1) then
+          begin
+            if CaseEqual(t, nm) then begin Result := True; Exit; end;
+            expectName := False;
+          end
+          else if CaseEqual(t, 'implementation') or CaseEqual(t, 'interface') or
+                  CaseEqual(t, 'initialization') or CaseEqual(t, 'finalization') then
+          begin sect := 0; expectName := False; end;
+        end;
+    end;
+  end;
+end;
+
 { Read a value-stack slot as a boolean. A bool slot passes through; an int
   slot is accepted only when it is exactly 0/1 (the FPC ordinal booleans, as in
   the legacy `(...) and 1` idiom). Any other int in a boolean op is a loud
@@ -947,6 +1030,21 @@ begin
             Error('conditional directive: defined requires (NAME)');
           Inc(PasCondExprPos);
           PasCondPushBool(PasDefineExists(name));
+        end
+        else if CaseEqual(word, 'declared') then
+        begin
+          SkipPasCondExprSpaces;
+          if (PasCondExprPos > Length(PasCondExprText)) or
+             (PasCondExprText[PasCondExprPos] <> '(') then
+            Error('conditional directive: declared requires (NAME)');
+          Inc(PasCondExprPos);
+          name := ReadPasCondQualifiedName;
+          SkipPasCondExprSpaces;
+          if (PasCondExprPos > Length(PasCondExprText)) or
+             (PasCondExprText[PasCondExprPos] <> ')') then
+            Error('conditional directive: declared requires (NAME)');
+          Inc(PasCondExprPos);
+          PasCondPushBool(PasCondNameDeclared(name));
         end
         else if PasCondWordIsDigits(word) then
         begin
