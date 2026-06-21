@@ -86,11 +86,18 @@ a56f773 Trunc+negate; pinned v31). Done:
   the x86-64 oracle on esp32c3 + esp32s3 via `test/test_esp_float_probe.pas`
   (operators, not direct kernel calls).
 
+### xtensa HW single FPU — DONE 2026-06-21 (4a3c680), opt-in `--xtensa-fpu`
+Single +,-,* lower to `add.s/sub.s/mul.s` (wfr/rfr core<->FP moves) on ESP32/-S3;
+single /, comparisons, conversions stay soft (no HW single divide / FP-compare-to-AR
+wired). **Opt-in** because FPU presence isn't inferable from the cpu flag —
+**ESP32-S2 (LX7) has NO FPU**, so soft is the safe default for every part. CPENABLE
+enabled at entry under the flag. FP encoders verified vs `xtensa-esp32s3-elf-as`;
+probe with `--xtensa-fpu` matches the x86-64 oracle on esp32s3 QEMU (add.s/mul.s
+confirmed in image). Default path + self-host byte-identical. NOTE: `--xtensa-fpu`
+sets CPENABLE itself; on ESP-IDF the OS also manages it per-task — fine (idempotent).
+The QEMU FPU-equality probe needs `ESP_PXXFLAGS=--xtensa-fpu`.
+
 ### REMAINING on this ticket
-- **xtensa HW single FPU.** Single is currently SOFT on xtensa (correct, but the
-  ticket wants `add.s/sub.s/mul.s` as the native `Real` path). Swap single-width
-  ops in `EmitFloatBinopXtensa` to the HW FPU (FP regs f0-f15, wfr/rfr core<->FP
-  moves, lsi/ssi); double stays soft. Verify the esp32s3 QEMU models the FPU.
 - **Round / Frac / Int intrinsics** (procIdx -204/-205/-206) still ERROR on ESP —
   no nearest-even / fractional soft kernel yet. Add kernels + wire (mirror the
   Trunc path). error-not-miscompile holds meanwhile.
