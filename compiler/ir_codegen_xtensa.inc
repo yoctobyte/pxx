@@ -1407,6 +1407,29 @@ begin
             IREmitNodeXtensa(IRA[argNode]);
             Exit;
           end;
+          if procIdx = -203 then
+          begin
+            { Trunc(x) -> Int64 toward zero, via the soft-float d2i/s2i kernels
+              (32-bit result, sign-extended to the a2:a3 pair). Round/Frac/Int
+              have no nearest-even/fractional kernel yet -> still error below. }
+            argNode := IRB[node];
+            tk := IntToTypeKind(IRTk[IRA[argNode]]);
+            if tk = tyDouble then
+            begin
+              EmitNode64Xtensa(IRA[argNode]);     { a2:a3 = double bits }
+              EmitFloatUnaryCallXtensa('__pxx_d2i', True, False);
+            end
+            else if tk = tySingle then
+            begin
+              IREmitNodeXtensa(IRA[argNode]);     { a2 = single bits }
+              EmitFloatUnaryCallXtensa('__pxx_s2i', False, False);
+            end
+            else
+              IREmitNodeXtensa(IRA[argNode]);      { Trunc of an integer is identity }
+            { sign-extend a2 -> a3 for the Int64 result pair }
+            EmitAsmXtensa(['movi a3, 0', 'bge a2, a3, .p', 'movi a3, -1', '.p:']);
+            Exit;
+          end;
           Error('target xtensa: builtin calls not supported in bare-metal stage 1');
         end;
 
@@ -1530,7 +1553,25 @@ begin
       end;
 
     IR_NEG:
-      if Is64BitXtensa(IntToTypeKind(IRTk[node])) then
+      if IsFloatXtensa(IntToTypeKind(IRTk[node])) then
+      begin
+        { Float negate = flip the IEEE sign bit (bit 63 of a Double = bit 31 of
+          the hi word a3; bit 31 of a Single in a2), NOT an integer negate. Must
+          precede the Is64Bit branch (Double is Is64Bit). }
+        if IntToTypeKind(IRTk[node]) = tyDouble then
+        begin
+          EmitNode64Xtensa(IRA[node]);           { a2:a3 = double bits }
+          EmitLoadConstXtensa(reg_xtensa_a8, Integer($80000000));
+          xtensa_xor(reg_xtensa_a3, reg_xtensa_a3, reg_xtensa_a8);
+        end
+        else
+        begin
+          IREmitNodeXtensa(IRA[node]);           { a2 = single bits }
+          EmitLoadConstXtensa(reg_xtensa_a8, Integer($80000000));
+          xtensa_xor(reg_xtensa_a2, reg_xtensa_a2, reg_xtensa_a8);
+        end;
+      end
+      else if Is64BitXtensa(IntToTypeKind(IRTk[node])) then
       begin
         EmitNode64Xtensa(IRA[node]);             { value -> a2:a3 }
         { negate: lo = 0-lo (borrow if lo<>0), hi = 0-hi-borrow }

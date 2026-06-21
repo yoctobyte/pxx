@@ -1048,6 +1048,32 @@ begin
             IREmitNodeRISCV32(IRA[argNode]);
             Exit;
           end;
+          if procIdx = -203 then
+          begin
+            { Trunc(x) -> Int64 toward zero, via the soft-float d2i/s2i kernels
+              (32-bit result, sign-extended to the a0:a1 pair). Round/Frac/Int
+              have no nearest-even/fractional kernel yet -> still error below. }
+            argNode := IRB[node];
+            tk := IntToTypeKind(IRTk[IRA[argNode]]);
+            if tk = tyDouble then
+            begin
+              EmitNode64RISCV32(IRA[argNode]);    { a0:a1 = double bits }
+              procIdx := FindProc('__pxx_d2i');
+              if procIdx < 0 then Error('compiler error: __pxx_d2i not found (uses softfloat?)');
+              EmitCallProc(procIdx);
+            end
+            else if tk = tySingle then
+            begin
+              IREmitNodeRISCV32(IRA[argNode]);    { a0 = single bits }
+              procIdx := FindProc('__pxx_s2i');
+              if procIdx < 0 then Error('compiler error: __pxx_s2i not found (uses softfloat?)');
+              EmitCallProc(procIdx);
+            end
+            else
+              IREmitNodeRISCV32(IRA[argNode]);     { Trunc of an integer is identity }
+            rv32_srai(reg_a1, reg_a0, 31);         { sign-extend to Int64 a0:a1 }
+            Exit;
+          end;
           Error('target riscv32: standard builtin calls not supported in bare-metal stage 1');
         end;
 
@@ -1149,12 +1175,29 @@ begin
 
     IR_NEG:
       begin
-        { LANDMINE: low-word-only — negates a0, ignores a1, so unary minus on a
-          runtime Int64/UInt64 is WRONG (high word stale). Harmless for softfloat
-          (never negates an Int64), so left as-is. The xtensa twin handles 64-bit
-          (EmitNode64Xtensa + borrow); mirror that here when esp-float needs it. }
-        IREmitNodeRISCV32(IRA[node]);
-        rv32_sub(reg_a0, reg_zero, reg_a0);
+        tk := IntToTypeKind(IRTk[node]);
+        if tk = tyDouble then
+        begin
+          { Float negate = flip the IEEE sign bit (bit 63 = bit 31 of the hi
+            word), NOT an integer negate. }
+          EmitNode64RISCV32(IRA[node]);          { a0:a1 = double bits }
+          EmitLoadImmRISCV32(reg_t0, Integer($80000000));
+          rv32_xor(reg_a1, reg_a1, reg_t0);
+        end
+        else if tk = tySingle then
+        begin
+          IREmitNodeRISCV32(IRA[node]);          { a0 = single bits }
+          EmitLoadImmRISCV32(reg_t0, Integer($80000000));
+          rv32_xor(reg_a0, reg_a0, reg_t0);
+        end
+        else
+        begin
+          { LANDMINE: low-word-only — negates a0, ignores a1, so unary minus on a
+            runtime Int64/UInt64 is WRONG (high word stale). Harmless for the
+            softfloat kernels (never integer-negate an Int64). }
+          IREmitNodeRISCV32(IRA[node]);
+          rv32_sub(reg_a0, reg_zero, reg_a0);
+        end;
       end;
 
     IR_NOT:

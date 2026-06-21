@@ -82,4 +82,14 @@ begin
   d := DSum(3.0, 4.0);   PutBool(d = 7.0);    { 1 }
   u := SSum(1.5, 2.5);   PutBool(u = 4.0);    { 1 }
   d := Mixed(1.0, 2.5, 3); PutBool(d = 6.5);  { 1 (double + single + int) }
+
+  { Float unary minus (IEEE sign-bit flip, not integer negate) }
+  d := 5.0; e := -d; PutBool(e = -5.0);   { 1 }
+  s := 2.5; u := -s; PutBool(u = -2.5);   { 1 }
+  d := 5.0; PutBool(-d < 0.0);            { 1 }
+
+  { Trunc (float -> int, toward zero) }
+  d := 7.9;  i := Trunc(d); PutBool(i = 7);    { 1 }
+  d := -3.5; i := Trunc(d); PutBool(i = -3);   { toward zero -> 1 }
+  s := 5.8;  i := Trunc(s); PutBool(i = 5);    { 1 }
 end.
