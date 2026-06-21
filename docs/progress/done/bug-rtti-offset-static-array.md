@@ -50,3 +50,5 @@ a managed 8-byte handle, so the static-array field is sized/laid out correctly.
 Verified: a class with `FItems: array[0..255] of string; FCount: Integer;` reads
 FCount correctly before and after writing FItems[0]/FItems[255] (no offset
 corruption). Closed with the string-model arc.
+
+**Resolved-in:** d83fbe9 (finalizing commit)

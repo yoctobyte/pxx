@@ -58,3 +58,5 @@ stay (harmless; RecSize still returns 16) to avoid renumbering the bootstrap-
 stable REC_* ordinals. test/test_class.pas (declares TMyClass) still passes via
 user-class resolution; test/test_tmyclass_name.pas adds the method-call case.
 Byte-identical self-host, make test green.
+
+**Resolved-in:** d83fbe9 (finalizing commit)

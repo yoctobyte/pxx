@@ -58,3 +58,5 @@ byte-identical, make test green.
 (Aside, pre-existing & unrelated: `writeln(p^)` on an alias-cast pointer whose
 pointee is dereferenced directly can segfault — `PI(@n)^` with `type PI=^Integer`
 crashes too, independent of this fix. Worth a separate ticket if it bites.)
+
+**Resolved-in:** 71036f6 (finalizing commit)

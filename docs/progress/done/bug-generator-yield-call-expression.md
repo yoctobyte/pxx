@@ -98,3 +98,5 @@ but the direct expression is legal source and should compile.
   to `IR_UNSUPPORTED` on `AN_CALL`) now sees an `AN_IDENT`. Source stays
   manual-temp-free. Regression test `test/test_generator_yield_call.pas`. `make
   test` green; self-host + threadsafe fixedpoint byte-identical.
+
+**Resolved-in:** 085be11 (finalizing commit)

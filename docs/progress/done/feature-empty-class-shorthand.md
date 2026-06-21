@@ -46,3 +46,5 @@ end;
   `class(TBase)` → skip body entirely, UClsSize still set from curFieldOff.
   `make test` green, byte-identical self-host. chess.pas now past EChess line
   (next gap: UpCase RTL). test/test_empty_class_shorthand.pas added.
+
+**Resolved-in:** 1dd9873 (finalizing commit)

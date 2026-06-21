@@ -84,3 +84,5 @@ MatchProcCall clause. Tried adding the float widen/narrow clause to
 TypesCompatible: `ScaleS(1.5,3)` then compiles but prints 0.00 (silently wrong),
 which is worse than the clean overload error, so reverted. Keep this ticket
 under the Single-first-class arc; do the ABI first, then the overload clause.
+
+**Resolved-in:** 26e8da2 (finalizing commit)

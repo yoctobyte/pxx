@@ -91,3 +91,5 @@ file-handle first argument instead of treating all arguments as console values.
     `for sp in Player.Spells`; it now stops in the posix PAL backend at an
     `SYS_openat` arch-define resolution (a Track B platform-axis gap, separate
     from this ticket).
+
+**Resolved-in:** 0fe2e9c (finalizing commit)

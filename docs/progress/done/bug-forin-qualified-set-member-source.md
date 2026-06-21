@@ -75,3 +75,5 @@ set element metadata for a set-valued field expression.
   g.Player.Spells` (nested member access) and `for sp in Self.Field` both work.
   Regression test `test/test_forin_set_member.pas`. `make test` green; self-host
   + threadsafe fixedpoint byte-identical.
+
+**Resolved-in:** 085be11 (finalizing commit)

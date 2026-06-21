@@ -78,3 +78,5 @@ offsets. make test + cross-bootstrap (i386/aarch64/arm32) byte-identical;
 test/test_record_typecast.pas added. (A bare value reinterpret `TRec(x)` without
 `^` — record value cast — is not part of this; the `^.field` form covers the
 typed-pointer use the ticket and Track B reflection/binding code want.)
+
+**Resolved-in:** 453bbc5 (finalizing commit)

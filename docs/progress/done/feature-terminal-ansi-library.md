@@ -43,3 +43,5 @@ their own engines.
 ## RESOLVED 2026-06-21 (Track B)
 
 Implemented `lib/rtl/ansiterm.pas` defining truecolor and standard ANSI sequence formatting functions. Added `test/lib_ansiterm.pas` unit test to verify exact escape sequences, avoiding compile-time constant-folding compiler bugs via runtime variable checks. Added `lib_ansiterm` execution to the Makefile `lib-test` suite.
+
+**Resolved-in:** 2d7e65c (finalizing commit)

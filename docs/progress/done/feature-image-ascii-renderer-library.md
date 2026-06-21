@@ -48,3 +48,5 @@ truecolor half-block rendering, with plain ASCII as a portable fallback.
 ## RESOLVED 2026-06-21 (Track B)
 
 Implemented `lib/rtl/ansirender.pas` providing ASCII rendering, ANSI 256-color ASCII rendering, and truecolor ANSI half-block rendering. Integrated local variables for indexing string constants to work around compiler limitations. Added `test/lib_ansirender.pas` unit test to verify exact output bytes, and added it to the Makefile `lib-test` target.
+
+**Resolved-in:** 2d7e65c (finalizing commit)

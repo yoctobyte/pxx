@@ -70,3 +70,5 @@ back on load. The gaps were NOT uniform:
 - Two targets (x86-64, aarch64) narrow in the CALLEE prologue (caller pushes
   double bits in a GPR); two (i386, arm32) narrow in the CALLER (push 4-byte
   single). Don't assume one convention across targets.
+
+**Resolved-in:** 26e8da2 (finalizing commit)

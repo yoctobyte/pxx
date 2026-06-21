@@ -83,3 +83,5 @@ indexed writes now work for both literal and named-alias dyn-array results.
 test/test_setlength_dynarray_result.pas added; byte-identical self-host,
 make test green. (NOTE: inline indexing of a dyn-array-returning CALL —
 `MakeBytes(1)[0]` — is a separate parser gap, not this bug.)
+
+**Resolved-in:** d83fbe9 (finalizing commit)

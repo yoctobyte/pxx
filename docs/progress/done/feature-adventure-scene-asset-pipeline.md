@@ -65,3 +65,5 @@ The engine should:
 ## RESOLVED 2026-06-21 (Track B)
 
 Implemented runtime PNG loading, decoding (via `png.pas`), and truecolor half-block rendering (via `ansirender.pas`) directly within `examples/adventure/engine.pas`. The game attempts to dynamically search for `.png` files under `scenes/<name>.png` (and other fallback paths) on room entrance and when facing monsters/riddles. If found, they are decoded and displayed in truecolor half-blocks on the console; otherwise, the engine falls back to built-in ASCII art. Assets `cpu.png`, `alu.png`, and `ram.png` were created and placed in the scenes folder.
+
+**Resolved-in:** 2d7e65c (finalizing commit)
