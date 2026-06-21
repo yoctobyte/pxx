@@ -92,6 +92,13 @@ MAJOR = language/emitted-ABI break, MINOR = features/new targets, PATCH = bugfix
 Keep the internal **pin counter** (`stable_linux_amd64` `VERSION`, currently v32)
 **separate** from the public semver — pin = dev checkpoint, tag = release.
 
+The channels (`alpha`/`beta`/`rc`) are just **ordered labels** on a monotonically
+increasing version; semver already orders them (`alpha < beta < rc < stable`), so
+they sort and the publish tool can enforce "strictly greater than last". A
+**per-release codename** (decorative) rides in the GitHub Release title/notes, not
+in the tag (tag stays pure semver). `tools/release.sh` drives the bump + codename
+interactively — see its section below.
+
 ## GitHub mechanics — branch push = CI, tag = release
 
 One x86_64 runner cross-builds **all** targets (host-independent codegen → no arch
@@ -126,15 +133,41 @@ rehearsal.**
   verify byte-identical reproduction, generate the manifest, assemble `dist/`, run
   `--selfcheck`. **Report what *would* be tagged/published. Create/push NO tag,
   cut NO GitHub Release.** Idempotent, repeatable, safe.
-- **`--publish vX.Y.Z`**: only after the rehearsal passes — create the annotated tag
-  and `git push origin vX.Y.Z` (which fires `release.yml`). (Or, if going CI-less,
-  `gh release create` with the locally-built `dist/` assets — but tag-driven CI is
-  preferred: clean-room, reproducible.)
-- **Guard rails (refuse to `--publish` if):** working tree dirty; not synced with
-  origin; `make test` not green; the version already tagged; version arg missing.
-  Print each failed guard explicitly.
-- **`--dry-run` is the default; make `--publish` the *only* path with side effects.**
-  Optionally a `--local` flag to attach locally-built assets instead of via CI.
+- **`--publish`**: only after the rehearsal passes — create the annotated tag and
+  `git push origin <tag>` (fires `release.yml`). (Or `--local`: `gh release create`
+  with locally-built `dist/` assets — but tag-driven CI is preferred: clean-room.)
+
+### Interactive version + codename (idiot-proof — the maintainer never hand-types a tag)
+
+`release.sh` is the *maintainer's* publish tool; idiot-proof *its own* process
+(no malformed tags, no version regression, no skipped channel). **Never accept a
+free-typed version** — compute and confirm from a menu.
+
+- **Read the last tag** (`git describe --tags --abbrev=0`), then present the next
+  steps as a menu, auto-computing each candidate so the user just picks:
+  - bump **patch** (`0.1.0 -> 0.1.1`)
+  - bump **minor** (`0.1.0 -> 0.2.0`)
+  - bump **major** (`0.1.0 -> 1.0.0`)
+  - bump the **prerelease counter** within the channel (`...-beta.1 -> ...-beta.2`)
+  - **advance the channel** (`alpha -> beta -> rc -> stable`) — ordered, one step
+  - **promote to stable** (drop the suffix: `0.2.0-rc.3 -> 0.2.0`)
+  Each printed with the literal resulting tag. The channels are just ordered
+  labels; semver's prerelease ordering (`alpha < beta < rc < <stable>`) is the
+  underlying monotonic spine, so the tool can *enforce* "strictly greater than the
+  last tag" and refuse any regression or out-of-order channel jump.
+- **Codename**: prompt for one (decorative, per-release). Optionally **auto-suggest**
+  the next from a themed wordlist (e.g. alphabetical sequence) so naming stays
+  consistent without thought; user accepts or overrides. Recorded in a codename
+  ledger (`docs/release-notes/` or a `CODENAMES` file) and used in the GitHub
+  Release **title/notes**, not the version tag (the tag stays pure semver so tooling
+  parses it).
+- **Confirm-before-act**: show the final `{tag, codename, channel, what fires}`,
+  require an explicit `yes`. Dry-run still the default; `--publish` + the confirmation
+  are the only side-effecting path.
+- **Guard rails (refuse to publish if):** working tree dirty; not synced with origin;
+  `make test` / `make release` not green; computed tag already exists; computed tag
+  not strictly greater than the last (regression); channel jump skips a step. Print
+  each failed guard explicitly with the fix.
 
 ## Non-goals
 - AppImage / snap / flatpak (wrong tool class).
