@@ -1992,7 +1992,9 @@ lib-test: pxx-stable-check
 	test "$$(/tmp/lib_ansiterm)" = "OK"
 	$(PXX_STABLE) test/lib_ansirender.pas /tmp/lib_ansirender
 	test "$$(/tmp/lib_ansirender)" = "OK"
-	@echo "lib-test ok (sudoku exact + collections + math + sysutils + random + bitset + platform + bignum + zlib + png smoke + ansiterm + ansirender) against stable v$$(cat $(STABLE_DEFAULT_DIR)/VERSION 2>/dev/null || echo '?')"
+	$(PXX_STABLE) -Fulib/rtl/platform/posix test/lib_process.pas /tmp/lib_process
+	test "$$(/tmp/lib_process)" = "$$(printf 'Bytes read: 12\nByte 0: 104\nByte 1: 101\nByte 2: 108\nByte 3: 108\nByte 4: 111\nByte 5: 32\nByte 6: 119\nByte 7: 111\nByte 8: 114\nByte 9: 108\nByte 10: 100\nByte 11: 10\nChild output: [hello world\n]\nChild wait status: 0\nOK')"
+	@echo "lib-test ok (sudoku exact + collections + math + sysutils + random + bitset + platform + bignum + zlib + png smoke + ansiterm + ansirender + process) against stable v$$(cat $(STABLE_DEFAULT_DIR)/VERSION 2>/dev/null || echo '?')"
 
 # Full Track-B library suite, distinct from compiler `make test`.
 library-suite-green: pxx-stable-check
@@ -2016,8 +2018,10 @@ demos: pxx-stable-check
 	@rc=0; for src in examples/primes/sieve.pas examples/sudoku/sudoku.pas \
 	    examples/maze/maze.pas examples/bignum/factorial.pas \
 	    examples/chess/chess.pas examples/adventure/adventure.pas \
-	    examples/life/life.pas; do \
-	  if $(PXX_STABLE) -Fulib/pcl "$$src" /tmp/demo_$$(basename $$src .pas) >/tmp/demo.log 2>&1; then \
+	    examples/life/life.pas examples/player/player.pas; do \
+	  flags="-Fulib/pcl"; \
+	  if [ "$$src" = "examples/player/player.pas" ]; then flags="$$flags -Fulib/rtl/platform/posix"; fi; \
+	  if $(PXX_STABLE) $$flags "$$src" /tmp/demo_$$(basename $$src .pas) >/tmp/demo.log 2>&1; then \
 	    printf '  OK    %s\n' "$$src"; \
 	  else \
 	    printf '  FAIL  %s  -- %s\n' "$$src" "$$(tail -1 /tmp/demo.log)"; \

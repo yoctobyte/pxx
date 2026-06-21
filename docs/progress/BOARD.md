@@ -12,10 +12,10 @@ _none_
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
-| feature-c-runtime-library | B | feature | C runtime/library layer (`lib/crtl`) plus direct C-library packages | — |
+| feature-c-runtime-library | B | feature | C runtime/library layer (`lib/crtl`) plus direct C-library packages | feature-c-source-frontend |
 | feature-platform-abstraction-layer | B | feature | Platform Abstraction Layer (PAL): per-platform RTL port at one seam | — |
 
-## backlog (84)
+## backlog (83)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -43,7 +43,6 @@ _none_
 | feature-demo-lisp | B | feature | Demo — Lisp / Scheme interpreter | — |
 | feature-demo-maze | B | feature | Demo — maze generator + solver | — |
 | feature-demo-solitaire | B | feature | Demo — console Klondike solitaire (user-requested entertainment test app) | — |
-| feature-demo-video-player | B | feature | Flagship Demo — Console Video Player (libc-free) | — |
 | feature-demo-vm | B | feature | Demo — bytecode VM + assembler (small ISA) | — |
 | feature-dns-resolver-library | B | feature | DNS resolver library (`dns.pas`) with selectable backends | — |
 | feature-dotted-unit-names | A | feature | Dotted / namespace unit names in `uses` | — |
@@ -51,8 +50,8 @@ _none_
 | feature-dynamic-include-paths-config | A | feature | Dynamic Include Paths, Configuration Files, and System Scanner | — |
 | feature-dynamic-soname-discovery | A | feature | Dynamic soname discovery (no execve) | — |
 | feature-esp32-idf-xtensa | A | feature | ESP-IDF integration: Xtensa (ESP32-S2/S3) — QEMU + real hardware | — |
-| feature-esp32-isr-iram | A | feature | ESP32: Compiler-Directed ISR and IRAM Support | — |
 | feature-esp-float | B | feature | ESP float wiring (xtensa + riscv32 float value model) | — |
+| feature-esp-peripheral-callback-api | BB//B/BAB | feature | ESP32 peripheral callback API (timer / GPIO / ADC) — the user-facing "interrupt" | — |
 | feature-exception-base-class | B | feature | Built-in / RTL `Exception` base class | — |
 | feature-extended-alias-or-reject | A | feature | Extended: formalize as Double alias (or reject) | — |
 | feature-flexcolumn-directive | A | feature | `flexcolumn` calling-convention directive | chore-inc-to-units |
@@ -108,7 +107,7 @@ _none_
 
 _none_
 
-## done (125)
+## done (127)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -181,12 +180,14 @@ _none_
 | feature-cross-target-feature-parity | A | feature | Cross-target language-feature parity (Intel + ARM) | — |
 | feature-default-standard-units | A | feature | Default standard units: `System` + `textfile` | — |
 | feature-demo-sudoku | B | feature | Demo — Sudoku (solver + generator + interactive play) | — |
+| feature-demo-video-player | B | feature | Flagship Demo — Console Video Player (libc-free) | — |
 | feature-directive-if-numeric | A | feature | Valued defines + numeric `{$IF}` evaluation | — |
 | feature-double-to-single-narrowing | A | feature | Double literal / value → Single narrowing on assign and argument | — |
 | feature-elf-rel-writer | A | feature | Relocatable ELF32 object writer (.o for ESP-IDF linking) | — |
 | feature-empty-class-shorthand | A | feature | Empty class descendant shorthand | — |
 | feature-esp32-bare-boot | A | feature | ESP32 bare-metal boot profile (no IDF) | — |
 | feature-esp32-idf-riscv32 | A | feature | ESP-IDF integration: riscv32 (ESP32-C3) end-to-end | feature-elf-rel-writer |
+| feature-esp32-isr-iram | B | feature | ESP32: Compiler-Directed ISR and IRAM Support | — |
 | feature-esp32-managed-features | A | feature | ESP32 managed-feature port (xtensa + riscv32, qemu-validated) | — |
 | feature-esp32-managed-strings | A | feature | ESP32 managed strings (tyAnsiString runtime on xtensa + riscv32) | — |
 | feature-esp-int64-arith | A | feature | 64-bit integer arithmetic for the ESP backends (riscv32 + xtensa) | — |
@@ -272,7 +273,6 @@ _none_
 - [B] feature-demo-lisp
 - [B] feature-demo-maze
 - [B] feature-demo-solitaire
-- [B] feature-demo-video-player
 - [B] feature-demo-vm
 - [B] feature-dns-resolver-library
 - [A] feature-dotted-unit-names
@@ -280,8 +280,8 @@ _none_
 - [A] feature-dynamic-include-paths-config
 - [A] feature-dynamic-soname-discovery
 - [A] feature-esp32-idf-xtensa
-- [A] feature-esp32-isr-iram
 - [B] feature-esp-float
+- [BB//B/BAB] feature-esp-peripheral-callback-api
 - [B] feature-exception-base-class
 - [A] feature-extended-alias-or-reject
 - [A] feature-fpc-vs-pxx-feature-boundary
@@ -336,6 +336,7 @@ _none_
 - **2** — feature-target-aarch64
 - **2** — feature-rtti-layout-table
 - **2** — feature-rtl-image-bitmap-library
+- **2** — feature-c-source-frontend
 - **2** — feature-cross-target-feature-parity
 - **2** — feature-cross-managed-string-cow
 - **1** — feature-terminal-ansi-library
@@ -347,7 +348,6 @@ _none_
 - **1** — feature-esp32-idf-xtensa
 - **1** — feature-elf-rel-writer
 - **1** — feature-directive-if-numeric
-- **1** — feature-c-source-frontend
 - **1** — feature-cross-selfhost-i386
 - **1** — feature-cross-selfhost-arm32
 - **1** — feature-cross-selfhost-aarch64
