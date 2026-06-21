@@ -1,0 +1,8 @@
+# release xfail registry — known-failing items the release gate TOLERATES.
+# One demo/test source path per line (exact match, grep -xF). A FAILURE listed here
+# is reported but does NOT block a release; any failure NOT listed BLOCKS it.
+# Every entry must name a reason + ticket above it. These also become the release
+# notes' honest "known gaps" section. Remove an entry the moment its ticket lands.
+
+# chess: blocked on local typed constants -> feature-local-typed-constant
+examples/chess/chess.pas

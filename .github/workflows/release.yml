@@ -1,0 +1,31 @@
+# Release — runs only on a semver tag (vX.Y.Z[-chan.N]). One x86_64 runner
+# cross-builds every target (codegen is host-independent — no arch matrix), runs
+# the full gate + reproduce-selfcheck for THIS tag, then publishes. A release can't
+# ship unless the gate + reproduction succeed (release.sh --build-for exits non-zero).
+name: release
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write          # lets gh create the Release
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }     # tags + history
+      - name: deps (FPC seed + QEMU)
+        run: sudo apt-get update && sudo apt-get install -y fpc qemu-user
+      - name: build compiler
+        run: make compiler/pascal26
+      - name: gate + build dist + manifest + reproduce (for this tag)
+        run: tools/release.sh --build-for "${GITHUB_REF_NAME}" --no-seatbelt
+      - name: create GitHub Release
+        env: { GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} }
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          gh release create "$TAG" \
+            "dist/pxx-$TAG.tar.gz" "dist/pxx-$TAG/MANIFEST.sha256" \
+            --title "PXX $TAG" --generate-notes

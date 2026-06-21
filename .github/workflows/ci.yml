@@ -1,0 +1,18 @@
+# CI — runs on every push / PR. Proves the tree is green & deterministic.
+# Publishes NOTHING (nightly != release). A green check = "releasable".
+name: ci
+on:
+  push:
+  pull_request:
+
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: deps (FPC seed + QEMU for cross-run)
+        run: sudo apt-get update && sudo apt-get install -y fpc qemu-user
+      - name: gate (self-host fixedpoint + determinism)
+        run: make test
+      - name: cross-bootstrap (all targets byte-identical)
+        run: make cross-bootstrap
