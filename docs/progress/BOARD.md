@@ -15,11 +15,13 @@ _none_
 | feature-c-runtime-library | B | feature | C runtime/library layer (`lib/crtl`) plus direct C-library packages | — |
 | feature-platform-abstraction-layer | B | feature | Platform Abstraction Layer (PAL): per-platform RTL port at one seam | — |
 
-## backlog (74)
+## backlog (75)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
 | bug-bare-function-name-call-vs-resultvar | A | bug | Bare function name in an expression: PXX calls it, FPC/ISO reads the result var | — |
+| bug-forin-qualified-set-member-source | A | bug | `for-in` over a qualified set member source fails | — |
+| bug-generator-yield-call-expression | A | bug | Generator `yield` of a call expression lowers to unsupported IR | — |
 | chore-inc-to-units | A | chore | `.inc` → real `.pas` units refactor | — |
 | chore-runtime-emission-size | A | chore | Finer runtime-support emission (code size) | — |
 | design-overloadable-intrinsics | A | design | Design question: overloadable compiler intrinsics (the `Copy` precedent) | — |
@@ -49,7 +51,6 @@ _none_
 | feature-esp32-idf-xtensa | A | feature | ESP-IDF integration: Xtensa (ESP32-S2/S3) — QEMU + real hardware | — |
 | feature-esp32-isr-iram | A | feature | ESP32: Compiler-Directed ISR and IRAM Support | — |
 | feature-esp-float | A | feature | ESP float wiring (xtensa + riscv32 float value model) | — |
-| feature-esp-int64-arith | A | feature | 64-bit integer arithmetic for the ESP backends (riscv32 + xtensa) | — |
 | feature-exception-base-class | B | feature | Built-in / RTL `Exception` base class | — |
 | feature-extended-alias-or-reject | A | feature | Extended: formalize as Double alias (or reject) | — |
 | feature-flexcolumn-directive | A | feature | `flexcolumn` calling-convention directive | chore-inc-to-units |
@@ -98,7 +99,7 @@ _none_
 
 _none_
 
-## done (112)
+## done (113)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -172,6 +173,7 @@ _none_
 | feature-esp32-idf-riscv32 | A | feature | ESP-IDF integration: riscv32 (ESP32-C3) end-to-end | feature-elf-rel-writer |
 | feature-esp32-managed-features | A | feature | ESP32 managed-feature port (xtensa + riscv32, qemu-validated) | — |
 | feature-esp32-managed-strings | A | feature | ESP32 managed strings (tyAnsiString runtime on xtensa + riscv32) | — |
+| feature-esp-int64-arith | A | feature | 64-bit integer arithmetic for the ESP backends (riscv32 + xtensa) | — |
 | feature-esp-isa-baseline-softfallback | A | feature | ESP ISA baseline + software fallbacks for older parts | — |
 | feature-explicit-typecasts | A | feature | Explicit type-casts (`Char`/`Boolean`/`String` and a general `TypeName(expr)`) | — |
 | feature-float-str-val | A | feature | Float Str / Val | — |
@@ -225,6 +227,8 @@ _none_
 ## Ready (no unmet blocker)
 
 - [A] bug-bare-function-name-call-vs-resultvar
+- [A] bug-forin-qualified-set-member-source
+- [A] bug-generator-yield-call-expression
 - [A] chore-inc-to-units
 - [A] chore-runtime-emission-size
 - [A] design-overloadable-intrinsics
@@ -253,7 +257,6 @@ _none_
 - [A] feature-esp32-idf-xtensa
 - [A] feature-esp32-isr-iram
 - [A] feature-esp-float
-- [A] feature-esp-int64-arith
 - [B] feature-exception-base-class
 - [A] feature-extended-alias-or-reject
 - [A] feature-fpc-vs-pxx-feature-boundary

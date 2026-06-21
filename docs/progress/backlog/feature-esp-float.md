@@ -42,17 +42,20 @@ Notes:
   Single otherwise). Small parser change. Affects no-FPU/ESP precision of `Real`
   code by design (the contract).
 
-## BLOCKED 2026-06-20 — needs [[feature-esp-int64-arith]] first
+## UNBLOCKED 2026-06-21 — [[feature-esp-int64-arith]] is now DONE (both ESP backends)
 
-The soft-float kernels are validated and ready, but they cannot run on ESP yet:
-the riscv32 + xtensa backends do **runtime integer arithmetic in 32 bits only**
-(the `IR_BINOP` handler uses single registers, no lo:hi pair), so a 64-bit
-`add`/`sub`/`mul`/`and` silently truncates. softfloat is almost all 64-bit math
-(double `shl 52`, 53x53 mul; single 48-bit products + Int64 guard math), so it
-either truncates or hits a tyString misclassification error on ESP. Verified on
-esp32c3 QEMU vs the x86-64 oracle. **Prerequisite: [[feature-esp-int64-arith]]**
-(64-bit register-pair arithmetic for the ESP backends, mirroring arm32's
-EmitNode64). Once that lands, resume the wiring below.
+Runtime 64-bit integer arithmetic now works on BOTH ESP backends (riscv32
+2026-06-20, xtensa 2026-06-21), so the soft-float kernels run correctly: the
+full softfloat library is byte-identical to the x86-64 oracle on esp32c3 +
+esp32s3 (`make test-esp-softfloat`). The float *value model + IR lowering*
+(the wiring below) is the remaining work — resume from step 0.
+
+Historical (the block, for context): the riscv32 + xtensa backends did runtime
+integer arithmetic in 32 bits only (the `IR_BINOP` handler used single
+registers, no lo:hi pair), so a 64-bit `add`/`sub`/`mul`/`and` silently
+truncated. softfloat is almost all 64-bit math (double `shl 52`, 53x53 mul;
+single 48-bit products + Int64 guard math), so it either truncated or hit a
+tyString misclassification error on ESP. That prerequisite is now cleared.
 
 Also fixed en route (separate commit, cb46fbd): COM/ARC interface ARC helpers
 in builtinheap were compiled unconditionally and broke ALL ESP compiles (indirect
