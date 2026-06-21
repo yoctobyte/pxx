@@ -1,7 +1,9 @@
 # Built-in / RTL `Exception` base class
 
 - **Type:** feature (compiler / RTL)
-- **Status:** backlog
+- **Status:** DONE 2026-06-21 (RTL `Exception` base in `lib/rtl/sysutils.pas`;
+  chess compiles past `class(Exception)`, now blocks further down on
+  `feature-local-typed-constant` at `chess.pas:846`)
 - **Owner:** —
 - **Opened:** 2026-06-20 (demo dashboard against pinned v14)
 - **Relation:** blocks `feature-demo-chess` and any FPC-style code that declares
@@ -54,3 +56,10 @@ handlers (`test/test_exception_typed.pas`), but there is no canonical
   `demo_chess` now gets past the missing base class and fails on the next FPC
   syntax gap, `EChess = class(Exception);` as an empty descendant shorthand.
   Tracked separately in `feature-empty-class-shorthand`.
+- 2026-06-21 — CLOSED. `feature-empty-class-shorthand` landed (in done/), so
+  `EChess = class(Exception);` now parses. Reconfirmed: `./compiler/pascal26
+  -Fulib/rtl -Fulib/pcl examples/chess/chess.pas` no longer errors on `Exception`
+  — it advances to `chess.pas:846` (`local typed constant not supported`), tracked
+  in `feature-local-typed-constant`. Acceptance met: chess past the base class;
+  raise/catch `class(Exception)` covered by `test/lib_sysutils.pas`; `make test`
+  green. → done/.
