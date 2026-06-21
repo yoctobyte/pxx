@@ -35,6 +35,13 @@ function PalBackendSocketClose(handle: Integer): Integer;
 function PalBackendMonotonicMillis: Int64;
 procedure PalBackendYield;
 
+function PalBackendVfork: Integer;
+function PalBackendExecve(path: PChar; argv, envp: Pointer): Integer;
+function PalBackendPipe2(var pipefd: array of Integer; flags: Integer): Integer;
+function PalBackendDup2(oldFd, newFd: Integer): Integer;
+function PalBackendWait4(pid: Integer; wstatus: Pointer; options: Integer; rusage: Pointer): Integer;
+function PalBackendVforkAndExec(path: PChar; argv, envp: Pointer; stdinReadFd, stdinWriteFd, stdoutReadFd, stdoutWriteFd: Integer): Integer;
+
 implementation
 
 const
@@ -425,6 +432,36 @@ begin
 {$ifdef PXX_PAL_ESP_IDF_TARGET}
   vTaskDelay(1);
 {$endif}
+end;
+
+function PalBackendVfork: Integer;
+begin
+  Result := PAL_ERR_UNSUPPORTED;
+end;
+
+function PalBackendExecve(path: PChar; argv, envp: Pointer): Integer;
+begin
+  Result := PAL_ERR_UNSUPPORTED;
+end;
+
+function PalBackendPipe2(var pipefd: array of Integer; flags: Integer): Integer;
+begin
+  Result := PAL_ERR_UNSUPPORTED;
+end;
+
+function PalBackendDup2(oldFd, newFd: Integer): Integer;
+begin
+  Result := PAL_ERR_UNSUPPORTED;
+end;
+
+function PalBackendWait4(pid: Integer; wstatus: Pointer; options: Integer; rusage: Pointer): Integer;
+begin
+  Result := PAL_ERR_UNSUPPORTED;
+end;
+
+function PalBackendVforkAndExec(path: PChar; argv, envp: Pointer; stdinReadFd, stdinWriteFd, stdoutReadFd, stdoutWriteFd: Integer): Integer;
+begin
+  Result := PAL_ERR_UNSUPPORTED;
 end;
 
 end.

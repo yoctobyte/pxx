@@ -65,7 +65,12 @@ procedure Insert(const src: AnsiString; var dst: AnsiString; index: Integer);
 { Concatenate two strings. For more than two, chain with + or nest calls. }
 function Concat(const s1, s2: AnsiString): AnsiString;
 
+{ Execute a process in a pipeline, returning its PID and redirecting stdin/stdout via pipes if requested. }
+function ExecutePipeline(const cmd: AnsiString; const args: array of AnsiString; var childStdinFd, childStdoutFd: Integer): Integer;
+
 implementation
+
+uses platform;
 
 constructor Exception.Create(const msg: string);
 begin
@@ -351,6 +356,80 @@ end;
 function Concat(const s1, s2: AnsiString): AnsiString;
 begin
   Result := s1 + s2;
+end;
+
+function ExecutePipeline(const cmd: AnsiString; const args: array of AnsiString; var childStdinFd, childStdoutFd: Integer): Integer;
+var
+  stdinPipe: array[0..1] of Integer;
+  stdoutPipe: array[0..1] of Integer;
+  pid: Integer;
+  argv: array of PChar;
+  i: Integer;
+  res: Integer;
+  env: array[0..0] of PChar;
+begin
+  stdinPipe[0] := -1; stdinPipe[1] := -1;
+  stdoutPipe[0] := -1; stdoutPipe[1] := -1;
+
+  { Construct argv in the parent process, before vfork! }
+  SetLength(argv, Length(args) + 2);
+  argv[0] := PChar(cmd);
+  for i := 0 to Length(args) - 1 do
+    argv[i + 1] := PChar(args[i]);
+  argv[Length(args) + 1] := nil;
+
+  env[0] := nil;
+
+  if childStdinFd = -1 then
+  begin
+    if PalPipe2(stdinPipe, 0) < 0 then
+    begin
+      Result := -1;
+      Exit;
+    end;
+  end;
+
+  if childStdoutFd = -1 then
+  begin
+    if PalPipe2(stdoutPipe, 0) < 0 then
+    begin
+      if stdinPipe[0] <> -1 then
+      begin
+        res := PalClose(stdinPipe[0]);
+        res := PalClose(stdinPipe[1]);
+      end;
+      Result := -1;
+      Exit;
+    end;
+  end;
+
+  { Fork and exec via PAL helper to avoid stack corruption }
+  pid := PalVforkAndExec(PChar(cmd), @argv[0], @env[0], stdinPipe[0], stdinPipe[1], stdoutPipe[0], stdoutPipe[1]);
+
+  if pid < 0 then
+  begin
+    { error }
+    if stdinPipe[0] <> -1 then begin res := PalClose(stdinPipe[0]); res := PalClose(stdinPipe[1]); end;
+    if stdoutPipe[0] <> -1 then begin res := PalClose(stdoutPipe[0]); res := PalClose(stdoutPipe[1]); end;
+    Result := -1;
+    Exit;
+  end;
+
+  { Parent process }
+  { Close the ends of the pipes we don't need }
+  if stdinPipe[0] <> -1 then
+  begin
+    res := PalClose(stdinPipe[0]); { Close child's read end }
+    childStdinFd := stdinPipe[1]; { Parent writes here }
+  end;
+
+  if stdoutPipe[1] <> -1 then
+  begin
+    res := PalClose(stdoutPipe[1]); { Close child's write end }
+    childStdoutFd := stdoutPipe[0]; { Parent reads from here }
+  end;
+
+  Result := pid;
 end;
 
 end.

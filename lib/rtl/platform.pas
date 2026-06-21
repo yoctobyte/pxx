@@ -80,6 +80,13 @@ function PalSocketClose(handle: Integer): Integer;
 function PalMonotonicMillis: Int64;
 procedure PalYield;
 
+function PalVfork: Integer;
+function PalExecve(path: PChar; argv, envp: Pointer): Integer;
+function PalPipe2(var pipefd: array of Integer; flags: Integer): Integer;
+function PalDup2(oldFd, newFd: Integer): Integer;
+function PalWait4(pid: Integer; wstatus: Pointer; options: Integer; rusage: Pointer): Integer;
+function PalVforkAndExec(path: PChar; argv, envp: Pointer; stdinReadFd, stdinWriteFd, stdoutReadFd, stdoutWriteFd: Integer): Integer;
+
 implementation
 
 function PalPlatform: Integer;
@@ -230,6 +237,36 @@ end;
 procedure PalYield;
 begin
   PalBackendYield;
+end;
+
+function PalVfork: Integer;
+begin
+  Result := PalBackendVfork;
+end;
+
+function PalExecve(path: PChar; argv, envp: Pointer): Integer;
+begin
+  Result := PalBackendExecve(path, argv, envp);
+end;
+
+function PalPipe2(var pipefd: array of Integer; flags: Integer): Integer;
+begin
+  Result := PalBackendPipe2(pipefd, flags);
+end;
+
+function PalDup2(oldFd, newFd: Integer): Integer;
+begin
+  Result := PalBackendDup2(oldFd, newFd);
+end;
+
+function PalWait4(pid: Integer; wstatus: Pointer; options: Integer; rusage: Pointer): Integer;
+begin
+  Result := PalBackendWait4(pid, wstatus, options, rusage);
+end;
+
+function PalVforkAndExec(path: PChar; argv, envp: Pointer; stdinReadFd, stdinWriteFd, stdoutReadFd, stdoutWriteFd: Integer): Integer;
+begin
+  Result := PalBackendVforkAndExec(path, argv, envp, stdinReadFd, stdinWriteFd, stdoutReadFd, stdoutWriteFd);
 end;
 
 end.
