@@ -15,13 +15,11 @@ _none_
 | feature-c-runtime-library | B | feature | C runtime/library layer (`lib/crtl`) plus direct C-library packages | — |
 | feature-platform-abstraction-layer | B | feature | Platform Abstraction Layer (PAL): per-platform RTL port at one seam | — |
 
-## backlog (75)
+## backlog (73)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
 | bug-bare-function-name-call-vs-resultvar | A | bug | Bare function name in an expression: PXX calls it, FPC/ISO reads the result var | — |
-| bug-forin-qualified-set-member-source | A | bug | `for-in` over a qualified set member source fails | — |
-| bug-generator-yield-call-expression | A | bug | Generator `yield` of a call expression lowers to unsupported IR | — |
 | chore-inc-to-units | A | chore | `.inc` → real `.pas` units refactor | — |
 | chore-runtime-emission-size | A | chore | Finer runtime-support emission (code size) | — |
 | design-overloadable-intrinsics | A | design | Design question: overloadable compiler intrinsics (the `Copy` precedent) | — |
@@ -99,7 +97,7 @@ _none_
 
 _none_
 
-## done (113)
+## done (115)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -116,7 +114,9 @@ _none_
 | bug-dynarray-whole-var-assign-cross | A | bug | Whole dynamic-array variable assignment (`b := a`) unsupported on i386 + aarch64 | — |
 | bug-for-in-implicit-self-field | A | bug | `for-in` over an implicit-`Self` array field fails in methods | — |
 | bug-forin-in-method-global-var-corruption | A | bug | `for-in` inside a method corrupts a dyn-array global declared after it | — |
+| bug-forin-qualified-set-member-source | A | bug | `for-in` over a qualified set member source fails | — |
 | bug-frozen-string-length-pointer-deref-cross | A | bug | `Length()` of a pointer-dereferenced frozen `string` returns 0 on the cross targets | — |
+| bug-generator-yield-call-expression | A | bug | Generator `yield` of a call expression lowers to unsupported IR | — |
 | bug-implicit-self-dynarray-length | A | bug | `Length` on implicit-`Self` dynamic-array field fails in methods | — |
 | bug-managed-byref-string-param-store | A | bug | Managed by-ref AnsiString params: store-through-var no-ops / segfaults | — |
 | bug-managed-to-frozen-string-assign-crash | A | bug | Assigning a managed string (tyAnsiString) into a frozen `string` (tyString) miscompiles → segfault | — |
@@ -227,8 +227,6 @@ _none_
 ## Ready (no unmet blocker)
 
 - [A] bug-bare-function-name-call-vs-resultvar
-- [A] bug-forin-qualified-set-member-source
-- [A] bug-generator-yield-call-expression
 - [A] chore-inc-to-units
 - [A] chore-runtime-emission-size
 - [A] design-overloadable-intrinsics

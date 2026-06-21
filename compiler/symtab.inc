@@ -480,6 +480,16 @@ begin
     UFldPtrElemTk[fi] := Ord(tyUnknown);
     UFldPtrElemRec[fi] := REC_NONE;
   end;
+  if tk = Ord(tySet) then
+  begin
+    UFldSetEnumId[fi] := LastTypeSetEnumId;
+    UFldSetElemTk[fi] := LastTypeSetElemTk;
+  end
+  else
+  begin
+    UFldSetEnumId[fi] := -1;
+    UFldSetElemTk[fi] := 0;
+  end;
   UFldIsArray[fi] := False;
   UFldArrLen[fi] := 1;
   UFldDynDepth[fi] := 0;

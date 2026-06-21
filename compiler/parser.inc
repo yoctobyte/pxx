@@ -4480,19 +4480,21 @@ end;
     while X <= hi do begin if X in S then BODY; X := X + 1; end;
   X (the loop var) doubles as the scan ordinal. Range from the set element type:
   `set of <enum>` → 0..count-1; `set of Char` → 0..255. }
-function ParseForInSetAST(varIdx, setSym: Integer): Integer;
+{ Shared membership-scan builder for `for x in <set>`. The set source is an
+  abstract value node (setOperand) — a plain `set var` ident (ParseForInSetAST)
+  or a qualified member-access lvalue (ParseForInNodeAST). The element range is
+  given by setEnumId (`set of <enum>` → 0..count-1) or setElemTk = tyChar
+  (`set of Char` → 0..255). bodyNode is the already-parsed loop body. }
+function BuildForInSetLoop(varIdx, setEnumId, setElemTk, setOperand, bodyNode: Integer): Integer;
 var
-  bodyNode, loV, hiV, vtk, oSym, isChar: Integer;
+  loV, hiV, vtk, oSym, isChar: Integer;
   initN, scanCond, condIn, pairN, ifN, incN, innerSeq, whileN: Integer;
   valNode, assignE, chrArg: Integer;
 begin
-  Expect(tkDo, 'do');
-  bodyNode := ParseStatementAST;
-
   isChar := 0;
-  if SymSetEnumId[setSym] >= 0 then
-  begin loV := 0; hiV := EnumTypeValCount[SymSetEnumId[setSym]] - 1; end
-  else if SymSetElemTk[setSym] = Ord(tyChar) then
+  if setEnumId >= 0 then
+  begin loV := 0; hiV := EnumTypeValCount[setEnumId] - 1; end
+  else if setElemTk = Ord(tyChar) then
   begin loV := 0; hiV := 255; isChar := 1; end
   else
     Error('for-in: set iteration supports `set of <enum>` or `set of Char` only');
@@ -4518,8 +4520,7 @@ begin
     valNode := GenMakeIdent(oSym, tyInteger);
   assignE := GenMakeAssign(GenMakeIdent(varIdx, IntToTypeKind(vtk)), valNode);
 
-  condIn := GenMakeBinop(tkIn, GenMakeIdent(oSym, tyInteger),
-                         GenMakeIdent(setSym, tySet), tyBoolean);
+  condIn := GenMakeBinop(tkIn, GenMakeIdent(oSym, tyInteger), setOperand, tyBoolean);
   ifN := AllocNode(AN_IF);
   ASTLeft[ifN] := condIn;
   pairN := AllocNode(AN_PAIR);
@@ -4534,6 +4535,15 @@ begin
   ASTLeft[whileN] := scanCond;
   ASTRight[whileN] := innerSeq;
   Result := GenMakeSeq(initN, GenMakeSeq(whileN, -1));
+end;
+
+function ParseForInSetAST(varIdx, setSym: Integer): Integer;
+var bodyNode: Integer;
+begin
+  Expect(tkDo, 'do');
+  bodyNode := ParseStatementAST;
+  Result := BuildForInSetLoop(varIdx, SymSetEnumId[setSym], SymSetElemTk[setSym],
+                              GenMakeIdent(setSym, tySet), bodyNode);
 end;
 
 { for x in <string|static array|dynarray|open-array var> do BODY:
@@ -4697,6 +4707,7 @@ end;
 function ParseForInNodeAST(varIdx, contNode: Integer): Integer;
 var
   bodyNode, elemTk, staticLen, recId, fldIdx: Integer;
+  setEnumId, setElemTk: Integer;
   contTk: TTypeKind;
   isString, isStaticArr, isArr: Boolean;
   fname: AnsiString;
@@ -4706,12 +4717,15 @@ begin
 
   isArr := IsNodeArray(contNode);
   staticLen := -1;
+  setEnumId := -1; setElemTk := 0;
   if ASTKind[contNode] = AN_IDENT then
   begin
     contTk := Syms[ASTIVal[contNode]].TypeKind;
     if isArr then elemTk := Ord(Syms[ASTIVal[contNode]].ElemType)
     else elemTk := Ord(contTk);
     staticLen := Syms[ASTIVal[contNode]].ArrLen;
+    setEnumId := SymSetEnumId[ASTIVal[contNode]];
+    setElemTk := SymSetElemTk[ASTIVal[contNode]];
   end
   else if ASTKind[contNode] = AN_FIELD then
   begin
@@ -4721,12 +4735,26 @@ begin
     elemTk := Ord(contTk);
     fldIdx := -1;
     if recId >= REC_UCLASS_BASE then fldIdx := FindUField(recId - REC_UCLASS_BASE, fname);
-    if fldIdx >= 0 then staticLen := UFldArrLen[fldIdx];
+    if fldIdx >= 0 then
+    begin
+      staticLen := UFldArrLen[fldIdx];
+      setEnumId := UFldSetEnumId[fldIdx];
+      setElemTk := UFldSetElemTk[fldIdx];
+    end;
   end
   else
   begin
     Error('for-in: unsupported iterable expression');
     contTk := tyInteger; elemTk := Ord(tyInteger);
+  end;
+
+  { set-valued qualified source (obj.field / Self.field of `set of <enum|Char>`)
+    → membership scan, equivalent to the symbol-based ParseForInSetAST. The set
+    node is cloned so the loop builder owns a private copy. }
+  if contTk = tySet then
+  begin
+    Result := BuildForInSetLoop(varIdx, setEnumId, setElemTk, CloneAST(contNode), bodyNode);
+    Exit;
   end;
 
   isStaticArr := isArr and (staticLen >= 0);
@@ -6081,10 +6109,30 @@ begin
           Error('yield inside try/except/finally is not allowed (v1)');
         Next;
         ParseExpr;
+        exprNode := CurASTNode;
+        { A record-returning call (or any non-addressable aggregate) yielded
+          directly has no address for the stackful current-slot, so IRLowerAddress
+          fell through to IR_UNSUPPORTED. Materialise it into a generator-frame
+          local first, then yield that local — the same lvalue path that
+          `tmp := MkRec(...)` uses. The stackful frame keeps the temp alive until
+          the next resume. }
+        if (IntToTypeKind(ASTTk[exprNode]) = tyRecord) and
+           not (ASTKind[exprNode] in [AN_IDENT, AN_FIELD, AN_INDEX, AN_DEREF]) then
+        begin
+          idx := AllocVar('', tyRecord);
+          InferSymTypeFromNode(idx, exprNode);
+          AllocateSymOffset(idx);
+          opNode := GenMakeAssign(GenMakeIdent(idx, tyRecord), exprNode);
+          exprNode := GenMakeIdent(idx, tyRecord);
+        end
+        else
+          opNode := -1;
         node := AllocNode(AN_YIELD);
-        ASTLeft[node] := CurASTNode;
+        ASTLeft[node] := exprNode;
         ASTIVal[node] := CurGenSelfSym;
         CurGenSeenYield := True;
+        if opNode >= 0 then
+          node := GenMakeSeq(opNode, GenMakeSeq(node, -1));
       end
       else if CaseEqual(name, 'await') and CurProcIsAsync then
       begin

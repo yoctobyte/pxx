@@ -1101,6 +1101,8 @@ var
   UFldArrLen  : array[0..MAX_UFIELD-1] of Integer;
   UFldDynDepth : array[0..MAX_UFIELD-1] of Integer; { dynamic-array field nesting: 0 = not a dynamic array, 1 = array of T, 2 = array of array of T, ... (UFldArrLen = -1 also marks dynamic, mirroring the symbol convention) }
   UFldPub    : array[0..MAX_UFIELD-1] of Integer;  { 1 = published, 0 = other }
+  UFldSetEnumId : array[0..MAX_UFIELD-1] of Integer; { set field: element enum type index for `set of TEnum`, else -1. Drives `for e in obj.field` range }
+  UFldSetElemTk : array[0..MAX_UFIELD-1] of Integer; { set field: element TTypeKind ordinal (tyChar/enum-as-integer), else 0 }
   { 2-D fixed-array fields: `m: array[a..b, c..d] of T`, flattened to 1-D
     storage; r.m[i,j] / r.m[i][j] index via (i-lo1)*span2 + (j-lo2). }
   UFldArrNDims  : array[0..MAX_UFIELD-1] of Integer;

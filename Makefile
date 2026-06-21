@@ -267,6 +267,10 @@ test-core: $(COMPILER)
 	test "$$(/tmp/test_generator26)" = "$$(printf '1 4 9 16 25 \n25\n0 1 1 2 3 5 8 13 \n1 2 3 ')"
 	./$(COMPILER) test/test_generator_record.pas /tmp/test_generator_record26
 	test "$$(/tmp/test_generator_record26)" = "$$(printf '1 10 1\n2 20 4\n3 30 9\n30')"
+	./$(COMPILER) test/test_generator_yield_call.pas /tmp/test_generator_yield_call26
+	test "$$(/tmp/test_generator_yield_call26)" = "$$(printf '1 2 10\n3 4 20\n5 6 30\n60')"
+	./$(COMPILER) test/test_forin_set_member.pas /tmp/test_forin_set_member26
+	test "$$(/tmp/test_forin_set_member26)" = "$$(printf 'spell=0\nspell=2\nspell=4\ndone')"
 	./$(COMPILER) test/test_forin_native.pas /tmp/test_forin_native26
 	test "$$(/tmp/test_forin_native26)" = "$$(printf 'static sum=150\ndyn sum=600\nchar=a\nchar=b\nchar=c\nday=0\nday=1\nday=2\nday=3\nday=4\nwd=0\nwd=2\nwd=4\ncs=a\ncs=m\ncs=x')"
 	./$(COMPILER) test/test_forin_enumerator.pas /tmp/test_forin_enumerator26
