@@ -4,5 +4,5 @@
 # Every entry must name a reason + ticket above it. These also become the release
 # notes' honest "known gaps" section. Remove an entry the moment its ticket lands.
 
-# chess: blocked on local typed constants -> feature-local-typed-constant
+# chess: local typed constants landed; now fails on eng.Free -> bug-method-call-free-tobject
 examples/chess/chess.pas
