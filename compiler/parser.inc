@@ -3559,6 +3559,28 @@ begin
       begin
         node := AllocNode(AN_INT_LIT); ASTIVal[node] := Syms[idx].ConstVal; ASTTk[node] := Ord(Syms[idx].TypeKind); CurASTNode := node; Next;
       end
+      else if (CurProc >= 0) and Procs[CurProc].IsFunc and
+              (Procs[CurProc].ParamCount > 0) and
+              (Tokens[TokPos].Kind <> tkLParen) and
+              ((name = Procs[CurProc].Name) or
+               CaseEqual(name, LastDotName(Procs[CurProc].Name))) then
+      begin
+        { Bare function name in its own body, read as a value = the result var
+          (FPC `FuncName` synonym for `Result`, e.g. `F := F + x`). The assign
+          side (`FuncName := ...`) is handled at the statement level; this is the
+          read side. A following `(` is a recursive call, not a result read, so
+          it is excluded above and falls through to the call paths below.
+
+          Restricted to ParamCount > 0: with parameters, a bare name (no parens)
+          cannot be a call, so it is unambiguously the result. For a PARAMLESS
+          function PXX keeps the historical meaning of bare own-name = recursive
+          call (the self-hosted compiler relies on it, e.g. `r := ConstEval` in
+          ConstEval's parenthesised-expr branch) — flipping that would silently
+          break self-host. Trailing `.field`/`[i]`/`^` resolve via ParseLValueAST. }
+        Next;
+        CurASTNode := ParseLValueAST(Procs[CurProc].RetSymIdx, TokPos - 2);
+        LastExprTk := IntToTypeKind(ASTTk[CurASTNode]);
+      end
       else if (procIdx >= 0) and Procs[procIdx].IsFunc and (Tokens[TokPos].Kind = tkLParen) then
       begin
         Next;

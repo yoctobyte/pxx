@@ -107,6 +107,30 @@ Self-host requires **declaration-before-use**; FPC resolves the whole unit (the
 [[feature-declaration-prescan]] (a header pre-scan, not lazy-linking). Interim:
 use an early-defined equivalent (`CaseEqual` in `defs.inc`) / order callees first.
 
+## Partial fix landed 2026-06-21 (Track A)
+
+The **parameterised** half of the divergence is fixed: inside a function with
+`ParamCount > 0`, a bare own-name read in an expression (not followed by `(`) now
+resolves to the result variable (`parser.inc` ParseFactor, new branch before the
+call paths, reading `Procs[CurProc].RetSymIdx` via `ParseLValueAST`). This is the
+unambiguous case — with parameters a bare name with no parens cannot be a call —
+so it needs no audit and matches FPC. Unblocked `examples/chess` `MoveText`
+(`MoveText := MoveText + Promo[...]`); chess advances past `chess.pas:872`.
+Test: `test/test_func_name_result_read.pas`; output-equal x86-64/i386/aarch64/
+arm32 (QEMU), compiles esp riscv32+xtensa; default + --threadsafe self-host
+byte-identical.
+
+**Still open — the paramless flip** (the risky half): a bare own-name in a
+PARAMLESS function is still a recursive call in PXX (the historical behaviour the
+self-hosted compiler relies on, e.g. `r := ConstEval` in ConstEval's `(expr)`
+branch). My branch deliberately excludes `ParamCount = 0` to preserve that;
+`function Counter: Integer; begin Counter := Counter + 10; end;` still infinitely
+recurses (consistent on all targets). Completing the FPC match = flip the 0-param
+case too, which still requires the bare-name-recursion-site audit described
+above. So this ticket stays **backlog** for that remaining flip.
+
 ## Log
 - 2026-06-21 — filed (Track A). Both traps cost a bootstrap cycle during
   feature-const-eval-typecast-int64; the fix there used `ConstEval()` + `CaseEqual`.
+- 2026-06-21 — partial fix (params>0 own-name read = result var) landed to
+  unblock chess; paramless flip remains. Track A.
