@@ -63,7 +63,7 @@ That is a compiler resolver/parser gap, not a library workaround target.
 - 2026-06-21 — filed from Track B Synapse smoke. The PAL/network layer already
   has socket primitives; Synapse's Delphi-POSIX path now needs compiler support
   for real Delphi namespace unit names before library shims can be useful.
-- 2026-06-21 — DONE. Three parser changes (parser.inc):
+- 2026-06-21 — DONE (commit 73b5b3a). Three parser changes (parser.inc):
   1. `ReadDottedUsesName` reads `ident('.'ident)*` in every `uses` clause
      (program / unit interface / unit implementation) and in the `unit X.Y;`
      header, so the full dotted name reaches the resolver. `ParseUsesUnit` already
