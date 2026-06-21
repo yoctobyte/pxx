@@ -510,6 +510,7 @@ type
 const
   MAX_TEMPLATES = 16;
   MAX_TEMPLATE_TOKENS = 8192;
+  MAX_NESTED_TOKENS = 8192;
   MAX_GENERIC_METHODS = 64;
   MAX_PENDING_SPECS = 32;
   MAX_SPECIALIZATIONS = 32;
@@ -576,6 +577,12 @@ var
   SpecializeTemplateName: AnsiString;
   SpecializeTokens   : array[0..MAX_TEMPLATE_TOKENS-1] of TRawToken;
   TemplateTokenCount : Integer;
+  { Nested routines (Approach B / lambda-lifting): a nested procedure/function is
+    forward-declared in place and its full body stashed here to be re-parsed as a
+    fresh top-level routine once the enclosing routine finishes. See
+    ParseNestedRoutine / FlushPendingNestedProcs in parser.inc. }
+  PendNestTok        : array[0..MAX_NESTED_TOKENS-1] of TRawToken;
+  PendNestCount      : Integer;
   GenericFuncs       : array[0..MAX_GENERIC_FUNCS-1] of TGenericFunc;
   GenericMethods     : array[0..MAX_GENERIC_METHODS-1] of TGenericMethod;
   GenericMethodCount : Integer;

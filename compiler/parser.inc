@@ -294,6 +294,8 @@ function ParseTypeKind: TTypeKind; forward;
 procedure ParseSubroutine; forward;
 procedure ParseGenericFunctionDef; forward;
 procedure ParseOperatorDef; forward;
+procedure ParseNestedRoutine; forward;
+procedure FlushPendingNestedProcs; forward;
 
 function GetTokenStrFromRaw(off, len: Integer): AnsiString;
 var s: AnsiString; i: Integer;
@@ -8506,6 +8508,108 @@ begin
   ResolvePendingPointerAliases;
 end;
 
+{ ===== Nested routines (Approach B: lambda-lifting) =====
+
+  A procedure/function declared inside another routine's declaration section is
+  NOT emitted in place (single-pass emission would drop its body into the middle
+  of the enclosing routine's code). Instead, at the declaration point we:
+    1. stash the nested routine's full token stream (PendNestTok), and
+    2. rewrite the in-place copy into a FORWARD declaration so the enclosing
+       body's calls to it resolve via the existing forward-completion path.
+  When the enclosing routine finishes (end of ParseSubroutine),
+  FlushPendingNestedProcs re-injects the stashed tokens after it, where the
+  top-level driver parses them as ordinary sibling routines that complete the
+  forward decl. This reuses the by-ref param ABI and forward machinery already
+  byte-identical on all targets — no new per-target codegen.
+
+  Slice 1 (this code): flatten only. The lifted routine is a plain top-level
+  proc; only its own params/locals and module globals resolve. A reference to an
+  enclosing local or to Self/a field fails at top-level parse ("undefined
+  variable") — capture (Slice 2) appends those as by-ref params + a Self param.
+
+  PERFORMANCE: lifted nested routines are not speed-optimized — once Slice 2
+  lands, every captured variable is an extra by-ref pointer arg plus a deref per
+  access, and a captured field goes through the passed Self. Correct and fully
+  functional, just indirection a direct frame access would not pay. }
+procedure ParseNestedRoutine;
+var
+  nestedStart, hdrEnd, finalCur, cur, depth, i, remCount: Integer;
+begin
+  nestedStart := TokPos - 1;   { the 'procedure'/'function' token (= CurTok) }
+
+  { Header terminator: the first ';' at parenthesis depth 0 (param-list ';'
+    separators sit at depth > 0). }
+  depth := 0;
+  cur := nestedStart;
+  while cur < TokCount do
+  begin
+    if Tokens[cur].Kind = tkLParen then Inc(depth)
+    else if Tokens[cur].Kind = tkRParen then Dec(depth)
+    else if (Tokens[cur].Kind = tkSemicolon) and (depth = 0) then Break;
+    Inc(cur);
+  end;
+  if cur >= TokCount then Error('nested routine: malformed header');
+  hdrEnd := cur;   { index of the ';' that ends the header }
+
+  { Body span: first 'begin', then match begin/case .. end depth, opt trailing ';'. }
+  cur := hdrEnd;
+  while (cur < TokCount) and (Tokens[cur].Kind <> tkBegin) do Inc(cur);
+  if cur >= TokCount then Error('nested routine: expected begin');
+  depth := 1; Inc(cur);
+  while (cur < TokCount) and (depth > 0) do
+  begin
+    if (Tokens[cur].Kind = tkBegin) or (Tokens[cur].Kind = tkCase) then Inc(depth)
+    else if Tokens[cur].Kind = tkEnd then Dec(depth);
+    Inc(cur);
+  end;
+  if (cur < TokCount) and (Tokens[cur].Kind = tkSemicolon) then Inc(cur);
+  finalCur := cur;
+
+  { Stash the full routine [nestedStart, finalCur) for top-level re-parse. Token
+    SOffsets index TokChars (never shifted), so the copy stays valid. }
+  if PendNestCount + (finalCur - nestedStart) >= MAX_NESTED_TOKENS then
+    Error('nested routine token buffer overflow');
+  for i := nestedStart to finalCur - 1 do
+  begin
+    PendNestTok[PendNestCount] := Tokens[i];
+    Inc(PendNestCount);
+  end;
+
+  { Rewrite the in-place copy to `<header>; forward;` by replacing the body
+    range (hdrEnd+1 .. finalCur-1) with the two tokens `forward ;`. }
+  Tokens[hdrEnd + 1].Kind := tkForward;
+  Tokens[hdrEnd + 1].IVal := 0; Tokens[hdrEnd + 1].Line := Tokens[nestedStart].Line;
+  Tokens[hdrEnd + 1].SOffset := 0; Tokens[hdrEnd + 1].SLen := 0;
+  Tokens[hdrEnd + 2].Kind := tkSemicolon;
+  Tokens[hdrEnd + 2].IVal := 0; Tokens[hdrEnd + 2].Line := Tokens[nestedStart].Line;
+  Tokens[hdrEnd + 2].SOffset := 0; Tokens[hdrEnd + 2].SLen := 0;
+  remCount := finalCur - (hdrEnd + 3);   { leftover body tokens to delete }
+  if remCount > 0 then
+  begin
+    for i := finalCur to TokCount - 1 do
+      Tokens[i - remCount] := Tokens[i];
+    TokCount := TokCount - remCount;
+  end;
+
+  { CurTok is still the 'procedure'/'function' token; parse the forward decl now
+    (registers the signature, then Exits without emitting a body). }
+  ParseSubroutine;
+end;
+
+{ Re-inject any nested routines stashed during this routine's body so the
+  top-level driver parses them next, as siblings that complete the forward
+  decls left in place by ParseNestedRoutine. Inserted before the read-ahead
+  token (TokPos-1) so the driver sees them immediately. }
+procedure FlushPendingNestedProcs;
+begin
+  if PendNestCount = 0 then Exit;
+  if TokPos < 1 then Exit;
+  InsertTokens(TokPos - 1, PendNestTok, PendNestCount);
+  PendNestCount := 0;
+  Dec(TokPos);
+  Next;
+end;
+
 { ===== Procedure/function parser ===== }
 
 procedure ParseSubroutine;
@@ -9656,11 +9760,12 @@ begin
   end;
 
   { Optional var/const/type/label sections }
-  while CurTok.Kind in [tkVar, tkConst, tkType] do
+  while CurTok.Kind in [tkVar, tkConst, tkType, tkProcedure, tkFunction] do
     case CurTok.Kind of
       tkVar:   ParseVarSection;
       tkConst: ParseConstSection;
       tkType:  ParseTypeSection;
+      tkProcedure, tkFunction: ParseNestedRoutine;
     end;
   { Managed locals (dynamic arrays, AnsiStrings, and records/arrays containing
     them) hold managed pointer slots. Zero their full extent before the body so
@@ -9950,6 +10055,10 @@ begin
   GenTryDepth := savedGenTry;
   CurGenStateCtr := savedGenStateCtr;
   CurGenSlotNext := savedGenSlotNext;
+
+  { Re-inject any nested routines declared in this routine's body so they parse
+    next as top-level siblings (completing the forward decls left in place). }
+  FlushPendingNestedProcs;
 end;
 
 function LowerCase(const s: AnsiString): AnsiString;
