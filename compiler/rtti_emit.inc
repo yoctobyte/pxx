@@ -360,10 +360,15 @@ begin
 
   if UClsCount > 0 then
   begin
-    { Registry: count slot followed by (name ptr, rtti ptr) pairs }
+    { Registry: count slot followed by (name ptr, rtti ptr) pairs. Only published
+      CLASSES belong here — managed value records also carry a UClsRTTIOff (their
+      layout descriptor from EmitLayoutRTTI), but that header begins with a Kind
+      word, not a name pointer, so including a record would both inflate the
+      count and make the runtime read a garbage name. Exclude records, matching
+      the class-RTTI Pass-1 predicate above. }
     regEntries := 0;
     for ci := 0 to UClsCount - 1 do
-      if UClsRTTIOff[ci] >= 0 then Inc(regEntries);
+      if (UClsRTTIOff[ci] >= 0) and (not UClsIsRecord[ci]) then Inc(regEntries);
     if regEntries > 0 then
     begin
       RTTIRegistryOff := DataLen;
@@ -372,7 +377,7 @@ begin
       PatchDataU64(RTTIRegistryOff, regEntries);
       for ci := 0 to UClsCount - 1 do
       begin
-        if UClsRTTIOff[ci] < 0 then continue;
+        if (UClsRTTIOff[ci] < 0) or UClsIsRecord[ci] then continue;
         entryPos := DataLen;
         DataPutZeros(16);
         nm := TokSliceStr(UClsNOff[ci], UClsNLen[ci]);

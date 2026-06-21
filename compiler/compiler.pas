@@ -9,6 +9,14 @@ program Pascal26;
 {$CASESENSITIVE ON}
 {$NESTEDCOMMENTS ON}
 
+{ The compiler relies on builtins only and must not pull the default
+  standard-unit surface (textfile drags the PAL platform_backend onto a search
+  path the bootstrap does not provide). This define opts out, the same as the
+  --no-default-rtl flag; it travels with the source so every self-build path
+  (bootstrap, cross-bootstrap, stabilize, manual) is covered. Harmless under
+  real FPC (the logic that reads it is PXX-only). }
+{$define PXX_NODEFAULTRTL}
+
 { Real FPC only: the FPC-seeded bootstrap pulls SysUtils/BaseUnix. Under PXX
   self-host these were always a no-op (builtins cover what little is used), and
   must stay unloaded now that `uses sysutils` can resolve a real
@@ -74,6 +82,7 @@ begin
   TARGET_PTR_SIZE := 8;
   EmitObjMode := False;
   EspBareBoot := False;
+  NoDefaultRtl := False;
   TargetPlatform := PLATFORM_POSIX;
   PlatformExplicit := False;
   NoUnhandledHandler := False;
@@ -179,6 +188,13 @@ begin
       { Bare-metal ESP32 image: SoC SRAM map, sp-init startup, UART MMIO output,
         no ESP-IDF. Linked ET_EXEC (do NOT set EmitObjMode). xtensa/riscv32. }
       EspBareBoot := True;
+      Inc(i);
+    end
+    else if option = '--no-default-rtl' then
+    begin
+      { Opt out of the default standard-unit surface (textfile + builtin).
+        Used by the compiler self-build, which must not pull PAL units. }
+      NoDefaultRtl := True;
       Inc(i);
     end
     else if option = '--strict-overload' then
@@ -309,6 +325,22 @@ begin
   CurSrcBaseName := GetFileBaseName(inFile);
   exePath := ParamStr(0);              { copy to a local; ParamStr result does not match the param overload directly }
   ExeDir := GetFilePath(exePath);
+  { Default standard surface pulls textfile, which `uses platform` -> resolves
+    platform_backend from the PAL dir. Anchor the POSIX backend dir to the
+    compiler binary so a plain `pxx foo.pas` finds it with no -Fu. Appended
+    last, so an explicit user -Fu (e.g. a per-platform override) still wins.
+    ESP targets select their own backend and are excluded from default RTL. }
+  if (not NoDefaultRtl) and
+     (TargetArch <> TARGET_XTENSA) and (TargetArch <> TARGET_RISCV32) then
+  begin
+    { ExeDir-anchored (the installed layout: <root>/compiler/ -> ../lib/...) plus
+      a CWD-relative fallback, mirroring ParseUsesUnit's own search chain. The
+      latter covers the self-host tests, which run a /tmp copy of the compiler
+      with CWD at the repo root, so ExeDir-relative ('/tmp/../lib/...') misses. }
+    if ExeDir <> '' then
+      AddPasUnitDir(ExeDir + '../lib/rtl/platform/posix/');
+    AddPasUnitDir('lib/rtl/platform/posix/');
+  end;
   CompiledUnitCount := 0;
   InitProcCount := 0;
   InInterface := False;

@@ -908,6 +908,7 @@ end;
 function IRLowerCallArg(cpi: Integer; pathIdx: Integer; argAST: Integer; isRefArg: Boolean): Integer;
 var argTk: TTypeKind;
     needTemp: Boolean;
+    argIsWholeArray: Boolean;
     argRecId: Integer;
     savedLastTypeRecId: Integer;
     tmpSym: Integer;
@@ -1021,7 +1022,17 @@ begin
   argTk := IntToTypeKind(ASTTk[argAST]);
   needTemp := False;
   argRecId := REC_NONE;
-  if argTk = tyRecord then
+  { A whole array variable is never a record-by-value argument: its node carries
+    the element's tyRecord tag, but the value is the array, not one record.
+    Routing it through the record temp-copy path below would substitute a
+    throwaway record temp for the real array slot whenever the element record is
+    >8 bytes — corrupting e.g. SetLength's target (the array was lost, the temp
+    resized). Only fires when the element record is large, so it stayed latent
+    until a >8-byte (e.g. managed-field) record element appeared. }
+  argIsWholeArray := (ASTKind[argAST] = AN_IDENT) and
+     (Integer(ASTIVal[argAST]) >= 0) and (Integer(ASTIVal[argAST]) < SymCount) and
+     Syms[ASTIVal[argAST]].IsArray;
+  if (argTk = tyRecord) and not argIsWholeArray then
   begin
     argRecId := ResolveNodeRec(argAST);
     if isRefArg then

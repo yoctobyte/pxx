@@ -10739,6 +10739,23 @@ begin
   hasCoroutine := False;
   needsBuiltin := False;
   needsTextfile := False;
+  { Default standard surface: textfile (classic Text/Assign/Reset/WriteLn) is
+    loaded by default on every non-ESP program, so `var f: Text` resolves
+    uniformly in programs, units, methods, and nested scopes — no token-scan
+    special case. Its numeric write dispatch formats through builtin's
+    StrInt/StrFloat, so builtin is pulled in too. ESP backends (xtensa/riscv32)
+    cannot compile either unit yet, so they stay opt-in via explicit `uses`. }
+  { Source opt-out: a program defining PXX_NODEFAULTRTL (the compiler itself does)
+    suppresses the default surface the same as the --no-default-rtl flag. The
+    define travels with the source, so every self-build path — bootstrap,
+    cross-bootstrap, stabilize, manual — opts out without per-site Makefile flags. }
+  if PasDefineExists('PXX_NODEFAULTRTL') then NoDefaultRtl := True;
+  if (not NoDefaultRtl) and
+     (TargetArch <> TARGET_XTENSA) and (TargetArch <> TARGET_RISCV32) then
+  begin
+    needsBuiltin := True;
+    needsTextfile := True;
+  end;
   DetectPascalRuntimeNeeds(needsHeap, needsAnsiRuntime);
   { Full builtin (Str/Val/Variant) is pulled only for AnsiString/exception
     programs and on demand for Str/Val (token loop below). The heap allocator
@@ -10891,18 +10908,6 @@ begin
     if (Tokens[i].Kind = tkUses) and
        (TargetArch <> TARGET_XTENSA) and (TargetArch <> TARGET_RISCV32) then
       needsBuiltin := True;
-    { Implicit text-file surface: a `Text`/`TextFile` type token auto-loads the
-      textfile unit up front (here, before declaration parsing — NOT mid-proc
-      from ParseTypeKind, which would disrupt the enclosing proc's codegen state
-      and skip managed-record zero-init). Its keyword-IO dispatch formats numeric
-      write args through StrInt/StrFloat, so the builtin unit is needed too. }
-    if (Tokens[i].Kind = tkIdent) and (i > 0) and (Tokens[i - 1].Kind = tkColon) and
-       (CaseEqual(GetTokenStr(i), 'text') or CaseEqual(GetTokenStr(i), 'textfile')) and
-       (TargetArch <> TARGET_XTENSA) and (TargetArch <> TARGET_RISCV32) then
-    begin
-      needsBuiltin := True;
-      needsTextfile := True;
-    end;
     Inc(i);
   end;
 

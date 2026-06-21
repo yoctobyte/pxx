@@ -844,6 +844,11 @@ var
     runtime. The entry stub sets sp; output (PutC) goes to UART0 MMIO from the
     program itself. Defines PXX_ESP_BARE for the source. xtensa/riscv32 only. }
   EspBareBoot : Boolean;
+  { --no-default-rtl: suppress the default standard-unit surface (textfile +
+    its builtin numeric-format backing). Set for compiler self-build, where
+    textfile would drag the PAL platform_backend onto a search path the
+    bootstrap does not provide, and the compiler relies on builtins only. }
+  NoDefaultRtl : Boolean;
   { writeELF32Rel scratch: per-proc / per-external .strtab name offsets
     (globals, not locals — 64KB each would strain the self-hosted stack). }
   ObjProcStrOff : array[0..MAX_PROCS-1] of Integer;
