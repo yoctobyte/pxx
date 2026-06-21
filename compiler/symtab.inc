@@ -470,6 +470,10 @@ begin
   fi := UFldCount;
   UFldNOff[fi] := noff;  UFldNLen[fi] := nlen;
   UFldOff_[fi] := byteOff; UFldTk[fi] := tk; UFldRec_[fi] := recId;
+  { Procedural-type field: remember the signature so `rec.field(args)` can lower
+    to an indirect call (LastTypeProcSig set by ParseTypeKind for the field type;
+    a plain proc field is tyPointer, a method-pointer field tyRecord). }
+  UFldProcSig[fi] := LastTypeProcSig;
   if tk = Ord(tyPointer) then
   begin
     UFldPtrElemTk[fi] := Ord(LastTypePointerElemTk);

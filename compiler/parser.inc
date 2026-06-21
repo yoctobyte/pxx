@@ -924,6 +924,8 @@ var
   w, withNode, recId: Integer;
   propFOff, propFLen: Integer;
   withResolved: Boolean;
+  fldSigPi, callIndNode, argsHead2, lastArg2, argSeq2, baseRecFld: Integer;
+  isMethodPtr: Boolean;
 begin
   prevTok := identTokIdx;
   if DebugTrace then writeln('ParseLValueAST: idx = ', idx, ' prevTok = ', prevTok, ' TokenStr = "', GetTokenStr(prevTok), '" CurTok.Line = ', CurTok.Line, ' TokPos = ', TokPos);
@@ -1555,11 +1557,52 @@ begin
       ASTLeft[fieldNode] := node;
       ASTSOffset[fieldNode] := propFOff;
       ASTSLen[fieldNode] := propFLen;
+      baseRecFld := recName;
       tk := RecFieldType(recName, fieldName);
       recName := RecFieldRecId(recName, fieldName);
       ASTTk[fieldNode] := Ord(tk);
       Next;
       node := fieldNode;
+
+      { Indirect call through a procedural-type field: `rec.field(args)`. The
+        field value is the proc pointer (tyPointer) or a {Code,Data} method
+        pointer (tyRecord); AN_CALL_IND evaluates ASTRight (the field node) as
+        the callee. Without this the statement parser sees a non-call lvalue and
+        demands ':='. }
+      fldSigPi := -1;
+      if (baseRecFld >= REC_UCLASS_BASE) and (CurTok.Kind = tkLParen) and
+         ((tk = tyPointer) or (tk = tyRecord)) then
+      begin
+        fIdx := FindUField(baseRecFld - REC_UCLASS_BASE, fieldName);
+        if (fIdx >= 0) and (not UFldIsArray[fIdx]) then fldSigPi := UFldProcSig[fIdx];
+      end;
+      if fldSigPi >= 0 then
+      begin
+        isMethodPtr := (tk = tyRecord);
+        Expect(tkLParen, '(');
+        argsHead2 := -1; lastArg2 := -1;
+        while CurTok.Kind <> tkRParen do
+        begin
+          ParseExpr;
+          argSeq2 := AllocNode(AN_ARG);
+          ASTLeft[argSeq2] := CurASTNode;
+          if argsHead2 = -1 then argsHead2 := argSeq2
+          else ASTRight[lastArg2] := argSeq2;
+          lastArg2 := argSeq2;
+          if CurTok.Kind = tkComma then Next
+          else if CurTok.Kind <> tkRParen then Error('expected comma or close parenthesis');
+        end;
+        Expect(tkRParen, ')');
+        callIndNode := AllocNode(AN_CALL_IND);
+        ASTLeft[callIndNode]  := argsHead2;
+        ASTRight[callIndNode] := fieldNode;
+        ASTIVal[callIndNode]  := fldSigPi;
+        ASTTk[callIndNode]    := Ord(Procs[fldSigPi].RetType);
+        if isMethodPtr then ASTSLen[callIndNode] := 1 else ASTSLen[callIndNode] := 0;
+        node := callIndNode;
+        tk := Procs[fldSigPi].RetType;
+        recName := ProcRetRecId[fldSigPi];
+      end;
     end;
   end;
   Result := node;
@@ -6941,7 +6984,7 @@ begin
               Next;
               valNode := ParseLValueAST(idx, TokPos - 2);
               if (ASTKind[valNode] = AN_CALL) or (ASTKind[valNode] = AN_VIRTUAL_CALL) or
-                 (ASTKind[valNode] = AN_INTF_CALL) then
+                 (ASTKind[valNode] = AN_INTF_CALL) or (ASTKind[valNode] = AN_CALL_IND) then
                 node := valNode
               else
               begin
@@ -9479,6 +9522,18 @@ begin
       begin
         Procs[procIdx].Params[i].IsArray := parr[i];
         Procs[procIdx].Params[i].IsRef := pbyref[i];
+        { Persist the param metadata the call-site lowering reads, so a call made
+          BEFORE the body is parsed (e.g. a lifted nested routine, whose
+          definition is deferred to top level) lowers identically to one after.
+          Without ProcParamDynDepth a `var dyn-array` arg passes the handle value
+          instead of &slot → SetLength corrupts memory. }
+        if i < 16 then
+        begin
+          if pDynDepth[i] > 0 then ProcParamDynDepth[procIdx * 16 + i] := pDynDepth[i];
+          ProcParamIsConst[procIdx * 16 + i] := pconst[i];
+          if (ptypes[i] = tyClass) or (ptypes[i] = tyRecord) then
+            ProcParamRecId[procIdx * 16 + i] := ptypesRec[i];
+        end;
       end;
     end
     else if declOverload then
