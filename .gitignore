@@ -43,3 +43,9 @@ examples/*/*
 examples/**/*.o
 examples/**/*.elf
 examples/**/*.map
+
+# Release build output (tools/release.sh assembles dist/ each run; never commit it).
+/dist/
+# Stray top-level build outputs (e.g. a misfired `gcc -o` that wrote literal "-o").
+/-o
+/-o.map

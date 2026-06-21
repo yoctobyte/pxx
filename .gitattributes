@@ -1,0 +1,24 @@
+# Keep GitHub's auto-generated "Source code (zip/tar.gz)" archives lean: strip
+# developer-process material that end users don't want. `git archive` (which is
+# what GitHub uses for tag/release archives) honors export-ignore; the paths stay
+# in the repo for anyone who clones. The curated release asset (dist/pxx-<tag>.tar.gz,
+# built by tools/release.sh) is separate and already excludes all of this.
+#
+# NOTE: git archive reads the .gitattributes of the tree being archived, so this
+# file must exist in the tagged commit to take effect.
+
+docs/progress/        export-ignore
+docs/dev/             export-ignore
+docs/developer/       export-ignore
+docs/historic/        export-ignore
+docs/lore/            export-ignore
+docs/naming-poll.md       export-ignore
+docs/naming-poll-final.md export-ignore
+docs/naming-round1.md     export-ignore
+agents/               export-ignore
+thesises/             export-ignore
+library_candidates/   export-ignore
+benchmarks/           export-ignore
+CLAUDE.md             export-ignore
+.gitattributes        export-ignore
+.github/              export-ignore
