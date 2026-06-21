@@ -3798,10 +3798,13 @@ begin
     if retSymIdx >= 0 then
     begin
       if Syms[retSymIdx].IsArray or (Syms[retSymIdx].Kind <> skLocal) or
-         not (TypeIsOrdinal(Syms[retSymIdx].TypeKind) or
+         not (TypeIsOrdinal(Syms[retSymIdx].TypeKind) or TypeIsFloat(Syms[retSymIdx].TypeKind) or
               (Syms[retSymIdx].TypeKind in [tyAnsiString, tyPointer, tyClass])) then
-        Error('target xtensa: only ordinal/pointer/string function results supported yet');
-      if (Syms[retSymIdx].TypeKind = tyInt64) or (Syms[retSymIdx].TypeKind = tyUInt64) then
+        Error('target xtensa: only ordinal/float/pointer/string function results supported yet');
+      { Float result carried as raw bits in the return reg(s): Double = a2:a3
+        (8-byte slot), Single = a2 (4-byte slot) — same shape as Int64/ordinal. }
+      if (Syms[retSymIdx].TypeKind = tyInt64) or (Syms[retSymIdx].TypeKind = tyUInt64) or
+         (Syms[retSymIdx].TypeKind = tyDouble) then
         EmitLoadVar64Xtensa(retSymIdx)   { 64-bit result in a2:a3 }
       else
         EmitLoadVarXtensa(retSymIdx);
@@ -3841,10 +3844,13 @@ begin
     if retSymIdx >= 0 then
     begin
       if Syms[retSymIdx].IsArray or (Syms[retSymIdx].Kind <> skLocal) or
-         not (TypeIsOrdinal(Syms[retSymIdx].TypeKind) or
+         not (TypeIsOrdinal(Syms[retSymIdx].TypeKind) or TypeIsFloat(Syms[retSymIdx].TypeKind) or
               (Syms[retSymIdx].TypeKind in [tyAnsiString, tyPointer, tyClass])) then
-        Error('target riscv32: only ordinal/pointer/string function results supported yet');
-      if (Syms[retSymIdx].TypeKind = tyInt64) or (Syms[retSymIdx].TypeKind = tyUInt64) then
+        Error('target riscv32: only ordinal/float/pointer/string function results supported yet');
+      { Float result carried as raw bits in the return reg(s): Double = a0:a1
+        (8-byte slot), Single = a0 (4-byte slot) — same shape as Int64/ordinal. }
+      if (Syms[retSymIdx].TypeKind = tyInt64) or (Syms[retSymIdx].TypeKind = tyUInt64) or
+         (Syms[retSymIdx].TypeKind = tyDouble) then
         EmitLoadVar64RISCV32(retSymIdx)   { 64-bit result in a0:a1 }
       else
         EmitLoadVarRISCV32(retSymIdx);

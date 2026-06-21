@@ -1422,6 +1422,25 @@ begin
         begin
           if (procIdx >= 0) and (not ProcExternal[procIdx]) and
              (i < Procs[procIdx].ParamCount) and
+             IsFloatXtensa(Procs[procIdx].Params[i].TypeKind) and
+             (not Procs[procIdx].Params[i].IsRef) and
+             (not Procs[procIdx].Params[i].IsArray) then
+          begin
+            { Float param: coerce to the param's float width, push one word
+              (single) or two words lo:hi (double). }
+            EmitFloatOperandXtensa(IRA[argNode], Procs[procIdx].Params[i].TypeKind);
+            XtensaPushA2;                           { lo / single }
+            if Procs[procIdx].Params[i].TypeKind = tyDouble then
+            begin
+              xtensa_mov(reg_xtensa_a2, reg_xtensa_a3);
+              XtensaPushA2;                          { hi }
+              Inc(nArgs, 2);
+            end
+            else
+              Inc(nArgs, 1);
+          end
+          else if (procIdx >= 0) and (not ProcExternal[procIdx]) and
+             (i < Procs[procIdx].ParamCount) and
              ((Procs[procIdx].Params[i].TypeKind = tyInt64) or
               (Procs[procIdx].Params[i].TypeKind = tyUInt64)) and
              (not Procs[procIdx].Params[i].IsRef) and

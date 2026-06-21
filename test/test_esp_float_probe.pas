@@ -31,6 +31,21 @@ begin
   PutC(10);
 end;
 
+function DSum(a, b: Double): Double;
+begin
+  Result := a + b;
+end;
+
+function SSum(a, b: Single): Single;
+begin
+  Result := a + b;
+end;
+
+function Mixed(a: Double; b: Single; n: Integer): Double;
+begin
+  Result := a + b + n;
+end;
+
 var
   d, e, f: Double;
   s, t, u: Single;
@@ -62,4 +77,9 @@ begin
 
   { Mixed int/float in an expression (int operand widened) }
   d := 2.0; PutBool(d + 3 = 5.0);     { 1 }
+
+  { Float params + returns }
+  d := DSum(3.0, 4.0);   PutBool(d = 7.0);    { 1 }
+  u := SSum(1.5, 2.5);   PutBool(u = 4.0);    { 1 }
+  d := Mixed(1.0, 2.5, 3); PutBool(d = 6.5);  { 1 (double + single + int) }
 end.

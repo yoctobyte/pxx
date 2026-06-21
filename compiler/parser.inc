@@ -10035,7 +10035,8 @@ begin
         Error('target riscv32: more than 8 parameter words not yet supported');
       EmitLoadImmRISCV32(reg_t0, Syms[idx].Offset);
       rv32_add(reg_t0, reg_s0, reg_t0);
-      if ((Syms[idx].TypeKind = tyInt64) or (Syms[idx].TypeKind = tyUInt64)) and
+      if ((Syms[idx].TypeKind = tyInt64) or (Syms[idx].TypeKind = tyUInt64) or
+          (Syms[idx].TypeKind = tyDouble)) and
          (not Syms[idx].IsRef) and (not Syms[idx].IsArray) then
       begin
         rv32_sw(reg_a0 + pw, reg_t0, 0);       { lo (word pw) }
@@ -10075,7 +10076,8 @@ begin
       end
       else
         EmitFrameAddrXtensa(reg_xtensa_a8, Syms[idx].Offset);
-      if ((Syms[idx].TypeKind = tyInt64) or (Syms[idx].TypeKind = tyUInt64)) and
+      if ((Syms[idx].TypeKind = tyInt64) or (Syms[idx].TypeKind = tyUInt64) or
+          (Syms[idx].TypeKind = tyDouble)) and
          (not Syms[idx].IsRef) and (not Syms[idx].IsArray) then
       begin
         xtensa_s32i(reg_xtensa_a2 + pw, reg_xtensa_a8, 0);     { lo (word pw) }

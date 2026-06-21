@@ -1062,6 +1062,27 @@ begin
         begin
           if (procIdx >= 0) and (not ProcExternal[procIdx]) and
              (i < Procs[procIdx].ParamCount) and
+             IsFloatRISCV32(Procs[procIdx].Params[i].TypeKind) and
+             (not Procs[procIdx].Params[i].IsRef) and
+             (not Procs[procIdx].Params[i].IsArray) then
+          begin
+            { Float param: coerce the arg to the param's float width, then push
+              one word (single) or two words lo:hi (double). }
+            EmitFloatOperandRISCV32(IRA[argNode], Procs[procIdx].Params[i].TypeKind);
+            if Procs[procIdx].Params[i].TypeKind = tyDouble then
+            begin
+              rv32_addi(reg_sp, reg_sp, -4); rv32_sw(reg_a0, reg_sp, 0);  { lo }
+              rv32_addi(reg_sp, reg_sp, -4); rv32_sw(reg_a1, reg_sp, 0);  { hi }
+              Inc(nArgs, 2);
+            end
+            else
+            begin
+              rv32_addi(reg_sp, reg_sp, -4); rv32_sw(reg_a0, reg_sp, 0);
+              Inc(nArgs, 1);
+            end;
+          end
+          else if (procIdx >= 0) and (not ProcExternal[procIdx]) and
+             (i < Procs[procIdx].ParamCount) and
              ((Procs[procIdx].Params[i].TypeKind = tyInt64) or
               (Procs[procIdx].Params[i].TypeKind = tyUInt64)) and
              (not Procs[procIdx].Params[i].IsRef) and
