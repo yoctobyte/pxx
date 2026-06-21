@@ -47,6 +47,14 @@ function __pxx_d2i(a: Int64): Integer;          { double -> signed int, trunc to
 function __pxx_s2d(a: LongWord): Int64;         { single -> double (exact repack) }
 function __pxx_d2s(a: Int64): LongWord;         { double -> single (round-near-even) }
 
+{ ---- Round / Frac / Int intrinsics (ESP backends call these) ---- }
+function __pxx_d2i_rne(a: Int64): Integer;      { double -> int, round-half-to-even }
+function __pxx_s2i_rne(a: LongWord): Integer;   { single -> int, round-half-to-even }
+function __pxx_dint(a: Int64): Int64;           { double -> double, trunc toward zero }
+function __pxx_sint(a: LongWord): LongWord;     { single -> single, trunc toward zero }
+function __pxx_dfrac(a: Int64): Int64;          { double fractional part (x - int(x)) }
+function __pxx_sfrac(a: LongWord): LongWord;    { single fractional part (x - int(x)) }
+
 implementation
 
 const
@@ -552,6 +560,83 @@ begin
   sExp := exp - 896;                            { = (exp - 1023) + 127 }
   m := sShiftRightSticky(m, 26);                { 53 -> 27 bits (24 + 3 guard) }
   Result := sRoundPack(sign, sExp, m);          { rounds, handles over/underflow }
+end;
+
+{ Round-half-to-even: double -> signed 32-bit int. Mirrors __pxx_d2i but applies
+  nearest-even on the discarded fraction instead of truncating. }
+function __pxx_d2i_rne(a: Int64): Integer;
+var sign, exp, shift: Integer; m, r, dropped, half: Int64;
+begin
+  exp := (a shr 52) and $7FF;
+  sign := (a shr 63) and 1;
+  if exp = 2047 then                                       { inf / NaN }
+  begin
+    if (a and D_MANT) <> 0 then begin Result := 0; Exit; end;
+    if sign = 1 then Result := Integer($80000000) else Result := $7FFFFFFF;
+    Exit;
+  end;
+  if exp < 1022 then begin Result := 0; Exit; end;         { |x| < 0.5 -> 0 }
+  if exp >= 1054 then                                       { |x| >= 2^31 -> saturate }
+  begin
+    if sign = 1 then Result := Integer($80000000) else Result := $7FFFFFFF;
+    Exit;
+  end;
+  m := (Int64(1) shl 52) or (a and D_MANT);                { value = m * 2^(exp-1075) }
+  shift := 1075 - exp;
+  if shift <= 0 then r := m shl (-shift)
+  else
+  begin
+    dropped := m and ((Int64(1) shl shift) - 1);
+    r := m shr shift;
+    half := Int64(1) shl (shift - 1);
+    if dropped > half then r := r + 1
+    else if dropped = half then begin if (r and 1) = 1 then r := r + 1; end;  { tie -> even }
+  end;
+  if sign = 1 then r := -r;
+  Result := Integer(r);
+end;
+
+function __pxx_s2i_rne(a: LongWord): Integer;
+begin
+  { route via the exact single->double repack, then round the double }
+  Result := __pxx_d2i_rne(__pxx_s2d(a));
+end;
+
+{ Truncate toward zero, result stays the same float type (clears the fractional
+  mantissa bits per the exponent). }
+function __pxx_dint(a: Int64): Int64;
+var exp, fracbits: Integer;
+begin
+  exp := (a shr 52) and $7FF;
+  if exp = 2047 then begin Result := a; Exit; end;         { inf / NaN unchanged }
+  if exp < 1023 then begin Result := a and (Int64(1) shl 63); Exit; end;  { |x|<1 -> signed 0 }
+  if exp >= 1075 then begin Result := a; Exit; end;        { already integer-valued }
+  fracbits := 1075 - exp;                                  { 1..52 fractional mantissa bits }
+  { Clear the low `fracbits` bits (toward zero). Avoid `not` — bitwise not on a
+    64-bit value miscompiles on the ESP backends (IR_NOT is boolean). shr is a
+    logical shift, so this drops the fractional bits and keeps sign+exponent. }
+  Result := (a shr fracbits) shl fracbits;
+end;
+
+function __pxx_sint(a: LongWord): LongWord;
+var exp, fracbits: Integer;
+begin
+  exp := (a shr 23) and $FF;
+  if exp = 255 then begin Result := a; Exit; end;          { inf / NaN unchanged }
+  if exp < 127 then begin Result := a and S_SIGN; Exit; end;  { |x|<1 -> signed 0 }
+  if exp >= 150 then begin Result := a; Exit; end;         { already integer-valued }
+  fracbits := 150 - exp;                                   { 1..23 fractional mantissa bits }
+  Result := (a shr fracbits) shl fracbits;                 { clear low bits (see __pxx_dint) }
+end;
+
+function __pxx_dfrac(a: Int64): Int64;
+begin
+  Result := __pxx_dsub(a, __pxx_dint(a));
+end;
+
+function __pxx_sfrac(a: LongWord): LongWord;
+begin
+  Result := __pxx_ssub(a, __pxx_sint(a));
 end;
 
 end.
