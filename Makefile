@@ -393,6 +393,8 @@ test-core: $(COMPILER)
 	test "$$(/tmp/test_global_init26)" = "$$(printf 'k=42 q=5000000000 flag=1\ntabsum=150\nlutsum=6000000000')"
 	./$(COMPILER) test/test_cross_typed_const.pas /tmp/test_typed_const26
 	test "$$(/tmp/test_typed_const26)" = "$$(printf 'limit=100 big=9000000000\ntabsum=14\nlutsum=6000000000\ntab2=40')"
+	./$(COMPILER) test/test_local_typed_const.pas /tmp/test_local_tc26
+	test "$$(/tmp/test_local_tc26)" = "$$(printf '100\na\nb\nc\n42\n100')"
 	./$(COMPILER) test/test_const_bitwise_shift.pas /tmp/test_const_bitshift26
 	test "$$(/tmp/test_const_bitshift26)" = "$$(printf '65536\n128\n2\n8\n15\n511\n65536')"
 	./$(COMPILER) test/test_const_typecast.pas /tmp/test_const_typecast26
@@ -1982,6 +1984,8 @@ lib-test: pxx-stable-check
 	test "$$(/tmp/lib_platform_esp)" = "$$(printf 'esp-idf\nopen=-38\nread=-38\nseek=-38\nflush=-38\ndelete=-38\nrename=-38\nmkdir=-38\nrmdir=-38\nsocket=-38\nreuse=-38\nnonblock=-38\nbind=-38\nconnect=-38\nlisten=-38\naccept=-38\nrecv=-38\nsend=-38\nshutdown=-38\nsockclose=-38\nunsupported=-38')"
 	$(PXX_STABLE) -Fulib/rtl/platform/posix test/lib_textfile.pas /tmp/lib_textfile
 	test "$$(/tmp/lib_textfile)" = "$$(printf 'alpha\nbeta\ncount=2\nio=0')"
+	$(PXX_STABLE) -Fulib/rtl/platform/posix test/lib_directory.pas /tmp/lib_directory
+	test "$$(/tmp/lib_directory)" = "$$(printf 'mkdir=0\nchild=0\nlist=ok\nalpha=1\nchild=1\nalpha-file=1\nchild-dir=1')"
 	$(PXX_STABLE) examples/bignum/factorial.pas /tmp/lib_factorial
 	test "$$(/tmp/lib_factorial)" = "$$(printf '5! = 120\n10! = 3628800\n20! = 2432902008176640000\n1000! digits      = 2568\n1000! first 10    = 4023872600\n1000! trailing 0s = 249')"
 	$(PXX_STABLE) test/lib_zlib.pas /tmp/lib_zlib
@@ -1994,7 +1998,7 @@ lib-test: pxx-stable-check
 	test "$$(/tmp/lib_ansirender)" = "OK"
 	$(PXX_STABLE) -Fulib/rtl/platform/posix test/lib_process.pas /tmp/lib_process
 	test "$$(/tmp/lib_process)" = "$$(printf 'Bytes read: 12\nByte 0: 104\nByte 1: 101\nByte 2: 108\nByte 3: 108\nByte 4: 111\nByte 5: 32\nByte 6: 119\nByte 7: 111\nByte 8: 114\nByte 9: 108\nByte 10: 100\nByte 11: 10\nChild output: [hello world\n]\nChild wait status: 0\nOK')"
-	@echo "lib-test ok (sudoku exact + collections + math + sysutils + random + bitset + platform + bignum + zlib + png smoke + ansiterm + ansirender + process) against stable v$$(cat $(STABLE_DEFAULT_DIR)/VERSION 2>/dev/null || echo '?')"
+	@echo "lib-test ok (sudoku exact + collections + math + sysutils + random + bitset + platform + directory + bignum + zlib + png smoke + ansiterm + ansirender + process) against stable v$$(cat $(STABLE_DEFAULT_DIR)/VERSION 2>/dev/null || echo '?')"
 
 # Full Track-B library suite, distinct from compiler `make test`.
 library-suite-green: pxx-stable-check
@@ -2018,9 +2022,9 @@ demos: pxx-stable-check
 	@rc=0; for src in examples/primes/sieve.pas examples/sudoku/sudoku.pas \
 	    examples/maze/maze.pas examples/bignum/factorial.pas \
 	    examples/chess/chess.pas examples/adventure/adventure.pas \
-	    examples/life/life.pas examples/player/player.pas; do \
+	    examples/life/life.pas examples/player/player.pas examples/fm/fm.pas; do \
 	  flags="-Fulib/pcl"; \
-	  if [ "$$src" = "examples/player/player.pas" ]; then flags="$$flags -Fulib/rtl/platform/posix"; fi; \
+	  if [ "$$src" = "examples/player/player.pas" ] || [ "$$src" = "examples/fm/fm.pas" ]; then flags="$$flags -Fulib/rtl/platform/posix"; fi; \
 	  if $(PXX_STABLE) $$flags "$$src" /tmp/demo_$$(basename $$src .pas) >/tmp/demo.log 2>&1; then \
 	    printf '  OK    %s\n' "$$src"; \
 	  else \

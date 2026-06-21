@@ -17,6 +17,7 @@ const
   MAX_DECL_NAMES = 256;  { comma-separated names in one var declaration line }
   MAX_ARR_DIMS = 6;      { max dimensions of a fixed multidimensional array }
   MAX_PENDING_INITS = 16384;  { constant global-var initializer assignments }
+  MAX_LOCAL_INITS   = 4096;   { routine-local typed-const initializer assignments }
   MAX_CPREP_PARAMS = 131072;
   MAX_CPREP_CONDS = 256;
   MAX_CPREP_INCLUDES = 128;
@@ -1073,6 +1074,16 @@ var
   PendingInitVal  : array[0..MAX_PENDING_INITS-1] of Int64;    { constant value }
   PendingInitTk   : array[0..MAX_PENDING_INITS-1] of Integer;  { value type kind }
   PendingInitCount: Integer;
+
+  { Routine-LOCAL typed-const initializers (`const T: array[..] of X = (..)`
+    inside a routine). Same shape as PendingInit but compiled into the routine's
+    own prologue (after managed-local zero-init, before the body) so each call
+    re-initializes its stack-resident table. Reset at routine entry. }
+  LocalInitSym  : array[0..MAX_LOCAL_INITS-1] of Integer;
+  LocalInitElem : array[0..MAX_LOCAL_INITS-1] of Integer;
+  LocalInitVal  : array[0..MAX_LOCAL_INITS-1] of Int64;
+  LocalInitTk   : array[0..MAX_LOCAL_INITS-1] of Integer;
+  LocalInitCount: Integer;
 
   BFixupTargetLines : array[0..255] of Int64;
   BFixupCodePoss    : array[0..255] of Integer;

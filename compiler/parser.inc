@@ -4093,6 +4093,10 @@ begin
   else if CurTok.Kind = tkTrue  then begin r := 1; Next; end
   else if CurTok.Kind = tkFalse then begin r := 0; Next; end
   else if CurTok.Kind = tkMinus then begin Next; r := -ConstEval(); end
+  else if (CurTok.Kind = tkString) and (Length(CurTok.SVal) = 1) then
+    { single-char literal 'x' used as an ordinal constant (Char typed-const
+      element, `Ord('A')`-free contexts) -> its character code. }
+    begin r := Ord(CurTok.SVal[1]); Next; end
   else if CurTok.Kind = tkIdent then
   begin
     idx := FindSym(CurTok.SVal);
@@ -7463,6 +7467,7 @@ begin
 procedure ParseConstSection;
 var name: AnsiString; v: Int64;
     cTk, cElemTk: TTypeKind; cLo, cHi, cIdx, cElem: Integer;
+    isLocalConst: Boolean;
 begin
   Next;
   while CurTok.Kind = tkIdent do
@@ -7471,11 +7476,16 @@ begin
     if CurTok.Kind = tkColon then
     begin
       { Typed constant: `const Name: type = value | (e0,e1,...)`. FPC typed
-        constants are writable globals with an initial value, so allocate
-        storage and reuse the pending-init machinery (same as a `var = init`).
-        Globals only; constants of ordinal/Int64 element type. }
-      if CurProc >= 0 then
-        Error('local typed constant not supported; use a const expression or a var');
+        constants are writable storage with an initial value, so allocate storage
+        and reuse the pending-init machinery (same as a `var = init`).
+
+        Two destinations by scope: a GLOBAL typed const records into PendingInit
+        (compiled before `main begin`); a routine-LOCAL one (CurProc >= 0)
+        records into LocalInit, compiled into that routine's prologue so its
+        stack-resident table is re-initialized on each call. AllocArray/AllocVar
+        already place storage at the right scope from CurProc. Ordinal/Char/Int64
+        element types; string/float/record initializers remain a follow-up. }
+      isLocalConst := CurProc >= 0;
       Next;
       if CurTok.Kind = tkArray then
       begin
@@ -7492,13 +7502,25 @@ begin
         Expect(tkLParen, '(');
         cElem := 0;
         repeat
-          if PendingInitCount >= MAX_PENDING_INITS then Error('too many global initializers');
           if cElem > (cHi - cLo) then Error('too many array constant elements');
-          PendingInitSym[PendingInitCount]  := cIdx;
-          PendingInitElem[PendingInitCount] := cLo + cElem;
-          PendingInitVal[PendingInitCount]  := ParseInitVal;
-          PendingInitTk[PendingInitCount]   := Ord(cElemTk);
-          Inc(PendingInitCount);
+          if isLocalConst then
+          begin
+            if LocalInitCount >= MAX_LOCAL_INITS then Error('too many local initializers');
+            LocalInitSym[LocalInitCount]  := cIdx;
+            LocalInitElem[LocalInitCount] := cLo + cElem;
+            LocalInitVal[LocalInitCount]  := ParseInitVal;
+            LocalInitTk[LocalInitCount]   := Ord(cElemTk);
+            Inc(LocalInitCount);
+          end
+          else
+          begin
+            if PendingInitCount >= MAX_PENDING_INITS then Error('too many global initializers');
+            PendingInitSym[PendingInitCount]  := cIdx;
+            PendingInitElem[PendingInitCount] := cLo + cElem;
+            PendingInitVal[PendingInitCount]  := ParseInitVal;
+            PendingInitTk[PendingInitCount]   := Ord(cElemTk);
+            Inc(PendingInitCount);
+          end;
           Inc(cElem);
         until not Eat(tkComma);
         Expect(tkRParen, ')');
@@ -7508,12 +7530,24 @@ begin
         cTk := ParseTypeKind;
         cIdx := AllocVar(name, cTk);
         Expect(tkEq, '=');
-        if PendingInitCount >= MAX_PENDING_INITS then Error('too many global initializers');
-        PendingInitSym[PendingInitCount]  := cIdx;
-        PendingInitElem[PendingInitCount] := -1;
-        PendingInitVal[PendingInitCount]  := ParseInitVal;
-        PendingInitTk[PendingInitCount]   := Ord(cTk);
-        Inc(PendingInitCount);
+        if isLocalConst then
+        begin
+          if LocalInitCount >= MAX_LOCAL_INITS then Error('too many local initializers');
+          LocalInitSym[LocalInitCount]  := cIdx;
+          LocalInitElem[LocalInitCount] := -1;
+          LocalInitVal[LocalInitCount]  := ParseInitVal;
+          LocalInitTk[LocalInitCount]   := Ord(cTk);
+          Inc(LocalInitCount);
+        end
+        else
+        begin
+          if PendingInitCount >= MAX_PENDING_INITS then Error('too many global initializers');
+          PendingInitSym[PendingInitCount]  := cIdx;
+          PendingInitElem[PendingInitCount] := -1;
+          PendingInitVal[PendingInitCount]  := ParseInitVal;
+          PendingInitTk[PendingInitCount]   := Ord(cTk);
+          Inc(PendingInitCount);
+        end;
       end;
     end
     else
@@ -9039,6 +9073,46 @@ end;
 
 { ===== Procedure/function parser ===== }
 
+procedure CompilePendingLocalInits;
+{ Emit the recorded routine-local typed-const initializers as assignments, at the
+  current code position (the routine prologue, after managed-local zero-init and
+  before the body). Mirror of CompilePendingGlobalInits over the LocalInit list;
+  the list is reset by the caller at routine entry. }
+var i, identNode, valNode, idxLit, target, assignNode: Integer;
+begin
+  for i := 0 to LocalInitCount - 1 do
+  begin
+    identNode := AllocNode(AN_IDENT);
+    ASTIVal[identNode] := LocalInitSym[i];
+    ASTTk[identNode] := Ord(Syms[LocalInitSym[i]].TypeKind);
+
+    if LocalInitElem[i] >= 0 then
+    begin
+      idxLit := AllocNode(AN_INT_LIT);
+      ASTIVal[idxLit] := LocalInitElem[i];
+      ASTTk[idxLit] := Ord(tyInteger);
+      target := AllocNode(AN_INDEX);
+      ASTLeft[target] := identNode;
+      ASTRight[target] := idxLit;
+      ASTTk[target] := LocalInitTk[i];
+    end
+    else
+      target := identNode;
+
+    valNode := AllocNode(AN_INT_LIT);
+    ASTIVal[valNode] := LocalInitVal[i];
+    ASTTk[valNode] := LocalInitTk[i];
+
+    assignNode := AllocNode(AN_ASSIGN);
+    ASTLeft[assignNode] := target;
+    ASTRight[assignNode] := valNode;
+
+    CompileAST(assignNode);
+    ASTNodeCount := 0;
+  end;
+  LocalInitCount := 0;
+end;
+
 procedure ParseSubroutine;
 var
   isFunc   : Boolean;
@@ -9619,6 +9693,7 @@ begin
   { Save scope }
   savedSC := SymCount;
   savedFS := FrameSize;
+  LocalInitCount := 0;   { routine-local typed-const initializers, flushed in the prologue }
   savedGLC := GotoLabelCount;
   savedGFC := GotoFixupCount;
   savedProcCleanupFrameActive := ProcExceptionCleanupFrameActive;
@@ -10365,6 +10440,10 @@ begin
         EmitB($F3); EmitB($AA);                                       { rep stosb }
       end;
     end;
+  { Routine-local typed constants: now that storage is allocated and managed
+    locals are nil'd, emit the recorded initializer assignments into the
+    prologue (re-run on each call). }
+  CompilePendingLocalInits;
   { label declarations: label foo, bar; }
   while (CurTok.Kind = tkIdent) and CaseEqual(CurTok.SVal, 'label') do
   begin
@@ -11045,6 +11124,7 @@ begin
   Procs[procIdx].BodyAddr := CodeLen;
 
   savedSC := SymCount; savedFS := FrameSize;
+  LocalInitCount := 0;   { routine-local typed-const initializers, flushed in the prologue }
   savedGLC := GotoLabelCount; savedGFC := GotoFixupCount;
   GotoLabelCount := 0; GotoFixupCount := 0;
   for j := 0 to MAX_GOTO_LABELS - 1 do GotoLabelIRId[j] := -1;
@@ -11069,6 +11149,7 @@ begin
     begin
       EmitB($48); EmitB($C7); EmitB($85); EmitI32(Syms[j].Offset); EmitI32(0);
     end;
+  CompilePendingLocalInits;   { routine-local typed-const init assignments }
 
   { Statements until `end` or `finalization` (an identifier, not a token). }
   seqNode := AllocNode(AN_SEQ);
