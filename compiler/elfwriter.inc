@@ -995,6 +995,10 @@ begin
     if CodePosToIramOff(DynCallCodePos[i]) >= 0 then Inc(relaIramCount) else Inc(relaTextCount);
   for i := 0 to IramCallFixCount-1 do
     if CodePosToIramOff(IramCallFix[i].CodePos) >= 0 then Inc(relaIramCount) else Inc(relaTextCount);
+  { @proc: each IR_PROCADDR literal word gets an absolute (R_*_32) reloc against
+    the target proc's symbol — the @isr address for esp_intr_alloc. }
+  for i := 0 to ProcAddrFixCount-1 do
+    if CodePosToIramOff(ProcAddrFix[i].CodePos) >= 0 then Inc(relaIramCount) else Inc(relaTextCount);
   relaDataCount := DataPtrFixCount + MethodFixCount;
 
   textOff := ELF32_HEADER_SIZE;
@@ -1088,6 +1092,9 @@ begin
   for i := 0 to IramCallFixCount-1 do
     if CodePosToIramOff(IramCallFix[i].CodePos) < 0 then
       writeRela32(f, IramCallFix[i].CodePos, ObjProcSymIdx[IramCallFix[i].ProcIdx], 1, 0);
+  for i := 0 to ProcAddrFixCount-1 do
+    if CodePosToIramOff(ProcAddrFix[i].CodePos) < 0 then
+      writeRela32(f, ProcAddrFix[i].CodePos, ObjProcSymIdx[ProcAddrFix[i].ProcIdx], 1, 0);
 
   { .rela.iram1.text — relocs whose CodePos was duplicated into .iram1.text;
     offsets remapped to the section-local position. }
@@ -1110,6 +1117,11 @@ begin
   begin
     mapped := CodePosToIramOff(IramCallFix[i].CodePos);
     if mapped >= 0 then writeRela32(f, mapped, ObjProcSymIdx[IramCallFix[i].ProcIdx], 1, 0);
+  end;
+  for i := 0 to ProcAddrFixCount-1 do
+  begin
+    mapped := CodePosToIramOff(ProcAddrFix[i].CodePos);
+    if mapped >= 0 then writeRela32(f, mapped, ObjProcSymIdx[ProcAddrFix[i].ProcIdx], 1, 0);
   end;
 
   { .rela.data (unchanged from the base writer; iram method targets use the
@@ -1182,15 +1194,18 @@ var
 begin
   if (TargetArch <> TARGET_XTENSA) and (TargetArch <> TARGET_RISCV32) then
     Error('--emit-obj: only xtensa/riscv32 targets are supported');
-  if ProcAddrFixCount > 0 then
-    Error('--emit-obj: proc-address fixups not yet supported');
-  { Programs with `iram;` procedures need the two-text-section writer. }
+  { Programs with `iram;` procedures need the two-text-section writer, which also
+    handles @proc (ProcAddrFix) relocs — dispatch BEFORE the guard below. }
   for i := 0 to ProcCount-1 do
     if ProcIram[i] and (Procs[i].BodyAddr >= 0) then
     begin
       writeELF32RelIram(outPath);
       Exit;
     end;
+  { Non-iram .o: @proc relocs aren't wired here yet (the iram writer above is).
+    An ISR/@isr program always has an iram proc, so it takes that path. }
+  if ProcAddrFixCount > 0 then
+    Error('--emit-obj: @proc fixups need an iram/interrupt routine present (non-iram .o path not wired)');
   if TargetArch = TARGET_XTENSA then machine := 94 else machine := 243;
 
   { .strtab layout: 0 = empty, then proc names, app_main, external names }
