@@ -38,6 +38,15 @@ begin
     halt(2);
   end;
 
+  // 3. Test RenderAnsiTrueColorQuadrant (1x1 target)
+  s := RenderAnsiTrueColorQuadrant(img, 1, 1);
+  expected := AnsiBgRGB(85, 170, 170) + AnsiRGB(255, 0, 0, #226#150#152);
+  if s <> expected then
+  begin
+    writeln('RenderAnsiTrueColorQuadrant failed');
+    halt(3);
+  end;
+
   ImageFree(img);
   writeln('OK');
 end.

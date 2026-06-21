@@ -92,6 +92,7 @@ type
     Player: TPlayer;
     Seed: LongWord;
     Done, Won: Boolean;
+    AdvancedGraphics: Boolean;
     function  NextRand(n: Integer): Integer;     { [0,n) — swap for random lib later }
     procedure LoadWorld(const path: AnsiString);
     function  FindRoom(const id: AnsiString): TRoom;
@@ -108,6 +109,8 @@ type
     procedure RevealHidden;
     procedure SaveTo(const path: AnsiString);
     procedure LoadFrom(const path: AnsiString);
+    function  DrawPngArt(const name: AnsiString): Boolean;
+    procedure DrawArt(const name: AnsiString);
     procedure Run;
   end;
 
@@ -147,7 +150,7 @@ begin
   Result := currLen > 0;
 end;
 
-function DrawPngArt(const name: AnsiString): Boolean;
+function TGame.DrawPngArt(const name: AnsiString): Boolean;
 var
   bytes: TByteArray;
   img: TImage;
@@ -184,7 +187,11 @@ begin
     destHeight := (destWidth * img.Height) div (2 * img.Width);
     if destHeight < 5 then destHeight := 5;
 
-    s := RenderAnsiTrueColorHalfBlock(img, destWidth, destHeight);
+    if AdvancedGraphics then
+      s := RenderAnsiTrueColorQuadrant(img, destWidth, destHeight)
+    else
+      s := RenderAnsiTrueColorHalfBlock(img, destWidth, destHeight);
+
     WriteLn(s);
     ImageFree(img);
     Result := True;
@@ -314,7 +321,7 @@ begin
   WriteLn;
 end;
 
-procedure DrawArt(const name: AnsiString);
+procedure TGame.DrawArt(const name: AnsiString);
 begin
   if DrawPngArt(name) then Exit;
 
@@ -956,13 +963,30 @@ procedure CmdGo(g: TGame; const arg: AnsiString);
 var d: TDirection;
 begin if NameToDir(arg, d) then g.Move(d) else WriteLn(Col('  Go where?', YEL)); end;
 
+procedure CmdGraphics(g: TGame; const arg: AnsiString);
+var want: AnsiString;
+begin
+  want := LowerStr(Trim(arg));
+  if want = 'pixelized' then
+    g.AdvancedGraphics := False
+  else if (want = 'advanced') or (want = 'quadrant') then
+    g.AdvancedGraphics := True
+  else
+    g.AdvancedGraphics := not g.AdvancedGraphics;
+
+  if g.AdvancedGraphics then
+    WriteLn(Col('  Graphics mode set to: Advanced (quadrants + detail)', GRN))
+  else
+    WriteLn(Col('  Graphics mode set to: Pixelized (half-blocks)', GRN));
+end;
+
 procedure CmdHelp(g: TGame; const arg: AnsiString);
 begin
   WriteLn(Bold('Commands:'));
   WriteLn('  look | n/s/e/w/u/d | go <dir>');
   WriteLn('  take [thing] | inventory(i) | examine(x) <thing>');
   WriteLn('  talk [who] | solve | cast <spell> | use <thing> | drink');
-  WriteLn('  save | load | help | quit');
+  WriteLn('  save | load | help | quit | graphics [pixelized/advanced]');
 end;
 
 procedure CmdQuit(g: TGame; const arg: AnsiString);
@@ -983,6 +1007,8 @@ var
   end;
 
 begin
+  AdvancedGraphics := True;
+
   AddVerb('look', @CmdLook);       AddVerb('l', @CmdLook);
   AddVerb('inventory', @CmdInv);   AddVerb('i', @CmdInv);
   AddVerb('take', @CmdTake);       AddVerb('get', @CmdTake);
@@ -994,6 +1020,7 @@ begin
   AddVerb('go', @CmdGo);           AddVerb('help', @CmdHelp);
   AddVerb('save', @CmdSave);       AddVerb('load', @CmdLoad);
   AddVerb('quit', @CmdQuit);
+  AddVerb('graphics', @CmdGraphics); AddVerb('mode', @CmdGraphics);
 
   Splash;
   WriteLn('You are trapped inside the computer. Find the I/O port and escape.');
