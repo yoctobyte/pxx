@@ -24,7 +24,7 @@ _none_
 | feature-pcl-opengl-glarea-demo | B | feature | PCL OpenGL GLArea demo | — |
 | feature-sys-getdents | B | feature | Directory scanning support — sys_getdents64 (libc-free) | — |
 
-## backlog (80)
+## backlog (81)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -96,6 +96,7 @@ _none_
 | feature-sat-solver-library | B | feature | SAT solver library — DPLL over CNF (known-instance test app) | — |
 | feature-stackful-coro-port | A | feature | Port the stackful coroutine backend to all targets | — |
 | feature-static-arena-profile | A | feature | Fixed-static-arena allocator profile | feature-unified-heap-allocator |
+| feature-string-copy-intrinsic-norter | A | feature | String `Copy` as a no-RTL compiler intrinsic (bootstrap-usable) | — |
 | feature-string-model-tyfixedstring | B | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 | feature-sys-process-spawning | A | feature | Process spawning and execution support — libc-free execve pipeline | — |
 | feature-threadsafe-io-serialization | A | feature | Statement-level I/O serialization under threads | feature-unified-heap-allocator |
@@ -326,6 +327,7 @@ _none_
 - [B] feature-sat-solver-library
 - [A] feature-stackful-coro-port
 - [A] feature-static-arena-profile
+- [A] feature-string-copy-intrinsic-norter
 - [B] feature-string-model-tyfixedstring
 - [A] feature-sys-process-spawning
 - [A] feature-threadsafe-io-serialization
