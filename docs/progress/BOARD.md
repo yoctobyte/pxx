@@ -15,7 +15,7 @@ _none_
 | feature-c-runtime-library | B | feature | C runtime/library layer (`lib/crtl`) plus direct C-library packages | — |
 | feature-platform-abstraction-layer | B | feature | Platform Abstraction Layer (PAL): per-platform RTL port at one seam | — |
 
-## backlog (82)
+## backlog (83)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -83,6 +83,7 @@ _none_
 | feature-png-decoder-library | B | feature | PNG decoder library | feature-compression-library, feature-hashing-library, feature-rtl-image-bitmap-library |
 | feature-progress-transition-helpers | A | feature | Progress transition helpers (`claim` / `resolve`) | — |
 | feature-random-library | B | feature | Random library — HW/OS/software tiered RNG (cross-target capability test) | — |
+| feature-release-packaging | B | feature | Release packaging, reproducibility manifest, and `release.sh` | — |
 | feature-rtl-conversion-and-bitset-library | B | feature | RTL gaps — string/number conversion + a bit-set type (surfaced by the demos) | — |
 | feature-rtl-image-bitmap-library | B | feature | RTL image bitmap library | — |
 | feature-rtl-terminal-raw-mode | B | feature | Terminal raw mode and unbuffered input support (libc-free) | — |
@@ -306,6 +307,7 @@ _none_
 - [A] feature-parallel-processing
 - [A] feature-progress-transition-helpers
 - [B] feature-random-library
+- [B] feature-release-packaging
 - [B] feature-rtl-conversion-and-bitset-library
 - [B] feature-rtl-image-bitmap-library
 - [B] feature-rtl-terminal-raw-mode
