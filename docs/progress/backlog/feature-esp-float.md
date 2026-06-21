@@ -105,17 +105,26 @@ Frac/Int -205/-206 promote arg to double then dfrac/dint). The last ESP float
 error path is gone. LANDMINE recorded: bitwise `not` on Int64/LongWord
 miscompiles on ESP (IR_NOT is boolean) — kernels clear low bits via shr/shl.
 
-### REMAINING (optional / chore)
-- **`{$FASTDOUBLES}`** follow-on (post-baseline, opt-in speed/precision knob; see
-  below). Not required for correctness.
-- Wire `test/test_esp_float_probe.pas` into the `make test` ESP suite (a
-  `test-esp-float` target next to `test-esp-softfloat`, incl an
-  `ESP_PXXFLAGS=--xtensa-fpu` run) — deferred: Track B has uncommitted Makefile
-  edits, don't sweep them.
+### `{$FASTDOUBLES ON}` — DONE 2026-06-21 (7cac337)
+Opt-in directive (default OFF). On xtensa with `--xtensa-fpu`, Double +,-,*
+compute through the HW single FPU (d2s -> add.s/sub.s/mul.s -> s2d) instead of the
+soft-double kernels — lossy single precision, traded for speed, no source edits.
+No-op on riscv (both soft) and double-native targets. `test_esp_fastdoubles`
+(integer-valued doubles, exact in single) matches the x86-64 oracle on esp32s3
+both with `--xtensa-fpu` and on the soft fallback; disasm confirms add.s/mul.s in
+the fast build, none in the soft build.
 
-The core ticket (Real native-depth model + per-target dispatch matrix + the full
-value model/arith/conv/params/returns/intrinsics) is **functionally complete** on
-riscv32 and xtensa, validated vs the x86-64 oracle on esp32c3 + esp32s3.
+### REMAINING (chore only)
+- Wire `test/test_esp_float_probe.pas` + `test_esp_fastdoubles.pas` into the
+  `make test` ESP suite (a `test-esp-float` target next to `test-esp-softfloat`,
+  incl `ESP_PXXFLAGS=--xtensa-fpu` runs) — deferred: Track B has uncommitted
+  Makefile edits, don't sweep them.
+
+**This ticket is COMPLETE** (Real native-depth model + per-target dispatch matrix +
+full value model / arith / conversions / params / returns / Trunc / Round / Frac /
+Int / negate + xtensa HW single FPU + {$FASTDOUBLES}), validated vs the x86-64
+oracle on esp32c3 + esp32s3. Pinned v32. Only the make-test wiring chore (B-blocked)
+remains.
 
 ## Dependencies
 

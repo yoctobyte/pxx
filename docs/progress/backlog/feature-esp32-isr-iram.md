@@ -54,8 +54,19 @@ indirect call into flash (`esp_rom_printf`), the mirrored restore, and `mret`.
 - **xtensa `interrupt;`** still errors — windowed-exception ISRs need EPC/EPS +
   `rfi`/`rfe` + the windowed register spill, materially more involved than riscv.
 - **`@isr` proc-address fixups** in the `.o` (`ProcAddrFix`, for `esp_intr_alloc`
-  IDF-registered ISRs) still error — separate follow-up; also unblocks live
-  validation above.
+  IDF-registered ISRs) still error in the `--emit-obj` relocatable writers
+  (`writeELF32Rel`/`writeELF32RelIram`) — needs an `R_RISCV_32` reloc against the
+  proc symbol. Separate follow-up; also unblocks live validation above.
+
+### `@proc` on bare riscv32 — DONE 2026-06-21 (38242eb)
+`@Routine` now yields the absolute code address on the bare ET_EXEC image:
+`IR_PROCADDR` emits a PC-relative inline-literal load (auipc/jal/literal/lw)
+recorded as a `ProcAddrFix`, patched to `entry+BodyAddr` by `writeELF32` (the
+generic patch loop already existed; the esp32 guard was relaxed for riscv32).
+`test_esp_procaddr` matches the x86-64 oracle on esp32c3. This is the first half
+of the `@isr` path; the `.o` relocatable writers still need it (above), as does a
+self-contained live trap test (still also blocked on CSR setup: no rv32 inline
+asm / CSR ops to write `mtvec`).
 
 ## Motivation
 
