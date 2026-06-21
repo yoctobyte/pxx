@@ -345,7 +345,7 @@ test-core: $(COMPILER)
 	test "$$(/tmp/test_async_sl26)" = "$$(printf 'A0\nB0\nA1\nB1\nA2\ndone')"
 	./$(COMPILER) test/test_reactor.pas /tmp/test_reactor26
 	test "$$(/tmp/test_reactor26)" = "$$(printf 'reader: start\nreader: would-block, parking\nwriter: writing\nreader: got 2 bytes: hi\ndone')"
-	./$(COMPILER) test/test_asyncecho.pas /tmp/test_asyncecho26
+	./$(COMPILER) -Fulib/rtl/platform/posix test/test_asyncecho.pas /tmp/test_asyncecho26
 	test "$$(/tmp/test_asyncecho26)" = "$$(printf 'client 1 ok\nclient 2 ok\ndone')"
 	./$(COMPILER) test/test_timer.pas /tmp/test_timer26
 	test "$$(/tmp/test_timer26)" = "$$(printf 'woke 50\nwoke 100\nwoke 150\ndone')"
@@ -1154,7 +1154,7 @@ test-i386: $(COMPILER)
 	test "$$(tools/run_target.sh i386 /tmp/test_i386_timer)" = "$$(printf 'woke 50\nwoke 100\nwoke 150\ndone')"
 	./$(COMPILER) --target=i386 test/test_reactor.pas /tmp/test_i386_reactor
 	test "$$(tools/run_target.sh i386 /tmp/test_i386_reactor)" = "$$(printf 'reader: start\nreader: would-block, parking\nwriter: writing\nreader: got 2 bytes: hi\ndone')"
-	./$(COMPILER) --target=i386 test/test_asyncecho.pas /tmp/test_i386_asyncecho
+	./$(COMPILER) --target=i386 -Fulib/rtl/platform/posix test/test_asyncecho.pas /tmp/test_i386_asyncecho
 	test "$$(tools/run_target.sh i386 /tmp/test_i386_asyncecho)" = "$$(printf 'client 1 ok\nclient 2 ok\ndone')"
 	./$(COMPILER) --target=i386 test/test_extern_c.pas /tmp/test_i386_extern
 	./$(COMPILER) test/test_extern_c.pas /tmp/test_i386_extern_x64
@@ -1402,7 +1402,7 @@ test-aarch64: $(COMPILER)
 	test "$$(tools/run_target.sh aarch64 /tmp/test_aarch64_timer)" = "$$(printf 'woke 50\nwoke 100\nwoke 150\ndone')"
 	./$(COMPILER) --target=aarch64 test/test_reactor.pas /tmp/test_aarch64_reactor
 	test "$$(tools/run_target.sh aarch64 /tmp/test_aarch64_reactor)" = "$$(printf 'reader: start\nreader: would-block, parking\nwriter: writing\nreader: got 2 bytes: hi\ndone')"
-	./$(COMPILER) --target=aarch64 test/test_asyncecho.pas /tmp/test_aarch64_asyncecho
+	./$(COMPILER) --target=aarch64 -Fulib/rtl/platform/posix test/test_asyncecho.pas /tmp/test_aarch64_asyncecho
 	test "$$(tools/run_target.sh aarch64 /tmp/test_aarch64_asyncecho)" = "$$(printf 'client 1 ok\nclient 2 ok\ndone')"
 	./$(COMPILER) --target=aarch64 test/test_extern_c.pas /tmp/test_aarch64_extern
 	./$(COMPILER) test/test_extern_c.pas /tmp/test_aarch64_extern_x64
@@ -1668,7 +1668,7 @@ test-arm32: $(COMPILER)
 	test "$$(tools/run_target.sh arm32 /tmp/test_arm32_timer)" = "$$(printf 'woke 50\nwoke 100\nwoke 150\ndone')"
 	./$(COMPILER) --target=arm32 test/test_reactor.pas /tmp/test_arm32_reactor
 	test "$$(tools/run_target.sh arm32 /tmp/test_arm32_reactor)" = "$$(printf 'reader: start\nreader: would-block, parking\nwriter: writing\nreader: got 2 bytes: hi\ndone')"
-	./$(COMPILER) --target=arm32 test/test_asyncecho.pas /tmp/test_arm32_asyncecho
+	./$(COMPILER) --target=arm32 -Fulib/rtl/platform/posix test/test_asyncecho.pas /tmp/test_arm32_asyncecho
 	test "$$(tools/run_target.sh arm32 /tmp/test_arm32_asyncecho)" = "$$(printf 'client 1 ok\nclient 2 ok\ndone')"
 	./$(COMPILER) --target=arm32 test/test_extern_c.pas /tmp/test_arm32_extern
 	./$(COMPILER) test/test_extern_c.pas /tmp/test_arm32_extern_x64

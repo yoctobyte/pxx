@@ -173,3 +173,11 @@ Out of scope (separate tickets):
   ESP object compile smokes for `--target=riscv32 --platform=esp` and
   `--target=xtensa --platform=esp`; `readelf -Ws` shows the expected lwIP
   imports.
+- 2026-06-21 — Re-homed `lib/rtl/asyncnet.pas` transport onto PAL sockets:
+  removed the duplicated per-arch Linux socket syscall layer from `asyncnet`,
+  and now use `PalSocket`/nonblocking/bind/connect/listen/accept/send/recv/
+  close while keeping `scheduler` as the existing coroutine readiness reactor.
+  `test/test_asyncecho.pas` now compiles with `-Fulib/rtl/platform/posix` in the
+  native and hosted cross Makefile gates. Validation: native async echo via
+  pinned v32 and live `compiler/pascal26`, i386 async echo under
+  `tools/run_target.sh`, `make lib-test`, and `make library-suite-green`.
