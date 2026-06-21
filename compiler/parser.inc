@@ -11562,6 +11562,14 @@ begin
       xtensa_mov(reg_xtensa_a7, reg_xtensa_sp);
       XtSpillDepth := 0;
     end;
+    { Enable the FP coprocessor before any add.s/mul.s (bare metal leaves CPENABLE
+      clear -> FP would trap). Enable all CPs (harmless: no context switching). }
+    if XtensaHasFpu then
+    begin
+      EmitLoadConstXtensa(reg_xtensa_a8, $FF);
+      xtensa_wsr_cpenable(reg_xtensa_a8);
+      xtensa_rsync;
+    end;
     { Xtensa entry stub: jump to main body. }
     jmpPatch := CodeLen;
     xtensa_j(0);

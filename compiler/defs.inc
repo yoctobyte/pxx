@@ -859,6 +859,13 @@ var
     software shift-subtract helpers __pxx_divsi3/__pxx_modsi3 for ESP32 classic
     (LX6), which has the multiply option but not the divide option. }
   XtensaSoftDivide : Boolean;
+  { Xtensa single-precision hardware FPU. Default False = single-width float ops
+    go through the soft kernels (correct on EVERY xtensa part, incl ESP32-S2
+    which has NO FPU). True (via --xtensa-fpu) lowers single +,-,* to the
+    hardware add.s/sub.s/mul.s (ESP32 / ESP32-S3 only); single /, comparisons and
+    conversions stay soft (no HW single divide/compare-to-AR path wired). Opt-in
+    because FPU presence can't be inferred from the cpu flag (S2 has none). }
+  XtensaHasFpu : Boolean;
   { Windowed-ABI expression stack: a constant-sp function keeps its stack
     pointer fixed (the window overflow/underflow handlers spill the caller's
     a0-a3 to [sp-16], so sp must not move). Temporaries live at sp-relative

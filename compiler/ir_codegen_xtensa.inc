@@ -746,6 +746,25 @@ begin
   isCmp := (op = Ord(tkEq)) or (op = Ord(tkNeq)) or (op = Ord(tkLt)) or
            (op = Ord(tkGt)) or (op = Ord(tkLe)) or (op = Ord(tkGe));
 
+  { Hardware single FPU path (--xtensa-fpu, ESP32/-S3): single +,-,* via
+    add.s/sub.s/mul.s. Single / and comparisons stay soft (no HW single divide /
+    no FP-compare-to-AR path wired); all Double stays soft. }
+  if XtensaHasFpu and (not isDouble) and
+     ((op = Ord(tkPlus)) or (op = Ord(tkMinus)) or (op = Ord(tkStar))) then
+  begin
+    EmitFloatOperandXtensa(left, tySingle);
+    XtensaPushA2;
+    EmitFloatOperandXtensa(right, tySingle);     { a2 = right bits }
+    XtensaPopA3;                                  { a3 = left bits }
+    xtensa_wfr(0, reg_xtensa_a3);                 { f0 = left }
+    xtensa_wfr(1, reg_xtensa_a2);                 { f1 = right }
+    if op = Ord(tkPlus) then xtensa_add_s(0, 0, 1)
+    else if op = Ord(tkMinus) then xtensa_sub_s(0, 0, 1)
+    else xtensa_mul_s(0, 0, 1);
+    xtensa_rfr(reg_xtensa_a2, 0);                 { a2 = result bits }
+    Exit;
+  end;
+
   argBase := XtSpillDepth;
   EmitFloatOperandXtensa(left, opTk);
   XtensaPushA2;

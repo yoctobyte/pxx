@@ -79,6 +79,7 @@ begin
   TargetArch := TARGET_X86_64;
   XtensaABI := XTENSA_ABI_CALL0;
   XtensaSoftDivide := False;
+  XtensaHasFpu := False;
   TARGET_PTR_SIZE := 8;
   EmitObjMode := False;
   EspBareBoot := False;
@@ -171,6 +172,13 @@ begin
       { ESP32 classic (LX6): no hardware divide option. Route div/mod through
         the software shift-subtract helpers. }
       XtensaSoftDivide := True;
+      Inc(i);
+    end
+    else if option = '--xtensa-fpu' then
+    begin
+      { ESP32 / ESP32-S3: single-precision hardware FPU present. Lower single
+        +,-,* to add.s/sub.s/mul.s. NOT for ESP32-S2 (no FPU). }
+      XtensaHasFpu := True;
       Inc(i);
     end
     else if option = '--target=riscv32' then

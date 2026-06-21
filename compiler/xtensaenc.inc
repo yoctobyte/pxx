@@ -139,6 +139,56 @@ begin
   EmitB((3 shl 4) or 0);
 end;
 
+{ ===== Single-precision FPU (FP coprocessor option; ESP32/-S3 have it, -S2 does
+  NOT — emit only under --xtensa-fpu). RRR: byte0=(t<<4)|op0, byte1=(r<<4)|s,
+  byte2=(op2<<4)|op1. Verified against xtensa-esp32s3-elf-as. ===== }
+procedure xtensa_add_s(fr, fs, ft: Integer);   { add.s fr, fs, ft }
+begin
+  EmitB((ft shl 4) or 0);
+  EmitB((fr shl 4) or fs);
+  EmitB((0 shl 4) or $A);
+end;
+
+procedure xtensa_sub_s(fr, fs, ft: Integer);   { sub.s fr, fs, ft }
+begin
+  EmitB((ft shl 4) or 0);
+  EmitB((fr shl 4) or fs);
+  EmitB((1 shl 4) or $A);
+end;
+
+procedure xtensa_mul_s(fr, fs, ft: Integer);   { mul.s fr, fs, ft }
+begin
+  EmitB((ft shl 4) or 0);
+  EmitB((fr shl 4) or fs);
+  EmitB((2 shl 4) or $A);
+end;
+
+procedure xtensa_wfr(fr, ar: Integer);         { wfr fr, ar  (ar bits -> FP reg) }
+begin
+  EmitB((5 shl 4) or 0);
+  EmitB((fr shl 4) or ar);
+  EmitB(($F shl 4) or $A);
+end;
+
+procedure xtensa_rfr(ar, fr: Integer);         { rfr ar, fr  (FP reg -> ar bits) }
+begin
+  EmitB((4 shl 4) or 0);
+  EmitB((ar shl 4) or fr);
+  EmitB(($F shl 4) or $A);
+end;
+
+procedure xtensa_wsr_cpenable(ar: Integer);    { wsr.cpenable ar  (SR 224) }
+begin
+  EmitB((ar shl 4) or 0);
+  EmitB($E0);
+  EmitB($13);
+end;
+
+procedure xtensa_rsync;                          { rsync }
+begin
+  EmitB($10); EmitB($20); EmitB($00);
+end;
+
 procedure xtensa_mov(dst, src: Integer);
 begin
   xtensa_or(dst, src, src);
