@@ -2927,9 +2927,6 @@ begin
         LastExprTk := IntToTypeKind(ASTTk[CurASTNode]);
         Exit;
       end;
-      if CaseEqual(name, 'puint8') then
-        writeln('ParseFactor PUInt8 found! Tokens[TokPos].Kind=', Ord(Tokens[TokPos].Kind), ' CurTok.Line=', CurTok.Line);
-
       { ---- SizeOf(TypeName) intrinsic: resolved at parse time to AN_INT_LIT ---- }
       if CaseEqual(name, 'sizeof') then
       begin
