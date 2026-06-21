@@ -761,8 +761,14 @@ begin
   begin
     if ExternalCount > 0 then
       Error('target esp32: external (dynamic) symbols not yet supported');
-    if (MethodFixCount > 0) or (ProcAddrFixCount > 0) then
-      Error('target esp32: method/proc-address fixups not yet supported');
+    { @proc address fixups (ProcAddrFix) are 32-bit-absolute patched in place
+      below and work for the bare ET_EXEC image on riscv32 (the IR_PROCADDR
+      literal-load emits a Patch32-friendly word). xtensa @proc isn't wired yet;
+      method fixups remain unsupported on both. }
+    if MethodFixCount > 0 then
+      Error('target esp32: method-address fixups not yet supported');
+    if (ProcAddrFixCount > 0) and (TargetArch <> TARGET_RISCV32) then
+      Error('target esp32: proc-address fixups not yet supported on this target');
   end;
 
   phnum := 1;

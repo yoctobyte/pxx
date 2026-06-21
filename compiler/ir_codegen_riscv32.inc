@@ -591,6 +591,24 @@ begin
         EmitLoadDataRefRISCV32(reg_a0, Strs[si].Offset);
       end;
 
+    IR_PROCADDR:
+      begin
+        { @proc -> a0 = the routine's absolute code address. Load a PC-relative
+          inline literal word that the ELF writer patches to entry+BodyAddr
+          (same shape as the iram cross-section call literal). Needed for raw ISR
+          install (mtvec) and @isr -> esp_intr_alloc. }
+        if ProcExternal[IRA[node]] then
+          Error('@ on external routine not supported; wrap it in a local routine');
+        rv32_auipc(reg_a0, 0);            { a0 = PC of this auipc }
+        rv32_jal(reg_zero, 8);            { skip the 4-byte literal }
+        if ProcAddrFixCount >= MAX_CALLFIX then Error('proc addr fixup overflow');
+        ProcAddrFix[ProcAddrFixCount].CodePos := CodeLen;
+        ProcAddrFix[ProcAddrFixCount].ProcIdx := IRA[node];
+        Inc(ProcAddrFixCount);
+        EmitI32(0);                       { literal: absolute proc addr (patched) }
+        rv32_lw(reg_a0, reg_a0, 8);       { a0 = [auipc_pc + 8] = literal }
+      end;
+
     IR_LOAD_SYM:
       if Is64BitRISCV32(Syms[IRA[node]].TypeKind) then
         EmitLoadVar64RISCV32(IRA[node])
