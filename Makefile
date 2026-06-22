@@ -2111,6 +2111,8 @@ lib-test: pxx-stable-check
 	test "$$(/tmp/lib_dns_spoof)" = "$$(printf 'badid=ok\ncount=0')"
 	$(PXX_STABLE) -Fulib/rtl/platform/posix test/lib_dns_tcp.pas /tmp/lib_dns_tcp
 	test "$$(/tmp/lib_dns_tcp)" = "$$(printf 'rcode=0\ncount=2\ntcp-fallback=ok')"
+	$(PXX_STABLE) -Fulib/rtl/platform/posix test/lib_dns_multins.pas /tmp/lib_dns_multins
+	test "$$(/tmp/lib_dns_multins)" = "$$(printf 'rcode=0\ncount=2\nmultins=ok')"
 	@if command -v qemu-aarch64 >/dev/null 2>&1 && command -v qemu-arm >/dev/null 2>&1; then \
 	  echo "=== lib-test cross: PAL net primitives under qemu-user (i386/aarch64/arm32) ==="; \
 	  for arch in i386 aarch64 arm32; do \

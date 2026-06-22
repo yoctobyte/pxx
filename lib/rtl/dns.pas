@@ -99,31 +99,41 @@ end;
 function DnsResolveHost(const name: string; var ips: TDnsIpv4Array; var count: Integer): Integer;
 var
   hostsText, resolvText: string;
-  ns: TDnsIpv4Array;
-  nsCount, rc: Integer;
+  ns, localIps: TDnsIpv4Array;
+  nsCount, localCount, rc, i: Integer;
   hostIp: LongWord;
 begin
   count := 0;
   rc := ReadFileText(PChar('/etc/hosts'), hostsText, 65536);
   rc := ReadFileText(PChar('/etc/resolv.conf'), resolvText, 8192);
 
+  { "files" first — an /etc/hosts entry wins over any nameserver. }
+  hostIp := 0;
+  if DnsLookupHosts(hostsText, name, hostIp) then
+  begin
+    ips[0] := hostIp;
+    count := 1;
+    DnsResolveHost := 0;
+    Exit;
+  end;
+
+  { "dns" — try every configured nameserver in order; never public DNS. }
   nsCount := 0;
   rc := DnsParseResolvConf(resolvText, ns, nsCount);
   if nsCount = 0 then
   begin
-    { No nameserver: only /etc/hosts can answer; never reach for public DNS. }
-    hostIp := 0;
-    if DnsLookupHosts(hostsText, name, hostIp) then
-    begin
-      ips[0] := hostIp;
-      count := 1;
-      DnsResolveHost := 0;
-    end
-    else
-      DnsResolveHost := DNS_ERR_NOCONFIG;
+    DnsResolveHost := DNS_ERR_NOCONFIG;
     Exit;
   end;
-  DnsResolveHost := DnsResolveHostEx(hostsText, ns[0], DNS_PORT, name, ips, count, 2000);
+  localCount := 0;
+  rc := DnsResolveAList(ns, nsCount, DNS_PORT, name, localIps, localCount, 2000);
+  if rc >= 0 then
+  begin
+    for i := 0 to localCount - 1 do
+      ips[i] := localIps[i];
+    count := localCount;
+  end;
+  DnsResolveHost := rc;
 end;
 
 end.

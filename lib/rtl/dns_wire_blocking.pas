@@ -16,6 +16,7 @@ uses platform, dns_wire_core, random;
 const
   DNS_PORT = 53;
   DNS_ERR_BADID = -3;   { response transaction id did not match the query }
+  DNS_ERR_NONS  = -5;   { nameserver list was empty }
 
 { Resolve A records for `name` by querying nameserver (host byte order ipv4) on
   nsPort over UDP, waiting up to timeoutMs. Returns the DNS RCODE (0 = NOERROR)
@@ -23,6 +24,14 @@ const
   socket errno, PAL_NET_ETIMEDOUT, or a DNS_ERR_* (malformed / bad id). }
 function DnsResolveA(nsHost: LongWord; nsPort: Integer; const name: string;
   var ips: TDnsIpv4Array; var count: Integer; timeoutMs: Integer): Integer;
+
+{ Try the nameservers ns[0..nsCount-1] in order until one gives a definitive
+  answer. A non-negative result (the DNS RCODE, even NXDOMAIN) is definitive and
+  returned immediately; a negative transport failure (timeout / refused / bad id)
+  moves on to the next nameserver. Returns the last error if all fail, or
+  DNS_ERR_NONS if the list is empty. }
+function DnsResolveAList(const ns: TDnsIpv4Array; nsCount, nsPort: Integer;
+  const name: string; var ips: TDnsIpv4Array; var count: Integer; timeoutMs: Integer): Integer;
 
 implementation
 
@@ -210,6 +219,37 @@ begin
     ips[i] := localIps[i];
   count := localCount;
   DnsResolveA := rcode;
+end;
+
+function DnsResolveAList(const ns: TDnsIpv4Array; nsCount, nsPort: Integer;
+  const name: string; var ips: TDnsIpv4Array; var count: Integer; timeoutMs: Integer): Integer;
+var
+  i, j, rc, localCount: Integer;
+  localIps: TDnsIpv4Array;
+begin
+  count := 0;
+  if nsCount <= 0 then
+  begin
+    DnsResolveAList := DNS_ERR_NONS;
+    Exit;
+  end;
+  rc := DNS_ERR_NONS;
+  for i := 0 to nsCount - 1 do
+  begin
+    localCount := 0;
+    rc := DnsResolveA(ns[i], nsPort, name, localIps, localCount, timeoutMs);
+    if rc >= 0 then
+    begin
+      { definitive answer (even NXDOMAIN) — copy out and stop }
+      for j := 0 to localCount - 1 do
+        ips[j] := localIps[j];
+      count := localCount;
+      DnsResolveAList := rc;
+      Exit;
+    end;
+    { negative = transport failure; try the next nameserver }
+  end;
+  DnsResolveAList := rc;   { last error }
 end;
 
 end.
