@@ -108,7 +108,7 @@ begin
     if (s[1]='c') and (s[2]='o') and (s[3]='n') and (s[4]='s') and (s[5]='t') then Result := tkConst;
     if (s[1]='w') and (s[2]='h') and (s[3]='i') and (s[4]='l') and (s[5]='e') then Result := tkWhile;
     if (s[1]='u') and (s[2]='n') and (s[3]='t') and (s[4]='i') and (s[5]='l') then Result := tkUntil;
-    if (s[1]='a') and (s[2]='r') and (s[3]='r') and (s[4]='a') and (s[5]='y') then Result := tkArray;
+    if (s = 'array') or ((not CaseSensitiveMode) and CaseEqual(s, 'array')) then Result := tkArray;
     if (s[1]='f') and (s[2]='a') and (s[3]='l') and (s[4]='s') and (s[5]='e') then Result := tkFalse;
     if (s[1]='F') and (s[2]='a') and (s[3]='l') and (s[4]='s') and (s[5]='e') then Result := tkFalse;
     if (s = 'write') or ((not CaseSensitiveMode) and CaseEqual(s, 'write')) then Result := tkwrite;
