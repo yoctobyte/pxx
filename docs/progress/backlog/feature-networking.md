@@ -153,3 +153,16 @@ DNS deferred to `feature-dns-resolver-library`.
   (`getaddrinfo`), `dns_wire` (pure Pascal over PAL UDP/TCP), and `dns_resolved`
   (systemd-resolved over D-Bus) backends. Public DNS fallback is explicit opt-in
   only, never default.
+- 2026-06-22 — PAL socket substrate is now complete enough for the blocking
+  `net.pas` first milestone (Track B, stable v37). On top of the TCP primitives
+  it now provides: UDP `PalSendToIpv4`/`PalRecvFromIpv4` with peer reporting,
+  `PalPoll` readiness (raw ppoll), `-errno` returns plus
+  `PAL_NET_EWOULDBLOCK`/`ECONNREFUSED`/`ECONNRESET`
+  (`feature-pal-network-datagram-poll-errno`, done), and socket introspection
+  `PalGetSockError` (SO_ERROR), `PalGetSockNameIpv4`, peer-reporting
+  `PalAcceptIpv4` (commit 6e3f731). All host-proven on loopback via
+  `lib_platform_net*` in `make lib-test`. The PAL stays scheduler-free; remaining
+  net.pas work is the target-neutral `TNetSocket`/`TNetAddress` blocking API over
+  these primitives — no new PAL surface expected for IPv4 loopback TCP/UDP. Still
+  PAL-blocked above IPv4: IPv6 sockaddr layout (`PAL_NET_AF_INET6` + 28-byte
+  sockaddr_in6 fill/parse) — to be added when net.pas reaches it.
