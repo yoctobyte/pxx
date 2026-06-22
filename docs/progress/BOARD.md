@@ -16,7 +16,7 @@ _none_
 
 _none_
 
-## backlog (68)
+## backlog (67)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -24,7 +24,6 @@ _none_
 | chess-pal-getdents-link | B | chess | examples/chess: PalBackendGetDents64 undefined (PAL backend not linked) | — |
 | chore-inc-to-units | A | chore | `.inc` → real `.pas` units refactor | — |
 | chore-runtime-emission-size | A | chore | Finer runtime-support emission (code size) | — |
-| chore-stable-binary-single-file-no-version-churn | A | chore | Stable binary: fixed-name overwrite (kill `vN` churn + the dangling-symlink trap) | — |
 | design-overloadable-intrinsics | A | design | Design question: overloadable compiler intrinsics (the `Copy` precedent) | — |
 | design-record-copy-dynarray-field-semantics | A | design | Record copy with a dynamic-array field: PXX deep-copies, FPC shares (reference) | — |
 | feature-additional-cpu-targets | A | feature | Additional CPU targets (rollup: i386 → aarch64 → arm32 → ESP32/RISC-V) | feature-target-aarch64, feature-target-arm32, feature-target-esp32, feature-target-i386 |
@@ -95,7 +94,7 @@ _none_
 | --- | --- | --- | --- | --- |
 | feature-c-runtime-library | B | feature | C runtime/library layer (`lib/crtl`) plus direct C-library packages | feature-c-source-frontend |
 
-## done (168)
+## done (169)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -149,6 +148,7 @@ _none_
 | bug-xtensa-call0-large-frame-truncates | A | bug | Xtensa Call0 / non-windowed frame >128 bytes silently truncates | — |
 | chore-asmtext-per-platform-split | A | chore | Split `asmtext.inc` monolith into per-platform files + fix emitter tests | — |
 | chore-qemu-test-env | A | chore | QEMU cross-target test environment | — |
+| chore-stable-binary-single-file-no-version-churn | A | chore | Stable binary: fixed-name overwrite (kill `vN` churn + the dangling-symlink trap) | — |
 | feature-aarch64-asm-emitter | A | feature | AArch64 text-assembler (`EmitAsmA64`) for cleaner ARM64 codegen | — |
 | feature-adventure-scene-asset-pipeline | B | feature | Adventure scene asset pipeline | feature-image-ascii-renderer-library |
 | feature-arm32-asm-emitter | A | feature | ARM32 text-assembler (`EmitAsmArm32`) for cleaner ARM32 codegen | — |
@@ -282,7 +282,6 @@ _none_
 - [B] chess-pal-getdents-link
 - [A] chore-inc-to-units
 - [A] chore-runtime-emission-size
-- [A] chore-stable-binary-single-file-no-version-churn
 - [A] design-overloadable-intrinsics
 - [A] design-record-copy-dynarray-field-semantics
 - [A] feature-additional-cpu-targets

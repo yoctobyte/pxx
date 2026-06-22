@@ -1,7 +1,7 @@
 # Stable binary: fixed-name overwrite (kill `vN` churn + the dangling-symlink trap)
 
 - **Type:** chore (dev architecture / workflow) — Track A-adjacent (infra)
-- **Status:** backlog
+- **Status:** **DONE** (default platform dir) — implemented + migrated, lib-test green.
 - **Owner:** —
 - **Opened:** 2026-06-22
 - **Priority:** low (not urgent) — but removes a recurring footgun.
@@ -117,3 +117,22 @@ tell B to re-pull afterwards.
 - 2026-06-22 — Filed after the v36 dangling-symlink incident. Design agreed with
   the user: keep the symlink, overwrite a fixed-name binary, drop `vN` churn.
   Pick up at a quiet coordination point.
+- 2026-06-22 — **DONE for the default platform dir.** Implemented:
+  - `make stabilize` overwrites `stable_latest` (no `vN`); `latest -> stable_latest`.
+  - `make pin` copies `stable_latest -> stable_pinned`; `pinned -> stable_pinned`.
+    Dropped the `VERSION=N` per-version selection. `VERSION` is now a monotonic
+    counter for reporting; `history.log`/`pin.log` carry sha + source commit.
+  - Symlinks kept (committed once, never re-pointed) → the overwritten binaries
+    are always *modified tracked* files; `git add -u stable_linux_amd64/` can't
+    miss them → the v36-class dangling-symlink trap is structurally gone. The pin
+    target prints the exact `git add -u … && commit` recipe.
+  - One-time migration: materialised `stable_pinned`/`stable_latest` from the
+    current v36, repointed `pinned`/`latest`, `git rm` the 36 `vN`, and wrote
+    `stable_linux_amd64/default/STABLES.md` (manifest: version | date | sha |
+    source commit | git blob id | subject; one-line extraction recipe). Working
+    tree drops ~100 MB → ~5.6 MB.
+  - Verified: `pinned -> stable_pinned` sha == v36; `make pxx-stable-check` +
+    `make lib-test` green against the new layout.
+  - **FOLLOW-UP (not done):** the **managed** stable dir (`stabilize-managed`,
+    `$(STABLE_MANAGED_DIR)`) still uses the old `vN` scheme — apply the same
+    change there when that path is next exercised (rarely pinned). Low prio.

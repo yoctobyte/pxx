@@ -1845,10 +1845,15 @@ stabilize: test
 	cmp /tmp/pascal26-next /tmp/pascal26-s5
 	@echo "=== recording stable binary ==="
 	@mkdir -p $(STABLE_DEFAULT_DIR)
+	@# Fixed-name overwrite (no per-version vN files): `latest` is a symlink to the
+	@# single, in-place-overwritten `stable_latest` binary. VERSION stays a
+	@# monotonic counter for reporting/provenance; history.log carries date + sha +
+	@# source commit per checkpoint. See
+	@# docs/progress/.../chore-stable-binary-single-file-no-version-churn.md.
 	@NV=$$(( $$(cat $(STABLE_DEFAULT_DIR)/VERSION 2>/dev/null || echo 0) + 1 )); \
 	 echo $$NV > $(STABLE_DEFAULT_DIR)/VERSION; \
-	 cp /tmp/pascal26-s5 $(STABLE_DEFAULT_DIR)/v$$NV; \
-	 ln -sfn v$$NV $(STABLE_DEFAULT_DIR)/latest; \
+	 cp /tmp/pascal26-s5 $(STABLE_DEFAULT_DIR)/stable_latest; \
+	 ln -sfn stable_latest $(STABLE_DEFAULT_DIR)/latest; \
 	 SHA=$$(sha256sum $(STABLE_DEFAULT_DIR)/latest | awk '{print $$1}'); \
 	 echo "$$SHA  latest" > $(STABLE_DEFAULT_DIR)/last.sha256; \
 	 printf '%s  v%s  %s  %s  %s\n' \
@@ -1856,7 +1861,7 @@ stabilize: test
 	   "$$(git log -1 --format='%H')" \
 	   "$$(git log -1 --format='%s')" \
 	   >> $(STABLE_DEFAULT_DIR)/history.log; \
-	 echo "STABLE v$$NV OK: $$SHA"
+	 echo "STABLE v$$NV OK: $$SHA  (-> stable_latest, fixed-name overwrite)"
 
 stabilize-managed: COMPILER := $(COMPILER_MANAGED)
 stabilize-managed: PXXFLAGS := -dPXX_MANAGED_STRING
@@ -1975,25 +1980,26 @@ pxx-stable-check:
 	   echo "      track A can bless it for B with 'make pin'."; \
 	 fi
 
-# Advance the `pinned` pointer that track B builds against (PXX_STABLE -> pinned).
-# Default target = current `latest`; override with VERSION=N to pin a specific
-# recorded stable. Records the move in pin.log for audit. This is the deliberate
+# Advance the stable that track B builds against (PXX_STABLE -> pinned). Blesses
+# the current `latest` checkpoint by copying it onto the single `stable_pinned`
+# binary (the `pinned` symlink points there permanently). This is the deliberate
 # 'hand B a new compiler' step, separate from `make stabilize` (which only
-# records a checkpoint + moves `latest`).
+# overwrites `stable_latest`). Records the move in pin.log for audit.
+# (No per-version vN files / VERSION=N selection -- mid-dev we only keep the
+# latest; old stables live in git history, see STABLES.md.)
 pin:
-	@test -e $(STABLE_DEFAULT_DIR)/latest || \
+	@test -e $(STABLE_DEFAULT_DIR)/stable_latest || \
 	  (echo "No stable yet. Run: make stabilize"; exit 1)
-	@TGT="$${VERSION:+v$${VERSION}}"; \
-	 TGT="$${TGT:-$$(readlink $(STABLE_DEFAULT_DIR)/latest)}"; \
-	 test -f $(STABLE_DEFAULT_DIR)/$$TGT || \
-	   (echo "$(STABLE_DEFAULT_DIR)/$$TGT does not exist"; exit 1); \
-	 OLD=$$(readlink $(STABLE_DEFAULT_DIR)/pinned 2>/dev/null || echo 'none'); \
-	 ln -sfn $$TGT $(STABLE_DEFAULT_DIR)/pinned; \
-	 printf '%s  pinned %s  (was %s)  %s\n' \
-	   "$$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$$TGT" "$$OLD" \
+	@NV=$$(cat $(STABLE_DEFAULT_DIR)/VERSION 2>/dev/null || echo '?'); \
+	 OLDSHA=$$(test -e $(STABLE_DEFAULT_DIR)/pinned && sha256sum $(STABLE_DEFAULT_DIR)/pinned | awk '{print substr($$1,1,12)}' || echo 'none'); \
+	 cp $(STABLE_DEFAULT_DIR)/stable_latest $(STABLE_DEFAULT_DIR)/stable_pinned; \
+	 ln -sfn stable_pinned $(STABLE_DEFAULT_DIR)/pinned; \
+	 SHA=$$(sha256sum $(STABLE_DEFAULT_DIR)/pinned | awk '{print $$1}'); \
+	 printf '%s  pinned v%s  %s  (was %s)  %s\n' \
+	   "$$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$$NV" "$$SHA" "$$OLDSHA" \
 	   "$$(git log -1 --format='%H' 2>/dev/null)" \
 	   >> $(STABLE_DEFAULT_DIR)/pin.log; \
-	 echo "pinned -> $$TGT (was $$OLD)."
+	 echo "pinned -> stable_pinned (v$$NV, $$SHA)."
 	@# Freeze the runtime-read builtin RTL next to the pinned binary. The pinned
 	@# binary resolves `uses builtinheap`/`builtin` via its ExeDir, i.e.
 	@# $(STABLE_DEFAULT_DIR)/builtin/, which is checked BEFORE the CWD-relative
@@ -2006,7 +2012,8 @@ pin:
 	@mkdir -p $(STABLE_DEFAULT_DIR)/builtin
 	@cp compiler/builtin/*.pas $(STABLE_DEFAULT_DIR)/builtin/
 	@echo "froze $$(ls $(STABLE_DEFAULT_DIR)/builtin/*.pas | wc -l) builtin RTL source(s) -> $(STABLE_DEFAULT_DIR)/builtin/"
-	@echo "Commit stable_linux_amd64/ to hand it to track B."
+	@echo "Hand to track B:  git add -u stable_linux_amd64/ && git commit -m 'chore(stable): pin vN' -- stable_linux_amd64/"
+	@echo "  (-u stages the in-place-overwritten stable_pinned/stable_latest; all stable files are tracked, so nothing can dangle.)"
 
 # Curated GREEN smoke for the library surface, against the pinned stable. May
 # hard-fail (a smoke gate for track B). Keep every entry here passing; move
