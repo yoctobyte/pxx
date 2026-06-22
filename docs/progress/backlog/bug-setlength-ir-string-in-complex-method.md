@@ -7,6 +7,11 @@
 - **Opened:** 2026-06-22
 - **Owner:** — (Track A / "sis")
 - **Found by:** Track B, building the `vm` bytecode library.
+- **Still open on v34** (re-verified): the name-resolution fix that landed in v34
+  (0e0bbdb) does NOT resolve this — `stable_linux_amd64/default/pinned -Fulib/rtl
+  examples/vm/vmdemo.pas` still fails with the same error. So this is a distinct
+  bug from the paramless/name-shadowing family; `vm` heavily uses dynamic-array
+  fields, so it may be in the same area Track A is working (dynarray codegen).
 
 ## Summary
 

@@ -83,15 +83,14 @@ _none_
 | idea-visibility-enforcement | B | idea | Enforce private/protected visibility | — |
 | meta-track-b-compiler-wishlist | B | meta | Track-B wishlist — compiler features most wanted to unblock libraries + demos | — |
 
-## blocked (3)
+## blocked (2)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
 | feature-c-runtime-library | B | feature | C runtime/library layer (`lib/crtl`) plus direct C-library packages | feature-c-source-frontend |
 | feature-demo-vm | B | feature | Demo — bytecode VM + assembler (small ISA) | bug-setlength-ir-string-in-complex-method |
-| feature-sat-solver-library | B | feature | SAT solver library — DPLL over CNF (known-instance test app) | bug-impl-prescan-codegen-regression |
 
-## done (160)
+## done (161)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -232,6 +231,7 @@ _none_
 | feature-rtl-terminal-raw-mode | B | feature | Terminal raw mode and unbuffered input support (libc-free) | — |
 | feature-rtti-layout-table | A | feature | Target-independent layout RTTI (Tier B) | feature-cross-bootstrap |
 | feature-rv32-asm-emitter | A | feature | RISC-V (RV32) text-assembler (`EmitAsmRv32`) for cleaner riscv32 codegen | — |
+| feature-sat-solver-library | B | feature | SAT solver library — DPLL over CNF (known-instance test app) | — |
 | feature-setlength-var-array-param-abi | A | feature | `SetLength` on a `var` dynamic-array parameter (cross-cutting ABI) | — |
 | feature-short-circuit-eval | A | feature | Short-circuit boolean evaluation (`and` / `or`) | — |
 | feature-single-first-class | A | feature | Single (32-bit float) first-class on the internal-call ABI | — |
@@ -357,4 +357,3 @@ _none_
 - **1** — chore-inc-to-units
 - **1** — bug-setlength-ir-string-in-complex-method
 - **1** — bug-managed-byref-string-param-store
-- **1** — bug-impl-prescan-codegen-regression

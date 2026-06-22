@@ -1,8 +1,7 @@
 # SAT solver library — DPLL over CNF (known-instance test app)
 
 - **Type:** feature
-- **Status:** blocked (impl written + FPC-verified; PXX miscompiles it)
-- **Blocked-by:** bug-impl-prescan-codegen-regression
+- **Status:** done — green on pinned v34
 - **Owner:** —
 - **Opened:** 2026-06-19
 - **Relation:** demo-eligible-as-library from idea-demo-app-candidates. Sibling
@@ -76,7 +75,15 @@ the sudoku/chess demos.
      second repro that reframes its root cause (pre-existing slot/offset
      allocation bug, not the `7ba91bf` pre-scan).
 
-  **Blocked:** the code is correct (FPC runs the oracle to `ALL OK`) but PXX
-  miscompiles it, so it is NOT wired into `make lib-test` yet (it would be a
-  genuine red, unlike json which is green on v33). Unblocks when the codegen bug
-  is fixed; then wire into lib-test + demos and close.
+  **Was blocked**, now resolved — corrected diagnosis:
+  - The `LoadDIMACS clauses=0` was **not** the impl-prescan/slot-offset bug I
+    first claimed. It was a compiler **name-resolution** bug: the local
+    `clauseCount` was shadowed by the same-named paramless function `ClauseCount`,
+    so bare reads resolved to the function. Track A fixed it (0e0bbdb, "local
+    variable shadows same-named paramless function"), pinned **v34**.
+  - DPLL recursed via a bare `DPLL`, which under the modern dialect (and FPC
+    objfpc) reads the result variable, not a recursive call. Fixed in this lib to
+    `DPLL()` (commit on this branch). My-code issue, not a compiler bug.
+- 2026-06-22 (later) — **DONE.** With v34 + `DPLL()`, `examples/sat/satdemo.pas`
+  runs `ALL OK` on the pinned compiler (PHP(3,2)/PHP(4,3) UNSAT, SAT models
+  verified). Wired into `make lib-test` (green) + `make demos`.
