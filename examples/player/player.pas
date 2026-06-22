@@ -32,6 +32,16 @@ var
   r, g, b: Byte;
   res: Integer;
   wstatus: Integer;
+  { audio sibling: a second ffmpeg decoding the same file straight to ALSA }
+  audioArgs: array of AnsiString;
+  audioPid: Integer;
+  audioStdin, audioStdout: Integer;
+  audioWstatus: Integer;
+
+const
+  SIG_CONT = 18;
+  SIG_STOP = 19;
+  SIG_TERM = 15;
 
 function ReadExactly(fd: Integer; buf: Pointer; len: Integer): Boolean;
 var
@@ -99,6 +109,22 @@ begin
     halt(1);
   end;
 
+  { Spawn the audio sibling: a second ffmpeg that decodes the same file's audio
+    straight to the ALSA "default" device (no aplay, no shell -> one child with a
+    known pid we can pause/stop). O_CLOEXEC on the pipes keeps the video child's
+    fds out of this one. Audio is best-effort: if it cannot start (no device),
+    the video path keeps working. }
+  SetLength(audioArgs, 9);
+  audioArgs[0] := '-loglevel'; audioArgs[1] := 'quiet';
+  audioArgs[2] := '-nostdin';
+  audioArgs[3] := '-i';        audioArgs[4] := videoPath;
+  audioArgs[5] := '-vn';
+  audioArgs[6] := '-f';        audioArgs[7] := 'alsa';
+  audioArgs[8] := 'default';
+  audioStdin := -1;
+  audioStdout := -1;
+  audioPid := ExecutePipeline(ffmpegPath, audioArgs, audioStdin, audioStdout);
+
   frameSize := (2 * w) * (2 * h) * 3;
   SetLength(rawFrame, frameSize);
   ImageInit(img, 2 * w, 2 * h);
@@ -128,9 +154,15 @@ begin
       begin
         paused := not paused;
         if paused then
-          pauseStart := PalMonotonicMillis
+        begin
+          pauseStart := PalMonotonicMillis;
+          if audioPid > 0 then res := PalKill(audioPid, SIG_STOP);   { freeze audio }
+        end
         else
+        begin
           startTime := startTime + (PalMonotonicMillis - pauseStart);
+          if audioPid > 0 then res := PalKill(audioPid, SIG_CONT);   { resume audio }
+        end;
       end
       else if (ch = 'g') or (ch = 'G') then
       begin
@@ -202,14 +234,31 @@ begin
   AnsiSetRawMode(False);
   write(AnsiMove(rows, 1) + AnsiReset + #10);
 
-  { Close pipes and wait for child }
+  { Stop the audio child (resume first in case it was paused, so the signal is
+    delivered), then close pipes and reap both children. }
+  if audioPid > 0 then
+  begin
+    res := PalKill(audioPid, SIG_CONT);
+    res := PalKill(audioPid, SIG_TERM);
+  end;
+
+  { Close pipes and wait for children }
   if childStdout <> -1 then
     PalClose(childStdout);
   if childStdin <> -1 then
     PalClose(childStdin);
+  if audioStdout <> -1 then
+    PalClose(audioStdout);
+  if audioStdin <> -1 then
+    PalClose(audioStdin);
 
   wstatus := 0;
   PalWait4(pid, @wstatus, 0, nil);
+  if audioPid > 0 then
+  begin
+    audioWstatus := 0;
+    PalWait4(audioPid, @audioWstatus, 0, nil);
+  end;
 
   ImageFree(img);
 end.

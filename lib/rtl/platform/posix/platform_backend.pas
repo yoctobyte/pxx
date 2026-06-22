@@ -45,6 +45,7 @@ function PalBackendExecve(path: PChar; argv, envp: Pointer): Integer;
 function PalBackendPipe2(var pipefd: array of Integer; flags: Integer): Integer;
 function PalBackendDup2(oldFd, newFd: Integer): Integer;
 function PalBackendWait4(pid: Integer; wstatus: Pointer; options: Integer; rusage: Pointer): Integer;
+function PalBackendKill(pid, sig: Integer): Integer;
 function PalBackendVforkAndExec(path: PChar; argv, envp: Pointer; stdinReadFd, stdinWriteFd, stdoutReadFd, stdoutWriteFd: Integer): Integer;
 
 implementation
@@ -58,7 +59,7 @@ const
   SYS_unlinkat = 263; SYS_renameat = 264;
   SYS_socket=41; SYS_connect=42; SYS_accept4=288; SYS_bind=49; SYS_listen=50;
   SYS_setsockopt=54; SYS_shutdown=48; SYS_fcntl=72;
-  SYS_vfork = 58; SYS_execve = 59; SYS_pipe2 = 293; SYS_dup2 = 33; SYS_wait4 = 61;
+  SYS_vfork = 58; SYS_execve = 59; SYS_pipe2 = 293; SYS_dup2 = 33; SYS_wait4 = 61; SYS_kill = 62;
   SYS_clock_gettime = 228;
 {$endif}
 {$ifdef CPU_I386}
@@ -68,7 +69,7 @@ const
   SYS_socketcall=102; SYS_fcntl=55;
   SC_SOCKET=1; SC_BIND=2; SC_CONNECT=3; SC_LISTEN=4; SC_ACCEPT4=18;
   SC_SETSOCKOPT=14; SC_SHUTDOWN=13;
-  SYS_vfork = 190; SYS_execve = 11; SYS_pipe2 = 331; SYS_dup2 = 63; SYS_wait4 = 114;
+  SYS_vfork = 190; SYS_execve = 11; SYS_pipe2 = 331; SYS_dup2 = 63; SYS_wait4 = 114; SYS_kill = 37;
   SYS_clock_gettime = 265;
 {$endif}
 {$ifdef CPU_AARCH64}
@@ -77,7 +78,7 @@ const
   SYS_unlinkat = 35; SYS_renameat = 38;
   SYS_socket=198; SYS_connect=203; SYS_accept4=242; SYS_bind=200; SYS_listen=201;
   SYS_setsockopt=208; SYS_shutdown=210; SYS_fcntl=25;
-  SYS_clone = 220; SYS_execve = 221; SYS_pipe2 = 59; SYS_dup3 = 24; SYS_wait4 = 260;
+  SYS_clone = 220; SYS_execve = 221; SYS_pipe2 = 59; SYS_dup3 = 24; SYS_wait4 = 260; SYS_kill = 129;
   SYS_clock_gettime = 113;
 {$endif}
 {$ifdef CPU_ARM32}
@@ -86,7 +87,7 @@ const
   SYS_unlinkat = 328; SYS_renameat = 329;
   SYS_socket=281; SYS_connect=283; SYS_accept4=366; SYS_bind=282; SYS_listen=284;
   SYS_setsockopt=294; SYS_shutdown=293; SYS_fcntl=55;
-  SYS_vfork = 190; SYS_execve = 11; SYS_pipe2 = 359; SYS_dup2 = 63; SYS_wait4 = 114;
+  SYS_vfork = 190; SYS_execve = 11; SYS_pipe2 = 359; SYS_dup2 = 63; SYS_wait4 = 114; SYS_kill = 37;
   SYS_clock_gettime = 263;
 {$endif}
   PAL_AT_FDCWD = -100;
@@ -409,6 +410,11 @@ end;
 function PalBackendWait4(pid: Integer; wstatus: Pointer; options: Integer; rusage: Pointer): Integer;
 begin
   Result := Integer(__pxxrawsyscall(SYS_wait4, pid, Int64(wstatus), options, Int64(rusage), 0, 0));
+end;
+
+function PalBackendKill(pid, sig: Integer): Integer;
+begin
+  Result := Integer(__pxxrawsyscall(SYS_kill, pid, sig, 0, 0, 0, 0));
 end;
 
 function PalBackendVforkAndExec(path: PChar; argv, envp: Pointer; stdinReadFd, stdinWriteFd, stdoutReadFd, stdoutWriteFd: Integer): Integer;

@@ -93,6 +93,7 @@ function PalExecve(path: PChar; argv, envp: Pointer): Integer;
 function PalPipe2(var pipefd: array of Integer; flags: Integer): Integer;
 function PalDup2(oldFd, newFd: Integer): Integer;
 function PalWait4(pid: Integer; wstatus: Pointer; options: Integer; rusage: Pointer): Integer;
+function PalKill(pid, sig: Integer): Integer;
 function PalVforkAndExec(path: PChar; argv, envp: Pointer; stdinReadFd, stdinWriteFd, stdoutReadFd, stdoutWriteFd: Integer): Integer;
 
 implementation
@@ -285,6 +286,11 @@ end;
 function PalWait4(pid: Integer; wstatus: Pointer; options: Integer; rusage: Pointer): Integer;
 begin
   Result := PalBackendWait4(pid, wstatus, options, rusage);
+end;
+
+function PalKill(pid, sig: Integer): Integer;
+begin
+  Result := PalBackendKill(pid, sig);
 end;
 
 function PalVforkAndExec(path: PChar; argv, envp: Pointer; stdinReadFd, stdinWriteFd, stdoutReadFd, stdoutWriteFd: Integer): Integer;

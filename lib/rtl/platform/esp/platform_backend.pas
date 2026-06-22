@@ -45,6 +45,7 @@ function PalBackendExecve(path: PChar; argv, envp: Pointer): Integer;
 function PalBackendPipe2(var pipefd: array of Integer; flags: Integer): Integer;
 function PalBackendDup2(oldFd, newFd: Integer): Integer;
 function PalBackendWait4(pid: Integer; wstatus: Pointer; options: Integer; rusage: Pointer): Integer;
+function PalBackendKill(pid, sig: Integer): Integer;
 function PalBackendVforkAndExec(path: PChar; argv, envp: Pointer; stdinReadFd, stdinWriteFd, stdoutReadFd, stdoutWriteFd: Integer): Integer;
 
 implementation
@@ -492,6 +493,11 @@ begin
 end;
 
 function PalBackendWait4(pid: Integer; wstatus: Pointer; options: Integer; rusage: Pointer): Integer;
+begin
+  Result := PAL_ERR_UNSUPPORTED;
+end;
+
+function PalBackendKill(pid, sig: Integer): Integer;
 begin
   Result := PAL_ERR_UNSUPPORTED;
 end;
