@@ -1,7 +1,7 @@
 # Port the stackful coroutine backend to all targets
 
 - **Type:** feature
-- **Status:** backlog
+- **Status:** done-followup (big / not directly language-relevant)
 - **Owner:** —
 - **Opened:** 2026-06-18 (design discussion — async ergonomics across targets)
 

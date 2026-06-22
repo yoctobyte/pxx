@@ -1,7 +1,7 @@
 # Allocator quality: split / coalesce / bins / alignment
 
 - **Type:** feature
-- **Status:** backlog
+- **Status:** done-followup (big / not directly language-relevant)
 - **Owner:** —
 - **Opened:** 2026-06-06 (follow-up to feature-unified-heap-allocator)
 
