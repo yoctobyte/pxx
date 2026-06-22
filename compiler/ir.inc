@@ -918,6 +918,7 @@ var argTk: TTypeKind;
     caCount, caElemRec, caElemSz, caSym, savedRec, caArgSym: Integer;
     caElemTk: TTypeKind;
     caIdent, caCountLit, caArg1, caArg2, caSlCall: Integer;
+    caRecName: Integer; caField: AnsiString; oaEligible: Boolean;
   coerceParamSym, coerceIntfCi, coerceCast: Integer;
 begin
   { A frozen-string concatenation used as a call argument builds its result in a
@@ -1026,53 +1027,79 @@ begin
     path is not exercised there). }
   if (cpi >= 0) and (pathIdx >= 0) and (pathIdx < Procs[cpi].ParamCount) and
      Procs[cpi].Params[pathIdx].IsArray and Procs[cpi].Params[pathIdx].IsRef and
-     (ASTKind[argAST] = AN_IDENT) and
+     ((ASTKind[argAST] = AN_IDENT) or (ASTKind[argAST] = AN_FIELD)) and
      (PendOAWBCount <= 63) then
   begin
-    caArgSym := ASTIVal[argAST];
-    if (caArgSym >= 0) and (caArgSym < SymCount) and Syms[caArgSym].IsArray and
-       (Syms[caArgSym].ArrLen >= 0) and (Syms[caArgSym].Kind <> skParam) then
+    { Determine the static-array source (a whole 1-D static array, either a
+      simple var or a record/class field). Dynamic arrays and open-array params
+      already carry a length header and are left alone. }
+    oaEligible := False; caCount := 0; caElemTk := tyUnknown; caElemRec := REC_NONE;
+    if ASTKind[argAST] = AN_IDENT then
     begin
-      caElemTk := Syms[caArgSym].ElemType;
-      caElemRec := Syms[caArgSym].ElemRecName;
-      if (caElemTk <> tyAnsiString) and
-         not ((caElemTk = tyRecord) and RecordHasManagedFields(caElemRec)) then
+      caArgSym := ASTIVal[argAST];
+      if (caArgSym >= 0) and (caArgSym < SymCount) and Syms[caArgSym].IsArray and
+         (Syms[caArgSym].ArrLen >= 0) and (Syms[caArgSym].Kind <> skParam) and
+         (SymArrNDims[caArgSym] <= 1) then
       begin
+        caElemTk := Syms[caArgSym].ElemType;
+        caElemRec := Syms[caArgSym].ElemRecName;
         caCount := Syms[caArgSym].ArrLen;
-        if caElemTk = tyRecord then caElemSz := RecSize(caElemRec)
-        else caElemSz := TypeSize(caElemTk);
-        savedRec := LastTypeRecId;
-        if caElemTk = tyRecord then LastTypeRecId := caElemRec;
-        caSym := AllocDynArray('', caElemTk, 1);
-        LastTypeRecId := savedRec;
-        SymIsHiddenArgTemp[caSym] := True;
-        IRAppend(IR_DEFAULT_MEM,
-          IRAppend(IR_SLOTADDR, caSym, -1, -1, 0, Ord(tyPointer)),
-          -1, REC_NONE, TARGET_PTR_SIZE, Ord(tyPointer));
-        caIdent := AllocNode(AN_IDENT);
-        ASTIVal[caIdent] := caSym; ASTTk[caIdent] := Ord(tyPointer);
-        caCountLit := AllocNode(AN_INT_LIT);
-        ASTIVal[caCountLit] := caCount; ASTTk[caCountLit] := Ord(tyInteger);
-        caArg1 := AllocNode(AN_ARG); ASTLeft[caArg1] := caIdent;
-        caArg2 := AllocNode(AN_ARG); ASTLeft[caArg2] := caCountLit;
-        ASTRight[caArg1] := caArg2;
-        caSlCall := AllocNode(AN_CALL); ASTIVal[caSlCall] := -102;
-        ASTLeft[caSlCall] := caArg1;
-        value := IRLowerAST(caSlCall);
-        IRIVal[value] := 1;
-        { copy-IN: static array -> temp data }
-        IRAppend(IR_COPY_REC,
-          IRAppend(IR_LEA, caSym, -1, -1, 0, Ord(tyPointer)),
-          IRAppend(IR_LEA, caArgSym, -1, -1, 0, Ord(tyPointer)),
-          -1, caCount * caElemSz, Ord(tyRecord));
-        { register copy-OUT: temp data -> static array, after the call }
-        PendOAWBTemp[PendOAWBCount] := caSym;
-        PendOAWBDest[PendOAWBCount] := caArgSym;
-        PendOAWBSize[PendOAWBCount] := caCount * caElemSz;
-        Inc(PendOAWBCount);
-        Result := IRAppend(IR_LEA, caSym, -1, -1, 0, Ord(tyPointer));
-        Exit;
+        oaEligible := True;
       end;
+    end
+    else
+    begin
+      caRecName := ResolveNodeRec(ASTLeft[argAST]);
+      caField := GetASTIdentName(argAST);
+      if RecFieldIsArray(caRecName, caField) and
+         (RecFieldArrLen(caRecName, caField) >= 0) and
+         (RecFieldDynDepth(caRecName, caField) = 0) and
+         (RecFieldArrNDims(caRecName, caField) <= 1) then
+      begin
+        caElemTk := RecFieldType(caRecName, caField);
+        caElemRec := RecFieldRecId(caRecName, caField);
+        caCount := RecFieldArrLen(caRecName, caField);
+        oaEligible := True;
+      end;
+    end;
+    if oaEligible and (caElemTk <> tyAnsiString) and
+       not ((caElemTk = tyRecord) and RecordHasManagedFields(caElemRec)) then
+    begin
+      if caElemTk = tyRecord then caElemSz := RecSize(caElemRec)
+      else caElemSz := TypeSize(caElemTk);
+      savedRec := LastTypeRecId;
+      if caElemTk = tyRecord then LastTypeRecId := caElemRec;
+      caSym := AllocDynArray('', caElemTk, 1);
+      LastTypeRecId := savedRec;
+      SymIsHiddenArgTemp[caSym] := True;
+      IRAppend(IR_DEFAULT_MEM,
+        IRAppend(IR_SLOTADDR, caSym, -1, -1, 0, Ord(tyPointer)),
+        -1, REC_NONE, TARGET_PTR_SIZE, Ord(tyPointer));
+      caIdent := AllocNode(AN_IDENT);
+      ASTIVal[caIdent] := caSym; ASTTk[caIdent] := Ord(tyPointer);
+      caCountLit := AllocNode(AN_INT_LIT);
+      ASTIVal[caCountLit] := caCount; ASTTk[caCountLit] := Ord(tyInteger);
+      caArg1 := AllocNode(AN_ARG); ASTLeft[caArg1] := caIdent;
+      caArg2 := AllocNode(AN_ARG); ASTLeft[caArg2] := caCountLit;
+      ASTRight[caArg1] := caArg2;
+      caSlCall := AllocNode(AN_CALL); ASTIVal[caSlCall] := -102;
+      ASTLeft[caSlCall] := caArg1;
+      value := IRLowerAST(caSlCall);
+      IRIVal[value] := 1;
+      { copy-IN: static array (var or field) -> temp data }
+      IRAppend(IR_COPY_REC,
+        IRAppend(IR_LEA, caSym, -1, -1, 0, Ord(tyPointer)),
+        IRLowerAddress(argAST),
+        -1, caCount * caElemSz, Ord(tyRecord));
+      { register copy-OUT: temp data -> the argument's address, after the call.
+        The dest is the arg AST node, re-lowered (IRLowerAddress) at flush time —
+        works for both a simple var and a record/class field. }
+      PendOAWBTemp[PendOAWBCount] := caSym;
+      PendOAWBDest[PendOAWBCount] := argAST;
+      PendOAWBSize[PendOAWBCount] := caCount * caElemSz;
+      Inc(PendOAWBCount);
+      Result := IRAppend(IR_LEA, caSym, -1, -1, 0, Ord(tyPointer));
+      Exit;
     end;
   end;
   { An `array of const` literal lowers to a freshly built dyn-array of TVarRec;
@@ -2799,7 +2826,7 @@ begin
           begin
             Dec(PendOAWBCount);
             IRAppend(IR_COPY_REC,
-              IRAppend(IR_LEA, PendOAWBDest[PendOAWBCount], -1, -1, 0, Ord(tyPointer)),
+              IRLowerAddress(PendOAWBDest[PendOAWBCount]),
               IRAppend(IR_LEA, PendOAWBTemp[PendOAWBCount], -1, -1, 0, Ord(tyPointer)),
               -1, PendOAWBSize[PendOAWBCount], Ord(tyRecord));
           end;
@@ -2810,7 +2837,7 @@ begin
           begin
             Dec(PendOAWBCount);
             IRAppend(IR_COPY_REC,
-              IRAppend(IR_LEA, PendOAWBDest[PendOAWBCount], -1, -1, 0, Ord(tyPointer)),
+              IRLowerAddress(PendOAWBDest[PendOAWBCount]),
               IRAppend(IR_LEA, PendOAWBTemp[PendOAWBCount], -1, -1, 0, Ord(tyPointer)),
               -1, PendOAWBSize[PendOAWBCount], Ord(tyRecord));
           end;

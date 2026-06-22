@@ -1134,7 +1134,7 @@ var
     arg lowering. See IRLowerCallArg + the AN_CALL flush. }
   PendOAWBCount : Integer;
   PendOAWBTemp  : array[0..63] of Integer;  { hidden dyn-array temp sym }
-  PendOAWBDest  : array[0..63] of Integer;  { static-array argument sym (copy-out destination) }
+  PendOAWBDest  : array[0..63] of Integer;  { static-array argument AST node, re-lowered via IRLowerAddress for the copy-out destination (simple var or record/class field) }
   PendOAWBSize  : array[0..63] of Integer;  { byte count to copy back }
   { Marks an IR node as a statement root (its result is discarded). The top-
     level emitter only emits roots; calls whose value is consumed are emitted

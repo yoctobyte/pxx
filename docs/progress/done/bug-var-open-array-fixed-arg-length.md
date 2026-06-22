@@ -1,10 +1,11 @@
 # `var`/`out` open-array param: fixed-array argument passes a wrong length
 
 - **Type:** bug (codegen / open-array ABI)
-- **Status:** PARTIAL — simple-var (`AN_IDENT`) case FIXED 2026-06-22; static-array
-  FIELD argument (`obj.field`, e.g. synacode's `MDContext.BufAnsiChar`) remains.
+- **Status:** DONE — 2026-06-22. Simple-var and static-array-FIELD arguments both
+  fixed (copy-in / copy-out).
 - **Owner:** — (Track A)
 - **Opened:** 2026-06-22
+- **Closed:** 2026-06-22
 - **Found-by:** Synapse recon (`synacode.pas` `ArrByteToLong(var ArByte: array of
   byte; var ArLong: array of Integer)`). Independent of the capital-`array`
   keyword fix (b5c0252) that first unblocked that line.
@@ -80,3 +81,17 @@ is on the Synapse compile path ([[feature-synapse-compile-check]]).
   generalising the `AN_IDENT` branch to `AN_FIELD`. Separately, `Length`/`High`
   on a static array used DIRECTLY (not via a param) is also wrong — filed as
   [[bug-static-array-length-direct]].
+
+- 2026-06-22 — **FIELD case DONE.** Generalised the copy-in/out branch from
+  `AN_IDENT` to `AN_FIELD`: a static-array record/class field passed to a
+  `var`/`out` open-array param is copied into a header'd dyn temp and copied back
+  after the call. The copy keys off the argument's ADDRESS (`IRLowerAddress`,
+  works for var and field alike); the copy-out destination is the arg AST node,
+  re-lowered at flush time. New helpers `RecFieldArrLen` / `RecFieldArrNDims`
+  (symtab.inc) read the field's static length / dim count; dynamic-array fields
+  (`RecFieldDynDepth > 0`) and multi-dim keep the native/runtime path. Test
+  `test/test_var_open_array_field.pas` (synacode MD5 shape: read `BufByte` field,
+  write `BufLong` field), FPC objfpc oracle-matched (256 / 1284). make test +
+  cross-bootstrap byte-identical. This is synacode's exact construct — the
+  Synapse compile path no longer trips on it (next there is `Move`/`FillChar`,
+  Track B).

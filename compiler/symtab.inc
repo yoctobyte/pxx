@@ -869,6 +869,32 @@ begin
   end;
 end;
 
+function RecFieldArrLen(rec: Integer; const field: AnsiString): Integer;
+{ Element count of a static-array field (>=0); -1 for a dynamic-array field or a
+  non-array. Only user-class fields carry a recorded length; builtin records
+  return -1 (none are static-array open-array sources). }
+var fi: Integer; field2: AnsiString;
+begin
+  Result := -1; field2 := field;
+  if (rec >= REC_UCLASS_BASE) and (BuiltinRecFieldCount(rec) = 0) then
+  begin
+    fi := FindUField(rec - REC_UCLASS_BASE, field2);
+    if fi >= 0 then Result := UFldArrLen[fi];
+  end;
+end;
+
+function RecFieldArrNDims(rec: Integer; const field: AnsiString): Integer;
+{ Dimension count of an array field (1 for a 1-D array); 0 when unknown/non-array. }
+var fi: Integer; field2: AnsiString;
+begin
+  Result := 0; field2 := field;
+  if (rec >= REC_UCLASS_BASE) and (BuiltinRecFieldCount(rec) = 0) then
+  begin
+    fi := FindUField(rec - REC_UCLASS_BASE, field2);
+    if fi >= 0 then Result := UFldArrNDims[fi];
+  end;
+end;
+
 procedure BuiltinLayoutAssert(ok: Boolean; const msg: AnsiString);
 begin
   if not ok then
