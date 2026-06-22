@@ -455,6 +455,14 @@ begin
 end;
 
 function ExecutePipeline(const cmd: AnsiString; const args: array of AnsiString; var childStdinFd, childStdoutFd: Integer): Integer;
+const
+  O_CLOEXEC = 524288;   { 0o2000000 -- create the pipe fds close-on-exec so a
+                          LATER child's exec does not keep an EARLIER child's
+                          pipes open. Without this, spawning a 2nd concurrent
+                          child (e.g. audio alongside video) leaks the 1st
+                          child's stdin write-end into it, so the 1st child never
+                          sees EOF and wait() deadlocks. dup2 in the child clears
+                          CLOEXEC on the wired-up fds, so 0/1 survive the exec. }
 var
   stdinPipe: array[0..1] of Integer;
   stdoutPipe: array[0..1] of Integer;
@@ -478,7 +486,7 @@ begin
 
   if childStdinFd = -1 then
   begin
-    if PalPipe2(stdinPipe, 0) < 0 then
+    if PalPipe2(stdinPipe, O_CLOEXEC) < 0 then
     begin
       Result := -1;
       Exit;
@@ -487,7 +495,7 @@ begin
 
   if childStdoutFd = -1 then
   begin
-    if PalPipe2(stdoutPipe, 0) < 0 then
+    if PalPipe2(stdoutPipe, O_CLOEXEC) < 0 then
     begin
       if stdinPipe[0] <> -1 then
       begin
