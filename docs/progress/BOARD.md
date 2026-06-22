@@ -62,6 +62,7 @@ _none_
 | feature-real-cross-target-consistency | A | feature | Verify `real`/Double bit-consistency across targets (x87 divergence?) | — |
 | feature-release-packaging | B | feature | Release packaging, reproducibility manifest, and `release.sh` | — |
 | feature-riscv32-record-function-results | A | feature | riscv32: support record (by-value struct) function results | — |
+| feature-riscv32-var-param-forwarding | A | feature | riscv32: a var parameter forwarded to a nested var parameter loses its address | — |
 | feature-synapse-compile-check | B | feature | Synapse library — proper compile check (Track B) | feature-mimic-fpc |
 | feature-threadsafe-io-serialization | A | feature | Statement-level I/O serialization under threads | feature-unified-heap-allocator |
 | feature-toolchain-cli-ux | A | feature | Toolchain CLI / user tooling (install, config, discovery, doctor, selfcheck) | — |
@@ -330,6 +331,7 @@ _none_
 - [A] feature-real-cross-target-consistency
 - [B] feature-release-packaging
 - [A] feature-riscv32-record-function-results
+- [A] feature-riscv32-var-param-forwarding
 - [A] feature-threadsafe-io-serialization
 - [A] feature-toolchain-cli-ux
 - [B] feature-writeln-as-library

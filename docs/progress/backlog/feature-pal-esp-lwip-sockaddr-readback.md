@@ -1,9 +1,21 @@
 # PAL esp/lwIP: getsockname & recvfrom return an unfilled (zero) sockaddr
 
 - **Type:** bug (Track B PAL / ESP networking) — qemu-reproducible
-- **Status:** backlog
+- **Status:** backlog — ROOT-CAUSED, blocked-by `feature-riscv32-var-param-forwarding`
 - **Owner:** —
 - **Opened:** 2026-06-22 (found by the ESP32-C3 lwIP socket smoke under qemu)
+
+## RESOLUTION (2026-06-22): not a PAL bug
+
+Root-caused on-target to a **riscv32 compiler bug**, filed as
+`feature-riscv32-var-param-forwarding`: forwarding a `var` parameter into a
+nested routine's `var` parameter drops the write on riscv32. `PalGetSockNameIpv4`
+/ `PalRecvFromIpv4` call the shared `ParseSockAddrIpv4(@sa, outAddr, outPort)`
+with the enclosing function's `var` params, so the parsed address never reaches
+the caller. lwIP fills the sockaddr correctly (proven inline). **The PAL code is
+correct — no change here; this resolves when the compiler bug is fixed.** The
+net-c3 smoke's address read-back checks re-enable then. The analysis below is
+kept for the trail.
 
 ## Problem
 
@@ -34,18 +46,39 @@ cd examples/esp32/net-c3
 The smoke prints `PXX-net-smoke status=0` (core path) plus diagnostics
 `bound-port=0` / `peer-port=0` showing the read-back gap.
 
-## Suspects / next steps
+## Root-cause analysis (static, 2026-06-22)
 
-- `*addrlen` (socklen_t in/out) handling into `lwip_getsockname` /
-  `lwip_recvfrom`: confirm the value passed (16) and what lwIP writes back. The
-  PAL passes `@addrlen` to an `Integer` initialized to 16.
-- Whether `ParseSockAddrIpv4` reading port@2-3 / addr@4-7 matches what lwIP
-  writes (offsets are layout-invariant vs Linux, so this is unlikely, but verify
-  against a raw 16-byte dump of the returned buffer).
-- Whether IDF lwIP needs the input `from`/`name` buffer pre-tagged (sin_len /
-  family) before the call, or a CONFIG_LWIP_* option, to populate the output.
-- This is fully qemu-reproducible (no hardware needed) via the net-c3 smoke, so
-  it can be root-caused on host.
+Read the IDF lwIP source — the layout/parse side is ruled out:
+
+- `struct sockaddr_in` (lwip/sockets.h): `sin_len`@0, `sin_family`@1 (both
+  `u8_t`), `sin_port`@2, `sin_addr`@4 — exactly what `ParseSockAddrIpv4` reads,
+  and what the now-fixed `FillSockAddrIpv4` writes (proven by delivery). So parse
+  offsets are correct.
+- `socklen_t` is `u32_t` (4 bytes) = the PAL's `Integer`. Signature match.
+- `lwip_getaddrname()` always calls `netconn_getaddr` then
+  `if (*namelen > GET_LEN) *namelen = GET_LEN; MEMCPY(name, &saddr, *namelen);`
+  — no input-length gate that would zero a valid request. `lwip_recvfrom`'s
+  `from` fill is the same shape.
+
+So an **all-zero** output means lwIP copied **0 bytes**, i.e. it read
+`*namelen == 0` on entry — even though the PAL sets `addrlen := 16` before the
+call.
+
+Prime suspect: **riscv32 codegen of `@<scalar-local>` passed to an external**.
+Note the asymmetry in the same call: `@sa[0]` (address of a local *array*
+element, the `from` buffer) reaches lwIP correctly — the payload is received —
+but `@addrlen` (address of a local *scalar* `Integer`) appears to arrive as a
+pointer to 0 / wrong slot. If confirmed this is a **Track A riscv32 compiler
+bug**, not an esp PAL defect, and the PAL code stays as-is (clean scalar `@`).
+
+Cheap discriminator (one qemu cycle, throwaway — do NOT commit a workaround):
+in an isolated esp program call `lwip_getsockname` with `addrlen` as a scalar
+local vs as `array[0..0] of Integer` element. If the array form fills correctly
+and the scalar does not, file the riscv32 `@scalar-local` compiler bug and keep
+the PAL on the clean scalar form (blocked on the compiler fix). If both fail,
+the cause is lwIP/config and stays here.
+
+All qemu-reproducible (no hardware) via the net-c3 smoke.
 
 ## Acceptance
 
