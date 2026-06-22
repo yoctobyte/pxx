@@ -1,7 +1,7 @@
 # `{$LAZYCASING ON/OFF}` for C imports only
 
 - **Type:** feature
-- **Status:** backlog
+- **Status:** done
 - **Owner:** —
 - **Blocked-by:** feature-compiler-warnings
 - **Opened:** 2026-06-06 (from todo.md §4)
@@ -28,3 +28,4 @@ case rules unaffected.
 
 ## Log
 - 2026-06-06 — ticket opened from todo.md §4.
+- 2026-06-22 — resolved, commit a9251ff.
