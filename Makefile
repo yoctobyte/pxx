@@ -2113,6 +2113,10 @@ lib-test: pxx-stable-check
 	test "$$(/tmp/lib_dns_tcp)" = "$$(printf 'rcode=0\ncount=2\ntcp-fallback=ok')"
 	$(PXX_STABLE) -Fulib/rtl/platform/posix test/lib_dns_multins.pas /tmp/lib_dns_multins
 	test "$$(/tmp/lib_dns_multins)" = "$$(printf 'rcode=0\ncount=2\nmultins=ok')"
+	$(PXX_STABLE) test/lib_dns_buildguard.pas /tmp/lib_dns_buildguard
+	test "$$(/tmp/lib_dns_buildguard)" = "$$(printf 'toolong=ok\nno-overflow=ok\nbiglabel=ok\nemptylabel=ok\ntinybuf=ok\nfits=ok')"
+	$(PXX_STABLE) test/lib_dns_parsefuzz.pas /tmp/lib_dns_parsefuzz
+	test "$$(/tmp/lib_dns_parsefuzz)" = "$$(printf 'empty=ok\nshort-header=ok\nrunaway-name=ok\ntruncated-rr=ok\nan-lie=ok\nhuge-rdlen=ok\nreserved-label=ok\nmany-a-rcode=ok\nmany-a-cap=ok\ndone')"
 	@if command -v qemu-aarch64 >/dev/null 2>&1 && command -v qemu-arm >/dev/null 2>&1; then \
 	  echo "=== lib-test cross: PAL net primitives under qemu-user (i386/aarch64/arm32) ==="; \
 	  for arch in i386 aarch64 arm32; do \

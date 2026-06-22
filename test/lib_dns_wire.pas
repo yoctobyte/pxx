@@ -18,7 +18,7 @@ end;
 
 begin
   { ---- encode: A query for example.com, id 0x1234 ---- }
-  qlen := DnsBuildQueryA('example.com', $1234, @q[0]);
+  qlen := DnsBuildQueryA('example.com', $1234, @q[0], 512);
   writeln('qlen=', qlen);
   Show('qhdr', (q[0] = $12) and (q[1] = $34) and (q[2] = $01) and
     (q[3] = $00) and (q[4] = $00) and (q[5] = $01));

@@ -146,7 +146,7 @@ var
 begin
   count := 0;
   queryId := NextQueryId;
-  qlen := DnsBuildQueryA(name, queryId, @qbuf[0]);
+  qlen := DnsBuildQueryA(name, queryId, @qbuf[0], 512);
   if qlen < 0 then
   begin
     DnsResolveA := qlen;

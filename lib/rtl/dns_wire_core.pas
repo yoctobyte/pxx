@@ -19,14 +19,16 @@ const
   { Negative parse results (distinct from a DNS RCODE, which is 0..15). }
   DNS_ERR_SHORT     = -1;   { packet truncated / ran off the end }
   DNS_ERR_MALFORMED = -2;   { bad label / pointer }
+  DNS_ERR_TOOLONG   = -6;   { encoded query would not fit in bufLen }
 
 type
   TDnsIpv4Array = array[0..DNS_MAX_IPS - 1] of LongWord;
 
-{ Encode a recursive A query for `name` into buf. buf must hold at least
-  12 + Length(name) + 2 + 5 bytes (<= 512 for any legal name). Returns the
-  packet length, or DNS_ERR_MALFORMED if a label is empty or > 63 bytes. }
-function DnsBuildQueryA(const name: string; queryId: Integer; buf: Pointer): Integer;
+{ Encode a recursive A query for `name` into buf[0..bufLen-1]. Returns the packet
+  length, DNS_ERR_MALFORMED if a label is empty or > 63 bytes, or DNS_ERR_TOOLONG
+  if the encoding would exceed bufLen (the write is bounded — it never runs past
+  bufLen). }
+function DnsBuildQueryA(const name: string; queryId: Integer; buf: Pointer; bufLen: Integer): Integer;
 
 { Parse a DNS response in buf[0..len-1]. On success returns the DNS RCODE
   (0 = NOERROR) and fills ips[0..count-1] with the A addresses (host byte
@@ -88,16 +90,22 @@ begin
   SkipName := DNS_ERR_SHORT;
 end;
 
-{ Write the label s[a..b] (1-based, inclusive) at pos; returns the new position,
-  or DNS_ERR_MALFORMED on an empty / over-long label. Top-level (not nested) so
-  it does not reach into an enclosing scope. }
-function WriteLabel(buf: Pointer; pos: Integer; const s: string; a, b: Integer): Integer;
+{ Write the label s[a..b] (1-based, inclusive) at pos, never past bufLen.
+  Returns the new position, DNS_ERR_MALFORMED on an empty / over-long label, or
+  DNS_ERR_TOOLONG if it would not fit. Top-level (not nested) so it does not
+  reach into an enclosing scope. }
+function WriteLabel(buf: Pointer; pos, bufLen: Integer; const s: string; a, b: Integer): Integer;
 var len2, j: Integer;
 begin
   len2 := b - a + 1;
   if (len2 <= 0) or (len2 > 63) then
   begin
     WriteLabel := DNS_ERR_MALFORMED;
+    Exit;
+  end;
+  if pos + 1 + len2 > bufLen then
+  begin
+    WriteLabel := DNS_ERR_TOOLONG;
     Exit;
   end;
   SetByteAt(buf, pos, len2);
@@ -110,10 +118,16 @@ begin
   WriteLabel := pos;
 end;
 
-function DnsBuildQueryA(const name: string; queryId: Integer; buf: Pointer): Integer;
+function DnsBuildQueryA(const name: string; queryId: Integer; buf: Pointer; bufLen: Integer): Integer;
 var
   pos, i, labelStart: Integer;
 begin
+  { 12-byte header + at least the root label + QTYPE/QCLASS (5). }
+  if bufLen < 17 then
+  begin
+    DnsBuildQueryA := DNS_ERR_TOOLONG;
+    Exit;
+  end;
   { Header: ID, flags (RD), QDCOUNT=1, AN/NS/AR = 0. }
   SetByteAt(buf, 0, (queryId shr 8) and $FF);
   SetByteAt(buf, 1, queryId and $FF);
@@ -130,10 +144,10 @@ begin
   begin
     if name[i] = '.' then
     begin
-      pos := WriteLabel(buf, pos, name, labelStart, i - 1);
+      pos := WriteLabel(buf, pos, bufLen, name, labelStart, i - 1);
       if pos < 0 then
       begin
-        DnsBuildQueryA := DNS_ERR_MALFORMED;
+        DnsBuildQueryA := pos;   { propagate MALFORMED / TOOLONG }
         Exit;
       end;
       labelStart := i + 1;
@@ -141,12 +155,18 @@ begin
   end;
   if labelStart <= Length(name) then
   begin
-    pos := WriteLabel(buf, pos, name, labelStart, Length(name));
+    pos := WriteLabel(buf, pos, bufLen, name, labelStart, Length(name));
     if pos < 0 then
     begin
-      DnsBuildQueryA := DNS_ERR_MALFORMED;
+      DnsBuildQueryA := pos;
       Exit;
     end;
+  end;
+  { root terminator + QTYPE + QCLASS = 5 bytes. }
+  if pos + 5 > bufLen then
+  begin
+    DnsBuildQueryA := DNS_ERR_TOOLONG;
+    Exit;
   end;
   SetByteAt(buf, pos, 0);
   pos := pos + 1;
