@@ -2049,8 +2049,32 @@ lib-test: pxx-stable-check
 	test "$$(/tmp/lib_platform_net_sockopt)" = "$$(printf 'name=ok\naccept-peer=ok\nsockerr=ok\nunsupported=-38')"
 	$(PXX_STABLE) -Fulib/rtl/platform/posix test/lib_net.pas /tmp/lib_net
 	test "$$(/tmp/lib_net)" = "$$(printf 'bound=ok\npeer=ok\ntcp=ok\nudp=ok')"
+	@if command -v qemu-aarch64 >/dev/null 2>&1 && command -v qemu-arm >/dev/null 2>&1; then \
+	  echo "=== lib-test cross: PAL net primitives under qemu-user (i386/aarch64/arm32) ==="; \
+	  for arch in i386 aarch64 arm32; do \
+	    $(PXX_STABLE) --target=$$arch -Fulib/rtl/platform/posix test/lib_net.pas /tmp/lib_net_$$arch >/dev/null; \
+	    test "$$(tools/run_target.sh $$arch /tmp/lib_net_$$arch)" = "$$(printf 'bound=ok\npeer=ok\ntcp=ok\nudp=ok')" || { echo "cross lib_net FAIL on $$arch"; exit 1; }; \
+	    $(PXX_STABLE) --target=$$arch -Fulib/rtl/platform/posix test/lib_platform_net_udp.pas /tmp/lib_udp_$$arch >/dev/null; \
+	    test "$$(tools/run_target.sh $$arch /tmp/lib_udp_$$arch)" = "$$(printf 'poll=ok\nrecv=ok\npeer=ok\necho=ok\nunsupported=-38')" || { echo "cross udp FAIL on $$arch"; exit 1; }; \
+	    $(PXX_STABLE) --target=$$arch -Fulib/rtl/platform/posix test/lib_platform_net_sockopt.pas /tmp/lib_so_$$arch >/dev/null; \
+	    test "$$(tools/run_target.sh $$arch /tmp/lib_so_$$arch)" = "$$(printf 'name=ok\naccept-peer=ok\nsockerr=ok\nunsupported=-38')" || { echo "cross sockopt FAIL on $$arch"; exit 1; }; \
+	    echo "cross net ok: $$arch"; \
+	  done; \
+	else \
+	  echo "=== lib-test cross: qemu-user not present, skipping cross-arch PAL net ==="; \
+	fi
 	$(PXX_STABLE) --platform=esp -Fulib/rtl/platform/esp test/lib_platform_esp.pas /tmp/lib_platform_esp
 	test "$$(/tmp/lib_platform_esp)" = "$$(printf 'esp-idf\nopen=-38\nread=-38\nseek=-38\nflush=-38\ndelete=-38\nrename=-38\nmkdir=-38\nrmdir=-38\nsocket=-38\nreuse=-38\nnonblock=-38\nbind=-38\nconnect=-38\nlisten=-38\naccept=-38\nrecv=-38\nsend=-38\nshutdown=-38\nsockclose=-38\nsendto=-38\nrecvfrom=-38\npoll=-38\nsockerr=-38\nsockname=-38\nacceptip=-38\nunsupported=-38')"
+	@if command -v readelf >/dev/null 2>&1; then \
+	  echo "=== lib-test: esp32c3 (riscv32) PAL object imports lwIP socket symbols ==="; \
+	  $(PXX_STABLE) --target=riscv32 -Fulib/rtl/platform/esp test/lib_platform_esp.pas /tmp/lib_esp_rv.o >/dev/null; \
+	  for sym in lwip_socket lwip_sendto lwip_recvfrom lwip_poll lwip_getsockopt lwip_getsockname; do \
+	    readelf -s /tmp/lib_esp_rv.o | grep -q "UND $$sym" || { echo "esp32c3 object missing import: $$sym"; exit 1; }; \
+	  done; \
+	  echo "esp32c3 lwIP imports ok"; \
+	else \
+	  echo "=== lib-test: readelf absent, skipping esp32c3 object lwIP smoke ==="; \
+	fi
 	$(PXX_STABLE) -Fulib/rtl/platform/posix test/lib_textfile.pas /tmp/lib_textfile
 	test "$$(/tmp/lib_textfile)" = "$$(printf 'alpha\nbeta\ncount=2\nio=0')"
 	$(PXX_STABLE) -Fulib/rtl/platform/posix test/lib_directory.pas /tmp/lib_directory

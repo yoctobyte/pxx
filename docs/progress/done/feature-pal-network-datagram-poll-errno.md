@@ -56,7 +56,14 @@ Missing surface that should be added deliberately:
     `lib_platform_esp`).
   - Verified by `test/lib_platform_net_udp.pas` (loopback UDP echo + poll
     readiness + peer-addr check) wired into `make lib-test`; full gate green.
-  - Deferred (not host-validatable here): ESP-IDF link/run smoke on C3/S3 =
-    Track A (hardware); IPv6 + DNS/resolver hooks tracked by
-    `feature-networking` / `feature-dns-resolver-library`.
   - Landed in commit `db1d3e1`.
+  - 2026-06-22 follow-up: the per-arch syscall numbers (sendto/recvfrom/ppoll,
+    i386 socketcall) are NO LONGER deferred — validated on **i386, aarch64,
+    arm32 under qemu-user** (`tools/run_target.sh`), now a qemu-guarded cross
+    block in `make lib-test`. This is Track-B-runnable; earlier "cross = Track A"
+    note was wrong (qemu-user is available here). riscv32 has no POSIX SYS_*
+    table (it is the ESP target, served by the esp backend) — expected, not a
+    gap. Still genuinely deferred: ESP-IDF lwIP **run** smoke on C3/S3 (needs an
+    IDF app with network-interface bring-up under the Espressif qemu-system fork,
+    not qemu-user); IPv6 + DNS hooks tracked by `feature-networking` /
+    `feature-dns-resolver-library`.
