@@ -21,6 +21,16 @@ const EPS: Double = 0.001;  { PXX: OK }
 Likely the untyped-const path doesn't accept a real literal (only integer/char/
 string), or const-expr eval lacks float. FPC infers a real-typed const.
 
+Also fails: a **negative** value in a *typed* float const (positive is fine):
+
+```pascal
+const A: Double = 1.0;    { OK }
+const A: Double = -2.5;   { PXX: rejected }   { unary minus in const float init }
+```
+
+So const float-expression evaluation is missing both untyped-real inference and
+unary minus on a real literal. Mixing typed + untyped consts in one block is fine.
+
 ## Second, related front-end gap (same area)
 
 A **value typecast to a float type** isn't parsed as an expression:

@@ -64,3 +64,15 @@ portable Pascal kernel until their asm surfaces are mature enough.
 - 2026-06-22 — Opened on user request: zoomable Mandelbrot application, no
   OpenGL yet, with optional math-library dependency and an expected native
   assembler optimization path starting on the host platform.
+- 2026-06-22 — **Partial (Track B):** static ASCII render + deterministic
+  smoke-mode landed — `examples/mandelbrot/mandelbrot.pas`: portable Pascal Double
+  kernel (escape-time), 70x32 grid over the canonical window, and the acceptance
+  "deterministic smoke mode + stable hash" via an integer escape-count CHECKSUM
+  (3745966 on x86-64, FPC-confirmed). Wired into `make lib-test` + `make demos`.
+  Doubles as the strict float cross-target probe (see
+  feature-real-cross-target-consistency) — the checksum must match on every target
+  (strict IEEE-754 Double is deterministic; a mismatch is a bug).
+  **Still open** (keeps this in backlog): interactive pan/zoom explorer, the
+  kernel-abstraction (fixed-point + native x86-64 asm kernels), and perf/benchmark
+  output. Gap found + filed: bug-untyped-float-const (untyped + negative float
+  consts rejected; worked around with locals).

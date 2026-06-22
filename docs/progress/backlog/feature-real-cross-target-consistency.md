@@ -8,26 +8,29 @@
 
 ## Goal
 
-Determine whether the pure-Pascal float math (`lib/rtl/math.pas`) and the `real`/
-`Double` type produce **bit-identical** results across all targets, or whether
-some targets diverge (notably **i386 x87** may keep 80-bit intermediates vs
-x86-64 SSE2 strict 64-bit). This is the "does `real` behave across platforms"
-question.
+Confirm the pure-Pascal float math (`lib/rtl/math.pas`) and the `real`/`Double`
+type produce **bit-identical** results across all targets. Strict IEEE-754 Double
+is deterministic on modern CPUs (x86-64 SSE2, AArch64/ARM VFP) and software float
+emulation, so the results **should match exactly** — a mismatch is a BUG, not
+expected divergence. Suspects if any target drifts: legacy **i386 x87** 80-bit
+intermediates, or non-strict FMA contraction. (Earlier framing of "floats vary,
+use tolerance" was wrong — corrected: identical width ⇒ identical result.)
 
 ## How
 
-Run `examples/mathf/mathdemo.pas` on each target under qemu:
-`make test-i386 / test-aarch64 / test-arm32` machinery (Track A's gate). The
-oracle is tolerance-based so it should print `ALL OK` everywhere even with small
-divergence; to measure *exact* divergence, add a variant that prints a few raw
-`writeln(x)` values and diff across targets.
+Best exact probe: **`examples/mandelbrot/mandelbrot.pas`** — its integer
+escape-count CHECKSUM (`3745966` on x86-64, FPC-confirmed) must be identical on
+every target. Run it under qemu on i386/aarch64/arm32 and diff the checksum. Any
+difference localises a float-determinism bug. (`examples/mathf/mathdemo.pas` also
+runs everywhere; it uses tolerance, so it's a weaker probe — the mandelbrot
+checksum is the strict one.)
 
 ## Expected / deliverable
 
-- If x86-64/aarch64/arm32/riscv all match and only i386 (x87) drifts: document it,
-  decide whether to force SSE/strict-double on i386 or accept tolerance-only
-  determinism for floats.
-- Update the determinism note in the math demo / a docs page with findings.
+- All targets produce checksum `3745966`. If one diverges (likely i386 x87),
+  that's a bug to fix (force strict SSE/64-bit, disable 80-bit intermediates /
+  FMA contraction), not something to paper over with tolerance.
+- Record findings; if all match, this closes as "float determinism verified".
 
 ## Context
 
