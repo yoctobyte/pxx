@@ -87,10 +87,15 @@ the compiler. Selection criteria, in order:
   wasps' nest. Out.
 - **Regex engine (NFA/DFA)** — the canonical "just use a library" problem; wrong
   flagship message. Possible small unit test only. Out as flagship.
-- **Ray tracer** — float-heavy (cross-target byte-divergence risk weakens the
-  oracle) + visual "please-user" output + ESP32 framebuffer RAM pressure. Out.
-- **Mandelbrot / fractal** — visual output, float-determinism caveat, shallow
-  language coverage. Out (at best a secondary float toy, not flagship).
+- **Ray tracer** — originally rejected as a flagship oracle: float-heavy
+  (cross-target byte-divergence risk), visual output, and ESP32 framebuffer RAM
+  pressure. Later accepted by explicit user request as a secondary visual
+  compute demo. → **demo ticket:** feature-demo-raytracer.
+- **Mandelbrot / fractal** — originally rejected as a flagship oracle: visual
+  output, float-determinism caveat, and shallow language coverage. Later
+  accepted by explicit user request as a secondary visual/optimization demo,
+  including a likely native asm kernel. → **demo ticket:**
+  feature-demo-mandelbrot.
 - **Chiptune / synth (integer DSP)** — audio output = "please-user" category;
   narrow coverage (mostly arrays + arithmetic). NOTE: classic chiptune = simple
   oscillators (square/tri/saw) + envelopes, NOT necessarily FM; FM (OPL/SID-style

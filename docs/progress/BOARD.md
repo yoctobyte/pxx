@@ -16,7 +16,7 @@ _none_
 
 _none_
 
-## backlog (63)
+## backlog (65)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -37,6 +37,8 @@ _none_
 | feature-demo-chess | B | feature | Flagship demo — chess engine (real-world app + cross-target oracle + benchmark) | — |
 | feature-demo-gui-solitaire | B | feature | Demo — GUI Patience / Solitaire | — |
 | feature-demo-lisp | B | feature | Demo — Lisp / Scheme interpreter | — |
+| feature-demo-mandelbrot | B | feature | Demo — zoomable Mandelbrot explorer | — |
+| feature-demo-raytracer | B | feature | Demo — CPU ray tracer | — |
 | feature-demo-solitaire | B | feature | Demo — console Klondike solitaire (user-requested entertainment test app) | — |
 | feature-demo-video-player-audio-sync | B | feature | Video player audio playback and sync | — |
 | feature-dns-resolver-library | B | feature | DNS resolver library (`dns.pas`) with selectable backends | — |
@@ -91,7 +93,7 @@ _none_
 | feature-c-runtime-library | B | feature | C runtime/library layer (`lib/crtl`) plus direct C-library packages | feature-c-source-frontend |
 | feature-demo-vm | B | feature | Demo — bytecode VM + assembler (small ISA) | bug-setlength-ir-string-in-complex-method |
 
-## done (161)
+## done (162)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -285,6 +287,8 @@ _none_
 - [B] feature-demo-chess
 - [B] feature-demo-gui-solitaire
 - [B] feature-demo-lisp
+- [B] feature-demo-mandelbrot
+- [B] feature-demo-raytracer
 - [B] feature-demo-solitaire
 - [B] feature-demo-video-player-audio-sync
 - [B] feature-dns-resolver-library
