@@ -137,6 +137,13 @@ the user's repo workflow). To avoid clobbering each other:
   work into your push — push only what you committed (`git commit -- <paths>`).
 - **`git log --oneline -5` at session start** to see what the other track just
   landed (e.g. a new stable `vN`, a freshly closed ticket).
+- **`BOARD.md` never conflicts.** It is generated from the ticket files and both
+  agents regenerate it constantly, so it carries a `merge=ours` attribute
+  (`.gitattributes`) — git keeps the current side on a merge/rebase instead of
+  raising a conflict, and the content self-heals on the next `tools/progress.sh
+  board-md`. This needs a **one-time per-checkout** config (not committable):
+  `git config merge.ours.driver true`. Run it once if you ever see a BOARD.md
+  conflict; then just regenerate the board before pushing.
 - B never needs to rebuild the compiler; A's in-progress `compiler/pascal26` is
   irrelevant to B because B uses `$(PXX_STABLE)`. So a half-built compiler binary
   in the tree does not block B.

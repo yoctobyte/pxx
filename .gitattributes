@@ -7,6 +7,14 @@
 # NOTE: git archive reads the .gitattributes of the tree being archived, so this
 # file must exist in the tagged commit to take effect.
 
+# BOARD.md is fully generated from the ticket files (tools/progress.sh board-md)
+# and both parallel agents regenerate it constantly, so a merge/rebase "both
+# modified BOARD.md" is pure noise. The `ours` merge driver keeps the current
+# side instead of conflicting; the content self-heals the next time the board is
+# regenerated. One-time local setup (per checkout, not committable):
+#     git config merge.ours.driver true
+docs/progress/BOARD.md merge=ours
+
 docs/progress/        export-ignore
 docs/dev/             export-ignore
 docs/developer/       export-ignore
