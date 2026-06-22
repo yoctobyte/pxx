@@ -35,3 +35,9 @@ Build/test against the present v35 binary explicitly:
 
 ## Log
 - 2026-06-22 — Filed by Track B. v35 binary present + green; v36 binary absent.
+
+## Resolved
+
+Track A pushed the missing binary in `d37d9fb` ("chore(stable): add missing v36
+binary (pinned symlink was dangling)"). `pinned -> v36` now resolves; `make
+lib-test` green on v36. Closed.
