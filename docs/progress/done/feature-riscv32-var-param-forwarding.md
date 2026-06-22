@@ -85,7 +85,7 @@ PAL code is idiomatic and correct; the fix is in the backend.
 
 ## Fix log
 
-- 2026-06-22 — **FIXED on riscv32 AND xtensa.** Root cause (found via disasm under
+- 2026-06-22 — **FIXED on riscv32 AND xtensa** (f67fad2). Root cause (found via disasm under
   the Espressif qemu-system harness): `IR_LEA` of a `var`/`out` SCALAR param
   returned the local slot ADDRESS (`&slot`), not the forwarded caller pointer
   (`[slot]`). `EmitSlotAddrRISCV32` / `EmitSlotAddrXtensa` (the scalar slot-addr
