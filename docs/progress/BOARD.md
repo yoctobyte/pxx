@@ -22,10 +22,11 @@ _none_
 | --- | --- | --- | --- | --- |
 | feature-c-runtime-library | B | feature | C runtime/library layer (`lib/crtl`) plus direct C-library packages | feature-c-source-frontend |
 
-## backlog (40)
+## backlog (41)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
+| bug-procedure-typed-procvalue | A | bug | `@Proc` / proc-value of a `procedure`-typed routine rejected ("unexpected token") | — |
 | chore-inc-to-units | A | chore | `.inc` → real `.pas` units refactor | — |
 | chore-runtime-emission-size | A | chore | Finer runtime-support emission (code size) | — |
 | feature-c-header-import-complex | A | feature | Import C headers for complex libraries (glib/GTK-grade) | — |
@@ -289,6 +290,7 @@ _none_
 
 ## Ready (no unmet blocker)
 
+- [A] bug-procedure-typed-procvalue
 - [A] chore-inc-to-units
 - [A] chore-runtime-emission-size
 - [A] feature-c-header-import-complex
