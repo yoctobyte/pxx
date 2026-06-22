@@ -59,7 +59,7 @@ const
   SYS_unlinkat = 263; SYS_renameat = 264;
   SYS_socket=41; SYS_connect=42; SYS_accept4=288; SYS_bind=49; SYS_listen=50;
   SYS_setsockopt=54; SYS_shutdown=48; SYS_fcntl=72;
-  SYS_vfork = 58; SYS_execve = 59; SYS_pipe2 = 293; SYS_dup2 = 33; SYS_wait4 = 61; SYS_kill = 62;
+  SYS_vfork = 58; SYS_fork = 57; SYS_execve = 59; SYS_pipe2 = 293; SYS_dup2 = 33; SYS_wait4 = 61; SYS_kill = 62;
   SYS_clock_gettime = 228;
 {$endif}
 {$ifdef CPU_I386}
@@ -69,7 +69,7 @@ const
   SYS_socketcall=102; SYS_fcntl=55;
   SC_SOCKET=1; SC_BIND=2; SC_CONNECT=3; SC_LISTEN=4; SC_ACCEPT4=18;
   SC_SETSOCKOPT=14; SC_SHUTDOWN=13;
-  SYS_vfork = 190; SYS_execve = 11; SYS_pipe2 = 331; SYS_dup2 = 63; SYS_wait4 = 114; SYS_kill = 37;
+  SYS_vfork = 190; SYS_fork = 2; SYS_execve = 11; SYS_pipe2 = 331; SYS_dup2 = 63; SYS_wait4 = 114; SYS_kill = 37;
   SYS_clock_gettime = 265;
 {$endif}
 {$ifdef CPU_AARCH64}
@@ -87,7 +87,7 @@ const
   SYS_unlinkat = 328; SYS_renameat = 329;
   SYS_socket=281; SYS_connect=283; SYS_accept4=366; SYS_bind=282; SYS_listen=284;
   SYS_setsockopt=294; SYS_shutdown=293; SYS_fcntl=55;
-  SYS_vfork = 190; SYS_execve = 11; SYS_pipe2 = 359; SYS_dup2 = 63; SYS_wait4 = 114; SYS_kill = 37;
+  SYS_vfork = 190; SYS_fork = 2; SYS_execve = 11; SYS_pipe2 = 359; SYS_dup2 = 63; SYS_wait4 = 114; SYS_kill = 37;
   SYS_clock_gettime = 263;
 {$endif}
   PAL_AT_FDCWD = -100;
@@ -382,9 +382,9 @@ end;
 function PalBackendVfork: Integer;
 begin
 {$ifdef CPU_AARCH64}
-  Result := Integer(__pxxrawsyscall(SYS_clone, $4111, 0, 0, 0, 0, 0)); { CLONE_VM | CLONE_VFORK | SIGCHLD }
+  Result := Integer(__pxxrawsyscall(SYS_clone, $11, 0, 0, 0, 0, 0)); { SIGCHLD only -> fork (own COW address space) }
 {$else}
-  Result := Integer(__pxxrawsyscall(SYS_vfork, 0, 0, 0, 0, 0, 0));
+  Result := Integer(__pxxrawsyscall(SYS_fork, 0, 0, 0, 0, 0, 0));
 {$endif}
 end;
 
@@ -422,10 +422,13 @@ var
   pid: Integer;
   res: Integer;
 begin
+{ Real fork (not vfork): the child gets its own copy-on-write address space, so
+  it can safely run this Pascal child path (dup2/close/execve) without clobbering
+  the parent's stack -- the shared-VM vfork hazard the ticket warned about. }
 {$ifdef CPU_AARCH64}
-  pid := Integer(__pxxrawsyscall(SYS_clone, $4111, 0, 0, 0, 0, 0)); { CLONE_VM | CLONE_VFORK | SIGCHLD }
+  pid := Integer(__pxxrawsyscall(SYS_clone, $11, 0, 0, 0, 0, 0)); { SIGCHLD only -> fork }
 {$else}
-  pid := Integer(__pxxrawsyscall(SYS_vfork, 0, 0, 0, 0, 0, 0));
+  pid := Integer(__pxxrawsyscall(SYS_fork, 0, 0, 0, 0, 0, 0));
 {$endif}
 
   if pid = 0 then
