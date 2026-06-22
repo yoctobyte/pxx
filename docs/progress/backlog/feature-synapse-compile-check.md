@@ -78,8 +78,35 @@ FPC path. First blocker per unit:
      primitives absent (RTL — Track B; provide in `lib/rtl`, or as compiler
      builtins).
 
-Track A spinoff filed: [[bug-var-open-array-fixed-arg-length]] (a `var array of
-T` param gets a wrong length from a fixed-array argument — on `synacode`'s path).
+Track A spinoff filed + FIXED: [[bug-var-open-array-fixed-arg-length]] (a `var
+array of T` param got a wrong length from a static-array argument — var and
+field, on `synacode`'s `ArrByteToLong`/MD5 path); also
+[[bug-static-array-length-direct]] (1-D).
 
-**Track B next:** provide `unixutil`, `dynlibs`, and `Move`/`FillChar` (System
-surface). These are the gating RTL units before the leaf protocol units compile.
+### Re-probe 2026-06-22 (after the Track A fixes) — Track A blockers CLEARED
+
+Same leaf sweep with `--mimic-fpc` after the capital-`array` keyword fix
+(b5c0252) and the var-open-array fixes. **Every remaining first-blocker is now
+RTL** (no parse/codegen/dialect gap surfaces):
+
+- `synautil` / `synaip` / `asn1util` / `synachar` → `uses` unit not found:
+  **`unixutil`**.
+- `synsock` / `blcksock` / `mimepart` / `mimemess` / `smtpsend` / `httpsend` /
+  `ftpsend` → `uses` unit not found: **`dynlibs`**.
+- `synacode` → `undefined variable (Move)` (its `uses` is satisfiable; stops on
+  the **`Move`** System primitive). `FillChar` is the sibling.
+
+So the Track A (compiler) side of the Synapse path is, for the leaf set, done for
+now. The compiler no longer trips on Synapse dialect/parse/codegen.
+
+**Track B next (RTL breadth, the gating units):**
+1. `unixutil` — small POSIX util shim unit.
+2. `dynlibs` — `LoadLibrary`/`GetProcAddress`/`UnloadLibrary` over the PAL
+   dynlib surface (PXX_HAS_DYNLIB).
+3. `Move` / `FillChar` — System memory primitives, auto-available without `uses`
+   (compiler builtins, or an always-loaded RTL surface). NOTE: this one is a
+   track-boundary call — if delivered as compiler intrinsics it is Track A; as an
+   always-loaded RTL unit it is Track B. Decide before starting.
+
+Once these land, re-run and record the next class (expected: `Classes`/`SysUtils`
+surface depth).
