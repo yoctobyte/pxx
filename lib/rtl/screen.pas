@@ -283,14 +283,14 @@ end;
 
 procedure ScreenRefresh;
 begin
-  Write(ScreenRender);
+  AnsiWrite(ScreenRender);
 end;
 
 procedure ScreenStart;
 begin
   AnsiSetRawMode(True);
-  Write(AnsiAltScreen(True));
-  Write(AnsiHideCursor);
+  AnsiWrite(AnsiAltScreen(True));
+  AnsiWrite(AnsiHideCursor);
   ScreenInit;          { size to the real terminal + alloc buffers }
   ScreenClear;
   ScreenRefresh;       { blank the alternate screen }
@@ -298,8 +298,8 @@ end;
 
 procedure ScreenEnd;
 begin
-  Write(AnsiShowCursor);
-  Write(AnsiAltScreen(False));
+  AnsiWrite(AnsiShowCursor);
+  AnsiWrite(AnsiAltScreen(False));
   AnsiSetRawMode(False);
 end;
 

@@ -21,6 +21,9 @@ function AnsiAltScreen(enable: Boolean): AnsiString;
 function TerminalSize(var cols, rows: Integer): Boolean;
 procedure AnsiSetRawMode(enable: Boolean);
 function AnsiReadKey: Char;
+{ Unbuffered write of s to stdout (raw syscall) — a TUI must not wait on Pascal's
+  output buffering to flush, so the screen manager renders through this. }
+procedure AnsiWrite(const s: AnsiString);
 
 implementation
 
@@ -142,6 +145,32 @@ begin
   {$ifdef CPUX86_64}
     Result := 72;
   {$endif}
+end;
+
+function GetSysWrite: Integer;
+begin
+  Result := -1;
+  {$ifdef CPU_I386}
+    Result := 4;
+  {$endif}
+  {$ifdef CPU_AARCH64}
+    Result := 64;
+  {$endif}
+  {$ifdef CPU_ARM32}
+    Result := 4;
+  {$endif}
+  {$ifdef CPUX86_64}
+    Result := 1;
+  {$endif}
+end;
+
+procedure AnsiWrite(const s: AnsiString);
+var w: Integer; res: Int64;
+begin
+  if Length(s) = 0 then Exit;
+  w := GetSysWrite;
+  if w = -1 then Exit;
+  res := __pxxrawsyscall(w, 1, Int64(@s[1]), Length(s), 0, 0, 0);   { fd 1 = stdout }
 end;
 
 type
