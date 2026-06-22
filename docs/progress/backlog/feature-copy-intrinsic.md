@@ -113,3 +113,10 @@ dynarray Copy), and string-family overloads for ShortString/UnicodeString.
   (ShortString/Unicode if/when added); dynamic-array `Delete`/`Insert`; by-type
   call-site resolution polish. (2-arg `Copy(s,i)` and dynarray `Copy` already
   work.)
+
+- 2026-06-22 — **`Concat` DONE.** `Concat(s1, ..., sn)` folds at parse time
+  (ParseFactor) to chained string `+`, reusing the working concat codegen; no
+  `uses`, a user `Concat` shadows it. Test `test/test_concat_intrinsic.pas`,
+  FPC-matched. **REMAINING:** string `Copy` family overloads (ShortString/Unicode
+  if/when added); dynamic-array `Delete`/`Insert`. The common string-mutator set
+  (Copy 2-arg, dynarray Copy, Delete, Insert, Concat) is now complete.

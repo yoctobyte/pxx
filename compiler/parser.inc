@@ -3396,6 +3396,28 @@ begin
         Exit;
       end;
 
+      { Concat(s1, s2, ..., sn): the System string-concatenation intrinsic, just
+        chained `+`. Folded here so it needs no `uses` and reuses the working
+        string-concat codegen. A user `Concat` (procIdx>=0) shadows it. }
+      if CaseEqual(name, 'Concat') and (procIdx < 0) and (Tokens[TokPos].Kind = tkLParen) then
+      begin
+        Next; Expect(tkLParen, '(');
+        ParseExpr; node := CurASTNode;
+        while Eat(tkComma) do
+        begin
+          ParseExpr;
+          left := AllocNode(AN_BINOP);
+          ASTIVal[left] := Ord(tkPlus);
+          ASTLeft[left] := node; ASTRight[left] := CurASTNode;
+          ASTTk[left] := Ord(tyAnsiString);
+          node := left;
+        end;
+        Expect(tkRParen, ')');
+        CurASTNode := node;
+        LastExprTk := tyAnsiString;
+        Exit;
+      end;
+
       { Generic dynamic-array Copy(arr, index [, count]) intrinsic, when no Copy
         function is in scope (a string `sysutils.Copy` keeps the proc path; that
         case, and Copy(dynarray) shadowed by a string Copy, are handled at the
