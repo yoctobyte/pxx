@@ -44,6 +44,43 @@ Mechanism (refined twice):
 single-unit reduction is still TODO and may be impractical given the layout
 sensitivity; the live png repro below is reliable.
 
+## Update 2026-06-22 (root cause reframed — NOT just 7ba91bf)
+
+Building the `sat` library turned up a **second, deterministic, FPC-verified**
+manifestation that reframes the root cause:
+
+- `lib/rtl/sat.pas` `LoadDIMACS` reliably miscompiles: a local `Integer`
+  counter (`clauseCount`) is never incremented (`clauseCount := clauseCount + 1`
+  reads back 0), while a sibling counter (`litCount`) works. FPC compiles the
+  identical source correctly. Repro: `compiler/pascal26 examples/sat/satdemo.pas`
+  (or any driver) → every formula reports `0 clauses` and wrong SAT/UNSAT;
+  `fpc -Mobjfpc` → correct.
+- It fails on **both** `dc11a9c` (pre-`7ba91bf`) **and** v33. So this victim is
+  **not** a `7ba91bf` regression — it is a **pre-existing latent codegen bug**.
+- It is **global-layout-sensitive**: extracting `LoadDIMACS` verbatim into a
+  *small* unit compiles correctly; only the *full* `sat.pas` symbol layout
+  triggers it. Likewise, adding a `writeln` to zlib flips even the "good"
+  compiler (noted below).
+
+**Conclusion:** the real defect is fragile **local-variable / temp slot/offset
+allocation** in unit-procedure codegen. `7ba91bf` did not introduce it — it
+shifts decl/codegen layout, changing *which* units land on the bad allocation.
+zlib was "safe" under `dc11a9c` and "unsafe" under `7ba91bf`; `sat` is "unsafe"
+under both.
+
+**Fix-strategy implication:** reverting/adjusting `7ba91bf` may restore a safe
+layout for zlib/png (unblock the gate) but will **not** fix the underlying bug —
+`sat` and future libs can still hit it. The durable fix is in slot/offset
+allocation, not the pre-scan. A good gate test: compile a unit whose procedure
+has ~10 locals + nested if/else with `SetLength` on module-global dynarrays in
+both branches, and check a computed counter against FPC.
+
+Deterministic repro (better than the png one — no instrumentation needed):
+```sh
+stable_linux_amd64/default/pinned examples/sat/satdemo.pas /tmp/s && /tmp/s
+#   -> "0 clauses", FAILs;   fpc -Mobjfpc agrees the source is correct
+```
+
 ## Summary
 
 Commit **`7ba91bf`** ("feat(parser): extend declaration pre-scan to unit

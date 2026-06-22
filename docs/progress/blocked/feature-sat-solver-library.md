@@ -1,7 +1,8 @@
 # SAT solver library — DPLL over CNF (known-instance test app)
 
 - **Type:** feature
-- **Status:** backlog
+- **Status:** blocked (impl written + FPC-verified; PXX miscompiles it)
+- **Blocked-by:** bug-impl-prescan-codegen-regression
 - **Owner:** —
 - **Opened:** 2026-06-19
 - **Relation:** demo-eligible-as-library from idea-demo-app-candidates. Sibling
@@ -58,3 +59,24 @@ the sudoku/chess demos.
 - 2026-06-19 — Opened from the demo/library organization pass. Background section
   added (user asked what SAT/CNF/DPLL are and where they come from — logic /
   theorem proving, 1960–62, not databases).
+- 2026-06-22 — **Implemented** (track B): `lib/rtl/sat.pas` (DIMACS parser +
+  DPLL with unit-propagation-via-forced-literal recursion + backtracking) and
+  oracle `examples/sat/satdemo.pas` (trivial SAT, a unit-propagation chain, a
+  small UNSAT, and pigeonhole PHP(3,2)/PHP(4,3) UNSAT; SAT models verified by
+  substitution). Sets avoided (tri-state Integer array). No `set of` gap hit.
+
+  Two compiler bugs surfaced and were dodged/filed:
+  1. **dynarray-as-record-field is broken** → `TCNF` record was abandoned in
+     favour of module-global state (zlib pattern). Filed
+     bug-dynarray-in-record-corrupt (clean minimal repro, FPC-verified).
+  2. **PXX still miscompiles the finished unit** even with globals: `LoadDIMACS`
+     loses a local counter increment (`clauseCount` stays 0) — a deterministic,
+     FPC-verified case of the layout-sensitive codegen bug. Fails on both
+     `dc11a9c` and v33. Folded into bug-impl-prescan-codegen-regression as a
+     second repro that reframes its root cause (pre-existing slot/offset
+     allocation bug, not the `7ba91bf` pre-scan).
+
+  **Blocked:** the code is correct (FPC runs the oracle to `ALL OK`) but PXX
+  miscompiles it, so it is NOT wired into `make lib-test` yet (it would be a
+  genuine red, unlike json which is green on v33). Unblocks when the codegen bug
+  is fixed; then wire into lib-test + demos and close.

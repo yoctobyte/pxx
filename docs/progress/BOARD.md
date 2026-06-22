@@ -22,6 +22,7 @@ _none_
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
+| bug-dynarray-in-record-corrupt | A | bug | Dynamic array as a record field is corrupted (value return + var-param assign) | — |
 | chess-pal-getdents-link | B | chess | examples/chess: PalBackendGetDents64 undefined (PAL backend not linked) | — |
 | chore-inc-to-units | A | chore | `.inc` → real `.pas` units refactor | — |
 | chore-runtime-emission-size | A | chore | Finer runtime-support emission (code size) | — |
@@ -71,7 +72,6 @@ _none_
 | feature-parallel-processing | A | feature | Parallel processing as a language feature | feature-unified-heap-allocator |
 | feature-random-library | B | feature | Random library — HW/OS/software tiered RNG (cross-target capability test) | — |
 | feature-release-packaging | B | feature | Release packaging, reproducibility manifest, and `release.sh` | — |
-| feature-sat-solver-library | B | feature | SAT solver library — DPLL over CNF (known-instance test app) | — |
 | feature-stackful-coro-port | A | feature | Port the stackful coroutine backend to all targets | — |
 | feature-static-arena-profile | A | feature | Fixed-static-arena allocator profile | feature-unified-heap-allocator |
 | feature-string-model-tyfixedstring | B | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
@@ -91,9 +91,9 @@ _none_
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
 | feature-c-runtime-library | B | feature | C runtime/library layer (`lib/crtl`) plus direct C-library packages | feature-c-source-frontend |
-| feature-json-library | B | feature | JSON library — parser + serializer (with a roundtrip test app) | bug-impl-prescan-codegen-regression |
+| feature-sat-solver-library | B | feature | SAT solver library — DPLL over CNF (known-instance test app) | bug-impl-prescan-codegen-regression |
 
-## done (156)
+## done (157)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -205,6 +205,7 @@ _none_
 | feature-image-ascii-renderer-library | B | feature | Image to ANSI ASCII renderer library | feature-rtl-image-bitmap-library, feature-terminal-ansi-library |
 | feature-interface-refcounting | A | feature | Interface reference counting (IInterface / ARC) | — |
 | feature-int-to-float-assign | A | feature | Integer → Float assignment / coercion missing the int→float conversion | — |
+| feature-json-library | B | feature | JSON library — parser + serializer (with a roundtrip test app) | — |
 | feature-language-gaps-from-demos | A | feature | Language gaps surfaced by the demo apps (sudoku / sieve / chess) | — |
 | feature-lazycasing-c-imports | A | feature | `{$LAZYCASING ON/OFF}` for C imports only | feature-compiler-warnings |
 | feature-library-test-suite | A+B | feature | Track B library test suite | — |
@@ -264,6 +265,7 @@ _none_
 
 ## Ready (no unmet blocker)
 
+- [A] bug-dynarray-in-record-corrupt
 - [B] chess-pal-getdents-link
 - [A] chore-inc-to-units
 - [A] chore-runtime-emission-size
@@ -311,7 +313,6 @@ _none_
 - [A] feature-parallel-processing
 - [B] feature-random-library
 - [B] feature-release-packaging
-- [B] feature-sat-solver-library
 - [A] feature-stackful-coro-port
 - [A] feature-static-arena-profile
 - [B] feature-string-model-tyfixedstring

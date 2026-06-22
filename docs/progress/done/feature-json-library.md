@@ -1,9 +1,7 @@
 # JSON library — parser + serializer (with a roundtrip test app)
 
 - **Type:** feature
-- **Status:** blocked (impl done; lib-test gate blocked on re-pin)
-- **Blocked-by:** bug-impl-prescan-codegen-regression
-  (re-pin past v32 is unsafe until that silent codegen regression is fixed)
+- **Status:** done — implemented + green on pinned v33 (commit 13c74d2)
 - **Owner:** —
 - **Opened:** 2026-06-19
 - **Relation:** one of the demo-eligible-as-library items from
@@ -61,3 +59,8 @@ self-host / cross-bootstrap.
   sections, introduced by 7ba91bf). Once that bug is fixed and the stable re-pinned,
   `make lib-test` goes green and this closes. Code is committed but NOT pushed
   (gate red until then).
+- 2026-06-22 (later) — **DONE.** v33 was re-pinned (includes `obj.Free` + bare
+  `Copy`), and `examples/json/jsondemo.pas` runs `ALL OK` on pinned v33. The
+  json lib-test lines pass; the `make lib-test` umbrella is still red, but only
+  because of the unrelated png regression (bug-impl-prescan-codegen-regression),
+  not json. Closing json on its own merits.
