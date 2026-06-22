@@ -30,3 +30,4 @@
 2026-06-21T12:01:13Z  v30  9bb56f44863a381f89e0f2f191b03badb4e74bf9e23c7c0538132b193b175ff3  90090acfb0a564efb9379012375ae88d55da9fc6  docs(tickets): Inc/Dec lvalue bug DONE (reframed from feature); file local-typed-const
 2026-06-21T12:49:38Z  v31  65b6177e660e16c6342fa1588787b1dcda5feb8c3ab7c66ea399a42fb0ae1506  a56f77300fec2f08b473413d005f1af11c38c711  feat(esp-float): Trunc + float unary minus on riscv32/xtensa
 2026-06-21T13:31:06Z  v32  c01e163bedc66cbaae3c37c1f3cd00919a6af464f1b6b6c08f362f17b0300fa8  4c88d92366807d87e6ea8e76b552dabbb798b445  docs(ticket): esp-float Round/Frac/Int done; core functionally complete
+2026-06-22T08:54:51Z  v33  489d7da765540f33c587438a10826588996a24ea528c79cbb29024d6c4effa41  c87785dc8782c12a64a37128e605d6e4cef28174  refactor(parser): harden all 9 paramless self-recursion sites to F()

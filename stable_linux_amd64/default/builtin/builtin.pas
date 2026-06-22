@@ -24,6 +24,12 @@ procedure ValFloat(const s: AnsiString; var v: Double; var code: Integer);
 function VariantToStr(const v: Variant): AnsiString;
 function PCharToString(p: PChar): AnsiString;
 
+{ Substring intrinsic backing bare `Copy(s, index[, count])` on a string with no
+  user `Copy` in scope — so frozen/managed string Copy works with no `uses`
+  (the lib `sysutils.Copy` is the same routine for the explicit-uses path). FPC
+  semantics: 1-based index clamped to >= 1, count clamped to the string end. }
+function __pxxStrCopy(const s: AnsiString; index, count: Integer): AnsiString;
+
 { The heap allocator and managed-string helpers (PXXAlloc/Free/Realloc,
   PXXStr*) moved to the `builtinheap` unit so heap-only / string-only programs
   do not pull in the Str/Val/Variant routines below. }
@@ -307,6 +313,27 @@ begin
       c := p[i];
     end;
   end;
+end;
+
+function __pxxStrCopy(const s: AnsiString; index, count: Integer): AnsiString;
+var i, n, last: Integer; r: AnsiString;
+begin
+  n := Length(s);
+  if index < 1 then index := 1;
+  if count < 0 then count := 0;
+  { Cap count to the chars available from index BEFORE forming `last`, so the
+    2-arg form's sentinel count (MaxInt) cannot overflow `index + count - 1`. }
+  if index > n then count := 0
+  else if count > n - index + 1 then count := n - index + 1;
+  last := index + count - 1;
+  r := '';
+  i := index;
+  while i <= last do
+  begin
+    r := r + s[i];
+    i := i + 1;
+  end;
+  Result := r;
 end;
 
 end.
