@@ -3428,6 +3428,40 @@ begin
         Exit;
       end;
 
+      { UpCase(c): System intrinsic -> __pxxUpCase helper (Char->Char, eval-once). }
+      if CaseEqual(name, 'UpCase') and (procIdx < 0) and (Tokens[TokPos].Kind = tkLParen) then
+      begin
+        Next; Expect(tkLParen, '(');
+        ParseExpr; node := CurASTNode;
+        Expect(tkRParen, ')');
+        helperPi := FindProc('__pxxUpCase');
+        if helperPi < 0 then Error('UpCase: builtin helper unavailable (needs the builtin unit; not on ESP)');
+        argSeq := AllocNode(AN_ARG); ASTLeft[argSeq] := node;
+        CurASTNode := AllocNode(AN_CALL); ASTIVal[CurASTNode] := helperPi;
+        ASTLeft[CurASTNode] := argSeq; ASTTk[CurASTNode] := Ord(tyChar);
+        LastExprTk := tyChar;
+        Exit;
+      end;
+
+      { Pos(sub, s): System substring search -> __pxxPos helper (1-based, 0 if not
+        found). A `uses sysutils` Pos or any user routine shadows (procIdx>=0). }
+      if CaseEqual(name, 'Pos') and (procIdx < 0) and (Tokens[TokPos].Kind = tkLParen) then
+      begin
+        Next; Expect(tkLParen, '(');
+        ParseExpr; node := CurASTNode;
+        Expect(tkComma, ',');
+        ParseExpr; op := CurASTNode;
+        Expect(tkRParen, ')');
+        helperPi := FindProc('__pxxPos');
+        if helperPi < 0 then Error('Pos: builtin helper unavailable (needs the builtin unit; not on ESP)');
+        argSeq := AllocNode(AN_ARG); ASTLeft[argSeq] := node;
+        left := AllocNode(AN_ARG); ASTLeft[left] := op; ASTRight[argSeq] := left;
+        CurASTNode := AllocNode(AN_CALL); ASTIVal[CurASTNode] := helperPi;
+        ASTLeft[CurASTNode] := argSeq; ASTTk[CurASTNode] := Ord(tyInteger);
+        LastExprTk := tyInteger;
+        Exit;
+      end;
+
       { Abs(e)/Sqr(e): System intrinsics lowered to builtin helpers (eval-once;
         int and float variants by the argument type). No `uses`; user routine of
         the same name shadows. ESP (no builtin unit) errors with a clear message. }
@@ -12400,6 +12434,13 @@ begin
     if (Tokens[i].Kind = tkIdent) and (i + 1 < TokCount) and
        (Tokens[i + 1].Kind = tkLParen) and
        (CaseEqual(GetTokenStr(i), 'abs') or CaseEqual(GetTokenStr(i), 'sqr')) and
+       (TargetArch <> TARGET_XTENSA) and (TargetArch <> TARGET_RISCV32) then
+      needsBuiltin := True;
+    { Bare `UpCase(...)` / `Pos(...)` lower to __pxxUpCase / __pxxPos in the
+      builtin unit (see ParseFactor); pull it so they resolve. ESP can't. }
+    if (Tokens[i].Kind = tkIdent) and (i + 1 < TokCount) and
+       (Tokens[i + 1].Kind = tkLParen) and
+       (CaseEqual(GetTokenStr(i), 'upcase') or CaseEqual(GetTokenStr(i), 'pos')) and
        (TargetArch <> TARGET_XTENSA) and (TargetArch <> TARGET_RISCV32) then
       needsBuiltin := True;
     { Variant use needs VariantToStr (in builtin) for variant writes — on

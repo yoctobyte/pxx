@@ -437,6 +437,8 @@ test-core: $(COMPILER)
 	test "$$(/tmp/test_succ_pred_odd26)" = "$$(printf '6 4\nb\ny\nodd7\neven8\n1')"
 	./$(COMPILER) test/test_abs_sqr.pas /tmp/test_abs_sqr26
 	test "$$(/tmp/test_abs_sqr26)" = "$$(printf '5 7\n49\n3.50\n6.25\n43')"
+	./$(COMPILER) test/test_upcase_pos.pas /tmp/test_upcase_pos26
+	test "$$(/tmp/test_upcase_pos26)" = "$$(printf 'AZ5\n3\n0\n1\nHI3')"
 	./$(COMPILER) test/test_keyword_case.pas /tmp/test_keyword_case26
 	test "$$(/tmp/test_keyword_case26)" = "$$(printf '9\n22')"
 	./$(COMPILER) test/test_var_open_array.pas /tmp/test_var_open_array26

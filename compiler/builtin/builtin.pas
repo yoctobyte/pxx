@@ -46,6 +46,12 @@ function __pxxAbsDbl(d: Double): Double;
 function __pxxSqrInt(x: Int64): Int64;
 function __pxxSqrDbl(d: Double): Double;
 
+{ Bare `UpCase(c)` / `Pos(sub, s)` lower to these (see ParseFactor) so the System
+  intrinsics work with no `uses`. A `uses sysutils` Pos (or any user routine)
+  shadows them at the call site. }
+function __pxxUpCase(c: Char): Char;
+function __pxxPos(const sub, s: AnsiString): Integer;
+
 { The heap allocator and managed-string helpers (PXXAlloc/Free/Realloc,
   PXXStr*) moved to the `builtinheap` unit so heap-only / string-only programs
   do not pull in the Str/Val/Variant routines below. }
@@ -384,6 +390,26 @@ end;
 function __pxxSqrDbl(d: Double): Double;
 begin
   Result := d * d;
+end;
+
+function __pxxUpCase(c: Char): Char;
+begin
+  if (c >= 'a') and (c <= 'z') then Result := Chr(Ord(c) - 32) else Result := c;
+end;
+
+function __pxxPos(const sub, s: AnsiString): Integer;
+var i, j, n, m: Integer; ok: Boolean;
+begin
+  Result := 0;
+  n := Length(s); m := Length(sub);
+  if (m = 0) or (m > n) then Exit;
+  for i := 1 to n - m + 1 do
+  begin
+    ok := True;
+    for j := 1 to m do
+      if s[i + j - 1] <> sub[j] then begin ok := False; Break; end;
+    if ok then begin Result := i; Exit; end;
+  end;
 end;
 
 end.
