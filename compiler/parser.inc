@@ -2732,6 +2732,30 @@ begin
       ASTLeft[node] := argSeq;
       CurASTNode := node;
     end;
+    tkSingle_T, tkDouble_T, tkExtended_T:
+    begin
+      { Value typecast to a float type, `Single(expr)` / `Double(expr)`. Unlike
+        the integer/char puns this is a real conversion (int->float, or
+        double->single narrowing), so desugar to a hidden temp of the cast type
+        plus an assignment — the ordinary store path already coerces the operand.
+        Reuses the generic assign-then-yield node (AN_STR_FROM_CHAR: Left = the
+        store side-effect, Right = the temp read). `Extended` aliases Double. }
+      if CurTok.Kind = tkSingle_T then LastExprTk := tySingle else LastExprTk := tyDouble;
+      Next; Expect(tkLParen, '('); ParseExpr; Expect(tkRParen, ')');
+      op := AllocVar('', LastExprTk);
+      node := AllocNode(AN_STR_FROM_CHAR);
+      argSeq := AllocNode(AN_IDENT);             { store LHS = the temp }
+      ASTIVal[argSeq] := op; ASTTk[argSeq] := Ord(Syms[op].TypeKind);
+      left := AllocNode(AN_ASSIGN);
+      ASTLeft[left] := argSeq; ASTRight[left] := CurASTNode;
+      ASTTk[left] := Ord(Syms[op].TypeKind);
+      ASTLeft[node] := left;
+      identNode := AllocNode(AN_IDENT);          { yielded value = the temp }
+      ASTIVal[identNode] := op; ASTTk[identNode] := Ord(Syms[op].TypeKind);
+      ASTRight[node] := identNode;
+      ASTTk[node] := Ord(Syms[op].TypeKind);
+      CurASTNode := node;
+    end;
     tkString_T:
     begin
       { `String(x)`. For a string operand it is identity (passthrough). For a Char
@@ -3669,7 +3693,14 @@ begin
       end
       else if (idx >= 0) and (Syms[idx].Kind = skConst) then
       begin
-        node := AllocNode(AN_INT_LIT); ASTIVal[node] := Syms[idx].ConstVal; ASTTk[node] := Ord(Syms[idx].TypeKind); CurASTNode := node; Next;
+        { A float-typed const carries its IEEE-754 bits in ConstVal — emit a
+          float literal, not an int literal (an AN_INT_LIT tagged tyDouble would
+          be mis-codegen'd as an integer). }
+        if TypeIsFloat(Syms[idx].TypeKind) then
+          node := AllocNode(AN_FLOAT_LIT)
+        else
+          node := AllocNode(AN_INT_LIT);
+        ASTIVal[node] := Syms[idx].ConstVal; ASTTk[node] := Ord(Syms[idx].TypeKind); CurASTNode := node; Next;
       end
       else if (CurProc >= 0) and Procs[CurProc].IsFunc and
               (Tokens[TokPos].Kind <> tkLParen) and
@@ -4294,8 +4325,20 @@ end;
   754 bit pattern (carried as Int64, same as AN_FLOAT_LIT); everything else goes
   through the integer ConstEval. Lets a `Double` initializer like 3.14 work. }
 function ParseInitVal: Int64;
+var neg: Boolean; signMask: Int64;
 begin
-  if CurTok.Kind = tkFloat then begin Result := CurTok.IVal; Next; end
+  { A leading unary +/- on a float literal: the lexer emits the sign as a
+    separate operator token, so a typed `const A: Double = -2.5` would otherwise
+    fall to the integer ConstEval and be rejected. Flip the IEEE-754 sign bit
+    (bit 63) for a minus. }
+  neg := False;
+  if (CurTok.Kind = tkMinus) and (Tokens[TokPos].Kind = tkFloat) then begin neg := True; Next; end
+  else if (CurTok.Kind = tkPlus) and (Tokens[TokPos].Kind = tkFloat) then Next;
+  if CurTok.Kind = tkFloat then
+  begin
+    Result := CurTok.IVal; Next;
+    if neg then begin signMask := 1; signMask := signMask shl 63; Result := Result xor signMask; end;
+  end
   else Result := ConstEval;
 end;
 
@@ -7774,6 +7817,15 @@ begin
         StrConstSLen[StrConstCount] := Tokens[TokPos-1].SLen;
         Inc(StrConstCount);
         Next;
+      end
+      else if (CurTok.Kind = tkFloat) or
+              ((CurTok.Kind = tkMinus) and (Tokens[TokPos].Kind = tkFloat)) or
+              ((CurTok.Kind = tkPlus) and (Tokens[TokPos].Kind = tkFloat)) then
+      begin
+        { Untyped real constant (`const EPS = 0.001;` / `= -2.5` / `= 1e-9`). FPC
+          infers a real-typed const. Store the IEEE-754 double bits tagged
+          tyDouble (sign handled by ParseInitVal); a use builds an AN_FLOAT_LIT. }
+        AddConst(name, tyDouble, ParseInitVal);
       end
       else
       begin
