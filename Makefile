@@ -415,6 +415,8 @@ test-core: $(COMPILER)
 	test "$$(/tmp/test_mode_delphi26)" = "$$(printf 'p5=10\nGate=42 calls=3\nTally=105')"
 	./$(COMPILER) test/test_mode_delphi_callarg.pas /tmp/test_mode_delphi_callarg26
 	test "$$(/tmp/test_mode_delphi_callarg26)" = "$$(printf 'ApplyFn=42\nlog=20\nCallNul=14')"
+	./$(COMPILER) test/test_mode_delphi_methptr.pas /tmp/test_mode_delphi_methptr26
+	test "$$(/tmp/test_mode_delphi_methptr26)" = "$$(printf 'total=12\nkicked=1')"
 	./$(COMPILER) test/test_user_type_shadows_builtin.pas /tmp/test_usershadow26
 	test "$$(/tmp/test_usershadow26)" = "$$(printf 'show 7\ndbl=10')"
 	./$(COMPILER) test/test_eof_stdin.pas /tmp/test_eof26

@@ -126,5 +126,20 @@ procedural AND the operand is a bare function-name (no required args, not alread
     probe is silenced via the new `MatchQuiet` flag (guards MatchProcCall diag).
   Test `test/test_mode_delphi_callarg.pas` (in `make test`), FPC `-Mdelphi`
   oracle-matched (42/20/14). make test + cross-bootstrap byte-identical.
+- 2026-06-22 — **method-pointer @-relax slice DONE**. `p := obj.M` (no `@`) binds
+  a method pointer == `p := @obj.M`, when `p` is a `procedure(...) of object`
+  lvalue. Small slice — PXX already had the method-pointer infra (AN_METHODREF
+  `@obj.M`→TMethod, EnsureMethodPtrRec, `of object` types, target-aware TMethod
+  Data offset in AN_ASSIGN). Added a branch in the assignment-site relax
+  (parser.inc, statement assign): in delphi mode, target proc-typed AND
+  `TypeKind = tyRecord` (a method-pointer var; a plain proc-ptr var is tyPointer —
+  this is what distinguishes the two) AND RHS is `obj.M` (`var.method`, no
+  following `(`) → emit the same AN_METHODREF the `@obj.M` path emits. Reuses the
+  existing AN_ASSIGN TMethod-target lowering, so cross targets (Data@4 on
+  i386/arm32, @8 on 64-bit) come for free. Test
+  `test/test_mode_delphi_methptr.pas` (in `make test`), FPC `-Mdelphi`
+  oracle-matched (total=12 / kicked=1; covers with-params + paramless method).
+  make test + cross-bootstrap byte-identical.
   **REMAINING:** proc-value comparison `if p = F`; proc-typed record/array
-  fields; method pointers (`p := obj.M`, 2-word `TMethod`); per-unit mode reset.
+  fields; method pointers at the CALL-ARG bind site (`g(obj.M)` — only the
+  assignment site is done); per-unit mode reset.

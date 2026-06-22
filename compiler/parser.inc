@@ -7373,9 +7373,37 @@ begin
                   delta. Default/objfpc keep requiring `@F` (F here would be a
                   call). Guarded on a routine name that is NOT a variable and is
                   not followed by `(`; an explicit `@F` (tkAt) takes the normal
-                  ParseExpr path. Method pointers (`p := obj.M`) are a later slice. }
+                  ParseExpr path. }
+                argIdx := -1;
+                if (CurTok.Kind = tkIdent) then argIdx := FindSym(CurTok.SVal);
                 if DelphiMode and (idx >= 0) and (SymProcSig[idx] >= 0) and
-                   (CurTok.Kind = tkIdent) and (FindSym(CurTok.SVal) < 0) and
+                   (Syms[idx].TypeKind = tyRecord) and (argIdx >= 0) and
+                   (Syms[argIdx].RecName >= REC_UCLASS_BASE) and
+                   (not UClsIsRecord[Syms[argIdx].RecName - REC_UCLASS_BASE]) and
+                   (Tokens[TokPos].Kind = tkDot) and (Tokens[TokPos+1].Kind = tkIdent) and
+                   (Tokens[TokPos+2].Kind <> tkLParen) and
+                   (FindUMeth(Syms[argIdx].RecName - REC_UCLASS_BASE, GetTokenStr(TokPos+1)) >= 0) then
+                begin
+                  { Delphi @-optional METHOD pointer: `p := obj.M` (no `@`) == `@obj.M`,
+                    where p is a method-pointer lvalue (`procedure(...) of object`,
+                    a 16-byte {Code,Data} record so TypeKind = tyRecord). Builds the
+                    same AN_METHODREF the `@obj.M` path emits; AN_ASSIGN writes the
+                    two pointers into the TMethod target. }
+                  smci := Syms[argIdx].RecName - REC_UCLASS_BASE;
+                  smmii := FindUMeth(smci, GetTokenStr(TokPos+1));
+                  Next; Next;   { consume obj name and '.'; CurTok = method name }
+                  opNode := AllocNode(AN_IDENT);
+                  ASTIVal[opNode] := argIdx;
+                  ASTTk[opNode] := Ord(tyClass);
+                  CurASTNode := AllocNode(AN_METHODREF);
+                  ASTIVal[CurASTNode] := UMthProc_[smmii];
+                  ASTLeft[CurASTNode] := opNode;
+                  ASTTk[CurASTNode] := Ord(tyRecord);
+                  LastExprTk := tyRecord;
+                  Next;   { consume method name }
+                end
+                else if DelphiMode and (idx >= 0) and (SymProcSig[idx] >= 0) and
+                   (CurTok.Kind = tkIdent) and (argIdx < 0) and
                    (FindProc(CurTok.SVal) >= 0) and (Tokens[TokPos].Kind <> tkLParen) then
                 begin
                   CurASTNode := AllocNode(AN_PROCADDR);
