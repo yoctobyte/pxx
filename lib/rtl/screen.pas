@@ -99,6 +99,10 @@ procedure ScreenEnd;
 function ScreenRender: AnsiString;
 { ScreenRender + write it to stdout. }
 procedure ScreenRefresh;
+{ Move the hardware cursor to cell (x,y) and show it — call after ScreenRefresh
+  to put a visible caret in the active input field (the manager otherwise keeps
+  the cursor hidden). }
+procedure ScreenPlaceCursor(x, y: Integer);
 
 { --- input --- }
 { Decode a key/escape sequence (ESC[A, ESC[3~, ESCOA, a plain byte, ...) into a
@@ -318,6 +322,11 @@ end;
 procedure ScreenRefresh;
 begin
   AnsiWrite(ScreenRender);
+end;
+
+procedure ScreenPlaceCursor(x, y: Integer);
+begin
+  AnsiWrite(AnsiMove(y + 1, x + 1) + AnsiShowCursor);
 end;
 
 procedure ScreenStart;

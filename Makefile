@@ -2201,6 +2201,8 @@ lib-test: pxx-stable-check
 	test "$$(/tmp/lib_ansiterm)" = "OK"
 	$(PXX_STABLE) test/lib_screen.pas /tmp/lib_screen
 	test "$$(/tmp/lib_screen | tail -1)" = "ALL OK"
+	$(PXX_STABLE) test/lib_cursor.pas /tmp/lib_cursor
+	test "$$(/tmp/lib_cursor)" = "$$(printf '\033[3;4H\033[?25h')"
 	$(PXX_STABLE) test/lib_lineedit.pas /tmp/lib_lineedit
 	test "$$(/tmp/lib_lineedit | tail -1)" = "ALL OK"
 	$(PXX_STABLE) test/lib_menu.pas /tmp/lib_menu
