@@ -1,7 +1,7 @@
 # Additional CPU targets (rollup: i386 → aarch64 → arm32 → ESP32/RISC-V)
 
 - **Type:** feature
-- **Status:** done-followup (big / not directly language-relevant)
+- **Status:** rainy-day 
 - **Owner:** —
 - **Blocked-by:** feature-target-i386, feature-target-aarch64, feature-target-arm32, feature-target-esp32
 - **Opened:** 2026-06-06 (from todo.md §5 / roadmap.md)

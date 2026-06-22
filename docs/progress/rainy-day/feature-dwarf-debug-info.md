@@ -1,7 +1,7 @@
 # DWARF debug info (`-g`) — phased, x86-64 first
 
 - **Type:** feature
-- **Status:** done-followup (big / not directly language-relevant)
+- **Status:** rainy-day 
 - **Owner:** —
 - **Opened:** 2026-06-20 (feasibility discussion — debugger support)
 - **Priority:** high value, but after the current correctness/breadth arc. Pairs

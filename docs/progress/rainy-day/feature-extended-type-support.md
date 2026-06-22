@@ -1,7 +1,7 @@
 # Proper `Extended` type support (currently aliased to Double)
 
 - **Type:** feature (compiler) — **Track A**
-- **Status:** done-followup — deferred (low priority by user)
+- **Status:** rainy-day 
 - **Opened:** 2026-06-22
 - **Owner:** — (Track A / "sis")
 

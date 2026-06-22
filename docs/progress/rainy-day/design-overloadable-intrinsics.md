@@ -1,7 +1,7 @@
 # Design question: overloadable compiler intrinsics (the `Copy` precedent)
 
 - **Type:** design / decision record (no action required yet)
-- **Status:** done-followup — **deliberately undecided**
+- **Status:** rainy-day **deliberately undecided**
 - **Owner:** Track A (language semantics)
 - **Opened:** 2026-06-20
 - **Relates:** [[bug-str-float-broken-by-copy-shadow]],

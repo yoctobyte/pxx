@@ -1,32 +1,22 @@
-# `done-followup/` — parked: shipped, or big/tangential, not active work
+# `done-followup/` — shipped, only optional polish left
 
-Tickets here are **not active backlog** — but "parked" does **not** mean
-"unimportant or uninteresting." It mostly means **big work and/or not directly
-language-relevant** (a new backend/OS port, runtime/allocator infra, debug
-tooling, a stretch goal), set aside so the active `backlog/` reflects the
-near-term language/compiler work. Flavours:
+Tickets here are **delivered and usable**; the feature works. They stay open only
+because some explicitly-optional / low-priority follow-up remains (an enhancement,
+a fancy, a deferred refinement) — nothing that blocks using the feature.
 
-1. **Shipped-core, polish-only.** The feature is delivered and usable; what
-   remains is explicitly optional (e.g. `feature-interfaces` — CORBA surface
-   complete, only automatic refcounting deferred).
-2. **Big / not directly language-relevant.** Substantial undertakings that are
-   tangential to the core language: extra CPU targets, OS ports, allocator
-   profiles, DWARF debug info, coroutine-runtime ports, parallel infra. Worth
-   doing — just not the current language focus.
-3. **Design parks.** Standing decisions intentionally left open (no action until
-   a call is made).
+Example: `feature-interfaces` — the CORBA interface surface is complete
+(declare/implement/assign/call, is/as/Supports, inheritance, all targets); only
+automatic refcounting (ARC) is deferred, and it is not needed.
 
-Counterpoint: a *language-relevant* feature (a directive, a type-system or
-codegen capability) stays in `backlog/` even when low priority — that's the line.
+Distinction:
+- vs `backlog/` — backlog is active, not-yet-delivered work.
+- vs `rainy-day/` — rainy-day is parked work that is **not built yet** (big /
+  not-directly-language-relevant / ideas / design parks).
+- vs `done/` — `done/` is fully complete with nothing left; here a small optional
+  remainder is acknowledged.
 
-Moving a ticket here is **reversible** — pull it back to `backlog/` when it
-becomes active, or to `done/` when the remainder is actually finished.
-
-`tools/progress.sh` knows this status (it shows as its own board column and is
-exempt from the `done/`-only "must log a commit" check). It does **not** satisfy
-`Blocked-by:` dependencies — only true `done/` does — since this bucket includes
-not-yet-built items.
-
-Convention: a ticket moved here should have its `Status:` updated to note the
-flavour (e.g. `done-followup — shipped; ARC deferred`, or `done-followup —
-deferred/rainy-day`).
+Move a ticket from here to `done/` when the remainder is actually finished, or
+back to `backlog/` if the follow-up becomes active. `tools/progress.sh` knows
+this status (own board column, README excluded from counts). It does **not**
+satisfy `Blocked-by:` by default — if a shipped item here truly unblocks
+something, prefer recording that dependency against `done/`.

@@ -1,7 +1,7 @@
 # Enforce private/protected visibility
 
 - **Type:** idea
-- **Status:** done-followup
+- **Status:** rainy-day 
 - **Owner:** —
 - **Opened:** 2026-06-06 (from todo.md / limitations)
 

@@ -1,7 +1,7 @@
 # Additional OS targets (BSD / macOS via syscall mapping; Windows deprioritized)
 
 - **Type:** feature
-- **Status:** done-followup (big / not directly language-relevant)
+- **Status:** rainy-day 
 - **Owner:** —
 - **Opened:** 2026-06-16
 

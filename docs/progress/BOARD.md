@@ -16,16 +16,19 @@ _none_
 
 _none_
 
-## backlog (48)
+## blocked (1)
+
+| Ticket | Track | Type | Summary | Blocked-by |
+| --- | --- | --- | --- | --- |
+| feature-c-runtime-library | B | feature | C runtime/library layer (`lib/crtl`) plus direct C-library packages | feature-c-source-frontend |
+
+## backlog (42)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
 | chess-pal-getdents-link | B | chess | examples/chess: PalBackendGetDents64 undefined (PAL backend not linked) | — |
 | chore-inc-to-units | A | chore | `.inc` → real `.pas` units refactor | — |
 | chore-runtime-emission-size | A | chore | Finer runtime-support emission (code size) | — |
-| feature-additional-cpu-targets | A | feature | Additional CPU targets (rollup: i386 → aarch64 → arm32 → ESP32/RISC-V) | feature-target-aarch64, feature-target-arm32, feature-target-esp32, feature-target-i386 |
-| feature-allocator-quality | A | feature | Allocator quality: split / coalesce / bins / alignment | — |
-| feature-async-auto-backend | A | feature | Auto stackless/stackful backend selection | — |
 | feature-c-header-import-complex | A | feature | Import C headers for complex libraries (glib/GTK-grade) | — |
 | feature-copy-intrinsic | B | feature | `Copy` as a generic overloaded intrinsic (string + dynarray families) | — |
 | feature-c-regex-library-devtest | A | feature | C regex library dev-test import | — |
@@ -36,7 +39,6 @@ _none_
 | feature-demo-raytracer | B | feature | Demo — CPU ray tracer | — |
 | feature-demo-solitaire | B | feature | Demo — console Klondike solitaire (user-requested entertainment test app) | — |
 | feature-dns-resolver-library | B | feature | DNS resolver library (`dns.pas`) with selectable backends | — |
-| feature-dwarf-debug-info | A | feature | DWARF debug info (`-g`) — phased, x86-64 first | — |
 | feature-dynamic-include-paths-config | A | feature | Dynamic Include Paths, Configuration Files, and System Scanner | — |
 | feature-dynamic-soname-discovery | A | feature | Dynamic soname discovery (no execve) | — |
 | feature-esp32-idf-xtensa | A | feature | ESP-IDF integration: Xtensa (ESP32-S2/S3) — QEMU + real hardware | — |
@@ -54,14 +56,12 @@ _none_
 | feature-nil-python-frontend | A | feature | Nil Python frontend (`.npy`) | — |
 | feature-object-reference-type | A | feature | `object` — a rooted object-reference type | — |
 | feature-optimization-levels | A | feature | Optimization levels (`-O0/-O1/-O2/-O3/-Os`) + pass framework | — |
-| feature-os-targets-bsd-mac | A | feature | Additional OS targets (BSD / macOS via syscall mapping; Windows deprioritized) | — |
 | feature-pal-esp-posix-fd-semantics | B | feature | ESP PAL: exact POSIX fd semantics over ESP-IDF VFS | — |
 | feature-pal-network-datagram-poll-errno | B | feature | PAL network: datagrams, readiness polling, and exact errno semantics | — |
 | feature-parallel-processing | A | feature | Parallel processing as a language feature | feature-unified-heap-allocator |
 | feature-random-library | B | feature | Random library — HW/OS/software tiered RNG (cross-target capability test) | — |
 | feature-real-cross-target-consistency | A | feature | Verify `real`/Double bit-consistency across targets (x87 divergence?) | — |
 | feature-release-packaging | B | feature | Release packaging, reproducibility manifest, and `release.sh` | — |
-| feature-stackful-coro-port | A | feature | Port the stackful coroutine backend to all targets | — |
 | feature-sys-process-spawning | B | feature | Process spawning and execution support — libc-free execve pipeline | — |
 | feature-threadsafe-io-serialization | A | feature | Statement-level I/O serialization under threads | feature-unified-heap-allocator |
 | feature-toolchain-cli-ux | A | feature | Toolchain CLI / user tooling (install, config, discovery, doctor, selfcheck) | — |
@@ -69,11 +69,36 @@ _none_
 | feature-zero-init-contract | A | feature | Zero-init contract — one library-owned managed-slot zeroing guarantee | — |
 | meta-track-b-compiler-wishlist | B | meta | Track-B wishlist — compiler features most wanted to unblock libraries + demos | — |
 
-## blocked (1)
+## rainy-day (18)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
-| feature-c-runtime-library | B | feature | C runtime/library layer (`lib/crtl`) plus direct C-library packages | feature-c-source-frontend |
+| design-overloadable-intrinsics | A | design | Design question: overloadable compiler intrinsics (the `Copy` precedent) | — |
+| design-record-copy-dynarray-field-semantics | A | design | Record copy with a dynamic-array field: PXX deep-copies, FPC shares (reference) | — |
+| feature-additional-cpu-targets | A | feature | Additional CPU targets (rollup: i386 → aarch64 → arm32 → ESP32/RISC-V) | feature-target-aarch64, feature-target-arm32, feature-target-esp32, feature-target-i386 |
+| feature-allocator-quality | A | feature | Allocator quality: split / coalesce / bins / alignment | — |
+| feature-async-auto-backend | A | feature | Auto stackless/stackful backend selection | — |
+| feature-dwarf-debug-info | A | feature | DWARF debug info (`-g`) — phased, x86-64 first | — |
+| feature-extended-type-support | A | feature | Proper `Extended` type support (currently aliased to Double) | — |
+| feature-fpc-vs-pxx-feature-boundary | A | feature | Policy: FPC-bootstrap subset vs PXX-only library features | — |
+| feature-handle-compacting-heap | A | feature | Handle-table compacting heap (anti-fragmentation for constrained RAM) | — |
+| feature-kernel-matrix-bootroom | B | feature | Kernel-matrix bootroom: one static PXX binary, swept across many Linux kernels | — |
+| feature-no-ansistring-profile | A | feature | No-AnsiString / bounded-string profile | — |
+| feature-os-targets-bsd-mac | A | feature | Additional OS targets (BSD / macOS via syscall mapping; Windows deprioritized) | — |
+| feature-stackful-coro-port | A | feature | Port the stackful coroutine backend to all targets | — |
+| feature-static-arena-profile | A | feature | Fixed-static-arena allocator profile | feature-unified-heap-allocator |
+| goal-compile-fpc-compiler | A | goal | 🗼 Lighthouse — compile the FPC compiler (`pp.pas`) with PXX | — |
+| idea-demo-app-candidates | B | idea | Demo / test application candidates — selection criteria + catalog | — |
+| idea-unit-rename-import | B | idea | `uses X as Y` unit-rename import (dialect extension) | — |
+| idea-visibility-enforcement | B | idea | Enforce private/protected visibility | — |
+
+## done-followup (3)
+
+| Ticket | Track | Type | Summary | Blocked-by |
+| --- | --- | --- | --- | --- |
+| feature-async-language-surface | A | feature | Async language surface + stackless coroutine backend | feature-cross-target-feature-parity |
+| feature-interfaces | A | feature | Interfaces | — |
+| feature-string-model-tyfixedstring | B | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
 ## done (173)
 
@@ -253,26 +278,6 @@ _none_
 | lib-string-copy-trim-missing | B | lib | String `Copy` / `Trim` not available | — |
 | lib-text-file-io-assign-rewrite | B | lib | Text file I/O: `Assign`/`Rewrite`/`Reset`/`WriteLn(f,…)`/`CloseFile` missing | — |
 
-## done-followup (15)
-
-| Ticket | Track | Type | Summary | Blocked-by |
-| --- | --- | --- | --- | --- |
-| design-overloadable-intrinsics | A | design | Design question: overloadable compiler intrinsics (the `Copy` precedent) | — |
-| design-record-copy-dynarray-field-semantics | A | design | Record copy with a dynamic-array field: PXX deep-copies, FPC shares (reference) | — |
-| feature-async-language-surface | A | feature | Async language surface + stackless coroutine backend | feature-cross-target-feature-parity |
-| feature-extended-type-support | A | feature | Proper `Extended` type support (currently aliased to Double) | — |
-| feature-fpc-vs-pxx-feature-boundary | A | feature | Policy: FPC-bootstrap subset vs PXX-only library features | — |
-| feature-handle-compacting-heap | A | feature | Handle-table compacting heap (anti-fragmentation for constrained RAM) | — |
-| feature-interfaces | A | feature | Interfaces | — |
-| feature-kernel-matrix-bootroom | B | feature | Kernel-matrix bootroom: one static PXX binary, swept across many Linux kernels | — |
-| feature-no-ansistring-profile | A | feature | No-AnsiString / bounded-string profile | — |
-| feature-static-arena-profile | A | feature | Fixed-static-arena allocator profile | feature-unified-heap-allocator |
-| feature-string-model-tyfixedstring | B | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
-| goal-compile-fpc-compiler | A | goal | 🗼 Lighthouse — compile the FPC compiler (`pp.pas`) with PXX | — |
-| idea-demo-app-candidates | B | idea | Demo / test application candidates — selection criteria + catalog | — |
-| idea-unit-rename-import | B | idea | `uses X as Y` unit-rename import (dialect extension) | — |
-| idea-visibility-enforcement | B | idea | Enforce private/protected visibility | — |
-
 ## rejected (3)
 
 | Ticket | Track | Type | Summary | Blocked-by |
@@ -286,9 +291,6 @@ _none_
 - [B] chess-pal-getdents-link
 - [A] chore-inc-to-units
 - [A] chore-runtime-emission-size
-- [A] feature-additional-cpu-targets
-- [A] feature-allocator-quality
-- [A] feature-async-auto-backend
 - [A] feature-c-header-import-complex
 - [B] feature-copy-intrinsic
 - [A] feature-c-regex-library-devtest
@@ -299,7 +301,6 @@ _none_
 - [B] feature-demo-raytracer
 - [B] feature-demo-solitaire
 - [B] feature-dns-resolver-library
-- [A] feature-dwarf-debug-info
 - [A] feature-dynamic-include-paths-config
 - [A] feature-dynamic-soname-discovery
 - [A] feature-esp32-idf-xtensa
@@ -315,14 +316,12 @@ _none_
 - [A] feature-nil-python-frontend
 - [A] feature-object-reference-type
 - [A] feature-optimization-levels
-- [A] feature-os-targets-bsd-mac
 - [B] feature-pal-esp-posix-fd-semantics
 - [B] feature-pal-network-datagram-poll-errno
 - [A] feature-parallel-processing
 - [B] feature-random-library
 - [A] feature-real-cross-target-consistency
 - [B] feature-release-packaging
-- [A] feature-stackful-coro-port
 - [B] feature-sys-process-spawning
 - [A] feature-threadsafe-io-serialization
 - [A] feature-toolchain-cli-ux

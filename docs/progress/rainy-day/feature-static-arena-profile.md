@@ -1,7 +1,7 @@
 # Fixed-static-arena allocator profile
 
 - **Type:** feature
-- **Status:** done-followup
+- **Status:** rainy-day 
 - **Owner:** —
 - **Blocked-by:** feature-unified-heap-allocator
 - **Opened:** 2026-06-06 (from todo.md §2d)

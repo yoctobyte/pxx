@@ -1,7 +1,7 @@
 # `uses X as Y` unit-rename import (dialect extension)
 
 - **Type:** idea
-- **Status:** done-followup
+- **Status:** rainy-day 
 - **Owner:** —
 - **Opened:** 2026-06-06 (from todo.md §4)
 

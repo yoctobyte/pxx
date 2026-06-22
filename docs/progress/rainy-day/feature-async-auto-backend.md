@@ -1,7 +1,7 @@
 # Auto stackless/stackful backend selection
 
 - **Type:** feature
-- **Status:** done-followup (big / not directly language-relevant)
+- **Status:** rainy-day 
 - **Owner:** —
 - **Opened:** 2026-06-18 (design discussion — async ergonomics on ESP)
 

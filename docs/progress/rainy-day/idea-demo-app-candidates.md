@@ -1,7 +1,7 @@
 # Demo / test application candidates — selection criteria + catalog
 
 - **Type:** idea
-- **Status:** done-followup
+- **Status:** rainy-day 
 - **Opened:** 2026-06-17
 - **Relation:** parent discussion for flagship demos. The first chosen build is
   feature-demo-chess. This ticket holds the selection rationale and the ranked
