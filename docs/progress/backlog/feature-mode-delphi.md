@@ -90,3 +90,22 @@ procedural AND the operand is a bare function-name (no required args, not alread
 - 2026-06-21 — filed (Track A). Surfaced from the bare-function-name `@` rule;
   user flagged Delphi mode as worth implementing for library compat and noted the
   intention/type-detection rabbit hole — bounded here to bind-site special-casing.
+- 2026-06-22 — **slice 1 landed.** `{$mode delphi}` parsed -> `DelphiMode` flag
+  (lexer directive; objfpc/fpc/tp/macpas inert). Two deltas done:
+  - **@-optional procedural value** at the proc-typed *assignment* bind site
+    (`p := Fn` takes `@Fn`; default still needs `@`).
+  - **Bare own-name reading**: in delphi a bare own-name is never the result var
+    (paramless -> recursive call, with-params -> function value); objfpc/default
+    keep the result-var flip (the second delta the user flagged). `Result` reads
+    the result in delphi.
+  Compiler is objfpc so self-host byte-identical; `make test` + cross-bootstrap
+  green; `test/test_mode_delphi.pas` matches FPC `-Mdelphi`.
+  **REMAINING slices:** @-relax at the other bind sites (call-arg `g(F)`, proc-
+  value comparison `if p = F`, proc-typed record/array fields); method pointers
+  (`p := obj.M`, 2-word `TMethod`); per-unit/section mode reset (currently a
+  whole-compile flag — fine single-unit, revisit for multi-unit so a non-delphi
+  unit can't inherit). Keep in backlog for those.
+- 2026-06-22 — found a PRE-EXISTING (v37) bug while testing: `@procedure`-TYPED
+  proc values (`type TP = procedure(...); var p: TP; p := @Proc`) error
+  `unexpected token`; `@function`-typed work. Filed
+  [[bug-procedure-typed-procvalue]] (independent of mode-delphi).
