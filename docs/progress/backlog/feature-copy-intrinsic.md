@@ -98,3 +98,18 @@ All three tested in `test/lib_sysutils.pas` with golden-output verification
 (`make lib-test`). Remaining scope under this ticket: the **dynarray**
 variants of Delete/Insert/Concat (these need compiler intrinsics, same as
 dynarray Copy), and string-family overloads for ShortString/UnicodeString.
+
+- 2026-06-22 — **string `Delete` / `Insert` DONE** (the most-wanted siblings).
+  Both were missing entirely (`undefined variable (Delete)`). Implemented as
+  statement intrinsics in ParseStatementAST that lower to builtin helpers
+  `__pxxStrDelete(var s; index; count)` / `__pxxStrInsert(const src; var s;
+  index)` (compiler/builtin/builtin.pas), built on `__pxxStrCopy` so managed
+  refcounting is the ordinary var-param + assign path; args eval once. Available
+  with no `uses` (pre-scan pulls the builtin unit on `delete(`/`insert(`); a user
+  routine of the same name shadows; string dest only (dynarray Delete/Insert and
+  ESP left as follow-up). Test `test/test_string_delete_insert.pas`, FPC
+  oracle-matched. make test + cross-bootstrap byte-identical.
+  **REMAINING:** `Concat(...)` intrinsic; string `Copy` family overloads
+  (ShortString/Unicode if/when added); dynamic-array `Delete`/`Insert`; by-type
+  call-site resolution polish. (2-arg `Copy(s,i)` and dynarray `Copy` already
+  work.)

@@ -30,6 +30,14 @@ function PCharToString(p: PChar): AnsiString;
   semantics: 1-based index clamped to >= 1, count clamped to the string end. }
 function __pxxStrCopy(const s: AnsiString; index, count: Integer): AnsiString;
 
+{ Bare `Delete(s, index, count)` / `Insert(src, s, index)` lower to these (see
+  ParseStatementAST), so the standard in-place string mutators work with no
+  `uses`. FPC semantics: 1-based index; Delete is a no-op when out of range;
+  Insert clamps index into [1, Length(s)+1]. Built on __pxxStrCopy so the
+  managed refcounting is the ordinary assignment path. }
+procedure __pxxStrDelete(var s: AnsiString; index, count: Integer);
+procedure __pxxStrInsert(const src: AnsiString; var s: AnsiString; index: Integer);
+
 { The heap allocator and managed-string helpers (PXXAlloc/Free/Realloc,
   PXXStr*) moved to the `builtinheap` unit so heap-only / string-only programs
   do not pull in the Str/Val/Variant routines below. }
@@ -334,6 +342,20 @@ begin
     i := i + 1;
   end;
   Result := r;
+end;
+
+procedure __pxxStrDelete(var s: AnsiString; index, count: Integer);
+begin
+  if (count <= 0) or (index < 1) or (index > Length(s)) then Exit;
+  { __pxxStrCopy clamps count to the string end, so an over-long count is fine. }
+  s := __pxxStrCopy(s, 1, index - 1) + __pxxStrCopy(s, index + count, Length(s));
+end;
+
+procedure __pxxStrInsert(const src: AnsiString; var s: AnsiString; index: Integer);
+begin
+  if index < 1 then index := 1;
+  if index > Length(s) + 1 then index := Length(s) + 1;
+  s := __pxxStrCopy(s, 1, index - 1) + src + __pxxStrCopy(s, index, Length(s));
 end;
 
 end.

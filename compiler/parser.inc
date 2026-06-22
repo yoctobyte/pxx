@@ -6810,6 +6810,48 @@ begin
         ASTLeft[node] := valNode;
         ASTRight[node] := CurASTNode;
       end
+      else if CaseEqual(name, 'Delete') and (FindProc('Delete') < 0) and
+              (Tokens[TokPos].Kind = tkLParen) then
+      begin
+        { Delete(s, index, count): in-place string delete, lowered to the
+          __pxxStrDelete builtin (eval-once; the var param + assign inside the
+          helper handle managed refcounting). String only for now — a user
+          `Delete` (e.g. a list method as a plain proc) shadows this. }
+        Next; Expect(tkLParen, '(');
+        ParseExpr; valNode := CurASTNode;
+        if not (IntToTypeKind(ASTTk[valNode]) in [tyString, tyAnsiString, tyFixedString]) then
+          Error('Delete: string argument expected (dynamic-array Delete not yet supported)');
+        Expect(tkComma, ','); ParseExpr; opNode := CurASTNode;       { index }
+        Expect(tkComma, ','); ParseExpr; stepsNode := CurASTNode;    { count }
+        Expect(tkRParen, ')');
+        i := FindProc('__pxxStrDelete');
+        if i < 0 then Error('Delete: string helper unavailable (needs the builtin unit; not on ESP)');
+        node := AllocNode(AN_CALL); ASTIVal[node] := i; ASTTk[node] := Ord(tyUnknown);
+        argSeq := AllocNode(AN_ARG); ASTLeft[argSeq] := valNode;
+        lastArg := AllocNode(AN_ARG); ASTLeft[lastArg] := opNode; ASTRight[argSeq] := lastArg;
+        argIdx := AllocNode(AN_ARG); ASTLeft[argIdx] := stepsNode; ASTRight[lastArg] := argIdx;
+        ASTLeft[node] := argSeq;
+      end
+      else if CaseEqual(name, 'Insert') and (FindProc('Insert') < 0) and
+              (Tokens[TokPos].Kind = tkLParen) then
+      begin
+        { Insert(src, s, index): in-place string insert, lowered to __pxxStrInsert.
+          src by value, s by ref (var param). String dest only for now. }
+        Next; Expect(tkLParen, '(');
+        ParseExpr; exprNode := CurASTNode;                            { src }
+        Expect(tkComma, ','); ParseExpr; valNode := CurASTNode;       { s (dest) }
+        if not (IntToTypeKind(ASTTk[valNode]) in [tyString, tyAnsiString, tyFixedString]) then
+          Error('Insert: string destination expected (dynamic-array Insert not yet supported)');
+        Expect(tkComma, ','); ParseExpr; opNode := CurASTNode;        { index }
+        Expect(tkRParen, ')');
+        i := FindProc('__pxxStrInsert');
+        if i < 0 then Error('Insert: string helper unavailable (needs the builtin unit; not on ESP)');
+        node := AllocNode(AN_CALL); ASTIVal[node] := i; ASTTk[node] := Ord(tyUnknown);
+        argSeq := AllocNode(AN_ARG); ASTLeft[argSeq] := exprNode;
+        lastArg := AllocNode(AN_ARG); ASTLeft[lastArg] := valNode; ASTRight[argSeq] := lastArg;
+        argIdx := AllocNode(AN_ARG); ASTLeft[argIdx] := opNode; ASTRight[lastArg] := argIdx;
+        ASTLeft[node] := argSeq;
+      end
       else if (name = 'SetLength') or (name = 'setlength') then
       begin
         Next; Expect(tkLParen, '(');
@@ -12238,6 +12280,15 @@ begin
       Copy just leaves the extra helper unused. ESP can't compile builtin. }
     if (Tokens[i].Kind = tkIdent) and (i + 1 < TokCount) and
        (Tokens[i + 1].Kind = tkLParen) and CaseEqual(GetTokenStr(i), 'copy') and
+       (TargetArch <> TARGET_XTENSA) and (TargetArch <> TARGET_RISCV32) then
+      needsBuiltin := True;
+    { Bare `Delete(...)` / `Insert(...)` on a string lower to __pxxStrDelete /
+      __pxxStrInsert in the builtin unit (see ParseStatementAST). Pull the unit so
+      the helpers resolve; a user routine of the same name shadows at the call
+      site, leaving the helpers unused. ESP can't compile builtin. }
+    if (Tokens[i].Kind = tkIdent) and (i + 1 < TokCount) and
+       (Tokens[i + 1].Kind = tkLParen) and
+       (CaseEqual(GetTokenStr(i), 'delete') or CaseEqual(GetTokenStr(i), 'insert')) and
        (TargetArch <> TARGET_XTENSA) and (TargetArch <> TARGET_RISCV32) then
       needsBuiltin := True;
     { Variant use needs VariantToStr (in builtin) for variant writes — on
