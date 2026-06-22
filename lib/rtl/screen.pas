@@ -49,6 +49,9 @@ procedure ScreenInit;
 
 function ScreenCols: Integer;
 function ScreenRows: Integer;
+{ Back-buffer glyphs of row y as plain text (no attributes) — for tests, layout
+  checks, and serialization. }
+function ScreenDumpRow(y: Integer): AnsiString;
 
 { Clipping / origin: after ScreenSetClip(x,y,w,h) all draw coordinates are
   relative to (x,y) and clipped to the w x h region — the basis for panels/
@@ -144,6 +147,15 @@ end;
 function ScreenRows: Integer;
 begin
   ScreenRows := scRows;
+end;
+
+function ScreenDumpRow(y: Integer): AnsiString;
+var x: Integer; s: AnsiString;
+begin
+  s := '';
+  if (y >= 0) and (y < scRows) then
+    for x := 0 to scCols - 1 do s := s + bCh[y * scCols + x];
+  ScreenDumpRow := s;
 end;
 
 procedure ScreenSetPen(fg, bg, attr: Integer);

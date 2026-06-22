@@ -86,6 +86,15 @@ begin
   exp := '' + E + '[2;3H' + E + '[0m' + '##' + E + '[3;3H' + '##';
   Check('clip', r, exp);
 
+  { --- composition: a box + text lays out as the expected ASCII picture --- }
+  ScreenInitSize(6, 4);
+  ScreenBox(0, 0, 6, 4);
+  ScreenWrite(1, 1, 'Hi');
+  Check('scene0', ScreenDumpRow(0), '+----+');
+  Check('scene1', ScreenDumpRow(1), '|Hi  |');
+  Check('scene2', ScreenDumpRow(2), '|    |');
+  Check('scene3', ScreenDumpRow(3), '+----+');
+
   { --- key decoder (pure, exact). Sequences go through a variable first to
     sidestep bug-ansistring-concat-arg-static-bloat (a concat expression passed
     straight as an arg reserves ~8 MB of BSS per call site). --- }
