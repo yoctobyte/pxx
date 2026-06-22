@@ -166,3 +166,17 @@ DNS deferred to `feature-dns-resolver-library`.
   these primitives — no new PAL surface expected for IPv4 loopback TCP/UDP. Still
   PAL-blocked above IPv4: IPv6 sockaddr layout (`PAL_NET_AF_INET6` + 28-byte
   sockaddr_in6 fill/parse) — to be added when net.pas reaches it.
+- 2026-06-22 — **First-milestone `lib/rtl/net.pas` landed** (Track B, stable v37,
+  commit 52319a0): the blocking IPv4 face the milestone called for, with no
+  platform conditionals of its own. `TNetSocket`/`TNetAddress`; TCP
+  `NetTcpListen`/`NetTcpAccept` (peer-reporting)/`NetTcpConnect`/`NetSend`/
+  `NetRecv`; UDP `NetUdpBind`/`NetUdpSendTo`/`NetUdpRecvFrom`; plus
+  `NetGetSockName`/`NetGetSockError`/`NetShutdown`/`NetClose`. End-to-end
+  loopback proof in `test/lib_net.pas` (single thread: blocking connect completes
+  via the kernel backlog, then accept; TCP echo + UDP roundtrip + ephemeral
+  bind/getsockname + peer address) wired into `make lib-test`. `asyncnet.pas`
+  stays the coroutine face over the same PAL primitives. STILL OPEN under this
+  ticket: IPv6, DNS (`feature-dns-resolver-library`), the Synapse / `Posix.*`
+  compat path (Track A blockers `feature-dotted-unit-names` +
+  `feature-conditional-declared-directive`), and async/blocking facade
+  unification.
