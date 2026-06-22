@@ -278,3 +278,15 @@ split DNS, captive portals, enterprise policy, and privacy expectations.
   `dns.pas` facade + backend selection (`dns_libc`, `dns_resolved`, `dns_esp`)
   and an async sibling over `asyncnet.pas`. Live-network resolution stays
   untested by policy (loopback/mock only; configured nameservers, never public).
+- 2026-06-22 — **`lib/rtl/dns.pas` facade landed** (commit 1a71354): the stable
+  "files dns" entrypoint. `DnsResolveHostEx(hostsText, ns, port, name, ...)` is
+  the testable seam — an `/etc/hosts` match short-circuits, a miss falls through
+  to `DnsResolveA`; `DnsResolveHost(name, ...)` reads `/etc/hosts` +
+  `/etc/resolv.conf` via PAL and resolves through the first configured
+  nameserver on port 53, returning `DNS_ERR_NOCONFIG` when nothing matches and
+  no nameserver is set (never public DNS). `test/lib_dns_facade.pas` proves the
+  seam (hosts hit without a query; miss served by the forked mock, 8/8) and the
+  live path was smoke-checked: `DnsResolveHost('localhost')` -> 127.0.0.1 from
+  the real `/etc/hosts`. The libc-free `dns_wire` resolver is now a complete
+  working vertical (codec -> config -> blocking transport -> facade); the
+  REMAINING items above are incremental on top.
