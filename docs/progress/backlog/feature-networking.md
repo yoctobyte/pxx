@@ -160,14 +160,14 @@ DNS deferred to `feature-dns-resolver-library`.
   `PAL_NET_EWOULDBLOCK`/`ECONNREFUSED`/`ECONNRESET`
   (`feature-pal-network-datagram-poll-errno`, done), and socket introspection
   `PalGetSockError` (SO_ERROR), `PalGetSockNameIpv4`, peer-reporting
-  `PalAcceptIpv4` (commit 6e3f731). All host-proven on loopback via
+  `PalAcceptIpv4` (commit adebdf9). All host-proven on loopback via
   `lib_platform_net*` in `make lib-test`. The PAL stays scheduler-free; remaining
   net.pas work is the target-neutral `TNetSocket`/`TNetAddress` blocking API over
   these primitives — no new PAL surface expected for IPv4 loopback TCP/UDP. Still
   PAL-blocked above IPv4: IPv6 sockaddr layout (`PAL_NET_AF_INET6` + 28-byte
   sockaddr_in6 fill/parse) — to be added when net.pas reaches it.
 - 2026-06-22 — **First-milestone `lib/rtl/net.pas` landed** (Track B, stable v37,
-  commit 52319a0): the blocking IPv4 face the milestone called for, with no
+  commit 3d7ac46): the blocking IPv4 face the milestone called for, with no
   platform conditionals of its own. `TNetSocket`/`TNetAddress`; TCP
   `NetTcpListen`/`NetTcpAccept` (peer-reporting)/`NetTcpConnect`/`NetSend`/
   `NetRecv`; UDP `NetUdpBind`/`NetUdpSendTo`/`NetUdpRecvFrom`; plus
