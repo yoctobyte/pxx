@@ -1,9 +1,10 @@
 # Demo — maze generator + solver
 
 - **Type:** feature
-- **Status:** backlog
-- **Owner:** —
+- **Status:** done
+- **Owner:** Codex (Track B)
 - **Opened:** 2026-06-19
+- **Closed:** 2026-06-22
 - **Relation:** demo-class candidate from idea-demo-app-candidates (top-10).
   **Pressures the set lane** (visited-set) — see feature-language-gaps-from-demos
   Gap 1. ASCII-over-serial, like the sudoku game. Platonic source.
@@ -40,6 +41,12 @@ self-host / cross regression.
 
 ## Log
 - 2026-06-19 — Opened in the demo-ticket organization pass.
+- 2026-06-22 — Re-verified by Codex on Track B pinned stable v32:
+  `stable_linux_amd64/default/pinned examples/maze/maze.pas /tmp/maze_pxx &&
+  /tmp/maze_pxx` builds and runs the solver successfully. The demo renders the
+  solved fixed-seed maze and reports `seed 12345  size 12x8  path cells = 43`.
+  No code change or new implementation commit was needed; this ticket was stale
+  after later compiler/runtime fixes.
 
 ## Status 2026-06-19 (track B, v10)
 
