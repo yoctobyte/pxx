@@ -1124,6 +1124,16 @@ begin
           each scalar arg is one word, a by-value Int64/UInt64 is two (lo then
           hi). nArgs counts WORDS here; word k is pushed in index order so it
           lands at [sp + (nWords-1-k)*4], then loads into a[k] (<=8 words). }
+        { Aggregate (record) result: push the caller's hidden destination first
+          (deepest), so it survives arg evaluation; loaded into t1 just before the
+          call. riscv has no dedicated indirect-result register, so t1 (a
+          caller-saved temp) carries it; the callee prologue reads t1 first. }
+        if (procIdx >= 0) and (not ProcExternal[procIdx]) and
+           TypeIsAggregate(Procs[procIdx].RetType) then
+        begin
+          IREmitNodeRISCV32(IRC[node]);                  { a0 = hidden dest addr }
+          rv32_addi(reg_sp, reg_sp, -4); rv32_sw(reg_a0, reg_sp, 0);
+        end;
         argNode := IRB[node];
         nArgs := 0;     { word count }
         i := 0;         { argument index }
@@ -1184,7 +1194,13 @@ begin
         for i := 0 to nArgs - 1 do
           rv32_lw(reg_a0 + i, reg_sp, (nArgs - 1 - i) * 4);
 
-        if nArgs > 0 then
+        if (procIdx >= 0) and (not ProcExternal[procIdx]) and
+           TypeIsAggregate(Procs[procIdx].RetType) then
+        begin
+          rv32_lw(reg_t1, reg_sp, nArgs * 4);          { hidden dest (pushed deepest) }
+          rv32_addi(reg_sp, reg_sp, (nArgs + 1) * 4);  { free args + hidden dest }
+        end
+        else if nArgs > 0 then
           rv32_addi(reg_sp, reg_sp, nArgs * 4);
 
         EmitCallProc(procIdx);
@@ -1213,6 +1229,20 @@ begin
         EmitLoadImmRISCV32(reg_a1, Integer(IRIVal[node]));  { a1 = byte count }
         procIdx := FindProc('PXXMemZero');
         if procIdx < 0 then Error('compiler error: PXXMemZero not found');
+        EmitCallProc(procIdx);
+      end;
+
+    IR_COPY_REC:
+      begin
+        { Whole-record copy: PXXMemMove(dest, src, count). ESP has no managed
+          record fields yet, so the plain byte move is correct (no per-field ARC). }
+        IREmitNodeRISCV32(IRB[node]);            { a0 = src }
+        rv32_addi(reg_sp, reg_sp, -4); rv32_sw(reg_a0, reg_sp, 0);
+        IREmitNodeRISCV32(IRA[node]);            { a0 = dest }
+        rv32_lw(reg_a1, reg_sp, 0); rv32_addi(reg_sp, reg_sp, 4);   { a1 = src }
+        EmitLoadImmRISCV32(reg_a2, Integer(IRIVal[node]));          { a2 = count }
+        procIdx := FindProc('PXXMemMove');
+        if procIdx < 0 then Error('compiler error: PXXMemMove not found');
         EmitCallProc(procIdx);
       end;
 

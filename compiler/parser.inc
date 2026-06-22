@@ -10556,6 +10556,14 @@ begin
       EmitI32($E08B9009);                                 { add r9, fp, r9 }
       EmitI32($E589C000);                                 { str r12, [r9] }
     end
+    else if TargetArch = TARGET_RISCV32 then
+    begin
+      { riscv32 carries the hidden destination in t1 (no dedicated indirect-result
+        reg); stash it before the param-copy loop clobbers t1. }
+      EmitLoadImmRISCV32(reg_t0, Syms[idx].Offset);
+      rv32_add(reg_t0, reg_s0, reg_t0);
+      rv32_sw(reg_t1, reg_t0, 0);
+    end
     else
       begin EmitB($4C); EmitB($89); EmitB($95); EmitI32(Syms[idx].Offset); end; { mov [rbp+off], r10 }
   end;

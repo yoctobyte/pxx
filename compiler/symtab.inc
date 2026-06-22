@@ -18,6 +18,7 @@ procedure EmitLoadVar64Xtensa(idx: Integer); forward;
 procedure EmitLoadVarRISCV32(idx: Integer); forward;
 procedure EmitLoadVar64RISCV32(idx: Integer); forward;
 procedure EmitLoadImmRISCV32(rd: Integer; v: Int32); forward;
+procedure EmitSlotAddrRISCV32(rd, si: Integer); forward;
 procedure EmitFrameAddrXtensa(rd: Integer; off: Integer); forward;
 procedure EmitLoadConstXtensa(rd: Integer; v: Int32); forward;
 procedure EmitCallProc(procIdx: Integer); forward;
@@ -3984,17 +3985,38 @@ begin
         end;
     if retSymIdx >= 0 then
     begin
-      if Syms[retSymIdx].IsArray or (Syms[retSymIdx].Kind <> skLocal) or
-         not (TypeIsOrdinal(Syms[retSymIdx].TypeKind) or TypeIsFloat(Syms[retSymIdx].TypeKind) or
-              (Syms[retSymIdx].TypeKind in [tyAnsiString, tyPointer, tyClass])) then
-        Error('target riscv32: only ordinal/float/pointer/string function results supported yet');
-      { Float result carried as raw bits in the return reg(s): Double = a0:a1
-        (8-byte slot), Single = a0 (4-byte slot) — same shape as Int64/ordinal. }
-      if (Syms[retSymIdx].TypeKind = tyInt64) or (Syms[retSymIdx].TypeKind = tyUInt64) or
-         (Syms[retSymIdx].TypeKind = tyDouble) then
-        EmitLoadVar64RISCV32(retSymIdx)   { 64-bit result in a0:a1 }
+      if TypeIsAggregate(Syms[retSymIdx].TypeKind) and
+         (CurProc >= 0) and (ProcAggregateDestSym[CurProc] >= 0) then
+      begin
+        { Aggregate (record) result: copy the Result local into the caller's
+          hidden destination (the pointer the prologue stashed from t1), return
+          that pointer in a0. PXXMemMove(dest, &Result, size). }
+        EmitSlotAddrRISCV32(reg_a1, retSymIdx);              { a1 = &Result (src) }
+        EmitLoadVarRISCV32(ProcAggregateDestSym[CurProc]);   { a0 = dest ptr }
+        if Syms[retSymIdx].TypeKind = tyRecord then
+          sz := RecSize(Syms[retSymIdx].RecName)
+        else
+          sz := TypeSize(Syms[retSymIdx].TypeKind);
+        EmitLoadImmRISCV32(reg_a2, sz);                       { a2 = byte count }
+        procIdx := FindProc('PXXMemMove');
+        if procIdx < 0 then Error('compiler error: PXXMemMove not found');
+        EmitCallProc(procIdx);
+        EmitLoadVarRISCV32(ProcAggregateDestSym[CurProc]);   { a0 = dest (return value) }
+      end
       else
-        EmitLoadVarRISCV32(retSymIdx);
+      begin
+        if Syms[retSymIdx].IsArray or (Syms[retSymIdx].Kind <> skLocal) or
+           not (TypeIsOrdinal(Syms[retSymIdx].TypeKind) or TypeIsFloat(Syms[retSymIdx].TypeKind) or
+                (Syms[retSymIdx].TypeKind in [tyAnsiString, tyPointer, tyClass])) then
+          Error('target riscv32: only ordinal/float/pointer/string function results supported yet');
+        { Float result carried as raw bits in the return reg(s): Double = a0:a1
+          (8-byte slot), Single = a0 (4-byte slot) — same shape as Int64/ordinal. }
+        if (Syms[retSymIdx].TypeKind = tyInt64) or (Syms[retSymIdx].TypeKind = tyUInt64) or
+           (Syms[retSymIdx].TypeKind = tyDouble) then
+          EmitLoadVar64RISCV32(retSymIdx)   { 64-bit result in a0:a1 }
+        else
+          EmitLoadVarRISCV32(retSymIdx);
+      end;
     end;
     rv32_addi(reg_sp, reg_s0, 0);
     rv32_lw(reg_s0, reg_sp, 8);

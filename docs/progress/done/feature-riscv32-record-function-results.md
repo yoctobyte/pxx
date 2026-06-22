@@ -1,9 +1,11 @@
 # riscv32: support record (by-value struct) function results
 
 - **Type:** feature (Track A — riscv32 codegen / ABI)
-- **Status:** backlog
-- **Owner:** —
+- **Status:** DONE — 2026-06-23. Record copy (IR_COPY_REC) + by-value record
+  function results implemented on riscv32, verified under qemu-system.
+- **Owner:** — (Track A)
 - **Opened:** 2026-06-22 (found wiring net.pas onto the ESP32-C3 socket smoke, Track B)
+- **Closed:** 2026-06-23
 
 ## Problem
 
@@ -72,3 +74,30 @@ results are blocked here.
   feature-riscv32-var-param-forwarding was fixed+verified this way (f67fad2). This
   one remains a real codegen feature (record-return ABI / xtensa stack args), but
   it is no longer blocked on verification.
+
+## Fix log
+
+- 2026-06-23 — **DONE on riscv32** (5789a81). Two gaps: (1) riscv32 had NO record copy at
+  all (`y := x` errored "unsupported node") and (2) no record return ABI. Both
+  added:
+  - `IR_COPY_REC` on riscv32 (`ir_codegen_riscv32.inc`): whole-record byte copy
+    via `PXXMemMove(dest, src, count)`. Fixes record assignment broadly.
+  - By-value record result via the hidden-destination ABI (PXX-internal, like
+    aarch64's x8 / arm32's r12): caller pushes the result-storage address
+    (`IRC[node]`, set target-independently in ir.inc) and loads it into **t1**
+    right before the call (riscv has no dedicated indirect-result reg); the callee
+    prologue (`parser.inc`) stashes t1 into `ProcAggregateDestSym`'s slot; the
+    epilogue (`symtab.inc`) `PXXMemMove`s the Result local into [dest] and returns
+    the pointer in a0. Forward-declared `EmitSlotAddrRISCV32` in symtab.inc
+    (siblings already were). Works for any record size (memcpy), so the
+    "≤2 words in a0/a1 vs sret" split is moot for PXX-internal calls.
+  - Verified under the Espressif qemu-system harness (`esp_run_bare.sh --chip
+    esp32c3`): record copy, a 2-field TNetAddress-shape result, and a 5-field
+    (>2 word) result all match the x86-64 oracle. Test
+    `test/test_esp_record_result.pas` wired into `make test-esp-bare` (esp32c3).
+    make test + cross-bootstrap byte-identical.
+  - `net.pas`'s by-value `TNetAddress` helpers now compile for riscv32; `uses net`
+    still hits a SEPARATE blocker (external/dynamic lwip_* symbols — not records),
+    tracked elsewhere.
+  - xtensa record results are a SEPARATE unimplemented gap (the windowed-ABI
+    hidden-dest register is fiddlier); the test runs on esp32c3 only.
