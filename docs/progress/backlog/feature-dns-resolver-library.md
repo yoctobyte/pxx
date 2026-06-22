@@ -246,3 +246,15 @@ split DNS, captive portals, enterprise policy, and privacy expectations.
 - 2026-06-21 — design filed. Decision: take all three serious paths (`libc`,
   pure wire DNS, systemd-resolved/D-Bus), make the resolver backend selectable,
   and never default to public DNS fallback.
+- 2026-06-22 — **first slice landed: `lib/rtl/dns_wire_core.pas`** (Track B,
+  stable v37, commit a3d97d9). Transport-free packet codec — the shared
+  `dns_wire_core` from the design's split. `DnsBuildQueryA` encodes a recursive
+  A query; `DnsParseResponseA` walks answer RRs (handling 0xC0 compressed names)
+  and extracts A records as host-order IPv4, returning the DNS RCODE or a
+  negative `DNS_ERR_*`. Pure/offline: `test/lib_dns_wire.pas` checks the query
+  wire bytes and parses a canned 2-answer response; FPC-oracle verified
+  (byte-identical); wired into `make lib-test`. NEXT slices: AAAA, CNAME-chain
+  following, `/etc/hosts` + `/etc/resolv.conf` parse, then `dns_wire_blocking`
+  over `net.pas` (UDP query + TCP-truncation fallback) and `dns_wire_async`
+  over `asyncnet.pas`. The `dns.pas` facade + backend selection come after a
+  backend works end to end.
