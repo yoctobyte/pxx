@@ -1771,6 +1771,22 @@ cross-bootstrap-i386: $(COMPILER)
 cross-bootstrap: cross-bootstrap-aarch64 cross-bootstrap-arm32 cross-bootstrap-i386
 	@echo "cross-bootstrap: i386 + aarch64 + arm32 all byte-identical self-fixedpoint"
 
+# Float bit-determinism across targets (feature-real-cross-target-consistency).
+# The mandelbrot escape-count checksum is integer-deterministic: strict IEEE-754
+# Double (x86-64 SSE2, AArch64/ARM VFP) must produce the SAME checksum on every
+# target — a mismatch localises a float-determinism bug (e.g. i386 x87 80-bit
+# intermediates). Reference 3745966 (FPC-confirmed on x86-64).
+test-float-determinism: $(COMPILER)
+	./$(COMPILER) examples/mandelbrot/mandelbrot.pas /tmp/mb_x86_64
+	test "$$(/tmp/mb_x86_64 | grep checksum=)" = "checksum=3745966"
+	@for a in i386 aarch64 arm32; do \
+	  ./$(COMPILER) --target=$$a examples/mandelbrot/mandelbrot.pas /tmp/mb_$$a >/dev/null || exit 1; \
+	  c=$$(tools/run_target.sh $$a /tmp/mb_$$a | grep checksum=); \
+	  test "$$c" = "checksum=3745966" || { echo "$$a float-determinism FAIL: $$c (want checksum=3745966)"; exit 1; }; \
+	  echo "$$a float-determinism: OK (checksum=3745966)"; \
+	done
+	@echo "test-float-determinism: x86_64 + i386 + aarch64 + arm32 all checksum=3745966"
+
 # Relocatable .o emission for the esp32-idf profile (feature-elf-rel-writer).
 # Host-only checks via binutils readelf; if the ESP cross toolchains are
 # installed (~/.espressif), also proves each .o links against a C shim.

@@ -1,8 +1,10 @@
 # Verify `real`/Double bit-consistency across targets (x87 divergence?)
 
 - **Type:** feature (verification) — **Track A**
-- **Status:** backlog
+- **Status:** DONE — 2026-06-22. Float determinism VERIFIED across x86-64 / i386 /
+  aarch64 / arm32 (no x87 divergence). Durable guard: `make test-float-determinism`.
 - **Opened:** 2026-06-22
+- **Closed:** 2026-06-22
 - **Owner:** — (Track A / "sis")
 - **Found by:** Track B, building the float math library.
 
@@ -40,3 +42,14 @@ byte-identical output, precisely because of this open question.
 
 ## Log
 - 2026-06-22 — Filed by Track B from the math-library work.
+
+- 2026-06-22 — **VERIFIED, closes.** Built `examples/mandelbrot/mandelbrot.pas`
+  with the current compiler for all four Linux targets and ran the cross ones
+  under QEMU (`tools/run_target.sh`). Every target produced the integer
+  escape-count **checksum=3745966 / ALL OK** — identical, so strict IEEE-754
+  Double is bit-deterministic across x86-64 (SSE2), i386, aarch64 and arm32
+  (VFP). No i386 x87 80-bit / FMA-contraction drift — the suspect did not
+  materialise. Made it a durable regression guard: new Makefile target
+  `make test-float-determinism` (builds + cross-runs mandelbrot, asserts the
+  checksum on each target). ESP soft-float (riscv32/xtensa) is covered separately
+  by the softfloat library validation (== x86-64 oracle); not re-run here.

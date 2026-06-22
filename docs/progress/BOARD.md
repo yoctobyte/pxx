@@ -24,7 +24,7 @@ _none_
 | --- | --- | --- | --- | --- |
 | feature-c-runtime-library | B | feature | C runtime/library layer (`lib/crtl`) plus direct C-library packages | feature-c-source-frontend |
 
-## backlog (43)
+## backlog (42)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -60,7 +60,6 @@ _none_
 | feature-pal-esp-posix-fd-semantics | B | feature | ESP PAL: exact POSIX fd semantics over ESP-IDF VFS | — |
 | feature-parallel-processing | A | feature | Parallel processing as a language feature | feature-unified-heap-allocator |
 | feature-random-library | B | feature | Random library — HW/OS/software tiered RNG (cross-target capability test) | — |
-| feature-real-cross-target-consistency | A | feature | Verify `real`/Double bit-consistency across targets (x87 divergence?) | — |
 | feature-release-packaging | B | feature | Release packaging, reproducibility manifest, and `release.sh` | — |
 | feature-riscv32-record-function-results | A | feature | riscv32: support record (by-value struct) function results | — |
 | feature-riscv32-var-param-forwarding | A | feature | riscv32: a var parameter forwarded to a nested var parameter loses its address | — |
@@ -106,7 +105,7 @@ _none_
 | feature-mimic-fpc | B | feature | `mimic FPC` compatibility mode | — |
 | feature-string-model-tyfixedstring | B | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (180)
+## done (181)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -256,6 +255,7 @@ _none_
 | feature-procedural-types | A | feature | Procedural types and method pointers | — |
 | feature-progress-check-makefile | A | feature | Wire `progress.sh check` into a make target | — |
 | feature-progress-transition-helpers | A | feature | Progress transition helpers (`claim` / `resolve`) | — |
+| feature-real-cross-target-consistency | A | feature | Verify `real`/Double bit-consistency across targets (x87 divergence?) | — |
 | feature-relative-path-units | A | feature | Relative/absolute path support in `uses`/`includes` | — |
 | feature-result-in-loop | A | feature | Function `Result` (float) read-modified inside a loop miscompiles to 0 | — |
 | feature-rtl-conversion-and-bitset-library | B | feature | RTL gaps — string/number conversion + a bit-set type (surfaced by the demos) | — |
@@ -331,7 +331,6 @@ _none_
 - [B] feature-pal-esp-posix-fd-semantics
 - [A] feature-parallel-processing
 - [B] feature-random-library
-- [A] feature-real-cross-target-consistency
 - [B] feature-release-packaging
 - [A] feature-riscv32-record-function-results
 - [A] feature-riscv32-var-param-forwarding
