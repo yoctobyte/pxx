@@ -1,0 +1,5 @@
+# lwIP loopback interface (127.0.0.1) so the socket smoke needs no Wi-Fi /
+# Ethernet bring-up. Both are default-y in IDF; pinned here so the smoke does
+# not depend on the default tracking.
+CONFIG_LWIP_NETIF_LOOPBACK=y
+CONFIG_LWIP_LOOPBACK_MAX_PBUFS=8

@@ -22,7 +22,7 @@ _none_
 | --- | --- | --- | --- | --- |
 | feature-c-runtime-library | B | feature | C runtime/library layer (`lib/crtl`) plus direct C-library packages | feature-c-source-frontend |
 
-## backlog (41)
+## backlog (43)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -55,11 +55,13 @@ _none_
 | feature-nil-python-frontend | A | feature | Nil Python frontend (`.npy`) | — |
 | feature-object-reference-type | A | feature | `object` — a rooted object-reference type | — |
 | feature-optimization-levels | A | feature | Optimization levels (`-O0/-O1/-O2/-O3/-Os`) + pass framework | — |
+| feature-pal-esp-lwip-sockaddr-readback | B | feature | PAL esp/lwIP: getsockname & recvfrom return an unfilled (zero) sockaddr | — |
 | feature-pal-esp-posix-fd-semantics | B | feature | ESP PAL: exact POSIX fd semantics over ESP-IDF VFS | — |
 | feature-parallel-processing | A | feature | Parallel processing as a language feature | feature-unified-heap-allocator |
 | feature-random-library | B | feature | Random library — HW/OS/software tiered RNG (cross-target capability test) | — |
 | feature-real-cross-target-consistency | A | feature | Verify `real`/Double bit-consistency across targets (x87 divergence?) | — |
 | feature-release-packaging | B | feature | Release packaging, reproducibility manifest, and `release.sh` | — |
+| feature-riscv32-record-function-results | A | feature | riscv32: support record (by-value struct) function results | — |
 | feature-synapse-compile-check | B | feature | Synapse library — proper compile check (Track B) | /, —, {$MIMIC, A, [[feature-mimic-fpc]], --mimic-fpc, the, (Track |
 | feature-threadsafe-io-serialization | A | feature | Statement-level I/O serialization under threads | feature-unified-heap-allocator |
 | feature-toolchain-cli-ux | A | feature | Toolchain CLI / user tooling (install, config, discovery, doctor, selfcheck) | — |
@@ -320,11 +322,13 @@ _none_
 - [A] feature-nil-python-frontend
 - [A] feature-object-reference-type
 - [A] feature-optimization-levels
+- [B] feature-pal-esp-lwip-sockaddr-readback
 - [B] feature-pal-esp-posix-fd-semantics
 - [A] feature-parallel-processing
 - [B] feature-random-library
 - [A] feature-real-cross-target-consistency
 - [B] feature-release-packaging
+- [A] feature-riscv32-record-function-results
 - [A] feature-threadsafe-io-serialization
 - [A] feature-toolchain-cli-ux
 - [B] feature-writeln-as-library

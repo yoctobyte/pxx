@@ -117,11 +117,15 @@ function lwip_getsockopt(s, level, optname: Integer; optval: Pointer; optlen: Po
 function lwip_getsockname(s: Integer; name: Pointer; namelen: Pointer): Integer; cdecl; external;
 {$endif}
 
+{ lwIP/BSD sockaddr_in: byte 0 = sin_len, byte 1 = sin_family (NOT the Linux
+  2-byte sin_family at offset 0 the POSIX backend uses). port (offset 2-3) and
+  addr (offset 4-7) are network byte order and identical to the Linux layout. }
 procedure FillSockAddrIpv4(sa: Pointer; hostAddr: LongWord; port: Integer);
 var i: Integer;
 begin
   for i := 0 to 15 do PB(Pointer(Int64(sa) + i))^ := 0;
-  PB(Pointer(Int64(sa) + 0))^ := PAL_NET_AF_INET;
+  PB(Pointer(Int64(sa) + 0))^ := 16;             { sin_len = sizeof(sockaddr_in) }
+  PB(Pointer(Int64(sa) + 1))^ := PAL_NET_AF_INET; { sin_family }
   PB(Pointer(Int64(sa) + 2))^ := (port shr 8) and $FF;
   PB(Pointer(Int64(sa) + 3))^ := port and $FF;
   PB(Pointer(Int64(sa) + 4))^ := (hostAddr shr 24) and $FF;
