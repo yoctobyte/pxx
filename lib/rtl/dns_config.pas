@@ -22,6 +22,12 @@ function DnsParseIpv4(const s: string; startIdx, endIdx: Integer; var ip: LongWo
   and `;` start comments. Returns the nameserver count (also via count). }
 function DnsParseResolvConf(const text: string; var ns: TDnsIpv4Array; var count: Integer): Integer;
 
+{ Look up `name` in /etc/hosts text (the "files" half of "files dns"). Each line
+  is `<ipv4> <hostname> [aliases...]`; hostname match is case-insensitive; `#`
+  starts a comment. Returns True with ip set (host byte order) on the first
+  match. IPv6 host lines are skipped (A/IPv4 slice only). }
+function DnsLookupHosts(const text: string; const name: string; var ip: LongWord): Boolean;
+
 implementation
 
 function DnsParseIpv4(const s: string; startIdx, endIdx: Integer; var ip: LongWord): Boolean;
@@ -142,6 +148,103 @@ begin
     end;
   end;
   DnsParseResolvConf := count;
+end;
+
+function LowerCh(c: Char): Char;
+begin
+  if (c >= 'A') and (c <= 'Z') then
+    LowerCh := Chr(Ord(c) + 32)
+  else
+    LowerCh := c;
+end;
+
+{ Case-insensitive compare of text[ts..te] against the whole of name. }
+function EqualsCI(const text: string; ts, te: Integer; const name: string): Boolean;
+var i, n: Integer;
+begin
+  n := te - ts + 1;
+  if n <> Length(name) then
+  begin
+    EqualsCI := False;
+    Exit;
+  end;
+  for i := 1 to n do
+    if LowerCh(text[ts + i - 1]) <> LowerCh(name[i]) then
+    begin
+      EqualsCI := False;
+      Exit;
+    end;
+  EqualsCI := True;
+end;
+
+{ One /etc/hosts line text[ls..le]: if any hostname token matches name, parse the
+  leading address into ip and return True. }
+function MatchHostsLine(const text: string; ls, le: Integer; const name: string; var ip: LongWord): Boolean;
+var
+  p, ts, te, tokIndex: Integer;
+  ipStart, ipEnd: Integer;
+  tmp: LongWord;
+begin
+  MatchHostsLine := False;
+  ipStart := 0;
+  ipEnd := -1;
+  tokIndex := 0;
+  p := ls;
+  while p <= le do
+  begin
+    { skip whitespace }
+    while (p <= le) and IsSpace(text[p]) do p := p + 1;
+    if p > le then Exit;
+    if text[p] = '#' then Exit;
+    { token [ts..te] }
+    ts := p;
+    while (p <= le) and (not IsSpace(text[p])) and (text[p] <> '#') do p := p + 1;
+    te := p - 1;
+    if tokIndex = 0 then
+    begin
+      ipStart := ts;
+      ipEnd := te;
+    end
+    else if EqualsCI(text, ts, te, name) then
+    begin
+      if DnsParseIpv4(text, ipStart, ipEnd, tmp) then
+      begin
+        ip := tmp;
+        MatchHostsLine := True;
+      end;
+      Exit;
+    end;
+    tokIndex := tokIndex + 1;
+  end;
+end;
+
+function DnsLookupHosts(const text: string; const name: string; var ip: LongWord): Boolean;
+var
+  i, ls, n: Integer;
+  found: LongWord;   { local, not the var param: avoids var->var forwarding }
+begin
+  DnsLookupHosts := False;
+  found := 0;
+  n := Length(text);
+  ls := 1;
+  for i := 1 to n do
+  begin
+    if text[i] = #10 then
+    begin
+      if (i - 1 >= ls) and MatchHostsLine(text, ls, i - 1, name, found) then
+      begin
+        ip := found;
+        DnsLookupHosts := True;
+        Exit;
+      end;
+      ls := i + 1;
+    end;
+  end;
+  if (ls <= n) and MatchHostsLine(text, ls, n, name, found) then
+  begin
+    ip := found;
+    DnsLookupHosts := True;
+  end;
 end;
 
 end.

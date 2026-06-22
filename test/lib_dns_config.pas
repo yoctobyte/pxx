@@ -9,7 +9,7 @@ var
   ip: LongWord;
   ns: TDnsIpv4Array;
   count, i: Integer;
-  cfg: string;
+  cfg, hosts: string;
 
 procedure Show(const tag: string; pass: Boolean);
 begin
@@ -38,4 +38,22 @@ begin
   Show('ns0', ns[0] = LongWord($08080808));
   Show('ns1', ns[1] = LongWord($01010101));
   Show('ns2', ns[2] = LongWord($09090909));
+
+  { ---- /etc/hosts lookup ---- }
+  hosts := '127.0.0.1   localhost'#10 +
+           '192.168.1.10  myhost.local myhost'#10 +
+           '# 10.0.0.1 commented.host'#10 +
+           '93.184.216.34  example.com';
+  ip := 0;
+  Show('h-local', DnsLookupHosts(hosts, 'localhost', ip) and (ip = LongWord($7F000001)));
+  ip := 0;
+  Show('h-alias', DnsLookupHosts(hosts, 'myhost', ip) and (ip = LongWord($C0A8010A)));
+  ip := 0;
+  Show('h-ci', DnsLookupHosts(hosts, 'MYHOST.LOCAL', ip) and (ip = LongWord($C0A8010A)));
+  ip := 0;
+  Show('h-nofinalnl', DnsLookupHosts(hosts, 'example.com', ip) and (ip = LongWord($5DB8D822)));
+  ip := 0;
+  Show('h-comment', not DnsLookupHosts(hosts, 'commented.host', ip));
+  ip := 0;
+  Show('h-miss', not DnsLookupHosts(hosts, 'nope', ip));
 end.
