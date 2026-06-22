@@ -1,7 +1,7 @@
 # `@Proc` / proc-value of a `procedure`-typed routine rejected ("unexpected token")
 
 - **Type:** bug (compiler / parser) — **Track A**
-- **Status:** backlog
+- **Status:** done
 - **Severity:** MEDIUM — blocks procedure-typed callbacks (event handlers, the
   common `procedure(Sender: TObject)` shape); `function`-typed proc values work.
 - **Opened:** 2026-06-22
@@ -57,6 +57,26 @@ end.
 2. Minimal repro is the block above; add a `procedure`-typed proc-var test
    alongside the existing function-typed one once fixed.
 
+## Resolution (2026-06-22, Track A, commit `e130d07`)
+
+**Reframed — NOT a @procedure / proc-value bug.** Procedure-typed proc values
+work fine (a non-colliding type name like `TMyProc` always compiled + called).
+The real cause was a **name collision**: the test type was named `TProc`, which
+the compiler reserves for an internal descriptor record (`REC_TPROC`, exposed for
+self-reflection). Type-name resolution checked the builtin record
+(`IsRecordType`) BEFORE the user alias (`FindTypeAlias`), so `var p: TProc`
+resolved to the builtin record (`tyRecord`), the proc var lost its signature, and
+the indirect call `p(x)` fell through to "unexpected token".
+
+**Fix:** a user `type X = ...` alias now shadows a same-named builtin record
+(skip the builtin when a user alias of that name exists). FPC doesn't reserve
+these names. Only triggers on the user-alias-vs-builtin overlap; `compiler.pas`
+defines no such alias, so the builtins still resolve there -> self-host
+byte-identical, cross-bootstrap byte-identical. Test
+`test/test_user_type_shadows_builtin.pas` (matches FPC). Retires the "TProc-name
+collision landmine".
+
 ## Log
-- 2026-06-22 — filed (Track A) from mode-delphi testing. Pre-existing; reproduces
-  on v37 + default mode. `function`-typed proc values are unaffected.
+- 2026-06-22 — filed (Track A) from mode-delphi testing.
+- 2026-06-22 — DONE. Root cause = user-alias-vs-builtin-record name collision
+  (TProc), not proc-value handling. Fixed in type-name resolution (`e130d07`).
