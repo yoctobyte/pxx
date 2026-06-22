@@ -34,3 +34,4 @@
 2026-06-22T10:44:32Z  v34  73edfe40be62f1064c4e860874520cc4a3019af3b7a87ab893ffeddf300e678e  5153dd771c3f9aa742b08e84d3b1b0f2b845bddf  fix(parser): local variable shadows same-named paramless function
 2026-06-22T11:45:31Z  v35  7d30d1e8d65991e4c2e55c75a9c160e1a8228e9d48b224dc9ce9d05a6b9ce017  4a37b0060c16c3e182963129ec451bcdfa58a50c  fix(parser): named dyn-array alias as a class/record field is a real dyn array
 2026-06-22T12:07:45Z  v36  180adf3a51081dc3a51e9fbf831b76e8485d03b0702deb2d973533d75a222614  39d851a848aac13105f8f602901c477273bcd596  fix(codegen): whole dyn-array assignment into a record/object field
+2026-06-22T13:25:49Z  v37  02dd962b748879bdf5d8e885be8ae65408640fdb59f0ddce2f56766cca1bc087  55350ffeb5297bdbcb39a05b449ebcc861971758  docs: record fix commit hashes in done tickets, refresh board
