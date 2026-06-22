@@ -29,6 +29,7 @@ const
   PAL_NET_EINPROGRESS = -115;
   PAL_NET_ECONNREFUSED = -111;
   PAL_NET_ECONNRESET = -104;
+  PAL_NET_ETIMEDOUT = -110;
 
   { Readiness poll event/result bits (Linux poll(2) values, shared across PAL
     arches). PalPoll returns the OR of the revents bits that fired. }

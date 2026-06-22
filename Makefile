@@ -2069,11 +2069,15 @@ lib-test: pxx-stable-check
 	test "$$(/tmp/lib_platform_net_sockopt)" = "$$(printf 'name=ok\naccept-peer=ok\nsockerr=ok\nunsupported=-38')"
 	$(PXX_STABLE) -Fulib/rtl/platform/posix test/lib_net.pas /tmp/lib_net
 	test "$$(/tmp/lib_net)" = "$$(printf 'bound=ok\npeer=ok\ntcp=ok\nudp=ok')"
+	$(PXX_STABLE) -Fulib/rtl/platform/posix test/lib_net_timeout.pas /tmp/lib_net_timeout
+	test "$$(/tmp/lib_net_timeout)" = "$$(printf 'connect=ok\nrefused=ok')"
 	@if command -v qemu-aarch64 >/dev/null 2>&1 && command -v qemu-arm >/dev/null 2>&1; then \
 	  echo "=== lib-test cross: PAL net primitives under qemu-user (i386/aarch64/arm32) ==="; \
 	  for arch in i386 aarch64 arm32; do \
 	    $(PXX_STABLE) --target=$$arch -Fulib/rtl/platform/posix test/lib_net.pas /tmp/lib_net_$$arch >/dev/null; \
 	    test "$$(tools/run_target.sh $$arch /tmp/lib_net_$$arch)" = "$$(printf 'bound=ok\npeer=ok\ntcp=ok\nudp=ok')" || { echo "cross lib_net FAIL on $$arch"; exit 1; }; \
+	    $(PXX_STABLE) --target=$$arch -Fulib/rtl/platform/posix test/lib_net_timeout.pas /tmp/lib_nt_$$arch >/dev/null; \
+	    test "$$(tools/run_target.sh $$arch /tmp/lib_nt_$$arch)" = "$$(printf 'connect=ok\nrefused=ok')" || { echo "cross net_timeout FAIL on $$arch"; exit 1; }; \
 	    $(PXX_STABLE) --target=$$arch -Fulib/rtl/platform/posix test/lib_platform_net_udp.pas /tmp/lib_udp_$$arch >/dev/null; \
 	    test "$$(tools/run_target.sh $$arch /tmp/lib_udp_$$arch)" = "$$(printf 'poll=ok\nrecv=ok\npeer=ok\necho=ok\nunsupported=-38')" || { echo "cross udp FAIL on $$arch"; exit 1; }; \
 	    $(PXX_STABLE) --target=$$arch -Fulib/rtl/platform/posix test/lib_platform_net_sockopt.pas /tmp/lib_so_$$arch >/dev/null; \

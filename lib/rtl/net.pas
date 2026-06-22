@@ -34,6 +34,11 @@ function NetLoopback(port: Integer): TNetAddress;
 function NetTcpListen(const addr: TNetAddress; backlog: Integer): TNetSocket;
 function NetTcpAccept(listener: TNetSocket; var peer: TNetAddress): TNetSocket;
 function NetTcpConnect(const addr: TNetAddress): TNetSocket;
+{ Connect with a deadline. Returns a connected (blocking) socket >= 0, or a
+  negative PAL error: PAL_NET_ETIMEDOUT on deadline, or the SO_ERROR/connect
+  errno (e.g. PAL_NET_ECONNREFUSED) on failure. Drives the non-blocking
+  connect -> poll-writable -> SO_ERROR sequence. }
+function NetTcpConnectTimeout(const addr: TNetAddress; timeoutMs: Integer): TNetSocket;
 function NetSend(sock: TNetSocket; buf: Pointer; len: Integer): Int64;
 function NetRecv(sock: TNetSocket; buf: Pointer; len: Integer): Int64;
 
@@ -110,6 +115,50 @@ begin
     Result := rc;
     Exit;
   end;
+  Result := fd;
+end;
+
+function NetTcpConnectTimeout(const addr: TNetAddress; timeoutMs: Integer): TNetSocket;
+var fd, rc, pr, soErr: Integer;
+begin
+  fd := PalSocket(PAL_NET_AF_INET, PAL_NET_SOCK_STREAM, 0);
+  if fd < 0 then
+  begin
+    Result := fd;
+    Exit;
+  end;
+  rc := PalSetSocketNonBlocking(fd, 1);
+  rc := PalConnectIpv4(fd, addr.Host, addr.Port);
+  if rc = 0 then
+  begin
+    { Immediate completion (common on loopback). }
+    PalSetSocketNonBlocking(fd, 0);
+    Result := fd;
+    Exit;
+  end;
+  if rc <> PAL_NET_EINPROGRESS then
+  begin
+    { Synchronous failure, e.g. a loopback RST reported as -ECONNREFUSED. }
+    PalSocketClose(fd);
+    Result := rc;
+    Exit;
+  end;
+  { In progress: the connect completes (or fails) when the socket is writable. }
+  pr := PalPoll(fd, PAL_POLL_OUT, timeoutMs);
+  if pr <= 0 then
+  begin
+    PalSocketClose(fd);
+    if pr = 0 then Result := PAL_NET_ETIMEDOUT else Result := pr;
+    Exit;
+  end;
+  soErr := PalGetSockError(fd);
+  if soErr <> 0 then
+  begin
+    PalSocketClose(fd);
+    Result := soErr;
+    Exit;
+  end;
+  PalSetSocketNonBlocking(fd, 0);
   Result := fd;
 end;
 
