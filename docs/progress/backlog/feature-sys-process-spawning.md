@@ -47,3 +47,6 @@ In a new process control unit or `sysutils`:
   but is fragile. Robust options: a real `fork` (separate address space) so the
   child can set up fds safely, or a leaf-only asm/syscall child trampoline. Not
   blocking the video player anymore.
+- **PalKill added** (sys_kill, all posix arches; esp stub): lets callers
+  SIGSTOP/SIGCONT/SIGTERM spawned children (used by the video player's audio
+  pause/stop). The vfork-child-stack hardening above is still the remaining item.

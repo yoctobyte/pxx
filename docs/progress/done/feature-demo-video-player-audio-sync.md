@@ -1,7 +1,7 @@
 # Video player audio playback and sync
 
 - **Type:** feature
-- **Status:** backlog
+- **Status:** done — audio implemented, green on v37
 - **Owner:** —
 - **Opened:** 2026-06-21
 - **Relation:** Follow-up from validating `feature-demo-video-player`.
@@ -53,3 +53,15 @@ ffmpeg → `aplay`) through `ExecutePipeline`, feed/sync it against the monotoni
 clock, and tie pause/quit/EOF to both children. (Secondary, non-blocking: the
 vfork child still runs Pascal with locals on the shared stack — see
 feature-sys-process-spawning hardening note.)
+
+## DONE (2026-06-22, Track B)
+
+Implemented audio as a **single ffmpeg → ALSA** sibling (`-vn -f alsa default`):
+no aplay, no shell → one child with a known pid, no grandchildren to orphan.
+Added `PalKill(pid, sig)` to the PAL (sys_kill, all 4 posix arches; esp stub).
+- Pause (space) SIGSTOP/SIGCONTs the audio child in step with the video timeline.
+- Quit/EOF SIGTERMs + reaps both children; pipes closed; clean exit, no orphans.
+- No-audio-stream / no-device path stays graceful (video unaffected).
+Verified headless on a generated 1s clip (with + without audio): exit 0, no orphan
+ffmpeg. Real sound needs a device + TTY (manual, like the original player).
+Acceptance met. Commit in the player-audio batch.

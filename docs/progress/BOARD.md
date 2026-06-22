@@ -16,7 +16,7 @@ _none_
 
 _none_
 
-## backlog (49)
+## backlog (48)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -35,7 +35,6 @@ _none_
 | feature-demo-mandelbrot | B | feature | Demo — zoomable Mandelbrot explorer | — |
 | feature-demo-raytracer | B | feature | Demo — CPU ray tracer | — |
 | feature-demo-solitaire | B | feature | Demo — console Klondike solitaire (user-requested entertainment test app) | — |
-| feature-demo-video-player-audio-sync | B | feature | Video player audio playback and sync | — |
 | feature-dns-resolver-library | B | feature | DNS resolver library (`dns.pas`) with selectable backends | — |
 | feature-dwarf-debug-info | A | feature | DWARF debug info (`-g`) — phased, x86-64 first | — |
 | feature-dynamic-include-paths-config | A | feature | Dynamic Include Paths, Configuration Files, and System Scanner | — |
@@ -76,7 +75,7 @@ _none_
 | --- | --- | --- | --- | --- |
 | feature-c-runtime-library | B | feature | C runtime/library layer (`lib/crtl`) plus direct C-library packages | feature-c-source-frontend |
 
-## done (172)
+## done (173)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -170,6 +169,7 @@ _none_
 | feature-demo-lisp | B | feature | Demo — Lisp / Scheme interpreter | — |
 | feature-demo-maze | B | feature | Demo — maze generator + solver | — |
 | feature-demo-sudoku | B | feature | Demo — Sudoku (solver + generator + interactive play) | — |
+| feature-demo-video-player-audio-sync | B | feature | Video player audio playback and sync | — |
 | feature-demo-video-player | B | feature | Flagship Demo — Console Video Player (libc-free) | — |
 | feature-demo-vm | B | feature | Demo — bytecode VM + assembler (small ISA) | — |
 | feature-directive-if-numeric | A | feature | Valued defines + numeric `{$IF}` evaluation | — |
@@ -298,7 +298,6 @@ _none_
 - [B] feature-demo-mandelbrot
 - [B] feature-demo-raytracer
 - [B] feature-demo-solitaire
-- [B] feature-demo-video-player-audio-sync
 - [B] feature-dns-resolver-library
 - [A] feature-dwarf-debug-info
 - [A] feature-dynamic-include-paths-config
