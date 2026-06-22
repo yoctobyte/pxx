@@ -16,7 +16,7 @@ _none_
 
 _none_
 
-## backlog (66)
+## backlog (65)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -29,7 +29,6 @@ _none_
 | feature-allocator-quality | A | feature | Allocator quality: split / coalesce / bins / alignment | — |
 | feature-async-auto-backend | A | feature | Auto stackless/stackful backend selection | — |
 | feature-async-language-surface | A | feature | Async language surface + stackless coroutine backend | feature-cross-target-feature-parity |
-| feature-bignum-library | B | feature | Bignum library — arbitrary-precision integers (deterministic test app) | — |
 | feature-c-header-import-complex | A | feature | Import C headers for complex libraries (glib/GTK-grade) | — |
 | feature-copy-intrinsic | B | feature | `Copy` as a generic overloaded intrinsic (string + dynarray families) | — |
 | feature-c-regex-library-devtest | A | feature | C regex library dev-test import | — |
@@ -93,7 +92,7 @@ _none_
 | --- | --- | --- | --- | --- |
 | feature-c-runtime-library | B | feature | C runtime/library layer (`lib/crtl`) plus direct C-library packages | feature-c-source-frontend |
 
-## done (154)
+## done (155)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -146,6 +145,7 @@ _none_
 | feature-array-of-const | A | feature | `array of const` (TVarRec) parameter support | — |
 | feature-asm-text-emitter | A | feature | Text-assembler codegen helpers (`EmitAsm386` / `EmitAsmX64` …) | feature-array-of-const |
 | feature-async-coroutines | A | feature | Async, coroutines, and `yield` | feature-unified-heap-allocator |
+| feature-bignum-library | B | feature | Bignum library — arbitrary-precision integers (deterministic test app) | — |
 | feature-class-is-as | A | feature | `is` / `as` / `Supports` — runtime class type-tests | — |
 | feature-compiler-search-path-pcl | A | feature | feature-compiler-search-path-pcl (Track A) | — |
 | feature-compiler-warnings | A | feature | Compiler warning diagnostics facility | — |
@@ -271,7 +271,6 @@ _none_
 - [A] feature-allocator-quality
 - [A] feature-async-auto-backend
 - [A] feature-async-language-surface
-- [B] feature-bignum-library
 - [A] feature-c-header-import-complex
 - [B] feature-copy-intrinsic
 - [A] feature-c-regex-library-devtest

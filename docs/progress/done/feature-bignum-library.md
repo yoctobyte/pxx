@@ -1,7 +1,7 @@
 # Bignum library — arbitrary-precision integers (deterministic test app)
 
 - **Type:** feature
-- **Status:** backlog
+- **Status:** done
 - **Owner:** —
 - **Opened:** 2026-06-19
 - **Relation:** demo-eligible-as-library from idea-demo-app-candidates. Sibling
@@ -51,3 +51,15 @@ Own `.pas` unit; FPC-ish naming; no port; no self-host / cross regression.
   The record-fn codegen crash (bug-record-fn-codegen-crash) that blocked these is
   fixed in pinned v11+. `BigMulSmall` remains for the small-multiply fast path.
   Remaining: `BigDivMod`, `BigCompare` (signed), `BigNegate`, `ModPow`.
+- 2026-06-22 — **DONE** (track B): remaining surface landed —
+  `BigDivMod` (long division, trunc-toward-zero, binary-search per limb),
+  `BigCompare` (signed), `BigIsZero`, `BigNegate`, `BigAddSigned`/`BigSubSigned`,
+  `BigFromStr`, and `BigModPow` (square-and-multiply). New oracle
+  `examples/bignum/bigmath.pas` checks DivMod invariant `q*b+r=a`, FPC
+  trunc-toward-zero signs, signed add/sub, ModPow known vectors (4^13 mod 497,
+  2^10 mod 1000, 3^5 mod 7) and a modpow-square self-consistency check; wired into
+  `make lib-test` + `make demos`. Fixed an infinite loop in `BigModPow`: the
+  `e := e div 2` step called `BigDivMod(e,two,q,e)` — quotient/remainder args
+  swapped, so `e` got the remainder and stayed odd forever. (That hang, killed
+  with exit 144, is what cut the previous track-B session mid-run.)
+  Commit 6ff75e0.
