@@ -7,7 +7,7 @@ unit platform;
 
 interface
 
-uses platform_backend;
+uses platform_types, platform_backend;
 
 const
   PAL_STDIN  = 0;
@@ -70,6 +70,8 @@ function PalRename(oldPath, newPath: PChar): Integer;
 function PalMkdir(path: PChar; mode: Integer): Integer;
 function PalRmdir(path: PChar): Integer;
 function PalGetDents64(handle: Integer; buf: Pointer; len: Integer): Int64;
+function PalStat(path: PChar; var info: TPalFileStat): Integer;
+function PalStatAt(dirHandle: Integer; path: PChar; var info: TPalFileStat): Integer;
 
 function PalSocket(domain, kind, proto: Integer): Integer;
 function PalSetSocketReuseAddr(handle, enabled: Integer): Integer;
@@ -183,6 +185,16 @@ end;
 function PalGetDents64(handle: Integer; buf: Pointer; len: Integer): Int64;
 begin
   Result := PalBackendGetDents64(handle, buf, len);
+end;
+
+function PalStat(path: PChar; var info: TPalFileStat): Integer;
+begin
+  Result := PalBackendStat(path, info);
+end;
+
+function PalStatAt(dirHandle: Integer; path: PChar; var info: TPalFileStat): Integer;
+begin
+  Result := PalBackendStatAt(dirHandle, path, info);
 end;
 
 function PalSocket(domain, kind, proto: Integer): Integer;

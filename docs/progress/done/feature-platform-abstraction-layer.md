@@ -1,8 +1,8 @@
 # Platform Abstraction Layer (PAL): per-platform RTL port at one seam
 
 - **Type:** feature (compiler axis + Track B RTL architecture)
-- **Status:** unfinished (halted — was working/Codex)
-- **Owner:** — (lock released; last worked by Codex)
+- **Status:** done
+- **Owner:** Codex
 - **Opened:** 2026-06-20
 - **Relation:** foundation for `lib-text-file-io-assign-rewrite`,
   `feature-networking`, and any IO-bearing stdlib. Backend selection rides the
@@ -183,3 +183,17 @@ Out of scope (separate tickets):
   `tools/run_target.sh`, `make lib-test`, and `make library-suite-green`.
 
 - 2026-06-21 — HALTED → `unfinished/`. `working/` lock released (no active agent). No uncommitted code this round; Track A step 1 already done+pinned, Track B PAL layering remains.
+- 2026-06-21 — Resumed by Codex for Track B. Added the next file-metadata PAL
+  slice in source: shared `platform_types.TPalFileStat`, facade calls
+  `PalStat`/`PalStatAt`, POSIX `statx` backing, and ESP unsupported stubs.
+  Threaded metadata through `SysUtils.GetDirectoryContents` for demo callers.
+- 2026-06-21 — Validation with pinned compiler v32: `tools/library_suite.sh
+  green` and `make lib-test` both pass. Directory regression now asserts
+  `PalStat` file/dir type plus `GetDirectoryContents` file size.
+- 2026-06-22 — DONE. Commit pending in uncommitted working tree. Acceptance is
+  covered by the platform define axis, path-selected PAL facade/backends, POSIX
+  file/process/socket/clock/directory/stat primitives, ESP unsupported/no-host
+  fallback stubs, and PAL consumers (`textfile`, `asyncnet`,
+  `SysUtils.GetDirectoryContents`). Regression: pinned v32
+  `tools/library_suite.sh green`, `make lib-test`, and `tools/progress.sh
+  check`.

@@ -3,6 +3,8 @@ unit platform_backend;
 
 interface
 
+uses platform_types;
+
 function PalBackendPlatform: Integer;
 function PalBackendHasFiles: Boolean;
 function PalBackendHasSockets: Boolean;
@@ -20,6 +22,8 @@ function PalBackendRename(oldPath, newPath: PChar): Integer;
 function PalBackendMkdir(path: PChar; mode: Integer): Integer;
 function PalBackendRmdir(path: PChar): Integer;
 function PalBackendGetDents64(handle: Integer; buf: Pointer; len: Integer): Int64;
+function PalBackendStat(path: PChar; var info: TPalFileStat): Integer;
+function PalBackendStatAt(dirHandle: Integer; path: PChar; var info: TPalFileStat): Integer;
 
 function PalBackendSocket(domain, kind, proto: Integer): Integer;
 function PalBackendSetSocketReuseAddr(handle, enabled: Integer): Integer;
@@ -57,6 +61,7 @@ const
   PAL_OPEN_EXCL   = $80;
   PAL_OPEN_TRUNC  = $200;
   PAL_OPEN_APPEND = $400;
+  PAL_OPEN_DIRECTORY = $10000;
 
   PAL_NET_AF_INET = 2;
   SOL_SOCKET = 1;
@@ -154,6 +159,11 @@ function PalBackendOpen(path: PChar; flags, mode: Integer): Integer;
 var stream: Pointer;
 begin
   if (flags and PAL_OPEN_EXCL) <> 0 then
+  begin
+    Result := PAL_ERR_UNSUPPORTED;
+    Exit;
+  end;
+  if (flags and PAL_OPEN_DIRECTORY) <> 0 then
   begin
     Result := PAL_ERR_UNSUPPORTED;
     Exit;
@@ -314,6 +324,27 @@ end;
 
 function PalBackendGetDents64(handle: Integer; buf: Pointer; len: Integer): Int64;
 begin
+  Result := PAL_ERR_UNSUPPORTED;
+end;
+
+procedure ClearPalFileStat(var info: TPalFileStat);
+begin
+  info.Size := -1;
+  info.MTimeSec := 0;
+  info.Mode := 0;
+  info.IsDir := False;
+  info.IsFile := False;
+end;
+
+function PalBackendStat(path: PChar; var info: TPalFileStat): Integer;
+begin
+  ClearPalFileStat(info);
+  Result := PAL_ERR_UNSUPPORTED;
+end;
+
+function PalBackendStatAt(dirHandle: Integer; path: PChar; var info: TPalFileStat): Integer;
+begin
+  ClearPalFileStat(info);
   Result := PAL_ERR_UNSUPPORTED;
 end;
 

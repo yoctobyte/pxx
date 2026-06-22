@@ -35,6 +35,8 @@ end;
 function EntryLine(const list: TFileInfoArray; idx, width: Integer): AnsiString;
 var
   prefix: AnsiString;
+  sizeText: AnsiString;
+  nameWidth: Integer;
 begin
   if idx >= Length(list) then
   begin
@@ -45,7 +47,16 @@ begin
     prefix := '[D] '
   else
     prefix := '    ';
-  Result := Fit(prefix + list[idx].Name, width);
+  if list[idx].IsDir or (list[idx].Size < 0) then
+    sizeText := ''
+  else
+    sizeText := IntToStr(list[idx].Size);
+  nameWidth := width - 11;
+  if nameWidth < 8 then nameWidth := width;
+  if nameWidth = width then
+    Result := Fit(prefix + list[idx].Name, width)
+  else
+    Result := Fit(prefix + list[idx].Name, nameWidth) + ' ' + Fit(sizeText, 10);
 end;
 
 procedure RenderSingle(const path: AnsiString; width, rows: Integer);

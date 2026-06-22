@@ -3,6 +3,8 @@ unit platform_backend;
 
 interface
 
+uses platform_types;
+
 function PalBackendPlatform: Integer;
 function PalBackendHasFiles: Boolean;
 function PalBackendHasSockets: Boolean;
@@ -20,6 +22,8 @@ function PalBackendRename(oldPath, newPath: PChar): Integer;
 function PalBackendMkdir(path: PChar; mode: Integer): Integer;
 function PalBackendRmdir(path: PChar): Integer;
 function PalBackendGetDents64(handle: Integer; buf: Pointer; len: Integer): Int64;
+function PalBackendStat(path: PChar; var info: TPalFileStat): Integer;
+function PalBackendStatAt(dirHandle: Integer; path: PChar; var info: TPalFileStat): Integer;
 
 function PalBackendSocket(domain, kind, proto: Integer): Integer;
 function PalBackendSetSocketReuseAddr(handle, enabled: Integer): Integer;
@@ -50,7 +54,7 @@ const
 
 {$ifdef CPUX86_64}
   SYS_read = 0; SYS_write = 1; SYS_close = 3; SYS_lseek = 8;
-  SYS_fsync = 74; SYS_openat = 257; SYS_mkdirat = 258; SYS_getdents64 = 217;
+  SYS_fsync = 74; SYS_openat = 257; SYS_mkdirat = 258; SYS_getdents64 = 217; SYS_statx = 332;
   SYS_unlinkat = 263; SYS_renameat = 264;
   SYS_socket=41; SYS_connect=42; SYS_accept4=288; SYS_bind=49; SYS_listen=50;
   SYS_setsockopt=54; SYS_shutdown=48; SYS_fcntl=72;
@@ -59,7 +63,7 @@ const
 {$endif}
 {$ifdef CPU_I386}
   SYS_read = 3; SYS_write = 4; SYS_close = 6; SYS_lseek = 19;
-  SYS_fsync = 118; SYS_openat = 295; SYS_mkdirat = 296; SYS_getdents64 = 220;
+  SYS_fsync = 118; SYS_openat = 295; SYS_mkdirat = 296; SYS_getdents64 = 220; SYS_statx = 383;
   SYS_unlinkat = 301; SYS_renameat = 302;
   SYS_socketcall=102; SYS_fcntl=55;
   SC_SOCKET=1; SC_BIND=2; SC_CONNECT=3; SC_LISTEN=4; SC_ACCEPT4=18;
@@ -69,7 +73,7 @@ const
 {$endif}
 {$ifdef CPU_AARCH64}
   SYS_read = 63; SYS_write = 64; SYS_close = 57; SYS_lseek = 62;
-  SYS_fsync = 82; SYS_openat = 56; SYS_mkdirat = 34; SYS_getdents64 = 61;
+  SYS_fsync = 82; SYS_openat = 56; SYS_mkdirat = 34; SYS_getdents64 = 61; SYS_statx = 291;
   SYS_unlinkat = 35; SYS_renameat = 38;
   SYS_socket=198; SYS_connect=203; SYS_accept4=242; SYS_bind=200; SYS_listen=201;
   SYS_setsockopt=208; SYS_shutdown=210; SYS_fcntl=25;
@@ -78,7 +82,7 @@ const
 {$endif}
 {$ifdef CPU_ARM32}
   SYS_read = 3; SYS_write = 4; SYS_close = 6; SYS_lseek = 19;
-  SYS_fsync = 118; SYS_openat = 322; SYS_mkdirat = 323; SYS_getdents64 = 217;
+  SYS_fsync = 118; SYS_openat = 322; SYS_mkdirat = 323; SYS_getdents64 = 217; SYS_statx = 397;
   SYS_unlinkat = 328; SYS_renameat = 329;
   SYS_socket=281; SYS_connect=283; SYS_accept4=366; SYS_bind=282; SYS_listen=284;
   SYS_setsockopt=294; SYS_shutdown=293; SYS_fcntl=55;
@@ -87,6 +91,10 @@ const
 {$endif}
   PAL_AT_FDCWD = -100;
   PAL_AT_REMOVEDIR = $200;
+  PAL_STATX_BASIC_STATS = $000007FF;
+  PAL_S_IFMT = $F000;
+  PAL_S_IFDIR = $4000;
+  PAL_S_IFREG = $8000;
   PAL_NET_AF_INET = 2;
   SOL_SOCKET = 1;
   SO_REUSEADDR = 2;
@@ -198,6 +206,62 @@ end;
 function PalBackendGetDents64(handle: Integer; buf: Pointer; len: Integer): Int64;
 begin
   Result := __pxxrawsyscall(SYS_getdents64, handle, Int64(buf), len, 0, 0, 0);
+end;
+
+function StatxByte(buf: Pointer; off: Integer): Byte;
+begin
+  Result := PB(Pointer(Int64(buf) + off))^;
+end;
+
+function StatxWordLE(buf: Pointer; off: Integer): Integer;
+begin
+  Result := Integer(StatxByte(buf, off)) + Integer(StatxByte(buf, off + 1)) * 256;
+end;
+
+function StatxInt64LE(buf: Pointer; off: Integer): Int64;
+var
+  i: Integer;
+  mul: Int64;
+begin
+  Result := 0;
+  mul := 1;
+  for i := 0 to 7 do
+  begin
+    Result := Result + Int64(StatxByte(buf, off + i)) * mul;
+    mul := mul * 256;
+  end;
+end;
+
+procedure ClearPalFileStat(var info: TPalFileStat);
+begin
+  info.Size := -1;
+  info.MTimeSec := 0;
+  info.Mode := 0;
+  info.IsDir := False;
+  info.IsFile := False;
+end;
+
+function PalBackendStatAt(dirHandle: Integer; path: PChar; var info: TPalFileStat): Integer;
+var
+  sx: array[0..255] of Byte;
+  mode: Integer;
+begin
+  ClearPalFileStat(info);
+  Result := Integer(__pxxrawsyscall(SYS_statx, dirHandle, Int64(path), 0,
+    PAL_STATX_BASIC_STATS, Int64(@sx[0]), 0));
+  if Result < 0 then Exit;
+
+  mode := StatxWordLE(@sx[0], $1C);
+  info.Mode := mode;
+  info.Size := StatxInt64LE(@sx[0], $28);
+  info.MTimeSec := StatxInt64LE(@sx[0], $70);
+  info.IsDir := (mode and PAL_S_IFMT) = PAL_S_IFDIR;
+  info.IsFile := (mode and PAL_S_IFMT) = PAL_S_IFREG;
+end;
+
+function PalBackendStat(path: PChar; var info: TPalFileStat): Integer;
+begin
+  Result := PalBackendStatAt(PAL_AT_FDCWD, path, info);
 end;
 
 function PalBackendSocket(domain, kind, proto: Integer): Integer;

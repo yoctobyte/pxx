@@ -1,11 +1,12 @@
 program lib_directory;
 
-uses sysutils, platform;
+uses sysutils, platform, platform_types;
 
 var
   list: TFileInfoArray;
   fd, i, alphaIdx, childIdx: Integer;
   b: Byte;
+  stat: TPalFileStat;
 
 function FindEntry(const name: AnsiString): Integer;
 var j: Integer;
@@ -47,6 +48,15 @@ begin
   if childIdx >= 0 then writeln('child=1') else writeln('child=0');
   if (alphaIdx >= 0) and (not list[alphaIdx].IsDir) then writeln('alpha-file=1') else writeln('alpha-file=0');
   if (childIdx >= 0) and list[childIdx].IsDir then writeln('child-dir=1') else writeln('child-dir=0');
+  if (alphaIdx >= 0) and (list[alphaIdx].Size = 1) then writeln('alpha-size=1') else writeln('alpha-size=0');
+  if (PalStat(PChar('/tmp/pxx_dir_suite/alpha.txt'), stat) >= 0) and stat.IsFile and (stat.Size = 1) then
+    writeln('stat-file=1')
+  else
+    writeln('stat-file=0');
+  if (PalStat(PChar('/tmp/pxx_dir_suite/child'), stat) >= 0) and stat.IsDir then
+    writeln('stat-dir=1')
+  else
+    writeln('stat-dir=0');
 
   PalDelete(PChar('/tmp/pxx_dir_suite/alpha.txt'));
   PalRmdir(PChar('/tmp/pxx_dir_suite/child'));

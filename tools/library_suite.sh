@@ -116,7 +116,7 @@ run_green() {
     $'alpha\nbeta\ncount=2\nio=0' \
     -Fu"$ROOT/lib/rtl/platform/posix" "$ROOT/test/lib_textfile.pas"
   run_expect directory_posix \
-    $'mkdir=0\nchild=0\nlist=ok\nalpha=1\nchild=1\nalpha-file=1\nchild-dir=1' \
+    $'mkdir=0\nchild=0\nlist=ok\nalpha=1\nchild=1\nalpha-file=1\nchild-dir=1\nalpha-size=1\nstat-file=1\nstat-dir=1' \
     -Fu"$ROOT/lib/rtl/platform/posix" "$ROOT/test/lib_directory.pas"
   run_expect bignum_factorial \
     $'5! = 120\n10! = 3628800\n20! = 2432902008176640000\n1000! digits      = 2568\n1000! first 10    = 4023872600\n1000! trailing 0s = 249' \

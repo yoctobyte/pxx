@@ -11,6 +11,7 @@ type
     Name: AnsiString;
     IsDir: Boolean;
     Size: Int64;
+    ModifiedTime: Int64;
   end;
   TFileInfoArray = array of TFileInfo;
 
@@ -72,8 +73,8 @@ procedure Insert(const src: AnsiString; var dst: AnsiString; index: Integer);
 { Concatenate two strings. For more than two, chain with + or nest calls. }
 function Concat(const s1, s2: AnsiString): AnsiString;
 
-{ List directory entries, excluding "." and "..". Size is -1 until PAL stat
-  metadata exists for the active backend. }
+{ List directory entries, excluding "." and "..". Size and modification time are
+  filled when the active PAL backend supports metadata, otherwise Size is -1. }
 function GetDirectoryContents(const path: AnsiString; var list: TFileInfoArray): Boolean;
 
 { Execute a process in a pipeline, returning its PID and redirecting stdin/stdout via pipes if requested. }
@@ -81,7 +82,7 @@ function ExecutePipeline(const cmd: AnsiString; const args: array of AnsiString;
 
 implementation
 
-uses platform;
+uses platform, platform_types;
 
 constructor Exception.Create(const msg: string);
 begin
@@ -401,6 +402,7 @@ var
   off, reclen, idx: Integer;
   name: AnsiString;
   dtype: Byte;
+  stat: TPalFileStat;
 begin
   SetLength(list, 0);
   fd := PalOpen(PChar(path), PAL_OPEN_READ or PAL_OPEN_DIRECTORY, 0);
@@ -434,6 +436,13 @@ begin
           list[idx].Name := name;
           list[idx].IsDir := dtype = PAL_DIRENT_DIR;
           list[idx].Size := -1;
+          list[idx].ModifiedTime := 0;
+          if PalStatAt(fd, PChar(name), stat) >= 0 then
+          begin
+            list[idx].IsDir := stat.IsDir;
+            list[idx].Size := stat.Size;
+            list[idx].ModifiedTime := stat.MTimeSec;
+          end;
         end;
         off := off + reclen;
       end;

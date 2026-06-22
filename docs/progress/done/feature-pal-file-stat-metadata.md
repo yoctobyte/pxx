@@ -2,8 +2,8 @@
 
 - **Type:** feature
 - **Track:** B
-- **Status:** backlog
-- **Owner:** —
+- **Status:** done
+- **Owner:** Codex
 - **Opened:** 2026-06-21
 - **Relation:** Follow-up from `feature-sys-getdents`; blocks full compact/tile
   metadata in `feature-demo-file-browser`.
@@ -31,3 +31,13 @@ show size/date and preview code cannot cheaply decide file classes from metadata
 
 ## Log
 - 2026-06-21 — Opened while implementing the first file-browser/getdents slice.
+- 2026-06-21 — Claimed as part of the resumed PAL slice. Source now exposes
+  `TPalFileStat`, `PalStat`, and `PalStatAt`; POSIX uses Linux `statx`, ESP
+  returns unsupported with cleared output, and `SysUtils.GetDirectoryContents`
+  fills size/type/mtime when metadata is available.
+- 2026-06-21 — Validation with pinned compiler v32: `tools/library_suite.sh
+  green` and `make lib-test` both pass. `test/lib_directory.pas` now checks
+  directory-list file size plus direct `PalStat` file/dir metadata.
+- 2026-06-22 — DONE. Commit pending in uncommitted working tree. Regression:
+  pinned v32 `tools/library_suite.sh green`, `make lib-test`, and
+  `tools/progress.sh check`.
