@@ -22,14 +22,34 @@ y.a[0] := 99;
 
 Both run; no crash. It is a **silent semantic difference**, not a bug per se.
 
-## Why it matters
+## Scope is NARROW — only assignment, not parameter passing (verified 2026-06-22)
 
-FPC dynamic arrays are reference types; idiomatic FPC/Delphi code can rely on
-the sharing (pass a record around, mutate the shared array, see it everywhere;
-or rely on cheap O(1) record copies). PXX's deep copy is arguably *safer* and
-more intuitive (true value semantics, no aliasing surprises) but diverges from
-FPC, so a ported library that assumes sharing would behave differently — and the
-divergence is invisible until a mutation-through-an-alias is observed.
+PXX already does the context-sensitive thing, and it is the *right* thing:
+
+| context | PXX | FPC | match |
+|---------|-----|-----|-------|
+| by-value param, mutate an element (`p(a); a[0]:=9`) | caller sees it (shared handle) | same | **yes** |
+| `SetLength` inside a by-value-param callee | caller length unchanged (COW) | same | **yes** |
+| **`y := x` assignment / record-field copy** | **deep copy (value)** | **shared (reference)** | **no — only here** |
+
+So **parameter passing and recursion already share the handle (reference) with
+COW** — no wasteful per-call copy, exactly as expected. The ONLY divergence is
+the **assignment / whole-record-copy** site, where PXX makes an independent copy.
+
+## Why it matters (and why PXX's choice is defensible)
+
+FPC dynamic arrays are reference types *everywhere*, including plain assignment —
+so FPC needs an explicit `Copy()` when you DON'T want an alias, and copying a
+record silently aliases its array field (mutating one record's field mutates the
+"copy"). That is the dark-afternoon debugging trap. PXX instead gives **value
+semantics at the assignment site** (a record copy is a real copy; no aliasing
+surprise) while keeping **reference semantics at the call boundary** (cheap,
+recursion-friendly, no surprise there either). That split is arguably the more
+intuitive design — the user agrees FPC's assignment-aliasing is a nuisance.
+
+The only cost: a ported FPC/Delphi library that *relies* on assignment-time
+array sharing would behave differently — invisibly, until a
+mutation-through-an-alias is observed.
 
 ## Options
 
@@ -51,13 +71,33 @@ retain/release) — that is consistent with (a)'s direction at the store site bu
 without the refcount; choosing (a) would complete it, choosing (b) would instead
 make that store a deep copy.
 
-## Recommendation
+## Recommendation / direction (user-aligned)
 
-Defer to the user. Lean **(b)** unless a Track B port concretely needs FPC
-sharing — value semantics is fewer footguns and PXX already behaves that way; the
-cost of (a) (full dyn-array ARC through aggregates) is high for a benefit no demo
-has needed yet. Revisit if a ported library breaks on it.
+Keep PXX's value-on-assignment as the **default** — it is the nuisance-free
+behaviour and the divergence is confined to one site. The likely end state is
+**"do both"**: a compiler switch that selects FPC reference-on-assignment for
+ports that need it, value-on-assignment (default) otherwise. Candidate surface: a
+`{$...}` directive or a `--`/`-d` flag, scoped to assignment-time dyn-array (and
+managed-aggregate) copy. Implementation only at the assignment/record-copy site —
+parameter passing already matches FPC and must stay reference (do NOT touch the
+call boundary).
+
+**Status: low priority, documented, no code yet.** The user may research (or we
+both) before choosing the switch surface + default. Open items to settle first:
+
+1. Confirm deep-copy of a managed *element* type at the assignment site (does
+   `y := x` for a record with an `array of AnsiString` field deep-copy the
+   strings, or share/segfault?). Verify before designing the switch.
+2. Decide the switch surface + name and whether the default ever flips per
+   `{$mode}` (delphi/fpc) for mimic-fpc.
+3. If (a)-style FPC sharing is ever the default, it pulls in full dyn-array ARC
+   through aggregates (retain/release on copy + scope exit) — the
+   feature-cross-managed-aggregates template.
 
 ## Log
 - 2026-06-22 — Filed from the dynarray-aggregate probe. Not a crash; a deliberate
-  semantics fork. No code change until the (a)/(b) decision is made.
+  semantics fork.
+- 2026-06-22 — Verified the divergence is **assignment-only**: PXX param-passing
+  already matches FPC (shared handle + COW). User aligned on value-on-assignment
+  default; likely resolution is a compiler switch to "do both". Low prio,
+  documented, no code until the switch surface/default is chosen.
