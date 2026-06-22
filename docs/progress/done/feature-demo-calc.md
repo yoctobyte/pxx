@@ -1,7 +1,7 @@
 # Demo — RPN / expression calculator (mini spreadsheet)
 
 - **Type:** feature
-- **Status:** backlog
+- **Status:** done — expression-evaluator core (commit 29e19cc); spreadsheet layer not built (was optional)
 - **Owner:** —
 - **Opened:** 2026-06-19
 - **Relation:** demo-class survivor from idea-demo-app-candidates (was catalog
@@ -42,3 +42,12 @@ regression.
 
 ## Log
 - 2026-06-19 — Opened in the demo-ticket organization pass.
+- 2026-06-22 — **DONE** (track B), commit 29e19cc: `lib/rtl/calc.pas` integer
+  expression evaluator — one-pass recursive-descent (no AST, to dodge the
+  dynarray-in-record codegen bug), precedence/parens/unary, gcd/min/max/pow/abs,
+  errors on syntax + div/mod-by-zero + unknown fn + trailing junk. Oracle
+  `examples/calc/calcdemo.pas` runs `ALL OK` on pinned v33; wired into
+  `make lib-test` + `make demos`. Used the json-style reader class (zero-init
+  fields), which compiles cleanly — unlike the module-global `sat` unit that hit
+  the layout-sensitive codegen bug. **Not done:** the optional mini-spreadsheet
+  layer (named cells + dependency recompute) — file a follow-up if wanted.

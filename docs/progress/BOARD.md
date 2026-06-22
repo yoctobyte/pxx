@@ -18,7 +18,7 @@ _none_
 
 _none_
 
-## backlog (63)
+## backlog (61)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -35,7 +35,6 @@ _none_
 | feature-copy-intrinsic | B | feature | `Copy` as a generic overloaded intrinsic (string + dynarray families) | — |
 | feature-c-regex-library-devtest | A | feature | C regex library dev-test import | — |
 | feature-c-source-frontend | A | feature | C source frontend — compile C function bodies (statements + expressions) | feature-cross-target-feature-parity |
-| feature-demo-calc | B | feature | Demo — RPN / expression calculator (mini spreadsheet) | — |
 | feature-demo-chess | B | feature | Flagship demo — chess engine (real-world app + cross-target oracle + benchmark) | — |
 | feature-demo-lisp | B | feature | Demo — Lisp / Scheme interpreter | — |
 | feature-demo-solitaire | B | feature | Demo — console Klondike solitaire (user-requested entertainment test app) | — |
@@ -92,7 +91,7 @@ _none_
 | feature-c-runtime-library | B | feature | C runtime/library layer (`lib/crtl`) plus direct C-library packages | feature-c-source-frontend |
 | feature-sat-solver-library | B | feature | SAT solver library — DPLL over CNF (known-instance test app) | bug-impl-prescan-codegen-regression |
 
-## done (157)
+## done (159)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -172,6 +171,7 @@ _none_
 | feature-cross-target-feature-parity | A | feature | Cross-target language-feature parity (Intel + ARM) | — |
 | feature-declaration-prescan | A | feature | Declaration pre-scan — whole-section symbol visibility (kill declare-before-use) | — |
 | feature-default-standard-units | A | feature | Default standard units: `System` + `textfile` | — |
+| feature-demo-calc | B | feature | Demo — RPN / expression calculator (mini spreadsheet) | — |
 | feature-demo-file-browser | B | feature | Flagship Demo — Midnight Commander-like TUI file browser (libc-free) | — |
 | feature-demo-life | B | feature | Demo — Conway's Game of Life | — |
 | feature-demo-maze | B | feature | Demo — maze generator + solver | — |
@@ -278,7 +278,6 @@ _none_
 - [B] feature-copy-intrinsic
 - [A] feature-c-regex-library-devtest
 - [A] feature-c-source-frontend
-- [B] feature-demo-calc
 - [B] feature-demo-chess
 - [B] feature-demo-lisp
 - [B] feature-demo-solitaire
