@@ -22,7 +22,7 @@ _none_
 | --- | --- | --- | --- | --- |
 | feature-c-runtime-library | B | feature | C runtime/library layer (`lib/crtl`) plus direct C-library packages | feature-c-source-frontend |
 
-## backlog (42)
+## backlog (43)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -35,6 +35,7 @@ _none_
 | feature-c-source-frontend | A | feature | C source frontend — compile C function bodies (statements + expressions) | feature-cross-target-feature-parity |
 | feature-demo-chess | B | feature | Flagship demo — chess engine (real-world app + cross-target oracle + benchmark) | — |
 | feature-demo-gui-solitaire | B | feature | Demo — GUI Patience / Solitaire | — |
+| feature-demo-mandelbrot-gui-threaded | B | feature | Demo — GUI Mandelbrot, multithreaded tiled zoom | — |
 | feature-demo-mandelbrot | B | feature | Demo — zoomable Mandelbrot explorer | — |
 | feature-demo-raytracer | B | feature | Demo — CPU ray tracer | — |
 | feature-demo-solitaire | B | feature | Demo — console Klondike solitaire (user-requested entertainment test app) | — |
@@ -297,6 +298,7 @@ _none_
 - [A] feature-c-source-frontend
 - [B] feature-demo-chess
 - [B] feature-demo-gui-solitaire
+- [B] feature-demo-mandelbrot-gui-threaded
 - [B] feature-demo-mandelbrot
 - [B] feature-demo-raytracer
 - [B] feature-demo-solitaire
