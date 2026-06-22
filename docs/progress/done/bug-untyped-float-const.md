@@ -49,9 +49,6 @@ Workaround: assign to a `Single` variable first, then pass it. (Used in
 `Single` temp instead of `Single(expr)`. Both are clean idiomatic Pascal, so this
 is not blocking — just a front-end parity gap with FPC worth closing.
 
-## Log
-- 2026-06-22 — Filed by Track B from the math-demo build.
-
 ## Resolution (2026-06-22, Track A)
 
 All three fixed in `compiler/parser.inc`:
