@@ -32,3 +32,13 @@ symbol resolves to nothing.
 ## Acceptance
 
 - `examples/chess` advances past `platform.pas:185` (hits the next gap, if any).
+
+## Resolved (v37)
+
+`examples/chess/chess.pas` now compiles with the stable compiler — both with and
+WITHOUT `-Fulib/rtl/platform/posix` (the `PalBackendGetDents64` symbol resolves;
+fixed upstream by the parser/backend wiring work that also unblocked the other
+units). It runs correctly: perft(1..4) = 20 / 400 / 8902 / 197281 (standard
+starting-position values). Acceptance met — chess advances well past
+`platform.pas:185`. Closing; the flagship oracle/benchmark scope stays in
+feature-demo-chess.
