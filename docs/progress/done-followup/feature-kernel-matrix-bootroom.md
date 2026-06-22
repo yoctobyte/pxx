@@ -1,7 +1,7 @@
 # Kernel-matrix bootroom: one static PXX binary, swept across many Linux kernels
 
 - **Type:** feature (harness + demo) — Track B
-- **Status:** backlog
+- **Status:** done-followup
 - **Owner:** — (Track B)
 - **Opened:** 2026-06-21
 - **Relation:** leans on the existing QEMU harness (ESP work,

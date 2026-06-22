@@ -1,7 +1,7 @@
 # Interfaces
 
 - **Type:** feature
-- **Status:** backlog — **effectively done.** CORBA surface COMPLETE 2026-06-19
+- **Status:** done-followup — **effectively done.** CORBA surface COMPLETE 2026-06-19
   (declare/implement/assign/call, is/as/Supports, implicit coercion, identity,
   nil, inheritance, all 4 targets). The only remaining work — automatic interface
   refcounting (ARC) — is split to feature-interface-refcounting and **deferred

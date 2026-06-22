@@ -1,7 +1,7 @@
 # No-AnsiString / bounded-string profile
 
 - **Type:** feature
-- **Status:** backlog
+- **Status:** done-followup
 - **Owner:** —
 - **Opened:** 2026-06-13 (from user note after arm32 SysOpen family)
 

@@ -1,7 +1,7 @@
 # sat DPLL: bare paramless recursion needs `DPLL()` after the paramless flip
 
 - **Type:** library fix (**Track B**) + flip-consequence note (Track A)
-- **Status:** backlog — **not a compiler bug** (reclassified 2026-06-22)
+- **Status:** done (Track B applied DPLL(); sat green in lib-test)
 - **Owner:** — (Track B owns the one-line sat fix)
 - **Opened:** 2026-06-22
 - **Relation:** consequence of [[bug-bare-function-name-call-vs-resultvar]] (the

@@ -1,7 +1,7 @@
 # Handle-table compacting heap (anti-fragmentation for constrained RAM)
 
 - **Type:** feature
-- **Status:** backlog
+- **Status:** done-followup
 - **Owner:** —
 - **Opened:** 2026-06-14 (design discussion: ESP32 heap fragmentation)
 

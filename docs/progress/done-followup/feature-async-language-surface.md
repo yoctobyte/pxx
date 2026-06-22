@@ -1,7 +1,7 @@
 # Async language surface + stackless coroutine backend
 
 - **Type:** feature
-- **Status:** backlog (surface shipped; open items folded into
+- **Status:** done-followup (surface shipped; open items folded into
   feature-cross-target-feature-parity)
 - **Owner:** —
 - **Blocked-by:** feature-cross-target-feature-parity

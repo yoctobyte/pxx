@@ -16,19 +16,16 @@ _none_
 
 _none_
 
-## backlog (65)
+## backlog (49)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
 | chess-pal-getdents-link | B | chess | examples/chess: PalBackendGetDents64 undefined (PAL backend not linked) | — |
 | chore-inc-to-units | A | chore | `.inc` → real `.pas` units refactor | — |
 | chore-runtime-emission-size | A | chore | Finer runtime-support emission (code size) | — |
-| design-overloadable-intrinsics | A | design | Design question: overloadable compiler intrinsics (the `Copy` precedent) | — |
-| design-record-copy-dynarray-field-semantics | A | design | Record copy with a dynamic-array field: PXX deep-copies, FPC shares (reference) | — |
 | feature-additional-cpu-targets | A | feature | Additional CPU targets (rollup: i386 → aarch64 → arm32 → ESP32/RISC-V) | feature-target-aarch64, feature-target-arm32, feature-target-esp32, feature-target-i386 |
 | feature-allocator-quality | A | feature | Allocator quality: split / coalesce / bins / alignment | — |
 | feature-async-auto-backend | A | feature | Auto stackless/stackful backend selection | — |
-| feature-async-language-surface | A | feature | Async language surface + stackless coroutine backend | feature-cross-target-feature-parity |
 | feature-c-header-import-complex | A | feature | Import C headers for complex libraries (glib/GTK-grade) | — |
 | feature-copy-intrinsic | B | feature | `Copy` as a generic overloaded intrinsic (string + dynarray families) | — |
 | feature-c-regex-library-devtest | A | feature | C regex library dev-test import | — |
@@ -45,15 +42,10 @@ _none_
 | feature-dynamic-soname-discovery | A | feature | Dynamic soname discovery (no execve) | — |
 | feature-esp32-idf-xtensa | A | feature | ESP-IDF integration: Xtensa (ESP32-S2/S3) — QEMU + real hardware | — |
 | feature-esp-peripheral-callback-api | B | feature | ESP32 peripheral callback API (timer / GPIO / ADC) — the user-facing "interrupt" | — |
-| feature-extended-type-support | A | feature | Proper `Extended` type support (currently aliased to Double) | — |
 | feature-flexcolumn-directive | A | feature | `flexcolumn` calling-convention directive | chore-inc-to-units |
-| feature-fpc-vs-pxx-feature-boundary | A | feature | Policy: FPC-bootstrap subset vs PXX-only library features | — |
-| feature-handle-compacting-heap | A | feature | Handle-table compacting heap (anti-fragmentation for constrained RAM) | — |
 | feature-inline-asm-depth | A | feature | Inline assembler depth | — |
 | feature-inline-asm-multi-arch | A | feature | Inline assembly support for other architectures (i386, aarch64, arm32) | — |
 | feature-inline-routines | A | feature | Inline routine expansion (`inline;`) | — |
-| feature-interfaces | A | feature | Interfaces | — |
-| feature-kernel-matrix-bootroom | B | feature | Kernel-matrix bootroom: one static PXX binary, swept across many Linux kernels | — |
 | feature-lazy-standard-unit-emission | A | feature | Lazy standard-unit emission / routine-level dead-code elimination | — |
 | feature-metaclass-descendant-enforcement | A | feature | Metaclass alias descendant-constraint enforcement | — |
 | feature-mimic-fpc | A | feature | `mimic FPC` compatibility mode | feature-directive-if-numeric |
@@ -61,7 +53,6 @@ _none_
 | feature-networking | B | feature | Networking runtime | — |
 | feature-nilpy-idf-import | A | feature | nilpy includes anything from ESP-IDF and it just works | feature-c-source-frontend, feature-esp32-idf-xtensa |
 | feature-nil-python-frontend | A | feature | Nil Python frontend (`.npy`) | — |
-| feature-no-ansistring-profile | A | feature | No-AnsiString / bounded-string profile | — |
 | feature-object-reference-type | A | feature | `object` — a rooted object-reference type | — |
 | feature-optimization-levels | A | feature | Optimization levels (`-O0/-O1/-O2/-O3/-Os`) + pass framework | — |
 | feature-os-targets-bsd-mac | A | feature | Additional OS targets (BSD / macOS via syscall mapping; Windows deprioritized) | — |
@@ -72,18 +63,11 @@ _none_
 | feature-real-cross-target-consistency | A | feature | Verify `real`/Double bit-consistency across targets (x87 divergence?) | — |
 | feature-release-packaging | B | feature | Release packaging, reproducibility manifest, and `release.sh` | — |
 | feature-stackful-coro-port | A | feature | Port the stackful coroutine backend to all targets | — |
-| feature-static-arena-profile | A | feature | Fixed-static-arena allocator profile | feature-unified-heap-allocator |
-| feature-string-model-tyfixedstring | B | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 | feature-sys-process-spawning | B | feature | Process spawning and execution support — libc-free execve pipeline | — |
 | feature-threadsafe-io-serialization | A | feature | Statement-level I/O serialization under threads | feature-unified-heap-allocator |
 | feature-toolchain-cli-ux | A | feature | Toolchain CLI / user tooling (install, config, discovery, doctor, selfcheck) | — |
 | feature-writeln-as-library | B | feature | write/writeln as a library function (via `array of const` + variadic sugar) | — |
 | feature-zero-init-contract | A | feature | Zero-init contract — one library-owned managed-slot zeroing guarantee | — |
-| fix-sat-dpll-needs-parens-after-paramless-flip | B | fix | sat DPLL: bare paramless recursion needs `DPLL()` after the paramless flip | — |
-| goal-compile-fpc-compiler | A | goal | 🗼 Lighthouse — compile the FPC compiler (`pp.pas`) with PXX | — |
-| idea-demo-app-candidates | B | idea | Demo / test application candidates — selection criteria + catalog | — |
-| idea-unit-rename-import | B | idea | `uses X as Y` unit-rename import (dialect extension) | — |
-| idea-visibility-enforcement | B | idea | Enforce private/protected visibility | — |
 | meta-track-b-compiler-wishlist | B | meta | Track-B wishlist — compiler features most wanted to unblock libraries + demos | — |
 
 ## blocked (1)
@@ -92,7 +76,7 @@ _none_
 | --- | --- | --- | --- | --- |
 | feature-c-runtime-library | B | feature | C runtime/library layer (`lib/crtl`) plus direct C-library packages | feature-c-source-frontend |
 
-## done (171)
+## done (172)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -263,10 +247,31 @@ _none_
 | feature-unified-heap-allocator | A | feature | Unified syscall-free heap allocator | — |
 | feature-xtensa-asm-emitter | A | feature | Xtensa text-assembler (`EmitAsmXtensa`) for ESP32 | — |
 | feature-xtensa-windowed-abi | A | feature | Xtensa windowed ABI codegen variant (for ESP-IDF interop) | — |
+| fix-sat-dpll-needs-parens-after-paramless-flip | B | fix | sat DPLL: bare paramless recursion needs `DPLL()` after the paramless flip | — |
 | idea-progress-board-md | B | idea | On-demand `BOARD.md` kanban grid | — |
 | lib-intToStr-missing | B | lib | `IntToStr` not available | — |
 | lib-string-copy-trim-missing | B | lib | String `Copy` / `Trim` not available | — |
 | lib-text-file-io-assign-rewrite | B | lib | Text file I/O: `Assign`/`Rewrite`/`Reset`/`WriteLn(f,…)`/`CloseFile` missing | — |
+
+## done-followup (15)
+
+| Ticket | Track | Type | Summary | Blocked-by |
+| --- | --- | --- | --- | --- |
+| design-overloadable-intrinsics | A | design | Design question: overloadable compiler intrinsics (the `Copy` precedent) | — |
+| design-record-copy-dynarray-field-semantics | A | design | Record copy with a dynamic-array field: PXX deep-copies, FPC shares (reference) | — |
+| feature-async-language-surface | A | feature | Async language surface + stackless coroutine backend | feature-cross-target-feature-parity |
+| feature-extended-type-support | A | feature | Proper `Extended` type support (currently aliased to Double) | — |
+| feature-fpc-vs-pxx-feature-boundary | A | feature | Policy: FPC-bootstrap subset vs PXX-only library features | — |
+| feature-handle-compacting-heap | A | feature | Handle-table compacting heap (anti-fragmentation for constrained RAM) | — |
+| feature-interfaces | A | feature | Interfaces | — |
+| feature-kernel-matrix-bootroom | B | feature | Kernel-matrix bootroom: one static PXX binary, swept across many Linux kernels | — |
+| feature-no-ansistring-profile | A | feature | No-AnsiString / bounded-string profile | — |
+| feature-static-arena-profile | A | feature | Fixed-static-arena allocator profile | feature-unified-heap-allocator |
+| feature-string-model-tyfixedstring | B | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
+| goal-compile-fpc-compiler | A | goal | 🗼 Lighthouse — compile the FPC compiler (`pp.pas`) with PXX | — |
+| idea-demo-app-candidates | B | idea | Demo / test application candidates — selection criteria + catalog | — |
+| idea-unit-rename-import | B | idea | `uses X as Y` unit-rename import (dialect extension) | — |
+| idea-visibility-enforcement | B | idea | Enforce private/protected visibility | — |
 
 ## rejected (3)
 
@@ -281,12 +286,9 @@ _none_
 - [B] chess-pal-getdents-link
 - [A] chore-inc-to-units
 - [A] chore-runtime-emission-size
-- [A] design-overloadable-intrinsics
-- [A] design-record-copy-dynarray-field-semantics
 - [A] feature-additional-cpu-targets
 - [A] feature-allocator-quality
 - [A] feature-async-auto-backend
-- [A] feature-async-language-surface
 - [A] feature-c-header-import-complex
 - [B] feature-copy-intrinsic
 - [A] feature-c-regex-library-devtest
@@ -303,21 +305,15 @@ _none_
 - [A] feature-dynamic-soname-discovery
 - [A] feature-esp32-idf-xtensa
 - [B] feature-esp-peripheral-callback-api
-- [A] feature-extended-type-support
-- [A] feature-fpc-vs-pxx-feature-boundary
-- [A] feature-handle-compacting-heap
 - [A] feature-inline-asm-depth
 - [A] feature-inline-asm-multi-arch
 - [A] feature-inline-routines
-- [A] feature-interfaces
-- [B] feature-kernel-matrix-bootroom
 - [A] feature-lazy-standard-unit-emission
 - [A] feature-metaclass-descendant-enforcement
 - [A] feature-mimic-fpc
 - [A] feature-mode-delphi
 - [B] feature-networking
 - [A] feature-nil-python-frontend
-- [A] feature-no-ansistring-profile
 - [A] feature-object-reference-type
 - [A] feature-optimization-levels
 - [A] feature-os-targets-bsd-mac
@@ -328,18 +324,11 @@ _none_
 - [A] feature-real-cross-target-consistency
 - [B] feature-release-packaging
 - [A] feature-stackful-coro-port
-- [A] feature-static-arena-profile
-- [B] feature-string-model-tyfixedstring
 - [B] feature-sys-process-spawning
 - [A] feature-threadsafe-io-serialization
 - [A] feature-toolchain-cli-ux
 - [B] feature-writeln-as-library
 - [A] feature-zero-init-contract
-- [B] fix-sat-dpll-needs-parens-after-paramless-flip
-- [A] goal-compile-fpc-compiler
-- [B] idea-demo-app-candidates
-- [B] idea-unit-rename-import
-- [B] idea-visibility-enforcement
 - [B] meta-track-b-compiler-wishlist
 
 ## Leverage (tickets each one unblocks)

@@ -1,7 +1,7 @@
 # 🗼 Lighthouse — compile the FPC compiler (`pp.pas`) with PXX
 
 - **Type:** goal (lighthouse / end-goal — NOT a sprint ticket)
-- **Status:** backlog
+- **Status:** done-followup
 - **Opened:** 2026-06-18
 - **Nature:** a fixed point on the horizon to steer by, not a task to schedule.
   Attempting it will avalanche into many concrete tickets; those are the work,

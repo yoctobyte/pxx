@@ -1,7 +1,7 @@
 # Policy: FPC-bootstrap subset vs PXX-only library features
 
 - **Type:** policy / architecture
-- **Status:** backlog (document + exploit)
+- **Status:** done-followup (document + exploit)
 - **Owner:** —
 - **Opened:** 2026-06-16
 

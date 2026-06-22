@@ -1,7 +1,7 @@
 # String model overhaul: tyFixedString + managed `string` + Str/Val
 
 - **Type:** feature (type system + all backends + RTL)
-- **Status:** backlog
+- **Status:** done-followup
 - **Owner:** Track A
 - **Opened:** 2026-06-20
 - **Relates:** [[bug-string-type-size-mismatch]], [[bug-rtti-offset-static-array]]

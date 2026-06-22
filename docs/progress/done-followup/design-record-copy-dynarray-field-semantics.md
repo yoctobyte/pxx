@@ -1,7 +1,7 @@
 # Record copy with a dynamic-array field: PXX deep-copies, FPC shares (reference)
 
 - **Type:** design question (semantics) — **Track A**, needs a decision
-- **Status:** backlog — **decision needed before any code change**
+- **Status:** done-followup — **decision needed before any code change**
 - **Opened:** 2026-06-22
 - **Found by:** Track A, dynarray-aggregate FPC-vs-PXX probe.
 
