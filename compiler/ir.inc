@@ -2360,6 +2360,21 @@ begin
         Result := IRAppend(IR_STORE_SYM, ASTIVal[ASTLeft[node]], value, -1, 0,
                            ASTTk[ASTLeft[node]]);
       end
+      else if (ASTKind[ASTLeft[node]] <> AN_IDENT) and
+              (NodeDynDepth(ASTLeft[node]) > 0) then
+      begin
+        { Whole dynamic-array assignment into a non-IDENT lvalue (a record/object
+          dyn-array field, or a nested sub-array slot). The source handle is
+          pointer-sized; store all 8 bytes into the field address. Without this
+          the generic scalar store below used the element width (truncating the
+          8-byte handle to 4) and the field ended up holding the source's slot
+          address rather than its handle -> segfault on the next index/Length.
+          (A non-IDENT dyn-array LHS does not carry the retain/release that the
+          IR_STORE_SYM path above does; the handle copy is share-semantics.) }
+        value := IRLowerAST(ASTRight[node]);
+        leftAddr := IRLowerAddress(ASTLeft[node]);
+        Result := IRAppend(IR_STORE_MEM, leftAddr, value, -1, 0, Ord(tyPointer));
+      end
       else if (IntToTypeKind(ASTTk[ASTLeft[node]]) = tyRecord) or
               ((ASTKind[ASTLeft[node]] = AN_IDENT) and
                (Syms[ASTIVal[ASTLeft[node]]].TypeKind = tyRecord)) then
