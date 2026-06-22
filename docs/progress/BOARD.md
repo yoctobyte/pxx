@@ -23,6 +23,7 @@ _none_
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
 | bug-dynarray-in-record-corrupt | A | bug | Dynamic array as a record field is corrupted (value return + var-param assign) | — |
+| bug-setlength-ir-string-in-complex-method | A | bug | `SetLength expects a string variable in IR codegen` on a valid array SetLength | — |
 | chess-pal-getdents-link | B | chess | examples/chess: PalBackendGetDents64 undefined (PAL backend not linked) | — |
 | chore-inc-to-units | A | chore | `.inc` → real `.pas` units refactor | — |
 | chore-runtime-emission-size | A | chore | Finer runtime-support emission (code size) | — |
@@ -39,7 +40,6 @@ _none_
 | feature-demo-lisp | B | feature | Demo — Lisp / Scheme interpreter | — |
 | feature-demo-solitaire | B | feature | Demo — console Klondike solitaire (user-requested entertainment test app) | — |
 | feature-demo-video-player-audio-sync | B | feature | Video player audio playback and sync | — |
-| feature-demo-vm | B | feature | Demo — bytecode VM + assembler (small ISA) | — |
 | feature-dns-resolver-library | B | feature | DNS resolver library (`dns.pas`) with selectable backends | — |
 | feature-dwarf-debug-info | A | feature | DWARF debug info (`-g`) — phased, x86-64 first | — |
 | feature-dynamic-include-paths-config | A | feature | Dynamic Include Paths, Configuration Files, and System Scanner | — |
@@ -84,11 +84,12 @@ _none_
 | idea-visibility-enforcement | B | idea | Enforce private/protected visibility | — |
 | meta-track-b-compiler-wishlist | B | meta | Track-B wishlist — compiler features most wanted to unblock libraries + demos | — |
 
-## blocked (2)
+## blocked (3)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
 | feature-c-runtime-library | B | feature | C runtime/library layer (`lib/crtl`) plus direct C-library packages | feature-c-source-frontend |
+| feature-demo-vm | B | feature | Demo — bytecode VM + assembler (small ISA) | bug-setlength-ir-string-in-complex-method |
 | feature-sat-solver-library | B | feature | SAT solver library — DPLL over CNF (known-instance test app) | bug-impl-prescan-codegen-regression |
 
 ## done (159)
@@ -266,6 +267,7 @@ _none_
 ## Ready (no unmet blocker)
 
 - [A] bug-dynarray-in-record-corrupt
+- [A] bug-setlength-ir-string-in-complex-method
 - [B] chess-pal-getdents-link
 - [A] chore-inc-to-units
 - [A] chore-runtime-emission-size
@@ -282,7 +284,6 @@ _none_
 - [B] feature-demo-lisp
 - [B] feature-demo-solitaire
 - [B] feature-demo-video-player-audio-sync
-- [B] feature-demo-vm
 - [B] feature-dns-resolver-library
 - [A] feature-dwarf-debug-info
 - [A] feature-dynamic-include-paths-config
@@ -354,5 +355,6 @@ _none_
 - **1** — feature-array-of-const
 - **1** — chore-qemu-test-env
 - **1** — chore-inc-to-units
+- **1** — bug-setlength-ir-string-in-complex-method
 - **1** — bug-managed-byref-string-param-store
 - **1** — bug-impl-prescan-codegen-regression

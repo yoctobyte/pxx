@@ -1,7 +1,8 @@
 # Demo — bytecode VM + assembler (small ISA)
 
 - **Type:** feature
-- **Status:** backlog
+- **Status:** blocked (impl + oracle written, FPC-verified; PXX miscompiles)
+- **Blocked-by:** bug-setlength-ir-string-in-complex-method
 - **Owner:** —
 - **Opened:** 2026-06-19
 - **Relation:** demo-class survivor from idea-demo-app-candidates. Interpreter
@@ -42,3 +43,16 @@ Platonic source, assumes idiomatic RTL; no compiler changes; ESP32-fit
 
 ## Log
 - 2026-06-19 — Opened in the demo-ticket organization pass.
+- 2026-06-22 — **Implemented** (track B): `lib/rtl/vm.pas` — 22-opcode stack ISA
+  (push/pop/dup/swap, arith, lt/gt/eq, load/store, jmp/jz/jnz, call/ret, print,
+  halt), a label-resolving two-pass text assembler, and a `case`-dispatch
+  executor returning PRINT output as a string. Flat parallel Integer arrays for
+  the program (no records-with-dynarrays). Oracle `examples/vm/vmdemo.pas`: loop
+  sum (55), iterative + recursive factorial (120, recursion via call/ret), a
+  twice-called subroutine (36/81), and assembler-error rejection.
+  **FPC runs it `ALL OK`.**
+  **Blocked:** PXX rejects the clean source with `SetLength expects a string
+  variable in IR codegen` — a layout-sensitive codegen bug
+  (bug-setlength-ir-string-in-complex-method). Left as clean Platonic code (no
+  workaround) and NOT wired into `make lib-test`. Unblocks + closes when the
+  codegen bug is fixed.
