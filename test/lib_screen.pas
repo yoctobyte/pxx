@@ -76,6 +76,16 @@ begin
   exp := '' + E + '[1;1H' + E + '[0m' + '##' + E + '[2;1H' + '##';
   Check('fillrect', r, exp);
 
+  { clip: a 5x5 fill clipped to a 2x2 region at offset (2,1) writes only the
+    four in-region cells (clip-local coords, translated). }
+  ScreenInitSize(6, 3);
+  r := ScreenRender;
+  ScreenSetClip(2, 1, 2, 2);
+  ScreenFillRect(0, 0, 5, 5, '#');
+  r := ScreenRender;
+  exp := '' + E + '[2;3H' + E + '[0m' + '##' + E + '[3;3H' + '##';
+  Check('clip', r, exp);
+
   { --- key decoder (pure, exact). Sequences go through a variable first to
     sidestep bug-ansistring-concat-arg-static-bloat (a concat expression passed
     straight as an arg reserves ~8 MB of BSS per call site). --- }

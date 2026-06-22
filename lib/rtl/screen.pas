@@ -50,7 +50,13 @@ procedure ScreenInit;
 function ScreenCols: Integer;
 function ScreenRows: Integer;
 
-{ Drawing — these touch only the back buffer. }
+{ Clipping / origin: after ScreenSetClip(x,y,w,h) all draw coordinates are
+  relative to (x,y) and clipped to the w x h region — the basis for panels/
+  layout. ScreenResetClip restores the full screen. }
+procedure ScreenSetClip(x, y, w, h: Integer);
+procedure ScreenResetClip;
+
+{ Drawing — these touch only the back buffer, through the current clip. }
 procedure ScreenSetPen(fg, bg, attr: Integer);
 procedure ScreenClear;                                   { blank with current pen }
 procedure ScreenPutChar(x, y: Integer; ch: Char);
@@ -90,6 +96,7 @@ var
   fCh: array of Char;
   fFg, fBg, fAttr: array of Integer;
   penFg, penBg, penAttr: Integer;
+  clipX, clipY, clipW, clipH: Integer;   { draw origin + clip region }
 
 procedure ScreenInitSize(cols, rows: Integer);
 var i, n: Integer;
@@ -102,12 +109,23 @@ begin
   SetLength(bCh, n); SetLength(bFg, n); SetLength(bBg, n); SetLength(bAttr, n);
   SetLength(fCh, n); SetLength(fFg, n); SetLength(fBg, n); SetLength(fAttr, n);
   penFg := COLOR_DEFAULT; penBg := COLOR_DEFAULT; penAttr := ATTR_NONE;
+  clipX := 0; clipY := 0; clipW := cols; clipH := rows;
   for i := 0 to n - 1 do
   begin
     bCh[i] := ' '; bFg[i] := COLOR_DEFAULT; bBg[i] := COLOR_DEFAULT; bAttr[i] := ATTR_NONE;
     { front primed to an impossible glyph so every cell is initially "dirty" }
     fCh[i] := #1; fFg[i] := -2; fBg[i] := -2; fAttr[i] := -2;
   end;
+end;
+
+procedure ScreenSetClip(x, y, w, h: Integer);
+begin
+  clipX := x; clipY := y; clipW := w; clipH := h;
+end;
+
+procedure ScreenResetClip;
+begin
+  clipX := 0; clipY := 0; clipW := scCols; clipH := scRows;
 end;
 
 procedure ScreenInit;
@@ -143,10 +161,13 @@ begin
 end;
 
 procedure ScreenPutChar(x, y: Integer; ch: Char);
-var idx: Integer;
+var gx, gy, idx: Integer;
 begin
-  if (x < 0) or (y < 0) or (x >= scCols) or (y >= scRows) then Exit;
-  idx := y * scCols + x;
+  { x,y are clip-local: reject outside the clip region, then translate. }
+  if (x < 0) or (y < 0) or (x >= clipW) or (y >= clipH) then Exit;
+  gx := clipX + x; gy := clipY + y;
+  if (gx < 0) or (gy < 0) or (gx >= scCols) or (gy >= scRows) then Exit;
+  idx := gy * scCols + gx;
   bCh[idx] := ch; bFg[idx] := penFg; bBg[idx] := penBg; bAttr[idx] := penAttr;
 end;
 
