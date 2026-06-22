@@ -3895,8 +3895,15 @@ begin
         end;
         Exit;
       end
-      else if (procIdx >= 0) and Procs[procIdx].IsFunc and (Procs[procIdx].ParamCount = 0) then
+      else if (idx < 0) and (procIdx >= 0) and Procs[procIdx].IsFunc and (Procs[procIdx].ParamCount = 0) then
       begin
+        { Bare paramless function called by name in an expression. Guarded on
+          `idx < 0`: a variable in scope with the same name (PXX is
+          case-insensitive, so a local `clauseCount` collides with a function
+          `ClauseCount`) must SHADOW the function — fall through to the var read
+          below. Without this guard the local read was silently compiled as a
+          call to the function (bug-impl-prescan-codegen-regression: the real
+          defect was here, name resolution, not slot/offset allocation). }
         Next;
         node := AllocNode(AN_CALL);
         ASTIVal[node] := procIdx;
@@ -6963,8 +6970,14 @@ begin
           ASTIVal[node] := procIdx;
           ASTLeft[node] := argsHead;
         end
-        else if (procIdx >= 0) and (Procs[procIdx].ParamCount = 0) then
+        else if (si < 0) and (procIdx >= 0) and (Procs[procIdx].ParamCount = 0) then
         begin
+          { Bare paramless call statement. Guarded on `si < 0` (FindSym above): a
+            variable in scope with the same name shadows the function, so
+            `counter := ...` where a local `counter` collides with a function
+            `ClauseCount`/`Counter` must reach the assignment path below, not be
+            eaten as a paramless call. Companion to the same guard in ParseFactor
+            (bug-impl-prescan-codegen-regression — name resolution, not slots). }
           Next;
           node := AllocNode(AN_CALL);
           ASTIVal[node] := procIdx;
