@@ -79,4 +79,5 @@ Unusual; left as-is.
 
 ## Log
 - 2026-06-22 — Filed by Track B from the math-demo build.
-- 2026-06-22 — DONE (Track A). Three front-end gaps closed; FPC-faithful.
+- 2026-06-22 — DONE (Track A, commit `74301ff`). Three front-end gaps closed;
+  FPC-faithful.

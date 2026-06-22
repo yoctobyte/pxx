@@ -40,7 +40,7 @@ depth>=2 branch (no regression).
   cross-bootstrap (i386/aarch64/arm32) byte-identical.
 
 ## Log
-- 2026-06-22 — Found + fixed (Track A). Part of a dynarray-in-aggregate
-  robustness pass (siblings: bug-dynarray-in-record-corrupt,
+- 2026-06-22 — Found + fixed (Track A, commit `f371958`). Part of a
+  dynarray-in-aggregate robustness pass (siblings: bug-dynarray-in-record-corrupt,
   bug-named-dynarray-field-setlength). Not separately re-pinned; rides the next
   `make pin`.
