@@ -39,3 +39,15 @@ stable compiler, run, screenshot.
 
 ## Log
 - 2026-06-22 — opened + taken. First code slice of the IDE.
+- 2026-06-22 — M0 built + ran. `apps/ide/{README.md,build.sh,.gitignore}`,
+  `garin/buffer.pas` (TIdeBuffer, render-agnostic, textfile-backed),
+  `eliah/main.pas` (single GTK3 window, 4 panes via gtk_fixed SetBounds: tree |
+  editor | designer-stub | output-stub | props-stub). Editor live — loads its
+  own source through the garin buffer (dogfood). Compiles clean with
+  `$(PXX_STABLE)`, **zero workarounds, no compiler ticket needed**. Screenshot
+  captured (window titled "Eliah - IDE", tree + source visible).
+  - **Caveat (honest):** panes use absolute bounds; window is resizable but panes
+    do NOT reflow yet, and there are no drag-splitters. The ticket's "resizable
+    splitters" is therefore NOT met — deferred to a follow-up (needs a layout
+    pass on window size-allocate, or real GtkPaned in PCL). Fixed tiled layout
+    only for now.

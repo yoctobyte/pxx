@@ -25,7 +25,7 @@ _none_
 | --- | --- | --- | --- | --- |
 | feature-c-runtime-library | B | feature | C runtime/library layer (`lib/crtl`) plus direct C-library packages | feature-c-source-frontend |
 
-## backlog (45)
+## backlog (46)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -46,6 +46,7 @@ _none_
 | feature-dynamic-soname-discovery | A | feature | Dynamic soname discovery (no execve) | — |
 | feature-eliah-m1-designer | B | feature | Eliah M1 — form designer (box emulation) | feature-eliah-m0-window |
 | feature-eliah-m2-builder | B | feature | Eliah M2 — builder integration | feature-eliah-m0-window |
+| feature-eliah-pane-reflow | B | feature | Eliah — pane reflow / resizable splitters | feature-eliah-m0-window |
 | feature-esp32-idf-xtensa | A | feature | ESP-IDF integration: Xtensa (ESP32-S2/S3) — QEMU + real hardware | — |
 | feature-esp-peripheral-callback-api | B | feature | ESP32 peripheral callback API (timer / GPIO / ADC) — the user-facing "interrupt" | — |
 | feature-flexcolumn-directive | A | feature | `flexcolumn` calling-convention directive | chore-inc-to-units |
@@ -348,11 +349,11 @@ _none_
 ## Leverage (tickets each one unblocks)
 
 - **5** — feature-unified-heap-allocator
+- **3** — feature-eliah-m0-window
 - **2** — feature-target-i386
 - **2** — feature-target-aarch64
 - **2** — feature-rtti-layout-table
 - **2** — feature-rtl-image-bitmap-library
-- **2** — feature-eliah-m0-window
 - **2** — feature-c-source-frontend
 - **2** — feature-cross-target-feature-parity
 - **2** — feature-cross-managed-string-cow
