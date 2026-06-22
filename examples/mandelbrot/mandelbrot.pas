@@ -19,6 +19,10 @@ const
   W = 70;
   H = 32;
   MAXIT = 200;
+  RE_MIN: Double = -2.50;
+  RE_MAX: Double =  1.00;
+  IM_MIN: Double = -1.25;
+  IM_MAX: Double =  1.25;
   EXPECTED = 3745966;    { escape-count checksum on x86-64 (reference target) }
 
 function EscapeCount(cre, cim: Double): Integer;
@@ -45,23 +49,20 @@ const
 var
   row, col, n, ri: Integer;
   cre, cim, dre, dim: Double;
-  reMin, reMax, imMin, imMax: Double;
   line: AnsiString;
   checksum: Int64;
 begin
-  reMin := -2.50; reMax := 1.00;
-  imMin := -1.25; imMax := 1.25;
-  dre := (reMax - reMin) / (W - 1);
-  dim := (imMax - imMin) / (H - 1);
+  dre := (RE_MAX - RE_MIN) / (W - 1);
+  dim := (IM_MAX - IM_MIN) / (H - 1);
   checksum := 0;
 
   for row := 0 to H - 1 do
   begin
-    cim := imMin + row * dim;
+    cim := IM_MIN + row * dim;
     line := '';
     for col := 0 to W - 1 do
     begin
-      cre := reMin + col * dre;
+      cre := RE_MIN + col * dre;
       n := EscapeCount(cre, cim);
       { positional checksum: weight by column so a horizontal shift is caught }
       checksum := checksum + n * (col + 1) + n;

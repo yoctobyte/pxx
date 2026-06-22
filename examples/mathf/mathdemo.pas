@@ -14,14 +14,12 @@ program MathDemo;
 uses math, sysutils;
 
 const
-  EPS:  Double = 0.000000001;     { 1e-9  for Double checks }
-  EPSS: Double = 0.00001;         { 1e-5  for Single checks; untyped float
-                                    consts aren't accepted yet, so these are
-                                    typed -- see bug-untyped-float-const }
+  EPS  = 0.000000001;     { 1e-9  for Double checks }
+  EPSS = 0.00001;         { 1e-5  for Single checks }
 
 var
   ok: Boolean;
-  s, s2: Single;
+  s: Single;
   d: Double;
   r: Real;
   acc, h, xx: Double;
@@ -120,12 +118,11 @@ begin
   Chk('sign tests',   Sign(-3.5) + Sign(0.0) + Sign(2.0), 0.0);
 
   writeln('-- Single overloads (narrowed) --');
-  s := 2.0;       ChkS('sqrt(2):single',   Sqrt(s), 1.41421356);
-  s := Pi / 6.0;  ChkS('sin(pi/6):single', Sin(s),  0.5);
-  s := 1.0;       ChkS('exp(1):single',    Exp(s),  2.71828183);
-  s := 8.0;       ChkS('log2(8):single',   Log2(s), 3.0);
-  s := 3.0; s2 := 4.0;
-  ChkS('hypot(3,4):single', Hypot(s, s2), 5.0);
+  ChkS('sqrt(2):single',    Sqrt(Single(2.0)),  1.41421356);
+  ChkS('sin(pi/6):single',  Sin(Single(Pi / 6.0)), 0.5);
+  ChkS('exp(1):single',     Exp(Single(1.0)),   2.71828183);
+  ChkS('log2(8):single',    Log2(Single(8.0)),  3.0);
+  ChkS('hypot(3,4):single', Hypot(Single(3.0), Single(4.0)), 5.0);
 
   writeln('-- Single->Double conversion + promotion --');
   s := 1.5;
