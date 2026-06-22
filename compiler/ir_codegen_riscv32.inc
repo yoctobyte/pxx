@@ -726,6 +726,16 @@ begin
         else if (Syms[si].TypeKind = tyAnsiString) and not Syms[si].IsArray and
                 not InLValueWrite and
                 not ((Syms[si].Kind = skParam) and Syms[si].IsRef) then
+          rv32_lw(reg_a0, reg_a0, 0)
+        { Scalar var/out param: the slot holds the forwarded caller address, so
+          its lvalue address is [slot], not &slot. Without this deref, taking the
+          address of a var param (e.g. forwarding `var op` into another routine's
+          `var p`, or `@op`) yields the local slot — the inner write never reaches
+          the caller (feature-riscv32-var-param-forwarding). The load/store paths
+          and the 64-bit slot-addr emitter already deref; this brings IR_LEA's
+          32-bit scalar path in line. Arrays/strings keep their handling above. }
+        else if (Syms[si].Kind = skParam) and Syms[si].IsRef and
+                not Syms[si].IsArray and (Syms[si].TypeKind <> tyAnsiString) then
           rv32_lw(reg_a0, reg_a0, 0);
       end;
 

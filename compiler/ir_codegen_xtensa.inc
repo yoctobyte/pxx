@@ -961,6 +961,16 @@ begin
         else if (Syms[si].TypeKind = tyAnsiString) and not Syms[si].IsArray and
                 not InLValueWrite and
                 not ((Syms[si].Kind = skParam) and Syms[si].IsRef) then
+          xtensa_l32i(reg_xtensa_a2, reg_xtensa_a2, 0)
+        { Scalar var/out param: the slot holds the forwarded caller address, so its
+          lvalue address is [slot], not &slot. Without this deref, forwarding a
+          `var` param into another routine's `var` param (or `@op`) yields the
+          local slot and the inner write never reaches the caller
+          (feature-riscv32-var-param-forwarding, same defect on xtensa). The 64-bit
+          slot-addr emitter + load/store paths already deref; this aligns IR_LEA's
+          scalar path. Arrays/strings keep their handling above. }
+        else if (Syms[si].Kind = skParam) and Syms[si].IsRef and
+                not Syms[si].IsArray and (Syms[si].TypeKind <> tyAnsiString) then
           xtensa_l32i(reg_xtensa_a2, reg_xtensa_a2, 0);
       end;
 

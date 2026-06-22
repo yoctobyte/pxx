@@ -1,9 +1,10 @@
 # riscv32: a var parameter forwarded to a nested var parameter loses its address
 
-- **Type:** bug (Track A — riscv32 codegen)
-- **Status:** backlog
-- **Owner:** —
+- **Type:** bug (Track A — riscv32 + xtensa codegen)
+- **Status:** DONE — 2026-06-22 (fixed on BOTH ESP backends; xtensa had the same defect).
+- **Owner:** — (Track A)
 - **Opened:** 2026-06-22 (isolated from the ESP32-C3 lwIP socket smoke, Track B)
+- **Closed:** 2026-06-22
 
 ## Problem
 
@@ -81,3 +82,28 @@ PAL code is idiomatic and correct; the fix is in the backend.
   address, and `IR_LEA` (~712) routes through it. So the defect is subtle (not
   the headline "address-of var param" path); pin it with on-target disasm of
   `outer`'s call to `inner` (how the `var op` arg is materialised into a2).
+
+## Fix log
+
+- 2026-06-22 — **FIXED on riscv32 AND xtensa.** Root cause (found via disasm under
+  the Espressif qemu-system harness): `IR_LEA` of a `var`/`out` SCALAR param
+  returned the local slot ADDRESS (`&slot`), not the forwarded caller pointer
+  (`[slot]`). `EmitSlotAddrRISCV32` / `EmitSlotAddrXtensa` (the scalar slot-addr
+  emitters that `IR_LEA` uses) never dereferenced var params, while the 64-bit
+  siblings (`EmitSlotAddr64*`) and the load/store paths already did — so Int64
+  var params worked but 32-bit scalars didn't. So forwarding `var op` into another
+  routine's `var p` (and `@op`) passed `&op_slot`; the callee wrote a stale local.
+  Fix: in each backend's `IR_LEA` handler, deref the slot for a scalar by-ref
+  param (`skParam and IsRef and not IsArray and TypeKind<>tyAnsiString`) — one
+  branch each in `ir_codegen_riscv32.inc` / `ir_codegen_xtensa.inc`. Arrays and
+  managed strings keep their existing handling; `IR_SLOTADDR` and the store paths
+  (which need the raw slot address) are untouched.
+- **HARNESS NOTE (reverses the earlier "needs harness" halt):** the ESP
+  qemu-system harness already exists and works — `tools/esp_run_bare.sh --chip
+  esp32c3|esp32s3 <prog>` boots a `--esp-profile=bare` ELF and diffs UART vs the
+  x86-64 oracle (`make test-esp-bare`). The earlier halt used qemu-USER
+  (`run_target.sh`), which is wrong for these bare-metal targets. Both Espressif
+  qemus are installed here.
+- Test: `test/test_esp_varparam.pas`, wired into `make test-esp-bare` for both
+  chips (oracle-diff). esp32c3 + esp32s3 both report `direct=3333 / fwd=3333`.
+  make test + cross-bootstrap byte-identical.
