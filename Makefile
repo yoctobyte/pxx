@@ -2083,6 +2083,8 @@ lib-test: pxx-stable-check
 	test "$$(/tmp/lib_dns_config)" = "$$(printf 'ip-ok=ok\nip-val=ok\nip-oversize=ok\nip-short=ok\nip-empty=ok\ncount=3\nns0=ok\nns1=ok\nns2=ok\nh-local=ok\nh-alias=ok\nh-ci=ok\nh-nofinalnl=ok\nh-comment=ok\nh-miss=ok')"
 	$(PXX_STABLE) -Fulib/rtl/platform/posix test/lib_dns_resolve.pas /tmp/lib_dns_resolve
 	test "$$(/tmp/lib_dns_resolve)" = "$$(printf 'rcode=0\ncount=2\nip0=ok\nip1=ok')"
+	$(PXX_STABLE) -Fulib/rtl/platform/posix test/lib_dns_facade.pas /tmp/lib_dns_facade
+	test "$$(/tmp/lib_dns_facade)" = "$$(printf 'hosts-hit=ok\nwire-rcode=0\nwire-count=2\nwire-ip0=ok')"
 	@if command -v qemu-aarch64 >/dev/null 2>&1 && command -v qemu-arm >/dev/null 2>&1; then \
 	  echo "=== lib-test cross: PAL net primitives under qemu-user (i386/aarch64/arm32) ==="; \
 	  for arch in i386 aarch64 arm32; do \
