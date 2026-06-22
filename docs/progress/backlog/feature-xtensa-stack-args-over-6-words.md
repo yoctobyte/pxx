@@ -71,3 +71,12 @@ the compiler.
   first for a 7-word routine, which is the `PalBackendVforkAndExec` (7 words)
   case. So: xtensa supports <= 6 param words, >6 does not compile — confirmed,
   not assumed.
+
+- 2026-06-22 — **CORRECTION: the ESP harness DOES exist** (the earlier "needs
+  qemu-system harness" halt note was wrong — it used qemu-USER). Use
+  `tools/esp_run_bare.sh --chip esp32c3|esp32s3 <prog>` (UART vs x86-64 oracle,
+  the `make test-esp-bare` pattern); both Espressif qemu-system builds are
+  installed. So this item is runtime-verifiable now. Sibling
+  feature-riscv32-var-param-forwarding was fixed+verified this way (f67fad2). This
+  one remains a real codegen feature (record-return ABI / xtensa stack args), but
+  it is no longer blocked on verification.

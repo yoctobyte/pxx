@@ -63,3 +63,12 @@ results are blocked here.
   supported yet`. Controls: an ordinal-result function compiles fine on riscv32,
   and the SAME record-result function compiles fine on x86_64. So the gap is
   specifically riscv32 record-by-value (struct) returns, confirmed.
+
+- 2026-06-22 — **CORRECTION: the ESP harness DOES exist** (the earlier "needs
+  qemu-system harness" halt note was wrong — it used qemu-USER). Use
+  `tools/esp_run_bare.sh --chip esp32c3|esp32s3 <prog>` (UART vs x86-64 oracle,
+  the `make test-esp-bare` pattern); both Espressif qemu-system builds are
+  installed. So this item is runtime-verifiable now. Sibling
+  feature-riscv32-var-param-forwarding was fixed+verified this way (f67fad2). This
+  one remains a real codegen feature (record-return ABI / xtensa stack args), but
+  it is no longer blocked on verification.
