@@ -411,6 +411,8 @@ test-core: $(COMPILER)
 	test "$$(/tmp/test_fnresult_pl26)" = "$$(printf '0 1\n8\n55')"
 	./$(COMPILER) test/test_local_shadows_func.pas /tmp/test_local_shadows26
 	test "$$(/tmp/test_local_shadows26)" = "$$(printf 'count=7 viaFunc=7\ntally=20')"
+	./$(COMPILER) test/test_mode_delphi.pas /tmp/test_mode_delphi26
+	test "$$(/tmp/test_mode_delphi26)" = "$$(printf 'p5=10\nGate=42 calls=3\nTally=105')"
 	./$(COMPILER) test/test_eof_stdin.pas /tmp/test_eof26
 	test "$$(printf 'x\ny' | /tmp/test_eof26)" = "$$(printf '1: x\n2: y\ntotal 2')"
 	test "$$(printf '' | /tmp/test_eof26)" = "total 0"

@@ -506,6 +506,7 @@ begin
   PasDefineCount := 0;
   PasCondCount := 0;
   StrictOverload := False;
+  DelphiMode := False;
   ThreadSafeMode := False;
   InterfacesComMode := False;
   ComInterfaceUsed := False;
@@ -1293,8 +1294,17 @@ begin
     else if CaseEqual(command, 'message') then
       writeln('pascal26:', SrcLine, ': message: ', messageText)
     else if CaseEqual(command, 'error') then
-      Error(messageText);
-    { Mode and unsupported compatibility directives remain accepted comments. }
+      Error(messageText)
+    else if CaseEqual(command, 'mode') then
+    begin
+      { {$mode delphi} toggles the one behavioural delta PXX honours: the
+        @-optional procedural value (a bare function name bound to a proc-typed
+        target takes its address). objfpc/fpc/tp/macpas all map to PXX's default
+        (objfpc-ish) dialect — DelphiMode off. PXX is otherwise a single dialect
+        superset, so non-delphi modes are accepted but inert. }
+      DelphiMode := CaseEqual(name, 'delphi');
+    end;
+    { Unsupported compatibility directives remain accepted comments. }
   end;
   if DebugTrace and (command <> '') then writeln('Pascal directive: ', command, ' ', name);
 end;

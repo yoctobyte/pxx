@@ -3704,6 +3704,7 @@ begin
       end
       else if (CurProc >= 0) and Procs[CurProc].IsFunc and
               (Tokens[TokPos].Kind <> tkLParen) and
+              not DelphiMode and
               ((name = Procs[CurProc].Name) or
                CaseEqual(name, LastDotName(Procs[CurProc].Name))) then
       begin
@@ -3712,6 +3713,13 @@ begin
           side (`FuncName := ...`) is handled at the statement level; this is the
           read side. A following `(` is a recursive call, not a result read, so
           it is excluded above and falls through to the call paths below.
+
+          {$mode delphi} delta: in Delphi a bare own-name read is NEVER the result
+          var — it is a (recursive) reference to the routine: paramless -> a call,
+          with-params -> the function value (an error unless bound to a proc-typed
+          target, which the @-relax bind sites handle). So this whole branch is
+          skipped in delphi mode; `Result` is used to read the result there. In
+          objfpc/default a bare own-name read is the result var (the project flip).
 
           Now FPC-faithful for ALL param counts (the paramless flip, bug-bare-
           function-name-call-vs-resultvar). A bare paramless own-name no longer
@@ -7254,7 +7262,25 @@ begin
               else
               begin
                 Expect(tkAssign, ':=');
-                ParseExpr;
+                { Delphi-mode @-optional procedural value: `p := F` (no `@`) where
+                  p is a proc-typed lvalue and F is a bare routine name not being
+                  called takes F's address — the one {$mode delphi} behavioural
+                  delta. Default/objfpc keep requiring `@F` (F here would be a
+                  call). Guarded on a routine name that is NOT a variable and is
+                  not followed by `(`; an explicit `@F` (tkAt) takes the normal
+                  ParseExpr path. Method pointers (`p := obj.M`) are a later slice. }
+                if DelphiMode and (idx >= 0) and (SymProcSig[idx] >= 0) and
+                   (CurTok.Kind = tkIdent) and (FindSym(CurTok.SVal) < 0) and
+                   (FindProc(CurTok.SVal) >= 0) and (Tokens[TokPos].Kind <> tkLParen) then
+                begin
+                  CurASTNode := AllocNode(AN_PROCADDR);
+                  ASTIVal[CurASTNode] := FindProc(CurTok.SVal);
+                  ASTTk[CurASTNode] := Ord(tyPointer);
+                  LastExprTk := tyPointer;
+                  Next;   { consume the routine name }
+                end
+                else
+                  ParseExpr;
                 if idx >= 0 then
                 begin
                   if Syms[idx].TypeKind = tyAuto then

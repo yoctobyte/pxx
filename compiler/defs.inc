@@ -660,6 +660,7 @@ var
   DebugTrace : Boolean;
   DumpIR : Boolean;
   StrictOverload : Boolean;
+  DelphiMode : Boolean;  { {$mode delphi}: relaxes a bare function name bound to a procedural-value target to take its address (@F-optional). PXX's dialect is otherwise one objfpc-ish superset; this is the one behavioural delta. Default off. }
   ThreadSafeMode : Boolean;
   InterfacesComMode : Boolean; { {$interfaces com}: interfaces declared while on are COM/ARC (reference-counted). Default off = CORBA (no refcount). }
   ComInterfaceUsed : Boolean; { set when any COM/ARC interface is declared; forces the builtinheap unit (PXXIntfAddRef/Release live there) and the ARC cleanup path. }
