@@ -215,7 +215,7 @@ begin
   if foundUnit then
   begin
     gAssign[v] := val;
-    if DPLL then begin Result := True; Exit; end;
+    if DPLL() then begin Result := True; Exit; end;
     for i := 0 to gNumVars do gAssign[i] := pre[i];
     Result := False;
     Exit;
@@ -226,11 +226,11 @@ begin
     if gAssign[i] = 0 then begin v := i; Break; end;
 
   gAssign[v] := 1;
-  if DPLL then begin Result := True; Exit; end;
+  if DPLL() then begin Result := True; Exit; end;
   for i := 0 to gNumVars do gAssign[i] := pre[i];
 
   gAssign[v] := -1;
-  if DPLL then begin Result := True; Exit; end;
+  if DPLL() then begin Result := True; Exit; end;
   for i := 0 to gNumVars do gAssign[i] := pre[i];
 
   Result := False;
@@ -242,7 +242,7 @@ begin
   SetLength(gAssign, gNumVars + 1);
   for i := 0 to gNumVars do gAssign[i] := 0;
 
-  if DPLL then
+  if DPLL() then
   begin
     SetLength(model, gNumVars + 1);
     for i := 0 to gNumVars do
