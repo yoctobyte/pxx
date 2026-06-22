@@ -8,11 +8,19 @@ function Power(base, exponent: Integer): Integer;
 function Gcd(a, b: Integer): Integer;
 function Lcm(a, b: Integer): Integer;
 
-{ Floating-point transcendentals — pure Pascal, no libm (keeps the no-libc
-  design). All numeric constants are float literals: a plain integer literal
-  assigned/initialised into a Double currently misses the int->float conversion
-  (feature-int-to-float-assign), so `0.0`/`2.0` etc. are used throughout (0 is
-  bit-identical and safe). }
+{ Floating-point math — pure Pascal, no libm (keeps the no-libc design), native
+  x86-64; other-CPU asm optimizations come later. Extended is NOT supported here
+  (it is currently aliased to Double); only Single + Double overloads.
+
+  Conventions / known compiler quirks honoured below:
+  - All numeric constants are float literals (`0.0`, `2.0`, `10.0`): a plain int
+    literal into a Double can miss the int->float conversion, so we spell them out.
+  - Never read-modify a function Result inside a loop (it can miscompile to 0,
+    feature-result-in-loop); accumulate in a local and assign Result at the end.
+  - `Trunc`, `Round`, `Frac`, `Int` are compiler builtins (not redefined here).
+  - Single overloads are thin wrappers: widen to Double, compute, narrow back. }
+
+{ ---- Double core ---- }
 function Pi: Double;
 function Abs(x: Double): Double;
 function Sqrt(x: Double): Double;
@@ -20,10 +28,59 @@ function Exp(x: Double): Double;
 function Ln(x: Double): Double;
 function Sin(x: Double): Double;
 function Cos(x: Double): Double;
+function Tan(x: Double): Double;
+function ArcSin(x: Double): Double;
+function ArcCos(x: Double): Double;
 function ArcTan(x: Double): Double;
+function ArcTan2(y, x: Double): Double;
+function Sinh(x: Double): Double;
+function Cosh(x: Double): Double;
+function Tanh(x: Double): Double;
+function ArcSinh(x: Double): Double;
+function ArcCosh(x: Double): Double;
+function ArcTanh(x: Double): Double;
+function Cot(x: Double): Double;
+function Sec(x: Double): Double;
+function Csc(x: Double): Double;
+function Log10(x: Double): Double;
+function Log2(x: Double): Double;
+function LogN(base, x: Double): Double;
+function Hypot(x, y: Double): Double;
 function Power(base, exponent: Double): Double;
+function IntPower(base: Double; n: Integer): Double;
+function Floor(x: Double): Double;
+function Ceil(x: Double): Double;
+function FMod(x, y: Double): Double;
+function Sign(x: Double): Integer;
+function Min(a, b: Double): Double;
+function Max(a, b: Double): Double;
+function DegToRad(d: Double): Double;
+function RadToDeg(r: Double): Double;
+
+{ ---- Single overloads (widen -> Double -> narrow) ---- }
+function Abs(x: Single): Single;
+function Sqrt(x: Single): Single;
+function Exp(x: Single): Single;
+function Ln(x: Single): Single;
+function Sin(x: Single): Single;
+function Cos(x: Single): Single;
+function Tan(x: Single): Single;
+function ArcSin(x: Single): Single;
+function ArcCos(x: Single): Single;
+function ArcTan(x: Single): Single;
+function Sinh(x: Single): Single;
+function Cosh(x: Single): Single;
+function Tanh(x: Single): Single;
+function Log10(x: Single): Single;
+function Log2(x: Single): Single;
+function Hypot(x, y: Single): Single;
+function Power(base, exponent: Single): Single;
+function Floor(x: Single): Single;
+function Ceil(x: Single): Single;
 
 implementation
+
+{ ================= Double core ================= }
 
 function Pi: Double;
 begin
@@ -52,9 +109,7 @@ begin
 end;
 
 function Exp(x: Double): Double;
-{ e^x = 2^k * e^r, r = x - k*ln2, Taylor for e^r. Scale in a LOCAL (res): a
-  function Result read-modified inside a loop is miscompiled to 0 (pre-existing
-  bug feature-result-in-loop), so never touch Result in the while loops. }
+{ e^x = 2^k * e^r, r = x - k*ln2, Taylor for e^r. Scale in a LOCAL (res). }
 var term, sum, r, res: Double; k, kc, i: Integer;
 begin
   k := Trunc(x / 0.69314718055994530942);
@@ -132,11 +187,14 @@ begin
   Result := sum;
 end;
 
+function Tan(x: Double): Double;
+begin
+  Result := Sin(x) / Cos(x);
+end;
+
 function ArcTan(x: Double): Double;
-{ Halve the argument via atan(r)=2*atan(r/(1+sqrt(1+r^2))) until |r| is small, so
-  the Taylor series converges fast (the raw series stalls near |r|=1, e.g.
-  atan(1)). Then undo the halvings by doubling. Scaling is in a LOCAL (never
-  Result in a loop — feature-result-in-loop). }
+{ atan(r)=2*atan(r/(1+sqrt(1+r^2))) reduction until |r| small, then Taylor,
+  then undo by doubling. Scaling in a LOCAL (never Result in a loop). }
 var r, term, sum, p: Double; i, nred: Integer;
 begin
   r := x;
@@ -159,6 +217,104 @@ begin
   Result := sum;
 end;
 
+function ArcSin(x: Double): Double;
+begin
+  if x >= 1.0 then begin Result := 1.57079632679489661923; Exit; end;
+  if x <= -1.0 then begin Result := -1.57079632679489661923; Exit; end;
+  Result := ArcTan(x / Sqrt(1.0 - x * x));
+end;
+
+function ArcCos(x: Double): Double;
+begin
+  Result := 1.57079632679489661923 - ArcSin(x);
+end;
+
+function ArcTan2(y, x: Double): Double;
+begin
+  if x > 0.0 then
+    Result := ArcTan(y / x)
+  else if x < 0.0 then
+  begin
+    if y >= 0.0 then Result := ArcTan(y / x) + 3.14159265358979323846
+    else Result := ArcTan(y / x) - 3.14159265358979323846;
+  end
+  else
+  begin
+    if y > 0.0 then Result := 1.57079632679489661923
+    else if y < 0.0 then Result := -1.57079632679489661923
+    else Result := 0.0;
+  end;
+end;
+
+function Sinh(x: Double): Double;
+begin
+  Result := 0.5 * (Exp(x) - Exp(-x));
+end;
+
+function Cosh(x: Double): Double;
+begin
+  Result := 0.5 * (Exp(x) + Exp(-x));
+end;
+
+function Tanh(x: Double): Double;
+var ex, enx: Double;
+begin
+  ex := Exp(x);
+  enx := Exp(-x);
+  Result := (ex - enx) / (ex + enx);
+end;
+
+function ArcSinh(x: Double): Double;
+begin
+  Result := Ln(x + Sqrt(x * x + 1.0));
+end;
+
+function ArcCosh(x: Double): Double;
+begin
+  if x < 1.0 then begin Result := 0.0; Exit; end;
+  Result := Ln(x + Sqrt(x * x - 1.0));
+end;
+
+function ArcTanh(x: Double): Double;
+begin
+  Result := 0.5 * Ln((1.0 + x) / (1.0 - x));
+end;
+
+function Cot(x: Double): Double;
+begin
+  Result := Cos(x) / Sin(x);
+end;
+
+function Sec(x: Double): Double;
+begin
+  Result := 1.0 / Cos(x);
+end;
+
+function Csc(x: Double): Double;
+begin
+  Result := 1.0 / Sin(x);
+end;
+
+function Log10(x: Double): Double;
+begin
+  Result := Ln(x) / 2.30258509299404568402;
+end;
+
+function Log2(x: Double): Double;
+begin
+  Result := Ln(x) / 0.69314718055994530942;
+end;
+
+function LogN(base, x: Double): Double;
+begin
+  Result := Ln(x) / Ln(base);
+end;
+
+function Hypot(x, y: Double): Double;
+begin
+  Result := Sqrt(x * x + y * y);
+end;
+
 function Power(base, exponent: Double): Double;
 { base^exponent = exp(exponent * ln(base)), base > 0. }
 begin
@@ -166,25 +322,221 @@ begin
   Result := Exp(exponent * Ln(base));
 end;
 
+function IntPower(base: Double; n: Integer): Double;
+{ square-and-multiply; negative n -> reciprocal. Accumulate in a local. }
+var res, b: Double; e: Integer;
+begin
+  res := 1.0;
+  b := base;
+  e := n;
+  if e < 0 then e := -e;
+  while e > 0 do
+  begin
+    if (e and 1) = 1 then res := res * b;
+    b := b * b;
+    e := e div 2;
+  end;
+  if n < 0 then res := 1.0 / res;
+  Result := res;
+end;
+
+function Floor(x: Double): Double;
+begin
+  if (x < 0.0) and (Frac(x) <> 0.0) then Result := Int(x) - 1.0
+  else Result := Int(x);
+end;
+
+function Ceil(x: Double): Double;
+begin
+  if (x > 0.0) and (Frac(x) <> 0.0) then Result := Int(x) + 1.0
+  else Result := Int(x);
+end;
+
+function FMod(x, y: Double): Double;
+{ truncated remainder: x - trunc(x/y)*y, sign of x }
+begin
+  if y = 0.0 then begin Result := 0.0; Exit; end;
+  Result := x - Int(x / y) * y;
+end;
+
+function Sign(x: Double): Integer;
+begin
+  if x > 0.0 then Result := 1
+  else if x < 0.0 then Result := -1
+  else Result := 0;
+end;
+
+function Min(a, b: Double): Double;
+begin
+  if a < b then Result := a else Result := b;
+end;
+
+function Max(a, b: Double): Double;
+begin
+  if a > b then Result := a else Result := b;
+end;
+
+function DegToRad(d: Double): Double;
+begin
+  Result := d * 3.14159265358979323846 / 180.0;
+end;
+
+function RadToDeg(r: Double): Double;
+begin
+  Result := r * 180.0 / 3.14159265358979323846;
+end;
+
+{ ================= Single overloads ================= }
+
+function Abs(x: Single): Single;
+var d: Double;
+begin
+  d := x;
+  Result := Abs(d);
+end;
+
+function Sqrt(x: Single): Single;
+var d: Double;
+begin
+  d := x;
+  Result := Sqrt(d);
+end;
+
+function Exp(x: Single): Single;
+var d: Double;
+begin
+  d := x;
+  Result := Exp(d);
+end;
+
+function Ln(x: Single): Single;
+var d: Double;
+begin
+  d := x;
+  Result := Ln(d);
+end;
+
+function Sin(x: Single): Single;
+var d: Double;
+begin
+  d := x;
+  Result := Sin(d);
+end;
+
+function Cos(x: Single): Single;
+var d: Double;
+begin
+  d := x;
+  Result := Cos(d);
+end;
+
+function Tan(x: Single): Single;
+var d: Double;
+begin
+  d := x;
+  Result := Tan(d);
+end;
+
+function ArcSin(x: Single): Single;
+var d: Double;
+begin
+  d := x;
+  Result := ArcSin(d);
+end;
+
+function ArcCos(x: Single): Single;
+var d: Double;
+begin
+  d := x;
+  Result := ArcCos(d);
+end;
+
+function ArcTan(x: Single): Single;
+var d: Double;
+begin
+  d := x;
+  Result := ArcTan(d);
+end;
+
+function Sinh(x: Single): Single;
+var d: Double;
+begin
+  d := x;
+  Result := Sinh(d);
+end;
+
+function Cosh(x: Single): Single;
+var d: Double;
+begin
+  d := x;
+  Result := Cosh(d);
+end;
+
+function Tanh(x: Single): Single;
+var d: Double;
+begin
+  d := x;
+  Result := Tanh(d);
+end;
+
+function Log10(x: Single): Single;
+var d: Double;
+begin
+  d := x;
+  Result := Log10(d);
+end;
+
+function Log2(x: Single): Single;
+var d: Double;
+begin
+  d := x;
+  Result := Log2(d);
+end;
+
+function Hypot(x, y: Single): Single;
+var dx, dy: Double;
+begin
+  dx := x;
+  dy := y;
+  Result := Hypot(dx, dy);
+end;
+
+function Power(base, exponent: Single): Single;
+var b, e: Double;
+begin
+  b := base;
+  e := exponent;
+  Result := Power(b, e);
+end;
+
+function Floor(x: Single): Single;
+var d: Double;
+begin
+  d := x;
+  Result := Floor(d);
+end;
+
+function Ceil(x: Single): Single;
+var d: Double;
+begin
+  d := x;
+  Result := Ceil(d);
+end;
+
+{ ================= Integer helpers ================= }
+
 function Min(a, b: Integer): Integer;
 begin
-  if a < b then
-    Result := a
-  else
-    Result := b;
+  if a < b then Result := a else Result := b;
 end;
 
 function Max(a, b: Integer): Integer;
 begin
-  if a > b then
-    Result := a
-  else
-    Result := b;
+  if a > b then Result := a else Result := b;
 end;
 
 function Power(base, exponent: Integer): Integer;
-var
-  i, res: Integer;
+var i, res: Integer;
 begin
   res := 1;
   for i := 1 to exponent do
@@ -193,8 +545,7 @@ begin
 end;
 
 function Gcd(a, b: Integer): Integer;
-var
-  temp, x, y: Integer;
+var temp, x, y: Integer;
 begin
   x := a;
   y := b;
@@ -209,10 +560,8 @@ end;
 
 function Lcm(a, b: Integer): Integer;
 begin
-  if (a = 0) or (b = 0) then
-    Result := 0
-  else
-    Result := (a * b) div Gcd(a, b);
+  if (a = 0) or (b = 0) then Result := 0
+  else Result := (a * b) div Gcd(a, b);
 end;
 
 end.
