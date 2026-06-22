@@ -1,9 +1,20 @@
 # `SetLength expects a string variable in IR codegen` on a valid array SetLength
 
 - **Type:** bug (compiler) — **Track A**
-- **Status:** backlog
+- **Status:** **DONE** — duplicate of [[bug-named-dynarray-field-setlength]],
+  fixed `4a37b00` (v35). vmdemo → `ALL OK`.
 - **Severity:** HIGH — rejects valid code; blocks a Track B library (vm). Loud
   (compile error), unlike the silent sibling bugs.
+
+> **Resolution (2026-06-22):** NOT slot/offset allocation and NOT
+> method-complexity. Root cause was a **named dynamic-array alias used as a class
+> field** (`FOps, FArgs: TIntArray`; `FLabelName: array of AnsiString` is inline
+> and was fine): the named-type field parse branch never set `fIsDyn`/`fDynDepth`,
+> so `UFldDynDepth = 0` and SetLength misrouted to the string path. The "small
+> reduction compiles" cases all used *inline* `array of T` fields or *local*
+> arrays (never broken) — that's why it looked complexity-sensitive. Fixed by
+> recording the alias's dyn-depth on the field (`4a37b00`); see the done ticket.
+> `examples/vm/vmdemo.pas` is `ALL OK` on v35.
 - **Opened:** 2026-06-22
 - **Owner:** — (Track A / "sis")
 - **Found by:** Track B, building the `vm` bytecode library.
