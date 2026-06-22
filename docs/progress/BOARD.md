@@ -22,7 +22,7 @@ _none_
 | --- | --- | --- | --- | --- |
 | feature-c-runtime-library | B | feature | C runtime/library layer (`lib/crtl`) plus direct C-library packages | feature-c-source-frontend |
 
-## backlog (40)
+## backlog (41)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -60,6 +60,7 @@ _none_
 | feature-random-library | B | feature | Random library — HW/OS/software tiered RNG (cross-target capability test) | — |
 | feature-real-cross-target-consistency | A | feature | Verify `real`/Double bit-consistency across targets (x87 divergence?) | — |
 | feature-release-packaging | B | feature | Release packaging, reproducibility manifest, and `release.sh` | — |
+| feature-synapse-compile-check | B | feature | Synapse library — proper compile check (Track B) | /, —, {$MIMIC, A, [[feature-mimic-fpc]], --mimic-fpc, the, (Track |
 | feature-threadsafe-io-serialization | A | feature | Statement-level I/O serialization under threads | feature-unified-heap-allocator |
 | feature-toolchain-cli-ux | A | feature | Toolchain CLI / user tooling (install, config, discovery, doctor, selfcheck) | — |
 | feature-writeln-as-library | B | feature | write/writeln as a library function (via `array of const` + variadic sugar) | — |
@@ -341,9 +342,13 @@ _none_
 - **2** — feature-c-source-frontend
 - **2** — feature-cross-target-feature-parity
 - **2** — feature-cross-managed-string-cow
+- **1** — (Track
+- **1** — the
+- **1** — --mimic-fpc
 - **1** — feature-terminal-ansi-library
 - **1** — feature-target-esp32
 - **1** — feature-target-arm32
+- **1** — [[feature-mimic-fpc]]
 - **1** — feature-managed-exception-cleanup
 - **1** — feature-image-ascii-renderer-library
 - **1** — feature-hashing-library
@@ -360,3 +365,7 @@ _none_
 - **1** — chore-qemu-test-env
 - **1** — chore-inc-to-units
 - **1** — bug-managed-byref-string-param-store
+- **1** — A
+- **1** — {$MIMIC
+- **1** — —
+- **1** — /
