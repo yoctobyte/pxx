@@ -47,7 +47,6 @@ _none_
 | feature-dynamic-soname-discovery | A | feature | Dynamic soname discovery (no execve) | — |
 | feature-esp32-idf-xtensa | A | feature | ESP-IDF integration: Xtensa (ESP32-S2/S3) — QEMU + real hardware | — |
 | feature-esp-peripheral-callback-api | B | feature | ESP32 peripheral callback API (timer / GPIO / ADC) — the user-facing "interrupt" | — |
-| feature-extended-alias-or-reject | A | feature | Extended: formalize as Double alias (or reject) | — |
 | feature-flexcolumn-directive | A | feature | `flexcolumn` calling-convention directive | chore-inc-to-units |
 | feature-fpc-vs-pxx-feature-boundary | A | feature | Policy: FPC-bootstrap subset vs PXX-only library features | — |
 | feature-handle-compacting-heap | A | feature | Handle-table compacting heap (anti-fragmentation for constrained RAM) | — |
@@ -194,6 +193,7 @@ _none_
 | feature-esp-isa-baseline-softfallback | A | feature | ESP ISA baseline + software fallbacks for older parts | — |
 | feature-exception-base-class | B | feature | Built-in / RTL `Exception` base class | — |
 | feature-explicit-typecasts | A | feature | Explicit type-casts (`Char`/`Boolean`/`String` and a general `TypeName(expr)`) | — |
+| feature-extended-alias-or-reject | A | feature | Extended: formalize as Double alias (or reject) | — |
 | feature-float-str-val | A | feature | Float Str / Val | — |
 | feature-for-in-iteration | A | feature | `for x in ...` iteration — FPC-exact (arrays, sets, strings, enums, enumerators) | — |
 | feature-forin-member-access-source | A | feature | `for-in` over a qualified member-access source (`obj.field`, `Self.field`) | — |
@@ -290,7 +290,6 @@ _none_
 - [A] feature-dynamic-soname-discovery
 - [A] feature-esp32-idf-xtensa
 - [B] feature-esp-peripheral-callback-api
-- [A] feature-extended-alias-or-reject
 - [A] feature-fpc-vs-pxx-feature-boundary
 - [A] feature-handle-compacting-heap
 - [A] feature-inline-asm-depth

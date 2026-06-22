@@ -32,3 +32,15 @@ tracked, not silently shipped.
 
 - Related: [[feature-single-first-class]] (the *other* end of the float-width
   spectrum — that one we DO want first-class).
+
+## Log
+
+- 2026-06-22 — **DONE, option (a)** (Track A, commit `d1a1ea9`). The `Extended` type name
+  (`parser.inc` `tkExtended_T` + the `CaseEqual(lo,'extended')` alias) now maps
+  to `tyDouble` at parse, so the front end never produces `tyExtended`; Extended
+  is plain Double on every target. The `tyExtended` enum + its x87 load/store
+  paths stay but are unreachable (`FloatBinopResultTk`'s tyExtended branch only
+  fired on an already-Extended operand). `compiler.pas` uses no Extended, so the
+  self-image is unchanged: `make test` + fpc-check byte-identical, cross-bootstrap
+  (i386/aarch64/arm32) byte-identical self-fixedpoint. Test
+  `test/test_extended_is_double.pas`.

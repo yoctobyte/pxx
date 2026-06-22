@@ -175,4 +175,5 @@ above. So this ticket stays **backlog** for that remaining flip.
   `r := ConstEval()` is a call in both). Regression test
   `test/test_func_name_paramless_result.pas` in `make test-core`; full gate green.
   The clean three-way model is now in force: `F`/`Result` = result var inside own
-  body, `F()` = call, `@F` = pointer. Track A.
+  body, `F()` = call, `@F` = pointer. Track A. Commit `db99145` (flip) +
+  `0f4fc59` (ticket close).
