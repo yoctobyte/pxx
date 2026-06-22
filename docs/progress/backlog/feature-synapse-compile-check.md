@@ -103,10 +103,14 @@ now. The compiler no longer trips on Synapse dialect/parse/codegen.
 1. `unixutil` — small POSIX util shim unit.
 2. `dynlibs` — `LoadLibrary`/`GetProcAddress`/`UnloadLibrary` over the PAL
    dynlib surface (PXX_HAS_DYNLIB).
-3. `Move` / `FillChar` — System memory primitives, auto-available without `uses`
-   (compiler builtins, or an always-loaded RTL surface). NOTE: this one is a
-   track-boundary call — if delivered as compiler intrinsics it is Track A; as an
-   always-loaded RTL unit it is Track B. Decide before starting.
+3. `Move` / `FillChar` — System memory primitives, auto-available without `uses`.
+   **Now unblocked for Track B as plain RTL functions:** untyped `var`/`const`
+   parameters landed (Track A, [[feature-untyped-parameters]], aafd222), so these
+   are writable in `lib/rtl` directly: `Move(const Source; var Dest; Count)` +
+   `FillChar(var X; Count; Value: Byte)` over `@Source`/`@Dest`. Caveats: `Move`
+   must be **overlap-safe** (memmove — copy backward when `dst>src` and ranges
+   overlap; the internal `PXXMemMove` is forward-only/memcpy); `FillChar` needs a
+   byte fill (only `PXXMemZero` exists). Auto-load so they resolve without `uses`.
 
 Once these land, re-run and record the next class (expected: `Classes`/`SysUtils`
 surface depth).
