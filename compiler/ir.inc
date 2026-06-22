@@ -1011,6 +1011,70 @@ begin
       end;
     end;
   end;
+  { Static array -> `var`/`out` open-array param: a `var` open array must let the
+    callee read AND write the caller's elements, and Length/High over it must
+    work. A bare static-array address has no length header at [data-8], so High
+    returns garbage (bug-var-open-array-fixed-arg-length). Pass a header'd dyn
+    temp instead (copy the static array in), and register a copy-OUT so the
+    callee's writes propagate back after the call (copy-in / copy-out aliasing —
+    observably equal to true aliasing unless the callee reaches the same array by
+    another path during the call). A function result in rax/xmm0 is preserved
+    across the post-call writeback (the AN_CALL flush spills it to a temp).
+    Element types with managed payloads are excluded (the value path excludes
+    them too). The compiler's own source never feeds a static array to a var
+    open-array param, so self-host / cross-bootstrap stay byte-identical (this
+    path is not exercised there). }
+  if (cpi >= 0) and (pathIdx >= 0) and (pathIdx < Procs[cpi].ParamCount) and
+     Procs[cpi].Params[pathIdx].IsArray and Procs[cpi].Params[pathIdx].IsRef and
+     (ASTKind[argAST] = AN_IDENT) and
+     (PendOAWBCount <= 63) then
+  begin
+    caArgSym := ASTIVal[argAST];
+    if (caArgSym >= 0) and (caArgSym < SymCount) and Syms[caArgSym].IsArray and
+       (Syms[caArgSym].ArrLen >= 0) and (Syms[caArgSym].Kind <> skParam) then
+    begin
+      caElemTk := Syms[caArgSym].ElemType;
+      caElemRec := Syms[caArgSym].ElemRecName;
+      if (caElemTk <> tyAnsiString) and
+         not ((caElemTk = tyRecord) and RecordHasManagedFields(caElemRec)) then
+      begin
+        caCount := Syms[caArgSym].ArrLen;
+        if caElemTk = tyRecord then caElemSz := RecSize(caElemRec)
+        else caElemSz := TypeSize(caElemTk);
+        savedRec := LastTypeRecId;
+        if caElemTk = tyRecord then LastTypeRecId := caElemRec;
+        caSym := AllocDynArray('', caElemTk, 1);
+        LastTypeRecId := savedRec;
+        SymIsHiddenArgTemp[caSym] := True;
+        IRAppend(IR_DEFAULT_MEM,
+          IRAppend(IR_SLOTADDR, caSym, -1, -1, 0, Ord(tyPointer)),
+          -1, REC_NONE, TARGET_PTR_SIZE, Ord(tyPointer));
+        caIdent := AllocNode(AN_IDENT);
+        ASTIVal[caIdent] := caSym; ASTTk[caIdent] := Ord(tyPointer);
+        caCountLit := AllocNode(AN_INT_LIT);
+        ASTIVal[caCountLit] := caCount; ASTTk[caCountLit] := Ord(tyInteger);
+        caArg1 := AllocNode(AN_ARG); ASTLeft[caArg1] := caIdent;
+        caArg2 := AllocNode(AN_ARG); ASTLeft[caArg2] := caCountLit;
+        ASTRight[caArg1] := caArg2;
+        caSlCall := AllocNode(AN_CALL); ASTIVal[caSlCall] := -102;
+        ASTLeft[caSlCall] := caArg1;
+        value := IRLowerAST(caSlCall);
+        IRIVal[value] := 1;
+        { copy-IN: static array -> temp data }
+        IRAppend(IR_COPY_REC,
+          IRAppend(IR_LEA, caSym, -1, -1, 0, Ord(tyPointer)),
+          IRAppend(IR_LEA, caArgSym, -1, -1, 0, Ord(tyPointer)),
+          -1, caCount * caElemSz, Ord(tyRecord));
+        { register copy-OUT: temp data -> static array, after the call }
+        PendOAWBTemp[PendOAWBCount] := caSym;
+        PendOAWBDest[PendOAWBCount] := caArgSym;
+        PendOAWBSize[PendOAWBCount] := caCount * caElemSz;
+        Inc(PendOAWBCount);
+        Result := IRAppend(IR_LEA, caSym, -1, -1, 0, Ord(tyPointer));
+        Exit;
+      end;
+    end;
+  end;
   { An `array of const` literal lowers to a freshly built dyn-array of TVarRec;
     its value is the data-pointer handle, passed straight through (never the
     record-by-value copy path below). }
@@ -1381,6 +1445,7 @@ var left, right, seq, item, value, outNode, first, last, leftAddr, argNode, argV
     dcCntTmp, dcTempSym, dcTempIdent, dcCountIdent, dcSlArg1, dcSlArg2: Integer;
     dcSlCall, dcSetlenVal, dcDestData, dcSrcStart, dcNbytes, dcSavedRec: Integer;
     dcElemTk: TTypeKind;
+    pendBase: Integer;
 begin
   if node = -1 then
   begin
@@ -2616,6 +2681,7 @@ begin
       end;
       pathIdx := 0;
       classIdx := -1;
+      pendBase := PendOAWBCount;   { open-array copy-out writebacks added by this call's args }
       if cpi = -Ord(tkGetMem) then
         classIdx := ASTRight[node];
       while item <> -1 do
@@ -2716,6 +2782,39 @@ begin
       end
       else
         Result := IRAppendCall(ASTIVal[node], first, classIdx, ASTTk[node]);
+      { copy-OUT the open-array writebacks this call's args registered (a static
+        array passed to a `var`/`out` open-array param): temp data -> static
+        array, after the call. Emitted by the linear IR_COPY_REC driver in append
+        order, so it runs after the call. A function result lives in rax/xmm0 at
+        this point and the COPY_REC would clobber it, so spill it to a temp before
+        the writeback and reload it afterwards (the reload node has a higher index
+        and therefore emits after the COPY_REC). }
+      if PendOAWBCount > pendBase then
+      begin
+        if Procs[ASTIVal[node]].IsFunc then
+        begin
+          value := AllocVar('', IntToTypeKind(ASTTk[node]));
+          IRAppend(IR_STORE_SYM, value, Result, -1, 0, ASTTk[node]);
+          while PendOAWBCount > pendBase do
+          begin
+            Dec(PendOAWBCount);
+            IRAppend(IR_COPY_REC,
+              IRAppend(IR_LEA, PendOAWBDest[PendOAWBCount], -1, -1, 0, Ord(tyPointer)),
+              IRAppend(IR_LEA, PendOAWBTemp[PendOAWBCount], -1, -1, 0, Ord(tyPointer)),
+              -1, PendOAWBSize[PendOAWBCount], Ord(tyRecord));
+          end;
+          Result := IRAppend(IR_LOAD_SYM, value, -1, -1, 0, ASTTk[node]);
+        end
+        else
+          while PendOAWBCount > pendBase do
+          begin
+            Dec(PendOAWBCount);
+            IRAppend(IR_COPY_REC,
+              IRAppend(IR_LEA, PendOAWBDest[PendOAWBCount], -1, -1, 0, Ord(tyPointer)),
+              IRAppend(IR_LEA, PendOAWBTemp[PendOAWBCount], -1, -1, 0, Ord(tyPointer)),
+              -1, PendOAWBSize[PendOAWBCount], Ord(tyRecord));
+          end;
+      end;
     end;
 
     AN_CALL_IND:

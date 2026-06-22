@@ -1,7 +1,8 @@
 # `var`/`out` open-array param: fixed-array argument passes a wrong length
 
 - **Type:** bug (codegen / open-array ABI)
-- **Status:** backlog
+- **Status:** PARTIAL — simple-var (`AN_IDENT`) case FIXED 2026-06-22; static-array
+  FIELD argument (`obj.field`, e.g. synacode's `MDContext.BufAnsiChar`) remains.
 - **Owner:** — (Track A)
 - **Opened:** 2026-06-22
 - **Found-by:** Synapse recon (`synacode.pas` `ArrByteToLong(var ArByte: array of
@@ -56,3 +57,26 @@ is on the Synapse compile path ([[feature-synapse-compile-check]]).
 `make test` (self-host byte-identical) + `make cross-bootstrap`. Add a test
 (extend `test/test_keyword_array_case.pas` or a new one) covering fixed-array →
 `var array of T` High/Length once fixed.
+
+## Fix log
+
+- 2026-06-22 — **simple-var case FIXED** (copy-in / copy-out). When a static
+  array variable (`AN_IDENT`, `ArrLen >= 0`, not a param) is passed to a
+  `var`/`out` open-array parameter, IRLowerCallArg now copies it into a header'd
+  dyn temp (so `[data-8]` length + indexing work over the param), and the AN_CALL
+  lowering emits a post-call copy-OUT (temp data -> static array) so the callee's
+  writes propagate back. Nested-call-safe via a small pending stack
+  (`PendOAWB*`, defs.inc) saved/restored around each call's arg lowering. A
+  function result is spilled to a temp across the writeback (the COPY_REC would
+  clobber rax/xmm0). All target-independent IR (IR_COPY_REC / IR_LEA / SetLength
+  -102), so it works on every backend; the compiler's own source never hits the
+  path, so self-host + cross-bootstrap stay byte-identical. Test
+  `test/test_var_open_array.pas` (read via `High` + writeback), FPC objfpc
+  oracle-matched (`6` / `0 10 20 30 `).
+  **REMAINING:** static-array **FIELD** argument (`obj.field` whose field is a
+  static array) — synacode's exact case (`MDContext.BufAnsiChar`,
+  `MDContext.BufLong`). Needs a field-arrlen lookup (no `RecFieldArrLen` helper
+  yet) + `IRLowerAddress(argAST)` for both the copy-in source and copy-out dest,
+  generalising the `AN_IDENT` branch to `AN_FIELD`. Separately, `Length`/`High`
+  on a static array used DIRECTLY (not via a param) is also wrong — filed as
+  [[bug-static-array-length-direct]].

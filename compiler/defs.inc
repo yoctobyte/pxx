@@ -1126,6 +1126,16 @@ var
   IRIVal  : array[0..MAX_IR-1] of Int64;
   IRTk    : array[0..MAX_IR-1] of Integer;
   IRSetLenBaseRec : array[0..MAX_IR-1] of Integer; { IR_SETLEN_DYN on a non-symbol (field) target: base element record id when IRIVal<0; -1/REC_NONE otherwise }
+  { Pending open-array copy-out (writeback) for a static array passed to a
+    `var`/`out` open-array parameter. The call site copies the static array into
+    a header'd dyn temp (so Length/High and indexing work over the param), then
+    after the call copies the temp's data back to the static array. A small fixed
+    stack, kept nested-call-safe by saving/restoring the count around each call's
+    arg lowering. See IRLowerCallArg + the AN_CALL flush. }
+  PendOAWBCount : Integer;
+  PendOAWBTemp  : array[0..63] of Integer;  { hidden dyn-array temp sym }
+  PendOAWBDest  : array[0..63] of Integer;  { static-array argument sym (copy-out destination) }
+  PendOAWBSize  : array[0..63] of Integer;  { byte count to copy back }
   { Marks an IR node as a statement root (its result is discarded). The top-
     level emitter only emits roots; calls whose value is consumed are emitted
     via their parent. Needed for IR_VIRTUAL_CALL, whose IRIVal holds the VMT
