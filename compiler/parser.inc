@@ -7509,7 +7509,13 @@ begin
         else
         begin
           LastTypeRecId := IsRecordType(lo);
-          if LastTypeRecId <> REC_NONE then
+          { A user `type X = ...` alias SHADOWS a same-named builtin record. The
+            compiler exposes internal descriptor records (TProc, TParam, ...) under
+            common names; a user program defining e.g. `type TProc = procedure(...)`
+            must get its own type, not the builtin (FPC does not reserve these).
+            Only triggers when both a record-name match and a user alias exist —
+            which in valid source is exactly the user-alias-vs-builtin case. }
+          if (LastTypeRecId <> REC_NONE) and (FindTypeAlias(lo) < 0) then
             Result := tyRecord
           else
           begin
