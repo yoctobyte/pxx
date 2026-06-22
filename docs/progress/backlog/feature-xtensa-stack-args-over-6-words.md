@@ -80,3 +80,16 @@ the compiler.
   feature-riscv32-var-param-forwarding was fixed+verified this way (f67fad2). This
   one remains a real codegen feature (record-return ABI / xtensa stack args), but
   it is no longer blocked on verification.
+
+- 2026-06-23 — Scoped (Track A). The cap is at parser.inc ~10823/10840 (callee
+  param copy) + ir_codegen_xtensa.inc ~1549 (call site). Lifting it needs INCOMING
+  STACK-ARG layout: words 0-5 stay in a2-a7 (Call0) / a10-a15 (windowed), words 6+
+  go on the stack and the callee reads them from its incoming frame. **Call0** is
+  the tractable half (classic moving-sp overflow; offset = frame size + saved regs
+  + (k-6)*4). **Windowed is the rabbit hole** and is exactly what the blocked PAL
+  needs (`--xtensa-abi=windowed`): the `entry`/`retw` window rotation plus the
+  [sp-16] window spill area make the overflow-arg offset frame-and-window
+  dependent — not a clean extension. Deferred as a focused sub-task; needs careful
+  windowed frame-layout work (and the qemu-system harness, which now exists, to
+  verify). The sibling ESP items (var->var forwarding, record results) are DONE
+  and verified this session; this is the remaining one.
