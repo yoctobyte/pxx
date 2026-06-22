@@ -105,8 +105,13 @@ procedure ScreenRefresh;
   byte ordinal or a KEY_* constant. Pure — testable without a terminal. }
 function ScreenDecodeKey(const seq: AnsiString): Integer;
 { Read one key event from stdin (raw mode assumed): a plain byte's ordinal, a
-  KEY_* constant for an escape sequence, or KEY_NONE when nothing is waiting. }
+  KEY_* constant for an escape sequence, or KEY_NONE when nothing is waiting
+  (non-blocking — for polling). }
 function ScreenReadKey: Integer;
+{ Like ScreenReadKey but BLOCKS for the first byte — the call to use in an event
+  loop so it waits for input instead of busy-spinning. Returns KEY_NONE only on
+  EOF/error. }
+function ScreenWaitKey: Integer;
 
 implementation
 
@@ -377,32 +382,54 @@ begin
     ScreenDecodeKey := KEY_UNKNOWN;
 end;
 
+{ ESC has just been consumed: gather the rest of the escape sequence, bounded —
+  a CSI (ESC[) / SS3 (ESCO) sequence ends at its final byte (0x40..0x7E), so we
+  stop there instead of slurping whatever else is buffered (which would eat the
+  next keypress). A lone ESC, or ESC+char (Alt-key), reads at most one more. }
+function ReadEscRest: AnsiString;
+var seq: AnsiString; b: Char; bo: Integer; done: Boolean;
+begin
+  seq := '' + #27;
+  b := AnsiReadKey;
+  if b <> #0 then
+  begin
+    seq := seq + b;
+    if (b = '[') or (b = 'O') then
+    begin
+      done := False;
+      while not done do
+      begin
+        b := AnsiReadKey;
+        if b = #0 then
+          done := True
+        else
+        begin
+          seq := seq + b;
+          bo := Ord(b);
+          if (bo >= 64) and (bo <= 126) then done := True;   { CSI/SS3 final byte }
+        end;
+      end;
+    end;
+  end;
+  ReadEscRest := seq;
+end;
+
 function ScreenReadKey: Integer;
-var c, extra: Char; seq: AnsiString; guard: Integer;
+var c: Char;
 begin
   c := AnsiReadKey;
-  if c = #0 then
-  begin
-    ScreenReadKey := KEY_NONE;
-    Exit;
-  end;
-  if c <> #27 then
-  begin
-    ScreenReadKey := Ord(c);
-    Exit;
-  end;
-  { ESC: gather the rest of the sequence (a real key arrives as one burst, so the
-    follow-on bytes are already buffered; a lone ESC reads nothing more). }
-  seq := '' + c;
-  guard := 0;
-  extra := AnsiReadKey;
-  while (extra <> #0) and (guard < 8) do
-  begin
-    seq := seq + extra;
-    guard := guard + 1;
-    extra := AnsiReadKey;
-  end;
-  ScreenReadKey := ScreenDecodeKey(seq);
+  if c = #0 then ScreenReadKey := KEY_NONE
+  else if c <> #27 then ScreenReadKey := Ord(c)
+  else ScreenReadKey := ScreenDecodeKey(ReadEscRest);
+end;
+
+function ScreenWaitKey: Integer;
+var c: Char;
+begin
+  c := AnsiReadKeyWait;          { block until the first byte }
+  if c = #0 then ScreenWaitKey := KEY_NONE
+  else if c <> #27 then ScreenWaitKey := Ord(c)
+  else ScreenWaitKey := ScreenDecodeKey(ReadEscRest);
 end;
 
 end.

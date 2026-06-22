@@ -21,6 +21,10 @@ function AnsiAltScreen(enable: Boolean): AnsiString;
 function TerminalSize(var cols, rows: Integer): Boolean;
 procedure AnsiSetRawMode(enable: Boolean);
 function AnsiReadKey: Char;
+{ Blocking single-byte read from stdin (no O_NONBLOCK): waits for a key. In raw
+  mode (VMIN=1) it returns as soon as one byte arrives; on EOF / error -> #0.
+  The non-blocking AnsiReadKey is for polling; this is for an event loop. }
+function AnsiReadKeyWait: Char;
 { Unbuffered write of s to stdout (raw syscall) — a TUI must not wait on Pascal's
   output buffering to flush, so the screen manager renders through this. }
 procedure AnsiWrite(const s: AnsiString);
@@ -164,6 +168,20 @@ begin
   {$endif}
 end;
 
+function AnsiReadKeyWait: Char;
+var c: Char; res: Int64; sysReadVal: Integer;
+begin
+  sysReadVal := GetSysRead;
+  c := #0;
+  if sysReadVal = -1 then
+  begin
+    Result := #0;
+    Exit;
+  end;
+  res := __pxxrawsyscall(sysReadVal, 0, Int64(@c), 1, 0, 0, 0);   { blocking read, fd 0 }
+  if res = 1 then Result := c else Result := #0;
+end;
+
 procedure AnsiWrite(const s: AnsiString);
 var w: Integer; res: Int64;
 begin
@@ -227,7 +245,7 @@ end;
 function AnsiReadKey: Char;
 var
   c: Char;
-  res: Int64;
+  res, rd: Int64;
   sysFcntlVal, sysReadVal: Integer;
   flags: Int64;
 begin
@@ -244,12 +262,14 @@ begin
   flags := __pxxrawsyscall(sysFcntlVal, 0, 3, 0, 0, 0, 0); { F_GETFL }
   res := __pxxrawsyscall(sysFcntlVal, 0, 4, flags or $800, 0, 0, 0); { F_SETFL, O_NONBLOCK }
 
-  res := __pxxrawsyscall(sysReadVal, 0, Int64(@c), 1, 0, 0, 0);
+  { keep the read's byte count in its own var — restoring flags below must not
+    clobber it (this once made AnsiReadKey always return #0). }
+  rd := __pxxrawsyscall(sysReadVal, 0, Int64(@c), 1, 0, 0, 0);
 
   { Restore stdin flags }
   res := __pxxrawsyscall(sysFcntlVal, 0, 4, flags, 0, 0, 0);
 
-  if res = 1 then
+  if rd = 1 then
     Result := c
   else
     Result := #0;
