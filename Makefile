@@ -766,6 +766,8 @@ test-core: $(COMPILER)
 	test "$$(/tmp/test_named_dynfield26)" = "$$(printf 'nums len=3 sum=60\nnames len=2 abb\nrec len=4 v3=99')"
 	./$(COMPILER) test/test_dynarray_record_field.pas /tmp/test_dynrecfield26
 	test "$$(/tmp/test_dynrecfield26)" = "$$(printf 'len=3 a0=10 a2=30 sum=60\nret len=4 first=1 last=4')"
+	./$(COMPILER) test/test_nested_dynarray_field.pas /tmp/test_nesteddynfield26
+	test "$$(/tmp/test_nesteddynfield26)" = "m00=0 m12=12 m22=22 sum=99"
 	./$(COMPILER) test/test_dynarray.pas /tmp/test_dynarray26
 	test "$$(/tmp/test_dynarray26)" = "$$(printf '1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1')"
 	./$(COMPILER) test/test_dynarray_ansistring.pas /tmp/test_dynarray_ansistring26

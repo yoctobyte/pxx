@@ -2557,6 +2557,24 @@ begin
             Exit;
           end;
         end;
+        { Nested sub-array SLOT reached through a non-array-symbol root — e.g.
+          `SetLength(rec.matrix[i], n)`, where `matrix` is an `array of array of
+          T` FIELD. The base symbol is the record (dyn depth 0) so the depth>=2
+          symbol path above does not fire, and the target is an AN_INDEX (not a
+          bare field) so the field path does not either. Use the slot-address
+          path with leaf element metadata walked from the dyn-array base
+          (NodeDynBaseTk/Rec handle the field+index chain). The array-symbol
+          rooted nested case (`m[i]`) is already taken by the depth>=2 branch. }
+        if (ASTKind[slTargetAST] = AN_INDEX) and (NodeDynDepth(slTargetAST) >= 1) then
+        begin
+          slDepth := NodeDynDepth(slTargetAST);
+          slTargetAddr := IRLowerAddress(slTargetAST);
+          slCountNode := IRLowerAST(slCountAST);
+          Result := IRAppend(IR_SETLEN_DYN, slTargetAddr, slCountNode, slDepth,
+                             -1, Ord(NodeDynBaseTk(slTargetAST)));
+          IRSetLenBaseRec[Result] := NodeDynBaseRec(slTargetAST);
+          Exit;
+        end;
       end;
       if cpi = -201 then
       begin
