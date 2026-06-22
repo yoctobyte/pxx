@@ -16,7 +16,7 @@ _none_
 
 _none_
 
-## backlog (67)
+## backlog (66)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -56,7 +56,6 @@ _none_
 | feature-interfaces | A | feature | Interfaces | — |
 | feature-json-library | B | feature | JSON library — parser + serializer (with a roundtrip test app) | — |
 | feature-kernel-matrix-bootroom | B | feature | Kernel-matrix bootroom: one static PXX binary, swept across many Linux kernels | — |
-| feature-lazycasing-c-imports | A | feature | `{$LAZYCASING ON/OFF}` for C imports only | feature-compiler-warnings |
 | feature-lazy-standard-unit-emission | A | feature | Lazy standard-unit emission / routine-level dead-code elimination | — |
 | feature-metaclass-descendant-enforcement | A | feature | Metaclass alias descendant-constraint enforcement | — |
 | feature-mimic-fpc | A | feature | `mimic FPC` compatibility mode | feature-directive-if-numeric |
@@ -94,7 +93,7 @@ _none_
 | --- | --- | --- | --- | --- |
 | feature-c-runtime-library | B | feature | C runtime/library layer (`lib/crtl`) plus direct C-library packages | feature-c-source-frontend |
 
-## done (153)
+## done (154)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -205,6 +204,7 @@ _none_
 | feature-interface-refcounting | A | feature | Interface reference counting (IInterface / ARC) | — |
 | feature-int-to-float-assign | A | feature | Integer → Float assignment / coercion missing the int→float conversion | — |
 | feature-language-gaps-from-demos | A | feature | Language gaps surfaced by the demo apps (sudoku / sieve / chess) | — |
+| feature-lazycasing-c-imports | A | feature | `{$LAZYCASING ON/OFF}` for C imports only | feature-compiler-warnings |
 | feature-library-test-suite | A+B | feature | Track B library test suite | — |
 | feature-library-var-out-lvalue-actuals | A | feature | Inc/Dec intrinsic rejects non-bare-symbol lvalue actuals | — |
 | feature-local-typed-constant | B | feature | Local typed constants (initialized const inside a routine) | — |
@@ -297,7 +297,6 @@ _none_
 - [A] feature-interfaces
 - [B] feature-json-library
 - [B] feature-kernel-matrix-bootroom
-- [A] feature-lazycasing-c-imports
 - [A] feature-lazy-standard-unit-emission
 - [A] feature-metaclass-descendant-enforcement
 - [A] feature-mimic-fpc
