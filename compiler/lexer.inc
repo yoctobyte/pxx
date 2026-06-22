@@ -7,6 +7,27 @@ begin
   Halt(1);
 end;
 
+{ Non-fatal diagnostic for accepted-but-suspect constructs (a case-insensitive
+  C-import match, a narrowing, an ignored attribute). Prints
+  `pascal26:<line>: warning: ...` to stdout, in the same shape as Error, and
+  keeps compiling. With -Werror (WarnAsError) it is promoted to a fatal Error.
+  Use WarnAt when the current token is not at the offending site. }
+procedure WarnAt(line: Integer; const msg: AnsiString);
+begin
+  Inc(WarnCount);
+  if WarnAsError then
+  begin
+    writeln('pascal26:', line, ': error: ', msg, ' (warning promoted by -Werror)');
+    Halt(1);
+  end;
+  writeln('pascal26:', line, ': warning: ', msg);
+end;
+
+procedure Warn(const msg: AnsiString);
+begin
+  WarnAt(CurTok.Line, msg);
+end;
+
 { ===== Lexer ===== }
 
 function Keyword(const s: AnsiString): TTokenKind;
@@ -1262,7 +1283,7 @@ begin
       end;
     end
     else if CaseEqual(command, 'warning') then
-      writeln('pascal26:', SrcLine, ': warning: ', messageText)
+      WarnAt(SrcLine, messageText)
     else if CaseEqual(command, 'message') then
       writeln('pascal26:', SrcLine, ': message: ', messageText)
     else if CaseEqual(command, 'error') then

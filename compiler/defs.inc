@@ -829,6 +829,8 @@ var
   LastTypePointerElemRec : Integer;
   LastTypeProcSig : Integer;  { set by ParseTypeKind when a name resolves to a procedural type: signature proc index, else -1 }
   ErrorIdent : AnsiString;
+  WarnCount : Integer;     { number of non-fatal warnings emitted via Warn }
+  WarnAsError : Boolean;   { -Werror: promote the next Warn to a fatal Error }
   LastExprTk : TTypeKind;
   InInterface : Boolean;
   { Declaration pre-scan (whole-section forward visibility): pass 1 registers

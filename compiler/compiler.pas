@@ -206,6 +206,12 @@ begin
       NoDefaultRtl := True;
       Inc(i);
     end
+    else if (option = '--werror') or (option = '-Werror') then
+    begin
+      { Promote any compiler-emitted warning to a fatal error. }
+      WarnAsError := True;
+      Inc(i);
+    end
     else if option = '--strict-overload' then
     begin
       StrictOverload := True;

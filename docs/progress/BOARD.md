@@ -16,7 +16,7 @@ _none_
 
 _none_
 
-## backlog (69)
+## backlog (68)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -31,7 +31,6 @@ _none_
 | feature-async-language-surface | A | feature | Async language surface + stackless coroutine backend | feature-cross-target-feature-parity |
 | feature-bignum-library | B | feature | Bignum library — arbitrary-precision integers (deterministic test app) | — |
 | feature-c-header-import-complex | A | feature | Import C headers for complex libraries (glib/GTK-grade) | — |
-| feature-compiler-warnings | A | feature | Compiler warning diagnostics facility | — |
 | feature-copy-intrinsic | B | feature | `Copy` as a generic overloaded intrinsic (string + dynarray families) | — |
 | feature-c-regex-library-devtest | A | feature | C regex library dev-test import | — |
 | feature-c-source-frontend | A | feature | C source frontend — compile C function bodies (statements + expressions) | feature-cross-target-feature-parity |
@@ -96,7 +95,7 @@ _none_
 | --- | --- | --- | --- | --- |
 | feature-c-runtime-library | B | feature | C runtime/library layer (`lib/crtl`) plus direct C-library packages | feature-c-source-frontend |
 
-## done (151)
+## done (152)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -151,6 +150,7 @@ _none_
 | feature-async-coroutines | A | feature | Async, coroutines, and `yield` | feature-unified-heap-allocator |
 | feature-class-is-as | A | feature | `is` / `as` / `Supports` — runtime class type-tests | — |
 | feature-compiler-search-path-pcl | A | feature | feature-compiler-search-path-pcl (Track A) | — |
+| feature-compiler-warnings | A | feature | Compiler warning diagnostics facility | — |
 | feature-compression-library | B | feature | Compression library — Huffman / LZ77 (roundtrip test app) | — |
 | feature-conditional-declared-directive | A | feature | `{$IF DECLARED(...)}` conditional directive support | — |
 | feature-const-eval-typecast-int64 | A | feature | ConstEval: typed casts + 64-bit folding in const initializers | — |
@@ -273,7 +273,6 @@ _none_
 - [A] feature-async-language-surface
 - [B] feature-bignum-library
 - [A] feature-c-header-import-complex
-- [A] feature-compiler-warnings
 - [B] feature-copy-intrinsic
 - [A] feature-c-regex-library-devtest
 - [A] feature-c-source-frontend
@@ -298,6 +297,7 @@ _none_
 - [A] feature-interfaces
 - [B] feature-json-library
 - [B] feature-kernel-matrix-bootroom
+- [A] feature-lazycasing-c-imports
 - [A] feature-lazy-standard-unit-emission
 - [A] feature-metaclass-descendant-enforcement
 - [A] feature-mimic-fpc

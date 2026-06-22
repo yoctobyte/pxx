@@ -16,6 +16,14 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PROG="$ROOT/docs/progress"
 [ -d "$PROG" ] || { echo "no $PROG" >&2; exit 1; }
+# Self-heal the canonical status dirs. Git does not track empty directories, so
+# a status dir with no tickets (e.g. unfinished/) disappears on a fresh checkout.
+# Under `set -o pipefail` a `find` over a missing dir then aborts the whole
+# script mid-render, truncating BOARD.md. Recreating them up front keeps every
+# `find "$PROG/<status>"` call site safe.
+for _st in urgent working unfinished backlog blocked done rejected; do
+  mkdir -p "$PROG/$_st"
+done
 TRACK_FILTER=""
 
 slug() { basename "$1" .md; }
