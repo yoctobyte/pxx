@@ -1,13 +1,27 @@
 # `{$mode delphi}` support — incl. the @-optional proc-pointer disambiguation
 
 - **Type:** feature (dialect mode + FPC/Delphi-source compat)
-- **Status:** backlog
+- **Status:** DONE (core slices) — 2026-06-22. Remaining edge bind sites split to
+  [[feature-mode-delphi-remaining]] (rainy-day, Synapse-driven).
 - **Owner:** — (Track A)
 - **Opened:** 2026-06-21
+- **Closed:** 2026-06-22
 - **Relation:** the `@`-rule half of [[bug-bare-function-name-call-vs-resultvar]];
   unblocks much library source. Companion to [[feature-mimic-fpc]],
   [[feature-networking]] (Synapse compiles via its `{$mode delphi}` path),
   [[goal-compile-fpc-compiler]].
+
+## Closing summary (2026-06-22)
+
+DONE and FPC `-Mdelphi` oracle-matched: the two behavioural deltas
+(`@`-optional procedural value; bare own-name is never the result var) plus the
+`@`-relax at the assignment site (`p := F`), the call-argument site (`g(F)`), and
+the method pointer assignment (`p := obj.M`). All self-host byte-identical +
+cross-bootstrap green. Tests: `test/test_mode_delphi*.pas` in `make test`.
+The narrower leftover bind sites (proc-value comparison, proc-typed
+record/array fields, method ptr at call-arg, per-unit mode reset) are low
+priority and tracked in [[feature-mode-delphi-remaining]]; pull one in only when
+a real Synapse compile trips on it.
 
 ## Why
 
