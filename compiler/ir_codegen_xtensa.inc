@@ -1482,6 +1482,17 @@ begin
           each scalar arg is one word, a by-value Int64/UInt64 is two (lo then
           hi). nArgs counts WORDS; word k loads into the k-th arg register
           (Call0 a2+k / windowed a10+k). Up to 6 words total. }
+        { Aggregate (record) result, Call0 only: push the caller's hidden
+          destination first (deepest), load into a8 just before the call. Windowed
+          record results are unsupported (the call-window rotation has no clean
+          caller->callee hidden-dest register) and are rejected at the callee
+          epilogue, so no windowed call reaches here with an aggregate result. }
+        if (procIdx >= 0) and (not ProcExternal[procIdx]) and
+           TypeIsAggregate(Procs[procIdx].RetType) and (XtensaABI = XTENSA_ABI_CALL0) then
+        begin
+          IREmitNodeXtensa(IRC[node]);     { a2 = hidden dest addr }
+          XtensaPushA2;
+        end;
         argNode := IRB[node];
         nArgs := 0;     { word count }
         i := 0;         { argument index }
@@ -1551,7 +1562,13 @@ begin
         begin
           for i := 0 to nArgs - 1 do
             xtensa_l32i(reg_xtensa_a2 + i, reg_xtensa_sp, (nArgs - 1 - i) * 4);
-          if nArgs > 0 then
+          if (procIdx >= 0) and (not ProcExternal[procIdx]) and
+             TypeIsAggregate(Procs[procIdx].RetType) then
+          begin
+            xtensa_l32i(reg_xtensa_a8, reg_xtensa_sp, nArgs * 4);   { hidden dest (deepest) }
+            xtensa_addi(reg_xtensa_sp, reg_xtensa_sp, (nArgs + 1) * 4);
+          end
+          else if nArgs > 0 then
             xtensa_addi(reg_xtensa_sp, reg_xtensa_sp, nArgs * 4);
         end;
 
@@ -1594,6 +1611,27 @@ begin
         end
         else
           EmitLoadConstXtensa(reg_xtensa_a3, Integer(IRIVal[node])); { a2=dest; arg1=count }
+        EmitCallProc(procIdx);
+      end;
+
+    IR_COPY_REC:
+      begin
+        { Whole-record copy: PXXMemMove(dest, src, count). ESP has no managed
+          record fields yet, so the plain byte move is correct (no per-field ARC). }
+        IREmitNodeXtensa(IRB[node]);             { a2 = src }
+        XtensaPushA2;
+        IREmitNodeXtensa(IRA[node]);             { a2 = dest }
+        XtensaPopA3;                              { a3 = src }
+        procIdx := FindProc('PXXMemMove');
+        if procIdx < 0 then Error('compiler error: PXXMemMove not found');
+        if XtensaABI = XTENSA_ABI_WINDOWED then
+        begin
+          xtensa_mov(reg_xtensa_a10, reg_xtensa_a2);                   { arg0 = dest }
+          xtensa_mov(reg_xtensa_a11, reg_xtensa_a3);                   { arg1 = src }
+          EmitLoadConstXtensa(reg_xtensa_a12, Integer(IRIVal[node]));  { arg2 = count }
+        end
+        else
+          EmitLoadConstXtensa(reg_xtensa_a4, Integer(IRIVal[node]));   { a2=dest, a3=src, a4=count }
         EmitCallProc(procIdx);
       end;
 

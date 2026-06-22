@@ -3924,17 +3924,41 @@ begin
         end;
     if retSymIdx >= 0 then
     begin
-      if Syms[retSymIdx].IsArray or (Syms[retSymIdx].Kind <> skLocal) or
-         not (TypeIsOrdinal(Syms[retSymIdx].TypeKind) or TypeIsFloat(Syms[retSymIdx].TypeKind) or
-              (Syms[retSymIdx].TypeKind in [tyAnsiString, tyPointer, tyClass])) then
-        Error('target xtensa: only ordinal/float/pointer/string function results supported yet');
-      { Float result carried as raw bits in the return reg(s): Double = a2:a3
-        (8-byte slot), Single = a2 (4-byte slot) — same shape as Int64/ordinal. }
-      if (Syms[retSymIdx].TypeKind = tyInt64) or (Syms[retSymIdx].TypeKind = tyUInt64) or
-         (Syms[retSymIdx].TypeKind = tyDouble) then
-        EmitLoadVar64Xtensa(retSymIdx)   { 64-bit result in a2:a3 }
+      if TypeIsAggregate(Syms[retSymIdx].TypeKind) and
+         (CurProc >= 0) and (ProcAggregateDestSym[CurProc] >= 0) then
+      begin
+        { Aggregate (record) result, Call0 only: copy the Result local into the
+          caller's hidden destination (the pointer the prologue stashed from a8),
+          return it in a2. PXXMemMove(dest, &Result, size). Windowed is rejected —
+          its call-window rotation has no clean caller->callee hidden-dest reg. }
+        if XtensaABI <> XTENSA_ABI_CALL0 then
+          Error('target xtensa: record function results require Call0 (windowed not yet supported)');
+        EmitFrameAddrXtensa(reg_xtensa_a3, Syms[retSymIdx].Offset);   { a3 = &Result (src) }
+        EmitLoadVarXtensa(ProcAggregateDestSym[CurProc]);             { a2 = dest ptr }
+        if Syms[retSymIdx].TypeKind = tyRecord then
+          sz := RecSize(Syms[retSymIdx].RecName)
+        else
+          sz := TypeSize(Syms[retSymIdx].TypeKind);
+        EmitLoadConstXtensa(reg_xtensa_a4, sz);                       { a4 = byte count }
+        procIdx := FindProc('PXXMemMove');
+        if procIdx < 0 then Error('compiler error: PXXMemMove not found');
+        EmitCallProc(procIdx);
+        EmitLoadVarXtensa(ProcAggregateDestSym[CurProc]);             { a2 = dest (return value) }
+      end
       else
-        EmitLoadVarXtensa(retSymIdx);
+      begin
+        if Syms[retSymIdx].IsArray or (Syms[retSymIdx].Kind <> skLocal) or
+           not (TypeIsOrdinal(Syms[retSymIdx].TypeKind) or TypeIsFloat(Syms[retSymIdx].TypeKind) or
+                (Syms[retSymIdx].TypeKind in [tyAnsiString, tyPointer, tyClass])) then
+          Error('target xtensa: only ordinal/float/pointer/string function results supported yet');
+        { Float result carried as raw bits in the return reg(s): Double = a2:a3
+          (8-byte slot), Single = a2 (4-byte slot) — same shape as Int64/ordinal. }
+        if (Syms[retSymIdx].TypeKind = tyInt64) or (Syms[retSymIdx].TypeKind = tyUInt64) or
+           (Syms[retSymIdx].TypeKind = tyDouble) then
+          EmitLoadVar64Xtensa(retSymIdx)   { 64-bit result in a2:a3 }
+        else
+          EmitLoadVarXtensa(retSymIdx);
+      end;
     end;
     if XtensaABI = XTENSA_ABI_WINDOWED then
     begin

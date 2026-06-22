@@ -10564,6 +10564,17 @@ begin
       rv32_add(reg_t0, reg_s0, reg_t0);
       rv32_sw(reg_t1, reg_t0, 0);
     end
+    else if TargetArch = TARGET_XTENSA then
+    begin
+      { xtensa Call0 carries the hidden destination in a8 (a caller-saved temp
+        outside the a2-a7 arg set); stash it before the param-copy clobbers a8.
+        Windowed record results are unsupported (rejected at the epilogue). }
+      if XtensaABI = XTENSA_ABI_CALL0 then
+      begin
+        EmitFrameAddrXtensa(reg_xtensa_a9, Syms[idx].Offset);
+        xtensa_s32i(reg_xtensa_a8, reg_xtensa_a9, 0);
+      end;
+    end
     else
       begin EmitB($4C); EmitB($89); EmitB($95); EmitI32(Syms[idx].Offset); end; { mov [rbp+off], r10 }
   end;

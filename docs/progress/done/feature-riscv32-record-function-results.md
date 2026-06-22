@@ -101,3 +101,12 @@ results are blocked here.
     tracked elsewhere.
   - xtensa record results are a SEPARATE unimplemented gap (the windowed-ABI
     hidden-dest register is fiddlier); the test runs on esp32c3 only.
+
+- 2026-06-23 — **xtensa Call0 record results also done** (same session). Mirrored
+  the riscv32 work onto xtensa: `IR_COPY_REC` (PXXMemMove, both ABIs) +
+  by-value record results via a Call0 hidden-dest register (a8): caller pushes the
+  dest + loads a8 before the call; prologue stashes a8 into `ProcAggregateDestSym`;
+  epilogue PXXMemMoves Result -> [dest], returns it in a2. Xtensa WINDOWED record
+  results stay rejected (the call-window rotation has no clean caller->callee
+  hidden-dest reg). Verified esp32s3 (Call0) under qemu-system; same test
+  `test/test_esp_record_result.pas` now runs on both chips in `make test-esp-bare`.

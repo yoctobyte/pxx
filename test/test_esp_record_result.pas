@@ -6,8 +6,9 @@ program test_esp_record_result;
   must match the x86-64 oracle. Covers: record copy, a 2-field by-value result
   (net.pas's TNetAddress shape), and a 5-field (>2 word) result. Output:
   11 / 22 / 2130706433 / 8080 / 150.
-  NOTE: esp32s3 (xtensa) record results are a separate unimplemented gap, so this
-  test runs on esp32c3 only. }
+  Runs on esp32c3 (riscv32) AND esp32s3 (xtensa Call0). Xtensa WINDOWED record
+  results stay unsupported (no clean hidden-dest register across the call-window
+  rotation) and are rejected at the callee epilogue. }
 
 {$ifdef CPU_XTENSA}{$define PXX_ESP}{$endif}
 {$ifdef CPU_RISCV32}{$define PXX_ESP}{$endif}

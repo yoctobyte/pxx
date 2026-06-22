@@ -1866,6 +1866,11 @@ test-esp-bare: $(COMPILER)
 	  ESP_RUN_TIMEOUT=8 tools/esp_run_bare.sh --chip esp32c3 test/test_esp_record_result.pas > /tmp/test_esp_record_result.c3 2>/dev/null; \
 	  if diff -u /tmp/test_esp_record_result.oracle /tmp/test_esp_record_result.c3; then echo "esp32c3 record copy + by-value results ok (UART output == x86-64 oracle)"; \
 	  else echo "esp32c3 record result MISMATCH"; exit 1; fi; fi
+	@XT=$$(ls $$HOME/.espressif/tools/qemu-xtensa/*/qemu/bin/qemu-system-xtensa 2>/dev/null | head -1); \
+	if [ -z "$$XT" ]; then echo "Espressif qemu-system-xtensa not installed; esp32s3 record-result run skipped"; else \
+	  ESP_RUN_TIMEOUT=8 tools/esp_run_bare.sh --chip esp32s3 test/test_esp_record_result.pas > /tmp/test_esp_record_result.s3 2>/dev/null; \
+	  if diff -u /tmp/test_esp_record_result.oracle /tmp/test_esp_record_result.s3; then echo "esp32s3 (Call0) record copy + by-value results ok (UART output == x86-64 oracle)"; \
+	  else echo "esp32s3 record result MISMATCH"; exit 1; fi; fi
 	@$(MAKE) --no-print-directory test-esp-softfloat
 
 # Runtime 64-bit-integer gate for the ESP backends: the soft-float library is
