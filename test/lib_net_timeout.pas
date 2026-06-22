@@ -7,9 +7,11 @@ program lib_net_timeout;
 uses net, platform;
 
 var
-  srv, cli: TNetSocket;
-  bound: TNetAddress;
+  srv, cli, acc: TNetSocket;
+  bound, peer: TNetAddress;
   rc: Integer;
+  b: array[0..0] of Byte;
+  n: Int64;
 
 begin
   { Success: a live listener accepts the connect. }
@@ -38,4 +40,27 @@ begin
     writeln('refused=bad');
     NetClose(cli);
   end;
+
+  { Recv timeout: set up a TCP pair, send one byte, NetRecvTimeout receives it;
+    a second NetRecvTimeout on the now-empty socket hits the deadline. }
+  srv := NetTcpListen(NetLoopback(0), 4);
+  rc := NetGetSockName(srv, bound);
+  cli := NetTcpConnectTimeout(NetLoopback(bound.Port), 1000);
+  acc := NetTcpAccept(srv, peer);
+  b[0] := 65;
+  n := NetSend(cli, @b[0], 1);
+  b[0] := 0;
+  n := NetRecvTimeout(acc, @b[0], 1, 1000);
+  if (n = 1) and (b[0] = 65) then
+    writeln('recv=ok')
+  else
+    writeln('recv=bad');
+  n := NetRecvTimeout(acc, @b[0], 1, 50);
+  if n = PAL_NET_ETIMEDOUT then
+    writeln('recv-timeout=ok')
+  else
+    writeln('recv-timeout=bad');
+  rc := NetClose(acc);
+  rc := NetClose(cli);
+  rc := NetClose(srv);
 end.

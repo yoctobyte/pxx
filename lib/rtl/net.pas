@@ -41,6 +41,10 @@ function NetTcpConnect(const addr: TNetAddress): TNetSocket;
 function NetTcpConnectTimeout(const addr: TNetAddress; timeoutMs: Integer): TNetSocket;
 function NetSend(sock: TNetSocket; buf: Pointer; len: Integer): Int64;
 function NetRecv(sock: TNetSocket; buf: Pointer; len: Integer): Int64;
+{ Wait up to timeoutMs for the socket to become readable, then recv once.
+  Returns the byte count (>0), 0 on peer close, PAL_NET_ETIMEDOUT on deadline,
+  or a negative poll/recv errno. }
+function NetRecvTimeout(sock: TNetSocket; buf: Pointer; len: Integer; timeoutMs: Integer): Int64;
 
 { UDP (blocking). }
 function NetUdpBind(const addr: TNetAddress): TNetSocket;
@@ -169,6 +173,23 @@ end;
 
 function NetRecv(sock: TNetSocket; buf: Pointer; len: Integer): Int64;
 begin
+  Result := PalRecv(sock, buf, len);
+end;
+
+function NetRecvTimeout(sock: TNetSocket; buf: Pointer; len: Integer; timeoutMs: Integer): Int64;
+var pr: Integer;
+begin
+  pr := PalPoll(sock, PAL_POLL_IN, timeoutMs);
+  if pr < 0 then
+  begin
+    Result := pr;
+    Exit;
+  end;
+  if pr = 0 then
+  begin
+    Result := PAL_NET_ETIMEDOUT;
+    Exit;
+  end;
   Result := PalRecv(sock, buf, len);
 end;
 
