@@ -2503,11 +2503,63 @@ begin
   for i := 0 to ProcCount-1 do
     if Procs[i].Name = lo then begin Result := i; Exit; end;
   { Case-insensitive fallback for case-insensitive symbols only (default Pascal).
-    First match wins; ambiguity refinement (warn) is future work. }
+    First match wins; ambiguity refinement (warn) is future work. External
+    (C-import) symbols are excluded: a C linker symbol IS case-sensitive
+    (`printf` <> `Printf`), so they match exact-only by default and relax only
+    under {$LAZYCASING ON} below. }
   for i := 0 to ProcCount-1 do
-    if (not ProcCaseSensitive[i]) and CaseEqual(Procs[i].Name, lo) then
+    if (not ProcCaseSensitive[i]) and (not ProcExternal[i]) and
+       CaseEqual(Procs[i].Name, lo) then
     begin Result := i; Exit; end;
+  { LAZYCASING fallback: only for C-import symbols (external), only when the
+    switch is on, and only when EXACTLY ONE matches case-insensitively. Resolves
+    to that proc's exact declared spelling (ELF linkage is unaffected) and warns
+    so the case mismatch stays visible. Ambiguous -> error. Never reached by
+    ordinary Pascal procs (they are not external). }
+  if LazyCasing then
+  begin
+    Result := -1;
+    for i := 0 to ProcCount-1 do
+      if ProcExternal[i] and CaseEqual(Procs[i].Name, lo) then
+      begin
+        if Result >= 0 then
+          Error('lazycasing: ambiguous case-insensitive match for ''' + name +
+                ''' (''' + Procs[Result].Name + ''' vs ''' + Procs[i].Name + ''')');
+        Result := i;
+      end;
+    if Result >= 0 then
+    begin
+      Warn('lazycasing: ''' + name + ''' resolved to C import ''' +
+           Procs[Result].Name + ''' (case mismatch)');
+      Exit;
+    end;
+  end;
   Result := -1;
+end;
+
+{ Canonicalize a C-import call name to the exact declared spelling under
+  {$LAZYCASING ON}. Returns `name` unchanged when the switch is off, when a proc
+  already matches exactly, or when no external symbol matches case-insensitively.
+  Ambiguity (>1 external match) is an error. Silent — the user-facing warning is
+  emitted once by FindProc during call classification; this only rebinds the
+  name so MatchProcCall's exact-name phases find the proc. }
+function LazyCanonName(const name: AnsiString): AnsiString;
+var i, found: Integer;
+begin
+  Result := name;
+  if not LazyCasing then Exit;
+  for i := 0 to ProcCount-1 do
+    if Procs[i].Name = name then Exit;            { exact match exists: no rebind }
+  found := -1;
+  for i := 0 to ProcCount-1 do
+    if ProcExternal[i] and CaseEqual(Procs[i].Name, name) then
+    begin
+      if found >= 0 then
+        Error('lazycasing: ambiguous case-insensitive match for ''' + name +
+              ''' (''' + Procs[found].Name + ''' vs ''' + Procs[i].Name + ''')');
+      found := i;
+    end;
+  if found >= 0 then Result := Procs[found].Name;
 end;
 
 function FindProcInUnit(const name: AnsiString; unitIdx: Integer): Integer;
@@ -2653,8 +2705,16 @@ begin
 end;
 
 function MatchProcCall(const name: AnsiString; nArgs: Integer; const argTypes: array of TTypeKind): Integer;
-var i, j: Integer; match: Boolean;
+var i, j: Integer; match: Boolean; cn: AnsiString;
 begin
+  { LAZYCASING: rebind a wrong-case C-import call to its exact declared spelling
+    once, then match normally (the exact-name phases below then find it). }
+  cn := LazyCanonName(name);
+  if cn <> name then
+  begin
+    Result := MatchProcCall(cn, nArgs, argTypes);
+    Exit;
+  end;
   { Phase 1: Try exact match }
   for i := 0 to ProcCount-1 do
   begin

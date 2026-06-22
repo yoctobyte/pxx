@@ -668,6 +668,7 @@ var
   CStyleComments : Boolean;   { CSTYLECOMMENTS directive: enable C slash-star comments }
   NestedComments : Boolean;   { NESTEDCOMMENTS directive: nest brace and paren-star comments }
   CaseSensitiveMode : Boolean; { CASESENSITIVE directive: when on, identifiers declared here match case-sensitively. Default off (standard case-insensitive Pascal). }
+  LazyCasing : Boolean; { LAZYCASING directive: when on, a C-import (external, case-sensitive) symbol may resolve through a case-insensitive fallback if exactly one matches (a warning is emitted). Default off; never weakens Pascal case rules. }
   NoUnhandledHandler : Boolean;
   Source  : AnsiString;
   SrcPos  : Integer;

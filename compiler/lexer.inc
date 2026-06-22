@@ -1252,6 +1252,12 @@ begin
       else if CaseEqual(name, 'off') then CaseSensitiveMode := False
       else Error('casesensitive requires on or off');
     end
+    else if CaseEqual(command, 'lazycasing') then
+    begin
+      if CaseEqual(name, 'on') then LazyCasing := True
+      else if CaseEqual(name, 'off') then LazyCasing := False
+      else Error('lazycasing requires on or off');
+    end
     else if CaseEqual(command, 'packrecords') or CaseEqual(command, 'align') then
     begin
       if CaseEqual(name, 'normal') or CaseEqual(name, 'default') then PackRecordsVal := 8
