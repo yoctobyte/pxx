@@ -1,11 +1,8 @@
 # Unit impl-section pre-scan silently miscompiles routines (zlib decode broken)
 
 - **Type:** bug (compiler) — **Track A**
-- **Status:** urgent — **LIVE in pinned v33; `make lib-test` is RED on master.**
-- **Severity:** CRITICAL — silent miscompilation now shipped in the pinned
-  stable. Was "blocks re-pin"; v33 (commit 3e2d412) re-pinned today's compiler
-  *including* `7ba91bf`, so the regression is now in the binary Track B builds
-  against. `make lib-test` fails at the png line under v33.
+- **Status:** **DONE** — fixed + re-pinned v34; `make lib-test` GREEN on master.
+- **Severity:** was CRITICAL (silent miscompile shipped in v33). Resolved.
 - **Opened:** 2026-06-22
 - **Owner:** — (Track A / "sis")
 - **Found by:** Track B, while wiring the new `json` library into `lib-test`.
@@ -182,3 +179,29 @@ routines / locals rather than chase the 2-function case.
 ## Log
 - 2026-06-22 — Filed by Track B. Bisected to `7ba91bf`; png/zlib decode repro.
   Blocks re-pin needed for `feature-json-library` lib-test wiring.
+- 2026-06-22 — **ROOT CAUSE FOUND + FIXED (Track A).** Not slot/offset allocation
+  and not `7ba91bf` — a **name-resolution** bug. PXX is case-insensitive, so a
+  local variable collides with a *paramless function* of the same name (sat:
+  local `clauseCount` vs function `ClauseCount`; zlib: a counter vs a helper).
+  Both the expression-read (`ParseFactor`) and the statement-assignment
+  (`ParseStatementAST`) resolved the bare name to a **CALL of the function**
+  instead of the local variable, so the local's reads/writes silently vanished —
+  `clauseCount := clauseCount + 1` compiled to `gNumClauses := ClauseCount()`
+  (always 0). Confirmed via `--dump-ir` (the store's RHS was `call a=145`, not
+  `load_sym [sym=clauseCount]`). `7ba91bf` only shifted unit layout → changed
+  *which* units happened to contain a collision (consistent with the bug
+  reproducing on `dc11a9c` too, and with `make test`/self-host staying
+  byte-identical: `compiler.pas` has no such collision).
+  **Fix:** guard both bare-paramless-call branches with `idx < 0` / `si < 0` (no
+  variable of that name in scope) so an in-scope variable shadows the function
+  (correct Pascal scoping); the function is still called when nothing shadows it.
+  Commit `5153dd7` (parser.inc) + regression `test/test_local_shadows_func.pas`.
+  Gate: `make test` + fpc-check byte-identical, cross-bootstrap (i386/aarch64/
+  arm32) byte-identical. **png decode → `2x2`; `make lib-test` GREEN; re-pinned
+  v34** (handed to Track B). The ticket's pre-scan/`savedBase` theory is retired.
+- 2026-06-22 — Residual: the sat *solver* (DPLL) still diverges PXX-vs-FPC on a
+  satisfiable instance (`sat3` → PXX `UNSAT`, FPC `SAT`) — a **separate** codegen
+  bug, NOT this collision (no name clash in DPLL/Solve/ClauseStatus). Cleanly
+  isolated to a standalone FPC-vs-PXX repro; filed as
+  [[bug-dpll-recursion-global-array-miscompile]]. The sat-library ticket stays
+  blocked on that, not on this one.
