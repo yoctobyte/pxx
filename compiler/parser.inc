@@ -4253,7 +4253,7 @@ begin
   end
   else if CurTok.Kind = tkLParen then
   begin
-    Next; r := ConstEval; Expect(tkRParen, ')');
+    Next; r := ConstEval(); Expect(tkRParen, ')');
   end;
   while (CurTok.Kind in [tkPlus, tkMinus, tkStar, tkDiv, tkMod, tkAnd, tkOr, tkXor, tkShl]) or
         ((CurTok.Kind = tkIdent) and (CurTok.SVal = 'shr')) do
@@ -6093,7 +6093,7 @@ begin
     WithStack[WithStackDepth] := varNode;
     Inc(WithStackDepth);
 
-    bodyNode := ParseWithStatementAST;
+    bodyNode := ParseWithStatementAST();
 
     { Pop }
     Dec(WithStackDepth);
@@ -6537,7 +6537,7 @@ begin
         if CurTok.Kind = tkSemicolon then
           ASTLeft[node] := -1          { bare `await;` — a pure suspension point }
         else
-          ASTLeft[node] := ParseStatementAST;
+          ASTLeft[node] := ParseStatementAST();
         ASTTk[node]   := Ord(tyUnknown);
       end
       else if CaseEqual(name, 'AsyncGo') then

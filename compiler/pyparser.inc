@@ -600,7 +600,7 @@ begin
   Expect(tkDedent, 'dedent');
   elseNode := -1;
   if PyIsIdent('elif') then
-    elseNode := PyParseIf
+    elseNode := PyParseIf()
   else if CurTok.Kind = tkElse then
   begin
     Next;

@@ -110,10 +110,10 @@ begin
     end
     else
     begin
-      thenNode := ParseBStatement;
+      thenNode := ParseBStatement();
       elseNode := -1;
       if Eat(tkElse) then
-        elseNode := ParseBStatement;
+        elseNode := ParseBStatement();
     end;
       
     stmtNode := AllocNode(AN_IF);

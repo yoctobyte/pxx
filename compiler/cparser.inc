@@ -718,9 +718,9 @@ begin
     Next; Result := CEvalConstExpr;
     if CurTok.Kind = tkRParen then Next;
   end
-  else if CurTok.Kind = tkMinus then begin Next; Result := -CEvalConstPrimary; end
-  else if CurTok.Kind = tkPlus then begin Next; Result := CEvalConstPrimary; end
-  else if CurTok.Kind = tkNot then begin Next; Result := not CEvalConstPrimary; end
+  else if CurTok.Kind = tkMinus then begin Next; Result := -CEvalConstPrimary(); end
+  else if CurTok.Kind = tkPlus then begin Next; Result := CEvalConstPrimary(); end
+  else if CurTok.Kind = tkNot then begin Next; Result := not CEvalConstPrimary(); end
   else if CurTok.Kind = tkInteger then begin Result := CurTok.IVal; Next; end
   else if CurTok.Kind = tkIdent then
   begin

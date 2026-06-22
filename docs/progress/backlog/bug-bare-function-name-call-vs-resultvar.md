@@ -86,10 +86,35 @@ This is a genuine PXX bug (FPC is consistent across modes), so the fix is one-wa
 - **Make PXX match FPC:** a bare function identifier *inside its own body* is the
   result variable; require `F()` for a recursive call (and `@F` for a pointer).
   Behaviour change — **audit every bare-name recursion site in the compiler
-  source first** (they must become `F()`), then flip. The known one is
-  `parser.inc` ConstEval `tkLParen` branch (`r := ConstEval` → `r := ConstEval()`);
-  there are likely others. Risk: a missed site silently reads a result var after
-  the flip, so do the audit before, not after.
+  source first** (they must become `F()`), then flip. Risk: a missed site
+  silently reads a result var after the flip, so do the audit before, not after.
+
+  **Audit DONE 2026-06-22 (Track A) — and all sites hardened.** The complete set
+  of bare paramless-own-name *reads* (current recursive calls that the flip would
+  turn into result-var reads) is exactly **9 sites**, now all rewritten to
+  explicit `F()` (a no-op on current PXX — `F()` is a call either way — so the
+  hardening landed without a flip and self-hosts byte-identical, default +
+  --threadsafe):
+  - `bparser.inc:113,116` — `ParseBStatement` (then/else node)
+  - `parser.inc:4256` — `ConstEval` `(expr)` branch (`r := ConstEval`)
+  - `parser.inc:6096` — `ParseWithStatementAST` (body node)
+  - `parser.inc:6540` — `ParseStatementAST` (`await <stmt>`)
+  - `cparser.inc:721,722,723` — `CEvalConstPrimary` (unary `-`/`+`/`not`)
+  - `pyparser.inc:603` — `PyParseIf` (`elif` chain)
+
+  Method: 62 paramless-only function names extracted; per-name reads classified
+  by *col-0 enclosing routine* (excluding `F(` calls, `F :=` result writes, `@F`
+  pointers, comments/strings); only same-body reads kept. No nested/indented
+  paramless functions exist in the frontend sources, so the col-0 assumption is
+  exhaustive. Audit script: `/tmp/audit3.py` (throwaway). Two earlier heuristics
+  under-counted (span end mis-cut by a comment containing "function result"; and
+  a header regex that missed paramless `procedure Foo;`) — both corrected; the
+  44→11→9 narrowing is documented in the session.
+
+  **Source is now flip-ready.** Remaining work = the parser flip itself (treat a
+  bare paramless own-name read as the result var) + re-run the gate. With every
+  recursion site already on `F()`, a missed site can no longer silently read a
+  result var.
 
 `-Mobjfpc` on the seed is NOT a fix (see above). Eventually wanted for
 correctness + `feature-mimic-fpc`, but it is a careful, audited flip.
@@ -134,3 +159,7 @@ above. So this ticket stays **backlog** for that remaining flip.
   feature-const-eval-typecast-int64; the fix there used `ConstEval()` + `CaseEqual`.
 - 2026-06-21 — partial fix (params>0 own-name read = result var) landed to
   unblock chess; paramless flip remains. Track A.
+- 2026-06-22 — full audit of paramless bare-name recursion sites (9 total) +
+  hardened all to explicit `F()`. Behaviour-preserving on current PXX; default +
+  --threadsafe self-host byte-identical, `make test` green. Source now flip-ready;
+  the paramless semantic flip is the only remaining step. Track A.
