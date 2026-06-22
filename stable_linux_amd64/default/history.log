@@ -35,3 +35,4 @@
 2026-06-22T11:45:31Z  v35  7d30d1e8d65991e4c2e55c75a9c160e1a8228e9d48b224dc9ce9d05a6b9ce017  4a37b0060c16c3e182963129ec451bcdfa58a50c  fix(parser): named dyn-array alias as a class/record field is a real dyn array
 2026-06-22T12:07:45Z  v36  180adf3a51081dc3a51e9fbf831b76e8485d03b0702deb2d973533d75a222614  39d851a848aac13105f8f602901c477273bcd596  fix(codegen): whole dyn-array assignment into a record/object field
 2026-06-22T13:25:49Z  v37  02dd962b748879bdf5d8e885be8ae65408640fdb59f0ddce2f56766cca1bc087  55350ffeb5297bdbcb39a05b449ebcc861971758  docs: record fix commit hashes in done tickets, refresh board
+2026-06-22T17:46:40Z  v38  322ea1fdffb76b2683bc9a7312831aae1045be359096b2126ce8447bb0792117  ec50f2f86eaa7ded934e4c0f5084380bdfadc67f  fix(parser): fold Length/High of a whole 1-D static array to a constant
