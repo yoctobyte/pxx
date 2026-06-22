@@ -2,7 +2,13 @@ program lib_platform_esp;
 
 uses platform;
 
+var
+  peerAddr: LongWord;
+  peerPort: Integer;
+
 begin
+  peerAddr := 0;
+  peerPort := 0;
   if PalPlatform = PAL_PLATFORM_POSIX then writeln('posix');
   if PalPlatform = PAL_PLATFORM_ESP_IDF then writeln('esp-idf');
   if PalHasFiles then writeln('files');
@@ -29,5 +35,8 @@ begin
   writeln('send=', Integer(PalSend(0, nil, 0)));
   writeln('shutdown=', PalShutdown(0, PAL_SHUT_RDWR));
   writeln('sockclose=', PalSocketClose(0));
+  writeln('sendto=', Integer(PalSendToIpv4(0, nil, 0, PAL_NET_IP_LOOPBACK, 48691)));
+  writeln('recvfrom=', Integer(PalRecvFromIpv4(0, nil, 0, peerAddr, peerPort)));
+  writeln('poll=', PalPoll(0, PAL_POLL_IN, 0));
   writeln('unsupported=', PalUnsupported);
 end.

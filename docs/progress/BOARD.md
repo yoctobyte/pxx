@@ -22,7 +22,7 @@ _none_
 | --- | --- | --- | --- | --- |
 | feature-c-runtime-library | B | feature | C runtime/library layer (`lib/crtl`) plus direct C-library packages | feature-c-source-frontend |
 
-## backlog (41)
+## backlog (40)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -57,7 +57,6 @@ _none_
 | feature-object-reference-type | A | feature | `object` — a rooted object-reference type | — |
 | feature-optimization-levels | A | feature | Optimization levels (`-O0/-O1/-O2/-O3/-Os`) + pass framework | — |
 | feature-pal-esp-posix-fd-semantics | B | feature | ESP PAL: exact POSIX fd semantics over ESP-IDF VFS | — |
-| feature-pal-network-datagram-poll-errno | B | feature | PAL network: datagrams, readiness polling, and exact errno semantics | — |
 | feature-parallel-processing | A | feature | Parallel processing as a language feature | feature-unified-heap-allocator |
 | feature-random-library | B | feature | Random library — HW/OS/software tiered RNG (cross-target capability test) | — |
 | feature-real-cross-target-consistency | A | feature | Verify `real`/Double bit-consistency across targets (x87 divergence?) | — |
@@ -99,7 +98,7 @@ _none_
 | feature-interfaces | A | feature | Interfaces | — |
 | feature-string-model-tyfixedstring | B | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (175)
+## done (176)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -238,6 +237,7 @@ _none_
 | feature-multidim-fixed-arrays | A | feature | Multidimensional fixed arrays | — |
 | feature-nested-routines | A | feature | Nested routines (procedures/functions inside a routine or method) | — |
 | feature-pal-file-stat-metadata | B | feature | PAL file stat metadata | — |
+| feature-pal-network-datagram-poll-errno | B | feature | PAL network: datagrams, readiness polling, and exact errno semantics | — |
 | feature-parallel-tracks-stable-compiler | A | feature | Parallel tracks: pin libraries/demos to a "stable" compiler | — |
 | feature-pcl-opengl-glarea-demo | B | feature | PCL OpenGL GLArea demo | — |
 | feature-platform-abstraction-layer | B | feature | Platform Abstraction Layer (PAL): per-platform RTL port at one seam | — |
@@ -318,7 +318,6 @@ _none_
 - [A] feature-object-reference-type
 - [A] feature-optimization-levels
 - [B] feature-pal-esp-posix-fd-semantics
-- [B] feature-pal-network-datagram-poll-errno
 - [A] feature-parallel-processing
 - [B] feature-random-library
 - [A] feature-real-cross-target-consistency

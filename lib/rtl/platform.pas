@@ -25,7 +25,18 @@ const
   PAL_NET_IP_LOOPBACK = $7F000001;
 
   PAL_NET_EAGAIN = -11;
+  PAL_NET_EWOULDBLOCK = -11;
   PAL_NET_EINPROGRESS = -115;
+  PAL_NET_ECONNREFUSED = -111;
+  PAL_NET_ECONNRESET = -104;
+
+  { Readiness poll event/result bits (Linux poll(2) values, shared across PAL
+    arches). PalPoll returns the OR of the revents bits that fired. }
+  PAL_POLL_IN  = $001;
+  PAL_POLL_OUT = $004;
+  PAL_POLL_ERR = $008;
+  PAL_POLL_HUP = $010;
+  PAL_POLL_NVAL = $020;
 
   PAL_SHUT_RD = 0;
   PAL_SHUT_WR = 1;
@@ -84,6 +95,9 @@ function PalRecv(handle: Integer; buf: Pointer; len: Integer): Int64;
 function PalSend(handle: Integer; buf: Pointer; len: Integer): Int64;
 function PalShutdown(handle, how: Integer): Integer;
 function PalSocketClose(handle: Integer): Integer;
+function PalSendToIpv4(handle: Integer; buf: Pointer; len: Integer; hostAddr: LongWord; port: Integer): Int64;
+function PalRecvFromIpv4(handle: Integer; buf: Pointer; len: Integer; var outAddr: LongWord; var outPort: Integer): Int64;
+function PalPoll(handle, events, timeoutMs: Integer): Integer;
 
 function PalMonotonicMillis: Int64;
 procedure PalYield;
@@ -251,6 +265,21 @@ end;
 function PalSocketClose(handle: Integer): Integer;
 begin
   Result := PalBackendSocketClose(handle);
+end;
+
+function PalSendToIpv4(handle: Integer; buf: Pointer; len: Integer; hostAddr: LongWord; port: Integer): Int64;
+begin
+  Result := PalBackendSendToIpv4(handle, buf, len, hostAddr, port);
+end;
+
+function PalRecvFromIpv4(handle: Integer; buf: Pointer; len: Integer; var outAddr: LongWord; var outPort: Integer): Int64;
+begin
+  Result := PalBackendRecvFromIpv4(handle, buf, len, outAddr, outPort);
+end;
+
+function PalPoll(handle, events, timeoutMs: Integer): Integer;
+begin
+  Result := PalBackendPoll(handle, events, timeoutMs);
 end;
 
 function PalMonotonicMillis: Int64;

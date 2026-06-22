@@ -36,6 +36,9 @@ function PalBackendRecv(handle: Integer; buf: Pointer; len: Integer): Int64;
 function PalBackendSend(handle: Integer; buf: Pointer; len: Integer): Int64;
 function PalBackendShutdown(handle, how: Integer): Integer;
 function PalBackendSocketClose(handle: Integer): Integer;
+function PalBackendSendToIpv4(handle: Integer; buf: Pointer; len: Integer; hostAddr: LongWord; port: Integer): Int64;
+function PalBackendRecvFromIpv4(handle: Integer; buf: Pointer; len: Integer; var outAddr: LongWord; var outPort: Integer): Int64;
+function PalBackendPoll(handle, events, timeoutMs: Integer): Integer;
 
 function PalBackendMonotonicMillis: Int64;
 procedure PalBackendYield;
@@ -59,6 +62,7 @@ const
   SYS_unlinkat = 263; SYS_renameat = 264;
   SYS_socket=41; SYS_connect=42; SYS_accept4=288; SYS_bind=49; SYS_listen=50;
   SYS_setsockopt=54; SYS_shutdown=48; SYS_fcntl=72;
+  SYS_sendto=44; SYS_recvfrom=45; SYS_ppoll=271;
   SYS_vfork = 58; SYS_fork = 57; SYS_execve = 59; SYS_pipe2 = 293; SYS_dup2 = 33; SYS_wait4 = 61; SYS_kill = 62;
   SYS_clock_gettime = 228;
 {$endif}
@@ -68,7 +72,8 @@ const
   SYS_unlinkat = 301; SYS_renameat = 302;
   SYS_socketcall=102; SYS_fcntl=55;
   SC_SOCKET=1; SC_BIND=2; SC_CONNECT=3; SC_LISTEN=4; SC_ACCEPT4=18;
-  SC_SETSOCKOPT=14; SC_SHUTDOWN=13;
+  SC_SETSOCKOPT=14; SC_SHUTDOWN=13; SC_SENDTO=11; SC_RECVFROM=12;
+  SYS_ppoll=309;
   SYS_vfork = 190; SYS_fork = 2; SYS_execve = 11; SYS_pipe2 = 331; SYS_dup2 = 63; SYS_wait4 = 114; SYS_kill = 37;
   SYS_clock_gettime = 265;
 {$endif}
@@ -78,6 +83,7 @@ const
   SYS_unlinkat = 35; SYS_renameat = 38;
   SYS_socket=198; SYS_connect=203; SYS_accept4=242; SYS_bind=200; SYS_listen=201;
   SYS_setsockopt=208; SYS_shutdown=210; SYS_fcntl=25;
+  SYS_sendto=206; SYS_recvfrom=207; SYS_ppoll=73;
   SYS_clone = 220; SYS_execve = 221; SYS_pipe2 = 59; SYS_dup3 = 24; SYS_wait4 = 260; SYS_kill = 129;
   SYS_clock_gettime = 113;
 {$endif}
@@ -87,6 +93,7 @@ const
   SYS_unlinkat = 328; SYS_renameat = 329;
   SYS_socket=281; SYS_connect=283; SYS_accept4=366; SYS_bind=282; SYS_listen=284;
   SYS_setsockopt=294; SYS_shutdown=293; SYS_fcntl=55;
+  SYS_sendto=290; SYS_recvfrom=292; SYS_ppoll=336;
   SYS_vfork = 190; SYS_fork = 2; SYS_execve = 11; SYS_pipe2 = 359; SYS_dup2 = 63; SYS_wait4 = 114; SYS_kill = 37;
   SYS_clock_gettime = 263;
 {$endif}
@@ -112,6 +119,13 @@ begin
   a[0] := a0; a[1] := a1; a[2] := a2; a[3] := a3; a[4] := a4;
   Result := __pxxrawsyscall(SYS_socketcall, callnr, Int64(@a[0]), 0, 0, 0, 0);
 end;
+
+function SockCall6(callnr: Integer; a0, a1, a2, a3, a4, a5: Int64): Int64;
+var a: array[0..5] of NativeInt;
+begin
+  a[0] := a0; a[1] := a1; a[2] := a2; a[3] := a3; a[4] := a4; a[5] := a5;
+  Result := __pxxrawsyscall(SYS_socketcall, callnr, Int64(@a[0]), 0, 0, 0, 0);
+end;
 {$endif}
 
 procedure FillSockAddrIpv4(sa: Pointer; hostAddr: LongWord; port: Integer);
@@ -125,6 +139,15 @@ begin
   PB(Pointer(Int64(sa) + 5))^ := (hostAddr shr 16) and $FF;
   PB(Pointer(Int64(sa) + 6))^ := (hostAddr shr 8) and $FF;
   PB(Pointer(Int64(sa) + 7))^ := hostAddr and $FF;
+end;
+
+procedure ParseSockAddrIpv4(sa: Pointer; var hostAddr: LongWord; var port: Integer);
+begin
+  port := (Integer(PB(Pointer(Int64(sa) + 2))^) shl 8) or Integer(PB(Pointer(Int64(sa) + 3))^);
+  hostAddr := (LongWord(PB(Pointer(Int64(sa) + 4))^) shl 24)
+           or (LongWord(PB(Pointer(Int64(sa) + 5))^) shl 16)
+           or (LongWord(PB(Pointer(Int64(sa) + 6))^) shl 8)
+           or  LongWord(PB(Pointer(Int64(sa) + 7))^);
 end;
 
 function PalBackendPlatform: Integer;
@@ -357,11 +380,71 @@ begin
   Result := PalBackendClose(handle);
 end;
 
+function PalBackendSendToIpv4(handle: Integer; buf: Pointer; len: Integer; hostAddr: LongWord; port: Integer): Int64;
+var sa: array[0..15] of Byte;
+begin
+  FillSockAddrIpv4(@sa[0], hostAddr, port);
+{$ifdef CPU_I386}
+  Result := SockCall6(SC_SENDTO, handle, Int64(buf), len, 0, Int64(@sa[0]), 16);
+{$else}
+  Result := __pxxrawsyscall(SYS_sendto, handle, Int64(buf), len, 0, Int64(@sa[0]), 16);
+{$endif}
+end;
+
+function PalBackendRecvFromIpv4(handle: Integer; buf: Pointer; len: Integer; var outAddr: LongWord; var outPort: Integer): Int64;
+var
+  sa: array[0..15] of Byte;
+  addrlen: Integer;
+  i: Integer;
+begin
+  for i := 0 to 15 do sa[i] := 0;
+  addrlen := 16;
+{$ifdef CPU_I386}
+  Result := SockCall6(SC_RECVFROM, handle, Int64(buf), len, 0, Int64(@sa[0]), Int64(@addrlen));
+{$else}
+  Result := __pxxrawsyscall(SYS_recvfrom, handle, Int64(buf), len, 0, Int64(@sa[0]), Int64(@addrlen));
+{$endif}
+  outAddr := 0;
+  outPort := 0;
+  if Result >= 0 then
+    ParseSockAddrIpv4(@sa[0], outAddr, outPort);
+end;
+
 type
   TTimeSpec = record
     Sec: NativeInt;
     Nsec: NativeInt;
   end;
+
+{ Readiness poll via ppoll (available on every PAL arch; aarch64 lacks legacy
+  poll). pollfd is int fd then short events then short revents; we pack the
+  second word as events or revents-shifted-16 on little-endian targets. Returns
+  the revents bitmask when positive, 0 on timeout, or -errno. }
+function PalBackendPoll(handle, events, timeoutMs: Integer): Integer;
+var
+  pfd: array[0..1] of Integer;
+  ts: TTimeSpec;
+  tsp: Pointer;
+  res: Int64;
+begin
+  pfd[0] := handle;
+  pfd[1] := events and $FFFF;
+  if timeoutMs < 0 then
+    tsp := nil
+  else
+  begin
+    ts.Sec := timeoutMs div 1000;
+    ts.Nsec := (timeoutMs mod 1000) * 1000000;
+    tsp := @ts;
+  end;
+  res := __pxxrawsyscall(SYS_ppoll, Int64(@pfd[0]), 1, Int64(tsp), 0, 0, 0);
+  if res < 0 then
+    Result := Integer(res)
+  else if res = 0 then
+    Result := 0
+  else
+    Result := (pfd[1] shr 16) and $FFFF;
+end;
 
 function PalBackendMonotonicMillis: Int64;
 var

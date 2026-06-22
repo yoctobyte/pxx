@@ -36,6 +36,9 @@ function PalBackendRecv(handle: Integer; buf: Pointer; len: Integer): Int64;
 function PalBackendSend(handle: Integer; buf: Pointer; len: Integer): Int64;
 function PalBackendShutdown(handle, how: Integer): Integer;
 function PalBackendSocketClose(handle: Integer): Integer;
+function PalBackendSendToIpv4(handle: Integer; buf: Pointer; len: Integer; hostAddr: LongWord; port: Integer): Int64;
+function PalBackendRecvFromIpv4(handle: Integer; buf: Pointer; len: Integer; var outAddr: LongWord; var outPort: Integer): Int64;
+function PalBackendPoll(handle, events, timeoutMs: Integer): Integer;
 
 function PalBackendMonotonicMillis: Int64;
 procedure PalBackendYield;
@@ -103,6 +106,9 @@ function lwip_recv(s: Integer; mem: Pointer; len, flags: Integer): Integer; cdec
 function lwip_send(s: Integer; data: Pointer; len, flags: Integer): Integer; cdecl; external;
 function lwip_shutdown(s, how: Integer): Integer; cdecl; external;
 function lwip_close(s: Integer): Integer; cdecl; external;
+function lwip_sendto(s: Integer; data: Pointer; size, flags: Integer; toAddr: Pointer; tolen: Integer): Integer; cdecl; external;
+function lwip_recvfrom(s: Integer; mem: Pointer; len, flags: Integer; fromAddr: Pointer; fromlen: Pointer): Integer; cdecl; external;
+function lwip_poll(fds: Pointer; nfds, timeout: Integer): Integer; cdecl; external;
 {$endif}
 
 procedure FillSockAddrIpv4(sa: Pointer; hostAddr: LongWord; port: Integer);
@@ -116,6 +122,15 @@ begin
   PB(Pointer(Int64(sa) + 5))^ := (hostAddr shr 16) and $FF;
   PB(Pointer(Int64(sa) + 6))^ := (hostAddr shr 8) and $FF;
   PB(Pointer(Int64(sa) + 7))^ := hostAddr and $FF;
+end;
+
+procedure ParseSockAddrIpv4(sa: Pointer; var hostAddr: LongWord; var port: Integer);
+begin
+  port := (Integer(PB(Pointer(Int64(sa) + 2))^) shl 8) or Integer(PB(Pointer(Int64(sa) + 3))^);
+  hostAddr := (LongWord(PB(Pointer(Int64(sa) + 4))^) shl 24)
+           or (LongWord(PB(Pointer(Int64(sa) + 5))^) shl 16)
+           or (LongWord(PB(Pointer(Int64(sa) + 6))^) shl 8)
+           or  LongWord(PB(Pointer(Int64(sa) + 7))^);
 end;
 
 function PalBackendPlatform: Integer;
@@ -455,6 +470,56 @@ begin
   Result := PAL_ERR_UNSUPPORTED;
 {$endif}
 end;
+
+function PalBackendSendToIpv4(handle: Integer; buf: Pointer; len: Integer; hostAddr: LongWord; port: Integer): Int64;
+var sa: array[0..15] of Byte;
+begin
+{$ifdef PXX_PAL_ESP_IDF_TARGET}
+  FillSockAddrIpv4(@sa[0], hostAddr, port);
+  Result := lwip_sendto(handle, buf, len, 0, @sa[0], 16);
+{$else}
+  Result := PAL_ERR_UNSUPPORTED;
+{$endif}
+end;
+
+function PalBackendRecvFromIpv4(handle: Integer; buf: Pointer; len: Integer; var outAddr: LongWord; var outPort: Integer): Int64;
+{$ifdef PXX_PAL_ESP_IDF_TARGET}
+var
+  sa: array[0..15] of Byte;
+  addrlen: Integer;
+  i: Integer;
+begin
+  for i := 0 to 15 do sa[i] := 0;
+  addrlen := 16;
+  Result := lwip_recvfrom(handle, buf, len, 0, @sa[0], @addrlen);
+  outAddr := 0;
+  outPort := 0;
+  if Result >= 0 then
+    ParseSockAddrIpv4(@sa[0], outAddr, outPort);
+end;
+{$else}
+begin
+  outAddr := 0;
+  outPort := 0;
+  Result := PAL_ERR_UNSUPPORTED;
+end;
+{$endif}
+
+function PalBackendPoll(handle, events, timeoutMs: Integer): Integer;
+{$ifdef PXX_PAL_ESP_IDF_TARGET}
+var pfd: array[0..1] of Integer;
+begin
+  pfd[0] := handle;
+  pfd[1] := events and $FFFF;
+  Result := lwip_poll(@pfd[0], 1, timeoutMs);
+  if Result > 0 then
+    Result := (pfd[1] shr 16) and $FFFF;
+end;
+{$else}
+begin
+  Result := PAL_ERR_UNSUPPORTED;
+end;
+{$endif}
 
 function PalBackendMonotonicMillis: Int64;
 begin
