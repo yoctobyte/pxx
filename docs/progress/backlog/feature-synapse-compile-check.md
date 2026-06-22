@@ -137,3 +137,25 @@ RTL shims — it is a **multi-unit chain**, not one small unit:
 This is a deep RTL-breadth cascade (BaseUnix/Classes/SysUtils depth follows), so
 it wants a dedicated push rather than opportunistic slices. The analysis above is
 the starting point.
+
+### Keystone 2026-06-22 — `dynlibs` gates the ENTIRE leaf path
+
+Re-probing `uses synautil` on v38 (untyped params landed): first wall is still
+`unixutil`, but `synautil` unconditionally `uses ... SynaFpc`, and **`SynaFpc`
+itself `uses dynlibs`** (under `{$IFDEF FPC}`). So `dynlibs` is required even for
+the "simple" leaf units (`synautil`/`synaip`/`asn1util`/`synachar`), not just
+`synsock`/`blcksock`. `SynaFpc` needs only `TLibHandle` + `LoadLibrary` /
+`FreeLibrary` / `GetProcAddress` / `GetProcedureAddress` / `UnloadLibrary` /
+`NilHandle` — it wraps them; Synapse tolerates `LoadLibrary` returning the nil
+handle (that path just means "optional lib, e.g. SSL, unavailable").
+
+So an **honest minimal `dynlibs`** (FPC signatures; `LoadLibrary -> NilHandle`,
+`GetProcAddress -> nil` until a real PAL loader exists) unblocks compilation and
+the no-dynamic-lib (plain-HTTP, no-SSL) path. It is NOT a workaround for a
+compiler bug — libc-free POSIX genuinely has no runtime loader; `PalHasDynlib`
+returning True on posix is the actual inconsistency to fix (set it False, or add
+real `PalDlOpen` over libc when a "link-libc" profile is chosen — a deliberate
+design decision, file separately). Recommended order for the dedicated push:
+`dynlibs` (stub) -> `unixutil`/`Unix`/`BaseUnix` -> verify `SysUtils`/`Classes`
+depth. (Coordination: `Move`/`FillChar` are owned elsewhere on Track B; keep
+`dynlibs`/the unix shims separate from them.)
