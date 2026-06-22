@@ -65,3 +65,19 @@ PAL code is idiomatic and correct; the fix is in the backend.
   inline lwIP getsockname fills the sockaddr (port 3333); a direct
   `myParse(...local out vars...)` works; only the `var`→`var` forwarded form
   returns 0. riscv32-specific (cross-arch i386/aarch64/arm32 var→var works).
+
+- 2026-06-22 — **Attempted (Track A), HALTED: needs an ESP/qemu-system harness.**
+  riscv32 and xtensa are bare-metal/ESP targets — they are NOT in
+  `make cross-bootstrap` (only i386/aarch64/arm32 are) and do NOT run under
+  qemu-USER here: even `program h; begin Halt(7); end.` for `--target=riscv32`
+  hangs (timeout) under `tools/run_target.sh riscv32`. So none of the ESP codegen
+  items can be runtime-verified in the host loop; verification requires
+  qemu-system / the esp-bare / IDF flow (as this ticket's own repro notes:
+  "qemu-system-riscv32 / esp32c3"). Deferred to a session with that harness wired
+  (or real esp32c3/s3 hardware) so fixes ship verified, not blind.
+- 2026-06-22 — static-read note for the next attempt: the obvious forwarding path
+  LOOKS correct — `EmitSlotAddrRISCV32` (ir_codegen_riscv32.inc ~205) already
+  dereferences a var-param slot (`lw rd,(rd)`) to yield the forwarded caller
+  address, and `IR_LEA` (~712) routes through it. So the defect is subtle (not
+  the headline "address-of var param" path); pin it with on-target disasm of
+  `outer`'s call to `inner` (how the `var op` arg is materialised into a2).

@@ -47,3 +47,13 @@ results are blocked here.
 - 2026-06-22 — Opened from the ESP32-C3 socket-smoke wiring. PAL-direct path
   works on riscv32; net.pas's by-value `TNetAddress` helpers do not. Sibling
   xtensa gap: `feature-xtensa-stack-args-over-6-words`.
+
+- 2026-06-22 — **Attempted (Track A), HALTED: needs an ESP/qemu-system harness.**
+  riscv32 and xtensa are bare-metal/ESP targets — they are NOT in
+  `make cross-bootstrap` (only i386/aarch64/arm32 are) and do NOT run under
+  qemu-USER here: even `program h; begin Halt(7); end.` for `--target=riscv32`
+  hangs (timeout) under `tools/run_target.sh riscv32`. So none of the ESP codegen
+  items can be runtime-verified in the host loop; verification requires
+  qemu-system / the esp-bare / IDF flow (as this ticket's own repro notes:
+  "qemu-system-riscv32 / esp32c3"). Deferred to a session with that harness wired
+  (or real esp32c3/s3 hardware) so fixes ship verified, not blind.
