@@ -16,7 +16,7 @@ _none_
 
 _none_
 
-## backlog (68)
+## backlog (67)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -71,7 +71,6 @@ _none_
 | feature-pal-esp-posix-fd-semantics | B | feature | ESP PAL: exact POSIX fd semantics over ESP-IDF VFS | — |
 | feature-pal-network-datagram-poll-errno | B | feature | PAL network: datagrams, readiness polling, and exact errno semantics | — |
 | feature-parallel-processing | A | feature | Parallel processing as a language feature | feature-unified-heap-allocator |
-| feature-progress-transition-helpers | A | feature | Progress transition helpers (`claim` / `resolve`) | — |
 | feature-random-library | B | feature | Random library — HW/OS/software tiered RNG (cross-target capability test) | — |
 | feature-release-packaging | B | feature | Release packaging, reproducibility manifest, and `release.sh` | — |
 | feature-sat-solver-library | B | feature | SAT solver library — DPLL over CNF (known-instance test app) | — |
@@ -95,7 +94,7 @@ _none_
 | --- | --- | --- | --- | --- |
 | feature-c-runtime-library | B | feature | C runtime/library layer (`lib/crtl`) plus direct C-library packages | feature-c-source-frontend |
 
-## done (152)
+## done (153)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -221,6 +220,7 @@ _none_
 | feature-png-decoder-library | B | feature | PNG decoder library | feature-compression-library, feature-hashing-library, feature-rtl-image-bitmap-library |
 | feature-procedural-types | A | feature | Procedural types and method pointers | — |
 | feature-progress-check-makefile | A | feature | Wire `progress.sh check` into a make target | — |
+| feature-progress-transition-helpers | A | feature | Progress transition helpers (`claim` / `resolve`) | — |
 | feature-relative-path-units | A | feature | Relative/absolute path support in `uses`/`includes` | — |
 | feature-result-in-loop | A | feature | Function `Result` (float) read-modified inside a loop miscompiles to 0 | — |
 | feature-rtl-conversion-and-bitset-library | B | feature | RTL gaps — string/number conversion + a bit-set type (surfaced by the demos) | — |
@@ -311,7 +311,6 @@ _none_
 - [B] feature-pal-esp-posix-fd-semantics
 - [B] feature-pal-network-datagram-poll-errno
 - [A] feature-parallel-processing
-- [A] feature-progress-transition-helpers
 - [B] feature-random-library
 - [B] feature-release-packaging
 - [B] feature-sat-solver-library
