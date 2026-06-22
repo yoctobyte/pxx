@@ -89,3 +89,36 @@ Two ways to get order-independence:
 ## Log
 - 2026-06-21 — filed (Track A), split out of the bare-function-name divergence
   bug as the principled fix for declaration-order strictness.
+- 2026-06-22 — **DONE** (Track A). Implemented the pre-scan as a two-pass over the
+  **program** declaration section in `ParseProgram` (`compiler/parser.inc`):
+  - **Pass 1** (`PreScanPass := True`): the existing decl loop runs normally —
+    `uses`/`var`/`const`/`type` are parsed for real (so every type/const/var name
+    is registered) — but each top-level `procedure`/`function`/`constructor`/
+    `destructor` registers only its **header** (the existing forward path, reused
+    via `(CurTok.Kind = tkForward) or InInterface or PreScanPass`) and its body is
+    skipped by the new `PreScanSkipRoutineBody` (balanced begin/case/try/asm/end
+    counter, recursing into nested routines). Each subroutine's token span is
+    recorded in `DeclItemStart/End`. `generic`/`specialize`/`operator` definitions
+    emit in place (they rewrite the token stream) so `PreScanPass` is cleared
+    around them.
+  - **Pass 2**: replays the recorded spans (`TokPos := DeclItemStart[i]; Next;
+    ParseSubroutine`) to emit the bodies — now with the whole section visible.
+    Methods (`methOwnerCi >= 0`) are not header-registered in pass 1 (they resolve
+    through the class method table built from the type section); only their body
+    is skipped.
+  - `ParseUnit` saves/clears `PreScanPass` so a used unit keeps its normal
+    single-pass behaviour (its interface is already forward-visible; the leak
+    otherwise made `PreScanSkipRoutineBody` eat the `implementation` keyword).
+  - Globals: `PreScanPass`, `DeclItemStart/End[MAX_DECL_ITEMS=32768]`,
+    `DeclItemCount` (`defs.inc`); initialised in `compiler.pas`.
+  - Acceptance `test/test_forward_use.pas` (call-before-define, const/type
+    before declaration, mutual recursion with no `forward`) — wired into
+    `make test-core`; passes on the self-hosted compiler.
+  - Gate: `make test` green; self-host **byte-identical** (1-gen reseed via
+    `make bootstrap`); threadsafe self-host byte-identical; i386/aarch64/arm32
+    build the full compiler; riscv32/xtensa ESP programs build.
+  - Scope note: unit **implementation** sections are not yet pre-scanned (they
+    keep single-pass order); the program-body pre-scan covers the documented
+    self-host pain (compiler is one program). Generic-method specialization at
+    program top level (token-stream mutation during pass 2) is untested — none in
+    the gate.

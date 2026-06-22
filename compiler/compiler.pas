@@ -353,6 +353,8 @@ begin
   CompiledUnitCount := 0;
   InitProcCount := 0;
   InInterface := False;
+  PreScanPass := False;
+  DeclItemCount := 0;
   if (not isC) and (not isBasic) and (not isNilPy) then
     ExpandIncludes(Source, SourceFileDir);
   if DebugTrace then writeln('After include expansion: ', Length(Source));

@@ -31,6 +31,7 @@ const
   MAX_IR      = 131072;
   MAX_LOOP_FIXUPS = 256;
   MAX_GOTO_LABELS = 64;
+  MAX_DECL_ITEMS = 32768;       { top-level subroutine items recorded by the declaration pre-scan }
   MAX_PAS_DEFINES = 1024;       { jedi.inc-grade compatibility headers define hundreds }
   MAX_PAS_DEFINE_CHARS = 32768;
   MAX_PAS_CONDS = 64;
@@ -830,6 +831,15 @@ var
   ErrorIdent : AnsiString;
   LastExprTk : TTypeKind;
   InInterface : Boolean;
+  { Declaration pre-scan (whole-section forward visibility): pass 1 registers
+    every top-level routine header (and all types/consts/vars) with bodies
+    skipped, so a routine may call another declared later (and mutual recursion
+    needs no `forward`). Pass 2 replays the recorded subroutine spans to emit the
+    bodies. See docs/progress/*/feature-declaration-prescan. }
+  PreScanPass : Boolean;        { True while registering headers (pass 1) }
+  DeclItemStart : array[0..MAX_DECL_ITEMS-1] of Integer; { token index of each recorded subroutine }
+  DeclItemEnd   : array[0..MAX_DECL_ITEMS-1] of Integer; { token index just past it }
+  DeclItemCount : Integer;
   CompiledUnits : array[0..255] of Integer;
   CompiledUnitCount : Integer;
   CurrentUnitIdx : Integer; { Strs[] name while parsing an imported unit, else -1 }

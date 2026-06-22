@@ -251,6 +251,8 @@ test-core: $(COMPILER)
 	test "$$(/tmp/test_dotted_uses26)" = "$$(printf '2\n42\n7')"
 	./$(COMPILER) test/test_string_copy_intrinsic.pas /tmp/test_string_copy_intrinsic26
 	test "$$(/tmp/test_string_copy_intrinsic26)" = "$$(printf 'Hello\nWorld\nWorld!\nWorld!\nHel\n0\nHello')"
+	./$(COMPILER) test/test_forward_use.pas /tmp/test_forward_use26
+	test "$$(/tmp/test_forward_use26)" = "$$(printf 'square(7) = 49\nGreeting  = hello\nsum 1..4  = 10\npoint     = 3,4')"
 	./$(COMPILER) test/test_platform_defines.pas /tmp/test_platform_defines_posix26
 	test "$$(/tmp/test_platform_defines_posix26)" = "$$(printf 'platform=posix\nfiles\nsockets\nthreads\ndynlib\nend')"
 	./$(COMPILER) --platform=esp test/test_platform_defines.pas /tmp/test_platform_defines_esp26

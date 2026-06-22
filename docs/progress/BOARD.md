@@ -8,11 +8,9 @@ lives in git, not in a timestamp._
 
 _none_
 
-## working (1)
+## working (0)
 
-| Ticket | Track | Type | Summary | Blocked-by |
-| --- | --- | --- | --- | --- |
-| feature-declaration-prescan | A | feature | Declaration pre-scan — whole-section symbol visibility (kill declare-before-use) | — |
+_none_
 
 ## unfinished (4)
 
@@ -109,7 +107,7 @@ _none_
 
 _none_
 
-## done (139)
+## done (140)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -183,6 +181,7 @@ _none_
 | feature-cross-selfhost-i386 | A | feature | Cross self-host: i386 generated compiler runs under Linux | — |
 | feature-cross-streaming-lfm | A | feature | Component streaming + LFM loading on the cross targets | — |
 | feature-cross-target-feature-parity | A | feature | Cross-target language-feature parity (Intel + ARM) | — |
+| feature-declaration-prescan | A | feature | Declaration pre-scan — whole-section symbol visibility (kill declare-before-use) | — |
 | feature-default-standard-units | A | feature | Default standard units: `System` + `textfile` | — |
 | feature-demo-maze | B | feature | Demo — maze generator + solver | — |
 | feature-demo-sudoku | B | feature | Demo — Sudoku (solver + generator + interactive play) | — |

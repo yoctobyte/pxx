@@ -9307,6 +9307,78 @@ begin
   LocalInitCount := 0;
 end;
 
+procedure PreScanSkipRoutineBody;
+{ Declaration pre-scan helper (pass 1). On entry CurTok is the first token after a
+  routine's header + directives (i.e. the start of its local-declaration part or
+  its `begin`/`asm`). Consumes the local declarations and the body, including the
+  trailing `;`, so the top-level decl walk can continue to the next declaration.
+  Nested routines are skipped recursively so their own `begin..end` do not
+  terminate the enclosing body early. Statement bodies never contain type
+  declarations, so the begin/asm block is closed by a plain begin/case/try/asm
+  vs end depth count. }
+var depth: Integer;
+begin
+  { Local declaration part: advance to this routine's begin/asm, recursing into
+    any nested routine (its keyword is the only begin/asm-bearing construct that
+    can appear here). var/const/type/label tokens — including a local
+    `record..end` — are passed over verbatim; only a nested routine introduces a
+    begin we must not mistake for our own. }
+  while not (CurTok.Kind in [tkBegin, tkAsm, tkEOF]) do
+  begin
+    if CurTok.Kind in [tkProcedure, tkFunction] then
+    begin
+      Next;                       { proc/func keyword }
+      { skip the signature up to the ';' at paren depth 0 }
+      depth := 0;
+      while (CurTok.Kind <> tkEOF) and
+            not ((CurTok.Kind = tkSemicolon) and (depth = 0)) do
+      begin
+        if CurTok.Kind = tkLParen then Inc(depth)
+        else if CurTok.Kind = tkRParen then Dec(depth);
+        Next;
+      end;
+      Eat(tkSemicolon);
+      { skip calling-convention / directive clauses }
+      while ((CurTok.Kind = tkIdent) and
+             (CaseEqual(CurTok.SVal, 'inline') or CaseEqual(CurTok.SVal, 'register') or
+              CaseEqual(CurTok.SVal, 'cdecl') or CaseEqual(CurTok.SVal, 'assembler') or
+              CaseEqual(CurTok.SVal, 'generator') or CaseEqual(CurTok.SVal, 'async') or
+              CaseEqual(CurTok.SVal, 'stackful') or CaseEqual(CurTok.SVal, 'stackless') or
+              CaseEqual(CurTok.SVal, 'iram') or CaseEqual(CurTok.SVal, 'interrupt') or
+              CaseEqual(CurTok.SVal, 'external'))) or
+            (CurTok.Kind = tkOverload) do
+      begin
+        if (CurTok.Kind = tkIdent) and CaseEqual(CurTok.SVal, 'external') then
+        begin
+          { external clause has no body; consume to its terminating ';' }
+          while (CurTok.Kind <> tkEOF) and (CurTok.Kind <> tkSemicolon) do Next;
+        end
+        else
+          Next;
+        Eat(tkSemicolon);
+      end;
+      if CurTok.Kind = tkForward then begin Next; Eat(tkSemicolon); end
+      else
+        PreScanSkipRoutineBody;   { nested routine body }
+    end
+    else
+      Next;
+  end;
+  { Body: balanced begin/asm .. end (case/try open inner ends too). }
+  if CurTok.Kind in [tkBegin, tkAsm] then
+  begin
+    depth := 1;
+    Next;
+    while (depth > 0) and (CurTok.Kind <> tkEOF) do
+    begin
+      if CurTok.Kind in [tkBegin, tkCase, tkTry, tkAsm, tkRecord] then Inc(depth)
+      else if CurTok.Kind = tkEnd then Dec(depth);
+      Next;
+    end;
+  end;
+  Eat(tkSemicolon);
+end;
+
 procedure ParseSubroutine;
 var
   isFunc   : Boolean;
@@ -9342,6 +9414,7 @@ var
   doneArgs, doneParam, isArr, isByRef, isConst, declOverload, isClassKeyword, isStaticMethod: Boolean;
   needsProcCleanupFrame, savedProcCleanupFrameActive: Boolean;
   isAsmFunc: Boolean;
+  preScanBody: Boolean;
   isGenerator, isStackless, isAsync: Boolean;
   isIram, isInterrupt: Boolean;
   savedGenIsGen, savedGenSeen, savedGenStackless, savedProcIsAsync: Boolean;
@@ -9785,52 +9858,61 @@ begin
     Exit;
   end;
 
-  { Forward declaration or interface declaration? }
-  if (CurTok.Kind = tkForward) or InInterface then
+  { Forward / interface declaration, or the declaration pre-scan pass. In all
+    three cases the routine's signature is registered without emitting a body.
+    During the pre-scan (PreScanPass) the body tokens are then skipped so the
+    top-level walk continues; a method (methOwnerCi >= 0) is left to the body
+    pass — it resolves through its class method table, not by name. }
+  if (CurTok.Kind = tkForward) or InInterface or PreScanPass then
   begin
+    preScanBody := PreScanPass and (CurTok.Kind <> tkForward);
     if CurTok.Kind = tkForward then
     begin
       Next; Eat(tkSemicolon);
     end;
-    procIdx := FindProcOverload(name, nparams, ptypes, parr, pbyref);
-    if procIdx < 0 then
+    if (not PreScanPass) or (methOwnerCi < 0) then
     begin
-      if StrictOverload and (FindProc(name) >= 0) then
+      procIdx := FindProcOverload(name, nparams, ptypes, parr, pbyref);
+      if procIdx < 0 then
       begin
-        if not declOverload then Error('overloaded routine requires overload directive');
-        if HasNonOverloadProc(name) then Error('all overloaded routines require overload directive');
-      end;
-      procIdx := RegisterProc(name, isFunc, retType, nparams, pnames, ptypes);
-      ProcRetRecId[procIdx] := retRecId;
-      ProcOverloadDirective[procIdx] := declOverload;
-      Procs[procIdx].BodyAddr := -1;
-      for i := 0 to nparams-1 do
-      begin
-        Procs[procIdx].Params[i].IsArray := parr[i];
-        Procs[procIdx].Params[i].IsRef := pbyref[i];
-        { Persist the param metadata the call-site lowering reads, so a call made
-          BEFORE the body is parsed (e.g. a lifted nested routine, whose
-          definition is deferred to top level) lowers identically to one after.
-          Without ProcParamDynDepth a `var dyn-array` arg passes the handle value
-          instead of &slot → SetLength corrupts memory. }
-        if i < 16 then
+        if StrictOverload and (FindProc(name) >= 0) then
         begin
-          if pDynDepth[i] > 0 then ProcParamDynDepth[procIdx * 16 + i] := pDynDepth[i];
-          ProcParamIsConst[procIdx * 16 + i] := pconst[i];
-          if (ptypes[i] = tyClass) or (ptypes[i] = tyRecord) then
-            ProcParamRecId[procIdx * 16 + i] := ptypesRec[i];
+          if not declOverload then Error('overloaded routine requires overload directive');
+          if HasNonOverloadProc(name) then Error('all overloaded routines require overload directive');
         end;
-      end;
-    end
-    else if declOverload then
-      ProcOverloadDirective[procIdx] := True;
-    ProcRetRecId[procIdx] := retRecId;
-    ProcRetIsDynArray[procIdx] := retIsDynArr;
-    ProcRetElemTk[procIdx] := retElemTk;
-    ProcRetElemRec[procIdx] := retElemRec;
-    ProcRetPtrElemTk[procIdx] := retPtrElemTk;
-    ProcRetPtrElemRec[procIdx] := retPtrElemRec;
-    if retIsDynArr then Procs[procIdx].RetType := tyPointer; { 8-byte heap handle ABI }
+        procIdx := RegisterProc(name, isFunc, retType, nparams, pnames, ptypes);
+        ProcRetRecId[procIdx] := retRecId;
+        ProcOverloadDirective[procIdx] := declOverload;
+        Procs[procIdx].BodyAddr := -1;
+        for i := 0 to nparams-1 do
+        begin
+          Procs[procIdx].Params[i].IsArray := parr[i];
+          Procs[procIdx].Params[i].IsRef := pbyref[i];
+          { Persist the param metadata the call-site lowering reads, so a call made
+            BEFORE the body is parsed (e.g. a lifted nested routine, whose
+            definition is deferred to top level) lowers identically to one after.
+            Without ProcParamDynDepth a `var dyn-array` arg passes the handle value
+            instead of &slot → SetLength corrupts memory. }
+          if i < 16 then
+          begin
+            if pDynDepth[i] > 0 then ProcParamDynDepth[procIdx * 16 + i] := pDynDepth[i];
+            ProcParamIsConst[procIdx * 16 + i] := pconst[i];
+            if (ptypes[i] = tyClass) or (ptypes[i] = tyRecord) then
+              ProcParamRecId[procIdx * 16 + i] := ptypesRec[i];
+          end;
+        end;
+      end
+      else if declOverload then
+        ProcOverloadDirective[procIdx] := True;
+      ProcRetRecId[procIdx] := retRecId;
+      ProcRetIsDynArray[procIdx] := retIsDynArr;
+      ProcRetElemTk[procIdx] := retElemTk;
+      ProcRetElemRec[procIdx] := retElemRec;
+      ProcRetPtrElemTk[procIdx] := retPtrElemTk;
+      ProcRetPtrElemRec[procIdx] := retPtrElemRec;
+      if retIsDynArr then Procs[procIdx].RetType := tyPointer; { 8-byte heap handle ABI }
+    end;
+    if preScanBody then PreScanSkipRoutineBody;
     Exit;
   end;
 
@@ -11382,8 +11464,13 @@ end;
 procedure ParseUnit;
 var
   uname: AnsiString;
-  doneUses, savedInterface, doneImp: Boolean;
+  doneUses, savedInterface, doneImp, savedPreScan: Boolean;
 begin
+  { A used unit parses in its own normal (single-pass) mode: its interface is
+    already forward-visible, so the enclosing program's pre-scan must not leak in
+    and make ParseSubroutine skip the unit's bodies. }
+  savedPreScan := PreScanPass;
+  PreScanPass := False;
   Expect(tkUnit, 'unit');
   if CurTok.Kind <> tkIdent then Error('expected unit name');
   uname := ReadDottedUsesName;   { accept dotted `unit Posix.SysSocket;` headers }
@@ -11480,6 +11567,7 @@ begin
   end;
 
   InInterface := savedInterface;
+  PreScanPass := savedPreScan;
 
   Expect(tkEnd, 'end');
   Expect(tkDot, '.');
@@ -11590,7 +11678,7 @@ end;
 procedure ParseProgram;
 var jmpPatch, i, j: Integer; doneUses, doneDecls, hasExceptions, needsBuiltin,
     needsHeap, needsAnsiRuntime, needHeapUnit, hasCoroutine, needsTextfile: Boolean;
-    savedUnitIdx: Integer;
+    savedUnitIdx, afterDeclTok: Integer;
     dummyNames: array[0..7] of AnsiString;
     dummyTypes: array[0..7] of TTypeKind;
 begin
@@ -11899,6 +11987,16 @@ begin
   if needsTextfile then ParseUsesUnit('textfile');
   FixupTVarRecLayout;
 
+  { ===== Declaration pre-scan (pass 1) =====
+    Walk the program's top-level declarations registering every routine's header
+    (signature), and parsing types/consts/vars/uses for real, but SKIPPING the
+    routine bodies — recording each subroutine's token span. After this pass the
+    whole section is visible, so a routine may call any other regardless of
+    source order and mutual recursion needs no `forward`. Generic/operator/
+    specialize/label declarations are handled in full here (not body-deferred);
+    they keep their existing source-order visibility. }
+  PreScanPass := True;
+  DeclItemCount := 0;
   doneDecls := False;
   while not doneDecls do
     case CurTok.Kind of
@@ -11918,16 +12016,33 @@ begin
       tkType:     ParseTypeSection;
       tkClass,
       tkProcedure,
-      tkFunction: ParseSubroutine;
+      tkFunction:
+      begin
+        if DeclItemCount >= MAX_DECL_ITEMS then Error('too many top-level declarations');
+        DeclItemStart[DeclItemCount] := TokPos - 1;
+        ParseSubroutine;
+        DeclItemEnd[DeclItemCount] := TokPos - 1;
+        Inc(DeclItemCount);
+      end;
       tkIdent:
+        { generic / specialize / operator definitions emit their body in place
+          (and rewrite the token stream), so they are parsed in full during the
+          pre-scan pass — not body-deferred — by clearing PreScanPass around
+          them. They are not recorded for the body pass. }
         if CaseEqual(CurTok.SVal, 'generic') then
-          ParseGenericFunctionDef
+        begin PreScanPass := False; ParseGenericFunctionDef; PreScanPass := True; end
         else if CaseEqual(CurTok.SVal, 'specialize') then
-          ParseTopLevelSpecialize
+        begin PreScanPass := False; ParseTopLevelSpecialize; PreScanPass := True; end
         else if CaseEqual(CurTok.SVal, 'operator') then
-          ParseOperatorDef
+        begin PreScanPass := False; ParseOperatorDef; PreScanPass := True; end
         else if CaseEqual(CurTok.SVal, 'constructor') or CaseEqual(CurTok.SVal, 'destructor') then
-          ParseSubroutine
+        begin
+          if DeclItemCount >= MAX_DECL_ITEMS then Error('too many top-level declarations');
+          DeclItemStart[DeclItemCount] := TokPos - 1;
+          ParseSubroutine;
+          DeclItemEnd[DeclItemCount] := TokPos - 1;
+          Inc(DeclItemCount);
+        end
         else if CaseEqual(CurTok.SVal, 'label') then
         begin
           Next;
@@ -11948,6 +12063,21 @@ begin
       else
         doneDecls := True;
     end;
+  PreScanPass := False;
+  afterDeclTok := TokPos - 1;   { the program-body `begin` (re-read after pass 2) }
+
+  { ===== Body pass (pass 2) =====
+    Re-parse each recorded subroutine, now with the whole section visible, to emit
+    its body (the header pass left it as a forward; this completes it). Spans are
+    replayed in source order so body code lands in its original relative order. }
+  for i := 0 to DeclItemCount - 1 do
+  begin
+    TokPos := DeclItemStart[i];
+    Next;
+    ParseSubroutine;
+  end;
+  TokPos := afterDeclTok;
+  Next;
 
   { Patch jmp to point here (start of main body) }
   if TargetArch = TARGET_ARM32 then
