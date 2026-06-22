@@ -32,3 +32,4 @@
 2026-06-21T13:31:06Z  v32  c01e163bedc66cbaae3c37c1f3cd00919a6af464f1b6b6c08f362f17b0300fa8  4c88d92366807d87e6ea8e76b552dabbb798b445  docs(ticket): esp-float Round/Frac/Int done; core functionally complete
 2026-06-22T08:54:51Z  v33  489d7da765540f33c587438a10826588996a24ea528c79cbb29024d6c4effa41  c87785dc8782c12a64a37128e605d6e4cef28174  refactor(parser): harden all 9 paramless self-recursion sites to F()
 2026-06-22T10:44:32Z  v34  73edfe40be62f1064c4e860874520cc4a3019af3b7a87ab893ffeddf300e678e  5153dd771c3f9aa742b08e84d3b1b0f2b845bddf  fix(parser): local variable shadows same-named paramless function
+2026-06-22T11:45:31Z  v35  7d30d1e8d65991e4c2e55c75a9c160e1a8228e9d48b224dc9ce9d05a6b9ce017  4a37b0060c16c3e182963129ec451bcdfa58a50c  fix(parser): named dyn-array alias as a class/record field is a real dyn array
