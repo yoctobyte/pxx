@@ -62,7 +62,7 @@ FPC objfpc oracle-matched.
   PXX rejects typeless params; `@varparam` yields the referent address (works);
   `PXXMemMove` is memcpy not memmove; only `PXXMemZero` exists.
 
-- 2026-06-22 — **DONE.** Implemented as designed. Parser accepts a typeless
+- 2026-06-22 — **DONE** (landed aafd222). Implemented as designed. Parser accepts a typeless
   `var`/`const`/`out` param (no colon) -> `tyPointer` + by-ref + `puntyped`
   marker (parser.inc, proc param loop); plumbed to `ProcParamUntyped`
   (defs.inc) at both registration sites. MatchProcCall / MatchProcCallInUnit
