@@ -407,6 +407,8 @@ test-core: $(COMPILER)
 	test "$$(/tmp/test_local_tc26)" = "$$(printf '100\na\nb\nc\n42\n100')"
 	./$(COMPILER) test/test_func_name_result_read.pas /tmp/test_fnresult26
 	test "$$(/tmp/test_fnresult26)" = "$$(printf '33\n0\nhi!\n120')"
+	./$(COMPILER) test/test_func_name_paramless_result.pas /tmp/test_fnresult_pl26
+	test "$$(/tmp/test_fnresult_pl26)" = "$$(printf '0 1\n8\n55')"
 	./$(COMPILER) test/test_eof_stdin.pas /tmp/test_eof26
 	test "$$(printf 'x\ny' | /tmp/test_eof26)" = "$$(printf '1: x\n2: y\ntotal 2')"
 	test "$$(printf '' | /tmp/test_eof26)" = "total 0"

@@ -3672,7 +3672,6 @@ begin
         node := AllocNode(AN_INT_LIT); ASTIVal[node] := Syms[idx].ConstVal; ASTTk[node] := Ord(Syms[idx].TypeKind); CurASTNode := node; Next;
       end
       else if (CurProc >= 0) and Procs[CurProc].IsFunc and
-              (Procs[CurProc].ParamCount > 0) and
               (Tokens[TokPos].Kind <> tkLParen) and
               ((name = Procs[CurProc].Name) or
                CaseEqual(name, LastDotName(Procs[CurProc].Name))) then
@@ -3683,12 +3682,12 @@ begin
           read side. A following `(` is a recursive call, not a result read, so
           it is excluded above and falls through to the call paths below.
 
-          Restricted to ParamCount > 0: with parameters, a bare name (no parens)
-          cannot be a call, so it is unambiguously the result. For a PARAMLESS
-          function PXX keeps the historical meaning of bare own-name = recursive
-          call (the self-hosted compiler relies on it, e.g. `r := ConstEval` in
-          ConstEval's parenthesised-expr branch) — flipping that would silently
-          break self-host. Trailing `.field`/`[i]`/`^` resolve via ParseLValueAST. }
+          Now FPC-faithful for ALL param counts (the paramless flip, bug-bare-
+          function-name-call-vs-resultvar). A bare paramless own-name no longer
+          recurses — `F()` is required to recurse. The 9 paramless self-recursion
+          sites in the frontend were pre-hardened to explicit `F()` (commit
+          c87785d) before this flip, so self-host stays byte-identical. Trailing
+          `.field`/`[i]`/`^` resolve via ParseLValueAST. }
         Next;
         CurASTNode := ParseLValueAST(Procs[CurProc].RetSymIdx, TokPos - 2);
         LastExprTk := IntToTypeKind(ASTTk[CurASTNode]);
