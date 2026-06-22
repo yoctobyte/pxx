@@ -42,3 +42,4 @@ units). It runs correctly: perft(1..4) = 20 / 400 / 8902 / 197281 (standard
 starting-position values). Acceptance met — chess advances well past
 `platform.pas:185`. Closing; the flagship oracle/benchmark scope stays in
 feature-demo-chess.
+  Verified compiling + correct perft on pinned v37 (commit a89bb11).
