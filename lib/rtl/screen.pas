@@ -24,6 +24,23 @@ const
   ATTR_UNDERLINE = 4;
   ATTR_REVERSE   = 8;
 
+  { Key codes from ScreenReadKey / ScreenDecodeKey. Plain bytes come back as
+    their ordinal (0..255, so Enter=13, Tab=9, Backspace=127); the codes below
+    (>255) are the non-byte keys. }
+  KEY_NONE    = -1;               { no key available (non-blocking read) }
+  KEY_UNKNOWN = 1000;
+  KEY_UP      = 1001;
+  KEY_DOWN    = 1002;
+  KEY_RIGHT   = 1003;
+  KEY_LEFT    = 1004;
+  KEY_HOME    = 1005;
+  KEY_END     = 1006;
+  KEY_PGUP    = 1007;
+  KEY_PGDN    = 1008;
+  KEY_INS     = 1009;
+  KEY_DEL     = 1010;
+  KEY_ESC     = 1011;
+
 { Allocate a cols x rows screen. The front buffer is primed to a state that
   differs from every back cell, so the first ScreenRender paints everything. }
 procedure ScreenInitSize(cols, rows: Integer);
@@ -45,6 +62,14 @@ procedure ScreenBox(x, y, w, h: Integer);                { ASCII border }
 function ScreenRender: AnsiString;
 { ScreenRender + write it to stdout. }
 procedure ScreenRefresh;
+
+{ --- input --- }
+{ Decode a key/escape sequence (ESC[A, ESC[3~, ESCOA, a plain byte, ...) into a
+  byte ordinal or a KEY_* constant. Pure — testable without a terminal. }
+function ScreenDecodeKey(const seq: AnsiString): Integer;
+{ Read one key event from stdin (raw mode assumed): a plain byte's ordinal, a
+  KEY_* constant for an escape sequence, or KEY_NONE when nothing is waiting. }
+function ScreenReadKey: Integer;
 
 implementation
 
@@ -198,6 +223,79 @@ end;
 procedure ScreenRefresh;
 begin
   Write(ScreenRender);
+end;
+
+function ScreenDecodeKey(const seq: AnsiString): Integer;
+var n, num, i: Integer; lastc: Char;
+begin
+  n := Length(seq);
+  if n = 0 then
+  begin
+    ScreenDecodeKey := KEY_UNKNOWN;
+    Exit;
+  end;
+  if n = 1 then
+  begin
+    if seq[1] = #27 then ScreenDecodeKey := KEY_ESC
+    else ScreenDecodeKey := Ord(seq[1]);   { plain byte: Enter=13, Tab=9, BS=127 }
+    Exit;
+  end;
+  { multi-byte must be a CSI (ESC[) or SS3 (ESCO) sequence }
+  if (seq[1] <> #27) or ((seq[2] <> '[') and (seq[2] <> 'O')) then
+  begin
+    ScreenDecodeKey := KEY_UNKNOWN;
+    Exit;
+  end;
+  lastc := seq[n];
+  if lastc = 'A' then ScreenDecodeKey := KEY_UP
+  else if lastc = 'B' then ScreenDecodeKey := KEY_DOWN
+  else if lastc = 'C' then ScreenDecodeKey := KEY_RIGHT
+  else if lastc = 'D' then ScreenDecodeKey := KEY_LEFT
+  else if lastc = 'H' then ScreenDecodeKey := KEY_HOME
+  else if lastc = 'F' then ScreenDecodeKey := KEY_END
+  else if lastc = '~' then
+  begin
+    num := 0;
+    for i := 3 to n - 1 do
+      if (seq[i] >= '0') and (seq[i] <= '9') then num := num * 10 + (Ord(seq[i]) - Ord('0'));
+    if (num = 1) or (num = 7) then ScreenDecodeKey := KEY_HOME
+    else if (num = 4) or (num = 8) then ScreenDecodeKey := KEY_END
+    else if num = 2 then ScreenDecodeKey := KEY_INS
+    else if num = 3 then ScreenDecodeKey := KEY_DEL
+    else if num = 5 then ScreenDecodeKey := KEY_PGUP
+    else if num = 6 then ScreenDecodeKey := KEY_PGDN
+    else ScreenDecodeKey := KEY_UNKNOWN;
+  end
+  else
+    ScreenDecodeKey := KEY_UNKNOWN;
+end;
+
+function ScreenReadKey: Integer;
+var c, extra: Char; seq: AnsiString; guard: Integer;
+begin
+  c := AnsiReadKey;
+  if c = #0 then
+  begin
+    ScreenReadKey := KEY_NONE;
+    Exit;
+  end;
+  if c <> #27 then
+  begin
+    ScreenReadKey := Ord(c);
+    Exit;
+  end;
+  { ESC: gather the rest of the sequence (a real key arrives as one burst, so the
+    follow-on bytes are already buffered; a lone ESC reads nothing more). }
+  seq := '' + c;
+  guard := 0;
+  extra := AnsiReadKey;
+  while (extra <> #0) and (guard < 8) do
+  begin
+    seq := seq + extra;
+    guard := guard + 1;
+    extra := AnsiReadKey;
+  end;
+  ScreenReadKey := ScreenDecodeKey(seq);
 end;
 
 end.
