@@ -22,7 +22,7 @@ _none_
 | --- | --- | --- | --- | --- |
 | feature-c-runtime-library | B | feature | C runtime/library layer (`lib/crtl`) plus direct C-library packages | feature-c-source-frontend |
 
-## backlog (43)
+## backlog (42)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -49,7 +49,6 @@ _none_
 | feature-inline-routines | A | feature | Inline routine expansion (`inline;`) | — |
 | feature-lazy-standard-unit-emission | A | feature | Lazy standard-unit emission / routine-level dead-code elimination | — |
 | feature-metaclass-descendant-enforcement | A | feature | Metaclass alias descendant-constraint enforcement | — |
-| feature-mimic-fpc | A | feature | `mimic FPC` compatibility mode | feature-directive-if-numeric |
 | feature-networking | B | feature | Networking runtime | — |
 | feature-nilpy-idf-import | A | feature | nilpy includes anything from ESP-IDF and it just works | feature-c-source-frontend, feature-esp32-idf-xtensa |
 | feature-nil-python-frontend | A | feature | Nil Python frontend (`.npy`) | — |
@@ -62,7 +61,7 @@ _none_
 | feature-real-cross-target-consistency | A | feature | Verify `real`/Double bit-consistency across targets (x87 divergence?) | — |
 | feature-release-packaging | B | feature | Release packaging, reproducibility manifest, and `release.sh` | — |
 | feature-riscv32-record-function-results | A | feature | riscv32: support record (by-value struct) function results | — |
-| feature-synapse-compile-check | B | feature | Synapse library — proper compile check (Track B) | /, —, {$MIMIC, A, [[feature-mimic-fpc]], --mimic-fpc, the, (Track |
+| feature-synapse-compile-check | B | feature | Synapse library — proper compile check (Track B) | feature-mimic-fpc |
 | feature-threadsafe-io-serialization | A | feature | Statement-level I/O serialization under threads | feature-unified-heap-allocator |
 | feature-toolchain-cli-ux | A | feature | Toolchain CLI / user tooling (install, config, discovery, doctor, selfcheck) | — |
 | feature-writeln-as-library | B | feature | write/writeln as a library function (via `array of const` + variadic sugar) | — |
@@ -94,12 +93,13 @@ _none_
 | idea-unit-rename-import | B | idea | `uses X as Y` unit-rename import (dialect extension) | — |
 | idea-visibility-enforcement | B | idea | Enforce private/protected visibility | — |
 
-## done-followup (3)
+## done-followup (4)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
 | feature-async-language-surface | A | feature | Async language surface + stackless coroutine backend | feature-cross-target-feature-parity |
 | feature-interfaces | A | feature | Interfaces | — |
+| feature-mimic-fpc | B | feature | `mimic FPC` compatibility mode | — |
 | feature-string-model-tyfixedstring | B | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
 ## done (178)
@@ -317,7 +317,6 @@ _none_
 - [A] feature-inline-routines
 - [A] feature-lazy-standard-unit-emission
 - [A] feature-metaclass-descendant-enforcement
-- [A] feature-mimic-fpc
 - [B] feature-networking
 - [A] feature-nil-python-frontend
 - [A] feature-object-reference-type
@@ -346,19 +345,15 @@ _none_
 - **2** — feature-c-source-frontend
 - **2** — feature-cross-target-feature-parity
 - **2** — feature-cross-managed-string-cow
-- **1** — (Track
-- **1** — the
-- **1** — --mimic-fpc
 - **1** — feature-terminal-ansi-library
 - **1** — feature-target-esp32
 - **1** — feature-target-arm32
-- **1** — [[feature-mimic-fpc]]
+- **1** — feature-mimic-fpc
 - **1** — feature-managed-exception-cleanup
 - **1** — feature-image-ascii-renderer-library
 - **1** — feature-hashing-library
 - **1** — feature-esp32-idf-xtensa
 - **1** — feature-elf-rel-writer
-- **1** — feature-directive-if-numeric
 - **1** — feature-cross-selfhost-i386
 - **1** — feature-cross-selfhost-arm32
 - **1** — feature-cross-selfhost-aarch64
@@ -369,7 +364,3 @@ _none_
 - **1** — chore-qemu-test-env
 - **1** — chore-inc-to-units
 - **1** — bug-managed-byref-string-param-store
-- **1** — A
-- **1** — {$MIMIC
-- **1** — —
-- **1** — /
