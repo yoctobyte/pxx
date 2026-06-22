@@ -56,6 +56,16 @@ procedure ScreenClear;                                   { blank with current pe
 procedure ScreenPutChar(x, y: Integer; ch: Char);
 procedure ScreenWrite(x, y: Integer; const s: AnsiString);
 procedure ScreenBox(x, y, w, h: Integer);                { ASCII border }
+procedure ScreenHLine(x, y, len: Integer; ch: Char);
+procedure ScreenVLine(x, y, len: Integer; ch: Char);
+procedure ScreenFillRect(x, y, w, h: Integer; ch: Char);
+
+{ Enter/leave full-screen mode (raw mode + xterm alternate buffer + cursor
+  hidden, then a blank paint). ScreenStart sizes to the real terminal; ScreenEnd
+  restores it. They touch the real tty, so they are not part of the byte-exact
+  test (which drives Render/decoder directly). }
+procedure ScreenStart;
+procedure ScreenEnd;
 
 { Compute the minimal escape string to bring the terminal from the front buffer
   to the back buffer, and fold back -> front. Pure of terminal I/O. }
@@ -220,9 +230,44 @@ begin
   ScreenRender := outp;
 end;
 
+procedure ScreenHLine(x, y, len: Integer; ch: Char);
+var i: Integer;
+begin
+  for i := 0 to len - 1 do ScreenPutChar(x + i, y, ch);
+end;
+
+procedure ScreenVLine(x, y, len: Integer; ch: Char);
+var i: Integer;
+begin
+  for i := 0 to len - 1 do ScreenPutChar(x, y + i, ch);
+end;
+
+procedure ScreenFillRect(x, y, w, h: Integer; ch: Char);
+var j: Integer;
+begin
+  for j := 0 to h - 1 do ScreenHLine(x, y + j, w, ch);
+end;
+
 procedure ScreenRefresh;
 begin
   Write(ScreenRender);
+end;
+
+procedure ScreenStart;
+begin
+  AnsiSetRawMode(True);
+  Write(AnsiAltScreen(True));
+  Write(AnsiHideCursor);
+  ScreenInit;          { size to the real terminal + alloc buffers }
+  ScreenClear;
+  ScreenRefresh;       { blank the alternate screen }
+end;
+
+procedure ScreenEnd;
+begin
+  Write(AnsiShowCursor);
+  Write(AnsiAltScreen(False));
+  AnsiSetRawMode(False);
 end;
 
 function ScreenDecodeKey(const seq: AnsiString): Integer;

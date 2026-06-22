@@ -61,6 +61,21 @@ begin
   exp := '' + E + '[1;1H' + E + '[0m' + E + '[1m' + E + '[31m' + 'R';
   Check('pen', r, exp);
 
+  { --- draw primitives: after a blank paint, a draw emits only its cells --- }
+  ScreenInitSize(5, 3);
+  r := ScreenRender;                 { paint blank, front == back }
+  ScreenHLine(1, 1, 3, '=');
+  r := ScreenRender;
+  exp := '' + E + '[2;2H' + E + '[0m' + '===';
+  Check('hline', r, exp);
+
+  ScreenInitSize(3, 2);
+  r := ScreenRender;
+  ScreenFillRect(0, 0, 2, 2, '#');
+  r := ScreenRender;
+  exp := '' + E + '[1;1H' + E + '[0m' + '##' + E + '[2;1H' + '##';
+  Check('fillrect', r, exp);
+
   { --- key decoder (pure, exact). Sequences go through a variable first to
     sidestep bug-ansistring-concat-arg-static-bloat (a concat expression passed
     straight as an arg reserves ~8 MB of BSS per call site). --- }
