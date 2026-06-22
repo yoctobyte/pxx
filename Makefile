@@ -2085,6 +2085,8 @@ lib-test: pxx-stable-check
 	test "$$(/tmp/lib_dns_resolve)" = "$$(printf 'rcode=0\ncount=2\nip0=ok\nip1=ok')"
 	$(PXX_STABLE) -Fulib/rtl/platform/posix test/lib_dns_facade.pas /tmp/lib_dns_facade
 	test "$$(/tmp/lib_dns_facade)" = "$$(printf 'hosts-hit=ok\nwire-rcode=0\nwire-count=2\nwire-ip0=ok')"
+	$(PXX_STABLE) -Fulib/rtl/platform/posix test/lib_dns_spoof.pas /tmp/lib_dns_spoof
+	test "$$(/tmp/lib_dns_spoof)" = "$$(printf 'badid=ok\ncount=0')"
 	@if command -v qemu-aarch64 >/dev/null 2>&1 && command -v qemu-arm >/dev/null 2>&1; then \
 	  echo "=== lib-test cross: PAL net primitives under qemu-user (i386/aarch64/arm32) ==="; \
 	  for arch in i386 aarch64 arm32; do \

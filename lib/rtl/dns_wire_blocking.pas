@@ -11,7 +11,7 @@ unit dns_wire_blocking;
 
 interface
 
-uses platform, dns_wire_core;
+uses platform, dns_wire_core, random;
 
 const
   DNS_PORT = 53;
@@ -26,13 +26,27 @@ function DnsResolveA(nsHost: LongWord; nsPort: Integer; const name: string;
 
 implementation
 
-const
-  QUERY_ID = $4242;   { fixed for the first slice; randomize per-query later }
+var
+  gSeeded: Boolean;   { lazy one-time seed of the query-id generator }
+
+{ A per-query transaction id. Combined with the OS-random source port this is
+  the basic off-path spoofing defense — a fixed id is trivially forgeable.
+  Seeded from the monotonic clock; not cryptographic (LCG), good enough for the
+  id+port entropy budget, to be upgraded to a CSPRNG later. }
+function NextQueryId: Integer;
+begin
+  if not gSeeded then
+  begin
+    RandSeed(LongWord(PalMonotonicMillis));
+    gSeeded := True;
+  end;
+  NextQueryId := Random(65536);
+end;
 
 function DnsResolveA(nsHost: LongWord; nsPort: Integer; const name: string;
   var ips: TDnsIpv4Array; var count: Integer; timeoutMs: Integer): Integer;
 var
-  sock, qlen, pr, i: Integer;
+  sock, qlen, pr, i, queryId: Integer;
   qbuf: array[0..511] of Byte;
   rbuf: array[0..1535] of Byte;
   n: Int64;
@@ -42,7 +56,8 @@ var
   fromPort: Integer;
 begin
   count := 0;
-  qlen := DnsBuildQueryA(name, QUERY_ID, @qbuf[0]);
+  queryId := NextQueryId;
+  qlen := DnsBuildQueryA(name, queryId, @qbuf[0]);
   if qlen < 0 then
   begin
     DnsResolveA := qlen;
@@ -93,7 +108,7 @@ begin
     DnsResolveA := rcode;
     Exit;
   end;
-  if outId <> QUERY_ID then
+  if outId <> queryId then
   begin
     DnsResolveA := DNS_ERR_BADID;
     Exit;
