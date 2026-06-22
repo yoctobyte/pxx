@@ -2201,6 +2201,8 @@ lib-test: pxx-stable-check
 	test "$$(/tmp/lib_screen | tail -1)" = "ALL OK"
 	$(PXX_STABLE) test/lib_lineedit.pas /tmp/lib_lineedit
 	test "$$(/tmp/lib_lineedit | tail -1)" = "ALL OK"
+	$(PXX_STABLE) test/lib_menu.pas /tmp/lib_menu
+	test "$$(/tmp/lib_menu | tail -1)" = "ALL OK"
 	$(PXX_STABLE) test/lib_ansirender.pas /tmp/lib_ansirender
 	test "$$(/tmp/lib_ansirender)" = "OK"
 	$(PXX_STABLE) -Fulib/rtl/platform/posix test/lib_process.pas /tmp/lib_process
