@@ -2,9 +2,10 @@
 
 - **Type:** feature
 - **Track:** B
-- **Status:** backlog
+- **Status:** done
 - **Owner:** —
 - **Opened:** 2026-06-20
+- **Closed:** 2026-06-20
 - **Relation:** Track B RTL foundation for PNG import, image conversion, and
   future graphics/image libraries.
 
@@ -41,3 +42,6 @@ slice.
 - Keep the first version byte-oriented and simple: 8-bit channels, row-major
   layout.
 - Avoid GUI concepts such as canvases, handles, fonts, or windows in this unit.
+
+## Log
+- 2026-06-20 — Landed `lib/rtl/image.pas` with `TRGBA` pixel and `TImage` bitmap records, initializers, boundary check, set/get pixel, and clear helpers. Tested in `test/lib_png.pas` (commit 44f7371).

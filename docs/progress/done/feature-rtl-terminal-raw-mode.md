@@ -1,9 +1,10 @@
 # Terminal raw mode and unbuffered input support (libc-free)
 
 - **Type:** feature
-- **Status:** backlog
+- **Status:** done
 - **Owner:** —
 - **Opened:** 2026-06-21
+- **Closed:** 2026-06-21
 - **Relation:** Stresses terminal state configuration and unbuffered input handling. Blocker for feature-demo-file-browser and feature-demo-video-player.
 
 ## Goal
@@ -25,3 +26,4 @@ In `lib/rtl/ansiterm.pas`:
 
 ## Log
 - 2026-06-21 — Opened.
+- 2026-06-21 — Landed libc-free `AnsiSetRawMode` and `AnsiReadKey` in `lib/rtl/ansiterm.pas`, using raw syscall ioctl and fcntl to support unbuffered keyboard event reading. Tested in `test/lib_ansiterm.pas` (commit 14832e1).

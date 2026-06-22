@@ -49,4 +49,4 @@ no port; no self-host / cross regression.
 
 ## Log
 - 2026-06-19 — Opened from the demo/library organization pass.
-- 2026-06-20 — Landed `lib/rtl/hashing.pas` with `CRC32*` (streaming + chunk) and `Adler32`. Used by the new `zlib` and `png` units. Wired into `lib-test` / `library-suite-green` via `test/lib_zlib.pas` and `test/lib_png.pas`.
+- 2026-06-20 — Landed `lib/rtl/hashing.pas` with `CRC32*` (streaming + chunk) and `Adler32` (commit 1bd5c47). Used by the new `zlib` and `png` units. Wired into `lib-test` / `library-suite-green` via `test/lib_zlib.pas` and `test/lib_png.pas`.

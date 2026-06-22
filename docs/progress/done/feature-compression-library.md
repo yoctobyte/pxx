@@ -44,4 +44,4 @@ the shared type). No self-host / cross regression.
 
 ## Log
 - 2026-06-19 — Opened from the demo/library organization pass.
-- 2026-06-20 — Landed `lib/rtl/zlib.pas`: RFC 1950/1951 inflate (stored, fixed Huffman, dynamic Huffman) with Adler-32 validation, plus `DeflateZlibStored` for encoding. Added `test/lib_zlib.pas` covering roundtrip, fixed/dynamic fixtures, and malformed-stream rejection. Green in `lib-test` and `library-suite-green`.
+- 2026-06-20 — Landed `lib/rtl/zlib.pas`: RFC 1950/1951 inflate (stored, fixed Huffman, dynamic Huffman) with Adler-32 validation, plus `DeflateZlibStored` for encoding. Added `test/lib_zlib.pas` covering roundtrip, fixed/dynamic fixtures, and malformed-stream rejection (commit 86b88f8). Green in `lib-test` and `library-suite-green`.

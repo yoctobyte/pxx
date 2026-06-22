@@ -1,9 +1,10 @@
 # Text file I/O: `Assign`/`Rewrite`/`Reset`/`WriteLn(f,…)`/`CloseFile` missing
 
 - **Type:** library / RTL (Track B)
-- **Status:** backlog
+- **Status:** done
 - **Owner:** —
 - **Opened:** 2026-06-20 (next `examples/adventure` blocker after call-result
+- **Closed:** 2026-06-21
   member access landed)
 - **Relation:** the current `examples/adventure` blocker (`engine.pas:563`).
   Not a compiler bug — a missing RTL surface.
@@ -57,7 +58,7 @@ adventure need write + read.
   first consumer for the new PAL byte-handle layer: implement classic text-file
   RTL on `PalOpen`/`PalRead`/`PalWrite`/`PalClose`, splitting a Track A ticket
   only if the file-handle `WriteLn(f, ...)` surface needs compiler lowering.
-- 2026-06-20 — First Track B slice landed locally: `lib/rtl/textfile.pas`
+- 2026-06-20 — First Track B slice landed locally (commit f9bdeb8): `lib/rtl/textfile.pas`
   defines `Text`, `Assign`/`AssignFile`, `Reset`, `Rewrite`, `Append`, `Close`/
   `CloseFile`, `Eof`, `IOResult`, and explicit `TextReadLn`/`TextWriteLn` on the
   PAL byte-handle API. `test/lib_textfile.pas` round-trips lines through a POSIX
@@ -66,3 +67,4 @@ adventure need write + read.
   surface decision, and `ReadLn`/`WriteLn` are lexer keywords. Track the
   compiler/default-surface follow-up in `feature-textfile-keyword-io-dispatch`
   before this ticket can close.
+- 2026-06-21 — Compiler support for `Assign`/`Reset`/`Rewrite` keywords and Text file I/O dispatch has landed in the stable compiler (`feature-textfile-keyword-io-dispatch`). The adventure game and all text-file tests compile and run successfully using the new units.

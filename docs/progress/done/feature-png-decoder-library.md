@@ -43,4 +43,4 @@ use an offline converter so this ticket does not block improving the demo.
   and land runtime PNG decoding when compression/hash foundations are ready.
 
 ## Log
-- 2026-06-20 — Landed `lib/rtl/png.pas`: 8-bit RGBA encode/decode, chunk parser with CRC32, IDAT concatenation, zlib inflate, and all five PNG scanline filters. Added `test/lib_png.pas` with a 2x2 roundtrip plus CRC-tamper rejection. Green in `lib-test` and `library-suite-green`.
+- 2026-06-20 — Landed `lib/rtl/png.pas`: 8-bit RGBA encode/decode, chunk parser with CRC32, IDAT concatenation, zlib inflate, and all five PNG scanline filters (commit f237f6a). Added `test/lib_png.pas` with a 2x2 roundtrip plus CRC-tamper rejection. Green in `lib-test` and `library-suite-green`.

@@ -1,9 +1,10 @@
 # Demo — Conway's Game of Life
 
 - **Type:** feature
-- **Status:** backlog
+- **Status:** done
 - **Owner:** —
 - **Opened:** 2026-06-19
+- **Closed:** 2026-06-21
 - **Relation:** demo-class candidate from idea-demo-app-candidates (top-10).
   Smallest of the set; exercises **bit packing** (cell rows) — touches
   feature-rtl-conversion-and-bitset-library. Cheap cross-ISA benchmark. Platonic
@@ -42,3 +43,4 @@ cross regression.
 
 ## Log
 - 2026-06-19 — Opened in the demo-ticket organization pass.
+- 2026-06-21 — Conway's Game of Life GUI demo implemented in `examples/life/life.pas`, using the new PCL `TBitmap` offscreen drawing and GTK3 Cairo backend (commit 857a675). Runs in smoke-test mode via `--smoke` flag, compiled and verified in `make demos`.

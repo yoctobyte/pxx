@@ -1,9 +1,10 @@
 # RTL gaps — string/number conversion + a bit-set type (surfaced by the demos)
 
 - **Type:** feature
-- **Status:** backlog
+- **Status:** done
 - **Owner:** —
 - **Opened:** 2026-06-19 (from the Sudoku + Prime-sieve demo apps)
+- **Closed:** 2026-06-20
 - **Relation:** sibling to feature-random-library and feature-writeln-as-library
   — the reusable-RTL lane. The demo apps in `examples/` are the motivating
   tests: written "platonically" (assume idiomatic RTL exists), so the missing
@@ -90,3 +91,5 @@ bit-set type may be the pragmatic answer to that lane too.
   - Int64 `and`/`or`/`not` are unreliable — 32-bit Integer is the safe word
     type for now
   - `ba.bits := nil` on a managed record field through `var` param segfaults
+
+- 2026-06-20 — Both Gap 1 (SysUtils number/string conversion) and Gap 2 (bit-set library `TBitArray`) have been fully implemented, tested, and verified green in `lib-test` (commit d83ab99). Demos sieve and sudoku compile and run successfully.
