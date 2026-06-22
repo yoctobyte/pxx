@@ -11465,6 +11465,7 @@ procedure ParseUnit;
 var
   uname: AnsiString;
   doneUses, savedInterface, doneImp, savedPreScan: Boolean;
+  savedBase, afterImpTok, ii: Integer;
 begin
   { A used unit parses in its own normal (single-pass) mode: its interface is
     already forward-visible, so the enclosing program's pre-scan must not leak in
@@ -11514,6 +11515,16 @@ begin
 
   InInterface := False;
 
+  { ===== Implementation pre-scan (pass 1) =====
+    Same whole-section forward visibility as the program body, but scoped to this
+    unit's implementation: an impl-private helper may be called before it is
+    defined (and mutual recursion needs no `forward`). The unit's interface
+    routines were already registered above, so this only adds the impl-only ones.
+    Subroutine spans are recorded in a region of the shared DeclItem arrays based
+    at the caller's DeclItemCount, so nested `uses` (which recurse into ParseUnit)
+    stack cleanly and the enclosing program's spans are preserved. }
+  savedBase := DeclItemCount;
+  PreScanPass := True;
   doneImp := False;
   while (CurTok.Kind <> tkEOF) and not doneImp do
   begin
@@ -11546,17 +11557,34 @@ begin
         tkType:     ParseTypeSection;
         tkClass,
         tkProcedure,
-        tkFunction: ParseSubroutine;
+        tkFunction:
+        begin
+          if DeclItemCount >= MAX_DECL_ITEMS then Error('too many implementation declarations');
+          DeclItemStart[DeclItemCount] := TokPos - 1;
+          ParseSubroutine;
+          DeclItemEnd[DeclItemCount] := TokPos - 1;
+          Inc(DeclItemCount);
+        end;
         tkIdent:
           { constructor/destructor are identifiers in this dialect, not tokens;
             their method bodies live in the unit implementation just like
             procedure/function bodies. }
           if CaseEqual(CurTok.SVal, 'constructor') or CaseEqual(CurTok.SVal, 'destructor') then
-            ParseSubroutine
+          begin
+            if DeclItemCount >= MAX_DECL_ITEMS then Error('too many implementation declarations');
+            DeclItemStart[DeclItemCount] := TokPos - 1;
+            ParseSubroutine;
+            DeclItemEnd[DeclItemCount] := TokPos - 1;
+            Inc(DeclItemCount);
+          end
           else if CaseEqual(CurTok.SVal, 'initialization') then
           begin
+            { initialization emits its body in place; run it in full (not
+              body-deferred) — all routines above are already registered. }
             Next;                       { consume 'initialization' }
+            PreScanPass := False;
             ParseInitializationSection(uname);
+            PreScanPass := True;
           end
           else
             Next;                       { 'finalization' + its body are skipped }
@@ -11565,6 +11593,21 @@ begin
       end;
     end;
   end;
+  PreScanPass := False;
+  afterImpTok := TokPos - 1;   { the unit's terminating `end` }
+
+  { ===== Body pass (pass 2) =====
+    Replay the recorded impl subroutines to emit their bodies, now that the whole
+    implementation is visible. }
+  for ii := savedBase to DeclItemCount - 1 do
+  begin
+    TokPos := DeclItemStart[ii];
+    Next;
+    ParseSubroutine;
+  end;
+  TokPos := afterImpTok;
+  Next;
+  DeclItemCount := savedBase;
 
   InInterface := savedInterface;
   PreScanPass := savedPreScan;

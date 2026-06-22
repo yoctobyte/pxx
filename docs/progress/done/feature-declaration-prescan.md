@@ -117,8 +117,18 @@ Two ways to get order-independence:
   - Gate: `make test` green; self-host **byte-identical** (1-gen reseed via
     `make bootstrap`); threadsafe self-host byte-identical; i386/aarch64/arm32
     build the full compiler; riscv32/xtensa ESP programs build.
-  - Scope note: unit **implementation** sections are not yet pre-scanned (they
-    keep single-pass order); the program-body pre-scan covers the documented
-    self-host pain (compiler is one program). Generic-method specialization at
-    program top level (token-stream mutation during pass 2) is untested — none in
-    the gate.
+  - Generic-method specialization at program top level (token-stream mutation
+    during pass 2) is untested — none in the gate.
+- 2026-06-22 — follow-up: unit **implementation** sections now pre-scanned too
+  (`ParseUnit`), scoped per unit. Same two-pass over the `doneImp` loop: pass 1
+  registers impl-private headers (the interface routines were already registered
+  in the interface loop) and skips bodies; pass 2 replays them. So an impl-only
+  helper may be called before it is defined and mutual recursion needs no
+  `forward`. The recorded spans use a region of the shared `DeclItem` arrays based
+  at the caller's `DeclItemCount` (`savedBase`), restored on exit, so nested
+  `uses` (recursive `ParseUnit`) and the enclosing program's spans never clobber
+  each other. `initialization` runs in full (`PreScanPass` cleared). Interface
+  section is unchanged (already forward-visible). Acceptance
+  `test/{unit_impl_fwd,test_unit_impl_fwd}.pas` (public→private-after,
+  private mutual recursion, private const-before-use) wired into `make test-core`.
+  Gate re-run green; self-host byte-identical; cross + ESP build.
