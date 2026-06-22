@@ -1,7 +1,7 @@
 # Progress transition helpers (`claim` / `resolve`)
 
 - **Type:** feature
-- **Status:** backlog
+- **Status:** done
 - **Owner:** —
 - **Opened:** 2026-06-06 (from agents/discussion/progress-tracker.md, Antigravity)
 
@@ -31,3 +31,4 @@ updated); `progress.sh check` passes afterward; no commit is made by the script.
 
 ## Log
 - 2026-06-06 — ticket opened from the design review thread.
+- 2026-06-22 — resolved, commit 64ac43f.
