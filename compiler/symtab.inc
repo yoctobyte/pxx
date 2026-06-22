@@ -2751,7 +2751,8 @@ begin
         match := True;
         for j := 0 to nArgs-1 do
         begin
-          if Procs[i].Params[j].TypeKind <> argTypes[j] then
+          if (Procs[i].Params[j].TypeKind <> argTypes[j]) and
+             not ProcParamUntyped[i * 16 + j] then
             match := False;
         end;
         if match then
@@ -2773,7 +2774,8 @@ begin
         match := True;
         for j := 0 to nArgs-1 do
         begin
-          if Procs[i].Params[j].TypeKind <> argTypes[j] then
+          if (Procs[i].Params[j].TypeKind <> argTypes[j]) and
+             not ProcParamUntyped[i * 16 + j] then
             match := False;
         end;
         if match then
@@ -2795,7 +2797,8 @@ begin
         match := True;
         for j := 0 to nArgs-1 do
         begin
-          if not TypesCompatible(Procs[i].Params[j].TypeKind, argTypes[j]) then
+          if not (TypesCompatible(Procs[i].Params[j].TypeKind, argTypes[j]) or
+                  ProcParamUntyped[i * 16 + j]) then
             match := False;
         end;
         if match then
@@ -2817,7 +2820,8 @@ begin
         match := True;
         for j := 0 to nArgs-1 do
         begin
-          if not TypesCompatible(Procs[i].Params[j].TypeKind, argTypes[j]) then
+          if not (TypesCompatible(Procs[i].Params[j].TypeKind, argTypes[j]) or
+                  ProcParamUntyped[i * 16 + j]) then
             match := False;
         end;
         if match then
@@ -2840,7 +2844,8 @@ begin
       for j := 0 to nArgs-1 do
       begin
         if not (TypesCompatible(Procs[i].Params[j].TypeKind, argTypes[j]) or
-                (ProcParamIsInterface(i, j) and (argTypes[j] = tyClass))) then
+                (ProcParamIsInterface(i, j) and (argTypes[j] = tyClass)) or
+                ProcParamUntyped[i * 16 + j]) then
           match := False;
       end;
       if match then
@@ -2882,7 +2887,7 @@ begin
     begin
       match := True;
       for j := 0 to nArgs - 1 do
-        if Procs[i].Params[j].TypeKind <> argTypes[j] then match := False;
+        if (Procs[i].Params[j].TypeKind <> argTypes[j]) and not ProcParamUntyped[i * 16 + j] then match := False;
       if match then
       begin
         Result := i;
@@ -2900,7 +2905,7 @@ begin
     begin
       match := True;
       for j := 0 to nArgs - 1 do
-        if Procs[i].Params[j].TypeKind <> argTypes[j] then match := False;
+        if (Procs[i].Params[j].TypeKind <> argTypes[j]) and not ProcParamUntyped[i * 16 + j] then match := False;
       if match then
       begin
         Result := i;
@@ -2916,7 +2921,7 @@ begin
     begin
       match := True;
       for j := 0 to nArgs - 1 do
-        if not TypesCompatible(Procs[i].Params[j].TypeKind, argTypes[j]) then match := False;
+        if not (TypesCompatible(Procs[i].Params[j].TypeKind, argTypes[j]) or ProcParamUntyped[i * 16 + j]) then match := False;
       if match then
       begin
         Result := i;
@@ -2934,7 +2939,7 @@ begin
     begin
       match := True;
       for j := 0 to nArgs - 1 do
-        if not TypesCompatible(Procs[i].Params[j].TypeKind, argTypes[j]) then match := False;
+        if not (TypesCompatible(Procs[i].Params[j].TypeKind, argTypes[j]) or ProcParamUntyped[i * 16 + j]) then match := False;
       if match then
       begin
         Result := i;

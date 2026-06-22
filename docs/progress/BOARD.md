@@ -104,7 +104,7 @@ _none_
 | feature-mimic-fpc | B | feature | `mimic FPC` compatibility mode | — |
 | feature-string-model-tyfixedstring | B | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (179)
+## done (180)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -280,6 +280,7 @@ _none_
 | feature-typed-const-arrays | A | feature | Typed constant arrays (initialized const arrays) | — |
 | feature-typed-instruction-encoders | A | feature | Typed instruction encoders for codegen | — |
 | feature-unified-heap-allocator | A | feature | Unified syscall-free heap allocator | — |
+| feature-untyped-parameters | B | feature | Untyped `var` / `const` / `out` parameters | — |
 | feature-xtensa-asm-emitter | A | feature | Xtensa text-assembler (`EmitAsmXtensa`) for ESP32 | — |
 | feature-xtensa-windowed-abi | A | feature | Xtensa windowed ABI codegen variant (for ESP-IDF interop) | — |
 | fix-sat-dpll-needs-parens-after-paramless-flip | B | fix | sat DPLL: bare paramless recursion needs `DPLL()` after the paramless flip | — |

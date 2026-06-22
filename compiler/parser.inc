@@ -9691,6 +9691,7 @@ var
   parr      : array[0..15] of Boolean;
   pbyref    : array[0..15] of Boolean;
   pconst    : array[0..15] of Boolean;  { param declared `const` (read-only by-ref) — lets a temporary bind to it }
+  puntyped  : array[0..15] of Boolean;  { param declared untyped (var/const/out, no type) — matches any arg type, address passed }
   pNDims    : array[0..15] of Integer;
   pDynDepth : array[0..15] of Integer;  { named dynamic-array param: dyn nesting depth (>0), 0 = not a dyn-array param }
   pDimLo    : array[0..16*MAX_ARR_DIMS-1] of Integer;
@@ -9709,6 +9710,7 @@ var
   patchPos : Integer;
   depth    : Integer;
   doneArgs, doneParam, isArr, isByRef, isConst, declOverload, isClassKeyword, isStaticMethod: Boolean;
+  isUntyped : Boolean;
   needsProcCleanupFrame, savedProcCleanupFrameActive: Boolean;
   isAsmFunc: Boolean;
   preScanBody: Boolean;
@@ -9809,7 +9811,23 @@ begin
         if not Eat(tkComma) then doneParam := True;
         if CurTok.Kind = tkColon then doneParam := True;
       end;
-      Expect(tkColon, ':');
+      isUntyped := False;
+      if CurTok.Kind <> tkColon then
+      begin
+        { Untyped parameter (`var x` / `const x` / `out x`, no type): an untyped
+          by-reference param. The caller passes the address of any-typed lvalue;
+          the callee reaches it via @x. Underpins Move/FillChar-style routines.
+          A value param with no type is meaningless, so require var/const/out. }
+        if not (isByRef or isConst) then
+          Error('untyped parameter requires var, const, or out');
+        isUntyped := True; isByRef := True;
+        tk := tyPointer; isArr := False; paramNDims := 0; paramDynDepth := 0;
+        LastTypeRecId := REC_NONE; LastTypePointerElemTk := tyUnknown;
+        LastTypePointerElemRec := REC_NONE; LastTypeProcSig := -1;
+      end
+      else
+      begin
+      Next;  { consume ':' }
       isArr := False;
       paramNDims := 0;
       paramDynDepth := 0;
@@ -9864,6 +9882,7 @@ begin
       end
       else
         tk := ParseTypeKind;
+      end;  { close the typed (has-colon) branch }
       { A `const` record param is passed by reference (like FPC). Passing it by
         value truncates to a single qword, dropping all but the first field. }
       if isConst and ((tk = tyRecord) or (tk = tyVariant)) and not isArr then
@@ -9871,6 +9890,7 @@ begin
       for i := startIdx to nparams-1 do
       begin
         ptypes[i] := tk;
+        puntyped[i] := isUntyped;
         ptypesRec[i] := LastTypeRecId;
         ptypesPtrElemTk[i] := LastTypePointerElemTk;
         ptypesPtrElemRec[i] := LastTypePointerElemRec;
@@ -10194,6 +10214,7 @@ begin
           begin
             if pDynDepth[i] > 0 then ProcParamDynDepth[procIdx * 16 + i] := pDynDepth[i];
             ProcParamIsConst[procIdx * 16 + i] := pconst[i];
+            ProcParamUntyped[procIdx * 16 + i] := puntyped[i];
             if (ptypes[i] = tyClass) or (ptypes[i] = tyRecord) then
               ProcParamRecId[procIdx * 16 + i] := ptypesRec[i];
           end;
@@ -10322,6 +10343,7 @@ begin
     idx := AllocParam(pnames[i], ptypes[i], pbyref[i], parr[i]);
     Procs[procIdx].Params[i].SymIdx := idx;
     if (procIdx >= 0) and (i < 16) then ProcParamIsConst[procIdx * 16 + i] := pconst[i];
+    if (procIdx >= 0) and (i < 16) then ProcParamUntyped[procIdx * 16 + i] := puntyped[i];
     if pDynDepth[i] > 0 then
     begin
       { Named dynamic-array type param: a real dynamic array, NOT an open-array

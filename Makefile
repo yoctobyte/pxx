@@ -439,6 +439,8 @@ test-core: $(COMPILER)
 	test "$$(/tmp/test_var_open_array_field26)" = "$$(printf '256\n1284')"
 	./$(COMPILER) test/test_static_array_length.pas /tmp/test_static_array_length26
 	test "$$(/tmp/test_static_array_length26)" = "$$(printf '3\n2\n64\n60')"
+	./$(COMPILER) test/test_untyped_params.pas /tmp/test_untyped_params26
+	test "$$(/tmp/test_untyped_params26)" = "$$(printf '7 7 7 7 \n7 7 7 7 ')"
 	./$(COMPILER) test/test_user_type_shadows_builtin.pas /tmp/test_usershadow26
 	test "$$(/tmp/test_usershadow26)" = "$$(printf 'show 7\ndbl=10')"
 	./$(COMPILER) test/test_eof_stdin.pas /tmp/test_eof26
