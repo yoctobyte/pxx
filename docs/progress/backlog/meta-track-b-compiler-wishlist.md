@@ -64,8 +64,21 @@ vectors). **Interim:** intermediate variables.
 
 ### 8. Generator record-yield + nested-yield  →  `feature-language-gaps-from-demos` (Gaps 2-3)
 `yield` from a nested routine; `generator of <record>` consumed by `for-in`.
-**Unblocks:** `feature-demo-chess` movegen, generator-based demos. Unverified
-(needs a build to confirm).
+**Unblocks:** `feature-demo-chess` movegen, generator-based demos.
+**VERIFIED 2026-06-22 (Track A, x86-64):**
+- **Generator-of-record + `for-in` WORKS via the stackful backend** (`uses
+  coroutine; function F: TRec; generator;` with a record local, `yield rec`,
+  `for r in F do ...` reading `r.field`). This is the chess-movegen case — it is
+  available now. Test shape: a 2-field record generator summing fields → correct.
+- **Two narrow sub-gaps remain, both non-trivial (NOT quick wins):**
+  - *Stackless* generators reject a record local (`only ordinal/pointer locals
+    supported (v1)`, parser.inc ~5659): the one-word-per-local slot model would
+    need multi-word slots + record-copy save/restore + a record CURRENT slot +
+    for-in record read. Use the stackful backend instead.
+  - *Nested-routine yield* (`yield` inside a nested proc of a generator) fails to
+    parse — cross-frame suspension; a real feature, deferred.
+  So item 8's headline deliverable is satisfied (stackful record generators);
+  the leftovers are edge variants, parked unless a demo demands them.
 
 ## Also needed (RTL, not pure compiler — noted for sequencing)
 
