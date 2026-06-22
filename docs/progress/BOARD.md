@@ -95,10 +95,11 @@ _none_
 | idea-unit-rename-import | B | idea | `uses X as Y` unit-rename import (dialect extension) | — |
 | idea-visibility-enforcement | B | idea | Enforce private/protected visibility | — |
 
-## done-followup (4)
+## done-followup (5)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
+| bug-static-array-length-direct | A | bug | `Length`/`High` of a static array used directly returns garbage | — |
 | feature-async-language-surface | A | feature | Async language surface + stackless coroutine backend | feature-cross-target-feature-parity |
 | feature-interfaces | A | feature | Interfaces | — |
 | feature-mimic-fpc | B | feature | `mimic FPC` compatibility mode | — |

@@ -2915,10 +2915,27 @@ begin
         idx<0 guard here — that would reject a valid implicit-Self field. }
       valNode := ParseLValueAST(idx, TokPos - 2);
       Expect(tkRParen, ')');
-      node := AllocNode(AN_CALL); ASTIVal[node] := -Ord(tkLength); ASTTk[node] := Ord(tyInteger);
-      argSeq := AllocNode(AN_ARG); ASTLeft[argSeq] := valNode;
-      ASTLeft[node] := argSeq;
-      CurASTNode := node;
+      { Length of a whole 1-D static array is a compile-time constant (FPC too).
+        The runtime -tkLength path reads a [data-8] length header, which only a
+        dyn array / open-array param has — a bare static array has none, so fold
+        the count here. Params (incl. open arrays, ArrLen=1000 sentinel) keep the
+        runtime path; multi-dim (SymArrNDims>=2) keeps it too (Length is the first
+        dimension, handled separately). }
+      if (idx >= 0) and (ASTKind[valNode] = AN_IDENT) and (ASTIVal[valNode] = idx) and
+         Syms[idx].IsArray and (Syms[idx].ArrLen >= 0) and (Syms[idx].Kind <> skParam) and
+         (SymArrNDims[idx] <= 1) then
+      begin
+        node := AllocNode(AN_INT_LIT);
+        ASTIVal[node] := Syms[idx].ArrLen; ASTTk[node] := Ord(tyInteger);
+        CurASTNode := node;
+      end
+      else
+      begin
+        node := AllocNode(AN_CALL); ASTIVal[node] := -Ord(tkLength); ASTTk[node] := Ord(tyInteger);
+        argSeq := AllocNode(AN_ARG); ASTLeft[argSeq] := valNode;
+        ASTLeft[node] := argSeq;
+        CurASTNode := node;
+      end;
     end;
     tkHigh:
     begin
@@ -2931,14 +2948,26 @@ begin
       { See Length above: ParseLValueAST handles implicit-Self + undefined. }
       valNode := ParseLValueAST(idx, TokPos - 2);
       Expect(tkRParen, ')');
-      node := AllocNode(AN_CALL); ASTIVal[node] := -Ord(tkLength); ASTTk[node] := Ord(tyInteger);
-      argSeq := AllocNode(AN_ARG); ASTLeft[argSeq] := valNode;
-      ASTLeft[node] := argSeq;
-      valNode := AllocNode(AN_INT_LIT); ASTIVal[valNode] := 1; ASTTk[valNode] := Ord(tyInteger);
-      CurASTNode := AllocNode(AN_BINOP);
-      ASTIVal[CurASTNode] := Ord(tkMinus);
-      ASTLeft[CurASTNode] := node; ASTRight[CurASTNode] := valNode;
-      ASTTk[CurASTNode] := Ord(tyInteger);
+      { High of a whole 1-D static array folds to the constant count-1 (see the
+        Length fold above for why the runtime path can't serve a static array). }
+      if (idx >= 0) and (ASTKind[valNode] = AN_IDENT) and (ASTIVal[valNode] = idx) and
+         Syms[idx].IsArray and (Syms[idx].ArrLen >= 0) and (Syms[idx].Kind <> skParam) and
+         (SymArrNDims[idx] <= 1) then
+      begin
+        CurASTNode := AllocNode(AN_INT_LIT);
+        ASTIVal[CurASTNode] := Syms[idx].ArrLen - 1; ASTTk[CurASTNode] := Ord(tyInteger);
+      end
+      else
+      begin
+        node := AllocNode(AN_CALL); ASTIVal[node] := -Ord(tkLength); ASTTk[node] := Ord(tyInteger);
+        argSeq := AllocNode(AN_ARG); ASTLeft[argSeq] := valNode;
+        ASTLeft[node] := argSeq;
+        valNode := AllocNode(AN_INT_LIT); ASTIVal[valNode] := 1; ASTTk[valNode] := Ord(tyInteger);
+        CurASTNode := AllocNode(AN_BINOP);
+        ASTIVal[CurASTNode] := Ord(tkMinus);
+        ASTLeft[CurASTNode] := node; ASTRight[CurASTNode] := valNode;
+        ASTTk[CurASTNode] := Ord(tyInteger);
+      end;
     end;
     tkGetMem:
     begin

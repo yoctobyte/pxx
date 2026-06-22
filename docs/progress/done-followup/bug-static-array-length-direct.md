@@ -1,9 +1,11 @@
 # `Length`/`High` of a static array used directly returns garbage
 
 - **Type:** bug (codegen)
-- **Status:** backlog
+- **Status:** DONE (1-D) — 2026-06-22. Multi-dim static `Length`/`High` used
+  directly still takes the (broken) runtime path; rare, left as follow-up.
 - **Owner:** — (Track A)
 - **Opened:** 2026-06-22
+- **Closed:** 2026-06-22 (1-D)
 - **Found-by:** Synapse recon, while fixing [[bug-var-open-array-fixed-arg-length]].
 
 ## Symptom
@@ -49,3 +51,16 @@ first-dim span), else leave the runtime path.
 
 `make test` (self-host byte-identical) + `make cross-bootstrap`. Add a test for
 `Length`/`High` of a 1-D static array (and, if handled, a 2-D one).
+
+## Fix log
+
+- 2026-06-22 — **1-D FIXED** by parse-time folding (parser.inc `tkLength` /
+  `tkHigh`): when the argument is a whole static-array `AN_IDENT` (`idx >= 0`,
+  `IsArray`, `ArrLen >= 0`, `Kind <> skParam`, `SymArrNDims <= 1`), emit an
+  `AN_INT_LIT` of `ArrLen` (Length) / `ArrLen - 1` (High) instead of the runtime
+  `-tkLength` call. Fixes every backend at once and matches FPC. Params (incl.
+  open arrays, ArrLen=1000 sentinel) and multi-dim (`SymArrNDims >= 2`) keep the
+  runtime path. Test `test/test_static_array_length.pas`, FPC objfpc
+  oracle-matched (3 / 2 / 64 / 60). make test + cross-bootstrap byte-identical.
+  **REMAINING:** multi-dim static `Length`/`High` used directly (still runtime,
+  still wrong; rare — `Length` of a 2-D static array's first dimension).
