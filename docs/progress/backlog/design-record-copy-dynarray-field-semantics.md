@@ -85,9 +85,12 @@ call boundary).
 **Status: low priority, documented, no code yet.** The user may research (or we
 both) before choosing the switch surface + default. Open items to settle first:
 
-1. Confirm deep-copy of a managed *element* type at the assignment site (does
-   `y := x` for a record with an `array of AnsiString` field deep-copy the
-   strings, or share/segfault?). Verify before designing the switch.
+1. ~~Confirm deep-copy of a managed *element* type at the assignment site.~~
+   **Verified 2026-06-22 — works, no segfault.** `y := x` for a record with an
+   `array of AnsiString` field deep-copies the strings (PXX `x0=aa` stays
+   independent while `y0=ZZ`; FPC shares → `x0=ZZ`). Array-of-records-with-string
+   and a dyn-array-field-of-records-with-string both round-trip correctly on PXX.
+   So value-on-assignment already handles managed elements safely.
 2. Decide the switch surface + name and whether the default ever flips per
    `{$mode}` (delphi/fpc) for mimic-fpc.
 3. If (a)-style FPC sharing is ever the default, it pulls in full dyn-array ARC
