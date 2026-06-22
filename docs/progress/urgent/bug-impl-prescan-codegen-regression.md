@@ -18,12 +18,31 @@ commit because `json`/`bignum` libs need `obj.Free` (562eb95) + bare `Copy`
 (dd706ff), which are newer than `7ba91bf` — **forward fix of `7ba91bf` only**,
 then re-pin v34.
 
-Likely mechanism (refined): the png IDAT stream is huffman-coded, yet the
-decoder lands in `InflateStored` and reports a *stored*-block error — so a block
-type / bit-position read (`btype := ReadBits(2)`) appears to be misread, routing
-huffman data into the stored path. `test/lib_zlib.pas` (small inputs) still
-passes, so it is size/shape-dependent. Minimal single-unit reduction still TODO;
-the live repro below is reliable.
+Mechanism (refined twice):
+
+1. **Not a block-type misroute.** Instrumenting `InflateRaw` shows the png IDAT
+   stream legitimately *is* a stored block: `bfinal=1 btype=0 gBitPos=19`. The
+   failure is the stored-data bound check `BytePos + len > Length(gData) - 4`
+   (zlib.pas:448) wrongly firing — i.e. one of `BytePos` (paramless fn call),
+   `len`, `Length(gData)`, or the comparison is computed wrong.
+
+2. **Layout-sensitive latent codegen bug, not new wrong logic.** Adding a single
+   `writeln(...)` into `InflateRaw` makes even the *GOOD* compiler (`dc11a9c`)
+   miscompile and fail identically. So `7ba91bf` does not introduce wrong logic
+   per se — it shifts the decl/codegen layout of the unit's implementation
+   section enough to *expose* a pre-existing latent miscompile (likely stack-slot
+   / temp / offset allocation around `InflateStored`). This explains why
+   `make test` + self-host stayed byte-identical, and why a small single-unit
+   reduction is elusive: any layout-changing edit moves the bug.
+
+   Fix implication: look at how the two-pass impl pre-scan affects routine
+   local-var / temp **offset allocation** (not name resolution). The underlying
+   defect is probably fragile slot/offset assignment that `7ba91bf` merely
+   re-triggered.
+
+`test/lib_zlib.pas` (small inputs) still passes → size/shape-dependent. A minimal
+single-unit reduction is still TODO and may be impractical given the layout
+sensitivity; the live png repro below is reliable.
 
 ## Summary
 
