@@ -222,6 +222,11 @@ begin
       ThreadSafeMode := True;
       Inc(i);
     end
+    else if option = '--mimic-fpc' then
+    begin
+      MimicFpc := True;
+      Inc(i);
+    end
     else if option = '--permissive-overload' then
     begin
       StrictOverload := False;
@@ -309,6 +314,7 @@ begin
   end;
   PasApplyTargetDefines;
   PasApplyPlatformDefines;
+  if MimicFpc then PasApplyMimicDefines;
   if ParamCount < i then
     begin writeln(StdErr,'usage: pascal26/PXX [--debug] [--dump-ir] [-dNAME] [-uNAME] [-Mobjfpc] [--strict-overload] [--no-unhandled-handler] <src> [out]'); Halt(1); end;
 

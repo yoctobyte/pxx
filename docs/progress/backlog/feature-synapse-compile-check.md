@@ -5,9 +5,11 @@
 - **Owner:** — (**Track B** — libraries/RTL; uses `$(PXX_STABLE)`, never rebuilds
   the compiler)
 - **Opened:** 2026-06-22
-- **Blocked-by:** [[feature-mimic-fpc]] (Track A — the `--mimic-fpc` / `{$MIMIC
-  FPC}` curated FPC-3.2.2 define set; without it Synapse's `jedi.inc` picks the
-  wrong platform branch — Kylix → `uses libc` — and the compile is meaningless).
+- **Blocked-by:** feature-mimic-fpc
+- **Why blocked:** needs the Track A `--mimic-fpc` / `{$MIMIC FPC}` curated
+  FPC-3.2.2 define set; without it Synapse's `jedi.inc` picks the wrong platform
+  branch (Kylix → `uses libc`) and the compile is meaningless. (NOTE 2026-06-22:
+  `--mimic-fpc` has since LANDED — this ticket is now actionable.)
 - **Relation:** the correctness/compat half of [[feature-networking]] (which
   names Synapse as compiler-compat target + test suite). Likely consumer of
   [[feature-mode-delphi-remaining]] (per-unit mode reset bites first in a

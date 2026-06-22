@@ -509,6 +509,7 @@ begin
   DelphiMode := False;
   ThreadSafeMode := False;
   MatchQuiet := False;
+  MimicFpc := False;
   InterfacesComMode := False;
   ComInterfaceUsed := False;
   CStyleComments := False;
@@ -622,6 +623,25 @@ begin
     name := 'PXX_ESP_BARE';
     PasDefine(name);
   end;
+end;
+
+procedure PasApplyMimicDefines;
+var name: AnsiString;
+begin
+  { --mimic-fpc / {$MIMIC FPC}: install the curated FPC 3.2.2 x86-64-Linux define
+    set so identity-probing library headers (jedi.inc / Synapse) select their FPC
+    path instead of Kylix/Delphi. LINUX, CPU64, CPUX86_64 are already PXX
+    defaults; this adds the FPC identity + version probes. Idempotent (PasDefine
+    skips dupes), so calling from both the CLI flag and the {$MIMIC} directive is
+    safe. NEVER call during a self-build — the compiler's own {$ifdef FPC} means
+    "real FPC, not PXX" (feature-mimic-fpc drawback 2). }
+  name := 'FPC'; PasDefine(name);
+  name := 'UNIX'; PasDefine(name);
+  name := 'ENDIAN_LITTLE'; PasDefine(name);
+  name := 'VER3'; PasDefine(name);
+  name := 'VER3_2'; PasDefine(name);
+  name := 'VER3_2_2'; PasDefine(name);
+  PasSetDefineValue('FPC_FULLVERSION', 30202);
 end;
 
 procedure PasDefineCommandOption(first: Integer);
@@ -1304,6 +1324,16 @@ begin
         (objfpc-ish) dialect — DelphiMode off. PXX is otherwise a single dialect
         superset, so non-delphi modes are accepted but inert. }
       DelphiMode := CaseEqual(name, 'delphi');
+    end
+    else if CaseEqual(command, 'mimic') then
+    begin
+      { {$MIMIC FPC}: same as the --mimic-fpc flag, but pinned in the source so a
+        project carries its own compatibility need. Applied immediately (lexing is
+        already in progress; defines must take effect before the next {$IF}).
+        Only FPC is a valid target; {$MIMIC DELPHI} is reserved (unimplemented). }
+      if CaseEqual(name, 'fpc') then
+      begin MimicFpc := True; PasApplyMimicDefines; end
+      else Error('unknown {$MIMIC} target (only FPC is supported): ' + name);
     end;
     { Unsupported compatibility directives remain accepted comments. }
   end;

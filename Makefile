@@ -181,7 +181,15 @@ test-nilpy-managed: test-nilpy
 test-nilpy-frozen: PXXFLAGS := $(FROZEN_PXXFLAGS)
 test-nilpy-frozen: test-nilpy
 
-test: fpc-check test-core test-asm-emit
+test: fpc-check test-core test-asm-emit lib-fpc-clean
+
+# Invariant for --mimic-fpc: under whole-compile mimic, lib/ units lex with FPC
+# defined, so any {$ifdef FPC} in a library unit would silently change meaning
+# (feature-mimic-fpc drawback 3). Keep lib/ FPC-clean — fail if any appears.
+lib-fpc-clean:
+	@if grep -rnoE '\{\$$if(n?def)?[ ]+FPC[ ]*\}|defined\(FPC\)' lib/ ; then \
+	  echo "lib-fpc-clean: FAIL — lib/ must not use {\$$ifdef FPC} (breaks --mimic-fpc)"; exit 1; \
+	else echo "lib-fpc-clean: OK"; fi
 
 # Host-side byte tests for the per-target text assemblers (EmitAsm386 / Rv32 /
 # A64 / Arm32). Each test {$include}s the SAME per-platform file the compiler
@@ -417,6 +425,12 @@ test-core: $(COMPILER)
 	test "$$(/tmp/test_mode_delphi_callarg26)" = "$$(printf 'ApplyFn=42\nlog=20\nCallNul=14')"
 	./$(COMPILER) test/test_mode_delphi_methptr.pas /tmp/test_mode_delphi_methptr26
 	test "$$(/tmp/test_mode_delphi_methptr26)" = "$$(printf 'total=12\nkicked=1')"
+	./$(COMPILER) test/test_mimic_fpc.pas /tmp/test_mimic_fpc_off26
+	test "$$(/tmp/test_mimic_fpc_off26)" = "fpc=no"
+	./$(COMPILER) --mimic-fpc test/test_mimic_fpc.pas /tmp/test_mimic_fpc_on26
+	test "$$(/tmp/test_mimic_fpc_on26)" = "$$(printf 'fpc=yes\nver>=20400\nunix')"
+	./$(COMPILER) test/test_mimic_directive.pas /tmp/test_mimic_directive26
+	test "$$(/tmp/test_mimic_directive26)" = "fpc 3.x"
 	./$(COMPILER) test/test_user_type_shadows_builtin.pas /tmp/test_usershadow26
 	test "$$(/tmp/test_usershadow26)" = "$$(printf 'show 7\ndbl=10')"
 	./$(COMPILER) test/test_eof_stdin.pas /tmp/test_eof26

@@ -1,10 +1,11 @@
 # `mimic FPC` compatibility mode
 
 - **Type:** feature
-- **Status:** backlog
-- **Owner:** —
-- **Blocked-by:** feature-directive-if-numeric
+- **Status:** DONE (core mechanism) — 2026-06-22. Follow-ups: docs, the scoped-v2
+  manifest, and Synapse-driven define-set growth (now [[feature-synapse-compile-check]]).
+- **Owner:** — (Track A)
 - **Opened:** 2026-06-10 (user decision after Synapse directive-wall pass)
+- **Closed:** 2026-06-22 (core)
 
 ## Motivation
 
@@ -152,3 +153,25 @@ semantics will fail loudly at parse — that is the correct failure shape.
   fallback; the scoped manifest is the primary mechanism. This ticket's remaining
   content = the actual define SET Synapse's Posix branch needs + the `{$mode
   delphi}` @-operator relax knob; the delivery vehicle is the scoped manifest.
+
+- 2026-06-22 — **core mechanism DONE.** `--mimic-fpc` CLI flag + `{$MIMIC FPC}`
+  source directive install a curated FPC-3.2.2 x86-64-Linux define set
+  (`PasApplyMimicDefines` in lexer.inc): `FPC`, `UNIX`, `ENDIAN_LITTLE`, `VER3`,
+  `VER3_2`, `VER3_2_2`, and valued `FPC_FULLVERSION := 30202`
+  (`LINUX`/`CPU64`/`CPUX86_64` are already defaults). Numeric `{$IF}` over the
+  valued define works (feature-directive-if-numeric, already done) — verified
+  `{$if FPC_FULLVERSION >= 20400}`. New global `MimicFpc` (defs.inc), reset in
+  PasInitDefines, applied after target/platform defines (or immediately by the
+  directive at lex time). `{$MIMIC DELPHI}` reserved → clear error. Drawback-3
+  invariant enforced: new `make test` target **lib-fpc-clean** fails if any
+  `lib/` unit uses `{$ifdef FPC}` / `defined(FPC)` (would silently change meaning
+  under whole-compile mimic). Tests: `test/test_mimic_fpc.pas` (flag off→`fpc=no`,
+  on→`fpc=yes/ver>=20400/unix`) + `test/test_mimic_directive.pas` (`{$MIMIC FPC}`
+  →`fpc 3.x`), both in `make test`. Self-host byte-identical (mimic never on in a
+  self-build — the {$ifdef FPC}=real-FPC landmine holds). Acceptance (2) and (3)
+  met. Acceptance (1) — a real Synapse compile past jedi.inc — is now the Track B
+  [[feature-synapse-compile-check]]; this also drives any define-set growth and
+  the scoped-v2 manifest. **REMAINING (follow-up):** docs (`docs/dialect.md` +
+  architecture directive section); scoped per-library v2 manifest
+  ([[feature-dynamic-include-paths-config]]); grow the define set only when a real
+  library probe demands it.
