@@ -2209,6 +2209,8 @@ lib-test: pxx-stable-check
 	test "$$(/tmp/lib_tui_app | tail -1)" = "ALL OK"
 	$(PXX_STABLE) test/lib_keys.pas /tmp/lib_keys
 	test "$$(printf 'q\033[A\033[B\033[3~\177' | /tmp/lib_keys)" = "$$(printf '113\n1001\n1002\n1010\n127')"
+	$(PXX_STABLE) -Fulib/rtl/platform/posix examples/tui/menudemo.pas /tmp/menudemo
+	test "$$(printf '\033[B\033[B\r' | /tmp/menudemo | tail -1)" = "selected=Quit"
 	$(PXX_STABLE) test/lib_ansirender.pas /tmp/lib_ansirender
 	test "$$(/tmp/lib_ansirender)" = "OK"
 	$(PXX_STABLE) -Fulib/rtl/platform/posix test/lib_process.pas /tmp/lib_process
