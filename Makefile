@@ -2059,6 +2059,8 @@ lib-test: pxx-stable-check
 	test "$$(/tmp/lib_vmdemo | tail -1)" = "ALL OK"
 	$(PXX_STABLE) examples/mandelbrot/mandelbrot.pas /tmp/lib_mandelbrot
 	test "$$(/tmp/lib_mandelbrot | tail -1)" = "ALL OK"
+	$(PXX_STABLE) examples/lisp/lispdemo.pas /tmp/lib_lispdemo
+	test "$$(/tmp/lib_lispdemo | tail -1)" = "ALL OK"
 	$(PXX_STABLE) test/lib_zlib.pas /tmp/lib_zlib
 	test "$$(/tmp/lib_zlib)" = "$$(printf 'OK stored roundtrip\nOK fixed huffman\nOK dynamic huffman\nOK bad header checksum\nOK bad adler32\nOK truncated stream\nOK reserved block type')"
 	$(PXX_STABLE) test/lib_png.pas /tmp/lib_png
@@ -2069,7 +2071,7 @@ lib-test: pxx-stable-check
 	test "$$(/tmp/lib_ansirender)" = "OK"
 	$(PXX_STABLE) -Fulib/rtl/platform/posix test/lib_process.pas /tmp/lib_process
 	test "$$(/tmp/lib_process)" = "$$(printf 'Bytes read: 12\nByte 0: 104\nByte 1: 101\nByte 2: 108\nByte 3: 108\nByte 4: 111\nByte 5: 32\nByte 6: 119\nByte 7: 111\nByte 8: 114\nByte 9: 108\nByte 10: 100\nByte 11: 10\nChild output: [hello world\n]\nChild wait status: 0\nOK')"
-	@echo "lib-test ok (sudoku exact + collections + math + sysutils + random + bitset + platform + directory + bignum + json + calc + sat + mathf + vm + mandelbrot + zlib + png smoke + ansiterm + ansirender + process) against stable v$$(cat $(STABLE_DEFAULT_DIR)/VERSION 2>/dev/null || echo '?')"
+	@echo "lib-test ok (sudoku exact + collections + math + sysutils + random + bitset + platform + directory + bignum + json + calc + sat + mathf + vm + mandelbrot + lisp + zlib + png smoke + ansiterm + ansirender + process) against stable v$$(cat $(STABLE_DEFAULT_DIR)/VERSION 2>/dev/null || echo '?')"
 
 # Full Track-B library suite, distinct from compiler `make test`.
 library-suite-green: pxx-stable-check
@@ -2093,7 +2095,7 @@ demos: pxx-stable-check
 	@rc=0; for src in examples/primes/sieve.pas examples/sudoku/sudoku.pas \
 	    examples/maze/maze.pas examples/bignum/factorial.pas examples/bignum/bigmath.pas \
 	    examples/json/jsondemo.pas examples/calc/calcdemo.pas examples/sat/satdemo.pas \
-	    examples/mathf/mathdemo.pas examples/vm/vmdemo.pas examples/mandelbrot/mandelbrot.pas \
+	    examples/mathf/mathdemo.pas examples/vm/vmdemo.pas examples/mandelbrot/mandelbrot.pas examples/lisp/lispdemo.pas \
 	    examples/chess/chess.pas examples/adventure/adventure.pas \
 	    examples/life/life.pas examples/player/player.pas examples/fm/fm.pas \
 	    examples/gl/triangle.pas; do \
