@@ -1,7 +1,7 @@
 # Demo — Lisp / Scheme interpreter
 
 - **Type:** feature
-- **Status:** backlog
+- **Status:** done — green on pinned v36
 - **Owner:** —
 - **Opened:** 2026-06-19
 - **Relation:** demo-class survivor from idea-demo-app-candidates (was catalog
@@ -44,3 +44,13 @@ slices (reader → eval → closures → builtins). No self-host / cross regress
 
 ## Log
 - 2026-06-19 — Opened in the demo-ticket organization pass.
+- 2026-06-22 — **DONE (Track B): commit 1c23671 —** `examples/lisp/lispdemo.pas` — S-expression
+  reader, environment evaluator with closures, special forms quote/if/define/
+  lambda/let/begin, and integer builtins (+,-,*,/,mod,=,<,>,cons,car,cdr,list,
+  null?,not,eq?). Values live in a flat cons-cell ARENA (parallel global Integer
+  arrays, handle = value) — no records-with-pointer-fields, robust like zlib/sat.
+  Deterministic oracle: recursive factorial(6)=720, fib(10)=55, closures
+  (adder), recursive length, higher-order map => (1 4 9 16). Ends `ALL OK`,
+  FPC-verified identical; wired into `make lib-test` + `make demos`. Globals
+  (incl. recursive defines) resolve via top-env fallback; locals shadow lexically.
+  REPL over stdin left optional / not done (not needed for the oracle).

@@ -36,7 +36,6 @@ _none_
 | feature-c-source-frontend | A | feature | C source frontend — compile C function bodies (statements + expressions) | feature-cross-target-feature-parity |
 | feature-demo-chess | B | feature | Flagship demo — chess engine (real-world app + cross-target oracle + benchmark) | — |
 | feature-demo-gui-solitaire | B | feature | Demo — GUI Patience / Solitaire | — |
-| feature-demo-lisp | B | feature | Demo — Lisp / Scheme interpreter | — |
 | feature-demo-mandelbrot | B | feature | Demo — zoomable Mandelbrot explorer | — |
 | feature-demo-raytracer | B | feature | Demo — CPU ray tracer | — |
 | feature-demo-solitaire | B | feature | Demo — console Klondike solitaire (user-requested entertainment test app) | — |
@@ -184,6 +183,7 @@ _none_
 | feature-demo-calc | B | feature | Demo — RPN / expression calculator (mini spreadsheet) | — |
 | feature-demo-file-browser | B | feature | Flagship Demo — Midnight Commander-like TUI file browser (libc-free) | — |
 | feature-demo-life | B | feature | Demo — Conway's Game of Life | — |
+| feature-demo-lisp | B | feature | Demo — Lisp / Scheme interpreter | — |
 | feature-demo-maze | B | feature | Demo — maze generator + solver | — |
 | feature-demo-sudoku | B | feature | Demo — Sudoku (solver + generator + interactive play) | — |
 | feature-demo-video-player | B | feature | Flagship Demo — Console Video Player (libc-free) | — |
@@ -294,7 +294,6 @@ _none_
 - [A] feature-c-source-frontend
 - [B] feature-demo-chess
 - [B] feature-demo-gui-solitaire
-- [B] feature-demo-lisp
 - [B] feature-demo-mandelbrot
 - [B] feature-demo-raytracer
 - [B] feature-demo-solitaire
