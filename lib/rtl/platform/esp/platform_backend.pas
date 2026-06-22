@@ -39,6 +39,9 @@ function PalBackendSocketClose(handle: Integer): Integer;
 function PalBackendSendToIpv4(handle: Integer; buf: Pointer; len: Integer; hostAddr: LongWord; port: Integer): Int64;
 function PalBackendRecvFromIpv4(handle: Integer; buf: Pointer; len: Integer; var outAddr: LongWord; var outPort: Integer): Int64;
 function PalBackendPoll(handle, events, timeoutMs: Integer): Integer;
+function PalBackendGetSockError(handle: Integer): Integer;
+function PalBackendGetSockNameIpv4(handle: Integer; var outAddr: LongWord; var outPort: Integer): Integer;
+function PalBackendAcceptIpv4(handle: Integer; var outAddr: LongWord; var outPort: Integer): Integer;
 
 function PalBackendMonotonicMillis: Int64;
 procedure PalBackendYield;
@@ -70,6 +73,7 @@ const
   PAL_NET_AF_INET = 2;
   SOL_SOCKET = 1;
   SO_REUSEADDR = 2;
+  SO_ERROR = 4;
   F_SETFL = 4;
   O_NONBLOCK = 1;
 
@@ -109,6 +113,8 @@ function lwip_close(s: Integer): Integer; cdecl; external;
 function lwip_sendto(s: Integer; data: Pointer; size, flags: Integer; toAddr: Pointer; tolen: Integer): Integer; cdecl; external;
 function lwip_recvfrom(s: Integer; mem: Pointer; len, flags: Integer; fromAddr: Pointer; fromlen: Pointer): Integer; cdecl; external;
 function lwip_poll(fds: Pointer; nfds, timeout: Integer): Integer; cdecl; external;
+function lwip_getsockopt(s, level, optname: Integer; optval: Pointer; optlen: Pointer): Integer; cdecl; external;
+function lwip_getsockname(s: Integer; name: Pointer; namelen: Pointer): Integer; cdecl; external;
 {$endif}
 
 procedure FillSockAddrIpv4(sa: Pointer; hostAddr: LongWord; port: Integer);
@@ -517,6 +523,76 @@ begin
 end;
 {$else}
 begin
+  Result := PAL_ERR_UNSUPPORTED;
+end;
+{$endif}
+
+function PalBackendGetSockError(handle: Integer): Integer;
+{$ifdef PXX_PAL_ESP_IDF_TARGET}
+var
+  err, optlen: Integer;
+  rc: Integer;
+begin
+  err := 0;
+  optlen := 4;
+  rc := lwip_getsockopt(handle, SOL_SOCKET, SO_ERROR, @err, @optlen);
+  if rc < 0 then
+    Result := rc
+  else
+    Result := -err;
+end;
+{$else}
+begin
+  Result := PAL_ERR_UNSUPPORTED;
+end;
+{$endif}
+
+function PalBackendGetSockNameIpv4(handle: Integer; var outAddr: LongWord; var outPort: Integer): Integer;
+{$ifdef PXX_PAL_ESP_IDF_TARGET}
+var
+  sa: array[0..15] of Byte;
+  addrlen: Integer;
+  i: Integer;
+  rc: Integer;
+begin
+  for i := 0 to 15 do sa[i] := 0;
+  addrlen := 16;
+  rc := lwip_getsockname(handle, @sa[0], @addrlen);
+  outAddr := 0;
+  outPort := 0;
+  if rc >= 0 then
+    ParseSockAddrIpv4(@sa[0], outAddr, outPort);
+  Result := rc;
+end;
+{$else}
+begin
+  outAddr := 0;
+  outPort := 0;
+  Result := PAL_ERR_UNSUPPORTED;
+end;
+{$endif}
+
+function PalBackendAcceptIpv4(handle: Integer; var outAddr: LongWord; var outPort: Integer): Integer;
+{$ifdef PXX_PAL_ESP_IDF_TARGET}
+var
+  sa: array[0..15] of Byte;
+  addrlen: Integer;
+  i: Integer;
+  rc: Integer;
+begin
+  for i := 0 to 15 do sa[i] := 0;
+  addrlen := 16;
+  rc := lwip_accept(handle, @sa[0], @addrlen);
+  outAddr := 0;
+  outPort := 0;
+  if rc >= 0 then
+    ParseSockAddrIpv4(@sa[0], outAddr, outPort);
+  Result := rc;
+end;
+{$else}
+begin
+  outAddr := 0;
+  outPort := 0;
   Result := PAL_ERR_UNSUPPORTED;
 end;
 {$endif}

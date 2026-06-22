@@ -38,5 +38,8 @@ begin
   writeln('sendto=', Integer(PalSendToIpv4(0, nil, 0, PAL_NET_IP_LOOPBACK, 48691)));
   writeln('recvfrom=', Integer(PalRecvFromIpv4(0, nil, 0, peerAddr, peerPort)));
   writeln('poll=', PalPoll(0, PAL_POLL_IN, 0));
+  writeln('sockerr=', PalGetSockError(0));
+  writeln('sockname=', PalGetSockNameIpv4(0, peerAddr, peerPort));
+  writeln('acceptip=', PalAcceptIpv4(0, peerAddr, peerPort));
   writeln('unsupported=', PalUnsupported);
 end.

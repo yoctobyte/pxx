@@ -98,6 +98,9 @@ function PalSocketClose(handle: Integer): Integer;
 function PalSendToIpv4(handle: Integer; buf: Pointer; len: Integer; hostAddr: LongWord; port: Integer): Int64;
 function PalRecvFromIpv4(handle: Integer; buf: Pointer; len: Integer; var outAddr: LongWord; var outPort: Integer): Int64;
 function PalPoll(handle, events, timeoutMs: Integer): Integer;
+function PalGetSockError(handle: Integer): Integer;
+function PalGetSockNameIpv4(handle: Integer; var outAddr: LongWord; var outPort: Integer): Integer;
+function PalAcceptIpv4(handle: Integer; var outAddr: LongWord; var outPort: Integer): Integer;
 
 function PalMonotonicMillis: Int64;
 procedure PalYield;
@@ -280,6 +283,21 @@ end;
 function PalPoll(handle, events, timeoutMs: Integer): Integer;
 begin
   Result := PalBackendPoll(handle, events, timeoutMs);
+end;
+
+function PalGetSockError(handle: Integer): Integer;
+begin
+  Result := PalBackendGetSockError(handle);
+end;
+
+function PalGetSockNameIpv4(handle: Integer; var outAddr: LongWord; var outPort: Integer): Integer;
+begin
+  Result := PalBackendGetSockNameIpv4(handle, outAddr, outPort);
+end;
+
+function PalAcceptIpv4(handle: Integer; var outAddr: LongWord; var outPort: Integer): Integer;
+begin
+  Result := PalBackendAcceptIpv4(handle, outAddr, outPort);
 end;
 
 function PalMonotonicMillis: Int64;
