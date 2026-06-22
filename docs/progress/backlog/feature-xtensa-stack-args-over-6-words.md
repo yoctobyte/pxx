@@ -63,3 +63,11 @@ the compiler.
   qemu-system / the esp-bare / IDF flow (as this ticket's own repro notes:
   "qemu-system-riscv32 / esp32c3"). Deferred to a session with that harness wired
   (or real esp32c3/s3 hardware) so fixes ship verified, not blind.
+- 2026-06-22 — **Verified the threshold empirically (not just inferred from one
+  compile error).** Programs defining + calling a procedure with N Integer
+  params, `--target=xtensa`: `5` and `6` params compile; `7` and `8` FAIL with
+  `more than 6 parameter words not yet supported`. Holds for BOTH `--xtensa-abi=
+  windowed` and Call0 (bare). The definition-site error (parser.inc:10557) fires
+  first for a 7-word routine, which is the `PalBackendVforkAndExec` (7 words)
+  case. So: xtensa supports <= 6 param words, >6 does not compile — confirmed,
+  not assumed.
