@@ -12,6 +12,10 @@ jobs:
       - uses: actions/checkout@v4
       - name: deps (FPC seed + QEMU for cross-run)
         run: sudo apt-get update && sudo apt-get install -y fpc qemu-user
+      - name: bootstrap (FPC seed -> self-hosted compiler/pascal26)
+        # compiler/pascal26 is a build artifact, not committed; the $(COMPILER)
+        # rule refuses to auto-bootstrap, so mint the seed from FPC first.
+        run: make bootstrap
       - name: gate (self-host fixedpoint + determinism)
         run: make test
       - name: cross-bootstrap (all targets byte-identical)
