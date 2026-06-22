@@ -1,7 +1,7 @@
 # `Abs` / `Sqr` System intrinsics missing
 
 - **Type:** feature (language) — Track A
-- **Status:** backlog
+- **Status:** DONE — 2026-06-23 (Abs + Sqr, int + float).
 - **Opened:** 2026-06-23
 - **Found by:** differential probe vs FPC (`Abs(-5)`, `Sqr(7)` -> "undefined").
 
@@ -25,3 +25,11 @@ A runtime helper (`__pxxAbsInt`/`__pxxAbsFloat`, `__pxxSqr*`) in the builtin uni
 (with the usual pre-scan pull on `abs(`/`sqr(`), mirroring the string Copy/Delete
 intrinsics), or an expression-temp mechanism so the argument is evaluated once.
 Gate: `make test` + FPC oracle (int + float, negative/zero/positive).
+
+## Fix log
+
+- 2026-06-23 — DONE via builtin helpers (same pattern as string Delete/Insert):
+  `__pxxAbsInt/__pxxAbsDbl/__pxxSqrInt/__pxxSqrDbl` in builtin.pas; ParseFactor
+  lowers `Abs`/`Sqr` to the int or float helper by the argument type (eval-once),
+  pre-scan pulls the builtin unit on `abs(`/`sqr(`. Test test/test_abs_sqr.pas,
+  FPC oracle-matched (int + float). make test + cross-bootstrap byte-identical.

@@ -3428,6 +3428,36 @@ begin
         Exit;
       end;
 
+      { Abs(e)/Sqr(e): System intrinsics lowered to builtin helpers (eval-once;
+        int and float variants by the argument type). No `uses`; user routine of
+        the same name shadows. ESP (no builtin unit) errors with a clear message. }
+      if (CaseEqual(name, 'Abs') or CaseEqual(name, 'Sqr')) and
+         (procIdx < 0) and (Tokens[TokPos].Kind = tkLParen) then
+      begin
+        Next; Expect(tkLParen, '(');
+        ParseExpr; node := CurASTNode;
+        Expect(tkRParen, ')');
+        if TypeIsFloat(IntToTypeKind(ASTTk[node])) then
+        begin
+          if CaseEqual(name, 'Abs') then helperPi := FindProc('__pxxAbsDbl')
+          else helperPi := FindProc('__pxxSqrDbl');
+        end
+        else
+        begin
+          if CaseEqual(name, 'Abs') then helperPi := FindProc('__pxxAbsInt')
+          else helperPi := FindProc('__pxxSqrInt');
+        end;
+        if helperPi < 0 then Error(name + ': builtin helper unavailable (needs the builtin unit; not on ESP)');
+        argSeq := AllocNode(AN_ARG); ASTLeft[argSeq] := node;
+        CurASTNode := AllocNode(AN_CALL); ASTIVal[CurASTNode] := helperPi;
+        ASTLeft[CurASTNode] := argSeq;
+        if TypeIsFloat(IntToTypeKind(ASTTk[node])) then ASTTk[CurASTNode] := Ord(tyDouble)
+        else if CaseEqual(name, 'Abs') then ASTTk[CurASTNode] := ASTTk[node]
+        else ASTTk[CurASTNode] := Ord(tyInt64);
+        LastExprTk := IntToTypeKind(ASTTk[CurASTNode]);
+        Exit;
+      end;
+
       { Concat(s1, s2, ..., sn): the System string-concatenation intrinsic, just
         chained `+`. Folded here so it needs no `uses` and reuses the working
         string-concat codegen. A user `Concat` (procIdx>=0) shadows it. }
@@ -12362,6 +12392,14 @@ begin
     if (Tokens[i].Kind = tkIdent) and (i + 1 < TokCount) and
        (Tokens[i + 1].Kind = tkLParen) and
        (CaseEqual(GetTokenStr(i), 'delete') or CaseEqual(GetTokenStr(i), 'insert')) and
+       (TargetArch <> TARGET_XTENSA) and (TargetArch <> TARGET_RISCV32) then
+      needsBuiltin := True;
+    { Bare `Abs(...)` / `Sqr(...)` lower to the __pxxAbs*/__pxxSqr* helpers in the
+      builtin unit (see ParseFactor). Pull the unit so they resolve; a user
+      routine of the same name shadows. ESP can't compile builtin. }
+    if (Tokens[i].Kind = tkIdent) and (i + 1 < TokCount) and
+       (Tokens[i + 1].Kind = tkLParen) and
+       (CaseEqual(GetTokenStr(i), 'abs') or CaseEqual(GetTokenStr(i), 'sqr')) and
        (TargetArch <> TARGET_XTENSA) and (TargetArch <> TARGET_RISCV32) then
       needsBuiltin := True;
     { Variant use needs VariantToStr (in builtin) for variant writes — on

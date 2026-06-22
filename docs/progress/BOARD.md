@@ -25,7 +25,7 @@ _none_
 | --- | --- | --- | --- | --- |
 | feature-c-runtime-library | B | feature | C runtime/library layer (`lib/crtl`) plus direct C-library packages | feature-c-source-frontend |
 
-## backlog (52)
+## backlog (51)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -36,7 +36,6 @@ _none_
 | bug-writeln-boolean-format | A | bug | `WriteLn(Boolean)` prints `0`/`1` instead of `FALSE`/`TRUE` | — |
 | chore-inc-to-units | A | chore | `.inc` → real `.pas` units refactor | — |
 | chore-runtime-emission-size | A | chore | Finer runtime-support emission (code size) | — |
-| feature-abs-sqr-intrinsics | A | feature | `Abs` / `Sqr` System intrinsics missing | — |
 | feature-c-header-import-complex | A | feature | Import C headers for complex libraries (glib/GTK-grade) | — |
 | feature-copy-intrinsic | B | feature | `Copy` as a generic overloaded intrinsic (string + dynarray families) | — |
 | feature-c-regex-library-devtest | A | feature | C regex library dev-test import | — |
@@ -116,7 +115,7 @@ _none_
 | feature-mimic-fpc | B | feature | `mimic FPC` compatibility mode | — |
 | feature-string-model-tyfixedstring | B | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (185)
+## done (186)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -177,6 +176,7 @@ _none_
 | chore-qemu-test-env | A | chore | QEMU cross-target test environment | — |
 | chore-stable-binary-single-file-no-version-churn | A | chore | Stable binary: fixed-name overwrite (kill `vN` churn + the dangling-symlink trap) | — |
 | feature-aarch64-asm-emitter | A | feature | AArch64 text-assembler (`EmitAsmA64`) for cleaner ARM64 codegen | — |
+| feature-abs-sqr-intrinsics | A | feature | `Abs` / `Sqr` System intrinsics missing | — |
 | feature-adventure-scene-asset-pipeline | B | feature | Adventure scene asset pipeline | feature-image-ascii-renderer-library |
 | feature-arm32-asm-emitter | A | feature | ARM32 text-assembler (`EmitAsmArm32`) for cleaner ARM32 codegen | — |
 | feature-array-of-const | A | feature | `array of const` (TVarRec) parameter support | — |
@@ -323,7 +323,6 @@ _none_
 - [A] bug-writeln-boolean-format
 - [A] chore-inc-to-units
 - [A] chore-runtime-emission-size
-- [A] feature-abs-sqr-intrinsics
 - [A] feature-c-header-import-complex
 - [B] feature-copy-intrinsic
 - [A] feature-c-regex-library-devtest

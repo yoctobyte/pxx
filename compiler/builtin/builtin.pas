@@ -38,6 +38,14 @@ function __pxxStrCopy(const s: AnsiString; index, count: Integer): AnsiString;
 procedure __pxxStrDelete(var s: AnsiString; index, count: Integer);
 procedure __pxxStrInsert(const src: AnsiString; var s: AnsiString; index: Integer);
 
+{ Bare `Abs(x)` / `Sqr(x)` lower to these (see ParseFactor) so the System
+  intrinsics work with no `uses` and the argument is evaluated once (the naive
+  e*e / if e<0 fold would double-evaluate a side-effecting argument). }
+function __pxxAbsInt(x: Int64): Int64;
+function __pxxAbsDbl(d: Double): Double;
+function __pxxSqrInt(x: Int64): Int64;
+function __pxxSqrDbl(d: Double): Double;
+
 { The heap allocator and managed-string helpers (PXXAlloc/Free/Realloc,
   PXXStr*) moved to the `builtinheap` unit so heap-only / string-only programs
   do not pull in the Str/Val/Variant routines below. }
@@ -356,6 +364,26 @@ begin
   if index < 1 then index := 1;
   if index > Length(s) + 1 then index := Length(s) + 1;
   s := __pxxStrCopy(s, 1, index - 1) + src + __pxxStrCopy(s, index, Length(s));
+end;
+
+function __pxxAbsInt(x: Int64): Int64;
+begin
+  if x < 0 then Result := -x else Result := x;
+end;
+
+function __pxxAbsDbl(d: Double): Double;
+begin
+  if d < 0 then Result := -d else Result := d;
+end;
+
+function __pxxSqrInt(x: Int64): Int64;
+begin
+  Result := x * x;
+end;
+
+function __pxxSqrDbl(d: Double): Double;
+begin
+  Result := d * d;
 end;
 
 end.
