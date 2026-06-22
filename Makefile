@@ -29,7 +29,7 @@ PXX_STABLE ?= $(STABLE_DEFAULT_DIR)/pinned
 PXXFLAGS   :=
 FROZEN_PXXFLAGS := -uPXX_MANAGED_STRING
 
-.PHONY: all bootstrap bootstrap-check fpc-check test test-core test-asm-emit test-nilpy qemu-env-check test-i386 test-aarch64 test-arm32 test-emit-obj stabilize check-stable revert benchmark benchmark-compiler-runtime benchmark-check clean distclean symbols \
+.PHONY: all bootstrap bootstrap-check fpc-check test test-core test-asm-emit test-nilpy qemu-env-check test-i386 test-aarch64 test-arm32 test-emit-obj stabilize check-stable selfcheck revert benchmark benchmark-compiler-runtime benchmark-check clean distclean symbols \
         bootstrap-managed bootstrap-frozen test-managed test-frozen stabilize-managed stabilize-frozen check-stable-managed revert-managed test-nilpy-managed test-nilpy-frozen \
         pxx-stable-check pin lib-test library-suite library-suite-green library-suite-discovery gui-test demos c-interop-devtest \
         progress-check cross-bootstrap cross-bootstrap-aarch64 cross-bootstrap-arm32 cross-bootstrap-i386 test-esp-bare test-esp-softfloat
@@ -1878,6 +1878,26 @@ check-stable:
 	@(cd $(STABLE_DEFAULT_DIR) && sha256sum -c last.sha256) && \
 	  echo "Stable v$$(cat $(STABLE_DEFAULT_DIR)/VERSION) OK: $$(cat $(STABLE_DEFAULT_DIR)/last.sha256)" || \
 	  (echo "MISMATCH: stable binary does not match last.sha256"; exit 1)
+
+# Light CI self-check -- NO fpc, NO qemu, seconds not minutes. Seeds from the
+# committed native stable binary instead of rebuilding it from FPC, self-hosts
+# the current source to a fixedpoint, and runs a compiled hello to prove the
+# binary executes. The pinned seed usually lags HEAD by one codegen generation,
+# so convergence is checked as g2 == g3 (a single g1 == g2 would false-fail
+# right after any codegen change). The full release-grade gate -- FPC bootstrap,
+# full determinism, and cross-target byte-identity -- stays in `make test` +
+# `make cross-bootstrap`, run by the release workflow.
+selfcheck: check-stable
+	@test -x $(PXX_STABLE) || (echo "No executable stable at $(PXX_STABLE)"; exit 1)
+	@echo "=== selfcheck: self-host from committed stable $(PXX_STABLE) ==="
+	$(PXX_STABLE) $(COMPILER_SRC) /tmp/pxx-sc-g1
+	/tmp/pxx-sc-g1 $(COMPILER_SRC) /tmp/pxx-sc-g2
+	/tmp/pxx-sc-g2 $(COMPILER_SRC) /tmp/pxx-sc-g3
+	cmp /tmp/pxx-sc-g2 /tmp/pxx-sc-g3
+	@echo "self-host fixedpoint OK (g2 == g3)"
+	/tmp/pxx-sc-g1 test/hello.pas /tmp/pxx-sc-hello
+	test "$$(/tmp/pxx-sc-hello)" = "Hello, World!"
+	@echo "=== selfcheck OK ==="
 
 check-stable-managed:
 	@test -e $(STABLE_MANAGED_DIR)/latest || \

@@ -1,28 +1,27 @@
-# CI — runs on every push / PR. Proves the tree is green & deterministic.
-# Publishes NOTHING (nightly != release). A green check = "releasable".
+# CI — runs on every push / PR. A fast, dependency-free sanity gate.
+#
+# Deliberately LIGHT: no FPC, no QEMU, no cross-targets. It seeds from the
+# committed native stable binary (stable_linux_amd64/default/pinned) instead of
+# rebuilding the compiler from FPC, self-hosts the current source to a fixedpoint
+# (g2 == g3), and runs a compiled hello. Seconds, not minutes.
+#
+# The full release-grade gate — FPC bootstrap, full determinism, and per-target
+# cross byte-identity (needs fpc + qemu-user) — lives in `release.yml`, which
+# runs `make test` + `make cross-bootstrap` on a manual tag dispatch.
 name: ci
 on:
   push:
   pull_request:
 
-# Cancel an in-flight run when a newer commit lands on the same ref, so rapid
-# pushes don't pile up obsolete 5-minute runs.
+# Cancel an in-flight run when a newer commit lands on the same ref.
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  gate:
+  selfcheck:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: deps (FPC seed + QEMU for cross-run)
-        run: sudo apt-get update && sudo apt-get install -y fpc qemu-user
-      - name: bootstrap (FPC seed -> self-hosted compiler/pascal26)
-        # compiler/pascal26 is a build artifact, not committed; the $(COMPILER)
-        # rule refuses to auto-bootstrap, so mint the seed from FPC first.
-        run: make bootstrap
-      - name: gate (self-host fixedpoint + determinism)
-        run: make test
-      - name: cross-bootstrap (all targets byte-identical)
-        run: make cross-bootstrap
+      - name: selfcheck (stable binary self-hosts current source + runs hello)
+        run: make selfcheck
