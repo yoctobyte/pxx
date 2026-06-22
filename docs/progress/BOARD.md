@@ -16,11 +16,10 @@ _none_
 
 _none_
 
-## backlog (61)
+## backlog (62)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
-| bug-dpll-recursion-global-array-miscompile | A | bug | DPLL backtracking miscompiles: satisfiable formula reported UNSAT | — |
 | bug-dynarray-in-record-corrupt | A | bug | Dynamic array as a record field is corrupted (value return + var-param assign) | — |
 | bug-setlength-ir-string-in-complex-method | A | bug | `SetLength expects a string variable in IR codegen` on a valid array SetLength | — |
 | chess-pal-getdents-link | B | chess | examples/chess: PalBackendGetDents64 undefined (PAL backend not linked) | — |
@@ -77,6 +76,7 @@ _none_
 | feature-toolchain-cli-ux | A | feature | Toolchain CLI / user tooling (install, config, discovery, doctor, selfcheck) | — |
 | feature-writeln-as-library | B | feature | write/writeln as a library function (via `array of const` + variadic sugar) | — |
 | feature-zero-init-contract | A | feature | Zero-init contract — one library-owned managed-slot zeroing guarantee | — |
+| fix-sat-dpll-needs-parens-after-paramless-flip | B | fix | sat DPLL: bare paramless recursion needs `DPLL()` after the paramless flip | — |
 | goal-compile-fpc-compiler | A | goal | 🗼 Lighthouse — compile the FPC compiler (`pp.pas`) with PXX | — |
 | idea-demo-app-candidates | B | idea | Demo / test application candidates — selection criteria + catalog | — |
 | idea-unit-rename-import | B | idea | `uses X as Y` unit-rename import (dialect extension) | — |
@@ -91,7 +91,7 @@ _none_
 | feature-demo-vm | B | feature | Demo — bytecode VM + assembler (small ISA) | bug-setlength-ir-string-in-complex-method |
 | feature-sat-solver-library | B | feature | SAT solver library — DPLL over CNF (known-instance test app) | bug-impl-prescan-codegen-regression |
 
-## done (159)
+## done (160)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -266,7 +266,6 @@ _none_
 
 ## Ready (no unmet blocker)
 
-- [A] bug-dpll-recursion-global-array-miscompile
 - [A] bug-dynarray-in-record-corrupt
 - [A] bug-setlength-ir-string-in-complex-method
 - [B] chess-pal-getdents-link
@@ -321,6 +320,7 @@ _none_
 - [A] feature-toolchain-cli-ux
 - [B] feature-writeln-as-library
 - [A] feature-zero-init-contract
+- [B] fix-sat-dpll-needs-parens-after-paramless-flip
 - [A] goal-compile-fpc-compiler
 - [B] idea-demo-app-candidates
 - [B] idea-unit-rename-import

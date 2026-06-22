@@ -199,9 +199,8 @@ routines / locals rather than chase the 2-function case.
   Gate: `make test` + fpc-check byte-identical, cross-bootstrap (i386/aarch64/
   arm32) byte-identical. **png decode → `2x2`; `make lib-test` GREEN; re-pinned
   v34** (handed to Track B). The ticket's pre-scan/`savedBase` theory is retired.
-- 2026-06-22 — Residual: the sat *solver* (DPLL) still diverges PXX-vs-FPC on a
-  satisfiable instance (`sat3` → PXX `UNSAT`, FPC `SAT`) — a **separate** codegen
-  bug, NOT this collision (no name clash in DPLL/Solve/ClauseStatus). Cleanly
-  isolated to a standalone FPC-vs-PXX repro; filed as
-  [[bug-dpll-recursion-global-array-miscompile]]. The sat-library ticket stays
-  blocked on that, not on this one.
+- 2026-06-22 — Residual sat *solver* (DPLL) verdict was wrong on satisfiable
+  instances, then **reclassified — NOT a codegen bug**: sat `DPLL` recurses via
+  bare `DPLL`, which the paramless flip (`db99145`) made a result-var read (FPC
+  objfpc semantics). One-line Track-B fix `DPLL` → `DPLL()`, verified correct on
+  v34. See [[fix-sat-dpll-needs-parens-after-paramless-flip]].
