@@ -110,3 +110,26 @@ now. The compiler no longer trips on Synapse dialect/parse/codegen.
 
 Once these land, re-run and record the next class (expected: `Classes`/`SysUtils`
 surface depth).
+
+### Scoping 2026-06-22 (Synapse source installed)
+
+Ran `tools/install_externals.sh` (geby/synapse @ 9c590c1, shallow clone into the
+gitignored `external/synapse`). Scoped the gating `unixutil` blocker to size the
+RTL shims — it is a **multi-unit chain**, not one small unit:
+
+- `synautil.pas:81` FPC/Unix branch is `uses UnixUtil, Unix, BaseUnix;` — so
+  "unixutil not found" is the first of three. Symbols `synautil` actually
+  references from that chain: `TZSeconds` (from `UnixUtil`), `gettimeofday` /
+  `fpgettimeofday` + `TTimeVal` (from `Unix` / `BaseUnix`). `synaip`, `asn1util`,
+  `synachar` pull `unixutil` transitively via `uses synautil`.
+- So the minimal unblock for the four leaf units is a small **`unixutil`** (just
+  `TZSeconds`) **plus** `Unix`/`BaseUnix` shims providing `gettimeofday`/
+  `fpgettimeofday`/`TTimeVal` (these can sit over PAL clock + raw syscalls). The
+  `dynlibs` set (`synsock`/`blcksock`/…) additionally needs a PAL dynlib surface
+  — note `PalHasDynlib` returns True on posix but **no `PalDlOpen`/`Sym`/`Close`
+  primitives exist yet**, and a libc-free `dlopen` is a design decision (loader
+  vs. link libc) — resolve that before `dynlibs`.
+
+This is a deep RTL-breadth cascade (BaseUnix/Classes/SysUtils depth follows), so
+it wants a dedicated push rather than opportunistic slices. The analysis above is
+the starting point.
