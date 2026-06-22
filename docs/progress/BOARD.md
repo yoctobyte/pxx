@@ -75,7 +75,7 @@ _none_
 | feature-stackful-coro-port | A | feature | Port the stackful coroutine backend to all targets | — |
 | feature-static-arena-profile | A | feature | Fixed-static-arena allocator profile | feature-unified-heap-allocator |
 | feature-string-model-tyfixedstring | B | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
-| feature-sys-process-spawning | A | feature | Process spawning and execution support — libc-free execve pipeline | — |
+| feature-sys-process-spawning | B | feature | Process spawning and execution support — libc-free execve pipeline | — |
 | feature-threadsafe-io-serialization | A | feature | Statement-level I/O serialization under threads | feature-unified-heap-allocator |
 | feature-toolchain-cli-ux | A | feature | Toolchain CLI / user tooling (install, config, discovery, doctor, selfcheck) | — |
 | feature-writeln-as-library | B | feature | write/writeln as a library function (via `array of const` + variadic sugar) | — |
@@ -331,7 +331,7 @@ _none_
 - [A] feature-stackful-coro-port
 - [A] feature-static-arena-profile
 - [B] feature-string-model-tyfixedstring
-- [A] feature-sys-process-spawning
+- [B] feature-sys-process-spawning
 - [A] feature-threadsafe-io-serialization
 - [A] feature-toolchain-cli-ux
 - [B] feature-writeln-as-library

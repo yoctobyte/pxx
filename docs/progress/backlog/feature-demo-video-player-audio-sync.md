@@ -30,3 +30,26 @@ listed sibling audio playback (`aplay` or similar), but
 
 ## Log
 - 2026-06-21 — Opened after Track B validated the existing video-only chain.
+
+## Blocker found + fixed (2026-06-22, Track B)
+
+Investigated "what's holding us back" — the concrete blocker for a second
+concurrent child (the audio process alongside video) was an **fd leak / EOF
+deadlock**, not exec itself:
+
+`ExecutePipeline` created its pipes with `flags=0` (no `O_CLOEXEC`). The audio
+child spawned second inherited the video child's stdin write-end, so closing the
+parent's copy never delivered EOF to the first child and `wait()` hung forever.
+Reproduced with two `/bin/cat` children (first child's `wait` deadlocked).
+
+**Fixed** in `lib/rtl/sysutils.pas` (commit ab71066): pipes are now `O_CLOEXEC`;
+`dup2` in the child clears CLOEXEC on the wired 0/1 fds so they survive exec,
+while all other inherited pipe fds auto-close on exec. Regression test
+`test/lib_process_multi.pas` (two concurrent children) wired into `make lib-test`.
+
+So concurrent children now work. Remaining for THIS ticket = the actual audio
+implementation: spawn an audio sibling (e.g. `ffmpeg ... | aplay` or a second
+ffmpeg → `aplay`) through `ExecutePipeline`, feed/sync it against the monotonic
+clock, and tie pause/quit/EOF to both children. (Secondary, non-blocking: the
+vfork child still runs Pascal with locals on the shared stack — see
+feature-sys-process-spawning hardening note.)

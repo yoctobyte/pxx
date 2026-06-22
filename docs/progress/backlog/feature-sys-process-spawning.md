@@ -32,3 +32,18 @@ In a new process control unit or `sysutils`:
 
 ## Log
 - 2026-06-21 — Opened.
+
+## Update (2026-06-22, Track B)
+
+- **O_CLOEXEC pipe fix landed** (commit ab71066): `ExecutePipeline` pipes are now
+  close-on-exec, so spawning multiple concurrent children no longer leaks earlier
+  children's pipe fds (was an EOF/wait deadlock). Regression:
+  `test/lib_process_multi.pas`.
+- **Still open (hardening, step 2 of this ticket):** the child branch of
+  `PalBackendVforkAndExec` runs a normal Pascal path (dup2/close calls, local
+  `res`) on the **shared vfork address space** before `execve`. Per this ticket's
+  own design note the child must reach `execve`/`exit` *directly* without writing
+  the shared stack. It works in practice today (single + now multi child pass),
+  but is fragile. Robust options: a real `fork` (separate address space) so the
+  child can set up fds safely, or a leaf-only asm/syscall child trampoline. Not
+  blocking the video player anymore.
