@@ -2186,6 +2186,8 @@ lib-test: pxx-stable-check
 	test "$$(/tmp/lib_png)" = "$$(printf '86\n137 80 78 71\n1\n2x2\n255,0,0,255\n0,255,0,128\n0,0,255,64\n255,255,255,0\n0\nbad chunk crc')"
 	$(PXX_STABLE) test/lib_ansiterm.pas /tmp/lib_ansiterm
 	test "$$(/tmp/lib_ansiterm)" = "OK"
+	$(PXX_STABLE) test/lib_screen.pas /tmp/lib_screen
+	test "$$(/tmp/lib_screen | tail -1)" = "ALL OK"
 	$(PXX_STABLE) test/lib_ansirender.pas /tmp/lib_ansirender
 	test "$$(/tmp/lib_ansirender)" = "OK"
 	$(PXX_STABLE) -Fulib/rtl/platform/posix test/lib_process.pas /tmp/lib_process

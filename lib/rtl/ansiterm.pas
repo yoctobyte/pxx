@@ -9,6 +9,15 @@ function AnsiReset: AnsiString;
 function AnsiBold: AnsiString;
 function AnsiClear: AnsiString;
 function AnsiMove(row, col: Integer): AnsiString;
+
+{ Backend primitives the screen manager (unit `screen`) drives. Colour setters
+  here SET the pen (no string wrap, no auto-reset), unlike AnsiColor/AnsiRGB. }
+function AnsiSetFg(code: Integer): AnsiString;   { SGR 30..37 / 90..97 }
+function AnsiSetBg(code: Integer): AnsiString;   { SGR 40..47 / 100..107 }
+function AnsiHideCursor: AnsiString;
+function AnsiShowCursor: AnsiString;
+function AnsiAltScreen(enable: Boolean): AnsiString;
+
 function TerminalSize(var cols, rows: Integer): Boolean;
 procedure AnsiSetRawMode(enable: Boolean);
 function AnsiReadKey: Char;
@@ -54,6 +63,34 @@ end;
 function AnsiMove(row, col: Integer): AnsiString;
 begin
   Result := '' + ESC + '[' + IntToStr(row) + ';' + IntToStr(col) + 'H';
+end;
+
+function AnsiSetFg(code: Integer): AnsiString;
+begin
+  Result := '' + ESC + '[' + IntToStr(code) + 'm';
+end;
+
+function AnsiSetBg(code: Integer): AnsiString;
+begin
+  Result := '' + ESC + '[' + IntToStr(code) + 'm';
+end;
+
+function AnsiHideCursor: AnsiString;
+begin
+  Result := '' + ESC + '[?25l';
+end;
+
+function AnsiShowCursor: AnsiString;
+begin
+  Result := '' + ESC + '[?25h';
+end;
+
+function AnsiAltScreen(enable: Boolean): AnsiString;
+begin
+  if enable then
+    Result := '' + ESC + '[?1049h'
+  else
+    Result := '' + ESC + '[?1049l';
 end;
 
 function GetSysIoctl: Integer;
