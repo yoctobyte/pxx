@@ -7791,7 +7791,7 @@ var
   ordinal: Int64;
   tname: AnsiString;
   done, stopTypes: Boolean; loVal, hiVal, arrLen: Integer; isArr: Boolean; isPackedRecord: Boolean;
-  fIsDyn: Boolean; fDynDepth: Integer;
+  fIsDyn: Boolean; fDynDepth: Integer; fAi: Integer;
   tnOff, tnLen, ci, fnOff, fnLen, curFieldOff, fRec, fSize, fAlign, classAlign, depth, targetNOff, targetNLen: Integer;
   fTk: TTypeKind;
   parentCi, slot, mmi, mnOff, mnLen, pnOff, pnLen, rFOff, rFLen, rMOff, rMLen, wFOff, wFLen, wMOff, wMLen, rnOff, rnLen, wnOff, wnLen, propRec, i, vmtSlots: Integer;
@@ -8369,8 +8369,25 @@ begin
             end
             else
             begin
-              fTk := ParseTypeKind;
-              fRec := LastTypeRecId;
+              { Named dynamic-array type field (`TDynArr = array of T`): mirror
+                the inline `array of T` field so SetLength/Length/indexing see a
+                real dynamic array. Without this the field's UFldDynDepth stayed
+                0 and SetLength(Self.field, n) misrouted to the string path. }
+              fAi := -1;
+              if CurTok.Kind = tkIdent then fAi := FindArrayType(CurTok.SVal);
+              if (fAi >= 0) and ArrTypeIsDyn[fAi] then
+              begin
+                fIsDyn := True;
+                fDynDepth := ArrTypeDynDepth[fAi];
+                fTk := IntToTypeKind(ArrTypeElemTk[fAi]);
+                fRec := ArrTypeElemRec[fAi];
+                Next;   { consume the named array type }
+              end
+              else
+              begin
+                fTk := ParseTypeKind;
+                fRec := LastTypeRecId;
+              end;
             end;
             if fIsDyn then
             begin
@@ -8578,8 +8595,25 @@ begin
             end
             else
             begin
-              fTk := ParseTypeKind;
-              fRec := LastTypeRecId;
+              { Named dynamic-array type field (`TDynArr = array of T`): mirror
+                the inline `array of T` field so SetLength/Length/indexing see a
+                real dynamic array. Without this the field's UFldDynDepth stayed
+                0 and SetLength(Self.field, n) misrouted to the string path. }
+              fAi := -1;
+              if CurTok.Kind = tkIdent then fAi := FindArrayType(CurTok.SVal);
+              if (fAi >= 0) and ArrTypeIsDyn[fAi] then
+              begin
+                fIsDyn := True;
+                fDynDepth := ArrTypeDynDepth[fAi];
+                fTk := IntToTypeKind(ArrTypeElemTk[fAi]);
+                fRec := ArrTypeElemRec[fAi];
+                Next;   { consume the named array type }
+              end
+              else
+              begin
+                fTk := ParseTypeKind;
+                fRec := LastTypeRecId;
+              end;
             end;
             if fIsDyn then
             begin

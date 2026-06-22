@@ -762,6 +762,8 @@ test-core: $(COMPILER)
 	test "$$(/tmp/test_float26)" = "$$(printf '1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1')"
 	./$(COMPILER) test/test_extended_is_double.pas /tmp/test_ext_dbl26
 	test "$$(/tmp/test_ext_dbl26)" = "$$(printf 'eq-div\n16.0\n6.00')"
+	./$(COMPILER) test/test_named_dynarray_field.pas /tmp/test_named_dynfield26
+	test "$$(/tmp/test_named_dynfield26)" = "$$(printf 'nums len=3 sum=60\nnames len=2 abb\nrec len=4 v3=99')"
 	./$(COMPILER) test/test_dynarray.pas /tmp/test_dynarray26
 	test "$$(/tmp/test_dynarray26)" = "$$(printf '1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1')"
 	./$(COMPILER) test/test_dynarray_ansistring.pas /tmp/test_dynarray_ansistring26
