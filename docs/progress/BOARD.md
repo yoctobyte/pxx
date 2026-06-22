@@ -8,11 +8,12 @@ lives in git, not in a timestamp._
 
 _none_
 
-## working (1)
+## working (2)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
 | feature-eliah-ide | B | feature | Eliah / Ilja — single-window IDE (GUI + TUI) | — |
+| feature-eliah-m0-window | B | feature | Eliah M0 — single tiled GTK3 window | — |
 
 ## unfinished (0)
 
@@ -24,7 +25,7 @@ _none_
 | --- | --- | --- | --- | --- |
 | feature-c-runtime-library | B | feature | C runtime/library layer (`lib/crtl`) plus direct C-library packages | feature-c-source-frontend |
 
-## backlog (42)
+## backlog (45)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -43,9 +44,12 @@ _none_
 | feature-dns-resolver-library | B | feature | DNS resolver library (`dns.pas`) with selectable backends | — |
 | feature-dynamic-include-paths-config | A | feature | Dynamic Include Paths, Configuration Files, and System Scanner | — |
 | feature-dynamic-soname-discovery | A | feature | Dynamic soname discovery (no execve) | — |
+| feature-eliah-m1-designer | B | feature | Eliah M1 — form designer (box emulation) | feature-eliah-m0-window |
+| feature-eliah-m2-builder | B | feature | Eliah M2 — builder integration | feature-eliah-m0-window |
 | feature-esp32-idf-xtensa | A | feature | ESP-IDF integration: Xtensa (ESP32-S2/S3) — QEMU + real hardware | — |
 | feature-esp-peripheral-callback-api | B | feature | ESP32 peripheral callback API (timer / GPIO / ADC) — the user-facing "interrupt" | — |
 | feature-flexcolumn-directive | A | feature | `flexcolumn` calling-convention directive | chore-inc-to-units |
+| feature-ilja-tui | B | feature | Ilja — TUI (ANSI) face | feature-eliah-m1-designer |
 | feature-inline-asm-depth | A | feature | Inline assembler depth | — |
 | feature-inline-asm-multi-arch | A | feature | Inline assembly support for other architectures (i386, aarch64, arm32) | — |
 | feature-inline-routines | A | feature | Inline routine expansion (`inline;`) | — |
@@ -348,6 +352,7 @@ _none_
 - **2** — feature-target-aarch64
 - **2** — feature-rtti-layout-table
 - **2** — feature-rtl-image-bitmap-library
+- **2** — feature-eliah-m0-window
 - **2** — feature-c-source-frontend
 - **2** — feature-cross-target-feature-parity
 - **2** — feature-cross-managed-string-cow
@@ -359,6 +364,7 @@ _none_
 - **1** — feature-image-ascii-renderer-library
 - **1** — feature-hashing-library
 - **1** — feature-esp32-idf-xtensa
+- **1** — feature-eliah-m1-designer
 - **1** — feature-elf-rel-writer
 - **1** — feature-cross-selfhost-i386
 - **1** — feature-cross-selfhost-arm32

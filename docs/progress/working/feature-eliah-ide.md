@@ -31,24 +31,25 @@ libraries (`lib/rtl`, `lib/pcl`); it is supermeta to the compiler.
 - **Forked per target:** rendering, input, layout. Canvas already exists both
   worlds — `lib/pcl/graphics.pas` (GTK) + `lib/rtl/ansirender.pas` (ANSI).
 
-## Proposed tree (naming pending final OK)
+## Tree (final, confirmed 2026-06-22)
 
 ```
-apps/
-  ide/      # shared, render-agnostic models
-  eliah/    # GTK frontend (build now)
-  ilja/     # TUI frontend (later)
+apps/ide/
+  garin/   # core (גרעין = kernel/core): docmodel, buffer, project, builder
+  eliah/   # GTK face   (Eliah = Elijah)
+  ilja/    # ANSI face  (Ilja  = Elijah)
 ```
 
-## Plan
+Naming scheme = Hebrew. eliah + ilja both transliterate **Elijah** (the two
+faces); **garin** is both a real given name and the word for kernel/core — the
+seed both faces grow from. `apps/ide/README.md` carries the one-line decoder.
 
-- **M0 (now):** Eliah — one GTK3 window, fixed tiled layout (proj tree | editor |
-  designer | output/props), editor pane live, rest stub. Build w/ `$(PXX_STABLE)`,
-  run, screenshot. Proves window + layout + dogfood path.
-- **M1:** designer pane paints mock widget boxes from the widget-tree model;
-  click-place, drag move/resize.
-- **M2:** builder shells to frankonpiler, error list → editor jump.
-- **Later:** Ilja TUI frontend reusing the shared models via ansirender.
+## Plan (this is the epic; each milestone has its own ticket)
+
+- **M0** → `feature-eliah-m0-window` (taken): Eliah one GTK3 window, tiled layout.
+- **M1** → `feature-eliah-m1-designer`: designer paints mock widget boxes.
+- **M2** → `feature-eliah-m2-builder`: shell frankonpiler, error list → jump.
+- **Later** → `feature-ilja-tui`: ANSI face reusing garin via ansirender.
 
 ## Acceptance
 
