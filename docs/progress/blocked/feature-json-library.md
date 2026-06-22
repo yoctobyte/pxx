@@ -1,7 +1,9 @@
 # JSON library — parser + serializer (with a roundtrip test app)
 
 - **Type:** feature
-- **Status:** backlog
+- **Status:** blocked (impl done; lib-test gate blocked on re-pin)
+- **Blocked-by:** bug-impl-prescan-codegen-regression
+  (re-pin past v32 is unsafe until that silent codegen regression is fixed)
 - **Owner:** —
 - **Opened:** 2026-06-19
 - **Relation:** one of the demo-eligible-as-library items from
@@ -46,3 +48,16 @@ self-host / cross-bootstrap.
 
 ## Log
 - 2026-06-19 — Opened from the demo/library organization pass.
+- 2026-06-22 — **Implemented** (track B), commit 3050ec5: `lib/rtl/json.pas`
+  (TJSONValue tree + TJSONReader recursive-descent parser + canonical compact/
+  pretty serializer; numbers kept as raw lexeme for byte-stable re-emit; EJSONError
+  on malformed input; \uXXXX -> UTF-8). Oracle `examples/json/jsondemo.pas` covers
+  roundtrip identity, canonical stability, escapes/unicode, typed access, and
+  parse-error exceptions; ends `ALL OK`. Wired into `make lib-test` + `make demos`.
+  Verified green against a freshly self-hosted compiler (HEAD).
+  **Blocked:** the pinned stable is v32, which predates `obj.Free` (562eb95) and
+  bare `Copy` (dd706ff) that the lib needs. Re-pinning past v32 is currently unsafe
+  because of bug-impl-prescan-codegen-regression (silent miscompile in unit impl
+  sections, introduced by 7ba91bf). Once that bug is fixed and the stable re-pinned,
+  `make lib-test` goes green and this closes. Code is committed but NOT pushed
+  (gate red until then).

@@ -20,6 +20,7 @@ _none_
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
+| bug-impl-prescan-codegen-regression | A | bug | Unit impl-section pre-scan silently miscompiles routines (zlib decode broken) | — |
 | chess-pal-getdents-link | B | chess | examples/chess: PalBackendGetDents64 undefined (PAL backend not linked) | — |
 | chore-inc-to-units | A | chore | `.inc` → real `.pas` units refactor | — |
 | chore-runtime-emission-size | A | chore | Finer runtime-support emission (code size) | — |
@@ -52,7 +53,6 @@ _none_
 | feature-inline-asm-multi-arch | A | feature | Inline assembly support for other architectures (i386, aarch64, arm32) | — |
 | feature-inline-routines | A | feature | Inline routine expansion (`inline;`) | — |
 | feature-interfaces | A | feature | Interfaces | — |
-| feature-json-library | B | feature | JSON library — parser + serializer (with a roundtrip test app) | — |
 | feature-kernel-matrix-bootroom | B | feature | Kernel-matrix bootroom: one static PXX binary, swept across many Linux kernels | — |
 | feature-lazy-standard-unit-emission | A | feature | Lazy standard-unit emission / routine-level dead-code elimination | — |
 | feature-metaclass-descendant-enforcement | A | feature | Metaclass alias descendant-constraint enforcement | — |
@@ -85,11 +85,12 @@ _none_
 | idea-visibility-enforcement | B | idea | Enforce private/protected visibility | — |
 | meta-track-b-compiler-wishlist | B | meta | Track-B wishlist — compiler features most wanted to unblock libraries + demos | — |
 
-## blocked (1)
+## blocked (2)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
 | feature-c-runtime-library | B | feature | C runtime/library layer (`lib/crtl`) plus direct C-library packages | feature-c-source-frontend |
+| feature-json-library | B | feature | JSON library — parser + serializer (with a roundtrip test app) | bug-impl-prescan-codegen-regression |
 
 ## done (156)
 
@@ -262,6 +263,7 @@ _none_
 
 ## Ready (no unmet blocker)
 
+- [A] bug-impl-prescan-codegen-regression
 - [B] chess-pal-getdents-link
 - [A] chore-inc-to-units
 - [A] chore-runtime-emission-size
@@ -293,7 +295,6 @@ _none_
 - [A] feature-inline-asm-multi-arch
 - [A] feature-inline-routines
 - [A] feature-interfaces
-- [B] feature-json-library
 - [B] feature-kernel-matrix-bootroom
 - [A] feature-lazy-standard-unit-emission
 - [A] feature-metaclass-descendant-enforcement
@@ -354,3 +355,4 @@ _none_
 - **1** — chore-qemu-test-env
 - **1** — chore-inc-to-units
 - **1** — bug-managed-byref-string-param-store
+- **1** — bug-impl-prescan-codegen-regression
