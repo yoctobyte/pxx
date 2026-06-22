@@ -59,4 +59,4 @@ Missing surface that should be added deliberately:
   - Deferred (not host-validatable here): ESP-IDF link/run smoke on C3/S3 =
     Track A (hardware); IPv6 + DNS/resolver hooks tracked by
     `feature-networking` / `feature-dns-resolver-library`.
-  - Landed in commit `2c5c696`.
+  - Landed in commit `db1d3e1`.
