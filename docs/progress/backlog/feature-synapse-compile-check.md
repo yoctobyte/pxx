@@ -61,3 +61,25 @@ probing with a real attempt:
 A defined Synapse subset (target: the blocking HTTP client path) compiles with
 `$(PXX_STABLE) --mimic-fpc` and a smoke unit exercises it under `make lib-test`,
 with every remaining gap either fixed in `lib/rtl` or filed as a Track A ticket.
+
+## Recon 2026-06-22 (first `--mimic-fpc` pass, leaf units)
+
+Ran `program p; uses <unit>;` per leaf with `--mimic-fpc` (fresh compiler).
+mimic acceptance MET: every failure is now missing-RTL or a concrete
+compiler gap, NOT a directive/branch error — units get past `jedi.inc` into the
+FPC path. First blocker per unit:
+
+- `synautil`, `synaip`, `asn1util`, `synachar` → **`uses` unit not found:
+  `unixutil`** (RTL — Track B).
+- `synsock`, `blcksock` → **`uses` unit not found: `dynlibs`** (RTL — Track B).
+- `synacode` → **two Track A gaps, both since handled/filed:**
+  1. capital `Array` keyword (`synacode.pas:344`) → FIXED (b5c0252).
+  2. then `undefined variable (Move)` (`:359`) — `Move`/`FillChar` System
+     primitives absent (RTL — Track B; provide in `lib/rtl`, or as compiler
+     builtins).
+
+Track A spinoff filed: [[bug-var-open-array-fixed-arg-length]] (a `var array of
+T` param gets a wrong length from a fixed-array argument — on `synacode`'s path).
+
+**Track B next:** provide `unixutil`, `dynlibs`, and `Move`/`FillChar` (System
+surface). These are the gating RTL units before the leaf protocol units compile.
