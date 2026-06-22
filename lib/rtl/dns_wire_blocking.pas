@@ -43,6 +43,86 @@ begin
   NextQueryId := Random(65536);
 end;
 
+{ Read exactly `need` bytes from a stream socket, polling for readability up to
+  timeoutMs between reads (DNS-over-TCP messages are length-prefixed, and TCP may
+  deliver them in pieces). Returns True only if all bytes arrived. }
+function RecvN(sock: Integer; buf: Pointer; need, timeoutMs: Integer): Boolean;
+var
+  got, pr: Integer;
+  n: Int64;
+begin
+  got := 0;
+  while got < need do
+  begin
+    pr := PalPoll(sock, PAL_POLL_IN, timeoutMs);
+    if pr <= 0 then
+    begin
+      RecvN := False;
+      Exit;
+    end;
+    n := PalRecv(sock, Pointer(Int64(buf) + got), need - got);
+    if n <= 0 then
+    begin
+      RecvN := False;
+      Exit;
+    end;
+    got := got + Integer(n);
+  end;
+  RecvN := True;
+end;
+
+{ DNS over TCP: connect, send the 2-byte-length-prefixed query, read the
+  2-byte-length-prefixed response into respBuf. Returns the response length
+  (capped at respMax), or a negative PAL/timeout error. }
+function DnsQueryTcp(nsHost: LongWord; nsPort: Integer; queryBuf: Pointer; qlen: Integer;
+  respBuf: Pointer; respMax, timeoutMs: Integer): Integer;
+var
+  sock: Integer;
+  lenpfx: array[0..1] of Byte;
+  n: Int64;
+  rlen: Integer;
+begin
+  sock := PalSocket(PAL_NET_AF_INET, PAL_NET_SOCK_STREAM, 0);
+  if sock < 0 then
+  begin
+    DnsQueryTcp := sock;
+    Exit;
+  end;
+  if PalConnectIpv4(sock, nsHost, nsPort) < 0 then
+  begin
+    PalSocketClose(sock);
+    DnsQueryTcp := PAL_NET_ECONNREFUSED;
+    Exit;
+  end;
+  lenpfx[0] := (qlen shr 8) and $FF;
+  lenpfx[1] := qlen and $FF;
+  n := PalSend(sock, @lenpfx[0], 2);
+  if (n = 2) then
+    n := PalSend(sock, queryBuf, qlen);
+  if Integer(n) <> qlen then
+  begin
+    PalSocketClose(sock);
+    DnsQueryTcp := -1;
+    Exit;
+  end;
+  if not RecvN(sock, @lenpfx[0], 2, timeoutMs) then
+  begin
+    PalSocketClose(sock);
+    DnsQueryTcp := PAL_NET_ETIMEDOUT;
+    Exit;
+  end;
+  rlen := (Integer(lenpfx[0]) shl 8) or Integer(lenpfx[1]);
+  if rlen > respMax then rlen := respMax;
+  if not RecvN(sock, respBuf, rlen, timeoutMs) then
+  begin
+    PalSocketClose(sock);
+    DnsQueryTcp := PAL_NET_ETIMEDOUT;
+    Exit;
+  end;
+  PalSocketClose(sock);
+  DnsQueryTcp := rlen;
+end;
+
 function DnsResolveA(nsHost: LongWord; nsPort: Integer; const name: string;
   var ips: TDnsIpv4Array; var count: Integer; timeoutMs: Integer): Integer;
 var
@@ -95,6 +175,18 @@ begin
   begin
     DnsResolveA := Integer(n);
     Exit;
+  end;
+
+  { Truncated (TC) answer: retry the same query over TCP, which has no datagram
+    size limit. The query bytes in qbuf are reused. }
+  if DnsTruncated(@rbuf[0], Integer(n)) then
+  begin
+    n := DnsQueryTcp(nsHost, nsPort, @qbuf[0], qlen, @rbuf[0], 1536, timeoutMs);
+    if n < 0 then
+    begin
+      DnsResolveA := Integer(n);
+      Exit;
+    end;
   end;
 
   { Parse into locals, then copy out — keeps this riscv32-clean by not forwarding

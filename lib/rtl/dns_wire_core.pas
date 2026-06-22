@@ -35,6 +35,10 @@ function DnsBuildQueryA(const name: string; queryId: Integer; buf: Pointer): Int
 function DnsParseResponseA(buf: Pointer; len: Integer; var ips: TDnsIpv4Array;
   var count: Integer; var outId: Integer): Integer;
 
+{ True if the response has the TC (truncated) header bit set, meaning the answer
+  did not fit in the UDP datagram and the query must be retried over TCP. }
+function DnsTruncated(buf: Pointer; len: Integer): Boolean;
+
 implementation
 
 type
@@ -231,6 +235,14 @@ begin
   end;
 
   DnsParseResponseA := rcode;
+end;
+
+function DnsTruncated(buf: Pointer; len: Integer): Boolean;
+begin
+  if len < 3 then
+    DnsTruncated := False
+  else
+    DnsTruncated := (ByteAt(buf, 2) and $02) <> 0;   { flags byte 2, TC bit }
 end;
 
 end.
