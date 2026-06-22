@@ -25,11 +25,12 @@ _none_
 | --- | --- | --- | --- | --- |
 | feature-c-runtime-library | B | feature | C runtime/library layer (`lib/crtl`) plus direct C-library packages | feature-c-source-frontend |
 
-## backlog (45)
+## backlog (46)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
 | bug-ansistring-concat-arg-static-bloat | A | bug | AnsiString concat expression as a call argument allocates an ~8 MB static buffer per site | — |
+| bug-const-open-array-managed-elem-length | A | bug | `const`/value open-array of a managed element loses its length (High = -1) | — |
 | chore-inc-to-units | A | chore | `.inc` → real `.pas` units refactor | — |
 | chore-runtime-emission-size | A | chore | Finer runtime-support emission (code size) | — |
 | feature-c-header-import-complex | A | feature | Import C headers for complex libraries (glib/GTK-grade) | — |
@@ -309,6 +310,7 @@ _none_
 ## Ready (no unmet blocker)
 
 - [A] bug-ansistring-concat-arg-static-bloat
+- [A] bug-const-open-array-managed-elem-length
 - [A] chore-inc-to-units
 - [A] chore-runtime-emission-size
 - [A] feature-c-header-import-complex

@@ -7,7 +7,7 @@ uses screen, menu;
 
 var
   items: array[0..2] of AnsiString;
-  fails: Integer;
+  fails, i, sel: Integer;
 
 procedure CK(const tag: string; got, want: Integer);
 begin
@@ -37,12 +37,18 @@ begin
   CK('clamp',     MenuNavigate(3, 99, KEY_UP, False), 1);   { 99 -> 2, up -> 1 }
   CK('empty',     MenuNavigate(0, 0, KEY_DOWN, True), 0);
 
-  { draw places items down from (1,0) }
+  { recommended caller-side rendering: loop the items, reverse the selected row }
   items[0] := 'Open';
   items[1] := 'Save';
   items[2] := 'Quit';
+  sel := 1;
   ScreenInitSize(6, 3);
-  MenuDraw(1, 0, items, 1);
+  for i := 0 to 2 do
+  begin
+    if i = sel then ScreenSetPen(COLOR_DEFAULT, COLOR_DEFAULT, ATTR_REVERSE)
+    else ScreenSetPen(COLOR_DEFAULT, COLOR_DEFAULT, ATTR_NONE);
+    ScreenWrite(1, i, items[i]);
+  end;
   CKs('draw0', ScreenDumpRow(0), ' Open ');
   CKs('draw1', ScreenDumpRow(1), ' Save ');
   CKs('draw2', ScreenDumpRow(2), ' Quit ');
