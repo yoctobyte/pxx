@@ -52,9 +52,40 @@ LFS / out-of-band, a separate decision).
 - Keep `VERSION` (the integer) and extend it to also record the **source SHA**
   the stable was built from (provenance, since old blobs are no longer kept by
   name).
-- One-time: `git rm stable_linux_amd64/default/v1 … vN`. History keeps them
-  (recoverable via `git show <sha>:…/pinned` if ever needed); the working tree
-  drops ~100 MB to ~5.6 MB (two binaries).
+- One-time: retire the existing `v1 … v36` (see next section) so the working
+  tree drops ~100 MB to ~5.6 MB (two binaries).
+
+## Retiring the existing 36 versions — keep, searchable, un-littered
+
+Requirement (user): don't lose them, keep them searchable, but stop them
+cluttering the working tree. Plain `git rm` felt "blunt"; `git mv` to an archive
+dir was floated.
+
+**`git mv` to an in-tree archive does NOT help** — moved files still live in
+every checkout (~100 MB unchanged). "Out of the tree" necessarily means they
+leave the working tree. The non-blunt way:
+
+- **`git rm stable_linux_amd64/default/v1 … v36` (one commit).** This does NOT
+  destroy them — every `vN` blob stays in git **history** permanently
+  (`git log --all -- <path>`, `git show <commit>:<path>`). "Keep" is satisfied;
+  only the *working tree* sheds them.
+- **Add a tiny text manifest** `stable_linux_amd64/STABLES.md` (a few KB, no
+  binaries) so they are *searchable + one-command extractable*. One row per
+  version:
+  `vN | date | source-SHA | git blob hash | commit-where-it-lived`.
+  Extract any old stable in one line:
+  `git cat-file blob <bloghash> > /tmp/pxx-vN && chmod +x /tmp/pxx-vN`
+  (or `git show <commit>:stable_linux_amd64/default/vN`). Generate the manifest
+  from history before the `git rm` (`git log --diff-filter=A --format=... -- path`
+  + `git rev-parse <commit>:<path>` for blob hashes).
+- **Optional, only if you want them as one checkout-able set:** an orphan branch
+  `stable-archive` holding the `vN` files, then `git rm` from `master`. Preserved,
+  diff-free from master, fetched only on demand. Heavier; the manifest+history
+  route already covers "keep + find + extract", so treat the orphan branch as a
+  nice-to-have, not required.
+
+This bounds the **working tree** only; git **history** still carries every blob
+(unchanged by rm/mv — that's the LFS/out-of-band conversation, separate).
 
 ## Out of scope / non-goals
 
