@@ -1,9 +1,9 @@
 # Dynamic array as a record field is corrupted (value return + var-param assign)
 
 - **Type:** bug (compiler) — **Track A**
-- **Status:** backlog
-- **Severity:** MEDIUM — has a known workaround (module globals, as in zlib),
-  but it forces non-idiomatic API design on Track B libraries.
+- **Status:** **DONE** — fixed `39d851a`, re-pinned v36.
+- **Severity:** MEDIUM — had a known workaround (module globals, as in zlib),
+  but it forced non-idiomatic API design on Track B libraries.
 - **Opened:** 2026-06-22
 - **Owner:** — (Track A / "sis")
 - **Found by:** Track B, building the `sat` library (wanted a `TCNF` record).
@@ -74,3 +74,20 @@ API becomes possible.
 ## Log
 - 2026-06-22 — Filed by Track B from the sat-library build. Minimal repro +
   FPC oracle. Pre-existing (documented in zlib since that unit was written).
+- 2026-06-22 — **DONE (Track A, `39d851a`, v36).** Root cause was the
+  whole-dyn-array assignment lowering, not refcount init: `rec.field := dynarr`
+  (a non-IDENT dyn-array LHS) fell through `AN_ASSIGN` to the generic scalar
+  store, which used the element width (truncating the 8-byte handle to 4) and
+  stored the source's slot *address* instead of its handle → bogus pointer →
+  segfault / garbage `Length`. The IR_STORE_SYM dyn-array path (plain `b := a`)
+  was correct; only the field/index lvalue path was missing. Fix: detect a
+  non-IDENT dyn-array LHS via `NodeDynDepth > 0` and store the handle at pointer
+  width (`ir.inc` AN_ASSIGN). Covers var-param field assign, local record field
+  assign, and by-value record return with dyn-array fields (all three in the
+  minimal repro now pass). Share semantics (no retain/release on the field
+  store) — matches how PXX dyn-arrays already behave; a refcount refinement can
+  follow if a double-free surfaces, but the corruption/crash is gone. Regression
+  `test/test_dynarray_record_field.pas`. Gate: `make test` + fpc-check
+  byte-identical, cross-bootstrap (i386/aarch64/arm32) byte-identical, lib-test
+  green. Track B can now use record-based dyn-array APIs (drop the module-global
+  workaround in zlib/sat when convenient).
