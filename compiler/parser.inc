@@ -3396,6 +3396,38 @@ begin
         Exit;
       end;
 
+      { Succ(e)/Pred(e)/Odd(e): System ordinal intrinsics, folded to arithmetic
+        (no `uses`, target-independent, the argument used exactly once so no
+        double-eval). Succ -> e+1, Pred -> e-1, Odd -> (e and 1) = 1 (Boolean).
+        A user routine of the same name (procIdx>=0) shadows. }
+      if (CaseEqual(name, 'Succ') or CaseEqual(name, 'Pred')) and
+         (procIdx < 0) and (Tokens[TokPos].Kind = tkLParen) then
+      begin
+        Next; Expect(tkLParen, '(');
+        ParseExpr; node := CurASTNode;
+        Expect(tkRParen, ')');
+        left := AllocNode(AN_INT_LIT); ASTIVal[left] := 1; ASTTk[left] := Ord(tyInteger);
+        op := AllocNode(AN_BINOP);
+        if CaseEqual(name, 'Succ') then ASTIVal[op] := Ord(tkPlus) else ASTIVal[op] := Ord(tkMinus);
+        ASTLeft[op] := node; ASTRight[op] := left; ASTTk[op] := ASTTk[node];
+        CurASTNode := op; LastExprTk := IntToTypeKind(ASTTk[node]);
+        Exit;
+      end;
+      if CaseEqual(name, 'Odd') and (procIdx < 0) and (Tokens[TokPos].Kind = tkLParen) then
+      begin
+        Next; Expect(tkLParen, '(');
+        ParseExpr; node := CurASTNode;
+        Expect(tkRParen, ')');
+        left := AllocNode(AN_INT_LIT); ASTIVal[left] := 1; ASTTk[left] := Ord(tyInteger);
+        op := AllocNode(AN_BINOP); ASTIVal[op] := Ord(tkAnd);
+        ASTLeft[op] := node; ASTRight[op] := left; ASTTk[op] := Ord(tyInteger);
+        left := AllocNode(AN_INT_LIT); ASTIVal[left] := 1; ASTTk[left] := Ord(tyInteger);
+        CurASTNode := AllocNode(AN_BINOP); ASTIVal[CurASTNode] := Ord(tkEq);
+        ASTLeft[CurASTNode] := op; ASTRight[CurASTNode] := left; ASTTk[CurASTNode] := Ord(tyBoolean);
+        LastExprTk := tyBoolean;
+        Exit;
+      end;
+
       { Concat(s1, s2, ..., sn): the System string-concatenation intrinsic, just
         chained `+`. Folded here so it needs no `uses` and reuses the working
         string-concat codegen. A user `Concat` (procIdx>=0) shadows it. }
