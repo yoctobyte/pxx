@@ -16,7 +16,7 @@ _none_
 
 _none_
 
-## backlog (66)
+## backlog (68)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -24,7 +24,9 @@ _none_
 | chess-pal-getdents-link | B | chess | examples/chess: PalBackendGetDents64 undefined (PAL backend not linked) | — |
 | chore-inc-to-units | A | chore | `.inc` → real `.pas` units refactor | — |
 | chore-runtime-emission-size | A | chore | Finer runtime-support emission (code size) | — |
+| chore-stable-binary-single-file-no-version-churn | A | chore | Stable binary: fixed-name overwrite (kill `vN` churn + the dangling-symlink trap) | — |
 | design-overloadable-intrinsics | A | design | Design question: overloadable compiler intrinsics (the `Copy` precedent) | — |
+| design-record-copy-dynarray-field-semantics | A | design | Record copy with a dynamic-array field: PXX deep-copies, FPC shares (reference) | — |
 | feature-additional-cpu-targets | A | feature | Additional CPU targets (rollup: i386 → aarch64 → arm32 → ESP32/RISC-V) | feature-target-aarch64, feature-target-arm32, feature-target-esp32, feature-target-i386 |
 | feature-allocator-quality | A | feature | Allocator quality: split / coalesce / bins / alignment | — |
 | feature-async-auto-backend | A | feature | Auto stackless/stackful backend selection | — |
@@ -93,7 +95,7 @@ _none_
 | --- | --- | --- | --- | --- |
 | feature-c-runtime-library | B | feature | C runtime/library layer (`lib/crtl`) plus direct C-library packages | feature-c-source-frontend |
 
-## done (167)
+## done (168)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -136,6 +138,7 @@ _none_
 | bug-rtti-offset-static-array | A | bug | RTTI offset corruption when class/record definitions contain large static arrays | — |
 | bug-setlength-dynarray-function-result | A | bug | SetLength rejects dynamic-array function result | — |
 | bug-setlength-ir-string-in-complex-method | A | bug | `SetLength expects a string variable in IR codegen` on a valid array SetLength | — |
+| bug-setlength-nested-dynarray-field | A | bug | SetLength on a nested sub-array slot through a record field | — |
 | bug-stack-corruption-inline-string-concat | A | bug | Stack frame corruption on inline string concatenation assignments | — |
 | bug-string-type-size-mismatch | A | bug | String type size mismatch in TypeSize vs codegen copies | — |
 | bug-subclass-field-offset-calculation | A | bug | bug-subclass-field-offset-calculation (Track A) | — |
@@ -279,7 +282,9 @@ _none_
 - [B] chess-pal-getdents-link
 - [A] chore-inc-to-units
 - [A] chore-runtime-emission-size
+- [A] chore-stable-binary-single-file-no-version-churn
 - [A] design-overloadable-intrinsics
+- [A] design-record-copy-dynarray-field-semantics
 - [A] feature-additional-cpu-targets
 - [A] feature-allocator-quality
 - [A] feature-async-auto-backend
