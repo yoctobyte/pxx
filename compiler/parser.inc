@@ -7325,7 +7325,7 @@ begin
     tkReal_T:     if (TargetArch = TARGET_XTENSA) or (TargetArch = TARGET_RISCV32) then Result := tySingle else Result := tyDouble;
     tkSingle_T:   Result := tySingle;
     tkDouble_T:   Result := tyDouble;
-    tkExtended_T: Result := tyExtended;
+    tkExtended_T: Result := tyDouble;   { Extended aliases Double — see below }
     else
     begin
       lo := CurTok.SVal;
@@ -7378,7 +7378,12 @@ begin
       end
       else if CaseEqual(lo, 'single') then Result := tySingle
       else if CaseEqual(lo, 'double') then Result := tyDouble
-      else if CaseEqual(lo, 'extended') then Result := tyExtended
+      else if CaseEqual(lo, 'extended') then Result := tyDouble
+        { Extended aliases Double (feature-extended-alias-or-reject, option a):
+          arithmetic already ran in SSE2 double; the 10-byte x87 tyExtended
+          storage gave no extra precision, so `Extended` is now plain Double on
+          every target. The tyExtended enum + its x87 load/store paths remain but
+          are no longer produced by the front end. }
       else if CaseEqual(lo, 'shortint') then Result := tyInt8
       else if CaseEqual(lo, 'byte') or CaseEqual(lo, 'uint8') then Result := tyUInt8
       else if CaseEqual(lo, 'smallint') then Result := tyInt16
