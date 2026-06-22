@@ -1,8 +1,8 @@
 # Bare function name in an expression: PXX calls it, FPC/ISO reads the result var
 
 - **Type:** bug (language semantics / FPC-compat) + self-host-vs-seed gotcha
-- **Status:** backlog
-- **Owner:** — (Track A)
+- **Status:** done
+- **Owner:** Track A
 - **Opened:** 2026-06-21
 - **Relation:** surfaced while implementing feature-const-eval-typecast-int64.
   Companion to [[feature-fpc-vs-pxx-feature-boundary]].
@@ -163,3 +163,16 @@ above. So this ticket stays **backlog** for that remaining flip.
   hardened all to explicit `F()`. Behaviour-preserving on current PXX; default +
   --threadsafe self-host byte-identical, `make test` green. Source now flip-ready;
   the paramless semantic flip is the only remaining step. Track A.
+- 2026-06-22 — **DONE.** Paramless flip landed (`parser.inc` ParseFactor: dropped
+  the `ParamCount > 0` guard so a bare own-name read with no following `(` is the
+  result var for ANY param count; `F()` still recurses). PXX now matches FPC in
+  all modes: `function F: Integer; begin F := F end;` reads the result var (no
+  infinite recursion). Because the 9 recursion sites were pre-hardened to `F()`,
+  `compiler.pas`'s compiled output is unchanged → default + `--threadsafe`
+  self-host byte-identical, and **fpc-check is now byte-identical** (`cmp
+  compiler/pascal26 /tmp/pascal26-from-fpc` passes) — the FPC seed is at last a
+  faithful oracle for this corner (the seed-vs-self-host divergence is gone, since
+  `r := ConstEval()` is a call in both). Regression test
+  `test/test_func_name_paramless_result.pas` in `make test-core`; full gate green.
+  The clean three-way model is now in force: `F`/`Result` = result var inside own
+  body, `F()` = call, `@F` = pointer. Track A.
