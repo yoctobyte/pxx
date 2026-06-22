@@ -95,6 +95,22 @@ begin
   Check('scene2', ScreenDumpRow(2), '|    |');
   Check('scene3', ScreenDumpRow(3), '+----+');
 
+  { --- two clipped panels side by side + a title: the panel system composes --- }
+  ScreenInitSize(13, 5);
+  ScreenWrite(0, 0, 'Title');
+  ScreenSetClip(0, 1, 6, 4);
+  ScreenBox(0, 0, 6, 4);
+  ScreenWrite(1, 1, 'L');
+  ScreenSetClip(7, 1, 6, 4);
+  ScreenBox(0, 0, 6, 4);
+  ScreenWrite(1, 1, 'R');
+  ScreenResetClip;
+  Check('lay0', ScreenDumpRow(0), 'Title        ');
+  Check('lay1', ScreenDumpRow(1), '+----+ +----+');
+  Check('lay2', ScreenDumpRow(2), '|L   | |R   |');
+  Check('lay3', ScreenDumpRow(3), '|    | |    |');
+  Check('lay4', ScreenDumpRow(4), '+----+ +----+');
+
   { --- key decoder (pure, exact). Sequences go through a variable first to
     sidestep bug-ansistring-concat-arg-static-bloat (a concat expression passed
     straight as an arg reserves ~8 MB of BSS per call site). --- }
