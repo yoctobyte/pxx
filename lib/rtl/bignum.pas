@@ -21,12 +21,20 @@ type
   end;
 
 function BigFromInt(n: Int64): TBigInt;
+function BigFromStr(const s: AnsiString): TBigInt;       { base-10, optional leading '-' }
 function BigToStr(const a: TBigInt): AnsiString;
 function BigCompareMag(const a, b: TBigInt): Integer;   { |a| vs |b|: -1/0/1 }
+function BigCompare(const a, b: TBigInt): Integer;      { signed a vs b: -1/0/1 }
+function BigIsZero(const a: TBigInt): Boolean;
+function BigNegate(const a: TBigInt): TBigInt;          { signed negation (zero stays +) }
 function BigMulSmall(const a: TBigInt; m: Int64): TBigInt;
 function BigAdd(const a, b: TBigInt): TBigInt;           { unsigned magnitudes }
 function BigSub(const a, b: TBigInt): TBigInt;           { unsigned |a| - |b|, assumes |a| >= |b| }
 function BigMul(const a, b: TBigInt): TBigInt;           { signed bignum*bignum }
+function BigAddSigned(const a, b: TBigInt): TBigInt;     { signed a + b }
+function BigSubSigned(const a, b: TBigInt): TBigInt;     { signed a - b }
+procedure BigDivMod(const a, b: TBigInt; var q, r: TBigInt);  { trunc-toward-zero: q*b + r = a, sign(r)=sign(a) }
+function BigModPow(const base, exp, m: TBigInt): TBigInt;     { (base^exp) mod m, exp >= 0 }
 
 implementation
 
@@ -213,6 +221,191 @@ begin
   r.neg := False;
   Normalize(r);
   BigAdd := r;
+end;
+
+function BigIsZero(const a: TBigInt): Boolean;
+begin
+  BigIsZero := Length(a.limbs) = 0;
+end;
+
+function BigNegate(const a: TBigInt): TBigInt;
+var r: TBigInt;
+begin
+  r := a;                       { copies limbs ref + sign }
+  if not BigIsZero(r) then r.neg := not a.neg else r.neg := False;
+  BigNegate := r;
+end;
+
+function BigCompare(const a, b: TBigInt): Integer;
+begin
+  if a.neg <> b.neg then
+  begin
+    if a.neg then BigCompare := -1 else BigCompare := 1;   { neg < pos; zero is never neg }
+    Exit;
+  end;
+  { same sign }
+  if a.neg then
+    BigCompare := -BigCompareMag(a, b)     { both negative: larger magnitude is smaller }
+  else
+    BigCompare := BigCompareMag(a, b);
+end;
+
+function BigAddSigned(const a, b: TBigInt): TBigInt;
+var r: TBigInt; c: Integer;
+begin
+  if a.neg = b.neg then
+  begin
+    r := BigAdd(a, b);                 { same sign: add magnitudes, keep sign }
+    if not BigIsZero(r) then r.neg := a.neg;
+  end
+  else
+  begin
+    c := BigCompareMag(a, b);          { differing signs: subtract smaller mag }
+    if c = 0 then
+      r := BigFromInt(0)
+    else if c > 0 then
+    begin
+      r := BigSub(a, b);
+      if not BigIsZero(r) then r.neg := a.neg;
+    end
+    else
+    begin
+      r := BigSub(b, a);
+      if not BigIsZero(r) then r.neg := b.neg;
+    end;
+  end;
+  BigAddSigned := r;
+end;
+
+function BigSubSigned(const a, b: TBigInt): TBigInt;
+var nb: TBigInt;
+begin
+  nb := BigNegate(b);
+  BigSubSigned := BigAddSigned(a, nb);
+end;
+
+function BigFromStr(const s: AnsiString): TBigInt;
+var r, t, dig: TBigInt; i, n: Integer; neg: Boolean; d: Int64;
+begin
+  r := BigFromInt(0);
+  n := Length(s);
+  i := 1;
+  neg := False;
+  if (n >= 1) and ((s[1] = '-') or (s[1] = '+')) then
+  begin
+    neg := s[1] = '-';
+    i := 2;
+  end;
+  while i <= n do
+  begin
+    d := Ord(s[i]) - Ord('0');
+    if (d >= 0) and (d <= 9) then
+    begin
+      { temps on purpose: a managed-return call passed straight as an arg to
+        another call corrupts loop state on pinned stable -- see
+        bug-nested-managed-return-call-arg }
+      t := BigMulSmall(r, 10);
+      dig := BigFromInt(d);
+      r := BigAdd(t, dig);
+    end;
+    i := i + 1;
+  end;
+  if not BigIsZero(r) then r.neg := neg;
+  BigFromStr := r;
+end;
+
+{ Long division, base 1e9. Magnitude division of |a| by |b|; quotient truncates
+  toward zero, remainder takes the dividend's sign (FPC div/mod semantics).
+  Quotient limbs found by binary search per position (correctness over speed). }
+procedure BigDivMod(const a, b: TBigInt; var q, r: TBigInt);
+var rem, qq, prod, shifted, dlimb: TBigInt; na, i: Integer; lo, hi, mid, d: Int64;
+begin
+  qq := BigFromInt(0);
+  rem := BigFromInt(0);
+  na := Length(a.limbs);
+  if BigIsZero(b) or (na = 0) then
+  begin
+    q := BigFromInt(0);
+    r := BigFromInt(0);
+    Exit;
+  end;
+
+  SetLength(qq.limbs, na);
+  for i := 0 to na - 1 do qq.limbs[i] := 0;
+
+  i := na - 1;
+  while i >= 0 do
+  begin
+    { rem := rem * BASE + a.limbs[i]  (temps: see bug-nested-managed-return-call-arg) }
+    shifted := BigMulSmall(rem, BIG_BASE);
+    dlimb := BigFromInt(a.limbs[i]);
+    rem := BigAdd(shifted, dlimb);
+    { largest d in [0, BASE-1] with |b|*d <= rem }
+    lo := 0; hi := BIG_BASE - 1;
+    while lo < hi do
+    begin
+      mid := (lo + hi + 1) div 2;
+      prod := BigMulSmall(b, mid);
+      prod.neg := False;
+      if BigCompareMag(prod, rem) <= 0 then lo := mid else hi := mid - 1;
+    end;
+    d := lo;
+    qq.limbs[i] := d;
+    if d > 0 then
+    begin
+      prod := BigMulSmall(b, d);
+      prod.neg := False;
+      rem := BigSub(rem, prod);     { rem >= prod by construction }
+    end;
+    i := i - 1;
+  end;
+
+  qq.neg := a.neg <> b.neg;
+  Normalize(qq);
+  rem.neg := a.neg;
+  Normalize(rem);
+  q := qq;
+  r := rem;
+end;
+
+{ (base^exp) mod m via square-and-multiply. exp treated as non-negative
+  magnitude; result is the least non-negative residue (sign of m ignored). }
+function BigModPow(const base, exp, m: TBigInt): TBigInt;
+var result, b, e, q, two, prod: TBigInt; odd: Boolean;
+begin
+  if BigIsZero(m) then
+  begin
+    BigModPow := BigFromInt(0);
+    Exit;
+  end;
+  result := BigFromInt(1);
+  two := BigFromInt(2);
+
+  { b := base mod m (non-negative) }
+  BigDivMod(base, m, q, b);
+  b.neg := False;
+
+  e := exp;
+  e.neg := False;
+
+  { temps for every managed-return result before it's passed on -- see
+    bug-nested-managed-return-call-arg }
+  while not BigIsZero(e) do
+  begin
+    odd := (e.limbs[0] mod 2) = 1;
+    if odd then
+    begin
+      prod := BigMul(result, b);
+      BigDivMod(prod, m, q, result);
+      result.neg := False;
+    end;
+    prod := BigMul(b, b);
+    BigDivMod(prod, m, q, b);
+    b.neg := False;
+    BigDivMod(e, two, e, q);     { e := e div 2 (quotient -> e, remainder discarded into q) }
+  end;
+
+  BigModPow := result;
 end;
 
 end.

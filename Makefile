@@ -2006,6 +2006,8 @@ lib-test: pxx-stable-check
 	test "$$(/tmp/lib_directory)" = "$$(printf 'mkdir=0\nchild=0\nlist=ok\nalpha=1\nchild=1\nalpha-file=1\nchild-dir=1\nalpha-size=1\nstat-file=1\nstat-dir=1')"
 	$(PXX_STABLE) examples/bignum/factorial.pas /tmp/lib_factorial
 	test "$$(/tmp/lib_factorial)" = "$$(printf '5! = 120\n10! = 3628800\n20! = 2432902008176640000\n1000! digits      = 2568\n1000! first 10    = 4023872600\n1000! trailing 0s = 249')"
+	$(PXX_STABLE) examples/bignum/bigmath.pas /tmp/lib_bigmath
+	test "$$(/tmp/lib_bigmath | tail -1)" = "ALL OK"
 	$(PXX_STABLE) test/lib_zlib.pas /tmp/lib_zlib
 	test "$$(/tmp/lib_zlib)" = "$$(printf 'OK stored roundtrip\nOK fixed huffman\nOK dynamic huffman\nOK bad header checksum\nOK bad adler32\nOK truncated stream\nOK reserved block type')"
 	$(PXX_STABLE) test/lib_png.pas /tmp/lib_png
@@ -2038,7 +2040,7 @@ gui-test: pxx-stable-check
 demos: pxx-stable-check
 	@echo "=== demos: compile-smoke examples/* against $(PXX_STABLE) ==="
 	@rc=0; for src in examples/primes/sieve.pas examples/sudoku/sudoku.pas \
-	    examples/maze/maze.pas examples/bignum/factorial.pas \
+	    examples/maze/maze.pas examples/bignum/factorial.pas examples/bignum/bigmath.pas \
 	    examples/chess/chess.pas examples/adventure/adventure.pas \
 	    examples/life/life.pas examples/player/player.pas examples/fm/fm.pas \
 	    examples/gl/triangle.pas; do \
