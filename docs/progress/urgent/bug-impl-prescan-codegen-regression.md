@@ -1,11 +1,29 @@
 # Unit impl-section pre-scan silently miscompiles routines (zlib decode broken)
 
 - **Type:** bug (compiler) — **Track A**
-- **Status:** backlog
-- **Severity:** HIGH — silent miscompilation; **blocks re-pin** past v32.
+- **Status:** urgent — **LIVE in pinned v33; `make lib-test` is RED on master.**
+- **Severity:** CRITICAL — silent miscompilation now shipped in the pinned
+  stable. Was "blocks re-pin"; v33 (commit 3e2d412) re-pinned today's compiler
+  *including* `7ba91bf`, so the regression is now in the binary Track B builds
+  against. `make lib-test` fails at the png line under v33.
 - **Opened:** 2026-06-22
 - **Owner:** — (Track A / "sis")
 - **Found by:** Track B, while wiring the new `json` library into `lib-test`.
+
+## Update 2026-06-22 (post v33 pin)
+
+v33 was pinned before this was fixed, so master's `make lib-test` is RED right
+now (png: `decode=truncated stored data`). Cannot un-pin to a pre-`7ba91bf`
+commit because `json`/`bignum` libs need `obj.Free` (562eb95) + bare `Copy`
+(dd706ff), which are newer than `7ba91bf` — **forward fix of `7ba91bf` only**,
+then re-pin v34.
+
+Likely mechanism (refined): the png IDAT stream is huffman-coded, yet the
+decoder lands in `InflateStored` and reports a *stored*-block error — so a block
+type / bit-position read (`btype := ReadBits(2)`) appears to be misread, routing
+huffman data into the stored path. `test/lib_zlib.pas` (small inputs) still
+passes, so it is size/shape-dependent. Minimal single-unit reduction still TODO;
+the live repro below is reliable.
 
 ## Summary
 
