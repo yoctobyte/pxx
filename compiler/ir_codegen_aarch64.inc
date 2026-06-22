@@ -1142,7 +1142,15 @@ begin
         else if op = Ord(tkOr) then EmitI32($AA010000)     { orr x0, x0, x1 }
         else if op = Ord(tkXor) then EmitI32($CA010000)    { eor x0, x0, x1 }
         else if op = Ord(tkShl) then EmitI32($9AC12000)    { lsl x0, x0, x1 }
-        else if op = Ord(tkIdent) then EmitI32($9AC12400)  { lsr x0, x0, x1 }
+        else if op = Ord(tkIdent) then
+        begin
+          { Logical shr on a <=32-bit operand: zero-extend (`mov w0, w0` clears the
+            upper 32 of x0) so a sign-extended negative value's high bits don't
+            leak into the 64-bit lsr (bug-shr-signed-integer-width). }
+          if TypeSize(IntToTypeKind(IRTk[IRA[node]])) < 8 then
+            EmitI32($2A0003E0);                            { mov w0, w0 }
+          EmitI32($9AC12400);                              { lsr x0, x0, x1 }
+        end
         else if (op = Ord(tkEq)) or (op = Ord(tkNeq)) or (op = Ord(tkLt)) or
                 (op = Ord(tkLe)) or (op = Ord(tkGt)) or (op = Ord(tkGe)) then
         begin

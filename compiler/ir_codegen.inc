@@ -2381,7 +2381,19 @@ begin
           tkAnd:   begin EmitB($48); EmitB($21); EmitB($C8); end; { and rax, rcx }
           tkOr:    begin EmitB($48); EmitB($09); EmitB($C8); end; { or rax, rcx }
           tkXor:   begin EmitB($48); EmitB($31); EmitB($C8); end; { xor rax, rcx }
-          tkIdent: begin EmitB($48); EmitB($D3); EmitB($E8); end; { shr rax, cl }
+          { Logical `shr` on a <=32-bit operand: the value is sign-extended in rax,
+            so a 64-bit shr leaks the sign bits down (bug-shr-signed-integer-width:
+            Integer(-8) shr 1 gave a 64-bit result). Zero-extend the operand to 32
+            bits first (`mov eax, eax` clears the upper half of rax) so the logical
+            shift brings in zeros; genuine 64-bit operands shift as-is. `shl` is
+            unaffected (the sign-extended high bits don't influence the low 32-bit
+            result), so it stays a single 64-bit shift. }
+          tkIdent:
+            begin
+              if TypeSize(IntToTypeKind(IRTk[left])) < 8 then
+                begin EmitB($89); EmitB($C0); end;            { mov eax, eax (zero-extend) }
+              EmitB($48); EmitB($D3); EmitB($E8);             { shr rax, cl }
+            end;
           tkShl:   begin EmitB($48); EmitB($D3); EmitB($E0); end; { shl rax, cl }
 
           tkIn:
