@@ -17,6 +17,24 @@ uses ansiterm, sysutils;
 
 const
   COLOR_DEFAULT = -1;             { use the terminal's default colour }
+  { Colour indices 0..15 (ncurses-style), used for both fg and bg; the manager
+    maps them to the right SGR code (30+/40+ normal, 90+/100+ bright). }
+  COLOR_BLACK   = 0;
+  COLOR_RED     = 1;
+  COLOR_GREEN   = 2;
+  COLOR_YELLOW  = 3;
+  COLOR_BLUE    = 4;
+  COLOR_MAGENTA = 5;
+  COLOR_CYAN    = 6;
+  COLOR_WHITE   = 7;
+  COLOR_BRIGHT_BLACK   = 8;
+  COLOR_BRIGHT_RED     = 9;
+  COLOR_BRIGHT_GREEN   = 10;
+  COLOR_BRIGHT_YELLOW  = 11;
+  COLOR_BRIGHT_BLUE    = 12;
+  COLOR_BRIGHT_MAGENTA = 13;
+  COLOR_BRIGHT_CYAN    = 14;
+  COLOR_BRIGHT_WHITE   = 15;
 
   ATTR_NONE      = 0;
   ATTR_BOLD      = 1;
@@ -210,6 +228,17 @@ begin
   end;
 end;
 
+{ Map a 0..15 colour index to its SGR code (30/90 for fg, 40/100 for bg). }
+function FgCode(c: Integer): Integer;
+begin
+  if c >= 8 then FgCode := 90 + (c - 8) else FgCode := 30 + c;
+end;
+
+function BgCode(c: Integer): Integer;
+begin
+  if c >= 8 then BgCode := 100 + (c - 8) else BgCode := 40 + c;
+end;
+
 { Build the SGR pen sequence: reset, then attrs, then colours. Emitted only when
   the pen changes (Render tracks the last one emitted). }
 function PenSeq(fg, bg, attr: Integer): AnsiString;
@@ -220,8 +249,8 @@ begin
   if (attr and ATTR_DIM) <> 0 then s := s + '' + #27 + '[2m';
   if (attr and ATTR_UNDERLINE) <> 0 then s := s + '' + #27 + '[4m';
   if (attr and ATTR_REVERSE) <> 0 then s := s + '' + #27 + '[7m';
-  if fg <> COLOR_DEFAULT then s := s + AnsiSetFg(fg);
-  if bg <> COLOR_DEFAULT then s := s + AnsiSetBg(bg);
+  if fg <> COLOR_DEFAULT then s := s + AnsiSetFg(FgCode(fg));
+  if bg <> COLOR_DEFAULT then s := s + AnsiSetBg(BgCode(bg));
   PenSeq := s;
 end;
 

@@ -53,13 +53,21 @@ begin
   r := ScreenRender;
   Check('no-op', r, '');
 
-  { Pen change: bold red 'R' on a 1x1 screen. }
+  { Pen change: bold red 'R' on a 1x1 screen (COLOR_RED -> SGR 31). }
   ScreenInitSize(1, 1);
-  ScreenSetPen(31, COLOR_DEFAULT, ATTR_BOLD);
+  ScreenSetPen(COLOR_RED, COLOR_DEFAULT, ATTR_BOLD);
   ScreenPutChar(0, 0, 'R');
   r := ScreenRender;
   exp := '' + E + '[1;1H' + E + '[0m' + E + '[1m' + E + '[31m' + 'R';
   Check('pen', r, exp);
+
+  { Background colour index maps to 40+ (blue -> 44); bright fg maps to 90+. }
+  ScreenInitSize(1, 1);
+  ScreenSetPen(COLOR_BRIGHT_GREEN, COLOR_BLUE, ATTR_NONE);
+  ScreenPutChar(0, 0, ' ');
+  r := ScreenRender;
+  exp := '' + E + '[1;1H' + E + '[0m' + E + '[92m' + E + '[44m' + ' ';
+  Check('pen-bg-bright', r, exp);
 
   { --- draw primitives: after a blank paint, a draw emits only its cells --- }
   ScreenInitSize(5, 3);
