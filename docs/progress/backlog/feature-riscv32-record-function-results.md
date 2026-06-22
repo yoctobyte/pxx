@@ -57,3 +57,9 @@ results are blocked here.
   qemu-system / the esp-bare / IDF flow (as this ticket's own repro notes:
   "qemu-system-riscv32 / esp32c3"). Deferred to a session with that harness wired
   (or real esp32c3/s3 hardware) so fixes ship verified, not blind.
+- 2026-06-22 — **Verified with a minimal repro + controls (not just the net.pas
+  failure).** `function MakeR(x:LongWord;y:Integer):TR` (TR = 2-field record),
+  `--target=riscv32` => `only ordinal/float/pointer/string function results
+  supported yet`. Controls: an ordinal-result function compiles fine on riscv32,
+  and the SAME record-result function compiles fine on x86_64. So the gap is
+  specifically riscv32 record-by-value (struct) returns, confirmed.
