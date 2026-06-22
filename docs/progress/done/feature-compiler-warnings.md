@@ -27,7 +27,7 @@ program still compiles; no regression in error handling. First consumer:
 
 ## Log
 - 2026-06-06 — ticket opened as the warnings prerequisite for lazycasing.
-- 2026-06-22 — DONE (Track A), commit 474ec63. Added `Warn(msg)` / `WarnAt(line, msg)` in
+- 2026-06-22 — DONE (Track A), commit a50bbd5. Added `Warn(msg)` / `WarnAt(line, msg)` in
   lexer.inc (next to `Error`): prints `pascal26:<line>: warning: ...`, increments
   `WarnCount`, keeps compiling. `-Werror`/`--werror` (WarnAsError) promotes the
   next warning to a fatal error. Re-routed the existing `{$warning}` directive
