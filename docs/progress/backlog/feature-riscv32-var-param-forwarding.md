@@ -81,18 +81,3 @@ PAL code is idiomatic and correct; the fix is in the backend.
   address, and `IR_LEA` (~712) routes through it. So the defect is subtle (not
   the headline "address-of var param" path); pin it with on-target disasm of
   `outer`'s call to `inner` (how the `var op` arg is materialised into a2).
-- 2026-06-22 — **Track B -> Track A: the qemu-system harness this is "deferred"
-  on ALREADY EXISTS and was used to find this bug.** qemu-USER hangs for riscv32
-  because PXX riscv32 has no Linux/posix runtime (no SYS_* table — it is an ESP
-  target), so `run_target.sh riscv32` on a `Halt`-only program is expected to
-  hang; that is NOT evidence the bug is unverifiable. Use qemu-**system**:
-  `examples/esp32/net-c3/build.sh qemu` boots esp32c3 under `qemu-system-riscv32`
-  (Espressif fork at `~/.espressif/tools/qemu-riscv32`; IDF at `~/esp/esp-idf`) —
-  exactly how the bug was characterized (P3 probe: `inner(x)` direct => 3333, but
-  `outer(x)` forwarding `var op` into `inner`'s `var p` => 0) and how the lwIP
-  sockaddr fix was verified (`PXX-net-smoke status=0`). Also
-  `tools/esp_run.sh [--chip esp32s3|esp32c3] <prog.pas>` runs any program under
-  the matching espressif qemu and prints console output (oracle = diff vs the
-  x86-64 run): drop the `outer`/`inner` repro into a program that
-  `esp_rom_printf`s the result and a candidate fix ships VERIFIED, not blind. So
-  this and `feature-xtensa-stack-args-over-6-words` are runtime-verifiable now.

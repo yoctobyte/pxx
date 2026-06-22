@@ -63,14 +63,3 @@ the compiler.
   qemu-system / the esp-bare / IDF flow (as this ticket's own repro notes:
   "qemu-system-riscv32 / esp32c3"). Deferred to a session with that harness wired
   (or real esp32c3/s3 hardware) so fixes ship verified, not blind.
-- 2026-06-22 — **Track B -> Track A: verifiable now, not "deferred for harness".**
-  The ESP qemu-system harness is wired: `tools/esp_run.sh --chip esp32s3 <prog>`
-  boots xtensa under the Espressif `qemu-system-xtensa` (installed at
-  `~/.espressif/tools/qemu-xtensa`; IDF at `~/esp/esp-idf`) and prints console
-  output (oracle = diff vs the x86-64 run). For an object-level smoke,
-  `examples/esp32/net-c3` is the esp32c3 (riscv32) twin that already runs under
-  qemu — an `examples/esp32/hello-s3` build proves the xtensa toolchain path.
-  qemu-USER hanging for xtensa/riscv32 is expected (no Linux runtime, ESP-only
-  target), not a blocker. A 7+-param-word fix can ship verified via this flow.
-  (Found alongside `feature-riscv32-var-param-forwarding`, which has the full
-  harness howto.)
