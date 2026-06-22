@@ -2035,7 +2035,8 @@ demos: pxx-stable-check
 	@rc=0; for src in examples/primes/sieve.pas examples/sudoku/sudoku.pas \
 	    examples/maze/maze.pas examples/bignum/factorial.pas \
 	    examples/chess/chess.pas examples/adventure/adventure.pas \
-	    examples/life/life.pas examples/player/player.pas examples/fm/fm.pas; do \
+	    examples/life/life.pas examples/player/player.pas examples/fm/fm.pas \
+	    examples/gl/triangle.pas; do \
 	  flags="-Fulib/pcl"; \
 	  if [ "$$src" = "examples/player/player.pas" ] || [ "$$src" = "examples/fm/fm.pas" ]; then flags="$$flags -Fulib/rtl/platform/posix"; fi; \
 	  if $(PXX_STABLE) $$flags "$$src" /tmp/demo_$$(basename $$src .pas) >/tmp/demo.log 2>&1; then \

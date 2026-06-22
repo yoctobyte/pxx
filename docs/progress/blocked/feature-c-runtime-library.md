@@ -1,7 +1,7 @@
 # C runtime/library layer (`lib/crtl`) plus direct C-library packages
 
 - **Type:** feature (Track B library / C frontend pressure)
-- **Status:** unfinished (halted — was working/Codex)
+- **Status:** blocked
 - **Owner:** — (lock released; last worked by Codex)
 - **Opened:** 2026-06-20
 - **Blocked-by:** feature-c-source-frontend
@@ -132,3 +132,6 @@ This needs a deliberate compiler/library namespace decision before accepted
   compiling the runtime source. Ticket now `Blocked-by: feature-c-source-frontend`.
 
 - 2026-06-21 — HALTED → `unfinished/`. `working/` lock released (no active agent). No uncommitted code this round; parked pending the C source frontend (feature-c-source-frontend, Track A).
+- 2026-06-22 — State audit on Track B: moved `unfinished/` → `blocked/`
+  because this ticket's remaining acceptance requires
+  `feature-c-source-frontend` (Track A). No Track B code change needed.

@@ -12,14 +12,9 @@ _none_
 
 _none_
 
-## unfinished (4)
+## unfinished (0)
 
-| Ticket | Track | Type | Summary | Blocked-by |
-| --- | --- | --- | --- | --- |
-| feature-c-runtime-library | B | feature | C runtime/library layer (`lib/crtl`) plus direct C-library packages | feature-c-source-frontend |
-| feature-demo-file-browser | B | feature | Flagship Demo — Midnight Commander-like TUI file browser (libc-free) | — |
-| feature-pcl-opengl-glarea-demo | B | feature | PCL OpenGL GLArea demo | — |
-| feature-sys-getdents | B | feature | Directory scanning support — sys_getdents64 (libc-free) | — |
+_none_
 
 ## backlog (77)
 
@@ -103,11 +98,13 @@ _none_
 | lib-text-file-io-assign-rewrite | B | lib | Text file I/O: `Assign`/`Rewrite`/`Reset`/`WriteLn(f,…)`/`CloseFile` missing | — |
 | meta-track-b-compiler-wishlist | B | meta | Track-B wishlist — compiler features most wanted to unblock libraries + demos | — |
 
-## blocked (0)
+## blocked (1)
 
-_none_
+| Ticket | Track | Type | Summary | Blocked-by |
+| --- | --- | --- | --- | --- |
+| feature-c-runtime-library | B | feature | C runtime/library layer (`lib/crtl`) plus direct C-library packages | feature-c-source-frontend |
 
-## done (140)
+## done (143)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -183,6 +180,7 @@ _none_
 | feature-cross-target-feature-parity | A | feature | Cross-target language-feature parity (Intel + ARM) | — |
 | feature-declaration-prescan | A | feature | Declaration pre-scan — whole-section symbol visibility (kill declare-before-use) | — |
 | feature-default-standard-units | A | feature | Default standard units: `System` + `textfile` | — |
+| feature-demo-file-browser | B | feature | Flagship Demo — Midnight Commander-like TUI file browser (libc-free) | — |
 | feature-demo-maze | B | feature | Demo — maze generator + solver | — |
 | feature-demo-sudoku | B | feature | Demo — Sudoku (solver + generator + interactive play) | — |
 | feature-demo-video-player | B | feature | Flagship Demo — Console Video Player (libc-free) | — |
@@ -223,6 +221,7 @@ _none_
 | feature-nested-routines | A | feature | Nested routines (procedures/functions inside a routine or method) | — |
 | feature-pal-file-stat-metadata | B | feature | PAL file stat metadata | — |
 | feature-parallel-tracks-stable-compiler | A | feature | Parallel tracks: pin libraries/demos to a "stable" compiler | — |
+| feature-pcl-opengl-glarea-demo | B | feature | PCL OpenGL GLArea demo | — |
 | feature-platform-abstraction-layer | B | feature | Platform Abstraction Layer (PAL): per-platform RTL port at one seam | — |
 | feature-procedural-types | A | feature | Procedural types and method pointers | — |
 | feature-progress-check-makefile | A | feature | Wire `progress.sh check` into a make target | — |
@@ -236,6 +235,7 @@ _none_
 | feature-softfloat-lib | B | feature | Soft-float library (IEEE-754 double kernels + conversions) | — |
 | feature-string-copy-intrinsic-norter | A | feature | String `Copy` as a no-RTL compiler intrinsic (bootstrap-usable) | — |
 | feature-synthetic-feature-matrix-test | A | feature | Synthetic all-features stress test (cross-target conformance) | — |
+| feature-sys-getdents | B | feature | Directory scanning support — sys_getdents64 (libc-free) | — |
 | feature-target-aarch64 | A | feature | Compile target: ARM64 / AArch64 Linux | feature-target-i386 |
 | feature-target-arm32 | A | feature | Compile target: ARM32 Linux | feature-target-aarch64 |
 | feature-target-esp32 | A | feature | Compile target: ESP32 / embedded | — |

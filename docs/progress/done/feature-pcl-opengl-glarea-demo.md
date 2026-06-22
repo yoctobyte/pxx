@@ -2,7 +2,7 @@
 
 - **Type:** feature
 - **Track:** B
-- **Status:** unfinished (halted — was working/Codex)
+- **Status:** done
 - **Owner:** — (lock released; last worked by Codex)
 - **Opened:** 2026-06-21
 - **Relation:** Demo/library request for richer PCL GUI examples.
@@ -33,3 +33,9 @@ forms, labels, and timers.
   tree.
 
 - 2026-06-21 — HALTED → `unfinished/`. `working/` lock released (no active agent). TGLArea + triangle demo committed as 95a3d9c (lib/pcl/glarea.pas, gl_c.h, examples/gl/).
+- 2026-06-22 — DONE in this commit. Fixed the triangle demo's local variable
+  name so pinned v32 resolves the `TGLArea` instance correctly, and added
+  `examples/gl/triangle.pas` to the `make demos` dashboard. Verified direct
+  compile with `stable_linux_amd64/default/pinned -Fulib/pcl
+  examples/gl/triangle.pas /tmp/demo_triangle`; existing `make gui-test` is
+  green.

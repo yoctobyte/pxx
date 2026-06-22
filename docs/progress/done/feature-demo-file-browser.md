@@ -1,7 +1,7 @@
 # Flagship Demo — Midnight Commander-like TUI file browser (libc-free)
 
 - **Type:** feature
-- **Status:** unfinished (halted — was working/Codex)
+- **Status:** done
 - **Owner:** — (lock released; last worked by Codex)
 - **Opened:** 2026-06-21
 - **Relation:** Sibling to other flagship demos. **Depends on** the low-level directory scanning in feature-sys-getdents and unbuffered terminal input in feature-rtl-terminal-raw-mode.
@@ -31,3 +31,10 @@ An interactive terminal file manager (`examples/fm/`) supporting multiple pane l
   blockers.
 
 - 2026-06-21 — HALTED → `unfinished/`. `working/` lock released (no active agent). First demo slice committed as 9d4a162 (examples/fm/fm.pas); needs stat metadata, previews, raw-key nav.
+- 2026-06-22 — DONE in this commit. Expanded `examples/fm/fm.pas` into a
+  one-shot/interactive terminal browser with 1-4 panes, compact/tile modes,
+  stat-backed size display, raw-key controls (`--interactive`), text previews,
+  PNG thumbnails through `PngDecodeRGBA` + `RenderAnsiTrueColorQuadrant`, and
+  colored placeholders for other file types. The default render remains
+  one-shot for deterministic smoke. Verified direct compile/run in compact and
+  tile mode plus `make demos`.

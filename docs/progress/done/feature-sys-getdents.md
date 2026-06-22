@@ -1,7 +1,7 @@
 # Directory scanning support — sys_getdents64 (libc-free)
 
 - **Type:** feature
-- **Status:** unfinished (halted — was working/Codex)
+- **Status:** done
 - **Owner:** — (lock released; last worked by Codex)
 - **Opened:** 2026-06-21
 - **Relation:** Stresses low-level syscall wrappers, pointer arithmetic, and type casting in RTL. Blocker for feature-demo-file-browser.
@@ -38,3 +38,8 @@ In `lib/rtl/sysutils.pas`:
   still missing and split to `feature-pal-file-stat-metadata`.
 
 - 2026-06-21 — HALTED → `unfinished/`. `working/` lock released (no active agent). In-flight code committed as 9f22df5 (sys_getdents64 + GetDirectoryContents + test); resume from there. Follow-up: feature-pal-file-stat-metadata.
+- 2026-06-22 — DONE in this commit. Re-audited current state after
+  `feature-pal-file-stat-metadata`: POSIX PAL exposes `PalGetDents64` and
+  `PalStatAt`, `SysUtils.GetDirectoryContents` filters `.`/`..` and fills
+  directory/file metadata, and `test/lib_directory.pas` covers entries, type,
+  size, and stat. Verified with `make lib-test`.
