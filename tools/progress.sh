@@ -7,9 +7,13 @@
 #   - LEVERAGE = how many tickets name a slug in their Blocked-by.
 #
 # Usage: tools/progress.sh [ready|leverage|board|board-md|check|all] [--track A|B]
+#        tools/progress.sh claim <slug> <owner>
+#        tools/progress.sh resolve <slug> <commit>
 #   ready --track B  list ready Track-B tickets only
 #   board-md  regenerate the committed docs/progress/BOARD.md (run after changes)
 #   check     validate the board; fails on a stale BOARD.md
+#   claim     git-mv a ticket to working/, stamp Status/Owner (no commit)
+#   resolve   git-mv a ticket to done/, stamp Status + a Log line (no commit)
 
 set -euo pipefail
 
@@ -383,8 +387,87 @@ cmd_board_md() {
   echo "wrote $PROG/BOARD.md"
 }
 
+# Locate a single ticket .md by slug across every status dir. Echoes its path;
+# fails (and explains) on a missing or ambiguous slug.
+find_ticket() {
+  local slug="$1" matches n
+  matches="$(find "$PROG" -name "$slug.md" ! -name 'BOARD.md' 2>/dev/null || true)"
+  n="$(printf '%s\n' "$matches" | grep -c . || true)"
+  if [ "$n" -eq 0 ]; then echo "no ticket with slug: $slug" >&2; return 1; fi
+  if [ "$n" -gt 1 ]; then
+    echo "ambiguous slug $slug — matches:" >&2; printf '%s\n' "$matches" >&2; return 1
+  fi
+  printf '%s\n' "$matches"
+}
+
+# Move a ticket file, staging the move. Uses `git mv` when the source is already
+# tracked; falls back to plain `mv` + `git add` for a freshly-authored ticket
+# that has not been committed yet (the common claim case).
+move_ticket() {
+  local src="$1" dst="$2"
+  if git ls-files --error-unmatch "$src" >/dev/null 2>&1; then
+    git mv "$src" "$dst"
+  else
+    mv "$src" "$dst"; git add "$dst" >/dev/null 2>&1 || true
+  fi
+}
+
+# Rewrite the first `- **<Marker>:** ...` bullet's value in place. No-op if the
+# field is absent (older tickets that omit it).
+set_field() {
+  local file="$1" marker="$2" value="$3"
+  if grep -qiE "^[[:space:]]*-?[[:space:]]*\*\*$marker:\*\*" "$file"; then
+    sed -i -E "0,/(\*\*$marker:\*\*[[:space:]]*).*/s//\1$value/" "$file"
+  fi
+}
+
+# claim <slug> <owner>: move the ticket into working/ and stamp Status/Owner.
+# No commit — the move + Owner must land in one agent-authored commit.
+cmd_claim() {
+  local slug="${1:-}" owner="${2:-}" f dest
+  if [ -z "$slug" ] || [ -z "$owner" ]; then
+    echo "usage: $0 claim <slug> <owner>" >&2; return 2
+  fi
+  f="$(find_ticket "$slug")" || return 1
+  dest="$PROG/working/$slug.md"
+  if [ "$f" = "$dest" ]; then echo "$slug already in working/" >&2; return 1; fi
+  move_ticket "$f" "$dest"
+  set_field "$dest" Status working
+  set_field "$dest" Owner "$owner"
+  git add "$dest"
+  echo "claimed $slug -> working/ (owner: $owner)." >&2
+  echo "staged, not committed. regenerate the board ($0 board-md) and commit the move + edits together." >&2
+}
+
+# resolve <slug> <commit>: move the ticket into done/, stamp Status, append a
+# Log line referencing the commit. No commit — the agent writes it.
+cmd_resolve() {
+  local slug="${1:-}" commit="${2:-}" f dest
+  if [ -z "$slug" ] || [ -z "$commit" ]; then
+    echo "usage: $0 resolve <slug> <commit>" >&2; return 2
+  fi
+  f="$(find_ticket "$slug")" || return 1
+  dest="$PROG/done/$slug.md"
+  if [ "$f" = "$dest" ]; then echo "$slug already in done/" >&2; return 1; fi
+  move_ticket "$f" "$dest"
+  set_field "$dest" Status done
+  if ! grep -qE '^## Log' "$dest"; then printf '\n## Log\n' >> "$dest"; fi
+  printf -- '- %s — resolved, commit %s.\n' "$(date +%F)" "$commit" >> "$dest"
+  git add "$dest"
+  echo "resolved $slug -> done/ (commit $commit)." >&2
+  echo "staged, not committed. regenerate the board ($0 board-md) and commit." >&2
+}
+
 cmd="${1:-all}"
 if [ "$#" -gt 0 ]; then shift; fi
+
+# claim/resolve take positional args (slug, owner|commit), not the --track flag
+# the other commands parse — dispatch them before the flag loop.
+case "$cmd" in
+  claim)   cmd_claim "$@"; exit $? ;;
+  resolve) cmd_resolve "$@"; exit $? ;;
+esac
+
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --track)
@@ -407,5 +490,6 @@ case "$cmd" in
   board-md) cmd_board_md ;;
   check)    cmd_check ;;
   all)      cmd_board; echo; cmd_leverage; echo; cmd_ready ;;
-  *) echo "usage: $0 [ready|leverage|board|board-md|check|all] [--track A|B]" >&2; exit 2 ;;
+  *) echo "usage: $0 [ready|leverage|board|board-md|check|all] [--track A|B]" >&2
+     echo "       $0 claim <slug> <owner> | resolve <slug> <commit>" >&2; exit 2 ;;
 esac
