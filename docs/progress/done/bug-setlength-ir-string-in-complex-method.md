@@ -88,3 +88,9 @@ cannot compile it, so it is NOT wired into `make lib-test`. Unblocks when this
 ## Log
 - 2026-06-22 — Filed by Track B from the vm build. FPC oracle confirms the
   source is valid; PXX rejects it only in the full-method context.
+
+## Resolved (v35)
+
+Duplicate of **bug-named-dynarray-field-setlength** (fixed by Track A, pinned
+v35). `examples/vm/vmdemo.pas` compiles + runs `ALL OK` on v35 with the clean
+source unchanged. Closed.

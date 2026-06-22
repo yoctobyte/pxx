@@ -1,8 +1,7 @@
 # Demo — bytecode VM + assembler (small ISA)
 
 - **Type:** feature
-- **Status:** blocked (impl + oracle written, FPC-verified; PXX miscompiles)
-- **Blocked-by:** bug-setlength-ir-string-in-complex-method
+- **Status:** done — unblocked + green on v35
 - **Owner:** —
 - **Opened:** 2026-06-19
 - **Relation:** demo-class survivor from idea-demo-app-candidates. Interpreter
@@ -56,3 +55,10 @@ Platonic source, assumes idiomatic RTL; no compiler changes; ESP32-fit
   (bug-setlength-ir-string-in-complex-method). Left as clean Platonic code (no
   workaround) and NOT wired into `make lib-test`. Unblocks + closes when the
   codegen bug is fixed.
+- 2026-06-22 (later) — **DONE.** Track A's named-dynamic-array-field SetLength
+  fix (bug-named-dynarray-field-setlength, pinned v35) cleared the
+  `SetLength expects a string variable in IR codegen` error. `examples/vm/vmdemo.pas`
+  runs `ALL OK` on v35 (loopsum 55, iter+recursive factorial 120, subroutine
+  36/81, assembler-error rejection). Wired into `make lib-test` + `make demos`.
+  The clean Platonic source compiled unchanged once the compiler was fixed.
+  Source committed in 56678e2; lib-test wiring + close in the math/vm batch.
