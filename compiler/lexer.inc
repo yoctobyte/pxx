@@ -508,6 +508,7 @@ begin
   StrictOverload := False;
   DelphiMode := False;
   ThreadSafeMode := False;
+  MatchQuiet := False;
   InterfacesComMode := False;
   ComInterfaceUsed := False;
   CStyleComments := False;

@@ -109,3 +109,22 @@ procedural AND the operand is a bare function-name (no required args, not alread
   proc values (`type TP = procedure(...); var p: TP; p := @Proc`) error
   `unexpected token`; `@function`-typed work. Filed
   [[bug-procedure-typed-procvalue]] (independent of mode-delphi).
+- 2026-06-22 — **call-arg @-relax slice DONE**. Passing a bare routine name to a
+  proc-typed parameter now takes its address (no `@`), matching FPC `-Mdelphi`.
+  Two mechanisms (parser.inc):
+  - `TryDelphiBareProcArg` (parse-time peek in both arg loops): a bare ident
+    naming a routine that CANNOT be a value-producing call here — a procedure, or
+    a function taking parameters — and standing alone as the whole arg (next tok
+    `,`/`)`) → `AN_PROCADDR`. Paramless functions are deliberately excluded here.
+  - `MatchCallDelphiProcAddr` (overload-resolution wrapper at both call sites):
+    a bare paramless-function arg parses call-first (`AN_CALL`); the match is
+    retried with such args retyped `tyPointer` and rewritten to a fresh
+    `AN_PROCADDR` **iff** the matched formal is procedural (`SymProcSig>=0`).
+    Needed because PXX compat-matches a numeric call result to a proc-typed
+    (pointer) param, so call-first alone would wrongly pass the result; the
+    procedural-formal test forces the address (FPC precedence). Speculative
+    probe is silenced via the new `MatchQuiet` flag (guards MatchProcCall diag).
+  Test `test/test_mode_delphi_callarg.pas` (in `make test`), FPC `-Mdelphi`
+  oracle-matched (42/20/14). make test + cross-bootstrap byte-identical.
+  **REMAINING:** proc-value comparison `if p = F`; proc-typed record/array
+  fields; method pointers (`p := obj.M`, 2-word `TMethod`); per-unit mode reset.

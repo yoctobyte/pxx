@@ -413,6 +413,8 @@ test-core: $(COMPILER)
 	test "$$(/tmp/test_local_shadows26)" = "$$(printf 'count=7 viaFunc=7\ntally=20')"
 	./$(COMPILER) test/test_mode_delphi.pas /tmp/test_mode_delphi26
 	test "$$(/tmp/test_mode_delphi26)" = "$$(printf 'p5=10\nGate=42 calls=3\nTally=105')"
+	./$(COMPILER) test/test_mode_delphi_callarg.pas /tmp/test_mode_delphi_callarg26
+	test "$$(/tmp/test_mode_delphi_callarg26)" = "$$(printf 'ApplyFn=42\nlog=20\nCallNul=14')"
 	./$(COMPILER) test/test_user_type_shadows_builtin.pas /tmp/test_usershadow26
 	test "$$(/tmp/test_usershadow26)" = "$$(printf 'show 7\ndbl=10')"
 	./$(COMPILER) test/test_eof_stdin.pas /tmp/test_eof26

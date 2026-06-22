@@ -2426,6 +2426,113 @@ begin
   Result := node;
 end;
 
+{ {$mode delphi} bare proc-value as a call argument: an identifier naming a
+  routine (not a variable) that CANNOT be a value-producing call in this position
+  -- a procedure, or a function that takes parameters -- standing alone as the
+  whole argument (the next token closes/separates it) is that routine's address
+  (@-optional). Paramless functions are deliberately NOT taken here: they parse
+  as a call (call-first precedence) and only fall back to @F via
+  MatchCallDelphiProcAddr. Returns an AN_PROCADDR node and consumes the name, or
+  -1 with nothing consumed. }
+function TryDelphiBareProcArg: Integer;
+var pi, node: Integer;
+begin
+  Result := -1;
+  if not DelphiMode then Exit;
+  if CurTok.Kind <> tkIdent then Exit;
+  if not (Tokens[TokPos].Kind in [tkComma, tkRParen]) then Exit;
+  if FindSym(CurTok.SVal) >= 0 then Exit;
+  pi := FindProc(CurTok.SVal);
+  if pi < 0 then Exit;
+  if Procs[pi].IsFunc and (Procs[pi].ParamCount = 0) then Exit;
+  node := AllocNode(AN_PROCADDR);
+  ASTIVal[node] := pi;
+  ASTTk[node] := Ord(tyPointer);
+  LastExprTk := tyPointer;
+  Next;
+  Result := node;
+end;
+
+{ {$mode delphi} call-arg @-relax. A bare paramless function name passed as a
+  call argument first parses as a CALL (call-first precedence: a paramless
+  function used as a value is called). When no overload accepts the resulting
+  call-result types, retry the overload match with each such argument retyped as
+  a procedural VALUE (its address, tyPointer) — the Delphi @-optional fallback.
+  On a successful retry, rewrite the matched proc-typed / Pointer arguments in
+  place to AN_PROCADDR (their ASTIVal already holds the callee proc index).
+  Returns the resolved procIdx, or -1. Outside delphi mode (or with no candidate
+  args) this is exactly the plain MatchProcCall[InUnit]. }
+function MatchCallDelphiProcAddr(const name: AnsiString; qUnit, nArgs, argsHead: Integer;
+  const argTypes: array of TTypeKind): Integer;
+var i, currArg, exprNode, pi, sidx, node, match0: Integer;
+    procCand: array[0..15] of Boolean; retryTypes: array[0..15] of TTypeKind;
+    hasCand, needAddr: Boolean;
+begin
+  hasCand := False;
+  if DelphiMode then
+  begin
+    currArg := argsHead;
+    for i := 0 to nArgs-1 do
+    begin
+      exprNode := ASTLeft[currArg];
+      procCand[i] := (ASTKind[exprNode] = AN_CALL) and (ASTLeft[exprNode] = -1) and
+                     (ASTIVal[exprNode] >= 0) and
+                     (Procs[ASTIVal[exprNode]].ParamCount = 0);
+      if procCand[i] then hasCand := True;
+      currArg := ASTRight[currArg];
+    end;
+  end;
+
+  MatchQuiet := hasCand;   { the call-first probe must not print mismatch diag }
+  if qUnit >= 0 then match0 := MatchProcCallInUnit(name, qUnit, nArgs, argTypes)
+  else match0 := MatchProcCall(name, nArgs, argTypes);
+  MatchQuiet := False;
+  Result := match0;
+  if not hasCand then Exit;
+
+  { Call-first precedence: keep the plain call when it matched, UNLESS a bare
+    paramless-function candidate landed on a procedural parameter -- a function
+    RESULT is never a procedural value, so that match is spurious (PXX treats a
+    proc-typed param as a pointer, which a numeric result compatibility-matches).
+    In that case the bare name must be the routine's address instead. }
+  needAddr := match0 < 0;
+  if match0 >= 0 then
+    for i := 0 to nArgs-1 do
+    begin
+      sidx := Procs[match0].Params[i].SymIdx;
+      if procCand[i] and (sidx >= 0) and (SymProcSig[sidx] >= 0) then needAddr := True;
+    end;
+  if not needAddr then Exit;
+
+  for i := 0 to nArgs-1 do
+    if procCand[i] then retryTypes[i] := tyPointer else retryTypes[i] := argTypes[i];
+  if qUnit >= 0 then pi := MatchProcCallInUnit(name, qUnit, nArgs, retryTypes)
+  else pi := MatchProcCall(name, nArgs, retryTypes);
+  if pi < 0 then Exit;   { retry failed -> leave the original result (genuine type error) }
+  Result := pi;
+
+  currArg := argsHead;
+  for i := 0 to nArgs-1 do
+  begin
+    exprNode := ASTLeft[currArg];
+    sidx := Procs[pi].Params[i].SymIdx;
+    if procCand[i] and
+       ((Procs[pi].Params[i].TypeKind = tyPointer) or
+        ((sidx >= 0) and (SymProcSig[sidx] >= 0))) then
+    begin
+      { Replace the call node with a fresh AN_PROCADDR (a clean node, like the
+        explicit `@F` path) rather than retagging the AN_CALL in place -- the
+        call node carries other AST fields that AN_PROCADDR codegen would
+        misread. The callee proc index is the call node's ASTIVal. }
+      node := AllocNode(AN_PROCADDR);
+      ASTIVal[node] := ASTIVal[exprNode];
+      ASTTk[node] := Ord(tyPointer);
+      ASTLeft[currArg] := node;
+    end;
+    currArg := ASTRight[currArg];
+  end;
+end;
+
 procedure ParseFactor;
 var name: AnsiString; recName: Integer; idx, procIdx, i, node, left, prevTok, valNode: Integer; tk: TTypeKind; op, argSeq, argSeq2, argSeq3, lastArg, argIdx, exprNode, szArg: Integer;
     nArgs, argsHead, currArg: Integer; argTypes: array[0..15] of TTypeKind;
@@ -3740,7 +3847,8 @@ begin
         nArgs := 0;
         while CurTok.Kind <> tkRParen do
         begin
-          ParseExpr;
+          node := TryDelphiBareProcArg;
+          if node >= 0 then CurASTNode := node else ParseExpr;
           argSeq := AllocNode(AN_ARG);
           ASTLeft[argSeq] := CurASTNode;
           if argsHead = -1 then
@@ -3764,10 +3872,7 @@ begin
           currArg := ASTRight[currArg];
         end;
 
-        if qUnit >= 0 then
-          procIdx := MatchProcCallInUnit(name, qUnit, nArgs, argTypes)
-        else
-          procIdx := MatchProcCall(name, nArgs, argTypes);
+        procIdx := MatchCallDelphiProcAddr(name, qUnit, nArgs, argsHead, argTypes);
         if procIdx < 0 then
         begin
           { Generic dynamic-array Copy(arr, index [, count]) intrinsic. Only when
@@ -6952,7 +7057,10 @@ begin
             if (CurTok.Kind = tkLBrack) and ParamIsVarRecArray(procIdx, nArgs) then
               CurASTNode := ParseVarRecLiteralAST
             else
-              ParseExpr;
+            begin
+              node := TryDelphiBareProcArg;
+              if node >= 0 then CurASTNode := node else ParseExpr;
+            end;
             argSeq := AllocNode(AN_ARG);
             ASTLeft[argSeq] := CurASTNode;
             if argsHead = -1 then
@@ -6976,10 +7084,7 @@ begin
             currArg := ASTRight[currArg];
           end;
 
-          if qUnit >= 0 then
-            procIdx := MatchProcCallInUnit(name, qUnit, nArgs, argTypes)
-          else
-            procIdx := MatchProcCall(name, nArgs, argTypes);
+          procIdx := MatchCallDelphiProcAddr(name, qUnit, nArgs, argsHead, argTypes);
           if procIdx < 0 then
             Error('no overload of ' + name + ' matches these arguments');
 

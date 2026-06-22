@@ -2825,16 +2825,19 @@ begin
     end;
   end;
 
-  writeln('Mismatch in MatchProcCall: name = ', name, ', nArgs = ', nArgs);
-  for j := 0 to nArgs-1 do
-    writeln('  arg[', j, '] = ', Ord(argTypes[j]));
-  for i := 0 to ProcCount-1 do
+  if not MatchQuiet then
   begin
-    if Procs[i].Name = name then
+    writeln('Mismatch in MatchProcCall: name = ', name, ', nArgs = ', nArgs);
+    for j := 0 to nArgs-1 do
+      writeln('  arg[', j, '] = ', Ord(argTypes[j]));
+    for i := 0 to ProcCount-1 do
     begin
-      writeln('  Candidate idx ', i, ': paramCount = ', Procs[i].ParamCount);
-      for j := 0 to Procs[i].ParamCount-1 do
-        writeln('    param[', j, '] = ', Ord(Procs[i].Params[j].TypeKind));
+      if Procs[i].Name = name then
+      begin
+        writeln('  Candidate idx ', i, ': paramCount = ', Procs[i].ParamCount);
+        for j := 0 to Procs[i].ParamCount-1 do
+          writeln('    param[', j, '] = ', Ord(Procs[i].Params[j].TypeKind));
+      end;
     end;
   end;
 
