@@ -433,6 +433,8 @@ test-core: $(COMPILER)
 	test "$$(/tmp/test_mimic_directive26)" = "fpc 3.x"
 	./$(COMPILER) test/test_keyword_array_case.pas /tmp/test_keyword_array_case26
 	test "$$(/tmp/test_keyword_array_case26)" = "$$(printf '36\n5')"
+	./$(COMPILER) test/test_keyword_case.pas /tmp/test_keyword_case26
+	test "$$(/tmp/test_keyword_case26)" = "$$(printf '9\n22')"
 	./$(COMPILER) test/test_var_open_array.pas /tmp/test_var_open_array26
 	test "$$(/tmp/test_var_open_array26)" = "$$(printf '6\n0 10 20 30 ')"
 	./$(COMPILER) test/test_var_open_array_field.pas /tmp/test_var_open_array_field26

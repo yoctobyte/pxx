@@ -30,9 +30,23 @@ end;
 
 { ===== Lexer ===== }
 
-function Keyword(const s: AnsiString): TTokenKind;
+function Keyword(const s0: AnsiString): TTokenKind;
+var s: AnsiString; ki: Integer;
 begin
   Result := tkIdent;
+  { Pascal keywords are case-insensitive in user code (only the compiler's own
+    source is {$CASESENSITIVE ON}). The table below historically hard-coded
+    lowercase (plus ad-hoc Capital variants for some), so mixed/upper-case forms
+    like `Then`, `Type`, `Mod`, `Case`, `ARRAY` fell through to identifiers.
+    Lowercase the token once here (user mode only) so every entry matches any
+    case; the redundant Capital-variant entries become harmless. CaseSensitive
+    mode (the self-build) keeps the exact spelling, so self-host stays
+    byte-identical. }
+  s := s0;
+  if not CaseSensitiveMode then
+    for ki := 1 to Length(s) do
+      if (s[ki] >= 'A') and (s[ki] <= 'Z') then
+        s[ki] := Chr(Ord(s[ki]) + 32);
   if Length(s) = 2 then
   begin
     if (s[1]='i') and (s[2]='f') then Result := tkIf;
@@ -193,7 +207,13 @@ begin
   begin
     if (s[1]='p') and (s[2]='a') and (s[3]='r') and (s[4]='a') and (s[5]='m') and (s[6]='c') and (s[7]='o') and (s[8]='u') and (s[9]='n') and (s[10]='t') then Result := tkArgCount;
     if (s[1]='P') and (s[2]='a') and (s[3]='r') and (s[4]='a') and (s[5]='m') and (s[6]='C') and (s[7]='o') and (s[8]='u') and (s[9]='n') and (s[10]='t') then Result := tkArgCount;
-  end
+  end;
+  { `forward` is a DIRECTIVE, not a reserved word — FPC lets it be an ordinary
+    identifier (e.g. `procedure Forward(...)`). The case-insensitive table above
+    would otherwise reserve every casing of it. Keep only the exact lowercase
+    spelling as the directive; any other casing (only possible when lowercasing
+    changed the token, i.e. s0 had an uppercase letter) stays an identifier. }
+  if (Result = tkForward) and (s0 <> s) then Result := tkIdent;
 end;
 {$ifdef FPC}
 procedure AppendChar(var dst: AnsiString; c: Char);
