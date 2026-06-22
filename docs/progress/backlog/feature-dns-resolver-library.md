@@ -258,3 +258,23 @@ split DNS, captive portals, enterprise policy, and privacy expectations.
   over `net.pas` (UDP query + TCP-truncation fallback) and `dns_wire_async`
   over `asyncnet.pas`. The `dns.pas` facade + backend selection come after a
   backend works end to end.
+- 2026-06-22 — **config baseline + working dns_wire backend landed** (Track B,
+  stable v38):
+  - `lib/rtl/dns_config.pas` (commits e4c3916 + earlier): `DnsParseIpv4`
+    (strict dotted-quad), `DnsParseResolvConf` (nameserver extraction), and
+    `DnsLookupHosts` (the "files" half of "files dns" — case-insensitive
+    hostname/alias match over `/etc/hosts` text). Pure/offline, FPC-oracle
+    verified, in `make lib-test`.
+  - `lib/rtl/dns_wire_blocking.pas` (commit 791fa1e): `DnsResolveA` — UDP A
+    query to a caller-supplied nameserver over PAL (build -> sendto -> PalPoll
+    -> recvfrom -> parse -> id check -> extract). No resolver policy, no public
+    DNS assumption. Proven end to end by `test/lib_dns_resolve.pas`: a **forked**
+    mock DNS server (process, not thread; both sides timeout-bounded) serves the
+    real query with a canned response echoing the query id; rcode=0, 2 IPs,
+    8/8 stable. The whole stack is written var->var-forwarding-free so it stays
+    correct on riscv32.
+  REMAINING: multi-nameserver retry, TCP fallback on a truncated (TC) response,
+  search/ndots qualification, per-query id randomization, AAAA; then the
+  `dns.pas` facade + backend selection (`dns_libc`, `dns_resolved`, `dns_esp`)
+  and an async sibling over `asyncnet.pas`. Live-network resolution stays
+  untested by policy (loopback/mock only; configured nameservers, never public).
