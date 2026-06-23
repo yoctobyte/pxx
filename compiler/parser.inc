@@ -8445,7 +8445,19 @@ var name: AnsiString; v: Int64;
     isLocalConst: Boolean;
 begin
   Next;
-  while CurTok.Kind = tkIdent do
+  { `constructor`/`destructor`/`operator` and the unit section words are plain
+    identifiers in this dialect (not keyword tokens like `procedure`/`function`,
+    which terminate the loop naturally). Without these guards a const section
+    directly followed by a constructor/destructor body — or ending an interface
+    before `implementation` — would consume that word as the next const NAME and
+    then fail expecting `=`. Mirrors the type-section terminator set. }
+  while (CurTok.Kind = tkIdent) and
+        (not CaseEqual(CurTok.SVal, 'constructor')) and
+        (not CaseEqual(CurTok.SVal, 'destructor')) and
+        (not CaseEqual(CurTok.SVal, 'operator')) and
+        (not CaseEqual(CurTok.SVal, 'implementation')) and
+        (not CaseEqual(CurTok.SVal, 'initialization')) and
+        (not CaseEqual(CurTok.SVal, 'finalization')) do
   begin
     name := CurTok.SVal; Next;
     if CurTok.Kind = tkColon then

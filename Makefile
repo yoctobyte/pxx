@@ -263,6 +263,8 @@ test-core: $(COMPILER)
 	test "$$(/tmp/test_forward_use26)" = "$$(printf 'square(7) = 49\nGreeting  = hello\nsum 1..4  = 10\npoint     = 3,4')"
 	./$(COMPILER) test/test_unit_impl_fwd.pas /tmp/test_unit_impl_fwd26
 	test "$$(/tmp/test_unit_impl_fwd26)" = "110"
+	./$(COMPILER) test/test_const_before_ctor.pas /tmp/test_const_before_ctor26
+	test "$$(/tmp/test_const_before_ctor26)" = "$$(printf '12\n112')"
 	./$(COMPILER) test/test_platform_defines.pas /tmp/test_platform_defines_posix26
 	test "$$(/tmp/test_platform_defines_posix26)" = "$$(printf 'platform=posix\nfiles\nsockets\nthreads\ndynlib\nend')"
 	./$(COMPILER) --platform=esp test/test_platform_defines.pas /tmp/test_platform_defines_esp26

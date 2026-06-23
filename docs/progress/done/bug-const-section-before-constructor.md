@@ -1,10 +1,28 @@
 # bug: const section before constructor/destructor not terminated
 
 - **Type:** bug (compiler / parser)
-- **Status:** backlog
+- **Status:** DONE 2026-06-23
 - **Track:** A (compiler)
 - **Reported-by:** Track B (apps/ide/eliah designer.pas)
 - **Opened:** 2026-06-23
+
+## Resolution (2026-06-23)
+
+`ParseConstSection`'s loop was a bare `while CurTok.Kind = tkIdent` — it
+terminated on `procedure`/`function` only because those are keyword tokens.
+`constructor`, `destructor`, `operator`, and the unit section words
+(`implementation`/`initialization`/`finalization`) are plain identifiers in this
+dialect, so the loop consumed them as the next const NAME and then failed
+expecting `=`. Added those names as loop terminators, mirroring the existing
+type-section guard set (parser.inc, `ParseConstSection`).
+
+Front-end only; self-host byte-identical; `make test` green. Regression:
+`test/test_const_before_ctor.pas` (+ companion unit, + Makefile gate) — covers
+an implementation const before a constructor and a const ending the interface
+section before `implementation`.
+
+**Track B:** the designer.pas render-constants can move back to the
+implementation section.
 
 ## Symptom
 

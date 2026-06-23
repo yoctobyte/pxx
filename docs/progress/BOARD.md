@@ -25,12 +25,11 @@ _none_
 | --- | --- | --- | --- | --- |
 | feature-c-runtime-library | B | feature | C runtime/library layer (`lib/crtl`) plus direct C-library packages | feature-c-source-frontend |
 
-## backlog (48)
+## backlog (47)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
 | bug-cardinal-expr-promotion | A | bug |  | — |
-| bug-const-section-before-constructor | A | bug | bug: const section before constructor/destructor not terminated | — |
 | bug-dynarray-managed-record-field-reassign | A | bug | bug: assigning a local dynamic-array-of-managed-record to a field drops/frees the elements | — |
 | bug-ir-unsupported-call-lvalue | A | bug | bug: "Unsupported linear node Kind=10" — AN_CALL in lvalue-address position | — |
 | bug-setlength-array-element | A | bug | bug: SetLength rejects an indexed array element as target | — |
@@ -112,7 +111,7 @@ _none_
 | feature-mimic-fpc | B | feature | `mimic FPC` compatibility mode | — |
 | feature-string-model-tyfixedstring | B | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (220)
+## done (221)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -131,6 +130,7 @@ _none_
 | bug-const-expr-shl-shr-not-folded | A | bug | `shl` / `shr` in a constant expression not accepted | — |
 | bug-const-managed-record-param-byref-crash | A | bug | const record param with a managed (dynarray) field crashes by-ref on i386 + aarch64 | — |
 | bug-const-open-array-managed-elem-length | A | bug | `const`/value open-array of a managed element loses its length (High = -1) | — |
+| bug-const-section-before-constructor | A | bug | bug: const section before constructor/destructor not terminated | — |
 | bug-c-packed-aligned-ignored | A | bug | C `__attribute__((packed))` / `aligned` ignored → field-offset drift | — |
 | bug-c-quoted-include-search-path | A | bug | C quoted includes do not search the including file directory | — |
 | bug-dynarray-in-record-corrupt | A | bug | Dynamic array as a record field is corrupted (value return + var-param assign) | — |
@@ -348,7 +348,6 @@ _none_
 ## Ready (no unmet blocker)
 
 - [A] bug-cardinal-expr-promotion
-- [A] bug-const-section-before-constructor
 - [A] bug-dynarray-managed-record-field-reassign
 - [A] bug-ir-unsupported-call-lvalue
 - [A] bug-setlength-array-element
