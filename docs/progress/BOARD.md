@@ -114,7 +114,7 @@ _none_
 | feature-mimic-fpc | B | feature | `mimic FPC` compatibility mode | — |
 | feature-string-model-tyfixedstring | B | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (192)
+## done (194)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -149,6 +149,7 @@ _none_
 | bug-method-call-free-tobject | A | bug | `obj.Free` rejected — built-in TObject has no `Free` method | — |
 | bug-movslq-on-64bit-pointer-load | A | bug | Bug — movslq instruction generated for 64-bit pointer/array field load | — |
 | bug-named-dynarray-field-setlength | A | bug | SetLength on a named dyn-array-alias class/record field misrouted to string path | — |
+| bug-open-array-copy-temp-leak | A | bug | Open-array copy temp leaked a heap block per call | — |
 | bug-operator-result-inferred-var | A | bug | Record-valued operator result is miscompiled (aggregate-return ABI) | — |
 | bug-pinned-stable-reads-live-builtin-rtl | A | bug | Pinned stable reads LIVE builtin RTL source — track A WIP breaks track B | — |
 | bug-pointer-cast-custom-alias | A | bug | Pointer cast on custom Char pointer aliases fails to skip string length prefix | — |
@@ -211,6 +212,7 @@ _none_
 | feature-cross-target-feature-parity | A | feature | Cross-target language-feature parity (Intel + ARM) | — |
 | feature-declaration-prescan | A | feature | Declaration pre-scan — whole-section symbol visibility (kill declare-before-use) | — |
 | feature-default-standard-units | A | feature | Default standard units: `System` + `textfile` | — |
+| feature-demo-2048 | B | feature | Demo — console 2048 (screen-lib entertainment + stress test) | — |
 | feature-demo-calc | B | feature | Demo — RPN / expression calculator (mini spreadsheet) | — |
 | feature-demo-file-browser | B | feature | Flagship Demo — Midnight Commander-like TUI file browser (libc-free) | — |
 | feature-demo-gui-solitaire | B | feature | Demo — GUI Patience / Solitaire | — |

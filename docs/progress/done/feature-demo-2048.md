@@ -1,7 +1,7 @@
 # Demo — console 2048 (screen-lib entertainment + stress test)
 
 - **Type:** feature (Track B — demo / library exercise)
-- **Status:** working
+- **Status:** done
 - **Owner:** Track B agent
 - **Opened:** 2026-06-23
 - **Relation:** second consumer of the `screen` TUI manager (after
@@ -35,3 +35,5 @@ tile spawns each move, score accumulates, win at 2048, game over when stuck.
   headless UI smoke (seed 1 + a fixed arrow sequence -> score=8). Both in
   make lib-test. Second clean consumer of screen.pas — no lib/compiler bugs
   surfaced this round.
+
+Landed in commit 4198c16.
