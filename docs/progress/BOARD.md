@@ -11,11 +11,12 @@ lives in git, not in a timestamp._
 | bug-metaclass-new-getclass-vmt | A | bug | bug: metaclass construction via GetClass stamps a non-canonical VMT | — |
 | bug-nested-comment-breaks-fpc-brace | A | bug | bug: nested `{ }` comments break the FPC idiom `{ ... '{' ... }` | — |
 
-## working (2)
+## working (3)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
 | feature-eliah-ide | B | feature | Eliah / Ilja — single-window IDE (GUI + TUI) | — |
+| feature-eliah-layout-tree | B | feature | feature: Eliah layout tree — window as a nested-TPaned splitter tree | — |
 | feature-eliah-m0-window | B | feature | Eliah M0 — single tiled GTK3 window | — |
 
 ## unfinished (1)
@@ -30,7 +31,7 @@ lives in git, not in a timestamp._
 | --- | --- | --- | --- | --- |
 | feature-c-runtime-library | B | feature | C runtime/library layer (`lib/crtl`) plus direct C-library packages | feature-c-source-frontend |
 
-## backlog (53)
+## backlog (51)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -55,7 +56,6 @@ lives in git, not in a timestamp._
 | feature-dynamic-soname-discovery | A | feature | Dynamic soname discovery (no execve) | — |
 | feature-eliah-component-palette | B | feature | feature: Eliah component palette — registry-driven (visual + non-visual tray) | — |
 | feature-eliah-from-lfm | B | feature | feature: define Eliah's own layout in a streamed .lfm (dogfooding) | — |
-| feature-eliah-layout-tree | B | feature | feature: Eliah layout tree — window as a nested-TPaned splitter tree | — |
 | feature-eliah-pane-collapse | B | feature | feature: Eliah pane collapse/restore + ratio memory | feature-eliah-layout-tree |
 | feature-eliah-perspectives | B | feature | feature: Eliah perspectives — saved layouts (Code / Design / Split) + compacting | feature-eliah-layout-tree, feature-eliah-pane-collapse |
 | feature-eliah-selection-link | B | feature | feature: Eliah shared selection model — designer ↔ editor link (+ AI rail) | — |
@@ -69,7 +69,6 @@ lives in git, not in a timestamp._
 | feature-inline-routines | A | feature | Inline routine expansion (`inline;`) | — |
 | feature-lazy-standard-unit-emission | A | feature | Lazy standard-unit emission / routine-level dead-code elimination | — |
 | feature-metaclass-descendant-enforcement | A | feature | Metaclass alias descendant-constraint enforcement | — |
-| feature-multidim-const-array | A | feature | feature: multidimensional typed-constant arrays | — |
 | feature-networking | B | feature | Networking runtime | — |
 | feature-nilpy-idf-import | A | feature | nilpy includes anything from ESP-IDF and it just works | feature-c-source-frontend, feature-esp32-idf-xtensa |
 | feature-nil-python-frontend | A | feature | Nil Python frontend (`.npy`) | — |
@@ -122,7 +121,7 @@ lives in git, not in a timestamp._
 | feature-mimic-fpc | B | feature | `mimic FPC` compatibility mode | — |
 | feature-string-model-tyfixedstring | B | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (231)
+## done (232)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -304,6 +303,7 @@ lives in git, not in a timestamp._
 | feature-member-access-on-call-result | B | feature | Member access on a function-call result (`f(args).field`) | — |
 | feature-metaclass-construct-dispatch | A | feature | feature: metaclass-dispatched construction — `classRef.Create` (virtual ctor via a `class of`) | — |
 | feature-mode-delphi | A | feature | `{$mode delphi}` support — incl. the @-optional proc-pointer disambiguation | — |
+| feature-multidim-const-array | A | feature | feature: multidimensional typed-constant arrays | — |
 | feature-multidim-fixed-arrays | A | feature | Multidimensional fixed arrays | — |
 | feature-nested-anonymous-fixed-array | A | feature | Anonymous nested fixed array `array[..] of array[..] of T` | — |
 | feature-nested-routines | A | feature | feature: nested (local) functions and procedures | — |
@@ -389,7 +389,6 @@ lives in git, not in a timestamp._
 - [A] feature-dynamic-soname-discovery
 - [B] feature-eliah-component-palette
 - [B] feature-eliah-from-lfm
-- [B] feature-eliah-layout-tree
 - [B] feature-eliah-selection-link
 - [B] feature-eliah-shell
 - [A] feature-esp32-idf-xtensa
@@ -400,7 +399,6 @@ lives in git, not in a timestamp._
 - [A] feature-inline-routines
 - [A] feature-lazy-standard-unit-emission
 - [A] feature-metaclass-descendant-enforcement
-- [A] feature-multidim-const-array
 - [B] feature-networking
 - [A] feature-nil-python-frontend
 - [A] feature-object-reference-type
