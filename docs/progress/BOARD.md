@@ -25,7 +25,7 @@ _none_
 | --- | --- | --- | --- | --- |
 | feature-c-runtime-library | B | feature | C runtime/library layer (`lib/crtl`) plus direct C-library packages | feature-c-source-frontend |
 
-## backlog (45)
+## backlog (46)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -56,6 +56,7 @@ _none_
 | feature-inline-routines | A | feature | Inline routine expansion (`inline;`) | — |
 | feature-lazy-standard-unit-emission | A | feature | Lazy standard-unit emission / routine-level dead-code elimination | — |
 | feature-metaclass-descendant-enforcement | A | feature | Metaclass alias descendant-constraint enforcement | — |
+| feature-multidim-const-array | A | feature | feature: multidimensional typed-constant arrays | — |
 | feature-networking | B | feature | Networking runtime | — |
 | feature-nilpy-idf-import | A | feature | nilpy includes anything from ESP-IDF and it just works | feature-c-source-frontend, feature-esp32-idf-xtensa |
 | feature-nil-python-frontend | A | feature | Nil Python frontend (`.npy`) | — |
@@ -109,7 +110,7 @@ _none_
 | feature-mimic-fpc | B | feature | `mimic FPC` compatibility mode | — |
 | feature-string-model-tyfixedstring | B | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (227)
+## done (228)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -149,6 +150,7 @@ _none_
 | bug-ir-unsupported-call-lvalue | A | bug | bug: "Unsupported linear node Kind=10" — AN_CALL in lvalue-address position | — |
 | bug-keywords-case-sensitive | A | bug | Capitalized keywords not recognized (case-sensitive keyword table) | — |
 | bug-length-rejects-non-variable | A | bug | bug: Length() rejects a non-variable argument (literal / expression) | — |
+| bug-lfm-streaming-skips-constructors | B | bug | bug: RTTI .lfm streaming skips constructors → widgets with constructor state broke | — |
 | bug-low-missing-high-wrong-nonzero-array | A | bug | bug: Low() missing; High() wrong on non-zero-based arrays | — |
 | bug-managed-byref-string-param-store | A | bug | Managed by-ref AnsiString params: store-through-var no-ops / segfaults | — |
 | bug-managed-to-frozen-string-assign-crash | A | bug | Assigning a managed string (tyAnsiString) into a frozen `string` (tyString) miscompiles → segfault | — |
@@ -376,6 +378,7 @@ _none_
 - [A] feature-inline-routines
 - [A] feature-lazy-standard-unit-emission
 - [A] feature-metaclass-descendant-enforcement
+- [A] feature-multidim-const-array
 - [B] feature-networking
 - [A] feature-nil-python-frontend
 - [A] feature-object-reference-type
@@ -398,6 +401,5 @@ _none_
 - **2** — feature-c-source-frontend
 - **1** — feature-mimic-fpc
 - **1** — feature-esp32-idf-xtensa
-- **1** — feature-eliah-m1-designer
 - **1** — feature-eliah-m0-window
 - **1** — chore-inc-to-units
