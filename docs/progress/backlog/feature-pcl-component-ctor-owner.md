@@ -1,8 +1,14 @@
 # feature: PCL components adopt the `Create(AOwner)` virtual-constructor shape
 
 - **Type:** feature (Track B — lib/pcl component model)
-- **Status:** backlog (paired with urgent/feature-metaclass-construct-dispatch)
+- **Status:** backlog — UNBLOCKED 2026-06-23 (language half landed)
 - **Opened:** 2026-06-23
+
+> **Unblocked 2026-06-23:** the compiler half is DONE
+> (`done/feature-metaclass-construct-dispatch`, pinned v44). `classRefVar.Create(args)`
+> dispatches through the dynamic VMT, parametrised virtual ctors work, and the
+> `TBaseClass(GetClass(name)).Create(AOwner)` bridge is verified. PCL can now adopt
+> the `Create(AOwner); virtual;` shape and have the streamer construct via metaclass.
 
 ## Goal
 

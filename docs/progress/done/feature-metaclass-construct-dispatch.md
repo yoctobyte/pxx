@@ -1,7 +1,49 @@
 # feature: metaclass-dispatched construction — `classRef.Create` (virtual ctor via a `class of`)
 
 - **Type:** feature (Track A — codegen / VMT dispatch)
-- **Status:** urgent
+- **Status:** DONE 2026-06-23 (commit 404abe4, pinned v44 5aedd94)
+
+## Resolution (2026-06-23)
+
+`classRefVar.Create(args)` now allocates the DYNAMIC class the class-ref
+points at and runs its virtual constructor. The repro prints `tag=2` for both
+the direct and metaclass paths; parametrised + polymorphic dispatch verified
+(`50/70/3`), and the GetClass(name)->metaclass->`.Create` bridge works
+(`TBaseClass(GetClass('TDer')).Create(7)` = 70).
+
+Built entirely from target-independent IR (the is/as idiom), so all backends
+share one path — verified on x86-64/i386/aarch64/arm32 (identical output);
+ESP rides the same shared ops. Self-host byte-identical.
+
+Recipe (AN_METACLASS_NEW, lowered in ir.inc):
+```
+size := [cref+16]        { RTTI instance size }
+inst := GetMem(size)     { plain alloc, no VMT stamp }
+[inst+0] := [cref+24]    { stamp the dynamic class's VMT }
+virtual-call ctor, Self=inst, slot = Create's VMT slot
+result := inst
+```
+Once `[inst+0]` holds the dynamic VMT, the ctor is an ordinary IR_VIRTUAL_CALL.
+
+Scope items 1, 2, 4 (dispatch / dynamic alloc / param passing) and the item-3
+bridge are all delivered at the COMPILER level. Streamer ADOPTION (replacing the
+four PCL constructor-skip stopgaps with idiomatic virtual ctors) is the companion
+**Track B** ticket `backlog/feature-pcl-component-ctor-owner`.
+
+Landmines hit: (a) the field-name token must be consumed (`Next`) before parsing
+ctor args — the selector loop's entry `Next` only eats the `.`; (b) the
+side-effecting virtual ctor call's result is discarded, so it must be flagged a
+statement root (`IRMarkStatementNode`) or it is pruned and the ctor never runs.
+
+New regression test: `test/test_metaclass_construct.pas` (in `make test`).
+
+Tests: `make test` green (fixedpoint + threadsafe byte-identical, asm-emit ×5).
+
+---
+
+(original ticket below)
+
+- **Status (orig):** urgent
 - **Found:** 2026-06-23, making the .lfm streaming loader run constructors
 - **Severity:** high — the keystone for streaming components, FPC/LCL source
   compatibility, and any class-factory pattern.
