@@ -43,3 +43,4 @@
 2026-06-23T19:12:49Z  v43  c7b316f234fa6994ebf2b0dcb01d3e861c00cc86cf5a0a9032327bf4e3ff4169  26fd9a435f722ae063ce05af39c0a048497c5702  docs(progress): close bug-consteval-precedence
 2026-06-23T20:51:15Z  v44  4e2e39e67e0de88d68364aa39a5639cc50e1cf1d6b25f6c2341f003de8b54806  404abe4d35a44a242d95575414a4d4dbc2259e45  feat(codegen): metaclass-dispatched construction (classRefVar.Create)
 2026-06-23T22:38:00Z  v45  f50c001dcbaba6c21e17edd3ba4a34f13d0142b1da7ea874af2e39efcf409d8b  989a5c569b149c9a18889679773ab8ea921e7f4a  fix(codegen): metaclass cast/GetClass canonical VMT + feat: const set literals
+2026-06-23T23:03:47Z  v46  317d98bf8d54bab4628066bf87b62345348b7daef565a14fbaedb3d85c983983  4cb3b42bb3b65981f75594fec7c0590044fcbb4b  docs(progress): close metaclass-getclass-vmt (urgent) + const-set-literal
