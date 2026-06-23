@@ -138,21 +138,17 @@ begin
 end;
 
 procedure THandler.OnCompile(Sender: TObject);
-var out: AnsiString; rc: Integer; args: array of AnsiString;
+var out: AnsiString; rc: Integer;
 begin
   if curFile = '' then begin Output.Text := '(no file selected)'; Exit; end;
-  SetLength(args, 2);
-  args[0] := curFile;
-  args[1] := BUILD_OUT;
-  out := RunCapture(PXX_PATH, args, rc);
+  out := RunCapture(PXX_PATH, [curFile, BUILD_OUT], rc);
   Output.Text := '$ compile ' + curFile + #10 + out + #10 + '--- exit ' + IntToStr(rc) + ' ---';
 end;
 
 procedure THandler.OnRun(Sender: TObject);
-var out: AnsiString; rc: Integer; args: array of AnsiString;
+var out: AnsiString; rc: Integer;
 begin
-  SetLength(args, 0);
-  out := RunCapture(BUILD_OUT, args, rc);
+  out := RunCapture(BUILD_OUT, [], rc);
   Output.Text := '$ run' + #10 + out + #10 + '--- exit ' + IntToStr(rc) + ' ---';
 end;
 
@@ -273,18 +269,18 @@ var
   PlaceBtn: TButton;
   DesignBox: TPaintBox;
   Dsn: TDesigner;
-  pm: TMethod;
+  btn: TButton;
   arg, startDir: AnsiString;
   centerW, centerH, contentH: Integer;
 
-procedure MkButton(const cap: AnsiString; x: Integer; m: TMethod);
+function MkButton(const cap: AnsiString; x: Integer): TButton;
 var b: TButton;
 begin
   b := TButton.Create;
   b.Parent := Form1;
   b.Caption := cap;
   b.SetBounds(x, 3, 80, 26);
-  b.OnClick := m;
+  MkButton := b;
 end;
 
 begin
@@ -304,8 +300,7 @@ begin
   H.Tree := TListBox.Create;
   H.Tree.Parent := Form1;
   H.Tree.SetBounds(0, TOOLBAR_H, W_TREE, contentH);
-  pm.Code := @H.OnTreeClick; pm.Data := H;
-  H.Tree.OnClick := pm;
+  H.Tree.OnClick := @H.OnTreeClick;
 
   H.Editor := TMemo.Create;
   H.Editor.Parent := Form1;
@@ -329,29 +324,25 @@ begin
   DesignBox := TPaintBox.Create;
   DesignBox.Parent := Form1;
   DesignBox.SetBounds(W_TREE + centerW, TOOLBAR_H, W_RIGHT, centerH);
-  pm.Code := @Dsn.Paint; pm.Data := Dsn;
-  DesignBox.OnPaint := pm;
+  DesignBox.OnPaint := @Dsn.Paint;
   { mouse-select + drag-move: down hit-tests & grabs, move drags the selected
-    box, up releases. (inline TMethod per urgent/bug-method-ptr-no-coerce…) }
-  pm.Data := H;
-  pm.Code := @H.OnDesignMouseDown; DesignBox.OnMouseDown := pm;
-  pm.Code := @H.OnDesignMouseMove; DesignBox.OnMouseMove := pm;
-  pm.Code := @H.OnDesignMouseUp;   DesignBox.OnMouseUp := pm;
+    box, up releases. }
+  DesignBox.OnMouseDown := @H.OnDesignMouseDown;
+  DesignBox.OnMouseMove := @H.OnDesignMouseMove;
+  DesignBox.OnMouseUp   := @H.OnDesignMouseUp;
 
   Props := TListBox.Create;
   Props.Parent := Form1;
   Props.SetBounds(W_TREE + centerW, TOOLBAR_H + centerH, W_RIGHT, H_BOTTOM - 28);
   Props.AddItem('object inspector (M1)');
-  pm.Code := @H.OnPropClick; pm.Data := H;
-  Props.OnClick := pm;
+  Props.OnClick := @H.OnPropClick;
 
   { value editor: pick a prop row above, type here, Enter commits to docmodel }
   ValueEdit := TEdit.Create;
   ValueEdit.Parent := Form1;
   ValueEdit.SetBounds(W_TREE + centerW, TOOLBAR_H + centerH + H_BOTTOM - 28,
     W_RIGHT, 26);
-  pm.Code := @H.OnValueKey; pm.Data := H;
-  ValueEdit.OnKeyDown := pm;
+  ValueEdit.OnKeyDown := @H.OnValueKey;
 
   H.Dsn := Dsn;
   H.DesignBox := DesignBox;
@@ -359,10 +350,9 @@ begin
   H.ValueEdit := ValueEdit;
   H.FEditRow := -1;
 
-  pm.Data := H;
-  pm.Code := @H.OnUp;      MkButton('Up',      4,   pm);
-  pm.Code := @H.OnCompile; MkButton('Compile', 90,  pm);
-  pm.Code := @H.OnRun;     MkButton('Run',     176, pm);
+  btn := MkButton('Up',      4);   btn.OnClick := @H.OnUp;
+  btn := MkButton('Compile', 90);  btn.OnClick := @H.OnCompile;
+  btn := MkButton('Run',     176); btn.OnClick := @H.OnRun;
 
   { palette: pick a widget kind, hit Place, then click the designer to drop it }
   Palette := TComboBox.Create;
@@ -381,8 +371,7 @@ begin
   PlaceBtn.Parent := Form1;
   PlaceBtn.Caption := 'Place';
   PlaceBtn.SetBounds(382, 3, 80, 26);
-  pm.Code := @H.OnPlaceToggle; pm.Data := H;
-  PlaceBtn.OnClick := pm;
+  PlaceBtn.OnClick := @H.OnPlaceToggle;
 
   H.Palette := Palette;
   H.PlaceBtn := PlaceBtn;
@@ -397,18 +386,14 @@ begin
 
   if arg = '--smoke' then
   begin
-    { Length() is taken of a string variable, not a property getter directly:
-      Length(memo.Text) trips bug-length-rejects-non-variable (codegen). }
     if H.nItems < 1 then begin writeln('SMOKE FAIL: empty tree'); Halt(1); end;
     H.LoadDir('apps/ide/garin');
     H.Tree.ItemIndex := H.nItems - 1;
     H.OnTreeClick(nil);
-    startDir := H.Editor.Text;
-    if Length(startDir) = 0 then begin writeln('SMOKE FAIL: editor empty'); Halt(1); end;
+    if Length(H.Editor.Text) = 0 then begin writeln('SMOKE FAIL: editor empty'); Halt(1); end;
     H.curFile := 'apps/ide/garin/buffer.pas';
     H.OnCompile(nil);
-    startDir := H.Output.Text;
-    if Length(startDir) = 0 then begin writeln('SMOKE FAIL: no compile output'); Halt(1); end;
+    if Length(H.Output.Text) = 0 then begin writeln('SMOKE FAIL: no compile output'); Halt(1); end;
 
     { designer mouse-select: click inside the sample OK button (x=28..108,
       y=92..120) -> it must become the selection and fill the inspector. }
