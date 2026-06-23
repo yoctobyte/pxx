@@ -17,6 +17,8 @@ right-justified / space-padded. Integer `:w` width already worked.
 
 ## Resolution (2026-06-23)
 
+Fixed in commit `86661d9`.
+
 `EmitWriteFloatFixed(width, decimals)` now runs a length pre-pass that does not
 disturb xmm0: it rounds `|value| * 10^decimals`, derives the integer part and
 counts its digits, adds the sign and `decimals+1` (for `.frac`), and emits
