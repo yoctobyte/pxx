@@ -52,5 +52,15 @@ begin
   CheckInt(e, 'resized button x', doc.NodeX(iBtn), 30);
   CheckInt(e, 'resized button width', doc.NodeW(iBtn), 100);
 
+  { scenario 4: HitTest — topmost node at a point (designer mouse-select) }
+  writeln('-- TDocModel.HitTest --');
+  { layout now: Form1 (0,0,400,300); button (30,40,100,30); label (20,60,60,18) }
+  CheckInt(e, 'hit inside button -> button', doc.HitTest(40, 50), iBtn);
+  CheckInt(e, 'hit form-only area -> form', doc.HitTest(300, 200), iForm);
+  CheckInt(e, 'hit outside all -> -1', doc.HitTest(500, 500), -1);
+  CheckInt(e, 'topmost wins (label over form)', doc.HitTest(25, 65),
+    doc.Count - 1);
+  CheckInt(e, 'right edge is exclusive', doc.HitTest(130, 50), iForm);
+
   Halt(EduthReport(e));
 end.

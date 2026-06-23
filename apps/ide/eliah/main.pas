@@ -16,8 +16,9 @@ program eliah;
   Working: the project tree lists a directory (click a folder to descend, "../"
   to go up, a file to open it in the editor through the garin buffer); Compile
   runs the pinned compiler on the open .pas and shows its output; Run executes
-  the built binary. The right column (designer + object inspector) is a stub
-  pending M1. }
+  the built binary. The right column is the designer: a TPaintBox paints the
+  garin docmodel as emulated boxes, clicking a box hit-tests the model and shows
+  a selection outline + the node's fields in the object-inspector pane below. }
 
 uses gtk3, controls, stdctrls, extctrls, graphics, forms, sysutils,
      buffer, runner, docmodel, designer;
@@ -36,6 +37,9 @@ type
   THandler = class
     Tree: TListBox;
     Editor, Output: TMemo;
+    Props: TListBox;
+    Dsn: TDesigner;
+    DesignBox: TPaintBox;
     dir, curFile: AnsiString;
     paths: array of AnsiString;
     isdirs: array of Boolean;
@@ -45,6 +49,8 @@ type
     procedure OnCompile(Sender: TObject);
     procedure OnRun(Sender: TObject);
     procedure OnUp(Sender: TObject);
+    procedure OnDesignMouseDown(Sender: TControl; Button, X, Y: Integer);
+    procedure ShowInspector(idx: Integer);
   end;
 
 function ParentDir(const d: AnsiString): AnsiString;
@@ -128,6 +134,33 @@ begin
   LoadDir(ParentDir(dir));
 end;
 
+procedure THandler.ShowInspector(idx: Integer);
+var d: TDocModel;
+begin
+  Props.Clear;
+  if (Dsn = nil) or (Dsn.Doc = nil) then Exit;
+  d := Dsn.Doc;
+  if (idx < 0) or (idx >= d.Count) then
+  begin
+    Props.AddItem('(no selection)');
+    Exit;
+  end;
+  Props.AddItem('Kind:    ' + d.KindName(d.NodeKind(idx)));
+  Props.AddItem('Caption: ' + d.NodeCaption(idx));
+  Props.AddItem('Left:    ' + IntToStr(d.NodeX(idx)));
+  Props.AddItem('Top:     ' + IntToStr(d.NodeY(idx)));
+  Props.AddItem('Width:   ' + IntToStr(d.NodeW(idx)));
+  Props.AddItem('Height:  ' + IntToStr(d.NodeH(idx)));
+end;
+
+procedure THandler.OnDesignMouseDown(Sender: TControl; Button, X, Y: Integer);
+var idx: Integer;
+begin
+  idx := Dsn.SelectAt(X, Y);
+  DesignBox.Invalidate;
+  ShowInspector(idx);
+end;
+
 var
   Form1: TForm;
   H: THandler;
@@ -192,11 +225,18 @@ begin
   DesignBox.SetBounds(W_TREE + centerW, TOOLBAR_H, W_RIGHT, centerH);
   pm.Code := @Dsn.Paint; pm.Data := Dsn;
   DesignBox.OnPaint := pm;
+  { mouse-select: click a box -> hit-test the docmodel -> outline + inspector }
+  pm.Code := @H.OnDesignMouseDown; pm.Data := H;
+  DesignBox.OnMouseDown := pm;
 
   Props := TListBox.Create;
   Props.Parent := Form1;
   Props.SetBounds(W_TREE + centerW, TOOLBAR_H + centerH, W_RIGHT, H_BOTTOM);
   Props.AddItem('object inspector (M1)');
+
+  H.Dsn := Dsn;
+  H.DesignBox := DesignBox;
+  H.Props := Props;
 
   pm.Data := H;
   pm.Code := @H.OnUp;      MkButton('Up',      4,   pm);
@@ -224,6 +264,17 @@ begin
     H.OnCompile(nil);
     startDir := H.Output.Text;
     if Length(startDir) = 0 then begin writeln('SMOKE FAIL: no compile output'); Halt(1); end;
+
+    { designer mouse-select: click inside the sample OK button (x=28..108,
+      y=92..120) -> it must become the selection and fill the inspector. }
+    H.OnDesignMouseDown(nil, 1, 40, 100);
+    if H.Dsn.Sel < 0 then begin writeln('SMOKE FAIL: no node selected'); Halt(1); end;
+    if H.Dsn.Doc.NodeCaption(H.Dsn.Sel) <> 'OK' then
+      begin writeln('SMOKE FAIL: wrong node selected'); Halt(1); end;
+    { click empty surface -> selection cleared }
+    H.OnDesignMouseDown(nil, 1, 5, 5);
+    if H.Dsn.Sel >= 0 then begin writeln('SMOKE FAIL: selection not cleared'); Halt(1); end;
+
     writeln('SMOKE OK');
   end
   else

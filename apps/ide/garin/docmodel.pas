@@ -33,6 +33,9 @@ type
       AParent, AX, AY, AW, AH: Integer): Integer;
     procedure SetNodeBounds(I, AX, AY, AW, AH: Integer);
     function Count: Integer;
+    { topmost node whose rect contains (AX, AY), or -1 if none. Later-added
+      nodes sit on top (children drawn after parents), so scan back-to-front. }
+    function HitTest(AX, AY: Integer): Integer;
     { field accessors (avoid record-by-value return paths) }
     function NodeKind(I: Integer): TWidgetKind;
     function NodeCaption(I: Integer): AnsiString;
@@ -79,6 +82,19 @@ end;
 function TDocModel.Count: Integer;
 begin
   Result := FCount;
+end;
+
+function TDocModel.HitTest(AX, AY: Integer): Integer;
+var i: Integer;
+begin
+  Result := -1;
+  for i := FCount - 1 downto 0 do
+    if (AX >= FNodes[i].X) and (AX < FNodes[i].X + FNodes[i].W) and
+       (AY >= FNodes[i].Y) and (AY < FNodes[i].Y + FNodes[i].H) then
+    begin
+      Result := i;
+      Exit;
+    end;
 end;
 
 function TDocModel.NodeKind(I: Integer): TWidgetKind;
