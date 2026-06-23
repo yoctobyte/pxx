@@ -1,22 +1,37 @@
 # bug: Length() rejects a non-variable argument (literal / expression)
 
 - **Type:** bug (Track A — parser / IR codegen)
-- **Status:** backlog
+- **Status:** done
 - **Found:** 2026-06-23, differential probe vs FPC
+- **Closed:** 2026-06-23
 - **Severity:** medium (every `Length('...')` / `Length(a+b)` must use a temp)
 - **Family:** same "intrinsic insists on an l-value variable" shape as
   `bug-setlength-array-element` and `bug-paramstr-inline-argstr`.
 
-## Partial progress (2026-06-23)
+## Resolution (2026-06-23)
 
-`Length(string-literal)` now folds to a compile-time constant (parser tkLength:
-`Length('hello')` -> 5, `Length('x')` -> 1, `if Length('y') > 0`), byte-identical
-to FPC, no codegen/self-host risk. STILL OPEN: a general string-valued
-*expression* (`Length(s + 'cd')`, a function result) — that needs the shared
-l-value-spill (the IR force-addresses the Length arg via isRefArg; a non-lvalue
-managed-string value would need to lower as a value or bind to a hidden temp).
-Same shared lowering as bug-setlength-array-element / bug-paramstr-inline-argstr;
-do them together.
+Front-end only, no codegen change. Two parts:
+
+1. Parser `tkLength`: a string LITERAL folds to its char count
+   (`Length('hello')` -> 5). For everything else it now `ParseExpr`s the argument
+   (was: required a single ident lvalue), so a concat / function result / any
+   string r-value is accepted; the whole-1-D-static-array compile-time fold is
+   kept (keyed off the resulting AN_IDENT).
+2. IR (`ir.inc`): the Length arg is force-addressed (`isRefArg`) only when it is
+   an lvalue (`IsASTLValue`) — a string/array variable/field/element whose `[-8]`
+   header the codegen reads from the slot. A non-lvalue managed-string VALUE
+   (concat / call result, `tyAnsiString`) is lowered as a value, and the existing
+   codegen tyAnsiString-value path reads the length straight from the handle.
+
+Verified byte-identical to FPC: `Length(s+t)`=4, `Length(s+'XYZ')`=5,
+`Length(mk)`=6 (function result), `Length('hello')`=5, `Length(s)`=2,
+`Length(dynarray)`=3, `Length(staticarray)`=4, `if Length(s+t)=4`. The existing
+lvalue paths (var/dynarray/field/open-array, and High/Low which reuse -tkLength)
+are unchanged (still lvalue → force-addressed). Minor: `Length(concat)` reads a
+transient managed temp that is not released (a small leak, not a miscompile —
+FPC frees its temp; the shared managed-arg-temp binding only fires for non-special
+calls). Gate: `make test` (self-host byte-identical) + FPC oracle. Closes
+bug-length-rejects-non-variable.
 
 ## Symptom
 
