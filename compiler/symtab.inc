@@ -2806,6 +2806,34 @@ begin
     end;
   end;
 
+  { Phase 1c: a Char argument prefers a string-typed parameter over the ordinal
+    (char -> integer) compatible match. A single-char literal types as tyChar,
+    so without this an earlier f(integer) overload silently won f('x') even when
+    an f(string) overload exists (FPC ranks a char literal as a string). Runs
+    before the general compatible phase so the string overload wins regardless of
+    declaration order; every other arg must still be an exact type match. }
+  for i := 0 to ProcCount-1 do
+  begin
+    if ProcNameMatches(i, name) and (Procs[i].ParamCount = nArgs) then
+    begin
+      match := True;
+      for j := 0 to nArgs-1 do
+      begin
+        if not ((Procs[i].Params[j].TypeKind = argTypes[j]) or
+                ProcParamUntyped[i * 16 + j] or
+                ((argTypes[j] = tyChar) and
+                 ((Procs[i].Params[j].TypeKind = tyString) or
+                  (Procs[i].Params[j].TypeKind = tyAnsiString)))) then
+          match := False;
+      end;
+      if match then
+      begin
+        Result := i;
+        Exit;
+      end;
+    end;
+  end;
+
   { Phase 2: Try compatible match }
   for i := 0 to ProcCount-1 do
   begin
