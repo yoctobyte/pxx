@@ -1,0 +1,217 @@
+program eliah;
+
+{ Eliah — GTK face of the IDE.
+
+  A single sizable window, fixed tiled layout (no multi-window / modal / sub-
+  windows). Toolbar + four panes:
+
+    [ Up  Compile  Run ]
+    +--------+----------------------+-----------+
+    | proj   |   editor             | designer  |
+    | tree   |                      | (stub)    |
+    |        +----------------------+-----------+
+    |        |   build output       | props     |
+    +--------+----------------------+-----------+
+
+  Working: the project tree lists a directory (click a folder to descend, ".."
+  to go up, a file to open it in the editor through the garin buffer); Compile
+  runs the pinned compiler on the open .pas and shows its output; Run executes
+  the built binary and shows its output. Designer/props are stubs (M1). }
+
+uses gtk3, controls, stdctrls, forms, sysutils, buffer, runner;
+
+const
+  W_WIN     = 1100;
+  H_WIN     = 720;
+  W_TREE    = 240;
+  W_RIGHT   = 320;
+  H_BOTTOM  = 180;
+  TOOLBAR_H = 34;
+  PXX_PATH  = 'stable_linux_amd64/default/pinned';
+  BUILD_OUT = '/tmp/eliah_build';
+
+type
+  THandler = class
+    Tree, Props: TListBox;
+    Editor, Output: TMemo;
+    dir, curFile: AnsiString;
+    paths: array of AnsiString;
+    isdirs: array of Boolean;
+    nItems: Integer;
+    procedure LoadDir(const d: AnsiString);
+    procedure OnTreeClick(Sender: TObject);
+    procedure OnCompile(Sender: TObject);
+    procedure OnRun(Sender: TObject);
+    procedure OnUp(Sender: TObject);
+  end;
+
+function ParentDir(const d: AnsiString): AnsiString;
+var i: Integer;
+begin
+  for i := Length(d) downto 1 do
+    if d[i] = '/' then
+    begin
+      if i = 1 then ParentDir := '/' else ParentDir := Copy(d, 1, i - 1);
+      Exit;
+    end;
+  ParentDir := '.';
+end;
+
+procedure THandler.LoadDir(const d: AnsiString);
+var list: TFileInfoArray; i: Integer; nm, full: AnsiString;
+begin
+  dir := d;
+  Tree.Clear;
+  nItems := 0;
+  SetLength(paths, 1024);
+  SetLength(isdirs, 1024);
+
+  Tree.AddItem('../');
+  paths[nItems] := ParentDir(d);
+  isdirs[nItems] := True;
+  nItems := nItems + 1;
+
+  if GetDirectoryContents(d, list) then
+    for i := 0 to Length(list) - 1 do
+    begin
+      nm := list[i].Name;
+      if (nm = '.') or (nm = '..') then continue;
+      full := d + '/' + nm;
+      if list[i].IsDir then Tree.AddItem(nm + '/') else Tree.AddItem(nm);
+      if nItems < 1024 then
+      begin
+        paths[nItems] := full;
+        isdirs[nItems] := list[i].IsDir;
+        nItems := nItems + 1;
+      end;
+    end;
+end;
+
+procedure THandler.OnTreeClick(Sender: TObject);
+var idx: Integer; buf: TIdeBuffer;
+begin
+  idx := Tree.ItemIndex;
+  if (idx < 0) or (idx >= nItems) then Exit;
+  if isdirs[idx] then
+  begin
+    LoadDir(paths[idx]);
+    Exit;
+  end;
+  curFile := paths[idx];
+  buf := TIdeBuffer.Create;
+  if buf.LoadFromFile(curFile) then Editor.Text := buf.Text
+  else Editor.Text := '(could not open ' + curFile + ')';
+  Props.Clear;
+  Props.AddItem('file: ' + curFile);
+  Props.AddItem('lines: ' + IntToStr(buf.LineCount));
+end;
+
+procedure THandler.OnCompile(Sender: TObject);
+var out: AnsiString; rc: Integer; args: array of AnsiString;
+begin
+  if curFile = '' then begin Output.Text := '(no file selected)'; Exit; end;
+  SetLength(args, 2);
+  args[0] := curFile;
+  args[1] := BUILD_OUT;
+  out := RunCapture(PXX_PATH, args, rc);
+  Output.Text := '$ compile ' + curFile + #10 + out + #10 + '--- exit ' + IntToStr(rc) + ' ---';
+end;
+
+procedure THandler.OnRun(Sender: TObject);
+var out: AnsiString; rc: Integer; args: array of AnsiString;
+begin
+  SetLength(args, 0);
+  out := RunCapture(BUILD_OUT, args, rc);
+  Output.Text := '$ run ' + BUILD_OUT + #10 + out + #10 + '--- exit ' + IntToStr(rc) + ' ---';
+end;
+
+procedure THandler.OnUp(Sender: TObject);
+begin
+  LoadDir(ParentDir(dir));
+end;
+
+var
+  Form1: TForm;
+  H: THandler;
+  Designer: TListBox;
+  pm: TMethod;
+  arg, startDir: AnsiString;
+  centerW, centerH, rightX, contentH: Integer;
+
+procedure MkButton(const cap: AnsiString; x: Integer; m: TMethod);
+var b: TButton;
+begin
+  b := TButton.Create;
+  b.Parent := Form1;
+  b.Caption := cap;
+  b.SetBounds(x, 3, 80, 26);
+  b.OnClick := m;
+end;
+
+begin
+  Application := TApplication.Create;
+  Application.Initialize;
+
+  Form1 := TForm.Create;
+  Form1.Caption := 'Eliah - IDE';
+  Form1.SetBounds(0, 0, W_WIN, H_WIN);
+
+  contentH := H_WIN - TOOLBAR_H;
+  centerW := W_WIN - W_TREE - W_RIGHT;
+  centerH := contentH - H_BOTTOM;
+  rightX  := W_TREE + centerW;
+
+  H := THandler.Create;
+
+  H.Tree := TListBox.Create;
+  H.Tree.Parent := Form1;
+  H.Tree.SetBounds(0, TOOLBAR_H, W_TREE, contentH);
+  pm.Code := @H.OnTreeClick; pm.Data := H;
+  H.Tree.OnClick := pm;
+
+  H.Editor := TMemo.Create;
+  H.Editor.Parent := Form1;
+  H.Editor.SetBounds(W_TREE, TOOLBAR_H, centerW, centerH);
+
+  H.Output := TMemo.Create;
+  H.Output.Parent := Form1;
+  H.Output.SetBounds(W_TREE, TOOLBAR_H + centerH, centerW, H_BOTTOM);
+  H.Output.Text := 'build output appears here';
+
+  Designer := TListBox.Create;
+  Designer.Parent := Form1;
+  Designer.SetBounds(rightX, TOOLBAR_H, W_RIGHT, centerH);
+  Designer.AddItem('designer: box-emulated preview (M1)');
+
+  H.Props := TListBox.Create;
+  H.Props.Parent := Form1;
+  H.Props.SetBounds(rightX, TOOLBAR_H + centerH, W_RIGHT, H_BOTTOM);
+  H.Props.AddItem('properties');
+
+  pm.Data := H;
+  pm.Code := @H.OnUp;      MkButton('Up',      4,   pm);
+  pm.Code := @H.OnCompile; MkButton('Compile', 90,  pm);
+  pm.Code := @H.OnRun;     MkButton('Run',     176, pm);
+
+  arg := '';
+  if ParamCount > 0 then arg := ParamStr(1);
+  if (arg <> '') and (arg <> '--smoke') then startDir := arg else startDir := '.';
+  H.LoadDir(startDir);
+
+  Form1.Realize;
+
+  if arg = '--smoke' then
+  begin
+    if H.nItems < 1 then begin writeln('SMOKE FAIL: empty tree'); Halt(1); end;
+    H.LoadDir('apps/ide/garin');
+    H.Tree.ItemIndex := H.nItems - 1;
+    H.OnTreeClick(nil);
+    if Length(H.Editor.Text) = 0 then begin writeln('SMOKE FAIL: editor empty'); Halt(1); end;
+    writeln('SMOKE OK');
+  end
+  else
+  begin
+    Application.MainForm := Form1;
+    Application.Run;
+  end;
+end.

@@ -25,11 +25,13 @@ _none_
 | --- | --- | --- | --- | --- |
 | feature-c-runtime-library | B | feature | C runtime/library layer (`lib/crtl`) plus direct C-library packages | feature-c-source-frontend |
 
-## backlog (51)
+## backlog (54)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
 | bug-const-section-before-constructor | A | bug | bug: const section before constructor/destructor not terminated | — |
+| bug-explicit-tobject-base | A | bug | bug: explicit `class(TObject)` base "type not found" | — |
+| bug-ir-unsupported-call-lvalue | A | bug | bug: "Unsupported linear node Kind=10" — AN_CALL in lvalue-address position | — |
 | bug-setlength-array-element | A | bug | bug: SetLength rejects an indexed array element as target | — |
 | bug-stderr-not-fd2 | B | bug | `writeln(StdErr, ...)` goes to stdout — StdErr not connected to fd 2 | — |
 | bug-writeln-real-format | A | bug | bug: `WriteLn(real)` default format differs from FPC | — |
@@ -76,6 +78,7 @@ _none_
 | feature-synapse-compile-check | B | feature | Synapse library — proper compile check (Track B) | feature-mimic-fpc |
 | feature-threadsafe-io-serialization | A | feature | Statement-level I/O serialization under threads | feature-unified-heap-allocator |
 | feature-toolchain-cli-ux | A | feature | Toolchain CLI / user tooling (install, config, discovery, doctor, selfcheck) | — |
+| feature-typed-const-record | A | feature | feature: typed constant record initializer (`const r: TRec = (...)`) | — |
 | feature-writeln-as-library | B | feature | write/writeln as a library function (via `array of const` + variadic sugar) | — |
 | feature-xtensa-stack-args-over-6-words | A | feature | xtensa: support calls/definitions with more than 6 parameter words | — |
 | feature-zero-init-contract | A | feature | Zero-init contract — one library-owned managed-slot zeroing guarantee | — |
@@ -340,6 +343,8 @@ _none_
 ## Ready (no unmet blocker)
 
 - [A] bug-const-section-before-constructor
+- [A] bug-explicit-tobject-base
+- [A] bug-ir-unsupported-call-lvalue
 - [A] bug-setlength-array-element
 - [B] bug-stderr-not-fd2
 - [A] bug-writeln-real-format
@@ -379,6 +384,7 @@ _none_
 - [B] feature-release-packaging
 - [A] feature-threadsafe-io-serialization
 - [A] feature-toolchain-cli-ux
+- [A] feature-typed-const-record
 - [B] feature-writeln-as-library
 - [A] feature-xtensa-stack-args-over-6-words
 - [A] feature-zero-init-contract
