@@ -25,11 +25,10 @@ _none_
 | --- | --- | --- | --- | --- |
 | feature-c-runtime-library | B | feature | C runtime/library layer (`lib/crtl`) plus direct C-library packages | feature-c-source-frontend |
 
-## backlog (44)
+## backlog (43)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
-| bug-setlength-array-element | A | bug | bug: SetLength rejects an indexed array element as target | — |
 | bug-stderr-not-fd2 | B | bug | `writeln(StdErr, ...)` goes to stdout — StdErr not connected to fd 2 | — |
 | chore-inc-to-units | A | chore | `.inc` → real `.pas` units refactor | — |
 | chore-runtime-emission-size | A | chore | Finer runtime-support emission (code size) | — |
@@ -108,7 +107,7 @@ _none_
 | feature-mimic-fpc | B | feature | `mimic FPC` compatibility mode | — |
 | feature-string-model-tyfixedstring | B | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (224)
+## done (225)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -170,6 +169,7 @@ _none_
 | bug-record-byvalue-arg-truncation | A | bug | By-value record args >8 bytes truncate (and operator operand edges) | — |
 | bug-record-fn-codegen-crash | A | bug | Context-sensitive runtime crash: record-returning fn with nested loops over dynarray fields | — |
 | bug-rtti-offset-static-array | A | bug | RTTI offset corruption when class/record definitions contain large static arrays | — |
+| bug-setlength-array-element | A | bug | bug: SetLength rejects an indexed array element as target | — |
 | bug-setlength-dynarray-function-result | A | bug | SetLength rejects dynamic-array function result | — |
 | bug-setlength-ir-string-in-complex-method | A | bug | `SetLength expects a string variable in IR codegen` on a valid array SetLength | — |
 | bug-setlength-nested-dynarray-field | A | bug | SetLength on a nested sub-array slot through a record field | — |
@@ -347,7 +347,6 @@ _none_
 
 ## Ready (no unmet blocker)
 
-- [A] bug-setlength-array-element
 - [B] bug-stderr-not-fd2
 - [A] chore-inc-to-units
 - [A] chore-runtime-emission-size

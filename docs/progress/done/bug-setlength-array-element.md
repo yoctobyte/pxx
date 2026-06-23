@@ -5,6 +5,8 @@
 - **Found:** 2026-06-23, building the solitaire engine (array of card piles)
 - **Severity:** medium (forces a different data shape for arrays-of-dynarrays)
 
+Case A in commit `1300ff4`; case B in commit `6771425`.
+
 ## Update 2026-06-23 (later) — case B FIXED, all targets
 
 Case B (`var a: array[0..3] of TA`, fixed outer / dyn-array-alias element) is now
