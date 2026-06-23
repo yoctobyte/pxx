@@ -702,8 +702,23 @@ begin
   ch := ctl.Handle;
   ph := pctl.Handle;
   if (ch = nil) or (ph = nil) then Exit;
-  
+
   cls := GetClass(GetInstanceClassName(Pointer(pctl)));
+
+  { TPaned: two children, no absolute coords. First child fills pack1, second
+    fills pack2; the draggable handle sits between them. resize=1 (child grows
+    with the paned), shrink=0 (respect the child's size request). A re-parent
+    (Realize re-entry) where the child is already in this paned is a no-op. }
+  if IsSubclassOf(cls, 'TPaned') then
+  begin
+    if gtk_widget_get_parent(ch) = ph then Exit;
+    if gtk_paned_get_child1(ph) = nil then
+      gtk_paned_pack1(ph, ch, 1, 0)
+    else if gtk_paned_get_child2(ph) = nil then
+      gtk_paned_pack2(ph, ch, 1, 0);
+    Exit;
+  end;
+
   container := GetContainerFixed(ph, cls);
   if container = nil then Exit;
 

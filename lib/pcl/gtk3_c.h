@@ -158,6 +158,17 @@ void gtk_box_pack_start(void* box, void* child, int expand, int fill, unsigned i
 void gtk_box_reorder_child(void* box, void* child, int position);
 void gtk_container_remove(void* container, void* widget);
 
+// Paned (draggable splitter): orientation 0=horizontal (side-by-side),
+// 1=vertical (stacked). pack1/pack2 take the two children; resize=child grows
+// with the paned, shrink=child may shrink below its request.
+void* gtk_paned_new(int orientation);
+void gtk_paned_pack1(void* paned, void* child, int resize, int shrink);
+void gtk_paned_pack2(void* paned, void* child, int resize, int shrink);
+void gtk_paned_set_position(void* paned, int position);
+int gtk_paned_get_position(void* paned);
+void* gtk_paned_get_child1(void* paned);
+void* gtk_paned_get_child2(void* paned);
+
 // Widget name (used for data association)
 void gtk_widget_set_name(void* widget, char* name);
 char* gtk_widget_get_name(void* widget);

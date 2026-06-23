@@ -2,7 +2,7 @@ unit extctrls;
 
 interface
 
-uses classes_lite, controls, uwidgetset, typinfo, graphics;
+uses classes_lite, controls, uwidgetset, typinfo, graphics, gtk3_c;
 
 type
   TPanel = class(TWinControl)
@@ -42,6 +42,29 @@ type
     property OnPaint: TMethod read FOnPaint write FOnPaint;
   end;
 
+  { TPaned — a container split by a draggable handle into two resizable panes.
+    Give it exactly two children (the first fills pane 1, the second pane 2).
+    Create is horizontal (side-by-side, vertical handle); CreateVertical stacks
+    them (horizontal handle). Position is the handle offset in pixels from the
+    top/left. Unlike TPanel, children are NOT placed by absolute coords — gtk's
+    paned sizes them and the user drags the handle between them. }
+  TPaned = class(TWinControl)
+  private
+    FVertical: Boolean;
+    FPosition: Integer;
+    procedure SetPosition(v: Integer);
+  public
+    constructor Create;
+    procedure CreateHandle; override;
+    function Realize: Integer; override;
+    function ActualPosition: Integer;   { live handle position from the widget }
+  published
+    { Set Vertical (and optionally Position) before the form is realized — the
+      paned handle is built lazily at Realize time. }
+    property Position: Integer read FPosition write SetPosition;
+    property Vertical: Boolean read FVertical write FVertical;
+  end;
+
 implementation
 
 { TPanel }
@@ -54,6 +77,51 @@ end;
 procedure TPanel.CreateHandle;
 begin
   Self.Handle := WidgetSet.CreatePanel(Self);
+end;
+
+{ TPaned }
+
+constructor TPaned.Create;
+begin
+  { Lazy handle: Vertical must be known at CreateHandle, so defer to Realize. }
+  FVertical := False;
+  FPosition := 0;
+end;
+
+procedure TPaned.CreateHandle;
+var orient: Integer;
+begin
+  { Talk to gtk directly here (like graphics.pas) rather than through a
+    WidgetSet method: adding new virtual methods to TWidgetSet currently
+    miscompiles their object argument — see
+    docs/progress/backlog/bug-widgetset-virtual-arg-corruption.md. gtk
+    orientation: 0 = horizontal (side-by-side, vertical handle), 1 = vertical. }
+  if FVertical then orient := 1 else orient := 0;
+  Self.Handle := gtk_paned_new(orient);
+end;
+
+function TPaned.Realize: Integer;
+begin
+  { inherited packs the two children; only then is a handle position valid —
+    setting it on an empty paned crashes gtk. }
+  Result := inherited Realize;
+  if (FPosition <> 0) and (Self.Handle <> nil) then
+    gtk_paned_set_position(Self.Handle, FPosition);
+end;
+
+procedure TPaned.SetPosition(v: Integer);
+begin
+  FPosition := v;
+  if Self.Handle <> nil then
+    gtk_paned_set_position(Self.Handle, v);
+end;
+
+function TPaned.ActualPosition: Integer;
+begin
+  if Self.Handle <> nil then
+    Result := gtk_paned_get_position(Self.Handle)
+  else
+    Result := 0;
 end;
 
 { TTimer }
