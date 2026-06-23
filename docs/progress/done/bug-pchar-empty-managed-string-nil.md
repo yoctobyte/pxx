@@ -60,3 +60,16 @@ model itself (empty stays nil internally), only the C-boundary adapter.
 
 `make test` + an external-C test passing `PChar('')` to a libc function
 (`strlen` → 0, not a segfault); FPC oracle-match.
+
+## Resolution (62d61ef, 2026-06-23)
+
+Added `PXXPCharOf(p: Pointer): Pointer` to builtinheap: returns `@PXXEmptyChar`
+(a shared BSS #0 byte) when the handle is nil, else the handle unchanged. The
+AN_PTR_CAST adapter (ir.inc) routes `PChar`/`PAnsiChar` of a tyAnsiString operand
+(ASTIVal=-2 marker) through it; registered in parser.inc whenever managed strings
+are in use (needHeapUnit). Frozen tyString (+8 inline buffer) path untouched.
+
+Verified vs FPC objfpc: `a:=''; PChar(a)` is non-nil, `strlen(PChar(a))=0` (no
+segfault); `PChar('hello')` → len 5. Self-host byte-identical, full make test
+green. Track B guard dropped in lib/pcl/gtk3widgets.pas SetText (now plain
+`p := PChar(AText)`).
