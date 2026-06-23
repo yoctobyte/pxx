@@ -30,7 +30,7 @@ lives in git, not in a timestamp._
 | --- | --- | --- | --- | --- |
 | feature-c-runtime-library | B | feature | C runtime/library layer (`lib/crtl`) plus direct C-library packages | feature-c-source-frontend |
 
-## backlog (47)
+## backlog (53)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -53,7 +53,13 @@ lives in git, not in a timestamp._
 | feature-dns-resolver-library | B | feature | DNS resolver library (`dns.pas`) with selectable backends | — |
 | feature-dynamic-include-paths-config | A | feature | Dynamic Include Paths, Configuration Files, and System Scanner | — |
 | feature-dynamic-soname-discovery | A | feature | Dynamic soname discovery (no execve) | — |
+| feature-eliah-component-palette | B | feature | feature: Eliah component palette — registry-driven (visual + non-visual tray) | — |
 | feature-eliah-from-lfm | B | feature | feature: define Eliah's own layout in a streamed .lfm (dogfooding) | — |
+| feature-eliah-layout-tree | B | feature | feature: Eliah layout tree — window as a nested-TPaned splitter tree | — |
+| feature-eliah-pane-collapse | B | feature | feature: Eliah pane collapse/restore + ratio memory | feature-eliah-layout-tree |
+| feature-eliah-perspectives | B | feature | feature: Eliah perspectives — saved layouts (Code / Design / Split) + compacting | feature-eliah-layout-tree, feature-eliah-pane-collapse |
+| feature-eliah-selection-link | B | feature | feature: Eliah shared selection model — designer ↔ editor link (+ AI rail) | — |
+| feature-eliah-shell | B | feature | feature: Eliah shell — perspective-based IDE (one window, splitter-tree layout) | — |
 | feature-esp32-idf-xtensa | A | feature | ESP-IDF integration: Xtensa (ESP32-S2/S3) — QEMU + real hardware | — |
 | feature-esp-peripheral-callback-api | B | feature | ESP32 peripheral callback API (timer / GPIO / ADC) — the user-facing "interrupt" | — |
 | feature-flexcolumn-directive | A | feature | `flexcolumn` calling-convention directive | chore-inc-to-units |
@@ -381,7 +387,11 @@ lives in git, not in a timestamp._
 - [B] feature-dns-resolver-library
 - [A] feature-dynamic-include-paths-config
 - [A] feature-dynamic-soname-discovery
+- [B] feature-eliah-component-palette
 - [B] feature-eliah-from-lfm
+- [B] feature-eliah-layout-tree
+- [B] feature-eliah-selection-link
+- [B] feature-eliah-shell
 - [A] feature-esp32-idf-xtensa
 - [B] feature-esp-peripheral-callback-api
 - [B] feature-ilja-tui
@@ -411,7 +421,9 @@ lives in git, not in a timestamp._
 
 ## Leverage (tickets each one unblocks)
 
+- **2** — feature-eliah-layout-tree
 - **2** — feature-c-source-frontend
 - **1** — feature-mimic-fpc
 - **1** — feature-esp32-idf-xtensa
+- **1** — feature-eliah-pane-collapse
 - **1** — chore-inc-to-units
