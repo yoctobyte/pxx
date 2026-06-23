@@ -1713,6 +1713,23 @@ begin
   Result := unitStart;
 end;
 
+{ Keep the body pass's recorded token indices in sync with a token-stream edit at
+  `atPos` of `delta` tokens (positive = insert, negative = removal). Only the still-
+  pending DeclItem spans and the body-begin marker matter; entries before the edit
+  are unaffected. No-op unless the body pass is active, so the nested-routine-free
+  self-build is byte-identical. }
+procedure AdjustPass2Spans(atPos, delta: Integer);
+var k: Integer;
+begin
+  if not Pass2Active then Exit;
+  for k := 0 to DeclItemCount - 1 do
+  begin
+    if DeclItemStart[k] >= atPos then DeclItemStart[k] := DeclItemStart[k] + delta;
+    if DeclItemEnd[k]   >= atPos then DeclItemEnd[k]   := DeclItemEnd[k]   + delta;
+  end;
+  if Pass2BodyTok >= atPos then Pass2BodyTok := Pass2BodyTok + delta;
+end;
+
 procedure InsertTokens(insertPos: Integer; const srcTokens: array of TRawToken; count: Integer);
 var i: Integer;
 begin
@@ -1724,6 +1741,7 @@ begin
   for i := 0 to count - 1 do
     Tokens[insertPos + i] := srcTokens[i];
   Inc(TokCount, count);
+  AdjustPass2Spans(insertPos, count);
 end;
 
 procedure Next;

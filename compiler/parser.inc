@@ -10184,9 +10184,14 @@ begin
   end;
 
   { Stash the (possibly rewritten) full routine [nestedStart, finalCur) for
-    top-level re-parse. Token SOffsets index TokChars (never shifted). }
+    top-level re-parse. Token SOffsets index TokChars (never shifted). Record this
+    routine's start offset within the buffer so the flush emits one DeclItem span
+    per routine (a body may stash several back to back). }
   if PendNestCount + (finalCur - nestedStart) >= MAX_NESTED_TOKENS then
     Error('nested routine token buffer overflow');
+  if PendNestRtnCount >= MAX_LIFTS then Error('too many nested routines in one body');
+  PendNestRtnStart[PendNestRtnCount] := PendNestCount;
+  Inc(PendNestRtnCount);
   for i := nestedStart to finalCur - 1 do
   begin
     PendNestTok[PendNestCount] := Tokens[i];
@@ -10207,6 +10212,9 @@ begin
     for i := finalCur to TokCount - 1 do
       Tokens[i - remCount] := Tokens[i];
     TokCount := TokCount - remCount;
+    { The removed inner body shifts every later token down by remCount — keep the
+      body pass's still-pending DeclItem spans and body-begin marker in sync. }
+    AdjustPass2Spans(finalCur, -remCount);
   end;
 
   { CurTok is still the 'procedure'/'function' token; parse the forward decl now
@@ -10214,18 +10222,42 @@ begin
   ParseSubroutine;
 end;
 
-{ Re-inject any nested routines stashed during this routine's body so the
-  top-level driver parses them next, as siblings that complete the forward
-  decls left in place by ParseNestedRoutine. Inserted before the read-ahead
-  token (TokPos-1) so the driver sees them immediately. }
+{ Re-inject any nested routines stashed during this routine's body so they parse
+  as top-level siblings that complete the forward decls left in place by
+  ParseNestedRoutine. APPENDED at end-of-stream (not spliced mid-stream): the
+  body pass replays fixed DeclItem spans, so a mid-stream insert would shift the
+  remaining spans + the body-begin marker out from under it. Each stashed routine
+  becomes its own DeclItem span; the body-pass driver loops `while i < DeclItemCount`
+  so these appended items are parsed in turn (and may themselves append deeper
+  nested routines). Outside the body pass (single-pass legacy path) the same append
+  works: the driver there also consumes trailing DeclItems. }
 procedure FlushPendingNestedProcs;
+var appendStart, i, r, rtnStart, rtnEnd: Integer;
 begin
   if PendNestCount = 0 then Exit;
-  if TokPos < 1 then Exit;
-  InsertTokens(TokPos - 1, PendNestTok, PendNestCount);
+  appendStart := TokCount;
+  for i := 0 to PendNestCount - 1 do
+  begin
+    if TokCount >= MAX_TOKENS then Error('token buffer overflow');
+    Tokens[TokCount] := PendNestTok[i];
+    Inc(TokCount);
+  end;
+  { One DeclItem span per stashed routine (boundaries recorded at stash time), so
+    the body-pass driver parses each as its own sibling. }
+  for r := 0 to PendNestRtnCount - 1 do
+  begin
+    if DeclItemCount >= MAX_DECL_ITEMS then Error('too many declarations (nested routine flush)');
+    rtnStart := appendStart + PendNestRtnStart[r];
+    if r + 1 < PendNestRtnCount then
+      rtnEnd := appendStart + PendNestRtnStart[r + 1]
+    else
+      rtnEnd := TokCount;
+    DeclItemStart[DeclItemCount] := rtnStart;
+    DeclItemEnd[DeclItemCount]   := rtnEnd;
+    Inc(DeclItemCount);
+  end;
   PendNestCount := 0;
-  Dec(TokPos);
-  Next;
+  PendNestRtnCount := 0;
 end;
 
 { ===== Procedure/function parser ===== }
@@ -12486,8 +12518,8 @@ end;
 procedure ParseUnit;
 var
   uname: AnsiString;
-  doneUses, savedInterface, doneImp, savedPreScan: Boolean;
-  savedBase, afterImpTok, ii: Integer;
+  doneUses, savedInterface, doneImp, savedPreScan, savedPass2Active: Boolean;
+  savedBase, afterImpTok, ii, savedPass2BodyTok: Integer;
 begin
   { A used unit parses in its own normal (single-pass) mode: its interface is
     already forward-visible, so the enclosing program's pre-scan must not leak in
@@ -12621,12 +12653,21 @@ begin
   { ===== Body pass (pass 2) =====
     Replay the recorded impl subroutines to emit their bodies, now that the whole
     implementation is visible. }
-  for ii := savedBase to DeclItemCount - 1 do
+  savedPass2Active := Pass2Active;
+  savedPass2BodyTok := Pass2BodyTok;
+  Pass2BodyTok := afterImpTok;
+  Pass2Active  := True;
+  ii := savedBase;
+  while ii < DeclItemCount do   { not a fixed `for`: a lifted nested routine appends fresh items mid-loop }
   begin
     TokPos := DeclItemStart[ii];
     Next;
     ParseSubroutine;
+    Inc(ii);
   end;
+  afterImpTok := Pass2BodyTok;   { kept in sync with pass-2 token edits }
+  Pass2Active  := savedPass2Active;
+  Pass2BodyTok := savedPass2BodyTok;
   TokPos := afterImpTok;
   Next;
   DeclItemCount := savedBase;
@@ -13180,13 +13221,18 @@ begin
     Re-parse each recorded subroutine, now with the whole section visible, to emit
     its body (the header pass left it as a forward; this completes it). Spans are
     replayed in source order so body code lands in its original relative order. }
-  for i := 0 to DeclItemCount - 1 do
+  Pass2BodyTok := afterDeclTok;
+  Pass2Active  := True;
+  i := 0;
+  while i < DeclItemCount do   { not a fixed `for`: a lifted nested routine appends fresh items mid-loop }
   begin
     TokPos := DeclItemStart[i];
     Next;
     ParseSubroutine;
+    Inc(i);
   end;
-  TokPos := afterDeclTok;
+  Pass2Active := False;
+  TokPos := Pass2BodyTok;
   Next;
 
   { Patch jmp to point here (start of main body) }

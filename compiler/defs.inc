@@ -594,6 +594,11 @@ var
     ParseNestedRoutine / FlushPendingNestedProcs in parser.inc. }
   PendNestTok        : array[0..MAX_NESTED_TOKENS-1] of TRawToken;
   PendNestCount      : Integer;
+  { Per-routine boundaries within PendNestTok: a single enclosing body may stash
+    several nested routines back to back, so the flush records each as its own
+    DeclItem span (one ParseSubroutine per routine). }
+  PendNestRtnStart   : array[0..MAX_LIFTS-1] of Integer;
+  PendNestRtnCount   : Integer;
   { Lambda-lift descriptors: a nested routine that captures enclosing state is
     given a mangled unique name; ParseSubroutine looks the name up here (both at
     the forward decl and the real definition) and appends the captured state as
@@ -856,6 +861,15 @@ var
   DeclItemStart : array[0..MAX_DECL_ITEMS-1] of Integer; { token index of each recorded subroutine }
   DeclItemEnd   : array[0..MAX_DECL_ITEMS-1] of Integer; { token index just past it }
   DeclItemCount : Integer;
+  { Body-pass (pass 2) token-stream tracking. A nested routine lifted during the
+    body pass edits the token stream (forward-rewrite removes the inner body, and
+    FlushPendingNestedProcs appends the lifted definition as a fresh DeclItem). Those
+    edits shift the indices the pass-2 driver still relies on: the remaining recorded
+    DeclItem spans and the program/unit body-begin marker. Pass2Active gates the
+    span adjustment so the (nested-routine-free) compiler self-build is untouched;
+    Pass2BodyTok is the single live body-begin index, kept in sync by AdjustPass2Spans. }
+  Pass2Active   : Boolean;
+  Pass2BodyTok  : Integer;
   CompiledUnits : array[0..255] of Integer;
   CompiledUnitCount : Integer;
   CurrentUnitIdx : Integer; { Strs[] name while parsing an imported unit, else -1 }
