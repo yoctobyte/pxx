@@ -25,10 +25,11 @@ _none_
 | --- | --- | --- | --- | --- |
 | feature-c-runtime-library | B | feature | C runtime/library layer (`lib/crtl`) plus direct C-library packages | feature-c-source-frontend |
 
-## backlog (54)
+## backlog (56)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
+| bug-cardinal-expr-promotion | A | bug |  | — |
 | bug-const-section-before-constructor | A | bug | bug: const section before constructor/destructor not terminated | — |
 | bug-explicit-tobject-base | A | bug | bug: explicit `class(TObject)` base "type not found" | — |
 | bug-ir-unsupported-call-lvalue | A | bug | bug: "Unsupported linear node Kind=10" — AN_CALL in lvalue-address position | — |
@@ -39,6 +40,7 @@ _none_
 | chore-repin-new-intrinsics | A | chore | chore: re-pin stable to expose the new System intrinsics to Track B | — |
 | chore-runtime-emission-size | A | chore | Finer runtime-support emission (code size) | — |
 | feature-c-header-import-complex | A | feature | Import C headers for complex libraries (glib/GTK-grade) | — |
+| feature-class-variables | A | feature | feature: class variables (`class var`) | — |
 | feature-const-set-literal | A | feature | Set literal in a `const` declaration (`const S = [1,2,3]`) | — |
 | feature-copy-intrinsic | B | feature | `Copy` as a generic overloaded intrinsic (string + dynarray families) | — |
 | feature-c-regex-library-devtest | A | feature | C regex library dev-test import | — |
@@ -342,6 +344,7 @@ _none_
 
 ## Ready (no unmet blocker)
 
+- [A] bug-cardinal-expr-promotion
 - [A] bug-const-section-before-constructor
 - [A] bug-explicit-tobject-base
 - [A] bug-ir-unsupported-call-lvalue
@@ -352,6 +355,7 @@ _none_
 - [A] chore-repin-new-intrinsics
 - [A] chore-runtime-emission-size
 - [A] feature-c-header-import-complex
+- [A] feature-class-variables
 - [A] feature-const-set-literal
 - [B] feature-copy-intrinsic
 - [A] feature-c-regex-library-devtest
