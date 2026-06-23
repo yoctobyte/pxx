@@ -8,10 +8,11 @@ lives in git, not in a timestamp._
 
 _none_
 
-## working (2)
+## working (3)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
+| feature-demo-gui-solitaire | B | feature | Demo — GUI Patience / Solitaire | — |
 | feature-eliah-ide | B | feature | Eliah / Ilja — single-window IDE (GUI + TUI) | — |
 | feature-eliah-m0-window | B | feature | Eliah M0 — single tiled GTK3 window | — |
 
@@ -25,7 +26,7 @@ _none_
 | --- | --- | --- | --- | --- |
 | feature-c-runtime-library | B | feature | C runtime/library layer (`lib/crtl`) plus direct C-library packages | feature-c-source-frontend |
 
-## backlog (51)
+## backlog (50)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -41,7 +42,6 @@ _none_
 | feature-c-regex-library-devtest | A | feature | C regex library dev-test import | — |
 | feature-c-source-frontend | A | feature | C source frontend — compile C function bodies (statements + expressions) | feature-cross-target-feature-parity |
 | feature-demo-chess | B | feature | Flagship demo — chess engine (real-world app + cross-target oracle + benchmark) | — |
-| feature-demo-gui-solitaire | B | feature | Demo — GUI Patience / Solitaire | — |
 | feature-demo-mandelbrot-gui-threaded | B | feature | Demo — GUI Mandelbrot, multithreaded tiled zoom | — |
 | feature-demo-mandelbrot | B | feature | Demo — zoomable Mandelbrot explorer | — |
 | feature-demo-raytracer | B | feature | Demo — CPU ray tracer | — |
@@ -329,7 +329,6 @@ _none_
 - [A] feature-c-regex-library-devtest
 - [A] feature-c-source-frontend
 - [B] feature-demo-chess
-- [B] feature-demo-gui-solitaire
 - [B] feature-demo-mandelbrot-gui-threaded
 - [B] feature-demo-mandelbrot
 - [B] feature-demo-raytracer

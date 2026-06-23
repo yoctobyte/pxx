@@ -2215,6 +2215,8 @@ lib-test: pxx-stable-check
 	test "$$(/tmp/lib_lineedit | tail -1)" = "ALL OK"
 	$(PXX_STABLE) test/lib_menu.pas /tmp/lib_menu
 	test "$$(/tmp/lib_menu | tail -1)" = "ALL OK"
+	$(PXX_STABLE) -Fuexamples/solitaire_gui test/lib_klondike.pas /tmp/lib_klondike
+	test "$$(/tmp/lib_klondike | tail -1)" = "ALL OK"
 	$(PXX_STABLE) test/lib_tui_app.pas /tmp/lib_tui_app
 	test "$$(/tmp/lib_tui_app | tail -1)" = "ALL OK"
 	$(PXX_STABLE) test/lib_keys.pas /tmp/lib_keys

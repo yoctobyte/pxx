@@ -2,8 +2,8 @@
 
 - **Type:** feature
 - **Track:** B
-- **Status:** backlog
-- **Owner:** —
+- **Status:** working
+- **Owner:** Track B agent (engine-first)
 - **Opened:** 2026-06-22
 - **Relation:** PCL/widget-set flagship demo. Sibling to
   `feature-demo-solitaire`, which remains the console/line-I/O Klondike ticket.
