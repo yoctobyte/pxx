@@ -20,23 +20,31 @@ const
   COL_TEXT = $00000000;   { caption (black) }
   COL_DIM  = $00909090;   { size hint }
   COL_SEL  = $00FF6020;   { selection outline (orange, BGR) }
+  HANDLE_HS = 4;          { corner-handle half-size for grab hit-testing }
+  MIN_SIZE  = 8;          { smallest node a resize may produce }
 
 type
+  { corner under the cursor: 0 none, 1 TL, 2 TR, 3 BL, 4 BR }
   TDesigner = class
   public
     Doc: TDocModel;
     Sel: Integer;          { selected node index, -1 = none }
     Dragging: Boolean;     { a move-drag is in progress }
     DragDX, DragDY: Integer; { click offset inside the node being dragged }
+    Resizing: Boolean;     { a corner-resize is in progress }
+    ResizeCorner: Integer; { 1=TL 2=TR 3=BL 4=BR while resizing }
     constructor Create;
     procedure Paint(Sender: TControl; Canvas: TCanvas);
     { hit-test the docmodel at (X, Y) and select the topmost node there
       (or clear selection). Returns the new selection index. }
     function SelectAt(X, Y: Integer): Integer;
-    { begin a move-drag: select the node at (X, Y) and, if one is hit, remember
-      where inside it the grab landed. Returns the selected index. }
+    { which corner handle of node I covers (X, Y): 0 none, 1 TL,2 TR,3 BL,4 BR. }
+    function HandleAt(I, X, Y: Integer): Integer;
+    { mouse-press: if it lands on a handle of the current selection, start a
+      resize; otherwise select the node under (X, Y) and start a move.
+      Returns the selected index. }
     function BeginDrag(X, Y: Integer): Integer;
-    { while dragging, move the selected node so the grab point tracks (X, Y). }
+    { while a move or resize is in progress, track the cursor to (X, Y). }
     procedure DragTo(X, Y: Integer);
     procedure EndDrag;
   end;
@@ -52,6 +60,8 @@ begin
   Dragging := False;
   DragDX := 0;
   DragDY := 0;
+  Resizing := False;
+  ResizeCorner := 0;
 end;
 
 function TDesigner.SelectAt(X, Y: Integer): Integer;
@@ -61,29 +71,89 @@ begin
   Result := Sel;
 end;
 
-function TDesigner.BeginDrag(X, Y: Integer): Integer;
+function Near(A, B: Integer): Boolean;
 begin
+  Near := (A >= B - HANDLE_HS) and (A <= B + HANDLE_HS);
+end;
+
+function TDesigner.HandleAt(I, X, Y: Integer): Integer;
+var x0, y0, x1, y1: Integer;
+begin
+  Result := 0;
+  if (Doc = nil) or (I < 0) or (I >= Doc.Count) then Exit;
+  x0 := Doc.NodeX(I);          y0 := Doc.NodeY(I);
+  x1 := x0 + Doc.NodeW(I);     y1 := y0 + Doc.NodeH(I);
+  if Near(X, x0) and Near(Y, y0) then Result := 1
+  else if Near(X, x1) and Near(Y, y0) then Result := 2
+  else if Near(X, x0) and Near(Y, y1) then Result := 3
+  else if Near(X, x1) and Near(Y, y1) then Result := 4;
+end;
+
+function TDesigner.BeginDrag(X, Y: Integer): Integer;
+var c: Integer;
+begin
+  Dragging := False;
+  Resizing := False;
+  { a press on a handle of the already-selected node starts a resize and keeps
+    the selection (handles only show on the selected node). }
+  if Sel >= 0 then
+  begin
+    c := HandleAt(Sel, X, Y);
+    if c > 0 then
+    begin
+      Resizing := True;
+      ResizeCorner := c;
+      Result := Sel;
+      Exit;
+    end;
+  end;
+  { otherwise (re)select what's under the cursor and start a move }
   Result := SelectAt(X, Y);
   if Result >= 0 then
   begin
     Dragging := True;
     DragDX := X - Doc.NodeX(Result);
     DragDY := Y - Doc.NodeY(Result);
-  end
-  else
-    Dragging := False;
+  end;
 end;
 
 procedure TDesigner.DragTo(X, Y: Integer);
+var x0, y0, x1, y1: Integer;
 begin
-  if Dragging and (Doc <> nil) and (Sel >= 0) then
+  if (Doc = nil) or (Sel < 0) then Exit;
+
+  if Dragging then
+  begin
     Doc.SetNodeBounds(Sel, X - DragDX, Y - DragDY,
       Doc.NodeW(Sel), Doc.NodeH(Sel));
+    Exit;
+  end;
+
+  if Resizing then
+  begin
+    { current corners; move only the dragged corner, clamp to MIN_SIZE }
+    x0 := Doc.NodeX(Sel);        y0 := Doc.NodeY(Sel);
+    x1 := x0 + Doc.NodeW(Sel);   y1 := y0 + Doc.NodeH(Sel);
+    case ResizeCorner of
+      1: begin x0 := X; y0 := Y; end;   { TL }
+      2: begin x1 := X; y0 := Y; end;   { TR }
+      3: begin x0 := X; y1 := Y; end;   { BL }
+      4: begin x1 := X; y1 := Y; end;   { BR }
+    end;
+    if x1 - x0 < MIN_SIZE then
+      if (ResizeCorner = 1) or (ResizeCorner = 3) then x0 := x1 - MIN_SIZE
+      else x1 := x0 + MIN_SIZE;
+    if y1 - y0 < MIN_SIZE then
+      if (ResizeCorner = 1) or (ResizeCorner = 2) then y0 := y1 - MIN_SIZE
+      else y1 := y0 + MIN_SIZE;
+    Doc.SetNodeBounds(Sel, x0, y0, x1 - x0, y1 - y0);
+  end;
 end;
 
 procedure TDesigner.EndDrag;
 begin
   Dragging := False;
+  Resizing := False;
 end;
 
 procedure TDesigner.Paint(Sender: TControl; Canvas: TCanvas);

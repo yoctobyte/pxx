@@ -165,7 +165,7 @@ end;
 
 procedure THandler.OnDesignMouseMove(Sender: TControl; Button, X, Y: Integer);
 begin
-  if not Dsn.Dragging then Exit;
+  if not (Dsn.Dragging or Dsn.Resizing) then Exit;
   Dsn.DragTo(X, Y);
   DesignBox.Invalidate;
   ShowInspector(Dsn.Sel);
@@ -303,6 +303,16 @@ begin
     H.OnDesignMouseMove(nil, 0, 200, 200);
     if (H.Dsn.Doc.NodeX(H.Dsn.Sel) <> 58) then
       begin writeln('SMOKE FAIL: node moved after mouse-up'); Halt(1); end;
+
+    { resize: OK button now at (58,132,80,28) -> BR corner at (138,160). Grab it
+      and drag to (158,180): origin stays, W/H grow by 20 -> (58,132,100,48). }
+    H.OnDesignMouseDown(nil, 1, 138, 160);
+    if not H.Dsn.Resizing then begin writeln('SMOKE FAIL: handle did not start resize'); Halt(1); end;
+    H.OnDesignMouseMove(nil, 1, 158, 180);
+    H.OnDesignMouseUp(nil, 1, 158, 180);
+    if (H.Dsn.Doc.NodeX(H.Dsn.Sel) <> 58) or (H.Dsn.Doc.NodeY(H.Dsn.Sel) <> 132) or
+       (H.Dsn.Doc.NodeW(H.Dsn.Sel) <> 100) or (H.Dsn.Doc.NodeH(H.Dsn.Sel) <> 48) then
+      begin writeln('SMOKE FAIL: BR resize wrong bounds'); Halt(1); end;
 
     { click empty surface -> selection cleared }
     H.OnDesignMouseDown(nil, 1, 5, 5);
