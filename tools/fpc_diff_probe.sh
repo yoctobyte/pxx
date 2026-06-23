@@ -152,6 +152,22 @@ P
 probe builtin-case known <<'P'
 var s: string; begin s := 'hi'; writeln(LENGTH(s)); end.
 P
+probe overload-by-type known <<'P'
+function f(a: integer): string; begin f := 'INT'; end;
+function f(a: string): string; begin f := 'STR'; end;
+begin writeln(f(1), '|', f('x')); end.
+P
+probe variant-record known <<'P'
+type tr = record case boolean of true: (i: integer); false: (c: char); end;
+var r: tr; begin r.i := 65; writeln(ord(r.c)); end.
+P
+probe default-param known <<'P'
+function f(a: integer; b: integer = 10): integer; begin f := a + b; end;
+begin writeln(f(5), '|', f(5, 1)); end.
+P
+probe binary-literal known <<'P'
+begin writeln(%1010); end.
+P
 
 echo "---"
 echo "new divergences: $new   known/filed: $known"
