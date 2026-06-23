@@ -2800,7 +2800,7 @@ begin
           if baseRec >= REC_UCLASS_BASE then
           begin
             mci := baseRec - REC_UCLASS_BASE;
-            mmi := FindUMeth(mci, fieldName);
+            if FindUProp(mci, fieldName) < 0 then mmi := FindUMeth(mci, fieldName);
           end;
           if (mmi >= 0) and (mci >= 0) and UClsIsInterface[mci] then
           begin
@@ -2836,6 +2836,52 @@ begin
               end;
               Expect(tkRParen, ')');
             end;
+            node := mcallNode;
+          end
+          else if mmi >= 0 then
+          begin
+            { `(expr).M(args)` on a non-interface class/record value (e.g.
+              `(o as T).M`). The interface branch above only handled IMT dispatch;
+              without this a class method silently lowered to an AN_FIELD read and
+              was never called. Mirrors ParseClassRecordSelectors: static or
+              virtual dispatch, Self = the grouped value (arg 0). }
+            mpi := UMthProc_[mmi];
+            if UMthVirSlot[mmi] >= 0 then
+            begin
+              mcallNode := AllocNode(AN_VIRTUAL_CALL);
+              ASTRight[mcallNode] := UMthVirSlot[mmi];
+            end
+            else
+              mcallNode := AllocNode(AN_CALL);
+            ASTIVal[mcallNode] := mpi;
+            ASTTk[mcallNode] := Ord(Procs[mpi].RetType);
+            margSeq := AllocNode(AN_ARG); ASTLeft[margSeq] := node;   { Self = arg 0 }
+            ASTLeft[mcallNode] := margSeq;
+            mlastArg := margSeq;
+            Next; { consume method name }
+            if CurTok.Kind = tkLParen then
+            begin
+              Next;
+              mai := 1;
+              while mai <= Procs[mpi].ParamCount - 1 do
+              begin
+                if Procs[mpi].Params[mai].IsRef or Procs[mpi].Params[mai].IsArray then
+                begin
+                  if CurTok.Kind <> tkIdent then Error('expected variable');
+                  margIdx := FindSym(CurTok.SVal); Next;
+                  mexprNode := ParseLValueAST(margIdx, TokPos - 2);
+                end
+                else begin ParseExpr; mexprNode := CurASTNode; end;
+                margSeq := AllocNode(AN_ARG); ASTLeft[margSeq] := mexprNode;
+                ASTRight[mlastArg] := margSeq; mlastArg := margSeq;
+                if mai < Procs[mpi].ParamCount - 1 then Expect(tkComma, ',');
+                Inc(mai);
+              end;
+              Expect(tkRParen, ')');
+            end;
+            { result type for chaining (e.g. (o as T).GetChild.M) }
+            if (Procs[mpi].RetType = tyClass) or (Procs[mpi].RetType = tyRecord) then
+              ASTTk[mcallNode] := Ord(Procs[mpi].RetType);
             node := mcallNode;
           end
           else
@@ -7746,6 +7792,29 @@ begin
           end;
         end;
       end;
+    end;
+
+    tkLParen:
+    begin
+      { Statement starting with a parenthesised expression: a method/proc call on
+        a grouped value, e.g. `(o as T).M;` (the as-inline-call bug), or a write
+        through one, e.g. `(p)^ := v`. ParseExpr resolves the member access (incl.
+        (as)-cast method dispatch via ParseFactor's grouped postfix); a trailing
+        `:=` makes it an assignment, otherwise it is a call whose result is
+        discarded. Previously the default branch below skipped to `;`, silently
+        dropping the statement. }
+      ParseExpr;
+      valNode := CurASTNode;
+      if CurTok.Kind = tkAssign then
+      begin
+        Next;
+        ParseExpr;
+        node := AllocNode(AN_ASSIGN);
+        ASTLeft[node] := valNode;
+        ASTRight[node] := CurASTNode;
+      end
+      else
+        node := valNode;
     end;
 
     tkSemicolon, tkEnd, tkElse, tkUntil, tkEOF: ;
