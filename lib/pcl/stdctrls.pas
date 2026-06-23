@@ -260,16 +260,18 @@ end;
 procedure TListBox.AddItem(const s: string);
 var row: Pointer;
 begin
-  if FCount < 256 then
+  { grow on demand: a streamed instance (CreateInstance skips the constructor)
+    has nil FItems/FRows, so never assume the constructor pre-sized them. }
+  if FCount >= Length(FItems) then SetLength(FItems, FCount + 64);
+  if FCount >= Length(FRows) then SetLength(FRows, FCount + 64);
+  FItems[FCount] := s;
+  FRows[FCount] := nil;
+  if Self.Handle <> nil then
   begin
-    FItems[FCount] := s;
-    if Self.Handle <> nil then
-    begin
-      row := WidgetSet.AddListItem(Self, s);
-      FRows[FCount] := row;
-    end;
-    FCount := FCount + 1;
+    row := WidgetSet.AddListItem(Self, s);
+    FRows[FCount] := row;
   end;
+  FCount := FCount + 1;
 end;
 
 procedure TListBox.Clear;
@@ -335,13 +337,11 @@ end;
 
 procedure TComboBox.AddItem(const s: string);
 begin
-  if FCount < 256 then
-  begin
-    FItems[FCount] := s;
-    if Self.Handle <> nil then
-      WidgetSet.AddComboItem(Self, s);
-    FCount := FCount + 1;
-  end;
+  if FCount >= Length(FItems) then SetLength(FItems, FCount + 64);
+  FItems[FCount] := s;
+  if Self.Handle <> nil then
+    WidgetSet.AddComboItem(Self, s);
+  FCount := FCount + 1;
 end;
 
 procedure TComboBox.Clear;

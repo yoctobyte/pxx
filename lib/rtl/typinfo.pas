@@ -196,13 +196,24 @@ end;
 
 function CreateInstance(cls: PClassRTTI): Pointer;
 var
-  obj: Pointer;
+  obj, addr: Pointer;
+  i, sz: Integer;
 begin
   CreateInstance := nil;
   if cls = nil then Exit;
-  { Bump-allocated heap is kernel-zeroed, so all fields start cleared
-    (string fields = empty). Mirror normal .Create: VMT pointer at offset 0. }
-  obj := GetMem(Integer(cls^.InstanceSize));
+  sz := Integer(cls^.InstanceSize);
+  obj := GetMem(sz);
+  { Zero the instance: GetMem may hand back reused (non-zero) heap, so fields —
+    notably FHandle — would otherwise be garbage and a pre-Realize FHandle<>nil
+    check would dereference junk. Mirror normal .Create (all fields cleared,
+    string fields empty). }
+  i := 0;
+  while i < sz do
+  begin
+    addr := @PUInt8(obj)[i];
+    PUInt8(addr)^ := 0;
+    Inc(i);
+  end;
   PPointer(obj)^ := cls^.VMTPtr;
   CreateInstance := obj;
 end;
