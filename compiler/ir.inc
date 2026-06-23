@@ -1749,6 +1749,11 @@ begin
       Result := IRAppend(IR_LEA, vrTmp, -1, -1, 0, Ord(tyPointer));
     end;
 
+    AN_SET_CONST_REF:
+      { Named set constant: the 32-byte mask was already baked into Data[] at
+        declaration time; yield its address exactly like a baked set literal. }
+      Result := IRAppend(IR_SET_LIT, -1, -1, -1, ASTIVal[node], Ord(tySet));
+
     AN_SET_LIT:
     begin
       { An all-constant set literal is baked into a 32-byte Data[] blob (the

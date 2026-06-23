@@ -92,7 +92,7 @@ begin
   rootCls := GetClass('TRoot');
   if rootCls = nil then begin writeln('FAIL: no TRoot rtti'); Halt(1); end;
 
-  root := TRoot.Create;
+  root := TRoot.Create(nil);   { TComponent.Create now takes an owner (FPC-shaped) }
   st := TByteStream.Create;
   st.Init(@buf[0], bufN);
   rd := TReader.Create;

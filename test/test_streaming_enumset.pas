@@ -78,7 +78,7 @@ begin
   cls := GetClass('TWidget');
   if cls = nil then begin writeln('FAIL: no TWidget rtti'); Halt(1); end;
 
-  w := TWidget.Create;
+  w := TWidget.Create(nil);   { TComponent.Create now takes an owner (FPC-shaped) }
   st := TByteStream.Create;
   st.Init(@buf[0], bufN);
   rd := TReader.Create;

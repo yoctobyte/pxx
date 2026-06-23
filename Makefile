@@ -419,6 +419,8 @@ test-core: $(COMPILER)
 	test "$$(/tmp/test_tc_record26)" = "$$(printf '7\n10 Z 20\n300\n300')"
 	./$(COMPILER) test/test_multidim_const_array.pas /tmp/test_md_const26
 	test "$$(/tmp/test_md_const26)" = "$$(printf '1 2 3 4\n10 30 40 60\n1 4 5 8\n7 8 9 10\n7 8 9 10')"
+	./$(COMPILER) test/test_const_set.pas /tmp/test_const_set26
+	test "$$(/tmp/test_const_set26)" = "$$(printf 'digits=5\ngreen=out\nblue=in\nrange=4\nunion=ok\ninter=ok')"
 	./$(COMPILER) test/test_func_name_result_read.pas /tmp/test_fnresult26
 	test "$$(/tmp/test_fnresult26)" = "$$(printf '33\n0\nhi!\n120')"
 	./$(COMPILER) test/test_func_name_paramless_result.pas /tmp/test_fnresult_pl26
@@ -514,6 +516,8 @@ test-core: $(COMPILER)
 	test "$$(/tmp/test_ir_virtual_call26)" = "$$(printf '1\n2\n1\n2')"
 	./$(COMPILER) test/test_metaclass_construct.pas /tmp/test_metaclass_construct26
 	test "$$(/tmp/test_metaclass_construct26)" = "$$(printf '50\n70\n3')"
+	./$(COMPILER) test/test_metaclass_getclass.pas /tmp/test_metaclass_getclass26
+	test "$$(/tmp/test_metaclass_getclass26)" = "$$(printf '3 base TRUE\n40 der TRUE')"
 	./$(COMPILER) test/test_inheritance_dispatch.pas /tmp/test_inheritance_dispatch26
 	test "$$(/tmp/test_inheritance_dispatch26)" = "$$(printf '50\n507\n50\n507\n5\n12\n7\n99\n5\n88')"
 	./$(COMPILER) test/test_inherited.pas /tmp/test_inherited26

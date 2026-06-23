@@ -177,6 +177,14 @@ begin
     if CaseEqual(StrConstName[i], name) then begin Result := i; Exit; end;
 end;
 
+function FindSetConst(const name: AnsiString): Integer;
+var i: Integer;
+begin
+  Result := -1;
+  for i := 0 to SetConstCount - 1 do
+    if CaseEqual(SetConstName[i], name) then begin Result := i; Exit; end;
+end;
+
 procedure RegisterSetAlias(noff, nlen, elemEnumId: Integer);
 { Named set type: TFooSet = set of TFoo. Stored in the alias table with
   AliasTk=tySet; AliasElemTk holds the element enum id (or -1). }

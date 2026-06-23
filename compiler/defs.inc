@@ -170,6 +170,9 @@ const
                            (alloc + SetLength + per-element store) whose handle is
                            the open-array argument — mirror of AN_VARREC_ARRAY for
                            plain (non-TVarRec) elements. }
+  AN_SET_CONST_REF = 66; { named set constant used as a value: ASTIVal = Data[]
+                           offset of the baked 32-byte mask. Lowers to IR_SET_LIT
+                           (same blob-address value a set literal yields). }
   AN_METACLASS_NEW = 65; { metaclass-dispatched construction `classRefVar.Create(..)`:
                            Left = AN_ARG chain of explicit ctor args (NO Self);
                            Right = classref value node (yields the RTTI blob ptr);
@@ -1319,6 +1322,14 @@ var
   StrConstSOff : array[0..MAX_TYPEALIAS-1] of Integer;
   StrConstSLen : array[0..MAX_TYPEALIAS-1] of Integer;
   StrConstCount: Integer;
+
+  { Named set constants (`const S = [1,2,3]` / `const S: TS = [..]`). The 32-byte
+    bitmask is baked into Data[] at decl time; a use resolves to AN_SET_CONST_REF
+    carrying the data offset (lowered via IR_SET_LIT, like a literal). }
+  SetConstName : array[0..MAX_TYPEALIAS-1] of AnsiString;
+  SetConstOff  : array[0..MAX_TYPEALIAS-1] of Integer;   { Data[] offset of the mask }
+  SetConstEnumId : array[0..MAX_TYPEALIAS-1] of Integer; { element enum type id, or -1 }
+  SetConstCount: Integer;
 
   { Scratch filled by NodeArrNDInfo for the multidim array a node references. }
   NDInfoNDims : Integer;

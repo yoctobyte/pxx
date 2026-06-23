@@ -340,6 +340,7 @@ function ParseSetMembershipAST(leftExpr: Integer): Integer; forward;
 function ParseSetLiteralAST: Integer; forward;
 function ParseVarRecLiteralAST: Integer; forward;
 function ParseArrayCtorAST(elemTk: TTypeKind): Integer; forward;
+function BuildMetaclassNew(crefNode, ci, mmi: Integer): Integer; forward;
 function ParseStatementAST: Integer; forward;
 procedure EnableCoroutineRuntime; forward;
 function ParseWithStatementAST: Integer; forward;
@@ -1403,56 +1404,31 @@ begin
       propFOff := Tokens[prevTok].SOffset;
       propFLen := Tokens[prevTok].SLen;
 
-      { Metaclass-dispatched construction `classRefVar.Create(args)`: the base is
-        a `class of T` variable (a tyPointer whose element is a class). Build an
-        AN_METACLASS_NEW that allocates the DYNAMIC class the var points at and
-        runs its (virtual) constructor — see the IR lowering. Distinct from the
-        static `TFoo.Create` path, which resolves the class at compile time. }
+      { Metaclass-dispatched construction `classRef.Create(args)`: the base is a
+        metaclass value — either a `class of T` variable (AN_IDENT, a tyPointer
+        whose element is a class) or an inline metaclass cast `TFooClass(expr)`
+        (AN_PTR_CAST over a `class of` alias, e.g. the streamer's
+        `TComponentClass(GetClass(name)).Create(owner)`). Build AN_METACLASS_NEW,
+        which allocates the DYNAMIC class the ref points at and runs its virtual
+        constructor — see the IR lowering. Distinct from the static `TFoo.Create`
+        path, which resolves the class at compile time. }
+      ci := -1;
       if (ASTKind[node] = AN_IDENT) and (ASTIVal[node] >= 0) and
          (Syms[ASTIVal[node]].TypeKind = tyPointer) and
          (Syms[ASTIVal[node]].PtrElemTk = tyClass) and
-         (Syms[ASTIVal[node]].PtrElemRec >= REC_UCLASS_BASE) and
-         CaseEqual(fieldName, 'create') then
+         (Syms[ASTIVal[node]].PtrElemRec >= REC_UCLASS_BASE) then
+        ci := Syms[ASTIVal[node]].PtrElemRec - REC_UCLASS_BASE
+      else if (ASTKind[node] = AN_PTR_CAST) and (ASTIVal[node] >= 0) and
+              (IntToTypeKind(AliasElemTk[ASTIVal[node]]) = tyClass) and
+              (AliasElemRec[ASTIVal[node]] >= REC_UCLASS_BASE) then
+        ci := AliasElemRec[ASTIVal[node]] - REC_UCLASS_BASE;
+      if (ci >= 0) and CaseEqual(fieldName, 'create') then
       begin
-        ci := Syms[ASTIVal[node]].PtrElemRec - REC_UCLASS_BASE;
         mmi := FindUMeth(ci, 'create');
         if mmi >= 0 then
         begin
-          mpi := UMthProc_[mmi];
           Next; { consume the 'Create' method name }
-          mcallNode := AllocNode(AN_METACLASS_NEW);
-          ASTRight[mcallNode] := node;                  { classref value }
-          ASTIVal[mcallNode] := mpi;                    { ctor proc idx }
-          ASTSOffset[mcallNode] := UMthVirSlot[mmi];    { vmt slot, -1 if non-virtual }
-          ASTSLen[mcallNode] := REC_UCLASS_BASE + ci;   { result record id }
-          ASTTk[mcallNode] := Ord(tyClass);
-          mlastArg := -1;
-          if CurTok.Kind = tkLParen then
-          begin
-            Next;
-            mai := 1; { param 0 = Self (the allocated instance) }
-            while mai <= Procs[mpi].ParamCount-1 do
-            begin
-              if Procs[mpi].Params[mai].IsRef or Procs[mpi].Params[mai].IsArray then
-              begin
-                if CurTok.Kind <> tkIdent then Error('expected variable');
-                margIdx := FindSym(CurTok.SVal); Next;
-                mexprNode := ParseLValueAST(margIdx, TokPos - 2);
-              end
-              else
-              begin
-                ParseExpr; mexprNode := CurASTNode;
-              end;
-              margSeq := AllocNode(AN_ARG); ASTLeft[margSeq] := mexprNode;
-              if mlastArg = -1 then ASTLeft[mcallNode] := margSeq
-              else ASTRight[mlastArg] := margSeq;
-              mlastArg := margSeq;
-              if mai < Procs[mpi].ParamCount-1 then Expect(tkComma, ',');
-              Inc(mai);
-            end;
-            Expect(tkRParen, ')');
-          end;
-          node := mcallNode;
+          node := BuildMetaclassNew(node, ci, mmi);
           recName := REC_UCLASS_BASE + ci;
           tk := tyClass;
           Continue;   { allow trailing .field/[i] selectors on the new instance }
@@ -1770,6 +1746,52 @@ begin
     end;
   end;
   Result := node;
+end;
+
+function BuildMetaclassNew(crefNode, ci, mmi: Integer): Integer;
+{ Build an AN_METACLASS_NEW for `<cref>.Create(args)` — metaclass-dispatched
+  construction (allocate the dynamic class the ref points at, run its virtual
+  ctor; see the IR lowering). On entry the `.Create` token pair has already been
+  consumed; CurTok is at `(` or the following token. `crefNode` yields the
+  classref (RTTI blob ptr), `ci` is the static base class, `mmi` its `create`
+  UMeth. Shared by the metaclass-var path (ParseLValueAST) and the inline
+  metaclass-cast path `TFooClass(expr).Create` (ParseFactor). }
+var mpi, mcallNode, mlastArg, margSeq, margIdx, mexprNode, mai: Integer;
+begin
+  mpi := UMthProc_[mmi];
+  mcallNode := AllocNode(AN_METACLASS_NEW);
+  ASTRight[mcallNode]   := crefNode;             { classref value }
+  ASTIVal[mcallNode]    := mpi;                  { ctor proc idx }
+  ASTSOffset[mcallNode] := UMthVirSlot[mmi];     { vmt slot, -1 if non-virtual }
+  ASTSLen[mcallNode]    := REC_UCLASS_BASE + ci; { result record id }
+  ASTTk[mcallNode]      := Ord(tyClass);
+  mlastArg := -1;
+  if CurTok.Kind = tkLParen then
+  begin
+    Next;
+    mai := 1; { param 0 = Self (the allocated instance) }
+    while mai <= Procs[mpi].ParamCount-1 do
+    begin
+      if Procs[mpi].Params[mai].IsRef or Procs[mpi].Params[mai].IsArray then
+      begin
+        if CurTok.Kind <> tkIdent then Error('expected variable');
+        margIdx := FindSym(CurTok.SVal); Next;
+        mexprNode := ParseLValueAST(margIdx, TokPos - 2);
+      end
+      else
+      begin
+        ParseExpr; mexprNode := CurASTNode;
+      end;
+      margSeq := AllocNode(AN_ARG); ASTLeft[margSeq] := mexprNode;
+      if mlastArg = -1 then ASTLeft[mcallNode] := margSeq
+      else ASTRight[mlastArg] := margSeq;
+      mlastArg := margSeq;
+      if mai < Procs[mpi].ParamCount-1 then Expect(tkComma, ',');
+      Inc(mai);
+    end;
+    Expect(tkRParen, ')');
+  end;
+  Result := mcallNode;
 end;
 
 function ParseSetMembershipAST(leftExpr: Integer): Integer;
@@ -4064,6 +4086,26 @@ begin
           { Set locals so the suffix loop below can resolve ^ and .field }
           tk      := tyPointer;
           recName := AliasElemRec[aliasIdx];  { pointee record id, used after ^ }
+          { Inline metaclass-cast construction `TFooClass(expr).Create(args)`: the
+            alias is a `class of T` (element tyClass) and the next selector is
+            `.Create`. Dispatch through the metaclass like the variable form (the
+            streamer's `TComponentClass(GetClass(n)).Create(owner)`). }
+          if (IntToTypeKind(AliasElemTk[aliasIdx]) = tyClass) and
+             (AliasElemRec[aliasIdx] >= REC_UCLASS_BASE) and
+             (CurTok.Kind = tkDot) and (Tokens[TokPos].Kind = tkIdent) and
+             CaseEqual(GetTokenStr(TokPos), 'create') then
+          begin
+            i := FindUMeth(AliasElemRec[aliasIdx] - REC_UCLASS_BASE, 'create');
+            if i >= 0 then
+            begin
+              Next; { consume '.' }
+              Next; { consume 'Create' }
+              node := BuildMetaclassNew(node, AliasElemRec[aliasIdx] - REC_UCLASS_BASE, i);
+              CurASTNode := node;
+              LastExprTk := tyClass;
+              Exit;
+            end;
+          end;
           { Run suffix loop: handle chains of ^, .field, and [i] on the cast result. }
           while CurTok.Kind in [tkCaret, tkDot, tkLBrack] do
           begin
@@ -4292,6 +4334,17 @@ begin
             Exit;
           end;
         end;
+      end;
+      sci := FindSetConst(name);
+      if sci >= 0 then
+      begin
+        { Named set constant — yields the baked 32-byte mask's address, exactly
+          like an all-constant set literal (lowered via IR_SET_LIT). }
+        node := AllocNode(AN_SET_CONST_REF);
+        ASTIVal[node] := SetConstOff[sci];
+        ASTTk[node] := Ord(tySet); CurASTNode := node; Next;
+        LastExprTk := tySet;
+        Exit;
       end;
       sci := FindStrConst(name);
       if sci >= 0 then
@@ -8548,6 +8601,45 @@ begin
 	  end;
 	end;
 
+function BakeSetConst: Integer;
+{ Parse a constant `[...]` set literal (elements + `lo..hi` ranges, all
+  ConstEval-able) and bake its 32-byte (256-bit) bitmask into Data[]; return the
+  Data offset. Same blob shape IR_SET_LIT emits for an all-constant literal, so a
+  use resolves to that address. CurTok must be `[`. }
+var lo, hi, vv, idx, i, bit, k: Integer;
+begin
+  Expect(tkLBrack, '[');
+  while (DataLen mod 8) <> 0 do
+  begin
+    if DataLen >= MAX_DATA then Error('data overflow');
+    Data[DataLen] := 0; Inc(DataLen);
+  end;
+  idx := DataLen;
+  for i := 0 to 31 do
+  begin
+    if DataLen >= MAX_DATA then Error('data overflow');
+    Data[DataLen] := 0; Inc(DataLen);
+  end;
+  if CurTok.Kind <> tkRBrack then
+    repeat
+      lo := ConstEval;
+      hi := lo;
+      if Eat(tkDotDot) then hi := ConstEval;
+      if lo < 0 then lo := 0;
+      if hi > 255 then hi := 255;
+      for vv := lo to hi do
+      begin
+        { bit := 1 shl (vv mod 8) — built with *2 to avoid `shl` in compiler
+          source (Shl8_ lives in ir.inc, included after this file). }
+        bit := 1;
+        for k := 1 to (vv mod 8) do bit := bit * 2;
+        Data[idx + (vv div 8)] := Data[idx + (vv div 8)] or bit;
+      end;
+    until not Eat(tkComma);
+  Expect(tkRBrack, ']');
+  Result := idx;
+end;
+
 procedure ParseConstSection;
 var name: AnsiString; v: Int64;
     cTk, cElemTk: TTypeKind; cLo, cHi, cIdx, cElem: Integer;
@@ -8669,7 +8761,18 @@ begin
         cTk := ParseTypeKind;
         cIdx := AllocVar(name, cTk);
         Expect(tkEq, '=');
-        if cTk = tyRecord then
+        if cTk = tySet then
+        begin
+          { Typed set constant `const S: TS = [..]`: bake the 32-byte mask and
+            record it in the SetConst table; uses resolve to AN_SET_CONST_REF.
+            (cIdx's storage is unused — the const carries no runtime var.) }
+          if SetConstCount >= MAX_TYPEALIAS then Error('too many set constants');
+          SetConstName[SetConstCount]   := name;
+          SetConstEnumId[SetConstCount] := LastTypeSetEnumId;
+          SetConstOff[SetConstCount]    := BakeSetConst;
+          Inc(SetConstCount);
+        end
+        else if cTk = tyRecord then
         begin
           { Record typed constant: `const r: TRec = (f1: v1; f2: v2; ...)` (FPC
             named-field form). Each scalar field initializer is recorded as a
@@ -8739,7 +8842,17 @@ begin
     else
     begin
       Expect(tkEq, '=');
-      if CurTok.Kind = tkString then
+      if CurTok.Kind = tkLBrack then
+      begin
+        { Untyped set constant `const S = [1,2,3]`: bake a plain-ordinal set mask
+          (no element enum type) and record it; uses resolve to AN_SET_CONST_REF. }
+        if SetConstCount >= MAX_TYPEALIAS then Error('too many set constants');
+        SetConstName[SetConstCount]   := name;
+        SetConstEnumId[SetConstCount] := -1;
+        SetConstOff[SetConstCount]    := BakeSetConst;
+        Inc(SetConstCount);
+      end
+      else if CurTok.Kind = tkString then
       begin
         { Untyped string constant: remember the literal's source span; a use of
           the name builds an AN_STR_LIT over it. }
@@ -13089,6 +13202,7 @@ begin
   PendingInitCount := 0;
   ArrTypeCount := 0;
   StrConstCount := 0;
+  SetConstCount := 0;
   Expect(tkProgram, 'program');
   if CurTok.Kind = tkEOF then Error('expected program name');
   Next;  { program name can be any identifier (even keyword) }
