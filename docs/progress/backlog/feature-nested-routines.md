@@ -99,3 +99,24 @@ No workaround beyond hoisting; this removes that.
 ## Repro
 
 `tools/fpc_diff_probe.sh` (the `nested-fn` / `nested-proc` probes).
+
+## Attempt 2026-06-23 (reverted) — the fix is bigger than the flush
+
+Tried the flush redesign from the sketch above: FlushPendingNestedProcs APPENDS
+the stashed tokens at end-of-stream + records a DeclItem (instead of mid-stream
+InsertTokens), and both pass-2 loops became `while i < DeclItemCount`. That part
+is correct and necessary, BUT it exposed a SECOND layer: with the old mid-stream
+`InsertTokens(TokPos-1) + Dec(TokPos); Next` gone, the parse now fails earlier —
+`Expected: begin, but got tkColon` at the nested routine's own line, during the
+enclosing routine's pass-2 body parse (before any flush). So `ParseNestedRoutine`
+(the in-place `<header>; forward;` rewrite at ~10196 + its trailing
+`ParseSubroutine` at ~10214, driven by `NestScanSpans`) leaves the parse position
+mis-placed in the pass-2 context; the old mid-stream flush's reposition was
+masking it. Reverted to keep the tree clean.
+
+NEXT (fresh session): fix BOTH together — (1) flush = append + DeclItem +
+`while`-loop pass-2 (as sketched), AND (2) make ParseNestedRoutine /
+NestScanSpans leave CurTok correctly after the rewritten forward decl in the
+pass-2 replay (verify hdrEnd/finalCur spans + the trailing ParseSubroutine land
+on the token after `forward;`). Needs full `make test` (self-host critical:
+ParseSubroutine + pass-2 are on every program's path).
