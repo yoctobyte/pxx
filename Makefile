@@ -442,6 +442,13 @@ test-core: $(COMPILER)
 	@if grep -qE 'bss=[0-9]{7,}B' /tmp/test_concat_arg_bss.log; then echo "concat-arg BSS bloat regressed:"; grep -oE 'bss=[0-9]+B' /tmp/test_concat_arg_bss.log; exit 1; else echo "concat-arg-bss: OK ($$(grep -oE 'bss=[0-9]+B' /tmp/test_concat_arg_bss.log))"; fi
 	./$(COMPILER) test/test_const_open_array_managed.pas /tmp/test_const_open_array_managed26
 	test "$$(/tmp/test_const_open_array_managed26)" = "$$(printf 'high=2 sel=1\n aa\n>bb\n cc\naabbcc')"
+	./$(COMPILER) test/test_open_array_no_leak.pas /tmp/test_open_array_no_leak26
+	test "$$(/tmp/test_open_array_no_leak26)" = "ok 1000000"
+	@if [ -x /usr/bin/time ]; then \
+	  /usr/bin/time -v /tmp/test_open_array_no_leak26 2>/tmp/oanl.time >/dev/null; \
+	  rss=$$(grep -oE 'Maximum resident set size .kbytes.: [0-9]+' /tmp/oanl.time | grep -oE '[0-9]+$$'); \
+	  if [ -n "$$rss" ] && [ "$$rss" -gt 10000 ]; then echo "open-array temp leak regressed: RSS $${rss}KB (>10MB over 2M calls)"; exit 1; else echo "open-array-no-leak: OK (RSS $${rss}KB)"; fi; \
+	else echo "/usr/bin/time absent; open-array RSS leak guard skipped"; fi
 	./$(COMPILER) test/test_abs_sqr.pas /tmp/test_abs_sqr26
 	test "$$(/tmp/test_abs_sqr26)" = "$$(printf '5 7\n49\n3.50\n6.25\n43')"
 	./$(COMPILER) test/test_upcase_pos.pas /tmp/test_upcase_pos26

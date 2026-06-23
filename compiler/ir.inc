@@ -983,30 +983,32 @@ begin
         caCount := Syms[caArgSym].ArrLen;
         if caElemTk = tyRecord then caElemSz := RecSize(caElemRec)
         else caElemSz := TypeSize(caElemTk);
-        savedRec := LastTypeRecId;
-        if caElemTk = tyRecord then LastTypeRecId := caElemRec;
-        caSym := AllocDynArray('', caElemTk, 1);
-        LastTypeRecId := savedRec;
+        { Copy the fixed array into a frame/BSS-local `[len:8][data]` buffer and
+          pass `&data` — the open-array param reads its length at [data-8] and
+          indexes `data`. A plain byte buffer (not a heap dyn array) auto-frees
+          (it is reused at the same site / private per frame), so there is no
+          per-call leak and recursion is safe; managed element handles are simply
+          borrowed bytes (no per-element ARC), correct for a const/value param
+          whose callee only reads them. }
+        caSym := AllocArray('', tyUInt8, 0, 8 + caCount * caElemSz - 1);
         SymIsHiddenArgTemp[caSym] := True;
-        IRAppend(IR_DEFAULT_MEM,
+        { length header at buf[0..7] }
+        IRAppend(IR_STORE_MEM,
           IRAppend(IR_SLOTADDR, caSym, -1, -1, 0, Ord(tyPointer)),
-          -1, REC_NONE, TARGET_PTR_SIZE, Ord(tyPointer));
-        caIdent := AllocNode(AN_IDENT);
-        ASTIVal[caIdent] := caSym; ASTTk[caIdent] := Ord(tyPointer);
-        caCountLit := AllocNode(AN_INT_LIT);
-        ASTIVal[caCountLit] := caCount; ASTTk[caCountLit] := Ord(tyInteger);
-        caArg1 := AllocNode(AN_ARG); ASTLeft[caArg1] := caIdent;
-        caArg2 := AllocNode(AN_ARG); ASTLeft[caArg2] := caCountLit;
-        ASTRight[caArg1] := caArg2;
-        caSlCall := AllocNode(AN_CALL); ASTIVal[caSlCall] := -102;
-        ASTLeft[caSlCall] := caArg1;
-        value := IRLowerAST(caSlCall);
-        IRIVal[value] := 1;
-        IRAppend(IR_COPY_REC,
-          IRAppend(IR_LEA, caSym, -1, -1, 0, Ord(tyPointer)),
+          IRAppend(IR_CONST_INT, -1, -1, -1, caCount, Ord(tyInteger)),
+          -1, 0, Ord(tyPointer));
+        { data := &buf + 8; copy the fixed array's elements into it }
+        value := IRAppend(IR_BINOP,
+          IRAppend(IR_SLOTADDR, caSym, -1, -1, 0, Ord(tyPointer)),
+          IRAppend(IR_CONST_INT, -1, -1, -1, 8, Ord(tyInteger)),
+          Ord(tkPlus), 0, Ord(tyPointer));
+        IRAppend(IR_COPY_REC, value,
           IRAppend(IR_LEA, caArgSym, -1, -1, 0, Ord(tyPointer)),
           -1, caCount * caElemSz, Ord(tyRecord));
-        Result := IRAppend(IR_LEA, caSym, -1, -1, 0, Ord(tyPointer));
+        Result := IRAppend(IR_BINOP,
+          IRAppend(IR_SLOTADDR, caSym, -1, -1, 0, Ord(tyPointer)),
+          IRAppend(IR_CONST_INT, -1, -1, -1, 8, Ord(tyInteger)),
+          Ord(tkPlus), 0, Ord(tyPointer));
         Exit;
       end;
     end;
@@ -1066,38 +1068,32 @@ begin
     begin
       if caElemTk = tyRecord then caElemSz := RecSize(caElemRec)
       else caElemSz := TypeSize(caElemTk);
-      savedRec := LastTypeRecId;
-      if caElemTk = tyRecord then LastTypeRecId := caElemRec;
-      caSym := AllocDynArray('', caElemTk, 1);
-      LastTypeRecId := savedRec;
+      { Frame/BSS-local `[len:8][data]` buffer (same no-leak, recursion-safe shape
+        as the const/value path above), plus a registered copy-OUT so the callee's
+        writes propagate back to the caller's array after the call. }
+      caSym := AllocArray('', tyUInt8, 0, 8 + caCount * caElemSz - 1);
       SymIsHiddenArgTemp[caSym] := True;
-      IRAppend(IR_DEFAULT_MEM,
+      IRAppend(IR_STORE_MEM,
         IRAppend(IR_SLOTADDR, caSym, -1, -1, 0, Ord(tyPointer)),
-        -1, REC_NONE, TARGET_PTR_SIZE, Ord(tyPointer));
-      caIdent := AllocNode(AN_IDENT);
-      ASTIVal[caIdent] := caSym; ASTTk[caIdent] := Ord(tyPointer);
-      caCountLit := AllocNode(AN_INT_LIT);
-      ASTIVal[caCountLit] := caCount; ASTTk[caCountLit] := Ord(tyInteger);
-      caArg1 := AllocNode(AN_ARG); ASTLeft[caArg1] := caIdent;
-      caArg2 := AllocNode(AN_ARG); ASTLeft[caArg2] := caCountLit;
-      ASTRight[caArg1] := caArg2;
-      caSlCall := AllocNode(AN_CALL); ASTIVal[caSlCall] := -102;
-      ASTLeft[caSlCall] := caArg1;
-      value := IRLowerAST(caSlCall);
-      IRIVal[value] := 1;
-      { copy-IN: static array (var or field) -> temp data }
-      IRAppend(IR_COPY_REC,
-        IRAppend(IR_LEA, caSym, -1, -1, 0, Ord(tyPointer)),
-        IRLowerAddress(argAST),
+        IRAppend(IR_CONST_INT, -1, -1, -1, caCount, Ord(tyInteger)),
+        -1, 0, Ord(tyPointer));
+      value := IRAppend(IR_BINOP,
+        IRAppend(IR_SLOTADDR, caSym, -1, -1, 0, Ord(tyPointer)),
+        IRAppend(IR_CONST_INT, -1, -1, -1, 8, Ord(tyInteger)),
+        Ord(tkPlus), 0, Ord(tyPointer));
+      { copy-IN: static array (var or field) -> buffer data }
+      IRAppend(IR_COPY_REC, value, IRLowerAddress(argAST),
         -1, caCount * caElemSz, Ord(tyRecord));
-      { register copy-OUT: temp data -> the argument's address, after the call.
-        The dest is the arg AST node, re-lowered (IRLowerAddress) at flush time —
-        works for both a simple var and a record/class field. }
+      { register copy-OUT: buffer data -> the argument's address, after the call.
+        The dest is the arg AST node, re-lowered (IRLowerAddress) at flush time. }
       PendOAWBTemp[PendOAWBCount] := caSym;
       PendOAWBDest[PendOAWBCount] := argAST;
       PendOAWBSize[PendOAWBCount] := caCount * caElemSz;
       Inc(PendOAWBCount);
-      Result := IRAppend(IR_LEA, caSym, -1, -1, 0, Ord(tyPointer));
+      Result := IRAppend(IR_BINOP,
+        IRAppend(IR_SLOTADDR, caSym, -1, -1, 0, Ord(tyPointer)),
+        IRAppend(IR_CONST_INT, -1, -1, -1, 8, Ord(tyInteger)),
+        Ord(tkPlus), 0, Ord(tyPointer));
       Exit;
     end;
   end;
@@ -2826,7 +2822,10 @@ begin
             Dec(PendOAWBCount);
             IRAppend(IR_COPY_REC,
               IRLowerAddress(PendOAWBDest[PendOAWBCount]),
-              IRAppend(IR_LEA, PendOAWBTemp[PendOAWBCount], -1, -1, 0, Ord(tyPointer)),
+              IRAppend(IR_BINOP,
+                IRAppend(IR_SLOTADDR, PendOAWBTemp[PendOAWBCount], -1, -1, 0, Ord(tyPointer)),
+                IRAppend(IR_CONST_INT, -1, -1, -1, 8, Ord(tyInteger)),
+                Ord(tkPlus), 0, Ord(tyPointer)),
               -1, PendOAWBSize[PendOAWBCount], Ord(tyRecord));
           end;
           Result := IRAppend(IR_LOAD_SYM, value, -1, -1, 0, ASTTk[node]);
@@ -2837,7 +2836,10 @@ begin
             Dec(PendOAWBCount);
             IRAppend(IR_COPY_REC,
               IRLowerAddress(PendOAWBDest[PendOAWBCount]),
-              IRAppend(IR_LEA, PendOAWBTemp[PendOAWBCount], -1, -1, 0, Ord(tyPointer)),
+              IRAppend(IR_BINOP,
+                IRAppend(IR_SLOTADDR, PendOAWBTemp[PendOAWBCount], -1, -1, 0, Ord(tyPointer)),
+                IRAppend(IR_CONST_INT, -1, -1, -1, 8, Ord(tyInteger)),
+                Ord(tkPlus), 0, Ord(tyPointer)),
               -1, PendOAWBSize[PendOAWBCount], Ord(tyRecord));
           end;
       end;
