@@ -118,6 +118,10 @@ end;
 
 procedure TPaintBox.CreateHandle;
 begin
+  { a streamed paintbox (CreateInstance skips the constructor) has no Canvas, so
+    the draw trampoline's Canvas.Handle would deref nil. CreateHandle runs at
+    Realize for streamed and normal instances alike — make the Canvas here. }
+  if FCanvas = nil then FCanvas := TCanvas.Create;
   Self.Handle := WidgetSet.CreatePaintBox(Self);
 end;
 
