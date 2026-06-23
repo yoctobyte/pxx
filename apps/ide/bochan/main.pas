@@ -202,10 +202,12 @@ begin
   CheckStr(e, 'argv[2] main', args[2], 'src/main.pas');
   CheckStr(e, 'argv[3] out', args[3], '/tmp/demo');
 
-  { no main unit -> empty argv.
-    NB: bind BuildArgs to a var before Length() — Length() of a dynarray
-    call-result inline miscompiles (bug-length-of-dynarray-call-result). }
+  { no main unit -> empty argv. }
   rproj := TProject.Create;
+  { WORKAROUND(bug-length-of-dynarray-call-result): bind BuildArgs to a var
+    before Length(). The Platonic form is  Length(rproj.BuildArgs)  inline, but
+    Length() of a dynarray call-result miscompiles (empty segfaults). Revert to
+    the inline form once that ticket lands. }
   args := rproj.BuildArgs;
   CheckInt(e, 'no-main argv empty', Length(args), 0);
 

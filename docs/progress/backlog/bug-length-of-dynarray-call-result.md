@@ -56,5 +56,19 @@ Related: `bug-length-rejects-non-variable` (done) handled *literal/expression*
 args to `Length`; this is the *dynarray call-result* case, which compiles but
 miscomputes.
 
+## Workaround in tree (undo when fixed)
+
+User-approved workaround (2026-06-23): bind the dynarray call-result to a
+variable before `Length()`. Grep marker: `WORKAROUND(bug-length-of-dynarray-call-result)`.
+
+Site:
+- `apps/ide/bochan/main.pas` — `args := rproj.BuildArgs; CheckInt(... Length(args) ...)`.
+  Platonic form is `Length(rproj.BuildArgs)` inline.
+
+To undo once this ticket lands: `grep -rn 'WORKAROUND(bug-length-of-dynarray-call-result)'`,
+inline each, drop the marker comment, re-run `apps/ide/test.sh` (must stay 92/92).
+
 ## Log
 - 2026-06-23 — filed (Track B discovery; repro above).
+- 2026-06-23 — user approved keeping the var-bind workaround; marked it greppable
+  + listed the undo step above.
