@@ -1,7 +1,7 @@
 # Eliah M2 — builder integration
 
 - **Type:** feature (app / demo)
-- **Status:** backlog
+- **Status:** done
 - **Track:** B
 - **Parent:** feature-eliah-ide
 - **Blocked-by:** feature-eliah-m0-window
@@ -35,3 +35,11 @@ clicking one navigates the editor. Self-host compiler not rebuilt (Track B).
   (added gtk get_iter_at_line/place_cursor/get_insert/scroll_mark_onscreen).
   Remaining (lower priority): garin/project.pas project model (files / main unit
   / build flags), and column info (the compiler emits line only, no col).
+- 2026-06-23 — DONE. garin/project.pas landed: TProject (name / main unit / out
+  path / files / unit search paths) + BuildArgs (compiler argv) + .pxxproj text
+  round-trip; bochan gate 62 -> 92 asserts. Eliah auto-loads eliah.pxxproj per
+  folder and drives Compile/Run from it (real -Fu paths → multi-unit builds);
+  single-file fallback unchanged. Verified end-to-end on a 2-unit project.
+  Surfaced + filed bug-length-of-dynarray-call-result (Track A). Column info
+  stays deferred (compiler emits line only). Commits d95e07e (model + gate),
+  99465ff (eliah wiring).
