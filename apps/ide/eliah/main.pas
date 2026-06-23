@@ -40,6 +40,9 @@ type
     Props: TListBox;
     ValueEdit: TEdit;
     FEditRow: Integer;     { which inspector row the value edit targets, -1 none }
+    Palette: TComboBox;
+    PlaceBtn: TButton;
+    PlaceMode: Boolean;    { next designer click drops a new widget }
     Dsn: TDesigner;
     DesignBox: TPaintBox;
     dir, curFile: AnsiString;
@@ -58,7 +61,24 @@ type
     procedure OnPropClick(Sender: TObject);
     procedure OnValueKey(Sender: TControl; KeyCode: Integer);
     procedure ApplyEdit;
+    procedure OnPlaceToggle(Sender: TObject);
   end;
+
+{ palette index -> docmodel kind (Form is the root, never placed) }
+function KindFromPalette(idx: Integer): TWidgetKind;
+begin
+  case idx of
+    0: KindFromPalette := wkButton;
+    1: KindFromPalette := wkLabel;
+    2: KindFromPalette := wkEdit;
+    3: KindFromPalette := wkMemo;
+    4: KindFromPalette := wkListBox;
+    5: KindFromPalette := wkCheckBox;
+    6: KindFromPalette := wkPanel;
+  else
+    KindFromPalette := wkButton;
+  end;
+end;
 
 function ParentDir(const d: AnsiString): AnsiString;
 var i: Integer;
@@ -160,9 +180,26 @@ begin
   Props.AddItem('Height:  ' + IntToStr(d.NodeH(idx)));
 end;
 
-procedure THandler.OnDesignMouseDown(Sender: TControl; Button, X, Y: Integer);
-var idx: Integer;
+procedure THandler.OnPlaceToggle(Sender: TObject);
 begin
+  PlaceMode := not PlaceMode;
+  if PlaceMode then PlaceBtn.Caption := 'Place*' else PlaceBtn.Caption := 'Place';
+end;
+
+procedure THandler.OnDesignMouseDown(Sender: TControl; Button, X, Y: Integer);
+var idx: Integer; k: TWidgetKind;
+begin
+  if PlaceMode then
+  begin
+    { drop a new widget of the palette kind, parented to the form (node 0) }
+    k := KindFromPalette(Palette.ItemIndex);
+    idx := Dsn.Doc.AddNode(k, Dsn.Doc.KindName(k), 0, X, Y, 80, 24);
+    Dsn.Sel := idx;
+    OnPlaceToggle(nil);          { one-shot: leave place mode after dropping }
+    DesignBox.Invalidate;
+    ShowInspector(idx);
+    Exit;
+  end;
   idx := Dsn.BeginDrag(X, Y);
   DesignBox.Invalidate;
   ShowInspector(idx);
@@ -232,6 +269,8 @@ var
   H: THandler;
   Props: TListBox;
   ValueEdit: TEdit;
+  Palette: TComboBox;
+  PlaceBtn: TButton;
   DesignBox: TPaintBox;
   Dsn: TDesigner;
   pm: TMethod;
@@ -325,6 +364,30 @@ begin
   pm.Code := @H.OnCompile; MkButton('Compile', 90,  pm);
   pm.Code := @H.OnRun;     MkButton('Run',     176, pm);
 
+  { palette: pick a widget kind, hit Place, then click the designer to drop it }
+  Palette := TComboBox.Create;
+  Palette.Parent := Form1;
+  Palette.SetBounds(266, 3, 110, 26);
+  Palette.AddItem('Button');
+  Palette.AddItem('Label');
+  Palette.AddItem('Edit');
+  Palette.AddItem('Memo');
+  Palette.AddItem('ListBox');
+  Palette.AddItem('CheckBox');
+  Palette.AddItem('Panel');
+  Palette.ItemIndex := 0;
+
+  PlaceBtn := TButton.Create;
+  PlaceBtn.Parent := Form1;
+  PlaceBtn.Caption := 'Place';
+  PlaceBtn.SetBounds(382, 3, 80, 26);
+  pm.Code := @H.OnPlaceToggle; pm.Data := H;
+  PlaceBtn.OnClick := pm;
+
+  H.Palette := Palette;
+  H.PlaceBtn := PlaceBtn;
+  H.PlaceMode := False;
+
   arg := '';
   if ParamCount > 0 then arg := ParamStr(1);
   if (arg <> '') and (arg <> '--smoke') then startDir := arg else startDir := '.';
@@ -392,6 +455,23 @@ begin
     H.FEditRow := 2; H.ValueEdit.Text := 'xyz'; H.ApplyEdit;
     if H.Dsn.Doc.NodeX(H.Dsn.Sel) <> 58 then
       begin writeln('SMOKE FAIL: bad int should keep old Left'); Halt(1); end;
+
+    { palette place: arm Place, click empty surface -> a new node is dropped,
+      parented to the form, selected; Place is one-shot (auto-disarms). }
+    H.Palette.ItemIndex := 1;        { Label }
+    H.OnPlaceToggle(nil);
+    if not H.PlaceMode then begin writeln('SMOKE FAIL: place not armed'); Halt(1); end;
+    centerW := H.Dsn.Doc.Count;      { reuse scratch int: node count before }
+    H.OnDesignMouseDown(nil, 1, 150, 150);
+    if H.Dsn.Doc.Count <> centerW + 1 then
+      begin writeln('SMOKE FAIL: place did not add a node'); Halt(1); end;
+    if H.Dsn.Sel <> centerW then
+      begin writeln('SMOKE FAIL: placed node not selected'); Halt(1); end;
+    if H.Dsn.Doc.NodeParent(H.Dsn.Sel) <> 0 then
+      begin writeln('SMOKE FAIL: placed node not parented to form'); Halt(1); end;
+    if H.Dsn.Doc.NodeKind(H.Dsn.Sel) <> KindFromPalette(H.Palette.ItemIndex) then
+      begin writeln('SMOKE FAIL: placed node wrong kind'); Halt(1); end;
+    if H.PlaceMode then begin writeln('SMOKE FAIL: place mode not one-shot'); Halt(1); end;
 
     { click empty surface -> selection cleared }
     H.OnDesignMouseDown(nil, 1, 5, 5);
