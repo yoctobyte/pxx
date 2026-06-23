@@ -28,7 +28,7 @@ Gate: `make test` + FPC oracle (int + float, negative/zero/positive).
 
 ## Fix log
 
-- 2026-06-23 — DONE via builtin helpers (same pattern as string Delete/Insert):
+- 2026-06-23 — DONE (3604594) via builtin helpers (same pattern as string Delete/Insert):
   `__pxxAbsInt/__pxxAbsDbl/__pxxSqrInt/__pxxSqrDbl` in builtin.pas; ParseFactor
   lowers `Abs`/`Sqr` to the int or float helper by the argument type (eval-once),
   pre-scan pulls the builtin unit on `abs(`/`sqr(`. Test test/test_abs_sqr.pas,
