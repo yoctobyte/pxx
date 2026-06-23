@@ -1,7 +1,7 @@
 # chore: re-pin stable to expose the new System intrinsics to Track B
 
 - **Type:** chore (Track A — pinning) / cross-track signal
-- **Status:** backlog
+- **Status:** urgent (carries the Length-getter fix `a034eaa` the Eliah GUI path needs)
 - **Found:** 2026-06-23, differential probe vs FPC (Track B)
 - **Severity:** medium (Track B cannot use shipped intrinsics until re-pinned)
 

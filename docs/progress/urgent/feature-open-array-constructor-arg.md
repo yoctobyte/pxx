@@ -1,7 +1,7 @@
 # feature: array constructor `[...]` as an open-array argument
 
 - **Type:** feature (Track A — parser / call lowering)
-- **Status:** backlog
+- **Status:** urgent (blocks Platonic Eliah IDE — RunCapture/array-of-string calls)
 - **Found:** 2026-06-23, building the Eliah IDE (runner.RunCapture call)
 - **Severity:** medium (common FPC idiom; forces a temp array variable per call)
 
