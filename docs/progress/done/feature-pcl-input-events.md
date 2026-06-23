@@ -1,7 +1,7 @@
 # PCL: mouse-coordinate + keyboard input events
 
 - **Type:** feature (Track B — PCL widget set)
-- **Status:** working
+- **Status:** done
 - **Owner:** Track B agent (solitaire-GUI spin-off)
 - **Opened:** 2026-06-23
 - **Relation:** unblocks the click/drag in `feature-demo-gui-solitaire`, and the
@@ -62,3 +62,13 @@ for keys, be focusable.
   g_signal_emit_by_name reaches the handler with button=1, x=42, y=17. gui-suite
   green. NEXT: OnKeyDown (key-press-event + keyval), wiring mouse on all controls
   (not just PaintBox) + can-focus for keys, then rework solitaire to click/drag.
+- 2026-06-23 — **Keyboard + resize landed; feature done.** OnKeyDown (keyval via
+  key-press-event, widget made focusable) and OnResize (width/height via
+  size-allocate) added alongside the mouse events; all dispatch through
+  CallMouseMethod. test_pcl_input asserts injected button/coords (42,17), key
+  (65) and allocation (800x600) reach their handlers. Solitaire reworked to
+  drag/drop + keyboard + responsive layout on top. Mouse/key/resize wired on the
+  PaintBox (the drawing surface apps custom-render); extending to all controls is
+  a future nicety, not needed by current consumers. Closing.
+
+Landed in commits 8cd601b (mouse), 1098e14 (keyboard), c2568b4 (resize).

@@ -2,7 +2,7 @@
 
 - **Type:** feature
 - **Track:** B
-- **Status:** working
+- **Status:** done
 - **Owner:** Track B agent (engine-first)
 - **Opened:** 2026-06-22
 - **Relation:** PCL/widget-set flagship demo. Sibling to
@@ -83,3 +83,11 @@ tests richer mouse event flow and live repaint.
   remain. The `--smoke` now drives DoMouseDown directly and asserts a stock click
   draws a card. gui-suite green. REMAINING (polish): true drag/drop (vs
   click-select-click-drop), window-resize relayout, score/move counter.
+- 2026-06-23 — **Feature-complete.** Drag/drop (press source / release dest),
+  keyboard shortcuts (n/u/a/d/q), move counter + win in the status label, and
+  responsive resize (RecalcLayout from OnResize: card size / spacing / hit-test
+  scale with the window). Plus undo, seeded New, auto-to-foundation. Engine in
+  lib-test; GUI smoke (draw/drag/key/resize asserts) in gui-suite. Closing.
+
+Landed in commits 675b492 (engine), 41044fc (GUI), e2b4f53 (click), cb40753
+(drag/keyboard/counter), 234de84 (responsive resize).
