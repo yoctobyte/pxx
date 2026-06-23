@@ -429,6 +429,7 @@ end;
 
 function AddUClass(off, len: Integer): Integer;
 begin
+  if UClsCount >= MAX_UCLASS then Error('too many classes/records (MAX_UCLASS)');
   Result := UClsCount;
   UClsNOff[UClsCount]   := off;
   UClsNLen[UClsCount]   := len;
@@ -507,6 +508,7 @@ end;
 procedure AddUMeth(ci, noff, nlen, procIdx: Integer);
 var mi: Integer;
 begin
+  if UMthCount >= MAX_UMETH then Error('too many class/record methods (MAX_UMETH)');
   mi := UMthCount;
   UMthNOff[mi] := noff; UMthNLen[mi] := nlen; UMthProc_[mi] := procIdx;
   UMthVirSlot[mi] := -1;

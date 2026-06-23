@@ -39,7 +39,7 @@ const
 
   MAX_UCLASS      = 512;   { user-defined class/record slots (incl. imported C structs) }
   MAX_UFIELD      = 16384; { field slots across all user classes/records }
-  MAX_UMETH       = 256;   { method slots across all user classes }
+  MAX_UMETH       = 8192;  { method slots across all user classes }
   MAX_IMT         = 512;   { per-(class,interface) interface method tables }
   MAX_UPROP       = 64;
   MAX_ENUMTYPE = 512;
