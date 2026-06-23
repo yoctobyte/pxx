@@ -1,7 +1,7 @@
 # Eliah M1 — form designer (box emulation)
 
 - **Type:** feature (app / demo)
-- **Status:** backlog
+- **Status:** working
 - **Track:** B
 - **Parent:** feature-eliah-ide
 - **Blocked-by:** feature-eliah-m0-window
@@ -45,3 +45,16 @@ compiler gaps → Track A ticket, no workaround.
   docmodel = source of truth; OI via real RTTI over real instances (render-
   agnostic data, shared with ilja); minimal node = width+height+parent (+caption
   for label/button).
+- 2026-06-23 — interaction trio DONE: select (docmodel.HitTest, topmost-wins,
+  5 bochan gate assertions), drag-move (BeginDrag/DragTo grab-offset), corner-
+  resize (HandleAt 4 corners, MIN_SIZE clamp). Selection outline + corner handles
+  painted. Inspector pane lists the selected node's Kind/Caption/Left/Top/Width/
+  Height, live during drag. All headless-smoke-covered (eliah --smoke).
+- 2026-06-23 — OI design refinement: "real RTTI over real *instances*" assumed
+  live component instances, but box-emulation has none — the docmodel record is
+  the truth. So the inspector reads docmodel fields directly (still render-
+  agnostic data; ilja reads the same model). RTTI-over-instances does not apply
+  to this architecture; field-list inspector is the correct form.
+- Remaining for M1: editable inspector (write a prop back -> repaint), click-to-
+  place a new widget from a palette, and seed/load a sample form (.lfm) so the
+  surface isn't a hardcoded stub. Then M2 (builder).
