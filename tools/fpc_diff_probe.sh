@@ -168,6 +168,14 @@ P
 probe binary-literal known <<'P'
 begin writeln(%1010); end.
 P
+probe as-inline-call known <<'P'
+type ta = class end; tb = class(ta) procedure m; end;
+procedure tb.m; begin writeln('M'); end;
+var o: ta; begin o := tb.create; (o as tb).m; end.
+P
+probe subrange-type known <<'P'
+type tr = 1..10; var x: tr; begin x := 5; writeln(x); end.
+P
 
 echo "---"
 echo "new divergences: $new   known/filed: $known"

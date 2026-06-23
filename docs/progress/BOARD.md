@@ -25,10 +25,11 @@ _none_
 | --- | --- | --- | --- | --- |
 | feature-c-runtime-library | B | feature | C runtime/library layer (`lib/crtl`) plus direct C-library packages | feature-c-source-frontend |
 
-## backlog (59)
+## backlog (61)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
+| bug-as-cast-inline-method-call | A | bug | bug: method call on an inline `(expr as T)` is silently dropped | — |
 | bug-case-insensitive-incomplete-builtins-funcs | A | bug | bug: case-insensitivity incomplete — builtins + function calls still case-sensitive | — |
 | bug-length-rejects-non-variable | A | bug | bug: Length() rejects a non-variable argument (literal / expression) | — |
 | bug-low-missing-high-wrong-nonzero-array | A | bug | bug: Low() missing; High() wrong on non-zero-based arrays | — |
@@ -81,6 +82,7 @@ _none_
 | feature-parallel-processing | A | feature | Parallel processing as a language feature | feature-unified-heap-allocator |
 | feature-random-library | B | feature | Random library — HW/OS/software tiered RNG (cross-target capability test) | — |
 | feature-release-packaging | B | feature | Release packaging, reproducibility manifest, and `release.sh` | — |
+| feature-subrange-type-decl | A | feature | feature: named subrange type declaration (`type T = lo..hi`) | — |
 | feature-synapse-compile-check | B | feature | Synapse library — proper compile check (Track B) | feature-mimic-fpc |
 | feature-threadsafe-io-serialization | A | feature | Statement-level I/O serialization under threads | feature-unified-heap-allocator |
 | feature-toolchain-cli-ux | A | feature | Toolchain CLI / user tooling (install, config, discovery, doctor, selfcheck) | — |
@@ -333,6 +335,7 @@ _none_
 
 ## Ready (no unmet blocker)
 
+- [A] bug-as-cast-inline-method-call
 - [A] bug-case-insensitive-incomplete-builtins-funcs
 - [A] bug-length-rejects-non-variable
 - [A] bug-low-missing-high-wrong-nonzero-array
@@ -379,6 +382,7 @@ _none_
 - [A] feature-parallel-processing
 - [B] feature-random-library
 - [B] feature-release-packaging
+- [A] feature-subrange-type-decl
 - [A] feature-threadsafe-io-serialization
 - [A] feature-toolchain-cli-ux
 - [B] feature-writeln-as-library
