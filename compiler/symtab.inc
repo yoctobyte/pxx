@@ -3361,12 +3361,14 @@ end;
 
 procedure EmitWriteFloatSci;
 { Double value in xmm0. Prints Pascal-style scientific notation:
-  <' '|'-'>d.<15 digits>E<'+'|'-'>ddd  (16 significant digits, 3-digit exponent).
-  Digit extraction uses double arithmetic, so the last 1-2 digits may differ
-  from a bignum formatter; adequate for general output. e10 kept in r12. }
-const FRAC = 15;
+  <' '|'-'>d.<16 digits>E<'+'|'-'>ddd  (17 significant digits, 3-digit exponent),
+  matching FPC's default Str(Double) field width. Digit extraction uses double
+  arithmetic, so the last 1-2 digits may differ from a correctly-rounded bignum
+  formatter; adequate for general output. e10 kept in r12. }
+const FRAC = 16;
 var jncPos, jmpSignDone, jnzNz, jmpDone: Integer;
     laTop, laJb, lbTop, lbJae, jnsPos2, jmpEd: Integer;
+    clampJle, bdLoop, roundJl, ovJb: Integer;
     k, j: Integer; divisor: Int64;
 begin
   EmitB($41); EmitB($54);                                       { push r12 }
@@ -3417,12 +3419,45 @@ begin
   EmitB($EB); EmitB(Byte(lbTop - (CodeLen + 1)));              { jmp .lb }
   Code[lbJae] := Byte(CodeLen - (lbJae + 1));                  { .eb: }
 
-  { m = round(value * 10^FRAC) in rbx (16-digit integer) }
-  divisor := 1; for k := 1 to FRAC do divisor := divisor * 10;
-  MovRaxImm(divisor);
+  { m = round-to-nearest(value * 10^FRAC) built as a (FRAC+1)-digit integer in
+    rbx, extracted MSD-first by iteration so each step only truncates a value in
+    [0,10). This keeps ~17 accurate digits, unlike one (value*10^16) double
+    multiply which overflows the 53-bit mantissa and zeroes the low digits. rcx
+    counts the FRAC+1 leading digits; one extra guard digit then rounds half-up.
+    No syscalls here, so rax/rcx/rdx are free scratch; xmm1 still holds 10.0. }
+  EmitB($48); EmitB($31); EmitB($DB);                          { xor rbx, rbx }
+  EmitB($B9); EmitI32(FRAC + 1);                               { mov ecx, 17 }
+  bdLoop := CodeLen;                                           { .bd: }
+  EmitB($F2); EmitB($48); EmitB($0F); EmitB($2C); EmitB($C0);  { cvttsd2si rax, xmm0 }
+  EmitB($48); EmitB($83); EmitB($F8); EmitB($09);              { cmp rax, 9 }
+  EmitB($7E); clampJle := CodeLen; EmitB(0);                   { jle .ok }
+  EmitB($B8); EmitI32(9);                                      { mov eax, 9 }
+  Code[clampJle] := Byte(CodeLen - (clampJle + 1));            { .ok: }
+  EmitB($48); EmitB($6B); EmitB($DB); EmitB($0A);              { imul rbx, rbx, 10 }
+  EmitB($48); EmitB($01); EmitB($C3);                          { add rbx, rax }
   EmitB($F2); EmitB($48); EmitB($0F); EmitB($2A); EmitB($D8);  { cvtsi2sd xmm3, rax }
-  EmitB($F2); EmitB($0F); EmitB($59); EmitB($C3);              { mulsd xmm0, xmm3 }
-  EmitB($F2); EmitB($48); EmitB($0F); EmitB($2D); EmitB($D8);  { cvtsd2si rbx, xmm0 }
+  EmitB($F2); EmitB($0F); EmitB($5C); EmitB($C3);              { subsd xmm0, xmm3 }
+  EmitB($F2); EmitB($0F); EmitB($59); EmitB($C1);              { mulsd xmm0, xmm1 }
+  EmitB($48); EmitB($FF); EmitB($C9);                          { dec rcx }
+  EmitB($75); EmitB(Byte(bdLoop - (CodeLen + 1)));             { jnz .bd }
+  { guard digit: round half-up }
+  EmitB($F2); EmitB($48); EmitB($0F); EmitB($2C); EmitB($C0);  { cvttsd2si rax, xmm0 }
+  EmitB($48); EmitB($83); EmitB($F8); EmitB($05);              { cmp rax, 5 }
+  EmitB($7C); roundJl := CodeLen; EmitB(0);                    { jl .noround }
+  EmitB($48); EmitB($FF); EmitB($C3);                          { inc rbx }
+  Code[roundJl] := Byte(CodeLen - (roundJl + 1));              { .noround: }
+  { carry past the leading digit (9.99..->10.0): drop a digit, bump exponent }
+  divisor := 1; for k := 0 to FRAC do divisor := divisor * 10;  { 10^(FRAC+1) }
+  EmitB($48); EmitB($B8); EmitI64(divisor);                    { mov rax, 10^17 }
+  EmitB($48); EmitB($39); EmitB($C3);                          { cmp rbx, rax }
+  EmitB($72); ovJb := CodeLen; EmitB(0);                       { jb .nov }
+  EmitB($48); EmitB($89); EmitB($D8);                          { mov rax, rbx }
+  EmitB($48); EmitB($31); EmitB($D2);                          { xor rdx, rdx }
+  EmitB($B9); EmitI32(10);                                     { mov ecx, 10 }
+  EmitB($48); EmitB($F7); EmitB($F1);                          { div rcx }
+  EmitB($48); EmitB($89); EmitB($C3);                          { mov rbx, rax }
+  EmitB($49); EmitB($FF); EmitB($C4);                          { inc r12 }
+  Code[ovJb] := Byte(CodeLen - (ovJb + 1));                    { .nov: }
 
   { print m as d.<FRAC digits>, most significant first }
   for k := FRAC downto 0 do
