@@ -33,6 +33,8 @@ type
       AParent, AX, AY, AW, AH: Integer): Integer;
     procedure SetNodeBounds(I, AX, AY, AW, AH: Integer);
     procedure SetNodeCaption(I: Integer; const ACaption: AnsiString);
+    { remove node I and all its descendants; compact and remap Parent indices. }
+    procedure DeleteNode(I: Integer);
     function Count: Integer;
     { topmost node whose rect contains (AX, AY), or -1 if none. Later-added
       nodes sit on top (children drawn after parents), so scan back-to-front. }
@@ -84,6 +86,46 @@ procedure TDocModel.SetNodeCaption(I: Integer; const ACaption: AnsiString);
 begin
   if (I < 0) or (I >= FCount) then Exit;
   FNodes[I].Caption := ACaption;
+end;
+
+procedure TDocModel.DeleteNode(I: Integer);
+var
+  dead: array of Boolean;
+  oldToNew: array of Integer;
+  j, n, p: Integer;
+begin
+  if (I < 0) or (I >= FCount) then Exit;
+
+  SetLength(dead, FCount);
+  SetLength(oldToNew, FCount);
+  for j := 0 to FCount - 1 do dead[j] := False;
+  dead[I] := True;
+  { a child's index is always > its parent's (parent must exist at AddNode), so
+    one forward pass propagates the deletion to all descendants. }
+  for j := 0 to FCount - 1 do
+    if (FNodes[j].Parent >= 0) and dead[FNodes[j].Parent] then dead[j] := True;
+
+  { compact survivors in place, recording old->new indices }
+  n := 0;
+  for j := 0 to FCount - 1 do
+    if not dead[j] then
+    begin
+      if n <> j then FNodes[n] := FNodes[j];
+      oldToNew[j] := n;
+      Inc(n);
+    end
+    else
+      oldToNew[j] := -1;
+
+  { remap parent links to the new indices }
+  for j := 0 to n - 1 do
+  begin
+    p := FNodes[j].Parent;
+    if p >= 0 then FNodes[j].Parent := oldToNew[p];
+  end;
+
+  FCount := n;
+  SetLength(FNodes, n);
 end;
 
 function TDocModel.Count: Integer;

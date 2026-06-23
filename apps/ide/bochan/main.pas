@@ -15,7 +15,7 @@ var
   doc: TDocModel;
   iForm, iBtn: Integer;
   lfm, saved: AnsiString;
-  ldoc, rdoc: TDocModel;
+  ldoc, rdoc, ddoc: TDocModel;
 
 begin
   EduthInit(e);
@@ -116,6 +116,37 @@ begin
   CheckInt(e, 'rt child abs Top', rdoc.NodeY(1), 30);
   CheckInt(e, 'rt child width', rdoc.NodeW(1), 80);
   CheckInt(e, 'rt child height', rdoc.NodeH(1), 26);
+
+  { scenario 8: DeleteNode — leaf removal + subtree removal + parent remap }
+  writeln('-- TDocModel.DeleteNode --');
+  ddoc := TDocModel.Create;
+  { 0 Form; 1 Panel(child of 0); 2 Button(child of 1); 3 Label(child of 0) }
+  ddoc.AddNode(wkForm,   'F', -1, 0, 0, 400, 300);
+  ddoc.AddNode(wkPanel,  'P',  0, 10, 10, 200, 100);
+  ddoc.AddNode(wkButton, 'B',  1, 20, 20, 80, 26);
+  ddoc.AddNode(wkLabel,  'L',  0, 10, 200, 60, 18);
+  { delete the Label (leaf, index 3) -> 3 nodes, others intact }
+  ddoc.DeleteNode(3);
+  CheckInt(e, 'leaf delete -> 3 nodes', ddoc.Count, 3);
+  CheckStr(e, 'button survived', ddoc.NodeCaption(2), 'B');
+  { delete the Panel (index 1) -> also removes its child Button; Form remains }
+  ddoc.DeleteNode(1);
+  CheckInt(e, 'subtree delete -> 1 node', ddoc.Count, 1);
+  CheckStr(e, 'form remains', ddoc.NodeCaption(0), 'F');
+  CheckInt(e, 'form still root', ddoc.NodeParent(0), -1);
+  { out-of-range is a no-op }
+  ddoc.DeleteNode(9);
+  CheckInt(e, 'oob delete no-op', ddoc.Count, 1);
+
+  { parent remap: delete a middle sibling, remaining child parent index stays valid }
+  ddoc := TDocModel.Create;
+  ddoc.AddNode(wkForm,  'F', -1, 0, 0, 400, 300);  { 0 }
+  ddoc.AddNode(wkLabel, 'A',  0, 0, 0, 10, 10);     { 1 }
+  ddoc.AddNode(wkLabel, 'B',  0, 0, 0, 10, 10);     { 2 }
+  ddoc.DeleteNode(1);                               { remove A -> B shifts to index 1 }
+  CheckInt(e, 'remap count', ddoc.Count, 2);
+  CheckStr(e, 'B is now index 1', ddoc.NodeCaption(1), 'B');
+  CheckInt(e, 'B parent remapped to 0', ddoc.NodeParent(1), 0);
 
   { scenario 7: WriteAllText -> LoadFromFile file round-trip }
   writeln('-- buffer.WriteAllText file round-trip --');

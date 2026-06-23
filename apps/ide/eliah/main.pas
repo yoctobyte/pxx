@@ -56,6 +56,7 @@ type
     procedure OnRun(Sender: TObject);
     procedure OnUp(Sender: TObject);
     procedure OnSave(Sender: TObject);
+    procedure OnDelete(Sender: TObject);
     procedure OpenDesign(const path: AnsiString);
     procedure Relayout(w, h: Integer);
     procedure OnFormResize(Sender: TControl; w, h: Integer);
@@ -152,6 +153,18 @@ begin
   else Editor.Text := '(could not open ' + curFile + ')';
   { a .lfm also loads into the designer surface }
   if EndsWithLfm(curFile) then OpenDesign(curFile);
+end;
+
+{ delete the selected node (and its children); the root form is kept }
+procedure THandler.OnDelete(Sender: TObject);
+begin
+  if (Dsn = nil) or (Dsn.Doc = nil) then Exit;
+  if Dsn.Sel <= 0 then Exit;   { -1 none, 0 = root form (not deletable) }
+  Dsn.Doc.DeleteNode(Dsn.Sel);
+  Dsn.Sel := -1;
+  Dsn.EndDrag;
+  DesignBox.Invalidate;
+  ShowInspector(-1);
 end;
 
 { load a .lfm into a fresh designer docmodel and make it the save target }
@@ -441,6 +454,7 @@ begin
   btn := MkButton('Compile', 90);  btn.OnClick := @H.OnCompile;
   btn := MkButton('Run',     176); btn.OnClick := @H.OnRun;
   btn := MkButton('Save',    466); btn.OnClick := @H.OnSave;
+  btn := MkButton('Del',     552); btn.OnClick := @H.OnDelete;
 
   { palette: pick a widget kind, hit Place, then click the designer to drop it }
   Palette := TComboBox.Create;
@@ -569,6 +583,17 @@ begin
     if H.Dsn.Doc.NodeKind(H.Dsn.Sel) <> KindFromPalette(H.Palette.ItemIndex) then
       begin writeln('SMOKE FAIL: placed node wrong kind'); Halt(1); end;
     if H.PlaceMode then begin writeln('SMOKE FAIL: place mode not one-shot'); Halt(1); end;
+
+    { delete: remove the just-placed node (selected); count drops, sel clears }
+    centerW := H.Dsn.Doc.Count;
+    H.OnDelete(nil);
+    if H.Dsn.Doc.Count <> centerW - 1 then begin writeln('SMOKE FAIL: delete did not remove node'); Halt(1); end;
+    if H.Dsn.Sel >= 0 then begin writeln('SMOKE FAIL: delete did not clear selection'); Halt(1); end;
+    { root guard: selecting the form (0) and deleting is a no-op }
+    centerW := H.Dsn.Doc.Count;
+    H.Dsn.Sel := 0;
+    H.OnDelete(nil);
+    if H.Dsn.Doc.Count <> centerW then begin writeln('SMOKE FAIL: root form should not delete'); Halt(1); end;
 
     { save round-trip: serialize the docmodel to a temp file (not the repo
       sample), reload it, node count must survive. Same path OnSave uses. }

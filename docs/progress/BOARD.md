@@ -25,12 +25,13 @@ _none_
 | --- | --- | --- | --- | --- |
 | feature-c-runtime-library | B | feature | C runtime/library layer (`lib/crtl`) plus direct C-library packages | feature-c-source-frontend |
 
-## backlog (48)
+## backlog (49)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
 | bug-cardinal-expr-promotion | A | bug |  | — |
 | bug-const-section-before-constructor | A | bug | bug: const section before constructor/destructor not terminated | — |
+| bug-dynarray-managed-record-field-reassign | A | bug | bug: assigning a local dynamic-array-of-managed-record to a field drops/frees the elements | — |
 | bug-ir-unsupported-call-lvalue | A | bug | bug: "Unsupported linear node Kind=10" — AN_CALL in lvalue-address position | — |
 | bug-setlength-array-element | A | bug | bug: SetLength rejects an indexed array element as target | — |
 | bug-stderr-not-fd2 | B | bug | `writeln(StdErr, ...)` goes to stdout — StdErr not connected to fd 2 | — |
@@ -348,6 +349,7 @@ _none_
 
 - [A] bug-cardinal-expr-promotion
 - [A] bug-const-section-before-constructor
+- [A] bug-dynarray-managed-record-field-reassign
 - [A] bug-ir-unsupported-call-lvalue
 - [A] bug-setlength-array-element
 - [B] bug-stderr-not-fd2
