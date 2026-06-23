@@ -25,10 +25,13 @@ _none_
 | --- | --- | --- | --- | --- |
 | feature-c-runtime-library | B | feature | C runtime/library layer (`lib/crtl`) plus direct C-library packages | feature-c-source-frontend |
 
-## backlog (48)
+## backlog (51)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
+| bug-nested-brace-comments | A | bug | bug: `{ }` comments do not nest | — |
+| bug-paramstr-inline-argstr | A | bug | bug: ParamStr/ArgStr result not usable inline (needs a string variable) | — |
+| bug-setlength-array-element | A | bug | bug: SetLength rejects an indexed array element as target | — |
 | bug-stderr-not-fd2 | B | bug | `writeln(StdErr, ...)` goes to stdout — StdErr not connected to fd 2 | — |
 | bug-writeln-boolean-format | A | bug | `WriteLn(Boolean)` prints `0`/`1` instead of `FALSE`/`TRUE` | — |
 | chore-inc-to-units | A | chore | `.inc` → real `.pas` units refactor | — |
@@ -318,6 +321,9 @@ _none_
 
 ## Ready (no unmet blocker)
 
+- [A] bug-nested-brace-comments
+- [A] bug-paramstr-inline-argstr
+- [A] bug-setlength-array-element
 - [B] bug-stderr-not-fd2
 - [A] bug-writeln-boolean-format
 - [A] chore-inc-to-units
