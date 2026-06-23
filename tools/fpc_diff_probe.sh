@@ -179,6 +179,9 @@ P
 probe cardinal-sub known <<'P'
 var a, b: cardinal; begin a := 3; b := 5; writeln(a - b); end.
 P
+probe enum-explicit known <<'P'
+type te = (a = 1, b = 5, c = 10); begin writeln(ord(a), '|', ord(b), '|', ord(c)); end.
+P
 
 echo "---"
 echo "new divergences: $new   known/filed: $known"
