@@ -2443,9 +2443,12 @@ begin
             so a 64-bit shr leaks the sign bits down (bug-shr-signed-integer-width:
             Integer(-8) shr 1 gave a 64-bit result). Zero-extend the operand to 32
             bits first (`mov eax, eax` clears the upper half of rax) so the logical
-            shift brings in zeros; genuine 64-bit operands shift as-is. `shl` is
-            unaffected (the sign-extended high bits don't influence the low 32-bit
-            result), so it stays a single 64-bit shift. }
+            shift brings in zeros; genuine 64-bit operands shift as-is. `shl` has
+            the analogous 32-bit-wrap gap (Integer(1) shl 31 should be
+            -2147483648) but can't be fixed by an operand-width check until the
+            Int64/UInt64 typecast propagates an 8-byte IRTk — otherwise
+            `UInt64(1) shl 40` (IRTk understated to 32-bit) would wrongly truncate
+            to 0. See bug-shl-signed-integer-width. }
           tkIdent:
             begin
               if TypeSize(IntToTypeKind(IRTk[left])) < 8 then
