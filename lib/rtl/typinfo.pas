@@ -195,14 +195,17 @@ begin
 end;
 
 { Allocate + zero an instance from RTTI, WITHOUT running its constructor (the
-  .lfm streamer fills published properties afterwards). CONTRACT: a streamable
-  class (anything that can appear in an .lfm) must NOT rely on its constructor
-  for required state — move such setup to a method that also runs for streamed
-  instances (e.g. CreateHandle at Realize) or make it lazy/guarded. Audited PCL
-  2026-06-23: TPaintBox (Canvas), TListBox/TComboBox (FItems) were the offenders,
-  now fixed; the rest of the TControl widgets only call HandleNeeded so zeroing
-  suffices. Non-widget TTimer/TMenu still init in their constructor — fine unless
-  someone streams them (they'd get default-zero fields, not a crash). }
+  .lfm streamer fills published properties afterwards).
+
+  STOPGAP CONTRACT (until urgent/feature-streaming-run-constructor lands — which
+  will add TClassRTTI.CtorPtr and call the constructor here, the proper fix):
+  a streamable class must NOT rely on its constructor for required state — move
+  such setup to a path that also runs for streamed instances (e.g. CreateHandle
+  at Realize) or make it lazy/guarded. Audited PCL 2026-06-23: TPaintBox (Canvas),
+  TListBox/TComboBox (FItems) were the offenders, now patched that way; the rest
+  of the TControl widgets only call HandleNeeded so zeroing suffices. Non-widget
+  TTimer/TMenu still init in their constructor — default-zero if streamed, not a
+  crash. Full design: docs/developer/lfm-streaming-and-constructors.md. }
 function CreateInstance(cls: PClassRTTI): Pointer;
 var
   obj, addr: Pointer;

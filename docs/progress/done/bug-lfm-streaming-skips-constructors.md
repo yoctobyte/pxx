@@ -63,12 +63,18 @@ Audited every PCL constructor for state `CreateInstance` would miss:
   (FRootMenuItem) init in their constructor → would stream as default-zero, NOT
   crash.
 
-## Contract (guardrail)
+## Contract (STOPGAP guardrail)
 
-Documented at `lib/rtl/typinfo.pas:CreateInstance`: a streamable class (anything
-that can appear in an .lfm) must NOT rely on its constructor for required state —
-move such setup to a path that also runs for streamed instances (e.g.
-`CreateHandle` at Realize) or make it lazy/guarded.
+Documented at `lib/rtl/typinfo.pas:CreateInstance`: a streamable class must NOT
+rely on its constructor for required state — move such setup to a path that also
+runs for streamed instances (e.g. `CreateHandle`) or make it lazy/guarded.
+
+This inverts the natural rule (a class *should* rely on its constructor) and is a
+**stopgap, not the design**. The proper fix — make the streamer run the
+constructor — is ticketed urgent: `urgent/feature-streaming-run-constructor`
+(add `TClassRTTI.CtorPtr`, call it in `CreateInstance`). Once it lands, these
+stopgaps revert to idiomatic constructors. Full design + the FPC comparison:
+`docs/developer/lfm-streaming-and-constructors.md`.
 
 ## Verification
 
