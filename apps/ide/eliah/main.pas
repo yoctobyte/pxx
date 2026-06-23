@@ -21,7 +21,7 @@ program eliah;
   a selection outline + the node's fields in the object-inspector pane below. }
 
 uses gtk3, controls, stdctrls, extctrls, graphics, forms, menus, sysutils,
-     buffer, runner, docmodel, designer, lfmload, builder;
+     buffer, runner, docmodel, designer, lfmload, builder, project;
 
 const
   W_WIN     = 1100;
@@ -41,6 +41,7 @@ type
     Editor, Output: TMemo;
     Errors: TListBox;
     Diags: TDiagList;
+    Proj: TProject;        { active project; empty MainUnit => single-file compile }
     Props: TListBox;
     ValueEdit: TEdit;
     FEditRow: Integer;     { which inspector row the value edit targets, -1 none }
@@ -149,6 +150,11 @@ begin
         nItems := nItems + 1;
       end;
     end;
+
+  { auto-load a project descriptor if the folder has one; on miss the model
+    stays empty (MainUnit='') and Compile falls back to single-file. }
+  Proj.Clear;
+  Proj.LoadFromFile(d + '/eliah.pxxproj');
 end;
 
 procedure THandler.OnTreeClick(Sender: TObject);
@@ -235,11 +241,25 @@ begin
 end;
 
 procedure THandler.OnCompile(Sender: TObject);
-var out: AnsiString; rc, i: Integer;
+var out, lbl: AnsiString; rc, i: Integer; args: TStrArray;
 begin
-  if curFile = '' then begin Output.Text := '(no file selected)'; Exit; end;
-  out := RunCapture(PXX_PATH, [curFile, BUILD_OUT], rc);
-  Output.Text := '$ compile ' + curFile + #10 + out + #10 + '--- exit ' + IntToStr(rc) + ' ---';
+  { a loaded project (eliah.pxxproj) drives the build; otherwise compile the
+    single open file straight to BUILD_OUT. }
+  if (Proj <> nil) and (Proj.MainUnit <> '') then
+  begin
+    args := Proj.BuildArgs;
+    lbl := Proj.MainUnit + ' (project ' + Proj.Name + ')';
+  end
+  else if curFile <> '' then
+  begin
+    SetLength(args, 2);
+    args[0] := curFile;
+    args[1] := BUILD_OUT;
+    lbl := curFile;
+  end
+  else begin Output.Text := '(no file selected)'; Exit; end;
+  out := RunCapture(PXX_PATH, args, rc);
+  Output.Text := '$ compile ' + lbl + #10 + out + #10 + '--- exit ' + IntToStr(rc) + ' ---';
   { parse diagnostics into the clickable error list }
   Diags.Clear;
   Diags.Parse(out);
@@ -252,10 +272,15 @@ begin
 end;
 
 procedure THandler.OnRun(Sender: TObject);
-var out: AnsiString; rc: Integer;
+var out, exe: AnsiString; rc: Integer;
 begin
-  out := RunCapture(BUILD_OUT, [], rc);
-  Output.Text := '$ run' + #10 + out + #10 + '--- exit ' + IntToStr(rc) + ' ---';
+  { run the project's output binary when a project defines one, else BUILD_OUT }
+  if (Proj <> nil) and (Proj.MainUnit <> '') and (Proj.OutPath <> '') then
+    exe := Proj.OutPath
+  else
+    exe := BUILD_OUT;
+  out := RunCapture(exe, [], rc);
+  Output.Text := '$ run ' + exe + #10 + out + #10 + '--- exit ' + IntToStr(rc) + ' ---';
 end;
 
 procedure THandler.OnUp(Sender: TObject);
@@ -519,6 +544,7 @@ begin
   centerH := contentH - H_BOTTOM;
 
   H := THandler.Create;
+  H.Proj := TProject.Create;
 
   H.Tree := TListBox.Create;
   H.Tree.Parent := Form1;
