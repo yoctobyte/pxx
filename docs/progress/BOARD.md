@@ -26,13 +26,14 @@ _none_
 | --- | --- | --- | --- | --- |
 | feature-c-runtime-library | B | feature | C runtime/library layer (`lib/crtl`) plus direct C-library packages | feature-c-source-frontend |
 
-## backlog (50)
+## backlog (51)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
 | bug-cardinal-expr-promotion | A | bug |  | — |
 | bug-const-section-before-constructor | A | bug | bug: const section before constructor/destructor not terminated | — |
 | bug-ir-unsupported-call-lvalue | A | bug | bug: "Unsupported linear node Kind=10" — AN_CALL in lvalue-address position | — |
+| bug-pchar-empty-managed-string-nil | A | bug | bug: `PChar('')` / `PChar(emptyAnsiString)` yields nil, not an empty C string | — |
 | bug-setlength-array-element | A | bug | bug: SetLength rejects an indexed array element as target | — |
 | bug-stderr-not-fd2 | B | bug | `writeln(StdErr, ...)` goes to stdout — StdErr not connected to fd 2 | — |
 | bug-writeln-real-format | A | bug | bug: `WriteLn(real)` default format differs from FPC | — |
@@ -348,6 +349,7 @@ _none_
 - [A] bug-cardinal-expr-promotion
 - [A] bug-const-section-before-constructor
 - [A] bug-ir-unsupported-call-lvalue
+- [A] bug-pchar-empty-managed-string-nil
 - [A] bug-setlength-array-element
 - [B] bug-stderr-not-fd2
 - [A] bug-writeln-real-format
