@@ -32,3 +32,17 @@ here — purely a re-pin.
 
 Not urgent-blocking (Track B has working idioms), but it removes a pile of
 interim hand-rolls across the library/demo lane.
+
+## Update 2026-06-23 — large fix batch now waiting on a pin
+
+Since this was filed, Track A landed many fixes in compiler/ that the pinned v38
+(`aa055c5`) does NOT yet include — `tools/fpc_diff_probe.sh` still shows all 16
+known divergences against the pin. A re-pin would expose, in one go:
+- `a034eaa` Length accepts any string/array r-value (+ `4281ed0` literal fold) —
+  unblocks GUI code like `Length(memo.Text)` (the eliah smoke worked around it)
+- `57d8f49` nested `{ }` / `(* *)` comments
+- `da4c8f9` variant-record union layout
+- `d828533` inline `ParamStr(i)` + out-of-range returns ''
+- `3a2e952` binary literals / explicit enum values / subrange types
+Plus the earlier Succ/Pred/Odd/Abs/Sqr/UpCase/Pos/Concat/Delete/Insert intrinsics.
+Net: a pin bump retires ~10 Track-B interim idioms at once.
