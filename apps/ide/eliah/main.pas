@@ -49,6 +49,7 @@ type
     PlaceMode: Boolean;    { next designer click drops a new widget }
     Dsn: TDesigner;
     DesignBox: TPaintBox;
+    Win: TForm;
     dir, curFile, designPath: AnsiString;
     paths: array of AnsiString;
     isdirs: array of Boolean;
@@ -69,6 +70,7 @@ type
     procedure OnDesignMouseMove(Sender: TControl; Button, X, Y: Integer);
     procedure OnDesignMouseUp(Sender: TControl; Button, X, Y: Integer);
     procedure ShowInspector(idx: Integer);
+    procedure UpdateTitle;
     procedure OnPropClick(Sender: TObject);
     procedure OnValueKey(Sender: TControl; KeyCode: Integer);
     procedure ApplyEdit;
@@ -292,11 +294,25 @@ begin
     Output.Text := '$ saved ' + target + ' (' + IntToStr(Dsn.Doc.Count) + ' nodes)'
   else
     Output.Text := '$ save failed: ' + target;
+  UpdateTitle;
+end;
+
+{ status line in the window title: open file, node count, current selection }
+procedure THandler.UpdateTitle;
+var s: AnsiString;
+begin
+  if (Win = nil) or (Dsn = nil) or (Dsn.Doc = nil) then Exit;
+  s := 'Eliah - ' + designPath + ' (' + IntToStr(Dsn.Doc.Count) + ' nodes)';
+  if (Dsn.Sel >= 0) and (Dsn.Sel < Dsn.Doc.Count) then
+    s := s + '  [sel: ' + Dsn.Doc.KindName(Dsn.Doc.NodeKind(Dsn.Sel)) +
+         ' ' + Dsn.Doc.NodeCaption(Dsn.Sel) + ']';
+  Win.Caption := s;
 end;
 
 procedure THandler.ShowInspector(idx: Integer);
 var d: TDocModel;
 begin
+  UpdateTitle;
   Props.Clear;
   if (Dsn = nil) or (Dsn.Doc = nil) then Exit;
   d := Dsn.Doc;
@@ -496,6 +512,7 @@ begin
   H.ValueEdit := ValueEdit;
   H.FEditRow := -1;
   H.designPath := SAMPLE_LFM;   { seeded from the sample; Save targets it until a .lfm is opened }
+  H.Win := Form1;
 
   Form1.OnResize := @H.OnFormResize;   { reflow panes on window resize }
 
@@ -678,6 +695,10 @@ begin
     if H.Dsn.Doc.Count <> 1 then begin writeln('SMOKE FAIL: new design not blank'); Halt(1); end;
     if H.Dsn.Doc.NodeParent(0) <> -1 then begin writeln('SMOKE FAIL: new root not a form'); Halt(1); end;
     if H.designPath <> 'untitled.lfm' then begin writeln('SMOKE FAIL: new did not retarget save'); Halt(1); end;
+
+    { status title reflects the open design + node count }
+    H.UpdateTitle;
+    if Length(H.Win.Caption) = 0 then begin writeln('SMOKE FAIL: title empty'); Halt(1); end;
 
     writeln('SMOKE OK');
   end
