@@ -1,9 +1,33 @@
 # bug: metaclass construction via GetClass stamps a non-canonical VMT
 
 - **Type:** bug
-- **Status:** urgent
+- **Status:** DONE 2026-06-24 (commit 989a5c5, pinned v45)
 - **Track:** A
 - **Opened:** 2026-06-23
+
+## Resolution (2026-06-24)
+
+Root cause was NOT a wrong VMT offset — it was a **missed parse route**. The
+inline cast form `TFooClass(expr).Create(args)` (the streamer's
+`TComponentClass(GetClass(name)).Create(owner)`) has an `AN_PTR_CAST` base, but
+`AN_METACLASS_NEW` detection only matched an `AN_IDENT` (a `class of` *variable*).
+So the cast form fell through to the field-selector path → no real construction →
+garbage / non-canonical `[inst+0]`. The variable form was correct all along but
+had only ever been checked with `tag=` (ctor ran), never VMT identity.
+
+Fix: detection now also fires for a metaclass-alias `AN_PTR_CAST`
+(`AliasElemTk = tyClass`); construction factored into `BuildMetaclassNew` shared
+by the var path (ParseLValueAST) and the cast path (ParseFactor). Both stamp the
+canonical class VMT (`[cref+24]` = `cls^.VMTPtr`) — virtual dispatch + RTTI
+identity hold.
+
+Verified: `TBaseClass(GetClass('TBase')).Create(3)` → VMT == `clsB^.VMTPtr`;
+`TBaseClass(GetClass('TDer')).Create(4)` dispatches `TDer.Kind` ('der'), VMT ==
+`clsD^.VMTPtr`. Regression test `test/test_metaclass_getclass.pas`. Self-host
+byte-identical; `make test` green. Track B can drop the four constructor-skip
+stopgaps and stream via `TComponentClass(childCls).Create(parent)`.
+
+---
 - **Blocks:** feature-pcl-component-ctor-owner (streamer adoption), feature-eliah-from-lfm
 
 ## Summary

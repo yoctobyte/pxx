@@ -1,9 +1,27 @@
 # Set literal in a `const` declaration (`const S = [1,2,3]`)
 
 - **Type:** feature (parser/const) — Track A
-- **Status:** backlog
+- **Status:** DONE 2026-06-24 (commit 989a5c5, pinned v45)
 - **Opened:** 2026-06-23
 - **Found by:** differential probe vs FPC.
+
+## Resolution (2026-06-24)
+
+Done via the data-rep route the findings below predicted (the cheap deferred-AST
+route was correctly avoided). `BakeSetConst` parses the `[..]` (elements +
+`lo..hi` ranges, all `ConstEval`-able) and bakes the 32-byte mask into Data[] at
+decl time — the same blob `IR_SET_LIT` emits. A new `SetConst` table maps
+name → Data offset (+ element enum id for typed `: TS`); `FindSetConst` resolves
+a use to `AN_SET_CONST_REF`, lowered via `IR_SET_LIT` (its address). So
+`x in S` / `S + [..]` / `S * [..]` read it exactly like a literal set. Both
+untyped `const S = [..]` and typed `const S: TS = [..]` (global + routine-local)
+work; verified membership, ranges, union, intersection. Test
+`test/test_const_set.pas`. Self-host byte-identical.
+
+Known gap (separate, pre-existing): `Ord('a')` is not `ConstEval`-folded, so
+`[Ord('a')]` in a const set errors — applies to all const exprs, not just sets.
+
+---
 
 ## Problem
 
