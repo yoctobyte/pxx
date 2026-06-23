@@ -38,6 +38,37 @@ runnable ELF binaries; `riscv32`/`xtensa` target embedded/bare-metal use.
 To run a cross binary on an x86-64 host, use QEMU user-mode emulation; the repo
 wraps this in `tools/run_target.sh <arch> <binary> [args…]`.
 
+## ESP32 chips, boards, and ISA strategy
+
+Two of PXX's cross targets cover the ESP32 family, split by instruction set:
+
+| Chip | ISA | PXX `--target` | Notes |
+| --- | --- | --- | --- |
+| ESP32 (orig) | Xtensa LX6 | `xtensa` (`--xtensa-cpu=lx6`) | dual-core |
+| ESP32-S2 | Xtensa LX7 | `xtensa` | single-core |
+| ESP32-S3 | Xtensa LX7 | `xtensa` | dual-core |
+| ESP32-C3 | RISC-V RV32IMC | `riscv32` | cheap, single-core; common baseline |
+| ESP32-C6 | RISC-V RV32IMAC | `riscv32` | + Wi-Fi 6 / 802.15.4 vs C3; same PXX codegen |
+| ESP32-P4 / future C/S parts | RISC-V | `riscv32` | Espressif's stated direction |
+
+**Boards vs chips.** Board form factors (DevKitC, DevKitM, "Mini", Super-Mini,
+nano clones, …) are just carrier boards — the target is chosen by the **chip**,
+not the board. Any S3 board uses `--target=xtensa`; any C3/C6 board uses
+`--target=riscv32`.
+
+**ISA direction.** Espressif is steering new silicon to RISC-V (the C-series,
+P4, and a coming RISC-V S-class part). So **`riscv32` is the long-term ESP
+target**; Xtensa is effectively legacy. We do **not** drop Xtensa, though:
+
+- S2/S3 hardware is owned and in active use here.
+- Older/cheaper parts (C3, S2, original ESP32) stay adequate for many projects
+  and remain on shelves for years.
+
+Practical stance: keep both ISAs working, but put new ESP effort on the RISC-V
+(`riscv32`) path first; treat Xtensa as feature-frozen-plus-fixes. The
+difference between, e.g., C3 and C6 is mostly the radio and peripherals — not the
+PXX codegen, which is the same `riscv32` backend for both.
+
 ## Predefined conditional symbols
 
 `PasInitDefines` seeds host symbols; once `--target` is known they are swapped
