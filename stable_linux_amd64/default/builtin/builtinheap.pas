@@ -58,6 +58,7 @@ function PXXRealloc(p: Pointer; newSize: NativeInt; align: Integer): Pointer;
   every target including ESP. (PXXDynSetLen has an ESP-lean body that skips
   managed-element retain/release; same signature.) }
 function PXXStrFromLit(len: NativeInt; src: Pointer): Pointer;
+function PXXPCharOf(p: Pointer): Pointer;
 function PXXStrConcat(lenA: NativeInt; srcA: Pointer; srcB: Pointer; lenB: NativeInt): Pointer;
 procedure PXXStrIncRef(p: Pointer);
 procedure PXXStrDecRef(p: Pointer);
@@ -133,6 +134,10 @@ var
   HeapPtr  : Int64;   { next free byte in the current arena (0 = none yet) }
   HeapEnd  : Int64;   { end address of the current arena }
   FreeList : Int64;   { head of the free list (payload address), 0 = empty }
+  { A single shared, read-only NUL byte. PChar of an empty managed string (a nil
+    handle) returns its address so the C boundary sees a valid empty C string, as
+    FPC guarantees — never a nil dereference. BSS-zeroed, so it is always #0. }
+  PXXEmptyChar : Char;
 {$ifdef PXX_ESP}
   { 64 KiB static arena as Int64 cells so its base is 8-aligned (payloads sit
     at base+8, also 8-aligned). Handed out once; HeapMmap returns 0 after. }
@@ -347,6 +352,19 @@ begin
   end;
   PByte(d + len)^ := 0;         { nul terminator }
   Result := Pointer(d);
+end;
+
+{ PChar/PAnsiChar of a managed string: the handle is already the NUL-terminated
+  data pointer when non-empty, but an empty managed string is a nil handle. FPC
+  guarantees PChar('') is a valid pointer to a static #0 byte (never nil), so a
+  C/PAL call f(PChar(s)) on an empty s must not dereference nil. Substitute the
+  shared empty #0 byte's address in that case. }
+function PXXPCharOf(p: Pointer): Pointer;
+begin
+  if p = nil then
+    Result := @PXXEmptyChar
+  else
+    Result := p;
 end;
 
 { Managed-string concatenation: allocate a fresh block holding srcA[0..lenA)
