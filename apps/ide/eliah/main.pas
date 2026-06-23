@@ -46,7 +46,7 @@ type
     PlaceMode: Boolean;    { next designer click drops a new widget }
     Dsn: TDesigner;
     DesignBox: TPaintBox;
-    dir, curFile: AnsiString;
+    dir, curFile, designPath: AnsiString;
     paths: array of AnsiString;
     isdirs: array of Boolean;
     nItems: Integer;
@@ -56,6 +56,7 @@ type
     procedure OnRun(Sender: TObject);
     procedure OnUp(Sender: TObject);
     procedure OnSave(Sender: TObject);
+    procedure OpenDesign(const path: AnsiString);
     procedure OnDesignMouseDown(Sender: TControl; Button, X, Y: Integer);
     procedure OnDesignMouseMove(Sender: TControl; Button, X, Y: Integer);
     procedure OnDesignMouseUp(Sender: TControl; Button, X, Y: Integer);
@@ -80,6 +81,16 @@ begin
   else
     KindFromPalette := wkButton;
   end;
+end;
+
+{ case-insensitive '.lfm' suffix test }
+function EndsWithLfm(const s: AnsiString): Boolean;
+var n: Integer; tail: AnsiString;
+begin
+  n := Length(s);
+  if n < 4 then begin EndsWithLfm := False; Exit; end;
+  tail := LowerCase(Copy(s, n - 3, 4));
+  EndsWithLfm := tail = '.lfm';
 end;
 
 function ParentDir(const d: AnsiString): AnsiString;
@@ -137,6 +148,33 @@ begin
   b := TIdeBuffer.Create;
   if b.LoadFromFile(curFile) then Editor.Text := b.Text
   else Editor.Text := '(could not open ' + curFile + ')';
+  { a .lfm also loads into the designer surface }
+  if EndsWithLfm(curFile) then OpenDesign(curFile);
+end;
+
+{ load a .lfm into a fresh designer docmodel and make it the save target }
+procedure THandler.OpenDesign(const path: AnsiString);
+var b: TIdeBuffer; d: TDocModel;
+begin
+  b := TIdeBuffer.Create;
+  if not b.LoadFromFile(path) then
+  begin
+    Output.Text := '$ open design failed: ' + path;
+    Exit;
+  end;
+  d := TDocModel.Create;
+  if LoadLfmText(b.Text, d) then
+  begin
+    Dsn.Doc := d;
+    Dsn.Sel := -1;
+    Dsn.EndDrag;
+    designPath := path;
+    if DesignBox <> nil then DesignBox.Invalidate;
+    ShowInspector(-1);
+    Output.Text := '$ opened design ' + path + ' (' + IntToStr(d.Count) + ' nodes)';
+  end
+  else
+    Output.Text := '$ no objects in ' + path;
 end;
 
 procedure THandler.OnCompile(Sender: TObject);
@@ -159,14 +197,17 @@ begin
   LoadDir(ParentDir(dir));
 end;
 
-{ serialize the designer docmodel back to sample.lfm (round-trips the loader) }
+{ serialize the designer docmodel back to the open design file (round-trips the
+  loader); falls back to the sample if nothing was opened explicitly }
 procedure THandler.OnSave(Sender: TObject);
+var target: AnsiString;
 begin
   if (Dsn = nil) or (Dsn.Doc = nil) then Exit;
-  if WriteAllText(SAMPLE_LFM, SaveLfmText(Dsn.Doc)) then
-    Output.Text := '$ saved ' + SAMPLE_LFM + ' (' + IntToStr(Dsn.Doc.Count) + ' nodes)'
+  if designPath <> '' then target := designPath else target := SAMPLE_LFM;
+  if WriteAllText(target, SaveLfmText(Dsn.Doc)) then
+    Output.Text := '$ saved ' + target + ' (' + IntToStr(Dsn.Doc.Count) + ' nodes)'
   else
-    Output.Text := '$ save failed: ' + SAMPLE_LFM;
+    Output.Text := '$ save failed: ' + target;
 end;
 
 procedure THandler.ShowInspector(idx: Integer);
@@ -363,6 +404,7 @@ begin
   H.Props := Props;
   H.ValueEdit := ValueEdit;
   H.FEditRow := -1;
+  H.designPath := SAMPLE_LFM;   { seeded from the sample; Save targets it until a .lfm is opened }
 
   btn := MkButton('Up',      4);   btn.OnClick := @H.OnUp;
   btn := MkButton('Compile', 90);  btn.OnClick := @H.OnCompile;
@@ -407,6 +449,15 @@ begin
     if H.Dsn.Doc.Count <> 5 then begin writeln('SMOKE FAIL: sample.lfm not loaded'); Halt(1); end;
     if H.Dsn.Doc.NodeCaption(3) <> 'OK' then begin writeln('SMOKE FAIL: lfm OK button missing'); Halt(1); end;
     if H.Dsn.Doc.NodeX(3) <> 28 then begin writeln('SMOKE FAIL: lfm abs coord wrong'); Halt(1); end;
+
+    { open any .lfm from the tree: clicking a .lfm reloads the designer + retargets Save }
+    H.Dsn.Doc := TDocModel.Create;   { wipe to prove OpenDesign reloads }
+    H.designPath := '';
+    H.OpenDesign('apps/ide/eliah/sample.lfm');
+    if H.Dsn.Doc.Count <> 5 then begin writeln('SMOKE FAIL: OpenDesign did not load'); Halt(1); end;
+    if H.designPath <> 'apps/ide/eliah/sample.lfm' then begin writeln('SMOKE FAIL: designPath not set'); Halt(1); end;
+    if not EndsWithLfm('Foo.LFM') then begin writeln('SMOKE FAIL: EndsWithLfm case'); Halt(1); end;
+    if EndsWithLfm('foo.pas') then begin writeln('SMOKE FAIL: EndsWithLfm false-pos'); Halt(1); end;
 
     H.LoadDir('apps/ide/garin');
     H.Tree.ItemIndex := H.nItems - 1;
