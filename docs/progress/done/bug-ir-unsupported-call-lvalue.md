@@ -1,9 +1,32 @@
 # bug: "Unsupported linear node Kind=10" — AN_CALL in lvalue-address position
 
 - **Type:** bug (Track A — AST→IR lowering / codegen)
-- **Status:** backlog
+- **Status:** DONE 2026-06-23 (no longer reproduces; resolved by prior work)
 - **Found:** 2026-06-23, building the Eliah IDE (full apps/ide/eliah/main.pas)
 - **Severity:** high (blocks compiling a real GTK application)
+
+## Resolution (2026-06-23) — verified no longer reproduces
+
+The whole-program interaction no longer triggers IR_UNSUPPORTED. Verified clean
+(exit 0, no "Unsupported linear node" / "Kind=10"):
+
+- the ticket fixture
+  `docs/progress/fixtures/bug-ir-unsupported-call-lvalue-eliah.pas`
+- **and the real, now-larger** `apps/ide/eliah/main.pas` (more panes than the
+  fixture: 661 procs / 226 KB code vs the fixture's 593 / 164 KB)
+
+both on **current HEAD and on the pinned stable v41**. Since v41 (which predates
+this session) already compiles them, the fix landed in the Track A work batched
+into that pin — most likely the nested-routines lambda-lifting and the
+PChar-empty / managed-string lowering fixes (`40569f9` and siblings), which
+changed exactly the call-result / address-materialisation paths the IDE's
+five-pane assembly exercised. The lvalue-address `IR_UNSUPPORTED` fallthrough at
+`ir.inc:744` is still the correct guard for genuinely unlowerable nodes; nothing
+hits it for this program now.
+
+No code change this session — closed after confirming the high-severity repro is
+gone. Track B can build the full Eliah `main.pas` (the trimmed-structure
+workaround noted below is no longer required).
 
 ## Symptom
 
