@@ -50,8 +50,21 @@ type
     procedure Run(const text: AnsiString);
   end;
 
+  TLfmDocWriter = class
+  public
+    Doc: TDocModel;
+    Buf: AnsiString;
+    constructor Create(ADoc: TDocModel);
+    procedure EmitNode(i, depth: Integer);   { node i + its children, recursively }
+    function Run: AnsiString;
+  end;
+
 { parse LFM text into doc (assumed fresh/empty). Returns True if >=1 object. }
 function LoadLfmText(const text: AnsiString; doc: TDocModel): Boolean;
+
+{ serialize doc back to .lfm text (inverse of LoadLfmText). Round-trips:
+  LoadLfmText(SaveLfmText(d)) reproduces d's tree/kinds/captions/abs-coords. }
+function SaveLfmText(doc: TDocModel): AnsiString;
 
 implementation
 
@@ -226,6 +239,73 @@ begin
   r := TLfmDocReader.Create(doc);
   r.Run(text);
   LoadLfmText := r.Any;
+end;
+
+function Spaces(n: Integer): AnsiString;
+var i: Integer;
+begin
+  Spaces := '';
+  for i := 1 to n do Spaces := Spaces + ' ';
+end;
+
+{ LFM string literal: wrap in single quotes, double any embedded quote }
+function QuoteLfm(const s: AnsiString): AnsiString;
+var i: Integer;
+begin
+  QuoteLfm := '''';
+  for i := 1 to Length(s) do
+    if s[i] = '''' then QuoteLfm := QuoteLfm + ''''''
+    else QuoteLfm := QuoteLfm + s[i];
+  QuoteLfm := QuoteLfm + '''';
+end;
+
+constructor TLfmDocWriter.Create(ADoc: TDocModel);
+begin
+  Doc := ADoc;
+  Buf := '';
+end;
+
+procedure TLfmDocWriter.EmitNode(i, depth: Integer);
+var ind, ind2, kn, cap: AnsiString; p, px, py, j: Integer;
+begin
+  ind := Spaces(depth * 2);
+  ind2 := Spaces(depth * 2 + 2);
+  kn := Doc.KindName(Doc.NodeKind(i));
+  { object <Kind><index>: T<Kind> — the name is cosmetic (the loader keys on the
+    type after the colon), index keeps it unique. }
+  Buf := Buf + ind + 'object ' + kn + IntToStr(i) + ': T' + kn + #10;
+
+  p := Doc.NodeParent(i);
+  if p >= 0 then begin px := Doc.NodeX(p); py := Doc.NodeY(p); end
+  else begin px := 0; py := 0; end;
+
+  { coords back to parent-relative (LoadLfmText re-absolutizes them) }
+  Buf := Buf + ind2 + 'Left = '   + IntToStr(Doc.NodeX(i) - px) + #10;
+  Buf := Buf + ind2 + 'Top = '    + IntToStr(Doc.NodeY(i) - py) + #10;
+  Buf := Buf + ind2 + 'Width = '  + IntToStr(Doc.NodeW(i)) + #10;
+  Buf := Buf + ind2 + 'Height = ' + IntToStr(Doc.NodeH(i)) + #10;
+  cap := Doc.NodeCaption(i);
+  if cap <> '' then Buf := Buf + ind2 + 'Caption = ' + QuoteLfm(cap) + #10;
+
+  for j := 0 to Doc.Count - 1 do
+    if Doc.NodeParent(j) = i then EmitNode(j, depth + 1);
+
+  Buf := Buf + ind + 'end' + #10;
+end;
+
+function TLfmDocWriter.Run: AnsiString;
+var i: Integer;
+begin
+  for i := 0 to Doc.Count - 1 do
+    if Doc.NodeParent(i) < 0 then EmitNode(i, 0);   { roots }
+  Run := Buf;
+end;
+
+function SaveLfmText(doc: TDocModel): AnsiString;
+var w: TLfmDocWriter;
+begin
+  w := TLfmDocWriter.Create(doc);
+  SaveLfmText := w.Run;
 end;
 
 end.

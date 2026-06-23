@@ -19,6 +19,9 @@ type
     property Path: AnsiString read FPath;
   end;
 
+{ write AText verbatim to APath (overwriting). Returns False on open failure. }
+function WriteAllText(const APath, AText: AnsiString): Boolean;
+
 implementation
 
 uses textfile;
@@ -67,6 +70,21 @@ end;
 function TIdeBuffer.LineCount: Integer;
 begin
   Result := FCount;
+end;
+
+function WriteAllText(const APath, AText: AnsiString): Boolean;
+var f: Text;
+begin
+  Assign(f, APath);
+  Rewrite(f);
+  if IOResult <> 0 then
+  begin
+    Result := False;
+    Exit;
+  end;
+  write(f, AText);
+  Close(f);
+  Result := True;
 end;
 
 end.

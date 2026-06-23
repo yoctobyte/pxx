@@ -14,8 +14,8 @@ var
   ok: Boolean;
   doc: TDocModel;
   iForm, iBtn: Integer;
-  lfm: AnsiString;
-  ldoc: TDocModel;
+  lfm, saved: AnsiString;
+  ldoc, rdoc: TDocModel;
 
 begin
   EduthInit(e);
@@ -97,6 +97,32 @@ begin
   CheckInt(e, 'child abs Left (0+20)', ldoc.NodeX(1), 20);
   CheckInt(e, 'child abs Top (0+30)', ldoc.NodeY(1), 30);
   CheckInt(e, 'child height', ldoc.NodeH(1), 26);
+
+  { scenario 6: round-trip — Save then re-Load reproduces the model }
+  writeln('-- lfmload SaveLfmText round-trip --');
+  saved := SaveLfmText(ldoc);
+  CheckTrue(e, 'save produced text', Length(saved) > 0);
+  rdoc := TDocModel.Create;
+  ok := LoadLfmText(saved, rdoc);
+  CheckTrue(e, 'reload returns true', ok);
+  CheckInt(e, 'same node count', rdoc.Count, ldoc.Count);
+  CheckStr(e, 'rt root kind', rdoc.KindName(rdoc.NodeKind(0)), 'Form');
+  CheckStr(e, 'rt root caption', rdoc.NodeCaption(0), 'My Form');
+  CheckInt(e, 'rt root width', rdoc.NodeW(0), 400);
+  CheckInt(e, 'rt child parent', rdoc.NodeParent(1), 0);
+  CheckStr(e, 'rt child kind', rdoc.KindName(rdoc.NodeKind(1)), 'Button');
+  CheckStr(e, 'rt child caption', rdoc.NodeCaption(1), 'OK');
+  CheckInt(e, 'rt child abs Left', rdoc.NodeX(1), 20);
+  CheckInt(e, 'rt child abs Top', rdoc.NodeY(1), 30);
+  CheckInt(e, 'rt child width', rdoc.NodeW(1), 80);
+  CheckInt(e, 'rt child height', rdoc.NodeH(1), 26);
+
+  { scenario 7: WriteAllText -> LoadFromFile file round-trip }
+  writeln('-- buffer.WriteAllText file round-trip --');
+  ok := WriteAllText('/tmp/bochan_w.txt', 'alpha' + #10 + 'beta');
+  CheckTrue(e, 'write returns true', ok);
+  CheckTrue(e, 'reads back', b.LoadFromFile('/tmp/bochan_w.txt'));
+  CheckStr(e, 'content matches', b.Text, 'alpha' + #10 + 'beta');
 
   Halt(EduthReport(e));
 end.

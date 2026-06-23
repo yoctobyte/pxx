@@ -55,6 +55,7 @@ type
     procedure OnCompile(Sender: TObject);
     procedure OnRun(Sender: TObject);
     procedure OnUp(Sender: TObject);
+    procedure OnSave(Sender: TObject);
     procedure OnDesignMouseDown(Sender: TControl; Button, X, Y: Integer);
     procedure OnDesignMouseMove(Sender: TControl; Button, X, Y: Integer);
     procedure OnDesignMouseUp(Sender: TControl; Button, X, Y: Integer);
@@ -156,6 +157,16 @@ end;
 procedure THandler.OnUp(Sender: TObject);
 begin
   LoadDir(ParentDir(dir));
+end;
+
+{ serialize the designer docmodel back to sample.lfm (round-trips the loader) }
+procedure THandler.OnSave(Sender: TObject);
+begin
+  if (Dsn = nil) or (Dsn.Doc = nil) then Exit;
+  if WriteAllText(SAMPLE_LFM, SaveLfmText(Dsn.Doc)) then
+    Output.Text := '$ saved ' + SAMPLE_LFM + ' (' + IntToStr(Dsn.Doc.Count) + ' nodes)'
+  else
+    Output.Text := '$ save failed: ' + SAMPLE_LFM;
 end;
 
 procedure THandler.ShowInspector(idx: Integer);
@@ -275,6 +286,7 @@ var
   centerW, centerH, contentH: Integer;
   sbuf: TIdeBuffer;
   sok: Boolean;
+  rtdoc: TDocModel;
 
 function MkButton(const cap: AnsiString; x: Integer): TButton;
 var b: TButton;
@@ -355,6 +367,7 @@ begin
   btn := MkButton('Up',      4);   btn.OnClick := @H.OnUp;
   btn := MkButton('Compile', 90);  btn.OnClick := @H.OnCompile;
   btn := MkButton('Run',     176); btn.OnClick := @H.OnRun;
+  btn := MkButton('Save',    466); btn.OnClick := @H.OnSave;
 
   { palette: pick a widget kind, hit Place, then click the designer to drop it }
   Palette := TComboBox.Create;
@@ -465,6 +478,19 @@ begin
     if H.Dsn.Doc.NodeKind(H.Dsn.Sel) <> KindFromPalette(H.Palette.ItemIndex) then
       begin writeln('SMOKE FAIL: placed node wrong kind'); Halt(1); end;
     if H.PlaceMode then begin writeln('SMOKE FAIL: place mode not one-shot'); Halt(1); end;
+
+    { save round-trip: serialize the docmodel to a temp file (not the repo
+      sample), reload it, node count must survive. Same path OnSave uses. }
+    centerW := H.Dsn.Doc.Count;
+    if not WriteAllText('/tmp/eliah_rt.lfm', SaveLfmText(H.Dsn.Doc)) then
+      begin writeln('SMOKE FAIL: save write failed'); Halt(1); end;
+    sbuf := TIdeBuffer.Create;
+    if not sbuf.LoadFromFile('/tmp/eliah_rt.lfm') then
+      begin writeln('SMOKE FAIL: save reload failed'); Halt(1); end;
+    rtdoc := TDocModel.Create;
+    sok := LoadLfmText(sbuf.Text, rtdoc);
+    if rtdoc.Count <> centerW then
+      begin writeln('SMOKE FAIL: round-trip lost nodes'); Halt(1); end;
 
     { click empty surface -> selection cleared }
     H.OnDesignMouseDown(nil, 1, 5, 5);
