@@ -88,55 +88,100 @@ This project's `GetClass` returns a *data record* (`PClassRTTI`), not a Pascal
 class reference, and there is no virtual-constructor / `class of` machinery — which
 is exactly why `CreateInstance` hand-rolls allocation and skips the constructor.
 
-## Decision
+## What already works (probed 2026-06-23)
 
-We do NOT need to build `class of` to fix this. We already mimic a metaclass:
-`PClassRTTI` + `CreateInstance` + `IsSubclassOf` + `GetMethodAddr` are the
-metaclass operations, spelled as an explicit handle + free functions instead of
-typed syntax.
+`class of` is not greenfield. Metaclass aliases are pointer-backed and compile;
+virtual constructors compile; **direct** construction is correct:
 
-**Make that handle a real factory: add `TClassRTTI.CtorPtr`** (compiler emits the
-parameterless-constructor *body* entry point) and have `CreateInstance` call it
-after allocating + zeroing, before properties stream. Calling is the same
-call-by-code-pointer already used for setter methods (`Self` in rdi).
-
-```
-function Construct(cls): Pointer;
-begin
-  Result := alloc + zero + VMT;
-  if cls^.CtorPtr <> nil then CallCtor(Result, cls^.CtorPtr);  { runs the ctor body }
-end;
+```pascal
+TBaseClass = class of TBase;        { compiles }
+o := TDer.Create;                   { direct virtual ctor -> tag=2, correct }
 ```
 
-Why this and not `class of`:
+The one thing broken is **construction through a metaclass variable**:
 
-- **Zero source changes.** Widgets keep plain `constructor Create;` —
-  FPC-source-compatible. The Canvas/array stopgaps revert to constructors.
-- **FPC's behaviour, not FPC's plumbing.** Ctor runs → props override, in ~6 lines
-  of RTL + one RTTI field.
-- **`class of` is sugar over this same runtime.** A `class of T` value is just a
-  `PClassRTTI`/VMT pointer; `c.Create` is `Construct(c)`; `obj is c` is the
-  parent-chain walk we already have. So if real `class of` lands later
-  (`feature-object-reference-type`), it REUSES `CtorPtr` — option 1 is a
-  prerequisite, never wasted.
+```pascal
+c := TDer;  o := c.Create;          { -> tag=4223806 (garbage) }
+```
 
-Gotcha: emit/call the constructor **body** (init on a pre-allocated `Self`), not
-the alloc-and-init entry, or you double-allocate. The compiler already splits
-these (that is how `inherited Create` runs a parent body without re-allocating).
-These constructors call `HandleNeeded` (`if FHandle=nil`), so running them at
-stream-time then again at Realize is idempotent.
+`c.Create` must dispatch through the value's VMT to allocate the *dynamic* class
+and run its virtual constructor. That single dispatch is the gap — and it is
+exactly what a component streamer needs (`classRef := metaclass(typeName);
+obj := classRef.Create`).
 
-## Layering (do not conflate)
+## Decision — walk the rabbit hole, not the shortcut
 
-1. **Runtime factory — `CtorPtr` (urgent, Track A).** Fixes streaming, lets the
-   stopgaps revert. `feature-streaming-run-constructor`.
-2. **Syntax — `class of` + virtual constructors (later, optional).** Typed sugar
-   for source code that wants FPC-style component registration; builds on (1).
-   `feature-object-reference-type`, `feature-metaclass-descendant-enforcement`.
+We considered a parameterless `TClassRTTI.CtorPtr` (emit the ctor body address,
+call by pointer). **Rejected.** It would unblock our streamer with less work but:
+
+- it can never make FPC/LCL *source* compile (LCL uses `class of`, virtual
+  `Create(AOwner)`, `RegisterClass`);
+- it hard-codes "parameterless", and FPC's constructor is `Create(AOwner)` —
+  owner-on-construct is intentional;
+- it is throwaway once real metaclass construction lands.
+
+And we are **not blocked**: Eliah works with the stopgaps, so there is no reason
+to ship a dead-end. So: fix the real thing —
+`urgent/feature-metaclass-construct-dispatch` (make `metaclassVar.Create` work) —
+and let the streamer construct through a class-ref like FPC does.
+
+## Ownership stance
+
+We adopt the `Create(AOwner)` **shape** for compatibility but keep `Owner = nil`
+first-class: in-app code may pass `nil` and just set `Parent` (a common, cleaner
+pattern). Compatibility, not the auto-free religion. See
+`backlog/feature-pcl-component-ctor-owner`.
+
+## North-star
+
+Someday compile parts of the actual LCL (even with our own CL). That is a
+marathon — needs broad completeness (interfaces, generics, RTL breadth), and
+`class of`+virtual-ctor is necessary-not-sufficient. But every brick toward it
+(metaclass construction, virtual ctors, `Create(AOwner)`) is independently useful
+for our own component library.
+
+## Layering
+
+1. **`metaclassVar.Create` dispatch** — urgent, Track A
+   (`feature-metaclass-construct-dispatch`). The keystone.
+2. **PCL `Create(AOwner)` + minimal Owner** — Track B
+   (`feature-pcl-component-ctor-owner`). The library shape.
+3. **Descendant-constraint enforcement / `object` root type** — existing backlog
+   (`feature-metaclass-descendant-enforcement`, `feature-object-reference-type`),
+   adjacent, reuse the same VMT plumbing.
+
+When 1+2 land, the streamer calls `classRef.Create(owner)` and the four stopgaps
+revert to idiomatic constructors.
+
+## OO-compatibility analysis (does running the ctor via metaclass bite us?)
+
+No tail-bite — running the constructor through metaclass dispatch is fully
+compatible with the rest of the object model, often *more* faithful:
+
+- **Virtual methods:** already correct on streamed instances — `CreateInstance`
+  stamps the VMT at allocation, so dispatch works whether or not the ctor ran.
+- **Inheritance / `inherited Create`:** the dispatched constructor is the most-
+  derived body, which calls `inherited` as written — the chain runs, identical to
+  a normal `TFoo.Create`. If the source omits `inherited`, that is faithful to the
+  source, not a new bug.
+- **Abstract methods:** a streamed instance is always a *concrete* class (the lfm
+  names one), so its VMT has the real overrides — no "abstract method called".
+  Abstract classes can't be streamed in FPC either.
+- **Right ctor:** we look the class up by name and dispatch through *its* VMT, so
+  we always run the correct concrete constructor — same outcome FPC's virtual
+  constructor gives.
+- **Default values:** ctor sets defaults, then properties override only what the
+  lfm specifies — this *improves* fidelity over the current zero-only behaviour.
+
+The real constraint is the **parameter**: FPC's ctor is `Create(AOwner)`. The
+dispatch must pass the arg through (not assume parameterless) — hence the
+companion `feature-pcl-component-ctor-owner`. Benign side effect: PCL ctors call
+`HandleNeeded`, so running them at stream-time builds the (unparented) widget a
+bit early — idempotent (`if FHandle=nil`), harmless.
 
 ## Until then
 
 The stopgaps stay (harmless defaults-hardening) and Track B keeps shipping. The
 contract — "a streamable class must not rely on its constructor; init in
 `CreateHandle`/lazily" — is documented at `lib/rtl/typinfo.pas:CreateInstance` as
-a **stopgap until (1) lands**, not as the permanent rule.
+a **stopgap until 1+2 land**, not the permanent rule.

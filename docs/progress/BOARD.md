@@ -8,7 +8,7 @@ lives in git, not in a timestamp._
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
-| feature-streaming-run-constructor | A | feature | feature: RTTI .lfm streaming must run the object's constructor | — |
+| feature-metaclass-construct-dispatch | A | feature | feature: metaclass-dispatched construction — `classRef.Create` (virtual ctor via a `class of`) | — |
 
 ## working (2)
 
@@ -27,7 +27,7 @@ _none_
 | --- | --- | --- | --- | --- |
 | feature-c-runtime-library | B | feature | C runtime/library layer (`lib/crtl`) plus direct C-library packages | feature-c-source-frontend |
 
-## backlog (46)
+## backlog (47)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -67,6 +67,7 @@ _none_
 | feature-pal-esp-lwip-sockaddr-readback | B | feature | PAL esp/lwIP: getsockname & recvfrom return an unfilled (zero) sockaddr | — |
 | feature-pal-esp-posix-fd-semantics | B | feature | ESP PAL: exact POSIX fd semantics over ESP-IDF VFS | — |
 | feature-parallel-processing | A | feature | Parallel processing as a language feature | feature-unified-heap-allocator |
+| feature-pcl-component-ctor-owner | B | feature | feature: PCL components adopt the `Create(AOwner)` virtual-constructor shape | — |
 | feature-random-library | B | feature | Random library — HW/OS/software tiered RNG (cross-target capability test) | — |
 | feature-release-packaging | B | feature | Release packaging, reproducibility manifest, and `release.sh` | — |
 | feature-synapse-compile-check | B | feature | Synapse library — proper compile check (Track B) | feature-mimic-fpc |
@@ -388,6 +389,7 @@ _none_
 - [B] feature-pal-esp-lwip-sockaddr-readback
 - [B] feature-pal-esp-posix-fd-semantics
 - [A] feature-parallel-processing
+- [B] feature-pcl-component-ctor-owner
 - [B] feature-random-library
 - [B] feature-release-packaging
 - [A] feature-threadsafe-io-serialization
@@ -397,7 +399,7 @@ _none_
 - [A] feature-xtensa-stack-args-over-6-words
 - [A] feature-zero-init-contract
 - [B] meta-track-b-compiler-wishlist
-- [urgent] [A] feature-streaming-run-constructor
+- [urgent] [A] feature-metaclass-construct-dispatch
 
 ## Leverage (tickets each one unblocks)
 

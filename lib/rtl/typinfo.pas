@@ -197,8 +197,9 @@ end;
 { Allocate + zero an instance from RTTI, WITHOUT running its constructor (the
   .lfm streamer fills published properties afterwards).
 
-  STOPGAP CONTRACT (until urgent/feature-streaming-run-constructor lands — which
-  will add TClassRTTI.CtorPtr and call the constructor here, the proper fix):
+  STOPGAP CONTRACT (until the streamer constructs via a metaclass —
+  urgent/feature-metaclass-construct-dispatch + feature-pcl-component-ctor-owner —
+  after which the constructor runs and these stopgaps revert):
   a streamable class must NOT rely on its constructor for required state — move
   such setup to a path that also runs for streamed instances (e.g. CreateHandle
   at Realize) or make it lazy/guarded. Audited PCL 2026-06-23: TPaintBox (Canvas),
