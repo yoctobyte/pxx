@@ -56,6 +56,7 @@ void gtk_fixed_move(void* container, void* widget, int x, int y);
 void* gtk_widget_get_parent(void* widget);
 void gtk_widget_set_size_request(void* widget, int width, int height);
 void* gtk_bin_get_child(void* bin);
+void gtk_widget_set_halign(void* widget, int align);
 
 // Dialogs
 void* gtk_message_dialog_new(void* parent, int flags, int mtype, int buttons, char* fmt, char* msg);
@@ -71,6 +72,7 @@ int g_source_remove(unsigned int tag);
 
 void* gtk_scrolled_window_new(void* hadjustment, void* vadjustment);
 void gtk_scrolled_window_set_policy(void* scrolled_window, int hpolicy, int vpolicy);
+void gtk_scrolled_window_set_shadow_type(void* scrolled_window, int type);
 void* gtk_text_view_new(void);
 void* gtk_text_view_get_buffer(void* text_view);
 void gtk_text_buffer_set_text(void* buffer, char* text, int len);

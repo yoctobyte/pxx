@@ -341,6 +341,18 @@ begin
     CallMethod(m.Code, m.Data, userdata);
 end;
 
+{ GtkListBox 'row-selected' passes (listbox, row, userdata). Fire OnClick when a
+  row is actually selected (row <> nil; a cleared selection passes nil). }
+procedure ListBoxRowSelectedTramp(widget: Pointer; row: Pointer; userdata: Pointer); cdecl;
+var ctl: TControl; m: TMethod;
+begin
+  if row = nil then Exit;
+  ctl := userdata;
+  m := ctl.OnClick;
+  if m.Code <> nil then
+    CallMethod(m.Code, m.Data, userdata);
+end;
+
 { Dispatch a method procedure(Sender; Button, X, Y: Integer) of object: SysV
   rdi=Self(data), rsi=Sender, edx=Button, ecx=X, r8d=Y. }
 procedure CallMouseMethod(code: Pointer; data: Pointer; sender: Pointer; button, x, y: Integer);
@@ -818,6 +830,7 @@ var scroll, tv: Pointer;
 begin
   scroll := gtk_scrolled_window_new(nil, nil);
   gtk_scrolled_window_set_policy(scroll, GTK_POLICY_AUTOMATIC, GTK_POLICY_AUTOMATIC);
+  gtk_scrolled_window_set_shadow_type(scroll, 1);   { GTK_SHADOW_IN: a visible border }
   tv := gtk_text_view_new();
   gtk_container_add(scroll, tv);
   Result := scroll;
@@ -826,6 +839,8 @@ end;
 function TGtk3WidgetSet.CreateListBox(AListBox: TComponent): Pointer;
 begin
   Result := gtk_list_box_new();
+  { fire OnClick on row selection (OnClick is read live at signal time) }
+  SignalConnectData(Result, 'row-selected', @ListBoxRowSelectedTramp, Pointer(AListBox));
 end;
 
 function TGtk3WidgetSet.CreateComboBox(AComboBox: TComponent): Pointer;
@@ -907,6 +922,7 @@ begin
   if h = nil then begin Result := nil; Exit; end;
   row := gtk_list_box_row_new();
   label_ := gtk_label_new(PChar(AText));
+  gtk_widget_set_halign(label_, 1);   { GTK_ALIGN_START: left-align row text }
   gtk_container_add(row, label_);
   gtk_list_box_insert(h, row, -1);
   gtk_widget_show_all(row);
@@ -947,7 +963,17 @@ begin
 end;
 
 procedure TGtk3WidgetSet.ClearList(AListBox: TComponent);
+var h, row: Pointer; ctl: TControl;
 begin
+  ctl := TControl(AListBox);
+  h := ctl.Handle;
+  if h = nil then Exit;
+  row := gtk_list_box_get_row_at_index(h, 0);
+  while row <> nil do
+  begin
+    gtk_widget_destroy(row);
+    row := gtk_list_box_get_row_at_index(h, 0);
+  end;
 end;
 
 procedure TGtk3WidgetSet.AddComboItem(AComboBox: TComponent; const AText: string);

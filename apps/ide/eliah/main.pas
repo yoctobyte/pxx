@@ -53,6 +53,7 @@ type
     dir, curFile, designPath, pendingSnap: AnsiString;
     undoStack: array of AnsiString;
     undoCount: Integer;
+    lastW: Integer;        { last width seen by OnFormResize (loop guard) }
     paths: array of AnsiString;
     isdirs: array of Boolean;
     nItems: Integer;
@@ -285,6 +286,10 @@ end;
 
 procedure THandler.OnFormResize(Sender: TControl; w, h: Integer);
 begin
+  { only react to a real width change; the GtkFixed's size-allocate otherwise
+    feeds back on its own child sizes and walks the height up endlessly. }
+  if w = lastW then Exit;
+  lastW := w;
   Relayout(w, h);
 end;
 
@@ -549,6 +554,7 @@ begin
   H.FEditRow := -1;
   H.designPath := SAMPLE_LFM;   { seeded from the sample; Save targets it until a .lfm is opened }
   H.Win := Form1;
+  H.lastW := -1;
 
   Form1.OnResize := @H.OnFormResize;   { reflow panes on window resize }
 
