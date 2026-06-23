@@ -7996,6 +7996,7 @@ var names: array[0..MAX_DECL_NAMES-1] of AnsiString; n, i, idx: Integer; tk: TTy
     isArr, isDyn: Boolean; arrLo, arrHi: Integer; elemTk: TTypeKind; dynDepth: Integer;
     initElem: Integer; initVal: Int64;
     isArrND: Boolean; ndCnt, dLo, dHi, di, flatLen, ai: Integer;
+    moreDims: Boolean;
     ndDimLo, ndDimSpan: array[0..MAX_ARR_DIMS-1] of Integer;
 begin
   Next;
@@ -8048,18 +8049,28 @@ begin
       isArr := True; Next;
       if CurTok.Kind = tkLBrack then
       begin
-        Next;
         { One or more comma-separated dimensions: `array[a..b, c..d, ...] of T`.
-          1 dimension is an ordinary array; >=2 flattens to 1-D (N-D indexing via
-          BuildFlatNDIndex). }
+          An anonymous nested fixed array (`array[a] of array[b] of T`) has the
+          SAME layout as `array[a,b] of T` in FPC, so merge the inner dims into
+          the outer list. 1 dimension is an ordinary array; >=2 flattens to 1-D
+          (N-D indexing via BuildFlatNDIndex). }
         ndCnt := 0;
-        repeat
-          dLo := ConstEval; Expect(tkDotDot, '..'); dHi := ConstEval;
-          if ndCnt >= MAX_ARR_DIMS then Error('too many array dimensions');
-          ndDimLo[ndCnt] := dLo; ndDimSpan[ndCnt] := dHi - dLo + 1; Inc(ndCnt);
-        until not Eat(tkComma);
-        Expect(tkRBrack, ']');
-        Expect(tkOf, 'of');
+        moreDims := True;
+        while moreDims do
+        begin
+          Next;   { consume '[' }
+          repeat
+            dLo := ConstEval; Expect(tkDotDot, '..'); dHi := ConstEval;
+            if ndCnt >= MAX_ARR_DIMS then Error('too many array dimensions');
+            ndDimLo[ndCnt] := dLo; ndDimSpan[ndCnt] := dHi - dLo + 1; Inc(ndCnt);
+          until not Eat(tkComma);
+          Expect(tkRBrack, ']');
+          Expect(tkOf, 'of');
+          { Continue only for a FIXED nested array (`array [`), not a dynamic
+            `array of` element or a scalar/record element type. }
+          moreDims := (CurTok.Kind = tkArray) and (Tokens[TokPos].Kind = tkLBrack);
+          if moreDims then Next;   { consume 'array'; loop head consumes '[' }
+        end;
         if ndCnt = 1 then
         begin arrLo := ndDimLo[0]; arrHi := ndDimLo[0] + ndDimSpan[0] - 1; end
         else
@@ -8309,7 +8320,7 @@ var
   ordinal: Int64;
   tname: AnsiString;
   done, stopTypes: Boolean; loVal, hiVal, arrLen: Integer; isArr: Boolean; isPackedRecord: Boolean;
-  fIsDyn: Boolean; fDynDepth: Integer; fAi: Integer;
+  fIsDyn: Boolean; fDynDepth: Integer; fAi: Integer; tMoreDims: Boolean;
   tnOff, tnLen, ci, fnOff, fnLen, curFieldOff, fRec, fSize, fAlign, classAlign, depth, targetNOff, targetNLen: Integer;
   fTk: TTypeKind;
   parentCi, slot, mmi, mnOff, mnLen, pnOff, pnLen, rFOff, rFLen, rMOff, rMLen, wFOff, wFLen, wMOff, wMLen, rnOff, rnLen, wnOff, wnLen, propRec, i, vmtSlots: Integer;
@@ -9217,16 +9228,25 @@ begin
         begin
           { Named fixed-array type `TA = array[a..b (, c..d, ...)] of T` —
             register it so a var/field/param of type TA becomes a real array
-            (1-D or flattened N-D). Previously skipped → TA was not an array. }
-          Next;
+            (1-D or flattened N-D). An anonymous nested fixed array
+            (`array[a] of array[b] of T`) is merged into `array[a,b] of T`
+            (identical FPC layout). Previously skipped → TA was not an array. }
           tdCnt := 0;
-          repeat
-            tdLo := ConstEval; Expect(tkDotDot, '..'); tdHi := ConstEval;
-            if tdCnt >= MAX_ARR_DIMS then Error('too many array dimensions');
-            tdDimLo[tdCnt] := tdLo; tdDimSpan[tdCnt] := tdHi - tdLo + 1; Inc(tdCnt);
-          until not Eat(tkComma);
-          Expect(tkRBrack, ']');
-          Expect(tkOf, 'of');
+          tMoreDims := True;
+          while tMoreDims do
+          begin
+            Next;   { consume '[' }
+            repeat
+              tdLo := ConstEval; Expect(tkDotDot, '..'); tdHi := ConstEval;
+              if tdCnt >= MAX_ARR_DIMS then Error('too many array dimensions');
+              tdDimLo[tdCnt] := tdLo; tdDimSpan[tdCnt] := tdHi - tdLo + 1; Inc(tdCnt);
+            until not Eat(tkComma);
+            Expect(tkRBrack, ']');
+            Expect(tkOf, 'of');
+            { Continue only for a FIXED nested array, not a dynamic `array of`. }
+            tMoreDims := (CurTok.Kind = tkArray) and (Tokens[TokPos].Kind = tkLBrack);
+            if tMoreDims then Next;   { consume 'array'; loop head consumes '[' }
+          end;
           aElemTk := ParseTypeKind;
           if tdCnt = 1 then
           begin aLo := tdDimLo[0]; aHi := tdDimLo[0] + tdDimSpan[0] - 1; end
