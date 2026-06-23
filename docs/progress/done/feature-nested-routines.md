@@ -120,3 +120,26 @@ NestScanSpans leave CurTok correctly after the rewritten forward decl in the
 pass-2 replay (verify hdrEnd/finalCur spans + the trailing ParseSubroutine land
 on the token after `forward;`). Needs full `make test` (self-host critical:
 ParseSubroutine + pass-2 are on every program's path).
+
+## Resolution (8dc5546, 2026-06-23)
+
+Fixed by reconciling the lambda-lift token surgery with the pre-scan two-pass
+driver. The regression mechanism diagnosed in the ticket was right (mid-stream
+flush vs fixed span replay); the "second layer" from the reverted attempt turned
+out to be the same flush issue surfacing differently — the in-place forward
+reparse itself is fine.
+
+What landed:
+- `FlushPendingNestedProcs`: append stashed routines at end-of-stream + one
+  DeclItem span per routine (boundaries recorded at stash time via
+  `PendNestRtnStart`), instead of `InsertTokens(TokPos-1)` mid-stream.
+- Both body-pass drivers (ParseProgram, ParseUnit) → `while i < DeclItemCount`
+  so appended/deeper-nested items are parsed.
+- `Pass2Active`/`Pass2BodyTok` + `AdjustPass2Spans` (hooked into InsertTokens and
+  the in-place body removal) keep the remaining DeclItem spans + body-begin
+  marker in sync with body-pass token edits. Gated on Pass2Active → self-build
+  (no nested routines) byte-identical.
+
+Verified vs FPC objfpc: nested proc/fn, multiple siblings in one body,
+enclosing-local capture, method Self-capture, nested recursion, unit-scoped
+nested routines. Self-host byte-identical, full make test green.

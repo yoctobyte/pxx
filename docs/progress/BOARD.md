@@ -26,7 +26,7 @@ _none_
 | --- | --- | --- | --- | --- |
 | feature-c-runtime-library | B | feature | C runtime/library layer (`lib/crtl`) plus direct C-library packages | feature-c-source-frontend |
 
-## backlog (51)
+## backlog (50)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -62,7 +62,6 @@ _none_
 | feature-inline-routines | A | feature | Inline routine expansion (`inline;`) | — |
 | feature-lazy-standard-unit-emission | A | feature | Lazy standard-unit emission / routine-level dead-code elimination | — |
 | feature-metaclass-descendant-enforcement | A | feature | Metaclass alias descendant-constraint enforcement | — |
-| feature-nested-routines | A | feature | feature: nested (local) functions and procedures | — |
 | feature-networking | B | feature | Networking runtime | — |
 | feature-nilpy-idf-import | A | feature | nilpy includes anything from ESP-IDF and it just works | feature-c-source-frontend, feature-esp32-idf-xtensa |
 | feature-nil-python-frontend | A | feature | Nil Python frontend (`.npy`) | — |
@@ -116,7 +115,7 @@ _none_
 | feature-mimic-fpc | B | feature | `mimic FPC` compatibility mode | — |
 | feature-string-model-tyfixedstring | B | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (215)
+## done (216)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -286,6 +285,7 @@ _none_
 | feature-mode-delphi | A | feature | `{$mode delphi}` support — incl. the @-optional proc-pointer disambiguation | — |
 | feature-multidim-fixed-arrays | A | feature | Multidimensional fixed arrays | — |
 | feature-nested-anonymous-fixed-array | A | feature | Anonymous nested fixed array `array[..] of array[..] of T` | — |
+| feature-nested-routines | A | feature | feature: nested (local) functions and procedures | — |
 | feature-open-array-constructor-arg | A | feature | feature: array constructor `[...]` as an open-array argument | — |
 | feature-pal-file-stat-metadata | B | feature | PAL file stat metadata | — |
 | feature-pal-network-datagram-poll-errno | B | feature | PAL network: datagrams, readiness polling, and exact errno semantics | — |
@@ -374,7 +374,6 @@ _none_
 - [A] feature-inline-routines
 - [A] feature-lazy-standard-unit-emission
 - [A] feature-metaclass-descendant-enforcement
-- [A] feature-nested-routines
 - [B] feature-networking
 - [A] feature-nil-python-frontend
 - [A] feature-object-reference-type
