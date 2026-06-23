@@ -1431,6 +1431,47 @@ begin
   IRAppend(IR_LABEL, -1, -1, -1, endLbl, 0);
 end;
 
+{ Append a synthetic string literal to the raw TokChars pool and return an
+  IR_CONST_STR node referencing it. Lets IR lowering emit string writes for
+  text that is not in the user's source (e.g. Boolean TRUE/FALSE). }
+function IRSyntheticConstStr(const s: AnsiString): Integer;
+var k, off: Integer;
+begin
+  off := TokCharLen;
+  for k := 1 to Length(s) do
+  begin
+    TokChars[TokCharLen] := s[k];
+    Inc(TokCharLen);
+  end;
+  Result := IRAppend(IR_CONST_STR, off, Length(s), -1, 0, Ord(tyString));
+end;
+
+{ Lower a Boolean `write` argument to a TRUE/FALSE string write, branching at
+  runtime. Target-independent: emits IR_JUMP_IF_FALSE / IR_WRITE(const_str) /
+  IR_JUMP / IR_LABEL, all of which every backend already handles, so the boolean
+  output is FPC-correct on all targets at once. Returns the first node; writes
+  the final node (the end label) into lastNode. wid = field width (-1 = none). }
+function IRLowerBoolWrite(value, wid: Integer; var lastNode: Integer): Integer;
+var bFalse, bEnd: Integer;
+begin
+  bFalse := IRNewLabel;
+  bEnd := IRNewLabel;
+  Result := IRAppend(IR_JUMP_IF_FALSE, bFalse, value, -1, 0, 0);
+  { Pascal/FPC renders TRUE/FALSE; the Nil-Python frontend renders Python's
+    True/False. }
+  if isNilPy then
+    IRAppend(IR_WRITE, IRSyntheticConstStr('True'), wid, -1, 0, Ord(tyString))
+  else
+    IRAppend(IR_WRITE, IRSyntheticConstStr('TRUE'), wid, -1, 0, Ord(tyString));
+  IRAppend(IR_JUMP, bEnd, -1, -1, 0, 0);
+  IRAppend(IR_LABEL, -1, -1, -1, bFalse, 0);
+  if isNilPy then
+    IRAppend(IR_WRITE, IRSyntheticConstStr('False'), wid, -1, 0, Ord(tyString))
+  else
+    IRAppend(IR_WRITE, IRSyntheticConstStr('FALSE'), wid, -1, 0, Ord(tyString));
+  lastNode := IRAppend(IR_LABEL, -1, -1, -1, bEnd, 0);
+end;
+
 function IRLowerAST(node: Integer): Integer;
 var left, right, seq, item, value, outNode, first, last, leftAddr, argNode, argVal, intCallNode, intArgSeq, argNode2, zeroVal, procIdx, zeroBytes: Integer;
     pairNode, condNode, specialId, classIdx, slot, cpi, pathIdx: Integer;
@@ -1438,6 +1479,7 @@ var left, right, seq, item, value, outNode, first, last, leftAddr, argNode, argV
     startLabel, elseLabel, endLabel, startLabelNode, endLabelNode: Integer;
     lhsNode, pair3, pair1, pair2, initNode, limitNode, isDownNode, bodyNode: Integer;
     foldOff, foldK: Integer;
+    bLastNode: Integer;
     foldStr: AnsiString;
     down: Boolean;
     varIdx: Integer;
@@ -3268,7 +3310,25 @@ begin
       begin
         { IR_WRITE: IRB = field width (0 = none), IRC = decimals (-1 = none),
           IRTk = the source expression type (for write dispatch). }
-        if ASTKind[item] = AN_ARG then
+        bLastNode := -1;
+        if (ASTKind[item] = AN_ARG) and (IntToTypeKind(ASTTk[ASTLeft[item]]) = tyBoolean) then
+        begin
+          { write(Boolean[:w]) -> FPC-style TRUE/FALSE text, branched at runtime. }
+          value := IRLowerAST(ASTLeft[item]);
+          outNode := IRLowerBoolWrite(value, ASTIVal[item], bLastNode);
+        end
+        else if (ASTKind[item] = AN_PAIR) and (IntToTypeKind(ASTTk[ASTLeft[item]]) = tyBoolean) then
+        begin
+          value := IRLowerAST(ASTLeft[item]);
+          outNode := IRLowerBoolWrite(value, -1, bLastNode);
+        end
+        else if (ASTKind[item] <> AN_ARG) and (ASTKind[item] <> AN_PAIR) and
+                (IntToTypeKind(ASTTk[item]) = tyBoolean) then
+        begin
+          value := IRLowerAST(item);
+          outNode := IRLowerBoolWrite(value, -1, bLastNode);
+        end
+        else if ASTKind[item] = AN_ARG then
         begin
           { A Variant arg writes its slot address; codegen reads tag+payload and
             dispatches at runtime (IRTk stays tyVariant). }
@@ -3300,7 +3360,7 @@ begin
           outNode := IRAppend(IR_WRITE, value, -1, -1, 0, IRTk[value]);
         end;
         if first < 0 then first := outNode;
-        last := outNode;
+        if bLastNode >= 0 then last := bLastNode else last := outNode;
         item := ASTRight[item];
       end;
       if ASTKind[node] = AN_WRITELN then

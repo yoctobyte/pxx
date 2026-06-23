@@ -1,10 +1,30 @@
 # `WriteLn(Boolean)` prints `0`/`1` instead of `FALSE`/`TRUE`
 
 - **Type:** bug (output formatting / FPC-compat) — Track A
-- **Status:** backlog
+- **Status:** done
 - **Owner:** — (Track A)
 - **Opened:** 2026-06-23
+- **Closed:** 2026-06-23
 - **Found by:** differential probe vs FPC (`writeln(1>0)` → pxx `1`, fpc `TRUE`).
+
+## Resolution (2026-06-23)
+
+Approach 2 (target-independent IR lowering) implemented. Added `IRSyntheticConstStr`
+(appends a literal to the `TokChars` raw pool and returns an `IR_CONST_STR` node —
+the missing "synthetic string literal" the earlier attempt was blocked on) and
+`IRLowerBoolWrite` in `compiler/ir.inc`. In `AN_WRITE`/`AN_WRITELN` lowering, a
+`tyBoolean` arg (plain, `AN_ARG`/`:width`, or `AN_PAIR`) now lowers to
+`IR_JUMP_IF_FALSE / IR_WRITE('TRUE') / IR_JUMP / IR_LABEL / IR_WRITE('FALSE') /
+IR_LABEL` — all primitives every backend already handles, so x86-64, i386,
+aarch64, arm32 and ESP riscv32/xtensa all print FPC-correct `TRUE`/`FALSE` at
+once (field width honored via the existing `IR_CONST_STR` write path). The
+Nil-Python frontend (`isNilPy`) renders Python's `True`/`False` instead.
+
+Test expectations flipped from `0`/`1`: `test_set_runtime`, `test_uint64_ops`,
+`test_conformance_1`, `test_conformance_2`, `test_cross_global_init`,
+`test_variant_ops`, `test_variant_string_ops`, `test_array_of_const_types`
+(`VBoolean`), `test_nilpy_bool` (→ `True`/`False`). Gate green: `make test`
+(self-host byte-identical after 1-gen reseed), cross-output tests, cross-bootstrap.
 
 ## Problem
 

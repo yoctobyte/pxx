@@ -147,7 +147,7 @@ test-nilpy: $(COMPILER)
 	./$(COMPILER) test/test_nilpy_convert.npy /tmp/test_nilpy_convert26
 	test "$$(/tmp/test_nilpy_convert26)" = "$$(printf '3\n42')"
 	./$(COMPILER) test/test_nilpy_bool.npy /tmp/test_nilpy_bool26
-	test "$$(/tmp/test_nilpy_bool26)" = "$$(printf '1\n1\n1\n0\n1\n1')"
+	test "$$(/tmp/test_nilpy_bool26)" = "$$(printf 'True\nTrue\nTrue\nFalse\nTrue\nTrue')"
 	./$(COMPILER) test/test_nilpy_str_float.npy /tmp/test_nilpy_str_float26
 	test "$$(/tmp/test_nilpy_str_float26)" = "$$(printf '3.14\n2.5\n-1.25\npi=3.14159\n3\n2')"
 	! ./$(COMPILER) test/test_nilpy_slash_fail.npy /tmp/test_nilpy_slash_fail26 > /tmp/test_nilpy_slash_fail.log 2>&1
@@ -240,7 +240,7 @@ test-core: $(COMPILER)
 	./$(COMPILER) test/test_const_record_temp_managed.pas /tmp/test_const_record_temp_managed26
 	test "$$(/tmp/test_const_record_temp_managed26)" = "$$(printf '7\n42\n42')"
 	./$(COMPILER) test/test_set_runtime.pas /tmp/test_set_runtime26
-	test "$$(/tmp/test_set_runtime26)" = "$$(printf '1 1 0\n1\n0 1\n0 1 1 0\n1 1 1 0\n1 0 1')"
+	test "$$(/tmp/test_set_runtime26)" = "$$(printf 'TRUE TRUE FALSE\nTRUE\nFALSE TRUE\nFALSE TRUE TRUE FALSE\nTRUE TRUE TRUE FALSE\nTRUE FALSE TRUE')"
 	./$(COMPILER) test/test_dynarray_copy.pas /tmp/test_dynarray_copy26
 	test "$$(/tmp/test_dynarray_copy26)" = "$$(printf '3\n30\n40\n50\n2\n50\n60\n2\n30 60\n3\n1 10 100\n2 20 200\n3 30 300\n6 60')"
 	./$(COMPILER) test/test_val_builtin.pas /tmp/test_val_builtin26
@@ -332,7 +332,7 @@ test-core: $(COMPILER)
 	./$(COMPILER) test/test_interface_arc_exc.pas /tmp/test_interface_arc_exc26
 	test "$$(/tmp/test_interface_arc_exc26)" = "$$(printf 'reassign created=2 freed=2\ncaught\nunwind freed=3')"
 	./$(COMPILER) test/test_uint64_ops.pas /tmp/test_uint64_ops26
-	test "$$(/tmp/test_uint64_ops26)" = "$$(printf '9600629759793949339\n0\n8846114313915602276\n4344256703880665856\n8\n1099511627776\n1\n0\n6')"
+	test "$$(/tmp/test_uint64_ops26)" = "$$(printf '9600629759793949339\n0\n8846114313915602276\n4344256703880665856\n8\n1099511627776\nTRUE\nFALSE\n6')"
 	./$(COMPILER) test/test_case_io.pas /tmp/test_case_io26
 	test "$$(/tmp/test_case_io26)" = "$$(printf 'one\nab\ntwo\nthree\n42')"
 	./$(COMPILER) test/test_uses_sysutils.pas /tmp/test_uses_sysutils26
@@ -390,15 +390,15 @@ test-core: $(COMPILER)
 	./$(COMPILER) test/test_varrec_alloc_after.pas /tmp/test_varrec_alloc_after26
 	test "$$(/tmp/test_varrec_alloc_after26)" = "$$(printf 'n=2: S 42\nn=4: 10 20 30 40\nn=3: 115 11 22')"
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_array_of_const_types.pas /tmp/test_aoc_types26
-	test "$$(/tmp/test_aoc_types26)" = "$$(printf 'vt0: 42\nvt1: 1\nvt2: Q\nvt16: 5000000000\nvt3: 3.50\nvt11: hi')"
+	test "$$(/tmp/test_aoc_types26)" = "$$(printf 'vt0: 42\nvt1: TRUE\nvt2: Q\nvt16: 5000000000\nvt3: 3.50\nvt11: hi')"
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_cross_write_pchar.pas /tmp/test_write_pchar26
 	test "$$(/tmp/test_write_pchar26)" = "$$(printf 'hello\nhello\nhello world')"
 	./$(COMPILER) test/test_cross_static_open_array.pas /tmp/test_static_open26
 	test "$$(/tmp/test_static_open26)" = "$$(printf 'len=4 high=3 sum=100 a0=10\nlen=2 high=1 sum=15 a0=7')"
 	./$(COMPILER) test/test_conformance_1.pas /tmp/test_conformance_1_26
-	test "$$(/tmp/test_conformance_1_26)" = "$$(printf 'shape 0 square area=9.00 tag=5000000004\nshape 1 circle area=12.00 tag=1000000000\nshape 2 generic area=0.00 tag=1000000007\ntotal area=21.00\npts len=3 high=2\n  pt p 0,0\n  pt p 2,1\n  pt p 4,4\n  i 42\n  q 9000000000\n  b 1\n  s mixed\nv int=1\ncaught: boom\ncaught=1\nconcat=abcdef len=6\nV...V.')"
+	test "$$(/tmp/test_conformance_1_26)" = "$$(printf 'shape 0 square area=9.00 tag=5000000004\nshape 1 circle area=12.00 tag=1000000000\nshape 2 generic area=0.00 tag=1000000007\ntotal area=21.00\npts len=3 high=2\n  pt p 0,0\n  pt p 2,1\n  pt p 4,4\n  i 42\n  q 9000000000\n  b TRUE\n  s mixed\nv int=1\ncaught: boom\ncaught=1\nconcat=abcdef len=6\nV...V.')"
 	./$(COMPILER) test/test_conformance_2.pas /tmp/test_conformance_2_26
-	test "$$(/tmp/test_conformance_2_26)" = "$$(printf 'q=7000000005 mix=111000000083\nfact20=2432902008176640000\neven10=1 odd7=1\nsum9=45 big=97864\n  rec r A=1000000000 B=0 sum=1000000000\n  rec r A=2000000000 B=1 sum=2000000001\n  rec r A=3000000000 B=4 sum=3000000004\ncopy A=3000000000 B=99 orig B=4\nopensum=100\n  i 42\n  q 9000000000\n  b 1\n  s mixed\nconcat=abcdef len=6\nV.--V.\ncaught=11 gdiv=5 gzero=-1')"
+	test "$$(/tmp/test_conformance_2_26)" = "$$(printf 'q=7000000005 mix=111000000083\nfact20=2432902008176640000\neven10=TRUE odd7=TRUE\nsum9=45 big=97864\n  rec r A=1000000000 B=0 sum=1000000000\n  rec r A=2000000000 B=1 sum=2000000001\n  rec r A=3000000000 B=4 sum=3000000004\ncopy A=3000000000 B=99 orig B=4\nopensum=100\n  i 42\n  q 9000000000\n  b TRUE\n  s mixed\nconcat=abcdef len=6\nV.--V.\ncaught=11 gdiv=5 gzero=-1')"
 	./$(COMPILER) test/test_cross_shortcircuit.pas /tmp/test_shortcircuit26
 	test "$$(/tmp/test_shortcircuit26)" = "$$(printf 'and-false calls=0\nor-true\nor-true calls=0\nand-true\nand-true calls=1\nor-false\nor-false calls=2\nguard1 ok\nchain calls=2\nbits 2 7 8')"
 	./$(COMPILER) test/test_many_local_names.pas /tmp/test_many_local_names26
@@ -408,7 +408,7 @@ test-core: $(COMPILER)
 	./$(COMPILER) test/test_cross_case_range.pas /tmp/test_case_range26
 	test "$$(/tmp/test_case_range26)" = "$$(printf 'ints=8436\nchars=206\nbucket=LLLMMMMHHH')"
 	./$(COMPILER) test/test_cross_global_init.pas /tmp/test_global_init26
-	test "$$(/tmp/test_global_init26)" = "$$(printf 'k=42 q=5000000000 flag=1\ntabsum=150\nlutsum=6000000000')"
+	test "$$(/tmp/test_global_init26)" = "$$(printf 'k=42 q=5000000000 flag=TRUE\ntabsum=150\nlutsum=6000000000')"
 	./$(COMPILER) test/test_cross_typed_const.pas /tmp/test_typed_const26
 	test "$$(/tmp/test_typed_const26)" = "$$(printf 'limit=100 big=9000000000\ntabsum=14\nlutsum=6000000000\ntab2=40')"
 	./$(COMPILER) test/test_local_typed_const.pas /tmp/test_local_tc26
@@ -871,13 +871,13 @@ test-core: $(COMPILER)
 	./$(COMPILER) test/test_variant.pas /tmp/test_variant26
 	test "$$(/tmp/test_variant26)" = "$$(printf '42\n-7\nQ\n3.14\n1\n100')"
 	./$(COMPILER) test/test_variant_ops.pas /tmp/test_variant_ops26
-	test "$$(/tmp/test_variant_ops26)" = "$$(printf '8\n2\n15\n7.5\n12.5\n1\n0\n0\n1\n1\n11\n1')"
+	test "$$(/tmp/test_variant_ops26)" = "$$(printf '8\n2\n15\n7.5\n12.5\nTRUE\nFALSE\nFALSE\nTRUE\nTRUE\n11\nTRUE')"
 	./$(COMPILER) test/test_variant_div.pas /tmp/test_variant_div26
 	test "$$(/tmp/test_variant_div26)" = "$$(printf '3\n2\n3.4\n2.5')"
 	./$(COMPILER) test/test_variant_string.pas /tmp/test_variant_string26
 	test "$$(/tmp/test_variant_string26)" = "$$(printf 'hello\n42\nhello\nmanaged\nworld\nlocal\n7')"
 	./$(COMPILER) test/test_variant_string_ops.pas /tmp/test_variant_string_ops26
-	test "$$(/tmp/test_variant_string_ops26)" = "$$(printf '1\n0\n0\n1\n1\n1\n0\n0\n1\n1\n1\n1\n1\n0\n1\n1\n0\nhello world\nab\nsweet potato\ngreen tomato\n0\n1\n0\n0')"
+	test "$$(/tmp/test_variant_string_ops26)" = "$$(printf 'TRUE\nFALSE\nFALSE\nTRUE\nTRUE\nTRUE\nFALSE\nFALSE\nTRUE\nTRUE\nTRUE\nTRUE\nTRUE\nFALSE\nTRUE\nTRUE\nFALSE\nhello world\nab\nsweet potato\ngreen tomato\nFALSE\nTRUE\nFALSE\nFALSE')"
 	./$(COMPILER) test/test_float_intrinsics.pas /tmp/test_float_intrinsics26
 	test "$$(/tmp/test_float_intrinsics26)" = "$$(printf '3\n-3\n4\n2\n4\n0.7500\n3.0')"
 	./$(COMPILER) test/test_nil_python_core.npy /tmp/test_nil_python_core26
@@ -897,7 +897,7 @@ test-core: $(COMPILER)
 	./$(COMPILER) test/test_nilpy_convert.npy /tmp/test_nilpy_convert26
 	test "$$(/tmp/test_nilpy_convert26)" = "$$(printf '3\n42')"
 	./$(COMPILER) test/test_nilpy_bool.npy /tmp/test_nilpy_bool26
-	test "$$(/tmp/test_nilpy_bool26)" = "$$(printf '1\n1\n1\n0\n1\n1')"
+	test "$$(/tmp/test_nilpy_bool26)" = "$$(printf 'True\nTrue\nTrue\nFalse\nTrue\nTrue')"
 	./$(COMPILER) test/test_nilpy_str_float.npy /tmp/test_nilpy_str_float26
 	test "$$(/tmp/test_nilpy_str_float26)" = "$$(printf '3.14\n2.5\n-1.25\npi=3.14159\n3\n2')"
 	./$(COMPILER) test/test_sets.pas /tmp/test_sets26
