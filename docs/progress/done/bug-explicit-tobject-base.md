@@ -1,7 +1,7 @@
 # bug: explicit `class(TObject)` base "type not found"
 
 - **Type:** bug (Track A — symbol resolution)
-- **Status:** backlog
+- **Status:** done
 - **Found:** 2026-06-23, differential probe vs FPC
 - **Severity:** low-medium (common FPC/Delphi spelling; blocks `class(TObject, IFoo)`)
 
@@ -35,3 +35,12 @@ symbols; only the implicit/interface forms resolve.
 ## Repro
 
 `type tc = class(TObject) procedure m; end; ...` → base type not found.
+
+## Resolution (2026-06-23)
+
+Parser (class-base list): a base name that is not a registered user class but is
+`TObject` / `TInterfacedObject` is now accepted as the implicit root (parentCi
+stays -1, same as a plain `class`) instead of erroring "base type not found".
+`class(TObject)`, `class(TObject, IFoo)`, `class(TInterfacedObject, IFoo)` all
+resolve. Front-end only. Gate (front-end): make bootstrap (self-host
+byte-identical) + class/interface tests. Closes bug-explicit-tobject-base.

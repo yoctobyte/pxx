@@ -8645,16 +8645,27 @@ begin
           repeat
             if CurTok.Kind <> tkIdent then Error('expected base class or interface name');
             tmpCi := FindUClass(CurTok.SVal);
-            if tmpCi < 0 then Error('base type not found: ' + CurTok.SVal);
-            if UClsIsInterface[tmpCi] then
+            if (tmpCi < 0) and
+               (CaseEqual(CurTok.SVal, 'TObject') or CaseEqual(CurTok.SVal, 'TInterfacedObject')) then
             begin
-              if implCnt > 15 then Error('too many implemented interfaces (v1: max 16)');
-              implIntf[implCnt] := tmpCi; Inc(implCnt);
+              { Explicit root base `class(TObject)` / `class(TInterfacedObject, IFoo)`
+                == the implicit root: leave parentCi = -1, same as a plain `class`.
+                These names are not registered as user classes (the root is
+                implicit), so accept them by name rather than erroring. }
             end
             else
             begin
-              if parentCi >= 0 then Error('a class may have only one parent class');
-              parentCi := tmpCi;
+              if tmpCi < 0 then Error('base type not found: ' + CurTok.SVal);
+              if UClsIsInterface[tmpCi] then
+              begin
+                if implCnt > 15 then Error('too many implemented interfaces (v1: max 16)');
+                implIntf[implCnt] := tmpCi; Inc(implCnt);
+              end
+              else
+              begin
+                if parentCi >= 0 then Error('a class may have only one parent class');
+                parentCi := tmpCi;
+              end;
             end;
             Next;
           until not Eat(tkComma);

@@ -25,13 +25,12 @@ _none_
 | --- | --- | --- | --- | --- |
 | feature-c-runtime-library | B | feature | C runtime/library layer (`lib/crtl`) plus direct C-library packages | feature-c-source-frontend |
 
-## backlog (56)
+## backlog (55)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
 | bug-cardinal-expr-promotion | A | bug |  | — |
 | bug-const-section-before-constructor | A | bug | bug: const section before constructor/destructor not terminated | — |
-| bug-explicit-tobject-base | A | bug | bug: explicit `class(TObject)` base "type not found" | — |
 | bug-ir-unsupported-call-lvalue | A | bug | bug: "Unsupported linear node Kind=10" — AN_CALL in lvalue-address position | — |
 | bug-setlength-array-element | A | bug | bug: SetLength rejects an indexed array element as target | — |
 | bug-stderr-not-fd2 | B | bug | `writeln(StdErr, ...)` goes to stdout — StdErr not connected to fd 2 | — |
@@ -120,7 +119,7 @@ _none_
 | feature-mimic-fpc | B | feature | `mimic FPC` compatibility mode | — |
 | feature-string-model-tyfixedstring | B | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (209)
+## done (210)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -143,6 +142,7 @@ _none_
 | bug-c-quoted-include-search-path | A | bug | C quoted includes do not search the including file directory | — |
 | bug-dynarray-in-record-corrupt | A | bug | Dynamic array as a record field is corrupted (value return + var-param assign) | — |
 | bug-dynarray-whole-var-assign-cross | A | bug | Whole dynamic-array variable assignment (`b := a`) unsupported on i386 + aarch64 | — |
+| bug-explicit-tobject-base | A | bug | bug: explicit `class(TObject)` base "type not found" | — |
 | bug-for-in-implicit-self-field | A | bug | `for-in` over an implicit-`Self` array field fails in methods | — |
 | bug-forin-in-method-global-var-corruption | A | bug | `for-in` inside a method corrupts a dyn-array global declared after it | — |
 | bug-forin-qualified-set-member-source | A | bug | `for-in` over a qualified set member source fails | — |
@@ -346,7 +346,6 @@ _none_
 
 - [A] bug-cardinal-expr-promotion
 - [A] bug-const-section-before-constructor
-- [A] bug-explicit-tobject-base
 - [A] bug-ir-unsupported-call-lvalue
 - [A] bug-setlength-array-element
 - [B] bug-stderr-not-fd2
