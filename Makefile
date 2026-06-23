@@ -437,6 +437,9 @@ test-core: $(COMPILER)
 	test "$$(/tmp/test_succ_pred_odd26)" = "$$(printf '6 4\nb\ny\nodd7\neven8\n1')"
 	./$(COMPILER) test/test_shr_width.pas /tmp/test_shr_width26
 	test "$$(/tmp/test_shr_width26)" = "$$(printf '2147483644\n2147483644\n9223372036854775804\n1099511627776\n256')"
+	./$(COMPILER) test/test_concat_arg_bss.pas /tmp/test_concat_arg_bss26 > /tmp/test_concat_arg_bss.log
+	test "$$(/tmp/test_concat_arg_bss26)" = "24"
+	@if grep -qE 'bss=[0-9]{7,}B' /tmp/test_concat_arg_bss.log; then echo "concat-arg BSS bloat regressed:"; grep -oE 'bss=[0-9]+B' /tmp/test_concat_arg_bss.log; exit 1; else echo "concat-arg-bss: OK ($$(grep -oE 'bss=[0-9]+B' /tmp/test_concat_arg_bss.log))"; fi
 	./$(COMPILER) test/test_abs_sqr.pas /tmp/test_abs_sqr26
 	test "$$(/tmp/test_abs_sqr26)" = "$$(printf '5 7\n49\n3.50\n6.25\n43')"
 	./$(COMPILER) test/test_upcase_pos.pas /tmp/test_upcase_pos26

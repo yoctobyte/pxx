@@ -1492,7 +1492,13 @@ begin
     sz := TypeSize(tk);
     if tk = tyString then
     begin
-      if CurProc < 0 then sz := STRING_CAP + 8
+      { A NAMED global frozen string reserves the full capacity (it may hold any
+        string / be reset). A hidden temp (name = '', e.g. a concat result
+        materialised as a call argument in the main body) never needs 8 MB — give
+        it the bounded local capacity, like the same temp inside a procedure
+        (bug-ansistring-concat-arg-static-bloat: each such main-scope site
+        otherwise reserved ~8 MB of BSS). }
+      if (CurProc < 0) and (name <> '') then sz := STRING_CAP + 8
       else sz := LOCAL_STR_CAP + 8;
     end
     else if (tk = tyFixedString) or (tk = tyShortString) then

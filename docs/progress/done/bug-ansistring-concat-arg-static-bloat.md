@@ -1,7 +1,7 @@
 # AnsiString concat expression as a call argument allocates an ~8 MB static buffer per site
 
 - **Type:** bug (Track A — codegen / managed-string temporaries)
-- **Status:** backlog
+- **Status:** DONE — 2026-06-23.
 - **Owner:** —
 - **Opened:** 2026-06-23 (found building the `screen` TUI lib, Track B)
 
@@ -66,3 +66,17 @@ idiomatic anyway. No library code bent around this.
 - A concat expression passed as an `AnsiString` argument uses a normal
   small/heap temporary; the repro's BSS is ~KB, not ~8 MB/site.
 - Self-host fixedpoint + existing string tests stay green.
+
+## Fix log
+
+- 2026-06-23 — DONE (46666a2). Root cause: a frozen `tyString` symbol at GLOBAL scope
+  (`CurProc < 0`) was sized `STRING_CAP` (8 MB) in AllocVar (symtab.inc ~1495);
+  proc-locals already used `LOCAL_STR_CAP` (256). A concat result materialised as
+  a call argument in the MAIN body is a HIDDEN temp (name `''`) at global scope,
+  so it got the full 8 MB — per site. Fix: only NAMED global frozen strings keep
+  `STRING_CAP`; hidden temps (`name = ''`) use `LOCAL_STR_CAP + 8` like the same
+  temp inside a procedure. Repro BSS 16 MB -> 4768 B; output unchanged. Named
+  global string vars and the compiler's own buffers are untouched (self-host
+  byte-identical, no reseed). Test `test/test_concat_arg_bss.pas` + a Makefile
+  BSS-size guard (fails if any `bss=` >= 7 digits). make test + cross-bootstrap
+  green.
