@@ -50,6 +50,8 @@ type
     procedure OnRun(Sender: TObject);
     procedure OnUp(Sender: TObject);
     procedure OnDesignMouseDown(Sender: TControl; Button, X, Y: Integer);
+    procedure OnDesignMouseMove(Sender: TControl; Button, X, Y: Integer);
+    procedure OnDesignMouseUp(Sender: TControl; Button, X, Y: Integer);
     procedure ShowInspector(idx: Integer);
   end;
 
@@ -156,9 +158,23 @@ end;
 procedure THandler.OnDesignMouseDown(Sender: TControl; Button, X, Y: Integer);
 var idx: Integer;
 begin
-  idx := Dsn.SelectAt(X, Y);
+  idx := Dsn.BeginDrag(X, Y);
   DesignBox.Invalidate;
   ShowInspector(idx);
+end;
+
+procedure THandler.OnDesignMouseMove(Sender: TControl; Button, X, Y: Integer);
+begin
+  if not Dsn.Dragging then Exit;
+  Dsn.DragTo(X, Y);
+  DesignBox.Invalidate;
+  ShowInspector(Dsn.Sel);
+end;
+
+procedure THandler.OnDesignMouseUp(Sender: TControl; Button, X, Y: Integer);
+begin
+  Dsn.EndDrag;
+  ShowInspector(Dsn.Sel);
 end;
 
 var
@@ -225,9 +241,12 @@ begin
   DesignBox.SetBounds(W_TREE + centerW, TOOLBAR_H, W_RIGHT, centerH);
   pm.Code := @Dsn.Paint; pm.Data := Dsn;
   DesignBox.OnPaint := pm;
-  { mouse-select: click a box -> hit-test the docmodel -> outline + inspector }
-  pm.Code := @H.OnDesignMouseDown; pm.Data := H;
-  DesignBox.OnMouseDown := pm;
+  { mouse-select + drag-move: down hit-tests & grabs, move drags the selected
+    box, up releases. (inline TMethod per urgent/bug-method-ptr-no-coerce…) }
+  pm.Data := H;
+  pm.Code := @H.OnDesignMouseDown; DesignBox.OnMouseDown := pm;
+  pm.Code := @H.OnDesignMouseMove; DesignBox.OnMouseMove := pm;
+  pm.Code := @H.OnDesignMouseUp;   DesignBox.OnMouseUp := pm;
 
   Props := TListBox.Create;
   Props.Parent := Form1;
@@ -271,6 +290,20 @@ begin
     if H.Dsn.Sel < 0 then begin writeln('SMOKE FAIL: no node selected'); Halt(1); end;
     if H.Dsn.Doc.NodeCaption(H.Dsn.Sel) <> 'OK' then
       begin writeln('SMOKE FAIL: wrong node selected'); Halt(1); end;
+
+    { drag-move: grab the OK button at (40,100) — origin (28,92), so the grab
+      offset is (12,8) — and move the cursor to (70,140); the node origin must
+      follow to (70-12, 140-8) = (58,132). }
+    H.OnDesignMouseDown(nil, 1, 40, 100);
+    H.OnDesignMouseMove(nil, 1, 70, 140);
+    H.OnDesignMouseUp(nil, 1, 70, 140);
+    if (H.Dsn.Doc.NodeX(H.Dsn.Sel) <> 58) or (H.Dsn.Doc.NodeY(H.Dsn.Sel) <> 132) then
+      begin writeln('SMOKE FAIL: drag-move did not reposition node'); Halt(1); end;
+    { move after release must NOT keep dragging }
+    H.OnDesignMouseMove(nil, 0, 200, 200);
+    if (H.Dsn.Doc.NodeX(H.Dsn.Sel) <> 58) then
+      begin writeln('SMOKE FAIL: node moved after mouse-up'); Halt(1); end;
+
     { click empty surface -> selection cleared }
     H.OnDesignMouseDown(nil, 1, 5, 5);
     if H.Dsn.Sel >= 0 then begin writeln('SMOKE FAIL: selection not cleared'); Halt(1); end;

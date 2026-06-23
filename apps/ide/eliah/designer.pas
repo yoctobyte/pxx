@@ -26,11 +26,19 @@ type
   public
     Doc: TDocModel;
     Sel: Integer;          { selected node index, -1 = none }
+    Dragging: Boolean;     { a move-drag is in progress }
+    DragDX, DragDY: Integer; { click offset inside the node being dragged }
     constructor Create;
     procedure Paint(Sender: TControl; Canvas: TCanvas);
     { hit-test the docmodel at (X, Y) and select the topmost node there
       (or clear selection). Returns the new selection index. }
     function SelectAt(X, Y: Integer): Integer;
+    { begin a move-drag: select the node at (X, Y) and, if one is hit, remember
+      where inside it the grab landed. Returns the selected index. }
+    function BeginDrag(X, Y: Integer): Integer;
+    { while dragging, move the selected node so the grab point tracks (X, Y). }
+    procedure DragTo(X, Y: Integer);
+    procedure EndDrag;
   end;
 
 implementation
@@ -41,6 +49,9 @@ constructor TDesigner.Create;
 begin
   Doc := nil;
   Sel := -1;
+  Dragging := False;
+  DragDX := 0;
+  DragDY := 0;
 end;
 
 function TDesigner.SelectAt(X, Y: Integer): Integer;
@@ -48,6 +59,31 @@ begin
   if Doc = nil then Sel := -1
   else Sel := Doc.HitTest(X, Y);
   Result := Sel;
+end;
+
+function TDesigner.BeginDrag(X, Y: Integer): Integer;
+begin
+  Result := SelectAt(X, Y);
+  if Result >= 0 then
+  begin
+    Dragging := True;
+    DragDX := X - Doc.NodeX(Result);
+    DragDY := Y - Doc.NodeY(Result);
+  end
+  else
+    Dragging := False;
+end;
+
+procedure TDesigner.DragTo(X, Y: Integer);
+begin
+  if Dragging and (Doc <> nil) and (Sel >= 0) then
+    Doc.SetNodeBounds(Sel, X - DragDX, Y - DragDY,
+      Doc.NodeW(Sel), Doc.NodeH(Sel));
+end;
+
+procedure TDesigner.EndDrag;
+begin
+  Dragging := False;
 end;
 
 procedure TDesigner.Paint(Sender: TControl; Canvas: TCanvas);
