@@ -24,6 +24,7 @@ type
     procedure SetHeight(v: Integer);
     procedure SetCaption(const s: string);
   public
+    constructor Create(AOwner: TComponent); override;
     procedure CreateHandle; virtual;
     procedure HandleNeeded;
     function Realize: Integer; virtual;
@@ -133,6 +134,11 @@ end;
 function TControl.GetHandle: Pointer;
 begin
   Result := FHandle;
+end;
+
+constructor TControl.Create(AOwner: TComponent);
+begin
+  inherited Create(AOwner);
 end;
 
 procedure TControl.CreateHandle;

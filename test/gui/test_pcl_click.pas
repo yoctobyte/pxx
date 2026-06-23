@@ -29,10 +29,10 @@ begin
   Application := TApplication.Create;
   Application.Initialize;
 
-  Form1 := TForm.Create;
+  Form1 := TForm.Create(nil);
   Form1.Caption := 'Click test';
 
-  Btn := TButton.Create;
+  Btn := TButton.Create(nil);
   Btn.Caption := 'Click me';
   Btn.Parent := Form1;
 

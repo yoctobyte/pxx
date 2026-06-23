@@ -10,7 +10,7 @@ type
     FMenu: TMainMenu;
     procedure SetMenu(v: TMainMenu);
   public
-    constructor Create;
+    constructor Create(AOwner: TComponent); override;
     procedure CreateHandle; override;
     function ApplyCaption: Integer; override;
     function Realize: Integer; override;
@@ -60,8 +60,9 @@ begin
     WidgetSet.SetFormMenu(Self, FMenu);
 end;
 
-constructor TForm.Create;
+constructor TForm.Create(AOwner: TComponent);
 begin
+  inherited Create(AOwner);
   Self.HandleNeeded;
 end;
 

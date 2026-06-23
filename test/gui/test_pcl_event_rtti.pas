@@ -33,10 +33,10 @@ begin
   Application := TApplication.Create;
   Application.Initialize;
 
-  Form1 := TMyForm.Create;
+  Form1 := TMyForm.Create(nil);
   Form1.Caption := 'RTTI event';
 
-  Btn := TButton.Create;
+  Btn := TButton.Create(nil);
   Btn.Caption := 'Click';
   Btn.Parent := Form1;
 

@@ -8,13 +8,13 @@ uses controls, uwidgetset, classes_lite, typinfo;
 type
   TButton = class(TWinControl)
   public
-    constructor Create;
+    constructor Create(AOwner: TComponent); override;
     procedure CreateHandle; override;
   end;
 
   TLabel = class(TControl)
   public
-    constructor Create;
+    constructor Create(AOwner: TComponent); override;
     procedure CreateHandle; override;
   end;
 
@@ -24,7 +24,7 @@ type
     FOnChange: TMethod;
     procedure SetText(const s: string);
   public
-    constructor Create;
+    constructor Create(AOwner: TComponent); override;
     procedure CreateHandle; override;
     procedure ConnectChange;
   published
@@ -38,7 +38,7 @@ type
     FOnChange: TMethod;
     procedure SetChecked(v: Boolean);
   public
-    constructor Create;
+    constructor Create(AOwner: TComponent); override;
     procedure CreateHandle; override;
     procedure ConnectChange;
   published
@@ -52,7 +52,7 @@ type
     function GetText: string;
     procedure SetText(const s: string);
   public
-    constructor Create;
+    constructor Create(AOwner: TComponent); override;
     procedure CreateHandle; override;
     procedure ConnectChange;
     procedure CaretToLine(line: Integer);   { 0-based; moves cursor + scrolls }
@@ -70,7 +70,7 @@ type
     function GetItemIndex: Integer;
     procedure SetItemIndex(v: Integer);
   public
-    constructor Create;
+    constructor Create(AOwner: TComponent); override;
     procedure CreateHandle; override;
     procedure ConnectChange;
     procedure AddItem(const s: string);
@@ -92,7 +92,7 @@ type
     function GetText: AnsiString;
     procedure SetText(const s: AnsiString);
   public
-    constructor Create;
+    constructor Create(AOwner: TComponent); override;
     procedure CreateHandle; override;
     procedure ConnectChange;
     procedure AddItem(const s: string);
@@ -122,8 +122,9 @@ end;
 
 { TButton }
 
-constructor TButton.Create;
+constructor TButton.Create(AOwner: TComponent);
 begin
+  inherited Create(AOwner);
   Self.HandleNeeded;
 end;
 
@@ -135,8 +136,9 @@ end;
 
 { TLabel }
 
-constructor TLabel.Create;
+constructor TLabel.Create(AOwner: TComponent);
 begin
+  inherited Create(AOwner);
   Self.HandleNeeded;
 end;
 
@@ -147,8 +149,9 @@ end;
 
 { TEdit }
 
-constructor TEdit.Create;
+constructor TEdit.Create(AOwner: TComponent);
 begin
+  inherited Create(AOwner);
   Self.HandleNeeded;
 end;
 
@@ -172,8 +175,9 @@ end;
 
 { TCheckBox }
 
-constructor TCheckBox.Create;
+constructor TCheckBox.Create(AOwner: TComponent);
 begin
+  inherited Create(AOwner);
   Self.HandleNeeded;
 end;
 
@@ -200,8 +204,9 @@ end;
 
 { TMemo }
 
-constructor TMemo.Create;
+constructor TMemo.Create(AOwner: TComponent);
 begin
+  inherited Create(AOwner);
   Self.HandleNeeded;
 end;
 
@@ -238,8 +243,9 @@ end;
 
 { TListBox }
 
-constructor TListBox.Create;
+constructor TListBox.Create(AOwner: TComponent);
 begin
+  inherited Create(AOwner);
   FCount := 0;
   SetLength(FItems, 256);
   SetLength(FRows, 256);
@@ -261,7 +267,8 @@ procedure TListBox.AddItem(const s: string);
 var row: Pointer;
 begin
   { grow on demand: a streamed instance (CreateInstance skips the constructor)
-    has nil FItems/FRows, so never assume the constructor pre-sized them. }
+    has nil FItems/FRows, so never assume the constructor pre-sized them.
+    STOPGAP — revert with urgent/bug-metaclass-new-getclass-vmt. }
   if FCount >= Length(FItems) then SetLength(FItems, FCount + 64);
   if FCount >= Length(FRows) then SetLength(FRows, FCount + 64);
   FItems[FCount] := s;
@@ -317,8 +324,9 @@ end;
 
 { TComboBox }
 
-constructor TComboBox.Create;
+constructor TComboBox.Create(AOwner: TComponent);
 begin
+  inherited Create(AOwner);
   FCount := 0;
   SetLength(FItems, 256);
   Self.HandleNeeded;

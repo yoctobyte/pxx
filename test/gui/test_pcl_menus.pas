@@ -28,21 +28,21 @@ begin
   Application := TApplication.Create;
   Application.Initialize;
 
-  Form1 := TForm.Create;
+  Form1 := TForm.Create(nil);
   Form1.Caption := 'Menus Test';
 
-  MainMenu1 := TMainMenu.Create;
+  MainMenu1 := TMainMenu.Create(nil);
   Form1.Menu := MainMenu1;
 
-  FileMenu := TMenuItem.Create;
+  FileMenu := TMenuItem.Create(nil);
   FileMenu.Caption := '&File';
   MainMenu1.Items.Add(FileMenu);
 
-  NewItem := TMenuItem.Create;
+  NewItem := TMenuItem.Create(nil);
   NewItem.Caption := '&New';
   FileMenu.Add(NewItem);
 
-  ExitItem := TMenuItem.Create;
+  ExitItem := TMenuItem.Create(nil);
   ExitItem.Caption := 'E&xit';
   
   Helper := TTestHelper.Create;
@@ -51,7 +51,7 @@ begin
   ExitItem.OnClick := m;
   FileMenu.Add(ExitItem);
 
-  EditMenu := TMenuItem.Create;
+  EditMenu := TMenuItem.Create(nil);
   EditMenu.Caption := '&Edit';
   MainMenu1.Items.Add(EditMenu);
 

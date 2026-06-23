@@ -1,7 +1,8 @@
 # feature: PCL components adopt the `Create(AOwner)` virtual-constructor shape
 
 - **Type:** feature (Track B — lib/pcl component model)
-- **Status:** backlog — UNBLOCKED 2026-06-23 (language half landed)
+- **Status:** unfinished — shape migrated (green); streamer adoption blocked on
+  `urgent/bug-metaclass-new-getclass-vmt`
 - **Opened:** 2026-06-23
 
 > **Unblocked 2026-06-23:** the compiler half is DONE
@@ -56,3 +57,29 @@ gui_suite green. App code that passes `nil` owner + sets `Parent` works unchange
 
 Blocked-by `urgent/feature-metaclass-construct-dispatch` for the streaming path,
 but the `Create(AOwner)` migration itself can proceed independently.
+
+## Progress 2026-06-23
+
+DONE (the migration, which the ticket says can proceed independently):
+- `classes_lite.TComponent.Create` → `constructor Create(AOwner: TComponent);
+  virtual;` + `FOwner`/`Owner` + `TComponentClass = class of TComponent`.
+- All PCL widgets migrated to `Create(AOwner); override;` calling
+  `inherited Create(AOwner)`: controls.TControl, stdctrls (7), extctrls
+  (TPanel/TTimer/TPaintBox/TPaned), menus (TMenuItem/TMenu), forms.TForm,
+  glarea.TGLArea. graphics.* and TApplication stay parameterless (not components).
+- All widget `.Create` call sites across apps/examples/test/gui pass an owner
+  (nil — owner-less + Parent is first-class here). Form subclasses with their own
+  ctor (TMainForm) became `Create(AOwner); override;`.
+- gui_suite green (incl. streaming tests, paned, eliah), garin 92/92, eliah
+  builds + smoke + screenshot.
+
+BLOCKED — streamer adoption: replacing `CreateInstance` with
+`TComponentClass(childCls).Create(parent)` and dropping the four
+constructor-skip stopgaps. The metaclass-construct bridge stamps a non-canonical
+VMT → `urgent/bug-metaclass-new-getclass-vmt`. Streamer stays on CreateInstance +
+stopgaps (markers point at that ticket) until it lands.
+
+Compiler gaps also hit (clean single-ctor path used instead, no workaround):
+default param on a constructor and overloaded constructors + `inherited` both
+fail to parse — noted for a future backlog ticket if the parameterless-convenience
+shape is ever wanted.

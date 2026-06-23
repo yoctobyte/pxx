@@ -25,11 +25,11 @@ begin
   Application.Initialize;
   writeln('initialized app');
 
-  Form1 := TForm.Create;
+  Form1 := TForm.Create(nil);
   writeln('created form');
   Form1.Caption := 'PCL on GTK';
 
-  Btn := TButton.Create;
+  Btn := TButton.Create(nil);
   writeln('created button');
   Btn.Caption := 'Hello PCL';
   Btn.Parent := Form1;

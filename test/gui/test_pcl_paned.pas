@@ -18,27 +18,27 @@ begin
   Application := TApplication.Create;
   Application.Initialize;
 
-  Form1 := TForm.Create;
+  Form1 := TForm.Create(nil);
   Form1.Caption := 'Paned Test';
   Form1.SetBounds(0, 0, 400, 300);
 
   { outer vertical paned fills the form }
-  VSplit := TPaned.Create;
+  VSplit := TPaned.Create(nil);
   VSplit.Vertical := True;
   VSplit.Parent := Form1;
   VSplit.SetBounds(0, 0, 400, 300);
 
   { pane 1 of the vertical split is itself a horizontal split of two panels }
-  HSplit := TPaned.Create;            { horizontal (default) }
+  HSplit := TPaned.Create(nil);            { horizontal (default) }
   HSplit.Parent := VSplit;
 
-  TopL := TPanel.Create;
+  TopL := TPanel.Create(nil);
   TopL.Parent := HSplit;
-  TopR := TPanel.Create;
+  TopR := TPanel.Create(nil);
   TopR.Parent := HSplit;
 
   { pane 2 of the vertical split is a single panel }
-  BottomP := TPanel.Create;
+  BottomP := TPanel.Create(nil);
   BottomP.Parent := VSplit;
 
   VSplit.Position := 180;

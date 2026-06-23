@@ -10,7 +10,7 @@ type
     FOnRender: TMethod;
     FGLWidth, FGLHeight: Integer;
   public
-    constructor Create;
+    constructor Create(AOwner: TComponent); override;
     procedure CreateHandle; override;
     procedure MakeCurrent;
     procedure QueueRender;
@@ -107,8 +107,9 @@ begin
   end;
 end;
 
-constructor TGLArea.Create;
+constructor TGLArea.Create(AOwner: TComponent);
 begin
+  inherited Create(AOwner);
   Self.HandleNeeded;
 end;
 

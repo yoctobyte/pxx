@@ -7,7 +7,7 @@ uses classes_lite, controls, uwidgetset, typinfo, graphics, gtk3_c;
 type
   TPanel = class(TWinControl)
   public
-    constructor Create;
+    constructor Create(AOwner: TComponent); override;
     procedure CreateHandle; override;
   end;
 
@@ -21,7 +21,7 @@ type
     procedure SetInterval(v: Integer);
     procedure UpdateTimer;
   public
-    constructor Create;
+    constructor Create(AOwner: TComponent); override;
     destructor Destroy;
   published
     property Interval: Integer read FInterval write SetInterval;
@@ -34,7 +34,7 @@ type
     FCanvas: TCanvas;
     FOnPaint: TMethod;
   public
-    constructor Create;
+    constructor Create(AOwner: TComponent); override;
     destructor Destroy;
     procedure CreateHandle; override;
     property Canvas: TCanvas read FCanvas;
@@ -54,7 +54,7 @@ type
     FPosition: Integer;
     procedure SetPosition(v: Integer);
   public
-    constructor Create;
+    constructor Create(AOwner: TComponent); override;
     procedure CreateHandle; override;
     function Realize: Integer; override;
     function ActualPosition: Integer;   { live handle position from the widget }
@@ -69,8 +69,9 @@ implementation
 
 { TPanel }
 
-constructor TPanel.Create;
+constructor TPanel.Create(AOwner: TComponent);
 begin
+  inherited Create(AOwner);
   Self.HandleNeeded;
 end;
 
@@ -81,8 +82,9 @@ end;
 
 { TPaned }
 
-constructor TPaned.Create;
+constructor TPaned.Create(AOwner: TComponent);
 begin
+  inherited Create(AOwner);
   { Lazy handle: Vertical must be known at CreateHandle, so defer to Realize. }
   FVertical := False;
   FPosition := 0;
@@ -126,8 +128,9 @@ end;
 
 { TTimer }
 
-constructor TTimer.Create;
+constructor TTimer.Create(AOwner: TComponent);
 begin
+  inherited Create(AOwner);
   FInterval := 1000;
   FEnabled := True;
   FTimerId := 0;
@@ -173,8 +176,9 @@ end;
 
 { TPaintBox }
 
-constructor TPaintBox.Create;
+constructor TPaintBox.Create(AOwner: TComponent);
 begin
+  inherited Create(AOwner);
   FCanvas := TCanvas.Create;
   Self.HandleNeeded;
 end;
@@ -186,9 +190,11 @@ end;
 
 procedure TPaintBox.CreateHandle;
 begin
-  { a streamed paintbox (CreateInstance skips the constructor) has no Canvas, so
-    the draw trampoline's Canvas.Handle would deref nil. CreateHandle runs at
-    Realize for streamed and normal instances alike — make the Canvas here. }
+  { STOPGAP (revert when urgent/bug-metaclass-new-getclass-vmt lands and the
+    streamer constructs via the virtual ctor): a streamed paintbox is made with
+    CreateInstance, which skips Create, so FCanvas is nil and the draw trampoline
+    would deref nil. CreateHandle runs at Realize for streamed + normal instances
+    alike — ensure the Canvas here. }
   if FCanvas = nil then FCanvas := TCanvas.Create;
   Self.Handle := WidgetSet.CreatePaintBox(Self);
 end;

@@ -186,20 +186,20 @@ var
 begin
   Application.Initialize;
 
-  Form1 := TForm.Create;
+  Form1 := TForm.Create(nil);
   Form1.Caption := 'Spinning Triangle - OpenGL 3.3';
   Form1.SetBounds(100, 100, 700, 560);
 
-  Area := TGLArea.Create;
+  Area := TGLArea.Create(nil);
   Area.Parent := Form1;
   Area.SetBounds(10, 10, 640, 480);
 
-  AngleLabel := TLabel.Create;
+  AngleLabel := TLabel.Create(nil);
   AngleLabel.Parent := Form1;
   AngleLabel.Caption := 'Angle: 0';
   AngleLabel.SetBounds(660, 10, 120, 30);
 
-  Timer := TTimer.Create;
+  Timer := TTimer.Create(nil);
   Timer.Interval := 16;
   Timer.Enabled := False;
 

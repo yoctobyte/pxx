@@ -17,7 +17,7 @@ type
     procedure SetEnabled(v: Boolean);
     procedure SetVisible(v: Boolean);
   public
-    constructor Create;
+    constructor Create(AOwner: TComponent); override;
     destructor Destroy;
     procedure Add(Item: TMenuItem);
     procedure Click;
@@ -37,7 +37,7 @@ type
   private
     FRootMenuItem: TMenuItem;
   public
-    constructor Create;
+    constructor Create(AOwner: TComponent); override;
     destructor Destroy;
     property Items: TMenuItem read FRootMenuItem;
   end;
@@ -49,8 +49,9 @@ implementation
 
 { TMenuItem }
 
-constructor TMenuItem.Create;
+constructor TMenuItem.Create(AOwner: TComponent);
 begin
+  inherited Create(AOwner);
   FEnabled := True;
   FVisible := True;
   FMenuOwner := nil;
@@ -113,9 +114,10 @@ end;
 
 { TMenu }
 
-constructor TMenu.Create;
+constructor TMenu.Create(AOwner: TComponent);
 begin
-  FRootMenuItem := TMenuItem.Create;
+  inherited Create(AOwner);
+  FRootMenuItem := TMenuItem.Create(nil);
   FRootMenuItem.FMenuOwner := Self;
 end;
 

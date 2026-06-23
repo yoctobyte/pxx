@@ -305,7 +305,7 @@ end;
 procedure MkButton(Form: TForm; const cap: string; x, y, w: Integer; m: TMethod);
 var b: TButton;
 begin
-  b := TButton.Create;
+  b := TButton.Create(nil);
   b.Parent := Form;
   b.Caption := cap;
   b.SetBounds(x, y, w, 28);
@@ -324,14 +324,14 @@ begin
   Application := TApplication.Create;
   Application.Initialize;
 
-  Form1 := TForm.Create;
+  Form1 := TForm.Create(nil);
   Form1.Caption := 'Klondike Solitaire';
 
-  PaintBox := TPaintBox.Create;
+  PaintBox := TPaintBox.Create(nil);
   PaintBox.Parent := Form1;
   PaintBox.SetBounds(0, 0, 560, 560);
 
-  Status := TLabel.Create;
+  Status := TLabel.Create(nil);
   Status.Parent := Form1;
   Status.Caption := 'Moves: 0   (drag cards; keys: n/u/a/d/q)';
   Status.SetBounds(580, 10, 220, 24);

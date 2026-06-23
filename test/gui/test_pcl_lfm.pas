@@ -14,13 +14,14 @@ uses typinfo, classes_lite, resources, lfm, gtk3, controls, stdctrls, forms;
 type
   TMainForm = class(TForm)
     count: Integer;
-    constructor Create;
+    constructor Create(AOwner: TComponent); override;
   published
     procedure Btn1Click(Sender: TObject);
   end;
 
-constructor TMainForm.Create;
+constructor TMainForm.Create(AOwner: TComponent);
 begin
+  inherited Create(AOwner);
   Self.HandleNeeded;                          { build the window }
   InitInheritedComponent(Self, 'TMainForm');  { stream caption + child + event }
 end;
@@ -40,7 +41,7 @@ begin
   Application := TApplication.Create;
   Application.Initialize;
 
-  Form1 := TMainForm.Create;
+  Form1 := TMainForm.Create(nil);
   writeln('streamed Caption=', Form1.Caption);
   writeln('childCount=', Form1.ChildCount);
 

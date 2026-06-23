@@ -37,17 +37,25 @@ type
   TComponent = class
   private
     FName: string;
+    FOwner: TComponent;
     FChildren: array of TComponent;
     FChildCount: Integer;
   public
-    constructor Create;
+    { FPC-shaped virtual constructor: a component takes its owner (which may be
+      nil — owner-less + Parent-only is a first-class pattern here). Virtual so
+      the streamer can construct any registered class via a metaclass:
+      TComponentClass(GetClass(name)).Create(owner). }
+    constructor Create(AOwner: TComponent); virtual;
     procedure AddChild(c: TComponent);
     function ChildCount: Integer;
     function Child(i: Integer): TComponent;
     function FindChild(const nm: string): TComponent;
+    property Owner: TComponent read FOwner;
   published
     property Name: string read FName write FName;
   end;
+
+  TComponentClass = class of TComponent;
 
   TReader = class
   private
@@ -65,8 +73,9 @@ implementation
 
 { ---------- TComponent ---------- }
 
-constructor TComponent.Create;
+constructor TComponent.Create(AOwner: TComponent);
 begin
+  FOwner := AOwner;
   SetLength(FChildren, 64);
 end;
 
@@ -246,6 +255,12 @@ begin
     className := FStream.ReadStrLen(lenByte);
     childCls := GetClass(className);
     if childCls = nil then StreamFail('unknown class');
+    { Ideal: construct through the metaclass so the class's real virtual ctor
+      runs — child := TComponentClass(childCls).Create(parent). BLOCKED: metaclass
+      construction via GetClass stamps a non-canonical VMT (GetInstanceClassName
+      fails, RTTI/virtual identity breaks), see
+      urgent/bug-metaclass-new-getclass-vmt. Until fixed, allocate with
+      CreateInstance (the widget constructor-skip stopgaps cover the gap). }
     childP := CreateInstance(childCls);
     child := childP;
     ReadBody(child, childCls, rootInst, rootCls);

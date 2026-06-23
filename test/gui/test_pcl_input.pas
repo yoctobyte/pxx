@@ -84,9 +84,9 @@ begin
   Application := TApplication.Create;
   Application.Initialize;
 
-  Form1 := TForm.Create;
+  Form1 := TForm.Create(nil);
   Form1.Caption := 'Input test';
-  PaintBox := TPaintBox.Create;
+  PaintBox := TPaintBox.Create(nil);
   PaintBox.Parent := Form1;
   PaintBox.SetBounds(0, 0, 200, 200);
 

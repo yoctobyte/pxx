@@ -15,11 +15,11 @@ begin
   Application := TApplication.Create;
   Application.Initialize;
 
-  Form1 := TForm.Create;
+  Form1 := TForm.Create(nil);
   Form1.Caption := 'Widgets Test';
 
   { 1. Test TMemo }
-  Memo := TMemo.Create;
+  Memo := TMemo.Create(nil);
   Memo.Parent := Form1;
   s := 'Line 1' + #10 + 'Line 2';
   Memo.Text := s;
@@ -31,7 +31,7 @@ begin
   end;
 
   { 2. Test TListBox }
-  ListBox := TListBox.Create;
+  ListBox := TListBox.Create(nil);
   ListBox.Parent := Form1;
   ListBox.AddItem('Apple');
   ListBox.AddItem('Banana');
@@ -48,7 +48,7 @@ begin
   if ListBox.ItemIndex <> 1 then begin writeln('FAIL: ListBox ItemIndex mismatch'); Halt(1); end;
 
   { 3. Test TComboBox }
-  ComboBox := TComboBox.Create;
+  ComboBox := TComboBox.Create(nil);
   ComboBox.Parent := Form1;
   ComboBox.AddItem('Red');
   ComboBox.AddItem('Green');

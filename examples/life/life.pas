@@ -362,49 +362,49 @@ begin
 
   Application.Initialize;
   
-  Form1 := TForm.Create;
+  Form1 := TForm.Create(nil);
   Form1.Caption := 'Conway''s Game of Life';
   Form1.SetBounds(100, 100, 800, 480);
   
-  PaintBox := TPaintBox.Create;
+  PaintBox := TPaintBox.Create(nil);
   PaintBox.Parent := Form1;
   PaintBox.SetBounds(10, 10, 640, 400);
   
-  Timer := TTimer.Create;
+  Timer := TTimer.Create(nil);
   Timer.Interval := 50; { 50ms interval }
   Timer.Enabled := False;
   
-  StartStopBtn := TButton.Create;
+  StartStopBtn := TButton.Create(nil);
   StartStopBtn.Parent := Form1;
   StartStopBtn.Caption := 'Start';
   StartStopBtn.SetBounds(660, 10, 130, 30);
   
-  StepBtn := TButton.Create;
+  StepBtn := TButton.Create(nil);
   StepBtn.Parent := Form1;
   StepBtn.Caption := 'Step';
   StepBtn.SetBounds(660, 50, 130, 30);
   
-  ClearBtn := TButton.Create;
+  ClearBtn := TButton.Create(nil);
   ClearBtn.Parent := Form1;
   ClearBtn.Caption := 'Clear';
   ClearBtn.SetBounds(660, 90, 130, 30);
   
-  RandomBtn := TButton.Create;
+  RandomBtn := TButton.Create(nil);
   RandomBtn.Parent := Form1;
   RandomBtn.Caption := 'Random';
   RandomBtn.SetBounds(660, 130, 130, 30);
   
-  GliderBtn := TButton.Create;
+  GliderBtn := TButton.Create(nil);
   GliderBtn.Parent := Form1;
   GliderBtn.Caption := 'Glider Preset';
   GliderBtn.SetBounds(660, 170, 130, 30);
   
-  GosperBtn := TButton.Create;
+  GosperBtn := TButton.Create(nil);
   GosperBtn.Parent := Form1;
   GosperBtn.Caption := 'Glider Gun';
   GosperBtn.SetBounds(660, 210, 130, 30);
   
-  GenLabel := TLabel.Create;
+  GenLabel := TLabel.Create(nil);
   GenLabel.Parent := Form1;
   GenLabel.Caption := 'Generation: 0';
   GenLabel.SetBounds(660, 260, 130, 30);

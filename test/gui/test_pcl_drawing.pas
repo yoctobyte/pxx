@@ -56,10 +56,10 @@ begin
   Application := TApplication.Create;
   Application.Initialize;
 
-  Form1 := TForm.Create;
+  Form1 := TForm.Create(nil);
   Form1.Caption := 'Drawing Test';
 
-  PaintBox := TPaintBox.Create;
+  PaintBox := TPaintBox.Create(nil);
   PaintBox.Parent := Form1;
   PaintBox.SetBounds(0, 0, 320, 240);
 

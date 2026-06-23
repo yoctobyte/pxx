@@ -515,7 +515,7 @@ var
 function MkMenuItem(const cap: AnsiString; parent: TMenuItem): TMenuItem;
 var it: TMenuItem;
 begin
-  it := TMenuItem.Create;
+  it := TMenuItem.Create(nil);
   it.Caption := cap;
   parent.Add(it);
   MkMenuItem := it;
@@ -524,7 +524,7 @@ end;
 function MkButton(const cap: AnsiString; x: Integer): TButton;
 var b: TButton;
 begin
-  b := TButton.Create;
+  b := TButton.Create(nil);
   b.Parent := Form1;
   b.Caption := cap;
   b.SetBounds(x, 3, 80, 26);
@@ -535,7 +535,7 @@ begin
   Application := TApplication.Create;
   Application.Initialize;
 
-  Form1 := TForm.Create;
+  Form1 := TForm.Create(nil);
   Form1.Caption := 'Eliah - IDE';
   Form1.SetBounds(0, 0, W_WIN, H_WIN);
 
@@ -546,23 +546,23 @@ begin
   H := THandler.Create;
   H.Proj := TProject.Create;
 
-  H.Tree := TListBox.Create;
+  H.Tree := TListBox.Create(nil);
   H.Tree.Parent := Form1;
   H.Tree.SetBounds(0, TOOLBAR_H, W_TREE, contentH - ERR_H);
   H.Tree.OnClick := @H.OnTreeClick;
 
   { error list under the tree: compile diagnostics, click -> jump editor }
   H.Diags := TDiagList.Create;
-  H.Errors := TListBox.Create;
+  H.Errors := TListBox.Create(nil);
   H.Errors.Parent := Form1;
   H.Errors.SetBounds(0, TOOLBAR_H + contentH - ERR_H, W_TREE, ERR_H);
   H.Errors.OnClick := @H.OnErrorClick;
 
-  H.Editor := TMemo.Create;
+  H.Editor := TMemo.Create(nil);
   H.Editor.Parent := Form1;
   H.Editor.SetBounds(W_TREE, TOOLBAR_H, centerW, centerH);
 
-  H.Output := TMemo.Create;
+  H.Output := TMemo.Create(nil);
   H.Output.Parent := Form1;
   H.Output.SetBounds(W_TREE, TOOLBAR_H + centerH, centerW, H_BOTTOM);
   H.Output.Text := 'build output appears here';
@@ -576,7 +576,7 @@ begin
   if sbuf.LoadFromFile(SAMPLE_LFM) then
     sok := LoadLfmText(sbuf.Text, Dsn.Doc);
 
-  DesignBox := TPaintBox.Create;
+  DesignBox := TPaintBox.Create(nil);
   DesignBox.Parent := Form1;
   DesignBox.SetBounds(W_TREE + centerW, TOOLBAR_H, W_RIGHT, centerH);
   DesignBox.OnPaint := @Dsn.Paint;
@@ -586,14 +586,14 @@ begin
   DesignBox.OnMouseMove := @H.OnDesignMouseMove;
   DesignBox.OnMouseUp   := @H.OnDesignMouseUp;
 
-  Props := TListBox.Create;
+  Props := TListBox.Create(nil);
   Props.Parent := Form1;
   Props.SetBounds(W_TREE + centerW, TOOLBAR_H + centerH, W_RIGHT, H_BOTTOM - 28);
   Props.AddItem('object inspector (M1)');
   Props.OnClick := @H.OnPropClick;
 
   { value editor: pick a prop row above, type here, Enter commits to docmodel }
-  ValueEdit := TEdit.Create;
+  ValueEdit := TEdit.Create(nil);
   ValueEdit.Parent := Form1;
   ValueEdit.SetBounds(W_TREE + centerW, TOOLBAR_H + centerH + H_BOTTOM - 28,
     W_RIGHT, 26);
@@ -609,20 +609,20 @@ begin
   H.lastW := -1;
 
   { main menu bar }
-  MainMenu := TMainMenu.Create;
+  MainMenu := TMainMenu.Create(nil);
   Form1.Menu := MainMenu;
 
-  FileMenu := TMenuItem.Create; FileMenu.Caption := '&File'; MainMenu.Items.Add(FileMenu);
+  FileMenu := TMenuItem.Create(nil); FileMenu.Caption := '&File'; MainMenu.Items.Add(FileMenu);
   mi := MkMenuItem('&New',          FileMenu); mi.OnClick := @H.OnNew;
   mi := MkMenuItem('&Open Folder...', FileMenu); mi.OnClick := @H.OnOpenFolder;
   mi := MkMenuItem('&Save',         FileMenu); mi.OnClick := @H.OnSave;
   mi := MkMenuItem('E&xit',         FileMenu); mi.OnClick := @H.OnExit;
 
-  EditMenu := TMenuItem.Create; EditMenu.Caption := '&Edit'; MainMenu.Items.Add(EditMenu);
+  EditMenu := TMenuItem.Create(nil); EditMenu.Caption := '&Edit'; MainMenu.Items.Add(EditMenu);
   mi := MkMenuItem('&Undo',   EditMenu); mi.OnClick := @H.OnUndo;
   mi := MkMenuItem('&Delete', EditMenu); mi.OnClick := @H.OnDelete;
 
-  BuildMenu := TMenuItem.Create; BuildMenu.Caption := '&Build'; MainMenu.Items.Add(BuildMenu);
+  BuildMenu := TMenuItem.Create(nil); BuildMenu.Caption := '&Build'; MainMenu.Items.Add(BuildMenu);
   mi := MkMenuItem('&Compile', BuildMenu); mi.OnClick := @H.OnCompile;
   mi := MkMenuItem('&Run',     BuildMenu); mi.OnClick := @H.OnRun;
 
@@ -637,7 +637,7 @@ begin
   btn := MkButton('Undo',    724); btn.OnClick := @H.OnUndo;
 
   { palette: pick a widget kind, hit Place, then click the designer to drop it }
-  Palette := TComboBox.Create;
+  Palette := TComboBox.Create(nil);
   Palette.Parent := Form1;
   Palette.SetBounds(266, 3, 110, 26);
   Palette.AddItem('Button');
@@ -649,7 +649,7 @@ begin
   Palette.AddItem('Panel');
   Palette.ItemIndex := 0;
 
-  PlaceBtn := TButton.Create;
+  PlaceBtn := TButton.Create(nil);
   PlaceBtn.Parent := Form1;
   PlaceBtn.Caption := 'Place';
   PlaceBtn.SetBounds(382, 3, 80, 26);
