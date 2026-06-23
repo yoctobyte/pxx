@@ -7012,7 +7012,7 @@ begin
         ASTRight[argSeq] := exprNode;
         Expect(tkRParen, ')');
       end
-      else if (name = 'LoadFile') or (name = 'loadfile') then
+      else if CaseEqual(name, 'LoadFile') then
       begin
         Next; Expect(tkLParen, '(');
         if CurTok.Kind <> tkIdent then Error('LoadFile: expected path');
@@ -7092,7 +7092,7 @@ begin
         argIdx := AllocNode(AN_ARG); ASTLeft[argIdx] := opNode; ASTRight[lastArg] := argIdx;
         ASTLeft[node] := argSeq;
       end
-      else if (name = 'SetLength') or (name = 'setlength') then
+      else if CaseEqual(name, 'SetLength') then
       begin
         Next; Expect(tkLParen, '(');
         if CurTok.Kind <> tkIdent then Error('SetLength: expected string or array variable');
@@ -7136,7 +7136,7 @@ begin
           ASTIVal[node] := -101;
         ASTLeft[node] := argSeq;
       end
-      else if (name = 'New') or (name = 'new') then
+      else if CaseEqual(name, 'New') then
       begin
         { New(p): allocate SizeOf(p^) and store the block into the pointer p.
           Equivalent to p := GetMem(SizeOf(p^)); size comes from p's element
@@ -7160,7 +7160,7 @@ begin
         node := AllocNode(AN_ASSIGN);
         ASTLeft[node] := valNode; ASTRight[node] := opNode;
       end
-      else if (name = 'Dispose') or (name = 'dispose') then
+      else if CaseEqual(name, 'Dispose') then
       begin
         { Dispose(p): return the block to the free list (= FreeMem(p)). }
         Next; Expect(tkLParen, '(');
@@ -7171,7 +7171,7 @@ begin
         ASTIVal[node] := -Ord(tkFreeMem);
         ASTLeft[node] := argSeq; ASTTk[node] := Ord(tyInteger);
       end
-      else if (name = 'ReallocMem') or (name = 'reallocmem') then
+      else if CaseEqual(name, 'ReallocMem') then
       begin
         { ReallocMem(p, newsize): resize the block p points at, preserving
           min(oldsize, newsize) bytes, and store the new pointer back into p.
@@ -7198,7 +7198,7 @@ begin
         node := AllocNode(AN_ASSIGN);
         ASTLeft[node] := valNode; ASTRight[node] := opNode;
       end
-      else if (name = 'Str') or (name = 'str') then
+      else if CaseEqual(name, 'Str') then
       begin
         { Str(x[:w[:d]], s): format integer x into string s, right-justified to
           width w. Parsed like write's value:w:d (literal width/decimals;
@@ -7255,7 +7255,7 @@ begin
         node := AllocNode(AN_ASSIGN);
         ASTLeft[node] := valNode; ASTRight[node] := opNode;
       end
-      else if ((name = 'Val') or (name = 'val')) and (Tokens[TokPos].Kind = tkLParen) then
+      else if (CaseEqual(name, 'Val')) and (Tokens[TokPos].Kind = tkLParen) then
       begin
         { Val(s, dest, code): dispatch on the destination variable's type — a
           float dest -> ValFloat (string->Double), otherwise the integer Val.
@@ -10459,7 +10459,7 @@ begin
     retType := tyBoolean;
   end;
 
-  if (name = 'LoadFile') or (name = 'loadfile') then
+  if CaseEqual(name, 'LoadFile') then
   begin
     while not (CurTok.Kind in [tkBegin, tkEOF]) do Next;
     if CurTok.Kind = tkBegin then

@@ -25,13 +25,12 @@ _none_
 | --- | --- | --- | --- | --- |
 | feature-c-runtime-library | B | feature | C runtime/library layer (`lib/crtl`) plus direct C-library packages | feature-c-source-frontend |
 
-## backlog (60)
+## backlog (59)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
 | bug-as-cast-inline-method-call | A | bug | bug: method call on an inline `(expr as T)` is silently dropped | — |
 | bug-cardinal-expr-promotion | A | bug | bug: cardinal/longword binary-op promotes to uint64 (FPC: int64) | — |
-| bug-case-insensitive-incomplete-builtins-funcs | A | bug | bug: case-insensitivity incomplete — builtins + function calls still case-sensitive | — |
 | bug-length-rejects-non-variable | A | bug | bug: Length() rejects a non-variable argument (literal / expression) | — |
 | bug-nested-brace-comments | A | bug | bug: `{ }` comments do not nest | — |
 | bug-overload-resolution-by-type | A | bug | bug: overload resolution binds a string arg to an earlier integer-param overload | — |
@@ -124,7 +123,7 @@ _none_
 | feature-mimic-fpc | B | feature | `mimic FPC` compatibility mode | — |
 | feature-string-model-tyfixedstring | B | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (198)
+## done (199)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -133,6 +132,7 @@ _none_
 | bug-bare-function-name-call-vs-resultvar | A | bug | Bare function name in an expression: PXX calls it, FPC/ISO reads the result var | — |
 | bug-builtin-val-miscompiles | A | bug | Builtin `Val` mis-lowers — wrong error code + segfault | — |
 | bug-builtin-write-case-sensitive | A | bug | Builtin write/writeln matched case-sensitively (only lowercase resolves) | — |
+| bug-case-insensitive-incomplete-builtins-funcs | A | bug | bug: case-insensitivity incomplete — builtins + function calls still case-sensitive | — |
 | bug-char-literal-in-const-expr | A | bug | Char literal in a constant expression: `ConstEval` rejected `'a'` | — |
 | bug-codegen-nested-index-load-width-pressure | A | bug | Codegen miscompiles nested integer-array index load width under register pressure | — |
 | bug-compiler-tmyclass-hardcoded-clash | A | bug | Hardcoded 'TMyClass' name clash in compiler type resolution | — |
@@ -339,7 +339,6 @@ _none_
 
 - [A] bug-as-cast-inline-method-call
 - [A] bug-cardinal-expr-promotion
-- [A] bug-case-insensitive-incomplete-builtins-funcs
 - [A] bug-length-rejects-non-variable
 - [A] bug-nested-brace-comments
 - [A] bug-overload-resolution-by-type

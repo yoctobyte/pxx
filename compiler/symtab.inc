@@ -2737,6 +2737,18 @@ begin
   Result := (rec >= REC_UCLASS_BASE) and UClsIsInterface[rec - REC_UCLASS_BASE];
 end;
 
+{ Does proc `idx` answer to `name`? Exact always; case-insensitively too for a
+  case-insensitive Pascal proc (default), but never for an external C import
+  (printf <> Printf — those relax only under {$LAZYCASING ON}, handled in
+  FindProc/LazyCanonName). Mirrors the FindProc fallback so unqualified calls
+  resolve mixed-case spellings (inttostr -> IntToStr) like variable names do. }
+function ProcNameMatches(idx: Integer; const name: AnsiString): Boolean;
+begin
+  Result := (Procs[idx].Name = name) or
+            ((not ProcCaseSensitive[idx]) and (not ProcExternal[idx]) and
+             CaseEqual(Procs[idx].Name, name));
+end;
+
 function MatchProcCall(const name: AnsiString; nArgs: Integer; const argTypes: array of TTypeKind): Integer;
 var i, j: Integer; match: Boolean; cn: AnsiString;
 begin
@@ -2751,7 +2763,7 @@ begin
   { Phase 1: Try exact match }
   for i := 0 to ProcCount-1 do
   begin
-    if Procs[i].Name = name then
+    if ProcNameMatches(i, name) then
     begin
       if Procs[i].ParamCount = nArgs then
       begin
@@ -2774,7 +2786,7 @@ begin
   { Phase 1b: Try exact match with return-lifting }
   for i := 0 to ProcCount-1 do
   begin
-    if Procs[i].Name = name then
+    if ProcNameMatches(i, name) then
     begin
       if (Procs[i].ParamCount > nArgs) and (ProcParamPtrDepth[i * 16 + nArgs] = 2) then
       begin
@@ -2797,7 +2809,7 @@ begin
   { Phase 2: Try compatible match }
   for i := 0 to ProcCount-1 do
   begin
-    if Procs[i].Name = name then
+    if ProcNameMatches(i, name) then
     begin
       if Procs[i].ParamCount = nArgs then
       begin
@@ -2820,7 +2832,7 @@ begin
   { Phase 2b: Try compatible match with return-lifting }
   for i := 0 to ProcCount-1 do
   begin
-    if Procs[i].Name = name then
+    if ProcNameMatches(i, name) then
     begin
       if (Procs[i].ParamCount > nArgs) and (ProcParamPtrDepth[i * 16 + nArgs] = 2) then
       begin
@@ -2845,7 +2857,7 @@ begin
     so existing record/class overloads are unaffected. }
   for i := 0 to ProcCount-1 do
   begin
-    if (Procs[i].Name = name) and (Procs[i].ParamCount = nArgs) then
+    if ProcNameMatches(i, name) and (Procs[i].ParamCount = nArgs) then
     begin
       match := True;
       for j := 0 to nArgs-1 do
@@ -2870,7 +2882,7 @@ begin
       writeln('  arg[', j, '] = ', Ord(argTypes[j]));
     for i := 0 to ProcCount-1 do
     begin
-      if Procs[i].Name = name then
+      if ProcNameMatches(i, name) then
       begin
         writeln('  Candidate idx ', i, ': paramCount = ', Procs[i].ParamCount);
         for j := 0 to Procs[i].ParamCount-1 do

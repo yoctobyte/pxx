@@ -1,9 +1,32 @@
 # bug: case-insensitivity incomplete — builtins + function calls still case-sensitive
 
 - **Type:** bug (Track A — parser / symbol resolution)
-- **Status:** backlog
+- **Status:** done
 - **Found:** 2026-06-23, differential probe vs FPC (Track B)
+- **Closed:** 2026-06-23
 - **Severity:** medium-high (breaks mixed-case FPC source broadly)
+
+## Resolution (2026-06-23)
+
+Front-end/resolution only, no codegen.
+
+1. **Unit/RTL function calls** (`inttostr` vs `IntToStr`): unqualified
+   `MatchProcCall` compared `Procs[i].Name = name` exactly in every overload
+   phase. Added `ProcNameMatches(idx, name)` (exact, plus case-insensitive for a
+   non-external, non-case-sensitive proc — mirrors the FindProc fallback and the
+   already-CI `MatchProcCallInUnit`) and routed all phases + the 2c interface
+   phase + the mismatch diagnostic through it. External C imports stay exact
+   (printf <> Printf; relax only under {$LAZYCASING ON}).
+2. **Builtins matched by name string**: `SetLength`, `New`, `Dispose`,
+   `ReallocMem`, `Str`, `Val`, `LoadFile` were `(name='X') or (name='x')`
+   (two spellings only) — now `CaseEqual(name, 'X')`. (Length/High/Low/Inc/Dec/
+   Ord/Chr/Copy/Trunc/Round/UpCase are keyword tokens, already CI via the lexer;
+   the nilpy `int`/`str` stay exact — Python-cased.)
+
+Verified mixed-case: SETLENGTH/LENGTH/HIGH/LOW/INC/DEC/ORD/CHR/COPY/TRUNC/ROUND/
+UPCASE and unit funcs inttostr/uppercase/lowercase/trim/strtoint/max/min — all
+byte-identical to FPC. Gate: `make test` (self-host byte-identical — resolution
+only) + FPC oracle. Closes bug-case-insensitive-incomplete-builtins-funcs.
 - **Relation:** continues `bug-keywords-case-sensitive` (DONE 7d5b18d) and
   `bug-builtin-write-case-sensitive` (DONE 3de5d05) — those fixed keywords and
   Write/Read/WriteLn/ReadLn; the rest of the builtins and all unit-function
