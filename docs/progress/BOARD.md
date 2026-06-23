@@ -25,10 +25,11 @@ _none_
 | --- | --- | --- | --- | --- |
 | feature-c-runtime-library | B | feature | C runtime/library layer (`lib/crtl`) plus direct C-library packages | feature-c-source-frontend |
 
-## backlog (54)
+## backlog (55)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
+| bug-const-section-before-constructor | A | bug | bug: const section before constructor/destructor not terminated | — |
 | bug-paramstr-inline-argstr | A | bug | bug: ParamStr/ArgStr result not usable inline (needs a string variable) | — |
 | bug-setlength-array-element | A | bug | bug: SetLength rejects an indexed array element as target | — |
 | bug-stderr-not-fd2 | B | bug | `writeln(StdErr, ...)` goes to stdout — StdErr not connected to fd 2 | — |
@@ -338,6 +339,7 @@ _none_
 
 ## Ready (no unmet blocker)
 
+- [A] bug-const-section-before-constructor
 - [A] bug-paramstr-inline-argstr
 - [A] bug-setlength-array-element
 - [B] bug-stderr-not-fd2

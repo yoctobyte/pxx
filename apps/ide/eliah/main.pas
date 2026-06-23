@@ -19,7 +19,8 @@ program eliah;
   the built binary. The right column (designer + object inspector) is a stub
   pending M1. }
 
-uses gtk3, controls, stdctrls, forms, sysutils, buffer, runner;
+uses gtk3, controls, stdctrls, extctrls, graphics, forms, sysutils,
+     buffer, runner, docmodel, designer;
 
 const
   W_WIN     = 1100;
@@ -130,7 +131,9 @@ end;
 var
   Form1: TForm;
   H: THandler;
-  Designer, Props: TListBox;
+  Props: TListBox;
+  DesignBox: TPaintBox;
+  Dsn: TDesigner;
   pm: TMethod;
   arg, startDir: AnsiString;
   centerW, centerH, contentH: Integer;
@@ -174,11 +177,21 @@ begin
   H.Output.SetBounds(W_TREE, TOOLBAR_H + centerH, centerW, H_BOTTOM);
   H.Output.Text := 'build output appears here';
 
-  Designer := TListBox.Create;
-  Designer.Parent := Form1;
-  Designer.SetBounds(W_TREE + centerW, TOOLBAR_H, W_RIGHT, centerH);
-  Designer.AddItem('designer: box-emulated preview (M1)');
-  Designer.AddItem('(no live widgets, no TComponent)');
+  { designer: box-emulated preview painted from the garin docmodel (no live
+    widgets). Sample form so the surface is non-empty until load/save lands. }
+  Dsn := TDesigner.Create;
+  Dsn.Doc := TDocModel.Create;
+  Dsn.Doc.AddNode(wkForm,   'Form1',  -1, 12, 12, W_RIGHT - 34, centerH - 70);
+  Dsn.Doc.AddNode(wkLabel,  'Name:',   0, 28, 48,  56, 18);
+  Dsn.Doc.AddNode(wkEdit,   '',        0, 92, 44, 140, 26);
+  Dsn.Doc.AddNode(wkButton, 'OK',      0, 28, 92,  80, 28);
+  Dsn.Doc.AddNode(wkButton, 'Cancel',  0, 116, 92, 80, 28);
+
+  DesignBox := TPaintBox.Create;
+  DesignBox.Parent := Form1;
+  DesignBox.SetBounds(W_TREE + centerW, TOOLBAR_H, W_RIGHT, centerH);
+  pm.Code := @Dsn.Paint; pm.Data := Dsn;
+  DesignBox.OnPaint := pm;
 
   Props := TListBox.Create;
   Props.Parent := Form1;
