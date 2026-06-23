@@ -570,6 +570,9 @@ begin
   fixed := gtk_fixed_new();
   gtk_box_pack_start(vbox, fixed, 1, 1, 0);
   SetFixedPtr(vbox, fixed);
+  { fire the form's OnResize with the content area's new allocation so apps can
+    reflow their panes (the fixed container is where child widgets are placed) }
+  SignalConnectData(fixed, 'size-allocate', @ControlSizeAllocateTramp, Pointer(AForm));
   Result := win;
 end;
 

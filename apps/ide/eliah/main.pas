@@ -57,6 +57,8 @@ type
     procedure OnUp(Sender: TObject);
     procedure OnSave(Sender: TObject);
     procedure OpenDesign(const path: AnsiString);
+    procedure Relayout(w, h: Integer);
+    procedure OnFormResize(Sender: TControl; w, h: Integer);
     procedure OnDesignMouseDown(Sender: TControl; Button, X, Y: Integer);
     procedure OnDesignMouseMove(Sender: TControl; Button, X, Y: Integer);
     procedure OnDesignMouseUp(Sender: TControl; Button, X, Y: Integer);
@@ -195,6 +197,33 @@ end;
 procedure THandler.OnUp(Sender: TObject);
 begin
   LoadDir(ParentDir(dir));
+end;
+
+{ reflow the panes for a content area of w x h (mirrors the startup layout).
+  Toolbar widgets stay pinned at the top. }
+procedure THandler.Relayout(w, h: Integer);
+var cw, ch, contentH: Integer;
+begin
+  contentH := h - TOOLBAR_H;
+  cw := w - W_TREE - W_RIGHT;
+  ch := contentH - H_BOTTOM;
+  { clamp so panes never collapse to negative / zero on a tiny window }
+  if cw < 120 then cw := 120;
+  if ch < 80 then ch := 80;
+  if contentH < 160 then contentH := 160;
+
+  Tree.SetBounds(0, TOOLBAR_H, W_TREE, contentH);
+  Editor.SetBounds(W_TREE, TOOLBAR_H, cw, ch);
+  Output.SetBounds(W_TREE, TOOLBAR_H + ch, cw, contentH - ch);
+  DesignBox.SetBounds(W_TREE + cw, TOOLBAR_H, W_RIGHT, ch);
+  Props.SetBounds(W_TREE + cw, TOOLBAR_H + ch, W_RIGHT, contentH - ch - 28);
+  ValueEdit.SetBounds(W_TREE + cw, TOOLBAR_H + contentH - 28, W_RIGHT, 26);
+  DesignBox.Invalidate;
+end;
+
+procedure THandler.OnFormResize(Sender: TControl; w, h: Integer);
+begin
+  Relayout(w, h);
 end;
 
 { serialize the designer docmodel back to the open design file (round-trips the
@@ -406,6 +435,8 @@ begin
   H.FEditRow := -1;
   H.designPath := SAMPLE_LFM;   { seeded from the sample; Save targets it until a .lfm is opened }
 
+  Form1.OnResize := @H.OnFormResize;   { reflow panes on window resize }
+
   btn := MkButton('Up',      4);   btn.OnClick := @H.OnUp;
   btn := MkButton('Compile', 90);  btn.OnClick := @H.OnCompile;
   btn := MkButton('Run',     176); btn.OnClick := @H.OnRun;
@@ -449,6 +480,15 @@ begin
     if H.Dsn.Doc.Count <> 5 then begin writeln('SMOKE FAIL: sample.lfm not loaded'); Halt(1); end;
     if H.Dsn.Doc.NodeCaption(3) <> 'OK' then begin writeln('SMOKE FAIL: lfm OK button missing'); Halt(1); end;
     if H.Dsn.Doc.NodeX(3) <> 28 then begin writeln('SMOKE FAIL: lfm abs coord wrong'); Halt(1); end;
+
+    { pane reflow: a bigger window stretches the center/right panes }
+    H.Relayout(1400, 900);
+    if H.Editor.Width <> 1400 - W_TREE - W_RIGHT then begin writeln('SMOKE FAIL: editor width did not reflow'); Halt(1); end;
+    if H.DesignBox.Height <> (900 - TOOLBAR_H - H_BOTTOM) then begin writeln('SMOKE FAIL: designbox height did not reflow'); Halt(1); end;
+    { tiny window clamps instead of going negative }
+    H.Relayout(200, 120);
+    if H.Editor.Width < 120 then begin writeln('SMOKE FAIL: reflow did not clamp width'); Halt(1); end;
+    H.Relayout(W_WIN, H_WIN);   { restore }
 
     { open any .lfm from the tree: clicking a .lfm reloads the designer + retargets Save }
     H.Dsn.Doc := TDocModel.Create;   { wipe to prove OpenDesign reloads }
