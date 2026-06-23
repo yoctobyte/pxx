@@ -15,6 +15,7 @@ type
     FOnMouseDown: TMethod;
     FOnMouseUp: TMethod;
     FOnMouseMove: TMethod;
+    FOnKeyDown: TMethod;
     procedure SetParent(p: TControl);
     procedure SetLeft(v: Integer);
     procedure SetTop(v: Integer);
@@ -45,6 +46,9 @@ type
     property OnMouseDown: TMethod read FOnMouseDown write FOnMouseDown;
     property OnMouseUp: TMethod read FOnMouseUp write FOnMouseUp;
     property OnMouseMove: TMethod read FOnMouseMove write FOnMouseMove;
+    { Keyboard: procedure(Sender: TControl; KeyCode: Integer) of object — KeyCode
+      is the GDK keyval (the widget must be focusable + focused). }
+    property OnKeyDown: TMethod read FOnKeyDown write FOnKeyDown;
   end;
 
   TWinControl = class(TControl)

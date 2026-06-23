@@ -415,6 +415,22 @@ begin
   ControlMouseMoveTramp := 0;
 end;
 
+function ControlKeyDownTramp(widget: Pointer; event: Pointer; userdata: Pointer): Integer; cdecl;
+var ctl: TControl; m: TMethod; keyval: LongWord; r: Integer;
+begin
+  ctl := userdata;
+  m := ctl.OnKeyDown;
+  if m.Code <> nil then
+  begin
+    keyval := 0;
+    r := gdk_event_get_keyval(event, @keyval);
+    { reuse the mouse dispatcher: the handler procedure(Sender; Key) reads the
+      first int (edx); the extra slots are ignored. }
+    CallMouseMethod(m.Code, m.Data, userdata, Integer(keyval), 0, 0);
+  end;
+  ControlKeyDownTramp := 0;
+end;
+
 procedure MenuItemActivateTramp(widget: Pointer; userdata: Pointer); cdecl;
 var item: TMenuItem; m: TMethod;
 begin
@@ -792,10 +808,13 @@ begin
   SignalConnectData(Result, 'draw', @ControlDrawTramp, Pointer(APaintBox));
   { request pointer events and route them to the OnMouse* handlers.
     masks: BUTTON_PRESS(256) | BUTTON_RELEASE(512) | POINTER_MOTION(4) = 772 }
-  gtk_widget_add_events(Result, 772);
+  gtk_widget_add_events(Result, 772 or 1024);   { + KEY_PRESS_MASK(1024) }
   SignalConnectData(Result, 'button-press-event',   @ControlMouseDownTramp, Pointer(APaintBox));
   SignalConnectData(Result, 'button-release-event', @ControlMouseUpTramp,   Pointer(APaintBox));
   SignalConnectData(Result, 'motion-notify-event',  @ControlMouseMoveTramp, Pointer(APaintBox));
+  { keyboard: make the drawing area focusable + route key presses }
+  gtk_widget_set_can_focus(Result, 1);
+  SignalConnectData(Result, 'key-press-event',      @ControlKeyDownTramp,   Pointer(APaintBox));
 end;
 
 function TGtk3WidgetSet.GetMemoText(AMemo: TComponent): string;

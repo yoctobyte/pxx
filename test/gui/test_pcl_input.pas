@@ -24,9 +24,23 @@ type
   end;
   PGdkBtn = ^TGdkBtn;
 
+  { GdkEventKey, GTK3 / 64-bit — keyval at offset 28. }
+  TGdkKey = record
+    etype: Integer;        { 0  : GDK_KEY_PRESS = 8 }
+    pad0: Integer;         { 4  }
+    window: Pointer;       { 8  }
+    sendEvent: Byte;       { 16 }
+    pk0, pk1, pk2: Byte;   { 17..19 }
+    time: LongWord;        { 20 }
+    state: LongWord;       { 24 }
+    keyval: LongWord;      { 28 }
+  end;
+  PGdkKey = ^TGdkKey;
+
   THandler = class
-    gotButton, gotX, gotY, count: Integer;
+    gotButton, gotX, gotY, gotKey, count, keyCount: Integer;
     procedure MouseDown(Sender: TControl; Button, X, Y: Integer);
+    procedure KeyDown(Sender: TControl; KeyCode: Integer);
   end;
 
 procedure THandler.MouseDown(Sender: TControl; Button, X, Y: Integer);
@@ -37,12 +51,19 @@ begin
   count := count + 1;
 end;
 
+procedure THandler.KeyDown(Sender: TControl; KeyCode: Integer);
+begin
+  gotKey := KeyCode;
+  keyCount := keyCount + 1;
+end;
+
 var
   Form1: TForm;
   PaintBox: TPaintBox;
   h: THandler;
   m: TMethod;
   ev: PGdkBtn;
+  evk: PGdkKey;
   handled, fails: Integer;
 
 begin
@@ -58,8 +79,11 @@ begin
 
   h := THandler.Create;
   h.count := 0;
+  h.keyCount := 0;
   m.Code := @h.MouseDown; m.Data := h;
   PaintBox.OnMouseDown := m;
+  m.Code := @h.KeyDown; m.Data := h;
+  PaintBox.OnKeyDown := m;
 
   Form1.Realize;
 
@@ -85,6 +109,20 @@ begin
   if h.gotButton = 1 then writeln('button=ok') else begin writeln('button=bad ', h.gotButton); fails := fails + 1; end;
   if h.gotX = 42 then writeln('x=ok') else begin writeln('x=bad ', h.gotX); fails := fails + 1; end;
   if h.gotY = 17 then writeln('y=ok') else begin writeln('y=bad ', h.gotY); fails := fails + 1; end;
+
+  { synthesize a key press (keyval 65 = 'A') }
+  evk := malloc(128);
+  evk^.etype := 8;          { GDK_KEY_PRESS }
+  evk^.window := gtk_widget_get_window(PaintBox.Handle);
+  evk^.sendEvent := 1;
+  evk^.time := 0;
+  evk^.state := 0;
+  evk^.keyval := 65;
+  handled := 0;
+  g_signal_emit_by_name(PaintBox.Handle, PC('key-press-event'), evk, @handled);
+  if h.keyCount < 1 then begin writeln('key-fired=bad'); fails := fails + 1; end
+  else writeln('key-fired=ok');
+  if h.gotKey = 65 then writeln('key=ok') else begin writeln('key=bad ', h.gotKey); fails := fails + 1; end;
 
   if fails = 0 then writeln('ALL OK') else writeln('FAILS=', fails);
   if fails <> 0 then Halt(1);
