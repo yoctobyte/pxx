@@ -4811,12 +4811,20 @@ begin
   { bytes = 8: full width, no change }
 end;
 
-function ConstEval: Int64;
-{ Evaluate a compile-time constant expression (no code emitted) }
-var r, v: Int64; idx, i: Integer; op: TTokenKind; s: AnsiString;
-    castBytes: Integer; castSigned: Boolean;
+function ConstEval: Int64; forward;
+
+function ConstEvalFactor: Int64;
+{ Primary of a const expression: literal / true / false / single-char literal /
+  named const / parenthesised expr / integer typecast. Unary +/- binds tightest
+  (so -2*3 = -(2)*3 = -6 and 2*-3 = -6). No code emitted. }
+var r: Int64; idx: Integer; castBytes: Integer; castSigned: Boolean;
 begin
   r := 0;
+  { NB: the parens on the recursive ConstEvalFactor() are required — a bare own
+    function name in an expression reads the (uninitialised) Result var instead
+    of recursing, both under the FPC seed and self-hosted. }
+  if CurTok.Kind = tkMinus then begin Next; Result := -ConstEvalFactor(); Exit; end;
+  if CurTok.Kind = tkPlus  then begin Next; Result :=  ConstEvalFactor(); Exit; end;
   if (TokPos < TokCount) and (Tokens[TokPos].Kind = tkLParen) and
      ConstIntCastWidth(CurTok.SVal, castBytes, castSigned) then
   begin
@@ -4831,7 +4839,6 @@ begin
   else if CurTok.Kind = tkInteger then begin r := CurTok.IVal; Next; end
   else if CurTok.Kind = tkTrue  then begin r := 1; Next; end
   else if CurTok.Kind = tkFalse then begin r := 0; Next; end
-  else if CurTok.Kind = tkMinus then begin Next; r := -ConstEval(); end
   else if (CurTok.Kind = tkString) and (Length(CurTok.SVal) = 1) then
     { single-char literal 'x' used as an ordinal constant (Char typed-const
       element, `Ord('A')`-free contexts) -> its character code. }
@@ -4860,30 +4867,53 @@ begin
   begin
     Next; r := ConstEval(); Expect(tkRParen, ')');
   end;
-  while (CurTok.Kind in [tkPlus, tkMinus, tkStar, tkDiv, tkMod, tkAnd, tkOr, tkXor, tkShl]) or
+  Result := r;
+end;
+
+function ConstEvalTerm: Int64;
+{ Multiplicative precedence level (binds tighter than +/-): * div mod and shl
+  shr, left-associative. `shr` is lexed as an identifier (no tkShr token), like
+  the runtime term parser. }
+var r, v: Int64; op: TTokenKind;
+begin
+  r := ConstEvalFactor;
+  while (CurTok.Kind in [tkStar, tkDiv, tkMod, tkAnd, tkShl]) or
         ((CurTok.Kind = tkIdent) and (CurTok.SVal = 'shr')) do
   begin
-    { `shr` is lexed as an identifier (no tkShr token), like the runtime term
-      parser; everything else is a real operator token. }
     if CurTok.Kind = tkIdent then
-    begin
-      Next; v := ConstEval(); r := r shr v;
-    end
+    begin Next; v := ConstEvalFactor; r := r shr v; end
     else
     begin
-      op := CurTok.Kind; Next; v := ConstEval();
+      op := CurTok.Kind; Next; v := ConstEvalFactor;
       case op of
-        tkPlus:  r := r + v;
-        tkMinus: r := r - v;
-        tkStar:  r := r * v;
-        tkDiv:   r := r div v;
-        tkMod:   r := r mod v;
-        tkAnd:   r := r and v;
-        tkOr:    r := r or v;
-        tkXor:   r := (r or v) and not (r and v);  { a xor b; the compiler must
-                   stay buildable by an older seed that lacks the xor operator }
-        tkShl:   r := r shl v;
+        tkStar: r := r * v;
+        tkDiv:  r := r div v;
+        tkMod:  r := r mod v;
+        tkAnd:  r := r and v;
+        tkShl:  r := r shl v;
       end;
+    end;
+  end;
+  Result := r;
+end;
+
+function ConstEval: Int64;
+{ Evaluate a compile-time constant expression (no code emitted). Additive
+  precedence level: + - or xor, left-associative; multiplicative ops bind
+  tighter (ConstEvalTerm). Fixes the old flat right-to-left fold that ignored
+  operator precedence (`2*3+1` gave 8, not 7). }
+var r, v: Int64; op: TTokenKind;
+begin
+  r := ConstEvalTerm;
+  while CurTok.Kind in [tkPlus, tkMinus, tkOr, tkXor] do
+  begin
+    op := CurTok.Kind; Next; v := ConstEvalTerm;
+    case op of
+      tkPlus:  r := r + v;
+      tkMinus: r := r - v;
+      tkOr:    r := r or v;
+      tkXor:   r := (r or v) and not (r and v);  { a xor b; the compiler must
+                 stay buildable by an older seed that lacks the xor operator }
     end;
   end;
   Result := r;
