@@ -2231,6 +2231,10 @@ lib-test: pxx-stable-check
 	test "$$(/tmp/lib_klondike | tail -1)" = "ALL OK"
 	$(PXX_STABLE) -Fulib/rtl -Fuexamples/solitaire_gui examples/solitaire/console_solitaire.pas /tmp/console_solitaire
 	test "$$(printf 'aq' | /tmp/console_solitaire 2>/dev/null | tail -1)" = "moves=2 won=0"
+	$(PXX_STABLE) -Fuexamples/g2048 test/lib_g2048.pas /tmp/lib_g2048
+	test "$$(/tmp/lib_g2048 | tail -1)" = "ALL OK"
+	$(PXX_STABLE) -Fulib/rtl -Fuexamples/g2048 examples/g2048/console_2048.pas /tmp/console_2048
+	test "$$(printf '\033[D\033[B\033[D\033[B\033[C\033[A q' | /tmp/console_2048 2>/dev/null | tail -1)" = "score=8 over=0"
 	$(PXX_STABLE) test/lib_tui_app.pas /tmp/lib_tui_app
 	test "$$(/tmp/lib_tui_app | tail -1)" = "ALL OK"
 	$(PXX_STABLE) test/lib_keys.pas /tmp/lib_keys
