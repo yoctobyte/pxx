@@ -609,13 +609,10 @@ begin
   h := ctl.Handle;
   if h = nil then Exit;
 
-  { an empty AnsiString marshals to a NULL PChar, which gtk_*_set_text rejects
-    ("assertion 'text != NULL'"); use an empty C string instead (same guard as
-    SetName above).
-    WAITING ON FIX: docs/progress/backlog/bug-pchar-empty-managed-string-nil.md
-    (Track A) — once PChar('')/PChar(emptyAnsiString) yields a static #0 pointer
-    instead of nil, drop this guard and just `p := PChar(AText)`. }
-  if AText = '' then p := PChar('') else p := PChar(AText);
+  { PChar of an empty AnsiString now yields a static #0 pointer (never nil), so
+    gtk_*_set_text sees a valid empty C string with no guard — see
+    docs/progress/done/bug-pchar-empty-managed-string-nil.md. }
+  p := PChar(AText);
 
   className := GetInstanceClassName(Pointer(AControl));
   cls := GetClass(className);
