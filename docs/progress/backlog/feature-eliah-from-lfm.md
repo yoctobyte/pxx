@@ -35,30 +35,39 @@ A real multi-widget form exposed:
    (CreateInstance) skips, leaving them nil → `FItems[0]` crash. FIXED (AddItem
    grows on demand; also drops the 256 cap).
 
-## Remaining blocker (4th)
+## 4th blocker — FIXED 2026-06-23
 
-A streamed `TEliahForm` passes `--smoke` (which Realizes once, no `gtk_main`) but
-**segfaults inside `Application.Run`** — before the first paint fires (the
-`OnDesignPaint` marker never prints), so the crash is in the second Realize /
-ConnectAppQuit / `ShowWidget` (`gtk_widget_show_all`) path for a streamed form.
-No streamed form had previously been `show_all`'d + `gtk_main`'d (test_pcl_lfm
-clicks synchronously without a main loop), so this is untested territory.
+A streamed `TPaintBox` had `Canvas = nil` (TPaintBox.Create makes FCanvas, which
+CreateInstance skips). `ControlDrawTramp` does `paintBox.Canvas.Handle := cr` on
+every expose → nil deref → segfault (an adjacent event-wired widget just shifted
+layout timing enough to trigger the draw). Fixed: TPaintBox.CreateHandle creates
+FCanvas if nil. Root-caused as **Track B / lib**, NOT resource inclusion (props
+streamed fine) and NOT the compiler (`GetMethodAddr` returns correct addresses).
 
-Repro: the `eliah.lfm` + the `TEliahForm` conversion (reverted from
-`apps/ide/eliah/main.pas` to keep the app working) — or minimally, stream any
-form with a child widget and call `Application.Run`.
+## Constructor-skip audit (2026-06-23)
 
-## Next steps
+All four blockers were the same theme: the streamer (`CreateInstance`) does NOT
+run constructors, and the loader had only ever been tested with a single TButton.
+Audited every PCL constructor:
 
-1. Find the `Application.Run` crash for streamed forms (likely a streamed child's
-   Realize/parenting: streamed children may not have `FParent` set the way
-   `widget.Parent := form` sets it, so the Realize/show path differs). Add a
-   minimal `stream + Application.Run` gate to lock it once fixed.
-2. Re-apply the `TEliahForm` conversion (the reverted main.pas rewrite) and
-   verify with an ffmpeg screenshot that the streamed layout renders + is
-   interactive.
+- Crash-risk (allocate sub-objects/arrays in the constructor): **TPaintBox**
+  (Canvas), **TListBox**/**TComboBox** (FItems/FRows). ALL FIXED.
+- Safe (only `HandleNeeded`; zeroing covers their fields): TButton, TLabel,
+  TEdit, TCheckBox, TMemo, TPanel, TGLArea, TForm.
+- Non-widget / unlikely-in-lfm, would get default-zero fields if streamed but NOT
+  crash: TTimer (FInterval/FEnabled/UpdateTimer), TMenu (FRootMenuItem).
+
+The contract is now documented at `lib/rtl/typinfo.pas:CreateInstance`.
+
+## Remaining work
+
+All streaming blockers are fixed. Only the re-application of the conversion is
+left: re-create the `TEliahForm` main.pas (the version that already passed
+`--smoke`; it only died on the now-fixed Canvas crash) and verify with an ffmpeg
+screenshot that the streamed layout renders + is interactive. `eliah.lfm` is
+committed and ready.
 
 ## Note
 
-The 3 fixed streaming bugs benefit ALL RTTI streaming (and fixed the silently-
-empty captions in `test_pcl_lfm`), independent of Eliah.
+The 4 streaming fixes benefit ALL RTTI streaming (and fixed the silently-empty
+captions in `test_pcl_lfm`), independent of Eliah.
