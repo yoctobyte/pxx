@@ -294,10 +294,17 @@ begin
   end;
 end;
 
+type
+  { setter method ABI: Self in the first slot (rdi), value in the second (rsi) —
+    same convention the GTK trampolines call methods with. }
+  TOrdSetter = procedure(Self: Pointer; v: Integer);
+  TStrSetter = procedure(Self: Pointer; const v: string);
+
 procedure SetOrdProp(instance: Pointer; p: PPropInfo; v: Int64);
 var
   addr: Pointer;
   sz, tk: Integer;
+  setter: TOrdSetter;
 begin
   if p^.SetKind = 0 then
   begin
@@ -321,6 +328,13 @@ begin
     begin
       PInt64(addr)^ := v;
     end;
+  end
+  else
+  begin
+    { SetKind=1: SetRef is the setter method's code pointer. Invoke it so the
+      property's side effects run (e.g. TControl.SetLeft updating the widget). }
+    setter := TOrdSetter(Pointer(p^.SetRef));
+    setter(instance, Integer(v));
   end;
 end;
 
@@ -339,11 +353,18 @@ end;
 procedure SetStrProp(instance: Pointer; p: PPropInfo; const v: string);
 var
   addr: Pointer;
+  setter: TStrSetter;
 begin
   if p^.SetKind = 0 then
   begin
     addr := @PUInt8(instance)[p^.SetRef];
     PAnsiStr(addr)^ := v;
+  end
+  else
+  begin
+    { SetKind=1: SetRef is the setter method's code pointer (e.g. SetCaption). }
+    setter := TStrSetter(Pointer(p^.SetRef));
+    setter(instance, v);
   end;
 end;
 

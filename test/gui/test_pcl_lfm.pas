@@ -46,13 +46,18 @@ begin
 
   Form1.Realize;
 
+  { method-backed props (write via a setter) must stream, not just events }
+  if Form1.Caption <> 'LFM Streamed' then begin writeln('FAIL: form caption not streamed (', Form1.Caption, ')'); Halt(1); end;
+
   btn := Form1.FindChild('Btn1');
   if btn = nil then begin writeln('FAIL: no Btn1'); Halt(1); end;
   bc := btn;
   writeln('btn Caption=', bc.Caption);
+  if bc.Caption <> 'Click me' then begin writeln('FAIL: btn caption not streamed (', bc.Caption, ')'); Halt(1); end;
 
   gtk_button_clicked(bc.Handle);
   gtk_button_clicked(bc.Handle);
 
   writeln('total clicks=', Form1.count);
+  if Form1.count <> 2 then begin writeln('FAIL: click count'); Halt(1); end;
 end.
