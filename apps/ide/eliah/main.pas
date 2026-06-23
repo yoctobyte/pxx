@@ -60,6 +60,7 @@ type
     procedure OnUp(Sender: TObject);
     procedure OnSave(Sender: TObject);
     procedure OnDelete(Sender: TObject);
+    procedure OnNew(Sender: TObject);
     procedure OnErrorClick(Sender: TObject);
     procedure OpenDesign(const path: AnsiString);
     procedure Relayout(w, h: Integer);
@@ -168,6 +169,22 @@ begin
   if (idx < 0) or (idx >= Diags.Count) then Exit;
   line := Diags.DiagLine(idx);
   if line > 0 then Editor.CaretToLine(line - 1);
+end;
+
+{ start a blank design: a single root form. Save will prompt to a fresh path
+  (untitled.lfm) so it never clobbers the previously-open file. }
+procedure THandler.OnNew(Sender: TObject);
+var d: TDocModel;
+begin
+  d := TDocModel.Create;
+  d.AddNode(wkForm, 'Form1', -1, 12, 12, 320, 240);
+  Dsn.Doc := d;
+  Dsn.Sel := -1;
+  Dsn.EndDrag;
+  designPath := 'untitled.lfm';
+  if DesignBox <> nil then DesignBox.Invalidate;
+  ShowInspector(-1);
+  Output.Text := '$ new design (untitled.lfm)';
 end;
 
 { delete the selected node (and its children); the root form is kept }
@@ -487,6 +504,7 @@ begin
   btn := MkButton('Run',     176); btn.OnClick := @H.OnRun;
   btn := MkButton('Save',    466); btn.OnClick := @H.OnSave;
   btn := MkButton('Del',     552); btn.OnClick := @H.OnDelete;
+  btn := MkButton('New',     638); btn.OnClick := @H.OnNew;
 
   { palette: pick a widget kind, hit Place, then click the designer to drop it }
   Palette := TComboBox.Create;
@@ -654,6 +672,12 @@ begin
     { click empty surface -> selection cleared }
     H.OnDesignMouseDown(nil, 1, 5, 5);
     if H.Dsn.Sel >= 0 then begin writeln('SMOKE FAIL: selection not cleared'); Halt(1); end;
+
+    { new design -> a single root form, save target retargeted to untitled }
+    H.OnNew(nil);
+    if H.Dsn.Doc.Count <> 1 then begin writeln('SMOKE FAIL: new design not blank'); Halt(1); end;
+    if H.Dsn.Doc.NodeParent(0) <> -1 then begin writeln('SMOKE FAIL: new root not a form'); Halt(1); end;
+    if H.designPath <> 'untitled.lfm' then begin writeln('SMOKE FAIL: new did not retarget save'); Halt(1); end;
 
     writeln('SMOKE OK');
   end
