@@ -114,6 +114,12 @@ function f(n: integer): integer; function g(m: integer): integer; begin g := m *
 begin f := g(n) + 1; end;
 begin writeln(f(5)); end.
 P
+probe low-array known <<'P'
+var a: array[5..9] of integer; begin writeln(low(a)); end.
+P
+probe high-nonzero-array known <<'P'
+var a: array[5..9] of integer; begin writeln(high(a)); end.
+P
 
 echo "---"
 echo "new divergences: $new   known/filed: $known"

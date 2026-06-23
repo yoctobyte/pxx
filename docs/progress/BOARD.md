@@ -25,11 +25,12 @@ _none_
 | --- | --- | --- | --- | --- |
 | feature-c-runtime-library | B | feature | C runtime/library layer (`lib/crtl`) plus direct C-library packages | feature-c-source-frontend |
 
-## backlog (54)
+## backlog (55)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
 | bug-length-rejects-non-variable | A | bug | bug: Length() rejects a non-variable argument (literal / expression) | — |
+| bug-low-missing-high-wrong-nonzero-array | A | bug | bug: Low() missing; High() wrong on non-zero-based arrays | — |
 | bug-nested-brace-comments | A | bug | bug: `{ }` comments do not nest | — |
 | bug-paramstr-inline-argstr | A | bug | bug: ParamStr/ArgStr result not usable inline (needs a string variable) | — |
 | bug-setlength-array-element | A | bug | bug: SetLength rejects an indexed array element as target | — |
@@ -328,6 +329,7 @@ _none_
 ## Ready (no unmet blocker)
 
 - [A] bug-length-rejects-non-variable
+- [A] bug-low-missing-high-wrong-nonzero-array
 - [A] bug-nested-brace-comments
 - [A] bug-paramstr-inline-argstr
 - [A] bug-setlength-array-element
