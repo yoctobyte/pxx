@@ -60,3 +60,18 @@ tests richer mouse event flow and live repaint.
 - 2026-06-22 — Opened on user request for a patience/solitaire GUI app to test
   widget-set behavior, general keyboard/mouse I/O, resizing, and related GUI
   application mechanics.
+
+## Log
+- 2026-06-23 — Engine-first landed: `examples/solitaire_gui/klondike.pas` (pure
+  logic, fixed 2D-array board, pure move predicates, seeded deal, draw/recycle,
+  multi-card runs, auto-to-foundation, win, full undo). Tested by
+  `test/lib_klondike.pas` in `make lib-test` (exhaustive predicates + move/undo
+  checksum round-trips).
+- 2026-06-23 — GUI front-end landed: `examples/solitaire_gui/solitaire_gui.pas`
+  (PCL/GTK3): board custom-drawn in TPaintBox.OnPaint, button-driven play
+  (New/Draw/Undo/Auto/To-Found + pile-select). `--smoke` headless integration
+  check wired into `tools/gui_suite.sh` (renders + a few engine moves, SMOKE OK).
+  LIMITATION: play is button-driven because PCL exposes only OnClick (no mouse
+  coordinates/keys) — the ticket's click/drag + keyboard needs PCL mouse/key
+  events first (a PCL/widget-set extension, not this demo). Discovered building
+  this; flag for the PCL track.

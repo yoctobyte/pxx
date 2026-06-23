@@ -41,6 +41,21 @@ run_gui_test test_pcl_widgets
 run_gui_test test_pcl_drawing
 run_gui_test test_pcl_menus
 
+# Solitaire GUI demo (engine in examples/solitaire_gui): compile + headless
+# --smoke run (renders the board + a few engine moves, prints SMOKE OK).
+solitaire_smoke() {
+  local src="$ROOT/examples/solitaire_gui/solitaire_gui.pas"
+  local out="/tmp/gui_test_solitaire" log="/tmp/gui_test_solitaire.log"
+  if ! "$PXX_STABLE" -Fulib/pcl -Fuexamples/solitaire_gui "$src" "$out" >"$log" 2>&1; then
+    say "FAIL  solitaire_gui -- compile: $(tail -1 "$log")"; fail=1; return
+  fi
+  if [ "$("$out" --smoke 2>"$log" | tail -1)" != "SMOKE OK" ]; then
+    say "FAIL  solitaire_gui -- smoke: $(tail -1 "$log")"; fail=1; return
+  fi
+  say "OK    solitaire_gui"
+}
+solitaire_smoke
+
 if [ "$fail" -ne 0 ]; then
   say "GUI suite finished with some failures (compiler bugs pending)."
   exit 1
