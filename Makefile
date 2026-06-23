@@ -2229,6 +2229,8 @@ lib-test: pxx-stable-check
 	test "$$(/tmp/lib_menu | tail -1)" = "ALL OK"
 	$(PXX_STABLE) -Fuexamples/solitaire_gui test/lib_klondike.pas /tmp/lib_klondike
 	test "$$(/tmp/lib_klondike | tail -1)" = "ALL OK"
+	$(PXX_STABLE) -Fulib/rtl -Fuexamples/solitaire_gui examples/solitaire/console_solitaire.pas /tmp/console_solitaire
+	test "$$(printf 'aq' | /tmp/console_solitaire 2>/dev/null | tail -1)" = "moves=2 won=0"
 	$(PXX_STABLE) test/lib_tui_app.pas /tmp/lib_tui_app
 	test "$$(/tmp/lib_tui_app | tail -1)" = "ALL OK"
 	$(PXX_STABLE) test/lib_keys.pas /tmp/lib_keys

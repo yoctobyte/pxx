@@ -1,8 +1,8 @@
 # Demo — console Klondike solitaire (user-requested entertainment test app)
 
 - **Type:** feature
-- **Status:** backlog
-- **Owner:** —
+- **Status:** working
+- **Owner:** Track B agent (reuses klondike engine + screen lib)
 - **Opened:** 2026-06-19 (user-called: "as user, I am calling solitaire")
 - **Relation:** demo-class, but a deliberate **exception to the catalog's
   headless / pure-oracle filter** in idea-demo-app-candidates — admitted because
@@ -68,3 +68,13 @@ entertainment; ESP-serial via line mode. No self-host / cross regression.
   = strings, line-input avoids termios) so the demo stays dependency-free and
   ESP-serial-capable; flagged the oracle caveat + the seeded-deal / scripted
   transcript test hooks.
+
+## Log
+- 2026-06-23 — **Done.** examples/solitaire/console_solitaire.pas: playable
+  terminal Klondike on the tested `klondike` engine + the `screen` TUI manager
+  (lib/rtl/screen.pas). Column cursor (arrows), space acts (stock=draw, else
+  pick source then destination → largest legal run), u=undo a=auto n=new q/Esc=
+  quit; red/black suits, fanned tableau, move counter + win line. Keys via
+  ScreenWaitKey so piped input drives it headlessly (EOF=KEY_NONE quits).
+  Scripted smoke in `make lib-test`: `printf 'aq'` on seed 1 sends AS+AH to
+  foundations -> `moves=2 won=0`. No GTK/display needed (pure terminal).
