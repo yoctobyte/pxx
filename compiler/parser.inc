@@ -12569,6 +12569,7 @@ end;
 procedure ParseProgram;
 var jmpPatch, i, j: Integer; doneUses, doneDecls, hasExceptions, needsBuiltin,
     needsHeap, needsAnsiRuntime, needHeapUnit, hasCoroutine, needsTextfile: Boolean;
+    usesTextfile: Boolean; tnm: AnsiString;
     savedUnitIdx, afterDeclTok: Integer;
     dummyNames: array[0..7] of AnsiString;
     dummyTypes: array[0..7] of TTypeKind;
@@ -12612,11 +12613,31 @@ begin
     define travels with the source, so every self-build path — bootstrap,
     cross-bootstrap, stabilize, manual — opts out without per-site Makefile flags. }
   if PasDefineExists('PXX_NODEFAULTRTL') then NoDefaultRtl := True;
+  { Only pull the implicit textfile surface when the source actually references
+    the file type. Scanning the already-lexed token stream up front for a bare
+    `Text`/`TextFile`/`IOResult` identifier (any position — var/param/field/
+    return/method, so more robust than the old `: Text` positional scan) skips
+    the ~0.19s textfile+builtin load for the common file-less program (plain
+    writeln to stdout uses builtins, not the textfile RTL). A length pre-check
+    avoids building a string for every token. An explicit `uses textfile` still
+    loads it regardless (handled in the token loop below). }
   if (not NoDefaultRtl) and
      (TargetArch <> TARGET_XTENSA) and (TargetArch <> TARGET_RISCV32) then
   begin
-    needsBuiltin := True;
-    needsTextfile := True;
+    usesTextfile := False;
+    for i := 0 to TokCount - 1 do
+      if (Tokens[i].Kind = tkIdent) and
+         ((Tokens[i].SLen = 4) or (Tokens[i].SLen = 8)) then
+      begin
+        tnm := GetTokenStr(i);
+        if CaseEqual(tnm, 'text') or CaseEqual(tnm, 'textfile') or CaseEqual(tnm, 'ioresult') then
+        begin usesTextfile := True; Break; end;
+      end;
+    if usesTextfile then
+    begin
+      needsBuiltin := True;
+      needsTextfile := True;
+    end;
   end;
   DetectPascalRuntimeNeeds(needsHeap, needsAnsiRuntime);
   { Full builtin (Str/Val/Variant) is pulled only for AnsiString/exception
