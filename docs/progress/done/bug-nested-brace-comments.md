@@ -1,9 +1,26 @@
 # bug: `{ }` comments do not nest
 
 - **Type:** bug (Track A — lexer)
-- **Status:** backlog
+- **Status:** done
 - **Found:** 2026-06-23, writing PCL/solitaire comments
+- **Closed:** 2026-06-23
 - **Severity:** low (cosmetic, but surprising — silently turns comment text into code)
+
+## Resolution (2026-06-23)
+
+The nested-comment machinery already existed (lexer.inc: `commentDepth` tracking
+for `{ }` and `(* *)`, plus the `{$NESTEDCOMMENTS ON/OFF}` directive), gated on a
+`NestedComments` flag that defaulted to False. Flipped the default to True — the
+dialect default the owner wanted (FPC nests too). `{$NESTEDCOMMENTS OFF}`
+disables it.
+
+`{ outer { inner } still comment }` and `(* a (* b *) c *)` now compile,
+byte-identical to FPC. Self-host is unaffected: the ~169 inner-brace comments in
+the compiler source (e.g. `{ push {r4-r11, lr} }`) are all brace-balanced, so the
+nested scan ends at the same point as the old flat scan (both modes skip the
+whole comment, identical token stream — verified by the byte-identical
+self-host). Gate: `make test` (self-host byte-identical) + FPC oracle. Closes
+bug-nested-brace-comments.
 
 ## Symptom
 

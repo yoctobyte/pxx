@@ -534,7 +534,7 @@ begin
   InterfacesComMode := False;
   ComInterfaceUsed := False;
   CStyleComments := False;
-  NestedComments := False;
+  NestedComments := True;   { nest `{ }` / `(* *)` by default (dialect default; FPC nests too); {$NESTEDCOMMENTS OFF} disables }
   CaseSensitiveMode := False;
   PackRecordsVal := 8;
   name := 'PXX';
