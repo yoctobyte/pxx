@@ -37,6 +37,7 @@ type
     
     function GetMemoText(AMemo: TComponent): string; override;
     procedure SetMemoText(AMemo: TComponent; const AText: string); override;
+    procedure MemoCaretToLine(AMemo: TComponent; line: Integer); override;
     
     function AddListItem(AListBox: TComponent; const AText: string): Pointer; override;
     function GetListIndex(AListBox: TComponent): Integer; override;
@@ -871,6 +872,23 @@ begin
   tv := gtk_bin_get_child(h);
   buf := gtk_text_view_get_buffer(tv);
   gtk_text_buffer_set_text(buf, PChar(AText), -1);
+end;
+
+procedure TGtk3WidgetSet.MemoCaretToLine(AMemo: TComponent; line: Integer);
+var
+  h, tv, buf, mark: Pointer;
+  iter: array[0..19] of Pointer;   { GtkTextIter blob, as in GetMemoText }
+  ctl: TControl;
+begin
+  ctl := TControl(AMemo);
+  h := ctl.Handle;
+  if h = nil then Exit;
+  tv := gtk_bin_get_child(h);
+  buf := gtk_text_view_get_buffer(tv);
+  gtk_text_buffer_get_iter_at_line(buf, @iter, line);
+  gtk_text_buffer_place_cursor(buf, @iter);
+  mark := gtk_text_buffer_get_insert(buf);
+  gtk_text_view_scroll_mark_onscreen(tv, mark);
 end;
 
 function TGtk3WidgetSet.AddListItem(AListBox: TComponent; const AText: string): Pointer;

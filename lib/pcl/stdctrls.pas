@@ -55,6 +55,7 @@ type
     constructor Create;
     procedure CreateHandle; override;
     procedure ConnectChange;
+    procedure CaretToLine(line: Integer);   { 0-based; moves cursor + scrolls }
   published
     property Text: string read GetText write SetText;
     property OnChange: TMethod read FOnChange write FOnChange;
@@ -227,6 +228,12 @@ procedure TMemo.SetText(const s: string);
 begin
   if Self.Handle <> nil then
     WidgetSet.SetMemoText(Self, s);
+end;
+
+procedure TMemo.CaretToLine(line: Integer);
+begin
+  if Self.Handle <> nil then
+    WidgetSet.MemoCaretToLine(Self, line);
 end;
 
 { TListBox }

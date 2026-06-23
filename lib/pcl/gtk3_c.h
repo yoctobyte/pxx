@@ -77,6 +77,10 @@ void gtk_text_buffer_set_text(void* buffer, char* text, int len);
 char* gtk_text_buffer_get_text(void* buffer, void* start, void* end, int include_hidden);
 void gtk_text_buffer_get_start_iter(void* buffer, void* iter);
 void gtk_text_buffer_get_end_iter(void* buffer, void* iter);
+void gtk_text_buffer_get_iter_at_line(void* buffer, void* iter, int line_number);
+void gtk_text_buffer_place_cursor(void* buffer, void* iter);
+void* gtk_text_buffer_get_insert(void* buffer);
+void gtk_text_view_scroll_mark_onscreen(void* text_view, void* mark);
 
 // List Box (TListBox)
 void* gtk_list_box_new(void);

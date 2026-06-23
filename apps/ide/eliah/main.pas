@@ -21,7 +21,7 @@ program eliah;
   a selection outline + the node's fields in the object-inspector pane below. }
 
 uses gtk3, controls, stdctrls, extctrls, graphics, forms, sysutils,
-     buffer, runner, docmodel, designer, lfmload;
+     buffer, runner, docmodel, designer, lfmload, builder;
 
 const
   W_WIN     = 1100;
@@ -29,6 +29,7 @@ const
   W_TREE    = 240;
   W_RIGHT   = 300;
   H_BOTTOM  = 200;
+  ERR_H     = 150;        { error-list height at the bottom of the left column }
   TOOLBAR_H = 34;
   PXX_PATH  = 'stable_linux_amd64/default/pinned';
   BUILD_OUT = '/tmp/eliah_build';
@@ -38,6 +39,8 @@ type
   THandler = class
     Tree: TListBox;
     Editor, Output: TMemo;
+    Errors: TListBox;
+    Diags: TDiagList;
     Props: TListBox;
     ValueEdit: TEdit;
     FEditRow: Integer;     { which inspector row the value edit targets, -1 none }
@@ -57,6 +60,7 @@ type
     procedure OnUp(Sender: TObject);
     procedure OnSave(Sender: TObject);
     procedure OnDelete(Sender: TObject);
+    procedure OnErrorClick(Sender: TObject);
     procedure OpenDesign(const path: AnsiString);
     procedure Relayout(w, h: Integer);
     procedure OnFormResize(Sender: TControl; w, h: Integer);
@@ -155,6 +159,17 @@ begin
   if EndsWithLfm(curFile) then OpenDesign(curFile);
 end;
 
+{ click a diagnostic -> jump the editor to its line (compiler lines are 1-based,
+  the memo caret is 0-based) }
+procedure THandler.OnErrorClick(Sender: TObject);
+var idx, line: Integer;
+begin
+  idx := Errors.ItemIndex;
+  if (idx < 0) or (idx >= Diags.Count) then Exit;
+  line := Diags.DiagLine(idx);
+  if line > 0 then Editor.CaretToLine(line - 1);
+end;
+
 { delete the selected node (and its children); the root form is kept }
 procedure THandler.OnDelete(Sender: TObject);
 begin
@@ -193,11 +208,20 @@ begin
 end;
 
 procedure THandler.OnCompile(Sender: TObject);
-var out: AnsiString; rc: Integer;
+var out: AnsiString; rc, i: Integer;
 begin
   if curFile = '' then begin Output.Text := '(no file selected)'; Exit; end;
   out := RunCapture(PXX_PATH, [curFile, BUILD_OUT], rc);
   Output.Text := '$ compile ' + curFile + #10 + out + #10 + '--- exit ' + IntToStr(rc) + ' ---';
+  { parse diagnostics into the clickable error list }
+  Diags.Clear;
+  Diags.Parse(out);
+  Errors.Clear;
+  if Diags.Count = 0 then
+    Errors.AddItem('(no diagnostics)')
+  else
+    for i := 0 to Diags.Count - 1 do
+      Errors.AddItem('L' + IntToStr(Diags.DiagLine(i)) + ': ' + Diags.DiagMsg(i));
 end;
 
 procedure THandler.OnRun(Sender: TObject);
@@ -225,7 +249,8 @@ begin
   if ch < 80 then ch := 80;
   if contentH < 160 then contentH := 160;
 
-  Tree.SetBounds(0, TOOLBAR_H, W_TREE, contentH);
+  Tree.SetBounds(0, TOOLBAR_H, W_TREE, contentH - ERR_H);
+  Errors.SetBounds(0, TOOLBAR_H + contentH - ERR_H, W_TREE, ERR_H);
   Editor.SetBounds(W_TREE, TOOLBAR_H, cw, ch);
   Output.SetBounds(W_TREE, TOOLBAR_H + ch, cw, contentH - ch);
   DesignBox.SetBounds(W_TREE + cw, TOOLBAR_H, W_RIGHT, ch);
@@ -397,8 +422,15 @@ begin
 
   H.Tree := TListBox.Create;
   H.Tree.Parent := Form1;
-  H.Tree.SetBounds(0, TOOLBAR_H, W_TREE, contentH);
+  H.Tree.SetBounds(0, TOOLBAR_H, W_TREE, contentH - ERR_H);
   H.Tree.OnClick := @H.OnTreeClick;
+
+  { error list under the tree: compile diagnostics, click -> jump editor }
+  H.Diags := TDiagList.Create;
+  H.Errors := TListBox.Create;
+  H.Errors.Parent := Form1;
+  H.Errors.SetBounds(0, TOOLBAR_H + contentH - ERR_H, W_TREE, ERR_H);
+  H.Errors.OnClick := @H.OnErrorClick;
 
   H.Editor := TMemo.Create;
   H.Editor.Parent := Form1;
@@ -520,6 +552,17 @@ begin
     H.curFile := 'apps/ide/garin/buffer.pas';
     H.OnCompile(nil);
     if Length(H.Output.Text) = 0 then begin writeln('SMOKE FAIL: no compile output'); Halt(1); end;
+
+    { diagnostics: compile a deliberately broken unit -> error list populated,
+      click jumps the editor (no crash). }
+    if not WriteAllText('/tmp/eliah_bad.pas', 'program bad;' + #10 + 'begin' + #10 + '  x := 1;' + #10 + 'end.' + #10) then
+      begin writeln('SMOKE FAIL: could not write bad.pas'); Halt(1); end;
+    H.curFile := '/tmp/eliah_bad.pas';
+    H.OnCompile(nil);
+    if H.Diags.Count < 1 then begin writeln('SMOKE FAIL: no diagnostics parsed'); Halt(1); end;
+    if H.Diags.DiagLine(0) <> 3 then begin writeln('SMOKE FAIL: diag line wrong'); Halt(1); end;
+    H.Errors.ItemIndex := 0;
+    H.OnErrorClick(nil);   { jump to the error line — must not crash }
 
     { designer mouse-select: click inside the sample OK button (x=28..108,
       y=92..120) -> it must become the selection and fill the inspector. }

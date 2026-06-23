@@ -6,7 +6,7 @@ program bochan;
   verdict. Links NO GUI/TUI face (no lib/pcl) — building this at all is the proof
   that garin is render-agnostic. }
 
-uses buffer, eduth, docmodel, lfmload;
+uses buffer, eduth, docmodel, lfmload, builder;
 
 var
   e: TEduth;
@@ -14,8 +14,9 @@ var
   ok: Boolean;
   doc: TDocModel;
   iForm, iBtn: Integer;
-  lfm, saved: AnsiString;
+  lfm, saved, diagOut: AnsiString;
   ldoc, rdoc, ddoc: TDocModel;
+  diags: TDiagList;
 
 begin
   EduthInit(e);
@@ -154,6 +155,23 @@ begin
   CheckTrue(e, 'write returns true', ok);
   CheckTrue(e, 'reads back', b.LoadFromFile('/tmp/bochan_w.txt'));
   CheckStr(e, 'content matches', b.Text, 'alpha' + #10 + 'beta');
+
+  { scenario 9: builder diagnostic parser }
+  writeln('-- builder.TDiagList.Parse --');
+  diagOut :=
+    'ok: ignore this line'                          + #10 +
+    'pascal26:3: error: undefined variable (x)'     + #10 +
+    'some banner without the shape'                 + #10 +
+    'pascal26:24: error: unit source not found'     + #10;
+  diags := TDiagList.Create;
+  diags.Parse(diagOut);
+  CheckInt(e, 'two diagnostics parsed', diags.Count, 2);
+  CheckInt(e, 'first diag line', diags.DiagLine(0), 3);
+  CheckStr(e, 'first diag msg', diags.DiagMsg(0), 'error: undefined variable (x)');
+  CheckInt(e, 'second diag line', diags.DiagLine(1), 24);
+  CheckStr(e, 'second diag msg', diags.DiagMsg(1), 'error: unit source not found');
+  diags.Clear;
+  CheckInt(e, 'clear resets', diags.Count, 0);
 
   Halt(EduthReport(e));
 end.
