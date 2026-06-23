@@ -53,3 +53,21 @@ presets + a compacted (auto-collapsed) state.
 
 ## Log
 - 2026-06-23 — filed (milestone 3 of feature-eliah-shell).
+
+## Progress 2026-06-24
+
+DONE: Code / Design / Split presets as collapse configs of the pane tree
+(midRight = [center | right]): code hides right, design hides center, split shows
+both. Wired to the View menu + a startup flag (--code/--design/--split) for
+screenshot verification. Code + Design screenshot-confirmed on Xvfb :99; Split is
+the no-collapse baseline (Restore is a no-op when nothing is collapsed) ==
+verified M1 layout. Smoke asserts the three collapse states.
+
+PARTIAL / BLOCKED: full pane hiding wanted gtk_widget_hide (TPaned.Collapse), but
+that path hits urgent/bug-method-miscompiled-by-context (a method segfaults vs an
+identical-body method that doesn't) and urgent/bug-compiler-hang-on-nested-if-in-begin
+(compiler infinite-loop). Collapse falls back to position-only (move handle to an
+edge) — enough for Code/Design here, but cannot hide a pane whose sibling resists
+shrinking (shrink=0). Revisit hide-based collapse + the remaining M3 scope
+(serialized descriptors, per-pane min/priority, priority-compacting on resize)
+once the two codegen tickets land.

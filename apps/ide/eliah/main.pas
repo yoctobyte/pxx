@@ -61,6 +61,7 @@ type
     RootPaned: TPaned;     { fills the content area; the whole pane layout is its subtree }
     colLeft, midRight, colCenter, colRight, colInspector: TPaned;
     panedSeeded: Boolean;  { initial handle positions applied on first allocation }
+    startPersp: AnsiString; { perspective applied once after the first allocation }
     Win: TForm;
     dir, curFile, designPath, pendingSnap: AnsiString;
     undoStack: array of AnsiString;
@@ -97,6 +98,10 @@ type
     procedure OnToggleLeft(Sender: TObject);
     procedure OnToggleOutput(Sender: TObject);
     procedure OnToggleRight(Sender: TObject);
+    procedure SetPerspective(const name: AnsiString);
+    procedure OnPerspCode(Sender: TObject);
+    procedure OnPerspDesign(Sender: TObject);
+    procedure OnPerspSplit(Sender: TObject);
   end;
 
 { palette index -> docmodel kind (Form is the root, never placed) }
@@ -345,6 +350,24 @@ begin
   if midRight <> nil then midRight.Toggle(2, 0);      { designer + inspector }
 end;
 
+{ Perspectives are pure layout: each is a collapse configuration of the same
+  pane tree (no mode branching in logic). midRight = [ center(editor/output) |
+  right(designer/inspector) ]:
+    code   -> hide the right column   (editor focus)
+    design -> hide the center column  (designer focus)
+    split  -> show both               (large-monitor / full) }
+procedure THandler.SetPerspective(const name: AnsiString);
+begin
+  if midRight = nil then Exit;
+  if name = 'code' then midRight.Collapse(2, 0)
+  else if name = 'design' then midRight.Collapse(1, 0)
+  else midRight.Restore;                               { split / default }
+end;
+
+procedure THandler.OnPerspCode(Sender: TObject);   begin SetPerspective('code');   end;
+procedure THandler.OnPerspDesign(Sender: TObject); begin SetPerspective('design'); end;
+procedure THandler.OnPerspSplit(Sender: TObject);  begin SetPerspective('split');  end;
+
 procedure THandler.OnFormResize(Sender: TControl; w, h: Integer);
 var contentH: Integer;
 begin
@@ -367,6 +390,8 @@ begin
     colRight.Position     := contentH - H_BOTTOM; { designer above inspector }
     colInspector.Position := H_BOTTOM - 28;       { props above value edit }
     panedSeeded := True;
+    { apply a startup perspective once the panes have a real allocation }
+    if startPersp <> '' then SetPerspective(startPersp);
   end;
 end;
 
@@ -541,7 +566,8 @@ var
   DesignBox: TPaintBox;
   Dsn: TDesigner;
   btn: TButton;
-  arg, startDir: AnsiString;
+  arg, startDir, parg: AnsiString;
+  pix: Integer;
   centerW, centerH, contentH: Integer;
   colLeft, midRight, colCenter, colRight, colInspector: TPaned;
   sbuf: TIdeBuffer;
@@ -692,6 +718,9 @@ begin
   mi := MkMenuItem('&Run',     BuildMenu); mi.OnClick := @H.OnRun;
 
   ViewMenu := TMenuItem.Create(nil); ViewMenu.Caption := '&View'; MainMenu.Items.Add(ViewMenu);
+  mi := MkMenuItem('&Code Layout',   ViewMenu); mi.OnClick := @H.OnPerspCode;
+  mi := MkMenuItem('&Design Layout', ViewMenu); mi.OnClick := @H.OnPerspDesign;
+  mi := MkMenuItem('&Split Layout',  ViewMenu); mi.OnClick := @H.OnPerspSplit;
   mi := MkMenuItem('Toggle &Left Panel',  ViewMenu); mi.OnClick := @H.OnToggleLeft;
   mi := MkMenuItem('Toggle &Output',      ViewMenu); mi.OnClick := @H.OnToggleOutput;
   mi := MkMenuItem('Toggle &Right Panel', ViewMenu); mi.OnClick := @H.OnToggleRight;
@@ -730,8 +759,20 @@ begin
   H.PlaceMode := False;
 
   arg := '';
-  if ParamCount > 0 then arg := ParamStr(1);
-  if (arg <> '') and (arg <> '--smoke') then startDir := arg else startDir := '.';
+  startDir := '.';
+  H.startPersp := '';
+  for pix := 1 to ParamCount do
+  begin
+    parg := ParamStr(pix);
+    if parg = '--smoke' then arg := '--smoke'
+    else if parg = '--code' then H.startPersp := 'code'
+    else if parg = '--design' then H.startPersp := 'design'
+    else if parg = '--split' then H.startPersp := 'split'
+    else if (Length(parg) >= 2) and (parg[1] = '-') and (parg[2] = '-') then
+      { ignore unknown -- flag }
+    else
+      startDir := parg;                 { a bare argument is the start directory }
+  end;
   H.LoadDir(startDir);
 
   Form1.Realize;
@@ -762,6 +803,14 @@ begin
     if H.RootPaned.CollapsedPane <> 1 then begin writeln('SMOKE FAIL: left panel did not collapse'); Halt(1); end;
     H.OnToggleLeft(nil);
     if H.RootPaned.CollapsedPane <> 0 then begin writeln('SMOKE FAIL: left panel did not restore'); Halt(1); end;
+
+    { perspectives are collapse configs of midRight = [center | right] }
+    H.SetPerspective('code');
+    if H.midRight.CollapsedPane <> 2 then begin writeln('SMOKE FAIL: code persp did not hide right'); Halt(1); end;
+    H.SetPerspective('design');
+    if H.midRight.CollapsedPane <> 1 then begin writeln('SMOKE FAIL: design persp did not hide center'); Halt(1); end;
+    H.SetPerspective('split');
+    if H.midRight.CollapsedPane <> 0 then begin writeln('SMOKE FAIL: split persp did not show both'); Halt(1); end;
 
     { open any .lfm from the tree: clicking a .lfm reloads the designer + retargets Save }
     H.Dsn.Doc := TDocModel.Create;   { wipe to prove OpenDesign reloads }

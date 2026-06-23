@@ -47,3 +47,12 @@ a restored pane.
 
 ## Log
 - 2026-06-23 — filed (milestone 2 of feature-eliah-shell).
+
+## Progress 2026-06-24
+
+CORE DONE: TPaned.Collapse/Restore/Toggle (remembers handle position) +
+gui_suite coverage; Eliah View menu toggles Left/Output/Right panels.
+
+DEFERRED: the labelled clickable collapse *strip* + per-pane header chevron need
+a stacking container (gtk_box / a PCL TBox with per-child expand) that PCL does
+not yet expose. Functional collapse/restore ships via the menu meanwhile.
