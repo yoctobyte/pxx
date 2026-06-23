@@ -8,6 +8,8 @@
 
 ## Resolution (2026-06-23)
 
+Fixed in commit `f0e2bbb`.
+
 The `field := localDynArray` path (whole dyn-array assignment into a non-IDENT
 lvalue: a record/class field or nested sub-array slot) only copied the handle —
 share-semantics with no refcount change — while the IDENT path (`localvar :=
