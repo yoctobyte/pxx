@@ -611,7 +611,10 @@ begin
 
   { an empty AnsiString marshals to a NULL PChar, which gtk_*_set_text rejects
     ("assertion 'text != NULL'"); use an empty C string instead (same guard as
-    SetName above). }
+    SetName above).
+    WAITING ON FIX: docs/progress/backlog/bug-pchar-empty-managed-string-nil.md
+    (Track A) — once PChar('')/PChar(emptyAnsiString) yields a static #0 pointer
+    instead of nil, drop this guard and just `p := PChar(AText)`. }
   if AText = '' then p := PChar('') else p := PChar(AText);
 
   className := GetInstanceClassName(Pointer(AControl));
