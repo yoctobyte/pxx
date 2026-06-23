@@ -108,7 +108,7 @@ _none_
 | feature-mimic-fpc | B | feature | `mimic FPC` compatibility mode | — |
 | feature-string-model-tyfixedstring | B | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (226)
+## done (227)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -125,6 +125,7 @@ _none_
 | bug-codegen-nested-index-load-width-pressure | A | bug | Codegen miscompiles nested integer-array index load width under register pressure | — |
 | bug-compiler-tmyclass-hardcoded-clash | A | bug | Hardcoded 'TMyClass' name clash in compiler type resolution | — |
 | bug-const-byref-record-param-temp | A | bug | Can't pass a function-result temporary to a const/by-ref record param | — |
+| bug-consteval-precedence | A | bug | bug: constant-expression evaluation ignores operator precedence | — |
 | bug-const-expr-shl-shr-not-folded | A | bug | `shl` / `shr` in a constant expression not accepted | — |
 | bug-const-managed-record-param-byref-crash | A | bug | const record param with a managed (dynarray) field crashes by-ref on i386 + aarch64 | — |
 | bug-const-open-array-managed-elem-length | A | bug | `const`/value open-array of a managed element loses its length (High = -1) | — |

@@ -28,6 +28,8 @@ size byte-for-byte).
 
 ## Resolution (2026-06-23)
 
+Fixed in commit `523e5df`.
+
 Split `ConstEval` into proper precedence levels, mirroring Pascal:
 - `ConstEvalFactor` — primary (literal / named const / paren / integer cast),
   unary `+`/`-` binding tightest. The recursive call needs explicit parens
