@@ -105,6 +105,15 @@ P
 probe length-literal known <<'P'
 begin writeln(length('hello')); end.
 P
+probe nested-proc known <<'P'
+procedure outer; procedure inner; begin writeln('in'); end; begin inner; end;
+begin outer; end.
+P
+probe nested-fn known <<'P'
+function f(n: integer): integer; function g(m: integer): integer; begin g := m * 2; end;
+begin f := g(n) + 1; end;
+begin writeln(f(5)); end.
+P
 
 echo "---"
 echo "new divergences: $new   known/filed: $known"
