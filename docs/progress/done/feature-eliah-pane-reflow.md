@@ -28,3 +28,9 @@ splitters between panes. No modal/subwindows introduced.
 
 ## Log
 - 2026-06-22 — filed from M0 caveat (absolute bounds, no reflow).
+- 2026-06-23 — DONE (core). Took option 1: wired 'size-allocate' on the form's
+  fixed container in pcl/gtk3widgets so TForm.OnResize fires with the content
+  w/h (was a real PCL gap — only TPaintBox had it). eliah Relayout(w,h)
+  recomputes all pane bounds on resize, clamped for tiny windows. Smoke-covered;
+  full gui_suite green. STRETCH not done: draggable GtkPaned splitters — left as
+  a separate future enhancement (bigger, benefits all PCL apps).
