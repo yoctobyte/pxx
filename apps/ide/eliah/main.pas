@@ -50,7 +50,9 @@ type
     Dsn: TDesigner;
     DesignBox: TPaintBox;
     Win: TForm;
-    dir, curFile, designPath: AnsiString;
+    dir, curFile, designPath, pendingSnap: AnsiString;
+    undoStack: array of AnsiString;
+    undoCount: Integer;
     paths: array of AnsiString;
     isdirs: array of Boolean;
     nItems: Integer;
@@ -63,6 +65,8 @@ type
     procedure OnDelete(Sender: TObject);
     procedure OnNew(Sender: TObject);
     procedure OnErrorClick(Sender: TObject);
+    procedure PushUndo(const snap: AnsiString);
+    procedure OnUndo(Sender: TObject);
     procedure OpenDesign(const path: AnsiString);
     procedure Relayout(w, h: Integer);
     procedure OnFormResize(Sender: TControl; w, h: Integer);
@@ -194,6 +198,7 @@ procedure THandler.OnDelete(Sender: TObject);
 begin
   if (Dsn = nil) or (Dsn.Doc = nil) then Exit;
   if Dsn.Sel <= 0 then Exit;   { -1 none, 0 = root form (not deletable) }
+  PushUndo(SaveLfmText(Dsn.Doc));
   Dsn.Doc.DeleteNode(Dsn.Sel);
   Dsn.Sel := -1;
   Dsn.EndDrag;
@@ -329,6 +334,29 @@ begin
   Props.AddItem('Height:  ' + IntToStr(d.NodeH(idx)));
 end;
 
+{ undo stack holds .lfm snapshots (SaveLfmText round-trips losslessly) }
+procedure THandler.PushUndo(const snap: AnsiString);
+begin
+  SetLength(undoStack, undoCount + 1);
+  undoStack[undoCount] := snap;
+  Inc(undoCount);
+end;
+
+procedure THandler.OnUndo(Sender: TObject);
+var d: TDocModel; ok: Boolean;
+begin
+  if undoCount <= 0 then begin Output.Text := '$ nothing to undo'; Exit; end;
+  Dec(undoCount);
+  d := TDocModel.Create;
+  ok := LoadLfmText(undoStack[undoCount], d);
+  Dsn.Doc := d;
+  Dsn.Sel := -1;
+  Dsn.EndDrag;
+  if DesignBox <> nil then DesignBox.Invalidate;
+  ShowInspector(-1);
+  Output.Text := '$ undo (' + IntToStr(undoCount) + ' left)';
+end;
+
 procedure THandler.OnPlaceToggle(Sender: TObject);
 begin
   PlaceMode := not PlaceMode;
@@ -338,9 +366,12 @@ end;
 procedure THandler.OnDesignMouseDown(Sender: TControl; Button, X, Y: Integer);
 var idx: Integer; k: TWidgetKind;
 begin
+  { snapshot the pre-action state; committed to undo only if the doc changes }
+  pendingSnap := SaveLfmText(Dsn.Doc);
   if PlaceMode then
   begin
     { drop a new widget of the palette kind, parented to the form (node 0) }
+    PushUndo(pendingSnap);
     k := KindFromPalette(Palette.ItemIndex);
     idx := Dsn.Doc.AddNode(k, Dsn.Doc.KindName(k), 0, X, Y, 80, 24);
     Dsn.Sel := idx;
@@ -365,6 +396,10 @@ end;
 procedure THandler.OnDesignMouseUp(Sender: TControl; Button, X, Y: Integer);
 begin
   Dsn.EndDrag;
+  { commit the pre-drag snapshot only if a move/resize actually changed the doc }
+  if (pendingSnap <> '') and (SaveLfmText(Dsn.Doc) <> pendingSnap) then
+    PushUndo(pendingSnap);
+  pendingSnap := '';
   ShowInspector(Dsn.Sel);
 end;
 
@@ -398,6 +433,7 @@ begin
   if (Dsn = nil) or (Dsn.Doc = nil) or (Dsn.Sel < 0) then Exit;
   d := Dsn.Doc;
   v := ValueEdit.Text;
+  PushUndo(SaveLfmText(d));
   case FEditRow of
     1: d.SetNodeCaption(Dsn.Sel, v);
     2: d.SetNodeBounds(Dsn.Sel, StrToIntDef(v, d.NodeX(Dsn.Sel)),
@@ -522,6 +558,7 @@ begin
   btn := MkButton('Save',    466); btn.OnClick := @H.OnSave;
   btn := MkButton('Del',     552); btn.OnClick := @H.OnDelete;
   btn := MkButton('New',     638); btn.OnClick := @H.OnNew;
+  btn := MkButton('Undo',    724); btn.OnClick := @H.OnUndo;
 
   { palette: pick a widget kind, hit Place, then click the designer to drop it }
   Palette := TComboBox.Create;
@@ -661,6 +698,15 @@ begin
     if H.Dsn.Doc.NodeKind(H.Dsn.Sel) <> KindFromPalette(H.Palette.ItemIndex) then
       begin writeln('SMOKE FAIL: placed node wrong kind'); Halt(1); end;
     if H.PlaceMode then begin writeln('SMOKE FAIL: place mode not one-shot'); Halt(1); end;
+
+    { undo: the place above is on the undo stack -> undo restores the prior count }
+    centerW := H.Dsn.Doc.Count;
+    H.OnUndo(nil);
+    if H.Dsn.Doc.Count <> centerW - 1 then begin writeln('SMOKE FAIL: undo did not revert place'); Halt(1); end;
+    { redo by re-placing to keep the rest of the flow stable }
+    H.Palette.ItemIndex := 1;
+    H.OnPlaceToggle(nil);
+    H.OnDesignMouseDown(nil, 1, 150, 150);
 
     { delete: remove the just-placed node (selected); count drops, sel clears }
     centerW := H.Dsn.Doc.Count;
