@@ -1542,6 +1542,7 @@ var left, right, seq, item, value, outNode, first, last, leftAddr, argNode, argV
     dcSlCall, dcSetlenVal, dcDestData, dcSrcStart, dcNbytes, dcSavedRec: Integer;
     dcElemTk: TTypeKind;
     pendBase: Integer;
+    mcCrefSym, mcInstSym, mcSize, mcVmt, mcAddr, mcSelfArg: Integer;
 begin
   if node = -1 then
   begin
@@ -3607,6 +3608,81 @@ begin
       end;
       { IRA=first arg, IRB=last arg, IRC=proc idx, IRIVal=VMT slot }
       Result := IRAppend(IR_VIRTUAL_CALL, first, last, cpi, slot, ASTTk[node]);
+    end;
+
+    AN_METACLASS_NEW:
+    begin
+      { Metaclass-dispatched construction `classRefVar.Create(args)`.
+          ASTRight   = classref value node (yields the dynamic class's RTTI blob)
+          ASTIVal    = ctor proc idx (param signature)
+          ASTSOffset = ctor VMT slot (-1 if the ctor is not virtual)
+          ASTLeft    = AN_ARG chain of explicit ctor args (Self excluded)
+        Allocate the DYNAMIC class read from the RTTI blob (size@16, vmt@24),
+        stamp its VMT, then run the constructor through the stamped VMT — an
+        ordinary virtual call once [inst+0] holds the right VMT. Built as
+        target-independent IR (same idiom as is/as), so all backends share it. }
+      cpi := ASTIVal[node];
+      slot := ASTSOffset[node];
+
+      { cref := <classref value> (the RTTI blob pointer). }
+      mcCrefSym := AllocVar('', tyPointer);
+      IRAppend(IR_STORE_SYM, mcCrefSym, IRLowerAST(ASTRight[node]), -1, 0, Ord(tyPointer));
+
+      { size := [cref+16] (RTTI instance size). }
+      mcAddr := IRAppend(IR_BINOP,
+                  IRAppend(IR_LOAD_SYM, mcCrefSym, -1, -1, 0, Ord(tyPointer)),
+                  IRAppend(IR_CONST_INT, -1, -1, -1, 16, Ord(tyInteger)),
+                  Ord(tkPlus), 0, Ord(tyPointer));
+      mcSize := IRAppend(IR_LOAD_MEM, mcAddr, -1, -1, 0, Ord(tyInt64));
+
+      { inst := GetMem(size) — plain alloc (classIdx = -1: no VMT stamp here). }
+      mcInstSym := AllocVar('', tyPointer);
+      IRAppend(IR_STORE_SYM, mcInstSym,
+               IRAppend(IR_CALL, -Ord(tkGetMem),
+                        IRAppend(IR_ARG, mcSize, -1, -1, 0, Ord(tyInteger)),
+                        -1, 0, Ord(tyPointer)),
+               -1, 0, Ord(tyPointer));
+
+      { [inst+0] := [cref+24] (stamp the dynamic class's VMT). }
+      mcAddr := IRAppend(IR_BINOP,
+                  IRAppend(IR_LOAD_SYM, mcCrefSym, -1, -1, 0, Ord(tyPointer)),
+                  IRAppend(IR_CONST_INT, -1, -1, -1, 24, Ord(tyInteger)),
+                  Ord(tkPlus), 0, Ord(tyPointer));
+      mcVmt := IRAppend(IR_LOAD_MEM, mcAddr, -1, -1, 0, Ord(tyInt64));
+      IRAppend(IR_STORE_MEM,
+               IRAppend(IR_LOAD_SYM, mcInstSym, -1, -1, 0, Ord(tyPointer)),
+               mcVmt, -1, 0, Ord(tyPointer));
+
+      { Constructor call: Self (param 0) = inst, then the explicit args. }
+      mcSelfArg := IRAppend(IR_ARG,
+                     IRAppend(IR_LOAD_SYM, mcInstSym, -1, -1, 0, Ord(tyPointer)),
+                     -1, -1, 0, Ord(tyClass));
+      first := mcSelfArg; last := mcSelfArg;
+      item := ASTLeft[node];
+      pathIdx := 1;
+      while item <> -1 do
+      begin
+        isRefArg := (pathIdx < Procs[cpi].ParamCount) and Procs[cpi].Params[pathIdx].IsRef;
+        if isRefArg then
+          value := IRLowerAddress(ASTLeft[item])
+        else
+          value := IRLowerAST(ASTLeft[item]);
+        argNode := IRAppend(IR_ARG, value, -1, -1, 0, ASTTk[ASTLeft[item]]);
+        IRB[last] := argNode;
+        last := argNode;
+        item := ASTRight[item];
+        Inc(pathIdx);
+      end;
+
+      if slot >= 0 then
+        { The call runs for its side effect (it fills the instance); its result
+          is discarded, so flag it a statement root or it would be pruned. }
+        IRMarkStatementNode(IRAppend(IR_VIRTUAL_CALL, first, last, cpi, slot, Ord(tyClass)))
+      else
+        IRMarkStatementNode(IRAppendCall(cpi, first, -1, Ord(tyClass)));
+
+      { The construction value is the instance, not the ctor body's return. }
+      Result := IRAppend(IR_LOAD_SYM, mcInstSym, -1, -1, 0, ASTTk[node]);
     end;
 
     AN_LABEL:

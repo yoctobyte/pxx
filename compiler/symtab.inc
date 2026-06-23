@@ -4727,6 +4727,10 @@ begin
     else
       Result := REC_NONE;
   end
+  else if ASTKind[node] = AN_METACLASS_NEW then
+    { `classRefVar.Create` yields an instance of the metaclass's base class;
+      the record id is stashed in ASTSLen at parse time. }
+    Result := ASTSLen[node]
   else if ASTKind[node] = AN_PTR_CAST then
   begin
     if ASTIVal[node] >= 0 then

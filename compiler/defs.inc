@@ -170,6 +170,13 @@ const
                            (alloc + SetLength + per-element store) whose handle is
                            the open-array argument — mirror of AN_VARREC_ARRAY for
                            plain (non-TVarRec) elements. }
+  AN_METACLASS_NEW = 65; { metaclass-dispatched construction `classRefVar.Create(..)`:
+                           Left = AN_ARG chain of explicit ctor args (NO Self);
+                           Right = classref value node (yields the RTTI blob ptr);
+                           ASTIVal = ctor proc idx (param signature); ASTSOffset =
+                           ctor VMT slot (-1 if non-virtual). Allocates the DYNAMIC
+                           class (size=[cref+16], vmt=[cref+24]) then runs the
+                           virtual ctor through the stamped VMT. }
 
   { Inline-asm operand kinds }
   AOP_NONE = 0;

@@ -1402,6 +1402,63 @@ begin
         access overrides it below with the backing field's span. }
       propFOff := Tokens[prevTok].SOffset;
       propFLen := Tokens[prevTok].SLen;
+
+      { Metaclass-dispatched construction `classRefVar.Create(args)`: the base is
+        a `class of T` variable (a tyPointer whose element is a class). Build an
+        AN_METACLASS_NEW that allocates the DYNAMIC class the var points at and
+        runs its (virtual) constructor — see the IR lowering. Distinct from the
+        static `TFoo.Create` path, which resolves the class at compile time. }
+      if (ASTKind[node] = AN_IDENT) and (ASTIVal[node] >= 0) and
+         (Syms[ASTIVal[node]].TypeKind = tyPointer) and
+         (Syms[ASTIVal[node]].PtrElemTk = tyClass) and
+         (Syms[ASTIVal[node]].PtrElemRec >= REC_UCLASS_BASE) and
+         CaseEqual(fieldName, 'create') then
+      begin
+        ci := Syms[ASTIVal[node]].PtrElemRec - REC_UCLASS_BASE;
+        mmi := FindUMeth(ci, 'create');
+        if mmi >= 0 then
+        begin
+          mpi := UMthProc_[mmi];
+          Next; { consume the 'Create' method name }
+          mcallNode := AllocNode(AN_METACLASS_NEW);
+          ASTRight[mcallNode] := node;                  { classref value }
+          ASTIVal[mcallNode] := mpi;                    { ctor proc idx }
+          ASTSOffset[mcallNode] := UMthVirSlot[mmi];    { vmt slot, -1 if non-virtual }
+          ASTSLen[mcallNode] := REC_UCLASS_BASE + ci;   { result record id }
+          ASTTk[mcallNode] := Ord(tyClass);
+          mlastArg := -1;
+          if CurTok.Kind = tkLParen then
+          begin
+            Next;
+            mai := 1; { param 0 = Self (the allocated instance) }
+            while mai <= Procs[mpi].ParamCount-1 do
+            begin
+              if Procs[mpi].Params[mai].IsRef or Procs[mpi].Params[mai].IsArray then
+              begin
+                if CurTok.Kind <> tkIdent then Error('expected variable');
+                margIdx := FindSym(CurTok.SVal); Next;
+                mexprNode := ParseLValueAST(margIdx, TokPos - 2);
+              end
+              else
+              begin
+                ParseExpr; mexprNode := CurASTNode;
+              end;
+              margSeq := AllocNode(AN_ARG); ASTLeft[margSeq] := mexprNode;
+              if mlastArg = -1 then ASTLeft[mcallNode] := margSeq
+              else ASTRight[mlastArg] := margSeq;
+              mlastArg := margSeq;
+              if mai < Procs[mpi].ParamCount-1 then Expect(tkComma, ',');
+              Inc(mai);
+            end;
+            Expect(tkRParen, ')');
+          end;
+          node := mcallNode;
+          recName := REC_UCLASS_BASE + ci;
+          tk := tyClass;
+          Continue;   { allow trailing .field/[i] selectors on the new instance }
+        end;
+      end;
+
       { Check if it is a property on a class }
       mci := -1; pri := -1;
       if recName >= REC_UCLASS_BASE then

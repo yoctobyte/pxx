@@ -508,6 +508,8 @@ test-core: $(COMPILER)
 	test "$$(/tmp/test_virtual_proc26)" = "$$(printf 'B\nB')"
 	./$(COMPILER) test/test_ir_virtual_call.pas /tmp/test_ir_virtual_call26
 	test "$$(/tmp/test_ir_virtual_call26)" = "$$(printf '1\n2\n1\n2')"
+	./$(COMPILER) test/test_metaclass_construct.pas /tmp/test_metaclass_construct26
+	test "$$(/tmp/test_metaclass_construct26)" = "$$(printf '50\n70\n3')"
 	./$(COMPILER) test/test_inheritance_dispatch.pas /tmp/test_inheritance_dispatch26
 	test "$$(/tmp/test_inheritance_dispatch26)" = "$$(printf '50\n507\n50\n507\n5\n12\n7\n99\n5\n88')"
 	./$(COMPILER) test/test_inherited.pas /tmp/test_inherited26
