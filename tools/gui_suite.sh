@@ -57,6 +57,21 @@ solitaire_smoke() {
 }
 solitaire_smoke
 
+# Eliah IDE (apps/ide/eliah): compile + headless --smoke (tree populates, opens a
+# file in the editor, compiles it, prints SMOKE OK).
+eliah_smoke() {
+  local src="$ROOT/apps/ide/eliah/main.pas"
+  local out="$ROOT/apps/ide/eliah/eliah" log="/tmp/gui_test_eliah.log"
+  if ! "$PXX_STABLE" -Fulib/pcl -Fulib/rtl -Fuapps/ide/garin "$src" "$out" >"$log" 2>&1; then
+    say "FAIL  eliah_ide -- compile: $(tail -1 "$log")"; fail=1; return
+  fi
+  if [ "$(cd "$ROOT" && "$out" --smoke 2>"$log" | tail -1)" != "SMOKE OK" ]; then
+    say "FAIL  eliah_ide -- smoke: $(tail -1 "$log")"; fail=1; return
+  fi
+  say "OK    eliah_ide"
+}
+eliah_smoke
+
 if [ "$fail" -ne 0 ]; then
   say "GUI suite finished with some failures (compiler bugs pending)."
   exit 1

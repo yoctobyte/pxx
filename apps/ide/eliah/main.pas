@@ -2,88 +2,220 @@ program eliah;
 
 { Eliah — GTK face of the IDE.
 
-  M0: a single sizable window with a fixed tiled layout — no multi-window, no
-  modal forms, no subwindows. Panes:
+  A single sizable window, fixed tiled layout (no multi-window / modal). Toolbar
+  plus three live panes:
 
-    +--------+----------------------+-----------+
-    | proj   |   editor             | designer  |
-    | tree   |                      | (M1 stub) |
-    |        +----------------------+-----------+
-    |        |   output (M2 stub)   | props     |
-    +--------+----------------------+-----------+
+    [ Up  Compile  Run ]
+    +--------+----------------------------------+
+    | proj   |   editor                         |
+    | tree   |                                  |
+    |        +----------------------------------+
+    |        |   build / run output             |
+    +--------+----------------------------------+
 
-  The editor pane is live (loads a file through the garin buffer). The other
-  panes are visible stubs filled in by later milestones. }
+  Working: the project tree lists a directory (click a folder to descend, "../"
+  to go up, a file to open it in the editor through the garin buffer); Compile
+  runs the pinned compiler on the open .pas and shows its output; Run executes
+  the built binary. The right column (designer + object inspector) is a stub
+  pending M1. }
 
-uses gtk3, controls, stdctrls, forms, buffer;
+uses gtk3, controls, stdctrls, forms, sysutils, buffer, runner;
 
 const
-  W_WIN    = 1100;
-  H_WIN    = 720;
-  W_TREE   = 220;
-  W_RIGHT  = 320;
-  H_BOTTOM = 170;
+  W_WIN     = 1100;
+  H_WIN     = 700;
+  W_TREE    = 240;
+  W_RIGHT   = 300;
+  H_BOTTOM  = 200;
+  TOOLBAR_H = 34;
+  PXX_PATH  = 'stable_linux_amd64/default/pinned';
+  BUILD_OUT = '/tmp/eliah_build';
+
+type
+  THandler = class
+    Tree: TListBox;
+    Editor, Output: TMemo;
+    dir, curFile: AnsiString;
+    paths: array of AnsiString;
+    isdirs: array of Boolean;
+    nItems: Integer;
+    procedure LoadDir(const d: AnsiString);
+    procedure OnTreeClick(Sender: TObject);
+    procedure OnCompile(Sender: TObject);
+    procedure OnRun(Sender: TObject);
+    procedure OnUp(Sender: TObject);
+  end;
+
+function ParentDir(const d: AnsiString): AnsiString;
+var i: Integer;
+begin
+  for i := Length(d) downto 1 do
+    if d[i] = '/' then
+    begin
+      if i = 1 then ParentDir := '/' else ParentDir := Copy(d, 1, i - 1);
+      Exit;
+    end;
+  ParentDir := '.';
+end;
+
+procedure THandler.LoadDir(const d: AnsiString);
+var list: TFileInfoArray; i: Integer; nm: AnsiString;
+begin
+  dir := d;
+  Tree.Clear;
+  nItems := 0;
+  SetLength(paths, 1024);
+  SetLength(isdirs, 1024);
+
+  Tree.AddItem('../');
+  paths[nItems] := ParentDir(d);
+  isdirs[nItems] := True;
+  nItems := nItems + 1;
+
+  if GetDirectoryContents(d, list) then
+    for i := 0 to Length(list) - 1 do
+    begin
+      nm := list[i].Name;
+      if (nm = '.') or (nm = '..') then continue;
+      if list[i].IsDir then Tree.AddItem(nm + '/') else Tree.AddItem(nm);
+      if nItems < 1024 then
+      begin
+        paths[nItems] := d + '/' + nm;
+        isdirs[nItems] := list[i].IsDir;
+        nItems := nItems + 1;
+      end;
+    end;
+end;
+
+procedure THandler.OnTreeClick(Sender: TObject);
+var idx: Integer; b: TIdeBuffer;
+begin
+  idx := Tree.ItemIndex;
+  if (idx < 0) or (idx >= nItems) then Exit;
+  if isdirs[idx] then
+  begin
+    LoadDir(paths[idx]);
+    Exit;
+  end;
+  curFile := paths[idx];
+  b := TIdeBuffer.Create;
+  if b.LoadFromFile(curFile) then Editor.Text := b.Text
+  else Editor.Text := '(could not open ' + curFile + ')';
+end;
+
+procedure THandler.OnCompile(Sender: TObject);
+var out: AnsiString; rc: Integer; args: array of AnsiString;
+begin
+  if curFile = '' then begin Output.Text := '(no file selected)'; Exit; end;
+  SetLength(args, 2);
+  args[0] := curFile;
+  args[1] := BUILD_OUT;
+  out := RunCapture(PXX_PATH, args, rc);
+  Output.Text := '$ compile ' + curFile + #10 + out + #10 + '--- exit ' + IntToStr(rc) + ' ---';
+end;
+
+procedure THandler.OnRun(Sender: TObject);
+var out: AnsiString; rc: Integer; args: array of AnsiString;
+begin
+  SetLength(args, 0);
+  out := RunCapture(BUILD_OUT, args, rc);
+  Output.Text := '$ run' + #10 + out + #10 + '--- exit ' + IntToStr(rc) + ' ---';
+end;
+
+procedure THandler.OnUp(Sender: TObject);
+begin
+  LoadDir(ParentDir(dir));
+end;
 
 var
   Form1: TForm;
-  Tree, Props, Designer: TListBox;
-  Editor, Output: TMemo;
-  Buf: TIdeBuffer;
-  centerW, centerH, rightX: Integer;
+  H: THandler;
+  Designer, Props: TListBox;
+  pm: TMethod;
+  arg, startDir: AnsiString;
+  centerW, centerH, contentH: Integer;
+
+procedure MkButton(const cap: AnsiString; x: Integer; m: TMethod);
+var b: TButton;
+begin
+  b := TButton.Create;
+  b.Parent := Form1;
+  b.Caption := cap;
+  b.SetBounds(x, 3, 80, 26);
+  b.OnClick := m;
+end;
 
 begin
   Application := TApplication.Create;
   Application.Initialize;
 
   Form1 := TForm.Create;
-  Form1.Caption := 'Eliah - IDE (M0)';
+  Form1.Caption := 'Eliah - IDE';
   Form1.SetBounds(0, 0, W_WIN, H_WIN);
 
+  contentH := H_WIN - TOOLBAR_H;
   centerW := W_WIN - W_TREE - W_RIGHT;
-  centerH := H_WIN - H_BOTTOM;
-  rightX  := W_TREE + centerW;
+  centerH := contentH - H_BOTTOM;
 
-  { left: project tree (stub) }
-  Tree := TListBox.Create;
-  Tree.Parent := Form1;
-  Tree.SetBounds(0, 0, W_TREE, H_WIN);
-  Tree.AddItem('apps/ide');
-  Tree.AddItem('  garin/');
-  Tree.AddItem('  eliah/');
-  Tree.AddItem('    main.pas');
-  Tree.AddItem('  ilja/');
+  H := THandler.Create;
 
-  { center-top: editor (live) }
-  Editor := TMemo.Create;
-  Editor.Parent := Form1;
-  Editor.SetBounds(W_TREE, 0, centerW, centerH);
+  H.Tree := TListBox.Create;
+  H.Tree.Parent := Form1;
+  H.Tree.SetBounds(0, TOOLBAR_H, W_TREE, contentH);
+  pm.Code := @H.OnTreeClick; pm.Data := H;
+  H.Tree.OnClick := pm;
 
-  { center-bottom: build output (stub, wired in M2) }
-  Output := TMemo.Create;
-  Output.Parent := Form1;
-  Output.SetBounds(W_TREE, centerH, centerW, H_BOTTOM);
-  Output.Text := 'output: build log appears here (M2)';
+  H.Editor := TMemo.Create;
+  H.Editor.Parent := Form1;
+  H.Editor.SetBounds(W_TREE, TOOLBAR_H, centerW, centerH);
 
-  { right-top: form designer (stub, box-painting lands in M1) }
+  H.Output := TMemo.Create;
+  H.Output.Parent := Form1;
+  H.Output.SetBounds(W_TREE, TOOLBAR_H + centerH, centerW, H_BOTTOM);
+  H.Output.Text := 'build output appears here';
+
   Designer := TListBox.Create;
   Designer.Parent := Form1;
-  Designer.SetBounds(rightX, 0, W_RIGHT, centerH);
+  Designer.SetBounds(W_TREE + centerW, TOOLBAR_H, W_RIGHT, centerH);
   Designer.AddItem('designer: box-emulated preview (M1)');
   Designer.AddItem('(no live widgets, no TComponent)');
 
-  { right-bottom: object inspector (stub) }
   Props := TListBox.Create;
   Props.Parent := Form1;
-  Props.SetBounds(rightX, centerH, W_RIGHT, H_BOTTOM);
-  Props.AddItem('properties');
+  Props.SetBounds(W_TREE + centerW, TOOLBAR_H + centerH, W_RIGHT, H_BOTTOM);
+  Props.AddItem('object inspector (M1)');
 
-  { dogfood: show our own source in the editor }
-  Buf := TIdeBuffer.Create;
-  if Buf.LoadFromFile('apps/ide/eliah/main.pas') then
-    Editor.Text := Buf.Text
+  pm.Data := H;
+  pm.Code := @H.OnUp;      MkButton('Up',      4,   pm);
+  pm.Code := @H.OnCompile; MkButton('Compile', 90,  pm);
+  pm.Code := @H.OnRun;     MkButton('Run',     176, pm);
+
+  arg := '';
+  if ParamCount > 0 then arg := ParamStr(1);
+  if (arg <> '') and (arg <> '--smoke') then startDir := arg else startDir := '.';
+  H.LoadDir(startDir);
+
+  Form1.Realize;
+
+  if arg = '--smoke' then
+  begin
+    { Length() is taken of a string variable, not a property getter directly:
+      Length(memo.Text) trips bug-length-rejects-non-variable (codegen). }
+    if H.nItems < 1 then begin writeln('SMOKE FAIL: empty tree'); Halt(1); end;
+    H.LoadDir('apps/ide/garin');
+    H.Tree.ItemIndex := H.nItems - 1;
+    H.OnTreeClick(nil);
+    startDir := H.Editor.Text;
+    if Length(startDir) = 0 then begin writeln('SMOKE FAIL: editor empty'); Halt(1); end;
+    H.curFile := 'apps/ide/garin/buffer.pas';
+    H.OnCompile(nil);
+    startDir := H.Output.Text;
+    if Length(startDir) = 0 then begin writeln('SMOKE FAIL: no compile output'); Halt(1); end;
+    writeln('SMOKE OK');
+  end
   else
-    Editor.Text := '(could not open apps/ide/eliah/main.pas)';
-
-  Application.MainForm := Form1;
-  Application.Run;
+  begin
+    Application.MainForm := Form1;
+    Application.Run;
+  end;
 end.

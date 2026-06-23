@@ -51,3 +51,19 @@ stable compiler, run, screenshot.
     splitters" is therefore NOT met — deferred to a follow-up (needs a layout
     pass on window size-allocate, or real GtkPaned in PCL). Fixed tiled layout
     only for now.
+- 2026-06-23 — M0 advanced toward a working IDE (still single tiled window):
+  - `garin/runner.pas` — render-agnostic process runner (RunCapture: launch +
+    capture stdout + exit code; pxx writes diagnostics to stdout so compiler
+    errors are captured).
+  - `eliah/main.pas` rewritten: **live project tree** from GetDirectoryContents
+    (click a folder to descend, "../" up, a file opens in the editor via the
+    garin buffer); **Compile** button runs the pinned compiler on the open .pas
+    and shows output; **Run** executes the built binary; build-output pane.
+    Designer + object-inspector right column still stubs (M1).
+  - Headless `--smoke` wired into `tools/gui_suite.sh` (eliah_ide): tree
+    populates, opens a file, compiles it -> SMOKE OK. gui-suite green.
+  - Bugs filed, NO workarounds bending app logic:
+    `feature-open-array-constructor-arg` (RunCapture call had to pre-build a temp
+    args array), and the `Length(memo.Text)` smoke check tripped
+    `bug-length-rejects-non-variable` (folded the codegen manifestation in) —
+    the smoke uses a string variable, which is idiomatic test code, not a hack.

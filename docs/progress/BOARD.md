@@ -25,11 +25,12 @@ _none_
 | --- | --- | --- | --- | --- |
 | feature-c-runtime-library | B | feature | C runtime/library layer (`lib/crtl`) plus direct C-library packages | feature-c-source-frontend |
 
-## backlog (57)
+## backlog (59)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
 | bug-cardinal-expr-promotion | A | bug | bug: cardinal/longword binary-op promotes to uint64 (FPC: int64) | — |
+| bug-ir-unsupported-call-lvalue | A | bug | bug: "Unsupported linear node Kind=10" — AN_CALL in lvalue-address position | — |
 | bug-length-rejects-non-variable | A | bug | bug: Length() rejects a non-variable argument (literal / expression) | — |
 | bug-nested-brace-comments | A | bug | bug: `{ }` comments do not nest | — |
 | bug-paramstr-inline-argstr | A | bug | bug: ParamStr/ArgStr result not usable inline (needs a string variable) | — |
@@ -72,6 +73,7 @@ _none_
 | feature-nilpy-idf-import | A | feature | nilpy includes anything from ESP-IDF and it just works | feature-c-source-frontend, feature-esp32-idf-xtensa |
 | feature-nil-python-frontend | A | feature | Nil Python frontend (`.npy`) | — |
 | feature-object-reference-type | A | feature | `object` — a rooted object-reference type | — |
+| feature-open-array-constructor-arg | A | feature | feature: array constructor `[...]` as an open-array argument | — |
 | feature-optimization-levels | A | feature | Optimization levels (`-O0/-O1/-O2/-O3/-Os`) + pass framework | — |
 | feature-pal-esp-lwip-sockaddr-readback | B | feature | PAL esp/lwIP: getsockname & recvfrom return an unfilled (zero) sockaddr | — |
 | feature-pal-esp-posix-fd-semantics | B | feature | ESP PAL: exact POSIX fd semantics over ESP-IDF VFS | — |
@@ -338,6 +340,7 @@ _none_
 ## Ready (no unmet blocker)
 
 - [A] bug-cardinal-expr-promotion
+- [A] bug-ir-unsupported-call-lvalue
 - [A] bug-length-rejects-non-variable
 - [A] bug-nested-brace-comments
 - [A] bug-paramstr-inline-argstr
@@ -374,6 +377,7 @@ _none_
 - [B] feature-networking
 - [A] feature-nil-python-frontend
 - [A] feature-object-reference-type
+- [A] feature-open-array-constructor-arg
 - [A] feature-optimization-levels
 - [B] feature-pal-esp-lwip-sockaddr-readback
 - [B] feature-pal-esp-posix-fd-semantics
