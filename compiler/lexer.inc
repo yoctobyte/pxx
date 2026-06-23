@@ -534,7 +534,7 @@ begin
   InterfacesComMode := False;
   ComInterfaceUsed := False;
   CStyleComments := False;
-  NestedComments := True;   { nest `{ }` / `(* *)` by default (dialect default; FPC nests too); {$NESTEDCOMMENTS OFF} disables }
+  NestedComments := False;  { FPC default: brace and paren-star comments do NOT nest; an inner open-brace is plain text. NESTEDCOMMENTS ON opts in. }
   CaseSensitiveMode := False;
   PackRecordsVal := 8;
   name := 'PXX';

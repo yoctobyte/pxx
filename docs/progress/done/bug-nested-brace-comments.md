@@ -6,6 +6,15 @@
 - **Closed:** 2026-06-23
 - **Severity:** low (cosmetic, but surprising — silently turns comment text into code)
 
+## CORRECTION (2026-06-24)
+
+This over-reached: real FPC does **not** nest `{ }` / `(* *)` by default — a `{`
+inside a `{ }` comment is plain text. The True default below broke the common
+idiom `{ consume '{' }` (lib/rtl/json.pas). Default reverted to False in
+`bug-nested-comment-breaks-fpc-brace`; nesting is now opt-in via
+`{$NESTEDCOMMENTS ON}` only. The original symptom (`{ outer { inner } }`) is no
+longer "fixed" by default — that idiom is non-FPC and must use the directive.
+
 ## Resolution (2026-06-23)
 
 The nested-comment machinery already existed (lexer.inc: `commentDepth` tracking
