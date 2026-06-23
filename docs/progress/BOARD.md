@@ -25,11 +25,10 @@ _none_
 | --- | --- | --- | --- | --- |
 | feature-c-runtime-library | B | feature | C runtime/library layer (`lib/crtl`) plus direct C-library packages | feature-c-source-frontend |
 
-## backlog (47)
+## backlog (46)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
-| bug-cardinal-expr-promotion | A | bug |  | — |
 | bug-dynarray-managed-record-field-reassign | A | bug | bug: assigning a local dynamic-array-of-managed-record to a field drops/frees the elements | — |
 | bug-ir-unsupported-call-lvalue | A | bug | bug: "Unsupported linear node Kind=10" — AN_CALL in lvalue-address position | — |
 | bug-setlength-array-element | A | bug | bug: SetLength rejects an indexed array element as target | — |
@@ -111,7 +110,7 @@ _none_
 | feature-mimic-fpc | B | feature | `mimic FPC` compatibility mode | — |
 | feature-string-model-tyfixedstring | B | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (221)
+## done (222)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -122,6 +121,7 @@ _none_
 | bug-builtin-val-miscompiles | A | bug | Builtin `Val` mis-lowers — wrong error code + segfault | — |
 | bug-builtin-write-case-sensitive | A | bug | Builtin write/writeln matched case-sensitively (only lowercase resolves) | — |
 | bug-cardinal-expr-promotion | A | bug | bug: cardinal/longword binary-op promotes to uint64 (FPC: int64) | — |
+| bug-cardinal-expr-promotion-shr-orphan | A | bug | bug: cardinal/signed 32-bit expression width (orphan addendum) | — |
 | bug-case-insensitive-incomplete-builtins-funcs | A | bug | bug: case-insensitivity incomplete — builtins + function calls still case-sensitive | — |
 | bug-char-literal-in-const-expr | A | bug | Char literal in a constant expression: `ConstEval` rejected `'a'` | — |
 | bug-codegen-nested-index-load-width-pressure | A | bug | Codegen miscompiles nested integer-array index load width under register pressure | — |
@@ -347,7 +347,6 @@ _none_
 
 ## Ready (no unmet blocker)
 
-- [A] bug-cardinal-expr-promotion
 - [A] bug-dynarray-managed-record-field-reassign
 - [A] bug-ir-unsupported-call-lvalue
 - [A] bug-setlength-array-element
