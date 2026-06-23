@@ -2533,6 +2533,93 @@ begin
   end;
 end;
 
+{ Compile-time low/high bound of a built-in ordinal type. Returns False for a
+  non-ordinal (float/string/record/etc). Ranges match FPC. UInt64/NativeInt high
+  overflows signed Int64 storage, so it is left unsupported (returns False). }
+function OrdinalTypeBound(tk: TTypeKind; wantHigh: Boolean; var v: Int64): Boolean;
+begin
+  Result := True;
+  case tk of
+    tyUInt8:   if wantHigh then v := 255 else v := 0;
+    tyInt8:    if wantHigh then v := 127 else v := -128;
+    tyUInt16:  if wantHigh then v := 65535 else v := 0;
+    tyInt16:   if wantHigh then v := 32767 else v := -32768;
+    tyUInt32:  if wantHigh then v := 4294967295 else v := 0;
+    tyInt32:   if wantHigh then v := 2147483647 else v := -2147483647 - 1;
+    tyInteger: if wantHigh then v := 2147483647 else v := -2147483647 - 1;
+    tyInt64:   if wantHigh then v := 9223372036854775807 else v := -9223372036854775807 - 1;
+    tyBoolean: if wantHigh then v := 1 else v := 0;
+    tyChar:    if wantHigh then v := 255 else v := 0;
+  else
+    Result := False;
+  end;
+end;
+
+{ Map a built-in ordinal TYPE name to its TTypeKind, or tyUnknown if the name is
+  not a (supported) ordinal builtin. Covers the names that lex as tkIdent (the
+  dedicated type tokens are handled directly via ParseTypeKind). }
+function OrdinalNameToTk(const nm: AnsiString): TTypeKind;
+begin
+  if CaseEqual(nm, 'shortint') then Result := tyInt8
+  else if CaseEqual(nm, 'byte') or CaseEqual(nm, 'uint8') then Result := tyUInt8
+  else if CaseEqual(nm, 'smallint') then Result := tyInt16
+  else if CaseEqual(nm, 'word') or CaseEqual(nm, 'uint16') then Result := tyUInt16
+  else if CaseEqual(nm, 'longint') then Result := tyInt32
+  else if CaseEqual(nm, 'integer') then Result := tyInteger
+  else if CaseEqual(nm, 'cardinal') or CaseEqual(nm, 'longword') or CaseEqual(nm, 'uint32') then Result := tyUInt32
+  else if CaseEqual(nm, 'int64') then Result := tyInt64
+  else if CaseEqual(nm, 'boolean') then Result := tyBoolean
+  else if CaseEqual(nm, 'char') or CaseEqual(nm, 'ansichar') then Result := tyChar
+  else Result := tyUnknown;
+end;
+
+{ If the current token names an ordinal TYPE (a type-keyword token, a builtin
+  ordinal name like ShortInt/Word, an ordinal type alias, or a user enum),
+  consume it and produce an AN_INT_LIT for High/Low of that type; return True.
+  Otherwise consume nothing and return False (the caller falls back to the
+  High/Low-of-array-variable path). A name that resolves to a VARIABLE is left
+  for that path. }
+function TryFoldHighLowType(wantHigh: Boolean; var outNode: Integer): Boolean;
+var btk: TTypeKind; bv: Int64; etid, aliasIdx: Integer; nm: AnsiString;
+begin
+  Result := False;
+  if (CurTok.Kind = tkInteger_T) or (CurTok.Kind = tkLongWord_T) or
+     (CurTok.Kind = tkBoolean_T) or (CurTok.Kind = tkChar_T) then
+  begin
+    btk := ParseTypeKind;   { consumes the type token, disambiguating byte/word/etc }
+    if OrdinalTypeBound(btk, wantHigh, bv) then
+    begin
+      outNode := AllocNode(AN_INT_LIT); ASTIVal[outNode] := bv; ASTTk[outNode] := Ord(btk);
+      Result := True;
+    end;
+    Exit;   { it was a type token — never fall through to the variable path }
+  end;
+  if CurTok.Kind <> tkIdent then Exit;
+  nm := CurTok.SVal;
+  { An array variable takes the variable path; a type name does not. }
+  if FindSym(nm) >= 0 then Exit;
+
+  btk := OrdinalNameToTk(nm);
+  if btk = tyUnknown then
+  begin
+    aliasIdx := FindTypeAlias(nm);
+    if aliasIdx >= 0 then btk := IntToTypeKind(AliasTk[aliasIdx]);
+  end;
+  if (btk <> tyUnknown) and OrdinalTypeBound(btk, wantHigh, bv) then
+  begin
+    Next; outNode := AllocNode(AN_INT_LIT); ASTIVal[outNode] := bv; ASTTk[outNode] := Ord(btk);
+    Result := True; Exit;
+  end;
+
+  etid := FindEnumType(nm);
+  if etid >= 0 then
+  begin
+    if wantHigh then bv := EnumTypeValCount[etid] - 1 else bv := 0;
+    Next; outNode := AllocNode(AN_INT_LIT); ASTIVal[outNode] := bv; ASTTk[outNode] := Ord(tyInteger);
+    Result := True; Exit;
+  end;
+end;
+
 procedure ParseFactor;
 var name: AnsiString; recName: Integer; idx, procIdx, i, node, left, prevTok, valNode: Integer; tk: TTypeKind; op, argSeq, argSeq2, argSeq3, lastArg, argIdx, exprNode, szArg: Integer;
     nArgs, argsHead, currArg: Integer; argTypes: array[0..15] of TTypeKind;
@@ -2943,7 +3030,14 @@ begin
         no new IR/codegen — works for open arrays, dyn arrays and (via Length)
         static arrays alike. }
       Next; Expect(tkLParen, '(');
-      if CurTok.Kind <> tkIdent then Error('High: expected array variable');
+      { High(ordinalType) / High(enum) folds to a compile-time constant. }
+      if TryFoldHighLowType(True, node) then
+      begin
+        Expect(tkRParen, ')');
+        CurASTNode := node;
+        Exit;
+      end;
+      if CurTok.Kind <> tkIdent then Error('High: expected array variable or ordinal type');
       idx := FindSym(CurTok.SVal); Next;
       { See Length above: ParseLValueAST handles implicit-Self + undefined. }
       valNode := ParseLValueAST(idx, TokPos - 2);
@@ -2968,6 +3062,24 @@ begin
         ASTLeft[CurASTNode] := node; ASTRight[CurASTNode] := valNode;
         ASTTk[CurASTNode] := Ord(tyInteger);
       end;
+    end;
+    tkLow:
+    begin
+      { Low(ordinalType)/Low(enum) folds to a compile-time constant. Low of an
+        array variable is 0 (pxx normalizes dyn/open/static arrays to 0-based). }
+      Next; Expect(tkLParen, '(');
+      if TryFoldHighLowType(False, node) then
+      begin
+        Expect(tkRParen, ')');
+        CurASTNode := node;
+        Exit;
+      end;
+      if CurTok.Kind <> tkIdent then Error('Low: expected array variable or ordinal type');
+      idx := FindSym(CurTok.SVal); Next;
+      valNode := ParseLValueAST(idx, TokPos - 2);   { consume the array variable }
+      Expect(tkRParen, ')');
+      CurASTNode := AllocNode(AN_INT_LIT);
+      ASTIVal[CurASTNode] := 0; ASTTk[CurASTNode] := Ord(tyInteger);
     end;
     tkGetMem:
     begin

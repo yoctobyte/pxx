@@ -86,6 +86,7 @@ begin
     if (s[1]='T') and (s[2]='r') and (s[3]='y') then Result := tkTry;
     if (s[1]='n') and (s[2]='i') and (s[3]='l') then Result := tkNil;
     if (s[1]='N') and (s[2]='i') and (s[3]='l') then Result := tkNil;
+    if ((s[1]='l') or (s[1]='L')) and ((s[2]='o') or (s[2]='O')) and ((s[3]='w') or (s[3]='W')) then Result := tkLow;
   end
   else if Length(s) = 4 then
   begin
