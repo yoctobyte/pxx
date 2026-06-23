@@ -1,15 +1,20 @@
+# bug: cardinal/signed 32-bit expression width (orphan addendum)
 
-## Also: signed 32-bit `shr` widened to 64-bit (2026-06-23)
+- **Type:** bug (Track A — type promotion / codegen width)
+- **Status:** DONE 2026-06-23 (both halves resolved elsewhere)
+- **Found:** 2026-06-23, differential probe vs FPC
 
-The same 32-vs-64 promotion bites signed `integer`/`longint` shifts when the high
-bit is set:
+This file was an orphaned addendum fragment. Both parts are fixed and tracked by
+their own done tickets:
 
-```pascal
-var i: integer; begin i := -8; writeln(i shr 1); end.
-{ fpc: 2147483644 (32-bit: $FFFFFFF8 shr 1)   pxx: 9223372036854775804 (64-bit) }
-```
+1. **Cardinal/LongWord binary-op → uint64 (FPC: int64).** Resolved — see
+   `done/bug-cardinal-expr-promotion.md` (TypeArithmeticResult only widens to
+   uint64 for a genuinely 64-bit unsigned operand).
 
-pxx sign-extends the 32-bit operand to 64 bits before shifting; FPC shifts in the
-declared 32-bit width. (`and`/`or` with a literal mask are fine — `-1 and $FFFF`
-= 65535 in both.) Root is shared with the cardinal case: 32-bit integer
-expressions should be evaluated in 32-bit width, not promoted to 64-bit.
+2. **Signed 32-bit `shr` widened to 64-bit** (the "## Also" addendum that lived
+   here: `Integer(-8) shr 1` gave a 64-bit value). Resolved — see
+   `done/bug-shr-signed-integer-width.md` (commit 346a26f: shr at operand width
+   on x86-64 + aarch64). Re-verified 2026-06-23 vs FPC `{$mode objfpc}`:
+   `i shr 1`, `c shr 1`, `l shr 1`, `i shr 28` all match.
+
+Closed to clear the backlog stub; no remaining work.
