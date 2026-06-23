@@ -99,3 +99,12 @@ method ref. `AddUMeth` had NO bounds check → silent corruption of adjacent
 globals → "undefined variable" on the importer's own members. Grew table to
 8192 and added Error guards to AddUMeth + AddUClass (latter also unchecked).
 Front-end-only, self-host byte-identical, full make test green.
+
+## Track B verification 2026-06-23 — still reproduces against pinned v39
+
+Marked done (fixed in compiler source), but the fix is NOT in the current pin:
+re-tested `apps/ide/eliah/main.pas + uses lfmload` against
+`stable_linux_amd64/default/pinned` (929fa70) and it still fails:
+`pascal26:194: error: undefined variable (OnPlaceToggle)`. So wiring
+`LoadLfmText` into Eliah stays parked on the Track B side until a re-pin carries
+the fix (same shape as chore-repin: source fixed, pin lags). No code change here.
