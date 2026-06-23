@@ -1,7 +1,7 @@
 # chore: re-pin stable to expose the new System intrinsics to Track B
 
 - **Type:** chore (Track A — pinning) / cross-track signal
-- **Status:** urgent (carries the Length-getter fix `a034eaa` the Eliah GUI path needs)
+- **Status:** done
 - **Found:** 2026-06-23, differential probe vs FPC (Track B)
 - **Severity:** medium (Track B cannot use shipped intrinsics until re-pinned)
 
@@ -46,3 +46,13 @@ known divergences against the pin. A re-pin would expose, in one go:
 - `3a2e952` binary literals / explicit enum values / subrange types
 Plus the earlier Succ/Pred/Odd/Abs/Sqr/UpCase/Pos/Concat/Delete/Insert intrinsics.
 Net: a pin bump retires ~10 Track-B interim idioms at once.
+
+## Resolution (2026-06-23)
+
+Re-pinned: `make stabilize` (full test + 4-iteration fixedpoint, green) + `make
+pin` → stable v39 (sha 59d5aa64…), builtin RTL re-frozen. Exposes to Track B, in
+one bump: the Succ/Pred/Odd/Abs/Sqr/UpCase/Pos/Concat/Delete/Insert intrinsics
+plus this session's fixes — Length r-value getter, nested comments, variant-record
+union layout, inline ParamStr, binary literals / explicit enum / subrange types,
+default parameters, @obj.Method→Pointer, and array-constructor open-array args.
+Closes chore-repin-new-intrinsics.

@@ -30,6 +30,28 @@ function PCharToString(p: PChar): AnsiString;
   semantics: 1-based index clamped to >= 1, count clamped to the string end. }
 function __pxxStrCopy(const s: AnsiString; index, count: Integer): AnsiString;
 
+{ Bare `Delete(s, index, count)` / `Insert(src, s, index)` lower to these (see
+  ParseStatementAST), so the standard in-place string mutators work with no
+  `uses`. FPC semantics: 1-based index; Delete is a no-op when out of range;
+  Insert clamps index into [1, Length(s)+1]. Built on __pxxStrCopy so the
+  managed refcounting is the ordinary assignment path. }
+procedure __pxxStrDelete(var s: AnsiString; index, count: Integer);
+procedure __pxxStrInsert(const src: AnsiString; var s: AnsiString; index: Integer);
+
+{ Bare `Abs(x)` / `Sqr(x)` lower to these (see ParseFactor) so the System
+  intrinsics work with no `uses` and the argument is evaluated once (the naive
+  e*e / if e<0 fold would double-evaluate a side-effecting argument). }
+function __pxxAbsInt(x: Int64): Int64;
+function __pxxAbsDbl(d: Double): Double;
+function __pxxSqrInt(x: Int64): Int64;
+function __pxxSqrDbl(d: Double): Double;
+
+{ Bare `UpCase(c)` / `Pos(sub, s)` lower to these (see ParseFactor) so the System
+  intrinsics work with no `uses`. A `uses sysutils` Pos (or any user routine)
+  shadows them at the call site. }
+function __pxxUpCase(c: Char): Char;
+function __pxxPos(const sub, s: AnsiString): Integer;
+
 { The heap allocator and managed-string helpers (PXXAlloc/Free/Realloc,
   PXXStr*) moved to the `builtinheap` unit so heap-only / string-only programs
   do not pull in the Str/Val/Variant routines below. }
@@ -334,6 +356,60 @@ begin
     i := i + 1;
   end;
   Result := r;
+end;
+
+procedure __pxxStrDelete(var s: AnsiString; index, count: Integer);
+begin
+  if (count <= 0) or (index < 1) or (index > Length(s)) then Exit;
+  { __pxxStrCopy clamps count to the string end, so an over-long count is fine. }
+  s := __pxxStrCopy(s, 1, index - 1) + __pxxStrCopy(s, index + count, Length(s));
+end;
+
+procedure __pxxStrInsert(const src: AnsiString; var s: AnsiString; index: Integer);
+begin
+  if index < 1 then index := 1;
+  if index > Length(s) + 1 then index := Length(s) + 1;
+  s := __pxxStrCopy(s, 1, index - 1) + src + __pxxStrCopy(s, index, Length(s));
+end;
+
+function __pxxAbsInt(x: Int64): Int64;
+begin
+  if x < 0 then Result := -x else Result := x;
+end;
+
+function __pxxAbsDbl(d: Double): Double;
+begin
+  if d < 0 then Result := -d else Result := d;
+end;
+
+function __pxxSqrInt(x: Int64): Int64;
+begin
+  Result := x * x;
+end;
+
+function __pxxSqrDbl(d: Double): Double;
+begin
+  Result := d * d;
+end;
+
+function __pxxUpCase(c: Char): Char;
+begin
+  if (c >= 'a') and (c <= 'z') then Result := Chr(Ord(c) - 32) else Result := c;
+end;
+
+function __pxxPos(const sub, s: AnsiString): Integer;
+var i, j, n, m: Integer; ok: Boolean;
+begin
+  Result := 0;
+  n := Length(s); m := Length(sub);
+  if (m = 0) or (m > n) then Exit;
+  for i := 1 to n - m + 1 do
+  begin
+    ok := True;
+    for j := 1 to m do
+      if s[i + j - 1] <> sub[j] then begin ok := False; Break; end;
+    if ok then begin Result := i; Exit; end;
+  end;
 end;
 
 end.
