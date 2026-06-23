@@ -1,0 +1,127 @@
+object EliahForm: TEliahForm
+  Left = 0
+  Top = 0
+  Width = 1100
+  Height = 700
+  Caption = 'Eliah - IDE'
+  object UpBtn: TButton
+    Left = 4
+    Top = 3
+    Width = 80
+    Height = 26
+    Caption = 'Up'
+    OnClick = OnUp
+  end
+  object CompileBtn: TButton
+    Left = 90
+    Top = 3
+    Width = 80
+    Height = 26
+    Caption = 'Compile'
+    OnClick = OnCompile
+  end
+  object RunBtn: TButton
+    Left = 176
+    Top = 3
+    Width = 80
+    Height = 26
+    Caption = 'Run'
+    OnClick = OnRun
+  end
+  object Palette: TComboBox
+    Left = 266
+    Top = 3
+    Width = 110
+    Height = 26
+  end
+  object PlaceBtn: TButton
+    Left = 382
+    Top = 3
+    Width = 80
+    Height = 26
+    Caption = 'Place'
+    OnClick = OnPlaceToggle
+  end
+  object SaveBtn: TButton
+    Left = 466
+    Top = 3
+    Width = 80
+    Height = 26
+    Caption = 'Save'
+    OnClick = OnSave
+  end
+  object DelBtn: TButton
+    Left = 552
+    Top = 3
+    Width = 80
+    Height = 26
+    Caption = 'Del'
+    OnClick = OnDelete
+  end
+  object NewBtn: TButton
+    Left = 638
+    Top = 3
+    Width = 80
+    Height = 26
+    Caption = 'New'
+    OnClick = OnNew
+  end
+  object UndoBtn: TButton
+    Left = 724
+    Top = 3
+    Width = 80
+    Height = 26
+    Caption = 'Undo'
+    OnClick = OnUndo
+  end
+  object Tree: TListBox
+    Left = 0
+    Top = 34
+    Width = 240
+    Height = 516
+    OnClick = OnTreeClick
+  end
+  object Errors: TListBox
+    Left = 0
+    Top = 550
+    Width = 240
+    Height = 150
+    OnClick = OnErrorClick
+  end
+  object Editor: TMemo
+    Left = 240
+    Top = 34
+    Width = 560
+    Height = 466
+  end
+  object Output: TMemo
+    Left = 240
+    Top = 500
+    Width = 560
+    Height = 200
+  end
+  object DesignBox: TPaintBox
+    Left = 800
+    Top = 34
+    Width = 300
+    Height = 466
+    OnPaint = OnDesignPaint
+    OnMouseDown = OnDesignMouseDown
+    OnMouseMove = OnDesignMouseMove
+    OnMouseUp = OnDesignMouseUp
+  end
+  object Props: TListBox
+    Left = 800
+    Top = 500
+    Width = 300
+    Height = 172
+    OnClick = OnPropClick
+  end
+  object ValueEdit: TEdit
+    Left = 800
+    Top = 672
+    Width = 300
+    Height = 26
+    OnKeyDown = OnValueKey
+  end
+end

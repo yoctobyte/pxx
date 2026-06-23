@@ -25,7 +25,7 @@ _none_
 | --- | --- | --- | --- | --- |
 | feature-c-runtime-library | B | feature | C runtime/library layer (`lib/crtl`) plus direct C-library packages | feature-c-source-frontend |
 
-## backlog (44)
+## backlog (45)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -45,6 +45,7 @@ _none_
 | feature-dns-resolver-library | B | feature | DNS resolver library (`dns.pas`) with selectable backends | — |
 | feature-dynamic-include-paths-config | A | feature | Dynamic Include Paths, Configuration Files, and System Scanner | — |
 | feature-dynamic-soname-discovery | A | feature | Dynamic soname discovery (no execve) | — |
+| feature-eliah-from-lfm | B | feature | feature: define Eliah's own layout in a streamed .lfm (dogfooding) | — |
 | feature-eliah-m2-builder | B | feature | Eliah M2 — builder integration | feature-eliah-m0-window |
 | feature-esp32-idf-xtensa | A | feature | ESP-IDF integration: Xtensa (ESP32-S2/S3) — QEMU + real hardware | — |
 | feature-esp-peripheral-callback-api | B | feature | ESP32 peripheral callback API (timer / GPIO / ADC) — the user-facing "interrupt" | — |
@@ -366,6 +367,7 @@ _none_
 - [B] feature-dns-resolver-library
 - [A] feature-dynamic-include-paths-config
 - [A] feature-dynamic-soname-discovery
+- [B] feature-eliah-from-lfm
 - [A] feature-esp32-idf-xtensa
 - [B] feature-esp-peripheral-callback-api
 - [B] feature-ilja-tui
@@ -396,5 +398,6 @@ _none_
 - **2** — feature-c-source-frontend
 - **1** — feature-mimic-fpc
 - **1** — feature-esp32-idf-xtensa
+- **1** — feature-eliah-m1-designer
 - **1** — feature-eliah-m0-window
 - **1** — chore-inc-to-units
