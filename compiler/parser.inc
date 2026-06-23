@@ -8432,6 +8432,7 @@ var
   fIsDyn: Boolean; fDynDepth: Integer; fAi: Integer; tMoreDims: Boolean;
   tnOff, tnLen, ci, fnOff, fnLen, curFieldOff, fRec, fSize, fAlign, classAlign, depth, targetNOff, targetNLen: Integer;
   variantBaseOff, variantMax, branchFieldOff: Integer;
+  enumNOff, enumNLen: Integer; enumNm: AnsiString;
   fTk: TTypeKind;
   parentCi, slot, mmi, mnOff, mnLen, pnOff, pnLen, rFOff, rFLen, rMOff, rMLen, wFOff, wFLen, wMOff, wMLen, rnOff, rnLen, wnOff, wnLen, propRec, i, vmtSlots: Integer;
   implIntf: array[0..15] of Integer; implCnt, tmpCi, ii, imSlot, imProc: Integer;
@@ -8486,9 +8487,20 @@ begin
         done := False;
         while (CurTok.Kind = tkIdent) and not done do
         begin
-          AddEnumVal(Tokens[TokPos-1].SOffset, Tokens[TokPos-1].SLen);
-          AddConst(CurTok.SVal, tyInteger, ordinal);
-          Inc(ordinal); Next;
+          { Optional explicit ordinal: `(a = 1, b = 5, c)` — a value sets the
+            member's ordinal; the next valueless member continues from value+1
+            (FPC semantics). }
+          enumNOff := Tokens[TokPos-1].SOffset; enumNLen := Tokens[TokPos-1].SLen;
+          enumNm := CurTok.SVal;
+          Next;
+          if CurTok.Kind = tkEq then
+          begin
+            Next;                 { consume '=' }
+            ordinal := ConstEval; { explicit ordinal value }
+          end;
+          AddEnumVal(enumNOff, enumNLen);
+          AddConst(enumNm, tyInteger, ordinal);
+          Inc(ordinal);
           if not Eat(tkComma) then done := True;
         end;
         Expect(tkRParen, ')');
@@ -9556,6 +9568,18 @@ begin
         end
         else
           RegisterProcTypeAlias(tnOff, tnLen, mpi);
+      end
+      else if (CurTok.Kind = tkInteger) or (CurTok.Kind = tkMinus) or (CurTok.Kind = tkString) then
+      begin
+        { Named ordinal subrange type: `T = lo..hi` (1..10, 'a'..'z'). Modelled as
+          an alias to the base ordinal (tyChar for a char-literal bound, else
+          tyInteger) — same treatment as an inline `var x: lo..hi` subrange (the
+          bounds are not retained). }
+        if CurTok.Kind = tkString then fTk := tyChar else fTk := tyInteger;
+        ConstEval;                 { low bound }
+        Expect(tkDotDot, '..');
+        ConstEval;                 { high bound }
+        RegisterGeneralAlias(tnOff, tnLen, Ord(fTk), REC_NONE);
       end
       else
       begin

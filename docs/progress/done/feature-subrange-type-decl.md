@@ -1,7 +1,7 @@
 # feature: named subrange type declaration (`type T = lo..hi`)
 
 - **Type:** feature (Track A — parser)
-- **Status:** backlog
+- **Status:** done
 - **Found:** 2026-06-23, differential probe vs FPC
 - **Severity:** low-medium (inline subrange works; only the named form is missing)
 
@@ -24,3 +24,12 @@ form — and as an array index type, set base, case selector, etc.
 ## Repro
 
 `tools/fpc_diff_probe.sh` (`subrange-type`).
+
+## Resolution (2026-06-23)
+
+Parser (ParseTypeSection type-def dispatch): a `type T = lo..hi` whose def starts
+with a constant (tkInteger/tkMinus/char-literal) is parsed as an ordinal subrange
+and registered as an alias to the base ordinal (tyChar for a char-literal bound,
+else tyInteger) — same treatment as an inline `var x: lo..hi` (bounds not
+retained). `type tr = 1..10` / `type tc = 'a'..'z'` usable as var types,
+byte-identical to FPC. Front-end only. Closes feature-subrange-type-decl.

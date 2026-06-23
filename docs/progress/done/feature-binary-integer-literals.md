@@ -1,7 +1,7 @@
 # feature: binary integer literals (`%1010`)
 
 - **Type:** feature (Track A — lexer)
-- **Status:** backlog
+- **Status:** done
 - **Found:** 2026-06-23, differential probe vs FPC
 - **Severity:** low (cosmetic; hex `$..` works, decimal works)
 
@@ -21,3 +21,9 @@ Handy for bit masks / register fields (ESP work). Hex (`$FF`) already lexes.
 ## Repro
 
 `tools/fpc_diff_probe.sh` (`binary-literal`).
+
+## Resolution (2026-06-23)
+
+Lexer: added a `%`-prefixed binary literal path alongside the existing `$` hex /
+`&` octal (Pascal `LexOne`). `%1010` -> 10, `%11111111` -> 255, byte-identical to
+FPC. Front-end only. Closes feature-binary-integer-literals.

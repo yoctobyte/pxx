@@ -1,7 +1,7 @@
 # feature: enumerated type with explicit ordinal values
 
 - **Type:** feature (Track A — parser)
-- **Status:** backlog
+- **Status:** done
 - **Found:** 2026-06-23, differential probe vs FPC
 - **Severity:** low-medium (common for C-interop / protocol constants)
 
@@ -26,3 +26,10 @@ constants (ESP/IDF, wire formats).
 ## Repro
 
 `tools/fpc_diff_probe.sh` (`enum-explicit`).
+
+## Resolution (2026-06-23)
+
+Parser (enum decl in ParseTypeSection): each member now accepts an optional
+`= constexpr` ordinal; a valueless member continues from the previous value + 1
+(FPC semantics). `(a=1, b=5, c, d=10)` -> 1,5,6,10, byte-identical to FPC.
+Front-end only. Closes feature-enum-explicit-values.

@@ -1548,6 +1548,15 @@ begin
     CurTok.Kind := tkInteger; CurTok.IVal := n; Exit;
   end;
 
+  if c = '%' then
+  begin
+    { Binary integer literal `%1010` (FPC syntax), like `$` hex / `&` octal. }
+    Inc(SrcPos); n := 0;
+    while (SrcPos <= Length(Source)) and (Source[SrcPos] in ['0'..'1']) do
+      begin n := n*2 + (Ord(Source[SrcPos])-48); Inc(SrcPos); end;
+    CurTok.Kind := tkInteger; CurTok.IVal := n; Exit;
+  end;
+
   if (c = '''') or (c = '#') then
   begin
     { String literal: a run of adjacent quoted segments and #nn char codes
