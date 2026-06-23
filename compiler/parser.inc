@@ -3232,13 +3232,33 @@ begin
     end;
     tkArgStr:
     begin
+      { Inline ParamStr(i): the 2-arg ArgStr(i, var) codegen needs a destination
+        string. Synthesize a hidden frozen-string temp, copy argv[i] into it
+        (EmitArgvToString — a frozen buffer write, no managed release, so the temp
+        needs no nil-init), and yield the temp. Lets ParamStr(i) be used directly
+        in any expression (comparison, argument), not only as an assignment RHS.
+        The temp is tyString (frozen) even under managed strings, matching the
+        `String` keyword temp above. }
       Next; Expect(tkLParen, '(');
-      ParseExpr;
+      ParseExpr;                            { index expression }
       Expect(tkRParen, ')');
-      node := AllocNode(AN_CALL); ASTIVal[node] := -Ord(tkArgStr);
+      op := AllocVar('', tyString);
+      { 2-arg ArgStr call: arg0 = index, arg1 = the temp (lvalue) }
       argSeq := AllocNode(AN_ARG); ASTLeft[argSeq] := CurASTNode;
+      identNode := AllocNode(AN_IDENT);
+      ASTIVal[identNode] := op; ASTTk[identNode] := Ord(Syms[op].TypeKind);
+      argSeq2 := AllocNode(AN_ARG); ASTLeft[argSeq2] := identNode;
+      ASTRight[argSeq] := argSeq2;
+      node := AllocNode(AN_CALL); ASTIVal[node] := -Ord(tkArgStr);
       ASTLeft[node] := argSeq;
-      CurASTNode := node;
+      { AN_STR_FROM_CHAR: Left = the ArgStr side-effect, Right = read the temp. }
+      left := AllocNode(AN_STR_FROM_CHAR);
+      ASTLeft[left] := node;
+      identNode := AllocNode(AN_IDENT);
+      ASTIVal[identNode] := op; ASTTk[identNode] := Ord(Syms[op].TypeKind);
+      ASTRight[left] := identNode;
+      ASTTk[left] := Ord(Syms[op].TypeKind);
+      CurASTNode := left;
     end;
     tkIdent:
     begin

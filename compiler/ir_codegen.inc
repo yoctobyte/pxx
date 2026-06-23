@@ -582,7 +582,18 @@ procedure EmitArgvToStringManaged(dstIdx: Integer);
 { On entry rax = argv index. Build a managed string from argv[index] (a C
   string) and publish it into dst (releasing dst's old handle). Managed
   counterpart of EmitArgvToString. }
+var inRangePatch, doneOutPatch: Integer;
 begin
+  { Bounds check: out-of-range index (>= argc, or negative) publishes nil (empty
+    string) instead of dereferencing a bad argv slot. argc is at [initial_rsp]. }
+  EmitB($48); EmitB($8B); EmitB($0C); EmitB($25); EmitGlobRef(BSS_INITIAL_RSP);  { mov rcx, [initial_rsp] }
+  EmitB($48); EmitB($8B); EmitB($09);               { mov rcx, [rcx] = argc }
+  EmitB($48); EmitB($39); EmitB($C8);               { cmp rax, rcx }
+  EmitB($72); inRangePatch := CodeLen; EmitB(0);    { jb in_range }
+  EmitB($48); EmitB($31); EmitB($C0);               { xor rax, rax (nil handle) }
+  EmitPublishManagedString(dstIdx);                  { dst := '' }
+  EmitB($EB); doneOutPatch := CodeLen; EmitB(0);    { jmp done }
+  Code[inRangePatch] := Byte(CodeLen - (inRangePatch + 1));
   EmitB($48); EmitB($C1); EmitB($E0); EmitB($03);   { shl rax, 3 }
   EmitB($48); EmitB($8B); EmitB($0C); EmitB($25); EmitGlobRef(BSS_INITIAL_RSP);
   EmitB($48); EmitB($83); EmitB($C1); EmitB($08);   { add rcx, 8 }
@@ -598,6 +609,7 @@ begin
   EmitB($48); EmitB($89); EmitB($CF);               { mov rdi, rcx (length) }
   IREmitCodeCall(AnsiStrFromLiteralAddr);           { rax = new managed string }
   EmitPublishManagedString(dstIdx);
+  Code[doneOutPatch] := Byte(CodeLen - (doneOutPatch + 1));
 end;
 
 procedure EmitVariantClear;

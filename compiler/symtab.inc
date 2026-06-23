@@ -2155,8 +2155,20 @@ begin
 end;
 
 procedure EmitArgvToString(dstIdx: Integer);
+var inRangePatch, doneOutPatch: Integer;
 begin
   { On entry: rax = argv index. Copy argv[rax] C-string to global string dstIdx. }
+  { Bounds check: an out-of-range index (>= argc, or negative) yields '' rather
+    than dereferencing a NULL/out-of-bounds argv slot (which segfaulted). argc is
+    at [initial_rsp]. }
+  EmitB($48); EmitB($8B); EmitB($0C); EmitB($25); EmitGlobRef(BSS_INITIAL_RSP);  { mov rcx, [initial_rsp] }
+  EmitB($48); EmitB($8B); EmitB($09);               { mov rcx, [rcx] = argc }
+  EmitB($48); EmitB($39); EmitB($C8);               { cmp rax, rcx }
+  EmitB($72); inRangePatch := CodeLen; EmitB(0);    { jb in_range (unsigned: 0<=index<argc) }
+  EmitB($48); EmitB($31); EmitB($C0);               { xor rax, rax }
+  EmitStoreStrLen(dstIdx);                           { dst := '' }
+  EmitB($EB); doneOutPatch := CodeLen; EmitB(0);    { jmp done }
+  Code[inRangePatch] := Byte(CodeLen - (inRangePatch + 1));
   EmitB($48); EmitB($C1); EmitB($E0); EmitB($03);   { shl rax, 3 }
   EmitB($48); EmitB($8B); EmitB($0C); EmitB($25); EmitGlobRef(BSS_INITIAL_RSP);
   EmitB($48); EmitB($83); EmitB($C1); EmitB($08);   { add rcx, 8 }
@@ -2172,6 +2184,7 @@ begin
   EmitStoreStrLen(dstIdx);
   EmitLeaStrDataRdi(dstIdx);
   EmitB($F3); EmitB($A4);
+  Code[doneOutPatch] := Byte(CodeLen - (doneOutPatch + 1));
 end;
 
 procedure EmitTerminateString(idx: Integer);

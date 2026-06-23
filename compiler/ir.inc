@@ -2004,7 +2004,11 @@ begin
         a hidden temp via the ordinary assignment path, frozen or managed); Right
         is the read of __t that yields the string value. No backend code — both
         sub-nodes are ordinary IR built at parse time. }
-      IRLowerAST(ASTLeft[node]);          { side-effect: char -> hidden string temp }
+      { Mark the side-effect as a statement so a call-shaped Left (e.g. the
+        synthesized ArgStr that fills a temp for inline ParamStr) is actually
+        emitted; a store-shaped Left (String(c)) emits unconditionally, so the
+        mark is a harmless no-op there. }
+      IRMarkStatementNode(IRLowerAST(ASTLeft[node]));   { side-effect into hidden temp }
       Result := IRLowerAST(ASTRight[node]);
     end;
 
