@@ -176,6 +176,9 @@ P
 probe subrange-type known <<'P'
 type tr = 1..10; var x: tr; begin x := 5; writeln(x); end.
 P
+probe cardinal-sub known <<'P'
+var a, b: cardinal; begin a := 3; b := 5; writeln(a - b); end.
+P
 
 echo "---"
 echo "new divergences: $new   known/filed: $known"

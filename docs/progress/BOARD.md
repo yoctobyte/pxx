@@ -25,11 +25,12 @@ _none_
 | --- | --- | --- | --- | --- |
 | feature-c-runtime-library | B | feature | C runtime/library layer (`lib/crtl`) plus direct C-library packages | feature-c-source-frontend |
 
-## backlog (61)
+## backlog (62)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
 | bug-as-cast-inline-method-call | A | bug | bug: method call on an inline `(expr as T)` is silently dropped | — |
+| bug-cardinal-expr-promotion | A | bug | bug: cardinal/longword binary-op promotes to uint64 (FPC: int64) | — |
 | bug-case-insensitive-incomplete-builtins-funcs | A | bug | bug: case-insensitivity incomplete — builtins + function calls still case-sensitive | — |
 | bug-length-rejects-non-variable | A | bug | bug: Length() rejects a non-variable argument (literal / expression) | — |
 | bug-low-missing-high-wrong-nonzero-array | A | bug | bug: Low() missing; High() wrong on non-zero-based arrays | — |
@@ -336,6 +337,7 @@ _none_
 ## Ready (no unmet blocker)
 
 - [A] bug-as-cast-inline-method-call
+- [A] bug-cardinal-expr-promotion
 - [A] bug-case-insensitive-incomplete-builtins-funcs
 - [A] bug-length-rejects-non-variable
 - [A] bug-low-missing-high-wrong-nonzero-array
