@@ -6,7 +6,7 @@ program bochan;
   verdict. Links NO GUI/TUI face (no lib/pcl) — building this at all is the proof
   that garin is render-agnostic. }
 
-uses buffer, eduth, docmodel, lfmload, builder;
+uses buffer, eduth, docmodel, lfmload, builder, project;
 
 var
   e: TEduth;
@@ -17,6 +17,9 @@ var
   lfm, saved, diagOut: AnsiString;
   ldoc, rdoc, ddoc: TDocModel;
   diags: TDiagList;
+  proj, rproj: TProject;
+  args: TStrArray;
+  projTxt: AnsiString;
 
 begin
   EduthInit(e);
@@ -172,6 +175,70 @@ begin
   CheckStr(e, 'second diag msg', diags.DiagMsg(1), 'error: unit source not found');
   diags.Clear;
   CheckInt(e, 'clear resets', diags.Count, 0);
+
+  { scenario 10: project model — build inputs -> compiler argv + text round-trip }
+  writeln('-- project.TProject --');
+  proj := TProject.Create;
+  proj.SetName('Demo');
+  proj.SetMain('src/main.pas');
+  proj.SetOut('/tmp/demo');
+  proj.AddUnitPath('lib/rtl');
+  proj.AddUnitPath('lib/pcl');
+  proj.AddFile('src/main.pas');
+  proj.AddFile('src/util.pas');
+  CheckStr(e, 'name', proj.Name, 'Demo');
+  CheckStr(e, 'main unit', proj.MainUnit, 'src/main.pas');
+  CheckStr(e, 'out path', proj.OutPath, '/tmp/demo');
+  CheckInt(e, 'two unit paths', proj.UnitPathCount, 2);
+  CheckStr(e, 'second unit path', proj.GetUnitPath(1), 'lib/pcl');
+  CheckInt(e, 'two files', proj.FileCount, 2);
+  CheckStr(e, 'second file', proj.GetFile(1), 'src/util.pas');
+
+  { BuildArgs: [-Fulib/rtl, -Fulib/pcl, src/main.pas, /tmp/demo] }
+  args := proj.BuildArgs;
+  CheckInt(e, 'argv length', Length(args), 4);
+  CheckStr(e, 'argv[0] -Fu rtl', args[0], '-Fulib/rtl');
+  CheckStr(e, 'argv[1] -Fu pcl', args[1], '-Fulib/pcl');
+  CheckStr(e, 'argv[2] main', args[2], 'src/main.pas');
+  CheckStr(e, 'argv[3] out', args[3], '/tmp/demo');
+
+  { no main unit -> empty argv.
+    NB: bind BuildArgs to a var before Length() — Length() of a dynarray
+    call-result inline miscompiles (bug-length-of-dynarray-call-result). }
+  rproj := TProject.Create;
+  args := rproj.BuildArgs;
+  CheckInt(e, 'no-main argv empty', Length(args), 0);
+
+  { text round-trip: save then load reproduces the model }
+  writeln('-- project save/load round-trip --');
+  projTxt := proj.SaveToText;
+  CheckTrue(e, 'save produced text', Length(projTxt) > 0);
+  rproj := TProject.Create;
+  CheckTrue(e, 'load returns true', rproj.LoadFromText(projTxt));
+  CheckStr(e, 'rt name', rproj.Name, 'Demo');
+  CheckStr(e, 'rt main', rproj.MainUnit, 'src/main.pas');
+  CheckStr(e, 'rt out', rproj.OutPath, '/tmp/demo');
+  CheckInt(e, 'rt unit path count', rproj.UnitPathCount, 2);
+  CheckStr(e, 'rt unit path 0', rproj.GetUnitPath(0), 'lib/rtl');
+  CheckInt(e, 'rt file count', rproj.FileCount, 2);
+  CheckStr(e, 'rt file 1', rproj.GetFile(1), 'src/util.pas');
+
+  { parser tolerates blanks and # comments }
+  rproj := TProject.Create;
+  rproj.LoadFromText('# a comment' + #10 + '' + #10 + 'name = X' + #10 +
+    '  main = m.pas  ' + #10 + 'file = a' + #10);
+  CheckStr(e, 'comment-tolerant name', rproj.Name, 'X');
+  CheckStr(e, 'trimmed main value', rproj.MainUnit, 'm.pas');
+  CheckInt(e, 'one file parsed', rproj.FileCount, 1);
+
+  { file round-trip on disk }
+  writeln('-- project SaveToFile/LoadFromFile --');
+  CheckTrue(e, 'save to file', proj.SaveToFile('/tmp/bochan_proj.pxxproj'));
+  rproj := TProject.Create;
+  CheckTrue(e, 'load from file', rproj.LoadFromFile('/tmp/bochan_proj.pxxproj'));
+  CheckStr(e, 'file rt name', rproj.Name, 'Demo');
+  CheckInt(e, 'file rt path count', rproj.UnitPathCount, 2);
+  CheckInt(e, 'file rt file count', rproj.FileCount, 2);
 
   Halt(EduthReport(e));
 end.
