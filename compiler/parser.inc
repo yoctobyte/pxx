@@ -8215,7 +8215,7 @@ end;
 procedure ParseVarSection;
 var names: array[0..MAX_DECL_NAMES-1] of AnsiString; n, i, idx: Integer; tk: TTypeKind;
     isArr, isDyn: Boolean; arrLo, arrHi: Integer; elemTk: TTypeKind; dynDepth: Integer;
-    initElem: Integer; initVal: Int64;
+    initElem: Integer; initVal: Int64; elemResolved: Boolean;
     isArrND: Boolean; ndCnt, dLo, dHi, di, flatLen, ai: Integer;
     moreDims: Boolean;
     ndDimLo, ndDimSpan: array[0..MAX_ARR_DIMS-1] of Integer;
@@ -8236,6 +8236,7 @@ begin
     until not Eat(tkComma);
     Expect(tkColon, ':');
     isArr := False; isDyn := False; arrLo := 0; arrHi := 0; elemTk := tyInteger;
+    elemResolved := False;
     isArrND := False; ndCnt := 0;
     ai := -1;
     if CurTok.Kind = tkIdent then ai := FindArrayType(CurTok.SVal);
@@ -8316,9 +8317,31 @@ begin
           Inc(dynDepth);
           Expect(tkOf, 'of');
         end;
+        { A named dynamic-array alias as the element (`array of TA` where
+          `TA = array of Integer`) composes its depth: the result is
+          `array of (dyn TA)`, i.e. our dynDepth plus the alias's depth, with the
+          alias's BASE element type. ParseTypeKind cannot do this — array-type
+          aliases live in the ArrType table, not the scalar alias table, so it
+          would resolve `TA` to a bare base type and drop the dynamic dimension. }
+        if CurTok.Kind = tkIdent then
+        begin
+          ai := FindArrayType(CurTok.SVal);
+          if (ai >= 0) and ArrTypeIsDyn[ai] then
+          begin
+            elemTk := IntToTypeKind(ArrTypeElemTk[ai]);
+            LastTypeRecId := ArrTypeElemRec[ai];
+            dynDepth := dynDepth + ArrTypeDynDepth[ai];
+            Next;                 { consume the alias name }
+            tk := elemTk;
+            elemResolved := True;
+          end;
+        end;
       end;
-      elemTk := ParseTypeKind;
-      tk := elemTk;
+      if not elemResolved then
+      begin
+        elemTk := ParseTypeKind;
+        tk := elemTk;
+      end;
     end
     else
     begin

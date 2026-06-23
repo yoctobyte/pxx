@@ -848,6 +848,8 @@ test-core: $(COMPILER)
 	test "$$(/tmp/test_ansistring_record_char_read26)" = "$$(printf '1\n1\n1')"
 	./$(COMPILER) test/test_nested_dynarray.pas /tmp/test_nested_dynarray26
 	test "$$(/tmp/test_nested_dynarray26)" = "$$(printf '1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1')"
+	./$(COMPILER) test/test_nested_dynarray_alias.pas /tmp/test_nested_dynarray_alias26
+	test "$$(/tmp/test_nested_dynarray_alias26)" = "$$(printf '1\n1\n1\n1\n1\n1\n1\n1\n1')"
 	./$(COMPILER) test/test_nested_dynarray_managed.pas /tmp/test_nested_dynarray_managed26
 	test "$$(/tmp/test_nested_dynarray_managed26)" = "$$(printf '1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1')"
 	./$(COMPILER) --threadsafe test/test_nested_dynarray_managed.pas /tmp/test_nested_dynarray_managed_threadsafe26
