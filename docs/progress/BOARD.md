@@ -25,16 +25,19 @@ _none_
 | --- | --- | --- | --- | --- |
 | feature-c-runtime-library | B | feature | C runtime/library layer (`lib/crtl`) plus direct C-library packages | feature-c-source-frontend |
 
-## backlog (50)
+## backlog (53)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
+| bug-length-rejects-non-variable | A | bug | bug: Length() rejects a non-variable argument (literal / expression) | — |
 | bug-nested-brace-comments | A | bug | bug: `{ }` comments do not nest | — |
 | bug-paramstr-inline-argstr | A | bug | bug: ParamStr/ArgStr result not usable inline (needs a string variable) | — |
 | bug-setlength-array-element | A | bug | bug: SetLength rejects an indexed array element as target | — |
 | bug-stderr-not-fd2 | B | bug | `writeln(StdErr, ...)` goes to stdout — StdErr not connected to fd 2 | — |
 | bug-writeln-boolean-format | A | bug | `WriteLn(Boolean)` prints `0`/`1` instead of `FALSE`/`TRUE` | — |
+| bug-writeln-real-format | A | bug | bug: `WriteLn(real)` default format differs from FPC | — |
 | chore-inc-to-units | A | chore | `.inc` → real `.pas` units refactor | — |
+| chore-repin-new-intrinsics | A | chore | chore: re-pin stable to expose the new System intrinsics to Track B | — |
 | chore-runtime-emission-size | A | chore | Finer runtime-support emission (code size) | — |
 | feature-c-header-import-complex | A | feature | Import C headers for complex libraries (glib/GTK-grade) | — |
 | feature-const-set-literal | A | feature | Set literal in a `const` declaration (`const S = [1,2,3]`) | — |
@@ -323,12 +326,15 @@ _none_
 
 ## Ready (no unmet blocker)
 
+- [A] bug-length-rejects-non-variable
 - [A] bug-nested-brace-comments
 - [A] bug-paramstr-inline-argstr
 - [A] bug-setlength-array-element
 - [B] bug-stderr-not-fd2
 - [A] bug-writeln-boolean-format
+- [A] bug-writeln-real-format
 - [A] chore-inc-to-units
+- [A] chore-repin-new-intrinsics
 - [A] chore-runtime-emission-size
 - [A] feature-c-header-import-complex
 - [A] feature-const-set-literal
