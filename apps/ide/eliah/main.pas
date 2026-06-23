@@ -21,7 +21,7 @@ program eliah;
   a selection outline + the node's fields in the object-inspector pane below. }
 
 uses gtk3, controls, stdctrls, extctrls, graphics, forms, sysutils,
-     buffer, runner, docmodel, designer;
+     buffer, runner, docmodel, designer, lfmload;
 
 const
   W_WIN     = 1100;
@@ -32,6 +32,7 @@ const
   TOOLBAR_H = 34;
   PXX_PATH  = 'stable_linux_amd64/default/pinned';
   BUILD_OUT = '/tmp/eliah_build';
+  SAMPLE_LFM = 'apps/ide/eliah/sample.lfm';
 
 type
   THandler = class
@@ -272,6 +273,8 @@ var
   btn: TButton;
   arg, startDir: AnsiString;
   centerW, centerH, contentH: Integer;
+  sbuf: TIdeBuffer;
+  sok: Boolean;
 
 function MkButton(const cap: AnsiString; x: Integer): TButton;
 var b: TButton;
@@ -312,14 +315,13 @@ begin
   H.Output.Text := 'build output appears here';
 
   { designer: box-emulated preview painted from the garin docmodel (no live
-    widgets). Sample form so the surface is non-empty until load/save lands. }
+    widgets). Seed the surface by loading a sample .lfm through the garin loader
+    (box-emulation parser, not the live-component streamer). }
   Dsn := TDesigner.Create;
   Dsn.Doc := TDocModel.Create;
-  Dsn.Doc.AddNode(wkForm,   'Form1',  -1, 12, 12, W_RIGHT - 34, centerH - 70);
-  Dsn.Doc.AddNode(wkLabel,  'Name:',   0, 28, 48,  56, 18);
-  Dsn.Doc.AddNode(wkEdit,   '',        0, 92, 44, 140, 26);
-  Dsn.Doc.AddNode(wkButton, 'OK',      0, 28, 92,  80, 28);
-  Dsn.Doc.AddNode(wkButton, 'Cancel',  0, 116, 92, 80, 28);
+  sbuf := TIdeBuffer.Create;
+  if sbuf.LoadFromFile(SAMPLE_LFM) then
+    sok := LoadLfmText(sbuf.Text, Dsn.Doc);
 
   DesignBox := TPaintBox.Create;
   DesignBox.Parent := Form1;
@@ -387,6 +389,12 @@ begin
   if arg = '--smoke' then
   begin
     if H.nItems < 1 then begin writeln('SMOKE FAIL: empty tree'); Halt(1); end;
+
+    { sample .lfm loaded into the designer docmodel }
+    if H.Dsn.Doc.Count <> 5 then begin writeln('SMOKE FAIL: sample.lfm not loaded'); Halt(1); end;
+    if H.Dsn.Doc.NodeCaption(3) <> 'OK' then begin writeln('SMOKE FAIL: lfm OK button missing'); Halt(1); end;
+    if H.Dsn.Doc.NodeX(3) <> 28 then begin writeln('SMOKE FAIL: lfm abs coord wrong'); Halt(1); end;
+
     H.LoadDir('apps/ide/garin');
     H.Tree.ItemIndex := H.nItems - 1;
     H.OnTreeClick(nil);
