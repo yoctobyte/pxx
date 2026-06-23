@@ -1971,6 +1971,34 @@ begin
         end;
       end;
 
+      { PChar(managedString): the managed handle is already the NUL-terminated
+        char pointer when non-empty, but an empty managed string is a nil handle —
+        FPC guarantees PChar('') is a valid pointer to a static #0 byte, never nil.
+        Route through PXXPCharOf, which substitutes that shared #0 byte for a nil
+        handle, so a C/PAL call f(PChar(s)) on an empty s does not deref nil. The
+        helper is registered whenever managed strings are in use (needHeapUnit);
+        if absent (degenerate build) fall through to the bare reinterpret. }
+      if (ASTIVal[node] = -2) and (ASTTk[ASTLeft[node]] = Ord(tyAnsiString)) then
+      begin
+        procIdx := FindProc('PXXPCharOf');
+        if procIdx >= 0 then
+        begin
+          wrapperArg := AllocNode(AN_ARG);
+          ASTLeft[wrapperArg] := ASTLeft[node];
+          ASTRight[wrapperArg] := -1;
+          ASTTk[wrapperArg] := Ord(tyPointer);
+
+          wrapperCall := AllocNode(AN_CALL);
+          ASTIVal[wrapperCall] := procIdx;
+          ASTTk[wrapperCall] := Ord(tyPointer);
+          ASTLeft[wrapperCall] := wrapperArg;
+          ASTRight[wrapperCall] := -1;
+
+          Result := IRLowerAST(wrapperCall);
+          Exit;
+        end;
+      end;
+
       { A cast PType(expr) is purely a type-tag change — the value in rax is
         already the pointer. No load-through-memory here. }
       Result := IRLowerAST(ASTLeft[node]);

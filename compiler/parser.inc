@@ -12887,6 +12887,11 @@ begin
   dummyNames[1] := 'src';   dummyTypes[1] := tyPointer;
   i := RegisterProc('PXXStrFromLit', True, tyPointer, 2, dummyNames, dummyTypes);
 
+  { PChar('') / PChar(emptyAnsiString) must not be nil: substitutes a static #0
+    byte for a nil managed handle (FPC-compat, prevents nil-deref at C calls). }
+  dummyNames[0] := 'p';     dummyTypes[0] := tyPointer;
+  i := RegisterProc('PXXPCharOf', True, tyPointer, 1, dummyNames, dummyTypes);
+
   { Generic dynamic-array Copy support helpers (clamp count + raw byte copy). }
   dummyNames[0] := 'srcData'; dummyTypes[0] := tyPointer;
   dummyNames[1] := 'index';   dummyTypes[1] := tyNativeInt;
