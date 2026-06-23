@@ -1,7 +1,7 @@
 # `const`/value open-array of a managed element loses its length (High = -1)
 
 - **Type:** bug (Track A — open-array ABI / managed elements)
-- **Status:** backlog
+- **Status:** DONE — 2026-06-23.
 - **Owner:** —
 - **Opened:** 2026-06-23 (found by a TUI integration test, Track B)
 - **Relation:** sibling of the fixed `bug-var-open-array-fixed-arg-length`
@@ -69,3 +69,23 @@ is fixed — no library code bent to a wrong shape.
 
 - The repro prints `high=2` and `x y z`; the cross-unit menu form does not crash.
 - Self-host fixedpoint + existing open-array tests stay green.
+
+## Fix log
+
+- 2026-06-23 — DONE (3d2b5b8). The value/const open-array copy-in path
+  (TryStaticToOpenArray, ir.inc) excluded managed element types, so a `const
+  array of AnsiString` fed a fixed array got no header'd temp -> bare address ->
+  `High` read garbage [P-8] (= -1; positive/garbage across a unit -> segfault).
+  Fix: allow `tyAnsiString` elements through the copy path. The existing
+  byte-copy of the element handles is correct for a CONST (read-only, borrowed)
+  parameter: the caller's array keeps the references and the hidden temp does not
+  over-release them (verified: a 5000-call cross-unit loop + use-after-call leaves
+  the strings intact — no crash, no over-release). Managed-field RECORD elements
+  stay excluded (need per-field ARC). Repro now prints `high=2` + `x y z`; the
+  trailing-scalar-after-open-array form (the cross-unit crash) is correct. Test
+  `test/test_const_open_array_managed.pas`, FPC oracle-matched. make test +
+  cross-bootstrap byte-identical.
+- NOTE (minor, pre-existing, both managed + non-managed): the per-call open-array
+  copy temp's dyn-array block is not freed (a small transient leak per call site);
+  correctness is unaffected. A follow-up could free the temp block at call return
+  (the var/out path has the same shape).

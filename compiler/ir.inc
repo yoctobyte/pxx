@@ -978,8 +978,7 @@ begin
     begin
       caElemTk := Syms[caArgSym].ElemType;
       caElemRec := Syms[caArgSym].ElemRecName;
-      if (caElemTk <> tyAnsiString) and
-         not ((caElemTk = tyRecord) and RecordHasManagedFields(caElemRec)) then
+      if not ((caElemTk = tyRecord) and RecordHasManagedFields(caElemRec)) then
       begin
         caCount := Syms[caArgSym].ArrLen;
         if caElemTk = tyRecord then caElemSz := RecSize(caElemRec)

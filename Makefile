@@ -440,6 +440,8 @@ test-core: $(COMPILER)
 	./$(COMPILER) test/test_concat_arg_bss.pas /tmp/test_concat_arg_bss26 > /tmp/test_concat_arg_bss.log
 	test "$$(/tmp/test_concat_arg_bss26)" = "24"
 	@if grep -qE 'bss=[0-9]{7,}B' /tmp/test_concat_arg_bss.log; then echo "concat-arg BSS bloat regressed:"; grep -oE 'bss=[0-9]+B' /tmp/test_concat_arg_bss.log; exit 1; else echo "concat-arg-bss: OK ($$(grep -oE 'bss=[0-9]+B' /tmp/test_concat_arg_bss.log))"; fi
+	./$(COMPILER) test/test_const_open_array_managed.pas /tmp/test_const_open_array_managed26
+	test "$$(/tmp/test_const_open_array_managed26)" = "$$(printf 'high=2 sel=1\n aa\n>bb\n cc\naabbcc')"
 	./$(COMPILER) test/test_abs_sqr.pas /tmp/test_abs_sqr26
 	test "$$(/tmp/test_abs_sqr26)" = "$$(printf '5 7\n49\n3.50\n6.25\n43')"
 	./$(COMPILER) test/test_upcase_pos.pas /tmp/test_upcase_pos26

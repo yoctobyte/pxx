@@ -26,12 +26,10 @@ _none_
 | --- | --- | --- | --- | --- |
 | feature-c-runtime-library | B | feature | C runtime/library layer (`lib/crtl`) plus direct C-library packages | feature-c-source-frontend |
 
-## backlog (50)
+## backlog (48)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
-| bug-ansistring-concat-arg-static-bloat | A | bug | AnsiString concat expression as a call argument allocates an ~8 MB static buffer per site | — |
-| bug-const-open-array-managed-elem-length | A | bug | `const`/value open-array of a managed element loses its length (High = -1) | — |
 | bug-stderr-not-fd2 | B | bug | `writeln(StdErr, ...)` goes to stdout — StdErr not connected to fd 2 | — |
 | bug-writeln-boolean-format | A | bug | `WriteLn(Boolean)` prints `0`/`1` instead of `FALSE`/`TRUE` | — |
 | chore-inc-to-units | A | chore | `.inc` → real `.pas` units refactor | — |
@@ -115,11 +113,12 @@ _none_
 | feature-mimic-fpc | B | feature | `mimic FPC` compatibility mode | — |
 | feature-string-model-tyfixedstring | B | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (187)
+## done (189)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
 | bug-64bit-shift-xor-literal-gaps | A | bug | 64-bit gaps in pinned v9: `xor` operator, large shifts, 64-bit hex literals | — |
+| bug-ansistring-concat-arg-static-bloat | A | bug | AnsiString concat expression as a call argument allocates an ~8 MB static buffer per site | — |
 | bug-bare-function-name-call-vs-resultvar | A | bug | Bare function name in an expression: PXX calls it, FPC/ISO reads the result var | — |
 | bug-builtin-val-miscompiles | A | bug | Builtin `Val` mis-lowers — wrong error code + segfault | — |
 | bug-builtin-write-case-sensitive | A | bug | Builtin write/writeln matched case-sensitively (only lowercase resolves) | — |
@@ -129,6 +128,7 @@ _none_
 | bug-const-byref-record-param-temp | A | bug | Can't pass a function-result temporary to a const/by-ref record param | — |
 | bug-const-expr-shl-shr-not-folded | A | bug | `shl` / `shr` in a constant expression not accepted | — |
 | bug-const-managed-record-param-byref-crash | A | bug | const record param with a managed (dynarray) field crashes by-ref on i386 + aarch64 | — |
+| bug-const-open-array-managed-elem-length | A | bug | `const`/value open-array of a managed element loses its length (High = -1) | — |
 | bug-c-packed-aligned-ignored | A | bug | C `__attribute__((packed))` / `aligned` ignored → field-offset drift | — |
 | bug-c-quoted-include-search-path | A | bug | C quoted includes do not search the including file directory | — |
 | bug-dynarray-in-record-corrupt | A | bug | Dynamic array as a record field is corrupted (value return + var-param assign) | — |
@@ -317,8 +317,6 @@ _none_
 
 ## Ready (no unmet blocker)
 
-- [A] bug-ansistring-concat-arg-static-bloat
-- [A] bug-const-open-array-managed-elem-length
 - [B] bug-stderr-not-fd2
 - [A] bug-writeln-boolean-format
 - [A] chore-inc-to-units
