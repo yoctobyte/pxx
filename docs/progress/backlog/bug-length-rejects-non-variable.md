@@ -7,6 +7,17 @@
 - **Family:** same "intrinsic insists on an l-value variable" shape as
   `bug-setlength-array-element` and `bug-paramstr-inline-argstr`.
 
+## Partial progress (2026-06-23)
+
+`Length(string-literal)` now folds to a compile-time constant (parser tkLength:
+`Length('hello')` -> 5, `Length('x')` -> 1, `if Length('y') > 0`), byte-identical
+to FPC, no codegen/self-host risk. STILL OPEN: a general string-valued
+*expression* (`Length(s + 'cd')`, a function result) — that needs the shared
+l-value-spill (the IR force-addresses the Length arg via isRefArg; a non-lvalue
+managed-string value would need to lower as a value or bind to a hidden temp).
+Same shared lowering as bug-setlength-array-element / bug-paramstr-inline-argstr;
+do them together.
+
 ## Symptom
 
 `Length` works on a string variable but fails on a string literal or expression:

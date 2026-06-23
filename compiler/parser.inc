@@ -3041,6 +3041,17 @@ begin
     tkLength:
     begin
       Next; Expect(tkLParen, '(');
+      { Length of a string LITERAL folds to its char count at compile time
+        (FPC: Length('hello') = 5). Covers the common literal forms without the
+        runtime [-8]-header path, which only an lvalue string/array has. }
+      if CurTok.Kind = tkString then
+      begin
+        node := AllocNode(AN_INT_LIT);
+        ASTIVal[node] := Length(CurTok.SVal); ASTTk[node] := Ord(tyInteger);
+        Next; Expect(tkRParen, ')');
+        CurASTNode := node;
+        Exit;
+      end;
       if CurTok.Kind <> tkIdent then Error('Length: expected string variable');
       idx := FindSym(CurTok.SVal); Next;
       { ParseLValueAST resolves implicit-Self fields when idx<0 and errors
