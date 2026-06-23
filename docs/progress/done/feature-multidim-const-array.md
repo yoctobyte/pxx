@@ -1,7 +1,27 @@
 # feature: multidimensional typed-constant arrays
 
 - **Type:** feature (Track A — parser / const initializers)
-- **Status:** backlog
+- **Status:** DONE 2026-06-23 (commit e0fe418)
+
+## Resolution (2026-06-23)
+
+`const M: array[0..1,0..1] of integer = ((1,2),(3,4))` parses for global +
+routine-local consts; 2-D / 3-D / non-zero-based verified (`1 2 3 4` /
+`10 30 40 60` / `1 4 5 8` / local `7 8 9 10`). The const-array path adopted the
+var-section ND handling: comma-separated dims flatten to a 1-D row-major store
+with `SymArrNDims`/`DimLo`/`DimSpan` set (so `M[i,j]` reads via
+`BuildFlatNDIndex`). The nested `((..),(..))` initializer is consumed by a
+paren-depth walk and filled row-major; the flat-index writes lower identically
+to the single-flat-index reads `BuildFlatNDIndex` already emits. Front-end only;
+self-host byte-identical; `make test` green. **Not pinned** (no Track B request).
+
+Test: `test/test_multidim_const_array.pas`.
+
+---
+
+(original below)
+
+- **Status (orig):** backlog
 - **Found:** 2026-06-23, differential sweep vs FPC
 - **Severity:** low-medium (common for static lookup tables; a 1-D const +
   manual indexing is the workaround)
