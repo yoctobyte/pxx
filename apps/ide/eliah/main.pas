@@ -38,6 +38,8 @@ type
     Tree: TListBox;
     Editor, Output: TMemo;
     Props: TListBox;
+    ValueEdit: TEdit;
+    FEditRow: Integer;     { which inspector row the value edit targets, -1 none }
     Dsn: TDesigner;
     DesignBox: TPaintBox;
     dir, curFile: AnsiString;
@@ -53,6 +55,9 @@ type
     procedure OnDesignMouseMove(Sender: TControl; Button, X, Y: Integer);
     procedure OnDesignMouseUp(Sender: TControl; Button, X, Y: Integer);
     procedure ShowInspector(idx: Integer);
+    procedure OnPropClick(Sender: TObject);
+    procedure OnValueKey(Sender: TControl; KeyCode: Integer);
+    procedure ApplyEdit;
   end;
 
 function ParentDir(const d: AnsiString): AnsiString;
@@ -177,10 +182,56 @@ begin
   ShowInspector(Dsn.Sel);
 end;
 
+{ click an inspector row -> load that field's current value into the edit }
+procedure THandler.OnPropClick(Sender: TObject);
+var d: TDocModel;
+begin
+  if (Dsn = nil) or (Dsn.Doc = nil) or (Dsn.Sel < 0) then Exit;
+  d := Dsn.Doc;
+  FEditRow := Props.ItemIndex;
+  case FEditRow of
+    1: ValueEdit.Text := d.NodeCaption(Dsn.Sel);
+    2: ValueEdit.Text := IntToStr(d.NodeX(Dsn.Sel));
+    3: ValueEdit.Text := IntToStr(d.NodeY(Dsn.Sel));
+    4: ValueEdit.Text := IntToStr(d.NodeW(Dsn.Sel));
+    5: ValueEdit.Text := IntToStr(d.NodeH(Dsn.Sel));
+  else
+    ValueEdit.Text := '';   { Kind (0) and anything else: not editable }
+  end;
+end;
+
+{ Enter (Return / KP_Enter) in the value edit commits it to the docmodel }
+procedure THandler.OnValueKey(Sender: TControl; KeyCode: Integer);
+begin
+  if (KeyCode = 65293) or (KeyCode = 65421) then ApplyEdit;
+end;
+
+procedure THandler.ApplyEdit;
+var d: TDocModel; v: AnsiString;
+begin
+  if (Dsn = nil) or (Dsn.Doc = nil) or (Dsn.Sel < 0) then Exit;
+  d := Dsn.Doc;
+  v := ValueEdit.Text;
+  case FEditRow of
+    1: d.SetNodeCaption(Dsn.Sel, v);
+    2: d.SetNodeBounds(Dsn.Sel, StrToIntDef(v, d.NodeX(Dsn.Sel)),
+         d.NodeY(Dsn.Sel), d.NodeW(Dsn.Sel), d.NodeH(Dsn.Sel));
+    3: d.SetNodeBounds(Dsn.Sel, d.NodeX(Dsn.Sel),
+         StrToIntDef(v, d.NodeY(Dsn.Sel)), d.NodeW(Dsn.Sel), d.NodeH(Dsn.Sel));
+    4: d.SetNodeBounds(Dsn.Sel, d.NodeX(Dsn.Sel), d.NodeY(Dsn.Sel),
+         StrToIntDef(v, d.NodeW(Dsn.Sel)), d.NodeH(Dsn.Sel));
+    5: d.SetNodeBounds(Dsn.Sel, d.NodeX(Dsn.Sel), d.NodeY(Dsn.Sel),
+         d.NodeW(Dsn.Sel), StrToIntDef(v, d.NodeH(Dsn.Sel)));
+  end;
+  DesignBox.Invalidate;
+  ShowInspector(Dsn.Sel);
+end;
+
 var
   Form1: TForm;
   H: THandler;
   Props: TListBox;
+  ValueEdit: TEdit;
   DesignBox: TPaintBox;
   Dsn: TDesigner;
   pm: TMethod;
@@ -250,12 +301,24 @@ begin
 
   Props := TListBox.Create;
   Props.Parent := Form1;
-  Props.SetBounds(W_TREE + centerW, TOOLBAR_H + centerH, W_RIGHT, H_BOTTOM);
+  Props.SetBounds(W_TREE + centerW, TOOLBAR_H + centerH, W_RIGHT, H_BOTTOM - 28);
   Props.AddItem('object inspector (M1)');
+  pm.Code := @H.OnPropClick; pm.Data := H;
+  Props.OnClick := pm;
+
+  { value editor: pick a prop row above, type here, Enter commits to docmodel }
+  ValueEdit := TEdit.Create;
+  ValueEdit.Parent := Form1;
+  ValueEdit.SetBounds(W_TREE + centerW, TOOLBAR_H + centerH + H_BOTTOM - 28,
+    W_RIGHT, 26);
+  pm.Code := @H.OnValueKey; pm.Data := H;
+  ValueEdit.OnKeyDown := pm;
 
   H.Dsn := Dsn;
   H.DesignBox := DesignBox;
   H.Props := Props;
+  H.ValueEdit := ValueEdit;
+  H.FEditRow := -1;
 
   pm.Data := H;
   pm.Code := @H.OnUp;      MkButton('Up',      4,   pm);
@@ -313,6 +376,22 @@ begin
     if (H.Dsn.Doc.NodeX(H.Dsn.Sel) <> 58) or (H.Dsn.Doc.NodeY(H.Dsn.Sel) <> 132) or
        (H.Dsn.Doc.NodeW(H.Dsn.Sel) <> 100) or (H.Dsn.Doc.NodeH(H.Dsn.Sel) <> 48) then
       begin writeln('SMOKE FAIL: BR resize wrong bounds'); Halt(1); end;
+
+    { editable inspector: pick a row, type a value, commit -> docmodel updates }
+    H.FEditRow := 1; H.ValueEdit.Text := 'Apply'; H.ApplyEdit;
+    if H.Dsn.Doc.NodeCaption(H.Dsn.Sel) <> 'Apply' then
+      begin writeln('SMOKE FAIL: caption edit not applied'); Halt(1); end;
+    H.FEditRow := 4; H.ValueEdit.Text := '120'; H.ApplyEdit;
+    if H.Dsn.Doc.NodeW(H.Dsn.Sel) <> 120 then
+      begin writeln('SMOKE FAIL: width edit not applied'); Halt(1); end;
+    { commit via the Enter key path (Return keyval) }
+    H.FEditRow := 3; H.ValueEdit.Text := '200'; H.OnValueKey(nil, 65293);
+    if H.Dsn.Doc.NodeY(H.Dsn.Sel) <> 200 then
+      begin writeln('SMOKE FAIL: Enter did not commit Top edit'); Halt(1); end;
+    { malformed int keeps the old value (StrToIntDef fallback) }
+    H.FEditRow := 2; H.ValueEdit.Text := 'xyz'; H.ApplyEdit;
+    if H.Dsn.Doc.NodeX(H.Dsn.Sel) <> 58 then
+      begin writeln('SMOKE FAIL: bad int should keep old Left'); Halt(1); end;
 
     { click empty surface -> selection cleared }
     H.OnDesignMouseDown(nil, 1, 5, 5);

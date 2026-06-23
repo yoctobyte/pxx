@@ -52,6 +52,9 @@ begin
   CheckInt(e, 'resized button x', doc.NodeX(iBtn), 30);
   CheckInt(e, 'resized button width', doc.NodeW(iBtn), 100);
 
+  doc.SetNodeCaption(iBtn, 'Go');
+  CheckStr(e, 'edited caption', doc.NodeCaption(iBtn), 'Go');
+
   { scenario 4: HitTest — topmost node at a point (designer mouse-select) }
   writeln('-- TDocModel.HitTest --');
   { layout now: Form1 (0,0,400,300); button (30,40,100,30); label (20,60,60,18) }

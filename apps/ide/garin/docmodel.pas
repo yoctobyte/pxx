@@ -32,6 +32,7 @@ type
     function AddNode(AKind: TWidgetKind; const ACaption: AnsiString;
       AParent, AX, AY, AW, AH: Integer): Integer;
     procedure SetNodeBounds(I, AX, AY, AW, AH: Integer);
+    procedure SetNodeCaption(I: Integer; const ACaption: AnsiString);
     function Count: Integer;
     { topmost node whose rect contains (AX, AY), or -1 if none. Later-added
       nodes sit on top (children drawn after parents), so scan back-to-front. }
@@ -77,6 +78,12 @@ begin
   FNodes[I].Y := AY;
   FNodes[I].W := AW;
   FNodes[I].H := AH;
+end;
+
+procedure TDocModel.SetNodeCaption(I: Integer; const ACaption: AnsiString);
+begin
+  if (I < 0) or (I >= FCount) then Exit;
+  FNodes[I].Caption := ACaption;
 end;
 
 function TDocModel.Count: Integer;
