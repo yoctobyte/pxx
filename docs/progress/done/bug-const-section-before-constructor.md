@@ -8,6 +8,8 @@
 
 ## Resolution (2026-06-23)
 
+Fixed in commit `abdc4b6`.
+
 `ParseConstSection`'s loop was a bare `while CurTok.Kind = tkIdent` — it
 terminated on `procedure`/`function` only because those are keyword tokens.
 `constructor`, `destructor`, `operator`, and the unit section words
