@@ -29,6 +29,32 @@ within the pre-scan span model, or flushing coordinated with the pass2 replay) �
 deep parser interaction, self-host-risky → do live, not autonomously. The
 PreScanSkipRoutineBody nested recursion already exists; the gap is pass2 + flush.
 
+### Precise mechanism (line-level, 2026-06-23)
+
+`FlushPendingNestedProcs` (parser.inc:10076) does
+`InsertTokens(TokPos-1, PendNestTok, PendNestCount); Dec(TokPos); Next;` — it
+splices the stashed nested-routine tokens **into the middle** of the token stream
+and returns, relying on the *caller's decl loop* to then parse the spliced
+`function`/`procedure` as a sibling (the old single-pass `ParseProgram` did
+exactly that).
+
+The pre-scan pass2 (parser.inc:~13038 program, ~12479 unit) instead replays fixed
+spans: `for i := 0 to DeclItemCount-1 do begin TokPos := DeclItemStart[i]; Next;
+ParseSubroutine; end`. Two breakages:
+1. After `ParseSubroutine(f)` returns (pass2), the spliced nested tokens sit at
+   `TokPos`, but the loop overwrites `TokPos := DeclItemStart[i+1]` — the nested
+   routine is **never parsed**.
+2. `InsertTokens` shifts every token index after the splice point, so the
+   pass1-recorded `DeclItemStart[i+1..]` now point at the **wrong tokens** →
+   `ParseSubroutine` lands on a non-name token → `expected name`
+   (parser.inc:10270).
+
+Fix sketch (live): make nested-routine flushing pre-scan-compatible — e.g. APPEND
+the nested tokens at end-of-stream (no mid-stream shift), record them as their own
+DeclItem, and make the pass2 driver a `while i < DeclItemCount` loop (not a fixed
+`for`) so appended items are parsed. Must keep the old single-pass path working
+and stay self-host byte-identical. Needs full `make test`.
+
 ## Gap
 
 A function/procedure declared inside another routine is rejected at parse:
