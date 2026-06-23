@@ -238,6 +238,7 @@ const
   IR_CALL_IND     = 57;  { Indirect call. IRA = callee value node (code addr); IRB = first IR_ARG; IRIVal = signature proc index (Params/RetType); IRStmtRoot marks a statement-level call (result discarded) }
   IR_VMTADDR      = 58;  { IRA = class index (ci); load the runtime address of that class's VMT (= the per-class identity stored at [instance+0]). Used by is/as type-tests. }
   IR_IMTADDR      = 59;  { IRA = IMT-table entry index; load the runtime address of that (class,interface) Interface Method Table. Captured as the fat pointer's first word. }
+  IR_STORE_DYN    = 60;  { ARC-correct whole dyn-array store into a slot ADDRESS (record/class field or nested sub-array). IRA = slot-address node; IRB = new handle value node; IRC = dyn depth; IRIVal = -1 (non-symbol → node-derived descriptor); IRTk = base TTypeKind; IRSetLenBaseRec = base record id. Retains the new handle, publishes it, element-aware releases the old. x86-64 only; other targets keep the IR_STORE_MEM share path. }
 
   { Generator-instance heap layout (see lib/rtl/coroutine.pas + the generator
     body lowering). A TCoroCtx is a single saved sp, so genCtx/callerCtx are one

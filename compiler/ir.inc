@@ -68,6 +68,7 @@ begin
     IR_FIELD: Result := 'field';
     IR_LOAD_MEM: Result := 'load_mem';
     IR_STORE_MEM: Result := 'store_mem';
+    IR_STORE_DYN: Result := 'store_dyn';
     IR_ARG: Result := 'arg';
     IR_EXC_ENTER: Result := 'exc_enter';
     IR_EXC_LEAVE: Result := 'exc_leave';
@@ -302,6 +303,12 @@ begin
       begin
         IRRequireNode(IRA[i], 'store_mem address');
         IRRequireNode(IRB[i], 'store_mem value');
+      end;
+
+      IR_STORE_DYN:
+      begin
+        IRRequireNode(IRA[i], 'store_dyn slot address');
+        IRRequireNode(IRB[i], 'store_dyn value');
       end;
 
       IR_ARG:
@@ -2588,11 +2595,27 @@ begin
           the generic scalar store below used the element width (truncating the
           8-byte handle to 4) and the field ended up holding the source's slot
           address rather than its handle -> segfault on the next index/Length.
-          (A non-IDENT dyn-array LHS does not carry the retain/release that the
-          IR_STORE_SYM path above does; the handle copy is share-semantics.) }
+
+          On x86-64 use the ARC-correct IR_STORE_DYN: retain the new handle and
+          element-aware release the old one, matching the IR_STORE_SYM IDENT
+          path. Without that retain, assigning a LOCAL dyn array to a field
+          (`field := tmp`) shares the handle, and the local's scope-exit release
+          frees the data the field still points at — managed-element strings come
+          back empty, and a shrinking rebuild segfaults
+          (bug-dynarray-managed-record-field-reassign). Other targets keep the
+          bare handle store (share-semantics) for now; the new op is x86-64-only,
+          so they never see it. }
         value := IRLowerAST(ASTRight[node]);
         leftAddr := IRLowerAddress(ASTLeft[node]);
-        Result := IRAppend(IR_STORE_MEM, leftAddr, value, -1, 0, Ord(tyPointer));
+        if TargetArch = TARGET_X86_64 then
+        begin
+          Result := IRAppend(IR_STORE_DYN, leftAddr, value,
+                             NodeDynDepth(ASTLeft[node]), -1,
+                             Ord(NodeDynBaseTk(ASTLeft[node])));
+          IRSetLenBaseRec[Result] := NodeDynBaseRec(ASTLeft[node]);
+        end
+        else
+          Result := IRAppend(IR_STORE_MEM, leftAddr, value, -1, 0, Ord(tyPointer));
       end
       else if (IntToTypeKind(ASTTk[ASTLeft[node]]) = tyRecord) or
               ((ASTKind[ASTLeft[node]] = AN_IDENT) and

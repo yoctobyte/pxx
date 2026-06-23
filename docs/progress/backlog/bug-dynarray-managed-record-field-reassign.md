@@ -1,10 +1,43 @@
 # bug: assigning a local dynamic-array-of-managed-record to a field drops/frees the elements
 
 - **Type:** bug (Track A — codegen, managed dynamic-array assignment / refcount)
-- **Status:** backlog
+- **Status:** DONE 2026-06-23 (x86-64; cross targets documented below)
 - **Found:** 2026-06-23, garin TDocModel.DeleteNode (Track B)
 - **Severity:** medium — silent data loss; in a repeated-call path it escalates to
   a segfault. Easy to hit when rebuilding a managed array via a local temp.
+
+## Resolution (2026-06-23)
+
+The `field := localDynArray` path (whole dyn-array assignment into a non-IDENT
+lvalue: a record/class field or nested sub-array slot) only copied the handle —
+share-semantics with no refcount change — while the IDENT path (`localvar :=
+dynArray`) was already ARC-correct via `IR_STORE_SYM`. So the local's scope-exit
+release dropped the shared block to refcount 0 and freed it (and DecRef'd the
+element strings), corrupting the field.
+
+Added `IR_STORE_DYN` (defs.inc 60): an ARC-correct whole dyn-array store into a
+slot ADDRESS — retain the new handle (skipped for a fresh function result that
+already carries +1, matching `IR_STORE_SYM` move-semantics), publish it, then
+element-aware release the old handle via `PXXDynArrayRelease` with a node-derived
+descriptor (`GetOrAllocNodeDynDesc`). Lowering in `ir.inc` emits it for the
+field/nested-slot dyn-array assign; codegen + `EmitDynArrayReleaseForNode` in
+`ir_codegen.inc`; verifier + opcode-name updated.
+
+Verified vs FPC: same-length rebuild (`Items := tmp`) now keeps the strings
+across repeated reassigns, and the shrinking rebuild no longer segfaults.
+Integer-array field assign unaffected. Self-host **byte-identical** (the compiler
+itself uses managed dyn-array fields, now ARC-correct internally). `make test`
+green. Regression: `test/test_dynarray_managed_field_reassign.pas`.
+
+### Cross targets (deferred, no regression)
+
+`IR_STORE_DYN` is emitted only when the target is x86-64; i386 / aarch64 /
+arm32 / xtensa / riscv32 keep the existing bare-handle `IR_STORE_MEM` store
+(same pre-existing share-semantics, so no regression, no new op to handle in
+their codegen). Bringing the ARC store to the cross backends — each needs the
+retain + element-aware-release asm — is a follow-up; cross managed-aggregate
+support otherwise exists. The default target (where this was found and where
+Track B builds) is fixed.
 
 ## Gap
 

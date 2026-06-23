@@ -328,6 +328,27 @@ begin
   EmitReleaseHeapLock;
 end;
 
+procedure EmitDynArrayReleaseLockedForNode(node: Integer);
+{ rax = dynamic-array data pointer. Element-aware release using a descriptor
+  derived from the node's own metadata (IRC = depth, IRTk = base type,
+  IRSetLenBaseRec = base record), for a non-symbol target such as a record/class
+  field. Caller holds the heap lock when threading is enabled. }
+var procIdx: Integer;
+begin
+  procIdx := FindProc('PXXDynArrayRelease');
+  if procIdx < 0 then Error('compiler error: PXXDynArrayRelease not found');
+  EmitB($48); EmitB($89); EmitB($C7); { mov rdi, rax }
+  EmitB($48); EmitB($BE); EmitDataRef(GetOrAllocNodeDynDesc(node)); { mov rsi, desc }
+  EmitCallProc(procIdx);
+end;
+
+procedure EmitDynArrayReleaseForNode(node: Integer);
+begin
+  EmitAcquireHeapLock;
+  EmitDynArrayReleaseLockedForNode(node);
+  EmitReleaseHeapLock;
+end;
+
 procedure EmitDynArrayUnique(symIdx: Integer; elemSize: Integer);
 var procIdx: Integer;
 begin
@@ -2051,6 +2072,31 @@ begin
         end;
       end;
 
+    IR_STORE_DYN:
+      begin
+        { ARC-correct whole dyn-array store into a slot ADDRESS (record/class
+          field or nested sub-array). Mirrors the IR_STORE_SYM IDENT path: retain
+          the new handle (unless it is a fresh function result already carrying
+          +1), publish it into the slot, then element-aware release the old
+          handle. The new handle is kept on the stack across the release call,
+          which (like IR_STORE_SYM's release) leaves [rsp] intact. }
+        valueNode := IRB[node];
+        IREmitNode(valueNode);                       { rax = new data pointer }
+        if not ((IRKind[valueNode] = IR_CALL) and (IRA[valueNode] >= 0)) then
+          EmitDynArrayRetain;
+        EmitB($50);                                  { push new }
+        IREmitNode(IRA[node]);                       { rax = slot address }
+        EmitB($50);                                  { push slot; [rsp+8]=new }
+        EmitB($48); EmitB($8B); EmitB($00);          { mov rax, [rax]  (old) }
+        EmitB($50);                                  { push old; [rsp+8]=slot,[rsp+16]=new }
+        EmitB($48); EmitB($8B); EmitB($44); EmitB($24); EmitB($10); { mov rax,[rsp+16] (new) }
+        EmitB($48); EmitB($8B); EmitB($4C); EmitB($24); EmitB($08); { mov rcx,[rsp+8]  (slot) }
+        EmitB($48); EmitB($89); EmitB($01);          { mov [rcx], rax  (slot := new) }
+        EmitB($58);                                  { pop rax (old); [rsp]=slot,[rsp+8]=new }
+        EmitDynArrayReleaseForNode(node);            { release old (preserves [rsp]) }
+        EmitB($59);                                  { pop rcx (discard slot) }
+        EmitB($58);                                  { pop rax (new = result) }
+      end;
     IR_STORE_MEM:
       begin
         addressNode := IRA[node];
@@ -4319,7 +4365,7 @@ begin
             IREmitNode(i);
         end;
 
-      IR_STORE_SYM, IR_STORE_MEM, IR_WRITE, IR_WRITELN,
+      IR_STORE_SYM, IR_STORE_MEM, IR_STORE_DYN, IR_WRITE, IR_WRITELN,
       IR_READLINE, IR_READ_VAR, IR_READ_DISCARD, IR_COPY_REC, IR_COPY_REC_MANAGED, IR_SET_COPY, IR_VAR_STORE,
       IR_SETLEN_DYN, IR_DEFAULT_MEM, IR_ZERO_SYM,
       IR_EXC_LEAVE, IR_RAISE, IR_EXC_STORE, IR_EXC_CLEAR, IR_TERMINATE,
