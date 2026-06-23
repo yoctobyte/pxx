@@ -8523,6 +8523,7 @@ begin
 	          initVal := ParseInitVal;
 	          PendingInitSym[PendingInitCount]  := idx;
 	          PendingInitElem[PendingInitCount] := arrLo + initElem;
+          PendingInitFOff[PendingInitCount] := -1;
 	          PendingInitVal[PendingInitCount]  := initVal;
 	          PendingInitTk[PendingInitCount]   := Ord(elemTk);
 	          Inc(PendingInitCount);
@@ -8537,6 +8538,7 @@ begin
 	        initVal := ParseInitVal;
 	        PendingInitSym[PendingInitCount]  := idx;
 	        PendingInitElem[PendingInitCount] := -1;
+        PendingInitFOff[PendingInitCount] := -1;
 	        PendingInitVal[PendingInitCount]  := initVal;
 	        PendingInitTk[PendingInitCount]   := Ord(tk);
 	        Inc(PendingInitCount);
@@ -8550,6 +8552,7 @@ procedure ParseConstSection;
 var name: AnsiString; v: Int64;
     cTk, cElemTk: TTypeKind; cLo, cHi, cIdx, cElem: Integer;
     isLocalConst: Boolean;
+    cRec, fNameOff, fNameLen: Integer; fName: AnsiString; fTk: TTypeKind;
 begin
   Next;
   { `constructor`/`destructor`/`operator` and the unit section words are plain
@@ -8602,6 +8605,7 @@ begin
             if LocalInitCount >= MAX_LOCAL_INITS then Error('too many local initializers');
             LocalInitSym[LocalInitCount]  := cIdx;
             LocalInitElem[LocalInitCount] := cLo + cElem;
+            LocalInitFOff[LocalInitCount] := -1;
             LocalInitVal[LocalInitCount]  := ParseInitVal;
             LocalInitTk[LocalInitCount]   := Ord(cElemTk);
             Inc(LocalInitCount);
@@ -8611,6 +8615,7 @@ begin
             if PendingInitCount >= MAX_PENDING_INITS then Error('too many global initializers');
             PendingInitSym[PendingInitCount]  := cIdx;
             PendingInitElem[PendingInitCount] := cLo + cElem;
+            PendingInitFOff[PendingInitCount] := -1;
             PendingInitVal[PendingInitCount]  := ParseInitVal;
             PendingInitTk[PendingInitCount]   := Ord(cElemTk);
             Inc(PendingInitCount);
@@ -8624,11 +8629,57 @@ begin
         cTk := ParseTypeKind;
         cIdx := AllocVar(name, cTk);
         Expect(tkEq, '=');
-        if isLocalConst then
+        if cTk = tyRecord then
+        begin
+          { Record typed constant: `const r: TRec = (f1: v1; f2: v2; ...)` (FPC
+            named-field form). Each scalar field initializer is recorded as a
+            `r.field := value` init (field span drives an AN_FIELD target in the
+            init emitter). Nested record/array fields are not handled yet. }
+          cRec := Syms[cIdx].RecName;
+          Expect(tkLParen, '(');
+          while CurTok.Kind <> tkRParen do
+          begin
+            if CurTok.Kind <> tkIdent then Error('expected field name in record constant');
+            fName := CurTok.SVal;
+            fNameOff := Tokens[TokPos-1].SOffset;
+            fNameLen := Tokens[TokPos-1].SLen;
+            Next;
+            Expect(tkColon, ':');
+            fTk := RecFieldType(cRec, fName);
+            if fTk = tyUnknown then Error('unknown field in record constant: ' + fName);
+            if isLocalConst then
+            begin
+              if LocalInitCount >= MAX_LOCAL_INITS then Error('too many local initializers');
+              LocalInitSym[LocalInitCount]  := cIdx;
+              LocalInitElem[LocalInitCount] := -1;
+              LocalInitFOff[LocalInitCount] := fNameOff;
+              LocalInitFLen[LocalInitCount] := fNameLen;
+              LocalInitVal[LocalInitCount]  := ParseInitVal;
+              LocalInitTk[LocalInitCount]   := Ord(fTk);
+              Inc(LocalInitCount);
+            end
+            else
+            begin
+              if PendingInitCount >= MAX_PENDING_INITS then Error('too many global initializers');
+              PendingInitSym[PendingInitCount]  := cIdx;
+              PendingInitElem[PendingInitCount] := -1;
+              PendingInitFOff[PendingInitCount] := fNameOff;
+              PendingInitFLen[PendingInitCount] := fNameLen;
+              PendingInitVal[PendingInitCount]  := ParseInitVal;
+              PendingInitTk[PendingInitCount]   := Ord(fTk);
+              Inc(PendingInitCount);
+            end;
+            { FPC separates fields with `;`; tolerate a trailing `,` too. }
+            if not Eat(tkSemicolon) then Eat(tkComma);
+          end;
+          Expect(tkRParen, ')');
+        end
+        else if isLocalConst then
         begin
           if LocalInitCount >= MAX_LOCAL_INITS then Error('too many local initializers');
           LocalInitSym[LocalInitCount]  := cIdx;
           LocalInitElem[LocalInitCount] := -1;
+          LocalInitFOff[LocalInitCount] := -1;
           LocalInitVal[LocalInitCount]  := ParseInitVal;
           LocalInitTk[LocalInitCount]   := Ord(cTk);
           Inc(LocalInitCount);
@@ -8638,6 +8689,7 @@ begin
           if PendingInitCount >= MAX_PENDING_INITS then Error('too many global initializers');
           PendingInitSym[PendingInitCount]  := cIdx;
           PendingInitElem[PendingInitCount] := -1;
+          PendingInitFOff[PendingInitCount] := -1;
           PendingInitVal[PendingInitCount]  := ParseInitVal;
           PendingInitTk[PendingInitCount]   := Ord(cTk);
           Inc(PendingInitCount);
@@ -10417,7 +10469,16 @@ begin
     ASTIVal[identNode] := LocalInitSym[i];
     ASTTk[identNode] := Ord(Syms[LocalInitSym[i]].TypeKind);
 
-    if LocalInitElem[i] >= 0 then
+    if LocalInitFOff[i] >= 0 then
+    begin
+      { Record typed-const field: `sym.field := value`. }
+      target := AllocNode(AN_FIELD);
+      ASTLeft[target] := identNode;
+      ASTSOffset[target] := LocalInitFOff[i];
+      ASTSLen[target] := LocalInitFLen[i];
+      ASTTk[target] := LocalInitTk[i];
+    end
+    else if LocalInitElem[i] >= 0 then
     begin
       idxLit := AllocNode(AN_INT_LIT);
       ASTIVal[idxLit] := LocalInitElem[i];
@@ -12942,7 +13003,16 @@ begin
     ASTIVal[identNode] := PendingInitSym[i];
     ASTTk[identNode] := Ord(Syms[PendingInitSym[i]].TypeKind);
 
-    if PendingInitElem[i] >= 0 then
+    if PendingInitFOff[i] >= 0 then
+    begin
+      { Record typed-const field: `sym.field := value`. }
+      target := AllocNode(AN_FIELD);
+      ASTLeft[target] := identNode;
+      ASTSOffset[target] := PendingInitFOff[i];
+      ASTSLen[target] := PendingInitFLen[i];
+      ASTTk[target] := PendingInitTk[i];
+    end
+    else if PendingInitElem[i] >= 0 then
     begin
       idxLit := AllocNode(AN_INT_LIT);
       ASTIVal[idxLit] := PendingInitElem[i];

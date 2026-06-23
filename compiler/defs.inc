@@ -1125,6 +1125,10 @@ var
   PendingInitElem : array[0..MAX_PENDING_INITS-1] of Integer;  { array index, or -1 for a scalar }
   PendingInitVal  : array[0..MAX_PENDING_INITS-1] of Int64;    { constant value }
   PendingInitTk   : array[0..MAX_PENDING_INITS-1] of Integer;  { value type kind }
+  { Record typed-const field: source span of the field name, so the emitter builds
+    `sym.field := value` instead of `sym[elem]`. SOff = -1 when not a field. }
+  PendingInitFOff : array[0..MAX_PENDING_INITS-1] of Integer;
+  PendingInitFLen : array[0..MAX_PENDING_INITS-1] of Integer;
   PendingInitCount: Integer;
 
   { Routine-LOCAL typed-const initializers (`const T: array[..] of X = (..)`
@@ -1135,6 +1139,8 @@ var
   LocalInitElem : array[0..MAX_LOCAL_INITS-1] of Integer;
   LocalInitVal  : array[0..MAX_LOCAL_INITS-1] of Int64;
   LocalInitTk   : array[0..MAX_LOCAL_INITS-1] of Integer;
+  LocalInitFOff : array[0..MAX_LOCAL_INITS-1] of Integer;  { record-field span (SOff=-1 if not a field) }
+  LocalInitFLen : array[0..MAX_LOCAL_INITS-1] of Integer;
   LocalInitCount: Integer;
 
   BFixupTargetLines : array[0..255] of Int64;

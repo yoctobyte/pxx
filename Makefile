@@ -415,6 +415,8 @@ test-core: $(COMPILER)
 	test "$$(/tmp/test_typed_const26)" = "$$(printf 'limit=100 big=9000000000\ntabsum=14\nlutsum=6000000000\ntab2=40')"
 	./$(COMPILER) test/test_local_typed_const.pas /tmp/test_local_tc26
 	test "$$(/tmp/test_local_tc26)" = "$$(printf '100\na\nb\nc\n42\n100')"
+	./$(COMPILER) test/test_typed_const_record.pas /tmp/test_tc_record26
+	test "$$(/tmp/test_tc_record26)" = "$$(printf '7\n10 Z 20\n300\n300')"
 	./$(COMPILER) test/test_func_name_result_read.pas /tmp/test_fnresult26
 	test "$$(/tmp/test_fnresult26)" = "$$(printf '33\n0\nhi!\n120')"
 	./$(COMPILER) test/test_func_name_paramless_result.pas /tmp/test_fnresult_pl26
