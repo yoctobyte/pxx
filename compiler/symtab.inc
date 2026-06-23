@@ -3336,15 +3336,62 @@ begin
   EmitB($41); EmitB($5D);                                        { pop r13 }
 end;
 
-procedure EmitWriteFloatFixed(decimals: Integer);
+procedure EmitWriteFloatFixed(width, decimals: Integer);
 { Double value in xmm0. Prints [-]intpart.frac with exactly 'decimals'
-  fractional digits (decimals=0 -> rounded integer, no point). Reuses the
-  integer printers; the value is scaled by 10^decimals and rounded to an
-  Int64 so all digits come from integer division. No field-width padding. }
+  fractional digits (decimals=0 -> rounded integer, no point), right-justified in
+  a field of `width` columns (width<=0 = no padding). Reuses the integer
+  printers; the value is scaled by 10^decimals and rounded to an Int64 so all
+  digits come from integer division. }
 var pow10, divisor: Int64; i, k, jncOff: Integer;
+    pNotNeg, pCntTop, pCntDone, pNoPad: Integer;
 begin
   pow10 := 1;
   for i := 1 to decimals do pow10 := pow10 * 10;
+
+  { Field-width padding: a pre-pass computes the formatted length and emits the
+    leading spaces, right-justifying the value (FPC `:w:d`). It must not disturb
+    xmm0 (the emission below re-reads it); it works in rax/rcx/rdx/rsi + xmm1/xmm2
+    only. Skipped for width<=0 (the common writeln(x:0:d) form). }
+  if width > 0 then
+  begin
+    EmitB($66); EmitB($48); EmitB($0F); EmitB($7E); EmitB($C0);   { movq rax, xmm0 }
+    EmitB($48); EmitB($31); EmitB($F6);                           { xor rsi, rsi }
+    EmitB($48); EmitB($0F); EmitB($BA); EmitB($E0); EmitB($3F);   { bt rax, 63 }
+    EmitB($73); pNotNeg := CodeLen; EmitB(0);                     { jnc .notneg }
+    EmitB($48); EmitB($FF); EmitB($C6);                           { inc rsi (sign char) }
+    Code[pNotNeg] := Byte(CodeLen - (pNotNeg + 1));
+    EmitB($48); EmitB($0F); EmitB($BA); EmitB($F0); EmitB($3F);   { btr rax, 63 (abs bits) }
+    EmitB($66); EmitB($48); EmitB($0F); EmitB($6E); EmitB($C8);   { movq xmm1, rax }
+    MovRaxImm(pow10);
+    EmitB($F2); EmitB($48); EmitB($0F); EmitB($2A); EmitB($D0);   { cvtsi2sd xmm2, rax }
+    EmitB($F2); EmitB($0F); EmitB($59); EmitB($CA);               { mulsd xmm1, xmm2 }
+    EmitB($F2); EmitB($48); EmitB($0F); EmitB($2D); EmitB($C1);   { cvtsd2si rax, xmm1 }
+    EmitB($48); EmitB($31); EmitB($D2);                           { xor rdx, rdx }
+    EmitB($48); EmitB($B9); EmitI64(pow10);                       { mov rcx, pow10 }
+    EmitB($48); EmitB($F7); EmitB($F1);                           { div rcx -> rax=intpart }
+    EmitB($48); EmitB($FF); EmitB($C6);                           { inc rsi (first int digit) }
+    EmitB($48); EmitB($B9); EmitI64(10);                          { mov rcx, 10 }
+    pCntTop := CodeLen;                                           { .cnt: }
+    EmitB($48); EmitB($83); EmitB($F8); EmitB($0A);               { cmp rax, 10 }
+    EmitB($72); pCntDone := CodeLen; EmitB(0);                    { jb .cntdone }
+    EmitB($48); EmitB($31); EmitB($D2);                           { xor rdx, rdx }
+    EmitB($48); EmitB($F7); EmitB($F1);                           { div rcx }
+    EmitB($48); EmitB($FF); EmitB($C6);                           { inc rsi }
+    EmitB($EB); EmitB(Byte(pCntTop - (CodeLen + 1)));             { jmp .cnt }
+    Code[pCntDone] := Byte(CodeLen - (pCntDone + 1));            { .cntdone: }
+    if decimals > 0 then
+    begin
+      EmitB($48); EmitB($81); EmitB($C6); EmitI32(decimals + 1); { add rsi, decimals+1 }
+    end;
+    MovRaxImm(width);
+    EmitB($48); EmitB($29); EmitB($F0);                           { sub rax, rsi (padcount) }
+    EmitB($7E); pNoPad := CodeLen; EmitB(0);                      { jle .nopad }
+    EnsureSpaces;
+    EmitB($48); EmitB($BE); EmitDataRef(SpacesOffset);           { mov rsi, spaces }
+    EmitB($48); EmitB($89); EmitB($C2);                           { mov rdx, rax }
+    MovRaxImm(SYS_WRITE); MovRdiImm(STDOUT); EmitSyscall;
+    Code[pNoPad] := Byte(CodeLen - (pNoPad + 1));                { .nopad: }
+  end;
 
   { sign: if the sign bit is set, print '-' and clear it (abs) }
   EmitB($66); EmitB($48); EmitB($0F); EmitB($7E); EmitB($C0);   { movq rax, xmm0 }

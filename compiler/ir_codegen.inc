@@ -2660,7 +2660,7 @@ begin
           IREmitNode(valNode);                                        { double bits -> rax }
           EmitB($66); EmitB($48); EmitB($0F); EmitB($6E); EmitB($C0); { movq xmm0, rax }
           if decs = -2 then EmitWriteFloatNat
-          else if decs >= 0 then EmitWriteFloatFixed(decs)
+          else if decs >= 0 then EmitWriteFloatFixed(wid, decs)
           else EmitWriteFloatSci;
         end
         else if decs = -3 then

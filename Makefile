@@ -918,6 +918,8 @@ test-core: $(COMPILER)
 	test "$$(/tmp/test_float_literals26)" = "$$(printf '1\n1\n1\n1\n1\n1\n1')"
 	./$(COMPILER) test/test_float_write.pas /tmp/test_float_write26
 	test "$$(/tmp/test_float_write26)" = "$$(printf '3.50\n4\n-2.750\n1.0\n0.00\n10.5\n 1.0000000000000000E+000\n-2.0000000000000000E+000\n 0.0000000000000000E+000\n 3.5000000000000000E+000\n 1.2345000000000002E+003')"
+	./$(COMPILER) test/test_float_width.pas /tmp/test_float_width26
+	test "$$(/tmp/test_float_width26)" = "$$(printf '[   3.142]\n[      1.50]\n[  -2.5]\n[   123.46]\n[  10.00]\n[3.1]\n[ 0.00]\n[1000]')"
 	./$(COMPILER) test/test_exceptions.pas /tmp/test_exceptions26
 	test "$$(/tmp/test_exceptions26)" = "$$(printf '1\n2\n4\n5')"
 	./$(COMPILER) test/test_exception_unit.pas /tmp/test_exception_unit26
