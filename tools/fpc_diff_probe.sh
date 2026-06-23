@@ -120,6 +120,9 @@ P
 probe high-nonzero-array known <<'P'
 var a: array[5..9] of integer; begin writeln(high(a)); end.
 P
+probe builtin-case known <<'P'
+var s: string; begin s := 'hi'; writeln(LENGTH(s)); end.
+P
 
 echo "---"
 echo "new divergences: $new   known/filed: $known"
