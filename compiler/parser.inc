@@ -362,6 +362,24 @@ begin
   Result := s;
 end;
 
+function FindClassVar(ci: Integer; const name: AnsiString): Integer;
+{ Class-variable lookup by (class ci, name), walking up the parent chain so a
+  subclass sees an inherited `class var`. Returns the backing global var sym idx,
+  or -1. }
+var i, cur: Integer;
+begin
+  Result := -1;
+  cur := ci;
+  while cur >= 0 do
+  begin
+    for i := 0 to ClassVarCount - 1 do
+      if (ClassVarCi[i] = cur) and
+         CaseEqual(GetTokenStrFromRaw(ClassVarNOff[i], ClassVarNLen[i]), name) then
+      begin Result := ClassVarSym[i]; Exit; end;
+    cur := UClsParent[cur];
+  end;
+end;
+
 procedure SpecializeStream(tokStart, count: Integer; const specName, paramName, concreteName: AnsiString; concreteType: TTokenKind);
 var
   i, j: Integer;
@@ -1100,7 +1118,22 @@ begin
           Next;
 
           mmi := FindUMeth(ci, fieldName);
-          if mmi < 0 then Error('class method not found: ' + fieldName);
+          if mmi < 0 then
+          begin
+            { class variable: TClass.cnt -> the backing global var (an lvalue, so
+              read and write both work). }
+            fldIdx := FindClassVar(ci, fieldName);
+            if fldIdx >= 0 then
+            begin
+              node := AllocNode(AN_IDENT);
+              ASTIVal[node] := fldIdx;
+              ASTTk[node] := Ord(Syms[fldIdx].TypeKind);
+              tk := Syms[fldIdx].TypeKind; recName := REC_NONE;
+              Result := node;
+              Exit;
+            end;
+            Error('class method not found: ' + fieldName);
+          end;
           mpi := UMthProc_[mmi];
 
           if not UMthIsStatic[mmi] then
@@ -1606,6 +1639,24 @@ begin
           node := mcallNode;
           tk := Procs[mpi].RetType;
           recName := ProcRetRecId[mpi];
+          Continue;
+        end;
+      end;
+      { class variable accessed via an instance (obj.cnt): not an instance field —
+        resolve to the shared backing global, so reads/writes hit the class var
+        (FPC: a class var is reachable from instances too). }
+      if (recName >= REC_UCLASS_BASE) and
+         (FindUField(recName - REC_UCLASS_BASE, fieldName) < 0) then
+      begin
+        fldIdx := FindClassVar(recName - REC_UCLASS_BASE, fieldName);
+        if fldIdx >= 0 then
+        begin
+          node := AllocNode(AN_IDENT);
+          ASTIVal[node] := fldIdx;
+          ASTTk[node] := Ord(Syms[fldIdx].TypeKind);
+          tk := Syms[fldIdx].TypeKind;
+          recName := REC_NONE;
+          Next;   { consume field name }
           Continue;
         end;
       end;
@@ -8791,6 +8842,39 @@ begin
             if CaseEqual(CurTok.SVal, 'published') then curPublished := 1
             else curPublished := 0;
             Next;
+            continue;
+          end;
+
+          { class var x[, y]: T; — one shared GLOBAL slot per class (not per
+            instance), addressed as TClass.x or obj.x. Registered in the ClassVar
+            table; storage is an anonymous global var (CurProc < 0 here). }
+          if (CurTok.Kind = tkClass) and (Tokens[TokPos].Kind = tkVar) then
+          begin
+            Next; Next;   { consume 'class' 'var' }
+            while CurTok.Kind = tkIdent do
+            begin
+              nFldNames := 0;
+              repeat
+                if CurTok.Kind <> tkIdent then Error('expected class var name');
+                fldNOffs[nFldNames] := Tokens[TokPos-1].SOffset;
+                fldNLens[nFldNames] := Tokens[TokPos-1].SLen;
+                Inc(nFldNames); Next;
+              until not Eat(tkComma);
+              Expect(tkColon, ':');
+              fTk := ParseTypeKind; fRec := LastTypeRecId;
+              for fni := 0 to nFldNames - 1 do
+              begin
+                if ClassVarCount >= MAX_TYPEALIAS then Error('too many class variables');
+                i := AllocVar('', fTk);
+                if (fTk = tyRecord) or (fTk = tyClass) then Syms[i].RecName := fRec;
+                ClassVarCi[ClassVarCount]   := ci;
+                ClassVarNOff[ClassVarCount] := fldNOffs[fni];
+                ClassVarNLen[ClassVarCount] := fldNLens[fni];
+                ClassVarSym[ClassVarCount]  := i;
+                Inc(ClassVarCount);
+              end;
+              Eat(tkSemicolon);
+            end;
             continue;
           end;
 

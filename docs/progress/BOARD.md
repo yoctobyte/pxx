@@ -26,7 +26,7 @@ _none_
 | --- | --- | --- | --- | --- |
 | feature-c-runtime-library | B | feature | C runtime/library layer (`lib/crtl`) plus direct C-library packages | feature-c-source-frontend |
 
-## backlog (51)
+## backlog (50)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -39,7 +39,6 @@ _none_
 | chore-inc-to-units | A | chore | `.inc` → real `.pas` units refactor | — |
 | chore-runtime-emission-size | A | chore | Finer runtime-support emission (code size) | — |
 | feature-c-header-import-complex | A | feature | Import C headers for complex libraries (glib/GTK-grade) | — |
-| feature-class-variables | A | feature | feature: class variables (`class var`) | — |
 | feature-const-set-literal | A | feature | Set literal in a `const` declaration (`const S = [1,2,3]`) | — |
 | feature-copy-intrinsic | B | feature | `Copy` as a generic overloaded intrinsic (string + dynarray families) | — |
 | feature-c-regex-library-devtest | A | feature | C regex library dev-test import | — |
@@ -116,7 +115,7 @@ _none_
 | feature-mimic-fpc | B | feature | `mimic FPC` compatibility mode | — |
 | feature-string-model-tyfixedstring | B | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (214)
+## done (215)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -204,6 +203,7 @@ _none_
 | feature-binary-integer-literals | A | feature | feature: binary integer literals (`%1010`) | — |
 | feature-bochan-eduth | B | feature | bochan + eduth — headless test driver + validator for garin | — |
 | feature-class-is-as | A | feature | `is` / `as` / `Supports` — runtime class type-tests | — |
+| feature-class-variables | A | feature | feature: class variables (`class var`) | — |
 | feature-compiler-search-path-pcl | A | feature | feature-compiler-search-path-pcl (Track A) | — |
 | feature-compiler-warnings | A | feature | Compiler warning diagnostics facility | — |
 | feature-compression-library | B | feature | Compression library — Huffman / LZ77 (roundtrip test app) | — |
@@ -354,7 +354,6 @@ _none_
 - [A] chore-inc-to-units
 - [A] chore-runtime-emission-size
 - [A] feature-c-header-import-complex
-- [A] feature-class-variables
 - [A] feature-const-set-literal
 - [B] feature-copy-intrinsic
 - [A] feature-c-regex-library-devtest

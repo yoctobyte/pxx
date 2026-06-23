@@ -1243,6 +1243,15 @@ var
   EnumValNOff     : array[0..MAX_ENUMVAL-1] of Integer;   { value name in TokChars }
   EnumValNLen     : array[0..MAX_ENUMVAL-1] of Integer;
   EnumValCount    : Integer;
+
+  { Class variables (`class var x: T`): one shared global storage slot per class,
+    addressed as TClass.x or instance.x. Registry maps (owning class ci, name) ->
+    the global var sym; inherited (a subclass sees a parent's class var). }
+  ClassVarCi      : array[0..MAX_TYPEALIAS-1] of Integer;   { owning class ci }
+  ClassVarNOff    : array[0..MAX_TYPEALIAS-1] of Integer;   { name in TokChars }
+  ClassVarNLen    : array[0..MAX_TYPEALIAS-1] of Integer;
+  ClassVarSym     : array[0..MAX_TYPEALIAS-1] of Integer;   { global var sym idx }
+  ClassVarCount   : Integer;
   LastTypeEnumId  : Integer;  { set by ParseTypeKind: enum type index or -1 }
   LastTypeSetEnumId : Integer;  { set by ParseTypeKind for set types: element enum index or -1 }
   LastTypeSetElemTk : Integer;  { set by ParseTypeKind for set types: element TTypeKind ordinal }
