@@ -1,7 +1,7 @@
 # bug: `@obj.Method` does not coerce to a `Pointer` (or `TMethod`) argument
 
 - **Type:** bug (Track A — parser / call matching / type coercion)
-- **Status:** urgent (blocks Platonic Eliah IDE event wiring)
+- **Status:** done
 - **Found:** 2026-06-23, wiring GTK event handlers in the Eliah IDE (Track B)
 - **Severity:** high — every `OnClick`/`OnPaint`/`OnMouseDown` handler in the GUI
   path must be hand-assembled into a `TMethod` field-by-field; the natural
@@ -78,3 +78,19 @@ wiring, and we are parking rather than bending further.
 ## Repro
 
 `/tmp/l1_repro.pas` (above) fails; `/tmp/l1_control.pas` (inline TMethod) passes.
+
+## Resolution (2026-06-23)
+
+`@obj.Method` (AN_METHODREF) was typed tyRecord, so overload matching saw a
+tyRecord arg vs a Pointer (tyPointer) param and rejected the call. But in a value
+context AN_METHODREF already lowers to its CODE address (IR_PROCADDR, ir.inc) —
+only the type tag was wrong. Changed the `@obj.Method` factor to type the node
+tyPointer. Assignment to a TMethod target still captures code+data: AN_ASSIGN
+keys on the AN_METHODREF NODE KIND (ir.inc:2467), not the type tag, so
+`pm := @h.M` / `widget.OnClick := @h.M` are unaffected.
+
+`TakesPtr(@h.M)` now compiles; control `pm.Code := @h.M`, method-var
+`cb := @h.M; cb(nil)`, and the method-ptr test suite all still pass; self-host
+byte-identical. Front-end only. Closes bug-method-ptr-no-coerce-pointer-arg.
+(Passing @obj.Method to a TMethod parameter by value remains a follow-up — assign
+context, the Eliah path, works.)

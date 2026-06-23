@@ -2686,10 +2686,15 @@ begin
         node := AllocNode(AN_METHODREF);
         ASTIVal[node] := UMthProc_[mmi];
         ASTLeft[node] := valNode;
-        ASTTk[node] := Ord(tyRecord);
+        { Typed as a Pointer: in a value/argument context @obj.Method surfaces its
+          CODE address (IR lowering yields IR_PROCADDR), so it matches a Pointer
+          parameter — `TakesPtr(@h.M)`. Assignment to a TMethod target still
+          captures code+data: AN_ASSIGN keys on the AN_METHODREF node kind, not
+          this type, so `pm := @h.M` / `widget.OnClick := @h.M` are unaffected. }
+        ASTTk[node] := Ord(tyPointer);
         Next;            { consume method name }
         CurASTNode := node;
-        LastExprTk := tyRecord;
+        LastExprTk := tyPointer;
       end
       { @proc: not a variable but a known routine → absolute code address }
       else if (idx < 0) and (FindProc(name) >= 0) then
