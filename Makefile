@@ -417,6 +417,8 @@ test-core: $(COMPILER)
 	test "$$(/tmp/test_local_tc26)" = "$$(printf '100\na\nb\nc\n42\n100')"
 	./$(COMPILER) test/test_typed_const_record.pas /tmp/test_tc_record26
 	test "$$(/tmp/test_tc_record26)" = "$$(printf '7\n10 Z 20\n300\n300')"
+	./$(COMPILER) test/test_multidim_const_array.pas /tmp/test_md_const26
+	test "$$(/tmp/test_md_const26)" = "$$(printf '1 2 3 4\n10 30 40 60\n1 4 5 8\n7 8 9 10\n7 8 9 10')"
 	./$(COMPILER) test/test_func_name_result_read.pas /tmp/test_fnresult26
 	test "$$(/tmp/test_fnresult26)" = "$$(printf '33\n0\nhi!\n120')"
 	./$(COMPILER) test/test_func_name_paramless_result.pas /tmp/test_fnresult_pl26

@@ -8553,6 +8553,8 @@ var name: AnsiString; v: Int64;
     cTk, cElemTk: TTypeKind; cLo, cHi, cIdx, cElem: Integer;
     isLocalConst: Boolean;
     cRec, fNameOff, fNameLen: Integer; fName: AnsiString; fTk: TTypeKind;
+    cnNDims, cFlatLen, cDi, cDepth: Integer;
+    cnDimLo, cnDimSpan: array[0..MAX_ARR_DIMS-1] of Integer;
 begin
   Next;
   { `constructor`/`destructor`/`operator` and the unit section words are plain
@@ -8588,41 +8590,79 @@ begin
       begin
         Next;
         Expect(tkLBrack, '[');
-        cLo := ConstEval;
-        Expect(tkDotDot, '..');
-        cHi := ConstEval;
+        { One or more comma-separated dimensions, mirroring the var-section ND
+          path. >=2 dims flatten to a 1-D row-major store indexed as an N-D array
+          (SymArrNDims), so `const M: array[0..1,0..1] of T = ((..),(..))` works
+          like the var form. }
+        cnNDims := 0;
+        repeat
+          cLo := ConstEval; Expect(tkDotDot, '..'); cHi := ConstEval;
+          if cnNDims >= MAX_ARR_DIMS then Error('too many array dimensions');
+          cnDimLo[cnNDims] := cLo; cnDimSpan[cnNDims] := cHi - cLo + 1; Inc(cnNDims);
+        until not Eat(tkComma);
         Expect(tkRBrack, ']');
         Expect(tkOf, 'of');
         cElemTk := ParseTypeKind;
+        if cnNDims = 1 then
+        begin
+          cLo := cnDimLo[0]; cFlatLen := cnDimSpan[0];
+        end
+        else
+        begin
+          cFlatLen := 1;
+          for cDi := 0 to cnNDims - 1 do cFlatLen := cFlatLen * cnDimSpan[cDi];
+          cLo := 0;
+        end;
+        cHi := cLo + cFlatLen - 1;
         cIdx := AllocArray(name, cElemTk, cLo, cHi);
-        Expect(tkEq, '=');
-        Expect(tkLParen, '(');
-        cElem := 0;
-        repeat
-          if cElem > (cHi - cLo) then Error('too many array constant elements');
-          if isLocalConst then
+        if cElemTk = tyRecord then Syms[cIdx].ElemRecName := LastTypeRecId;
+        if cnNDims >= 2 then
+        begin
+          SymArrNDims[cIdx] := cnNDims;
+          for cDi := 0 to cnNDims - 1 do
           begin
-            if LocalInitCount >= MAX_LOCAL_INITS then Error('too many local initializers');
-            LocalInitSym[LocalInitCount]  := cIdx;
-            LocalInitElem[LocalInitCount] := cLo + cElem;
-            LocalInitFOff[LocalInitCount] := -1;
-            LocalInitVal[LocalInitCount]  := ParseInitVal;
-            LocalInitTk[LocalInitCount]   := Ord(cElemTk);
-            Inc(LocalInitCount);
-          end
+            SymArrDimLo[cIdx * MAX_ARR_DIMS + cDi]   := cnDimLo[cDi];
+            SymArrDimSpan[cIdx * MAX_ARR_DIMS + cDi] := cnDimSpan[cDi];
+          end;
+        end;
+        Expect(tkEq, '=');
+        { Nested-paren initializer flattened in row-major encounter order. A 1-D
+          array is one paren level; an N-D one nests one level per dimension, but
+          the flat store fills in order regardless of nesting depth. }
+        Expect(tkLParen, '(');
+        cDepth := 1; cElem := 0;
+        while cDepth > 0 do
+        begin
+          if CurTok.Kind = tkLParen then begin Next; Inc(cDepth); end
+          else if CurTok.Kind = tkRParen then begin Next; Dec(cDepth); end
+          else if CurTok.Kind = tkComma then Next
           else
           begin
-            if PendingInitCount >= MAX_PENDING_INITS then Error('too many global initializers');
-            PendingInitSym[PendingInitCount]  := cIdx;
-            PendingInitElem[PendingInitCount] := cLo + cElem;
-            PendingInitFOff[PendingInitCount] := -1;
-            PendingInitVal[PendingInitCount]  := ParseInitVal;
-            PendingInitTk[PendingInitCount]   := Ord(cElemTk);
-            Inc(PendingInitCount);
+            if cElem >= cFlatLen then Error('too many array constant elements');
+            if isLocalConst then
+            begin
+              if LocalInitCount >= MAX_LOCAL_INITS then Error('too many local initializers');
+              LocalInitSym[LocalInitCount]  := cIdx;
+              LocalInitElem[LocalInitCount] := cLo + cElem;
+              LocalInitFOff[LocalInitCount] := -1;
+              LocalInitVal[LocalInitCount]  := ParseInitVal;
+              LocalInitTk[LocalInitCount]   := Ord(cElemTk);
+              Inc(LocalInitCount);
+            end
+            else
+            begin
+              if PendingInitCount >= MAX_PENDING_INITS then Error('too many global initializers');
+              PendingInitSym[PendingInitCount]  := cIdx;
+              PendingInitElem[PendingInitCount] := cLo + cElem;
+              PendingInitFOff[PendingInitCount] := -1;
+              PendingInitVal[PendingInitCount]  := ParseInitVal;
+              PendingInitTk[PendingInitCount]   := Ord(cElemTk);
+              Inc(PendingInitCount);
+            end;
+            Inc(cElem);
           end;
-          Inc(cElem);
-        until not Eat(tkComma);
-        Expect(tkRParen, ')');
+        end;
+        if cElem <> cFlatLen then Error('wrong number of array constant elements');
       end
       else
       begin
