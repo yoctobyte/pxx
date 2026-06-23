@@ -6,7 +6,7 @@ program bochan;
   verdict. Links NO GUI/TUI face (no lib/pcl) — building this at all is the proof
   that garin is render-agnostic. }
 
-uses buffer, eduth, docmodel;
+uses buffer, eduth, docmodel, lfmload;
 
 var
   e: TEduth;
@@ -14,6 +14,8 @@ var
   ok: Boolean;
   doc: TDocModel;
   iForm, iBtn: Integer;
+  lfm: AnsiString;
+  ldoc: TDocModel;
 
 begin
   EduthInit(e);
@@ -64,6 +66,37 @@ begin
   CheckInt(e, 'topmost wins (label over form)', doc.HitTest(25, 65),
     doc.Count - 1);
   CheckInt(e, 'right edge is exclusive', doc.HitTest(130, 50), iForm);
+
+  { scenario 5: load a .lfm text into a docmodel (box-emulation loader) }
+  writeln('-- lfmload.LoadLfmText --');
+  lfm :=
+    'object Form1: TForm'        + #10 +
+    '  Left = 0'                 + #10 +
+    '  Top = 0'                  + #10 +
+    '  Width = 400'              + #10 +
+    '  Height = 300'             + #10 +
+    '  Caption = ''My Form'''    + #10 +
+    '  object Btn: TButton'      + #10 +
+    '    Left = 20'              + #10 +
+    '    Top = 30'               + #10 +
+    '    Width = 80'             + #10 +
+    '    Height = 26'            + #10 +
+    '    Caption = ''OK'''       + #10 +
+    '  end'                      + #10 +
+    'end'                        + #10;
+  ldoc := TDocModel.Create;
+  ok := LoadLfmText(lfm, ldoc);
+  CheckTrue(e, 'load returns true', ok);
+  CheckInt(e, 'two nodes parsed', ldoc.Count, 2);
+  CheckStr(e, 'root kind is Form', ldoc.KindName(ldoc.NodeKind(0)), 'Form');
+  CheckStr(e, 'root caption', ldoc.NodeCaption(0), 'My Form');
+  CheckInt(e, 'root width', ldoc.NodeW(0), 400);
+  CheckInt(e, 'child parented to root', ldoc.NodeParent(1), 0);
+  CheckStr(e, 'child kind is Button', ldoc.KindName(ldoc.NodeKind(1)), 'Button');
+  CheckStr(e, 'child caption', ldoc.NodeCaption(1), 'OK');
+  CheckInt(e, 'child abs Left (0+20)', ldoc.NodeX(1), 20);
+  CheckInt(e, 'child abs Top (0+30)', ldoc.NodeY(1), 30);
+  CheckInt(e, 'child height', ldoc.NodeH(1), 26);
 
   Halt(EduthReport(e));
 end.
