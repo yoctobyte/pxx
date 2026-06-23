@@ -33,19 +33,12 @@ type
     procedure Refresh;
     procedure SelectPile(p: Integer);
     function FaceUpRun(p: Integer): Integer;
+    function HitPile(x, y: Integer): Integer;
+    procedure DoMouseDown(Sender: TControl; Button, X, Y: Integer);
     procedure DoNew(Sender: TObject);
     procedure DoDraw(Sender: TObject);
     procedure DoUndo(Sender: TObject);
     procedure DoAuto(Sender: TObject);
-    procedure DoFound(Sender: TObject);
-    procedure DoSelW(Sender: TObject);
-    procedure DoSel1(Sender: TObject);
-    procedure DoSel2(Sender: TObject);
-    procedure DoSel3(Sender: TObject);
-    procedure DoSel4(Sender: TObject);
-    procedure DoSel5(Sender: TObject);
-    procedure DoSel6(Sender: TObject);
-    procedure DoSel7(Sender: TObject);
   end;
 
 function RankStr(r: Integer): string;
@@ -185,14 +178,48 @@ begin
   Refresh;
 end;
 
+{ Which pile is at (x,y)? Mirrors the OnPaint layout. -1 = none. }
+function THandler.HitPile(x, y: Integer): Integer;
+var c: Integer;
+begin
+  HitPile := -1;
+  if (y >= 10) and (y < 10 + CARD_H) then
+  begin
+    if (x >= 10) and (x < 10 + CARD_W) then HitPile := P_STOCK
+    else if (x >= 80) and (x < 80 + CARD_W) then HitPile := P_WASTE
+    else
+    begin
+      c := (x - 290) div 70;
+      if (c >= 0) and (c < 4) and (x >= 290 + c * 70) and (x < 290 + c * 70 + CARD_W) then
+        HitPile := P_FOUND + c;
+    end;
+  end
+  else if y >= 110 then
+  begin
+    c := (x - 10) div 70;
+    if (c >= 0) and (c < 7) and (x >= 10 + c * 70) and (x < 10 + c * 70 + CARD_W) then
+      HitPile := P_TAB + c;
+  end;
+end;
+
+procedure THandler.DoMouseDown(Sender: TControl; Button, X, Y: Integer);
+var p: Integer;
+begin
+  p := HitPile(X, Y);
+  if p < 0 then Exit;
+  if p = P_STOCK then        { click the stock to draw / recycle }
+  begin
+    DrawStock;
+    selected := -1;
+    Refresh;
+  end
+  else
+    SelectPile(p);           { click a source then a destination (incl. foundation) }
+end;
+
 procedure THandler.DoNew(Sender: TObject);  begin NewGame(Random(100000) + 1); selected := -1; Refresh; end;
 procedure THandler.DoDraw(Sender: TObject); begin DrawStock; selected := -1; Refresh; end;
 procedure THandler.DoUndo(Sender: TObject); begin Undo; selected := -1; Refresh; end;
-procedure THandler.DoFound(Sender: TObject);
-begin
-  if selected >= 0 then AutoFoundation(selected);
-  selected := -1; Refresh;
-end;
 procedure THandler.DoAuto(Sender: TObject);
 var moved: Boolean; p: Integer;
 begin
@@ -204,14 +231,6 @@ begin
   until not moved;
   selected := -1; Refresh;
 end;
-procedure THandler.DoSelW(Sender: TObject); begin SelectPile(P_WASTE); end;
-procedure THandler.DoSel1(Sender: TObject); begin SelectPile(P_TAB + 0); end;
-procedure THandler.DoSel2(Sender: TObject); begin SelectPile(P_TAB + 1); end;
-procedure THandler.DoSel3(Sender: TObject); begin SelectPile(P_TAB + 2); end;
-procedure THandler.DoSel4(Sender: TObject); begin SelectPile(P_TAB + 3); end;
-procedure THandler.DoSel5(Sender: TObject); begin SelectPile(P_TAB + 4); end;
-procedure THandler.DoSel6(Sender: TObject); begin SelectPile(P_TAB + 5); end;
-procedure THandler.DoSel7(Sender: TObject); begin SelectPile(P_TAB + 6); end;
 
 procedure MkButton(Form: TForm; const cap: string; x, y, w: Integer; m: TMethod);
 var b: TButton;
@@ -251,21 +270,13 @@ begin
 
   pm.Code := @H.OnPaint; pm.Data := H;
   PaintBox.OnPaint := pm;
+  pm.Code := @H.DoMouseDown; pm.Data := H;
+  PaintBox.OnMouseDown := pm;   { click the board to play }
 
   pm.Data := H;
-  pm.Code := @H.DoNew;   MkButton(Form1, 'New',      580,  50, 90, pm);
-  pm.Code := @H.DoDraw;  MkButton(Form1, 'Draw',     580,  84, 90, pm);
-  pm.Code := @H.DoUndo;  MkButton(Form1, 'Undo',     580, 118, 90, pm);
-  pm.Code := @H.DoFound; MkButton(Form1, 'To Found', 580, 152, 90, pm);
-  pm.Code := @H.DoAuto;  MkButton(Form1, 'Auto',     580, 186, 90, pm);
-  pm.Code := @H.DoSelW;  MkButton(Form1, 'Waste',    580, 240, 90, pm);
-  pm.Code := @H.DoSel1;  MkButton(Form1, 'T1', 580, 274, 42, pm);
-  pm.Code := @H.DoSel2;  MkButton(Form1, 'T2', 626, 274, 42, pm);
-  pm.Code := @H.DoSel3;  MkButton(Form1, 'T3', 580, 308, 42, pm);
-  pm.Code := @H.DoSel4;  MkButton(Form1, 'T4', 626, 308, 42, pm);
-  pm.Code := @H.DoSel5;  MkButton(Form1, 'T5', 580, 342, 42, pm);
-  pm.Code := @H.DoSel6;  MkButton(Form1, 'T6', 626, 342, 42, pm);
-  pm.Code := @H.DoSel7;  MkButton(Form1, 'T7', 580, 376, 42, pm);
+  pm.Code := @H.DoNew;   MkButton(Form1, 'New',  580,  50, 90, pm);
+  pm.Code := @H.DoUndo;  MkButton(Form1, 'Undo', 580,  84, 90, pm);
+  pm.Code := @H.DoAuto;  MkButton(Form1, 'Auto', 580, 118, 90, pm);
 
   Form1.Realize;
 
@@ -273,12 +284,19 @@ begin
   if ParamCount > 0 then arg := ParamStr(1);
   if arg = '--smoke' then
   begin
-    { headless integration check: render, run a few engine moves, render again. }
+    { headless integration check driven through the click handler: clicking the
+      stock must draw a card (verifies hit-test -> action), then auto + two
+      tableau clicks (source/dest) exercise the click-to-move path. }
     H.OnPaint(PaintBox, PaintBox.Canvas);
-    H.DoDraw(nil);
+    H.DoMouseDown(PaintBox, 1, 30, 40);          { stock -> draw }
+    if PileCount(P_WASTE) <> 1 then
+    begin
+      writeln('SMOKE FAIL: stock click did not draw');
+      Halt(1);
+    end;
     H.DoAuto(nil);
-    H.SelectPile(P_TAB + 6);
-    H.SelectPile(P_TAB + 5);
+    H.DoMouseDown(PaintBox, 1, 10 + 6 * 70 + 5, 200);  { tableau col 6 (source) }
+    H.DoMouseDown(PaintBox, 1, 10 + 5 * 70 + 5, 200);  { tableau col 5 (dest) }
     H.OnPaint(PaintBox, PaintBox.Canvas);
     writeln('SMOKE OK');
   end

@@ -75,3 +75,11 @@ tests richer mouse event flow and live repaint.
   coordinates/keys) — the ticket's click/drag + keyboard needs PCL mouse/key
   events first (a PCL/widget-set extension, not this demo). Discovered building
   this; flag for the PCL track.
+- 2026-06-23 — **Click-to-play landed** on the new PCL mouse events
+  (feature-pcl-input-events). The board is now interactive: PaintBox.OnMouseDown
+  -> HitPile(x,y) maps the click to a pile (mirrors the OnPaint layout); clicking
+  the stock draws, clicking a source then a destination (tableau or foundation)
+  moves the largest legal run. Pile-select buttons removed; only New/Undo/Auto
+  remain. The `--smoke` now drives DoMouseDown directly and asserts a stock click
+  draws a card. gui-suite green. REMAINING (polish): true drag/drop (vs
+  click-select-click-drop), window-resize relayout, score/move counter.
