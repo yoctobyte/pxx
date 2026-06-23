@@ -95,6 +95,35 @@ probe trunc-round  <<'P'
 begin writeln(trunc(3.7), '|', round(2.5), '|', round(3.5)); end.
 P
 
+# ---- correctness guards (value semantics; must keep matching FPC) ----
+probe rec-copy <<'P'
+type tr = record x: integer; end; var a, b: tr; begin a.x := 5; b := a; b.x := 9; writeln(a.x, '|', b.x); end.
+P
+probe arr-copy <<'P'
+type ta = array[0..2] of integer; var a, b: ta; begin a[0] := 5; b := a; b[0] := 9; writeln(a[0], '|', b[0]); end.
+P
+probe copy-overrun <<'P'
+var s: string; begin s := 'abc'; writeln('[' + copy(s, 2, 100) + ']'); end.
+P
+probe copy-past-end <<'P'
+var s: string; begin s := 'abc'; writeln('[' + copy(s, 5, 2) + ']'); end.
+P
+probe int-div-neg <<'P'
+begin writeln((-10) div 3, '|', 10 div (-3)); end.
+P
+probe mod-signs <<'P'
+begin writeln(17 mod 5, '|', (-17) mod 5, '|', 17 mod (-5)); end.
+P
+probe round-half-neg <<'P'
+begin writeln(trunc(-3.7), '|', round(-2.5)); end.
+P
+probe array-zero-init <<'P'
+var a: array[0..3] of integer; begin writeln(a[0], a[1], a[2], a[3]); end.
+P
+probe concat-loop <<'P'
+var s: string; i: integer; begin s := ''; for i := 1 to 5 do s := s + 'x'; writeln(s, '|', length(s)); end.
+P
+
 # ---- known/filed divergences (kept as regression markers) ----
 probe bool-write known <<'P'
 begin writeln(1 > 0, '|', 2 < 1); end.
