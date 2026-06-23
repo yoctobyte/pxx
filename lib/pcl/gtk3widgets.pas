@@ -692,8 +692,14 @@ begin
   
   cls := GetClass(GetInstanceClassName(Pointer(pctl)));
   container := GetContainerFixed(ph, cls);
-    
-  gtk_fixed_put(container, ch, ctl.Left, ctl.Top);
+  if container = nil then Exit;
+
+  { Realize re-parents children, so a widget may already be in the container;
+    re-putting it trips gtk_fixed_put's 'parent == NULL' assertion. Move instead. }
+  if gtk_widget_get_parent(ch) = container then
+    gtk_fixed_move(container, ch, ctl.Left, ctl.Top)
+  else
+    gtk_fixed_put(container, ch, ctl.Left, ctl.Top);
 end;
 
 procedure TGtk3WidgetSet.ShowWidget(AControl: TComponent);
