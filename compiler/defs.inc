@@ -164,6 +164,12 @@ const
                            so the value passes through unchanged; the tag exists
                            so trailing .field/[i] resolve offsets against TClass
                            (ResolveNodeRec maps it to REC_UCLASS_BASE+ci). }
+  AN_ARRAY_CTOR    = 64; { `[e0, e1, ...]` passed to an `array of T` (scalar/string
+                           element) parameter: Left = AN_ARG element chain, ASTIVal
+                           = element TTypeKind ord. Lowers to a heap dyn-array temp
+                           (alloc + SetLength + per-element store) whose handle is
+                           the open-array argument — mirror of AN_VARREC_ARRAY for
+                           plain (non-TVarRec) elements. }
 
   { Inline-asm operand kinds }
   AOP_NONE = 0;

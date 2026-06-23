@@ -339,6 +339,7 @@ function ParseLValueAST(idx: Integer; identTokIdx: Integer): Integer; forward;
 function ParseSetMembershipAST(leftExpr: Integer): Integer; forward;
 function ParseSetLiteralAST: Integer; forward;
 function ParseVarRecLiteralAST: Integer; forward;
+function ParseArrayCtorAST(elemTk: TTypeKind): Integer; forward;
 function ParseStatementAST: Integer; forward;
 procedure EnableCoroutineRuntime; forward;
 function ParseWithStatementAST: Integer; forward;
@@ -1829,6 +1830,50 @@ begin
             (argNo >= 0) and (argNo < Procs[procIdx].ParamCount) and
             Procs[procIdx].Params[argNo].IsArray and
             (Procs[procIdx].Params[argNo].TypeKind = tyRecord);
+end;
+
+function ParamIsOpenArrayScalar(procIdx, argNo: Integer): Boolean;
+{ True when param argNo is an `array of T` whose element is scalar/string (not
+  `array of const` = tyRecord) — the signal to parse a `[...]` argument as an
+  array constructor (temp dyn-array) rather than a set literal. }
+begin
+  Result := (procIdx >= 0) and (argNo >= 0) and
+            (argNo < Procs[procIdx].ParamCount) and
+            Procs[procIdx].Params[argNo].IsArray and
+            (Procs[procIdx].Params[argNo].TypeKind <> tyRecord) and
+            (Procs[procIdx].Params[argNo].TypeKind <> tyVariant);
+end;
+
+function ParseArrayCtorAST(elemTk: TTypeKind): Integer;
+{ `[ e0, e1, ... ]` for an `array of T` (scalar/string) parameter. Builds an
+  AN_ARRAY_CTOR whose Left is the element AN_ARG chain; ASTIVal/ASTTk carry the
+  element type so overload matching binds it to the open-array param (whose
+  TypeKind is the element type). Lowering builds a heap dyn-array temp. }
+var node, argNode, lastArg: Integer; done: Boolean;
+begin
+  node := AllocNode(AN_ARRAY_CTOR);
+  ASTIVal[node] := Ord(elemTk);
+  ASTTk[node]   := Ord(elemTk);
+  ASTLeft[node] := -1;
+  lastArg := -1;
+  Expect(tkLBrack, '[');
+  if CurTok.Kind <> tkRBrack then
+  begin
+    done := False;
+    while not done do
+    begin
+      ParseExpr;
+      argNode := AllocNode(AN_ARG);
+      ASTLeft[argNode] := CurASTNode;
+      ASTRight[argNode] := -1;
+      if lastArg = -1 then ASTLeft[node] := argNode
+      else ASTRight[lastArg] := argNode;
+      lastArg := argNode;
+      if not Eat(tkComma) then done := True;
+    end;
+  end;
+  Expect(tkRBrack, ']');
+  Result := node;
 end;
 
 procedure EmitArgvToAddr;
@@ -4197,8 +4242,15 @@ begin
         nArgs := 0;
         while CurTok.Kind <> tkRParen do
         begin
-          node := TryDelphiBareProcArg;
-          if node >= 0 then CurASTNode := node else ParseExpr;
+          if (CurTok.Kind = tkLBrack) and ParamIsVarRecArray(procIdx, nArgs) then
+            CurASTNode := ParseVarRecLiteralAST
+          else if (CurTok.Kind = tkLBrack) and ParamIsOpenArrayScalar(procIdx, nArgs) then
+            CurASTNode := ParseArrayCtorAST(Procs[procIdx].Params[nArgs].TypeKind)
+          else
+          begin
+            node := TryDelphiBareProcArg;
+            if node >= 0 then CurASTNode := node else ParseExpr;
+          end;
           argSeq := AllocNode(AN_ARG);
           ASTLeft[argSeq] := CurASTNode;
           if argsHead = -1 then
@@ -4340,12 +4392,14 @@ begin
           exprNode := ASTLeft[currArg];
           if Procs[procIdx].Params[i].IsRef or Procs[procIdx].Params[i].IsArray then
           begin
-            if not ((ASTKind[exprNode] = AN_IDENT) or (ASTKind[exprNode] = AN_INDEX) or (ASTKind[exprNode] = AN_FIELD)) then
+            if not ((ASTKind[exprNode] = AN_IDENT) or (ASTKind[exprNode] = AN_INDEX) or (ASTKind[exprNode] = AN_FIELD) or
+                    (ASTKind[exprNode] = AN_VARREC_ARRAY) or (ASTKind[exprNode] = AN_ARRAY_CTOR)) then
             begin
               { A `const` record param may bind a non-lvalue temporary (e.g. a
                 function result): the call-arg lowering materializes it into a
                 hidden local and passes its address (FPC behaviour). `var`/`out`
-                still require a true lvalue so write-back has somewhere to land. }
+                still require a true lvalue so write-back has somewhere to land.
+                An array-constructor literal ([...]) is itself the open-array temp. }
               if not (ProcParamIsConst[procIdx * 16 + i] and (IntToTypeKind(ASTTk[exprNode]) = tyRecord)) then
                 Error('by-reference argument must be a variable');
             end;
@@ -7448,6 +7502,8 @@ begin
           begin
             if (CurTok.Kind = tkLBrack) and ParamIsVarRecArray(procIdx, nArgs) then
               CurASTNode := ParseVarRecLiteralAST
+            else if (CurTok.Kind = tkLBrack) and ParamIsOpenArrayScalar(procIdx, nArgs) then
+              CurASTNode := ParseArrayCtorAST(Procs[procIdx].Params[nArgs].TypeKind)
             else
             begin
               node := TryDelphiBareProcArg;

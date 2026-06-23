@@ -1,7 +1,7 @@
 # feature: array constructor `[...]` as an open-array argument
 
 - **Type:** feature (Track A — parser / call lowering)
-- **Status:** urgent (blocks Platonic Eliah IDE — RunCapture/array-of-string calls)
+- **Status:** done
 - **Found:** 2026-06-23, building the Eliah IDE (runner.RunCapture call)
 - **Severity:** medium (common FPC idiom; forces a temp array variable per call)
 
@@ -43,3 +43,21 @@ length defect) — this is the constructor not being accepted as an argument at 
 ## Repro
 
 `function f(const a: array of integer): integer; ... f([1,2,3])`.
+
+## Resolution (2026-06-23)
+
+New AN_ARRAY_CTOR node (defs.inc), the plain-element mirror of AN_VARREC_ARRAY.
+At a call where the param is an `array of T` with a scalar/string element
+(ParamIsOpenArrayScalar), a `[...]` argument is parsed by ParseArrayCtorAST into
+AN_ARRAY_CTOR tagged with the element type (so overload matching binds it to the
+open-array param, whose TypeKind is the element type). Lowering (ir.inc) builds a
+heap dyn-array temp: alloc + nil-init + SetLength(N) + per-element store via the
+normal element-assign path (coercion + managed-string ARC), yielding the
+data-pointer handle. Wired into both the expression-level (parser ~4243) and
+statement-level (~7494) call-arg loops; AN_ARRAY_CTOR also bypasses the by-ref
+"must be a variable" check (it IS the open-array temp) and passes through
+IRLowerCallArg.
+
+f([1,2,3])=6, f([10,20,30,40])=100, g(['a','b'])=2 (string elems), h([])=0 (empty)
+— byte-identical to FPC. Self-host byte-identical; array-of-const/open-array test
+suite green. Closes feature-open-array-constructor-arg.

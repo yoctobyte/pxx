@@ -1100,7 +1100,7 @@ begin
   { An `array of const` literal lowers to a freshly built dyn-array of TVarRec;
     its value is the data-pointer handle, passed straight through (never the
     record-by-value copy path below). }
-  if ASTKind[argAST] = AN_VARREC_ARRAY then
+  if (ASTKind[argAST] = AN_VARREC_ARRAY) or (ASTKind[argAST] = AN_ARRAY_CTOR) then
   begin
     Result := IRLowerAST(argAST);
     Exit;
@@ -1533,6 +1533,64 @@ begin
 
     AN_DEFAULT:
       Error('default requires an assignment target');
+
+    AN_ARRAY_CTOR:
+    begin
+      { `[e0, e1, ...]` for an `array of T` (scalar/string) parameter: build a heap
+        dyn-array temp of T, SetLength(N), store each element through the normal
+        element-assign path (type coercion + managed-string ARC), and yield the
+        data-pointer handle as the open-array argument. Plain-element mirror of
+        AN_VARREC_ARRAY. }
+      vrElemTk := IntToTypeKind(ASTIVal[node]);
+      vrCount := 0;
+      item := ASTLeft[node];
+      while item <> -1 do begin Inc(vrCount); item := ASTRight[item]; end;
+
+      vrTmp := AllocDynArray('', vrElemTk, 1);
+      { Managed local synthesised after the prologue zero-init pass — flag it for
+        the codegen prologue nil-init and zero the handle slot here so SetLength
+        sees nil (mirrors AN_VARREC_ARRAY). }
+      SymIsHiddenArgTemp[vrTmp] := True;
+      IRAppend(IR_DEFAULT_MEM,
+        IRAppend(IR_SLOTADDR, vrTmp, -1, -1, 0, Ord(tyPointer)),
+        -1, REC_NONE, TARGET_PTR_SIZE, Ord(tyPointer));
+
+      { SetLength(tmp, vrCount) }
+      vrIdent := AllocNode(AN_IDENT);
+      ASTIVal[vrIdent] := vrTmp; ASTTk[vrIdent] := Ord(tyPointer);
+      vrCountLit := AllocNode(AN_INT_LIT);
+      ASTIVal[vrCountLit] := vrCount; ASTTk[vrCountLit] := Ord(tyInteger);
+      vrArg1 := AllocNode(AN_ARG); ASTLeft[vrArg1] := vrIdent;
+      vrArg2 := AllocNode(AN_ARG); ASTLeft[vrArg2] := vrCountLit;
+      ASTRight[vrArg1] := vrArg2;
+      vrSlCall := AllocNode(AN_CALL); ASTIVal[vrSlCall] := -102;
+      ASTLeft[vrSlCall] := vrArg1;
+      value := IRLowerAST(vrSlCall);
+      IRIVal[value] := 1;   { mark the SetLength IR_CALL as a statement to emit }
+
+      { tmp[i] := element, via the normal element-assign path. }
+      i := 0;
+      item := ASTLeft[node];
+      while item <> -1 do
+      begin
+        vrIdent := AllocNode(AN_IDENT);
+        ASTIVal[vrIdent] := vrTmp; ASTTk[vrIdent] := Ord(tyPointer);
+        vrIdxLit := AllocNode(AN_INT_LIT);
+        ASTIVal[vrIdxLit] := i; ASTTk[vrIdxLit] := Ord(tyInteger);
+        vrIndex := AllocNode(AN_INDEX);
+        ASTLeft[vrIndex] := vrIdent; ASTRight[vrIndex] := vrIdxLit;
+        ASTTk[vrIndex] := Ord(vrElemTk);
+        elemAddr := AllocNode(AN_ASSIGN);
+        ASTLeft[elemAddr] := vrIndex;
+        ASTRight[elemAddr] := ASTLeft[item];
+        ASTTk[elemAddr] := Ord(vrElemTk);
+        IRMarkStatementNode(IRLowerAST(elemAddr));
+        Inc(i);
+        item := ASTRight[item];
+      end;
+
+      Result := IRAppend(IR_LEA, vrTmp, -1, -1, 0, Ord(tyPointer));
+    end;
 
     AN_VARREC_ARRAY:
     begin
