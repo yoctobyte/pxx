@@ -1,9 +1,25 @@
 # bug: cardinal/longword binary-op promotes to uint64 (FPC: int64)
 
 - **Type:** bug (Track A — type promotion) — FPC-parity, wrong value on underflow
-- **Status:** backlog
+- **Status:** done
 - **Found:** 2026-06-23, differential probe vs FPC
+- **Closed:** 2026-06-23
 - **Severity:** low-medium (diverges only when the result underflows / exceeds int32)
+
+## Resolution (2026-06-23)
+
+`TypeArithmeticResult` (symtab.inc) returned `tyUInt64` whenever
+`TypeCompareUnsigned(lhs,rhs)` was true — including two 32-bit unsigned operands
+(Cardinal/LongWord/Word/Byte), so `cardinal(3) - cardinal(5)` evaluated as
+2^64-2. Changed to return `tyUInt64` only when an operand is itself a 64-bit
+unsigned type (`tyUInt64`/`tyNativeUInt`); otherwise `tyInt64`. Two
+32-bit-or-narrower unsigned operands fit in Int64, so the result is signed —
+matching FPC. `TypeCompareUnsigned` (relational comparison signedness) is
+untouched.
+
+Verified vs FPC `{$mode objfpc}`: `a-b` = -2, store-back wrap unchanged
+(4294967295 / 0), `a+b` = 8, `uint64 - n` stays unsigned. Gate: `make test`
+(self-host byte-identical) + FPC oracle. Closes bug-cardinal-expr-promotion.
 
 ## Symptom
 

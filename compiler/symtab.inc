@@ -1307,6 +1307,21 @@ begin
     Result := tyInt64;
 end;
 
+function TypeArithmeticResultOp(lhs, rhs: TTypeKind; op: TTokenKind): TTypeKind;
+{ Operator-aware integer promotion, matching FPC's range-based result type.
+  Most operators keep the TypeCompareUnsigned widening (e.g. LongWord * LongWord
+  can reach ~2^64, so it stays UInt64). SUBTRACTION of unsigned operands can go
+  negative, and FPC yields a signed Int64 unless a true 64-bit unsigned operand
+  (UInt64/QWord/NativeUInt) forces UInt64 — so `cardinal(3) - cardinal(5)` = -2,
+  not 2^64-2, while `qword - qword` stays unsigned. }
+begin
+  if (op = tkMinus) and (lhs <> tyUInt64) and (rhs <> tyUInt64) and
+     (lhs <> tyNativeUInt) and (rhs <> tyNativeUInt) then
+    Result := tyInt64
+  else
+    Result := TypeArithmeticResult(lhs, rhs);
+end;
+
 function TypeDivideUnsigned(dividend: TTypeKind): Boolean;
 begin
   Result := TypeIsOrdinal(dividend) and not TypeSigned(dividend);
