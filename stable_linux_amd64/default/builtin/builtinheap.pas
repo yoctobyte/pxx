@@ -1506,14 +1506,14 @@ begin
 end;
 
 procedure PXXWriteFloatSci(p: Pointer);
-{ Pascal scientific notation <' '|'-'>d.<15 digits>E<'+'|'-'>ddd. Mirrors
-  EmitWriteFloatSci (x86-64), including the leading-space positive sign. }
-var x, m, dv, r, two52, scale15: Double; e, d, k: Integer; ch: Char;
+{ Pascal scientific notation <' '|'-'>d.<16 digits>E<'+'|'-'>ddd (17 significant
+  digits, 3-digit exponent), matching FPC's Str(Double) field width and the
+  x86-64 EmitWriteFloatSci. The mantissa is extracted MSD-first into a 17-digit
+  integer so each step only truncates a value in [0,10) — preserves ~17 accurate
+  digits, unlike one (x*1e16) multiply which overflows the 53-bit mantissa. One
+  guard digit rounds half-up. Includes the leading-space positive sign. }
+var x: Double; e, d, k: Integer; m, divisor: Int64; ch: Char;
 begin
-  two52 := 1;
-  for k := 1 to 52 do two52 := two52 * 2;
-  scale15 := 1;
-  for k := 1 to 15 do scale15 := scale15 * 10;
   x := PDouble(p)^;
   if PByte(Int64(p) + 7)^ >= 128 then
   begin
@@ -1524,7 +1524,7 @@ begin
     write(' ');
   if x = 0 then
   begin
-    write('0.000000000000000E+000');
+    write('0.0000000000000000E+000');
     Exit;
   end;
   e := 0;
@@ -1538,23 +1538,31 @@ begin
     x := x * 10;
     e := e - 1;
   end;
-  { m := round-even(x * 1e15): 16 significant digits. Above 2^52 the value
-    is already integral, matching cvtsd2si exactly. }
-  m := x * scale15;
-  if m < two52 then
+  m := 0;
+  for k := 0 to 16 do
   begin
-    r := m + two52;
-    m := r - two52;
+    d := Trunc(x);
+    if d > 9 then d := 9;
+    m := m * 10 + d;
+    x := (x - d) * 10;
   end;
-  dv := scale15;
-  for k := 0 to 15 do
+  d := Trunc(x);                 { guard digit }
+  if d >= 5 then m := m + 1;
+  { carry past the leading digit (9.99..->10.0): drop a digit, bump exponent }
+  divisor := 1;
+  for k := 0 to 16 do divisor := divisor * 10;   { 10^17 }
+  if m >= divisor then
   begin
-    d := Trunc(m / dv);
-    m := m - d * dv;
-    ch := Chr(48 + d);
+    m := m div 10;
+    e := e + 1;
+  end;
+  for k := 16 downto 0 do
+  begin
+    divisor := 1;
+    for d := 1 to k do divisor := divisor * 10;
+    ch := Chr(48 + ((m div divisor) mod 10));
     write(ch);
-    if k = 0 then write('.');
-    dv := dv / 10;
+    if k = 16 then write('.');
   end;
   write('E');
   if e < 0 then

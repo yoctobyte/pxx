@@ -39,3 +39,4 @@
 2026-06-23T12:58:29Z  v39  59d5aa64092018e982367fcd8b12c559d71fe5e87ecd14a25abd7c49e76008ef  6d285d57a0f7d89793ad457aa5e4294399e039e8  feat: array constructor [...] as an open-array argument
 2026-06-23T14:12:21Z  v40  d9c7095c131d20187bc961cf3d328ad82df945080289862c9aeac6cd25ddc367  54b2657c584dc596a1ca0ebc765333443dec7c85  docs(progress): close bug-import-class-sibling-call (MAX_UMETH overflow)
 2026-06-23T16:19:25Z  v41  74001f6639747822273e633918caa0f9669a71fa4c0671cea107f28700fc933b  a987d29f8c414a45cda914d468c6709d6b027085  docs(progress): close bug-pchar-empty-managed-string-nil
+2026-06-23T17:22:05Z  v42  53c7b3684d174bb36b77414a30b533c36f9f889d428e3a7e15bf2d8b7dd6b5ac  8840c8d1eb2d2f842736c1bcee8b2fa186a90724  docs(progress): close bug-ir-unsupported-call-lvalue (no longer reproduces)
