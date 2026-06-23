@@ -2761,7 +2761,12 @@ begin
           specialId := -cpi;
           if specialId = Ord(tkLength) then
           begin
-            if pathIdx = 0 then isRefArg := True;
+            { Force-address the Length arg only when it is an lvalue (string/array
+              variable, field, element): the codegen reads its [-8] header from the
+              slot. A non-lvalue string VALUE (a concat / function result) is
+              lowered as a value instead — the codegen's tyAnsiString-value path
+              reads the length from the handle directly. }
+            if pathIdx = 0 then isRefArg := IsASTLValue(ASTLeft[item]);
           end
           else if (specialId = Ord(tkSysRead)) or (specialId = Ord(tkSyswrite)) then
           begin

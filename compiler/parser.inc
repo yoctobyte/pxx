@@ -3052,25 +3052,24 @@ begin
         CurASTNode := node;
         Exit;
       end;
-      if CurTok.Kind <> tkIdent then Error('Length: expected string variable');
-      idx := FindSym(CurTok.SVal); Next;
-      { ParseLValueAST resolves implicit-Self fields when idx<0 and errors
-        ('undefined variable') if the name is truly unknown, so no extra
-        idx<0 guard here — that would reject a valid implicit-Self field. }
-      valNode := ParseLValueAST(idx, TokPos - 2);
+      { Any string/array r-value: an lvalue (var/field/element) keeps the
+        force-addressed [data-8] header read; a non-lvalue managed-string value
+        (concat / function result) lowers as a value (IR side de-references the
+        handle directly — see IsASTLValue gate in ir.inc). ParseExpr also resolves
+        a bare ident / implicit-Self field exactly as ParseLValueAST did. }
+      ParseExpr;
+      valNode := CurASTNode;
       Expect(tkRParen, ')');
-      { Length of a whole 1-D static array is a compile-time constant (FPC too).
-        The runtime -tkLength path reads a [data-8] length header, which only a
-        dyn array / open-array param has — a bare static array has none, so fold
-        the count here. Params (incl. open arrays, ArrLen=1000 sentinel) keep the
-        runtime path; multi-dim (SymArrNDims>=2) keeps it too (Length is the first
-        dimension, handled separately). }
-      if (idx >= 0) and (ASTKind[valNode] = AN_IDENT) and (ASTIVal[valNode] = idx) and
-         Syms[idx].IsArray and (Syms[idx].ArrLen >= 0) and (Syms[idx].Kind <> skParam) and
-         (SymArrNDims[idx] <= 1) then
+      { Length of a whole 1-D static array is a compile-time constant (FPC too):
+        the runtime -tkLength path reads a [data-8] length header, which only a
+        dyn array / open-array param has — a bare static array has none. Params
+        (incl. open arrays) and multi-dim keep the runtime path. }
+      if (ASTKind[valNode] = AN_IDENT) and (ASTIVal[valNode] >= 0) and
+         Syms[ASTIVal[valNode]].IsArray and (Syms[ASTIVal[valNode]].ArrLen >= 0) and
+         (Syms[ASTIVal[valNode]].Kind <> skParam) and (SymArrNDims[ASTIVal[valNode]] <= 1) then
       begin
         node := AllocNode(AN_INT_LIT);
-        ASTIVal[node] := Syms[idx].ArrLen; ASTTk[node] := Ord(tyInteger);
+        ASTIVal[node] := Syms[ASTIVal[valNode]].ArrLen; ASTTk[node] := Ord(tyInteger);
         CurASTNode := node;
       end
       else
