@@ -23,7 +23,8 @@ const
 
 type
   THandler = class
-    selected: Integer;
+    selected: Integer;     { the pile being dragged from, -1 = none }
+    moveCount: Integer;
     PaintBox: TPaintBox;
     StatusLabel: TLabel;
     constructor Create(APaint: TPaintBox; ALabel: TLabel);
@@ -31,10 +32,12 @@ type
     procedure DrawPile(Canvas: TCanvas; p, x, y: Integer; fanned: Boolean);
     procedure OnPaint(Sender: TControl; Canvas: TCanvas);
     procedure Refresh;
-    procedure SelectPile(p: Integer);
     function FaceUpRun(p: Integer): Integer;
     function HitPile(x, y: Integer): Integer;
+    function DoMoveBest(src, dst: Integer): Boolean;
     procedure DoMouseDown(Sender: TControl; Button, X, Y: Integer);
+    procedure DoMouseUp(Sender: TControl; Button, X, Y: Integer);
+    procedure DoKeyDown(Sender: TControl; KeyCode: Integer);
     procedure DoNew(Sender: TObject);
     procedure DoDraw(Sender: TObject);
     procedure DoUndo(Sender: TObject);
@@ -64,6 +67,7 @@ begin
   PaintBox := APaint;
   StatusLabel := ALabel;
   selected := -1;
+  moveCount := 0;
   NewGame(1);
 end;
 
@@ -142,9 +146,8 @@ procedure THandler.Refresh;
 begin
   if StatusLabel <> nil then
   begin
-    if IsWon then StatusLabel.Caption := 'You win!'
-    else if selected >= 0 then StatusLabel.Caption := 'Source selected'
-    else StatusLabel.Caption := 'Pick a pile';
+    if IsWon then StatusLabel.Caption := 'You win!  Moves: ' + IntToStr(moveCount)
+    else StatusLabel.Caption := 'Moves: ' + IntToStr(moveCount);
   end;
   if PaintBox <> nil then PaintBox.Invalidate;
 end;
@@ -158,24 +161,21 @@ begin
   FaceUpRun := k;
 end;
 
-procedure THandler.SelectPile(p: Integer);
-var k: Integer; done: Boolean;
+{ Move the largest legal face-up run from src onto dst; counts on success. }
+function THandler.DoMoveBest(src, dst: Integer): Boolean;
+var k: Integer;
 begin
-  if selected < 0 then
-    selected := p
-  else
+  DoMoveBest := False;
+  k := FaceUpRun(src);
+  while (k >= 1) and (not DoMoveBest) do
   begin
-    { move the largest legal face-up run from `selected` onto p }
-    done := False;
-    k := FaceUpRun(selected);
-    while (k >= 1) and (not done) do
+    if TryMove(src, dst, k) then
     begin
-      if TryMove(selected, p, k) then done := True;
-      k := k - 1;
+      moveCount := moveCount + 1;
+      DoMoveBest := True;
     end;
-    selected := -1;
+    k := k - 1;
   end;
-  Refresh;
 end;
 
 { Which pile is at (x,y)? Mirrors the OnPaint layout. -1 = none. }
@@ -202,22 +202,46 @@ begin
   end;
 end;
 
+{ Press: clicking the stock draws; otherwise begin a drag from that pile. }
 procedure THandler.DoMouseDown(Sender: TControl; Button, X, Y: Integer);
 var p: Integer;
 begin
   p := HitPile(X, Y);
   if p < 0 then Exit;
-  if p = P_STOCK then        { click the stock to draw / recycle }
+  if p = P_STOCK then
   begin
     DrawStock;
     selected := -1;
-    Refresh;
   end
   else
-    SelectPile(p);           { click a source then a destination (incl. foundation) }
+    selected := p;
+  Refresh;
 end;
 
-procedure THandler.DoNew(Sender: TObject);  begin NewGame(Random(100000) + 1); selected := -1; Refresh; end;
+{ Release: drop the dragged run onto the pile under the cursor. }
+procedure THandler.DoMouseUp(Sender: TControl; Button, X, Y: Integer);
+var d: Integer; ok: Boolean;
+begin
+  if selected < 0 then Exit;
+  d := HitPile(X, Y);
+  if (d >= 0) and (d <> selected) then ok := DoMoveBest(selected, d);
+  selected := -1;
+  Refresh;
+end;
+
+procedure THandler.DoKeyDown(Sender: TControl; KeyCode: Integer);
+begin
+  case KeyCode of
+    110: DoNew(nil);        { n }
+    117: DoUndo(nil);       { u }
+    97:  DoAuto(nil);       { a }
+    100: DoDraw(nil);       { d }
+    32:  DoDraw(nil);       { space }
+    113: gtk_main_quit;     { q }
+  end;
+end;
+
+procedure THandler.DoNew(Sender: TObject);  begin NewGame(Random(100000) + 1); selected := -1; moveCount := 0; Refresh; end;
 procedure THandler.DoDraw(Sender: TObject); begin DrawStock; selected := -1; Refresh; end;
 procedure THandler.DoUndo(Sender: TObject); begin Undo; selected := -1; Refresh; end;
 procedure THandler.DoAuto(Sender: TObject);
@@ -225,9 +249,9 @@ var moved: Boolean; p: Integer;
 begin
   repeat
     moved := False;
-    if AutoFoundation(P_WASTE) then moved := True;
+    if AutoFoundation(P_WASTE) then begin moved := True; moveCount := moveCount + 1; end;
     for p := 0 to 6 do
-      if AutoFoundation(P_TAB + p) then moved := True;
+      if AutoFoundation(P_TAB + p) then begin moved := True; moveCount := moveCount + 1; end;
   until not moved;
   selected := -1; Refresh;
 end;
@@ -263,15 +287,19 @@ begin
 
   Status := TLabel.Create;
   Status.Parent := Form1;
-  Status.Caption := 'Pick a pile';
-  Status.SetBounds(580, 10, 200, 24);
+  Status.Caption := 'Moves: 0   (drag cards; keys: n/u/a/d/q)';
+  Status.SetBounds(580, 10, 220, 24);
 
   H := THandler.Create(PaintBox, Status);
 
   pm.Code := @H.OnPaint; pm.Data := H;
   PaintBox.OnPaint := pm;
   pm.Code := @H.DoMouseDown; pm.Data := H;
-  PaintBox.OnMouseDown := pm;   { click the board to play }
+  PaintBox.OnMouseDown := pm;     { press a pile to start a drag }
+  pm.Code := @H.DoMouseUp; pm.Data := H;
+  PaintBox.OnMouseUp := pm;       { release on a pile to drop }
+  pm.Code := @H.DoKeyDown; pm.Data := H;
+  PaintBox.OnKeyDown := pm;       { n/u/a/d/q shortcuts }
 
   pm.Data := H;
   pm.Code := @H.DoNew;   MkButton(Form1, 'New',  580,  50, 90, pm);
@@ -284,9 +312,10 @@ begin
   if ParamCount > 0 then arg := ParamStr(1);
   if arg = '--smoke' then
   begin
-    { headless integration check driven through the click handler: clicking the
-      stock must draw a card (verifies hit-test -> action), then auto + two
-      tableau clicks (source/dest) exercise the click-to-move path. }
+    { headless integration check through the drag handlers: press the stock to
+      draw (asserts hit-test -> action), auto to foundations, then a drag
+      (press col 6, release col 5) exercises the click-to-move path. A key
+      shortcut (u = undo) exercises the keyboard path. }
     H.OnPaint(PaintBox, PaintBox.Canvas);
     H.DoMouseDown(PaintBox, 1, 30, 40);          { stock -> draw }
     if PileCount(P_WASTE) <> 1 then
@@ -295,8 +324,9 @@ begin
       Halt(1);
     end;
     H.DoAuto(nil);
-    H.DoMouseDown(PaintBox, 1, 10 + 6 * 70 + 5, 200);  { tableau col 6 (source) }
-    H.DoMouseDown(PaintBox, 1, 10 + 5 * 70 + 5, 200);  { tableau col 5 (dest) }
+    H.DoMouseDown(PaintBox, 1, 10 + 6 * 70 + 5, 200);  { press tableau col 6 }
+    H.DoMouseUp(PaintBox, 1, 10 + 5 * 70 + 5, 200);    { release on col 5 }
+    H.DoKeyDown(PaintBox, 117);                          { 'u' = undo }
     H.OnPaint(PaintBox, PaintBox.Canvas);
     writeln('SMOKE OK');
   end
