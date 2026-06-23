@@ -209,10 +209,22 @@ cmd_ready() {
 }
 
 cmd_leverage() {
-  echo "== LEVERAGE (how many tickets each slug unblocks) =="
-  local f
+  echo "== LEVERAGE (how many not-yet-done tickets each slug unblocks) =="
+  local f b done_list
+  # A done blocker provides no leverage (it is already satisfied), and a
+  # done/rejected source ticket needs no unblocking — exclude both so the count
+  # reflects only real, remaining unblocking work. Uses the same done set as the
+  # READY computation for consistency.
+  done_list="$(done_slugs)"
   while IFS= read -r f; do
-    blockers_of "$f"
+    case "$f" in
+      "$PROG"/done/*|"$PROG"/rejected/*) continue ;;
+    esac
+    while IFS= read -r b; do
+      [ -n "$b" ] || continue
+      printf '%s\n' "$done_list" | grep -qxF "$b" && continue
+      printf '%s\n' "$b"
+    done < <(blockers_of "$f")
   done < <(find "$PROG" -name '*.md' ! -name 'README.md' ! -name 'BOARD.md') \
     | sort | uniq -c | sort -rn | sed 's/^/  /'
 }

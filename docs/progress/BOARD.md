@@ -391,32 +391,8 @@ _none_
 
 ## Leverage (tickets each one unblocks)
 
-- **5** — feature-unified-heap-allocator
-- **3** — feature-eliah-m0-window
-- **2** — feature-target-i386
-- **2** — feature-target-aarch64
-- **2** — feature-rtti-layout-table
-- **2** — feature-rtl-image-bitmap-library
 - **2** — feature-c-source-frontend
-- **2** — feature-cross-target-feature-parity
-- **2** — feature-cross-managed-string-cow
-- **1** — feature-terminal-ansi-library
-- **1** — feature-target-esp32
-- **1** — feature-target-arm32
 - **1** — feature-mimic-fpc
-- **1** — feature-managed-exception-cleanup
-- **1** — feature-image-ascii-renderer-library
-- **1** — feature-hashing-library
 - **1** — feature-esp32-idf-xtensa
-- **1** — feature-eliah-m1-designer
-- **1** — feature-elf-rel-writer
-- **1** — feature-cross-selfhost-i386
-- **1** — feature-cross-selfhost-arm32
-- **1** — feature-cross-selfhost-aarch64
-- **1** — feature-cross-bootstrap
-- **1** — feature-compression-library
-- **1** — feature-compiler-warnings
-- **1** — feature-array-of-const
-- **1** — chore-qemu-test-env
+- **1** — feature-eliah-m0-window
 - **1** — chore-inc-to-units
-- **1** — bug-managed-byref-string-param-store
