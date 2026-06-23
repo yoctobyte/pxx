@@ -90,3 +90,12 @@ method-refs don't alias the importer's symbol slots.
 GUI graph — under the limit). Wiring it into Eliah (`LoadLfmText` seeding the
 designer docmodel) is **parked**: Eliah keeps its hardcoded sample form until this
 is fixed. No app-logic workaround applied — the integration is simply blocked.
+
+## Resolution
+
+Fixed 5b38502 (Track A). Root cause: `MAX_UMETH = 256` (method slots across all
+user classes) overflowed by the 12-unit Eliah graph + ubad6's intra-class
+method ref. `AddUMeth` had NO bounds check → silent corruption of adjacent
+globals → "undefined variable" on the importer's own members. Grew table to
+8192 and added Error guards to AddUMeth + AddUClass (latter also unchecked).
+Front-end-only, self-host byte-identical, full make test green.
