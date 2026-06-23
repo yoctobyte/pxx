@@ -1,9 +1,27 @@
 # bug: Low() missing; High() wrong on non-zero-based arrays
 
 - **Type:** bug (Track A — parser + codegen) — includes a silent miscompile
-- **Status:** backlog
+- **Status:** done
 - **Found:** 2026-06-23, differential probe vs FPC
+- **Closed:** 2026-06-23
 - **Severity:** medium-high (`High` returns a wrong value silently; `Low` absent)
+
+## Resolution (2026-06-23)
+
+Front-end only (parser fold), no codegen. Both defects use the array's stored
+lower bound `Syms[].ConstVal` (set by AllocArray; 0 for open/dynamic/0-based):
+
+1. `High(1-D static array)` now folds to `ConstVal + ArrLen - 1` (the upper
+   index bound) instead of `ArrLen - 1` — fixes the silent miscompile for a
+   non-zero lower bound (`array[5..9]` → 9, was 4). 0-based arrays unchanged
+   (ConstVal=0). Open/dynamic `High` keeps the Length-based 0-based path.
+2. `Low(array)` (the `tkLow` token added in feature-high-low-of-type) folds to
+   `ConstVal` for a 1-D static array (`array[5..9]` → 5), else 0 (open/dynamic).
+
+`for i := Low(a) to High(a)` idiom now correct. Verified byte-identical to FPC
+for static (any bounds), 0-based, and dynamic arrays. N-D arrays keep existing
+behavior (out of scope; ConstVal=0 for flattened N-D). Gate: `make test`
+(self-host byte-identical, no reseed — front-end only) + FPC oracle.
 
 ## Two defects
 

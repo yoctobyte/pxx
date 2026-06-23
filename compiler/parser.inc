@@ -3042,14 +3042,17 @@ begin
       { See Length above: ParseLValueAST handles implicit-Self + undefined. }
       valNode := ParseLValueAST(idx, TokPos - 2);
       Expect(tkRParen, ')');
-      { High of a whole 1-D static array folds to the constant count-1 (see the
-        Length fold above for why the runtime path can't serve a static array). }
+      { High of a whole 1-D static array folds to its upper index bound (see the
+        Length fold above for why the runtime path can't serve a static array).
+        The lower bound is in Syms[].ConstVal (0 for a 0-based array), so the
+        upper bound is ConstVal + count - 1 — NOT count - 1, which silently
+        miscompiled non-zero-based arrays (array[5..9] -> 4 instead of 9). }
       if (idx >= 0) and (ASTKind[valNode] = AN_IDENT) and (ASTIVal[valNode] = idx) and
          Syms[idx].IsArray and (Syms[idx].ArrLen >= 0) and (Syms[idx].Kind <> skParam) and
          (SymArrNDims[idx] <= 1) then
       begin
         CurASTNode := AllocNode(AN_INT_LIT);
-        ASTIVal[CurASTNode] := Syms[idx].ArrLen - 1; ASTTk[CurASTNode] := Ord(tyInteger);
+        ASTIVal[CurASTNode] := Syms[idx].ConstVal + Syms[idx].ArrLen - 1; ASTTk[CurASTNode] := Ord(tyInteger);
       end
       else
       begin
@@ -3066,7 +3069,9 @@ begin
     tkLow:
     begin
       { Low(ordinalType)/Low(enum) folds to a compile-time constant. Low of an
-        array variable is 0 (pxx normalizes dyn/open/static arrays to 0-based). }
+        array variable is the declared lower index bound — Syms[].ConstVal for a
+        1-D static array (e.g. array[5..9] -> 5); 0 for open/dynamic arrays and
+        for 0-based statics. }
       Next; Expect(tkLParen, '(');
       if TryFoldHighLowType(False, node) then
       begin
@@ -3079,7 +3084,12 @@ begin
       valNode := ParseLValueAST(idx, TokPos - 2);   { consume the array variable }
       Expect(tkRParen, ')');
       CurASTNode := AllocNode(AN_INT_LIT);
-      ASTIVal[CurASTNode] := 0; ASTTk[CurASTNode] := Ord(tyInteger);
+      if (idx >= 0) and Syms[idx].IsArray and (Syms[idx].Kind <> skParam) and
+         (SymArrNDims[idx] <= 1) then
+        ASTIVal[CurASTNode] := Syms[idx].ConstVal
+      else
+        ASTIVal[CurASTNode] := 0;
+      ASTTk[CurASTNode] := Ord(tyInteger);
     end;
     tkGetMem:
     begin

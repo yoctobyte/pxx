@@ -25,7 +25,7 @@ _none_
 | --- | --- | --- | --- | --- |
 | feature-c-runtime-library | B | feature | C runtime/library layer (`lib/crtl`) plus direct C-library packages | feature-c-source-frontend |
 
-## backlog (61)
+## backlog (60)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -33,7 +33,6 @@ _none_
 | bug-cardinal-expr-promotion | A | bug | bug: cardinal/longword binary-op promotes to uint64 (FPC: int64) | — |
 | bug-case-insensitive-incomplete-builtins-funcs | A | bug | bug: case-insensitivity incomplete — builtins + function calls still case-sensitive | — |
 | bug-length-rejects-non-variable | A | bug | bug: Length() rejects a non-variable argument (literal / expression) | — |
-| bug-low-missing-high-wrong-nonzero-array | A | bug | bug: Low() missing; High() wrong on non-zero-based arrays | — |
 | bug-nested-brace-comments | A | bug | bug: `{ }` comments do not nest | — |
 | bug-overload-resolution-by-type | A | bug | bug: overload resolution binds a string arg to an earlier integer-param overload | — |
 | bug-paramstr-inline-argstr | A | bug | bug: ParamStr/ArgStr result not usable inline (needs a string variable) | — |
@@ -125,7 +124,7 @@ _none_
 | feature-mimic-fpc | B | feature | `mimic FPC` compatibility mode | — |
 | feature-string-model-tyfixedstring | B | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (197)
+## done (198)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -154,6 +153,7 @@ _none_
 | bug-implicit-textfile-unit-method-local | A | bug | Implicit textfile import misses method-local `Text` in units | — |
 | bug-impl-prescan-codegen-regression | A | bug | Unit impl-section pre-scan silently miscompiles routines (zlib decode broken) | — |
 | bug-keywords-case-sensitive | A | bug | Capitalized keywords not recognized (case-sensitive keyword table) | — |
+| bug-low-missing-high-wrong-nonzero-array | A | bug | bug: Low() missing; High() wrong on non-zero-based arrays | — |
 | bug-managed-byref-string-param-store | A | bug | Managed by-ref AnsiString params: store-through-var no-ops / segfaults | — |
 | bug-managed-to-frozen-string-assign-crash | A | bug | Assigning a managed string (tyAnsiString) into a frozen `string` (tyString) miscompiles → segfault | — |
 | bug-many-param-call-corruption | A | bug | Self-hosted x86-64 backend miscompiles calls with many parameters | — |
@@ -341,7 +341,6 @@ _none_
 - [A] bug-cardinal-expr-promotion
 - [A] bug-case-insensitive-incomplete-builtins-funcs
 - [A] bug-length-rejects-non-variable
-- [A] bug-low-missing-high-wrong-nonzero-array
 - [A] bug-nested-brace-comments
 - [A] bug-overload-resolution-by-type
 - [A] bug-paramstr-inline-argstr
