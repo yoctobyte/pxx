@@ -8215,7 +8215,7 @@ end;
 procedure ParseVarSection;
 var names: array[0..MAX_DECL_NAMES-1] of AnsiString; n, i, idx: Integer; tk: TTypeKind;
     isArr, isDyn: Boolean; arrLo, arrHi: Integer; elemTk: TTypeKind; dynDepth: Integer;
-    initElem: Integer; initVal: Int64; elemResolved: Boolean;
+    initElem: Integer; initVal: Int64; elemResolved: Boolean; elemDynDepth: Integer;
     isArrND: Boolean; ndCnt, dLo, dHi, di, flatLen, ai: Integer;
     moreDims: Boolean;
     ndDimLo, ndDimSpan: array[0..MAX_ARR_DIMS-1] of Integer;
@@ -8236,7 +8236,7 @@ begin
     until not Eat(tkComma);
     Expect(tkColon, ':');
     isArr := False; isDyn := False; arrLo := 0; arrHi := 0; elemTk := tyInteger;
-    elemResolved := False;
+    elemResolved := False; elemDynDepth := 0;
     isArrND := False; ndCnt := 0;
     ai := -1;
     if CurTok.Kind = tkIdent then ai := FindArrayType(CurTok.SVal);
@@ -8337,6 +8337,25 @@ begin
           end;
         end;
       end;
+      { A FIXED array whose element is a dynamic-array alias
+        (`array[0..3] of TA`, TA = `array of T`): each element slot holds a
+        pointer-sized dyn-array handle. Record the element's dyn depth in
+        elemDynDepth (threaded into SymElemDynDepth via LastTypeElemDynDepth at
+        AllocArray); base element type/rec come from the alias. The dynamic-outer
+        case above already handled its own alias element. }
+      if isArr and (not isDyn) and (not elemResolved) and (CurTok.Kind = tkIdent) then
+      begin
+        ai := FindArrayType(CurTok.SVal);
+        if (ai >= 0) and ArrTypeIsDyn[ai] then
+        begin
+          elemTk := IntToTypeKind(ArrTypeElemTk[ai]);
+          LastTypeRecId := ArrTypeElemRec[ai];
+          elemDynDepth := ArrTypeDynDepth[ai];
+          Next;                 { consume the alias name }
+          tk := elemTk;
+          elemResolved := True;
+        end;
+      end;
       if not elemResolved then
       begin
         elemTk := ParseTypeKind;
@@ -8360,6 +8379,7 @@ begin
 	          idx := AllocDynArray(names[i], elemTk, dynDepth)
 	        else
 	        begin
+	          LastTypeElemDynDepth := elemDynDepth;  { fixed array of a dyn-array element (consumed + reset by AllocArray) }
 	          idx := AllocArray(names[i], elemTk, arrLo, arrHi);
 	          if elemTk = tyRecord then
 	            Syms[idx].ElemRecName := LastTypeRecId;
@@ -11697,6 +11717,51 @@ begin
   for i := savedSC to SymCount - 1 do
     if Syms[i].Kind = skLocal then
     begin
+      { Fixed array whose elements are dynamic-array handles (`array[..] of TA`):
+        nil each pointer-sized slot so SetLength on an element does not release a
+        garbage "old" handle. Done as a per-element loop of pointer-sized stores
+        (not one multi-byte memset) so it works on every target — the cross
+        backends reject the >pointer-sized managed-aggregate zero path. }
+      if Syms[i].IsArray and (Syms[i].ArrLen <> -1) and (SymElemDynDepth[i] > 0) then
+      begin
+        for j := 0 to Syms[i].ArrLen - 1 do
+        begin
+          if TargetArch = TARGET_I386 then
+          begin
+            EmitB($C7); EmitB($85); EmitI32(Syms[i].Offset + j * TARGET_PTR_SIZE); EmitI32(0);
+          end
+          else if TargetArch = TARGET_ARM32 then
+          begin
+            EmitLoadImmArm32(9, Syms[i].Offset + j * TARGET_PTR_SIZE);
+            EmitI32($E08B9009);                                          { add r9, fp, r9 }
+            EmitI32($E3A00000);                                          { mov r0, #0 }
+            EmitI32($E5890000);                                          { str r0, [r9] }
+          end
+          else if TargetArch = TARGET_AARCH64 then
+          begin
+            EmitLoadImmA64(9, Syms[i].Offset + j * TARGET_PTR_SIZE);
+            EmitI32($8B0903A9);                                          { add x9, x29, x9 }
+            EmitI32($F900013F);                                          { str xzr, [x9] }
+          end
+          else if TargetArch = TARGET_XTENSA then
+          begin
+            EmitFrameAddrXtensa(reg_xtensa_a8, Syms[i].Offset + j * TARGET_PTR_SIZE);
+            xtensa_movi(reg_xtensa_a9, 0);
+            xtensa_s32i(reg_xtensa_a9, reg_xtensa_a8, 0);
+          end
+          else if TargetArch = TARGET_RISCV32 then
+          begin
+            EmitLoadImmRISCV32(reg_t0, Syms[i].Offset + j * TARGET_PTR_SIZE);
+            rv32_add(reg_t0, reg_s0, reg_t0);
+            rv32_sw(reg_zero, reg_t0, 0);
+          end
+          else
+          begin
+            EmitB($48); EmitB($C7); EmitB($85); EmitI32(Syms[i].Offset + j * TARGET_PTR_SIZE); EmitI32(0);
+          end;
+        end;
+        Continue;
+      end;
       zeroBytes := 0;
       if Syms[i].IsArray and (Syms[i].ArrLen = -1) then
         zeroBytes := TARGET_PTR_SIZE                          { dyn-array handle }

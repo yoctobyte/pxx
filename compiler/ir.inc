@@ -455,7 +455,14 @@ begin
     AN_INDEX:
       begin
         bd := NodeDynDepth(ASTLeft[node]);
-        if bd > 0 then Result := bd - 1;
+        if bd > 0 then Result := bd - 1
+        else if (ASTKind[ASTLeft[node]] = AN_IDENT) and
+                (Syms[ASTIVal[ASTLeft[node]]].IsArray) and
+                (Syms[ASTIVal[ASTLeft[node]]].ArrLen <> -1) and
+                (SymElemDynDepth[ASTIVal[ASTLeft[node]]] > 0) then
+          { Indexing a FIXED array whose element is a dynamic array
+            (`array[..] of TA`): the element is a dyn array of this depth. }
+          Result := SymElemDynDepth[ASTIVal[ASTLeft[node]]];
       end;
   end;
 end;
@@ -469,6 +476,10 @@ begin
   if ASTKind[node] = AN_IDENT then
   begin
     if Syms[ASTIVal[node]].IsArray and (Syms[ASTIVal[node]].ArrLen = -1) then
+      Result := Syms[ASTIVal[node]].ElemType
+    else if Syms[ASTIVal[node]].IsArray and (Syms[ASTIVal[node]].ArrLen <> -1) and
+            (SymElemDynDepth[ASTIVal[node]] > 0) then
+      { fixed array of a dyn-array element: element base type lives in ElemType }
       Result := Syms[ASTIVal[node]].ElemType;
   end
   else if ASTKind[node] = AN_FIELD then
@@ -699,7 +710,21 @@ begin
           lo := Syms[ASTIVal[baseNode]].ConstVal;
       end;
     end;
-    
+
+    { A FIXED array whose element is a dynamic array (`array[..] of TA`) stores a
+      pointer-sized handle per slot, regardless of the element base type's own
+      size — override the stride so a[i] addresses the right slot, and tag the
+      slot-address node tyPointer (like a nested dyn sub-array element) so Length
+      / indexing treat a[i] as a dyn-array handle, not a base value. }
+    if isArr and (ASTKind[baseNode] = AN_IDENT) and
+       Syms[ASTIVal[baseNode]].IsArray and (Syms[ASTIVal[baseNode]].ArrLen <> -1) and
+       (SymElemDynDepth[ASTIVal[baseNode]] > 0) then
+    begin
+      elemSize := TARGET_PTR_SIZE;
+      Result := IRAppend(IR_INDEX, baseAddr, indexNode, lo, elemSize, Ord(tyPointer));
+      Exit;
+    end;
+
     Result := IRAppend(IR_INDEX, baseAddr, indexNode, lo, elemSize, ASTTk[node]);
   end
   else if ASTKind[node] = AN_FIELD then

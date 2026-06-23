@@ -740,6 +740,7 @@ var
   SymCaseSensitive : array[0..MAX_SYMS-1] of Boolean; { match this symbol name case-sensitively }
   SymUnitIdx : array[0..MAX_SYMS-1] of Integer; { Strs[] unit name, or -1 for main/local compiler-generated symbols }
   SymDynDepth : array[0..MAX_SYMS-1] of Integer; { dynamic-array nesting: 0=not dynamic, 1=array of T, 2=array of array of T, ... }
+  SymElemDynDepth : array[0..MAX_SYMS-1] of Integer; { for a FIXED array whose ELEMENT is itself a dynamic array (`array[..] of TDynAlias`): the element's dyn depth (0 = element not dynamic). Element base type/rec live in ElemType/ElemRecName; each slot is pointer-sized. }
   SymGenSlot  : array[0..MAX_SYMS-1] of Integer; { stackless generator: persistent-slot index for a local that must survive yields; -1 = not persisted }
   SymProcSig  : array[0..MAX_SYMS-1] of Integer; { procedural-type var/param: signature proc index (Procs[] entry, BodyAddr=-1) for indirect-call marshalling; -1 = not a proc-typed value }
   SymSetEnumId : array[0..MAX_SYMS-1] of Integer; { set var: element enum type index for `set of TEnum`, else -1. Drives `for e in set` range }
@@ -839,6 +840,7 @@ var
   DynamicSize      : Integer;
   DynamicNeededCount : Integer; { distinct DT_NEEDED libraries }
   LastTypeRecId : Integer;
+  LastTypeElemDynDepth : Integer; { set when a fixed-array element type resolves to a dynamic-array alias; consumed by AllocArray to lay the element out pointer-sized and record SymElemDynDepth, then reset }
   LastTypeStrCap : Integer; { frozen fixed-string capacity from the most recent string[N] type parse (0 = default); consumed by AllocVar/AllocArray, then reset }
   TVarRecId : Integer;   { record id of builtinheap.TVarRec (`array of const`
                            element), or REC_NONE if the unit isn't loaded }

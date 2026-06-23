@@ -1157,6 +1157,14 @@ begin
     zeroBytes := TARGET_PTR_SIZE;
     Result := True;
   end
+  else if Syms[i].IsArray and (Syms[i].ArrLen <> -1) and (SymElemDynDepth[i] > 0) then
+  begin
+    { Fixed array whose elements are dynamic-array handles (`array[..] of TA`):
+      each slot must start nil so SetLength on an element does not release a
+      garbage "old" handle. }
+    zeroBytes := Syms[i].ArrLen * TARGET_PTR_SIZE;
+    Result := True;
+  end
   else if Syms[i].TypeKind = tyAnsiString then
   begin
     if Syms[i].IsArray then
@@ -1471,6 +1479,7 @@ begin
   Syms[SymCount].IsArray  := False;
   Syms[SymCount].ArrLen   := 0;
   SymDynDepth[SymCount] := 0;
+  SymElemDynDepth[SymCount] := 0;
   SymGenSlot[SymCount] := -1;
   SymProcSig[SymCount] := -1;
   SymSetEnumId[SymCount] := -1;
@@ -1561,6 +1570,7 @@ begin
   Syms[SymCount].ArrLen   := 0;
   if isArray then Syms[SymCount].ArrLen := 1000;
   SymDynDepth[SymCount] := 0;
+  SymElemDynDepth[SymCount] := 0;
   SymGenSlot[SymCount] := -1;
   SymProcSig[SymCount] := -1;
   SymSetEnumId[SymCount] := -1;
@@ -1601,19 +1611,35 @@ function AllocArray(const name: AnsiString; elemType: TTypeKind; lo, hi: Integer
 var elemSize, totalSize, align: Integer;
 begin
   if SymCount >= MAX_SYMS then Error('too many symbols');
-  if elemType = tyString then
+  if LastTypeElemDynDepth > 0 then
+  begin
+    { Element is itself a dynamic array (`array[..] of TDynAlias`): each slot holds
+      a pointer-sized heap handle. The base element type/rec stay in
+      elemType/LastTypeRecId; SymElemDynDepth (set below) marks the slots dynamic. }
+    elemSize := TARGET_PTR_SIZE;
+    align := TARGET_PTR_SIZE;
+  end
+  else if elemType = tyString then
   begin
     if CurProc < 0 then elemSize := STRING_CAP + 8
     else elemSize := LOCAL_STR_CAP + 8;
+    align := TARGET_PTR_SIZE;
   end
   else if (elemType = tyFixedString) or (elemType = tyShortString) then
-    elemSize := FrozenStrSlotSize(elemType, LastTypeStrCap)
-  else if elemType = tyRecord then elemSize := RecSize(LastTypeRecId)
-  else elemSize := TypeSize(elemType);
-  if (elemType = tyString) or (elemType = tyFixedString) or (elemType = tyShortString) or (elemType = tyRecord) then
-    align := TARGET_PTR_SIZE
+  begin
+    elemSize := FrozenStrSlotSize(elemType, LastTypeStrCap);
+    align := TARGET_PTR_SIZE;
+  end
+  else if elemType = tyRecord then
+  begin
+    elemSize := RecSize(LastTypeRecId);
+    align := TARGET_PTR_SIZE;
+  end
   else
+  begin
+    elemSize := TypeSize(elemType);
     align := TypeAlign(elemType);
+  end;
 
   totalSize := (hi - lo + 1) * elemSize;
   Syms[SymCount].Name     := name;
@@ -1622,6 +1648,7 @@ begin
   Syms[SymCount].IsArray  := True;
   Syms[SymCount].ArrLen   := hi - lo + 1;
   SymDynDepth[SymCount] := 0;
+  SymElemDynDepth[SymCount] := LastTypeElemDynDepth;
   SymArrNDims[SymCount] := 0;
   SymProcSig[SymCount] := -1;
   SymRTTIOff[SymCount] := -1;
@@ -1660,6 +1687,7 @@ begin
     Syms[SymCount].Kind   := skLocal;
     Syms[SymCount].Offset := -FrameSize;
   end;
+  LastTypeElemDynDepth := 0;   { consumed }
   Result := SymCount; Inc(SymCount);
 end;
 
@@ -1676,6 +1704,7 @@ begin
   Syms[SymCount].IsArray     := True;
   Syms[SymCount].ArrLen      := -1;           { -1 = dynamic }
   SymDynDepth[SymCount] := depth;
+  SymElemDynDepth[SymCount] := 0;
   SymProcSig[SymCount] := -1;
   SymRTTIOff[SymCount] := -1;
   { Reset the same recycled parallel-array fields AllocVar does — symbol slots

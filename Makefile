@@ -854,6 +854,8 @@ test-core: $(COMPILER)
 	test "$$(/tmp/test_nested_dynarray_alias26)" = "$$(printf '1\n1\n1\n1\n1\n1\n1\n1\n1')"
 	./$(COMPILER) test/test_dynarray_managed_field_reassign.pas /tmp/test_dynarray_managed_field_reassign26
 	test "$$(/tmp/test_dynarray_managed_field_reassign26)" = "$$(printf '1\n1\n1\n1\n1\n1')"
+	./$(COMPILER) test/test_fixed_array_of_dynarray.pas /tmp/test_fixed_array_of_dynarray26
+	test "$$(/tmp/test_fixed_array_of_dynarray26)" = "$$(printf '1\n1\n1\n1\n1\n1\n1\n1\n1\n1')"
 	./$(COMPILER) test/test_nested_dynarray_managed.pas /tmp/test_nested_dynarray_managed26
 	test "$$(/tmp/test_nested_dynarray_managed26)" = "$$(printf '1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1')"
 	./$(COMPILER) --threadsafe test/test_nested_dynarray_managed.pas /tmp/test_nested_dynarray_managed_threadsafe26

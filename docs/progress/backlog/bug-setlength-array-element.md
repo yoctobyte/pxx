@@ -1,9 +1,39 @@
 # bug: SetLength rejects an indexed array element as target
 
 - **Type:** bug (Track A — IR codegen / type system)
-- **Status:** backlog (partially fixed 2026-06-23 — case A done; case B remains)
+- **Status:** DONE 2026-06-23 (both cases A and B fixed, all targets)
 - **Found:** 2026-06-23, building the solitaire engine (array of card piles)
 - **Severity:** medium (forces a different data shape for arrays-of-dynarrays)
+
+## Update 2026-06-23 (later) — case B FIXED, all targets
+
+Case B (`var a: array[0..3] of TA`, fixed outer / dyn-array-alias element) is now
+fixed, end to end and on every target (verified x86-64 + aarch64/i386/arm32 vs
+FPC). The element layout change landed:
+
+- New `SymElemDynDepth[]` parallel array (defs.inc) — element dyn depth for a
+  FIXED array whose element is itself a dynamic array; reset in every `Alloc*`.
+- `LastTypeElemDynDepth` global threads the depth from the parser into
+  `AllocArray`, which lays each slot out pointer-sized and stamps
+  `SymElemDynDepth`. Parser detects the dyn-alias element in the fixed-array
+  var-section path (per-name, re-set before each `AllocArray`).
+- `NodeDynDepth` / `NodeDynBaseTk` (AN_INDEX) and the `IR_INDEX` stride/tag in
+  `ir.inc` now report `a[i]` as a pointer-sized dyn-array handle, so SetLength /
+  Length / indexing / whole-element assignment all route through the existing
+  dyn-array machinery (no new IR op — fully target-independent).
+- Proc-local fixed-array-of-dyn slots are nil'd in the prologue via a
+  per-element pointer-sized zero loop (works on all targets; the multi-byte
+  managed-aggregate zero path is x86-64-only), so SetLength on an element does
+  not release a garbage "old" handle (this was a segfault).
+
+Self-host byte-identical; `make test` green. Regression:
+`test/test_fixed_array_of_dynarray.pas` (globals, multi-name decl, record
+element, proc-local grow/shrink, repeated calls).
+
+Residual: scope-exit release of a proc-local fixed-array-of-dyn's element
+handles is not emitted (they leak at function return — no crash, correct output);
+matches pxx's existing tolerance for fixed-array-of-managed locals. A separate
+cleanup-pass enhancement if it ever matters.
 
 ## Update 2026-06-23 — root cause found; case A fixed
 
