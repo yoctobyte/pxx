@@ -41,3 +41,4 @@
 2026-06-23T16:19:25Z  v41  74001f6639747822273e633918caa0f9669a71fa4c0671cea107f28700fc933b  a987d29f8c414a45cda914d468c6709d6b027085  docs(progress): close bug-pchar-empty-managed-string-nil
 2026-06-23T17:22:05Z  v42  53c7b3684d174bb36b77414a30b533c36f9f889d428e3a7e15bf2d8b7dd6b5ac  8840c8d1eb2d2f842736c1bcee8b2fa186a90724  docs(progress): close bug-ir-unsupported-call-lvalue (no longer reproduces)
 2026-06-23T19:12:49Z  v43  c7b316f234fa6994ebf2b0dcb01d3e861c00cc86cf5a0a9032327bf4e3ff4169  26fd9a435f722ae063ce05af39c0a048497c5702  docs(progress): close bug-consteval-precedence
+2026-06-23T20:51:15Z  v44  4e2e39e67e0de88d68364aa39a5639cc50e1cf1d6b25f6c2341f003de8b54806  404abe4d35a44a242d95575414a4d4dbc2259e45  feat(codegen): metaclass-dispatched construction (classRefVar.Create)
