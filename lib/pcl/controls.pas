@@ -16,6 +16,7 @@ type
     FOnMouseUp: TMethod;
     FOnMouseMove: TMethod;
     FOnKeyDown: TMethod;
+    FOnResize: TMethod;
     procedure SetParent(p: TControl);
     procedure SetLeft(v: Integer);
     procedure SetTop(v: Integer);
@@ -49,6 +50,9 @@ type
     { Keyboard: procedure(Sender: TControl; KeyCode: Integer) of object — KeyCode
       is the GDK keyval (the widget must be focusable + focused). }
     property OnKeyDown: TMethod read FOnKeyDown write FOnKeyDown;
+    { Resize: procedure(Sender: TControl; Width, Height: Integer) of object,
+      from the widget's new allocation. }
+    property OnResize: TMethod read FOnResize write FOnResize;
   end;
 
   TWinControl = class(TControl)

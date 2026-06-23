@@ -37,10 +37,15 @@ type
   end;
   PGdkKey = ^TGdkKey;
 
+  { GtkAllocation is gint x, y, width, height. }
+  TAlloc = record x, y, w, h: Integer; end;
+  PAlloc = ^TAlloc;
+
   THandler = class
-    gotButton, gotX, gotY, gotKey, count, keyCount: Integer;
+    gotButton, gotX, gotY, gotKey, gotW, gotH, count, keyCount, resizeCount: Integer;
     procedure MouseDown(Sender: TControl; Button, X, Y: Integer);
     procedure KeyDown(Sender: TControl; KeyCode: Integer);
+    procedure Resize(Sender: TControl; Width, Height: Integer);
   end;
 
 procedure THandler.MouseDown(Sender: TControl; Button, X, Y: Integer);
@@ -57,6 +62,13 @@ begin
   keyCount := keyCount + 1;
 end;
 
+procedure THandler.Resize(Sender: TControl; Width, Height: Integer);
+begin
+  gotW := Width;
+  gotH := Height;
+  resizeCount := resizeCount + 1;
+end;
+
 var
   Form1: TForm;
   PaintBox: TPaintBox;
@@ -64,6 +76,7 @@ var
   m: TMethod;
   ev: PGdkBtn;
   evk: PGdkKey;
+  alloc: PAlloc;
   handled, fails: Integer;
 
 begin
@@ -80,10 +93,13 @@ begin
   h := THandler.Create;
   h.count := 0;
   h.keyCount := 0;
+  h.resizeCount := 0;
   m.Code := @h.MouseDown; m.Data := h;
   PaintBox.OnMouseDown := m;
   m.Code := @h.KeyDown; m.Data := h;
   PaintBox.OnKeyDown := m;
+  m.Code := @h.Resize; m.Data := h;
+  PaintBox.OnResize := m;
 
   Form1.Realize;
 
@@ -123,6 +139,16 @@ begin
   if h.keyCount < 1 then begin writeln('key-fired=bad'); fails := fails + 1; end
   else writeln('key-fired=ok');
   if h.gotKey = 65 then writeln('key=ok') else begin writeln('key=bad ', h.gotKey); fails := fails + 1; end;
+
+  { synthesize a size-allocate (new allocation 800x600) }
+  alloc := malloc(64);
+  alloc^.x := 0; alloc^.y := 0; alloc^.w := 800; alloc^.h := 600;
+  handled := 0;
+  g_signal_emit_by_name(PaintBox.Handle, PC('size-allocate'), alloc, @handled);
+  if h.resizeCount < 1 then begin writeln('resize-fired=bad'); fails := fails + 1; end
+  else writeln('resize-fired=ok');
+  if (h.gotW = 800) and (h.gotH = 600) then writeln('resize=ok')
+  else begin writeln('resize=bad ', h.gotW, 'x', h.gotH); fails := fails + 1; end;
 
   if fails = 0 then writeln('ALL OK') else writeln('FAILS=', fails);
   if fails <> 0 then Halt(1);

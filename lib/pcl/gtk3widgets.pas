@@ -431,6 +431,22 @@ begin
   ControlKeyDownTramp := 0;
 end;
 
+type PInt = ^Integer;
+
+procedure ControlSizeAllocateTramp(widget: Pointer; alloc: Pointer; userdata: Pointer); cdecl;
+var ctl: TControl; m: TMethod; w, h: Integer;
+begin
+  ctl := userdata;
+  m := ctl.OnResize;
+  if m.Code <> nil then
+  begin
+    { GtkAllocation is gint x,y,width,height -> width at offset 8, height at 12 }
+    w := PInt(Pointer(Int64(alloc) + 8))^;
+    h := PInt(Pointer(Int64(alloc) + 12))^;
+    CallMouseMethod(m.Code, m.Data, userdata, w, h, 0);
+  end;
+end;
+
 procedure MenuItemActivateTramp(widget: Pointer; userdata: Pointer); cdecl;
 var item: TMenuItem; m: TMethod;
 begin
@@ -815,6 +831,7 @@ begin
   { keyboard: make the drawing area focusable + route key presses }
   gtk_widget_set_can_focus(Result, 1);
   SignalConnectData(Result, 'key-press-event',      @ControlKeyDownTramp,   Pointer(APaintBox));
+  SignalConnectData(Result, 'size-allocate',        @ControlSizeAllocateTramp, Pointer(APaintBox));
 end;
 
 function TGtk3WidgetSet.GetMemoText(AMemo: TComponent): string;
