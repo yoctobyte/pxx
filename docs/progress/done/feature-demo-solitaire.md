@@ -1,7 +1,7 @@
 # Demo — console Klondike solitaire (user-requested entertainment test app)
 
 - **Type:** feature
-- **Status:** working
+- **Status:** done
 - **Owner:** Track B agent (reuses klondike engine + screen lib)
 - **Opened:** 2026-06-19 (user-called: "as user, I am calling solitaire")
 - **Relation:** demo-class, but a deliberate **exception to the catalog's
@@ -78,3 +78,5 @@ entertainment; ESP-serial via line mode. No self-host / cross regression.
   ScreenWaitKey so piped input drives it headlessly (EOF=KEY_NONE quits).
   Scripted smoke in `make lib-test`: `printf 'aq'` on seed 1 sends AS+AH to
   foundations -> `moves=2 won=0`. No GTK/display needed (pure terminal).
+
+Landed in commit d251206.
