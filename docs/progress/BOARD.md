@@ -25,18 +25,15 @@ _none_
 | --- | --- | --- | --- | --- |
 | feature-c-runtime-library | B | feature | C runtime/library layer (`lib/crtl`) plus direct C-library packages | feature-c-source-frontend |
 
-## backlog (59)
+## backlog (56)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
-| bug-cardinal-expr-promotion | A | bug | bug: cardinal/longword binary-op promotes to uint64 (FPC: int64) | — |
-| bug-ir-unsupported-call-lvalue | A | bug | bug: "Unsupported linear node Kind=10" — AN_CALL in lvalue-address position | — |
 | bug-length-rejects-non-variable | A | bug | bug: Length() rejects a non-variable argument (literal / expression) | — |
 | bug-nested-brace-comments | A | bug | bug: `{ }` comments do not nest | — |
 | bug-paramstr-inline-argstr | A | bug | bug: ParamStr/ArgStr result not usable inline (needs a string variable) | — |
 | bug-setlength-array-element | A | bug | bug: SetLength rejects an indexed array element as target | — |
 | bug-stderr-not-fd2 | B | bug | `writeln(StdErr, ...)` goes to stdout — StdErr not connected to fd 2 | — |
-| bug-variant-record-no-overlap | A | bug | bug: variant record (case fields) do not share storage | — |
 | bug-writeln-real-format | A | bug | bug: `WriteLn(real)` default format differs from FPC | — |
 | chore-inc-to-units | A | chore | `.inc` → real `.pas` units refactor | — |
 | chore-repin-new-intrinsics | A | chore | chore: re-pin stable to expose the new System intrinsics to Track B | — |
@@ -123,7 +120,7 @@ _none_
 | feature-mimic-fpc | B | feature | `mimic FPC` compatibility mode | — |
 | feature-string-model-tyfixedstring | B | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (201)
+## done (203)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -133,6 +130,7 @@ _none_
 | bug-bare-function-name-call-vs-resultvar | A | bug | Bare function name in an expression: PXX calls it, FPC/ISO reads the result var | — |
 | bug-builtin-val-miscompiles | A | bug | Builtin `Val` mis-lowers — wrong error code + segfault | — |
 | bug-builtin-write-case-sensitive | A | bug | Builtin write/writeln matched case-sensitively (only lowercase resolves) | — |
+| bug-cardinal-expr-promotion | A | bug | bug: cardinal/longword binary-op promotes to uint64 (FPC: int64) | — |
 | bug-case-insensitive-incomplete-builtins-funcs | A | bug | bug: case-insensitivity incomplete — builtins + function calls still case-sensitive | — |
 | bug-char-literal-in-const-expr | A | bug | Char literal in a constant expression: `ConstEval` rejected `'a'` | — |
 | bug-codegen-nested-index-load-width-pressure | A | bug | Codegen miscompiles nested integer-array index load width under register pressure | — |
@@ -184,6 +182,7 @@ _none_
 | bug-threadsafe-layout-rtti-helper-races | A | bug | Thread-safe layout RTTI helper races | feature-rtti-layout-table |
 | bug-untyped-float-const | A | bug | Untyped float const `const X = 1.5;` rejected (and `Single(expr)` value cast) | — |
 | bug-v36-pinned-binary-missing | A | bug | Pinned v36 binary is missing from git — `pinned` symlink dangles | — |
+| bug-variant-record-no-overlap | A | bug | bug: variant record (case fields) do not share storage | — |
 | bug-var-open-array-fixed-arg-length | A | bug | `var`/`out` open-array param: fixed-array argument passes a wrong length | — |
 | bug-whole-record-copy-main-body-noop | A | bug | Latent: whole-record array-element copy in main-program body emits store no-ops | — |
 | bug-writeln-boolean-format | A | bug | `WriteLn(Boolean)` prints `0`/`1` instead of `FALSE`/`TRUE` | — |
@@ -339,14 +338,11 @@ _none_
 
 ## Ready (no unmet blocker)
 
-- [A] bug-cardinal-expr-promotion
-- [A] bug-ir-unsupported-call-lvalue
 - [A] bug-length-rejects-non-variable
 - [A] bug-nested-brace-comments
 - [A] bug-paramstr-inline-argstr
 - [A] bug-setlength-array-element
 - [B] bug-stderr-not-fd2
-- [A] bug-variant-record-no-overlap
 - [A] bug-writeln-real-format
 - [A] chore-inc-to-units
 - [A] chore-repin-new-intrinsics
