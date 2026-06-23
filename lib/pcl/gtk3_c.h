@@ -149,8 +149,20 @@ char* gtk_widget_get_name(void* widget);
 // Widget visibility
 void gtk_widget_show(void* widget);
 
+// Input events (mouse / keyboard)
+void gtk_widget_add_events(void* widget, int events);
+void gtk_widget_set_can_focus(void* widget, int can_focus);
+void gtk_widget_grab_focus(void* widget);
+int gdk_event_get_button(void* event, unsigned int* button);
+int gdk_event_get_coords(void* event, double* x_win, double* y_win);
+int gdk_event_get_keyval(void* event, unsigned int* keyval);
+void* gtk_widget_get_window(void* widget);
+int gtk_widget_event(void* widget, void* event);
+void g_signal_emit_by_name(void* instance, char* detailed_signal, void* event, int* ret);
+
 // Libc
 int usleep(unsigned int usec);
+void* malloc(unsigned long size);
 
 #endif
 

@@ -12,6 +12,9 @@ type
     FLeft, FTop, FWidth, FHeight: Integer;
     FCaption: string;
     FOnClick: TMethod;
+    FOnMouseDown: TMethod;
+    FOnMouseUp: TMethod;
+    FOnMouseMove: TMethod;
     procedure SetParent(p: TControl);
     procedure SetLeft(v: Integer);
     procedure SetTop(v: Integer);
@@ -37,6 +40,11 @@ type
     property Height: Integer read FHeight write SetHeight;
     property Caption: string read FCaption write SetCaption;
     property OnClick: TMethod read FOnClick write FOnClick;
+    { Mouse events: procedure(Sender: TControl; Button, X, Y: Integer) of object.
+      Button is 1=left,2=middle,3=right (0 for moves). }
+    property OnMouseDown: TMethod read FOnMouseDown write FOnMouseDown;
+    property OnMouseUp: TMethod read FOnMouseUp write FOnMouseUp;
+    property OnMouseMove: TMethod read FOnMouseMove write FOnMouseMove;
   end;
 
   TWinControl = class(TControl)

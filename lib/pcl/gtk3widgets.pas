@@ -340,6 +340,81 @@ begin
     CallMethod(m.Code, m.Data, userdata);
 end;
 
+{ Dispatch a method procedure(Sender; Button, X, Y: Integer) of object: SysV
+  rdi=Self(data), rsi=Sender, edx=Button, ecx=X, r8d=Y. }
+procedure CallMouseMethod(code: Pointer; data: Pointer; sender: Pointer; button, x, y: Integer);
+begin
+  asm
+    push rbx
+    push r12
+    push r13
+    push r14
+    push r15
+    mov rdi, data
+    mov rsi, sender
+    mov edx, button
+    mov ecx, x
+    mov r8d, y
+    mov rax, code
+    mov r11, rsp
+    db 72, 131, 228, 240   { and rsp, -16 }
+    sub rsp, 8
+    push r11
+    db 255, 208            { call rax }
+    pop r11
+    mov rsp, r11
+    pop r15
+    pop r14
+    pop r13
+    pop r12
+    pop rbx
+  end;
+end;
+
+function ControlMouseDownTramp(widget: Pointer; event: Pointer; userdata: Pointer): Integer; cdecl;
+var ctl: TControl; m: TMethod; btn: LongWord; xd, yd: Double; r: Integer;
+begin
+  ctl := userdata;
+  m := ctl.OnMouseDown;
+  if m.Code <> nil then
+  begin
+    btn := 0; xd := 0; yd := 0;
+    r := gdk_event_get_button(event, @btn);
+    r := gdk_event_get_coords(event, @xd, @yd);
+    CallMouseMethod(m.Code, m.Data, userdata, Integer(btn), Trunc(xd), Trunc(yd));
+  end;
+  ControlMouseDownTramp := 0;   { 0 = let the event propagate }
+end;
+
+function ControlMouseUpTramp(widget: Pointer; event: Pointer; userdata: Pointer): Integer; cdecl;
+var ctl: TControl; m: TMethod; btn: LongWord; xd, yd: Double; r: Integer;
+begin
+  ctl := userdata;
+  m := ctl.OnMouseUp;
+  if m.Code <> nil then
+  begin
+    btn := 0; xd := 0; yd := 0;
+    r := gdk_event_get_button(event, @btn);
+    r := gdk_event_get_coords(event, @xd, @yd);
+    CallMouseMethod(m.Code, m.Data, userdata, Integer(btn), Trunc(xd), Trunc(yd));
+  end;
+  ControlMouseUpTramp := 0;
+end;
+
+function ControlMouseMoveTramp(widget: Pointer; event: Pointer; userdata: Pointer): Integer; cdecl;
+var ctl: TControl; m: TMethod; xd, yd: Double; r: Integer;
+begin
+  ctl := userdata;
+  m := ctl.OnMouseMove;
+  if m.Code <> nil then
+  begin
+    xd := 0; yd := 0;
+    r := gdk_event_get_coords(event, @xd, @yd);
+    CallMouseMethod(m.Code, m.Data, userdata, 0, Trunc(xd), Trunc(yd));
+  end;
+  ControlMouseMoveTramp := 0;
+end;
+
 procedure MenuItemActivateTramp(widget: Pointer; userdata: Pointer); cdecl;
 var item: TMenuItem; m: TMethod;
 begin
@@ -715,6 +790,12 @@ function TGtk3WidgetSet.CreatePaintBox(APaintBox: TComponent): Pointer;
 begin
   Result := gtk_drawing_area_new();
   SignalConnectData(Result, 'draw', @ControlDrawTramp, Pointer(APaintBox));
+  { request pointer events and route them to the OnMouse* handlers.
+    masks: BUTTON_PRESS(256) | BUTTON_RELEASE(512) | POINTER_MOTION(4) = 772 }
+  gtk_widget_add_events(Result, 772);
+  SignalConnectData(Result, 'button-press-event',   @ControlMouseDownTramp, Pointer(APaintBox));
+  SignalConnectData(Result, 'button-release-event', @ControlMouseUpTramp,   Pointer(APaintBox));
+  SignalConnectData(Result, 'motion-notify-event',  @ControlMouseMoveTramp, Pointer(APaintBox));
 end;
 
 function TGtk3WidgetSet.GetMemoText(AMemo: TComponent): string;
