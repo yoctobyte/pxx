@@ -8,13 +8,12 @@ lives in git, not in a timestamp._
 
 _none_
 
-## working (3)
+## working (2)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
 | feature-eliah-ide | B | feature | Eliah / Ilja — single-window IDE (GUI + TUI) | — |
 | feature-eliah-m0-window | B | feature | Eliah M0 — single tiled GTK3 window | — |
-| feature-eliah-m1-designer | B | feature | Eliah M1 — form designer (box emulation) | feature-eliah-m0-window |
 
 ## unfinished (0)
 
@@ -114,7 +113,7 @@ _none_
 | feature-mimic-fpc | B | feature | `mimic FPC` compatibility mode | — |
 | feature-string-model-tyfixedstring | B | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (217)
+## done (218)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -246,6 +245,7 @@ _none_
 | feature-dotted-unit-names | A | feature | Dotted / namespace unit names in `uses` | — |
 | feature-double-to-single-narrowing | A | feature | Double literal / value → Single narrowing on assign and argument | — |
 | feature-elf-rel-writer | A | feature | Relocatable ELF32 object writer (.o for ESP-IDF linking) | — |
+| feature-eliah-m1-designer | B | feature | Eliah M1 — form designer (box emulation) | feature-eliah-m0-window |
 | feature-empty-class-shorthand | A | feature | Empty class descendant shorthand | — |
 | feature-enum-explicit-values | A | feature | feature: enumerated type with explicit ordinal values | — |
 | feature-eof-stdin-builtin | A | feature | `Eof` (standard input) not recognized | — |
@@ -368,6 +368,7 @@ _none_
 - [A] feature-dynamic-soname-discovery
 - [A] feature-esp32-idf-xtensa
 - [B] feature-esp-peripheral-callback-api
+- [B] feature-ilja-tui
 - [A] feature-inline-asm-depth
 - [A] feature-inline-asm-multi-arch
 - [A] feature-inline-routines
