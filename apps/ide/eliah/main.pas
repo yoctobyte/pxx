@@ -94,6 +94,9 @@ type
     procedure OnValueKey(Sender: TControl; KeyCode: Integer);
     procedure ApplyEdit;
     procedure OnPlaceToggle(Sender: TObject);
+    procedure OnToggleLeft(Sender: TObject);
+    procedure OnToggleOutput(Sender: TObject);
+    procedure OnToggleRight(Sender: TObject);
   end;
 
 { palette index -> docmodel kind (Form is the root, never placed) }
@@ -325,6 +328,23 @@ begin
   if DesignBox <> nil then DesignBox.Invalidate;
 end;
 
+{ View menu: collapse/restore whole panels. Each toggles a splitter to (near)
+  zero, remembering the prior handle position so a second click restores it. }
+procedure THandler.OnToggleLeft(Sender: TObject);
+begin
+  if RootPaned <> nil then RootPaned.Toggle(1, 0);    { tree + errors column }
+end;
+
+procedure THandler.OnToggleOutput(Sender: TObject);
+begin
+  if colCenter <> nil then colCenter.Toggle(2, 0);    { build/run output }
+end;
+
+procedure THandler.OnToggleRight(Sender: TObject);
+begin
+  if midRight <> nil then midRight.Toggle(2, 0);      { designer + inspector }
+end;
+
 procedure THandler.OnFormResize(Sender: TControl; w, h: Integer);
 var contentH: Integer;
 begin
@@ -528,7 +548,7 @@ var
   sok: Boolean;
   rtdoc: TDocModel;
   MainMenu: TMainMenu;
-  FileMenu, EditMenu, BuildMenu, mi: TMenuItem;
+  FileMenu, EditMenu, BuildMenu, ViewMenu, mi: TMenuItem;
 
 function MkMenuItem(const cap: AnsiString; parent: TMenuItem): TMenuItem;
 var it: TMenuItem;
@@ -671,6 +691,11 @@ begin
   mi := MkMenuItem('&Compile', BuildMenu); mi.OnClick := @H.OnCompile;
   mi := MkMenuItem('&Run',     BuildMenu); mi.OnClick := @H.OnRun;
 
+  ViewMenu := TMenuItem.Create(nil); ViewMenu.Caption := '&View'; MainMenu.Items.Add(ViewMenu);
+  mi := MkMenuItem('Toggle &Left Panel',  ViewMenu); mi.OnClick := @H.OnToggleLeft;
+  mi := MkMenuItem('Toggle &Output',      ViewMenu); mi.OnClick := @H.OnToggleOutput;
+  mi := MkMenuItem('Toggle &Right Panel', ViewMenu); mi.OnClick := @H.OnToggleRight;
+
   Form1.OnResize := @H.OnFormResize;   { reflow panes on window resize }
 
   btn := MkButton('Up',      4);   btn.OnClick := @H.OnUp;
@@ -730,6 +755,13 @@ begin
     H.Relayout(200, 120);
     if H.RootPaned.Height < 160 then begin writeln('SMOKE FAIL: reflow did not clamp height'); Halt(1); end;
     H.Relayout(W_WIN, H_WIN);   { restore }
+
+    { View-menu collapse/restore: toggling the left panel collapses RootPaned's
+      pane 1 (position-only, allocation-independent) and toggling again restores. }
+    H.OnToggleLeft(nil);
+    if H.RootPaned.CollapsedPane <> 1 then begin writeln('SMOKE FAIL: left panel did not collapse'); Halt(1); end;
+    H.OnToggleLeft(nil);
+    if H.RootPaned.CollapsedPane <> 0 then begin writeln('SMOKE FAIL: left panel did not restore'); Halt(1); end;
 
     { open any .lfm from the tree: clicking a .lfm reloads the designer + retargets Save }
     H.Dsn.Doc := TDocModel.Create;   { wipe to prove OpenDesign reloads }

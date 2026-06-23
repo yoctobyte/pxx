@@ -59,5 +59,21 @@ begin
   if VSplit.ActualPosition <> 120 then
   begin writeln('FAIL: VSplit reposition mismatch'); Halt(1); end;
 
-  writeln('PASS: TPaned splits, packs two children each, position round-trips');
+  { collapse pane 1 to a 16px strip, then restore to the remembered position }
+  HSplit.Position := 150;
+  HSplit.Collapse(1, 16);
+  if HSplit.CollapsedPane <> 1 then begin writeln('FAIL: not marked collapsed'); Halt(1); end;
+  if HSplit.ActualPosition <> 16 then begin writeln('FAIL: collapse did not shrink to strip'); Halt(1); end;
+  HSplit.Restore;
+  if HSplit.CollapsedPane <> 0 then begin writeln('FAIL: still marked collapsed'); Halt(1); end;
+  if HSplit.ActualPosition <> 150 then begin writeln('FAIL: restore did not return to remembered pos'); Halt(1); end;
+
+  { Toggle: collapse then restore via the same call }
+  HSplit.Toggle(1, 0);
+  if HSplit.CollapsedPane <> 1 then begin writeln('FAIL: toggle did not collapse'); Halt(1); end;
+  HSplit.Toggle(1, 0);
+  if HSplit.CollapsedPane <> 0 then begin writeln('FAIL: toggle did not restore'); Halt(1); end;
+  if HSplit.ActualPosition <> 150 then begin writeln('FAIL: toggle restore pos wrong'); Halt(1); end;
+
+  writeln('PASS: TPaned splits, packs two children each, position + collapse/restore');
 end.

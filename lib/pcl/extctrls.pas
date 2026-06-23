@@ -52,12 +52,22 @@ type
   private
     FVertical: Boolean;
     FPosition: Integer;
+    FCollapsedPane: Integer;   { 0 = none, 1 = pane1 collapsed, 2 = pane2 collapsed }
+    FRestorePos: Integer;      { handle position remembered across a collapse }
     procedure SetPosition(v: Integer);
+    function AxisSize: Integer; { allocated span along the split axis }
   public
     constructor Create(AOwner: TComponent); override;
     procedure CreateHandle; override;
     function Realize: Integer; override;
     function ActualPosition: Integer;   { live handle position from the widget }
+    { Collapse a pane to (near) zero, remembering the current handle position;
+      Restore puts it back. AStrip leaves that many px visible (0 = fully gone).
+      Toggle collapses APane if open, else restores. APane is 1 or 2. }
+    procedure Collapse(APane: Integer; AStrip: Integer);
+    procedure Restore;
+    procedure Toggle(APane: Integer; AStrip: Integer);
+    function CollapsedPane: Integer;    { 0 none, else which pane is collapsed }
   published
     { Set Vertical (and optionally Position) before the form is realized — the
       paned handle is built lazily at Realize time. }
@@ -88,6 +98,8 @@ begin
   { Lazy handle: Vertical must be known at CreateHandle, so defer to Realize. }
   FVertical := False;
   FPosition := 0;
+  FCollapsedPane := 0;
+  FRestorePos := 0;
 end;
 
 procedure TPaned.CreateHandle;
@@ -124,6 +136,49 @@ begin
     Result := gtk_paned_get_position(Self.Handle)
   else
     Result := 0;
+end;
+
+{ the paned's span along its split axis (width if horizontal, height if vertical) }
+function TPaned.AxisSize: Integer;
+begin
+  if Self.Handle = nil then Result := 0
+  else if FVertical then Result := gtk_widget_get_allocated_height(Self.Handle)
+  else Result := gtk_widget_get_allocated_width(Self.Handle);
+end;
+
+procedure TPaned.Collapse(APane: Integer; AStrip: Integer);
+var sz: Integer;
+begin
+  if Self.Handle = nil then Exit;
+  if FCollapsedPane <> 0 then Restore;          { only one collapse at a time }
+  FRestorePos := gtk_paned_get_position(Self.Handle);
+  if APane = 1 then
+    SetPosition(AStrip)                          { pane1 shrinks to the strip }
+  else
+  begin
+    sz := AxisSize;
+    if sz <= 0 then sz := FRestorePos;           { not allocated yet: best effort }
+    SetPosition(sz - AStrip);                    { pane2 shrinks to the strip }
+  end;
+  FCollapsedPane := APane;
+end;
+
+procedure TPaned.Restore;
+begin
+  if FCollapsedPane = 0 then Exit;
+  SetPosition(FRestorePos);
+  FCollapsedPane := 0;
+end;
+
+procedure TPaned.Toggle(APane: Integer; AStrip: Integer);
+begin
+  if FCollapsedPane = APane then Restore
+  else Collapse(APane, AStrip);
+end;
+
+function TPaned.CollapsedPane: Integer;
+begin
+  Result := FCollapsedPane;
 end;
 
 { TTimer }

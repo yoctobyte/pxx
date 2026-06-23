@@ -168,6 +168,8 @@ void gtk_paned_set_position(void* paned, int position);
 int gtk_paned_get_position(void* paned);
 void* gtk_paned_get_child1(void* paned);
 void* gtk_paned_get_child2(void* paned);
+int gtk_widget_get_allocated_width(void* widget);
+int gtk_widget_get_allocated_height(void* widget);
 
 // Widget name (used for data association)
 void gtk_widget_set_name(void* widget, char* name);
