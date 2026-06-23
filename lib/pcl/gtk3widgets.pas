@@ -44,6 +44,7 @@ type
     procedure SetListIndex(AListBox: TComponent; AIndex: Integer); override;
     procedure ClearList(AListBox: TComponent); override;
     procedure DestroyWidget(AWidget: Pointer); override;
+    function SelectFolder(const ATitle: string): string; override;
     
     procedure AddComboItem(AComboBox: TComponent; const AText: string); override;
     function GetActiveIndex(AComboBox: TComponent): Integer; override;
@@ -962,6 +963,23 @@ begin
   end;
 end;
 
+function TGtk3WidgetSet.SelectFolder(const ATitle: string): string;
+var dlg, fname: Pointer; resp: Integer;
+begin
+  Result := '';
+  dlg := gtk_file_chooser_dialog_new(PChar(ATitle), nil,
+    GTK_FILE_CHOOSER_ACTION_SELECT_FOLDER, nil);
+  gtk_dialog_add_button(dlg, PChar('Cancel'), GTK_RESPONSE_CANCEL);
+  gtk_dialog_add_button(dlg, PChar('Open'), GTK_RESPONSE_ACCEPT);
+  resp := gtk_dialog_run(dlg);
+  if resp = GTK_RESPONSE_ACCEPT then
+  begin
+    fname := gtk_file_chooser_get_filename(dlg);
+    if fname <> nil then Result := PCharToStr(fname);
+  end;
+  gtk_widget_destroy(dlg);
+end;
+
 procedure TGtk3WidgetSet.ClearList(AListBox: TComponent);
 var h, row: Pointer; ctl: TControl;
 begin
@@ -1076,15 +1094,16 @@ begin
   
   vbox := GetVBoxPtr(win);
   if vbox = nil then begin Result := 0; Exit; end;
-  
-  menubar := GetMenuBarPtr(vbox);
+
+  { Track the menubar on the menu's root-item Handle, NOT the vbox widget-name:
+    that name slot already holds the fixed-container pointer (SetFixedPtr), and
+    overwriting it makes GetFixedPtr return nil (no child can enter the fixed).
+    Realize re-applies the menu, so destroy any prior menubar to avoid dupes. }
+  menubar := menu.Items.Handle;
   if menubar <> nil then
-  begin
     gtk_widget_destroy(menubar);
-  end;
-     
   menubar := gtk_menu_bar_new();
-  SetMenuBarPtr(vbox, menubar);
+  menu.Items.Handle := menubar;
   
   for i := 0 to menu.Items.Count - 1 do
   begin

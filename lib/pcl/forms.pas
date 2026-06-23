@@ -34,7 +34,15 @@ var
   Application: TApplication;
   RequireDerivedFormResource: Boolean;
 
+{ modal folder picker; returns the chosen path or '' if cancelled }
+function SelectFolderDialog(const ATitle: string): string;
+
 implementation
+
+function SelectFolderDialog(const ATitle: string): string;
+begin
+  SelectFolderDialog := WidgetSet.SelectFolder(ATitle);
+end;
 
 procedure TForm.SetMenu(v: TMainMenu);
 begin

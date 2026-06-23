@@ -20,7 +20,7 @@ program eliah;
   garin docmodel as emulated boxes, clicking a box hit-tests the model and shows
   a selection outline + the node's fields in the object-inspector pane below. }
 
-uses gtk3, controls, stdctrls, extctrls, graphics, forms, sysutils,
+uses gtk3, controls, stdctrls, extctrls, graphics, forms, menus, sysutils,
      buffer, runner, docmodel, designer, lfmload, builder;
 
 const
@@ -62,6 +62,8 @@ type
     procedure OnCompile(Sender: TObject);
     procedure OnRun(Sender: TObject);
     procedure OnUp(Sender: TObject);
+    procedure OnOpenFolder(Sender: TObject);
+    procedure OnExit(Sender: TObject);
     procedure OnSave(Sender: TObject);
     procedure OnDelete(Sender: TObject);
     procedure OnNew(Sender: TObject);
@@ -259,6 +261,19 @@ end;
 procedure THandler.OnUp(Sender: TObject);
 begin
   LoadDir(ParentDir(dir));
+end;
+
+{ File -> Open Folder: pick a directory and make it the project tree root }
+procedure THandler.OnOpenFolder(Sender: TObject);
+var p: AnsiString;
+begin
+  p := SelectFolderDialog('Open Project Folder');
+  if p <> '' then LoadDir(p);
+end;
+
+procedure THandler.OnExit(Sender: TObject);
+begin
+  Halt(0);
 end;
 
 { reflow the panes for a content area of w x h (mirrors the startup layout).
@@ -469,6 +484,17 @@ var
   sbuf: TIdeBuffer;
   sok: Boolean;
   rtdoc: TDocModel;
+  MainMenu: TMainMenu;
+  FileMenu, EditMenu, BuildMenu, mi: TMenuItem;
+
+function MkMenuItem(const cap: AnsiString; parent: TMenuItem): TMenuItem;
+var it: TMenuItem;
+begin
+  it := TMenuItem.Create;
+  it.Caption := cap;
+  parent.Add(it);
+  MkMenuItem := it;
+end;
 
 function MkButton(const cap: AnsiString; x: Integer): TButton;
 var b: TButton;
@@ -555,6 +581,24 @@ begin
   H.designPath := SAMPLE_LFM;   { seeded from the sample; Save targets it until a .lfm is opened }
   H.Win := Form1;
   H.lastW := -1;
+
+  { main menu bar }
+  MainMenu := TMainMenu.Create;
+  Form1.Menu := MainMenu;
+
+  FileMenu := TMenuItem.Create; FileMenu.Caption := '&File'; MainMenu.Items.Add(FileMenu);
+  mi := MkMenuItem('&New',          FileMenu); mi.OnClick := @H.OnNew;
+  mi := MkMenuItem('&Open Folder...', FileMenu); mi.OnClick := @H.OnOpenFolder;
+  mi := MkMenuItem('&Save',         FileMenu); mi.OnClick := @H.OnSave;
+  mi := MkMenuItem('E&xit',         FileMenu); mi.OnClick := @H.OnExit;
+
+  EditMenu := TMenuItem.Create; EditMenu.Caption := '&Edit'; MainMenu.Items.Add(EditMenu);
+  mi := MkMenuItem('&Undo',   EditMenu); mi.OnClick := @H.OnUndo;
+  mi := MkMenuItem('&Delete', EditMenu); mi.OnClick := @H.OnDelete;
+
+  BuildMenu := TMenuItem.Create; BuildMenu.Caption := '&Build'; MainMenu.Items.Add(BuildMenu);
+  mi := MkMenuItem('&Compile', BuildMenu); mi.OnClick := @H.OnCompile;
+  mi := MkMenuItem('&Run',     BuildMenu); mi.OnClick := @H.OnRun;
 
   Form1.OnResize := @H.OnFormResize;   { reflow panes on window resize }
 

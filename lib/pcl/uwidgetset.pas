@@ -44,6 +44,7 @@ type
     procedure SetListIndex(AListBox: TComponent; AIndex: Integer); virtual;
     procedure ClearList(AListBox: TComponent); virtual;
     procedure DestroyWidget(AWidget: Pointer); virtual;
+    function SelectFolder(const ATitle: string): string; virtual;
     
     procedure AddComboItem(AComboBox: TComponent; const AText: string); virtual;
     function GetActiveIndex(AComboBox: TComponent): Integer; virtual;
@@ -97,6 +98,7 @@ function TWidgetSet.GetListIndex(AListBox: TComponent): Integer; begin GetListIn
 procedure TWidgetSet.SetListIndex(AListBox: TComponent; AIndex: Integer); begin end;
 procedure TWidgetSet.ClearList(AListBox: TComponent); begin end;
 procedure TWidgetSet.DestroyWidget(AWidget: Pointer); begin end;
+function TWidgetSet.SelectFolder(const ATitle: string): string; begin SelectFolder := ''; end;
 
 procedure TWidgetSet.AddComboItem(AComboBox: TComponent; const AText: string); begin end;
   function TWidgetSet.GetActiveIndex(AComboBox: TComponent): Integer; begin GetActiveIndex := -1; end;

@@ -40,6 +40,16 @@ void gtk_container_add(void* container, void* widget);
 void gtk_widget_show_all(void* widget);
 void gtk_widget_destroy(void* widget);
 
+// File chooser (folder picker). The dialog_new constructor is varargs; we pass a
+// NULL terminator (no inline buttons) and add buttons via gtk_dialog_add_button.
+#define GTK_FILE_CHOOSER_ACTION_SELECT_FOLDER 2
+#define GTK_RESPONSE_ACCEPT -3
+#define GTK_RESPONSE_CANCEL -6
+void* gtk_file_chooser_dialog_new(char* title, void* parent, int action, void* terminator);
+void* gtk_dialog_add_button(void* dialog, char* button_text, int response_id);
+int gtk_dialog_run(void* dialog);
+char* gtk_file_chooser_get_filename(void* chooser);
+
 // Additional Widgets & Layout
 void* gtk_label_new(char* text);
 void gtk_label_set_text(void* label, char* text);
