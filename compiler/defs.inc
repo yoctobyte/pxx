@@ -779,6 +779,8 @@ var
   ProcParamDynDepth : array[0..MAX_PARAM_DEPTHS-1] of Integer; { named dynamic-array param: dyn nesting depth (>0); 0 = not a named dynarray param. Persists because param syms are reused across procs. Distinguishes a resizable `TDynArr=array of T` param from an open `array of T` param at the call site. }
   ProcParamIsConst : array[0..MAX_PARAM_DEPTHS-1] of Boolean; { param declared `const` (read-only by-ref). Persists because param syms are reused across procs. At a call site, a `const` record param may bind a non-lvalue temporary (FPC behaviour) — the temp is materialized into a hidden local and its address passed; a `var`/`out` param still requires a true lvalue for write-back. }
   ProcParamUntyped : array[0..MAX_PARAM_DEPTHS-1] of Boolean; { param declared untyped (`var x`/`const x`/`out x`, no type) — an untyped by-ref param. Overload matching accepts ANY argument type for this slot; the caller passes the argument's address. Underpins Move/FillChar-style routines. }
+  ProcParamHasDefault : array[0..MAX_PARAM_DEPTHS-1] of Boolean; { param has a default value (`b: Integer = 10`). Trailing params only. A call omitting trailing args supplies these; overload matching accepts nArgs in [required..ParamCount]. }
+  ProcParamDefaultVal : array[0..MAX_PARAM_DEPTHS-1] of Int64;   { the constant-folded default ordinal value (when ProcParamHasDefault). }
   CurrentCLibrary : AnsiString;
   CTypeIsVoid : Boolean; { last ParseCDeclType saw bare void (no pointer) }
   CTypePtrDepth : Integer;   { pointer-star count of the last ParseCDeclType (0 = not a pointer) }

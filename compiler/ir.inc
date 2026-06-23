@@ -2846,6 +2846,22 @@ begin
         item := ASTRight[item];
         Inc(pathIdx);
       end;
+      { Default parameters: a call that omitted trailing args supplies each
+        remaining param's constant default (ordinal/char/bool/enum). MatchProcCall
+        already accepted the shorter arity (ProcArityMatches). }
+      cpi := ASTIVal[node];
+      if cpi >= 0 then
+        while (pathIdx < Procs[cpi].ParamCount) and (pathIdx < 16) and
+              ProcParamHasDefault[cpi * 16 + pathIdx] do
+        begin
+          argNode := IRAppend(IR_ARG,
+            IRAppend(IR_CONST_INT, -1, -1, -1, ProcParamDefaultVal[cpi * 16 + pathIdx],
+                     Ord(Procs[cpi].Params[pathIdx].TypeKind)),
+            -1, -1, 0, Ord(Procs[cpi].Params[pathIdx].TypeKind));
+          if first < 0 then first := argNode else IRB[last] := argNode;
+          last := argNode;
+          Inc(pathIdx);
+        end;
       if ASTLiftedVar[node] >= 0 then
       begin
         callRetType := Procs[ASTIVal[node]].RetType;

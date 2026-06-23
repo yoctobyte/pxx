@@ -2777,6 +2777,25 @@ begin
              CaseEqual(Procs[idx].Name, name));
 end;
 
+function ProcArityMatches(i, nArgs: Integer): Boolean;
+{ Exact arity, OR a call that omits trailing args whose params all carry a default
+  value (`f(a; b: T = d)` callable as `f(x)`). The type-match phases only check
+  the supplied args[0..nArgs-1]; the omitted ones are filled with their defaults
+  at call lowering. }
+var k: Integer;
+begin
+  if Procs[i].ParamCount = nArgs then begin Result := True; Exit; end;
+  if (nArgs >= 0) and (nArgs < Procs[i].ParamCount) then
+  begin
+    Result := True;
+    for k := nArgs to Procs[i].ParamCount - 1 do
+      if (k >= 16) or (not ProcParamHasDefault[i * 16 + k]) then
+      begin Result := False; Exit; end;
+    Exit;
+  end;
+  Result := False;
+end;
+
 function MatchProcCall(const name: AnsiString; nArgs: Integer; const argTypes: array of TTypeKind): Integer;
 var i, j: Integer; match: Boolean; cn: AnsiString;
 begin
@@ -2793,7 +2812,7 @@ begin
   begin
     if ProcNameMatches(i, name) then
     begin
-      if Procs[i].ParamCount = nArgs then
+      if ProcArityMatches(i, nArgs) then
       begin
         match := True;
         for j := 0 to nArgs-1 do
@@ -2842,7 +2861,7 @@ begin
     declaration order; every other arg must still be an exact type match. }
   for i := 0 to ProcCount-1 do
   begin
-    if ProcNameMatches(i, name) and (Procs[i].ParamCount = nArgs) then
+    if ProcNameMatches(i, name) and ProcArityMatches(i, nArgs) then
     begin
       match := True;
       for j := 0 to nArgs-1 do
@@ -2867,7 +2886,7 @@ begin
   begin
     if ProcNameMatches(i, name) then
     begin
-      if Procs[i].ParamCount = nArgs then
+      if ProcArityMatches(i, nArgs) then
       begin
         match := True;
         for j := 0 to nArgs-1 do
@@ -2913,7 +2932,7 @@ begin
     so existing record/class overloads are unaffected. }
   for i := 0 to ProcCount-1 do
   begin
-    if ProcNameMatches(i, name) and (Procs[i].ParamCount = nArgs) then
+    if ProcNameMatches(i, name) and ProcArityMatches(i, nArgs) then
     begin
       match := True;
       for j := 0 to nArgs-1 do

@@ -10213,6 +10213,9 @@ var
   pbyref    : array[0..15] of Boolean;
   pconst    : array[0..15] of Boolean;  { param declared `const` (read-only by-ref) — lets a temporary bind to it }
   puntyped  : array[0..15] of Boolean;  { param declared untyped (var/const/out, no type) — matches any arg type, address passed }
+  pdefault  : array[0..15] of Boolean;  { param has a default value (`b: Integer = 10`) }
+  pdefaultval : array[0..15] of Int64;  { the constant-folded default ordinal }
+  hasDefault : Boolean; defaultVal : Int64;
   pNDims    : array[0..15] of Integer;
   pDynDepth : array[0..15] of Integer;  { named dynamic-array param: dyn nesting depth (>0), 0 = not a dyn-array param }
   pDimLo    : array[0..16*MAX_ARR_DIMS-1] of Integer;
@@ -10313,6 +10316,7 @@ begin
     begin
       isByRef := False;
       isConst := False;
+      hasDefault := False; defaultVal := 0;
       if (CurTok.Kind = tkVar) or
          ((CurTok.Kind = tkIdent) and CaseEqual(CurTok.SVal, 'out')) then
       begin
@@ -10403,6 +10407,14 @@ begin
       end
       else
         tk := ParseTypeKind;
+      { Default value: `b: Integer = 10`. Constant-folded; supplied at a call that
+        omits the (trailing) argument. }
+      if CurTok.Kind = tkEq then
+      begin
+        Next;
+        defaultVal := ConstEval;
+        hasDefault := True;
+      end;
       end;  { close the typed (has-colon) branch }
       { A `const` record param is passed by reference (like FPC). Passing it by
         value truncates to a single qword, dropping all but the first field. }
@@ -10419,6 +10431,8 @@ begin
         parr[i] := isArr;
         pbyref[i] := isByRef;
         pconst[i] := isConst;
+        pdefault[i] := hasDefault;
+        pdefaultval[i] := defaultVal;
         pNDims[i] := paramNDims;
         pDynDepth[i] := paramDynDepth;
         for pdi := 0 to paramNDims - 1 do
@@ -10736,6 +10750,8 @@ begin
             if pDynDepth[i] > 0 then ProcParamDynDepth[procIdx * 16 + i] := pDynDepth[i];
             ProcParamIsConst[procIdx * 16 + i] := pconst[i];
             ProcParamUntyped[procIdx * 16 + i] := puntyped[i];
+            ProcParamHasDefault[procIdx * 16 + i] := pdefault[i];
+            ProcParamDefaultVal[procIdx * 16 + i] := pdefaultval[i];
             if (ptypes[i] = tyClass) or (ptypes[i] = tyRecord) then
               ProcParamRecId[procIdx * 16 + i] := ptypesRec[i];
           end;
@@ -10865,6 +10881,8 @@ begin
     Procs[procIdx].Params[i].SymIdx := idx;
     if (procIdx >= 0) and (i < 16) then ProcParamIsConst[procIdx * 16 + i] := pconst[i];
     if (procIdx >= 0) and (i < 16) then ProcParamUntyped[procIdx * 16 + i] := puntyped[i];
+    if (procIdx >= 0) and (i < 16) then ProcParamHasDefault[procIdx * 16 + i] := pdefault[i];
+    if (procIdx >= 0) and (i < 16) then ProcParamDefaultVal[procIdx * 16 + i] := pdefaultval[i];
     if pDynDepth[i] > 0 then
     begin
       { Named dynamic-array type param: a real dynamic array, NOT an open-array
