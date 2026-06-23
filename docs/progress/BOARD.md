@@ -11,12 +11,11 @@ lives in git, not in a timestamp._
 | bug-metaclass-new-getclass-vmt | A | bug | bug: metaclass construction via GetClass stamps a non-canonical VMT | — |
 | bug-nested-comment-breaks-fpc-brace | A | bug | bug: nested `{ }` comments break the FPC idiom `{ ... '{' ... }` | — |
 
-## working (3)
+## working (2)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
 | feature-eliah-ide | B | feature | Eliah / Ilja — single-window IDE (GUI + TUI) | — |
-| feature-eliah-layout-tree | B | feature | feature: Eliah layout tree — window as a nested-TPaned splitter tree | — |
 | feature-eliah-m0-window | B | feature | Eliah M0 — single tiled GTK3 window | — |
 
 ## unfinished (1)
@@ -121,7 +120,7 @@ lives in git, not in a timestamp._
 | feature-mimic-fpc | B | feature | `mimic FPC` compatibility mode | — |
 | feature-string-model-tyfixedstring | B | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (232)
+## done (233)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -262,6 +261,7 @@ lives in git, not in a timestamp._
 | feature-dotted-unit-names | A | feature | Dotted / namespace unit names in `uses` | — |
 | feature-double-to-single-narrowing | A | feature | Double literal / value → Single narrowing on assign and argument | — |
 | feature-elf-rel-writer | A | feature | Relocatable ELF32 object writer (.o for ESP-IDF linking) | — |
+| feature-eliah-layout-tree | B | feature | feature: Eliah layout tree — window as a nested-TPaned splitter tree | — |
 | feature-eliah-m1-designer | B | feature | Eliah M1 — form designer (box emulation) | feature-eliah-m0-window |
 | feature-eliah-m2-builder | B | feature | Eliah M2 — builder integration | feature-eliah-m0-window |
 | feature-eliah-pane-reflow | B | feature | Eliah — pane reflow / resizable splitters | feature-eliah-m0-window |
@@ -389,6 +389,7 @@ lives in git, not in a timestamp._
 - [A] feature-dynamic-soname-discovery
 - [B] feature-eliah-component-palette
 - [B] feature-eliah-from-lfm
+- [B] feature-eliah-pane-collapse
 - [B] feature-eliah-selection-link
 - [B] feature-eliah-shell
 - [A] feature-esp32-idf-xtensa
@@ -419,7 +420,6 @@ lives in git, not in a timestamp._
 
 ## Leverage (tickets each one unblocks)
 
-- **2** — feature-eliah-layout-tree
 - **2** — feature-c-source-frontend
 - **1** — feature-mimic-fpc
 - **1** — feature-esp32-idf-xtensa

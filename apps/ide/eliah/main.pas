@@ -2,16 +2,24 @@ program eliah;
 
 { Eliah — GTK face of the IDE.
 
-  A single sizable window, fixed tiled layout (no multi-window / modal). Toolbar
-  plus three live panes:
+  A single sizable window (no multi-window / modal). Menu + toolbar on top; below
+  them the whole pane area is ONE nested-TPaned splitter tree (RootPaned), so
+  every divider is a draggable splitter and the layout is data, not absolute math:
 
-    [ Up  Compile  Run ]
-    +--------+----------------------------------+
-    | proj   |   editor                         |
-    | tree   |                                  |
-    |        +----------------------------------+
-    |        |   build / run output             |
-    +--------+----------------------------------+
+    [ Up  Compile  Run … ]                         (toolbar — outside the tree)
+    +--------+----------------------+-------------+
+    | proj   |   editor             |  designer   |
+    | tree   |                      |             |
+    |--------+----------------------+-------------+
+    | errors |   build / run output | inspector   |
+    +--------+----------------------+-------------+
+
+    RootPaned(H) ─┬ colLeft(V):  tree / errors
+                  └ midRight(H) ─┬ colCenter(V): editor / output
+                                 └ colRight(V):  designer / colInspector(V): props / valueEdit
+
+  GtkPaned owns all splitter sizing; we seed initial handle positions once on the
+  first allocation (OnFormResize) and only resize RootPaned on window-resize.
 
   Working: the project tree lists a directory (click a folder to descend, "../"
   to go up, a file to open it in the editor through the garin buffer); Compile
@@ -50,6 +58,9 @@ type
     PlaceMode: Boolean;    { next designer click drops a new widget }
     Dsn: TDesigner;
     DesignBox: TPaintBox;
+    RootPaned: TPaned;     { fills the content area; the whole pane layout is its subtree }
+    colLeft, midRight, colCenter, colRight, colInspector: TPaned;
+    panedSeeded: Boolean;  { initial handle positions applied on first allocation }
     Win: TForm;
     dir, curFile, designPath, pendingSnap: AnsiString;
     undoStack: array of AnsiString;
@@ -301,36 +312,42 @@ begin
   Halt(0);
 end;
 
-{ reflow the panes for a content area of w x h (mirrors the startup layout).
-  Toolbar widgets stay pinned at the top. }
+{ reflow for a content area of w x h. The pane layout is the RootPaned subtree —
+  GtkPaned owns the internal splits, so we only resize the root to fill the area
+  below the toolbar. Toolbar widgets stay pinned at the top. }
 procedure THandler.Relayout(w, h: Integer);
-var cw, ch, contentH: Integer;
+var contentH: Integer;
 begin
   contentH := h - TOOLBAR_H;
-  cw := w - W_TREE - W_RIGHT;
-  ch := contentH - H_BOTTOM;
-  { clamp so panes never collapse to negative / zero on a tiny window }
-  if cw < 120 then cw := 120;
-  if ch < 80 then ch := 80;
   if contentH < 160 then contentH := 160;
-
-  Tree.SetBounds(0, TOOLBAR_H, W_TREE, contentH - ERR_H);
-  Errors.SetBounds(0, TOOLBAR_H + contentH - ERR_H, W_TREE, ERR_H);
-  Editor.SetBounds(W_TREE, TOOLBAR_H, cw, ch);
-  Output.SetBounds(W_TREE, TOOLBAR_H + ch, cw, contentH - ch);
-  DesignBox.SetBounds(W_TREE + cw, TOOLBAR_H, W_RIGHT, ch);
-  Props.SetBounds(W_TREE + cw, TOOLBAR_H + ch, W_RIGHT, contentH - ch - 28);
-  ValueEdit.SetBounds(W_TREE + cw, TOOLBAR_H + contentH - 28, W_RIGHT, 26);
-  DesignBox.Invalidate;
+  if RootPaned <> nil then
+    RootPaned.SetBounds(0, TOOLBAR_H, w, contentH);
+  if DesignBox <> nil then DesignBox.Invalidate;
 end;
 
 procedure THandler.OnFormResize(Sender: TControl; w, h: Integer);
+var contentH: Integer;
 begin
   { only react to a real width change; the GtkFixed's size-allocate otherwise
     feeds back on its own child sizes and walks the height up endlessly. }
   if w = lastW then Exit;
   lastW := w;
   Relayout(w, h);
+
+  { Seed the splitter handles once, on the first real allocation — GtkPaned
+    clamps a position set before it has a size, so doing it at construction
+    silently fails. Seed only once so later user drags are not reset. }
+  if (not panedSeeded) and (w > 0) and (RootPaned <> nil) then
+  begin
+    contentH := h - TOOLBAR_H;
+    RootPaned.Position    := W_TREE;             { left column width }
+    midRight.Position     := w - W_TREE - W_RIGHT;{ center column width }
+    colLeft.Position      := contentH - ERR_H;    { tree above errors }
+    colCenter.Position    := contentH - H_BOTTOM; { editor above output }
+    colRight.Position     := contentH - H_BOTTOM; { designer above inspector }
+    colInspector.Position := H_BOTTOM - 28;       { props above value edit }
+    panedSeeded := True;
+  end;
 end;
 
 { serialize the designer docmodel back to the open design file (round-trips the
@@ -506,6 +523,7 @@ var
   btn: TButton;
   arg, startDir: AnsiString;
   centerW, centerH, contentH: Integer;
+  colLeft, midRight, colCenter, colRight, colInspector: TPaned;
   sbuf: TIdeBuffer;
   sok: Boolean;
   rtdoc: TDocModel;
@@ -546,25 +564,54 @@ begin
   H := THandler.Create;
   H.Proj := TProject.Create;
 
+  { ── Pane layout is one TPaned tree filling the content area below the toolbar.
+    GtkPaned owns all splitter sizing + drag; we only seed initial handle
+    positions and resize the root on form-resize. No per-pane absolute math.
+
+        Root (H) ──┬─ colLeft (V): Tree / Errors
+                   └─ midRight (H) ─┬─ colCenter (V): Editor / Output
+                                    └─ colRight  (V): DesignBox / colInspector(V): Props / ValueEdit
+
+    Each leaf's first child fills pane 1, the second fills pane 2 (set Parent in
+    that order). ── }
+  H.RootPaned := TPaned.Create(nil);                 { horizontal: left | rest }
+  H.RootPaned.Parent := Form1;
+  H.RootPaned.SetBounds(0, TOOLBAR_H, W_WIN, contentH);
+
+  colLeft := TPaned.Create(nil); colLeft.Vertical := True;
+  colLeft.Parent := H.RootPaned;
+
+  midRight := TPaned.Create(nil);                    { horizontal: center | right }
+  midRight.Parent := H.RootPaned;
+
+  colCenter := TPaned.Create(nil); colCenter.Vertical := True;
+  colCenter.Parent := midRight;
+
+  colRight := TPaned.Create(nil); colRight.Vertical := True;
+  colRight.Parent := midRight;
+
+  colInspector := TPaned.Create(nil); colInspector.Vertical := True;
+
+  { keep references so OnFormResize can seed/track handle positions }
+  H.colLeft := colLeft; H.midRight := midRight; H.colCenter := colCenter;
+  H.colRight := colRight; H.colInspector := colInspector;
+  H.panedSeeded := False;
+
   H.Tree := TListBox.Create(nil);
-  H.Tree.Parent := Form1;
-  H.Tree.SetBounds(0, TOOLBAR_H, W_TREE, contentH - ERR_H);
+  H.Tree.Parent := colLeft;                          { pane 1 of colLeft }
   H.Tree.OnClick := @H.OnTreeClick;
 
   { error list under the tree: compile diagnostics, click -> jump editor }
   H.Diags := TDiagList.Create;
   H.Errors := TListBox.Create(nil);
-  H.Errors.Parent := Form1;
-  H.Errors.SetBounds(0, TOOLBAR_H + contentH - ERR_H, W_TREE, ERR_H);
+  H.Errors.Parent := colLeft;                        { pane 2 of colLeft }
   H.Errors.OnClick := @H.OnErrorClick;
 
   H.Editor := TMemo.Create(nil);
-  H.Editor.Parent := Form1;
-  H.Editor.SetBounds(W_TREE, TOOLBAR_H, centerW, centerH);
+  H.Editor.Parent := colCenter;                      { pane 1 of colCenter }
 
   H.Output := TMemo.Create(nil);
-  H.Output.Parent := Form1;
-  H.Output.SetBounds(W_TREE, TOOLBAR_H + centerH, centerW, H_BOTTOM);
+  H.Output.Parent := colCenter;                      { pane 2 of colCenter }
   H.Output.Text := 'build output appears here';
 
   { designer: box-emulated preview painted from the garin docmodel (no live
@@ -577,8 +624,7 @@ begin
     sok := LoadLfmText(sbuf.Text, Dsn.Doc);
 
   DesignBox := TPaintBox.Create(nil);
-  DesignBox.Parent := Form1;
-  DesignBox.SetBounds(W_TREE + centerW, TOOLBAR_H, W_RIGHT, centerH);
+  DesignBox.Parent := colRight;                      { pane 1 of colRight }
   DesignBox.OnPaint := @Dsn.Paint;
   { mouse-select + drag-move: down hit-tests & grabs, move drags the selected
     box, up releases. }
@@ -586,17 +632,16 @@ begin
   DesignBox.OnMouseMove := @H.OnDesignMouseMove;
   DesignBox.OnMouseUp   := @H.OnDesignMouseUp;
 
+  colInspector.Parent := colRight;                   { pane 2 of colRight }
+
   Props := TListBox.Create(nil);
-  Props.Parent := Form1;
-  Props.SetBounds(W_TREE + centerW, TOOLBAR_H + centerH, W_RIGHT, H_BOTTOM - 28);
+  Props.Parent := colInspector;                      { pane 1 of colInspector }
   Props.AddItem('object inspector (M1)');
   Props.OnClick := @H.OnPropClick;
 
   { value editor: pick a prop row above, type here, Enter commits to docmodel }
   ValueEdit := TEdit.Create(nil);
-  ValueEdit.Parent := Form1;
-  ValueEdit.SetBounds(W_TREE + centerW, TOOLBAR_H + centerH + H_BOTTOM - 28,
-    W_RIGHT, 26);
+  ValueEdit.Parent := colInspector;                  { pane 2 of colInspector }
   ValueEdit.OnKeyDown := @H.OnValueKey;
 
   H.Dsn := Dsn;
@@ -675,13 +720,15 @@ begin
     if H.Dsn.Doc.NodeCaption(3) <> 'OK' then begin writeln('SMOKE FAIL: lfm OK button missing'); Halt(1); end;
     if H.Dsn.Doc.NodeX(3) <> 28 then begin writeln('SMOKE FAIL: lfm abs coord wrong'); Halt(1); end;
 
-    { pane reflow: a bigger window stretches the center/right panes }
+    { pane layout is the RootPaned subtree; reflow resizes the root to fill the
+      content area below the toolbar (GtkPaned owns the internal splits). }
+    if H.RootPaned = nil then begin writeln('SMOKE FAIL: no root paned'); Halt(1); end;
     H.Relayout(1400, 900);
-    if H.Editor.Width <> 1400 - W_TREE - W_RIGHT then begin writeln('SMOKE FAIL: editor width did not reflow'); Halt(1); end;
-    if H.DesignBox.Height <> (900 - TOOLBAR_H - H_BOTTOM) then begin writeln('SMOKE FAIL: designbox height did not reflow'); Halt(1); end;
-    { tiny window clamps instead of going negative }
+    if H.RootPaned.Width <> 1400 then begin writeln('SMOKE FAIL: root paned width did not reflow'); Halt(1); end;
+    if H.RootPaned.Height <> (900 - TOOLBAR_H) then begin writeln('SMOKE FAIL: root paned height did not reflow'); Halt(1); end;
+    { tiny window clamps the content height instead of going negative }
     H.Relayout(200, 120);
-    if H.Editor.Width < 120 then begin writeln('SMOKE FAIL: reflow did not clamp width'); Halt(1); end;
+    if H.RootPaned.Height < 160 then begin writeln('SMOKE FAIL: reflow did not clamp height'); Halt(1); end;
     H.Relayout(W_WIN, H_WIN);   { restore }
 
     { open any .lfm from the tree: clicking a .lfm reloads the designer + retargets Save }

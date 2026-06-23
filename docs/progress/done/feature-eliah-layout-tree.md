@@ -1,7 +1,7 @@
 # feature: Eliah layout tree — window as a nested-TPaned splitter tree
 
 - **Type:** feature (Track B)
-- **Status:** backlog
+- **Status:** done
 - **Track:** B
 - **Parent:** feature-eliah-shell
 - **Opened:** 2026-06-23
@@ -60,3 +60,15 @@ main layout path.
 
 ## Log
 - 2026-06-23 — filed (milestone 1 of feature-eliah-shell).
+
+## Log
+- 2026-06-24 — DONE. Eliah's window is now one nested-TPaned tree (RootPaned):
+  HPaned[ colLeft(V: tree/errors) | HPaned[ colCenter(V: editor/output) |
+  colRight(V: designer / colInspector(V: props/valueEdit)) ] ]. Children parent
+  into leaves via the existing SetParent TPaned branch. Absolute per-pane
+  Relayout math removed — Relayout now only resizes RootPaned; GtkPaned owns the
+  splits. Handle positions seeded once on the first allocation (OnFormResize),
+  since GtkPaned clamps a position set before it has a size. Smoke asserts root
+  reflow; gui_suite + garin(92) green; screenshot (Xvfb :99) confirms all panes
+  render with draggable handles. Also added docs/developer/gui-testing.md
+  (Xvfb-based GUI testing, no foreground grab).
