@@ -603,26 +603,31 @@ begin
 end;
 
 procedure TGtk3WidgetSet.SetText(AControl: TComponent; const AText: string);
-var h: Pointer; className: string; ctl: TControl; cls: PClassRTTI;
+var h: Pointer; className: string; ctl: TControl; cls: PClassRTTI; p: PChar;
 begin
   ctl := TControl(AControl);
   h := ctl.Handle;
   if h = nil then Exit;
-  
+
+  { an empty AnsiString marshals to a NULL PChar, which gtk_*_set_text rejects
+    ("assertion 'text != NULL'"); use an empty C string instead (same guard as
+    SetName above). }
+  if AText = '' then p := PChar('') else p := PChar(AText);
+
   className := GetInstanceClassName(Pointer(AControl));
   cls := GetClass(className);
   if IsSubclassOf(cls, 'TForm') then
-    gtk_window_set_title(h, PChar(AText))
+    gtk_window_set_title(h, p)
   else if IsSubclassOf(cls, 'TButton') then
-    gtk_button_set_label(h, PChar(AText))
+    gtk_button_set_label(h, p)
   else if IsSubclassOf(cls, 'TLabel') then
-    gtk_label_set_text(h, PChar(AText))
+    gtk_label_set_text(h, p)
   else if IsSubclassOf(cls, 'TEdit') then
-    gtk_entry_set_text(h, PChar(AText))
+    gtk_entry_set_text(h, p)
   else if IsSubclassOf(cls, 'TCheckBox') then
-    gtk_button_set_label(h, PChar(AText))
+    gtk_button_set_label(h, p)
   else if IsSubclassOf(cls, 'TPanel') then
-    gtk_button_set_label(h, PChar(AText));
+    gtk_button_set_label(h, p);
 end;
 
 procedure TGtk3WidgetSet.Invalidate(AControl: TComponent);
