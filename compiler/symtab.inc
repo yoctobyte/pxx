@@ -417,6 +417,27 @@ begin
   end;
 end;
 
+{ The default indexed property of a class (walking ancestors), or -1. Drives the
+  `obj[i]` shorthand. }
+function FindDefaultProp(ci: Integer): Integer;
+var i, base, cnt, curr: Integer;
+begin
+  Result := -1;
+  curr := ci;
+  while curr >= 0 do
+  begin
+    base := UClsPBase[curr];
+    cnt  := UClsPCount[curr];
+    i := 0;
+    while i < cnt do
+    begin
+      if UPropIsDefault[base + i] then begin Result := base + i; Exit; end;
+      Inc(i);
+    end;
+    curr := UClsParent[curr];
+  end;
+end;
+
 function AddUProperty(ci, noff, nlen, tk, recId: Integer): Integer;
 var pri: Integer;
 begin
@@ -430,6 +451,8 @@ begin
   UPropPub[pri] := 0;
   UPropEnumId[pri] := -1;
   UPropSetEnumId[pri] := -1;
+  UPropIsIndexed[pri] := False;
+  UPropIsDefault[pri] := False;
   UPropCount := UPropCount + 1;
   UClsPCount[ci] := UClsPCount[ci] + 1;
   Result := pri;

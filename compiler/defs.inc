@@ -1334,6 +1334,8 @@ var
   UPropPub    : array[0..MAX_UPROP-1] of Integer;  { 1 = published, 0 = other }
   UPropEnumId : array[0..MAX_UPROP-1] of Integer;  { enum type index if prop is enum-typed, else -1 }
   UPropSetEnumId : array[0..MAX_UPROP-1] of Integer;  { element enum type index if prop is set-typed, else -1 }
+  UPropIsIndexed : array[0..MAX_UPROP-1] of Boolean;  { array property: `property Items[i: TIdx]: T` — getter/setter take the index as an extra arg }
+  UPropIsDefault : array[0..MAX_UPROP-1] of Boolean;  { `default;` indexed property: `obj[i]` lowers through it }
   UPropCount  : Integer;
 
   { Named enum types (ordinal<->name). Enum vars stay integer-sized; this table

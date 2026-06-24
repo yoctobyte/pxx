@@ -55,3 +55,24 @@ This is the standard idiom for every collection, so it gates a lot:
 - Self-host fixedpoint byte-identical, `make stabilize` + `make pin` so Track B
   can build the standard Classes ([[feature-own-net-http-lib]] follow-on / the
   Classes unit).
+
+## Log
+- 2026-06-24 — DONE (Track A). Indexed (array) properties + `default` land:
+  `property Items[i: TIdx]: T read G [write P]; [default;]`. Front-end only
+  (parser + symtab), no codegen change → self-host fixedpoint byte-identical.
+  - Decl: parse + discard the `[index: TIdx]` clause (the accessor signature
+    defines the index type), set `UPropIsIndexed`; optional trailing `default;`
+    sets `UPropIsDefault`.
+  - Access (`obj.Items[i]` read/write): the property branch in `ParseLValueAST`
+    parses the subscript and threads it as an extra accessor arg (getter: self,
+    index; setter: self, index, value). `:=` detection peeks PAST the bracket
+    group (the `:=` follows the subscript, not the name).
+  - `default` (`obj[i]`): the class-index branch routes through `FindDefaultProp`
+    to the default property's getter/setter; getter result `continue`s the
+    postfix loop (so `list[i].field` works) with the property's element type.
+  - Read-only (no `write`) supported.
+  - Regression: `test/test_indexed_property.pas` (indexed get/set, default `[i]`,
+    read-only) wired into `make test` (test-core).
+  Multi-index (`P[a,b: T]`) still nice-to-have (single index covers the
+  collections need). Unblocks the standard Classes surface (TList/TStringList
+  Items[], Synapse SocketList.Items[n]).

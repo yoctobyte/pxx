@@ -1301,6 +1301,69 @@ begin
     end
     else if CurTok.Kind = tkLBrack then
     begin
+      { Default indexed property: `obj[i]` → obj.<default>[i] getter/setter. }
+      if (tk = tyClass) and (recName >= REC_UCLASS_BASE) then
+      begin
+        mci := recName - REC_UCLASS_BASE;
+        pri := FindDefaultProp(mci);
+        if pri >= 0 then
+        begin
+          { peek past the [...] group for a trailing := (assignment context) }
+          isAssign := False;
+          i := TokPos - 1; w := 0;   { TokPos-1 = the '[' }
+          while i < TokCount do
+          begin
+            if Tokens[i].Kind = tkLBrack then Inc(w)
+            else if Tokens[i].Kind = tkRBrack then
+            begin Dec(w); if w = 0 then begin Inc(i); Break; end; end;
+            Inc(i);
+          end;
+          if (i < TokCount) and (Tokens[i].Kind = tkAssign) then isAssign := True;
+
+          Next; { consume '[' }
+          ParseExpr; mexprNode := CurASTNode;   { index }
+          Expect(tkRBrack, ']');
+          margIdx := AllocNode(AN_ARG);
+          ASTLeft[margIdx] := mexprNode;
+
+          if isAssign then
+          begin
+            if UPropWriteMLen[pri] <= 0 then Error('default property is read-only');
+            methName := '';
+            for i := 0 to UPropWriteMLen[pri] - 1 do AppendChar(methName, TokChars[UPropWriteMOff[pri] + i]);
+            mmi := FindUMeth(mci, methName);
+            if mmi < 0 then Error('setter method not found: ' + methName);
+            mpi := UMthProc_[mmi];
+            Expect(tkAssign, ':=');
+            ParseExpr;
+            if UMthVirSlot[mmi] >= 0 then begin mcallNode := AllocNode(AN_VIRTUAL_CALL); ASTRight[mcallNode] := UMthVirSlot[mmi]; end
+            else mcallNode := AllocNode(AN_CALL);
+            ASTIVal[mcallNode] := mpi; ASTTk[mcallNode] := Ord(Procs[mpi].RetType);
+            mselfArg := AllocNode(AN_ARG); ASTLeft[mselfArg] := node; ASTLeft[mcallNode] := mselfArg;
+            margSeq := AllocNode(AN_ARG); ASTLeft[margSeq] := CurASTNode;  { value }
+            ASTRight[mselfArg] := margIdx; ASTRight[margIdx] := margSeq;
+            node := mcallNode; Result := node; Exit;
+          end
+          else
+          begin
+            if UPropReadMLen[pri] <= 0 then Error('default property is write-only');
+            methName := '';
+            for i := 0 to UPropReadMLen[pri] - 1 do AppendChar(methName, TokChars[UPropReadMOff[pri] + i]);
+            mmi := FindUMeth(mci, methName);
+            if mmi < 0 then Error('getter method not found: ' + methName);
+            mpi := UMthProc_[mmi];
+            if UMthVirSlot[mmi] >= 0 then begin mcallNode := AllocNode(AN_VIRTUAL_CALL); ASTRight[mcallNode] := UMthVirSlot[mmi]; end
+            else mcallNode := AllocNode(AN_CALL);
+            ASTIVal[mcallNode] := mpi; ASTTk[mcallNode] := Ord(Procs[mpi].RetType);
+            mselfArg := AllocNode(AN_ARG); ASTLeft[mselfArg] := node; ASTLeft[mcallNode] := mselfArg;
+            ASTRight[mselfArg] := margIdx;
+            node := mcallNode;
+            tk := IntToTypeKind(UPropTk[pri]); recName := UPropRec[pri];
+            ASTTk[node] := StrValTk(tk);
+            continue;   { allow further postfix on the getter result }
+          end;
+        end;
+      end;
       Next;
       alreadyResolved := False;
       indexNode := AllocNode(AN_INDEX);
@@ -1491,6 +1554,21 @@ begin
       if pri >= 0 then
       begin
         isAssign := (CurTok.Kind = tkAssign) or ((TokPos < TokCount) and (Tokens[TokPos].Kind = tkAssign));
+        { Indexed property `obj.Items[i] := v`: `:=` follows the subscript, not the
+          name. Peek past the bracket group (CurTok = name, TokPos = `[`). }
+        if UPropIsIndexed[pri] and (not isAssign) and
+           (TokPos < TokCount) and (Tokens[TokPos].Kind = tkLBrack) then
+        begin
+          i := TokPos; w := 0;
+          while i < TokCount do
+          begin
+            if Tokens[i].Kind = tkLBrack then Inc(w)
+            else if Tokens[i].Kind = tkRBrack then
+            begin Dec(w); if w = 0 then begin Inc(i); Break; end; end;
+            Inc(i);
+          end;
+          if (i < TokCount) and (Tokens[i].Kind = tkAssign) then isAssign := True;
+        end;
         if isAssign then
         begin
           if UPropWriteFLen[pri] > 0 then
@@ -1511,6 +1589,15 @@ begin
             mpi := UMthProc_[mmi];
 
             if CurTok.Kind = tkIdent then Next; { consume property name }
+            margIdx := -1;
+            if UPropIsIndexed[pri] then
+            begin
+              Expect(tkLBrack, '[');
+              ParseExpr; mexprNode := CurASTNode;
+              Expect(tkRBrack, ']');
+              margIdx := AllocNode(AN_ARG);
+              ASTLeft[margIdx] := mexprNode;
+            end;
             Expect(tkAssign, ':=');
             ParseExpr;
 
@@ -1531,8 +1618,15 @@ begin
             ASTLeft[mcallNode] := mselfArg;
 
             margSeq := AllocNode(AN_ARG);
-            ASTLeft[margSeq] := CurASTNode;
-            ASTRight[mselfArg] := margSeq;
+            ASTLeft[margSeq] := CurASTNode;   { value }
+            { Setter args: self [, index], value }
+            if margIdx >= 0 then
+            begin
+              ASTRight[mselfArg] := margIdx;
+              ASTRight[margIdx] := margSeq;
+            end
+            else
+              ASTRight[mselfArg] := margSeq;
 
             node := mcallNode;
             Result := node; Exit;
@@ -1560,6 +1654,15 @@ begin
             mpi := UMthProc_[mmi];
 
             Next; { consume property name }
+            margIdx := -1;
+            if UPropIsIndexed[pri] then
+            begin
+              Expect(tkLBrack, '[');
+              ParseExpr; mexprNode := CurASTNode;
+              Expect(tkRBrack, ']');
+              margIdx := AllocNode(AN_ARG);
+              ASTLeft[margIdx] := mexprNode;
+            end;
             if UMthVirSlot[mmi] >= 0 then
             begin
               mcallNode := AllocNode(AN_VIRTUAL_CALL);
@@ -1575,6 +1678,8 @@ begin
             mselfArg := AllocNode(AN_ARG);
             ASTLeft[mselfArg] := node;
             ASTLeft[mcallNode] := mselfArg;
+            { Getter args: self [, index] }
+            if margIdx >= 0 then ASTRight[mselfArg] := margIdx;
 
             node := mcallNode;
             Result := node; Exit;
@@ -8967,6 +9072,7 @@ var
   mNParams, mStartIdx, mTokKindOrd, mpi, mSelfIdx, mFullNameOff, mFullNameLen: Integer;
   curPublished: Integer;  { 1 while inside a published section of the current class body }
   etid, propEnumId, propSetEnumId: Integer;
+  propIsIndexed, propIsDefault: Boolean;   { indexed (array) property + `default;` }
   mFullName: AnsiString;
   aLo, aHi: Integer; aElemTk: TTypeKind;
   tdCnt, tdLo, tdHi, tdi, tflatLen, fNDims: Integer;
@@ -9449,6 +9555,19 @@ begin
             pnOff := Tokens[TokPos-1].SOffset;
             pnLen := Tokens[TokPos-1].SLen;
             Next;
+            { Indexed (array) property: `property Items[i: TIdx]: T ...`. The index
+              parameter's name/type are defined by the accessor signature, so the
+              declaration clause is parsed and discarded; we only mark the property
+              indexed so accesses pass the subscript as an extra accessor arg. }
+            propIsIndexed := False;
+            propIsDefault := False;
+            if CurTok.Kind = tkLBrack then
+            begin
+              propIsIndexed := True;
+              Next;
+              while (CurTok.Kind <> tkRBrack) and (CurTok.Kind <> tkEOF) do Next;
+              Expect(tkRBrack, ']');
+            end;
             Expect(tkColon, ':');
             LastTypeSetEnumId := -1;
             propTk := ParseTypeKind;
@@ -9498,6 +9617,13 @@ begin
             end;
 
             Eat(tkSemicolon);
+            { Optional `default;` on an indexed property → obj[i] routes here. }
+            if CurTok.Kind = tkDefault then
+            begin
+              propIsDefault := True;
+              Next;
+              Eat(tkSemicolon);
+            end;
             i := AddUProperty(ci, pnOff, pnLen, Ord(propTk), propRec);
             UPropReadFOff[i] := rFOff; UPropReadFLen[i] := rFLen;
             UPropReadMOff[i] := rMOff; UPropReadMLen[i] := rMLen;
@@ -9506,6 +9632,8 @@ begin
             UPropPub[i] := curPublished;
             UPropEnumId[i] := propEnumId;
             UPropSetEnumId[i] := propSetEnumId;
+            UPropIsIndexed[i] := propIsIndexed;
+            UPropIsDefault[i] := propIsDefault;
           end
           else if CurTok.Kind = tkIdent then
           begin
