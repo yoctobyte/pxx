@@ -9,13 +9,12 @@ unit classes;
   IPv4 of the RTL Classes: enough for the string-list / pointer-list needs;
   TStream / TMemoryStream is the next slice. Track B.
 
-  STATUS: TList works and is smoked. TStrings/TStringList are written and compile,
-  but are BLOCKED at runtime by a compiler VMT bug — virtual dispatch hits the
-  wrong slot with this many mixed-signature (string/Integer/TObject) abstract
-  methods, so the string getter returns garbage. See
-  bug-mixed-signature-vmt-misdispatch (Track A, urgent). The code here is correct
-  (no workaround per the Platonic rule); it will work once the VMT bug is fixed,
-  at which point the TStringList smoke is re-enabled. }
+  STATUS: TList, TStrings and TStringList all work and are smoked (the VMT
+  mixed-signature dispatch bug that blocked the abstract base was fixed Track A,
+  v53). One gap remains: TStringList.Sort is correct code but does not order
+  because AnsiString `<`/`>` are broken (return constants) —
+  bug-string-ordering-comparison-constant (Track A, urgent). No workaround per the
+  Platonic rule; the sorted smoke re-enables once that lands. }
 
 interface
 

@@ -9,9 +9,9 @@ lives in git, not in a timestamp._
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
 | bug-conditional-directive-miscount-synautil | A | bug | Spurious "unterminated conditional directive" on synautil + jedi.inc | — |
-| bug-mixed-signature-vmt-misdispatch | A | bug | Virtual dispatch hits the wrong VMT slot with many mixed-signature methods | — |
 | bug-r-directive-toggle-treated-as-resource | A | bug | `{$R-}` / `{$R+}` range-check toggle misread as a resource directive | — |
 | bug-set-of-char-const-corrupts-char-codegen | A | bug | A `set of char` typed constant corrupts `Ord(char-var)` codegen | — |
+| bug-string-ordering-comparison-constant | A | bug | AnsiString `<` `>` `<=` `>=` return constants, not a real comparison | — |
 
 ## working (3)
 
@@ -33,7 +33,7 @@ lives in git, not in a timestamp._
 | --- | --- | --- | --- | --- |
 | feature-c-runtime-library | B | feature | C runtime/library layer (`lib/crtl`) plus direct C-library packages | feature-c-source-frontend |
 
-## backlog (50)
+## backlog (51)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -67,6 +67,7 @@ lives in git, not in a timestamp._
 | feature-lazy-standard-unit-emission | A | feature | Lazy standard-unit emission / routine-level dead-code elimination | — |
 | feature-metaclass-descendant-enforcement | A | feature | Metaclass alias descendant-constraint enforcement | — |
 | feature-move-fillchar-intrinsics | B | feature | Move / FillChar as compiler intrinsics (future optimization) | — |
+| feature-native-arch-binaries | A | feature | Distribute native per-arch stable binaries (no FPC/make on install) | — |
 | feature-networking | B | feature | Networking runtime | — |
 | feature-nilpy-idf-import | A | feature | nilpy includes anything from ESP-IDF and it just works | feature-c-source-frontend, feature-esp32-idf-xtensa |
 | feature-nil-python-frontend | A | feature | Nil Python frontend (`.npy`) | — |
@@ -122,7 +123,7 @@ lives in git, not in a timestamp._
 | feature-mimic-fpc | B | feature | `mimic FPC` compatibility mode | — |
 | feature-string-model-tyfixedstring | B | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (252)
+## done (253)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -177,6 +178,7 @@ lives in git, not in a timestamp._
 | bug-method-call-free-tobject | A | bug | `obj.Free` rejected — built-in TObject has no `Free` method | — |
 | bug-method-miscompiled-by-context | A | bug | bug: a method miscompiles (segfault) depending on surrounding class context | — |
 | bug-method-ptr-no-coerce-pointer-arg | A | bug | bug: `@obj.Method` does not coerce to a `Pointer` (or `TMethod`) argument | — |
+| bug-mixed-signature-vmt-misdispatch | A | bug | Virtual dispatch hits the wrong VMT slot with many mixed-signature methods | — |
 | bug-movslq-on-64bit-pointer-load | A | bug | Bug — movslq instruction generated for 64-bit pointer/array field load | — |
 | bug-named-dynarray-field-setlength | A | bug | SetLength on a named dyn-array-alias class/record field misrouted to string path | — |
 | bug-nested-brace-comments | A | bug | bug: `{ }` comments do not nest | — |
@@ -418,6 +420,7 @@ lives in git, not in a timestamp._
 - [A] feature-lazy-standard-unit-emission
 - [A] feature-metaclass-descendant-enforcement
 - [B] feature-move-fillchar-intrinsics
+- [A] feature-native-arch-binaries
 - [B] feature-networking
 - [A] feature-nil-python-frontend
 - [A] feature-object-reference-type
@@ -437,9 +440,9 @@ lives in git, not in a timestamp._
 - [A] feature-zero-init-contract
 - [B] meta-track-b-compiler-wishlist
 - [urgent] [A] bug-conditional-directive-miscount-synautil
-- [urgent] [A] bug-mixed-signature-vmt-misdispatch
 - [urgent] [A] bug-r-directive-toggle-treated-as-resource
 - [urgent] [A] bug-set-of-char-const-corrupts-char-codegen
+- [urgent] [A] bug-string-ordering-comparison-constant
 
 ## Leverage (tickets each one unblocks)
 

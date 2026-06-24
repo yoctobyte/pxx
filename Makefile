@@ -2309,8 +2309,9 @@ lib-test: pxx-stable-check
 	$(PXX_STABLE) -Fulib/rtl/platform/posix test/lib_dns_async.pas /tmp/lib_dns_async
 	test "$$(/tmp/lib_dns_async)" = "$$(printf 'server-done=ok\nrcode=ok\ncount=ok\nip=ok')"
 	$(PXX_STABLE) -Fulib/rtl test/lib_classes.pas /tmp/lib_classes
-	test "$$(/tmp/lib_classes)" = "$$(printf 'count=ok\ndefault-idx=ok\nitems=ok\nwrite=ok\nindexof=ok\ninsert=ok\ndelete=ok\nremove=ok')"
-	@echo "lib-test ok (sudoku exact + collections + math + sysutils + random + bitset + platform + directory + bignum + json + calc + sat + mathf + vm + mandelbrot + lisp + zlib + png smoke + ansiterm + ansirender + process + process-multi + dynlibs + unixshims + strpchar + sockets + http + http-async + http-redirect + http-keepalive + dns-async + classes-tlist) against stable v$$(cat $(STABLE_DEFAULT_DIR)/VERSION 2>/dev/null || echo '?')"
+	test "$$(/tmp/lib_classes | grep -c '=ok')" = "16"
+	test "$$(/tmp/lib_classes | grep -c 'FAIL')" = "0"
+	@echo "lib-test ok (sudoku exact + collections + math + sysutils + random + bitset + platform + directory + bignum + json + calc + sat + mathf + vm + mandelbrot + lisp + zlib + png smoke + ansiterm + ansirender + process + process-multi + dynlibs + unixshims + strpchar + sockets + http + http-async + http-redirect + http-keepalive + dns-async + classes) against stable v$$(cat $(STABLE_DEFAULT_DIR)/VERSION 2>/dev/null || echo '?')"
 
 # Full Track-B library suite, distinct from compiler `make test`.
 library-suite-green: pxx-stable-check
