@@ -228,9 +228,34 @@ small; Tier 3-lite (base types + RTTI structs + pointer-cheat) ≈ 1 session.
     `Procs[].BodyAddr` plus `DW_LNS_set_prologue_end` on the first body row.
   - Helpers split to ≤6 params (`writeShdr64` + per-call `DbgShFlags/Addr/Align`
     globals) to dodge the many-param-call-corruption backend landmine.
-  Remaining (deferred, not blocking): pointer-cheat types render as `^pointer` in
-  gdb (gdb derives pointer type names from the pointee, ignoring `DW_AT_name`) —
-  `x/s`/handle inspection still work, label is cosmetic; the outermost `bt` frame
-  past the program body is junk (no `.eh_frame`/CFI — frame-pointer unwind only);
-  cross-target generalisation (×4) still pending. Tier 1-3 effectively complete
-  for x86-64.
+- 2026-06-24 — **CFI (`.debug_frame`) + cheat-label polish LANDED (x86-64).**
+  Native x86-64 debug is now feature-complete; only cross-target remains.
+  - **`.debug_frame`** (DbgEmitFrame): one CIE (standard rbp frame: `def_cfa
+    rsp+8`, `RA@cfa-8`, data_align -8, RA reg 16) + one FDE per main-file proc
+    (`advance_loc 1; def_cfa_offset 16; offset rbp@cfa-16; advance_loc 3;
+    def_cfa_register rbp` — byte offsets MUST match the emitted `push rbp`(1)/
+    `mov rbp,rsp`(3)) + a program-body FDE with `DW_CFA_undefined RA` so the
+    unwinder terminates. Result: robust unwinding everywhere (incl. a clean
+    SIGSEGV backtrace — `bt` shows the faulting frame, args like `p=0x0`, the
+    whole call chain, and stops at the program body) and the junk outermost
+    frame is GONE. Chose `.debug_frame` over `.eh_frame` (absolute addresses,
+    rides the existing unmapped-debug-section machinery; CIE_id = 0xFFFFFFFF).
+  - **Cheat labels**: runtime-layout types now emit a `DW_TAG_typedef` over a
+    shared anonymous void pointer, so gdb shows the real Pascal name (`whatis s`
+    → `string`, `whatis arr` → `array of Integer`) instead of `^pointer`, while
+    `x/s`/handle inspection still work.
+  - New `make test-debug-g` assertions: no junk `?? ()` frame, and a SIGSEGV
+    sample unwinds to the named faulting frame at `file:line`.
+  All behind `if DebugInfo` → self-host + cross-bootstrap byte-identical (verified).
+  LANDMINE added: `.debug_frame` FDE prologue offsets are hard-coded to the
+  standard `push rbp; mov rbp,rsp` byte lengths — asm-body procs and any future
+  prologue change would desync the CFI (generators are fine, they still go
+  through EmitProcPrologue).
+
+  Remaining (deferred): pointer-cheat element inspection (`print arr[i]`/struct
+  string DIE — the byte-exact ABI struct the ticket deleted; do not rebuild
+  unless a workflow needs it); class instances still show as a labeled pointer
+  rather than a pointer-to-its-structure_type; **cross-target generalisation
+  (×4: i386/aarch64/arm32 + ELF32 section-header table in `writeELF32`, per-arch
+  DWARF reg map, DWARF32 addr width)** is the only big piece left. Tier 1-3 +
+  CFI complete for x86-64.

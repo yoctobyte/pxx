@@ -70,6 +70,27 @@ if command -v gdb >/dev/null 2>&1; then
     || { echo "dwarf-g: FAIL — param a not readable (expected 3)"; echo "$GLOG"; exit 1; }
   echo "$GLOG" | grep -qE 'x = 3, y = 4' \
     || { echo "dwarf-g: FAIL — record fields not inspectable (expected x=3,y=4)"; echo "$GLOG"; exit 1; }
+  # CFI: the backtrace must terminate cleanly — no junk "?? ()" frame past the
+  # program body (.debug_frame FDEs + RA-undefined on the main body).
+  echo "$GLOG" | grep -qE '\?\? \(\)' \
+    && { echo "dwarf-g: FAIL — junk frame in bt (CFI/.debug_frame missing)"; echo "$GLOG"; exit 1; }
+  # Crash backtrace: a SIGSEGV must unwind to named frames with file:line.
+  CSRC="$TMP/dbgcrash.pas"; CEXE="$TMP/dbgcrash"
+  cat > "$CSRC" <<'EOC'
+program dbgcrash;
+type PInt = ^Integer;
+procedure Boom(p: PInt);
+begin
+  p^ := 5;
+end;
+begin
+  Boom(nil);
+end.
+EOC
+  "$PXX" -g "$CSRC" "$CEXE" >/dev/null 2>&1 || { echo "dwarf-g: FAIL — crash sample compile errored"; exit 1; }
+  CLOG="$(gdb -q -batch -ex "set debuginfod enabled off" -ex run -ex bt "$CEXE" 2>/dev/null)"
+  echo "$CLOG" | grep -qE "Boom .*dbgcrash.pas:5" \
+    || { echo "dwarf-g: FAIL — crash bt missing faulting frame"; echo "$CLOG"; exit 1; }
 else
   echo "dwarf-g: WARN — gdb not found, skipping breakpoint/inspection checks"
 fi
