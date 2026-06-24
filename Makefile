@@ -2287,7 +2287,9 @@ lib-test: pxx-stable-check
 	test "$$(/tmp/lib_process_multi | tail -1)" = "OK"
 	$(PXX_STABLE) test/lib_dynlibs.pas /tmp/lib_dynlibs
 	test "$$(/tmp/lib_dynlibs)" = "$$(printf 'nil-handle=ok\nsym-nil=ok\nprocaddr-alias=ok\nunload=ok\nfree-alias=ok\nerrstr=ok')"
-	@echo "lib-test ok (sudoku exact + collections + math + sysutils + random + bitset + platform + directory + bignum + json + calc + sat + mathf + vm + mandelbrot + lisp + zlib + png smoke + ansiterm + ansirender + process + process-multi + dynlibs) against stable v$$(cat $(STABLE_DEFAULT_DIR)/VERSION 2>/dev/null || echo '?')"
+	$(PXX_STABLE) test/lib_unixshims.pas /tmp/lib_unixshims
+	test "$$(/tmp/lib_unixshims)" = "$$(printf 'gettimeofday=ok\ntv_sec-sane=ok\ntv_usec-range=ok\nnil-tp=ok\ntzseconds=ok')"
+	@echo "lib-test ok (sudoku exact + collections + math + sysutils + random + bitset + platform + directory + bignum + json + calc + sat + mathf + vm + mandelbrot + lisp + zlib + png smoke + ansiterm + ansirender + process + process-multi + dynlibs + unixshims) against stable v$$(cat $(STABLE_DEFAULT_DIR)/VERSION 2>/dev/null || echo '?')"
 
 # Full Track-B library suite, distinct from compiler `make test`.
 library-suite-green: pxx-stable-check
