@@ -59,13 +59,23 @@ Blocking + async method set: `HttpGet/Post/Head/Put/Delete`, generic
 Redirect e2e: `test/lib_http_redirect` — a server coroutine answers 302+Location
 then 200, the async client follows the hop (multi-connection, one thread).
 
+## Keep-alive (landed 2026-06-24)
+
+`THttpConnection` (socket + host/port + leftover-byte buffer + Alive) reusable
+across requests. `HttpConnect`/`HttpConnExec`/`HttpConnGet` (blocking) and
+`HttpConnectAsync`/`HttpConnExecAsync`/`HttpConnGetAsync` (reactor) share one
+core: send `Connection: keep-alive`, then **length-aware** read — exactly
+Content-Length bytes or the full chunked body (`HttpChunkedLen`), not read-to-EOF
+— leaving surplus bytes buffered for the next request. e2e `test/lib_http_keepalive`:
+server coroutine does ONE accept and serves TWO requests; client reuses one
+connection (both bodies correct, stays Alive between). `HttpConnClose` to finish.
+
 ## Roadmap (next slices)
 
-1. **Keep-alive transport** — recv exactly Content-Length / until last chunk so a
-   connection can be reused (today: one request per `Connection: close`, which
-   the parser frames correctly).
-2. **Header map API** — structured request/response headers (today: raw block +
-   `HttpHeaderValue` lookup); relative-Location resolution for redirects.
+1. **Header map API** — structured request/response headers (today: raw block +
+   `HttpHeaderValue` lookup).
+2. **Connection pool** — keep a small set of `THttpConnection`s keyed by host:port
+   so `HttpGet` reuses one transparently (today reuse is explicit via the Conn API).
 3. **TLS** — `https://` is parsed and refused (`isTls`). Routes through a common
    TLS seam [[feature-tls-provider-abstraction]] with two interchangeable
    backends: OpenSSL (default; via [[feature-real-dynlib-loader]]) and the native

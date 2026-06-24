@@ -72,6 +72,31 @@ function HttpExec(const method, url, extraHeaders, body: AnsiString): THttpRespo
   Returns the final response (or the last 3xx if the limit is hit). }
 function HttpGetFollow(const url: AnsiString; maxRedirects: Integer): THttpResponse;
 
+{ --- keep-alive: a reusable connection (blocking) ---
+  HttpConnect opens a connection; HttpConnExec/HttpConnGet send a request with
+  `Connection: keep-alive` and read exactly ONE response (length-aware: exactly
+  Content-Length bytes, or the full chunked body), leaving the socket open and
+  any surplus bytes buffered for the next request. conn.Alive goes False if the
+  server closes (or asks to). HttpConnClose closes the socket. }
+type
+  THttpConnection = record
+    Sock:  TNetSocket;
+    Host:  AnsiString;
+    Port:  Integer;
+    Buf:   AnsiString;     { bytes read past the current response, kept for next }
+    Alive: Boolean;
+  end;
+
+function HttpConnect(const host: AnsiString; port: Integer): THttpConnection;
+function HttpConnExec(var conn: THttpConnection; const method, path, extraHeaders, body: AnsiString): THttpResponse;
+function HttpConnGet(var conn: THttpConnection; const path: AnsiString): THttpResponse;
+procedure HttpConnClose(var conn: THttpConnection);
+
+{ Async keep-alive (call from a coroutine; same THttpConnection, reactor recv). }
+function HttpConnectAsync(const host: AnsiString; port: Integer): THttpConnection;
+function HttpConnExecAsync(var conn: THttpConnection; const method, path, extraHeaders, body: AnsiString): THttpResponse;
+function HttpConnGetAsync(var conn: THttpConnection; const path: AnsiString): THttpResponse;
+
 { --- async transport (call from inside a coroutine; drive with RunUntilDone) ---
   Non-blocking connect/send/recv over the scheduler's epoll reactor (via
   asyncnet): the coroutine yields on EAGAIN, so one thread serves many requests.
@@ -170,27 +195,26 @@ begin
     end;
 end;
 
+function HttpHexVal(const s: AnsiString): Integer;
+var k, d: Integer; c: Char;
+begin
+  Result := 0;
+  for k := 1 to Length(s) do
+  begin
+    c := s[k];
+    if (c >= '0') and (c <= '9') then d := Ord(c) - Ord('0')
+    else if (c >= 'a') and (c <= 'f') then d := Ord(c) - Ord('a') + 10
+    else if (c >= 'A') and (c <= 'F') then d := Ord(c) - Ord('A') + 10
+    else Break;       { stop at ';' chunk-ext or whitespace }
+    Result := Result * 16 + d;
+  end;
+end;
+
 function HttpDechunk(const body: AnsiString): AnsiString;
 var
   pos, n, sz: Integer;
   hexline, outp: AnsiString;
   lineEnd: Integer;
-
-  function HexVal(const s: AnsiString): Integer;
-  var k, d: Integer; c: Char;
-  begin
-    Result := 0;
-    for k := 1 to Length(s) do
-    begin
-      c := s[k];
-      if (c >= '0') and (c <= '9') then d := Ord(c) - Ord('0')
-      else if (c >= 'a') and (c <= 'f') then d := Ord(c) - Ord('a') + 10
-      else if (c >= 'A') and (c <= 'F') then d := Ord(c) - Ord('A') + 10
-      else Break;     { stop at ';' chunk-ext or whitespace }
-      Result := Result * 16 + d;
-    end;
-  end;
-
 begin
   outp := '';
   pos := 1;
@@ -202,7 +226,7 @@ begin
     while (lineEnd < n) and not ((body[lineEnd] = #13) and (body[lineEnd + 1] = #10)) do
       Inc(lineEnd);
     hexline := Copy(body, pos, lineEnd - pos);
-    sz := HexVal(hexline);
+    sz := HttpHexVal(hexline);
     pos := lineEnd + 2;                 { past CRLF }
     if sz <= 0 then Break;              { last chunk }
     if pos + sz - 1 > n then sz := n - pos + 1;
@@ -424,6 +448,168 @@ begin
   end;
 end;
 
+{ ---- keep-alive helpers ---- }
+
+{ 1-based position of the first CRLFCRLF in s, or 0. }
+function HttpFindHeaderEnd(const s: AnsiString): Integer;
+var i, n: Integer;
+begin
+  Result := 0;
+  n := Length(s);
+  for i := 1 to n - 3 do
+    if (s[i] = #13) and (s[i+1] = #10) and (s[i+2] = #13) and (s[i+3] = #10) then
+    begin Result := i; Exit; end;
+end;
+
+{ Byte length of a COMPLETE chunked body in s starting at `start` (1-based),
+  through the terminating empty line; -1 if not all present yet. }
+function HttpChunkedLen(const s: AnsiString; start: Integer): Integer;
+var pos, n, sz, lineEnd: Integer;
+begin
+  pos := start; n := Length(s);
+  while pos <= n do
+  begin
+    lineEnd := pos;
+    while (lineEnd < n) and not ((s[lineEnd] = #13) and (s[lineEnd+1] = #10)) do Inc(lineEnd);
+    if (lineEnd >= n) or not ((s[lineEnd] = #13) and (s[lineEnd+1] = #10)) then
+    begin Result := -1; Exit; end;          { size line's CRLF not here yet }
+    sz := HttpHexVal(Copy(s, pos, lineEnd - pos));
+    pos := lineEnd + 2;                       { past the size CRLF }
+    if sz = 0 then
+    begin
+      { final chunk: need the terminating CRLF (no trailers supported). }
+      if (pos + 1 <= n) and (s[pos] = #13) and (s[pos+1] = #10) then
+        Result := (pos + 1) - start + 1
+      else
+        Result := -1;
+      Exit;
+    end;
+    if pos + sz + 2 - 1 > n then begin Result := -1; Exit; end;  { data+CRLF not all here }
+    pos := pos + sz + 2;                       { data + trailing CRLF }
+  end;
+  Result := -1;
+end;
+
+{ One recv (blocking NetRecv, or reactor TcpRecv when async) appended to
+  conn.Buf; returns the byte count (0 = peer closed). }
+function HttpConnRecvMore(var conn: THttpConnection; async: Boolean): Integer;
+var b: array[0..4095] of Byte; got: Int64; chunk: AnsiString;
+begin
+  if async then got := TcpRecv(conn.Sock, @b[0], 4096)
+  else got := NetRecv(conn.Sock, @b[0], 4096);
+  if got > 0 then
+  begin
+    SetLength(chunk, got);                  { local — SetLength on a record field
+                                              via a var param is not codegen-supported }
+    Move(b[0], chunk[1], got);
+    conn.Buf := conn.Buf + chunk;
+  end
+  else
+    conn.Alive := False;
+  Result := Integer(got);
+end;
+
+function HttpConnect(const host: AnsiString; port: Integer): THttpConnection;
+var ip: LongWord;
+begin
+  Result.Host := host; Result.Port := port; Result.Buf := '';
+  Result.Sock := NET_INVALID_SOCKET; Result.Alive := False;
+  if not HttpResolve(host, ip) then Exit;
+  Result.Sock := NetTcpConnect(NetAddress(ip, port));
+  Result.Alive := Result.Sock >= 0;
+end;
+
+{ Shared core: send a keep-alive request and read exactly one length-aware
+  response. async picks the reactor (TcpRecv/TcpSend) vs blocking (Net*). }
+function HttpConnExecCore(var conn: THttpConnection;
+  const method, path, extraHeaders, body: AnsiString; async: Boolean): THttpResponse;
+var
+  req, headerBlock, oneResp: AnsiString;
+  hdrEnd, bodyStart, clen, clen2, blen, sent: Integer;
+begin
+  Result.Ok := False; Result.Status := 0; Result.Reason := '';
+  Result.Headers := ''; Result.Body := '';
+  if not conn.Alive then Exit;
+
+  { keep-alive request: like HttpBuildRequest but Connection: keep-alive. }
+  req := method + ' ' + path + ' HTTP/1.1' + CRLF + 'Host: ' + conn.Host + CRLF +
+         'Connection: keep-alive' + CRLF + extraHeaders;
+  if body <> '' then req := req + 'Content-Length: ' + IntToStr(Length(body)) + CRLF;
+  req := req + CRLF;
+  if body <> '' then req := req + body;
+  if async then sent := Integer(TcpSend(conn.Sock, @req[1], Length(req)))
+  else sent := Integer(NetSend(conn.Sock, @req[1], Length(req)));
+  if sent < 0 then begin conn.Alive := False; Exit; end;
+
+  { read until the full header block is buffered }
+  hdrEnd := HttpFindHeaderEnd(conn.Buf);
+  while hdrEnd = 0 do
+  begin
+    if HttpConnRecvMore(conn, async) <= 0 then Exit;   { closed before full headers }
+    hdrEnd := HttpFindHeaderEnd(conn.Buf);
+  end;
+  headerBlock := Copy(conn.Buf, 1, hdrEnd - 1);
+  bodyStart := hdrEnd + 4;
+
+  { length-aware: exactly Content-Length, or the full chunked body }
+  if Pos('chunked', LowerCase(HttpHeaderValue(headerBlock, 'Transfer-Encoding'))) > 0 then
+  begin
+    blen := HttpChunkedLen(conn.Buf, bodyStart);
+    while blen < 0 do
+    begin
+      if HttpConnRecvMore(conn, async) <= 0 then Break;
+      blen := HttpChunkedLen(conn.Buf, bodyStart);
+    end;
+    if blen < 0 then Exit;
+  end
+  else
+  begin
+    clen := StrToIntDef(HttpHeaderValue(headerBlock, 'Content-Length'), 0);
+    blen := clen;
+    while (Length(conn.Buf) - (bodyStart - 1)) < clen do
+      if HttpConnRecvMore(conn, async) <= 0 then Break;
+    clen2 := Length(conn.Buf) - (bodyStart - 1);
+    if clen2 < blen then blen := clen2;        { short close — take what we got }
+  end;
+
+  { this response = headers + its body; the rest stays buffered for the next. }
+  oneResp := Copy(conn.Buf, 1, (bodyStart - 1) + blen);
+  conn.Buf := Copy(conn.Buf, bodyStart + blen, Length(conn.Buf));
+  HttpParseResponse(oneResp, Result);
+
+  if Pos('close', LowerCase(HttpHeaderValue(headerBlock, 'Connection'))) > 0 then
+    conn.Alive := False;
+end;
+
+function HttpConnExec(var conn: THttpConnection; const method, path, extraHeaders, body: AnsiString): THttpResponse;
+begin
+  Result := HttpConnExecCore(conn, method, path, extraHeaders, body, False);
+end;
+
+function HttpConnGet(var conn: THttpConnection; const path: AnsiString): THttpResponse;
+begin
+  Result := HttpConnExecCore(conn, 'GET', path, '', '', False);
+end;
+
+procedure HttpConnClose(var conn: THttpConnection);
+var rc: Integer;
+begin
+  if conn.Sock >= 0 then rc := NetClose(conn.Sock);
+  conn.Sock := NET_INVALID_SOCKET;
+  conn.Alive := False;
+  conn.Buf := '';
+end;
+
+function HttpConnExecAsync(var conn: THttpConnection; const method, path, extraHeaders, body: AnsiString): THttpResponse;
+begin
+  Result := HttpConnExecCore(conn, method, path, extraHeaders, body, True);
+end;
+
+function HttpConnGetAsync(var conn: THttpConnection; const path: AnsiString): THttpResponse;
+begin
+  Result := HttpConnExecCore(conn, 'GET', path, '', '', True);
+end;
+
 function HttpResolveAsync(const host: AnsiString; var ip: LongWord): Boolean;
 var ips: TDnsIpv4Array; cnt: Integer;
 begin
@@ -433,6 +619,16 @@ begin
     if cnt > 0 then begin ip := ips[0]; Result := True; Exit; end;
   end;
   Result := False;
+end;
+
+function HttpConnectAsync(const host: AnsiString; port: Integer): THttpConnection;
+var ip: LongWord;
+begin
+  Result.Host := host; Result.Port := port; Result.Buf := '';
+  Result.Sock := NET_INVALID_SOCKET; Result.Alive := False;
+  if not HttpResolveAsync(host, ip) then Exit;
+  Result.Sock := TcpConnectAddr(ip, port);
+  Result.Alive := Result.Sock >= 0;
 end;
 
 function HttpRequestAsync(const method, url, extraHeaders, body: AnsiString): THttpResponse;
