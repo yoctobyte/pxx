@@ -51,3 +51,4 @@
 2026-06-24T14:43:12Z  v51  0725440358c2b80279e35d60d4c6035deab3da535122f71856aae5fea5247fcb  5965542108da2f14f71d84df24f19c807af01fc8  feat(parser): indexed (array) properties + default
 2026-06-24T15:53:46Z  v52  82baba176932546547f7cf0461f499e518867f03eb4cf60d832feb2a73e7b279  73417619089a913f500d6936959e7a716adc111e  feat(parser): multi-index properties P[a, b]
 2026-06-24T16:36:41Z  v53  e2f4d90495b256561dd752ec3e10d3b5acee61b4df1d5ce48a1ac4a0729fd1e3  70041300afe003c5e2abfe3aafbee2bef0d9b6b7  fix(tooling): graceful non-x86_64 install + gate demos behind install
+2026-06-24T17:38:02Z  v54  98c6ebff80cd30bc363855065812faaad43105d2953d099f15769b7eb8e150f4  c56e6d7c9f270d4e9b2caefb865f3b6db717546a  fix(parser): Read/Write as method names + untyped params in methods
