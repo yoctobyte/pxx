@@ -109,9 +109,56 @@ end first; generalise after.
 - [feature-compiler-warnings](feature-compiler-warnings.md) — adjacent
   developer-experience work.
 
+## Re-validation 2026-06-24 (all claims still hold) + plan refinements
+
+Code re-checked against current tree. Findings that change the estimate:
+
+- **Line capture is ~3 sites, not 540.** `AllocNode` (parser.inc:13) and
+  `IRAppend` (ir.inc:21) are each a single definition. Capture `CurTok.Line`
+  *inside* `AllocNode` → `ASTLine[]`; set a `CurLowerLine` global at the top of
+  `IRLowerAST` (= `ASTLine[node]`); read it in `IRAppend` → `IRLine[]`. No need
+  to touch the 540 call sites.
+- **Emit hook is clean.** `IREmitNode` (ir_codegen.inc:1391, x64) — `CodeLen` at
+  entry is the address where that node's code begins → push a
+  `(CodeLen, IRLine[node])` row when the line changes. One backend for Tier 1.
+- **`writeELF` has NO section-header table** (elfwriter.inc:646; e_shoff=0). gdb
+  reads `.debug_*` via section headers, so the `-g` exe path must ADD a section
+  header table + `.shstrtab`. The byte-writers exist (`writeShdrA/B`,
+  `writeStrZ`) — used today only in the ET_REL (`--emit-obj`) and ESP paths — so
+  it is wiring, not new machinery. ~80 lines, gated on `-g`.
+- **Tier 1 also needs a minimal `.debug_info` CU stub.** A `.debug_line` table is
+  only usable when a CU DIE references it via `DW_AT_stmt_list`. So Tier 1 ships
+  with a one-DIE `.debug_info` + `.debug_abbrev` + `.debug_str` (CU name /
+  comp_dir / stmt_list, ~40 bytes). (Ticket had this under Tier 2; it rides with
+  Tier 1 in practice.)
+
+### Graceful-degradation decision (kills the Tier-3 bulk)
+
+Anything with runtime/heap layout is emitted as a **labeled
+`DW_TAG_pointer_type`**, NOT a byte-exact ABI struct DIE:
+- dynarray `array of T` → pointer named `"array of <T>"` (gdb shows handle;
+  `print p^` if pointee set).
+- managed string / AnsiString → pointer named `"string"` (gdb `x/s` works — data
+  is NUL-terminated — no struct DIE needed).
+- variant → opaque pointer. class instance → pointer to the struct DIE.
+
+What stays "real" (all cheap, RTTI-backed): base types (`DW_TAG_base_type`),
+records/classes (`DW_TAG_structure_type` + members from the EXISTING RTTI:
+`__rttireg` / `UClsRTTIOff` / typinfo — do NOT rebuild field metadata), fixed
+arrays (`DW_TAG_array_type`). The expensive part — describing dynarray/string/
+variant runtime layout byte-exact — is DELETED. Inspection works for ints,
+records, class fields, fixed arrays; the hard 10% shows a labeled pointer
+instead of nothing.
+
+Refined effort: Tier 1 (line + CU stub) ≈ 1 session; Tier 2 (subprograms/frames)
+small; Tier 3-lite (base types + RTTI structs + pointer-cheat) ≈ 1 session.
+
 ## Log
 - 2026-06-20 — ticket opened from DWARF feasibility examination. Findings: no
   debug info exists; PXX is its own linker so must emit all `.debug_*` itself;
   line info dies at the lexer (tokens have `.Line`, AST/IR do not). Plan: three
   tiers (`.debug_line` → subprograms → locals/types), x86-64 first, `-g`
   opt-in so self-host byte-identical is untouched.
+- 2026-06-24 — re-validated against current tree (claims hold); added line-capture
+  / emit-hook / section-header findings + the pointer-cheat degradation decision
+  (see section above). Tier 1 confirmed ~1-session feasible.
