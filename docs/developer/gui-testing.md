@@ -16,18 +16,39 @@ apps/ide/eliah/eliah --smoke          # SMOKE OK, no window
 PXX_STABLE=… tools/gui_suite.sh        # construct + smoke, no foreground steal
 ```
 
-## 2. Screenshot needed → use Xvfb (virtual display), not `:0`
+## 2. Screenshot needed → use `tools/gui_shot.sh` (Xvfb wrapper)
 
-**Requires `Xvfb`** (`sudo apt install xvfb`). Run the app on a private
-framebuffer display that never touches the real screen, then grab from it:
+**Requires `Xvfb`** (`sudo apt install xvfb`). The wrapper runs the app on a
+private framebuffer (`:99`), captures one frame, and kills the app — never
+touching the real screen:
 
 ```sh
-Xvfb :99 -screen 0 1920x1080x24 &       # once per session
-export DISPLAY=:99
-apps/ide/eliah/eliah >/tmp/run.log 2>&1 &  # renders offscreen, no grab/HID steal
-sleep 2
-ffmpeg -y -f x11grab -video_size 1920x1080 -i :99 -frames:v 1 /tmp/shot.png
+tools/gui_shot.sh OUT.png CMD [ARGS...]
+# e.g.
+tools/gui_shot.sh /tmp/eliah.png apps/ide/eliah/eliah --split
+GUI_SHOT_SIZE=900x600 tools/gui_shot.sh /tmp/narrow.png ./myapp
 ```
+
+Knobs (env): `GUI_SHOT_SIZE` (default 1100x700), `GUI_SHOT_SETTLE` (2.5s),
+`GUI_SHOT_FRESH=1` (kill+restart Xvfb first), `GUI_SHOT_DISPLAY` (`:99`). It
+auto-detects a blank/wedged capture and retries once on a fresh Xvfb.
+
+Doing it by hand (what the wrapper automates) — note the **two traps**:
+
+```sh
+Xvfb :99 -screen 0 1920x1080x24 &          # once per session
+DISPLAY=:99 apps/ide/eliah/eliah &          # renders offscreen, no grab/HID steal
+sleep 2
+DISPLAY=:99 ffmpeg -y -f x11grab -video_size 1100x700 \
+    -i :99+0,0 -frames:v 1 /tmp/shot.png    # MUST be -frames:v 1
+```
+
+- **Trap 1:** a bare ffmpeg `-i` (or `-update 1` without `-frames:v 1`) records
+  *forever*, wedges the display, and every later grab comes back blank. Always
+  `-frames:v 1`.
+- **Trap 2:** after many rapid launch/kill cycles the Xvfb display gets wedged
+  and grabs go blank (~1-3 KB PNG). A real PCL window is tens of KB. Restart
+  Xvfb fresh to recover (the wrapper does this automatically).
 
 Benefits over grabbing `:0`:
 - never steals focus / raises over the user's windows;
