@@ -136,6 +136,15 @@ function HttpPostAsync(const url, contentType, body: AnsiString): THttpResponse;
 { Async GET following up to maxRedirects 3xx Location hops (absolute URLs). }
 function HttpGetFollowAsync(const url: AnsiString; maxRedirects: Integer): THttpResponse;
 
+{ --- async connection pool ---
+  HttpGetPooledAsync transparently reuses a live keep-alive connection to the
+  same host:port from a process-global pool, opening a fresh one only when none
+  is available (then keeping it for next time). Single-flow (coroutine) use only
+  — not concurrency-safe across simultaneously-running coroutines. HttpPoolClose
+  closes and drops every pooled connection. }
+function HttpGetPooledAsync(const url: AnsiString): THttpResponse;
+procedure HttpPoolClose;
+
 implementation
 
 const
@@ -846,6 +855,52 @@ begin
     Inc(hops);
     Result := HttpGetAsync(cur);
   end;
+end;
+
+var
+  gPool: array of THttpConnection;
+
+function HttpPoolFind(const host: AnsiString; port: Integer): Integer;
+var i: Integer;
+begin
+  Result := -1;
+  for i := 0 to Length(gPool) - 1 do
+    if gPool[i].Alive and (gPool[i].Port = port) and (gPool[i].Host = host) then
+    begin Result := i; Exit; end;
+end;
+
+function HttpGetPooledAsync(const url: AnsiString): THttpResponse;
+var
+  host, path: AnsiString;
+  port, idx, n: Integer;
+  isTls: Boolean;
+begin
+  Result.Ok := False; Result.Status := 0; Result.Reason := '';
+  Result.Headers := ''; Result.Body := '';
+  if not HttpParseUrl(url, host, port, path, isTls) then Exit;
+  if isTls then Exit;
+
+  { reuse a live connection to this host:port if one is pooled }
+  idx := HttpPoolFind(host, port);
+  if idx >= 0 then
+  begin
+    Result := HttpConnExecCore(gPool[idx], 'GET', path, '', '', True);
+    if Result.Ok then Exit;          { reused successfully }
+    { else the connection had died — leave it (Alive=False, skipped) and open a fresh one }
+  end;
+
+  n := Length(gPool);
+  SetLength(gPool, n + 1);            { gPool is a global — SetLength OK }
+  gPool[n] := HttpConnectAsync(host, port);
+  Result := HttpConnExecCore(gPool[n], 'GET', path, '', '', True);
+end;
+
+procedure HttpPoolClose;
+var i: Integer;
+begin
+  for i := 0 to Length(gPool) - 1 do
+    HttpConnClose(gPool[i]);
+  SetLength(gPool, 0);
 end;
 
 end.

@@ -2306,12 +2306,14 @@ lib-test: pxx-stable-check
 	test "$$(/tmp/lib_http_redirect)" = "$$(printf 'server-done=ok\nstatus=ok\nbody=ok')"
 	$(PXX_STABLE) -Fulib/rtl/platform/posix test/lib_http_keepalive.pas /tmp/lib_http_keepalive
 	test "$$(/tmp/lib_http_keepalive)" = "$$(printf 'server-done=ok\nbody1=ok\nalive-mid=ok\nbody2=ok')"
+	$(PXX_STABLE) -Fulib/rtl/platform/posix test/lib_http_pool.pas /tmp/lib_http_pool
+	test "$$(/tmp/lib_http_pool)" = "$$(printf 'server-done=ok\nbody1=ok\nbody2-reused=ok')"
 	$(PXX_STABLE) -Fulib/rtl/platform/posix test/lib_dns_async.pas /tmp/lib_dns_async
 	test "$$(/tmp/lib_dns_async)" = "$$(printf 'server-done=ok\nrcode=ok\ncount=ok\nip=ok')"
 	$(PXX_STABLE) -Fulib/rtl test/lib_classes.pas /tmp/lib_classes
 	test "$$(/tmp/lib_classes | grep -c '=ok')" = "16"
 	test "$$(/tmp/lib_classes | grep -c 'FAIL')" = "0"
-	@echo "lib-test ok (sudoku exact + collections + math + sysutils + random + bitset + platform + directory + bignum + json + calc + sat + mathf + vm + mandelbrot + lisp + zlib + png smoke + ansiterm + ansirender + process + process-multi + dynlibs + unixshims + strpchar + sockets + http + http-async + http-redirect + http-keepalive + dns-async + classes) against stable v$$(cat $(STABLE_DEFAULT_DIR)/VERSION 2>/dev/null || echo '?')"
+	@echo "lib-test ok (sudoku exact + collections + math + sysutils + random + bitset + platform + directory + bignum + json + calc + sat + mathf + vm + mandelbrot + lisp + zlib + png smoke + ansiterm + ansirender + process + process-multi + dynlibs + unixshims + strpchar + sockets + http + http-async + http-redirect + http-keepalive + http-pool + dns-async + classes) against stable v$$(cat $(STABLE_DEFAULT_DIR)/VERSION 2>/dev/null || echo '?')"
 
 # Full Track-B library suite, distinct from compiler `make test`.
 library-suite-green: pxx-stable-check

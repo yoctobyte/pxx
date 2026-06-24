@@ -89,10 +89,19 @@ dodge [[bug-setlength-record-field-via-var-param]]. Plus `HttpUrlEncode`/
 `HttpUrlDecode` (RFC 3986 percent-encoding; decode also maps `+`→space) for query
 strings / form bodies. Pure; `lib_http` now 43 checks.
 
+## Connection pool (landed 2026-06-24)
+
+`HttpGetPooledAsync` transparently reuses a live keep-alive connection to the
+same host:port from a process-global pool (opens a fresh one only when none is
+free, then keeps it); `HttpPoolClose` drops them all. e2e `test/lib_http_pool`:
+server does ONE accept, client makes TWO pooled GETs, the second reuses the
+connection. Single-flow (coroutine) only — not concurrency-safe across
+simultaneously-running coroutines yet.
+
 ## Roadmap (next slices)
 
-1. **Connection pool** — keep a small set of `THttpConnection`s keyed by host:port
-   so `HttpGet` reuses one transparently (today reuse is explicit via the Conn API).
+1. Concurrency-safe pool (per-coroutine acquire/release) + a blocking
+   `HttpGetPooled`; pool eviction/idle-timeout.
 2. Structured headers on `THttpResponse` (today: raw `.Headers` block; parse via
    `HttpParseHeaders` on demand).
 3. **TLS** — `https://` is parsed and refused (`isTls`). Routes through a common
