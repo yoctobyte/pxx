@@ -48,6 +48,19 @@ the constant-pool / global-data layout for set constants, or `Ord`/char load
 picking up the set const's base. Reproduces with a single set const + single
 char var, so it should reduce cleanly.
 
+## Related const-codegen quirks (same family, found alongside)
+
+Indexing/typed-const issues that smell like the same const-data handling — record
+here, split out if they prove independent:
+
+- **Untyped string const, indexed** → wrong char. `const t = 'ABCDEF'; c := t[2]`
+  compiles but `c` is garbage (not `'B'`). Worked around in
+  `lib/rtl/sysutils.IntToHex` by computing the hex digit arithmetically instead
+  of indexing a const table.
+- **Typed string const with initializer** → parse error. `const t: string =
+  'ABCDEF';` → `Expected: begin, but got: ABCDEF`. Likely a separate parser gap
+  (typed-const string initializer), noted for triage.
+
 ## Done when
 
 - `Ord(c)` and `c in C` are correct in the presence of one or more `set of char`

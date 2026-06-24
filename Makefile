@@ -2290,7 +2290,7 @@ lib-test: pxx-stable-check
 	$(PXX_STABLE) test/lib_unixshims.pas /tmp/lib_unixshims
 	test "$$(/tmp/lib_unixshims)" = "$$(printf 'gettimeofday=ok\ntv_sec-sane=ok\ntv_usec-range=ok\nnil-tp=ok\ntzseconds=ok')"
 	$(PXX_STABLE) test/lib_strpchar.pas /tmp/lib_strpchar
-	test "$$(/tmp/lib_strpchar)" = "$$(printf 'strlcopy-ret=ok\nstrlcopy-trunc=ok\nstrlcopy-short=ok\nstrlcomp-eq=ok\nstrlcomp-lt=ok\nstrlcomp-gt=ok\nsleep=ok')"
+	test "$$(/tmp/lib_strpchar)" = "$$(printf 'strlcopy-ret=ok\nstrlcopy-trunc=ok\nstrlcopy-short=ok\nstrlcomp-eq=ok\nstrlcomp-lt=ok\nstrlcomp-gt=ok\nsleep=ok\nmove-fillchar=ok\ninttohex-ff=ok\ninttohex-pad=ok\nstringofchar=ok\nstringofchar-0=ok')"
 	@echo "lib-test ok (sudoku exact + collections + math + sysutils + random + bitset + platform + directory + bignum + json + calc + sat + mathf + vm + mandelbrot + lisp + zlib + png smoke + ansiterm + ansirender + process + process-multi + dynlibs + unixshims + strpchar) against stable v$$(cat $(STABLE_DEFAULT_DIR)/VERSION 2>/dev/null || echo '?')"
 
 # Full Track-B library suite, distinct from compiler `make test`.

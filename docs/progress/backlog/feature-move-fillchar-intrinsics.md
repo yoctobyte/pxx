@@ -12,10 +12,20 @@
 
 `Move(const Source; var Dest; Count)` and `FillChar(var X; Count; Value: Byte)`
 are System primitives FPC makes available without `uses` and lowers to optimized
-inline code (often `rep movsb`/`rep stosb` or vectorized copies). PXX currently
-has neither as a builtin; Track B is providing plain-Pascal `lib/rtl`
-implementations (auto-loaded, overlap-safe Move = memmove, byte FillChar) over
-`@Source`/`@Dest` + untyped params.
+inline code (often `rep movsb`/`rep stosb` or vectorized copies). PXX has neither
+as a builtin.
+
+**Interim (landed 2026-06-24):** plain-Pascal `Move` (overlap-safe / memmove) and
+`FillChar` live in `lib/rtl/sysutils.pas`, resolved via the existing `uses
+SysUtils` that every real consumer (and all Synapse units) already has. This is a
+**temporary home** — FPC's canonical home is `System` (bare, no `uses`). Two
+things this ticket should eventually deliver:
+
+1. **Proper home / no-`uses` availability** — move them to the auto-pulled
+   `compiler/builtin/builtin.pas` (the implicit System surface; any `uses`-bearing
+   program already pulls it, per the `tkUses` pre-scan in `parser.inc`), so bare
+   `Move`/`FillChar` work with no `uses` like FPC. Then remove the SysUtils copies.
+2. **Optimization** (below).
 
 That is correct and unblocks compilation, but a byte-at-a-time Pascal loop is slow
 for the bulk-copy paths these primitives exist for (MD5/hashing buffers in

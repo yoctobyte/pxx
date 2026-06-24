@@ -26,6 +26,13 @@ type
 { Int64 -> decimal string (covers Integer via widening). Handles negatives. }
 function IntToStr(value: Int64): AnsiString;
 
+{ Uppercase hexadecimal of value, left-zero-padded to at least Digits chars
+  (FPC SysUtils.IntToHex). Negative values use their two's-complement bits. }
+function IntToHex(value: Int64; digits: Integer): AnsiString;
+
+{ A string of Count copies of ch (FPC SysUtils.StringOfChar; '' if Count<=0). }
+function StringOfChar(ch: Char; count: Integer): AnsiString;
+
 { 1-based substring; count clamped to the end; out-of-range index -> ''. }
 function Copy(const s: AnsiString; index, count: Integer): AnsiString;
 
@@ -68,6 +75,15 @@ function StrLComp(Str1, Str2: PChar; MaxLen: Cardinal): Integer;
 { Suspend the current thread for at least Milliseconds (FPC SysUtils.Sleep).
   Backed by the nanosleep syscall. }
 procedure Sleep(Milliseconds: Cardinal);
+
+{ INTERIM HOME (see feature-move-fillchar-intrinsics). In FPC, Move/FillChar are
+  System primitives — bare, no `uses`. Until the compiler provides them (as
+  builtins, then optimized intrinsics) they live here in SysUtils: every real
+  consumer, and all Synapse units, `uses SysUtils`, so the bare name resolves.
+  Remove from here once the compiler builtin lands. Move is overlap-safe
+  (memmove semantics); FillChar fills bytes. }
+procedure Move(const Source; var Dest; Count: Integer);
+procedure FillChar(var X; Count: Integer; Value: Byte);
 
 { Left-pad/Right-pad s to len chars with ch (default space). }
 function PadLeft(const s: AnsiString; len: Integer; ch: Char): AnsiString;
@@ -119,6 +135,36 @@ begin
     value := value div 10;
   end;
   if neg then s := '-' + s;
+  Result := s;
+end;
+
+function IntToHex(value: Int64; digits: Integer): AnsiString;
+var s: AnsiString; u: UInt64; nib: Integer; c: Char;
+begin
+  u := UInt64(value);
+  if u = 0 then
+    s := '0'
+  else
+  begin
+    s := '';
+    while u > 0 do
+    begin
+      nib := Integer(u and 15);
+      if nib < 10 then c := Chr(Ord('0') + nib)
+      else c := Chr(Ord('A') + nib - 10);
+      s := c + s;
+      u := u shr 4;
+    end;
+  end;
+  while Length(s) < digits do s := '0' + s;
+  Result := s;
+end;
+
+function StringOfChar(ch: Char; count: Integer): AnsiString;
+var s: AnsiString; i: Integer;
+begin
+  s := '';
+  for i := 1 to count do s := s + ch;
   Result := s;
 end;
 
@@ -242,6 +288,27 @@ begin
   req.Sec  := Milliseconds div 1000;
   req.Nsec := (Milliseconds mod 1000) * 1000000;
   res := __pxxrawsyscall(n, Int64(@req), 0, 0, 0, 0, 0);
+end;
+
+procedure Move(const Source; var Dest; Count: Integer);
+var s, d: PByte; i: Integer;
+begin
+  if Count <= 0 then Exit;
+  s := PByte(@Source);
+  d := PByte(@Dest);
+  { Overlap-safe: when Dest is above Source and the ranges overlap, copy
+    backward so we don't clobber not-yet-copied bytes (memmove, not memcpy). }
+  if (Int64(d) > Int64(s)) and (Int64(d) < Int64(s) + Count) then
+    for i := Count - 1 downto 0 do d[i] := s[i]
+  else
+    for i := 0 to Count - 1 do d[i] := s[i];
+end;
+
+procedure FillChar(var X; Count: Integer; Value: Byte);
+var d: PByte; i: Integer;
+begin
+  d := PByte(@X);
+  for i := 0 to Count - 1 do d[i] := Value;
 end;
 
 function UpperCase(const s: AnsiString): AnsiString;

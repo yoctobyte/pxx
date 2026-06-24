@@ -215,3 +215,28 @@ codegen; Synapse uses such constants, so it threatens correctness later.
 
 **Track B next (not blocked on Track A):** `Move`/`FillChar` RTL, then the
 `sockets` unit for synsock/blcksock.
+
+### Progress 2026-06-24 (cont. 2) — sysutils breadth; synacode hits {$R-} at emit
+
+Added to `lib/rtl/sysutils.pas` (all smoked in `test/lib_strpchar`):
+**`Move`** (overlap-safe/memmove) + **`FillChar`** (interim home — see
+[[feature-move-fillchar-intrinsics]]; FPC's is System/no-uses), **`IntToHex`**,
+**`StringOfChar`**. synacode resolves all of these now.
+
+**`synacode` new wall: `{$R-}` at emit** — [[bug-r-directive-toggle-treated-as-resource]]
+(Track A, urgent). The `{$R}` lexer reads the range-check toggle `-`/`+` as a
+resource filename; the error only fires at emit, so it was masked until synacode
+started passing semantics. Latent since 2026-05-30, not a v50 regression.
+
+Spinoff: const-string-index quirks folded into
+[[bug-set-of-char-const-corrupts-char-codegen]] (untyped string const index →
+garbage char, worked around in IntToHex; typed `const s: string = ...` → parse
+error).
+
+**Track A urgent queue now (all block Synapse):**
+1. [[bug-conditional-directive-miscount-synautil]] — synautil/synaip/asn1util/synachar.
+2. [[bug-r-directive-toggle-treated-as-resource]] — synacode (and the above, at emit).
+3. [[bug-set-of-char-const-corrupts-char-codegen]] — correctness.
+
+**Track B (not blocked):** `sockets` unit → synsock/blcksock (+ our own net lib /
+HTTP, async-aware — see the design note to come).
