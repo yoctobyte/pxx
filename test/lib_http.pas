@@ -59,4 +59,20 @@ begin
   { Response parse: 404, no body. }
   HttpParseResponse('HTTP/1.1 404 Not Found'#13#10'X: y'#13#10#13#10, resp);
   SayBool('resp-404', (resp.Status = 404) and (resp.Reason = 'Not Found') and (resp.Body = ''));
+
+  { Header lookup (case-insensitive, trimmed). }
+  SayBool('hdr-ci', HttpHeaderValue('Content-Type:  text/html '#13#10'X: 1', 'content-type') = 'text/html');
+  SayBool('hdr-miss', HttpHeaderValue('A: b'#13#10, 'nope') = '');
+
+  { Chunked decode (standalone helper): '5\r\nhello\r\n6\r\n world\r\n0\r\n\r\n'. }
+  SayBool('dechunk', HttpDechunk('5'#13#10'hello'#13#10'6'#13#10' world'#13#10'0'#13#10#13#10) = 'hello world');
+
+  { Response with chunked body is decoded. }
+  HttpParseResponse('HTTP/1.1 200 OK'#13#10'Transfer-Encoding: chunked'#13#10#13#10 +
+                    '4'#13#10'Wiki'#13#10'5'#13#10'pedia'#13#10'0'#13#10#13#10, resp);
+  SayBool('resp-chunked', resp.Body = 'Wikipedia');
+
+  { Content-Length trims trailing junk (e.g. start of a pipelined response). }
+  HttpParseResponse('HTTP/1.1 200 OK'#13#10'Content-Length: 2'#13#10#13#10'hiEXTRA', resp);
+  SayBool('resp-clen-trim', resp.Body = 'hi');
 end.

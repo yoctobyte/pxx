@@ -44,10 +44,19 @@ Foundation already present and reused: `net.pas` (blocking TCP/UDP + timeouts),
   record, client resolves through the reactor (server + client, one thread).
   Pending: TC→TCP retry; multi-nameserver failover on the async path.
 
+## Framing breadth (landed 2026-06-24)
+
+`http.pas` pure helpers: `HttpHeaderValue` (case-insensitive lookup),
+`HttpDechunk` (chunked decode), and `HttpParseResponse` now applies framing —
+`Transfer-Encoding: chunked` is decoded, else the body is trimmed to
+`Content-Length`. Smoke `test/lib_http` (26 checks). Pending: keep-alive /
+length-aware recv loop on the transport (today reads to EOF with
+`Connection: close`, which the parser then frames correctly).
+
 ## Roadmap (next slices)
 
-1. **Response framing breadth** — `Content-Length` bodies and chunked transfer
-   encoding (today: read-to-EOF with `Connection: close`); keep-alive.
+1. **Keep-alive transport** — recv exactly Content-Length / until last chunk so a
+   connection can be reused (today: one request per `Connection: close`).
 4. **TLS** — `https://` is parsed and refused (`isTls`). Scoped into its own
    flagship ticket [[feature-tls13-from-scratch]]: syscall-only TLS 1.3 (Pascal
    handshake + optional kTLS bulk; kernel does NOT do the handshake). OpenSSL via

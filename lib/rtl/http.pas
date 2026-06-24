@@ -36,7 +36,15 @@ function HttpParseUrl(const url: AnsiString;
   A Content-Length is added automatically when body <> ''. }
 function HttpBuildRequest(const method, host, path, extraHeaders, body: AnsiString): AnsiString;
 
-{ Parse a raw response into resp (status line + headers + body). }
+{ Case-insensitive header lookup over a raw header block. Returns the value with
+  surrounding whitespace trimmed, or '' if absent. }
+function HttpHeaderValue(const headers, name: AnsiString): AnsiString;
+
+{ Decode a chunked-transfer-encoded body to its plain bytes. }
+function HttpDechunk(const body: AnsiString): AnsiString;
+
+{ Parse a raw response into resp (status line + headers + body). Applies
+  Transfer-Encoding: chunked decoding, else trims the body to Content-Length. }
 procedure HttpParseResponse(const raw: AnsiString; var resp: THttpResponse);
 
 { --- blocking transport --- }
@@ -110,8 +118,80 @@ begin
   Result := r;
 end;
 
+function HttpHeaderValue(const headers, name: AnsiString): AnsiString;
+var
+  lname, lhead, line: AnsiString;
+  i, lineStart, colon: Integer;
+begin
+  Result := '';
+  lname := LowerCase(name);
+  lhead := LowerCase(headers);
+  { Walk lines; match the name before its ':'. }
+  lineStart := 1;
+  for i := 1 to Length(lhead) + 1 do
+    if (i > Length(lhead)) or (lhead[i] = #10) then
+    begin
+      line := Copy(lhead, lineStart, i - lineStart);
+      { strip trailing CR }
+      if (Length(line) > 0) and (line[Length(line)] = #13) then
+        line := Copy(line, 1, Length(line) - 1);
+      colon := Pos(':', line);
+      if (colon > 0) and (Trim(Copy(line, 1, colon - 1)) = lname) then
+      begin
+        { return the value from the ORIGINAL (case-preserved) headers }
+        Result := Trim(Copy(headers, lineStart + colon, i - (lineStart + colon)));
+        if (Length(Result) > 0) and (Result[Length(Result)] = #13) then
+          Result := Copy(Result, 1, Length(Result) - 1);
+        Exit;
+      end;
+      lineStart := i + 1;
+    end;
+end;
+
+function HttpDechunk(const body: AnsiString): AnsiString;
+var
+  pos, n, sz: Integer;
+  hexline, outp: AnsiString;
+  lineEnd: Integer;
+
+  function HexVal(const s: AnsiString): Integer;
+  var k, d: Integer; c: Char;
+  begin
+    Result := 0;
+    for k := 1 to Length(s) do
+    begin
+      c := s[k];
+      if (c >= '0') and (c <= '9') then d := Ord(c) - Ord('0')
+      else if (c >= 'a') and (c <= 'f') then d := Ord(c) - Ord('a') + 10
+      else if (c >= 'A') and (c <= 'F') then d := Ord(c) - Ord('A') + 10
+      else Break;     { stop at ';' chunk-ext or whitespace }
+      Result := Result * 16 + d;
+    end;
+  end;
+
+begin
+  outp := '';
+  pos := 1;
+  n := Length(body);
+  while pos <= n do
+  begin
+    { chunk-size line up to CRLF }
+    lineEnd := pos;
+    while (lineEnd < n) and not ((body[lineEnd] = #13) and (body[lineEnd + 1] = #10)) do
+      Inc(lineEnd);
+    hexline := Copy(body, pos, lineEnd - pos);
+    sz := HexVal(hexline);
+    pos := lineEnd + 2;                 { past CRLF }
+    if sz <= 0 then Break;              { last chunk }
+    if pos + sz - 1 > n then sz := n - pos + 1;
+    outp := outp + Copy(body, pos, sz);
+    pos := pos + sz + 2;               { data + trailing CRLF }
+  end;
+  Result := outp;
+end;
+
 procedure HttpParseResponse(const raw: AnsiString; var resp: THttpResponse);
-var i, n, lineEnd, sp1, sp2, sep: Integer; statusLine, code: AnsiString;
+var i, n, lineEnd, sp1, sp2, sep, cl: Integer; statusLine, code, te, clv: AnsiString;
 begin
   resp.Ok := False; resp.Status := 0; resp.Reason := '';
   resp.Headers := ''; resp.Body := '';
@@ -159,6 +239,21 @@ begin
   end
   else
     resp.Headers := Copy(raw, lineEnd + 2, n);
+
+  { Framing: chunked wins; else trim to Content-Length if given. }
+  te := LowerCase(HttpHeaderValue(resp.Headers, 'Transfer-Encoding'));
+  if Pos('chunked', te) > 0 then
+    resp.Body := HttpDechunk(resp.Body)
+  else
+  begin
+    clv := HttpHeaderValue(resp.Headers, 'Content-Length');
+    if clv <> '' then
+    begin
+      cl := StrToIntDef(clv, -1);
+      if (cl >= 0) and (cl < Length(resp.Body)) then
+        resp.Body := Copy(resp.Body, 1, cl);
+    end;
+  end;
 
   resp.Ok := resp.Status > 0;
 end;
