@@ -252,10 +252,38 @@ small; Tier 3-lite (base types + RTTI structs + pointer-cheat) ≈ 1 session.
   prologue change would desync the CFI (generators are fine, they still go
   through EmitProcPrologue).
 
-  Remaining (deferred): pointer-cheat element inspection (`print arr[i]`/struct
-  string DIE — the byte-exact ABI struct the ticket deleted; do not rebuild
-  unless a workflow needs it); class instances still show as a labeled pointer
-  rather than a pointer-to-its-structure_type; **cross-target generalisation
-  (×4: i386/aarch64/arm32 + ELF32 section-header table in `writeELF32`, per-arch
-  DWARF reg map, DWARF32 addr width)** is the only big piece left. Tier 1-3 +
-  CFI complete for x86-64.
+- 2026-06-24 — **CROSS-TARGET LANDED — `-g` complete on all four Linux targets
+  (x86-64, i386, aarch64, arm32).** Verified end-to-end under qemu-user gdbstub +
+  gdb-multiarch: `bt` shows function names/args/file:line, CFI unwinds caller
+  frames, `print` reads params/locals, globals, and record fields on every arch.
+  (esp xtensa/riscv32 stay excluded — windowed/no-FP ABI, no gdb path.)
+  - **`DbgSetArchParams`** centralises the per-arch table: ptr width (8 x86-64/
+    aarch64, 4 i386/arm32), frame-base reg (rbp6/ebp5/x29 29/r11 11), RA col
+    (16/8/30/14), SP reg, link-reg-saved-in-prologue flag (aarch64/arm32 store
+    x30/lr; x86 relies on the `call`-pushed RA), and the two prologue step byte
+    lengths for the FDE `advance_loc`. `DbgPutAddr` emits ptr-width addresses
+    everywhere (line set_address, CU/subprogram low/high_pc, DW_OP_addr, FDE).
+  - **Row recording moved to a shared `DbgRecordRow(i)`** (in ir.inc, before the
+    per-arch ir_codegen_* files) called at the top of each backend's statement
+    emit loop — previously only the x86-64 loop recorded rows, so cross builds
+    had an empty line table. Per-body reset moved to the IREmitMachineCode
+    dispatcher so it runs before any backend.
+  - **`writeELF32` gained the section-header table** (`writeShdr32`/
+    `DbgWriteShdrTable32`, Elf32_Shdr 40B) + e_shoff/shnum/shstrndx, mirroring
+    the 64-bit path; gated to i386/arm32 (not esp). aarch64 already flows through
+    the 64-bit `writeELF`, so just enabling it in the doDebug condition sufficed.
+  - **Globals → CU-level** `DW_TAG_variable` DIEs (was: nested under the main-body
+    subprogram, which scoped them to `main` only → `print <global>` failed inside
+    other procs). Now true globals, visible from every frame.
+  LANDMINES: (1) row recording is per-backend — a new backend needs the
+  `DbgRecordRow` call or its line table is silently empty. (2) host gdb prints
+  cross frame-base regs with x86 names (`$mm0`/`$st0`) when not arch-configured —
+  cosmetic; the DWARF reg numbers are correct (confirmed under gdb-multiarch with
+  `set architecture`). (3) program globals must be CU children, not subprogram
+  children, or they aren't global to gdb.
+
+  **DWARF `-g` is now DONE for all Linux targets.** Remaining (deferred, optional):
+  pointer-cheat element inspection (`print arr[i]` / managed-string struct — the
+  byte-exact ABI struct the ticket deliberately deleted); class instances show as
+  a labeled pointer rather than pointer-to-structure_type. esp targets out of
+  scope. Ticket can move to done once these optional tails are explicitly waived.

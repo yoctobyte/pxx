@@ -95,4 +95,18 @@ else
   echo "dwarf-g: WARN — gdb not found, skipping breakpoint/inspection checks"
 fi
 
+# Cross targets: structural check (portable — readelf is arch-independent). Each
+# -g build must carry a populated .debug_line + a .debug_frame CIE. Full runtime
+# cross-debug (qemu gdbstub + gdb-multiarch) is validated manually, not gated.
+if command -v readelf >/dev/null 2>&1; then
+  for T in aarch64 i386 arm32; do
+    TEXE="$TMP/dbgsmoke.$T"
+    "$PXX" -g --target=$T "$SRC" "$TEXE" >/dev/null 2>&1 || { echo "dwarf-g: FAIL — -g --target=$T compile errored"; exit 1; }
+    readelf --debug-dump=decodedline "$TEXE" 2>/dev/null | grep -qE "[[:space:]]$ADDLINE[[:space:]]+0x" \
+      || { echo "dwarf-g: FAIL — $T: line $ADDLINE missing from .debug_line"; exit 1; }
+    readelf --debug-dump=frames "$TEXE" 2>/dev/null | grep -q "CIE" \
+      || { echo "dwarf-g: FAIL — $T: no .debug_frame CIE"; exit 1; }
+  done
+fi
+
 echo "dwarf-g: OK"
