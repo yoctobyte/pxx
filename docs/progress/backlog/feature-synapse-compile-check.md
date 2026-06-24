@@ -262,3 +262,26 @@ variants) and a `netdb` shim (`THostEntry`/`GetHostByName`/`ResolveName`/`+6`/
 **Synapse is now heavily Track-A-gated**: directive-miscount, R-toggle,
 qualified-const (+ string-cmp / Read-Write-names / untyped-method-params for the
 Classes it needs). Track B shim work past synsock waits on the qualified-const fix.
+
+### Re-probe 2026-06-25 (v55) — {$R-} fixed; synacode COMPILES + partially runs
+
+`{$R-}` fix (v55) + all the RTL/compiler fixes mean **synacode now compiles
+fully**, joining `synafpc`. Leaf set:
+
+| unit | state |
+|------|-------|
+| `synafpc`, `synacode` | **compile OK** |
+| `synautil`/`synaip`/`asn1util`/`synachar` | [[bug-conditional-directive-miscount-synautil]] (Track A, open) |
+| `synsock`/`blcksock` | [[bug-unit-qualified-constant-not-resolved]] (`termio.FIONREAD`, Track A, open) |
+
+**synacode functional dogfood** (`--mimic-fpc`): `EncodeBase64('hello world')` =
+`aGVsbG8gd29ybGQ=` — **correct**. But `DecodeBase64` returns garbage and `MD5`
+segfaults at runtime — both index/process const lookup tables
+(`ReTableBase64`, the MD5 state), so this is the const-table-index / managed-Move
+runtime codegen family ([[bug-set-of-char-const-corrupts-char-codegen]] and
+relatives). Compiling is necessary but not sufficient — synacode needs those
+runtime codegen bugs fixed (Track A) for correct Base64-decode/MD5. A minimal
+repro from synacode's `Decode4to3Ex` / MD5 path would sharpen the Track A ticket.
+
+Two leaf units down (compile); the rest gated on directive-miscount /
+qualified-const, and full synacode correctness on the const-codegen runtime bugs.
