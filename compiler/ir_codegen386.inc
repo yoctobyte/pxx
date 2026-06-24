@@ -2585,6 +2585,16 @@ begin
             begin EmitB($F2); EmitB($0F); EmitB($10); EmitB($00); end; { movsd xmm0, [eax] }
           Exit;
         end;
+        if (tk = tyString) or (tk = tyFixedString) or (tk = tyShortString) then
+        begin
+          { A frozen/inline-string value IS its buffer address. Deref'ing a
+            pointer-to-frozen-string (typinfo NamePtr^) yields that address — a
+            pointer-width (4-byte) load, not the TypeSize(tyString)=8 path (which
+            classified it 64-bit and loaded edx:eax, diverging from x86-64).
+            bug-cross-gate-masked-failures. }
+          EmitB($8B); EmitB($00);                    { mov eax, [eax] (pointer width) }
+          Exit;
+        end;
         if not (TypeIsOrdinal(tk) or (tk = tyBoolean) or (tk = tyPointer) or
                 (tk = tyChar) or (tk = tyUnknown) or
                 (tk = tyAnsiString) or (tk = tyClass)) then

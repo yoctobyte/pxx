@@ -1936,6 +1936,15 @@ begin
         end;
         
         IREmitNodeAarch64(IRA[node]); { address -> x0 }
+        if (tk = tyString) or (tk = tyFixedString) or (tk = tyShortString) then
+        begin
+          { A frozen/inline-string value IS its buffer address. Deref'ing a
+            pointer-to-frozen-string (e.g. typinfo NamePtr^) yields that address
+            — a pointer-width load, not a TypeSize(tyString)=8 load (which would
+            be wrong on 32-bit). bug-cross-gate-masked-failures. }
+          EmitI32($F9400000);          { ldr x0, [x0] (pointer width) }
+          Exit;
+        end;
         if not (TypeIsOrdinal(tk) or (tk = tyBoolean) or (tk = tyPointer) or
                 (tk = tyChar) or (tk = tyUnknown) or
                 (tk = tyAnsiString) or (tk = tyClass)) then

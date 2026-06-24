@@ -1106,8 +1106,8 @@ test-i386: $(COMPILER)
 	./$(COMPILER) -dPXX_MANAGED_STRING --target=i386 test/test_cross_string_cow.pas /tmp/test_i386_string_cow
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_cross_string_cow.pas /tmp/test_i386_string_cow_x64
 	test "$$(tools/run_target.sh i386 /tmp/test_i386_string_cow)" = "$$(/tmp/test_i386_string_cow_x64)"
-	./$(COMPILER) -dPXX_MANAGED_STRING --target=i386 test/test_cross_frozen_strlen_deref.pas /tmp/test_i386_frozen_strlen
-	./$(COMPILER) -dPXX_MANAGED_STRING test/test_cross_frozen_strlen_deref.pas /tmp/test_i386_frozen_strlen_x64
+	./$(COMPILER) -uPXX_MANAGED_STRING --target=i386 test/test_cross_frozen_strlen_deref.pas /tmp/test_i386_frozen_strlen
+	./$(COMPILER) -uPXX_MANAGED_STRING test/test_cross_frozen_strlen_deref.pas /tmp/test_i386_frozen_strlen_x64
 	test "$$(tools/run_target.sh i386 /tmp/test_i386_frozen_strlen)" = "$$(/tmp/test_i386_frozen_strlen_x64)"
 	./$(COMPILER) -dPXX_MANAGED_STRING --target=i386 test/test_cross_record_array_store.pas /tmp/test_i386_rec_arr_store
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_cross_record_array_store.pas /tmp/test_i386_rec_arr_store_x64
@@ -1336,8 +1336,8 @@ test-aarch64: $(COMPILER)
 	./$(COMPILER) -dPXX_MANAGED_STRING --target=aarch64 test/test_cross_str_length_index.pas /tmp/test_aarch64_str_length_index
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_cross_str_length_index.pas /tmp/test_aarch64_str_length_index_x64
 	test "$$(tools/run_target.sh aarch64 /tmp/test_aarch64_str_length_index)" = "$$(/tmp/test_aarch64_str_length_index_x64)"
-	./$(COMPILER) -dPXX_MANAGED_STRING --target=aarch64 test/test_cross_frozen_strlen_deref.pas /tmp/test_aarch64_frozen_strlen
-	./$(COMPILER) -dPXX_MANAGED_STRING test/test_cross_frozen_strlen_deref.pas /tmp/test_aarch64_frozen_strlen_x64
+	./$(COMPILER) -uPXX_MANAGED_STRING --target=aarch64 test/test_cross_frozen_strlen_deref.pas /tmp/test_aarch64_frozen_strlen
+	./$(COMPILER) -uPXX_MANAGED_STRING test/test_cross_frozen_strlen_deref.pas /tmp/test_aarch64_frozen_strlen_x64
 	test "$$(tools/run_target.sh aarch64 /tmp/test_aarch64_frozen_strlen)" = "$$(/tmp/test_aarch64_frozen_strlen_x64)"
 	./$(COMPILER) -dPXX_MANAGED_STRING --target=aarch64 test/test_cross_record_array_store.pas /tmp/test_aarch64_rec_arr_store
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_cross_record_array_store.pas /tmp/test_aarch64_rec_arr_store_x64
@@ -1593,8 +1593,8 @@ test-arm32: $(COMPILER)
 	./$(COMPILER) -dPXX_MANAGED_STRING --target=arm32 test/test_cross_setlen_varparam.pas /tmp/test_arm32_setlen_vp
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_cross_setlen_varparam.pas /tmp/test_arm32_setlen_vp_x64
 	test "$$(tools/run_target.sh arm32 /tmp/test_arm32_setlen_vp)" = "$$(/tmp/test_arm32_setlen_vp_x64)"
-	./$(COMPILER) -dPXX_MANAGED_STRING --target=arm32 test/test_cross_frozen_strlen_deref.pas /tmp/test_arm32_frozen_strlen
-	./$(COMPILER) -dPXX_MANAGED_STRING test/test_cross_frozen_strlen_deref.pas /tmp/test_arm32_frozen_strlen_x64
+	./$(COMPILER) -uPXX_MANAGED_STRING --target=arm32 test/test_cross_frozen_strlen_deref.pas /tmp/test_arm32_frozen_strlen
+	./$(COMPILER) -uPXX_MANAGED_STRING test/test_cross_frozen_strlen_deref.pas /tmp/test_arm32_frozen_strlen_x64
 	test "$$(tools/run_target.sh arm32 /tmp/test_arm32_frozen_strlen)" = "$$(/tmp/test_arm32_frozen_strlen_x64)"
 	./$(COMPILER) -dPXX_MANAGED_STRING --target=arm32 test/test_cross_record_array_store.pas /tmp/test_arm32_rec_arr_store
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_cross_record_array_store.pas /tmp/test_arm32_rec_arr_store_x64
