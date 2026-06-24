@@ -1591,9 +1591,48 @@ begin
       end
       else if Source[SrcPos] = '#' then
       begin
+        { Char-code literal #NN. After '#', an optional radix prefix selects the
+          base (matching the integer-literal lexer): #$ hex, #% binary, #& octal,
+          else decimal. A lone prefix with no digit is a lex error rather than a
+          silent Chr(0). See bug-hex-char-code-literal. }
         Inc(SrcPos); n := 0;
-        while (SrcPos <= Length(Source)) and (Source[SrcPos] in ['0'..'9']) do
-          begin n := n*10 + (Ord(Source[SrcPos])-48); Inc(SrcPos); end;
+        if (SrcPos <= Length(Source)) and (Source[SrcPos] = '$') then
+        begin
+          Inc(SrcPos);
+          if not ((SrcPos <= Length(Source)) and (Source[SrcPos] in ['0'..'9','a'..'f','A'..'F'])) then
+            Error('lexer: empty hex char-code literal after #$');
+          while (SrcPos <= Length(Source)) and (Source[SrcPos] in ['0'..'9','a'..'f','A'..'F']) do
+          begin
+            c := Source[SrcPos];
+            if c in ['0'..'9'] then n := n*16 + (Ord(c)-48)
+            else if c in ['a'..'f'] then n := n*16 + (Ord(c)-87)
+            else n := n*16 + (Ord(c)-55);
+            Inc(SrcPos);
+          end;
+        end
+        else if (SrcPos <= Length(Source)) and (Source[SrcPos] = '%') then
+        begin
+          Inc(SrcPos);
+          if not ((SrcPos <= Length(Source)) and (Source[SrcPos] in ['0'..'1'])) then
+            Error('lexer: empty binary char-code literal after #%');
+          while (SrcPos <= Length(Source)) and (Source[SrcPos] in ['0'..'1']) do
+            begin n := n*2 + (Ord(Source[SrcPos])-48); Inc(SrcPos); end;
+        end
+        else if (SrcPos <= Length(Source)) and (Source[SrcPos] = '&') then
+        begin
+          Inc(SrcPos);
+          if not ((SrcPos <= Length(Source)) and (Source[SrcPos] in ['0'..'7'])) then
+            Error('lexer: empty octal char-code literal after #&');
+          while (SrcPos <= Length(Source)) and (Source[SrcPos] in ['0'..'7']) do
+            begin n := n*8 + (Ord(Source[SrcPos])-48); Inc(SrcPos); end;
+        end
+        else
+        begin
+          if not ((SrcPos <= Length(Source)) and (Source[SrcPos] in ['0'..'9'])) then
+            Error('lexer: empty char-code literal after #');
+          while (SrcPos <= Length(Source)) and (Source[SrcPos] in ['0'..'9']) do
+            begin n := n*10 + (Ord(Source[SrcPos])-48); Inc(SrcPos); end;
+        end;
         AppendChar(s, Chr(n));
       end
       else

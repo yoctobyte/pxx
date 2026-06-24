@@ -586,6 +586,8 @@ test-core: $(COMPILER)
 	test "$$(/tmp/test_ir_binops26)" = "$$(printf -- '-3\n-2\n3\n2\n8\n14\n0\n1\n25')"
 	./$(COMPILER) test/test_shl.pas /tmp/test_shl26
 	test "$$(/tmp/test_shl26)" = "$$(printf '16\n12\n9')"
+	./$(COMPILER) test/test_hex_char_code.pas /tmp/test_hex_char_code26
+	test "$$(/tmp/test_hex_char_code26)" = "$$(printf '65\n65\n65\n65\n255\nlo\nhi\nex')"
 	./$(COMPILER) test/test_op_overload.pas /tmp/test_op_overload_ir26
 	test "$$(/tmp/test_op_overload_ir26)" = "$$(printf '1\n0\n1\n0\n1\n0\n10\n6')"
 	./$(COMPILER) test/test_overloading.pas /tmp/test_overloading_ir26

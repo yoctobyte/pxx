@@ -1,7 +1,11 @@
 # `#$NN` / `#%NN` / `#&NN` char-code literals broken (hex/bin/oct escape)
 
 - **Type:** bug (lexer) — correctness, silent miscompile
-- **Status:** urgent (Track A)
+- **Status:** done (2026-06-24) — fixed in lexer.inc `#` branch: radix dispatch
+  ($/%/& before the digit loop) + empty-prefix lex error. Lexer-only, self-host
+  byte-identical (no reseed). Regression test `test/test_hex_char_code.pas`
+  (all three radices, statement + char const + subrange set const) under
+  `make test`. Pinned for B to re-probe synacode.
 - **Owner:** — (**Track A** — `compiler/**`)
 - **Opened:** 2026-06-24
 - **Found-by:** Synapse recon ([[feature-synapse-compile-check]]) — `synacode.pas`
