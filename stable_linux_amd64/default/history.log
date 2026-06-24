@@ -52,3 +52,4 @@
 2026-06-24T15:53:46Z  v52  82baba176932546547f7cf0461f499e518867f03eb4cf60d832feb2a73e7b279  73417619089a913f500d6936959e7a716adc111e  feat(parser): multi-index properties P[a, b]
 2026-06-24T16:36:41Z  v53  e2f4d90495b256561dd752ec3e10d3b5acee61b4df1d5ce48a1ac4a0729fd1e3  70041300afe003c5e2abfe3aafbee2bef0d9b6b7  fix(tooling): graceful non-x86_64 install + gate demos behind install
 2026-06-24T17:38:02Z  v54  98c6ebff80cd30bc363855065812faaad43105d2953d099f15769b7eb8e150f4  c56e6d7c9f270d4e9b2caefb865f3b6db717546a  fix(parser): Read/Write as method names + untyped params in methods
+2026-06-24T18:38:59Z  v55  d026e64dfdb80b19659fc54e326053eded4086b88994bd25a99ef193e00faa67  62ee73c6f2c67c1c8f161d7b3f752fd064b43c88  fix(lexer): {$R-}/{$R+} are range-check toggles, not resources
