@@ -30,7 +30,7 @@ program eliah;
 
 uses gtk3, controls, stdctrls, extctrls, graphics, forms, menus, sysutils,
      buffer, runner, docmodel, designer, lfmload, builder, project, perspective,
-     registry;
+     registry, typinfo;
 
 const
   W_WIN     = 1100;
@@ -54,7 +54,8 @@ type
     Props: TListBox;
     ValueEdit: TEdit;
     FEditRow: Integer;     { which inspector row the value edit targets, -1 none }
-    FBagBase: Integer;     { inspector row index where the extra-property bag starts }
+    FBagBase: Integer;     { inspector row index where the extra-property rows start }
+    FBagNames: array of AnsiString; { property name backing each extra-property row }
     Palette: TComboBox;
     PaletteNames: array of AnsiString; { class name backing each palette row }
     PlaceBtn: TButton;
@@ -94,6 +95,8 @@ type
     procedure OnDesignMouseMove(Sender: TControl; Button, X, Y: Integer);
     procedure OnDesignMouseUp(Sender: TControl; Button, X, Y: Integer);
     procedure ShowInspector(idx: Integer);
+    procedure AddBagRow(d: TDocModel; idx: Integer; const nm: AnsiString);
+    function BagRowShown(const nm: AnsiString): Boolean;
     procedure UpdateTitle;
     procedure OnPropClick(Sender: TObject);
     procedure OnValueKey(Sender: TControl; KeyCode: Integer);
@@ -135,6 +138,24 @@ begin
     CompDisplay := Copy(clsName, 2, Length(clsName) - 1)
   else
     CompDisplay := clsName;
+end;
+
+{ read a published property's name from its RTTI (frozen NamePtr string) }
+function PropName(p: PPropInfo): AnsiString;
+var ps: PString;
+begin
+  PropName := '';
+  if p = nil then Exit;
+  ps := p^.NamePtr;
+  PropName := ps^;
+end;
+
+{ a property already shown as a modelled inspector row (mapped to a node field),
+  so it is NOT repeated in the RTTI extra-property list. }
+function IsModelledProp(const nm: AnsiString): Boolean;
+begin
+  IsModelledProp := (nm = 'Caption') or (nm = 'Name') or (nm = 'Left') or
+    (nm = 'Top') or (nm = 'Width') or (nm = 'Height');
 end;
 
 { case-insensitive '.lfm' suffix test }
@@ -479,8 +500,32 @@ begin
   Win.Caption := s;
 end;
 
+{ append one extra-property row (name + current bag value), recording the name so
+  the click/apply handlers can map the row back to the property. }
+procedure THandler.AddBagRow(d: TDocModel; idx: Integer; const nm: AnsiString);
+var n: Integer;
+begin
+  if FBagBase = 0 then FBagBase := Props.Count;   { first extra row }
+  n := Length(FBagNames);
+  SetLength(FBagNames, n + 1);
+  FBagNames[n] := nm;
+  Props.AddItem(nm + ' = ' + d.NodePropByName(idx, nm));
+end;
+
+function THandler.BagRowShown(const nm: AnsiString): Boolean;
+var k: Integer;
+begin
+  BagRowShown := False;
+  for k := 0 to Length(FBagNames) - 1 do
+    if FBagNames[k] = nm then begin BagRowShown := True; Exit; end;
+end;
+
 procedure THandler.ShowInspector(idx: Integer);
-var d: TDocModel; j: Integer;
+var
+  d: TDocModel; j, cnt: Integer;
+  cls: PClassRTTI;
+  plist: TPropList;
+  nm: AnsiString;
 begin
   UpdateTitle;
   Props.Clear;
@@ -503,12 +548,28 @@ begin
     Props.AddItem('Width:   ' + IntToStr(d.NodeW(idx)));
     Props.AddItem('Height:  ' + IntToStr(d.NodeH(idx)));
   end;
-  { extra published properties (Interval, …) — editable, written back to the bag }
+  { extra published properties — driven by the registered class's RTTI so EVERY
+    published data property shows (Interval, Enabled, …), even ones not yet in the
+    .lfm; the value comes from the node's bag (blank if unset). Editing writes the
+    bag. Events (method props) are skipped — they belong to the wiring surface. }
   FBagBase := 0;
+  SetLength(FBagNames, 0);
+  cls := GetClass('T' + d.KindName(d.NodeKind(idx)));
+  if cls <> nil then
+  begin
+    cnt := GetPropList(cls, @plist);
+    for j := 0 to cnt - 1 do
+    begin
+      nm := PropName(plist[j]);
+      if (plist[j]^.Kind = 5) or IsModelledProp(nm) or BagRowShown(nm) then Continue;
+      AddBagRow(d, idx, nm);
+    end;
+  end;
+  { also surface any stored prop the class RTTI didn't list (orphan / unknown) }
   for j := 0 to d.NodePropCount(idx) - 1 do
   begin
-    if FBagBase = 0 then FBagBase := Props.Count;  { first bag row }
-    Props.AddItem(d.NodePropName(idx, j) + ' = ' + d.NodePropVal(idx, j));
+    nm := d.NodePropName(idx, j);
+    if not BagRowShown(nm) then AddBagRow(d, idx, nm);
   end;
 end;
 
@@ -596,9 +657,10 @@ begin
   d := Dsn.Doc;
   FEditRow := Props.ItemIndex;
   { a bag row (extra published prop): edit its value }
-  if (FBagBase > 0) and (FEditRow >= FBagBase) then
+  if (FBagBase > 0) and (FEditRow >= FBagBase) and
+     (FEditRow - FBagBase < Length(FBagNames)) then
   begin
-    ValueEdit.Text := d.NodePropVal(Dsn.Sel, FEditRow - FBagBase);
+    ValueEdit.Text := d.NodePropByName(Dsn.Sel, FBagNames[FEditRow - FBagBase]);
     Exit;
   end;
   { non-visual nodes only expose an editable Caption (no geometry rows) }
@@ -632,10 +694,11 @@ begin
   d := Dsn.Doc;
   v := ValueEdit.Text;
   { a bag row: write the value back to the named extra property }
-  if (FBagBase > 0) and (FEditRow >= FBagBase) then
+  if (FBagBase > 0) and (FEditRow >= FBagBase) and
+     (FEditRow - FBagBase < Length(FBagNames)) then
   begin
     PushUndo(SaveLfmText(d));
-    d.SetNodeProp(Dsn.Sel, d.NodePropName(Dsn.Sel, FEditRow - FBagBase), v);
+    d.SetNodeProp(Dsn.Sel, FBagNames[FEditRow - FBagBase], v);
     DesignBox.Invalidate;
     ShowInspector(Dsn.Sel);
     Exit;
@@ -1114,6 +1177,9 @@ begin
     H.ShowInspector(5);
     if H.FBagBase <= 0 then
       begin writeln('SMOKE FAIL: timer Interval prop not surfaced'); Halt(1); end;
+    { RTTI-driven: the unset Enabled prop shows too, not only the .lfm Interval }
+    if Length(H.FBagNames) < 2 then
+      begin writeln('SMOKE FAIL: RTTI prop list missing unset props'); Halt(1); end;
     if H.Dsn.Doc.NodePropByName(5, 'Interval') <> '1000' then
       begin writeln('SMOKE FAIL: timer Interval prop not loaded'); Halt(1); end;
     H.FEditRow := H.FBagBase; H.ValueEdit.Text := '2000'; H.ApplyEdit;
