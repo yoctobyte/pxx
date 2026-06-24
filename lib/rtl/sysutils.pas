@@ -58,6 +58,17 @@ function StrToFloat(const s: AnsiString): Double;
 { Return the position of substr in s, 1-based; 0 if not found. }
 function Pos(const substr, s: AnsiString): Integer;
 
+{ Null-terminated PChar routines (FPC's `strings` unit, re-exported by SysUtils).
+  StrLCopy copies at most MaxLen chars from Source up to its #0, always #0-
+  terminates Dest, and returns Dest. StrLComp compares at most MaxLen chars,
+  returning <0 / 0 / >0 like FPC (stops at the first #0 or difference). }
+function StrLCopy(Dest, Source: PChar; MaxLen: Cardinal): PChar;
+function StrLComp(Str1, Str2: PChar; MaxLen: Cardinal): Integer;
+
+{ Suspend the current thread for at least Milliseconds (FPC SysUtils.Sleep).
+  Backed by the nanosleep syscall. }
+procedure Sleep(Milliseconds: Cardinal);
+
 { Left-pad/Right-pad s to len chars with ch (default space). }
 function PadLeft(const s: AnsiString; len: Integer; ch: Char): AnsiString;
 function PadRight(const s: AnsiString; len: Integer; ch: Char): AnsiString;
@@ -176,6 +187,61 @@ begin
     Result := Chr(Ord(c) - 32)
   else
     Result := c;
+end;
+
+function StrLCopy(Dest, Source: PChar; MaxLen: Cardinal): PChar;
+var i: Cardinal;
+begin
+  Result := Dest;
+  i := 0;
+  while (i < MaxLen) and (Source[i] <> #0) do
+  begin
+    Dest[i] := Source[i];
+    Inc(i);
+  end;
+  Dest[i] := #0;
+end;
+
+function StrLComp(Str1, Str2: PChar; MaxLen: Cardinal): Integer;
+var i: Cardinal; c1, c2: Integer;
+begin
+  Result := 0;
+  i := 0;
+  while i < MaxLen do
+  begin
+    c1 := Ord(Str1[i]);
+    c2 := Ord(Str2[i]);
+    if (c1 <> c2) or (c1 = 0) then
+    begin
+      Result := c1 - c2;
+      Exit;
+    end;
+    Inc(i);
+  end;
+end;
+
+function SysNanosleepNo: Integer;
+begin
+  Result := -1;
+  {$ifdef CPUX86_64} Result := 35;  {$endif}
+  {$ifdef CPU_I386}  Result := 162; {$endif}
+  {$ifdef CPU_AARCH64} Result := 101; {$endif}
+  {$ifdef CPU_ARM32} Result := 162; {$endif}
+end;
+
+procedure Sleep(Milliseconds: Cardinal);
+type
+  TKernelTimeSpec = record Sec: NativeInt; Nsec: NativeInt; end;
+var
+  req: TKernelTimeSpec;
+  n: Integer;
+  res: Int64;
+begin
+  n := SysNanosleepNo;
+  if n = -1 then Exit;
+  req.Sec  := Milliseconds div 1000;
+  req.Nsec := (Milliseconds mod 1000) * 1000000;
+  res := __pxxrawsyscall(n, Int64(@req), 0, 0, 0, 0, 0);
 end;
 
 function UpperCase(const s: AnsiString): AnsiString;

@@ -190,3 +190,28 @@ Filed urgent: [[bug-conditional-directive-miscount-synautil]]. No lib workaround
 
 Also open from earlier: [[bug-hex-char-code-literal]] (Track A, urgent) for
 `synacode`'s `#$NN` set constants.
+
+### Progress 2026-06-24 (cont.) — synafpc COMPILES; StrLCopy/Sleep landed
+
+- [[bug-hex-char-code-literal]] **FIXED by Track A** (v50). `synacode` now parses
+  past its `#$NN` set constants and stops only at `Move`/`FillChar`.
+- Added to `lib/rtl/sysutils.pas` (FPC `strings`/SysUtils surface): **`StrLCopy`,
+  `StrLComp`** (synafpc's `SysUtils.StrLCopy`/`StrLComp` wrappers — FPC path, not
+  kylix/posix), and **`Sleep`** (nanosleep syscall). Smoke: `test/lib_strpchar`.
+- **`synafpc` now compiles fully (`ok`)** — the keystone unit is unblocked.
+
+Leaf-set re-probe (v50, `--mimic-fpc`):
+
+| unit | state |
+|------|-------|
+| `synafpc` | **OK** |
+| `synautil`/`synaip`/`asn1util`/`synachar` | blocked on [[bug-conditional-directive-miscount-synautil]] (Track A) |
+| `synacode` | needs `Move`/`FillChar` (RTL; intrinsic future = [[feature-move-fillchar-intrinsics]]) |
+| `synsock`/`blcksock` | next gap: `uses` unit not found **`sockets`** (FPC Sockets unit — RTL, Track B) |
+
+Spinoff bug filed while verifying the hex fix: [[bug-set-of-char-const-corrupts-char-codegen]]
+(Track A, urgent) — a `set of char` typed constant corrupts `Ord(char-var)`
+codegen; Synapse uses such constants, so it threatens correctness later.
+
+**Track B next (not blocked on Track A):** `Move`/`FillChar` RTL, then the
+`sockets` unit for synsock/blcksock.
