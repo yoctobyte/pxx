@@ -134,6 +134,15 @@ function QuotedStr(const s: AnsiString): AnsiString;
   (max chars for %s, fraction digits for %f). FPC SysUtils.Format. }
 function Format(const fmt: AnsiString; const args: array of const): AnsiString;
 
+{ Path helpers (POSIX '/' delimiter; '\' also accepted as a separator). }
+function ExtractFileName(const path: AnsiString): AnsiString;   { after last sep }
+function ExtractFilePath(const path: AnsiString): AnsiString;   { up to & incl last sep }
+function ExtractFileDir(const path: AnsiString): AnsiString;    { up to last sep, excl }
+function ExtractFileExt(const path: AnsiString): AnsiString;    { last '.ext' incl dot }
+function ChangeFileExt(const path, ext: AnsiString): AnsiString;
+function IncludeTrailingPathDelimiter(const path: AnsiString): AnsiString;
+function ExcludeTrailingPathDelimiter(const path: AnsiString): AnsiString;
+
 { List directory entries, excluding "." and "..". Size and modification time are
   filled when the active PAL backend supports metadata, otherwise Size is -1. }
 function GetDirectoryContents(const path: AnsiString; var list: TFileInfoArray): Boolean;
@@ -645,6 +654,74 @@ begin
     if s[i] = '''' then r := r + '''''' else r := r + s[i];
   end;
   Result := r + '''';
+end;
+
+function IsPathSep(c: Char): Boolean;
+begin
+  Result := (c = '/') or (c = '\');
+end;
+
+{ 1-based index of the last path separator, or 0. }
+function LastPathSep(const path: AnsiString): Integer;
+var i: Integer;
+begin
+  Result := 0;
+  for i := Length(path) downto 1 do
+    if IsPathSep(path[i]) then begin Result := i; Exit; end;
+end;
+
+function ExtractFileName(const path: AnsiString): AnsiString;
+var p: Integer;
+begin
+  p := LastPathSep(path);
+  Result := Copy(path, p + 1, Length(path) - p);
+end;
+
+function ExtractFilePath(const path: AnsiString): AnsiString;
+var p: Integer;
+begin
+  p := LastPathSep(path);
+  Result := Copy(path, 1, p);
+end;
+
+function ExtractFileDir(const path: AnsiString): AnsiString;
+var p: Integer;
+begin
+  p := LastPathSep(path);
+  if p <= 1 then Result := Copy(path, 1, p)   { keep a lone leading '/' }
+  else Result := Copy(path, 1, p - 1);
+end;
+
+function ExtractFileExt(const path: AnsiString): AnsiString;
+var i, sep: Integer;
+begin
+  Result := '';
+  sep := LastPathSep(path);
+  for i := Length(path) downto sep + 1 do
+    if path[i] = '.' then begin Result := Copy(path, i, Length(path) - i + 1); Exit; end;
+end;
+
+function ChangeFileExt(const path, ext: AnsiString): AnsiString;
+var i, sep: Integer;
+begin
+  sep := LastPathSep(path);
+  for i := Length(path) downto sep + 1 do
+    if path[i] = '.' then begin Result := Copy(path, 1, i - 1) + ext; Exit; end;
+  Result := path + ext;
+end;
+
+function IncludeTrailingPathDelimiter(const path: AnsiString): AnsiString;
+begin
+  if (Length(path) > 0) and IsPathSep(path[Length(path)]) then Result := path
+  else Result := path + '/';
+end;
+
+function ExcludeTrailingPathDelimiter(const path: AnsiString): AnsiString;
+begin
+  if (Length(path) > 1) and IsPathSep(path[Length(path)]) then
+    Result := Copy(path, 1, Length(path) - 1)
+  else
+    Result := path;
 end;
 
 function FmtPCharStr(p: Pointer): AnsiString;

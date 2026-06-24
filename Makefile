@@ -2323,7 +2323,10 @@ lib-test: pxx-stable-check
 	$(PXX_STABLE) -Fulib/rtl test/lib_format.pas /tmp/lib_format
 	test "$$(/tmp/lib_format | grep -c '=ok')" = "14"
 	test "$$(/tmp/lib_format | grep -c 'FAIL')" = "0"
-	@echo "lib-test ok (sudoku exact + collections + math + sysutils + random + bitset + platform + directory + bignum + json + calc + sat + mathf + vm + mandelbrot + lisp + zlib + png smoke + ansiterm + ansirender + process + process-multi + dynlibs + unixshims + strpchar + sockets + http + http-async + http-redirect + http-keepalive + http-pool + dns-async + classes + strutil + streams + format) against stable v$$(cat $(STABLE_DEFAULT_DIR)/VERSION 2>/dev/null || echo '?')"
+	$(PXX_STABLE) -Fulib/rtl test/lib_paths.pas /tmp/lib_paths
+	test "$$(/tmp/lib_paths | grep -c '=ok')" = "14"
+	test "$$(/tmp/lib_paths | grep -c 'FAIL')" = "0"
+	@echo "lib-test ok (sudoku exact + collections + math + sysutils + random + bitset + platform + directory + bignum + json + calc + sat + mathf + vm + mandelbrot + lisp + zlib + png smoke + ansiterm + ansirender + process + process-multi + dynlibs + unixshims + strpchar + sockets + http + http-async + http-redirect + http-keepalive + http-pool + dns-async + classes + strutil + streams + format + paths) against stable v$$(cat $(STABLE_DEFAULT_DIR)/VERSION 2>/dev/null || echo '?')"
 
 # Full Track-B library suite, distinct from compiler `make test`.
 library-suite-green: pxx-stable-check
