@@ -7,7 +7,7 @@ program bochan;
   that garin is render-agnostic. }
 
 uses buffer, eduth, docmodel, lfmload, builder, project, perspective, registry,
-  typinfo;
+  typinfo, selection;
 
 type
   { Synthetic class hierarchy to exercise registry enumeration headlessly (no
@@ -58,6 +58,9 @@ var
   regMid: TRegSampleMid;
   regLeaf: TRegSampleLeaf;
   regArr: TRegEntryArr;
+  sel: TSelectionModel;
+  selLn: Integer;
+  selTxt: AnsiString;
 
 begin
   EduthInit(e);
@@ -399,6 +402,41 @@ begin
   regArr := EnumDescendants('TRegSampleBase', True);
   CheckTrue(e, 'enum includeSelf adds the ancestor',
     RegArrHas(regArr, 'TRegSampleBase'));
+
+  { scenario: selection model + .lfm code-location mapping (M5 selection-link) }
+  writeln('-- selection model + lfm line mapping --');
+  if b.LoadFromFile('apps/ide/eliah/sample.lfm') then
+  begin
+    selTxt := b.Text;
+    ldoc := TDocModel.Create;
+    CheckTrue(e, 'sel sample parses', LoadLfmText(selTxt, ldoc));
+    { node names captured from the `object <Name>:` headers }
+    CheckStr(e, 'node 3 name', ldoc.NodeName(3), 'BtnOk');
+    CheckInt(e, 'find BtnOk by name', ldoc.FindByName('BtnOk'), 3);
+    CheckInt(e, 'find Timer1 by name', ldoc.FindByName('Timer1'), 5);
+    CheckInt(e, 'unknown name -> -1', ldoc.FindByName('Nope'), -1);
+
+    sel := TSelectionModel.Create(ldoc);
+    CheckInt(e, 'initial selection none', sel.Selected, -1);
+    sel.Select(3);
+    CheckInt(e, 'select index 3', sel.Selected, 3);
+    CheckStr(e, 'selected name', sel.SelectedName, 'BtnOk');
+    CheckInt(e, 'one change', sel.Changes, 1);
+    sel.Select(3);
+    CheckInt(e, 're-select same: no extra change', sel.Changes, 1);
+    sel.SelectByName('Timer1');
+    CheckInt(e, 'select by name', sel.Selected, 5);
+    sel.SelectByName('Ghost');
+    CheckInt(e, 'select unknown name clears', sel.Selected, -1);
+
+    { code <-> designer line mapping }
+    selLn := LfmFindObjectLine(selTxt, 'BtnOk');
+    CheckTrue(e, 'BtnOk has an object line', selLn >= 0);
+    CheckStr(e, 'name at that line round-trips', LfmObjectNameAt(selTxt, selLn), 'BtnOk');
+    CheckInt(e, 'missing name -> no line', LfmFindObjectLine(selTxt, 'Nope'), -1);
+  end
+  else
+    CheckTrue(e, 'sel sample.lfm present', False);
 
   Halt(EduthReport(e));
 end.

@@ -20,6 +20,8 @@ type
 
   TDocNode = record
     Kind: TWidgetKind;
+    Name: AnsiString;  { component identifier (the `object <Name>:` name) — the
+                         key the selection link matches between code and designer }
     Caption: AnsiString;
     Parent: Integer;   { index into the model; -1 = the form/root }
     X, Y, W, H: Integer;
@@ -39,6 +41,10 @@ type
     function AddNode(AKind: TWidgetKind; const ACaption: AnsiString;
       AParent, AX, AY, AW, AH: Integer): Integer;
     procedure SetNodeBounds(I, AX, AY, AW, AH: Integer);
+    procedure SetNodeName(I: Integer; const AName: AnsiString);
+    function NodeName(I: Integer): AnsiString;
+    { index of the node whose Name = AName (case-sensitive), or -1 }
+    function FindByName(const AName: AnsiString): Integer;
     procedure SetNodeCaption(I: Integer; const ACaption: AnsiString);
     { remove node I and all its descendants; compact and remap Parent indices. }
     procedure DeleteNode(I: Integer);
@@ -97,6 +103,27 @@ begin
   FNodes[I].Y := AY;
   FNodes[I].W := AW;
   FNodes[I].H := AH;
+end;
+
+procedure TDocModel.SetNodeName(I: Integer; const AName: AnsiString);
+begin
+  if (I < 0) or (I >= FCount) then Exit;
+  FNodes[I].Name := AName;
+end;
+
+function TDocModel.NodeName(I: Integer): AnsiString;
+begin
+  if (I < 0) or (I >= FCount) then NodeName := ''
+  else NodeName := FNodes[I].Name;
+end;
+
+function TDocModel.FindByName(const AName: AnsiString): Integer;
+var i: Integer;
+begin
+  FindByName := -1;
+  if AName = '' then Exit;
+  for i := 0 to FCount - 1 do
+    if FNodes[i].Name = AName then begin FindByName := i; Exit; end;
 end;
 
 procedure TDocModel.SetNodeCaption(I: Integer; const ACaption: AnsiString);

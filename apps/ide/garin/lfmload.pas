@@ -175,7 +175,7 @@ begin
 end;
 
 procedure TLfmDocReader.HandleLine(const ln: AnsiString);
-var body, kw, typeName, ty, pname: AnsiString; colon, j, parent, eq: Integer;
+var body, kw, typeName, ty, pname, nameStr: AnsiString; colon, j, parent, eq: Integer;
 begin
   body := Trim2(ln);
   if body = '' then Exit;
@@ -191,10 +191,16 @@ begin
     if colon > 0 then
       typeName := Trim2(Copy(body, colon + 1, Length(body) - colon));
     ty := FirstWord(typeName);
+    { the component identifier sits between the `object` keyword and the colon }
+    nameStr := '';
+    if colon > Length(FirstWord(body)) then
+      nameStr := Trim2(Copy(body, Length(FirstWord(body)) + 1,
+        colon - Length(FirstWord(body)) - 1));
 
     if Depth > 0 then parent := Stack[Depth - 1] else parent := -1;
     { default box; coords patched by the property lines that follow }
     Cur := Doc.AddNode(KindOf(ty), '', parent, 0, 0, 80, 24);
+    Doc.SetNodeName(Cur, nameStr);
     SetLength(Stack, Depth + 1);
     Stack[Depth] := Cur;
     Inc(Depth);
@@ -284,14 +290,15 @@ begin
 end;
 
 procedure TLfmDocWriter.EmitNode(i, depth: Integer);
-var ind, ind2, kn, cap: AnsiString; p, px, py, j: Integer;
+var ind, ind2, kn, cap, nm: AnsiString; p, px, py, j: Integer;
 begin
   ind := Spaces(depth * 2);
   ind2 := Spaces(depth * 2 + 2);
   kn := Doc.KindName(Doc.NodeKind(i));
-  { object <Kind><index>: T<Kind> — the name is cosmetic (the loader keys on the
-    type after the colon), index keeps it unique. }
-  Buf := Buf + ind + 'object ' + kn + IntToStr(i) + ': T' + kn + #10;
+  { object <Name>: T<Kind> — use the real component name when known (the selection
+    link depends on it), else a cosmetic Kind+index. }
+  if Doc.NodeName(i) <> '' then nm := Doc.NodeName(i) else nm := kn + IntToStr(i);
+  Buf := Buf + ind + 'object ' + nm + ': T' + kn + #10;
 
   p := Doc.NodeParent(i);
   if p >= 0 then begin px := Doc.NodeX(p); py := Doc.NodeY(p); end
