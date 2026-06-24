@@ -12,12 +12,13 @@ lives in git, not in a timestamp._
 | bug-r-directive-toggle-treated-as-resource | A | bug | `{$R-}` / `{$R+}` range-check toggle misread as a resource directive | — |
 | bug-set-of-char-const-corrupts-char-codegen | A | bug | A `set of char` typed constant corrupts `Ord(char-var)` codegen | — |
 
-## working (2)
+## working (3)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
 | feature-eliah-ide | B | feature | Eliah / Ilja — single-window IDE (GUI + TUI) | — |
 | feature-eliah-m0-window | B | feature | Eliah M0 — single tiled GTK3 window | — |
+| feature-own-net-http-lib | B | feature | Own networking library — native HTTP client (+ sockets, async) | — |
 
 ## unfinished (1)
 
