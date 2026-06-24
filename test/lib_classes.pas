@@ -13,6 +13,10 @@ var
   sl: TStringList;
   ss: TStrings;          { declare as base, instantiate concrete }
   marker: TObject;
+  ms, ms2: TMemoryStream;
+  wbuf, rbuf: array[0..9] of Byte;
+  i, n: Integer;
+  ok: Boolean;
 begin
   { ---- TList: default [i] property, Add, Insert, Delete, IndexOf, Remove ---- }
   list := TList.Create;
@@ -60,4 +64,22 @@ begin
   ss.SetText('one'#10'two'#10'three');
   SayBool('strings-settext', (ss.Count = 3) and (ss[2] = 'three'));
   ss.Free;
+
+  { ---- TMemoryStream: write / seek / read / size / CopyFrom ---- }
+  ms := TMemoryStream.Create;
+  for i := 0 to 9 do wbuf[i] := i + 1;
+  n := ms.Write(wbuf[0], 10);
+  SayBool('stream-write', (n = 10) and (ms.Size = 10) and (ms.Position = 10));
+  ms.Position := 0;
+  n := ms.Read(rbuf[0], 10);
+  ok := n = 10;
+  for i := 0 to 9 do ok := ok and (rbuf[i] = i + 1);
+  SayBool('stream-read', ok);
+  ms.Seek(-2, soEnd);
+  SayBool('stream-seek', ms.Position = 8);
+  { CopyFrom into a second stream }
+  ms2 := TMemoryStream.Create;
+  ms.Position := 0;
+  SayBool('stream-copy', (ms2.CopyFrom(ms, 10) = 10) and (ms2.Size = 10));
+  ms.Free; ms2.Free;
 end.

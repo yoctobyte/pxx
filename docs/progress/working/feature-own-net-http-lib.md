@@ -75,10 +75,11 @@ connection (both bodies correct, stays Alive between). `HttpConnClose` to finish
 - `TList` / `TStrings` / `TStringList` — **done & smoked** (`lib/rtl/classes.pas`,
   `test/lib_classes`). `TStringList.Sort` blocked on
   [[bug-string-ordering-comparison-constant]].
-- `TStream` / `TMemoryStream` — written, **blocked** on two Track A gaps:
-  [[bug-read-write-reserved-as-method-names]] and [[bug-untyped-params-in-methods]]
-  (both needed for the standard `Read`/`Write(var Buffer; …)` surface). Synapse's
-  heaviest Classes need.
+- `TStream` / `TMemoryStream` — **done & smoked** (Read/Write/Seek/Position/Size/
+  CopyFrom). The two Track A gaps that blocked it (Read/Write method names,
+  untyped method params) were fixed v54. Minor: bare `Read`/`Write` self-calls in
+  a method hit the console intrinsic — qualified with `Self.`
+  ([[bug-bare-read-write-in-method-hits-intrinsic]]).
 
 ## Header API + URL encoding (landed 2026-06-24)
 

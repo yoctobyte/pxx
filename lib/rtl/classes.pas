@@ -6,12 +6,9 @@ unit classes;
   a future Generics.Collections, not here. The streaming runtime (TComponent,
   TReader) is in classes_lite.
 
-  IPv4 of the RTL Classes: enough for the string-list / pointer-list needs.
-  TStream / TMemoryStream is written but BLOCKED on two Track A gaps —
-  bug-read-write-reserved-as-method-names (`Read`/`Write` can't be method names)
-  and bug-untyped-params-in-methods (`var Buffer` untyped params rejected in
-  methods) — both required for the standard stream surface. Lands here once those
-  are fixed. Track B.
+  Surface: TList, TStrings, TStringList, TStream + TMemoryStream — all working and
+  smoked (the Read/Write-method-name and untyped-method-param gaps that blocked
+  the stream surface were fixed Track A, v54). TStringList.Sort uses CompareStr.
 
   STATUS: TList, TStrings and TStringList all work and are smoked, Sort included.
   Sort compares via sysutils.CompareStr (char-code based) — which is what FPC's
@@ -24,6 +21,42 @@ interface
 uses sysutils;   { CompareStr for Sort }
 
 type
+  { ---- TStream: abstract byte stream + TMemoryStream concrete ---- }
+  TSeekOrigin = (soBeginning, soCurrent, soEnd);
+
+  TStream = class
+  protected
+    function GetSize: Int64; virtual;
+    function GetPosition: Int64; virtual;
+    procedure SetPosition(const Pos: Int64); virtual;
+  public
+    function Read(var Buffer; Count: Longint): Longint; virtual; abstract;
+    function Write(const Buffer; Count: Longint): Longint; virtual; abstract;
+    function Seek(const Offset: Int64; Origin: TSeekOrigin): Int64; virtual; abstract;
+    procedure ReadBuffer(var Buffer; Count: Longint);
+    procedure WriteBuffer(const Buffer; Count: Longint);
+    function CopyFrom(Source: TStream; Count: Int64): Int64;
+    property Position: Int64 read GetPosition write SetPosition;
+    property Size: Int64 read GetSize;
+  end;
+
+  TMemoryStream = class(TStream)
+  private
+    FData: array of Byte;
+    FSize: Int64;
+    FPosition: Int64;
+    procedure EnsureCapacity(needed: Int64);
+  protected
+    function GetSize: Int64; override;
+  public
+    function Read(var Buffer; Count: Longint): Longint; override;
+    function Write(const Buffer; Count: Longint): Longint; override;
+    function Seek(const Offset: Int64; Origin: TSeekOrigin): Int64; override;
+    procedure Clear;
+    procedure SetSize(NewSize: Int64);
+    function Memory: Pointer;
+  end;
+
   { ---- TList: a growable list of untyped pointers ---- }
   TList = class
   private
@@ -89,6 +122,119 @@ type
   end;
 
 implementation
+
+{ ============================ TStream ============================ }
+
+function TStream.GetPosition: Int64;
+begin
+  Result := Seek(0, soCurrent);
+end;
+
+procedure TStream.SetPosition(const Pos: Int64);
+begin
+  Seek(Pos, soBeginning);
+end;
+
+function TStream.GetSize: Int64;
+var p: Int64;
+begin
+  p := Seek(0, soCurrent);
+  Result := Seek(0, soEnd);
+  Seek(p, soBeginning);
+end;
+
+procedure TStream.ReadBuffer(var Buffer; Count: Longint);
+begin
+  Self.Read(Buffer, Count);       { Self. — bare Read/Write hit the console intrinsic }
+end;
+
+procedure TStream.WriteBuffer(const Buffer; Count: Longint);
+begin
+  Self.Write(Buffer, Count);
+end;
+
+function TStream.CopyFrom(Source: TStream; Count: Int64): Int64;
+var buf: array[0..4095] of Byte; chunk, got: Longint;
+begin
+  Result := 0;
+  while Count > 0 do
+  begin
+    if Count > 4096 then chunk := 4096 else chunk := Longint(Count);
+    got := Source.Read(buf[0], chunk);
+    if got <= 0 then Break;
+    Self.Write(buf[0], got);       { Self. — else the console Write intrinsic }
+    Result := Result + got;
+    Count := Count - got;
+  end;
+end;
+
+{ ============================ TMemoryStream ============================ }
+
+procedure TMemoryStream.EnsureCapacity(needed: Int64);
+var cap: Int64;
+begin
+  cap := Length(FData);
+  if needed <= cap then Exit;
+  if cap = 0 then cap := 64;
+  while cap < needed do cap := cap * 2;
+  SetLength(FData, cap);
+end;
+
+function TMemoryStream.GetSize: Int64;
+begin
+  Result := FSize;
+end;
+
+function TMemoryStream.Read(var Buffer; Count: Longint): Longint;
+var avail: Int64;
+begin
+  avail := FSize - FPosition;
+  if avail <= 0 then begin Result := 0; Exit; end;
+  if Count > avail then Count := Longint(avail);
+  if Count > 0 then Move(FData[FPosition], Buffer, Count);
+  FPosition := FPosition + Count;
+  Result := Count;
+end;
+
+function TMemoryStream.Write(const Buffer; Count: Longint): Longint;
+begin
+  if Count <= 0 then begin Result := 0; Exit; end;
+  EnsureCapacity(FPosition + Count);
+  Move(Buffer, FData[FPosition], Count);
+  FPosition := FPosition + Count;
+  if FPosition > FSize then FSize := FPosition;
+  Result := Count;
+end;
+
+function TMemoryStream.Seek(const Offset: Int64; Origin: TSeekOrigin): Int64;
+begin
+  case Origin of
+    soBeginning: FPosition := Offset;
+    soCurrent:   FPosition := FPosition + Offset;
+    soEnd:       FPosition := FSize + Offset;
+  end;
+  if FPosition < 0 then FPosition := 0;
+  Result := FPosition;
+end;
+
+procedure TMemoryStream.Clear;
+begin
+  SetLength(FData, 0);
+  FSize := 0;
+  FPosition := 0;
+end;
+
+procedure TMemoryStream.SetSize(NewSize: Int64);
+begin
+  EnsureCapacity(NewSize);
+  FSize := NewSize;
+  if FPosition > FSize then FPosition := FSize;
+end;
+
+function TMemoryStream.Memory: Pointer;
+begin
+  if Length(FData) > 0 then Result := @FData[0] else Result := nil;
+end;
 
 { ============================ TList ============================ }
 
