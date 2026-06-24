@@ -470,10 +470,28 @@ end;
 procedure writeShdr64(var f: File; name, typ: Integer; off, size: Int64);
 begin
   writeU32(f, name); writeU32(f, typ);
-  writeU64(f, 0); writeU64(f, 0);     { sh_flags, sh_addr }
+  writeU64(f, DbgShFlags); writeU64(f, DbgShAddr);
   writeU64(f, off); writeU64(f, size);
   writeU32(f, 0); writeU32(f, 0);     { sh_link, sh_info }
-  writeU64(f, 1); writeU64(f, 0);     { sh_addralign, sh_entsize }
+  writeU64(f, DbgShAlign); writeU64(f, 0);  { sh_addralign, sh_entsize }
+end;
+{ -g section header table: NULL, .text, .data, .bss (allocated — so gdb's
+  find_pc_section maps code/data/bss addresses; without .text a subprogram DIE's
+  low_pc resolves to no section and gdb segfaults), then the 4 debug sections. }
+procedure DbgWriteShdrTable(var f: File; entry, dataBase, bssBase: Int64; codeOffset: Integer; dbgFileBase: Int64);
+begin
+  writePad(f, 64);   { NULL shdr (index 0) }
+  DbgShFlags := 6; DbgShAddr := entry;    DbgShAlign := 16;
+  writeShdr64(f, DbgNmText, 1, codeOffset, CodeLen);                  { .text PROGBITS }
+  DbgShFlags := 3; DbgShAddr := dataBase; DbgShAlign := 8;
+  writeShdr64(f, DbgNmData, 1, codeOffset + CodeLen, DataLen);        { .data PROGBITS }
+  DbgShFlags := 3; DbgShAddr := bssBase;  DbgShAlign := 8;
+  writeShdr64(f, DbgNmBss, 8, codeOffset + CodeLen + DataLen, BSSSize); { .bss NOBITS }
+  DbgShFlags := 0; DbgShAddr := 0;        DbgShAlign := 1;
+  writeShdr64(f, DbgNmLine,   1, dbgFileBase + DbgLineSecOff,   DbgLineSecSize);
+  writeShdr64(f, DbgNmInfo,   1, dbgFileBase + DbgInfoSecOff,   DbgInfoSecSize);
+  writeShdr64(f, DbgNmAbbrev, 1, dbgFileBase + DbgAbbrevSecOff, DbgAbbrevSecSize);
+  writeShdr64(f, DbgNmShStr,  3, dbgFileBase + DbgShStrSecOff,  DbgShStrSecSize);
 end;
 {$else}
 procedure writeU8(f: Integer; v: Byte);
@@ -564,10 +582,29 @@ end;
 procedure writeShdr64(f: Integer; name, typ: Integer; off, size: Int64);
 begin
   writeU32(f, name); writeU32(f, typ);
-  writeU64(f, 0); writeU64(f, 0);     { sh_flags, sh_addr }
+  writeU64(f, DbgShFlags); writeU64(f, DbgShAddr);
   writeU64(f, off); writeU64(f, size);
   writeU32(f, 0); writeU32(f, 0);     { sh_link, sh_info }
-  writeU64(f, 1); writeU64(f, 0);     { sh_addralign, sh_entsize }
+  writeU64(f, DbgShAlign); writeU64(f, 0);  { sh_addralign, sh_entsize }
+end;
+{ -g section header table: NULL, .text, .data, .bss (allocated — so gdb's
+  find_pc_section maps code/data/bss addresses; without .text a subprogram DIE's
+  low_pc resolves to no section and gdb segfaults), then the 4 debug sections. }
+procedure DbgWriteShdrTable(f: Integer; entry, dataBase, bssBase: Int64; codeOffset: Integer; dbgFileBase: Int64);
+var i: Integer;
+begin
+  for i := 1 to 64 do writeU8(f, 0);   { NULL shdr (index 0) }
+  DbgShFlags := 6; DbgShAddr := entry;    DbgShAlign := 16;
+  writeShdr64(f, DbgNmText, 1, codeOffset, CodeLen);                  { .text PROGBITS }
+  DbgShFlags := 3; DbgShAddr := dataBase; DbgShAlign := 8;
+  writeShdr64(f, DbgNmData, 1, codeOffset + CodeLen, DataLen);        { .data PROGBITS }
+  DbgShFlags := 3; DbgShAddr := bssBase;  DbgShAlign := 8;
+  writeShdr64(f, DbgNmBss, 8, codeOffset + CodeLen + DataLen, BSSSize); { .bss NOBITS }
+  DbgShFlags := 0; DbgShAddr := 0;        DbgShAlign := 1;
+  writeShdr64(f, DbgNmLine,   1, dbgFileBase + DbgLineSecOff,   DbgLineSecSize);
+  writeShdr64(f, DbgNmInfo,   1, dbgFileBase + DbgInfoSecOff,   DbgInfoSecSize);
+  writeShdr64(f, DbgNmAbbrev, 1, dbgFileBase + DbgAbbrevSecOff, DbgAbbrevSecSize);
+  writeShdr64(f, DbgNmShStr,  3, dbgFileBase + DbgShStrSecOff,  DbgShStrSecSize);
 end;
 {$endif}
 
@@ -651,6 +688,265 @@ begin
   DbgPutB(0);
 end;
 
+{ Overwrite a single byte already in DbgBuf (back-patch a block1 length). }
+procedure DbgPatchB(pos, v: Integer);
+begin
+  DbgBuf[pos] := v and 255;
+end;
+
+{ Build a string from a name slice in TokChars (local copy — TokSliceStr in
+  rtti_emit.inc is included after this file). }
+function DbgTokSlice(off, len: Integer): AnsiString;
+var s: AnsiString; i: Integer;
+begin
+  s := ''; i := 0;
+  while i < len do begin AppendChar(s, TokChars[off + i]); Inc(i); end;
+  DbgTokSlice := s;
+end;
+
+{ Base-type props for a TTypeKind ordinal. Returns True + sets name/enc/size for
+  the scalar kinds that map to DW_TAG_base_type; False for record/class/string/
+  pointer/etc (handled as structure_type or the pointer cheat). }
+function DbgBaseTypeProps(tkOrd: Integer; var nm: AnsiString; var enc, sz: Integer): Boolean;
+begin
+  DbgBaseTypeProps := True;
+  case tkOrd of
+    1:  begin nm := 'Integer';    enc := 5; sz := 4; end;  { tyInteger, signed }
+    2:  begin nm := 'Boolean';    enc := 2; sz := 1; end;  { boolean }
+    3:  begin nm := 'Char';       enc := 8; sz := 1; end;  { unsigned_char }
+    7:  begin nm := 'ShortInt';   enc := 5; sz := 1; end;
+    8:  begin nm := 'Byte';       enc := 7; sz := 1; end;
+    9:  begin nm := 'SmallInt';   enc := 5; sz := 2; end;
+    10: begin nm := 'Word';       enc := 7; sz := 2; end;
+    11: begin nm := 'LongInt';    enc := 5; sz := 4; end;
+    12: begin nm := 'Cardinal';   enc := 7; sz := 4; end;
+    13: begin nm := 'Int64';      enc := 5; sz := 8; end;
+    14: begin nm := 'QWord';      enc := 7; sz := 8; end;
+    15: begin nm := 'NativeInt';  enc := 5; sz := 8; end;
+    16: begin nm := 'NativeUInt'; enc := 7; sz := 8; end;
+    18: begin nm := 'Single';     enc := 4; sz := 4; end;
+    19: begin nm := 'Double';     enc := 4; sz := 8; end;
+    20: begin nm := 'Extended';   enc := 4; sz := 10; end;
+  else
+    DbgBaseTypeProps := False;
+  end;
+end;
+
+{ Human label for a type, used for the pointer-cheat name and array-of-<T>. }
+function DbgTypeDisplayName(tkOrd, recId: Integer): AnsiString;
+var nm: AnsiString; enc, sz: Integer;
+begin
+  if DbgBaseTypeProps(tkOrd, nm, enc, sz) then begin DbgTypeDisplayName := nm; Exit; end;
+  case tkOrd of
+    4, 23, 25, 26: DbgTypeDisplayName := 'string';
+    17: DbgTypeDisplayName := 'Pointer';
+    21: DbgTypeDisplayName := 'set';
+    22: DbgTypeDisplayName := 'Variant';
+    5, 6:  { record / class: use the declared type name if known }
+      if (recId >= REC_UCLASS_BASE) and ((recId - REC_UCLASS_BASE) < UClsCount) then
+        DbgTypeDisplayName := DbgTokSlice(UClsNOff[recId - REC_UCLASS_BASE], UClsNLen[recId - REC_UCLASS_BASE])
+      else if tkOrd = 6 then DbgTypeDisplayName := 'object'
+      else DbgTypeDisplayName := 'record';
+  else
+    DbgTypeDisplayName := 'unknown';
+  end;
+end;
+
+function DbgTypeLookup(cat, recId, aux: Integer): Integer;
+var i: Integer;
+begin
+  for i := 0 to DbgTypeCount - 1 do
+    if (DbgTypeCat[i] = cat) and (DbgTypeRecId[i] = recId) and (DbgTypeAux[i] = aux) then
+    begin DbgTypeLookup := DbgTypeOff[i]; Exit; end;
+  DbgTypeLookup := -1;
+end;
+
+procedure DbgTypeRegister(cat, recId, aux, off: Integer);
+begin
+  if DbgTypeCount >= MAX_DBG_TYPES then Exit;
+  DbgTypeCat[DbgTypeCount] := cat;
+  DbgTypeRecId[DbgTypeCount] := recId;
+  DbgTypeAux[DbgTypeCount] := aux;
+  DbgTypeOff[DbgTypeCount] := off;
+  Inc(DbgTypeCount);
+end;
+
+function DbgEnsureType(tkOrd, recId, isArr, arrLen, elemTkOrd, elemRec: Integer): Integer; forward;
+
+{ Emit a DW_TAG_base_type / pointer-cheat / structure_type for a non-array type,
+  returning its .debug_info offset (cached). Records emit their members from the
+  existing UFld* tables (no field metadata rebuild); class/string/pointer/variant
+  degrade to a labeled DW_TAG_pointer_type. }
+function DbgEnsureScalar(tkOrd, recId: Integer): Integer;
+var off, i, ci, fb, fc, memOff, fldTk, fldRec, fldArr, fldArrLen, fldDyn: Integer;
+    nm: AnsiString; enc, sz: Integer;
+begin
+  off := DbgTypeLookup(tkOrd, recId, 0);
+  if off >= 0 then begin DbgEnsureScalar := off; Exit; end;
+
+  if DbgBaseTypeProps(tkOrd, nm, enc, sz) then
+  begin
+    off := DbgLen - DbgInfoSecOff;
+    DbgTypeRegister(tkOrd, recId, 0, off);
+    DbgPutULEB(5); DbgPutStrZ(nm); DbgPutB(enc); DbgPutB(sz);
+    DbgEnsureScalar := off; Exit;
+  end;
+
+  if (tkOrd = 5) and (recId >= REC_UCLASS_BASE) and ((recId - REC_UCLASS_BASE) < UClsCount)
+     and not UClsIsInterface[recId - REC_UCLASS_BASE] then
+  begin
+    { record by value → structure_type. Ensure each field's type first so member
+      ref4s point backward. }
+    ci := recId - REC_UCLASS_BASE;
+    fb := UClsFBase[ci]; fc := UClsFCount[ci];
+    for i := 0 to fc - 1 do
+    begin
+      fldTk := UFldTk[fb + i]; fldRec := UFldRec_[fb + i];
+      fldArr := 0; if UFldIsArray[fb + i] then fldArr := 1;
+      fldArrLen := UFldArrLen[fb + i]; fldDyn := UFldDynDepth[fb + i];
+      if fldDyn > 0 then DbgEnsureType(fldTk, fldRec, 1, -1, fldTk, fldRec)
+      else if fldArr <> 0 then DbgEnsureType(fldTk, fldRec, 1, fldArrLen, fldTk, fldRec)
+      else DbgEnsureScalar(fldTk, fldRec);
+    end;
+    off := DbgLen - DbgInfoSecOff;
+    DbgTypeRegister(tkOrd, recId, 0, off);
+    DbgPutULEB(7);                                  { structure_type }
+    DbgPutStrZ(DbgTokSlice(UClsNOff[ci], UClsNLen[ci]));
+    DbgPutU16(RecSize(recId));                      { byte_size }
+    for i := 0 to fc - 1 do
+    begin
+      fldTk := UFldTk[fb + i]; fldRec := UFldRec_[fb + i];
+      fldArr := 0; if UFldIsArray[fb + i] then fldArr := 1;
+      fldArrLen := UFldArrLen[fb + i]; fldDyn := UFldDynDepth[fb + i];
+      if fldDyn > 0 then memOff := DbgEnsureType(fldTk, fldRec, 1, -1, fldTk, fldRec)
+      else if fldArr <> 0 then memOff := DbgEnsureType(fldTk, fldRec, 1, fldArrLen, fldTk, fldRec)
+      else memOff := DbgEnsureScalar(fldTk, fldRec);
+      DbgPutULEB(8);                                { member }
+      DbgPutStrZ(DbgTokSlice(UFldNOff[fb + i], UFldNLen[fb + i]));
+      DbgPutU32(memOff);                            { ref4 type }
+      DbgPutU16(UFldOff_[fb + i]);                  { data_member_location }
+    end;
+    DbgPutB(0);                                     { end members }
+    DbgEnsureScalar := off; Exit;
+  end;
+
+  { Everything with runtime/heap layout → a labeled DW_TAG_pointer_type. }
+  off := DbgLen - DbgInfoSecOff;
+  DbgTypeRegister(tkOrd, recId, 0, off);
+  DbgPutULEB(6); DbgPutStrZ(DbgTypeDisplayName(tkOrd, recId)); DbgPutB(8);
+  DbgEnsureScalar := off;
+end;
+
+function DbgEnsureType(tkOrd, recId, isArr, arrLen, elemTkOrd, elemRec: Integer): Integer;
+var off, elemOff, cat, aux: Integer;
+begin
+  if (isArr <> 0) and (arrLen >= 0) then
+  begin
+    cat := 2000; aux := arrLen * 64 + elemTkOrd;
+    off := DbgTypeLookup(cat, elemRec, aux);
+    if off >= 0 then begin DbgEnsureType := off; Exit; end;
+    elemOff := DbgEnsureScalar(elemTkOrd, elemRec);
+    off := DbgLen - DbgInfoSecOff;
+    DbgTypeRegister(cat, elemRec, aux, off);
+    DbgPutULEB(9);                 { array_type }
+    DbgPutU32(elemOff);           { ref4 DW_AT_type }
+    DbgPutULEB(10);               { subrange_type }
+    if arrLen > 0 then DbgPutU16(arrLen - 1) else DbgPutU16(0);  { upper_bound }
+    DbgPutB(0);                   { end children }
+    DbgEnsureType := off; Exit;
+  end;
+  if isArr <> 0 then
+  begin
+    { dynamic array → pointer-cheat "array of <elem>" }
+    cat := 3000; aux := elemTkOrd;
+    off := DbgTypeLookup(cat, elemRec, aux);
+    if off >= 0 then begin DbgEnsureType := off; Exit; end;
+    off := DbgLen - DbgInfoSecOff;
+    DbgTypeRegister(cat, elemRec, aux, off);
+    DbgPutULEB(6);
+    DbgPutStrZ('array of ' + DbgTypeDisplayName(elemTkOrd, elemRec));
+    DbgPutB(8);
+    DbgEnsureType := off; Exit;
+  end;
+  DbgEnsureType := DbgEnsureScalar(tkOrd, recId);
+end;
+
+{ The type offset for one DbgVar entry. }
+function DbgVarTypeOff(vi: Integer): Integer;
+var isArr: Integer;
+begin
+  isArr := 0; if DbgVarIsArray[vi] then isArr := 1;
+  DbgVarTypeOff := DbgEnsureType(DbgVarTk[vi], DbgVarRec[vi], isArr,
+                                 DbgVarArrLen[vi], DbgVarElemTk[vi], DbgVarElemRec[vi]);
+end;
+
+{ Pass 1 of .debug_info children: emit every type DIE referenced by a captured
+  var, so the param/var DIEs that follow can ref4 backward. }
+procedure DbgEmitTypeDIEs;
+var i: Integer;
+begin
+  DbgTypeCount := 0;
+  for i := 0 to DbgVarCount - 1 do DbgVarTypeOff(i);
+end;
+
+{ Emit a formal_parameter / variable DIE (location: globals = DW_OP_addr abs;
+  locals/params = DW_OP_fbreg off, +DW_OP_deref for by-ref). }
+procedure DbgEmitOneVar(vi: Integer);
+var typeOff, lenPos: Integer;
+begin
+  typeOff := DbgVarTypeOff(vi);   { cached }
+  if DbgVarIsParam[vi] then DbgPutULEB(3) else DbgPutULEB(4);
+  DbgPutStrZ(DbgVarName[vi]);
+  DbgPutU32(typeOff);             { ref4 DW_AT_type }
+  { DW_AT_location, block1 }
+  lenPos := DbgLen; DbgPutB(0);   { length placeholder }
+  if DbgVarIsGlobal[vi] then
+  begin
+    DbgPutB($03);                 { DW_OP_addr }
+    DbgPutU64(DbgBssBase + DbgVarOff[vi]);
+  end
+  else
+  begin
+    DbgPutB($91);                 { DW_OP_fbreg }
+    DbgPutSLEB(DbgVarOff[vi]);
+    if DbgVarIsRef[vi] then DbgPutB($06);  { DW_OP_deref (by-ref param) }
+  end;
+  DbgPatchB(lenPos, DbgLen - (lenPos + 1));
+end;
+
+{ Pass 2: one DW_TAG_subprogram per main-file proc + the program body, each with
+  its captured params/locals (globals hang under the main-body subprogram). }
+procedure DbgEmitSubprograms(entry: Int64);
+var p, i, lenPos: Integer;
+begin
+  for p := 0 to ProcCount - 1 do
+  begin
+    if ProcDbgMain[p] and (Procs[p].BodyAddr >= 0) and (not ProcExternal[p]) then
+    begin
+      DbgPutULEB(2);                              { subprogram }
+      DbgPutStrZ(Procs[p].Name);
+      DbgPutU64(entry + Procs[p].BodyAddr);       { low_pc }
+      DbgPutU64(entry + ProcBodyEnd[p]);          { high_pc (absolute) }
+      DbgPutB(1); DbgPutB($56);                   { frame_base = DW_OP_reg6 (rbp) }
+      for i := 0 to DbgVarCount - 1 do
+        if DbgVarProc[i] = p then DbgEmitOneVar(i);
+      DbgPutB(0);                                 { end subprogram children }
+    end;
+  end;
+  { Program body as a subprogram named after the program; its vars are globals. }
+  if DbgMainBodyEnd > DbgMainBodyStart then
+  begin
+    DbgPutULEB(2);
+    if DbgProgName <> '' then DbgPutStrZ(DbgProgName) else DbgPutStrZ('main');
+    DbgPutU64(entry + DbgMainBodyStart);
+    DbgPutU64(entry + DbgMainBodyEnd);
+    DbgPutB(1); DbgPutB($56);
+    for i := 0 to DbgVarCount - 1 do
+      if DbgVarProc[i] = -1 then DbgEmitOneVar(i);
+    DbgPutB(0);
+  end;
+end;
+
 { Build all .debug_* section bytes into DbgBuf. entry = runtime VA of code start
   (LOAD_ADDR+codeOffset); codeBytes = CodeLen. DWARF version 3, DWARF32. }
 procedure BuildDwarfSections(entry: Int64; codeBytes: Integer);
@@ -702,6 +998,7 @@ begin
       DbgPutB(3); DbgPutSLEB(dLine);    { DW_LNS_advance_line }
       curLine := DwarfRowLine[i];
     end;
+    if DwarfRowPrologueEnd[i] then DbgPutB(10);  { DW_LNS_set_prologue_end }
     DbgPutB(1);                          { DW_LNS_copy → append row }
   end;
   { advance to end of code, then end_sequence }
@@ -713,9 +1010,8 @@ begin
 
   { ---- .debug_abbrev ---- }
   DbgAbbrevSecOff := DbgLen;
-  DbgPutULEB(1);            { abbrev code 1 }
-  DbgPutULEB($11);         { DW_TAG_compile_unit }
-  DbgPutB(0);              { DW_CHILDREN_no }
+  { abbrev 1: compile_unit (has children: the subprograms + type DIEs) }
+  DbgPutULEB(1); DbgPutULEB($11); DbgPutB(1);   { DW_TAG_compile_unit, children=yes }
   DbgPutULEB($25); DbgPutULEB($08);  { DW_AT_producer, DW_FORM_string }
   DbgPutULEB($13); DbgPutULEB($0b);  { DW_AT_language, DW_FORM_data1 }
   DbgPutULEB($03); DbgPutULEB($08);  { DW_AT_name, DW_FORM_string }
@@ -723,7 +1019,56 @@ begin
   DbgPutULEB($11); DbgPutULEB($01);  { DW_AT_low_pc, DW_FORM_addr }
   DbgPutULEB($12); DbgPutULEB($01);  { DW_AT_high_pc, DW_FORM_addr }
   DbgPutULEB($10); DbgPutULEB($06);  { DW_AT_stmt_list, DW_FORM_data4 }
-  DbgPutULEB(0); DbgPutULEB(0);      { end of attributes }
+  DbgPutULEB(0); DbgPutULEB(0);
+  { abbrev 2: subprogram (children: params + locals) }
+  DbgPutULEB(2); DbgPutULEB($2e); DbgPutB(1);   { DW_TAG_subprogram, children=yes }
+  DbgPutULEB($03); DbgPutULEB($08);  { DW_AT_name, DW_FORM_string }
+  DbgPutULEB($11); DbgPutULEB($01);  { DW_AT_low_pc, DW_FORM_addr }
+  DbgPutULEB($12); DbgPutULEB($01);  { DW_AT_high_pc, DW_FORM_addr }
+  DbgPutULEB($40); DbgPutULEB($0a);  { DW_AT_frame_base, DW_FORM_block1 }
+  DbgPutULEB(0); DbgPutULEB(0);
+  { abbrev 3: formal_parameter }
+  DbgPutULEB(3); DbgPutULEB($05); DbgPutB(0);   { DW_TAG_formal_parameter, no children }
+  DbgPutULEB($03); DbgPutULEB($08);  { DW_AT_name, DW_FORM_string }
+  DbgPutULEB($49); DbgPutULEB($13);  { DW_AT_type, DW_FORM_ref4 }
+  DbgPutULEB($02); DbgPutULEB($0a);  { DW_AT_location, DW_FORM_block1 }
+  DbgPutULEB(0); DbgPutULEB(0);
+  { abbrev 4: variable }
+  DbgPutULEB(4); DbgPutULEB($34); DbgPutB(0);   { DW_TAG_variable, no children }
+  DbgPutULEB($03); DbgPutULEB($08);  { DW_AT_name, DW_FORM_string }
+  DbgPutULEB($49); DbgPutULEB($13);  { DW_AT_type, DW_FORM_ref4 }
+  DbgPutULEB($02); DbgPutULEB($0a);  { DW_AT_location, DW_FORM_block1 }
+  DbgPutULEB(0); DbgPutULEB(0);
+  { abbrev 5: base_type }
+  DbgPutULEB(5); DbgPutULEB($24); DbgPutB(0);   { DW_TAG_base_type }
+  DbgPutULEB($03); DbgPutULEB($08);  { DW_AT_name, DW_FORM_string }
+  DbgPutULEB($3e); DbgPutULEB($0b);  { DW_AT_encoding, DW_FORM_data1 }
+  DbgPutULEB($0b); DbgPutULEB($0b);  { DW_AT_byte_size, DW_FORM_data1 }
+  DbgPutULEB(0); DbgPutULEB(0);
+  { abbrev 6: pointer_type (the runtime-layout cheat: a named 8-byte pointer) }
+  DbgPutULEB(6); DbgPutULEB($0f); DbgPutB(0);   { DW_TAG_pointer_type }
+  DbgPutULEB($03); DbgPutULEB($08);  { DW_AT_name, DW_FORM_string }
+  DbgPutULEB($0b); DbgPutULEB($0b);  { DW_AT_byte_size, DW_FORM_data1 }
+  DbgPutULEB(0); DbgPutULEB(0);
+  { abbrev 7: structure_type (record/class-by-value; members follow) }
+  DbgPutULEB(7); DbgPutULEB($13); DbgPutB(1);   { DW_TAG_structure_type, children=yes }
+  DbgPutULEB($03); DbgPutULEB($08);  { DW_AT_name, DW_FORM_string }
+  DbgPutULEB($0b); DbgPutULEB($05);  { DW_AT_byte_size, DW_FORM_data2 }
+  DbgPutULEB(0); DbgPutULEB(0);
+  { abbrev 8: member }
+  DbgPutULEB(8); DbgPutULEB($0d); DbgPutB(0);   { DW_TAG_member }
+  DbgPutULEB($03); DbgPutULEB($08);  { DW_AT_name, DW_FORM_string }
+  DbgPutULEB($49); DbgPutULEB($13);  { DW_AT_type, DW_FORM_ref4 }
+  DbgPutULEB($38); DbgPutULEB($05);  { DW_AT_data_member_location, DW_FORM_data2 }
+  DbgPutULEB(0); DbgPutULEB(0);
+  { abbrev 9: array_type (fixed array; subrange child gives the count) }
+  DbgPutULEB(9); DbgPutULEB($01); DbgPutB(1);   { DW_TAG_array_type, children=yes }
+  DbgPutULEB($49); DbgPutULEB($13);  { DW_AT_type, DW_FORM_ref4 }
+  DbgPutULEB(0); DbgPutULEB(0);
+  { abbrev 10: subrange_type }
+  DbgPutULEB(10); DbgPutULEB($21); DbgPutB(0);  { DW_TAG_subrange_type }
+  DbgPutULEB($2f); DbgPutULEB($05);  { DW_AT_upper_bound, DW_FORM_data2 }
+  DbgPutULEB(0); DbgPutULEB(0);
   DbgPutULEB(0);                     { end of abbrev table }
   DbgAbbrevSecSize := DbgLen - DbgAbbrevSecOff;
 
@@ -741,12 +1086,22 @@ begin
   DbgPutU64(entry);                 { DW_AT_low_pc }
   DbgPutU64(entry + codeBytes);     { DW_AT_high_pc }
   DbgPutU32(0);                     { DW_AT_stmt_list → .debug_line offset 0 }
+
+  { Type DIEs first (so subprogram param/var ref4s resolve backward), then the
+    subprograms with their locals as children. }
+  DbgEmitTypeDIEs;
+  DbgEmitSubprograms(entry);
+
+  DbgPutB(0);                       { end of compile_unit children }
   DbgInfoSecSize := DbgLen - DbgInfoSecOff;
   DbgPatchU32(lenPos, DbgInfoSecSize - 4);
 
   { ---- .shstrtab ---- }
   DbgShStrSecOff := DbgLen;
   DbgPutB(0);                       { index 0 = empty name }
+  DbgNmText := DbgLen - DbgShStrSecOff;   DbgPutStrZ('.text');
+  DbgNmData := DbgLen - DbgShStrSecOff;   DbgPutStrZ('.data');
+  DbgNmBss := DbgLen - DbgShStrSecOff;    DbgPutStrZ('.bss');
   DbgNmLine := DbgLen - DbgShStrSecOff;   DbgPutStrZ('.debug_line');
   DbgNmInfo := DbgLen - DbgShStrSecOff;   DbgPutStrZ('.debug_info');
   DbgNmAbbrev := DbgLen - DbgShStrSecOff; DbgPutStrZ('.debug_abbrev');
@@ -784,6 +1139,7 @@ begin
   shoff := 0;
   if doDebug then
   begin
+    DbgBssBase := bssBase;
     BuildDwarfSections(entry, CodeLen);
     dbgFileBase := filesz;
     shoff := dbgFileBase + DbgLen;
@@ -837,7 +1193,7 @@ begin
   writeU32(f,0);writeU16(f,64);writeU16(f,56);
   if doDebug then
   begin
-    writeU16(f,phCount);writeU16(f,64);writeU16(f,5);writeU16(f,4); { e_shnum=5, e_shstrndx=4 }
+    writeU16(f,phCount);writeU16(f,64);writeU16(f,8);writeU16(f,7); { e_shnum=8, e_shstrndx=7 }
   end
   else
   begin
@@ -866,11 +1222,7 @@ begin
     if DbgLen > 0 then Blockwrite(f,DbgBuf[0],DbgLen);
     zb := 0;
     for i := 1 to padN do Blockwrite(f,zb,1);
-    for i := 1 to 64 do Blockwrite(f,zb,1);   { NULL shdr (index 0) }
-    writeShdr64(f, DbgNmLine,   1, dbgFileBase + DbgLineSecOff,   DbgLineSecSize);
-    writeShdr64(f, DbgNmInfo,   1, dbgFileBase + DbgInfoSecOff,   DbgInfoSecSize);
-    writeShdr64(f, DbgNmAbbrev, 1, dbgFileBase + DbgAbbrevSecOff, DbgAbbrevSecSize);
-    writeShdr64(f, DbgNmShStr,  3, dbgFileBase + DbgShStrSecOff,  DbgShStrSecSize);
+    DbgWriteShdrTable(f, entry, dataBase, bssBase, codeOffset, dbgFileBase);
   end;
   Close(f);
   FpChmod(outPath,&755);
@@ -908,6 +1260,7 @@ begin
   shoff := 0;
   if doDebug then
   begin
+    DbgBssBase := bssBase;
     BuildDwarfSections(entry, CodeLen);
     dbgFileBase := filesz;
     shoff := dbgFileBase + DbgLen;
@@ -963,7 +1316,7 @@ begin
   writeU32(f,0);writeU16(f,64);writeU16(f,56);
   if doDebug then
   begin
-    writeU16(f,phCount);writeU16(f,64);writeU16(f,5);writeU16(f,4); { e_shnum=5, e_shstrndx=4 }
+    writeU16(f,phCount);writeU16(f,64);writeU16(f,8);writeU16(f,7); { e_shnum=8, e_shstrndx=7 }
   end
   else
   begin
@@ -991,12 +1344,7 @@ begin
   begin
     if DbgLen > 0 then syswrite(f,DbgBuf,DbgLen);
     for i := 1 to padN do writeU8(f,0);
-    { section headers: 0=NULL, 1=.debug_line, 2=.debug_info, 3=.debug_abbrev, 4=.shstrtab }
-    for i := 1 to 64 do writeU8(f,0);  { NULL shdr (index 0) }
-    writeShdr64(f, DbgNmLine,   1, dbgFileBase + DbgLineSecOff,   DbgLineSecSize);   { SHT_PROGBITS }
-    writeShdr64(f, DbgNmInfo,   1, dbgFileBase + DbgInfoSecOff,   DbgInfoSecSize);
-    writeShdr64(f, DbgNmAbbrev, 1, dbgFileBase + DbgAbbrevSecOff, DbgAbbrevSecSize);
-    writeShdr64(f, DbgNmShStr,  3, dbgFileBase + DbgShStrSecOff,  DbgShStrSecSize);  { SHT_STRTAB }
+    DbgWriteShdrTable(f, entry, dataBase, bssBase, codeOffset, dbgFileBase);
   end;
   sysfchmod(f, 493); { chmod 755 }
   sysclose(f);

@@ -51,6 +51,43 @@ begin
   ASTRight[Result]    := CloneAST(ASTRight[node]);
 end;
 
+{ DWARF -g (Tier 3): snapshot one symbol into the DbgVar side table. Symbol
+  slots recycle across procs, so this must run while the proc's scope is live.
+  Filters compiler-internal slots (hidden temps, __-prefixed, Result-less). }
+procedure DbgRecordVar(procIdx, symIdx: Integer; isGlobal: Boolean);
+var nm: AnsiString;
+begin
+  if not DebugInfo then Exit;
+  if DbgVarCount >= MAX_DBG_VARS then Exit;
+  if not (Syms[symIdx].Kind in [skLocal, skGlobal, skParam]) then Exit;
+  if SymIsHiddenArgTemp[symIdx] then Exit;
+  nm := Syms[symIdx].Name;
+  if Length(nm) = 0 then Exit;
+  if (Length(nm) >= 2) and (nm[1] = '_') and (nm[2] = '_') then Exit;
+  DbgVarProc[DbgVarCount]     := procIdx;
+  DbgVarName[DbgVarCount]     := nm;
+  DbgVarTk[DbgVarCount]       := Ord(Syms[symIdx].TypeKind);
+  DbgVarRec[DbgVarCount]      := Syms[symIdx].RecName;
+  DbgVarOff[DbgVarCount]      := Syms[symIdx].Offset;
+  DbgVarIsParam[DbgVarCount]  := Syms[symIdx].Kind = skParam;
+  DbgVarIsGlobal[DbgVarCount] := isGlobal;
+  DbgVarIsRef[DbgVarCount]    := Syms[symIdx].IsRef;
+  DbgVarIsArray[DbgVarCount]  := Syms[symIdx].IsArray;
+  DbgVarArrLen[DbgVarCount]   := Syms[symIdx].ArrLen;
+  DbgVarElemTk[DbgVarCount]   := Ord(Syms[symIdx].ElemType);
+  DbgVarElemRec[DbgVarCount]  := Syms[symIdx].ElemRecName;
+  Inc(DbgVarCount);
+end;
+
+{ Snapshot all params+locals of a proc (its live scope = ScopeBase..SymCount-1). }
+procedure DbgCaptureProcLocals(procIdx: Integer);
+var i: Integer;
+begin
+  if not DebugInfo then Exit;
+  for i := Procs[procIdx].ScopeBase to SymCount - 1 do
+    DbgRecordVar(procIdx, i, False);
+end;
+
 procedure InferSymTypeFromNode(symIdx: Integer; node: Integer);
 var tk: TTypeKind; procIdx, recId, varIdx: Integer;
 begin
@@ -12354,6 +12391,11 @@ begin
 
   { End of this proc's body bytes — the iram byte-range is [BodyAddr, ProcBodyEnd). }
   ProcBodyEnd[procIdx] := CodeLen;
+  { DWARF -g: this proc is in the main source file iff we are still parsing main-
+    file tokens (units lex past DbgMainTokEnd). Drives DW_TAG_subprogram emission.
+    Snapshot its params+locals now, before the scope (Syms[]) is torn down. }
+  ProcDbgMain[procIdx] := TokPos <= DbgMainTokEnd;
+  if DebugInfo and ProcDbgMain[procIdx] then DbgCaptureProcLocals(procIdx);
 
   { Patch frame size }
   PatchProcPrologue(patchPos, FrameSize);
@@ -13230,6 +13272,7 @@ begin
   SetConstCount := 0;
   Expect(tkProgram, 'program');
   if CurTok.Kind = tkEOF then Error('expected program name');
+  DbgProgName := CurTok.SVal;  { -g: names the main-body subprogram }
   Next;  { program name can be any identifier (even keyword) }
   if CurTok.Kind = tkLParen then
     begin Next; while CurTok.Kind <> tkRParen do Next; Next; end;
@@ -13578,6 +13621,7 @@ begin
     managed-field zero-init. }
   if needsTextfile then ParseUsesUnit('textfile');
   FixupTVarRecLayout;
+  DbgGlobalScopeBase := SymCount;  { -g: program globals are declared past here }
 
   { ===== Declaration pre-scan (pass 1) =====
     Walk the program's top-level declarations registering every routine's header
@@ -13698,7 +13742,14 @@ begin
   CompilePendingGlobalInits;
 
   Expect(tkBegin, 'begin');
+  DbgMainBodyStart := CodeLen;   { -g: program-body code range → main subprogram }
   ParseBlock;
+  DbgMainBodyEnd := CodeLen;
+  { -g: snapshot the program's own global vars (skGlobal past the runtime units)
+    as children of the main-body subprogram. }
+  if DebugInfo then
+    for i := DbgGlobalScopeBase to SymCount - 1 do
+      if Syms[i].Kind = skGlobal then DbgRecordVar(-1, i, True);
   Expect(tkEnd, 'end');
   Eat(tkDot);
 

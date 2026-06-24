@@ -4249,6 +4249,7 @@ begin
     LabelPositions[i] := -1;
   LabelFixupCount := 0;
   DwarfLastLine := 0;   { each proc body re-emits a row for its first source line }
+  DwarfProcFirstRow := True;  { its first row marks prologue_end for `break func` }
 
   { Nil-init hidden owning locals synthesised for materialised managed-string
     arguments. They are created during this body's IR lowering, after the
@@ -4282,11 +4283,25 @@ begin
       nothing (a duplicate address row is harmless). }
     if DebugInfo and (IRLine[i] <> 0) and (IRLine[i] <> DwarfLastLine) then
     begin
+      { At the first body row, also drop an entry row at the proc's low_pc (the
+        push-rbp). gdb's skip_prologue_using_sal only engages when a line row
+        exists at the function start; this lets `break <func>` skip to the
+        prologue_end row instead of falling back to its arch analyzer (which
+        stops mid-prologue, before params are stored). }
+      if DwarfProcFirstRow and (CurProc >= 0) and (DwarfRowCount < MAX_DWARF_ROWS) then
+      begin
+        DwarfRowAddr[DwarfRowCount] := Procs[CurProc].BodyAddr;
+        DwarfRowLine[DwarfRowCount] := IRLine[i];
+        DwarfRowPrologueEnd[DwarfRowCount] := False;
+        Inc(DwarfRowCount);
+      end;
       if DwarfRowCount < MAX_DWARF_ROWS then
       begin
         DwarfRowAddr[DwarfRowCount] := CodeLen;
         DwarfRowLine[DwarfRowCount] := IRLine[i];
+        DwarfRowPrologueEnd[DwarfRowCount] := DwarfProcFirstRow;
         Inc(DwarfRowCount);
+        DwarfProcFirstRow := False;
       end;
       DwarfLastLine := IRLine[i];
     end;

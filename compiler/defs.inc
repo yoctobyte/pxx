@@ -31,6 +31,8 @@ const
   MAX_IR      = 131072;
   MAX_DWARF      = 1048576;   { DWARF -g: byte buffer for all .debug_* section content }
   MAX_DWARF_ROWS = 131072;    { DWARF -g: (code-offset, line) rows for the .debug_line program }
+  MAX_DBG_VARS   = 16384;     { DWARF -g: snapshotted params/locals/globals (Tier 3) }
+  MAX_DBG_TYPES  = 4096;      { DWARF -g: distinct type DIEs }
   MAX_LOOP_FIXUPS = 256;
   MAX_GOTO_LABELS = 64;
   MAX_DECL_ITEMS = 32768;       { top-level subroutine items recorded by the declaration pre-scan }
@@ -794,6 +796,7 @@ var
   ProcIram        : array[0..MAX_PROCS-1] of Boolean;   { `; iram;` — body placed in the ELF .iram1.text section (ESP IRAM) }
   ProcIsInterrupt : array[0..MAX_PROCS-1] of Boolean;   { `; interrupt;` — raw hardware interrupt handler (reserved; full reg-save/iret not yet emitted) }
   ProcBodyEnd     : array[0..MAX_PROCS-1] of Integer;   { Code[] offset just past this proc's body (set at proc end); the iram byte-range is [BodyAddr, ProcBodyEnd) }
+  ProcDbgMain     : array[0..MAX_PROCS-1] of Boolean;   { DWARF -g: proc defined in the main source file (gets a DW_TAG_subprogram DIE) }
   ProcGenElemTk   : array[0..MAX_PROCS-1] of TTypeKind; { stackless: declared (yielded) element type; the proc's own RetType is Boolean (has-next) }
   ProcGenParamCnt : array[0..MAX_PROCS-1] of Integer;   { stackless: declared param count (the ABI param is the single hidden instance ptr) }
   ProcGenInstSize : array[0..MAX_PROCS-1] of Integer;   { stackless: instance byte size (header + persistent slots) }
@@ -1198,8 +1201,10 @@ var
     DebugInfo. See feature-dwarf-debug-info.md. }
   DwarfRowAddr : array[0..MAX_DWARF_ROWS-1] of Integer; { raw Code[] offset of the statement }
   DwarfRowLine : array[0..MAX_DWARF_ROWS-1] of Integer; { source line at that offset }
+  DwarfRowPrologueEnd : array[0..MAX_DWARF_ROWS-1] of Boolean; { first row of a proc body → DW_LNS_set_prologue_end (gdb skips the prologue to here) }
   DwarfRowCount : Integer;
   DwarfLastLine : Integer;   { dedup tracker, reset per proc }
+  DwarfProcFirstRow : Boolean;  { next recorded row is this body's first → mark prologue_end }
   DbgBuf : array[0..MAX_DWARF-1] of Byte;
   DbgLen : Integer;
   { Section metadata filled by BuildDwarfSections — offsets/sizes are WITHIN
@@ -1209,8 +1214,38 @@ var
   DbgAbbrevSecOff, DbgAbbrevSecSize : Integer;
   DbgShStrSecOff, DbgShStrSecSize : Integer;
   DbgNmLine, DbgNmInfo, DbgNmAbbrev, DbgNmShStr : Integer;
+  DbgNmText, DbgNmData, DbgNmBss : Integer;
+  DbgShFlags, DbgShAddr, DbgShAlign : Int64;  { per-section header fields for writeShdr64 (avoids the >6-param call landmine) }
   DbgSrcName : AnsiString;   { source filename recorded in the line table + CU DIE }
   DbgMainTokEnd : Integer;   { token index just past the main source file; nodes from appended units (TokPos beyond this) get ASTLine 0 so the single-file line table stays unambiguous }
+  DbgProgName : AnsiString;  { program name → main-body DW_TAG_subprogram }
+  DbgMainBodyStart, DbgMainBodyEnd : Integer;  { Code[] range of the program body }
+  DbgGlobalScopeBase : Integer;  { Syms[] index after runtime units, before main decls — globals above this are the program's own }
+  DbgBssBase : Int64;            { runtime base address of BSS, for global-var DW_OP_addr locations }
+
+  { DWARF Tier 3 side tables. Symbol slots recycle across procs (SymCount is
+    restored at each proc's end), so per-proc params/locals must be snapshotted
+    during compilation — they are gone by writeELF time. DbgVarProc = owning
+    Procs[] index, or -1 for a program-body global. }
+  DbgVarProc    : array[0..MAX_DBG_VARS-1] of Integer;
+  DbgVarName    : array[0..MAX_DBG_VARS-1] of AnsiString;
+  DbgVarTk      : array[0..MAX_DBG_VARS-1] of Integer;
+  DbgVarRec     : array[0..MAX_DBG_VARS-1] of Integer;
+  DbgVarOff     : array[0..MAX_DBG_VARS-1] of Integer;   { rbp-relative (local/param) or BSS offset (global) }
+  DbgVarIsParam : array[0..MAX_DBG_VARS-1] of Boolean;
+  DbgVarIsGlobal: array[0..MAX_DBG_VARS-1] of Boolean;
+  DbgVarIsRef   : array[0..MAX_DBG_VARS-1] of Boolean;   { by-ref param: location needs a trailing deref }
+  DbgVarIsArray : array[0..MAX_DBG_VARS-1] of Boolean;
+  DbgVarArrLen  : array[0..MAX_DBG_VARS-1] of Integer;   { >=0 fixed array; <0 dynamic }
+  DbgVarElemTk  : array[0..MAX_DBG_VARS-1] of Integer;
+  DbgVarElemRec : array[0..MAX_DBG_VARS-1] of Integer;
+  DbgVarCount   : Integer;
+  { Type-DIE dedup map (cat, recId, aux) -> .debug_info offset. }
+  DbgTypeCat    : array[0..MAX_DBG_TYPES-1] of Integer;
+  DbgTypeRecId  : array[0..MAX_DBG_TYPES-1] of Integer;
+  DbgTypeAux    : array[0..MAX_DBG_TYPES-1] of Integer;
+  DbgTypeOff    : array[0..MAX_DBG_TYPES-1] of Integer;
+  DbgTypeCount  : Integer;
   IRLabelCount : Integer;
   IRLoopStackBreak    : array[0..63] of Integer;
   IRLoopStackContinue : array[0..63] of Integer;
