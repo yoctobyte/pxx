@@ -5,9 +5,10 @@ order: 0
 
 # PXX (pascal26)
 
-PXX is a small, self-hosting Pascal-dialect compiler. It is **its own linker** —
-it emits final Linux ELF executables directly, with no external assembler or
-linker in the path — and it compiles itself.
+PXX is a **from-scratch**, self-hosting Pascal-dialect compiler. It is **its own
+linker** — it emits final Linux ELF executables directly, with no external
+assembler or linker in the path — and it compiles itself. Everything down to the
+runtime and the ELF bytes is its own code, no toolchain dependencies.
 
 ## Highlights
 

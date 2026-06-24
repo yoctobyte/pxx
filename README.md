@@ -1,9 +1,10 @@
 # PXX
 
-PXX is a provisional name for a small self-hosting Pascal compiler for Linux
-x86-64. It emits ELF executables directly, with no assembler or linker step.
-The executable is still `compiler/pascal26`; naming things is the one compiler
-problem not solved by recursion.
+PXX is a provisional name for a from-scratch, self-hosting Pascal compiler. It
+emits ELF executables directly — no assembler or linker step — for Linux x86-64
+(native) plus i386, aarch64, and arm32, with bare-metal ESP32 (xtensa/riscv32)
+cross targets. The executable is still `compiler/pascal26`; naming things is the
+one compiler problem not solved by recursion.
 
 The compiler is written in plain Pascal and currently supports a tested Object
 Pascal subset: classes, generics, overloads, operators, exceptions, RTTI,
