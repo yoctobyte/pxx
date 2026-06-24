@@ -41,18 +41,24 @@ how the splitter tree is arranged.
 - **Selection is a shared, bidirectional event.** Designer↔editor link, and any
   future AI command, ride one selection/command model — never special layout.
 
-## Milestones
+## Milestones — M1–M5 DONE (2026-06-24)
 
-1. `feature-eliah-layout-tree` — window → nested-`TPaned` tree (kill the absolute
-   `gtk_fixed` pane layout). **Foundation; unblocks the rest.**
-2. `feature-eliah-pane-collapse` — pane header + collapse/restore strip + ratio
-   memory.
-3. `feature-eliah-perspectives` — layout = ratios+min+priority, serialized; the
-   Code / Design / Split presets + switcher; priority-collapse compacting.
-4. `feature-eliah-component-palette` — component registry → palette (visual +
-   non-visual tray), built on the new `TComponent`/`Create(AOwner)` model.
-5. `feature-eliah-selection-link` — shared bidirectional selection model linking
-   designer and editor; the rail future AI tooling rides.
+1. ✅ `done/feature-eliah-layout-tree` — window → nested-`TPaned` tree.
+2. ✅ `done/feature-eliah-pane-collapse` (core) — full collapse/restore + View
+   toggles. DEFERRED sub-item: the labelled clickable collapse *strip* + per-pane
+   chevron (needed a stacking container; now UNBLOCKED — `done/
+   bug-widgetset-virtual-arg-corruption` cleared the TWidgetSet-virtual block, so
+   the strip widget can be built).
+3. ✅ `done/feature-eliah-perspectives` — Code/Design/Split presets + compacting.
+4. ✅ `done/feature-eliah-component-palette` — registry palette (visual + non-visual
+   tray) + RTTI inspector, on the `TComponent`/`Create(AOwner)` model.
+5. ✅ `done/feature-eliah-selection-link` — shared bidirectional selection link
+   (designer↔editor) + wire-OnClick command; the rail AI tooling will ride
+   (`backlog/feature-eliah-ai-command-rail`).
+
+All five milestones are complete; only the M2 collapse-strip/chevron polish is
+deferred (now unblocked). The shell is registry-driven with a shared
+selection/command surface.
 
 ## Future (not yet ticketed)
 
