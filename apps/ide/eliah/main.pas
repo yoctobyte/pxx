@@ -54,6 +54,7 @@ type
     Props: TListBox;
     ValueEdit: TEdit;
     FEditRow: Integer;     { which inspector row the value edit targets, -1 none }
+    FBagBase: Integer;     { inspector row index where the extra-property bag starts }
     Palette: TComboBox;
     PaletteNames: array of AnsiString; { class name backing each palette row }
     PlaceBtn: TButton;
@@ -479,7 +480,7 @@ begin
 end;
 
 procedure THandler.ShowInspector(idx: Integer);
-var d: TDocModel;
+var d: TDocModel; j: Integer;
 begin
   UpdateTitle;
   Props.Clear;
@@ -493,9 +494,7 @@ begin
   Props.AddItem('Kind:    ' + d.KindName(d.NodeKind(idx)));
   Props.AddItem('Caption: ' + d.NodeCaption(idx));
   if d.IsNonVisual(d.NodeKind(idx)) then
-    { non-visual components have no canvas geometry — they sit in the tray. Only
-      the Caption (row 1) is editable here; published props (Interval, …) wait on
-      the RTTI inspector. }
+    { non-visual components have no canvas geometry — they sit in the tray. }
     Props.AddItem('(non-visual: tray component)')
   else
   begin
@@ -503,6 +502,13 @@ begin
     Props.AddItem('Top:     ' + IntToStr(d.NodeY(idx)));
     Props.AddItem('Width:   ' + IntToStr(d.NodeW(idx)));
     Props.AddItem('Height:  ' + IntToStr(d.NodeH(idx)));
+  end;
+  { extra published properties (Interval, …) — editable, written back to the bag }
+  FBagBase := 0;
+  for j := 0 to d.NodePropCount(idx) - 1 do
+  begin
+    if FBagBase = 0 then FBagBase := Props.Count;  { first bag row }
+    Props.AddItem(d.NodePropName(idx, j) + ' = ' + d.NodePropVal(idx, j));
   end;
 end;
 
@@ -589,6 +595,12 @@ begin
   if (Dsn = nil) or (Dsn.Doc = nil) or (Dsn.Sel < 0) then Exit;
   d := Dsn.Doc;
   FEditRow := Props.ItemIndex;
+  { a bag row (extra published prop): edit its value }
+  if (FBagBase > 0) and (FEditRow >= FBagBase) then
+  begin
+    ValueEdit.Text := d.NodePropVal(Dsn.Sel, FEditRow - FBagBase);
+    Exit;
+  end;
   { non-visual nodes only expose an editable Caption (no geometry rows) }
   if d.IsNonVisual(d.NodeKind(Dsn.Sel)) then
   begin
@@ -619,6 +631,15 @@ begin
   if (Dsn = nil) or (Dsn.Doc = nil) or (Dsn.Sel < 0) then Exit;
   d := Dsn.Doc;
   v := ValueEdit.Text;
+  { a bag row: write the value back to the named extra property }
+  if (FBagBase > 0) and (FEditRow >= FBagBase) then
+  begin
+    PushUndo(SaveLfmText(d));
+    d.SetNodeProp(Dsn.Sel, d.NodePropName(Dsn.Sel, FEditRow - FBagBase), v);
+    DesignBox.Invalidate;
+    ShowInspector(Dsn.Sel);
+    Exit;
+  end;
   { non-visual nodes: only Caption is editable (geometry is tray-derived) }
   if d.IsNonVisual(d.NodeKind(Dsn.Sel)) and (FEditRow <> 1) then Exit;
   PushUndo(SaveLfmText(d));
@@ -1089,6 +1110,15 @@ begin
       begin writeln('SMOKE FAIL: non-visual geometry edit corrupted node'); Halt(1); end;
     if H.Dsn.Doc.NodeW(5) = 999 then
       begin writeln('SMOKE FAIL: non-visual geometry edit not guarded'); Halt(1); end;
+    { extra published prop (Interval) is shown + editable via the bag rows }
+    H.ShowInspector(5);
+    if H.FBagBase <= 0 then
+      begin writeln('SMOKE FAIL: timer Interval prop not surfaced'); Halt(1); end;
+    if H.Dsn.Doc.NodePropByName(5, 'Interval') <> '1000' then
+      begin writeln('SMOKE FAIL: timer Interval prop not loaded'); Halt(1); end;
+    H.FEditRow := H.FBagBase; H.ValueEdit.Text := '2000'; H.ApplyEdit;
+    if H.Dsn.Doc.NodePropByName(5, 'Interval') <> '2000' then
+      begin writeln('SMOKE FAIL: Interval bag edit not applied'); Halt(1); end;
 
     { save round-trip: serialize the docmodel to a temp file (not the repo
       sample), reload it, node count must survive. Same path OnSave uses. }

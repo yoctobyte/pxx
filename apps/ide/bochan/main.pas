@@ -361,6 +361,12 @@ begin
     CheckInt(e, 'sample.lfm node count', rdoc.Count, 6);
     CheckStr(e, 'sample node 5 is a Timer', rdoc.KindName(rdoc.NodeKind(5)), 'Timer');
     CheckTrue(e, 'sample Timer is non-visual', rdoc.IsNonVisual(rdoc.NodeKind(5)));
+    { the Timer's Interval is an extra published prop — kept verbatim, not dropped }
+    CheckStr(e, 'sample Timer Interval prop', rdoc.NodePropByName(5, 'Interval'), '1000');
+    { and it survives a save -> reload round-trip }
+    ldoc := TDocModel.Create;
+    CheckTrue(e, 'sample re-parses from save', LoadLfmText(SaveLfmText(rdoc), ldoc));
+    CheckStr(e, 'rt Timer Interval prop', ldoc.NodePropByName(5, 'Interval'), '1000');
   end
   else
     CheckTrue(e, 'sample.lfm present', False);

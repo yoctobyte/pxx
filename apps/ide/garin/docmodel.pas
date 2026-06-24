@@ -23,6 +23,11 @@ type
     Caption: AnsiString;
     Parent: Integer;   { index into the model; -1 = the form/root }
     X, Y, W, H: Integer;
+    { extra published properties beyond the modelled ones (Interval, Enabled, …),
+      kept verbatim as name=value so they survive a .lfm round-trip and feed the
+      RTTI inspector. Parallel arrays. }
+    PropN: array of AnsiString;
+    PropV: array of AnsiString;
   end;
 
   TDocModel = class
@@ -53,6 +58,13 @@ type
     { non-visual components have no canvas geometry — the face renders them in a
       tray strip, not as a positioned/resizable box. }
     function IsNonVisual(K: TWidgetKind): Boolean;
+    { extra-property bag (verbatim name=value). SetNodeProp overwrites an existing
+      name or appends. }
+    procedure SetNodeProp(I: Integer; const AName, AVal: AnsiString);
+    function NodePropCount(I: Integer): Integer;
+    function NodePropName(I, J: Integer): AnsiString;
+    function NodePropVal(I, J: Integer): AnsiString;
+    function NodePropByName(I: Integer; const AName: AnsiString): AnsiString;
   end;
 
 implementation
@@ -207,6 +219,56 @@ end;
 function TDocModel.IsNonVisual(K: TWidgetKind): Boolean;
 begin
   IsNonVisual := (K = wkTimer) or (K = wkMenu);
+end;
+
+procedure TDocModel.SetNodeProp(I: Integer; const AName, AVal: AnsiString);
+var j, n: Integer;
+begin
+  if (I < 0) or (I >= FCount) then Exit;
+  for j := 0 to Length(FNodes[I].PropN) - 1 do
+    if FNodes[I].PropN[j] = AName then
+    begin
+      FNodes[I].PropV[j] := AVal;
+      Exit;
+    end;
+  n := Length(FNodes[I].PropN);
+  SetLength(FNodes[I].PropN, n + 1);
+  SetLength(FNodes[I].PropV, n + 1);
+  FNodes[I].PropN[n] := AName;
+  FNodes[I].PropV[n] := AVal;
+end;
+
+function TDocModel.NodePropCount(I: Integer): Integer;
+begin
+  if (I < 0) or (I >= FCount) then NodePropCount := 0
+  else NodePropCount := Length(FNodes[I].PropN);
+end;
+
+function TDocModel.NodePropName(I, J: Integer): AnsiString;
+begin
+  NodePropName := '';
+  if (I < 0) or (I >= FCount) then Exit;
+  if (J >= 0) and (J < Length(FNodes[I].PropN)) then NodePropName := FNodes[I].PropN[J];
+end;
+
+function TDocModel.NodePropVal(I, J: Integer): AnsiString;
+begin
+  NodePropVal := '';
+  if (I < 0) or (I >= FCount) then Exit;
+  if (J >= 0) and (J < Length(FNodes[I].PropV)) then NodePropVal := FNodes[I].PropV[J];
+end;
+
+function TDocModel.NodePropByName(I: Integer; const AName: AnsiString): AnsiString;
+var j: Integer;
+begin
+  NodePropByName := '';
+  if (I < 0) or (I >= FCount) then Exit;
+  for j := 0 to Length(FNodes[I].PropN) - 1 do
+    if FNodes[I].PropN[j] = AName then
+    begin
+      NodePropByName := FNodes[I].PropV[j];
+      Exit;
+    end;
 end;
 
 end.

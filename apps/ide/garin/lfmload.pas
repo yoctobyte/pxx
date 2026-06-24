@@ -175,7 +175,7 @@ begin
 end;
 
 procedure TLfmDocReader.HandleLine(const ln: AnsiString);
-var body, kw, typeName, ty: AnsiString; colon, j, parent: Integer;
+var body, kw, typeName, ty, pname: AnsiString; colon, j, parent, eq: Integer;
 begin
   body := Trim2(ln);
   if body = '' then Exit;
@@ -210,7 +210,23 @@ begin
   else if kw = 'WIDTH' then   SetField(2, StrToIntDef(RhsOf(body), Doc.NodeW(Cur)))
   else if kw = 'HEIGHT' then  SetField(3, StrToIntDef(RhsOf(body), Doc.NodeH(Cur)))
   else if kw = 'CAPTION' then
+  begin
     if Cur >= 0 then Doc.SetNodeCaption(Cur, Unquote(RhsOf(body)));
+  end
+  else if Cur >= 0 then
+  begin
+    { any other single-line `Prop = Value` — keep the value verbatim so it
+      survives the round-trip and the inspector can show it. Multi-line / nested
+      values aren't modelled (rare in our designs); they'd land as a bare name. }
+    eq := 0;
+    for j := 1 to Length(body) do
+      if body[j] = '=' then begin eq := j; Break; end;
+    if eq > 0 then
+    begin
+      pname := Trim2(Copy(body, 1, eq - 1));
+      if pname <> '' then Doc.SetNodeProp(Cur, pname, RhsOf(body));
+    end;
+  end;
 end;
 
 procedure TLfmDocReader.Run(const text: AnsiString);
@@ -288,6 +304,10 @@ begin
   Buf := Buf + ind2 + 'Height = ' + IntToStr(Doc.NodeH(i)) + #10;
   cap := Doc.NodeCaption(i);
   if cap <> '' then Buf := Buf + ind2 + 'Caption = ' + QuoteLfm(cap) + #10;
+
+  { extra published properties, kept verbatim (already-formatted RHS) }
+  for j := 0 to Doc.NodePropCount(i) - 1 do
+    Buf := Buf + ind2 + Doc.NodePropName(i, j) + ' = ' + Doc.NodePropVal(i, j) + #10;
 
   for j := 0 to Doc.Count - 1 do
     if Doc.NodeParent(j) = i then EmitNode(j, depth + 1);
