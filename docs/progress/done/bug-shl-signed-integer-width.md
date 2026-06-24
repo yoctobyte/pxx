@@ -1,7 +1,7 @@
 # bug: `shl` on a 32-bit Integer does not wrap at 32-bit width
 
 - **Type:** bug (Track A — codegen width / FPC-parity)
-- **Status:** backlog
+- **Status:** done
 - **Found:** 2026-06-23, differential sweep vs FPC
 - **Severity:** low (loud, rare: only when shifting into/through bit 31 of a
   32-bit value). Sibling of the resolved `bug-shr-signed-integer-width`.
@@ -47,3 +47,24 @@ sign bug, so the change was reverted (only a doc-comment in `ir_codegen.inc`
 
 `var i:integer; begin i:=1; writeln(i shl 31); end.` (and the `UInt64(1) shl 40`
 control that must stay `1099511627776`).
+
+## Fix log
+
+- 2026-06-24 — DONE on the 64-bit-register targets (x86-64 + aarch64). Two parts,
+  in the order the ticket prescribed:
+  1. **Width propagation (shared `ir.inc`, `AN_PTR_CAST`).** A builtin numeric
+     reinterpret (`ASTIVal = -1`: Int64/UInt64/Integer/Cardinal/…) lowered to its
+     inner expr's IR node and kept that node's IRTk, so `UInt64(1)` was understated
+     to the 32-bit width of the `1` literal. Now re-tag the result IR node with the
+     cast's `ASTTk` — the operand width becomes trustworthy for width-sensitive ops.
+  2. **Post-shift wrap (`tkShl`).** After `shl`, when `TypeSize(IRTk[left]) < 8`,
+     re-derive the narrow result from the low 32 bits: x86-64 `cdqe` / aarch64
+     `sxtw x0, w0` for a signed operand, `mov eax,eax` / `mov w0,w0` for unsigned;
+     64-bit operands (incl. the now-correctly-tagged `UInt64(...)` cast) shift
+     as-is. i386/arm32/riscv32/xtensa use 32-bit registers for a 32-bit Integer, so
+     the shift is naturally width-correct — no change.
+- Test: extended `test/test_shr_width.pas` (i shl 31 = -2147483648, -1 shl 4 = -16,
+  Cardinal 1 shl 31 = 2147483648, UInt64(1) shl 40 unchanged = 1099511627776,
+  Int64(1) shl 52 = 4503599627370496), FPC oracle-matched on x86-64 and verified
+  identical under qemu-aarch64. `make test` green + self-host byte-identical (the
+  codegen change reseeds — fixed via `make bootstrap`).

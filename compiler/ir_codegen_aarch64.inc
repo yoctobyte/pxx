@@ -1173,7 +1173,21 @@ begin
         else if op = Ord(tkAnd) then EmitI32($8A010000)    { and x0, x0, x1 }
         else if op = Ord(tkOr) then EmitI32($AA010000)     { orr x0, x0, x1 }
         else if op = Ord(tkXor) then EmitI32($CA010000)    { eor x0, x0, x1 }
-        else if op = Ord(tkShl) then EmitI32($9AC12000)    { lsl x0, x0, x1 }
+        else if op = Ord(tkShl) then
+        begin
+          EmitI32($9AC12000);                              { lsl x0, x0, x1 }
+          { Wrap at the operand width: a <8-byte result shifted into bit 31 must
+            read back as a 32-bit value (sign-extended for a signed operand,
+            zero-extended for unsigned), not the wider 64-bit register content
+            (bug-shl-signed-integer-width). 64-bit operands shift as-is. }
+          if TypeSize(IntToTypeKind(IRTk[IRA[node]])) < 8 then
+          begin
+            if TypeSigned(IntToTypeKind(IRTk[IRA[node]])) then
+              EmitI32($93407C00)                           { sxtw x0, w0 }
+            else
+              EmitI32($2A0003E0);                          { mov w0, w0 }
+          end;
+        end
         else if op = Ord(tkIdent) then
         begin
           { Logical shr on a <=32-bit operand: zero-extend (`mov w0, w0` clears the

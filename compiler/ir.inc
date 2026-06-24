@@ -2050,7 +2050,14 @@ begin
       begin
         right := IRAppend(IR_CONST_INT, -1, -1, -1, 8, Ord(tyInteger));
         Result := IRAppend(IR_BINOP, Result, right, Ord(tkPlus), 0, Ord(tyPointer));
-      end;
+      end
+      else if ASTIVal[node] = -1 then
+        { Builtin numeric/ordinal reinterpret (Int64/UInt64/Integer/Cardinal/...):
+          re-tag the result IR node with the cast's width so width-sensitive ops
+          (e.g. tkShl's 32-bit wrap) read the operand's real width. Without this,
+          UInt64(1) lowers to the inner const's 32-bit IRTk and a shl-into-bit-31
+          truncation would wrongly fire. See bug-shl-signed-integer-width. }
+        IRTk[Result] := ASTTk[node];
     end;
 
     AN_RTTI_REG:

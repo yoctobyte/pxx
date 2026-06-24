@@ -2455,7 +2455,23 @@ begin
                 begin EmitB($89); EmitB($C0); end;            { mov eax, eax (zero-extend) }
               EmitB($48); EmitB($D3); EmitB($E8);             { shr rax, cl }
             end;
-          tkShl:   begin EmitB($48); EmitB($D3); EmitB($E0); end; { shl rax, cl }
+          { `shl` in a 64-bit register on a <8-byte operand leaves a value shifted
+            into bit 31 looking positive (1 shl 31 read 2147483648, not
+            -2147483648). Re-derive the narrow result from the low 32 bits: cdqe
+            sign-extends for a signed operand, `mov eax,eax` zero-extends for an
+            unsigned one. 64-bit operands (incl. UInt64(...) casts, now tagged
+            8-byte by ir.inc) shift as-is. See bug-shl-signed-integer-width. }
+          tkShl:
+            begin
+              EmitB($48); EmitB($D3); EmitB($E0);             { shl rax, cl }
+              if TypeSize(IntToTypeKind(IRTk[left])) < 8 then
+              begin
+                if TypeSigned(IntToTypeKind(IRTk[left])) then
+                  begin EmitB($48); EmitB($98); end           { cdqe }
+                else
+                  begin EmitB($89); EmitB($C0); end;          { mov eax, eax }
+              end;
+            end;
 
           tkIn:
             begin
