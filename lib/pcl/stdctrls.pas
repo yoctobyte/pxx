@@ -266,9 +266,7 @@ end;
 procedure TListBox.AddItem(const s: string);
 var row: Pointer;
 begin
-  { grow on demand: a streamed instance (CreateInstance skips the constructor)
-    has nil FItems/FRows, so never assume the constructor pre-sized them.
-    STOPGAP — revert with urgent/bug-metaclass-new-getclass-vmt. }
+  { grow on demand past the constructor's initial reservation }
   if FCount >= Length(FItems) then SetLength(FItems, FCount + 64);
   if FCount >= Length(FRows) then SetLength(FRows, FCount + 64);
   FItems[FCount] := s;

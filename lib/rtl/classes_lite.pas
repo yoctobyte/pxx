@@ -255,14 +255,12 @@ begin
     className := FStream.ReadStrLen(lenByte);
     childCls := GetClass(className);
     if childCls = nil then StreamFail('unknown class');
-    { Ideal: construct through the metaclass so the class's real virtual ctor
-      runs — child := TComponentClass(childCls).Create(parent). BLOCKED: metaclass
-      construction via GetClass stamps a non-canonical VMT (GetInstanceClassName
-      fails, RTTI/virtual identity breaks), see
-      urgent/bug-metaclass-new-getclass-vmt. Until fixed, allocate with
-      CreateInstance (the widget constructor-skip stopgaps cover the gap). }
-    childP := CreateInstance(childCls);
-    child := childP;
+    { Construct through the metaclass so the class's real virtual ctor runs
+      (Owner = parent). Unblocked by done/bug-metaclass-new-getclass-vmt (v45):
+      TComponentClass(cref).Create stamps the canonical class VMT, so virtual
+      dispatch + RTTI identity hold on the streamed instance. }
+    child := TComponentClass(childCls).Create(parent);
+    childP := child;
     ReadBody(child, childCls, rootInst, rootCls);
     parent.AddChild(child);
     { Bind the child into the root's published field of the same name, so code

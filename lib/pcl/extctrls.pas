@@ -260,12 +260,6 @@ end;
 
 procedure TPaintBox.CreateHandle;
 begin
-  { STOPGAP (revert when urgent/bug-metaclass-new-getclass-vmt lands and the
-    streamer constructs via the virtual ctor): a streamed paintbox is made with
-    CreateInstance, which skips Create, so FCanvas is nil and the draw trampoline
-    would deref nil. CreateHandle runs at Realize for streamed + normal instances
-    alike — ensure the Canvas here. }
-  if FCanvas = nil then FCanvas := TCanvas.Create;
   Self.Handle := WidgetSet.CreatePaintBox(Self);
 end;
 

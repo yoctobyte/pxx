@@ -194,19 +194,15 @@ begin
   GetClassName := ps^;
 end;
 
-{ Allocate + zero an instance from RTTI, WITHOUT running its constructor (the
-  .lfm streamer fills published properties afterwards).
+{ Allocate + zero an instance from RTTI, WITHOUT running its constructor.
 
-  STOPGAP CONTRACT (until the streamer constructs via a metaclass —
-  urgent/feature-metaclass-construct-dispatch + feature-pcl-component-ctor-owner —
-  after which the constructor runs and these stopgaps revert):
-  a streamable class must NOT rely on its constructor for required state — move
-  such setup to a path that also runs for streamed instances (e.g. CreateHandle
-  at Realize) or make it lazy/guarded. Audited PCL 2026-06-23: TPaintBox (Canvas),
-  TListBox/TComboBox (FItems) were the offenders, now patched that way; the rest
-  of the TControl widgets only call HandleNeeded so zeroing suffices. Non-widget
-  TTimer/TMenu still init in their constructor — default-zero if streamed, not a
-  crash. Full design: docs/developer/lfm-streaming-and-constructors.md. }
+  The .lfm child streamer no longer uses this — it constructs components through
+  the metaclass virtual ctor (TComponentClass(cref).Create(owner)) now that
+  done/bug-metaclass-new-getclass-vmt is fixed, so child components run their real
+  constructors. CreateInstance remains for the root-form load path
+  (TApplication.CreateForm, which then streams via InitInheritedComponent) and for
+  metaclass/RTTI tests that deliberately skip the ctor. Callers of this raw
+  allocator must not assume any constructor side effects ran. }
 function CreateInstance(cls: PClassRTTI): Pointer;
 var
   obj, addr: Pointer;
