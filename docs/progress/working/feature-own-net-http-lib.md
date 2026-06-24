@@ -80,13 +80,14 @@ connection (both bodies correct, stays Alive between). `HttpConnClose` to finish
   (both needed for the standard `Read`/`Write(var Buffer; …)` surface). Synapse's
   heaviest Classes need.
 
-## Header API (landed 2026-06-24)
+## Header API + URL encoding (landed 2026-06-24)
 
 `THttpHeaders` (name/value pairs) + `HttpParseHeaders` (raw block → structured,
 multi-value preserved in order), `HttpHeadersGet`/`HttpHeadersHas`
-(case-insensitive), `HttpHeaderName`/`HttpHeaderVal` (iterate). Pure; 5 checks in
-`lib_http` (38 total). Built locally to dodge
-[[bug-setlength-record-field-via-var-param]].
+(case-insensitive), `HttpHeaderName`/`HttpHeaderVal` (iterate). Built locally to
+dodge [[bug-setlength-record-field-via-var-param]]. Plus `HttpUrlEncode`/
+`HttpUrlDecode` (RFC 3986 percent-encoding; decode also maps `+`→space) for query
+strings / form bodies. Pure; `lib_http` now 43 checks.
 
 ## Roadmap (next slices)
 

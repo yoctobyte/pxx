@@ -97,4 +97,11 @@ begin
   SayBool('hdrs-first', HttpHeadersGet(hdrs, 'Set-Cookie') = 'a=1');    { first of repeats }
   SayBool('hdrs-has', HttpHeadersHas(hdrs, 'set-cookie') and not HttpHeadersHas(hdrs, 'nope'));
   SayBool('hdrs-iter', (HttpHeaderName(hdrs, 0) = 'Content-Type') and (HttpHeaderVal(hdrs, 2) = 'b=2'));
+
+  { URL percent-encoding. }
+  SayBool('urlenc', HttpUrlEncode('a b&c=d/e') = 'a%20b%26c%3Dd%2Fe');
+  SayBool('urlenc-keep', HttpUrlEncode('Aa9-_.~') = 'Aa9-_.~');
+  SayBool('urldec', HttpUrlDecode('a%20b%26c') = 'a b&c');
+  SayBool('urldec-plus', HttpUrlDecode('a+b') = 'a b');
+  SayBool('url-roundtrip', HttpUrlDecode(HttpUrlEncode('x y/z?q=1')) = 'x y/z?q=1');
 end.

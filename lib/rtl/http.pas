@@ -69,6 +69,11 @@ function HttpDechunk(const body: AnsiString): AnsiString;
   scheme+host+port; anything else resolves against the base path's directory. }
 function HttpResolveUrl(const base, location: AnsiString): AnsiString;
 
+{ Percent-encode for URLs (RFC 3986 unreserved A-Za-z0-9-_.~ kept; everything
+  else -> %XX, space -> %20). Decode reverses it and also maps '+' -> space. }
+function HttpUrlEncode(const s: AnsiString): AnsiString;
+function HttpUrlDecode(const s: AnsiString): AnsiString;
+
 { Parse a raw response into resp (status line + headers + body). Applies
   Transfer-Encoding: chunked decoding, else trims the body to Content-Length. }
 procedure HttpParseResponse(const raw: AnsiString; var resp: THttpResponse);
@@ -286,6 +291,49 @@ begin
     else Break;       { stop at ';' chunk-ext or whitespace }
     Result := Result * 16 + d;
   end;
+end;
+
+function HttpHexDigit(n: Integer): Char;
+begin
+  if n < 10 then Result := Chr(Ord('0') + n)
+  else Result := Chr(Ord('A') + n - 10);
+end;
+
+function HttpUrlEncode(const s: AnsiString): AnsiString;
+var i, o: Integer; c: Char; r: AnsiString;
+begin
+  r := '';
+  for i := 1 to Length(s) do
+  begin
+    c := s[i];
+    if ((c >= 'A') and (c <= 'Z')) or ((c >= 'a') and (c <= 'z')) or
+       ((c >= '0') and (c <= '9')) or (c = '-') or (c = '_') or (c = '.') or (c = '~') then
+      r := r + c
+    else
+    begin
+      o := Ord(c);
+      r := r + '%' + HttpHexDigit(o div 16) + HttpHexDigit(o mod 16);
+    end;
+  end;
+  Result := r;
+end;
+
+function HttpUrlDecode(const s: AnsiString): AnsiString;
+var i, n: Integer; c: Char; r: AnsiString;
+begin
+  r := ''; i := 1; n := Length(s);
+  while i <= n do
+  begin
+    c := s[i];
+    if (c = '%') and (i + 2 <= n) then
+    begin
+      r := r + Chr(HttpHexVal(Copy(s, i + 1, 2)));
+      i := i + 3;
+    end
+    else if c = '+' then begin r := r + ' '; i := i + 1; end
+    else begin r := r + c; i := i + 1; end;
+  end;
+  Result := r;
 end;
 
 function HttpDechunk(const body: AnsiString): AnsiString;
