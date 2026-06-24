@@ -58,34 +58,49 @@ say "PXX install"
 # 1. Compiler
 # ---------------------------------------------------------------------------
 PINNED="$ROOT/stable_linux_amd64/default/pinned"
-arch="$(uname -m)"
-if [ "$arch" != x86_64 ] && [ "$arch" != amd64 ]; then
-  note "host arch is '$arch'; the committed stable binary is x86-64."
-  note "build a native compiler with:  make bootstrap   (needs FPC)"
-fi
-if [ ! -e "$PINNED" ]; then
-  echo "no pinned compiler at $PINNED" >&2
-  echo "run 'make bootstrap && make stabilize && make pin' first." >&2
-  exit 1
-fi
-printf 'program pxxsmoke;\nbegin\nend.\n' > /tmp/pxx_smoke.pas
-if "$PINNED" /tmp/pxx_smoke.pas /tmp/pxx_smoke >/dev/null 2>&1; then
-  note "pinned compiler OK: $PINNED"
+COMPILER="$PINNED"          # what ./pxx will point at
+SMOKE='program pxxsmoke; begin end.'
+printf '%s\n' "$SMOKE" > /tmp/pxx_smoke.pas
+
+runs_here() { [ -e "$1" ] && "$1" /tmp/pxx_smoke.pas /tmp/pxx_smoke >/dev/null 2>&1; }
+
+if runs_here "$PINNED"; then
+  note "stable compiler OK: $PINNED"
 else
-  echo "pinned compiler did not run a smoke compile — aborting." >&2
-  exit 1
+  # The committed stable binary is x86-64; on another host arch it can't run.
+  # Native per-arch binaries are not distributed yet
+  # (see docs/progress/backlog/feature-native-arch-binaries). Build one from
+  # source if the toolchain is here, otherwise guide the user.
+  note "the committed stable binary doesn't run on this host ($(uname -m))."
+  if command -v fpc >/dev/null 2>&1 && command -v make >/dev/null 2>&1; then
+    if [ "$(ask 'Build a native compiler from source now (make bootstrap, needs FPC)?' y)" = y ]; then
+      ( cd "$ROOT" && make bootstrap ) || { echo "make bootstrap failed — aborting." >&2; exit 1; }
+      if runs_here "$ROOT/compiler/pascal26"; then
+        COMPILER="$ROOT/compiler/pascal26"
+        note "native compiler built: $COMPILER"
+      else
+        echo "built compiler did not run a smoke — aborting." >&2; exit 1
+      fi
+    else
+      echo "skipped. Build later with:  make bootstrap" >&2; exit 1
+    fi
+  else
+    echo "no runnable compiler and FPC/make not found." >&2
+    echo "install FPC ('sudo apt install fpc') then:  make bootstrap" >&2
+    exit 1
+  fi
 fi
 
 # ---------------------------------------------------------------------------
 # 2. ./pxx wrapper (+ optional PATH)
 # ---------------------------------------------------------------------------
 say "compiler wrapper"
-"$ROOT/tools/install.sh" --bindir "$ROOT" >/dev/null
-note "wrote ./pxx  (pinned compiler + library roots; auto-tracks re-pins)"
+"$ROOT/tools/install.sh" --bindir "$ROOT" --compiler "$COMPILER" >/dev/null
+note "wrote ./pxx  (compiler + library roots on the unit search path)"
 note "use it from anywhere:  $ROOT/pxx foo.pas foo"
 
 if [ "$OFFER_PATH" = 1 ] && [ "$(ask 'Put pxx on your PATH (~/.local/bin)?' n)" = y ]; then
-  "$ROOT/tools/install.sh" >/dev/null
+  "$ROOT/tools/install.sh" --compiler "$COMPILER" >/dev/null
   note "installed ~/.local/bin/pxx (ensure ~/.local/bin is on PATH)"
 fi
 

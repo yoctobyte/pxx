@@ -14,13 +14,15 @@ set -uo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$ROOT"
 
-if [ -x "$ROOT/pxx" ]; then
-  PXX=("$ROOT/pxx")
-else
-  PINNED="$ROOT/stable_linux_amd64/default/pinned"
-  [ -e "$PINNED" ] || { echo "no ./pxx and no pinned compiler — run ./install.sh first" >&2; exit 1; }
-  PXX=("$PINNED" -Fu"$ROOT/lib/rtl" -Fu"$ROOT/lib/pcl" -Fu"$ROOT/lib/rtl/platform/posix")
+# Demos build with the installed ./pxx. Require install first — the demos need a
+# configured compiler (library roots, optional externals), so this stays a
+# post-install step rather than something runnable straight from a bare checkout.
+if [ ! -x "$ROOT/pxx" ]; then
+  echo "demos need the compiler set up first — run:  ./install.sh" >&2
+  echo "(it creates ./pxx, then offers to launch these demos)" >&2
+  exit 1
 fi
+PXX=("$ROOT/pxx")
 
 # name | source | kind | description
 #   kind: batch (runs to completion) | tty (reads stdin) | gui (needs X/GTK/GL)

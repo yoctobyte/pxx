@@ -24,10 +24,12 @@ ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 BINDIR="${HOME}/.local/bin"
 ACTION="install"
+COMPILER_OVERRIDE=""
 
 while [ $# -gt 0 ]; do
   case "$1" in
     --bindir) BINDIR="$2"; shift 2 ;;
+    --compiler) COMPILER_OVERRIDE="$2"; shift 2 ;;   # use this binary instead of the pinned symlink (e.g. a native make-bootstrap build)
     --uninstall) ACTION="uninstall"; shift ;;
     -h|--help) sed -n '2,20p' "$0"; exit 0 ;;
     *) echo "unknown option: $1" >&2; exit 2 ;;
@@ -41,10 +43,14 @@ if [ "$ACTION" = "uninstall" ]; then
   exit 0
 fi
 
-PINNED="${ROOT}/stable_linux_amd64/default/pinned"
+if [ -n "$COMPILER_OVERRIDE" ]; then
+  PINNED="$COMPILER_OVERRIDE"
+else
+  PINNED="${ROOT}/stable_linux_amd64/default/pinned"
+fi
 if [ ! -e "$PINNED" ]; then
-  echo "no pinned compiler at $PINNED" >&2
-  echo "run 'make stabilize && make pin' first (or point --bindir at a checkout that has one)." >&2
+  echo "no compiler at $PINNED" >&2
+  echo "run 'make stabilize && make pin' first (or pass --compiler PATH)." >&2
   exit 1
 fi
 
