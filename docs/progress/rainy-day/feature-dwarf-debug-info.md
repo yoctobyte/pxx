@@ -192,3 +192,45 @@ small; Tier 3-lite (base types + RTTI structs + pointer-cheat) ≈ 1 session.
   (2) per-unit SrcLine reset means a one-file line table MUST filter to main-file
   tokens or every unit's "line N" aliases the user's "line N".
   Next: Tier 2 (subprograms → real `bt` names/frames), then Tier 3-lite.
+- 2026-06-24 — **Tier 2 + Tier 3-lite LANDED (x86-64, `-g`).** `bt` now shows PXX
+  function names + file:line frames; `print`/`info args` read params, locals, and
+  globals; records inspect field-by-field (`print p` → `{x = 3, y = 4}`); strings
+  read via `x/s`. All behind `if DebugInfo` → self-host + cross-bootstrap stay
+  byte-identical (verified). New `make test-debug-g` now asserts the Tier 2/3
+  behaviour too.
+  Implementation:
+  - **Side tables, not live symtab.** Symbol slots recycle across procs (SymCount
+    restored at each proc end), so params/locals are GONE by writeELF time. Capture
+    them during compile: `DbgCaptureProcLocals` (parser.inc, before scope teardown)
+    snapshots `Syms[ScopeBase..SymCount-1]` into the `DbgVar*` arrays; program
+    globals captured at ParseProgram end (skGlobal past `DbgGlobalScopeBase`).
+    `ProcDbgMain[]` flags main-file procs; `DbgMainBodyStart/End` + `DbgProgName`
+    bound the program body.
+  - **.debug_info DIEs** (BuildDwarfSections, elfwriter.inc): CU(children) →
+    type DIEs first (so param/var `ref4`s point backward) → one `DW_TAG_subprogram`
+    per main-file proc + one for the program body (name, low/high_pc from
+    `Procs[].BodyAddr`/`ProcBodyEnd`, `frame_base = DW_OP_reg6`), each with its
+    captured `formal_parameter`/`variable` children. Locations: globals
+    `DW_OP_addr`(bssBase+off); locals/params `DW_OP_fbreg`(off), +`DW_OP_deref`
+    for by-ref params.
+  - **Types** (graceful degradation): base types → `DW_TAG_base_type`; records →
+    `DW_TAG_structure_type` with members from the EXISTING UFld* tables (no field
+    metadata rebuild); fixed arrays → `array_type`+`subrange`; class/string/
+    pointer/variant/dynarray → labeled `DW_TAG_pointer_type` (the pointer-cheat).
+    Deduped via the `(cat,recId,aux)` map.
+  - **Allocated sections required.** Two new LANDMINES that cost real debugging:
+    (a) gdb segfaults when a `DW_TAG_subprogram`'s `low_pc` lands in NO allocated
+    section — the `-g` ELF MUST carry real `.text`/`.data`/`.bss` section headers
+    (sh_addr set), not only `.debug_*`. `find_pc_section` returns null otherwise.
+    (b) `break <func>` only skips the prologue cleanly when a line row exists AT
+    the function's `low_pc`; without it gdb's arch analyzer stops mid-prologue
+    (before params are stored → args read as 0). Fix: emit an entry row at
+    `Procs[].BodyAddr` plus `DW_LNS_set_prologue_end` on the first body row.
+  - Helpers split to ≤6 params (`writeShdr64` + per-call `DbgShFlags/Addr/Align`
+    globals) to dodge the many-param-call-corruption backend landmine.
+  Remaining (deferred, not blocking): pointer-cheat types render as `^pointer` in
+  gdb (gdb derives pointer type names from the pointee, ignoring `DW_AT_name`) —
+  `x/s`/handle inspection still work, label is cosmetic; the outermost `bt` frame
+  past the program body is junk (no `.eh_frame`/CFI — frame-pointer unwind only);
+  cross-target generalisation (×4) still pending. Tier 1-3 effectively complete
+  for x86-64.

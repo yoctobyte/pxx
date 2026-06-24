@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
-# DWARF Tier 1 (-g) smoke gate. Builds a tiny program with -g and asserts:
-#   1. readelf --debug-dump=decodedline shows line rows for the source file
-#   2. (if gdb present) a line breakpoint resolves + hits, and `bt` prints file:line
-# x86-64 only — Tier 1 emits debug info on that backend alone.
+# DWARF Tier 1-3 (-g) smoke gate. Builds a tiny program with -g and asserts:
+#   T1  readelf --debug-dump=decodedline shows line rows for the source
+#   T1  gdb resolves+hits a line breakpoint, step tracks source lines
+#   T2  bt shows PXX function names + file:line frames
+#   T3  params/locals/record fields print with correct values
+# x86-64 only — debug info is emitted on that backend alone.
 #
 # Usage: tools/dwarf_smoke.sh <path-to-pxx-compiler>
 set -u
@@ -14,48 +16,62 @@ EXE="$TMP/dbgsmoke"
 
 cat > "$SRC" <<'EOF'
 program dbgsmoke;
-var i: Integer;
-begin
-  i := 0;
-  while i < 3 do
-  begin
-    writeln('i=', i);
-    i := i + 1;
+type
+  TPoint = record
+    x, y: Integer;
   end;
-  writeln('done');
+
+function Add(a, b: Integer): Integer;
+var local: Integer;
+begin
+  local := a + b;
+  Add := local;
+end;
+
+var
+  pt: TPoint;
+  s: Integer;
+begin
+  pt.x := 3;
+  pt.y := 4;
+  s := Add(pt.x, pt.y);
+  writeln('i=', s);
 end.
 EOF
-# The writeln is on line 7 — the breakpoint target.
-BPLINE=7
+# Add's body is line 10; the program writeln is line 21.
+ADDLINE=10
 
 "$PXX" -g "$SRC" "$EXE" >/dev/null 2>&1 || { echo "dwarf-g: FAIL — compile -g errored"; exit 1; }
 
-# Runtime behaviour must be identical to a normal build.
 OUT="$("$EXE")"
-EXP="$(printf 'i=0\ni=1\ni=2\ndone')"
-[ "$OUT" = "$EXP" ] || { echo "dwarf-g: FAIL — runtime output changed under -g"; echo "got: $OUT"; exit 1; }
+[ "$OUT" = "i=7" ] || { echo "dwarf-g: FAIL — runtime output changed under -g (got: $OUT)"; exit 1; }
 
-# 1. Line table present and references the source file.
+# T1: line table present and references the source file.
 if command -v readelf >/dev/null 2>&1; then
   DL="$(readelf --debug-dump=decodedline "$EXE" 2>/dev/null)"
   echo "$DL" | grep -q 'dbgsmoke.pas' || { echo "dwarf-g: FAIL — no .debug_line rows for source"; exit 1; }
-  echo "$DL" | grep -qE "[[:space:]]$BPLINE[[:space:]]+0x" || { echo "dwarf-g: FAIL — line $BPLINE not in line table"; exit 1; }
+  echo "$DL" | grep -qE "[[:space:]]$ADDLINE[[:space:]]+0x" || { echo "dwarf-g: FAIL — line $ADDLINE not in line table"; exit 1; }
 else
   echo "dwarf-g: WARN — readelf not found, skipping line-table check"
 fi
 
-# 2. gdb sets + hits a line breakpoint and bt shows file:line.
+# T1-T3 via gdb: break in Add (line:file form, the robust path), check name in
+# bt, args, a local, and a record field in the caller frame.
 if command -v gdb >/dev/null 2>&1; then
   GLOG="$(gdb -q -batch -ex "set debuginfod enabled off" \
-    -ex "break dbgsmoke.pas:$BPLINE" -ex "run" -ex "bt" "$EXE" 2>/dev/null)"
-  echo "$GLOG" | grep -qE "Breakpoint 1 at .*dbgsmoke.pas, line $BPLINE" \
-    || { echo "dwarf-g: FAIL — gdb could not resolve line breakpoint"; echo "$GLOG"; exit 1; }
-  echo "$GLOG" | grep -qE "Breakpoint 1,.*dbgsmoke.pas:$BPLINE" \
-    || { echo "dwarf-g: FAIL — gdb breakpoint did not hit at file:line"; echo "$GLOG"; exit 1; }
-  echo "$GLOG" | grep -qE "dbgsmoke.pas:$BPLINE" \
-    || { echo "dwarf-g: FAIL — bt does not show file:line"; echo "$GLOG"; exit 1; }
+    -ex "break dbgsmoke.pas:$ADDLINE" -ex "run" -ex "bt" \
+    -ex "print a" -ex "print b" -ex "up" -ex "print pt" \
+    "$EXE" 2>/dev/null)"
+  echo "$GLOG" | grep -qE "Breakpoint 1,.*Add .*dbgsmoke.pas:$ADDLINE" \
+    || { echo "dwarf-g: FAIL — gdb did not hit Add at file:line with function name"; echo "$GLOG"; exit 1; }
+  echo "$GLOG" | grep -qE "dbgsmoke .*dbgsmoke.pas:" \
+    || { echo "dwarf-g: FAIL — bt missing caller frame (program body)"; echo "$GLOG"; exit 1; }
+  echo "$GLOG" | grep -qE '\$1 = 3' \
+    || { echo "dwarf-g: FAIL — param a not readable (expected 3)"; echo "$GLOG"; exit 1; }
+  echo "$GLOG" | grep -qE 'x = 3, y = 4' \
+    || { echo "dwarf-g: FAIL — record fields not inspectable (expected x=3,y=4)"; echo "$GLOG"; exit 1; }
 else
-  echo "dwarf-g: WARN — gdb not found, skipping breakpoint check"
+  echo "dwarf-g: WARN — gdb not found, skipping breakpoint/inspection checks"
 fi
 
 echo "dwarf-g: OK"
