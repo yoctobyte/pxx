@@ -97,7 +97,7 @@ begin
   begin
     { i386 int 0x80 ABI: eax=4 (write), ebx=fd, ecx=buf, edx=len }
     EmitB($B8); EmitI32(4);
-    EmitB($BB); EmitI32(STDOUT);
+    EmitB($BB); EmitI32(CurWriteFd);
     EmitB($B9); EmitDataRef(dataOff);
     EmitB($BA); EmitI32(len);
     EmitB($CD); EmitB($80);
@@ -118,7 +118,7 @@ begin
     EmitwriteSyscallA64(dataOff, len);
     Exit;
   end;
-  MovRaxImm(SYS_WRITE); MovRdiImm(STDOUT);
+  MovRaxImm(SYS_WRITE); MovRdiImm(CurWriteFd);
   EmitB($48); EmitB($BE); EmitDataRef(dataOff);
   MovRdxImm(len); EmitSyscall;
 end;

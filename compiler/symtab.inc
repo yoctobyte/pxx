@@ -2154,7 +2154,7 @@ begin
     end;
     EmitLeaStrDataRsi(idx);
   end;
-  MovRaxImm(SYS_WRITE); MovRdiImm(STDOUT); EmitSyscall;
+  MovRaxImm(SYS_WRITE); MovRdiImm(CurWriteFd); EmitSyscall;
 end;
 
 procedure EmitStrAssignLiteral(dstIdx, litOff, litLen: Integer);
@@ -3152,7 +3152,7 @@ begin
   EmitB($75); EmitB(Byte(loopStart - (CodeLen + 1)));
   EmitB($48); EmitB($89); EmitB($FE);
   EmitB($48); EmitB($89); EmitB($CA);
-  MovRaxImm(SYS_WRITE); MovRdiImm(STDOUT); EmitSyscall;
+  MovRaxImm(SYS_WRITE); MovRdiImm(CurWriteFd); EmitSyscall;
 end;
 
 procedure EmitwriteUInt;
@@ -3172,7 +3172,7 @@ begin
   EmitB($75); EmitB(Byte(loopStart - (CodeLen + 1)));
   EmitB($48); EmitB($89); EmitB($FE);
   EmitB($48); EmitB($89); EmitB($CA);
-  MovRaxImm(SYS_WRITE); MovRdiImm(STDOUT); EmitSyscall;
+  MovRaxImm(SYS_WRITE); MovRdiImm(CurWriteFd); EmitSyscall;
 end;
 
 procedure EmitwriteChar;
@@ -3180,7 +3180,7 @@ procedure EmitwriteChar;
 begin
   EmitB($48); EmitB($BE); EmitDataRef(INTBUF_OFFSET);
   EmitB($88); EmitB($06);
-  MovRaxImm(SYS_WRITE); MovRdiImm(STDOUT); MovRdxImm(1); EmitSyscall;
+  MovRaxImm(SYS_WRITE); MovRdiImm(CurWriteFd); MovRdxImm(1); EmitSyscall;
 end;
 
 procedure EnsureSpaces;
@@ -3226,7 +3226,7 @@ begin
   EnsureSpaces;
   EmitB($48); EmitB($BE); EmitDataRef(SpacesOffset);    { mov rsi, spaces }
   EmitB($48); EmitB($89); EmitB($C2);                    { mov rdx, rax }
-  MovRaxImm(SYS_WRITE); MovRdiImm(STDOUT); EmitSyscall;
+  MovRaxImm(SYS_WRITE); MovRdiImm(CurWriteFd); EmitSyscall;
   Code[jleOff] := Byte(CodeLen - (jleOff + 1));
   { Write sign if negative }
   EmitB($4D); EmitB($85); EmitB($C0);                    { test r8, r8 }
@@ -3236,7 +3236,7 @@ begin
   { Write digits }
   EmitB($5A);                                            { pop rdx }
   EmitB($5E);                                            { pop rsi }
-  MovRaxImm(SYS_WRITE); MovRdiImm(STDOUT); EmitSyscall;
+  MovRaxImm(SYS_WRITE); MovRdiImm(CurWriteFd); EmitSyscall;
 end;
 
 procedure EmitwriteUIntW(width: Integer);
@@ -3263,11 +3263,11 @@ begin
   EnsureSpaces;
   EmitB($48); EmitB($BE); EmitDataRef(SpacesOffset);
   EmitB($48); EmitB($89); EmitB($C2);                    { mov rdx, rax }
-  MovRaxImm(SYS_WRITE); MovRdiImm(STDOUT); EmitSyscall;
+  MovRaxImm(SYS_WRITE); MovRdiImm(CurWriteFd); EmitSyscall;
   Code[jleOff] := Byte(CodeLen - (jleOff + 1));
   EmitB($5A);                                            { pop rdx }
   EmitB($5E);                                            { pop rsi }
-  MovRaxImm(SYS_WRITE); MovRdiImm(STDOUT); EmitSyscall;
+  MovRaxImm(SYS_WRITE); MovRdiImm(CurWriteFd); EmitSyscall;
 end;
 
 procedure EmitWriteFloatNat;
@@ -3397,7 +3397,7 @@ begin
     EnsureSpaces;
     EmitB($48); EmitB($BE); EmitDataRef(SpacesOffset);           { mov rsi, spaces }
     EmitB($48); EmitB($89); EmitB($C2);                           { mov rdx, rax }
-    MovRaxImm(SYS_WRITE); MovRdiImm(STDOUT); EmitSyscall;
+    MovRaxImm(SYS_WRITE); MovRdiImm(CurWriteFd); EmitSyscall;
     Code[pNoPad] := Byte(CodeLen - (pNoPad + 1));                { .nopad: }
   end;
 

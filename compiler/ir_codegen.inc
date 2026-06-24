@@ -982,7 +982,7 @@ begin
   EmitB($0F); EmitB($84); pNil := CodeLen; EmitI32(0); { jz Lend }
   EmitB($48); EmitB($89); EmitB($C6);               { mov rsi, rax }
   EmitB($48); EmitB($8B); EmitB($50); EmitB($F8);   { mov rdx, [rax-8] }
-  MovRaxImm(SYS_WRITE); MovRdiImm(STDOUT); EmitSyscall;
+  MovRaxImm(SYS_WRITE); MovRdiImm(CurWriteFd); EmitSyscall;
 
   { Lend }
   Patch32(pNil, CodeLen - (pNil + 4));
@@ -2665,6 +2665,7 @@ begin
         valNode := IRA[node];
         wid  := IRB[node];   { field width, 0 = none }
         decs := IRC[node];   { decimals, -1 = none }
+        CurWriteFd := IRIVal[node]; if CurWriteFd = 0 then CurWriteFd := STDOUT;  { target fd (2 = StdErr) }
         if IntToTypeKind(IRTk[node]) = tyVariant then
         begin
           { valNode lowers to the variant slot address; dispatch on the tag. }
@@ -2694,7 +2695,7 @@ begin
             EnsureSpaces;
             EmitB($48); EmitB($BE); EmitDataRef(SpacesOffset);
             MovRdxImm(wid - Strs[si].Len);
-            MovRaxImm(SYS_WRITE); MovRdiImm(STDOUT); EmitSyscall;
+            MovRaxImm(SYS_WRITE); MovRdiImm(CurWriteFd); EmitSyscall;
           end;
           if Strs[si].Len > 0 then
             EmitwriteSyscall(Strs[si].Offset + 8, Strs[si].Len);
@@ -2713,7 +2714,7 @@ begin
             EmitB($7E); EmitB(35);               { jle .skip_pad (35 bytes) }
             EmitB($48); EmitB($BE); EmitDataRef(SpacesOffset);
             EmitB($48); EmitB($89); EmitB($C2);  { mov rdx, rax }
-            MovRaxImm(SYS_WRITE); MovRdiImm(STDOUT); EmitSyscall;
+            MovRaxImm(SYS_WRITE); MovRdiImm(CurWriteFd); EmitSyscall;
           end;
           EmitwriteStrVar(symIdx);
         end
@@ -2734,13 +2735,13 @@ begin
             EmitB($7E); pDone := CodeLen; EmitB(0);         { jle skip_pad }
             EmitB($48); EmitB($BE); EmitDataRef(SpacesOffset); { mov rsi, spaces }
             EmitB($48); EmitB($89); EmitB($C2);            { mov rdx, rax (pad count) }
-            MovRaxImm(SYS_WRITE); MovRdiImm(STDOUT); EmitSyscall;
+            MovRaxImm(SYS_WRITE); MovRdiImm(CurWriteFd); EmitSyscall;
             Code[pDone] := Byte(CodeLen - (pDone + 1));
           end;
           EmitB($48); EmitB($8B); EmitB($04); EmitB($24); { mov rax, [rsp] = handle (reload; syscall clobbered rax) }
           EmitB($48); EmitB($89); EmitB($C6);             { mov rsi, rax }
           EmitB($48); EmitB($8B); EmitB($50); EmitB($F8); { mov rdx, [rax-8] }
-          MovRaxImm(SYS_WRITE); MovRdiImm(STDOUT); EmitSyscall;
+          MovRaxImm(SYS_WRITE); MovRdiImm(CurWriteFd); EmitSyscall;
           EmitB($58);                                     { restore managed expression }
           if (IRKind[valNode] = IR_BINOP) and (IntToTypeKind(IRTk[valNode]) = tyAnsiString) then
             IREmitCodeCall(AnsiStrReleaseAddr);
@@ -2754,7 +2755,7 @@ begin
           EmitB($48); EmitB($89); EmitB($C6);              { mov rsi, rax }
           EmitB($48); EmitB($8B); EmitB($10);              { mov rdx, [rax] }
           EmitB($48); EmitB($83); EmitB($C6); EmitB($08);  { add rsi, 8 }
-          MovRaxImm(SYS_WRITE); MovRdiImm(STDOUT); EmitSyscall;
+          MovRaxImm(SYS_WRITE); MovRdiImm(CurWriteFd); EmitSyscall;
         end
         else
         begin
@@ -3659,6 +3660,7 @@ begin
       
     IR_WRITELN:
       begin
+        CurWriteFd := IRIVal[node]; if CurWriteFd = 0 then CurWriteFd := STDOUT;  { newline to the same fd }
         EmitwriteSyscall(NEWLINE_OFFSET, 1);
       end;
 
@@ -4217,6 +4219,7 @@ var i, lblId, pos, targetOffset, f, procIdx: Integer;
     LabelFixupTarget: array[0..2047] of Integer;
     LabelFixupCount: Integer;
 begin
+  CurWriteFd := STDOUT;   { default write target; IR_WRITE/IR_WRITELN override per-statement (fd 2 for StdErr) }
   if TargetArch = TARGET_I386 then
   begin
     IREmitMachineCode386;

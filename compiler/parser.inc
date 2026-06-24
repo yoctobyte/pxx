@@ -6655,6 +6655,9 @@ begin
       if (vidx >= 0) and (Syms[vidx].Kind = skConst) and (Syms[vidx].TypeKind = tyInteger) and (Syms[vidx].Name = 'StdErr') then
       begin
         Next; Eat(tkComma);
+        { Route this write to fd 2. ASTIVal on the WRITE node carries the target
+          fd (0/absent = stdout); codegen threads it to the write syscalls. }
+        ASTIVal[node] := Syms[vidx].ConstVal;
       end;
     end;
     repeat

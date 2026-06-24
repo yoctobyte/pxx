@@ -1483,24 +1483,24 @@ end;
   IR_JUMP / IR_LABEL, all of which every backend already handles, so the boolean
   output is FPC-correct on all targets at once. Returns the first node; writes
   the final node (the end label) into lastNode. wid = field width (-1 = none). }
-function IRLowerBoolWrite(value, wid: Integer; var lastNode: Integer): Integer;
+function IRLowerBoolWrite(value, wid: Integer; var lastNode: Integer; fd: Integer): Integer;
 var bFalse, bEnd: Integer;
 begin
   bFalse := IRNewLabel;
   bEnd := IRNewLabel;
   Result := IRAppend(IR_JUMP_IF_FALSE, bFalse, value, -1, 0, 0);
   { Pascal/FPC renders TRUE/FALSE; the Nil-Python frontend renders Python's
-    True/False. }
+    True/False. (ival = target fd, threaded for writeln(StdErr,..).) }
   if isNilPy then
-    IRAppend(IR_WRITE, IRSyntheticConstStr('True'), wid, -1, 0, Ord(tyString))
+    IRAppend(IR_WRITE, IRSyntheticConstStr('True'), wid, -1, fd, Ord(tyString))
   else
-    IRAppend(IR_WRITE, IRSyntheticConstStr('TRUE'), wid, -1, 0, Ord(tyString));
+    IRAppend(IR_WRITE, IRSyntheticConstStr('TRUE'), wid, -1, fd, Ord(tyString));
   IRAppend(IR_JUMP, bEnd, -1, -1, 0, 0);
   IRAppend(IR_LABEL, -1, -1, -1, bFalse, 0);
   if isNilPy then
-    IRAppend(IR_WRITE, IRSyntheticConstStr('False'), wid, -1, 0, Ord(tyString))
+    IRAppend(IR_WRITE, IRSyntheticConstStr('False'), wid, -1, fd, Ord(tyString))
   else
-    IRAppend(IR_WRITE, IRSyntheticConstStr('FALSE'), wid, -1, 0, Ord(tyString));
+    IRAppend(IR_WRITE, IRSyntheticConstStr('FALSE'), wid, -1, fd, Ord(tyString));
   lastNode := IRAppend(IR_LABEL, -1, -1, -1, bEnd, 0);
 end;
 
@@ -1512,6 +1512,7 @@ var left, right, seq, item, value, outNode, first, last, leftAddr, argNode, argV
     lhsNode, pair3, pair1, pair2, initNode, limitNode, isDownNode, bodyNode: Integer;
     foldOff, foldK: Integer;
     bLastNode: Integer;
+    writeFd: Integer;
     foldStr: AnsiString;
     down: Boolean;
     varIdx: Integer;
@@ -3501,28 +3502,33 @@ begin
     begin
       first := -1;
       last := -1;
+      { Target fd, threaded into each IR_WRITE/IR_WRITELN's ival slot so codegen
+        emits the write syscalls against it. ASTIVal[node] = 0 means the default
+        (stdout); writeln(StdErr,..) set it to 2 in the parser. }
+      writeFd := ASTIVal[node];
+      if writeFd = 0 then writeFd := STDOUT;
       item := ASTLeft[node];
       while item <> -1 do
       begin
         { IR_WRITE: IRB = field width (0 = none), IRC = decimals (-1 = none),
-          IRTk = the source expression type (for write dispatch). }
+          IRIVal = target fd, IRTk = the source expression type (write dispatch). }
         bLastNode := -1;
         if (ASTKind[item] = AN_ARG) and (IntToTypeKind(ASTTk[ASTLeft[item]]) = tyBoolean) then
         begin
           { write(Boolean[:w]) -> FPC-style TRUE/FALSE text, branched at runtime. }
           value := IRLowerAST(ASTLeft[item]);
-          outNode := IRLowerBoolWrite(value, ASTIVal[item], bLastNode);
+          outNode := IRLowerBoolWrite(value, ASTIVal[item], bLastNode, writeFd);
         end
         else if (ASTKind[item] = AN_PAIR) and (IntToTypeKind(ASTTk[ASTLeft[item]]) = tyBoolean) then
         begin
           value := IRLowerAST(ASTLeft[item]);
-          outNode := IRLowerBoolWrite(value, -1, bLastNode);
+          outNode := IRLowerBoolWrite(value, -1, bLastNode, writeFd);
         end
         else if (ASTKind[item] <> AN_ARG) and (ASTKind[item] <> AN_PAIR) and
                 (IntToTypeKind(ASTTk[item]) = tyBoolean) then
         begin
           value := IRLowerAST(item);
-          outNode := IRLowerBoolWrite(value, -1, bLastNode);
+          outNode := IRLowerBoolWrite(value, -1, bLastNode, writeFd);
         end
         else if ASTKind[item] = AN_ARG then
         begin
@@ -3536,31 +3542,31 @@ begin
             { write(PChar): tag the IR_WRITE with the -3 decimals sentinel so
               codegen emits a runtime C-string (strlen + write) instead of
               printing the pointer value. }
-            outNode := IRAppend(IR_WRITE, value, ASTIVal[item], -3, 0, Ord(tyPointer))
+            outNode := IRAppend(IR_WRITE, value, ASTIVal[item], -3, writeFd, Ord(tyPointer))
           else
-            outNode := IRAppend(IR_WRITE, value, ASTIVal[item], ASTSOffset[item], 0, Ord(IntToTypeKind(ASTTk[ASTLeft[item]])));
+            outNode := IRAppend(IR_WRITE, value, ASTIVal[item], ASTSOffset[item], writeFd, Ord(IntToTypeKind(ASTTk[ASTLeft[item]])));
         end
         else if ASTKind[item] = AN_PAIR then
         begin
           value := IRLowerAST(ASTLeft[item]);
-          outNode := IRAppend(IR_WRITE, value, -1, -1, 0, IRTk[value]);
+          outNode := IRAppend(IR_WRITE, value, -1, -1, writeFd, IRTk[value]);
         end
         else if IntToTypeKind(ASTTk[item]) = tyVariant then
         begin
           value := IRLowerAddress(item);
-          outNode := IRAppend(IR_WRITE, value, -1, -1, 0, Ord(tyVariant));
+          outNode := IRAppend(IR_WRITE, value, -1, -1, writeFd, Ord(tyVariant));
         end
         else
         begin
           value := IRLowerAST(item);
-          outNode := IRAppend(IR_WRITE, value, -1, -1, 0, IRTk[value]);
+          outNode := IRAppend(IR_WRITE, value, -1, -1, writeFd, IRTk[value]);
         end;
         if first < 0 then first := outNode;
         if bLastNode >= 0 then last := bLastNode else last := outNode;
         item := ASTRight[item];
       end;
       if ASTKind[node] = AN_WRITELN then
-        Result := IRAppend(IR_WRITELN, first, last, -1, 0, 0)
+        Result := IRAppend(IR_WRITELN, first, last, -1, writeFd, 0)
       else
         Result := IRAppend(IR_BLOCK, first, last, -1, 0, 0);
     end;

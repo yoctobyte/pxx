@@ -1070,6 +1070,7 @@ var
   ExceptionUsed   : Boolean;
   ProcExceptionCleanupFrameActive: Boolean;
   InLValueWrite   : Boolean;
+  CurWriteFd      : Integer; { fd a write/writeln syscall targets; STDOUT by default, 2 for writeln(StdErr,..) }
   CAttrPacked     : Boolean;
   CAttrAligned    : Boolean;
   ExcSetJmpAddr   : Integer;
