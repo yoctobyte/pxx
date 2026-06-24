@@ -48,9 +48,10 @@ Foundation already present and reused: `net.pas` (blocking TCP/UDP + timeouts),
 
 1. **Response framing breadth** — `Content-Length` bodies and chunked transfer
    encoding (today: read-to-EOF with `Connection: close`); keep-alive.
-4. **TLS** — `https://` is parsed and refused (`isTls`); needs a TLS layer
-   (separate unit; ties into [[feature-real-dynlib-loader]] only if we shell out
-   to OpenSSL, otherwise a from-scratch/ BearSSL-style stack — design later).
+4. **TLS** — `https://` is parsed and refused (`isTls`). Scoped into its own
+   flagship ticket [[feature-tls13-from-scratch]]: syscall-only TLS 1.3 (Pascal
+   handshake + optional kTLS bulk; kernel does NOT do the handshake). OpenSSL via
+   [[feature-real-dynlib-loader]] is the production/fallback path.
 5. **More methods / headers API** — PUT/DELETE/HEAD, a small header map, redirects.
 
 ## Compiler gaps surfaced while building (filed)
