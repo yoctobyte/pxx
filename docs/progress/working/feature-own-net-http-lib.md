@@ -49,20 +49,28 @@ Foundation already present and reused: `net.pas` (blocking TCP/UDP + timeouts),
 `http.pas` pure helpers: `HttpHeaderValue` (case-insensitive lookup),
 `HttpDechunk` (chunked decode), and `HttpParseResponse` now applies framing —
 `Transfer-Encoding: chunked` is decoded, else the body is trimmed to
-`Content-Length`. Smoke `test/lib_http` (26 checks). Pending: keep-alive /
-length-aware recv loop on the transport (today reads to EOF with
-`Connection: close`, which the parser then frames correctly).
+`Content-Length`. Smoke `test/lib_http` (29 checks).
+
+## Methods + redirects (landed 2026-06-24)
+
+Blocking + async method set: `HttpGet/Post/Head/Put/Delete`, generic
+`HttpExec(method, url, headers, body)` with custom headers, and
+`HttpGetFollow`/`HttpGetFollowAsync` (follow up to N 3xx `Location` hops).
+Redirect e2e: `test/lib_http_redirect` — a server coroutine answers 302+Location
+then 200, the async client follows the hop (multi-connection, one thread).
 
 ## Roadmap (next slices)
 
 1. **Keep-alive transport** — recv exactly Content-Length / until last chunk so a
-   connection can be reused (today: one request per `Connection: close`).
-4. **TLS** — `https://` is parsed and refused (`isTls`). Routes through a common
+   connection can be reused (today: one request per `Connection: close`, which
+   the parser frames correctly).
+2. **Header map API** — structured request/response headers (today: raw block +
+   `HttpHeaderValue` lookup); relative-Location resolution for redirects.
+3. **TLS** — `https://` is parsed and refused (`isTls`). Routes through a common
    TLS seam [[feature-tls-provider-abstraction]] with two interchangeable
    backends: OpenSSL (default; via [[feature-real-dynlib-loader]]) and the native
    handrolled stack [[feature-tls13-from-scratch]]. Mix-and-match (e.g. native
    client ⇄ OpenSSL server) is the interop correctness test.
-5. **More methods / headers API** — PUT/DELETE/HEAD, a small header map, redirects.
 
 ## Compiler gaps surfaced while building (filed)
 

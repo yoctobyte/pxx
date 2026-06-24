@@ -51,14 +51,27 @@ procedure HttpParseResponse(const raw: AnsiString; var resp: THttpResponse);
 
 function HttpGet(const url: AnsiString): THttpResponse;
 function HttpPost(const url, contentType, body: AnsiString): THttpResponse;
+function HttpHead(const url: AnsiString): THttpResponse;
+function HttpPut(const url, contentType, body: AnsiString): THttpResponse;
+function HttpDelete(const url: AnsiString): THttpResponse;
+
+{ Generic request: any method + optional extra headers (CRLF-terminated lines) +
+  body. A Content-Length is added automatically when body <> ''. }
+function HttpExec(const method, url, extraHeaders, body: AnsiString): THttpResponse;
+
+{ GET following up to maxRedirects 3xx Location hops (absolute Location URLs).
+  Returns the final response (or the last 3xx if the limit is hit). }
+function HttpGetFollow(const url: AnsiString; maxRedirects: Integer): THttpResponse;
 
 { --- async transport (call from inside a coroutine; drive with RunUntilDone) ---
   Non-blocking connect/send/recv over the scheduler's epoll reactor (via
   asyncnet): the coroutine yields on EAGAIN, so one thread serves many requests.
-  Reuses the same pure build/parse helpers. Hostname resolution is dotted-quad
-  only for now (true async DNS is a later slice); a non-numeric host fails. }
+  Hostnames resolve via the async resolver (dns_async); reuses the same pure
+  build/parse helpers. }
 function HttpGetAsync(const url: AnsiString): THttpResponse;
 function HttpPostAsync(const url, contentType, body: AnsiString): THttpResponse;
+{ Async GET following up to maxRedirects 3xx Location hops (absolute URLs). }
+function HttpGetFollowAsync(const url: AnsiString; maxRedirects: Integer): THttpResponse;
 
 implementation
 
@@ -331,6 +344,51 @@ begin
   Result := HttpRequest('POST', url, hdr, body);
 end;
 
+function HttpExec(const method, url, extraHeaders, body: AnsiString): THttpResponse;
+begin
+  Result := HttpRequest(method, url, extraHeaders, body);
+end;
+
+function HttpHead(const url: AnsiString): THttpResponse;
+begin
+  Result := HttpRequest('HEAD', url, '', '');
+end;
+
+function HttpPut(const url, contentType, body: AnsiString): THttpResponse;
+var hdr: AnsiString;
+begin
+  hdr := '';
+  if contentType <> '' then hdr := 'Content-Type: ' + contentType + CRLF;
+  Result := HttpRequest('PUT', url, hdr, body);
+end;
+
+function HttpDelete(const url: AnsiString): THttpResponse;
+begin
+  Result := HttpRequest('DELETE', url, '', '');
+end;
+
+function HttpIsRedirect(status: Integer): Boolean;
+begin
+  Result := (status = 301) or (status = 302) or (status = 303)
+         or (status = 307) or (status = 308);
+end;
+
+function HttpGetFollow(const url: AnsiString; maxRedirects: Integer): THttpResponse;
+var cur, loc: AnsiString; hops: Integer;
+begin
+  cur := url;
+  hops := 0;
+  Result := HttpGet(cur);
+  while Result.Ok and HttpIsRedirect(Result.Status) and (hops < maxRedirects) do
+  begin
+    loc := HttpHeaderValue(Result.Headers, 'Location');
+    if loc = '' then Break;
+    cur := loc;
+    Inc(hops);
+    Result := HttpGet(cur);
+  end;
+end;
+
 function HttpResolveAsync(const host: AnsiString; var ip: LongWord): Boolean;
 var ips: TDnsIpv4Array; cnt: Integer;
 begin
@@ -393,6 +451,22 @@ begin
   hdr := '';
   if contentType <> '' then hdr := 'Content-Type: ' + contentType + CRLF;
   Result := HttpRequestAsync('POST', url, hdr, body);
+end;
+
+function HttpGetFollowAsync(const url: AnsiString; maxRedirects: Integer): THttpResponse;
+var cur, loc: AnsiString; hops: Integer;
+begin
+  cur := url;
+  hops := 0;
+  Result := HttpGetAsync(cur);
+  while Result.Ok and HttpIsRedirect(Result.Status) and (hops < maxRedirects) do
+  begin
+    loc := HttpHeaderValue(Result.Headers, 'Location');
+    if loc = '' then Break;
+    cur := loc;
+    Inc(hops);
+    Result := HttpGetAsync(cur);
+  end;
 end;
 
 end.

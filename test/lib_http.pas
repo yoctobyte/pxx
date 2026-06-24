@@ -75,4 +75,11 @@ begin
   { Content-Length trims trailing junk (e.g. start of a pipelined response). }
   HttpParseResponse('HTTP/1.1 200 OK'#13#10'Content-Length: 2'#13#10#13#10'hiEXTRA', resp);
   SayBool('resp-clen-trim', resp.Body = 'hi');
+
+  { Methods produce the right request line (HEAD/PUT/DELETE via HttpBuildRequest,
+    which the wrappers call). }
+  SayBool('req-head', Copy(HttpBuildRequest('HEAD', 'h', '/x', '', ''), 1, 18) = 'HEAD /x HTTP/1.1'#13#10);
+  req := HttpBuildRequest('PUT', 'h', '/r', '', 'data');
+  SayBool('req-put', (Copy(req, 1, 17) = 'PUT /r HTTP/1.1'#13#10) and (Pos('Content-Length: 4'#13#10, req) > 0));
+  SayBool('req-delete', Copy(HttpBuildRequest('DELETE', 'h', '/r', '', ''), 1, 20) = 'DELETE /r HTTP/1.1'#13#10);
 end.
