@@ -66,3 +66,10 @@ range-check switch — a no-op like `{$Q±}`/`{$I±}` — and do **not** call
 - `synacode` gets past emit (next gap, if any, is a genuine RTL/codegen one).
 - Regression test under `make test` (a program with `{$R-}` builds and runs).
 - Self-host fixedpoint byte-identical.
+
+## Log
+- 2026-06-24 — FIXED (Track A). lexer.inc {$R} branch now skips resource handling
+  when the directive body begins with +/- (the range-check toggle {$R+}/{$R-}),
+  treating it as a no-op like {$Q±}/{$I±}; only `{$R name file}` / `{$R *.res}`
+  register a resource. Regression test/test_r_directive.pas in make test.
+  Self-host fixedpoint byte-identical.

@@ -1189,9 +1189,13 @@ begin
   end
   else
     ReadPasDirectiveWord(name);
-  { Resource directive (R name file): capture the filename before skipping. }
+  { Resource directive (R name file): capture the filename before skipping.
+    But `{$R+}` / `{$R-}` are the range-check switch (like {$Q±}/{$I±}), NOT a
+    resource — disambiguate on a leading +/- so the toggle is a no-op instead of
+    registering a bogus resource named '-'. See bug-r-directive-toggle-... }
   fname := '';
-  if CaseEqual(command, 'R') and PasDirectiveActive then
+  if CaseEqual(command, 'R') and PasDirectiveActive and
+     not ((SrcPos <= Length(Source)) and ((Source[SrcPos] = '+') or (Source[SrcPos] = '-'))) then
     ReadPasDirectiveFile(fname);
   messageText := '';
   if CaseEqual(command, 'warning') or CaseEqual(command, 'message') or
