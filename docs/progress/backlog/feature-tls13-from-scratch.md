@@ -4,8 +4,9 @@
 - **Status:** backlog — **DEFERRED**, start alongside BSD support (not now)
 - **Owner:** —
 - **Opened:** 2026-06-24
-- **Relation:** the `https://` half of [[feature-own-net-http-lib]]; alternative
-  to the OpenSSL-dlopen path ([[feature-real-dynlib-loader]]).
+- **Relation:** the **native backend** behind [[feature-tls-provider-abstraction]]
+  (the common TLS seam); the OpenSSL backend is the co-equal default. The `https`
+  half of [[feature-own-net-http-lib]].
 
 ## Scope decision (2026-06-24)
 

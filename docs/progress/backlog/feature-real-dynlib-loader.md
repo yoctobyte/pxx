@@ -8,8 +8,10 @@
 - **Found-by:** Synapse recon ([[feature-synapse-compile-check]]) — `dynlibs`
   stub unblocks compile but cannot actually load anything (SSL/TLS).
 - **Relation:** consumed by [[feature-synapse-compile-check]] (only for the
-  SSL/TLS path; the plain-HTTP path needs only the stub). Relevant to many
-  future projects, not just Synapse.
+  SSL/TLS path; the plain-HTTP path needs only the stub). Also the concrete
+  prerequisite for the **OpenSSL backend** of
+  [[feature-tls-provider-abstraction]] (dlopen `libssl`/`libcrypto`). Relevant to
+  many future projects, not just Synapse.
 
 ## Context
 

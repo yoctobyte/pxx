@@ -57,10 +57,11 @@ length-aware recv loop on the transport (today reads to EOF with
 
 1. **Keep-alive transport** — recv exactly Content-Length / until last chunk so a
    connection can be reused (today: one request per `Connection: close`).
-4. **TLS** — `https://` is parsed and refused (`isTls`). Scoped into its own
-   flagship ticket [[feature-tls13-from-scratch]]: syscall-only TLS 1.3 (Pascal
-   handshake + optional kTLS bulk; kernel does NOT do the handshake). OpenSSL via
-   [[feature-real-dynlib-loader]] is the production/fallback path.
+4. **TLS** — `https://` is parsed and refused (`isTls`). Routes through a common
+   TLS seam [[feature-tls-provider-abstraction]] with two interchangeable
+   backends: OpenSSL (default; via [[feature-real-dynlib-loader]]) and the native
+   handrolled stack [[feature-tls13-from-scratch]]. Mix-and-match (e.g. native
+   client ⇄ OpenSSL server) is the interop correctness test.
 5. **More methods / headers API** — PUT/DELETE/HEAD, a small header map, redirects.
 
 ## Compiler gaps surfaced while building (filed)
