@@ -30,7 +30,13 @@ program eliah;
 
 uses gtk3, controls, stdctrls, extctrls, graphics, forms, menus, sysutils,
      buffer, runner, docmodel, designer, lfmload, builder, project, perspective,
-     registry, typinfo, selection;
+     registry, typinfo, selection, classes_lite, resources, lfm;
+
+{ Eliah's own window chrome is defined in eliah.lfm and streamed into TEliahForm
+  (dogfooding the .lfm streamer). The toolbar + nested-TPaned splitter tree + leaf
+  widgets come from the resource; the menu, palette population, designer, and
+  reflow stay in code. }
+{$R TEliahForm eliah.lfm}
 
 const
   W_WIN     = 1100;
@@ -45,30 +51,24 @@ const
   SAMPLE_LFM = 'apps/ide/eliah/sample.lfm';
 
 type
-  THandler = class
-    Tree: TListBox;
-    Editor, Output: TMemo;
-    Errors: TListBox;
+  { The whole window is streamed from eliah.lfm into this form. The widget fields
+    below are PUBLISHED so the streamer binds each to the matching .lfm object;
+    the event handlers are PUBLISHED so .lfm OnX = OnY bindings resolve. Everything
+    else (designer, selection model, project, undo, …) is plain state. }
+  TEliahForm = class(TForm)
+  public
     Diags: TDiagList;
     Proj: TProject;        { active project; empty MainUnit => single-file compile }
-    Props: TListBox;
-    ValueEdit: TEdit;
     FEditRow: Integer;     { which inspector row the value edit targets, -1 none }
     FBagBase: Integer;     { inspector row index where the extra-property rows start }
     FBagNames: array of AnsiString; { property name backing each extra-property row }
-    Palette: TComboBox;
     PaletteNames: array of AnsiString; { class name backing each palette row }
-    PlaceBtn: TButton;
     PlaceMode: Boolean;    { next designer click drops a new widget }
     Dsn: TDesigner;
     Sel: TSelectionModel;  { shared selection — designer + editor stay in sync via it }
-    DesignBox: TPaintBox;
-    RootPaned: TPaned;     { fills the content area; the whole pane layout is its subtree }
-    colLeft, midRight, colCenter, colRight, colInspector: TPaned;
     Persp: TPerspective;   { current layout: column visibility + priority compacting }
     panedSeeded: Boolean;  { initial handle positions applied on first allocation }
     startPersp: AnsiString; { perspective applied once after the first allocation }
-    Win: TForm;
     dir, curFile, designPath, pendingSnap: AnsiString;
     undoStack: array of AnsiString;
     undoCount: Integer;
@@ -76,39 +76,22 @@ type
     paths: array of AnsiString;
     isdirs: array of Boolean;
     nItems: Integer;
+    constructor Create(AOwner: TComponent); override;
     procedure LoadDir(const d: AnsiString);
-    procedure OnTreeClick(Sender: TObject);
-    procedure OnCompile(Sender: TObject);
-    procedure OnRun(Sender: TObject);
-    procedure OnUp(Sender: TObject);
     procedure OnOpenFolder(Sender: TObject);
     procedure OnExit(Sender: TObject);
-    procedure OnSave(Sender: TObject);
-    procedure OnDelete(Sender: TObject);
-    procedure OnNew(Sender: TObject);
-    procedure OnErrorClick(Sender: TObject);
     procedure PushUndo(const snap: AnsiString);
-    procedure OnUndo(Sender: TObject);
     procedure OpenDesign(const path: AnsiString);
     procedure Relayout(w, h: Integer);
     procedure OnFormResize(Sender: TControl; w, h: Integer);
-    procedure OnDesignMouseDown(Sender: TControl; Button, X, Y: Integer);
-    procedure OnDesignMouseMove(Sender: TControl; Button, X, Y: Integer);
-    procedure OnDesignMouseUp(Sender: TControl; Button, X, Y: Integer);
     procedure ShowInspector(idx: Integer);
     procedure AddBagRow(d: TDocModel; idx: Integer; const nm: AnsiString);
     function BagRowShown(const nm: AnsiString): Boolean;
-    { selection link: route a selection through the shared model + sync both views }
     procedure SelectNode(idx: Integer);
-    procedure EditorToSelection;           { designer -> editor: scroll to the node's code }
-    procedure SelectFromEditorLine(ln: Integer);  { editor -> designer: line's component }
-    procedure OnPickFromCaret(Sender: TObject);    { toolbar: select from the editor caret }
-    procedure OnWireOnClick(Sender: TObject);      { command: wire the selection's OnClick }
+    procedure EditorToSelection;
+    procedure SelectFromEditorLine(ln: Integer);
     procedure UpdateTitle;
-    procedure OnPropClick(Sender: TObject);
-    procedure OnValueKey(Sender: TControl; KeyCode: Integer);
     procedure ApplyEdit;
-    procedure OnPlaceToggle(Sender: TObject);
     procedure OnToggleLeft(Sender: TObject);
     procedure OnToggleOutput(Sender: TObject);
     procedure OnToggleRight(Sender: TObject);
@@ -117,6 +100,42 @@ type
     procedure OnPerspCode(Sender: TObject);
     procedure OnPerspDesign(Sender: TObject);
     procedure OnPerspSplit(Sender: TObject);
+  published
+    { streamed widgets — names match eliah.lfm objects }
+    Tree: TListBox;
+    Errors: TListBox;
+    Props: TListBox;
+    Editor: TMemo;
+    Output: TMemo;
+    ValueEdit: TEdit;
+    Palette: TComboBox;
+    PlaceBtn: TButton;
+    DesignBox: TPaintBox;
+    RootPaned: TPaned;     { fills the content area; the whole pane layout is its subtree }
+    colLeft: TPaned;
+    midRight: TPaned;
+    colCenter: TPaned;
+    colRight: TPaned;
+    colInspector: TPaned;
+    { event handlers bound from eliah.lfm }
+    procedure OnUp(Sender: TObject);
+    procedure OnCompile(Sender: TObject);
+    procedure OnRun(Sender: TObject);
+    procedure OnSave(Sender: TObject);
+    procedure OnDelete(Sender: TObject);
+    procedure OnNew(Sender: TObject);
+    procedure OnUndo(Sender: TObject);
+    procedure OnTreeClick(Sender: TObject);
+    procedure OnErrorClick(Sender: TObject);
+    procedure OnPlaceToggle(Sender: TObject);
+    procedure OnPickFromCaret(Sender: TObject);
+    procedure OnWireOnClick(Sender: TObject);
+    procedure OnPropClick(Sender: TObject);
+    procedure OnValueKey(Sender: TControl; KeyCode: Integer);
+    procedure OnDesignPaint(Sender: TControl; Canvas: TCanvas);
+    procedure OnDesignMouseDown(Sender: TControl; Button, X, Y: Integer);
+    procedure OnDesignMouseMove(Sender: TControl; Button, X, Y: Integer);
+    procedure OnDesignMouseUp(Sender: TControl; Button, X, Y: Integer);
   end;
 
 { A registered visual component class name -> the docmodel kind the designer can
@@ -187,7 +206,7 @@ begin
   ParentDir := '.';
 end;
 
-procedure THandler.LoadDir(const d: AnsiString);
+procedure TEliahForm.LoadDir(const d: AnsiString);
 var list: TFileInfoArray; i: Integer; nm: AnsiString;
 begin
   dir := d;
@@ -221,7 +240,7 @@ begin
   Proj.LoadFromFile(d + '/eliah.pxxproj');
 end;
 
-procedure THandler.OnTreeClick(Sender: TObject);
+procedure TEliahForm.OnTreeClick(Sender: TObject);
 var idx: Integer; b: TIdeBuffer;
 begin
   idx := Tree.ItemIndex;
@@ -241,7 +260,7 @@ end;
 
 { click a diagnostic -> jump the editor to its line (compiler lines are 1-based,
   the memo caret is 0-based) }
-procedure THandler.OnErrorClick(Sender: TObject);
+procedure TEliahForm.OnErrorClick(Sender: TObject);
 var idx, line: Integer;
 begin
   idx := Errors.ItemIndex;
@@ -252,11 +271,11 @@ end;
 
 { start a blank design: a single root form. Save will prompt to a fresh path
   (untitled.lfm) so it never clobbers the previously-open file. }
-procedure THandler.OnNew(Sender: TObject);
+procedure TEliahForm.OnNew(Sender: TObject);
 var d: TDocModel;
 begin
   d := TDocModel.Create;
-  d.AddNode(wkForm, 'Form1', -1, 12, 12, 320, 240);
+  d.AddNode(wkForm, 'EliahForm', -1, 12, 12, 320, 240);
   Dsn.Doc := d;
   if Sel <> nil then Sel.SetDoc(d);
   Dsn.Sel := -1;
@@ -268,7 +287,7 @@ begin
 end;
 
 { delete the selected node (and its children); the root form is kept }
-procedure THandler.OnDelete(Sender: TObject);
+procedure TEliahForm.OnDelete(Sender: TObject);
 begin
   if (Dsn = nil) or (Dsn.Doc = nil) then Exit;
   if Dsn.Sel <= 0 then Exit;   { -1 none, 0 = root form (not deletable) }
@@ -281,7 +300,7 @@ begin
 end;
 
 { load a .lfm into a fresh designer docmodel and make it the save target }
-procedure THandler.OpenDesign(const path: AnsiString);
+procedure TEliahForm.OpenDesign(const path: AnsiString);
 var b: TIdeBuffer; d: TDocModel;
 begin
   b := TIdeBuffer.Create;
@@ -306,7 +325,7 @@ begin
     Output.Text := '$ no objects in ' + path;
 end;
 
-procedure THandler.OnCompile(Sender: TObject);
+procedure TEliahForm.OnCompile(Sender: TObject);
 var out, lbl: AnsiString; rc, i: Integer; args: TStrArray;
 begin
   { a loaded project (eliah.pxxproj) drives the build; otherwise compile the
@@ -337,7 +356,7 @@ begin
       Errors.AddItem('L' + IntToStr(Diags.DiagLine(i)) + ': ' + Diags.DiagMsg(i));
 end;
 
-procedure THandler.OnRun(Sender: TObject);
+procedure TEliahForm.OnRun(Sender: TObject);
 var out, exe: AnsiString; rc: Integer;
 begin
   { run the project's output binary when a project defines one, else BUILD_OUT }
@@ -349,20 +368,20 @@ begin
   Output.Text := '$ run ' + exe + #10 + out + #10 + '--- exit ' + IntToStr(rc) + ' ---';
 end;
 
-procedure THandler.OnUp(Sender: TObject);
+procedure TEliahForm.OnUp(Sender: TObject);
 begin
   LoadDir(ParentDir(dir));
 end;
 
 { File -> Open Folder: pick a directory and make it the project tree root }
-procedure THandler.OnOpenFolder(Sender: TObject);
+procedure TEliahForm.OnOpenFolder(Sender: TObject);
 var p: AnsiString;
 begin
   p := SelectFolderDialog('Open Project Folder');
   if p <> '' then LoadDir(p);
 end;
 
-procedure THandler.OnExit(Sender: TObject);
+procedure TEliahForm.OnExit(Sender: TObject);
 begin
   Halt(0);
 end;
@@ -370,7 +389,7 @@ end;
 { reflow for a content area of w x h. The pane layout is the RootPaned subtree —
   GtkPaned owns the internal splits, so we only resize the root to fill the area
   below the toolbar. Toolbar widgets stay pinned at the top. }
-procedure THandler.Relayout(w, h: Integer);
+procedure TEliahForm.Relayout(w, h: Integer);
 var contentH: Integer;
 begin
   contentH := h - TOOLBAR_H;
@@ -399,7 +418,7 @@ end;
   for the current width (auto-collapse the lowest-priority column when the
   minimums don't fit), then map each column's shown-state onto its splitter.
   Pure layout — no mode branching. }
-procedure THandler.ApplyLayout(w: Integer);
+procedure TEliahForm.ApplyLayout(w: Integer);
 var sLeft, sCenter, sRight: Boolean;
 begin
   if (Persp = nil) or (RootPaned = nil) or (midRight = nil) then Exit;
@@ -415,7 +434,7 @@ end;
     code   -> hide right   (editor focus)
     design -> hide center  (designer focus)
     split  -> show all     (large monitor / full) }
-procedure THandler.SetPerspective(const name: AnsiString);
+procedure TEliahForm.SetPerspective(const name: AnsiString);
 begin
   if Persp = nil then Exit;
   Persp.SetVisible(Persp.IndexOf('left'),   True);
@@ -424,12 +443,12 @@ begin
   if lastW > 0 then ApplyLayout(lastW);
 end;
 
-procedure THandler.OnPerspCode(Sender: TObject);   begin SetPerspective('code');   end;
-procedure THandler.OnPerspDesign(Sender: TObject); begin SetPerspective('design'); end;
-procedure THandler.OnPerspSplit(Sender: TObject);  begin SetPerspective('split');  end;
+procedure TEliahForm.OnPerspCode(Sender: TObject);   begin SetPerspective('code');   end;
+procedure TEliahForm.OnPerspDesign(Sender: TObject); begin SetPerspective('design'); end;
+procedure TEliahForm.OnPerspSplit(Sender: TObject);  begin SetPerspective('split');  end;
 
 { View-menu toggles flip a column's visibility choice, then re-apply. }
-procedure THandler.OnToggleLeft(Sender: TObject);
+procedure TEliahForm.OnToggleLeft(Sender: TObject);
 var i: Integer;
 begin
   if Persp = nil then Exit;
@@ -438,7 +457,7 @@ begin
   if lastW > 0 then ApplyLayout(lastW);
 end;
 
-procedure THandler.OnToggleRight(Sender: TObject);
+procedure TEliahForm.OnToggleRight(Sender: TObject);
 var i: Integer;
 begin
   if Persp = nil then Exit;
@@ -447,12 +466,12 @@ begin
   if lastW > 0 then ApplyLayout(lastW);
 end;
 
-procedure THandler.OnToggleOutput(Sender: TObject);
+procedure TEliahForm.OnToggleOutput(Sender: TObject);
 begin
   if colCenter <> nil then colCenter.Toggle(2, 0);    { vertical sub-pane: build/run output }
 end;
 
-procedure THandler.OnFormResize(Sender: TControl; w, h: Integer);
+procedure TEliahForm.OnFormResize(Sender: TControl; w, h: Integer);
 var contentH: Integer;
 begin
   { only react to a real width change; the GtkFixed's size-allocate otherwise
@@ -485,7 +504,7 @@ end;
 
 { serialize the designer docmodel back to the open design file (round-trips the
   loader); falls back to the sample if nothing was opened explicitly }
-procedure THandler.OnSave(Sender: TObject);
+procedure TEliahForm.OnSave(Sender: TObject);
 var target: AnsiString;
 begin
   if (Dsn = nil) or (Dsn.Doc = nil) then Exit;
@@ -498,20 +517,34 @@ begin
 end;
 
 { status line in the window title: open file, node count, current selection }
-procedure THandler.UpdateTitle;
+procedure TEliahForm.UpdateTitle;
 var s: AnsiString;
 begin
-  if (Win = nil) or (Dsn = nil) or (Dsn.Doc = nil) then Exit;
+  if (Dsn = nil) or (Dsn.Doc = nil) then Exit;
   s := 'Eliah - ' + designPath + ' (' + IntToStr(Dsn.Doc.Count) + ' nodes)';
   if (Dsn.Sel >= 0) and (Dsn.Sel < Dsn.Doc.Count) then
     s := s + '  [sel: ' + Dsn.Doc.KindName(Dsn.Doc.NodeKind(Dsn.Sel)) +
          ' ' + Dsn.Doc.NodeCaption(Dsn.Sel) + ']';
-  Win.Caption := s;
+  Self.Caption := s;
+end;
+
+{ stream the window chrome from eliah.lfm (publishes bind widgets + events) }
+constructor TEliahForm.Create(AOwner: TComponent);
+begin
+  inherited Create(AOwner);
+  Self.HandleNeeded;
+  InitInheritedComponent(Self, 'TEliahForm');
+end;
+
+{ the designer paint-box's OnPaint (bound from the .lfm) delegates to the designer }
+procedure TEliahForm.OnDesignPaint(Sender: TControl; Canvas: TCanvas);
+begin
+  if Dsn <> nil then Dsn.Paint(Sender, Canvas);
 end;
 
 { append one extra-property row (name + current bag value), recording the name so
   the click/apply handlers can map the row back to the property. }
-procedure THandler.AddBagRow(d: TDocModel; idx: Integer; const nm: AnsiString);
+procedure TEliahForm.AddBagRow(d: TDocModel; idx: Integer; const nm: AnsiString);
 var n: Integer;
 begin
   if FBagBase = 0 then FBagBase := Props.Count;   { first extra row }
@@ -521,7 +554,7 @@ begin
   Props.AddItem(nm + ' = ' + d.NodePropByName(idx, nm));
 end;
 
-function THandler.BagRowShown(const nm: AnsiString): Boolean;
+function TEliahForm.BagRowShown(const nm: AnsiString): Boolean;
 var k: Integer;
 begin
   BagRowShown := False;
@@ -532,7 +565,7 @@ end;
 { Route a selection through the shared model and refresh the designer + inspector.
   Does NOT touch the editor — call EditorToSelection for the designer->editor jump
   (kept separate so editor->designer doesn't loop back). }
-procedure THandler.SelectNode(idx: Integer);
+procedure TEliahForm.SelectNode(idx: Integer);
 begin
   if Sel <> nil then Sel.Select(idx);
   if Dsn <> nil then
@@ -545,7 +578,7 @@ end;
 
 { designer -> editor: show the design's .lfm and scroll to the selected node's
   `object <Name>` declaration. }
-procedure THandler.EditorToSelection;
+procedure TEliahForm.EditorToSelection;
 var nm: AnsiString; ln: Integer; eb: TIdeBuffer;
 begin
   if (Dsn = nil) or (Dsn.Doc = nil) or (Dsn.Sel < 0) or (Editor = nil) then Exit;
@@ -567,7 +600,7 @@ end;
 
 { editor -> designer: the component declared on editor line `ln` becomes the
   selection (no editor scroll-back — the caret is already there). }
-procedure THandler.SelectFromEditorLine(ln: Integer);
+procedure TEliahForm.SelectFromEditorLine(ln: Integer);
 var nm: AnsiString; idx: Integer;
 begin
   if (Dsn = nil) or (Dsn.Doc = nil) or (Editor = nil) then Exit;
@@ -577,7 +610,7 @@ begin
   if idx >= 0 then SelectNode(idx);
 end;
 
-procedure THandler.OnPickFromCaret(Sender: TObject);
+procedure TEliahForm.OnPickFromCaret(Sender: TObject);
 begin
   if Editor <> nil then SelectFromEditorLine(Editor.CaretLine);
 end;
@@ -585,7 +618,7 @@ end;
 { command: wire the selected component's OnClick — assign a handler (round-trips
   in the .lfm, shows in the inspector) and generate its stub in the code editor.
   One command on the shared selection; a menu/shortcut/AI source is interchangeable. }
-procedure THandler.OnWireOnClick(Sender: TObject);
+procedure TEliahForm.OnWireOnClick(Sender: TObject);
 var nm, hn: AnsiString;
 begin
   if (Dsn = nil) or (Dsn.Doc = nil) or (Dsn.Sel < 0) then Exit;
@@ -604,7 +637,7 @@ begin
   Output.Text := '$ wired ' + nm + '.OnClick -> ' + hn;
 end;
 
-procedure THandler.ShowInspector(idx: Integer);
+procedure TEliahForm.ShowInspector(idx: Integer);
 var
   d: TDocModel; j, cnt: Integer;
   cls: PClassRTTI;
@@ -658,14 +691,14 @@ begin
 end;
 
 { undo stack holds .lfm snapshots (SaveLfmText round-trips losslessly) }
-procedure THandler.PushUndo(const snap: AnsiString);
+procedure TEliahForm.PushUndo(const snap: AnsiString);
 begin
   SetLength(undoStack, undoCount + 1);
   undoStack[undoCount] := snap;
   Inc(undoCount);
 end;
 
-procedure THandler.OnUndo(Sender: TObject);
+procedure TEliahForm.OnUndo(Sender: TObject);
 var d: TDocModel; ok: Boolean;
 begin
   if undoCount <= 0 then begin Output.Text := '$ nothing to undo'; Exit; end;
@@ -681,13 +714,13 @@ begin
   Output.Text := '$ undo (' + IntToStr(undoCount) + ' left)';
 end;
 
-procedure THandler.OnPlaceToggle(Sender: TObject);
+procedure TEliahForm.OnPlaceToggle(Sender: TObject);
 begin
   PlaceMode := not PlaceMode;
   if PlaceMode then PlaceBtn.Caption := 'Place*' else PlaceBtn.Caption := 'Place';
 end;
 
-procedure THandler.OnDesignMouseDown(Sender: TControl; Button, X, Y: Integer);
+procedure TEliahForm.OnDesignMouseDown(Sender: TControl; Button, X, Y: Integer);
 var idx: Integer; k: TWidgetKind;
 begin
   { snapshot the pre-action state; committed to undo only if the doc changes }
@@ -715,7 +748,7 @@ begin
   EditorToSelection;
 end;
 
-procedure THandler.OnDesignMouseMove(Sender: TControl; Button, X, Y: Integer);
+procedure TEliahForm.OnDesignMouseMove(Sender: TControl; Button, X, Y: Integer);
 begin
   if not (Dsn.Dragging or Dsn.Resizing) then Exit;
   Dsn.DragTo(X, Y);
@@ -723,7 +756,7 @@ begin
   ShowInspector(Dsn.Sel);
 end;
 
-procedure THandler.OnDesignMouseUp(Sender: TControl; Button, X, Y: Integer);
+procedure TEliahForm.OnDesignMouseUp(Sender: TControl; Button, X, Y: Integer);
 begin
   Dsn.EndDrag;
   { commit the pre-drag snapshot only if a move/resize actually changed the doc }
@@ -734,7 +767,7 @@ begin
 end;
 
 { click an inspector row -> load that field's current value into the edit }
-procedure THandler.OnPropClick(Sender: TObject);
+procedure TEliahForm.OnPropClick(Sender: TObject);
 var d: TDocModel;
 begin
   if (Dsn = nil) or (Dsn.Doc = nil) or (Dsn.Sel < 0) then Exit;
@@ -766,12 +799,12 @@ begin
 end;
 
 { Enter (Return / KP_Enter) in the value edit commits it to the docmodel }
-procedure THandler.OnValueKey(Sender: TControl; KeyCode: Integer);
+procedure TEliahForm.OnValueKey(Sender: TControl; KeyCode: Integer);
 begin
   if (KeyCode = 65293) or (KeyCode = 65421) then ApplyEdit;
 end;
 
-procedure THandler.ApplyEdit;
+procedure TEliahForm.ApplyEdit;
 var d: TDocModel; v: AnsiString;
 begin
   if (Dsn = nil) or (Dsn.Doc = nil) or (Dsn.Sel < 0) then Exit;
@@ -806,19 +839,10 @@ begin
 end;
 
 var
-  Form1: TForm;
-  H: THandler;
-  Props: TListBox;
-  ValueEdit: TEdit;
-  Palette: TComboBox;
-  PlaceBtn: TButton;
-  DesignBox: TPaintBox;
-  Dsn: TDesigner;
-  btn: TButton;
+  EliahForm: TEliahForm;
   arg, startDir, parg: AnsiString;
   pix: Integer;
   centerW, centerH, contentH: Integer;
-  colLeft, midRight, colCenter, colRight, colInspector: TPaned;
   sbuf: TIdeBuffer;
   sok: Boolean;
   rtdoc: TDocModel;
@@ -837,473 +861,364 @@ begin
   MkMenuItem := it;
 end;
 
-function MkButton(const cap: AnsiString; x: Integer): TButton;
-var b: TButton;
-begin
-  b := TButton.Create(nil);
-  b.Parent := Form1;
-  b.Caption := cap;
-  b.SetBounds(x, 3, 80, 26);
-  MkButton := b;
-end;
-
 begin
   Application := TApplication.Create;
   Application.Initialize;
-
-  Form1 := TForm.Create(nil);
-  Form1.Caption := 'Eliah - IDE';
-  Form1.SetBounds(0, 0, W_WIN, H_WIN);
 
   contentH := H_WIN - TOOLBAR_H;
   centerW := W_WIN - W_TREE - W_RIGHT;
   centerH := contentH - H_BOTTOM;
 
-  H := THandler.Create;
-  H.Proj := TProject.Create;
+  { stream the whole window chrome (toolbar + nested-TPaned splitter tree + leaf
+    widgets) from eliah.lfm. Published fields/methods on TEliahForm bind the
+    widgets and the OnX handlers. Pane tree:
+        RootPaned(H) = colLeft(V: Tree/Errors) | midRight(H) =
+          colCenter(V: Editor/Output) | colRight(V: DesignBox | colInspector(V: Props/ValueEdit)) }
+  EliahForm := TEliahForm.Create(nil);
+  EliahForm.SetBounds(0, 0, W_WIN, H_WIN);
+  EliahForm.Proj := TProject.Create;
+  EliahForm.panedSeeded := False;
+  EliahForm.FEditRow := -1;
+  EliahForm.lastW := -1;
+  EliahForm.designPath := SAMPLE_LFM;   { Save targets the sample until a .lfm is opened }
 
-  { ── Pane layout is one TPaned tree filling the content area below the toolbar.
-    GtkPaned owns all splitter sizing + drag; we only seed initial handle
-    positions and resize the root on form-resize. No per-pane absolute math.
+  { compacting priorities for the three columns (higher survives a shrink longer) }
+  EliahForm.Persp := TPerspective.Create;
+  EliahForm.Persp.SetName('Split');
+  EliahForm.Persp.AddPane('left',   W_TREE,  50, True);
+  EliahForm.Persp.AddPane('center', 320,     90, True);
+  EliahForm.Persp.AddPane('right',  W_RIGHT, 40, True);
 
-        Root (H) ──┬─ colLeft (V): Tree / Errors
-                   └─ midRight (H) ─┬─ colCenter (V): Editor / Output
-                                    └─ colRight  (V): DesignBox / colInspector(V): Props / ValueEdit
+  EliahForm.Diags := TDiagList.Create;
 
-    Each leaf's first child fills pane 1, the second fills pane 2 (set Parent in
-    that order). ── }
-  H.RootPaned := TPaned.Create(nil);                 { horizontal: left | rest }
-  H.RootPaned.Parent := Form1;
-  H.RootPaned.SetBounds(0, TOOLBAR_H, W_WIN, contentH);
-
-  colLeft := TPaned.Create(nil); colLeft.Vertical := True;
-  colLeft.Parent := H.RootPaned;
-
-  midRight := TPaned.Create(nil);                    { horizontal: center | right }
-  midRight.Parent := H.RootPaned;
-
-  colCenter := TPaned.Create(nil); colCenter.Vertical := True;
-  colCenter.Parent := midRight;
-
-  colRight := TPaned.Create(nil); colRight.Vertical := True;
-  colRight.Parent := midRight;
-
-  colInspector := TPaned.Create(nil); colInspector.Vertical := True;
-
-  { keep references so OnFormResize can seed/track handle positions }
-  H.colLeft := colLeft; H.midRight := midRight; H.colCenter := colCenter;
-  H.colRight := colRight; H.colInspector := colInspector;
-  H.panedSeeded := False;
-
-  { the three horizontal columns + their compacting priorities (higher survives a
-    shrink longer). center (editor) is most important, right (designer) least. }
-  H.Persp := TPerspective.Create;
-  H.Persp.SetName('Split');
-  H.Persp.AddPane('left',   W_TREE,  50, True);
-  H.Persp.AddPane('center', 320,     90, True);
-  H.Persp.AddPane('right',  W_RIGHT, 40, True);
-
-  H.Tree := TListBox.Create(nil);
-  H.Tree.Parent := colLeft;                          { pane 1 of colLeft }
-  H.Tree.OnClick := @H.OnTreeClick;
-
-  { error list under the tree: compile diagnostics, click -> jump editor }
-  H.Diags := TDiagList.Create;
-  H.Errors := TListBox.Create(nil);
-  H.Errors.Parent := colLeft;                        { pane 2 of colLeft }
-  H.Errors.OnClick := @H.OnErrorClick;
-
-  H.Editor := TMemo.Create(nil);
-  H.Editor.Parent := colCenter;                      { pane 1 of colCenter }
-
-  H.Output := TMemo.Create(nil);
-  H.Output.Parent := colCenter;                      { pane 2 of colCenter }
-  H.Output.Text := 'build output appears here';
-
-  { designer: box-emulated preview painted from the garin docmodel (no live
-    widgets). Seed the surface by loading a sample .lfm through the garin loader
-    (box-emulation parser, not the live-component streamer). }
-  Dsn := TDesigner.Create;
-  Dsn.Doc := TDocModel.Create;
+  { designer: box-emulated preview from the garin docmodel. Seed it by loading the
+    sample .lfm via the garin loader (box-emulation parser, NOT this live streamer).
+    Create before Realize so the bound OnDesignPaint has a designer. }
+  EliahForm.Dsn := TDesigner.Create;
+  EliahForm.Dsn.Doc := TDocModel.Create;
   sbuf := TIdeBuffer.Create;
   if sbuf.LoadFromFile(SAMPLE_LFM) then
-    sok := LoadLfmText(sbuf.Text, Dsn.Doc);
+    sok := LoadLfmText(sbuf.Text, EliahForm.Dsn.Doc);
+  EliahForm.Sel := TSelectionModel.Create(EliahForm.Dsn.Doc);
 
-  DesignBox := TPaintBox.Create(nil);
-  DesignBox.Parent := colRight;                      { pane 1 of colRight }
-  DesignBox.OnPaint := @Dsn.Paint;
-  { mouse-select + drag-move: down hit-tests & grabs, move drags the selected
-    box, up releases. }
-  DesignBox.OnMouseDown := @H.OnDesignMouseDown;
-  DesignBox.OnMouseMove := @H.OnDesignMouseMove;
-  DesignBox.OnMouseUp   := @H.OnDesignMouseUp;
+  EliahForm.Output.Text := 'build output appears here';
+  EliahForm.Props.AddItem('object inspector (M1)');
+  EliahForm.OnResize := @EliahForm.OnFormResize;
 
-  colInspector.Parent := colRight;                   { pane 2 of colRight }
-
-  Props := TListBox.Create(nil);
-  Props.Parent := colInspector;                      { pane 1 of colInspector }
-  Props.AddItem('object inspector (M1)');
-  Props.OnClick := @H.OnPropClick;
-
-  { value editor: pick a prop row above, type here, Enter commits to docmodel }
-  ValueEdit := TEdit.Create(nil);
-  ValueEdit.Parent := colInspector;                  { pane 2 of colInspector }
-  ValueEdit.OnKeyDown := @H.OnValueKey;
-
-  H.Dsn := Dsn;
-  H.Sel := TSelectionModel.Create(Dsn.Doc);
-  H.DesignBox := DesignBox;
-  H.Props := Props;
-  H.ValueEdit := ValueEdit;
-  H.FEditRow := -1;
-  H.designPath := SAMPLE_LFM;   { seeded from the sample; Save targets it until a .lfm is opened }
-  H.Win := Form1;
-  H.lastW := -1;
-
-  { main menu bar }
+  { main menu bar (kept in code) }
   MainMenu := TMainMenu.Create(nil);
-  Form1.Menu := MainMenu;
+  EliahForm.Menu := MainMenu;
 
   FileMenu := TMenuItem.Create(nil); FileMenu.Caption := '&File'; MainMenu.Items.Add(FileMenu);
-  mi := MkMenuItem('&New',          FileMenu); mi.OnClick := @H.OnNew;
-  mi := MkMenuItem('&Open Folder...', FileMenu); mi.OnClick := @H.OnOpenFolder;
-  mi := MkMenuItem('&Save',         FileMenu); mi.OnClick := @H.OnSave;
-  mi := MkMenuItem('E&xit',         FileMenu); mi.OnClick := @H.OnExit;
+  mi := MkMenuItem('&New',          FileMenu); mi.OnClick := @EliahForm.OnNew;
+  mi := MkMenuItem('&Open Folder...', FileMenu); mi.OnClick := @EliahForm.OnOpenFolder;
+  mi := MkMenuItem('&Save',         FileMenu); mi.OnClick := @EliahForm.OnSave;
+  mi := MkMenuItem('E&xit',         FileMenu); mi.OnClick := @EliahForm.OnExit;
 
   EditMenu := TMenuItem.Create(nil); EditMenu.Caption := '&Edit'; MainMenu.Items.Add(EditMenu);
-  mi := MkMenuItem('&Undo',   EditMenu); mi.OnClick := @H.OnUndo;
-  mi := MkMenuItem('&Delete', EditMenu); mi.OnClick := @H.OnDelete;
+  mi := MkMenuItem('&Undo',   EditMenu); mi.OnClick := @EliahForm.OnUndo;
+  mi := MkMenuItem('&Delete', EditMenu); mi.OnClick := @EliahForm.OnDelete;
 
   BuildMenu := TMenuItem.Create(nil); BuildMenu.Caption := '&Build'; MainMenu.Items.Add(BuildMenu);
-  mi := MkMenuItem('&Compile', BuildMenu); mi.OnClick := @H.OnCompile;
-  mi := MkMenuItem('&Run',     BuildMenu); mi.OnClick := @H.OnRun;
+  mi := MkMenuItem('&Compile', BuildMenu); mi.OnClick := @EliahForm.OnCompile;
+  mi := MkMenuItem('&Run',     BuildMenu); mi.OnClick := @EliahForm.OnRun;
 
   ViewMenu := TMenuItem.Create(nil); ViewMenu.Caption := '&View'; MainMenu.Items.Add(ViewMenu);
-  mi := MkMenuItem('&Code Layout',   ViewMenu); mi.OnClick := @H.OnPerspCode;
-  mi := MkMenuItem('&Design Layout', ViewMenu); mi.OnClick := @H.OnPerspDesign;
-  mi := MkMenuItem('&Split Layout',  ViewMenu); mi.OnClick := @H.OnPerspSplit;
-  mi := MkMenuItem('Toggle &Left Panel',  ViewMenu); mi.OnClick := @H.OnToggleLeft;
-  mi := MkMenuItem('Toggle &Output',      ViewMenu); mi.OnClick := @H.OnToggleOutput;
-  mi := MkMenuItem('Toggle &Right Panel', ViewMenu); mi.OnClick := @H.OnToggleRight;
+  mi := MkMenuItem('&Code Layout',   ViewMenu); mi.OnClick := @EliahForm.OnPerspCode;
+  mi := MkMenuItem('&Design Layout', ViewMenu); mi.OnClick := @EliahForm.OnPerspDesign;
+  mi := MkMenuItem('&Split Layout',  ViewMenu); mi.OnClick := @EliahForm.OnPerspSplit;
+  mi := MkMenuItem('Toggle &Left Panel',  ViewMenu); mi.OnClick := @EliahForm.OnToggleLeft;
+  mi := MkMenuItem('Toggle &Output',      ViewMenu); mi.OnClick := @EliahForm.OnToggleOutput;
+  mi := MkMenuItem('Toggle &Right Panel', ViewMenu); mi.OnClick := @EliahForm.OnToggleRight;
 
-  Form1.OnResize := @H.OnFormResize;   { reflow panes on window resize }
-
-  btn := MkButton('Up',      4);   btn.OnClick := @H.OnUp;
-  btn := MkButton('Compile', 90);  btn.OnClick := @H.OnCompile;
-  btn := MkButton('Run',     176); btn.OnClick := @H.OnRun;
-  btn := MkButton('Save',    466); btn.OnClick := @H.OnSave;
-  btn := MkButton('Del',     552); btn.OnClick := @H.OnDelete;
-  btn := MkButton('New',     638); btn.OnClick := @H.OnNew;
-  btn := MkButton('Undo',    724); btn.OnClick := @H.OnUndo;
-  btn := MkButton('Link',    810); btn.OnClick := @H.OnPickFromCaret;
-  btn := MkButton('OnClick', 896); btn.OnClick := @H.OnWireOnClick;
-
-  { palette: pick a widget kind, hit Place, then click the designer to drop it.
-    Registry-driven: every registered visual component (descends from TControl)
-    the designer can place appears here automatically — RegisterClass'ing a new
-    placeable widget surfaces it with no edit to this list. }
-  Palette := TComboBox.Create(nil);
-  Palette.Parent := Form1;
-  Palette.SetBounds(266, 3, 110, 26);
+  { registry-driven palette: visual components first, a divider, then non-visual }
   comps := EnumDescendants('TComponent', False);
-  SetLength(H.PaletteNames, 0);
-  { grouped: visual widgets (canvas) first, then a divider, then non-visual
-    components (tray). CompPlaceKind gates both; PaletteNames[i]='' marks the
-    divider, which the place handler treats as a no-op. }
+  SetLength(EliahForm.PaletteNames, 0);
   for ci := 0 to Length(comps) - 1 do
     if CompPlaceKind(comps[ci].Name, pk) and
        ClassDescendsFrom(comps[ci].Cls, 'TControl') then
     begin
-      Palette.AddItem(CompDisplay(comps[ci].Name));
-      SetLength(H.PaletteNames, Length(H.PaletteNames) + 1);
-      H.PaletteNames[Length(H.PaletteNames) - 1] := comps[ci].Name;
+      EliahForm.Palette.AddItem(CompDisplay(comps[ci].Name));
+      SetLength(EliahForm.PaletteNames, Length(EliahForm.PaletteNames) + 1);
+      EliahForm.PaletteNames[Length(EliahForm.PaletteNames) - 1] := comps[ci].Name;
     end;
-  nvFirst := Length(H.PaletteNames);
+  nvFirst := Length(EliahForm.PaletteNames);
   for ci := 0 to Length(comps) - 1 do
     if CompPlaceKind(comps[ci].Name, pk) and
        not ClassDescendsFrom(comps[ci].Cls, 'TControl') then
     begin
-      if Length(H.PaletteNames) = nvFirst then   { first non-visual: emit divider }
+      if Length(EliahForm.PaletteNames) = nvFirst then
       begin
-        Palette.AddItem('-- non-visual --');
-        SetLength(H.PaletteNames, Length(H.PaletteNames) + 1);
-        H.PaletteNames[Length(H.PaletteNames) - 1] := '';
+        EliahForm.Palette.AddItem('-- non-visual --');
+        SetLength(EliahForm.PaletteNames, Length(EliahForm.PaletteNames) + 1);
+        EliahForm.PaletteNames[Length(EliahForm.PaletteNames) - 1] := '';
       end;
-      Palette.AddItem(CompDisplay(comps[ci].Name));
-      SetLength(H.PaletteNames, Length(H.PaletteNames) + 1);
-      H.PaletteNames[Length(H.PaletteNames) - 1] := comps[ci].Name;
+      EliahForm.Palette.AddItem(CompDisplay(comps[ci].Name));
+      SetLength(EliahForm.PaletteNames, Length(EliahForm.PaletteNames) + 1);
+      EliahForm.PaletteNames[Length(EliahForm.PaletteNames) - 1] := comps[ci].Name;
     end;
-  Palette.ItemIndex := 0;
-
-  PlaceBtn := TButton.Create(nil);
-  PlaceBtn.Parent := Form1;
-  PlaceBtn.Caption := 'Place';
-  PlaceBtn.SetBounds(382, 3, 80, 26);
-  PlaceBtn.OnClick := @H.OnPlaceToggle;
-
-  H.Palette := Palette;
-  H.PlaceBtn := PlaceBtn;
-  H.PlaceMode := False;
+  EliahForm.Palette.ItemIndex := 0;
+  EliahForm.PlaceMode := False;
 
   arg := '';
   startDir := '.';
-  H.startPersp := '';
+  EliahForm.startPersp := '';
   for pix := 1 to ParamCount do
   begin
     parg := ParamStr(pix);
     if parg = '--smoke' then arg := '--smoke'
-    else if parg = '--code' then H.startPersp := 'code'
-    else if parg = '--design' then H.startPersp := 'design'
-    else if parg = '--split' then H.startPersp := 'split'
+    else if parg = '--code' then EliahForm.startPersp := 'code'
+    else if parg = '--design' then EliahForm.startPersp := 'design'
+    else if parg = '--split' then EliahForm.startPersp := 'split'
     else if (Length(parg) >= 2) and (parg[1] = '-') and (parg[2] = '-') then
       { ignore unknown -- flag }
     else
       startDir := parg;                 { a bare argument is the start directory }
   end;
-  H.LoadDir(startDir);
+  EliahForm.LoadDir(startDir);
 
-  Form1.Realize;
+  EliahForm.Realize;
 
   if arg = '--smoke' then
   begin
-    if H.nItems < 1 then begin writeln('SMOKE FAIL: empty tree'); Halt(1); end;
+    if EliahForm.nItems < 1 then begin writeln('SMOKE FAIL: empty tree'); Halt(1); end;
 
     { sample .lfm loaded into the designer docmodel }
-    if H.Dsn.Doc.Count <> 6 then begin writeln('SMOKE FAIL: sample.lfm not loaded'); Halt(1); end;
-    if H.Dsn.Doc.NodeCaption(3) <> 'OK' then begin writeln('SMOKE FAIL: lfm OK button missing'); Halt(1); end;
-    if H.Dsn.Doc.NodeX(3) <> 28 then begin writeln('SMOKE FAIL: lfm abs coord wrong'); Halt(1); end;
+    if EliahForm.Dsn.Doc.Count <> 6 then begin writeln('SMOKE FAIL: sample.lfm not loaded'); Halt(1); end;
+    if EliahForm.Dsn.Doc.NodeCaption(3) <> 'OK' then begin writeln('SMOKE FAIL: lfm OK button missing'); Halt(1); end;
+    if EliahForm.Dsn.Doc.NodeX(3) <> 28 then begin writeln('SMOKE FAIL: lfm abs coord wrong'); Halt(1); end;
     { the sample's TTimer streams in as a non-visual tray node }
-    if not H.Dsn.Doc.IsNonVisual(H.Dsn.Doc.NodeKind(5)) then
+    if not EliahForm.Dsn.Doc.IsNonVisual(EliahForm.Dsn.Doc.NodeKind(5)) then
       begin writeln('SMOKE FAIL: sample TTimer not a non-visual node'); Halt(1); end;
 
     { pane layout is the RootPaned subtree; reflow resizes the root to fill the
       content area below the toolbar (GtkPaned owns the internal splits). }
-    if H.RootPaned = nil then begin writeln('SMOKE FAIL: no root paned'); Halt(1); end;
-    H.Relayout(1400, 900);
-    if H.RootPaned.Width <> 1400 then begin writeln('SMOKE FAIL: root paned width did not reflow'); Halt(1); end;
-    if H.RootPaned.Height <> (900 - TOOLBAR_H) then begin writeln('SMOKE FAIL: root paned height did not reflow'); Halt(1); end;
+    if EliahForm.RootPaned = nil then begin writeln('SMOKE FAIL: no root paned'); Halt(1); end;
+    EliahForm.Relayout(1400, 900);
+    if EliahForm.RootPaned.Width <> 1400 then begin writeln('SMOKE FAIL: root paned width did not reflow'); Halt(1); end;
+    if EliahForm.RootPaned.Height <> (900 - TOOLBAR_H) then begin writeln('SMOKE FAIL: root paned height did not reflow'); Halt(1); end;
     { tiny window clamps the content height instead of going negative }
-    H.Relayout(200, 120);
-    if H.RootPaned.Height < 160 then begin writeln('SMOKE FAIL: reflow did not clamp height'); Halt(1); end;
-    H.Relayout(W_WIN, H_WIN);   { restore }
+    EliahForm.Relayout(200, 120);
+    if EliahForm.RootPaned.Height < 160 then begin writeln('SMOKE FAIL: reflow did not clamp height'); Halt(1); end;
+    EliahForm.Relayout(W_WIN, H_WIN);   { restore }
 
     { headless has no real allocation, so drive layout with an explicit width.
       View-menu toggle flips the left column's visibility choice. }
-    H.OnToggleLeft(nil); H.ApplyLayout(W_WIN);
-    if H.RootPaned.CollapsedPane <> 1 then begin writeln('SMOKE FAIL: left panel did not collapse'); Halt(1); end;
-    H.OnToggleLeft(nil); H.ApplyLayout(W_WIN);
-    if H.RootPaned.CollapsedPane <> 0 then begin writeln('SMOKE FAIL: left panel did not restore'); Halt(1); end;
+    EliahForm.OnToggleLeft(nil); EliahForm.ApplyLayout(W_WIN);
+    if EliahForm.RootPaned.CollapsedPane <> 1 then begin writeln('SMOKE FAIL: left panel did not collapse'); Halt(1); end;
+    EliahForm.OnToggleLeft(nil); EliahForm.ApplyLayout(W_WIN);
+    if EliahForm.RootPaned.CollapsedPane <> 0 then begin writeln('SMOKE FAIL: left panel did not restore'); Halt(1); end;
 
     { perspectives are visibility configs of midRight = [center | right] }
-    H.SetPerspective('code'); H.ApplyLayout(W_WIN);
-    if H.midRight.CollapsedPane <> 2 then begin writeln('SMOKE FAIL: code persp did not hide right'); Halt(1); end;
-    H.SetPerspective('design'); H.ApplyLayout(W_WIN);
-    if H.midRight.CollapsedPane <> 1 then begin writeln('SMOKE FAIL: design persp did not hide center'); Halt(1); end;
-    H.SetPerspective('split'); H.ApplyLayout(W_WIN);
-    if H.midRight.CollapsedPane <> 0 then begin writeln('SMOKE FAIL: split persp did not show both'); Halt(1); end;
+    EliahForm.SetPerspective('code'); EliahForm.ApplyLayout(W_WIN);
+    if EliahForm.midRight.CollapsedPane <> 2 then begin writeln('SMOKE FAIL: code persp did not hide right'); Halt(1); end;
+    EliahForm.SetPerspective('design'); EliahForm.ApplyLayout(W_WIN);
+    if EliahForm.midRight.CollapsedPane <> 1 then begin writeln('SMOKE FAIL: design persp did not hide center'); Halt(1); end;
+    EliahForm.SetPerspective('split'); EliahForm.ApplyLayout(W_WIN);
+    if EliahForm.midRight.CollapsedPane <> 0 then begin writeln('SMOKE FAIL: split persp did not show both'); Halt(1); end;
 
     { priority compacting: a width below sum(mins) auto-collapses the lowest
       priority column (right=designer), even in the split perspective. }
-    H.SetPerspective('split'); H.ApplyLayout(400);
-    if H.midRight.CollapsedPane <> 2 then begin writeln('SMOKE FAIL: compacting did not drop right'); Halt(1); end;
-    H.ApplyLayout(W_WIN);
-    if H.midRight.CollapsedPane <> 0 then begin writeln('SMOKE FAIL: widening did not restore right'); Halt(1); end;
+    EliahForm.SetPerspective('split'); EliahForm.ApplyLayout(400);
+    if EliahForm.midRight.CollapsedPane <> 2 then begin writeln('SMOKE FAIL: compacting did not drop right'); Halt(1); end;
+    EliahForm.ApplyLayout(W_WIN);
+    if EliahForm.midRight.CollapsedPane <> 0 then begin writeln('SMOKE FAIL: widening did not restore right'); Halt(1); end;
 
     { open any .lfm from the tree: clicking a .lfm reloads the designer + retargets Save }
-    H.Dsn.Doc := TDocModel.Create;   { wipe to prove OpenDesign reloads }
-    H.designPath := '';
-    H.OpenDesign('apps/ide/eliah/sample.lfm');
-    if H.Dsn.Doc.Count <> 6 then begin writeln('SMOKE FAIL: OpenDesign did not load'); Halt(1); end;
-    if H.designPath <> 'apps/ide/eliah/sample.lfm' then begin writeln('SMOKE FAIL: designPath not set'); Halt(1); end;
+    EliahForm.Dsn.Doc := TDocModel.Create;   { wipe to prove OpenDesign reloads }
+    EliahForm.designPath := '';
+    EliahForm.OpenDesign('apps/ide/eliah/sample.lfm');
+    if EliahForm.Dsn.Doc.Count <> 6 then begin writeln('SMOKE FAIL: OpenDesign did not load'); Halt(1); end;
+    if EliahForm.designPath <> 'apps/ide/eliah/sample.lfm' then begin writeln('SMOKE FAIL: designPath not set'); Halt(1); end;
     if not EndsWithLfm('Foo.LFM') then begin writeln('SMOKE FAIL: EndsWithLfm case'); Halt(1); end;
     if EndsWithLfm('foo.pas') then begin writeln('SMOKE FAIL: EndsWithLfm false-pos'); Halt(1); end;
 
-    H.LoadDir('apps/ide/garin');
-    H.Tree.ItemIndex := H.nItems - 1;
-    H.OnTreeClick(nil);
-    if Length(H.Editor.Text) = 0 then begin writeln('SMOKE FAIL: editor empty'); Halt(1); end;
-    H.curFile := 'apps/ide/garin/buffer.pas';
-    H.OnCompile(nil);
-    if Length(H.Output.Text) = 0 then begin writeln('SMOKE FAIL: no compile output'); Halt(1); end;
+    EliahForm.LoadDir('apps/ide/garin');
+    EliahForm.Tree.ItemIndex := EliahForm.nItems - 1;
+    EliahForm.OnTreeClick(nil);
+    if Length(EliahForm.Editor.Text) = 0 then begin writeln('SMOKE FAIL: editor empty'); Halt(1); end;
+    EliahForm.curFile := 'apps/ide/garin/buffer.pas';
+    EliahForm.OnCompile(nil);
+    if Length(EliahForm.Output.Text) = 0 then begin writeln('SMOKE FAIL: no compile output'); Halt(1); end;
 
     { diagnostics: compile a deliberately broken unit -> error list populated,
       click jumps the editor (no crash). }
     if not WriteAllText('/tmp/eliah_bad.pas', 'program bad;' + #10 + 'begin' + #10 + '  x := 1;' + #10 + 'end.' + #10) then
       begin writeln('SMOKE FAIL: could not write bad.pas'); Halt(1); end;
-    H.curFile := '/tmp/eliah_bad.pas';
-    H.OnCompile(nil);
-    if H.Diags.Count < 1 then begin writeln('SMOKE FAIL: no diagnostics parsed'); Halt(1); end;
-    if H.Diags.DiagLine(0) <> 3 then begin writeln('SMOKE FAIL: diag line wrong'); Halt(1); end;
-    H.Errors.ItemIndex := 0;
-    H.OnErrorClick(nil);   { jump to the error line — must not crash }
+    EliahForm.curFile := '/tmp/eliah_bad.pas';
+    EliahForm.OnCompile(nil);
+    if EliahForm.Diags.Count < 1 then begin writeln('SMOKE FAIL: no diagnostics parsed'); Halt(1); end;
+    if EliahForm.Diags.DiagLine(0) <> 3 then begin writeln('SMOKE FAIL: diag line wrong'); Halt(1); end;
+    EliahForm.Errors.ItemIndex := 0;
+    EliahForm.OnErrorClick(nil);   { jump to the error line — must not crash }
 
     { designer mouse-select: click inside the sample OK button (x=28..108,
       y=92..120) -> it must become the selection and fill the inspector. }
-    H.OnDesignMouseDown(nil, 1, 40, 100);
-    if H.Dsn.Sel < 0 then begin writeln('SMOKE FAIL: no node selected'); Halt(1); end;
-    if H.Dsn.Doc.NodeCaption(H.Dsn.Sel) <> 'OK' then
+    EliahForm.OnDesignMouseDown(nil, 1, 40, 100);
+    if EliahForm.Dsn.Sel < 0 then begin writeln('SMOKE FAIL: no node selected'); Halt(1); end;
+    if EliahForm.Dsn.Doc.NodeCaption(EliahForm.Dsn.Sel) <> 'OK' then
       begin writeln('SMOKE FAIL: wrong node selected'); Halt(1); end;
 
     { drag-move: grab the OK button at (40,100) — origin (28,92), so the grab
       offset is (12,8) — and move the cursor to (70,140); the node origin must
       follow to (70-12, 140-8) = (58,132). }
-    H.OnDesignMouseDown(nil, 1, 40, 100);
-    H.OnDesignMouseMove(nil, 1, 70, 140);
-    H.OnDesignMouseUp(nil, 1, 70, 140);
-    if (H.Dsn.Doc.NodeX(H.Dsn.Sel) <> 58) or (H.Dsn.Doc.NodeY(H.Dsn.Sel) <> 132) then
+    EliahForm.OnDesignMouseDown(nil, 1, 40, 100);
+    EliahForm.OnDesignMouseMove(nil, 1, 70, 140);
+    EliahForm.OnDesignMouseUp(nil, 1, 70, 140);
+    if (EliahForm.Dsn.Doc.NodeX(EliahForm.Dsn.Sel) <> 58) or (EliahForm.Dsn.Doc.NodeY(EliahForm.Dsn.Sel) <> 132) then
       begin writeln('SMOKE FAIL: drag-move did not reposition node'); Halt(1); end;
     { move after release must NOT keep dragging }
-    H.OnDesignMouseMove(nil, 0, 200, 200);
-    if (H.Dsn.Doc.NodeX(H.Dsn.Sel) <> 58) then
+    EliahForm.OnDesignMouseMove(nil, 0, 200, 200);
+    if (EliahForm.Dsn.Doc.NodeX(EliahForm.Dsn.Sel) <> 58) then
       begin writeln('SMOKE FAIL: node moved after mouse-up'); Halt(1); end;
 
     { resize: OK button now at (58,132,80,28) -> BR corner at (138,160). Grab it
       and drag to (158,180): origin stays, W/H grow by 20 -> (58,132,100,48). }
-    H.OnDesignMouseDown(nil, 1, 138, 160);
-    if not H.Dsn.Resizing then begin writeln('SMOKE FAIL: handle did not start resize'); Halt(1); end;
-    H.OnDesignMouseMove(nil, 1, 158, 180);
-    H.OnDesignMouseUp(nil, 1, 158, 180);
-    if (H.Dsn.Doc.NodeX(H.Dsn.Sel) <> 58) or (H.Dsn.Doc.NodeY(H.Dsn.Sel) <> 132) or
-       (H.Dsn.Doc.NodeW(H.Dsn.Sel) <> 100) or (H.Dsn.Doc.NodeH(H.Dsn.Sel) <> 48) then
+    EliahForm.OnDesignMouseDown(nil, 1, 138, 160);
+    if not EliahForm.Dsn.Resizing then begin writeln('SMOKE FAIL: handle did not start resize'); Halt(1); end;
+    EliahForm.OnDesignMouseMove(nil, 1, 158, 180);
+    EliahForm.OnDesignMouseUp(nil, 1, 158, 180);
+    if (EliahForm.Dsn.Doc.NodeX(EliahForm.Dsn.Sel) <> 58) or (EliahForm.Dsn.Doc.NodeY(EliahForm.Dsn.Sel) <> 132) or
+       (EliahForm.Dsn.Doc.NodeW(EliahForm.Dsn.Sel) <> 100) or (EliahForm.Dsn.Doc.NodeH(EliahForm.Dsn.Sel) <> 48) then
       begin writeln('SMOKE FAIL: BR resize wrong bounds'); Halt(1); end;
 
     { editable inspector: pick a row, type a value, commit -> docmodel updates }
-    H.FEditRow := 1; H.ValueEdit.Text := 'Apply'; H.ApplyEdit;
-    if H.Dsn.Doc.NodeCaption(H.Dsn.Sel) <> 'Apply' then
+    EliahForm.FEditRow := 1; EliahForm.ValueEdit.Text := 'Apply'; EliahForm.ApplyEdit;
+    if EliahForm.Dsn.Doc.NodeCaption(EliahForm.Dsn.Sel) <> 'Apply' then
       begin writeln('SMOKE FAIL: caption edit not applied'); Halt(1); end;
-    H.FEditRow := 4; H.ValueEdit.Text := '120'; H.ApplyEdit;
-    if H.Dsn.Doc.NodeW(H.Dsn.Sel) <> 120 then
+    EliahForm.FEditRow := 4; EliahForm.ValueEdit.Text := '120'; EliahForm.ApplyEdit;
+    if EliahForm.Dsn.Doc.NodeW(EliahForm.Dsn.Sel) <> 120 then
       begin writeln('SMOKE FAIL: width edit not applied'); Halt(1); end;
     { commit via the Enter key path (Return keyval) }
-    H.FEditRow := 3; H.ValueEdit.Text := '200'; H.OnValueKey(nil, 65293);
-    if H.Dsn.Doc.NodeY(H.Dsn.Sel) <> 200 then
+    EliahForm.FEditRow := 3; EliahForm.ValueEdit.Text := '200'; EliahForm.OnValueKey(nil, 65293);
+    if EliahForm.Dsn.Doc.NodeY(EliahForm.Dsn.Sel) <> 200 then
       begin writeln('SMOKE FAIL: Enter did not commit Top edit'); Halt(1); end;
     { malformed int keeps the old value (StrToIntDef fallback) }
-    H.FEditRow := 2; H.ValueEdit.Text := 'xyz'; H.ApplyEdit;
-    if H.Dsn.Doc.NodeX(H.Dsn.Sel) <> 58 then
+    EliahForm.FEditRow := 2; EliahForm.ValueEdit.Text := 'xyz'; EliahForm.ApplyEdit;
+    if EliahForm.Dsn.Doc.NodeX(EliahForm.Dsn.Sel) <> 58 then
       begin writeln('SMOKE FAIL: bad int should keep old Left'); Halt(1); end;
 
     { palette place: arm Place, click empty surface -> a new node is dropped,
       parented to the form, selected; Place is one-shot (auto-disarms). }
-    H.Palette.ItemIndex := 1;        { Label }
-    H.OnPlaceToggle(nil);
-    if not H.PlaceMode then begin writeln('SMOKE FAIL: place not armed'); Halt(1); end;
-    centerW := H.Dsn.Doc.Count;      { reuse scratch int: node count before }
-    H.OnDesignMouseDown(nil, 1, 150, 150);
-    if H.Dsn.Doc.Count <> centerW + 1 then
+    EliahForm.Palette.ItemIndex := 1;        { Label }
+    EliahForm.OnPlaceToggle(nil);
+    if not EliahForm.PlaceMode then begin writeln('SMOKE FAIL: place not armed'); Halt(1); end;
+    centerW := EliahForm.Dsn.Doc.Count;      { reuse scratch int: node count before }
+    EliahForm.OnDesignMouseDown(nil, 1, 150, 150);
+    if EliahForm.Dsn.Doc.Count <> centerW + 1 then
       begin writeln('SMOKE FAIL: place did not add a node'); Halt(1); end;
-    if H.Dsn.Sel <> centerW then
+    if EliahForm.Dsn.Sel <> centerW then
       begin writeln('SMOKE FAIL: placed node not selected'); Halt(1); end;
-    if H.Dsn.Doc.NodeParent(H.Dsn.Sel) <> 0 then
+    if EliahForm.Dsn.Doc.NodeParent(EliahForm.Dsn.Sel) <> 0 then
       begin writeln('SMOKE FAIL: placed node not parented to form'); Halt(1); end;
     pk := wkButton;
-    CompPlaceKind(H.PaletteNames[H.Palette.ItemIndex], pk);
-    if H.Dsn.Doc.NodeKind(H.Dsn.Sel) <> pk then
+    CompPlaceKind(EliahForm.PaletteNames[EliahForm.Palette.ItemIndex], pk);
+    if EliahForm.Dsn.Doc.NodeKind(EliahForm.Dsn.Sel) <> pk then
       begin writeln('SMOKE FAIL: placed node wrong kind'); Halt(1); end;
-    if Length(H.PaletteNames) < 7 then
+    if Length(EliahForm.PaletteNames) < 7 then
       begin writeln('SMOKE FAIL: registry palette underpopulated'); Halt(1); end;
-    if H.PlaceMode then begin writeln('SMOKE FAIL: place mode not one-shot'); Halt(1); end;
+    if EliahForm.PlaceMode then begin writeln('SMOKE FAIL: place mode not one-shot'); Halt(1); end;
 
     { undo: the place above is on the undo stack -> undo restores the prior count }
-    centerW := H.Dsn.Doc.Count;
-    H.OnUndo(nil);
-    if H.Dsn.Doc.Count <> centerW - 1 then begin writeln('SMOKE FAIL: undo did not revert place'); Halt(1); end;
+    centerW := EliahForm.Dsn.Doc.Count;
+    EliahForm.OnUndo(nil);
+    if EliahForm.Dsn.Doc.Count <> centerW - 1 then begin writeln('SMOKE FAIL: undo did not revert place'); Halt(1); end;
     { redo by re-placing to keep the rest of the flow stable }
-    H.Palette.ItemIndex := 1;
-    H.OnPlaceToggle(nil);
-    H.OnDesignMouseDown(nil, 1, 150, 150);
+    EliahForm.Palette.ItemIndex := 1;
+    EliahForm.OnPlaceToggle(nil);
+    EliahForm.OnDesignMouseDown(nil, 1, 150, 150);
 
     { delete: remove the just-placed node (selected); count drops, sel clears }
-    centerW := H.Dsn.Doc.Count;
-    H.OnDelete(nil);
-    if H.Dsn.Doc.Count <> centerW - 1 then begin writeln('SMOKE FAIL: delete did not remove node'); Halt(1); end;
-    if H.Dsn.Sel >= 0 then begin writeln('SMOKE FAIL: delete did not clear selection'); Halt(1); end;
+    centerW := EliahForm.Dsn.Doc.Count;
+    EliahForm.OnDelete(nil);
+    if EliahForm.Dsn.Doc.Count <> centerW - 1 then begin writeln('SMOKE FAIL: delete did not remove node'); Halt(1); end;
+    if EliahForm.Dsn.Sel >= 0 then begin writeln('SMOKE FAIL: delete did not clear selection'); Halt(1); end;
     { root guard: selecting the form (0) and deleting is a no-op }
-    centerW := H.Dsn.Doc.Count;
-    H.Dsn.Sel := 0;
-    H.OnDelete(nil);
-    if H.Dsn.Doc.Count <> centerW then begin writeln('SMOKE FAIL: root form should not delete'); Halt(1); end;
+    centerW := EliahForm.Dsn.Doc.Count;
+    EliahForm.Dsn.Sel := 0;
+    EliahForm.OnDelete(nil);
+    if EliahForm.Dsn.Doc.Count <> centerW then begin writeln('SMOKE FAIL: root form should not delete'); Halt(1); end;
 
     { non-visual: place a Timer -> a tray node (non-visual, bottom strip, fixed).
       Left in the doc so the save round-trip below also covers tray serialization. }
     ci := 0;
-    while (ci < Length(H.PaletteNames)) and (H.PaletteNames[ci] <> 'TTimer') do Inc(ci);
-    if ci >= Length(H.PaletteNames) then
+    while (ci < Length(EliahForm.PaletteNames)) and (EliahForm.PaletteNames[ci] <> 'TTimer') do Inc(ci);
+    if ci >= Length(EliahForm.PaletteNames) then
       begin writeln('SMOKE FAIL: TTimer not in registry palette'); Halt(1); end;
-    H.Palette.ItemIndex := ci;
-    H.OnPlaceToggle(nil);
-    centerW := H.Dsn.Doc.Count;
-    H.OnDesignMouseDown(nil, 1, 150, 150);
-    if H.Dsn.Doc.Count <> centerW + 1 then
+    EliahForm.Palette.ItemIndex := ci;
+    EliahForm.OnPlaceToggle(nil);
+    centerW := EliahForm.Dsn.Doc.Count;
+    EliahForm.OnDesignMouseDown(nil, 1, 150, 150);
+    if EliahForm.Dsn.Doc.Count <> centerW + 1 then
       begin writeln('SMOKE FAIL: timer place did not add a node'); Halt(1); end;
-    if not H.Dsn.Doc.IsNonVisual(H.Dsn.Doc.NodeKind(H.Dsn.Sel)) then
+    if not EliahForm.Dsn.Doc.IsNonVisual(EliahForm.Dsn.Doc.NodeKind(EliahForm.Dsn.Sel)) then
       begin writeln('SMOKE FAIL: placed timer not non-visual'); Halt(1); end;
-    H.Dsn.LayoutTray;
-    if H.Dsn.Doc.NodeY(H.Dsn.Sel) <
-       H.Dsn.Doc.NodeY(0) + H.Dsn.Doc.NodeH(0) - 80 then
+    EliahForm.Dsn.LayoutTray;
+    if EliahForm.Dsn.Doc.NodeY(EliahForm.Dsn.Sel) <
+       EliahForm.Dsn.Doc.NodeY(0) + EliahForm.Dsn.Doc.NodeH(0) - 80 then
       begin writeln('SMOKE FAIL: timer not laid out in bottom tray'); Halt(1); end;
-    H.Dsn.BeginDrag(H.Dsn.Doc.NodeX(H.Dsn.Sel) + 4, H.Dsn.Doc.NodeY(H.Dsn.Sel) + 4);
-    if H.Dsn.Dragging then
+    EliahForm.Dsn.BeginDrag(EliahForm.Dsn.Doc.NodeX(EliahForm.Dsn.Sel) + 4, EliahForm.Dsn.Doc.NodeY(EliahForm.Dsn.Sel) + 4);
+    if EliahForm.Dsn.Dragging then
       begin writeln('SMOKE FAIL: tray icon should not be draggable'); Halt(1); end;
-    H.Dsn.EndDrag;
+    EliahForm.Dsn.EndDrag;
 
     { inspector on a non-visual node: Caption editable, geometry rows guarded.
       The sample's TTimer is node 5. }
-    H.Dsn.Sel := 5;
-    H.ShowInspector(5);
-    H.FEditRow := 1; H.ValueEdit.Text := 'Heartbeat'; H.ApplyEdit;
-    if H.Dsn.Doc.NodeCaption(5) <> 'Heartbeat' then
+    EliahForm.Dsn.Sel := 5;
+    EliahForm.ShowInspector(5);
+    EliahForm.FEditRow := 1; EliahForm.ValueEdit.Text := 'Heartbeat'; EliahForm.ApplyEdit;
+    if EliahForm.Dsn.Doc.NodeCaption(5) <> 'Heartbeat' then
       begin writeln('SMOKE FAIL: non-visual caption edit ignored'); Halt(1); end;
     { a geometry-row edit must be a no-op on a non-visual node }
-    H.FEditRow := 4; H.ValueEdit.Text := '999'; H.ApplyEdit;
-    if H.Dsn.Doc.NodeCaption(5) <> 'Heartbeat' then
+    EliahForm.FEditRow := 4; EliahForm.ValueEdit.Text := '999'; EliahForm.ApplyEdit;
+    if EliahForm.Dsn.Doc.NodeCaption(5) <> 'Heartbeat' then
       begin writeln('SMOKE FAIL: non-visual geometry edit corrupted node'); Halt(1); end;
-    if H.Dsn.Doc.NodeW(5) = 999 then
+    if EliahForm.Dsn.Doc.NodeW(5) = 999 then
       begin writeln('SMOKE FAIL: non-visual geometry edit not guarded'); Halt(1); end;
     { extra published prop (Interval) is shown + editable via the bag rows }
-    H.ShowInspector(5);
-    if H.FBagBase <= 0 then
+    EliahForm.ShowInspector(5);
+    if EliahForm.FBagBase <= 0 then
       begin writeln('SMOKE FAIL: timer Interval prop not surfaced'); Halt(1); end;
     { RTTI-driven: the unset Enabled prop shows too, not only the .lfm Interval }
-    if Length(H.FBagNames) < 2 then
+    if Length(EliahForm.FBagNames) < 2 then
       begin writeln('SMOKE FAIL: RTTI prop list missing unset props'); Halt(1); end;
-    if H.Dsn.Doc.NodePropByName(5, 'Interval') <> '1000' then
+    if EliahForm.Dsn.Doc.NodePropByName(5, 'Interval') <> '1000' then
       begin writeln('SMOKE FAIL: timer Interval prop not loaded'); Halt(1); end;
-    H.FEditRow := H.FBagBase; H.ValueEdit.Text := '2000'; H.ApplyEdit;
-    if H.Dsn.Doc.NodePropByName(5, 'Interval') <> '2000' then
+    EliahForm.FEditRow := EliahForm.FBagBase; EliahForm.ValueEdit.Text := '2000'; EliahForm.ApplyEdit;
+    if EliahForm.Dsn.Doc.NodePropByName(5, 'Interval') <> '2000' then
       begin writeln('SMOKE FAIL: Interval bag edit not applied'); Halt(1); end;
 
     { selection link (M5): designer <-> editor through the shared model }
-    H.SelectNode(H.Dsn.Doc.FindByName('BtnOk'));
-    if H.Sel.SelectedName <> 'BtnOk' then
+    EliahForm.SelectNode(EliahForm.Dsn.Doc.FindByName('BtnOk'));
+    if EliahForm.Sel.SelectedName <> 'BtnOk' then
       begin writeln('SMOKE FAIL: shared selection model name mismatch'); Halt(1); end;
-    H.EditorToSelection;                 { designer -> editor: load the .lfm + scroll }
-    if H.curFile <> H.designPath then
+    EliahForm.EditorToSelection;                 { designer -> editor: load the .lfm + scroll }
+    if EliahForm.curFile <> EliahForm.designPath then
       begin writeln('SMOKE FAIL: editor did not load the design file'); Halt(1); end;
-    centerW := LfmFindObjectLine(H.Editor.Text, 'BtnOk');
+    centerW := LfmFindObjectLine(EliahForm.Editor.Text, 'BtnOk');
     if centerW < 0 then
       begin writeln('SMOKE FAIL: BtnOk object line not in editor'); Halt(1); end;
-    H.Sel.Clear; H.Dsn.Sel := -1;
-    H.SelectFromEditorLine(centerW);     { editor -> designer: line maps to selection }
-    if H.Dsn.Sel <> H.Dsn.Doc.FindByName('BtnOk') then
+    EliahForm.Sel.Clear; EliahForm.Dsn.Sel := -1;
+    EliahForm.SelectFromEditorLine(centerW);     { editor -> designer: line maps to selection }
+    if EliahForm.Dsn.Sel <> EliahForm.Dsn.Doc.FindByName('BtnOk') then
       begin writeln('SMOKE FAIL: editor->designer selection failed'); Halt(1); end;
 
     { command surface: wire OnClick on the selection -> assign handler + gen stub }
-    H.OnWireOnClick(nil);
-    if H.Dsn.Doc.NodePropByName(H.Dsn.Sel, 'OnClick') <> 'BtnOkClick' then
+    EliahForm.OnWireOnClick(nil);
+    if EliahForm.Dsn.Doc.NodePropByName(EliahForm.Dsn.Sel, 'OnClick') <> 'BtnOkClick' then
       begin writeln('SMOKE FAIL: OnClick not assigned'); Halt(1); end;
-    if not CodeHasHandler(H.Editor.Text, 'BtnOkClick') then
+    if not CodeHasHandler(EliahForm.Editor.Text, 'BtnOkClick') then
       begin writeln('SMOKE FAIL: handler stub not generated'); Halt(1); end;
     { idempotent: wiring again keeps the same editor text (no duplicate stub) }
-    centerH := Length(H.Editor.Text);
-    H.OnWireOnClick(nil);
-    if Length(H.Editor.Text) <> centerH then
+    centerH := Length(EliahForm.Editor.Text);
+    EliahForm.OnWireOnClick(nil);
+    if Length(EliahForm.Editor.Text) <> centerH then
       begin writeln('SMOKE FAIL: re-wire duplicated the stub'); Halt(1); end;
 
     { save round-trip: serialize the docmodel to a temp file (not the repo
       sample), reload it, node count must survive. Same path OnSave uses. }
-    centerW := H.Dsn.Doc.Count;
-    if not WriteAllText('/tmp/eliah_rt.lfm', SaveLfmText(H.Dsn.Doc)) then
+    centerW := EliahForm.Dsn.Doc.Count;
+    if not WriteAllText('/tmp/eliah_rt.lfm', SaveLfmText(EliahForm.Dsn.Doc)) then
       begin writeln('SMOKE FAIL: save write failed'); Halt(1); end;
     sbuf := TIdeBuffer.Create;
     if not sbuf.LoadFromFile('/tmp/eliah_rt.lfm') then
@@ -1314,24 +1229,24 @@ begin
       begin writeln('SMOKE FAIL: round-trip lost nodes'); Halt(1); end;
 
     { click empty surface -> selection cleared }
-    H.OnDesignMouseDown(nil, 1, 5, 5);
-    if H.Dsn.Sel >= 0 then begin writeln('SMOKE FAIL: selection not cleared'); Halt(1); end;
+    EliahForm.OnDesignMouseDown(nil, 1, 5, 5);
+    if EliahForm.Dsn.Sel >= 0 then begin writeln('SMOKE FAIL: selection not cleared'); Halt(1); end;
 
     { new design -> a single root form, save target retargeted to untitled }
-    H.OnNew(nil);
-    if H.Dsn.Doc.Count <> 1 then begin writeln('SMOKE FAIL: new design not blank'); Halt(1); end;
-    if H.Dsn.Doc.NodeParent(0) <> -1 then begin writeln('SMOKE FAIL: new root not a form'); Halt(1); end;
-    if H.designPath <> 'untitled.lfm' then begin writeln('SMOKE FAIL: new did not retarget save'); Halt(1); end;
+    EliahForm.OnNew(nil);
+    if EliahForm.Dsn.Doc.Count <> 1 then begin writeln('SMOKE FAIL: new design not blank'); Halt(1); end;
+    if EliahForm.Dsn.Doc.NodeParent(0) <> -1 then begin writeln('SMOKE FAIL: new root not a form'); Halt(1); end;
+    if EliahForm.designPath <> 'untitled.lfm' then begin writeln('SMOKE FAIL: new did not retarget save'); Halt(1); end;
 
     { status title reflects the open design + node count }
-    H.UpdateTitle;
-    if Length(H.Win.Caption) = 0 then begin writeln('SMOKE FAIL: title empty'); Halt(1); end;
+    EliahForm.UpdateTitle;
+    if Length(EliahForm.Win.Caption) = 0 then begin writeln('SMOKE FAIL: title empty'); Halt(1); end;
 
     writeln('SMOKE OK');
   end
   else
   begin
-    Application.MainForm := Form1;
+    Application.MainForm := EliahForm;
     Application.Run;
   end;
 end.
