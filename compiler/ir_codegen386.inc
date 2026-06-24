@@ -2000,6 +2000,42 @@ begin
             if argNode = -1 then
               Error('target i386: ParamStr expression must be assigned directly');
             valNode := IRA[argNode];
+            { Managed-string dest (scalar `string` is tyAnsiString by default):
+              build a heap AnsiString from argv[index] and publish it (release
+              dst's old handle), mirroring LoadFile. The fixed-buffer emitter
+              below is for a frozen string dest only. }
+            if (IRKind[valNode] = IR_LOAD_SYM) and
+               (Syms[IRA[valNode]].TypeKind = tyAnsiString) then
+            begin
+              si := IRA[valNode];
+              EmitArgvToAnsiString386;         { eax (index) -> eax = new handle }
+              EmitB($50);                      { push new }
+              if Syms[si].Kind = skGlobal then
+                begin EmitB($A1); EmitGlobRef(Syms[si].Offset); end
+              else if (Syms[si].Kind = skParam) and Syms[si].IsRef then
+              begin
+                EmitB($8B); EmitB($8D); EmitI32(Syms[si].Offset); { caller slot }
+                EmitB($8B); EmitB($01);                           { old }
+              end
+              else
+                begin EmitB($8B); EmitB($85); EmitI32(Syms[si].Offset); end;
+              procIdx := FindProc('PXXStrDecRef');
+              if procIdx < 0 then Error('compiler error: PXXStrDecRef not found');
+              EmitB($50);                      { push old }
+              EmitCallProc(procIdx);
+              EmitB($81); EmitB($C4); EmitI32(4);
+              EmitB($58);                      { pop new }
+              if Syms[si].Kind = skGlobal then
+                begin EmitB($A3); EmitGlobRef(Syms[si].Offset); end
+              else if (Syms[si].Kind = skParam) and Syms[si].IsRef then
+              begin
+                EmitB($8B); EmitB($8D); EmitI32(Syms[si].Offset); { caller slot }
+                EmitB($89); EmitB($01);                           { store new }
+              end
+              else
+                begin EmitB($89); EmitB($85); EmitI32(Syms[si].Offset); end;
+              Exit;
+            end;
             if IRKind[valNode] <> IR_LEA then
               Error('target i386: ArgStr expects a string variable');
             EmitArgvToFixedString386(IRA[valNode]);

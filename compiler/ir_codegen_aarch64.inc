@@ -1427,6 +1427,22 @@ begin
             if argNode = -1 then
               Error('target aarch64: ParamStr expression must be assigned directly');
             valNode := IRA[argNode];
+            { Managed-string dest (scalar `string` is tyAnsiString by default):
+              build a heap AnsiString from argv[index] and publish it (release
+              dst's old handle), mirroring the LoadFile path. The fixed/short
+              inline-buffer path below is for a frozen string dest only. }
+            if (IRKind[valNode] = IR_LOAD_SYM) and
+               (Syms[IRA[valNode]].TypeKind = tyAnsiString) then
+            begin
+              si := IRA[valNode];
+              EmitArgvToAnsiStringA64;          { x0 (index) -> x0 = new handle }
+              EmitI32($F81F0FE0);               { str x0, [sp,#-16]! (push new) }
+              EmitLoadVarA64(si);               { x0 = old handle }
+              EmitStrDecRefA64;
+              EmitI32($F84107E0);               { ldr x0, [sp],#16 (pop new) }
+              EmitStoreVarA64(si);
+              Exit;
+            end;
             if IRKind[valNode] <> IR_LEA then
               Error('target aarch64: ArgStr expects a string variable');
             EmitLoadArgvPtrA64;               { x0 = src }

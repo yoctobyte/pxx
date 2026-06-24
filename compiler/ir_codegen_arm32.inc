@@ -1657,6 +1657,22 @@ begin
             if argNode = -1 then
               Error('target arm32: ParamStr expression must be assigned directly');
             valNode := IRA[argNode];
+            { Managed-string dest (scalar `string` is tyAnsiString by default):
+              build a heap AnsiString from argv[index] and publish it (release
+              dst's old handle), mirroring LoadFile. The fixed-buffer emitter
+              below is for a frozen string dest only. }
+            if (IRKind[valNode] = IR_LOAD_SYM) and
+               (Syms[IRA[valNode]].TypeKind = tyAnsiString) then
+            begin
+              si := IRA[valNode];
+              EmitArgvToAnsiStringArm32;     { r0 (index) -> r0 = new handle }
+              EmitI32($E92D0001);            { push {r0} new }
+              EmitLoadVarArm32(si);          { r0 = old handle }
+              EmitStrDecRefArm32;
+              EmitI32($E8BD0001);            { pop {r0} new }
+              EmitStoreVarArm32(si);
+              Exit;
+            end;
             if IRKind[valNode] <> IR_LEA then
               Error('target arm32: ArgStr expects a string variable');
             EmitArgvToFixedStringArm32(IRA[valNode]);

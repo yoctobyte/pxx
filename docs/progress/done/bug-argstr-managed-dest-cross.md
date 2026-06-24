@@ -1,7 +1,7 @@
 # bug: ArgStr(i, s) into a managed-string var rejected/broken on cross targets
 
 - **Type:** bug (Track A — cross codegen / argv intrinsics)
-- **Status:** backlog
+- **Status:** done
 - **Found:** 2026-06-23, full-sweep after the metaclass-construct work
 - **Severity:** medium — blocks `test-i386` / `test-aarch64` / `test-arm32`
   (the cross gate is red on `test/test_arm32_arg_runtime.pas`). x86-64 is fine.
@@ -52,3 +52,23 @@ runs of `test_arm32_arg_runtime` match the x86-64 oracle (`3 / <arg1> / <arg2>`)
 - Pre-existing — confirmed on base @9a32b51 (before the metaclass commits), which
   touch no backend file. Surfaced by the argv-intrinsics test
   (`test_arm32_arg_runtime`, commit 7b20bef).
+
+## Fix log
+
+- 2026-06-24 — DONE. Gave i386 / arm32 / aarch64 a managed-string `ArgStr` path
+  mirroring x86-64's `EmitArgvToStringManaged`. Each backend already had a managed
+  argv builder used by `ParamStr` (`EmitArgvToAnsiString386` /
+  `EmitArgvToAnsiStringArm32` / `EmitArgvToAnsiStringA64`, all: index reg in ->
+  managed handle out) and a `LoadFile` publish sequence (release dst's old handle,
+  store the new refcount-1 handle). The `ArgStr` statement handler now: when the
+  dest lowers to `IR_LOAD_SYM` over a `tyAnsiString` slot, calls the managed
+  builder and publishes; otherwise keeps the existing fixed/short inline-buffer
+  emitter. All three `test_arm32_arg_runtime` cross runs now match the x86-64
+  oracle (`2 / alpha / beta` for `… alpha beta`).
+- NOTE: the cross gates (`make test-i386/aarch64/arm32`) are still red, but on
+  *different, pre-existing* tests that were masked because `arg_runtime` failed
+  first (the gate stops at the first error): `test_cross_frozen_strlen_deref`
+  (i386/arm32 value mismatch vs x86-64 oracle) and `test_classref` (aarch64:
+  "load through pointer of this type not yet supported"). Both reproduce on HEAD
+  with the ArgStr change stashed → not caused here. Filed as
+  `bug-cross-gate-masked-failures`.
