@@ -38,6 +38,7 @@ type
     function GetMemoText(AMemo: TComponent): string; virtual;
     procedure SetMemoText(AMemo: TComponent; const AText: string); virtual;
     procedure MemoCaretToLine(AMemo: TComponent; line: Integer); virtual;
+    function MemoCaretLine(AMemo: TComponent): Integer; virtual;
 
     function AddListItem(AListBox: TComponent; const AText: string): Pointer; virtual;
     function GetListIndex(AListBox: TComponent): Integer; virtual;
@@ -92,6 +93,7 @@ function TWidgetSet.GetChecked(AControl: TComponent): Boolean; begin GetChecked 
 function TWidgetSet.GetMemoText(AMemo: TComponent): string; begin GetMemoText := ''; end;
 procedure TWidgetSet.SetMemoText(AMemo: TComponent; const AText: string); begin end;
 procedure TWidgetSet.MemoCaretToLine(AMemo: TComponent; line: Integer); begin end;
+function TWidgetSet.MemoCaretLine(AMemo: TComponent): Integer; begin MemoCaretLine := 0; end;
 
 function TWidgetSet.AddListItem(AListBox: TComponent; const AText: string): Pointer; begin AddListItem := nil; end;
 function TWidgetSet.GetListIndex(AListBox: TComponent): Integer; begin GetListIndex := -1; end;

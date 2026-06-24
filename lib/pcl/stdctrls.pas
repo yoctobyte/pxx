@@ -56,6 +56,7 @@ type
     procedure CreateHandle; override;
     procedure ConnectChange;
     procedure CaretToLine(line: Integer);   { 0-based; moves cursor + scrolls }
+    function CaretLine: Integer;             { 0-based line of the caret }
   published
     property Text: string read GetText write SetText;
     property OnChange: TMethod read FOnChange write FOnChange;
@@ -239,6 +240,14 @@ procedure TMemo.CaretToLine(line: Integer);
 begin
   if Self.Handle <> nil then
     WidgetSet.MemoCaretToLine(Self, line);
+end;
+
+function TMemo.CaretLine: Integer;
+begin
+  if Self.Handle <> nil then
+    CaretLine := WidgetSet.MemoCaretLine(Self)
+  else
+    CaretLine := 0;
 end;
 
 { TListBox }

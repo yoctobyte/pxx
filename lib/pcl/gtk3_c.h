@@ -93,6 +93,8 @@ void gtk_text_buffer_get_iter_at_line(void* buffer, void* iter, int line_number)
 void gtk_text_buffer_place_cursor(void* buffer, void* iter);
 void* gtk_text_buffer_get_insert(void* buffer);
 void gtk_text_view_scroll_mark_onscreen(void* text_view, void* mark);
+void gtk_text_buffer_get_iter_at_mark(void* buffer, void* iter, void* mark);
+int gtk_text_iter_get_line(void* iter);
 
 // List Box (TListBox)
 void* gtk_list_box_new(void);

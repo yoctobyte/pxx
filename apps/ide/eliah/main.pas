@@ -30,7 +30,7 @@ program eliah;
 
 uses gtk3, controls, stdctrls, extctrls, graphics, forms, menus, sysutils,
      buffer, runner, docmodel, designer, lfmload, builder, project, perspective,
-     registry, typinfo;
+     registry, typinfo, selection;
 
 const
   W_WIN     = 1100;
@@ -61,6 +61,7 @@ type
     PlaceBtn: TButton;
     PlaceMode: Boolean;    { next designer click drops a new widget }
     Dsn: TDesigner;
+    Sel: TSelectionModel;  { shared selection — designer + editor stay in sync via it }
     DesignBox: TPaintBox;
     RootPaned: TPaned;     { fills the content area; the whole pane layout is its subtree }
     colLeft, midRight, colCenter, colRight, colInspector: TPaned;
@@ -97,6 +98,11 @@ type
     procedure ShowInspector(idx: Integer);
     procedure AddBagRow(d: TDocModel; idx: Integer; const nm: AnsiString);
     function BagRowShown(const nm: AnsiString): Boolean;
+    { selection link: route a selection through the shared model + sync both views }
+    procedure SelectNode(idx: Integer);
+    procedure EditorToSelection;           { designer -> editor: scroll to the node's code }
+    procedure SelectFromEditorLine(ln: Integer);  { editor -> designer: line's component }
+    procedure OnPickFromCaret(Sender: TObject);    { toolbar: select from the editor caret }
     procedure UpdateTitle;
     procedure OnPropClick(Sender: TObject);
     procedure OnValueKey(Sender: TControl; KeyCode: Integer);
@@ -251,6 +257,7 @@ begin
   d := TDocModel.Create;
   d.AddNode(wkForm, 'Form1', -1, 12, 12, 320, 240);
   Dsn.Doc := d;
+  if Sel <> nil then Sel.SetDoc(d);
   Dsn.Sel := -1;
   Dsn.EndDrag;
   designPath := 'untitled.lfm';
@@ -286,6 +293,7 @@ begin
   if LoadLfmText(b.Text, d) then
   begin
     Dsn.Doc := d;
+    if Sel <> nil then Sel.SetDoc(d);
     Dsn.Sel := -1;
     Dsn.EndDrag;
     designPath := path;
@@ -520,6 +528,59 @@ begin
     if FBagNames[k] = nm then begin BagRowShown := True; Exit; end;
 end;
 
+{ Route a selection through the shared model and refresh the designer + inspector.
+  Does NOT touch the editor — call EditorToSelection for the designer->editor jump
+  (kept separate so editor->designer doesn't loop back). }
+procedure THandler.SelectNode(idx: Integer);
+begin
+  if Sel <> nil then Sel.Select(idx);
+  if Dsn <> nil then
+  begin
+    if Sel <> nil then Dsn.Sel := Sel.Selected else Dsn.Sel := idx;
+    if DesignBox <> nil then DesignBox.Invalidate;
+    ShowInspector(Dsn.Sel);
+  end;
+end;
+
+{ designer -> editor: show the design's .lfm and scroll to the selected node's
+  `object <Name>` declaration. }
+procedure THandler.EditorToSelection;
+var nm: AnsiString; ln: Integer; eb: TIdeBuffer;
+begin
+  if (Dsn = nil) or (Dsn.Doc = nil) or (Dsn.Sel < 0) or (Editor = nil) then Exit;
+  nm := Dsn.Doc.NodeName(Dsn.Sel);
+  if nm = '' then Exit;
+  { make the editor show the design file (the one the designer renders) }
+  if (curFile <> designPath) and (designPath <> '') then
+  begin
+    eb := TIdeBuffer.Create;
+    if eb.LoadFromFile(designPath) then
+    begin
+      Editor.Text := eb.Text;
+      curFile := designPath;
+    end;
+  end;
+  ln := LfmFindObjectLine(Editor.Text, nm);
+  if ln >= 0 then Editor.CaretToLine(ln);
+end;
+
+{ editor -> designer: the component declared on editor line `ln` becomes the
+  selection (no editor scroll-back — the caret is already there). }
+procedure THandler.SelectFromEditorLine(ln: Integer);
+var nm: AnsiString; idx: Integer;
+begin
+  if (Dsn = nil) or (Dsn.Doc = nil) or (Editor = nil) then Exit;
+  nm := LfmObjectNameAt(Editor.Text, ln);
+  if nm = '' then Exit;
+  idx := Dsn.Doc.FindByName(nm);
+  if idx >= 0 then SelectNode(idx);
+end;
+
+procedure THandler.OnPickFromCaret(Sender: TObject);
+begin
+  if Editor <> nil then SelectFromEditorLine(Editor.CaretLine);
+end;
+
 procedure THandler.ShowInspector(idx: Integer);
 var
   d: TDocModel; j, cnt: Integer;
@@ -589,6 +650,7 @@ begin
   d := TDocModel.Create;
   ok := LoadLfmText(undoStack[undoCount], d);
   Dsn.Doc := d;
+  if Sel <> nil then Sel.SetDoc(d);
   Dsn.Sel := -1;
   Dsn.EndDrag;
   if DesignBox <> nil then DesignBox.Invalidate;
@@ -620,15 +682,14 @@ begin
     { drop a new widget of the palette kind, parented to the form (node 0) }
     PushUndo(pendingSnap);
     idx := Dsn.Doc.AddNode(k, Dsn.Doc.KindName(k), 0, X, Y, 80, 24);
-    Dsn.Sel := idx;
+    SelectNode(idx);
     OnPlaceToggle(nil);          { one-shot: leave place mode after dropping }
-    DesignBox.Invalidate;
-    ShowInspector(idx);
     Exit;
   end;
   idx := Dsn.BeginDrag(X, Y);
-  DesignBox.Invalidate;
-  ShowInspector(idx);
+  { route through the shared selection model + jump the editor to the node's code }
+  SelectNode(idx);
+  EditorToSelection;
 end;
 
 procedure THandler.OnDesignMouseMove(Sender: TControl; Button, X, Y: Integer);
@@ -867,6 +928,7 @@ begin
   ValueEdit.OnKeyDown := @H.OnValueKey;
 
   H.Dsn := Dsn;
+  H.Sel := TSelectionModel.Create(Dsn.Doc);
   H.DesignBox := DesignBox;
   H.Props := Props;
   H.ValueEdit := ValueEdit;
@@ -910,6 +972,7 @@ begin
   btn := MkButton('Del',     552); btn.OnClick := @H.OnDelete;
   btn := MkButton('New',     638); btn.OnClick := @H.OnNew;
   btn := MkButton('Undo',    724); btn.OnClick := @H.OnUndo;
+  btn := MkButton('Link',    810); btn.OnClick := @H.OnPickFromCaret;
 
   { palette: pick a widget kind, hit Place, then click the designer to drop it.
     Registry-driven: every registered visual component (descends from TControl)
@@ -1185,6 +1248,21 @@ begin
     H.FEditRow := H.FBagBase; H.ValueEdit.Text := '2000'; H.ApplyEdit;
     if H.Dsn.Doc.NodePropByName(5, 'Interval') <> '2000' then
       begin writeln('SMOKE FAIL: Interval bag edit not applied'); Halt(1); end;
+
+    { selection link (M5): designer <-> editor through the shared model }
+    H.SelectNode(H.Dsn.Doc.FindByName('BtnOk'));
+    if H.Sel.SelectedName <> 'BtnOk' then
+      begin writeln('SMOKE FAIL: shared selection model name mismatch'); Halt(1); end;
+    H.EditorToSelection;                 { designer -> editor: load the .lfm + scroll }
+    if H.curFile <> H.designPath then
+      begin writeln('SMOKE FAIL: editor did not load the design file'); Halt(1); end;
+    centerW := LfmFindObjectLine(H.Editor.Text, 'BtnOk');
+    if centerW < 0 then
+      begin writeln('SMOKE FAIL: BtnOk object line not in editor'); Halt(1); end;
+    H.Sel.Clear; H.Dsn.Sel := -1;
+    H.SelectFromEditorLine(centerW);     { editor -> designer: line maps to selection }
+    if H.Dsn.Sel <> H.Dsn.Doc.FindByName('BtnOk') then
+      begin writeln('SMOKE FAIL: editor->designer selection failed'); Halt(1); end;
 
     { save round-trip: serialize the docmodel to a temp file (not the repo
       sample), reload it, node count must survive. Same path OnSave uses. }
