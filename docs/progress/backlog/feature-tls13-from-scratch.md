@@ -42,7 +42,37 @@ build.
      `setsockopt(TCP_ULP,"tls")` + `setsockopt(SOL_TLS, TLS_TX/TLS_RX,
      crypto_info)`; the kernel then encrypts/decrypts bulk data at line rate and
      `read`/`write` look plaintext. Needs `PalSetSockOpt` + the `SOL_TLS`
-     crypto-info structs. The perf path; Linux/x86-64 only.
+     crypto-info structs. The perf path; **per-platform behind PAL** (Linux and
+     FreeBSD have kTLS with *different* APIs; OpenBSD/NetBSD/macOS/ESP do not —
+     see the platform table below). Never the baseline.
+
+## Platform abstraction (get the seam at the right level)
+
+The protocol is portable; the crypto and the offloads are not. Three layers:
+
+- **TLS protocol** (handshake state machine, key schedule, transcript hash,
+  ASN.1/X.509, alerts) — **pure portable Pascal, identical on every target.**
+- **Crypto primitives** (AES block, SHA-2 compression, bignum modexp, AEAD) —
+  behind a **thin PAL-swappable seam** so a target can substitute hardware:
+  software Pascal on Linux/BSD; **ESP32 has HW AES/SHA/RSA accelerators** (MMIO
+  via the PAL ESP backend, and ESP-IDF mbedTLS) — don't run software AES there.
+  Every implementation is held to the same RFC/NIST test vectors.
+- **Record layer** — pluggable. **Portable Pascal AEAD is the baseline (works on
+  EVERY target).** kTLS is an *optional per-platform offload*, not the baseline.
+
+### kTLS availability (offload only — the handshake is always ours)
+
+| OS | kTLS | API |
+|----|------|-----|
+| Linux | yes (TX 4.13+, RX 4.17+) | `setsockopt(TCP_ULP,"tls")` + `SOL_TLS` crypto_info |
+| FreeBSD | yes (pioneered) | `setsockopt(TCP_TXTLS_ENABLE,...)` — **different** API/structs |
+| OpenBSD / NetBSD / macOS | no | (userspace TLS) |
+| ESP32 | no | FreeRTOS/lwIP; use HW accel + Pascal record layer |
+
+So kTLS glue is **per-platform behind PAL** (separate Linux and FreeBSD backends),
+absent elsewhere — which is exactly why the Pascal record layer must be the
+baseline. The from-scratch TLS is therefore never wasted: the SW path always
+works; kTLS/HW-accel plug in where present.
 
 ## Target ciphersuite (TLS 1.3 only — far simpler than 1.2)
 
@@ -72,7 +102,9 @@ HTTP client); server-side later if wanted.
    (file syscalls — fine).
 6. **TLS 1.3 record + handshake state machine**; transcript hash; key schedule;
    alerts.
-7. **kTLS** glue: `PalSetSockOpt` + `SOL_TLS` crypto-info (optional perf path).
+7. **Crypto-primitive PAL seam** so HW accel can substitute SW (ESP32 AES/SHA/RSA
+   peripherals); + **kTLS** glue `PalSetSockOpt` per-platform (Linux `SOL_TLS`,
+   FreeBSD `TCP_TXTLS_ENABLE`) — optional offload, absent on OpenBSD/NetBSD/macOS/ESP.
 8. **Integration:** `https://` in `http` (its `isTls` branch is already stubbed
    to refuse); async path too.
 
