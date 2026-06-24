@@ -1,8 +1,8 @@
 # feature: PCL components adopt the `Create(AOwner)` virtual-constructor shape
 
 - **Type:** feature (Track B — lib/pcl component model)
-- **Status:** unfinished — shape migrated (green); streamer adoption blocked on
-  `urgent/bug-metaclass-new-getclass-vmt`
+- **Status:** DONE 2026-06-24 (commit e71cb1c) — shape migrated + streamer adopts
+  the metaclass virtual ctor; the four constructor-skip stopgaps are reverted.
 - **Opened:** 2026-06-23
 
 > **Unblocked 2026-06-23:** the compiler half is DONE
@@ -83,3 +83,19 @@ Compiler gaps also hit (clean single-ctor path used instead, no workaround):
 default param on a constructor and overloaded constructors + `inherited` both
 fail to parse — noted for a future backlog ticket if the parameterless-convenience
 shape is ever wanted.
+
+## Progress 2026-06-24 — streamer adoption DONE
+
+`done/bug-metaclass-new-getclass-vmt` (v45) cleared the block. `TReader.ReadChildren`
+now constructs each child via `TComponentClass(childCls).Create(parent)` (Owner =
+parent), so streamed components run their real virtual ctors. All four
+constructor-skip stopgaps reverted:
+- TPaintBox.CreateHandle FCanvas=nil guard removed (ctor sets Canvas);
+- TListBox/TComboBox FItems grow-on-demand kept only as plain robustness past the
+  ctor's initial 256 reservation (stopgap rationale comment dropped);
+- typinfo.CreateInstance STOPGAP CONTRACT note rewritten — the raw allocator now
+  serves only the root-form load path (TApplication.CreateForm) + RTTI tests that
+  deliberately skip the ctor.
+
+Gates: garin 116/116, gui_suite OK (incl test_pcl_lfm streaming), eliah
+build+smoke+screenshot green. Commit e71cb1c.

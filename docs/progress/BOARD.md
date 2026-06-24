@@ -15,12 +15,11 @@ _none_
 | feature-eliah-ide | B | feature | Eliah / Ilja — single-window IDE (GUI + TUI) | — |
 | feature-eliah-m0-window | B | feature | Eliah M0 — single tiled GTK3 window | — |
 
-## unfinished (2)
+## unfinished (1)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
 | feature-eliah-pane-collapse | B | feature | feature: Eliah pane collapse/restore + ratio memory | feature-eliah-layout-tree |
-| feature-pcl-component-ctor-owner | B | feature | feature: PCL components adopt the `Create(AOwner)` virtual-constructor shape | — |
 
 ## blocked (1)
 
@@ -28,12 +27,11 @@ _none_
 | --- | --- | --- | --- | --- |
 | feature-c-runtime-library | B | feature | C runtime/library layer (`lib/crtl`) plus direct C-library packages | feature-c-source-frontend |
 
-## backlog (47)
+## backlog (46)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
 | bug-argstr-managed-dest-cross | A | bug | bug: ArgStr(i, s) into a managed-string var rejected/broken on cross targets | — |
-| bug-shl-signed-integer-width | A | bug | bug: `shl` on a 32-bit Integer does not wrap at 32-bit width | — |
 | bug-stderr-not-fd2 | B | bug | `writeln(StdErr, ...)` goes to stdout — StdErr not connected to fd 2 | — |
 | bug-widgetset-virtual-arg-corruption | A | bug | bug: new virtual method on TWidgetSet miscompiles its object argument | — |
 | chore-inc-to-units | A | chore | `.inc` → real `.pas` units refactor | — |
@@ -114,7 +112,7 @@ _none_
 | feature-mimic-fpc | B | feature | `mimic FPC` compatibility mode | — |
 | feature-string-model-tyfixedstring | B | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (240)
+## done (242)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -187,6 +185,7 @@ _none_
 | bug-setlength-dynarray-function-result | A | bug | SetLength rejects dynamic-array function result | — |
 | bug-setlength-ir-string-in-complex-method | A | bug | `SetLength expects a string variable in IR codegen` on a valid array SetLength | — |
 | bug-setlength-nested-dynarray-field | A | bug | SetLength on a nested sub-array slot through a record field | — |
+| bug-shl-signed-integer-width | A | bug | bug: `shl` on a 32-bit Integer does not wrap at 32-bit width | — |
 | bug-shr-signed-integer-width | A | bug | `shr` on a negative 32-bit Integer shifts at 64-bit width (miscompile) | — |
 | bug-stack-corruption-inline-string-concat | A | bug | Stack frame corruption on inline string concatenation assignments | — |
 | bug-string-type-size-mismatch | A | bug | String type size mismatch in TypeSize vs codegen copies | — |
@@ -312,6 +311,7 @@ _none_
 | feature-pal-file-stat-metadata | B | feature | PAL file stat metadata | — |
 | feature-pal-network-datagram-poll-errno | B | feature | PAL network: datagrams, readiness polling, and exact errno semantics | — |
 | feature-parallel-tracks-stable-compiler | A | feature | Parallel tracks: pin libraries/demos to a "stable" compiler | — |
+| feature-pcl-component-ctor-owner | B | feature | feature: PCL components adopt the `Create(AOwner)` virtual-constructor shape | — |
 | feature-pcl-input-events | B | feature | PCL: mouse-coordinate + keyboard input events | — |
 | feature-pcl-opengl-glarea-demo | B | feature | PCL OpenGL GLArea demo | — |
 | feature-platform-abstraction-layer | B | feature | Platform Abstraction Layer (PAL): per-platform RTL port at one seam | — |
@@ -370,7 +370,6 @@ _none_
 ## Ready (no unmet blocker)
 
 - [A] bug-argstr-managed-dest-cross
-- [A] bug-shl-signed-integer-width
 - [B] bug-stderr-not-fd2
 - [A] bug-widgetset-virtual-arg-corruption
 - [A] chore-inc-to-units
