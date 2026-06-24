@@ -29,7 +29,7 @@ program eliah;
   a selection outline + the node's fields in the object-inspector pane below. }
 
 uses gtk3, controls, stdctrls, extctrls, graphics, forms, menus, sysutils,
-     buffer, runner, docmodel, designer, lfmload, builder, project;
+     buffer, runner, docmodel, designer, lfmload, builder, project, perspective;
 
 const
   W_WIN     = 1100;
@@ -60,6 +60,7 @@ type
     DesignBox: TPaintBox;
     RootPaned: TPaned;     { fills the content area; the whole pane layout is its subtree }
     colLeft, midRight, colCenter, colRight, colInspector: TPaned;
+    Persp: TPerspective;   { current layout: column visibility + priority compacting }
     panedSeeded: Boolean;  { initial handle positions applied on first allocation }
     startPersp: AnsiString; { perspective applied once after the first allocation }
     Win: TForm;
@@ -99,6 +100,7 @@ type
     procedure OnToggleOutput(Sender: TObject);
     procedure OnToggleRight(Sender: TObject);
     procedure SetPerspective(const name: AnsiString);
+    procedure ApplyLayout(w: Integer);
     procedure OnPerspCode(Sender: TObject);
     procedure OnPerspDesign(Sender: TObject);
     procedure OnPerspSplit(Sender: TObject);
@@ -333,40 +335,77 @@ begin
   if DesignBox <> nil then DesignBox.Invalidate;
 end;
 
-{ View menu: collapse/restore whole panels. Each toggles a splitter to (near)
-  zero, remembering the prior handle position so a second click restores it. }
-procedure THandler.OnToggleLeft(Sender: TObject);
+{ Set a paned to one of three states without flicker: 0=show both, 1=collapse
+  pane1, 2=collapse pane2. Idempotent (no-op if already in that state). }
+procedure SetPanedVis(p: TPaned; show1, show2: Boolean);
+var desired: Integer;
 begin
-  if RootPaned <> nil then RootPaned.Toggle(1, 0);    { tree + errors column }
+  if p = nil then Exit;
+  if show1 and show2 then desired := 0
+  else if show1 then desired := 2          { second pane hidden }
+  else desired := 1;                        { first pane hidden (or both: keep 1) }
+  if p.CollapsedPane = desired then Exit;
+  if desired = 0 then p.Restore
+  else p.Collapse(desired, 0);
 end;
 
-procedure THandler.OnToggleOutput(Sender: TObject);
+{ The whole horizontal layout is the perspective model applied to the splitter
+  tree. RootPaned = [ left | midRight ]; midRight = [ center | right ]. Compact
+  for the current width (auto-collapse the lowest-priority column when the
+  minimums don't fit), then map each column's shown-state onto its splitter.
+  Pure layout — no mode branching. }
+procedure THandler.ApplyLayout(w: Integer);
+var sLeft, sCenter, sRight: Boolean;
 begin
-  if colCenter <> nil then colCenter.Toggle(2, 0);    { build/run output }
+  if (Persp = nil) or (RootPaned = nil) or (midRight = nil) then Exit;
+  Persp.Compact(w);
+  sLeft   := Persp.IsShown(Persp.IndexOf('left'));
+  sCenter := Persp.IsShown(Persp.IndexOf('center'));
+  sRight  := Persp.IsShown(Persp.IndexOf('right'));
+  SetPanedVis(midRight, sCenter, sRight);
+  SetPanedVis(RootPaned, sLeft, True);     { the right side is always the midRight container }
 end;
 
-procedure THandler.OnToggleRight(Sender: TObject);
-begin
-  if midRight <> nil then midRight.Toggle(2, 0);      { designer + inspector }
-end;
-
-{ Perspectives are pure layout: each is a collapse configuration of the same
-  pane tree (no mode branching in logic). midRight = [ center(editor/output) |
-  right(designer/inspector) ]:
-    code   -> hide the right column   (editor focus)
-    design -> hide the center column  (designer focus)
-    split  -> show both               (large-monitor / full) }
+{ Perspectives set per-column visibility choices, then re-apply the layout.
+    code   -> hide right   (editor focus)
+    design -> hide center  (designer focus)
+    split  -> show all     (large monitor / full) }
 procedure THandler.SetPerspective(const name: AnsiString);
 begin
-  if midRight = nil then Exit;
-  if name = 'code' then midRight.Collapse(2, 0)
-  else if name = 'design' then midRight.Collapse(1, 0)
-  else midRight.Restore;                               { split / default }
+  if Persp = nil then Exit;
+  Persp.SetVisible(Persp.IndexOf('left'),   True);
+  Persp.SetVisible(Persp.IndexOf('center'), name <> 'design');
+  Persp.SetVisible(Persp.IndexOf('right'),  name <> 'code');
+  if lastW > 0 then ApplyLayout(lastW);
 end;
 
 procedure THandler.OnPerspCode(Sender: TObject);   begin SetPerspective('code');   end;
 procedure THandler.OnPerspDesign(Sender: TObject); begin SetPerspective('design'); end;
 procedure THandler.OnPerspSplit(Sender: TObject);  begin SetPerspective('split');  end;
+
+{ View-menu toggles flip a column's visibility choice, then re-apply. }
+procedure THandler.OnToggleLeft(Sender: TObject);
+var i: Integer;
+begin
+  if Persp = nil then Exit;
+  i := Persp.IndexOf('left');
+  Persp.SetVisible(i, not Persp.PaneVisible(i));
+  if lastW > 0 then ApplyLayout(lastW);
+end;
+
+procedure THandler.OnToggleRight(Sender: TObject);
+var i: Integer;
+begin
+  if Persp = nil then Exit;
+  i := Persp.IndexOf('right');
+  Persp.SetVisible(i, not Persp.PaneVisible(i));
+  if lastW > 0 then ApplyLayout(lastW);
+end;
+
+procedure THandler.OnToggleOutput(Sender: TObject);
+begin
+  if colCenter <> nil then colCenter.Toggle(2, 0);    { vertical sub-pane: build/run output }
+end;
 
 procedure THandler.OnFormResize(Sender: TControl; w, h: Integer);
 var contentH: Integer;
@@ -391,8 +430,12 @@ begin
     colInspector.Position := H_BOTTOM - 28;       { props above value edit }
     panedSeeded := True;
     { apply a startup perspective once the panes have a real allocation }
-    if startPersp <> '' then SetPerspective(startPersp);
-  end;
+    if startPersp <> '' then SetPerspective(startPersp)
+    else ApplyLayout(w);
+  end
+  else
+    { later resizes: re-run priority compacting (auto-collapse on shrink) }
+    ApplyLayout(w);
 end;
 
 { serialize the designer docmodel back to the open design file (round-trips the
@@ -643,6 +686,14 @@ begin
   H.colRight := colRight; H.colInspector := colInspector;
   H.panedSeeded := False;
 
+  { the three horizontal columns + their compacting priorities (higher survives a
+    shrink longer). center (editor) is most important, right (designer) least. }
+  H.Persp := TPerspective.Create;
+  H.Persp.SetName('Split');
+  H.Persp.AddPane('left',   W_TREE,  50, True);
+  H.Persp.AddPane('center', 320,     90, True);
+  H.Persp.AddPane('right',  W_RIGHT, 40, True);
+
   H.Tree := TListBox.Create(nil);
   H.Tree.Parent := colLeft;                          { pane 1 of colLeft }
   H.Tree.OnClick := @H.OnTreeClick;
@@ -797,20 +848,27 @@ begin
     if H.RootPaned.Height < 160 then begin writeln('SMOKE FAIL: reflow did not clamp height'); Halt(1); end;
     H.Relayout(W_WIN, H_WIN);   { restore }
 
-    { View-menu collapse/restore: toggling the left panel collapses RootPaned's
-      pane 1 (position-only, allocation-independent) and toggling again restores. }
-    H.OnToggleLeft(nil);
+    { headless has no real allocation, so drive layout with an explicit width.
+      View-menu toggle flips the left column's visibility choice. }
+    H.OnToggleLeft(nil); H.ApplyLayout(W_WIN);
     if H.RootPaned.CollapsedPane <> 1 then begin writeln('SMOKE FAIL: left panel did not collapse'); Halt(1); end;
-    H.OnToggleLeft(nil);
+    H.OnToggleLeft(nil); H.ApplyLayout(W_WIN);
     if H.RootPaned.CollapsedPane <> 0 then begin writeln('SMOKE FAIL: left panel did not restore'); Halt(1); end;
 
-    { perspectives are collapse configs of midRight = [center | right] }
-    H.SetPerspective('code');
+    { perspectives are visibility configs of midRight = [center | right] }
+    H.SetPerspective('code'); H.ApplyLayout(W_WIN);
     if H.midRight.CollapsedPane <> 2 then begin writeln('SMOKE FAIL: code persp did not hide right'); Halt(1); end;
-    H.SetPerspective('design');
+    H.SetPerspective('design'); H.ApplyLayout(W_WIN);
     if H.midRight.CollapsedPane <> 1 then begin writeln('SMOKE FAIL: design persp did not hide center'); Halt(1); end;
-    H.SetPerspective('split');
+    H.SetPerspective('split'); H.ApplyLayout(W_WIN);
     if H.midRight.CollapsedPane <> 0 then begin writeln('SMOKE FAIL: split persp did not show both'); Halt(1); end;
+
+    { priority compacting: a width below sum(mins) auto-collapses the lowest
+      priority column (right=designer), even in the split perspective. }
+    H.SetPerspective('split'); H.ApplyLayout(400);
+    if H.midRight.CollapsedPane <> 2 then begin writeln('SMOKE FAIL: compacting did not drop right'); Halt(1); end;
+    H.ApplyLayout(W_WIN);
+    if H.midRight.CollapsedPane <> 0 then begin writeln('SMOKE FAIL: widening did not restore right'); Halt(1); end;
 
     { open any .lfm from the tree: clicking a .lfm reloads the designer + retargets Save }
     H.Dsn.Doc := TDocModel.Create;   { wipe to prove OpenDesign reloads }

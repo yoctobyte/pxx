@@ -6,7 +6,7 @@ program bochan;
   verdict. Links NO GUI/TUI face (no lib/pcl) — building this at all is the proof
   that garin is render-agnostic. }
 
-uses buffer, eduth, docmodel, lfmload, builder, project;
+uses buffer, eduth, docmodel, lfmload, builder, project, perspective;
 
 var
   e: TEduth;
@@ -20,6 +20,8 @@ var
   proj, rproj: TProject;
   args: TStrArray;
   projTxt: AnsiString;
+  persp, rpersp: TPerspective;
+  perspTxt: AnsiString;
 
 begin
   EduthInit(e);
@@ -241,6 +243,58 @@ begin
   CheckStr(e, 'file rt name', rproj.Name, 'Demo');
   CheckInt(e, 'file rt path count', rproj.UnitPathCount, 2);
   CheckInt(e, 'file rt file count', rproj.FileCount, 2);
+
+  { scenario 11: perspective model — visibility + priority compacting + round-trip }
+  writeln('-- perspective.TPerspective --');
+  persp := TPerspective.Create;
+  persp.SetName('Split');
+  { three columns along the horizontal axis: left | center | right }
+  persp.AddPane('left',   120, 80, True);
+  persp.AddPane('center', 200, 90, True);   { highest priority — editor }
+  persp.AddPane('right',  160, 40, True);   { lowest priority — designer }
+  CheckInt(e, 'pane count', persp.PaneCount, 3);
+  CheckInt(e, 'center index', persp.IndexOf('center'), 1);
+  CheckInt(e, 'right min', persp.PaneMin(2), 160);
+
+  { plenty of width -> all three shown }
+  persp.Compact(1000);
+  CheckTrue(e, 'wide: left shown', persp.IsShown(0));
+  CheckTrue(e, 'wide: center shown', persp.IsShown(1));
+  CheckTrue(e, 'wide: right shown', persp.IsShown(2));
+
+  { width below sum(mins=480) but >= 320 -> drop lowest priority (right) }
+  persp.Compact(400);
+  CheckTrue(e, 'tight: left shown', persp.IsShown(0));
+  CheckTrue(e, 'tight: center shown', persp.IsShown(1));
+  CheckTrue(e, 'tight: right collapsed', not persp.IsShown(2));
+  CheckTrue(e, 'tight: right forced (not hidden by choice)', persp.IsForced(2));
+
+  { tighter: below left+center mins (320) -> also drop left (next lowest, 80) }
+  persp.Compact(250);
+  CheckTrue(e, 'tighter: left collapsed', not persp.IsShown(0));
+  CheckTrue(e, 'tighter: center survives (highest pri)', persp.IsShown(1));
+  CheckTrue(e, 'tighter: right collapsed', not persp.IsShown(2));
+
+  { a hidden-by-choice pane stays hidden but is not "forced" }
+  persp.SetVisible(2, False);
+  persp.Compact(1000);
+  CheckTrue(e, 'choice-hidden: right not shown', not persp.IsShown(2));
+  CheckTrue(e, 'choice-hidden: right not forced', not persp.IsForced(2));
+  CheckTrue(e, 'choice-hidden: center still shown', persp.IsShown(1));
+
+  { text round-trip }
+  writeln('-- perspective save/load round-trip --');
+  persp.SetVisible(2, True);
+  perspTxt := persp.SaveToText;
+  CheckTrue(e, 'persp text produced', Length(perspTxt) > 0);
+  rpersp := TPerspective.Create;
+  CheckTrue(e, 'persp load', rpersp.LoadFromText(perspTxt));
+  CheckStr(e, 'rt persp name', rpersp.Name, 'Split');
+  CheckInt(e, 'rt pane count', rpersp.PaneCount, 3);
+  CheckStr(e, 'rt pane 1 id', rpersp.PaneId(1), 'center');
+  CheckInt(e, 'rt pane 1 min', rpersp.PaneMin(1), 200);
+  CheckInt(e, 'rt pane 2 priority', rpersp.PanePriority(2), 40);
+  CheckTrue(e, 'rt pane 0 visible', rpersp.PaneVisible(0));
 
   Halt(EduthReport(e));
 end.
