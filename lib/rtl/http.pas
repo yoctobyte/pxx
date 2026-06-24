@@ -12,7 +12,7 @@ unit http;
 
 interface
 
-uses net, asyncnet, dns, dns_config, dns_wire_core, sysutils;
+uses net, asyncnet, dns, dns_async, dns_config, dns_wire_core, sysutils;
 
 type
   THttpResponse = record
@@ -236,6 +236,17 @@ begin
   Result := HttpRequest('POST', url, hdr, body);
 end;
 
+function HttpResolveAsync(const host: AnsiString; var ip: LongWord): Boolean;
+var ips: TDnsIpv4Array; cnt: Integer;
+begin
+  cnt := 0;
+  if DnsResolveHostAsync(host, ips, cnt) = 0 then
+  begin
+    if cnt > 0 then begin ip := ips[0]; Result := True; Exit; end;
+  end;
+  Result := False;
+end;
+
 function HttpRequestAsync(const method, url, extraHeaders, body: AnsiString): THttpResponse;
 var
   host, path: AnsiString;
@@ -254,8 +265,7 @@ begin
 
   if not HttpParseUrl(url, host, port, path, isTls) then Exit;
   if isTls then Exit;                          { no TLS layer yet }
-  { async DNS not yet wired — dotted-quad only on this path. }
-  if not DnsParseIpv4(host, 1, Length(host), ip) then Exit;
+  if not HttpResolveAsync(host, ip) then Exit; { dotted-quad or hostname, async }
 
   fd := TcpConnectAddr(ip, port);              { yields until connected }
   if fd < 0 then Exit;

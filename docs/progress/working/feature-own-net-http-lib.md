@@ -36,14 +36,17 @@ Foundation already present and reused: `net.pas` (blocking TCP/UDP + timeouts),
   coroutine (`HttpGetAsync`) on ONE thread, both reactor-driven via `RunUntilDone`,
   real loopback round-trip (status 200 + body). The proof-of-concept for async
   sockets that a blocking client cannot do single-threaded.
-- Caveat: async DNS not yet wired — `HttpGetAsync` is dotted-quad only (a
-  hostname fails); blocking `HttpGet` resolves names. True async DNS is a slice.
+- **Async DNS (landed)** — `lib/rtl/dns_async.pas`: `DnsResolveHostAsync` /
+  `DnsQueryAAsync` resolve over UDP on the reactor (yield on the socket), same
+  wire format as the blocking resolver; resolv.conf/hosts read synchronously.
+  `HttpGetAsync` now takes hostnames (was dotted-quad only). Smoke
+  `test/lib_dns_async` — a loopback UDP DNS-server coroutine answers a canned A
+  record, client resolves through the reactor (server + client, one thread).
+  Pending: TC→TCP retry; multi-nameserver failover on the async path.
 
 ## Roadmap (next slices)
 
-1. **Async DNS** — resolve over UDP on the reactor so `HttpGetAsync` takes
-   hostnames (today dotted-quad only).
-2. **Response framing breadth** — `Content-Length` bodies and chunked transfer
+1. **Response framing breadth** — `Content-Length` bodies and chunked transfer
    encoding (today: read-to-EOF with `Connection: close`); keep-alive.
 4. **TLS** — `https://` is parsed and refused (`isTls`); needs a TLS layer
    (separate unit; ties into [[feature-real-dynlib-loader]] only if we shell out
