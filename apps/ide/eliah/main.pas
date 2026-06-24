@@ -103,6 +103,7 @@ type
     procedure EditorToSelection;           { designer -> editor: scroll to the node's code }
     procedure SelectFromEditorLine(ln: Integer);  { editor -> designer: line's component }
     procedure OnPickFromCaret(Sender: TObject);    { toolbar: select from the editor caret }
+    procedure OnWireOnClick(Sender: TObject);      { command: wire the selection's OnClick }
     procedure UpdateTitle;
     procedure OnPropClick(Sender: TObject);
     procedure OnValueKey(Sender: TControl; KeyCode: Integer);
@@ -581,6 +582,28 @@ begin
   if Editor <> nil then SelectFromEditorLine(Editor.CaretLine);
 end;
 
+{ command: wire the selected component's OnClick — assign a handler (round-trips
+  in the .lfm, shows in the inspector) and generate its stub in the code editor.
+  One command on the shared selection; a menu/shortcut/AI source is interchangeable. }
+procedure THandler.OnWireOnClick(Sender: TObject);
+var nm, hn: AnsiString;
+begin
+  if (Dsn = nil) or (Dsn.Doc = nil) or (Dsn.Sel < 0) then Exit;
+  nm := Dsn.Doc.NodeName(Dsn.Sel);
+  if nm = '' then Exit;
+  hn := EventHandlerName(nm, 'Click');
+  PushUndo(SaveLfmText(Dsn.Doc));
+  Dsn.Doc.SetNodeProp(Dsn.Sel, 'OnClick', hn);     { assignment }
+  if (Editor <> nil) and not CodeHasHandler(Editor.Text, hn) then
+  begin
+    Editor.Text := Editor.Text + #10 + EventHandlerStub(hn);   { stub }
+    Editor.CaretToLine(100000);                    { scroll to the new stub (gtk clamps) }
+  end;
+  ShowInspector(Dsn.Sel);
+  if DesignBox <> nil then DesignBox.Invalidate;
+  Output.Text := '$ wired ' + nm + '.OnClick -> ' + hn;
+end;
+
 procedure THandler.ShowInspector(idx: Integer);
 var
   d: TDocModel; j, cnt: Integer;
@@ -973,6 +996,7 @@ begin
   btn := MkButton('New',     638); btn.OnClick := @H.OnNew;
   btn := MkButton('Undo',    724); btn.OnClick := @H.OnUndo;
   btn := MkButton('Link',    810); btn.OnClick := @H.OnPickFromCaret;
+  btn := MkButton('OnClick', 896); btn.OnClick := @H.OnWireOnClick;
 
   { palette: pick a widget kind, hit Place, then click the designer to drop it.
     Registry-driven: every registered visual component (descends from TControl)
@@ -1263,6 +1287,18 @@ begin
     H.SelectFromEditorLine(centerW);     { editor -> designer: line maps to selection }
     if H.Dsn.Sel <> H.Dsn.Doc.FindByName('BtnOk') then
       begin writeln('SMOKE FAIL: editor->designer selection failed'); Halt(1); end;
+
+    { command surface: wire OnClick on the selection -> assign handler + gen stub }
+    H.OnWireOnClick(nil);
+    if H.Dsn.Doc.NodePropByName(H.Dsn.Sel, 'OnClick') <> 'BtnOkClick' then
+      begin writeln('SMOKE FAIL: OnClick not assigned'); Halt(1); end;
+    if not CodeHasHandler(H.Editor.Text, 'BtnOkClick') then
+      begin writeln('SMOKE FAIL: handler stub not generated'); Halt(1); end;
+    { idempotent: wiring again keeps the same editor text (no duplicate stub) }
+    centerH := Length(H.Editor.Text);
+    H.OnWireOnClick(nil);
+    if Length(H.Editor.Text) <> centerH then
+      begin writeln('SMOKE FAIL: re-wire duplicated the stub'); Halt(1); end;
 
     { save round-trip: serialize the docmodel to a temp file (not the repo
       sample), reload it, node count must survive. Same path OnSave uses. }

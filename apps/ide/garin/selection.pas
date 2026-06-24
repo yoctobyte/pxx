@@ -39,6 +39,19 @@ function LfmFindObjectLine(const text, AName: AnsiString): Integer;
   Name; otherwise ''. The inverse of LfmFindObjectLine for one line. }
 function LfmObjectNameAt(const text: AnsiString; LineIdx: Integer): AnsiString;
 
+{ ---- command surface (wire an event handler) ---- }
+
+{ Conventional handler name for a component event: <CompName><Event>, e.g.
+  ('BtnOk','Click') -> 'BtnOkClick'. }
+function EventHandlerName(const CompName, Event: AnsiString): AnsiString;
+
+{ A bare Pascal handler stub for HandlerName. }
+function EventHandlerStub(const HandlerName: AnsiString): AnsiString;
+
+{ True if code already declares `procedure <HandlerName>(` (any whitespace run
+  after `procedure`). Avoids appending a duplicate stub. }
+function CodeHasHandler(const code, HandlerName: AnsiString): Boolean;
+
 implementation
 
 constructor TSelectionModel.Create(ADoc: TDocModel);
@@ -146,6 +159,53 @@ end;
 function LfmObjectNameAt(const text: AnsiString; LineIdx: Integer): AnsiString;
 begin
   LfmObjectNameAt := ObjectNameOfLine(NthLine(text, LineIdx));
+end;
+
+{ first index >= from where sub occurs in s (1-based), or 0 }
+function FindFrom(const s, sub: AnsiString; from: Integer): Integer;
+var i, j, n, m: Integer; ok: Boolean;
+begin
+  FindFrom := 0;
+  n := Length(s); m := Length(sub);
+  if (m = 0) or (m > n) then Exit;
+  for i := from to n - m + 1 do
+  begin
+    ok := True;
+    for j := 1 to m do
+      if s[i + j - 1] <> sub[j] then begin ok := False; Break; end;
+    if ok then begin FindFrom := i; Exit; end;
+  end;
+end;
+
+function EventHandlerName(const CompName, Event: AnsiString): AnsiString;
+begin
+  EventHandlerName := CompName + Event;
+end;
+
+function EventHandlerStub(const HandlerName: AnsiString): AnsiString;
+begin
+  EventHandlerStub :=
+    'procedure ' + HandlerName + '(Sender: TObject);' + #10 +
+    'begin' + #10 +
+    '' + #10 +
+    'end;' + #10;
+end;
+
+function CodeHasHandler(const code, HandlerName: AnsiString): Boolean;
+var p, n: Integer;
+begin
+  CodeHasHandler := False;
+  if HandlerName = '' then Exit;
+  p := 1;
+  repeat
+    p := FindFrom(code, 'procedure ', p);
+    if p = 0 then Exit;
+    n := p + Length('procedure ');
+    while (n <= Length(code)) and ((code[n] = ' ') or (code[n] = #9)) do Inc(n);
+    if FindFrom(code, HandlerName + '(', n) = n then
+    begin CodeHasHandler := True; Exit; end;
+    p := p + 1;
+  until False;
 end;
 
 function LfmFindObjectLine(const text, AName: AnsiString): Integer;

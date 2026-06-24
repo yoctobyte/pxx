@@ -434,6 +434,17 @@ begin
     CheckTrue(e, 'BtnOk has an object line', selLn >= 0);
     CheckStr(e, 'name at that line round-trips', LfmObjectNameAt(selTxt, selLn), 'BtnOk');
     CheckInt(e, 'missing name -> no line', LfmFindObjectLine(selTxt, 'Nope'), -1);
+
+    { wire-event command helpers }
+    CheckStr(e, 'handler name', EventHandlerName('BtnOk', 'Click'), 'BtnOkClick');
+    selTxt := EventHandlerStub('BtnOkClick');
+    CheckTrue(e, 'stub declares the proc',
+      CodeHasHandler(selTxt, 'BtnOkClick'));
+    CheckTrue(e, 'stub is a procedure',
+      LfmFindObjectLine(selTxt, 'x') = -1);   { stub has no object lines }
+    CheckTrue(e, 'no handler in empty code', not CodeHasHandler('', 'BtnOkClick'));
+    CheckTrue(e, 'unrelated proc is not the handler',
+      not CodeHasHandler('procedure Foo(Sender: TObject); begin end;', 'BtnOkClick'));
   end
   else
     CheckTrue(e, 'sel sample.lfm present', False);
