@@ -75,5 +75,13 @@ begin
   if HSplit.CollapsedPane <> 0 then begin writeln('FAIL: toggle did not restore'); Halt(1); end;
   if HSplit.ActualPosition <> 150 then begin writeln('FAIL: toggle restore pos wrong'); Halt(1); end;
 
-  writeln('PASS: TPaned splits, packs two children each, position + collapse/restore');
+  { full collapse (strip = 0) hides the pane's child entirely, restore shows it.
+    Pane 2 path exercises gtk_paned_get_child2 + gtk_widget_hide/show. }
+  HSplit.Collapse(2, 0);
+  if HSplit.CollapsedPane <> 2 then begin writeln('FAIL: pane2 full-collapse not marked'); Halt(1); end;
+  HSplit.Restore;
+  if HSplit.CollapsedPane <> 0 then begin writeln('FAIL: pane2 restore not marked'); Halt(1); end;
+  if HSplit.ActualPosition <> 150 then begin writeln('FAIL: pane2 restore pos wrong'); Halt(1); end;
+
+  writeln('PASS: TPaned splits, packs two children each, position + strip/full collapse');
 end.

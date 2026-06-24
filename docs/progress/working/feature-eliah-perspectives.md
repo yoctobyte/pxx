@@ -71,3 +71,15 @@ edge) — enough for Code/Design here, but cannot hide a pane whose sibling resi
 shrinking (shrink=0). Revisit hide-based collapse + the remaining M3 scope
 (serialized descriptors, per-pane min/priority, priority-compacting on resize)
 once the two codegen tickets land.
+
+## Update 2026-06-24 (v48)
+
+UNBLOCKED + DONE for presets: the two codegen bugs were fixed by sis
+(v47 Length-of-dynarray-call-result; v48 local-var-shadows-method, which was the
+root of both bug-method-miscompiled-by-context and the compiler-hang). TPaned.Collapse
+now uses robust gtk_widget_hide full-collapse. All three perspectives
+screenshot-confirmed on Xvfb :99: code (right hidden), design (center hidden),
+split (all three columns). gui_suite test_pcl_paned covers strip + full collapse.
+
+Remaining M3 scope (separate): serialized perspective descriptors, per-pane
+min/priority, priority-compacting on resize. Presets + switcher shipped.

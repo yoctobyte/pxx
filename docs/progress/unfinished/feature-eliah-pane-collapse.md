@@ -56,3 +56,10 @@ gui_suite coverage; Eliah View menu toggles Left/Output/Right panels.
 DEFERRED: the labelled clickable collapse *strip* + per-pane header chevron need
 a stacking container (gtk_box / a PCL TBox with per-child expand) that PCL does
 not yet expose. Functional collapse/restore ships via the menu meanwhile.
+
+## Update 2026-06-24 (v48)
+
+Full hide-based collapse now works (gtk_widget_hide; the blocking codegen bugs
+were fixed in v47/v48). Still DEFERRED: the labelled clickable collapse *strip* +
+per-pane header chevron (needs a stacking container / TBox). Menu + perspective
+collapse are fully functional.

@@ -147,25 +147,40 @@ begin
 end;
 
 procedure TPaned.Collapse(APane: Integer; AStrip: Integer);
-var sz: Integer;
+var sz: Integer; ch: Pointer;
 begin
   if Self.Handle = nil then Exit;
   if FCollapsedPane <> 0 then Restore;          { only one collapse at a time }
   FRestorePos := gtk_paned_get_position(Self.Handle);
-  if APane = 1 then
-    SetPosition(AStrip)                          { pane1 shrinks to the strip }
+  if AStrip > 0 then
+  begin
+    { strip collapse: leave AStrip px visible by moving the handle to the edge }
+    if APane = 1 then SetPosition(AStrip);
+    if APane = 2 then
+    begin
+      sz := AxisSize;
+      if sz <= 0 then sz := FRestorePos;
+      SetPosition(sz - AStrip);
+    end;
+  end
   else
   begin
-    sz := AxisSize;
-    if sz <= 0 then sz := FRestorePos;           { not allocated yet: best effort }
-    SetPosition(sz - AStrip);                    { pane2 shrinks to the strip }
+    { full collapse: hide the pane's child so the sibling takes all the space
+      (robust regardless of shrink / allocation) }
+    ch := gtk_paned_get_child1(Self.Handle);
+    if APane = 2 then ch := gtk_paned_get_child2(Self.Handle);
+    if ch <> nil then gtk_widget_hide(ch);
   end;
   FCollapsedPane := APane;
 end;
 
 procedure TPaned.Restore;
+var ch: Pointer;
 begin
   if FCollapsedPane = 0 then Exit;
+  ch := gtk_paned_get_child1(Self.Handle);
+  if FCollapsedPane = 2 then ch := gtk_paned_get_child2(Self.Handle);
+  if ch <> nil then gtk_widget_show(ch);        { no-op if it was a strip collapse }
   SetPosition(FRestorePos);
   FCollapsedPane := 0;
 end;

@@ -177,6 +177,7 @@ char* gtk_widget_get_name(void* widget);
 
 // Widget visibility
 void gtk_widget_show(void* widget);
+void gtk_widget_hide(void* widget);
 
 // Input events (mouse / keyboard)
 void gtk_widget_add_events(void* widget, int events);
