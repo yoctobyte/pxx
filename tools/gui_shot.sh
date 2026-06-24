@@ -25,7 +25,13 @@
 #     that and retry once on a freshly restarted Xvfb.
 set -u
 
-DISP="${GUI_SHOT_DISPLAY:-:99}"
+# Display selection. By default we let Xvfb pick a FREE display (-displayfd) so
+# two parallel agents never fight over a shared :99 — the old hardcoded default
+# meant one agent's pkill/lock-rm killed the other's live Xvfb mid-capture.
+# GUI_SHOT_DISPLAY still forces a specific display (back-compat) and is then
+# lock-cleaned before start.
+DISP="${GUI_SHOT_DISPLAY:-}"
+if [ -n "$DISP" ]; then AUTO=0; else AUTO=1; fi
 SCREEN="${GUI_SHOT_SCREEN:-1920x1080x24}"
 SIZE="${GUI_SHOT_SIZE:-1100x700}"
 SETTLE="${GUI_SHOT_SETTLE:-2.5}"
@@ -38,12 +44,38 @@ fi
 OUT="$1"; shift
 CMD=( "$@" )
 
-dispnum="${DISP#:}"
+XVFB_PID=""
 
-xvfb_alive() { DISPLAY="$DISP" xdpyinfo >/dev/null 2>&1; }
+xvfb_alive() { [ -n "$DISP" ] && DISPLAY="$DISP" xdpyinfo >/dev/null 2>&1; }
+
+# Kill only the Xvfb WE started (by PID) — never pattern-pkill a display number
+# that a parallel agent may own.
+stop_xvfb() {
+  [ -n "$XVFB_PID" ] && kill -9 "$XVFB_PID" 2>/dev/null
+  XVFB_PID=""
+}
+trap 'stop_xvfb' EXIT
 
 start_xvfb() {
-  Xvfb "$DISP" -screen 0 "$SCREEN" >/tmp/gui_shot_xvfb.log 2>&1 &
+  if [ "$AUTO" = "1" ]; then
+    # Let Xvfb find a free display and report it on fd 1.
+    local fdfile; fdfile="$(mktemp)"
+    Xvfb -displayfd 1 -screen 0 "$SCREEN" 1>"$fdfile" 2>/tmp/gui_shot_xvfb.log &
+    XVFB_PID=$!
+    local n=""
+    for _ in $(seq 1 20); do
+      n="$(tr -dc '0-9' <"$fdfile")"
+      [ -n "$n" ] && break
+      sleep 0.3
+    done
+    rm -f "$fdfile"
+    [ -n "$n" ] || return 1
+    DISP=":$n"
+  else
+    rm -f "/tmp/.X${DISP#:}-lock" 2>/dev/null   # clear a stale lock for the fixed display
+    Xvfb "$DISP" -screen 0 "$SCREEN" >/tmp/gui_shot_xvfb.log 2>&1 &
+    XVFB_PID=$!
+  fi
   for _ in 1 2 3 4 5 6 7 8 9 10; do
     sleep 0.4
     xvfb_alive && return 0
@@ -52,8 +84,8 @@ start_xvfb() {
 }
 
 restart_xvfb() {
-  pkill -9 -f "Xvfb $DISP" 2>/dev/null
-  pkill -9 -f "Xvfb ${DISP} " 2>/dev/null
+  stop_xvfb
+  [ "$AUTO" = "1" ] || rm -f "/tmp/.X${DISP#:}-lock" 2>/dev/null
   sleep 1
   start_xvfb
 }
