@@ -2296,7 +2296,7 @@ lib-test: pxx-stable-check
 	$(PXX_STABLE) -Fulib/rtl/platform/posix test/lib_sockets.pas /tmp/lib_sockets
 	test "$$(/tmp/lib_sockets)" = "$$(printf 'htons=ok\nhtonl=ok\nroundtrip=ok\nsocket=ok\nbind=ok\nlisten=ok\nconnect=ok\naccept=ok\nsend=ok\nrecv=ok\nclose-conn=ok\nclose-cli=ok\nclose-srv=ok')"
 	$(PXX_STABLE) -Fulib/rtl/platform/posix test/lib_http.pas /tmp/lib_http
-	test "$$(/tmp/lib_http | grep -c '=ok')" = "29"
+	test "$$(/tmp/lib_http | grep -c '=ok')" = "33"
 	test "$$(/tmp/lib_http | grep -c 'FAIL')" = "0"
 	$(PXX_STABLE) -Fulib/rtl/platform/posix test/lib_http_async.pas /tmp/lib_http_async
 	test "$$(/tmp/lib_http_async)" = "$$(printf 'server-done=ok\nstatus=ok\nreason=ok\nbody=ok')"

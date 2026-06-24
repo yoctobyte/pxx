@@ -43,6 +43,11 @@ function HttpHeaderValue(const headers, name: AnsiString): AnsiString;
 { Decode a chunked-transfer-encoded body to its plain bytes. }
 function HttpDechunk(const body: AnsiString): AnsiString;
 
+{ Resolve a (possibly relative) Location against a base URL: an absolute
+  http(s):// location is returned as-is; an absolute-path '/x' keeps the base
+  scheme+host+port; anything else resolves against the base path's directory. }
+function HttpResolveUrl(const base, location: AnsiString): AnsiString;
+
 { Parse a raw response into resp (status line + headers + body). Applies
   Transfer-Encoding: chunked decoding, else trims the body to Content-Length. }
 procedure HttpParseResponse(const raw: AnsiString; var resp: THttpResponse);
@@ -201,6 +206,28 @@ begin
     pos := pos + sz + 2;               { data + trailing CRLF }
   end;
   Result := outp;
+end;
+
+function HttpResolveUrl(const base, location: AnsiString): AnsiString;
+var host, path, scheme, authority: AnsiString; port, i: Integer; isTls: Boolean;
+begin
+  if (Copy(location, 1, 7) = 'http://') or (Copy(location, 1, 8) = 'https://') then
+  begin Result := location; Exit; end;
+  if not HttpParseUrl(base, host, port, path, isTls) then
+  begin Result := location; Exit; end;
+  if isTls then scheme := 'https://' else scheme := 'http://';
+  authority := host;
+  if (isTls and (port <> 443)) or ((not isTls) and (port <> 80)) then
+    authority := host + ':' + IntToStr(port);
+  if (Length(location) > 0) and (location[1] = '/') then
+    Result := scheme + authority + location
+  else
+  begin
+    { relative to the base path's directory (everything up to the last '/') }
+    i := Length(path);
+    while (i > 0) and (path[i] <> '/') do Dec(i);
+    Result := scheme + authority + Copy(path, 1, i) + location;
+  end;
 end;
 
 procedure HttpParseResponse(const raw: AnsiString; var resp: THttpResponse);
@@ -383,7 +410,7 @@ begin
   begin
     loc := HttpHeaderValue(Result.Headers, 'Location');
     if loc = '' then Break;
-    cur := loc;
+    cur := HttpResolveUrl(cur, loc);
     Inc(hops);
     Result := HttpGet(cur);
   end;
@@ -463,7 +490,7 @@ begin
   begin
     loc := HttpHeaderValue(Result.Headers, 'Location');
     if loc = '' then Break;
-    cur := loc;
+    cur := HttpResolveUrl(cur, loc);
     Inc(hops);
     Result := HttpGetAsync(cur);
   end;

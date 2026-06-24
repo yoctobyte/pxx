@@ -82,4 +82,10 @@ begin
   req := HttpBuildRequest('PUT', 'h', '/r', '', 'data');
   SayBool('req-put', (Copy(req, 1, 17) = 'PUT /r HTTP/1.1'#13#10) and (Pos('Content-Length: 4'#13#10, req) > 0));
   SayBool('req-delete', Copy(HttpBuildRequest('DELETE', 'h', '/r', '', ''), 1, 20) = 'DELETE /r HTTP/1.1'#13#10);
+
+  { Location resolution: absolute / absolute-path / relative / default-port. }
+  SayBool('url-abs', HttpResolveUrl('http://a/x', 'http://b/y') = 'http://b/y');
+  SayBool('url-abspath', HttpResolveUrl('http://host:8080/a/b', '/c') = 'http://host:8080/c');
+  SayBool('url-rel', HttpResolveUrl('http://host/a/b', 'c') = 'http://host/a/c');
+  SayBool('url-defport', HttpResolveUrl('http://host/a', '/x') = 'http://host/x');
 end.
