@@ -3876,3 +3876,31 @@ begin
   IRVerify;
   IRDump;
 end;
+
+{ DWARF -g: record a line-table row at the start address of IR instruction i when
+  its source line changes. Called at the top of every backend's statement emit
+  loop (defined here, before the per-arch ir_codegen_* files), so CodeLen is the
+  address where this instruction's machine code begins. The first row of a proc
+  body also drops an entry row at the proc's low_pc and marks the body row
+  prologue_end, so `break <func>` skips the prologue cleanly. }
+procedure DbgRecordRow(i: Integer);
+begin
+  if not DebugInfo then Exit;
+  if (IRLine[i] = 0) or (IRLine[i] = DwarfLastLine) then Exit;
+  if DwarfProcFirstRow and (CurProc >= 0) and (DwarfRowCount < MAX_DWARF_ROWS) then
+  begin
+    DwarfRowAddr[DwarfRowCount] := Procs[CurProc].BodyAddr;
+    DwarfRowLine[DwarfRowCount] := IRLine[i];
+    DwarfRowPrologueEnd[DwarfRowCount] := False;
+    Inc(DwarfRowCount);
+  end;
+  if DwarfRowCount < MAX_DWARF_ROWS then
+  begin
+    DwarfRowAddr[DwarfRowCount] := CodeLen;
+    DwarfRowLine[DwarfRowCount] := IRLine[i];
+    DwarfRowPrologueEnd[DwarfRowCount] := DwarfProcFirstRow;
+    Inc(DwarfRowCount);
+    DwarfProcFirstRow := False;
+  end;
+  DwarfLastLine := IRLine[i];
+end;

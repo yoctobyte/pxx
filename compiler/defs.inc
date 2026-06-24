@@ -1223,6 +1223,15 @@ var
   DbgMainBodyStart, DbgMainBodyEnd : Integer;  { Code[] range of the program body }
   DbgGlobalScopeBase : Integer;  { Syms[] index after runtime units, before main decls — globals above this are the program's own }
   DbgBssBase : Int64;            { runtime base address of BSS, for global-var DW_OP_addr locations }
+  { Per-target DWARF parameters (set by DbgSetArchParams). x86-64 + aarch64 use
+    8-byte addresses; i386 + arm32 use 4. esp targets get no -g. }
+  DbgPtrSize : Integer;          { address byte width: 8 (x86-64/aarch64) or 4 (i386/arm32) }
+  DbgRegFrame : Integer;         { DWARF reg of the frame base (rbp=6, ebp=5, x29=29, r11=11) }
+  DbgRegRA : Integer;            { DWARF return-address column (rip=16, i386=8, x30=30, lr=14) }
+  DbgRegSP : Integer;            { DWARF reg of the stack pointer (rsp=7, esp=4, sp=31, sp=13) }
+  DbgRegLR : Integer;            { DWARF reg of the link register saved in the prologue (aarch64/arm32) }
+  DbgFrameSavesLR : Boolean;     { prologue stores the return reg in the frame (aarch64/arm32) vs `call` pushed it (x86) }
+  DbgPrologAdv1, DbgPrologAdv2 : Integer;  { byte lengths of the two prologue steps for FDE advance_loc }
 
   { DWARF Tier 3 side tables. Symbol slots recycle across procs (SymCount is
     restored at each proc's end), so per-proc params/locals must be snapshotted

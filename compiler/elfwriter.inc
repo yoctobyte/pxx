@@ -494,6 +494,31 @@ begin
   writeShdr64(f, DbgNmFrame,  1, dbgFileBase + DbgFrameSecOff,  DbgFrameSecSize);
   writeShdr64(f, DbgNmShStr,  3, dbgFileBase + DbgShStrSecOff,  DbgShStrSecSize);
 end;
+{ Elf32_Shdr (40 bytes) for the -g ELF32 targets (i386/arm32). }
+procedure writeShdr32(var f: File; name, typ, off, size: Integer);
+begin
+  writeU32(f, name); writeU32(f, typ);
+  writeU32(f, DbgShFlags); writeU32(f, DbgShAddr);
+  writeU32(f, off); writeU32(f, size);
+  writeU32(f, 0); writeU32(f, 0);     { sh_link, sh_info }
+  writeU32(f, DbgShAlign); writeU32(f, 0);  { sh_addralign, sh_entsize }
+end;
+procedure DbgWriteShdrTable32(var f: File; entry, dataBase, bssBase, codeOffset, dbgFileBase: Integer);
+begin
+  writePad(f, 40);   { NULL shdr (index 0) }
+  DbgShFlags := 6; DbgShAddr := entry;    DbgShAlign := 16;
+  writeShdr32(f, DbgNmText, 1, codeOffset, CodeLen);
+  DbgShFlags := 3; DbgShAddr := dataBase; DbgShAlign := 8;
+  writeShdr32(f, DbgNmData, 1, codeOffset + CodeLen, DataLen);
+  DbgShFlags := 3; DbgShAddr := bssBase;  DbgShAlign := 8;
+  writeShdr32(f, DbgNmBss, 8, codeOffset + CodeLen + DataLen, BSSSize);
+  DbgShFlags := 0; DbgShAddr := 0;        DbgShAlign := 1;
+  writeShdr32(f, DbgNmLine,   1, dbgFileBase + DbgLineSecOff,   DbgLineSecSize);
+  writeShdr32(f, DbgNmInfo,   1, dbgFileBase + DbgInfoSecOff,   DbgInfoSecSize);
+  writeShdr32(f, DbgNmAbbrev, 1, dbgFileBase + DbgAbbrevSecOff, DbgAbbrevSecSize);
+  writeShdr32(f, DbgNmFrame,  1, dbgFileBase + DbgFrameSecOff,  DbgFrameSecSize);
+  writeShdr32(f, DbgNmShStr,  3, dbgFileBase + DbgShStrSecOff,  DbgShStrSecSize);
+end;
 {$else}
 procedure writeU8(f: Integer; v: Byte);
 begin
@@ -608,6 +633,32 @@ begin
   writeShdr64(f, DbgNmFrame,  1, dbgFileBase + DbgFrameSecOff,  DbgFrameSecSize);
   writeShdr64(f, DbgNmShStr,  3, dbgFileBase + DbgShStrSecOff,  DbgShStrSecSize);
 end;
+{ Elf32_Shdr (40 bytes) for the -g ELF32 targets (i386/arm32). }
+procedure writeShdr32(f: Integer; name, typ, off, size: Integer);
+begin
+  writeU32(f, name); writeU32(f, typ);
+  writeU32(f, DbgShFlags); writeU32(f, DbgShAddr);
+  writeU32(f, off); writeU32(f, size);
+  writeU32(f, 0); writeU32(f, 0);     { sh_link, sh_info }
+  writeU32(f, DbgShAlign); writeU32(f, 0);  { sh_addralign, sh_entsize }
+end;
+procedure DbgWriteShdrTable32(f: Integer; entry, dataBase, bssBase, codeOffset, dbgFileBase: Integer);
+var i: Integer;
+begin
+  for i := 1 to 40 do writeU8(f, 0);   { NULL shdr (index 0) }
+  DbgShFlags := 6; DbgShAddr := entry;    DbgShAlign := 16;
+  writeShdr32(f, DbgNmText, 1, codeOffset, CodeLen);
+  DbgShFlags := 3; DbgShAddr := dataBase; DbgShAlign := 8;
+  writeShdr32(f, DbgNmData, 1, codeOffset + CodeLen, DataLen);
+  DbgShFlags := 3; DbgShAddr := bssBase;  DbgShAlign := 8;
+  writeShdr32(f, DbgNmBss, 8, codeOffset + CodeLen + DataLen, BSSSize);
+  DbgShFlags := 0; DbgShAddr := 0;        DbgShAlign := 1;
+  writeShdr32(f, DbgNmLine,   1, dbgFileBase + DbgLineSecOff,   DbgLineSecSize);
+  writeShdr32(f, DbgNmInfo,   1, dbgFileBase + DbgInfoSecOff,   DbgInfoSecSize);
+  writeShdr32(f, DbgNmAbbrev, 1, dbgFileBase + DbgAbbrevSecOff, DbgAbbrevSecSize);
+  writeShdr32(f, DbgNmFrame,  1, dbgFileBase + DbgFrameSecOff,  DbgFrameSecSize);
+  writeShdr32(f, DbgNmShStr,  3, dbgFileBase + DbgShStrSecOff,  DbgShStrSecSize);
+end;
 {$endif}
 
 { ===== DWARF Tier 1 (-g): .debug_line + minimal CU stub =====================
@@ -642,6 +693,48 @@ begin
   if (v >= 0) and (v <= 2147483647) then DbgPutU32(0)
   else if (v < 0) and (v >= -2147483648) then DbgPutU32(-1)
   else DbgPutU32(Integer((v shr 32) and $FFFFFFFF));
+end;
+
+{ A target-width address (4 on i386/arm32, 8 on x86-64/aarch64). }
+procedure DbgPutAddr(v: Int64);
+begin
+  if DbgPtrSize = 8 then DbgPutU64(v) else DbgPutU32(Integer(v and $FFFFFFFF));
+end;
+
+{ True for the four targets that get DWARF -g (esp xtensa/riscv32 excluded:
+  windowed/no-frame-pointer ABI, no gdb-over-qemu line path). }
+function DbgArchSupported: Boolean;
+begin
+  DbgArchSupported := (TargetArch = TARGET_X86_64) or (TargetArch = TARGET_AARCH64)
+    or (TargetArch = TARGET_I386) or (TargetArch = TARGET_ARM32);
+end;
+
+{ Fill the per-target DWARF parameter globals. }
+procedure DbgSetArchParams;
+begin
+  DbgFrameSavesLR := False; DbgRegLR := 0;
+  if TargetArch = TARGET_I386 then
+  begin
+    DbgPtrSize := 4; DbgRegFrame := 5; DbgRegRA := 8; DbgRegSP := 4;
+    DbgPrologAdv1 := 1; DbgPrologAdv2 := 2;       { push ebp; mov ebp,esp }
+  end
+  else if TargetArch = TARGET_ARM32 then
+  begin
+    DbgPtrSize := 4; DbgRegFrame := 11; DbgRegRA := 14; DbgRegSP := 13;
+    DbgRegLR := 14; DbgFrameSavesLR := True;
+    DbgPrologAdv1 := 4; DbgPrologAdv2 := 4;       { push {fp,lr}; mov fp,sp }
+  end
+  else if TargetArch = TARGET_AARCH64 then
+  begin
+    DbgPtrSize := 8; DbgRegFrame := 29; DbgRegRA := 30; DbgRegSP := 31;
+    DbgRegLR := 30; DbgFrameSavesLR := True;
+    DbgPrologAdv1 := 4; DbgPrologAdv2 := 4;       { stp x29,x30,[sp,#-16]!; mov x29,sp }
+  end
+  else
+  begin   { x86-64 }
+    DbgPtrSize := 8; DbgRegFrame := 6; DbgRegRA := 16; DbgRegSP := 7;
+    DbgPrologAdv1 := 1; DbgPrologAdv2 := 3;       { push rbp; mov rbp,rsp }
+  end;
 end;
 
 { Overwrite a 4-byte little-endian value already placed in DbgBuf (back-patch). }
@@ -783,7 +876,7 @@ begin
   if off >= 0 then begin DbgEnsureVoidPtr := off; Exit; end;
   off := DbgLen - DbgInfoSecOff;
   DbgTypeRegister(9000, 0, 0, off);
-  DbgPutULEB(12); DbgPutB(8);   { anonymous pointer_type, byte_size 8 }
+  DbgPutULEB(12); DbgPutB(DbgPtrSize);   { anonymous pointer_type, target ptr width }
   DbgEnsureVoidPtr := off;
 end;
 
@@ -925,7 +1018,7 @@ begin
   if DbgVarIsGlobal[vi] then
   begin
     DbgPutB($03);                 { DW_OP_addr }
-    DbgPutU64(DbgBssBase + DbgVarOff[vi]);
+    DbgPutAddr(DbgBssBase + DbgVarOff[vi]);
   end
   else
   begin
@@ -947,9 +1040,9 @@ begin
     begin
       DbgPutULEB(2);                              { subprogram }
       DbgPutStrZ(Procs[p].Name);
-      DbgPutU64(entry + Procs[p].BodyAddr);       { low_pc }
-      DbgPutU64(entry + ProcBodyEnd[p]);          { high_pc (absolute) }
-      DbgPutB(1); DbgPutB($56);                   { frame_base = DW_OP_reg6 (rbp) }
+      DbgPutAddr(entry + Procs[p].BodyAddr);      { low_pc }
+      DbgPutAddr(entry + ProcBodyEnd[p]);         { high_pc (absolute) }
+      DbgPutB(1); DbgPutB($50 + DbgRegFrame);     { frame_base = DW_OP_reg<frame> }
       for i := 0 to DbgVarCount - 1 do
         if DbgVarProc[i] = p then DbgEmitOneVar(i);
       DbgPutB(0);                                 { end subprogram children }
@@ -960,56 +1053,64 @@ begin
   begin
     DbgPutULEB(2);
     if DbgProgName <> '' then DbgPutStrZ(DbgProgName) else DbgPutStrZ('main');
-    DbgPutU64(entry + DbgMainBodyStart);
-    DbgPutU64(entry + DbgMainBodyEnd);
-    DbgPutB(1); DbgPutB($56);
-    for i := 0 to DbgVarCount - 1 do
-      if DbgVarProc[i] = -1 then DbgEmitOneVar(i);
-    DbgPutB(0);
+    DbgPutAddr(entry + DbgMainBodyStart);
+    DbgPutAddr(entry + DbgMainBodyEnd);
+    DbgPutB(1); DbgPutB($50 + DbgRegFrame);
+    DbgPutB(0);   { no children: program globals are CU-level (DbgEmitGlobals) }
   end;
 end;
 
-{ Pad the in-progress .debug_frame entry with DW_CFA_nop to the next 8-byte
+{ Program globals as CU-level variable DIEs (siblings of the subprograms), so gdb
+  treats them as true globals visible from every frame — not locals of `main`. }
+procedure DbgEmitGlobals;
+var i: Integer;
+begin
+  for i := 0 to DbgVarCount - 1 do
+    if DbgVarProc[i] = -1 then DbgEmitOneVar(i);
+end;
+
+{ Pad the in-progress .debug_frame entry with DW_CFA_nop to the next pointer-size
   boundary (relative to the section start), as CIE/FDE require. }
 procedure DbgFramePad;
 begin
-  while ((DbgLen - DbgFrameSecOff) mod 8) <> 0 do DbgPutB(0);
+  while ((DbgLen - DbgFrameSecOff) mod DbgPtrSize) <> 0 do DbgPutB(0);
 end;
 
-{ .debug_frame: one CIE (standard x86-64 rbp frame) + one FDE per main-file proc,
-  plus an FDE for the program body marking the return address undefined so the
-  unwinder terminates cleanly (no junk outermost frame). Absolute addresses
-  (DWARF reg: rbp=6, rsp=7, RA=16). x86-64 only for now. }
+{ .debug_frame: one CIE (standard frame-pointer frame for the target) + one FDE
+  per main-file proc, plus a program-body FDE with the return address marked
+  undefined so the unwinder terminates cleanly (no junk outermost frame).
+  Absolute addresses; all regs/offsets come from DbgSetArchParams. }
 procedure DbgEmitFrame(entry: Int64);
 var lenPos, p: Integer;
 begin
   DbgFrameSecOff := DbgLen;
   { ---- CIE ---- }
   lenPos := DbgLen; DbgPutU32(0);
-  DbgPutU32(-1);            { CIE_id = 0xFFFFFFFF (.debug_frame) }
-  DbgPutB(1);              { version }
-  DbgPutB(0);             { augmentation = "" }
-  DbgPutULEB(1);          { code_alignment_factor }
-  DbgPutSLEB(-8);         { data_alignment_factor }
-  DbgPutB(16);            { return_address_register = RA (rip) }
-  DbgPutB($0c); DbgPutULEB(7); DbgPutULEB(8);   { DW_CFA_def_cfa rsp, 8 }
-  DbgPutB($90); DbgPutULEB(1);                   { DW_CFA_offset RA, cfa-8 }
+  DbgPutU32(-1);                 { CIE_id = 0xFFFFFFFF (.debug_frame) }
+  DbgPutB(1);                    { version }
+  DbgPutB(0);                    { augmentation = "" }
+  DbgPutULEB(1);                 { code_alignment_factor }
+  DbgPutSLEB(-DbgPtrSize);       { data_alignment_factor }
+  DbgPutB(DbgRegRA);             { return_address_register }
+  DbgPutB($0c); DbgPutULEB(DbgRegSP); DbgPutULEB(DbgPtrSize);  { def_cfa sp, ptr }
+  DbgPutB($80 + DbgRegRA); DbgPutULEB(1);                       { offset RA at cfa-ptr }
   DbgFramePad;
   DbgPatchU32(lenPos, DbgLen - (lenPos + 4));
 
-  { ---- one FDE per main-file proc (standard push rbp; mov rbp,rsp prologue) ---- }
+  { ---- one FDE per main-file proc (standard frame-pointer prologue) ---- }
   for p := 0 to ProcCount - 1 do
     if ProcDbgMain[p] and (Procs[p].BodyAddr >= 0) and (not ProcExternal[p]) then
     begin
       lenPos := DbgLen; DbgPutU32(0);
-      DbgPutU32(0);                              { CIE_pointer }
-      DbgPutU64(entry + Procs[p].BodyAddr);      { initial_location }
-      DbgPutU64(ProcBodyEnd[p] - Procs[p].BodyAddr); { address_range }
-      DbgPutB($41);                              { advance_loc 1 (after push rbp) }
-      DbgPutB($0e); DbgPutULEB(16);              { def_cfa_offset 16 }
-      DbgPutB($86); DbgPutULEB(2);               { offset rbp (reg 6) at cfa-16 }
-      DbgPutB($43);                              { advance_loc 3 (after mov rbp,rsp) }
-      DbgPutB($0d); DbgPutULEB(6);               { def_cfa_register rbp }
+      DbgPutU32(0);                                   { CIE_pointer }
+      DbgPutAddr(entry + Procs[p].BodyAddr);          { initial_location }
+      DbgPutAddr(ProcBodyEnd[p] - Procs[p].BodyAddr); { address_range }
+      DbgPutB($40 + DbgPrologAdv1);                   { advance_loc (frame-setup store) }
+      DbgPutB($0e); DbgPutULEB(2 * DbgPtrSize);       { def_cfa_offset }
+      DbgPutB($80 + DbgRegFrame); DbgPutULEB(2);      { offset frame-reg at cfa-2*ptr }
+      if DbgFrameSavesLR then begin DbgPutB($80 + DbgRegLR); DbgPutULEB(1); end; { offset LR at cfa-ptr }
+      DbgPutB($40 + DbgPrologAdv2);                   { advance_loc (mov fp,sp) }
+      DbgPutB($0d); DbgPutULEB(DbgRegFrame);          { def_cfa_register frame-reg }
       DbgFramePad;
       DbgPatchU32(lenPos, DbgLen - (lenPos + 4));
     end;
@@ -1019,9 +1120,9 @@ begin
   begin
     lenPos := DbgLen; DbgPutU32(0);
     DbgPutU32(0);
-    DbgPutU64(entry + DbgMainBodyStart);
-    DbgPutU64(DbgMainBodyEnd - DbgMainBodyStart);
-    DbgPutB($07); DbgPutULEB(16);                { DW_CFA_undefined RA }
+    DbgPutAddr(entry + DbgMainBodyStart);
+    DbgPutAddr(DbgMainBodyEnd - DbgMainBodyStart);
+    DbgPutB($07); DbgPutULEB(DbgRegRA);             { DW_CFA_undefined RA }
     DbgFramePad;
     DbgPatchU32(lenPos, DbgLen - (lenPos + 4));
   end;
@@ -1034,6 +1135,7 @@ procedure BuildDwarfSections(entry: Int64; codeBytes: Integer);
 var i, lenPos, hdrPos, progStart, curLine, curAddr, dLine, dAddr: Integer;
     nm: AnsiString;
 begin
+  DbgSetArchParams;
   DbgLen := 0;
   nm := DbgSrcName;
   if nm = '' then nm := 'source.pas';
@@ -1063,7 +1165,7 @@ begin
   { line number program }
   { DW_LNE_set_address(entry + first row addr) }
   if DwarfRowCount > 0 then curAddr := DwarfRowAddr[0] else curAddr := 0;
-  DbgPutB(0); DbgPutULEB(9); DbgPutB(2); DbgPutU64(entry + curAddr); { extended set_address }
+  DbgPutB(0); DbgPutULEB(1 + DbgPtrSize); DbgPutB(2); DbgPutAddr(entry + curAddr); { extended set_address }
   curLine := 1;
   for i := 0 to DwarfRowCount - 1 do
   begin
@@ -1167,19 +1269,20 @@ begin
   lenPos := DbgLen; DbgPutU32(0);   { unit_length — patched }
   DbgPutU16(3);                     { version }
   DbgPutU32(0);                     { debug_abbrev_offset = 0 }
-  DbgPutB(8);                       { address_size }
+  DbgPutB(DbgPtrSize);              { address_size }
   DbgPutULEB(1);                    { DIE: abbrev code 1 (compile_unit) }
   DbgPutStrZ('frankonpiler');       { DW_AT_producer }
   DbgPutB($09);                     { DW_AT_language = DW_LANG_Pascal83 }
   DbgPutStrZ(nm);                   { DW_AT_name }
   DbgPutStrZ('.');                  { DW_AT_comp_dir }
-  DbgPutU64(entry);                 { DW_AT_low_pc }
-  DbgPutU64(entry + codeBytes);     { DW_AT_high_pc }
+  DbgPutAddr(entry);               { DW_AT_low_pc }
+  DbgPutAddr(entry + codeBytes);   { DW_AT_high_pc }
   DbgPutU32(0);                     { DW_AT_stmt_list → .debug_line offset 0 }
 
-  { Type DIEs first (so subprogram param/var ref4s resolve backward), then the
-    subprograms with their locals as children. }
+  { Type DIEs first (so param/var ref4s resolve backward), then CU-level globals,
+    then the subprograms with their locals as children. }
   DbgEmitTypeDIEs;
+  DbgEmitGlobals;
   DbgEmitSubprograms(entry);
 
   DbgPutB(0);                       { end of compile_unit children }
@@ -1229,7 +1332,7 @@ begin
   filesz   := codeOffset + CodeLen + DataLen;
   memsz    := filesz + BSSSize;
 
-  doDebug := DebugInfo and (TargetArch = TARGET_X86_64);
+  doDebug := DebugInfo and ((TargetArch = TARGET_X86_64) or (TargetArch = TARGET_AARCH64));
   shoff := 0;
   if doDebug then
   begin
@@ -1350,7 +1453,7 @@ begin
   { DWARF -g: Tier 1 is x86-64 only. Build the .debug_* bytes, then place a
     section-header table after them (the load image is unchanged — debug sections
     live past p_filesz, unmapped). }
-  doDebug := DebugInfo and (TargetArch = TARGET_X86_64);
+  doDebug := DebugInfo and ((TargetArch = TARGET_X86_64) or (TargetArch = TARGET_AARCH64));
   shoff := 0;
   if doDebug then
   begin
@@ -1455,6 +1558,7 @@ var
   i, codeOffset, phnum: Integer;
   isDyn: Boolean;
   loadBase, dataBase, bssBase, entry, filesz, memsz, addr: Int64;
+  doDebug: Boolean; dbgFileBase, shoff32, padN: Integer;
 {$ifdef FPC}
   f: File;
 {$else}
@@ -1504,6 +1608,21 @@ begin
   entry    := loadBase + codeOffset;
   filesz   := codeOffset + CodeLen + DataLen;
   memsz    := (bssBase - loadBase) + BSSSize;
+
+  { DWARF -g for the 32-bit hosted targets (i386/arm32). esp (bare/xtensa/riscv32)
+    is excluded. Section headers placed past p_filesz, like the 64-bit path. }
+  doDebug := DebugInfo and ((TargetArch = TARGET_I386) or (TargetArch = TARGET_ARM32))
+             and (not EspBareBoot);
+  shoff32 := 0;
+  if doDebug then
+  begin
+    DbgBssBase := bssBase;
+    BuildDwarfSections(entry, CodeLen);
+    dbgFileBase := filesz;
+    shoff32 := dbgFileBase + DbgLen;
+    padN := (4 - (shoff32 mod 4)) mod 4;
+    shoff32 := shoff32 + padN;
+  end;
 
   { Data fixups: 4-byte absolute on this target (EmitDataRef emitted 4 bytes). }
   for i := 0 to FixCount-1 do
@@ -1578,10 +1697,17 @@ begin
   else if TargetArch = TARGET_XTENSA then writeU16(f,94)
   else writeU16(f,3);
   writeU32(f,1);            { ET_EXEC, EM_ARM/EM_386 }
-  writeU32(f,entry);writeU32(f,ELF32_HEADER_SIZE);writeU32(f,0);
+  writeU32(f,entry);writeU32(f,ELF32_HEADER_SIZE);writeU32(f,shoff32);
   if TargetArch = TARGET_ARM32 then writeU32(f,$05000000) else writeU32(f,0);
   writeU16(f,ELF32_HEADER_SIZE);writeU16(f,PROG32_HEADER_SIZE);
-  writeU16(f,phnum);writeU16(f,0);writeU16(f,0);writeU16(f,0);
+  if doDebug then
+  begin
+    writeU16(f,phnum);writeU16(f,40);writeU16(f,9);writeU16(f,8); { shentsize=40, shnum=9, shstrndx=8 }
+  end
+  else
+  begin
+    writeU16(f,phnum);writeU16(f,0);writeU16(f,0);writeU16(f,0);
+  end;
 
   { phdr32 (32 bytes): PT_LOAD RWX, whole file at loadBase }
   writeU32(f,1);writeU32(f,0);                          { type, offset }
@@ -1611,11 +1737,23 @@ begin
 {$ifdef FPC}
   if CodeLen > 0 then Blockwrite(f,Code[0],CodeLen);
   if DataLen > 0 then Blockwrite(f,Data[0],DataLen);
+  if doDebug then
+  begin
+    if DbgLen > 0 then Blockwrite(f,DbgBuf[0],DbgLen);
+    for i := 1 to padN do writeU8(f,0);
+    DbgWriteShdrTable32(f, entry, dataBase, bssBase, codeOffset, dbgFileBase);
+  end;
   Close(f);
   FpChmod(outPath,&755);
 {$else}
   if CodeLen > 0 then syswrite(f,Code,CodeLen);
   if DataLen > 0 then syswrite(f,Data,DataLen);
+  if doDebug then
+  begin
+    if DbgLen > 0 then syswrite(f,DbgBuf,DbgLen);
+    for i := 1 to padN do writeU8(f,0);
+    DbgWriteShdrTable32(f, entry, dataBase, bssBase, codeOffset, dbgFileBase);
+  end;
   sysfchmod(f, 493); { chmod 755 }
   sysclose(f);
 {$endif}

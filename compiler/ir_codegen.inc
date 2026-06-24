@@ -4220,6 +4220,10 @@ var i, lblId, pos, targetOffset, f, procIdx: Integer;
     LabelFixupCount: Integer;
 begin
   CurWriteFd := STDOUT;   { default write target; IR_WRITE/IR_WRITELN override per-statement (fd 2 for StdErr) }
+  { DWARF -g: per-body line-row state, reset before any backend runs (each backend
+    calls DbgRecordRow in its statement loop). }
+  DwarfLastLine := 0;
+  DwarfProcFirstRow := True;
   if TargetArch = TARGET_I386 then
   begin
     IREmitMachineCode386;
@@ -4248,8 +4252,6 @@ begin
   for i := 0 to MAX_IR - 1 do
     LabelPositions[i] := -1;
   LabelFixupCount := 0;
-  DwarfLastLine := 0;   { each proc body re-emits a row for its first source line }
-  DwarfProcFirstRow := True;  { its first row marks prologue_end for `break func` }
 
   { Nil-init hidden owning locals synthesised for materialised managed-string
     arguments. They are created during this body's IR lowering, after the
@@ -4277,34 +4279,7 @@ begin
 
   for i := 0 to IRCount - 1 do
   begin
-    { DWARF -g: record a line-table row at the start address of each statement
-      whose source line differs from the last. CodeLen here is exactly where this
-      instruction's machine code begins. Labels/jumps carry the line too but cost
-      nothing (a duplicate address row is harmless). }
-    if DebugInfo and (IRLine[i] <> 0) and (IRLine[i] <> DwarfLastLine) then
-    begin
-      { At the first body row, also drop an entry row at the proc's low_pc (the
-        push-rbp). gdb's skip_prologue_using_sal only engages when a line row
-        exists at the function start; this lets `break <func>` skip to the
-        prologue_end row instead of falling back to its arch analyzer (which
-        stops mid-prologue, before params are stored). }
-      if DwarfProcFirstRow and (CurProc >= 0) and (DwarfRowCount < MAX_DWARF_ROWS) then
-      begin
-        DwarfRowAddr[DwarfRowCount] := Procs[CurProc].BodyAddr;
-        DwarfRowLine[DwarfRowCount] := IRLine[i];
-        DwarfRowPrologueEnd[DwarfRowCount] := False;
-        Inc(DwarfRowCount);
-      end;
-      if DwarfRowCount < MAX_DWARF_ROWS then
-      begin
-        DwarfRowAddr[DwarfRowCount] := CodeLen;
-        DwarfRowLine[DwarfRowCount] := IRLine[i];
-        DwarfRowPrologueEnd[DwarfRowCount] := DwarfProcFirstRow;
-        Inc(DwarfRowCount);
-        DwarfProcFirstRow := False;
-      end;
-      DwarfLastLine := IRLine[i];
-    end;
+    DbgRecordRow(i);   { DWARF -g line table }
     case IRKind[i] of
       IR_LABEL:
         begin

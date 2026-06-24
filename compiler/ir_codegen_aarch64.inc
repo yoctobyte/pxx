@@ -2584,6 +2584,7 @@ begin
 
   for i := 0 to IRCount - 1 do
   begin
+    DbgRecordRow(i);   { DWARF -g line table }
     case IRKind[i] of
       IR_LABEL:
         begin
