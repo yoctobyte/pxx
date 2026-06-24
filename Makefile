@@ -29,7 +29,7 @@ PXX_STABLE ?= $(STABLE_DEFAULT_DIR)/pinned
 PXXFLAGS   :=
 FROZEN_PXXFLAGS := -uPXX_MANAGED_STRING
 
-.PHONY: all bootstrap bootstrap-check fpc-check test test-core test-asm-emit test-nilpy qemu-env-check test-i386 test-aarch64 test-arm32 test-emit-obj stabilize check-stable selfcheck revert benchmark benchmark-compiler-runtime benchmark-check clean distclean symbols \
+.PHONY: all bootstrap bootstrap-check fpc-check test test-core test-asm-emit test-debug-g test-nilpy qemu-env-check test-i386 test-aarch64 test-arm32 test-emit-obj stabilize check-stable selfcheck revert benchmark benchmark-compiler-runtime benchmark-check clean distclean symbols \
         bootstrap-managed bootstrap-frozen test-managed test-frozen stabilize-managed stabilize-frozen check-stable-managed revert-managed test-nilpy-managed test-nilpy-frozen \
         pxx-stable-check pin lib-test library-suite library-suite-green library-suite-discovery gui-test demos c-interop-devtest \
         progress-check cross-bootstrap cross-bootstrap-aarch64 cross-bootstrap-arm32 cross-bootstrap-i386 test-esp-bare test-esp-softfloat
@@ -181,7 +181,14 @@ test-nilpy-managed: test-nilpy
 test-nilpy-frozen: PXXFLAGS := $(FROZEN_PXXFLAGS)
 test-nilpy-frozen: test-nilpy
 
-test: fpc-check test-core test-asm-emit lib-fpc-clean
+test: fpc-check test-core test-asm-emit test-debug-g lib-fpc-clean
+
+# DWARF Tier 1 (-g) smoke: a -g build must keep identical runtime output, emit a
+# .debug_line table for the source, and let gdb resolve+hit a line breakpoint
+# with file:line in the backtrace (x86-64). -g is opt-in, so the byte-identical
+# self-host path is unaffected (covered by fpc-check/bootstrap).
+test-debug-g: $(COMPILER)
+	./tools/dwarf_smoke.sh ./$(COMPILER)
 
 # Invariant for --mimic-fpc: under whole-compile mimic, lib/ units lex with FPC
 # defined, so any {$ifdef FPC} in a library unit would silently change meaning

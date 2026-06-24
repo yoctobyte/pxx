@@ -162,3 +162,33 @@ small; Tier 3-lite (base types + RTTI structs + pointer-cheat) ≈ 1 session.
 - 2026-06-24 — re-validated against current tree (claims hold); added line-capture
   / emit-hook / section-header findings + the pointer-cheat degradation decision
   (see section above). Tier 1 confirmed ~1-session feasible.
+- 2026-06-24 — **Tier 1 LANDED (x86-64, `-g` opt-in).** `pxx -g hello.pas` now
+  emits `.debug_line` + a minimal CU stub; gdb resolves+hits a line breakpoint,
+  `step`/`next` track source lines, frame 0 of `bt` shows `file:line`. (`bt`
+  function NAMES are still `??` — that is Tier 2 subprograms, as designed.)
+  Implementation as planned:
+  - `ASTLine[]` set in `AllocNode` (parser.inc) from `CurTok.Line`, but ONLY for
+    main-file nodes (`TokPos <= DbgMainTokEnd`) — appended builtin/RTL units lex
+    with their SrcLine reset to 1 per unit (LexAppend), so without this guard
+    their rows collide with the user file's lines under the single shared file
+    entry. `DbgMainTokEnd` is set to `TokCount` right after `LexAll`.
+  - `CurLowerLine` global tracked at the top of `IRLowerAST`; `IRLine[]` stamped
+    in `IRAppend`.
+  - Row collection in the x64 `IREmitMachineCode` loop (`CodeLen` at the start of
+    each statement whose line changed). `DwarfLastLine` reset per proc.
+  - All `.debug_*` bytes built into one `DbgBuf` (BuildDwarfSections in
+    elfwriter.inc): `.debug_line` (DWARF3 state machine), `.debug_abbrev`,
+    `.debug_info` (one compile_unit DIE, inline `DW_FORM_string` — NO `.debug_str`
+    needed), `.shstrtab`. Both `writeELF` variants (FPC seed + self-host) gained a
+    `-g`-gated section-header table (`writeShdr64`, Elf64_Shdr) + `e_shoff`/
+    `e_shnum=5`/`e_shstrndx=4`. Debug sections live past `p_filesz` (unmapped).
+  - `-g` flag in compiler.pas; `DebugInfo` global, default False.
+  - Gates: `make test` green; self-host + cross-bootstrap byte-identical
+    (the row-recording is behind `if DebugInfo`, so `-g`-off codegen bytes are
+    unchanged → no reseed). New `make test-debug-g` (tools/dwarf_smoke.sh):
+    readelf decodedline rows + gdb break/run/bt.
+  LANDMINES recorded: (1) SLEB128 needs a real arithmetic shift — Pascal `div`
+  truncates toward zero and `shr` is logical; bias `(v-127) div 128` for negatives.
+  (2) per-unit SrcLine reset means a one-file line table MUST filter to main-file
+  tokens or every unit's "line N" aliases the user's "line N".
+  Next: Tier 2 (subprograms → real `bt` names/frames), then Tier 3-lite.
