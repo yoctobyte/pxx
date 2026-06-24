@@ -92,9 +92,9 @@ object EliahForm: TEliahForm
   end
   object RootPaned: TPaned
     Left = 0
-    Top = 34
+    Top = 40
     Width = 1100
-    Height = 666
+    Height = 660
     object colLeft: TPaned
       Vertical = True
       object Tree: TListBox

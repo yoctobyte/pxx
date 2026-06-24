@@ -1,0 +1,28 @@
+object CounterForm: TForm
+  Left = 40
+  Top = 40
+  Width = 240
+  Height = 150
+  Caption = 'Counter'
+  object CountLabel: TLabel
+    Left = 100
+    Top = 24
+    Width = 48
+    Height = 18
+    Caption = '0'
+  end
+  object IncBtn: TButton
+    Left = 20
+    Top = 78
+    Width = 90
+    Height = 30
+    Caption = '+'
+  end
+  object DecBtn: TButton
+    Left = 130
+    Top = 78
+    Width = 90
+    Height = 30
+    Caption = '-'
+  end
+end

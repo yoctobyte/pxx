@@ -45,10 +45,11 @@ const
   W_RIGHT   = 300;
   H_BOTTOM  = 200;
   ERR_H     = 150;        { error-list height at the bottom of the left column }
-  TOOLBAR_H = 34;
+  TOOLBAR_H = 40;        { toolbar strip height (buttons are 26px at Top=3) }
   PXX_PATH  = 'stable_linux_amd64/default/pinned';
   BUILD_OUT = '/tmp/eliah_build';
   SAMPLE_LFM = 'apps/ide/eliah/sample.lfm';
+  EXAMPLES_DIR = 'apps/ide/eliah/examples';   { demo projects; default start dir }
 
 type
   { The whole window is streamed from eliah.lfm into this form. The widget fields
@@ -80,6 +81,7 @@ type
     procedure LoadDir(const d: AnsiString);
     procedure OnOpenFolder(Sender: TObject);
     procedure OnExit(Sender: TObject);
+    procedure OnExampleClick(Sender: TObject);   { File->Examples item -> open it }
     procedure PushUndo(const snap: AnsiString);
     procedure OpenDesign(const path: AnsiString);
     procedure Relayout(w, h: Integer);
@@ -194,6 +196,49 @@ begin
   EndsWithLfm := tail = '.lfm';
 end;
 
+{ a NUL byte (or a control char that isn't tab/newline/return) in the first few KB
+  means the file is not text — opening it raw garbles the editor and a large one is
+  slow to set into the gtk buffer. }
+function LooksBinary(const s: AnsiString): Boolean;
+var i, n: Integer; c: Integer;
+begin
+  LooksBinary := False;
+  n := Length(s);
+  if n > 4096 then n := 4096;
+  for i := 1 to n do
+  begin
+    c := Ord(s[i]);
+    if (c = 0) or ((c < 32) and (c <> 9) and (c <> 10) and (c <> 13)) then
+    begin LooksBinary := True; Exit; end;
+  end;
+end;
+
+{ a classic offset + hex + ascii dump of the first maxBytes of s }
+function HexPreview(const s: AnsiString; maxBytes: Integer): AnsiString;
+const hexd = '0123456789abcdef';
+var i, n, col, c: Integer; line, asc, r: AnsiString;
+begin
+  n := Length(s);
+  if n > maxBytes then n := maxBytes;
+  r := '';
+  line := ''; asc := ''; col := 0;
+  for i := 1 to n do
+  begin
+    c := Ord(s[i]);
+    line := line + hexd[(c shr 4) + 1] + hexd[(c and 15) + 1] + ' ';
+    if (c >= 32) and (c < 127) then asc := asc + s[i] else asc := asc + '.';
+    col := col + 1;
+    if col = 16 then
+    begin r := r + line + ' ' + asc + #10; line := ''; asc := ''; col := 0; end;
+  end;
+  if col > 0 then
+  begin
+    while col < 16 do begin line := line + '   '; col := col + 1; end;
+    r := r + line + ' ' + asc + #10;
+  end;
+  HexPreview := r;
+end;
+
 function ParentDir(const d: AnsiString): AnsiString;
 var i: Integer;
 begin
@@ -252,10 +297,20 @@ begin
   end;
   curFile := paths[idx];
   b := TIdeBuffer.Create;
-  if b.LoadFromFile(curFile) then Editor.Text := b.Text
-  else Editor.Text := '(could not open ' + curFile + ')';
-  { a .lfm also loads into the designer surface }
-  if EndsWithLfm(curFile) then OpenDesign(curFile);
+  if not b.LoadFromFile(curFile) then
+    Editor.Text := '(could not open ' + curFile + ')'
+  else if LooksBinary(b.Text) then
+    { soft-guard: don't dump a binary into the editor (garbled + slow). Show a
+      hex preview of the head instead, and skip the designer load. }
+    Editor.Text := '[binary file: ' + curFile + '  (' +
+      IntToStr(Length(b.Text)) + ' bytes)]' + #10 + #10 +
+      HexPreview(b.Text, 2048)
+  else
+  begin
+    Editor.Text := b.Text;
+    { a .lfm also loads into the designer surface }
+    if EndsWithLfm(curFile) then OpenDesign(curFile);
+  end;
 end;
 
 { click a diagnostic -> jump the editor to its line (compiler lines are 1-based,
@@ -384,6 +439,23 @@ end;
 procedure TEliahForm.OnExit(Sender: TObject);
 begin
   Halt(0);
+end;
+
+{ File->Examples->X : the menu item's caption is the example file name; open it
+  (loads into the editor, and the designer too when it is a .lfm). }
+procedure TEliahForm.OnExampleClick(Sender: TObject);
+var nm, path: AnsiString; b: TIdeBuffer;
+begin
+  if Sender = nil then Exit;
+  nm := TMenuItem(Sender).Caption;
+  path := EXAMPLES_DIR + '/' + nm;
+  b := TIdeBuffer.Create;
+  if not b.LoadFromFile(path) then
+  begin Output.Text := '$ no example: ' + path; Exit; end;
+  curFile := path;
+  Editor.Text := b.Text;
+  if EndsWithLfm(path) then OpenDesign(path);
+  Output.Text := '$ opened example ' + nm;
 end;
 
 { reflow for a content area of w x h. The pane layout is the RootPaned subtree —
@@ -735,11 +807,12 @@ begin
       OnPlaceToggle(nil);
       Exit;
     end;
-    { drop a new widget of the palette kind, parented to the form (node 0) }
+    { drop a new widget of the palette kind, parented to the form (node 0).
+      Place is STICKY: stays armed so several widgets can be dropped in a row;
+      click Place again (or pick another tool) to stop. }
     PushUndo(pendingSnap);
     idx := Dsn.Doc.AddNode(k, Dsn.Doc.KindName(k), 0, X, Y, 80, 24);
     SelectNode(idx);
-    OnPlaceToggle(nil);          { one-shot: leave place mode after dropping }
     Exit;
   end;
   idx := Dsn.BeginDrag(X, Y);
@@ -847,10 +920,12 @@ var
   sok: Boolean;
   rtdoc: TDocModel;
   MainMenu: TMainMenu;
-  FileMenu, EditMenu, BuildMenu, ViewMenu, mi: TMenuItem;
+  FileMenu, EditMenu, BuildMenu, ViewMenu, ExMenu, mi: TMenuItem;
   comps: TRegEntryArr;
   ci, nvFirst: Integer;
   pk: TWidgetKind;
+  exlist: TFileInfoArray;
+  exi: Integer;
 
 function MkMenuItem(const cap: AnsiString; parent: TMenuItem): TMenuItem;
 var it: TMenuItem;
@@ -913,6 +988,18 @@ begin
   mi := MkMenuItem('&New',          FileMenu); mi.OnClick := @EliahForm.OnNew;
   mi := MkMenuItem('&Open Folder...', FileMenu); mi.OnClick := @EliahForm.OnOpenFolder;
   mi := MkMenuItem('&Save',         FileMenu); mi.OnClick := @EliahForm.OnSave;
+
+  { Examples submenu — autofilled from EXAMPLES_DIR (Arduino-style). Each item's
+    caption is the example file name; OnExampleClick opens it. }
+  ExMenu := TMenuItem.Create(nil); ExMenu.Caption := 'E&xamples'; FileMenu.Add(ExMenu);
+  if GetDirectoryContents(EXAMPLES_DIR, exlist) then
+    for exi := 0 to Length(exlist) - 1 do
+      if (not exlist[exi].IsDir) and EndsWithLfm(exlist[exi].Name) then
+      begin
+        mi := MkMenuItem(exlist[exi].Name, ExMenu);
+        mi.OnClick := @EliahForm.OnExampleClick;
+      end;
+
   mi := MkMenuItem('E&xit',         FileMenu); mi.OnClick := @EliahForm.OnExit;
 
   EditMenu := TMenuItem.Create(nil); EditMenu.Caption := '&Edit'; MainMenu.Items.Add(EditMenu);
@@ -961,7 +1048,7 @@ begin
   EliahForm.PlaceMode := False;
 
   arg := '';
-  startDir := '.';
+  startDir := EXAMPLES_DIR;   { open the demo projects by default (override with a dir arg) }
   EliahForm.startPersp := '';
   for pix := 1 to ParamCount do
   begin
@@ -1099,7 +1186,7 @@ begin
       begin writeln('SMOKE FAIL: bad int should keep old Left'); Halt(1); end;
 
     { palette place: arm Place, click empty surface -> a new node is dropped,
-      parented to the form, selected; Place is one-shot (auto-disarms). }
+      parented to the form, selected; Place is sticky (stays armed). }
     EliahForm.Palette.ItemIndex := 1;        { Label }
     EliahForm.OnPlaceToggle(nil);
     if not EliahForm.PlaceMode then begin writeln('SMOKE FAIL: place not armed'); Halt(1); end;
@@ -1117,7 +1204,14 @@ begin
       begin writeln('SMOKE FAIL: placed node wrong kind'); Halt(1); end;
     if Length(EliahForm.PaletteNames) < 7 then
       begin writeln('SMOKE FAIL: registry palette underpopulated'); Halt(1); end;
-    if EliahForm.PlaceMode then begin writeln('SMOKE FAIL: place mode not one-shot'); Halt(1); end;
+    { sticky: still armed, a second click drops another node without re-arming }
+    if not EliahForm.PlaceMode then begin writeln('SMOKE FAIL: place not sticky'); Halt(1); end;
+    centerW := EliahForm.Dsn.Doc.Count;
+    EliahForm.OnDesignMouseDown(nil, 1, 200, 200);
+    if EliahForm.Dsn.Doc.Count <> centerW + 1 then
+      begin writeln('SMOKE FAIL: sticky place did not add a 2nd node'); Halt(1); end;
+    EliahForm.OnPlaceToggle(nil);   { disarm }
+    if EliahForm.PlaceMode then begin writeln('SMOKE FAIL: toggle did not disarm'); Halt(1); end;
 
     { undo: the place above is on the undo stack -> undo restores the prior count }
     centerW := EliahForm.Dsn.Doc.Count;
@@ -1127,6 +1221,7 @@ begin
     EliahForm.Palette.ItemIndex := 1;
     EliahForm.OnPlaceToggle(nil);
     EliahForm.OnDesignMouseDown(nil, 1, 150, 150);
+    EliahForm.OnPlaceToggle(nil);   { disarm (Place is sticky now) }
 
     { delete: remove the just-placed node (selected); count drops, sel clears }
     centerW := EliahForm.Dsn.Doc.Count;
@@ -1161,6 +1256,7 @@ begin
     if EliahForm.Dsn.Dragging then
       begin writeln('SMOKE FAIL: tray icon should not be draggable'); Halt(1); end;
     EliahForm.Dsn.EndDrag;
+    EliahForm.OnPlaceToggle(nil);   { disarm sticky place }
 
     { inspector on a non-visual node: Caption editable, geometry rows guarded.
       The sample's TTimer is node 5. }
