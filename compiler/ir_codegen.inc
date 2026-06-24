@@ -4172,6 +4172,24 @@ begin
         while argNode <> -1 do
         begin
           IREmitNode(IRA[argNode]); { evaluates arg -> rax }
+          { Managed-string param: convert an inline-string literal / char arg to a
+            managed AnsiString, exactly as the direct IR_CALL path does. Without
+            this the callee reads a raw rodata literal as a managed handle and the
+            length is garbage. See bug-mixed-signature-vmt-misdispatch. }
+          if (pathIdx < Procs[procIdx].ParamCount) and
+             (Procs[procIdx].Params[pathIdx].TypeKind = tyAnsiString) then
+          begin
+            if IntToTypeKind(IRTk[argNode]) = tyString then
+              EmitAnsiStrFromInlineString
+            else if IntToTypeKind(IRTk[argNode]) = tyChar then
+            begin
+              EmitB($50);                                     { push rax (char code) }
+              EmitB($48); EmitB($89); EmitB($E6);             { mov rsi, rsp }
+              EmitB($48); EmitB($C7); EmitB($C7); EmitI32(1); { mov rdi, 1 }
+              IREmitCodeCall(AnsiStrFromLiteralAddr);
+              EmitB($59);                                     { pop rcx (restore stack) }
+            end;
+          end;
           EmitB($50); { push rax }
           argNode := IRB[argNode];
           Inc(pathIdx);

@@ -3659,11 +3659,15 @@ begin
         if (pathIdx > 0) and (pathIdx < Procs[cpi].ParamCount) and
            Procs[cpi].Params[pathIdx].IsRef then
           isRefArg := True;
-        { Self (pathIdx=0) is always passed by value (pointer) }
-        if isRefArg then
-          value := IRLowerAddress(ASTLeft[item])
+        { Self (pathIdx=0) is always passed by value (pointer). Real args go
+          through the same IRLowerCallArg as a direct call so by-ref literals,
+          static->open-array, class->interface coercion, and frozen-string concat
+          marshal identically — a raw IRLowerAddress(literal) here produced a bad
+          pointer (corrupt string length). See bug-mixed-signature-vmt-misdispatch. }
+        if pathIdx = 0 then
+          value := IRLowerAST(ASTLeft[item])
         else
-          value := IRLowerAST(ASTLeft[item]);
+          value := IRLowerCallArg(cpi, pathIdx, ASTLeft[item], isRefArg);
         argNode := IRAppend(IR_ARG, value, -1, -1, 0, ASTTk[ASTLeft[item]]);
         if first < 0 then first := argNode
         else IRB[last] := argNode;

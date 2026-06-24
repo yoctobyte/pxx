@@ -82,3 +82,21 @@ collection surface, and any similar abstract-base polymorphic class. `TList`
   override called polymorphically).
 - Self-host fixedpoint byte-identical; `make stabilize` + `make pin` so Track B
   can finish `TStrings`/`TStringList`.
+
+## Log
+- 2026-06-24 — FIXED (Track A). Root cause was NOT VMT slot layout — it was the
+  virtual-call ARG marshalling. The default compiler is managed-strings
+  (`string` = tyAnsiString). The direct IR_CALL path converts an inline string
+  LITERAL (or char) argument to a managed AnsiString
+  (`EmitAnsiStrFromInlineString`); IR_VIRTUAL_CALL did not, so the callee read a
+  raw rodata literal as a managed handle → corrupt length / garbage.
+  Narrowing fit: a string VARIABLE arg (already managed) worked; the uniform-8
+  getters took no string arg so never tripped it; the mixed set broke because
+  InsIt/PutA take `const s: string` literals through virtual dispatch.
+  Fix: IR_VIRTUAL_CALL codegen now applies the same tyString/tyChar→tyAnsiString
+  arg conversion as IR_CALL (ir_codegen.inc). Also routed AN_VIRTUAL_CALL arg
+  LOWERING through IRLowerCallArg (ir.inc) to match direct calls (by-ref literals,
+  static→open-array, class→interface coercion, frozen concat).
+  Regression: test/test_virtual_managed_arg.pas (8-mixed-method abstract base,
+  literal args via virtual InsIt/PutA, polymorphic GetA) in make test. Self-host
+  fixedpoint gen3==gen4. Unblocks Track B TStrings/TStringList.
