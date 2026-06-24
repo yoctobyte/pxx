@@ -492,10 +492,18 @@ begin
   end;
   Props.AddItem('Kind:    ' + d.KindName(d.NodeKind(idx)));
   Props.AddItem('Caption: ' + d.NodeCaption(idx));
-  Props.AddItem('Left:    ' + IntToStr(d.NodeX(idx)));
-  Props.AddItem('Top:     ' + IntToStr(d.NodeY(idx)));
-  Props.AddItem('Width:   ' + IntToStr(d.NodeW(idx)));
-  Props.AddItem('Height:  ' + IntToStr(d.NodeH(idx)));
+  if d.IsNonVisual(d.NodeKind(idx)) then
+    { non-visual components have no canvas geometry — they sit in the tray. Only
+      the Caption (row 1) is editable here; published props (Interval, …) wait on
+      the RTTI inspector. }
+    Props.AddItem('(non-visual: tray component)')
+  else
+  begin
+    Props.AddItem('Left:    ' + IntToStr(d.NodeX(idx)));
+    Props.AddItem('Top:     ' + IntToStr(d.NodeY(idx)));
+    Props.AddItem('Width:   ' + IntToStr(d.NodeW(idx)));
+    Props.AddItem('Height:  ' + IntToStr(d.NodeH(idx)));
+  end;
 end;
 
 { undo stack holds .lfm snapshots (SaveLfmText round-trips losslessly) }
@@ -581,6 +589,13 @@ begin
   if (Dsn = nil) or (Dsn.Doc = nil) or (Dsn.Sel < 0) then Exit;
   d := Dsn.Doc;
   FEditRow := Props.ItemIndex;
+  { non-visual nodes only expose an editable Caption (no geometry rows) }
+  if d.IsNonVisual(d.NodeKind(Dsn.Sel)) then
+  begin
+    if FEditRow = 1 then ValueEdit.Text := d.NodeCaption(Dsn.Sel)
+    else ValueEdit.Text := '';
+    Exit;
+  end;
   case FEditRow of
     1: ValueEdit.Text := d.NodeCaption(Dsn.Sel);
     2: ValueEdit.Text := IntToStr(d.NodeX(Dsn.Sel));
@@ -604,6 +619,8 @@ begin
   if (Dsn = nil) or (Dsn.Doc = nil) or (Dsn.Sel < 0) then Exit;
   d := Dsn.Doc;
   v := ValueEdit.Text;
+  { non-visual nodes: only Caption is editable (geometry is tray-derived) }
+  if d.IsNonVisual(d.NodeKind(Dsn.Sel)) and (FEditRow <> 1) then Exit;
   PushUndo(SaveLfmText(d));
   case FEditRow of
     1: d.SetNodeCaption(Dsn.Sel, v);
@@ -1058,6 +1075,20 @@ begin
     if H.Dsn.Dragging then
       begin writeln('SMOKE FAIL: tray icon should not be draggable'); Halt(1); end;
     H.Dsn.EndDrag;
+
+    { inspector on a non-visual node: Caption editable, geometry rows guarded.
+      The sample's TTimer is node 5. }
+    H.Dsn.Sel := 5;
+    H.ShowInspector(5);
+    H.FEditRow := 1; H.ValueEdit.Text := 'Heartbeat'; H.ApplyEdit;
+    if H.Dsn.Doc.NodeCaption(5) <> 'Heartbeat' then
+      begin writeln('SMOKE FAIL: non-visual caption edit ignored'); Halt(1); end;
+    { a geometry-row edit must be a no-op on a non-visual node }
+    H.FEditRow := 4; H.ValueEdit.Text := '999'; H.ApplyEdit;
+    if H.Dsn.Doc.NodeCaption(5) <> 'Heartbeat' then
+      begin writeln('SMOKE FAIL: non-visual geometry edit corrupted node'); Halt(1); end;
+    if H.Dsn.Doc.NodeW(5) = 999 then
+      begin writeln('SMOKE FAIL: non-visual geometry edit not guarded'); Halt(1); end;
 
     { save round-trip: serialize the docmodel to a temp file (not the repo
       sample), reload it, node count must survive. Same path OnSave uses. }
