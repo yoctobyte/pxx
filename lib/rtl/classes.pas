@@ -1,13 +1,278 @@
 unit classes;
+{ Classic FPC-compatible Classes — the traditional, non-generic surface every
+  FPC/Delphi program (and Synapse) expects: TList (a list of Pointer),
+  TStrings (abstract) + TStringList (concrete). Standard inheritance on purpose
+  (TStringList descends from TStrings); a type-safe TList<T> lives separately in
+  a future Generics.Collections, not here. The streaming runtime (TComponent,
+  TReader) is in classes_lite.
 
-{ RTL Classes compatibility stub. The streaming runtime lives in classes_lite
-  (TComponent, TReader); the LCL widgetset builds on that. The minimal
-  helloworld references no Classes symbol directly (TObject is built in), so
-  this only needs to satisfy `uses`. Grow toward classes_lite parity as user
-  code needs TStringList/TStream/etc. }
+  IPv4 of the RTL Classes: enough for the string-list / pointer-list needs;
+  TStream / TMemoryStream is the next slice. Track B.
+
+  STATUS: TList works and is smoked. TStrings/TStringList are written and compile,
+  but are BLOCKED at runtime by a compiler VMT bug — virtual dispatch hits the
+  wrong slot with this many mixed-signature (string/Integer/TObject) abstract
+  methods, so the string getter returns garbage. See
+  bug-mixed-signature-vmt-misdispatch (Track A, urgent). The code here is correct
+  (no workaround per the Platonic rule); it will work once the VMT bug is fixed,
+  at which point the TStringList smoke is re-enabled. }
 
 interface
 
+type
+  { ---- TList: a growable list of untyped pointers ---- }
+  TList = class
+  private
+    FItems: array of Pointer;
+    FCount: Integer;
+    function GetItem(Index: Integer): Pointer;
+    procedure SetItem(Index: Integer; Item: Pointer);
+  public
+    function Add(Item: Pointer): Integer;
+    procedure Clear;
+    procedure Delete(Index: Integer);
+    procedure Insert(Index: Integer; Item: Pointer);
+    function IndexOf(Item: Pointer): Integer;
+    function Remove(Item: Pointer): Integer;
+    property Count: Integer read FCount;
+    property Items[Index: Integer]: Pointer read GetItem write SetItem; default;
+  end;
+
+  { ---- TStrings: abstract string-list base ---- }
+  TStrings = class
+  protected
+    function Get(Index: Integer): string; virtual; abstract;
+    function GetCount: Integer; virtual; abstract;
+    function GetObject(Index: Integer): TObject; virtual; abstract;
+    procedure Put(Index: Integer; const S: string); virtual; abstract;
+    procedure PutObject(Index: Integer; AObject: TObject); virtual; abstract;
+  public
+    function Add(const S: string): Integer; virtual;
+    function AddObject(const S: string; AObject: TObject): Integer; virtual;
+    procedure Clear; virtual; abstract;
+    procedure Delete(Index: Integer); virtual; abstract;
+    procedure Insert(Index: Integer; const S: string); virtual; abstract;
+    function IndexOf(const S: string): Integer; virtual;
+    function GetText: string;
+    procedure SetText(const Value: string);
+    property Count: Integer read GetCount;
+    property Strings[Index: Integer]: string read Get write Put; default;
+    property Objects[Index: Integer]: TObject read GetObject write PutObject;
+    property Text: string read GetText write SetText;
+  end;
+
+  { ---- TStringList: concrete string list with paired objects ---- }
+  TStringItem = record
+    FStr: string;
+    FObj: TObject;
+  end;
+
+  TStringList = class(TStrings)
+  private
+    FList: array of TStringItem;
+    FCount: Integer;
+  protected
+    function Get(Index: Integer): string; override;
+    function GetCount: Integer; override;
+    function GetObject(Index: Integer): TObject; override;
+    procedure Put(Index: Integer; const S: string); override;
+    procedure PutObject(Index: Integer; AObject: TObject); override;
+  public
+    procedure Clear; override;
+    procedure Delete(Index: Integer); override;
+    procedure Insert(Index: Integer; const S: string); override;
+    procedure Sort;
+  end;
+
 implementation
+
+{ ============================ TList ============================ }
+
+function TList.GetItem(Index: Integer): Pointer;
+begin
+  if (Index >= 0) and (Index < FCount) then Result := FItems[Index]
+  else Result := nil;
+end;
+
+procedure TList.SetItem(Index: Integer; Item: Pointer);
+begin
+  if (Index >= 0) and (Index < FCount) then FItems[Index] := Item;
+end;
+
+function TList.Add(Item: Pointer): Integer;
+begin
+  if FCount >= Length(FItems) then
+  begin
+    if Length(FItems) = 0 then SetLength(FItems, 8)
+    else SetLength(FItems, Length(FItems) * 2);
+  end;
+  FItems[FCount] := Item;
+  Result := FCount;
+  FCount := FCount + 1;
+end;
+
+procedure TList.Clear;
+begin
+  SetLength(FItems, 0);
+  FCount := 0;
+end;
+
+procedure TList.Delete(Index: Integer);
+var i: Integer;
+begin
+  if (Index < 0) or (Index >= FCount) then Exit;
+  for i := Index to FCount - 2 do FItems[i] := FItems[i + 1];
+  FCount := FCount - 1;
+end;
+
+procedure TList.Insert(Index: Integer; Item: Pointer);
+var i: Integer;
+begin
+  if (Index < 0) or (Index > FCount) then Exit;
+  Add(nil);                                  { grow by one }
+  for i := FCount - 1 downto Index + 1 do FItems[i] := FItems[i - 1];
+  FItems[Index] := Item;
+end;
+
+function TList.IndexOf(Item: Pointer): Integer;
+var i: Integer;
+begin
+  for i := 0 to FCount - 1 do
+    if FItems[i] = Item then begin Result := i; Exit; end;
+  Result := -1;
+end;
+
+function TList.Remove(Item: Pointer): Integer;
+begin
+  Result := IndexOf(Item);
+  if Result >= 0 then Self.Delete(Result);   { Self. — Delete is also a builtin }
+end;
+
+{ ============================ TStrings ============================ }
+
+function TStrings.Add(const S: string): Integer;
+begin
+  Result := GetCount;
+  Self.Insert(Result, S);                    { Self. — Insert is also a builtin }
+end;
+
+function TStrings.AddObject(const S: string; AObject: TObject): Integer;
+begin
+  Result := Add(S);
+  PutObject(Result, AObject);
+end;
+
+function TStrings.IndexOf(const S: string): Integer;
+var i: Integer;
+begin
+  for i := 0 to GetCount - 1 do
+    if Get(i) = S then begin Result := i; Exit; end;
+  Result := -1;
+end;
+
+function TStrings.GetText: string;
+var i: Integer; r: string;
+begin
+  r := '';
+  for i := 0 to GetCount - 1 do r := r + Get(i) + #13#10;
+  Result := r;
+end;
+
+procedure TStrings.SetText(const Value: string);
+var i, n: Integer; line: string; c: Char;
+begin
+  Clear;
+  line := '';
+  n := Length(Value);
+  for i := 1 to n do
+  begin
+    c := Value[i];
+    if c = #10 then
+    begin
+      if (Length(line) > 0) and (line[Length(line)] = #13) then
+        line := Copy(line, 1, Length(line) - 1);
+      Add(line);
+      line := '';
+    end
+    else
+      line := line + c;
+  end;
+  if line <> '' then Add(line);
+end;
+
+{ ============================ TStringList ============================ }
+
+function TStringList.GetCount: Integer;
+begin
+  Result := FCount;
+end;
+
+function TStringList.Get(Index: Integer): string;
+begin
+  if (Index >= 0) and (Index < FCount) then Result := FList[Index].FStr
+  else Result := '';
+end;
+
+function TStringList.GetObject(Index: Integer): TObject;
+begin
+  if (Index >= 0) and (Index < FCount) then Result := FList[Index].FObj
+  else Result := nil;
+end;
+
+procedure TStringList.Put(Index: Integer; const S: string);
+begin
+  if (Index >= 0) and (Index < FCount) then FList[Index].FStr := S;
+end;
+
+procedure TStringList.PutObject(Index: Integer; AObject: TObject);
+begin
+  if (Index >= 0) and (Index < FCount) then FList[Index].FObj := AObject;
+end;
+
+procedure TStringList.Clear;
+begin
+  SetLength(FList, 0);
+  FCount := 0;
+end;
+
+procedure TStringList.Delete(Index: Integer);
+var i: Integer;
+begin
+  if (Index < 0) or (Index >= FCount) then Exit;
+  for i := Index to FCount - 2 do FList[i] := FList[i + 1];
+  FCount := FCount - 1;
+end;
+
+procedure TStringList.Insert(Index: Integer; const S: string);
+var i: Integer;
+begin
+  if (Index < 0) or (Index > FCount) then Exit;
+  if FCount >= Length(FList) then
+  begin
+    if Length(FList) = 0 then SetLength(FList, 8)
+    else SetLength(FList, Length(FList) * 2);
+  end;
+  for i := FCount downto Index + 1 do FList[i] := FList[i - 1];
+  FList[Index].FStr := S;
+  FList[Index].FObj := nil;
+  FCount := FCount + 1;
+end;
+
+procedure TStringList.Sort;
+var i, j: Integer; tmp: TStringItem;
+begin
+  { insertion sort by string value }
+  for i := 1 to FCount - 1 do
+  begin
+    tmp := FList[i];
+    j := i - 1;
+    while (j >= 0) and (FList[j].FStr > tmp.FStr) do
+    begin
+      FList[j + 1] := FList[j];
+      j := j - 1;
+    end;
+    FList[j + 1] := tmp;
+  end;
+end;
 
 end.

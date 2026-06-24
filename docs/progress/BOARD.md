@@ -9,9 +9,9 @@ lives in git, not in a timestamp._
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
 | bug-conditional-directive-miscount-synautil | A | bug | Spurious "unterminated conditional directive" on synautil + jedi.inc | — |
+| bug-mixed-signature-vmt-misdispatch | A | bug | Virtual dispatch hits the wrong VMT slot with many mixed-signature methods | — |
 | bug-r-directive-toggle-treated-as-resource | A | bug | `{$R-}` / `{$R+}` range-check toggle misread as a resource directive | — |
 | bug-set-of-char-const-corrupts-char-codegen | A | bug | A `set of char` typed constant corrupts `Ord(char-var)` codegen | — |
-| feature-indexed-array-properties | B | feature | Indexed (array) properties + `default` — `property Items[i]: T read G write P` | — |
 
 ## working (3)
 
@@ -121,7 +121,7 @@ lives in git, not in a timestamp._
 | feature-mimic-fpc | B | feature | `mimic FPC` compatibility mode | — |
 | feature-string-model-tyfixedstring | B | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (251)
+## done (252)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -308,6 +308,7 @@ lives in git, not in a timestamp._
 | feature-i386-asm-emitter | A | feature | i386 text-assembler (`EmitAsm386`) for cleaner x86-32 codegen | — |
 | feature-i386-int64-codegen | A | feature | Full Int64 codegen for i386 | — |
 | feature-image-ascii-renderer-library | B | feature | Image to ANSI ASCII renderer library | feature-rtl-image-bitmap-library, feature-terminal-ansi-library |
+| feature-indexed-array-properties | B | feature | Indexed (array) properties + `default` — `property Items[i]: T read G write P` | — |
 | feature-interface-refcounting | A | feature | Interface reference counting (IInterface / ARC) | — |
 | feature-int-to-float-assign | A | feature | Integer → Float assignment / coercion missing the int→float conversion | — |
 | feature-json-library | B | feature | JSON library — parser + serializer (with a roundtrip test app) | — |
@@ -434,9 +435,9 @@ lives in git, not in a timestamp._
 - [A] feature-zero-init-contract
 - [B] meta-track-b-compiler-wishlist
 - [urgent] [A] bug-conditional-directive-miscount-synautil
+- [urgent] [A] bug-mixed-signature-vmt-misdispatch
 - [urgent] [A] bug-r-directive-toggle-treated-as-resource
 - [urgent] [A] bug-set-of-char-const-corrupts-char-codegen
-- [urgent] [B] feature-indexed-array-properties
 
 ## Leverage (tickets each one unblocks)
 
