@@ -1,11 +1,21 @@
 # TLS 1.3 from scratch — syscall-only (Pascal handshake + kTLS bulk)
 
 - **Type:** feature (library / crypto / protocol) — flagship
-- **Status:** backlog (Track B — `lib/rtl`, `$(PXX_STABLE)`)
+- **Status:** backlog — **DEFERRED**, start alongside BSD support (not now)
 - **Owner:** —
 - **Opened:** 2026-06-24
 - **Relation:** the `https://` half of [[feature-own-net-http-lib]]; alternative
   to the OpenSSL-dlopen path ([[feature-real-dynlib-loader]]).
+
+## Scope decision (2026-06-24)
+
+**Target: POSIX/Linux only.** This from-scratch stack is *our* TLS for the
+desktop/server targets. **ESP32 is out of scope** — ESP-IDF already ships
+mbedTLS + HW crypto; link those there, don't run our software stack. **BSD/kTLS
+(FreeBSD) is deferred to when BSD support proper begins.** So: don't pre-build
+multi-platform crypto seams now — keep the primitives portable Pascal targeting
+Linux/POSIX; the per-platform notes below are forward-looking context, not work
+to do up front. Whole feature is deferred until we pick up BSD anyway.
 
 ## Why / stance
 
