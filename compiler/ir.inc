@@ -1543,6 +1543,7 @@ var left, right, seq, item, value, outNode, first, last, leftAddr, argNode, argV
     dcElemTk: TTypeKind;
     pendBase: Integer;
     mcCrefSym, mcInstSym, mcSize, mcVmt, mcAddr, mcSelfArg: Integer;
+    dynLenTmp, dynLenPi: Integer;
 begin
   if node = -1 then
   begin
@@ -2929,7 +2930,30 @@ begin
           end;
         end;
 
-        value := IRLowerCallArg(cpi, pathIdx, ASTLeft[item], isRefArg);
+        { Length(F()) where F returns a dynamic array: the call result is a heap
+          handle (data ptr), not an lvalue, so the force-address path can't fire
+          and the value path would deref it as an address ([rax]) and read the
+          first element instead of the [-8] count. Bind the handle to a hidden
+          dynamic-array local and hand its IR_LEA to the Length codegen — the same
+          shape a dyn-array variable produces, so every backend's existing
+          dyn-array Length path serves it. See bug-length-of-dynarray-call-result. }
+        if (cpi < 0) and (-cpi = Ord(tkLength)) and (pathIdx = 0) and
+           (ASTKind[ASTLeft[item]] = AN_CALL) and (ASTIVal[ASTLeft[item]] >= 0) and
+           ProcRetIsDynArray[ASTIVal[ASTLeft[item]]] then
+        begin
+          dynLenPi := ASTIVal[ASTLeft[item]];
+          dynLenTmp := AllocVar('', tyPointer);
+          Syms[dynLenTmp].IsArray := True;
+          Syms[dynLenTmp].ArrLen := -1;
+          SymDynDepth[dynLenTmp] := 1;
+          Syms[dynLenTmp].ElemType := ProcRetElemTk[dynLenPi];
+          Syms[dynLenTmp].ElemRecName := ProcRetElemRec[dynLenPi];
+          callVal := IRLowerAST(ASTLeft[item]);
+          IRAppend(IR_STORE_SYM, dynLenTmp, callVal, -1, 0, Ord(tyPointer));
+          value := IRAppend(IR_LEA, dynLenTmp, -1, -1, 0, Ord(tyPointer));
+        end
+        else
+          value := IRLowerCallArg(cpi, pathIdx, ASTLeft[item], isRefArg);
 
         { A materialised managed-string argument (a literal, concat, char/string
           coercion, or function result — anything that is not an existing lvalue)

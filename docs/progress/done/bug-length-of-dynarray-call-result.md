@@ -1,9 +1,10 @@
 # bug: `Length()` of a dynamic-array function-call result is wrong/crashes
 
 - **Type:** bug
-- **Status:** backlog
+- **Status:** done
 - **Track:** A
 - **Opened:** 2026-06-23
+- **Closed:** 2026-06-24
 
 ## Summary
 
@@ -72,3 +73,16 @@ inline each, drop the marker comment, re-run `apps/ide/test.sh` (must stay 92/92
 - 2026-06-23 — filed (Track B discovery; repro above).
 - 2026-06-23 — user approved keeping the var-bind workaround; marked it greppable
   + listed the undo step above.
+- 2026-06-24 — FIXED (Track A). Root cause: `Length(F())` lowers the dyn-array
+  call result as a value (not an lvalue), and the codegen `else` branch treated it
+  as an address — `mov rax,[rax]` read element 0 (gave 0), or wild-derefed for an
+  empty managed-element array (segfault). Fix in `ir.inc` (IRLowerAST, tkLength
+  arg loop): when the arg is an `AN_CALL` to a proc with `ProcRetIsDynArray`, bind
+  the returned handle to a hidden dyn-array local (IsArray, ArrLen=-1, SymDynDepth
+  1, ElemType/ElemRecName from `ProcRet*`) and hand its `IR_LEA` to the Length
+  codegen — the exact shape a dyn-array variable produces, so every backend's
+  existing dyn-array Length path serves it (target-independent, no per-backend
+  change). Regression `test/test_length_dynarray_call.pas` (3/3/0/0/4/0) wired
+  into `make test`; full `make test` green, self-host byte-identical. Stabilized +
+  pinned for Track B. Track B may now undo the bochan workaround
+  (`grep -rn 'WORKAROUND(bug-length-of-dynarray-call-result)'`) — left for B's lane.
