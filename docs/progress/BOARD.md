@@ -8,13 +8,12 @@ lives in git, not in a timestamp._
 
 _none_
 
-## working (3)
+## working (2)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
 | feature-eliah-ide | B | feature | Eliah / Ilja — single-window IDE (GUI + TUI) | — |
 | feature-eliah-m0-window | B | feature | Eliah M0 — single tiled GTK3 window | — |
-| feature-eliah-perspectives | B | feature | feature: Eliah perspectives — saved layouts (Code / Design / Split) + compacting | feature-eliah-layout-tree, feature-eliah-pane-collapse |
 
 ## unfinished (2)
 
@@ -115,7 +114,7 @@ _none_
 | feature-mimic-fpc | B | feature | `mimic FPC` compatibility mode | — |
 | feature-string-model-tyfixedstring | B | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (239)
+## done (240)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -266,6 +265,7 @@ _none_
 | feature-eliah-m1-designer | B | feature | Eliah M1 — form designer (box emulation) | feature-eliah-m0-window |
 | feature-eliah-m2-builder | B | feature | Eliah M2 — builder integration | feature-eliah-m0-window |
 | feature-eliah-pane-reflow | B | feature | Eliah — pane reflow / resizable splitters | feature-eliah-m0-window |
+| feature-eliah-perspectives | B | feature | feature: Eliah perspectives — saved layouts (Code / Design / Split) + compacting | feature-eliah-layout-tree, feature-eliah-pane-collapse |
 | feature-empty-class-shorthand | A | feature | Empty class descendant shorthand | — |
 | feature-enum-explicit-values | A | feature | feature: enumerated type with explicit ordinal values | — |
 | feature-eof-stdin-builtin | A | feature | `Eof` (standard input) not recognized | — |
@@ -419,5 +419,4 @@ _none_
 - **2** — feature-c-source-frontend
 - **1** — feature-mimic-fpc
 - **1** — feature-esp32-idf-xtensa
-- **1** — feature-eliah-pane-collapse
 - **1** — chore-inc-to-units

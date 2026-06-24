@@ -1,7 +1,7 @@
 # feature: Eliah perspectives — saved layouts (Code / Design / Split) + compacting
 
 - **Type:** feature (Track B)
-- **Status:** backlog
+- **Status:** done
 - **Track:** B
 - **Parent:** feature-eliah-shell
 - **Blocked-by:** feature-eliah-layout-tree, feature-eliah-pane-collapse
@@ -83,3 +83,16 @@ split (all three columns). gui_suite test_pcl_paned covers strip + full collapse
 
 Remaining M3 scope (separate): serialized perspective descriptors, per-pane
 min/priority, priority-compacting on resize. Presets + switcher shipped.
+
+## DONE 2026-06-24
+
+garin/perspective.TPerspective (render-agnostic, bochan-tested 116 asserts):
+named layout, per-pane min/priority/visibility, Compact(available) priority
+auto-collapse, text round-trip. Eliah drives its horizontal layout through it:
+- 3 presets (Code/Design/Split) via View menu + --code/--design/--split flags
+  (Code+Design+Split screenshot-confirmed on Xvfb :99);
+- priority compacting on every resize (narrow window auto-collapses the
+  lowest-priority column = designer, instead of squashing the editor) — proven
+  by smoke (ApplyLayout(400) drops right, widening restores) + bochan;
+- descriptors round-trip via SaveToText/LoadFromText.
+Mode is pure layout (no DesignMode branching). gui_suite + garin(116) green.
