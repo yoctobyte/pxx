@@ -95,3 +95,26 @@ bottom (commit c706b1c):
 - **Generic non-visual classes**: tray currently proven with TTimer/TMenu (fixed
   docmodel kinds). Arbitrary registered non-visual components want class-name
   storage on the node rather than an enum kind — a docmodel extension.
+
+## Progress 2026-06-24 (cont. 2) — grouping, inspector, property bag
+
+- **Palette grouping** (commit f9ad0d6→): visual widgets, a `-- non-visual --`
+  divider, then tray components; place handler disarms cleanly on the divider.
+- **Inspector / non-visual** (f9ad0d6): tray nodes show Kind + editable Caption +
+  a non-visual marker, geometry rows suppressed and guarded.
+- **Property bag + inspector edit** (44f451f): TDocNode carries an extra-property
+  bag; lfmload round-trips any `Prop = Value` (fixed a silent prop-drop-on-save
+  data-loss bug — TTimer.Interval was being lost). Inspector shows + edits bag
+  props (FBagBase), undoable, for visual and non-visual alike.
+- Gates: bochan 142/142, eliah --smoke OK, gui_suite OK.
+
+### Acceptance MET
+Palette is registry-populated; visual drops to canvas, non-visual to the tray;
+inspector edits both (modelled fields + bag props). Screenshot shows the tray.
+
+### Remaining polish (low priority — could split to a follow-up)
+- **Full RTTI property list**: show ALL published props of the registered class
+  (GetPropList), including ones not yet in the .lfm, so a fresh Timer exposes
+  Interval/Enabled without hand-editing. Bag holds only props already present.
+- **Generic non-visual classes**: tray proven with TTimer/TMenu (fixed docmodel
+  kinds); arbitrary registered non-visual components want class-name node storage.
