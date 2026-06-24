@@ -49,3 +49,37 @@ headless via bochan); screenshot of linked selection.
 
 ## Log
 - 2026-06-23 — filed (milestone 5 of feature-eliah-shell).
+
+## Progress 2026-06-24 — shared model + bidirectional link landed
+
+Foundation (commit a74c646, garin, bochan-tested):
+- docmodel node Name (the `object <Name>:` identifier) — captured + emitted by
+  lfmload (was discarded); FindByName.
+- garin/selection.TSelectionModel: shared current selection (index) +
+  Select/SelectByName/Clear/SelectedName/change-count.
+- selection.LfmFindObjectLine / LfmObjectNameAt: component name <-> .lfm line.
+
+Wiring (commit 1ce2032, eliah + lib/pcl):
+- THandler.Sel routes all selections through the model (synced on doc swap).
+- **Designer -> editor**: select a node -> editor loads the design .lfm + scrolls
+  (TMemo.CaretToLine) to its `object <Name>` line.
+- **Editor -> designer**: 'Link' toolbar button reads the caret line (new
+  TMemo.CaretLine + TWidgetSet.MemoCaretLine virtual + gtk get_iter_at_mark/
+  iter_get_line bindings) and selects the component declared there.
+- The 'Link' button is one command source on the shared model — menus/shortcuts/AI
+  are interchangeable sources.
+
+Gates: garin 157/157, eliah --smoke OK (both directions, deterministic via
+SelectFromEditorLine), gui_suite OK, screenshot shows the Link button.
+
+### Remaining (keeps this ticket open)
+- **wire-OnClick command**: generate a handler stub + assignment (touches .pas
+  codegen); the example end-to-end command from the acceptance.
+- **AI rail + console pane** (stub): an AI command source emitting the same
+  selection/command ops; no layout special-casing.
+- **Command-surface doc**: short note so AI/menus/shortcuts are documented as
+  interchangeable sources.
+- **Editor->designer on caret move** (not just the button): wants a TMemo caret/
+  click signal; the button covers it for now.
+- Link currently keys on the .lfm object declaration (the box-emulation creation
+  site); .pas event-handler navigation arrives with wire-OnClick.
