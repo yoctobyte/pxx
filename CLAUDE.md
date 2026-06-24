@@ -6,10 +6,10 @@ riscv cross targets), and a Nil-Python frontend. The authoritative source of
 project state is `docs/progress/BOARD.md` (regenerate with `tools/progress.sh
 board-md`).
 
-## Two parallel agents — figure out which one you are
+## Three parallel agents — figure out which one you are
 
-The user runs **two Claude agents at once** on this same repo/branch, split by
-track. **At session start, infer your track from the request:**
+The user runs **multiple Claude agents at once** on this same repo/branch, split
+by track. **At session start, infer your track from the request:**
 
 - **Track A — compiler.** codegen / IR / backends / a target, parser / lexer /
   ABI / ELF, bootstrap / self-host / `make stabilize`, compiler bugs, language
@@ -17,9 +17,15 @@ track. **At session start, infer your track from the request:**
 - **Track B — libraries / demos.** `lib/rtl` · `lib/pcl`, `examples/**`, writing
   or fixing a library (JSON, hashing, `IntToStr`, `Copy`…), demo apps, `make
   lib-test` / `make demos`, tickets tagged "(library)".
+- **Track C — documentation (user / website).** `docs/site/**` — the user-facing
+  docs the website pulls straight from git and publishes (getting-started,
+  language reference, tutorials, install, the public landing copy). Prose only:
+  **never** touches `compiler/**` or `lib/**`. NOT the internal dev docs
+  (`docs/dev/**`) or the agent board (`docs/progress/**`) — those belong to A/B.
 
-If genuinely ambiguous, **ask: "Track A (compiler) or B (libraries/demos)?"** —
-don't guess; the tracks have opposite rules about rebuilding the compiler.
+If genuinely ambiguous, **ask: "Track A (compiler), B (libraries/demos), or C
+(docs/website)?"** — don't guess; A/B have opposite rules about rebuilding the
+compiler, and C must stay out of code entirely.
 
 Full protocol, including the stable-binary boundary, the lib-test/demos
 discovery→ticket loop, and shared-checkout coordination, is in
@@ -35,6 +41,13 @@ When a feature B needs lands: `make stabilize` (records a checkpoint, moves
 Build everything with `$(PXX_STABLE)` (= `stable_linux_amd64/default/pinned`);
 never rebuild the compiler. `make lib-test` (green smoke) / `make demos`
 (dashboard). Compiler/language gaps → file a ticket in `docs/progress/backlog`.
+
+### Track C in one line
+Own `docs/site/**` (Markdown the website publishes verbatim from git). No build,
+no compiler, no `lib/**`. Gate = docs stay internally consistent and examples
+compile against `$(PXX_STABLE)` (never rebuild). A compiler/library gap found
+while documenting → file a ticket in `docs/progress/backlog`, don't fix code.
+Verify code snippets by compiling them; don't invent behaviour.
 
 ## Workflow norms (both tracks)
 - Work directly on `master` (no worktrees/clones). Commit in small units.

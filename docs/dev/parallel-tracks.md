@@ -1,11 +1,12 @@
-# Parallel tracks: compiler (A) and libraries/demos (B)
+# Parallel tracks: compiler (A), libraries/demos (B), docs/website (C)
 
-Two work streams proceed in parallel, decoupled by a **pinned stable compiler**.
+Work streams proceed in parallel, decoupled by a **pinned stable compiler**.
 The point: A can rebuild and temporarily regress the compiler while B keeps
-building libraries and demo apps against a known-good baseline.
+building libraries and demo apps against a known-good baseline, and C writes the
+public documentation against that same baseline.
 
-The user runs **two Claude agents at once** against this same repo/branch — one
-per track. Most sessions are one or the other.
+The user runs **several Claude agents at once** against this same repo/branch —
+one per track. Most sessions are one track.
 
 ## Which agent am I? (mode A/B auto-detection)
 
@@ -18,10 +19,14 @@ At the start of a session, infer the track from the user's request:
 - **Track B — libraries/demos.** Signals: `lib/rtl` / `lib/pcl`, `examples/**`,
   writing or fixing a *library* (JSON, hashing, `IntToStr`, `Copy`, collections),
   demo apps, `make lib-test` / `make demos`, a ticket tagged "(library)".
+- **Track C — docs/website.** Signals: user documentation, getting-started /
+  install / tutorial / language-reference prose, the website / landing copy,
+  `docs/site/**`, "document feature X", "write the docs for". Prose only — no
+  code changes.
 
-If the request is genuinely ambiguous, **ask**: "Am I on track A (compiler) or
-track B (libraries/demos) this session?" Don't guess when unsure — the two
-tracks have opposite rules about rebuilding the compiler.
+If the request is genuinely ambiguous, **ask**: "Am I on track A (compiler), B
+(libraries/demos), or C (docs/website) this session?" Don't guess when unsure —
+A/B have opposite rules about rebuilding the compiler, and C must not touch code.
 
 Once known, follow that track's section below. Lanes are soft (see the end), so
 crossing over is allowed when a task needs it — but start from the inferred
@@ -102,6 +107,35 @@ shape the library should have. If the pinned compiler rejects valid source or
 miscompiles it, do **not** add compiler-appeasement workarounds to the library.
 Leave the platonic code in place, add/keep the focused test even if it fails, and
 file a Track A bug ticket with the exact compiler error or misbehavior.
+
+## Track C — documentation (user / website)
+
+Owns: `docs/site/**` — the **user-facing** documentation, authored as Markdown and
+**published to the website straight from git** (the site pulls the repo and
+renders `docs/site/`; no separate docs repo, no generated artifacts checked in by
+C). Typical content: getting-started, install, language reference, the standard
+library / RTL reference, tutorials, FAQ, and the public landing copy.
+
+Strict boundaries:
+
+- **Prose only. C never edits `compiler/**` or `lib/**`** (or `Makefile` build
+  logic). It does not rebuild the compiler — examples are compiled against
+  `$(PXX_STABLE)` to verify they work, nothing more.
+- **Not the internal docs.** `docs/dev/**` (this file, design notes) and
+  `docs/progress/**` (the agent board / tickets) are A/B territory, not website
+  material. C stays in `docs/site/**`.
+- **Verify, don't invent.** Every code snippet in the docs should actually compile
+  and run on the pinned compiler — paste real output, don't guess behaviour. A
+  doc example is a mini conformance test.
+- **Found a gap while documenting** (a feature that doesn't work as it should, a
+  missing library, a confusing error) → **file a ticket** in
+  `docs/progress/backlog` (tag the track it belongs to) rather than fixing code.
+  Document what *is*, note the gap, move on.
+
+C's "gate" is light: internal consistency (no dead links, examples compile), and
+the published tree under `docs/site/` builds whatever static-site generator the
+website uses (kept generator-agnostic — plain Markdown + front-matter so any of
+mkdocs / Docusaurus / Hugo / a custom puller can render it).
 
 ## Lanes are soft, not walls
 
