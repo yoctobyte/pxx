@@ -2053,12 +2053,31 @@ begin
         Result := IRAppend(IR_BINOP, Result, right, Ord(tkPlus), 0, Ord(tyPointer));
       end
       else if ASTIVal[node] = -1 then
+      begin
         { Builtin numeric/ordinal reinterpret (Int64/UInt64/Integer/Cardinal/...):
           re-tag the result IR node with the cast's width so width-sensitive ops
           (e.g. tkShl's 32-bit wrap) read the operand's real width. Without this,
           UInt64(1) lowers to the inner const's 32-bit IRTk and a shl-into-bit-31
           truncation would wrongly fire. See bug-shl-signed-integer-width. }
-        IRTk[Result] := ASTTk[node];
+        castTk := IntToTypeKind(ASTTk[node]);
+        if ((castTk = tyInt64) or (castTk = tyUInt64))
+           and not ((IntToTypeKind(IRTk[Result]) = tyInt64)
+                    or (IntToTypeKind(IRTk[Result]) = tyUInt64)) then
+        begin
+          { Widening numeric reinterpret 32->64 (e.g. Int64(someInteger)): on a
+            32-bit target the inner value occupies one register and its high word
+            is undefined; a bare re-tag tells consumers "this is 64-bit" but no
+            sign/zero-extend ever runs (EmitNode64 widens only when the SOURCE tag
+            is narrow). Force a real widen by adding 0: the inner node keeps its
+            own narrow tag so the extend direction follows its signedness, and the
+            sum carries the cast's 64-bit tag. No-op on 64-bit targets where the
+            load is already full-width. See bug-i386-arm32-int64-conformance. }
+          right := IRAppend(IR_CONST_INT, -1, -1, -1, 0, ASTTk[node]);
+          Result := IRAppend(IR_BINOP, Result, right, Ord(tkPlus), 0, ASTTk[node]);
+        end
+        else
+          IRTk[Result] := ASTTk[node];
+      end;
     end;
 
     AN_RTTI_REG:

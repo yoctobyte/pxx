@@ -31,7 +31,7 @@ _none_
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
-| bug-cross-gate-masked-failures | A | bug | bug: cross gates red on two pre-existing tests (were masked behind ArgStr) | — |
+| bug-managed-length-via-pointer-deref | A | bug | bug: managed Length(ps^) / Length(rec.pf^) returns garbage (all targets) | — |
 | chore-inc-to-units | A | chore | `.inc` → real `.pas` units refactor | — |
 | chore-runtime-emission-size | A | chore | Finer runtime-support emission (code size) | — |
 | feature-c-header-import-complex | A | feature | Import C headers for complex libraries (glib/GTK-grade) | — |
@@ -109,7 +109,7 @@ _none_
 | feature-mimic-fpc | B | feature | `mimic FPC` compatibility mode | — |
 | feature-string-model-tyfixedstring | B | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (247)
+## done (249)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -135,6 +135,7 @@ _none_
 | bug-const-section-before-constructor | A | bug | bug: const section before constructor/destructor not terminated | — |
 | bug-c-packed-aligned-ignored | A | bug | C `__attribute__((packed))` / `aligned` ignored → field-offset drift | — |
 | bug-c-quoted-include-search-path | A | bug | C quoted includes do not search the including file directory | — |
+| bug-cross-gate-masked-failures | A | bug | bug: cross gates red on two pre-existing tests (were masked behind ArgStr) | — |
 | bug-dynarray-in-record-corrupt | A | bug | Dynamic array as a record field is corrupted (value return + var-param assign) | — |
 | bug-dynarray-managed-record-field-reassign | A | bug | bug: assigning a local dynamic-array-of-managed-record to a field drops/frees the elements | — |
 | bug-dynarray-whole-var-assign-cross | A | bug | Whole dynamic-array variable assignment (`b := a`) unsupported on i386 + aarch64 | — |
@@ -144,6 +145,7 @@ _none_
 | bug-forin-qualified-set-member-source | A | bug | `for-in` over a qualified set member source fails | — |
 | bug-frozen-string-length-pointer-deref-cross | A | bug | `Length()` of a pointer-dereferenced frozen `string` returns 0 on the cross targets | — |
 | bug-generator-yield-call-expression | A | bug | Generator `yield` of a call expression lowers to unsupported IR | — |
+| bug-i386-arm32-int64-conformance | A | bug | bug: i386/arm32 diverge on Int64 via fn-return / record-field / mixed ops | — |
 | bug-implicit-self-dynarray-length | A | bug | `Length` on implicit-`Self` dynamic-array field fails in methods | — |
 | bug-implicit-textfile-unit-method-local | A | bug | Implicit textfile import misses method-local `Text` in units | — |
 | bug-impl-prescan-codegen-regression | A | bug | Unit impl-section pre-scan silently miscompiles routines (zlib decode broken) | — |
@@ -371,7 +373,7 @@ _none_
 
 ## Ready (no unmet blocker)
 
-- [A] bug-cross-gate-masked-failures
+- [A] bug-managed-length-via-pointer-deref
 - [A] chore-inc-to-units
 - [A] chore-runtime-emission-size
 - [A] feature-c-header-import-complex
