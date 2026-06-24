@@ -29,7 +29,8 @@ program eliah;
   a selection outline + the node's fields in the object-inspector pane below. }
 
 uses gtk3, controls, stdctrls, extctrls, graphics, forms, menus, sysutils,
-     buffer, runner, docmodel, designer, lfmload, builder, project, perspective;
+     buffer, runner, docmodel, designer, lfmload, builder, project, perspective,
+     registry;
 
 const
   W_WIN     = 1100;
@@ -54,6 +55,7 @@ type
     ValueEdit: TEdit;
     FEditRow: Integer;     { which inspector row the value edit targets, -1 none }
     Palette: TComboBox;
+    PaletteNames: array of AnsiString; { class name backing each palette row }
     PlaceBtn: TButton;
     PlaceMode: Boolean;    { next designer click drops a new widget }
     Dsn: TDesigner;
@@ -106,20 +108,30 @@ type
     procedure OnPerspSplit(Sender: TObject);
   end;
 
-{ palette index -> docmodel kind (Form is the root, never placed) }
-function KindFromPalette(idx: Integer): TWidgetKind;
+{ A registered visual component class name -> the docmodel kind the designer can
+  place for it. Returns False for components the box-emulation model can't place
+  yet (e.g. TComboBox/TPaintBox/TPaned/TForm) — those are filtered out of the
+  palette. This is the only PCL-name -> kind policy; the registry stays generic. }
+function CompPlaceKind(const clsName: AnsiString; var k: TWidgetKind): Boolean;
 begin
-  case idx of
-    0: KindFromPalette := wkButton;
-    1: KindFromPalette := wkLabel;
-    2: KindFromPalette := wkEdit;
-    3: KindFromPalette := wkMemo;
-    4: KindFromPalette := wkListBox;
-    5: KindFromPalette := wkCheckBox;
-    6: KindFromPalette := wkPanel;
+  CompPlaceKind := True;
+  if      clsName = 'TButton'   then k := wkButton
+  else if clsName = 'TLabel'    then k := wkLabel
+  else if clsName = 'TEdit'     then k := wkEdit
+  else if clsName = 'TMemo'     then k := wkMemo
+  else if clsName = 'TListBox'  then k := wkListBox
+  else if clsName = 'TCheckBox' then k := wkCheckBox
+  else if clsName = 'TPanel'    then k := wkPanel
+  else CompPlaceKind := False;
+end;
+
+{ Palette display label: drop a leading 'T' from the class name (TButton -> Button). }
+function CompDisplay(const clsName: AnsiString): AnsiString;
+begin
+  if (Length(clsName) > 1) and (clsName[1] = 'T') then
+    CompDisplay := Copy(clsName, 2, Length(clsName) - 1)
   else
-    KindFromPalette := wkButton;
-  end;
+    CompDisplay := clsName;
 end;
 
 { case-insensitive '.lfm' suffix test }
@@ -522,7 +534,9 @@ begin
   begin
     { drop a new widget of the palette kind, parented to the form (node 0) }
     PushUndo(pendingSnap);
-    k := KindFromPalette(Palette.ItemIndex);
+    k := wkButton;
+    if (Palette.ItemIndex >= 0) and (Palette.ItemIndex < Length(PaletteNames)) then
+      CompPlaceKind(PaletteNames[Palette.ItemIndex], k);
     idx := Dsn.Doc.AddNode(k, Dsn.Doc.KindName(k), 0, X, Y, 80, 24);
     Dsn.Sel := idx;
     OnPlaceToggle(nil);          { one-shot: leave place mode after dropping }
@@ -618,6 +632,9 @@ var
   rtdoc: TDocModel;
   MainMenu: TMainMenu;
   FileMenu, EditMenu, BuildMenu, ViewMenu, mi: TMenuItem;
+  comps: TRegEntryArr;
+  ci: Integer;
+  pk: TWidgetKind;
 
 function MkMenuItem(const cap: AnsiString; parent: TMenuItem): TMenuItem;
 var it: TMenuItem;
@@ -786,17 +803,23 @@ begin
   btn := MkButton('New',     638); btn.OnClick := @H.OnNew;
   btn := MkButton('Undo',    724); btn.OnClick := @H.OnUndo;
 
-  { palette: pick a widget kind, hit Place, then click the designer to drop it }
+  { palette: pick a widget kind, hit Place, then click the designer to drop it.
+    Registry-driven: every registered visual component (descends from TControl)
+    the designer can place appears here automatically — RegisterClass'ing a new
+    placeable widget surfaces it with no edit to this list. }
   Palette := TComboBox.Create(nil);
   Palette.Parent := Form1;
   Palette.SetBounds(266, 3, 110, 26);
-  Palette.AddItem('Button');
-  Palette.AddItem('Label');
-  Palette.AddItem('Edit');
-  Palette.AddItem('Memo');
-  Palette.AddItem('ListBox');
-  Palette.AddItem('CheckBox');
-  Palette.AddItem('Panel');
+  comps := EnumDescendants('TComponent', False);
+  SetLength(H.PaletteNames, 0);
+  for ci := 0 to Length(comps) - 1 do
+  begin
+    if not ClassDescendsFrom(comps[ci].Cls, 'TControl') then Continue;
+    if not CompPlaceKind(comps[ci].Name, pk) then Continue;
+    Palette.AddItem(CompDisplay(comps[ci].Name));
+    SetLength(H.PaletteNames, Length(H.PaletteNames) + 1);
+    H.PaletteNames[Length(H.PaletteNames) - 1] := comps[ci].Name;
+  end;
   Palette.ItemIndex := 0;
 
   PlaceBtn := TButton.Create(nil);
@@ -957,8 +980,12 @@ begin
       begin writeln('SMOKE FAIL: placed node not selected'); Halt(1); end;
     if H.Dsn.Doc.NodeParent(H.Dsn.Sel) <> 0 then
       begin writeln('SMOKE FAIL: placed node not parented to form'); Halt(1); end;
-    if H.Dsn.Doc.NodeKind(H.Dsn.Sel) <> KindFromPalette(H.Palette.ItemIndex) then
+    pk := wkButton;
+    CompPlaceKind(H.PaletteNames[H.Palette.ItemIndex], pk);
+    if H.Dsn.Doc.NodeKind(H.Dsn.Sel) <> pk then
       begin writeln('SMOKE FAIL: placed node wrong kind'); Halt(1); end;
+    if Length(H.PaletteNames) < 7 then
+      begin writeln('SMOKE FAIL: registry palette underpopulated'); Halt(1); end;
     if H.PlaceMode then begin writeln('SMOKE FAIL: place mode not one-shot'); Halt(1); end;
 
     { undo: the place above is on the undo stack -> undo restores the prior count }
