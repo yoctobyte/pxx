@@ -159,3 +159,34 @@ design decision, file separately). Recommended order for the dedicated push:
 `dynlibs` (stub) -> `unixutil`/`Unix`/`BaseUnix` -> verify `SysUtils`/`Classes`
 depth. (Coordination: `Move`/`FillChar` are owned elsewhere on Track B; keep
 `dynlibs`/the unix shims separate from them.)
+
+### Progress 2026-06-24 — dynlibs + unix shims LANDED; blocked on a directive bug
+
+Track B RTL landed (all with `make lib-test` smokes):
+
+- **`lib/rtl/dynlibs.pas`** — honest stub (`LoadLibrary->NilHandle`,
+  `GetProcedureAddress->nil`). Unblocks `SynaFpc` and thus every leaf unit's
+  `uses`. Real loader split into [[feature-real-dynlib-loader]] (opt-in,
+  syscall-first / libc-cheat policy). Carries a PChar-overload **workaround** for
+  [[bug-pchar-to-string-implicit-conv]] (Track A) — remove when that lands.
+- **`lib/rtl/baseunix.pas`** — `timeval` family + `fpgettimeofday` over a real
+  CLOCK_REALTIME `clock_gettime` syscall (native-width timespec per arch).
+- **`lib/rtl/unix.pas`** — `Tzseconds` (0/UTC; TZif parse deferred).
+- **`lib/rtl/unixutil.pas`** — presence-only.
+
+With these the `uses` chain of `synautil`/`synaip`/`asn1util`/`synachar` fully
+resolves. **Furthest reached:** `synautil` now passes the uses clause and stops
+at a **Track A compiler bug** — spurious `unterminated conditional directive` on
+`synautil` + `jedi.inc` (jedi alone OK, synautil sans jedi OK, together fail).
+Filed urgent: [[bug-conditional-directive-miscount-synautil]]. No lib workaround
+(Platonic).
+
+**Blocker stack now (leaf set):**
+1. **[[bug-conditional-directive-miscount-synautil]]** (Track A, urgent) — gates
+   synautil/synaip/asn1util/synachar at the directive phase.
+2. After that: `synafpc`/`synautil` need **`StrLCopy`** (and likely sibling
+   `strings`-unit routines) — RTL gap, Track B.
+3. `Move`/`FillChar` — owned separately on Track B.
+
+Also open from earlier: [[bug-hex-char-code-literal]] (Track A, urgent) for
+`synacode`'s `#$NN` set constants.
