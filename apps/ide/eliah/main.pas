@@ -534,11 +534,16 @@ begin
   pendingSnap := SaveLfmText(Dsn.Doc);
   if PlaceMode then
   begin
+    { resolve the palette selection to a placeable kind; a group-divider row
+      (empty class name) or anything CompPlaceKind rejects just disarms. }
+    if (Palette.ItemIndex < 0) or (Palette.ItemIndex >= Length(PaletteNames)) or
+       not CompPlaceKind(PaletteNames[Palette.ItemIndex], k) then
+    begin
+      OnPlaceToggle(nil);
+      Exit;
+    end;
     { drop a new widget of the palette kind, parented to the form (node 0) }
     PushUndo(pendingSnap);
-    k := wkButton;
-    if (Palette.ItemIndex >= 0) and (Palette.ItemIndex < Length(PaletteNames)) then
-      CompPlaceKind(PaletteNames[Palette.ItemIndex], k);
     idx := Dsn.Doc.AddNode(k, Dsn.Doc.KindName(k), 0, X, Y, 80, 24);
     Dsn.Sel := idx;
     OnPlaceToggle(nil);          { one-shot: leave place mode after dropping }
@@ -635,7 +640,7 @@ var
   MainMenu: TMainMenu;
   FileMenu, EditMenu, BuildMenu, ViewMenu, mi: TMenuItem;
   comps: TRegEntryArr;
-  ci: Integer;
+  ci, nvFirst: Integer;
   pk: TWidgetKind;
 
 function MkMenuItem(const cap: AnsiString; parent: TMenuItem): TMenuItem;
@@ -814,16 +819,32 @@ begin
   Palette.SetBounds(266, 3, 110, 26);
   comps := EnumDescendants('TComponent', False);
   SetLength(H.PaletteNames, 0);
+  { grouped: visual widgets (canvas) first, then a divider, then non-visual
+    components (tray). CompPlaceKind gates both; PaletteNames[i]='' marks the
+    divider, which the place handler treats as a no-op. }
   for ci := 0 to Length(comps) - 1 do
-  begin
-    { both visual widgets and non-visual components belong here — CompPlaceKind
-      is the gate (it knows which class names the docmodel can place; non-visual
-      ones land in the tray, visual ones on the canvas). }
-    if not CompPlaceKind(comps[ci].Name, pk) then Continue;
-    Palette.AddItem(CompDisplay(comps[ci].Name));
-    SetLength(H.PaletteNames, Length(H.PaletteNames) + 1);
-    H.PaletteNames[Length(H.PaletteNames) - 1] := comps[ci].Name;
-  end;
+    if CompPlaceKind(comps[ci].Name, pk) and
+       ClassDescendsFrom(comps[ci].Cls, 'TControl') then
+    begin
+      Palette.AddItem(CompDisplay(comps[ci].Name));
+      SetLength(H.PaletteNames, Length(H.PaletteNames) + 1);
+      H.PaletteNames[Length(H.PaletteNames) - 1] := comps[ci].Name;
+    end;
+  nvFirst := Length(H.PaletteNames);
+  for ci := 0 to Length(comps) - 1 do
+    if CompPlaceKind(comps[ci].Name, pk) and
+       not ClassDescendsFrom(comps[ci].Cls, 'TControl') then
+    begin
+      if Length(H.PaletteNames) = nvFirst then   { first non-visual: emit divider }
+      begin
+        Palette.AddItem('-- non-visual --');
+        SetLength(H.PaletteNames, Length(H.PaletteNames) + 1);
+        H.PaletteNames[Length(H.PaletteNames) - 1] := '';
+      end;
+      Palette.AddItem(CompDisplay(comps[ci].Name));
+      SetLength(H.PaletteNames, Length(H.PaletteNames) + 1);
+      H.PaletteNames[Length(H.PaletteNames) - 1] := comps[ci].Name;
+    end;
   Palette.ItemIndex := 0;
 
   PlaceBtn := TButton.Create(nil);
