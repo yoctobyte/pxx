@@ -42,11 +42,53 @@ on Failure 2).
 pascal26:186: error: target aarch64: load through pointer of this type not yet supported ()
 ```
 
-A class-reference / metaclass construct at `test_classref.pas:186` lowers to a
-load the aarch64 backend rejects ("load through pointer of this type not yet
-supported"). `feature-metaclass-construct-dispatch` is marked done as
-"target-independent IR, all backends", but this particular classref load is not
-handled on aarch64. i386/arm32 were not checked for the same test (gate ordering).
+The `186` is a line in `typinfo` (`uses typinfo`; the test is 36 lines), not the
+test — specifically `GetClass`'s loop `if entries[i].NamePtr^ = name then`
+(typinfo.pas ~180), where `NamePtr: PString = ^TRttiStr` and
+`TRttiStr = string[255]`.
+
+### Root cause (investigated 2026-06-24, not yet fixed — bigger than a quick patch)
+
+This is NOT really classref/metaclass and NOT aarch64-only — it is a frozen/inline
+string dereferenced **through a pointer field**, broken on every target:
+
+- `ir.inc` AN_DEREF/FIELD/INDEX value lowering: a frozen-string value "IS its
+  address", so for `p^` it returns the address node `left` and re-tags it
+  `IRTk[left] := ASTTk[node]` (so consumers see a frozen string, not a raw
+  pointer). The comment even documents this.
+- For a simple `ps^` (ps a pointer *variable*), `left` is an `IR_LOAD_SYM` and the
+  in-place re-tag is harmless (still an 8-byte slot load).
+- For `entries[i].NamePtr^` (deref of a pointer-typed *field*), `left` is an
+  `IR_LOAD_MEM(fieldAddr, tyPointer)` that loads the field's pointer value. The
+  re-tag mutates that very load to `tyString`, turning a pointer-load into a
+  string-load. aarch64's `IR_LOAD_MEM` type guard then rejects `tk=4`; **x86-64
+  does not error but mis-handles it and segfaults at runtime** (confirmed).
+
+Minimal repro (segfaults on x86-64, errors on aarch64):
+
+```pascal
+type TRttiStr = string[255]; PString = ^TRttiStr;
+     TEntry = record NamePtr: PString; X: Integer; end; PEntry = ^TEntry;
+var arr: array[0..1] of TEntry; s0: TRttiStr; entries: PEntry; name: string; i: Integer;
+begin
+  s0 := 'TFoo'; arr[0].NamePtr := @s0; entries := @arr[0]; name := 'TFoo';
+  for i := 0 to 1 do if entries[i].NamePtr^ = name then writeln('match ', i);
+end.
+```
+
+### Proper fix (sketch)
+
+Don't mutate the tag of the `left` address node in place when it is a load that
+actually fetches the pointer (`IR_LOAD_MEM`/`IR_FIELD`/`IR_INDEX`): the pointer
+must still be loaded pointer-width, only *presented* as a frozen-string address.
+Either wrap it in a tag-only pass-through node, or keep `left` as `tyPointer` and
+carry the frozen-string-ness on the consuming op. Also note `string[255]` here
+resolves to legacy `tyString` (ord 4), not `tyFixedString` — the migration alias
+is inconsistent and worth pinning down at the same time. (An attempt that merely
+widened the AN_DEREF type set and/or the aarch64 guard was reverted: it fixes the
+simple `ps^` case but not the pointer-field case, and the underlying in-place
+re-tag of a pointer-load is the real defect.) i386/arm32 were not separately
+checked but share the same `ir.inc` lowering, so expect the same break.
 
 ## Acceptance
 
