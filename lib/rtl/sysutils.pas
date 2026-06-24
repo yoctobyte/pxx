@@ -18,6 +18,9 @@ type
   TReplaceFlag  = (rfReplaceAll, rfIgnoreCase);
   TReplaceFlags = set of TReplaceFlag;
 
+  PInt64Rec  = ^Int64;
+  PDoubleRec = ^Double;
+
   Exception = class
     FMessage: string;
     FHelpContext: Integer;
@@ -125,6 +128,11 @@ function StringReplace(const S, OldPattern, NewPattern: AnsiString; Flags: TRepl
 
 { Wrap s in single quotes, doubling any embedded quote. }
 function QuotedStr(const s: AnsiString): AnsiString;
+
+{ printf-style formatting over an `array of const`. Specifiers: %d %u %x %s %f
+  %g %c %%, with width, '-' (left-align) / '0' (zero-pad) flags, and .precision
+  (max chars for %s, fraction digits for %f). FPC SysUtils.Format. }
+function Format(const fmt: AnsiString; const args: array of const): AnsiString;
 
 { List directory entries, excluding "." and "..". Size and modification time are
   filled when the active PAL backend supports metadata, otherwise Size is -1. }
@@ -637,6 +645,174 @@ begin
     if s[i] = '''' then r := r + '''''' else r := r + s[i];
   end;
   Result := r + '''';
+end;
+
+function FmtPCharStr(p: Pointer): AnsiString;
+var pc: PChar; i: Integer; r: AnsiString;
+begin
+  r := '';
+  if p <> nil then
+  begin
+    pc := PChar(p); i := 0;
+    while pc[i] <> #0 do begin r := r + pc[i]; Inc(i); end;
+  end;
+  Result := r;
+end;
+
+{ Read one array-of-const element as Int64 / string / double. }
+function FmtArgInt(const v: TVarRec): Int64;
+begin
+  case v.VType of
+    vtInteger: Result := v.VInteger;
+    vtInt64:   Result := PInt64Rec(v.VInt64)^;
+    vtBoolean: Result := Ord(v.VBoolean);
+    vtChar:    Result := Ord(v.VChar);
+    vtExtended: Result := Trunc(PDoubleRec(v.VExtended)^);
+  else
+    Result := 0;
+  end;
+end;
+
+function FmtArgStr(const v: TVarRec): AnsiString;
+begin
+  case v.VType of
+    vtAnsiString: Result := FmtPCharStr(v.VAnsiString);
+    vtPChar:      Result := FmtPCharStr(v.VPChar);
+    vtChar:       Result := v.VChar;
+    vtInteger:    Result := IntToStr(v.VInteger);
+    vtInt64:      Result := IntToStr(PInt64Rec(v.VInt64)^);
+    vtBoolean:    if v.VBoolean then Result := 'TRUE' else Result := 'FALSE';
+    vtExtended:   Result := FloatToStr(PDoubleRec(v.VExtended)^);
+  else
+    Result := '';
+  end;
+end;
+
+function FmtArgFloat(const v: TVarRec): Double;
+begin
+  case v.VType of
+    vtExtended: Result := PDoubleRec(v.VExtended)^;
+    vtInteger:  Result := v.VInteger;
+    vtInt64:    Result := PInt64Rec(v.VInt64)^;
+  else
+    Result := 0;
+  end;
+end;
+
+{ Fixed-point: exactly prec fraction digits, rounded (printf %f). }
+function FmtFixed(v: Double; prec: Integer): AnsiString;
+var neg: Boolean; ip, scaled, k: Int64; i: Integer; fracStr: AnsiString;
+begin
+  neg := v < 0;
+  if neg then v := -v;
+  k := 1;
+  for i := 1 to prec do k := k * 10;
+  scaled := Trunc(v * k + 0.5);            { round half up }
+  ip := scaled div k;
+  Result := IntToStr(ip);
+  if prec > 0 then
+  begin
+    fracStr := IntToStr(scaled mod k);
+    while Length(fracStr) < prec do fracStr := '0' + fracStr;
+    Result := Result + '.' + fracStr;
+  end;
+  if neg then Result := '-' + Result;
+end;
+
+function FmtPad(const s: AnsiString; width: Integer; leftAlign, zeroPad: Boolean): AnsiString;
+var pad: AnsiString; need, k: Integer;
+begin
+  need := width - Length(s);
+  if need <= 0 then begin Result := s; Exit; end;
+  pad := '';
+  if leftAlign then
+    for k := 1 to need do pad := pad + ' '
+  else if zeroPad then
+    for k := 1 to need do pad := pad + '0'
+  else
+    for k := 1 to need do pad := pad + ' ';
+  if leftAlign then Result := s + pad else Result := pad + s;
+end;
+
+function Format(const fmt: AnsiString; const args: array of const): AnsiString;
+var
+  i, n, argIdx, width, prec: Integer;
+  c: Char;
+  leftAlign, zeroPad, hasPrec: Boolean;
+  piece, r: AnsiString;
+  iv: Int64;
+begin
+  r := ''; i := 1; n := Length(fmt); argIdx := 0;
+  while i <= n do
+  begin
+    c := fmt[i];
+    if c <> '%' then begin r := r + c; Inc(i); Continue; end;
+    Inc(i);                                        { past '%' }
+    if (i <= n) and (fmt[i] = '%') then begin r := r + '%'; Inc(i); Continue; end;
+
+    leftAlign := False; zeroPad := False;
+    while (i <= n) and ((fmt[i] = '-') or (fmt[i] = '0')) do
+    begin
+      if fmt[i] = '-' then leftAlign := True else zeroPad := True;
+      Inc(i);
+    end;
+    width := 0;
+    while (i <= n) and (fmt[i] >= '0') and (fmt[i] <= '9') do
+    begin width := width * 10 + (Ord(fmt[i]) - Ord('0')); Inc(i); end;
+    hasPrec := False; prec := 0;
+    if (i <= n) and (fmt[i] = '.') then
+    begin
+      Inc(i); hasPrec := True;
+      while (i <= n) and (fmt[i] >= '0') and (fmt[i] <= '9') do
+      begin prec := prec * 10 + (Ord(fmt[i]) - Ord('0')); Inc(i); end;
+    end;
+    if i > n then Break;
+    c := fmt[i]; Inc(i);
+
+    piece := '';
+    case c of
+      'd', 'u':
+        begin
+          if argIdx < Length(args) then piece := IntToStr(FmtArgInt(args[argIdx]));
+          Inc(argIdx);
+        end;
+      'x', 'X':
+        begin
+          if argIdx < Length(args) then
+          begin iv := FmtArgInt(args[argIdx]); piece := IntToHex(iv, 0); end;
+          Inc(argIdx);
+        end;
+      's':
+        begin
+          if argIdx < Length(args) then piece := FmtArgStr(args[argIdx]);
+          if hasPrec and (Length(piece) > prec) then piece := Copy(piece, 1, prec);
+          Inc(argIdx);
+        end;
+      'f':
+        begin
+          if argIdx < Length(args) then
+          begin
+            if hasPrec then piece := FmtFixed(FmtArgFloat(args[argIdx]), prec)
+            else piece := FmtFixed(FmtArgFloat(args[argIdx]), 2);
+          end;
+          Inc(argIdx);
+        end;
+      'g':
+        begin
+          if argIdx < Length(args) then piece := FloatToStr(FmtArgFloat(args[argIdx]));
+          Inc(argIdx);
+        end;
+      'c':
+        begin
+          if argIdx < Length(args) then piece := Chr(Integer(FmtArgInt(args[argIdx])));
+          Inc(argIdx);
+        end;
+    else
+      piece := '%' + c;                            { unknown spec — emit literally }
+    end;
+    r := r + FmtPad(piece, width, leftAlign, zeroPad);
+  end;
+  Result := r;
 end;
 
 function DirentByte(buf: Pointer; off: Integer): Byte;
