@@ -47,10 +47,9 @@ begin
   sl.Objects[1] := marker;
   SayBool('sl-object', sl.Objects[1] = marker);
 
-  { Text in insertion order. NOTE: sl.Sort is correct but blocked by
-    bug-string-ordering-comparison-constant (string < / > are stuck) — re-add a
-    sorted check when that Track A bug is fixed. }
-  SayBool('sl-text', sl.Text = 'banana'#13#10'apple'#13#10'cherry'#13#10);
+  sl.Sort;                       { uses CompareStr (correct comparator) }
+  SayBool('sl-sorted', (sl[0] = 'apple') and (sl[1] = 'banana') and (sl[2] = 'cherry'));
+  SayBool('sl-text', sl.Text = 'apple'#13#10'banana'#13#10'cherry'#13#10);
   sl.Free;
 
   { ---- TStrings base reference to a TStringList (the standard idiom) ---- }

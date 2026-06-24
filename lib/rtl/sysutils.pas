@@ -15,6 +15,9 @@ type
   end;
   TFileInfoArray = array of TFileInfo;
 
+  TReplaceFlag  = (rfReplaceAll, rfIgnoreCase);
+  TReplaceFlags = set of TReplaceFlag;
+
   Exception = class
     FMessage: string;
     FHelpContext: Integer;
@@ -99,6 +102,29 @@ procedure Insert(const src: AnsiString; var dst: AnsiString; index: Integer);
 
 { Concatenate two strings. For more than two, chain with + or nest calls. }
 function Concat(const s1, s2: AnsiString): AnsiString;
+
+{ Lexicographic compare by byte value: <0 / 0 / >0. Uses char codes (the string
+  relational operators are unreliable — see bug-string-ordering-comparison-constant
+  — so this is the correct comparator and what Sort etc. should call). }
+function CompareStr(const s1, s2: AnsiString): Integer;
+{ Case-insensitive CompareStr; SameText is its = 0 form. }
+function CompareText(const s1, s2: AnsiString): Integer;
+function SameText(const s1, s2: AnsiString): Boolean;
+
+{ Strip leading / trailing chars <= ' '. }
+function TrimLeft(const s: AnsiString): AnsiString;
+function TrimRight(const s: AnsiString): AnsiString;
+
+{ Parse a decimal integer; True + value on success, False (value untouched) on
+  any malformed input. }
+function TryStrToInt(const s: AnsiString; var value: Integer): Boolean;
+
+{ Replace occurrences of OldPattern in S with NewPattern. rfReplaceAll replaces
+  every occurrence (else only the first); rfIgnoreCase matches case-insensitively. }
+function StringReplace(const S, OldPattern, NewPattern: AnsiString; Flags: TReplaceFlags): AnsiString;
+
+{ Wrap s in single quotes, doubling any embedded quote. }
+function QuotedStr(const s: AnsiString): AnsiString;
 
 { List directory entries, excluding "." and "..". Size and modification time are
   filled when the active PAL backend supports metadata, otherwise Size is -1. }
@@ -501,6 +527,116 @@ end;
 function Concat(const s1, s2: AnsiString): AnsiString;
 begin
   Result := s1 + s2;
+end;
+
+function CompareStr(const s1, s2: AnsiString): Integer;
+var i, l1, l2, m, c1, c2: Integer;
+begin
+  l1 := Length(s1); l2 := Length(s2);
+  if l1 < l2 then m := l1 else m := l2;
+  for i := 1 to m do
+  begin
+    c1 := Ord(s1[i]); c2 := Ord(s2[i]);
+    if c1 <> c2 then begin Result := c1 - c2; Exit; end;
+  end;
+  Result := l1 - l2;
+end;
+
+function CompareText(const s1, s2: AnsiString): Integer;
+begin
+  Result := CompareStr(LowerCase(s1), LowerCase(s2));
+end;
+
+function SameText(const s1, s2: AnsiString): Boolean;
+begin
+  Result := CompareText(s1, s2) = 0;
+end;
+
+function TrimLeft(const s: AnsiString): AnsiString;
+var i, n: Integer;
+begin
+  n := Length(s); i := 1;
+  while (i <= n) and (s[i] <= ' ') do Inc(i);
+  Result := Copy(s, i, n - i + 1);
+end;
+
+function TrimRight(const s: AnsiString): AnsiString;
+var i: Integer;
+begin
+  i := Length(s);
+  while (i >= 1) and (s[i] <= ' ') do Dec(i);
+  Result := Copy(s, 1, i);
+end;
+
+function TryStrToInt(const s: AnsiString; var value: Integer): Boolean;
+var i, n, sign, d: Integer; t: AnsiString; v: Int64;
+begin
+  t := Trim(s);
+  n := Length(t);
+  if n = 0 then begin Result := False; Exit; end;
+  i := 1; sign := 1;
+  if t[1] = '-' then begin sign := -1; i := 2; end
+  else if t[1] = '+' then i := 2;
+  if i > n then begin Result := False; Exit; end;
+  v := 0;
+  while i <= n do
+  begin
+    if (t[i] < '0') or (t[i] > '9') then begin Result := False; Exit; end;
+    d := Ord(t[i]) - Ord('0');
+    v := v * 10 + d;
+    Inc(i);
+  end;
+  value := Integer(sign * v);
+  Result := True;
+end;
+
+function StringReplace(const S, OldPattern, NewPattern: AnsiString; Flags: TReplaceFlags): AnsiString;
+var
+  src, pat, r: AnsiString;
+  i, plen, slen: Integer;
+  all, ci, matched: Boolean;
+begin
+  plen := Length(OldPattern);
+  if plen = 0 then begin Result := S; Exit; end;
+  all := rfReplaceAll in Flags;
+  ci := rfIgnoreCase in Flags;
+  if ci then begin src := LowerCase(S); pat := LowerCase(OldPattern); end
+  else begin src := S; pat := OldPattern; end;
+  slen := Length(S);
+  r := '';
+  i := 1;
+  while i <= slen do
+  begin
+    matched := (i + plen - 1 <= slen) and (Copy(src, i, plen) = pat);
+    if matched then
+    begin
+      r := r + NewPattern;
+      i := i + plen;
+      if not all then
+      begin
+        r := r + Copy(S, i, slen - i + 1);
+        Result := r;
+        Exit;
+      end;
+    end
+    else
+    begin
+      r := r + S[i];
+      Inc(i);
+    end;
+  end;
+  Result := r;
+end;
+
+function QuotedStr(const s: AnsiString): AnsiString;
+var i: Integer; r: AnsiString;
+begin
+  r := '''';
+  for i := 1 to Length(s) do
+  begin
+    if s[i] = '''' then r := r + '''''' else r := r + s[i];
+  end;
+  Result := r + '''';
 end;
 
 function DirentByte(buf: Pointer; off: Integer): Byte;

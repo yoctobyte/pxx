@@ -13,14 +13,15 @@ unit classes;
   methods) — both required for the standard stream surface. Lands here once those
   are fixed. Track B.
 
-  STATUS: TList, TStrings and TStringList all work and are smoked (the VMT
-  mixed-signature dispatch bug that blocked the abstract base was fixed Track A,
-  v53). One gap remains: TStringList.Sort is correct code but does not order
-  because AnsiString `<`/`>` are broken (return constants) —
-  bug-string-ordering-comparison-constant (Track A, urgent). No workaround per the
-  Platonic rule; the sorted smoke re-enables once that lands. }
+  STATUS: TList, TStrings and TStringList all work and are smoked, Sort included.
+  Sort compares via sysutils.CompareStr (char-code based) — which is what FPC's
+  TStringList.Sort uses anyway, and it correctly sidesteps the broken AnsiString
+  `<`/`>` operators (bug-string-ordering-comparison-constant, Track A — still open
+  for user code that uses those operators directly). }
 
 interface
+
+uses sysutils;   { CompareStr for Sort }
 
 type
   { ---- TList: a growable list of untyped pointers ---- }
@@ -269,7 +270,7 @@ begin
   begin
     tmp := FList[i];
     j := i - 1;
-    while (j >= 0) and (FList[j].FStr > tmp.FStr) do
+    while (j >= 0) and (CompareStr(FList[j].FStr, tmp.FStr) > 0) do
     begin
       FList[j + 1] := FList[j];
       j := j - 1;
