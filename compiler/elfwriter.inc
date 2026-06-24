@@ -465,6 +465,16 @@ begin
   writeU32(f, link); writeU32(f, info);
   writeU32(f, alignv); writeU32(f, entsize);
 end;
+{ One Elf64_Shdr (64 bytes) for the -g debug sections. All share flags/addr/link/
+  info/entsize = 0 and addralign = 1, so only name/type/offset/size vary. }
+procedure writeShdr64(var f: File; name, typ: Integer; off, size: Int64);
+begin
+  writeU32(f, name); writeU32(f, typ);
+  writeU64(f, 0); writeU64(f, 0);     { sh_flags, sh_addr }
+  writeU64(f, off); writeU64(f, size);
+  writeU32(f, 0); writeU32(f, 0);     { sh_link, sh_info }
+  writeU64(f, 1); writeU64(f, 0);     { sh_addralign, sh_entsize }
+end;
 {$else}
 procedure writeU8(f: Integer; v: Byte);
 begin
@@ -549,13 +559,208 @@ begin
   writeU32(f, link); writeU32(f, info);
   writeU32(f, alignv); writeU32(f, entsize);
 end;
+{ One Elf64_Shdr (64 bytes) for the -g debug sections. All share flags/addr/link/
+  info/entsize = 0 and addralign = 1, so only name/type/offset/size vary. }
+procedure writeShdr64(f: Integer; name, typ: Integer; off, size: Int64);
+begin
+  writeU32(f, name); writeU32(f, typ);
+  writeU64(f, 0); writeU64(f, 0);     { sh_flags, sh_addr }
+  writeU64(f, off); writeU64(f, size);
+  writeU32(f, 0); writeU32(f, 0);     { sh_link, sh_info }
+  writeU64(f, 1); writeU64(f, 0);     { sh_addralign, sh_entsize }
+end;
 {$endif}
+
+{ ===== DWARF Tier 1 (-g): .debug_line + minimal CU stub =====================
+  PXX is its own linker, so it writes every .debug_* byte itself. Everything
+  below builds the section content into the shared DbgBuf byte buffer (no file
+  IO, no $ifdef — pure byte math) so both writeELF variants can append it with
+  their own primitives. x86-64 only for Tier 1. }
+
+procedure DbgPutB(v: Integer);
+begin
+  if DbgLen >= MAX_DWARF then Error('DWARF buffer overflow (-g)');
+  DbgBuf[DbgLen] := v and 255;
+  Inc(DbgLen);
+end;
+
+procedure DbgPutU16(v: Integer);
+begin
+  DbgPutB(v and 255); DbgPutB((v shr 8) and 255);
+end;
+
+procedure DbgPutU32(v: Integer);
+begin
+  DbgPutB(v and 255); DbgPutB((v shr 8) and 255);
+  DbgPutB((v shr 16) and 255); DbgPutB((v shr 24) and 255);
+end;
+
+procedure DbgPutU64(v: Int64);
+begin
+  DbgPutU32(Integer(v and $FFFFFFFF));
+  { Match writeU64's small-value path so we never rely on `v shr 32` for values
+    that fit in 32 bits (the i386 self-host duplicated-low-dword landmine). }
+  if (v >= 0) and (v <= 2147483647) then DbgPutU32(0)
+  else if (v < 0) and (v >= -2147483648) then DbgPutU32(-1)
+  else DbgPutU32(Integer((v shr 32) and $FFFFFFFF));
+end;
+
+{ Overwrite a 4-byte little-endian value already placed in DbgBuf (back-patch). }
+procedure DbgPatchU32(pos, v: Integer);
+begin
+  DbgBuf[pos]   := v and 255;
+  DbgBuf[pos+1] := (v shr 8) and 255;
+  DbgBuf[pos+2] := (v shr 16) and 255;
+  DbgBuf[pos+3] := (v shr 24) and 255;
+end;
+
+procedure DbgPutULEB(v: Integer);
+var b: Integer;
+begin
+  repeat
+    b := v and $7F;
+    v := v shr 7;
+    if v <> 0 then b := b or $80;
+    DbgPutB(b);
+  until v = 0;
+end;
+
+procedure DbgPutSLEB(v: Integer);
+var b: Integer; more: Boolean;
+begin
+  more := True;
+  while more do
+  begin
+    b := v and $7F;
+    { Arithmetic shift right by 7. Pascal `div` truncates toward zero and `shr`
+      is logical, so neither alone gives floor() for negatives — bias first. }
+    if v < 0 then v := (v - 127) div 128
+    else v := v div 128;
+    if ((v = 0) and ((b and $40) = 0)) or ((v = -1) and ((b and $40) <> 0)) then
+      more := False
+    else
+      b := b or $80;
+    DbgPutB(b);
+  end;
+end;
+
+procedure DbgPutStrZ(const s: AnsiString);
+var i: Integer;
+begin
+  for i := 1 to Length(s) do DbgPutB(Ord(s[i]));
+  DbgPutB(0);
+end;
+
+{ Build all .debug_* section bytes into DbgBuf. entry = runtime VA of code start
+  (LOAD_ADDR+codeOffset); codeBytes = CodeLen. DWARF version 3, DWARF32. }
+procedure BuildDwarfSections(entry: Int64; codeBytes: Integer);
+var i, lenPos, hdrPos, progStart, curLine, curAddr, dLine, dAddr: Integer;
+    nm: AnsiString;
+begin
+  DbgLen := 0;
+  nm := DbgSrcName;
+  if nm = '' then nm := 'source.pas';
+
+  { ---- .debug_line ---- }
+  DbgLineSecOff := DbgLen;
+  lenPos := DbgLen; DbgPutU32(0);   { unit_length — patched }
+  DbgPutU16(3);                     { version = DWARF 3 }
+  hdrPos := DbgLen; DbgPutU32(0);   { header_length — patched }
+  DbgPutB(1);                       { minimum_instruction_length }
+  DbgPutB(1);                       { default_is_stmt }
+  DbgPutB(256 - 5);                 { line_base = -5 (as unsigned byte) }
+  DbgPutB(14);                      { line_range }
+  DbgPutB(13);                      { opcode_base }
+  { standard_opcode_lengths for opcodes 1..12 }
+  DbgPutB(0); DbgPutB(1); DbgPutB(1); DbgPutB(1); DbgPutB(1); DbgPutB(0);
+  DbgPutB(0); DbgPutB(0); DbgPutB(1); DbgPutB(0); DbgPutB(0); DbgPutB(1);
+  { include_directories: none → just the terminating NUL }
+  DbgPutB(0);
+  { file_names: one entry, then terminating NUL }
+  DbgPutStrZ(nm); DbgPutULEB(0); DbgPutULEB(0); DbgPutULEB(0);
+  DbgPutB(0);
+  { header_length = distance from the byte after header_length to here }
+  progStart := DbgLen;
+  DbgPatchU32(hdrPos, progStart - (hdrPos + 4));
+
+  { line number program }
+  { DW_LNE_set_address(entry + first row addr) }
+  if DwarfRowCount > 0 then curAddr := DwarfRowAddr[0] else curAddr := 0;
+  DbgPutB(0); DbgPutULEB(9); DbgPutB(2); DbgPutU64(entry + curAddr); { extended set_address }
+  curLine := 1;
+  for i := 0 to DwarfRowCount - 1 do
+  begin
+    dAddr := DwarfRowAddr[i] - curAddr;
+    if dAddr <> 0 then
+    begin
+      DbgPutB(2); DbgPutULEB(dAddr);    { DW_LNS_advance_pc }
+      curAddr := DwarfRowAddr[i];
+    end;
+    dLine := DwarfRowLine[i] - curLine;
+    if dLine <> 0 then
+    begin
+      DbgPutB(3); DbgPutSLEB(dLine);    { DW_LNS_advance_line }
+      curLine := DwarfRowLine[i];
+    end;
+    DbgPutB(1);                          { DW_LNS_copy → append row }
+  end;
+  { advance to end of code, then end_sequence }
+  dAddr := codeBytes - curAddr;
+  if dAddr > 0 then begin DbgPutB(2); DbgPutULEB(dAddr); end;
+  DbgPutB(0); DbgPutULEB(1); DbgPutB(1); { DW_LNE_end_sequence }
+  DbgLineSecSize := DbgLen - DbgLineSecOff;
+  DbgPatchU32(lenPos, DbgLineSecSize - 4);
+
+  { ---- .debug_abbrev ---- }
+  DbgAbbrevSecOff := DbgLen;
+  DbgPutULEB(1);            { abbrev code 1 }
+  DbgPutULEB($11);         { DW_TAG_compile_unit }
+  DbgPutB(0);              { DW_CHILDREN_no }
+  DbgPutULEB($25); DbgPutULEB($08);  { DW_AT_producer, DW_FORM_string }
+  DbgPutULEB($13); DbgPutULEB($0b);  { DW_AT_language, DW_FORM_data1 }
+  DbgPutULEB($03); DbgPutULEB($08);  { DW_AT_name, DW_FORM_string }
+  DbgPutULEB($1b); DbgPutULEB($08);  { DW_AT_comp_dir, DW_FORM_string }
+  DbgPutULEB($11); DbgPutULEB($01);  { DW_AT_low_pc, DW_FORM_addr }
+  DbgPutULEB($12); DbgPutULEB($01);  { DW_AT_high_pc, DW_FORM_addr }
+  DbgPutULEB($10); DbgPutULEB($06);  { DW_AT_stmt_list, DW_FORM_data4 }
+  DbgPutULEB(0); DbgPutULEB(0);      { end of attributes }
+  DbgPutULEB(0);                     { end of abbrev table }
+  DbgAbbrevSecSize := DbgLen - DbgAbbrevSecOff;
+
+  { ---- .debug_info ---- }
+  DbgInfoSecOff := DbgLen;
+  lenPos := DbgLen; DbgPutU32(0);   { unit_length — patched }
+  DbgPutU16(3);                     { version }
+  DbgPutU32(0);                     { debug_abbrev_offset = 0 }
+  DbgPutB(8);                       { address_size }
+  DbgPutULEB(1);                    { DIE: abbrev code 1 (compile_unit) }
+  DbgPutStrZ('frankonpiler');       { DW_AT_producer }
+  DbgPutB($09);                     { DW_AT_language = DW_LANG_Pascal83 }
+  DbgPutStrZ(nm);                   { DW_AT_name }
+  DbgPutStrZ('.');                  { DW_AT_comp_dir }
+  DbgPutU64(entry);                 { DW_AT_low_pc }
+  DbgPutU64(entry + codeBytes);     { DW_AT_high_pc }
+  DbgPutU32(0);                     { DW_AT_stmt_list → .debug_line offset 0 }
+  DbgInfoSecSize := DbgLen - DbgInfoSecOff;
+  DbgPatchU32(lenPos, DbgInfoSecSize - 4);
+
+  { ---- .shstrtab ---- }
+  DbgShStrSecOff := DbgLen;
+  DbgPutB(0);                       { index 0 = empty name }
+  DbgNmLine := DbgLen - DbgShStrSecOff;   DbgPutStrZ('.debug_line');
+  DbgNmInfo := DbgLen - DbgShStrSecOff;   DbgPutStrZ('.debug_info');
+  DbgNmAbbrev := DbgLen - DbgShStrSecOff; DbgPutStrZ('.debug_abbrev');
+  DbgNmShStr := DbgLen - DbgShStrSecOff;  DbgPutStrZ('.shstrtab');
+  DbgShStrSecSize := DbgLen - DbgShStrSecOff;
+end;
 
 {$ifdef FPC}
 procedure writeELF(const outPath: AnsiString);
 var f: File; i: Integer;
     phCount, codeOffset, machine: Integer;
     dataBase, bssBase, entry, filesz, memsz, addr: Int64;
+    doDebug: Boolean; dbgFileBase, shoff: Int64; padN: Integer;
+    zb: Byte;
 begin
   if TargetArch = TARGET_AARCH64 then
     machine := 183
@@ -574,6 +779,17 @@ begin
   entry    := LOAD_ADDR + codeOffset;
   filesz   := codeOffset + CodeLen + DataLen;
   memsz    := filesz + BSSSize;
+
+  doDebug := DebugInfo and (TargetArch = TARGET_X86_64);
+  shoff := 0;
+  if doDebug then
+  begin
+    BuildDwarfSections(entry, CodeLen);
+    dbgFileBase := filesz;
+    shoff := dbgFileBase + DbgLen;
+    padN := (8 - (shoff mod 8)) mod 8;
+    shoff := shoff + padN;
+  end;
 
   { Apply data fixups (8-byte absolute) }
   for i := 0 to FixCount-1 do
@@ -617,9 +833,16 @@ begin
   writeU8(f,0);writeU8(f,0);writeU8(f,0);writeU8(f,0);
   writeU8(f,0);writeU8(f,0);writeU8(f,0);writeU8(f,0);
   writeU16(f,2);writeU16(f,machine);writeU32(f,1);
-  writeU64(f,entry);writeU64(f,64);writeU64(f,0);
+  writeU64(f,entry);writeU64(f,64);writeU64(f,shoff);
   writeU32(f,0);writeU16(f,64);writeU16(f,56);
-  writeU16(f,phCount);writeU16(f,64);writeU16(f,0);writeU16(f,0);
+  if doDebug then
+  begin
+    writeU16(f,phCount);writeU16(f,64);writeU16(f,5);writeU16(f,4); { e_shnum=5, e_shstrndx=4 }
+  end
+  else
+  begin
+    writeU16(f,phCount);writeU16(f,64);writeU16(f,0);writeU16(f,0);
+  end;
 
   writeU32(f,1);writeU32(f,7);  { PT_LOAD, RWX }
   writeU64(f,0);writeU64(f,LOAD_ADDR);writeU64(f,LOAD_ADDR);
@@ -638,6 +861,17 @@ begin
 
   if CodeLen > 0 then Blockwrite(f,Code[0],CodeLen);
   if DataLen > 0 then Blockwrite(f,Data[0],DataLen);
+  if doDebug then
+  begin
+    if DbgLen > 0 then Blockwrite(f,DbgBuf[0],DbgLen);
+    zb := 0;
+    for i := 1 to padN do Blockwrite(f,zb,1);
+    for i := 1 to 64 do Blockwrite(f,zb,1);   { NULL shdr (index 0) }
+    writeShdr64(f, DbgNmLine,   1, dbgFileBase + DbgLineSecOff,   DbgLineSecSize);
+    writeShdr64(f, DbgNmInfo,   1, dbgFileBase + DbgInfoSecOff,   DbgInfoSecSize);
+    writeShdr64(f, DbgNmAbbrev, 1, dbgFileBase + DbgAbbrevSecOff, DbgAbbrevSecSize);
+    writeShdr64(f, DbgNmShStr,  3, dbgFileBase + DbgShStrSecOff,  DbgShStrSecSize);
+  end;
   Close(f);
   FpChmod(outPath,&755);
   WriteMapFile(outPath, codeOffset);
@@ -647,6 +881,7 @@ procedure writeELF(const outPath: AnsiString);
 var f: Integer; i: Integer;
     phCount, codeOffset, machine: Integer;
     dataBase, bssBase, entry, filesz, memsz, addr: Int64;
+    doDebug: Boolean; dbgFileBase, shoff: Int64; padN: Integer;
 begin
   if TargetArch = TARGET_AARCH64 then
     machine := 183
@@ -665,6 +900,20 @@ begin
   entry    := LOAD_ADDR + codeOffset;
   filesz   := codeOffset + CodeLen + DataLen;
   memsz    := filesz + BSSSize;
+
+  { DWARF -g: Tier 1 is x86-64 only. Build the .debug_* bytes, then place a
+    section-header table after them (the load image is unchanged — debug sections
+    live past p_filesz, unmapped). }
+  doDebug := DebugInfo and (TargetArch = TARGET_X86_64);
+  shoff := 0;
+  if doDebug then
+  begin
+    BuildDwarfSections(entry, CodeLen);
+    dbgFileBase := filesz;
+    shoff := dbgFileBase + DbgLen;
+    padN := (8 - (shoff mod 8)) mod 8;
+    shoff := shoff + padN;
+  end;
 
   { Apply data fixups (8-byte absolute) }
   for i := 0 to FixCount-1 do
@@ -710,9 +959,16 @@ begin
   writeU8(f,0);writeU8(f,0);writeU8(f,0);writeU8(f,0);
   writeU8(f,0);writeU8(f,0);writeU8(f,0);writeU8(f,0);
   writeU16(f,2);writeU16(f,machine);writeU32(f,1);
-  writeU64(f,entry);writeU64(f,64);writeU64(f,0);
+  writeU64(f,entry);writeU64(f,64);writeU64(f,shoff);
   writeU32(f,0);writeU16(f,64);writeU16(f,56);
-  writeU16(f,phCount);writeU16(f,64);writeU16(f,0);writeU16(f,0);
+  if doDebug then
+  begin
+    writeU16(f,phCount);writeU16(f,64);writeU16(f,5);writeU16(f,4); { e_shnum=5, e_shstrndx=4 }
+  end
+  else
+  begin
+    writeU16(f,phCount);writeU16(f,64);writeU16(f,0);writeU16(f,0);
+  end;
 
   writeU32(f,1);writeU32(f,7);  { PT_LOAD, RWX }
   writeU64(f,0);writeU64(f,LOAD_ADDR);writeU64(f,LOAD_ADDR);
@@ -731,6 +987,17 @@ begin
 
   if CodeLen > 0 then syswrite(f,Code,CodeLen);
   if DataLen > 0 then syswrite(f,Data,DataLen);
+  if doDebug then
+  begin
+    if DbgLen > 0 then syswrite(f,DbgBuf,DbgLen);
+    for i := 1 to padN do writeU8(f,0);
+    { section headers: 0=NULL, 1=.debug_line, 2=.debug_info, 3=.debug_abbrev, 4=.shstrtab }
+    for i := 1 to 64 do writeU8(f,0);  { NULL shdr (index 0) }
+    writeShdr64(f, DbgNmLine,   1, dbgFileBase + DbgLineSecOff,   DbgLineSecSize);   { SHT_PROGBITS }
+    writeShdr64(f, DbgNmInfo,   1, dbgFileBase + DbgInfoSecOff,   DbgInfoSecSize);
+    writeShdr64(f, DbgNmAbbrev, 1, dbgFileBase + DbgAbbrevSecOff, DbgAbbrevSecSize);
+    writeShdr64(f, DbgNmShStr,  3, dbgFileBase + DbgShStrSecOff,  DbgShStrSecSize);  { SHT_STRTAB }
+  end;
   sysfchmod(f, 493); { chmod 755 }
   sysclose(f);
   WriteMapFile(outPath, codeOffset);

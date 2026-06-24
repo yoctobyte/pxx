@@ -4248,6 +4248,7 @@ begin
   for i := 0 to MAX_IR - 1 do
     LabelPositions[i] := -1;
   LabelFixupCount := 0;
+  DwarfLastLine := 0;   { each proc body re-emits a row for its first source line }
 
   { Nil-init hidden owning locals synthesised for materialised managed-string
     arguments. They are created during this body's IR lowering, after the
@@ -4275,6 +4276,20 @@ begin
 
   for i := 0 to IRCount - 1 do
   begin
+    { DWARF -g: record a line-table row at the start address of each statement
+      whose source line differs from the last. CodeLen here is exactly where this
+      instruction's machine code begins. Labels/jumps carry the line too but cost
+      nothing (a duplicate address row is harmless). }
+    if DebugInfo and (IRLine[i] <> 0) and (IRLine[i] <> DwarfLastLine) then
+    begin
+      if DwarfRowCount < MAX_DWARF_ROWS then
+      begin
+        DwarfRowAddr[DwarfRowCount] := CodeLen;
+        DwarfRowLine[DwarfRowCount] := IRLine[i];
+        Inc(DwarfRowCount);
+      end;
+      DwarfLastLine := IRLine[i];
+    end;
     case IRKind[i] of
       IR_LABEL:
         begin

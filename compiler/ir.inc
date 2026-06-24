@@ -16,6 +16,7 @@ begin
   IRCount := 0;
   IRLabelCount := 0;
   IRLoopStackDepth := 0;
+  CurLowerLine := 0;
 end;
 
 function IRAppend(kind, a, b, c: Integer; ival: Int64; tk: Integer): Integer;
@@ -28,6 +29,7 @@ begin
   IRIVal[IRCount] := ival;
   IRTk[IRCount] := tk;
   IRStmtRoot[IRCount] := False;
+  IRLine[IRCount] := CurLowerLine;
   Result := IRCount;
   Inc(IRCount);
 end;
@@ -1551,6 +1553,8 @@ begin
     Result := -1;
     Exit;
   end;
+
+  if ASTLine[node] <> 0 then CurLowerLine := ASTLine[node];
 
   case ASTKind[node] of
     AN_INT_LIT, AN_BOOL_LIT:

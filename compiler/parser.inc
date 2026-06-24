@@ -21,6 +21,13 @@ begin
   ASTRight[ASTNodeCount]   := -1;
   ASTTk[ASTNodeCount]      := 0;
   ASTLiftedVar[ASTNodeCount] := -1;
+  { DWARF -g: only stamp lines for nodes from the main source file. Tokens from
+    appended units (builtin/RTL, lexed past DbgMainTokEnd) get line 0 so they
+    contribute no rows — the Tier 1 line table describes one file. }
+  if TokPos <= DbgMainTokEnd then
+    ASTLine[ASTNodeCount] := CurTok.Line
+  else
+    ASTLine[ASTNodeCount] := 0;
   Result := ASTNodeCount;
   Inc(ASTNodeCount);
 end;
@@ -39,6 +46,7 @@ begin
   ASTSLen[Result]     := ASTSLen[node];
   ASTTk[Result]       := ASTTk[node];
   ASTLiftedVar[Result] := ASTLiftedVar[node];
+  ASTLine[Result]     := ASTLine[node];
   ASTLeft[Result]     := CloneAST(ASTLeft[node]);
   ASTRight[Result]    := CloneAST(ASTRight[node]);
 end;

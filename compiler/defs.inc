@@ -29,6 +29,8 @@ const
   MAX_TOKENS  = 524288;
   MAX_AST     = 524288;
   MAX_IR      = 131072;
+  MAX_DWARF      = 1048576;   { DWARF -g: byte buffer for all .debug_* section content }
+  MAX_DWARF_ROWS = 131072;    { DWARF -g: (code-offset, line) rows for the .debug_line program }
   MAX_LOOP_FIXUPS = 256;
   MAX_GOTO_LABELS = 64;
   MAX_DECL_ITEMS = 32768;       { top-level subroutine items recorded by the declaration pre-scan }
@@ -699,6 +701,8 @@ var
   Source  : AnsiString;
   SrcPos  : Integer;
   SrcLine : Integer;
+  CurLowerLine : Integer; { current AST source line being lowered → stamped onto IR (DWARF -g) }
+  DebugInfo : Boolean;    { -g: emit DWARF .debug_* sections + section header table }
   CurTok  : TToken;
   PasDefineChars   : array[0..MAX_PAS_DEFINE_CHARS-1] of Char;
   PasDefineNameOff : array[0..MAX_PAS_DEFINES-1] of Integer;
@@ -1161,6 +1165,7 @@ var
   ASTRight   : array[0..MAX_AST-1] of Integer;
   ASTTk      : array[0..MAX_AST-1] of Integer;  { TTypeKind of expression }
   ASTLiftedVar : array[0..MAX_AST-1] of Integer; { symbol index of compiler-lifted variable, or -1 }
+  ASTLine    : array[0..MAX_AST-1] of Integer; { source line of this node (CurTok.Line at alloc), 0 if unknown — DWARF -g }
   ASTNodeCount : Integer;
 
   IRKind  : array[0..MAX_IR-1] of Integer;
@@ -1185,7 +1190,27 @@ var
     via their parent. Needed for IR_VIRTUAL_CALL, whose IRIVal holds the VMT
     slot and so cannot double as the IR_CALL=1 statement flag. }
   IRStmtRoot : array[0..MAX_IR-1] of Boolean;
+  IRLine  : array[0..MAX_IR-1] of Integer; { source line of this IR instr (from CurLowerLine), 0 if unknown — DWARF -g }
   IRCount : Integer;
+
+  { DWARF -g (Tier 1): address→line rows collected at emit, and a single byte
+    buffer that all .debug_* section bytes are built into. e_shoff stays 0 unless
+    DebugInfo. See feature-dwarf-debug-info.md. }
+  DwarfRowAddr : array[0..MAX_DWARF_ROWS-1] of Integer; { raw Code[] offset of the statement }
+  DwarfRowLine : array[0..MAX_DWARF_ROWS-1] of Integer; { source line at that offset }
+  DwarfRowCount : Integer;
+  DwarfLastLine : Integer;   { dedup tracker, reset per proc }
+  DbgBuf : array[0..MAX_DWARF-1] of Byte;
+  DbgLen : Integer;
+  { Section metadata filled by BuildDwarfSections — offsets/sizes are WITHIN
+    DbgBuf; name fields are byte offsets into the .shstrtab span. }
+  DbgLineSecOff, DbgLineSecSize : Integer;
+  DbgInfoSecOff, DbgInfoSecSize : Integer;
+  DbgAbbrevSecOff, DbgAbbrevSecSize : Integer;
+  DbgShStrSecOff, DbgShStrSecSize : Integer;
+  DbgNmLine, DbgNmInfo, DbgNmAbbrev, DbgNmShStr : Integer;
+  DbgSrcName : AnsiString;   { source filename recorded in the line table + CU DIE }
+  DbgMainTokEnd : Integer;   { token index just past the main source file; nodes from appended units (TokPos beyond this) get ASTLine 0 so the single-file line table stays unambiguous }
   IRLabelCount : Integer;
   IRLoopStackBreak    : array[0..63] of Integer;
   IRLoopStackContinue : array[0..63] of Integer;

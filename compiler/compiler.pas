@@ -74,6 +74,8 @@ function GetOrAllocDynUniqueDesc(node: Integer): Integer; forward;
 var inFile, outFile, option, exePath: AnsiString; readingOptions: Boolean; n, i, j: Integer;
 begin
   DebugTrace := False;
+  DebugInfo := False;
+  DbgMainTokEnd := MAX_TOKENS;
   DumpIR := False;
   DumpRTTI := False;
   TargetArch := TARGET_X86_64;
@@ -109,6 +111,13 @@ begin
     else if option = '--dump-ir' then
     begin
       DumpIR := True;
+      Inc(i);
+    end
+    else if option = '-g' then
+    begin
+      { DWARF Tier 1: emit .debug_line + a minimal CU stub (x86-64 only).
+        Off by default → self-host / bootstrap byte-identical path untouched. }
+      DebugInfo := True;
       Inc(i);
     end
     else if option = '--dump-rtti' then
@@ -340,6 +349,7 @@ begin
   isNilPy := (n >= 4) and (inFile[n] = 'y') and (inFile[n-1] = 'p') and (inFile[n-2] = 'n') and (inFile[n-3] = '.');
 
   LoadFile(inFile, Source);
+  DbgSrcName := inFile;   { -g: file name recorded in .debug_line + CU DIE }
   if DebugTrace then writeln('Loaded file length: ', Length(Source));
   SourceFileDir := GetFilePath(inFile);
   CurUnitDir := SourceFileDir;
@@ -435,6 +445,7 @@ begin
   else
   begin
     LexAll;
+    DbgMainTokEnd := TokCount;   { -g: main-file token boundary (units appended after) }
     TokPos := 0;
     Next;
     ParseProgram;
