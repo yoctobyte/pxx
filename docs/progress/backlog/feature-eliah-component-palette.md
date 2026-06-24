@@ -72,3 +72,26 @@ dropping a non-visual one adds a tray icon; the inspector edits both via RTTI.
   place routing (visual->canvas, non-visual->tray). Registry already classifies
   non-visual (TComponent but not TControl), so the data is ready.
 - **Grouping** (Standard/Additional) in the palette — minor; defer with the tray.
+
+## Progress 2026-06-24 (cont.) — non-visual tray DONE
+
+Non-visual components now drop into a Delphi-style icon tray along the form
+bottom (commit c706b1c):
+- docmodel: wkTimer/wkMenu + IsNonVisual(); lfmload KindOf round-trips TTimer/TMenu.
+- designer.LayoutTray: bottom strip, slot rects written back so the shared
+  HitTest/selection works; tray icons fixed (no drag/resize), distinct fill, no
+  size hint.
+- palette: CompPlaceKind maps TTimer/TMenu; filter dropped the TControl-only gate
+  so non-visual components route to the tray on drop.
+- sample.lfm ships a TTimer (tray visible on launch).
+- Gates: bochan 139/139, eliah --smoke OK, gui_suite OK, screenshot verified.
+
+### Remaining (keeps this ticket open)
+- **Palette grouping** (Standard/Additional/Non-visual headers) — combo is flat.
+- **RTTI inspector**: the inspector edits docmodel node fields (caption/bounds);
+  non-visual components want published-RTTI editing (Interval, etc.). The registry
+  already carries the class, so the inspector can read GetPropList off it. This is
+  shared with M5's command/selection surface.
+- **Generic non-visual classes**: tray currently proven with TTimer/TMenu (fixed
+  docmodel kinds). Arbitrary registered non-visual components want class-name
+  storage on the node rather than an enum kind — a docmodel extension.
