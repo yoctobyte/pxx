@@ -1,0 +1,33 @@
+object TStreamPanedForm: TStreamPanedForm
+  Left = 0
+  Top = 0
+  Width = 600
+  Height = 400
+  Caption = 'Stream Paned'
+  object TopBtn: TButton
+    Left = 4
+    Top = 3
+    Width = 80
+    Height = 26
+    Caption = 'Top'
+  end
+  object RootPaned: TPaned
+    Left = 0
+    Top = 34
+    Width = 600
+    Height = 366
+    Position = 200
+    object ColLeft: TPaned
+      Vertical = True
+      Position = 180
+      object BtnA: TButton
+        Caption = 'A'
+      end
+      object BtnB: TButton
+        Caption = 'B'
+      end
+    end
+    object Editor: TMemo
+    end
+  end
+end
