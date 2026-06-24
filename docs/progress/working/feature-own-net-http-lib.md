@@ -26,15 +26,24 @@ Foundation already present and reused: `net.pas` (blocking TCP/UDP + timeouts),
 `scheduler.pas` (coroutines + epoll async reactor: `SetNonBlocking`/
 `WaitReadable`/`WaitWritable`/`RunUntilDone`), `dns.pas`.
 
+## Async + e2e landed (2026-06-24)
+
+- **`HttpGetAsync`/`HttpPostAsync`** (http.pas) over the scheduler's epoll reactor
+  via asyncnet (non-blocking connect/send/recv, coroutine yields on EAGAIN),
+  reusing the same pure build/parse helpers. Added `asyncnet.TcpConnectAddr(host,
+  port)` (generalised the loopback `TcpConnect`).
+- **`test/lib_http_async`** — true end-to-end: a server coroutine and a client
+  coroutine (`HttpGetAsync`) on ONE thread, both reactor-driven via `RunUntilDone`,
+  real loopback round-trip (status 200 + body). The proof-of-concept for async
+  sockets that a blocking client cannot do single-threaded.
+- Caveat: async DNS not yet wired — `HttpGetAsync` is dotted-quad only (a
+  hostname fails); blocking `HttpGet` resolves names. True async DNS is a slice.
+
 ## Roadmap (next slices)
 
-1. **Async transport for http** — an `HttpGetAsync` that drives the request over
-   the scheduler reactor (non-blocking connect/send/recv, yielding the coroutine)
-   while reusing the pure build/parse helpers. The seam is already in place.
-2. **End-to-end integration test** — a forked or coroutine loopback HTTP server so
-   `HttpGet` is exercised against a real socket (the current smoke is pure-helper;
-   transport is covered separately by `lib_sockets`/`lib_net`).
-3. **Response framing breadth** — `Content-Length` bodies and chunked transfer
+1. **Async DNS** — resolve over UDP on the reactor so `HttpGetAsync` takes
+   hostnames (today dotted-quad only).
+2. **Response framing breadth** — `Content-Length` bodies and chunked transfer
    encoding (today: read-to-EOF with `Connection: close`); keep-alive.
 4. **TLS** — `https://` is parsed and refused (`isTls`); needs a TLS layer
    (separate unit; ties into [[feature-real-dynlib-loader]] only if we shell out

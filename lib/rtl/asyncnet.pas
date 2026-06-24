@@ -17,6 +17,10 @@ uses scheduler, platform;
 function TcpListen(port: Integer): Integer;
 function TcpAccept(lfd: Integer): Integer;
 function TcpConnect(port: Integer): Integer;
+{ Async connect to an arbitrary IPv4 host (host byte order) + port. Same
+  non-blocking-connect/park-on-writable pattern as TcpConnect (which is the
+  loopback special case). }
+function TcpConnectAddr(host: LongWord; port: Integer): Integer;
 function TcpRecv(fd: Integer; buf: Pointer; len: Integer): Int64;
 function TcpSend(fd: Integer; buf: Pointer; len: Integer): Int64;
 procedure TcpClose(fd: Integer);
@@ -73,6 +77,18 @@ begin
   rc := PalConnectIpv4(fd, PAL_NET_IP_LOOPBACK, port);
   if rc = PAL_NET_EINPROGRESS then
     WaitWritable(fd);   { connection completes asynchronously }
+  Result := fd;
+end;
+
+function TcpConnectAddr(host: LongWord; port: Integer): Integer;
+var fd: Integer; rc: Integer;
+begin
+  fd := PalSocket(PAL_NET_AF_INET, PAL_NET_SOCK_STREAM, 0);
+  if fd < 0 then begin Result := fd; Exit; end;
+  rc := PalSetSocketNonBlocking(fd, 1);
+  rc := PalConnectIpv4(fd, host, port);
+  if rc = PAL_NET_EINPROGRESS then
+    WaitWritable(fd);
   Result := fd;
 end;
 

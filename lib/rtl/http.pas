@@ -12,7 +12,7 @@ unit http;
 
 interface
 
-uses net, dns, dns_config, dns_wire_core, sysutils;
+uses net, asyncnet, dns, dns_config, dns_wire_core, sysutils;
 
 type
   THttpResponse = record
@@ -43,6 +43,14 @@ procedure HttpParseResponse(const raw: AnsiString; var resp: THttpResponse);
 
 function HttpGet(const url: AnsiString): THttpResponse;
 function HttpPost(const url, contentType, body: AnsiString): THttpResponse;
+
+{ --- async transport (call from inside a coroutine; drive with RunUntilDone) ---
+  Non-blocking connect/send/recv over the scheduler's epoll reactor (via
+  asyncnet): the coroutine yields on EAGAIN, so one thread serves many requests.
+  Reuses the same pure build/parse helpers. Hostname resolution is dotted-quad
+  only for now (true async DNS is a later slice); a non-numeric host fails. }
+function HttpGetAsync(const url: AnsiString): THttpResponse;
+function HttpPostAsync(const url, contentType, body: AnsiString): THttpResponse;
 
 implementation
 
@@ -226,6 +234,60 @@ begin
   hdr := '';
   if contentType <> '' then hdr := 'Content-Type: ' + contentType + CRLF;
   Result := HttpRequest('POST', url, hdr, body);
+end;
+
+function HttpRequestAsync(const method, url, extraHeaders, body: AnsiString): THttpResponse;
+var
+  host, path: AnsiString;
+  port: Integer;
+  isTls: Boolean;
+  ip: LongWord;
+  fd: Integer;
+  req, raw: AnsiString;
+  buf: array[0..4095] of Byte;
+  n, i: Integer;
+const
+  BUFSZ = 4096;
+begin
+  Result.Ok := False; Result.Status := 0; Result.Reason := '';
+  Result.Headers := ''; Result.Body := '';
+
+  if not HttpParseUrl(url, host, port, path, isTls) then Exit;
+  if isTls then Exit;                          { no TLS layer yet }
+  { async DNS not yet wired — dotted-quad only on this path. }
+  if not DnsParseIpv4(host, 1, Length(host), ip) then Exit;
+
+  fd := TcpConnectAddr(ip, port);              { yields until connected }
+  if fd < 0 then Exit;
+
+  req := HttpBuildRequest(method, host, path, extraHeaders, body);
+  if TcpSend(fd, @req[1], Length(req)) < 0 then
+  begin
+    TcpClose(fd); Exit;
+  end;
+
+  raw := '';
+  repeat
+    n := TcpRecv(fd, @buf[0], BUFSZ);          { yields on EAGAIN }
+    if n > 0 then
+      for i := 0 to n - 1 do raw := raw + Chr(buf[i]);
+  until n <= 0;
+  TcpClose(fd);
+
+  HttpParseResponse(raw, Result);
+end;
+
+function HttpGetAsync(const url: AnsiString): THttpResponse;
+begin
+  Result := HttpRequestAsync('GET', url, '', '');
+end;
+
+function HttpPostAsync(const url, contentType, body: AnsiString): THttpResponse;
+var hdr: AnsiString;
+begin
+  hdr := '';
+  if contentType <> '' then hdr := 'Content-Type: ' + contentType + CRLF;
+  Result := HttpRequestAsync('POST', url, hdr, body);
 end;
 
 end.
