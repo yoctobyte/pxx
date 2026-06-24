@@ -6,7 +6,39 @@ program bochan;
   verdict. Links NO GUI/TUI face (no lib/pcl) — building this at all is the proof
   that garin is render-agnostic. }
 
-uses buffer, eduth, docmodel, lfmload, builder, project, perspective;
+uses buffer, eduth, docmodel, lfmload, builder, project, perspective, registry,
+  typinfo;
+
+type
+  { Synthetic class hierarchy to exercise registry enumeration headlessly (no
+    PCL): the registry walk + ancestor-chain test only need RTTI, which these
+    published classes carry. Instantiated below so the linker keeps their RTTI. }
+  TRegSampleBase = class
+  private
+    FTag: Integer;
+  published
+    property Tag: Integer read FTag write FTag;
+  end;
+  TRegSampleMid = class(TRegSampleBase)
+  private
+    FCaption: AnsiString;
+  published
+    property Caption: AnsiString read FCaption write FCaption;
+  end;
+  TRegSampleLeaf = class(TRegSampleMid)
+  private
+    FNote: AnsiString;
+  published
+    property Note: AnsiString read FNote write FNote;
+  end;
+
+function RegArrHas(const arr: TRegEntryArr; const nm: AnsiString): Boolean;
+var i: Integer;
+begin
+  RegArrHas := False;
+  for i := 0 to Length(arr) - 1 do
+    if arr[i].Name = nm then begin RegArrHas := True; Exit; end;
+end;
 
 var
   e: TEduth;
@@ -22,6 +54,10 @@ var
   projTxt: AnsiString;
   persp, rpersp: TPerspective;
   perspTxt: AnsiString;
+  regBase: TRegSampleBase;
+  regMid: TRegSampleMid;
+  regLeaf: TRegSampleLeaf;
+  regArr: TRegEntryArr;
 
 begin
   EduthInit(e);
@@ -295,6 +331,35 @@ begin
   CheckInt(e, 'rt pane 1 min', rpersp.PaneMin(1), 200);
   CheckInt(e, 'rt pane 2 priority', rpersp.PanePriority(2), 40);
   CheckTrue(e, 'rt pane 0 visible', rpersp.PaneVisible(0));
+
+  { scenario: registry — enumerate registered classes by ancestor (M4 palette).
+    Keep the synthetic instances alive so their RTTI is linked + registered. }
+  writeln('-- registry enumeration --');
+  regBase := TRegSampleBase.Create;  regBase.Tag := 1;
+  regMid  := TRegSampleMid.Create;   regMid.Caption := 'm';
+  regLeaf := TRegSampleLeaf.Create;  regLeaf.Note := 'n';
+
+  CheckTrue(e, 'registry non-empty', RegisteredClassCount > 0);
+  CheckTrue(e, 'leaf descends from base',
+    ClassDescendsFrom(GetClass('TRegSampleLeaf'), 'TRegSampleBase'));
+  CheckTrue(e, 'mid descends from base',
+    ClassDescendsFrom(GetClass('TRegSampleMid'), 'TRegSampleBase'));
+  CheckTrue(e, 'class descends from itself',
+    ClassDescendsFrom(GetClass('TRegSampleBase'), 'TRegSampleBase'));
+  CheckTrue(e, 'base does not descend from leaf',
+    not ClassDescendsFrom(GetClass('TRegSampleBase'), 'TRegSampleLeaf'));
+  CheckTrue(e, 'unrelated ancestor name is false',
+    not ClassDescendsFrom(GetClass('TRegSampleLeaf'), 'TNotAClass'));
+
+  regArr := EnumDescendants('TRegSampleBase', False);
+  CheckTrue(e, 'enum excludes the ancestor itself',
+    not RegArrHas(regArr, 'TRegSampleBase'));
+  CheckTrue(e, 'enum finds mid descendant', RegArrHas(regArr, 'TRegSampleMid'));
+  CheckTrue(e, 'enum finds leaf descendant', RegArrHas(regArr, 'TRegSampleLeaf'));
+
+  regArr := EnumDescendants('TRegSampleBase', True);
+  CheckTrue(e, 'enum includeSelf adds the ancestor',
+    RegArrHas(regArr, 'TRegSampleBase'));
 
   Halt(EduthReport(e));
 end.
