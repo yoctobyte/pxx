@@ -74,6 +74,11 @@ function HttpResolveUrl(const base, location: AnsiString): AnsiString;
 function HttpUrlEncode(const s: AnsiString): AnsiString;
 function HttpUrlDecode(const s: AnsiString): AnsiString;
 
+{ Append `name=value` (both percent-encoded) to a query/form string q, inserting
+  '&' when q is non-empty. Serves both `?query` strings and
+  application/x-www-form-urlencoded bodies. }
+function HttpQueryAdd(const q, name, value: AnsiString): AnsiString;
+
 { Parse a raw response into resp (status line + headers + body). Applies
   Transfer-Encoding: chunked decoding, else trims the body to Content-Length. }
 procedure HttpParseResponse(const raw: AnsiString; var resp: THttpResponse);
@@ -85,6 +90,8 @@ function HttpPost(const url, contentType, body: AnsiString): THttpResponse;
 function HttpHead(const url: AnsiString): THttpResponse;
 function HttpPut(const url, contentType, body: AnsiString): THttpResponse;
 function HttpDelete(const url: AnsiString): THttpResponse;
+{ POST an application/x-www-form-urlencoded body (build it with HttpQueryAdd). }
+function HttpPostForm(const url, formBody: AnsiString): THttpResponse;
 
 { Generic request: any method + optional extra headers (CRLF-terminated lines) +
   body. A Content-Length is added automatically when body <> ''. }
@@ -336,6 +343,12 @@ begin
   Result := r;
 end;
 
+function HttpQueryAdd(const q, name, value: AnsiString): AnsiString;
+begin
+  Result := HttpUrlEncode(name) + '=' + HttpUrlEncode(value);
+  if q <> '' then Result := q + '&' + Result;
+end;
+
 function HttpDechunk(const body: AnsiString): AnsiString;
 var
   pos, n, sz: Integer;
@@ -550,6 +563,11 @@ end;
 function HttpDelete(const url: AnsiString): THttpResponse;
 begin
   Result := HttpRequest('DELETE', url, '', '');
+end;
+
+function HttpPostForm(const url, formBody: AnsiString): THttpResponse;
+begin
+  Result := HttpPost(url, 'application/x-www-form-urlencoded', formBody);
 end;
 
 function HttpIsRedirect(status: Integer): Boolean;

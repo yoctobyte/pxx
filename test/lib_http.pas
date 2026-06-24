@@ -104,4 +104,9 @@ begin
   SayBool('urldec', HttpUrlDecode('a%20b%26c') = 'a b&c');
   SayBool('urldec-plus', HttpUrlDecode('a+b') = 'a b');
   SayBool('url-roundtrip', HttpUrlDecode(HttpUrlEncode('x y/z?q=1')) = 'x y/z?q=1');
+
+  { Query/form builder: first pair no '&', encodes name+value. }
+  SayBool('query1', HttpQueryAdd('', 'a', '1') = 'a=1');
+  SayBool('query2', HttpQueryAdd(HttpQueryAdd('', 'a', '1'), 'b', '2 3') = 'a=1&b=2%203');
+  SayBool('query-enc', HttpQueryAdd('', 'q', 'a&b') = 'q=a%26b');
 end.
