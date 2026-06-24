@@ -2247,7 +2247,7 @@ lib-test: pxx-stable-check
 	$(PXX_STABLE) test/lib_zlib.pas /tmp/lib_zlib
 	test "$$(/tmp/lib_zlib)" = "$$(printf 'OK stored roundtrip\nOK fixed huffman\nOK dynamic huffman\nOK bad header checksum\nOK bad adler32\nOK truncated stream\nOK reserved block type')"
 	$(PXX_STABLE) test/lib_png.pas /tmp/lib_png
-	test "$$(/tmp/lib_png)" = "$$(printf '86\n137 80 78 71\n1\n2x2\n255,0,0,255\n0,255,0,128\n0,0,255,64\n255,255,255,0\n0\nbad chunk crc')"
+	test "$$(/tmp/lib_png)" = "$$(printf '86\n137 80 78 71\nTRUE\n2x2\n255,0,0,255\n0,255,0,128\n0,0,255,64\n255,255,255,0\nFALSE\nbad chunk crc')"
 	$(PXX_STABLE) test/lib_ansiterm.pas /tmp/lib_ansiterm
 	test "$$(/tmp/lib_ansiterm)" = "OK"
 	$(PXX_STABLE) test/lib_screen.pas /tmp/lib_screen
@@ -2261,11 +2261,11 @@ lib-test: pxx-stable-check
 	$(PXX_STABLE) -Fuexamples/solitaire_gui test/lib_klondike.pas /tmp/lib_klondike
 	test "$$(/tmp/lib_klondike | tail -1)" = "ALL OK"
 	$(PXX_STABLE) -Fulib/rtl -Fuexamples/solitaire_gui examples/solitaire/console_solitaire.pas /tmp/console_solitaire
-	test "$$(printf 'aq' | /tmp/console_solitaire 2>/dev/null | tail -1)" = "moves=2 won=0"
+	test "$$(printf 'aq' | /tmp/console_solitaire 2>/dev/null | tail -1)" = "moves=2 won=FALSE"
 	$(PXX_STABLE) -Fuexamples/g2048 test/lib_g2048.pas /tmp/lib_g2048
 	test "$$(/tmp/lib_g2048 | tail -1)" = "ALL OK"
 	$(PXX_STABLE) -Fulib/rtl -Fuexamples/g2048 examples/g2048/console_2048.pas /tmp/console_2048
-	test "$$(printf '\033[D\033[B\033[D\033[B\033[C\033[A q' | /tmp/console_2048 2>/dev/null | tail -1)" = "score=8 over=0"
+	test "$$(printf '\033[D\033[B\033[D\033[B\033[C\033[A q' | /tmp/console_2048 2>/dev/null | tail -1)" = "score=8 over=FALSE"
 	$(PXX_STABLE) test/lib_tui_app.pas /tmp/lib_tui_app
 	test "$$(/tmp/lib_tui_app | tail -1)" = "ALL OK"
 	$(PXX_STABLE) test/lib_keys.pas /tmp/lib_keys
@@ -2278,7 +2278,9 @@ lib-test: pxx-stable-check
 	test "$$(/tmp/lib_process)" = "$$(printf 'Bytes read: 12\nByte 0: 104\nByte 1: 101\nByte 2: 108\nByte 3: 108\nByte 4: 111\nByte 5: 32\nByte 6: 119\nByte 7: 111\nByte 8: 114\nByte 9: 108\nByte 10: 100\nByte 11: 10\nChild output: [hello world\n]\nChild wait status: 0\nOK')"
 	$(PXX_STABLE) -Fulib/rtl/platform/posix test/lib_process_multi.pas /tmp/lib_process_multi
 	test "$$(/tmp/lib_process_multi | tail -1)" = "OK"
-	@echo "lib-test ok (sudoku exact + collections + math + sysutils + random + bitset + platform + directory + bignum + json + calc + sat + mathf + vm + mandelbrot + lisp + zlib + png smoke + ansiterm + ansirender + process + process-multi) against stable v$$(cat $(STABLE_DEFAULT_DIR)/VERSION 2>/dev/null || echo '?')"
+	$(PXX_STABLE) test/lib_dynlibs.pas /tmp/lib_dynlibs
+	test "$$(/tmp/lib_dynlibs)" = "$$(printf 'nil-handle=ok\nsym-nil=ok\nprocaddr-alias=ok\nunload=ok\nfree-alias=ok\nerrstr=ok')"
+	@echo "lib-test ok (sudoku exact + collections + math + sysutils + random + bitset + platform + directory + bignum + json + calc + sat + mathf + vm + mandelbrot + lisp + zlib + png smoke + ansiterm + ansirender + process + process-multi + dynlibs) against stable v$$(cat $(STABLE_DEFAULT_DIR)/VERSION 2>/dev/null || echo '?')"
 
 # Full Track-B library suite, distinct from compiler `make test`.
 library-suite-green: pxx-stable-check
