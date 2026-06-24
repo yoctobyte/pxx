@@ -1030,6 +1030,25 @@ begin
   end;
 end;
 
+{ Parse an indexed-property subscript `[e1 {, e2}]` (bracket not yet consumed)
+  into a chain of AN_ARG nodes. head = first arg, tail = last (so a setter's value
+  arg can be spliced after). Supports multi-index `obj.Cells[a, b]` / `obj[a, b]`. }
+procedure ParsePropIndexArgs(var head, tail: Integer);
+var n: Integer;
+begin
+  Expect(tkLBrack, '[');
+  ParseExpr;
+  head := AllocNode(AN_ARG); ASTLeft[head] := CurASTNode; tail := head;
+  while CurTok.Kind = tkComma do
+  begin
+    Next;
+    ParseExpr;
+    n := AllocNode(AN_ARG); ASTLeft[n] := CurASTNode;
+    ASTRight[tail] := n; tail := n;
+  end;
+  Expect(tkRBrack, ']');
+end;
+
 function ParseLValueAST(idx: Integer; identTokIdx: Integer): Integer;
 var
   node, indexNode, fieldNode, prevTok, recName, i: Integer;
@@ -1320,11 +1339,7 @@ begin
           end;
           if (i < TokCount) and (Tokens[i].Kind = tkAssign) then isAssign := True;
 
-          Next; { consume '[' }
-          ParseExpr; mexprNode := CurASTNode;   { index }
-          Expect(tkRBrack, ']');
-          margIdx := AllocNode(AN_ARG);
-          ASTLeft[margIdx] := mexprNode;
+          ParsePropIndexArgs(margIdx, mlastArg);   { [a {, b}] (bracket consumed here) }
 
           if isAssign then
           begin
@@ -1341,7 +1356,7 @@ begin
             ASTIVal[mcallNode] := mpi; ASTTk[mcallNode] := Ord(Procs[mpi].RetType);
             mselfArg := AllocNode(AN_ARG); ASTLeft[mselfArg] := node; ASTLeft[mcallNode] := mselfArg;
             margSeq := AllocNode(AN_ARG); ASTLeft[margSeq] := CurASTNode;  { value }
-            ASTRight[mselfArg] := margIdx; ASTRight[margIdx] := margSeq;
+            ASTRight[mselfArg] := margIdx; ASTRight[mlastArg] := margSeq;
             node := mcallNode; Result := node; Exit;
           end
           else
@@ -1590,14 +1605,7 @@ begin
 
             if CurTok.Kind = tkIdent then Next; { consume property name }
             margIdx := -1;
-            if UPropIsIndexed[pri] then
-            begin
-              Expect(tkLBrack, '[');
-              ParseExpr; mexprNode := CurASTNode;
-              Expect(tkRBrack, ']');
-              margIdx := AllocNode(AN_ARG);
-              ASTLeft[margIdx] := mexprNode;
-            end;
+            if UPropIsIndexed[pri] then ParsePropIndexArgs(margIdx, mlastArg);
             Expect(tkAssign, ':=');
             ParseExpr;
 
@@ -1619,11 +1627,11 @@ begin
 
             margSeq := AllocNode(AN_ARG);
             ASTLeft[margSeq] := CurASTNode;   { value }
-            { Setter args: self [, index], value }
+            { Setter args: self [, index...], value }
             if margIdx >= 0 then
             begin
               ASTRight[mselfArg] := margIdx;
-              ASTRight[margIdx] := margSeq;
+              ASTRight[mlastArg] := margSeq;
             end
             else
               ASTRight[mselfArg] := margSeq;
@@ -1655,14 +1663,7 @@ begin
 
             Next; { consume property name }
             margIdx := -1;
-            if UPropIsIndexed[pri] then
-            begin
-              Expect(tkLBrack, '[');
-              ParseExpr; mexprNode := CurASTNode;
-              Expect(tkRBrack, ']');
-              margIdx := AllocNode(AN_ARG);
-              ASTLeft[margIdx] := mexprNode;
-            end;
+            if UPropIsIndexed[pri] then ParsePropIndexArgs(margIdx, mlastArg);
             if UMthVirSlot[mmi] >= 0 then
             begin
               mcallNode := AllocNode(AN_VIRTUAL_CALL);
@@ -1678,7 +1679,7 @@ begin
             mselfArg := AllocNode(AN_ARG);
             ASTLeft[mselfArg] := node;
             ASTLeft[mcallNode] := mselfArg;
-            { Getter args: self [, index] }
+            { Getter args: self [, index...] }
             if margIdx >= 0 then ASTRight[mselfArg] := margIdx;
 
             node := mcallNode;

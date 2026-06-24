@@ -16,6 +16,14 @@ type
     property Vals[i: Integer]: Integer read G;   { read-only, non-default }
   end;
 
+  TGrid = class
+    FC: array of Integer;
+    procedure Setup;
+    function GetCell(a, b: Integer): Integer;
+    procedure SetCell(a, b: Integer; v: Integer);
+    property Cells[a, b: Integer]: Integer read GetCell write SetCell; default;
+  end;
+
 procedure TList.Setup; begin SetLength(FI, 4); end;
 function TList.GetItem(i: Integer): Integer; begin GetItem := FI[i]; end;
 procedure TList.SetItem(i: Integer; v: Integer); begin FI[i] := v; end;
@@ -23,9 +31,14 @@ procedure TList.SetItem(i: Integer; v: Integer); begin FI[i] := v; end;
 procedure TRO.Setup; begin SetLength(FI, 3); FI[0] := 10; FI[1] := 20; FI[2] := 30; end;
 function TRO.G(i: Integer): Integer; begin G := FI[i]; end;
 
+procedure TGrid.Setup; begin SetLength(FC, 9); end;
+function TGrid.GetCell(a, b: Integer): Integer; begin GetCell := FC[a * 3 + b]; end;
+procedure TGrid.SetCell(a, b: Integer; v: Integer); begin FC[a * 3 + b] := v; end;
+
 var
   L: TList;
   r: TRO;
+  g: TGrid;
 begin
   L := TList.Create;
   L.Setup;
@@ -40,4 +53,11 @@ begin
   r.Setup;
   writeln(r.Vals[0]);   { 10 — read-only indexed getter }
   writeln(r.Vals[2]);   { 30 }
+
+  g := TGrid.Create;
+  g.Setup;
+  g.Cells[1, 2] := 55;  { multi-index setter }
+  g[2, 0] := 88;        { default multi-index setter }
+  writeln(g.Cells[1, 2]); { 55 — multi-index getter }
+  writeln(g[2, 0]);     { 88 — default multi-index getter }
 end.

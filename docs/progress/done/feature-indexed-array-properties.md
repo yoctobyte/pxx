@@ -76,3 +76,8 @@ This is the standard idiom for every collection, so it gates a lot:
   Multi-index (`P[a,b: T]`) still nice-to-have (single index covers the
   collections need). Unblocks the standard Classes surface (TList/TStringList
   Items[], Synapse SocketList.Items[n]).
+- 2026-06-24 — Multi-index (`property Cells[a, b: Integer]: T`) landed too:
+  `ParsePropIndexArgs` parses `[e1 {, e2}]` into an AN_ARG chain spliced between
+  self and (setter) value; works for `obj.Cells[a,b]` and default `obj[a,b]`,
+  read + write. Test extended (2D grid get/set + default). Front-end only,
+  byte-identical. The feature is now fully complete.
