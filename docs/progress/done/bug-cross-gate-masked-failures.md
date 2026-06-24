@@ -1,7 +1,8 @@
 # bug: cross gates red on two pre-existing tests (were masked behind ArgStr)
 
 - **Type:** bug (Track A — cross codegen)
-- **Status:** backlog
+- **Status:** done (both documented sub-failures fixed; aarch64 gate green)
+- **Resolved:** 2026-06-24
 - **Found:** 2026-06-24, after fixing `bug-argstr-managed-dest-cross`
 - **Severity:** medium — keeps `make test-i386` / `test-aarch64` / `test-arm32`
   red. Both are independent of the ArgStr fix; they were simply hidden because
@@ -103,3 +104,38 @@ git stash    # (if the ArgStr change is uncommitted; not needed once committed)
 tools/run_target.sh i386 /tmp/fs                 # vs the x86-64 build's output
 ./compiler/pascal26 --target=aarch64 test/test_classref.pas /tmp/cr   # errors at :186
 ```
+
+## Resolution (2026-06-24)
+
+Both documented sub-failures fixed (commit 76c0cd4):
+
+- **Failure 2 (`test_classref` / aarch64).** Root cause was a frozen/inline-string
+  value dereferenced through a pointer (typinfo `NamePtr^`): the value IS its
+  buffer address, so the deref is a pointer-width load, but the cross
+  `IR_LOAD_MEM` handlers rejected the frozen-string type kinds (and, off 64-bit,
+  would have used `TypeSize(tyString)=8`). Added a frozen-string branch to each
+  cross backend's `IR_LOAD_MEM` that loads pointer-width (aarch64 `ldr x0`; i386
+  `mov eax`; arm32 `ldr r0`). x86-64 already worked (8 == ptr width). Fixes
+  `test_classref` on all targets.
+- **Failure 1 (`test_cross_frozen_strlen_deref` / i386+arm32).** The Makefile ran
+  it under `-dPXX_MANAGED_STRING`, exercising *managed* `Length(ps^)` — a
+  different, separately-broken path whose word-size-dependent garbage 32-bit can
+  never match 64-bit on. The test is named/documented for FROZEN strings; switched
+  the invocations to `-uPXX_MANAGED_STRING`. With the LOAD_MEM fix it yields
+  `5/5/5/2/2` identically on all four targets.
+
+**`make test-aarch64` is now fully green.** x86-64 gate green, self-host
+byte-identical.
+
+### Newly exposed (filed separately — not regressions, were masked behind the above)
+
+- **`bug-i386-arm32-int64-conformance`** — with the frozen wall cleared,
+  `make test-i386`/`test-arm32` now reach `test_conformance_2` and diverge from
+  the x86-64 oracle on Int64 reached through a function return / record field /
+  mixed `shl`-`div`-`mod` (e.g. `Fact(20)`, `I64Mix`, `RecSum`). Plain Int64
+  multiply is fine, so it is specific to those constructs on 32-bit. Pre-existing
+  (this change touches only frozen-string `IR_LOAD_MEM` + Makefile flags).
+- **`bug-managed-length-via-pointer-deref`** — managed `Length(ps^)` / `Length(rec.pf^)`
+  returns garbage on *every* target (reads the handle/content, never `[handle-8]`);
+  forcing the value path instead segfaults (borrowed handle wrongly released).
+  Separate from the frozen path fixed here.
