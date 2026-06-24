@@ -15,6 +15,7 @@ var
   isTls, okUrl: Boolean;
   req: AnsiString;
   resp: THttpResponse;
+  hdrs: THttpHeaders;
 begin
   { URL parse: host + path. }
   okUrl := HttpParseUrl('http://example.com/index.html', host, port, path, isTls);
@@ -88,4 +89,12 @@ begin
   SayBool('url-abspath', HttpResolveUrl('http://host:8080/a/b', '/c') = 'http://host:8080/c');
   SayBool('url-rel', HttpResolveUrl('http://host/a/b', 'c') = 'http://host/a/c');
   SayBool('url-defport', HttpResolveUrl('http://host/a', '/x') = 'http://host/x');
+
+  { Structured header API: parse / count / get (ci) / has / iterate. }
+  hdrs := HttpParseHeaders('Content-Type: text/html'#13#10'Set-Cookie: a=1'#13#10'Set-Cookie: b=2'#13#10);
+  SayBool('hdrs-count', hdrs.Count = 3);
+  SayBool('hdrs-get-ci', HttpHeadersGet(hdrs, 'content-type') = 'text/html');
+  SayBool('hdrs-first', HttpHeadersGet(hdrs, 'Set-Cookie') = 'a=1');    { first of repeats }
+  SayBool('hdrs-has', HttpHeadersHas(hdrs, 'set-cookie') and not HttpHeadersHas(hdrs, 'nope'));
+  SayBool('hdrs-iter', (HttpHeaderName(hdrs, 0) = 'Content-Type') and (HttpHeaderVal(hdrs, 2) = 'b=2'));
 end.

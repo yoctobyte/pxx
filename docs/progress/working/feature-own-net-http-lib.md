@@ -80,12 +80,20 @@ connection (both bodies correct, stays Alive between). `HttpConnClose` to finish
   (both needed for the standard `Read`/`Write(var Buffer; …)` surface). Synapse's
   heaviest Classes need.
 
+## Header API (landed 2026-06-24)
+
+`THttpHeaders` (name/value pairs) + `HttpParseHeaders` (raw block → structured,
+multi-value preserved in order), `HttpHeadersGet`/`HttpHeadersHas`
+(case-insensitive), `HttpHeaderName`/`HttpHeaderVal` (iterate). Pure; 5 checks in
+`lib_http` (38 total). Built locally to dodge
+[[bug-setlength-record-field-via-var-param]].
+
 ## Roadmap (next slices)
 
-1. **Header map API** — structured request/response headers (today: raw block +
-   `HttpHeaderValue` lookup).
-2. **Connection pool** — keep a small set of `THttpConnection`s keyed by host:port
+1. **Connection pool** — keep a small set of `THttpConnection`s keyed by host:port
    so `HttpGet` reuses one transparently (today reuse is explicit via the Conn API).
+2. Structured headers on `THttpResponse` (today: raw `.Headers` block; parse via
+   `HttpParseHeaders` on demand).
 3. **TLS** — `https://` is parsed and refused (`isTls`). Routes through a common
    TLS seam [[feature-tls-provider-abstraction]] with two interchangeable
    backends: OpenSSL (default; via [[feature-real-dynlib-loader]]) and the native

@@ -35,7 +35,7 @@ lives in git, not in a timestamp._
 | --- | --- | --- | --- | --- |
 | feature-c-runtime-library | B | feature | C runtime/library layer (`lib/crtl`) plus direct C-library packages | feature-c-source-frontend |
 
-## backlog (51)
+## backlog (50)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -69,7 +69,6 @@ lives in git, not in a timestamp._
 | feature-lazy-standard-unit-emission | A | feature | Lazy standard-unit emission / routine-level dead-code elimination | — |
 | feature-metaclass-descendant-enforcement | A | feature | Metaclass alias descendant-constraint enforcement | — |
 | feature-move-fillchar-intrinsics | B | feature | Move / FillChar as compiler intrinsics (future optimization) | — |
-| feature-native-arch-binaries | A | feature | Distribute native per-arch stable binaries (no FPC/make on install) | — |
 | feature-networking | B | feature | Networking runtime | — |
 | feature-nilpy-idf-import | A | feature | nilpy includes anything from ESP-IDF and it just works | feature-c-source-frontend, feature-esp32-idf-xtensa |
 | feature-nil-python-frontend | A | feature | Nil Python frontend (`.npy`) | — |
@@ -125,7 +124,7 @@ lives in git, not in a timestamp._
 | feature-mimic-fpc | B | feature | `mimic FPC` compatibility mode | — |
 | feature-string-model-tyfixedstring | B | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (253)
+## done (254)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -329,6 +328,7 @@ lives in git, not in a timestamp._
 | feature-mode-delphi | A | feature | `{$mode delphi}` support — incl. the @-optional proc-pointer disambiguation | — |
 | feature-multidim-const-array | A | feature | feature: multidimensional typed-constant arrays | — |
 | feature-multidim-fixed-arrays | A | feature | Multidimensional fixed arrays | — |
+| feature-native-arch-binaries | A | feature | Distribute native per-arch stable binaries (no FPC/make on install) | — |
 | feature-nested-anonymous-fixed-array | A | feature | Anonymous nested fixed array `array[..] of array[..] of T` | — |
 | feature-nested-routines | A | feature | feature: nested (local) functions and procedures | — |
 | feature-open-array-constructor-arg | A | feature | feature: array constructor `[...]` as an open-array argument | — |
@@ -422,7 +422,6 @@ lives in git, not in a timestamp._
 - [A] feature-lazy-standard-unit-emission
 - [A] feature-metaclass-descendant-enforcement
 - [B] feature-move-fillchar-intrinsics
-- [A] feature-native-arch-binaries
 - [B] feature-networking
 - [A] feature-nil-python-frontend
 - [A] feature-object-reference-type

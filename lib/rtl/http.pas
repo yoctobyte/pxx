@@ -44,6 +44,23 @@ function HttpBuildRequest(const method, host, path, extraHeaders, body: AnsiStri
   surrounding whitespace trimmed, or '' if absent. }
 function HttpHeaderValue(const headers, name: AnsiString): AnsiString;
 
+type
+  THttpHeaderPair = record Name, Value: AnsiString; end;
+  THttpHeaders = record
+    List:  array of THttpHeaderPair;
+    Count: Integer;
+  end;
+
+{ Parse a raw header block into name/value pairs (trimmed). Multi-value headers
+  appear as repeated entries in order. }
+function HttpParseHeaders(const block: AnsiString): THttpHeaders;
+{ Case-insensitive first-match value, or '' if absent. }
+function HttpHeadersGet(const h: THttpHeaders; const name: AnsiString): AnsiString;
+function HttpHeadersHas(const h: THttpHeaders; const name: AnsiString): Boolean;
+{ i in 0..h.Count-1. }
+function HttpHeaderName(const h: THttpHeaders; i: Integer): AnsiString;
+function HttpHeaderVal(const h: THttpHeaders; i: Integer): AnsiString;
+
 { Decode a chunked-transfer-encoded body to its plain bytes. }
 function HttpDechunk(const body: AnsiString): AnsiString;
 
@@ -193,6 +210,67 @@ begin
       end;
       lineStart := i + 1;
     end;
+end;
+
+function HttpParseHeaders(const block: AnsiString): THttpHeaders;
+var
+  arr: array of THttpHeaderPair;
+  cnt, i, n, lineStart, colon: Integer;
+  line, nm: AnsiString;
+begin
+  cnt := 0;
+  n := Length(block);
+  lineStart := 1;
+  for i := 1 to n + 1 do
+    if (i > n) or (block[i] = #10) then
+    begin
+      line := Copy(block, lineStart, i - lineStart);
+      if (Length(line) > 0) and (line[Length(line)] = #13) then
+        line := Copy(line, 1, Length(line) - 1);
+      colon := Pos(':', line);
+      if colon > 0 then
+      begin
+        nm := Trim(Copy(line, 1, colon - 1));
+        if nm <> '' then
+        begin
+          SetLength(arr, cnt + 1);          { local array — SetLength OK }
+          arr[cnt].Name := nm;
+          arr[cnt].Value := Trim(Copy(line, colon + 1, Length(line)));
+          cnt := cnt + 1;
+        end;
+      end;
+      lineStart := i + 1;
+    end;
+  Result.List := arr;
+  Result.Count := cnt;
+end;
+
+function HttpHeadersGet(const h: THttpHeaders; const name: AnsiString): AnsiString;
+var i: Integer; ln: AnsiString;
+begin
+  Result := '';
+  ln := LowerCase(name);
+  for i := 0 to h.Count - 1 do
+    if LowerCase(h.List[i].Name) = ln then begin Result := h.List[i].Value; Exit; end;
+end;
+
+function HttpHeadersHas(const h: THttpHeaders; const name: AnsiString): Boolean;
+var i: Integer; ln: AnsiString;
+begin
+  Result := False;
+  ln := LowerCase(name);
+  for i := 0 to h.Count - 1 do
+    if LowerCase(h.List[i].Name) = ln then begin Result := True; Exit; end;
+end;
+
+function HttpHeaderName(const h: THttpHeaders; i: Integer): AnsiString;
+begin
+  if (i >= 0) and (i < h.Count) then Result := h.List[i].Name else Result := '';
+end;
+
+function HttpHeaderVal(const h: THttpHeaders; i: Integer): AnsiString;
+begin
+  if (i >= 0) and (i < h.Count) then Result := h.List[i].Value else Result := '';
 end;
 
 function HttpHexVal(const s: AnsiString): Integer;
