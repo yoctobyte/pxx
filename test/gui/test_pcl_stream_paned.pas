@@ -20,6 +20,11 @@ type
   TStreamPanedForm = class(TForm)
   public
     constructor Create(AOwner: TComponent); override;
+  published
+    { a published field whose name matches an .lfm object should auto-bind during
+      streaming (SetFieldByName) — load-bearing for eliah-from-lfm }
+    RootPaned: TPaned;
+    Editor: TMemo;
   end;
 
 constructor TStreamPanedForm.Create(AOwner: TComponent);
@@ -57,6 +62,11 @@ begin
   if rp.Vertical then begin writeln('FAIL: RootPaned should be horizontal'); Halt(1); end;
   if rp.Position <> 200 then begin writeln('FAIL: RootPaned.Position not streamed'); Halt(1); end;
   if not cl.Vertical then begin writeln('FAIL: ColLeft.Vertical not streamed'); Halt(1); end;
+
+  { published fields must auto-bind to the matching streamed objects }
+  if Form1.RootPaned = nil then begin writeln('FAIL: RootPaned field not bound'); Halt(1); end;
+  if Form1.Editor = nil then begin writeln('FAIL: Editor field not bound'); Halt(1); end;
+  if Form1.RootPaned <> rp then begin writeln('FAIL: RootPaned field != FindChild'); Halt(1); end;
 
   writeln('STREAM PANED OK');
 

@@ -74,54 +74,62 @@ object EliahForm: TEliahForm
     Caption = 'Undo'
     OnClick = OnUndo
   end
-  object Tree: TListBox
-    Left = 0
-    Top = 34
-    Width = 240
-    Height = 516
-    OnClick = OnTreeClick
-  end
-  object Errors: TListBox
-    Left = 0
-    Top = 550
-    Width = 240
-    Height = 150
-    OnClick = OnErrorClick
-  end
-  object Editor: TMemo
-    Left = 240
-    Top = 34
-    Width = 560
-    Height = 466
-  end
-  object Output: TMemo
-    Left = 240
-    Top = 500
-    Width = 560
-    Height = 200
-  end
-  object DesignBox: TPaintBox
-    Left = 800
-    Top = 34
-    Width = 300
-    Height = 466
-    OnPaint = OnDesignPaint
-    OnMouseDown = OnDesignMouseDown
-    OnMouseMove = OnDesignMouseMove
-    OnMouseUp = OnDesignMouseUp
-  end
-  object Props: TListBox
-    Left = 800
-    Top = 500
-    Width = 300
-    Height = 172
-    OnClick = OnPropClick
-  end
-  object ValueEdit: TEdit
-    Left = 800
-    Top = 672
-    Width = 300
+  object LinkBtn: TButton
+    Left = 810
+    Top = 3
+    Width = 80
     Height = 26
-    OnKeyDown = OnValueKey
+    Caption = 'Link'
+    OnClick = OnPickFromCaret
+  end
+  object WireBtn: TButton
+    Left = 896
+    Top = 3
+    Width = 80
+    Height = 26
+    Caption = 'OnClick'
+    OnClick = OnWireOnClick
+  end
+  object RootPaned: TPaned
+    Left = 0
+    Top = 34
+    Width = 1100
+    Height = 666
+    object colLeft: TPaned
+      Vertical = True
+      object Tree: TListBox
+        OnClick = OnTreeClick
+      end
+      object Errors: TListBox
+        OnClick = OnErrorClick
+      end
+    end
+    object midRight: TPaned
+      object colCenter: TPaned
+        Vertical = True
+        object Editor: TMemo
+        end
+        object Output: TMemo
+        end
+      end
+      object colRight: TPaned
+        Vertical = True
+        object DesignBox: TPaintBox
+          OnPaint = OnDesignPaint
+          OnMouseDown = OnDesignMouseDown
+          OnMouseMove = OnDesignMouseMove
+          OnMouseUp = OnDesignMouseUp
+        end
+        object colInspector: TPaned
+          Vertical = True
+          object Props: TListBox
+            OnClick = OnPropClick
+          end
+          object ValueEdit: TEdit
+            OnKeyDown = OnValueKey
+          end
+        end
+      end
+    end
   end
 end
