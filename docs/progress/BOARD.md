@@ -45,8 +45,8 @@ _none_
 | feature-dns-resolver-library | B | feature | DNS resolver library (`dns.pas`) with selectable backends | — |
 | feature-dynamic-include-paths-config | A | feature | Dynamic Include Paths, Configuration Files, and System Scanner | — |
 | feature-dynamic-soname-discovery | A | feature | Dynamic soname discovery (no execve) | — |
+| feature-eliah-ai-command-rail | B | feature | feature: Eliah AI command rail + console pane | — |
 | feature-eliah-from-lfm | B | feature | feature: define Eliah's own layout in a streamed .lfm (dogfooding) | — |
-| feature-eliah-selection-link | B | feature | feature: Eliah shared selection model — designer ↔ editor link (+ AI rail) | — |
 | feature-eliah-shell | B | feature | feature: Eliah shell — perspective-based IDE (one window, splitter-tree layout) | — |
 | feature-esp32-idf-xtensa | A | feature | ESP-IDF integration: Xtensa (ESP32-S2/S3) — QEMU + real hardware | — |
 | feature-esp-peripheral-callback-api | B | feature | ESP32 peripheral callback API (timer / GPIO / ADC) — the user-facing "interrupt" | — |
@@ -109,7 +109,7 @@ _none_
 | feature-mimic-fpc | B | feature | `mimic FPC` compatibility mode | — |
 | feature-string-model-tyfixedstring | B | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (246)
+## done (247)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -266,6 +266,7 @@ _none_
 | feature-eliah-m2-builder | B | feature | Eliah M2 — builder integration | feature-eliah-m0-window |
 | feature-eliah-pane-reflow | B | feature | Eliah — pane reflow / resizable splitters | feature-eliah-m0-window |
 | feature-eliah-perspectives | B | feature | feature: Eliah perspectives — saved layouts (Code / Design / Split) + compacting | feature-eliah-layout-tree, feature-eliah-pane-collapse |
+| feature-eliah-selection-link | B | feature | feature: Eliah shared selection model — designer ↔ editor link (+ AI rail) | — |
 | feature-empty-class-shorthand | A | feature | Empty class descendant shorthand | — |
 | feature-enum-explicit-values | A | feature | feature: enumerated type with explicit ordinal values | — |
 | feature-eof-stdin-builtin | A | feature | `Eof` (standard input) not recognized | — |
@@ -384,8 +385,8 @@ _none_
 - [B] feature-dns-resolver-library
 - [A] feature-dynamic-include-paths-config
 - [A] feature-dynamic-soname-discovery
+- [B] feature-eliah-ai-command-rail
 - [B] feature-eliah-from-lfm
-- [B] feature-eliah-selection-link
 - [B] feature-eliah-shell
 - [A] feature-esp32-idf-xtensa
 - [B] feature-esp-peripheral-callback-api

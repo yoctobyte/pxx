@@ -83,3 +83,24 @@ SelectFromEditorLine), gui_suite OK, screenshot shows the Link button.
   click signal; the button covers it for now.
 - Link currently keys on the .lfm object declaration (the box-emulation creation
   site); .pas event-handler navigation arrives with wire-OnClick.
+
+## DONE 2026-06-24
+
+Wire-OnClick command landed (commit after 1bff46b): selecting a component +
+'OnClick' assigns `OnClick = <Name>Click` (round-trips in the .lfm, shows in the
+inspector) and generates an undoable handler stub in the editor (idempotent).
+Command surface documented (docs/developer/eliah-command-surface.md). AI rail
+split to a suggestion ticket (backlog/feature-eliah-ai-command-rail) per the
+decision that it mainly adds networking, little local-test value.
+
+**M5 acceptance met:** designer<->editor selection link both directions; one
+command (wire OnClick) end-to-end through the shared model; command surface
+documented (menu/shortcut/AI interchangeable). Gates: garin 162/162, eliah
+--smoke OK, gui_suite OK, screenshots of Link + OnClick.
+
+Deferred (own tickets / minor):
+- AI command rail + console pane — backlog/feature-eliah-ai-command-rail.
+- editor->designer on caret *move* (not just the Link button) — wants a TMemo
+  caret/click signal; the button covers it.
+- .pas event-handler navigation (the link keys on the .lfm object declaration =
+  the box-emulation creation site); the wire command already seeds .pas stubs.
