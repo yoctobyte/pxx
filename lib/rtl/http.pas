@@ -6,9 +6,13 @@ unit http;
   (over scheduler's epoll reactor: SetNonBlocking + WaitReadable) can reuse them
   without duplicating the protocol logic.
 
-  Scope now: plain HTTP (no TLS — https needs a TLS layer, a separate unit),
-  GET/POST, `Connection: close` response framing (read to EOF). Chunked /
-  keep-alive framing is a later slice. }
+  Capabilities: plain HTTP (no TLS yet — see feature-tls-provider-abstraction);
+  GET/POST/HEAD/PUT/DELETE + generic HttpExec with custom headers; blocking and
+  async (reactor) transports; hostname resolution (blocking dns / async
+  dns_async); response framing (Transfer-Encoding: chunked decode, else
+  Content-Length); redirect following with relative-Location resolution.
+  Next: keep-alive / connection reuse (today one request per Connection: close,
+  which the parser frames correctly); a structured header map. }
 
 interface
 
@@ -327,7 +331,7 @@ var
   sock: TNetSocket;
   req, raw: AnsiString;
   buf: array[0..4095] of Byte;
-  n, i: Integer;
+  n, old: Integer;
 const
   BUFSZ = 4096;
 begin
@@ -351,7 +355,11 @@ begin
   repeat
     n := NetRecv(sock, @buf[0], BUFSZ);
     if n > 0 then
-      for i := 0 to n - 1 do raw := raw + Chr(buf[i]);
+    begin
+      old := Length(raw);
+      SetLength(raw, old + n);
+      Move(buf[0], raw[old + 1], n);          { bulk append — not per-byte }
+    end;
   until n <= 0;
   NetClose(sock);
 
@@ -436,7 +444,7 @@ var
   fd: Integer;
   req, raw: AnsiString;
   buf: array[0..4095] of Byte;
-  n, i: Integer;
+  n, old: Integer;
 const
   BUFSZ = 4096;
 begin
@@ -460,7 +468,11 @@ begin
   repeat
     n := TcpRecv(fd, @buf[0], BUFSZ);          { yields on EAGAIN }
     if n > 0 then
-      for i := 0 to n - 1 do raw := raw + Chr(buf[i]);
+    begin
+      old := Length(raw);
+      SetLength(raw, old + n);
+      Move(buf[0], raw[old + 1], n);          { bulk append — not per-byte }
+    end;
   until n <= 0;
   TcpClose(fd);
 
