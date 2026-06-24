@@ -71,3 +71,26 @@ committed and ready.
 
 The 4 streaming fixes benefit ALL RTTI streaming (and fixed the silently-empty
 captions in `test_pcl_lfm`), independent of Eliah.
+
+## DONE 2026-06-24 (commit 64f1526)
+
+Eliah's whole window chrome now streams from `apps/ide/eliah/eliah.lfm` into
+`TEliahForm` via `{$R}`/`InitInheritedComponent` — toolbar (incl Link/OnClick) +
+the nested-TPaned splitter tree + every leaf widget. ~200 lines of imperative
+widget creation replaced by streaming (main.pas net -85 lines).
+
+The ticket's premise was stale (written for the flat M0 layout; M1 rebuilt the
+window as a nested-TPaned tree). De-risked first with `test/gui/test_pcl_stream_paned`
+(now in gui_suite): proved deep nested TPaned streams, Realize recursively
+parents + packs TPaned slots by order, and published fields/methods bind — **zero
+rtl/pcl changes needed** beyond the already-landed streamer-adoption work.
+
+- THandler -> TEliahForm(TForm): widget fields PUBLISHED (streamer binds them),
+  event handlers PUBLISHED (.lfm OnX=OnY resolves). Designer/selection/project/
+  undo/perspectives stay plain state; menu + palette + designer + reflow run in
+  code after streaming.
+- eliah.lfm rewritten to the current tree, names matching field/handler names.
+
+Gates: garin 162/162, eliah --smoke OK, gui_suite OK, screenshot identical to the
+imperative build. The 4 old constructor-skip "blockers" were already obsoleted by
+the streamer adopting the metaclass virtual ctor (real ctors run; stopgaps reverted).
