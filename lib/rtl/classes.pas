@@ -6,8 +6,12 @@ unit classes;
   a future Generics.Collections, not here. The streaming runtime (TComponent,
   TReader) is in classes_lite.
 
-  IPv4 of the RTL Classes: enough for the string-list / pointer-list needs;
-  TStream / TMemoryStream is the next slice. Track B.
+  IPv4 of the RTL Classes: enough for the string-list / pointer-list needs.
+  TStream / TMemoryStream is written but BLOCKED on two Track A gaps —
+  bug-read-write-reserved-as-method-names (`Read`/`Write` can't be method names)
+  and bug-untyped-params-in-methods (`var Buffer` untyped params rejected in
+  methods) — both required for the standard stream surface. Lands here once those
+  are fixed. Track B.
 
   STATUS: TList, TStrings and TStringList all work and are smoked (the VMT
   mixed-signature dispatch bug that blocked the abstract base was fixed Track A,

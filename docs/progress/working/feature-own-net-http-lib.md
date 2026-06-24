@@ -70,6 +70,16 @@ Content-Length bytes or the full chunked body (`HttpChunkedLen`), not read-to-EO
 server coroutine does ONE accept and serves TWO requests; client reuses one
 connection (both bodies correct, stays Alive between). `HttpConnClose` to finish.
 
+## Classes progress (RTL, drives synapse + general use)
+
+- `TList` / `TStrings` / `TStringList` — **done & smoked** (`lib/rtl/classes.pas`,
+  `test/lib_classes`). `TStringList.Sort` blocked on
+  [[bug-string-ordering-comparison-constant]].
+- `TStream` / `TMemoryStream` — written, **blocked** on two Track A gaps:
+  [[bug-read-write-reserved-as-method-names]] and [[bug-untyped-params-in-methods]]
+  (both needed for the standard `Read`/`Write(var Buffer; …)` surface). Synapse's
+  heaviest Classes need.
+
 ## Roadmap (next slices)
 
 1. **Header map API** — structured request/response headers (today: raw block +
