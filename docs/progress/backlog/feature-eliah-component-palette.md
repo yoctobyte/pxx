@@ -49,3 +49,26 @@ dropping a non-visual one adds a tray icon; the inspector edits both via RTTI.
 
 ## Log
 - 2026-06-23 — filed (milestone 4 of feature-eliah-shell).
+
+## Progress 2026-06-24 — registry surface + registry-driven palette DONE
+
+- **Registry surface** (garin/registry.pas, render-agnostic, bochan-tested 10
+  asserts): `EnumDescendants(ancestorName, includeSelf)` walks the
+  compiler-emitted RTTI registry (__rttireg); `ClassDescendsFrom` is the
+  ancestor-chain test. The face supplies the PCL ancestor names — core stays
+  generic. Foundation commit ee2a7de.
+- **Palette pane**: the designer combo is now populated from the registry
+  (visual = descends from TControl, filtered to docmodel-placeable kinds via
+  CompPlaceKind). RegisterClass'ing a new placeable widget surfaces it with no
+  IDE edit. Commit fceb968.
+- Registry in eliah carries 17 components: 7 placeable visual (Button/Label/Edit/
+  Memo/ListBox/CheckBox/Panel) + bases + non-visual (TTimer, TMenu*, TMenuItem).
+
+### Remaining (keeps this ticket open)
+- **Non-visual tray** (the distinctive bullet): drop a non-visual component
+  (TTimer, a wrapped library) -> a Delphi-style icon tray along the form bottom;
+  selectable + inspector-editable but not on the canvas. Needs docmodel support
+  for a non-visual node (no X/Y/canvas rect) + designer tray-strip rendering +
+  place routing (visual->canvas, non-visual->tray). Registry already classifies
+  non-visual (TComponent but not TControl), so the data is ready.
+- **Grouping** (Standard/Additional) in the palette — minor; defer with the tray.

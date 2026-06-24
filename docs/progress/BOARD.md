@@ -31,7 +31,7 @@ _none_
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
-| bug-argstr-managed-dest-cross | A | bug | bug: ArgStr(i, s) into a managed-string var rejected/broken on cross targets | — |
+| bug-cross-gate-masked-failures | A | bug | bug: cross gates red on two pre-existing tests (were masked behind ArgStr) | — |
 | bug-stderr-not-fd2 | B | bug | `writeln(StdErr, ...)` goes to stdout — StdErr not connected to fd 2 | — |
 | bug-widgetset-virtual-arg-corruption | A | bug | bug: new virtual method on TWidgetSet miscompiles its object argument | — |
 | chore-inc-to-units | A | chore | `.inc` → real `.pas` units refactor | — |
@@ -112,12 +112,13 @@ _none_
 | feature-mimic-fpc | B | feature | `mimic FPC` compatibility mode | — |
 | feature-string-model-tyfixedstring | B | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (242)
+## done (243)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
 | bug-64bit-shift-xor-literal-gaps | A | bug | 64-bit gaps in pinned v9: `xor` operator, large shifts, 64-bit hex literals | — |
 | bug-ansistring-concat-arg-static-bloat | A | bug | AnsiString concat expression as a call argument allocates an ~8 MB static buffer per site | — |
+| bug-argstr-managed-dest-cross | A | bug | bug: ArgStr(i, s) into a managed-string var rejected/broken on cross targets | — |
 | bug-as-cast-inline-method-call | A | bug | bug: method call on an inline `(expr as T)` is silently dropped | — |
 | bug-bare-function-name-call-vs-resultvar | A | bug | Bare function name in an expression: PXX calls it, FPC/ISO reads the result var | — |
 | bug-builtin-val-miscompiles | A | bug | Builtin `Val` mis-lowers — wrong error code + segfault | — |
@@ -369,7 +370,7 @@ _none_
 
 ## Ready (no unmet blocker)
 
-- [A] bug-argstr-managed-dest-cross
+- [A] bug-cross-gate-masked-failures
 - [B] bug-stderr-not-fd2
 - [A] bug-widgetset-virtual-arg-corruption
 - [A] chore-inc-to-units
