@@ -118,3 +118,19 @@ inspector edits both (modelled fields + bag props). Screenshot shows the tray.
   Interval/Enabled without hand-editing. Bag holds only props already present.
 - **Generic non-visual classes**: tray proven with TTimer/TMenu (fixed docmodel
   kinds); arbitrary registered non-visual components want class-name node storage.
+
+## DONE 2026-06-24 (commit 65a8276)
+
+RTTI-driven inspector landed: the extra-property section walks the registered
+class's published props via GetPropList (GetClass('T'+KindName)), so every
+published data property shows (Interval, Enabled, …) with its bag value, editable
++ round-tripped. Events skipped; modelled props not duplicated.
+
+**M4 complete.** Palette is registry-driven (visual + non-visual, grouped); visual
+drops to canvas, non-visual to a bottom tray; the inspector edits both via modelled
+rows + RTTI-listed published props.
+
+Deferred (not needed for M4; open a fresh ticket if ever wanted): **generic
+non-visual class storage** — the tray is proven with TTimer/TMenu (fixed docmodel
+kinds); supporting *arbitrary* registered non-visual components would want
+class-name node storage instead of an enum kind. Speculative; no current demand.
