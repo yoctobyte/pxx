@@ -1,9 +1,38 @@
 # bug: compiler hangs (infinite loop) on a method with a nested if/else inside a begin block
 
 - **Type:** bug
-- **Status:** urgent
+- **Status:** done
 - **Track:** A
 - **Opened:** 2026-06-24
+- **Closed:** 2026-06-24
+
+## Resolution (2026-06-24)
+
+Two-part fix.
+
+1. **Root cause (the real fix).** Not the nesting itself: a **local variable whose
+   name matches a method of the enclosing class** was parsed as a bare implicit-Self
+   method call. In `TPaned.Restore`, the local `child` collided with an inherited
+   `Child` method (`FindUMeth` slot 14). The implicit-Self dispatch in
+   `ParseStatementAST` (tkIdent branch) fired *without* checking that the name is a
+   local var in scope, so `child := gtk_paned_get_child2(...)` consumed only `child`
+   and stopped at `:=`. The if/else's `Eat(tkElse)` then failed, leaving a dangling
+   `else` that `ParseBlockAST`'s loop treated as an empty statement (no progress) —
+   infinite loop. Fix: guard the implicit-Self method dispatch with `si < 0` (a
+   local/param of the same name shadows the method), mirroring the existing
+   local-shadows guard on the paramless-call path. `child` now reaches the
+   assignment path. The exact body shape compiles; `examples`/`apps/ide` (TPaned)
+   and self-host are unaffected (byte-identical).
+
+2. **Watchdog (the requested guard).** `ParseBlockAST` now bounds the loop: if a
+   statement consumes no tokens, it errors (`internal parser bug: statement made no
+   progress in block`) instead of spinning. No input can wedge the compiler in this
+   loop again.
+
+Regression: `test/test_local_shadows_method_assign.pas` (10/20/-1) — hangs on the
+pre-fix pinned binary, passes after. Wired into `make test`. The sibling
+`bug-method-miscompiled-by-context` is a *separate* (codegen) defect and remains
+open.
 
 ## Summary
 

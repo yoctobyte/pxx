@@ -6690,7 +6690,7 @@ end;
 
 function ParseBlockAST: Integer;
 var
-  seqNode, lastSeq, stmtNode, savedBlockId: Integer;
+  seqNode, lastSeq, stmtNode, savedBlockId, wdPos: Integer;
 begin
   savedBlockId := CurBlockId;
   if EnableLazyVar then
@@ -6705,8 +6705,15 @@ begin
   lastSeq := seqNode;
   while not (CurTok.Kind in [tkEnd, tkEOF, tkUntil]) do
   begin
+    wdPos := TokPos;
     stmtNode := ParseStatementAST;
     Eat(tkSemicolon);
+    { Watchdog: a statement that consumes no tokens would spin this loop forever
+      (no progress, never reaching tkEnd). Bound it — turn an internal parser
+      defect into a diagnostic instead of a hang (Error reports CurTok.Line).
+      See bug-compiler-hang-on-nested-if-in-begin. }
+    if TokPos <= wdPos then
+      Error('internal parser bug: statement made no progress in block (would hang)');
     if ASTLeft[lastSeq] = -1 then
       ASTLeft[lastSeq] := stmtNode
     else
@@ -7780,8 +7787,15 @@ begin
 
         if node = -1 then
         begin
-          { Implicit Self.method dispatch for methods called bare inside a class body }
-          if CurSelfClass >= REC_UCLASS_BASE then
+          { Implicit Self.method dispatch for methods called bare inside a class body.
+            Guarded on si < 0: a local var (or param) of the same name shadows the
+            method, so `child := ...` where `child` is a local must reach the
+            assignment path below — not be eaten as a bare implicit-Self method
+            call (which consumes only the name, leaving `:=` dangling and, via a
+            following `else`, hanging ParseBlockAST). Companion to the same
+            local-shadows guard on the paramless-call path above
+            (bug-compiler-hang-on-nested-if-in-begin). }
+          if (CurSelfClass >= REC_UCLASS_BASE) and (si < 0) then
           begin
             smci := CurSelfClass - REC_UCLASS_BASE;
             smmii := FindUMeth(smci, name);

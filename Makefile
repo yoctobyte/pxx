@@ -858,6 +858,8 @@ test-core: $(COMPILER)
 	test "$$(/tmp/test_dynarray_result26)" = "$$(printf '1\n1\n1\n1\n1\n1\n1\n1\n1\n1')"
 	./$(COMPILER) -Fulib/rtl test/test_length_dynarray_call.pas /tmp/test_length_dynarray_call26
 	test "$$(/tmp/test_length_dynarray_call26)" = "$$(printf '3\n3\n0\n0\n4\n0')"
+	./$(COMPILER) test/test_local_shadows_method_assign.pas /tmp/test_local_shadows_method_assign26
+	test "$$(/tmp/test_local_shadows_method_assign26)" = "$$(printf '10\n20\n-1')"
 	./$(COMPILER) test/test_static_array_ansistring_field.pas /tmp/test_static_array_ansistring_field26
 	test "$$(/tmp/test_static_array_ansistring_field26)" = "$$(printf '1\n1\n1\n1\n1\n1\n1\n1')"
 	./$(COMPILER) test/test_ansistring_record_char_read.pas /tmp/test_ansistring_record_char_read26
