@@ -47,3 +47,15 @@ not the console intrinsic.
   while bare `Read(...)`/`Write(...)` still reach the console/file intrinsics.
 - `TStream`/`TMemoryStream` compile (with [[bug-untyped-params-in-methods]]).
 - Regression test under `make test`; self-host fixedpoint byte-identical.
+
+## Log
+- 2026-06-24 — FIXED (Track A). Read/Write/Readln/Writeln carry their text in SVal,
+  so they are accepted as method NAMES via a new `IsMemberNameTok` helper at the
+  method-declaration and implementation-header name positions (parser.inc). Member
+  CALL sites (`stream.Read(...)`) already accepted them. Verified: a class with
+  virtual `Read`/`Write` declares, implements, and dispatches.
+  RESIDUAL (separate, filed bug-virtual-keyword-name-result): assigning such a
+  method's result by its OWN name (`Read := x`) inside a VIRTUAL method
+  miscompiled the return value; that form is now a clear compile error directing
+  to `Result := ...` (which is correct in all cases) instead of silently
+  mis-storing. Regression test/test_stream_methods.pas in make test.

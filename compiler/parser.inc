@@ -195,6 +195,17 @@ end;
 procedure ParseExpr; forward;
 procedure PyParseBoolExpr; forward;  { Nil Python boolean layer (defined in pyparser.inc) }
 
+{ Read/Write/Readln/Writeln are intrinsics resolved by context at the call site,
+  not true reserved words — FPC lets a user declaration shadow them. Accept them
+  (and plain identifiers) where a member/method NAME is expected, so e.g.
+  TStream.Read / TStream.Write can be declared. The token's SVal carries the
+  text, so name capture is unchanged. }
+function IsMemberNameTok: Boolean;
+begin
+  IsMemberNameTok := (CurTok.Kind = tkIdent) or (CurTok.Kind = tkRead) or
+    (CurTok.Kind = tkwrite) or (CurTok.Kind = tkReadln) or (CurTok.Kind = tkwriteln);
+end;
+
 { Resolve a (possibly dotted) unit qualifier at the front of a reference:
   `Unit.Member` or `Posix.SysSocket.Member`. Greedily matches the LONGEST dotted
   prefix that is a compiled unit and still leaves a trailing `.member`, so a
@@ -7168,16 +7179,32 @@ begin
       node := ParseLazyVarDeclAST;
     end;
 
-    tkwriteln, tkwrite:
+    tkwriteln, tkwrite, tkReadln, tkRead:
     begin
-      isLn := CurTok.Kind = tkwriteln; Next;
-      node := ParsewriteArgsAST(isLn);
-    end;
-
-    tkReadln, tkRead:
-    begin
-      isLn := CurTok.Kind = tkReadln; Next;
-      node := ParseReadArgsAST(isLn);
+      { A function named Read/Write/Readln/Writeln assigning its own result:
+        `Read := x` / `Write.field := x`. The name lexes as an intrinsic token, so
+        catch the own-name result assignment before the intrinsic statement —
+        otherwise it silently misparses as a Read/Write intrinsic. }
+      if (CurProc >= 0) and Procs[CurProc].IsFunc and
+         (Tokens[TokPos].Kind in [tkAssign, tkDot, tkLBrack, tkCaret]) and
+         CaseEqual(CurTok.SVal, LastDotName(Procs[CurProc].Name)) then
+        { Assigning the function result by its own name, where that name is an
+          intrinsic keyword (Read/Write/Readln/Writeln). The bare-own-name result
+          path miscompiles for a VIRTUAL method of this name (returns garbage), so
+          reject it with a clear message instead of silently mis-storing. Use
+          `Result := ...`, which is correct in every case.
+          See bug-virtual-keyword-name-result. }
+        Error('assign the result of a Read/Write method via "Result := ..." (bare own-name result is unsupported for intrinsic-named methods)')
+      else if (CurTok.Kind = tkwriteln) or (CurTok.Kind = tkwrite) then
+      begin
+        isLn := CurTok.Kind = tkwriteln; Next;
+        node := ParsewriteArgsAST(isLn);
+      end
+      else
+      begin
+        isLn := CurTok.Kind = tkReadln; Next;
+        node := ParseReadArgsAST(isLn);
+      end;
     end;
 
     tkHalt, tkExit:
@@ -9068,7 +9095,7 @@ var
   isConstructor, isDestructor, isVirtual, isOverride, isAbstract, isClassMethod: Boolean;
   mname, propName, readName, writeName: AnsiString;
   propTk: TTypeKind;
-  mIsFunc, mDoneArgs, mDoneParam, mIsArr, mIsByRef: Boolean;
+  mIsFunc, mDoneArgs, mDoneParam, mIsArr, mIsByRef, mSawConst, mIsUntyped: Boolean;
   mRetType, mTk: TTypeKind;
   mNParams, mStartIdx, mTokKindOrd, mpi, mSelfIdx, mFullNameOff, mFullNameLen: Integer;
   curPublished: Integer;  { 1 while inside a published section of the current class body }
@@ -9086,6 +9113,7 @@ var
   fldNLens: array[0..31] of Integer;
   nFldNames, fni: Integer;
   mPByRef: array[0..15] of Boolean;
+  mPUntyped: array[0..15] of Boolean;
 begin
   Next;
   stopTypes := False;
@@ -9416,7 +9444,7 @@ begin
             else
               Next;
 
-            if CurTok.Kind <> tkIdent then Error('expected method name');
+            if not IsMemberNameTok then Error('expected method name');
             mname := CurTok.SVal;
             mnOff := Tokens[TokPos-1].SOffset;
             mnLen := Tokens[TokPos-1].SLen;
@@ -9431,6 +9459,7 @@ begin
               while (CurTok.Kind <> tkRParen) and not mDoneArgs do
               begin
                 mIsByRef := False;
+                mSawConst := False;
                 if (CurTok.Kind = tkVar) or
                    ((CurTok.Kind = tkIdent) and CaseEqual(CurTok.SVal, 'out')) then
                 begin
@@ -9438,7 +9467,7 @@ begin
                   Next;
                 end
                 else if CurTok.Kind = tkConst then
-                  Next;
+                begin mSawConst := True; Next; end;
                 mStartIdx := mNParams;
                 mDoneParam := False;
                 while (CurTok.Kind = tkIdent) and not mDoneParam do
@@ -9447,23 +9476,37 @@ begin
                   if not Eat(tkComma) then mDoneParam := True;
                   if CurTok.Kind = tkColon then mDoneParam := True;
                 end;
-                Expect(tkColon, ':');
                 mIsArr := False;
-                if CurTok.Kind = tkArray then
+                mIsUntyped := False;
+                if CurTok.Kind <> tkColon then
                 begin
-                  Next;
-                  Expect(tkOf, 'of');
-                  mTk := ParseTypeKind;
-                  mIsArr := True;
+                  { Untyped method param (`var B` / `const B`, no type) — mirror the
+                    standalone-routine path: by-ref, any arg type, address passed. }
+                  if not (mIsByRef or mSawConst) then
+                    Error('untyped parameter requires var, const, or out');
+                  mIsUntyped := True; mIsByRef := True; mTk := tyPointer;
+                  LastTypeRecId := REC_NONE;
                 end
                 else
-                  mTk := ParseTypeKind;
+                begin
+                  Expect(tkColon, ':');
+                  if CurTok.Kind = tkArray then
+                  begin
+                    Next;
+                    Expect(tkOf, 'of');
+                    mTk := ParseTypeKind;
+                    mIsArr := True;
+                  end
+                  else
+                    mTk := ParseTypeKind;
+                end;
                 for i := mStartIdx to mNParams-1 do
                 begin
                   mPTypes[i] := mTk;
                   mPTypesRec[i] := LastTypeRecId;
                   mPArr[i] := mIsArr;
                   mPByRef[i] := mIsByRef;
+                  mPUntyped[i] := mIsUntyped;
                 end;
                 if not Eat(tkSemicolon) then mDoneArgs := True;
               end;
@@ -9485,11 +9528,13 @@ begin
                 mPTypes[i] := mPTypes[i-1];
                 mPArr[i]   := mPArr[i-1];
                 mPByRef[i] := mPByRef[i-1];
+                mPUntyped[i] := mPUntyped[i-1];
               end;
               mPNames[0] := 'Self';
               mPTypes[0] := tyClass;
               mPArr[0]   := False;
               mPByRef[0] := False;
+              mPUntyped[0] := False;
               mNParams := mNParams + 1;
             end;
 
@@ -9504,6 +9549,7 @@ begin
               Procs[mpi].BodyAddr := -1;
               for i := 0 to mNParams-1 do
               begin
+                if (i < 16) then ProcParamUntyped[mpi * 16 + i] := mPUntyped[i];
                 Procs[mpi].Params[i].IsArray := mPArr[i];
                 Procs[mpi].Params[i].IsRef := mPByRef[i];
                 if (mPTypes[i] = tyClass) or (mPTypes[i] = tyRecord) then
@@ -11017,7 +11063,7 @@ begin
       begin
         methOwnerRec := REC_UCLASS_BASE + methOwnerCi;
         Next; { consume dot }
-        if CurTok.Kind <> tkIdent then Error('expected method name');
+        if not IsMemberNameTok then Error('expected method name');
         methName := CurTok.SVal;
         methSNOff := Tokens[TokPos-1].SOffset;
         methSNLen := Tokens[TokPos-1].SLen;

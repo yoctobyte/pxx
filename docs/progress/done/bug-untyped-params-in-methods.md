@@ -45,3 +45,13 @@ Use the same untyped-parameter parsing in method declarations (and their
 - `TStream`/`TMemoryStream` (`Read`/`Write` with untyped buffers) compile —
   together with [[bug-read-write-reserved-as-method-names]].
 - Regression test under `make test`; self-host fixedpoint byte-identical.
+
+## Log
+- 2026-06-24 — FIXED (Track A). The class-method-declaration param parser now
+  mirrors the standalone routine path: a `var`/`const`/`out` parameter with no
+  following `:` type is an untyped by-ref param (placeholder tyPointer,
+  ProcParamUntyped set, address passed; `@Param` reaches it). Self-injection
+  shifts the untyped flags; overload matching already honored ProcParamUntyped.
+  (Implementation headers parse via ParseSubroutine, which already supported
+  untyped params.) Verified with `TStream.Read(var Buffer; …)` /
+  `Write(const Buffer; …)`. Regression test/test_stream_methods.pas in make test.

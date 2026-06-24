@@ -218,6 +218,8 @@ test-core: $(COMPILER)
 	test "$$(/tmp/test_indexed_property26)" = "$$(printf '99\n7\n42\n10\n30\n55\n88')"
 	./$(COMPILER) test/test_virtual_managed_arg.pas /tmp/test_virtual_managed_arg26
 	test "$$(/tmp/test_virtual_managed_arg26)" = "$$(printf '2\ncherry\napple')"
+	./$(COMPILER) test/test_stream_methods.pas /tmp/test_stream_methods26
+	test "$$(/tmp/test_stream_methods26)" = "$$(printf '65 66 67\n3 3')"
 	./$(COMPILER) test/test_dynarray_field.pas /tmp/test_dynarray_field26
 	test "$$(/tmp/test_dynarray_field26)" = "$$(printf '1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1')"
 	./$(COMPILER) test/test_method_implicit_field.pas /tmp/test_method_implicit_field26
