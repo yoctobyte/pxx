@@ -491,6 +491,7 @@ begin
   writeShdr64(f, DbgNmLine,   1, dbgFileBase + DbgLineSecOff,   DbgLineSecSize);
   writeShdr64(f, DbgNmInfo,   1, dbgFileBase + DbgInfoSecOff,   DbgInfoSecSize);
   writeShdr64(f, DbgNmAbbrev, 1, dbgFileBase + DbgAbbrevSecOff, DbgAbbrevSecSize);
+  writeShdr64(f, DbgNmFrame,  1, dbgFileBase + DbgFrameSecOff,  DbgFrameSecSize);
   writeShdr64(f, DbgNmShStr,  3, dbgFileBase + DbgShStrSecOff,  DbgShStrSecSize);
 end;
 {$else}
@@ -604,6 +605,7 @@ begin
   writeShdr64(f, DbgNmLine,   1, dbgFileBase + DbgLineSecOff,   DbgLineSecSize);
   writeShdr64(f, DbgNmInfo,   1, dbgFileBase + DbgInfoSecOff,   DbgInfoSecSize);
   writeShdr64(f, DbgNmAbbrev, 1, dbgFileBase + DbgAbbrevSecOff, DbgAbbrevSecSize);
+  writeShdr64(f, DbgNmFrame,  1, dbgFileBase + DbgFrameSecOff,  DbgFrameSecSize);
   writeShdr64(f, DbgNmShStr,  3, dbgFileBase + DbgShStrSecOff,  DbgShStrSecSize);
 end;
 {$endif}
@@ -773,10 +775,34 @@ end;
 
 function DbgEnsureType(tkOrd, recId, isArr, arrLen, elemTkOrd, elemRec: Integer): Integer; forward;
 
+{ Shared anonymous "pointer to void" DIE — the base every cheat typedef wraps. }
+function DbgEnsureVoidPtr: Integer;
+var off: Integer;
+begin
+  off := DbgTypeLookup(9000, 0, 0);
+  if off >= 0 then begin DbgEnsureVoidPtr := off; Exit; end;
+  off := DbgLen - DbgInfoSecOff;
+  DbgTypeRegister(9000, 0, 0, off);
+  DbgPutULEB(12); DbgPutB(8);   { anonymous pointer_type, byte_size 8 }
+  DbgEnsureVoidPtr := off;
+end;
+
+{ A runtime-layout type that gets a labeled typedef over the void pointer, so gdb
+  shows the Pascal name (`string`, `array of Integer`, …) instead of `void *`,
+  while `x/s` / handle inspection still work. }
+function DbgEmitNamedCheat(const nm: AnsiString): Integer;
+var vp, off: Integer;
+begin
+  vp := DbgEnsureVoidPtr;
+  off := DbgLen - DbgInfoSecOff;
+  DbgPutULEB(11); DbgPutStrZ(nm); DbgPutU32(vp);   { typedef nm -> void* }
+  DbgEmitNamedCheat := off;
+end;
+
 { Emit a DW_TAG_base_type / pointer-cheat / structure_type for a non-array type,
   returning its .debug_info offset (cached). Records emit their members from the
   existing UFld* tables (no field metadata rebuild); class/string/pointer/variant
-  degrade to a labeled DW_TAG_pointer_type. }
+  degrade to a named typedef over a void pointer. }
 function DbgEnsureScalar(tkOrd, recId: Integer): Integer;
 var off, i, ci, fb, fc, memOff, fldTk, fldRec, fldArr, fldArrLen, fldDyn: Integer;
     nm: AnsiString; enc, sz: Integer;
@@ -830,10 +856,9 @@ begin
     DbgEnsureScalar := off; Exit;
   end;
 
-  { Everything with runtime/heap layout → a labeled DW_TAG_pointer_type. }
-  off := DbgLen - DbgInfoSecOff;
+  { Everything with runtime/heap layout → named typedef over a void pointer. }
+  off := DbgEmitNamedCheat(DbgTypeDisplayName(tkOrd, recId));
   DbgTypeRegister(tkOrd, recId, 0, off);
-  DbgPutULEB(6); DbgPutStrZ(DbgTypeDisplayName(tkOrd, recId)); DbgPutB(8);
   DbgEnsureScalar := off;
 end;
 
@@ -861,11 +886,8 @@ begin
     cat := 3000; aux := elemTkOrd;
     off := DbgTypeLookup(cat, elemRec, aux);
     if off >= 0 then begin DbgEnsureType := off; Exit; end;
-    off := DbgLen - DbgInfoSecOff;
+    off := DbgEmitNamedCheat('array of ' + DbgTypeDisplayName(elemTkOrd, elemRec));
     DbgTypeRegister(cat, elemRec, aux, off);
-    DbgPutULEB(6);
-    DbgPutStrZ('array of ' + DbgTypeDisplayName(elemTkOrd, elemRec));
-    DbgPutB(8);
     DbgEnsureType := off; Exit;
   end;
   DbgEnsureType := DbgEnsureScalar(tkOrd, recId);
@@ -945,6 +967,65 @@ begin
       if DbgVarProc[i] = -1 then DbgEmitOneVar(i);
     DbgPutB(0);
   end;
+end;
+
+{ Pad the in-progress .debug_frame entry with DW_CFA_nop to the next 8-byte
+  boundary (relative to the section start), as CIE/FDE require. }
+procedure DbgFramePad;
+begin
+  while ((DbgLen - DbgFrameSecOff) mod 8) <> 0 do DbgPutB(0);
+end;
+
+{ .debug_frame: one CIE (standard x86-64 rbp frame) + one FDE per main-file proc,
+  plus an FDE for the program body marking the return address undefined so the
+  unwinder terminates cleanly (no junk outermost frame). Absolute addresses
+  (DWARF reg: rbp=6, rsp=7, RA=16). x86-64 only for now. }
+procedure DbgEmitFrame(entry: Int64);
+var lenPos, p: Integer;
+begin
+  DbgFrameSecOff := DbgLen;
+  { ---- CIE ---- }
+  lenPos := DbgLen; DbgPutU32(0);
+  DbgPutU32(-1);            { CIE_id = 0xFFFFFFFF (.debug_frame) }
+  DbgPutB(1);              { version }
+  DbgPutB(0);             { augmentation = "" }
+  DbgPutULEB(1);          { code_alignment_factor }
+  DbgPutSLEB(-8);         { data_alignment_factor }
+  DbgPutB(16);            { return_address_register = RA (rip) }
+  DbgPutB($0c); DbgPutULEB(7); DbgPutULEB(8);   { DW_CFA_def_cfa rsp, 8 }
+  DbgPutB($90); DbgPutULEB(1);                   { DW_CFA_offset RA, cfa-8 }
+  DbgFramePad;
+  DbgPatchU32(lenPos, DbgLen - (lenPos + 4));
+
+  { ---- one FDE per main-file proc (standard push rbp; mov rbp,rsp prologue) ---- }
+  for p := 0 to ProcCount - 1 do
+    if ProcDbgMain[p] and (Procs[p].BodyAddr >= 0) and (not ProcExternal[p]) then
+    begin
+      lenPos := DbgLen; DbgPutU32(0);
+      DbgPutU32(0);                              { CIE_pointer }
+      DbgPutU64(entry + Procs[p].BodyAddr);      { initial_location }
+      DbgPutU64(ProcBodyEnd[p] - Procs[p].BodyAddr); { address_range }
+      DbgPutB($41);                              { advance_loc 1 (after push rbp) }
+      DbgPutB($0e); DbgPutULEB(16);              { def_cfa_offset 16 }
+      DbgPutB($86); DbgPutULEB(2);               { offset rbp (reg 6) at cfa-16 }
+      DbgPutB($43);                              { advance_loc 3 (after mov rbp,rsp) }
+      DbgPutB($0d); DbgPutULEB(6);               { def_cfa_register rbp }
+      DbgFramePad;
+      DbgPatchU32(lenPos, DbgLen - (lenPos + 4));
+    end;
+
+  { ---- program body FDE: RA undefined → unwinder stops here ---- }
+  if DbgMainBodyEnd > DbgMainBodyStart then
+  begin
+    lenPos := DbgLen; DbgPutU32(0);
+    DbgPutU32(0);
+    DbgPutU64(entry + DbgMainBodyStart);
+    DbgPutU64(DbgMainBodyEnd - DbgMainBodyStart);
+    DbgPutB($07); DbgPutULEB(16);                { DW_CFA_undefined RA }
+    DbgFramePad;
+    DbgPatchU32(lenPos, DbgLen - (lenPos + 4));
+  end;
+  DbgFrameSecSize := DbgLen - DbgFrameSecOff;
 end;
 
 { Build all .debug_* section bytes into DbgBuf. entry = runtime VA of code start
@@ -1069,6 +1150,15 @@ begin
   DbgPutULEB(10); DbgPutULEB($21); DbgPutB(0);  { DW_TAG_subrange_type }
   DbgPutULEB($2f); DbgPutULEB($05);  { DW_AT_upper_bound, DW_FORM_data2 }
   DbgPutULEB(0); DbgPutULEB(0);
+  { abbrev 11: typedef (gives the pointer-cheat a real Pascal type name) }
+  DbgPutULEB(11); DbgPutULEB($16); DbgPutB(0);  { DW_TAG_typedef }
+  DbgPutULEB($03); DbgPutULEB($08);  { DW_AT_name, DW_FORM_string }
+  DbgPutULEB($49); DbgPutULEB($13);  { DW_AT_type, DW_FORM_ref4 }
+  DbgPutULEB(0); DbgPutULEB(0);
+  { abbrev 12: anonymous pointer_type (pointer to void — the cheat's base) }
+  DbgPutULEB(12); DbgPutULEB($0f); DbgPutB(0);  { DW_TAG_pointer_type }
+  DbgPutULEB($0b); DbgPutULEB($0b);  { DW_AT_byte_size, DW_FORM_data1 }
+  DbgPutULEB(0); DbgPutULEB(0);
   DbgPutULEB(0);                     { end of abbrev table }
   DbgAbbrevSecSize := DbgLen - DbgAbbrevSecOff;
 
@@ -1096,6 +1186,9 @@ begin
   DbgInfoSecSize := DbgLen - DbgInfoSecOff;
   DbgPatchU32(lenPos, DbgInfoSecSize - 4);
 
+  { ---- .debug_frame (CFI: robust unwinding + clean bt termination) ---- }
+  DbgEmitFrame(entry);
+
   { ---- .shstrtab ---- }
   DbgShStrSecOff := DbgLen;
   DbgPutB(0);                       { index 0 = empty name }
@@ -1105,6 +1198,7 @@ begin
   DbgNmLine := DbgLen - DbgShStrSecOff;   DbgPutStrZ('.debug_line');
   DbgNmInfo := DbgLen - DbgShStrSecOff;   DbgPutStrZ('.debug_info');
   DbgNmAbbrev := DbgLen - DbgShStrSecOff; DbgPutStrZ('.debug_abbrev');
+  DbgNmFrame := DbgLen - DbgShStrSecOff;  DbgPutStrZ('.debug_frame');
   DbgNmShStr := DbgLen - DbgShStrSecOff;  DbgPutStrZ('.shstrtab');
   DbgShStrSecSize := DbgLen - DbgShStrSecOff;
 end;
@@ -1193,7 +1287,7 @@ begin
   writeU32(f,0);writeU16(f,64);writeU16(f,56);
   if doDebug then
   begin
-    writeU16(f,phCount);writeU16(f,64);writeU16(f,8);writeU16(f,7); { e_shnum=8, e_shstrndx=7 }
+    writeU16(f,phCount);writeU16(f,64);writeU16(f,9);writeU16(f,8); { e_shnum=9, e_shstrndx=8 }
   end
   else
   begin
@@ -1316,7 +1410,7 @@ begin
   writeU32(f,0);writeU16(f,64);writeU16(f,56);
   if doDebug then
   begin
-    writeU16(f,phCount);writeU16(f,64);writeU16(f,8);writeU16(f,7); { e_shnum=8, e_shstrndx=7 }
+    writeU16(f,phCount);writeU16(f,64);writeU16(f,9);writeU16(f,8); { e_shnum=9, e_shstrndx=8 }
   end
   else
   begin

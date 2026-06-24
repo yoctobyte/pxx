@@ -1212,8 +1212,9 @@ var
   DbgLineSecOff, DbgLineSecSize : Integer;
   DbgInfoSecOff, DbgInfoSecSize : Integer;
   DbgAbbrevSecOff, DbgAbbrevSecSize : Integer;
+  DbgFrameSecOff, DbgFrameSecSize : Integer;
   DbgShStrSecOff, DbgShStrSecSize : Integer;
-  DbgNmLine, DbgNmInfo, DbgNmAbbrev, DbgNmShStr : Integer;
+  DbgNmLine, DbgNmInfo, DbgNmAbbrev, DbgNmFrame, DbgNmShStr : Integer;
   DbgNmText, DbgNmData, DbgNmBss : Integer;
   DbgShFlags, DbgShAddr, DbgShAlign : Int64;  { per-section header fields for writeShdr64 (avoids the >6-param call landmine) }
   DbgSrcName : AnsiString;   { source filename recorded in the line table + CU DIE }
