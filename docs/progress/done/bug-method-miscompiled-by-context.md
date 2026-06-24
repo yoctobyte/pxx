@@ -1,10 +1,37 @@
 # bug: a method miscompiles (segfault) depending on surrounding class context
 
 - **Type:** bug
-- **Status:** urgent
+- **Status:** done
 - **Track:** A
 - **Opened:** 2026-06-24
+- **Closed:** 2026-06-24
 - **Blocks:** hide-based `TPaned.Collapse` (feature-eliah-perspectives full collapse)
+
+## Resolution (2026-06-24)
+
+Same root cause as `bug-compiler-hang-on-nested-if-in-begin` (fixed together,
+pin v48). The hide-body uses a local `child` whose name collides with an
+inherited `Child` method, so `child := gtk_paned_get_child1(...)` was parsed as a
+bare implicit-Self `Child` call — consuming only the name and leaving `:=`. With
+no `else` after it, the dangling `:= rhs` fell to the statement parser's default
+branch, which **skips to `;`** — so the assignment was silently dropped and
+`child` stayed **uninitialised** (stack garbage). `gtk_widget_hide(child)` then
+deref'd garbage → segfault. The "DbgHide works / Collapse segfaults" and
+"different method name fixes it" symptoms were the uninitialised-garbage lottery,
+not the method identity.
+
+Fix: guard the implicit-Self method dispatch in `ParseStatementAST` with
+`si < 0` (a local/param of the same name shadows the method), so the local
+assignment lands. Non-GTK analog proves it: a method body `child := 30; if a=2
+then child := 40; Result := child` returned `0/0` (assignments skipped) before,
+`30/40` after — covered by `test/test_local_shadows_method_assign.pas` (the
+`Pick` cases). The GTK hide-based `TPaned.Collapse` can be re-enabled by Track B
+(runtime verify under eliah); the shipped position-only fallback no longer needs
+the workaround.
+
+The "non-virtual method receives corrupt Self/args in a specific class layout"
+framing was a red herring — it was a parse-time name-resolution skip, not a
+codegen/ABI defect; not related to `bug-widgetset-virtual-arg-corruption`.
 
 ## Summary
 
