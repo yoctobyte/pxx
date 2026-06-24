@@ -240,3 +240,25 @@ error).
 
 **Track B (not blocked):** `sockets` unit → synsock/blcksock (+ our own net lib /
 HTTP, async-aware — see the design note to come).
+
+### Re-probe 2026-06-24 (cont. 3) — sockets unit advanced synsock; new gaps
+
+Leaf/socket/protocol sweep (v53, `--mimic-fpc`, all current RTL):
+
+| unit | state |
+|------|-------|
+| `synafpc` | OK |
+| `synautil`/`synaip`/`asn1util`/`synachar` | [[bug-conditional-directive-miscount-synautil]] (Track A) |
+| `synacode` | [[bug-r-directive-toggle-treated-as-resource]] at emit (Track A) |
+| `synsock`/`blcksock`/`httpsend`/`ftpsend`/`smtpsend` | advanced past `sockets` (unit now exists) → next: `termio` (added, trivial), then **[[bug-unit-qualified-constant-not-resolved]]** (Track A) on ssfpc's `FIONREAD = termio.FIONREAD;` |
+
+Track B added `lib/rtl/termio.pas` (FIONREAD/FIONBIO/FIOASYNC). After the
+qualified-const bug clears, the next RTL gaps for the socket path are the
+`sockets` address-string helpers (`StrToNetAddr`/`NetAddrToStr`/`HostToNet`/IPv6
+variants) and a `netdb` shim (`THostEntry`/`GetHostByName`/`ResolveName`/`+6`/
+`TProtocolEntry`/`TServiceEntry`, over `lib/rtl/dns`), then `Classes` depth
+(TStream — itself Track-A-blocked). `syncobjs` already exists.
+
+**Synapse is now heavily Track-A-gated**: directive-miscount, R-toggle,
+qualified-const (+ string-cmp / Read-Write-names / untyped-method-params for the
+Classes it needs). Track B shim work past synsock waits on the qualified-const fix.
