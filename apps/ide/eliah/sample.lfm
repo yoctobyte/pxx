@@ -31,4 +31,8 @@ object Form1: TForm
     Height = 28
     Caption = 'Cancel'
   end
+  object Timer1: TTimer
+    Caption = 'Timer1'
+    Interval = 1000
+  end
 end

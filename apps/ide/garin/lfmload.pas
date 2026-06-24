@@ -82,6 +82,8 @@ begin
   else if t = 'TLISTBOX' then KindOf := wkListBox
   else if t = 'TCHECKBOX' then KindOf := wkCheckBox
   else if t = 'TPANEL' then KindOf := wkPanel
+  else if t = 'TTIMER' then KindOf := wkTimer
+  else if t = 'TMENU' then KindOf := wkMenu
   else KindOf := wkPanel;   { unknown type -> generic box }
 end;
 

@@ -20,8 +20,13 @@ const
   COL_TEXT = $00000000;   { caption (black) }
   COL_DIM  = $00909090;   { size hint }
   COL_SEL  = $00FF6020;   { selection outline (orange, BGR) }
+  COL_TRAY = $00C8E6FF;   { non-visual tray icon fill (pale amber, BGR) }
   HANDLE_HS = 4;          { corner-handle half-size for grab hit-testing }
   MIN_SIZE  = 8;          { smallest node a resize may produce }
+  TRAY_ICW  = 78;         { tray icon width }
+  TRAY_ICH  = 40;         { tray icon height }
+  TRAY_PAD  = 8;          { gap from the form edges }
+  TRAY_GAP  = 8;          { gap between tray icons }
 
 type
   { corner under the cursor: 0 none, 1 TL, 2 TR, 3 BL, 4 BR }
@@ -35,6 +40,11 @@ type
     ResizeCorner: Integer; { 1=TL 2=TR 3=BL 4=BR while resizing }
     constructor Create;
     procedure Paint(Sender: TControl; Canvas: TCanvas);
+    { Position every non-visual node into a left-to-right strip along the bottom
+      of the root form, writing the slot rect back into the node so the shared
+      HitTest/selection machinery treats a tray icon like any other box. Derived
+      geometry — safe to recompute every paint. }
+    procedure LayoutTray;
     { hit-test the docmodel at (X, Y) and select the topmost node there
       (or clear selection). Returns the new selection index. }
     function SelectAt(X, Y: Integer): Integer;
@@ -81,6 +91,8 @@ var x0, y0, x1, y1: Integer;
 begin
   Result := 0;
   if (Doc = nil) or (I < 0) or (I >= Doc.Count) then Exit;
+  { tray icons are fixed — no resize handles }
+  if Doc.IsNonVisual(Doc.NodeKind(I)) then Exit;
   x0 := Doc.NodeX(I);          y0 := Doc.NodeY(I);
   x1 := x0 + Doc.NodeW(I);     y1 := y0 + Doc.NodeH(I);
   if Near(X, x0) and Near(Y, y0) then Result := 1
@@ -107,9 +119,10 @@ begin
       Exit;
     end;
   end;
-  { otherwise (re)select what's under the cursor and start a move }
+  { otherwise (re)select what's under the cursor and start a move. tray icons are
+    fixed-position: select but never drag. }
   Result := SelectAt(X, Y);
-  if Result >= 0 then
+  if (Result >= 0) and not Doc.IsNonVisual(Doc.NodeKind(Result)) then
   begin
     Dragging := True;
     DragDX := X - Doc.NodeX(Result);
@@ -156,9 +169,33 @@ begin
   Resizing := False;
 end;
 
+procedure TDesigner.LayoutTray;
+var i, fi, fx, fy, fw, fh, slot, ty: Integer;
+begin
+  if Doc = nil then Exit;
+  { the root form supplies the tray's frame }
+  fi := -1;
+  for i := 0 to Doc.Count - 1 do
+    if (Doc.NodeParent(i) < 0) and (Doc.NodeKind(i) = wkForm) then
+    begin fi := i; Break; end;
+  if fi < 0 then Exit;
+  fx := Doc.NodeX(fi);  fy := Doc.NodeY(fi);
+  fw := Doc.NodeW(fi);  fh := Doc.NodeH(fi);
+  ty := fy + fh - TRAY_PAD - TRAY_ICH;
+  slot := 0;
+  for i := 0 to Doc.Count - 1 do
+    if Doc.IsNonVisual(Doc.NodeKind(i)) then
+    begin
+      Doc.SetNodeBounds(i,
+        fx + TRAY_PAD + slot * (TRAY_ICW + TRAY_GAP), ty, TRAY_ICW, TRAY_ICH);
+      Inc(slot);
+    end;
+end;
+
 procedure TDesigner.Paint(Sender: TControl; Canvas: TCanvas);
 var
   i, x, y, w, h: Integer;
+  nonvis: Boolean;
 begin
   { clear the surface }
   Canvas.Brush.Color := COL_BG;
@@ -166,9 +203,11 @@ begin
   Canvas.Rectangle(0, 0, 4000, 4000);
 
   if Doc = nil then Exit;
+  LayoutTray;   { refresh tray slot rects before drawing/hit-testing }
 
   for i := 0 to Doc.Count - 1 do
   begin
+    nonvis := Doc.IsNonVisual(Doc.NodeKind(i));
     x := Doc.NodeX(i);
     y := Doc.NodeY(i);
     w := Doc.NodeW(i);
@@ -176,6 +215,8 @@ begin
 
     if Doc.NodeKind(i) = wkForm then
       Canvas.Brush.Color := COL_BG
+    else if nonvis then
+      Canvas.Brush.Color := COL_TRAY
     else
       Canvas.Brush.Color := COL_BOX;
     Canvas.Pen.Color := COL_EDGE;
@@ -188,8 +229,12 @@ begin
     Canvas.TextOut(x + 4, y + 3,
       Doc.KindName(Doc.NodeKind(i)) + ': ' + Doc.NodeCaption(i));
 
-    Canvas.Font.Color := COL_DIM;
-    Canvas.TextOut(x + 4, y + h - 16, IntToStr(w) + 'x' + IntToStr(h));
+    { size hint only for positioned widgets; tray icons have no meaningful size }
+    if not nonvis then
+    begin
+      Canvas.Font.Color := COL_DIM;
+      Canvas.TextOut(x + 4, y + h - 16, IntToStr(w) + 'x' + IntToStr(h));
+    end;
   end;
 
   { selection outline + corner handles, painted over the boxes }
@@ -205,14 +250,17 @@ begin
     Canvas.Pen.Width := 2;
     Canvas.Rectangle(x - 1, y - 1, x + w + 1, y + h + 1);
 
-    { 4 solid corner handles }
-    Canvas.Brush.Color := COL_SEL;
-    Canvas.Pen.Color := COL_SEL;
-    Canvas.Pen.Width := 1;
-    Canvas.Rectangle(x - 3,     y - 3,     x + 3,     y + 3);
-    Canvas.Rectangle(x + w - 3, y - 3,     x + w + 3, y + 3);
-    Canvas.Rectangle(x - 3,     y + h - 3, x + 3,     y + h + 3);
-    Canvas.Rectangle(x + w - 3, y + h - 3, x + w + 3, y + h + 3);
+    { 4 solid corner handles — only on resizable (visual) nodes }
+    if not Doc.IsNonVisual(Doc.NodeKind(Sel)) then
+    begin
+      Canvas.Brush.Color := COL_SEL;
+      Canvas.Pen.Color := COL_SEL;
+      Canvas.Pen.Width := 1;
+      Canvas.Rectangle(x - 3,     y - 3,     x + 3,     y + 3);
+      Canvas.Rectangle(x + w - 3, y - 3,     x + w + 3, y + 3);
+      Canvas.Rectangle(x - 3,     y + h - 3, x + 3,     y + h + 3);
+      Canvas.Rectangle(x + w - 3, y + h - 3, x + w + 3, y + h + 3);
+    end;
   end;
 end;
 

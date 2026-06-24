@@ -122,6 +122,8 @@ begin
   else if clsName = 'TListBox'  then k := wkListBox
   else if clsName = 'TCheckBox' then k := wkCheckBox
   else if clsName = 'TPanel'    then k := wkPanel
+  else if clsName = 'TTimer'    then k := wkTimer   { non-visual -> tray }
+  else if clsName = 'TMenu'     then k := wkMenu    { non-visual -> tray }
   else CompPlaceKind := False;
 end;
 
@@ -814,7 +816,9 @@ begin
   SetLength(H.PaletteNames, 0);
   for ci := 0 to Length(comps) - 1 do
   begin
-    if not ClassDescendsFrom(comps[ci].Cls, 'TControl') then Continue;
+    { both visual widgets and non-visual components belong here — CompPlaceKind
+      is the gate (it knows which class names the docmodel can place; non-visual
+      ones land in the tray, visual ones on the canvas). }
     if not CompPlaceKind(comps[ci].Name, pk) then Continue;
     Palette.AddItem(CompDisplay(comps[ci].Name));
     SetLength(H.PaletteNames, Length(H.PaletteNames) + 1);
@@ -856,9 +860,12 @@ begin
     if H.nItems < 1 then begin writeln('SMOKE FAIL: empty tree'); Halt(1); end;
 
     { sample .lfm loaded into the designer docmodel }
-    if H.Dsn.Doc.Count <> 5 then begin writeln('SMOKE FAIL: sample.lfm not loaded'); Halt(1); end;
+    if H.Dsn.Doc.Count <> 6 then begin writeln('SMOKE FAIL: sample.lfm not loaded'); Halt(1); end;
     if H.Dsn.Doc.NodeCaption(3) <> 'OK' then begin writeln('SMOKE FAIL: lfm OK button missing'); Halt(1); end;
     if H.Dsn.Doc.NodeX(3) <> 28 then begin writeln('SMOKE FAIL: lfm abs coord wrong'); Halt(1); end;
+    { the sample's TTimer streams in as a non-visual tray node }
+    if not H.Dsn.Doc.IsNonVisual(H.Dsn.Doc.NodeKind(5)) then
+      begin writeln('SMOKE FAIL: sample TTimer not a non-visual node'); Halt(1); end;
 
     { pane layout is the RootPaned subtree; reflow resizes the root to fill the
       content area below the toolbar (GtkPaned owns the internal splits). }
@@ -897,7 +904,7 @@ begin
     H.Dsn.Doc := TDocModel.Create;   { wipe to prove OpenDesign reloads }
     H.designPath := '';
     H.OpenDesign('apps/ide/eliah/sample.lfm');
-    if H.Dsn.Doc.Count <> 5 then begin writeln('SMOKE FAIL: OpenDesign did not load'); Halt(1); end;
+    if H.Dsn.Doc.Count <> 6 then begin writeln('SMOKE FAIL: OpenDesign did not load'); Halt(1); end;
     if H.designPath <> 'apps/ide/eliah/sample.lfm' then begin writeln('SMOKE FAIL: designPath not set'); Halt(1); end;
     if not EndsWithLfm('Foo.LFM') then begin writeln('SMOKE FAIL: EndsWithLfm case'); Halt(1); end;
     if EndsWithLfm('foo.pas') then begin writeln('SMOKE FAIL: EndsWithLfm false-pos'); Halt(1); end;
@@ -1007,6 +1014,29 @@ begin
     H.Dsn.Sel := 0;
     H.OnDelete(nil);
     if H.Dsn.Doc.Count <> centerW then begin writeln('SMOKE FAIL: root form should not delete'); Halt(1); end;
+
+    { non-visual: place a Timer -> a tray node (non-visual, bottom strip, fixed).
+      Left in the doc so the save round-trip below also covers tray serialization. }
+    ci := 0;
+    while (ci < Length(H.PaletteNames)) and (H.PaletteNames[ci] <> 'TTimer') do Inc(ci);
+    if ci >= Length(H.PaletteNames) then
+      begin writeln('SMOKE FAIL: TTimer not in registry palette'); Halt(1); end;
+    H.Palette.ItemIndex := ci;
+    H.OnPlaceToggle(nil);
+    centerW := H.Dsn.Doc.Count;
+    H.OnDesignMouseDown(nil, 1, 150, 150);
+    if H.Dsn.Doc.Count <> centerW + 1 then
+      begin writeln('SMOKE FAIL: timer place did not add a node'); Halt(1); end;
+    if not H.Dsn.Doc.IsNonVisual(H.Dsn.Doc.NodeKind(H.Dsn.Sel)) then
+      begin writeln('SMOKE FAIL: placed timer not non-visual'); Halt(1); end;
+    H.Dsn.LayoutTray;
+    if H.Dsn.Doc.NodeY(H.Dsn.Sel) <
+       H.Dsn.Doc.NodeY(0) + H.Dsn.Doc.NodeH(0) - 80 then
+      begin writeln('SMOKE FAIL: timer not laid out in bottom tray'); Halt(1); end;
+    H.Dsn.BeginDrag(H.Dsn.Doc.NodeX(H.Dsn.Sel) + 4, H.Dsn.Doc.NodeY(H.Dsn.Sel) + 4);
+    if H.Dsn.Dragging then
+      begin writeln('SMOKE FAIL: tray icon should not be draggable'); Halt(1); end;
+    H.Dsn.EndDrag;
 
     { save round-trip: serialize the docmodel to a temp file (not the repo
       sample), reload it, node count must survive. Same path OnSave uses. }

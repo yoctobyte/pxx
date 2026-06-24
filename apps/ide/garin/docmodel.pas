@@ -14,7 +14,9 @@ interface
 type
   TWidgetKind = (
     wkForm, wkPanel, wkButton, wkLabel, wkEdit,
-    wkMemo, wkListBox, wkCheckBox);
+    wkMemo, wkListBox, wkCheckBox,
+    { non-visual components — live in the form's tray, not on the canvas }
+    wkTimer, wkMenu);
 
   TDocNode = record
     Kind: TWidgetKind;
@@ -48,6 +50,9 @@ type
     function NodeW(I: Integer): Integer;
     function NodeH(I: Integer): Integer;
     function KindName(K: TWidgetKind): AnsiString;
+    { non-visual components have no canvas geometry — the face renders them in a
+      tray strip, not as a positioned/resizable box. }
+    function IsNonVisual(K: TWidgetKind): Boolean;
   end;
 
 implementation
@@ -192,9 +197,16 @@ begin
     wkMemo:     Result := 'Memo';
     wkListBox:  Result := 'ListBox';
     wkCheckBox: Result := 'CheckBox';
+    wkTimer:    Result := 'Timer';
+    wkMenu:     Result := 'Menu';
   else
     Result := '?';
   end;
+end;
+
+function TDocModel.IsNonVisual(K: TWidgetKind): Boolean;
+begin
+  IsNonVisual := (K = wkTimer) or (K = wkMenu);
 end;
 
 end.

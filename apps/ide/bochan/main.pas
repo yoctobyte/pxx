@@ -332,6 +332,39 @@ begin
   CheckInt(e, 'rt pane 2 priority', rpersp.PanePriority(2), 40);
   CheckTrue(e, 'rt pane 0 visible', rpersp.PaneVisible(0));
 
+  { scenario: non-visual components (M4 tray) — classify + serialize round-trip }
+  writeln('-- docmodel non-visual + tray round-trip --');
+  ddoc := TDocModel.Create;
+  CheckTrue(e, 'timer is non-visual', ddoc.IsNonVisual(wkTimer));
+  CheckTrue(e, 'menu is non-visual', ddoc.IsNonVisual(wkMenu));
+  CheckTrue(e, 'button is visual', not ddoc.IsNonVisual(wkButton));
+  CheckTrue(e, 'form is visual', not ddoc.IsNonVisual(wkForm));
+  CheckStr(e, 'timer kind name', ddoc.KindName(wkTimer), 'Timer');
+  ddoc.AddNode(wkForm, 'Form1', -1, 0, 0, 400, 300);
+  ddoc.AddNode(wkButton, 'OK', 0, 20, 20, 80, 26);
+  ddoc.AddNode(wkTimer, 'Timer1', 0, 8, 252, 78, 40);
+  saved := SaveLfmText(ddoc);
+  rdoc := TDocModel.Create;
+  CheckTrue(e, 'tray doc reloads', LoadLfmText(saved, rdoc));
+  CheckInt(e, 'tray doc node count', rdoc.Count, 3);
+  CheckStr(e, 'timer kind survives round-trip',
+    rdoc.KindName(rdoc.NodeKind(2)), 'Timer');
+  CheckTrue(e, 'reloaded timer still non-visual',
+    rdoc.IsNonVisual(rdoc.NodeKind(2)));
+
+  { scenario: the shipped eliah sample.lfm parses with its non-visual TTimer }
+  writeln('-- eliah sample.lfm load --');
+  if b.LoadFromFile('apps/ide/eliah/sample.lfm') then
+  begin
+    rdoc := TDocModel.Create;
+    CheckTrue(e, 'sample.lfm parses', LoadLfmText(b.Text, rdoc));
+    CheckInt(e, 'sample.lfm node count', rdoc.Count, 6);
+    CheckStr(e, 'sample node 5 is a Timer', rdoc.KindName(rdoc.NodeKind(5)), 'Timer');
+    CheckTrue(e, 'sample Timer is non-visual', rdoc.IsNonVisual(rdoc.NodeKind(5)));
+  end
+  else
+    CheckTrue(e, 'sample.lfm present', False);
+
   { scenario: registry — enumerate registered classes by ancestor (M4 palette).
     Keep the synthetic instances alive so their RTTI is linked + registered. }
   writeln('-- registry enumeration --');
