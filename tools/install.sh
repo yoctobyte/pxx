@@ -25,11 +25,13 @@ ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 BINDIR="${HOME}/.local/bin"
 ACTION="install"
 COMPILER_OVERRIDE=""
+TARGET_ARCH=""
 
 while [ $# -gt 0 ]; do
   case "$1" in
     --bindir) BINDIR="$2"; shift 2 ;;
     --compiler) COMPILER_OVERRIDE="$2"; shift 2 ;;   # use this binary instead of the pinned symlink (e.g. a native make-bootstrap build)
+    --target) TARGET_ARCH="$2"; shift 2 ;;           # inject --target=ARCH into the wrapper (a cross-built native binary still defaults to x86-64)
     --uninstall) ACTION="uninstall"; shift ;;
     -h|--help) sed -n '2,20p' "$0"; exit 0 ;;
     *) echo "unknown option: $1" >&2; exit 2 ;;
@@ -79,6 +81,7 @@ mkdir -p "$BINDIR"
   echo '# checkout'"'"'s library roots on the unit search path. Re-run install.sh'
   echo '# to refresh the library list; the compiler symlink auto-tracks re-pins.'
   printf 'exec "%s" \\\n' "$PINNED"
+  [ -n "$TARGET_ARCH" ] && printf '  --target=%s \\\n' "$TARGET_ARCH"
   for d in "${LIBDIRS[@]}"; do
     printf '  -Fu"%s" \\\n' "$d"
   done

@@ -59,19 +59,30 @@ say "PXX install"
 # ---------------------------------------------------------------------------
 PINNED="$ROOT/stable_linux_amd64/default/pinned"
 COMPILER="$PINNED"          # what ./pxx will point at
+WRAP_TARGET=""              # --target injected into the wrapper (native cross binary defaults to x86-64)
 SMOKE='program pxxsmoke; begin end.'
 printf '%s\n' "$SMOKE" > /tmp/pxx_smoke.pas
 
 runs_here() { [ -e "$1" ] && "$1" /tmp/pxx_smoke.pas /tmp/pxx_smoke >/dev/null 2>&1; }
 
+# Map uname -m to a PXX target arch.
+case "$(uname -m)" in
+  x86_64|amd64)        HOSTARCH=x86_64 ;;
+  aarch64|arm64)       HOSTARCH=aarch64 ;;
+  armv7l|armv6l|armhf) HOSTARCH=arm32 ;;
+  i386|i486|i586|i686) HOSTARCH=i386 ;;
+  *)                   HOSTARCH="" ;;
+esac
+NATIVE="$ROOT/native/pxx-$HOSTARCH"
+
 if runs_here "$PINNED"; then
-  note "stable compiler OK: $PINNED"
+  note "stable compiler OK: $PINNED"          # x86-64 host: pinned auto-tracks re-pins
+elif [ -n "$HOSTARCH" ] && runs_here "$NATIVE"; then
+  COMPILER="$NATIVE"; WRAP_TARGET="$HOSTARCH"  # committed native cross binary
+  note "native compiler OK: $NATIVE  (target $HOSTARCH)"
 else
-  # The committed stable binary is x86-64; on another host arch it can't run.
-  # Native per-arch binaries are not distributed yet
-  # (see docs/progress/backlog/feature-native-arch-binaries). Build one from
-  # source if the toolchain is here, otherwise guide the user.
-  note "the committed stable binary doesn't run on this host ($(uname -m))."
+  # No committed binary runs here — build from source if the toolchain is present.
+  note "no committed binary runs on this host ($(uname -m))."
   if command -v fpc >/dev/null 2>&1 && command -v make >/dev/null 2>&1; then
     if [ "$(ask 'Build a native compiler from source now (make bootstrap, needs FPC)?' y)" = y ]; then
       ( cd "$ROOT" && make bootstrap ) || { echo "make bootstrap failed — aborting." >&2; exit 1; }
@@ -95,12 +106,20 @@ fi
 # 2. ./pxx wrapper (+ optional PATH)
 # ---------------------------------------------------------------------------
 say "compiler wrapper"
-"$ROOT/tools/install.sh" --bindir "$ROOT" --compiler "$COMPILER" >/dev/null
+if [ -n "$WRAP_TARGET" ]; then
+  "$ROOT/tools/install.sh" --bindir "$ROOT" --compiler "$COMPILER" --target "$WRAP_TARGET" >/dev/null
+else
+  "$ROOT/tools/install.sh" --bindir "$ROOT" --compiler "$COMPILER" >/dev/null
+fi
 note "wrote ./pxx  (compiler + library roots on the unit search path)"
 note "use it from anywhere:  $ROOT/pxx foo.pas foo"
 
 if [ "$OFFER_PATH" = 1 ] && [ "$(ask 'Put pxx on your PATH (~/.local/bin)?' n)" = y ]; then
-  "$ROOT/tools/install.sh" --compiler "$COMPILER" >/dev/null
+  if [ -n "$WRAP_TARGET" ]; then
+    "$ROOT/tools/install.sh" --compiler "$COMPILER" --target "$WRAP_TARGET" >/dev/null
+  else
+    "$ROOT/tools/install.sh" --compiler "$COMPILER" >/dev/null
+  fi
   note "installed ~/.local/bin/pxx (ensure ~/.local/bin is on PATH)"
 fi
 
