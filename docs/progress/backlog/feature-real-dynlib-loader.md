@@ -96,3 +96,12 @@ dynsym emission is already target-indep; needs per-target run verification);
 signatures (current int/ptr proc-var calls match System V on x86-64); (d) Synapse
 SSL/TLS end-to-end. Status -> partial/done-for-x86-64; leaving ticket in backlog
 for the PAL+multi-target follow-up unless closed.
+
+## Update (2026-06-25): cdecl indirect calls DONE (x86-64)
+
+Follow-up (c) landed (c461fce): `cdecl` on proc TYPES + System V indirect-call
+marshalling on x86-64 (int->rdi.., float->xmm0.., 16-byte aligned, float
+return). A dlsym'd C function with float args now calls correctly through a
+`function(...): R; cdecl` pointer (sqrt/pow/ldexp verified). Remaining: stack
+spill (>6 int / >8 float), by-value structs, varargs; and porting the indirect
+cdecl path to the other targets. (a) PAL primitives and (d) Synapse SSL still open.
