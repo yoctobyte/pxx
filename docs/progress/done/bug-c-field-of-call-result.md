@@ -42,3 +42,12 @@ using it.
 3. Verify `g()->w` (non-zero offset), `g()->ptr[i]`, and `g().field`
    (struct-by-value return) all match gcc before landing. Pervasive in lua
    (`localeconv()->decimal_point[0]`, accessor macros over call results).
+
+## Resolution
+- 2026-06-26 — FIXED. CNodeIsPointer/CNodePtrElemRec recognise a pointer-returning
+  AN_CALL; ResolveNodeRec already resolved the AN_DEREF(AN_CALL) record. The
+  earlier "offset 0" was a RED HERRING from a separate bug: struct-typed GLOBALS
+  did not record their record id (ParseCGlobalVarDecl skipped LastTypeRecId), so
+  `gg.f` always landed at offset 0 — fixed too. g()->field / g()->n->x verified vs
+  gcc. Fixture ccall_field_b31.c (=42). (g()->arr[i] and global initializers/
+  arrays remain a separate gap — globals are not materialised as real arrays.)

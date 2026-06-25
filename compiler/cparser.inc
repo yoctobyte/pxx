@@ -366,6 +366,9 @@ begin
     Result := IntToTypeKind(ASTTk[node]) = tyPointer
   else if (ASTKind[node] = AN_BINOP) or (ASTKind[node] = AN_INCDEC) then
     { pointer arithmetic / `p++` keeps a pointer type (CMakeBinop / CMakeIncDec) }
+    Result := IntToTypeKind(ASTTk[node]) = tyPointer
+  else if ASTKind[node] = AN_CALL then
+    { a function returning a pointer — `f()->field` must deref the result }
     Result := IntToTypeKind(ASTTk[node]) = tyPointer;
 end;
 
@@ -1699,6 +1702,10 @@ begin
         Next;
       until (depth = 0) or (CurTok.Kind = tkEOF);
     end;
+    { A struct-typed global needs its record id recorded (AllocVar reads the
+      global LastTypeRecId for tyRecord) so field access `gg.f` resolves the
+      offset — without this the field always landed at offset 0. }
+    if baseTk = tyRecord then LastTypeRecId := CTypeBaseRec;
     if FindSym(name) < 0 then AllocVar(name, baseTk);
     if CurTok.Kind = tkAssign then
     begin

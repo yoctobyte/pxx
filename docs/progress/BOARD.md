@@ -29,14 +29,13 @@ _none_
 | --- | --- | --- | --- | --- |
 | feature-c-runtime-library | B | feature | C runtime/library layer (`lib/crtl`) plus direct C-library packages | feature-c-source-frontend |
 
-## backlog (61)
+## backlog (60)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
 | bug-aggregate-member-array-as-var-param | A | bug | bug: passing an array that is a member of an aggregate (record field / 2D-array row) as a var/const param segfaults | — |
 | bug-arm32-writeln-longword-high-bit | A | bug | bug: arm32 `writeln(LongWord)` mangles a value with the high bit set | — |
 | bug-c-addr-of-unsupported-ir | A | bug | C `&` of certain operands lowers to IR_UNSUPPORTED (codegen crash) | — |
-| bug-c-field-of-call-result | C | bug | C: `f()->field` — field/index of a pointer-returning call result | — |
 | bug-c-sizeof-string-literal | C | bug | C `sizeof("string literal")` returns pointer size, not array size | — |
 | bug-esp-not-always-boolean | A | bug | bug: `not` on an integer is boolean-only on ESP (riscv32 / xtensa) | — |
 | bug-fixed-array-assignment-no-copy | A | bug | bug: assigning one fixed array to another (`b := a`) does not copy | — |
@@ -129,7 +128,7 @@ _none_
 | feature-mimic-fpc | B | feature | `mimic FPC` compatibility mode | — |
 | feature-string-model-tyfixedstring | B | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (282)
+## done (283)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -146,6 +145,7 @@ _none_
 | bug-cardinal-expr-promotion-shr-orphan | A | bug | bug: cardinal/signed 32-bit expression width (orphan addendum) | — |
 | bug-case-insensitive-incomplete-builtins-funcs | A | bug | bug: case-insensitivity incomplete — builtins + function calls still case-sensitive | — |
 | bug-c-const-eval-bitwise-not | C | bug | C const-eval: `~` (bitwise NOT) yields wrong value | — |
+| bug-c-field-of-call-result | C | bug | C: `f()->field` — field/index of a pointer-returning call result | — |
 | bug-c-field-on-pointer-arithmetic | C | bug | C: `(p + i)->field` (field on a computed pointer) fails / Unsupported | — |
 | bug-char-literal-concat-in-const-expr | A | bug | Char-literal concatenation in a const expression fails (`const T = #65 + #66`) | — |
 | bug-char-literal-in-const-expr | A | bug | Char literal in a constant expression: `ConstEval` rejected `'a'` | — |
@@ -429,7 +429,6 @@ _none_
 - [A] bug-aggregate-member-array-as-var-param
 - [A] bug-arm32-writeln-longword-high-bit
 - [A] bug-c-addr-of-unsupported-ir
-- [C] bug-c-field-of-call-result
 - [C] bug-c-sizeof-string-literal
 - [A] bug-esp-not-always-boolean
 - [A] bug-fixed-array-assignment-no-copy
