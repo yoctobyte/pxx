@@ -1,8 +1,15 @@
 # C desktop path — compile real portable C (tiny-regex → lua → sqlite)
 
 - **Type:** feature (track-C milestone path)
-- **Status:** backlog
+- **Status:** backlog (active arc — lua core 3/34 files parse; see 2026-06-25 log)
 - **Opened:** 2026-06-25
+- **Session 2026-06-25 (Track C) delivered, all gate-green + self-host
+  byte-identical, on `feat/cfront`:** function pointers (4d36da6), typedef-of-
+  struct-tag record aliasing (b65d617), forward-record field-base re-anchor
+  (65f3fcd), ternary `?:` / `AN_TERNARY` (b68c5be), integer literal suffixes
+  (a64d316), bitwise-`~` const-eval (cd5996d, closed bug-c-const-eval-bitwise-not).
+  lua-5.4.7 staged in `library_candidates/lua` (gitignored). Remaining blockers
+  triaged below; lua does NOT compile yet (multi-session, spans Track C + A).
 - **Track:** C (C frontend) — isolated worktree `../frankonpiler-cfront`, branch
   `feat/cfront`. Lands to `master` only when `make test` + self-host fixedpoint
   stay green (C-body codegen edits the compiler binary → reseed).
