@@ -24,6 +24,14 @@ before assuming the workaround is still needed.
 
 ### Coding-pattern landmines (no single site — avoid in new Track B code)
 
+- **Long command-line arguments in a large program.** Reading a long `ParamStr`
+  (~hundreds of chars) into an AnsiString and then doing more heap work corrupted
+  memory and crashed later in `test/devtest_tls13_handshake.pas` (a big multi-unit
+  program). Could **not** reduce to a minimal repro (`ParamStr` of a 700-char arg
+  in isolation is fine), so no Track A ticket yet — but pass bulk data (a cert, a
+  key) via a **file** (short path arg + `PalOpen`/`PalRead`), not argv. If a clean
+  repro turns up, file it.
+
 - **Managed-record return as a call arg.** Until
   [[bug-managed-record-result-self-arg]] is fixed, do not write
   `Result := F(Result, …)` or `g(F(x), …)` where the return type is a record with

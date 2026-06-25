@@ -62,6 +62,11 @@ procedure DerTLV(const d: AnsiString; pos: Integer;
                  var tag, vstart, vlen, nextpos: Integer);
 var b, n, i: Integer;
 begin
+  { bounds-safe: a malformed/short element yields an empty value at the end }
+  if (pos < 1) or (pos + 1 > Length(d)) then
+  begin
+    tag := 0; vlen := 0; vstart := Length(d) + 1; nextpos := Length(d) + 1; Exit;
+  end;
   tag := Ord(d[pos]);
   b := Ord(d[pos + 1]);
   if b < $80 then
@@ -71,10 +76,18 @@ begin
   else
   begin
     n := b and $7f;
+    if pos + 1 + n > Length(d) then
+    begin
+      tag := 0; vlen := 0; vstart := Length(d) + 1; nextpos := Length(d) + 1; Exit;
+    end;
     vlen := 0;
     for i := 1 to n do vlen := (vlen shl 8) or Ord(d[pos + 1 + i]);
     vstart := pos + 2 + n;
   end;
+  { clamp so a bogus length can't push vstart/nextpos past the buffer }
+  if (vlen < 0) or (vstart + vlen > Length(d) + 1) then
+    vlen := Length(d) + 1 - vstart;
+  if vlen < 0 then vlen := 0;
   nextpos := vstart + vlen;
 end;
 

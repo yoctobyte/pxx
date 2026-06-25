@@ -4,9 +4,14 @@ program devtest_tls13_handshake;
   ClientHello -> ServerHello -> X25519 ECDHE -> key schedule -> decrypt the
   server flight (EncryptedExtensions/Certificate/CertificateVerify/Finished) ->
   verify the server Finished MAC -> send client Finished -> application keys ->
-  send an HTTP GET -> decrypt the response. Driven by tls13-handshake-devtest.
-  Usage: devtest_tls13_handshake <port> }
-uses sysutils, net, x25519, sha256, tls13_keys, tls13_record, tls13_hs, x509, ed25519, tls13_ktls;
+  verify the cert CHAIN (leaf <- trusted CA, validity, hostname) -> send client
+  Finished -> application keys -> send an HTTP GET -> decrypt the response.
+  Driven by tls13-handshake-devtest.
+  Usage: devtest_tls13_handshake <port> [ca-der-file] [now-YYYYMMDDHHMMSS] [no-ktls]
+  NB the trusted CA is read from a FILE, not a command-line arg: a long argv entry
+  corrupts memory in this large program (couldn't reduce to a minimal repro; see
+  track-b-workarounds.md). }
+uses sysutils, net, platform, x25519, sha256, tls13_keys, tls13_record, tls13_hs, x509, ed25519, tls13_ktls;
 
 function ToHex(const r: AnsiString): AnsiString;
 const HEX = '0123456789abcdef';
@@ -54,6 +59,40 @@ begin
             Chr((len shr 8) and $ff) + Chr(len and $ff);
 end;
 
+function Nyb(c: Char): Integer;
+begin
+  if (c >= '0') and (c <= '9') then Nyb := Ord(c) - Ord('0')
+  else Nyb := Ord(c) - Ord('a') + 10;
+end;
+
+function Hx(const h: AnsiString): AnsiString;
+var i, hi, lo: Integer;
+begin
+  Result := ''; i := 1;
+  while i + 1 <= Length(h) do
+  begin hi := Nyb(h[i]); lo := Nyb(h[i+1]); Result := Result + Chr((hi shl 4) or lo); i := i + 2; end;
+end;
+
+function ForceNoKtls: Boolean;
+var i: Integer;
+begin
+  ForceNoKtls := False;
+  for i := 1 to ParamCount do if ParamStr(i) = 'no-ktls' then ForceNoKtls := True;
+end;
+
+function ReadFileBytes(const path: AnsiString): AnsiString;
+var h, k: Integer; got: Int64; buf: array[0..8191] of Byte;
+begin
+  Result := '';
+  h := PalOpen(PChar(path), 0, 0);     { O_RDONLY }
+  if h < 0 then Exit;
+  repeat
+    got := PalRead(h, @buf[0], 8192);
+    for k := 0 to Integer(got) - 1 do Result := Result + Chr(buf[k]);
+  until got <= 0;
+  PalClose(h);
+end;
+
 function FinishedKey(const secret: AnsiString): AnsiString;
 begin FinishedKey := HkdfExpandLabel(secret, 'finished', '', 32); end;
 
@@ -75,6 +114,7 @@ var
   leaf: TCert; certVerifyHash, leafDer, signedContent, cvScheme, cvSig: AnsiString;
   cp, ctxLen, certLen, sl: Integer;
   ktlsTx: Boolean;
+  caCert: TCert; caHex, nowStr, caDer: AnsiString;
 
   procedure Fail(const m: string);
   begin writeln(m); writeln('FAIL'); Halt(1); end;
@@ -195,6 +235,25 @@ begin
     end;
   end;
 
+  { certificate chain verification: the leaf must chain to the trusted CA passed
+    as ParamStr(2) (a real client uses /etc/ssl/certs), be valid at `now`
+    (ParamStr(3)), and match the hostname. This is on top of CertificateVerify
+    (which proves the server holds the leaf's key). }
+  caHex := ParamStr(2);     { a file PATH to the trusted-CA cert (DER) }
+  nowStr := ParamStr(3);
+  if (caHex <> '') and (caHex <> 'no-ktls') then
+  begin
+    caDer := ReadFileBytes(caHex);
+    caCert := X509Parse(caDer);
+    if not caCert.Ok then Fail('trust-anchor read/parse failed');
+    if X509VerifyChain(leaf, caCert, nowStr, 'localhost') then
+      writeln('chain-verified=ok (leaf<-CA, valid, hostname localhost)')
+    else
+      Fail('certificate chain verification failed');
+  end
+  else
+    writeln('chain-verify=skip (no trust anchor passed)');
+
   { client Finished over transcript CH..server-Finished }
   cFinKey := FinishedKey(cHs);
   cFinData := HmacSha256(cFinKey, TranscriptHash(transcript));
@@ -222,7 +281,7 @@ begin
   { ParamStr(2)='no-ktls' forces the Pascal record layer, to exercise the
     fallback. Short-circuit `and` keeps KtlsEnable (which sets TCP_ULP) from
     running when kTLS is forced off or the suite isn't AES-GCM. }
-  ktlsTx := ((ParamCount < 2) or (ParamStr(2) <> 'no-ktls'))
+  ktlsTx := (not ForceNoKtls)
             and (suite = CS_AES_128_GCM_SHA256)
             and KtlsEnable(gSock)
             and KtlsSetAesGcm128(gSock, True, cAppKey, cAppIv);
