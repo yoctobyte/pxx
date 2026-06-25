@@ -101,8 +101,9 @@ HTTP client); server-side later if wanted.
 (EC field arithmetic). Big head start.
 
 **Need (each its own unit + smoke):**
-1. **Hashes:** SHA-256, SHA-384 (`lib/rtl/hashing` has only CRC/Adler today),
-   HMAC, HKDF-Extract/Expand (the 1.3 key schedule).
+1. **Hashes:** ~~SHA-256~~ + ~~HMAC~~ + ~~HKDF-Extract/Expand~~ **landed
+   2026-06-25** (`lib/rtl/sha256.pas`, RFC-vector smoke `test/lib_sha256` in
+   lib-test). SHA-384 still needed for the 384 ciphersuite.
 2. **AEAD:** AES-128 block + GCM (GHASH), and ChaCha20 + Poly1305.
 3. **X25519** (Curve25519 ECDH) — field arithmetic mod 2^255-19 (can sit on
    bignum or a dedicated 64-bit-limb field).
@@ -121,7 +122,11 @@ HTTP client); server-side later if wanted.
 
 ## Milestones (suggested order — each smoke-tested against known test vectors)
 
-- M1 hashes + HMAC + HKDF (RFC test vectors).
+- M1 hashes + HMAC + HKDF (RFC test vectors). **DONE for SHA-256 (2026-06-25)** —
+  `lib/rtl/sha256.pas`: SHA-256 (FIPS 180-4) + HMAC-SHA256 (RFC 2104) +
+  HKDF-Extract/Expand (RFC 5869), all verified against published vectors in
+  `test/lib_sha256` (12 checks, gated in lib-test). Library-free, pure integer —
+  the first concrete step of the from-scratch / kTLS path. SHA-384 still to add.
 - M2 AES-128-GCM + ChaCha20-Poly1305 (RFC 8439 / NIST vectors).
 - M3 X25519 (RFC 7748 vectors).
 - M4 signature verify: RSA, ECDSA-P256, Ed25519 (RFC 8032 vectors).
