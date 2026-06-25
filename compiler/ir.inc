@@ -580,6 +580,14 @@ var baseNode, baseAddr, indexNode, lo, elemSize: Integer;
     dynBaseTk: TTypeKind;
     recName, aliasIdx: Integer;
 begin
+  { Address of an address-of: `&(&x)`. In valid C this only arises from array
+    decay (`&arr` where arr is an array yields arr's address), so the address of
+    that is the operand's own address. Collapse one level. }
+  if ASTKind[node] = AN_ADDR then
+  begin
+    Result := IRLowerAddress(ASTLeft[node]);
+    Exit;
+  end;
   if ASTKind[node] = AN_IDENT then
   begin
     Result := IRAppend(IR_LEA, ASTIVal[node], -1, -1, 0, Ord(tyPointer));
