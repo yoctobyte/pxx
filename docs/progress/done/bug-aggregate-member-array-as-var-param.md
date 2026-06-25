@@ -1,7 +1,7 @@
 # bug: passing an array that is a member of an aggregate (record field / 2D-array row) as a var/const param segfaults
 
 - **Type:** bug (codegen — address-of an aggregate-member array argument)
-- **Status:** backlog
+- **Status:** DONE (2026-06-25, Track A — commits 3a19116 + ef2ee46)
 - **Track:** A
 - **Opened:** 2026-06-25
 - **Found-by:** Track B, Ed25519 (`lib/rtl/ed25519.pas`) — points modelled as
@@ -89,3 +89,42 @@ by that stride; (3) `IRLowerAddress`/AN_INDEX — stride by the aggregate size a
 let a partial index yield the sub-array lvalue; (4) call-arg — pass `p[0]`/`p.a`
 by-ref as a fixed `TG`. A type-system feature, scoped as such — not a codegen
 patch. Track B workaround (split into standalone vars) stands until then.
+
+## Resolution (2026-06-25, Track A — front-end only, self-host byte-identical)
+
+Fixed in two parser commits. The earlier "why it is not a 5-line fix" worry —
+that merging to a flat N-D array would reject the partial `p[0]` — was wrong:
+the exact-subscript-count check (parser.inc:1412/1426) only fires for the comma
+(`m[i,j]`) and consecutive-bracket (`m[i][j]`) forms. A lone leading subscript
+`m[i]` falls to the plain `else` branch and is accepted — so merge + handle the
+partial there.
+
+**1. `3a19116` — `array[..] of <named FIXED-array type>` merges to multidim.**
+The element-mis-sizing root: `of TG` (TG a named fixed-array type) fell through
+to `ParseTypeKind`, which dropped TG's dimension and collapsed the element to its
+bare base (stride 8→4). Now a named fixed-array element is merged into the outer
+dim list exactly like the anonymous-nested (`array[a] of array[b] of T`) and
+true-2D (`array[a,b] of T`) forms — at all three sites: named array-type
+definition (~10516), inline var (~8903), record field (~10087/10313). So
+`array[0..2] of TG` and `record a,b: TG end` become real flattened N-D layouts;
+`p[i][j]` / `r.a[i]` and index-0 var-params (`Fill(p[0], …)`, `Fill(r.a, …)`)
+are correct.
+
+**2. `ef2ee46` — a lone leading subscript of an N-D fixed array selects a row.**
+`p[1]` (partial) was lowered with element stride → address `base + i*elemSize`
+instead of `base + i*rowSize`, so `Fill(pts[i], …)` (variable `i`) aliased wrong
+bytes. This was **pre-existing for true-2D arrays too**, not specific to the
+named-type form. `ParseLValueAST` now scales a lone subscript to the row's
+first-element flat index `(i-lo0)*span1*..*span_{n-1}` (BuildPartialNDRowIndex),
+so the ordinary element-stride AN_INDEX yields the row base address — which is
+what a `var`/`const` array param needs. No sym-model "array element" type, no
+codegen change. The callee handles the by-ref row via the existing fixed-array
+`var` param ABI (slot holds &row, derefs and indexes).
+
+Verified: `array[0..2] of TG` and `record …: TG` var-params with both constant
+and variable row index; `pts[i]` (Ed25519 point pattern) writes the right row;
+true-2D `array[0..2,0..3]` row var-param; nested full indexing and 3-D
+(`a[i][j][k]`, `a[i,j,k]`) unchanged; `make test` green; bootstrap byte-identical.
+
+Track B can now model EC points as `array[0..n] of TGf` / `record …: TGf` and
+drop the split-into-standalone-vars workaround once it rebuilds on the next pin.
