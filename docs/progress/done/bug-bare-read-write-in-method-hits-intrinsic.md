@@ -38,6 +38,32 @@ such method in scope.
 - Unqualified `Read`/`Write` inside a method with those members calls the member.
 - Regression test under `make test`. (Low priority — `Self.` works.)
 
+## Resolution (2026-06-25)
+
+Fixed for the **statement** case (the TStream.CopyFrom symptom). In
+`ParseStatementAST`, the `tkwriteln/tkwrite/tkReadln/tkRead` branch now, before
+falling to the console-intrinsic dispatch, checks: inside a method
+(`CurProc>=0`, `CurSelfClass` is a class), the next token is `(`, and
+`FindUMeth(CurSelfClass, CurTok.SVal) >= 0` → builds an implicit-`Self` method
+call (AN_CALL / AN_VIRTUAL_CALL), mirroring the tkIdent implicit-Self dispatch.
+The `(` guard keeps a bare console `Write`/`Writeln` on the intrinsic path; the
+own-name-result assignment is still rejected above
+(bug-virtual-keyword-name-result). `FindUMeth` walks the parent chain, so an
+inherited Read/Write member binds too. Front-end only — self-host byte-identical
+(the compiler defines no class with a Read/Write member). New regression
+`test/test_method_read_write_unqualified.pas` in `make test`. Committed in
+<COMMIT>.
+
+**Residual (not this fix):**
+- *Expression* context (`x := Read` / `v := Write(n)`): the intrinsic keyword
+  token is not accepted as a value in `ParseFactor`, so it errors `expected
+  expression` rather than misdispatching. A separate ParseFactor branch (same
+  shape) would be needed if a Read/Write *function* member must be callable
+  unqualified in an expression.
+- `Move` (below): a different mechanism — `Move` is a builtin proc on the
+  tkIdent path, not a keyword token — and its repro needs adventure's fuller
+  context. Left open as a data point.
+
 ## Related data point — `Move` (2026-06-25, Track B)
 
 The same family bit `examples/adventure` once F1 (textfile) cleared: a

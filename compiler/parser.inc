@@ -7362,6 +7362,57 @@ begin
           `Result := ...`, which is correct in every case.
           See bug-virtual-keyword-name-result. }
         Error('assign the result of a Read/Write method via "Result := ..." (bare own-name result is unsupported for intrinsic-named methods)')
+      else if (CurProc >= 0) and (CurSelfClass >= REC_UCLASS_BASE) and
+              (Tokens[TokPos].Kind = tkLParen) and
+              (FindUMeth(CurSelfClass - REC_UCLASS_BASE, CurTok.SVal) >= 0) then
+      begin
+        { An unqualified `Read`/`Write`/`Readln`/`Writeln` naming a METHOD of the
+          enclosing class binds to that member (Self.method), like FPC — not the
+          console intrinsic. The names lex as intrinsic keyword tokens, so this is
+          caught here before the intrinsic statement. Guarded on a following `(`,
+          so a bare console `Write`/`Writeln` (or a class with no such member)
+          keeps the intrinsic path; the own-name result assignment is rejected
+          above. Mirrors the implicit-Self method statement dispatch in the tkIdent
+          case. See bug-bare-read-write-in-method-hits-intrinsic. }
+        smci := CurSelfClass - REC_UCLASS_BASE;
+        smmii := FindUMeth(smci, CurTok.SVal);
+        smpii := UMthProc_[smmii];
+        Next; { consume the method name token }
+        smSelfIdx := Procs[CurProc].Params[0].SymIdx;
+        smselfArg := AllocNode(AN_ARG);
+        valNode := AllocNode(AN_IDENT);
+        ASTIVal[valNode] := smSelfIdx;
+        ASTTk[valNode] := Ord(tyClass);
+        ASTLeft[smselfArg] := valNode;
+        if UMthVirSlot[smmii] >= 0 then
+        begin
+          smcallNode := AllocNode(AN_VIRTUAL_CALL);
+          ASTRight[smcallNode] := UMthVirSlot[smmii];
+        end
+        else
+          smcallNode := AllocNode(AN_CALL);
+        ASTIVal[smcallNode] := smpii;
+        if smpii >= 0 then
+          ASTTk[smcallNode] := Ord(Procs[smpii].RetType)
+        else
+          ASTTk[smcallNode] := Ord(tyInteger);
+        ASTLeft[smcallNode] := smselfArg;
+        smLastArg := smselfArg;
+        Next; { consume '(' }
+        smMai := 1;
+        while CurTok.Kind <> tkRParen do
+        begin
+          ParseExpr;
+          smArgSeq := AllocNode(AN_ARG);
+          ASTLeft[smArgSeq] := CurASTNode;
+          ASTRight[smLastArg] := smArgSeq;
+          smLastArg := smArgSeq;
+          Inc(smMai);
+          if CurTok.Kind = tkComma then Next;
+        end;
+        Expect(tkRParen, ')');
+        node := smcallNode;
+      end
       else if (CurTok.Kind = tkwriteln) or (CurTok.Kind = tkwrite) then
       begin
         isLn := CurTok.Kind = tkwriteln; Next;

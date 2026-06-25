@@ -270,6 +270,8 @@ test-core: $(COMPILER)
 	test "$$(/tmp/test_dynarray_field26)" = "$$(printf '1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1')"
 	./$(COMPILER) test/test_method_implicit_field.pas /tmp/test_method_implicit_field26
 	test "$$(/tmp/test_method_implicit_field26)" = "$$(printf '3\n2\n42\n0\n-1')"
+	./$(COMPILER) test/test_method_read_write_unqualified.pas /tmp/test_method_rw_unqual26
+	test "$$(/tmp/test_method_rw_unqual26)" = "$$(printf 'data=42\nr=43')"
 	./$(COMPILER) test/test_forin_implicit_field.pas /tmp/test_forin_implicit_field26
 	test "$$(/tmp/test_forin_implicit_field26)" = "$$(printf '10\n42\n3\n121')"
 	./$(COMPILER) test/test_dynarray_global_after_method.pas /tmp/test_dynarray_global_after_method26
