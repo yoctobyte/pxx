@@ -6,7 +6,7 @@ program devtest_tls13_handshake;
   verify the server Finished MAC -> send client Finished -> application keys ->
   send an HTTP GET -> decrypt the response. Driven by tls13-handshake-devtest.
   Usage: devtest_tls13_handshake <port> }
-uses sysutils, net, x25519, sha256, tls13_keys, tls13_record, tls13_hs;
+uses sysutils, net, x25519, sha256, tls13_keys, tls13_record, tls13_hs, x509, ed25519;
 
 function ToHex(const r: AnsiString): AnsiString;
 const HEX = '0123456789abcdef';
@@ -72,6 +72,8 @@ var
   sFinKey, cFinKey, expectFin, cFinData, cFinMsg, cFinRec: AnsiString;
   cApp, sApp, cAppKey, cAppIv, sAppKey, sAppIv: AnsiString;
   getMsg, getRec, resp: AnsiString;
+  leaf: TCert; certVerifyHash, leafDer, signedContent, cvScheme, cvSig: AnsiString;
+  cp, ctxLen, certLen, sl: Integer;
 
   procedure Fail(const m: string);
   begin writeln(m); writeln('FAIL'); Halt(1); end;
@@ -154,9 +156,39 @@ begin
       end
       else
       begin
+        if mt = HS_CERTIFICATE then
+        begin
+          { Certificate = ctx(1+len) || cert_list(3) || [ cert(3+DER) ext(2) ]... }
+          cp := 5;                                   { body[1]=type, body[2..4]=len; cp=5 = first byte of msg body }
+          ctxLen := Ord(body[cp]); cp := cp + 1 + ctxLen;
+          cp := cp + 3;                              { certificate_list length }
+          certLen := (Ord(body[cp]) shl 16) or (Ord(body[cp+1]) shl 8) or Ord(body[cp+2]);
+          cp := cp + 3;
+          leafDer := Copy(body, cp, certLen);
+          leaf := X509Parse(leafDer);
+          if not leaf.Ok then Fail('leaf cert parse');
+          writeln('got Certificate len=', np, ' leaf-parsed=', leaf.Ok);
+        end;
         transcript := transcript + body;             { EE / Cert / CertVerify }
-        if mt = HS_CERTIFICATE then writeln('got Certificate len=', np);
-        if mt = HS_CERTIFICATE_VERIFY then writeln('got CertificateVerify');
+        if mt = HS_CERTIFICATE then certVerifyHash := TranscriptHash(transcript);  { CH..Certificate }
+        if mt = HS_CERTIFICATE_VERIFY then
+        begin
+          { body: type(1)+len(3) then scheme(2) + sig(2-byte len + sig) }
+          cvScheme := Copy(body, 5, 2);
+          sl := (Ord(body[7]) shl 8) or Ord(body[8]);
+          cvSig := Copy(body, 9, sl);
+          signedContent := '';
+          for cp := 1 to 64 do signedContent := signedContent + Chr($20);
+          signedContent := signedContent + 'TLS 1.3, server CertificateVerify' + Chr(0) + certVerifyHash;
+          if (Ord(cvScheme[1]) = $08) and (Ord(cvScheme[2]) = $07) then  { ed25519 }
+          begin
+            if Ed25519Verify(leaf.PubBits, signedContent, cvSig) then
+              writeln('certverify=ok (ed25519)')
+            else Fail('CertificateVerify signature invalid');
+          end
+          else
+            writeln('certverify=skip (scheme ', ToHex(cvScheme), ', verifier not wired here)');
+        end;
       end;
       parsePos := parsePos + 4 + np;
     end;
