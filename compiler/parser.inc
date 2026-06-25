@@ -8911,6 +8911,40 @@ begin
           Next;                 { consume the alias name }
           tk := elemTk;
           elemResolved := True;
+        end
+        else if (ai >= 0) and (not ArrTypeIsDyn[ai]) then
+        begin
+          { A FIXED array whose element is a FIXED named-array type
+            (`array[0..2] of TG`, `TG = array[0..3] of T`): same flat layout as
+            `array[0..2,0..3] of T` — merge TG's dims into the outer list, like
+            the anonymous-nested form. Without this ParseTypeKind drops TG's
+            dimension and the element stride collapses to the base type's size. }
+          if ArrTypeNDims[ai] >= 2 then
+          begin
+            for di := 0 to ArrTypeNDims[ai] - 1 do
+            begin
+              if ndCnt >= MAX_ARR_DIMS then Error('too many array dimensions');
+              ndDimLo[ndCnt]   := ArrTypeDimLo[ai * MAX_ARR_DIMS + di];
+              ndDimSpan[ndCnt] := ArrTypeDimSpan[ai * MAX_ARR_DIMS + di];
+              Inc(ndCnt);
+            end;
+          end
+          else
+          begin
+            if ndCnt >= MAX_ARR_DIMS then Error('too many array dimensions');
+            ndDimLo[ndCnt]   := ArrTypeLo[ai];
+            ndDimSpan[ndCnt] := ArrTypeHi[ai] - ArrTypeLo[ai] + 1;
+            Inc(ndCnt);
+          end;
+          isArrND := True;
+          flatLen := 1;
+          for di := 0 to ndCnt - 1 do flatLen := flatLen * ndDimSpan[di];
+          arrLo := 0; arrHi := flatLen - 1;
+          elemTk := IntToTypeKind(ArrTypeElemTk[ai]);
+          LastTypeRecId := ArrTypeElemRec[ai];
+          tk := elemTk;
+          elemResolved := True;
+          Next;                 { consume the named array type }
         end;
       end;
       if not elemResolved then
@@ -10094,6 +10128,36 @@ begin
                 fRec := ArrTypeElemRec[fAi];
                 Next;   { consume the named array type }
               end
+              else if (fAi >= 0) and (not ArrTypeIsDyn[fAi]) then
+              begin
+                { Named FIXED-array type field (`a: TG`, `TG = array[..] of T`):
+                  make it a real array field (1-D or flattened N-D) so a.x[i]
+                  indexes with the right stride. Without this ParseTypeKind drops
+                  TG's dimension and the field collapses to a single base element
+                  (corrupting r.field[i] and r.field passed as a var array arg). }
+                isArr := True;
+                fTk := IntToTypeKind(ArrTypeElemTk[fAi]);
+                fRec := ArrTypeElemRec[fAi];
+                if ArrTypeNDims[fAi] >= 2 then
+                begin
+                  fNDims := ArrTypeNDims[fAi];
+                  arrLen := 1;
+                  for tdi := 0 to fNDims - 1 do
+                  begin
+                    tdDimLo[tdi]   := ArrTypeDimLo[fAi * MAX_ARR_DIMS + tdi];
+                    tdDimSpan[tdi] := ArrTypeDimSpan[fAi * MAX_ARR_DIMS + tdi];
+                    arrLen := arrLen * tdDimSpan[tdi];
+                  end;
+                end
+                else
+                begin
+                  fNDims := 1;
+                  tdDimLo[0]   := ArrTypeLo[fAi];
+                  tdDimSpan[0] := ArrTypeHi[fAi] - ArrTypeLo[fAi] + 1;
+                  arrLen := tdDimSpan[0];
+                end;
+                Next;   { consume the named array type }
+              end
               else
               begin
                 fTk := ParseTypeKind;
@@ -10320,6 +10384,36 @@ begin
                 fRec := ArrTypeElemRec[fAi];
                 Next;   { consume the named array type }
               end
+              else if (fAi >= 0) and (not ArrTypeIsDyn[fAi]) then
+              begin
+                { Named FIXED-array type field (`a: TG`, `TG = array[..] of T`):
+                  make it a real array field (1-D or flattened N-D) so a.x[i]
+                  indexes with the right stride. Without this ParseTypeKind drops
+                  TG's dimension and the field collapses to a single base element
+                  (corrupting r.field[i] and r.field passed as a var array arg). }
+                isArr := True;
+                fTk := IntToTypeKind(ArrTypeElemTk[fAi]);
+                fRec := ArrTypeElemRec[fAi];
+                if ArrTypeNDims[fAi] >= 2 then
+                begin
+                  fNDims := ArrTypeNDims[fAi];
+                  arrLen := 1;
+                  for tdi := 0 to fNDims - 1 do
+                  begin
+                    tdDimLo[tdi]   := ArrTypeDimLo[fAi * MAX_ARR_DIMS + tdi];
+                    tdDimSpan[tdi] := ArrTypeDimSpan[fAi * MAX_ARR_DIMS + tdi];
+                    arrLen := arrLen * tdDimSpan[tdi];
+                  end;
+                end
+                else
+                begin
+                  fNDims := 1;
+                  tdDimLo[0]   := ArrTypeLo[fAi];
+                  tdDimSpan[0] := ArrTypeHi[fAi] - ArrTypeLo[fAi] + 1;
+                  arrLen := tdDimSpan[0];
+                end;
+                Next;   { consume the named array type }
+              end
               else
               begin
                 fTk := ParseTypeKind;
@@ -10513,7 +10607,41 @@ begin
             tMoreDims := (CurTok.Kind = tkArray) and (Tokens[TokPos].Kind = tkLBrack);
             if tMoreDims then Next;   { consume 'array'; loop head consumes '[' }
           end;
-          aElemTk := ParseTypeKind;
+          { A FIXED named-array type as the element (`array[a..b] of TG`,
+            `TG = array[c..d] of T`) has the SAME flat layout as `array[a..b,
+            c..d] of T` — merge TG's dimensions into the outer list, exactly as
+            the anonymous-nested form above does. Without this, ParseTypeKind
+            resolves TG to its bare base element and the inner dimension is lost
+            (the element stride collapses to the base type's size, corrupting
+            p[i][j]). TG is already flattened in its own ArrType entry, so one
+            merge covers arbitrary nesting depth. }
+          fAi := -1;
+          if CurTok.Kind = tkIdent then fAi := FindArrayType(CurTok.SVal);
+          if (fAi >= 0) and (not ArrTypeIsDyn[fAi]) then
+          begin
+            if ArrTypeNDims[fAi] >= 2 then
+            begin
+              for tdi := 0 to ArrTypeNDims[fAi] - 1 do
+              begin
+                if tdCnt >= MAX_ARR_DIMS then Error('too many array dimensions');
+                tdDimLo[tdCnt]   := ArrTypeDimLo[fAi * MAX_ARR_DIMS + tdi];
+                tdDimSpan[tdCnt] := ArrTypeDimSpan[fAi * MAX_ARR_DIMS + tdi];
+                Inc(tdCnt);
+              end;
+            end
+            else
+            begin
+              if tdCnt >= MAX_ARR_DIMS then Error('too many array dimensions');
+              tdDimLo[tdCnt]   := ArrTypeLo[fAi];
+              tdDimSpan[tdCnt] := ArrTypeHi[fAi] - ArrTypeLo[fAi] + 1;
+              Inc(tdCnt);
+            end;
+            aElemTk := IntToTypeKind(ArrTypeElemTk[fAi]);
+            LastTypeRecId := ArrTypeElemRec[fAi];
+            Next;   { consume the named array type }
+          end
+          else
+            aElemTk := ParseTypeKind;
           if tdCnt = 1 then
           begin aLo := tdDimLo[0]; aHi := tdDimLo[0] + tdDimSpan[0] - 1; end
           else
