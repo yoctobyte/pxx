@@ -54,3 +54,25 @@ two prescan passes — mirror the generic-function `PreScanPass` handling.
 - The program repro compiles and `b.SetIt(42)` then `b.Value` = 42.
 - Regression test under `make test`.
 - Self-host fixedpoint byte-identical.
+
+## Resolution (2026-06-25, Track A)
+
+Fixed. A generic class-method impl (`procedure TBox.Meth` where TBox is a
+template) is consumed by `ParseSubroutine` → `BufferGenericMethod` + Exit. The
+program/unit 2-pass declaration prescan recorded it as a replayable DeclItem, so
+pass 2 re-entered `ParseSubroutine` and buffered the SAME method a second time —
+duplicate TemplateTokens + GenericMethods entries corrupted the specialization
+stream ("expected name").
+
+New flag `GenericMethodBuffered` (defs.inc): `ParseSubroutine` sets it when it
+buffers a generic method and Exits; the four pass-1 drivers (ParseProgram +
+ParseUnit, procedure/function and constructor/destructor) then skip recording the
+DeclItem, so the method is buffered once and streamed by `specialize`. Generic
+functions already avoided this by clearing PreScanPass around themselves; this is
+the class-method analogue.
+
+Front-end only — self-host byte-identical. Verified program generics (single +
+multiple methods, function-result T, Integer + string specializations) and the
+unit form (test_collections) unchanged. Test:
+`test/test_generic_class_in_program.pas` (7 / hi) in `make test`; cross-checked
+i386/aarch64/arm32.

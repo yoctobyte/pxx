@@ -11159,6 +11159,7 @@ begin
   isAsync := False;
   isIram := False;
   isInterrupt := False;
+  GenericMethodBuffered := False;
   if CurTok.Kind = tkClass then
   begin
     isClassKeyword := True;
@@ -11185,6 +11186,7 @@ begin
         token before the template name) so the specialized stream is a complete
         standalone subroutine the top-level loop can parse. }
       BufferGenericMethod(depth, TokPos - 3);
+      GenericMethodBuffered := True;
       Exit;
     end;
       methOwnerCi := FindUClass(name);
@@ -13413,8 +13415,11 @@ begin
           if DeclItemCount >= MAX_DECL_ITEMS then Error('too many implementation declarations');
           DeclItemStart[DeclItemCount] := TokPos - 1;
           ParseSubroutine;
-          DeclItemEnd[DeclItemCount] := TokPos - 1;
-          Inc(DeclItemCount);
+          if not GenericMethodBuffered then
+          begin
+            DeclItemEnd[DeclItemCount] := TokPos - 1;
+            Inc(DeclItemCount);
+          end;
         end;
         tkIdent:
           { constructor/destructor are identifiers in this dialect, not tokens;
@@ -13425,8 +13430,11 @@ begin
             if DeclItemCount >= MAX_DECL_ITEMS then Error('too many implementation declarations');
             DeclItemStart[DeclItemCount] := TokPos - 1;
             ParseSubroutine;
-            DeclItemEnd[DeclItemCount] := TokPos - 1;
-            Inc(DeclItemCount);
+            if not GenericMethodBuffered then
+            begin
+              DeclItemEnd[DeclItemCount] := TokPos - 1;
+              Inc(DeclItemCount);
+            end;
           end
           else if CaseEqual(CurTok.SVal, 'initialization') then
           begin
@@ -13986,8 +13994,11 @@ begin
         if DeclItemCount >= MAX_DECL_ITEMS then Error('too many top-level declarations');
         DeclItemStart[DeclItemCount] := TokPos - 1;
         ParseSubroutine;
-        DeclItemEnd[DeclItemCount] := TokPos - 1;
-        Inc(DeclItemCount);
+        if not GenericMethodBuffered then
+        begin
+          DeclItemEnd[DeclItemCount] := TokPos - 1;
+          Inc(DeclItemCount);
+        end;
       end;
       tkIdent:
         { generic / specialize / operator definitions emit their body in place
@@ -14005,8 +14016,11 @@ begin
           if DeclItemCount >= MAX_DECL_ITEMS then Error('too many top-level declarations');
           DeclItemStart[DeclItemCount] := TokPos - 1;
           ParseSubroutine;
-          DeclItemEnd[DeclItemCount] := TokPos - 1;
-          Inc(DeclItemCount);
+          if not GenericMethodBuffered then
+          begin
+            DeclItemEnd[DeclItemCount] := TokPos - 1;
+            Inc(DeclItemCount);
+          end;
         end
         else if CaseEqual(CurTok.SVal, 'label') then
         begin

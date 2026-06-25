@@ -28,16 +28,14 @@ _none_
 | --- | --- | --- | --- | --- |
 | feature-c-runtime-library | B | feature | C runtime/library layer (`lib/crtl`) plus direct C-library packages | feature-c-source-frontend |
 
-## backlog (54)
+## backlog (52)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
 | bug-bare-read-write-in-method-hits-intrinsic | A | bug | Bare `Read`/`Write` inside a method resolves to the console intrinsic, not the method | — |
-| bug-generic-class-methods-in-program | A | bug | Generic class METHOD bodies break in a program (work in a unit) | — |
 | bug-managed-length-via-pointer-deref | A | bug | bug: managed Length(ps^) / Length(rec.pf^) returns garbage (all targets) | — |
 | bug-pchar-to-string-implicit-conv | A | bug | PChar → string implicit conversion missing in call args (and assignment helper) | — |
 | bug-proc-typed-call-const-record-arg | A | bug | bug: indirect call through a proc-typed value with a `const record` arg miscompiles | — |
-| bug-setlength-record-field-via-var-param | A | bug | SetLength on a record string/array field via a `var` parameter fails codegen | — |
 | bug-virtual-keyword-name-result | A | bug | Bare own-name result of a VIRTUAL intrinsic-named method miscompiles | — |
 | chore-inc-to-units | A | chore | `.inc` → real `.pas` units refactor | — |
 | chore-runtime-emission-size | A | chore | Finer runtime-support emission (code size) | — |
@@ -121,7 +119,7 @@ _none_
 | feature-mimic-fpc | B | feature | `mimic FPC` compatibility mode | — |
 | feature-string-model-tyfixedstring | B | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (269)
+## done (271)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -162,6 +160,7 @@ _none_
 | bug-forin-qualified-set-member-source | A | bug | `for-in` over a qualified set member source fails | — |
 | bug-frozen-string-length-pointer-deref-cross | A | bug | `Length()` of a pointer-dereferenced frozen `string` returns 0 on the cross targets | — |
 | bug-generator-yield-call-expression | A | bug | Generator `yield` of a call expression lowers to unsupported IR | — |
+| bug-generic-class-methods-in-program | A | bug | Generic class METHOD bodies break in a program (work in a unit) | — |
 | bug-hex-char-code-literal | A | bug | `#$NN` / `#%NN` / `#&NN` char-code literals broken (hex/bin/oct escape) | — |
 | bug-i386-arm32-int64-conformance | A | bug | bug: i386/arm32 diverge on Int64 via fn-return / record-field / mixed ops | — |
 | bug-implicit-self-dynarray-length | A | bug | `Length` on implicit-`Self` dynamic-array field fails in methods | — |
@@ -208,6 +207,7 @@ _none_
 | bug-setlength-dynarray-function-result | A | bug | SetLength rejects dynamic-array function result | — |
 | bug-setlength-ir-string-in-complex-method | A | bug | `SetLength expects a string variable in IR codegen` on a valid array SetLength | — |
 | bug-setlength-nested-dynarray-field | A | bug | SetLength on a nested sub-array slot through a record field | — |
+| bug-setlength-record-field-via-var-param | A | bug | SetLength on a record string/array field via a `var` parameter fails codegen | — |
 | bug-set-of-char-const-corrupts-char-codegen | A | bug | A `set of char` typed constant corrupts `Ord(char-var)` codegen | — |
 | bug-shl-signed-integer-width | A | bug | bug: `shl` on a 32-bit Integer does not wrap at 32-bit width | — |
 | bug-shr-signed-integer-width | A | bug | `shr` on a negative 32-bit Integer shifts at 64-bit width (miscompile) | — |
@@ -406,11 +406,9 @@ _none_
 ## Ready (no unmet blocker)
 
 - [A] bug-bare-read-write-in-method-hits-intrinsic
-- [A] bug-generic-class-methods-in-program
 - [A] bug-managed-length-via-pointer-deref
 - [A] bug-pchar-to-string-implicit-conv
 - [A] bug-proc-typed-call-const-record-arg
-- [A] bug-setlength-record-field-via-var-param
 - [A] bug-virtual-keyword-name-result
 - [A] chore-inc-to-units
 - [A] chore-runtime-emission-size

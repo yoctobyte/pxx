@@ -880,6 +880,11 @@ var
     needs no `forward`). Pass 2 replays the recorded subroutine spans to emit the
     bodies. See docs/progress/*/feature-declaration-prescan. }
   PreScanPass : Boolean;        { True while registering headers (pass 1) }
+  GenericMethodBuffered : Boolean; { set by ParseSubroutine when it consumed a generic
+    class-method impl (`procedure TBox.Meth` for a template TBox) via
+    BufferGenericMethod and Exited. The pass-1 driver then must NOT record it as a
+    replayable DeclItem — the method is buffered once and streamed by specialize;
+    replaying it in pass 2 would double-buffer and corrupt the token stream. }
   DeclItemStart : array[0..MAX_DECL_ITEMS-1] of Integer; { token index of each recorded subroutine }
   DeclItemEnd   : array[0..MAX_DECL_ITEMS-1] of Integer; { token index just past it }
   DeclItemCount : Integer;
