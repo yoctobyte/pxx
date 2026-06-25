@@ -61,6 +61,12 @@ function HttpHeadersHas(const h: THttpHeaders; const name: AnsiString): Boolean;
 function HttpHeaderName(const h: THttpHeaders; i: Integer): AnsiString;
 function HttpHeaderVal(const h: THttpHeaders; i: Integer): AnsiString;
 
+{ Structured headers off a response: parse the raw `.Headers` block on demand
+  (the response keeps headers raw to stay record-field-bug-free; these are the
+  convenience seam over HttpParseHeaders / HttpHeaderValue). }
+function HttpResponseHeaders(const resp: THttpResponse): THttpHeaders;
+function HttpResponseHeader(const resp: THttpResponse; const name: AnsiString): AnsiString;
+
 { Decode a chunked-transfer-encoded body to its plain bytes. }
 function HttpDechunk(const body: AnsiString): AnsiString;
 
@@ -292,6 +298,16 @@ end;
 function HttpHeaderVal(const h: THttpHeaders; i: Integer): AnsiString;
 begin
   if (i >= 0) and (i < h.Count) then Result := h.List[i].Value else Result := '';
+end;
+
+function HttpResponseHeaders(const resp: THttpResponse): THttpHeaders;
+begin
+  Result := HttpParseHeaders(resp.Headers);
+end;
+
+function HttpResponseHeader(const resp: THttpResponse; const name: AnsiString): AnsiString;
+begin
+  Result := HttpHeaderValue(resp.Headers, name);
 end;
 
 function HttpHexVal(const s: AnsiString): Integer;

@@ -98,6 +98,13 @@ begin
   SayBool('hdrs-has', HttpHeadersHas(hdrs, 'set-cookie') and not HttpHeadersHas(hdrs, 'nope'));
   SayBool('hdrs-iter', (HttpHeaderName(hdrs, 0) = 'Content-Type') and (HttpHeaderVal(hdrs, 2) = 'b=2'));
 
+  { Structured headers off a parsed response (the convenience seam). }
+  HttpParseResponse('HTTP/1.1 200 OK'#13#10'Content-Type: text/plain'#13#10'X-A: 1'#13#10#13#10'body', resp);
+  hdrs := HttpResponseHeaders(resp);
+  SayBool('resp-hdrs-count', hdrs.Count = 2);
+  SayBool('resp-hdr-ci', HttpResponseHeader(resp, 'content-type') = 'text/plain');
+  SayBool('resp-hdr-absent', HttpResponseHeader(resp, 'nope') = '');
+
   { URL percent-encoding. }
   SayBool('urlenc', HttpUrlEncode('a b&c=d/e') = 'a%20b%26c%3Dd%2Fe');
   SayBool('urlenc-keep', HttpUrlEncode('Aa9-_.~') = 'Aa9-_.~');

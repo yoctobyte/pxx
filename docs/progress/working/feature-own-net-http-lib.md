@@ -1,7 +1,7 @@
 # Own networking library — native HTTP client (+ sockets, async)
 
 - **Type:** feature (library) — our own net stack, independent of Synapse
-- **Status:** working (first slices landed)
+- **Status:** working (Track B agent active — structured-headers slice)
 - **Owner:** — (**Track B** — `lib/rtl`, `$(PXX_STABLE)`)
 - **Opened:** 2026-06-24
 - **Why:** compiling Synapse is nice, but we also want a small, native,
@@ -99,12 +99,21 @@ server does ONE accept, client makes TWO pooled GETs, the second reuses the
 connection. Single-flow (coroutine) only — not concurrency-safe across
 simultaneously-running coroutines yet.
 
+## Structured response headers (landed 2026-06-25)
+
+`HttpResponseHeaders(resp): THttpHeaders` (parse the raw `.Headers` block on
+demand) + `HttpResponseHeader(resp, name): AnsiString` (case-insensitive single
+value) — the convenience seam so callers get structured access without the
+response record carrying a `THttpHeaders` field (dodges
+[[bug-setlength-record-field-via-var-param]]). Pure forwarders over the existing
+`HttpParseHeaders` / `HttpHeaderValue`. `lib_http` now 49 checks (3 added:
+`resp-hdrs-count` / `resp-hdr-ci` / `resp-hdr-absent`).
+
 ## Roadmap (next slices)
 
 1. Concurrency-safe pool (per-coroutine acquire/release) + a blocking
    `HttpGetPooled`; pool eviction/idle-timeout.
-2. Structured headers on `THttpResponse` (today: raw `.Headers` block; parse via
-   `HttpParseHeaders` on demand).
+2. ~~Structured headers on `THttpResponse`~~ — **landed 2026-06-25** (above).
 3. **TLS** — `https://` is parsed and refused (`isTls`). Routes through a common
    TLS seam [[feature-tls-provider-abstraction]] with two interchangeable
    backends: OpenSSL (default; via [[feature-real-dynlib-loader]]) and the native
