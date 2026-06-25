@@ -662,16 +662,17 @@ end;
 { One recv (blocking NetRecv, or reactor TcpRecv when async) appended to
   conn.Buf; returns the byte count (0 = peer closed). }
 function HttpConnRecvMore(var conn: THttpConnection; async: Boolean): Integer;
-var b: array[0..4095] of Byte; got: Int64; chunk: AnsiString;
+var b: array[0..4095] of Byte; got: Int64; n, oldLen: Integer;
 begin
   if async then got := TcpRecv(conn.Sock, @b[0], 4096)
   else got := NetRecv(conn.Sock, @b[0], 4096);
   if got > 0 then
   begin
-    SetLength(chunk, got);                  { local — SetLength on a record field
-                                              via a var param is not codegen-supported }
-    Move(b[0], chunk[1], got);
-    conn.Buf := conn.Buf + chunk;
+    n := Integer(got);
+    oldLen := Length(conn.Buf);
+    SetLength(conn.Buf, oldLen + n);        { grow the field in place (needs the
+                                              v67 var-param-field SetLength fix) }
+    Move(b[0], conn.Buf[oldLen + 1], n);
   end
   else
     conn.Alive := False;
