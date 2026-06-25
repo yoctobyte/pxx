@@ -12,11 +12,14 @@ language surface as the compiler actually accepts it.
 > verified against the compiler. Each example here compiles on the pinned
 > compiler.
 
-## Topics
+## Pages
 
-- Types — ordinals, floats, strings, records, dynamic and fixed arrays.
-- Classes & interfaces — fields, methods, virtual/override, constructors.
-- Properties — simple, indexed (array), and `default` properties.
+- [Types](./types.md) — ordinals, floats, strings, records, dynamic and fixed
+  arrays, enumerations.
+- [Classes & interfaces](./classes.md) — fields, methods, virtual/override,
+  constructors, properties.
+
+## Planned
+
+- Properties in depth — indexed (array) and `default` properties.
 - Generics, exceptions, sets, variants.
-
-_(Stub — Track C fills these in.)_
