@@ -44,9 +44,10 @@ if ! "$PXX_STABLE" -dPXX_DYNLIB_LIBC -Fu"$ROOT/lib/rtl/platform/posix" \
   say "FAIL: client build"; tail -3 /tmp/pxx_tls_devtest_build.log; exit 1
 fi
 
-# ---- self-signed cert + loopback TLS server ----
+# ---- self-signed cert (CN + SAN = localhost) + loopback TLS server ----
 if ! openssl req -x509 -newkey rsa:2048 -keyout "$KEY" -out "$CERT" \
-      -days 1 -nodes -subj "/CN=localhost" >/dev/null 2>&1; then
+      -days 1 -nodes -subj "/CN=localhost" \
+      -addext "subjectAltName=DNS:localhost" >/dev/null 2>&1; then
   say "SKIP: cert generation failed"; exit 0
 fi
 openssl s_server -accept "$PORT" -cert "$CERT" -key "$KEY" -www -quiet >"$SLOG" 2>&1 &
@@ -59,8 +60,8 @@ while [ $i -lt 50 ]; do
   i=$((i + 1)); sleep 0.1
 done
 
-# ---- run the client ----
-OUT=$(timeout 30 "$CLIENT" "https://127.0.0.1:$PORT/" 2>&1)
+# ---- run the client (port + trusted CA file) ----
+OUT=$(timeout 30 "$CLIENT" "$PORT" "$CERT" 2>&1)
 RC=$?
 say "$OUT"
 

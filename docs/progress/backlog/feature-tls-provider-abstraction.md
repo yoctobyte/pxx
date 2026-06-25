@@ -93,9 +93,25 @@ OpenSSL backend updated accordingly (no internal poll-loop in `Handshake`;
 `HttpGetAsync` (coroutine, `Spawn`/`RunUntilDone`) over real `openssl s_server` —
 both return 200 + decrypted body. So HTTPS now composes with the reactor.
 
+## Slice 5 landed — certificate verification + trust store (2026-06-25)
+
+The OpenSSL backend is now **secure by default**. `OpenSslTlsRegister` loads the
+system trust store (`SSL_CTX_set_default_verify_paths`), sets
+`SSL_VERIFY_PEER`, and per connection calls `SSL_set1_host(host)` so the
+handshake validates both the **chain** and the **hostname** (CN/SAN). A failed
+verification aborts `SSL_connect` → the request returns `Ok=False`;
+`OpenSslTlsLastVerifyResult` exposes the `X509_V_*` code.
+`OpenSslTlsRegisterEx(verifyPeer, caFile)` adds a private/test CA on top of the
+system store, or turns verification off (dev only).
+
+**Verified** by the extended `tls-openssl-devtest` against `openssl s_server`
+(self-signed, CN/SAN=localhost): **reject** — system-store-only, the untrusted
+cert is refused (`Ok=False`, `verify_result=18` = self-signed); **accept** — with
+the test CA trusted, blocking GET → 200 and the hostname matches; **async** — the
+verified connection also works via `HttpGetAsync` on the reactor.
+
 **Next slices:** (a) server side (`SSL_accept`) → the 4-cell client×server interop
-matrix; (b) cert verification + trust store; (c) the native backend
-([[feature-tls13-from-scratch]], deferred).
+matrix; (b) the native backend ([[feature-tls13-from-scratch]], deferred).
 
 ## Decision (2026-06-24)
 

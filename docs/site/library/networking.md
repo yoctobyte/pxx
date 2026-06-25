@@ -84,7 +84,10 @@ The `tls_openssl` unit provides a backend that loads the system `libssl` at
 runtime (via `dlopen`). Because loading a shared library pulls in libc, it is
 **opt-in**: build with `-dPXX_DYNLIB_LIBC` (the default build stays libc-free and
 has no dynamic loader). Register it once at startup, then use the normal `http`
-calls:
+calls. `OpenSslTlsRegister` is **secure by default** — it verifies the peer
+certificate against the system trust store and checks that the certificate
+matches the hostname; an untrusted or mismatched certificate fails the request
+(`Ok` is `False`).
 
 ```pascal
 program https_example;
@@ -112,12 +115,22 @@ Both the blocking (`HttpGet`/`HttpExec`) and async (`HttpGetAsync`, …) familie
 work over HTTPS: the async handshake yields on the reactor while OpenSSL waits for
 the socket, so TLS requests compose with everything else on the coroutine loop.
 
+### Trust store and private CAs
+
+To trust a private or self-signed CA (e.g. an internal service, or a test
+server), register with `OpenSslTlsRegisterEx(verifyPeer, caFile)`:
+
+```pascal
+OpenSslTlsRegisterEx(True, '/path/to/ca.pem');   // system store + this CA, verified
+```
+
+`caFile` is added on top of the system trust store. Passing `verifyPeer = False`
+turns verification off entirely — only for development against throwaway
+endpoints; never in production. After a refused handshake,
+`OpenSslTlsLastVerifyResult` returns the OpenSSL `X509_V_*` code explaining why.
+
 **Current limits of the OpenSSL backend (x86-64):**
 
-- **No certificate verification yet.** The connection is encrypted, but the peer
-  certificate is not validated against a trust store. Treat the current TLS
-  support as suitable for development and trusted/loopback endpoints, not as
-  protection against an active attacker. Verification is planned.
 - **Client only.** Server-side TLS (`SSL_accept`) is not wired yet.
 
 A from-scratch native TLS stack is planned as a second, interchangeable backend

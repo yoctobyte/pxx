@@ -124,9 +124,14 @@ response record carrying a `THttpHeaders` field (dodges
    `make tls-openssl-devtest`. **Async TLS landed 2026-06-25** too: the seam
    handshake is non-blocking + resumable (`TlsHandshakeResume`), so `HttpGetAsync`
    over https yields on the reactor and resumes — the devtest now runs both a
-   blocking and an async https GET against `openssl s_server`. **Remaining:** cert
-   verification, server-side TLS (`SSL_accept`) for the interop matrix, and the
-   native handrolled stack [[feature-tls13-from-scratch]] (deferred).
+   blocking and an async https GET against `openssl s_server`. **Cert
+   verification + trust store landed 2026-06-25**: `OpenSslTlsRegister` is now
+   secure-by-default (system store + `SSL_VERIFY_PEER` + hostname match via
+   `SSL_set1_host`); `OpenSslTlsRegisterEx(verify, caFile)` for private CAs / opt
+   out. Devtest proves reject (untrusted self-signed → `Ok=False`) + accept
+   (trusted CA → 200) + async. **Remaining:** server-side TLS (`SSL_accept`) for
+   the interop matrix, and the native handrolled stack
+   [[feature-tls13-from-scratch]] (deferred).
 
 ## Compiler gaps surfaced while building (filed)
 
