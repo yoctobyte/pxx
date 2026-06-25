@@ -176,6 +176,14 @@ begin
       ASTSLen[node] := Tokens[TokPos - 1].SLen;
       ASTTk[node] := Ord(tyString);
       Next;
+      { Adjacent string literals concatenate (C: `"a" "b"` == `"ab"`; lua's
+        `lua_pushliteral` expands to `"" s`). The decoded chars of consecutive
+        string tokens are contiguous in TokChars, so just extend the length. }
+      while CurTok.Kind = tkString do
+      begin
+        ASTSLen[node] := ASTSLen[node] + Tokens[TokPos - 1].SLen;
+        Next;
+      end;
       Result := node;
     end;
     tkLParen:
