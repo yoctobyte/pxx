@@ -108,14 +108,17 @@ pxx -dPXX_DYNLIB_LIBC -Fulib/rtl/platform/posix https_example.pas https_example
 ./https_example
 ```
 
+Both the blocking (`HttpGet`/`HttpExec`) and async (`HttpGetAsync`, …) families
+work over HTTPS: the async handshake yields on the reactor while OpenSSL waits for
+the socket, so TLS requests compose with everything else on the coroutine loop.
+
 **Current limits of the OpenSSL backend (x86-64):**
 
-- **Blocking client only.** The blocking `HttpGet`/`HttpExec` family works over
-  HTTPS today; the async (`…Async`) handshake is not wired yet.
 - **No certificate verification yet.** The connection is encrypted, but the peer
   certificate is not validated against a trust store. Treat the current TLS
   support as suitable for development and trusted/loopback endpoints, not as
   protection against an active attacker. Verification is planned.
+- **Client only.** Server-side TLS (`SSL_accept`) is not wired yet.
 
 A from-scratch native TLS stack is planned as a second, interchangeable backend
 behind the same seam.

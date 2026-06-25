@@ -539,13 +539,28 @@ begin
   else PalPoll(fd, PAL_POLL_OUT, -1);
 end;
 
-{ Client TLS handshake over a connected fd. True on tlsOk; False (cleanly) when
+{ Client TLS handshake over a connected fd. Drives the seam's non-blocking
+  handshake to completion: on want-read/want-write it waits for the fd (blocking
+  poll or async coroutine yield) and resumes. True on tlsOk; False (cleanly) when
   no backend or the handshake failed. }
 function HttpTlsConnect(fd: Integer; const host: AnsiString; async: Boolean;
                         var tlsc: TTlsConn): Boolean;
+var r: TTlsResult;
 begin
   tlsc := nil;
-  Result := TlsAvailable and (TlsHandshake(fd, tlsClient, host, tlsc) = tlsOk);
+  Result := False;
+  if not TlsAvailable then Exit;
+  r := TlsHandshake(fd, tlsClient, host, tlsc);
+  while (r = tlsWantRead) or (r = tlsWantWrite) do
+  begin
+    HttpIoWait(fd, async, r = tlsWantRead);
+    r := TlsHandshakeResume(tlsc);
+  end;
+  Result := r = tlsOk;
+  if not Result and (tlsc <> nil) then
+  begin
+    TlsClose(tlsc); tlsc := nil;
+  end;
 end;
 
 { Send the whole buffer. Plain path matches the old single-call behaviour; TLS

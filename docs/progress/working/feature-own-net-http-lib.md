@@ -121,10 +121,12 @@ response record carrying a `THttpHeaders` field (dodges
    e2e (`test/lib_https_mock`, gated `https-mock-seam`). **OpenSSL backend landed
    2026-06-25** (`lib/rtl/tls_openssl.pas`, via the v68 dlopen loader): real
    `HttpGet('https://…')` ⇄ `openssl s_server`, status 200, verified by
-   `make tls-openssl-devtest` (blocking client, x86-64). **Remaining:** async
-   handshake (seam resume-step), cert verification, and the native handrolled
-   stack [[feature-tls13-from-scratch]] (deferred). Mix-and-match (native client ⇄
-   OpenSSL server) stays the interop test.
+   `make tls-openssl-devtest`. **Async TLS landed 2026-06-25** too: the seam
+   handshake is non-blocking + resumable (`TlsHandshakeResume`), so `HttpGetAsync`
+   over https yields on the reactor and resumes — the devtest now runs both a
+   blocking and an async https GET against `openssl s_server`. **Remaining:** cert
+   verification, server-side TLS (`SSL_accept`) for the interop matrix, and the
+   native handrolled stack [[feature-tls13-from-scratch]] (deferred).
 
 ## Compiler gaps surfaced while building (filed)
 

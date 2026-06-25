@@ -37,10 +37,18 @@ type
   TTlsBackend = class
     { Human-readable backend name, e.g. 'openssl' / 'native' / 'mock'. }
     function  Name: string; virtual;
-    { Run the TLS handshake over an already-connected `fd`. `host` feeds SNI /
-      cert-name verification for clients. On tlsOk, `c` is a live connection. }
+    { Begin the TLS handshake over an already-connected `fd`. `host` feeds SNI /
+      cert-name verification for clients. NON-BLOCKING: on `tlsOk`, `c` is a live
+      connection; on `tlsWantRead`/`tlsWantWrite`, `c` is allocated but the
+      handshake is incomplete — the caller waits for the fd then calls
+      `HandshakeResume(c)` until it no longer wants I/O. On `tlsError`, `c` is nil.
+      (A backend over a blocking fd simply returns `tlsOk`/`tlsError` and never
+      wants — the resume loop is then a no-op.) }
     function  Handshake(fd: Integer; role: TTlsRole; const host: string;
                         var c: TTlsConn): TTlsResult; virtual;
+    { Continue a handshake that returned want-read/want-write, after the fd became
+      ready. Returns `tlsOk` when complete, another want, or `tlsError`. }
+    function  HandshakeResume(c: TTlsConn): TTlsResult; virtual;
     { Decrypt up to `len` bytes into `buf`; `got` = bytes produced. }
     function  Read (c: TTlsConn; buf: Pointer; len: Integer; var got: Integer): TTlsResult; virtual;
     { Encrypt+send up to `len` bytes from `buf`; `put` = bytes consumed. }
@@ -62,6 +70,7 @@ function  TlsAvailable: Boolean;
 
 function  TlsHandshake(fd: Integer; role: TTlsRole; const host: string;
                        var c: TTlsConn): TTlsResult;
+function  TlsHandshakeResume(c: TTlsConn): TTlsResult;
 function  TlsRead (c: TTlsConn; buf: Pointer; len: Integer; var got: Integer): TTlsResult;
 function  TlsWrite(c: TTlsConn; buf: Pointer; len: Integer; var put: Integer): TTlsResult;
 procedure TlsClose(c: TTlsConn);
@@ -82,6 +91,11 @@ function TTlsBackend.Handshake(fd: Integer; role: TTlsRole; const host: string;
                                var c: TTlsConn): TTlsResult;
 begin
   c := nil;
+  Result := tlsError;
+end;
+
+function TTlsBackend.HandshakeResume(c: TTlsConn): TTlsResult;
+begin
   Result := tlsError;
 end;
 
@@ -129,6 +143,14 @@ begin
     Result := tlsError
   else
     Result := gBackend.Handshake(fd, role, host, c);
+end;
+
+function TlsHandshakeResume(c: TTlsConn): TTlsResult;
+begin
+  if gBackend = nil then
+    Result := tlsError
+  else
+    Result := gBackend.HandshakeResume(c);
 end;
 
 function TlsRead(c: TTlsConn; buf: Pointer; len: Integer; var got: Integer): TTlsResult;

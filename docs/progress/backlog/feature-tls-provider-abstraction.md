@@ -76,16 +76,26 @@ a real TLS 1.3 handshake + GET through our http stack ⇄ OpenSSL. Opt-in /
 non-hermetic (needs the openssl CLI + libssl); skips cleanly when absent, so it is
 **not** in the core lib-test gate.
 
-Scope/limits of this slice: **client, blocking path, x86-64.** `SSL_connect` is
-driven to completion inside `Handshake` (poll loop) — correct for a blocking fd;
-the async (reactor) handshake still needs the seam resume-step (below). No peer
-verification yet (`SSL_VERIFY_NONE` default) — dev/platonic only; a trust-store +
-`SSL_CTX_set_verify` are required before hostile-network use.
+## Slice 4 landed — async TLS handshake (2026-06-25)
 
-**Next slices:** (a) async handshake — add a non-blocking resume step to the seam
-so `HttpGetAsync` works over OpenSSL too; (b) server side (`SSL_accept`) → the
-4-cell client×server interop matrix; (c) cert verification + trust store;
-(d) the native backend ([[feature-tls13-from-scratch]], deferred).
+The seam handshake is now **non-blocking + resumable**: `Handshake` does one step
+(allocates the conn, attempts `SSL_connect`) and returns `tlsOk` / `tlsWantRead` /
+`tlsWantWrite` / `tlsError`; a new `TTlsBackend.HandshakeResume(c)` (neutral
+`TlsHandshakeResume`) does each subsequent step after the fd is ready. `http`'s
+`HttpTlsConnect` drives the loop — `HttpIoWait` between steps maps to `PalPoll`
+(blocking) or `WaitReadable`/`WaitWritable` (async coroutine yield). A blocking fd
+returns `tlsOk` on the first step (loop never runs), so the blocking path is
+unchanged; a non-blocking reactor fd yields and resumes.
+
+OpenSSL backend updated accordingly (no internal poll-loop in `Handshake`;
+`SslStepConnect` shared by `Handshake`/`HandshakeResume`). **Verified:** the
+`tls-openssl-devtest` now runs **both** a blocking `HttpGet` and an async
+`HttpGetAsync` (coroutine, `Spawn`/`RunUntilDone`) over real `openssl s_server` —
+both return 200 + decrypted body. So HTTPS now composes with the reactor.
+
+**Next slices:** (a) server side (`SSL_accept`) → the 4-cell client×server interop
+matrix; (b) cert verification + trust store; (c) the native backend
+([[feature-tls13-from-scratch]], deferred).
 
 ## Decision (2026-06-24)
 

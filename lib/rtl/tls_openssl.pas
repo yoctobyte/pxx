@@ -31,7 +31,7 @@ procedure OpenSslTlsUnregister;
 
 implementation
 
-uses dynlibs, platform;
+uses dynlibs;
 
 const
   SSL_ERROR_WANT_READ  = 2;
@@ -63,6 +63,7 @@ type
     function  Name: string; override;
     function  Handshake(fd: Integer; role: TTlsRole; const host: string;
                         var c: TTlsConn): TTlsResult; override;
+    function  HandshakeResume(c: TTlsConn): TTlsResult; override;
     function  Read (c: TTlsConn; buf: Pointer; len: Integer; var got: Integer): TTlsResult; override;
     function  Write(c: TTlsConn; buf: Pointer; len: Integer; var put: Integer): TTlsResult; override;
     procedure Close(c: TTlsConn); override;
@@ -109,9 +110,22 @@ end;
 function TOpenSslTls.Name: string;
 begin Result := 'openssl'; end;
 
+{ One SSL_connect step, mapped to a seam result. tlsOk = handshake complete;
+  want = needs the fd ready then another step; tlsError = fatal. }
+function SslStepConnect(p: PSslConn): TTlsResult;
+var ret, err: Integer;
+begin
+  ret := pConnect(p^.ssl);
+  if ret = 1 then begin Result := tlsOk; Exit; end;
+  err := pGetErr(p^.ssl, ret);
+  if err = SSL_ERROR_WANT_READ then Result := tlsWantRead
+  else if err = SSL_ERROR_WANT_WRITE then Result := tlsWantWrite
+  else Result := tlsError;
+end;
+
 function TOpenSslTls.Handshake(fd: Integer; role: TTlsRole; const host: string;
                                var c: TTlsConn): TTlsResult;
-var p: PSslConn; ssl: Pointer; ret, err: Integer;
+var p: PSslConn; ssl: Pointer;
 begin
   c := nil;
   Result := tlsError;
@@ -122,23 +136,24 @@ begin
   if host <> '' then
     pCtrl(ssl, SSL_CTRL_SET_TLSEXT_HOSTNAME, TLSEXT_NAMETYPE_host_name, Pointer(PChar(host)));
 
-  { drive SSL_connect to completion (one call on a blocking fd; poll-loop covers
-    a non-blocking fd too, blocking the thread — fine for the blocking path) }
-  repeat
-    ret := pConnect(ssl);
-    if ret = 1 then
-    begin
-      GetMem(p, SizeOf(TSslConn));
-      p^.ssl := ssl; p^.fd := fd;
-      c := p;
-      Result := tlsOk;
-      Exit;
-    end;
-    err := pGetErr(ssl, ret);
-    if err = SSL_ERROR_WANT_READ then PalPoll(fd, PAL_POLL_IN, -1)
-    else if err = SSL_ERROR_WANT_WRITE then PalPoll(fd, PAL_POLL_OUT, -1)
-    else begin pSslFree(ssl); Exit; end;
-  until False;
+  GetMem(p, SizeOf(TSslConn));
+  p^.ssl := ssl; p^.fd := fd;
+
+  { NON-blocking: one step. On a blocking fd this returns tlsOk immediately; on a
+    non-blocking fd it may return want, and the caller drives HandshakeResume. }
+  Result := SslStepConnect(p);
+  if Result = tlsError then
+  begin
+    pSslFree(ssl); FreeMem(p); c := nil;
+  end
+  else
+    c := p;                 { tlsOk or want — connection lives }
+end;
+
+function TOpenSslTls.HandshakeResume(c: TTlsConn): TTlsResult;
+begin
+  if c = nil then Result := tlsError
+  else Result := SslStepConnect(PSslConn(c));
 end;
 
 function TOpenSslTls.Read(c: TTlsConn; buf: Pointer; len: Integer; var got: Integer): TTlsResult;
