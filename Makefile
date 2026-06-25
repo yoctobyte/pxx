@@ -2412,6 +2412,9 @@ lib-test: pxx-stable-check
 	$(PXX_STABLE) -Fulib/rtl test/lib_tls13_record.pas /tmp/lib_tls13_record
 	test "$$(/tmp/lib_tls13_record | grep -c '=ok')" = "6"
 	test "$$(/tmp/lib_tls13_record | grep -c 'FAIL')" = "0"
+	$(PXX_STABLE) -Fulib/rtl test/lib_tls13_hs.pas /tmp/lib_tls13_hs
+	test "$$(/tmp/lib_tls13_hs | grep -c '=ok')" = "7"
+	test "$$(/tmp/lib_tls13_hs | grep -c 'FAIL')" = "0"
 	$(PXX_STABLE) -Fulib/rtl test/lib_chacha20poly1305.pas /tmp/lib_chacha
 	test "$$(/tmp/lib_chacha | grep -c '=ok')" = "7"
 	test "$$(/tmp/lib_chacha | grep -c 'FAIL')" = "0"
@@ -2464,7 +2467,7 @@ lib-test: pxx-stable-check
 	$(PXX_STABLE) -Fulib/rtl test/lib_paths.pas /tmp/lib_paths
 	test "$$(/tmp/lib_paths | grep -c '=ok')" = "14"
 	test "$$(/tmp/lib_paths | grep -c 'FAIL')" = "0"
-	@echo "lib-test ok (sudoku exact + collections + math + sysutils + random + bitset + platform + directory + bignum + json + calc + sat + mathf + vm + mandelbrot + raytracer + chess-perft + lisp + zlib + png smoke + ansiterm + ansirender + process + process-multi + dynlibs + unixshims + strpchar + sockets + sha256-hmac-hkdf + sha512 + tls13-keysched + tls13-record + chacha20-poly1305 + x25519 + aes-gcm + rsa-verify + ed25519-verify + ecdsa-p256-verify + x509 + tls-seam + http + http-async + http-redirect + http-keepalive + http-pool + https-mock-seam + dns-async + classes + strutil + streams + format + paths) against stable v$$(cat $(STABLE_DEFAULT_DIR)/VERSION 2>/dev/null || echo '?')"
+	@echo "lib-test ok (sudoku exact + collections + math + sysutils + random + bitset + platform + directory + bignum + json + calc + sat + mathf + vm + mandelbrot + raytracer + chess-perft + lisp + zlib + png smoke + ansiterm + ansirender + process + process-multi + dynlibs + unixshims + strpchar + sockets + sha256-hmac-hkdf + sha512 + tls13-keysched + tls13-record + tls13-hs + chacha20-poly1305 + x25519 + aes-gcm + rsa-verify + ed25519-verify + ecdsa-p256-verify + x509 + tls-seam + http + http-async + http-redirect + http-keepalive + http-pool + https-mock-seam + dns-async + classes + strutil + streams + format + paths) against stable v$$(cat $(STABLE_DEFAULT_DIR)/VERSION 2>/dev/null || echo '?')"
 
 # Full Track-B library suite, distinct from compiler `make test`.
 library-suite-green: pxx-stable-check

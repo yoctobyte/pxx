@@ -168,9 +168,15 @@ HTTP client); server-side later if wanted.
   HKDF-Expand-Label, Derive-Secret, the Early/Handshake/Master secret chain, and
   traffic key/iv derivation (RFC 8446 §7.1), verified byte-for-byte against the
   RFC 8448 worked example (`test/lib_tls13_keys`, 5 checks, gated `tls13-keysched`).
-  Remaining M6: record layer (framing + per-record nonce + AEAD), ClientHello /
-  ServerHello, transcript hash, the handshake state machine, then a real
-  `https://` GET.
+  **Record layer done** (`lib/rtl/tls13_record.pas`, `tls13-record`): TLSCiphertext
+  framing + per-record nonce (`iv XOR seq`) + AEAD wrap/unwrap over both
+  ciphersuites, roundtrip + tamper-reject. **Handshake message layer done**
+  (`lib/rtl/tls13_hs.pas`, `tls13-hs`): ClientHello builder (X25519 key_share,
+  the two SHA-256 suites, supported_versions/groups/sig_algs/SNI), ServerHello
+  parser (cipher + server key_share), HS framing + transcript hash. **Remaining
+  M6:** the handshake state machine that drives these against a live server
+  (decrypt the server flight, verify CertificateVerify + Finished, send client
+  Finished, switch to app keys) → a real `https://` GET.
 - M6 TLS 1.3 handshake state machine → a real `https://` GET (Pascal record
   layer); verify against a public host.
 - M7 (optional) kTLS offload for app-data throughput.
