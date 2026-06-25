@@ -152,7 +152,14 @@ HTTP client); server-side later if wanted.
   `lib_ecdsa_p256` 2; gated `rsa-verify`/`ed25519-verify`/`ecdsa-p256-verify`).
   Surfaced Track A bugs [[bug-not-on-int64-is-boolean]],
   [[bug-aggregate-member-array-as-var-param]].
-- M5 ASN.1/X.509 parse + chain validation + trust store.
+- M5 ASN.1/X.509 parse + chain validation + trust store. **In progress
+  (2026-06-25):** `lib/rtl/x509.pas` — a DER (TLV) parser + X.509 field extraction
+  (tbsCertificate, signatureAlgorithm, signatureValue, SubjectPublicKeyInfo) +
+  `X509VerifySig` wiring the cert signature to the M4 verifiers
+  (RSA/ECDSA-P256/Ed25519 by OID). `test/lib_x509`: three self-signed certs
+  (one per algorithm) parse and their self-signatures verify (5 checks, gated
+  `x509`). **Remaining:** chain building (issuer-key links to a root), validity
+  dates, the system trust store (`/etc/ssl/certs`), and hostname / SAN matching.
 - M6 TLS 1.3 handshake state machine → a real `https://` GET (Pascal record
   layer); verify against a public host.
 - M7 (optional) kTLS offload for app-data throughput.
