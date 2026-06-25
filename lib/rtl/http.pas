@@ -105,6 +105,13 @@ function HttpUrlDecode(const s: AnsiString): AnsiString;
   application/x-www-form-urlencoded bodies. }
 function HttpQueryAdd(const q, name, value: AnsiString): AnsiString;
 
+{ Read back from an `a=1&b=2` query/form string: HttpQueryGet returns the first
+  value for name (percent-decoded, '' if absent or empty); HttpQueryHas reports
+  presence (distinguishes a present-but-empty field from an absent one). Names are
+  matched after percent-decoding. }
+function HttpQueryGet(const query, name: AnsiString): AnsiString;
+function HttpQueryHas(const query, name: AnsiString): Boolean;
+
 { --- multipart/form-data builder (pure; for file/field uploads) ---
   Usage: pick a boundary, concatenate one Part per field/file, finish with
   HttpMultipartEnd, and POST with HttpMultipartContentType in extraHeaders:
@@ -459,6 +466,50 @@ function HttpQueryAdd(const q, name, value: AnsiString): AnsiString;
 begin
   Result := HttpUrlEncode(name) + '=' + HttpUrlEncode(value);
   if q <> '' then Result := q + '&' + Result;
+end;
+
+function HttpQueryGet(const query, name: AnsiString): AnsiString;
+var i, start, n, eq: Integer; seg, segName: AnsiString;
+begin
+  Result := '';
+  n := Length(query); start := 1;
+  while start <= n + 1 do
+  begin
+    i := start;
+    while (i <= n) and (query[i] <> '&') do Inc(i);
+    seg := Copy(query, start, i - start);
+    if seg <> '' then
+    begin
+      eq := Pos('=', seg);
+      if eq > 0 then segName := Copy(seg, 1, eq - 1) else segName := seg;
+      if HttpUrlDecode(segName) = name then
+      begin
+        if eq > 0 then Result := HttpUrlDecode(Copy(seg, eq + 1, Length(seg)));
+        Exit;
+      end;
+    end;
+    start := i + 1;
+  end;
+end;
+
+function HttpQueryHas(const query, name: AnsiString): Boolean;
+var i, start, n, eq: Integer; seg, segName: AnsiString;
+begin
+  Result := False;
+  n := Length(query); start := 1;
+  while start <= n + 1 do
+  begin
+    i := start;
+    while (i <= n) and (query[i] <> '&') do Inc(i);
+    seg := Copy(query, start, i - start);
+    if seg <> '' then
+    begin
+      eq := Pos('=', seg);
+      if eq > 0 then segName := Copy(seg, 1, eq - 1) else segName := seg;
+      if HttpUrlDecode(segName) = name then begin Result := True; Exit; end;
+    end;
+    start := i + 1;
+  end;
 end;
 
 var gMpCounter: Integer;

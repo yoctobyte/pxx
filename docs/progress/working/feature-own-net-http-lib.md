@@ -207,6 +207,15 @@ Body), `HttpRequestHeader` (case-insensitive lookup), and `HttpBuildResponse`
 its hand-rolled request parser and hand-counted Content-Lengths (the source of an
 earlier off-by-one). `make lib-test` green.
 
+## Query/form read-back (landed 2026-06-25)
+
+`http.pas` `HttpQueryGet(query, name)` / `HttpQueryHas(query, name)` read back an
+`a=1&b=2` query or `x-www-form-urlencoded` body — percent-decoded values, names
+matched after decoding, `HttpQueryHas` distinguishing present-but-empty from
+absent. Completes the form-handling round trip with the existing `HttpQueryAdd`
+builder. `lib_http` +8 (`query-get`/`-get-1st`/`-get-miss`/`-decname`/`-has`/
+`-has-empty`/`-has-miss`/`-roundtrip`). `make lib-test` green.
+
 ## Roadmap (next slices)
 
 1. ~~Concurrency-safe pool + blocking `HttpGetPooled` + eviction/idle-timeout~~

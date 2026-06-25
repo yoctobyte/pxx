@@ -189,4 +189,16 @@ begin
   SayBool('build-resp-empty',
     HttpBuildResponse(404, 'Not Found', '', '') =
     'HTTP/1.1 404 Not Found'#13#10'Content-Length: 0'#13#10#13#10);
+
+  { Query/form read-back (percent-decoded, present-empty vs absent). }
+  SayBool('query-get',     HttpQueryGet('a=1&b=2%203&c=4', 'b') = '2 3');
+  SayBool('query-get-1st', HttpQueryGet('x=1&x=2', 'x') = '1');
+  SayBool('query-get-miss', HttpQueryGet('a=1', 'z') = '');
+  SayBool('query-decname',  HttpQueryGet('a%20b=ok', 'a b') = 'ok');
+  SayBool('query-has',      HttpQueryHas('a=1&flag&b=2', 'flag'));
+  SayBool('query-has-empty', HttpQueryHas('a=', 'a') and (HttpQueryGet('a=', 'a') = ''));
+  SayBool('query-has-miss', not HttpQueryHas('a=1', 'z'));
+  { round-trips the builder. }
+  SayBool('query-roundtrip',
+    HttpQueryGet(HttpQueryAdd(HttpQueryAdd('', 'n', 'a&b'), 'm', 'x y'), 'n') = 'a&b');
 end.

@@ -2447,7 +2447,7 @@ lib-test: pxx-stable-check
 	test "$$(/tmp/lib_tls | grep -c '=ok')" = "14"
 	test "$$(/tmp/lib_tls | grep -c 'FAIL')" = "0"
 	$(PXX_STABLE) -Fulib/rtl/platform/posix test/lib_http.pas /tmp/lib_http
-	test "$$(/tmp/lib_http | grep -c '=ok')" = "75"
+	test "$$(/tmp/lib_http | grep -c '=ok')" = "83"
 	test "$$(/tmp/lib_http | grep -c 'FAIL')" = "0"
 	$(PXX_STABLE) -Fulib/rtl/platform/posix test/lib_http_async.pas /tmp/lib_http_async
 	test "$$(/tmp/lib_http_async)" = "$$(printf 'server-done=ok\nstatus=ok\nreason=ok\nbody=ok')"
