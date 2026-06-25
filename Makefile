@@ -663,6 +663,8 @@ test-core: $(COMPILER)
 	test "$$(/tmp/test_dynlib_stub26)" = "no loader"
 	./$(COMPILER) -dPXX_DYNLIB_LIBC -Fulib/rtl test/test_dynlib.pas /tmp/test_dynlib_libc26
 	test "$$(/tmp/test_dynlib_libc26)" = "$$(printf 'strlen: 5\nunloaded: TRUE')"
+	./$(COMPILER) test/test_cdecl_indirect.pas /tmp/test_cdecl_indirect26
+	test "$$(/tmp/test_cdecl_indirect26)" = "$$(printf '4.0\n1024.0\n12.0')"
 	./$(COMPILER) test/test_auto_var.pas /tmp/test_auto_var26
 	test "$$(/tmp/test_auto_var26)" = "$$(printf 'Global tests:\ng_int = 456\ng_str = hello global\ng_bool is False\ng_dbl = 3.14\nLocal tests:\nl_int = 123\nl_str = hello local\nl_bool is True\nl_rec = 10, 20\np_rec^ = 10, 20\nall auto variable tests done!')"
 	./$(COMPILER) test/test_sqlite_crud_autotyped.pas /tmp/test_sqlite_crud_autotyped26

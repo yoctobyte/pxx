@@ -3193,6 +3193,7 @@ begin
   ProcOverloadDirective[ProcCount] := False;
   ProcLibrary[ProcCount]      := -1;
   ProcExtName[ProcCount]      := -1;
+  ProcCdecl[ProcCount]        := False;
   ProcUnitIdx[ProcCount]      := CurrentUnitIdx;
   ProcRetRecId[ProcCount]     := REC_NONE;
   ProcAggregateDestSym[ProcCount] := -1;

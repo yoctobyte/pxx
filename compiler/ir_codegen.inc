@@ -1547,33 +1547,103 @@ begin
 
     IR_CALL_IND:
       begin
-        { Indirect call through a proc-typed value. Internal Pascal convention
-          (all args in integer registers, <=6). Evaluate the callee first and
-          keep it deepest on the stack so arg evaluation cannot clobber it; pop
-          args into the ABI registers, then pop the callee into r11 and call. }
         cpi := IRIVal[node];                       { signature proc index }
         nArgs := Procs[cpi].ParamCount + IRC[node]; { + injected Self for method ptr }
-        if nArgs > 6 then
-          Error('indirect call with more than 6 parameters is not supported');
-        IREmitNode(IRA[node]); EmitB($50);         { push rax = callee addr }
-        argNode := IRB[node];
-        while argNode <> -1 do
+        if (cpi >= 0) and ProcCdecl[cpi] then
         begin
-          IREmitNode(IRA[argNode]);
-          EmitB($50);                              { push rax }
-          argNode := IRB[argNode];
-        end;
-        for i := nArgs - 1 downto 0 do
-          case i of
-            0: EmitB($5F);                          { pop rdi }
-            1: EmitB($5E);                          { pop rsi }
-            2: EmitB($5A);                          { pop rdx }
-            3: EmitB($59);                          { pop rcx }
-            4: begin EmitB($41); EmitB($58); end;   { pop r8 }
-            5: begin EmitB($41); EmitB($59); end;   { pop r9 }
+          { System V (cdecl) indirect call through a `cdecl` proc-type value:
+            integer/pointer args -> rdi,rsi,rdx,rcx,r8,r9; floating args ->
+            xmm0..xmm7 (classes counted independently); callee through r11; the
+            stack 16-byte-aligned at the call (libc SSE code requires it). Stack
+            spill (>6 int / >8 float), by-value structs and varargs are not
+            modelled yet. Lets a dlsym'd C function with float args call right. }
+          intIdx := 0; sseIdx := 0;
+          argNode := IRB[node]; i := 0;
+          while argNode <> -1 do
+          begin
+            argNodeArr[i] := IRA[argNode];
+            { Self (i < IRC, injected for a method ptr) is a pointer -> int class. }
+            if (i >= IRC[node]) and TypeIsFloat(Procs[cpi].Params[i - IRC[node]].TypeKind) then
+            begin argIsSse[i] := True; Inc(sseIdx); end
+            else begin argIsSse[i] := False; Inc(intIdx); end;
+            argNode := IRB[argNode]; Inc(i);
           end;
-        EmitB($41); EmitB($5B);                     { pop r11 = callee }
-        EmitB($41); EmitB($FF); EmitB($D3);         { call r11 }
+          if intIdx > 6 then Error('cdecl indirect call: more than 6 integer args not supported yet');
+          if sseIdx > 8 then Error('cdecl indirect call: more than 8 float args not supported yet');
+          IREmitNode(IRA[node]); EmitB($50);       { push callee (deepest) }
+          for i := nArgs - 1 downto 0 do
+          begin
+            IREmitNode(argNodeArr[i]); EmitB($50); { push arg }
+          end;
+          intIdx := 0; sseIdx := 0;
+          for i := 0 to nArgs - 1 do
+            if argIsSse[i] then
+            begin
+              EmitB($58);                          { pop rax }
+              EmitB($66); EmitB($48); EmitB($0F); EmitB($6E); EmitB($C0 + sseIdx * 8); { movq xmm[n], rax }
+              if (i >= IRC[node]) and (Procs[cpi].Params[i - IRC[node]].TypeKind = tySingle) then
+                begin EmitB($F2); EmitB($0F); EmitB($5A); EmitB($C0 + sseIdx * 9); end; { cvtsd2ss xmm,xmm }
+              Inc(sseIdx);
+            end
+            else
+            begin
+              case intIdx of
+                0: EmitB($5F);                      { pop rdi }
+                1: EmitB($5E);                      { pop rsi }
+                2: EmitB($5A);                      { pop rdx }
+                3: EmitB($59);                      { pop rcx }
+                4: begin EmitB($41); EmitB($58); end; { pop r8 }
+                5: begin EmitB($41); EmitB($59); end; { pop r9 }
+              end;
+              Inc(intIdx);
+            end;
+          { rsp now points at the callee. Align and call through it; the saved rsp
+            (P, where [P]=callee) lives in the slot pushed below. }
+          EmitB($49); EmitB($89); EmitB($E3);       { mov r11, rsp  (r11 = P) }
+          EmitB($48); EmitB($83); EmitB($E4); EmitB($F0); { and rsp, -16 }
+          EmitB($41); EmitB($53);                   { push r11  ([rsp]=P) }
+          EmitB($48); EmitB($83); EmitB($EC); EmitB($08); { sub rsp, 8  (16-align) }
+          EmitB($B8); EmitI32(sseIdx);              { mov eax, #vector-regs (vararg ABI) }
+          EmitB($4C); EmitB($8B); EmitB($5C); EmitB($24); EmitB($08); { mov r11, [rsp+8] = P }
+          EmitB($4D); EmitB($8B); EmitB($1B);       { mov r11, [r11] = callee }
+          EmitB($41); EmitB($FF); EmitB($D3);       { call r11 }
+          EmitB($48); EmitB($8B); EmitB($64); EmitB($24); EmitB($08); { mov rsp, [rsp+8] = P }
+          EmitB($48); EmitB($83); EmitB($C4); EmitB($08); { add rsp, 8  (pop callee) }
+          if TypeIsFloat(Procs[cpi].RetType) then
+          begin
+            if Procs[cpi].RetType = tySingle then
+              begin EmitB($F3); EmitB($0F); EmitB($5A); EmitB($C0); end; { cvtss2sd xmm0,xmm0 }
+            EmitB($66); EmitB($48); EmitB($0F); EmitB($7E); EmitB($C0); { movq rax, xmm0 }
+          end;
+        end
+        else
+        begin
+          { Internal Pascal convention (all args in integer registers, <=6).
+            Evaluate the callee first and keep it deepest on the stack so arg
+            evaluation cannot clobber it; pop args into the ABI registers, then
+            pop the callee into r11 and call. }
+          if nArgs > 6 then
+            Error('indirect call with more than 6 parameters is not supported');
+          IREmitNode(IRA[node]); EmitB($50);         { push rax = callee addr }
+          argNode := IRB[node];
+          while argNode <> -1 do
+          begin
+            IREmitNode(IRA[argNode]);
+            EmitB($50);                              { push rax }
+            argNode := IRB[argNode];
+          end;
+          for i := nArgs - 1 downto 0 do
+            case i of
+              0: EmitB($5F);                          { pop rdi }
+              1: EmitB($5E);                          { pop rsi }
+              2: EmitB($5A);                          { pop rdx }
+              3: EmitB($59);                          { pop rcx }
+              4: begin EmitB($41); EmitB($58); end;   { pop r8 }
+              5: begin EmitB($41); EmitB($59); end;   { pop r9 }
+            end;
+          EmitB($41); EmitB($5B);                     { pop r11 = callee }
+          EmitB($41); EmitB($FF); EmitB($D3);         { call r11 }
+        end;
       end;
 
     IR_LOAD_SYM:

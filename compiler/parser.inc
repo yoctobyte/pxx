@@ -10505,6 +10505,18 @@ begin
         end
         else
           RegisterProcTypeAlias(tnOff, tnLen, mpi);
+        { Optional `; cdecl` calling-convention directive on the procedural type
+          (`T = function(...): R; cdecl;`). Marks the signature C-ABI so an
+          indirect call through a value of this type marshals System V (needed for
+          dlsym'd C functions). Other directives (stdcall etc.) are not modelled
+          yet — only cdecl, which on x86-64 is the System V path the externs use. }
+        if (CurTok.Kind = tkSemicolon) and (TokPos < TokCount) and
+           (Tokens[TokPos].Kind = tkIdent) and CaseEqual(GetTokenStr(TokPos), 'cdecl') then
+        begin
+          Next;   { consume ';' }
+          Next;   { consume 'cdecl' }
+          ProcCdecl[mpi] := True;
+        end;
       end
       else if (CurTok.Kind = tkInteger) or (CurTok.Kind = tkMinus) or (CurTok.Kind = tkString) then
       begin
