@@ -498,23 +498,25 @@ begin
 end;
 
 function PadLeft(const s: AnsiString; len: Integer; ch: Char): AnsiString;
-var r: AnsiString; i, n: Integer;
+var n, pad: Integer;
 begin
   n := Length(s);
   if n >= len then begin Result := s; Exit; end;
-  r := '';
-  for i := 1 to len - n do r := r + ch;
-  Result := r + s;
+  pad := len - n;
+  SetLength(Result, len);
+  FillChar(Result[1], pad, Ord(ch));         { pad chars, then the original }
+  if n > 0 then Move(s[1], Result[pad + 1], n);
 end;
 
 function PadRight(const s: AnsiString; len: Integer; ch: Char): AnsiString;
-var r: AnsiString; i, n: Integer;
+var n, pad: Integer;
 begin
   n := Length(s);
   if n >= len then begin Result := s; Exit; end;
-  r := s;
-  for i := 1 to len - n do r := r + ch;
-  Result := r;
+  pad := len - n;
+  SetLength(Result, len);
+  if n > 0 then Move(s[1], Result[1], n);    { original, then pad chars }
+  FillChar(Result[n + 1], pad, Ord(ch));
 end;
 
 procedure Delete(var s: AnsiString; index, count: Integer);
