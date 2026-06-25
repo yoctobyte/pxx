@@ -34,7 +34,6 @@ _none_
 | --- | --- | --- | --- | --- |
 | bug-bare-read-write-in-method-hits-intrinsic | A | bug | Bare `Read`/`Write` inside a method resolves to the console intrinsic, not the method | — |
 | bug-managed-length-via-pointer-deref | A | bug | bug: managed Length(ps^) / Length(rec.pf^) returns garbage (all targets) | — |
-| bug-proc-typed-call-const-record-arg | A | bug | bug: indirect call through a proc-typed value with a `const record` arg miscompiles | — |
 | bug-virtual-keyword-name-result | A | bug | Bare own-name result of a VIRTUAL intrinsic-named method miscompiles | — |
 | chore-inc-to-units | A | chore | `.inc` → real `.pas` units refactor | — |
 | chore-runtime-emission-size | A | chore | Finer runtime-support emission (code size) | — |
@@ -58,6 +57,7 @@ _none_
 | feature-esp-peripheral-callback-api | B | feature | ESP32 peripheral callback API (timer / GPIO / ADC) — the user-facing "interrupt" | — |
 | feature-flexcolumn-directive | A | feature | `flexcolumn` calling-convention directive | chore-inc-to-units |
 | feature-ilja-tui | B | feature | Ilja — TUI (ANSI) face | feature-eliah-m1-designer |
+| feature-indexed-proc-value-call | A | feature | Indexed / element proc-value call: `arr[i](args)` | — |
 | feature-inline-asm-depth | A | feature | Inline assembler depth | — |
 | feature-inline-asm-multi-arch | A | feature | Inline assembly support for other architectures (i386, aarch64, arm32) | — |
 | feature-inline-routines | A | feature | Inline routine expansion (`inline;`) | — |
@@ -119,7 +119,7 @@ _none_
 | feature-mimic-fpc | B | feature | `mimic FPC` compatibility mode | — |
 | feature-string-model-tyfixedstring | B | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (272)
+## done (273)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -198,6 +198,7 @@ _none_
 | bug-procedure-typed-procvalue | A | bug | `@Proc` / proc-value of a `procedure`-typed routine rejected ("unexpected token") | — |
 | bug-proc-local-managed-record-uninit | A | bug | Proc-local managed record not zero-initialised on entry → first-call miscompute | — |
 | bug-procptr-record-field-call | A | bug | Calling a procedural-pointer record/class field (`v.Run(args)`) | — |
+| bug-proc-typed-call-const-record-arg | A | bug | bug: indirect call through a proc-typed value with a `const record` arg miscompiles | — |
 | bug-r-directive-toggle-treated-as-resource | A | bug | `{$R-}` / `{$R+}` range-check toggle misread as a resource directive | — |
 | bug-read-preserves-line-remainder | A | bug | `read` consumes a whole line like `readln` | — |
 | bug-read-write-reserved-as-method-names | A | bug | `Read` / `Write` can't be used as method names (reserved) | — |
@@ -408,7 +409,6 @@ _none_
 
 - [A] bug-bare-read-write-in-method-hits-intrinsic
 - [A] bug-managed-length-via-pointer-deref
-- [A] bug-proc-typed-call-const-record-arg
 - [A] bug-virtual-keyword-name-result
 - [A] chore-inc-to-units
 - [A] chore-runtime-emission-size
@@ -431,6 +431,7 @@ _none_
 - [A] feature-esp32-idf-xtensa
 - [B] feature-esp-peripheral-callback-api
 - [B] feature-ilja-tui
+- [A] feature-indexed-proc-value-call
 - [A] feature-inline-asm-depth
 - [A] feature-inline-asm-multi-arch
 - [A] feature-inline-routines

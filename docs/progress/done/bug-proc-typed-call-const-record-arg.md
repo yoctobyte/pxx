@@ -85,3 +85,17 @@ independent of the codegen bug above.
 - Regression test (proc-typed table of `function(const rec): Integer`).
 - Unblocks [[feature-demo-chess]] slice 2 (search + eval): `Evaluate`'s
   proc-typed term table yields correct scores (startpos ≈ 0, not ±INF).
+
+## Resolution (2026-06-25, Track A)
+
+Scalar form FIXED (67c5536): the proc-TYPE mini-parser consumed `const` but never
+marked the param by-reference, while a real routine forces const record/variant
+params by-ref (ParseSubroutine ~11403). The signature's IsRef therefore disagreed
+with the callee → the indirect call passed a value where the callee expected an
+address → segfault. Applied the same const-record/variant -> by-ref rule in the
+proc-type parser; signature and callee now agree. Test:
+test/test_proc_const_record.pas (42 / 42). Self-host byte-identical; make test green.
+
+The ARRAY-ELEMENT symptom in this ticket was a DIFFERENT root cause — indexed
+proc-value calls (`arr[i](args)`) are not parsed at all (it errors even with an
+int arg, no const record involved). Split to [[feature-indexed-proc-value-call]].
