@@ -156,11 +156,15 @@ begin
       Inc(DynamicNeededCount);
     end;
   end;
-  { Symbol names (one per imported symbol) }
+  { Symbol names (one per imported symbol). An `external 'lib' name 'sym'` clause
+    overrides the emitted link symbol (ProcExtName); else the Pascal name. }
   for i := 0 to ExternalCount-1 do
   begin
     nameOff[i] := DataLen - DynamicStrOff;
-    DataPutZ(Procs[ExternalProc[i]].Name);
+    if ProcExtName[ExternalProc[i]] >= 0 then
+      DataPutZ(Strs[ProcExtName[ExternalProc[i]]].Text)
+    else
+      DataPutZ(Procs[ExternalProc[i]].Name);
   end;
   DynamicStrSize := DataLen - DynamicStrOff;
   while (DataLen mod 8) <> 0 do DataPutB(0);
@@ -267,7 +271,10 @@ begin
   for i := 0 to ExternalCount-1 do
   begin
     nameOff[i] := DataLen - DynamicStrOff;
-    DataPutZ(Procs[ExternalProc[i]].Name);
+    if ProcExtName[ExternalProc[i]] >= 0 then
+      DataPutZ(Strs[ProcExtName[ExternalProc[i]]].Text)
+    else
+      DataPutZ(Procs[ExternalProc[i]].Name);
   end;
   DynamicStrSize := DataLen - DynamicStrOff;
   while (DataLen mod 4) <> 0 do DataPutB(0);

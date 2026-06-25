@@ -2821,7 +2821,7 @@ function MatchCallDelphiProcAddr(const name: AnsiString; qUnit, nArgs, argsHead:
   const argTypes: array of TTypeKind): Integer;
 var i, currArg, exprNode, pi, sidx, node, match0: Integer;
     procCand: array[0..15] of Boolean; retryTypes: array[0..15] of TTypeKind;
-    hasCand, needAddr, pcharRetry: Boolean;
+    hasCand, needAddr, pcharRetry, hasPChar: Boolean;
 begin
   hasCand := False;
   if DelphiMode then
@@ -2838,7 +2838,17 @@ begin
     end;
   end;
 
-  MatchQuiet := hasCand;   { the call-first probe must not print mismatch diag }
+  { A PChar argument may need the PChar->string coercion retry below, whose
+    initial match legitimately fails — quiet the mismatch diagnostic for it. }
+  hasPChar := False;
+  currArg := argsHead;
+  for i := 0 to nArgs-1 do
+  begin
+    if IsNodePChar(ASTLeft[currArg]) then hasPChar := True;
+    currArg := ASTRight[currArg];
+  end;
+
+  MatchQuiet := hasCand or hasPChar;   { the call-first / pchar probe must not print mismatch diag }
   if qUnit >= 0 then match0 := MatchProcCallInUnit(name, qUnit, nArgs, argTypes)
   else match0 := MatchProcCall(name, nArgs, argTypes);
   MatchQuiet := False;
@@ -11208,6 +11218,7 @@ var
   pw, pnWords, wlo, whi: Integer;   { ARM32 word-based param spill (int64 = 2 words) }
   methName: AnsiString;
   extLib: AnsiString;
+  extSym: AnsiString;
   liftIdx, lcb: Integer;   { lambda-lift descriptor index / captured-param base }
 begin
   isClassKeyword := False;
@@ -11535,11 +11546,16 @@ begin
   begin
     Next;
     extLib := '';
+    extSym := '';
     if CurTok.Kind = tkString then begin extLib := CurTok.SVal; Next; end;
     if (CurTok.Kind = tkIdent) and CaseEqual(CurTok.SVal, 'name') then
     begin
       Next;
-      if CurTok.Kind = tkString then begin name := CurTok.SVal; Next; end;
+      { `name 'sym'` sets the LINK symbol, NOT the Pascal routine identifier — the
+        routine stays callable by its declared name (e.g. `c_dlopen ... name
+        'dlopen'`). Previously this overwrote `name`, registering the proc under
+        the link symbol and leaving the Pascal name undefined. }
+      if CurTok.Kind = tkString then begin extSym := CurTok.SVal; Next; end;
     end;
     Eat(tkSemicolon);
     procIdx := FindProcOverload(name, nparams, ptypes, parr, pbyref);
@@ -11554,6 +11570,7 @@ begin
     Procs[procIdx].BodyAddr := -1;
     ProcExternal[procIdx] := True;
     ProcLibrary[procIdx] := InternStr(extLib);
+    if extSym <> '' then ProcExtName[procIdx] := InternStr(extSym);
     Exit;
   end;
 

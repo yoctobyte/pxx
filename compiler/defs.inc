@@ -787,6 +787,7 @@ var
   ProcExternal : array[0..MAX_PROCS-1] of Boolean;
   ProcCaseSensitive : array[0..MAX_PROCS-1] of Boolean; { match this proc name case-sensitively (C imports, or Pascal in case-sensitive mode) }
   ProcLibrary  : array[0..MAX_PROCS-1] of Integer; { Strs[] entry for DT_NEEDED name }
+  ProcExtName  : array[0..MAX_PROCS-1] of Integer; { Strs[] link symbol from `external 'lib' name 'sym'`; -1 = use the Pascal routine name }
   ProcUnitIdx : array[0..MAX_PROCS-1] of Integer; { Strs[] unit name, or -1 for main }
   ProcRetRecId : array[0..MAX_PROCS-1] of Integer; { record id for tyRecord results }
   ProcAggregateDestSym : array[0..MAX_PROCS-1] of Integer; { hidden caller-result pointer local, or -1 }

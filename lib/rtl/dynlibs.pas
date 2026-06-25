@@ -1,17 +1,21 @@
 unit dynlibs;
-{ FPC-compatible `dynlibs` surface — HONEST STUB (feature-synapse-compile-check).
+{ FPC-compatible `dynlibs` surface.
 
-  libc-free POSIX has no runtime loader, so this unit cannot actually load a
-  shared object: LoadLibrary returns NilHandle, GetProcedureAddress returns nil.
-  That is the correct answer here, not a placeholder for a compiler bug — see
-  lib/rtl/platform.pas (PalHasDynlib) and the recon notes.
+  Two modes, chosen at compile time:
 
-  It exists so units that `uses dynlibs` (Synapse's SynaFpc, hence the whole
-  Synapse leaf set) compile, and so the no-dynamic-lib path works: callers that
-  treat a nil handle as "optional library unavailable" (e.g. SSL/TLS in Synapse)
-  degrade correctly. The real loader is a separate, opt-in feature:
-  feature-real-dynlib-loader (PalDlOpen/Sym/Close + a link-libc-vs-ELF-loader
-  decision). Do NOT fake GetProcedureAddress until that lands. }
+  * Default (syscall-only, libc-free): there is no runtime loader, so this is an
+    HONEST STUB — LoadLibrary returns NilHandle, GetProcedureAddress returns nil.
+    Callers that treat a nil handle as "optional library unavailable" (e.g.
+    SSL/TLS in Synapse) degrade correctly. This keeps the core libc-free.
+
+  * Opt-in real loader (`-dPXX_DYNLIB_LIBC`): wraps libc's dlopen/dlsym/dlclose.
+    The binary then links libc.so.6 (dynamic interp + GOT), the very dependency
+    the syscall-only core avoids — so it is opt-in per project, like --mimic-fpc.
+    First real consumer: loading .so files we don't control (OpenSSL etc.).
+    Verified on x86-64; the cdecl extern + dynamic-link emission is target
+    independent, so other targets follow once tested.
+
+  See feature-real-dynlib-loader for the libc-vs-from-scratch-ELF-loader policy. }
 
 interface
 
@@ -22,30 +26,61 @@ type
 const
   NilHandle: TLibHandle = 0;
 
-{ Load a shared library by name. No loader present -> always NilHandle. }
+{ Load a shared library by name. Real loader: dlopen; stub: always NilHandle.
+  A PChar argument is accepted via the compiler's implicit PChar->string
+  conversion, so FPC code passing a PChar (e.g. Synapse SynaFpc) compiles as-is. }
 function LoadLibrary(const Name: string): TLibHandle;
-{ WORKAROUND (bug-pchar-to-string-implicit-conv): FPC converts a PChar argument
-  to the string param automatically, so its dynlibs needs no PChar overload.
-  PXX's MatchProcCall does not yet, and Synapse's SynaFpc passes a PChar — so we
-  add explicit PChar overloads here. REMOVE both once that Track A bug is fixed. }
-function LoadLibrary(Name: PChar): TLibHandle;
 
-{ Resolve a symbol in a loaded library. No loader present -> always nil. }
+{ Resolve a symbol in a loaded library. Real loader: dlsym; stub: always nil. }
 function GetProcedureAddress(Lib: TLibHandle; const ProcName: string): Pointer;
-{ WORKAROUND (bug-pchar-to-string-implicit-conv) — remove with the one above. }
-function GetProcedureAddress(Lib: TLibHandle; ProcName: PChar): Pointer;
 
-{ Unload a library. Nothing was loaded -> succeeds trivially. }
+{ Unload a library. Real loader: dlclose; stub: trivial success. }
 function UnloadLibrary(Lib: TLibHandle): Boolean;
 
 { FPC aliases kept for source compatibility. }
 function GetProcAddress(Lib: TLibHandle; const ProcName: string): Pointer;
 function FreeLibrary(Lib: TLibHandle): Boolean;
 
-{ Last loader error. No loader -> a fixed diagnostic. }
+{ Last loader error. }
 function GetLoadErrorStr: string;
 
 implementation
+
+{$ifdef PXX_DYNLIB_LIBC}
+
+const
+  RTLD_NOW = 2;   { resolve all symbols at load time (Linux/glibc) }
+
+{ dlopen/dlsym/dlclose live in libc.so.6 on modern glibc (>= 2.34; the old
+  separate libdl is now an empty stub). The compiler emits the dynamic-link
+  machinery (PT_INTERP, dynsym, GOT) for any `external '<soname>'` routine. }
+function c_dlopen(name: PChar; flag: Integer): Pointer; cdecl; external 'libc.so.6' name 'dlopen';
+function c_dlsym(handle: Pointer; symbol: PChar): Pointer; cdecl; external 'libc.so.6' name 'dlsym';
+function c_dlclose(handle: Pointer): Integer; cdecl; external 'libc.so.6' name 'dlclose';
+
+function LoadLibrary(const Name: string): TLibHandle;
+begin
+  Result := TLibHandle(c_dlopen(PChar(Name), RTLD_NOW));
+end;
+
+function GetProcedureAddress(Lib: TLibHandle; const ProcName: string): Pointer;
+begin
+  if Lib = NilHandle then Result := nil
+  else Result := c_dlsym(Pointer(Lib), PChar(ProcName));
+end;
+
+function UnloadLibrary(Lib: TLibHandle): Boolean;
+begin
+  if Lib = NilHandle then Result := True
+  else Result := c_dlclose(Pointer(Lib)) = 0;
+end;
+
+function GetLoadErrorStr: string;
+begin
+  Result := 'dynlibs: see dlerror (libc loader)';
+end;
+
+{$else}
 
 function LoadLibrary(const Name: string): TLibHandle;
 begin
@@ -54,17 +89,7 @@ begin
   Result := NilHandle;
 end;
 
-function LoadLibrary(Name: PChar): TLibHandle;
-begin
-  Result := NilHandle;
-end;
-
 function GetProcedureAddress(Lib: TLibHandle; const ProcName: string): Pointer;
-begin
-  Result := nil;
-end;
-
-function GetProcedureAddress(Lib: TLibHandle; ProcName: PChar): Pointer;
 begin
   Result := nil;
 end;
@@ -75,6 +100,13 @@ begin
   Result := True;
 end;
 
+function GetLoadErrorStr: string;
+begin
+  Result := 'dynlibs: no runtime loader on this target (libc-free build)';
+end;
+
+{$endif}
+
 function GetProcAddress(Lib: TLibHandle; const ProcName: string): Pointer;
 begin
   Result := GetProcedureAddress(Lib, ProcName);
@@ -83,11 +115,6 @@ end;
 function FreeLibrary(Lib: TLibHandle): Boolean;
 begin
   Result := UnloadLibrary(Lib);
-end;
-
-function GetLoadErrorStr: string;
-begin
-  Result := 'dynlibs: no runtime loader on this target (libc-free build)';
 end;
 
 end.

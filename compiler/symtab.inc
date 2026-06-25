@@ -3192,6 +3192,7 @@ begin
   ProcCaseSensitive[ProcCount] := CaseSensitiveMode;
   ProcOverloadDirective[ProcCount] := False;
   ProcLibrary[ProcCount]      := -1;
+  ProcExtName[ProcCount]      := -1;
   ProcUnitIdx[ProcCount]      := CurrentUnitIdx;
   ProcRetRecId[ProcCount]     := REC_NONE;
   ProcAggregateDestSym[ProcCount] := -1;
