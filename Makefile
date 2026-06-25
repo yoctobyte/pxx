@@ -350,6 +350,8 @@ test-core: $(COMPILER)
 	/tmp/cfnptr_deref_call_b1526; test "$$?" = "42"
 	./$(COMPILER) test/caddr_array_field_b16.c /tmp/caddr_array_field_b1626
 	/tmp/caddr_array_field_b1626; test "$$?" = "42"
+	./$(COMPILER) test/cpp_if_chain_b17.c /tmp/cpp_if_chain_b1726
+	/tmp/cpp_if_chain_b1726; test "$$?" = "42"
 	./$(COMPILER) -Itest/cinc/inc test/cinc/cinc_main.c /tmp/cinc_main26
 	test "$$(/tmp/cinc_main26)" = "$$(printf 'local-ok\ninc-ok')"
 	./$(COMPILER) test/test_declared_directive.pas /tmp/test_declared_directive26

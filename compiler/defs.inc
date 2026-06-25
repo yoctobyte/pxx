@@ -1099,6 +1099,7 @@ var
   CPExprText    : AnsiString;
   CPExprPos     : Integer;
   CPExprEnd     : Integer;
+  CPExprDepth   : Integer;   { #if macro-atom recursion guard (chained #defines) }
 
   { Reserved BSS slot 0: initial rsp (for argv access) }
   BSS_INITIAL_RSP : Integer;  { always 0; set in ParseProgram init }

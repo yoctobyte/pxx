@@ -248,7 +248,8 @@ end;
 function CPExprOr: Int64; forward;
 
 function CPExprAtom: Int64;
-var a, b, mi: Integer;
+var a, b, mi, p: Integer;
+    savedText: AnsiString; savedPos, savedEnd: Integer;
 begin
   CPSkipExprSpace;
   Result := 0;
@@ -294,7 +295,29 @@ begin
     else
     begin
       mi := CPFindMacro(CPExprText, a, b);
-      if mi >= 0 then Result := CPParsePoolNumber(mi) else Result := 0;
+      if mi < 0 then
+        Result := 0
+      else
+      begin
+        { Recursively EVALUATE the macro's body as a sub-expression, so a chained
+          object macro (`T -> DEF -> LL -> 3`, the lua LUA_INT_TYPE/LUA_INTEGER
+          pattern) and an arithmetic body both resolve — not just a literal number.
+          Depth-guarded against self-referential `#define X X`. }
+        if CPExprDepth >= 64 then
+          Result := CPParsePoolNumber(mi)
+        else
+        begin
+          savedText := CPExprText; savedPos := CPExprPos; savedEnd := CPExprEnd;
+          CPExprText := '';
+          for p := CPMValueOff[mi] to CPMValueOff[mi] + CPMValueLen[mi] - 1 do
+            CPExprText := CPExprText + CPrepChars[p];
+          CPExprPos := 1; CPExprEnd := Length(CPExprText);
+          Inc(CPExprDepth);
+          if CPExprEnd >= 1 then Result := CPExprOr else Result := 0;
+          Dec(CPExprDepth);
+          CPExprText := savedText; CPExprPos := savedPos; CPExprEnd := savedEnd;
+        end;
+      end;
     end;
   end;
 end;
@@ -372,6 +395,7 @@ begin
   CPExprText := line;
   CPExprPos := p;
   CPExprEnd := last;
+  CPExprDepth := 0;
   Result := CPExprOr <> 0;
 end;
 
