@@ -20,7 +20,7 @@ unit http;
 interface
 
 uses net, asyncnet, dns, dns_async, dns_config, dns_wire_core, sysutils,
-     tls, scheduler, platform, zlib, hashing;
+     tls, scheduler, platform, zlib, hashing, base64;
 
 type
   THttpResponse = record
@@ -77,6 +77,10 @@ function HttpDechunk(const body: AnsiString): AnsiString;
 { Decompress a body per Content-Encoding (gzip / deflate; identity and empty
   pass through). An unknown or malformed encoding returns the body unchanged. }
 function HttpDecodeContent(const encoding, body: AnsiString): AnsiString;
+
+{ 'Authorization: Basic <base64(user:pass)>' header line (CRLF-terminated) —
+  drop into the extraHeaders argument of HttpExec / HttpConnExec. }
+function HttpBasicAuth(const user, pass: AnsiString): AnsiString;
 
 { Resolve a (possibly relative) Location against a base URL: an absolute
   http(s):// location is returned as-is; an absolute-path '/x' keeps the base
@@ -463,6 +467,11 @@ begin
 
   SetLength(Result, Length(dst));
   for i := 0 to Length(dst) - 1 do Result[i + 1] := AnsiChar(dst[i]);
+end;
+
+function HttpBasicAuth(const user, pass: AnsiString): AnsiString;
+begin
+  Result := 'Authorization: Basic ' + Base64EncodeStr(user + ':' + pass) + CRLF;
 end;
 
 function HttpResolveUrl(const base, location: AnsiString): AnsiString;

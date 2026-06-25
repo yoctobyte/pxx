@@ -149,6 +149,17 @@ caller already set the header). e2e `test/lib_http_gzip`: a server coroutine
 serves a gzip body with `Content-Encoding: gzip`; the async client both
 advertises the codec and decodes the body to `hello world` transparently.
 
+## Base64 + HTTP Basic auth (landed 2026-06-25)
+
+New `lib/rtl/base64.pas` — RFC 4648 `Base64Encode`/`Decode` over `TByteArray`
+plus `Base64EncodeStr`/`Base64DecodeStr`; decode tolerates ASCII whitespace
+(line-wrapped MIME) and rejects invalid chars. Unit test `test/lib_base64` (14
+checks: the RFC vectors `f`/`fo`/`foo`/…/`foobar`, padding, whitespace, a full
+0..255 byte round-trip, invalid-char rejection). On top, `http.pas`
+`HttpBasicAuth(user, pass)` returns a ready `Authorization: Basic <b64>` header
+line for the `extraHeaders` arg of `HttpExec`/`HttpConnExec` (`lib_http` +1,
+`basic-auth`). `make lib-test` green.
+
 ## Roadmap (next slices)
 
 1. ~~Concurrency-safe pool + blocking `HttpGetPooled` + eviction/idle-timeout~~

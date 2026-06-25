@@ -2364,6 +2364,9 @@ lib-test: pxx-stable-check
 	test "$$(/tmp/lib_lispdemo | tail -1)" = "ALL OK"
 	$(PXX_STABLE) test/lib_zlib.pas /tmp/lib_zlib
 	test "$$(/tmp/lib_zlib)" = "$$(printf 'OK stored roundtrip\nOK fixed huffman\nOK dynamic huffman\nOK bad header checksum\nOK bad adler32\nOK truncated stream\nOK reserved block type\nOK gzip\nOK gzip bad crc\nOK raw deflate')"
+	$(PXX_STABLE) -Fulib/rtl test/lib_base64.pas /tmp/lib_base64
+	test "$$(/tmp/lib_base64 | grep -c '=ok')" = "14"
+	test "$$(/tmp/lib_base64 | grep -c 'FAIL')" = "0"
 	$(PXX_STABLE) test/lib_png.pas /tmp/lib_png
 	test "$$(/tmp/lib_png)" = "$$(printf '86\n137 80 78 71\nTRUE\n2x2\n255,0,0,255\n0,255,0,128\n0,0,255,64\n255,255,255,0\nFALSE\nbad chunk crc')"
 	$(PXX_STABLE) test/lib_ansiterm.pas /tmp/lib_ansiterm
@@ -2444,7 +2447,7 @@ lib-test: pxx-stable-check
 	test "$$(/tmp/lib_tls | grep -c '=ok')" = "14"
 	test "$$(/tmp/lib_tls | grep -c 'FAIL')" = "0"
 	$(PXX_STABLE) -Fulib/rtl/platform/posix test/lib_http.pas /tmp/lib_http
-	test "$$(/tmp/lib_http | grep -c '=ok')" = "54"
+	test "$$(/tmp/lib_http | grep -c '=ok')" = "55"
 	test "$$(/tmp/lib_http | grep -c 'FAIL')" = "0"
 	$(PXX_STABLE) -Fulib/rtl/platform/posix test/lib_http_async.pas /tmp/lib_http_async
 	test "$$(/tmp/lib_http_async)" = "$$(printf 'server-done=ok\nstatus=ok\nreason=ok\nbody=ok')"
@@ -2477,7 +2480,7 @@ lib-test: pxx-stable-check
 	$(PXX_STABLE) -Fulib/rtl test/lib_paths.pas /tmp/lib_paths
 	test "$$(/tmp/lib_paths | grep -c '=ok')" = "14"
 	test "$$(/tmp/lib_paths | grep -c 'FAIL')" = "0"
-	@echo "lib-test ok (sudoku exact + collections + math + sysutils + random + bitset + platform + directory + bignum + json + calc + sat + mathf + vm + mandelbrot + raytracer + chess-perft + lisp + zlib + png smoke + ansiterm + ansirender + process + process-multi + dynlibs + unixshims + strpchar + sockets + sha256-hmac-hkdf + sha512 + tls13-keysched + tls13-record + tls13-hs + chacha20-poly1305 + x25519 + aes-gcm + rsa-verify + ed25519-verify + ecdsa-p256-verify + x509 + tls-seam + http + http-async + http-redirect + http-keepalive + http-pool + http-pool-concurrent + http-gzip + https-mock-seam + dns-async + classes + strutil + streams + format + paths) against stable v$$(cat $(STABLE_DEFAULT_DIR)/VERSION 2>/dev/null || echo '?')"
+	@echo "lib-test ok (sudoku exact + collections + math + sysutils + random + bitset + platform + directory + bignum + json + calc + sat + mathf + vm + mandelbrot + raytracer + chess-perft + lisp + zlib + base64 + png smoke + ansiterm + ansirender + process + process-multi + dynlibs + unixshims + strpchar + sockets + sha256-hmac-hkdf + sha512 + tls13-keysched + tls13-record + tls13-hs + chacha20-poly1305 + x25519 + aes-gcm + rsa-verify + ed25519-verify + ecdsa-p256-verify + x509 + tls-seam + http + http-async + http-redirect + http-keepalive + http-pool + http-pool-concurrent + http-gzip + https-mock-seam + dns-async + classes + strutil + streams + format + paths) against stable v$$(cat $(STABLE_DEFAULT_DIR)/VERSION 2>/dev/null || echo '?')"
 
 # Full Track-B library suite, distinct from compiler `make test`.
 library-suite-green: pxx-stable-check

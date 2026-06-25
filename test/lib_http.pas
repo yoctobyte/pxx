@@ -140,4 +140,8 @@ begin
           'Content-Length: 31'#13#10#13#10 + gz;
   HttpParseResponse(raw2, resp);
   SayBool('ce-resp-gzip', resp.Body = 'hello world');
+
+  { Basic auth header line (base64 of user:pass). }
+  SayBool('basic-auth',
+    HttpBasicAuth('user', 'pass') = 'Authorization: Basic dXNlcjpwYXNz'#13#10);
 end.
