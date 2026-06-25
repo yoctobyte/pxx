@@ -104,8 +104,9 @@ HTTP client); server-side later if wanted.
 1. **Hashes:** ~~SHA-256~~ + ~~HMAC~~ + ~~HKDF-Extract/Expand~~ **landed
    2026-06-25** (`lib/rtl/sha256.pas`, RFC-vector smoke `test/lib_sha256` in
    lib-test). SHA-384 still needed for the 384 ciphersuite.
-2. **AEAD:** ~~ChaCha20 + Poly1305~~ **done** (`lib/rtl/chacha20poly1305.pas`,
-   RFC 8439). AES-128 block + GCM (GHASH) still needed.
+2. **AEAD:** ~~ChaCha20 + Poly1305~~ + ~~AES-128 block + GCM (GHASH)~~ **done**
+   (`lib/rtl/chacha20poly1305.pas` RFC 8439, `lib/rtl/aesgcm.pas` FIPS-197 + GCM
+   TC1–4).
 3. ~~**X25519** (Curve25519 ECDH)~~ **done** (`lib/rtl/x25519.pas`, RFC 7748;
    16-limb radix-2^16 field, not bignum).
 4. **Signature verify:** RSA (PKCS#1 v1.5 + PSS) over bignum; ECDSA-P256;
@@ -128,12 +129,13 @@ HTTP client); server-side later if wanted.
   HKDF-Extract/Expand (RFC 5869), all verified against published vectors in
   `test/lib_sha256` (12 checks, gated in lib-test). Library-free, pure integer —
   the first concrete step of the from-scratch / kTLS path. SHA-384 still to add.
-- M2 AES-128-GCM + ChaCha20-Poly1305 (RFC 8439 / NIST vectors). **ChaCha20-Poly1305
-  DONE (2026-06-25)** — `lib/rtl/chacha20poly1305.pas`: ChaCha20 (32-bit ARX) +
-  Poly1305 (native 5×26-bit limbs, no bignum) + the AEAD seal/open, verified
-  against RFC 8439 §2.5.2/§2.8.2 in `test/lib_chacha20poly1305` (7 checks, gated as
-  `chacha20-poly1305`). AES-128-GCM (S-box + GHASH) still to add. Surfaced a Track
-  A codegen bug along the way: [[bug-managed-record-result-self-arg]].
+- M2 AES-128-GCM + ChaCha20-Poly1305 (RFC 8439 / NIST vectors). **DONE
+  (2026-06-25).** ChaCha20-Poly1305: `lib/rtl/chacha20poly1305.pas` (ChaCha20 ARX +
+  Poly1305 native limbs), RFC 8439 §2.5.2/§2.8.2, `test/lib_chacha20poly1305` (7
+  checks). AES-128-GCM: `lib/rtl/aesgcm.pas` (AES-128 + GHASH GF(2^128) + GCM),
+  FIPS-197 AES + GCM-spec TC1–4, `test/lib_aesgcm` (8 checks, gated `aes-gcm`).
+  Both library-free. Surfaced Track A bugs: [[bug-managed-record-result-self-arg]],
+  [[bug-fixed-array-assignment-no-copy]], [[bug-string-literal-concat-compare-segfault]].
 - M3 X25519 (RFC 7748 vectors). **DONE (2026-06-25)** —
   `lib/rtl/x25519.pas`: a TweetNaCl `crypto_scalarmult` port (16-limb radix-2^16
   field, Int64), `X25519` + `X25519Base`, verified against RFC 7748 §5.2 + §6.1

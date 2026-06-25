@@ -28,14 +28,16 @@ _none_
 | --- | --- | --- | --- | --- |
 | feature-c-runtime-library | B | feature | C runtime/library layer (`lib/crtl`) plus direct C-library packages | feature-c-source-frontend |
 
-## backlog (53)
+## backlog (55)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
 | bug-bare-read-write-in-method-hits-intrinsic | A | bug | Bare `Read`/`Write` inside a method resolves to the console intrinsic, not the method | — |
+| bug-fixed-array-assignment-no-copy | A | bug | bug: assigning one fixed array to another (`b := a`) does not copy | — |
 | bug-managed-length-via-pointer-deref | A | bug | bug: managed Length(ps^) / Length(rec.pf^) returns garbage (all targets) | — |
 | bug-managed-record-result-self-arg | A | bug | bug: function Result of a managed-field record, passed as a call arg in its own reassignment, segfaults | — |
 | bug-not-on-int64-is-boolean | A | bug | bug: `not` on an Int64 yields a boolean, not the bitwise complement | — |
+| bug-string-literal-concat-compare-segfault | A | bug | bug: comparing against a concatenation of string literals (`x = 'a' + 'b'`) segfaults | — |
 | bug-virtual-keyword-name-result | A | bug | Bare own-name result of a VIRTUAL intrinsic-named method miscompiles | — |
 | chore-inc-to-units | A | chore | `.inc` → real `.pas` units refactor | — |
 | chore-runtime-emission-size | A | chore | Finer runtime-support emission (code size) | — |
@@ -410,9 +412,11 @@ _none_
 ## Ready (no unmet blocker)
 
 - [A] bug-bare-read-write-in-method-hits-intrinsic
+- [A] bug-fixed-array-assignment-no-copy
 - [A] bug-managed-length-via-pointer-deref
 - [A] bug-managed-record-result-self-arg
 - [A] bug-not-on-int64-is-boolean
+- [A] bug-string-literal-concat-compare-segfault
 - [A] bug-virtual-keyword-name-result
 - [A] chore-inc-to-units
 - [A] chore-runtime-emission-size

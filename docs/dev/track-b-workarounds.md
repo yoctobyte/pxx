@@ -20,6 +20,8 @@ before assuming the workaround is still needed.
 | `lib/rtl/bignum.pas` (`BigFromStr`, `BigDivMod`), `examples/bignum/bigmath.pas` | managed-return calls bound to a temp before being passed as an arg (no `BigAdd(BigMulSmall(x,…),…)` nesting) | [[bug-managed-record-result-self-arg]] (aka `bug-nested-managed-return-call-arg`) | nest the calls directly |
 | `lib/rtl/chacha20poly1305.pas` (Poly1305) | native 5×26-bit limbs instead of `bignum` | [[bug-managed-record-result-self-arg]] — *partial:* limbs are the idiomatic choice anyway, so this is **not** a pure workaround; keep even after the fix | — (keep) |
 | `lib/rtl/x25519.pas` (`Asr64`, `Sel25519`) | bitwise complement written `-x-1` / `-b` instead of `not` | [[bug-not-on-int64-is-boolean]] — `not` on an `Int64` *expression* miscompiles | plain `not` |
+| `lib/rtl/aesgcm.pas` (`BlkCopy`, used in `EncryptBlk`, `GfMul`, `AesCtr`, `GcmSetup`, `GcmTag`) | whole static-array `:=` replaced by element-copy loops | [[bug-fixed-array-assignment-no-copy]] — `b := a` on a fixed array doesn't copy | plain `dst := src` |
+| `test/lib_sha256.pas`, `test/lib_aesgcm.pas` (expected hex literals) | long literals kept on **one line** (no `'a' + 'b'`) | [[bug-string-literal-concat-compare-segfault]] — `x = 'a'+'b'` comparison segfaults | split literals with `+` |
 
 ### Coding-pattern landmines (no single site — avoid in new Track B code)
 
@@ -36,6 +38,12 @@ before assuming the workaround is still needed.
 - **`not` on an `Int64` expression** (`not (x-1)`, `not Int64(5)`) miscompiles —
   [[bug-not-on-int64-is-boolean]]. Use the two's-complement identity: `~x` →
   `-x - 1`, `~(b-1)` → `-b`. `not` on a plain Int64 *variable* is fine.
+- **Whole static-array assignment** `b := a` doesn't copy —
+  [[bug-fixed-array-assignment-no-copy]]. Copy element by element (or a small
+  `Copy` proc). Records and dynamic arrays are unaffected.
+- **String-literal concat in a comparison** `x = 'a' + 'b'` segfaults —
+  [[bug-string-literal-concat-compare-segfault]]. Keep the literal on one line, or
+  assign the concat to a var first. (Assignment `v := 'a'+'b'` is fine.)
 
 ## Cleanup backlog — workarounds whose bug is now FIXED (revertible)
 
