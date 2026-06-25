@@ -358,11 +358,27 @@ gap rather than bloating this ticket.
   green, self-host byte-identical, all 9 C fixtures match gcc; fixture
   `test/cstruct_fwd_interleave_b8.c` (=42). lzio.c now parses past `luaZ_fill` and
   reaches `luaZ_read`.
-- **NEXT BLOCKER: ternary `?:`.** Real lzio.c now stops in `luaZ_read` at
-  `m = (n <= z->n) ? n : z->n;` with `expected C expression`. The ternary
-  conditional operator is unimplemented and is flagged **Track A** (needs an
-  `AN_TERNARY` shared-IR node + codegen, per the roadmap reframe and
-  `track-a-c-frontend-shared-ir-touchpoints`). This is the clean Track-C → Track-A
-  handoff boundary: the C-frontend parsing gaps to here (fn pointers, struct-tag
-  aliasing, forward-record fields) are closed; the remaining lua blockers
-  (ternary, switch/case, setjmp/longjmp) need shared-IR work owned by A.
+- 2026-06-25 — **ternary `?:` DONE** (new `AN_TERNARY` node). Real lzio.c stopped
+  in `luaZ_read` at `m = (n <= z->n) ? n : z->n;`. Implemented the C conditional
+  operator end-to-end: new `AN_TERNARY` AST node (Left=cond, Right=AN_PAIR(then,
+  else), ASTTk=then-branch type); ParseCExpr parses it between logical-or and
+  assignment, right-associative; IR lowering is **fully target-independent** —
+  a hidden temp (`AllocVar` during lowering, same idiom as IRLowerClassMatch) +
+  `IR_JUMP_IF_FALSE`/labels/`IR_STORE_SYM`/`IR_LOAD_SYM`, so only the taken branch
+  is evaluated and NO per-backend codegen was needed. Logged in
+  `track-a-c-frontend-shared-ir-touchpoints` (a new shared node) for A to
+  reconcile. Self-host byte-identical (AN_TERNARY is C-frontend-only; the Pascal
+  self-compile never emits it); `make test` green; fixture `test/cternary_b9.c`
+  (=37, nested + only-taken-branch side effect proves no double-eval). **lzio.c
+  now compiles clean** (full parse — it is a library, no main).
+- 2026-06-25 — **LUA CORE SURVEY: 3 / 34 files parse clean** (lctype, lzio, + 1).
+  The remaining 31 hit a SPREAD of next blockers, roughly: many `call to
+  undeclared function` (likely the libc/extern surface, M2 — or a parse that drops
+  a function), several `unexpected token (` (more C constructs — `switch`, `goto`,
+  designated initialisers, or further declarator forms), one `expected C
+  expression` (lparser.c), and one `Unsupported linear node in IR codegen`
+  (ldebug.c — an IR/codegen gap). NEXT high-leverage step: triage the `call to
+  undeclared function` cluster (it hits ~15 files — likely one common cause). Then
+  `switch/case` (Track A, break-only-scope IR) and `setjmp/longjmp` (Track A)
+  remain the big language blockers before a full lua build, plus multi-file
+  linking (no upstream amalgamation).

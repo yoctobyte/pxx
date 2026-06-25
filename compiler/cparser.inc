@@ -567,12 +567,30 @@ begin
   Result := node;
 end;
 
-{ Top-level C expression: assignment (right-assoc), incl. compound-assign.
-  Ternary `?:` and the comma operator arrive in a later increment. }
+{ Top-level C expression: assignment (right-assoc), incl. compound-assign and the
+  conditional `?:` operator. The comma operator is handled at statement level. }
 function ParseCExpr: Integer;
-var left, rhs, node, cTok, baseOp: Integer;
+var left, rhs, node, cTok, baseOp, thenE, elseE, pair: Integer;
 begin
   left := ParseCBinExpr(1);
+  { conditional `cond ? a : b` — sits between logical-or and assignment, and is
+    right-associative (`a ? b : c ? d : e` = `a ? b : (c ? d : e)`). Only the
+    taken branch is evaluated (lowered via a hidden temp in ir.inc). }
+  if CurTok.Kind = tkQuestion then
+  begin
+    Next;
+    thenE := ParseCExpr();        { middle: a full expression }
+    Expect(tkColon, ':');
+    elseE := ParseCExpr();        { else: right-associative }
+    pair := AllocNode(AN_PAIR);
+    ASTLeft[pair] := thenE;
+    ASTRight[pair] := elseE;
+    node := AllocNode(AN_TERNARY);
+    ASTLeft[node] := left;        { condition }
+    ASTRight[node] := pair;
+    ASTTk[node] := ASTTk[thenE];  { result type follows the then-branch }
+    left := node;
+  end;
   case CurTok.Kind of
     tkAssign, tkPlusEq, tkMinusEq, tkStarEq, tkSlashEq, tkModEq,
     tkAmpEq, tkPipeEq, tkXorEq, tkShlEq, tkShrEq:

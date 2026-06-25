@@ -184,6 +184,10 @@ const
                            ctor VMT slot (-1 if non-virtual). Allocates the DYNAMIC
                            class (size=[cref+16], vmt=[cref+24]) then runs the
                            virtual ctor through the stamped VMT. }
+  AN_TERNARY       = 67; { C conditional `cond ? a : b`: Left = cond; Right =
+                           AN_PAIR(then, else); ASTTk = result type (then-branch).
+                           Lowers (target-independent) to a hidden temp + branches:
+                           only the taken branch is evaluated. }
 
   { Inline-asm operand kinds }
   AOP_NONE = 0;

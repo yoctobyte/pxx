@@ -1593,6 +1593,7 @@ var left, right, seq, item, value, outNode, first, last, leftAddr, argNode, argV
     continueLabel, continueLabelNode: Integer;
     branchSeq, branchPair, labelsHead, stmtNode, labelNode: Integer;
     clauseBodyLabel, nextClauseLabel, selectorValNode: Integer;
+    ternTmp: Integer;
     rhsIsLValue: Boolean;
     isComIntf: Boolean;
     intfTmpImt, intfTmpInst: Integer;
@@ -3316,6 +3317,27 @@ begin
       end;
       endLabelNode := IRAppend(IR_LABEL, -1, -1, -1, endLabel, 0);
       Result := IRAppend(IR_BLOCK, first, endLabelNode, -1, 0, 0);
+    end;
+
+    AN_TERNARY:
+    begin
+      { C `cond ? a : b` as a value-producing expression. Evaluate only the taken
+        branch and store it into a hidden temp; the result is a load of that temp.
+        Target-independent — uses only IR_JUMP_IF_FALSE / labels / store / load. }
+      pairNode := ASTRight[node];
+      ternTmp := AllocVar('', IntToTypeKind(ASTTk[node]));
+      elseLabel := IRNewLabel;
+      endLabel := IRNewLabel;
+      condNode := IRLowerAST(ASTLeft[node]);
+      IRAppend(IR_JUMP_IF_FALSE, elseLabel, condNode, -1, 0, 0);
+      value := IRLowerAST(ASTLeft[pairNode]);          { then-branch }
+      IRAppend(IR_STORE_SYM, ternTmp, value, -1, 0, ASTTk[node]);
+      IRAppend(IR_JUMP, endLabel, -1, -1, 0, 0);
+      IRAppend(IR_LABEL, -1, -1, -1, elseLabel, 0);
+      value := IRLowerAST(ASTRight[pairNode]);         { else-branch }
+      IRAppend(IR_STORE_SYM, ternTmp, value, -1, 0, ASTTk[node]);
+      IRAppend(IR_LABEL, -1, -1, -1, endLabel, 0);
+      Result := IRAppend(IR_LOAD_SYM, ternTmp, -1, -1, 0, ASTTk[node]);
     end;
 
     AN_WHILE:
