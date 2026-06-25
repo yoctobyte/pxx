@@ -46,3 +46,25 @@ concatenation, producing the concatenated constant string — in every mode.
   `#$xx + #$xx` form likewise.
 - `synacode.DecodeBase64(EncodeBase64(s)) = s` round-trips.
 - Regression test under `make test`; self-host fixedpoint byte-identical.
+
+## Resolution (2026-06-25, v60)
+
+Fixed the untyped-const parse path. `#65` and `'A'` both lex as `tkString`
+tokens carrying the decoded value in `SVal`; the untyped string-const branch in
+`ParseConstSection` only handled a SINGLE literal (it captured one token's source
+span) and fell over on the trailing `+`.
+
+Fix (`parser.inc`): when a `+` follows the string literal, concatenate the
+decoded values of the `+`-separated string/char literals into a fresh `TokChars`
+span and point the string const at it — a use expands to an `AN_STR_LIT` over
+that span, exactly like a single literal. Works for `#65 + #66`, `#$41 + #$42`,
+`'foo' + 'bar'`, and mixed `'x' + #45 + 'y'`, in every mode.
+
+Verified: `const T = #65 + #66` → `T = 'AB'` (Length 2; assigning to a string var
+and indexing gives Ord 65/66). Regression `test/test_const_string_concat.pas`
+under `make test`. Self-host byte-identical; pinned v60.
+
+Note: the synacode `DecodeBase64` round-trip (and the "compiles-but-wrong-table
+inside synacode" observation) can't be verified yet — synacode/synapse still stop
+on unrelated gaps (e.g. "untyped parameter requires var, const, or out"). The
+headline const-concat parse + value is fixed; re-probe synacode once those land.

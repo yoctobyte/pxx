@@ -8855,6 +8855,7 @@ var name: AnsiString; v: Int64;
     isLocalConst: Boolean;
     cRec, fNameOff, fNameLen: Integer; fName: AnsiString; fTk: TTypeKind;
     cnNDims, cFlatLen, cDi, cDepth: Integer;
+    scOff, scLen, si: Integer;
     cnDimLo, cnDimSpan: array[0..MAX_ARR_DIMS-1] of Integer;
 begin
   Next;
@@ -9069,14 +9070,50 @@ begin
       end
       else if CurTok.Kind = tkString then
       begin
-        { Untyped string constant: remember the literal's source span; a use of
-          the name builds an AN_STR_LIT over it. }
-        if StrConstCount >= MAX_TYPEALIAS then Error('too many string constants');
-        StrConstName[StrConstCount] := name;
-        StrConstSOff[StrConstCount] := Tokens[TokPos-1].SOffset;
-        StrConstSLen[StrConstCount] := Tokens[TokPos-1].SLen;
-        Inc(StrConstCount);
-        Next;
+        if Tokens[TokPos].Kind = tkPlus then
+        begin
+          { `+`-concatenation of string/char literals, e.g. `const T = #65 + #66`
+            or `'foo' + 'bar'`. #65 and 'A' both arrive as tkString tokens whose
+            decoded value is in SVal. Build the concatenated value into a fresh
+            TokChars span and point the string const at it; a use expands to an
+            AN_STR_LIT over that span, like a single literal
+            (bug-char-literal-concat-in-const-expr). }
+          scOff := TokCharLen; scLen := 0;
+          for si := 1 to Length(CurTok.SVal) do
+          begin
+            if TokCharLen >= STRING_CAP then Error('string constant buffer overflow');
+            TokChars[TokCharLen] := CurTok.SVal[si]; Inc(TokCharLen); Inc(scLen);
+          end;
+          Next;
+          while CurTok.Kind = tkPlus do
+          begin
+            Next;
+            if CurTok.Kind <> tkString then
+              Error('const string concatenation: expected a string or char literal');
+            for si := 1 to Length(CurTok.SVal) do
+            begin
+              if TokCharLen >= STRING_CAP then Error('string constant buffer overflow');
+              TokChars[TokCharLen] := CurTok.SVal[si]; Inc(TokCharLen); Inc(scLen);
+            end;
+            Next;
+          end;
+          if StrConstCount >= MAX_TYPEALIAS then Error('too many string constants');
+          StrConstName[StrConstCount] := name;
+          StrConstSOff[StrConstCount] := scOff;
+          StrConstSLen[StrConstCount] := scLen;
+          Inc(StrConstCount);
+        end
+        else
+        begin
+          { Untyped string constant: remember the literal's source span; a use of
+            the name builds an AN_STR_LIT over it. }
+          if StrConstCount >= MAX_TYPEALIAS then Error('too many string constants');
+          StrConstName[StrConstCount] := name;
+          StrConstSOff[StrConstCount] := Tokens[TokPos-1].SOffset;
+          StrConstSLen[StrConstCount] := Tokens[TokPos-1].SLen;
+          Inc(StrConstCount);
+          Next;
+        end;
       end
       else if (CurTok.Kind = tkFloat) or
               ((CurTok.Kind = tkMinus) and (Tokens[TokPos].Kind = tkFloat)) or
