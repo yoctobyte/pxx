@@ -24,6 +24,26 @@
   gap to isolate), 1 `expected C expression`. NEXT: pick off the `unexpected
   token` tail incrementally (Track C), isolate the 2 IR-codegen gaps, then
   `setjmp`/`longjmp` (Track A) + multi-file linking for an actual lua build.
+- 2026-06-26 (round 4) — **full-file-bisection harness in use; 7 more fixes,
+  lua core 5 -> 7 files parse clean**, all gate-green + self-host byte-identical.
+  Bisecting lapi.c's `index2value` surfaced a chain of high-leverage bugs:
+  array-of-struct element STRIDE (a SILENT miscompile — `a[i]`/`p[i]` used pointer
+  size not RecSize; `bug-c-struct-pointer-index-stride` done), `(p+i)->field`
+  (`bug-c-field-on-pointer-arithmetic` done), **re-expansion of the same macro
+  inside its own arguments** (lua's `check_exp` within `check_exp` via `gco2ccl`;
+  the active-macro guard was too aggressive), **multi-line macro/call arguments**
+  (the preprocessor was line-based; now joins continuation lines while parens are
+  unbalanced), and **`++`/`--` as a VALUE** (new AN_INCDEC: postfix yields the old
+  value via a temp, prefix the new; pointer base supported for `s2v(top.p++)`;
+  `bug-c-postincrement-as-rvalue` done). Fixtures b23–b27. KEY: the bisection
+  harness (build progressively larger prefixes of the real .c with its real
+  includes) + the `near:` locator is the working method — minimal repros no longer
+  reproduce these emergent/cumulative-state bugs. Current landscape: 9 `Unsupported
+  linear node` (IRLowerAddress gaps for compound/rvalue exprs — `&(call)`,
+  `&(int-lit)`, etc.; mostly address-of-rvalue, several are UB so verify against
+  gcc before "fixing"), 8 `unexpected token`, 7 clean, 5 `expected C expression`,
+  4 `call to undeclared function`. setjmp/longjmp (Track A) + multi-file linking
+  still remain for a full build.
 - 2026-06-25 (round 3) — **6 more Track C fixes**, all gate-green + byte-identical:
   adjacent string-literal concatenation (`"a" "b"`, lua's `lua_pushliteral`);
   string-literal-to-pointer store now lands on char 0 not the Pascal length
