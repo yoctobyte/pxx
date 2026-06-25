@@ -34,9 +34,9 @@ _none_
 | --- | --- | --- | --- | --- |
 | bug-aggregate-member-array-as-var-param | A | bug | bug: passing an array that is a member of an aggregate (record field / 2D-array row) as a var/const param segfaults | — |
 | bug-bare-read-write-in-method-hits-intrinsic | A | bug | Bare `Read`/`Write` inside a method resolves to the console intrinsic, not the method | — |
+| bug-esp-not-always-boolean | A | bug | bug: `not` on an integer is boolean-only on ESP (riscv32 / xtensa) | — |
 | bug-fixed-array-assignment-no-copy | A | bug | bug: assigning one fixed array to another (`b := a`) does not copy | — |
 | bug-managed-record-result-self-arg | A | bug | bug: function Result of a managed-field record, passed as a call arg in its own reassignment, segfaults | — |
-| bug-not-on-int64-is-boolean | A | bug | bug: `not` on an Int64 yields a boolean, not the bitwise complement | — |
 | bug-string-literal-concat-compare-segfault | A | bug | bug: comparing against a concatenation of string literals (`x = 'a' + 'b'`) segfaults | — |
 | bug-virtual-keyword-name-result | A | bug | Bare own-name result of a VIRTUAL intrinsic-named method miscompiles | — |
 | chore-inc-to-units | A | chore | `.inc` → real `.pas` units refactor | — |
@@ -122,7 +122,7 @@ _none_
 | feature-mimic-fpc | B | feature | `mimic FPC` compatibility mode | — |
 | feature-string-model-tyfixedstring | B | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (275)
+## done (276)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -189,6 +189,7 @@ _none_
 | bug-named-dynarray-field-setlength | A | bug | SetLength on a named dyn-array-alias class/record field misrouted to string path | — |
 | bug-nested-brace-comments | A | bug | bug: `{ }` comments do not nest | — |
 | bug-nested-comment-breaks-fpc-brace | A | bug | bug: nested `{ }` comments break the FPC idiom `{ ... '{' ... }` | — |
+| bug-not-on-int64-is-boolean | A | bug | bug: `not` on an Int64 yields a boolean, not the bitwise complement | — |
 | bug-open-array-copy-temp-leak | A | bug | Open-array copy temp leaked a heap block per call | — |
 | bug-operator-result-inferred-var | A | bug | Record-valued operator result is miscompiled (aggregate-return ABI) | — |
 | bug-overload-resolution-by-type | A | bug | bug: overload resolution binds a string arg to an earlier integer-param overload | — |
@@ -414,9 +415,9 @@ _none_
 
 - [A] bug-aggregate-member-array-as-var-param
 - [A] bug-bare-read-write-in-method-hits-intrinsic
+- [A] bug-esp-not-always-boolean
 - [A] bug-fixed-array-assignment-no-copy
 - [A] bug-managed-record-result-self-arg
-- [A] bug-not-on-int64-is-boolean
 - [A] bug-string-literal-concat-compare-segfault
 - [A] bug-virtual-keyword-name-result
 - [A] chore-inc-to-units
