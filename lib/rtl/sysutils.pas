@@ -604,42 +604,58 @@ begin
   Result := True;
 end;
 
+{ pat matches src at 1-based pos (no allocation, unlike Copy(src,pos,plen)=pat). }
+function StrMatchAt(const src, pat: AnsiString; pos, plen, slen: Integer): Boolean;
+var j: Integer;
+begin
+  StrMatchAt := False;
+  if pos + plen - 1 > slen then Exit;
+  for j := 1 to plen do
+    if src[pos + j - 1] <> pat[j] then Exit;
+  StrMatchAt := True;
+end;
+
 function StringReplace(const S, OldPattern, NewPattern: AnsiString; Flags: TReplaceFlags): AnsiString;
 var
-  src, pat, r: AnsiString;
-  i, plen, slen: Integer;
-  all, ci, matched: Boolean;
+  src, pat: AnsiString;
+  i, plen, slen, nlen, count, outPos, done: Integer;
+  all: Boolean;
 begin
   plen := Length(OldPattern);
   if plen = 0 then begin Result := S; Exit; end;
   all := rfReplaceAll in Flags;
-  ci := rfIgnoreCase in Flags;
-  if ci then begin src := LowerCase(S); pat := LowerCase(OldPattern); end
+  if rfIgnoreCase in Flags then begin src := LowerCase(S); pat := LowerCase(OldPattern); end
   else begin src := S; pat := OldPattern; end;
   slen := Length(S);
-  r := '';
-  i := 1;
+  nlen := Length(NewPattern);
+
+  { pass 1: count matches so the result is sized exactly (no O(n^2) append) }
+  count := 0; i := 1;
   while i <= slen do
-  begin
-    matched := (i + plen - 1 <= slen) and (Copy(src, i, plen) = pat);
-    if matched then
+    if StrMatchAt(src, pat, i, plen, slen) then
     begin
-      r := r + NewPattern;
+      Inc(count); i := i + plen;
+      if not all then i := slen + 1;        { only the first match counts }
+    end
+    else Inc(i);
+  if count = 0 then begin Result := S; Exit; end;
+
+  { pass 2: fill — NewPattern at each (replaced) match, else copy the char }
+  SetLength(Result, slen + count * (nlen - plen));
+  outPos := 1; i := 1; done := 0;
+  while i <= slen do
+    if (all or (done = 0)) and StrMatchAt(src, pat, i, plen, slen) then
+    begin
+      if nlen > 0 then Move(NewPattern[1], Result[outPos], nlen);
+      outPos := outPos + nlen;
       i := i + plen;
-      if not all then
-      begin
-        r := r + Copy(S, i, slen - i + 1);
-        Result := r;
-        Exit;
-      end;
+      Inc(done);
     end
     else
     begin
-      r := r + S[i];
-      Inc(i);
+      Result[outPos] := S[i];
+      Inc(outPos); Inc(i);
     end;
-  end;
-  Result := r;
 end;
 
 function QuotedStr(const s: AnsiString): AnsiString;

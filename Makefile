@@ -2483,7 +2483,7 @@ lib-test: pxx-stable-check
 	test "$$(/tmp/lib_classes | grep -c '=ok')" = "21"
 	test "$$(/tmp/lib_classes | grep -c 'FAIL')" = "0"
 	$(PXX_STABLE) -Fulib/rtl test/lib_strutil.pas /tmp/lib_strutil
-	test "$$(/tmp/lib_strutil | grep -c '=ok')" = "28"
+	test "$$(/tmp/lib_strutil | grep -c '=ok')" = "32"
 	test "$$(/tmp/lib_strutil | grep -c 'FAIL')" = "0"
 	$(PXX_STABLE) -Fulib/rtl test/lib_format.pas /tmp/lib_format
 	test "$$(/tmp/lib_format | grep -c '=ok')" = "14"

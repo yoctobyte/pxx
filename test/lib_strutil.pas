@@ -30,6 +30,10 @@ begin
   SayBool('replace-first', StringReplace('a.b.c', '.', '-', []) = 'a-b.c');
   SayBool('replace-ci', StringReplace('aXbXc', 'x', '_', [rfIgnoreCase, rfReplaceAll]) = 'a_b_c');
   SayBool('replace-nomatch', StringReplace('abc', 'z', '_', [rfReplaceAll]) = 'abc');
+  SayBool('replace-grow', StringReplace('a.b', '.', '<>', [rfReplaceAll]) = 'a<>b');
+  SayBool('replace-delete', StringReplace('a-b-c', '-', '', [rfReplaceAll]) = 'abc');
+  SayBool('replace-multi', StringReplace('xAByAB', 'AB', 'Z', [rfReplaceAll]) = 'xZyZ');
+  SayBool('replace-first-rest', StringReplace('a.b.c', '.', '-', []) = 'a-b.c');
 
   SayBool('quoted', QuotedStr('it''s') = '''it''''s''');
 
