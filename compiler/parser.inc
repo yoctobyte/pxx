@@ -5095,6 +5095,7 @@ function ConstEvalFactor: Int64;
   named const / parenthesised expr / integer typecast. Unary +/- binds tightest
   (so -2*3 = -(2)*3 = -6 and 2*-3 = -6). No code emitted. }
 var r: Int64; idx: Integer; castBytes: Integer; castSigned: Boolean;
+    cName: AnsiString; cQUnit: Integer;
 begin
   r := 0;
   { NB: the parens on the recursive ConstEvalFactor() are required — a bare own
@@ -5122,7 +5123,15 @@ begin
     begin r := Ord(CurTok.SVal[1]); Next; end
   else if CurTok.Kind = tkIdent then
   begin
-    idx := FindSym(CurTok.SVal);
+    { A `Unit.Const` qualifier (e.g. `termio.FIONREAD`) — ConsumeUnitQualifier
+      leaves the parser on the member name and yields the unit index; resolve the
+      const in that unit's scope, same as the ordinary-expression path. }
+    cName := CurTok.SVal;
+    cQUnit := ConsumeUnitQualifier(cName);
+    if cQUnit >= 0 then
+      idx := FindSymInUnit(cName, cQUnit)
+    else
+      idx := FindSym(cName);
     if (idx >= 0) and (Syms[idx].Kind = skConst) then
       r := Syms[idx].ConstVal
     else

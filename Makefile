@@ -770,7 +770,7 @@ test-core: $(COMPILER)
 	./$(COMPILER) test/test_case_sensitive_unit.pas /tmp/test_case_sensitive_unit26
 	test "$$(/tmp/test_case_sensitive_unit26)" = "$$(printf 'unit\n7')"
 	./$(COMPILER) test/test_qualified_units.pas /tmp/test_qualified_units26
-	test "$$(/tmp/test_qualified_units26)" = "$$(printf '3\n7\n11\n22\n101\n201')"
+	test "$$(/tmp/test_qualified_units26)" = "$$(printf '1074030207\n1074030207\n3\n7\n11\n22\n101\n201')"
 	./$(COMPILER) test/test_relpath_uses.pas /tmp/test_relpath_uses26
 	test "$$(/tmp/test_relpath_uses26)" = "$$(printf '13\n15\n100')"
 	./$(COMPILER) test/test_syncobjs.pas /tmp/test_syncobjs26

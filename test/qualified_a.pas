@@ -2,6 +2,9 @@ unit qualified_a;
 
 interface
 
+const
+  SharedConst = 1074030207;
+
 var
   SharedValue: Integer;
 

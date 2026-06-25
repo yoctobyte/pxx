@@ -44,3 +44,20 @@ context.
 - `synsock` gets past the ssfpc const block (next gap: the netdb / sockets
   address-string surface, RTL — Track B).
 - Regression test under `make test`; self-host fixedpoint byte-identical.
+
+## Resolution (2026-06-25, v58)
+
+The ordinary-expression path (`x := Unit.Const`) already resolved (via
+`ConsumeUnitQualifier` + `FindSymInUnit` in `ParseFactor`). Only the **const-
+expression** evaluator `ConstEvalFactor` was missing it: its `tkIdent` branch did
+a bare `FindSym(CurTok.SVal)` and never recognised a `Unit.Const` qualifier, so
+`const X = termio.FIONREAD;` failed with "not a constant" (it saw `termio`).
+
+Fix (`parser.inc`, `ConstEvalFactor`): reuse `ConsumeUnitQualifier` (leaves the
+parser on the member name, yields the unit index) and resolve via
+`FindSymInUnit` when qualified, else `FindSym` as before. Same lookup that already
+serves qualified types and function calls.
+
+Regression: `test/test_qualified_units.pas` extended with a qualified const
+(`qualified_a.SharedConst`) used in both a const expression and an ordinary
+expression. Self-host byte-identical; pinned v58.
