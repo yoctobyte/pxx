@@ -5,8 +5,7 @@ unit ed25519;
   feature-tls13-from-scratch (Ed25519 cert signatures).
 
   Same Int64/array gotchas as x25519: whole fixed-array `:=` doesn't copy (element
-  loops), bitwise `not` on an Int64 expr miscompiles (-x-1), unit-init blocks may
-  not run (constants built lazily). }
+  loops), unit-init blocks may not run (constants built lazily). }
 
 interface
 
@@ -51,7 +50,7 @@ end;
 function Asr64(x: Int64; n: Integer): Int64;
 begin
   if x >= 0 then Asr64 := x shr n
-  else Asr64 := -(((-x - 1) shr n)) - 1;
+  else Asr64 := not ((not x) shr n);
 end;
 
 procedure GfCopy(var d: TGf; const s: TGf);
@@ -82,7 +81,7 @@ end;
 procedure Sel25519(var p, q: TGf; b: Int64);
 var t, c: Int64; i: Integer;
 begin
-  c := -b;
+  c := not (b - 1);
   for i := 0 to 15 do
   begin
     t := c and (p[i] xor q[i]);
