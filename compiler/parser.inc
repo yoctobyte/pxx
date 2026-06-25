@@ -404,6 +404,7 @@ function ParseAsmStatementAST: Integer; forward;
 function ParseBlockAST: Integer; forward;
 procedure CompileAST(node: Integer); forward;
 function ParseTypeKind: TTypeKind; forward;
+function IsNodePChar(node: Integer): Boolean; forward;  { defined in ir.inc (included later) }
 procedure ParseSubroutine; forward;
 procedure ParseGenericFunctionDef; forward;
 procedure ParseOperatorDef; forward;
@@ -2799,11 +2800,28 @@ end;
   place to AN_PROCADDR (their ASTIVal already holds the callee proc index).
   Returns the resolved procIdx, or -1. Outside delphi mode (or with no candidate
   args) this is exactly the plain MatchProcCall[InUnit]. }
+{ Wrap a PChar argument node in a `PCharToString(node)` call so a PChar binds a
+  string/AnsiString parameter (FPC's implicit conversion). The helper lives in the
+  builtin unit, auto-pulled when a PChar is in scope (see ParseProgram token scan). }
+function WrapPCharToString(argNode: Integer): Integer;
+var procIdx, wArg, wCall: Integer;
+begin
+  procIdx := FindProc('PCharToString');
+  if procIdx < 0 then Error('PChar->string conversion: PCharToString helper not loaded');
+  wArg := AllocNode(AN_ARG);
+  ASTLeft[wArg] := argNode; ASTRight[wArg] := -1; ASTTk[wArg] := Ord(tyPointer);
+  wCall := AllocNode(AN_CALL);
+  ASTIVal[wCall] := procIdx;
+  ASTTk[wCall] := Ord(Procs[procIdx].RetType);
+  ASTLeft[wCall] := wArg; ASTRight[wCall] := -1;
+  Result := wCall;
+end;
+
 function MatchCallDelphiProcAddr(const name: AnsiString; qUnit, nArgs, argsHead: Integer;
   const argTypes: array of TTypeKind): Integer;
 var i, currArg, exprNode, pi, sidx, node, match0: Integer;
     procCand: array[0..15] of Boolean; retryTypes: array[0..15] of TTypeKind;
-    hasCand, needAddr: Boolean;
+    hasCand, needAddr, pcharRetry: Boolean;
 begin
   hasCand := False;
   if DelphiMode then
@@ -2825,6 +2843,46 @@ begin
   else match0 := MatchProcCall(name, nArgs, argTypes);
   MatchQuiet := False;
   Result := match0;
+
+  { PChar -> string implicit conversion in a call argument (FPC parity): when no
+    overload matches as-is, retry treating each PChar argument as an AnsiString.
+    If that matches, wrap every PChar arg whose matched parameter is a string in
+    PCharToString. Runs only on a failed match so it never overrides a stricter
+    one; e.g. dynlibs.LoadLibrary(PChar) into a `string` param. }
+  if Result < 0 then
+  begin
+    pcharRetry := False;
+    currArg := argsHead;
+    for i := 0 to nArgs-1 do
+    begin
+      if IsNodePChar(ASTLeft[currArg]) then
+        begin retryTypes[i] := tyAnsiString; pcharRetry := True; end
+      else
+        retryTypes[i] := argTypes[i];
+      currArg := ASTRight[currArg];
+    end;
+    if pcharRetry then
+    begin
+      if qUnit >= 0 then pi := MatchProcCallInUnit(name, qUnit, nArgs, retryTypes)
+      else pi := MatchProcCall(name, nArgs, retryTypes);
+      if pi >= 0 then
+      begin
+        currArg := argsHead;
+        for i := 0 to nArgs-1 do
+        begin
+          exprNode := ASTLeft[currArg];
+          if IsNodePChar(exprNode) and
+             ((Procs[pi].Params[i].TypeKind = tyString) or
+              (Procs[pi].Params[i].TypeKind = tyAnsiString)) then
+            ASTLeft[currArg] := WrapPCharToString(exprNode);
+          currArg := ASTRight[currArg];
+        end;
+        Result := pi;
+        Exit;
+      end;
+    end;
+  end;
+
   if not hasCand then Exit;
 
   { Call-first precedence: keep the plain call when it matched, UNLESS a bare
@@ -13857,6 +13915,16 @@ begin
        (TargetArch = TARGET_X86_64) then
       needsBuiltin := True;
     if (Tokens[i].Kind = tkUses) and
+       (TargetArch <> TARGET_XTENSA) and (TargetArch <> TARGET_RISCV32) then
+      needsBuiltin := True;
+    { A PChar/PAnsiChar in scope may be converted to string — implicitly in a
+      `string` assignment or string-param call, or explicitly via string(pc).
+      Both lower to the PCharToString helper (in builtin). Pull the unit so the
+      helper resolves in a standalone program. Gated by `not NoDefaultRtl` so the
+      compiler's own PXX_NODEFAULTRTL self-build (uses PChar heavily, ships its own
+      builtins) never drags in builtin.pas. ESP can't compile builtin. }
+    if (not NoDefaultRtl) and (Tokens[i].Kind = tkIdent) and
+       (CaseEqual(GetTokenStr(i), 'pchar') or CaseEqual(GetTokenStr(i), 'pansichar')) and
        (TargetArch <> TARGET_XTENSA) and (TargetArch <> TARGET_RISCV32) then
       needsBuiltin := True;
     Inc(i);

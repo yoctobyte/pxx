@@ -657,6 +657,8 @@ test-core: $(COMPILER)
 	rm -f /tmp/test_string_to_pchar_auto26.db
 	./$(COMPILER) test/test_string_to_pchar_auto.pas /tmp/string_to_pchar_auto26
 	test "$$(/tmp/string_to_pchar_auto26)" = "$$(printf 'open=0\nprepare=0\n1 alice\n2 bob\nfinalize=0\nclose=0')"
+	./$(COMPILER) test/test_pchar_to_string.pas /tmp/test_pchar_to_string26
+	test "$$(/tmp/test_pchar_to_string26)" = "$$(printf '3\n3\nabc\n3')"
 	./$(COMPILER) test/test_auto_var.pas /tmp/test_auto_var26
 	test "$$(/tmp/test_auto_var26)" = "$$(printf 'Global tests:\ng_int = 456\ng_str = hello global\ng_bool is False\ng_dbl = 3.14\nLocal tests:\nl_int = 123\nl_str = hello local\nl_bool is True\nl_rec = 10, 20\np_rec^ = 10, 20\nall auto variable tests done!')"
 	./$(COMPILER) test/test_sqlite_crud_autotyped.pas /tmp/test_sqlite_crud_autotyped26
