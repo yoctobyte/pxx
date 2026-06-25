@@ -42,13 +42,27 @@ while [ $i -lt 50 ]; do
   i=$((i + 1)); sleep 0.1
 done
 
-OUT=$(timeout 30 "$CLIENT" "$PORT" 2>&1)
-RC=$?
+# run twice: default (kTLS offload if module loaded) + forced Pascal fallback
+say "--- run 1: default (kTLS TX if the tls module is loaded) ---"
+OUT=$(timeout 30 "$CLIENT" "$PORT" 2>&1); RC=$?
 say "$OUT"
-if [ $RC -eq 0 ] && printf '%s' "$OUT" | grep -q '^ALL OK'; then
-  say "tls13-handshake-devtest OK (real TLS 1.3 key exchange + flight decryption)"
+PASS1=0; [ $RC -eq 0 ] && printf '%s' "$OUT" | grep -q '^ALL OK' && PASS1=1
+
+# restart the server for a fresh connection
+kill "$SRV_PID" 2>/dev/null
+openssl s_server -accept "$PORT" -cert "$CERT" -key "$KEY" -tls1_3 -www -quiet >"$SLOG" 2>&1 &
+SRV_PID=$!
+i=0; while [ $i -lt 50 ]; do openssl s_client -connect "127.0.0.1:$PORT" -tls1_3 </dev/null >/dev/null 2>&1 && break; i=$((i+1)); sleep 0.1; done
+
+say "--- run 2: forced fallback (no-ktls, Pascal record layer) ---"
+OUT2=$(timeout 30 "$CLIENT" "$PORT" no-ktls 2>&1); RC2=$?
+say "$OUT2"
+PASS2=0; [ $RC2 -eq 0 ] && printf '%s' "$OUT2" | grep -q '^ALL OK' && PASS2=1
+
+if [ $PASS1 -eq 1 ] && [ $PASS2 -eq 1 ]; then
+  say "tls13-handshake-devtest OK (full handshake + kTLS TX offload + Pascal fallback)"
   exit 0
 else
-  say "FAIL: client rc=$RC"
+  say "FAIL: run1=$PASS1 run2=$PASS2"
   exit 1
 fi

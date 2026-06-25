@@ -219,17 +219,21 @@ begin
     TX-only: the kernel encrypts our app records; RX stays on the Pascal record
     layer (so the server's NewSessionTicket control records don't need recvmsg). }
   getMsg := 'GET / HTTP/1.0' + Chr(13) + Chr(10) + 'Host: localhost' + Chr(13) + Chr(10) + Chr(13) + Chr(10);
-  ktlsTx := False;
-  if (suite = CS_AES_128_GCM_SHA256)
-     and KtlsEnable(gSock) and KtlsSetAesGcm128(gSock, True, cAppKey, cAppIv) then
+  { ParamStr(2)='no-ktls' forces the Pascal record layer, to exercise the
+    fallback. Short-circuit `and` keeps KtlsEnable (which sets TCP_ULP) from
+    running when kTLS is forced off or the suite isn't AES-GCM. }
+  ktlsTx := ((ParamCount < 2) or (ParamStr(2) <> 'no-ktls'))
+            and (suite = CS_AES_128_GCM_SHA256)
+            and KtlsEnable(gSock)
+            and KtlsSetAesGcm128(gSock, True, cAppKey, cAppIv);
+  if ktlsTx then
   begin
-    ktlsTx := True;
     writeln('ktls-tx=installed (kernel encrypts the GET)');
     SendBytes(getMsg);                                { plaintext write; kernel seals it }
   end
   else
   begin
-    writeln('ktls=unavailable; Pascal record layer for TX');
+    writeln('tx=Pascal record layer (kTLS off/unavailable)');
     getRec := Tls13Seal(AeadSuite, cAppKey, cAppIv, 0, CT_APPLICATION_DATA, getMsg);
     SendBytes(getRec);
   end;
