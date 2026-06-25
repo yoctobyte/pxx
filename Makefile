@@ -370,6 +370,8 @@ test-core: $(COMPILER)
 	/tmp/cmacro_nested_self_b2526; test "$$?" = "42"
 	./$(COMPILER) test/cmacro_multiline_b26.c /tmp/cmacro_multiline_b2626
 	/tmp/cmacro_multiline_b2626; test "$$?" = "42"
+	./$(COMPILER) test/cincdec_value_b27.c /tmp/cincdec_value_b2726
+	/tmp/cincdec_value_b2726; test "$$?" = "42"
 	./$(COMPILER) -Itest/cinc/inc test/cinc/cinc_main.c /tmp/cinc_main26
 	test "$$(/tmp/cinc_main26)" = "$$(printf 'local-ok\ninc-ok')"
 	./$(COMPILER) test/test_declared_directive.pas /tmp/test_declared_directive26

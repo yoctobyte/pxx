@@ -125,8 +125,8 @@ function ParseCPostfix: Integer; forward;
   lvalue so the assignment's lvalue and rvalue nodes do not alias. Used for
   both prefix and postfix `++`/`--`; in statement / for-post context the
   pre-vs-post value distinction is irrelevant, so both lower identically. }
-function CMakeIncDec(lv: Integer; isInc: Boolean): Integer;
-var one, binop, node, rd: Integer;
+function CMakeIncDec(lv: Integer; isInc, isPre: Boolean): Integer;
+var one, binop, asn, node, rd: Integer;
 begin
   rd := CloneAST(lv);
   one := AllocNode(AN_INT_LIT);
@@ -134,13 +134,24 @@ begin
   ASTTk[one] := Ord(tyInteger);
   binop := AllocNode(AN_BINOP);
   if isInc then ASTIVal[binop] := Ord(tkPlus) else ASTIVal[binop] := Ord(tkMinus);
-  ASTLeft[binop] := rd;
+  ASTLeft[binop] := rd;          { read of lv (clone) — scales for pointers }
   ASTRight[binop] := one;
   ASTTk[binop] := ASTTk[lv];
-  node := AllocNode(AN_ASSIGN);
-  ASTLeft[node] := lv;
-  ASTRight[node] := binop;
+  asn := AllocNode(AN_ASSIGN);
+  ASTLeft[asn] := lv;
+  ASTRight[asn] := binop;
+  ASTTk[asn] := ASTTk[lv];
+  { Wrap so the result is a usable VALUE (old for postfix, new for prefix) — e.g.
+    `(p++)->f`, `x = a[i++]`. The AN_ASSIGN does the scaled store; AN_INCDEC reads
+    the old value (a fresh clone) and yields old/new. }
+  node := AllocNode(AN_INCDEC);
+  ASTLeft[node] := CloneAST(lv);
+  ASTRight[node] := asn;
+  if isPre then ASTSLen[node] := 1 else ASTSLen[node] := 0;
   ASTTk[node] := ASTTk[lv];
+  { Carry the pointed-at record (like a pointer-arith binop) so `(p++)->field`
+    resolves — lua's `s2v(top.p++)`. }
+  if CNodeIsPointer(lv) then ASTSOffset[node] := CNodePtrElemRec(lv);
   Result := node;
 end;
 
@@ -353,13 +364,13 @@ begin
     Result := RecFieldType(ResolveNodeRec(ASTLeft[node]), GetASTIdentName(node)) = tyPointer
   else if ASTKind[node] = AN_INDEX then
     Result := IntToTypeKind(ASTTk[node]) = tyPointer
-  else if ASTKind[node] = AN_BINOP then
-    { pointer arithmetic `ptr +/- int` keeps a pointer type (set in CMakeBinop) }
+  else if (ASTKind[node] = AN_BINOP) or (ASTKind[node] = AN_INCDEC) then
+    { pointer arithmetic / `p++` keeps a pointer type (CMakeBinop / CMakeIncDec) }
     Result := IntToTypeKind(ASTTk[node]) = tyPointer;
 end;
 
 { Pointed-at record id of a pointer-valued node, for `(p+i)->field` resolution.
-  Pointer-arithmetic binops carry it on ASTSOffset (stamped by CMakeBinop). }
+  Pointer-arithmetic binops / `p++` carry it on ASTSOffset. }
 function CNodePtrElemRec(node: Integer): Integer;
 begin
   Result := REC_NONE;
@@ -368,7 +379,7 @@ begin
     Result := Syms[ASTIVal[node]].PtrElemRec
   else if ASTKind[node] = AN_FIELD then
     Result := RecFieldPtrElemRec(ResolveNodeRec(ASTLeft[node]), GetASTIdentName(node))
-  else if ASTKind[node] = AN_BINOP then
+  else if (ASTKind[node] = AN_BINOP) or (ASTKind[node] = AN_INCDEC) then
     Result := ASTSOffset[node];
 end;
 
@@ -521,13 +532,13 @@ begin
     begin
       Next;
       operand := ParseCUnary();
-      Result := CMakeIncDec(operand, True);
+      Result := CMakeIncDec(operand, True, True);
     end;
     tkMinusMinus: { prefix --lv }
     begin
       Next;
       operand := ParseCUnary();
-      Result := CMakeIncDec(operand, False);
+      Result := CMakeIncDec(operand, False, True);
     end;
     else
       Result := ParseCPostfix();
@@ -596,10 +607,11 @@ begin
         dnode := AllocNode(AN_DEREF);
         ASTLeft[dnode] := node;
         ASTTk[dnode] := Ord(tyRecord);
-        { A computed pointer (e.g. `(p+i)->f`) has no symbol/field for
+        { A computed pointer (e.g. `(p+i)->f`, `(p++)->f`) has no symbol/field for
           ResolveNodeRec to walk, so carry the element record on the deref
           (ResolveNodeRec honours ASTIVal[AN_DEREF] > 0). }
-        if (ASTKind[node] = AN_BINOP) and (CNodePtrElemRec(node) > 0) then
+        if ((ASTKind[node] = AN_BINOP) or (ASTKind[node] = AN_INCDEC)) and
+           (CNodePtrElemRec(node) > 0) then
           ASTIVal[dnode] := CNodePtrElemRec(node);
         baseFld := dnode;
       end;
@@ -675,8 +687,8 @@ begin
     end
     else if (CurTok.Kind = tkPlusPlus) or (CurTok.Kind = tkMinusMinus) then
     begin
-      if CurTok.Kind = tkPlusPlus then node := CMakeIncDec(node, True)
-      else node := CMakeIncDec(node, False);
+      if CurTok.Kind = tkPlusPlus then node := CMakeIncDec(node, True, False)
+      else node := CMakeIncDec(node, False, False);
       Next;
     end
     else

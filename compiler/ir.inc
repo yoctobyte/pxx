@@ -3374,6 +3374,29 @@ begin
       Result := IRLowerAST(ASTRight[node]);
     end;
 
+    AN_INCDEC:
+    begin
+      { C `++`/`--` as a value. ASTRight is the AN_ASSIGN `lv = lv +/- 1` (it does
+        the scaled store); ASTLeft is a read of the lvalue. Prefix yields the new
+        value (assign, then read); postfix yields the old value (read into a temp,
+        then assign). }
+      if ASTSLen[node] = 1 then
+      begin
+        last := IRLowerAST(ASTRight[node]);     { lv = lv +/- 1 }
+        IRMarkStatementNode(last);
+        Result := IRLowerAST(ASTLeft[node]);    { new value }
+      end
+      else
+      begin
+        ternTmp := AllocVar('', IntToTypeKind(ASTTk[node]));
+        value := IRLowerAST(ASTLeft[node]);     { old value }
+        IRAppend(IR_STORE_SYM, ternTmp, value, -1, 0, ASTTk[node]);
+        last := IRLowerAST(ASTRight[node]);     { lv = lv +/- 1 }
+        IRMarkStatementNode(last);
+        Result := IRAppend(IR_LOAD_SYM, ternTmp, -1, -1, 0, ASTTk[node]);
+      end;
+    end;
+
     AN_SWITCH:
     begin
       endLabel := IRNewLabel;

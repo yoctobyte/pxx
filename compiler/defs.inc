@@ -201,6 +201,10 @@ const
   AN_COMMA         = 71; { C comma EXPRESSION `(a, b)`: Left evaluated for side
                            effects and discarded, Right yields the value. ASTTk =
                            Right's type. (Statement-level comma uses AN_BLOCK.) }
+  AN_INCDEC        = 72; { C `++`/`--` as a VALUE. Left = a read of the lvalue
+                           (old value), Right = the AN_ASSIGN `lv = lv +/- 1`
+                           (does the scaled store), ASTSLen = 1 prefix / 0 postfix.
+                           Yields the new (prefix) or old (postfix) value. }
 
   { Inline-asm operand kinds }
   AOP_NONE = 0;
