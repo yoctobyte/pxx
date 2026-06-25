@@ -48,3 +48,44 @@ see [[track-b-workarounds]].
 - `Fill(p[0], …)` / `Fill(p.a, …)` for an array element/field passes the correct
   address; no segfault; the element is updated in place.
 - Regression test (2D array row + array-typed record field, var and const).
+
+## Diagnosis (2026-06-25) — deeper than "address-of": element mis-sizing
+
+Not (only) an address-of bug. The root is that **`array[..] of <named fixed-array
+type>` mis-sizes its element**. Measured directly: for
+`TG = array[0..1] of Int64; TP = array[0..1] of TG`, the outer-index stride
+`PByte(@p[1]) - PByte(@p[0])` = **4**, not `SizeOf(TG)` = 16. So the whole `TP`
+is laid out as if its element were a 4-byte Integer.
+
+Cause: in the fixed-array type parse (parser.inc ~8903), the `of <ident>` element
+handler only resolves a named **dynamic**-array alias (`FindArrayType` +
+`ArrTypeIsDyn`). A named **fixed**-array alias (`TG`) is not handled there, so it
+falls through to `elemTk := ParseTypeKind` (parser.inc ~8918), which resolves
+`TG` via the scalar path and yields a bare base kind (→ ~4-byte Integer). The
+array element size, total storage, and every index stride are then wrong.
+`@p[1]` is garbage; `p[1][0]` (full double index) sometimes reads right only by
+the multidim flat-offset path, while a single `p[1]` (a row) is wrong.
+
+The record-field form (`record a,b,c: TG end`) is the same gap for an array-typed
+record field.
+
+### Why it is not a 5-line fix
+
+- **Merging to a flat N-D array is wrong here.** `array[0..1] of TG` is not
+  `array[0..1,0..1] of Int64` for *access*: FPC lets you take `p[0]` as a whole
+  `TG` (and pass it to `var g: TG`). But the parser enforces an exact subscript
+  count for `SymArrNDims >= 2` arrays (parser.inc:1412
+  "wrong number of array subscripts"), so merging would reject the very `p[0]`
+  the repro needs.
+- The correct model is **array-of-aggregate-element**: the element is a sized
+  block (like a record element, `RecSize`) whose own (base type, dims) are
+  retained so `p[0]` is an lvalue of array type `TG`, `p[0][j]` indexes within
+  it, and `p[0]` can be passed by-ref. The sym model today has `ElemType` +
+  `ElemRecName` (record elements) but **no representation for an array element**.
+
+So this needs: (1) parser — detect a named fixed-array alias element and record
+its byte size + element (base type, dims); (2) sym/`AllocArray` — size the array
+by that stride; (3) `IRLowerAddress`/AN_INDEX — stride by the aggregate size and
+let a partial index yield the sub-array lvalue; (4) call-arg — pass `p[0]`/`p.a`
+by-ref as a fixed `TG`. A type-system feature, scoped as such — not a codegen
+patch. Track B workaround (split into standalone vars) stands until then.
