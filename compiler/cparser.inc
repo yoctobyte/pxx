@@ -209,6 +209,14 @@ begin
           end;
         end;
         Expect(tkRParen, ')');
+        { gcc builtin `__builtin_expect(x, c)` is a branch-prediction hint that
+          evaluates to its first argument — lua uses it pervasively via
+          l_likely/l_unlikely. Reduce it to that argument's value. }
+        if (name = '__builtin_expect') and (argHead >= 0) then
+        begin
+          Result := ASTLeft[argHead];
+          Exit;
+        end;
         procIdx := FindProc(name);
         if procIdx >= 0 then
         begin
