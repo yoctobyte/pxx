@@ -14,6 +14,8 @@ function IsCTypeTok: Boolean; forward;
 function ParseCDeclType: TTypeKind; forward;
 function ParseCCommaStmt: Integer; forward;
 function ParseCSwitchAST: Integer; forward;
+function CNodeIsPointer(node: Integer): Boolean; forward;
+function CNodePtrElemRec(node: Integer): Integer; forward;
 
 { ===== C expression compiler (Slice B) =====
   A real recursive-descent C expression parser at C precedence, replacing the
@@ -83,6 +85,16 @@ begin
   ASTLeft[node] := l;
   ASTRight[node] := r;
   ASTTk[node] := CBinResultTk(cTok, l, r);
+  { Pointer arithmetic `ptr +/- int` (or `int + ptr`) stays a pointer, carrying
+    the element record on ASTSOffset so `(p+i)->field` / `(p+i)[j]` resolve (the
+    IR already scales the offset by element size). }
+  if (cTok = Ord(tkPlus)) or (cTok = Ord(tkMinus)) then
+  begin
+    if CNodeIsPointer(l) then
+    begin ASTTk[node] := Ord(tyPointer); ASTSOffset[node] := CNodePtrElemRec(l); end
+    else if (cTok = Ord(tkPlus)) and CNodeIsPointer(r) then
+    begin ASTTk[node] := Ord(tyPointer); ASTSOffset[node] := CNodePtrElemRec(r); end;
+  end;
   Result := node;
 end;
 
@@ -340,7 +352,24 @@ begin
   else if ASTKind[node] = AN_FIELD then
     Result := RecFieldType(ResolveNodeRec(ASTLeft[node]), GetASTIdentName(node)) = tyPointer
   else if ASTKind[node] = AN_INDEX then
+    Result := IntToTypeKind(ASTTk[node]) = tyPointer
+  else if ASTKind[node] = AN_BINOP then
+    { pointer arithmetic `ptr +/- int` keeps a pointer type (set in CMakeBinop) }
     Result := IntToTypeKind(ASTTk[node]) = tyPointer;
+end;
+
+{ Pointed-at record id of a pointer-valued node, for `(p+i)->field` resolution.
+  Pointer-arithmetic binops carry it on ASTSOffset (stamped by CMakeBinop). }
+function CNodePtrElemRec(node: Integer): Integer;
+begin
+  Result := REC_NONE;
+  if node < 0 then Exit;
+  if ASTKind[node] = AN_IDENT then
+    Result := Syms[ASTIVal[node]].PtrElemRec
+  else if ASTKind[node] = AN_FIELD then
+    Result := RecFieldPtrElemRec(ResolveNodeRec(ASTLeft[node]), GetASTIdentName(node))
+  else if ASTKind[node] = AN_BINOP then
+    Result := ASTSOffset[node];
 end;
 
 { Size in bytes of the type just consumed by ParseCDeclType (globals CType*). }
@@ -567,6 +596,11 @@ begin
         dnode := AllocNode(AN_DEREF);
         ASTLeft[dnode] := node;
         ASTTk[dnode] := Ord(tyRecord);
+        { A computed pointer (e.g. `(p+i)->f`) has no symbol/field for
+          ResolveNodeRec to walk, so carry the element record on the deref
+          (ResolveNodeRec honours ASTIVal[AN_DEREF] > 0). }
+        if (ASTKind[node] = AN_BINOP) and (CNodePtrElemRec(node) > 0) then
+          ASTIVal[dnode] := CNodePtrElemRec(node);
         baseFld := dnode;
       end;
       recId := ResolveNodeRec(baseFld);

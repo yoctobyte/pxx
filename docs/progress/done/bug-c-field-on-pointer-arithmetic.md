@@ -44,3 +44,12 @@ node's TYPE is wrong.)
 
 Common in lua/sqlite (stack/array element access). Use the full-file-bisection
 harness (see the feature ticket) to confirm against lapi.c after fixing.
+
+## Resolution
+- 2026-06-26 — FIXED, after the struct-pointer stride bug was fixed first.
+  CMakeBinop now tags `ptr +/- int` as tyPointer and carries the element record
+  on ASTSOffset; CNodeIsPointer recognises pointer-arith binops; ParseCPostfix
+  stamps the element record on the `->` deref (ResolveNodeRec honours
+  ASTIVal[AN_DEREF] > 0). `(p+i)->field` / `(p+i)[j]` now give correct values
+  (no longer IR_UNSUPPORTED, and no silent wrong value since the stride is right).
+  Self-host byte-identical; fixture test/cfield_ptr_arith_b24.c (=42).

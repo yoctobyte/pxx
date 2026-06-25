@@ -364,6 +364,8 @@ test-core: $(COMPILER)
 	/tmp/ccomma_expr_b2226; test "$$?" = "42"
 	./$(COMPILER) test/cstruct_array_stride_b23.c /tmp/cstruct_array_stride_b2326
 	/tmp/cstruct_array_stride_b2326; test "$$?" = "42"
+	./$(COMPILER) test/cfield_ptr_arith_b24.c /tmp/cfield_ptr_arith_b2426
+	/tmp/cfield_ptr_arith_b2426; test "$$?" = "42"
 	./$(COMPILER) -Itest/cinc/inc test/cinc/cinc_main.c /tmp/cinc_main26
 	test "$$(/tmp/cinc_main26)" = "$$(printf 'local-ok\ninc-ok')"
 	./$(COMPILER) test/test_declared_directive.pas /tmp/test_declared_directive26
