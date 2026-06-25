@@ -360,6 +360,8 @@ test-core: $(COMPILER)
 	/tmp/csizeof_constexpr_b2026; test "$$?" = "42"
 	./$(COMPILER) test/caddr_func_b21.c /tmp/caddr_func_b2126
 	/tmp/caddr_func_b2126; test "$$?" = "42"
+	./$(COMPILER) test/ccomma_expr_b22.c /tmp/ccomma_expr_b2226
+	/tmp/ccomma_expr_b2226; test "$$?" = "42"
 	./$(COMPILER) -Itest/cinc/inc test/cinc/cinc_main.c /tmp/cinc_main26
 	test "$$(/tmp/cinc_main26)" = "$$(printf 'local-ok\ninc-ok')"
 	./$(COMPILER) test/test_declared_directive.pas /tmp/test_declared_directive26

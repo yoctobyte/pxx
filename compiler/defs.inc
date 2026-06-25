@@ -198,6 +198,9 @@ const
                            lowering (dispatch target). }
   AN_DEFAULT       = 70; { `default:` marker inside a switch body. ASTSOffset =
                            the IR label assigned at lowering. }
+  AN_COMMA         = 71; { C comma EXPRESSION `(a, b)`: Left evaluated for side
+                           effects and discarded, Right yields the value. ASTTk =
+                           Right's type. (Statement-level comma uses AN_BLOCK.) }
 
   { Inline-asm operand kinds }
   AOP_NONE = 0;

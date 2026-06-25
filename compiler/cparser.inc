@@ -190,6 +190,19 @@ begin
     begin
       Next;
       Result := ParseCExpr;
+      { Parenthesized comma EXPRESSION `(a, b, c)` — evaluate each for side
+        effects, yield the last. lua uses `((void)l, expr)` pervasively (api_check
+        / lua_lock expand to it). Build left-nested AN_COMMA nodes. }
+      while CurTok.Kind = tkComma do
+      begin
+        Next;
+        valNode := ParseCExpr;
+        node := AllocNode(AN_COMMA);
+        ASTLeft[node] := Result;       { evaluated, discarded }
+        ASTRight[node] := valNode;     { yields the value }
+        ASTTk[node] := ASTTk[valNode];
+        Result := node;
+      end;
       Expect(tkRParen, ')');
     end;
     tkIdent:

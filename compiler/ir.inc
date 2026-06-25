@@ -3365,6 +3365,15 @@ begin
       Result := IRAppend(IR_LOAD_SYM, ternTmp, -1, -1, 0, ASTTk[node]);
     end;
 
+    AN_COMMA:
+    begin
+      { C comma expression `(a, b)`: evaluate `a` for side effects (kept as a
+        statement so it is not pruned), then yield `b`'s value. }
+      last := IRLowerAST(ASTLeft[node]);
+      IRMarkStatementNode(last);
+      Result := IRLowerAST(ASTRight[node]);
+    end;
+
     AN_SWITCH:
     begin
       endLabel := IRNewLabel;
