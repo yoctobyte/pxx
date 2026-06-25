@@ -24,6 +24,24 @@
   gap to isolate), 1 `expected C expression`. NEXT: pick off the `unexpected
   token` tail incrementally (Track C), isolate the 2 IR-codegen gaps, then
   `setjmp`/`longjmp` (Track A) + multi-file linking for an actual lua build.
+- 2026-06-25 (round 3) — **6 more Track C fixes**, all gate-green + byte-identical:
+  adjacent string-literal concatenation (`"a" "b"`, lua's `lua_pushliteral`);
+  string-literal-to-pointer store now lands on char 0 not the Pascal length
+  prefix (closed `bug-c-string-literal-to-pointer-prefix`); `sizeof` in constant
+  expressions / array dimensions (`char b[3*sizeof(size_t)]`); `&function`
+  (AN_PROCADDR in IRLowerAddress); parenthesized comma EXPRESSION `(a,b)` (new
+  `AN_COMMA` — lua's `api_check`/`lua_lock` = `((void)l, expr)`); plus the libc
+  header growth (math.h + string/stdio/stdlib) and recursive `#if`. Fixtures
+  b18–b22. lua core still 5/34 parse-clean by COUNT, but individual files advance
+  several blockers each (lapi/lstate/ldo now fail much deeper).
+  **KEY FINDING for the next worker:** the remaining `unexpected token` /
+  `expected C expression` failures are EMERGENT from the cumulative full-file
+  preprocessor/macro state — every construct extracted in isolation (api_check,
+  index2stack, the sizeof/comma/cast forms) now COMPILES, but the full file still
+  fails. So per-file progress now needs bisection WITHIN the real file (build
+  progressively larger prefixes of the actual .c with its real includes), not
+  minimal repros. The `near:` locator (cd30d0c) gives the token; pair it with a
+  prefix-bisect harness.
 - 2026-06-25 (final survey) — **the remaining lua blockers are now predominantly
   CROSS-TRACK, not Track C.** With the type system fixed, the `call to undeclared
   function` cluster resolves to: (a) **libc functions with no crtl declaration** —
