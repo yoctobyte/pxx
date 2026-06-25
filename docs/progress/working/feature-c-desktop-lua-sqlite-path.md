@@ -221,3 +221,23 @@ gap rather than bloating this ticket.
   self-host byte-identical. Deferred: struct field access (`. ->`), casts,
   sizeof, multi-dim arrays, array initialisers, mixed `int *p, q` declarators.
   Next: struct field access + casts (then char-string libc surface toward M1).
+- 2026-06-25 — **Slice B increment 2b (struct field access) DONE.** `.` and `->`
+  field access (both lex to tkDot since `->`→tkDot is intentional): ParseCPostfix
+  builds AN_FIELD, and disambiguates by base type — a pointer base auto-derefs
+  (AN_DEREF) so `p->f` = `(*p).f`, a value base takes the field directly. Uses
+  the existing ResolveNodeRec (handles AN_DEREF-of-pointer-to-record and AN_FIELD
+  chains) + RecFieldType. Struct-by-value locals now set RecName
+  (LastTypeRecId := CTypeBaseRec before AllocVar) so AllocVar reserves RecSize
+  and fields resolve. KEY FIX: top-level `struct/union/enum/typedef` DEFINITIONS
+  were never laid out in program mode (only the header-import path ParseCUnit did
+  it) — so every field resolved to offset 0 (`p.x` and `p.y` aliased). Wired the
+  existing ParseCTypedef/ParseCEnumDecl/ParseCStructDecl into the program driver:
+  pass 1 lays out types (once) + signatures + globals; pass 2 compiles bodies and
+  skips type decls/globals via SkipCDeclToSemi (balanced-brace skip to the
+  depth-0 `;`). All in Track D's lane (cparser only) — reuses existing AN_FIELD/
+  AN_DEREF, no shared-IR edits. Verified vs gcc: value `.`, pointer `->`,
+  struct-pointer params, nested structs, typedef structs, linked-list walk; new
+  fixture `test/cstruct_b3.c` (=62) wired in; full C-import regression green;
+  self-host byte-identical. Deferred: casts, sizeof, struct-by-value params,
+  combined `struct X {..} v;`, array/struct initialisers. Next: casts + sizeof,
+  then char-string libc surface (M2) toward running tiny-regex (M1).

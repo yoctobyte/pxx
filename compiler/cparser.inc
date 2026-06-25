@@ -6,6 +6,10 @@ procedure SkipBraceBlock; forward;
 procedure ParseCSubroutine; forward;
 function ParseCExpr: Integer; forward;
 function CEvalConstExpr: Int64; forward;
+procedure ParseCTypedef; forward;
+procedure ParseCEnumDecl; forward;
+procedure ParseCStructDecl; forward;
+function IsBareStructDecl: Boolean; forward;
 
 { ===== C expression compiler (Slice B) =====
   A real recursive-descent C expression parser at C precedence, replacing the
@@ -260,6 +264,20 @@ begin
     Result := ASTTk[node];
 end;
 
+{ True when a node denotes a pointer value, so `.`/`->` (both lex to tkDot in C)
+  on it means C `->` (deref then field) rather than direct field access. }
+function CNodeIsPointer(node: Integer): Boolean;
+begin
+  Result := False;
+  if node < 0 then Exit;
+  if ASTKind[node] = AN_IDENT then
+    Result := (Syms[ASTIVal[node]].TypeKind = tyPointer) and not Syms[ASTIVal[node]].IsArray
+  else if ASTKind[node] = AN_FIELD then
+    Result := RecFieldType(ResolveNodeRec(ASTLeft[node]), GetASTIdentName(node)) = tyPointer
+  else if ASTKind[node] = AN_INDEX then
+    Result := IntToTypeKind(ASTTk[node]) = tyPointer;
+end;
+
 { Unary prefix: `- + ! ~ * &`. sizeof and casts arrive later. }
 function ParseCUnary: Integer;
 var node, operand: Integer;
@@ -339,7 +357,8 @@ end;
 { Postfix layer: a primary optionally followed by `++`/`--`. Array/field/call
   postfix (`[] . -> ()`) arrive with the lvalue increment. }
 function ParseCPostfix: Integer;
-var node, idxExpr, inode: Integer; done: Boolean;
+var node, idxExpr, inode, dnode, fnode, baseFld, recId, fldOff, fldLen: Integer;
+    done: Boolean; fieldName: AnsiString;
 begin
   node := ParseCPrimary;
   done := False;
@@ -355,6 +374,34 @@ begin
       ASTRight[inode] := idxExpr;
       ASTTk[inode] := CNodePointeeTk(node);
       node := inode;
+    end
+    else if CurTok.Kind = tkDot then      { `.` field, or `->` (also tkDot) }
+    begin
+      Next;
+      if CurTok.Kind <> tkIdent then Error('field name expected after .');
+      fldOff := Tokens[TokPos - 1].SOffset;
+      fldLen := Tokens[TokPos - 1].SLen;
+      fieldName := CurTok.SVal;
+      { On a pointer base this is C `->`: dereference, then take the field. }
+      baseFld := node;
+      if CNodeIsPointer(node) then
+      begin
+        dnode := AllocNode(AN_DEREF);
+        ASTLeft[dnode] := node;
+        ASTTk[dnode] := Ord(tyRecord);
+        baseFld := dnode;
+      end;
+      recId := ResolveNodeRec(baseFld);
+      fnode := AllocNode(AN_FIELD);
+      ASTLeft[fnode] := baseFld;
+      ASTSOffset[fnode] := fldOff;
+      ASTSLen[fnode] := fldLen;
+      if recId <> REC_NONE then
+        ASTTk[fnode] := Ord(RecFieldType(recId, fieldName))
+      else
+        ASTTk[fnode] := Ord(tyInteger);
+      Next;   { consume field name }
+      node := fnode;
     end
     else if (CurTok.Kind = tkPlusPlus) or (CurTok.Kind = tkMinusMinus) then
     begin
@@ -791,6 +838,9 @@ begin
     end
     else
     begin
+      { A struct-by-value local needs its record id so field access resolves and
+        AllocVar reserves RecSize bytes. }
+      if baseTk = tyRecord then LastTypeRecId := CTypeBaseRec;
       idx := AllocVar(name, baseTk);
       if baseTk = tyPointer then
       begin
@@ -1123,6 +1173,33 @@ begin
   TokPos := savedPos; Next;        { rewind }
 end;
 
+{ True when the current top-level token starts a TYPE declaration
+  (`typedef …`, `enum …`, or a bare `struct/union [Tag] { … } ;` / forward),
+  as opposed to a function or a global variable typed by a struct. }
+function CIsTopLevelTypeDecl: Boolean;
+begin
+  Result := ((CurTok.Kind = tkIdent) and (CurTok.SVal = 'typedef')) or
+            ((CurTok.Kind = tkIdent) and (CurTok.SVal = 'enum')) or
+            (((CurTok.Kind = tkRecord) or
+              ((CurTok.Kind = tkIdent) and (CurTok.SVal = 'union'))) and IsBareStructDecl);
+end;
+
+{ Consume a top-level declaration up to and including its terminating `;`,
+  balancing any `{ }` (struct body / brace initialiser). Used in pass 2 to skip
+  type declarations and globals already processed in pass 1. }
+procedure SkipCDeclToSemi;
+var depth: Integer;
+begin
+  depth := 0;
+  while CurTok.Kind <> tkEOF do
+  begin
+    if CurTok.Kind = tkBegin then Inc(depth)
+    else if CurTok.Kind = tkEnd then Dec(depth)
+    else if (CurTok.Kind = tkSemicolon) and (depth <= 0) then begin Next; Exit; end;
+    Next;
+  end;
+end;
+
 { C program driver (Slice D): compile EVERY function (not just main) plus
   top-level globals, with forward inter-function calls resolved. Two passes over
   the one token stream:
@@ -1149,11 +1226,17 @@ begin
   firstIdx := TokPos - 1;
   CProgramMode := True;
 
-  { pass 1: signatures + global reservations }
+  { pass 1: lay out types, register every function signature, reserve globals }
   CHeaderMode := True;
   while CurTok.Kind <> tkEOF do
   begin
-    if IsCTypeTok then
+    if CIsTopLevelTypeDecl then
+    begin
+      if (CurTok.Kind = tkIdent) and (CurTok.SVal = 'typedef') then ParseCTypedef
+      else if (CurTok.Kind = tkIdent) and (CurTok.SVal = 'enum') then ParseCEnumDecl
+      else ParseCStructDecl;
+    end
+    else if IsCTypeTok then
     begin
       if CTopLevelIsFunc then ParseCSubroutine
       else ParseCGlobalVarDecl;
@@ -1163,14 +1246,16 @@ begin
   end;
   CHeaderMode := False;
 
-  { pass 2: compile bodies }
+  { pass 2: compile function bodies; types/globals already done in pass 1 }
   TokPos := firstIdx; Next;
   while CurTok.Kind <> tkEOF do
   begin
-    if IsCTypeTok then
+    if CIsTopLevelTypeDecl then
+      SkipCDeclToSemi
+    else if IsCTypeTok then
     begin
       if CTopLevelIsFunc then ParseCSubroutine
-      else ParseCGlobalVarDecl;
+      else SkipCDeclToSemi;
     end
     else
       Next;
