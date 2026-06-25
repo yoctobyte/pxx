@@ -58,3 +58,4 @@
 2026-06-25T00:26:11Z  v58  9ba5d7ce00f5d812904f3d9584ff51c26f5dc7a0e961db0764b2d8ddcbad59cb  105cda3be0896e62fe53ff34d0b67b15a76e95d9  chore(stable): pin v57 (set-of-char const shadowing fix)
 2026-06-25T00:44:29Z  v59  8863f39dd00034e58800f7605ea44f62a8583e95419966325e8bf826659dc84c  adec5270b4fc1327b44cb3b49a482a1bf1296a66  chore(stable): pin v58 (Unit.Const in const expressions)
 2026-06-25T00:53:05Z  v60  ee7f8e3d2ff3e63ad09640eed09eb99ac49963bfedc21af6aaa0745c89e71886  fd3b7cb086945da5839c87aa530f27bb0b22be1e  chore(stable): pin v59 (inactive-branch comment/string skip)
+2026-06-25T01:09:01Z  v61  594c8b9000c59653ee0a2b373aeaeb09283ddf6bcb8364143757ae8c974a716d  01ca7e732d405dba7597e00923829171449ac18a  chore(stable): pin v60 (const char/string-literal concatenation)
