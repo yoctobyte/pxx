@@ -152,7 +152,7 @@ end;
   (constant -> folded literal; variable -> AN_IDENT; name followed by `(` ->
   call with an AN_ARG chain). }
 function ParseCPrimary: Integer;
-var node, idx, procIdx, argHead, argTail, argNode, valNode: Integer;
+var node, idx, procIdx, argHead, argTail, argNode, valNode, calleeNode: Integer;
     name: AnsiString;
 begin
   Result := -1;
@@ -189,13 +189,8 @@ begin
       Next;
       if CurTok.Kind = tkLParen then
       begin
-        { function call }
+        { call — direct (named function) or indirect (fn-pointer variable) }
         Next;
-        procIdx := FindProc(name);
-        node := AllocNode(AN_CALL);
-        ASTIVal[node] := procIdx;
-        if procIdx >= 0 then ASTTk[node] := Ord(Procs[procIdx].RetType)
-        else ASTTk[node] := Ord(tyInteger);
         argHead := -1; argTail := -1;
         if CurTok.Kind <> tkRParen then
         begin
@@ -212,9 +207,36 @@ begin
             Break;
           end;
         end;
-        ASTLeft[node] := argHead;
         Expect(tkRParen, ')');
-        if procIdx < 0 then Error('call to undeclared function');
+        procIdx := FindProc(name);
+        if procIdx >= 0 then
+        begin
+          node := AllocNode(AN_CALL);
+          ASTIVal[node] := procIdx;
+          ASTTk[node] := Ord(Procs[procIdx].RetType);
+          ASTLeft[node] := argHead;
+        end
+        else
+        begin
+          idx := FindSym(name);
+          if (idx >= 0) and (SymProcSig[idx] >= 0) then
+          begin
+            { `f(args)` where f is a fn-pointer variable -> indirect call.
+              ASTRight = the callee value (the variable), ASTIVal = the
+              signature Procs[] index (marshalling + return type). }
+            calleeNode := AllocNode(AN_IDENT);
+            ASTIVal[calleeNode] := idx;
+            ASTTk[calleeNode] := Ord(tyPointer);
+            node := AllocNode(AN_CALL_IND);
+            ASTLeft[node]  := argHead;
+            ASTRight[node] := calleeNode;
+            ASTIVal[node]  := SymProcSig[idx];
+            ASTTk[node]    := Ord(Procs[SymProcSig[idx]].RetType);
+            ASTSLen[node]  := 0;
+          end
+          else
+            Error('call to undeclared function');
+        end;
         Result := node;
       end
       else
@@ -222,13 +244,23 @@ begin
         idx := FindSym(name);
         if idx < 0 then
         begin
-          { Best-effort C frontend: an unresolved identifier (e.g. a token left
-            behind by a self-referential / unmodelled macro) degrades to a 0
-            literal instead of failing the whole translation unit — matching the
-            old skip-the-statement leniency. Undeclared *calls* still error. }
-          node := AllocNode(AN_INT_LIT);
-          ASTIVal[node] := 0;
-          ASTTk[node] := Ord(tyInteger);
+          { A bare function name decays to its address (a fn-pointer value),
+            e.g. `BinOp f = add;`. Otherwise an unresolved identifier (a token
+            left by a self-referential / unmodelled macro) degrades to a 0
+            literal — best-effort frontend, matching the old skip leniency. }
+          procIdx := FindProc(name);
+          if procIdx >= 0 then
+          begin
+            node := AllocNode(AN_PROCADDR);
+            ASTIVal[node] := procIdx;
+            ASTTk[node] := Ord(tyPointer);
+          end
+          else
+          begin
+            node := AllocNode(AN_INT_LIT);
+            ASTIVal[node] := 0;
+            ASTTk[node] := Ord(tyInteger);
+          end;
         end
         else if Syms[idx].Kind = skConst then
         begin
@@ -447,6 +479,7 @@ end;
   postfix (`[] . -> ()`) arrive with the lvalue increment. }
 function ParseCPostfix: Integer;
 var node, idxExpr, inode, dnode, fnode, baseFld, recId, fldOff, fldLen: Integer;
+    argHead, argTail, argNode, valNode, sig: Integer;
     done: Boolean; fieldName: AnsiString;
 begin
   node := ParseCPrimary;
@@ -490,7 +523,37 @@ begin
       else
         ASTTk[fnode] := Ord(tyInteger);
       Next;   { consume field name }
-      node := fnode;
+      { fn-pointer field call: `rec.field(args)` / `p->field(args)` lowers to an
+        indirect call through the field value (callee = AN_FIELD node). }
+      if (CurTok.Kind = tkLParen) and (recId <> REC_NONE) and
+         (RecFieldProcSig(recId, fieldName) >= 0) then
+      begin
+        sig := RecFieldProcSig(recId, fieldName);
+        Next;                                 { consume '(' }
+        argHead := -1; argTail := -1;
+        if CurTok.Kind <> tkRParen then
+          while True do
+          begin
+            valNode := ParseCExpr;
+            argNode := AllocNode(AN_ARG);
+            ASTLeft[argNode] := valNode; ASTRight[argNode] := -1;
+            if argHead = -1 then argHead := argNode
+            else ASTRight[argTail] := argNode;
+            argTail := argNode;
+            if CurTok.Kind = tkComma then begin Next; Continue; end;
+            Break;
+          end;
+        Expect(tkRParen, ')');
+        inode := AllocNode(AN_CALL_IND);
+        ASTLeft[inode]  := argHead;
+        ASTRight[inode] := fnode;             { callee value = the fn-pointer field }
+        ASTIVal[inode]  := sig;
+        ASTTk[inode]    := Ord(Procs[sig].RetType);
+        ASTSLen[inode]  := 0;
+        node := inode;
+      end
+      else
+        node := fnode;
     end
     else if (CurTok.Kind = tkPlusPlus) or (CurTok.Kind = tkMinusMinus) then
     begin
@@ -662,6 +725,7 @@ begin
     CTypedefTk[idx] := Ord(tk);
     CTypedefElemTk[idx] := elemTk;
     CTypedefRec[idx] := rec;
+    CTypedefProcSig[idx] := -1;
     Exit;
   end;
   if CTypedefCount >= MAX_CTYPEDEF then Error('C typedef table overflow');
@@ -678,6 +742,7 @@ begin
   CTypedefTk[CTypedefCount] := Ord(tk);
   CTypedefElemTk[CTypedefCount] := elemTk;
   CTypedefRec[CTypedefCount] := rec;
+  CTypedefProcSig[CTypedefCount] := -1;
   CTypedefHashInsert(CTypedefCount, name);
   Inc(CTypedefCount);
 end;
@@ -685,6 +750,17 @@ end;
 procedure AddCTypedef(const name: AnsiString; tk: TTypeKind);
 begin
   AddCTypedefEx(name, tk, Ord(tyUnknown), REC_NONE);
+end;
+
+{ Register a function-pointer typedef: `Name` resolves to a pointer value, but
+  carries `sigPi` (a signature Procs[] entry, BodyAddr=-1, ProcCdecl) so a var of
+  this type is callable through AN_CALL_IND with proper marshalling. }
+procedure AddCTypedefFnPtr(const name: AnsiString; sigPi: Integer);
+var idx: Integer;
+begin
+  AddCTypedef(name, tyPointer);
+  idx := FindCTypedef(name);
+  if idx >= 0 then CTypedefProcSig[idx] := sigPi;
 end;
 
 function IsCTypeTok: Boolean;
@@ -715,11 +791,17 @@ function ParseCDeclType: TTypeKind;
 var
   isUnsigned, isSigned, isFloatTy, isVoid, loop, sawBase, isTypedef, isAggBase: Boolean;
   shortCount, longCount, tdIdx, depth, baseRec: Integer;
-  base: TTypeKind;
+  base, fpRet, fpPType: TTypeKind;
+  fpName: AnsiString;
+  fpNParams, fpSig: Integer;
+  fpPTypes: array[0..15] of TTypeKind;
+  fpPNames: array[0..15] of AnsiString;
 begin
   isUnsigned := False; isSigned := False; isFloatTy := False; isVoid := False;
   sawBase := False; isTypedef := False; isAggBase := False;
   shortCount := 0; longCount := 0; base := tyInt32; baseRec := REC_NONE;
+  CTypeProcSig := -1;
+  CTypeFnPtrName := '';
   loop := True;
   while loop do
   begin
@@ -774,6 +856,7 @@ begin
             begin
               base := IntToTypeKind(CTypedefTk[tdIdx]);
               baseRec := CTypedefRec[tdIdx];
+              CTypeProcSig := CTypedefProcSig[tdIdx]; { fn-pointer typedef carries a call signature }
               sawBase := True; isTypedef := True;
               Next;
             end
@@ -820,6 +903,7 @@ begin
   CTypeBaseRec := baseRec;
   if CurTok.Kind = tkStar then
   begin
+    CTypeProcSig := -1;           { `FnPtrTypedef *` = pointer-to-fn-ptr, not directly callable }
     CTypeElemTk := Ord(Result);   { the pointed-at scalar/typedef kind at depth 1 }
     CTypeElemRec := baseRec;      { ...and its record id, if it is a struct }
     while CurTok.Kind = tkStar do
@@ -844,22 +928,56 @@ begin
     group so the caller's parameter loop resyncs on the next `,`/`)`. }
   if (CurTok.Kind = tkLParen) and (Tokens[TokPos].Kind = tkStar) then
   begin
+    fpRet := Result;                  { return type parsed above (before the '(') }
+    if isVoid then fpRet := tyInteger;
     Result := tyPointer;
     CTypeIsVoid := False;
+    fpName := '';
+    { first group `(*name)` — collapse to Pointer, capturing the declarator name }
     depth := 0;
     repeat
       if CurTok.Kind = tkLParen then Inc(depth)
-      else if CurTok.Kind = tkRParen then Dec(depth);
+      else if CurTok.Kind = tkRParen then Dec(depth)
+      else if (CurTok.Kind = tkIdent) and (fpName = '') then fpName := CurTok.SVal;
       Next;
     until (depth = 0) or (CurTok.Kind = tkEOF);
+    { second group `(params)` — capture param types to build a call signature }
+    fpNParams := 0;
     if CurTok.Kind = tkLParen then
     begin
-      depth := 0;
-      repeat
-        if CurTok.Kind = tkLParen then Inc(depth)
-        else if CurTok.Kind = tkRParen then Dec(depth);
-        Next;
-      until (depth = 0) or (CurTok.Kind = tkEOF);
+      Next;                           { consume the parameter-list '(' }
+      while (CurTok.Kind <> tkRParen) and (CurTok.Kind <> tkEOF) do
+      begin
+        if IsCTypeTok then
+        begin
+          { NB parens REQUIRED: bare `ParseCDeclType` would read this function's
+            own Result (pxx bare-funcname rule), not recurse -> infinite loop. }
+          fpPType := ParseCDeclType();
+          if CTypeIsVoid then
+          begin
+            { (void) — no parameter }
+          end
+          else if fpNParams <= 15 then
+          begin
+            fpPTypes[fpNParams] := fpPType;
+            fpPNames[fpNParams] := 'a';
+            Inc(fpNParams);
+          end;
+          if CurTok.Kind = tkIdent then Next;  { optional parameter name }
+        end
+        else
+          Next;                       { e.g. `...` varargs marker }
+        Eat(tkComma);
+      end;
+      Eat(tkRParen);
+    end;
+    if fpName <> '' then
+    begin
+      fpSig := RegisterProc('$cfnptr', True, fpRet, fpNParams, fpPNames, fpPTypes);
+      Procs[fpSig].BodyAddr := -1;
+      ProcCdecl[fpSig] := True;        { C ABI (System V) for the indirect call }
+      CTypeProcSig := fpSig;           { caller threads this onto the typedef/var/field }
+      CTypeFnPtrName := fpName;
     end;
   end;
 end;
@@ -896,7 +1014,7 @@ end;
   and per-declarator pointer-depth handling come later. }
 function ParseCLocalDeclAST: Integer;
 var baseTk: TTypeKind; head, tail, seq, asn, idn, initExpr, blk, idx: Integer;
-    elemTkOrd, elemRec, arrLen: Integer;
+    elemTkOrd, elemRec, arrLen, procSig: Integer;
     name: AnsiString;
 begin
   baseTk := ParseCDeclType;   { specifiers + first declarator's pointer suffix }
@@ -904,6 +1022,7 @@ begin
     clobber the CType* globals (it does not run ParseCDeclType). }
   elemTkOrd := CTypeElemTk;
   elemRec := CTypeElemRec;
+  procSig := CTypeProcSig;    { fn-pointer typedef signature, if any }
   head := -1; tail := -1;
   while True do
   begin
@@ -935,6 +1054,7 @@ begin
       begin
         Syms[idx].PtrElemTk := IntToTypeKind(elemTkOrd);
         Syms[idx].PtrElemRec := elemRec;
+        if procSig >= 0 then SymProcSig[idx] := procSig;  { fn-pointer var: callable }
       end;
       initExpr := -1;
       if CurTok.Kind = tkAssign then
@@ -1434,6 +1554,7 @@ var
   pdepths: array[0..15] of Integer;
   pelemtk: array[0..15] of Integer;   { pointed-at TTypeKind ordinal per pointer param }
   pelemrec: array[0..15] of Integer;
+  pprocsig: array[0..15] of Integer;  { fn-pointer signature Procs[] index per param, else -1 }
   savedSC, savedFS, node, savedCurProc: Integer;
 begin
   retType := ParseCDeclType;
@@ -1480,6 +1601,7 @@ begin
         pdepths[nparams] := CTypePtrDepth;
         pelemtk[nparams] := CTypeElemTk;
         pelemrec[nparams] := CTypeElemRec;
+        pprocsig[nparams] := CTypeProcSig;   { fn-pointer param: callable in the body }
         if CurTok.Kind = tkIdent then
         begin
           pnames[nparams] := CurTok.SVal;
@@ -1566,6 +1688,7 @@ begin
     begin
       Syms[idx].PtrElemTk := IntToTypeKind(pelemtk[i]);
       Syms[idx].PtrElemRec := pelemrec[i];
+      if pprocsig[i] >= 0 then SymProcSig[idx] := pprocsig[i];  { fn-pointer param: callable }
     end;
   end;
   
@@ -1975,6 +2098,7 @@ procedure ParseCStructInto(ci: Integer; isUnion: Boolean);
 var
   curOff, maxAlign, fnOff, fnLen, arrLen, declStars, sz, al, totalSz, thisOff: Integer;
   baseScalarTk, baseElemTk, baseElemRec, baseRecId, declTk, declElemTk, declElemRec, declRec: Integer;
+  fldProcSig: Integer;
   fTk: TTypeKind;
   isArr, firstDecl: Boolean;
 begin
@@ -1986,6 +2110,7 @@ begin
     if IsCTypeTok then
     begin
       fTk := ParseCDeclType;
+      fldProcSig := CTypeProcSig;   { fn-pointer typedef field signature, if any }
       { Recover the base scalar/struct before pointer folding, so comma
         declarators with differing pointer levels (`int *a, b`) are correct. }
       if CTypePtrDepth > 0 then
@@ -2062,6 +2187,8 @@ begin
           AddUField(ci, fnOff, fnLen, thisOff, declTk, declRec);
           UFldIsArray[UFldCount-1] := isArr;
           UFldArrLen[UFldCount-1] := arrLen;
+          if (declStars = 0) and (fldProcSig >= 0) then
+            UFldProcSig[UFldCount-1] := fldProcSig;  { fn-pointer field: callable }
         end;
 
         totalSz := sz;
@@ -2090,10 +2217,12 @@ end;
   - struct/union [tag] [body] Name   -> opaque, mapped to Pointer
   - enum [tag] body Name             -> Int32, enumerators become constants
   - <decl-specifiers> Name           -> the mapped scalar/pointer type
-  Function-pointer typedefs `ret (*Name)(args)` are detected and registered
-  as Pointer; their argument signature is not yet modelled. }
+  Function-pointer typedefs `ret (*Name)(args)` are registered as Pointer AND
+  carry a signature Procs[] entry (CTypedefProcSig) so a value of the type is
+  callable through AN_CALL_IND with C-ABI marshalling. }
 procedure ParseCTypedef;
-var tk: TTypeKind; nm, tagName: AnsiString; isAggregate, isUnion, hasTag: Boolean;
+var tk: TTypeKind; nm, tagName: AnsiString;
+    isAggregate, isUnion, hasTag: Boolean;
     ci, ptrStars, nmOff, nmLen: Integer;
 begin
   Next; { consume 'typedef' }
@@ -2197,17 +2326,13 @@ begin
 
   { scalar / pointer typedef }
   tk := ParseCDeclType;
-  { function-pointer form: ret (*Name)(...) — the declarator name sits inside
-    parens. Detect a '(' next and recover the name, registering as Pointer. }
-  if CurTok.Kind = tkLParen then
+  { Function-pointer typedef `ret (*Name)(params)`: ParseCDeclType collapses the
+    declarator to Pointer and (now) captures the name + a call signature in
+    CTypeFnPtrName / CTypeProcSig. Register Name as a pointer typedef that carries
+    the signature, so a value of the type is callable through AN_CALL_IND. }
+  if (CTypeFnPtrName <> '') and (CTypeProcSig >= 0) then
   begin
-    Next;
-    while CurTok.Kind = tkStar do Next;
-    if CurTok.Kind = tkIdent then
-    begin
-      nm := CurTok.SVal; Next;
-      AddCTypedef(nm, tyPointer);
-    end;
+    AddCTypedefFnPtr(CTypeFnPtrName, CTypeProcSig);
     while (CurTok.Kind <> tkSemicolon) and (CurTok.Kind <> tkEOF) do Next;
     Eat(tkSemicolon);
     Exit;

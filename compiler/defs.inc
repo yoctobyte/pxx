@@ -832,6 +832,8 @@ var
   CTypeElemTk : Integer;     { pointed-at TTypeKind ordinal when CTypePtrDepth>0 (tyPointer for depth>=2) }
   CTypeElemRec : Integer;    { pointed-at record id when the element is a struct, else REC_NONE }
   CTypeBaseRec : Integer;    { record id of the base type before any pointer suffix, else REC_NONE }
+  CTypeProcSig : Integer;    { fn-pointer typedef signature Procs[] index of the last ParseCDeclType (CTypePtrDepth=0), else -1 }
+  CTypeFnPtrName : AnsiString; { fn-pointer declarator name `ret (*Name)(..)` captured by the last ParseCDeclType, else '' }
   CHeaderMode : Boolean; { parsing C in header/FFI mode }
   CProgramMode : Boolean; { compiling a C .c program (vs importing a header):
     a `{...}` function body is a LOCAL definition (internal), so the pass-1
@@ -843,6 +845,7 @@ var
   CTypedefTk    : array[0..MAX_CTYPEDEF-1] of Integer; { resolved TTypeKind ordinal }
   CTypedefElemTk : array[0..MAX_CTYPEDEF-1] of Integer; { pointer typedef: pointed-at TTypeKind ordinal }
   CTypedefRec   : array[0..MAX_CTYPEDEF-1] of Integer;  { struct typedef: record id; pointer typedef: elem record id }
+  CTypedefProcSig : array[0..MAX_CTYPEDEF-1] of Integer; { fn-pointer typedef: signature Procs[] index (BodyAddr=-1) for indirect-call marshalling; -1 = not a fn pointer }
   { Open-addressed name->index hash for O(1) FindCTypedef. Stores idx+1 so the
     zero-initialised state means "empty" (no -1 fill needed). Size is a power of
     two > 2*MAX_CTYPEDEF for a <=0.5 load factor. }

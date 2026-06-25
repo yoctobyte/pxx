@@ -263,9 +263,9 @@ gap rather than bloating this ticket.
       track-a-c-frontend-shared-ir-touchpoints).
     - function pointers (decl + indirect call), global/`static const`
       initialisers (currently zero-init), multi-dim arrays, array/struct
-      initialisers — Track D.
+      initialisers — Track C.
     - M3: `setjmp`/`longjmp` needs register-save/restore codegen -> **Track A**;
-      varargs *define* (callee SysV ABI) -> Track D.
+      varargs *define* (callee SysV ABI) -> Track C.
   Also: **lua/tiny-regex sources are not staged in this worktree**
   (`library_candidates/` is absent here; it lives in the master checkout), so
   M1/M4 cannot be compiled here until staged.
@@ -273,3 +273,56 @@ gap rather than bloating this ticket.
   steady, green, self-host-byte-identical state. One shared-IR touch
   (ir.inc AN_EXIT->Halt) is documented in
   track-a-c-frontend-shared-ir-touchpoints for the sister agents to reconcile.
+- 2026-06-25 — **LUA STAGED + first real blocker located (empirical).**
+  Fetched `lua-5.4.7` into `library_candidates/lua` (gitignored — vendor source,
+  not committed). The live compiler already parses several core files: `lctype.c`
+  reaches "main function not found" = full parse OK (a library, no main, like
+  tiny-regex `re.c`). `lzio.c` / `lmem.c` / `lobject.c` fail. Reduced the failure
+  to a minimal no-header reproducer: **function pointers.**
+    - `BinOp f = add; f(3,4);` → `pascal26: error: call to undeclared function`.
+    - `c.op(5,6)` (indirect call through a fn-ptr struct field) — same family.
+    - lua hits this immediately: `lua.h` defines `lua_CFunction`/`lua_Reader`/…
+      as `ret (*Name)(args)`, and the core calls through fn-ptr fields
+      (`z->reader(L, z->data, &size)` in lzio.c is the exact first failure).
+  Root cause: C fn-ptr typedefs register as plain `tyPointer` with the **argument
+  signature not modelled** (cparser.inc ~2094), so `AN_CALL_IND` has no signature
+  `Procs[]` index to marshal with, and a bare function name decays to `0` instead
+  of its address. The IR primitives already exist and are proven on the Pascal
+  side: `AN_CALL_IND` (parser.inc ParseProcVarCallAST), `AN_PROCADDR`,
+  `SymProcSig`/`UFldProcSig` (defs.inc:772, symtab.inc:509), and the C-ABI
+  `ProcCdecl` flag. **Next slice (Track C, binary-editing — `make test` +
+  self-host + cross gate):** function pointers —
+    1. fn-ptr typedef `ret (*Name)(params)` → synthesize a signature `Procs[]`
+       entry (`RegisterProc` + `BodyAddr:=-1` + `ProcCdecl:=True`); store its index
+       on the typedef (new `CTypedefProcSig` slot).
+    2. var/field of that typedef → set `SymProcSig`/`UFldProcSig` from the typedef.
+    3. call sites in cparser ParseCPrimary/ParseCPostfix: bare function name (not
+       followed by `(`) → `AN_PROCADDR`; `name(args)` where `name` is a var with
+       `SymProcSig>=0` → `AN_CALL_IND`; postfix `field(args)` with `UFldProcSig>=0`
+       → `AN_CALL_IND`.
+  Remaining lua blockers after fn-pointers (from the reframe): switch/case +
+  ternary + setjmp/longjmp (**Track A**, shared-IR), varargs-define (Track C),
+  and multi-file linking (lua core = 34 `.c`; no upstream amalgamation — build a
+  one-unit include shim or add object linking).
+- 2026-06-25 — **Function pointers DONE** (Slice B inc3). Typedef'd fn-ptr types,
+  indirect calls through a variable / struct field / parameter, and bare
+  function-name decay to address — all four forms match gcc. Implementation:
+  ParseCDeclType's existing `(*name)(params)` declarator-skip now also captures
+  the declarator name + builds a signature `Procs[]` entry (`RegisterProc` +
+  `BodyAddr:=-1` + `ProcCdecl:=True` for the System V ABI), exposed via new
+  globals `CTypeProcSig`/`CTypeFnPtrName`. ParseCTypedef registers the typedef
+  with that signature (`CTypedefProcSig` slot); local-decl / struct-field /
+  param sites thread it onto `SymProcSig`/`UFldProcSig`; ParseCPrimary lowers a
+  bare function name to `AN_PROCADDR` and `var(args)` to `AN_CALL_IND`, and
+  ParseCPostfix lowers `rec.field(args)`/`p->field(args)` to `AN_CALL_IND` via
+  the new `RecFieldProcSig` accessor. All shared IR (`AN_CALL_IND`/`AN_PROCADDR`
+  already proven on the Pascal side) — no codegen edits. LANDMINE (cost ~30 min):
+  the recursive param-type parse must be `ParseCDeclType()` **with parens** — bare
+  `ParseCDeclType` reads the function's own Result (pxx bare-funcname rule) →
+  infinite loop (the exact landmine this ticket logged for Slice B inc1). Gate:
+  `make test` green, self-host byte-identical, all 8 C fixtures match gcc; new
+  fixture `test/cfnptr_b6.c` (=91) wired into `c-interop-devtest`. NB this was
+  NOT lzio.c's first blocker — lzio/lmem/lobject still stop at an earlier
+  `unexpected token (` (a different construct; SrcPos shows a NUL between
+  newlines — a preprocessor artifact to investigate next). lua.h's fn-ptr
+  typedefs (`lua_CFunction`/`lua_Reader`/…) now model correctly regardless.

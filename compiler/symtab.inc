@@ -881,6 +881,19 @@ begin
   end;
 end;
 
+{ Procedural-call signature Procs[] index of a (fn-pointer) record field, or -1.
+  Used to lower `rec.field(args)` / `p->field(args)` to an indirect call. }
+function RecFieldProcSig(rec: Integer; const field: AnsiString): Integer;
+var fi: Integer; field2: AnsiString;
+begin
+  Result := -1; field2 := field;
+  if rec >= REC_UCLASS_BASE then
+  begin
+    fi := FindUField(rec - REC_UCLASS_BASE, field2);
+    if fi >= 0 then Result := UFldProcSig[fi];
+  end;
+end;
+
 function RecFieldIsArray(rec: Integer; const field: AnsiString): Boolean;
 var fi, i, cnt: Integer; field2: AnsiString;
 begin
