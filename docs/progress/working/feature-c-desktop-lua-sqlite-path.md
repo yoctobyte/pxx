@@ -134,3 +134,27 @@ gap rather than bloating this ticket.
   `test_c_slicea.pas` (`<< >> & | ^` + precedence) matches gcc, wired into the
   C-import suite. Filed `bug-c-const-eval-bitwise-not` (pre-existing `~` typing
   quirk, omitted from the fixture). Next: Slice B (real C expression compiler).
+- 2026-06-25 — **Slice B (C expression compiler) increment 1 DONE.** Real
+  recursive-descent C expression parser in cparser.inc (`ParseCExpr` +
+  `ParseCBinExpr` precedence-climber + `ParseCUnary` + `ParseCPrimary`),
+  replacing the Pascal-`ParseExpr` borrow in `return`. Emits the shared AST
+  (AN_BINOP/AN_NEG/AN_NOT/AN_INT_LIT/AN_IDENT/AN_CALL/AN_ARG/AN_ASSIGN/
+  AN_STR_LIT) so all IR/backends apply. Full C precedence: `* / % | + - | << >>
+  | rel | eq | & | ^ | bit-| | && | ||`, unary `- + ! ~`, assignment +
+  compound-assign (right-assoc), function calls with arg chains, paren grouping,
+  int/char/string literals, const-fold of imported enum/#define names.
+  C-op -> AST-op mapping: `/`->tkDiv, `>>`->tkIdent(shr), `&`->tkAnd, `|`->tkOr
+  (bitwise); `&&`/`||` tagged tyBoolean with operands normalised via `(e!=0)`
+  for canonical 0/1. Added distinct `tkLogNot` for `!` (was collapsed with `~`
+  -> bitwise); `~` stays tkNot. `return <expr>` from a top-level C main now
+  exits with the value (IR: value-bearing CurProc<0 AN_EXIT routes through the
+  Halt terminate path; Pascal program Exit never carries a value, so self-host
+  byte-identical holds). LANDMINE (cost ~an hour): paramless self-recursion —
+  `op := ParseCUnary` reads the function's *own Result* (pxx/FPC bare-funcname
+  rule), not a recursive call; must be `ParseCUnary()`. Fixed in ParseCUnary
+  (x3) and ParseCExpr. Verified: 20-expr differential sweep + fixture
+  `test/cexpr_b.c` (=89) all match gcc; full C-import suite still green;
+  self-host byte-identical. Deferred to increment 2: ternary `?:`, comma
+  operator, pointer/lvalue unary (`* & ++ --`), cast, sizeof, postfix
+  `[] . -> ++ --`. Next: Slice C statements (locals+if/while/for/switch) to
+  unlock multi-statement bodies.

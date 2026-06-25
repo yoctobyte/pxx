@@ -2817,6 +2817,15 @@ begin
           value := -1;
         last := IRAppend(IR_TERMINATE, value, -1, -1, AN_HALT, 0);
       end
+      else if (CurProc < 0) and (ASTLeft[node] <> -1) then
+      begin
+        { `return <expr>` from a top-level C main (no enclosing proc): the value
+          IS the process exit code, so terminate with it like Halt(expr). Pascal
+          program-level Exit never carries a value, so this never fires in a
+          self-build (byte-identical preserved). }
+        value := IRLowerAST(ASTLeft[node]);
+        last := IRAppend(IR_TERMINATE, value, -1, -1, AN_HALT, 0);
+      end
       else
       begin
         if ASTLeft[node] <> -1 then

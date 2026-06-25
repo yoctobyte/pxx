@@ -429,7 +429,8 @@ type
     tkPlusPlus, tkMinusMinus,
     tkPlusEq, tkMinusEq, tkStarEq, tkSlashEq, tkModEq,
     tkAmpEq, tkPipeEq, tkXorEq, tkShlEq, tkShrEq,
-    tkQuestion
+    tkQuestion,
+    tkLogNot   { C `!` (logical not); distinct from `~` which stays tkNot }
   );
 
   TToken = record

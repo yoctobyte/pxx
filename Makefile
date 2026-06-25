@@ -314,6 +314,8 @@ test-core: $(COMPILER)
 	test "$$(/tmp/hello26)" = "Hello, World!"
 	./$(COMPILER) test/hello.c /tmp/hello_c26
 	test "$$(/tmp/hello_c26)" = "Hello, World!"
+	./$(COMPILER) test/cexpr_b.c /tmp/cexpr_b26
+	/tmp/cexpr_b26; test "$$?" = "89"
 	./$(COMPILER) -Itest/cinc/inc test/cinc/cinc_main.c /tmp/cinc_main26
 	test "$$(/tmp/cinc_main26)" = "$$(printf 'local-ok\ninc-ok')"
 	./$(COMPILER) test/test_declared_directive.pas /tmp/test_declared_directive26

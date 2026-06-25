@@ -3,6 +3,297 @@
 function ParseCBlockAST: Integer; forward;
 function ParseCStatementAST: Integer; forward;
 procedure SkipBraceBlock; forward;
+function ParseCExpr: Integer; forward;
+
+{ ===== C expression compiler (Slice B) =====
+  A real recursive-descent C expression parser at C precedence, replacing the
+  earlier Pascal-ParseExpr borrow. Emits the shared AST nodes (AN_BINOP, AN_NEG,
+  AN_NOT, AN_INT_LIT, AN_IDENT, AN_CALL, AN_ASSIGN, AN_STR_LIT) so the existing
+  IR lowering and all backends apply unchanged.
+
+  Operator-token mapping into AN_BINOP.IVal: the IR's binop validator accepts
+  ops with ordinal <= Ord(tkShl) plus tkXor, and encodes shift-right as the
+  *tkIdent* operator (shift-left = tkShl). So the distinct C lexer tokens from
+  Slice A are translated here to the operator tokens the IR understands:
+    C `&`(tkAmp)->tkAnd bitwise, `|`(tkPipe)->tkOr bitwise, `^`->tkXor,
+    `<<`->tkShl, `>>`->tkIdent(shr), `/`->tkDiv (integer division),
+    `&&`->tkAnd / `||`->tkOr but tagged tyBoolean for the short-circuit path. }
+
+{ Result type of a binary node: comparisons/logical -> Boolean; otherwise widen
+  to Int64 if either operand is Int64, else Integer. }
+function CBinResultTk(opTok, l, r: Integer): Integer;
+begin
+  if (opTok = Ord(tkEq)) or (opTok = Ord(tkNeq)) or (opTok = Ord(tkLt)) or
+     (opTok = Ord(tkLe)) or (opTok = Ord(tkGt)) or (opTok = Ord(tkGe)) or
+     (opTok = Ord(tkAnd)) or (opTok = Ord(tkOr)) then
+    Result := Ord(tyBoolean)
+  else if (IntToTypeKind(ASTTk[l]) = tyInt64) or (IntToTypeKind(ASTTk[r]) = tyInt64) then
+    Result := Ord(tyInt64)
+  else
+    Result := Ord(tyInteger);
+end;
+
+{ Build an AN_BINOP from a C operator token and two operand nodes. cTok is the
+  raw C lexer token kind (CurTok.Kind ordinal). }
+{ Wrap an expression in `(e != 0)` so a logical operand becomes a true 0/1
+  boolean. C `&&`/`||` must yield exactly 0/1, and the short-circuit IR stores
+  the operand value into a 1-byte boolean temp — a raw `2` would read back as 2.
+  Normalising both operands here keeps the result canonical. }
+function CMakeTruthy(e: Integer): Integer;
+var node, zero: Integer;
+begin
+  zero := AllocNode(AN_INT_LIT);
+  ASTIVal[zero] := 0;
+  ASTTk[zero] := Ord(tyInteger);
+  node := AllocNode(AN_BINOP);
+  ASTIVal[node] := Ord(tkNeq);
+  ASTLeft[node] := e;
+  ASTRight[node] := zero;
+  ASTTk[node] := Ord(tyBoolean);
+  Result := node;
+end;
+
+function CMakeBinop(cTok, l, r: Integer): Integer;
+var node, ivalOp: Integer;
+begin
+  ivalOp := cTok;
+  if cTok = Ord(tkSlash) then ivalOp := Ord(tkDiv)        { C `/` on ints = div }
+  else if cTok = Ord(tkShr) then ivalOp := Ord(tkIdent)   { shr encoded as tkIdent }
+  else if cTok = Ord(tkAmp) then ivalOp := Ord(tkAnd)     { bitwise AND }
+  else if cTok = Ord(tkPipe) then ivalOp := Ord(tkOr);    { bitwise OR }
+  { tkPlus/tkMinus/tkStar/tkMod/tkShl/tkXor/tkAnd(&&)/tkOr(||)/comparisons map
+    straight through. }
+  if (cTok = Ord(tkAnd)) or (cTok = Ord(tkOr)) then       { logical && / || }
+  begin
+    l := CMakeTruthy(l);
+    r := CMakeTruthy(r);
+  end;
+  node := AllocNode(AN_BINOP);
+  ASTIVal[node] := ivalOp;
+  ASTLeft[node] := l;
+  ASTRight[node] := r;
+  ASTTk[node] := CBinResultTk(cTok, l, r);
+  Result := node;
+end;
+
+{ Binary-operator precedence (higher binds tighter); -1 = not a binary op.
+  Note `&`=tkAmp(bitwise, 8) is distinct from `&&`=tkAnd(logical, 4), and
+  `|`=tkPipe(bitwise, 6) from `||`=tkOr(logical, 3) since Slice A. }
+function CBinPrec(k: TTokenKind): Integer;
+begin
+  case k of
+    tkStar, tkSlash, tkMod:        Result := 11;
+    tkPlus, tkMinus:               Result := 10;
+    tkShl, tkShr:                  Result := 9;
+    tkLt, tkLe, tkGt, tkGe:        Result := 8;
+    tkEq, tkNeq:                   Result := 7;
+    tkAmp:                         Result := 6;   { bitwise & }
+    tkXor:                         Result := 5;   { bitwise ^ }
+    tkPipe:                        Result := 4;   { bitwise | }
+    tkAnd:                         Result := 3;   { logical && }
+    tkOr:                          Result := 2;   { logical || }
+    else                           Result := -1;
+  end;
+end;
+
+function ParseCUnary: Integer; forward;
+
+{ Precedence-climbing binary-expression parser (left-associative). }
+function ParseCBinExpr(minPrec: Integer): Integer;
+var left, right, cTok, prec: Integer;
+begin
+  left := ParseCUnary;
+  while True do
+  begin
+    prec := CBinPrec(CurTok.Kind);
+    if prec < minPrec then Break;
+    cTok := Ord(CurTok.Kind);
+    Next;
+    right := ParseCBinExpr(prec + 1);   { left-assoc: strictly-higher on the right }
+    left := CMakeBinop(cTok, left, right);
+  end;
+  Result := left;
+end;
+
+{ A primary: integer/char/string literal, parenthesised expr, identifier
+  (constant -> folded literal; variable -> AN_IDENT; name followed by `(` ->
+  call with an AN_ARG chain). }
+function ParseCPrimary: Integer;
+var node, idx, procIdx, argHead, argTail, argNode, valNode: Integer;
+    name: AnsiString;
+begin
+  Result := -1;
+  case CurTok.Kind of
+    tkInteger:
+    begin
+      node := AllocNode(AN_INT_LIT);
+      ASTIVal[node] := CurTok.IVal;
+      if (CurTok.IVal > 2147483647) or (CurTok.IVal < -2147483648) then
+        ASTTk[node] := Ord(tyInt64)
+      else
+        ASTTk[node] := Ord(tyInteger);
+      Next;
+      Result := node;
+    end;
+    tkString:
+    begin
+      node := AllocNode(AN_STR_LIT);
+      ASTSOffset[node] := Tokens[TokPos - 1].SOffset;
+      ASTSLen[node] := Tokens[TokPos - 1].SLen;
+      ASTTk[node] := Ord(tyString);
+      Next;
+      Result := node;
+    end;
+    tkLParen:
+    begin
+      Next;
+      Result := ParseCExpr;
+      Expect(tkRParen, ')');
+    end;
+    tkIdent:
+    begin
+      name := CurTok.SVal;
+      Next;
+      if CurTok.Kind = tkLParen then
+      begin
+        { function call }
+        Next;
+        procIdx := FindProc(name);
+        node := AllocNode(AN_CALL);
+        ASTIVal[node] := procIdx;
+        if procIdx >= 0 then ASTTk[node] := Ord(Procs[procIdx].RetType)
+        else ASTTk[node] := Ord(tyInteger);
+        argHead := -1; argTail := -1;
+        if CurTok.Kind <> tkRParen then
+        begin
+          while True do
+          begin
+            valNode := ParseCExpr;
+            argNode := AllocNode(AN_ARG);
+            ASTLeft[argNode] := valNode;
+            ASTRight[argNode] := -1;
+            if argHead = -1 then argHead := argNode
+            else ASTRight[argTail] := argNode;
+            argTail := argNode;
+            if CurTok.Kind = tkComma then begin Next; Continue; end;
+            Break;
+          end;
+        end;
+        ASTLeft[node] := argHead;
+        Expect(tkRParen, ')');
+        if procIdx < 0 then Error('call to undeclared function');
+        Result := node;
+      end
+      else
+      begin
+        idx := FindSym(name);
+        if idx < 0 then Error('undefined variable');
+        if Syms[idx].Kind = skConst then
+        begin
+          node := AllocNode(AN_INT_LIT);
+          ASTIVal[node] := Syms[idx].ConstVal;
+          ASTTk[node] := Ord(Syms[idx].TypeKind);
+        end
+        else
+        begin
+          node := AllocNode(AN_IDENT);
+          ASTIVal[node] := idx;
+          ASTTk[node] := Ord(Syms[idx].TypeKind);
+        end;
+        Result := node;
+      end;
+    end;
+    else
+      Error('expected C expression');
+  end;
+end;
+
+{ Unary prefix: `- + ! ~`. Pointer/lvalue unary (`* & ++ --`), sizeof and casts
+  arrive with the lvalue/postfix increment. }
+function ParseCUnary: Integer;
+var node, operand: Integer;
+begin
+  case CurTok.Kind of
+    tkMinus:
+    begin
+      Next;
+      operand := ParseCUnary();
+      node := AllocNode(AN_NEG);
+      ASTLeft[node] := operand;
+      ASTTk[node] := ASTTk[operand];
+      Result := node;
+    end;
+    tkPlus:
+    begin
+      Next;
+      Result := ParseCUnary();
+    end;
+    tkNot:   { `~` bitwise NOT }
+    begin
+      Next;
+      operand := ParseCUnary();
+      node := AllocNode(AN_NOT);
+      ASTLeft[node] := operand;
+      ASTTk[node] := Ord(tyInteger);
+      Result := node;
+    end;
+    tkLogNot:   { `!` logical NOT -> (operand == 0), a 0/1 boolean }
+    begin
+      Next;
+      operand := ParseCUnary();
+      node := AllocNode(AN_BINOP);
+      ASTIVal[node] := Ord(tkEq);
+      ASTLeft[node] := operand;
+      ASTRight[node] := AllocNode(AN_INT_LIT);
+      ASTIVal[ASTRight[node]] := 0;
+      ASTTk[ASTRight[node]] := Ord(tyInteger);
+      ASTTk[node] := Ord(tyBoolean);
+      Result := node;
+    end;
+    else
+      Result := ParseCPrimary;
+  end;
+end;
+
+{ Top-level C expression: assignment (right-assoc), incl. compound-assign.
+  Ternary `?:` and the comma operator arrive in a later increment. }
+function ParseCExpr: Integer;
+var left, rhs, node, cTok, baseOp: Integer;
+begin
+  left := ParseCBinExpr(1);
+  case CurTok.Kind of
+    tkAssign, tkPlusEq, tkMinusEq, tkStarEq, tkSlashEq, tkModEq,
+    tkAmpEq, tkPipeEq, tkXorEq, tkShlEq, tkShrEq:
+    begin
+      cTok := Ord(CurTok.Kind);
+      Next;
+      rhs := ParseCExpr();   { right-associative }
+      if cTok <> Ord(tkAssign) then
+      begin
+        { x OP= y  ==>  x = x OP y. The left operand node is reused as the
+          binop's left; since it is a pure lvalue read this is safe. }
+        baseOp := Ord(tkPlus);
+        if cTok = Ord(tkMinusEq) then baseOp := Ord(tkMinus)
+        else if cTok = Ord(tkStarEq) then baseOp := Ord(tkStar)
+        else if cTok = Ord(tkSlashEq) then baseOp := Ord(tkSlash)
+        else if cTok = Ord(tkModEq) then baseOp := Ord(tkMod)
+        else if cTok = Ord(tkAmpEq) then baseOp := Ord(tkAmp)
+        else if cTok = Ord(tkPipeEq) then baseOp := Ord(tkPipe)
+        else if cTok = Ord(tkXorEq) then baseOp := Ord(tkXor)
+        else if cTok = Ord(tkShlEq) then baseOp := Ord(tkShl)
+        else if cTok = Ord(tkShrEq) then baseOp := Ord(tkShr);
+        rhs := CMakeBinop(baseOp, left, rhs);
+      end;
+      node := AllocNode(AN_ASSIGN);
+      ASTLeft[node] := left;
+      ASTRight[node] := rhs;
+      ASTTk[node] := ASTTk[left];
+      Result := node;
+    end;
+    else
+      Result := left;
+  end;
+end;
 
 function CTypedefHashKey(const name: AnsiString): Integer;
 var i, h: Integer;
@@ -360,10 +651,7 @@ begin
     Next;
     node := AllocNode(AN_EXIT);
     if CurTok.Kind <> tkSemicolon then
-    begin
-      ParseExpr;
-      ASTLeft[node] := CurASTNode;
-    end
+      ASTLeft[node] := ParseCExpr
     else
       ASTLeft[node] := -1;
     Eat(tkSemicolon);

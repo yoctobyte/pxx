@@ -369,7 +369,7 @@ begin
     '!': begin
            if (SrcPos <= Length(Source)) and (Source[SrcPos] = '=') then
              begin Inc(SrcPos); CurTok.Kind := tkNeq; end
-           else CurTok.Kind := tkNot;
+           else CurTok.Kind := tkLogNot;   { logical not; `~` stays tkNot }
          end;
     '=': begin
            if (SrcPos <= Length(Source)) and (Source[SrcPos] = '=') then
