@@ -1137,6 +1137,10 @@ begin
       arrLen := CEvalConstExpr;
       Expect(tkRBrack, ']');
       if arrLen < 1 then arrLen := 1;
+      { An array of structs needs the element record id so AllocArray sizes the
+        slot by RecSize, not a default — `struct V a[N]; a[i].f` was using the
+        wrong stride. }
+      if baseTk = tyRecord then LastTypeRecId := CTypeBaseRec;
       idx := AllocArray(name, baseTk, 0, arrLen - 1);
       { array initialisers `= { ... }` not yet supported — skip if present }
       if CurTok.Kind = tkAssign then

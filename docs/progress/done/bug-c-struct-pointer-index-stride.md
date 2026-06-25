@@ -46,3 +46,16 @@ on a struct pointer scales correctly AND `(p+i)` keeps its pointer type, both
 the binop pointer) was tried and reverted because it turned the loud
 "Unsupported" into a SILENT wrong value via this stride bug — fix the stride
 first.
+
+## Resolution
+- 2026-06-26 — FIXED for local arrays. Root cause was NOT the pointer-index path
+  (that already used RecSize) but the C array DECLARATION: `struct V a[N]` called
+  AllocArray without setting the global LastTypeRecId, so AllocArray sized record
+  slots by a default instead of RecSize -> `a[i]` used the wrong stride, and
+  `a[i]` vs `p[i]` disagreed. Now the C local-array decl sets
+  `LastTypeRecId := CTypeBaseRec` for tyRecord elements before AllocArray.
+  Self-host byte-identical; fixture test/cstruct_array_stride_b23.c (=42).
+  FOLLOW-UP: global arrays of structs (ParseCGlobalVarDecl) and struct FIELDS
+  that are arrays-of-struct may share the same missing-LastTypeRecId pattern —
+  verify/extend. `bug-c-field-on-pointer-arithmetic` ((p+i)->field Unsupported)
+  is now the only remaining piece for that construct.
