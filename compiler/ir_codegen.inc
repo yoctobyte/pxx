@@ -2028,11 +2028,24 @@ begin
       begin
         addressNode := IRA[node];
         IREmitNode(addressNode);
-        
+
         tk := IntToTypeKind(IRTk[node]);
         size := TypeSize(tk);
         isSigned := TypeSigned(tk);
-        
+
+        { A Single field/element is a 4-byte float; the IR value model carries
+          floats as DOUBLE bits, so load the 4-byte single and widen (cvtss2sd),
+          mirroring the per-variable Single load. Without this the raw 4-byte load
+          treats single bits as the low dword of a double = garbage
+          (bug-single-field-element-in-aggregate). }
+        if tk = tySingle then
+        begin
+          EmitB($66); EmitB($0F); EmitB($6E); EmitB($00);       { movd xmm0, [rax] }
+          EmitB($F3); EmitB($0F); EmitB($5A); EmitB($C0);       { cvtss2sd xmm0, xmm0 }
+          EmitB($66); EmitB($48); EmitB($0F); EmitB($7E); EmitB($C0); { movq rax, xmm0 }
+          Exit;
+        end;
+
         if size = 1 then
         begin
           if isSigned then
@@ -2204,6 +2217,17 @@ begin
           begin
             EmitB($F2); EmitB($48); EmitB($0F); EmitB($2A); EmitB($C9); { cvtsi2sd xmm1, rcx }
             EmitB($66); EmitB($48); EmitB($0F); EmitB($7E); EmitB($C9); { movq rcx, xmm1 }
+          end;
+
+          { A Single field/element is a 4-byte float slot; the value in rcx is
+            DOUBLE bits, so narrow to single (cvtsd2ss) before the 4-byte store —
+            else the low dword of the double is stored = garbage. Mirrors the
+            per-variable Single store (bug-single-field-element-in-aggregate). }
+          if tk = tySingle then
+          begin
+            EmitB($66); EmitB($48); EmitB($0F); EmitB($6E); EmitB($C9); { movq xmm1, rcx }
+            EmitB($F2); EmitB($0F); EmitB($5A); EmitB($C9);             { cvtsd2ss xmm1, xmm1 }
+            EmitB($66); EmitB($0F); EmitB($7E); EmitB($C9);             { movd ecx, xmm1 }
           end;
 
           if size = 1 then

@@ -52,3 +52,23 @@ feature-single-first-class).
 - `s.a := 4.5; writeln(s.a)` and the array form give `4.5`; `record a,b,c: Single`
   round-trips through a function result too.
 - Regression test under `make test`; self-host fixedpoint byte-identical.
+
+## Resolution (2026-06-25, v66)
+
+A `Single` field/element is a 4-byte float, but the IR value model carries floats
+as **double** bits, so the raw size-based field/element store/load mishandled
+them:
+
+- **x86-64** (the reported target): `IR_STORE_MEM` stored the low dword of the
+  double bits (no `cvtsd2ss`), and `IR_LOAD_MEM` read 4 single-bytes as the low
+  dword of a double (no `cvtss2sd`). Fixed: narrow (cvtsd2ss) before the 4-byte
+  store; load 4 bytes + widen (cvtss2sd). i386/arm32 already handled both.
+- **aarch64**: the Single AND Double `IR_STORE_MEM` paths reinterpreted an
+  **integer** value as float bits (`fmov`) instead of converting it (`scvtf`), so
+  `s.a := 10` / `d.a := 10` into a float field/element stored ~0. Fixed: `scvtf`
+  for an int value, `fmov` for an already-float value.
+
+Verified Single + Double field/array, int and float values, and a Single-field
+record function result, identical on x86-64/i386/aarch64/arm32. Regression
+`test/test_single_in_aggregate.pas` in `make test`, `test-aarch64`, `test-arm32`.
+Self-host byte-identical; pinned v66.

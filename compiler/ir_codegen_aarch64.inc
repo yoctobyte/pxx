@@ -2025,7 +2025,14 @@ begin
           IREmitNodeAarch64(IRA[node]); { address -> x0 }
           InLValueWrite := savedLValueWrite;
           EmitI32($F84107E1);           { ldr x1, [sp], #16 (value) }
-          EmitI32($9E670020);           { fmov d0, x1 }
+          { An integer value into a Single slot must be int->double converted
+            (scvtf) first; a float value is already double bits (fmov). Then
+            narrow to single. Without the int case, `s.a := 10` reinterpreted the
+            int as double bits -> ~0 (bug-single-field-element-in-aggregate). }
+          if TypeIsFloat(IntToTypeKind(IRTk[IRB[node]])) then
+            EmitI32($9E670020)          { fmov d0, x1 }
+          else
+            EmitI32($9E620020);         { scvtf d0, x1 (int -> double) }
           EmitI32($1E624000);           { fcvt s0, d0 }
           EmitI32($1E260001);           { fmov w1, s0 }
           EmitI32($B9000001);           { str w1, [x0] }
@@ -2040,6 +2047,14 @@ begin
           IREmitNodeAarch64(IRA[node]); { address -> x0 }
           InLValueWrite := savedLValueWrite;
           EmitI32($F84107E1);           { ldr x1, [sp], #16 (value) }
+          { An integer value into a Double slot must be int->double converted
+            (scvtf); a float value is already double bits. `d.a := 10` otherwise
+            stored the raw integer (bug-single-field-element-in-aggregate). }
+          if not TypeIsFloat(IntToTypeKind(IRTk[IRB[node]])) then
+          begin
+            EmitI32($9E620020);         { scvtf d0, x1 (int -> double) }
+            EmitI32($9E660001);         { fmov x1, d0 }
+          end;
           EmitI32($F9000001);           { str x1, [x0] }
           Exit;
         end;

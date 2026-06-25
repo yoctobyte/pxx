@@ -28,12 +28,11 @@ _none_
 | --- | --- | --- | --- | --- |
 | feature-c-runtime-library | B | feature | C runtime/library layer (`lib/crtl`) plus direct C-library packages | feature-c-source-frontend |
 
-## backlog (56)
+## backlog (55)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
 | bug-bare-read-write-in-method-hits-intrinsic | A | bug | Bare `Read`/`Write` inside a method resolves to the console intrinsic, not the method | — |
-| bug-float-field-record-function-return | A | bug | `Single` field/element inside a record or array stores/loads as zero | — |
 | bug-generic-class-methods-in-program | A | bug | Generic class METHOD bodies break in a program (work in a unit) | — |
 | bug-managed-length-via-pointer-deref | A | bug | bug: managed Length(ps^) / Length(rec.pf^) returns garbage (all targets) | — |
 | bug-pchar-to-string-implicit-conv | A | bug | PChar → string implicit conversion missing in call args (and assignment helper) | — |
@@ -123,7 +122,7 @@ _none_
 | feature-mimic-fpc | B | feature | `mimic FPC` compatibility mode | — |
 | feature-string-model-tyfixedstring | B | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (266)
+## done (267)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -158,6 +157,7 @@ _none_
 | bug-dynarray-managed-record-field-reassign | A | bug | bug: assigning a local dynamic-array-of-managed-record to a field drops/frees the elements | — |
 | bug-dynarray-whole-var-assign-cross | A | bug | Whole dynamic-array variable assignment (`b := a`) unsupported on i386 + aarch64 | — |
 | bug-explicit-tobject-base | A | bug | bug: explicit `class(TObject)` base "type not found" | — |
+| bug-float-field-record-function-return | A | bug | `Single` field/element inside a record or array stores/loads as zero | — |
 | bug-for-in-implicit-self-field | A | bug | `for-in` over an implicit-`Self` array field fails in methods | — |
 | bug-forin-in-method-global-var-corruption | A | bug | `for-in` inside a method corrupts a dyn-array global declared after it | — |
 | bug-forin-qualified-set-member-source | A | bug | `for-in` over a qualified set member source fails | — |
@@ -405,7 +405,6 @@ _none_
 ## Ready (no unmet blocker)
 
 - [A] bug-bare-read-write-in-method-hits-intrinsic
-- [A] bug-float-field-record-function-return
 - [A] bug-generic-class-methods-in-program
 - [A] bug-managed-length-via-pointer-deref
 - [A] bug-pchar-to-string-implicit-conv
