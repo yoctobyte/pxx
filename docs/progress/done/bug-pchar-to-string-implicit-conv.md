@@ -62,3 +62,19 @@ re-verify the synafpc probe still compiles.
 - The PChar overloads are removed from `lib/rtl/dynlibs.pas` and Synapse's
   `synafpc` still gets past `dynlibs` ([[feature-synapse-compile-check]]).
 - Regression test under `make test` covering both arg-passing and assignment.
+
+## Resolution (2026-06-25, Track A)
+
+Done. (1) Overload match: MatchCallDelphiProcAddr retries a failed match treating
+each PChar arg as AnsiString; on success wraps every PChar arg whose matched param
+is a string in PCharToString. Only fires after a normal match fails (never
+overrides a stricter overload). (2) Helper availability: a PChar/PAnsiChar token
+in scope pulls the builtin unit (gated by `not NoDefaultRtl` so the compiler's own
+self-build is untouched), fixing the standalone `s := pc` "helper not found".
+(3) lib/rtl/dynlibs.pas PChar overloads removed — LoadLibrary/GetProcedureAddress
+take `const string`, PChar callers (Synapse SynaFpc) bind via the conversion;
+verified LoadLibrary(pc) compiles + loads.
+
+Scope: the reverse `pc := 'literal'` (string->PChar, stores the inline length-
+prefix addr) is a SEPARATE gap, left unchanged per "keep string->PChar unchanged".
+Tests: test/test_pchar_to_string.pas. Self-host byte-identical; make test + cross green.

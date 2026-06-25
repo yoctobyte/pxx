@@ -75,3 +75,24 @@ keep B as the rainy-day ideal.
   `compiler/**`, so the link-libc profile likely wants its own Track A ticket
   once route A is chosen.
 - Until then `dynlibs` stub is the contract; do not fake `GetProcAddress`.
+
+## Resolution (2026-06-25, Track A — route A, opt-in, x86-64)
+
+Implemented route A (wrap libc dlopen/dlsym/dlclose) per the user's "AMD64 first,
+port later" direction. PXX already emits a dynamically-linked ELF for any
+`external '<soname>'` routine, so no loader infrastructure was needed — two
+compiler fixes (the `external name 'sym'` link-symbol bug via ProcExtName; quiet
+the PChar-coercion mismatch diag) plus lib/rtl/dynlibs.pas.
+
+dynlibs.pas: opt-in `-dPXX_DYNLIB_LIBC` -> LoadLibrary/GetProcedureAddress/
+UnloadLibrary wrap dlopen(RTLD_NOW)/dlsym/dlclose; default stays the libc-free
+stub. Honors the policy (libc-free default, opt-in like --mimic-fpc). Verified:
+load libc.so.6, dlsym strlen, call via proc var -> 5. Test: test/test_dynlib.pas.
+
+Remaining (follow-ups, not blocking): (a) factor PalDlOpen/Sym/Close PAL
+primitives + reconcile PalBackendHasDynlib; (b) port to other targets (extern +
+dynsym emission is already target-indep; needs per-target run verification);
+(c) cdecl on PROC TYPES + cdecl indirect calls for strict multi-arg/float C
+signatures (current int/ptr proc-var calls match System V on x86-64); (d) Synapse
+SSL/TLS end-to-end. Status -> partial/done-for-x86-64; leaving ticket in backlog
+for the PAL+multi-target follow-up unless closed.
