@@ -1,7 +1,9 @@
 # Own networking library — native HTTP client (+ sockets, async)
 
 - **Type:** feature (library) — our own net stack, independent of Synapse
-- **Status:** working (Track B agent active — structured-headers slice)
+- **Status:** working (Track B — client feature-complete for common use: pool
+  (concurrent+cap), gzip/deflate, Accept-Encoding, base64+Basic auth, multipart,
+  cookie jar, all e2e-proven; next: example/demo app)
 - **Owner:** — (**Track B** — `lib/rtl`, `$(PXX_STABLE)`)
 - **Opened:** 2026-06-24
 - **Why:** compiling Synapse is nice, but we also want a small, native,
