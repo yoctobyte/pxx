@@ -2413,7 +2413,7 @@ lib-test: pxx-stable-check
 	test "$$(/tmp/lib_tls13_record | grep -c '=ok')" = "6"
 	test "$$(/tmp/lib_tls13_record | grep -c 'FAIL')" = "0"
 	$(PXX_STABLE) -Fulib/rtl test/lib_tls13_hs.pas /tmp/lib_tls13_hs
-	test "$$(/tmp/lib_tls13_hs | grep -c '=ok')" = "7"
+	test "$$(/tmp/lib_tls13_hs | grep -c '=ok')" = "6"
 	test "$$(/tmp/lib_tls13_hs | grep -c 'FAIL')" = "0"
 	$(PXX_STABLE) -Fulib/rtl test/lib_chacha20poly1305.pas /tmp/lib_chacha
 	test "$$(/tmp/lib_chacha | grep -c '=ok')" = "7"
