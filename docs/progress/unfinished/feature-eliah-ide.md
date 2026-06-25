@@ -1,7 +1,7 @@
 # Eliah / Ilja — single-window IDE (GUI + TUI)
 
 - **Type:** feature (app / demo, supermeta)
-- **Status:** working
+- **Status:** unfinished (parked — no active agent; GTK/Xvfb work, resume when picked up)
 - **Track:** B (built with `$(PXX_STABLE)`; never rebuilds the compiler)
 - **Owner:** Track B agent
 - **Opened:** 2026-06-22

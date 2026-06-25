@@ -1,7 +1,7 @@
 # Eliah M0 — single tiled GTK3 window
 
 - **Type:** feature (app / demo)
-- **Status:** working
+- **Status:** unfinished (parked — no active agent; GTK/Xvfb work, resume when picked up)
 - **Track:** B (built with `$(PXX_STABLE)`)
 - **Owner:** Track B agent
 - **Parent:** feature-eliah-ide

@@ -8,18 +8,18 @@ lives in git, not in a timestamp._
 
 _none_
 
-## working (3)
+## working (1)
+
+| Ticket | Track | Type | Summary | Blocked-by |
+| --- | --- | --- | --- | --- |
+| feature-own-net-http-lib | B | feature | Own networking library — native HTTP client (+ sockets, async) | — |
+
+## unfinished (3)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
 | feature-eliah-ide | B | feature | Eliah / Ilja — single-window IDE (GUI + TUI) | — |
 | feature-eliah-m0-window | B | feature | Eliah M0 — single tiled GTK3 window | — |
-| feature-own-net-http-lib | B | feature | Own networking library — native HTTP client (+ sockets, async) | — |
-
-## unfinished (1)
-
-| Ticket | Track | Type | Summary | Blocked-by |
-| --- | --- | --- | --- | --- |
 | feature-eliah-pane-collapse | B | feature | feature: Eliah pane collapse/restore + ratio memory | feature-eliah-layout-tree |
 
 ## blocked (1)
