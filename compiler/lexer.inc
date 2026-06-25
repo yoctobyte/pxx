@@ -1373,11 +1373,87 @@ begin
   begin
     if not PasDirectiveActive then
     begin
+      { Skipping an inactive conditional branch. Only a genuine top-level
+        directive (open-brace dollar) must update the conditional-nesting stack;
+        an ifdef/endif sequence appearing inside a COMMENT or STRING is text, not
+        a directive. The active path below already skips comments and nests on a
+        directive-looking open-brace; this path must do the same, or e.g.
+        jedi.inc has a line-115 comment quoting ifndef/ifdef directives that would
+        push phantom conditionals when the include guard is inactive (a 2nd
+        include) and the stack would never balance
+        (bug-conditional-directive-miscount-synautil). }
       if (Source[SrcPos] = '{') and (SrcPos < Length(Source)) and
          (Source[SrcPos + 1] = '$') then
       begin
         Inc(SrcPos);
         ProcessPasDirective;
+      end
+      else if Source[SrcPos] = '{' then
+      begin
+        { Brace comment — mirror the active-path skip, incl. nesting on a
+          directive-looking open-brace so its close-brace does not end the
+          comment early. }
+        Inc(SrcPos);
+        commentDepth := 1;
+        while (SrcPos <= Length(Source)) and (commentDepth > 0) do
+        begin
+          if Source[SrcPos] = #10 then Inc(SrcLine)
+          else if (Source[SrcPos] = '{') and
+                  (NestedComments or
+                   ((SrcPos < Length(Source)) and (Source[SrcPos + 1] = '$'))) then
+            Inc(commentDepth)
+          else if Source[SrcPos] = '}' then Dec(commentDepth);
+          Inc(SrcPos);
+        end;
+      end
+      else if (Source[SrcPos] = '(') and (SrcPos+1 <= Length(Source)) and
+              (Source[SrcPos+1] = '*') then
+      begin
+        { Paren-star comment. }
+        Inc(SrcPos, 2);
+        commentDepth := 1;
+        while (SrcPos+1 <= Length(Source)) and (commentDepth > 0) do
+        begin
+          if (Source[SrcPos] = '*') and (Source[SrcPos+1] = ')') then
+            begin Dec(commentDepth); Inc(SrcPos, 2); end
+          else if NestedComments and (Source[SrcPos] = '(') and (Source[SrcPos+1] = '*') then
+            begin Inc(commentDepth); Inc(SrcPos, 2); end
+          else
+          begin
+            if Source[SrcPos] = #10 then Inc(SrcLine);
+            Inc(SrcPos);
+          end;
+        end;
+      end
+      else if (Source[SrcPos] = '/') and (SrcPos+1 <= Length(Source)) and
+              (Source[SrcPos+1] = '/') then
+        { Line comment. }
+        while (SrcPos <= Length(Source)) and (Source[SrcPos] <> #10) do Inc(SrcPos)
+      else if (Source[SrcPos] = '/') and CStyleComments and
+              (SrcPos+1 <= Length(Source)) and (Source[SrcPos+1] = '*') then
+      begin
+        { C-style slash-star comment. }
+        Inc(SrcPos, 2);
+        cDone := False;
+        while (SrcPos+1 <= Length(Source)) and not cDone do
+        begin
+          if (Source[SrcPos] = '*') and (Source[SrcPos+1] = '/') then
+            begin Inc(SrcPos, 2); cDone := True; end
+          else
+          begin
+            if Source[SrcPos] = #10 then Inc(SrcLine);
+            Inc(SrcPos);
+          end;
+        end;
+      end
+      else if Source[SrcPos] = '''' then
+      begin
+        { String literal — a directive-looking sequence inside dead code's string
+          is not a directive. Skip to the closing quote (single-line, Pascal). }
+        Inc(SrcPos);
+        while (SrcPos <= Length(Source)) and (Source[SrcPos] <> '''') and
+              (Source[SrcPos] <> #10) do Inc(SrcPos);
+        if (SrcPos <= Length(Source)) and (Source[SrcPos] = '''') then Inc(SrcPos);
       end
       else
       begin

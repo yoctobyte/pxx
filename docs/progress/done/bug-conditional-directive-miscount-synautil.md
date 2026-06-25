@@ -73,3 +73,30 @@ instrument the conditional stack directly far faster.
   lands under `make test`.
 - Self-host fixedpoint byte-identical; `make stabilize` + `make pin` so Track B
   can re-probe ([[feature-synapse-compile-check]]).
+
+## Resolution (2026-06-25, v59)
+
+Root cause: the lexer's **inactive-branch skip** scanned char-by-char and
+processed any open-brace-dollar sequence as a conditional directive, but did NOT
+skip comments or string literals. jedi.inc line 115 is a COMMENT that quotes two
+directives (`"{$IFNDEF CLR} {$IFDEF MSWINDOWS}"`). When jedi's include guard is
+ACTIVE (first include, e.g. via synautil) the active lexer treats the line as a
+comment and ignores the quoted directives — balanced. When the guard is INACTIVE
+(a 2nd include — synautil pulls synafpc, which includes jedi again, so
+`JEDI_INC` is already defined) the dead-branch skip processed the two quoted
+directives as real openers, pushing phantom conditionals that never close → the
+EOF check reported "unterminated conditional directive". The jedi/synautil
+"interaction" was exactly this: jedi alone is the first (active) include;
+synautil pulls it a second time (inactive).
+
+Fix (`lexer.inc`, `SkipSpace` inactive path): mirror the active path — skip
+brace comments (with the nest-on-directive-open-brace rule), paren-star comments,
+line comments, optional C-style comments, and single-quoted strings, so only a
+genuine top-level directive updates the conditional-nesting stack. Self-host
+byte-identical; the synautil compile now passes the conditional phase and stops
+on a genuine parse gap, not a directive error.
+
+Regression: `test/test_cond_comment_skip.pas` + `test/cond_comment_guard.inc`
+(a guarded include pulled twice; the dead 2nd body contains a comment quoting
+directives). Fails pre-fix ("unterminated conditional directive"), prints 42
+post-fix. Pinned v59.

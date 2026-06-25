@@ -226,6 +226,8 @@ test-core: $(COMPILER)
 	test "$$(/tmp/test_stream_methods26)" = "$$(printf '65 66 67\n3 3')"
 	./$(COMPILER) test/test_r_directive.pas /tmp/test_r_directive26
 	test "$$(/tmp/test_r_directive26)" = "42"
+	./$(COMPILER) -Itest test/test_cond_comment_skip.pas /tmp/test_cond_comment_skip26
+	test "$$(/tmp/test_cond_comment_skip26)" = "42"
 	./$(COMPILER) test/test_dynarray_field.pas /tmp/test_dynarray_field26
 	test "$$(/tmp/test_dynarray_field26)" = "$$(printf '1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1')"
 	./$(COMPILER) test/test_method_implicit_field.pas /tmp/test_method_implicit_field26
