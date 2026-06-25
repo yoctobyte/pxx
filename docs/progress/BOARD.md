@@ -31,7 +31,7 @@ lives in git, not in a timestamp._
 | --- | --- | --- | --- | --- |
 | feature-c-runtime-library | B | feature | C runtime/library layer (`lib/crtl`) plus direct C-library packages | feature-c-source-frontend |
 
-## backlog (55)
+## backlog (56)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -43,6 +43,7 @@ lives in git, not in a timestamp._
 | bug-pointer-deref-not-accepted-as-var-arg | A | bug | A pointer dereference `p^` is rejected as a `var`/by-ref argument | — |
 | bug-setlength-record-field-via-var-param | A | bug | SetLength on a record string/array field via a `var` parameter fails codegen | — |
 | bug-string-const-index-and-typed-init | A | bug | Untyped string const indexing yields garbage; typed string const initializer won't parse | — |
+| bug-textfile-primitives-not-ambient-in-units | A | bug | Text-file primitives (`Assign`/`Rewrite`/`Reset`/`Close`) not visible inside a unit | — |
 | bug-virtual-keyword-name-result | A | bug | Bare own-name result of a VIRTUAL intrinsic-named method miscompiles | — |
 | chore-inc-to-units | A | chore | `.inc` → real `.pas` units refactor | — |
 | chore-runtime-emission-size | A | chore | Finer runtime-support emission (code size) | — |
@@ -408,6 +409,7 @@ lives in git, not in a timestamp._
 - [A] bug-pointer-deref-not-accepted-as-var-arg
 - [A] bug-setlength-record-field-via-var-param
 - [A] bug-string-const-index-and-typed-init
+- [A] bug-textfile-primitives-not-ambient-in-units
 - [A] bug-virtual-keyword-name-result
 - [A] chore-inc-to-units
 - [A] chore-runtime-emission-size

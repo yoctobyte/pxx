@@ -20,6 +20,14 @@ Date: 2026-06-18. Files: `engine.pas`, `adventure.pas`, `world.dat`.
 - **Fallback (only if you say so):** embed `world.dat` as a const string and
   parse from memory; drop save/load. Not preferred — file I/O is the point of
   "all in config files."
+- **2026-06-25 update:** Text I/O is now *implemented* (`lib/rtl/textfile`:
+  `Assign`/`Reset`/`Rewrite`/`Append`/`Close`/`writeln(f,…)` all work). The actual
+  blocker here is narrower and filed as
+  [[bug-textfile-primitives-not-ambient-in-units]]: those procedures are ambient
+  in a **program** but not inside a **unit** (engine.pas is a unit), so `Assign`
+  is undefined at engine.pas:652. Adding `uses textfile` to engine compiles it,
+  but that is non-platonic (FPC has these in System, ambient everywhere) — the
+  honest fix is the compiler making them ambient in unit scope too.
 
 ### F2. `{$I-}`/`{$I+}` + `IOResult` (soft file-open check)
 - **Where:** `TGame.LoadFrom` (guarding a missing save file).
