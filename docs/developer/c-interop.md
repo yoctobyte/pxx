@@ -186,64 +186,31 @@ exist so accepted misspellings remain visible.
 
 ## Runtime Dynamic Loading (`dlopen`)
 
-The `external` paths above resolve a shared library at **load time**: the soname
-becomes a `DT_NEEDED`, and the dynamic linker (`ld.so`) maps it before `main`.
-Loading a library chosen at **run time** (a name only known while running, e.g.
-an optional plugin or `libssl` for TLS) is a different problem, handled by
-`lib/rtl/dynlibs.pas` (`LoadLibrary` / `GetProcedureAddress` / `UnloadLibrary`).
+The `external` paths above resolve a library at **load time** (soname →
+`DT_NEEDED`, mapped by `ld.so` before `main`). Loading a library chosen at **run
+time** goes through `lib/rtl/dynlibs.pas` (`LoadLibrary` /
+`GetProcedureAddress` / `UnloadLibrary`), with two compile-time modes:
 
-Two modes, picked at compile time:
+- **Default — honest stub.** `LoadLibrary` → `NilHandle`, `GetProcedureAddress` →
+  `nil`. Correct for the libc-free syscall-only core (no runtime loader; callers
+  treat a nil handle as "optional library absent").
+- **Opt-in real loader — `-dPXX_DYNLIB_LIBC`.** Wraps libc `dlopen`/`dlsym`/
+  `dlclose`; the binary then links `libc.so.6`. Opt-in per project (like
+  `--mimic-fpc`) so the core stays libc-free unless asked.
 
-- **Default — honest stub.** `LoadLibrary` returns `NilHandle`, `GetProcedureAddress`
-  returns `nil`. Correct for the libc-free syscall-only core: there is no runtime
-  loader, and well-behaved callers treat a nil handle as "optional library absent".
-- **Opt-in real loader — `-dPXX_DYNLIB_LIBC`.** Wraps libc's `dlopen`/`dlsym`/
-  `dlclose`. The binary then links `libc.so.6` (interp + GOT). Opt-in per project,
-  like `--mimic-fpc`, so the core stays libc-free unless you ask for a loader.
+`dlopen` is not a syscall — a from-scratch ELF `.so` loader over `openat`/`mmap`
+(route B: parse ELF, map segments, apply relocations, resolve the lib's own
+`DT_NEEDED`, init/TLS/versioning) would keep the libc-free invariant but is
+thousands of lines, and the system libraries we'd load (OpenSSL/GTK/sqlite)
+depend on libc anyway. Deferred; mostly Track B — see `feature-real-dynlib-loader`.
 
-### Why the real loader needs libc
-
-`dlopen` is **not a syscall** — there is no `sys_dlopen`. Loading a `.so` at
-runtime is a large user-space job: parse the ELF, `mmap`/`mprotect` the segments
-(these *are* syscalls), walk the dynamic section, **apply relocations** (GOT/PLT,
-`RELATIVE`, `GLOB_DAT`, `JUMP_SLOT`), resolve the library's *own* `DT_NEEDED`
-recursively, run `init_array`, set up TLS, and honour symbol versioning. That
-machinery is exactly what libc/`ld.so` package. We could write it ourselves over
-`openat`/`mmap` (**route B**, a from-scratch ELF `.so` loader — see
-`feature-real-dynlib-loader`), which would keep the libc-free invariant *and*
-double as a serious compiler test. It is deferred deliberately: thousands of
-lines, hard to debug, and **the system `.so`s we'd want to load (OpenSSL, GTK,
-sqlite) depend on libc anyway** — a from-scratch loader would still have to load
-and relocate libc to satisfy *their* imports. So for real system libraries libc
-is in the picture regardless of route; route A is the honest, cheap choice and
-route B only pays off for loading libc-free `.so`s we produce ourselves. This is
-mostly a Track B effort if/when it happens.
-
-### Calling a resolved symbol — the convention is yours, not the library's
-
-`dlsym` (and the dynamic linker generally) returns a **bare code address**. A
-`.so` carries **no signature and no calling-convention metadata** — none. Nothing
-in the file says "this is `int(const char*)` using System V `cdecl`". You assert
-the signature yourself by casting the pointer to a typed procedure pointer:
-
-```pascal
-type TStrLen = function(s: PChar): Integer; cdecl;   { YOUR declaration = the contract }
-fn := TStrLen(GetProcedureAddress(h, 'strlen'));
-n  := fn(PChar(s));                                  { indirect call through the pointer }
-```
-
-This is the same contract you write for a compile-time `external` — there the
-Pascal declaration supplies it; here the proc-pointer **type** supplies it. The
-library is consulted only for the *address*. (C headers feel like they "deduce"
-the convention only because the header *is* that hand-written declaration.)
-
-Because the convention lives in the proc type, an **indirect** call (through a
-pointer) must marshal per that type. On x86-64 PXX's internal convention and
-System V `cdecl` coincide for integer/pointer arguments, so simple resolved
-functions already call correctly; they diverge for floats (xmm regs), more than
-six arguments, by-value structs, and varargs. Carrying `cdecl` on proc *types*
-plus cdecl-correct indirect calls is the follow-up that makes arbitrary C
-signatures callable through `dlsym` — see `feature-real-dynlib-loader`.
+`dlsym` returns a bare code address with no signature or calling-convention
+metadata; the proc-pointer **type** is the contract (as a C header is for static
+externs). Indirect calls marshal per that type; PXX's internal convention matches
+System V `cdecl` for integer/pointer args on x86-64 but not for floats, >6 args,
+by-value structs, or varargs. `cdecl` on proc *types* + cdecl-correct indirect
+calls is the follow-up for arbitrary C signatures via `dlsym`
+(`feature-real-dynlib-loader`).
 
 ## Compiler Tracing
 
