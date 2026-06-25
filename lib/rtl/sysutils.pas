@@ -352,29 +352,27 @@ begin
 end;
 
 function UpperCase(const s: AnsiString): AnsiString;
-var i: Integer; r: AnsiString; c: Char;
+var i: Integer; c: Char;
 begin
-  r := '';
+  SetLength(Result, Length(s));        { size once, index-assign — not O(n^2) append }
   for i := 1 to Length(s) do
   begin
     c := s[i];
     if (c >= 'a') and (c <= 'z') then c := Chr(Ord(c) - 32);
-    r := r + c;
+    Result[i] := c;
   end;
-  Result := r;
 end;
 
 function LowerCase(const s: AnsiString): AnsiString;
-var i: Integer; r: AnsiString; c: Char;
+var i: Integer; c: Char;
 begin
-  r := '';
+  SetLength(Result, Length(s));
   for i := 1 to Length(s) do
   begin
     c := s[i];
     if (c >= 'A') and (c <= 'Z') then c := Chr(Ord(c) + 32);
-    r := r + c;
+    Result[i] := c;
   end;
-  Result := r;
 end;
 
 function Pos(const substr, s: AnsiString): Integer;
