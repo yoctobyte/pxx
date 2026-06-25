@@ -52,7 +52,7 @@ own-name-result assignment is still rejected above
 inherited Read/Write member binds too. Front-end only — self-host byte-identical
 (the compiler defines no class with a Read/Write member). New regression
 `test/test_method_read_write_unqualified.pas` in `make test`. Committed in
-<COMMIT>.
+777730d.
 
 **Residual (not this fix):**
 - *Expression* context (`x := Read` / `v := Write(n)`): the intrinsic keyword
