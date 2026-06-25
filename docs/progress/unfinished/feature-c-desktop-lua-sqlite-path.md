@@ -373,14 +373,21 @@ gap rather than bloating this ticket.
   now compiles clean** (full parse — it is a library, no main).
 - 2026-06-25 — **LUA CORE SURVEY: 3 / 34 files parse clean** (lctype, lzio, + 1),
   with the remaining blockers triaged by instrumenting the "undeclared call" name:
-    - **Function-like macros — the biggest cluster.** `call to undeclared
-      function` is mostly an UNEXPANDED function-like macro parsed as a call:
-      `cast` (`#define cast(t,exp) ((t)(exp))` in llimits.h), `novariant`, etc.
-      lua uses these everywhere. The preprocessor (`cpreproc.inc`) does not expand
-      function-like macros `NAME(args)` — this is the **single highest-leverage
-      Track C item left** (unblocks ~half the failing files). Was slice E in
-      `feature-c-source-frontend`, deferred as "embedded"; it is squarely on the
-      desktop path too. Object-like macros already work.
+    - **Function-like macro expansion bugs — the biggest cluster.** `call to
+      undeclared function` is mostly an UNEXPANDED function-like macro parsed as a
+      call: `cast` (`#define cast(t,exp) ((t)(exp))` in llimits.h), `novariant`,
+      etc. IMPORTANT: function-like macros ALREADY work in general (`cpreproc.inc`
+      has `CPExpandFunction` + arg parsing) — lzio.c's `cast_uchar(...)` compiled
+      clean, AND an isolated repro of the full cast family
+      (`cast`/`cast_int`/`cast_uint`/`cast_uchar`, nested) expands correctly and
+      runs. So lstring.c's `cast`-reaches-parser failure is **context-specific**,
+      NOT one common cause — the cluster is probably several distinct preprocessor
+      edge cases (token-paste `##`, stringize `#`, a multi-token type arg in a
+      particular position, a `CPMacroIsActive` recursion-guard interaction, or a
+      macro that re-defines/undefs). Next step: bisect ONE failing file
+      (lstring.c) down to the exact unexpanded use, then widen. Still likely the
+      highest-leverage Track C cluster, but expect a handful of small fixes rather
+      than a single feature.
     - **`__builtin_offsetof`** (lfunc.c) — gcc builtin for `offsetof`; map to a
       compile-time field offset (Track C).
     - **`switch`/`case`** (lgc.c parses `switch` as a call) — Track A (break-only-
