@@ -150,6 +150,16 @@ function HttpParseRequest(const raw: AnsiString; var req: THttpRequest): Boolean
 function HttpRequestHeader(const req: THttpRequest; const name: AnsiString): AnsiString;
 function HttpBuildResponse(status: Integer; const reason, extraHeaders, body: AnsiString): AnsiString;
 
+{ Per-connection serve loop: on an accepted socket cfd, read one length-aware
+  request (headers + Content-Length body), dispatch it to handler (which returns a
+  full response string — build it with HttpBuildResponse), send the reply, and
+  repeat over keep-alive until the peer closes or maxRequests is reached
+  (maxRequests <= 0 = unlimited). async selects the reactor (call from a coroutine)
+  vs blocking I/O. The caller owns accept and closing cfd. }
+type
+  THttpHandler = function(const req: THttpRequest): AnsiString;
+procedure HttpServeConn(cfd: Integer; handler: THttpHandler; maxRequests: Integer; async: Boolean);
+
 { --- blocking transport --- }
 
 function HttpGet(const url: AnsiString): THttpResponse;
@@ -1218,6 +1228,60 @@ end;
 function HttpConnGetAsync(var conn: THttpConnection; const path: AnsiString): THttpResponse;
 begin
   Result := HttpConnExecCore(conn, 'GET', path, '', '', True);
+end;
+
+procedure HttpServeConn(cfd: Integer; handler: THttpHandler; maxRequests: Integer; async: Boolean);
+var
+  buf: array[0..4095] of Byte;
+  data, headerBlock, resp: AnsiString;
+  req: THttpRequest;
+  got: Int64;
+  oldLen, hdrEnd, bodyStart, clen, reqLen, k: Integer;
+  alive: Boolean;
+begin
+  data := ''; k := 0; alive := True;
+  while alive and ((maxRequests <= 0) or (k < maxRequests)) do
+  begin
+    { read until the full header block is buffered }
+    hdrEnd := HttpFindHeaderEnd(data);
+    while hdrEnd = 0 do
+    begin
+      got := HttpRecvSome(cfd, nil, False, async, @buf[0], 4096);
+      if got <= 0 then begin alive := False; Break; end;
+      oldLen := Length(data);
+      SetLength(data, oldLen + Integer(got));
+      Move(buf[0], data[oldLen + 1], Integer(got));
+      hdrEnd := HttpFindHeaderEnd(data);
+    end;
+    if not alive then Break;
+
+    headerBlock := Copy(data, 1, hdrEnd - 1);
+    bodyStart := hdrEnd + 4;
+    clen := StrToIntDef(HttpHeaderValue(headerBlock, 'Content-Length'), 0);
+
+    { read until the declared body is fully buffered }
+    while (Length(data) - (bodyStart - 1)) < clen do
+    begin
+      got := HttpRecvSome(cfd, nil, False, async, @buf[0], 4096);
+      if got <= 0 then begin alive := False; Break; end;
+      oldLen := Length(data);
+      SetLength(data, oldLen + Integer(got));
+      Move(buf[0], data[oldLen + 1], Integer(got));
+    end;
+
+    reqLen := (bodyStart - 1) + clen;
+    if Length(data) < reqLen then reqLen := Length(data);   { short close }
+    HttpParseRequest(Copy(data, 1, reqLen), req);
+    data := Copy(data, reqLen + 1, Length(data));           { keep any surplus }
+
+    resp := handler(req);
+    if not HttpSendAll(cfd, nil, False, async, @resp[1], Length(resp)) then alive := False;
+
+    { honour an explicit Connection: close from the client }
+    if Pos('close', LowerCase(HttpHeaderValue(headerBlock, 'Connection'))) > 0 then
+      alive := False;
+    Inc(k);
+  end;
 end;
 
 function HttpResolveAsync(const host: AnsiString; var ip: LongWord): Boolean;

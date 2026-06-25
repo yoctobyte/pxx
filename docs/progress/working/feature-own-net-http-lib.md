@@ -216,6 +216,19 @@ absent. Completes the form-handling round trip with the existing `HttpQueryAdd`
 builder. `lib_http` +8 (`query-get`/`-get-1st`/`-get-miss`/`-decname`/`-has`/
 `-has-empty`/`-has-miss`/`-roundtrip`). `make lib-test` green.
 
+## Server framework — HttpServeConn (landed 2026-06-25)
+
+`http.pas` `THttpHandler = function(const req: THttpRequest): AnsiString` +
+`HttpServeConn(cfd, handler, maxRequests, async)`: the per-connection serve loop
+— length-aware request read (headers + Content-Length body, surplus kept),
+dispatch to the user handler (which returns a full response, built via
+`HttpBuildResponse`), send, repeat over keep-alive until the peer closes /
+`Connection: close` / maxRequests. Reactor or blocking. The caller owns accept.
+Turns the server-side helpers into an actual framework: a routing handler in a
+few lines. e2e `test/lib_http_serve`: a handler routes on `req.Path`/`req.Query`,
+client makes two keep-alive requests (second echoes a query string). `make
+lib-test` green.
+
 ## Roadmap (next slices)
 
 1. ~~Concurrency-safe pool + blocking `HttpGetPooled` + eviction/idle-timeout~~
