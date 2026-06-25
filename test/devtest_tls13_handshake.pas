@@ -74,6 +74,7 @@ var
   getMsg, getRec, resp: AnsiString;
   leaf: TCert; certVerifyHash, leafDer, signedContent, cvScheme, cvSig: AnsiString;
   cp, ctxLen, certLen, sl: Integer;
+  ktlsTx: Boolean;
 
   procedure Fail(const m: string);
   begin writeln(m); writeln('FAIL'); Halt(1); end;
@@ -214,12 +215,26 @@ begin
   SendBytes(cFinRec);
   writeln('client-finished-sent=ok');
 
-  { send the HTTP GET encrypted under client application keys }
+  { M7: try to offload TX to kTLS. AES-GCM only (kTLS struct wired for that).
+    TX-only: the kernel encrypts our app records; RX stays on the Pascal record
+    layer (so the server's NewSessionTicket control records don't need recvmsg). }
   getMsg := 'GET / HTTP/1.0' + Chr(13) + Chr(10) + 'Host: localhost' + Chr(13) + Chr(10) + Chr(13) + Chr(10);
-  getRec := Tls13Seal(AeadSuite, cAppKey, cAppIv, 0, CT_APPLICATION_DATA, getMsg);
-  SendBytes(getRec);
+  ktlsTx := False;
+  if (suite = CS_AES_128_GCM_SHA256)
+     and KtlsEnable(gSock) and KtlsSetAesGcm128(gSock, True, cAppKey, cAppIv) then
+  begin
+    ktlsTx := True;
+    writeln('ktls-tx=installed (kernel encrypts the GET)');
+    SendBytes(getMsg);                                { plaintext write; kernel seals it }
+  end
+  else
+  begin
+    writeln('ktls=unavailable; Pascal record layer for TX');
+    getRec := Tls13Seal(AeadSuite, cAppKey, cAppIv, 0, CT_APPLICATION_DATA, getMsg);
+    SendBytes(getRec);
+  end;
 
-  { read + decrypt the server's application response }
+  { read + decrypt the server's application response (Pascal record layer) }
   resp := ''; seqS := 0;
   for i := 1 to 8 do
   begin
@@ -227,27 +242,21 @@ begin
     if ctype = 20 then continue;
     if ctype <> 23 then continue;
     rec := RecHdr(23, Length(payload)) + payload;
-    { server hs Finished already consumed; app records use server app keys at seq 0.. }
     if Tls13Open(AeadSuite, sAppKey, sAppIv, seqS, rec, ptext, rct) then
     begin
       seqS := seqS + 1;
       if rct = 23 then resp := resp + ptext;         { application_data }
       if Pos('HTTP/', resp) > 0 then Break;
     end
-    else Break;                                       { likely a NewSessionTicket under hs key; stop }
+    else Break;                                       { e.g. NewSessionTicket; stop }
   end;
-
-  { M7: install the application keys into the kernel (kTLS) on this socket and
-    report. Where the `tls` module is loaded this succeeds, offloading bulk
-    record crypto to the kernel; otherwise the Pascal record layer (used above)
-    stays the baseline. }
-  if KtlsEnable(gSock) and KtlsSetAesGcm128(gSock, True, cAppKey, cAppIv)
-     and KtlsSetAesGcm128(gSock, False, sAppKey, sAppIv) then
-    writeln('ktls=installed (kernel TLS offload active)')
-  else
-    writeln('ktls=unavailable (tls kernel module not loaded; Pascal record layer is baseline)');
 
   NetClose(gSock);
   writeln('response-head=', Copy(resp, 1, 20));
-  if Pos('HTTP/', resp) > 0 then writeln('ALL OK (https GET)') else writeln('FAIL');
+  if (Pos('HTTP/', resp) > 0) then
+  begin
+    if ktlsTx then writeln('ALL OK (https GET, kTLS-encrypted request)')
+    else writeln('ALL OK (https GET, Pascal record layer)');
+  end
+  else writeln('FAIL');
 end.
