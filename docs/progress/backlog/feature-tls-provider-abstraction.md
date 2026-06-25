@@ -8,6 +8,33 @@
   over two backends: [[feature-tls13-from-scratch]] (native) and the OpenSSL
   backend (needs [[feature-real-dynlib-loader]]).
 
+## Slice 1 landed — the seam + plumbing proof (2026-06-25)
+
+`lib/rtl/tls.pas` ships the backend-neutral contract: `TTlsRole`, `TTlsResult`
+(`tlsOk`/`tlsWantRead`/`tlsWantWrite`/`tlsClosed`/`tlsError`), opaque `TTlsConn`,
+and `TTlsBackend` (the vtable: `Name` / `Handshake` / `Read` / `Write` / `Close`).
+Plus a process-global registry (`TlsRegisterBackend` / `TlsActiveBackend` /
+`TlsAvailable`) and neutral wrappers (`TlsHandshake` / `TlsRead` / `TlsWrite` /
+`TlsClose`) that **fail cleanly with `tlsError` when no backend is registered**
+(never crash — the `dynlibs`-stub discipline). No backend ships here.
+
+Signature refinement vs the sketch below: `Handshake` returns a `TTlsResult` with
+the connection as a `var c: TTlsConn` out-param (uniform with Read/Write error
+reporting), rather than returning `TTlsConn` directly.
+
+Plumbing proven by `test/lib_tls` (14 checks, wired into `make lib-test` as
+`tls-seam`): the no-backend path refuses cleanly, then a **mock plaintext
+backend** (Read/Write just pass bytes over the fd) registered through the seam
+carries a real loopback round-trip via `TlsHandshake`/`TlsWrite`/`TlsRead`/
+`TlsClose`, and clearing the registry restores the clean state. Exercises the
+vtable dispatch + registry independent of any crypto.
+
+**Next slices:** (a) route `http`'s `isTls` branch through the seam (`https://`
+does TlsHandshake-after-connect, send/recv via Tls*; clean error when
+`not TlsAvailable`) + a mock-backed `https` e2e; (b) the OpenSSL backend
+([[feature-real-dynlib-loader]]); (c) the native backend
+([[feature-tls13-from-scratch]], deferred).
+
 ## Decision (2026-06-24)
 
 Support **both** TLS backends from the start, behind **one common interface**:
