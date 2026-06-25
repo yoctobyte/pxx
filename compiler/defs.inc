@@ -833,6 +833,10 @@ var
   CTypeElemRec : Integer;    { pointed-at record id when the element is a struct, else REC_NONE }
   CTypeBaseRec : Integer;    { record id of the base type before any pointer suffix, else REC_NONE }
   CHeaderMode : Boolean; { parsing C in header/FFI mode }
+  CProgramMode : Boolean; { compiling a C .c program (vs importing a header):
+    a `{...}` function body is a LOCAL definition (internal), so the pass-1
+    signature scan must mark it ProcExternal=False even while skipping the body,
+    or a caller compiled before the callee's definition emits an external call. }
   CTypedefCount : Integer;
   CTypedefNameOff : array[0..MAX_CTYPEDEF-1] of Integer;
   CTypedefNameLen : array[0..MAX_CTYPEDEF-1] of Integer;

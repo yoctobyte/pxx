@@ -178,3 +178,28 @@ gap rather than bloating this ticket.
   (=82) wired into the suite; full C-import regression green; self-host
   byte-identical. Next: Slice D (compile ALL functions + globals + inter-fn
   calls) — merge the ParseCProgram/ParseCSubroutine drivers.
+- 2026-06-25 — **Slice D (multi-function + globals) DONE.** ParseCProgram is now
+  a two-pass driver over the one token stream: pass 1 (CHeaderMode) registers
+  EVERY function signature and reserves every global, skipping bodies; pass 2
+  compiles each function body via the existing ParseCSubroutine machinery
+  (prologue/params/frame/epilogue). Forward + mutual inter-function calls
+  resolve through ApplyCallFixups. Entry stub (x86-64, matching the prior
+  convention which was already x86-64 machine code): `mov [rsp-save]; call main;
+  exit_group(eax)` so main's int return is the process exit code; the call is a
+  rel32 patched to main's body once compiled. `CTopLevelIsFunc` peeks
+  type+declarator for a `(` and rewinds (TokPos save/restore) to classify
+  function vs global. Globals reserved as zero-init BSS (CurProc<0 => skGlobal);
+  non-zero/constant global initialisers deferred. LANDMINE: linkage across the
+  two passes — added `CProgramMode`; a bodied function in a program is a LOCAL
+  definition so pass 1 marks it ProcExternal=False (else a caller compiled
+  before the callee's definition emits an EXTERNAL call -> "undefined symbol"),
+  and pass 2's prototype `;` path must NOT re-mark external (it would clobber
+  pass-1's definition-wins linkage before the body recompiles). Verified:
+  forward calls, mutual recursion (even/odd), deep recursion (fib), 6-arg calls,
+  shared globals all match gcc; new fixture `test/cmulti_d.c` (=104) wired in;
+  full C-import regression green; self-host byte-identical. tiny-regex `re.c`
+  now passes the old multi-function blocker (was "undefined variable
+  (re_matchp)") — it reaches "main function not found" because it is a library
+  (no main), the correct result. M1 (running regex) additionally needs
+  pointers/arrays. Next: Slice B increment 2 — pointer/lvalue unary (`* &`),
+  postfix `[] . ->`, casts, sizeof — the real blocker for regex/lua/sqlite.

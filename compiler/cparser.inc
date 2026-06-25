@@ -3,6 +3,7 @@
 function ParseCBlockAST: Integer; forward;
 function ParseCStatementAST: Integer; forward;
 procedure SkipBraceBlock; forward;
+procedure ParseCSubroutine; forward;
 function ParseCExpr: Integer; forward;
 
 { ===== C expression compiler (Slice B) =====
@@ -1001,59 +1002,105 @@ begin
   Result := blockNode;
 end;
 
+{ A top-level global variable definition: <type> name (, name)* ;
+  Allocated as zero-initialised BSS (CurProc<0 => skGlobal). Increment-1 scope:
+  the slot is reserved and any initialiser is skipped (C zero-inits globals; a
+  non-zero constant/runtime initialiser is a follow-up). Re-running across the
+  two driver passes is idempotent — a name already present is not re-allocated. }
+procedure ParseCGlobalVarDecl;
+var baseTk: TTypeKind; name: AnsiString;
+begin
+  baseTk := ParseCDeclType;
+  while True do
+  begin
+    if CurTok.Kind <> tkIdent then Break;
+    name := CurTok.SVal; Next;
+    if FindSym(name) < 0 then AllocVar(name, baseTk);
+    if CurTok.Kind = tkAssign then
+    begin
+      Next;
+      while (CurTok.Kind <> tkComma) and (CurTok.Kind <> tkSemicolon) and
+            (CurTok.Kind <> tkEOF) do Next;
+    end;
+    if CurTok.Kind = tkComma then begin Next; Continue; end;
+    Break;
+  end;
+  Eat(tkSemicolon);
+end;
+
+{ Classify the top-level item starting at the current token as a function
+  (definition or prototype) vs a global variable, WITHOUT consuming it: peek
+  the declaration-specifiers + declarator name and test for a following `(`,
+  then rewind the token cursor. }
+function CTopLevelIsFunc: Boolean;
+var savedPos: Integer;
+begin
+  savedPos := TokPos - 1;          { index of the current token }
+  ParseCDeclType;
+  if CurTok.Kind = tkIdent then Next;
+  Result := (CurTok.Kind = tkLParen);
+  TokPos := savedPos; Next;        { rewind }
+end;
+
+{ C program driver (Slice D): compile EVERY function (not just main) plus
+  top-level globals, with forward inter-function calls resolved. Two passes over
+  the one token stream:
+    pass 1 (CHeaderMode) — register every function signature and reserve every
+            global, skipping bodies, so any call resolves regardless of order;
+    pass 2 — compile each function body (ParseCSubroutine) and reserve globals
+            (idempotent).
+  Entry stub (x86-64, matching the pre-existing convention): save rsp, `call
+  main`, then exit_group(eax) so main's int return becomes the process code. }
 procedure ParseCProgram;
-var jmpPatch, node: Integer; name: AnsiString;
+var firstIdx, callPatch, mainIdx: Integer;
 begin
   BSS_INITIAL_RSP := BSSSize; Inc(BSSSize, 8);
 
+  { mov [BSS_INITIAL_RSP], rsp }
   EmitB($48); EmitB($89); EmitB($24); EmitB($25); EmitGlobRef(BSS_INITIAL_RSP);
-  EmitB($E9); jmpPatch := CodeLen; EmitI32(0);
+  { call main (rel32, patched once main's body address is known) }
+  EmitB($E8); callPatch := CodeLen; EmitI32(0);
+  { mov edi, eax ; mov eax, 231 (exit_group) ; syscall }
+  EmitB($89); EmitB($C7);
+  EmitB($B8); EmitI32(231);
+  EmitB($0F); EmitB($05);
 
-  { Scan top level for 'main' function definition }
+  firstIdx := TokPos - 1;
+  CProgramMode := True;
+
+  { pass 1: signatures + global reservations }
+  CHeaderMode := True;
   while CurTok.Kind <> tkEOF do
   begin
     if IsCTypeTok then
     begin
-      ParseCDeclType;  { consume return type incl. pointer suffix }
-      if CurTok.Kind = tkIdent then
-      begin
-        name := CurTok.SVal;
-        Next;
-        if CurTok.Kind = tkLParen then
-        begin
-          { skip parameter list }
-          while (CurTok.Kind <> tkRParen) and (CurTok.Kind <> tkEOF) do Next;
-          Expect(tkRParen, ')');
-          if CurTok.Kind = tkBegin then
-          begin
-            if name = 'main' then
-            begin
-              Patch32(jmpPatch, CodeLen - (jmpPatch + 4));
-              node := ParseCBlockAST;
-              CompileAST(node);
-              EmitExit(0);
-              ApplyCallFixups;
-              Exit;
-            end
-            else
-            begin
-              { skip non-main function bodies for now }
-              node := ParseCBlockAST;
-            end;
-          end;
-        end
-        else
-        begin
-          { global variable declaration — skip to ; }
-          while (CurTok.Kind <> tkSemicolon) and (CurTok.Kind <> tkEOF) do Next;
-          Eat(tkSemicolon);
-        end;
-      end;
+      if CTopLevelIsFunc then ParseCSubroutine
+      else ParseCGlobalVarDecl;
     end
     else
       Next;
   end;
-  Error('main function not found');
+  CHeaderMode := False;
+
+  { pass 2: compile bodies }
+  TokPos := firstIdx; Next;
+  while CurTok.Kind <> tkEOF do
+  begin
+    if IsCTypeTok then
+    begin
+      if CTopLevelIsFunc then ParseCSubroutine
+      else ParseCGlobalVarDecl;
+    end
+    else
+      Next;
+  end;
+
+  CProgramMode := False;
+  ApplyCallFixups;
+
+  mainIdx := FindProc('main');
+  if mainIdx < 0 then Error('main function not found');
+  Patch32(callPatch, Procs[mainIdx].BodyAddr - (callPatch + 4));
 end;
 
 procedure ParseCSubroutine;
@@ -1145,16 +1192,31 @@ begin
         (CurTok.Kind <> tkEOF) do Next;
   if CurTok.Kind = tkSemicolon then
   begin
-    ProcExternal[procIdx] := True;
-    ProcLibrary[procIdx] := InternStr(CurrentCLibrary);
+    { Pure declaration (prototype). Mark external EXCEPT in a C-program pass 2,
+      where pass 1 already settled linkage (a prototype + a later local
+      definition => internal); re-marking here, before that definition is
+      recompiled, would make an intervening caller emit an external call. }
+    if not (CProgramMode and not CHeaderMode) then
+    begin
+      ProcExternal[procIdx] := True;
+      ProcLibrary[procIdx] := InternStr(CurrentCLibrary);
+    end;
     Next;
     Exit;
   end;
 
   if CHeaderMode then
   begin
-    ProcExternal[procIdx] := True;
-    ProcLibrary[procIdx] := InternStr(CurrentCLibrary);
+    { A bodied function in a C program is a local definition compiled in pass 2;
+      mark it internal now so a caller compiled earlier emits a fixup (internal)
+      call, not an external one. In true header-import mode bodies stay external. }
+    if CProgramMode then
+      ProcExternal[procIdx] := False
+    else
+    begin
+      ProcExternal[procIdx] := True;
+      ProcLibrary[procIdx] := InternStr(CurrentCLibrary);
+    end;
     SkipBraceBlock;
     Exit;
   end;
