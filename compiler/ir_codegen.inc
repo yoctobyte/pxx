@@ -2602,6 +2602,14 @@ begin
                 else
                   EmitStrCmpReg(op = tkEq);
               end
+              else if ((op = tkLt) or (op = tkLe) or (op = tkGt) or (op = tkGe)) and
+                  ((IntToTypeKind(IRTk[left]) = tyAnsiString) or
+                   (IntToTypeKind(IRTk[left]) = tyString)) and
+                  ((IntToTypeKind(IRTk[right]) = tyAnsiString) or
+                   (IntToTypeKind(IRTk[right]) = tyString)) then
+              begin
+                EmitAnsiStrCmp3Reg(op, IntToTypeKind(IRTk[left]), IntToTypeKind(IRTk[right]));
+              end
               else
               begin
                 EmitB($48); EmitB($3B); EmitB($C1); { cmp rax, rcx }

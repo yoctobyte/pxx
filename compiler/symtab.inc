@@ -2447,6 +2447,73 @@ begin
   Patch32(skipJmp, CodeLen - (skipJmp + 4));
 end;
 
+procedure EmitAnsiStrCmp3Reg(op: TTokenKind; lhsTk, rhsTk: TTypeKind);
+{ Lexicographic ordering for managed strings (tyAnsiString / tyString).
+  rax = LHS handle, rcx = RHS handle.  Sets rax := 0/1 per op (< <= > >=).
+  Mirrors EmitAnsiStrCmpReg's loading prologue, then a min-length repe cmpsb
+  with a length tie-break, then an unsigned setcc. }
+var pLhsNil, pLhsDone, pRhsNil, pRhsDone, pMinOk, pLenCmp, pSetcc: Integer;
+begin
+  { --- Load LHS (rax) -> rsi (chars), rdx (len) --- }
+  if lhsTk = tyAnsiString then
+  begin
+    EmitB($48); EmitB($85); EmitB($C0);             { test rax, rax }
+    EmitB($74); pLhsNil := CodeLen; EmitB(0);       { jz lhs_nil }
+    EmitB($48); EmitB($89); EmitB($C6);             { mov rsi, rax }
+    EmitB($48); EmitB($8B); EmitB($50); EmitB($F8); { mov rdx, [rax-8] }
+    EmitB($EB); pLhsDone := CodeLen; EmitB(0);      { jmp lhs_done }
+    Code[pLhsNil] := Byte(CodeLen - (pLhsNil + 1));
+    EmitB($31); EmitB($F6);                         { xor esi, esi }
+    EmitB($31); EmitB($D2);                         { xor edx, edx }
+    Code[pLhsDone] := Byte(CodeLen - (pLhsDone + 1));
+  end
+  else
+  begin
+    EmitB($48); EmitB($8D); EmitB($70); EmitB($08); { lea rsi, [rax+8] }
+    EmitB($48); EmitB($8B); EmitB($10);             { mov rdx, [rax] }
+  end;
+
+  { --- Load RHS (rcx) -> rdi (chars), r8 (len) --- }
+  if rhsTk = tyAnsiString then
+  begin
+    EmitB($48); EmitB($85); EmitB($C9);             { test rcx, rcx }
+    EmitB($74); pRhsNil := CodeLen; EmitB(0);       { jz rhs_nil }
+    EmitB($48); EmitB($89); EmitB($CF);             { mov rdi, rcx }
+    EmitB($4C); EmitB($8B); EmitB($41); EmitB($F8); { mov r8, [rcx-8] }
+    EmitB($EB); pRhsDone := CodeLen; EmitB(0);      { jmp rhs_done }
+    Code[pRhsNil] := Byte(CodeLen - (pRhsNil + 1));
+    EmitB($31); EmitB($FF);                         { xor edi, edi }
+    EmitB($45); EmitB($31); EmitB($C0);             { xor r8d, r8d }
+    Code[pRhsDone] := Byte(CodeLen - (pRhsDone + 1));
+  end
+  else
+  begin
+    EmitB($48); EmitB($8D); EmitB($79); EmitB($08); { lea rdi, [rcx+8] }
+    EmitB($4C); EmitB($8B); EmitB($01);             { mov r8, [rcx] }
+  end;
+
+  { --- minlen in rcx --- }
+  EmitB($48); EmitB($89); EmitB($D1);               { mov rcx, rdx }
+  EmitB($4C); EmitB($39); EmitB($C1);               { cmp rcx, r8 }
+  EmitB($76); pMinOk := CodeLen; EmitB(0);          { jbe min_ok }
+  EmitB($4C); EmitB($89); EmitB($C1);               { mov rcx, r8 }
+  Code[pMinOk] := Byte(CodeLen - (pMinOk + 1));     { min_ok: }
+  EmitB($48); EmitB($85); EmitB($C9);               { test rcx, rcx }
+  EmitB($74); pLenCmp := CodeLen; EmitB(0);         { jz len_cmp }
+  EmitB($F3); EmitB($A6);                           { repe cmpsb }
+  EmitB($75); pSetcc := CodeLen; EmitB(0);          { jne set_cc (flags = lhs-rhs) }
+  Code[pLenCmp] := Byte(CodeLen - (pLenCmp + 1));   { len_cmp: }
+  EmitB($4C); EmitB($39); EmitB($C2);               { cmp rdx, r8 }
+  Code[pSetcc] := Byte(CodeLen - (pSetcc + 1));     { set_cc: }
+  case op of
+    tkLt: begin EmitB($0F); EmitB($92); EmitB($C0); end;  { setb }
+    tkLe: begin EmitB($0F); EmitB($96); EmitB($C0); end;  { setbe }
+    tkGt: begin EmitB($0F); EmitB($97); EmitB($C0); end;  { seta }
+    tkGe: begin EmitB($0F); EmitB($93); EmitB($C0); end;  { setae }
+  end;
+  EmitB($48); EmitB($0F); EmitB($B6); EmitB($C0);   { movzx rax, al }
+end;
+
 { ===== Array element access ===== }
 
 procedure EmitBumpAlloc;

@@ -214,6 +214,8 @@ test-asm-emit:
 test-core: $(COMPILER)
 	./$(COMPILER) test/test_ansistring.pas /tmp/test_ansistring26
 	test "$$(/tmp/test_ansistring26)" = "$$(printf '0\nInitially empty ok\nHello\n5\nHello\nAssignment equal ok\nhello\nHello\nCOW index write ok\nLocalString\n11\nLocal equal ok\nX\nChar assign ok\nHello World!\nHello\nHello World!\n0\nClear empty ok')"
+	./$(COMPILER) test/test_string_ordering.pas /tmp/test_string_ordering26
+	test "$$(/tmp/test_string_ordering26)" = "$$(printf '101001\n10\n011010\n101\n110')"
 	./$(COMPILER) test/test_indexed_property.pas /tmp/test_indexed_property26
 	test "$$(/tmp/test_indexed_property26)" = "$$(printf '99\n7\n42\n10\n30\n55\n88')"
 	./$(COMPILER) test/test_virtual_managed_arg.pas /tmp/test_virtual_managed_arg26

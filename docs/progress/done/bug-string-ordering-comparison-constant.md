@@ -51,3 +51,23 @@ codegen for string `=` vs string `<`.
   equal/prefix cases.
 - Self-host fixedpoint byte-identical; `make stabilize` + `make pin` so
   `TStringList.Sort` ([[feature-own-net-http-lib]]) re-enables.
+
+## Resolution (2026-06-25, v56)
+
+Fixed. The string-compare path in `ir_codegen.inc` was gated on `(op = tkEq) or
+(op = tkNeq)` only; ordering ops fell through to the general integer `else` which
+did `cmp rax, rcx` on the raw string **handles** (pointers), not contents — hence
+constant/garbage results.
+
+- `symtab.inc`: new `EmitAnsiStrCmp3Reg(op, lhsTk, rhsTk)` — reuses the
+  EmitAnsiStrCmpReg loading prologue (handles both tyAnsiString `[rax-8]`/nil and
+  tyString `[rax]`+8 layouts per side), then min-length `repe cmpsb` with a
+  length tie-break and an **unsigned** setcc (setb/setbe/seta/setae).
+- `ir_codegen.inc`: ordering branch (`tkLt/tkLe/tkGt/tkGe`) when both operands are
+  tyAnsiString/tyString routes to the new helper.
+- Regression: `test/test_string_ordering.pas` under `make test` (greater/less/
+  equal/prefix/empty cases for all six relops).
+- Self-host byte-identical; `make stabilize` + `make pin` → v56.
+
+Scope note: char-vs-string *ordering* (rare, not in ticket) still falls through;
+the eq/neq char-vs-string paths are unchanged and correct.
