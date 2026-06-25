@@ -3053,7 +3053,28 @@ begin
           dynamic-array local and hand its IR_LEA to the Length codegen — the same
           shape a dyn-array variable produces, so every backend's existing
           dyn-array Length path serves it. See bug-length-of-dynarray-call-result. }
+        { Length(ps^) / Length(rec.pf^) over a managed string (ps: ^string): `@s`
+          of a managed string yields the HANDLE (the heap data pointer) itself,
+          so `ps` holds the handle and `ps^` IS that handle. Its address-lowering
+          (IRLowerAddress AN_DEREF) collapses to a bare load of ps tagged
+          tyPointer, which the Length codegen's catch-all then derefs once more
+          ([handle]) and returns the first data word instead of the [handle-8]
+          length (garbage). Lower it instead as the plain handle load retagged
+          tyAnsiString: that is the same shape a managed-string VALUE produces, so
+          every backend's tyAnsiString Length path (no extra deref -> test ->
+          [-8]) serves it with no codegen change. Frozen `ps^` keeps tyString and
+          is untouched; managed strings don't exist on ESP so riscv32/xtensa never
+          see this. The deref is borrowed (ASTKind AN_DEREF is already excluded
+          from the managed-temp owning path above), so no double-free. See
+          bug-managed-length-via-pointer-deref. }
         if (cpi < 0) and (-cpi = Ord(tkLength)) and (pathIdx = 0) and
+           (ASTKind[ASTLeft[item]] = AN_DEREF) and
+           (IntToTypeKind(ASTTk[ASTLeft[item]]) = tyAnsiString) then
+        begin
+          value := IRLowerAST(ASTLeft[ASTLeft[item]]);
+          IRTk[value] := Ord(tyAnsiString);
+        end
+        else if (cpi < 0) and (-cpi = Ord(tkLength)) and (pathIdx = 0) and
            (ASTKind[ASTLeft[item]] = AN_CALL) and (ASTIVal[ASTLeft[item]] >= 0) and
            ProcRetIsDynArray[ASTIVal[ASTLeft[item]]] then
         begin

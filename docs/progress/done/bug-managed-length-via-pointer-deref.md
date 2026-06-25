@@ -46,3 +46,29 @@ variant test should be added once this is fixed.
 
 Managed `Length(ps^)` / `Length(rec.pf^)` == direct `Length` on all targets; no
 double-free.
+
+## Resolution (2026-06-25)
+
+Root cause was one level off from the original note: `@s` of a managed string
+yields the **handle (heap data pointer) itself**, not `&slot` — the garbage
+`500085772884` decodes to the bytes `'TRoot'`, i.e. the catch-all returned
+`[handle]` (the string data) instead of `[handle-8]` (the length). So `ps` IS
+the handle; `Length(ps^)` needs `test; [-8]` with **no** extra deref. The
+attempted value-path double-free was a separate red herring; the AN_DEREF
+managed-temp exclusion (ir.inc) already keeps the borrow correct.
+
+Fix: lowering-only, in the `IRLowerAST` arg loop (`ir.inc`, beside the
+dyn-array-call Length special-case). For `Length(<deref>)` where the deref's
+type is `tyAnsiString`, lower the arg as the plain handle load of the pointer
+operand, retagged `tyAnsiString` (`IRTk[value] := Ord(tyAnsiString)`). That is
+the same node shape a managed-string *value* produces, so every backend's
+existing `tyAnsiString` Length path (no extra deref → test → `[-8]`) serves it
+with **zero codegen change**. Frozen `ps^` keeps `tyString` (untouched); managed
+strings don't exist on ESP, so riscv32/xtensa never hit it.
+
+Verified `5 5 5 2 2 OK` on x86-64 / i386 / aarch64 / arm32 (incl. a 1000-iter
+loop = no double-free / leak). Gate: `make test` (self-host byte-identical) +
+`test-i386 test-aarch64 test-arm32` + `cross-bootstrap` all green. New managed
+regression test `test/test_managed_strlen_deref.pas` wired into all three cross
+sections (cross-vs-x64 oracle + an absolute-output assertion). The pre-existing
+`test_cross_frozen_strlen_deref` (frozen, `-uPXX_MANAGED_STRING`) stays.
