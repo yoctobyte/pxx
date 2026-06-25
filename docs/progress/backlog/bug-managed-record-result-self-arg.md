@@ -55,6 +55,25 @@ managed-string-field family ([[bug-setlength-record-field-via-var-param]] fixed
 v67, [[bug-managed-length-via-pointer-deref]]) — this is the return-slot/self-arg
 corner of the same managed-aggregate area.
 
+## Same bug, already worked around elsewhere
+
+This is the bug `lib/rtl/bignum.pas` + `examples/bignum/bigmath.pas` comments call
+**`bug-nested-managed-return-call-arg`** (which has no ticket file — this ticket
+is its home). Their standing workaround: never pass a managed-return call
+straight as an argument to another call — **bind it to a temp first**, e.g.
+
+```pascal
+t := BigMulSmall(rem, BIG_BASE);   { not BigAdd(BigMulSmall(rem,BIG_BASE), …) }
+d := BigFromInt(a.limbs[i]);
+rem := BigAdd(t, d);
+```
+
+So the failure isn't only the literal `Result := F(Result,…)` self-aliasing form
+above — **any** managed-record-returning call used directly as an argument to
+another call can corrupt state. The self-arg / self-reassignment case (the repro)
+is the loudest (immediate segfault). Once fixed, the temp-binding in
+`bignum.pas` (`BigFromStr`, `BigDivMod`) and `bigmath.pas` can be simplified.
+
 ## Acceptance
 
 - `Result := F(Result, …)` for a managed-field record returns the right value on
