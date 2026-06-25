@@ -1,7 +1,23 @@
 # C desktop path — compile real portable C (tiny-regex → lua → sqlite)
 
 - **Type:** feature (track-C milestone path)
-- **Status:** backlog (active arc — lua core 3/34 files parse; see 2026-06-25 log)
+- **Status:** backlog (active arc — lua core **14/34 files parse clean**; see logs)
+- **Session 2026-06-26 round 5 (Track C), gate-green + byte-identical, lua core
+  7 -> 14:** global array decls no longer cascade + balanced-brace aggregate-init
+  skip (3843307), `sizeof((l)[0])` balanced-paren operand skip — unblocked the
+  whole luaL_newlibtable sizeof cluster, +6 files (ced768d), `signal()` declared
+  via a `__sighandler_t` typedef (the function-returning-fn-pointer declarator was
+  unparseable) + undeclared-call error now names the function (2f5e285). REMAINING
+  blockers: (a) **emergent-combination bugs** — in big files (lapi/lvm/lgc) an
+  `IRLowerAddress` hits an int-literal / AN_CALL / AN_ASSIGN where every isolated
+  piece (setobj, isvalid, luaC_barrier, the ternary) compiles fine; the failure
+  only appears with the whole accumulated file. Smells like STATE ACCUMULATION
+  (recycled symtab slots / node-pool — cf. the Alloc* parallel-array landmine),
+  NOT a per-construct bug; bisection can't isolate it because the minimal repro
+  doesn't carry the accumulated state. Next: instrument which sym/node slot is
+  recycled with stale ASTSOffset/Kind when the int-lit address is emitted. (b)
+  varargs `__builtin_va_start` (va_list — lua's luaL_error; Track A/ABI). (c)
+  setobj/setsvalue undeclared in lvm (same emergent class). (d) multi-file linking.
 - **Opened:** 2026-06-25
 - **Session 2026-06-25 (Track C) delivered, all gate-green + self-host
   byte-identical, on `feat/cfront`:** function pointers (4d36da6), typedef-of-
