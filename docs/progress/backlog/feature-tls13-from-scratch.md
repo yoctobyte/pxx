@@ -158,8 +158,12 @@ HTTP client); server-side later if wanted.
   `X509VerifySig` wiring the cert signature to the M4 verifiers
   (RSA/ECDSA-P256/Ed25519 by OID). `test/lib_x509`: three self-signed certs
   (one per algorithm) parse and their self-signatures verify (5 checks, gated
-  `x509`). **Remaining:** chain building (issuer-key links to a root), validity
-  dates, the system trust store (`/etc/ssl/certs`), and hostname / SAN matching.
+  `x509`). **Chain validation added 2026-06-25:** `X509VerifyChain` (issuer-name
+  link + signature + validity + hostname), `X509ValidAt`, `X509HostMatch` (SAN
+  dNSName, case-insensitive, single `*.` wildcard). `lib_x509` now also validates
+  a real CA→leaf chain (issuer link, SAN exact/wildcard/reject, expired-reject,
+  badhost-reject, chain-ok; 12 checks). **Remaining:** loading the system trust
+  store (`/etc/ssl/certs`) for the trust anchor — wired in at M6.
 - M6 TLS 1.3 handshake state machine → a real `https://` GET (Pascal record
   layer); verify against a public host.
 - M7 (optional) kTLS offload for app-data throughput.

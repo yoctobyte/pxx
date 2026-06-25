@@ -20,6 +20,11 @@ type
     SigValue:  AnsiString;   { signature bits (BIT STRING content, 0x00 stripped) }
     KeyAlgOid: AnsiString;   { SPKI algorithm OID value bytes }
     PubBits:   AnsiString;   { subjectPublicKey (BIT STRING content, 0x00 stripped) }
+    Issuer:    AnsiString;   { raw issuer Name TLV (for chain linking) }
+    Subject:   AnsiString;   { raw subject Name TLV }
+    NotBefore: AnsiString;   { normalised YYYYMMDDHHMMSS }
+    NotAfter:  AnsiString;   { normalised YYYYMMDDHHMMSS }
+    ExtRaw:    AnsiString;   { raw Extensions SEQUENCE value (for SAN) }
   end;
 
 { Parse a DER certificate into its key fields. Result.Ok is False on malformed. }
@@ -29,6 +34,18 @@ function X509Parse(const der: AnsiString): TCert;
   PubBits). For a self-signed cert pass the same cert as issuer. }
 function X509VerifySig(const cert, issuer: TCert): Boolean;
 
+{ True if nowStr (YYYYMMDDHHMMSS, UTC) is within [NotBefore, NotAfter]. }
+function X509ValidAt(const cert: TCert; const nowStr: AnsiString): Boolean;
+
+{ True if `host` matches a dNSName in the cert's subjectAltName (exact,
+  case-insensitive, plus a single leading-label wildcard `*.`). }
+function X509HostMatch(const cert: TCert; const host: AnsiString): Boolean;
+
+{ Full link check: `leaf` was issued by `issuer` (name link + signature), both
+  valid at nowStr, and (if host<>'') the leaf matches host. `issuer` trust (a
+  root in the store) is the caller's responsibility. }
+function X509VerifyChain(const leaf, issuer: TCert; const nowStr, host: AnsiString): Boolean;
+
 implementation
 
 uses rsa, ecdsa_p256, ed25519;
@@ -37,6 +54,7 @@ const
   OID_RSA_SHA256 = #$2a#$86#$48#$86#$f7#$0d#$01#$01#$0b;
   OID_ECDSA_SHA256 = #$2a#$86#$48#$ce#$3d#$04#$03#$02;
   OID_ED25519 = #$2b#$65#$70;
+  OID_SAN = #$55#$1d#$11;       { 2.5.29.17 subjectAltName }
 
 { Parse a DER tag-length-value at 1-based `pos`. Returns the tag byte, the
   value's 1-based start, its length, and the position just past the value. }
@@ -82,6 +100,27 @@ begin
   for i := Length(s) + 1 to n do Result := Chr(0) + Result;
 end;
 
+{ Normalise an ASN.1 Time to YYYYMMDDHHMMSS (UTCTime gets a century prefix). }
+function NormTime(tag: Integer; const t: AnsiString): AnsiString;
+begin
+  if tag = $17 then     { UTCTime YYMMDDHHMMSSZ }
+  begin
+    if t[1] < '5' then Result := '20' else Result := '19';
+    Result := Result + Copy(t, 1, 12);
+  end
+  else                  { GeneralizedTime YYYYMMDDHHMMSSZ }
+    Result := Copy(t, 1, 14);
+end;
+
+procedure ParseValidity(const der: AnsiString; vs: Integer; var nb, na: AnsiString);
+var tag, ts, tl, np: Integer;
+begin
+  DerTLV(der, vs, tag, ts, tl, np);
+  nb := NormTime(tag, Copy(der, ts, tl));
+  DerTLV(der, np, tag, ts, tl, np);
+  na := NormTime(tag, Copy(der, ts, tl));
+end;
+
 function X509Parse(const der: AnsiString): TCert;
 var
   tag, vs, vl, np: Integer;
@@ -115,18 +154,22 @@ begin
   if tag <> $03 then Exit;
   Result.SigValue := Copy(der, vs + 1, vl - 1);
 
-  { --- inside tbsCertificate: find SubjectPublicKeyInfo --- }
+  { --- walk tbsCertificate children --- }
   DerTLV(der, tbsPos, tag, vs, vl, np);    { tbs SEQ; vs = first child }
   p := vs;
   { optional [0] version }
   DerTLV(der, p, tag, vs, vl, np);
   if tag = $A0 then p := np;               { skip version }
-  { serial, sigAlg, issuer, validity, subject -> 5 elements to skip }
-  for i := 1 to 5 do
-  begin
-    DerTLV(der, p, tag, vs, vl, np);
-    p := np;
-  end;
+  DerTLV(der, p, tag, vs, vl, np); p := np;          { serialNumber }
+  DerTLV(der, p, tag, vs, vl, np); p := np;          { signature alg }
+  Result.Issuer := DerElement(der, p);
+  DerTLV(der, p, tag, vs, vl, np); p := np;          { issuer }
+  { validity SEQUENCE of notBefore Time, notAfter Time }
+  DerTLV(der, p, tag, vs, vl, np);
+  ParseValidity(der, vs, Result.NotBefore, Result.NotAfter);
+  p := np;
+  Result.Subject := DerElement(der, p);
+  DerTLV(der, p, tag, vs, vl, np); p := np;          { subject }
   spkiPos := p;                            { SubjectPublicKeyInfo SEQUENCE }
   DerTLV(der, spkiPos, tag, vs, vl, np);
   if tag <> $30 then Exit;
@@ -140,6 +183,21 @@ begin
   DerTLV(der, algNp, bitTag, bitVs, bitVl, bitNp);
   if bitTag <> $03 then Exit;
   Result.PubBits := Copy(der, bitVs + 1, bitVl - 1);   { strip 0x00 unused-bits }
+
+  { extensions: after SPKI, skip optional [1]/[2] unique IDs to the [3] block }
+  p := bitNp;
+  DerTLV(der, tbsPos, tag, vs, vl, np);    { re-read tbs end }
+  while p < np do
+  begin
+    DerTLV(der, p, tag, vs, vl, algNp);
+    if tag = $A3 then                      { [3] EXPLICIT Extensions }
+    begin
+      DerTLV(der, vs, tag, vs, vl, algNp); { the Extensions SEQUENCE }
+      Result.ExtRaw := Copy(der, vs, vl);
+      Break;
+    end;
+    p := algNp;
+  end;
 
   Result.Ok := True;
 end;
@@ -190,6 +248,92 @@ begin
   end
   else if cert.SigAlgOid = OID_ED25519 then
     Result := Ed25519Verify(issuer.PubBits, cert.TbsRaw, cert.SigValue);
+end;
+
+function X509ValidAt(const cert: TCert; const nowStr: AnsiString): Boolean;
+begin
+  Result := (nowStr >= cert.NotBefore) and (nowStr <= cert.NotAfter);
+end;
+
+function LowerCh(c: Char): Char;
+begin
+  if (c >= 'A') and (c <= 'Z') then LowerCh := Chr(Ord(c) + 32) else LowerCh := c;
+end;
+
+function CiEq(const a, b: AnsiString): Boolean;
+var i: Integer;
+begin
+  if Length(a) <> Length(b) then begin Result := False; Exit; end;
+  for i := 1 to Length(a) do
+    if LowerCh(a[i]) <> LowerCh(b[i]) then begin Result := False; Exit; end;
+  Result := True;
+end;
+
+{ Match host against one dNSName, honouring a single leading `*.` wildcard. }
+function NameMatch(const pat, host: AnsiString): Boolean;
+var pdot, hdot: Integer; i: Integer;
+begin
+  if (Length(pat) > 2) and (pat[1] = '*') and (pat[2] = '.') then
+  begin
+    { wildcard: the part after the first host label must equal pat after `*` }
+    hdot := 0;
+    for i := 1 to Length(host) do if host[i] = '.' then begin hdot := i; Break; end;
+    if hdot = 0 then begin Result := False; Exit; end;
+    Result := CiEq(Copy(host, hdot, Length(host) - hdot + 1), Copy(pat, 2, Length(pat) - 1));
+  end
+  else
+    Result := CiEq(pat, host);
+end;
+
+function X509HostMatch(const cert: TCert; const host: AnsiString): Boolean;
+var
+  ext: AnsiString;
+  p, tag, vs, vl, np, endp: Integer;
+  oidVs, oidVl, oidNp: Integer;
+  octVs, octVl, octNp: Integer;
+  gp, gtag, gvs, gvl, gnp, gend: Integer;
+begin
+  Result := False;
+  ext := cert.ExtRaw;
+  if ext = '' then Exit;
+  p := 1; endp := Length(ext) + 1;
+  while p < endp do
+  begin
+    DerTLV(ext, p, tag, vs, vl, np);              { one Extension SEQUENCE }
+    if tag <> $30 then Break;
+    DerTLV(ext, vs, tag, oidVs, oidVl, oidNp);    { extnID OID }
+    if (tag = $06) and (Copy(ext, oidVs, oidVl) = OID_SAN) then
+    begin
+      { extnValue OCTET STRING is the last child of the extension }
+      DerTLV(ext, oidNp, tag, octVs, octVl, octNp);
+      if tag = $01 then DerTLV(ext, octNp, tag, octVs, octVl, octNp);  { skip critical BOOL }
+      if tag = $04 then
+      begin
+        { OCTET STRING wraps a GeneralNames SEQUENCE }
+        DerTLV(ext, octVs, gtag, gvs, gvl, gnp);
+        gp := gvs; gend := gvs + gvl;
+        while gp < gend do
+        begin
+          DerTLV(ext, gp, gtag, gvs, gvl, gnp);
+          if gtag = $82 then                       { dNSName [2] IA5String }
+            if NameMatch(Copy(ext, gvs, gvl), host) then begin Result := True; Exit; end;
+          gp := gnp;
+        end;
+      end;
+      Exit;
+    end;
+    p := np;
+  end;
+end;
+
+function X509VerifyChain(const leaf, issuer: TCert; const nowStr, host: AnsiString): Boolean;
+begin
+  { cheap checks first; the signature (possibly a slow modexp) goes last }
+  Result := leaf.Ok and issuer.Ok
+    and (leaf.Issuer = issuer.Subject)
+    and X509ValidAt(leaf, nowStr) and X509ValidAt(issuer, nowStr)
+    and ((host = '') or X509HostMatch(leaf, host))
+    and X509VerifySig(leaf, issuer);
 end;
 
 end.

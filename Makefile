@@ -2423,7 +2423,7 @@ lib-test: pxx-stable-check
 	test "$$(/tmp/lib_ecdsa | grep -c '=ok')" = "2"
 	test "$$(/tmp/lib_ecdsa | grep -c 'FAIL')" = "0"
 	$(PXX_STABLE) -Fulib/rtl test/lib_x509.pas /tmp/lib_x509
-	test "$$(/tmp/lib_x509 | grep -c '=ok')" = "5"
+	test "$$(/tmp/lib_x509 | grep -c '=ok')" = "12"
 	test "$$(/tmp/lib_x509 | grep -c 'FAIL')" = "0"
 	$(PXX_STABLE) -Fulib/rtl/platform/posix test/lib_tls.pas /tmp/lib_tls
 	test "$$(/tmp/lib_tls | grep -c '=ok')" = "14"
