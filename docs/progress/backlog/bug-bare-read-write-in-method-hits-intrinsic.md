@@ -37,3 +37,15 @@ such method in scope.
 
 - Unqualified `Read`/`Write` inside a method with those members calls the member.
 - Regression test under `make test`. (Low priority — `Self.` works.)
+
+## Related data point — `Move` (2026-06-25, Track B)
+
+The same family bit `examples/adventure` once F1 (textfile) cleared: a
+`TGame.Move(d: TDirection)` method called unqualified from `TGame.Run`
+(engine.pas:1038, `Move(d)`) binds to the memory `Move(src,dst,count)` intrinsic →
+`error: no overload of Move matches these arguments`. So this is not specific to
+`Read`/`Write` — any intrinsic-named method (`Move`, …) called unqualified is at
+risk. NB: a reduced repro (bare method `Move(Integer)`/`Move(enum)` from another
+method, program or unit) does **not** reproduce — it needs engine's fuller
+context, so the trigger is narrower than "any same-named method". Sidestep:
+`Self.Move(d)`.

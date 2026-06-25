@@ -28,6 +28,23 @@ Date: 2026-06-18. Files: `engine.pas`, `adventure.pas`, `world.dat`.
   is undefined at engine.pas:652. Adding `uses textfile` to engine compiles it,
   but that is non-platonic (FPC has these in System, ambient everywhere) — the
   honest fix is the compiler making them ambient in unit scope too.
+- **2026-06-25 RESOLVED:** Track A v62 (`8e68543` "inject textfile RTL for units
+  that reference Text") makes the textfile primitives ambient in unit scope.
+  `Assign` at engine.pas:652 now compiles. The compile advances to the next
+  blocker below (F-Move).
+
+### F-Move (new, surfaced after F1 cleared). Bare `Move(d)` resolves to the `Move` intrinsic
+- **Where:** `TGame.Run` at engine.pas:1038 — `if NameToDir(w, d) then begin
+  Move(d); Continue; end;` calling the method `TGame.Move(d: TDirection)`.
+- **Symptom:** `pascal26:1038: error: no overload of Move matches these arguments`
+  — the unqualified `Move(d)` binds to the memory-move intrinsic
+  `Move(src,dst,count)` instead of `Self.Move`. Same family as
+  [[bug-bare-read-write-in-method-hits-intrinsic]] (intrinsic shadows a same-named
+  method called unqualified inside another method).
+- **Note:** a reduced repro (bare method `Move(Integer)`/`Move(enum)` called from
+  another method, program or unit) does **not** reproduce — it needs engine's
+  fuller context, so no standalone minimal-repro ticket yet; logged on the
+  bare-intrinsic ticket as a data point. Sidestep for now: qualify as `Self.Move(d)`.
 
 ### F2. `{$I-}`/`{$I+}` + `IOResult` (soft file-open check)
 - **Where:** `TGame.LoadFrom` (guarding a missing save file).

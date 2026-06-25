@@ -84,6 +84,12 @@ portable Pascal kernel until their asm surfaces are mature enough.
   which is why the integer checksum still matched FPC). The shade-ramp must be a
   string **variable**, or this Track A codegen bug fixed, before the visual is
   trustworthy. Left the source idiomatic (const index) — blocked on the compiler.
+- 2026-06-25 — **ASCII visual FIXED.** Track A v61 fixed
+  [[bug-const-string-index-miscompiles]] (`0a02e46`). The `RAMP[ri+1]` lookup now
+  returns the right char, so the no-arg ASCII grid renders the correct Mandelbrot
+  bulb (matches FPC), not the repeated-ramp garbage. Smoke checksum unchanged
+  (3745966). The const-index source stayed idiomatic the whole time — no
+  workaround needed.
 - 2026-06-25 — **Landed (Track B):** integer fixed-point kernel + colour image +
   benchmark. `mandelbrot.pas` now has three modes (no-arg = the same ASCII+CHECKSUM
   smoke, so the lib-test/demos gate is byte-unchanged): `--ppm FILE [W H]` writes a
