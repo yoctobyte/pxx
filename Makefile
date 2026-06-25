@@ -31,7 +31,7 @@ FROZEN_PXXFLAGS := -uPXX_MANAGED_STRING
 
 .PHONY: all bootstrap bootstrap-check fpc-check test-fpc seed-from-stable test test-core test-asm-emit test-debug-g test-nilpy qemu-env-check test-i386 test-aarch64 test-arm32 test-emit-obj stabilize check-stable selfcheck revert benchmark benchmark-compiler-runtime benchmark-check clean distclean symbols \
         bootstrap-managed bootstrap-frozen test-managed test-frozen stabilize-managed stabilize-frozen check-stable-managed revert-managed test-nilpy-managed test-nilpy-frozen \
-        pxx-stable-check pin lib-test library-suite library-suite-green library-suite-discovery gui-test demos c-interop-devtest tls-openssl-devtest \
+        pxx-stable-check pin lib-test library-suite library-suite-green library-suite-discovery gui-test demos c-interop-devtest tls-openssl-devtest tls13-handshake-devtest \
         progress-check cross-bootstrap cross-bootstrap-aarch64 cross-bootstrap-arm32 cross-bootstrap-i386 test-esp-bare test-esp-softfloat
 
 all: $(COMPILER)
@@ -2516,3 +2516,8 @@ c-interop-devtest: pxx-stable-check
 # is NOT in the default lib-test gate; skips cleanly when prereqs are absent.
 tls-openssl-devtest: pxx-stable-check
 	tools/tls_openssl_devtest.sh
+
+# From-scratch TLS 1.3 client handshake (phase 1) vs openssl s_server. Opt-in /
+# non-hermetic; not in the lib-test gate.
+tls13-handshake-devtest: pxx-stable-check
+	tools/tls13_handshake_devtest.sh

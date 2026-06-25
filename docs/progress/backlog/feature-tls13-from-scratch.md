@@ -173,10 +173,17 @@ HTTP client); server-side later if wanted.
   ciphersuites, roundtrip + tamper-reject. **Handshake message layer done**
   (`lib/rtl/tls13_hs.pas`, `tls13-hs`): ClientHello builder (X25519 key_share,
   the two SHA-256 suites, supported_versions/groups/sig_algs/SNI), ServerHello
-  parser (cipher + server key_share), HS framing + transcript hash. **Remaining
-  M6:** the handshake state machine that drives these against a live server
-  (decrypt the server flight, verify CertificateVerify + Finished, send client
-  Finished, switch to app keys) → a real `https://` GET.
+  parser (cipher + server key_share), HS framing + transcript hash. **Handshake state machine — phase 1 works against a real server (2026-06-25):**
+  `test/devtest_tls13_handshake.pas` (`make tls13-handshake-devtest`) drives a
+  from-scratch TLS 1.3 client against `openssl s_server -tls1_3` — sends a real
+  ClientHello, parses the ServerHello, computes the X25519 ECDHE, runs the
+  handshake key schedule, and **decrypts the server's first encrypted flight**
+  (EncryptedExtensions, inner content-type 22). So the whole M1–M6 stack
+  interoperates with a real TLS 1.3 server through key exchange + record
+  decryption. **Remaining (phase 2):** reassemble the full server flight
+  (Certificate, CertificateVerify, Finished), verify the chain (M5) + the
+  CertificateVerify signature (M4) + the server Finished MAC, send the client
+  Finished, switch to application keys, and do a real `https://` GET.
 - M6 TLS 1.3 handshake state machine → a real `https://` GET (Pascal record
   layer); verify against a public host.
 - M7 (optional) kTLS offload for app-data throughput.
