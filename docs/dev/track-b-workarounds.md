@@ -18,8 +18,7 @@ before assuming the workaround is still needed.
 |---|---|---|---|
 | `lib/rtl/bignum.pas` (`BigFromStr`, `BigDivMod`), `examples/bignum/bigmath.pas` | managed-return calls bound to a temp before being passed as an arg (no `BigAdd(BigMulSmall(x,…),…)` nesting) | [[bug-managed-record-result-self-arg]] (aka `bug-nested-managed-return-call-arg`) | nest the calls directly |
 | `lib/rtl/chacha20poly1305.pas` (Poly1305) | native 5×26-bit limbs instead of `bignum` | [[bug-managed-record-result-self-arg]] — *partial:* limbs are the idiomatic choice anyway, so this is **not** a pure workaround; keep even after the fix | — (keep) |
-| `lib/rtl/aesgcm.pas` (`BlkCopy`, used in `EncryptBlk`, `GfMul`, `AesCtr`, `GcmSetup`, `GcmTag`) | whole static-array `:=` replaced by element-copy loops | [[bug-fixed-array-assignment-no-copy]] — `b := a` on a fixed array doesn't copy | plain `dst := src` |
-| `test/lib_sha256.pas`, `test/lib_aesgcm.pas` (expected hex literals) | long literals kept on **one line** (no `'a' + 'b'`) | [[bug-string-literal-concat-compare-segfault]] — `x = 'a'+'b'` comparison segfaults | split literals with `+` |
+| `lib/rtl/aesgcm.pas` (`BlkCopy`, used in `EncryptBlk`, `GfMul`, `AesCtr`, `GcmSetup`, `GcmTag`) | whole static-array `:=` replaced by element-copy loops | [[bug-fixed-array-assignment-no-copy]] — **fixed generally (v72)**, but a full revert of *this unit* still segfaults at the GCM path (residual, NOT minimally reproducible — every isolated `array :=` pattern passes on v72). **Keep `BlkCopy` here** until the residual is understood. | (do not revert yet) |
 | `lib/rtl/ed25519.pas` (EC points) | a point's 4 field coords are **4 separate standalone TGf vars**, never an `array of TGf` or a record of TGf | [[bug-aggregate-member-array-as-var-param]] — passing an aggregate-member array by ref segfaults | a `TPoint = array[0..3] of TGf` / record |
 
 ### Coding-pattern landmines (no single site — avoid in new Track B code)
@@ -40,12 +39,6 @@ before assuming the workaround is still needed.
   than fixed limbs).
 - **`Read := x` / `Write := x`** (own-name result of an intrinsic-named **virtual**
   method) miscompiles — [[bug-virtual-keyword-name-result]]. Use `Result := x`.
-- **Whole static-array assignment** `b := a` doesn't copy —
-  [[bug-fixed-array-assignment-no-copy]]. Copy element by element (or a small
-  `Copy` proc). Records and dynamic arrays are unaffected.
-- **String-literal concat in a comparison** `x = 'a' + 'b'` segfaults —
-  [[bug-string-literal-concat-compare-segfault]]. Keep the literal on one line, or
-  assign the concat to a var first. (Assignment `v := 'a'+'b'` is fine.)
 - **Aggregate-member array as a var/const param** (a 2D-array row `p[i]`, or an
   array-typed record field `p.a`) segfaults —
   [[bug-aggregate-member-array-as-var-param]]. Keep each sub-array a standalone
@@ -86,3 +79,12 @@ now in `done/`, so the workaround can be removed and the idiomatic form restored
   bare `Read`/`Write`. Re-tested: `lib_classes` (21) green.
 - [[bug-managed-length-via-pointer-deref]] **fixed (v71)** — no Track B code
   carried a workaround (it was a compiler-internal find); landmine note dropped.
+- [[bug-string-literal-concat-compare-segfault]] **fixed (v73)** — `x = 'a'+'b'`
+  comparison no longer crashes (re-tested). The `lib_sha256`/`lib_aesgcm` expected
+  hex literals were kept one-line; that form is fine, so nothing to revert.
+- [[bug-fixed-array-assignment-no-copy]] **fixed (v72) for the general case** —
+  every isolated `array :=` pattern (local↔local, ↔ var/const param, 16-elem)
+  copies correctly. BUT reverting `lib/rtl/aesgcm.pas`'s `BlkCopy` to plain `:=`
+  still **segfaults** in the GCM path (`aes-ecb` passes, `gcm-tc1` cores) and I
+  could **not** minimally reproduce it. So `aesgcm` keeps `BlkCopy` for now (see
+  the table above); the unit's behaviour is unchanged and `lib_aesgcm` stays green.
