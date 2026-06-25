@@ -53,3 +53,4 @@
 2026-06-24T16:36:41Z  v53  e2f4d90495b256561dd752ec3e10d3b5acee61b4df1d5ce48a1ac4a0729fd1e3  70041300afe003c5e2abfe3aafbee2bef0d9b6b7  fix(tooling): graceful non-x86_64 install + gate demos behind install
 2026-06-24T17:38:02Z  v54  98c6ebff80cd30bc363855065812faaad43105d2953d099f15769b7eb8e150f4  c56e6d7c9f270d4e9b2caefb865f3b6db717546a  fix(parser): Read/Write as method names + untyped params in methods
 2026-06-24T18:38:59Z  v55  d026e64dfdb80b19659fc54e326053eded4086b88994bd25a99ef193e00faa67  62ee73c6f2c67c1c8f161d7b3f752fd064b43c88  fix(lexer): {$R-}/{$R+} are range-check toggles, not resources
+2026-06-25T00:04:17Z  v56  ca123876de6fbf3d2fa3892f863764ae8821695b2e449d3341c060d343eac84f  738fcb0e350733370923a08543f70728f40ed5d8  chore(stable): pin v55 ({$R-} range-check toggle fix)
