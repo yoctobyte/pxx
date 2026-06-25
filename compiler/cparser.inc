@@ -1981,6 +1981,10 @@ begin
   else if CurTok.Kind = tkPlus then begin Next; Result := CEvalConstPrimary(); end
   else if CurTok.Kind = tkNot then begin Next; Result := CEvalConstPrimary() xor (-1); end  { ~ : bitwise NOT (xor -1 sidesteps the `not <call>`=boolean typing quirk) }
   else if CurTok.Kind = tkInteger then begin Result := CurTok.IVal; Next; end
+  else if (CurTok.Kind = tkIdent) and (CurTok.SVal = 'sizeof') then
+    { `sizeof(type|expr)` in a constant expression (e.g. array dimension
+      `char b[3 * sizeof(size_t)]`). Reuse the value-form folder. }
+    Result := ASTIVal[ParseCSizeof]
   else if CurTok.Kind = tkIdent then
   begin
     idx := FindSym(CurTok.SVal);
