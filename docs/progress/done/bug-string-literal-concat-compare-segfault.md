@@ -1,7 +1,7 @@
 # bug: comparing against a concatenation of string literals (`x = 'a' + 'b'`) segfaults
 
 - **Type:** bug (codegen — constant string concat as a comparison operand)
-- **Status:** backlog
+- **Status:** done
 - **Track:** A
 - **Opened:** 2026-06-25
 - **Found-by:** Track B, test vectors in `test/lib_sha256` and `test/lib_aesgcm` —
@@ -43,3 +43,19 @@ compare), whereas the assignment path materialises it correctly.
 
 - `if x = 'a' + 'b' then …` evaluates correctly (no crash) for AnsiString.
 - Regression test.
+
+## Log
+- 2026-06-25 — fixed (9f8d568). Root cause as suspected: a runtime
+  string-concat result fed into the hand-emitted string-compare path crashes.
+  Fix = constant folding instead: the ESP-only literal-concat fold in ir.inc
+  (`'a'+'b'` → one interned IR_CONST_STR) made target-independent, so a
+  literal-concat operand becomes a single literal — identical to the known-good
+  single-line form. Subtlety: the folded literal must be tagged tyString (a
+  plain literal's kind), NOT the surrounding expression's ASTTk — a
+  Concat-synthesised `+` chain is tyAnsiString in managed mode, and tagging the
+  static literal tyAnsiString made managed paths release it as a heap handle →
+  crash at scope exit (regressed test_concat_intrinsic; caught + fixed before
+  commit). Regression test test/test_str_literal_concat_compare.pas. Verified
+  x86-64 + aarch64/arm32/i386; make test + self-host + cross-bootstrap
+  byte-identical (1-gen reseed). Track B can drop the single-line-literal
+  workaround in lib_sha256 / lib_aesgcm.
