@@ -203,3 +203,21 @@ gap rather than bloating this ticket.
   (no main), the correct result. M1 (running regex) additionally needs
   pointers/arrays. Next: Slice B increment 2 — pointer/lvalue unary (`* &`),
   postfix `[] . ->`, casts, sizeof — the real blocker for regex/lua/sqlite.
+- 2026-06-25 — **Slice B increment 2a (pointers + arrays) DONE.** Unary `*`
+  (deref, rvalue+lvalue) and `&` (address-of) in ParseCUnary; postfix subscript
+  `[]` in ParseCPostfix (AN_INDEX). Pointer arithmetic `p+i` is scaled by the IR
+  automatically (it keys on operand type + IRPointerStride). Local decls now
+  carry pointer element type (Syms.PtrElemTk/PtrElemRec from the captured
+  CTypeElem* globals) and support fixed arrays `T a[N]` via AllocArray (N is a
+  constant expression — literal/enum/#define). LANDMINE: pointer PARAMETERS also
+  need their pointed-at type threaded (else `*a`/`a[i]` inside the body use the
+  wrong width — `swap(int*,int*)` silently no-ops); added per-param pelemtk/
+  pelemrec capture + PtrElemTk set after AllocParam in ParseCSubroutine. All in
+  Track D's lane (clexer/cparser only) — reuses existing AN_DEREF/AN_ADDR/
+  AN_INDEX, no shared-IR edits. Verified vs gcc: deref read/write, fixed arrays,
+  array+pointer subscript, pointer arithmetic, pointer params, char* + string
+  literal (`strlen("hello")`=5 — NUL-terminated literals work), `swap` idiom;
+  new fixture `test/cptr_b2.c` (=122) wired in; full C-import regression green;
+  self-host byte-identical. Deferred: struct field access (`. ->`), casts,
+  sizeof, multi-dim arrays, array initialisers, mixed `int *p, q` declarators.
+  Next: struct field access + casts (then char-string libc surface toward M1).

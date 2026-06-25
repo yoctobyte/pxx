@@ -5,6 +5,7 @@ function ParseCStatementAST: Integer; forward;
 procedure SkipBraceBlock; forward;
 procedure ParseCSubroutine; forward;
 function ParseCExpr: Integer; forward;
+function CEvalConstExpr: Int64; forward;
 
 { ===== C expression compiler (Slice B) =====
   A real recursive-descent C expression parser at C precedence, replacing the
@@ -242,12 +243,46 @@ begin
   end;
 end;
 
-{ Unary prefix: `- + ! ~`. Pointer/lvalue unary (`* & ++ --`), sizeof and casts
-  arrive with the lvalue/postfix increment. }
+{ Pointed-at / element TTypeKind ordinal of a pointer or array node, used to tag
+  AN_DEREF / AN_INDEX results. Defaults to Integer for shapes not yet modelled. }
+function CNodePointeeTk(node: Integer): Integer;
+begin
+  Result := Ord(tyInteger);
+  if node < 0 then Exit;
+  if ASTKind[node] = AN_IDENT then
+  begin
+    if Syms[ASTIVal[node]].IsArray then
+      Result := Ord(Syms[ASTIVal[node]].ElemType)
+    else if Syms[ASTIVal[node]].TypeKind = tyPointer then
+      Result := Ord(Syms[ASTIVal[node]].PtrElemTk);
+  end
+  else if ASTKind[node] = AN_INDEX then
+    Result := ASTTk[node];
+end;
+
+{ Unary prefix: `- + ! ~ * &`. sizeof and casts arrive later. }
 function ParseCUnary: Integer;
 var node, operand: Integer;
 begin
   case CurTok.Kind of
+    tkStar:   { *p dereference }
+    begin
+      Next;
+      operand := ParseCUnary();
+      node := AllocNode(AN_DEREF);
+      ASTLeft[node] := operand;
+      ASTTk[node] := CNodePointeeTk(operand);
+      Result := node;
+    end;
+    tkAmp:    { &x address-of }
+    begin
+      Next;
+      operand := ParseCUnary();
+      node := AllocNode(AN_ADDR);
+      ASTLeft[node] := operand;
+      ASTTk[node] := Ord(tyPointer);
+      Result := node;
+    end;
     tkMinus:
     begin
       Next;
@@ -304,14 +339,31 @@ end;
 { Postfix layer: a primary optionally followed by `++`/`--`. Array/field/call
   postfix (`[] . -> ()`) arrive with the lvalue increment. }
 function ParseCPostfix: Integer;
-var node: Integer;
+var node, idxExpr, inode: Integer; done: Boolean;
 begin
   node := ParseCPrimary;
-  while (CurTok.Kind = tkPlusPlus) or (CurTok.Kind = tkMinusMinus) do
+  done := False;
+  while not done do
   begin
-    if CurTok.Kind = tkPlusPlus then node := CMakeIncDec(node, True)
-    else node := CMakeIncDec(node, False);
-    Next;
+    if CurTok.Kind = tkLBrack then        { subscript a[i] / p[i] }
+    begin
+      Next;
+      idxExpr := ParseCExpr;
+      Expect(tkRBrack, ']');
+      inode := AllocNode(AN_INDEX);
+      ASTLeft[inode] := node;
+      ASTRight[inode] := idxExpr;
+      ASTTk[inode] := CNodePointeeTk(node);
+      node := inode;
+    end
+    else if (CurTok.Kind = tkPlusPlus) or (CurTok.Kind = tkMinusMinus) then
+    begin
+      if CurTok.Kind = tkPlusPlus then node := CMakeIncDec(node, True)
+      else node := CMakeIncDec(node, False);
+      Next;
+    end
+    else
+      done := True;
   end;
   Result := node;
 end;
@@ -708,29 +760,58 @@ end;
   and per-declarator pointer-depth handling come later. }
 function ParseCLocalDeclAST: Integer;
 var baseTk: TTypeKind; head, tail, seq, asn, idn, initExpr, blk, idx: Integer;
+    elemTkOrd, elemRec, arrLen: Integer;
     name: AnsiString;
 begin
   baseTk := ParseCDeclType;   { specifiers + first declarator's pointer suffix }
+  { Capture the pointer element type/record now — ParseCExpr below must not
+    clobber the CType* globals (it does not run ParseCDeclType). }
+  elemTkOrd := CTypeElemTk;
+  elemRec := CTypeElemRec;
   head := -1; tail := -1;
   while True do
   begin
     if CurTok.Kind <> tkIdent then Break;
     name := CurTok.SVal; Next;
-    idx := AllocVar(name, baseTk);
-    initExpr := -1;
-    if CurTok.Kind = tkAssign then
+    if CurTok.Kind = tkLBrack then
     begin
+      { fixed array  T name[N]  — N is a constant expression (literal/enum/macro) }
       Next;
-      initExpr := ParseCExpr;
-    end;
-    if initExpr >= 0 then
+      arrLen := CEvalConstExpr;
+      Expect(tkRBrack, ']');
+      if arrLen < 1 then arrLen := 1;
+      idx := AllocArray(name, baseTk, 0, arrLen - 1);
+      { array initialisers `= { ... }` not yet supported — skip if present }
+      if CurTok.Kind = tkAssign then
+      begin
+        Next;
+        while (CurTok.Kind <> tkComma) and (CurTok.Kind <> tkSemicolon) and
+              (CurTok.Kind <> tkEOF) do Next;
+      end;
+    end
+    else
     begin
-      idn := AllocNode(AN_IDENT); ASTIVal[idn] := idx; ASTTk[idn] := Ord(baseTk);
-      asn := AllocNode(AN_ASSIGN); ASTLeft[asn] := idn; ASTRight[asn] := initExpr;
-      ASTTk[asn] := Ord(baseTk);
-      seq := AllocNode(AN_SEQ); ASTLeft[seq] := asn; ASTRight[seq] := -1;
-      if head = -1 then head := seq else ASTRight[tail] := seq;
-      tail := seq;
+      idx := AllocVar(name, baseTk);
+      if baseTk = tyPointer then
+      begin
+        Syms[idx].PtrElemTk := IntToTypeKind(elemTkOrd);
+        Syms[idx].PtrElemRec := elemRec;
+      end;
+      initExpr := -1;
+      if CurTok.Kind = tkAssign then
+      begin
+        Next;
+        initExpr := ParseCExpr;
+      end;
+      if initExpr >= 0 then
+      begin
+        idn := AllocNode(AN_IDENT); ASTIVal[idn] := idx; ASTTk[idn] := Ord(baseTk);
+        asn := AllocNode(AN_ASSIGN); ASTLeft[asn] := idn; ASTRight[asn] := initExpr;
+        ASTTk[asn] := Ord(baseTk);
+        seq := AllocNode(AN_SEQ); ASTLeft[seq] := asn; ASTRight[seq] := -1;
+        if head = -1 then head := seq else ASTRight[tail] := seq;
+        tail := seq;
+      end;
     end;
     if CurTok.Kind = tkComma then begin Next; Continue; end;
     Break;
@@ -1113,6 +1194,8 @@ var
   ptypes: array[0..15] of TTypeKind;
   pnames: array[0..15] of AnsiString;
   pdepths: array[0..15] of Integer;
+  pelemtk: array[0..15] of Integer;   { pointed-at TTypeKind ordinal per pointer param }
+  pelemrec: array[0..15] of Integer;
   savedSC, savedFS, node, savedCurProc: Integer;
 begin
   retType := ParseCDeclType;
@@ -1157,6 +1240,8 @@ begin
       begin
         ptypes[nparams] := ptype;
         pdepths[nparams] := CTypePtrDepth;
+        pelemtk[nparams] := CTypeElemTk;
+        pelemrec[nparams] := CTypeElemRec;
         if CurTok.Kind = tkIdent then
         begin
           pnames[nparams] := CurTok.SVal;
@@ -1237,6 +1322,13 @@ begin
   begin
     idx := AllocParam(pnames[i], ptypes[i], False, False);
     Procs[procIdx].Params[i].SymIdx := idx;
+    { Thread a pointer parameter's pointed-at type so `*p`, `p[i]`, and pointer
+      arithmetic inside the body know the element stride/width. }
+    if ptypes[i] = tyPointer then
+    begin
+      Syms[idx].PtrElemTk := IntToTypeKind(pelemtk[i]);
+      Syms[idx].PtrElemRec := pelemrec[i];
+    end;
   end;
   
   { Return value slot }
@@ -1354,8 +1446,8 @@ end;
   C token stream. Since Slice A the C lexer emits distinct operator tokens:
   `<<`=tkShl, `>>`=tkShr, `|`=tkPipe, `^`=tkXor, `&`=tkAmp.
   Precedence, low to high: | , ^ , & , << >> , + - , * , unary , primary.
-  Unknown/unsupported tokens evaluate to 0 rather than derailing. }
-function CEvalConstExpr: Int64; forward;
+  Unknown/unsupported tokens evaluate to 0 rather than derailing.
+  (CEvalConstExpr is forward-declared at the top of the C parser.) }
 
 function CEvalConstPrimary: Int64;
 var idx: Integer;

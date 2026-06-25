@@ -320,6 +320,8 @@ test-core: $(COMPILER)
 	/tmp/cstmt_c26; test "$$?" = "82"
 	./$(COMPILER) test/cmulti_d.c /tmp/cmulti_d26
 	/tmp/cmulti_d26; test "$$?" = "104"
+	./$(COMPILER) test/cptr_b2.c /tmp/cptr_b226
+	/tmp/cptr_b226; test "$$?" = "122"
 	./$(COMPILER) -Itest/cinc/inc test/cinc/cinc_main.c /tmp/cinc_main26
 	test "$$(/tmp/cinc_main26)" = "$$(printf 'local-ok\ninc-ok')"
 	./$(COMPILER) test/test_declared_directive.pas /tmp/test_declared_directive26
