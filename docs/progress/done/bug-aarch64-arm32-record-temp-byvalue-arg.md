@@ -64,3 +64,32 @@ separately if not already covered by the i386 maturity work.
 - `examples/raytracer` no longer needs the named-`TRGBA` materialization for
   aarch64.
 - Regression test in the aarch64/arm32 cross suites; self-host unaffected.
+
+## Resolution (2026-06-25, v65)
+
+The aarch64 and arm32 backends rejected `IR_LOAD_MEM` of a `tyRecord` value
+("load through pointer of this type not yet supported") — the path a small
+(<=8-byte) by-value record argument takes (`ir.inc` wraps a record call/binop
+result in `IR_LOAD_MEM tyRecord`, loading its packed bytes into a register, like
+x86-64).
+
+Fix: allow `tyRecord` in both backends' `IR_LOAD_MEM` type allow-list.
+- **aarch64**: `TypeSize(tyRecord)=8` -> the existing `sz=8` path emits
+  `ldr x0,[x0]`, loading the whole packed record (<=8 bytes), mirroring x86-64.
+  Fully correct for <=8-byte records (`Sum(Mk(3))`=12, an 8-byte record=15/30).
+- **arm32**: `ldr r0,[r0]` loads the packed bytes for a <=4-byte record (the
+  `TRGBA` repro). Verified `Sum(Mk(3))`=12.
+
+Regression `test/test_record_temp_byval_arg.pas` (temp + named, prints `18`,`46`)
+in `make test`, `test-aarch64`, `test-arm32`. Self-host byte-identical (x86-64
+codegen untouched); pinned v65.
+
+### Residual (separate, pre-existing — not this temp bug)
+
+- **arm32 records > 4 bytes**: the arm32 by-value record-param marshalling/prologue
+  only carries the low 4 bytes (a *named* 8-byte record arg already dropped its
+  high word before this fix), so a >4-byte record arg is wrong on arm32. Needs the
+  arm32 record-param ABI widened to r0:r1 (caller + prologue), tracked here as the
+  remaining arm32 item.
+- **i386**: still rejects *any* by-value record param ("only ordinal/pointer
+  parameters supported yet") — a broader i386 maturity gap, untouched.

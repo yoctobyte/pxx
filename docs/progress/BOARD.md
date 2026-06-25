@@ -28,11 +28,10 @@ _none_
 | --- | --- | --- | --- | --- |
 | feature-c-runtime-library | B | feature | C runtime/library layer (`lib/crtl`) plus direct C-library packages | feature-c-source-frontend |
 
-## backlog (57)
+## backlog (56)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
-| bug-aarch64-arm32-record-temp-byvalue-arg | A | bug | aarch64/arm32: record temporary as a by-value arg fails codegen | — |
 | bug-bare-read-write-in-method-hits-intrinsic | A | bug | Bare `Read`/`Write` inside a method resolves to the console intrinsic, not the method | — |
 | bug-float-field-record-function-return | A | bug | `Single` field/element inside a record or array stores/loads as zero | — |
 | bug-generic-class-methods-in-program | A | bug | Generic class METHOD bodies break in a program (work in a unit) | — |
@@ -124,11 +123,12 @@ _none_
 | feature-mimic-fpc | B | feature | `mimic FPC` compatibility mode | — |
 | feature-string-model-tyfixedstring | B | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (265)
+## done (266)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
 | bug-64bit-shift-xor-literal-gaps | A | bug | 64-bit gaps in pinned v9: `xor` operator, large shifts, 64-bit hex literals | — |
+| bug-aarch64-arm32-record-temp-byvalue-arg | A | bug | aarch64/arm32: record temporary as a by-value arg fails codegen | — |
 | bug-ansistring-concat-arg-static-bloat | A | bug | AnsiString concat expression as a call argument allocates an ~8 MB static buffer per site | — |
 | bug-argstr-managed-dest-cross | A | bug | bug: ArgStr(i, s) into a managed-string var rejected/broken on cross targets | — |
 | bug-as-cast-inline-method-call | A | bug | bug: method call on an inline `(expr as T)` is silently dropped | — |
@@ -404,7 +404,6 @@ _none_
 
 ## Ready (no unmet blocker)
 
-- [A] bug-aarch64-arm32-record-temp-byvalue-arg
 - [A] bug-bare-read-write-in-method-hits-intrinsic
 - [A] bug-float-field-record-function-return
 - [A] bug-generic-class-methods-in-program

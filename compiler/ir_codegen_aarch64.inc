@@ -1947,8 +1947,12 @@ begin
         end;
         if not (TypeIsOrdinal(tk) or (tk = tyBoolean) or (tk = tyPointer) or
                 (tk = tyChar) or (tk = tyUnknown) or
-                (tk = tyAnsiString) or (tk = tyClass)) then
+                (tk = tyAnsiString) or (tk = tyClass) or (tk = tyRecord)) then
           Error('target aarch64: load through pointer of this type not yet supported');
+        { A small (<=8-byte) by-value record argument loads its packed bytes into
+          x0 (TypeSize(tyRecord)=8 -> the sz=8 ldr below), mirroring x86-64 — lets
+          a record temporary cross as a by-value arg (bug-aarch64-arm32-record-
+          temp-byvalue-arg). }
         sz := TypeSize(tk);
         sgn := TypeSigned(tk);
         if sz = 1 then

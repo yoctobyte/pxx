@@ -2179,7 +2179,7 @@ begin
         end;
         if not (TypeIsOrdinal(tk) or (tk = tyBoolean) or (tk = tyPointer) or
                 (tk = tyChar) or (tk = tyUnknown) or
-                (tk = tyAnsiString) or (tk = tyClass)) then
+                (tk = tyAnsiString) or (tk = tyClass) or (tk = tyRecord)) then
           Error('target arm32: load through pointer of this type not yet supported');
         sz := TypeSize(tk);
         sgn := TypeSigned(tk);
@@ -2197,6 +2197,11 @@ begin
           EmitI32($E5900000);  { ldr r0, [r0]     (lo) }
         end
         else
+          { tyRecord (<=4-byte by-value record) loads its packed bytes into r0,
+            letting a record temp cross as a by-value arg
+            (bug-aarch64-arm32-record-temp-byvalue-arg). Records >4 bytes need the
+            arm32 record-param marshalling widened (a separate, pre-existing gap —
+            even a named 8-byte record arg drops its high word here). }
           EmitI32($E5900000); { ldr r0, [r0] (4-byte) }
       end;
 
