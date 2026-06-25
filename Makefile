@@ -547,6 +547,8 @@ test-core: $(COMPILER)
 	test "$$(/tmp/test_string_delete_insert26)" = "$$(printf 'ho\nhellxo\nabc\nworld!\nabc')"
 	./$(COMPILER) test/test_concat_intrinsic.pas /tmp/test_concat_intrinsic26
 	test "$$(/tmp/test_concat_intrinsic26)" = "$$(printf 'abc\nx\nhello world')"
+	./$(COMPILER) test/test_str_literal_concat_compare.pas /tmp/test_str_lit_concat_cmp26
+	test "$$(/tmp/test_str_lit_concat_cmp26)" = "$$(printf 'eq1\nneq2\neq3\npqr\nhello world')"
 	./$(COMPILER) test/test_user_type_shadows_builtin.pas /tmp/test_usershadow26
 	test "$$(/tmp/test_usershadow26)" = "$$(printf 'show 7\ndbl=10')"
 	./$(COMPILER) test/test_eof_stdin.pas /tmp/test_eof26

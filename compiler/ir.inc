@@ -2315,13 +2315,16 @@ begin
 
     AN_BINOP:
     begin
-      { ESP has no frozen-string concat path, and in managed-string mode the
-        only `tyString + tyString` operands are string literals (a `String` var
-        is tyAnsiString). Fold `'a' + 'b'` to a single interned literal here so
-        no runtime concat is needed. ESP-gated so hosted/cross IR — and thus the
-        byte-identical self-host — is unchanged. }
-      if ((TargetArch = TARGET_XTENSA) or (TargetArch = TARGET_RISCV32)) and
-         (Integer(ASTIVal[node]) = Ord(tkPlus)) and
+      { Fold a compile-time concat of two string/char literals (`'a' + 'b'`) to a
+        single interned literal — constant folding, target-independent. Besides
+        avoiding a runtime concat, this is the correctness fix for
+        bug-string-literal-concat-compare-segfault: a literal-concat appearing as
+        a comparison operand (`x = 'a' + 'b'`) otherwise fed the runtime
+        string-concat result into the hand-emitted string-compare path and
+        crashed. A folded single literal behaves exactly like writing the literal
+        on one line (the known-good form), so assignment and comparison agree.
+        ESP needs it regardless (no frozen-string concat path). }
+      if (Integer(ASTIVal[node]) = Ord(tkPlus)) and
          IsConstStrLitNode(ASTLeft[node]) and IsConstStrLitNode(ASTRight[node]) then
       begin
         foldStr := ConstStrLitValue(ASTLeft[node]) + ConstStrLitValue(ASTRight[node]);
@@ -2331,7 +2334,14 @@ begin
           TokChars[TokCharLen] := foldStr[foldK];
           Inc(TokCharLen);
         end;
-        Result := IRAppend(IR_CONST_STR, foldOff, Length(foldStr), -1, 0, ASTTk[node]);
+        { Tag the folded result tyString — a plain one-line literal's kind — not
+          ASTTk[node]. The surrounding expression may be tyAnsiString (e.g. a
+          Concat-synthesised `+` chain in managed mode); emitting the literal as
+          tyAnsiString would make downstream managed paths treat this static
+          literal pointer as a heap handle and release it -> crash at scope exit
+          (regressed test_concat_intrinsic). As tyString it behaves exactly like
+          any other string literal and is coerced to managed on use. }
+        Result := IRAppend(IR_CONST_STR, foldOff, Length(foldStr), -1, 0, Ord(tyString));
         Exit;
       end;
 
