@@ -760,6 +760,7 @@ var
   SymElemDynDepth : array[0..MAX_SYMS-1] of Integer; { for a FIXED array whose ELEMENT is itself a dynamic array (`array[..] of TDynAlias`): the element's dyn depth (0 = element not dynamic). Element base type/rec live in ElemType/ElemRecName; each slot is pointer-sized. }
   SymGenSlot  : array[0..MAX_SYMS-1] of Integer; { stackless generator: persistent-slot index for a local that must survive yields; -1 = not persisted }
   SymProcSig  : array[0..MAX_SYMS-1] of Integer; { procedural-type var/param: signature proc index (Procs[] entry, BodyAddr=-1) for indirect-call marshalling; -1 = not a proc-typed value }
+  SymElemProcSig : array[0..MAX_SYMS-1] of Integer; { array-of-proctype var: signature proc index of the ELEMENT proc type, for an indexed indirect call `arr[i](args)`; -1 = element not proc-typed }
   SymSetEnumId : array[0..MAX_SYMS-1] of Integer; { set var: element enum type index for `set of TEnum`, else -1. Drives `for e in set` range }
   SymSetElemTk : array[0..MAX_SYMS-1] of Integer; { set var: element TTypeKind ordinal (tyChar/tyInteger/enum-as-integer), else 0 }
   SymStrCap : array[0..MAX_SYMS-1] of Integer; { frozen fixed-string capacity (max chars) for tyFixedString/tyShortString slots; 0 = use the kind default (DEFAULT_STR_CAP) }

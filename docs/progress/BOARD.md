@@ -28,7 +28,7 @@ _none_
 | --- | --- | --- | --- | --- |
 | feature-c-runtime-library | B | feature | C runtime/library layer (`lib/crtl`) plus direct C-library packages | feature-c-source-frontend |
 
-## backlog (52)
+## backlog (51)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -57,7 +57,6 @@ _none_
 | feature-esp-peripheral-callback-api | B | feature | ESP32 peripheral callback API (timer / GPIO / ADC) — the user-facing "interrupt" | — |
 | feature-flexcolumn-directive | A | feature | `flexcolumn` calling-convention directive | chore-inc-to-units |
 | feature-ilja-tui | B | feature | Ilja — TUI (ANSI) face | feature-eliah-m1-designer |
-| feature-indexed-proc-value-call | A | feature | Indexed / element proc-value call: `arr[i](args)` | — |
 | feature-inline-asm-depth | A | feature | Inline assembler depth | — |
 | feature-inline-asm-multi-arch | A | feature | Inline assembly support for other architectures (i386, aarch64, arm32) | — |
 | feature-inline-routines | A | feature | Inline routine expansion (`inline;`) | — |
@@ -119,7 +118,7 @@ _none_
 | feature-mimic-fpc | B | feature | `mimic FPC` compatibility mode | — |
 | feature-string-model-tyfixedstring | B | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (273)
+## done (274)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -327,6 +326,7 @@ _none_
 | feature-i386-int64-codegen | A | feature | Full Int64 codegen for i386 | — |
 | feature-image-ascii-renderer-library | B | feature | Image to ANSI ASCII renderer library | feature-rtl-image-bitmap-library, feature-terminal-ansi-library |
 | feature-indexed-array-properties | B | feature | Indexed (array) properties + `default` — `property Items[i]: T read G write P` | — |
+| feature-indexed-proc-value-call | A | feature | Indexed / element proc-value call: `arr[i](args)` | — |
 | feature-interface-refcounting | A | feature | Interface reference counting (IInterface / ARC) | — |
 | feature-int-to-float-assign | A | feature | Integer → Float assignment / coercion missing the int→float conversion | — |
 | feature-json-library | B | feature | JSON library — parser + serializer (with a roundtrip test app) | — |
@@ -431,7 +431,6 @@ _none_
 - [A] feature-esp32-idf-xtensa
 - [B] feature-esp-peripheral-callback-api
 - [B] feature-ilja-tui
-- [A] feature-indexed-proc-value-call
 - [A] feature-inline-asm-depth
 - [A] feature-inline-asm-multi-arch
 - [A] feature-inline-routines

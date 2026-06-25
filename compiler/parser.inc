@@ -1525,6 +1525,44 @@ begin
       end;
       ASTTk[indexNode] := StrValTk(tk);
       node := indexNode;
+
+      { Indirect call through a proc-typed array element: `arr[i](args)`. The
+        element value is the proc pointer (tyPointer) or a {Code,Data} method
+        pointer (tyRecord); AN_CALL_IND evaluates ASTRight (the index node) as the
+        callee. Mirrors the record-field path below. The element signature is
+        SymElemProcSig, captured at the array declaration. }
+      baseNode := ASTLeft[indexNode];
+      fldSigPi := -1;
+      if (ASTKind[baseNode] = AN_IDENT) and (CurTok.Kind = tkLParen) and
+         ((tk = tyPointer) or (tk = tyRecord)) then
+        fldSigPi := SymElemProcSig[ASTIVal[baseNode]];
+      if fldSigPi >= 0 then
+      begin
+        isMethodPtr := (tk = tyRecord);
+        Expect(tkLParen, '(');
+        argsHead2 := -1; lastArg2 := -1;
+        while CurTok.Kind <> tkRParen do
+        begin
+          ParseExpr;
+          argSeq2 := AllocNode(AN_ARG);
+          ASTLeft[argSeq2] := CurASTNode;
+          if argsHead2 = -1 then argsHead2 := argSeq2
+          else ASTRight[lastArg2] := argSeq2;
+          lastArg2 := argSeq2;
+          if CurTok.Kind = tkComma then Next
+          else if CurTok.Kind <> tkRParen then Error('expected comma or close parenthesis');
+        end;
+        Expect(tkRParen, ')');
+        callIndNode := AllocNode(AN_CALL_IND);
+        ASTLeft[callIndNode]  := argsHead2;
+        ASTRight[callIndNode] := indexNode;
+        ASTIVal[callIndNode]  := fldSigPi;
+        ASTTk[callIndNode]    := Ord(Procs[fldSigPi].RetType);
+        if isMethodPtr then ASTSLen[callIndNode] := 1 else ASTSLen[callIndNode] := 0;
+        node := callIndNode;
+        tk := Procs[fldSigPi].RetType;
+        recName := ProcRetRecId[fldSigPi];
+      end;
     end
     else
     begin
@@ -8657,7 +8695,7 @@ var names: array[0..MAX_DECL_NAMES-1] of AnsiString; n, i, idx: Integer; tk: TTy
     isArr, isDyn: Boolean; arrLo, arrHi: Integer; elemTk: TTypeKind; dynDepth: Integer;
     initElem: Integer; initVal: Int64; elemResolved: Boolean; elemDynDepth: Integer;
     isArrND: Boolean; ndCnt, dLo, dHi, di, flatLen, ai: Integer;
-    moreDims: Boolean;
+    moreDims: Boolean; elemProcSig: Integer;
     ndDimLo, ndDimSpan: array[0..MAX_ARR_DIMS-1] of Integer;
 begin
   Next;
@@ -8677,6 +8715,7 @@ begin
     Expect(tkColon, ':');
     isArr := False; isDyn := False; arrLo := 0; arrHi := 0; elemTk := tyInteger;
     elemResolved := False; elemDynDepth := 0;
+    elemProcSig := -1;
     isArrND := False; ndCnt := 0;
     ai := -1;
     if CurTok.Kind = tkIdent then ai := FindArrayType(CurTok.SVal);
@@ -8800,6 +8839,11 @@ begin
       begin
         elemTk := ParseTypeKind;
         tk := elemTk;
+        { array of <proctype>: element carries a call signature (plain proc =>
+          tyPointer, method pointer => tyRecord). Captured for indexed indirect
+          calls `arr[i](args)`. }
+        if (elemTk = tyPointer) or (elemTk = tyRecord) then
+          elemProcSig := LastTypeProcSig;
       end;
     end
     else
@@ -8833,6 +8877,7 @@ begin
 	            end;
 	          end;
 	        end;
+	        if elemProcSig >= 0 then SymElemProcSig[idx] := elemProcSig;  { array of proc-type: indexed indirect call arr[i](args) }
 	      end
 	    else
 	      for i := 0 to n-1 do

@@ -1513,6 +1513,7 @@ begin
   SymElemDynDepth[SymCount] := 0;
   SymGenSlot[SymCount] := -1;
   SymProcSig[SymCount] := -1;
+  SymElemProcSig[SymCount] := -1;
   SymSetEnumId[SymCount] := -1;
   SymSetElemTk[SymCount] := 0;
   SymStrCap[SymCount] := 0;
@@ -1604,6 +1605,7 @@ begin
   SymElemDynDepth[SymCount] := 0;
   SymGenSlot[SymCount] := -1;
   SymProcSig[SymCount] := -1;
+  SymElemProcSig[SymCount] := -1;
   SymSetEnumId[SymCount] := -1;
   SymSetElemTk[SymCount] := 0;
   SymStrCap[SymCount] := 0;
@@ -1682,6 +1684,7 @@ begin
   SymElemDynDepth[SymCount] := LastTypeElemDynDepth;
   SymArrNDims[SymCount] := 0;
   SymProcSig[SymCount] := -1;
+  SymElemProcSig[SymCount] := -1;
   SymRTTIOff[SymCount] := -1;
   { Match AllocVar: reset recycled parallel-array fields (see AllocDynArray). }
   SymGenSlot[SymCount] := -1;
@@ -1737,6 +1740,7 @@ begin
   SymDynDepth[SymCount] := depth;
   SymElemDynDepth[SymCount] := 0;
   SymProcSig[SymCount] := -1;
+  SymElemProcSig[SymCount] := -1;
   SymRTTIOff[SymCount] := -1;
   { Reset the same recycled parallel-array fields AllocVar does — symbol slots
     are reused after a proc body restores SymCount, so a stale SymBlockId here

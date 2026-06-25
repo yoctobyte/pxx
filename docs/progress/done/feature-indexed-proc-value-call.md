@@ -2,8 +2,9 @@
 
 - **Type:** feature (Track A — parser + element proc-sig tracking)
 - **Track:** A — `compiler/**`
-- **Status:** backlog
-- **Owner:** —
+- **Status:** done
+- **Owner:** Track A
+- **Closed:** 2026-06-25
 - **Opened:** 2026-06-25
 - **Split-from:** [[bug-proc-typed-call-const-record-arg]] (its array-element
   symptom; the scalar/const-record half is fixed).
@@ -49,3 +50,16 @@ yields the pointer and the `(...)` is dropped / mis-parsed.
 - `arr[i](args)` (and `EvalTerms[i](pos)` with a `const record` param) compiles and
   calls correctly; the chess eval no longer saturates to ±INF.
 - Regression test under `make test`; self-host fixedpoint byte-identical.
+
+## Resolution (2026-06-25)
+
+- New `SymElemProcSig` parallel array (defs.inc) tracks an array's ELEMENT proc
+  signature; reset to -1 at all four symtab `Alloc*` sites (parallel-array
+  landmine). Captured in `ParseVarSection` from `LastTypeProcSig` after the
+  element `ParseTypeKind` (plain proc => tyPointer, method ptr => tyRecord).
+- `ParseFactor` postfix loop: after building an `AN_INDEX` whose base is an
+  `AN_IDENT` with a non-negative `SymElemProcSig` and `(` follows, splice an
+  `AN_CALL_IND` (callee = the index node), mirroring the record-field path.
+- No reseed needed — `make bootstrap` byte-identical first pass. `make test`
+  green. Chess compiles + runs: startpos `bestmove e2e4 score 10` (sane, no
+  ±INF saturation). Regression: `test/test_indexed_proc_call.pas`.
