@@ -2541,7 +2541,16 @@ begin
     IR_NOT:
       begin
         IREmitNodeArm32(IRA[node]);
-        if TypeIsOrdinal(IntToTypeKind(IRTk[node])) and
+        if Is64BitArm32(IntToTypeKind(IRTk[node])) then
+        begin
+          { 64-bit value in the r0:r1 pair: complement BOTH words. `mvn r0,r0`
+            alone left the high word (r1) intact, so `not x` for an Int64 read as
+            a 32-bit-wide complement (e.g. -6 printed as 4294967290). Mirrors the
+            i386 eax:edx pair. }
+          EmitI32($E1E00000); { mvn r0, r0 }
+          EmitI32($E1E01001); { mvn r1, r1 }
+        end
+        else if TypeIsOrdinal(IntToTypeKind(IRTk[node])) and
            (IntToTypeKind(IRTk[node]) <> tyBoolean) then
         begin
           EmitI32($E1E00000); { mvn r0, r0 }

@@ -645,6 +645,8 @@ test-core: $(COMPILER)
 	test "$$(/tmp/test_ir_codegen_fail26)" = "$$(printf '15\nFAIL')"
 	./$(COMPILER) test/test_ir_unary.pas /tmp/test_ir_unary26
 	test "$$(/tmp/test_ir_unary26)" = "$$(printf '%s\nOK' '-5')"
+	./$(COMPILER) test/test_not_int64_expr.pas /tmp/test_not_int64_expr26
+	test "$$(/tmp/test_not_int64_expr26)" = "$$(printf '%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\nok-lw0\nok-lw1\nok-bool' '-6' '-6' '-5' '-3' '-7' '-11' '-11' '-6' '-1')"
 	./$(COMPILER) test/test_ir_deref.pas /tmp/test_ir_deref26
 	test "$$(/tmp/test_ir_deref26)" = "$$(printf '10\n20\n100\n200')"
 	./$(COMPILER) test/test_ir_call.pas /tmp/test_ir_call26
@@ -1194,6 +1196,9 @@ test-i386: $(COMPILER)
 	./$(COMPILER) test/test_managed_strlen_deref.pas /tmp/test_i386_managed_strlen_x64
 	test "$$(tools/run_target.sh i386 /tmp/test_i386_managed_strlen)" = "$$(/tmp/test_i386_managed_strlen_x64)"
 	test "$$(/tmp/test_i386_managed_strlen_x64)" = "$$(printf '5\n5\n5\n2\n2\nOK')"
+	./$(COMPILER) --target=i386 test/test_not_int64_expr.pas /tmp/test_i386_not64
+	./$(COMPILER) test/test_not_int64_expr.pas /tmp/test_i386_not64_x64
+	test "$$(tools/run_target.sh i386 /tmp/test_i386_not64)" = "$$(/tmp/test_i386_not64_x64)"
 	./$(COMPILER) -dPXX_MANAGED_STRING --target=i386 test/test_cross_record_array_store.pas /tmp/test_i386_rec_arr_store
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_cross_record_array_store.pas /tmp/test_i386_rec_arr_store_x64
 	test "$$(tools/run_target.sh i386 /tmp/test_i386_rec_arr_store)" = "$$(/tmp/test_i386_rec_arr_store_x64)"
@@ -1428,6 +1433,9 @@ test-aarch64: $(COMPILER)
 	./$(COMPILER) --target=aarch64 test/test_managed_strlen_deref.pas /tmp/test_aarch64_managed_strlen
 	./$(COMPILER) test/test_managed_strlen_deref.pas /tmp/test_aarch64_managed_strlen_x64
 	test "$$(tools/run_target.sh aarch64 /tmp/test_aarch64_managed_strlen)" = "$$(/tmp/test_aarch64_managed_strlen_x64)"
+	./$(COMPILER) --target=aarch64 test/test_not_int64_expr.pas /tmp/test_aarch64_not64
+	./$(COMPILER) test/test_not_int64_expr.pas /tmp/test_aarch64_not64_x64
+	test "$$(tools/run_target.sh aarch64 /tmp/test_aarch64_not64)" = "$$(/tmp/test_aarch64_not64_x64)"
 	./$(COMPILER) -uPXX_MANAGED_STRING --target=aarch64 test/test_cross_frozen_strlen_deref.pas /tmp/test_aarch64_frozen_strlen
 	./$(COMPILER) -uPXX_MANAGED_STRING test/test_cross_frozen_strlen_deref.pas /tmp/test_aarch64_frozen_strlen_x64
 	test "$$(tools/run_target.sh aarch64 /tmp/test_aarch64_frozen_strlen)" = "$$(/tmp/test_aarch64_frozen_strlen_x64)"
@@ -1695,6 +1703,9 @@ test-arm32: $(COMPILER)
 	./$(COMPILER) --target=arm32 test/test_managed_strlen_deref.pas /tmp/test_arm32_managed_strlen
 	./$(COMPILER) test/test_managed_strlen_deref.pas /tmp/test_arm32_managed_strlen_x64
 	test "$$(tools/run_target.sh arm32 /tmp/test_arm32_managed_strlen)" = "$$(/tmp/test_arm32_managed_strlen_x64)"
+	./$(COMPILER) --target=arm32 test/test_not_int64_expr.pas /tmp/test_arm32_not64
+	./$(COMPILER) test/test_not_int64_expr.pas /tmp/test_arm32_not64_x64
+	test "$$(tools/run_target.sh arm32 /tmp/test_arm32_not64)" = "$$(/tmp/test_arm32_not64_x64)"
 	./$(COMPILER) -dPXX_MANAGED_STRING --target=arm32 test/test_cross_record_array_store.pas /tmp/test_arm32_rec_arr_store
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_cross_record_array_store.pas /tmp/test_arm32_rec_arr_store_x64
 	test "$$(tools/run_target.sh arm32 /tmp/test_arm32_rec_arr_store)" = "$$(/tmp/test_arm32_rec_arr_store_x64)"

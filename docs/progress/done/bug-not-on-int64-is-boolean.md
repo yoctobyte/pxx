@@ -57,3 +57,38 @@ Should emit a 64-bit bitwise NOT.
 - `not x` for `x: Int64` returns the bitwise complement (`not Int64(0) = -1`) on
   all targets; check `LongWord`/`Integer`/`Int64` and signed/unsigned.
 - Regression test.
+
+## Resolution (2026-06-25) — host targets
+
+Two defects, both fixed:
+
+1. **Typing (root cause).** The parser only trusted `not <operand>` as bitwise
+   for an int LITERAL or IDENTIFIER; every other integer operand fell to the
+   boolean path (`xor rax,1`), so `not Int64(0)` printed TRUE, `not (x-1)` etc
+   were wrong. Extended the trust (`parser.inc`, `tkNot`) to three more
+   authoritative-integer operand shapes: built-in ordinal value-casts
+   `Int64(e)`/`Cardinal(e)` (AN_PTR_CAST, ASTIVal=-1) and the `Integer(e)`/
+   `LongWord(e)` token-casts (AN_CALL, negative op id); and **pure
+   arithmetic/shift** AN_BINOP (`+ - * div mod shl shr`; `shr` is lexed as an
+   identifier so its op id is `Ord(tkIdent)`). `and`/`or`/`xor` and comparisons
+   stay logical (a comparison binop is sometimes mistagged integer), so the
+   compiler's own `not (a or b)` / `not (r and v)` keep self-host byte-identical.
+
+2. **arm32 codegen (found while verifying).** arm32 `IR_NOT` did `mvn r0,r0` only
+   — the high word `r1` was left intact, so even the already-bitwise `not x` for
+   an `Int64` read as a 32-bit complement (`-6` → `4294967290`). Added the
+   64-bit pair branch (`mvn r0,r0; mvn r1,r1`), mirroring i386's `eax:edx`.
+
+Verified `not` over Int64 cast/arith/shift on **x86-64, i386, aarch64, arm32**
+(LongWord complement checked by value). Gate: `make test` (self-host
+byte-identical — neither change touches compiler self-build paths) +
+`test-i386/aarch64/arm32` + `cross-bootstrap` all green. New regression
+`test/test_not_int64_expr.pas` wired into the x86-64 base test and all three
+cross sections.
+
+**ESP not covered here** — riscv32 `IR_NOT` is unconditionally `xori a0,1`
+(boolean, ignores type) and xtensa's non-64 path is `xor a2,1` (boolean for
+32-bit ordinals too). That is a distinct pre-existing defect needing the
+bare-metal qemu-system harness to verify; filed as
+`bug-esp-not-always-boolean`. x25519 (the finder) runs on host, so the host fix
+unblocks it.

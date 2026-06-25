@@ -3072,6 +3072,7 @@ var name: AnsiString; recName: Integer; idx, procIdx, i, node, left, prevTok, va
     liftedVar, identNode, addrNode: Integer;
     helperPi, wrapperArg, wrapperCall, sci: Integer;
     isLiftedCall, isCStringCall: Boolean;
+    bitNot, opIsArith: Boolean; notOp: Integer;
 begin
   LastExprTk := tyInteger;
   case CurTok.Kind of
@@ -3373,8 +3374,34 @@ begin
         the long-standing logical behaviour. The IR_NOT codegen already emits
         `not rax` for ordinal-non-boolean types. }
       node := AllocNode(AN_NOT); ASTLeft[node] := left;
-      if ((ASTKind[left] = AN_INT_LIT) or (ASTKind[left] = AN_IDENT)) and
-         ((ASTTk[left] = 1) or ((ASTTk[left] >= 7) and (ASTTk[left] <= 16))) then
+      { Bitwise only when the operand's integer type is AUTHORITATIVE. Beyond the
+        literal/identifier base case, three more operand shapes carry a trustworthy
+        integer type and so were wrongly forced boolean (the result became `xor
+        rax,1` — e.g. `not Int64(0)` printed TRUE):
+          - a built-in ordinal value-cast `Int64(e)`/`Cardinal(e)` (AN_PTR_CAST,
+            ASTIVal=-1) and the `Integer(e)`/`LongWord(e)` token-casts (AN_CALL
+            with the cast's negative op id);
+          - a pure ARITHMETIC/shift AN_BINOP (`x-1`, `x shr 1`): its operator is
+            unambiguously numeric, so unlike a comparison/`and`/`or`/`xor` binop
+            (which PXX sometimes mistags integer though it is logically boolean)
+            it can never be boolean. `shr` is lexed as an identifier, so its
+            operator id is Ord(tkIdent) — the only ident-operator binop.
+        and/or/xor stay logical (ambiguous), matching the prior behaviour, so the
+        compiler's own `not (a or b)` / `not (r and v)` keep self-host identical. }
+      notOp := Integer(ASTIVal[left]);
+      opIsArith := (notOp = Ord(tkPlus)) or (notOp = Ord(tkMinus)) or
+                   (notOp = Ord(tkStar)) or (notOp = Ord(tkDiv)) or
+                   (notOp = Ord(tkMod)) or (notOp = Ord(tkShl)) or
+                   (notOp = Ord(tkIdent));
+      bitNot :=
+        ((ASTTk[left] = 1) or ((ASTTk[left] >= 7) and (ASTTk[left] <= 16))) and
+        ((ASTKind[left] = AN_INT_LIT) or (ASTKind[left] = AN_IDENT) or
+         ((ASTKind[left] = AN_PTR_CAST) and (Integer(ASTIVal[left]) = -1)) or
+         ((ASTKind[left] = AN_CALL) and
+          ((Integer(ASTIVal[left]) = -Ord(tkInteger_T)) or
+           (Integer(ASTIVal[left]) = -Ord(tkLongWord_T)))) or
+         ((ASTKind[left] = AN_BINOP) and opIsArith));
+      if bitNot then
       begin
         ASTTk[node] := ASTTk[left];
         LastExprTk := IntToTypeKind(ASTTk[left]);
