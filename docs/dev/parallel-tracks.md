@@ -83,6 +83,13 @@ The **authoritative gate is unchanged**: `make test` + self-host fixedpoint.
 A feature is not "done" until it passes that. `make stabilize` will not record a
 baseline that fails the gate.
 
+`make test` (and therefore `stabilize`/`pin`) is **FPC-free** — it self-hosts off
+the existing `compiler/pascal26`. FPC-dependent checks (compliance + the host
+asm-emit oracle) live in `make test-fpc`, a release/CI postcheck, not the daily
+gate. A fresh checkout seeds the working binary with `make seed-from-stable` (no
+FPC); only a pure-source build with no committed binary needs `make bootstrap`.
+See **`docs/dev/fpc-optional-workflow.md`**.
+
 ## Track B — libraries and demos
 
 Owns (ideal): `lib/**`, `examples/**`, new `test/lib_*`, and the `lib-test` /

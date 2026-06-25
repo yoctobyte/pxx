@@ -272,6 +272,7 @@ run_gate() {
   echo "    (xfail registry: ${XFAIL_FILE} — known gaps tolerated, all else fatal)"
   # Track A gate + library + demos. demos is parsed against the xfail list.
   make test
+  make test-fpc      # release-grade: FPC-compliance + host asm-emit oracle (not in daily `make test`)
   make cross-bootstrap
   make lib-test
   # demos: tolerate only registered xfails
@@ -356,8 +357,11 @@ included source — no separate packages to fetch.
     setup.sh, selfcheck.sh  install + reproduce helpers
 
 ## Rebuild from source
-    make compiler/pascal26     # FPC-seed the compiler, then it self-hosts
-    make test                  # byte-identical self-host fixed point
+    make seed-from-stable      # seed working binary from the shipped stable (no FPC)
+    make test                  # byte-identical self-host fixed point (no FPC)
+    # — or, from pure source with no binary at all:
+    make bootstrap             # FPC seeds gen0, then it self-hosts (needs fpc)
+    make test-fpc              # optional: prove FPC still compiles us (compliance)
 
 ## Verify reproducibility
     ./selfcheck.sh             # rebuild each binary, diff against MANIFEST.sha256

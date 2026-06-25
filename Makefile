@@ -29,7 +29,7 @@ PXX_STABLE ?= $(STABLE_DEFAULT_DIR)/pinned
 PXXFLAGS   :=
 FROZEN_PXXFLAGS := -uPXX_MANAGED_STRING
 
-.PHONY: all bootstrap bootstrap-check fpc-check test test-core test-asm-emit test-debug-g test-nilpy qemu-env-check test-i386 test-aarch64 test-arm32 test-emit-obj stabilize check-stable selfcheck revert benchmark benchmark-compiler-runtime benchmark-check clean distclean symbols \
+.PHONY: all bootstrap bootstrap-check fpc-check test-fpc seed-from-stable test test-core test-asm-emit test-debug-g test-nilpy qemu-env-check test-i386 test-aarch64 test-arm32 test-emit-obj stabilize check-stable selfcheck revert benchmark benchmark-compiler-runtime benchmark-check clean distclean symbols \
         bootstrap-managed bootstrap-frozen test-managed test-frozen stabilize-managed stabilize-frozen check-stable-managed revert-managed test-nilpy-managed test-nilpy-frozen \
         pxx-stable-check pin lib-test library-suite library-suite-green library-suite-discovery gui-test demos c-interop-devtest tls-openssl-devtest \
         progress-check cross-bootstrap cross-bootstrap-aarch64 cross-bootstrap-arm32 cross-bootstrap-i386 test-esp-bare test-esp-softfloat
@@ -181,7 +181,31 @@ test-nilpy-managed: test-nilpy
 test-nilpy-frozen: PXXFLAGS := $(FROZEN_PXXFLAGS)
 test-nilpy-frozen: test-nilpy
 
-test: fpc-check test-core test-asm-emit test-debug-g lib-fpc-clean
+# Daily gate. Self-hosts off the EXISTING compiler/pascal26 (the $(COMPILER)
+# rule rebuilds it from itself, no FPC). FPC is NOT required here -- the
+# FPC-dependent checks (compliance + host-side asm-emit oracle) live in
+# `make test-fpc` (release/CI postcheck), and a cold checkout seeds the binary
+# with `make seed-from-stable` (also no FPC). Only a pure-source distro build
+# with no committed binary needs `make bootstrap`.
+test: test-core test-debug-g lib-fpc-clean
+
+# FPC-dependent postcheck, NOT part of the daily gate. Two checks that shell out
+# to FPC: (1) fpc-check -- FPC can still compile us and yields the same
+# self-hosted binary (compliance); (2) test-asm-emit -- host-built byte oracle
+# for the per-target assemblers (built with FPC). Was a transitive dep of
+# `test`/`stabilize`, forcing FPC for every pin; now explicit so the daily loop
+# (and `apt remove fpc`) is unaffected. Run by the release workflow / CI.
+test-fpc: fpc-check test-asm-emit
+
+# Cold-start seed WITHOUT FPC: copy the committed pinned stable binary into the
+# working slot so `make test` / `make stabilize` can self-host. Use this on a
+# fresh checkout instead of `make bootstrap` (which rebuilds gen0 from FPC and is
+# only needed for a pure-source build that ships no binary).
+seed-from-stable:
+	@test -x $(PXX_STABLE) || \
+	  (echo "No pinned stable at $(PXX_STABLE). Run: make bootstrap (needs FPC) once."; exit 1)
+	cp $(PXX_STABLE) $(COMPILER)
+	@echo "seeded $(COMPILER) from $(PXX_STABLE) (no FPC). Run 'make test' to self-host."
 
 # DWARF Tier 1 (-g) smoke: a -g build must keep identical runtime output, emit a
 # .debug_line table for the source, and let gdb resolve+hit a line breakpoint
