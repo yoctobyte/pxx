@@ -2103,6 +2103,13 @@ var
   isArr, firstDecl: Boolean;
 begin
   Next; { consume the opening brace }
+  { Re-anchor this record's field base to the current field-table position before
+    laying out the body. A forward record (`typedef struct Zio ZIO;` then a later
+    `struct Zio { ... }`) had its UClsFBase fixed at forward-declaration time; if
+    another struct's fields were added in between, the body's fields would land
+    outside that range and FindUField (a contiguous base+count scan) would miss
+    them. A freshly-created record has no fields yet, so this is a safe no-op. }
+  if UClsFCount[ci] = 0 then UClsFBase[ci] := UFldCount;
   curOff := 0;
   maxAlign := 1;
   while (CurTok.Kind <> tkEnd) and (CurTok.Kind <> tkEOF) do

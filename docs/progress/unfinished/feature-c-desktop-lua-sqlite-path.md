@@ -338,11 +338,31 @@ gap rather than bloating this ticket.
   pattern (`typedef struct Zio ZIO;`, `typedef struct lua_State lua_State;` then
   the body in lstate.h — L->top now resolvable). Gate: `make test` green,
   self-host byte-identical, all C fixtures match gcc; fixture
-  `test/ctypedef_struct_b7.c` (=51). NEXT BLOCKER (still): the *real* lzio.c
-  (full lua headers via `#include`) still stops at `luaZ_fill`'s
-  `z->reader(...)` with `unexpected token (` even though the Lua-faithful
-  isolated reproducer (`test/ctypedef_struct_b7.c`) passes — so the remaining
-  fault is in the **header `#include` processing path** (the NUL-between-newlines
-  in the token stream points at the include/preproc mechanism, not the struct/
-  typedef parser). Investigate how `#include`d struct/typedef layout differs from
-  inline program-mode layout next.
+  `test/ctypedef_struct_b7.c` (=51).
+- 2026-06-25 — **forward-record field base re-anchored** (Slice B inc5). The real
+  lzio.c `z->reader(...)` still failed after the alias fix; root cause was NOT the
+  `#include`/preproc path but a **contiguous-field-range** bug exposed by the
+  alias fix. `FindUField` scans a record's fields as a flat block
+  `UFldNOff[UClsFBase[ci] .. +UClsFCount[ci]]`. A forward record (`typedef struct
+  Zio ZIO;`) had `UClsFBase` fixed at forward-declaration time; lua's lzio.h then
+  lays out an intervening `typedef struct Mbuffer {…} Mbuffer;` BEFORE the
+  `struct Zio { … }` body, so Zio's body fields land past its recorded base and
+  `FindUField('reader')` returns -1 (field — and thus its fn-ptr sig — invisible;
+  every other field silently aliased offset 0). Fix: ParseCStructInto re-anchors
+  `UClsFBase[ci] := UFldCount` when it begins laying out a body that has no fields
+  yet (`UClsFCount[ci]=0`) — a no-op for freshly-created records, correct for
+  forward ones. Diagnosis landmine: the symptom looked like a fn-ptr-sig/`#include`
+  bug (UFldProcSig read as -1) but was a field-LOOKUP failure (`FindUField`=-1);
+  only a minimal bisect (a 3-field intervening struct typedef) exposed it — single
+  intervening fields didn't shift the base enough to interleave. Gate: `make test`
+  green, self-host byte-identical, all 9 C fixtures match gcc; fixture
+  `test/cstruct_fwd_interleave_b8.c` (=42). lzio.c now parses past `luaZ_fill` and
+  reaches `luaZ_read`.
+- **NEXT BLOCKER: ternary `?:`.** Real lzio.c now stops in `luaZ_read` at
+  `m = (n <= z->n) ? n : z->n;` with `expected C expression`. The ternary
+  conditional operator is unimplemented and is flagged **Track A** (needs an
+  `AN_TERNARY` shared-IR node + codegen, per the roadmap reframe and
+  `track-a-c-frontend-shared-ir-touchpoints`). This is the clean Track-C → Track-A
+  handoff boundary: the C-frontend parsing gaps to here (fn pointers, struct-tag
+  aliasing, forward-record fields) are closed; the remaining lua blockers
+  (ternary, switch/case, setjmp/longjmp) need shared-IR work owned by A.
