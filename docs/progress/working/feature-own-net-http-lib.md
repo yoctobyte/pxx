@@ -196,6 +196,17 @@ requests over a single keep-alive connection — `GET /` (server sets a cookie),
 gzip body the client decodes transparently). Prints a deterministic transcript;
 smoke `net-demo` in `make lib-test` asserts the 5 key markers.
 
+## Server-side helpers (landed 2026-06-25)
+
+`http.pas` gained the request/response server symmetry of the client helpers:
+`THttpRequest` + `HttpParseRequest` (request line → Method/Path/Query/Headers/
+Body), `HttpRequestHeader` (case-insensitive lookup), and `HttpBuildResponse`
+(status/reason/headers/body, **Content-Length computed automatically**). `lib_http`
++8 (`req-parse`/`-method`/`-path`/`-query`/`-hdr`/`-postbody`, `build-resp`,
+`build-resp-empty`). The showcase demo now dogfoods them server-side — dropping
+its hand-rolled request parser and hand-counted Content-Lengths (the source of an
+earlier off-by-one). `make lib-test` green.
+
 ## Roadmap (next slices)
 
 1. ~~Concurrency-safe pool + blocking `HttpGetPooled` + eviction/idle-timeout~~

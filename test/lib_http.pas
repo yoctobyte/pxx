@@ -26,6 +26,7 @@ var
   isTls, okUrl: Boolean;
   req: AnsiString;
   resp: THttpResponse;
+  sreq: THttpRequest;
   hdrs: THttpHeaders;
   gz, raw2: AnsiString;
 begin
@@ -170,4 +171,22 @@ begin
     'Set-Cookie: theme=dark'#13#10'Content-Length: 0'#13#10#13#10, resp);
   SayBool('cookie-from-resp',
     HttpCookieFromResponse('', resp) = 'sid=abc; theme=dark');
+
+  { Server-side: parse request, lookup header, build response (auto Content-Length). }
+  SayBool('req-parse',
+    HttpParseRequest('GET /search?q=cats HTTP/1.1'#13#10 +
+      'Host: x'#13#10'Accept: */*'#13#10#13#10, sreq));
+  SayBool('req-method',  sreq.Method = 'GET');
+  SayBool('req-path',    sreq.Path = '/search');
+  SayBool('req-query',   sreq.Query = 'q=cats');
+  SayBool('req-hdr',     HttpRequestHeader(sreq, 'host') = 'x');
+  SayBool('req-postbody',
+    HttpParseRequest('POST /u HTTP/1.1'#13#10'Content-Length: 2'#13#10#13#10'hi', sreq) and
+    (sreq.Method = 'POST') and (sreq.Body = 'hi'));
+  SayBool('build-resp',
+    HttpBuildResponse(200, 'OK', 'X: 1'#13#10, 'hello') =
+    'HTTP/1.1 200 OK'#13#10'X: 1'#13#10'Content-Length: 5'#13#10#13#10'hello');
+  SayBool('build-resp-empty',
+    HttpBuildResponse(404, 'Not Found', '', '') =
+    'HTTP/1.1 404 Not Found'#13#10'Content-Length: 0'#13#10#13#10);
 end.

@@ -25,20 +25,10 @@ begin
   for i := 0 to 30 do Result[i + 1] := AnsiChar(b[i]);
 end;
 
-function ReqPath(const req: AnsiString): AnsiString;
-{ second token of the request line: 'GET /me HTTP/1.1' -> '/me' }
-var i, s: Integer;
-begin
-  Result := '/';
-  i := 1;
-  while (i <= Length(req)) and (req[i] <> ' ') do Inc(i);
-  Inc(i); s := i;
-  while (i <= Length(req)) and (req[i] <> ' ') do Inc(i);
-  if i > s then Result := Copy(req, s, i - s);
-end;
+const KEEPALIVE = 'Connection: keep-alive'#13#10;
 
 procedure ServerCo(arg: Pointer);
-var lfd, cfd, k: Integer; buf: array[0..2047] of Byte; n: Int64; req, path, resp: AnsiString; i: Integer;
+var lfd, cfd, k: Integer; buf: array[0..2047] of Byte; n: Int64; raw, resp: AnsiString; i: Integer; req: THttpRequest;
 begin
   lfd := TcpListen(PORT);
   cfd := TcpAccept(lfd);
@@ -46,26 +36,25 @@ begin
   begin
     n := TcpRecv(cfd, @buf[0], 2048);
     if n <= 0 then Break;
-    SetLength(req, n);
-    for i := 1 to n do req[i] := AnsiChar(buf[i - 1]);
-    path := ReqPath(req);
+    SetLength(raw, n);
+    for i := 1 to n do raw[i] := AnsiChar(buf[i - 1]);
+    HttpParseRequest(raw, req);               { server-side parse helper }
 
-    if path = '/' then
-      resp := 'HTTP/1.1 200 OK'#13#10'Set-Cookie: sid=demo123; Path=/'#13#10 +
-              'Content-Length: 21'#13#10'Connection: keep-alive'#13#10#13#10 +
-              'Welcome to frank2 net'
-    else if path = '/me' then
+    { HttpBuildResponse computes Content-Length for us — no hand-counting. }
+    if req.Path = '/' then
+      resp := HttpBuildResponse(200, 'OK',
+                'Set-Cookie: sid=demo123; Path=/'#13#10 + KEEPALIVE,
+                'Welcome to frank2 net')
+    else if req.Path = '/me' then
     begin
-      if Pos('Cookie: sid=demo123', req) > 0 then
-        resp := 'HTTP/1.1 200 OK'#13#10'Content-Length: 17'#13#10 +
-                'Connection: keep-alive'#13#10#13#10'hello sid=demo123'
+      if Pos('sid=demo123', HttpRequestHeader(req, 'Cookie')) > 0 then
+        resp := HttpBuildResponse(200, 'OK', KEEPALIVE, 'hello sid=demo123')
       else
-        resp := 'HTTP/1.1 200 OK'#13#10'Content-Length: 5'#13#10 +
-                'Connection: keep-alive'#13#10#13#10'anon!';
+        resp := HttpBuildResponse(200, 'OK', KEEPALIVE, 'anon!');
     end
     else
-      resp := 'HTTP/1.1 200 OK'#13#10'Content-Encoding: gzip'#13#10 +
-              'Content-Length: 31'#13#10'Connection: keep-alive'#13#10#13#10 + GzipHelloWorld;
+      resp := HttpBuildResponse(200, 'OK',
+                'Content-Encoding: gzip'#13#10 + KEEPALIVE, GzipHelloWorld);
 
     TcpSend(cfd, @resp[1], Length(resp));
   end;

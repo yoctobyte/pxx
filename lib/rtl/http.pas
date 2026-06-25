@@ -31,6 +31,14 @@ type
     Body:    AnsiString;
   end;
 
+  THttpRequest = record
+    Method:  AnsiString;   { e.g. 'GET' }
+    Path:    AnsiString;   { request target up to '?', '/' if empty }
+    Query:   AnsiString;   { part after '?', '' if none }
+    Headers: AnsiString;   { raw header block }
+    Body:    AnsiString;   { everything past the header block }
+  end;
+
 { --- pure helpers (no I/O) --- }
 
 { Split `http://host[:port][/path]`. Returns False if not http:// or no host.
@@ -126,6 +134,14 @@ function HttpCookieHeader(const jar: AnsiString): AnsiString;
 { Parse a raw response into resp (status line + headers + body). Applies
   Transfer-Encoding: chunked decoding, else trims the body to Content-Length. }
 procedure HttpParseResponse(const raw: AnsiString; var resp: THttpResponse);
+
+{ --- server-side helpers (pure) ---
+  HttpParseRequest splits a raw request (request line + headers + body);
+  HttpRequestHeader is a case-insensitive header lookup over it; HttpBuildResponse
+  formats a reply and computes Content-Length automatically (no hand-counting). }
+function HttpParseRequest(const raw: AnsiString; var req: THttpRequest): Boolean;
+function HttpRequestHeader(const req: THttpRequest; const name: AnsiString): AnsiString;
+function HttpBuildResponse(status: Integer; const reason, extraHeaders, body: AnsiString): AnsiString;
 
 { --- blocking transport --- }
 
@@ -685,6 +701,75 @@ begin
   if ce <> '' then resp.Body := HttpDecodeContent(ce, resp.Body);
 
   resp.Ok := resp.Status > 0;
+end;
+
+function HttpParseRequest(const raw: AnsiString; var req: THttpRequest): Boolean;
+var n, lineEnd, sp1, sp2, sep, q, i: Integer; target: AnsiString;
+begin
+  req.Method := ''; req.Path := '/'; req.Query := '';
+  req.Headers := ''; req.Body := '';
+  Result := False;
+  n := Length(raw);
+  if n = 0 then Exit;
+
+  { request line up to first CRLF }
+  lineEnd := 1;
+  while (lineEnd < n) and not ((raw[lineEnd] = #13) and (raw[lineEnd + 1] = #10)) do
+    Inc(lineEnd);
+
+  { 'METHOD target HTTP/1.1' -> method, target between the first two spaces }
+  sp1 := 0; sp2 := 0;
+  for i := 1 to lineEnd - 1 do
+    if raw[i] = ' ' then
+    begin
+      if sp1 = 0 then sp1 := i
+      else if sp2 = 0 then sp2 := i;
+    end;
+  if sp1 = 0 then Exit;
+  req.Method := Copy(raw, 1, sp1 - 1);
+  if sp2 > 0 then target := Copy(raw, sp1 + 1, sp2 - sp1 - 1)
+  else target := Copy(raw, sp1 + 1, lineEnd - 1 - sp1);
+
+  q := Pos('?', target);
+  if q > 0 then
+  begin
+    req.Path := Copy(target, 1, q - 1);
+    req.Query := Copy(target, q + 1, Length(target));
+  end
+  else
+    req.Path := target;
+  if req.Path = '' then req.Path := '/';
+
+  { headers/body split at CRLFCRLF }
+  sep := 0;
+  for i := 1 to n - 3 do
+    if (raw[i] = #13) and (raw[i + 1] = #10) and
+       (raw[i + 2] = #13) and (raw[i + 3] = #10) then
+    begin sep := i; break; end;
+  if sep > 0 then
+  begin
+    if lineEnd + 2 <= sep - 1 then
+      req.Headers := Copy(raw, lineEnd + 2, sep - (lineEnd + 2));
+    req.Body := Copy(raw, sep + 4, n);
+  end
+  else
+    req.Headers := Copy(raw, lineEnd + 2, n);
+
+  Result := req.Method <> '';
+end;
+
+function HttpRequestHeader(const req: THttpRequest; const name: AnsiString): AnsiString;
+begin
+  Result := HttpHeaderValue(req.Headers, name);
+end;
+
+function HttpBuildResponse(status: Integer; const reason, extraHeaders, body: AnsiString): AnsiString;
+var r: AnsiString;
+begin
+  r := 'HTTP/1.1 ' + IntToStr(status) + ' ' + reason + CRLF;
+  if extraHeaders <> '' then r := r + extraHeaders;
+  r := r + 'Content-Length: ' + IntToStr(Length(body)) + CRLF + CRLF;
+  Result := r + body;
 end;
 
 function HttpResolve(const host: AnsiString; var ip: LongWord): Boolean;
