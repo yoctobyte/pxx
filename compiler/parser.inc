@@ -10451,11 +10451,12 @@ begin
           while (CurTok.Kind <> tkRParen) and not mDoneArgs do
           begin
             mIsByRef := False;
+            mSawConst := False;
             if (CurTok.Kind = tkVar) or
                ((CurTok.Kind = tkIdent) and CaseEqual(CurTok.SVal, 'out')) then
             begin mIsByRef := True; Next; end
             else if CurTok.Kind = tkConst then
-              Next;
+            begin mSawConst := True; Next; end;
             mStartIdx := mNParams;
             mDoneParam := False;
             while (CurTok.Kind = tkIdent) and not mDoneParam do
@@ -10472,6 +10473,13 @@ begin
             end
             else
               mTk := ParseTypeKind;
+            { A `const` record/variant param is passed by reference — must match
+              ParseSubroutine's rule (parser.inc ~11403) so an INDIRECT call
+              through this proc-type marshals the arg the same way the callee
+              receives it (else the address/value mismatch segfaults — see
+              bug-proc-typed-call-const-record-arg). }
+            if mSawConst and ((mTk = tyRecord) or (mTk = tyVariant)) and not mIsArr then
+              mIsByRef := True;
             for i := mStartIdx to mNParams-1 do
             begin
               mPTypes[i] := mTk;
