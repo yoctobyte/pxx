@@ -164,6 +164,13 @@ HTTP client); server-side later if wanted.
   a real CA→leaf chain (issuer link, SAN exact/wildcard/reject, expired-reject,
   badhost-reject, chain-ok; 12 checks). **Remaining:** loading the system trust
   store (`/etc/ssl/certs`) for the trust anchor — wired in at M6.
+- M6 **key schedule done (2026-06-25):** `lib/rtl/tls13_keys.pas` —
+  HKDF-Expand-Label, Derive-Secret, the Early/Handshake/Master secret chain, and
+  traffic key/iv derivation (RFC 8446 §7.1), verified byte-for-byte against the
+  RFC 8448 worked example (`test/lib_tls13_keys`, 5 checks, gated `tls13-keysched`).
+  Remaining M6: record layer (framing + per-record nonce + AEAD), ClientHello /
+  ServerHello, transcript hash, the handshake state machine, then a real
+  `https://` GET.
 - M6 TLS 1.3 handshake state machine → a real `https://` GET (Pascal record
   layer); verify against a public host.
 - M7 (optional) kTLS offload for app-data throughput.
