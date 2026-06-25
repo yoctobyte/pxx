@@ -56,3 +56,4 @@
 2026-06-25T00:04:17Z  v56  ca123876de6fbf3d2fa3892f863764ae8821695b2e449d3341c060d343eac84f  738fcb0e350733370923a08543f70728f40ed5d8  chore(stable): pin v55 ({$R-} range-check toggle fix)
 2026-06-25T00:18:14Z  v57  46b20eeaf83b5817bc1586acc45591117e46ba7d5e2c0b721a3b3c7830a4d0ce  1325fc5725f0d6aff3f389542c7202447eb57d57  chore(stable): pin v56 (AnsiString ordering relops fix)
 2026-06-25T00:26:11Z  v58  9ba5d7ce00f5d812904f3d9584ff51c26f5dc7a0e961db0764b2d8ddcbad59cb  105cda3be0896e62fe53ff34d0b67b15a76e95d9  chore(stable): pin v57 (set-of-char const shadowing fix)
+2026-06-25T00:44:29Z  v59  8863f39dd00034e58800f7605ea44f62a8583e95419966325e8bf826659dc84c  adec5270b4fc1327b44cb3b49a482a1bf1296a66  chore(stable): pin v58 (Unit.Const in const expressions)
