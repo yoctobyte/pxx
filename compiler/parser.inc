@@ -12737,6 +12737,7 @@ var
   basePath, ext, emsg: AnsiString;
   lastSlash, lastDot: Integer;
   isCompiled, isCUnit, isCHeader, isPath, savedCaseMode, softMissOK: Boolean;
+  unitNeedsText: Boolean;
 begin
   isPath := False;
   for i := 1 to Length(name) do
@@ -13120,6 +13121,7 @@ begin
     { Append tokens to global Token stream }
     startPos := LexAppend(UnitContent);
     i := startPos;
+    unitNeedsText := False;
     while i < TokCount do
     begin
       if Tokens[i].Kind in [tkTry, tkRaise] then EnableExceptionRuntime;
@@ -13127,7 +13129,28 @@ begin
         needs the CoSwitch stub emitted before its body compiles. }
       if (Tokens[i].Kind = tkIdent) and CaseEqual(GetTokenStr(i), '__pxxcoswitch') then
         EnableCoroutineRuntime;
+      { A unit that references the Text file type needs the implicit textfile RTL
+        too — the program-level pre-scan only sees the program's own tokens, so a
+        unit using `var f: Text; Assign(f,...)` (the idiomatic FPC form, no
+        explicit `uses textfile`) would otherwise hit `undefined variable
+        (Assign)` (bug-textfile-primitives-not-ambient-in-units). }
+      if (Tokens[i].Kind = tkIdent) and
+         ((Tokens[i].SLen = 4) or (Tokens[i].SLen = 8)) then
+        if CaseEqual(GetTokenStr(i), 'text') or CaseEqual(GetTokenStr(i), 'textfile') or
+           CaseEqual(GetTokenStr(i), 'ioresult') then
+          unitNeedsText := True;
       Inc(i);
+    end;
+
+    { Load the implicit textfile surface (builtin first, for its numeric write
+      dispatch) before parsing the unit body, so the unit's Assign/Reset/Rewrite/
+      Close resolve. Same gating as the program-level default surface; idempotent
+      via the CompiledUnits guard, so an explicit `uses textfile` is harmless. }
+    if unitNeedsText and (not NoDefaultRtl) and
+       (TargetArch <> TARGET_XTENSA) and (TargetArch <> TARGET_RISCV32) then
+    begin
+      ParseUsesUnit('builtin');
+      ParseUsesUnit('textfile');
     end;
 
     { Point parser to first token of the unit }

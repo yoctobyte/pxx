@@ -71,3 +71,24 @@ scope should also inject them when compiling a unit.
 - `examples/adventure/adventure.pas` advances past the `Assign` error (its next
   predicted failure, not this one).
 - Regression test under `make test`; self-host fixedpoint byte-identical.
+
+## Resolution (2026-06-25, v62)
+
+The implicit textfile RTL was injected only by the program-level pre-scan, which
+sees only the program's own tokens. A unit pulled later via `uses` was lexed
+after that scan, so a unit using `var f: Text; Assign(f,...)` (no explicit `uses
+textfile`) never triggered the injection → `undefined variable (Assign)`.
+
+Fix (`parser.inc`, `ParseUsesUnit`): the existing per-unit token scan (which
+already flags `try`/`raise` and `__pxxcoswitch`) now also flags a `Text` /
+`textfile` / `ioresult` reference; if found (and the default surface is not
+opted out, non-ESP target) it loads `builtin` + `textfile` before `ParseUnit`,
+so the unit's Assign/Reset/Rewrite/Close resolve. Idempotent via the
+CompiledUnits guard, so an explicit `uses textfile` is harmless, and the
+self-build (PXX_NODEFAULTRTL) is unaffected — byte-identical.
+
+Verified: the minimal-repro unit compiles with only `uses sysutils`; a unit
+read/write round-trip works; `examples/adventure` now advances past the `Assign`
+error (next blocker is an unrelated `Move` overload). Regression
+`test/test_textfile_in_unit.pas` (+ `test/textfile_unit_dep.pas`) under
+`make test`. Pinned v62.
