@@ -9006,6 +9006,55 @@ begin
           SetConstOff[SetConstCount]    := BakeSetConst;
           Inc(SetConstCount);
         end
+        else if cTk in [tyString, tyAnsiString, tyFixedString, tyShortString] then
+        begin
+          { Typed string constant `const Name: string = 'literal'` (and the
+            `'a' + 'b'` / `#65 + #66` concatenation form). Treated as a read-only
+            string-literal alias — registered in the StrConst table exactly like
+            the untyped `const Name = 'literal'` path, with NO storage var (a
+            phantom var would shadow a same-named variable and ParseInitVal has no
+            string case). A use of the name expands to AN_STR_LIT over the span,
+            which already coerces to a managed string where needed. }
+          Expect(tkEq, '=');
+          if CurTok.Kind <> tkString then
+            Error('typed string constant: expected a string or char literal');
+          if (Tokens[TokPos].Kind = tkPlus) then
+          begin
+            scOff := TokCharLen; scLen := 0;
+            for si := 1 to Length(CurTok.SVal) do
+            begin
+              if TokCharLen >= STRING_CAP then Error('string constant buffer overflow');
+              TokChars[TokCharLen] := CurTok.SVal[si]; Inc(TokCharLen); Inc(scLen);
+            end;
+            Next;
+            while CurTok.Kind = tkPlus do
+            begin
+              Next;
+              if CurTok.Kind <> tkString then
+                Error('const string concatenation: expected a string or char literal');
+              for si := 1 to Length(CurTok.SVal) do
+              begin
+                if TokCharLen >= STRING_CAP then Error('string constant buffer overflow');
+                TokChars[TokCharLen] := CurTok.SVal[si]; Inc(TokCharLen); Inc(scLen);
+              end;
+              Next;
+            end;
+            if StrConstCount >= MAX_TYPEALIAS then Error('too many string constants');
+            StrConstName[StrConstCount] := name;
+            StrConstSOff[StrConstCount] := scOff;
+            StrConstSLen[StrConstCount] := scLen;
+            Inc(StrConstCount);
+          end
+          else
+          begin
+            if StrConstCount >= MAX_TYPEALIAS then Error('too many string constants');
+            StrConstName[StrConstCount] := name;
+            StrConstSOff[StrConstCount] := Tokens[TokPos-1].SOffset;
+            StrConstSLen[StrConstCount] := Tokens[TokPos-1].SLen;
+            Inc(StrConstCount);
+            Next;
+          end;
+        end
         else
         begin
         cIdx := AllocVar(name, cTk);

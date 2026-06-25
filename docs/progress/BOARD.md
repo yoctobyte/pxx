@@ -28,7 +28,7 @@ _none_
 | --- | --- | --- | --- | --- |
 | feature-c-runtime-library | B | feature | C runtime/library layer (`lib/crtl`) plus direct C-library packages | feature-c-source-frontend |
 
-## backlog (54)
+## backlog (53)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -37,7 +37,6 @@ _none_
 | bug-managed-length-via-pointer-deref | A | bug | bug: managed Length(ps^) / Length(rec.pf^) returns garbage (all targets) | — |
 | bug-pchar-to-string-implicit-conv | A | bug | PChar → string implicit conversion missing in call args (and assignment helper) | — |
 | bug-setlength-record-field-via-var-param | A | bug | SetLength on a record string/array field via a `var` parameter fails codegen | — |
-| bug-string-const-index-and-typed-init | A | bug | Typed string constant with a string initializer won't parse | — |
 | bug-virtual-keyword-name-result | A | bug | Bare own-name result of a VIRTUAL intrinsic-named method miscompiles | — |
 | chore-inc-to-units | A | chore | `.inc` → real `.pas` units refactor | — |
 | chore-runtime-emission-size | A | chore | Finer runtime-support emission (code size) | — |
@@ -121,7 +120,7 @@ _none_
 | feature-mimic-fpc | B | feature | `mimic FPC` compatibility mode | — |
 | feature-string-model-tyfixedstring | B | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (268)
+## done (269)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -213,6 +212,7 @@ _none_
 | bug-shr-signed-integer-width | A | bug | `shr` on a negative 32-bit Integer shifts at 64-bit width (miscompile) | — |
 | bug-stack-corruption-inline-string-concat | A | bug | Stack frame corruption on inline string concatenation assignments | — |
 | bug-stderr-not-fd2 | A | bug | `writeln(StdErr, ...)` goes to stdout — StdErr not connected to fd 2 | — |
+| bug-string-const-index-and-typed-init | A | bug | Typed string constant with a string initializer won't parse | — |
 | bug-string-ordering-comparison-constant | A | bug | AnsiString `<` `>` `<=` `>=` return constants, not a real comparison | — |
 | bug-string-type-size-mismatch | A | bug | String type size mismatch in TypeSize vs codegen copies | — |
 | bug-subclass-field-offset-calculation | A | bug | bug-subclass-field-offset-calculation (Track A) | — |
@@ -409,7 +409,6 @@ _none_
 - [A] bug-managed-length-via-pointer-deref
 - [A] bug-pchar-to-string-implicit-conv
 - [A] bug-setlength-record-field-via-var-param
-- [A] bug-string-const-index-and-typed-init
 - [A] bug-virtual-keyword-name-result
 - [A] chore-inc-to-units
 - [A] chore-runtime-emission-size

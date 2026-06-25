@@ -232,6 +232,8 @@ test-core: $(COMPILER)
 	test "$$(/tmp/test_const_string_concat26)" = "$$(printf 'AB\n2\nABC\n3\nfoobar\nx-y\n65 66')"
 	./$(COMPILER) test/test_const_string_index.pas /tmp/test_const_string_index26
 	test "$$(/tmp/test_const_string_index26)" = "$$(printf '58\n58\nX:\n:\n[:]\nab\n30 30')"
+	./$(COMPILER) test/test_typed_string_const.pas /tmp/test_typed_string_const26
+	test "$$(/tmp/test_typed_string_const26)" = "$$(printf 'ABCDEF\nfoobar\nABC\nB\nABCDEF\n6\nlocal!')"
 	./$(COMPILER) test/test_byval_record_temp.pas /tmp/test_byval_record_temp26
 	test "$$(/tmp/test_byval_record_temp26)" = "$$(printf '11 22 33\n15 15 15\n8 9 10')"
 	./$(COMPILER) test/test_int_arg_to_float_param.pas /tmp/test_int_arg_to_float_param26
