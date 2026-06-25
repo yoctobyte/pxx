@@ -1594,6 +1594,7 @@ var left, right, seq, item, value, outNode, first, last, leftAddr, argNode, argV
     branchSeq, branchPair, labelsHead, stmtNode, labelNode: Integer;
     clauseBodyLabel, nextClauseLabel, selectorValNode: Integer;
     ternTmp: Integer;
+    swSelTmp, swDefault, swSeq, swMarker, swSelTk: Integer;
     rhsIsLValue: Boolean;
     isComIntf: Boolean;
     intfTmpImt, intfTmpInst: Integer;
@@ -3338,6 +3339,75 @@ begin
       IRAppend(IR_STORE_SYM, ternTmp, value, -1, 0, ASTTk[node]);
       IRAppend(IR_LABEL, -1, -1, -1, endLabel, 0);
       Result := IRAppend(IR_LOAD_SYM, ternTmp, -1, -1, 0, ASTTk[node]);
+    end;
+
+    AN_SWITCH:
+    begin
+      endLabel := IRNewLabel;
+      { selector evaluated once into a temp }
+      value := IRLowerAST(ASTLeft[node]);
+      first := value;
+      if ASTTk[ASTLeft[node]] = 0 then swSelTk := Ord(tyInteger)
+      else swSelTk := ASTTk[ASTLeft[node]];
+      swSelTmp := AllocVar('', IntToTypeKind(swSelTk));
+      IRAppend(IR_STORE_SYM, swSelTmp, value, -1, 0, swSelTk);
+      { pass 1 — dispatch: give each case/default marker a label and, for a case,
+        emit `if (sel == caseval) goto label` (via JUMP_IF_FALSE of `sel != val`). }
+      swDefault := -1;
+      swSeq := ASTLeft[ASTRight[node]];
+      while swSeq <> -1 do
+      begin
+        swMarker := ASTLeft[swSeq];
+        if swMarker >= 0 then
+        begin
+          if ASTKind[swMarker] = AN_CASE then
+          begin
+            ASTSOffset[swMarker] := IRNewLabel;
+            condNode := IRAppend(IR_BINOP,
+              IRAppend(IR_LOAD_SYM, swSelTmp, -1, -1, 0, swSelTk),
+              IRAppend(IR_CONST_INT, -1, -1, -1, ASTIVal[swMarker], swSelTk),
+              Ord(tkNeq), 0, Ord(tyBoolean));
+            IRAppend(IR_JUMP_IF_FALSE, ASTSOffset[swMarker], condNode, -1, 0, 0);
+          end
+          else if ASTKind[swMarker] = AN_DEFAULT then
+          begin
+            ASTSOffset[swMarker] := IRNewLabel;
+            swDefault := ASTSOffset[swMarker];
+          end;
+        end;
+        swSeq := ASTRight[swSeq];
+      end;
+      if swDefault >= 0 then IRAppend(IR_JUMP, swDefault, -1, -1, 0, 0)
+      else IRAppend(IR_JUMP, endLabel, -1, -1, 0, 0);
+      { pass 2 — bodies in source order (fallthrough). break -> end; continue is
+        inherited so it targets the enclosing loop, giving a break-only scope. }
+      if IRLoopStackDepth >= 64 then Error('IR loop stack overflow');
+      IRLoopStackBreak[IRLoopStackDepth] := endLabel;
+      if IRLoopStackDepth > 0 then
+        IRLoopStackContinue[IRLoopStackDepth] := IRLoopStackContinue[IRLoopStackDepth - 1]
+      else
+        IRLoopStackContinue[IRLoopStackDepth] := endLabel;
+      IRLoopStackExceptionDepth[IRLoopStackDepth] := ExceptionCodegenDepth;
+      Inc(IRLoopStackDepth);
+      swSeq := ASTLeft[ASTRight[node]];
+      while swSeq <> -1 do
+      begin
+        swMarker := ASTLeft[swSeq];
+        if swMarker >= 0 then
+        begin
+          if (ASTKind[swMarker] = AN_CASE) or (ASTKind[swMarker] = AN_DEFAULT) then
+            IRAppend(IR_LABEL, -1, -1, -1, ASTSOffset[swMarker], 0)
+          else
+          begin
+            last := IRLowerAST(swMarker);
+            IRMarkStatementNode(last);
+          end;
+        end;
+        swSeq := ASTRight[swSeq];
+      end;
+      Dec(IRLoopStackDepth);
+      endLabelNode := IRAppend(IR_LABEL, -1, -1, -1, endLabel, 0);
+      Result := IRAppend(IR_BLOCK, first, endLabelNode, -1, 0, 0);
     end;
 
     AN_WHILE:

@@ -13,6 +13,7 @@ function IsBareStructDecl: Boolean; forward;
 function IsCTypeTok: Boolean; forward;
 function ParseCDeclType: TTypeKind; forward;
 function ParseCCommaStmt: Integer; forward;
+function ParseCSwitchAST: Integer; forward;
 
 { ===== C expression compiler (Slice B) =====
   A real recursive-descent C expression parser at C precedence, replacing the
@@ -1366,6 +1367,27 @@ begin
   if CurTok.Kind = tkWhile then begin Result := ParseCWhileAST; Exit; end;
   if CurTok.Kind = tkFor then begin Result := ParseCForAST; Exit; end;
   if CurTok.Kind = tkDo then begin Result := ParseCDoWhileAST; Exit; end;
+  if (CurTok.Kind = tkIdent) and (CurTok.SVal = 'switch') then
+  begin Result := ParseCSwitchAST; Exit; end;
+
+  { `case CONST:` / `default:` labels inside a switch body — emitted as marker
+    nodes that the switch lowering turns into dispatch targets. }
+  if (CurTok.Kind = tkIdent) and (CurTok.SVal = 'case') then
+  begin
+    Next;
+    node := AllocNode(AN_CASE);
+    ASTIVal[node] := CEvalConstExpr;
+    Expect(tkColon, ':');
+    Result := node;
+    Exit;
+  end;
+  if (CurTok.Kind = tkIdent) and (CurTok.SVal = 'default') then
+  begin
+    Next;
+    Expect(tkColon, ':');
+    Result := AllocNode(AN_DEFAULT);
+    Exit;
+  end;
 
   if CurTok.Kind = tkBreak then
   begin
@@ -1422,6 +1444,40 @@ begin
   end;
   Expect(tkEnd, '}');
   Result := blockNode;
+end;
+
+{ C `switch (sel) { ... case CONST: ... default: ... }`. The body is parsed like
+  a brace block; `case`/`default` arrive as AN_CASE/AN_DEFAULT marker nodes in the
+  statement sequence (fallthrough is implicit — bodies run on into the next).
+  AN_SWITCH lowering (ir.inc) turns the markers into dispatch targets + a break
+  scope. }
+function ParseCSwitchAST: Integer;
+var node, selNode, bodyNode, seqNode, stmtNode, lastSeq: Integer;
+begin
+  Next;                          { consume 'switch' }
+  Expect(tkLParen, '(');
+  selNode := ParseCExpr;
+  Expect(tkRParen, ')');
+  Expect(tkBegin, '{');
+  bodyNode := AllocNode(AN_BLOCK);
+  lastSeq := -1;
+  while (CurTok.Kind <> tkEnd) and (CurTok.Kind <> tkEOF) do
+  begin
+    stmtNode := ParseCStatementAST;
+    if stmtNode <> -1 then
+    begin
+      seqNode := AllocNode(AN_SEQ);
+      ASTLeft[seqNode] := stmtNode;
+      if lastSeq = -1 then ASTLeft[bodyNode] := seqNode
+      else ASTRight[lastSeq] := seqNode;
+      lastSeq := seqNode;
+    end;
+  end;
+  Expect(tkEnd, '}');
+  node := AllocNode(AN_SWITCH);
+  ASTLeft[node] := selNode;
+  ASTRight[node] := bodyNode;
+  Result := node;
 end;
 
 { A top-level global variable definition: <type> name (, name)* ;

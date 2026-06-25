@@ -188,6 +188,16 @@ const
                            AN_PAIR(then, else); ASTTk = result type (then-branch).
                            Lowers (target-independent) to a hidden temp + branches:
                            only the taken branch is evaluated. }
+  AN_SWITCH        = 68; { C `switch (sel) { body }`: Left = selector expr; Right =
+                           AN_BLOCK body whose statement SEQ contains AN_CASE /
+                           AN_DEFAULT marker nodes. Lowered to a dispatch (compare
+                           selector vs each case, jump to its label) + the body in
+                           order (fallthrough), with a break-only scope. }
+  AN_CASE          = 69; { `case CONST:` marker inside a switch body. ASTIVal =
+                           constant value; ASTSOffset = the IR label assigned at
+                           lowering (dispatch target). }
+  AN_DEFAULT       = 70; { `default:` marker inside a switch body. ASTSOffset =
+                           the IR label assigned at lowering. }
 
   { Inline-asm operand kinds }
   AOP_NONE = 0;

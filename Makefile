@@ -342,6 +342,8 @@ test-core: $(COMPILER)
 	/tmp/cbitnot_b1126; test "$$?" = "6"
 	./$(COMPILER) test/cparen_name_b12.c /tmp/cparen_name_b1226
 	/tmp/cparen_name_b1226; test "$$?" = "30"
+	./$(COMPILER) test/cswitch_b13.c /tmp/cswitch_b1326
+	/tmp/cswitch_b1326; test "$$?" = "3"
 	./$(COMPILER) -Itest/cinc/inc test/cinc/cinc_main.c /tmp/cinc_main26
 	test "$$(/tmp/cinc_main26)" = "$$(printf 'local-ok\ninc-ok')"
 	./$(COMPILER) test/test_declared_directive.pas /tmp/test_declared_directive26
