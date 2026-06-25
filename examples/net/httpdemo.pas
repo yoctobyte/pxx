@@ -27,37 +27,32 @@ end;
 
 const KEEPALIVE = 'Connection: keep-alive'#13#10;
 
+{ A routing handler — the whole "site". HttpServeConn calls it per request and
+  computes Content-Length via HttpBuildResponse, so no hand-counting. }
+function DemoHandler(const req: THttpRequest): AnsiString;
+begin
+  if req.Path = '/' then
+    DemoHandler := HttpBuildResponse(200, 'OK',
+                     'Set-Cookie: sid=demo123; Path=/'#13#10 + KEEPALIVE,
+                     'Welcome to frank2 net')
+  else if req.Path = '/me' then
+  begin
+    if Pos('sid=demo123', HttpRequestHeader(req, 'Cookie')) > 0 then
+      DemoHandler := HttpBuildResponse(200, 'OK', KEEPALIVE, 'hello sid=demo123')
+    else
+      DemoHandler := HttpBuildResponse(200, 'OK', KEEPALIVE, 'anon!');
+  end
+  else
+    DemoHandler := HttpBuildResponse(200, 'OK',
+                     'Content-Encoding: gzip'#13#10 + KEEPALIVE, GzipHelloWorld);
+end;
+
 procedure ServerCo(arg: Pointer);
-var lfd, cfd, k: Integer; buf: array[0..2047] of Byte; n: Int64; raw, resp: AnsiString; i: Integer; req: THttpRequest;
+var lfd, cfd: Integer;
 begin
   lfd := TcpListen(PORT);
   cfd := TcpAccept(lfd);
-  for k := 1 to 3 do                          { three keep-alive requests }
-  begin
-    n := TcpRecv(cfd, @buf[0], 2048);
-    if n <= 0 then Break;
-    SetLength(raw, n);
-    for i := 1 to n do raw[i] := AnsiChar(buf[i - 1]);
-    HttpParseRequest(raw, req);               { server-side parse helper }
-
-    { HttpBuildResponse computes Content-Length for us — no hand-counting. }
-    if req.Path = '/' then
-      resp := HttpBuildResponse(200, 'OK',
-                'Set-Cookie: sid=demo123; Path=/'#13#10 + KEEPALIVE,
-                'Welcome to frank2 net')
-    else if req.Path = '/me' then
-    begin
-      if Pos('sid=demo123', HttpRequestHeader(req, 'Cookie')) > 0 then
-        resp := HttpBuildResponse(200, 'OK', KEEPALIVE, 'hello sid=demo123')
-      else
-        resp := HttpBuildResponse(200, 'OK', KEEPALIVE, 'anon!');
-    end
-    else
-      resp := HttpBuildResponse(200, 'OK',
-                'Content-Encoding: gzip'#13#10 + KEEPALIVE, GzipHelloWorld);
-
-    TcpSend(cfd, @resp[1], Length(resp));
-  end;
+  HttpServeConn(cfd, @DemoHandler, 3, True);   { the per-connection serve loop }
   TcpClose(cfd); TcpClose(lfd);
 end;
 
