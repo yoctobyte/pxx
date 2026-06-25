@@ -42,3 +42,10 @@ regresses `len("hello world")` from 11 to 3 (points at char 8). So the call-arg
 arm32/riscv32/xtensa all have their own IR_CONST_STR). Harmonize ALL the
 AN_STR_LIT paths (value / index / call-arg / write) in one pass and add a fixture
 covering: assigned-then-deref, direct call arg, index `s[i]`, and write/printf.
+
+## Resolution
+- 2026-06-25 (5cb9155) — FIXED via the targeted route: AN_ASSIGN's scalar-store
+  path applies the same +8 length-prefix skip the call-arg marshalling uses, for
+  a string-literal RHS to a pointer LHS, C-mode only. Covers local var, struct
+  field, and reassignment; direct call-args unchanged (no regression).
+  Self-host byte-identical; fixture test/cstr_to_ptr_b19.c (=42).
