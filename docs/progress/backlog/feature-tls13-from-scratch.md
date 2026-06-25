@@ -104,7 +104,8 @@ HTTP client); server-side later if wanted.
 1. **Hashes:** ~~SHA-256~~ + ~~HMAC~~ + ~~HKDF-Extract/Expand~~ **landed
    2026-06-25** (`lib/rtl/sha256.pas`, RFC-vector smoke `test/lib_sha256` in
    lib-test). SHA-384 still needed for the 384 ciphersuite.
-2. **AEAD:** AES-128 block + GCM (GHASH), and ChaCha20 + Poly1305.
+2. **AEAD:** ~~ChaCha20 + Poly1305~~ **done** (`lib/rtl/chacha20poly1305.pas`,
+   RFC 8439). AES-128 block + GCM (GHASH) still needed.
 3. **X25519** (Curve25519 ECDH) — field arithmetic mod 2^255-19 (can sit on
    bignum or a dedicated 64-bit-limb field).
 4. **Signature verify:** RSA (PKCS#1 v1.5 + PSS) over bignum; ECDSA-P256;
@@ -127,7 +128,12 @@ HTTP client); server-side later if wanted.
   HKDF-Extract/Expand (RFC 5869), all verified against published vectors in
   `test/lib_sha256` (12 checks, gated in lib-test). Library-free, pure integer —
   the first concrete step of the from-scratch / kTLS path. SHA-384 still to add.
-- M2 AES-128-GCM + ChaCha20-Poly1305 (RFC 8439 / NIST vectors).
+- M2 AES-128-GCM + ChaCha20-Poly1305 (RFC 8439 / NIST vectors). **ChaCha20-Poly1305
+  DONE (2026-06-25)** — `lib/rtl/chacha20poly1305.pas`: ChaCha20 (32-bit ARX) +
+  Poly1305 (native 5×26-bit limbs, no bignum) + the AEAD seal/open, verified
+  against RFC 8439 §2.5.2/§2.8.2 in `test/lib_chacha20poly1305` (7 checks, gated as
+  `chacha20-poly1305`). AES-128-GCM (S-box + GHASH) still to add. Surfaced a Track
+  A codegen bug along the way: [[bug-managed-record-result-self-arg]].
 - M3 X25519 (RFC 7748 vectors).
 - M4 signature verify: RSA, ECDSA-P256, Ed25519 (RFC 8032 vectors).
 - M5 ASN.1/X.509 parse + chain validation + trust store.
