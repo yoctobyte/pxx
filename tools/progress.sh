@@ -108,7 +108,7 @@ ticket_owner() {
 
 normalize_track() {
   echo "$1" | tr '[:lower:]' '[:upper:]' \
-    | sed -E 's/TRACK//g; s/[^AB+\/]//g; s#A/B#A+B#g; s#B/A#A+B#g'
+    | sed -E 's/TRACK//g; s/[^ABCD+\/]//g; s#A/B#A+B#g; s#B/A#A+B#g'
 }
 
 # Track from frontmatter/bullet, then a conservative fallback. A+B means the
@@ -306,14 +306,18 @@ cmd_check() {
     fi
   done
   # 3b. unfinished/ = a halted WIP with no active owner (working = the live lock,
-  # released here). Track B parked unfinished is fine, but a Track A ticket left
-  # unfinished is CRITICAL: a half-applied compiler change can break the
-  # stable-binary boundary / self-host gate, so it must not sit silently.
+  # released here). Track B/D parked unfinished is fine, but a Track A (Pascal
+  # compiler) or Track C (C frontend) ticket left unfinished is CRITICAL: both
+  # edit the compiler binary, so a half-applied change can break the
+  # stable-binary boundary / self-host gate, and must not sit silently.
   for f in "$PROG"/unfinished/*.md; do
     [ -e "$f" ] || continue
-    if [ "$(ticket_track "$f")" = "A" ]; then
-      echo "CRITICAL-UNFINISHED-A: $(slug "$f") is Track A in unfinished/ — compiler left mid-change; resolve or revert before proceeding"; problems=1
-    fi
+    case "$(ticket_track "$f")" in
+      A|*A+*|*+A*) echo "CRITICAL-UNFINISHED-A: $(slug "$f") is Track A in unfinished/ — compiler left mid-change; resolve or revert before proceeding"; problems=1 ;;
+    esac
+    case "$(ticket_track "$f")" in
+      C|*C+*|*+C*) echo "CRITICAL-UNFINISHED-C: $(slug "$f") is Track C (C frontend) in unfinished/ — compiler left mid-change; resolve or revert before proceeding"; problems=1 ;;
+    esac
   done
   for f in "$PROG"/done/*.md; do
     [ -e "$f" ] || continue

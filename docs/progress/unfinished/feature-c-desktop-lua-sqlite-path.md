@@ -1,9 +1,9 @@
 # C desktop path — compile real portable C (tiny-regex → lua → sqlite)
 
-- **Type:** feature (track-D milestone path)
+- **Type:** feature (track-C milestone path)
 - **Status:** backlog
 - **Opened:** 2026-06-25
-- **Track:** D (C frontend) — isolated worktree `../frankonpiler-cfront`, branch
+- **Track:** C (C frontend) — isolated worktree `../frankonpiler-cfront`, branch
   `feat/cfront`. Lands to `master` only when `make test` + self-host fixedpoint
   stay green (C-body codegen edits the compiler binary → reseed).
 - **Builds on:** `feature-c-source-frontend` (slices A–F = the *mechanics*:

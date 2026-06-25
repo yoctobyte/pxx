@@ -18,7 +18,7 @@ _none_
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
-| feature-c-desktop-lua-sqlite-path | A+B | feature | C desktop path — compile real portable C (tiny-regex → lua → sqlite) | — |
+| feature-c-desktop-lua-sqlite-path | C | feature | C desktop path — compile real portable C (tiny-regex → lua → sqlite) | — |
 | feature-eliah-ide | B | feature | Eliah / Ilja — single-window IDE (GUI + TUI) | — |
 | feature-eliah-m0-window | B | feature | Eliah M0 — single tiled GTK3 window | — |
 | feature-eliah-pane-collapse | B | feature | feature: Eliah pane collapse/restore + ratio memory | feature-eliah-layout-tree |
@@ -35,7 +35,7 @@ _none_
 | --- | --- | --- | --- | --- |
 | bug-aggregate-member-array-as-var-param | A | bug | bug: passing an array that is a member of an aggregate (record field / 2D-array row) as a var/const param segfaults | — |
 | bug-arm32-writeln-longword-high-bit | A | bug | bug: arm32 `writeln(LongWord)` mangles a value with the high bit set | — |
-| bug-c-const-eval-bitwise-not | A | bug | C const-eval: `~` (bitwise NOT) yields wrong value | — |
+| bug-c-const-eval-bitwise-not | C | bug | C const-eval: `~` (bitwise NOT) yields wrong value | — |
 | bug-esp-not-always-boolean | A | bug | bug: `not` on an integer is boolean-only on ESP (riscv32 / xtensa) | — |
 | bug-fixed-array-assignment-no-copy | A | bug | bug: assigning one fixed array to another (`b := a`) does not copy | — |
 | bug-managed-record-result-self-arg | A | bug | bug: function Result of a managed-field record, passed as a call arg in its own reassignment, segfaults | — |
@@ -421,7 +421,7 @@ _none_
 
 - [A] bug-aggregate-member-array-as-var-param
 - [A] bug-arm32-writeln-longword-high-bit
-- [A] bug-c-const-eval-bitwise-not
+- [C] bug-c-const-eval-bitwise-not
 - [A] bug-esp-not-always-boolean
 - [A] bug-fixed-array-assignment-no-copy
 - [A] bug-managed-record-result-self-arg

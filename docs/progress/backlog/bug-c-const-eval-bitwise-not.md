@@ -1,7 +1,7 @@
 # C const-eval: `~` (bitwise NOT) yields wrong value
 
 - **Type:** bug
-- **Track:** D (C frontend)
+- **Track:** C (C frontend)
 - **Opened:** 2026-06-25
 - **Found-by:** Slice A (lexer operator fidelity) fixture work.
 

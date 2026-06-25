@@ -1,32 +1,44 @@
-# Parallel tracks: compiler (A), libraries/demos (B), docs/website (C)
+# Parallel tracks: compiler (A), libraries/demos (B), C frontend (C), docs (D)
 
 Work streams proceed in parallel, decoupled by a **pinned stable compiler**.
-The point: A can rebuild and temporarily regress the compiler while B keeps
-building libraries and demo apps against a known-good baseline, and C writes the
-public documentation against that same baseline.
+The point: A (Pascal compiler) and C (C frontend) can rebuild and temporarily
+regress the compiler while B keeps building libraries and demo apps against a
+known-good baseline, and D writes the public documentation against that same
+baseline.
+
+> **Track C/D were swapped.** Track **C is now the C frontend** (compiling C
+> source); Track **D is documentation** (`docs/site/**`). Older tickets/commits
+> that tag the C-frontend work `[D]`/`track-d` or docs `[C]`/`track-c` predate the
+> swap — read them by content, not the stale tag.
 
 The user runs **several Claude agents at once** against this same repo/branch —
 one per track. Most sessions are one track.
 
-## Which agent am I? (mode A/B auto-detection)
+## Which agent am I? (auto-detection)
 
 At the start of a session, infer the track from the user's request:
 
-- **Track A — compiler.** Signals: compiler internals, codegen / IR / backends,
-  a target (i386 / aarch64 / arm32 / xtensa / riscv / ESP), parser / lexer /
-  ABI / ELF, bootstrap / self-host / fixedpoint / `make stabilize`, fixing a
-  compiler bug, adding a *language* feature, `compiler/**` files.
+- **Track A — compiler core.** Signals: compiler internals, codegen / IR /
+  backends, a target (i386 / aarch64 / arm32 / xtensa / riscv / ESP), parser /
+  lexer / ABI / ELF, bootstrap / self-host / fixedpoint / `make stabilize`,
+  fixing a compiler bug, adding a *Pascal language* feature, `compiler/**` files
+  (the Pascal frontend, shared IR, backends).
 - **Track B — libraries/demos.** Signals: `lib/rtl` / `lib/pcl`, `examples/**`,
   writing or fixing a *library* (JSON, hashing, `IntToStr`, `Copy`, collections),
   demo apps, `make lib-test` / `make demos`, a ticket tagged "(library)".
-- **Track C — docs/website.** Signals: user documentation, getting-started /
+- **Track C — C frontend.** Signals: compiling **C source**, `compiler/clexer.inc`
+  / `compiler/cparser.inc` / `compiler/cpreproc.inc`, `test/*.c` fixtures,
+  `c-interop-devtest`, the `feat/cfront` branch, the tiny-regex → lua → sqlite
+  path. C-body lowering rides the shared IR → edits the compiler binary like A.
+- **Track D — docs/website.** Signals: user documentation, getting-started /
   install / tutorial / language-reference prose, the website / landing copy,
   `docs/site/**`, "document feature X", "write the docs for". Prose only — no
   code changes.
 
-If the request is genuinely ambiguous, **ask**: "Am I on track A (compiler), B
-(libraries/demos), or C (docs/website) this session?" Don't guess when unsure —
-A/B have opposite rules about rebuilding the compiler, and C must not touch code.
+If the request is genuinely ambiguous, **ask**: "Am I on track A (compiler core),
+B (libraries/demos), C (C frontend), or D (docs/website) this session?" Don't
+guess when unsure — A and C edit the compiler binary (self-host gate), B never
+rebuilds it, and D must not touch code.
 
 Once known, follow that track's section below. Lanes are soft (see the end), so
 crossing over is allowed when a task needs it — but start from the inferred
@@ -115,22 +127,59 @@ miscompiles it, do **not** add compiler-appeasement workarounds to the library.
 Leave the platonic code in place, add/keep the focused test even if it fails, and
 file a Track A bug ticket with the exact compiler error or misbehavior.
 
-## Track C — documentation (user / website)
+## Track C — C frontend (compiling C source)
+
+Owns: the **C-source compilation path** layered onto the same compiler —
+`compiler/clexer.inc` (C lexer), `compiler/cparser.inc` (C parser + body
+lowering), `compiler/cpreproc.inc` (C preprocessor), the `test/*.c` fixtures, and
+the `c-interop-devtest` suite. Worked on the isolated **`feat/cfront`** branch /
+worktree so its in-progress compiler edits don't destabilise `master`.
+
+The leverage: the C frontend emits the **same shared IR** the Pascal frontend
+does, so all six backends, ELF, and the ABI come for free; C `extern` maps onto
+the existing dynamic-link / external-symbol path (`printf`/`malloc`/`fopen`
+resolve to libc). The header-import half (typedef/struct/union/enum, POD layout,
+extern decls, integer macros) is mature; the active work is the **body** half
+(expressions, statements, multi-function, then setjmp/longjmp + varargs-define).
+
+Rules — same compiler-binary discipline as Track A:
+
+- **Gate = `make test` + self-host fixedpoint (byte-identical).** Because C-body
+  lowering goes through the shared IR, a C-frontend change edits the compiler
+  binary; a half-applied one breaks the self-host gate (CRITICAL, like A).
+- **Keep body lowering in the shared IR, not per-target codegen** — cross
+  regressions (i386/arm32/aarch64/riscv32/xtensa) otherwise surface late. Run the
+  multi-target harness, not just x86-64.
+- **Oracle = gcc/tcc stdout-equality** on deterministic int/string output.
+- **The clexer is shared with header import** — collapsed multi-char operators are
+  relied on by `CEvalConstExpr`; update the const-evaluator in the same change.
+  Keep the `->` → `tkDot` mapping. Mind `MAX_UCLASS`/`MAX_UFIELD` pressure (C
+  structs share Pascal's tables; preserve opaque-fallback guards).
+- **Shared-IR touch-points** (e.g. `AN_EXIT`→Halt, a future `AN_TERNARY` /
+  break-only switch scope) are recorded in
+  `track-a-c-frontend-shared-ir-touchpoints` for Track A to reconcile at merge.
+
+North star: compile real portable C — `feature-c-desktop-lua-sqlite-path`
+(tiny-regex warmup → lua → sqlite). Note `library_candidates/` (the staged
+upstream C sources) lives in the **master checkout**, not the `feat/cfront`
+worktree — stage lua/regex there before attempting M1/M4.
+
+## Track D — documentation (user / website)
 
 Owns: `docs/site/**` — the **user-facing** documentation, authored as Markdown and
 **published to the website straight from git** (the site pulls the repo and
 renders `docs/site/`; no separate docs repo, no generated artifacts checked in by
-C). Typical content: getting-started, install, language reference, the standard
+D). Typical content: getting-started, install, language reference, the standard
 library / RTL reference, tutorials, FAQ, and the public landing copy.
 
 Strict boundaries:
 
-- **Prose only. C never edits `compiler/**` or `lib/**`** (or `Makefile` build
+- **Prose only. D never edits `compiler/**` or `lib/**`** (or `Makefile` build
   logic). It does not rebuild the compiler — examples are compiled against
   `$(PXX_STABLE)` to verify they work, nothing more.
 - **Not the internal docs.** `docs/dev/**` (this file, design notes) and
-  `docs/progress/**` (the agent board / tickets) are A/B territory, not website
-  material. C stays in `docs/site/**`.
+  `docs/progress/**` (the agent board / tickets) are A/B/C territory, not website
+  material. D stays in `docs/site/**`.
 - **Verify, don't invent.** Every code snippet in the docs should actually compile
   and run on the pinned compiler — paste real output, don't guess behaviour. A
   doc example is a mini conformance test.
@@ -139,7 +188,7 @@ Strict boundaries:
   `docs/progress/backlog` (tag the track it belongs to) rather than fixing code.
   Document what *is*, note the gap, move on.
 
-C's "gate" is light: internal consistency (no dead links, examples compile), and
+D's "gate" is light: internal consistency (no dead links, examples compile), and
 the published tree under `docs/site/` builds whatever static-site generator the
 website uses (kept generator-agnostic — plain Markdown + front-matter so any of
 mkdocs / Docusaurus / Hugo / a custom puller can render it).
