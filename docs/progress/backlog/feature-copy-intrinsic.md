@@ -35,6 +35,13 @@ single non-generic RTL function cannot express:
 - Keep the lib `strutils.Copy(AnsiString)` working as the interim path; the
   intrinsic supersedes it for the generic cases.
 
+## Track B note (2026-06-25)
+
+The interim AnsiString `Copy` (`lib/rtl/sysutils.pas`) is now `SetLength`+single
+`Move`, not char-by-char append — the optimization this ticket anticipated.
+Behaviour unchanged (`make lib-test` green). Does not affect the Track A intrinsic
+scope above (still needs generics / call-site overload for the dynarray family).
+
 ## Siblings (same reasoning — mention so they aren't re-discovered)
 
 `Delete(s/arr, index, count)`, `Insert(src, dst, index)`, and `Concat(...)` are

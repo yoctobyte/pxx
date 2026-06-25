@@ -212,21 +212,18 @@ begin
 end;
 
 function Copy(const s: AnsiString; index, count: Integer): AnsiString;
-var i, n, last: Integer; r: AnsiString;
+var n, last, len: Integer;
 begin
   n := Length(s);
   if index < 1 then index := 1;
   if count < 0 then count := 0;
   last := index + count - 1;
   if last > n then last := n;
-  r := '';
-  i := index;
-  while i <= last do
-  begin
-    r := r + s[i];
-    i := i + 1;
-  end;
-  Result := r;
+  len := last - index + 1;
+  if len <= 0 then begin Result := ''; Exit; end;
+  { build the result once — SetLength + a single Move, not char-by-char append }
+  SetLength(Result, len);
+  Move(s[index], Result[1], len);
 end;
 
 function Trim(const s: AnsiString): AnsiString;
