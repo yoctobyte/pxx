@@ -396,7 +396,7 @@ end;
   identifier operand to its symbol's size; otherwise a conservative pointer
   size (full expression-type sizing arrives with the type system). }
 function ParseCSizeof: Integer;
-var node, sz, si: Integer; tk: TTypeKind;
+var node, sz, si, depth: Integer; tk: TTypeKind;
 begin
   Next; { sizeof }
   sz := TARGET_PTR_SIZE;
@@ -417,10 +417,20 @@ begin
         else if Syms[si].TypeKind = tyRecord then sz := RecSize(Syms[si].RecName)
         else sz := TypeSize(Syms[si].TypeKind);
       end;
-      while (CurTok.Kind <> tkRParen) and (CurTok.Kind <> tkEOF) do Next;
-    end
-    else
-      while (CurTok.Kind <> tkRParen) and (CurTok.Kind <> tkEOF) do Next;
+    end;
+    { Skip the rest of the operand to the MATCHING `)` — balanced parens, so
+      `sizeof((l)[0])` / `sizeof(a[i])` don't stop at an inner `)`. }
+    depth := 1;
+    while CurTok.Kind <> tkEOF do
+    begin
+      if CurTok.Kind = tkLParen then Inc(depth)
+      else if CurTok.Kind = tkRParen then
+      begin
+        Dec(depth);
+        if depth = 0 then Break;
+      end;
+      Next;
+    end;
     Expect(tkRParen, ')');
   end
   else if CurTok.Kind = tkIdent then
