@@ -4738,12 +4738,16 @@ begin
             if not ((ASTKind[exprNode] = AN_IDENT) or (ASTKind[exprNode] = AN_INDEX) or (ASTKind[exprNode] = AN_FIELD) or
                     (ASTKind[exprNode] = AN_VARREC_ARRAY) or (ASTKind[exprNode] = AN_ARRAY_CTOR)) then
             begin
-              { A `const` record param may bind a non-lvalue temporary (e.g. a
-                function result): the call-arg lowering materializes it into a
-                hidden local and passes its address (FPC behaviour). `var`/`out`
-                still require a true lvalue so write-back has somewhere to land.
-                An array-constructor literal ([...]) is itself the open-array temp. }
-              if not (ProcParamIsConst[procIdx * 16 + i] and (IntToTypeKind(ASTTk[exprNode]) = tyRecord)) then
+              { A record param passed by-ref may bind a non-lvalue temporary (e.g.
+                a function result) when it is `const` OR plain by-value (>8-byte
+                records are passed by-ref only for ABI; the callee copies, so a
+                hidden-local temp is sound). Only a genuine `var`/`out` record
+                (explicitly declared by-ref) still needs a true lvalue for
+                write-back. An array-constructor literal ([...]) is itself the
+                open-array temp. }
+              if not ((IntToTypeKind(ASTTk[exprNode]) = tyRecord) and
+                      (ProcParamIsConst[procIdx * 16 + i] or
+                       not ProcParamExplicitByRef[procIdx * 16 + i])) then
                 Error('by-reference argument must be a variable');
             end;
           end;
@@ -7968,10 +7972,12 @@ begin
             begin
               if not ((ASTKind[exprNode] = AN_IDENT) or (ASTKind[exprNode] = AN_INDEX) or (ASTKind[exprNode] = AN_FIELD)) then
               begin
-                { `const` record param accepts a non-lvalue temporary (FPC) — the
-                  call-arg lowering copies it into a hidden local and passes its
-                  address. `var`/`out` still need a true lvalue. }
-                if not (ProcParamIsConst[procIdx * 16 + i] and (IntToTypeKind(ASTTk[exprNode]) = tyRecord)) then
+                { A `const` OR plain by-value record param accepts a non-lvalue
+                  temporary (>8-byte records are by-ref only for ABI; the callee
+                  copies). Only a genuine `var`/`out` record needs a true lvalue. }
+                if not ((IntToTypeKind(ASTTk[exprNode]) = tyRecord) and
+                        (ProcParamIsConst[procIdx * 16 + i] or
+                         not ProcParamExplicitByRef[procIdx * 16 + i])) then
                   Error('by-reference argument must be a variable');
               end;
             end;
@@ -11591,6 +11597,7 @@ begin
           begin
             if pDynDepth[i] > 0 then ProcParamDynDepth[procIdx * 16 + i] := pDynDepth[i];
             ProcParamIsConst[procIdx * 16 + i] := pconst[i];
+            ProcParamExplicitByRef[procIdx * 16 + i] := pbyref[i];
             ProcParamUntyped[procIdx * 16 + i] := puntyped[i];
             ProcParamHasDefault[procIdx * 16 + i] := pdefault[i];
             ProcParamDefaultVal[procIdx * 16 + i] := pdefaultval[i];
@@ -11722,6 +11729,7 @@ begin
     idx := AllocParam(pnames[i], ptypes[i], pbyref[i], parr[i]);
     Procs[procIdx].Params[i].SymIdx := idx;
     if (procIdx >= 0) and (i < 16) then ProcParamIsConst[procIdx * 16 + i] := pconst[i];
+    if (procIdx >= 0) and (i < 16) then ProcParamExplicitByRef[procIdx * 16 + i] := pbyref[i];
     if (procIdx >= 0) and (i < 16) then ProcParamUntyped[procIdx * 16 + i] := puntyped[i];
     if (procIdx >= 0) and (i < 16) then ProcParamHasDefault[procIdx * 16 + i] := pdefault[i];
     if (procIdx >= 0) and (i < 16) then ProcParamDefaultVal[procIdx * 16 + i] := pdefaultval[i];

@@ -3204,6 +3204,7 @@ begin
   begin
     ProcParamPtrDepth[ProcCount * 16 + i] := 0;
     ProcParamIsConst[ProcCount * 16 + i] := False;
+    ProcParamExplicitByRef[ProcCount * 16 + i] := False;
   end;
   for i := 0 to nParams-1 do
   begin

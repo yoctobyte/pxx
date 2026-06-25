@@ -80,3 +80,32 @@ callee already copies for by-value semantics, so a hidden-local temp is sound.
 `examples/raytracer` declares its vector-input params `const` — which is also the
 idiomatic, more efficient style for non-mutated record inputs, so the demo stays
 platonic. This ticket tracks making the bare by-value form work too.
+
+## Resolution (2026-06-25, v63)
+
+The stated Fix — extend the temporary-materialization allowance to **plain
+by-value** record params — is implemented:
+
+- `defs.inc`: new `ProcParamExplicitByRef[]` records whether a param was declared
+  by-ref at the *source* level (`var`/`out`/`const`), captured before the >8-byte
+  record ABI forces `Params[].IsRef := True`.
+- `symtab.inc`/`parser.inc`: persist it alongside `ProcParamIsConst`.
+- `parser.inc` (both call-arg checks): a `tyRecord` argument temporary is accepted
+  when the param is `const` **or** plain by-value (`not ProcParamExplicitByRef`);
+  a genuine `var`/`out` record still requires a true lvalue (verified: `var`/`out`
+  + temp still error). `IRLowerCallArg`'s `needTemp` path already copies the temp
+  into a hidden local.
+
+Verified end-to-end with **integer** records (`Add(Mk(1,2,3), Mk(10,20,30))` →
+`11 22 33`; nested/mixed temp+named). Regression
+`test/test_byval_record_temp.pas` under `make test`. Self-host byte-identical;
+pinned v63.
+
+> **Caveat — float records still wrong:** while testing the Vec3 (Double) chain I
+> found the values come back **zero** regardless of `const`/by-value/named —
+> because a function returning a record with float fields (≥3 float fields)
+> loses them. That is a **separate, pre-existing codegen ABI bug**, filed as
+> [[bug-float-field-record-function-return]]. So this ticket's done-when #1 (the
+> `z.x = 2.5` Vec3 value) and the raytracer rendering depend on THAT fix; the
+> parse-allowance this ticket asked for is done and correct for working
+> (integer/≤2-float-field) records.
