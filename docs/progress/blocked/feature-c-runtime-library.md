@@ -1,7 +1,9 @@
 # C runtime/library layer (`lib/crtl`) plus direct C-library packages
 
-- **Type:** feature (Track B library / C frontend pressure)
+- **Type:** feature (C frontend / RTL — legitimately Track B library work
+  originally; reassigned to C now that C owns `lib/crtl` and the C runtime)
 - **Status:** blocked
+- **Track:** C (C frontend)
 - **Owner:** — (lock released; last worked by Codex)
 - **Opened:** 2026-06-20
 - **Blocked-by:** feature-c-source-frontend

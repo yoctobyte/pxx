@@ -1,32 +1,42 @@
-# Parallel tracks: compiler (A), libraries/demos (B), docs/website (C)
+# Parallel tracks: compiler (A), libraries/demos (B), C frontend (C), docs/website (D)
 
 Work streams proceed in parallel, decoupled by a **pinned stable compiler**.
 The point: A can rebuild and temporarily regress the compiler while B keeps
-building libraries and demo apps against a known-good baseline, and C writes the
-public documentation against that same baseline.
+building libraries and demo apps against a known-good baseline, D writes the
+public documentation against that same baseline, and C grows the C-language
+frontend on an isolated branch without disturbing any of them.
 
-The user runs **several Claude agents at once** against this same repo/branch —
-one per track. Most sessions are one track.
+The user runs **several Claude agents at once** against this repo — one per
+track. Most sessions are one track. **The track letter is a stable ID; always
+say it with its name** (e.g. "Track C (C frontend)"). The letters were chosen so
+**C = the C language** and **D = documentation** — do not read "Track C" as docs.
 
-## Which agent am I? (mode A/B auto-detection)
+## Which agent am I? (track auto-detection)
 
 At the start of a session, infer the track from the user's request:
 
-- **Track A — compiler.** Signals: compiler internals, codegen / IR / backends,
-  a target (i386 / aarch64 / arm32 / xtensa / riscv / ESP), parser / lexer /
-  ABI / ELF, bootstrap / self-host / fixedpoint / `make stabilize`, fixing a
-  compiler bug, adding a *language* feature, `compiler/**` files.
+- **Track A — compiler (Pascal).** Signals: compiler internals, codegen / IR /
+  backends, a target (i386 / aarch64 / arm32 / xtensa / riscv / ESP), parser /
+  lexer / ABI / ELF, bootstrap / self-host / fixedpoint / `make stabilize`,
+  fixing a compiler bug, adding a *language* feature, `compiler/**` (shared
+  internals). Works on `master`.
 - **Track B — libraries/demos.** Signals: `lib/rtl` / `lib/pcl`, `examples/**`,
   writing or fixing a *library* (JSON, hashing, `IntToStr`, `Copy`, collections),
-  demo apps, `make lib-test` / `make demos`, a ticket tagged "(library)".
-- **Track C — docs/website.** Signals: user documentation, getting-started /
+  demo apps, `make lib-test` / `make demos`, a ticket tagged "(library)". Works
+  on `master`.
+- **Track C — C frontend (cfront).** Signals: the C-language frontend
+  (`compiler/clexer.inc`, `cparser.inc`, `cpreproc.inc`, C-exclusive C→IR
+  lowering), `lib/crtl`, compiling C programs (tiny-regex / lua / sqlite),
+  `feat/cfront`. **Works on a branch in its own worktree**, never `master`.
+- **Track D — docs/website.** Signals: user documentation, getting-started /
   install / tutorial / language-reference prose, the website / landing copy,
   `docs/site/**`, "document feature X", "write the docs for". Prose only — no
-  code changes.
+  code changes. Works on `master`.
 
 If the request is genuinely ambiguous, **ask**: "Am I on track A (compiler), B
-(libraries/demos), or C (docs/website) this session?" Don't guess when unsure —
-A/B have opposite rules about rebuilding the compiler, and C must not touch code.
+(libraries/demos), C (C frontend), or D (docs/website) this session?" Don't guess
+when unsure — the tracks have opposite rules about rebuilding the compiler and
+where they work.
 
 Once known, follow that track's section below. Lanes are soft (see the end), so
 crossing over is allowed when a task needs it — but start from the inferred
@@ -115,22 +125,53 @@ miscompiles it, do **not** add compiler-appeasement workarounds to the library.
 Leave the platonic code in place, add/keep the focused test even if it fails, and
 file a Track A bug ticket with the exact compiler error or misbehavior.
 
-## Track C — documentation (user / website)
+## Track C — C frontend (cfront)
+
+Owns: the **C-language frontend** — `compiler/clexer.inc`, `cparser.inc`,
+`cpreproc.inc`, the C-exclusive C→IR lowering, `lib/crtl` (the C runtime), and C
+tests. Goal: compile real portable C (tiny-regex → lua → sqlite); roadmap in
+`docs/progress/backlog/feature-c-desktop-lua-sqlite-path.md`.
+
+**Works on a branch in its own worktree** — `feat/cfront`, checked out at
+`../frankonpiler-cfront` (`git worktree add ../frankonpiler-cfront -b
+feat/cfront`). **Never on `master`.** Adding/changing the C frontend changes the
+compiler binary (forces a reseed), so it must stay off A/B/D's ground until a
+stable slice deliberately merges.
+
+The load-bearing boundary with Track A:
+
+- **C owns only the C-specific frontend files.** Shared compiler internals — AST
+  node kinds, IR ops, `symtab` structures, `defs.inc`, backend codegen
+  (`ir_codegen*`), ABI, ELF — are **Track A's**.
+- **Need a new AST node / IR op / symtab field / backend change?** → **file a
+  Track A ticket.** A implements it, gates it (`make test` + self-host), and
+  `make pin`s it; C then builds on the pinned compiler. C never edits shared
+  AST/IR/codegen unilaterally — that is precisely what keeps A's self-host gate
+  intact.
+- **Rebase `feat/cfront` on `master` periodically** — C builds the compiler, so
+  it must absorb A's pins and Pascal fixes.
+
+C's gate: C tests green (gcc/tcc stdout-equality oracle) + self-host
+byte-identical + cross-bootstrap. **Merging `feat/cfront` → `master` is a Track A
+event** (the merge changes the compiler → re-pin), coordinated with A — not a
+quiet fast-forward.
+
+## Track D — documentation (user / website)
 
 Owns: `docs/site/**` — the **user-facing** documentation, authored as Markdown and
 **published to the website straight from git** (the site pulls the repo and
 renders `docs/site/`; no separate docs repo, no generated artifacts checked in by
-C). Typical content: getting-started, install, language reference, the standard
+D). Typical content: getting-started, install, language reference, the standard
 library / RTL reference, tutorials, FAQ, and the public landing copy.
 
 Strict boundaries:
 
-- **Prose only. C never edits `compiler/**` or `lib/**`** (or `Makefile` build
+- **Prose only. D never edits `compiler/**` or `lib/**`** (or `Makefile` build
   logic). It does not rebuild the compiler — examples are compiled against
   `$(PXX_STABLE)` to verify they work, nothing more.
 - **Not the internal docs.** `docs/dev/**` (this file, design notes) and
-  `docs/progress/**` (the agent board / tickets) are A/B territory, not website
-  material. C stays in `docs/site/**`.
+  `docs/progress/**` (the agent board / tickets) are A/B/C territory, not website
+  material. D stays in `docs/site/**`.
 - **Verify, don't invent.** Every code snippet in the docs should actually compile
   and run on the pinned compiler — paste real output, don't guess behaviour. A
   doc example is a mini conformance test.
@@ -139,7 +180,7 @@ Strict boundaries:
   `docs/progress/backlog` (tag the track it belongs to) rather than fixing code.
   Document what *is*, note the gap, move on.
 
-C's "gate" is light: internal consistency (no dead links, examples compile), and
+D's "gate" is light: internal consistency (no dead links, examples compile), and
 the published tree under `docs/site/` builds whatever static-site generator the
 website uses (kept generator-agnostic — plain Markdown + front-matter so any of
 mkdocs / Docusaurus / Hugo / a custom puller can render it).
@@ -160,8 +201,11 @@ track's fenced section to avoid collisions.
 
 ## Shared checkout — coordination
 
-Both agents work the **same checkout** on `master` (no worktrees, no clones, per
-the user's repo workflow). To avoid clobbering each other:
+Tracks **A, B, and D share the same checkout** on `master` (no clones).
+**Track C is the exception** — it lives in its own `git worktree`
+(`../frankonpiler-cfront`, branch `feat/cfront`), so it never collides in the
+working tree and only meets the others at a deliberate merge + re-pin. The rules
+below are for the A/B/D shared `master` checkout:
 
 - **Commit early and often, in small units.** Uncommitted edits are the only
   thing the other agent can stomp; committed work is safe.
