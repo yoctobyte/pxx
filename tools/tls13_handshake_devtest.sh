@@ -24,7 +24,7 @@ trap cleanup EXIT INT TERM
 [ -x "$PXX_STABLE" ] || { say "SKIP: no pinned compiler"; exit 0; }
 command -v openssl >/dev/null 2>&1 || { say "SKIP: openssl CLI not found"; exit 0; }
 
-say "=== tls13-handshake-devtest (from-scratch TLS 1.3 client, phase 1) ==="
+say "=== tls13-handshake-devtest (from-scratch TLS 1.3 client, full handshake + GET) ==="
 
 if ! "$PXX_STABLE" -Fu"$ROOT/lib/rtl/platform/posix" \
       "$ROOT/test/devtest_tls13_handshake.pas" "$CLIENT" >/tmp/pxx_tls13_build.log 2>&1; then
