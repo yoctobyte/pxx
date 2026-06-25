@@ -484,11 +484,37 @@ begin
   end;
 end;
 
+{ Procedural-call signature of a node that yields a function-pointer value, or -1.
+  Unwraps `*fnptr` (dereferencing a function pointer yields the same callee) and
+  resolves the signature of a fn-pointer variable or record field. `callee`
+  returns the node whose value is the function address (the var/field itself,
+  never the deref) so `(*p->cb)(args)` calls through `p->cb`. }
+function CNodeProcSig(node: Integer; var callee: Integer): Integer;
+var inner, recId: Integer; fname: AnsiString;
+begin
+  Result := -1; callee := node;
+  if node < 0 then Exit;
+  inner := node;
+  while ASTKind[inner] = AN_DEREF do inner := ASTLeft[inner];
+  callee := inner;
+  if ASTKind[inner] = AN_IDENT then
+    Result := SymProcSig[ASTIVal[inner]]
+  else if ASTKind[inner] = AN_FIELD then
+  begin
+    recId := ResolveNodeRec(ASTLeft[inner]);
+    if recId <> REC_NONE then
+    begin
+      fname := GetTokenStrFromRaw(ASTSOffset[inner], ASTSLen[inner]);
+      Result := RecFieldProcSig(recId, fname);
+    end;
+  end;
+end;
+
 { Postfix layer: a primary optionally followed by `++`/`--`. Array/field/call
   postfix (`[] . -> ()`) arrive with the lvalue increment. }
 function ParseCPostfix: Integer;
 var node, idxExpr, inode, dnode, fnode, baseFld, recId, fldOff, fldLen: Integer;
-    argHead, argTail, argNode, valNode, sig: Integer;
+    argHead, argTail, argNode, valNode, sig, calleeNode2: Integer;
     done: Boolean; fieldName: AnsiString;
 begin
   node := ParseCPrimary;
@@ -563,6 +589,34 @@ begin
       end
       else
         node := fnode;
+    end
+    else if (CurTok.Kind = tkLParen) and (CNodeProcSig(node, calleeNode2) >= 0) then
+    begin
+      { indirect call through a parenthesized/dereferenced fn-pointer value, e.g.
+        `(*g->frealloc)(g->ud, ...)` — lua's allocator idiom. }
+      sig := CNodeProcSig(node, calleeNode2);
+      Next;                                  { consume '(' }
+      argHead := -1; argTail := -1;
+      if CurTok.Kind <> tkRParen then
+        while True do
+        begin
+          valNode := ParseCExpr;
+          argNode := AllocNode(AN_ARG);
+          ASTLeft[argNode] := valNode; ASTRight[argNode] := -1;
+          if argHead = -1 then argHead := argNode
+          else ASTRight[argTail] := argNode;
+          argTail := argNode;
+          if CurTok.Kind = tkComma then begin Next; Continue; end;
+          Break;
+        end;
+      Expect(tkRParen, ')');
+      inode := AllocNode(AN_CALL_IND);
+      ASTLeft[inode]  := argHead;
+      ASTRight[inode] := calleeNode2;
+      ASTIVal[inode]  := sig;
+      ASTTk[inode]    := Ord(Procs[sig].RetType);
+      ASTSLen[inode]  := 0;
+      node := inode;
     end
     else if (CurTok.Kind = tkPlusPlus) or (CurTok.Kind = tkMinusMinus) then
     begin

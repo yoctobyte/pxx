@@ -346,6 +346,8 @@ test-core: $(COMPILER)
 	/tmp/cswitch_b1326; test "$$?" = "3"
 	./$(COMPILER) test/cbuiltin_expect_b14.c /tmp/cbuiltin_expect_b1426
 	/tmp/cbuiltin_expect_b1426; test "$$?" = "5"
+	./$(COMPILER) test/cfnptr_deref_call_b15.c /tmp/cfnptr_deref_call_b1526
+	/tmp/cfnptr_deref_call_b1526; test "$$?" = "42"
 	./$(COMPILER) -Itest/cinc/inc test/cinc/cinc_main.c /tmp/cinc_main26
 	test "$$(/tmp/cinc_main26)" = "$$(printf 'local-ok\ninc-ok')"
 	./$(COMPILER) test/test_declared_directive.pas /tmp/test_declared_directive26
