@@ -50,6 +50,22 @@ writeln('x=[', RAMP[3], ']');   { pascal26: error: unexpected token () }
 Assigning to a temp first (`c := RAMP[3]; writeln(..., c, ...)`) sidesteps the
 parse error but then hits the codegen bug above.
 
+## Discriminator: only string constants, not const arrays
+
+A typed const **array** indexes correctly with both a literal and a variable
+index — so the const-storage + index machinery is fine in general:
+
+```pascal
+const TBL: array[0..4] of Integer = (10,20,30,40,50);
+  i:=2; TBL[i]=30  TBL[2]=30   { both CORRECT }
+const HEX = '0123456789abcdef';
+  HEX[i+1]  { garbage — WRONG }
+```
+
+So the bug is specific to **string-literal constant element access**, not const
+indexing as a whole. Points Track A at the char-from-const-string lowering, not
+the const/index path.
+
 ## Root cause (hypothesis)
 
 A `const s = 'literal'` is folded as a string literal; element access `s[idx]`
