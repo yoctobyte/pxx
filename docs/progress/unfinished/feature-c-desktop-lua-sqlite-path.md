@@ -388,6 +388,16 @@ gap rather than bloating this ticket.
       (lstring.c) down to the exact unexpanded use, then widen. Still likely the
       highest-leverage Track C cluster, but expect a handful of small fixes rather
       than a single feature.
+      - **UPDATE — first two fixed/traced.** (a) Integer literal SUFFIXES
+        (`U/L/UL/LL/ULL`) were never consumed by the C lexer, leaving e.g. `UL` as
+        a dangling identifier that broke const expressions like
+        `(0xffffffffffffffffUL / sizeof(t))` (DONE — clexer consumes the suffix;
+        fixture `test/cint_suffix_b10.c`=42). (b) lstring.c's `cast` failure then
+        traced NOT to the suffix but to real `MAX_SIZET = ((size_t)(~(size_t)0))`
+        — the `~` bitwise-NOT const-eval, already filed as
+        `bug-c-const-eval-bitwise-not` (Track C). So the macro "cluster" is indeed
+        several independent small const-eval/lexer bugs, confirmed. Next: fix
+        `bug-c-const-eval-bitwise-not`, then re-survey.
     - **`__builtin_offsetof`** (lfunc.c) — gcc builtin for `offsetof`; map to a
       compile-time field offset (Track C).
     - **`switch`/`case`** (lgc.c parses `switch` as a call) — Track A (break-only-

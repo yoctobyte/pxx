@@ -336,6 +336,8 @@ test-core: $(COMPILER)
 	/tmp/cstruct_fwd_interleave_b826; test "$$?" = "42"
 	./$(COMPILER) test/cternary_b9.c /tmp/cternary_b926
 	/tmp/cternary_b926; test "$$?" = "37"
+	./$(COMPILER) test/cint_suffix_b10.c /tmp/cint_suffix_b1026
+	/tmp/cint_suffix_b1026; test "$$?" = "42"
 	./$(COMPILER) -Itest/cinc/inc test/cinc/cinc_main.c /tmp/cinc_main26
 	test "$$(/tmp/cinc_main26)" = "$$(printf 'local-ok\ninc-ok')"
 	./$(COMPILER) test/test_declared_directive.pas /tmp/test_declared_directive26

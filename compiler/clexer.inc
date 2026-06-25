@@ -227,6 +227,9 @@ begin
     n := 0;
     while (SrcPos <= Length(Source)) and (Source[SrcPos] in ['0'..'9']) do
       begin n := n * 10 + (Ord(Source[SrcPos]) - 48); Inc(SrcPos); end;
+    { consume an integer suffix (u/U/l/L, e.g. UL/LL/ULL) — else it dangles as a
+      separate identifier token and breaks const expressions like `MAX/sizeof(t)` }
+    while (SrcPos <= Length(Source)) and (Source[SrcPos] in ['u','U','l','L']) do Inc(SrcPos);
     CurTok.Kind := tkInteger; CurTok.IVal := n; Exit;
   end;
 
@@ -251,6 +254,8 @@ begin
       while (SrcPos <= Length(Source)) and (Source[SrcPos] in ['0'..'9']) do
         begin n := n * 10 + (Ord(Source[SrcPos]) - 48); Inc(SrcPos); end;
     end;
+    { consume an integer suffix (u/U/l/L) on hex/octal/decimal-zero literals }
+    while (SrcPos <= Length(Source)) and (Source[SrcPos] in ['u','U','l','L']) do Inc(SrcPos);
     CurTok.Kind := tkInteger; CurTok.IVal := n; Exit;
   end;
 
