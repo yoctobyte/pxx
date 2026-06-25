@@ -44,3 +44,12 @@ to Track A.
 
 Add a `~`-bearing enum to `test/cslicea_lib.c` (`S_NOT = (~0) & 0xFF` → 255)
 once fixed; today it is omitted from the Slice A fixture to keep it green.
+
+## Resolution
+- 2026-06-25 (Track C) — FIXED. `CEvalConstPrimary` `~` path changed from
+  `not CEvalConstPrimary()` (typed boolean by the self-host compiler) to
+  `CEvalConstPrimary() xor (-1)` (bitwise Int64), per the recommended local
+  rewrite. `enum { N0=~0, N5=~5, NM=~0&255 }` now gives -1/-6/255 (= gcc).
+  Self-host byte-identical; fixture `test/cbitnot_b11.c` (=6). The general
+  `not <AN_CALL Int64-result>`=boolean typing quirk is left for the
+  `bug-esp-not-always-boolean` family.

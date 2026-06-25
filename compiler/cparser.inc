@@ -1839,7 +1839,7 @@ begin
   end
   else if CurTok.Kind = tkMinus then begin Next; Result := -CEvalConstPrimary(); end
   else if CurTok.Kind = tkPlus then begin Next; Result := CEvalConstPrimary(); end
-  else if CurTok.Kind = tkNot then begin Next; Result := not CEvalConstPrimary(); end
+  else if CurTok.Kind = tkNot then begin Next; Result := CEvalConstPrimary() xor (-1); end  { ~ : bitwise NOT (xor -1 sidesteps the `not <call>`=boolean typing quirk) }
   else if CurTok.Kind = tkInteger then begin Result := CurTok.IVal; Next; end
   else if CurTok.Kind = tkIdent then
   begin
