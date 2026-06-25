@@ -64,3 +64,21 @@ gaps separately if the platonic implementation needs them.
 - 2026-06-22 — Opened on user request: no-OpenGL ray tracer application, with
   optional math-library dependency and room for simpler math profiles where
   practical.
+- 2026-06-25 — **Landed (Track B):** headless CPU ray tracer at
+  `examples/raytracer/raytracer.pas`. Fixed deterministic scene (3 spheres on a
+  checkerboard plane, point light), ambient + Lambert diffuse + Blinn specular,
+  hard shadows, up to 3 mirror-reflection bounces, sky gradient. `Vec3`/`TSphere`
+  records, dynamic-array scene, recursion for reflections, `math.pas` Sqrt/Power.
+  Modes: no-arg = deterministic SMOKE_W×SMOKE_H render + integer pixel CHECKSUM
+  (EXPECTED=297935246), `--ppm FILE [W H]` = colour PPM (P3). Wired into
+  `make lib-test` (gate, ALL OK) + `make demos`. Cross-target: checksum identical
+  on x86-64 and aarch64 (transcendental Power is deterministic via math.pas).
+  Gaps found while keeping the source platonic:
+  - [[bug-plain-byvalue-record-param-temp]] — plain by-value record param >8B
+    rejects a temp arg (only `const` was fixed). Used `const` vector params
+    (idiomatic anyway) to compose; ticket tracks the bare form.
+  - [[feature-arm32-large-aggregate-result]] — arm32 can't return a 24-byte
+    `Vec3` (sret for >4-word aggregate results). i386 still lacks float params.
+    So the cross gate stays mandelbrot-only.
+  **Still open:** interactive hosted mode (camera orbit/zoom, resize), PNG output
+  once convenient, optional simpler-math profile.

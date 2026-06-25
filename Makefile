@@ -2265,6 +2265,8 @@ lib-test: pxx-stable-check
 	test "$$(/tmp/lib_vmdemo | tail -1)" = "ALL OK"
 	$(PXX_STABLE) examples/mandelbrot/mandelbrot.pas /tmp/lib_mandelbrot
 	test "$$(/tmp/lib_mandelbrot | tail -1)" = "ALL OK"
+	$(PXX_STABLE) examples/raytracer/raytracer.pas /tmp/lib_raytracer
+	test "$$(/tmp/lib_raytracer | tail -1)" = "ALL OK"
 	$(PXX_STABLE) examples/lisp/lispdemo.pas /tmp/lib_lispdemo
 	test "$$(/tmp/lib_lispdemo | tail -1)" = "ALL OK"
 	$(PXX_STABLE) test/lib_zlib.pas /tmp/lib_zlib
@@ -2334,7 +2336,7 @@ lib-test: pxx-stable-check
 	$(PXX_STABLE) -Fulib/rtl test/lib_paths.pas /tmp/lib_paths
 	test "$$(/tmp/lib_paths | grep -c '=ok')" = "14"
 	test "$$(/tmp/lib_paths | grep -c 'FAIL')" = "0"
-	@echo "lib-test ok (sudoku exact + collections + math + sysutils + random + bitset + platform + directory + bignum + json + calc + sat + mathf + vm + mandelbrot + lisp + zlib + png smoke + ansiterm + ansirender + process + process-multi + dynlibs + unixshims + strpchar + sockets + http + http-async + http-redirect + http-keepalive + http-pool + dns-async + classes + strutil + streams + format + paths) against stable v$$(cat $(STABLE_DEFAULT_DIR)/VERSION 2>/dev/null || echo '?')"
+	@echo "lib-test ok (sudoku exact + collections + math + sysutils + random + bitset + platform + directory + bignum + json + calc + sat + mathf + vm + mandelbrot + raytracer + lisp + zlib + png smoke + ansiterm + ansirender + process + process-multi + dynlibs + unixshims + strpchar + sockets + http + http-async + http-redirect + http-keepalive + http-pool + dns-async + classes + strutil + streams + format + paths) against stable v$$(cat $(STABLE_DEFAULT_DIR)/VERSION 2>/dev/null || echo '?')"
 
 # Full Track-B library suite, distinct from compiler `make test`.
 library-suite-green: pxx-stable-check
@@ -2359,6 +2361,7 @@ demos: pxx-stable-check
 	    examples/maze/maze.pas examples/bignum/factorial.pas examples/bignum/bigmath.pas \
 	    examples/json/jsondemo.pas examples/calc/calcdemo.pas examples/sat/satdemo.pas \
 	    examples/mathf/mathdemo.pas examples/vm/vmdemo.pas examples/mandelbrot/mandelbrot.pas examples/lisp/lispdemo.pas \
+	    examples/raytracer/raytracer.pas \
 	    examples/chess/chess.pas examples/adventure/adventure.pas \
 	    examples/life/life.pas examples/player/player.pas examples/fm/fm.pas \
 	    examples/gl/triangle.pas; do \

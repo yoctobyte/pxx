@@ -28,7 +28,7 @@ _none_
 | --- | --- | --- | --- | --- |
 | feature-c-runtime-library | B | feature | C runtime/library layer (`lib/crtl`) plus direct C-library packages | feature-c-source-frontend |
 
-## backlog (56)
+## backlog (58)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -37,6 +37,7 @@ _none_
 | bug-generic-class-methods-in-program | A | bug | Generic class METHOD bodies break in a program (work in a unit) | — |
 | bug-managed-length-via-pointer-deref | A | bug | bug: managed Length(ps^) / Length(rec.pf^) returns garbage (all targets) | — |
 | bug-pchar-to-string-implicit-conv | A | bug | PChar → string implicit conversion missing in call args (and assignment helper) | — |
+| bug-plain-byvalue-record-param-temp | A | bug | Plain (non-`const`) by-value record param >8B rejects a temporary argument | — |
 | bug-pointer-deref-not-accepted-as-var-arg | A | bug | A pointer dereference `p^` is rejected as a `var`/by-ref argument | — |
 | bug-setlength-record-field-via-var-param | A | bug | SetLength on a record string/array field via a `var` parameter fails codegen | — |
 | bug-string-const-index-and-typed-init | A | bug | Untyped string const indexing yields garbage; typed string const initializer won't parse | — |
@@ -44,6 +45,7 @@ _none_
 | bug-virtual-keyword-name-result | A | bug | Bare own-name result of a VIRTUAL intrinsic-named method miscompiles | — |
 | chore-inc-to-units | A | chore | `.inc` → real `.pas` units refactor | — |
 | chore-runtime-emission-size | A | chore | Finer runtime-support emission (code size) | — |
+| feature-arm32-large-aggregate-result | A | feature | arm32: support record function results larger than 4 param words (sret) | — |
 | feature-c-header-import-complex | A | feature | Import C headers for complex libraries (glib/GTK-grade) | — |
 | feature-copy-intrinsic | B | feature | `Copy` as a generic overloaded intrinsic (string + dynarray families) | — |
 | feature-c-regex-library-devtest | A | feature | C regex library dev-test import | — |
@@ -405,6 +407,7 @@ _none_
 - [A] bug-generic-class-methods-in-program
 - [A] bug-managed-length-via-pointer-deref
 - [A] bug-pchar-to-string-implicit-conv
+- [A] bug-plain-byvalue-record-param-temp
 - [A] bug-pointer-deref-not-accepted-as-var-arg
 - [A] bug-setlength-record-field-via-var-param
 - [A] bug-string-const-index-and-typed-init
@@ -412,6 +415,7 @@ _none_
 - [A] bug-virtual-keyword-name-result
 - [A] chore-inc-to-units
 - [A] chore-runtime-emission-size
+- [A] feature-arm32-large-aggregate-result
 - [A] feature-c-header-import-complex
 - [B] feature-copy-intrinsic
 - [A] feature-c-regex-library-devtest
