@@ -148,14 +148,32 @@ function HttpPostAsync(const url, contentType, body: AnsiString): THttpResponse;
 { Async GET following up to maxRedirects 3xx Location hops (absolute URLs). }
 function HttpGetFollowAsync(const url: AnsiString; maxRedirects: Integer): THttpResponse;
 
-{ --- async connection pool ---
-  HttpGetPooledAsync transparently reuses a live keep-alive connection to the
-  same host:port from a process-global pool, opening a fresh one only when none
-  is available (then keeping it for next time). Single-flow (coroutine) use only
-  — not concurrency-safe across simultaneously-running coroutines. HttpPoolClose
-  closes and drops every pooled connection. }
+{ --- connection pool (concurrency-safe across coroutines) ---
+  HttpGetPooled / HttpGetPooledAsync transparently reuse a live keep-alive
+  connection to the same host:port:scheme from a process-global pool, opening a
+  fresh one only when no free one is available (then keeping it for next time).
+  Each in-flight request reserves its slot (InUse), so two coroutines hitting the
+  same host never share a socket; exec runs on a local copy written back by slot
+  index, so another coroutine's pool growth can't dangle a `var` across a reactor
+  yield. HttpPoolClose closes and drops every pooled connection. }
+function HttpGetPooled(const url: AnsiString): THttpResponse;
 function HttpGetPooledAsync(const url: AnsiString): THttpResponse;
 procedure HttpPoolClose;
+
+{ Idle eviction: close every free (not-InUse) connection idle for >= maxIdleMs
+  (monotonic). Call periodically from the reactor flow. }
+procedure HttpPoolEvictIdle(maxIdleMs: Int64);
+{ Number of live (still-open) pooled connections — observability / tests. }
+function HttpPoolCount: Integer;
+
+{ Explicit acquire/exec/release — pin one connection across several requests,
+  concurrency-safe. Acquire reserves a live free slot (or opens fresh), returning
+  a slot handle (>= 0) or -1 on connect failure. Exec sends one keep-alive
+  request on the handle. Release frees the slot (closing it if it died). }
+function HttpPoolAcquire(const host: AnsiString; port: Integer; isTls, async: Boolean): Integer;
+function HttpPoolSlotExec(handle: Integer;
+  const method, path, extraHeaders, body: AnsiString; async: Boolean): THttpResponse;
+procedure HttpPoolReleaseSlot(handle: Integer);
 
 implementation
 
@@ -1001,49 +1019,129 @@ begin
   end;
 end;
 
+type
+  THttpPoolSlot = record
+    Conn:     THttpConnection;
+    InUse:    Boolean;       { reserved by an in-flight request — never shared }
+    LastUsed: Int64;         { PalMonotonicMillis at last release — idle eviction }
+  end;
 var
-  gPool: array of THttpConnection;
+  gPool: array of THttpPoolSlot;
 
-function HttpPoolFind(const host: AnsiString; port: Integer; isTls: Boolean): Integer;
+{ Reserve a free, live slot to host:port:scheme (mark InUse). -1 if none free. }
+function HttpPoolReserve(const host: AnsiString; port: Integer; isTls: Boolean): Integer;
 var i: Integer;
 begin
   Result := -1;
   for i := 0 to Length(gPool) - 1 do
-    if gPool[i].Alive and (gPool[i].Port = port) and (gPool[i].Host = host)
-       and (gPool[i].IsTls = isTls) then
-    begin Result := i; Exit; end;
+    if (not gPool[i].InUse) and gPool[i].Conn.Alive
+       and (gPool[i].Conn.Port = port) and (gPool[i].Conn.Host = host)
+       and (gPool[i].Conn.IsTls = isTls) then
+    begin
+      gPool[i].InUse := True;
+      Result := i; Exit;
+    end;
 end;
 
-function HttpGetPooledAsync(const url: AnsiString): THttpResponse;
-var
-  host, path: AnsiString;
-  port, idx, n: Integer;
-  isTls: Boolean;
+function HttpPoolAcquire(const host: AnsiString; port: Integer; isTls, async: Boolean): Integer;
+var idx, i, n: Integer; c: THttpConnection;
+begin
+  idx := HttpPoolReserve(host, port, isTls);     { a live free slot, now InUse }
+  if idx >= 0 then begin Result := idx; Exit; end;
+
+  if async then c := HttpConnectAsync(host, port, isTls)
+  else           c := HttpConnect(host, port, isTls);
+  if not c.Alive then begin HttpConnClose(c); Result := -1; Exit; end;
+
+  { park the fresh connection in a dead free slot, else append — reserved InUse }
+  for i := 0 to Length(gPool) - 1 do
+    if (not gPool[i].InUse) and (not gPool[i].Conn.Alive) then
+    begin
+      gPool[i].Conn := c; gPool[i].InUse := True;
+      gPool[i].LastUsed := PalMonotonicMillis;
+      Result := i; Exit;
+    end;
+  n := Length(gPool);
+  SetLength(gPool, n + 1);            { gPool is a global — SetLength OK }
+  gPool[n].Conn := c; gPool[n].InUse := True;
+  gPool[n].LastUsed := PalMonotonicMillis;
+  Result := n;
+end;
+
+function HttpPoolSlotExec(handle: Integer;
+  const method, path, extraHeaders, body: AnsiString; async: Boolean): THttpResponse;
+var c: THttpConnection;
+begin
+  Result.Ok := False; Result.Status := 0; Result.Reason := '';
+  Result.Headers := ''; Result.Body := '';
+  if (handle < 0) or (handle >= Length(gPool)) then Exit;
+  c := gPool[handle].Conn;             { local copy — survives a reactor yield even
+                                         if another coroutine grows gPool }
+  Result := HttpConnExecCore(c, method, path, extraHeaders, body, async);
+  gPool[handle].Conn := c;             { write the updated state back by index }
+  gPool[handle].LastUsed := PalMonotonicMillis;
+end;
+
+procedure HttpPoolReleaseSlot(handle: Integer);
+begin
+  if (handle < 0) or (handle >= Length(gPool)) then Exit;
+  if not gPool[handle].Conn.Alive then
+    HttpConnClose(gPool[handle].Conn);  { dead — free the fd; slot reusable }
+  gPool[handle].InUse := False;
+  gPool[handle].LastUsed := PalMonotonicMillis;
+end;
+
+function HttpGetPooledCore(const url: AnsiString; async: Boolean): THttpResponse;
+var host, path: AnsiString; port, h: Integer; isTls: Boolean;
 begin
   Result.Ok := False; Result.Status := 0; Result.Reason := '';
   Result.Headers := ''; Result.Body := '';
   if not HttpParseUrl(url, host, port, path, isTls) then Exit;
 
-  { reuse a live connection to this host:port(:scheme) if one is pooled }
-  idx := HttpPoolFind(host, port, isTls);
-  if idx >= 0 then
-  begin
-    Result := HttpConnExecCore(gPool[idx], 'GET', path, '', '', True);
-    if Result.Ok then Exit;          { reused successfully }
-    { else the connection had died — leave it (Alive=False, skipped) and open a fresh one }
-  end;
+  h := HttpPoolAcquire(host, port, isTls, async);
+  if h < 0 then Exit;                  { connect failed }
+  Result := HttpPoolSlotExec(h, 'GET', path, '', '', async);
 
-  n := Length(gPool);
-  SetLength(gPool, n + 1);            { gPool is a global — SetLength OK }
-  gPool[n] := HttpConnectAsync(host, port, isTls);
-  Result := HttpConnExecCore(gPool[n], 'GET', path, '', '', True);
+  { a pooled connection the server had silently dropped: retry once, fresh }
+  if (not Result.Ok) and (not gPool[h].Conn.Alive) then
+  begin
+    HttpPoolReleaseSlot(h);            { closes the dead one, frees the slot }
+    h := HttpPoolAcquire(host, port, isTls, async);   { opens fresh (dead skipped) }
+    if h < 0 then Exit;
+    Result := HttpPoolSlotExec(h, 'GET', path, '', '', async);
+  end;
+  HttpPoolReleaseSlot(h);
+end;
+
+function HttpGetPooled(const url: AnsiString): THttpResponse;
+begin Result := HttpGetPooledCore(url, False); end;
+
+function HttpGetPooledAsync(const url: AnsiString): THttpResponse;
+begin Result := HttpGetPooledCore(url, True); end;
+
+procedure HttpPoolEvictIdle(maxIdleMs: Int64);
+var i: Integer; now: Int64;
+begin
+  now := PalMonotonicMillis;
+  for i := 0 to Length(gPool) - 1 do
+    if (not gPool[i].InUse) and gPool[i].Conn.Alive
+       and ((now - gPool[i].LastUsed) >= maxIdleMs) then
+      HttpConnClose(gPool[i].Conn);   { mark dead; the slot is reused later }
+end;
+
+function HttpPoolCount: Integer;
+var i: Integer;
+begin
+  Result := 0;
+  for i := 0 to Length(gPool) - 1 do
+    if gPool[i].Conn.Alive then Inc(Result);
 end;
 
 procedure HttpPoolClose;
 var i: Integer;
 begin
   for i := 0 to Length(gPool) - 1 do
-    HttpConnClose(gPool[i]);
+    HttpConnClose(gPool[i].Conn);
   SetLength(gPool, 0);
 end;
 

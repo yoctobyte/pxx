@@ -109,10 +109,27 @@ response record carrying a `THttpHeaders` field (dodges
 `HttpParseHeaders` / `HttpHeaderValue`. `lib_http` now 49 checks (3 added:
 `resp-hdrs-count` / `resp-hdr-ci` / `resp-hdr-absent`).
 
+## Concurrency-safe pool (landed 2026-06-25)
+
+The keep-alive pool is now concurrency-safe across coroutines. Each in-flight
+request **reserves** its slot (`InUse`), so two coroutines hitting the same
+host:port never share a socket; exec runs on a **local copy of the connection
+written back by slot index** (`HttpPoolSlotExec`), so another coroutine growing
+the global pool (`SetLength`) can't dangle a `var` held across a reactor yield —
+the original single-flow-only bug. New API: explicit `HttpPoolAcquire` /
+`HttpPoolSlotExec` / `HttpPoolReleaseSlot` (pin a connection across requests),
+blocking `HttpGetPooled` (shares `HttpGetPooledCore` with the async path; auto
+one-shot retry on a fresh conn if a pooled socket was silently dropped),
+`HttpPoolEvictIdle(maxIdleMs)` (close free conns idle past a monotonic
+threshold), `HttpPoolCount` (live-conn observability). e2e
+`test/lib_http_pool_concurrent`: two client coroutines GET the SAME host:port at
+once → server must accept TWICE (proves no socket sharing); then count=2 →
+`HttpPoolEvictIdle(0)` → count=0. `make lib-test` green.
+
 ## Roadmap (next slices)
 
-1. Concurrency-safe pool (per-coroutine acquire/release) + a blocking
-   `HttpGetPooled`; pool eviction/idle-timeout.
+1. ~~Concurrency-safe pool + blocking `HttpGetPooled` + eviction/idle-timeout~~
+   — **landed 2026-06-25** (above). Remaining: per-host pool size cap.
 2. ~~Structured headers on `THttpResponse`~~ — **landed 2026-06-25** (above).
 3. **TLS** — seam + http routing **landed 2026-06-25**: `https://` now goes
    through the common TLS seam [[feature-tls-provider-abstraction]]
