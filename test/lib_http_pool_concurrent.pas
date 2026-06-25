@@ -7,8 +7,10 @@ program lib_http_pool_concurrent;
   connection. The server proves this by accepting TWICE — if the pool had shared
   one socket, the second accept would never return and the test would hang/fail.
 
-  Then: HttpPoolCount sees both live connections; HttpPoolEvictIdle(0) closes the
-  now-idle ones; the count drops to 0. }
+  Per-host cap = 1: both clients still open their own socket while in flight (the
+  server accepts twice), but as they release, the second conn over the cap is
+  closed rather than pooled — so only ONE live conn remains. HttpPoolEvictIdle(0)
+  then closes it; the count drops to 0. }
 uses scheduler, asyncnet, http;
 
 const PORT = 28811;
@@ -54,12 +56,13 @@ end;
 var countLive, countEvicted: Integer;
 begin
   gAccepts := 0; gBody1 := ''; gBody2 := ''; gServerDone := False;
+  HttpPoolSetMaxPerHost(1);                { keep at most one idle conn per host }
   Spawn(@ServerCo, nil);
   Spawn(@Client1Co, nil);
   Spawn(@Client2Co, nil);
   RunUntilDone;
 
-  countLive := HttpPoolCount;             { both connections pooled, live }
+  countLive := HttpPoolCount;             { cap=1 → only one conn kept }
   HttpPoolEvictIdle(0);                    { idle >= 0ms → close every free conn }
   countEvicted := HttpPoolCount;
   HttpPoolClose;
@@ -68,6 +71,6 @@ begin
   SayBool('two-accepts', gAccepts = 2);    { proves the two clients did NOT share }
   SayBool('body1', gBody1 = 'hey');
   SayBool('body2', gBody2 = 'hey');
-  SayBool('count-live', countLive = 2);
+  SayBool('count-capped', countLive = 1);  { per-host cap trimmed the extra }
   SayBool('count-after-evict', countEvicted = 0);
 end.

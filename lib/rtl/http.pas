@@ -165,6 +165,9 @@ procedure HttpPoolClose;
 procedure HttpPoolEvictIdle(maxIdleMs: Int64);
 { Number of live (still-open) pooled connections — observability / tests. }
 function HttpPoolCount: Integer;
+{ Per-host:port:scheme cap on idle pooled connections (0 = unlimited). On release
+  a connection beyond the cap is closed rather than kept. }
+procedure HttpPoolSetMaxPerHost(n: Integer);
 
 { Explicit acquire/exec/release — pin one connection across several requests,
   concurrency-safe. Acquire reserves a live free slot (or opens fresh), returning
@@ -1027,6 +1030,12 @@ type
   end;
 var
   gPool: array of THttpPoolSlot;
+  gMaxPerHost: Integer;          { 0 = unlimited (BSS-zeroed default) }
+
+procedure HttpPoolSetMaxPerHost(n: Integer);
+begin
+  gMaxPerHost := n;
+end;
 
 { Reserve a free, live slot to host:port:scheme (mark InUse). -1 if none free. }
 function HttpPoolReserve(const host: AnsiString; port: Integer; isTls: Boolean): Integer;
@@ -1082,13 +1091,28 @@ begin
   gPool[handle].LastUsed := PalMonotonicMillis;
 end;
 
+{ Count free (not-InUse) live conns to the same host:port:scheme as slot h. }
+function HttpPoolFreeToHost(h: Integer): Integer;
+var i: Integer;
+begin
+  Result := 0;
+  for i := 0 to Length(gPool) - 1 do
+    if (not gPool[i].InUse) and gPool[i].Conn.Alive
+       and (gPool[i].Conn.Port = gPool[h].Conn.Port)
+       and (gPool[i].Conn.Host = gPool[h].Conn.Host)
+       and (gPool[i].Conn.IsTls = gPool[h].Conn.IsTls) then
+      Inc(Result);
+end;
+
 procedure HttpPoolReleaseSlot(handle: Integer);
 begin
   if (handle < 0) or (handle >= Length(gPool)) then Exit;
-  if not gPool[handle].Conn.Alive then
-    HttpConnClose(gPool[handle].Conn);  { dead — free the fd; slot reusable }
   gPool[handle].InUse := False;
   gPool[handle].LastUsed := PalMonotonicMillis;
+  if not gPool[handle].Conn.Alive then
+    HttpConnClose(gPool[handle].Conn)   { dead — free the fd; slot reusable }
+  else if (gMaxPerHost > 0) and (HttpPoolFreeToHost(handle) > gMaxPerHost) then
+    HttpConnClose(gPool[handle].Conn);  { over the per-host cap — don't keep it }
 end;
 
 function HttpGetPooledCore(const url: AnsiString; async: Boolean): THttpResponse;

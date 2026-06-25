@@ -121,15 +121,18 @@ the original single-flow-only bug. New API: explicit `HttpPoolAcquire` /
 blocking `HttpGetPooled` (shares `HttpGetPooledCore` with the async path; auto
 one-shot retry on a fresh conn if a pooled socket was silently dropped),
 `HttpPoolEvictIdle(maxIdleMs)` (close free conns idle past a monotonic
-threshold), `HttpPoolCount` (live-conn observability). e2e
-`test/lib_http_pool_concurrent`: two client coroutines GET the SAME host:port at
-once → server must accept TWICE (proves no socket sharing); then count=2 →
+threshold), `HttpPoolCount` (live-conn observability), and
+`HttpPoolSetMaxPerHost(n)` (cap idle conns per host:port:scheme; over-cap conns
+are closed on release instead of pooled). e2e `test/lib_http_pool_concurrent`:
+two client coroutines GET the SAME host:port at once → server must accept TWICE
+(proves no socket sharing); with cap=1 only one conn is kept (count=1) →
 `HttpPoolEvictIdle(0)` → count=0. `make lib-test` green.
 
 ## Roadmap (next slices)
 
 1. ~~Concurrency-safe pool + blocking `HttpGetPooled` + eviction/idle-timeout~~
-   — **landed 2026-06-25** (above). Remaining: per-host pool size cap.
+   — **landed 2026-06-25** (above), including per-host pool size cap
+   (`HttpPoolSetMaxPerHost`).
 2. ~~Structured headers on `THttpResponse`~~ — **landed 2026-06-25** (above).
 3. **TLS** — seam + http routing **landed 2026-06-25**: `https://` now goes
    through the common TLS seam [[feature-tls-provider-abstraction]]
