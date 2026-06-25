@@ -8,6 +8,30 @@
   (the common TLS seam); the OpenSSL backend is the co-equal default. The `https`
   half of [[feature-own-net-http-lib]].
 
+## STATUS (2026-06-25) — a working from-scratch TLS 1.3 client exists
+
+M1–M7 are implemented and tested. A from-scratch, library-free Pascal client does
+a **real, server-authenticated https GET** against `openssl s_server -tls1_3`
+(`make tls13-handshake-devtest`): ClientHello → ServerHello → X25519 ECDHE → key
+schedule → decrypt the server flight → verify **CertificateVerify** + the cert
+**chain** (issuer/sig/validity/hostname) + the server **Finished** → client
+Finished → app keys → GET → decrypt `200`. Both the **kTLS-TX** offload (when the
+`tls` module is loaded) and the **Pascal record layer** baseline are exercised.
+
+Library units (all in `lib/rtl`, all gated in `make lib-test` unless noted):
+`sha256` (+HMAC/HKDF), `sha512`, `chacha20poly1305`, `aesgcm`, `x25519`, `rsa`,
+`ed25519`, `ecdsa_p256` (slow, gated), `x509`, `tls13_keys`, `tls13_record`,
+`tls13_hs`, `tls13_ktls`. Handshake driver: `test/devtest_tls13_handshake.pas`
+(non-hermetic devtest, needs openssl; not in the gate).
+
+**Next steps (each its own slice):** [[feature-tls-system-trust-store]]
+(`/etc/ssl/certs` anchoring) · RSA-PSS + ECDSA `CertificateVerify` scheme dispatch
+· kTLS RX (control-record `recvmsg`) · ciphersuite negotiation / HelloRetryRequest
+/ session tickets · ESP `not`-on-int Boolean variant (sis's
+`bug-esp-not-always-boolean` — the x86-64 `not` reverts don't apply on ESP).
+Workaround/undo state for the codegen bugs hit along the way is in
+[[track-b-workarounds]].
+
 ## Scope decision (2026-06-24)
 
 **Target: POSIX/Linux only.** This from-scratch stack is *our* TLS for the
@@ -162,8 +186,9 @@ HTTP client); server-side later if wanted.
   link + signature + validity + hostname), `X509ValidAt`, `X509HostMatch` (SAN
   dNSName, case-insensitive, single `*.` wildcard). `lib_x509` now also validates
   a real CA→leaf chain (issuer link, SAN exact/wildcard/reject, expired-reject,
-  badhost-reject, chain-ok; 12 checks). **Remaining:** loading the system trust
-  store (`/etc/ssl/certs`) for the trust anchor — wired in at M6.
+  badhost-reject, chain-ok; 12 checks). Parse + chain validation **done**; the
+  only M5 remainder — loading the system trust store (`/etc/ssl/certs`) for the
+  trust anchor — is its own ticket [[feature-tls-system-trust-store]].
 - M6 **key schedule done (2026-06-25):** `lib/rtl/tls13_keys.pas` —
   HKDF-Expand-Label, Derive-Secret, the Early/Handshake/Master secret chain, and
   traffic key/iv derivation (RFC 8446 §7.1), verified byte-for-byte against the
@@ -181,11 +206,18 @@ HTTP client); server-side later if wanted.
   Certificate, CertificateVerify, Finished) → **verify the server Finished MAC**
   → send the client Finished → derive application keys → send an HTTP GET → and
   **decrypt the `HTTP/1.0 200 ok` response**. The whole M1–M6 stack interoperates
-  with OpenSSL end to end. **Remaining hardening:** verify the certificate chain
-  (M5) + the CertificateVerify signature (M4) inside the handshake (the units
-  exist; the minimal client currently trusts the server Finished, which proves
-  key-schedule correctness but not cert binding). Ciphersuite negotiation,
-  HelloRetryRequest, and session tickets are also out of this minimal client.
+  with OpenSSL end to end. **Server authentication now wired (2026-06-25):** the
+  client verifies the **CertificateVerify** signature (Ed25519) over the
+  transcript AND the certificate **chain** (`X509VerifyChain`: issuer-name link +
+  leaf signature under the CA + validity dates + SAN hostname), refusing the
+  connection if either fails — verified vs `openssl s_server` (`certverify=ok` +
+  `chain-verified=ok`). The trusted CA is read from a **file** (`PalOpen`/
+  `PalRead`), not argv (long-argv corruption landmine, see [[track-b-workarounds]]).
+  **Remaining hardening:** chain-to-system-trust-store
+  ([[feature-tls-system-trust-store]]) instead of a passed CA; RSA-PSS + ECDSA
+  `CertificateVerify` scheme dispatch (M4 RSA-PKCS1/ECDSA/Ed25519 exist, RSA-PSS
+  not yet); kTLS RX offload (control-record `recvmsg`); ciphersuite negotiation,
+  HelloRetryRequest, session tickets.
 - M6 TLS 1.3 handshake state machine → a real `https://` GET (Pascal record
   layer); verify against a public host.
 - M7 (optional) kTLS offload for app-data throughput. **Done + verified
