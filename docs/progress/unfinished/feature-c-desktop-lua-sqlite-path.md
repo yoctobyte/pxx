@@ -24,6 +24,20 @@
   gap to isolate), 1 `expected C expression`. NEXT: pick off the `unexpected
   token` tail incrementally (Track C), isolate the 2 IR-codegen gaps, then
   `setjmp`/`longjmp` (Track A) + multi-file linking for an actual lua build.
+- 2026-06-25 (final survey) — **the remaining lua blockers are now predominantly
+  CROSS-TRACK, not Track C.** With the type system fixed, the `call to undeclared
+  function` cluster resolves to: (a) **libc functions with no crtl declaration** —
+  `fabs`/`frexp` (there is NO `lib/crtl/include/math.h` at all), `strerror`
+  (string.h doesn't declare it), `fwrite`, `system`, `signal`. Growing the crtl
+  header/library surface is **Track B** (`lib/crtl/**`, the M2 milestone). (b) a
+  few residual macro re-scan bugs (`cast`/`cast_byte`/`novariant` — Track C, deep
+  and context-dependent). The other big remaining gates — **`setjmp`/`longjmp`**
+  (codegen; `compiler/exception_emit.inc` has the Pascal exception path but C
+  setjmp/longjmp is unverified) and **multi-file linking** — are **Track A** /
+  infrastructure. CONCLUSION: Track C has been pushed about as far as it can take
+  lua ALONE; reaching a working lua build now needs Track B (libc surface) and
+  Track A (setjmp) in tandem, plus the residual Track C parse tail (16
+  `unexpected token`, diagnosable via the new `near:` locator).
 - 2026-06-25 (even later) — **recursive `#if` macro expansion fixed (0fa88d1) —
   foundational.** `#if` evaluated a macro atom by reading its body as a literal
   number, so a chained object macro resolved wrong: lua's
