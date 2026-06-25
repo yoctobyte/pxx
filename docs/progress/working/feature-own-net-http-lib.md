@@ -229,6 +229,17 @@ few lines. e2e `test/lib_http_serve`: a handler routes on `req.Path`/`req.Query`
 client makes two keep-alive requests (second echoes a query string). `make
 lib-test` green.
 
+## JSON-over-HTTP (landed 2026-06-25)
+
+New `lib/rtl/httpjson.pas` (separate unit so plain HTTP users don't pull JSON):
+`HttpGetJson`/`HttpPostJson` + async `HttpGetJsonAsync`/`HttpPostJsonAsync` —
+fetch/post and parse the body as JSON via the `json` codec, returning the parsed
+`TJSONValue` tree (caller frees) with an `ok` flag (False on transport failure or
+non-JSON body). Plus `JsonParseSafe` (swallows `EJSONError` → ok=False). e2e
+`test/lib_httpjson`: a loopback server returns `{"name":"frank","age":2}`, the
+client fetches with `HttpGetJsonAsync` and reads typed fields; pure
+`JsonParseSafe` good/malformed. `make lib-test` green.
+
 ## Roadmap (next slices)
 
 1. ~~Concurrency-safe pool + blocking `HttpGetPooled` + eviction/idle-timeout~~
