@@ -8,17 +8,17 @@ lives in git, not in a timestamp._
 
 _none_
 
-## working (2)
+## working (1)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
-| feature-c-desktop-lua-sqlite-path | A | feature | C desktop path — compile real portable C (tiny-regex → lua → sqlite) | — |
 | feature-own-net-http-lib | B | feature | Own networking library — native HTTP client (+ sockets, async) | — |
 
-## unfinished (3)
+## unfinished (4)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
+| feature-c-desktop-lua-sqlite-path | A+B | feature | C desktop path — compile real portable C (tiny-regex → lua → sqlite) | — |
 | feature-eliah-ide | B | feature | Eliah / Ilja — single-window IDE (GUI + TUI) | — |
 | feature-eliah-m0-window | B | feature | Eliah M0 — single tiled GTK3 window | — |
 | feature-eliah-pane-collapse | B | feature | feature: Eliah pane collapse/restore + ratio memory | feature-eliah-layout-tree |
