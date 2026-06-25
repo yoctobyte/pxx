@@ -160,6 +160,16 @@ checks: the RFC vectors `f`/`fo`/`foo`/…/`foobar`, padding, whitespace, a full
 line for the `extraHeaders` arg of `HttpExec`/`HttpConnExec` (`lib_http` +1,
 `basic-auth`). `make lib-test` green.
 
+## multipart/form-data builder (landed 2026-06-25)
+
+`http.pas` pure builder for file/field uploads: `HttpMultipartBoundary` (unique
+per call), `HttpMultipartContentType(boundary)` (the header line for
+`extraHeaders`), `HttpMultipartField`/`HttpMultipartFile` (one RFC 7578 part
+each), `HttpMultipartEnd`. Caller concatenates parts and POSTs via `HttpExec`.
+`lib_http` +5 (`mp-ctype`/`mp-field`/`mp-file`/`mp-end`/`mp-boundary-uniq`, with
+a fixed boundary for deterministic byte assertions). Pure, no I/O. `make
+lib-test` green.
+
 ## Roadmap (next slices)
 
 1. ~~Concurrency-safe pool + blocking `HttpGetPooled` + eviction/idle-timeout~~

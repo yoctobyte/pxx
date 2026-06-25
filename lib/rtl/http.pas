@@ -97,6 +97,20 @@ function HttpUrlDecode(const s: AnsiString): AnsiString;
   application/x-www-form-urlencoded bodies. }
 function HttpQueryAdd(const q, name, value: AnsiString): AnsiString;
 
+{ --- multipart/form-data builder (pure; for file/field uploads) ---
+  Usage: pick a boundary, concatenate one Part per field/file, finish with
+  HttpMultipartEnd, and POST with HttpMultipartContentType in extraHeaders:
+    b    := HttpMultipartBoundary;
+    body := HttpMultipartField(b, 'name', 'value')
+          + HttpMultipartFile(b, 'avatar', 'me.png', 'image/png', pngBytes)
+          + HttpMultipartEnd(b);
+    HttpExec('POST', url, HttpMultipartContentType(b), body); }
+function HttpMultipartBoundary: AnsiString;
+function HttpMultipartContentType(const boundary: AnsiString): AnsiString;
+function HttpMultipartField(const boundary, name, value: AnsiString): AnsiString;
+function HttpMultipartFile(const boundary, name, filename, contentType, data: AnsiString): AnsiString;
+function HttpMultipartEnd(const boundary: AnsiString): AnsiString;
+
 { Parse a raw response into resp (status line + headers + body). Applies
   Transfer-Encoding: chunked decoding, else trims the body to Content-Length. }
 procedure HttpParseResponse(const raw: AnsiString; var resp: THttpResponse);
@@ -417,6 +431,41 @@ function HttpQueryAdd(const q, name, value: AnsiString): AnsiString;
 begin
   Result := HttpUrlEncode(name) + '=' + HttpUrlEncode(value);
   if q <> '' then Result := q + '&' + Result;
+end;
+
+var gMpCounter: Integer;
+
+function HttpMultipartBoundary: AnsiString;
+var ms: Integer;
+begin
+  Inc(gMpCounter);
+  ms := Integer(PalMonotonicMillis and $7FFFFFFF);
+  Result := '----frank2Boundary' + IntToStr(ms) + 'x' + IntToStr(gMpCounter);
+end;
+
+function HttpMultipartContentType(const boundary: AnsiString): AnsiString;
+begin
+  Result := 'Content-Type: multipart/form-data; boundary=' + boundary + CRLF;
+end;
+
+function HttpMultipartField(const boundary, name, value: AnsiString): AnsiString;
+begin
+  Result := '--' + boundary + CRLF
+          + 'Content-Disposition: form-data; name="' + name + '"' + CRLF
+          + CRLF + value + CRLF;
+end;
+
+function HttpMultipartFile(const boundary, name, filename, contentType, data: AnsiString): AnsiString;
+begin
+  Result := '--' + boundary + CRLF
+          + 'Content-Disposition: form-data; name="' + name + '"; filename="' + filename + '"' + CRLF
+          + 'Content-Type: ' + contentType + CRLF
+          + CRLF + data + CRLF;
+end;
+
+function HttpMultipartEnd(const boundary: AnsiString): AnsiString;
+begin
+  Result := '--' + boundary + '--' + CRLF;
 end;
 
 function HttpDechunk(const body: AnsiString): AnsiString;

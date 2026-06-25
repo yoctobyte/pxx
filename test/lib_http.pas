@@ -144,4 +144,17 @@ begin
   { Basic auth header line (base64 of user:pass). }
   SayBool('basic-auth',
     HttpBasicAuth('user', 'pass') = 'Authorization: Basic dXNlcjpwYXNz'#13#10);
+
+  { multipart/form-data builder (deterministic with a fixed boundary 'BND'). }
+  SayBool('mp-ctype',
+    HttpMultipartContentType('BND') = 'Content-Type: multipart/form-data; boundary=BND'#13#10);
+  SayBool('mp-field',
+    HttpMultipartField('BND', 'k', 'v') =
+    '--BND'#13#10'Content-Disposition: form-data; name="k"'#13#10#13#10'v'#13#10);
+  SayBool('mp-file',
+    HttpMultipartFile('BND', 'f', 'a.txt', 'text/plain', 'hi') =
+    '--BND'#13#10'Content-Disposition: form-data; name="f"; filename="a.txt"'#13#10 +
+    'Content-Type: text/plain'#13#10#13#10'hi'#13#10);
+  SayBool('mp-end', HttpMultipartEnd('BND') = '--BND--'#13#10);
+  SayBool('mp-boundary-uniq', HttpMultipartBoundary <> HttpMultipartBoundary);
 end.
