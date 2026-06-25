@@ -97,6 +97,30 @@ begin
 end;
 
 function ParseCUnary: Integer; forward;
+function ParseCPostfix: Integer; forward;
+
+{ Build `lv = lv (+|-) 1` as an AN_ASSIGN. The read side is a clone of the
+  lvalue so the assignment's lvalue and rvalue nodes do not alias. Used for
+  both prefix and postfix `++`/`--`; in statement / for-post context the
+  pre-vs-post value distinction is irrelevant, so both lower identically. }
+function CMakeIncDec(lv: Integer; isInc: Boolean): Integer;
+var one, binop, node, rd: Integer;
+begin
+  rd := CloneAST(lv);
+  one := AllocNode(AN_INT_LIT);
+  ASTIVal[one] := 1;
+  ASTTk[one] := Ord(tyInteger);
+  binop := AllocNode(AN_BINOP);
+  if isInc then ASTIVal[binop] := Ord(tkPlus) else ASTIVal[binop] := Ord(tkMinus);
+  ASTLeft[binop] := rd;
+  ASTRight[binop] := one;
+  ASTTk[binop] := ASTTk[lv];
+  node := AllocNode(AN_ASSIGN);
+  ASTLeft[node] := lv;
+  ASTRight[node] := binop;
+  ASTTk[node] := ASTTk[lv];
+  Result := node;
+end;
 
 { Precedence-climbing binary-expression parser (left-associative). }
 function ParseCBinExpr(minPrec: Integer): Integer;
@@ -187,8 +211,17 @@ begin
       else
       begin
         idx := FindSym(name);
-        if idx < 0 then Error('undefined variable');
-        if Syms[idx].Kind = skConst then
+        if idx < 0 then
+        begin
+          { Best-effort C frontend: an unresolved identifier (e.g. a token left
+            behind by a self-referential / unmodelled macro) degrades to a 0
+            literal instead of failing the whole translation unit — matching the
+            old skip-the-statement leniency. Undeclared *calls* still error. }
+          node := AllocNode(AN_INT_LIT);
+          ASTIVal[node] := 0;
+          ASTTk[node] := Ord(tyInteger);
+        end
+        else if Syms[idx].Kind = skConst then
         begin
           node := AllocNode(AN_INT_LIT);
           ASTIVal[node] := Syms[idx].ConstVal;
@@ -250,9 +283,36 @@ begin
       ASTTk[node] := Ord(tyBoolean);
       Result := node;
     end;
+    tkPlusPlus:   { prefix ++lv }
+    begin
+      Next;
+      operand := ParseCUnary();
+      Result := CMakeIncDec(operand, True);
+    end;
+    tkMinusMinus: { prefix --lv }
+    begin
+      Next;
+      operand := ParseCUnary();
+      Result := CMakeIncDec(operand, False);
+    end;
     else
-      Result := ParseCPrimary;
+      Result := ParseCPostfix();
   end;
+end;
+
+{ Postfix layer: a primary optionally followed by `++`/`--`. Array/field/call
+  postfix (`[] . -> ()`) arrive with the lvalue increment. }
+function ParseCPostfix: Integer;
+var node: Integer;
+begin
+  node := ParseCPrimary;
+  while (CurTok.Kind = tkPlusPlus) or (CurTok.Kind = tkMinusMinus) do
+  begin
+    if CurTok.Kind = tkPlusPlus then node := CMakeIncDec(node, True)
+    else node := CMakeIncDec(node, False);
+    Next;
+  end;
+  Result := node;
 end;
 
 { Top-level C expression: assignment (right-assoc), incl. compound-assign.
@@ -639,11 +699,232 @@ begin
   Result := node;
 end;
 
+{ A local declaration line: <type> name [= init] (, name [= init])* ;
+  Each name is allocated (a global slot in a top-level main where CurProc<0, a
+  stack local inside a function) so subsequent statements resolve it; returns an
+  AN_BLOCK whose AN_SEQ chain holds the initialiser assignments (an empty block
+  when there are no initialisers). Increment-1 scope: scalar declarators; array
+  and per-declarator pointer-depth handling come later. }
+function ParseCLocalDeclAST: Integer;
+var baseTk: TTypeKind; head, tail, seq, asn, idn, initExpr, blk, idx: Integer;
+    name: AnsiString;
+begin
+  baseTk := ParseCDeclType;   { specifiers + first declarator's pointer suffix }
+  head := -1; tail := -1;
+  while True do
+  begin
+    if CurTok.Kind <> tkIdent then Break;
+    name := CurTok.SVal; Next;
+    idx := AllocVar(name, baseTk);
+    initExpr := -1;
+    if CurTok.Kind = tkAssign then
+    begin
+      Next;
+      initExpr := ParseCExpr;
+    end;
+    if initExpr >= 0 then
+    begin
+      idn := AllocNode(AN_IDENT); ASTIVal[idn] := idx; ASTTk[idn] := Ord(baseTk);
+      asn := AllocNode(AN_ASSIGN); ASTLeft[asn] := idn; ASTRight[asn] := initExpr;
+      ASTTk[asn] := Ord(baseTk);
+      seq := AllocNode(AN_SEQ); ASTLeft[seq] := asn; ASTRight[seq] := -1;
+      if head = -1 then head := seq else ASTRight[tail] := seq;
+      tail := seq;
+    end;
+    if CurTok.Kind = tkComma then begin Next; Continue; end;
+    Break;
+  end;
+  Eat(tkSemicolon);
+  blk := AllocNode(AN_BLOCK);
+  ASTLeft[blk] := head;   { -1 = empty block, emits nothing }
+  Result := blk;
+end;
+
+function ParseCIfAST: Integer;
+var cond, thenS, elseS, node, pair: Integer;
+begin
+  Next; { if }
+  Expect(tkLParen, '(');
+  cond := ParseCExpr;
+  Expect(tkRParen, ')');
+  thenS := ParseCStatementAST;
+  elseS := -1;
+  if CurTok.Kind = tkElse then begin Next; elseS := ParseCStatementAST; end;
+  node := AllocNode(AN_IF);
+  ASTLeft[node] := cond;
+  pair := AllocNode(AN_PAIR);
+  ASTLeft[pair] := thenS;
+  ASTRight[pair] := elseS;
+  ASTRight[node] := pair;
+  Result := node;
+end;
+
+function ParseCWhileAST: Integer;
+var cond, body, node: Integer;
+begin
+  Next; { while }
+  Expect(tkLParen, '(');
+  cond := ParseCExpr;
+  Expect(tkRParen, ')');
+  body := ParseCStatementAST;
+  node := AllocNode(AN_WHILE);
+  ASTLeft[node] := cond;
+  ASTRight[node] := body;
+  Result := node;
+end;
+
+{ Build `(e == 0)` as a tyBoolean node — logical negation / `!e`. }
+function CMakeIsZero(e: Integer): Integer;
+var node, zero: Integer;
+begin
+  zero := AllocNode(AN_INT_LIT); ASTIVal[zero] := 0; ASTTk[zero] := Ord(tyInteger);
+  node := AllocNode(AN_BINOP);
+  ASTIVal[node] := Ord(tkEq);
+  ASTLeft[node] := e; ASTRight[node] := zero;
+  ASTTk[node] := Ord(tyBoolean);
+  Result := node;
+end;
+
+{ Append `stmt` as a new AN_SEQ node onto a chain; returns the new tail.
+  `*head` is set on the first append. }
+function CSeqAppend(stmt: Integer; var head, tail: Integer): Integer;
+var seq: Integer;
+begin
+  seq := AllocNode(AN_SEQ); ASTLeft[seq] := stmt; ASTRight[seq] := -1;
+  if head = -1 then head := seq else ASTRight[tail] := seq;
+  tail := seq;
+  Result := seq;
+end;
+
+{ `for (init; cond; post) body`.
+  - No post: desugars to `init; while (cond) body` (continue->cond is correct).
+  - With post: a `continue` must still run `post`, but the loop machinery's
+    continue target is the while condition. So we desugar to a constant-true
+    loop that runs `post` at the TOP (guarded by a first-iteration flag) before
+    re-checking the condition:
+        init; first = 1;
+        while (1) { if (!first) post; first = 0; if (!cond) break; body; }
+    A continue jumps to the while head, runs post, re-checks cond — exactly C
+    semantics. An empty cond is constant-true. }
+function ParseCForAST: Integer;
+var initNode, cond, post, body, loop, whileBody, outer, trueCond: Integer;
+    oHead, oTail, bHead, bTail, flagVar, flagSet, flagClr, ifPost, ifBrk, brk: Integer;
+    idn1, idn2: Integer;
+begin
+  Next; { for }
+  Expect(tkLParen, '(');
+
+  initNode := -1;
+  if CurTok.Kind = tkSemicolon then
+    Next
+  else if IsCTypeTok then
+    initNode := ParseCLocalDeclAST
+  else
+  begin
+    initNode := ParseCExpr;
+    Eat(tkSemicolon);
+  end;
+
+  if CurTok.Kind = tkSemicolon then
+  begin
+    cond := AllocNode(AN_INT_LIT); ASTIVal[cond] := 1; ASTTk[cond] := Ord(tyBoolean);
+  end
+  else
+    cond := ParseCExpr;
+  Expect(tkSemicolon, ';');
+
+  post := -1;
+  if CurTok.Kind <> tkRParen then post := ParseCExpr;
+  Expect(tkRParen, ')');
+
+  body := ParseCStatementAST;
+
+  oHead := -1; oTail := -1;
+  if initNode >= 0 then CSeqAppend(initNode, oHead, oTail);
+
+  if post < 0 then
+  begin
+    { simple: while (cond) body }
+    loop := AllocNode(AN_WHILE);
+    ASTLeft[loop] := cond;
+    ASTRight[loop] := body;
+    CSeqAppend(loop, oHead, oTail);
+  end
+  else
+  begin
+    flagVar := AllocVar('', tyBoolean);
+
+    { first = 1 }
+    idn1 := AllocNode(AN_IDENT); ASTIVal[idn1] := flagVar; ASTTk[idn1] := Ord(tyBoolean);
+    flagSet := AllocNode(AN_ASSIGN); ASTLeft[flagSet] := idn1;
+    ASTRight[flagSet] := AllocNode(AN_INT_LIT); ASTIVal[ASTRight[flagSet]] := 1;
+    ASTTk[ASTRight[flagSet]] := Ord(tyInteger); ASTTk[flagSet] := Ord(tyBoolean);
+    CSeqAppend(flagSet, oHead, oTail);
+
+    bHead := -1; bTail := -1;
+
+    { if (!first) post  ->  if (first == 0) post }
+    idn2 := AllocNode(AN_IDENT); ASTIVal[idn2] := flagVar; ASTTk[idn2] := Ord(tyBoolean);
+    ifPost := AllocNode(AN_IF);
+    ASTLeft[ifPost] := CMakeIsZero(idn2);
+    ASTRight[ifPost] := AllocNode(AN_PAIR);
+    ASTLeft[ASTRight[ifPost]] := post;
+    ASTRight[ASTRight[ifPost]] := -1;
+    CSeqAppend(ifPost, bHead, bTail);
+
+    { first = 0 }
+    idn1 := AllocNode(AN_IDENT); ASTIVal[idn1] := flagVar; ASTTk[idn1] := Ord(tyBoolean);
+    flagClr := AllocNode(AN_ASSIGN); ASTLeft[flagClr] := idn1;
+    ASTRight[flagClr] := AllocNode(AN_INT_LIT); ASTIVal[ASTRight[flagClr]] := 0;
+    ASTTk[ASTRight[flagClr]] := Ord(tyInteger); ASTTk[flagClr] := Ord(tyBoolean);
+    CSeqAppend(flagClr, bHead, bTail);
+
+    { if (!cond) break }
+    ifBrk := AllocNode(AN_IF);
+    ASTLeft[ifBrk] := CMakeIsZero(cond);
+    brk := AllocNode(AN_BREAK);
+    ASTRight[ifBrk] := AllocNode(AN_PAIR);
+    ASTLeft[ASTRight[ifBrk]] := brk;
+    ASTRight[ASTRight[ifBrk]] := -1;
+    CSeqAppend(ifBrk, bHead, bTail);
+
+    { body }
+    CSeqAppend(body, bHead, bTail);
+
+    whileBody := AllocNode(AN_BLOCK); ASTLeft[whileBody] := bHead;
+    trueCond := AllocNode(AN_INT_LIT); ASTIVal[trueCond] := 1; ASTTk[trueCond] := Ord(tyBoolean);
+    loop := AllocNode(AN_WHILE);
+    ASTLeft[loop] := trueCond;
+    ASTRight[loop] := whileBody;
+    CSeqAppend(loop, oHead, oTail);
+  end;
+
+  outer := AllocNode(AN_BLOCK);
+  ASTLeft[outer] := oHead;
+  Result := outer;
+end;
+
 function ParseCStatementAST: Integer;
 var node, exprNode: Integer;
 begin
   Result := -1;
   if CurTok.Kind = tkEOF then Exit;
+
+  { empty statement }
+  if CurTok.Kind = tkSemicolon then
+  begin
+    Next;
+    node := AllocNode(AN_BLOCK); ASTLeft[node] := -1;
+    Result := node;
+    Exit;
+  end;
+
+  { local variable declaration }
+  if IsCTypeTok then
+  begin
+    Result := ParseCLocalDeclAST;
+    Exit;
+  end;
 
   { return [expr]; — the expression is optional for void functions }
   if CurTok.Kind = tkExit then
@@ -659,7 +940,24 @@ begin
     Exit;
   end;
 
-  { printf(...) }
+  if CurTok.Kind = tkIf then begin Result := ParseCIfAST; Exit; end;
+  if CurTok.Kind = tkWhile then begin Result := ParseCWhileAST; Exit; end;
+  if CurTok.Kind = tkFor then begin Result := ParseCForAST; Exit; end;
+
+  if CurTok.Kind = tkBreak then
+  begin
+    Next; Eat(tkSemicolon);
+    Result := AllocNode(AN_BREAK);
+    Exit;
+  end;
+  if CurTok.Kind = tkContinue then
+  begin
+    Next; Eat(tkSemicolon);
+    Result := AllocNode(AN_CONTINUE);
+    Exit;
+  end;
+
+  { printf(...) — args still ignored beyond the format string (libc work). }
   if (CurTok.Kind = tkIdent) and (CurTok.SVal = 'printf') then
   begin
     Result := ParseCPrintfAST;
@@ -673,10 +971,10 @@ begin
     Exit;
   end;
 
-  { skip type declarations and unknown statements }
-  while (CurTok.Kind <> tkSemicolon) and (CurTok.Kind <> tkEnd) and
-        (CurTok.Kind <> tkEOF) do Next;
+  { expression statement (assignment, call, ++/--) }
+  exprNode := ParseCExpr;
   Eat(tkSemicolon);
+  Result := exprNode;
 end;
 
 function ParseCBlockAST: Integer;

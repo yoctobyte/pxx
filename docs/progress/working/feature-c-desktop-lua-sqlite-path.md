@@ -158,3 +158,23 @@ gap rather than bloating this ticket.
   operator, pointer/lvalue unary (`* & ++ --`), cast, sizeof, postfix
   `[] . -> ++ --`. Next: Slice C statements (locals+if/while/for/switch) to
   unlock multi-statement bodies.
+- 2026-06-25 — **Slice C (statements) increment 1 DONE.** ParseCStatementAST now
+  dispatches: local declarations with initialisers (`int x=…, y=…;` — AllocVar
+  per name, init lowered to AN_ASSIGN; main-scope locals land in BSS since
+  CurProc<0, function locals get stack slots), expression statements
+  (assignment/compound-assign/call), `if/else`, `while`, `for`, `break`,
+  `continue`, empty `;`, nested blocks. Prefix + postfix `++`/`--` added
+  (lowered to `lv = lv ± 1`, read side CloneAST'd to avoid aliasing). `break`
+  keyword remapped tkHalt→tkBreak; added `continue`→tkContinue. `for` desugars
+  to a while loop; with a post-expression it uses a first-iteration flag so a
+  `continue` still runs `post` before re-checking the condition (the naive
+  `init;while(cond){body;post}` desugar HANGS on continue — post is skipped so
+  the counter never advances). REGRESSION fix: a stricter body parser broke
+  test_c_macro_soup (a deliberately self-referential macro leaves an undefined
+  identifier the old parser silently skipped) — an unresolved identifier now
+  degrades to a `0` literal (best-effort frontend; undeclared *calls* still
+  error). Verified: ~20 Slice-C differential programs (locals/loops/if/break/
+  continue/fib/factorial) match gcc exit codes; new fixture `test/cstmt_c.c`
+  (=82) wired into the suite; full C-import regression green; self-host
+  byte-identical. Next: Slice D (compile ALL functions + globals + inter-fn
+  calls) — merge the ParseCProgram/ParseCSubroutine drivers.

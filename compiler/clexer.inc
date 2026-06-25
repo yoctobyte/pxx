@@ -22,7 +22,7 @@ begin
       if (s[1]='w') and (s[2]='h') and (s[3]='i') and (s[4]='l') and (s[5]='e') then Result := tkWhile;
       if (s[1]='s') and (s[2]='h') and (s[3]='o') and (s[4]='r') and (s[5]='t') then Result := tkCShort;
       if (s[1]='c') and (s[2]='o') and (s[3]='n') and (s[4]='s') and (s[5]='t') then Result := tkConst;
-      if (s[1]='b') and (s[2]='r') and (s[3]='e') and (s[4]='a') and (s[5]='k') then Result := tkHalt;
+      if (s[1]='b') and (s[2]='r') and (s[3]='e') and (s[4]='a') and (s[5]='k') then Result := tkBreak;
       if (s[1]='f') and (s[2]='l') and (s[3]='o') and (s[4]='a') and (s[5]='t') then Result := tkCFloat;
       if (s[1]='_') and (s[2]='B') and (s[3]='o') and (s[4]='o') and (s[5]='l') then Result := tkCBool;
     end;
@@ -34,6 +34,7 @@ begin
     end;
     8: begin
       if (s[1]='u') and (s[2]='n') and (s[3]='s') and (s[4]='i') and (s[5]='g') and (s[6]='n') and (s[7]='e') and (s[8]='d') then Result := tkCUnsigned;
+      if (s[1]='c') and (s[2]='o') and (s[3]='n') and (s[4]='t') and (s[5]='i') and (s[6]='n') and (s[7]='u') and (s[8]='e') then Result := tkContinue;
     end;
   end;
 end;
