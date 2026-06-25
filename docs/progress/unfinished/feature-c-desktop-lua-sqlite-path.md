@@ -371,14 +371,26 @@ gap rather than bloating this ticket.
   self-compile never emits it); `make test` green; fixture `test/cternary_b9.c`
   (=37, nested + only-taken-branch side effect proves no double-eval). **lzio.c
   now compiles clean** (full parse — it is a library, no main).
-- 2026-06-25 — **LUA CORE SURVEY: 3 / 34 files parse clean** (lctype, lzio, + 1).
-  The remaining 31 hit a SPREAD of next blockers, roughly: many `call to
-  undeclared function` (likely the libc/extern surface, M2 — or a parse that drops
-  a function), several `unexpected token (` (more C constructs — `switch`, `goto`,
-  designated initialisers, or further declarator forms), one `expected C
-  expression` (lparser.c), and one `Unsupported linear node in IR codegen`
-  (ldebug.c — an IR/codegen gap). NEXT high-leverage step: triage the `call to
-  undeclared function` cluster (it hits ~15 files — likely one common cause). Then
-  `switch/case` (Track A, break-only-scope IR) and `setjmp/longjmp` (Track A)
-  remain the big language blockers before a full lua build, plus multi-file
-  linking (no upstream amalgamation).
+- 2026-06-25 — **LUA CORE SURVEY: 3 / 34 files parse clean** (lctype, lzio, + 1),
+  with the remaining blockers triaged by instrumenting the "undeclared call" name:
+    - **Function-like macros — the biggest cluster.** `call to undeclared
+      function` is mostly an UNEXPANDED function-like macro parsed as a call:
+      `cast` (`#define cast(t,exp) ((t)(exp))` in llimits.h), `novariant`, etc.
+      lua uses these everywhere. The preprocessor (`cpreproc.inc`) does not expand
+      function-like macros `NAME(args)` — this is the **single highest-leverage
+      Track C item left** (unblocks ~half the failing files). Was slice E in
+      `feature-c-source-frontend`, deferred as "embedded"; it is squarely on the
+      desktop path too. Object-like macros already work.
+    - **`__builtin_offsetof`** (lfunc.c) — gcc builtin for `offsetof`; map to a
+      compile-time field offset (Track C).
+    - **`switch`/`case`** (lgc.c parses `switch` as a call) — Track A (break-only-
+      scope shared-IR primitive per the reframe).
+    - **`Unsupported linear node in IR codegen`** (ldebug.c) — an IR/codegen gap
+      to isolate (could be Track A).
+    - A few `unexpected token (` / `expected C expression` (lparser.c, lobject.c,
+      ltable.c) — residual C constructs to bisect after macros land (many may be
+      downstream of the missing macro expansion).
+  RECOMMENDED ORDER: (1) function-like macro expansion [Track C, big, unblocks
+  most], (2) `__builtin_offsetof` [Track C, small], (3) `switch/case` [Track A],
+  (4) re-survey, then `setjmp/longjmp` [Track A] + multi-file linking (no upstream
+  amalgamation; build a one-unit include shim or add object linking) for M4.
