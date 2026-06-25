@@ -45,8 +45,14 @@ end.
 | `arr[0](r)` array proc-typed | `const TRec` | **garbage (code addr)** |
 | `fn(r)` scalar proc-typed | `TRec` (by value) | 42 (OK) |
 | `fn(21)` scalar proc-typed | `Integer` | 42 (OK) |
+| `fn(r)` scalar proc-typed | **`var TRec`** (by ref) | **42 (OK)** |
+| `fn(100, r)` scalar proc-typed | `Integer; const TRec` | **segfault** |
 
-So the broken axis is **indirect call + `const record` parameter**. The garbage
+So the broken axis is precisely **indirect call + a `const record` parameter** —
+**`var record` (also by-reference) is fine**, and the break persists when the
+const-record is not the first arg. That isolates it to how a `const` aggregate
+arg (as opposed to `var`) is lowered on the indirect/proc-value call path. The
+garbage
 values are increasing code-segment addresses (`@Sum` itself / adjacent function
 entries), i.e. the const-record arg lowering on the indirect path is wrong — the
 callee reads the function pointer / a bad address instead of the record's
@@ -54,13 +60,15 @@ address.
 
 ## Likely cause
 
-Const-record args are passed **by hidden reference** (address of the record). The
-**direct**-call path lowers that address correctly; the **indirect** (proc-typed
-value) path appears to lower the const-record arg differently — probably failing
-to take the address (passing the record by value into a slot the callee derefs as
-a pointer, or clobbering the arg register with the call target). Compare the
-arg-setup for `AN_CALL` (direct) vs the indirect/proc-value call path for a
-`const`-by-ref aggregate parameter.
+Both `const` and `var` record args are passed **by hidden reference** (address of
+the record), yet on the indirect path **`var` works and `const` does not** — so
+the two are lowered by different code, and only the `const`-aggregate branch is
+wrong on the proc-value path (it likely fails to take the record's address —
+passing it by value / a bad pointer the callee then derefs, or clobbering the arg
+register with the call target). The **direct**-call path lowers `const` records
+correctly. Compare arg-setup for `AN_CALL` (direct) vs the indirect/proc-value
+call path, specifically the `const`-aggregate-by-ref branch against the (working)
+`var`-aggregate branch.
 
 ## Secondary (separate, minor) parser quirk
 
