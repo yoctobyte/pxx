@@ -126,6 +126,15 @@ candidates — selection criteria, hard filters, and why each alternative was ke
 or rejected — lives in its own ticket: **idea-demo-app-candidates**.
 
 ## Log
+- 2026-06-25 — **slice 2 (search+eval) blocked by codegen bug**
+  [[bug-proc-typed-call-const-record-arg]]. `go N` returns `score 30000` (=INF)
+  from any position because `Evaluate` calls its terms through the proc-typed
+  table `EvalTerms[i](pos)` (`const TPosition` param), and indirect calls with a
+  const-record arg are miscompiled (return the function pointer / segfault).
+  Confirmed: direct `TermMaterial(pos)`=0, but `EvalTerms[0](pos)`=4318895 (a code
+  address). The **perft oracle is unaffected** (no eval calls) and stays the
+  lib-test gate; search/eval validation waits on the Track A fix. Engine left
+  idiomatic (no workaround) per the platonic policy.
 - 2026-06-25 — **x86-64 oracle validated + wired into `make lib-test`** (Track B,
   v66). The platonic engine compiles clean against `$(PXX_STABLE)` (no `-Fu`) and
   perft matches **every** published constant: startpos perft(1..6) =
