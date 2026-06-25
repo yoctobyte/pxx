@@ -14,7 +14,8 @@ typedef int sig_atomic_t;
 #define SIGSEGV 11
 #define SIGTERM 15
 
-void (*signal(int sig, void (*func)(int)))(int);
+typedef void (*__sighandler_t)(int);
+__sighandler_t signal(int sig, __sighandler_t func);
 int raise(int sig);
 
 #endif

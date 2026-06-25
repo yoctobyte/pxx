@@ -288,7 +288,7 @@ begin
             ASTSLen[node]  := 0;
           end
           else
-            Error('call to undeclared function');
+            Error('call to undeclared function: ' + name);
         end;
         Result := node;
       end
