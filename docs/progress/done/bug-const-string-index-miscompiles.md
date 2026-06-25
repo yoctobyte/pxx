@@ -89,3 +89,27 @@ silently wrong on pxx. Common idiom; produces no error, just bad data.
 - `examples/mandelbrot` renders the correct bulb on pxx (matches FPC visual),
   not just the matching checksum.
 - Regression test under `make test`; self-host fixedpoint byte-identical.
+
+## Resolution (2026-06-25, v61)
+
+Two compounding gaps, both fixed:
+
+1. **Parser** (`ParseFactor`, untyped-string-const branch): a string const
+   resolved to an `AN_STR_LIT` but a trailing `[i]` was never consumed, so the
+   index was dropped (string context returned the whole string; call-arg context
+   `writeln(…, RAMP[3], …)` failed to parse). Now a trailing `[expr]` wraps the
+   `AN_STR_LIT` in an `AN_INDEX` tagged tyChar.
+2. **Codegen** (`IRLowerAddress`, `AN_INDEX`): with an `AN_STR_LIT` base, the
+   address used `IRLowerAddress(baseNode)` — wrong, the literal has no addressable
+   slot. The literal's VALUE (`IR_CONST_STR`) is a pointer to the frozen
+   `[len][data]` blob (data at +8), identical layout to a frozen-string variable
+   slot, so index it with `base = IRLowerAST(baseNode)`, `lo = -7`, stride 1,
+   tyChar.
+
+Verified char + string context, literal + variable index, call-arg context, and
+that const ARRAY indexing is unaffected — on x86-64 / i386 / aarch64 / arm32.
+Regression `test/test_const_string_index.pas` under `make test`. Self-host
+byte-identical; pinned v61.
+
+(The related typed-string-const initializer parse gap remains separate —
+[[bug-string-const-index-and-typed-init]].)

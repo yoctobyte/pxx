@@ -230,6 +230,8 @@ test-core: $(COMPILER)
 	test "$$(/tmp/test_cond_comment_skip26)" = "42"
 	./$(COMPILER) test/test_const_string_concat.pas /tmp/test_const_string_concat26
 	test "$$(/tmp/test_const_string_concat26)" = "$$(printf 'AB\n2\nABC\n3\nfoobar\nx-y\n65 66')"
+	./$(COMPILER) test/test_const_string_index.pas /tmp/test_const_string_index26
+	test "$$(/tmp/test_const_string_index26)" = "$$(printf '58\n58\nX:\n:\n[:]\nab\n30 30')"
 	./$(COMPILER) test/test_dynarray_field.pas /tmp/test_dynarray_field26
 	test "$$(/tmp/test_dynarray_field26)" = "$$(printf '1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1')"
 	./$(COMPILER) test/test_method_implicit_field.pas /tmp/test_method_implicit_field26

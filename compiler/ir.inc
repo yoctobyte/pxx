@@ -631,6 +631,19 @@ begin
         Result := IRAppend(IR_INDEX, baseAddr, indexNode, 0, elemSize, Ord(dynBaseTk));
       Exit;
     end;
+    { Indexing a string LITERAL or untyped string const (AN_STR_LIT): its VALUE
+      is a pointer to the frozen [len][data] blob (data at +8), and it has no
+      addressable slot — so index it like a frozen string but with the literal's
+      value as the base (lo=-7 puts index 1 at data[0]). Without this,
+      IRLowerAddress(AN_STR_LIT) yields a wrong base and s[i] reads garbage / the
+      whole string (bug-const-string-index-miscompiles). }
+    if ASTKind[baseNode] = AN_STR_LIT then
+    begin
+      baseAddr := IRLowerAST(baseNode);
+      indexNode := IRLowerAST(ASTRight[node]);
+      Result := IRAppend(IR_INDEX, baseAddr, indexNode, -7, 1, Ord(tyChar));
+      Exit;
+    end;
     baseAddr := IRLowerAddress(baseNode);
     indexNode := IRLowerAST(ASTRight[node]);
 

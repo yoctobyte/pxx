@@ -4520,6 +4520,21 @@ begin
         node := AllocNode(AN_STR_LIT);
         ASTSOffset[node] := StrConstSOff[sci]; ASTSLen[node] := StrConstSLen[sci];
         ASTTk[node] := Ord(tyString); CurASTNode := node; Next;
+        { Trailing index `RAMP[i]` -> a char from the literal's frozen storage
+          (bug-const-string-index-miscompiles). The AN_STR_LIT base is lowered
+          via its IR_CONST_STR value in IRLowerAddress. }
+        while CurTok.Kind = tkLBrack do
+        begin
+          Next;
+          indexNode := AllocNode(AN_INDEX);
+          ASTLeft[indexNode] := node;
+          ParseExpr;
+          ASTRight[indexNode] := CurASTNode;
+          Expect(tkRBrack, ']');
+          ASTTk[indexNode] := Ord(tyChar);
+          node := indexNode; CurASTNode := node;
+          LastExprTk := tyChar;
+        end;
       end
       else if (idx >= 0) and (Syms[idx].Kind = skConst) then
       begin
