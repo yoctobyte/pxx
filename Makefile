@@ -725,6 +725,8 @@ test-core: $(COMPILER)
 	test "$$(/tmp/test_ptr_alias26)" = "$$(printf '777\n888\n12\n34\n20\n30\n99\n55')"
 	./$(COMPILER) test/test_ptr_deref_field.pas /tmp/test_ptr_deref_field26
 	test "$$(/tmp/test_ptr_deref_field26)" = "$$(printf '10\n20\n42\n99\n1234\n5\n9999\n100\n300\n777')"
+	./$(COMPILER) test/test_ptr_deref_vararg.pas /tmp/test_ptr_deref_vararg26
+	test "$$(/tmp/test_ptr_deref_vararg26)" = "$$(printf '5\n7\n7')"
 	./$(COMPILER) test/test_ptr_cast.pas /tmp/test_ptr_cast26
 	test "$$(/tmp/test_ptr_cast26)" = "$$(printf '12345\n99999\n77\n88\n42\n1111\n7\n99\n100\n200\nbuiltin_cast: int64 ok\n100')"
 	./$(COMPILER) test/test_ptr_arithmetic.pas /tmp/test_ptr_arithmetic26

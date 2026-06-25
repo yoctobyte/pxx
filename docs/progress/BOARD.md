@@ -28,7 +28,7 @@ _none_
 | --- | --- | --- | --- | --- |
 | feature-c-runtime-library | B | feature | C runtime/library layer (`lib/crtl`) plus direct C-library packages | feature-c-source-frontend |
 
-## backlog (55)
+## backlog (54)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -36,7 +36,6 @@ _none_
 | bug-generic-class-methods-in-program | A | bug | Generic class METHOD bodies break in a program (work in a unit) | — |
 | bug-managed-length-via-pointer-deref | A | bug | bug: managed Length(ps^) / Length(rec.pf^) returns garbage (all targets) | — |
 | bug-pchar-to-string-implicit-conv | A | bug | PChar → string implicit conversion missing in call args (and assignment helper) | — |
-| bug-pointer-deref-not-accepted-as-var-arg | A | bug | A pointer dereference `p^` is rejected as a `var`/by-ref argument | — |
 | bug-setlength-record-field-via-var-param | A | bug | SetLength on a record string/array field via a `var` parameter fails codegen | — |
 | bug-string-const-index-and-typed-init | A | bug | Typed string constant with a string initializer won't parse | — |
 | bug-virtual-keyword-name-result | A | bug | Bare own-name result of a VIRTUAL intrinsic-named method miscompiles | — |
@@ -122,7 +121,7 @@ _none_
 | feature-mimic-fpc | B | feature | `mimic FPC` compatibility mode | — |
 | feature-string-model-tyfixedstring | B | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (267)
+## done (268)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -195,6 +194,7 @@ _none_
 | bug-pinned-stable-reads-live-builtin-rtl | A | bug | Pinned stable reads LIVE builtin RTL source — track A WIP breaks track B | — |
 | bug-plain-byvalue-record-param-temp | A | bug | Plain (non-`const`) by-value record param >8B rejects a temporary argument | — |
 | bug-pointer-cast-custom-alias | A | bug | Pointer cast on custom Char pointer aliases fails to skip string length prefix | — |
+| bug-pointer-deref-not-accepted-as-var-arg | A | bug | A pointer dereference `p^` is rejected as a `var`/by-ref argument | — |
 | bug-procedure-typed-procvalue | A | bug | `@Proc` / proc-value of a `procedure`-typed routine rejected ("unexpected token") | — |
 | bug-proc-local-managed-record-uninit | A | bug | Proc-local managed record not zero-initialised on entry → first-call miscompute | — |
 | bug-procptr-record-field-call | A | bug | Calling a procedural-pointer record/class field (`v.Run(args)`) | — |
@@ -408,7 +408,6 @@ _none_
 - [A] bug-generic-class-methods-in-program
 - [A] bug-managed-length-via-pointer-deref
 - [A] bug-pchar-to-string-implicit-conv
-- [A] bug-pointer-deref-not-accepted-as-var-arg
 - [A] bug-setlength-record-field-via-var-param
 - [A] bug-string-const-index-and-typed-init
 - [A] bug-virtual-keyword-name-result

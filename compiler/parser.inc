@@ -4736,6 +4736,7 @@ begin
           if Procs[procIdx].Params[i].IsRef or Procs[procIdx].Params[i].IsArray then
           begin
             if not ((ASTKind[exprNode] = AN_IDENT) or (ASTKind[exprNode] = AN_INDEX) or (ASTKind[exprNode] = AN_FIELD) or
+                    (ASTKind[exprNode] = AN_DEREF) or
                     (ASTKind[exprNode] = AN_VARREC_ARRAY) or (ASTKind[exprNode] = AN_ARRAY_CTOR)) then
             begin
               { A record param passed by-ref may bind a non-lvalue temporary (e.g.
@@ -7970,7 +7971,8 @@ begin
             if (Procs[procIdx].Params[i].IsRef or Procs[procIdx].Params[i].IsArray) and
                (ASTKind[exprNode] <> AN_VARREC_ARRAY) then
             begin
-              if not ((ASTKind[exprNode] = AN_IDENT) or (ASTKind[exprNode] = AN_INDEX) or (ASTKind[exprNode] = AN_FIELD)) then
+              if not ((ASTKind[exprNode] = AN_IDENT) or (ASTKind[exprNode] = AN_INDEX) or (ASTKind[exprNode] = AN_FIELD) or
+                      (ASTKind[exprNode] = AN_DEREF)) then
               begin
                 { A `const` OR plain by-value record param accepts a non-lvalue
                   temporary (>8-byte records are by-ref only for ABI; the callee
