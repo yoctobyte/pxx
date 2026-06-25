@@ -72,3 +72,5 @@ loop = no double-free / leak). Gate: `make test` (self-host byte-identical) +
 regression test `test/test_managed_strlen_deref.pas` wired into all three cross
 sections (cross-vs-x64 oracle + an absolute-output assertion). The pre-existing
 `test_cross_frozen_strlen_deref` (frozen, `-uPXX_MANAGED_STRING`) stays.
+
+Committed in e9ad8a5.
