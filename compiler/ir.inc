@@ -2805,6 +2805,15 @@ begin
       else
       begin
         value := IRLowerAST(ASTRight[node]);
+        { A C string literal stored to a pointer must land on char 0, not the
+          8-byte Pascal length prefix the literal's handle points at. Apply the
+          same +8 skip the call-argument path uses (see the tyString->tyPointer
+          marshalling in AN_CALL). C-mode only -> Pascal self-build unaffected. }
+        if CProgramMode and (ASTKind[ASTRight[node]] = AN_STR_LIT) and
+           (lhsTk = tyPointer) then
+          value := IRAppend(IR_BINOP, value,
+                            IRAppend(IR_CONST_INT, -1, -1, -1, 8, Ord(tyInteger)),
+                            Ord(tkPlus), 0, Ord(tyPointer));
         if ASTKind[ASTLeft[node]] = AN_IDENT then
           Result := IRAppend(IR_STORE_SYM, ASTIVal[ASTLeft[node]], value, -1, 0, ASTTk[ASTLeft[node]])
         else

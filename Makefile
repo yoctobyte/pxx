@@ -354,6 +354,8 @@ test-core: $(COMPILER)
 	/tmp/cpp_if_chain_b1726; test "$$?" = "42"
 	./$(COMPILER) test/cstr_concat_b18.c /tmp/cstr_concat_b1826
 	/tmp/cstr_concat_b1826; test "$$?" = "42"
+	./$(COMPILER) test/cstr_to_ptr_b19.c /tmp/cstr_to_ptr_b1926
+	/tmp/cstr_to_ptr_b1926; test "$$?" = "42"
 	./$(COMPILER) -Itest/cinc/inc test/cinc/cinc_main.c /tmp/cinc_main26
 	test "$$(/tmp/cinc_main26)" = "$$(printf 'local-ok\ninc-ok')"
 	./$(COMPILER) test/test_declared_directive.pas /tmp/test_declared_directive26
