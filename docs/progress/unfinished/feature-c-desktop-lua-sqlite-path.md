@@ -10,6 +10,20 @@
   (a64d316), bitwise-`~` const-eval (cd5996d, closed bug-c-const-eval-bitwise-not).
   lua-5.4.7 staged in `library_candidates/lua` (gitignored). Remaining blockers
   triaged below; lua does NOT compile yet (multi-session, spans Track C + A).
+  Session also added: parenthesized declarator names `(name)(params)` (50e1626's
+  predecessor d4c9b9f — unblocked the whole lua_* API prototype cluster) and
+  **C `switch`/`case`/`default`** with fallthrough + break-only scope (50e1626,
+  AN_SWITCH, target-independent IR). lua core: 0 → **4/34 files parse clean**.
+  End-of-session error landscape across the 34 core files: 21 `unexpected token`
+  (a LONG TAIL of varied expression-parse bugs — NOT one cause; e.g. a string-
+  literal/`sizeof` macro expansion in lobject.c, a `+=` on a `->` field in lmem.c,
+  a call in lstate.c — each needs individual bisection), 6 `call to undeclared
+  function` (residual macros + `__builtin_offsetof` + lstring's deep cast chain
+  which bottoms out at `bug-c-const-eval-bitwise-not`-adjacent macro re-scan), 2
+  `Unsupported linear node in IR codegen` (ldebug.c, lparser.c — an IR/codegen
+  gap to isolate), 1 `expected C expression`. NEXT: pick off the `unexpected
+  token` tail incrementally (Track C), isolate the 2 IR-codegen gaps, then
+  `setjmp`/`longjmp` (Track A) + multi-file linking for an actual lua build.
 - **Track:** C (C frontend) — isolated worktree `../frankonpiler-cfront`, branch
   `feat/cfront`. Lands to `master` only when `make test` + self-host fixedpoint
   stay green (C-body codegen edits the compiler binary → reseed).
