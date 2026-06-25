@@ -92,3 +92,5 @@ cross sections.
 bare-metal qemu-system harness to verify; filed as
 `bug-esp-not-always-boolean`. x25519 (the finder) runs on host, so the host fix
 unblocks it.
+
+Committed in 1abf43f.
