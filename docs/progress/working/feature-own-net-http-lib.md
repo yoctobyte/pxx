@@ -187,6 +187,15 @@ parses it into a jar and sends it back as a `Cookie` header on the second
 request, which the server confirms (`authed`). Composes the cookie jar + async
 keep-alive + structured response headers.
 
+## Showcase demo (landed 2026-06-25)
+
+`examples/net/httpdemo.pas` — a self-contained loopback showcase (no external
+network): a server coroutine and a client coroutine on one reactor thread, three
+requests over a single keep-alive connection — `GET /` (server sets a cookie),
+`GET /me` (client sends the cookie back, server greets it), `GET /data.gz` (a
+gzip body the client decodes transparently). Prints a deterministic transcript;
+smoke `net-demo` in `make lib-test` asserts the 5 key markers.
+
 ## Roadmap (next slices)
 
 1. ~~Concurrency-safe pool + blocking `HttpGetPooled` + eviction/idle-timeout~~
