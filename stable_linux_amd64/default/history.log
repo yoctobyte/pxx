@@ -69,3 +69,4 @@
 2026-06-25T10:44:25Z  v69  252c129335722fd4b6cc56842afff497330152e220457412d4d32eda1e239ade  c57bc6baa434be2136aa22a94c52fb4e34254bb8  docs(progress): cdecl indirect calls done (x86-64) in dynlib-loader ticket
 2026-06-25T11:59:40Z  v70  c1857172a5b63eb572be504f1714f045c3169f4a3d07b3411ddb8225a2ea2f59  30e052b77e50dc5f12a9af4949d1fa0a4370d95e  feat(parser): indexed proc-value indirect call arr[i](args)
 2026-06-25T13:45:02Z  v71  29fc4f95b2ee6cc7a87aa2f59db271d0b88db0f5ede47a97203d278b3b47fd39  9b3c316bfffb5e655fdfc62dc25ab1086c89e51b  docs(tickets): xvfb real-window GUI smoke (B) + arm32 writeln(LongWord) bug (A)
+2026-06-25T14:31:53Z  v72  74afa2d8c740fddb4998e1f8fd7eaa138332f768d494b41420190ec84cd4efe9  aa72ed61f5aed2001ef20034972d7353623b7d44  docs(tickets): close bug-fixed-array-assignment-no-copy [A]
