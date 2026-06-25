@@ -110,7 +110,7 @@ run_green() {
     $'tcp=ok\nunsupported=-38' \
     -Fu"$ROOT/lib/rtl/platform/posix" "$ROOT/test/lib_platform_net.pas"
   run_expect platform_esp_unsupported \
-    $'esp-idf\nopen=-38\nread=-38\nseek=-38\nflush=-38\ndelete=-38\nrename=-38\nmkdir=-38\nrmdir=-38\nsocket=-38\nreuse=-38\nnonblock=-38\nbind=-38\nconnect=-38\nlisten=-38\naccept=-38\nrecv=-38\nsend=-38\nshutdown=-38\nsockclose=-38\nunsupported=-38' \
+    $'esp-idf\nopen=-38\nread=-38\nseek=-38\nflush=-38\ndelete=-38\nrename=-38\nmkdir=-38\nrmdir=-38\nsocket=-38\nreuse=-38\nnonblock=-38\nbind=-38\nconnect=-38\nlisten=-38\naccept=-38\nrecv=-38\nsend=-38\nshutdown=-38\nsockclose=-38\nsendto=-38\nrecvfrom=-38\npoll=-38\nsockerr=-38\nsockname=-38\nacceptip=-38\nunsupported=-38' \
     --platform=esp -Fu"$ROOT/lib/rtl/platform/esp" "$ROOT/test/lib_platform_esp.pas"
   run_expect textfile_posix \
     $'alpha\nbeta\ncount=2\nio=0' \
@@ -125,7 +125,7 @@ run_green() {
     $'OK stored roundtrip\nOK fixed huffman\nOK dynamic huffman\nOK bad header checksum\nOK bad adler32\nOK truncated stream\nOK reserved block type' \
     "$ROOT/test/lib_zlib.pas"
   run_expect png \
-    $'86\n137 80 78 71\n1\n2x2\n255,0,0,255\n0,255,0,128\n0,0,255,64\n255,255,255,0\n0\nbad chunk crc' \
+    $'86\n137 80 78 71\nTRUE\n2x2\n255,0,0,255\n0,255,0,128\n0,0,255,64\n255,255,255,0\nFALSE\nbad chunk crc' \
     "$ROOT/test/lib_png.pas"
 }
 
