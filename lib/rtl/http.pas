@@ -111,6 +111,18 @@ function HttpMultipartField(const boundary, name, value: AnsiString): AnsiString
 function HttpMultipartFile(const boundary, name, filename, contentType, data: AnsiString): AnsiString;
 function HttpMultipartEnd(const boundary: AnsiString): AnsiString;
 
+{ --- minimal cookie jar (pure) ---
+  A jar is a plain "name=value; name2=value2" string (the Cookie request header
+  value). HttpCookieSet replaces or appends one pair; HttpCookieUpdate merges a
+  single Set-Cookie value (its leading name=value, attributes ignored);
+  HttpCookieFromResponse merges every Set-Cookie header of a response;
+  HttpCookieHeader renders the 'Cookie: …' request line (empty jar → ''). This
+  tracks name=value only — Domain/Path/Expires/Secure scoping is not modelled. }
+function HttpCookieSet(const jar, name, value: AnsiString): AnsiString;
+function HttpCookieUpdate(const jar, setCookieValue: AnsiString): AnsiString;
+function HttpCookieFromResponse(const jar: AnsiString; const resp: THttpResponse): AnsiString;
+function HttpCookieHeader(const jar: AnsiString): AnsiString;
+
 { Parse a raw response into resp (status line + headers + body). Applies
   Transfer-Encoding: chunked decoding, else trims the body to Content-Length. }
 procedure HttpParseResponse(const raw: AnsiString; var resp: THttpResponse);
@@ -466,6 +478,64 @@ end;
 function HttpMultipartEnd(const boundary: AnsiString): AnsiString;
 begin
   Result := '--' + boundary + '--' + CRLF;
+end;
+
+function HttpCookieSet(const jar, name, value: AnsiString): AnsiString;
+var res, seg, segName: AnsiString; i, start, n, eq: Integer; replaced: Boolean;
+begin
+  res := ''; replaced := False;
+  n := Length(jar); start := 1;
+  while start <= n + 1 do
+  begin
+    i := start;
+    while (i <= n) and (jar[i] <> ';') do Inc(i);
+    seg := Trim(Copy(jar, start, i - start));
+    if seg <> '' then
+    begin
+      eq := Pos('=', seg);
+      if eq > 0 then segName := Trim(Copy(seg, 1, eq - 1)) else segName := seg;
+      if segName = name then begin seg := name + '=' + value; replaced := True; end;
+      if res <> '' then res := res + '; ';
+      res := res + seg;
+    end;
+    start := i + 1;
+  end;
+  if not replaced then
+  begin
+    if res <> '' then res := res + '; ';
+    res := res + name + '=' + value;
+  end;
+  Result := res;
+end;
+
+function HttpCookieUpdate(const jar, setCookieValue: AnsiString): AnsiString;
+var nv, name, value: AnsiString; eq, semi: Integer;
+begin
+  Result := jar;
+  semi := Pos(';', setCookieValue);
+  if semi > 0 then nv := Copy(setCookieValue, 1, semi - 1) else nv := setCookieValue;
+  nv := Trim(nv);
+  eq := Pos('=', nv);
+  if eq <= 0 then Exit;
+  name := Trim(Copy(nv, 1, eq - 1));
+  value := Trim(Copy(nv, eq + 1, Length(nv)));
+  if name = '' then Exit;
+  Result := HttpCookieSet(jar, name, value);
+end;
+
+function HttpCookieFromResponse(const jar: AnsiString; const resp: THttpResponse): AnsiString;
+var hdrs: THttpHeaders; i: Integer;
+begin
+  Result := jar;
+  hdrs := HttpResponseHeaders(resp);
+  for i := 0 to hdrs.Count - 1 do
+    if LowerCase(HttpHeaderName(hdrs, i)) = 'set-cookie' then
+      Result := HttpCookieUpdate(Result, HttpHeaderVal(hdrs, i));
+end;
+
+function HttpCookieHeader(const jar: AnsiString): AnsiString;
+begin
+  if Trim(jar) = '' then Result := '' else Result := 'Cookie: ' + jar + CRLF;
 end;
 
 function HttpDechunk(const body: AnsiString): AnsiString;

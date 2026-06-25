@@ -170,6 +170,17 @@ each), `HttpMultipartEnd`. Caller concatenates parts and POSTs via `HttpExec`.
 a fixed boundary for deterministic byte assertions). Pure, no I/O. `make
 lib-test` green.
 
+## Minimal cookie jar (landed 2026-06-25)
+
+`http.pas` pure cookie helpers over a plain `"a=1; b=2"` jar string (= the Cookie
+header value): `HttpCookieSet` (replace/append one pair), `HttpCookieUpdate`
+(merge one Set-Cookie value, attributes ignored), `HttpCookieFromResponse`
+(merge every `Set-Cookie` header of a response via the structured-headers seam),
+`HttpCookieHeader` (render `Cookie: …` request line, empty jar → ''). Tracks
+name=value only — Domain/Path/Expires/Secure scoping is out of scope. `lib_http`
++7 (`cookie-set`/`-append`/`-replace`/`-update`/`-header`/`-empty`/`-from-resp`).
+`make lib-test` green.
+
 ## Roadmap (next slices)
 
 1. ~~Concurrency-safe pool + blocking `HttpGetPooled` + eviction/idle-timeout~~

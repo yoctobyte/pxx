@@ -157,4 +157,17 @@ begin
     'Content-Type: text/plain'#13#10#13#10'hi'#13#10);
   SayBool('mp-end', HttpMultipartEnd('BND') = '--BND--'#13#10);
   SayBool('mp-boundary-uniq', HttpMultipartBoundary <> HttpMultipartBoundary);
+
+  { Cookie jar: set/append/replace, Set-Cookie merge, render. }
+  SayBool('cookie-set',     HttpCookieSet('', 'a', '1') = 'a=1');
+  SayBool('cookie-append',  HttpCookieSet('a=1', 'b', '2') = 'a=1; b=2');
+  SayBool('cookie-replace', HttpCookieSet('a=1; b=2', 'a', '9') = 'a=9; b=2');
+  SayBool('cookie-update',  HttpCookieUpdate('a=1', 'b=2; Path=/; HttpOnly') = 'a=1; b=2');
+  SayBool('cookie-header',  HttpCookieHeader('a=1; b=2') = 'Cookie: a=1; b=2'#13#10);
+  SayBool('cookie-empty',   HttpCookieHeader('') = '');
+  HttpParseResponse('HTTP/1.1 200 OK'#13#10 +
+    'Set-Cookie: sid=abc; Path=/'#13#10 +
+    'Set-Cookie: theme=dark'#13#10'Content-Length: 0'#13#10#13#10, resp);
+  SayBool('cookie-from-resp',
+    HttpCookieFromResponse('', resp) = 'sid=abc; theme=dark');
 end.
