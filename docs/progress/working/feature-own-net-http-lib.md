@@ -118,10 +118,13 @@ response record carrying a `THttpHeaders` field (dodges
    through the common TLS seam [[feature-tls-provider-abstraction]]
    (`lib/rtl/tls.pas`) on all four transports (blocking/async one-shot, keep-alive,
    pool); with no backend an https request fails cleanly. Proven plaintext-mock
-   e2e (`test/lib_https_mock`, gated `https-mock-seam`). **Remaining:** the two
-   real backends — OpenSSL (default; via [[feature-real-dynlib-loader]], dlopen
-   coming) and the native handrolled stack [[feature-tls13-from-scratch]],
-   deferred. Mix-and-match (native client ⇄ OpenSSL server) is the interop test.
+   e2e (`test/lib_https_mock`, gated `https-mock-seam`). **OpenSSL backend landed
+   2026-06-25** (`lib/rtl/tls_openssl.pas`, via the v68 dlopen loader): real
+   `HttpGet('https://…')` ⇄ `openssl s_server`, status 200, verified by
+   `make tls-openssl-devtest` (blocking client, x86-64). **Remaining:** async
+   handshake (seam resume-step), cert verification, and the native handrolled
+   stack [[feature-tls13-from-scratch]] (deferred). Mix-and-match (native client ⇄
+   OpenSSL server) stays the interop test.
 
 ## Compiler gaps surfaced while building (filed)
 

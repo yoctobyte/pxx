@@ -55,9 +55,37 @@ loopback server let `HttpGetAsync('https://...')` complete through the seam over
 the reactor (status 200 + body), exercising the want-read yield path. Real
 crypto waits on the backends.
 
-**Next slices:** (a) the OpenSSL backend ([[feature-real-dynlib-loader]] — dlopen
-coming); (b) the native backend ([[feature-tls13-from-scratch]], deferred);
-(c) optional: a seam resume-step if a fully-async handshake is wanted.
+## Slice 3 landed — OpenSSL backend, real HTTPS (2026-06-25)
+
+`lib/rtl/tls_openssl.pas` implements `TTlsBackend` over **libssl.so.3, dlopen'd at
+runtime** through the real loader ([[feature-real-dynlib-loader]], landed v68).
+`OpenSslTlsRegister` loads the lib, resolves `TLS_client_method` / `SSL_CTX_new` /
+`SSL_new` / `SSL_set_fd` / `SSL_connect` / `SSL_read` / `SSL_write` /
+`SSL_get_error` / `SSL_shutdown` / `SSL_ctrl` (SNI via
+`SSL_CTRL_SET_TLSEXT_HOSTNAME`) / frees, builds a client `SSL_CTX`, and registers
+itself as the active backend. Entry points are plain (non-cdecl) proc vars — the
+x86-64 default ABI matches SysV cdecl for these pointer/int signatures (same as
+the `dynlibs` strlen smoke). `SSL_get_error` maps `WANT_READ`/`WANT_WRITE` →
+`tlsWantRead`/`tlsWantWrite`, `ZERO_RETURN` → `tlsClosed`.
+
+**Verified end to end:** `make tls-openssl-devtest` (`tools/tls_openssl_devtest.sh`
++ `test/devtest_tls_openssl.pas`) builds the client with `-dPXX_DYNLIB_LIBC`,
+spins up a loopback `openssl s_server -www` with a self-signed cert, and a
+**blocking `HttpGet('https://…')` returns status 200 + a ~5 KB decrypted body** —
+a real TLS 1.3 handshake + GET through our http stack ⇄ OpenSSL. Opt-in /
+non-hermetic (needs the openssl CLI + libssl); skips cleanly when absent, so it is
+**not** in the core lib-test gate.
+
+Scope/limits of this slice: **client, blocking path, x86-64.** `SSL_connect` is
+driven to completion inside `Handshake` (poll loop) — correct for a blocking fd;
+the async (reactor) handshake still needs the seam resume-step (below). No peer
+verification yet (`SSL_VERIFY_NONE` default) — dev/platonic only; a trust-store +
+`SSL_CTX_set_verify` are required before hostile-network use.
+
+**Next slices:** (a) async handshake — add a non-blocking resume step to the seam
+so `HttpGetAsync` works over OpenSSL too; (b) server side (`SSL_accept`) → the
+4-cell client×server interop matrix; (c) cert verification + trust store;
+(d) the native backend ([[feature-tls13-from-scratch]], deferred).
 
 ## Decision (2026-06-24)
 
