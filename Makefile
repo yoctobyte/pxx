@@ -920,6 +920,8 @@ test-core: $(COMPILER)
 	test "$$(/tmp/test_nested_dynarray_managed26)" = "$$(printf '1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1')"
 	./$(COMPILER) --threadsafe test/test_nested_dynarray_managed.pas /tmp/test_nested_dynarray_managed_threadsafe26
 	test "$$(/tmp/test_nested_dynarray_managed_threadsafe26)" = "$$(printf '1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1')"
+	./$(COMPILER) test/test_setlength_managed_field.pas /tmp/test_setlength_managed_field26
+	test "$$(/tmp/test_setlength_managed_field26)" = "$$(printf 'ABxxx\nAB\nA\nQzz')"
 	./$(COMPILER) test/test_managed_record_assign.pas /tmp/test_managed_record_assign26
 	test "$$(/tmp/test_managed_record_assign26)" = "$$(printf '1\n1\n1\n1\n1\n1\n1\n1\n1\n1')"
 	./$(COMPILER) test/test_managed_record_exit.pas /tmp/test_managed_record_exit26

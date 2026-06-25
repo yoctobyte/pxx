@@ -1688,6 +1688,34 @@ begin
         xtensa_xor(reg_xtensa_a2, reg_xtensa_a2, reg_xtensa_a8);
       end;
 
+    IR_SETLEN_STR:
+      begin
+        { SetLength(ansistring-lvalue, n) -> PXXStrSetLen(slotAddr, n). IRA =
+          slot-address node, IRB = new length. Address-based, so a record/var-
+          param field needs no symbol reconstruction. Spill both args, then load
+          into the ABI arg registers. }
+        argBase := XtSpillDepth;
+        IREmitNodeXtensa(IRA[node]);          { a2 = slot address }
+        XtensaPushA2;                         { slot @ argBase }
+        IREmitNodeXtensa(IRB[node]);          { a2 = n }
+        XtensaPushA2;                         { n @ argBase+4 }
+        procIdx := FindProc('PXXStrSetLen');
+        if procIdx < 0 then Error('compiler error: PXXStrSetLen not found');
+        if XtensaABI = XTENSA_ABI_WINDOWED then
+        begin
+          xtensa_l32i(reg_xtensa_a10, reg_xtensa_sp, argBase + 0);
+          xtensa_l32i(reg_xtensa_a11, reg_xtensa_sp, argBase + 4);
+          XtSpillDepth := argBase;
+        end
+        else
+        begin
+          xtensa_l32i(reg_xtensa_a2, reg_xtensa_sp, argBase + 0);
+          xtensa_l32i(reg_xtensa_a3, reg_xtensa_sp, argBase + 4);
+          XtSpillDepth := argBase;
+        end;
+        EmitCallProc(procIdx);
+      end;
+
     else
       Error('target xtensa: unsupported node in IR codegen: ' + IROpName(IRKind[node]));
   end;

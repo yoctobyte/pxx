@@ -3857,6 +3857,21 @@ begin
         EmitB($F3); EmitB($A4);                { rep movsb (src -> dest) }
       end;
 
+    IR_SETLEN_STR:
+      begin
+        { SetLength(ansistring-lvalue, n) -> PXXStrSetLen(slotAddr, n). IRA =
+          target slot-ADDRESS node, IRB = new length. Address-based, so a record/
+          var-param field needs no symbol reconstruction. }
+        IREmitNode(IRA[node]);                  { rax = slot address }
+        EmitB($50);                             { push rax }
+        IREmitNode(IRB[node]);                  { rax = n }
+        EmitB($48); EmitB($89); EmitB($C6);     { mov rsi, rax (n) }
+        EmitB($5F);                             { pop rdi (slot addr) }
+        procIdx := FindProc('PXXStrSetLen');
+        if procIdx < 0 then Error('compiler error: PXXStrSetLen not found');
+        EmitCallProc(procIdx);
+      end;
+
     IR_SETLEN_DYN:
       begin
         { Nested SetLength on a target slot ADDRESS. Allocate a new
@@ -4444,7 +4459,7 @@ begin
 
       IR_STORE_SYM, IR_STORE_MEM, IR_STORE_DYN, IR_WRITE, IR_WRITELN,
       IR_READLINE, IR_READ_VAR, IR_READ_DISCARD, IR_COPY_REC, IR_COPY_REC_MANAGED, IR_SET_COPY, IR_VAR_STORE,
-      IR_SETLEN_DYN, IR_DEFAULT_MEM, IR_ZERO_SYM,
+      IR_SETLEN_DYN, IR_SETLEN_STR, IR_DEFAULT_MEM, IR_ZERO_SYM,
       IR_EXC_LEAVE, IR_RAISE, IR_EXC_STORE, IR_EXC_CLEAR, IR_TERMINATE,
       IR_COSWITCH, IR_YIELD,
       IR_ASM:

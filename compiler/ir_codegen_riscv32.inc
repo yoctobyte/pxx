@@ -1280,6 +1280,21 @@ begin
         rv32_xori(reg_a0, reg_a0, 1);
       end;
 
+    IR_SETLEN_STR:
+      begin
+        { SetLength(ansistring-lvalue, n) -> PXXStrSetLen(slotAddr, n). IRA =
+          slot-address node, IRB = new length. Address-based, so a record/var-
+          param field needs no symbol reconstruction. }
+        IREmitNodeRISCV32(IRA[node]);      { a0 = slot address }
+        rv32_addi(reg_sp, reg_sp, -4); rv32_sw(reg_a0, reg_sp, 0);  { push slot }
+        IREmitNodeRISCV32(IRB[node]);      { a0 = n }
+        rv32_addi(reg_a1, reg_a0, 0);      { a1 = n }
+        rv32_lw(reg_a0, reg_sp, 0); rv32_addi(reg_sp, reg_sp, 4);   { pop slot -> a0 }
+        procIdx := FindProc('PXXStrSetLen');
+        if procIdx < 0 then Error('compiler error: PXXStrSetLen not found');
+        EmitCallProc(procIdx);
+      end;
+
     else
       Error('target riscv32: unsupported node in IR codegen');
   end;

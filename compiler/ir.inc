@@ -52,6 +52,7 @@ begin
     IR_COPY_REC_MANAGED: Result := 'copy_rec_managed';
     IR_DYNDATA: Result := 'dyndata';
     IR_SETLEN_DYN: Result := 'setlen_dyn';
+    IR_SETLEN_STR: Result := 'setlen_str';
     IR_DYNUNIQUE: Result := 'dynunique';
     IR_SLOTADDR: Result := 'slotaddr';
     IR_ZERO_SYM: Result := 'zero_sym';
@@ -234,6 +235,12 @@ begin
       begin
         IRRequireNode(IRA[i], 'setlen_dyn target');
         IRRequireNode(IRB[i], 'setlen_dyn count');
+      end;
+
+      IR_SETLEN_STR:
+      begin
+        IRRequireNode(IRA[i], 'setlen_str target');
+        IRRequireNode(IRB[i], 'setlen_str count');
       end;
 
       IR_DYNUNIQUE:
@@ -488,6 +495,41 @@ begin
     Result := RecFieldType(ResolveNodeRec(ASTLeft[node]), GetASTIdentName(node))
   else if ASTKind[node] = AN_INDEX then
     Result := NodeDynBaseTk(ASTLeft[node]);
+end;
+
+function NodeIsManagedString(node: Integer): Boolean;
+{ True if the lvalue node denotes a managed AnsiString (a string symbol, record/
+  class field, indexed element, or pointer deref of one). Drives the address-
+  based SetLength path (IR_SETLEN_STR) so a field / var-param field needs no
+  symbol reconstruction. Frozen inline strings (tyString) return False. }
+var rec: Integer;
+begin
+  Result := False;
+  if node < 0 then Exit;
+  case ASTKind[node] of
+    AN_IDENT:
+      { A scalar managed-string variable — NOT a dynamic array of strings (whose
+        symbol also carries tyAnsiString as its element type). }
+      Result := (Syms[ASTIVal[node]].TypeKind = tyAnsiString) and
+                not Syms[ASTIVal[node]].IsArray;
+    AN_FIELD:
+      { RecFieldType reports the ELEMENT type for an array field, so an
+        `array of string` field also reads back tyAnsiString — exclude it via the
+        field's dyn-array depth so only a scalar string field matches. }
+      begin
+        rec := ResolveNodeRec(ASTLeft[node]);
+        if rec <> REC_NONE then
+          Result := (RecFieldType(rec, GetASTIdentName(node)) = tyAnsiString) and
+                    (RecFieldDynDepth(rec, GetASTIdentName(node)) = 0);
+      end;
+    AN_INDEX, AN_DEREF:
+      { An indexed element / pointer deref of a managed string tags tyAnsiString,
+        but indexing a multidimensional array (`s[i]` where s is `array of array
+        of AnsiString`) yields a SUB-ARRAY that also tags tyAnsiString (its base
+        element type). Require dyn depth 0 so only a true scalar string matches. }
+      Result := (IntToTypeKind(ASTTk[node]) = tyAnsiString) and
+                (NodeDynDepth(node) = 0);
+  end;
 end;
 
 function NodeDynBaseRec(node: Integer): Integer;
@@ -2859,6 +2901,22 @@ begin
           special-call lowering (managed strings/records + COW). }
         slTargetAST := ASTLeft[ASTLeft[node]];
         slCountAST  := ASTLeft[ASTRight[ASTLeft[node]]];
+        { Managed AnsiString target reached through a non-symbol lvalue (record/
+          class field, var-param field, index, deref): address the slot
+          generically and resize via PXXStrSetLen. The address-based op needs no
+          symbol reconstruction, so a field works like a plain variable
+          (bug-setlength-record-field-via-var-param). A plain symbol target
+          (AN_IDENT, incl a by-ref `var s: string` param) keeps the existing
+          symbol path — on x86-64 that is the amortized in-place inline resize, so
+          string-building stays O(n). Only tyAnsiString reaches here; frozen
+          inline strings take the -101 store-length path. }
+        if NodeIsManagedString(slTargetAST) and (ASTKind[slTargetAST] <> AN_IDENT) then
+        begin
+          slTargetAddr := IRLowerAddress(slTargetAST);
+          slCountNode := IRLowerAST(slCountAST);
+          Result := IRAppend(IR_SETLEN_STR, slTargetAddr, slCountNode, -1, -1, Ord(tyAnsiString));
+          Exit;
+        end;
         slRootSym := NodeDynBaseSym(slTargetAST);
         if (slRootSym >= 0) and (SymDynDepth[slRootSym] >= 2) then
         begin

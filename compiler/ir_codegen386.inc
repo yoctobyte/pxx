@@ -1264,6 +1264,22 @@ begin
         end;
       end;
 
+    IR_SETLEN_STR:
+      begin
+        { SetLength(ansistring-lvalue, n) -> PXXStrSetLen(slotAddr, n). IRA =
+          slot-address node, IRB = new length. Address-based, so a record/var-
+          param field needs no symbol reconstruction. Same push order as the
+          symbol path above. }
+        IREmitNode386(IRA[node]);      { eax = slot address }
+        EmitB($50);                    { push slot addr }
+        IREmitNode386(IRB[node]);      { eax = new length }
+        EmitB($50);                    { push n }
+        procIdx := FindProc('PXXStrSetLen');
+        if procIdx < 0 then Error('compiler error: PXXStrSetLen not found');
+        EmitCallProc(procIdx);
+        EmitB($81); EmitB($C4); EmitI32(8); { add esp, 8 }
+      end;
+
     IR_SETLEN_DYN:
       begin
         { Nested / record-or-class-field SetLength via the portable
