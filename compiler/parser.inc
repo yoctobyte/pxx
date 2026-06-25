@@ -4497,7 +4497,12 @@ begin
           end;
         end;
       end;
-      sci := FindSetConst(name);
+      { Named set constant — but only if the name does not resolve to a real
+        variable/parameter/const symbol first. A same-named variable (FindSetConst
+        is case-insensitive: a `set of char` const `C` would otherwise shadow a
+        char var `c`) must win. }
+      sci := -1;
+      if idx < 0 then sci := FindSetConst(name);
       if sci >= 0 then
       begin
         { Named set constant — yields the baked 32-byte mask's address, exactly
@@ -8954,20 +8959,25 @@ begin
       else
       begin
         cTk := ParseTypeKind;
-        cIdx := AllocVar(name, cTk);
-        Expect(tkEq, '=');
         if cTk = tySet then
         begin
           { Typed set constant `const S: TS = [..]`: bake the 32-byte mask and
             record it in the SetConst table; uses resolve to AN_SET_CONST_REF.
-            (cIdx's storage is unused — the const carries no runtime var.) }
+            No runtime var symbol is allocated — the const carries no storage, and
+            a phantom var would shadow a same-named variable case-insensitively
+            (bug-set-of-char-const-corrupts-char-codegen). }
+          Expect(tkEq, '=');
           if SetConstCount >= MAX_TYPEALIAS then Error('too many set constants');
           SetConstName[SetConstCount]   := name;
           SetConstEnumId[SetConstCount] := LastTypeSetEnumId;
           SetConstOff[SetConstCount]    := BakeSetConst;
           Inc(SetConstCount);
         end
-        else if cTk = tyRecord then
+        else
+        begin
+        cIdx := AllocVar(name, cTk);
+        Expect(tkEq, '=');
+        if cTk = tyRecord then
         begin
           { Record typed constant: `const r: TRec = (f1: v1; f2: v2; ...)` (FPC
             named-field form). Each scalar field initializer is recorded as a
@@ -9031,6 +9041,7 @@ begin
           PendingInitVal[PendingInitCount]  := ParseInitVal;
           PendingInitTk[PendingInitCount]   := Ord(cTk);
           Inc(PendingInitCount);
+        end;
         end;
       end;
     end

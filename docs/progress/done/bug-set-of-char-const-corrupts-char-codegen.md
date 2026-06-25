@@ -68,3 +68,31 @@ here, split out if they prove independent:
 - Regression test under `make test` (set-of-char const + char var: `Ord`, `in`
   with a variable operand, multiple consts).
 - Self-host fixedpoint byte-identical.
+
+## Resolution (2026-06-25, v57)
+
+Not a `set of char` codegen bug — a **case-insensitive name collision**. The
+repro names the const `C` and the char var `c`; in this dialect they are the same
+identifier. Two compounding causes:
+
+1. `ParseConstSection` allocated a phantom var symbol for a typed set const
+   (`cIdx := AllocVar(name, tySet)`) whose storage the comment already noted was
+   "unused" — so `C` became a real tySet (32-byte aggregate) symbol that shadowed
+   the char var.
+2. `ParseFactor` consulted `FindSetConst(name)` (case-insensitive) **before** the
+   resolved variable symbol `idx`, so even without the phantom var the set const
+   `C` would win over the char var `c`. `Ord(c)`/`write(c)` then loaded the set's
+   address (aggregate by-ref) → garbage / segfault.
+
+Fix (`parser.inc`):
+- typed set const no longer allocates a runtime var (only the `SetConst` table +
+  baked mask); and
+- `FindSetConst` is gated on `idx < 0` so a real same-named variable wins.
+
+Set-const usage (`c in Vowels`, untyped `['0'..'9']`) still resolves via
+`AN_SET_CONST_REF`. Regression `test/test_set_of_char_const.pas` under `make
+test`. Self-host byte-identical; pinned v57.
+
+The two "related const-codegen quirks" (untyped string const indexing; typed
+string const initializer) proved independent and are split to
+[[bug-string-const-index-and-typed-init]] in backlog.
