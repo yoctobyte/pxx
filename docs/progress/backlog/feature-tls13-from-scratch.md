@@ -109,8 +109,9 @@ HTTP client); server-side later if wanted.
    TC1–4).
 3. ~~**X25519** (Curve25519 ECDH)~~ **done** (`lib/rtl/x25519.pas`, RFC 7748;
    16-limb radix-2^16 field, not bignum).
-4. **Signature verify:** RSA (PKCS#1 v1.5 + PSS) over bignum; ECDSA-P256;
-   Ed25519.
+4. **Signature verify:** ~~RSA (PKCS#1 v1.5)~~ + ~~ECDSA-P256~~ + ~~Ed25519~~
+   **done** (`rsa.pas`, `ecdsa_p256.pas`, `ed25519.pas`). RSA-PSS still to add if a
+   server needs it.
 5. **ASN.1/DER** parser + **X.509** cert parse; chain build + validation
    (validity dates, key usage, name match); **trust store** from `/etc/ssl/certs`
    (file syscalls — fine).
@@ -143,7 +144,14 @@ HTTP client); server-side later if wanted.
   `x25519`). Library-free. Surfaced Track A bug
   [[bug-not-on-int64-is-boolean]] (`not` on an Int64 expression miscompiles;
   worked around with `-x-1`).
-- M4 signature verify: RSA, ECDSA-P256, Ed25519 (RFC 8032 vectors).
+- M4 signature verify: RSA, ECDSA-P256, Ed25519 (RFC 8032 vectors). **DONE
+  (2026-06-25).** `lib/rtl/rsa.pas` (PKCS#1 v1.5 SHA-256, over bignum),
+  `lib/rtl/ed25519.pas` (RFC 8032, TweetNaCl port over `lib/rtl/sha512.pas`),
+  `lib/rtl/ecdsa_p256.pas` (secp256r1 SHA-256, Jacobian over bignum). All
+  verify-only, library-free, vector-checked (`lib_rsa` 3, `lib_ed25519` 3,
+  `lib_ecdsa_p256` 2; gated `rsa-verify`/`ed25519-verify`/`ecdsa-p256-verify`).
+  Surfaced Track A bugs [[bug-not-on-int64-is-boolean]],
+  [[bug-aggregate-member-array-as-var-param]].
 - M5 ASN.1/X.509 parse + chain validation + trust store.
 - M6 TLS 1.3 handshake state machine → a real `https://` GET (Pascal record
   layer); verify against a public host.
