@@ -326,3 +326,23 @@ gap rather than bloating this ticket.
   `unexpected token (` (a different construct; SrcPos shows a NUL between
   newlines — a preprocessor artifact to investigate next). lua.h's fn-ptr
   typedefs (`lua_CFunction`/`lua_Reader`/…) now model correctly regardless.
+- 2026-06-25 — **typedef of a struct tag now aliases the record** (Slice B inc4).
+  `typedef struct Zio ZIO;` (no body, with a tag) was registered as an opaque
+  `tyPointer`, dropping the record id — so `ZIO *z; z->field` resolved against
+  REC_NONE (field offset 0, fn-ptr field calls unrecognised → `unexpected token
+  (`). Now the no-body aggregate-typedef branch aliases the tag's (possibly
+  forward) record via `FindOrForwardCTag`: `typedef struct T X;` → `X` is the
+  record; `typedef struct T *X;` → pointer to it; tagless stays an opaque
+  pointer. A later `struct T { ... }` body fills the same forward record, so
+  `z->field` (incl. the lua ZIO reader fn-ptr field) resolves. This is the lua
+  pattern (`typedef struct Zio ZIO;`, `typedef struct lua_State lua_State;` then
+  the body in lstate.h — L->top now resolvable). Gate: `make test` green,
+  self-host byte-identical, all C fixtures match gcc; fixture
+  `test/ctypedef_struct_b7.c` (=51). NEXT BLOCKER (still): the *real* lzio.c
+  (full lua headers via `#include`) still stops at `luaZ_fill`'s
+  `z->reader(...)` with `unexpected token (` even though the Lua-faithful
+  isolated reproducer (`test/ctypedef_struct_b7.c`) passes — so the remaining
+  fault is in the **header `#include` processing path** (the NUL-between-newlines
+  in the token stream points at the include/preproc mechanism, not the struct/
+  typedef parser). Investigate how `#include`d struct/typedef layout differs from
+  inline program-mode layout next.

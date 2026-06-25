@@ -2296,13 +2296,32 @@ begin
       Eat(tkSemicolon);
       Exit;
     end;
-    { No body: opaque forward declaration — pointer-only handle.
-      The declarator may carry a pointer: typedef struct _X *XRef; }
-    while CurTok.Kind = tkStar do Next;
+    { No body present (forward / separately-defined struct). With a tag, the
+      typedef ALIASES that struct's (possibly forward) record — `typedef struct
+      Zio ZIO;` makes `ZIO` the record and `ZIO *` a pointer to it, so a later
+      `struct Zio { ... }` body fills the same record and `z->field` resolves.
+      `typedef struct T *Ref;` is a pointer to it. A tagless no-body typedef
+      stays an opaque pointer handle. }
+    ptrStars := 0;
+    while CurTok.Kind = tkStar do begin Inc(ptrStars); Next; end;
     if CurTok.Kind = tkIdent then
     begin
+      nmOff := Tokens[TokPos-1].SOffset;
+      nmLen := Tokens[TokPos-1].SLen;
       nm := CurTok.SVal; Next;
-      AddCTypedef(nm, tyPointer); { opaque aggregate: pointer-only }
+      if hasTag then
+      begin
+        ci := FindOrForwardCTag(tagName) - REC_UCLASS_BASE;
+        if ptrStars > 0 then
+        begin
+          AddCTypedefEx(nm, tyPointer, Ord(tyRecord), REC_UCLASS_BASE + ci);
+          RegisterPtrAlias(nmOff, nmLen, Ord(tyRecord), REC_UCLASS_BASE + ci, 0, 0);
+        end
+        else
+          AddCTypedefEx(nm, tyRecord, Ord(tyUnknown), REC_UCLASS_BASE + ci);
+      end
+      else
+        AddCTypedef(nm, tyPointer); { tagless opaque aggregate: pointer-only }
     end;
     while (CurTok.Kind <> tkSemicolon) and (CurTok.Kind <> tkEOF) do Next;
     Eat(tkSemicolon);

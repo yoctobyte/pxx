@@ -330,6 +330,8 @@ test-core: $(COMPILER)
 	/tmp/cloop_b526; test "$$?" = "28"
 	./$(COMPILER) test/cfnptr_b6.c /tmp/cfnptr_b626
 	/tmp/cfnptr_b626; test "$$?" = "91"
+	./$(COMPILER) test/ctypedef_struct_b7.c /tmp/ctypedef_struct_b726
+	/tmp/ctypedef_struct_b726; test "$$?" = "51"
 	./$(COMPILER) -Itest/cinc/inc test/cinc/cinc_main.c /tmp/cinc_main26
 	test "$$(/tmp/cinc_main26)" = "$$(printf 'local-ok\ninc-ok')"
 	./$(COMPILER) test/test_declared_directive.pas /tmp/test_declared_directive26
