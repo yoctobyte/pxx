@@ -588,6 +588,13 @@ begin
     Result := IRLowerAddress(ASTLeft[node]);
     Exit;
   end;
+  { `&function` — a function's address IS the function-pointer value (C `&f == f`).
+    The AN_PROCADDR value node already yields the code address. }
+  if ASTKind[node] = AN_PROCADDR then
+  begin
+    Result := IRLowerAST(node);
+    Exit;
+  end;
   if ASTKind[node] = AN_IDENT then
   begin
     Result := IRAppend(IR_LEA, ASTIVal[node], -1, -1, 0, Ord(tyPointer));
