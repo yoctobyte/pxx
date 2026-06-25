@@ -1,7 +1,28 @@
 # C desktop path — compile real portable C (tiny-regex → lua → sqlite)
 
 - **Type:** feature (track-C milestone path)
-- **Status:** backlog (active arc — lua core **14/34 files parse clean**; see logs)
+- **Status:** backlog (active arc — lua core **15/34 files parse clean**; see logs)
+- **Session 2026-06-26 round 6 (Track C), gate-green + byte-identical, lua 14 ->
+  15 + VM-core path unblocked:** ROOT-CAUSE fix — multi-declarator pointers
+  `T *a, *b;` (5d3bc2f). ParseCLocalDeclAST folded the FIRST declarator's `*` into
+  the base type and applied it to every name, so `int *p, *q;` dropped/mistyped q
+  and `TValue *io1, *io2;` siblings lost pointer-ness -> deref hit IR_UNSUPPORTED.
+  This was the real cause of the round-5 'emergent setobj/setsvalue' VM-core
+  failures (every isolated piece compiled; the trigger was simply two pointers in
+  one declaration). Now each declarator parses its own stars (a literal star
+  redistributes; a typedef pointer applies whole). lapi advanced past setobj to
+  varargs. NOTE: the bisection method that finally cracked it — keep shrinking the
+  failing snippet (drop macro, drop types, drop block) until a plain-C minimal
+  repro remains; here `int *p,*q; *p=*q;` was the whole bug. REMAINING (each deep
+  / multi-session): (a) **varargs** `__builtin_va_start` — now the top named
+  blocker, 3 files (lapi/lauxlib/ldebug), lua's luaL_error; real va_list ABI =
+  Track A. (b) `IRLowerAddress` of rvalue/compound exprs — AN_CALL (liolib/lobject/
+  lparser: `localeconv()->decimal_point[0]`, field/index of a call result),
+  AN_ASSIGN (ldo), AN_BINOP (ltm), AN_COMMA (luac); general fix = materialise the
+  rvalue to a hidden temp and address that (verify each vs gcc; some are UB). (c)
+  lvm setobj/lundump setsvalue still 'undeclared' (a genuinely emergent
+  macro-expansion case, distinct from the multi-declarator one). (d) multi-file
+  linking. lua.c (interpreter main) compiles to an object.
 - **Session 2026-06-26 round 5 (Track C), gate-green + byte-identical, lua core
   7 -> 14:** global array decls no longer cascade + balanced-brace aggregate-init
   skip (3843307), `sizeof((l)[0])` balanced-paren operand skip — unblocked the
