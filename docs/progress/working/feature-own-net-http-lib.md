@@ -179,7 +179,11 @@ header value): `HttpCookieSet` (replace/append one pair), `HttpCookieUpdate`
 `HttpCookieHeader` (render `Cookie: …` request line, empty jar → ''). Tracks
 name=value only — Domain/Path/Expires/Secure scoping is out of scope. `lib_http`
 +7 (`cookie-set`/`-append`/`-replace`/`-update`/`-header`/`-empty`/`-from-resp`).
-`make lib-test` green.
+`make lib-test` green. e2e `test/lib_http_cookie`: one keep-alive connection, two
+requests — the server sets `Set-Cookie` on the first reply, the async client
+parses it into a jar and sends it back as a `Cookie` header on the second
+request, which the server confirms (`authed`). Composes the cookie jar + async
+keep-alive + structured response headers.
 
 ## Roadmap (next slices)
 
