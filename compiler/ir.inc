@@ -2718,6 +2718,32 @@ begin
         Result := IRAppend(IR_STORE_SYM, ASTIVal[ASTLeft[node]], value, -1, 0,
                            ASTTk[ASTLeft[node]]);
       end
+      else if (ASTKind[ASTLeft[node]] = AN_IDENT) and
+              (ASTIVal[ASTLeft[node]] >= 0) and
+              Syms[ASTIVal[ASTLeft[node]]].IsArray and
+              (Syms[ASTIVal[ASTLeft[node]]].ArrLen >= 0) and
+              (SymArrNDims[ASTIVal[ASTLeft[node]]] <= 1) and
+              (SymElemDynDepth[ASTIVal[ASTLeft[node]]] = 0) and
+              (Syms[ASTIVal[ASTLeft[node]]].ElemType <> tyAnsiString) and
+              (Syms[ASTIVal[ASTLeft[node]]].ElemType <> tyString) and
+              not ((Syms[ASTIVal[ASTLeft[node]]].ElemType = tyRecord) and
+                   RecordHasManagedFields(Syms[ASTIVal[ASTLeft[node]]].ElemRecName)) and
+              rhsIsLValue then
+      begin
+        { Whole static-array assignment (`b := a`). The scalar store path below
+          moves only one element's width, leaving the rest of `b` as garbage
+          (bug-fixed-array-assignment-no-copy). Copy the full ArrLen*elemSize
+          via IR_COPY_REC, mirroring the whole-record path and the static-array
+          arg-copy idiom above. Managed-element arrays (string / managed-record
+          elements) need per-element ARC and are left to the scalar path. }
+        i := ASTIVal[ASTLeft[node]];
+        if Syms[i].ElemType = tyRecord then elemSize := RecSize(Syms[i].ElemRecName)
+        else elemSize := TypeSize(Syms[i].ElemType);
+        leftAddr := IRLowerAddress(ASTLeft[node]);
+        right := IRLowerAddress(ASTRight[node]);
+        Result := IRAppend(IR_COPY_REC, leftAddr, right, -1,
+                           Syms[i].ArrLen * elemSize, Ord(tyRecord));
+      end
       else if (ASTKind[ASTLeft[node]] <> AN_IDENT) and
               (NodeDynDepth(ASTLeft[node]) > 0) then
       begin
