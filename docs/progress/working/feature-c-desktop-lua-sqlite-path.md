@@ -121,3 +121,16 @@ gap rather than bloating this ticket.
   C: tiny-regex warmup → lua → sqlite. Pulls slices A–D from
   `feature-c-source-frontend`; adds setjmp/longjmp + varargs-define (its
   non-goals) because lua requires both; defers embedded layout (slice F).
+- 2026-06-25 — **Slice A (clexer operator fidelity) DONE.** Multi-char C
+  operators now lex to distinct tokens: `++ -- += -= *= /= %= &= |= ^= <<= >>=`,
+  `<<`=tkShl `>>`=tkShr, `&`=tkAmp(bitwise) vs `&&`=tkAnd(logical),
+  `|`=tkPipe vs `||`=tkOr, `^`=tkXor, `?`=tkQuestion, `:`=tkColon (was unlexed →
+  also activates the bitfield→opaque guard at CStructBodyIsSimple). `->`→tkDot
+  kept. `CEvalConstExpr` rewritten to the new tokens in the same commit (added a
+  bit-XOR precedence level) + the RegisterCMacroConsts guard; enum/macro const
+  eval unaffected. New enum tokens appended at end of `TTokenKind` (no ordinal
+  shift). Self-host byte-identical (`make bootstrap`). Header-import regression:
+  c_interop devtest identical to pinned; new fixture `test/cslicea_lib.c` +
+  `test_c_slicea.pas` (`<< >> & | ^` + precedence) matches gcc, wired into the
+  C-import suite. Filed `bug-c-const-eval-bitwise-not` (pre-existing `~` typing
+  quirk, omitted from the fixture). Next: Slice B (real C expression compiler).

@@ -8,10 +8,11 @@ lives in git, not in a timestamp._
 
 _none_
 
-## working (1)
+## working (2)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
+| feature-c-desktop-lua-sqlite-path | A | feature | C desktop path — compile real portable C (tiny-regex → lua → sqlite) | — |
 | feature-own-net-http-lib | B | feature | Own networking library — native HTTP client (+ sockets, async) | — |
 
 ## unfinished (3)
@@ -34,6 +35,7 @@ _none_
 | --- | --- | --- | --- | --- |
 | bug-aggregate-member-array-as-var-param | A | bug | bug: passing an array that is a member of an aggregate (record field / 2D-array row) as a var/const param segfaults | — |
 | bug-arm32-writeln-longword-high-bit | A | bug | bug: arm32 `writeln(LongWord)` mangles a value with the high bit set | — |
+| bug-c-const-eval-bitwise-not | A | bug | C const-eval: `~` (bitwise NOT) yields wrong value | — |
 | bug-esp-not-always-boolean | A | bug | bug: `not` on an integer is boolean-only on ESP (riscv32 / xtensa) | — |
 | bug-fixed-array-assignment-no-copy | A | bug | bug: assigning one fixed array to another (`b := a`) does not copy | — |
 | bug-managed-record-result-self-arg | A | bug | bug: function Result of a managed-field record, passed as a call arg in its own reassignment, segfaults | — |
@@ -43,7 +45,6 @@ _none_
 | chore-runtime-emission-size | A | chore | Finer runtime-support emission (code size) | — |
 | feature-arm32-large-aggregate-result | A | feature | arm32: support record function results larger than 4 param words (sret) | — |
 | feature-cdecl-indirect-cross-targets | A | feature | Port cdecl indirect calls (dynamic library loading) to the other targets | — |
-| feature-c-desktop-lua-sqlite-path | A | feature | C desktop path — compile real portable C (tiny-regex → lua → sqlite) | — |
 | feature-c-header-import-complex | A | feature | Import C headers for complex libraries (glib/GTK-grade) | — |
 | feature-copy-intrinsic | B | feature | `Copy` as a generic overloaded intrinsic (string + dynarray families) | — |
 | feature-c-regex-library-devtest | A | feature | C regex library dev-test import | — |
@@ -418,6 +419,7 @@ _none_
 
 - [A] bug-aggregate-member-array-as-var-param
 - [A] bug-arm32-writeln-longword-high-bit
+- [A] bug-c-const-eval-bitwise-not
 - [A] bug-esp-not-always-boolean
 - [A] bug-fixed-array-assignment-no-copy
 - [A] bug-managed-record-result-self-arg
@@ -427,7 +429,6 @@ _none_
 - [A] chore-runtime-emission-size
 - [A] feature-arm32-large-aggregate-result
 - [A] feature-cdecl-indirect-cross-targets
-- [A] feature-c-desktop-lua-sqlite-path
 - [A] feature-c-header-import-complex
 - [B] feature-copy-intrinsic
 - [A] feature-c-regex-library-devtest

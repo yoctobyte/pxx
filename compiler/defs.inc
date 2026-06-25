@@ -420,7 +420,16 @@ type
     tkIndent, tkDedent, tkNewline,
     tkHigh,
     tkXor,
-    tkLow
+    tkLow,
+    { C multi-char operators (Slice A). Distinct so the C body parser and const
+      evaluator can tell `&`/`&&`, `|`/`||`, `<<`/`>>`, and the compound-assigns
+      apart. tkShl/tkXor/tkColon already exist above and are reused. }
+    tkShr,
+    tkAmp, tkPipe,
+    tkPlusPlus, tkMinusMinus,
+    tkPlusEq, tkMinusEq, tkStarEq, tkSlashEq, tkModEq,
+    tkAmpEq, tkPipeEq, tkXorEq, tkShlEq, tkShrEq,
+    tkQuestion
   );
 
   TToken = record

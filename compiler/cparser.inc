@@ -703,9 +703,9 @@ begin
 end;
 
 { Integer constant-expression evaluator for enum values. Operates on the live
-  C token stream. The C lexer does not produce distinct shift/bitwise tokens,
-  so `<<` arrives as two tkLt, `>>` as two tkGt, `|` as tkOr, `&` as tkAnd.
-  Precedence, low to high: | , & , << >> , + - , * , unary , primary.
+  C token stream. Since Slice A the C lexer emits distinct operator tokens:
+  `<<`=tkShl, `>>`=tkShr, `|`=tkPipe, `^`=tkXor, `&`=tkAmp.
+  Precedence, low to high: | , ^ , & , << >> , + - , * , unary , primary.
   Unknown/unsupported tokens evaluate to 0 rather than derailing. }
 function CEvalConstExpr: Int64; forward;
 
@@ -749,31 +749,29 @@ end;
 function CEvalConstShift: Int64;
 begin
   Result := CEvalConstAdd;
-  while (CurTok.Kind = tkLt) or (CurTok.Kind = tkGt) do
+  while (CurTok.Kind = tkShl) or (CurTok.Kind = tkShr) do
   begin
-    if CurTok.Kind = tkLt then
-    begin
-      Next; if CurTok.Kind = tkLt then Next; { second '<' of '<<' }
-      Result := Result shl CEvalConstAdd;
-    end
-    else
-    begin
-      Next; if CurTok.Kind = tkGt then Next; { second '>' of '>>' }
-      Result := Result shr CEvalConstAdd;
-    end;
+    if CurTok.Kind = tkShl then begin Next; Result := Result shl CEvalConstAdd; end
+    else begin Next; Result := Result shr CEvalConstAdd; end;
   end;
 end;
 
 function CEvalConstAnd: Int64;
 begin
   Result := CEvalConstShift;
-  while CurTok.Kind = tkAnd do begin Next; Result := Result and CEvalConstShift; end;
+  while CurTok.Kind = tkAmp do begin Next; Result := Result and CEvalConstShift; end;
+end;
+
+function CEvalConstXor: Int64;
+begin
+  Result := CEvalConstAnd;
+  while CurTok.Kind = tkXor do begin Next; Result := Result xor CEvalConstAnd; end;
 end;
 
 function CEvalConstExpr: Int64;
 begin
-  Result := CEvalConstAnd;
-  while CurTok.Kind = tkOr do begin Next; Result := Result or CEvalConstAnd; end;
+  Result := CEvalConstXor;
+  while CurTok.Kind = tkPipe do begin Next; Result := Result or CEvalConstXor; end;
 end;
 
 { Parse an enumerator list. CurTok must be at the opening tkBegin (the brace).
@@ -863,9 +861,9 @@ begin
       if (Tokens[t].Kind = tkInteger) or (Tokens[t].Kind = tkLParen) or
          (Tokens[t].Kind = tkRParen) or (Tokens[t].Kind = tkPlus) or
          (Tokens[t].Kind = tkMinus) or (Tokens[t].Kind = tkStar) or
-         (Tokens[t].Kind = tkLt) or (Tokens[t].Kind = tkGt) or
-         (Tokens[t].Kind = tkOr) or (Tokens[t].Kind = tkAnd) or
-         (Tokens[t].Kind = tkNot) then
+         (Tokens[t].Kind = tkShl) or (Tokens[t].Kind = tkShr) or
+         (Tokens[t].Kind = tkPipe) or (Tokens[t].Kind = tkAmp) or
+         (Tokens[t].Kind = tkXor) or (Tokens[t].Kind = tkNot) then
         { allowed }
       else if Tokens[t].Kind = tkIdent then
       begin

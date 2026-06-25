@@ -318,19 +318,28 @@ begin
   Inc(SrcPos);
   case c of
     '+': begin
-           if (SrcPos <= Length(Source)) and (Source[SrcPos] = '+') then Inc(SrcPos)
-           else if (SrcPos <= Length(Source)) and (Source[SrcPos] = '=') then Inc(SrcPos);
-           CurTok.Kind := tkPlus;
+           if (SrcPos <= Length(Source)) and (Source[SrcPos] = '+') then begin Inc(SrcPos); CurTok.Kind := tkPlusPlus; end
+           else if (SrcPos <= Length(Source)) and (Source[SrcPos] = '=') then begin Inc(SrcPos); CurTok.Kind := tkPlusEq; end
+           else CurTok.Kind := tkPlus;
          end;
     '-': begin
-           if (SrcPos <= Length(Source)) and (Source[SrcPos] = '-') then begin Inc(SrcPos); CurTok.Kind := tkMinus; end
+           if (SrcPos <= Length(Source)) and (Source[SrcPos] = '-') then begin Inc(SrcPos); CurTok.Kind := tkMinusMinus; end
            else if (SrcPos <= Length(Source)) and (Source[SrcPos] = '>') then begin Inc(SrcPos); CurTok.Kind := tkDot; end
-           else if (SrcPos <= Length(Source)) and (Source[SrcPos] = '=') then begin Inc(SrcPos); CurTok.Kind := tkMinus; end
+           else if (SrcPos <= Length(Source)) and (Source[SrcPos] = '=') then begin Inc(SrcPos); CurTok.Kind := tkMinusEq; end
            else CurTok.Kind := tkMinus;
          end;
-    '*': CurTok.Kind := tkStar;
-    '/': CurTok.Kind := tkSlash;
-    '%': CurTok.Kind := tkMod;
+    '*': begin
+           if (SrcPos <= Length(Source)) and (Source[SrcPos] = '=') then begin Inc(SrcPos); CurTok.Kind := tkStarEq; end
+           else CurTok.Kind := tkStar;
+         end;
+    '/': begin
+           if (SrcPos <= Length(Source)) and (Source[SrcPos] = '=') then begin Inc(SrcPos); CurTok.Kind := tkSlashEq; end
+           else CurTok.Kind := tkSlash;
+         end;
+    '%': begin
+           if (SrcPos <= Length(Source)) and (Source[SrcPos] = '=') then begin Inc(SrcPos); CurTok.Kind := tkModEq; end
+           else CurTok.Kind := tkMod;
+         end;
     '(': CurTok.Kind := tkLParen;
     ')': CurTok.Kind := tkRParen;
     '[': CurTok.Kind := tkLBrack;
@@ -340,14 +349,22 @@ begin
     ';': CurTok.Kind := tkSemicolon;
     ',': CurTok.Kind := tkComma;
     '.': CurTok.Kind := tkDot;
+    ':': CurTok.Kind := tkColon;
+    '?': CurTok.Kind := tkQuestion;
     '~': CurTok.Kind := tkNot;
+    '^': begin
+           if (SrcPos <= Length(Source)) and (Source[SrcPos] = '=') then begin Inc(SrcPos); CurTok.Kind := tkXorEq; end
+           else CurTok.Kind := tkXor;
+         end;
     '&': begin
-           if (SrcPos <= Length(Source)) and (Source[SrcPos] = '&') then Inc(SrcPos);
-           CurTok.Kind := tkAnd;
+           if (SrcPos <= Length(Source)) and (Source[SrcPos] = '&') then begin Inc(SrcPos); CurTok.Kind := tkAnd; end
+           else if (SrcPos <= Length(Source)) and (Source[SrcPos] = '=') then begin Inc(SrcPos); CurTok.Kind := tkAmpEq; end
+           else CurTok.Kind := tkAmp;
          end;
     '|': begin
-           if (SrcPos <= Length(Source)) and (Source[SrcPos] = '|') then Inc(SrcPos);
-           CurTok.Kind := tkOr;
+           if (SrcPos <= Length(Source)) and (Source[SrcPos] = '|') then begin Inc(SrcPos); CurTok.Kind := tkOr; end
+           else if (SrcPos <= Length(Source)) and (Source[SrcPos] = '=') then begin Inc(SrcPos); CurTok.Kind := tkPipeEq; end
+           else CurTok.Kind := tkPipe;
          end;
     '!': begin
            if (SrcPos <= Length(Source)) and (Source[SrcPos] = '=') then
@@ -360,12 +377,26 @@ begin
            else CurTok.Kind := tkAssign;
          end;
     '<': begin
-           if (SrcPos <= Length(Source)) and (Source[SrcPos] = '=') then
+           if (SrcPos <= Length(Source)) and (Source[SrcPos] = '<') then
+             begin
+               Inc(SrcPos);
+               if (SrcPos <= Length(Source)) and (Source[SrcPos] = '=') then
+                 begin Inc(SrcPos); CurTok.Kind := tkShlEq; end
+               else CurTok.Kind := tkShl;
+             end
+           else if (SrcPos <= Length(Source)) and (Source[SrcPos] = '=') then
              begin Inc(SrcPos); CurTok.Kind := tkLe; end
            else CurTok.Kind := tkLt;
          end;
     '>': begin
-           if (SrcPos <= Length(Source)) and (Source[SrcPos] = '=') then
+           if (SrcPos <= Length(Source)) and (Source[SrcPos] = '>') then
+             begin
+               Inc(SrcPos);
+               if (SrcPos <= Length(Source)) and (Source[SrcPos] = '=') then
+                 begin Inc(SrcPos); CurTok.Kind := tkShrEq; end
+               else CurTok.Kind := tkShr;
+             end
+           else if (SrcPos <= Length(Source)) and (Source[SrcPos] = '=') then
              begin Inc(SrcPos); CurTok.Kind := tkGe; end
            else CurTok.Kind := tkGt;
          end;

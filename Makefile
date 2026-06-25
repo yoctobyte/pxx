@@ -675,6 +675,8 @@ test-core: $(COMPILER)
 	test "$$(/tmp/c_typedef26)" = "5000000000"
 	./$(COMPILER) test/test_c_enum.pas /tmp/c_enum26
 	test "$$(/tmp/c_enum26)" = "$$(printf '0 1 2\n0 1 2 4 5\n1000 1001')"
+	./$(COMPILER) test/test_c_slicea.pas /tmp/c_slicea26
+	test "$$(/tmp/c_slicea26)" = "16 32 6 60 21 275 1"
 	./$(COMPILER) test/test_c_float.pas /tmp/c_float26
 	test "$$(/tmp/c_float26)" = "$$(printf '1024.0\n16.0\n12.0')"
 	cc -shared -fPIC -o /tmp/libspill.so test/spill_lib.c
