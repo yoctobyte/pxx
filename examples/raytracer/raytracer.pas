@@ -21,7 +21,7 @@ program RayTracer;
   array of scene objects, bounded recursion for reflections, nested float loops,
   and integer image-buffer / PPM output. }
 
-uses sysutils, math;
+uses sysutils, math, image, png, hashing, platform;
 
 const
   SMOKE_W = 96;
@@ -236,35 +236,23 @@ begin
   Clamp255 := i;
 end;
 
-{ Render the scene; if path<>'' write a PPM, always return the pixel checksum. }
-function Render(iw, ih: Integer; const path: AnsiString): Int64;
+{ Render the scene into img and return the pixel checksum. }
+function Render(iw, ih: Integer; var img: TImage): Int64;
 var
-  f: Text;
   px, py: Integer;
   sx, sy, aspect, fov: Double;
   ro, rd, col: Vec3;
   r, g, b: Integer;
   checksum: Int64;
-  line: AnsiString;
-  toFile: Boolean;
+  c: TRGBA;
 begin
-  toFile := path <> '';
   aspect := iw / ih;
   fov := 1.0;                 { tan(half-fov) ~ scene scale }
   checksum := 0;
   ro := V(0.0, 1.0, 0.0);     { camera a touch above the plane }
-
-  if toFile then
-  begin
-    Assign(f, path); Rewrite(f);
-    writeln(f, 'P3');
-    writeln(f, IntToStr(iw) + ' ' + IntToStr(ih));
-    writeln(f, '255');
-  end;
+  ImageInit(img, iw, ih);
 
   for py := 0 to ih - 1 do
-  begin
-    line := '';
     for px := 0 to iw - 1 do
     begin
       sx := (2.0 * ((px + 0.5) / iw) - 1.0) * aspect * fov;
@@ -275,33 +263,61 @@ begin
       g := Clamp255(col.y);
       b := Clamp255(col.z);
       checksum := checksum + (r + 2 * g + 3 * b) * (px + 1);
-      if toFile then
-        line := line + IntToStr(r) + ' ' + IntToStr(g) + ' ' + IntToStr(b) + ' ';
+      c := MakeRGBA(r, g, b, 255);   { named: aarch64 rejects a record temp arg
+                                       (bug-aarch64-record-temp-byvalue-arg) }
+      ImageSetPixel(img, px, py, c);
     end;
-    if toFile then writeln(f, line);
-  end;
 
-  if toFile then Close(f);
   Render := checksum;
+end;
+
+procedure WritePPM(const path: AnsiString; var img: TImage);
+var f: Text; px, py: Integer; c: TRGBA; line: AnsiString;
+begin
+  Assign(f, path); Rewrite(f);
+  writeln(f, 'P3');
+  writeln(f, IntToStr(img.Width) + ' ' + IntToStr(img.Height));
+  writeln(f, '255');
+  for py := 0 to img.Height - 1 do
+  begin
+    line := '';
+    for px := 0 to img.Width - 1 do
+    begin
+      c := ImageGetPixel(img, px, py);
+      line := line + IntToStr(c.R) + ' ' + IntToStr(c.G) + ' ' + IntToStr(c.B) + ' ';
+    end;
+    writeln(f, line);
+  end;
+  Close(f);
+end;
+
+procedure WritePNG(const path: AnsiString; var img: TImage);
+var f: Text; bytes: TByteArray;
+begin
+  PngEncodeRGBA(img, bytes);
+  Assign(f, path); Rewrite(f);
+  PalWrite(f.Handle, @bytes[0], Length(bytes));
+  Close(f);
 end;
 
 var
   i, iw, ih: Integer;
-  a, mode, ppmPath: AnsiString;
+  a, mode, outPath: AnsiString;
   csum: Int64;
+  img: TImage;
 begin
   mode := 'smoke';
-  ppmPath := 'raytracer.ppm';
+  outPath := '';
   iw := 320; ih := 240;
 
   i := 1;
   while i <= ParamCount do
   begin
     a := ParamStr(i);
-    if a = '--ppm' then
+    if (a = '--ppm') or (a = '--png') then
     begin
-      mode := 'ppm';
-      if i + 1 <= ParamCount then begin ppmPath := ParamStr(i + 1); i := i + 1; end;
+      if a = '--ppm' then mode := 'ppm' else mode := 'png';
+      if i + 1 <= ParamCount then begin outPath := ParamStr(i + 1); i := i + 1; end;
       if i + 2 <= ParamCount then
       begin
         iw := StrToIntDef(ParamStr(i + 1), iw);
@@ -316,13 +332,23 @@ begin
 
   if mode = 'ppm' then
   begin
-    csum := Render(iw, ih, ppmPath);
-    writeln('wrote ', ppmPath, ' (', iw, 'x', ih, ')');
+    if outPath = '' then outPath := 'raytracer.ppm';
+    csum := Render(iw, ih, img);
+    WritePPM(outPath, img);
+    writeln('wrote ', outPath, ' (', iw, 'x', ih, ')');
+    writeln('checksum=', csum);
+  end
+  else if mode = 'png' then
+  begin
+    if outPath = '' then outPath := 'raytracer.png';
+    csum := Render(iw, ih, img);
+    WritePNG(outPath, img);
+    writeln('wrote ', outPath, ' (', iw, 'x', ih, ')');
     writeln('checksum=', csum);
   end
   else
   begin
-    csum := Render(SMOKE_W, SMOKE_H, '');
+    csum := Render(SMOKE_W, SMOKE_H, img);
     writeln('checksum=', csum);
     if EXPECTED = 0 then writeln('(no EXPECTED pinned yet)')
     else if csum = EXPECTED then writeln('ALL OK')

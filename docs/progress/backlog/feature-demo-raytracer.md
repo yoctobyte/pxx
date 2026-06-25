@@ -80,5 +80,17 @@ gaps separately if the platonic implementation needs them.
   - [[feature-arm32-large-aggregate-result]] — arm32 can't return a 24-byte
     `Vec3` (sret for >4-word aggregate results). i386 still lacks float params.
     So the cross gate stays mandelbrot-only.
-  **Still open:** interactive hosted mode (camera orbit/zoom, resize), PNG output
-  once convenient, optional simpler-math profile.
+  **Still open:** interactive hosted mode (camera orbit/zoom, resize), optional
+  simpler-math profile.
+- 2026-06-25 — **PNG output added.** `--png FILE [W H]` builds a `TImage` and
+  writes a real PNG via the `png`/`zlib` RTL (`PngEncodeRGBA` + raw `PalWrite` of
+  the byte stream through the `Text` handle). Verified: `file` reports a valid
+  RGBA PNG and it round-trips losslessly (encode checksum == decode checksum).
+  `--ppm` retained; render now goes through a shared `TImage`, smoke checksum
+  unchanged (297935246). Host + aarch64 build clean; arm32 still blocked on
+  [[feature-arm32-large-aggregate-result]] (Vec3 result). New gap found:
+  [[bug-aarch64-arm32-record-temp-byvalue-arg]] — `ImageSetPixel(img,x,y,
+  MakeRGBA(...))` (record temp arg) fails aarch64/arm32 codegen; fixed by a named
+  `TRGBA` local (idiomatic). (mandelbrot deliberately kept PPM-only: it is in the
+  Track A float-determinism cross gate and pulling png/image/zlib would break its
+  aarch64/arm32 cross-build.)

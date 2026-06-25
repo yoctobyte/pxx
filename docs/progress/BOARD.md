@@ -28,10 +28,11 @@ _none_
 | --- | --- | --- | --- | --- |
 | feature-c-runtime-library | B | feature | C runtime/library layer (`lib/crtl`) plus direct C-library packages | feature-c-source-frontend |
 
-## backlog (56)
+## backlog (57)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
+| bug-aarch64-arm32-record-temp-byvalue-arg | A | bug | aarch64/arm32: record temporary as a by-value arg fails codegen | — |
 | bug-bare-read-write-in-method-hits-intrinsic | A | bug | Bare `Read`/`Write` inside a method resolves to the console intrinsic, not the method | — |
 | bug-generic-class-methods-in-program | A | bug | Generic class METHOD bodies break in a program (work in a unit) | — |
 | bug-managed-length-via-pointer-deref | A | bug | bug: managed Length(ps^) / Length(rec.pf^) returns garbage (all targets) | — |
@@ -402,6 +403,7 @@ _none_
 
 ## Ready (no unmet blocker)
 
+- [A] bug-aarch64-arm32-record-temp-byvalue-arg
 - [A] bug-bare-read-write-in-method-hits-intrinsic
 - [A] bug-generic-class-methods-in-program
 - [A] bug-managed-length-via-pointer-deref
