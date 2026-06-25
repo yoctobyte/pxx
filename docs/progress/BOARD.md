@@ -81,7 +81,7 @@ _none_
 | feature-release-packaging | B | feature | Release packaging, reproducibility manifest, and `release.sh` | — |
 | feature-synapse-compile-check | B | feature | Synapse library — proper compile check (Track B) | feature-mimic-fpc |
 | feature-threadsafe-io-serialization | A | feature | Statement-level I/O serialization under threads | feature-unified-heap-allocator |
-| feature-tls13-from-scratch | A | feature | TLS 1.3 from scratch — syscall-only (Pascal handshake + kTLS bulk) | — |
+| feature-tls13-from-scratch | B | feature | TLS 1.3 from scratch — syscall-only (Pascal handshake + kTLS bulk) | — |
 | feature-tls-provider-abstraction | B | feature | TLS provider abstraction — pluggable backends (OpenSSL + handrolled) | — |
 | feature-tls-system-trust-store | B | feature | Chain-to-system-trust-store (/etc/ssl/certs) for the TLS client | — |
 | feature-toolchain-cli-ux | A | feature | Toolchain CLI / user tooling (install, config, discovery, doctor, selfcheck) | — |
@@ -462,7 +462,7 @@ _none_
 - [B] feature-real-dynlib-loader
 - [B] feature-release-packaging
 - [A] feature-threadsafe-io-serialization
-- [A] feature-tls13-from-scratch
+- [B] feature-tls13-from-scratch
 - [B] feature-tls-provider-abstraction
 - [B] feature-tls-system-trust-store
 - [A] feature-toolchain-cli-ux
