@@ -6,7 +6,10 @@ unit http;
   (over scheduler's epoll reactor: SetNonBlocking + WaitReadable) can reuse them
   without duplicating the protocol logic.
 
-  Capabilities: plain HTTP (no TLS yet — see feature-tls-provider-abstraction);
+  Capabilities: HTTP + https through the pluggable TLS seam (tls.pas) — bytes
+  route via the active backend when the URL is https and a backend is registered,
+  else an https request fails cleanly (no backend ships in-tree yet — see
+  feature-tls-provider-abstraction);
   GET/POST/HEAD/PUT/DELETE + generic HttpExec with custom headers; blocking and
   async (reactor) transports; hostname resolution (blocking dns / async
   dns_async); response framing (Transfer-Encoding: chunked decode, else
@@ -16,7 +19,8 @@ unit http;
 
 interface
 
-uses net, asyncnet, dns, dns_async, dns_config, dns_wire_core, sysutils;
+uses net, asyncnet, dns, dns_async, dns_config, dns_wire_core, sysutils,
+     tls, scheduler, platform;
 
 type
   THttpResponse = record
@@ -120,15 +124,17 @@ type
     Port:  Integer;
     Buf:   AnsiString;     { bytes read past the current response, kept for next }
     Alive: Boolean;
+    IsTls: Boolean;        { https — I/O routed through the TLS seam (tls.pas) }
+    Tls:   TTlsConn;       { backend connection handle when IsTls }
   end;
 
-function HttpConnect(const host: AnsiString; port: Integer): THttpConnection;
+function HttpConnect(const host: AnsiString; port: Integer; isTls: Boolean): THttpConnection;
 function HttpConnExec(var conn: THttpConnection; const method, path, extraHeaders, body: AnsiString): THttpResponse;
 function HttpConnGet(var conn: THttpConnection; const path: AnsiString): THttpResponse;
 procedure HttpConnClose(var conn: THttpConnection);
 
 { Async keep-alive (call from a coroutine; same THttpConnection, reactor recv). }
-function HttpConnectAsync(const host: AnsiString; port: Integer): THttpConnection;
+function HttpConnectAsync(const host: AnsiString; port: Integer; isTls: Boolean): THttpConnection;
 function HttpConnExecAsync(var conn: THttpConnection; const method, path, extraHeaders, body: AnsiString): THttpResponse;
 function HttpConnGetAsync(var conn: THttpConnection; const path: AnsiString): THttpResponse;
 
@@ -510,6 +516,85 @@ begin
     Result := False;
 end;
 
+{ ===== TLS-aware transport seam =====
+  All HTTP byte I/O funnels through these so the same protocol code serves plain
+  and https. When isTls, bytes go through the active TLS backend (tls.pas); else
+  the plain blocking (Net*) or reactor (Tcp*) transport. With no backend
+  registered, an https request fails cleanly (HttpTlsConnect returns False ->
+  caller returns Ok=False) rather than crashing.
+
+  Handshake is treated as completing within one TlsHandshake call (the mock and a
+  blocking OpenSSL backend do; a future fully-async handshake will need a resume
+  step added to the seam). The want-read/want-write retry loop lives on the data
+  path (Read/Write), where it is resumable on the same connection and where async
+  yielding actually matters. }
+
+procedure HttpIoWait(fd: Integer; async, forRead: Boolean);
+begin
+  if async then
+  begin
+    if forRead then WaitReadable(fd) else WaitWritable(fd);
+  end
+  else if forRead then PalPoll(fd, PAL_POLL_IN, -1)
+  else PalPoll(fd, PAL_POLL_OUT, -1);
+end;
+
+{ Client TLS handshake over a connected fd. True on tlsOk; False (cleanly) when
+  no backend or the handshake failed. }
+function HttpTlsConnect(fd: Integer; const host: AnsiString; async: Boolean;
+                        var tlsc: TTlsConn): Boolean;
+begin
+  tlsc := nil;
+  Result := TlsAvailable and (TlsHandshake(fd, tlsClient, host, tlsc) = tlsOk);
+end;
+
+{ Send the whole buffer. Plain path matches the old single-call behaviour; TLS
+  path loops over partial writes and want-states. }
+function HttpSendAll(fd: Integer; tlsc: TTlsConn; isTls, async: Boolean;
+                     buf: Pointer; len: Integer): Boolean;
+var off, put: Integer; r: TTlsResult; n: Int64;
+begin
+  if isTls then
+  begin
+    off := 0;
+    while off < len do
+    begin
+      r := TlsWrite(tlsc, Pointer(Int64(buf) + off), len - off, put);
+      if r = tlsOk then off := off + put
+      else if r = tlsWantWrite then HttpIoWait(fd, async, False)
+      else if r = tlsWantRead then HttpIoWait(fd, async, True)
+      else begin Result := False; Exit; end;
+    end;
+    Result := True;
+  end
+  else
+  begin
+    if async then n := TcpSend(fd, buf, len) else n := NetSend(fd, buf, len);
+    Result := n >= 0;
+  end;
+end;
+
+{ One read. Returns bytes (>0), 0 on clean close, <0 on error — same convention
+  as Net/TcpRecv, so existing read loops are unchanged. }
+function HttpRecvSome(fd: Integer; tlsc: TTlsConn; isTls, async: Boolean;
+                      buf: Pointer; len: Integer): Int64;
+var got: Integer; r: TTlsResult;
+begin
+  if isTls then
+  begin
+    repeat
+      r := TlsRead(tlsc, buf, len, got);
+      if r = tlsWantRead then HttpIoWait(fd, async, True)
+      else if r = tlsWantWrite then HttpIoWait(fd, async, False);
+    until (r <> tlsWantRead) and (r <> tlsWantWrite);
+    if r = tlsOk then Result := got
+    else if r = tlsClosed then Result := 0
+    else Result := -1;
+  end
+  else if async then Result := TcpRecv(fd, buf, len)
+  else Result := NetRecv(fd, buf, len);
+end;
+
 function HttpRequest(const method, url, extraHeaders, body: AnsiString): THttpResponse;
 var
   host, path: AnsiString;
@@ -517,6 +602,7 @@ var
   isTls: Boolean;
   ip: LongWord;
   sock: TNetSocket;
+  tlsc: TTlsConn;
   req, raw: AnsiString;
   buf: array[0..4095] of Byte;
   n, old: Integer;
@@ -526,22 +612,28 @@ begin
   Result.Ok := False; Result.Status := 0; Result.Reason := '';
   Result.Headers := ''; Result.Body := '';
 
+  tlsc := nil;
   if not HttpParseUrl(url, host, port, path, isTls) then Exit;
-  if isTls then Exit;                 { no TLS layer yet }
   if not HttpResolve(host, ip) then Exit;
 
   sock := NetTcpConnect(NetAddress(ip, port));
   if sock < 0 then Exit;
 
-  req := HttpBuildRequest(method, host, path, extraHeaders, body);
-  if NetSend(sock, @req[1], Length(req)) < 0 then
+  if isTls and not HttpTlsConnect(sock, host, False, tlsc) then
   begin
+    NetClose(sock); Exit;             { https requested but no/failed TLS backend }
+  end;
+
+  req := HttpBuildRequest(method, host, path, extraHeaders, body);
+  if not HttpSendAll(sock, tlsc, isTls, False, @req[1], Length(req)) then
+  begin
+    if isTls then TlsClose(tlsc);
     NetClose(sock); Exit;
   end;
 
   raw := '';
   repeat
-    n := NetRecv(sock, @buf[0], BUFSZ);
+    n := HttpRecvSome(sock, tlsc, isTls, False, @buf[0], BUFSZ);
     if n > 0 then
     begin
       old := Length(raw);
@@ -549,6 +641,7 @@ begin
       Move(buf[0], raw[old + 1], n);          { bulk append — not per-byte }
     end;
   until n <= 0;
+  if isTls then TlsClose(tlsc);
   NetClose(sock);
 
   HttpParseResponse(raw, Result);
@@ -664,8 +757,7 @@ end;
 function HttpConnRecvMore(var conn: THttpConnection; async: Boolean): Integer;
 var b: array[0..4095] of Byte; got: Int64; n, oldLen: Integer;
 begin
-  if async then got := TcpRecv(conn.Sock, @b[0], 4096)
-  else got := NetRecv(conn.Sock, @b[0], 4096);
+  got := HttpRecvSome(conn.Sock, conn.Tls, conn.IsTls, async, @b[0], 4096);
   if got > 0 then
   begin
     n := Integer(got);
@@ -679,14 +771,20 @@ begin
   Result := Integer(got);
 end;
 
-function HttpConnect(const host: AnsiString; port: Integer): THttpConnection;
+function HttpConnect(const host: AnsiString; port: Integer; isTls: Boolean): THttpConnection;
 var ip: LongWord;
 begin
   Result.Host := host; Result.Port := port; Result.Buf := '';
   Result.Sock := NET_INVALID_SOCKET; Result.Alive := False;
+  Result.IsTls := isTls; Result.Tls := nil;
   if not HttpResolve(host, ip) then Exit;
   Result.Sock := NetTcpConnect(NetAddress(ip, port));
-  Result.Alive := Result.Sock >= 0;
+  if Result.Sock < 0 then Exit;
+  if isTls and not HttpTlsConnect(Result.Sock, host, False, Result.Tls) then
+  begin
+    NetClose(Result.Sock); Result.Sock := NET_INVALID_SOCKET; Exit;
+  end;
+  Result.Alive := True;
 end;
 
 { Shared core: send a keep-alive request and read exactly one length-aware
@@ -695,7 +793,7 @@ function HttpConnExecCore(var conn: THttpConnection;
   const method, path, extraHeaders, body: AnsiString; async: Boolean): THttpResponse;
 var
   req, headerBlock, oneResp: AnsiString;
-  hdrEnd, bodyStart, clen, clen2, blen, sent: Integer;
+  hdrEnd, bodyStart, clen, clen2, blen: Integer;
 begin
   Result.Ok := False; Result.Status := 0; Result.Reason := '';
   Result.Headers := ''; Result.Body := '';
@@ -707,9 +805,8 @@ begin
   if body <> '' then req := req + 'Content-Length: ' + IntToStr(Length(body)) + CRLF;
   req := req + CRLF;
   if body <> '' then req := req + body;
-  if async then sent := Integer(TcpSend(conn.Sock, @req[1], Length(req)))
-  else sent := Integer(NetSend(conn.Sock, @req[1], Length(req)));
-  if sent < 0 then begin conn.Alive := False; Exit; end;
+  if not HttpSendAll(conn.Sock, conn.Tls, conn.IsTls, async, @req[1], Length(req)) then
+  begin conn.Alive := False; Exit; end;
 
   { read until the full header block is buffered }
   hdrEnd := HttpFindHeaderEnd(conn.Buf);
@@ -764,6 +861,7 @@ end;
 procedure HttpConnClose(var conn: THttpConnection);
 var rc: Integer;
 begin
+  if conn.IsTls then begin TlsClose(conn.Tls); conn.Tls := nil; end;
   if conn.Sock >= 0 then rc := NetClose(conn.Sock);
   conn.Sock := NET_INVALID_SOCKET;
   conn.Alive := False;
@@ -791,14 +889,20 @@ begin
   Result := False;
 end;
 
-function HttpConnectAsync(const host: AnsiString; port: Integer): THttpConnection;
+function HttpConnectAsync(const host: AnsiString; port: Integer; isTls: Boolean): THttpConnection;
 var ip: LongWord;
 begin
   Result.Host := host; Result.Port := port; Result.Buf := '';
   Result.Sock := NET_INVALID_SOCKET; Result.Alive := False;
+  Result.IsTls := isTls; Result.Tls := nil;
   if not HttpResolveAsync(host, ip) then Exit;
   Result.Sock := TcpConnectAddr(ip, port);
-  Result.Alive := Result.Sock >= 0;
+  if Result.Sock < 0 then Exit;
+  if isTls and not HttpTlsConnect(Result.Sock, host, True, Result.Tls) then
+  begin
+    TcpClose(Result.Sock); Result.Sock := NET_INVALID_SOCKET; Exit;
+  end;
+  Result.Alive := True;
 end;
 
 function HttpRequestAsync(const method, url, extraHeaders, body: AnsiString): THttpResponse;
@@ -811,28 +915,35 @@ var
   req, raw: AnsiString;
   buf: array[0..4095] of Byte;
   n, old: Integer;
+  tlsc: TTlsConn;
 const
   BUFSZ = 4096;
 begin
   Result.Ok := False; Result.Status := 0; Result.Reason := '';
   Result.Headers := ''; Result.Body := '';
 
+  tlsc := nil;
   if not HttpParseUrl(url, host, port, path, isTls) then Exit;
-  if isTls then Exit;                          { no TLS layer yet }
   if not HttpResolveAsync(host, ip) then Exit; { dotted-quad or hostname, async }
 
   fd := TcpConnectAddr(ip, port);              { yields until connected }
   if fd < 0 then Exit;
 
-  req := HttpBuildRequest(method, host, path, extraHeaders, body);
-  if TcpSend(fd, @req[1], Length(req)) < 0 then
+  if isTls and not HttpTlsConnect(fd, host, True, tlsc) then
   begin
+    TcpClose(fd); Exit;                        { https requested but no/failed TLS backend }
+  end;
+
+  req := HttpBuildRequest(method, host, path, extraHeaders, body);
+  if not HttpSendAll(fd, tlsc, isTls, True, @req[1], Length(req)) then
+  begin
+    if isTls then TlsClose(tlsc);
     TcpClose(fd); Exit;
   end;
 
   raw := '';
   repeat
-    n := TcpRecv(fd, @buf[0], BUFSZ);          { yields on EAGAIN }
+    n := HttpRecvSome(fd, tlsc, isTls, True, @buf[0], BUFSZ);   { yields on EAGAIN }
     if n > 0 then
     begin
       old := Length(raw);
@@ -840,6 +951,7 @@ begin
       Move(buf[0], raw[old + 1], n);          { bulk append — not per-byte }
     end;
   until n <= 0;
+  if isTls then TlsClose(tlsc);
   TcpClose(fd);
 
   HttpParseResponse(raw, Result);
@@ -877,12 +989,13 @@ end;
 var
   gPool: array of THttpConnection;
 
-function HttpPoolFind(const host: AnsiString; port: Integer): Integer;
+function HttpPoolFind(const host: AnsiString; port: Integer; isTls: Boolean): Integer;
 var i: Integer;
 begin
   Result := -1;
   for i := 0 to Length(gPool) - 1 do
-    if gPool[i].Alive and (gPool[i].Port = port) and (gPool[i].Host = host) then
+    if gPool[i].Alive and (gPool[i].Port = port) and (gPool[i].Host = host)
+       and (gPool[i].IsTls = isTls) then
     begin Result := i; Exit; end;
 end;
 
@@ -895,10 +1008,9 @@ begin
   Result.Ok := False; Result.Status := 0; Result.Reason := '';
   Result.Headers := ''; Result.Body := '';
   if not HttpParseUrl(url, host, port, path, isTls) then Exit;
-  if isTls then Exit;
 
-  { reuse a live connection to this host:port if one is pooled }
-  idx := HttpPoolFind(host, port);
+  { reuse a live connection to this host:port(:scheme) if one is pooled }
+  idx := HttpPoolFind(host, port, isTls);
   if idx >= 0 then
   begin
     Result := HttpConnExecCore(gPool[idx], 'GET', path, '', '', True);
@@ -908,7 +1020,7 @@ begin
 
   n := Length(gPool);
   SetLength(gPool, n + 1);            { gPool is a global — SetLength OK }
-  gPool[n] := HttpConnectAsync(host, port);
+  gPool[n] := HttpConnectAsync(host, port, isTls);
   Result := HttpConnExecCore(gPool[n], 'GET', path, '', '', True);
 end;
 

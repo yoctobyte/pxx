@@ -29,11 +29,35 @@ carries a real loopback round-trip via `TlsHandshake`/`TlsWrite`/`TlsRead`/
 `TlsClose`, and clearing the registry restores the clean state. Exercises the
 vtable dispatch + registry independent of any crypto.
 
-**Next slices:** (a) route `http`'s `isTls` branch through the seam (`https://`
-does TlsHandshake-after-connect, send/recv via Tls*; clean error when
-`not TlsAvailable`) + a mock-backed `https` e2e; (b) the OpenSSL backend
-([[feature-real-dynlib-loader]]); (c) the native backend
-([[feature-tls13-from-scratch]], deferred).
+## Slice 2 landed — http routes `https://` through the seam (2026-06-25)
+
+`lib/rtl/http.pas` now sends/receives every byte through a TLS-aware transport
+funnel (`HttpSendAll` / `HttpRecvSome` / `HttpTlsConnect` / `HttpIoWait`): when a
+URL is `https://` it does `TlsHandshake`-after-connect and routes I/O via
+`TlsWrite`/`TlsRead`, else the plain blocking (`Net*`) / reactor (`Tcp*`) path
+exactly as before. Covers **all four** transports — blocking one-shot
+(`HttpRequest`), async one-shot (`HttpRequestAsync`), keep-alive
+(`THttpConnection` gained `IsTls`/`Tls`; `HttpConnect`/`HttpConnectAsync` take an
+`isTls` arg; close tears the TLS layer down first), and the async pool (reuse
+keyed on host:port:**scheme** so an https conn is never handed to a plain request).
+
+The data-path `Read`/`Write` want-loop maps `tlsWantRead`/`tlsWantWrite` to
+`WaitReadable`/`WaitWritable` (async) or `PalPoll` (blocking), so a backend that
+would-block yields the coroutine and resumes — the async TLS path OpenSSL needs.
+The **handshake** is taken as completing within one `TlsHandshake` call (the mock
++ a blocking OpenSSL backend do; a fully-async handshake would need a resume step
+added to the seam — noted as future work). With **no backend**, an `https`
+request fails cleanly (`Ok=False`) — never crashes.
+
+Proven by `test/lib_https_mock` (6 checks, wired into `make lib-test` as
+`https-mock-seam`): no-backend https fails clean, then a mock plaintext backend +
+loopback server let `HttpGetAsync('https://...')` complete through the seam over
+the reactor (status 200 + body), exercising the want-read yield path. Real
+crypto waits on the backends.
+
+**Next slices:** (a) the OpenSSL backend ([[feature-real-dynlib-loader]] — dlopen
+coming); (b) the native backend ([[feature-tls13-from-scratch]], deferred);
+(c) optional: a seam resume-step if a fully-async handshake is wanted.
 
 ## Decision (2026-06-24)
 

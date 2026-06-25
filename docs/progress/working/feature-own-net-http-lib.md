@@ -114,11 +114,14 @@ response record carrying a `THttpHeaders` field (dodges
 1. Concurrency-safe pool (per-coroutine acquire/release) + a blocking
    `HttpGetPooled`; pool eviction/idle-timeout.
 2. ~~Structured headers on `THttpResponse`~~ — **landed 2026-06-25** (above).
-3. **TLS** — `https://` is parsed and refused (`isTls`). Routes through a common
-   TLS seam [[feature-tls-provider-abstraction]] with two interchangeable
-   backends: OpenSSL (default; via [[feature-real-dynlib-loader]]) and the native
-   handrolled stack [[feature-tls13-from-scratch]]. Mix-and-match (e.g. native
-   client ⇄ OpenSSL server) is the interop correctness test.
+3. **TLS** — seam + http routing **landed 2026-06-25**: `https://` now goes
+   through the common TLS seam [[feature-tls-provider-abstraction]]
+   (`lib/rtl/tls.pas`) on all four transports (blocking/async one-shot, keep-alive,
+   pool); with no backend an https request fails cleanly. Proven plaintext-mock
+   e2e (`test/lib_https_mock`, gated `https-mock-seam`). **Remaining:** the two
+   real backends — OpenSSL (default; via [[feature-real-dynlib-loader]], dlopen
+   coming) and the native handrolled stack [[feature-tls13-from-scratch]],
+   deferred. Mix-and-match (native client ⇄ OpenSSL server) is the interop test.
 
 ## Compiler gaps surfaced while building (filed)
 

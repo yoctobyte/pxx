@@ -35,7 +35,7 @@ end;
 procedure ClientCo(arg: Pointer);
 var conn: THttpConnection; r1, r2: THttpResponse;
 begin
-  conn := HttpConnectAsync('127.0.0.1', PORT);
+  conn := HttpConnectAsync('127.0.0.1', PORT, False);   { plaintext }
   r1 := HttpConnGetAsync(conn, '/a');
   gBody1 := r1.Body;
   gAliveMid := conn.Alive;               { still alive between requests }
