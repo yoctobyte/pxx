@@ -240,6 +240,16 @@ begin
   Result := r;
 end;
 
+{ Add a default Accept-Encoding to the caller's extra headers unless they already
+  set one — so the transport advertises the codecs HttpDecodeContent handles. }
+function HttpWithAcceptEncoding(const extraHeaders: AnsiString): AnsiString;
+begin
+  if Pos('accept-encoding:', LowerCase(extraHeaders)) > 0 then
+    Result := extraHeaders
+  else
+    Result := extraHeaders + 'Accept-Encoding: gzip, deflate' + CRLF;
+end;
+
 function HttpHeaderValue(const headers, name: AnsiString): AnsiString;
 var
   lname, lhead, line: AnsiString;
@@ -692,7 +702,7 @@ begin
     NetClose(sock); Exit;             { https requested but no/failed TLS backend }
   end;
 
-  req := HttpBuildRequest(method, host, path, extraHeaders, body);
+  req := HttpBuildRequest(method, host, path, HttpWithAcceptEncoding(extraHeaders), body);
   if not HttpSendAll(sock, tlsc, isTls, False, @req[1], Length(req)) then
   begin
     if isTls then TlsClose(tlsc);
@@ -869,7 +879,7 @@ begin
 
   { keep-alive request: like HttpBuildRequest but Connection: keep-alive. }
   req := method + ' ' + path + ' HTTP/1.1' + CRLF + 'Host: ' + conn.Host + CRLF +
-         'Connection: keep-alive' + CRLF + extraHeaders;
+         'Connection: keep-alive' + CRLF + HttpWithAcceptEncoding(extraHeaders);
   if body <> '' then req := req + 'Content-Length: ' + IntToStr(Length(body)) + CRLF;
   req := req + CRLF;
   if body <> '' then req := req + body;
@@ -1002,7 +1012,7 @@ begin
     TcpClose(fd); Exit;                        { https requested but no/failed TLS backend }
   end;
 
-  req := HttpBuildRequest(method, host, path, extraHeaders, body);
+  req := HttpBuildRequest(method, host, path, HttpWithAcceptEncoding(extraHeaders), body);
   if not HttpSendAll(fd, tlsc, isTls, True, @req[1], Length(req)) then
   begin
     if isTls then TlsClose(tlsc);

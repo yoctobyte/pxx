@@ -142,6 +142,13 @@ deflate`), `lib_http` +5 (`ce-identity`/`ce-empty`/`ce-gzip`/`ce-unknown`/
 `ce-resp-gzip`, the last a full gzip response decompressed by HttpParseResponse).
 `make lib-test` green vs v73.
 
+The client also now **advertises** `Accept-Encoding: gzip, deflate` by default
+(via `HttpWithAcceptEncoding`, applied in the three transport sites — blocking,
+async, keep-alive — but NOT in the pure `HttpBuildRequest`, and skipped if the
+caller already set the header). e2e `test/lib_http_gzip`: a server coroutine
+serves a gzip body with `Content-Encoding: gzip`; the async client both
+advertises the codec and decodes the body to `hello world` transparently.
+
 ## Roadmap (next slices)
 
 1. ~~Concurrency-safe pool + blocking `HttpGetPooled` + eviction/idle-timeout~~
