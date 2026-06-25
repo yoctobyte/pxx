@@ -84,3 +84,17 @@ portable Pascal kernel until their asm surfaces are mature enough.
   which is why the integer checksum still matched FPC). The shade-ramp must be a
   string **variable**, or this Track A codegen bug fixed, before the visual is
   trustworthy. Left the source idiomatic (const index) — blocked on the compiler.
+- 2026-06-25 — **Landed (Track B):** integer fixed-point kernel + colour image +
+  benchmark. `mandelbrot.pas` now has three modes (no-arg = the same ASCII+CHECKSUM
+  smoke, so the lib-test/demos gate is byte-unchanged): `--ppm FILE [W H]` writes a
+  colour PPM (P3) via a deterministic integer palette (rgbsum line as a soft
+  oracle); `--bench [W H]` reports px/s + iters/s using a `baseunix`
+  clock_gettime timer; `--kernel float|fixed` picks the Double reference kernel or
+  a new Int64 **Q4.28 integer-only** kernel (no math.pas / float runtime). The PPM
+  path uses no const-string indexing, so it renders a CORRECT bulb (verified:
+  ~16% inside-set black pixels; same FPC-confirmed `EscapeCount`) while the ASCII
+  grid stays blocked on [[bug-const-string-index-miscompiles]]. Cross-target
+  compile checked: aarch64/arm32 build clean; i386 Int64-kernel + baseunix verified
+  against stable (float params are the pre-existing pattern the live gate handles).
+  **Still open:** interactive pan/zoom explorer, native x86-64 asm kernel, and the
+  ASCII visual (the const-string-index bug).
