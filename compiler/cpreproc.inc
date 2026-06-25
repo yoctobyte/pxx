@@ -459,7 +459,7 @@ end;
 
 procedure CPExpandFunction(mi: Integer; const src: AnsiString;
   argCount, level: Integer; var dst: AnsiString);
-var p, last, a, b, ai, argBase, argP: Integer;
+var p, last, a, b, ai, argBase, argP, k, savedSlot: Integer;
 begin
   if DebugTrace then writeln('C preprocessor: expand function #', mi, ' level=', level);
   argBase := level * 16;
@@ -476,7 +476,16 @@ begin
       if (ai >= 0) and (ai < argCount) then
       begin
         CPSetExpandedArgLength(level, 0);
+        { Expand this argument with the CURRENT macro (mi) de-activated: per C, a
+          macro's arguments are macro-expanded outside its own replacement, so a
+          nested call to the SAME macro inside an argument (lua's `check_exp`
+          inside `check_exp` via `gco2ccl`) must expand. Enclosing active macros
+          stay active; nested arg macros push above, leaving mi's slot intact. }
+        savedSlot := -1;
+        for k := CPActiveMacroCount - 1 downto 0 do
+          if CPActiveMacros[k] = mi then begin savedSlot := k; CPActiveMacros[k] := -1; Break; end;
         CPExpandRangeForArgLevel(level, src, CPArgStart[argBase + ai], CPArgEnd[argBase + ai]);
+        if savedSlot >= 0 then CPActiveMacros[savedSlot] := mi;
         CPAppendExpandedArgToDst(level, dst);
       end
       else
