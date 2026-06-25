@@ -1574,6 +1574,7 @@ var
   pelemrec: array[0..15] of Integer;
   pprocsig: array[0..15] of Integer;  { fn-pointer signature Procs[] index per param, else -1 }
   savedSC, savedFS, node, savedCurProc: Integer;
+  parenName: Boolean;
 begin
   retType := ParseCDeclType;
   { Capture the return type's pointed-at type so `f()^`, `f()^.field`, `f()[i]`
@@ -1587,6 +1588,18 @@ begin
   end;
   if CTypeIsVoid then retType := tyInteger; { void return: value slot unused }
 
+  { A parenthesized declarator name `(name)(params)` — lua.h declares its whole
+    API this way (`LUA_API int (lua_gettop) (lua_State *L);`). Unwrap the redundant
+    parens so the name + param list parse normally. Distinct from `(*name)(...)`
+    (a function pointer), which ParseCDeclType already consumes. }
+  parenName := False;
+  if (CurTok.Kind = tkLParen) and
+     (Tokens[TokPos].Kind = tkIdent) and (Tokens[TokPos+1].Kind = tkRParen) then
+  begin
+    parenName := True;
+    Next;   { consume '(' — CurTok is now the name }
+  end;
+
   if CurTok.Kind <> tkIdent then
   begin
     while (CurTok.Kind <> tkSemicolon) and (CurTok.Kind <> tkEOF) do Next;
@@ -1595,6 +1608,7 @@ begin
   end;
   name := CurTok.SVal;
   Next;
+  if parenName then Eat(tkRParen);   { consume the ')' wrapping the name }
 
   if CurTok.Kind <> tkLParen then
   begin
