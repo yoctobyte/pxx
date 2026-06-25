@@ -24,6 +24,21 @@
   gap to isolate), 1 `expected C expression`. NEXT: pick off the `unexpected
   token` tail incrementally (Track C), isolate the 2 IR-codegen gaps, then
   `setjmp`/`longjmp` (Track A) + multi-file linking for an actual lua build.
+- 2026-06-25 (even later) — **recursive `#if` macro expansion fixed (0fa88d1) —
+  foundational.** `#if` evaluated a macro atom by reading its body as a literal
+  number, so a chained object macro resolved wrong: lua's
+  `LUA_INT_TYPE → LUA_INT_DEFAULT → LUA_INT_LONGLONG → 3` made
+  `#if LUA_INT_TYPE == LUA_INT_LONGLONG` FALSE, so `LUA_INTEGER` / `lua_Integer` /
+  `lua_Unsigned` were NEVER defined under the real headers. CPExprAtom now
+  recursively evaluates a macro body as a sub-expression (depth-guarded). Also
+  added LLONG_MAX/MIN + ULLONG_MAX to `lib/crtl/include/limits.h` (luaconf gates
+  the long-long path on `#if defined(LLONG_MAX)`). **lua_Integer/lua_Unsigned now
+  register.** NOTE: lua must be compiled WITH `-Ilib/crtl/include` on the path so
+  `<limits.h>`/`<stddef.h>` resolve. Post-fix error landscape (with that include
+  path): 16 `unexpected token`, 10 `call to undeclared function` (more files now
+  reach real libc calls — the M2 crtl/extern surface), 3 `expected C expression`,
+  5 parse-clean. The type-system foundation is now correct; the tail is libc
+  surface + residual per-file parse bugs + setjmp (Track A) + multi-file linking.
 - 2026-06-25 (later) — **session continued; lua core now 5/34 parse clean.**
   Added beyond the above: a permanent readable `near:` source-context on
   unexpected-token errors (cd30d0c — makes the tail diagnosable WITHOUT an
