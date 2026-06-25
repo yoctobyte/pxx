@@ -467,6 +467,18 @@ begin
   last := p + CPMValueLen[mi] - 1;
   while p <= last do
   begin
+    { Token-paste operator `a ## b`: drop the `##` (and whitespace around it) so the
+      left operand's last token abuts the right operand's first token. The pasted
+      result is re-scanned by the caller, so `DBL_ ## n` -> `DBL_MANT_DIG` then
+      expands as an object macro (lua's l_mathlim). }
+    if (CPrepChars[p] = '#') and (p < last) and (CPrepChars[p + 1] = '#') then
+    begin
+      while (Length(dst) > 0) and (dst[Length(dst)] in [' ', #9]) do
+        SetLength(dst, Length(dst) - 1);
+      p := p + 2;
+      while (p <= last) and (CPrepChars[p] in [' ', #9]) do Inc(p);
+      Continue;
+    end;
     if CPIsIdentStart(CPrepChars[p]) then
     begin
       a := p;
@@ -508,7 +520,7 @@ end;
 procedure CPExpandRange(const src: AnsiString; first, last, level: Integer;
   var dst: AnsiString);
 var
-  p, a, b, mi, q, depth, argc, argBase: Integer;
+  p, a, b, mi, q, depth, argc, argBase, ai: Integer;
   quote: Char;
   quotedDone: Boolean;
 begin
@@ -593,7 +605,18 @@ begin
             Inc(q);
           end;
           if argc > 0 then CPArgEnd[argBase + argc - 1] := q - 1;
-          
+          { Trim leading/trailing whitespace of each argument (standard C), so a
+            spaced call like `CAT(1, 7)` pastes `17`, not `1 7`. }
+          for ai := 0 to argc - 1 do
+          begin
+            while (CPArgStart[argBase + ai] <= CPArgEnd[argBase + ai]) and
+                  (src[CPArgStart[argBase + ai]] in [' ', #9]) do
+              Inc(CPArgStart[argBase + ai]);
+            while (CPArgEnd[argBase + ai] >= CPArgStart[argBase + ai]) and
+                  (src[CPArgEnd[argBase + ai]] in [' ', #9]) do
+              Dec(CPArgEnd[argBase + ai]);
+          end;
+
           if CPMacroIsActive(mi) then
             CPAppendRange(dst, src, a, q)
           else
