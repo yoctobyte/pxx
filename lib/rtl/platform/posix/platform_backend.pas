@@ -27,6 +27,7 @@ function PalBackendStatAt(dirHandle: Integer; path: PChar; var info: TPalFileSta
 
 function PalBackendSocket(domain, kind, proto: Integer): Integer;
 function PalBackendSetSocketReuseAddr(handle, enabled: Integer): Integer;
+function PalBackendSetSockOpt(handle, level, optname: Integer; valPtr: Pointer; valLen: Integer): Integer;
 function PalBackendSetSocketNonBlocking(handle, enabled: Integer): Integer;
 function PalBackendBindIpv4(handle: Integer; hostAddr: LongWord; port: Integer): Integer;
 function PalBackendConnectIpv4(handle: Integer; hostAddr: LongWord; port: Integer): Integer;
@@ -314,6 +315,16 @@ begin
 {$else}
   Result := Integer(__pxxrawsyscall(SYS_setsockopt, handle, SOL_SOCKET, SO_REUSEADDR,
     Int64(@one), 4, 0));
+{$endif}
+end;
+
+function PalBackendSetSockOpt(handle, level, optname: Integer; valPtr: Pointer; valLen: Integer): Integer;
+begin
+{$ifdef CPU_I386}
+  Result := Integer(SockCall(SC_SETSOCKOPT, handle, level, optname, Int64(valPtr), valLen));
+{$else}
+  Result := Integer(__pxxrawsyscall(SYS_setsockopt, handle, level, optname,
+    Int64(valPtr), valLen, 0));
 {$endif}
 end;
 

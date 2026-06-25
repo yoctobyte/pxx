@@ -6,7 +6,7 @@ program devtest_tls13_handshake;
   verify the server Finished MAC -> send client Finished -> application keys ->
   send an HTTP GET -> decrypt the response. Driven by tls13-handshake-devtest.
   Usage: devtest_tls13_handshake <port> }
-uses sysutils, net, x25519, sha256, tls13_keys, tls13_record, tls13_hs, x509, ed25519;
+uses sysutils, net, x25519, sha256, tls13_keys, tls13_record, tls13_hs, x509, ed25519, tls13_ktls;
 
 function ToHex(const r: AnsiString): AnsiString;
 const HEX = '0123456789abcdef';
@@ -236,6 +236,16 @@ begin
     end
     else Break;                                       { likely a NewSessionTicket under hs key; stop }
   end;
+
+  { M7: install the application keys into the kernel (kTLS) on this socket and
+    report. Where the `tls` module is loaded this succeeds, offloading bulk
+    record crypto to the kernel; otherwise the Pascal record layer (used above)
+    stays the baseline. }
+  if KtlsEnable(gSock) and KtlsSetAesGcm128(gSock, True, cAppKey, cAppIv)
+     and KtlsSetAesGcm128(gSock, False, sAppKey, sAppIv) then
+    writeln('ktls=installed (kernel TLS offload active)')
+  else
+    writeln('ktls=unavailable (tls kernel module not loaded; Pascal record layer is baseline)');
 
   NetClose(gSock);
   writeln('response-head=', Copy(resp, 1, 20));

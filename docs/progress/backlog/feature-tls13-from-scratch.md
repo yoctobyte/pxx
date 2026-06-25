@@ -188,7 +188,17 @@ HTTP client); server-side later if wanted.
   HelloRetryRequest, and session tickets are also out of this minimal client.
 - M6 TLS 1.3 handshake state machine → a real `https://` GET (Pascal record
   layer); verify against a public host.
-- M7 (optional) kTLS offload for app-data throughput.
+- M7 (optional) kTLS offload for app-data throughput. **Implemented 2026-06-25:**
+  `lib/rtl/tls13_ktls.pas` (`KtlsEnable` = setsockopt `TCP_ULP`="tls";
+  `KtlsSetAesGcm128` installs the TLS 1.3 AES-GCM-128 `tls12_crypto_info` for
+  TX/RX) on a new general `PalSetSockOpt` PAL primitive. Wired into
+  `tls13-handshake-devtest`: after the handshake derives app keys it installs
+  them into the kernel so bulk record crypto is offloaded. **Not functionally
+  verifiable in the dev sandbox** — the `tls` kernel module exists
+  (`/lib/modules/.../tls.ko.zst`) but loading it needs root, so the devtest
+  reports `ktls=unavailable` and the Pascal record layer (proven by the real
+  https GET) stays the baseline. The code path activates where the module is
+  loaded.
 
 ## Done when
 
