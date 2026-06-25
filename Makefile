@@ -234,6 +234,8 @@ test-core: $(COMPILER)
 	test "$$(/tmp/test_const_string_index26)" = "$$(printf '58\n58\nX:\n:\n[:]\nab\n30 30')"
 	./$(COMPILER) test/test_byval_record_temp.pas /tmp/test_byval_record_temp26
 	test "$$(/tmp/test_byval_record_temp26)" = "$$(printf '11 22 33\n15 15 15\n8 9 10')"
+	./$(COMPILER) test/test_int_arg_to_float_param.pas /tmp/test_int_arg_to_float_param26
+	test "$$(/tmp/test_int_arg_to_float_param26)" = "$$(printf '80.0\n50.0\n1.0 2.0 3.0\n2.500 2.500 2.500')"
 	./$(COMPILER) test/test_dynarray_field.pas /tmp/test_dynarray_field26
 	test "$$(/tmp/test_dynarray_field26)" = "$$(printf '1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1')"
 	./$(COMPILER) test/test_method_implicit_field.pas /tmp/test_method_implicit_field26

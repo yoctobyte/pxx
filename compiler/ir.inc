@@ -1231,6 +1231,20 @@ begin
       value := IRLowerAST(argAST);
       if (argTk = tyRecord) and ((ASTKind[argAST] = AN_CALL) or (ASTKind[argAST] = AN_BINOP)) then
         value := IRAppend(IR_LOAD_MEM, value, -1, -1, 0, ASTTk[argAST]);
+      { Integer argument to a float parameter: convert. The call ABI carries a
+        float as its IEEE bits; an integer value (raw bits in a GPR) would be
+        misread by the callee as a float (e.g. V(1,1,1) into Double params gives
+        0.0). Round-trip through a hidden float temp, whose STORE already does the
+        int->float (cvtsi2sd) conversion uniformly on every target
+        (feature-int-to-float-assign). }
+      if (cpi >= 0) and (pathIdx >= 0) and (pathIdx < Procs[cpi].ParamCount) and
+         TypeIsFloat(Procs[cpi].Params[pathIdx].TypeKind) and
+         (not TypeIsFloat(argTk)) and TypeIsOrdinal(argTk) then
+      begin
+        tmpSym := AllocVar('', Procs[cpi].Params[pathIdx].TypeKind);
+        IRAppend(IR_STORE_SYM, tmpSym, value, -1, 0, Ord(Procs[cpi].Params[pathIdx].TypeKind));
+        value := IRAppend(IR_LOAD_SYM, tmpSym, -1, -1, 0, Ord(Procs[cpi].Params[pathIdx].TypeKind));
+      end;
     end;
   end;
   Result := value;
