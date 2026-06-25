@@ -22,6 +22,7 @@ before assuming the workaround is still needed.
 | `lib/rtl/x25519.pas` (`Asr64`, `Sel25519`) | bitwise complement written `-x-1` / `-b` instead of `not` | [[bug-not-on-int64-is-boolean]] — `not` on an `Int64` *expression* miscompiles | plain `not` |
 | `lib/rtl/aesgcm.pas` (`BlkCopy`, used in `EncryptBlk`, `GfMul`, `AesCtr`, `GcmSetup`, `GcmTag`) | whole static-array `:=` replaced by element-copy loops | [[bug-fixed-array-assignment-no-copy]] — `b := a` on a fixed array doesn't copy | plain `dst := src` |
 | `test/lib_sha256.pas`, `test/lib_aesgcm.pas` (expected hex literals) | long literals kept on **one line** (no `'a' + 'b'`) | [[bug-string-literal-concat-compare-segfault]] — `x = 'a'+'b'` comparison segfaults | split literals with `+` |
+| `lib/rtl/ed25519.pas` (EC points) | a point's 4 field coords are **4 separate standalone TGf vars**, never an `array of TGf` or a record of TGf | [[bug-aggregate-member-array-as-var-param]] — passing an aggregate-member array by ref segfaults | a `TPoint = array[0..3] of TGf` / record |
 
 ### Coding-pattern landmines (no single site — avoid in new Track B code)
 
@@ -44,6 +45,10 @@ before assuming the workaround is still needed.
 - **String-literal concat in a comparison** `x = 'a' + 'b'` segfaults —
   [[bug-string-literal-concat-compare-segfault]]. Keep the literal on one line, or
   assign the concat to a var first. (Assignment `v := 'a'+'b'` is fine.)
+- **Aggregate-member array as a var/const param** (a 2D-array row `p[i]`, or an
+  array-typed record field `p.a`) segfaults —
+  [[bug-aggregate-member-array-as-var-param]]. Keep each sub-array a standalone
+  variable and pass them individually.
 
 ## Cleanup backlog — workarounds whose bug is now FIXED (revertible)
 

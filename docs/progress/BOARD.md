@@ -32,9 +32,9 @@ _none_
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
+| bug-aggregate-member-array-as-var-param | A | bug | bug: passing an array that is a member of an aggregate (record field / 2D-array row) as a var/const param segfaults | — |
 | bug-bare-read-write-in-method-hits-intrinsic | A | bug | Bare `Read`/`Write` inside a method resolves to the console intrinsic, not the method | — |
 | bug-fixed-array-assignment-no-copy | A | bug | bug: assigning one fixed array to another (`b := a`) does not copy | — |
-| bug-managed-length-via-pointer-deref | A | bug | bug: managed Length(ps^) / Length(rec.pf^) returns garbage (all targets) | — |
 | bug-managed-record-result-self-arg | A | bug | bug: function Result of a managed-field record, passed as a call arg in its own reassignment, segfaults | — |
 | bug-not-on-int64-is-boolean | A | bug | bug: `not` on an Int64 yields a boolean, not the bitwise complement | — |
 | bug-string-literal-concat-compare-segfault | A | bug | bug: comparing against a concatenation of string literals (`x = 'a' + 'b'`) segfaults | — |
@@ -122,7 +122,7 @@ _none_
 | feature-mimic-fpc | B | feature | `mimic FPC` compatibility mode | — |
 | feature-string-model-tyfixedstring | B | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (274)
+## done (275)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -177,6 +177,7 @@ _none_
 | bug-lfm-streaming-skips-constructors | B | bug | bug: RTTI .lfm streaming skips constructors → widgets with constructor state broke | — |
 | bug-low-missing-high-wrong-nonzero-array | A | bug | bug: Low() missing; High() wrong on non-zero-based arrays | — |
 | bug-managed-byref-string-param-store | A | bug | Managed by-ref AnsiString params: store-through-var no-ops / segfaults | — |
+| bug-managed-length-via-pointer-deref | A | bug | bug: managed Length(ps^) / Length(rec.pf^) returns garbage (all targets) | — |
 | bug-managed-to-frozen-string-assign-crash | A | bug | Assigning a managed string (tyAnsiString) into a frozen `string` (tyString) miscompiles → segfault | — |
 | bug-many-param-call-corruption | A | bug | Self-hosted x86-64 backend miscompiles calls with many parameters | — |
 | bug-metaclass-new-getclass-vmt | A | bug | bug: metaclass construction via GetClass stamps a non-canonical VMT | — |
@@ -411,9 +412,9 @@ _none_
 
 ## Ready (no unmet blocker)
 
+- [A] bug-aggregate-member-array-as-var-param
 - [A] bug-bare-read-write-in-method-hits-intrinsic
 - [A] bug-fixed-array-assignment-no-copy
-- [A] bug-managed-length-via-pointer-deref
 - [A] bug-managed-record-result-self-arg
 - [A] bug-not-on-int64-is-boolean
 - [A] bug-string-literal-concat-compare-segfault
