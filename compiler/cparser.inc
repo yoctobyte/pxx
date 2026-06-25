@@ -1171,8 +1171,11 @@ end;
   when there are no initialisers). Increment-1 scope: scalar declarators; array
   and per-declarator pointer-depth handling come later. }
 function ParseCLocalDeclAST: Integer;
-var baseTk: TTypeKind; head, tail, seq, asn, idn, initExpr, blk, idx: Integer;
+var baseTk, declTk, scalarTk: TTypeKind;
+    head, tail, seq, asn, idn, initExpr, blk, idx: Integer;
     elemTkOrd, elemRec, arrLen, procSig: Integer;
+    declElemTk, declElemRec, declProcSig, declPtr, scalarRec: Integer;
+    hadStar: Boolean;
     name: AnsiString;
 begin
   baseTk := ParseCDeclType;   { specifiers + first declarator's pointer suffix }
@@ -1181,6 +1184,15 @@ begin
   elemTkOrd := CTypeElemTk;
   elemRec := CTypeElemRec;
   procSig := CTypeProcSig;    { fn-pointer typedef signature, if any }
+  { Multi-declarator support `T *a, b, *c;`: the `*` binds to each declarator, not
+    the base. ParseCDeclType folded the FIRST declarator's star into baseTk, so
+    recover the pre-star scalar base; each later declarator gets its own stars.
+    A pointer from a *literal* star (elemTk known) is redistributable; a pointer
+    from a typedef (no star) is the whole type and applies to every sibling. }
+  hadStar := (baseTk = tyPointer) and (elemTkOrd <> Ord(tyUnknown));
+  if hadStar then begin scalarTk := IntToTypeKind(elemTkOrd); scalarRec := elemRec; end
+  else begin scalarTk := baseTk; scalarRec := CTypeBaseRec; end;
+  declTk := baseTk; declElemTk := elemTkOrd; declElemRec := elemRec; declProcSig := procSig;
   head := -1; tail := -1;
   while True do
   begin
@@ -1196,8 +1208,8 @@ begin
       { An array of structs needs the element record id so AllocArray sizes the
         slot by RecSize, not a default — `struct V a[N]; a[i].f` was using the
         wrong stride. }
-      if baseTk = tyRecord then LastTypeRecId := CTypeBaseRec;
-      idx := AllocArray(name, baseTk, 0, arrLen - 1);
+      if declTk = tyRecord then LastTypeRecId := scalarRec;
+      idx := AllocArray(name, declTk, 0, arrLen - 1);
       { array initialisers `= { ... }` not yet materialised — skip if present.
         Balanced-brace skip so inner commas (`{1, 2, 3}`) don't end it early. }
       if CurTok.Kind = tkAssign then
@@ -1221,13 +1233,13 @@ begin
     begin
       { A struct-by-value local needs its record id so field access resolves and
         AllocVar reserves RecSize bytes. }
-      if baseTk = tyRecord then LastTypeRecId := CTypeBaseRec;
-      idx := AllocVar(name, baseTk);
-      if baseTk = tyPointer then
+      if declTk = tyRecord then LastTypeRecId := scalarRec;
+      idx := AllocVar(name, declTk);
+      if declTk = tyPointer then
       begin
-        Syms[idx].PtrElemTk := IntToTypeKind(elemTkOrd);
-        Syms[idx].PtrElemRec := elemRec;
-        if procSig >= 0 then SymProcSig[idx] := procSig;  { fn-pointer var: callable }
+        Syms[idx].PtrElemTk := IntToTypeKind(declElemTk);
+        Syms[idx].PtrElemRec := declElemRec;
+        if declProcSig >= 0 then SymProcSig[idx] := declProcSig;  { fn-pointer var: callable }
       end;
       initExpr := -1;
       if CurTok.Kind = tkAssign then
@@ -1237,15 +1249,42 @@ begin
       end;
       if initExpr >= 0 then
       begin
-        idn := AllocNode(AN_IDENT); ASTIVal[idn] := idx; ASTTk[idn] := Ord(baseTk);
+        idn := AllocNode(AN_IDENT); ASTIVal[idn] := idx; ASTTk[idn] := Ord(declTk);
         asn := AllocNode(AN_ASSIGN); ASTLeft[asn] := idn; ASTRight[asn] := initExpr;
-        ASTTk[asn] := Ord(baseTk);
+        ASTTk[asn] := Ord(declTk);
         seq := AllocNode(AN_SEQ); ASTLeft[seq] := asn; ASTRight[seq] := -1;
         if head = -1 then head := seq else ASTRight[tail] := seq;
         tail := seq;
       end;
     end;
-    if CurTok.Kind = tkComma then begin Next; Continue; end;
+    if CurTok.Kind = tkComma then
+    begin
+      Next;
+      { next declarator's own pointer level (`*c` in `T *a, b, *c`) }
+      declPtr := 0;
+      while CurTok.Kind = tkStar do begin Inc(declPtr); Next; end;
+      if declPtr > 0 then
+      begin
+        declTk := tyPointer;
+        if declPtr = 1 then begin declElemTk := Ord(scalarTk); declElemRec := scalarRec; end
+        else begin declElemTk := Ord(tyPointer); declElemRec := REC_NONE; end;
+        declProcSig := -1;
+      end
+      else if hadStar then
+      begin
+        { sibling with no star, base had a redistributable star: plain scalar }
+        declTk := scalarTk; declElemTk := Ord(tyUnknown); declElemRec := scalarRec;
+        declProcSig := -1;
+      end
+      else
+      begin
+        { base carries no redistributable star (plain/typedef): siblings get the
+          same full base type + metadata }
+        declTk := baseTk; declElemTk := elemTkOrd; declElemRec := elemRec;
+        declProcSig := procSig;
+      end;
+      Continue;
+    end;
     Break;
   end;
   Eat(tkSemicolon);
