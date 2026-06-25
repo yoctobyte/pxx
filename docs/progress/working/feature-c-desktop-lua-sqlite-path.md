@@ -241,3 +241,35 @@ gap rather than bloating this ticket.
   self-host byte-identical. Deferred: casts, sizeof, struct-by-value params,
   combined `struct X {..} v;`, array/struct initialisers. Next: casts + sizeof,
   then char-string libc surface (M2) toward running tiny-regex (M1).
+- 2026-06-25 — **casts + sizeof + do/while + comma DONE** (slice B inc2c/2d).
+  `(type)expr` casts (AN_PTR_CAST reinterpret-retag; cast-vs-paren disambiguated
+  by peeking a type after `(`), `sizeof(type|expr|var)` -> compile-time int,
+  `do/while` (first-iteration-flag desugar so break/continue keep C semantics),
+  and the comma operator in statement / for-init / for-post positions. All in
+  Track D's lane (cparser only), reusing existing nodes. Fixtures
+  test/ccast_b4.c (=102), test/cloop_b5.c (=28). Self-host byte-identical.
+- 2026-06-25 — **ROADMAP REFRAMED after empirically probing the frontend.** The
+  frontend is more capable than the M0–M4 milestones implied: a bubble-sort over
+  an array of structs (struct assignment, `a[j].key`, pointer params, nested
+  loops) already matches gcc. The genuine remaining gaps to compile real C
+  (lua/sqlite) are mostly C *language* features, NOT "M2 libc surface" (libc
+  resolves via the extern/host path that already works — printf):
+    - **switch/case (+ fallthrough)** — biggest lua/sqlite user; a fully-correct
+      desugar needs break-only scope, but the IR's loop stack couples break and
+      continue, so a clean switch likely wants a shared break-only-scope IR
+      primitive -> **Track A** candidate. (Common break-terminated switches could
+      desugar to do{}while(0)+matched-flag, but continue-in-switch would mis-bind.)
+    - **ternary `?:`** — needs an AN_TERNARY node -> **Track A** (already flagged in
+      track-a-c-frontend-shared-ir-touchpoints).
+    - function pointers (decl + indirect call), global/`static const`
+      initialisers (currently zero-init), multi-dim arrays, array/struct
+      initialisers — Track D.
+    - M3: `setjmp`/`longjmp` needs register-save/restore codegen -> **Track A**;
+      varargs *define* (callee SysV ABI) -> Track D.
+  Also: **lua/tiny-regex sources are not staged in this worktree**
+  (`library_candidates/` is absent here; it lives in the master checkout), so
+  M1/M4 cannot be compiled here until staged.
+- 2026-06-25 — **PARKED for cross-track merge** (Track A/B/C sync). Branch is in
+  steady, green, self-host-byte-identical state. One shared-IR touch
+  (ir.inc AN_EXIT->Halt) is documented in
+  track-a-c-frontend-shared-ir-touchpoints for the sister agents to reconcile.

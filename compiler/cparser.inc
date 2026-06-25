@@ -12,6 +12,7 @@ procedure ParseCStructDecl; forward;
 function IsBareStructDecl: Boolean; forward;
 function IsCTypeTok: Boolean; forward;
 function ParseCDeclType: TTypeKind; forward;
+function ParseCCommaStmt: Integer; forward;
 
 { ===== C expression compiler (Slice B) =====
   A real recursive-descent C expression parser at C precedence, replacing the
@@ -1041,7 +1042,7 @@ begin
     initNode := ParseCLocalDeclAST
   else
   begin
-    initNode := ParseCExpr;
+    initNode := ParseCCommaStmt;
     Eat(tkSemicolon);
   end;
 
@@ -1054,7 +1055,7 @@ begin
   Expect(tkSemicolon, ';');
 
   post := -1;
-  if CurTok.Kind <> tkRParen then post := ParseCExpr;
+  if CurTok.Kind <> tkRParen then post := ParseCCommaStmt;
   Expect(tkRParen, ')');
 
   body := ParseCStatementAST;
@@ -1124,6 +1125,69 @@ begin
   Result := outer;
 end;
 
+{ `do body while (cond);` — body runs once, then repeats while cond. Desugared
+  with a first-iteration flag to a constant-checked while so break/continue keep
+  C semantics: `flag=1; while (flag || cond) { flag=0; body }`. A continue jumps
+  to the while head, where flag is 0, so cond is re-checked (correct). }
+function ParseCDoWhileAST: Integer;
+var body, cond, flagVar, loop, whileBody, outer: Integer;
+    oHead, oTail, bHead, bTail, flagSet, flagClr, orCond, idn1, idn2: Integer;
+begin
+  Next; { do }
+  body := ParseCStatementAST;
+  if CurTok.Kind = tkWhile then Next else Error('while expected after do');
+  Expect(tkLParen, '(');
+  cond := ParseCExpr;
+  Expect(tkRParen, ')');
+  Eat(tkSemicolon);
+
+  flagVar := AllocVar('', tyBoolean);
+  oHead := -1; oTail := -1;
+
+  idn1 := AllocNode(AN_IDENT); ASTIVal[idn1] := flagVar; ASTTk[idn1] := Ord(tyBoolean);
+  flagSet := AllocNode(AN_ASSIGN); ASTLeft[flagSet] := idn1;
+  ASTRight[flagSet] := AllocNode(AN_INT_LIT); ASTIVal[ASTRight[flagSet]] := 1;
+  ASTTk[ASTRight[flagSet]] := Ord(tyInteger); ASTTk[flagSet] := Ord(tyBoolean);
+  CSeqAppend(flagSet, oHead, oTail);
+
+  bHead := -1; bTail := -1;
+  idn2 := AllocNode(AN_IDENT); ASTIVal[idn2] := flagVar; ASTTk[idn2] := Ord(tyBoolean);
+  flagClr := AllocNode(AN_ASSIGN); ASTLeft[flagClr] := idn2;
+  ASTRight[flagClr] := AllocNode(AN_INT_LIT); ASTIVal[ASTRight[flagClr]] := 0;
+  ASTTk[ASTRight[flagClr]] := Ord(tyInteger); ASTTk[flagClr] := Ord(tyBoolean);
+  CSeqAppend(flagClr, bHead, bTail);
+  CSeqAppend(body, bHead, bTail);
+  whileBody := AllocNode(AN_BLOCK); ASTLeft[whileBody] := bHead;
+
+  idn1 := AllocNode(AN_IDENT); ASTIVal[idn1] := flagVar; ASTTk[idn1] := Ord(tyBoolean);
+  orCond := CMakeBinop(Ord(tkOr), idn1, cond);
+  loop := AllocNode(AN_WHILE); ASTLeft[loop] := orCond; ASTRight[loop] := whileBody;
+  CSeqAppend(loop, oHead, oTail);
+
+  outer := AllocNode(AN_BLOCK); ASTLeft[outer] := oHead;
+  Result := outer;
+end;
+
+{ A comma-separated expression sequence in statement position (expression
+  statement, for-init, for-post): each expression runs for its side effects with
+  the value discarded, so it lowers to a block of the expressions as statements.
+  A single expression (no comma) returns just that node. }
+function ParseCCommaStmt: Integer;
+var head, tail, blk: Integer;
+begin
+  Result := ParseCExpr;
+  if CurTok.Kind <> tkComma then Exit;
+  head := -1; tail := -1;
+  CSeqAppend(Result, head, tail);
+  while CurTok.Kind = tkComma do
+  begin
+    Next;
+    CSeqAppend(ParseCExpr, head, tail);
+  end;
+  blk := AllocNode(AN_BLOCK); ASTLeft[blk] := head;
+  Result := blk;
+end;
+
 function ParseCStatementAST: Integer;
 var node, exprNode: Integer;
 begin
@@ -1163,6 +1227,7 @@ begin
   if CurTok.Kind = tkIf then begin Result := ParseCIfAST; Exit; end;
   if CurTok.Kind = tkWhile then begin Result := ParseCWhileAST; Exit; end;
   if CurTok.Kind = tkFor then begin Result := ParseCForAST; Exit; end;
+  if CurTok.Kind = tkDo then begin Result := ParseCDoWhileAST; Exit; end;
 
   if CurTok.Kind = tkBreak then
   begin
@@ -1191,8 +1256,8 @@ begin
     Exit;
   end;
 
-  { expression statement (assignment, call, ++/--) }
-  exprNode := ParseCExpr;
+  { expression statement (assignment, call, ++/--, comma sequence) }
+  exprNode := ParseCCommaStmt;
   Eat(tkSemicolon);
   Result := exprNode;
 end;
