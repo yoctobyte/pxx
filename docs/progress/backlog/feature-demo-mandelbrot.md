@@ -76,3 +76,11 @@ portable Pascal kernel until their asm surfaces are mature enough.
   kernel-abstraction (fixed-point + native x86-64 asm kernels), and perf/benchmark
   output. Gap found + filed: bug-untyped-float-const (untyped + negative float
   consts rejected; worked around with locals).
+- 2026-06-25 — **Visual is BROKEN on pxx (checksum gate masked it).** Diffed pxx
+  vs FPC: FPC renders a correct bulb, pxx renders repeated `' .:-=+*#%@'` rows.
+  Root cause isolated and filed as [[bug-const-string-index-miscompiles]]:
+  `line := line + RAMP[ri+1]` over `const RAMP=' .:-=+*#%@'` returns the *whole*
+  const string per element instead of one char (escape counts `n` are correct,
+  which is why the integer checksum still matched FPC). The shade-ramp must be a
+  string **variable**, or this Track A codegen bug fixed, before the visual is
+  trustworthy. Left the source idiomatic (const index) — blocked on the compiler.

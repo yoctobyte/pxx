@@ -34,11 +34,12 @@ lives in git, not in a timestamp._
 | --- | --- | --- | --- | --- |
 | feature-c-runtime-library | B | feature | C runtime/library layer (`lib/crtl`) plus direct C-library packages | feature-c-source-frontend |
 
-## backlog (53)
+## backlog (54)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
 | bug-bare-read-write-in-method-hits-intrinsic | A | bug | Bare `Read`/`Write` inside a method resolves to the console intrinsic, not the method | — |
+| bug-const-string-index-miscompiles | A | bug | Indexing a string constant miscompiles (`const RAMP='...'; RAMP[i]`) | — |
 | bug-generic-class-methods-in-program | A | bug | Generic class METHOD bodies break in a program (work in a unit) | — |
 | bug-managed-length-via-pointer-deref | A | bug | bug: managed Length(ps^) / Length(rec.pf^) returns garbage (all targets) | — |
 | bug-pchar-to-string-implicit-conv | A | bug | PChar → string implicit conversion missing in call args (and assignment helper) | — |
@@ -399,6 +400,7 @@ lives in git, not in a timestamp._
 ## Ready (no unmet blocker)
 
 - [A] bug-bare-read-write-in-method-hits-intrinsic
+- [A] bug-const-string-index-miscompiles
 - [A] bug-generic-class-methods-in-program
 - [A] bug-managed-length-via-pointer-deref
 - [A] bug-pchar-to-string-implicit-conv
