@@ -1007,6 +1007,25 @@ begin
   Result := acc;
 end;
 
+{ A single leading subscript on an >=2-D fixed array selects a whole sub-array
+  (row): `m[i]` of `array[a..b, c..d] of T` is the row `array[c..d] of T` at
+  byte offset (i-lo0)*span1*..*span_{nd-1} elements. Build that flat element
+  index so the ordinary element-stride AN_INDEX lands on the row's first
+  element; its address is then the row base (what a `var`/`const` array param or
+  whole-row reference needs). NDInfo* must be filled (NodeArrNDInfo). }
+function BuildPartialNDRowIndex(rowIdxNode: Integer): Integer;
+var d, trailing, loLit, diff, spanLit: Integer;
+begin
+  trailing := 1;
+  for d := 1 to NDInfoNDims - 1 do trailing := trailing * NDInfoSpan[d];
+  loLit := AllocNode(AN_INT_LIT); ASTIVal[loLit] := NDInfoLo[0]; ASTTk[loLit] := Ord(tyInteger);
+  diff := AllocNode(AN_BINOP); ASTIVal[diff] := Ord(tkMinus);
+  ASTLeft[diff] := rowIdxNode; ASTRight[diff] := loLit; ASTTk[diff] := Ord(tyInteger);
+  spanLit := AllocNode(AN_INT_LIT); ASTIVal[spanLit] := trailing; ASTTk[spanLit] := Ord(tyInteger);
+  Result := AllocNode(AN_BINOP); ASTIVal[Result] := Ord(tkStar);
+  ASTLeft[Result] := diff; ASTRight[Result] := spanLit; ASTTk[Result] := Ord(tyInteger);
+end;
+
 { If `node` is an N-D fixed array reference (a SymArrNDims ident or an
   UFldArrNDims record field), fill NDInfo* and return True. Lets m[..] and
   r.m[..] share one path. }
@@ -1457,6 +1476,14 @@ begin
         end;
         Expect(tkRBrack, ']');
         alreadyResolved := True;
+      end
+      else if isND then
+      begin
+        { Partial: a single leading subscript on an N-D fixed array names a whole
+          row (sub-array). Scale it to the row's first-element flat index so the
+          element-stride AN_INDEX yields the row base address. }
+        ASTRight[indexNode] := BuildPartialNDRowIndex(CurASTNode);
+        Expect(tkRBrack, ']');
       end
       else
       begin
