@@ -1188,12 +1188,23 @@ begin
         wrong stride. }
       if baseTk = tyRecord then LastTypeRecId := CTypeBaseRec;
       idx := AllocArray(name, baseTk, 0, arrLen - 1);
-      { array initialisers `= { ... }` not yet supported — skip if present }
+      { array initialisers `= { ... }` not yet materialised — skip if present.
+        Balanced-brace skip so inner commas (`{1, 2, 3}`) don't end it early. }
       if CurTok.Kind = tkAssign then
       begin
         Next;
-        while (CurTok.Kind <> tkComma) and (CurTok.Kind <> tkSemicolon) and
-              (CurTok.Kind <> tkEOF) do Next;
+        if CurTok.Kind = tkBegin then
+        begin
+          idx := 0;   { reuse as brace depth }
+          repeat
+            if CurTok.Kind = tkBegin then Inc(idx)
+            else if CurTok.Kind = tkEnd then Dec(idx);
+            Next;
+          until (idx = 0) or (CurTok.Kind = tkEOF);
+        end
+        else
+          while (CurTok.Kind <> tkComma) and (CurTok.Kind <> tkSemicolon) and
+                (CurTok.Kind <> tkEOF) do Next;
       end;
     end
     else
@@ -1619,19 +1630,44 @@ end;
   non-zero constant/runtime initialiser is a follow-up). Re-running across the
   two driver passes is idempotent — a name already present is not re-allocated. }
 procedure ParseCGlobalVarDecl;
-var baseTk: TTypeKind; name: AnsiString;
+var baseTk: TTypeKind; name: AnsiString; depth: Integer;
 begin
   baseTk := ParseCDeclType;
   while True do
   begin
     if CurTok.Kind <> tkIdent then Break;
     name := CurTok.SVal; Next;
+    { Global array dimension(s) `T name[...]` (lua's luaL_Reg tables). Skip the
+      brackets with balanced nesting; the size may be a complex macro, so don't
+      evaluate it — the slot is not a real array yet, but the decl no longer
+      cascades (previously the dangling `[` broke later parsing). }
+    while CurTok.Kind = tkLBrack do
+    begin
+      depth := 0;
+      repeat
+        if CurTok.Kind = tkLBrack then Inc(depth)
+        else if CurTok.Kind = tkRBrack then Dec(depth);
+        Next;
+      until (depth = 0) or (CurTok.Kind = tkEOF);
+    end;
     if FindSym(name) < 0 then AllocVar(name, baseTk);
     if CurTok.Kind = tkAssign then
     begin
       Next;
-      while (CurTok.Kind <> tkComma) and (CurTok.Kind <> tkSemicolon) and
-            (CurTok.Kind <> tkEOF) do Next;
+      if CurTok.Kind = tkBegin then
+      begin
+        { `= { ... }` aggregate initializer: skip with BALANCED braces so inner
+          commas (`{{"a",f},{"b",g}}`) don't end it early. }
+        depth := 0;
+        repeat
+          if CurTok.Kind = tkBegin then Inc(depth)
+          else if CurTok.Kind = tkEnd then Dec(depth);
+          Next;
+        until (depth = 0) or (CurTok.Kind = tkEOF);
+      end
+      else
+        while (CurTok.Kind <> tkComma) and (CurTok.Kind <> tkSemicolon) and
+              (CurTok.Kind <> tkEOF) do Next;
     end;
     if CurTok.Kind = tkComma then begin Next; Continue; end;
     Break;
