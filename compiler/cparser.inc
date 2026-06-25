@@ -10,6 +10,8 @@ procedure ParseCTypedef; forward;
 procedure ParseCEnumDecl; forward;
 procedure ParseCStructDecl; forward;
 function IsBareStructDecl: Boolean; forward;
+function IsCTypeTok: Boolean; forward;
+function ParseCDeclType: TTypeKind; forward;
 
 { ===== C expression compiler (Slice B) =====
   A real recursive-descent C expression parser at C precedence, replacing the
@@ -278,10 +280,96 @@ begin
     Result := IntToTypeKind(ASTTk[node]) = tyPointer;
 end;
 
-{ Unary prefix: `- + ! ~ * &`. sizeof and casts arrive later. }
-function ParseCUnary: Integer;
-var node, operand: Integer;
+{ Size in bytes of the type just consumed by ParseCDeclType (globals CType*). }
+function CTypeSizeBytes(tk: TTypeKind): Integer;
 begin
+  if CTypePtrDepth > 0 then Result := TARGET_PTR_SIZE
+  else if tk = tyRecord then Result := RecSize(CTypeBaseRec)
+  else Result := TypeSize(tk);
+end;
+
+{ `sizeof(type)`, `sizeof(expr)`, or `sizeof expr` -> a compile-time integer.
+  CurTok is the `sizeof` identifier. Folds a type operand to its size; an
+  identifier operand to its symbol's size; otherwise a conservative pointer
+  size (full expression-type sizing arrives with the type system). }
+function ParseCSizeof: Integer;
+var node, sz, si: Integer; tk: TTypeKind;
+begin
+  Next; { sizeof }
+  sz := TARGET_PTR_SIZE;
+  if CurTok.Kind = tkLParen then
+  begin
+    Next;
+    if IsCTypeTok then
+    begin
+      tk := ParseCDeclType;
+      sz := CTypeSizeBytes(tk);
+    end
+    else if CurTok.Kind = tkIdent then
+    begin
+      si := FindSym(CurTok.SVal);
+      if si >= 0 then
+      begin
+        if Syms[si].IsArray then sz := Syms[si].ArrLen * TypeSize(Syms[si].ElemType)
+        else if Syms[si].TypeKind = tyRecord then sz := RecSize(Syms[si].RecName)
+        else sz := TypeSize(Syms[si].TypeKind);
+      end;
+      while (CurTok.Kind <> tkRParen) and (CurTok.Kind <> tkEOF) do Next;
+    end
+    else
+      while (CurTok.Kind <> tkRParen) and (CurTok.Kind <> tkEOF) do Next;
+    Expect(tkRParen, ')');
+  end
+  else if CurTok.Kind = tkIdent then
+  begin
+    si := FindSym(CurTok.SVal);
+    if si >= 0 then sz := TypeSize(Syms[si].TypeKind);
+    Next;
+  end;
+  node := AllocNode(AN_INT_LIT);
+  ASTIVal[node] := sz;
+  ASTTk[node] := Ord(tyInteger);
+  Result := node;
+end;
+
+{ Peek: is the `(` at CurTok the start of a cast `(type)…`? Rewinds. }
+function CIsCastAhead: Boolean;
+var savedPos: Integer;
+begin
+  savedPos := TokPos - 1;          { index of the '(' }
+  Next;                            { CurTok = first token inside the parens }
+  Result := IsCTypeTok;
+  TokPos := savedPos; Next;        { rewind to '(' }
+end;
+
+{ Unary prefix: `- + ! ~ * &`, sizeof, and casts `(type)expr`. }
+function ParseCUnary: Integer;
+var node, operand, castElemTk, castElemRec, castDepth: Integer; castTk: TTypeKind;
+begin
+  { sizeof }
+  if (CurTok.Kind = tkIdent) and (CurTok.SVal = 'sizeof') then
+  begin
+    Result := ParseCSizeof();
+    Exit;
+  end;
+  { cast: (type) unary -> reinterpret/retag the operand to the target type }
+  if (CurTok.Kind = tkLParen) and CIsCastAhead then
+  begin
+    Next; { ( }
+    castTk := ParseCDeclType;
+    castDepth := CTypePtrDepth;
+    castElemTk := CTypeElemTk;
+    castElemRec := CTypeElemRec;
+    Expect(tkRParen, ')');
+    operand := ParseCUnary();
+    node := AllocNode(AN_PTR_CAST);
+    ASTLeft[node] := operand;
+    ASTIVal[node] := -1;            { numeric / pointer reinterpret-retag }
+    if castDepth > 0 then ASTTk[node] := Ord(tyPointer)
+    else ASTTk[node] := Ord(castTk);
+    Result := node;
+    Exit;
+  end;
   case CurTok.Kind of
     tkStar:   { *p dereference }
     begin

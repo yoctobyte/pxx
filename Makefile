@@ -324,6 +324,8 @@ test-core: $(COMPILER)
 	/tmp/cptr_b226; test "$$?" = "122"
 	./$(COMPILER) test/cstruct_b3.c /tmp/cstruct_b326
 	/tmp/cstruct_b326; test "$$?" = "62"
+	./$(COMPILER) test/ccast_b4.c /tmp/ccast_b426
+	/tmp/ccast_b426; test "$$?" = "102"
 	./$(COMPILER) -Itest/cinc/inc test/cinc/cinc_main.c /tmp/cinc_main26
 	test "$$(/tmp/cinc_main26)" = "$$(printf 'local-ok\ninc-ok')"
 	./$(COMPILER) test/test_declared_directive.pas /tmp/test_declared_directive26
