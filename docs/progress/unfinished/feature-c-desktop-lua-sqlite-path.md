@@ -24,6 +24,20 @@
   gap to isolate), 1 `expected C expression`. NEXT: pick off the `unexpected
   token` tail incrementally (Track C), isolate the 2 IR-codegen gaps, then
   `setjmp`/`longjmp` (Track A) + multi-file linking for an actual lua build.
+- 2026-06-25 (later) — **session continued; lua core now 5/34 parse clean.**
+  Added beyond the above: a permanent readable `near:` source-context on
+  unexpected-token errors (cd30d0c — makes the tail diagnosable WITHOUT an
+  instrumented rebuild; use it), indirect call through `(*expr)(args)` /
+  dereferenced fn-pointer (e4a991a — lua's `(*g->frealloc)(...)`), and an
+  IRLowerAddress `&(array-field)` collapse (007d14f — unblocked lmem.c). Filed
+  `bug-c-sizeof-string-literal` and `bug-c-addr-of-unsupported-ir` (the latter
+  partially fixed; `&s->v[0]` element-via-arrow remains). Current error
+  landscape over 34 files: 20 `unexpected token` (still a long tail of DISTINCT
+  per-file causes — e.g. ltable's `(lua_Unsigned)i` cast-vs-paren disambiguation,
+  lstate's `sizeof(size_t)`; the `near:` context now pinpoints each), 7
+  `call to undeclared function`, 2 `expected C expression`. Grind the tail with
+  the locator; then `setjmp`/`longjmp` (Track A) + multi-file linking remain for
+  an actual lua build.
 - 2026-06-25 — **`__builtin_expect` handled** (2f62c2e): reduces to its first arg
   (lua's pervasive l_likely/l_unlikely). **Diverse-tail confirmed by windowed
   bisect:** the 21 `unexpected token` files each have a DIFFERENT context-
