@@ -129,9 +129,19 @@ turns verification off entirely — only for development against throwaway
 endpoints; never in production. After a refused handshake,
 `OpenSslTlsLastVerifyResult` returns the OpenSSL `X509_V_*` code explaining why.
 
-**Current limits of the OpenSSL backend (x86-64):**
+### Server-side TLS
 
-- **Client only.** Server-side TLS (`SSL_accept`) is not wired yet.
+The backend can also play the server role. `OpenSslTlsServerInit(certFile,
+keyFile)` builds a server context from a PEM certificate + key; an accepting
+socket then handshakes with `TlsHandshake(fd, tlsServer, '', conn)` (driving
+`TlsHandshakeResume` on want-read/write, the same loop the client uses) and moves
+bytes with `TlsRead` / `TlsWrite`. Client and server share the one backend, so a
+single process can both serve TLS and make TLS requests. (There is no high-level
+HTTPS *server* object yet — you wire `accept` + the seam yourself; the `http`
+unit itself is a client.)
+
+**Current limits of the OpenSSL backend:** x86-64 only (where the dynamic loader
+is verified).
 
 A from-scratch native TLS stack is planned as a second, interchangeable backend
 behind the same seam.

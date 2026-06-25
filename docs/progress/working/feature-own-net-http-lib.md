@@ -129,9 +129,12 @@ response record carrying a `THttpHeaders` field (dodges
    secure-by-default (system store + `SSL_VERIFY_PEER` + hostname match via
    `SSL_set1_host`); `OpenSslTlsRegisterEx(verify, caFile)` for private CAs / opt
    out. Devtest proves reject (untrusted self-signed → `Ok=False`) + accept
-   (trusted CA → 200) + async. **Remaining:** server-side TLS (`SSL_accept`) for
-   the interop matrix, and the native handrolled stack
-   [[feature-tls13-from-scratch]] (deferred).
+   (trusted CA → 200) + async. **Server-side TLS landed 2026-06-25**
+   (`OpenSslTlsServerInit` + `SSL_accept` via the seam): `devtest_tls_interop`
+   runs our OpenSSL HTTPS server ⇄ our verified `HttpGetAsync` client on one
+   reactor → 200. The OpenSSL backend is now client+server, blocking+async,
+   verified. **Remaining:** the native handrolled stack
+   [[feature-tls13-from-scratch]] (deferred) for native⇄OpenSSL interop.
 
 ## Compiler gaps surfaced while building (filed)
 

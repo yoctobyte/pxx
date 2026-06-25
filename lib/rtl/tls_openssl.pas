@@ -31,6 +31,11 @@ uses tls;
 function OpenSslTlsRegister: Boolean;
 function OpenSslTlsRegisterEx(verifyPeer: Boolean; const caFile: string): Boolean;
 
+{ Enable the server role: build a server SSL_CTX from a PEM cert + private key.
+  Shares the one active backend with the client side, so a process can serve TLS
+  and make TLS client requests at once. True when cert + key load. }
+function OpenSslTlsServerInit(const certFile, keyFile: string): Boolean;
+
 { X509_V_* code from the most recent failed handshake (0 = X509_V_OK). Lets a
   caller report *why* a TLS connection was rejected. }
 function OpenSslTlsLastVerifyResult: Int64;
@@ -51,6 +56,7 @@ const
   SSL_VERIFY_NONE = 0;
   SSL_VERIFY_PEER = 1;
   X509_V_OK = 0;
+  SSL_FILETYPE_PEM = 1;
 
 type
   { OpenSSL function pointers. Plain (non-cdecl) proc vars: on x86-64 the default
@@ -72,8 +78,9 @@ type
   TLoadVerifyFn = function(ctx: Pointer; CAfile: PChar; CApath: PChar): Integer;
   TSet1HostFn  = function(ssl: Pointer; name: PChar): Integer;
   TVerifyResFn = function(ssl: Pointer): Int64;
+  TUseFileFn   = function(ctx: Pointer; fname: PChar; ftype: Integer): Integer;
 
-  TSslConn = record ssl: Pointer; fd: Integer; end;
+  TSslConn = record ssl: Pointer; fd: Integer; isServer: Boolean; end;
   PSslConn = ^TSslConn;
 
   TOpenSslTls = class(TTlsBackend)
@@ -88,12 +95,14 @@ type
 
 var
   gLib:       TLibHandle;
-  gCtx:       Pointer;
+  gClientCtx: Pointer;          { client SSL_CTX (TLS_client_method) }
+  gServerCtx: Pointer;          { server SSL_CTX (TLS_server_method + cert/key) }
   gBackend:   TOpenSslTls;
-  gVerify:    Boolean;          { peer + hostname verification on? }
+  gVerify:    Boolean;          { client peer + hostname verification on? }
   gLastVerifyResult: Int64;     { X509_V_* from the last failed handshake }
   { resolved entry points }
   pTlsClientMethod: TMethodFn;
+  pTlsServerMethod: TMethodFn;
   pCtxNew:    TCtxNewFn;
   pCtxFree:   TCtxFreeFn;
   pSslNew:    TSslNewFn;
@@ -110,10 +119,17 @@ var
   pLoadVerify: TLoadVerifyFn;
   pSet1Host:  TSet1HostFn;
   pVerifyRes: TVerifyResFn;
+  pAccept:    TConnectFn;       { SSL_accept (same shape as SSL_connect) }
+  pUseCert:   TUseFileFn;
+  pUseKey:    TUseFileFn;
 
 function ResolveAll: Boolean;
 begin
   pTlsClientMethod := TMethodFn  (GetProcedureAddress(gLib, 'TLS_client_method'));
+  pTlsServerMethod := TMethodFn  (GetProcedureAddress(gLib, 'TLS_server_method'));
+  pAccept    := TConnectFn (GetProcedureAddress(gLib, 'SSL_accept'));
+  pUseCert   := TUseFileFn (GetProcedureAddress(gLib, 'SSL_CTX_use_certificate_file'));
+  pUseKey    := TUseFileFn (GetProcedureAddress(gLib, 'SSL_CTX_use_PrivateKey_file'));
   pCtxNew    := TCtxNewFn  (GetProcedureAddress(gLib, 'SSL_CTX_new'));
   pCtxFree   := TCtxFreeFn (GetProcedureAddress(gLib, 'SSL_CTX_free'));
   pSslNew    := TSslNewFn  (GetProcedureAddress(gLib, 'SSL_new'));
@@ -130,23 +146,26 @@ begin
   pLoadVerify := TLoadVerifyFn(GetProcedureAddress(gLib, 'SSL_CTX_load_verify_locations'));
   pSet1Host  := TSet1HostFn  (GetProcedureAddress(gLib, 'SSL_set1_host'));
   pVerifyRes := TVerifyResFn (GetProcedureAddress(gLib, 'SSL_get_verify_result'));
-  Result := (pTlsClientMethod <> nil) and (pCtxNew <> nil) and (pSslNew <> nil)
-        and (pSetFd <> nil) and (pConnect <> nil) and (pRead <> nil)
-        and (pWrite <> nil) and (pGetErr <> nil) and (pShutdown <> nil)
-        and (pSslFree <> nil) and (pCtrl <> nil)
+  Result := (pTlsClientMethod <> nil) and (pTlsServerMethod <> nil)
+        and (pCtxNew <> nil) and (pSslNew <> nil)
+        and (pSetFd <> nil) and (pConnect <> nil) and (pAccept <> nil)
+        and (pRead <> nil) and (pWrite <> nil) and (pGetErr <> nil)
+        and (pShutdown <> nil) and (pSslFree <> nil) and (pCtrl <> nil)
         and (pSetVerify <> nil) and (pDefPaths <> nil) and (pLoadVerify <> nil)
-        and (pSet1Host <> nil) and (pVerifyRes <> nil);
+        and (pSet1Host <> nil) and (pVerifyRes <> nil)
+        and (pUseCert <> nil) and (pUseKey <> nil);
 end;
 
 function TOpenSslTls.Name: string;
 begin Result := 'openssl'; end;
 
-{ One SSL_connect step, mapped to a seam result. tlsOk = handshake complete;
-  want = needs the fd ready then another step; tlsError = fatal. }
-function SslStepConnect(p: PSslConn): TTlsResult;
+{ One handshake step (SSL_connect for a client, SSL_accept for a server), mapped
+  to a seam result. tlsOk = complete; want = needs the fd ready then another step;
+  tlsError = fatal. }
+function SslStepHandshake(p: PSslConn): TTlsResult;
 var ret, err: Integer;
 begin
-  ret := pConnect(p^.ssl);
+  if p^.isServer then ret := pAccept(p^.ssl) else ret := pConnect(p^.ssl);
   if ret = 1 then begin Result := tlsOk; Exit; end;
   err := pGetErr(p^.ssl, ret);
   if err = SSL_ERROR_WANT_READ then Result := tlsWantRead
@@ -156,15 +175,17 @@ end;
 
 function TOpenSslTls.Handshake(fd: Integer; role: TTlsRole; const host: string;
                                var c: TTlsConn): TTlsResult;
-var p: PSslConn; ssl: Pointer;
+var p: PSslConn; ssl, ctx: Pointer; isSrv: Boolean;
 begin
   c := nil;
   Result := tlsError;
-  if gCtx = nil then Exit;
-  ssl := pSslNew(gCtx);
+  isSrv := role = tlsServer;
+  if isSrv then ctx := gServerCtx else ctx := gClientCtx;
+  if ctx = nil then Exit;
+  ssl := pSslNew(ctx);
   if ssl = nil then Exit;
   pSetFd(ssl, fd);
-  if host <> '' then
+  if (not isSrv) and (host <> '') then
   begin
     pCtrl(ssl, SSL_CTRL_SET_TLSEXT_HOSTNAME, TLSEXT_NAMETYPE_host_name, Pointer(PChar(host)));
     { enable hostname match against the cert during verification }
@@ -172,14 +193,14 @@ begin
   end;
 
   GetMem(p, SizeOf(TSslConn));
-  p^.ssl := ssl; p^.fd := fd;
+  p^.ssl := ssl; p^.fd := fd; p^.isServer := isSrv;
 
   { NON-blocking: one step. On a blocking fd this returns tlsOk immediately; on a
     non-blocking fd it may return want, and the caller drives HandshakeResume. }
-  Result := SslStepConnect(p);
+  Result := SslStepHandshake(p);
   if Result = tlsError then
   begin
-    gLastVerifyResult := pVerifyRes(ssl);   { X509_V_* — why it failed }
+    if not isSrv then gLastVerifyResult := pVerifyRes(ssl);   { X509_V_* — why }
     pSslFree(ssl); FreeMem(p); c := nil;
   end
   else
@@ -189,8 +210,8 @@ end;
 function TOpenSslTls.HandshakeResume(c: TTlsConn): TTlsResult;
 begin
   if c = nil then begin Result := tlsError; Exit; end;
-  Result := SslStepConnect(PSslConn(c));
-  if Result = tlsError then
+  Result := SslStepHandshake(PSslConn(c));
+  if (Result = tlsError) and (not PSslConn(c)^.isServer) then
     gLastVerifyResult := pVerifyRes(PSslConn(c)^.ssl);
 end;
 
@@ -228,27 +249,35 @@ begin
   FreeMem(p);
 end;
 
-function OpenSslTlsRegisterEx(verifyPeer: Boolean; const caFile: string): Boolean;
+{ Load libssl + resolve symbols + register the (single) OpenSSL backend as active.
+  Idempotent: a process can be both client and server on the one backend. }
+function EnsureBackend: Boolean;
 begin
+  if gBackend <> nil then begin Result := True; Exit; end;
   Result := False;
-  if gBackend <> nil then begin Result := True; Exit; end;   { already up }
   gLib := LoadLibrary('libssl.so.3');
   if gLib = NilHandle then Exit;                              { no loader / no lib }
   if not ResolveAll then Exit;
-  gCtx := pCtxNew(pTlsClientMethod());
-  if gCtx = nil then Exit;
+  gBackend := TOpenSslTls.Create;
+  TlsRegisterBackend(gBackend);
+  Result := True;
+end;
+
+function OpenSslTlsRegisterEx(verifyPeer: Boolean; const caFile: string): Boolean;
+begin
+  Result := False;
+  if not EnsureBackend then Exit;
+  if gClientCtx = nil then gClientCtx := pCtxNew(pTlsClientMethod());
+  if gClientCtx = nil then Exit;
 
   { trust store: the system default CA bundle, plus an optional extra CA file
     (a private/test CA). Verification mode is per the caller. }
-  pDefPaths(gCtx);
-  if caFile <> '' then pLoadVerify(gCtx, PChar(caFile), nil);
-  if verifyPeer then pSetVerify(gCtx, SSL_VERIFY_PEER, nil)
-  else pSetVerify(gCtx, SSL_VERIFY_NONE, nil);
+  pDefPaths(gClientCtx);
+  if caFile <> '' then pLoadVerify(gClientCtx, PChar(caFile), nil);
+  if verifyPeer then pSetVerify(gClientCtx, SSL_VERIFY_PEER, nil)
+  else pSetVerify(gClientCtx, SSL_VERIFY_NONE, nil);
   gVerify := verifyPeer;
   gLastVerifyResult := X509_V_OK;
-
-  gBackend := TOpenSslTls.Create;
-  TlsRegisterBackend(gBackend);
   Result := True;
 end;
 
@@ -257,6 +286,17 @@ begin
   { secure default: verify the peer against the system trust store + match the
     hostname. Use OpenSslTlsRegisterEx for a private CA or to opt out. }
   Result := OpenSslTlsRegisterEx(True, '');
+end;
+
+function OpenSslTlsServerInit(const certFile, keyFile: string): Boolean;
+begin
+  Result := False;
+  if not EnsureBackend then Exit;
+  if gServerCtx = nil then gServerCtx := pCtxNew(pTlsServerMethod());
+  if gServerCtx = nil then Exit;
+  if pUseCert(gServerCtx, PChar(certFile), SSL_FILETYPE_PEM) <> 1 then Exit;
+  if pUseKey (gServerCtx, PChar(keyFile),  SSL_FILETYPE_PEM) <> 1 then Exit;
+  Result := True;
 end;
 
 function OpenSslTlsLastVerifyResult: Int64;
@@ -269,10 +309,11 @@ var none: TTlsBackend;
 begin
   none := nil;
   TlsRegisterBackend(none);
-  if gCtx <> nil then begin if pCtxFree <> nil then pCtxFree(gCtx); gCtx := nil; end;
+  if gClientCtx <> nil then begin if pCtxFree <> nil then pCtxFree(gClientCtx); gClientCtx := nil; end;
+  if gServerCtx <> nil then begin if pCtxFree <> nil then pCtxFree(gServerCtx); gServerCtx := nil; end;
   if gBackend <> nil then begin gBackend.Free; gBackend := nil; end;
 end;
 
 begin
-  gLib := NilHandle; gCtx := nil; gBackend := nil;
+  gLib := NilHandle; gClientCtx := nil; gServerCtx := nil; gBackend := nil;
 end.

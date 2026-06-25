@@ -110,8 +110,26 @@ cert is refused (`Ok=False`, `verify_result=18` = self-signed); **accept** — w
 the test CA trusted, blocking GET → 200 and the hostname matches; **async** — the
 verified connection also works via `HttpGetAsync` on the reactor.
 
-**Next slices:** (a) server side (`SSL_accept`) → the 4-cell client×server interop
-matrix; (b) the native backend ([[feature-tls13-from-scratch]], deferred).
+## Slice 6 landed — server side (`SSL_accept`) + OpenSSL⇄OpenSSL interop (2026-06-25)
+
+The OpenSSL backend now plays **both roles** on one active backend. `Handshake`
+branches on `role`: clients `SSL_connect`, servers `SSL_accept` (shared
+`SslStepHandshake`, want-read/write handling identical so the async resume loop
+serves both). `OpenSslTlsServerInit(certFile, keyFile)` builds a server `SSL_CTX`
+(`TLS_server_method` + `SSL_CTX_use_certificate_file`/`use_PrivateKey_file`)
+alongside the client ctx — a single process can serve and consume TLS at once.
+
+**Verified** (`devtest_tls_interop`, run by `tls-openssl-devtest`): our
+OpenSSL-backed HTTPS **server** (accept + seam handshake + `TlsRead`/`TlsWrite`)
+⇄ our `HttpGetAsync` **client**, both coroutines on one reactor thread, client
+verifying the server cert + hostname → status 200, body intact. So the
+client×server interop holds for the OpenSSL backend on both ends (the diagonal +
+the our-client⇄s_server cell from slice 3/5).
+
+**Remaining for the umbrella ticket:** the native backend
+([[feature-tls13-from-scratch]], deferred) — needed for the off-diagonal
+native⇄OpenSSL interop cells. The OpenSSL half of this ticket is functionally
+complete (client + server, blocking + async, verified).
 
 ## Decision (2026-06-24)
 

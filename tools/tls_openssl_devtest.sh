@@ -11,10 +11,12 @@ set -u
 ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 PXX_STABLE=${PXX_STABLE:-"$ROOT/stable_linux_amd64/default/pinned"}
 PORT=28771
+PORT2=28772
 CERT=/tmp/pxx_tls_devtest_cert.pem
 KEY=/tmp/pxx_tls_devtest_key.pem
 SLOG=/tmp/pxx_tls_devtest_sserver.log
 CLIENT=/tmp/pxx_devtest_tls_openssl
+INTEROP=/tmp/pxx_devtest_tls_interop
 SRV_PID=""
 
 say() { printf '%s\n' "$*"; }
@@ -60,15 +62,30 @@ while [ $i -lt 50 ]; do
   i=$((i + 1)); sleep 0.1
 done
 
-# ---- run the client (port + trusted CA file) ----
+# ---- test 1: our client vs openssl s_server (verify reject/accept + async) ----
+say "--- client vs openssl s_server ---"
 OUT=$(timeout 30 "$CLIENT" "$PORT" "$CERT" 2>&1)
 RC=$?
 say "$OUT"
-
-if [ $RC -eq 0 ] && printf '%s' "$OUT" | grep -q '^ALL OK$'; then
-  say "tls-openssl-devtest OK (real HTTPS handshake + GET via OpenSSL backend)"
-  exit 0
-else
-  say "FAIL: client rc=$RC (expected ALL OK)"
-  exit 1
+if [ $RC -ne 0 ] || ! printf '%s' "$OUT" | grep -q '^ALL OK$'; then
+  say "FAIL: client rc=$RC (expected ALL OK)"; exit 1
 fi
+
+# server no longer needed
+kill "$SRV_PID" 2>/dev/null; SRV_PID=""
+
+# ---- test 2: our TLS server (SSL_accept) <-> our verified client, one reactor ----
+say "--- interop: our server <-> our client ---"
+if ! "$PXX_STABLE" -dPXX_DYNLIB_LIBC -Fu"$ROOT/lib/rtl/platform/posix" \
+      "$ROOT/test/devtest_tls_interop.pas" "$INTEROP" >/tmp/pxx_tls_interop_build.log 2>&1; then
+  say "FAIL: interop build"; tail -3 /tmp/pxx_tls_interop_build.log; exit 1
+fi
+OUT2=$(timeout 30 "$INTEROP" "$PORT2" "$CERT" "$KEY" 2>&1)
+RC2=$?
+say "$OUT2"
+if [ $RC2 -ne 0 ] || ! printf '%s' "$OUT2" | grep -q '^ALL OK$'; then
+  say "FAIL: interop rc=$RC2 (expected ALL OK)"; exit 1
+fi
+
+say "tls-openssl-devtest OK (client<->s_server verify + our server<->client interop)"
+exit 0
