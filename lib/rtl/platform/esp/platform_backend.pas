@@ -27,6 +27,7 @@ function PalBackendStatAt(dirHandle: Integer; path: PChar; var info: TPalFileSta
 
 function PalBackendSocket(domain, kind, proto: Integer): Integer;
 function PalBackendSetSocketReuseAddr(handle, enabled: Integer): Integer;
+function PalBackendSetSockOpt(handle, level, optname: Integer; valPtr: Pointer; valLen: Integer): Integer;
 function PalBackendSetSocketNonBlocking(handle, enabled: Integer): Integer;
 function PalBackendBindIpv4(handle: Integer; hostAddr: LongWord; port: Integer): Integer;
 function PalBackendConnectIpv4(handle: Integer; hostAddr: LongWord; port: Integer): Integer;
@@ -389,6 +390,15 @@ begin
 {$ifdef PXX_PAL_ESP_IDF_TARGET}
   one := enabled;
   Result := lwip_setsockopt(handle, SOL_SOCKET, SO_REUSEADDR, @one, 4);
+{$else}
+  Result := PAL_ERR_UNSUPPORTED;
+{$endif}
+end;
+
+function PalBackendSetSockOpt(handle, level, optname: Integer; valPtr: Pointer; valLen: Integer): Integer;
+begin
+{$ifdef PXX_PAL_ESP_IDF_TARGET}
+  Result := lwip_setsockopt(handle, level, optname, valPtr, valLen);
 {$else}
   Result := PAL_ERR_UNSUPPORTED;
 {$endif}
