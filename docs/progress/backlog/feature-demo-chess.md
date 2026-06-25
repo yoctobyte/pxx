@@ -126,6 +126,18 @@ candidates — selection criteria, hard filters, and why each alternative was ke
 or rejected — lives in its own ticket: **idea-demo-app-candidates**.
 
 ## Log
+- 2026-06-25 — **x86-64 oracle validated + wired into `make lib-test`** (Track B,
+  v66). The platonic engine compiles clean against `$(PXX_STABLE)` (no `-Fu`) and
+  perft matches **every** published constant: startpos perft(1..6) =
+  20/400/8902/197281/4865609/119060324; Kiwipete perft(1..3) = 48/2039/97862;
+  Position 3 perft(1..3) = 14/191/2812. Added a `--selftest` mode (top-level
+  `PerftCheck` + `SelfTest`, no nested-proc capture per the F3 gap) that checks
+  10 perft values across those 3 positions, prints a folded integer `CHECKSUM
+  5554659317958071639` and `ALL OK` in ~1.1s; wired as the `chess-perft` smoke
+  oracle in lib-test (startpos perft>=5 deliberately excluded — ~19s, too slow for
+  the gate). perft(6) confirmed manually (7m53s, x86-64). **Remaining (Track A):**
+  cross-target byte-identical perft + self-host build on all 5 targets, and the
+  benchmark harness (nodes/sec, cycles/node).
 - 2026-06-19 — **Platonic engine source landed** (`examples/chess/chess.pas`).
   One coherent mailbox engine combining slices 1–4: FEN parse (exceptions),
   pseudo-legal **movegen as a `generator` driven by `for m in GenMoves(pos)`**,

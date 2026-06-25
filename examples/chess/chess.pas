@@ -923,6 +923,58 @@ begin
   end;
 end;
 
+{ ===== Self-test oracle =====
+  Integer-only, cross-target deterministic. Runs perft against published
+  constants for three standard positions; prints one `name=ok`/`=FAIL` line per
+  check, a folded integer CHECKSUM, and a final `ALL OK`. Kept fast (no startpos
+  perft >=5) so it is cheap enough for the lib-test smoke gate. }
+
+function PerftCheck(var pos: TPosition; depth: Integer; want: Int64;
+                    const name: AnsiString; var chk: Int64): Boolean;
+var got: Int64;
+begin
+  got := Perft(pos, depth);
+  chk := chk * 1000003 + got;
+  if got = want then
+  begin
+    writeln(name, '=ok');
+    PerftCheck := True;
+  end
+  else
+  begin
+    writeln(name, '=FAIL got=', got, ' want=', want);
+    PerftCheck := False;
+  end;
+end;
+
+procedure SelfTest(eng: TEngine);
+var allok: Boolean; chk: Int64;
+begin
+  allok := True; chk := 0;
+
+  { start position }
+  eng.NewGame;
+  if not PerftCheck(eng.pos, 1, 20,     'start-p1', chk) then allok := False;
+  if not PerftCheck(eng.pos, 2, 400,    'start-p2', chk) then allok := False;
+  if not PerftCheck(eng.pos, 3, 8902,   'start-p3', chk) then allok := False;
+  if not PerftCheck(eng.pos, 4, 197281, 'start-p4', chk) then allok := False;
+
+  { Kiwipete (heavy tactical / castling / en-passant cross-section) }
+  SetFEN(eng.pos, 'r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq -');
+  if not PerftCheck(eng.pos, 1, 48,    'kiwi-p1', chk) then allok := False;
+  if not PerftCheck(eng.pos, 2, 2039,  'kiwi-p2', chk) then allok := False;
+  if not PerftCheck(eng.pos, 3, 97862, 'kiwi-p3', chk) then allok := False;
+
+  { Position 3 (promotions + rook/pawn endgame edge cases) }
+  SetFEN(eng.pos, '8/2p5/3p4/KP5r/1R3p1k/8/4P1P1/8 w - -');
+  if not PerftCheck(eng.pos, 1, 14,   'pos3-p1', chk) then allok := False;
+  if not PerftCheck(eng.pos, 2, 191,  'pos3-p2', chk) then allok := False;
+  if not PerftCheck(eng.pos, 3, 2812, 'pos3-p3', chk) then allok := False;
+
+  writeln('CHECKSUM ', chk);
+  if allok then writeln('ALL OK') else writeln('FAIL');
+end;
+
 { ===== Main ===== }
 
 var
@@ -941,22 +993,27 @@ begin
   eng := TEngine.Create;
   eng.NewGame;
 
-  writeln('PXX chess demo');
-  PrintBoard(eng.pos);
+  if (ParamCount >= 1) and (ParamStr(1) = '--selftest') then
+    SelfTest(eng)
+  else
+  begin
+    writeln('PXX chess demo');
+    PrintBoard(eng.pos);
 
-  { deterministic oracle: perft from the start position }
-  writeln;
-  for d := 1 to 4 do
-    writeln('perft(', d, ') = ', Perft(eng.pos, d));
+    { deterministic oracle: perft from the start position }
+    writeln;
+    for d := 1 to 4 do
+      writeln('perft(', d, ') = ', Perft(eng.pos, d));
 
-  { fixed-depth best move (search + eval + TT exercised) }
-  eng.nodes := 0;
-  score := eng.BestMove(4, best);
-  writeln;
-  writeln('bestmove ', MoveText(best), '  score ', score, '  nodes ', eng.nodes);
+    { fixed-depth best move (search + eval + TT exercised) }
+    eng.nodes := 0;
+    score := eng.BestMove(4, best);
+    writeln;
+    writeln('bestmove ', MoveText(best), '  score ', score, '  nodes ', eng.nodes);
 
-  { interactive surface (reads stdin; ends at EOF) }
-  Repl(eng);
+    { interactive surface (reads stdin; ends at EOF) }
+    Repl(eng);
+  end;
 
   eng.Free;
 end.
