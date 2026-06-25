@@ -24,6 +24,20 @@
   gap to isolate), 1 `expected C expression`. NEXT: pick off the `unexpected
   token` tail incrementally (Track C), isolate the 2 IR-codegen gaps, then
   `setjmp`/`longjmp` (Track A) + multi-file linking for an actual lua build.
+- 2026-06-25 — **`__builtin_expect` handled** (2f62c2e): reduces to its first arg
+  (lua's pervasive l_likely/l_unlikely). **Diverse-tail confirmed by windowed
+  bisect:** the 21 `unexpected token` files each have a DIFFERENT context-
+  dependent cause that does NOT reproduce in isolation (every minimal repro
+  passes) and the lexer SrcPos sits ahead of the parse point, making them slow to
+  pin. Concrete findings so far: lobject.c uses `sizeof("string")/sizeof(char)`
+  → filed `bug-c-sizeof-string-literal` (pxx returns 8 not len+1; a VALUE bug, not
+  the parse blocker); ltable.c fails inside a deeply-nested macro cast chain
+  (`(...Integer)( limit + 1)))))->tt_)) & 0x0F)`); lmem.c parses its whole body
+  but still errors (SrcPos at end-of-function — the real fault is elsewhere in the
+  token stream). RECOMMENDATION for the next session: add a PERMANENT, precise
+  C-parse error locator (print the failing token's own source offset + a readable
+  window, not the lexer SrcPos) — without it, each `unexpected token` costs an
+  instrumented rebuild to locate. Then grind the tail file-by-file.
 - **Track:** C (C frontend) — isolated worktree `../frankonpiler-cfront`, branch
   `feat/cfront`. Lands to `master` only when `make test` + self-host fixedpoint
   stay green (C-body codegen edits the compiler binary → reseed).
