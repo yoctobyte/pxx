@@ -128,6 +128,20 @@ two client coroutines GET the SAME host:port at once → server must accept TWIC
 (proves no socket sharing); with cap=1 only one conn is kept (count=1) →
 `HttpPoolEvictIdle(0)` → count=0. `make lib-test` green.
 
+## Content-Encoding: gzip / deflate (landed 2026-06-25)
+
+Responses are now transparently decompressed. `zlib.pas` gained `InflateGzip`
+(RFC 1952: parse magic + optional FEXTRA/FNAME/FCOMMENT/FHCRC fields, inflate the
+raw deflate body, verify CRC32 + ISIZE) and `InflateRawBytes` (bare RFC 1951, no
+wrapper) alongside the existing `InflateZlib` (RFC 1950). `http.pas` gained the
+pure `HttpDecodeContent(encoding, body)` — gzip / deflate (zlib-wrapped, with a
+raw-deflate fallback) / identity / unknown-passthrough — and `HttpParseResponse`
+calls it after framing, so every client path (blocking, async, keep-alive, pool)
+gets decoded bodies for free. Tests: `lib_zlib` +3 (`gzip`, `gzip bad crc`, `raw
+deflate`), `lib_http` +5 (`ce-identity`/`ce-empty`/`ce-gzip`/`ce-unknown`/
+`ce-resp-gzip`, the last a full gzip response decompressed by HttpParseResponse).
+`make lib-test` green vs v73.
+
 ## Roadmap (next slices)
 
 1. ~~Concurrency-safe pool + blocking `HttpGetPooled` + eviction/idle-timeout~~

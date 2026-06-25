@@ -9,6 +9,17 @@ begin
   if b then writeln(tag, '=ok') else writeln(tag, '=FAIL');
 end;
 
+function GzipHelloWorld: AnsiString;
+{ gzip member for 'hello world' (Python gzip, mtime=0) as a binary string. }
+const b: array[0..30] of Integer = (
+  31, 139, 8, 0, 0, 0, 0, 0, 2, 255, 203, 72, 205, 201, 201, 87, 40, 207,
+  47, 202, 73, 1, 0, 133, 17, 74, 13, 11, 0, 0, 0);
+var i: Integer;
+begin
+  SetLength(Result, 31);
+  for i := 0 to 30 do Result[i + 1] := AnsiChar(b[i]);
+end;
+
 var
   host, path: AnsiString;
   port: Integer;
@@ -16,6 +27,7 @@ var
   req: AnsiString;
   resp: THttpResponse;
   hdrs: THttpHeaders;
+  gz, raw2: AnsiString;
 begin
   { URL parse: host + path. }
   okUrl := HttpParseUrl('http://example.com/index.html', host, port, path, isTls);
@@ -116,4 +128,16 @@ begin
   SayBool('query1', HttpQueryAdd('', 'a', '1') = 'a=1');
   SayBool('query2', HttpQueryAdd(HttpQueryAdd('', 'a', '1'), 'b', '2 3') = 'a=1&b=2%203');
   SayBool('query-enc', HttpQueryAdd('', 'q', 'a&b') = 'q=a%26b');
+
+  { Content-Encoding decoding (gzip/deflate; identity + unknown pass through). }
+  gz := GzipHelloWorld;
+  SayBool('ce-identity', HttpDecodeContent('identity', 'abc') = 'abc');
+  SayBool('ce-empty',    HttpDecodeContent('', 'abc') = 'abc');
+  SayBool('ce-gzip',     HttpDecodeContent('gzip', gz) = 'hello world');
+  SayBool('ce-unknown',  HttpDecodeContent('br', gz) = gz);
+  { full response: HttpParseResponse decompresses a gzip body in place. }
+  raw2 := 'HTTP/1.1 200 OK'#13#10 + 'Content-Encoding: gzip'#13#10 +
+          'Content-Length: 31'#13#10#13#10 + gz;
+  HttpParseResponse(raw2, resp);
+  SayBool('ce-resp-gzip', resp.Body = 'hello world');
 end.

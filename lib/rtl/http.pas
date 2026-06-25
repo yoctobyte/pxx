@@ -20,7 +20,7 @@ unit http;
 interface
 
 uses net, asyncnet, dns, dns_async, dns_config, dns_wire_core, sysutils,
-     tls, scheduler, platform;
+     tls, scheduler, platform, zlib, hashing;
 
 type
   THttpResponse = record
@@ -73,6 +73,10 @@ function HttpResponseHeader(const resp: THttpResponse; const name: AnsiString): 
 
 { Decode a chunked-transfer-encoded body to its plain bytes. }
 function HttpDechunk(const body: AnsiString): AnsiString;
+
+{ Decompress a body per Content-Encoding (gzip / deflate; identity and empty
+  pass through). An unknown or malformed encoding returns the body unchanged. }
+function HttpDecodeContent(const encoding, body: AnsiString): AnsiString;
 
 { Resolve a (possibly relative) Location against a base URL: an absolute
   http(s):// location is returned as-is; an absolute-path '/x' keeps the base
@@ -427,6 +431,30 @@ begin
   Result := outp;
 end;
 
+function HttpDecodeContent(const encoding, body: AnsiString): AnsiString;
+var enc, e: AnsiString; src, dst: TByteArray; i: Integer; ok: Boolean;
+begin
+  Result := body;
+  enc := LowerCase(Trim(encoding));
+  if (enc = '') or (enc = 'identity') or (body = '') then Exit;
+
+  SetLength(src, Length(body));
+  for i := 1 to Length(body) do src[i - 1] := Byte(body[i]);
+
+  ok := False;
+  if enc = 'gzip' then
+    ok := InflateGzip(src, dst, e)
+  else if enc = 'deflate' then
+  begin
+    ok := InflateZlib(src, dst, e);              { spec: RFC1950 zlib-wrapped }
+    if not ok then ok := InflateRawBytes(src, dst, e);   { lenient: raw deflate }
+  end;
+  if not ok then Exit;                            { unknown/failed → unchanged }
+
+  SetLength(Result, Length(dst));
+  for i := 0 to Length(dst) - 1 do Result[i + 1] := AnsiChar(dst[i]);
+end;
+
 function HttpResolveUrl(const base, location: AnsiString): AnsiString;
 var host, path, scheme, authority: AnsiString; port, i: Integer; isTls: Boolean;
 begin
@@ -450,7 +478,7 @@ begin
 end;
 
 procedure HttpParseResponse(const raw: AnsiString; var resp: THttpResponse);
-var i, n, lineEnd, sp1, sp2, sep, cl: Integer; statusLine, code, te, clv: AnsiString;
+var i, n, lineEnd, sp1, sp2, sep, cl: Integer; statusLine, code, te, clv, ce: AnsiString;
 begin
   resp.Ok := False; resp.Status := 0; resp.Reason := '';
   resp.Headers := ''; resp.Body := '';
@@ -513,6 +541,10 @@ begin
         resp.Body := Copy(resp.Body, 1, cl);
     end;
   end;
+
+  { Content-Encoding: gzip / deflate — decompress once framing yielded the body. }
+  ce := HttpHeaderValue(resp.Headers, 'Content-Encoding');
+  if ce <> '' then resp.Body := HttpDecodeContent(ce, resp.Body);
 
   resp.Ok := resp.Status > 0;
 end;

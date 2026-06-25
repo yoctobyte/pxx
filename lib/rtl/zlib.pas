@@ -19,6 +19,18 @@ uses hashing;
 function InflateZlib(const src: TByteArray; var dst: TByteArray;
                      var err: AnsiString): Boolean;
 
+{ InflateGzip(input, output, error) — parse an RFC 1952 gzip member (magic,
+  optional FEXTRA/FNAME/FCOMMENT/FHCRC fields), inflate the raw deflate body, and
+  verify the CRC32 + ISIZE trailer. Returns True on success. }
+function InflateGzip(const src: TByteArray; var dst: TByteArray;
+                     var err: AnsiString): Boolean;
+
+{ InflateRawBytes(input, output, error) — inflate a bare RFC 1951 deflate stream
+  (no zlib/gzip wrapper, no trailing checksum). For HTTP `Content-Encoding:
+  deflate` peers that send raw deflate rather than zlib-wrapped. }
+function InflateRawBytes(const src: TByteArray; var dst: TByteArray;
+                         var err: AnsiString): Boolean;
+
 procedure DeflateZlibStored(const src: TByteArray; var dst: TByteArray);
 
 implementation
@@ -541,6 +553,108 @@ begin
     dst[i] := gDst[i];
   SetLength(gDst, 0);
 
+  Result := True;
+end;
+
+{ ---- public InflateGzip ---- }
+
+function InflateGzip(const src: TByteArray; var dst: TByteArray;
+                     var err: AnsiString): Boolean;
+var flg, hdr, endPos, i: Integer; xlen: Integer;
+    wantCrc, gotCrc, wantSize: LongWord;
+begin
+  Result := False;
+  err    := '';
+  SetLength(dst, 0);
+
+  if Length(src) < 18 then begin err := 'gzip stream too short'; Exit; end;
+  if (src[0] <> $1F) or (src[1] <> $8B) then
+    begin err := 'bad gzip magic'; Exit; end;
+  if src[2] <> 8 then
+    begin err := 'unsupported gzip CM (not deflate)'; Exit; end;
+
+  flg := Integer(src[3]);
+  hdr := 10;                              { fixed header: magic..OS }
+
+  if (flg and $04) <> 0 then              { FEXTRA: XLEN (LE) + that many bytes }
+  begin
+    if hdr + 2 > Length(src) then begin err := 'truncated gzip FEXTRA'; Exit; end;
+    xlen := Integer(src[hdr]) or (Integer(src[hdr + 1]) shl 8);
+    hdr := hdr + 2 + xlen;
+  end;
+  if (flg and $08) <> 0 then              { FNAME: zero-terminated }
+  begin
+    while (hdr < Length(src)) and (src[hdr] <> 0) do Inc(hdr);
+    Inc(hdr);
+  end;
+  if (flg and $10) <> 0 then              { FCOMMENT: zero-terminated }
+  begin
+    while (hdr < Length(src)) and (src[hdr] <> 0) do Inc(hdr);
+    Inc(hdr);
+  end;
+  if (flg and $02) <> 0 then hdr := hdr + 2;   { FHCRC: 2-byte header CRC }
+
+  if hdr + 8 > Length(src) then begin err := 'truncated gzip header'; Exit; end;
+
+  gData   := src;
+  gBitPos := hdr * 8;
+  gOk     := True;
+  gDLen   := 0;
+  SetLength(gDst, 256);
+
+  if not InflateRaw(err) then begin SetLength(gDst, 0); Exit; end;
+  DstTrim;
+
+  { trailer: CRC32 then ISIZE, each 4 bytes little-endian, byte-aligned. }
+  ByteAlign;
+  endPos := BytePos;
+  if endPos + 8 <> Length(src) then
+    begin err := 'trailing gzip data'; SetLength(gDst, 0); Exit; end;
+
+  wantCrc := LongWord(src[endPos]) or (LongWord(src[endPos + 1]) shl 8) or
+             (LongWord(src[endPos + 2]) shl 16) or (LongWord(src[endPos + 3]) shl 24);
+  wantSize := LongWord(src[endPos + 4]) or (LongWord(src[endPos + 5]) shl 8) or
+              (LongWord(src[endPos + 6]) shl 16) or (LongWord(src[endPos + 7]) shl 24);
+
+  { copy global buffer to caller's dst }
+  SetLength(dst, gDLen);
+  for i := 0 to gDLen - 1 do
+    dst[i] := gDst[i];
+  SetLength(gDst, 0);
+
+  gotCrc := CRC32Bytes(dst);
+  if gotCrc <> wantCrc then
+    begin err := 'bad gzip crc32'; SetLength(dst, 0); Exit; end;
+  if wantSize <> LongWord(gDLen) then
+    begin err := 'bad gzip isize'; SetLength(dst, 0); Exit; end;
+
+  Result := True;
+end;
+
+{ ---- public InflateRawBytes ---- }
+
+function InflateRawBytes(const src: TByteArray; var dst: TByteArray;
+                         var err: AnsiString): Boolean;
+var i: Integer;
+begin
+  Result := False;
+  err    := '';
+  SetLength(dst, 0);
+  if Length(src) < 1 then begin err := 'empty deflate stream'; Exit; end;
+
+  gData   := src;
+  gBitPos := 0;
+  gOk     := True;
+  gDLen   := 0;
+  SetLength(gDst, 256);
+
+  if not InflateRaw(err) then begin SetLength(gDst, 0); Exit; end;
+  DstTrim;
+
+  SetLength(dst, gDLen);
+  for i := 0 to gDLen - 1 do
+    dst[i] := gDst[i];
+  SetLength(gDst, 0);
   Result := True;
 end;
 
