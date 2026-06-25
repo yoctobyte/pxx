@@ -19,6 +19,7 @@ before assuming the workaround is still needed.
 | `lib/rtl/classes.pas` (`TStream.Read`/`Write` bodies) | self-calls qualified `Self.Read(...)` / `Self.Write(...)` | [[bug-bare-read-write-in-method-hits-intrinsic]] | bare `Read(...)` / `Write(...)` |
 | `lib/rtl/bignum.pas` (`BigFromStr`, `BigDivMod`), `examples/bignum/bigmath.pas` | managed-return calls bound to a temp before being passed as an arg (no `BigAdd(BigMulSmall(x,…),…)` nesting) | [[bug-managed-record-result-self-arg]] (aka `bug-nested-managed-return-call-arg`) | nest the calls directly |
 | `lib/rtl/chacha20poly1305.pas` (Poly1305) | native 5×26-bit limbs instead of `bignum` | [[bug-managed-record-result-self-arg]] — *partial:* limbs are the idiomatic choice anyway, so this is **not** a pure workaround; keep even after the fix | — (keep) |
+| `lib/rtl/x25519.pas` (`Asr64`, `Sel25519`) | bitwise complement written `-x-1` / `-b` instead of `not` | [[bug-not-on-int64-is-boolean]] — `not` on an `Int64` *expression* miscompiles | plain `not` |
 
 ### Coding-pattern landmines (no single site — avoid in new Track B code)
 
@@ -32,6 +33,9 @@ before assuming the workaround is still needed.
   [[bug-managed-length-via-pointer-deref]]. Deref into a local string first.
 - **`Read := x` / `Write := x`** (own-name result of an intrinsic-named **virtual**
   method) miscompiles — [[bug-virtual-keyword-name-result]]. Use `Result := x`.
+- **`not` on an `Int64` expression** (`not (x-1)`, `not Int64(5)`) miscompiles —
+  [[bug-not-on-int64-is-boolean]]. Use the two's-complement identity: `~x` →
+  `-x - 1`, `~(b-1)` → `-b`. `not` on a plain Int64 *variable* is fine.
 
 ## Cleanup backlog — workarounds whose bug is now FIXED (revertible)
 

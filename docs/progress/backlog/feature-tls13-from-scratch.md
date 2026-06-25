@@ -106,8 +106,8 @@ HTTP client); server-side later if wanted.
    lib-test). SHA-384 still needed for the 384 ciphersuite.
 2. **AEAD:** ~~ChaCha20 + Poly1305~~ **done** (`lib/rtl/chacha20poly1305.pas`,
    RFC 8439). AES-128 block + GCM (GHASH) still needed.
-3. **X25519** (Curve25519 ECDH) — field arithmetic mod 2^255-19 (can sit on
-   bignum or a dedicated 64-bit-limb field).
+3. ~~**X25519** (Curve25519 ECDH)~~ **done** (`lib/rtl/x25519.pas`, RFC 7748;
+   16-limb radix-2^16 field, not bignum).
 4. **Signature verify:** RSA (PKCS#1 v1.5 + PSS) over bignum; ECDSA-P256;
    Ed25519.
 5. **ASN.1/DER** parser + **X.509** cert parse; chain build + validation
@@ -134,7 +134,13 @@ HTTP client); server-side later if wanted.
   against RFC 8439 §2.5.2/§2.8.2 in `test/lib_chacha20poly1305` (7 checks, gated as
   `chacha20-poly1305`). AES-128-GCM (S-box + GHASH) still to add. Surfaced a Track
   A codegen bug along the way: [[bug-managed-record-result-self-arg]].
-- M3 X25519 (RFC 7748 vectors).
+- M3 X25519 (RFC 7748 vectors). **DONE (2026-06-25)** —
+  `lib/rtl/x25519.pas`: a TweetNaCl `crypto_scalarmult` port (16-limb radix-2^16
+  field, Int64), `X25519` + `X25519Base`, verified against RFC 7748 §5.2 + §6.1
+  (Diffie-Hellman incl. ECDH agreement) in `test/lib_x25519` (6 checks, gated as
+  `x25519`). Library-free. Surfaced Track A bug
+  [[bug-not-on-int64-is-boolean]] (`not` on an Int64 expression miscompiles;
+  worked around with `-x-1`).
 - M4 signature verify: RSA, ECDSA-P256, Ed25519 (RFC 8032 vectors).
 - M5 ASN.1/X.509 parse + chain validation + trust store.
 - M6 TLS 1.3 handshake state machine → a real `https://` GET (Pascal record
