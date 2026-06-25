@@ -1279,8 +1279,27 @@ begin
     CPInclude(line, p, last, depth, baseDir);
 end;
 
+{ Net parenthesis depth of a line, ignoring `"..."` / `'...'` literals. Used to
+  detect a (function-macro) call whose arguments continue on the next line. }
+function CPLineParenDepth(const line: AnsiString): Integer;
+var i: Integer; inStr, inCh: Boolean; c: Char;
+begin
+  Result := 0; inStr := False; inCh := False; i := 1;
+  while i <= Length(line) do
+  begin
+    c := line[i];
+    if inStr then begin if c = '\' then Inc(i) else if c = '"' then inStr := False; end
+    else if inCh then begin if c = '\' then Inc(i) else if c = '''' then inCh := False; end
+    else if c = '"' then inStr := True
+    else if c = '''' then inCh := True
+    else if c = '(' then Inc(Result)
+    else if c = ')' then Dec(Result);
+    Inc(i);
+  end;
+end;
+
 procedure CPProcessText(const src, baseDir: AnsiString; depth: Integer);
-var pos, p: Integer; inComment: Boolean;
+var pos, p: Integer; inComment: Boolean; cont: AnsiString;
 begin
   pos := 1;
   inComment := False;
@@ -1293,6 +1312,16 @@ begin
       if not (CPrepLine[p] in [' ', #9]) then Break;
       Inc(p);
     end;
+    { Join continuation physical lines while a call's parentheses stay unbalanced,
+      so a function-macro invocation whose arguments span newlines (common in
+      lua/sqlite) expands as a whole. Directives use `\` continuation, already
+      handled in CPReadLine, so skip them. }
+    if (p > Length(CPrepLine)) or (CPrepLine[p] <> '#') then
+      while (pos <= Length(src)) and (CPLineParenDepth(CPrepLine) > 0) do
+      begin
+        CPReadLine(src, pos, inComment, cont);
+        CPrepLine := CPrepLine + ' ' + cont;
+      end;
     if p <= Length(CPrepLine) then
     begin
       if CPrepLine[p] = '#' then
