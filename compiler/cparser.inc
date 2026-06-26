@@ -3,6 +3,830 @@
 function ParseCBlockAST: Integer; forward;
 function ParseCStatementAST: Integer; forward;
 procedure SkipBraceBlock; forward;
+procedure ParseCSubroutine; forward;
+function ParseCExpr: Integer; forward;
+function CEvalConstExpr: Int64; forward;
+procedure ParseCTypedef; forward;
+procedure ParseCEnumDecl; forward;
+procedure ParseCStructDecl; forward;
+function IsBareStructDecl: Boolean; forward;
+function IsCTypeTok: Boolean; forward;
+function ParseCDeclType: TTypeKind; forward;
+function ParseCCommaStmt: Integer; forward;
+function ParseCCommaExpr: Integer; forward;
+function ParseCSwitchAST: Integer; forward;
+function CNodeIsPointer(node: Integer): Boolean; forward;
+function CNodePtrElemRec(node: Integer): Integer; forward;
+procedure ParseCStructInto(ci: Integer; isUnion: Boolean); forward;
+
+{ ===== C expression compiler (Slice B) =====
+  A real recursive-descent C expression parser at C precedence, replacing the
+  earlier Pascal-ParseExpr borrow. Emits the shared AST nodes (AN_BINOP, AN_NEG,
+  AN_NOT, AN_INT_LIT, AN_IDENT, AN_CALL, AN_ASSIGN, AN_STR_LIT) so the existing
+  IR lowering and all backends apply unchanged.
+
+  Operator-token mapping into AN_BINOP.IVal: the IR's binop validator accepts
+  ops with ordinal <= Ord(tkShl) plus tkXor, and encodes shift-right as the
+  *tkIdent* operator (shift-left = tkShl). So the distinct C lexer tokens from
+  Slice A are translated here to the operator tokens the IR understands:
+    C `&`(tkAmp)->tkAnd bitwise, `|`(tkPipe)->tkOr bitwise, `^`->tkXor,
+    `<<`->tkShl, `>>`->tkIdent(shr), `/`->tkDiv (integer division),
+    `&&`->tkAnd / `||`->tkOr but tagged tyBoolean for the short-circuit path. }
+
+{ Result type of a binary node: comparisons/logical -> Boolean; otherwise widen
+  to Int64 if either operand is Int64, else Integer. }
+function CBinResultTk(opTok, l, r: Integer): Integer;
+begin
+  if (opTok = Ord(tkEq)) or (opTok = Ord(tkNeq)) or (opTok = Ord(tkLt)) or
+     (opTok = Ord(tkLe)) or (opTok = Ord(tkGt)) or (opTok = Ord(tkGe)) or
+     (opTok = Ord(tkAnd)) or (opTok = Ord(tkOr)) then
+    Result := Ord(tyBoolean)
+  else if (IntToTypeKind(ASTTk[l]) = tyInt64) or (IntToTypeKind(ASTTk[r]) = tyInt64) then
+    Result := Ord(tyInt64)
+  else
+    Result := Ord(tyInteger);
+end;
+
+{ Build an AN_BINOP from a C operator token and two operand nodes. cTok is the
+  raw C lexer token kind (CurTok.Kind ordinal). }
+{ Wrap an expression in `(e != 0)` so a logical operand becomes a true 0/1
+  boolean. C `&&`/`||` must yield exactly 0/1, and the short-circuit IR stores
+  the operand value into a 1-byte boolean temp — a raw `2` would read back as 2.
+  Normalising both operands here keeps the result canonical. }
+function CMakeTruthy(e: Integer): Integer;
+var node, zero: Integer;
+begin
+  zero := AllocNode(AN_INT_LIT);
+  ASTIVal[zero] := 0;
+  ASTTk[zero] := Ord(tyInteger);
+  node := AllocNode(AN_BINOP);
+  ASTIVal[node] := Ord(tkNeq);
+  ASTLeft[node] := e;
+  ASTRight[node] := zero;
+  ASTTk[node] := Ord(tyBoolean);
+  Result := node;
+end;
+
+function CMakeBinop(cTok, l, r: Integer): Integer;
+var node, ivalOp: Integer;
+begin
+  ivalOp := cTok;
+  if cTok = Ord(tkSlash) then ivalOp := Ord(tkDiv)        { C `/` on ints = div }
+  else if cTok = Ord(tkShr) then ivalOp := Ord(tkIdent)   { shr encoded as tkIdent }
+  else if cTok = Ord(tkAmp) then ivalOp := Ord(tkAnd)     { bitwise AND }
+  else if cTok = Ord(tkPipe) then ivalOp := Ord(tkOr);    { bitwise OR }
+  { tkPlus/tkMinus/tkStar/tkMod/tkShl/tkXor/tkAnd(&&)/tkOr(||)/comparisons map
+    straight through. }
+  if (cTok = Ord(tkAnd)) or (cTok = Ord(tkOr)) then       { logical && / || }
+  begin
+    l := CMakeTruthy(l);
+    r := CMakeTruthy(r);
+  end;
+  node := AllocNode(AN_BINOP);
+  ASTIVal[node] := ivalOp;
+  ASTLeft[node] := l;
+  ASTRight[node] := r;
+  ASTTk[node] := CBinResultTk(cTok, l, r);
+  { Pointer arithmetic `ptr +/- int` (or `int + ptr`) stays a pointer, carrying
+    the element record on ASTSOffset so `(p+i)->field` / `(p+i)[j]` resolve (the
+    IR already scales the offset by element size). }
+  if (cTok = Ord(tkPlus)) or (cTok = Ord(tkMinus)) then
+  begin
+    if CNodeIsPointer(l) then
+    begin ASTTk[node] := Ord(tyPointer); ASTSOffset[node] := CNodePtrElemRec(l); end
+    else if (cTok = Ord(tkPlus)) and CNodeIsPointer(r) then
+    begin ASTTk[node] := Ord(tyPointer); ASTSOffset[node] := CNodePtrElemRec(r); end;
+  end;
+  Result := node;
+end;
+
+{ Binary-operator precedence (higher binds tighter); -1 = not a binary op.
+  Note `&`=tkAmp(bitwise, 8) is distinct from `&&`=tkAnd(logical, 4), and
+  `|`=tkPipe(bitwise, 6) from `||`=tkOr(logical, 3) since Slice A. }
+function CBinPrec(k: TTokenKind): Integer;
+begin
+  case k of
+    tkStar, tkSlash, tkMod:        Result := 11;
+    tkPlus, tkMinus:               Result := 10;
+    tkShl, tkShr:                  Result := 9;
+    tkLt, tkLe, tkGt, tkGe:        Result := 8;
+    tkEq, tkNeq:                   Result := 7;
+    tkAmp:                         Result := 6;   { bitwise & }
+    tkXor:                         Result := 5;   { bitwise ^ }
+    tkPipe:                        Result := 4;   { bitwise | }
+    tkAnd:                         Result := 3;   { logical && }
+    tkOr:                          Result := 2;   { logical || }
+    else                           Result := -1;
+  end;
+end;
+
+function ParseCUnary: Integer; forward;
+function ParseCPostfix: Integer; forward;
+
+{ Build the shared-IR AN_INCDEC value node (master shape): Left = the lvalue
+  (address computed once at lowering), ASTIVal = +1/-1 (the lowering scales by
+  element size for a pointer), ASTSOffset = 1 for postfix (yield OLD value) / 0
+  for prefix (yield NEW). The pointed-at record for `(p++)->field` is derived from
+  the lvalue (Left) by CNodePtrElemRec, not carried on the node. }
+function CMakeIncDec(lv: Integer; isInc, isPre: Boolean): Integer;
+var node: Integer;
+begin
+  node := AllocNode(AN_INCDEC);
+  ASTLeft[node] := lv;
+  if isInc then ASTIVal[node] := 1 else ASTIVal[node] := -1;
+  if isPre then ASTSOffset[node] := 0 else ASTSOffset[node] := 1;
+  ASTTk[node] := ASTTk[lv];
+  Result := node;
+end;
+
+{ Precedence-climbing binary-expression parser (left-associative). }
+function ParseCBinExpr(minPrec: Integer): Integer;
+var left, right, cTok, prec: Integer;
+begin
+  left := ParseCUnary;
+  while True do
+  begin
+    prec := CBinPrec(CurTok.Kind);
+    if prec < minPrec then Break;
+    cTok := Ord(CurTok.Kind);
+    Next;
+    right := ParseCBinExpr(prec + 1);   { left-assoc: strictly-higher on the right }
+    left := CMakeBinop(cTok, left, right);
+  end;
+  Result := left;
+end;
+
+{ The pointer to a va_list's control block, for the __pxx_va_* helpers. va_list
+  is `__pxx_va_elem[1]`, so a LOCAL va_list is an array — take its address (&ap[0]).
+  A va_list PARAMETER decayed to a pointer at the call site, so the identifier
+  already IS the control-block pointer — pass it as-is. }
+function CVaListAddr(apNode: Integer): Integer;
+begin
+  Result := AllocNode(AN_ADDR);
+  ASTLeft[Result] := apNode;
+  ASTTk[Result] := Ord(tyPointer);
+end;
+
+{ A primary: integer/char/string literal, parenthesised expr, identifier
+  (constant -> folded literal; variable -> AN_IDENT; name followed by `(` ->
+  call with an AN_ARG chain). }
+function ParseCPrimary: Integer;
+var node, idx, procIdx, argHead, argTail, argNode, valNode, calleeNode: Integer;
+    apNode, addrNode, callNode, helper, a2, a3: Integer;
+    vt: TTypeKind;
+    name: AnsiString;
+begin
+  Result := -1;
+  case CurTok.Kind of
+    tkInteger:
+    begin
+      node := AllocNode(AN_INT_LIT);
+      ASTIVal[node] := CurTok.IVal;
+      if (CurTok.IVal > 2147483647) or (CurTok.IVal < -2147483648) then
+        ASTTk[node] := Ord(tyInt64)
+      else
+        ASTTk[node] := Ord(tyInteger);
+      Next;
+      Result := node;
+    end;
+    tkFloat:
+    begin
+      { float literal — IVal carries the IEEE-754 double bit pattern (clexer) }
+      node := AllocNode(AN_FLOAT_LIT);
+      ASTIVal[node] := CurTok.IVal;
+      ASTTk[node] := Ord(tyDouble);
+      Next;
+      Result := node;
+    end;
+    tkString:
+    begin
+      node := AllocNode(AN_STR_LIT);
+      ASTSOffset[node] := Tokens[TokPos - 1].SOffset;
+      ASTSLen[node] := Tokens[TokPos - 1].SLen;
+      ASTTk[node] := Ord(tyString);
+      Next;
+      { Adjacent string literals concatenate (C: `"a" "b"` == `"ab"`; lua's
+        `lua_pushliteral` expands to `"" s`). The decoded chars of consecutive
+        string tokens are contiguous in TokChars, so just extend the length. }
+      while CurTok.Kind = tkString do
+      begin
+        ASTSLen[node] := ASTSLen[node] + Tokens[TokPos - 1].SLen;
+        Next;
+      end;
+      Result := node;
+    end;
+    tkLParen:
+    begin
+      Next;
+      Result := ParseCExpr;
+      { Parenthesized comma EXPRESSION `(a, b, c)` — evaluate each for side
+        effects, yield the last. lua uses `((void)l, expr)` pervasively (api_check
+        / lua_lock expand to it). Build left-nested AN_COMMA nodes. }
+      while CurTok.Kind = tkComma do
+      begin
+        Next;
+        valNode := ParseCExpr;
+        node := AllocNode(AN_COMMA);
+        ASTLeft[node] := Result;       { evaluated, discarded }
+        ASTRight[node] := valNode;     { yields the value }
+        ASTTk[node] := ASTTk[valNode];
+        Result := node;
+      end;
+      Expect(tkRParen, ')');
+    end;
+    tkIdent:
+    begin
+      name := CurTok.SVal;
+      Next;
+      { varargs builtins, desugared over stdarg.h's va_list struct + the pure-C
+        __pxx_va_* helpers (so the only special codegen is the variadic prologue). }
+      if (name = '__builtin_va_arg') and (CurTok.Kind = tkLParen) then
+      begin
+        { __builtin_va_arg(ap, type) -> *(type*)__pxx_va_arg_{gp|fp}(&ap) }
+        Next;
+        apNode := ParseCExpr; Eat(tkComma);
+        vt := ParseCDeclType;
+        if CTypePtrDepth > 0 then vt := tyPointer;
+        Expect(tkRParen, ')');
+        addrNode := CVaListAddr(apNode);
+        if (vt = tySingle) or (vt = tyDouble) then helper := FindProc('__pxx_va_arg_fp')
+        else helper := FindProc('__pxx_va_arg_gp');
+        argNode := AllocNode(AN_ARG); ASTLeft[argNode] := addrNode; ASTRight[argNode] := -1;
+        callNode := AllocNode(AN_CALL); ASTIVal[callNode] := helper;
+        ASTTk[callNode] := Ord(tyPointer); ASTLeft[callNode] := argNode;
+        node := AllocNode(AN_DEREF); ASTLeft[node] := callNode; ASTTk[node] := Ord(vt);
+        Result := node; Exit;
+      end
+      else if (name = '__builtin_va_start') and (CurTok.Kind = tkLParen) then
+      begin
+        { __builtin_va_start(ap, last) -> __pxx_va_start_impl(&ap, &__va_save, NGP) }
+        Next;
+        apNode := ParseCExpr; Eat(tkComma);
+        valNode := ParseCExpr;   { `last` named param — discarded }
+        Expect(tkRParen, ')');
+        addrNode := CVaListAddr(apNode);
+        idx := FindSym('__va_save');
+        a2 := AllocNode(AN_IDENT); ASTIVal[a2] := idx; ASTTk[a2] := Ord(tyRecord);
+        node := AllocNode(AN_ADDR); ASTLeft[node] := a2; ASTTk[node] := Ord(tyPointer);
+        a3 := AllocNode(AN_INT_LIT);
+        if CurProc >= 0 then ASTIVal[a3] := ProcNamedGP[CurProc] else ASTIVal[a3] := 0;
+        ASTTk[a3] := Ord(tyInteger);
+        helper := FindProc('__pxx_va_start_impl');
+        argNode := AllocNode(AN_ARG); ASTLeft[argNode] := addrNode;
+        calleeNode := AllocNode(AN_ARG); ASTLeft[calleeNode] := node; ASTRight[argNode] := calleeNode;
+        valNode := AllocNode(AN_ARG); ASTLeft[valNode] := a3; ASTRight[calleeNode] := valNode; ASTRight[valNode] := -1;
+        callNode := AllocNode(AN_CALL); ASTIVal[callNode] := helper;
+        ASTTk[callNode] := Ord(tyPointer); ASTLeft[callNode] := argNode;
+        Result := callNode; Exit;
+      end
+      else if (name = '__builtin_va_end') and (CurTok.Kind = tkLParen) then
+      begin
+        Next; apNode := ParseCExpr; Expect(tkRParen, ')');
+        node := AllocNode(AN_INT_LIT); ASTIVal[node] := 0; ASTTk[node] := Ord(tyInteger);
+        Result := node; Exit;
+      end;
+      if CurTok.Kind = tkLParen then
+      begin
+        { call — direct (named function) or indirect (fn-pointer variable) }
+        Next;
+        argHead := -1; argTail := -1;
+        if CurTok.Kind <> tkRParen then
+        begin
+          while True do
+          begin
+            valNode := ParseCExpr;
+            argNode := AllocNode(AN_ARG);
+            ASTLeft[argNode] := valNode;
+            ASTRight[argNode] := -1;
+            if argHead = -1 then argHead := argNode
+            else ASTRight[argTail] := argNode;
+            argTail := argNode;
+            if CurTok.Kind = tkComma then begin Next; Continue; end;
+            Break;
+          end;
+        end;
+        Expect(tkRParen, ')');
+        { gcc builtin `__builtin_expect(x, c)` is a branch-prediction hint that
+          evaluates to its first argument — lua uses it pervasively via
+          l_likely/l_unlikely. Reduce it to that argument's value. }
+        if (name = '__builtin_expect') and (argHead >= 0) then
+        begin
+          Result := ASTLeft[argHead];
+          Exit;
+        end;
+        procIdx := FindProc(name);
+        if procIdx >= 0 then
+        begin
+          node := AllocNode(AN_CALL);
+          ASTIVal[node] := procIdx;
+          ASTTk[node] := Ord(Procs[procIdx].RetType);
+          ASTLeft[node] := argHead;
+        end
+        else
+        begin
+          idx := FindSym(name);
+          if (idx >= 0) and (SymProcSig[idx] >= 0) then
+          begin
+            { `f(args)` where f is a fn-pointer variable -> indirect call.
+              ASTRight = the callee value (the variable), ASTIVal = the
+              signature Procs[] index (marshalling + return type). }
+            calleeNode := AllocNode(AN_IDENT);
+            ASTIVal[calleeNode] := idx;
+            ASTTk[calleeNode] := Ord(tyPointer);
+            node := AllocNode(AN_CALL_IND);
+            ASTLeft[node]  := argHead;
+            ASTRight[node] := calleeNode;
+            ASTIVal[node]  := SymProcSig[idx];
+            ASTTk[node]    := Ord(Procs[SymProcSig[idx]].RetType);
+            ASTSLen[node]  := 0;
+          end
+          else
+            Error('call to undeclared function: ' + name);
+        end;
+        Result := node;
+      end
+      else
+      begin
+        idx := FindSym(name);
+        if idx < 0 then
+        begin
+          { A bare function name decays to its address (a fn-pointer value),
+            e.g. `BinOp f = add;`. Otherwise an unresolved identifier (a token
+            left by a self-referential / unmodelled macro) degrades to a 0
+            literal — best-effort frontend, matching the old skip leniency. }
+          procIdx := FindProc(name);
+          if procIdx >= 0 then
+          begin
+            node := AllocNode(AN_PROCADDR);
+            ASTIVal[node] := procIdx;
+            ASTTk[node] := Ord(tyPointer);
+          end
+          else
+          begin
+            node := AllocNode(AN_INT_LIT);
+            ASTIVal[node] := 0;
+            ASTTk[node] := Ord(tyInteger);
+          end;
+        end
+        else if Syms[idx].Kind = skConst then
+        begin
+          node := AllocNode(AN_INT_LIT);
+          ASTIVal[node] := Syms[idx].ConstVal;
+          ASTTk[node] := Ord(Syms[idx].TypeKind);
+        end
+        else
+        begin
+          node := AllocNode(AN_IDENT);
+          ASTIVal[node] := idx;
+          ASTTk[node] := Ord(Syms[idx].TypeKind);
+        end;
+        Result := node;
+      end;
+    end;
+    else
+      Error('expected C expression');
+  end;
+end;
+
+{ Pointed-at / element TTypeKind ordinal of a pointer or array node, used to tag
+  AN_DEREF / AN_INDEX results. Defaults to Integer for shapes not yet modelled. }
+function CNodePointeeTk(node: Integer): Integer;
+begin
+  Result := Ord(tyInteger);
+  if node < 0 then Exit;
+  if ASTKind[node] = AN_IDENT then
+  begin
+    if Syms[ASTIVal[node]].IsArray then
+      Result := Ord(Syms[ASTIVal[node]].ElemType)
+    else if Syms[ASTIVal[node]].TypeKind = tyPointer then
+      Result := Ord(Syms[ASTIVal[node]].PtrElemTk);
+  end
+  else if ASTKind[node] = AN_INDEX then
+    Result := ASTTk[node];
+end;
+
+{ True when a node denotes a pointer value, so `.`/`->` (both lex to tkDot in C)
+  on it means C `->` (deref then field) rather than direct field access. }
+function CNodeIsPointer(node: Integer): Boolean;
+begin
+  Result := False;
+  if node < 0 then Exit;
+  if ASTKind[node] = AN_IDENT then
+    Result := (Syms[ASTIVal[node]].TypeKind = tyPointer) and not Syms[ASTIVal[node]].IsArray
+  else if ASTKind[node] = AN_FIELD then
+    Result := RecFieldType(ResolveNodeRec(ASTLeft[node]), GetASTIdentName(node)) = tyPointer
+  else if ASTKind[node] = AN_INDEX then
+    Result := IntToTypeKind(ASTTk[node]) = tyPointer
+  else if (ASTKind[node] = AN_BINOP) or (ASTKind[node] = AN_INCDEC) then
+    { pointer arithmetic / `p++` keeps a pointer type (CMakeBinop / CMakeIncDec) }
+    Result := IntToTypeKind(ASTTk[node]) = tyPointer
+  else if ASTKind[node] = AN_CALL then
+    { a function returning a pointer — `f()->field` must deref the result }
+    Result := IntToTypeKind(ASTTk[node]) = tyPointer
+  else if ASTKind[node] = AN_ASSIGN then
+    { `(p = x)->field`: the assignment yields the (pointer) LHS value }
+    Result := CNodeIsPointer(ASTLeft[node]);
+end;
+
+{ Pointed-at record id of a pointer-valued node, for `(p+i)->field` resolution.
+  Pointer-arithmetic binops / `p++` carry it on ASTSOffset. }
+function CNodePtrElemRec(node: Integer): Integer;
+begin
+  Result := REC_NONE;
+  if node < 0 then Exit;
+  if ASTKind[node] = AN_IDENT then
+    Result := Syms[ASTIVal[node]].PtrElemRec
+  else if ASTKind[node] = AN_FIELD then
+    Result := RecFieldPtrElemRec(ResolveNodeRec(ASTLeft[node]), GetASTIdentName(node))
+  else if ASTKind[node] = AN_BINOP then
+    Result := ASTSOffset[node]      { pointer-arith binop carries the elem rec }
+  else if ASTKind[node] = AN_INCDEC then
+    Result := CNodePtrElemRec(ASTLeft[node])   { `p++`: elem rec from the lvalue }
+  else if ASTKind[node] = AN_ASSIGN then
+    Result := CNodePtrElemRec(ASTLeft[node]);
+end;
+
+{ Size in bytes of the type just consumed by ParseCDeclType (globals CType*). }
+function CTypeSizeBytes(tk: TTypeKind): Integer;
+begin
+  if CTypePtrDepth > 0 then Result := TARGET_PTR_SIZE
+  else if tk = tyRecord then Result := RecSize(CTypeBaseRec)
+  else Result := TypeSize(tk);
+end;
+
+{ `sizeof(type)`, `sizeof(expr)`, or `sizeof expr` -> a compile-time integer.
+  CurTok is the `sizeof` identifier. Folds a type operand to its size; an
+  identifier operand to its symbol's size; otherwise a conservative pointer
+  size (full expression-type sizing arrives with the type system). }
+function ParseCSizeof: Integer;
+var node, sz, si, depth: Integer; tk: TTypeKind;
+begin
+  Next; { sizeof }
+  sz := TARGET_PTR_SIZE;
+  if CurTok.Kind = tkLParen then
+  begin
+    Next;
+    if IsCTypeTok then
+    begin
+      tk := ParseCDeclType;
+      sz := CTypeSizeBytes(tk);
+    end
+    else if CurTok.Kind = tkIdent then
+    begin
+      si := FindSym(CurTok.SVal);
+      if si >= 0 then
+      begin
+        if Syms[si].IsArray then sz := Syms[si].ArrLen * TypeSize(Syms[si].ElemType)
+        else if Syms[si].TypeKind = tyRecord then sz := RecSize(Syms[si].RecName)
+        else sz := TypeSize(Syms[si].TypeKind);
+      end;
+    end;
+    { Skip the rest of the operand to the MATCHING `)` — balanced parens, so
+      `sizeof((l)[0])` / `sizeof(a[i])` don't stop at an inner `)`. }
+    depth := 1;
+    while CurTok.Kind <> tkEOF do
+    begin
+      if CurTok.Kind = tkLParen then Inc(depth)
+      else if CurTok.Kind = tkRParen then
+      begin
+        Dec(depth);
+        if depth = 0 then Break;
+      end;
+      Next;
+    end;
+    Expect(tkRParen, ')');
+  end
+  else if CurTok.Kind = tkIdent then
+  begin
+    si := FindSym(CurTok.SVal);
+    if si >= 0 then sz := TypeSize(Syms[si].TypeKind);
+    Next;
+  end;
+  node := AllocNode(AN_INT_LIT);
+  ASTIVal[node] := sz;
+  ASTTk[node] := Ord(tyInteger);
+  Result := node;
+end;
+
+{ Peek: is the `(` at CurTok the start of a cast `(type)…`? Rewinds. }
+function CIsCastAhead: Boolean;
+var savedPos: Integer;
+begin
+  savedPos := TokPos - 1;          { index of the '(' }
+  Next;                            { CurTok = first token inside the parens }
+  Result := IsCTypeTok;
+  TokPos := savedPos; Next;        { rewind to '(' }
+end;
+
+{ Unary prefix: `- + ! ~ * &`, sizeof, and casts `(type)expr`. }
+function ParseCUnary: Integer;
+var node, operand, castElemTk, castElemRec, castDepth: Integer; castTk: TTypeKind;
+begin
+  { sizeof }
+  if (CurTok.Kind = tkIdent) and (CurTok.SVal = 'sizeof') then
+  begin
+    Result := ParseCSizeof();
+    Exit;
+  end;
+  { cast: (type) unary -> reinterpret/retag the operand to the target type }
+  if (CurTok.Kind = tkLParen) and CIsCastAhead then
+  begin
+    Next; { ( }
+    castTk := ParseCDeclType;
+    castDepth := CTypePtrDepth;
+    castElemTk := CTypeElemTk;
+    castElemRec := CTypeElemRec;
+    Expect(tkRParen, ')');
+    operand := ParseCUnary();
+    node := AllocNode(AN_PTR_CAST);
+    ASTLeft[node] := operand;
+    ASTIVal[node] := -1;            { numeric / pointer reinterpret-retag }
+    if castDepth > 0 then ASTTk[node] := Ord(tyPointer)
+    else ASTTk[node] := Ord(castTk);
+    Result := node;
+    Exit;
+  end;
+  case CurTok.Kind of
+    tkStar:   { *p dereference }
+    begin
+      Next;
+      operand := ParseCUnary();
+      node := AllocNode(AN_DEREF);
+      ASTLeft[node] := operand;
+      ASTTk[node] := CNodePointeeTk(operand);
+      Result := node;
+    end;
+    tkAmp:    { &x address-of }
+    begin
+      Next;
+      operand := ParseCUnary();
+      node := AllocNode(AN_ADDR);
+      ASTLeft[node] := operand;
+      ASTTk[node] := Ord(tyPointer);
+      Result := node;
+    end;
+    tkMinus:
+    begin
+      Next;
+      operand := ParseCUnary();
+      node := AllocNode(AN_NEG);
+      ASTLeft[node] := operand;
+      ASTTk[node] := ASTTk[operand];
+      Result := node;
+    end;
+    tkPlus:
+    begin
+      Next;
+      Result := ParseCUnary();
+    end;
+    tkNot:   { `~` bitwise NOT }
+    begin
+      Next;
+      operand := ParseCUnary();
+      node := AllocNode(AN_NOT);
+      ASTLeft[node] := operand;
+      ASTTk[node] := Ord(tyInteger);
+      Result := node;
+    end;
+    tkLogNot:   { `!` logical NOT -> (operand == 0), a 0/1 boolean }
+    begin
+      Next;
+      operand := ParseCUnary();
+      node := AllocNode(AN_BINOP);
+      ASTIVal[node] := Ord(tkEq);
+      ASTLeft[node] := operand;
+      ASTRight[node] := AllocNode(AN_INT_LIT);
+      ASTIVal[ASTRight[node]] := 0;
+      ASTTk[ASTRight[node]] := Ord(tyInteger);
+      ASTTk[node] := Ord(tyBoolean);
+      Result := node;
+    end;
+    tkPlusPlus:   { prefix ++lv }
+    begin
+      Next;
+      operand := ParseCUnary();
+      Result := CMakeIncDec(operand, True, True);
+    end;
+    tkMinusMinus: { prefix --lv }
+    begin
+      Next;
+      operand := ParseCUnary();
+      Result := CMakeIncDec(operand, False, True);
+    end;
+    else
+      Result := ParseCPostfix();
+  end;
+end;
+
+{ Procedural-call signature of a node that yields a function-pointer value, or -1.
+  Unwraps `*fnptr` (dereferencing a function pointer yields the same callee) and
+  resolves the signature of a fn-pointer variable or record field. `callee`
+  returns the node whose value is the function address (the var/field itself,
+  never the deref) so `(*p->cb)(args)` calls through `p->cb`. }
+function CNodeProcSig(node: Integer; var callee: Integer): Integer;
+var inner, recId: Integer; fname: AnsiString;
+begin
+  Result := -1; callee := node;
+  if node < 0 then Exit;
+  inner := node;
+  while ASTKind[inner] = AN_DEREF do inner := ASTLeft[inner];
+  callee := inner;
+  if ASTKind[inner] = AN_IDENT then
+    Result := SymProcSig[ASTIVal[inner]]
+  else if ASTKind[inner] = AN_FIELD then
+  begin
+    recId := ResolveNodeRec(ASTLeft[inner]);
+    if recId <> REC_NONE then
+    begin
+      fname := GetTokenStrFromRaw(ASTSOffset[inner], ASTSLen[inner]);
+      Result := RecFieldProcSig(recId, fname);
+    end;
+  end;
+end;
+
+{ Postfix layer: a primary optionally followed by `++`/`--`. Array/field/call
+  postfix (`[] . -> ()`) arrive with the lvalue increment. }
+function ParseCPostfix: Integer;
+var node, idxExpr, inode, dnode, fnode, baseFld, recId, fldOff, fldLen: Integer;
+    argHead, argTail, argNode, valNode, sig, calleeNode2: Integer;
+    done: Boolean; fieldName: AnsiString;
+begin
+  node := ParseCPrimary;
+  done := False;
+  while not done do
+  begin
+    if CurTok.Kind = tkLBrack then        { subscript a[i] / p[i] }
+    begin
+      Next;
+      idxExpr := ParseCExpr;
+      Expect(tkRBrack, ']');
+      inode := AllocNode(AN_INDEX);
+      ASTLeft[inode] := node;
+      ASTRight[inode] := idxExpr;
+      ASTTk[inode] := CNodePointeeTk(node);
+      node := inode;
+    end
+    else if CurTok.Kind = tkDot then      { `.` field, or `->` (also tkDot) }
+    begin
+      Next;
+      if CurTok.Kind <> tkIdent then Error('field name expected after .');
+      fldOff := Tokens[TokPos - 1].SOffset;
+      fldLen := Tokens[TokPos - 1].SLen;
+      fieldName := CurTok.SVal;
+      { On a pointer base this is C `->`: dereference, then take the field. }
+      baseFld := node;
+      if CNodeIsPointer(node) then
+      begin
+        dnode := AllocNode(AN_DEREF);
+        ASTLeft[dnode] := node;
+        ASTTk[dnode] := Ord(tyRecord);
+        { A computed pointer (e.g. `(p+i)->f`, `(p++)->f`) has no symbol/field for
+          ResolveNodeRec to walk, so carry the element record on the deref
+          (ResolveNodeRec honours ASTIVal[AN_DEREF] > 0). }
+        if ((ASTKind[node] = AN_BINOP) or (ASTKind[node] = AN_INCDEC) or
+            (ASTKind[node] = AN_ASSIGN)) and (CNodePtrElemRec(node) > 0) then
+          ASTIVal[dnode] := CNodePtrElemRec(node);
+        baseFld := dnode;
+      end;
+      recId := ResolveNodeRec(baseFld);
+      fnode := AllocNode(AN_FIELD);
+      ASTLeft[fnode] := baseFld;
+      ASTSOffset[fnode] := fldOff;
+      ASTSLen[fnode] := fldLen;
+      if recId <> REC_NONE then
+        ASTTk[fnode] := Ord(RecFieldType(recId, fieldName))
+      else
+        ASTTk[fnode] := Ord(tyInteger);
+      Next;   { consume field name }
+      { fn-pointer field call: `rec.field(args)` / `p->field(args)` lowers to an
+        indirect call through the field value (callee = AN_FIELD node). }
+      if (CurTok.Kind = tkLParen) and (recId <> REC_NONE) and
+         (RecFieldProcSig(recId, fieldName) >= 0) then
+      begin
+        sig := RecFieldProcSig(recId, fieldName);
+        Next;                                 { consume '(' }
+        argHead := -1; argTail := -1;
+        if CurTok.Kind <> tkRParen then
+          while True do
+          begin
+            valNode := ParseCExpr;
+            argNode := AllocNode(AN_ARG);
+            ASTLeft[argNode] := valNode; ASTRight[argNode] := -1;
+            if argHead = -1 then argHead := argNode
+            else ASTRight[argTail] := argNode;
+            argTail := argNode;
+            if CurTok.Kind = tkComma then begin Next; Continue; end;
+            Break;
+          end;
+        Expect(tkRParen, ')');
+        inode := AllocNode(AN_CALL_IND);
+        ASTLeft[inode]  := argHead;
+        ASTRight[inode] := fnode;             { callee value = the fn-pointer field }
+        ASTIVal[inode]  := sig;
+        ASTTk[inode]    := Ord(Procs[sig].RetType);
+        ASTSLen[inode]  := 0;
+        node := inode;
+      end
+      else
+        node := fnode;
+    end
+    else if (CurTok.Kind = tkLParen) and (CNodeProcSig(node, calleeNode2) >= 0) then
+    begin
+      { indirect call through a parenthesized/dereferenced fn-pointer value, e.g.
+        `(*g->frealloc)(g->ud, ...)` — lua's allocator idiom. }
+      sig := CNodeProcSig(node, calleeNode2);
+      Next;                                  { consume '(' }
+      argHead := -1; argTail := -1;
+      if CurTok.Kind <> tkRParen then
+        while True do
+        begin
+          valNode := ParseCExpr;
+          argNode := AllocNode(AN_ARG);
+          ASTLeft[argNode] := valNode; ASTRight[argNode] := -1;
+          if argHead = -1 then argHead := argNode
+          else ASTRight[argTail] := argNode;
+          argTail := argNode;
+          if CurTok.Kind = tkComma then begin Next; Continue; end;
+          Break;
+        end;
+      Expect(tkRParen, ')');
+      inode := AllocNode(AN_CALL_IND);
+      ASTLeft[inode]  := argHead;
+      ASTRight[inode] := calleeNode2;
+      ASTIVal[inode]  := sig;
+      ASTTk[inode]    := Ord(Procs[sig].RetType);
+      ASTSLen[inode]  := 0;
+      node := inode;
+    end
+    else if (CurTok.Kind = tkPlusPlus) or (CurTok.Kind = tkMinusMinus) then
+    begin
+      if CurTok.Kind = tkPlusPlus then node := CMakeIncDec(node, True, False)
+      else node := CMakeIncDec(node, False, False);
+      Next;
+    end
+    else
+      done := True;
+  end;
+  Result := node;
+end;
+
+{ Top-level C expression: assignment (right-assoc), incl. compound-assign and the
+  conditional `?:` operator. The comma operator is handled at statement level. }
+function ParseCExpr: Integer;
+var left, rhs, node, cTok, baseOp, thenE, elseE, pair: Integer;
+begin
+  left := ParseCBinExpr(1);
+  { conditional `cond ? a : b` — sits between logical-or and assignment, and is
+    right-associative (`a ? b : c ? d : e` = `a ? b : (c ? d : e)`). Only the
+    taken branch is evaluated (lowered via a hidden temp in ir.inc). }
+  if CurTok.Kind = tkQuestion then
+  begin
+    Next;
+    thenE := ParseCExpr();        { middle: a full expression }
+    Expect(tkColon, ':');
+    elseE := ParseCExpr();        { else: right-associative }
+    pair := AllocNode(AN_PAIR);
+    ASTLeft[pair] := thenE;
+    ASTRight[pair] := elseE;
+    node := AllocNode(AN_TERNARY);
+    ASTLeft[node] := left;        { condition }
+    ASTRight[node] := pair;
+    ASTTk[node] := ASTTk[thenE];  { result type follows the then-branch }
+    left := node;
+  end;
+  case CurTok.Kind of
+    tkAssign, tkPlusEq, tkMinusEq, tkStarEq, tkSlashEq, tkModEq,
+    tkAmpEq, tkPipeEq, tkXorEq, tkShlEq, tkShrEq:
+    begin
+      cTok := Ord(CurTok.Kind);
+      Next;
+      rhs := ParseCExpr();   { right-associative }
+      if cTok <> Ord(tkAssign) then
+      begin
+        { x OP= y  ==>  x = x OP y. The left operand node is reused as the
+          binop's left; since it is a pure lvalue read this is safe. }
+        baseOp := Ord(tkPlus);
+        if cTok = Ord(tkMinusEq) then baseOp := Ord(tkMinus)
+        else if cTok = Ord(tkStarEq) then baseOp := Ord(tkStar)
+        else if cTok = Ord(tkSlashEq) then baseOp := Ord(tkSlash)
+        else if cTok = Ord(tkModEq) then baseOp := Ord(tkMod)
+        else if cTok = Ord(tkAmpEq) then baseOp := Ord(tkAmp)
+        else if cTok = Ord(tkPipeEq) then baseOp := Ord(tkPipe)
+        else if cTok = Ord(tkXorEq) then baseOp := Ord(tkXor)
+        else if cTok = Ord(tkShlEq) then baseOp := Ord(tkShl)
+        else if cTok = Ord(tkShrEq) then baseOp := Ord(tkShr);
+        rhs := CMakeBinop(baseOp, left, rhs);
+      end;
+      node := AllocNode(AN_ASSIGN);
+      ASTLeft[node] := left;
+      ASTRight[node] := rhs;
+      ASTTk[node] := ASTTk[left];
+      Result := node;
+    end;
+    else
+      Result := left;
+  end;
+end;
 
 function CTypedefHashKey(const name: AnsiString): Integer;
 var i, h: Integer;
@@ -113,6 +937,31 @@ begin
   Result := rec;
 end;
 
+{ Lay out an inline struct/union body `{ ... }` (CurTok at the brace) into a
+  record, used for `struct|union [tag] { ... }` in a TYPE position. `rec` is the
+  tag's record (>= REC_UCLASS_BASE) or REC_NONE for an anonymous body; on return
+  it holds the laid-out record id. }
+procedure CParseInlineAggBody(var rec: Integer; isUnion: Boolean);
+var d: Integer;
+begin
+  if (rec < REC_UCLASS_BASE) and (UClsCount < MAX_UCLASS - 1) then
+  begin
+    rec := REC_UCLASS_BASE + AddUClass(0, 0);
+    UClsIsRecord[rec - REC_UCLASS_BASE] := True;
+  end;
+  if rec >= REC_UCLASS_BASE then
+    ParseCStructInto(rec - REC_UCLASS_BASE, isUnion)
+  else
+  begin
+    d := 0;   { no record headroom: skip the body with balanced braces }
+    repeat
+      if CurTok.Kind = tkBegin then Inc(d)
+      else if CurTok.Kind = tkEnd then Dec(d);
+      Next;
+    until (d = 0) or (CurTok.Kind = tkEOF);
+  end;
+end;
+
 procedure AddCTypedefEx(const name: AnsiString; tk: TTypeKind; elemTk, rec: Integer);
 var idx, i: Integer;
 begin
@@ -122,6 +971,7 @@ begin
     CTypedefTk[idx] := Ord(tk);
     CTypedefElemTk[idx] := elemTk;
     CTypedefRec[idx] := rec;
+    CTypedefProcSig[idx] := -1;
     Exit;
   end;
   if CTypedefCount >= MAX_CTYPEDEF then Error('C typedef table overflow');
@@ -138,6 +988,7 @@ begin
   CTypedefTk[CTypedefCount] := Ord(tk);
   CTypedefElemTk[CTypedefCount] := elemTk;
   CTypedefRec[CTypedefCount] := rec;
+  CTypedefProcSig[CTypedefCount] := -1;
   CTypedefHashInsert(CTypedefCount, name);
   Inc(CTypedefCount);
 end;
@@ -145,6 +996,17 @@ end;
 procedure AddCTypedef(const name: AnsiString; tk: TTypeKind);
 begin
   AddCTypedefEx(name, tk, Ord(tyUnknown), REC_NONE);
+end;
+
+{ Register a function-pointer typedef: `Name` resolves to a pointer value, but
+  carries `sigPi` (a signature Procs[] entry, BodyAddr=-1, ProcCdecl) so a var of
+  this type is callable through AN_CALL_IND with proper marshalling. }
+procedure AddCTypedefFnPtr(const name: AnsiString; sigPi: Integer);
+var idx: Integer;
+begin
+  AddCTypedef(name, tyPointer);
+  idx := FindCTypedef(name);
+  if idx >= 0 then CTypedefProcSig[idx] := sigPi;
 end;
 
 function IsCTypeTok: Boolean;
@@ -175,11 +1037,17 @@ function ParseCDeclType: TTypeKind;
 var
   isUnsigned, isSigned, isFloatTy, isVoid, loop, sawBase, isTypedef, isAggBase: Boolean;
   shortCount, longCount, tdIdx, depth, baseRec: Integer;
-  base: TTypeKind;
+  base, fpRet, fpPType: TTypeKind;
+  fpName: AnsiString;
+  fpNParams, fpSig: Integer;
+  fpPTypes: array[0..15] of TTypeKind;
+  fpPNames: array[0..15] of AnsiString;
 begin
   isUnsigned := False; isSigned := False; isFloatTy := False; isVoid := False;
   sawBase := False; isTypedef := False; isAggBase := False;
   shortCount := 0; longCount := 0; base := tyInt32; baseRec := REC_NONE;
+  CTypeProcSig := -1;
+  CTypeFnPtrName := '';
   loop := True;
   while loop do
   begin
@@ -195,15 +1063,12 @@ begin
       tkCFloat:    begin base := tySingle; isFloatTy := True; sawBase := True; Next; end;
       tkCDouble:   begin base := tyDouble; isFloatTy := True; sawBase := True; Next; end;
       tkCBool:     begin base := tyUInt8; sawBase := True; Next; end;
-      tkRecord:    { 'struct' [tag] — tag reference in type position }
+      tkRecord:    { 'struct' [tag] [inline body] in type position }
         begin
           Next;
-          if CurTok.Kind = tkIdent then
-          begin
-            base := tyRecord; baseRec := FindOrForwardCTag(CurTok.SVal);
-            isAggBase := True; sawBase := True; Next;
-          end
-          else begin base := tyRecord; isAggBase := True; sawBase := True; end;
+          base := tyRecord; isAggBase := True; sawBase := True;
+          if CurTok.Kind = tkIdent then begin baseRec := FindOrForwardCTag(CurTok.SVal); Next; end;
+          if CurTok.Kind = tkBegin then CParseInlineAggBody(baseRec, False);
         end;
       tkIdent:
         begin
@@ -213,12 +1078,9 @@ begin
           if (not sawBase) and (CurTok.SVal = 'union') then
           begin
             Next;
-            if CurTok.Kind = tkIdent then
-            begin
-              base := tyRecord; baseRec := FindOrForwardCTag(CurTok.SVal); Next;
-            end
-            else base := tyRecord;
-            isAggBase := True; sawBase := True;
+            base := tyRecord; isAggBase := True; sawBase := True;
+            if CurTok.Kind = tkIdent then begin baseRec := FindOrForwardCTag(CurTok.SVal); Next; end;
+            if CurTok.Kind = tkBegin then CParseInlineAggBody(baseRec, True);
           end
           else if (not sawBase) and (CurTok.SVal = 'enum') then
           begin
@@ -234,6 +1096,7 @@ begin
             begin
               base := IntToTypeKind(CTypedefTk[tdIdx]);
               baseRec := CTypedefRec[tdIdx];
+              CTypeProcSig := CTypedefProcSig[tdIdx]; { fn-pointer typedef carries a call signature }
               sawBase := True; isTypedef := True;
               Next;
             end
@@ -280,6 +1143,7 @@ begin
   CTypeBaseRec := baseRec;
   if CurTok.Kind = tkStar then
   begin
+    CTypeProcSig := -1;           { `FnPtrTypedef *` = pointer-to-fn-ptr, not directly callable }
     CTypeElemTk := Ord(Result);   { the pointed-at scalar/typedef kind at depth 1 }
     CTypeElemRec := baseRec;      { ...and its record id, if it is a struct }
     while CurTok.Kind = tkStar do
@@ -304,22 +1168,56 @@ begin
     group so the caller's parameter loop resyncs on the next `,`/`)`. }
   if (CurTok.Kind = tkLParen) and (Tokens[TokPos].Kind = tkStar) then
   begin
+    fpRet := Result;                  { return type parsed above (before the '(') }
+    if isVoid then fpRet := tyInteger;
     Result := tyPointer;
     CTypeIsVoid := False;
+    fpName := '';
+    { first group `(*name)` — collapse to Pointer, capturing the declarator name }
     depth := 0;
     repeat
       if CurTok.Kind = tkLParen then Inc(depth)
-      else if CurTok.Kind = tkRParen then Dec(depth);
+      else if CurTok.Kind = tkRParen then Dec(depth)
+      else if (CurTok.Kind = tkIdent) and (fpName = '') then fpName := CurTok.SVal;
       Next;
     until (depth = 0) or (CurTok.Kind = tkEOF);
+    { second group `(params)` — capture param types to build a call signature }
+    fpNParams := 0;
     if CurTok.Kind = tkLParen then
     begin
-      depth := 0;
-      repeat
-        if CurTok.Kind = tkLParen then Inc(depth)
-        else if CurTok.Kind = tkRParen then Dec(depth);
-        Next;
-      until (depth = 0) or (CurTok.Kind = tkEOF);
+      Next;                           { consume the parameter-list '(' }
+      while (CurTok.Kind <> tkRParen) and (CurTok.Kind <> tkEOF) do
+      begin
+        if IsCTypeTok then
+        begin
+          { NB parens REQUIRED: bare `ParseCDeclType` would read this function's
+            own Result (pxx bare-funcname rule), not recurse -> infinite loop. }
+          fpPType := ParseCDeclType();
+          if CTypeIsVoid then
+          begin
+            { (void) — no parameter }
+          end
+          else if fpNParams <= 15 then
+          begin
+            fpPTypes[fpNParams] := fpPType;
+            fpPNames[fpNParams] := 'a';
+            Inc(fpNParams);
+          end;
+          if CurTok.Kind = tkIdent then Next;  { optional parameter name }
+        end
+        else
+          Next;                       { e.g. `...` varargs marker }
+        Eat(tkComma);
+      end;
+      Eat(tkRParen);
+    end;
+    if fpName <> '' then
+    begin
+      fpSig := RegisterProc('$cfnptr', True, fpRet, fpNParams, fpPNames, fpPTypes);
+      Procs[fpSig].BodyAddr := -1;
+      ProcCdecl[fpSig] := True;        { C ABI (System V) for the indirect call }
+      CTypeProcSig := fpSig;           { caller threads this onto the typedef/var/field }
+      CTypeFnPtrName := fpName;
     end;
   end;
 end;
@@ -348,11 +1246,415 @@ begin
   Result := node;
 end;
 
+{ A local declaration line: <type> name [= init] (, name [= init])* ;
+  Each name is allocated (a global slot in a top-level main where CurProc<0, a
+  stack local inside a function) so subsequent statements resolve it; returns an
+  AN_BLOCK whose AN_SEQ chain holds the initialiser assignments (an empty block
+  when there are no initialisers). Increment-1 scope: scalar declarators; array
+  and per-declarator pointer-depth handling come later. }
+function ParseCLocalDeclAST: Integer;
+var baseTk, declTk, scalarTk: TTypeKind;
+    head, tail, seq, asn, idn, initExpr, blk, idx: Integer;
+    elemTkOrd, elemRec, arrLen, procSig: Integer;
+    declElemTk, declElemRec, declProcSig, declPtr, scalarRec: Integer;
+    hadStar: Boolean;
+    name: AnsiString;
+begin
+  baseTk := ParseCDeclType;   { specifiers + first declarator's pointer suffix }
+  { Capture the pointer element type/record now — ParseCExpr below must not
+    clobber the CType* globals (it does not run ParseCDeclType). }
+  elemTkOrd := CTypeElemTk;
+  elemRec := CTypeElemRec;
+  procSig := CTypeProcSig;    { fn-pointer typedef signature, if any }
+  { Multi-declarator support `T *a, b, *c;`: the `*` binds to each declarator, not
+    the base. ParseCDeclType folded the FIRST declarator's star into baseTk, so
+    recover the pre-star scalar base; each later declarator gets its own stars.
+    A pointer from a *literal* star (elemTk known) is redistributable; a pointer
+    from a typedef (no star) is the whole type and applies to every sibling. }
+  hadStar := (baseTk = tyPointer) and (elemTkOrd <> Ord(tyUnknown));
+  if hadStar then begin scalarTk := IntToTypeKind(elemTkOrd); scalarRec := elemRec; end
+  else begin scalarTk := baseTk; scalarRec := CTypeBaseRec; end;
+  declTk := baseTk; declElemTk := elemTkOrd; declElemRec := elemRec; declProcSig := procSig;
+  head := -1; tail := -1;
+  while True do
+  begin
+    if CurTok.Kind <> tkIdent then Break;
+    name := CurTok.SVal; Next;
+    if CurTok.Kind = tkLBrack then
+    begin
+      { fixed array  T name[N]  — N is a constant expression (literal/enum/macro) }
+      Next;
+      arrLen := CEvalConstExpr;
+      Expect(tkRBrack, ']');
+      if arrLen < 1 then arrLen := 1;
+      { An array of structs needs the element record id so AllocArray sizes the
+        slot by RecSize, not a default — `struct V a[N]; a[i].f` was using the
+        wrong stride. }
+      if declTk = tyRecord then LastTypeRecId := scalarRec;
+      idx := AllocArray(name, declTk, 0, arrLen - 1);
+      { array initialisers `= { ... }` not yet materialised — skip if present.
+        Balanced-brace skip so inner commas (`{1, 2, 3}`) don't end it early. }
+      if CurTok.Kind = tkAssign then
+      begin
+        Next;
+        if CurTok.Kind = tkBegin then
+        begin
+          idx := 0;   { reuse as brace depth }
+          repeat
+            if CurTok.Kind = tkBegin then Inc(idx)
+            else if CurTok.Kind = tkEnd then Dec(idx);
+            Next;
+          until (idx = 0) or (CurTok.Kind = tkEOF);
+        end
+        else
+          while (CurTok.Kind <> tkComma) and (CurTok.Kind <> tkSemicolon) and
+                (CurTok.Kind <> tkEOF) do Next;
+      end;
+    end
+    else
+    begin
+      { A struct-by-value local needs its record id so field access resolves and
+        AllocVar reserves RecSize bytes. }
+      if declTk = tyRecord then LastTypeRecId := scalarRec;
+      idx := AllocVar(name, declTk);
+      if declTk = tyPointer then
+      begin
+        Syms[idx].PtrElemTk := IntToTypeKind(declElemTk);
+        Syms[idx].PtrElemRec := declElemRec;
+        if declProcSig >= 0 then SymProcSig[idx] := declProcSig;  { fn-pointer var: callable }
+      end;
+      initExpr := -1;
+      if CurTok.Kind = tkAssign then
+      begin
+        Next;
+        if CurTok.Kind = tkBegin then
+        begin
+          { Aggregate initializer `= { ... }` on a non-array local (e.g.
+            `static const expdesc ef = {VKINT, {0}, ...}`): not yet materialised,
+            balanced-brace skip so inner commas/braces don't end it early. }
+          arrLen := 0;   { reuse as brace depth }
+          repeat
+            if CurTok.Kind = tkBegin then Inc(arrLen)
+            else if CurTok.Kind = tkEnd then Dec(arrLen);
+            Next;
+          until (arrLen = 0) or (CurTok.Kind = tkEOF);
+        end
+        else
+          initExpr := ParseCExpr;
+      end;
+      if initExpr >= 0 then
+      begin
+        idn := AllocNode(AN_IDENT); ASTIVal[idn] := idx; ASTTk[idn] := Ord(declTk);
+        asn := AllocNode(AN_ASSIGN); ASTLeft[asn] := idn; ASTRight[asn] := initExpr;
+        ASTTk[asn] := Ord(declTk);
+        seq := AllocNode(AN_SEQ); ASTLeft[seq] := asn; ASTRight[seq] := -1;
+        if head = -1 then head := seq else ASTRight[tail] := seq;
+        tail := seq;
+      end;
+    end;
+    if CurTok.Kind = tkComma then
+    begin
+      Next;
+      { next declarator's own pointer level (`*c` in `T *a, b, *c`) }
+      declPtr := 0;
+      while CurTok.Kind = tkStar do begin Inc(declPtr); Next; end;
+      if declPtr > 0 then
+      begin
+        declTk := tyPointer;
+        if declPtr = 1 then begin declElemTk := Ord(scalarTk); declElemRec := scalarRec; end
+        else begin declElemTk := Ord(tyPointer); declElemRec := REC_NONE; end;
+        declProcSig := -1;
+      end
+      else if hadStar then
+      begin
+        { sibling with no star, base had a redistributable star: plain scalar }
+        declTk := scalarTk; declElemTk := Ord(tyUnknown); declElemRec := scalarRec;
+        declProcSig := -1;
+      end
+      else
+      begin
+        { base carries no redistributable star (plain/typedef): siblings get the
+          same full base type + metadata }
+        declTk := baseTk; declElemTk := elemTkOrd; declElemRec := elemRec;
+        declProcSig := procSig;
+      end;
+      Continue;
+    end;
+    Break;
+  end;
+  Eat(tkSemicolon);
+  blk := AllocNode(AN_BLOCK);
+  ASTLeft[blk] := head;   { -1 = empty block, emits nothing }
+  Result := blk;
+end;
+
+{ A full C expression INCLUDING the top-level comma operator `a, b` — yields an
+  AN_COMMA (evaluate left for side effects, value is the right). Used where C
+  allows a comma expression: if/while/for conditions. (Function arguments and
+  initializer lists keep using ParseCExpr, which stops at a comma separator.) }
+function ParseCCommaExpr: Integer;
+var node: Integer;
+begin
+  Result := ParseCExpr;
+  while CurTok.Kind = tkComma do
+  begin
+    Next;
+    node := AllocNode(AN_COMMA);
+    ASTLeft[node] := Result;
+    ASTRight[node] := ParseCExpr;
+    ASTTk[node] := ASTTk[ASTRight[node]];
+    Result := node;
+  end;
+end;
+
+function ParseCIfAST: Integer;
+var cond, thenS, elseS, node, pair: Integer;
+begin
+  Next; { if }
+  Expect(tkLParen, '(');
+  cond := ParseCCommaExpr;
+  Expect(tkRParen, ')');
+  thenS := ParseCStatementAST;
+  elseS := -1;
+  if CurTok.Kind = tkElse then begin Next; elseS := ParseCStatementAST; end;
+  node := AllocNode(AN_IF);
+  ASTLeft[node] := cond;
+  pair := AllocNode(AN_PAIR);
+  ASTLeft[pair] := thenS;
+  ASTRight[pair] := elseS;
+  ASTRight[node] := pair;
+  Result := node;
+end;
+
+function ParseCWhileAST: Integer;
+var cond, body, node: Integer;
+begin
+  Next; { while }
+  Expect(tkLParen, '(');
+  cond := ParseCCommaExpr;
+  Expect(tkRParen, ')');
+  body := ParseCStatementAST;
+  node := AllocNode(AN_WHILE);
+  ASTLeft[node] := cond;
+  ASTRight[node] := body;
+  Result := node;
+end;
+
+{ Build `(e == 0)` as a tyBoolean node — logical negation / `!e`. }
+function CMakeIsZero(e: Integer): Integer;
+var node, zero: Integer;
+begin
+  zero := AllocNode(AN_INT_LIT); ASTIVal[zero] := 0; ASTTk[zero] := Ord(tyInteger);
+  node := AllocNode(AN_BINOP);
+  ASTIVal[node] := Ord(tkEq);
+  ASTLeft[node] := e; ASTRight[node] := zero;
+  ASTTk[node] := Ord(tyBoolean);
+  Result := node;
+end;
+
+{ Append `stmt` as a new AN_SEQ node onto a chain; returns the new tail.
+  `*head` is set on the first append. }
+function CSeqAppend(stmt: Integer; var head, tail: Integer): Integer;
+var seq: Integer;
+begin
+  seq := AllocNode(AN_SEQ); ASTLeft[seq] := stmt; ASTRight[seq] := -1;
+  if head = -1 then head := seq else ASTRight[tail] := seq;
+  tail := seq;
+  Result := seq;
+end;
+
+{ `for (init; cond; post) body`.
+  - No post: desugars to `init; while (cond) body` (continue->cond is correct).
+  - With post: a `continue` must still run `post`, but the loop machinery's
+    continue target is the while condition. So we desugar to a constant-true
+    loop that runs `post` at the TOP (guarded by a first-iteration flag) before
+    re-checking the condition:
+        init; first = 1;
+        while (1) { if (!first) post; first = 0; if (!cond) break; body; }
+    A continue jumps to the while head, runs post, re-checks cond — exactly C
+    semantics. An empty cond is constant-true. }
+function ParseCForAST: Integer;
+var initNode, cond, post, body, loop, whileBody, outer, trueCond: Integer;
+    oHead, oTail, bHead, bTail, flagVar, flagSet, flagClr, ifPost, ifBrk, brk: Integer;
+    idn1, idn2: Integer;
+begin
+  Next; { for }
+  Expect(tkLParen, '(');
+
+  initNode := -1;
+  if CurTok.Kind = tkSemicolon then
+    Next
+  else if IsCTypeTok then
+    initNode := ParseCLocalDeclAST
+  else
+  begin
+    initNode := ParseCCommaStmt;
+    Eat(tkSemicolon);
+  end;
+
+  if CurTok.Kind = tkSemicolon then
+  begin
+    cond := AllocNode(AN_INT_LIT); ASTIVal[cond] := 1; ASTTk[cond] := Ord(tyBoolean);
+  end
+  else
+    cond := ParseCCommaExpr;
+  Expect(tkSemicolon, ';');
+
+  post := -1;
+  if CurTok.Kind <> tkRParen then post := ParseCCommaStmt;
+  Expect(tkRParen, ')');
+
+  body := ParseCStatementAST;
+
+  oHead := -1; oTail := -1;
+  if initNode >= 0 then CSeqAppend(initNode, oHead, oTail);
+
+  if post < 0 then
+  begin
+    { simple: while (cond) body }
+    loop := AllocNode(AN_WHILE);
+    ASTLeft[loop] := cond;
+    ASTRight[loop] := body;
+    CSeqAppend(loop, oHead, oTail);
+  end
+  else
+  begin
+    flagVar := AllocVar('', tyBoolean);
+
+    { first = 1 }
+    idn1 := AllocNode(AN_IDENT); ASTIVal[idn1] := flagVar; ASTTk[idn1] := Ord(tyBoolean);
+    flagSet := AllocNode(AN_ASSIGN); ASTLeft[flagSet] := idn1;
+    ASTRight[flagSet] := AllocNode(AN_INT_LIT); ASTIVal[ASTRight[flagSet]] := 1;
+    ASTTk[ASTRight[flagSet]] := Ord(tyInteger); ASTTk[flagSet] := Ord(tyBoolean);
+    CSeqAppend(flagSet, oHead, oTail);
+
+    bHead := -1; bTail := -1;
+
+    { if (!first) post  ->  if (first == 0) post }
+    idn2 := AllocNode(AN_IDENT); ASTIVal[idn2] := flagVar; ASTTk[idn2] := Ord(tyBoolean);
+    ifPost := AllocNode(AN_IF);
+    ASTLeft[ifPost] := CMakeIsZero(idn2);
+    ASTRight[ifPost] := AllocNode(AN_PAIR);
+    ASTLeft[ASTRight[ifPost]] := post;
+    ASTRight[ASTRight[ifPost]] := -1;
+    CSeqAppend(ifPost, bHead, bTail);
+
+    { first = 0 }
+    idn1 := AllocNode(AN_IDENT); ASTIVal[idn1] := flagVar; ASTTk[idn1] := Ord(tyBoolean);
+    flagClr := AllocNode(AN_ASSIGN); ASTLeft[flagClr] := idn1;
+    ASTRight[flagClr] := AllocNode(AN_INT_LIT); ASTIVal[ASTRight[flagClr]] := 0;
+    ASTTk[ASTRight[flagClr]] := Ord(tyInteger); ASTTk[flagClr] := Ord(tyBoolean);
+    CSeqAppend(flagClr, bHead, bTail);
+
+    { if (!cond) break }
+    ifBrk := AllocNode(AN_IF);
+    ASTLeft[ifBrk] := CMakeIsZero(cond);
+    brk := AllocNode(AN_BREAK);
+    ASTRight[ifBrk] := AllocNode(AN_PAIR);
+    ASTLeft[ASTRight[ifBrk]] := brk;
+    ASTRight[ASTRight[ifBrk]] := -1;
+    CSeqAppend(ifBrk, bHead, bTail);
+
+    { body }
+    CSeqAppend(body, bHead, bTail);
+
+    whileBody := AllocNode(AN_BLOCK); ASTLeft[whileBody] := bHead;
+    trueCond := AllocNode(AN_INT_LIT); ASTIVal[trueCond] := 1; ASTTk[trueCond] := Ord(tyBoolean);
+    loop := AllocNode(AN_WHILE);
+    ASTLeft[loop] := trueCond;
+    ASTRight[loop] := whileBody;
+    CSeqAppend(loop, oHead, oTail);
+  end;
+
+  outer := AllocNode(AN_BLOCK);
+  ASTLeft[outer] := oHead;
+  Result := outer;
+end;
+
+{ `do body while (cond);` — body runs once, then repeats while cond. Desugared
+  with a first-iteration flag to a constant-checked while so break/continue keep
+  C semantics: `flag=1; while (flag || cond) { flag=0; body }`. A continue jumps
+  to the while head, where flag is 0, so cond is re-checked (correct). }
+function ParseCDoWhileAST: Integer;
+var body, cond, flagVar, loop, whileBody, outer: Integer;
+    oHead, oTail, bHead, bTail, flagSet, flagClr, orCond, idn1, idn2: Integer;
+begin
+  Next; { do }
+  body := ParseCStatementAST;
+  if CurTok.Kind = tkWhile then Next else Error('while expected after do');
+  Expect(tkLParen, '(');
+  cond := ParseCExpr;
+  Expect(tkRParen, ')');
+  Eat(tkSemicolon);
+
+  flagVar := AllocVar('', tyBoolean);
+  oHead := -1; oTail := -1;
+
+  idn1 := AllocNode(AN_IDENT); ASTIVal[idn1] := flagVar; ASTTk[idn1] := Ord(tyBoolean);
+  flagSet := AllocNode(AN_ASSIGN); ASTLeft[flagSet] := idn1;
+  ASTRight[flagSet] := AllocNode(AN_INT_LIT); ASTIVal[ASTRight[flagSet]] := 1;
+  ASTTk[ASTRight[flagSet]] := Ord(tyInteger); ASTTk[flagSet] := Ord(tyBoolean);
+  CSeqAppend(flagSet, oHead, oTail);
+
+  bHead := -1; bTail := -1;
+  idn2 := AllocNode(AN_IDENT); ASTIVal[idn2] := flagVar; ASTTk[idn2] := Ord(tyBoolean);
+  flagClr := AllocNode(AN_ASSIGN); ASTLeft[flagClr] := idn2;
+  ASTRight[flagClr] := AllocNode(AN_INT_LIT); ASTIVal[ASTRight[flagClr]] := 0;
+  ASTTk[ASTRight[flagClr]] := Ord(tyInteger); ASTTk[flagClr] := Ord(tyBoolean);
+  CSeqAppend(flagClr, bHead, bTail);
+  CSeqAppend(body, bHead, bTail);
+  whileBody := AllocNode(AN_BLOCK); ASTLeft[whileBody] := bHead;
+
+  idn1 := AllocNode(AN_IDENT); ASTIVal[idn1] := flagVar; ASTTk[idn1] := Ord(tyBoolean);
+  orCond := CMakeBinop(Ord(tkOr), idn1, cond);
+  loop := AllocNode(AN_WHILE); ASTLeft[loop] := orCond; ASTRight[loop] := whileBody;
+  CSeqAppend(loop, oHead, oTail);
+
+  outer := AllocNode(AN_BLOCK); ASTLeft[outer] := oHead;
+  Result := outer;
+end;
+
+{ A comma-separated expression sequence in statement position (expression
+  statement, for-init, for-post): each expression runs for its side effects with
+  the value discarded, so it lowers to a block of the expressions as statements.
+  A single expression (no comma) returns just that node. }
+function ParseCCommaStmt: Integer;
+var head, tail, blk: Integer;
+begin
+  Result := ParseCExpr;
+  if CurTok.Kind <> tkComma then Exit;
+  head := -1; tail := -1;
+  CSeqAppend(Result, head, tail);
+  while CurTok.Kind = tkComma do
+  begin
+    Next;
+    CSeqAppend(ParseCExpr, head, tail);
+  end;
+  blk := AllocNode(AN_BLOCK); ASTLeft[blk] := head;
+  Result := blk;
+end;
+
 function ParseCStatementAST: Integer;
 var node, exprNode: Integer;
 begin
   Result := -1;
   if CurTok.Kind = tkEOF then Exit;
+
+  { empty statement }
+  if CurTok.Kind = tkSemicolon then
+  begin
+    Next;
+    node := AllocNode(AN_BLOCK); ASTLeft[node] := -1;
+    Result := node;
+    Exit;
+  end;
+
+  { local variable declaration }
+  if IsCTypeTok then
+  begin
+    Result := ParseCLocalDeclAST;
+    Exit;
+  end;
 
   { return [expr]; — the expression is optional for void functions }
   if CurTok.Kind = tkExit then
@@ -360,10 +1662,7 @@ begin
     Next;
     node := AllocNode(AN_EXIT);
     if CurTok.Kind <> tkSemicolon then
-    begin
-      ParseExpr;
-      ASTLeft[node] := CurASTNode;
-    end
+      ASTLeft[node] := ParseCExpr
     else
       ASTLeft[node] := -1;
     Eat(tkSemicolon);
@@ -371,7 +1670,78 @@ begin
     Exit;
   end;
 
-  { printf(...) }
+  if CurTok.Kind = tkIf then begin Result := ParseCIfAST; Exit; end;
+  if CurTok.Kind = tkWhile then begin Result := ParseCWhileAST; Exit; end;
+  if CurTok.Kind = tkFor then begin Result := ParseCForAST; Exit; end;
+  if CurTok.Kind = tkDo then begin Result := ParseCDoWhileAST; Exit; end;
+  if (CurTok.Kind = tkIdent) and (CurTok.SVal = 'switch') then
+  begin Result := ParseCSwitchAST; Exit; end;
+
+  { `case CONST:` / `default:` labels inside a switch body — emitted as marker
+    nodes that the switch lowering turns into dispatch targets. }
+  if (CurTok.Kind = tkIdent) and (CurTok.SVal = 'case') then
+  begin
+    Next;
+    node := AllocNode(AN_CASE);
+    ASTIVal[node] := CEvalConstExpr;
+    Expect(tkColon, ':');
+    Result := node;
+    Exit;
+  end;
+  if (CurTok.Kind = tkIdent) and (CurTok.SVal = 'default') then
+  begin
+    Next;
+    Expect(tkColon, ':');
+    Result := AllocNode(AN_DEFAULT);
+    Exit;
+  end;
+
+  { `goto label;` }
+  if (CurTok.Kind = tkIdent) and (CurTok.SVal = 'goto') then
+  begin
+    Next;
+    if CurTok.Kind <> tkIdent then Error('expected label name after goto');
+    node := AllocNode(AN_GOTO);
+    ASTSOffset[node] := Tokens[TokPos - 1].SOffset;
+    ASTSLen[node] := Tokens[TokPos - 1].SLen;
+    Next;
+    Eat(tkSemicolon);
+    Result := node;
+    Exit;
+  end;
+
+  { `label:` — a goto target as a statement (after case/default, which are above) }
+  if (CurTok.Kind = tkIdent) and (Tokens[TokPos].Kind = tkColon) then
+  begin
+    { Register the label name so AN_LABEL/AN_GOTO resolve it (C labels are not
+      pre-declared; the table is reset per function in ParseCSubroutine). }
+    if GotoLabelCount >= MAX_GOTO_LABELS then Error('too many labels');
+    GotoLabelNOff[GotoLabelCount] := Tokens[TokPos - 1].SOffset;
+    GotoLabelNLen[GotoLabelCount] := Tokens[TokPos - 1].SLen;
+    GotoLabelCodePos[GotoLabelCount] := -1;
+    Inc(GotoLabelCount);
+    node := AllocNode(AN_LABEL);
+    ASTSOffset[node] := Tokens[TokPos - 1].SOffset;
+    ASTSLen[node] := Tokens[TokPos - 1].SLen;
+    Next; Next;    { consume ident and colon }
+    Result := node;
+    Exit;
+  end;
+
+  if CurTok.Kind = tkBreak then
+  begin
+    Next; Eat(tkSemicolon);
+    Result := AllocNode(AN_BREAK);
+    Exit;
+  end;
+  if CurTok.Kind = tkContinue then
+  begin
+    Next; Eat(tkSemicolon);
+    Result := AllocNode(AN_CONTINUE);
+    Exit;
+  end;
+
+  { printf(...) — args still ignored beyond the format string (libc work). }
   if (CurTok.Kind = tkIdent) and (CurTok.SVal = 'printf') then
   begin
     Result := ParseCPrintfAST;
@@ -385,10 +1755,10 @@ begin
     Exit;
   end;
 
-  { skip type declarations and unknown statements }
-  while (CurTok.Kind <> tkSemicolon) and (CurTok.Kind <> tkEnd) and
-        (CurTok.Kind <> tkEOF) do Next;
+  { expression statement (assignment, call, ++/--, comma sequence) }
+  exprNode := ParseCCommaStmt;
   Eat(tkSemicolon);
+  Result := exprNode;
 end;
 
 function ParseCBlockAST: Integer;
@@ -415,73 +1785,283 @@ begin
   Result := blockNode;
 end;
 
+{ C `switch (sel) { ... case CONST: ... default: ... }`. The body is parsed like
+  a brace block; `case`/`default` arrive as AN_CASE/AN_DEFAULT marker nodes in the
+  statement sequence (fallthrough is implicit — bodies run on into the next).
+  AN_SWITCH lowering (ir.inc) turns the markers into dispatch targets + a break
+  scope. }
+function ParseCSwitchAST: Integer;
+var node, selNode, bodyNode, seqNode, stmtNode, lastSeq: Integer;
+begin
+  Next;                          { consume 'switch' }
+  Expect(tkLParen, '(');
+  selNode := ParseCExpr;
+  Expect(tkRParen, ')');
+  Expect(tkBegin, '{');
+  bodyNode := AllocNode(AN_BLOCK);
+  lastSeq := -1;
+  while (CurTok.Kind <> tkEnd) and (CurTok.Kind <> tkEOF) do
+  begin
+    stmtNode := ParseCStatementAST;
+    if stmtNode <> -1 then
+    begin
+      seqNode := AllocNode(AN_SEQ);
+      ASTLeft[seqNode] := stmtNode;
+      if lastSeq = -1 then ASTLeft[bodyNode] := seqNode
+      else ASTRight[lastSeq] := seqNode;
+      lastSeq := seqNode;
+    end;
+  end;
+  Expect(tkEnd, '}');
+  node := AllocNode(AN_SWITCH);
+  ASTLeft[node] := selNode;
+  ASTRight[node] := bodyNode;
+  Result := node;
+end;
+
+{ A top-level global variable definition: <type> name (, name)* ;
+  Allocated as zero-initialised BSS (CurProc<0 => skGlobal). Increment-1 scope:
+  the slot is reserved and any initialiser is skipped (C zero-inits globals; a
+  non-zero constant/runtime initialiser is a follow-up). Re-running across the
+  two driver passes is idempotent — a name already present is not re-allocated. }
+procedure ParseCGlobalVarDecl;
+var baseTk: TTypeKind; name: AnsiString; depth, idx, recBase, fldI, fOff, fTk, fSz: Integer;
+    recId: Integer; wasArr: Boolean; initV: Int64;
+begin
+  baseTk := ParseCDeclType;
+  recId := CTypeBaseRec;
+  while True do
+  begin
+    if CurTok.Kind <> tkIdent then Break;
+    name := CurTok.SVal; Next;
+    { Global array dimension(s) `T name[...]` (lua's luaL_Reg tables). Skip the
+      brackets with balanced nesting; the size may be a complex macro, so don't
+      evaluate it — the slot is not a real array yet, but the decl no longer
+      cascades (previously the dangling `[` broke later parsing). }
+    wasArr := False;
+    while CurTok.Kind = tkLBrack do
+    begin
+      wasArr := True;
+      depth := 0;
+      repeat
+        if CurTok.Kind = tkLBrack then Inc(depth)
+        else if CurTok.Kind = tkRBrack then Dec(depth);
+        Next;
+      until (depth = 0) or (CurTok.Kind = tkEOF);
+    end;
+    { A struct-typed global needs its record id recorded (AllocVar reads the
+      global LastTypeRecId for tyRecord) so field access `gg.f` resolves the
+      offset — without this the field always landed at offset 0. }
+    if baseTk = tyRecord then LastTypeRecId := recId;
+    idx := FindSym(name);
+    if idx < 0 then idx := AllocVar(name, baseTk);
+    if CurTok.Kind = tkAssign then
+    begin
+      Next;
+      { Materialise a non-array struct/union global brace-initializer as per-field
+        PendingInit writes (constant values only) — so e.g. lstrlib's nativeendian
+        union and small struct globals read correctly at runtime instead of zero.
+        Arrays and non-constant inits fall through to the skip path. The PendingInit
+        emission resolves a field by NAME, so FOff/FLen carry the field's NAME
+        reference (UFldNOff/UFldNLen), which name-resolves to the correct byte
+        offset for every field (unions: all at offset 0; structs: each distinct). }
+      recBase := -1;
+      if (recId >= REC_UCLASS_BASE) and UClsIsRecord[recId - REC_UCLASS_BASE] then
+        recBase := UClsFBase[recId - REC_UCLASS_BASE];
+      if (CurTok.Kind = tkBegin) and (baseTk = tyRecord) and (not wasArr) and
+         (idx >= 0) and (recBase >= 0) and
+         (UClsFCount[recId - REC_UCLASS_BASE] >= 1) then
+      begin
+        Next;   { consume the opening brace }
+        fldI := 0;
+        while (CurTok.Kind <> tkEnd) and (CurTok.Kind <> tkEOF) do
+        begin
+          if (fldI < UClsFCount[recId - REC_UCLASS_BASE]) and (CurTok.Kind = tkInteger) and
+             (Tokens[TokPos].Kind in [tkComma, tkEnd]) and (PendingInitCount < MAX_PENDING_INITS) then
+          begin
+            PendingInitSym[PendingInitCount]  := idx;
+            PendingInitElem[PendingInitCount] := -1;
+            PendingInitFOff[PendingInitCount] := UFldNOff[recBase + fldI];  { field NAME ref }
+            PendingInitFLen[PendingInitCount] := UFldNLen[recBase + fldI];
+            PendingInitVal[PendingInitCount]  := CurTok.IVal;
+            PendingInitTk[PendingInitCount]   := UFldTk[recBase + fldI];
+            Inc(PendingInitCount);
+            Inc(fldI); Next; Eat(tkComma);
+          end
+          else
+            Next;   { non-constant / nested / overflow field: skip without materialising }
+        end;
+        Eat(tkEnd);
+      end
+      else if CurTok.Kind = tkBegin then
+      begin
+        { `= { ... }` aggregate initializer: skip with BALANCED braces so inner
+          commas (`{{"a",f},{"b",g}}`) don't end it early. }
+        depth := 0;
+        repeat
+          if CurTok.Kind = tkBegin then Inc(depth)
+          else if CurTok.Kind = tkEnd then Dec(depth);
+          Next;
+        until (depth = 0) or (CurTok.Kind = tkEOF);
+      end
+      else if (not wasArr) and (idx >= 0) and (baseTk <> tyRecord) and
+              (baseTk <> tyPointer) and TypeIsOrdinal(baseTk) and
+              (CurTok.Kind = tkInteger) and (Tokens[TokPos].Kind in [tkComma, tkSemicolon]) and
+              (PendingInitCount < MAX_PENDING_INITS) then
+      begin
+        { Scalar ordinal global `T x = <int literal>;` -> a direct PendingInit
+          assign (no field offset, so the by-name emission path is unaffected),
+          run at the start of main. Anything more complex falls through to skip. }
+        PendingInitSym[PendingInitCount]  := idx;
+        PendingInitElem[PendingInitCount] := -1;
+        PendingInitFOff[PendingInitCount] := -1;
+        PendingInitFLen[PendingInitCount] := 0;
+        PendingInitVal[PendingInitCount]  := CurTok.IVal;
+        PendingInitTk[PendingInitCount]   := Ord(baseTk);
+        Inc(PendingInitCount);
+        Next;
+      end
+      else
+        while (CurTok.Kind <> tkComma) and (CurTok.Kind <> tkSemicolon) and
+              (CurTok.Kind <> tkEOF) do Next;
+    end;
+    if CurTok.Kind = tkComma then begin Next; Continue; end;
+    Break;
+  end;
+  Eat(tkSemicolon);
+end;
+
+{ Classify the top-level item starting at the current token as a function
+  (definition or prototype) vs a global variable, WITHOUT consuming it: peek
+  the declaration-specifiers + declarator name and test for a following `(`,
+  then rewind the token cursor. }
+function CTopLevelIsFunc: Boolean;
+var savedPos: Integer;
+begin
+  savedPos := TokPos - 1;          { index of the current token }
+  ParseCDeclType;
+  if CurTok.Kind = tkIdent then Next;
+  Result := (CurTok.Kind = tkLParen);
+  TokPos := savedPos; Next;        { rewind }
+end;
+
+{ True when the current top-level token starts a TYPE declaration
+  (`typedef …`, `enum …`, or a bare `struct/union [Tag] { … } ;` / forward),
+  as opposed to a function or a global variable typed by a struct. }
+function CIsTopLevelTypeDecl: Boolean;
+begin
+  Result := ((CurTok.Kind = tkIdent) and (CurTok.SVal = 'typedef')) or
+            ((CurTok.Kind = tkIdent) and (CurTok.SVal = 'enum')) or
+            (((CurTok.Kind = tkRecord) or
+              ((CurTok.Kind = tkIdent) and (CurTok.SVal = 'union'))) and IsBareStructDecl);
+end;
+
+{ Consume a top-level declaration up to and including its terminating `;`,
+  balancing any `{ }` (struct body / brace initialiser). Used in pass 2 to skip
+  type declarations and globals already processed in pass 1. }
+procedure SkipCDeclToSemi;
+var depth: Integer;
+begin
+  depth := 0;
+  while CurTok.Kind <> tkEOF do
+  begin
+    if CurTok.Kind = tkBegin then Inc(depth)
+    else if CurTok.Kind = tkEnd then Dec(depth)
+    else if (CurTok.Kind = tkSemicolon) and (depth <= 0) then begin Next; Exit; end;
+    Next;
+  end;
+end;
+
+{ C program driver (Slice D): compile EVERY function (not just main) plus
+  top-level globals, with forward inter-function calls resolved. Two passes over
+  the one token stream:
+    pass 1 (CHeaderMode) — register every function signature and reserve every
+            global, skipping bodies, so any call resolves regardless of order;
+    pass 2 — compile each function body (ParseCSubroutine) and reserve globals
+            (idempotent).
+  Entry stub (x86-64, matching the pre-existing convention): save rsp, `call
+  main`, then exit_group(eax) so main's int return becomes the process code. }
 procedure ParseCProgram;
-var jmpPatch, node: Integer; name: AnsiString;
+var firstIdx, callPatch, mainIdx: Integer;
 begin
   BSS_INITIAL_RSP := BSSSize; Inc(BSSSize, 8);
 
+  { mov [BSS_INITIAL_RSP], rsp }
   EmitB($48); EmitB($89); EmitB($24); EmitB($25); EmitGlobRef(BSS_INITIAL_RSP);
-  EmitB($E9); jmpPatch := CodeLen; EmitI32(0);
+  { call main (rel32, patched once main's body address is known) }
+  EmitB($E8); callPatch := CodeLen; EmitI32(0);
+  { mov edi, eax ; mov eax, 231 (exit_group) ; syscall }
+  EmitB($89); EmitB($C7);
+  EmitB($B8); EmitI32(231);
+  EmitB($0F); EmitB($05);
 
-  { Scan top level for 'main' function definition }
+  firstIdx := TokPos - 1;
+  CProgramMode := True;
+
+  { pass 1: lay out types, register every function signature, reserve globals }
+  CHeaderMode := True;
   while CurTok.Kind <> tkEOF do
   begin
-    if IsCTypeTok then
+    if CIsTopLevelTypeDecl then
     begin
-      ParseCDeclType;  { consume return type incl. pointer suffix }
-      if CurTok.Kind = tkIdent then
-      begin
-        name := CurTok.SVal;
-        Next;
-        if CurTok.Kind = tkLParen then
-        begin
-          { skip parameter list }
-          while (CurTok.Kind <> tkRParen) and (CurTok.Kind <> tkEOF) do Next;
-          Expect(tkRParen, ')');
-          if CurTok.Kind = tkBegin then
-          begin
-            if name = 'main' then
-            begin
-              Patch32(jmpPatch, CodeLen - (jmpPatch + 4));
-              node := ParseCBlockAST;
-              CompileAST(node);
-              EmitExit(0);
-              ApplyCallFixups;
-              Exit;
-            end
-            else
-            begin
-              { skip non-main function bodies for now }
-              node := ParseCBlockAST;
-            end;
-          end;
-        end
-        else
-        begin
-          { global variable declaration — skip to ; }
-          while (CurTok.Kind <> tkSemicolon) and (CurTok.Kind <> tkEOF) do Next;
-          Eat(tkSemicolon);
-        end;
-      end;
+      if (CurTok.Kind = tkIdent) and (CurTok.SVal = 'typedef') then ParseCTypedef
+      else if (CurTok.Kind = tkIdent) and (CurTok.SVal = 'enum') then ParseCEnumDecl
+      else ParseCStructDecl;
+    end
+    else if IsCTypeTok then
+    begin
+      if CTopLevelIsFunc then ParseCSubroutine
+      else ParseCGlobalVarDecl;
     end
     else
       Next;
   end;
-  Error('main function not found');
+  CHeaderMode := False;
+
+  { pass 2: compile function bodies; types/globals already done in pass 1 }
+  TokPos := firstIdx; Next;
+  while CurTok.Kind <> tkEOF do
+  begin
+    if CIsTopLevelTypeDecl then
+      SkipCDeclToSemi
+    else if IsCTypeTok then
+    begin
+      if CTopLevelIsFunc then ParseCSubroutine
+      else SkipCDeclToSemi;
+    end
+    else
+      Next;
+  end;
+
+  CProgramMode := False;
+  ApplyCallFixups;
+
+  mainIdx := FindProc('main');
+  if mainIdx < 0 then Error('main function not found');
+  Patch32(callPatch, Procs[mainIdx].BodyAddr - (callPatch + 4));
 end;
 
 procedure ParseCSubroutine;
 var
   retType, ptype: TTypeKind;
-  name: AnsiString;
+  name, extLib: AnsiString;
   isFunc: Boolean;
-  nparams, procIdx, i, idx, patchPos, sz: Integer;
+  nparams, procIdx, i, idx, patchPos, sz, gli: Integer;
   retPtrElemTk, retPtrElemRec: Integer;
   ptypes: array[0..15] of TTypeKind;
   pnames: array[0..15] of AnsiString;
   pdepths: array[0..15] of Integer;
+  pelemtk: array[0..15] of Integer;   { pointed-at TTypeKind ordinal per pointer param }
+  pelemrec: array[0..15] of Integer;
+  precid: array[0..15] of Integer;    { record id per tyRecord param (for isRef field access) }
+  pprocsig: array[0..15] of Integer;  { fn-pointer signature Procs[] index per param, else -1 }
   savedSC, savedFS, node, savedCurProc: Integer;
+  vaSaveSym, vaSaveRec: Integer;
+  parenName, isVariadic: Boolean;
 begin
+  { Default DT_NEEDED soname for an external with no explicit library: math
+    functions are in libm.so.6 on glibc, everything else in libc.so.6. }
+  extLib := 'libc.so.6';
   retType := ParseCDeclType;
   { Capture the return type's pointed-at type so `f()^`, `f()^.field`, `f()[i]`
     on a typed-pointer result resolve the element. }
@@ -494,6 +2074,18 @@ begin
   end;
   if CTypeIsVoid then retType := tyInteger; { void return: value slot unused }
 
+  { A parenthesized declarator name `(name)(params)` — lua.h declares its whole
+    API this way (`LUA_API int (lua_gettop) (lua_State *L);`). Unwrap the redundant
+    parens so the name + param list parse normally. Distinct from `(*name)(...)`
+    (a function pointer), which ParseCDeclType already consumes. }
+  parenName := False;
+  if (CurTok.Kind = tkLParen) and
+     (Tokens[TokPos].Kind = tkIdent) and (Tokens[TokPos+1].Kind = tkRParen) then
+  begin
+    parenName := True;
+    Next;   { consume '(' — CurTok is now the name }
+  end;
+
   if CurTok.Kind <> tkIdent then
   begin
     while (CurTok.Kind <> tkSemicolon) and (CurTok.Kind <> tkEOF) do Next;
@@ -502,6 +2094,14 @@ begin
   end;
   name := CurTok.SVal;
   Next;
+  extLib := 'libc.so.6';
+  if (name = 'pow') or (name = 'sqrt') or (name = 'fmod') or (name = 'floor') or
+     (name = 'ceil') or (name = 'fabs') or (name = 'sin') or (name = 'cos') or
+     (name = 'tan') or (name = 'asin') or (name = 'acos') or (name = 'atan') or
+     (name = 'atan2') or (name = 'exp') or (name = 'log') or (name = 'frexp') or
+     (name = 'ldexp') or (name = 'sinh') or (name = 'cosh') or (name = 'tanh') then
+    extLib := 'libm.so.6';
+  if parenName then Eat(tkRParen);   { consume the ')' wrapping the name }
 
   if CurTok.Kind <> tkLParen then
   begin
@@ -511,8 +2111,10 @@ begin
   end;
   Expect(tkLParen, '(');
   nparams := 0;
+  isVariadic := False;
   while (CurTok.Kind <> tkRParen) and (CurTok.Kind <> tkEOF) do
   begin
+    if CurTok.Kind = tkDot then isVariadic := True;   { `...` lexes to three tkDot }
     if IsCTypeTok then
     begin
       ptype := ParseCDeclType;
@@ -524,6 +2126,10 @@ begin
       begin
         ptypes[nparams] := ptype;
         pdepths[nparams] := CTypePtrDepth;
+        pelemtk[nparams] := CTypeElemTk;
+        pelemrec[nparams] := CTypeElemRec;
+        precid[nparams] := CTypeBaseRec;     { record id for a tyRecord param }
+        pprocsig[nparams] := CTypeProcSig;   { fn-pointer param: callable in the body }
         if CurTok.Kind = tkIdent then
         begin
           pnames[nparams] := CurTok.SVal;
@@ -533,6 +2139,30 @@ begin
         begin
           pnames[nparams] := 'arg0';
           pnames[nparams][4] := Chr(Ord('0') + nparams);
+        end;
+        { C array parameter `T name[...]` decays to a pointer `T *name` (lua
+          ltable `computesizes(unsigned int nums[], ...)`). Consume the bracket
+          dimension(s) and retype the param as pointer-to-element. }
+        if CurTok.Kind = tkLBrack then
+        begin
+          while CurTok.Kind = tkLBrack do
+          begin
+            sz := 0;   { reuse as bracket depth }
+            repeat
+              if CurTok.Kind = tkLBrack then Inc(sz)
+              else if CurTok.Kind = tkRBrack then Dec(sz);
+              Next;
+            until (sz = 0) or (CurTok.Kind = tkEOF);
+          end;
+          if pdepths[nparams] = 0 then
+          begin
+            pelemtk[nparams] := Ord(ptypes[nparams]);
+            pelemrec[nparams] := CTypeBaseRec;
+          end
+          else
+            pelemtk[nparams] := Ord(tyPointer);   { `T *name[]` -> pointer-to-pointer }
+          ptypes[nparams] := tyPointer;
+          pdepths[nparams] := 1;
         end;
         Inc(nparams);
       end;
@@ -549,6 +2179,8 @@ begin
   procIdx := FindProc(name);
   if procIdx < 0 then
     procIdx := RegisterProc(name, isFunc, retType, nparams, pnames, ptypes);
+  ProcVariadic[procIdx] := isVariadic;
+  ProcNamedGP[procIdx] := nparams;   { lua's variadic fns take only GP named params (L, fmt) }
   for i := 0 to nparams - 1 do
     ProcParamPtrDepth[procIdx * 16 + i] := pdepths[i];
   ProcRetPtrElemTk[procIdx] := retPtrElemTk;
@@ -559,16 +2191,33 @@ begin
         (CurTok.Kind <> tkEOF) do Next;
   if CurTok.Kind = tkSemicolon then
   begin
-    ProcExternal[procIdx] := True;
-    ProcLibrary[procIdx] := InternStr(CurrentCLibrary);
+    { Pure declaration (prototype). Mark external EXCEPT in a C-program pass 2,
+      where pass 1 already settled linkage (a prototype + a later local
+      definition => internal); re-marking here, before that definition is
+      recompiled, would make an intervening caller emit an external call. }
+    if not (CProgramMode and not CHeaderMode) then
+    begin
+      ProcExternal[procIdx] := True;
+      if CurrentCLibrary <> '' then ProcLibrary[procIdx] := InternStr(CurrentCLibrary)
+      else ProcLibrary[procIdx] := InternStr(extLib);   { libm for math, else libc }
+    end;
     Next;
     Exit;
   end;
 
   if CHeaderMode then
   begin
-    ProcExternal[procIdx] := True;
-    ProcLibrary[procIdx] := InternStr(CurrentCLibrary);
+    { A bodied function in a C program is a local definition compiled in pass 2;
+      mark it internal now so a caller compiled earlier emits a fixup (internal)
+      call, not an external one. In true header-import mode bodies stay external. }
+    if CProgramMode then
+      ProcExternal[procIdx] := False
+    else
+    begin
+      ProcExternal[procIdx] := True;
+      if CurrentCLibrary <> '' then ProcLibrary[procIdx] := InternStr(CurrentCLibrary)
+      else ProcLibrary[procIdx] := InternStr(extLib);
+    end;
     SkipBraceBlock;
     Exit;
   end;
@@ -582,24 +2231,83 @@ begin
   savedFS := FrameSize;
   FrameSize := 0;
   CurProc := procIdx;
+  { Reset the goto-label table per function (C labels are registered inline as
+    `label:` is parsed; names are function-scoped). }
+  GotoLabelCount := 0;
+  GotoFixupCount := 0;
+  for gli := 0 to MAX_GOTO_LABELS - 1 do GotoLabelIRId[gli] := -1;
   Procs[procIdx].ScopeBase := SymCount;
   
   { Allocate parameter slots }
   for i := 0 to nparams-1 do
   begin
-    idx := AllocParam(pnames[i], ptypes[i], False, False);
+    { A C record param is by-value but passed via the by-ref ABI (an 8-byte
+      pointer slot the callee derefs); the caller copies the record to a temp and
+      passes &temp (IRLowerCallArg), giving true by-value with correct field
+      access for records of ANY size (the inline 8-byte slot could not hold >8B). }
+    if ptypes[i] = tyRecord then
+    begin
+      LastTypeRecId := precid[i];
+      idx := AllocParam(pnames[i], ptypes[i], True, False);
+    end
+    else
+      idx := AllocParam(pnames[i], ptypes[i], False, False);
     Procs[procIdx].Params[i].SymIdx := idx;
+    { Thread a pointer parameter's pointed-at type so `*p`, `p[i]`, and pointer
+      arithmetic inside the body know the element stride/width. }
+    if ptypes[i] = tyPointer then
+    begin
+      Syms[idx].PtrElemTk := IntToTypeKind(pelemtk[i]);
+      Syms[idx].PtrElemRec := pelemrec[i];
+      if pprocsig[i] >= 0 then SymProcSig[idx] := pprocsig[i];  { fn-pointer param: callable }
+    end;
   end;
   
   { Return value slot }
   AllocVar('Result', retType);
   Procs[procIdx].RetSymIdx := SymCount - 1;
   Syms[SymCount-1].Kind := skLocal;
-  
+
+  { Variadic: reserve a 176-byte register-save area as a hidden local `__va_save`.
+    The prologue stores the incoming GP+XMM arg registers here; va_start points
+    reg_save_area at it; va_arg reads from it. }
+  vaSaveSym := -1;
+  if ProcVariadic[procIdx] then
+  begin
+    vaSaveRec := FindCTag('__pxx_va_save');
+    if vaSaveRec >= 0 then
+    begin
+      LastTypeRecId := vaSaveRec;
+      vaSaveSym := AllocVar('__va_save', tyRecord);
+    end;
+  end;
+
   { Prologue }
   patchPos := EmitProcPrologue;
   Procs[procIdx].FramePatch := patchPos;
-  
+
+  { Variadic register-save prologue (System V): store the 6 GP + 8 XMM arg
+    registers into __va_save so va_arg can read the variadic args. Registers are
+    still pristine here (the param copy below only reads them). Additive + gated
+    to variadic functions, so non-variadic / Pascal codegen is unchanged. }
+  if vaSaveSym >= 0 then
+  begin
+    EmitB($48); EmitB($89); EmitB($BD); EmitI32(Syms[vaSaveSym].Offset + 0);    { mov [rbp+o], rdi }
+    EmitB($48); EmitB($89); EmitB($B5); EmitI32(Syms[vaSaveSym].Offset + 8);    { rsi }
+    EmitB($48); EmitB($89); EmitB($95); EmitI32(Syms[vaSaveSym].Offset + 16);   { rdx }
+    EmitB($48); EmitB($89); EmitB($8D); EmitI32(Syms[vaSaveSym].Offset + 24);   { rcx }
+    EmitB($4C); EmitB($89); EmitB($85); EmitI32(Syms[vaSaveSym].Offset + 32);   { r8 }
+    EmitB($4C); EmitB($89); EmitB($8D); EmitI32(Syms[vaSaveSym].Offset + 40);   { r9 }
+    EmitB($F2); EmitB($0F); EmitB($11); EmitB($85); EmitI32(Syms[vaSaveSym].Offset + 48);   { movsd [rbp+o], xmm0 }
+    EmitB($F2); EmitB($0F); EmitB($11); EmitB($8D); EmitI32(Syms[vaSaveSym].Offset + 64);   { xmm1 }
+    EmitB($F2); EmitB($0F); EmitB($11); EmitB($95); EmitI32(Syms[vaSaveSym].Offset + 80);   { xmm2 }
+    EmitB($F2); EmitB($0F); EmitB($11); EmitB($9D); EmitI32(Syms[vaSaveSym].Offset + 96);   { xmm3 }
+    EmitB($F2); EmitB($0F); EmitB($11); EmitB($A5); EmitI32(Syms[vaSaveSym].Offset + 112);  { xmm4 }
+    EmitB($F2); EmitB($0F); EmitB($11); EmitB($AD); EmitI32(Syms[vaSaveSym].Offset + 128);  { xmm5 }
+    EmitB($F2); EmitB($0F); EmitB($11); EmitB($B5); EmitI32(Syms[vaSaveSym].Offset + 144);  { xmm6 }
+    EmitB($F2); EmitB($0F); EmitB($11); EmitB($BD); EmitI32(Syms[vaSaveSym].Offset + 160);  { xmm7 }
+  end;
+
   { Copy registers to stack params }
   for i := 0 to nparams-1 do
   begin
@@ -675,10 +2383,15 @@ begin
     end;
   end;
   
+  { Constant global initializers (struct/union brace inits recorded as PendingInit
+    during pass 1) run once at the start of `main`, before user code — the C
+    analogue of the Pascal program's pre-body CompilePendingGlobalInits. }
+  if name = 'main' then CompilePendingGlobalInits;
+
   { Parse & Compile Body }
   node := ParseCBlockAST;
   CompileAST(node);
-  
+
   { Epilogue }
   EmitProcEpilog(Procs[procIdx].RetSymIdx);
   PatchProcPrologue(patchPos, FrameSize);
@@ -703,11 +2416,11 @@ begin
 end;
 
 { Integer constant-expression evaluator for enum values. Operates on the live
-  C token stream. The C lexer does not produce distinct shift/bitwise tokens,
-  so `<<` arrives as two tkLt, `>>` as two tkGt, `|` as tkOr, `&` as tkAnd.
-  Precedence, low to high: | , & , << >> , + - , * , unary , primary.
-  Unknown/unsupported tokens evaluate to 0 rather than derailing. }
-function CEvalConstExpr: Int64; forward;
+  C token stream. Since Slice A the C lexer emits distinct operator tokens:
+  `<<`=tkShl, `>>`=tkShr, `|`=tkPipe, `^`=tkXor, `&`=tkAmp.
+  Precedence, low to high: | , ^ , & , << >> , + - , * , unary , primary.
+  Unknown/unsupported tokens evaluate to 0 rather than derailing.
+  (CEvalConstExpr is forward-declared at the top of the C parser.) }
 
 function CEvalConstPrimary: Int64;
 var idx: Integer;
@@ -715,13 +2428,32 @@ begin
   Result := 0;
   if CurTok.Kind = tkLParen then
   begin
-    Next; Result := CEvalConstExpr;
-    if CurTok.Kind = tkRParen then Next;
+    Next;
+    if IsCTypeTok then
+    begin
+      { cast `(type)expr` in a constant expression — the integer value is
+        unchanged for const-folding (lua's cast_int(...) = ((int)(...))). Skip the
+        cast type tokens to the matching `)`, then fold the operand. NOTE the `()`
+        on the recursive call: bare `CEvalConstPrimary` would read this function's
+        own Result, not recurse. }
+      while (CurTok.Kind <> tkRParen) and (CurTok.Kind <> tkEOF) do Next;
+      if CurTok.Kind = tkRParen then Next;
+      Result := CEvalConstPrimary();
+    end
+    else
+    begin
+      Result := CEvalConstExpr;
+      if CurTok.Kind = tkRParen then Next;
+    end;
   end
   else if CurTok.Kind = tkMinus then begin Next; Result := -CEvalConstPrimary(); end
   else if CurTok.Kind = tkPlus then begin Next; Result := CEvalConstPrimary(); end
-  else if CurTok.Kind = tkNot then begin Next; Result := not CEvalConstPrimary(); end
+  else if CurTok.Kind = tkNot then begin Next; Result := CEvalConstPrimary() xor (-1); end  { ~ : bitwise NOT (xor -1 sidesteps the `not <call>`=boolean typing quirk) }
   else if CurTok.Kind = tkInteger then begin Result := CurTok.IVal; Next; end
+  else if (CurTok.Kind = tkIdent) and (CurTok.SVal = 'sizeof') then
+    { `sizeof(type|expr)` in a constant expression (e.g. array dimension
+      `char b[3 * sizeof(size_t)]`). Reuse the value-form folder. }
+    Result := ASTIVal[ParseCSizeof]
   else if CurTok.Kind = tkIdent then
   begin
     idx := FindSym(CurTok.SVal);
@@ -731,9 +2463,23 @@ begin
 end;
 
 function CEvalConstMul: Int64;
+var rhs: Int64;
 begin
   Result := CEvalConstPrimary;
-  while CurTok.Kind = tkStar do begin Next; Result := Result * CEvalConstPrimary; end;
+  while (CurTok.Kind = tkStar) or (CurTok.Kind = tkSlash) or (CurTok.Kind = tkMod) do
+  begin
+    if CurTok.Kind = tkStar then begin Next; Result := Result * CEvalConstPrimary; end
+    else if CurTok.Kind = tkSlash then
+    begin
+      Next; rhs := CEvalConstPrimary;
+      if rhs <> 0 then Result := Result div rhs else Result := 0;   { e.g. sizeof(a)/sizeof(a[0]) }
+    end
+    else
+    begin
+      Next; rhs := CEvalConstPrimary;
+      if rhs <> 0 then Result := Result mod rhs else Result := 0;
+    end;
+  end;
 end;
 
 function CEvalConstAdd: Int64;
@@ -749,31 +2495,29 @@ end;
 function CEvalConstShift: Int64;
 begin
   Result := CEvalConstAdd;
-  while (CurTok.Kind = tkLt) or (CurTok.Kind = tkGt) do
+  while (CurTok.Kind = tkShl) or (CurTok.Kind = tkShr) do
   begin
-    if CurTok.Kind = tkLt then
-    begin
-      Next; if CurTok.Kind = tkLt then Next; { second '<' of '<<' }
-      Result := Result shl CEvalConstAdd;
-    end
-    else
-    begin
-      Next; if CurTok.Kind = tkGt then Next; { second '>' of '>>' }
-      Result := Result shr CEvalConstAdd;
-    end;
+    if CurTok.Kind = tkShl then begin Next; Result := Result shl CEvalConstAdd; end
+    else begin Next; Result := Result shr CEvalConstAdd; end;
   end;
 end;
 
 function CEvalConstAnd: Int64;
 begin
   Result := CEvalConstShift;
-  while CurTok.Kind = tkAnd do begin Next; Result := Result and CEvalConstShift; end;
+  while CurTok.Kind = tkAmp do begin Next; Result := Result and CEvalConstShift; end;
+end;
+
+function CEvalConstXor: Int64;
+begin
+  Result := CEvalConstAnd;
+  while CurTok.Kind = tkXor do begin Next; Result := Result xor CEvalConstAnd; end;
 end;
 
 function CEvalConstExpr: Int64;
 begin
-  Result := CEvalConstAnd;
-  while CurTok.Kind = tkOr do begin Next; Result := Result or CEvalConstAnd; end;
+  Result := CEvalConstXor;
+  while CurTok.Kind = tkPipe do begin Next; Result := Result or CEvalConstXor; end;
 end;
 
 { Parse an enumerator list. CurTok must be at the opening tkBegin (the brace).
@@ -863,9 +2607,9 @@ begin
       if (Tokens[t].Kind = tkInteger) or (Tokens[t].Kind = tkLParen) or
          (Tokens[t].Kind = tkRParen) or (Tokens[t].Kind = tkPlus) or
          (Tokens[t].Kind = tkMinus) or (Tokens[t].Kind = tkStar) or
-         (Tokens[t].Kind = tkLt) or (Tokens[t].Kind = tkGt) or
-         (Tokens[t].Kind = tkOr) or (Tokens[t].Kind = tkAnd) or
-         (Tokens[t].Kind = tkNot) then
+         (Tokens[t].Kind = tkShl) or (Tokens[t].Kind = tkShr) or
+         (Tokens[t].Kind = tkPipe) or (Tokens[t].Kind = tkAmp) or
+         (Tokens[t].Kind = tkXor) or (Tokens[t].Kind = tkNot) then
         { allowed }
       else if Tokens[t].Kind = tkIdent then
       begin
@@ -941,10 +2685,7 @@ begin
     end;
 
     if Tokens[i].Kind = tkBegin then
-    begin
-      if depth >= 1 then begin Result := False; Exit; end;  { nested aggregate body }
-      Inc(depth);
-    end
+      Inc(depth)   { nested aggregate bodies are now laid out as sub-records }
     else if Tokens[i].Kind = tkEnd then
     begin
       Dec(depth);
@@ -996,20 +2737,85 @@ end;
   fixed arrays `T x[N]`, and nested struct-by-value. Bitfields (`x : n`) and
   inline anonymous struct definitions are skipped, not laid out. }
 procedure ParseCStructInto(ci: Integer; isUnion: Boolean);
+const MAX_BF = 256;
 var
   curOff, maxAlign, fnOff, fnLen, arrLen, declStars, sz, al, totalSz, thisOff: Integer;
   baseScalarTk, baseElemTk, baseElemRec, baseRecId, declTk, declElemTk, declElemRec, declRec: Integer;
+  fldProcSig, subci, subRecSz, subAl, sdepth, bfCount, k: Integer;
   fTk: TTypeKind;
-  isArr, firstDecl: Boolean;
+  isArr, firstDecl, subIsUnion: Boolean;
+  { The parent's fields are BUFFERED during the walk and appended to the shared
+    UFld pool only AFTER the body (and any nested sub-records) are laid out, so the
+    parent's fields stay contiguous — FindUField scans [base, base+count). Without
+    this, a nested-aggregate member's sub-record fields would be inserted between
+    the parent's fields and break the contiguous range. }
+  bfNOff, bfNLen, bfOff, bfTk, bfRec, bfElemTk, bfElemRec, bfProcSig, bfArrLen: array[0..MAX_BF-1] of Integer;
+  bfIsArr: array[0..MAX_BF-1] of Boolean;
 begin
   Next; { consume the opening brace }
   curOff := 0;
   maxAlign := 1;
+  bfCount := 0;
   while (CurTok.Kind <> tkEnd) and (CurTok.Kind <> tkEOF) do
   begin
-    if IsCTypeTok then
+    { Nested inline aggregate member: struct or union with an inline body followed
+      by member name(s). Lay the body out as a sub-record (recursively) and buffer
+      the member(s) as record-typed fields, so outer.name.member resolves (lua
+      CallInfo / GCUnion). Detected by an opening brace right after the keyword,
+      optionally past a tag. }
+    if ((CurTok.Kind = tkRecord) or ((CurTok.Kind = tkIdent) and (CurTok.SVal = 'union'))) and
+       ((Tokens[TokPos].Kind = tkBegin) or
+        ((Tokens[TokPos].Kind = tkIdent) and (Tokens[TokPos + 1].Kind = tkBegin))) then
+    begin
+      subIsUnion := (CurTok.Kind = tkIdent) and (CurTok.SVal = 'union');
+      Next;  { consume struct/union keyword }
+      if (CurTok.Kind = tkIdent) and (Tokens[TokPos].Kind = tkBegin) then
+      begin
+        subci := FindOrForwardCTag(CurTok.SVal) - REC_UCLASS_BASE;  { inline-tagged }
+        Next;
+      end
+      else if UClsCount < MAX_UCLASS - 1 then
+      begin subci := AddUClass(0, 0); UClsIsRecord[subci] := True; end
+      else
+        subci := -1;
+      if subci >= 0 then
+        ParseCStructInto(subci, subIsUnion)
+      else
+      begin
+        sdepth := 0;
+        repeat
+          if CurTok.Kind = tkBegin then Inc(sdepth)
+          else if CurTok.Kind = tkEnd then Dec(sdepth);
+          Next;
+        until (sdepth = 0) or (CurTok.Kind = tkEOF);
+      end;
+      if subci >= 0 then begin subRecSz := UClsSize_[subci]; subAl := UClsAlign[subci]; end
+      else begin subRecSz := TARGET_PTR_SIZE; subAl := TARGET_PTR_SIZE; end;
+      if subAl < 1 then subAl := 1;
+      repeat
+        if CurTok.Kind <> tkIdent then Break;
+        fnOff := Tokens[TokPos - 1].SOffset; fnLen := Tokens[TokPos - 1].SLen; Next;
+        while CurTok.Kind = tkLBrack do
+        begin Next; while (CurTok.Kind <> tkRBrack) and (CurTok.Kind <> tkEOF) do Next; Eat(tkRBrack); end;
+        if isUnion then thisOff := 0 else thisOff := AlignTo(curOff, subAl);
+        if (subci >= 0) and (bfCount < MAX_BF) then
+        begin
+          bfNOff[bfCount] := fnOff; bfNLen[bfCount] := fnLen; bfOff[bfCount] := thisOff;
+          bfTk[bfCount] := Ord(tyRecord); bfRec[bfCount] := REC_UCLASS_BASE + subci;
+          bfElemTk[bfCount] := Ord(tyUnknown); bfElemRec[bfCount] := REC_NONE;
+          bfIsArr[bfCount] := False; bfArrLen[bfCount] := 1; bfProcSig[bfCount] := -1;
+          Inc(bfCount);
+        end;
+        if isUnion then begin if subRecSz > curOff then curOff := subRecSz; end
+        else curOff := thisOff + subRecSz;
+        if subAl > maxAlign then maxAlign := subAl;
+      until not Eat(tkComma);
+      Eat(tkSemicolon);
+    end
+    else if IsCTypeTok then
     begin
       fTk := ParseCDeclType;
+      fldProcSig := CTypeProcSig;   { fn-pointer typedef field signature, if any }
       { Recover the base scalar/struct before pointer folding, so comma
         declarators with differing pointer levels (`int *a, b`) are correct. }
       if CTypePtrDepth > 0 then
@@ -1076,16 +2882,14 @@ begin
         if isUnion then thisOff := 0
         else thisOff := AlignTo(curOff, al);
 
-        { AddUField reads LastTypePointerElemTk/Rec for pointer fields. Skip the
-          record (but keep advancing the offset, so size stays correct) if the
-          field pool is nearly full — avoids a hard overflow on a giant struct. }
-        if UFldCount < MAX_UFIELD - 1 then
+        if bfCount < MAX_BF then
         begin
-          LastTypePointerElemTk := IntToTypeKind(declElemTk);
-          LastTypePointerElemRec := declElemRec;
-          AddUField(ci, fnOff, fnLen, thisOff, declTk, declRec);
-          UFldIsArray[UFldCount-1] := isArr;
-          UFldArrLen[UFldCount-1] := arrLen;
+          bfNOff[bfCount] := fnOff; bfNLen[bfCount] := fnLen; bfOff[bfCount] := thisOff;
+          bfTk[bfCount] := declTk; bfRec[bfCount] := declRec;
+          bfElemTk[bfCount] := declElemTk; bfElemRec[bfCount] := declElemRec;
+          bfIsArr[bfCount] := isArr; bfArrLen[bfCount] := arrLen;
+          if (declStars = 0) then bfProcSig[bfCount] := fldProcSig else bfProcSig[bfCount] := -1;
+          Inc(bfCount);
         end;
 
         totalSz := sz;
@@ -1103,9 +2907,22 @@ begin
       Eat(tkSemicolon);
     end
     else
-      Next;  { skip nested struct/union defs, attributes, unknown tokens }
+      Next;  { skip attributes / unknown tokens }
   end;
   Eat(tkEnd); { consume the closing brace }
+  { Append the parent's buffered fields contiguously, NOW (after sub-records), and
+    anchor the record's field base here. }
+  UClsFBase[ci] := UFldCount;
+  for k := 0 to bfCount - 1 do
+  begin
+    if UFldCount >= MAX_UFIELD - 1 then Break;   { pool nearly full: drop the rest }
+    LastTypePointerElemTk := IntToTypeKind(bfElemTk[k]);
+    LastTypePointerElemRec := bfElemRec[k];
+    AddUField(ci, bfNOff[k], bfNLen[k], bfOff[k], bfTk[k], bfRec[k]);
+    UFldIsArray[UFldCount-1] := bfIsArr[k];
+    UFldArrLen[UFldCount-1] := bfArrLen[k];
+    if bfProcSig[k] >= 0 then UFldProcSig[UFldCount-1] := bfProcSig[k];
+  end;
   UClsSize_[ci] := AlignTo(curOff, maxAlign);
   UClsAlign[ci] := maxAlign;
 end;
@@ -1114,10 +2931,12 @@ end;
   - struct/union [tag] [body] Name   -> opaque, mapped to Pointer
   - enum [tag] body Name             -> Int32, enumerators become constants
   - <decl-specifiers> Name           -> the mapped scalar/pointer type
-  Function-pointer typedefs `ret (*Name)(args)` are detected and registered
-  as Pointer; their argument signature is not yet modelled. }
+  Function-pointer typedefs `ret (*Name)(args)` are registered as Pointer AND
+  carry a signature Procs[] entry (CTypedefProcSig) so a value of the type is
+  callable through AN_CALL_IND with C-ABI marshalling. }
 procedure ParseCTypedef;
-var tk: TTypeKind; nm, tagName: AnsiString; isAggregate, isUnion, hasTag: Boolean;
+var tk: TTypeKind; nm, tagName: AnsiString;
+    isAggregate, isUnion, hasTag: Boolean;
     ci, ptrStars, nmOff, nmLen: Integer;
 begin
   Next; { consume 'typedef' }
@@ -1191,13 +3010,32 @@ begin
       Eat(tkSemicolon);
       Exit;
     end;
-    { No body: opaque forward declaration — pointer-only handle.
-      The declarator may carry a pointer: typedef struct _X *XRef; }
-    while CurTok.Kind = tkStar do Next;
+    { No body present (forward / separately-defined struct). With a tag, the
+      typedef ALIASES that struct's (possibly forward) record — `typedef struct
+      Zio ZIO;` makes `ZIO` the record and `ZIO *` a pointer to it, so a later
+      `struct Zio { ... }` body fills the same record and `z->field` resolves.
+      `typedef struct T *Ref;` is a pointer to it. A tagless no-body typedef
+      stays an opaque pointer handle. }
+    ptrStars := 0;
+    while CurTok.Kind = tkStar do begin Inc(ptrStars); Next; end;
     if CurTok.Kind = tkIdent then
     begin
+      nmOff := Tokens[TokPos-1].SOffset;
+      nmLen := Tokens[TokPos-1].SLen;
       nm := CurTok.SVal; Next;
-      AddCTypedef(nm, tyPointer); { opaque aggregate: pointer-only }
+      if hasTag then
+      begin
+        ci := FindOrForwardCTag(tagName) - REC_UCLASS_BASE;
+        if ptrStars > 0 then
+        begin
+          AddCTypedefEx(nm, tyPointer, Ord(tyRecord), REC_UCLASS_BASE + ci);
+          RegisterPtrAlias(nmOff, nmLen, Ord(tyRecord), REC_UCLASS_BASE + ci, 0, 0);
+        end
+        else
+          AddCTypedefEx(nm, tyRecord, Ord(tyUnknown), REC_UCLASS_BASE + ci);
+      end
+      else
+        AddCTypedef(nm, tyPointer); { tagless opaque aggregate: pointer-only }
     end;
     while (CurTok.Kind <> tkSemicolon) and (CurTok.Kind <> tkEOF) do Next;
     Eat(tkSemicolon);
@@ -1221,17 +3059,13 @@ begin
 
   { scalar / pointer typedef }
   tk := ParseCDeclType;
-  { function-pointer form: ret (*Name)(...) — the declarator name sits inside
-    parens. Detect a '(' next and recover the name, registering as Pointer. }
-  if CurTok.Kind = tkLParen then
+  { Function-pointer typedef `ret (*Name)(params)`: ParseCDeclType collapses the
+    declarator to Pointer and (now) captures the name + a call signature in
+    CTypeFnPtrName / CTypeProcSig. Register Name as a pointer typedef that carries
+    the signature, so a value of the type is callable through AN_CALL_IND. }
+  if (CTypeFnPtrName <> '') and (CTypeProcSig >= 0) then
   begin
-    Next;
-    while CurTok.Kind = tkStar do Next;
-    if CurTok.Kind = tkIdent then
-    begin
-      nm := CurTok.SVal; Next;
-      AddCTypedef(nm, tyPointer);
-    end;
+    AddCTypedefFnPtr(CTypeFnPtrName, CTypeProcSig);
     while (CurTok.Kind <> tkSemicolon) and (CurTok.Kind <> tkEOF) do Next;
     Eat(tkSemicolon);
     Exit;
@@ -1272,11 +3106,25 @@ end;
   a function/variable typed by the struct (`struct Tag *get();`). CurTok is the
   struct/union keyword, so Tokens[TokPos] is the token after it. }
 function IsBareStructDecl: Boolean;
-var i: Integer;
+var i, depth: Integer;
 begin
   i := TokPos;
   if (i < TokCount) and (Tokens[i].Kind = tkIdent) then Inc(i);  { skip tag }
-  Result := (i < TokCount) and (Tokens[i].Kind in [tkBegin, tkSemicolon]);
+  if i >= TokCount then begin Result := False; Exit; end;
+  if Tokens[i].Kind = tkSemicolon then begin Result := True; Exit; end;  { `struct Tag;` forward }
+  if Tokens[i].Kind <> tkBegin then begin Result := False; Exit; end;    { `struct Tag x` etc. }
+  { Scan past the balanced body; a `;` right after it is a bare type definition,
+    but an identifier (a variable) means this is a struct-typed GLOBAL/var decl
+    (`struct { ... } g;`) that must route to ParseCGlobalVarDecl, not ParseCStructDecl. }
+  depth := 0;
+  while i < TokCount do
+  begin
+    if Tokens[i].Kind = tkBegin then Inc(depth)
+    else if Tokens[i].Kind = tkEnd then
+    begin Dec(depth); if depth = 0 then begin Inc(i); Break; end; end;
+    Inc(i);
+  end;
+  Result := (i < TokCount) and (Tokens[i].Kind = tkSemicolon);
 end;
 
 { Bare `struct/union [Tag] { body };` (definition) or `struct Tag;` (forward).

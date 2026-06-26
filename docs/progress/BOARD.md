@@ -18,7 +18,7 @@ _none_
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
-| feature-c-desktop-lua-sqlite-path | A+B | feature | C desktop path — compile real portable C (tiny-regex → lua → sqlite) | — |
+| feature-c-desktop-lua-sqlite-path | C | feature | C desktop path — compile real portable C (tiny-regex → lua → sqlite) | — |
 | feature-eliah-ide | B | feature | Eliah / Ilja — single-window IDE (GUI + TUI) | — |
 | feature-eliah-m0-window | B | feature | Eliah M0 — single tiled GTK3 window | — |
 | feature-eliah-pane-collapse | B | feature | feature: Eliah pane collapse/restore + ratio memory | feature-eliah-layout-tree |
@@ -27,20 +27,27 @@ _none_
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
-| feature-c-runtime-library | B | feature | C runtime/library layer (`lib/crtl`) plus direct C-library packages | feature-c-source-frontend |
+| feature-c-runtime-library | C | feature | C runtime/library layer (`lib/crtl`) plus direct C-library packages | feature-c-source-frontend |
 
-## backlog (52)
+## backlog (63)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
+| bug-c-addr-of-unsupported-ir | A | bug | C `&` of certain operands lowers to IR_UNSUPPORTED (codegen crash) | — |
+| bug-c-double-vararg | A | bug | C: double passed as a variadic arg reads 0 | — |
+| bug-c-float-int-cast-and-spill | A | bug | C: int<->float numeric cast + computed-double spill across branches | — |
+| bug-c-libc-data-symbol-stdio | A | bug | C stdio must ride pxx syscalls (libc-free), not import libc | — |
+| bug-c-sizeof-string-literal | C | bug | C `sizeof("string literal")` returns pointer size, not array size | — |
+| bug-paramless-self-recursion-silent-result-read | A | bug | Paramless self-recursion reads own Result silently — no diagnostic | — |
 | chore-inc-to-units | A | chore | `.inc` → real `.pas` units refactor | — |
 | chore-runtime-emission-size | A | chore | Finer runtime-support emission (code size) | — |
 | feature-arm32-large-aggregate-result | A | feature | arm32: support record function results larger than 4 param words (sret) | — |
 | feature-cdecl-indirect-cross-targets | A | feature | Port cdecl indirect calls (dynamic library loading) to the other targets | — |
-| feature-c-header-import-complex | A | feature | Import C headers for complex libraries (glib/GTK-grade) | — |
+| feature-c-header-import-complex | C | feature | Import C headers for complex libraries (glib/GTK-grade) | — |
 | feature-copy-intrinsic | B | feature | `Copy` as a generic overloaded intrinsic (string + dynarray families) | — |
-| feature-c-regex-library-devtest | A | feature | C regex library dev-test import | — |
-| feature-c-source-frontend | A | feature | C source frontend — compile C function bodies (statements + expressions) | feature-cross-target-feature-parity |
+| feature-c-regex-library-devtest | C | feature | C regex library dev-test import | — |
+| feature-c-source-frontend | C | feature | C source frontend — compile C function bodies (statements + expressions) | feature-cross-target-feature-parity |
+| feature-c-varargs-design | A | feature | C varargs (va_list / va_start / va_arg) — implementation design | — |
 | feature-demo-chess | B | feature | Flagship demo — chess engine (real-world app + cross-target oracle + benchmark) | — |
 | feature-demo-mandelbrot-gui-threaded | B | feature | Demo — GUI Mandelbrot, multithreaded tiled zoom | — |
 | feature-demo-mandelbrot | B | feature | Demo — zoomable Mandelbrot explorer | — |
@@ -85,6 +92,10 @@ _none_
 | feature-zero-init-contract | A | feature | Zero-init contract — one library-owned managed-slot zeroing guarantee | — |
 | meta-track-b-compiler-wishlist | B | meta | Track-B wishlist — compiler features most wanted to unblock libraries + demos | — |
 | track-a-c-frontend-shared-ir-touchpoints | A | track | C frontend — shared-IR touch points that belong to Track A | — |
+| track-a-c-stdio-needs-pascal-import-and-data-relocs | A | track | C stdio (printf family) blocked — needs Pascal import + global data relocs | — |
+| track-a-fpc-forward-ref-gettokenstrfromraw-lexer | A | track | FPC bootstrap: GetTokenStrFromRaw used in lexer.inc before its parser.inc definition | — |
+| track-c-ternary-string-literal-segfault | A | track | C: ternary with two string-literal arms segfaults at runtime | — |
+| track-c-va-arg-nonint-lea | A | track | C: va_arg of any non-`int` type -> "invalid symbol in lea" | — |
 
 ## rainy-day (19)
 
@@ -120,7 +131,7 @@ _none_
 | feature-mimic-fpc | B | feature | `mimic FPC` compatibility mode | — |
 | feature-string-model-tyfixedstring | B | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (287)
+## done (295)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -138,9 +149,14 @@ _none_
 | bug-cardinal-expr-promotion | A | bug | bug: cardinal/longword binary-op promotes to uint64 (FPC: int64) | — |
 | bug-cardinal-expr-promotion-shr-orphan | A | bug | bug: cardinal/signed 32-bit expression width (orphan addendum) | — |
 | bug-case-insensitive-incomplete-builtins-funcs | A | bug | bug: case-insensitivity incomplete — builtins + function calls still case-sensitive | — |
-| bug-c-const-eval-bitwise-not | A | bug | C const-eval: `~` (bitwise NOT) yields wrong value | — |
+| bug-c-const-cast-in-array-dim | A | bug | C: `(type)` cast inside a constant expression (array dimension) | — |
+| bug-c-const-eval-bitwise-not | C | bug | C const-eval: `~` (bitwise NOT) yields wrong value | — |
+| bug-c-field-of-call-result | C | bug | C: `f()->field` — field/index of a pointer-returning call result | — |
+| bug-c-field-on-pointer-arithmetic | C | bug | C: `(p + i)->field` (field on a computed pointer) fails / Unsupported | — |
 | bug-char-literal-concat-in-const-expr | A | bug | Char-literal concatenation in a const expression fails (`const T = #65 + #66`) | — |
 | bug-char-literal-in-const-expr | A | bug | Char literal in a constant expression: `ConstEval` rejected `'a'` | — |
+| bug-c-large-record-byval-param | A | bug | C: large (>16-byte) record passed by value gives garbage in the callee | — |
+| bug-c-nested-anon-union-struct | A | bug | C: nested/anonymous struct-or-union member makes the whole struct opaque | — |
 | bug-codegen-nested-index-load-width-pressure | A | bug | Codegen miscompiles nested integer-array index load width under register pressure | — |
 | bug-compiler-hang-on-nested-if-in-begin | A | bug | bug: compiler hangs (infinite loop) on a method with a nested if/else inside a begin block | — |
 | bug-compiler-tmyclass-hardcoded-clash | A | bug | Hardcoded 'TMyClass' name clash in compiler type resolution | — |
@@ -153,8 +169,11 @@ _none_
 | bug-const-section-before-constructor | A | bug | bug: const section before constructor/destructor not terminated | — |
 | bug-const-string-index-miscompiles | A | bug | Indexing a string constant miscompiles (`const RAMP='...'; RAMP[i]`) | — |
 | bug-c-packed-aligned-ignored | A | bug | C `__attribute__((packed))` / `aligned` ignored → field-offset drift | — |
+| bug-c-postincrement-as-rvalue | C | bug | C: post-increment/decrement used as a VALUE (`(p++)->f`, `x = a[i++]`) | — |
 | bug-c-quoted-include-search-path | A | bug | C quoted includes do not search the including file directory | — |
 | bug-cross-gate-masked-failures | A | bug | bug: cross gates red on two pre-existing tests (were masked behind ArgStr) | — |
+| bug-c-string-literal-to-pointer-prefix | C | bug | C: string literal assigned to a `char *` points at the Pascal length-prefix | — |
+| bug-c-struct-pointer-index-stride | C | bug | C: `p[i]` / `p+i` on a struct pointer uses the wrong element stride | — |
 | bug-dynarray-in-record-corrupt | A | bug | Dynamic array as a record field is corrupted (value return + var-param assign) | — |
 | bug-dynarray-managed-record-field-reassign | A | bug | bug: assigning a local dynamic-array-of-managed-record to a field drops/frees the elements | — |
 | bug-dynarray-whole-var-assign-cross | A | bug | Whole dynamic-array variable assignment (`b := a`) unsupported on i386 + aarch64 | — |
@@ -422,14 +441,21 @@ _none_
 
 ## Ready (no unmet blocker)
 
+- [A] bug-c-addr-of-unsupported-ir
+- [A] bug-c-double-vararg
+- [A] bug-c-float-int-cast-and-spill
+- [A] bug-c-libc-data-symbol-stdio
+- [C] bug-c-sizeof-string-literal
+- [A] bug-paramless-self-recursion-silent-result-read
 - [A] chore-inc-to-units
 - [A] chore-runtime-emission-size
 - [A] feature-arm32-large-aggregate-result
 - [A] feature-cdecl-indirect-cross-targets
-- [A] feature-c-header-import-complex
+- [C] feature-c-header-import-complex
 - [B] feature-copy-intrinsic
-- [A] feature-c-regex-library-devtest
-- [A] feature-c-source-frontend
+- [C] feature-c-regex-library-devtest
+- [C] feature-c-source-frontend
+- [A] feature-c-varargs-design
 - [B] feature-demo-chess
 - [B] feature-demo-mandelbrot-gui-threaded
 - [B] feature-demo-mandelbrot
@@ -471,6 +497,10 @@ _none_
 - [A] feature-zero-init-contract
 - [B] meta-track-b-compiler-wishlist
 - [A] track-a-c-frontend-shared-ir-touchpoints
+- [A] track-a-c-stdio-needs-pascal-import-and-data-relocs
+- [A] track-a-fpc-forward-ref-gettokenstrfromraw-lexer
+- [A] track-c-ternary-string-literal-segfault
+- [A] track-c-va-arg-nonint-lea
 
 ## Leverage (tickets each one unblocks)
 

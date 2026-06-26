@@ -211,6 +211,12 @@ const
                            ctor VMT slot (-1 if non-virtual). Allocates the DYNAMIC
                            class (size=[cref+16], vmt=[cref+24]) then runs the
                            virtual ctor through the stamped VMT. }
+  AN_SWITCH        = 71; { C `switch (sel) { body }`: Left = selector expr; Right =
+                           AN_BLOCK body whose statement SEQ contains AN_CASE (17) /
+                           AN_DEFAULT (48) marker nodes — shared with the Pascal
+                           case/default node kinds. Lowered to a dispatch (compare
+                           selector vs each case, jump to its label) + the body in
+                           order (fallthrough), with a break-only scope. }
 
   { Inline-asm operand kinds }
   AOP_NONE = 0;
@@ -427,8 +433,6 @@ type
     tkInteger_T, tkBoolean_T, tkChar_T, tkString_T, tkReal_T, tkLongWord_T,
     tkAssign, tkEq, tkNeq, tkLt, tkLe, tkGt, tkGe,
     tkPlus, tkMinus, tkStar, tkSlash,
-    tkPlusPlus, tkMinusMinus,                 { ++ / -- (C inc/dec; new in pxx) }
-    tkPlusEq, tkMinusEq, tkStarEq, tkSlashEq, { += -= *= /= compound assignment }
     tkLParen, tkRParen, tkLBrack, tkRBrack,
     tkSemicolon, tkColon, tkComma, tkDot, tkDotDot, tkAt, tkCaret,
     tkBreak, tkContinue, tkOverload,
@@ -449,7 +453,17 @@ type
     tkIndent, tkDedent, tkNewline,
     tkHigh,
     tkXor,
-    tkLow
+    tkLow,
+    { C multi-char operators (Slice A). Distinct so the C body parser and const
+      evaluator can tell `&`/`&&`, `|`/`||`, `<<`/`>>`, and the compound-assigns
+      apart. tkShl/tkXor/tkColon already exist above and are reused. }
+    tkShr,
+    tkAmp, tkPipe,
+    tkPlusPlus, tkMinusMinus,
+    tkPlusEq, tkMinusEq, tkStarEq, tkSlashEq, tkModEq,
+    tkAmpEq, tkPipeEq, tkXorEq, tkShlEq, tkShrEq,
+    tkQuestion,
+    tkLogNot   { C `!` (logical not); distinct from `~` which stays tkNot }
   );
 
   TToken = record
@@ -819,6 +833,8 @@ var
   ProcLibrary  : array[0..MAX_PROCS-1] of Integer; { Strs[] entry for DT_NEEDED name }
   ProcExtName  : array[0..MAX_PROCS-1] of Integer; { Strs[] link symbol from `external 'lib' name 'sym'`; -1 = use the Pascal routine name }
   ProcCdecl    : array[0..MAX_PROCS-1] of Boolean; { signature uses the C (System V AMD64) convention. Set for a `... cdecl` PROC TYPE so an INDIRECT call through it marshals SysV (int->rdi.., float->xmm0..) instead of PXX's internal all-integer convention — needed for dlsym'd C functions with float args. }
+  ProcVariadic : array[0..MAX_PROCS-1] of Boolean; { C function with a trailing `...` — needs the System V register-save prologue so va_arg can read the variadic args. }
+  ProcNamedGP  : array[0..MAX_PROCS-1] of Integer; { count of named (non-variadic) GP params, for va_start's initial gp_offset }
   ProcUnitIdx : array[0..MAX_PROCS-1] of Integer; { Strs[] unit name, or -1 for main }
   ProcRetRecId : array[0..MAX_PROCS-1] of Integer; { record id for tyRecord results }
   ProcAggregateDestSym : array[0..MAX_PROCS-1] of Integer; { hidden caller-result pointer local, or -1 }
@@ -851,13 +867,20 @@ var
   CTypeElemTk : Integer;     { pointed-at TTypeKind ordinal when CTypePtrDepth>0 (tyPointer for depth>=2) }
   CTypeElemRec : Integer;    { pointed-at record id when the element is a struct, else REC_NONE }
   CTypeBaseRec : Integer;    { record id of the base type before any pointer suffix, else REC_NONE }
+  CTypeProcSig : Integer;    { fn-pointer typedef signature Procs[] index of the last ParseCDeclType (CTypePtrDepth=0), else -1 }
+  CTypeFnPtrName : AnsiString; { fn-pointer declarator name `ret (*Name)(..)` captured by the last ParseCDeclType, else '' }
   CHeaderMode : Boolean; { parsing C in header/FFI mode }
+  CProgramMode : Boolean; { compiling a C .c program (vs importing a header):
+    a `{...}` function body is a LOCAL definition (internal), so the pass-1
+    signature scan must mark it ProcExternal=False even while skipping the body,
+    or a caller compiled before the callee's definition emits an external call. }
   CTypedefCount : Integer;
   CTypedefNameOff : array[0..MAX_CTYPEDEF-1] of Integer;
   CTypedefNameLen : array[0..MAX_CTYPEDEF-1] of Integer;
   CTypedefTk    : array[0..MAX_CTYPEDEF-1] of Integer; { resolved TTypeKind ordinal }
   CTypedefElemTk : array[0..MAX_CTYPEDEF-1] of Integer; { pointer typedef: pointed-at TTypeKind ordinal }
   CTypedefRec   : array[0..MAX_CTYPEDEF-1] of Integer;  { struct typedef: record id; pointer typedef: elem record id }
+  CTypedefProcSig : array[0..MAX_CTYPEDEF-1] of Integer; { fn-pointer typedef: signature Procs[] index (BodyAddr=-1) for indirect-call marshalling; -1 = not a fn pointer }
   { Open-addressed name->index hash for O(1) FindCTypedef. Stores idx+1 so the
     zero-initialised state means "empty" (no -1 fill needed). Size is a power of
     two > 2*MAX_CTYPEDEF for a <=0.5 load factor. }
@@ -1101,6 +1124,7 @@ var
   CPExprText    : AnsiString;
   CPExprPos     : Integer;
   CPExprEnd     : Integer;
+  CPExprDepth   : Integer;   { #if macro-atom recursion guard (chained #defines) }
 
   { Reserved BSS slot 0: initial rsp (for argv access) }
   BSS_INITIAL_RSP : Integer;  { always 0; set in ParseProgram init }

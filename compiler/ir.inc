@@ -580,6 +580,21 @@ var baseNode, baseAddr, indexNode, lo, elemSize: Integer;
     dynBaseTk: TTypeKind;
     recName, aliasIdx: Integer;
 begin
+  { Address of an address-of: `&(&x)`. In valid C this only arises from array
+    decay (`&arr` where arr is an array yields arr's address), so the address of
+    that is the operand's own address. Collapse one level. }
+  if ASTKind[node] = AN_ADDR then
+  begin
+    Result := IRLowerAddress(ASTLeft[node]);
+    Exit;
+  end;
+  { `&function` — a function's address IS the function-pointer value (C `&f == f`).
+    The AN_PROCADDR value node already yields the code address. }
+  if ASTKind[node] = AN_PROCADDR then
+  begin
+    Result := IRLowerAST(node);
+    Exit;
+  end;
   if ASTKind[node] = AN_IDENT then
   begin
     Result := IRAppend(IR_LEA, ASTIVal[node], -1, -1, 0, Ord(tyPointer));
@@ -1210,7 +1225,12 @@ begin
   if (argTk = tyRecord) and not argIsWholeArray then
   begin
     argRecId := ResolveNodeRec(argAST);
-    if isRefArg then
+    if CProgramMode then
+      { C struct-by-value: a record param is by-ref ABI (8-byte pointer slot),
+        so ALWAYS copy the record to a temp and pass &temp — true by-value with
+        correct field access for any size. C-mode-gated -> Pascal byte-identical. }
+      needTemp := True
+    else if isRefArg then
     begin
       if not IsASTLValue(argAST) then
         needTemp := True;
@@ -1603,6 +1623,8 @@ var left, right, seq, item, value, outNode, first, last, leftAddr, argNode, argV
     continueLabel, continueLabelNode: Integer;
     branchSeq, branchPair, labelsHead, stmtNode, labelNode: Integer;
     clauseBodyLabel, nextClauseLabel, selectorValNode: Integer;
+    ternTmp: Integer;
+    swSelTmp, swDefault, swSeq, swMarker, swSelTk: Integer;
     rhsIsLValue: Boolean;
     isComIntf: Boolean;
     intfTmpImt, intfTmpInst: Integer;
@@ -2070,7 +2092,7 @@ begin
       castTk := IntToTypeKind(ASTTk[node]);
       if (castTk = tyString) or (castTk = tyAnsiString) then
       begin
-        if IsNodePChar(ASTLeft[node]) then
+        if IsNodePChar(ASTLeft[node]) and not CProgramMode then
         begin
           procIdx := FindProc('PCharToString');
           if procIdx < 0 then Error('compiler error: PCharToString helper not found');
@@ -2479,7 +2501,25 @@ begin
       end
       else
       begin
-        if ((ASTIVal[node] = Ord(tkPlus)) or (ASTIVal[node] = Ord(tkMinus))) and
+        if (ASTIVal[node] = Ord(tkMinus)) and
+           (IntToTypeKind(ASTTk[ASTLeft[node]]) = tyPointer) and
+           (IntToTypeKind(ASTTk[ASTRight[node]]) = tyPointer) then
+        begin
+          { Pointer difference `p - q` = (address_p - address_q) / sizeof(element)
+            (C ptrdiff). Both operands are pointers; subtract addresses then divide
+            by the element stride. }
+          left := IRLowerAST(ASTLeft[node]);
+          right := IRLowerAST(ASTRight[node]);
+          Result := IRAppend(IR_BINOP, left, right, Ord(tkMinus), 0, Ord(tyInt64));
+          elemSize := IRPointerStride(ASTLeft[node]);
+          if elemSize > 1 then
+          begin
+            item := IRAppend(IR_CONST_INT, -1, -1, -1, elemSize, Ord(tyInt64));
+            { tkDiv = integer division (tkSlash is the float `/` path) }
+            Result := IRAppend(IR_BINOP, Result, item, Ord(tkDiv), 0, Ord(tyInt64));
+          end;
+        end
+        else if ((ASTIVal[node] = Ord(tkPlus)) or (ASTIVal[node] = Ord(tkMinus))) and
            (IntToTypeKind(ASTTk[ASTLeft[node]]) = tyPointer) and
            TypeIsOrdinal(IntToTypeKind(ASTTk[ASTRight[node]])) then
         begin
@@ -2589,7 +2629,7 @@ begin
       begin
       if (lhsTk = tyString) or (lhsTk = tyAnsiString) then
       begin
-        if IsNodePChar(ASTRight[node]) then
+        if IsNodePChar(ASTRight[node]) and not CProgramMode then
         begin
           procIdx := FindProc('PCharToString');
           if procIdx < 0 then Error('compiler error: PCharToString helper not found');
@@ -2841,12 +2881,30 @@ begin
       else
       begin
         value := IRLowerAST(ASTRight[node]);
+        { A C string literal stored to a pointer must land on char 0, not the
+          8-byte Pascal length prefix the literal's handle points at. Apply the
+          same +8 skip the call-argument path uses (see the tyString->tyPointer
+          marshalling in AN_CALL). C-mode only -> Pascal self-build unaffected. }
+        if CProgramMode and (ASTKind[ASTRight[node]] = AN_STR_LIT) and
+           (lhsTk = tyPointer) then
+          value := IRAppend(IR_BINOP, value,
+                            IRAppend(IR_CONST_INT, -1, -1, -1, 8, Ord(tyInteger)),
+                            Ord(tkPlus), 0, Ord(tyPointer));
         if ASTKind[ASTLeft[node]] = AN_IDENT then
-          Result := IRAppend(IR_STORE_SYM, ASTIVal[ASTLeft[node]], value, -1, 0, ASTTk[ASTLeft[node]])
+        begin
+          Result := IRAppend(IR_STORE_SYM, ASTIVal[ASTLeft[node]], value, -1, 0, ASTTk[ASTLeft[node]]);
+          { In C an assignment is an expression yielding the stored value, so load
+            it back; this lets `g(p = x)` / `(p = x)->f` use the value. Pascal keeps
+            the store node as the result -> self-build byte-identical. }
+          if CProgramMode then
+            Result := IRAppend(IR_LOAD_SYM, ASTIVal[ASTLeft[node]], -1, -1, 0, ASTTk[ASTLeft[node]]);
+        end
         else
         begin
           leftAddr := IRLowerAddress(ASTLeft[node]);
           Result := IRAppend(IR_STORE_MEM, leftAddr, value, -1, 0, ASTTk[ASTLeft[node]]);
+          if CProgramMode then
+            Result := IRAppend(IR_LOAD_MEM, leftAddr, -1, -1, 0, ASTTk[ASTLeft[node]]);
         end;
       end;
       end;
@@ -2861,6 +2919,15 @@ begin
           value := IRLowerAST(ASTLeft[node])
         else
           value := -1;
+        last := IRAppend(IR_TERMINATE, value, -1, -1, AN_HALT, 0);
+      end
+      else if (CurProc < 0) and (ASTLeft[node] <> -1) then
+      begin
+        { `return <expr>` from a top-level C main (no enclosing proc): the value
+          IS the process exit code, so terminate with it like Halt(expr). Pascal
+          program-level Exit never carries a value, so this never fires in a
+          self-build (byte-identical preserved). }
+        value := IRLowerAST(ASTLeft[node]);
         last := IRAppend(IR_TERMINATE, value, -1, -1, AN_HALT, 0);
       end
       else
@@ -3158,10 +3225,15 @@ begin
           parameter gets the same +8 length-prefix skip as an explicit PChar()
           cast, so C bindings pass a Pascal string without PChar() boilerplate.
           The string data at Offset+8 is NUL-terminated by InternStr. }
-        if (not isRefArg) and (cpi >= 0) and (pathIdx < Procs[cpi].ParamCount) and
-           (Procs[cpi].Params[pathIdx].TypeKind = tyPointer) and
-           (IntToTypeKind(ASTTk[ASTLeft[item]]) = tyString) then
+        if (not isRefArg) and (cpi >= 0) and
+           (IntToTypeKind(ASTTk[ASTLeft[item]]) = tyString) and
+           (((pathIdx < Procs[cpi].ParamCount) and
+             (Procs[cpi].Params[pathIdx].TypeKind = tyPointer)) or
+            (ProcVariadic[cpi] and (pathIdx >= Procs[cpi].ParamCount))) then
         begin
+          { A string passed to a Pointer param OR as a variadic arg (the callee's
+            va_arg(char*) wants C char data, not the Pascal length prefix) gets the
+            +8 length-prefix skip. }
           right := IRAppend(IR_CONST_INT, -1, -1, -1, 8, Ord(tyInteger));
           value := IRAppend(IR_BINOP, value, right, Ord(tkPlus), 0, Ord(tyPointer));
           argNode := IRAppend(IR_ARG, value, -1, -1, 0, Ord(tyPointer));
@@ -3460,6 +3532,75 @@ begin
       IRMarkStatementNode(IRLowerAST(argNode));
       IRAppend(IR_LABEL, -1, -1, -1, endLabel, 0);
       Result := IRAppend(IR_LOAD_SYM, varIdx, -1, -1, 0, Ord(argTk));
+    end;
+
+    AN_SWITCH:
+    begin
+      endLabel := IRNewLabel;
+      { selector evaluated once into a temp }
+      value := IRLowerAST(ASTLeft[node]);
+      first := value;
+      if ASTTk[ASTLeft[node]] = 0 then swSelTk := Ord(tyInteger)
+      else swSelTk := ASTTk[ASTLeft[node]];
+      swSelTmp := AllocVar('', IntToTypeKind(swSelTk));
+      IRAppend(IR_STORE_SYM, swSelTmp, value, -1, 0, swSelTk);
+      { pass 1 — dispatch: give each case/default marker a label and, for a case,
+        emit `if (sel == caseval) goto label` (via JUMP_IF_FALSE of `sel != val`). }
+      swDefault := -1;
+      swSeq := ASTLeft[ASTRight[node]];
+      while swSeq <> -1 do
+      begin
+        swMarker := ASTLeft[swSeq];
+        if swMarker >= 0 then
+        begin
+          if ASTKind[swMarker] = AN_CASE then
+          begin
+            ASTSOffset[swMarker] := IRNewLabel;
+            condNode := IRAppend(IR_BINOP,
+              IRAppend(IR_LOAD_SYM, swSelTmp, -1, -1, 0, swSelTk),
+              IRAppend(IR_CONST_INT, -1, -1, -1, ASTIVal[swMarker], swSelTk),
+              Ord(tkNeq), 0, Ord(tyBoolean));
+            IRAppend(IR_JUMP_IF_FALSE, ASTSOffset[swMarker], condNode, -1, 0, 0);
+          end
+          else if ASTKind[swMarker] = AN_DEFAULT then
+          begin
+            ASTSOffset[swMarker] := IRNewLabel;
+            swDefault := ASTSOffset[swMarker];
+          end;
+        end;
+        swSeq := ASTRight[swSeq];
+      end;
+      if swDefault >= 0 then IRAppend(IR_JUMP, swDefault, -1, -1, 0, 0)
+      else IRAppend(IR_JUMP, endLabel, -1, -1, 0, 0);
+      { pass 2 — bodies in source order (fallthrough). break -> end; continue is
+        inherited so it targets the enclosing loop, giving a break-only scope. }
+      if IRLoopStackDepth >= 64 then Error('IR loop stack overflow');
+      IRLoopStackBreak[IRLoopStackDepth] := endLabel;
+      if IRLoopStackDepth > 0 then
+        IRLoopStackContinue[IRLoopStackDepth] := IRLoopStackContinue[IRLoopStackDepth - 1]
+      else
+        IRLoopStackContinue[IRLoopStackDepth] := endLabel;
+      IRLoopStackExceptionDepth[IRLoopStackDepth] := ExceptionCodegenDepth;
+      Inc(IRLoopStackDepth);
+      swSeq := ASTLeft[ASTRight[node]];
+      while swSeq <> -1 do
+      begin
+        swMarker := ASTLeft[swSeq];
+        if swMarker >= 0 then
+        begin
+          if (ASTKind[swMarker] = AN_CASE) or (ASTKind[swMarker] = AN_DEFAULT) then
+            IRAppend(IR_LABEL, -1, -1, -1, ASTSOffset[swMarker], 0)
+          else
+          begin
+            last := IRLowerAST(swMarker);
+            IRMarkStatementNode(last);
+          end;
+        end;
+        swSeq := ASTRight[swSeq];
+      end;
+      Dec(IRLoopStackDepth);
+      endLabelNode := IRAppend(IR_LABEL, -1, -1, -1, endLabel, 0);
+      Result := IRAppend(IR_BLOCK, first, endLabelNode, -1, 0, 0);
     end;
 
     AN_WHILE:

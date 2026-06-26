@@ -1,6 +1,7 @@
 # C const-eval: `~` (bitwise NOT) yields wrong value
 
 - **Type:** bug
+- **Track:** C (C frontend)
 - **Track:** D (C frontend) — root fixed by Track A
 - **Opened:** 2026-06-25
 - **Found-by:** Slice A (lexer operator fidelity) fixture work.
@@ -45,6 +46,14 @@ to Track A.
 Add a `~`-bearing enum to `test/cslicea_lib.c` (`S_NOT = (~0) & 0xFF` → 255)
 once fixed; today it is omitted from the Slice A fixture to keep it green.
 
+## Resolution
+- 2026-06-25 (Track C) — FIXED. `CEvalConstPrimary` `~` path changed from
+  `not CEvalConstPrimary()` (typed boolean by the self-host compiler) to
+  `CEvalConstPrimary() xor (-1)` (bitwise Int64), per the recommended local
+  rewrite. `enum { N0=~0, N5=~5, NM=~0&255 }` now gives -1/-6/255 (= gcc).
+  Self-host byte-identical; fixture `test/cbitnot_b11.c` (=6). The general
+  `not <AN_CALL Int64-result>`=boolean typing quirk is left for the
+  `bug-esp-not-always-boolean` family.
 ## Resolution (2026-06-26, Track A — commit on master, pin v79)
 Root fixed at source: the Pascal front-end now types `not <ordinal-returning
 call>` as bitwise (parser.inc tkNot trusts an AN_CALL whose proc RetType is a

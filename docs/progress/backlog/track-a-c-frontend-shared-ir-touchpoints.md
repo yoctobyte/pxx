@@ -49,3 +49,33 @@ the general fix stays with A.
 - 2026-06-25 — opened by Track D after slices A–D. Going forward, Track D files
   a Track A ticket whenever the C frontend needs a shared-IR/AST change (e.g. a
   new node) rather than absorbing it into the C-only path.
+
+## RESOLVED 2026-06-26 — value-bearing nodes reconciled (read this before adding an AST node)
+
+What went wrong: BOTH tracks implemented the value-bearing nodes in parallel
+(Track C on `feat/cfront`, Track A on master) with **different node numbers and
+different node shapes**. Merging stacked two definitions → duplicate identifiers +
+mismatched lowering. Avoidable: the rule below already existed; it was crossed.
+
+Canonical (master, after merge `556ad7dd`) — these are DONE, do not re-add:
+
+| node               | num | shape |
+|--------------------|-----|-------|
+| AN_TERNARY         | 67  | Left=cond, Right=AN_PAIR(then,else), ASTTk=result |
+| AN_COMMA           | 68  | Left=side-effect (discarded), Right=value |
+| AN_INCDEC          | 69  | Left=lvalue, ASTIVal=+1/-1 (lowering scales by stride), ASTSOffset=1 postfix/0 prefix |
+| AN_COMPOUND_ASSIGN | 70  | Left=lvalue, Right=rhs, ASTIVal=binop token or Ord(tkAssign) |
+| AN_SWITCH          | 71  | Left=selector, Right=AN_BLOCK; markers reuse AN_CASE=17 / AN_DEFAULT=48 |
+
+**Next free AN_ number = 72.** Highest in use = AN_SWITCH=71.
+
+Rules to avoid a repeat (reinforced):
+1. C never invents a shared AST node number unilaterally. Need one → file a Track A
+   ticket (as section 2 did for AN_TERNARY) and use the number A assigns.
+2. If C must prototype a node before A lands it, claim from a RESERVED HIGH range
+   (AN_C_PROTO_BASE = 100+) and record it HERE the same commit, so it can never
+   collide with A's next sequential number, and A sees the reservation.
+3. The C frontend's `cparser` builds nodes in **master's documented shape** (table
+   above). Lowering for these lives in `ir.inc` and is **Track A's**; C only emits.
+4. AN_CASE/AN_DEFAULT are shared Pascal+C node kinds (17/48) — C switch reuses
+   them, does not redefine.

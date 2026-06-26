@@ -248,7 +248,8 @@ end;
 function CPExprOr: Int64; forward;
 
 function CPExprAtom: Int64;
-var a, b, mi: Integer;
+var a, b, mi, p: Integer;
+    savedText: AnsiString; savedPos, savedEnd: Integer;
 begin
   CPSkipExprSpace;
   Result := 0;
@@ -294,7 +295,29 @@ begin
     else
     begin
       mi := CPFindMacro(CPExprText, a, b);
-      if mi >= 0 then Result := CPParsePoolNumber(mi) else Result := 0;
+      if mi < 0 then
+        Result := 0
+      else
+      begin
+        { Recursively EVALUATE the macro's body as a sub-expression, so a chained
+          object macro (`T -> DEF -> LL -> 3`, the lua LUA_INT_TYPE/LUA_INTEGER
+          pattern) and an arithmetic body both resolve — not just a literal number.
+          Depth-guarded against self-referential `#define X X`. }
+        if CPExprDepth >= 64 then
+          Result := CPParsePoolNumber(mi)
+        else
+        begin
+          savedText := CPExprText; savedPos := CPExprPos; savedEnd := CPExprEnd;
+          CPExprText := '';
+          for p := CPMValueOff[mi] to CPMValueOff[mi] + CPMValueLen[mi] - 1 do
+            CPExprText := CPExprText + CPrepChars[p];
+          CPExprPos := 1; CPExprEnd := Length(CPExprText);
+          Inc(CPExprDepth);
+          if CPExprEnd >= 1 then Result := CPExprOr else Result := 0;
+          Dec(CPExprDepth);
+          CPExprText := savedText; CPExprPos := savedPos; CPExprEnd := savedEnd;
+        end;
+      end;
     end;
   end;
 end;
@@ -372,6 +395,7 @@ begin
   CPExprText := line;
   CPExprPos := p;
   CPExprEnd := last;
+  CPExprDepth := 0;
   Result := CPExprOr <> 0;
 end;
 
@@ -435,7 +459,7 @@ end;
 
 procedure CPExpandFunction(mi: Integer; const src: AnsiString;
   argCount, level: Integer; var dst: AnsiString);
-var p, last, a, b, ai, argBase, argP: Integer;
+var p, last, a, b, ai, argBase, argP, k, savedSlot, q: Integer;
 begin
   if DebugTrace then writeln('C preprocessor: expand function #', mi, ' level=', level);
   argBase := level * 16;
@@ -443,6 +467,45 @@ begin
   last := p + CPMValueLen[mi] - 1;
   while p <= last do
   begin
+    { Token-paste operator `a ## b`: drop the `##` (and whitespace around it) so the
+      left operand's last token abuts the right operand's first token. The pasted
+      result is re-scanned by the caller, so `DBL_ ## n` -> `DBL_MANT_DIG` then
+      expands as an object macro (lua's l_mathlim). }
+    if (CPrepChars[p] = '#') and (p < last) and (CPrepChars[p + 1] = '#') then
+    begin
+      while (Length(dst) > 0) and (dst[Length(dst)] in [' ', #9]) do
+        SetLength(dst, Length(dst) - 1);
+      p := p + 2;
+      while (p <= last) and (CPrepChars[p] in [' ', #9]) do Inc(p);
+      Continue;
+    end;
+    { Stringize `#param` -> a string literal of the parameter's RAW (unexpanded)
+      argument text, e.g. lua's `#t` for a type name. Only fires when a parameter
+      name follows; a bare `#` otherwise falls through as a normal char. }
+    if CPrepChars[p] = '#' then
+    begin
+      q := p + 1;
+      while (q <= last) and (CPrepChars[q] in [' ', #9]) do Inc(q);
+      a := q;
+      while (q <= last) and CPIsIdentChar(CPrepChars[q]) do Inc(q);
+      b := q - 1;
+      if b >= a then
+      begin
+        ai := CPParamIndex(mi, a, b - a + 1);
+        if (ai >= 0) and (ai < argCount) then
+        begin
+          AppendChar(dst, '"');
+          for k := CPArgStart[argBase + ai] to CPArgEnd[argBase + ai] do
+          begin
+            if (src[k] = '"') or (src[k] = '\') then AppendChar(dst, '\');
+            AppendChar(dst, src[k]);
+          end;
+          AppendChar(dst, '"');
+          p := q;
+          Continue;
+        end;
+      end;
+    end;
     if CPIsIdentStart(CPrepChars[p]) then
     begin
       a := p;
@@ -452,7 +515,16 @@ begin
       if (ai >= 0) and (ai < argCount) then
       begin
         CPSetExpandedArgLength(level, 0);
+        { Expand this argument with the CURRENT macro (mi) de-activated: per C, a
+          macro's arguments are macro-expanded outside its own replacement, so a
+          nested call to the SAME macro inside an argument (lua's `check_exp`
+          inside `check_exp` via `gco2ccl`) must expand. Enclosing active macros
+          stay active; nested arg macros push above, leaving mi's slot intact. }
+        savedSlot := -1;
+        for k := CPActiveMacroCount - 1 downto 0 do
+          if CPActiveMacros[k] = mi then begin savedSlot := k; CPActiveMacros[k] := -1; Break; end;
         CPExpandRangeForArgLevel(level, src, CPArgStart[argBase + ai], CPArgEnd[argBase + ai]);
+        if savedSlot >= 0 then CPActiveMacros[savedSlot] := mi;
         CPAppendExpandedArgToDst(level, dst);
       end
       else
@@ -472,10 +544,26 @@ begin
   end;
 end;
 
+{ If object macro mi's entire body is a single identifier that names a FUNCTION
+  macro, return that function macro's index (else -1). Handles aliases like
+  `#define setsvalue2n setsvalue`, where `setsvalue2n(args)` must expand the
+  inner function macro with the args that follow in the source. }
+function CPObjectAliasFuncMacro(mi: Integer): Integer;
+var off, len, i, fm: Integer;
+begin
+  Result := -1;
+  off := CPMValueOff[mi]; len := CPMValueLen[mi];
+  if (len <= 0) or (not CPIsIdentStart(CPrepChars[off])) then Exit;
+  for i := 0 to len - 1 do
+    if not CPIsIdentChar(CPrepChars[off + i]) then Exit;
+  fm := CPFindMacroPool(off, len);
+  if (fm >= 0) and CPMFunction[fm] then Result := fm;
+end;
+
 procedure CPExpandRange(const src: AnsiString; first, last, level: Integer;
   var dst: AnsiString);
 var
-  p, a, b, mi, q, depth, argc, argBase: Integer;
+  p, a, b, mi, q, depth, argc, argBase, ai, innerMi: Integer;
   quote: Char;
   quotedDone: Boolean;
 begin
@@ -511,6 +599,19 @@ begin
       while (p <= last) and CPIsIdentChar(src[p]) do Inc(p);
       b := p - 1;
       mi := CPFindMacro(src, a, b);
+      { Object-macro alias of a function macro `#define A FUNC` used as `A(args)`:
+        redirect to FUNC so the function-macro path below pulls the args that
+        follow in the source (lua's setsvalue2n / setobj2n). }
+      if (mi >= 0) and (not CPMFunction[mi]) then
+      begin
+        innerMi := CPObjectAliasFuncMacro(mi);
+        if innerMi >= 0 then
+        begin
+          q := p;
+          while (q <= last) and (src[q] in [' ', #9]) do Inc(q);
+          if (q <= last) and (src[q] = '(') then mi := innerMi;
+        end;
+      end;
       if (mi < 0) then
         CPAppendRange(dst, src, a, b)
       else if not CPMFunction[mi] then
@@ -560,7 +661,18 @@ begin
             Inc(q);
           end;
           if argc > 0 then CPArgEnd[argBase + argc - 1] := q - 1;
-          
+          { Trim leading/trailing whitespace of each argument (standard C), so a
+            spaced call like `CAT(1, 7)` pastes `17`, not `1 7`. }
+          for ai := 0 to argc - 1 do
+          begin
+            while (CPArgStart[argBase + ai] <= CPArgEnd[argBase + ai]) and
+                  (src[CPArgStart[argBase + ai]] in [' ', #9]) do
+              Inc(CPArgStart[argBase + ai]);
+            while (CPArgEnd[argBase + ai] >= CPArgStart[argBase + ai]) and
+                  (src[CPArgEnd[argBase + ai]] in [' ', #9]) do
+              Dec(CPArgEnd[argBase + ai]);
+          end;
+
           if CPMacroIsActive(mi) then
             CPAppendRange(dst, src, a, q)
           else
@@ -1246,8 +1358,27 @@ begin
     CPInclude(line, p, last, depth, baseDir);
 end;
 
+{ Net parenthesis depth of a line, ignoring `"..."` / `'...'` literals. Used to
+  detect a (function-macro) call whose arguments continue on the next line. }
+function CPLineParenDepth(const line: AnsiString): Integer;
+var i: Integer; inStr, inCh: Boolean; c: Char;
+begin
+  Result := 0; inStr := False; inCh := False; i := 1;
+  while i <= Length(line) do
+  begin
+    c := line[i];
+    if inStr then begin if c = '\' then Inc(i) else if c = '"' then inStr := False; end
+    else if inCh then begin if c = '\' then Inc(i) else if c = '''' then inCh := False; end
+    else if c = '"' then inStr := True
+    else if c = '''' then inCh := True
+    else if c = '(' then Inc(Result)
+    else if c = ')' then Dec(Result);
+    Inc(i);
+  end;
+end;
+
 procedure CPProcessText(const src, baseDir: AnsiString; depth: Integer);
-var pos, p: Integer; inComment: Boolean;
+var pos, p: Integer; inComment: Boolean; cont: AnsiString;
 begin
   pos := 1;
   inComment := False;
@@ -1260,6 +1391,16 @@ begin
       if not (CPrepLine[p] in [' ', #9]) then Break;
       Inc(p);
     end;
+    { Join continuation physical lines while a call's parentheses stay unbalanced,
+      so a function-macro invocation whose arguments span newlines (common in
+      lua/sqlite) expands as a whole. Directives use `\` continuation, already
+      handled in CPReadLine, so skip them. }
+    if (p > Length(CPrepLine)) or (CPrepLine[p] <> '#') then
+      while (pos <= Length(src)) and (CPLineParenDepth(CPrepLine) > 0) do
+      begin
+        CPReadLine(src, pos, inComment, cont);
+        CPrepLine := CPrepLine + ' ' + cont;
+      end;
     if p <= Length(CPrepLine) then
     begin
       if CPrepLine[p] = '#' then

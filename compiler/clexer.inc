@@ -22,7 +22,7 @@ begin
       if (s[1]='w') and (s[2]='h') and (s[3]='i') and (s[4]='l') and (s[5]='e') then Result := tkWhile;
       if (s[1]='s') and (s[2]='h') and (s[3]='o') and (s[4]='r') and (s[5]='t') then Result := tkCShort;
       if (s[1]='c') and (s[2]='o') and (s[3]='n') and (s[4]='s') and (s[5]='t') then Result := tkConst;
-      if (s[1]='b') and (s[2]='r') and (s[3]='e') and (s[4]='a') and (s[5]='k') then Result := tkHalt;
+      if (s[1]='b') and (s[2]='r') and (s[3]='e') and (s[4]='a') and (s[5]='k') then Result := tkBreak;
       if (s[1]='f') and (s[2]='l') and (s[3]='o') and (s[4]='a') and (s[5]='t') then Result := tkCFloat;
       if (s[1]='_') and (s[2]='B') and (s[3]='o') and (s[4]='o') and (s[5]='l') then Result := tkCBool;
     end;
@@ -34,6 +34,7 @@ begin
     end;
     8: begin
       if (s[1]='u') and (s[2]='n') and (s[3]='s') and (s[4]='i') and (s[5]='g') and (s[6]='n') and (s[7]='e') and (s[8]='d') then Result := tkCUnsigned;
+      if (s[1]='c') and (s[2]='o') and (s[3]='n') and (s[4]='t') and (s[5]='i') and (s[6]='n') and (s[7]='u') and (s[8]='e') then Result := tkContinue;
     end;
   end;
 end;
@@ -191,6 +192,30 @@ begin
   end;
 end;
 
+{ Scan the fractional/exponent/suffix tail of a C float literal that begins at
+  numStart (SrcPos is positioned at the `.` or `e`/`E`), and emit a tkFloat whose
+  IVal carries the IEEE-754 double bit pattern (matching the Pascal lexer). }
+procedure CLexFloatTail(numStart: Integer);
+var fs: AnsiString; valEnd: Integer;
+begin
+  if (SrcPos <= Length(Source)) and (Source[SrcPos] = '.') then
+  begin
+    Inc(SrcPos);
+    while (SrcPos <= Length(Source)) and (Source[SrcPos] in ['0'..'9']) do Inc(SrcPos);
+  end;
+  if (SrcPos <= Length(Source)) and (Source[SrcPos] in ['e','E']) then
+  begin
+    Inc(SrcPos);
+    if (SrcPos <= Length(Source)) and (Source[SrcPos] in ['+','-']) then Inc(SrcPos);
+    while (SrcPos <= Length(Source)) and (Source[SrcPos] in ['0'..'9']) do Inc(SrcPos);
+  end;
+  valEnd := SrcPos;   { value text ends before any f/F/l/L suffix }
+  if (SrcPos <= Length(Source)) and (Source[SrcPos] in ['f','F','l','L']) then Inc(SrcPos);
+  fs := Copy(Source, numStart, valEnd - numStart);
+  CurTok.Kind := tkFloat;
+  CurTok.IVal := StrToDoubleBits(fs);
+end;
+
 procedure CLexOne;
 var
 {$ifdef FPC}
@@ -201,6 +226,7 @@ var
   s: AnsiString;
   n: Int64;
   done: Boolean;
+  numStart, valEnd: Integer;
 begin
   CSkipSpace;
   CurTok.Line := SrcLine; CurTok.SVal := ''; CurTok.IVal := 0;
@@ -223,16 +249,39 @@ begin
 
   if c in ['1'..'9'] then
   begin
+    numStart := SrcPos;
     n := 0;
     while (SrcPos <= Length(Source)) and (Source[SrcPos] in ['0'..'9']) do
       begin n := n * 10 + (Ord(Source[SrcPos]) - 48); Inc(SrcPos); end;
+    { Float literal: a `.` after the digits (`1.5`, `2.`), or an exponent
+      `e`/`E` followed by digits or a sign (`1e308`, `1e-3`). }
+    if ((SrcPos <= Length(Source)) and (Source[SrcPos] = '.')) or
+       ((SrcPos <= Length(Source)) and (Source[SrcPos] in ['e','E']) and
+        (SrcPos < Length(Source)) and (Source[SrcPos+1] in ['0'..'9','+','-'])) then
+    begin
+      CLexFloatTail(numStart);
+      Exit;
+    end;
+    { consume an integer suffix (u/U/l/L, e.g. UL/LL/ULL) — else it dangles as a
+      separate identifier token and breaks const expressions like `MAX/sizeof(t)` }
+    while (SrcPos <= Length(Source)) and (Source[SrcPos] in ['u','U','l','L']) do Inc(SrcPos);
     CurTok.Kind := tkInteger; CurTok.IVal := n; Exit;
   end;
 
   { 0, 0x hex, or 0 alone }
   if c = '0' then
   begin
+    numStart := SrcPos;
     Inc(SrcPos);
+    { `0.5` / `0e3` — a float beginning with 0 (but not `0x` hex) }
+    if (SrcPos <= Length(Source)) and
+       ((Source[SrcPos] = '.') or
+        ((Source[SrcPos] in ['e','E']) and (SrcPos < Length(Source)) and
+         (Source[SrcPos+1] in ['0'..'9','+','-']))) then
+    begin
+      CLexFloatTail(numStart);
+      Exit;
+    end;
     if (SrcPos <= Length(Source)) and
        ((Source[SrcPos] = 'x') or (Source[SrcPos] = 'X')) then
     begin
@@ -250,6 +299,8 @@ begin
       while (SrcPos <= Length(Source)) and (Source[SrcPos] in ['0'..'9']) do
         begin n := n * 10 + (Ord(Source[SrcPos]) - 48); Inc(SrcPos); end;
     end;
+    { consume an integer suffix (u/U/l/L) on hex/octal/decimal-zero literals }
+    while (SrcPos <= Length(Source)) and (Source[SrcPos] in ['u','U','l','L']) do Inc(SrcPos);
     CurTok.Kind := tkInteger; CurTok.IVal := n; Exit;
   end;
 
@@ -318,19 +369,28 @@ begin
   Inc(SrcPos);
   case c of
     '+': begin
-           if (SrcPos <= Length(Source)) and (Source[SrcPos] = '+') then Inc(SrcPos)
-           else if (SrcPos <= Length(Source)) and (Source[SrcPos] = '=') then Inc(SrcPos);
-           CurTok.Kind := tkPlus;
+           if (SrcPos <= Length(Source)) and (Source[SrcPos] = '+') then begin Inc(SrcPos); CurTok.Kind := tkPlusPlus; end
+           else if (SrcPos <= Length(Source)) and (Source[SrcPos] = '=') then begin Inc(SrcPos); CurTok.Kind := tkPlusEq; end
+           else CurTok.Kind := tkPlus;
          end;
     '-': begin
-           if (SrcPos <= Length(Source)) and (Source[SrcPos] = '-') then begin Inc(SrcPos); CurTok.Kind := tkMinus; end
+           if (SrcPos <= Length(Source)) and (Source[SrcPos] = '-') then begin Inc(SrcPos); CurTok.Kind := tkMinusMinus; end
            else if (SrcPos <= Length(Source)) and (Source[SrcPos] = '>') then begin Inc(SrcPos); CurTok.Kind := tkDot; end
-           else if (SrcPos <= Length(Source)) and (Source[SrcPos] = '=') then begin Inc(SrcPos); CurTok.Kind := tkMinus; end
+           else if (SrcPos <= Length(Source)) and (Source[SrcPos] = '=') then begin Inc(SrcPos); CurTok.Kind := tkMinusEq; end
            else CurTok.Kind := tkMinus;
          end;
-    '*': CurTok.Kind := tkStar;
-    '/': CurTok.Kind := tkSlash;
-    '%': CurTok.Kind := tkMod;
+    '*': begin
+           if (SrcPos <= Length(Source)) and (Source[SrcPos] = '=') then begin Inc(SrcPos); CurTok.Kind := tkStarEq; end
+           else CurTok.Kind := tkStar;
+         end;
+    '/': begin
+           if (SrcPos <= Length(Source)) and (Source[SrcPos] = '=') then begin Inc(SrcPos); CurTok.Kind := tkSlashEq; end
+           else CurTok.Kind := tkSlash;
+         end;
+    '%': begin
+           if (SrcPos <= Length(Source)) and (Source[SrcPos] = '=') then begin Inc(SrcPos); CurTok.Kind := tkModEq; end
+           else CurTok.Kind := tkMod;
+         end;
     '(': CurTok.Kind := tkLParen;
     ')': CurTok.Kind := tkRParen;
     '[': CurTok.Kind := tkLBrack;
@@ -340,19 +400,27 @@ begin
     ';': CurTok.Kind := tkSemicolon;
     ',': CurTok.Kind := tkComma;
     '.': CurTok.Kind := tkDot;
+    ':': CurTok.Kind := tkColon;
+    '?': CurTok.Kind := tkQuestion;
     '~': CurTok.Kind := tkNot;
+    '^': begin
+           if (SrcPos <= Length(Source)) and (Source[SrcPos] = '=') then begin Inc(SrcPos); CurTok.Kind := tkXorEq; end
+           else CurTok.Kind := tkXor;
+         end;
     '&': begin
-           if (SrcPos <= Length(Source)) and (Source[SrcPos] = '&') then Inc(SrcPos);
-           CurTok.Kind := tkAnd;
+           if (SrcPos <= Length(Source)) and (Source[SrcPos] = '&') then begin Inc(SrcPos); CurTok.Kind := tkAnd; end
+           else if (SrcPos <= Length(Source)) and (Source[SrcPos] = '=') then begin Inc(SrcPos); CurTok.Kind := tkAmpEq; end
+           else CurTok.Kind := tkAmp;
          end;
     '|': begin
-           if (SrcPos <= Length(Source)) and (Source[SrcPos] = '|') then Inc(SrcPos);
-           CurTok.Kind := tkOr;
+           if (SrcPos <= Length(Source)) and (Source[SrcPos] = '|') then begin Inc(SrcPos); CurTok.Kind := tkOr; end
+           else if (SrcPos <= Length(Source)) and (Source[SrcPos] = '=') then begin Inc(SrcPos); CurTok.Kind := tkPipeEq; end
+           else CurTok.Kind := tkPipe;
          end;
     '!': begin
            if (SrcPos <= Length(Source)) and (Source[SrcPos] = '=') then
              begin Inc(SrcPos); CurTok.Kind := tkNeq; end
-           else CurTok.Kind := tkNot;
+           else CurTok.Kind := tkLogNot;   { logical not; `~` stays tkNot }
          end;
     '=': begin
            if (SrcPos <= Length(Source)) and (Source[SrcPos] = '=') then
@@ -360,12 +428,26 @@ begin
            else CurTok.Kind := tkAssign;
          end;
     '<': begin
-           if (SrcPos <= Length(Source)) and (Source[SrcPos] = '=') then
+           if (SrcPos <= Length(Source)) and (Source[SrcPos] = '<') then
+             begin
+               Inc(SrcPos);
+               if (SrcPos <= Length(Source)) and (Source[SrcPos] = '=') then
+                 begin Inc(SrcPos); CurTok.Kind := tkShlEq; end
+               else CurTok.Kind := tkShl;
+             end
+           else if (SrcPos <= Length(Source)) and (Source[SrcPos] = '=') then
              begin Inc(SrcPos); CurTok.Kind := tkLe; end
            else CurTok.Kind := tkLt;
          end;
     '>': begin
-           if (SrcPos <= Length(Source)) and (Source[SrcPos] = '=') then
+           if (SrcPos <= Length(Source)) and (Source[SrcPos] = '>') then
+             begin
+               Inc(SrcPos);
+               if (SrcPos <= Length(Source)) and (Source[SrcPos] = '=') then
+                 begin Inc(SrcPos); CurTok.Kind := tkShrEq; end
+               else CurTok.Kind := tkShr;
+             end
+           else if (SrcPos <= Length(Source)) and (Source[SrcPos] = '=') then
              begin Inc(SrcPos); CurTok.Kind := tkGe; end
            else CurTok.Kind := tkGt;
          end;

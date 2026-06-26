@@ -1,13 +1,13 @@
-# docs/site — public documentation (Track C)
+# docs/site — public documentation (Track D)
 
 This tree is the **user-facing documentation**, published to the project website
 straight from git: the site pulls this repo and renders `docs/site/`. There is no
 separate docs repo and no generated output committed here — just authored
 Markdown.
 
-## Owned by Track C
+## Owned by Track D
 
-Per `docs/dev/parallel-tracks.md`, Track C owns `docs/site/**` and nothing else.
+Per `docs/dev/parallel-tracks.md`, Track D owns `docs/site/**` and nothing else.
 Prose only — no `compiler/**`, no `lib/**`. A gap found while writing → file a
 ticket in `docs/progress/backlog`, don't fix code.
 

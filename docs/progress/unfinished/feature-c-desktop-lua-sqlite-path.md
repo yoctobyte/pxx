@@ -1,5 +1,242 @@
 # C desktop path — compile real portable C (tiny-regex → lua → sqlite)
 
+- **Type:** feature (track-C milestone path)
+- **Status:** backlog (active arc — lua core **29/34 files parse clean (85%)**; see logs)
+- **Session 2026-06-26 round 16 (Track C), gate-green + byte-identical, lua 27 ->
+  29:** inline anonymous struct/union as a TYPE (f5ef8ec) — `struct { .. }` /
+  `union { .. }` with an inline body in type position (global var / param / field)
+  was not laid out (the body dangled, the var stayed opaque); ParseCDeclType now
+  lays it out as a record via CParseInlineAggBody, and IsBareStructDecl correctly
+  treats `struct { .. } g;` as a VARIABLE decl (route to ParseCGlobalVarDecl), not
+  a bare type decl. Unblocked lparser + lstrlib (parse). The C frontend's
+  parse/preprocessor/struct-layout surface is now COMPLETE for the lua core.
+  **The sole remaining core parse blocker is VARARGS** (lapi/lauxlib/ldebug/lobject
+  — `va_arg(ap, type)` / `va_start` / `va_list`): System V AMD64 va_list ABI =
+  variadic prologue register-save area + va_arg lowering (gp_offset/overflow) +
+  the `al`-register call convention. The parse half is Track C, the codegen half is
+  the shared backend (Track A) and risks the byte-identical self-host gate. luac is
+  a SEPARATE tool (not the interpreter core). TWO remaining correctness gaps beyond
+  parse: (1) global `= { .. }` initializer DATA is still skipped (pre-existing;
+  affects ALL initialised globals — lparser priority[] / lstrlib nativeendian read
+  zero at runtime; fix = PendingInit-based materialisation, pure Track C); (2)
+  multi-file LINKING (combine 34 objects into one executable) — infrastructure the
+  single-file C frontend lacks. So: parse is ~done, but a runnable Lua needs
+  varargs codegen (Track A) + global-init data + linking.
+- **Session 2026-06-26 rounds 14-15 (Track C), gate-green + byte-identical, lua
+  25 -> 27:** C assignment-as-value (call arg / chained / `(p=x)->field`; ldo's
+  `isLua(ci = ci->previous)`), and the big one — **nested anonymous union/struct
+  member layout** (ffb1a73). A struct containing an inline `union {..}` / `struct
+  {..}` member was laid out as an opaque pointer -> field access read garbage; lua
+  CallInfo/GCUnion/TValue use nested unions pervasively, so this was a WIDESPREAD
+  silent miscompile and the emergent root behind ldo/ltm. Fixed by laying the
+  nested body out as a sub-record AND buffering the parent's field descriptors,
+  appending them to the UFld pool contiguously after the sub-records (the obstacle
+  was the contiguous [base,count) FindUField model). Unblocked ldo + ltm. The
+  parse/preprocessor/struct-layout layer is now essentially complete. REMAINING 7
+  files, all substantial features: (A) **varargs** `__builtin_va_start` / `va_arg`
+  / `va_list` — lapi, lauxlib, ldebug, lobject (System V AMD64 va_list ABI; Track
+  A / codegen). (B) **global-array DATA materialisation** + anon-struct array
+  element — lparser (`static const struct {lu_byte left,right;} priority[] = {..}`
+  then `priority[op].left`), lstrlib; need the `{..}` initializer laid into the
+  data segment as a real sized array. (C) luac — a SEPARATE tool (the bytecode
+  compiler, not the interpreter core); `#define S(x) (int)(x),SS(x)` (comma macro
+  expanding to a printf arg list) hits AN_COMMA in IRLowerAddress; low priority.
+- **Session 2026-06-26 rounds 11-13 (Track C), gate-green + byte-identical, lua
+  22 -> 25:** object-macro-alias-of-function-macro re-expansion (unblocked lvm);
+  `(type)` cast in constant expressions (ltable — root was the bare-funcname=Result
+  landmine: `Result := CEvalConstPrimary` needed `()`); `#` stringize operator
+  (lundump); aggregate initializer `= {...}` on a non-array local (lcode); and the
+  pointer-pointer subtraction codegen fix (ptrdiff — was a silent miscompile;
+  tkDiv not tkSlash). Fixtures b38-b42. The PARSE/PREPROCESSOR layer is now
+  essentially complete; the 9 remaining files are blocked on three deeper things:
+  (A) **varargs** `__builtin_va_start` / `va_arg` / `va_list` — lapi, lauxlib,
+  ldebug, lobject (System V AMD64 va_list ABI: variadic prologue saves the
+  register-save area, va_arg walks gp_offset/overflow_arg_area; Track A / codegen).
+  (B) **global array DATA materialisation** + anonymous-struct member access —
+  lparser (`static const struct {lu_byte left,right;} priority[] = {...}` indexed
+  `priority[op].left`), lstrlib; globals are not yet real arrays with their
+  initializer data laid into the data segment (the brackets/init are skipped).
+  (C) **IRLowerAddress of rvalue/compound** in the VM/GC core — ldo (AN_ASSIGN),
+  ltm (AN_BINOP, the emergent setobj block over `&(p++)->val`/`&(p+i)->val`), luac
+  (AN_COMMA); several are address-of-rvalue (verify vs gcc, some UB). These are
+  feature/codegen work, partly Track A (varargs), spanning multiple sessions —
+  not the isolated parse fixes that took the core 0 -> 74%.
+- **Session 2026-06-26 rounds 7-10 (Track C), all gate-green + byte-identical,
+  lua 14 -> 22:** f()->field on pointer-returning calls + global-struct record id
+  (silent miscompile — global struct fields were all offset 0); `##` token-paste +
+  macro arg whitespace trim; C goto + labels; C float-literal lexing; constant-expr
+  `/` and `%`; comma operator in if/while/for conditions; array-syntax function
+  params `T name[]` decay to pointers (silent miscompile); object-macro alias of a
+  function macro re-expands with source args (lua setsvalue2n/setobj2n -> unblocked
+  lvm + lundump partially). Fixtures b31-b38. REMAINING 12 files, each deep or
+  cross-track: (a) **varargs** `__builtin_va_start` (lapi/lauxlib/ldebug — va_list
+  ABI, Track A). (b) **emergent codegen combinations** in the VM/GC core (ltm/ldo:
+  `setobjs2s(L, top.p++, func.p + i)` = setobj block over `&(p++)->val` /
+  `&(p+i)->val` — every isolated piece compiles == gcc, the macro-expanded block
+  does not; reduce with the full-file-bisection method as was done for the
+  multi-declarator root cause). (c) IRLowerAddress of rvalue/compound (lparser
+  AN_INT_LIT, luac AN_COMMA — several are UB, verify vs gcc). (d) `(type)` cast in
+  a constant expr (ltable MAXABITS — finicky, see bug-c-const-cast-in-array-dim).
+  (e) float codegen conversions (lstrlib/lobject — see
+  bug-c-float-int-cast-and-spill). (f) lcode field-name. (g) multi-file linking.
+  METHOD NOTE that keeps working: shrink a failing real-file snippet (drop macro,
+  drop types, drop block) to a plain-C minimal repro; emergent "works in isolation"
+  failures are usually a shared root (multi-declarator, object-macro-alias).
+- **Session 2026-06-26 round 6 (Track C), gate-green + byte-identical, lua 14 ->
+  15 + VM-core path unblocked:** ROOT-CAUSE fix — multi-declarator pointers
+  `T *a, *b;` (5d3bc2f). ParseCLocalDeclAST folded the FIRST declarator's `*` into
+  the base type and applied it to every name, so `int *p, *q;` dropped/mistyped q
+  and `TValue *io1, *io2;` siblings lost pointer-ness -> deref hit IR_UNSUPPORTED.
+  This was the real cause of the round-5 'emergent setobj/setsvalue' VM-core
+  failures (every isolated piece compiled; the trigger was simply two pointers in
+  one declaration). Now each declarator parses its own stars (a literal star
+  redistributes; a typedef pointer applies whole). lapi advanced past setobj to
+  varargs. NOTE: the bisection method that finally cracked it — keep shrinking the
+  failing snippet (drop macro, drop types, drop block) until a plain-C minimal
+  repro remains; here `int *p,*q; *p=*q;` was the whole bug. REMAINING (each deep
+  / multi-session): (a) **varargs** `__builtin_va_start` — now the top named
+  blocker, 3 files (lapi/lauxlib/ldebug), lua's luaL_error; real va_list ABI =
+  Track A. (b) `IRLowerAddress` of rvalue/compound exprs — AN_CALL (liolib/lobject/
+  lparser: `localeconv()->decimal_point[0]`, field/index of a call result),
+  AN_ASSIGN (ldo), AN_BINOP (ltm), AN_COMMA (luac); general fix = materialise the
+  rvalue to a hidden temp and address that (verify each vs gcc; some are UB). (c)
+  lvm setobj/lundump setsvalue still 'undeclared' (a genuinely emergent
+  macro-expansion case, distinct from the multi-declarator one). (d) multi-file
+  linking. lua.c (interpreter main) compiles to an object.
+- **Session 2026-06-26 round 5 (Track C), gate-green + byte-identical, lua core
+  7 -> 14:** global array decls no longer cascade + balanced-brace aggregate-init
+  skip (3843307), `sizeof((l)[0])` balanced-paren operand skip — unblocked the
+  whole luaL_newlibtable sizeof cluster, +6 files (ced768d), `signal()` declared
+  via a `__sighandler_t` typedef (the function-returning-fn-pointer declarator was
+  unparseable) + undeclared-call error now names the function (2f5e285). REMAINING
+  blockers: (a) **emergent-combination bugs** — in big files (lapi/lvm/lgc) an
+  `IRLowerAddress` hits an int-literal / AN_CALL / AN_ASSIGN where every isolated
+  piece (setobj, isvalid, luaC_barrier, the ternary) compiles fine; the failure
+  only appears with the whole accumulated file. Smells like STATE ACCUMULATION
+  (recycled symtab slots / node-pool — cf. the Alloc* parallel-array landmine),
+  NOT a per-construct bug; bisection can't isolate it because the minimal repro
+  doesn't carry the accumulated state. Next: instrument which sym/node slot is
+  recycled with stale ASTSOffset/Kind when the int-lit address is emitted. (b)
+  varargs `__builtin_va_start` (va_list — lua's luaL_error; Track A/ABI). (c)
+  setobj/setsvalue undeclared in lvm (same emergent class). (d) multi-file linking.
+- **Opened:** 2026-06-25
+- **Session 2026-06-25 (Track C) delivered, all gate-green + self-host
+  byte-identical, on `feat/cfront`:** function pointers (4d36da6), typedef-of-
+  struct-tag record aliasing (b65d617), forward-record field-base re-anchor
+  (65f3fcd), ternary `?:` / `AN_TERNARY` (b68c5be), integer literal suffixes
+  (a64d316), bitwise-`~` const-eval (cd5996d, closed bug-c-const-eval-bitwise-not).
+  lua-5.4.7 staged in `library_candidates/lua` (gitignored). Remaining blockers
+  triaged below; lua does NOT compile yet (multi-session, spans Track C + A).
+  Session also added: parenthesized declarator names `(name)(params)` (50e1626's
+  predecessor d4c9b9f — unblocked the whole lua_* API prototype cluster) and
+  **C `switch`/`case`/`default`** with fallthrough + break-only scope (50e1626,
+  AN_SWITCH, target-independent IR). lua core: 0 → **4/34 files parse clean**.
+  End-of-session error landscape across the 34 core files: 21 `unexpected token`
+  (a LONG TAIL of varied expression-parse bugs — NOT one cause; e.g. a string-
+  literal/`sizeof` macro expansion in lobject.c, a `+=` on a `->` field in lmem.c,
+  a call in lstate.c — each needs individual bisection), 6 `call to undeclared
+  function` (residual macros + `__builtin_offsetof` + lstring's deep cast chain
+  which bottoms out at `bug-c-const-eval-bitwise-not`-adjacent macro re-scan), 2
+  `Unsupported linear node in IR codegen` (ldebug.c, lparser.c — an IR/codegen
+  gap to isolate), 1 `expected C expression`. NEXT: pick off the `unexpected
+  token` tail incrementally (Track C), isolate the 2 IR-codegen gaps, then
+  `setjmp`/`longjmp` (Track A) + multi-file linking for an actual lua build.
+- 2026-06-26 (round 4) — **full-file-bisection harness in use; 7 more fixes,
+  lua core 5 -> 7 files parse clean**, all gate-green + self-host byte-identical.
+  Bisecting lapi.c's `index2value` surfaced a chain of high-leverage bugs:
+  array-of-struct element STRIDE (a SILENT miscompile — `a[i]`/`p[i]` used pointer
+  size not RecSize; `bug-c-struct-pointer-index-stride` done), `(p+i)->field`
+  (`bug-c-field-on-pointer-arithmetic` done), **re-expansion of the same macro
+  inside its own arguments** (lua's `check_exp` within `check_exp` via `gco2ccl`;
+  the active-macro guard was too aggressive), **multi-line macro/call arguments**
+  (the preprocessor was line-based; now joins continuation lines while parens are
+  unbalanced), and **`++`/`--` as a VALUE** (new AN_INCDEC: postfix yields the old
+  value via a temp, prefix the new; pointer base supported for `s2v(top.p++)`;
+  `bug-c-postincrement-as-rvalue` done). Fixtures b23–b27. KEY: the bisection
+  harness (build progressively larger prefixes of the real .c with its real
+  includes) + the `near:` locator is the working method — minimal repros no longer
+  reproduce these emergent/cumulative-state bugs. Current landscape: 9 `Unsupported
+  linear node` (IRLowerAddress gaps for compound/rvalue exprs — `&(call)`,
+  `&(int-lit)`, etc.; mostly address-of-rvalue, several are UB so verify against
+  gcc before "fixing"), 8 `unexpected token`, 7 clean, 5 `expected C expression`,
+  4 `call to undeclared function`. setjmp/longjmp (Track A) + multi-file linking
+  still remain for a full build.
+- 2026-06-25 (round 3) — **6 more Track C fixes**, all gate-green + byte-identical:
+  adjacent string-literal concatenation (`"a" "b"`, lua's `lua_pushliteral`);
+  string-literal-to-pointer store now lands on char 0 not the Pascal length
+  prefix (closed `bug-c-string-literal-to-pointer-prefix`); `sizeof` in constant
+  expressions / array dimensions (`char b[3*sizeof(size_t)]`); `&function`
+  (AN_PROCADDR in IRLowerAddress); parenthesized comma EXPRESSION `(a,b)` (new
+  `AN_COMMA` — lua's `api_check`/`lua_lock` = `((void)l, expr)`); plus the libc
+  header growth (math.h + string/stdio/stdlib) and recursive `#if`. Fixtures
+  b18–b22. lua core still 5/34 parse-clean by COUNT, but individual files advance
+  several blockers each (lapi/lstate/ldo now fail much deeper).
+  **KEY FINDING for the next worker:** the remaining `unexpected token` /
+  `expected C expression` failures are EMERGENT from the cumulative full-file
+  preprocessor/macro state — every construct extracted in isolation (api_check,
+  index2stack, the sizeof/comma/cast forms) now COMPILES, but the full file still
+  fails. So per-file progress now needs bisection WITHIN the real file (build
+  progressively larger prefixes of the actual .c with its real includes), not
+  minimal repros. The `near:` locator (cd30d0c) gives the token; pair it with a
+  prefix-bisect harness.
+- 2026-06-25 (final survey) — **the remaining lua blockers are now predominantly
+  CROSS-TRACK, not Track C.** With the type system fixed, the `call to undeclared
+  function` cluster resolves to: (a) **libc functions with no crtl declaration** —
+  `fabs`/`frexp` (there is NO `lib/crtl/include/math.h` at all), `strerror`
+  (string.h doesn't declare it), `fwrite`, `system`, `signal`. Growing the crtl
+  header/library surface is **Track B** (`lib/crtl/**`, the M2 milestone). (b) a
+  few residual macro re-scan bugs (`cast`/`cast_byte`/`novariant` — Track C, deep
+  and context-dependent). The other big remaining gates — **`setjmp`/`longjmp`**
+  (codegen; `compiler/exception_emit.inc` has the Pascal exception path but C
+  setjmp/longjmp is unverified) and **multi-file linking** — are **Track A** /
+  infrastructure. CONCLUSION: Track C has been pushed about as far as it can take
+  lua ALONE; reaching a working lua build now needs Track B (libc surface) and
+  Track A (setjmp) in tandem, plus the residual Track C parse tail (16
+  `unexpected token`, diagnosable via the new `near:` locator).
+- 2026-06-25 (even later) — **recursive `#if` macro expansion fixed (0fa88d1) —
+  foundational.** `#if` evaluated a macro atom by reading its body as a literal
+  number, so a chained object macro resolved wrong: lua's
+  `LUA_INT_TYPE → LUA_INT_DEFAULT → LUA_INT_LONGLONG → 3` made
+  `#if LUA_INT_TYPE == LUA_INT_LONGLONG` FALSE, so `LUA_INTEGER` / `lua_Integer` /
+  `lua_Unsigned` were NEVER defined under the real headers. CPExprAtom now
+  recursively evaluates a macro body as a sub-expression (depth-guarded). Also
+  added LLONG_MAX/MIN + ULLONG_MAX to `lib/crtl/include/limits.h` (luaconf gates
+  the long-long path on `#if defined(LLONG_MAX)`). **lua_Integer/lua_Unsigned now
+  register.** NOTE: lua must be compiled WITH `-Ilib/crtl/include` on the path so
+  `<limits.h>`/`<stddef.h>` resolve. Post-fix error landscape (with that include
+  path): 16 `unexpected token`, 10 `call to undeclared function` (more files now
+  reach real libc calls — the M2 crtl/extern surface), 3 `expected C expression`,
+  5 parse-clean. The type-system foundation is now correct; the tail is libc
+  surface + residual per-file parse bugs + setjmp (Track A) + multi-file linking.
+- 2026-06-25 (later) — **session continued; lua core now 5/34 parse clean.**
+  Added beyond the above: a permanent readable `near:` source-context on
+  unexpected-token errors (cd30d0c — makes the tail diagnosable WITHOUT an
+  instrumented rebuild; use it), indirect call through `(*expr)(args)` /
+  dereferenced fn-pointer (e4a991a — lua's `(*g->frealloc)(...)`), and an
+  IRLowerAddress `&(array-field)` collapse (007d14f — unblocked lmem.c). Filed
+  `bug-c-sizeof-string-literal` and `bug-c-addr-of-unsupported-ir` (the latter
+  partially fixed; `&s->v[0]` element-via-arrow remains). Current error
+  landscape over 34 files: 20 `unexpected token` (still a long tail of DISTINCT
+  per-file causes — e.g. ltable's `(lua_Unsigned)i` cast-vs-paren disambiguation,
+  lstate's `sizeof(size_t)`; the `near:` context now pinpoints each), 7
+  `call to undeclared function`, 2 `expected C expression`. Grind the tail with
+  the locator; then `setjmp`/`longjmp` (Track A) + multi-file linking remain for
+  an actual lua build.
+- 2026-06-25 — **`__builtin_expect` handled** (2f62c2e): reduces to its first arg
+  (lua's pervasive l_likely/l_unlikely). **Diverse-tail confirmed by windowed
+  bisect:** the 21 `unexpected token` files each have a DIFFERENT context-
+  dependent cause that does NOT reproduce in isolation (every minimal repro
+  passes) and the lexer SrcPos sits ahead of the parse point, making them slow to
+  pin. Concrete findings so far: lobject.c uses `sizeof("string")/sizeof(char)`
+  → filed `bug-c-sizeof-string-literal` (pxx returns 8 not len+1; a VALUE bug, not
+  the parse blocker); ltable.c fails inside a deeply-nested macro cast chain
+  (`(...Integer)( limit + 1)))))->tt_)) & 0x0F)`); lmem.c parses its whole body
+  but still errors (SrcPos at end-of-function — the real fault is elsewhere in the
+  token stream). RECOMMENDATION for the next session: add a PERMANENT, precise
+  C-parse error locator (print the failing token's own source offset + a readable
+  window, not the lexer SrcPos) — without it, each `unexpected token` costs an
+  instrumented rebuild to locate. Then grind the tail file-by-file.
+- **Track:** C (C frontend) — isolated worktree `../frankonpiler-cfront`, branch
 - **Type:** feature (track-D milestone path)
 - **Status:** backlog
 - **Opened:** 2026-06-25
@@ -263,6 +500,9 @@ gap rather than bloating this ticket.
       track-a-c-frontend-shared-ir-touchpoints).
     - function pointers (decl + indirect call), global/`static const`
       initialisers (currently zero-init), multi-dim arrays, array/struct
+      initialisers — Track C.
+    - M3: `setjmp`/`longjmp` needs register-save/restore codegen -> **Track A**;
+      varargs *define* (callee SysV ABI) -> Track C.
       initialisers — Track D.
     - M3: `setjmp`/`longjmp` needs register-save/restore codegen -> **Track A**;
       varargs *define* (callee SysV ABI) -> Track D.
@@ -273,3 +513,168 @@ gap rather than bloating this ticket.
   steady, green, self-host-byte-identical state. One shared-IR touch
   (ir.inc AN_EXIT->Halt) is documented in
   track-a-c-frontend-shared-ir-touchpoints for the sister agents to reconcile.
+- 2026-06-25 — **LUA STAGED + first real blocker located (empirical).**
+  Fetched `lua-5.4.7` into `library_candidates/lua` (gitignored — vendor source,
+  not committed). The live compiler already parses several core files: `lctype.c`
+  reaches "main function not found" = full parse OK (a library, no main, like
+  tiny-regex `re.c`). `lzio.c` / `lmem.c` / `lobject.c` fail. Reduced the failure
+  to a minimal no-header reproducer: **function pointers.**
+    - `BinOp f = add; f(3,4);` → `pascal26: error: call to undeclared function`.
+    - `c.op(5,6)` (indirect call through a fn-ptr struct field) — same family.
+    - lua hits this immediately: `lua.h` defines `lua_CFunction`/`lua_Reader`/…
+      as `ret (*Name)(args)`, and the core calls through fn-ptr fields
+      (`z->reader(L, z->data, &size)` in lzio.c is the exact first failure).
+  Root cause: C fn-ptr typedefs register as plain `tyPointer` with the **argument
+  signature not modelled** (cparser.inc ~2094), so `AN_CALL_IND` has no signature
+  `Procs[]` index to marshal with, and a bare function name decays to `0` instead
+  of its address. The IR primitives already exist and are proven on the Pascal
+  side: `AN_CALL_IND` (parser.inc ParseProcVarCallAST), `AN_PROCADDR`,
+  `SymProcSig`/`UFldProcSig` (defs.inc:772, symtab.inc:509), and the C-ABI
+  `ProcCdecl` flag. **Next slice (Track C, binary-editing — `make test` +
+  self-host + cross gate):** function pointers —
+    1. fn-ptr typedef `ret (*Name)(params)` → synthesize a signature `Procs[]`
+       entry (`RegisterProc` + `BodyAddr:=-1` + `ProcCdecl:=True`); store its index
+       on the typedef (new `CTypedefProcSig` slot).
+    2. var/field of that typedef → set `SymProcSig`/`UFldProcSig` from the typedef.
+    3. call sites in cparser ParseCPrimary/ParseCPostfix: bare function name (not
+       followed by `(`) → `AN_PROCADDR`; `name(args)` where `name` is a var with
+       `SymProcSig>=0` → `AN_CALL_IND`; postfix `field(args)` with `UFldProcSig>=0`
+       → `AN_CALL_IND`.
+  Remaining lua blockers after fn-pointers (from the reframe): switch/case +
+  ternary + setjmp/longjmp (**Track A**, shared-IR), varargs-define (Track C),
+  and multi-file linking (lua core = 34 `.c`; no upstream amalgamation — build a
+  one-unit include shim or add object linking).
+- 2026-06-25 — **Function pointers DONE** (Slice B inc3). Typedef'd fn-ptr types,
+  indirect calls through a variable / struct field / parameter, and bare
+  function-name decay to address — all four forms match gcc. Implementation:
+  ParseCDeclType's existing `(*name)(params)` declarator-skip now also captures
+  the declarator name + builds a signature `Procs[]` entry (`RegisterProc` +
+  `BodyAddr:=-1` + `ProcCdecl:=True` for the System V ABI), exposed via new
+  globals `CTypeProcSig`/`CTypeFnPtrName`. ParseCTypedef registers the typedef
+  with that signature (`CTypedefProcSig` slot); local-decl / struct-field /
+  param sites thread it onto `SymProcSig`/`UFldProcSig`; ParseCPrimary lowers a
+  bare function name to `AN_PROCADDR` and `var(args)` to `AN_CALL_IND`, and
+  ParseCPostfix lowers `rec.field(args)`/`p->field(args)` to `AN_CALL_IND` via
+  the new `RecFieldProcSig` accessor. All shared IR (`AN_CALL_IND`/`AN_PROCADDR`
+  already proven on the Pascal side) — no codegen edits. LANDMINE (cost ~30 min):
+  the recursive param-type parse must be `ParseCDeclType()` **with parens** — bare
+  `ParseCDeclType` reads the function's own Result (pxx bare-funcname rule) →
+  infinite loop (the exact landmine this ticket logged for Slice B inc1). Gate:
+  `make test` green, self-host byte-identical, all 8 C fixtures match gcc; new
+  fixture `test/cfnptr_b6.c` (=91) wired into `c-interop-devtest`. NB this was
+  NOT lzio.c's first blocker — lzio/lmem/lobject still stop at an earlier
+  `unexpected token (` (a different construct; SrcPos shows a NUL between
+  newlines — a preprocessor artifact to investigate next). lua.h's fn-ptr
+  typedefs (`lua_CFunction`/`lua_Reader`/…) now model correctly regardless.
+- 2026-06-25 — **typedef of a struct tag now aliases the record** (Slice B inc4).
+  `typedef struct Zio ZIO;` (no body, with a tag) was registered as an opaque
+  `tyPointer`, dropping the record id — so `ZIO *z; z->field` resolved against
+  REC_NONE (field offset 0, fn-ptr field calls unrecognised → `unexpected token
+  (`). Now the no-body aggregate-typedef branch aliases the tag's (possibly
+  forward) record via `FindOrForwardCTag`: `typedef struct T X;` → `X` is the
+  record; `typedef struct T *X;` → pointer to it; tagless stays an opaque
+  pointer. A later `struct T { ... }` body fills the same forward record, so
+  `z->field` (incl. the lua ZIO reader fn-ptr field) resolves. This is the lua
+  pattern (`typedef struct Zio ZIO;`, `typedef struct lua_State lua_State;` then
+  the body in lstate.h — L->top now resolvable). Gate: `make test` green,
+  self-host byte-identical, all C fixtures match gcc; fixture
+  `test/ctypedef_struct_b7.c` (=51).
+- 2026-06-25 — **forward-record field base re-anchored** (Slice B inc5). The real
+  lzio.c `z->reader(...)` still failed after the alias fix; root cause was NOT the
+  `#include`/preproc path but a **contiguous-field-range** bug exposed by the
+  alias fix. `FindUField` scans a record's fields as a flat block
+  `UFldNOff[UClsFBase[ci] .. +UClsFCount[ci]]`. A forward record (`typedef struct
+  Zio ZIO;`) had `UClsFBase` fixed at forward-declaration time; lua's lzio.h then
+  lays out an intervening `typedef struct Mbuffer {…} Mbuffer;` BEFORE the
+  `struct Zio { … }` body, so Zio's body fields land past its recorded base and
+  `FindUField('reader')` returns -1 (field — and thus its fn-ptr sig — invisible;
+  every other field silently aliased offset 0). Fix: ParseCStructInto re-anchors
+  `UClsFBase[ci] := UFldCount` when it begins laying out a body that has no fields
+  yet (`UClsFCount[ci]=0`) — a no-op for freshly-created records, correct for
+  forward ones. Diagnosis landmine: the symptom looked like a fn-ptr-sig/`#include`
+  bug (UFldProcSig read as -1) but was a field-LOOKUP failure (`FindUField`=-1);
+  only a minimal bisect (a 3-field intervening struct typedef) exposed it — single
+  intervening fields didn't shift the base enough to interleave. Gate: `make test`
+  green, self-host byte-identical, all 9 C fixtures match gcc; fixture
+  `test/cstruct_fwd_interleave_b8.c` (=42). lzio.c now parses past `luaZ_fill` and
+  reaches `luaZ_read`.
+- 2026-06-25 — **ternary `?:` DONE** (new `AN_TERNARY` node). Real lzio.c stopped
+  in `luaZ_read` at `m = (n <= z->n) ? n : z->n;`. Implemented the C conditional
+  operator end-to-end: new `AN_TERNARY` AST node (Left=cond, Right=AN_PAIR(then,
+  else), ASTTk=then-branch type); ParseCExpr parses it between logical-or and
+  assignment, right-associative; IR lowering is **fully target-independent** —
+  a hidden temp (`AllocVar` during lowering, same idiom as IRLowerClassMatch) +
+  `IR_JUMP_IF_FALSE`/labels/`IR_STORE_SYM`/`IR_LOAD_SYM`, so only the taken branch
+  is evaluated and NO per-backend codegen was needed. Logged in
+  `track-a-c-frontend-shared-ir-touchpoints` (a new shared node) for A to
+  reconcile. Self-host byte-identical (AN_TERNARY is C-frontend-only; the Pascal
+  self-compile never emits it); `make test` green; fixture `test/cternary_b9.c`
+  (=37, nested + only-taken-branch side effect proves no double-eval). **lzio.c
+  now compiles clean** (full parse — it is a library, no main).
+- 2026-06-25 — **LUA CORE SURVEY: 3 / 34 files parse clean** (lctype, lzio, + 1),
+  with the remaining blockers triaged by instrumenting the "undeclared call" name:
+    - **Function-like macro expansion bugs — the biggest cluster.** `call to
+      undeclared function` is mostly an UNEXPANDED function-like macro parsed as a
+      call: `cast` (`#define cast(t,exp) ((t)(exp))` in llimits.h), `novariant`,
+      etc. IMPORTANT: function-like macros ALREADY work in general (`cpreproc.inc`
+      has `CPExpandFunction` + arg parsing) — lzio.c's `cast_uchar(...)` compiled
+      clean, AND an isolated repro of the full cast family
+      (`cast`/`cast_int`/`cast_uint`/`cast_uchar`, nested) expands correctly and
+      runs. So lstring.c's `cast`-reaches-parser failure is **context-specific**,
+      NOT one common cause — the cluster is probably several distinct preprocessor
+      edge cases (token-paste `##`, stringize `#`, a multi-token type arg in a
+      particular position, a `CPMacroIsActive` recursion-guard interaction, or a
+      macro that re-defines/undefs). Next step: bisect ONE failing file
+      (lstring.c) down to the exact unexpanded use, then widen. Still likely the
+      highest-leverage Track C cluster, but expect a handful of small fixes rather
+      than a single feature.
+      - **UPDATE — first two fixed/traced.** (a) Integer literal SUFFIXES
+        (`U/L/UL/LL/ULL`) were never consumed by the C lexer, leaving e.g. `UL` as
+        a dangling identifier that broke const expressions like
+        `(0xffffffffffffffffUL / sizeof(t))` (DONE — clexer consumes the suffix;
+        fixture `test/cint_suffix_b10.c`=42). (b) lstring.c's `cast` failure then
+        traced NOT to the suffix but to real `MAX_SIZET = ((size_t)(~(size_t)0))`
+        — the `~` bitwise-NOT const-eval, already filed as
+        `bug-c-const-eval-bitwise-not` (Track C). So the macro "cluster" is indeed
+        several independent small const-eval/lexer bugs, confirmed. Next: fix
+        `bug-c-const-eval-bitwise-not`, then re-survey.
+    - **`__builtin_offsetof`** (lfunc.c) — gcc builtin for `offsetof`; map to a
+      compile-time field offset (Track C).
+    - **`switch`/`case`** (lgc.c parses `switch` as a call) — Track A (break-only-
+      scope shared-IR primitive per the reframe).
+    - **`Unsupported linear node in IR codegen`** (ldebug.c) — an IR/codegen gap
+      to isolate (could be Track A).
+    - A few `unexpected token (` / `expected C expression` (lparser.c, lobject.c,
+      ltable.c) — residual C constructs to bisect after macros land (many may be
+      downstream of the missing macro expansion).
+  RECOMMENDED ORDER: (1) function-like macro expansion [Track C, big, unblocks
+  most], (2) `__builtin_offsetof` [Track C, small], (3) `switch/case` [Track A],
+  (4) re-survey, then `setjmp/longjmp` [Track A] + multi-file linking (no upstream
+  amalgamation; build a one-unit include shim or add object linking) for M4.
+
+## 2026-06-26 — BREAKTHROUGH: varargs done; lua compiles + links as a whole
+- **C varargs implemented** (commits ~76-79): ProcVariadic detection, hidden
+  __va_save register-save area + additive variadic-gated prologue, stdarg.h with
+  pure-C __pxx_va_* helpers, __builtin_va_start/va_arg/va_end desugaring, and the
+  IR_CALL excess-arg fix (pop all pushed args into SysV regs, not just
+  ParamCount). Self-host byte-identical throughout. Int/long/pointer/string
+  varargs verified == gcc.
+- **lua core parse: 29 -> 33/34** (lapi/lauxlib/ldebug/lobject now parse; only
+  luac.c left, on an unrelated "Unsupported linear node" codegen gap).
+- **lua TEST-COMPILES AS A WHOLE** via amalgamation (one TU = every core .c +
+  lua.c): a 744 KB dynamic ELF, DT_NEEDED libc.so.6 + libm.so.6, all 86 libc/libm
+  imports resolve (commit 80 defaults C externs to libc/libm sonames). Recipe in
+  library_candidates/lua/BUILD-pxx.md.
+- **Remaining for a RUNNING lua** (3 filed/known): bug-c-large-record-byval-param
+  (24-byte va_list by value -> luaO_pushvfstring segfault at startup),
+  bug-c-double-vararg (%f reads 0), and luac.c's codegen node. No multi-file
+  linker needed — amalgamation covers it.
+
+## 2026-06-26 (cont) — struct-by-value fixed; lua RUNS non-IO code
+- bug-c-large-record-byval-param CLOSED: C struct-by-value params of any size
+  (isRef pointer slot + caller copy, CProgramMode-gated, byte-identical). va_list
+  passing now works (was the luaO_pushvfstring segfault).
+- pxx-compiled lua now COMPILES + LINKS + RUNS non-IO Lua (rc 0). `print`/IO
+  still segfaults -> bug-c-libc-data-symbol-stdio (stdout/stderr/stdin are libc
+  DATA symbols, not imported; need a COPY relocation). That + bug-c-double-vararg
+  + global-array-init are the remaining run blockers.

@@ -314,6 +314,110 @@ test-core: $(COMPILER)
 	test "$$(/tmp/hello26)" = "Hello, World!"
 	./$(COMPILER) test/hello.c /tmp/hello_c26
 	test "$$(/tmp/hello_c26)" = "Hello, World!"
+	./$(COMPILER) test/cexpr_b.c /tmp/cexpr_b26
+	/tmp/cexpr_b26; test "$$?" = "89"
+	./$(COMPILER) test/cstmt_c.c /tmp/cstmt_c26
+	/tmp/cstmt_c26; test "$$?" = "82"
+	./$(COMPILER) test/cmulti_d.c /tmp/cmulti_d26
+	/tmp/cmulti_d26; test "$$?" = "104"
+	./$(COMPILER) test/cptr_b2.c /tmp/cptr_b226
+	/tmp/cptr_b226; test "$$?" = "122"
+	./$(COMPILER) test/cstruct_b3.c /tmp/cstruct_b326
+	/tmp/cstruct_b326; test "$$?" = "62"
+	./$(COMPILER) test/ccast_b4.c /tmp/ccast_b426
+	/tmp/ccast_b426; test "$$?" = "102"
+	./$(COMPILER) test/cloop_b5.c /tmp/cloop_b526
+	/tmp/cloop_b526; test "$$?" = "28"
+	./$(COMPILER) test/cfnptr_b6.c /tmp/cfnptr_b626
+	/tmp/cfnptr_b626; test "$$?" = "91"
+	./$(COMPILER) test/ctypedef_struct_b7.c /tmp/ctypedef_struct_b726
+	/tmp/ctypedef_struct_b726; test "$$?" = "51"
+	./$(COMPILER) test/cstruct_fwd_interleave_b8.c /tmp/cstruct_fwd_interleave_b826
+	/tmp/cstruct_fwd_interleave_b826; test "$$?" = "42"
+	./$(COMPILER) test/cternary_b9.c /tmp/cternary_b926
+	/tmp/cternary_b926; test "$$?" = "37"
+	./$(COMPILER) test/cint_suffix_b10.c /tmp/cint_suffix_b1026
+	/tmp/cint_suffix_b1026; test "$$?" = "42"
+	./$(COMPILER) test/cbitnot_b11.c /tmp/cbitnot_b1126
+	/tmp/cbitnot_b1126; test "$$?" = "6"
+	./$(COMPILER) test/cparen_name_b12.c /tmp/cparen_name_b1226
+	/tmp/cparen_name_b1226; test "$$?" = "30"
+	./$(COMPILER) test/cswitch_b13.c /tmp/cswitch_b1326
+	/tmp/cswitch_b1326; test "$$?" = "3"
+	./$(COMPILER) test/cbuiltin_expect_b14.c /tmp/cbuiltin_expect_b1426
+	/tmp/cbuiltin_expect_b1426; test "$$?" = "5"
+	./$(COMPILER) test/cfnptr_deref_call_b15.c /tmp/cfnptr_deref_call_b1526
+	/tmp/cfnptr_deref_call_b1526; test "$$?" = "42"
+	./$(COMPILER) test/caddr_array_field_b16.c /tmp/caddr_array_field_b1626
+	/tmp/caddr_array_field_b1626; test "$$?" = "42"
+	./$(COMPILER) test/cpp_if_chain_b17.c /tmp/cpp_if_chain_b1726
+	/tmp/cpp_if_chain_b1726; test "$$?" = "42"
+	./$(COMPILER) test/cstr_concat_b18.c /tmp/cstr_concat_b1826
+	/tmp/cstr_concat_b1826; test "$$?" = "42"
+	./$(COMPILER) test/cstr_to_ptr_b19.c /tmp/cstr_to_ptr_b1926
+	/tmp/cstr_to_ptr_b1926; test "$$?" = "42"
+	./$(COMPILER) test/csizeof_constexpr_b20.c /tmp/csizeof_constexpr_b2026
+	/tmp/csizeof_constexpr_b2026; test "$$?" = "42"
+	./$(COMPILER) test/caddr_func_b21.c /tmp/caddr_func_b2126
+	/tmp/caddr_func_b2126; test "$$?" = "42"
+	./$(COMPILER) test/ccomma_expr_b22.c /tmp/ccomma_expr_b2226
+	/tmp/ccomma_expr_b2226; test "$$?" = "42"
+	./$(COMPILER) test/cstruct_array_stride_b23.c /tmp/cstruct_array_stride_b2326
+	/tmp/cstruct_array_stride_b2326; test "$$?" = "42"
+	./$(COMPILER) test/cfield_ptr_arith_b24.c /tmp/cfield_ptr_arith_b2426
+	/tmp/cfield_ptr_arith_b2426; test "$$?" = "42"
+	./$(COMPILER) test/cmacro_nested_self_b25.c /tmp/cmacro_nested_self_b2526
+	/tmp/cmacro_nested_self_b2526; test "$$?" = "42"
+	./$(COMPILER) test/cmacro_multiline_b26.c /tmp/cmacro_multiline_b2626
+	/tmp/cmacro_multiline_b2626; test "$$?" = "42"
+	./$(COMPILER) test/cincdec_value_b27.c /tmp/cincdec_value_b2726
+	/tmp/cincdec_value_b2726; test "$$?" = "42"
+	./$(COMPILER) test/cglobal_array_init_b28.c /tmp/cglobal_array_init_b2826
+	/tmp/cglobal_array_init_b2826; test "$$?" = "42"
+	./$(COMPILER) test/csizeof_paren_index_b29.c /tmp/csizeof_paren_index_b2926
+	/tmp/csizeof_paren_index_b2926; test "$$?" = "42"
+	./$(COMPILER) test/cmulti_decl_ptr_b30.c /tmp/cmulti_decl_ptr_b3026
+	/tmp/cmulti_decl_ptr_b3026; test "$$?" = "42"
+	./$(COMPILER) test/ccall_field_b31.c /tmp/ccall_field_b3126
+	/tmp/ccall_field_b3126; test "$$?" = "42"
+	./$(COMPILER) test/cmacro_paste_b32.c /tmp/cmacro_paste_b3226
+	/tmp/cmacro_paste_b3226; test "$$?" = "42"
+	./$(COMPILER) test/cgoto_label_b33.c /tmp/cgoto_label_b3326
+	/tmp/cgoto_label_b3326; test "$$?" = "42"
+	./$(COMPILER) test/cfloat_literal_b34.c /tmp/cfloat_literal_b3426
+	/tmp/cfloat_literal_b3426; test "$$?" = "42"
+	./$(COMPILER) test/cconst_divmod_b35.c /tmp/cconst_divmod_b3526
+	/tmp/cconst_divmod_b3526; test "$$?" = "42"
+	./$(COMPILER) test/ccomma_cond_b36.c /tmp/ccomma_cond_b3626
+	/tmp/ccomma_cond_b3626; test "$$?" = "42"
+	./$(COMPILER) test/carray_param_b37.c /tmp/carray_param_b3726
+	/tmp/carray_param_b3726; test "$$?" = "42"
+	./$(COMPILER) test/cmacro_obj_alias_b38.c /tmp/cmacro_obj_alias_b3826
+	/tmp/cmacro_obj_alias_b3826; test "$$?" = "42"
+	./$(COMPILER) test/cconst_cast_b39.c /tmp/cconst_cast_b3926
+	/tmp/cconst_cast_b3926; test "$$?" = "42"
+	./$(COMPILER) test/cmacro_stringize_b40.c /tmp/cmacro_stringize_b4026
+	/tmp/cmacro_stringize_b4026; test "$$?" = "42"
+	./$(COMPILER) test/cagg_init_local_b41.c /tmp/cagg_init_local_b4126
+	/tmp/cagg_init_local_b4126; test "$$?" = "42"
+	./$(COMPILER) test/cptr_diff_b42.c /tmp/cptr_diff_b4226
+	/tmp/cptr_diff_b4226; test "$$?" = "42"
+	./$(COMPILER) test/cassign_value_b43.c /tmp/cassign_value_b4326
+	/tmp/cassign_value_b4326; test "$$?" = "42"
+	./$(COMPILER) test/cnested_union_b44.c /tmp/cnested_union_b4426
+	/tmp/cnested_union_b4426; test "$$?" = "42"
+	./$(COMPILER) test/canon_agg_global_b45.c /tmp/canon_agg_global_b4526
+	/tmp/canon_agg_global_b4526; test "$$?" = "42"
+	./$(COMPILER) test/cunion_global_init_b46.c /tmp/cunion_global_init_b4626
+	/tmp/cunion_global_init_b4626; test "$$?" = "42"
+	./$(COMPILER) test/cglobal_scalar_init_b47.c /tmp/cglobal_scalar_init_b4726
+	/tmp/cglobal_scalar_init_b4726; test "$$?" = "42"
+	./$(COMPILER) test/cstruct_global_init_b48.c /tmp/cstruct_global_init_b4826
+	/tmp/cstruct_global_init_b4826; test "$$?" = "42"
+	./$(COMPILER) -Ilib/crtl/include test/cvarargs_int_b49.c /tmp/cvarargs_int_b4926
+	/tmp/cvarargs_int_b4926; test "$$?" = "42"
+	./$(COMPILER) -Ilib/crtl/include test/crecord_byval_param_b50.c /tmp/crecord_byval_param_b5026
+	/tmp/crecord_byval_param_b5026; test "$$?" = "42"
 	./$(COMPILER) -Itest/cinc/inc test/cinc/cinc_main.c /tmp/cinc_main26
 	test "$$(/tmp/cinc_main26)" = "$$(printf 'local-ok\ninc-ok')"
 	./$(COMPILER) test/test_declared_directive.pas /tmp/test_declared_directive26
@@ -681,6 +785,8 @@ test-core: $(COMPILER)
 	test "$$(/tmp/c_typedef26)" = "5000000000"
 	./$(COMPILER) test/test_c_enum.pas /tmp/c_enum26
 	test "$$(/tmp/c_enum26)" = "$$(printf '0 1 2\n0 1 2 4 5\n1000 1001')"
+	./$(COMPILER) test/test_c_slicea.pas /tmp/c_slicea26
+	test "$$(/tmp/c_slicea26)" = "16 32 6 60 21 275 1"
 	./$(COMPILER) test/test_c_float.pas /tmp/c_float26
 	test "$$(/tmp/c_float26)" = "$$(printf '1024.0\n16.0\n12.0')"
 	cc -shared -fPIC -o /tmp/libspill.so test/spill_lib.c

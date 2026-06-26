@@ -1899,15 +1899,29 @@ function Eat(k: TTokenKind): Boolean;
 begin Result := CurTok.Kind = k; if Result then Next; end;
 
 procedure Expect(k: TTokenKind; const name: AnsiString);
-var s2: AnsiString;
+var s2, ctx: AnsiString; ei: Integer;
 begin
   if CurTok.Kind <> k then
   begin
     s2 := CurTok.SVal;
     writeln('Expected: ', name, ', but got: ', s2, ' (Kind: ', Ord(CurTok.Kind),
             ', Line: ', CurTok.Line, ')');
-    writeln('SrcPos: ', SrcPos);
-    writeln('Ords around SrcPos: ', Ord(Source[SrcPos-2]), ' ', Ord(Source[SrcPos-1]), ' [', Ord(Source[SrcPos]), '] ', Ord(Source[SrcPos+1]), ' ', Ord(Source[SrcPos+2]));
+    { Readable source context around the OFFENDING token (its own source offset —
+      the precise parse point; the lexer's SrcPos runs ahead of it). The `>>><<<`
+      brackets mark exactly where the parser tripped. }
+    if (TokPos >= 1) and (TokPos <= TokCount) then
+    begin
+      { Token text lives in the TokChars pool (see GetTokenStrFromRaw); the raw
+        token's SOffset indexes it. Walk a few neighbouring tokens for context. }
+      ctx := '';
+      for ei := TokPos - 6 to TokPos + 2 do
+        if (ei >= 1) and (ei <= TokCount) then
+        begin
+          if ei = TokPos then ctx := ctx + '>>> ';
+          ctx := ctx + GetTokenStrFromRaw(Tokens[ei-1].SOffset, Tokens[ei-1].SLen) + ' ';
+        end;
+      writeln('  near: ', ctx);
+    end;
     Error('unexpected token');
   end;
   Next;
