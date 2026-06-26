@@ -2,6 +2,29 @@
 
 - **Type:** feature (track-C milestone path)
 - **Status:** backlog (active arc — lua core **29/34 files parse clean (85%)**; see logs)
+- **Session 2026-06-26 round 19 (Track A+C) — lua runs past STRING INTERNING into
+  luaT_init; 3 compiler fixes (commit d84d9164), gate-green + self-host
+  byte-identical.** The round-18 `internshrstr` crash was `getshrstr(ts) ==
+  ts->contents` returning 0 — a C **fixed-array struct field** read as a value
+  loaded the array's bytes instead of decaying to the field ADDRESS. Three fixes:
+  - **array-field decay** (ir.inc, CProgramMode-gated): a C `char contents[N]`
+    field used as a value now decays to its address, like an array variable.
+  - **array brace-init materialization** (cparser.inc): C `T a[]={e0,e1,..}`
+    local/static arrays now generate real `a[k]=ek` assignments at the decl point
+    (reuses C expr lowering -> string-literal / `&` / cast elements work) and size
+    an unsized `[]` from the element count. Was lua's `luaT_eventname[]`
+    tag-method-name table reading stack garbage.
+  - **`*const` declarator** (cparser.inc): a pointer-level `const`
+    (`char *const p`) is skipped after the stars; previously the declarator name
+    was never reached -> variable undeclared (read as 0). lua's table is
+    `static const char *const luaT_eventname[]`, so this was load-bearing.
+  RESULT: lua runs stack_init -> registry -> **string interning** (was the crash)
+  -> `luaT_init` with `luaT_eventname[0]=="__index"` materialized correctly.
+  NEXT BLOCKER (filed `bug-c-multidim-array-field-partial-row`): `luaS_new`'s
+  `TString **p = G(L)->strcache[i]` — a **2-D array struct field**. Full 2-D
+  `cache[i][j]` works; the partial-index ROW DECAY `cache[i]` does not (loads the
+  element instead of the row address). Larger multidim-field feature; the C
+  frontend's thin per-node pointer-type model makes the clean fix multi-session.
 - **Session 2026-06-26 round 18 (Track A+C) — lua COMPILES, LINKS, and EXECUTES
   into newstate; setjmp/longjmp codegen landed.** Built lua-5.4.7 as a one-TU
   amalgamation (crtl + 33 core/lib .c) against the libc-free crtl; it now runs
