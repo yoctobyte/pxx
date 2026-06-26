@@ -2,6 +2,40 @@
 
 - **Type:** feature (track-C milestone path)
 - **Status:** backlog (active arc — lua core **29/34 files parse clean (85%)**; see logs)
+- **Session 2026-06-26 round 18 (Track A+C) — lua COMPILES, LINKS, and EXECUTES
+  into newstate; setjmp/longjmp codegen landed.** Built lua-5.4.7 as a one-TU
+  amalgamation (crtl + 33 core/lib .c) against the libc-free crtl; it now runs
+  through stack_init, init_registry, object allocation, and into the string
+  table before a remaining lua-core miscompile. Commits 11a4a95f, 863c044c (+the
+  earlier round-17 chain), all gate-green + self-host byte-identical:
+  - **setjmp/longjmp codegen** (the M3 keystone): EmitCSetjmpStubs emits x86-64
+    machine-code stubs registered as __pxx_setjmp/__pxx_longjmp (save/restore
+    callee regs + caller rsp + return addr). setjmp.h maps the macros and makes
+    jmp_buf a STRUCT — a `typedef long jmp_buf[16]` array-typedef LOSES its
+    dimension in the frontend (sized as one long), so a struct field of it
+    underflows the frame and rsp lands inside the local jmp_buf, corrupting
+    setjmp's own return. Verified: value passing, nested-frame longjmp, local +
+    struct-field jmp_buf. lua's whole error model rides this.
+  - **libc-free libm via math.pas**: crtl math.c bridges to lib/rtl/math.pas;
+    most C names bind case-insensitively (sqrt->Sqrt). FIX (compiler): a Pascal
+    unit's `uses` now searches the unit's OWN dir first, so pxxcio's `uses math`
+    binds lib/rtl/math.pas, NOT -Ilib/crtl/include/math.h. pow routes via exp/ln
+    (Power is overloaded). frexp/ldexp loop-based (the *(ulong*)&double pun is
+    unreliable).
+  - **libc-free allocator**: malloc/free/realloc -> the Pascal mmap heap
+    (PXXAlloc/PXXFree/PXXRealloc) via pxxcio; exit -> exit_group. + locale
+    (localeconv "."), stdlib (atoi/strtod/qsort), seed-only time.
+  - **lua run state**: setjmp + math + allocator all verified working inside lua;
+    luaC_newobj returns valid memory; createstrobj completes. Crash is now a
+    NULL/offset miscompile in the string-INTERNING tail (internshrstr after
+    createstrobj) — a lua-core struct-layout bug, the next thread to pull.
+  - **REMAINING for a printing lua:** the internshrstr miscompile, then the rest
+    of the lua-core bring-up tail (openlibs registration tables = global
+    array-of-struct init, still BSS-zeroed; bug-c-vararg-overflow-area for 6+ args).
+    Build recipe: one-TU `#include` amalg of crtl/src + lua/src (luac.c excluded),
+    `-Ilib/crtl/include -Ilibrary_candidates/lua/src`. lua via
+    `tools/install_lib_candidates.sh lua` (gitignored).
+
 - **Session 2026-06-26 round 17 (Track A+C combined) — C STDIO RUNS LIBC-FREE
   VIA THE PASCAL PAL; printf formatting works.** Five commits, all gate-green +
   self-host byte-identical:
