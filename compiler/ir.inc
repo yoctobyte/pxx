@@ -3174,10 +3174,15 @@ begin
           parameter gets the same +8 length-prefix skip as an explicit PChar()
           cast, so C bindings pass a Pascal string without PChar() boilerplate.
           The string data at Offset+8 is NUL-terminated by InternStr. }
-        if (not isRefArg) and (cpi >= 0) and (pathIdx < Procs[cpi].ParamCount) and
-           (Procs[cpi].Params[pathIdx].TypeKind = tyPointer) and
-           (IntToTypeKind(ASTTk[ASTLeft[item]]) = tyString) then
+        if (not isRefArg) and (cpi >= 0) and
+           (IntToTypeKind(ASTTk[ASTLeft[item]]) = tyString) and
+           (((pathIdx < Procs[cpi].ParamCount) and
+             (Procs[cpi].Params[pathIdx].TypeKind = tyPointer)) or
+            (ProcVariadic[cpi] and (pathIdx >= Procs[cpi].ParamCount))) then
         begin
+          { A string passed to a Pointer param OR as a variadic arg (the callee's
+            va_arg(char*) wants C char data, not the Pascal length prefix) gets the
+            +8 length-prefix skip. }
           right := IRAppend(IR_CONST_INT, -1, -1, -1, 8, Ord(tyInteger));
           value := IRAppend(IR_BINOP, value, right, Ord(tkPlus), 0, Ord(tyPointer));
           argNode := IRAppend(IR_ARG, value, -1, -1, 0, Ord(tyPointer));
