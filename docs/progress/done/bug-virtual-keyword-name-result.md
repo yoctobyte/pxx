@@ -1,7 +1,7 @@
 # Bare own-name result of a VIRTUAL intrinsic-named method miscompiles
 
 - **Type:** bug (codegen) — narrow
-- **Status:** backlog (Track A)
+- **Status:** DONE (2026-06-26, commit on master)
 - **Owner:** —
 - **Opened:** 2026-06-24
 - **Found-by:** TStream Read/Write methods (bug-read-write-reserved-as-method-names).
@@ -43,3 +43,11 @@ is latent behind that guard; `Result :=` is the correct, robust form.
 - `Read := Count` in a virtual intrinsic-named method returns the assigned value
   (remove the parser guard once codegen is correct).
 - Regression test.
+
+## Resolution (2026-06-26, Track A)
+The miscompile was resolved by intervening own-name/result fixes since the ticket
+opened. Removed the parser guard; the keyword-name branch now builds the same
+AN_ASSIGN(Result, expr) as the non-keyword own-name path (incl `.field`/`[i]`).
+Verified by test/test_virtual_keyword_result.pas (registered in `make test`):
+keyword-name virtual Read/Write result, override, and polymorphic dispatch all
+correct (5/6/10/10). Self-host byte-identical; make test green incl cross.
