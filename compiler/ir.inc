@@ -1228,6 +1228,16 @@ begin
     LastTypeRecId := argRecId;
     tmpSym := AllocVar('', tyRecord);
     LastTypeRecId := savedLastTypeRecId;
+    { A managed-field record temp is filled by IR_COPY_REC_MANAGED below, which
+      RELEASES the destination's old managed fields before copying. This temp is
+      allocated during IR lowering, after the parser's prologue zero-init pass,
+      so without a nil-init its fields hold stack garbage and the release frees a
+      bogus handle (double-free / heap corruption — crashes when the arg is a
+      managed-record value, e.g. `f(g(x), …)` with g returning a managed record).
+      Mark it so codegen nil-inits its full extent before the body, exactly like
+      the hidden aggregate-result temp in IRAppendCall. }
+    if RecordHasManagedFields(argRecId) then
+      SymIsHiddenArgTemp[tmpSym] := True;
 
     tmpAddr := IRAppend(IR_LEA, tmpSym, -1, -1, 0, Ord(tyPointer));
 
