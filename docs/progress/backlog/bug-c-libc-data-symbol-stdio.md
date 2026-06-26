@@ -26,8 +26,13 @@
    `puts`/`fflush`/`fread`/`fopen`/`fclose`/`fseek` on `__pxx_write`/`__pxx_read`
    + the open/close/lseek syscalls. Compile it into the program (amalgamation),
    so these resolve INTERNALLY — no libc.so.6 import for IO.
-3. Abstraction: keep the C-vs-Pascal IO split clean — both target the same PAL /
-   syscall layer; C stdio is a thin C-ABI veneer over it, not a fork.
+3. Abstraction (IMPORTANT): C stdio is a thin C-ABI veneer over the PAL, NOT a
+   fork and NOT hardcoded syscalls. The PAL backend decides the mechanism:
+   - posix (x86-64/linux): raw write/read/open/lseek syscalls.
+   - ESP32: route through ESP-IDF (assume IDF for now; IDF provides
+     vfs/console/fatfs). stdio without IDF is possible but out of scope.
+   So __pxx_write etc. dispatch to the active PAL (PXX_PLATFORM_*), exactly like
+   Pascal's IO already does — C and Pascal share ONE platform IO layer.
 
 Last run blockers after this: bug-c-double-vararg (%f in number formatting),
 global ARRAY initializer data (lua's static luaL_Reg tables).
