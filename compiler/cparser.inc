@@ -2195,9 +2195,23 @@ begin
 end;
 
 function CEvalConstMul: Int64;
+var rhs: Int64;
 begin
   Result := CEvalConstPrimary;
-  while CurTok.Kind = tkStar do begin Next; Result := Result * CEvalConstPrimary; end;
+  while (CurTok.Kind = tkStar) or (CurTok.Kind = tkSlash) or (CurTok.Kind = tkMod) do
+  begin
+    if CurTok.Kind = tkStar then begin Next; Result := Result * CEvalConstPrimary; end
+    else if CurTok.Kind = tkSlash then
+    begin
+      Next; rhs := CEvalConstPrimary;
+      if rhs <> 0 then Result := Result div rhs else Result := 0;   { e.g. sizeof(a)/sizeof(a[0]) }
+    end
+    else
+    begin
+      Next; rhs := CEvalConstPrimary;
+      if rhs <> 0 then Result := Result mod rhs else Result := 0;
+    end;
+  end;
 end;
 
 function CEvalConstAdd: Int64;
