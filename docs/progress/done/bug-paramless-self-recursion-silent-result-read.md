@@ -2,6 +2,7 @@
 
 - **Type:** bug / dev-footgun (compiler language semantics)
 - **Track:** A (compiler core / parser-semantics) — raised by Track C (C frontend).
+- **Status:** DONE (2026-06-26, commit on master)
 - **Opened:** 2026-06-25
 
 ## Symptom
@@ -54,3 +55,12 @@ depends on it). Just surface the ambiguity.
 
 Always call paramless routines (incl. self-recursion) as `Name()`. Documented in
 the Track C resume notes / landmines.
+
+## Resolution (2026-06-26, Track A)
+Added opt-in `--warn-self-result`: warns at the bare own-name value-read site when
+the enclosing function is parameterless (the ambiguous case; with-params bare name
+is unambiguously Result). Default OFF so the compiler's own bare-name=Result idiom
+keeps self-host byte-identical and -Werror builds clean. The assignment-target
+form and `Name()` calls are unaffected. Did NOT change the default
+bare-name=Result semantics (self-host depends on it), per the ticket's non-goal —
+just surfaced the ambiguity. C-frontend authors: build with --warn-self-result.
