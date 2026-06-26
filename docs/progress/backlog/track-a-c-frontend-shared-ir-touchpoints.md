@@ -72,8 +72,9 @@ Canonical (master, after merge `556ad7dd`) — these are DONE, do not re-add:
 Rules to avoid a repeat (reinforced):
 1. C never invents a shared AST node number unilaterally. Need one → file a Track A
    ticket (as section 2 did for AN_TERNARY) and use the number A assigns.
-2. If C must prototype a node before A lands it, claim from the TOP of the free
-   range and record it HERE the same commit, so A sees the reservation.
+2. If C must prototype a node before A lands it, claim from a RESERVED HIGH range
+   (AN_C_PROTO_BASE = 100+) and record it HERE the same commit, so it can never
+   collide with A's next sequential number, and A sees the reservation.
 3. The C frontend's `cparser` builds nodes in **master's documented shape** (table
    above). Lowering for these lives in `ir.inc` and is **Track A's**; C only emits.
 4. AN_CASE/AN_DEFAULT are shared Pascal+C node kinds (17/48) — C switch reuses
