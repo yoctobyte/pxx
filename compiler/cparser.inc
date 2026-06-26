@@ -13,6 +13,7 @@ function IsBareStructDecl: Boolean; forward;
 function IsCTypeTok: Boolean; forward;
 function ParseCDeclType: TTypeKind; forward;
 function ParseCCommaStmt: Integer; forward;
+function ParseCCommaExpr: Integer; forward;
 function ParseCSwitchAST: Integer; forward;
 function CNodeIsPointer(node: Integer): Boolean; forward;
 function CNodePtrElemRec(node: Integer): Integer; forward;
@@ -1305,12 +1306,31 @@ begin
   Result := blk;
 end;
 
+{ A full C expression INCLUDING the top-level comma operator `a, b` — yields an
+  AN_COMMA (evaluate left for side effects, value is the right). Used where C
+  allows a comma expression: if/while/for conditions. (Function arguments and
+  initializer lists keep using ParseCExpr, which stops at a comma separator.) }
+function ParseCCommaExpr: Integer;
+var node: Integer;
+begin
+  Result := ParseCExpr;
+  while CurTok.Kind = tkComma do
+  begin
+    Next;
+    node := AllocNode(AN_COMMA);
+    ASTLeft[node] := Result;
+    ASTRight[node] := ParseCExpr;
+    ASTTk[node] := ASTTk[ASTRight[node]];
+    Result := node;
+  end;
+end;
+
 function ParseCIfAST: Integer;
 var cond, thenS, elseS, node, pair: Integer;
 begin
   Next; { if }
   Expect(tkLParen, '(');
-  cond := ParseCExpr;
+  cond := ParseCCommaExpr;
   Expect(tkRParen, ')');
   thenS := ParseCStatementAST;
   elseS := -1;
@@ -1329,7 +1349,7 @@ var cond, body, node: Integer;
 begin
   Next; { while }
   Expect(tkLParen, '(');
-  cond := ParseCExpr;
+  cond := ParseCCommaExpr;
   Expect(tkRParen, ')');
   body := ParseCStatementAST;
   node := AllocNode(AN_WHILE);
@@ -1395,7 +1415,7 @@ begin
     cond := AllocNode(AN_INT_LIT); ASTIVal[cond] := 1; ASTTk[cond] := Ord(tyBoolean);
   end
   else
-    cond := ParseCExpr;
+    cond := ParseCCommaExpr;
   Expect(tkSemicolon, ';');
 
   post := -1;
