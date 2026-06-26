@@ -1,7 +1,28 @@
 # C desktop path — compile real portable C (tiny-regex → lua → sqlite)
 
 - **Type:** feature (track-C milestone path)
-- **Status:** backlog (active arc — lua core **15/34 files parse clean**; see logs)
+- **Status:** backlog (active arc — lua core **22/34 files parse clean (65%)**; see logs)
+- **Session 2026-06-26 rounds 7-10 (Track C), all gate-green + byte-identical,
+  lua 14 -> 22:** f()->field on pointer-returning calls + global-struct record id
+  (silent miscompile — global struct fields were all offset 0); `##` token-paste +
+  macro arg whitespace trim; C goto + labels; C float-literal lexing; constant-expr
+  `/` and `%`; comma operator in if/while/for conditions; array-syntax function
+  params `T name[]` decay to pointers (silent miscompile); object-macro alias of a
+  function macro re-expands with source args (lua setsvalue2n/setobj2n -> unblocked
+  lvm + lundump partially). Fixtures b31-b38. REMAINING 12 files, each deep or
+  cross-track: (a) **varargs** `__builtin_va_start` (lapi/lauxlib/ldebug — va_list
+  ABI, Track A). (b) **emergent codegen combinations** in the VM/GC core (ltm/ldo:
+  `setobjs2s(L, top.p++, func.p + i)` = setobj block over `&(p++)->val` /
+  `&(p+i)->val` — every isolated piece compiles == gcc, the macro-expanded block
+  does not; reduce with the full-file-bisection method as was done for the
+  multi-declarator root cause). (c) IRLowerAddress of rvalue/compound (lparser
+  AN_INT_LIT, luac AN_COMMA — several are UB, verify vs gcc). (d) `(type)` cast in
+  a constant expr (ltable MAXABITS — finicky, see bug-c-const-cast-in-array-dim).
+  (e) float codegen conversions (lstrlib/lobject — see
+  bug-c-float-int-cast-and-spill). (f) lcode field-name. (g) multi-file linking.
+  METHOD NOTE that keeps working: shrink a failing real-file snippet (drop macro,
+  drop types, drop block) to a plain-C minimal repro; emergent "works in isolation"
+  failures are usually a shared root (multi-declarator, object-macro-alias).
 - **Session 2026-06-26 round 6 (Track C), gate-green + byte-identical, lua 14 ->
   15 + VM-core path unblocked:** ROOT-CAUSE fix — multi-declarator pointers
   `T *a, *b;` (5d3bc2f). ParseCLocalDeclAST folded the FIRST declarator's `*` into
