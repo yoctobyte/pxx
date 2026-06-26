@@ -402,6 +402,8 @@ test-core: $(COMPILER)
 	/tmp/cagg_init_local_b4126; test "$$?" = "42"
 	./$(COMPILER) test/cptr_diff_b42.c /tmp/cptr_diff_b4226
 	/tmp/cptr_diff_b4226; test "$$?" = "42"
+	./$(COMPILER) test/cassign_value_b43.c /tmp/cassign_value_b4326
+	/tmp/cassign_value_b4326; test "$$?" = "42"
 	./$(COMPILER) -Itest/cinc/inc test/cinc/cinc_main.c /tmp/cinc_main26
 	test "$$(/tmp/cinc_main26)" = "$$(printf 'local-ok\ninc-ok')"
 	./$(COMPILER) test/test_declared_directive.pas /tmp/test_declared_directive26

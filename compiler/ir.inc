@@ -2840,11 +2840,20 @@ begin
                             IRAppend(IR_CONST_INT, -1, -1, -1, 8, Ord(tyInteger)),
                             Ord(tkPlus), 0, Ord(tyPointer));
         if ASTKind[ASTLeft[node]] = AN_IDENT then
-          Result := IRAppend(IR_STORE_SYM, ASTIVal[ASTLeft[node]], value, -1, 0, ASTTk[ASTLeft[node]])
+        begin
+          Result := IRAppend(IR_STORE_SYM, ASTIVal[ASTLeft[node]], value, -1, 0, ASTTk[ASTLeft[node]]);
+          { In C an assignment is an expression yielding the stored value, so load
+            it back; this lets `g(p = x)` / `(p = x)->f` use the value. Pascal keeps
+            the store node as the result -> self-build byte-identical. }
+          if CProgramMode then
+            Result := IRAppend(IR_LOAD_SYM, ASTIVal[ASTLeft[node]], -1, -1, 0, ASTTk[ASTLeft[node]]);
+        end
         else
         begin
           leftAddr := IRLowerAddress(ASTLeft[node]);
           Result := IRAppend(IR_STORE_MEM, leftAddr, value, -1, 0, ASTTk[ASTLeft[node]]);
+          if CProgramMode then
+            Result := IRAppend(IR_LOAD_MEM, leftAddr, -1, -1, 0, ASTTk[ASTLeft[node]]);
         end;
       end;
       end;

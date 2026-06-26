@@ -379,7 +379,10 @@ begin
     Result := IntToTypeKind(ASTTk[node]) = tyPointer
   else if ASTKind[node] = AN_CALL then
     { a function returning a pointer — `f()->field` must deref the result }
-    Result := IntToTypeKind(ASTTk[node]) = tyPointer;
+    Result := IntToTypeKind(ASTTk[node]) = tyPointer
+  else if ASTKind[node] = AN_ASSIGN then
+    { `(p = x)->field`: the assignment yields the (pointer) LHS value }
+    Result := CNodeIsPointer(ASTLeft[node]);
 end;
 
 { Pointed-at record id of a pointer-valued node, for `(p+i)->field` resolution.
@@ -393,7 +396,9 @@ begin
   else if ASTKind[node] = AN_FIELD then
     Result := RecFieldPtrElemRec(ResolveNodeRec(ASTLeft[node]), GetASTIdentName(node))
   else if (ASTKind[node] = AN_BINOP) or (ASTKind[node] = AN_INCDEC) then
-    Result := ASTSOffset[node];
+    Result := ASTSOffset[node]
+  else if ASTKind[node] = AN_ASSIGN then
+    Result := CNodePtrElemRec(ASTLeft[node]);
 end;
 
 { Size in bytes of the type just consumed by ParseCDeclType (globals CType*). }
@@ -633,8 +638,8 @@ begin
         { A computed pointer (e.g. `(p+i)->f`, `(p++)->f`) has no symbol/field for
           ResolveNodeRec to walk, so carry the element record on the deref
           (ResolveNodeRec honours ASTIVal[AN_DEREF] > 0). }
-        if ((ASTKind[node] = AN_BINOP) or (ASTKind[node] = AN_INCDEC)) and
-           (CNodePtrElemRec(node) > 0) then
+        if ((ASTKind[node] = AN_BINOP) or (ASTKind[node] = AN_INCDEC) or
+            (ASTKind[node] = AN_ASSIGN)) and (CNodePtrElemRec(node) > 0) then
           ASTIVal[dnode] := CNodePtrElemRec(node);
         baseFld := dnode;
       end;
