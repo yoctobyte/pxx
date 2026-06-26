@@ -2011,7 +2011,7 @@ var
   pelemrec: array[0..15] of Integer;
   pprocsig: array[0..15] of Integer;  { fn-pointer signature Procs[] index per param, else -1 }
   savedSC, savedFS, node, savedCurProc: Integer;
-  parenName: Boolean;
+  parenName, isVariadic: Boolean;
 begin
   retType := ParseCDeclType;
   { Capture the return type's pointed-at type so `f()^`, `f()^.field`, `f()[i]`
@@ -2055,8 +2055,10 @@ begin
   end;
   Expect(tkLParen, '(');
   nparams := 0;
+  isVariadic := False;
   while (CurTok.Kind <> tkRParen) and (CurTok.Kind <> tkEOF) do
   begin
+    if CurTok.Kind = tkDot then isVariadic := True;   { `...` lexes to three tkDot }
     if IsCTypeTok then
     begin
       ptype := ParseCDeclType;
@@ -2120,6 +2122,8 @@ begin
   procIdx := FindProc(name);
   if procIdx < 0 then
     procIdx := RegisterProc(name, isFunc, retType, nparams, pnames, ptypes);
+  ProcVariadic[procIdx] := isVariadic;
+  ProcNamedGP[procIdx] := nparams;   { lua's variadic fns take only GP named params (L, fmt) }
   for i := 0 to nparams - 1 do
     ProcParamPtrDepth[procIdx * 16 + i] := pdepths[i];
   ProcRetPtrElemTk[procIdx] := retPtrElemTk;
