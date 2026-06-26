@@ -77,3 +77,4 @@
 2026-06-26T05:13:21Z  v77  3878181e8d5f7fbdb2f3aeb8862b73a915705bfab5581657ec6b473ce37d832e  86d868875157d6387260c9a3bb2ffcc382a60d97  feat(ir): AN_COMMA — C comma operator (slice 3)
 2026-06-26T05:35:50Z  v78  ad6d3ca6590781e05f94e9495ae69236be58def42167578366688fc2fff707e0  0c8595e0bcf8e369de9891384701607423f31d6f  feat(ir): AN_INCDEC + AN_COMPOUND_ASSIGN — value-bearing assign & ++/-- (slice 2)
 2026-06-26T06:08:47Z  v79  2a4b6e331d4edf745ea845291dd30b08a2055ea14faf574217f853da30a361d3  ae8f7578760abafec80da252578460ef0a4b4926  fix(parser): not <ordinal-returning call> is bitwise, not boolean
+2026-06-26T11:46:32Z  v80  7c365fe5d88838c33465ef89117e2061d91b73571a4082f46233ba34bdb076d9  afae3f1a234d62b3302877cdab8b6e8fe0a0729c  merge: feat/cfront -> master — C frontend lands (Track A re-pin event)
