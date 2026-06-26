@@ -3486,6 +3486,16 @@ begin
          ((ASTKind[left] = AN_CALL) and
           ((Integer(ASTIVal[left]) = -Ord(tkInteger_T)) or
            (Integer(ASTIVal[left]) = -Ord(tkLongWord_T)))) or
+         { A user function call whose DECLARED return type is a non-boolean
+           ordinal is authoritative (unlike the node's ASTTk, which PXX sometimes
+           mistags). This trusts `not f()` for an Int64/Integer-returning f
+           (e.g. C const-eval `~CEvalConstPrimary()`) as bitwise, while a
+           Boolean-returning f (RetType = tyBoolean, e.g. `not Eat(..)`) still
+           falls through to logical. }
+         ((ASTKind[left] = AN_CALL) and (Integer(ASTIVal[left]) >= 0) and
+          (Integer(ASTIVal[left]) < ProcCount) and
+          TypeIsOrdinal(Procs[Integer(ASTIVal[left])].RetType) and
+          (Procs[Integer(ASTIVal[left])].RetType <> tyBoolean)) or
          ((ASTKind[left] = AN_BINOP) and opIsArith));
       if bitNot then
       begin
