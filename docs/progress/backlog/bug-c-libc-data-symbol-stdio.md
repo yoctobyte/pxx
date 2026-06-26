@@ -16,7 +16,21 @@
 - C cannot emit a raw syscall (`__asm__` unsupported), so the bridge must be a
   pxx intrinsic or a Pascal-backed helper.
 
-## Fix (libc-free, in lib/crtl)
+## Fix — REUSE the existing Pascal RTL (do NOT rewrite IO)
+KEY: C can import Pascal libraries, and the Pascal RTL already implements
+file/console IO once, PAL-aware (posix syscalls / ESP-IDF). So C stdio is a thin
+C-ABI VENEER that calls the EXISTING Pascal RTL IO routines — not a new
+__pxx_write + a from-scratch stdio.c. No duplication, no second IO path.
+
+- stdout/stderr/stdin -> map to the Pascal RTL's standard handles / fd 1,2,0.
+- fwrite/fputs/fputc/puts/fread/fopen/fclose/fseek/fflush -> call the matching
+  Pascal RTL routine (the one Pascal `write`/`Assign`/`BlockWrite`/file API
+  already uses), which already dispatches through the PAL (posix vs ESP-IDF).
+- The earlier "__pxx_write builtin + lib/crtl/src/stdio.c from scratch" plan is
+  superseded by this: only write the veneer + the C<->Pascal RTL binding. printf
+  staying on AN_WRITE is fine, or also re-point it at the RTL for consistency.
+
+## (superseded) earlier from-scratch sketch
 1. Add a low-level syscall bridge usable from C: a `__pxx_write(int fd, const
    void *buf, unsigned long len)` builtin that emits the write syscall (reuse the
    AN_WRITE / AN_SYSCALL path the printf stub already uses). Likewise
