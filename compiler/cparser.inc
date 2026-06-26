@@ -1585,6 +1585,38 @@ begin
     Exit;
   end;
 
+  { `goto label;` }
+  if (CurTok.Kind = tkIdent) and (CurTok.SVal = 'goto') then
+  begin
+    Next;
+    if CurTok.Kind <> tkIdent then Error('expected label name after goto');
+    node := AllocNode(AN_GOTO);
+    ASTSOffset[node] := Tokens[TokPos - 1].SOffset;
+    ASTSLen[node] := Tokens[TokPos - 1].SLen;
+    Next;
+    Eat(tkSemicolon);
+    Result := node;
+    Exit;
+  end;
+
+  { `label:` — a goto target as a statement (after case/default, which are above) }
+  if (CurTok.Kind = tkIdent) and (Tokens[TokPos].Kind = tkColon) then
+  begin
+    { Register the label name so AN_LABEL/AN_GOTO resolve it (C labels are not
+      pre-declared; the table is reset per function in ParseCSubroutine). }
+    if GotoLabelCount >= MAX_GOTO_LABELS then Error('too many labels');
+    GotoLabelNOff[GotoLabelCount] := Tokens[TokPos - 1].SOffset;
+    GotoLabelNLen[GotoLabelCount] := Tokens[TokPos - 1].SLen;
+    GotoLabelCodePos[GotoLabelCount] := -1;
+    Inc(GotoLabelCount);
+    node := AllocNode(AN_LABEL);
+    ASTSOffset[node] := Tokens[TokPos - 1].SOffset;
+    ASTSLen[node] := Tokens[TokPos - 1].SLen;
+    Next; Next;    { consume ident and colon }
+    Result := node;
+    Exit;
+  end;
+
   if CurTok.Kind = tkBreak then
   begin
     Next; Eat(tkSemicolon);
@@ -1846,7 +1878,7 @@ var
   retType, ptype: TTypeKind;
   name: AnsiString;
   isFunc: Boolean;
-  nparams, procIdx, i, idx, patchPos, sz: Integer;
+  nparams, procIdx, i, idx, patchPos, sz, gli: Integer;
   retPtrElemTk, retPtrElemRec: Integer;
   ptypes: array[0..15] of TTypeKind;
   pnames: array[0..15] of AnsiString;
@@ -1988,6 +2020,11 @@ begin
   savedFS := FrameSize;
   FrameSize := 0;
   CurProc := procIdx;
+  { Reset the goto-label table per function (C labels are registered inline as
+    `label:` is parsed; names are function-scoped). }
+  GotoLabelCount := 0;
+  GotoFixupCount := 0;
+  for gli := 0 to MAX_GOTO_LABELS - 1 do GotoLabelIRId[gli] := -1;
   Procs[procIdx].ScopeBase := SymCount;
   
   { Allocate parameter slots }
