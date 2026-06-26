@@ -174,6 +174,17 @@ begin
   Result := left;
 end;
 
+{ The pointer to a va_list's control block, for the __pxx_va_* helpers. va_list
+  is `__pxx_va_elem[1]`, so a LOCAL va_list is an array — take its address (&ap[0]).
+  A va_list PARAMETER decayed to a pointer at the call site, so the identifier
+  already IS the control-block pointer — pass it as-is. }
+function CVaListAddr(apNode: Integer): Integer;
+begin
+  Result := AllocNode(AN_ADDR);
+  ASTLeft[Result] := apNode;
+  ASTTk[Result] := Ord(tyPointer);
+end;
+
 { A primary: integer/char/string literal, parenthesised expr, identifier
   (constant -> folded literal; variable -> AN_IDENT; name followed by `(` ->
   call with an AN_ARG chain). }
@@ -255,7 +266,7 @@ begin
         vt := ParseCDeclType;
         if CTypePtrDepth > 0 then vt := tyPointer;
         Expect(tkRParen, ')');
-        addrNode := AllocNode(AN_ADDR); ASTLeft[addrNode] := apNode; ASTTk[addrNode] := Ord(tyPointer);
+        addrNode := CVaListAddr(apNode);
         if (vt = tySingle) or (vt = tyDouble) then helper := FindProc('__pxx_va_arg_fp')
         else helper := FindProc('__pxx_va_arg_gp');
         argNode := AllocNode(AN_ARG); ASTLeft[argNode] := addrNode; ASTRight[argNode] := -1;
@@ -271,7 +282,7 @@ begin
         apNode := ParseCExpr; Eat(tkComma);
         valNode := ParseCExpr;   { `last` named param — discarded }
         Expect(tkRParen, ')');
-        addrNode := AllocNode(AN_ADDR); ASTLeft[addrNode] := apNode; ASTTk[addrNode] := Ord(tyPointer);
+        addrNode := CVaListAddr(apNode);
         idx := FindSym('__va_save');
         a2 := AllocNode(AN_IDENT); ASTIVal[a2] := idx; ASTTk[a2] := Ord(tyRecord);
         node := AllocNode(AN_ADDR); ASTLeft[node] := a2; ASTTk[node] := Ord(tyPointer);
