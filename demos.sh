@@ -46,7 +46,7 @@ DEMOS=(
   "solitaire|examples/solitaire/console_solitaire.pas|tty|Klondike solitaire (terminal)"
   "menu|examples/tui/menudemo.pas|tty|TUI menu widgets"
   "triangle|examples/gl/triangle.pas|gui|OpenGL triangle"
-  "solitaire-gui|examples/solitaire_gui/console_solitaire.pas|gui|Solitaire (GUI)"
+  "solitaire-gui|examples/solitaire_gui/solitaire_gui.pas|gui|Solitaire (GUI)"
   "fm|examples/fm/fm.pas|gui|File manager (GTK)"
   "player|examples/player/player.pas|gui|Media player (GTK)"
 )

@@ -65,4 +65,5 @@ Run cross binaries under QEMU user-mode (see the repo's `tools/run_target.sh`).
 
 - [Language](../language/)
 - [Standard library](../library/)
+- [Examples](../examples/)
 - [Targets](../targets/)

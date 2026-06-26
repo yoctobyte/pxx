@@ -16,6 +16,32 @@ classes, basic generics, exceptions, and simple units are the best fit.
 `{$mode objfpc}` and `-Mobjfpc` are accepted as compatibility markers. PXX does
 not currently implement multiple Pascal semantic modes.
 
+## Porting checklist
+
+Start with a small, direct compile:
+
+```sh
+./pxx program.pas program
+```
+
+If the program uses local units, add their directories explicitly:
+
+```sh
+./pxx -Fusrc -Fusrc/common program.pas program
+```
+
+For code that probes FPC identity symbols or expects FPC-style conditional
+branches, try the curated compatibility define set:
+
+```sh
+./pxx --mimic-fpc -Fuvendor/lib program.pas program
+```
+
+`--mimic-fpc` is opt-in. It is meant for FPC-oriented library code that chooses
+implementation branches by compiler identity. Do not use it as a blanket default
+for every PXX project, and do not use it to decide whether code is running under
+real Free Pascal.
+
 ## Identity symbols
 
 | Symbol | Meaning |
@@ -43,6 +69,18 @@ Use this pattern for compiler-specific code:
 - Some FPC directives are accepted only as comments or compatibility markers.
 - Overflow, range checking, and many compile-switch states are not implemented.
 - Only tested project units and examples should be treated as supported.
+
+## Common fixes
+
+Prefer these changes when moving small FPC examples to PXX:
+
+- Replace implicit package assumptions with explicit `uses` clauses and `-Fu`
+  search roots.
+- Keep compiler-specific branches under `{$ifdef PXX}` or `{$ifdef FPC}`.
+- Avoid depending on FPC's full RTL surface unless the needed unit exists in
+  `lib/rtl`.
+- Build C-header or imported-library experiments separately from the first
+  Pascal port; get the Pascal-only slice compiling first.
 
 ## Next
 

@@ -35,6 +35,7 @@ runtime and the ELF bytes is its own code, no toolchain dependencies.
   compatibility notes.
 - [Targets](./targets/) — native, cross, ESP32, and cross-language output.
 - [Standard library](./library/) — the RTL and PCL units.
+- [Examples](./examples/) — demo programs included in the checkout.
 - [Reference](./reference/) — command line, configuration, limits, and glossary.
 
 > These docs are published directly from the project's git repository. Found a
