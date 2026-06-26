@@ -2065,7 +2065,18 @@ begin
     AN_INDEX, AN_FIELD, AN_DEREF:
     begin
       left := IRLowerAddress(node);
-      if (IntToTypeKind(ASTTk[node]) = tyString) or (IntToTypeKind(ASTTk[node]) = tySet) then
+      if CProgramMode and (ASTKind[node] = AN_FIELD) and
+         RecFieldIsArray(ResolveNodeRec(ASTLeft[node]), GetASTIdentName(node)) and
+         (RecFieldDynDepth(ResolveNodeRec(ASTLeft[node]), GetASTIdentName(node)) = 0) then
+      begin
+        { C fixed-array struct field (e.g. `char contents[N]`) decays to a pointer
+          = the field's ADDRESS, exactly like an array variable (AN_IDENT IsArray
+          -> IR_LEA above). Without this it would load the array's first bytes as a
+          scalar value. }
+        Result := left;
+        IRTk[Result] := Ord(tyPointer);
+      end
+      else if (IntToTypeKind(ASTTk[node]) = tyString) or (IntToTypeKind(ASTTk[node]) = tySet) then
       begin
         { A frozen-string / set value IS its address (no load). Present the
           address node with the value's frozen-string tag, mirroring the AN_IDENT

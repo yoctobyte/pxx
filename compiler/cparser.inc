@@ -1203,6 +1203,10 @@ begin
     begin
       Inc(CTypePtrDepth);
       Next;
+      { skip a pointer-level `const`/`volatile` qualifier: `char *const p`,
+        `T * const * p` — without this the declarator name is never reached and
+        the variable goes undeclared (read as 0). }
+      while CurTok.Kind = tkConst do Next;
     end;
     if CTypePtrDepth >= 2 then
     begin
@@ -1312,6 +1316,8 @@ var baseTk, declTk, scalarTk: TTypeKind;
     declElemTk, declElemRec, declProcSig, declPtr, scalarRec: Integer;
     hadStar: Boolean;
     name: AnsiString;
+    inode, idxLit, ei, nArrElems, brDepth: Integer;
+    arrElems: array[0..255] of Integer;
 begin
   baseTk := ParseCDeclType;   { specifiers + first declarator's pointer suffix }
   { Capture the pointer element type/record now — ParseCExpr below must not
@@ -1335,29 +1341,85 @@ begin
     name := CurTok.SVal; Next;
     if CurTok.Kind = tkLBrack then
     begin
-      { fixed array  T name[N]  — N is a constant expression (literal/enum/macro) }
+      { fixed array  T name[N]  — N is a constant expression (literal/enum/macro);
+        an unsized `[]` (arrLen=-1) is sized from the initializer below. }
       Next;
-      arrLen := CEvalConstExpr;
+      if CurTok.Kind = tkRBrack then arrLen := -1
+      else arrLen := CEvalConstExpr;
       Expect(tkRBrack, ']');
-      if arrLen < 1 then arrLen := 1;
       { An array of structs needs the element record id so AllocArray sizes the
         slot by RecSize, not a default — `struct V a[N]; a[i].f` was using the
         wrong stride. }
       if declTk = tyRecord then LastTypeRecId := scalarRec;
+      { Array brace-initializer for scalar/pointer element arrays: parse each
+        element expression up front (so an unsized open-bracket array is sized
+        from the count) and generate arr-index-k := ek assignments at the
+        declaration point. Reuses the C expr lowering, so string-literal / addr /
+        cast elements all materialise correctly (this is how lua's
+        luaT_eventname char-pointer table gets real data instead of stack
+        garbage). Record-element arrays (each element a nested brace group) and
+        over-long lists fall back to the balanced-brace skip below. }
+      nArrElems := 0;
+      if (CurTok.Kind = tkAssign) and (declTk <> tyRecord) and
+         (Tokens[TokPos].Kind = tkBegin) then
+      begin
+        Next; Next;   { consume the assign then the open brace }
+        while (CurTok.Kind <> tkEnd) and (CurTok.Kind <> tkEOF) do
+        begin
+          if nArrElems > 255 then begin nArrElems := -1; Break; end;
+          arrElems[nArrElems] := ParseCExpr;
+          Inc(nArrElems);
+          if CurTok.Kind = tkComma then begin Next; Continue; end;
+          Break;
+        end;
+        if nArrElems >= 0 then Expect(tkEnd, '}')
+        else begin
+          { oversize: finish the balanced-brace skip from wherever we stopped }
+          brDepth := 1;
+          while (brDepth > 0) and (CurTok.Kind <> tkEOF) do
+          begin
+            if CurTok.Kind = tkBegin then Inc(brDepth)
+            else if CurTok.Kind = tkEnd then Dec(brDepth);
+            Next;
+          end;
+          nArrElems := 0;
+        end;
+      end;
+      if arrLen < 1 then
+      begin
+        if nArrElems > 0 then arrLen := nArrElems else arrLen := 1;
+      end
+      else if nArrElems > arrLen then arrLen := nArrElems;
       idx := AllocArray(name, declTk, 0, arrLen - 1);
-      { array initialisers `= { ... }` not yet materialised — skip if present.
-        Balanced-brace skip so inner commas (`{1, 2, 3}`) don't end it early. }
+      if declTk = tyPointer then
+      begin
+        Syms[idx].PtrElemTk := IntToTypeKind(declElemTk);
+        Syms[idx].PtrElemRec := declElemRec;
+      end;
+      for ei := 0 to nArrElems - 1 do
+      begin
+        idn := AllocNode(AN_IDENT); ASTIVal[idn] := idx; ASTTk[idn] := Ord(declTk);
+        idxLit := AllocNode(AN_INT_LIT); ASTIVal[idxLit] := ei; ASTTk[idxLit] := Ord(tyInteger);
+        inode := AllocNode(AN_INDEX); ASTLeft[inode] := idn; ASTRight[inode] := idxLit;
+        ASTTk[inode] := Ord(declTk);
+        asn := AllocNode(AN_ASSIGN); ASTLeft[asn] := inode; ASTRight[asn] := arrElems[ei];
+        ASTTk[asn] := Ord(declTk);
+        seq := AllocNode(AN_SEQ); ASTLeft[seq] := asn; ASTRight[seq] := -1;
+        if head = -1 then head := seq else ASTRight[tail] := seq;
+        tail := seq;
+      end;
+      { Unconsumed initializer (record-element array, or non-brace): balanced skip. }
       if CurTok.Kind = tkAssign then
       begin
         Next;
         if CurTok.Kind = tkBegin then
         begin
-          idx := 0;   { reuse as brace depth }
+          brDepth := 0;
           repeat
-            if CurTok.Kind = tkBegin then Inc(idx)
-            else if CurTok.Kind = tkEnd then Dec(idx);
+            if CurTok.Kind = tkBegin then Inc(brDepth)
+            else if CurTok.Kind = tkEnd then Dec(brDepth);
             Next;
-          until (idx = 0) or (CurTok.Kind = tkEOF);
+          until (brDepth = 0) or (CurTok.Kind = tkEOF);
         end
         else
           while (CurTok.Kind <> tkComma) and (CurTok.Kind <> tkSemicolon) and
