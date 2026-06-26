@@ -38,6 +38,7 @@ For ESP32 targets, start with the board-specific examples under
 
 - [Cross-compilation](./cross-compilation.md)
 - [Cross languages](./cross-languages.md)
+- [Nil Python](./nil-python.md)
 
 ## Next
 

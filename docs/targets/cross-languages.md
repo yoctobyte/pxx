@@ -30,7 +30,9 @@ full C ABI compatibility layer.
 ## Nil Python
 
 Nil Python is an experimental Python-like frontend designed to call imported C
-APIs directly through the same compiler backend. Treat it as a research feature.
+APIs directly through the same compiler backend. It supports strict local type inference and automatic C-parameter return-lifting (autotyping).
+
+See the dedicated [Nil Python](./nil-python.md) page for detailed syntax, type inference rules, and C-interop capabilities.
 
 ## Next
 
