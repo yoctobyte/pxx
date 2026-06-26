@@ -22,10 +22,11 @@ language). **At session start, infer your track from the request:**
   lib-test` / `make demos`, tickets tagged "(library)". Works on `master`.
 - **Track C — C frontend (cfront).** The C-language frontend
   (`compiler/clexer.inc`, `cparser.inc`, `cpreproc.inc`, C-exclusive C→IR
-  lowering), `lib/crtl`, C tests. **Works on a branch in its own worktree**
-  (`feat/cfront`, `../frankonpiler-cfront`) — never on `master` — because adding
-  the C frontend changes the compiler binary (reseed) and must stay off A/B/D's
-  ground until a stable slice merges.
+  lowering), `lib/crtl`, C tests. **Works on `master`** (as of v80, when the C
+  frontend merged in — the old `feat/cfront` worktree is retired). The branch
+  existed only while C was destabilizing; now C *is* part of the compiler, so it
+  lives on `master` like everyone else, protected by the same pin boundary (B/D
+  build on `pinned`, not HEAD).
 - **Track D — documentation (user / website).** `docs/site/**` — the user-facing
   docs the website pulls straight from git and publishes (getting-started,
   language reference, tutorials, install, the public landing copy). Prose only:
@@ -54,14 +55,23 @@ never rebuild the compiler. `make lib-test` (green smoke) / `make demos`
 (dashboard). Compiler/language gaps → file a ticket in `docs/progress/backlog`.
 
 ### Track C in one line
-Own the C-frontend files; build the C compiler on the `feat/cfront` branch.
-**Shared compiler internals stay A's** — a new AST node / IR op / symtab field /
-backend change → **file a Track A ticket** (A implements + pins; C builds on the
-pinned compiler). Never edit shared AST/IR/codegen unilaterally — that is the
-rule that keeps A's self-host gate safe. Gate = C tests green + self-host
-byte-identical + cross. Rebase on `master` periodically (C builds the compiler,
-so it must absorb A's pins). **Merging `feat/cfront` → `master` is a Track A
-event** (re-pin), not a quiet fast-forward.
+Own the C-frontend files (`clexer`/`cparser`/`cpreproc`, C→IR lowering,
+`lib/crtl`, C tests) on `master`. **Shared compiler internals stay A's** — a new
+AST node / IR op / symtab field / backend change (anything in `lexer.inc`,
+`parser.inc`, `ir*.inc`, `symtab.inc`, `defs.inc`, the backends) → **file a Track
+A ticket**, do not edit it under Track C. That rule keeps A's self-host gate safe
+and is what stops AST-node-number / token collisions. Gate = C tests green +
+self-host byte-identical + cross. Land only green; big destabilizing work goes in
+behind a flag or incrementally, never a long-lived branch.
+
+### Combined-track assignment (one agent, two tracks)
+The user may put a single agent on **two tracks at once** — e.g. "you are Track A
+*and* C". Then the tracks stay distinct (own files, own gates) and a shared-code
+change is **still filed as a Track A ticket** for traceability — but the *same
+agent may resolve its own ticket*, because the user has confirmed no other agent
+holds Track A concurrently, so there is no coordination hazard. File → (normally
+hand off) → here, file → self-resolve. Drop back to file-and-hand-off the moment
+the agent is single-track again.
 
 ### Track D in one line
 Own `docs/site/**` (Markdown the website publishes verbatim from git). No build,
@@ -71,8 +81,9 @@ while documenting → file a ticket in `docs/progress/backlog`, don't fix code.
 Verify code snippets by compiling them; don't invent behaviour.
 
 ## Workflow norms (all tracks)
-- A / B / D work directly on `master` (no worktrees/clones); **C works on
-  `feat/cfront` in its own worktree**. Commit in small units.
+- **All tracks work directly on `master`** (no worktrees/clones). Commit in small
+  units. (Historic: C used a `feat/cfront` worktree until it merged at v80; that
+  worktree is retired.)
 - `git pull --rebase` before pushing; push promptly. Stay in your lane's files.
 - **Push only your own lane.** Each track pushes the commits it made. During a
   sync, do **not** push, commit, or rebase another track's branch or in-flight

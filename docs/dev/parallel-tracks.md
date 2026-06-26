@@ -4,7 +4,8 @@ Work streams proceed in parallel, decoupled by a **pinned stable compiler**.
 The point: A can rebuild and temporarily regress the compiler while B keeps
 building libraries and demo apps against a known-good baseline, D writes the
 public documentation against that same baseline, and C grows the C-language
-frontend on an isolated branch without disturbing any of them.
+frontend. (C grew on an isolated branch until it merged at v80; all tracks now
+work on `master`.)
 
 The user runs **several Claude agents at once** against this repo — one per
 track. Most sessions are one track. **The track letter is a stable ID; always
@@ -26,8 +27,8 @@ At the start of a session, infer the track from the user's request:
   on `master`.
 - **Track C — C frontend (cfront).** Signals: the C-language frontend
   (`compiler/clexer.inc`, `cparser.inc`, `cpreproc.inc`, C-exclusive C→IR
-  lowering), `lib/crtl`, compiling C programs (tiny-regex / lua / sqlite),
-  `feat/cfront`. **Works on a branch in its own worktree**, never `master`.
+  lowering), `lib/crtl`, compiling C programs (tiny-regex / lua / sqlite).
+  **Works on `master`** (merged at v80; the old `feat/cfront` worktree is retired).
 - **Track D — docs/website.** Signals: user documentation, getting-started /
   install / tutorial / language-reference prose, the website / landing copy,
   `docs/site/**`, "document feature X", "write the docs for". Prose only — no
@@ -132,29 +133,51 @@ Owns: the **C-language frontend** — `compiler/clexer.inc`, `cparser.inc`,
 tests. Goal: compile real portable C (tiny-regex → lua → sqlite); roadmap in
 `docs/progress/backlog/feature-c-desktop-lua-sqlite-path.md`.
 
-**Works on a branch in its own worktree** — `feat/cfront`, checked out at
-`../frankonpiler-cfront` (`git worktree add ../frankonpiler-cfront -b
-feat/cfront`). **Never on `master`.** Adding/changing the C frontend changes the
-compiler binary (forces a reseed), so it must stay off A/B/D's ground until a
-stable slice deliberately merges.
+**Works on `master`** — like every other track. The C frontend merged to
+`master` at **v80** (2026-06-26); the old `feat/cfront` worktree at
+`../frankonpiler-cfront` is **retired**. The branch existed only while the C
+frontend was destabilizing (it reseeds the compiler binary); now C *is* part of
+the compiler, so it lives on `master`, protected by the same pin boundary every
+track relies on (B/D build on `pinned`, not HEAD, so an in-progress C change on
+`master` HEAD can't break them until it is pinned).
 
-The load-bearing boundary with Track A:
+> **Why the branch was retired.** A long-lived branch traded one risk
+> (destabilizing A/B/D's ground) for several worse ones that bit at merge time:
+> token-enum and AST-node-number collisions (both tracks numbered into the same
+> space independently), a cross-include forward-reference that only the FPC build
+> caught, and "tested-locally ≠ what-was-pushed" drift. On `master` those surface
+> immediately, in review, against the live numbers — not in a big-bang merge.
 
-- **C owns only the C-specific frontend files.** Shared compiler internals — AST
-  node kinds, IR ops, `symtab` structures, `defs.inc`, backend codegen
-  (`ir_codegen*`), ABI, ELF — are **Track A's**.
-- **Need a new AST node / IR op / symtab field / backend change?** → **file a
-  Track A ticket.** A implements it, gates it (`make test` + self-host), and
-  `make pin`s it; C then builds on the pinned compiler. C never edits shared
-  AST/IR/codegen unilaterally — that is precisely what keeps A's self-host gate
-  intact.
-- **Rebase `feat/cfront` on `master` periodically** — C builds the compiler, so
-  it must absorb A's pins and Pascal fixes.
+The load-bearing boundary with Track A is **unchanged** (it never depended on the
+branch — it's a file-ownership rule):
+
+- **C owns only the C-specific frontend files** (`clexer.inc`, `cparser.inc`,
+  `cpreproc.inc`, C→IR lowering, `lib/crtl`, C tests). Shared compiler internals
+  — AST node kinds, IR ops, `symtab` structures, `defs.inc`, `lexer.inc`,
+  `parser.inc`, backend codegen (`ir_codegen*`), ABI, ELF — are **Track A's**.
+- **Need a new AST node / IR op / symtab field / token / backend change?** →
+  **file a Track A ticket;** do not edit the shared file under Track C. A
+  implements it, gates it (`make test` + self-host), and `make pin`s it. This is
+  exactly what stops the node-number/token collisions a branch let slip through.
+- **Land only green;** big destabilizing work goes behind a flag or lands
+  incrementally — never a long-lived branch.
 
 C's gate: C tests green (gcc/tcc stdout-equality oracle) + self-host
-byte-identical + cross-bootstrap. **Merging `feat/cfront` → `master` is a Track A
-event** (the merge changes the compiler → re-pin), coordinated with A — not a
-quiet fast-forward.
+byte-identical + cross-bootstrap.
+
+### Combined-track assignment (one agent on two tracks)
+
+The user may assign a single agent **two tracks at once** ("you are Track A *and*
+C"). Then:
+
+- The tracks stay **distinct** — own files, own gates, own ticket trail.
+- A shared-code change is **still filed as a Track A ticket** (traceability — the
+  board still shows what shared internals moved and why).
+- But the **same agent may resolve its own ticket**, because the user has
+  confirmed no *other* agent holds Track A concurrently, so the hand-off exists
+  only to prevent collisions that can't happen here. File → self-resolve, instead
+  of file → hand-off.
+- The instant the agent is single-track again, revert to file-and-hand-off.
 
 ## Track D — documentation (user / website)
 
@@ -201,17 +224,17 @@ track's fenced section to avoid collisions.
 
 ## Shared checkout — coordination
 
-Tracks **A, B, and D share the same checkout** on `master` (no clones).
-**Track C is the exception** — it lives in its own `git worktree`
-(`../frankonpiler-cfront`, branch `feat/cfront`), so it never collides in the
-working tree and only meets the others at a deliberate merge + re-pin. The rules
-below are for the A/B/D shared `master` checkout:
+**All tracks (A, B, C, D) share the same checkout** on `master` (no clones, no
+worktrees — C's `feat/cfront` worktree was retired when it merged at v80). The
+rules below are for that shared `master` checkout:
 
 - **Commit early and often, in small units.** Uncommitted edits are the only
   thing the other agent can stomp; committed work is safe.
-- **Stay in your lane's files.** A → `compiler/**`; B → `lib/**`, `examples/**`,
-  `test/lib_*`. File overlap is then near zero. The shared `Makefile` is fenced
-  per track.
+- **Stay in your lane's files.** A → `compiler/**` (shared internals); B →
+  `lib/**`, `examples/**`, `test/lib_*`; C → `compiler/c{lexer,parser,preproc}.inc`
+  + C→IR lowering, `lib/crtl`, C tests (but shared `compiler/**` internals are
+  A's — file a Track A ticket); D → `docs/site/**`. File overlap is then near
+  zero. The shared `Makefile` is fenced per track.
 - **`git pull --rebase` before you push**, and push promptly after committing —
   the other agent may have pushed in between. Resolve in your own files.
 - **Push freely when stable; you don't need to ask.** History is reversible, so a
