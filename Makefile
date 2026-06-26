@@ -653,6 +653,8 @@ test-core: $(COMPILER)
 	test "$$(/tmp/test_ir_unary26)" = "$$(printf '%s\nOK' '-5')"
 	./$(COMPILER) test/test_not_int64_expr.pas /tmp/test_not_int64_expr26
 	test "$$(/tmp/test_not_int64_expr26)" = "$$(printf '%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\nok-lw0\nok-lw1\nok-bool' '-6' '-6' '-5' '-3' '-7' '-11' '-11' '-6' '-1')"
+	./$(COMPILER) test/test_virtual_keyword_result.pas /tmp/test_vkr26
+	test "$$(/tmp/test_vkr26)" = "$$(printf '5\n6\n10\n10')"
 	./$(COMPILER) test/test_ir_deref.pas /tmp/test_ir_deref26
 	test "$$(/tmp/test_ir_deref26)" = "$$(printf '10\n20\n100\n200')"
 	./$(COMPILER) test/test_ir_call.pas /tmp/test_ir_call26

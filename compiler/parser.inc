@@ -7488,13 +7488,28 @@ begin
       if (CurProc >= 0) and Procs[CurProc].IsFunc and
          (Tokens[TokPos].Kind in [tkAssign, tkDot, tkLBrack, tkCaret]) and
          CaseEqual(CurTok.SVal, LastDotName(Procs[CurProc].Name)) then
+      begin
         { Assigning the function result by its own name, where that name is an
-          intrinsic keyword (Read/Write/Readln/Writeln). The bare-own-name result
-          path miscompiles for a VIRTUAL method of this name (returns garbage), so
-          reject it with a clear message instead of silently mis-storing. Use
-          `Result := ...`, which is correct in every case.
-          See bug-virtual-keyword-name-result. }
-        Error('assign the result of a Read/Write method via "Result := ..." (bare own-name result is unsupported for intrinsic-named methods)')
+          intrinsic keyword (Read/Write/Readln/Writeln). Build the same
+          AN_ASSIGN(Result, expr) as the non-keyword own-name path in the tkIdent
+          case. See bug-virtual-keyword-name-result. }
+        Next;   { consume the keyword-name token }
+        if CurTok.Kind = tkAssign then
+        begin
+          Expect(tkAssign, ':=');
+          valNode := AllocNode(AN_IDENT);
+          ASTIVal[valNode] := Procs[CurProc].RetSymIdx;
+        end
+        else
+        begin
+          valNode := ParseLValueAST(Procs[CurProc].RetSymIdx, TokPos - 2);
+          Expect(tkAssign, ':=');
+        end;
+        ParseExpr;
+        node := AllocNode(AN_ASSIGN);
+        ASTLeft[node] := valNode;
+        ASTRight[node] := CurASTNode;
+      end
       else if (CurProc >= 0) and (CurSelfClass >= REC_UCLASS_BASE) and
               (Tokens[TokPos].Kind = tkLParen) and
               (FindUMeth(CurSelfClass - REC_UCLASS_BASE, CurTok.SVal) >= 0) then
