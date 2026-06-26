@@ -2060,7 +2060,7 @@ end;
 procedure ParseCSubroutine;
 var
   retType, ptype: TTypeKind;
-  name: AnsiString;
+  name, extLib: AnsiString;
   isFunc: Boolean;
   nparams, procIdx, i, idx, patchPos, sz, gli: Integer;
   retPtrElemTk, retPtrElemRec: Integer;
@@ -2074,6 +2074,9 @@ var
   vaSaveSym, vaSaveRec: Integer;
   parenName, isVariadic: Boolean;
 begin
+  { Default DT_NEEDED soname for an external with no explicit library: math
+    functions are in libm.so.6 on glibc, everything else in libc.so.6. }
+  extLib := 'libc.so.6';
   retType := ParseCDeclType;
   { Capture the return type's pointed-at type so `f()^`, `f()^.field`, `f()[i]`
     on a typed-pointer result resolve the element. }
@@ -2106,6 +2109,13 @@ begin
   end;
   name := CurTok.SVal;
   Next;
+  extLib := 'libc.so.6';
+  if (name = 'pow') or (name = 'sqrt') or (name = 'fmod') or (name = 'floor') or
+     (name = 'ceil') or (name = 'fabs') or (name = 'sin') or (name = 'cos') or
+     (name = 'tan') or (name = 'asin') or (name = 'acos') or (name = 'atan') or
+     (name = 'atan2') or (name = 'exp') or (name = 'log') or (name = 'frexp') or
+     (name = 'ldexp') or (name = 'sinh') or (name = 'cosh') or (name = 'tanh') then
+    extLib := 'libm.so.6';
   if parenName then Eat(tkRParen);   { consume the ')' wrapping the name }
 
   if CurTok.Kind <> tkLParen then
@@ -2202,7 +2212,8 @@ begin
     if not (CProgramMode and not CHeaderMode) then
     begin
       ProcExternal[procIdx] := True;
-      ProcLibrary[procIdx] := InternStr(CurrentCLibrary);
+      if CurrentCLibrary <> '' then ProcLibrary[procIdx] := InternStr(CurrentCLibrary)
+      else ProcLibrary[procIdx] := InternStr(extLib);   { libm for math, else libc }
     end;
     Next;
     Exit;
@@ -2218,7 +2229,8 @@ begin
     else
     begin
       ProcExternal[procIdx] := True;
-      ProcLibrary[procIdx] := InternStr(CurrentCLibrary);
+      if CurrentCLibrary <> '' then ProcLibrary[procIdx] := InternStr(CurrentCLibrary)
+      else ProcLibrary[procIdx] := InternStr(extLib);
     end;
     SkipBraceBlock;
     Exit;
