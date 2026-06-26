@@ -42,7 +42,7 @@ I/O are available without importing a unit just to initialize the runtime.
 | [`http`](./networking.md) | HTTP/1.1 client with redirects, chunked responses, pooling, and TLS backend support. |
 | `net` / `sockets` | Lower-level networking primitives. |
 | `dns`, `dns_async` | DNS lookup helpers. |
-| `scheduler`, `coroutine`, `asyncnet` | Coroutine reactor and async networking support. |
+| [`scheduler` & `coroutine`](./async.md) | Coroutine reactor, cooperative scheduling, and async networking support. |
 | `tls`, `tls_openssl` | TLS backend interface and OpenSSL-backed implementation. |
 
 ## Crypto and checksums
