@@ -4801,6 +4801,17 @@ begin
           sites in the frontend were pre-hardened to explicit `F()` (commit
           c87785d) before this flip, so self-host stays byte-identical. Trailing
           `.field`/`[i]`/`^` resolve via ParseLValueAST. }
+        { Opt-in footgun diagnostic (--warn-self-result): for a PARAMETERLESS
+          function, a bare own-name value read is the Result, but a
+          recursive-descent author usually meant `Name()`. Self-host-invisible
+          (the rule is the same in seed and self-host), so it silently miscompiles
+          user code — surface the ambiguity. Only paramless (with-params bare name
+          can't be a call, so it is unambiguously Result). See
+          bug-paramless-self-recursion-silent-result-read. }
+        if WarnSelfResult and (Procs[CurProc].ParamCount = 0) then
+          Warn('bare own name ''' + name + ''' reads the result of parameterless '
+            + 'function ' + Procs[CurProc].Name + '; write ' + name
+            + '() for a recursive call, or Result to read the result');
         Next;
         CurASTNode := ParseLValueAST(Procs[CurProc].RetSymIdx, TokPos - 2);
         LastExprTk := IntToTypeKind(ASTTk[CurASTNode]);

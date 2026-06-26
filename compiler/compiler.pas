@@ -77,6 +77,7 @@ begin
   DebugInfo := False;
   DbgMainTokEnd := MAX_TOKENS;
   DumpIR := False;
+  WarnSelfResult := False;
   DumpRTTI := False;
   TargetArch := TARGET_X86_64;
   XtensaABI := XTENSA_ABI_CALL0;
@@ -219,6 +220,14 @@ begin
     begin
       { Promote any compiler-emitted warning to a fatal error. }
       WarnAsError := True;
+      Inc(i);
+    end
+    else if option = '--warn-self-result' then
+    begin
+      { Warn when a parameterless function's bare own name is read as a value
+        (FPC reads its Result; a recursive-descent author usually meant Name()).
+        Opt-in: the compiler's own source uses the bare-name=Result idiom. }
+      WarnSelfResult := True;
       Inc(i);
     end
     else if option = '--strict-overload' then

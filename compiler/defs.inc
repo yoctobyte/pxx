@@ -904,6 +904,10 @@ var
   ErrorIdent : AnsiString;
   WarnCount : Integer;     { number of non-fatal warnings emitted via Warn }
   WarnAsError : Boolean;   { -Werror: promote the next Warn to a fatal Error }
+  WarnSelfResult : Boolean; { --warn-self-result: warn when a paramless function's
+                             bare own name is read as a value (FPC = its Result,
+                             but often a mistaken `Name()` self-recursion). Off by
+                             default — the compiler's own source uses the idiom. }
   LastExprTk : TTypeKind;
   InInterface : Boolean;
   { Declaration pre-scan (whole-section forward visibility): pass 1 registers
