@@ -57,3 +57,12 @@ fields into a separate region. Until then a struct with a nested anonymous
 aggregate stays opaque (current behaviour). LANDMINE hit during the attempt: a
 literal brace in a Pascal source COMMENT opens a nested comment (compiler.pas has
 NESTEDCOMMENTS ON) and eats source — keep braces out of comment prose.
+
+## Resolution
+- 2026-06-26 — FIXED via option (a): ParseCStructInto now BUFFERS the parent record`s
+  field descriptors during the walk and appends them to the UFld pool contiguously
+  AFTER the body (and any nested sub-records) are laid out, anchoring UClsFBase at
+  that point. Nested struct/union members create a sub-record (recursively, right
+  isUnion) and are buffered as tyRecord fields. CStructBodyIsSimple no longer bails
+  on nested braces. Self-host byte-identical (C-frontend-only); fixture
+  cnested_union_b44.c (=42). lua core 25 -> 27 (ldo + ltm unblocked).

@@ -2494,10 +2494,7 @@ begin
     end;
 
     if Tokens[i].Kind = tkBegin then
-    begin
-      if depth >= 1 then begin Result := False; Exit; end;  { nested aggregate body }
-      Inc(depth);
-    end
+      Inc(depth)   { nested aggregate bodies are now laid out as sub-records }
     else if Tokens[i].Kind = tkEnd then
     begin
       Dec(depth);
@@ -2549,26 +2546,82 @@ end;
   fixed arrays `T x[N]`, and nested struct-by-value. Bitfields (`x : n`) and
   inline anonymous struct definitions are skipped, not laid out. }
 procedure ParseCStructInto(ci: Integer; isUnion: Boolean);
+const MAX_BF = 256;
 var
   curOff, maxAlign, fnOff, fnLen, arrLen, declStars, sz, al, totalSz, thisOff: Integer;
   baseScalarTk, baseElemTk, baseElemRec, baseRecId, declTk, declElemTk, declElemRec, declRec: Integer;
-  fldProcSig: Integer;
+  fldProcSig, subci, subRecSz, subAl, sdepth, bfCount, k: Integer;
   fTk: TTypeKind;
-  isArr, firstDecl: Boolean;
+  isArr, firstDecl, subIsUnion: Boolean;
+  { The parent's fields are BUFFERED during the walk and appended to the shared
+    UFld pool only AFTER the body (and any nested sub-records) are laid out, so the
+    parent's fields stay contiguous — FindUField scans [base, base+count). Without
+    this, a nested-aggregate member's sub-record fields would be inserted between
+    the parent's fields and break the contiguous range. }
+  bfNOff, bfNLen, bfOff, bfTk, bfRec, bfElemTk, bfElemRec, bfProcSig, bfArrLen: array[0..MAX_BF-1] of Integer;
+  bfIsArr: array[0..MAX_BF-1] of Boolean;
 begin
   Next; { consume the opening brace }
-  { Re-anchor this record's field base to the current field-table position before
-    laying out the body. A forward record (`typedef struct Zio ZIO;` then a later
-    `struct Zio { ... }`) had its UClsFBase fixed at forward-declaration time; if
-    another struct's fields were added in between, the body's fields would land
-    outside that range and FindUField (a contiguous base+count scan) would miss
-    them. A freshly-created record has no fields yet, so this is a safe no-op. }
-  if UClsFCount[ci] = 0 then UClsFBase[ci] := UFldCount;
   curOff := 0;
   maxAlign := 1;
+  bfCount := 0;
   while (CurTok.Kind <> tkEnd) and (CurTok.Kind <> tkEOF) do
   begin
-    if IsCTypeTok then
+    { Nested inline aggregate member: struct or union with an inline body followed
+      by member name(s). Lay the body out as a sub-record (recursively) and buffer
+      the member(s) as record-typed fields, so outer.name.member resolves (lua
+      CallInfo / GCUnion). Detected by an opening brace right after the keyword,
+      optionally past a tag. }
+    if ((CurTok.Kind = tkRecord) or ((CurTok.Kind = tkIdent) and (CurTok.SVal = 'union'))) and
+       ((Tokens[TokPos].Kind = tkBegin) or
+        ((Tokens[TokPos].Kind = tkIdent) and (Tokens[TokPos + 1].Kind = tkBegin))) then
+    begin
+      subIsUnion := (CurTok.Kind = tkIdent) and (CurTok.SVal = 'union');
+      Next;  { consume struct/union keyword }
+      if (CurTok.Kind = tkIdent) and (Tokens[TokPos].Kind = tkBegin) then
+      begin
+        subci := FindOrForwardCTag(CurTok.SVal) - REC_UCLASS_BASE;  { inline-tagged }
+        Next;
+      end
+      else if UClsCount < MAX_UCLASS - 1 then
+      begin subci := AddUClass(0, 0); UClsIsRecord[subci] := True; end
+      else
+        subci := -1;
+      if subci >= 0 then
+        ParseCStructInto(subci, subIsUnion)
+      else
+      begin
+        sdepth := 0;
+        repeat
+          if CurTok.Kind = tkBegin then Inc(sdepth)
+          else if CurTok.Kind = tkEnd then Dec(sdepth);
+          Next;
+        until (sdepth = 0) or (CurTok.Kind = tkEOF);
+      end;
+      if subci >= 0 then begin subRecSz := UClsSize_[subci]; subAl := UClsAlign[subci]; end
+      else begin subRecSz := TARGET_PTR_SIZE; subAl := TARGET_PTR_SIZE; end;
+      if subAl < 1 then subAl := 1;
+      repeat
+        if CurTok.Kind <> tkIdent then Break;
+        fnOff := Tokens[TokPos - 1].SOffset; fnLen := Tokens[TokPos - 1].SLen; Next;
+        while CurTok.Kind = tkLBrack do
+        begin Next; while (CurTok.Kind <> tkRBrack) and (CurTok.Kind <> tkEOF) do Next; Eat(tkRBrack); end;
+        if isUnion then thisOff := 0 else thisOff := AlignTo(curOff, subAl);
+        if (subci >= 0) and (bfCount < MAX_BF) then
+        begin
+          bfNOff[bfCount] := fnOff; bfNLen[bfCount] := fnLen; bfOff[bfCount] := thisOff;
+          bfTk[bfCount] := Ord(tyRecord); bfRec[bfCount] := REC_UCLASS_BASE + subci;
+          bfElemTk[bfCount] := Ord(tyUnknown); bfElemRec[bfCount] := REC_NONE;
+          bfIsArr[bfCount] := False; bfArrLen[bfCount] := 1; bfProcSig[bfCount] := -1;
+          Inc(bfCount);
+        end;
+        if isUnion then begin if subRecSz > curOff then curOff := subRecSz; end
+        else curOff := thisOff + subRecSz;
+        if subAl > maxAlign then maxAlign := subAl;
+      until not Eat(tkComma);
+      Eat(tkSemicolon);
+    end
+    else if IsCTypeTok then
     begin
       fTk := ParseCDeclType;
       fldProcSig := CTypeProcSig;   { fn-pointer typedef field signature, if any }
@@ -2638,18 +2691,14 @@ begin
         if isUnion then thisOff := 0
         else thisOff := AlignTo(curOff, al);
 
-        { AddUField reads LastTypePointerElemTk/Rec for pointer fields. Skip the
-          record (but keep advancing the offset, so size stays correct) if the
-          field pool is nearly full — avoids a hard overflow on a giant struct. }
-        if UFldCount < MAX_UFIELD - 1 then
+        if bfCount < MAX_BF then
         begin
-          LastTypePointerElemTk := IntToTypeKind(declElemTk);
-          LastTypePointerElemRec := declElemRec;
-          AddUField(ci, fnOff, fnLen, thisOff, declTk, declRec);
-          UFldIsArray[UFldCount-1] := isArr;
-          UFldArrLen[UFldCount-1] := arrLen;
-          if (declStars = 0) and (fldProcSig >= 0) then
-            UFldProcSig[UFldCount-1] := fldProcSig;  { fn-pointer field: callable }
+          bfNOff[bfCount] := fnOff; bfNLen[bfCount] := fnLen; bfOff[bfCount] := thisOff;
+          bfTk[bfCount] := declTk; bfRec[bfCount] := declRec;
+          bfElemTk[bfCount] := declElemTk; bfElemRec[bfCount] := declElemRec;
+          bfIsArr[bfCount] := isArr; bfArrLen[bfCount] := arrLen;
+          if (declStars = 0) then bfProcSig[bfCount] := fldProcSig else bfProcSig[bfCount] := -1;
+          Inc(bfCount);
         end;
 
         totalSz := sz;
@@ -2667,9 +2716,22 @@ begin
       Eat(tkSemicolon);
     end
     else
-      Next;  { skip nested struct/union defs, attributes, unknown tokens }
+      Next;  { skip attributes / unknown tokens }
   end;
   Eat(tkEnd); { consume the closing brace }
+  { Append the parent's buffered fields contiguously, NOW (after sub-records), and
+    anchor the record's field base here. }
+  UClsFBase[ci] := UFldCount;
+  for k := 0 to bfCount - 1 do
+  begin
+    if UFldCount >= MAX_UFIELD - 1 then Break;   { pool nearly full: drop the rest }
+    LastTypePointerElemTk := IntToTypeKind(bfElemTk[k]);
+    LastTypePointerElemRec := bfElemRec[k];
+    AddUField(ci, bfNOff[k], bfNLen[k], bfOff[k], bfTk[k], bfRec[k]);
+    UFldIsArray[UFldCount-1] := bfIsArr[k];
+    UFldArrLen[UFldCount-1] := bfArrLen[k];
+    if bfProcSig[k] >= 0 then UFldProcSig[UFldCount-1] := bfProcSig[k];
+  end;
   UClsSize_[ci] := AlignTo(curOff, maxAlign);
   UClsAlign[ci] := maxAlign;
 end;
