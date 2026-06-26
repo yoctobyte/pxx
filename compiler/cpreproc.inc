@@ -517,10 +517,26 @@ begin
   end;
 end;
 
+{ If object macro mi's entire body is a single identifier that names a FUNCTION
+  macro, return that function macro's index (else -1). Handles aliases like
+  `#define setsvalue2n setsvalue`, where `setsvalue2n(args)` must expand the
+  inner function macro with the args that follow in the source. }
+function CPObjectAliasFuncMacro(mi: Integer): Integer;
+var off, len, i, fm: Integer;
+begin
+  Result := -1;
+  off := CPMValueOff[mi]; len := CPMValueLen[mi];
+  if (len <= 0) or (not CPIsIdentStart(CPrepChars[off])) then Exit;
+  for i := 0 to len - 1 do
+    if not CPIsIdentChar(CPrepChars[off + i]) then Exit;
+  fm := CPFindMacroPool(off, len);
+  if (fm >= 0) and CPMFunction[fm] then Result := fm;
+end;
+
 procedure CPExpandRange(const src: AnsiString; first, last, level: Integer;
   var dst: AnsiString);
 var
-  p, a, b, mi, q, depth, argc, argBase, ai: Integer;
+  p, a, b, mi, q, depth, argc, argBase, ai, innerMi: Integer;
   quote: Char;
   quotedDone: Boolean;
 begin
@@ -556,6 +572,19 @@ begin
       while (p <= last) and CPIsIdentChar(src[p]) do Inc(p);
       b := p - 1;
       mi := CPFindMacro(src, a, b);
+      { Object-macro alias of a function macro `#define A FUNC` used as `A(args)`:
+        redirect to FUNC so the function-macro path below pulls the args that
+        follow in the source (lua's setsvalue2n / setobj2n). }
+      if (mi >= 0) and (not CPMFunction[mi]) then
+      begin
+        innerMi := CPObjectAliasFuncMacro(mi);
+        if innerMi >= 0 then
+        begin
+          q := p;
+          while (q <= last) and (src[q] in [' ', #9]) do Inc(q);
+          if (q <= last) and (src[q] = '(') then mi := innerMi;
+        end;
+      end;
       if (mi < 0) then
         CPAppendRange(dst, src, a, b)
       else if not CPMFunction[mi] then

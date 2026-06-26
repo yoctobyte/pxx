@@ -392,6 +392,8 @@ test-core: $(COMPILER)
 	/tmp/ccomma_cond_b3626; test "$$?" = "42"
 	./$(COMPILER) test/carray_param_b37.c /tmp/carray_param_b3726
 	/tmp/carray_param_b3726; test "$$?" = "42"
+	./$(COMPILER) test/cmacro_obj_alias_b38.c /tmp/cmacro_obj_alias_b3826
+	/tmp/cmacro_obj_alias_b3826; test "$$?" = "42"
 	./$(COMPILER) -Itest/cinc/inc test/cinc/cinc_main.c /tmp/cinc_main26
 	test "$$(/tmp/cinc_main26)" = "$$(printf 'local-ok\ninc-ok')"
 	./$(COMPILER) test/test_declared_directive.pas /tmp/test_declared_directive26
