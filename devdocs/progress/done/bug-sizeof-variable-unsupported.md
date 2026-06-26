@@ -39,3 +39,12 @@ It does not support resolving the type of a variable or expression operand to de
 
 - The `SizeOf` intrinsic accepts both type names (e.g., `SizeOf(Integer)`) and variable/expression operands (e.g., `SizeOf(myVar)`).
 - Verified by a test case compiling and running successfully on all targets.
+
+## DONE 2026-06-26 (Track A)
+parser.inc ParseFactor SizeOf: when the operand is not a known type name, fall
+back to FindSym — a variable operand resolves to its declared type's size
+(record-by-value var -> RecSize via Syms[].RecName; scalar/pointer/class-ref ->
+TypeSize). `SizeOf(i)`==`SizeOf(Integer)`==4, `SizeOf(r)`==`SizeOf(TR)`==16, etc.
+Self-host byte-identical. NOTE: covers a bare variable token (the ticket's repro);
+a multi-token expression operand (`SizeOf(a.f)`, `SizeOf(arr[0])`) still needs the
+ParseExpr-type-inference path — file a follow-up if a workload hits it.

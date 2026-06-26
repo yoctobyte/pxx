@@ -36,9 +36,9 @@ _none_
 | bug-c-addr-of-unsupported-ir | A | bug | C `&` of certain operands lowers to IR_UNSUPPORTED (codegen crash) | — |
 | bug-c-libc-data-symbol-stdio | A | bug | C stdio must ride pxx syscalls (libc-free), not import libc | — |
 | bug-c-sizeof-string-literal | C | bug | C `sizeof("string literal")` returns pointer size, not array size | — |
+| bug-c-vararg-overflow-area | A | bug | C: 6+ variadic args (overflow area) segfault | — |
 | bug-multi-interface-method-corruption | A | bug | Memory/String corruption when calling methods on secondary interfaces | — |
 | bug-paramless-self-recursion-silent-result-read | A | bug | Paramless self-recursion reads own Result silently — no diagnostic | — |
-| bug-sizeof-variable-unsupported | A | bug | SizeOf intrinsic does not support variable or expression operands | — |
 | chore-inc-to-units | A | chore | `.inc` → real `.pas` units refactor | — |
 | chore-runtime-emission-size | A | chore | Finer runtime-support emission (code size) | — |
 | feature-arm32-large-aggregate-result | A | feature | arm32: support record function results larger than 4 param words (sret) | — |
@@ -131,7 +131,7 @@ _none_
 | feature-mimic-fpc | B | feature | `mimic FPC` compatibility mode | — |
 | feature-string-model-tyfixedstring | B | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (300)
+## done (301)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -245,6 +245,7 @@ _none_
 | bug-set-of-char-const-corrupts-char-codegen | A | bug | A `set of char` typed constant corrupts `Ord(char-var)` codegen | — |
 | bug-shl-signed-integer-width | A | bug | bug: `shl` on a 32-bit Integer does not wrap at 32-bit width | — |
 | bug-shr-signed-integer-width | A | bug | `shr` on a negative 32-bit Integer shifts at 64-bit width (miscompile) | — |
+| bug-sizeof-variable-unsupported | A | bug | SizeOf intrinsic does not support variable or expression operands | — |
 | bug-stack-corruption-inline-string-concat | A | bug | Stack frame corruption on inline string concatenation assignments | — |
 | bug-stderr-not-fd2 | A | bug | `writeln(StdErr, ...)` goes to stdout — StdErr not connected to fd 2 | — |
 | bug-string-const-index-and-typed-init | A | bug | Typed string constant with a string initializer won't parse | — |
@@ -449,9 +450,9 @@ _none_
 - [A] bug-c-addr-of-unsupported-ir
 - [A] bug-c-libc-data-symbol-stdio
 - [C] bug-c-sizeof-string-literal
+- [A] bug-c-vararg-overflow-area
 - [A] bug-multi-interface-method-corruption
 - [A] bug-paramless-self-recursion-silent-result-read
-- [A] bug-sizeof-variable-unsupported
 - [A] chore-inc-to-units
 - [A] chore-runtime-emission-size
 - [A] feature-arm32-large-aggregate-result

@@ -3990,8 +3990,24 @@ begin
               prevTok := RecSize(idx)
             else
             begin
-              Error('SizeOf: unknown type');
-              prevTok := 0;
+              { Not a type name — accept a VARIABLE operand (FPC/Delphi allow
+                SizeOf(v) = size of v's declared type, not just SizeOf(Type)).
+                A record-by-value var uses its record size; everything else its
+                scalar type size (TypeSize returns pointer width for class/
+                pointer references). }
+              sci := FindSym(name);
+              if sci >= 0 then
+              begin
+                if (Syms[sci].TypeKind = tyRecord) and (Syms[sci].RecName >= 0) then
+                  prevTok := RecSize(Syms[sci].RecName)
+                else
+                  prevTok := TypeSize(Syms[sci].TypeKind);
+              end
+              else
+              begin
+                Error('SizeOf: unknown type or variable');
+                prevTok := 0;
+              end;
             end;
           end;
         end
