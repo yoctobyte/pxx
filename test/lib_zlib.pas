@@ -135,6 +135,62 @@ begin
   else writeln('OK reserved block type');
 end;
 
+function IsHelloWorld(const b: TByteArray): Boolean;
+const s: AnsiString = 'hello world';
+var j: Integer;
+begin
+  Result := False;
+  if Length(b) <> Length(s) then Exit;
+  for j := 0 to Length(s) - 1 do
+    if b[j] <> Byte(s[j + 1]) then Exit;
+  Result := True;
+end;
+
+procedure FillGzipHelloWorld;
+{ gzip member for 'hello world' (Python gzip, mtime=0). }
+begin
+  SetLength(enc, 31);
+  enc[0]:=31; enc[1]:=139; enc[2]:=8; enc[3]:=0; enc[4]:=0; enc[5]:=0;
+  enc[6]:=0; enc[7]:=0; enc[8]:=2; enc[9]:=255; enc[10]:=203; enc[11]:=72;
+  enc[12]:=205; enc[13]:=201; enc[14]:=201; enc[15]:=87; enc[16]:=40;
+  enc[17]:=207; enc[18]:=47; enc[19]:=202; enc[20]:=73; enc[21]:=1; enc[22]:=0;
+  enc[23]:=133; enc[24]:=17; enc[25]:=74; enc[26]:=13; enc[27]:=11; enc[28]:=0;
+  enc[29]:=0; enc[30]:=0;
+end;
+
+procedure TestGzip;
+begin
+  FillGzipHelloWorld;
+  good := InflateGzip(enc, outbuf, err);
+  if not good then Fail('gzip inflate: ' + err)
+  else if not IsHelloWorld(outbuf) then Fail('gzip data mismatch')
+  else writeln('OK gzip');
+end;
+
+procedure TestGzipBadCrc;
+{ same gzip member, CRC32 first trailer byte corrupted. }
+begin
+  FillGzipHelloWorld;
+  enc[23] := 132;                 { flip the CRC32 LSB }
+  good := InflateGzip(enc, outbuf, err);
+  if good or (err <> 'bad gzip crc32') then
+    Fail('gzip bad crc: got [' + err + ']')
+  else writeln('OK gzip bad crc');
+end;
+
+procedure TestRawDeflate;
+{ bare RFC1951 deflate of 'hello world' (no wrapper). }
+begin
+  SetLength(enc, 13);
+  enc[0]:=203; enc[1]:=72; enc[2]:=205; enc[3]:=201; enc[4]:=201; enc[5]:=87;
+  enc[6]:=40; enc[7]:=207; enc[8]:=47; enc[9]:=202; enc[10]:=73; enc[11]:=1;
+  enc[12]:=0;
+  good := InflateRawBytes(enc, outbuf, err);
+  if not good then Fail('raw deflate inflate: ' + err)
+  else if not IsHelloWorld(outbuf) then Fail('raw deflate data mismatch')
+  else writeln('OK raw deflate');
+end;
+
 begin
   bad := 0;
   TestStoredRoundtrip;
@@ -144,4 +200,7 @@ begin
   TestBadAdler;
   TestTruncated;
   TestReservedBlockType;
+  TestGzip;
+  TestGzipBadCrc;
+  TestRawDeflate;
 end.

@@ -1,7 +1,7 @@
 # bug: arm32 `writeln(LongWord)` mangles a value with the high bit set
 
 - **Type:** bug (codegen — arm32 unsigned-32 write formatting)
-- **Status:** backlog
+- **Status:** DONE (2026-06-26, commit on master)
 - **Track:** A
 - **Opened:** 2026-06-25
 - **Found-by:** Track A, verifying bug-not-on-int64-is-boolean
@@ -43,3 +43,13 @@ targets. Remove the workaround once this is fixed.
 - `writeln(c)` for `c: LongWord` with bit 31 set prints the correct unsigned
   decimal on arm32 (matching the x86-64 oracle).
 - Regression test (cross compare arm32 vs x86-64).
+
+## Resolution (2026-06-26, Track A)
+arm32's write/Str integer loops divided with SDIV; the unsigned writers mangled
+LongWord >= 2^31, and the signed writers also mangled INT_MIN (negation overflows
+to 0x80000000, SDIV mis-divides). Every loop divides a NON-NEGATIVE magnitude
+(unsigned value, or post-negation magnitude), so switched all four sdiv
+(0xE714F210) -> udiv (0xE734F210) in emit.inc. Fixes both LongWord-high-bit AND
+INT_MIN as a bonus. Regression: test/test_uint32_write.pas, cross-checked arm32
+vs x86-64 in `make test`. Self-host byte-identical. (test_not_int64_expr's
+value-comparison workaround can stay; the new test covers the writeln path.)

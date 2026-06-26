@@ -145,12 +145,12 @@ end;
 
 procedure TStream.ReadBuffer(var Buffer; Count: Longint);
 begin
-  Self.Read(Buffer, Count);       { Self. — bare Read/Write hit the console intrinsic }
+  Read(Buffer, Count);
 end;
 
 procedure TStream.WriteBuffer(const Buffer; Count: Longint);
 begin
-  Self.Write(Buffer, Count);
+  Write(Buffer, Count);
 end;
 
 function TStream.CopyFrom(Source: TStream; Count: Int64): Int64;
@@ -162,7 +162,7 @@ begin
     if Count > 4096 then chunk := 4096 else chunk := Longint(Count);
     got := Source.Read(buf[0], chunk);
     if got <= 0 then Break;
-    Self.Write(buf[0], got);       { Self. — else the console Write intrinsic }
+    Write(buf[0], got);
     Result := Result + got;
     Count := Count - got;
   end;

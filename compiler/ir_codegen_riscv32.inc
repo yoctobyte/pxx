@@ -1275,9 +1275,27 @@ begin
 
     IR_NOT:
       begin
-        { Same low-word-only caveat as IR_NEG for 64-bit bitwise not. }
-        IREmitNodeRISCV32(IRA[node]);
-        rv32_xori(reg_a0, reg_a0, 1);
+        { Type-directed, mirroring i386/aarch64: bitwise complement for an
+          integer/ordinal operand, boolean (low-bit) flip only for a Boolean.
+          RISC-V has no `not`; `xori reg, -1` is the full-width complement (the
+          12-bit immediate -1 sign-extends to all ones). }
+        if Is64BitRISCV32(IntToTypeKind(IRTk[node])) then
+        begin
+          EmitNode64RISCV32(IRA[node]);              { a0:a1 = value }
+          rv32_xori(reg_a0, reg_a0, -1);
+          rv32_xori(reg_a1, reg_a1, -1);
+        end
+        else if TypeIsOrdinal(IntToTypeKind(IRTk[node])) and
+                (IntToTypeKind(IRTk[node]) <> tyBoolean) then
+        begin
+          IREmitNodeRISCV32(IRA[node]);
+          rv32_xori(reg_a0, reg_a0, -1);
+        end
+        else
+        begin
+          IREmitNodeRISCV32(IRA[node]);
+          rv32_xori(reg_a0, reg_a0, 1);
+        end;
       end;
 
     IR_SETLEN_STR:

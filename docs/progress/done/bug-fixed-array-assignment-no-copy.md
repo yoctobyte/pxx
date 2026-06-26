@@ -1,7 +1,7 @@
 # bug: assigning one fixed array to another (`b := a`) does not copy
 
 - **Type:** bug (codegen — value assignment of a static array)
-- **Status:** backlog
+- **Status:** done
 - **Track:** A
 - **Opened:** 2026-06-25
 - **Found-by:** Track B, AES-128 (`lib/rtl/aesgcm.pas`) — `tmp := s` in ShiftRows
@@ -42,3 +42,18 @@ semantics; this is specifically **static/fixed arrays by value**.
 - `b := a` for a fixed-array type copies all elements (`b[0]` stays 1 after
   `a[0] := 99`), for element types of any width (Byte / Integer / Int64).
 - Regression test.
+
+## Log
+- 2026-06-25 — fixed (74f4f30). Root cause: a whole fixed-array `:=` (LHS is an
+  AN_IDENT array, ArrLen >= 0) had no branch in the AN_ASSIGN dispatch
+  (ir.inc) — it fell through to the generic scalar store, which moves only one
+  element's width. Added a whole-static-array branch emitting IR_COPY_REC over
+  `ArrLen*elemSize` (same op records use; same size idiom as the static-array
+  arg-copy path), gated to 1-D arrays of non-managed elements
+  (Byte/Integer/Int64/record); managed-element arrays (string / managed-record
+  elements) stay on the scalar path (per-element ARC, separate work). Lowered
+  through shared IR so all backends inherit it. Verified x86-64 +
+  aarch64/arm32/i386 (incl Int64 on 32-bit); regression test
+  test/test_fixed_array_copy.pas; make test + self-host + cross-bootstrap all
+  byte-identical. Track B can now drop the element-loop workaround in
+  lib/rtl/aesgcm.pas.

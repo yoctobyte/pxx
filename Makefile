@@ -649,6 +649,8 @@ test-core: $(COMPILER)
 	test "$$(/tmp/test_string_delete_insert26)" = "$$(printf 'ho\nhellxo\nabc\nworld!\nabc')"
 	./$(COMPILER) test/test_concat_intrinsic.pas /tmp/test_concat_intrinsic26
 	test "$$(/tmp/test_concat_intrinsic26)" = "$$(printf 'abc\nx\nhello world')"
+	./$(COMPILER) test/test_str_literal_concat_compare.pas /tmp/test_str_lit_concat_cmp26
+	test "$$(/tmp/test_str_lit_concat_cmp26)" = "$$(printf 'eq1\nneq2\neq3\npqr\nhello world')"
 	./$(COMPILER) test/test_user_type_shadows_builtin.pas /tmp/test_usershadow26
 	test "$$(/tmp/test_usershadow26)" = "$$(printf 'show 7\ndbl=10')"
 	./$(COMPILER) test/test_eof_stdin.pas /tmp/test_eof26
@@ -745,12 +747,16 @@ test-core: $(COMPILER)
 	test "$$(/tmp/test_ir_case26)" = "$$(printf '12\n12\n3\n99\n99')"
 	./$(COMPILER) test/test_ir_codegen.pas /tmp/test_ir_codegen26
 	test "$$(/tmp/test_ir_codegen26)" = "$$(printf '15\nOK')"
+	./$(COMPILER) test/test_fixed_array_copy.pas /tmp/test_fixed_array_copy26
+	test "$$(/tmp/test_fixed_array_copy26)" = "$$(printf '1 4\n10 20 30\n5000000000 7000000000\nOK')"
 	./$(COMPILER) test/test_ir_codegen_fail.pas /tmp/test_ir_codegen_fail26
 	test "$$(/tmp/test_ir_codegen_fail26)" = "$$(printf '15\nFAIL')"
 	./$(COMPILER) test/test_ir_unary.pas /tmp/test_ir_unary26
 	test "$$(/tmp/test_ir_unary26)" = "$$(printf '%s\nOK' '-5')"
 	./$(COMPILER) test/test_not_int64_expr.pas /tmp/test_not_int64_expr26
 	test "$$(/tmp/test_not_int64_expr26)" = "$$(printf '%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\nok-lw0\nok-lw1\nok-bool' '-6' '-6' '-5' '-3' '-7' '-11' '-11' '-6' '-1')"
+	./$(COMPILER) test/test_virtual_keyword_result.pas /tmp/test_vkr26
+	test "$$(/tmp/test_vkr26)" = "$$(printf '5\n6\n10\n10')"
 	./$(COMPILER) test/test_ir_deref.pas /tmp/test_ir_deref26
 	test "$$(/tmp/test_ir_deref26)" = "$$(printf '10\n20\n100\n200')"
 	./$(COMPILER) test/test_ir_call.pas /tmp/test_ir_call26
@@ -1812,6 +1818,9 @@ test-arm32: $(COMPILER)
 	./$(COMPILER) --target=arm32 test/test_not_int64_expr.pas /tmp/test_arm32_not64
 	./$(COMPILER) test/test_not_int64_expr.pas /tmp/test_arm32_not64_x64
 	test "$$(tools/run_target.sh arm32 /tmp/test_arm32_not64)" = "$$(/tmp/test_arm32_not64_x64)"
+	./$(COMPILER) --target=arm32 test/test_uint32_write.pas /tmp/test_arm32_u32w
+	./$(COMPILER) test/test_uint32_write.pas /tmp/test_arm32_u32w_x64
+	test "$$(tools/run_target.sh arm32 /tmp/test_arm32_u32w)" = "$$(/tmp/test_arm32_u32w_x64)"
 	./$(COMPILER) -dPXX_MANAGED_STRING --target=arm32 test/test_cross_record_array_store.pas /tmp/test_arm32_rec_arr_store
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_cross_record_array_store.pas /tmp/test_arm32_rec_arr_store_x64
 	test "$$(tools/run_target.sh arm32 /tmp/test_arm32_rec_arr_store)" = "$$(/tmp/test_arm32_rec_arr_store_x64)"
@@ -2463,7 +2472,10 @@ lib-test: pxx-stable-check
 	$(PXX_STABLE) examples/lisp/lispdemo.pas /tmp/lib_lispdemo
 	test "$$(/tmp/lib_lispdemo | tail -1)" = "ALL OK"
 	$(PXX_STABLE) test/lib_zlib.pas /tmp/lib_zlib
-	test "$$(/tmp/lib_zlib)" = "$$(printf 'OK stored roundtrip\nOK fixed huffman\nOK dynamic huffman\nOK bad header checksum\nOK bad adler32\nOK truncated stream\nOK reserved block type')"
+	test "$$(/tmp/lib_zlib)" = "$$(printf 'OK stored roundtrip\nOK fixed huffman\nOK dynamic huffman\nOK bad header checksum\nOK bad adler32\nOK truncated stream\nOK reserved block type\nOK gzip\nOK gzip bad crc\nOK raw deflate')"
+	$(PXX_STABLE) -Fulib/rtl test/lib_base64.pas /tmp/lib_base64
+	test "$$(/tmp/lib_base64 | grep -c '=ok')" = "14"
+	test "$$(/tmp/lib_base64 | grep -c 'FAIL')" = "0"
 	$(PXX_STABLE) test/lib_png.pas /tmp/lib_png
 	test "$$(/tmp/lib_png)" = "$$(printf '86\n137 80 78 71\nTRUE\n2x2\n255,0,0,255\n0,255,0,128\n0,0,255,64\n255,255,255,0\nFALSE\nbad chunk crc')"
 	$(PXX_STABLE) test/lib_ansiterm.pas /tmp/lib_ansiterm
@@ -2544,7 +2556,7 @@ lib-test: pxx-stable-check
 	test "$$(/tmp/lib_tls | grep -c '=ok')" = "14"
 	test "$$(/tmp/lib_tls | grep -c 'FAIL')" = "0"
 	$(PXX_STABLE) -Fulib/rtl/platform/posix test/lib_http.pas /tmp/lib_http
-	test "$$(/tmp/lib_http | grep -c '=ok')" = "49"
+	test "$$(/tmp/lib_http | grep -c '=ok')" = "83"
 	test "$$(/tmp/lib_http | grep -c 'FAIL')" = "0"
 	$(PXX_STABLE) -Fulib/rtl/platform/posix test/lib_http_async.pas /tmp/lib_http_async
 	test "$$(/tmp/lib_http_async)" = "$$(printf 'server-done=ok\nstatus=ok\nreason=ok\nbody=ok')"
@@ -2554,6 +2566,23 @@ lib-test: pxx-stable-check
 	test "$$(/tmp/lib_http_keepalive)" = "$$(printf 'server-done=ok\nbody1=ok\nalive-mid=ok\nbody2=ok')"
 	$(PXX_STABLE) -Fulib/rtl/platform/posix test/lib_http_pool.pas /tmp/lib_http_pool
 	test "$$(/tmp/lib_http_pool)" = "$$(printf 'server-done=ok\nbody1=ok\nbody2-reused=ok')"
+	$(PXX_STABLE) -Fulib/rtl/platform/posix test/lib_http_pool_concurrent.pas /tmp/lib_http_pool_concurrent
+	test "$$(/tmp/lib_http_pool_concurrent | grep -c '=ok')" = "6"
+	test "$$(/tmp/lib_http_pool_concurrent | grep -c 'FAIL')" = "0"
+	$(PXX_STABLE) -Fulib/rtl/platform/posix test/lib_http_gzip.pas /tmp/lib_http_gzip
+	test "$$(/tmp/lib_http_gzip | grep -c '=ok')" = "4"
+	test "$$(/tmp/lib_http_gzip | grep -c 'FAIL')" = "0"
+	$(PXX_STABLE) -Fulib/rtl/platform/posix test/lib_http_cookie.pas /tmp/lib_http_cookie
+	test "$$(/tmp/lib_http_cookie | grep -c '=ok')" = "4"
+	test "$$(/tmp/lib_http_cookie | grep -c 'FAIL')" = "0"
+	$(PXX_STABLE) -Fulib/rtl/platform/posix test/lib_http_serve.pas /tmp/lib_http_serve
+	test "$$(/tmp/lib_http_serve | grep -c '=ok')" = "3"
+	test "$$(/tmp/lib_http_serve | grep -c 'FAIL')" = "0"
+	$(PXX_STABLE) -Fulib/rtl/platform/posix test/lib_httpjson.pas /tmp/lib_httpjson
+	test "$$(/tmp/lib_httpjson | grep -c '=ok')" = "6"
+	test "$$(/tmp/lib_httpjson | grep -c 'FAIL')" = "0"
+	$(PXX_STABLE) -Fulib/rtl/platform/posix examples/net/httpdemo.pas /tmp/httpdemo
+	test "$$(/tmp/httpdemo | grep -c -e 'Welcome to frank2 net' -e 'cookie: sid=demo123' -e 'hello sid=demo123' -e 'body:   hello world' -e '^done')" = "5"
 	$(PXX_STABLE) -Fulib/rtl/platform/posix test/lib_https_mock.pas /tmp/lib_https_mock
 	test "$$(/tmp/lib_https_mock | grep -c '=ok')" = "6"
 	test "$$(/tmp/lib_https_mock | grep -c 'FAIL')" = "0"
@@ -2563,7 +2592,7 @@ lib-test: pxx-stable-check
 	test "$$(/tmp/lib_classes | grep -c '=ok')" = "21"
 	test "$$(/tmp/lib_classes | grep -c 'FAIL')" = "0"
 	$(PXX_STABLE) -Fulib/rtl test/lib_strutil.pas /tmp/lib_strutil
-	test "$$(/tmp/lib_strutil | grep -c '=ok')" = "17"
+	test "$$(/tmp/lib_strutil | grep -c '=ok')" = "32"
 	test "$$(/tmp/lib_strutil | grep -c 'FAIL')" = "0"
 	$(PXX_STABLE) -Fulib/rtl test/lib_format.pas /tmp/lib_format
 	test "$$(/tmp/lib_format | grep -c '=ok')" = "14"
@@ -2571,7 +2600,7 @@ lib-test: pxx-stable-check
 	$(PXX_STABLE) -Fulib/rtl test/lib_paths.pas /tmp/lib_paths
 	test "$$(/tmp/lib_paths | grep -c '=ok')" = "14"
 	test "$$(/tmp/lib_paths | grep -c 'FAIL')" = "0"
-	@echo "lib-test ok (sudoku exact + collections + math + sysutils + random + bitset + platform + directory + bignum + json + calc + sat + mathf + vm + mandelbrot + raytracer + chess-perft + lisp + zlib + png smoke + ansiterm + ansirender + process + process-multi + dynlibs + unixshims + strpchar + sockets + sha256-hmac-hkdf + sha512 + tls13-keysched + tls13-record + tls13-hs + chacha20-poly1305 + x25519 + aes-gcm + rsa-verify + ed25519-verify + ecdsa-p256-verify + x509 + tls-seam + http + http-async + http-redirect + http-keepalive + http-pool + https-mock-seam + dns-async + classes + strutil + streams + format + paths) against stable v$$(cat $(STABLE_DEFAULT_DIR)/VERSION 2>/dev/null || echo '?')"
+	@echo "lib-test ok (sudoku exact + collections + math + sysutils + random + bitset + platform + directory + bignum + json + calc + sat + mathf + vm + mandelbrot + raytracer + chess-perft + lisp + zlib + base64 + png smoke + ansiterm + ansirender + process + process-multi + dynlibs + unixshims + strpchar + sockets + sha256-hmac-hkdf + sha512 + tls13-keysched + tls13-record + tls13-hs + chacha20-poly1305 + x25519 + aes-gcm + rsa-verify + ed25519-verify + ecdsa-p256-verify + x509 + tls-seam + http + http-async + http-redirect + http-keepalive + http-pool + http-pool-concurrent + http-gzip + http-cookie + http-serve + http-json + net-demo + https-mock-seam + dns-async + classes + strutil + streams + format + paths) against stable v$$(cat $(STABLE_DEFAULT_DIR)/VERSION 2>/dev/null || echo '?')"
 
 # Full Track-B library suite, distinct from compiler `make test`.
 library-suite-green: pxx-stable-check

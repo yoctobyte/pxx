@@ -237,6 +237,10 @@
   window, not the lexer SrcPos) — without it, each `unexpected token` costs an
   instrumented rebuild to locate. Then grind the tail file-by-file.
 - **Track:** C (C frontend) — isolated worktree `../frankonpiler-cfront`, branch
+- **Type:** feature (track-D milestone path)
+- **Status:** backlog
+- **Opened:** 2026-06-25
+- **Track:** D (C frontend) — isolated worktree `../frankonpiler-cfront`, branch
   `feat/cfront`. Lands to `master` only when `make test` + self-host fixedpoint
   stay green (C-body codegen edits the compiler binary → reseed).
 - **Builds on:** `feature-c-source-frontend` (slices A–F = the *mechanics*:
@@ -499,6 +503,9 @@ gap rather than bloating this ticket.
       initialisers — Track C.
     - M3: `setjmp`/`longjmp` needs register-save/restore codegen -> **Track A**;
       varargs *define* (callee SysV ABI) -> Track C.
+      initialisers — Track D.
+    - M3: `setjmp`/`longjmp` needs register-save/restore codegen -> **Track A**;
+      varargs *define* (callee SysV ABI) -> Track D.
   Also: **lua/tiny-regex sources are not staged in this worktree**
   (`library_candidates/` is absent here; it lives in the master checkout), so
   M1/M4 cannot be compiled here until staged.

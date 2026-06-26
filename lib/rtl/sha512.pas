@@ -34,9 +34,6 @@ const
     $28db77f523047d84, $32caab7b40c72493, $3c9ebe0a15c9bebc, $431d67c49c100d4c,
     $4cc5d4becb3e42b6, $597f299cfc657e2a, $5fcb6fab3ad6faec, $6c44198c4a475817);
 
-function Not64(x: Int64): Int64;
-begin Not64 := -x - 1; end;     { `not` on an Int64 expr miscompiles }
-
 function RotR(x: Int64; n: Integer): Int64;
 begin RotR := (x shr n) or (x shl (64 - n)); end;
 
@@ -65,7 +62,7 @@ begin
   for t := 0 to 79 do
   begin
     s1 := RotR(e, 14) xor RotR(e, 18) xor RotR(e, 41);
-    ch := (e and f) xor (Not64(e) and g);
+    ch := (e and f) xor ((not e) and g);
     t1 := hh + s1 + ch + K[t] + w[t];
     s0 := RotR(a, 28) xor RotR(a, 34) xor RotR(a, 39);
     maj := (a and b) xor (a and c) xor (b and c);

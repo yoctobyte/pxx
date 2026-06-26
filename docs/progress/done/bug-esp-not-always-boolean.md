@@ -1,7 +1,7 @@
 # bug: `not` on an integer is boolean-only on ESP (riscv32 / xtensa)
 
 - **Type:** bug (codegen — `IR_NOT` on ESP backends)
-- **Status:** backlog
+- **Status:** DONE (2026-06-26, pin v79, commit 40185664)
 - **Track:** A
 - **Opened:** 2026-06-25 (split from bug-not-on-int64-is-boolean, host part fixed)
 
@@ -40,3 +40,13 @@ ESP variant of `test/test_not_int64_expr.pas` (Int64 + 32-bit ordinal `not`).
 
 - `not x` (Int64 and Integer/LongWord) == bitwise complement on esp32c3 and
   esp32s3, matching the x86-64 oracle.
+
+## Resolution (2026-06-26, Track A — commit 40185664, pin v79)
+riscv32 + xtensa IR_NOT now type-directed (mirror i386/aarch64): 64-bit ->
+complement both words; 32-bit ordinal-non-boolean -> full complement (riscv
+`xori reg,-1`, xtensa `movi a8,-1`); Boolean -> low-bit flip preserved. Verified
+by disassembly of test_not_int64_expr.pas — riscv emits `xori reg,reg,-1` (a0 x11
++ a1 x9 hi-words), xtensa `movi a8,-1` x10; boolean flips intact. x86-64
+self-host byte-identical; make test green. ESP qemu harness was unavailable this
+session (qemu boot produced no UART) so verification is instruction-level static;
+re-run `make test-esp-bare` when the harness env is back to confirm UART == oracle.

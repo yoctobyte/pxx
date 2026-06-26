@@ -16,15 +16,20 @@ before assuming the workaround is still needed.
 
 | Where | Workaround | Blocking bug (open) | Revert to |
 |---|---|---|---|
-| `lib/rtl/classes.pas` (`TStream.Read`/`Write` bodies) | self-calls qualified `Self.Read(...)` / `Self.Write(...)` | [[bug-bare-read-write-in-method-hits-intrinsic]] | bare `Read(...)` / `Write(...)` |
 | `lib/rtl/bignum.pas` (`BigFromStr`, `BigDivMod`), `examples/bignum/bigmath.pas` | managed-return calls bound to a temp before being passed as an arg (no `BigAdd(BigMulSmall(x,…),…)` nesting) | [[bug-managed-record-result-self-arg]] (aka `bug-nested-managed-return-call-arg`) | nest the calls directly |
 | `lib/rtl/chacha20poly1305.pas` (Poly1305) | native 5×26-bit limbs instead of `bignum` | [[bug-managed-record-result-self-arg]] — *partial:* limbs are the idiomatic choice anyway, so this is **not** a pure workaround; keep even after the fix | — (keep) |
-| `lib/rtl/x25519.pas` (`Asr64`, `Sel25519`) | bitwise complement written `-x-1` / `-b` instead of `not` | [[bug-not-on-int64-is-boolean]] — `not` on an `Int64` *expression* miscompiles | plain `not` |
-| `lib/rtl/aesgcm.pas` (`BlkCopy`, used in `EncryptBlk`, `GfMul`, `AesCtr`, `GcmSetup`, `GcmTag`) | whole static-array `:=` replaced by element-copy loops | [[bug-fixed-array-assignment-no-copy]] — `b := a` on a fixed array doesn't copy | plain `dst := src` |
-| `test/lib_sha256.pas`, `test/lib_aesgcm.pas` (expected hex literals) | long literals kept on **one line** (no `'a' + 'b'`) | [[bug-string-literal-concat-compare-segfault]] — `x = 'a'+'b'` comparison segfaults | split literals with `+` |
+| `lib/rtl/aesgcm.pas` (`BlkCopy`, used in `EncryptBlk`, `GfMul`, `AesCtr`, `GcmSetup`, `GcmTag`) | whole static-array `:=` replaced by element-copy loops | [[bug-fixed-array-assignment-no-copy]] — **fixed generally (v72)**, but a full revert of *this unit* still segfaults at the GCM path (residual, NOT minimally reproducible — every isolated `array :=` pattern passes on v72). **Keep `BlkCopy` here** until the residual is understood. | (do not revert yet) |
 | `lib/rtl/ed25519.pas` (EC points) | a point's 4 field coords are **4 separate standalone TGf vars**, never an `array of TGf` or a record of TGf | [[bug-aggregate-member-array-as-var-param]] — passing an aggregate-member array by ref segfaults | a `TPoint = array[0..3] of TGf` / record |
 
 ### Coding-pattern landmines (no single site — avoid in new Track B code)
+
+- **Long command-line arguments in a large program.** Reading a long `ParamStr`
+  (~hundreds of chars) into an AnsiString and then doing more heap work corrupted
+  memory and crashed later in `test/devtest_tls13_handshake.pas` (a big multi-unit
+  program). Could **not** reduce to a minimal repro (`ParamStr` of a 700-char arg
+  in isolation is fine), so no Track A ticket yet — but pass bulk data (a cert, a
+  key) via a **file** (short path arg + `PalOpen`/`PalRead`), not argv. If a clean
+  repro turns up, file it.
 
 - **Managed-record return as a call arg.** Until
   [[bug-managed-record-result-self-arg]] is fixed, do not write
@@ -32,19 +37,8 @@ before assuming the workaround is still needed.
   a managed field (dynamic array / AnsiString) — bind to a local first. Affects
   any `bignum`-heavy code (e.g. a future X25519/RSA written over `bignum` rather
   than fixed limbs).
-- **`Length(ps^)` on a managed string through a pointer** returns garbage —
-  [[bug-managed-length-via-pointer-deref]]. Deref into a local string first.
 - **`Read := x` / `Write := x`** (own-name result of an intrinsic-named **virtual**
   method) miscompiles — [[bug-virtual-keyword-name-result]]. Use `Result := x`.
-- **`not` on an `Int64` expression** (`not (x-1)`, `not Int64(5)`) miscompiles —
-  [[bug-not-on-int64-is-boolean]]. Use the two's-complement identity: `~x` →
-  `-x - 1`, `~(b-1)` → `-b`. `not` on a plain Int64 *variable* is fine.
-- **Whole static-array assignment** `b := a` doesn't copy —
-  [[bug-fixed-array-assignment-no-copy]]. Copy element by element (or a small
-  `Copy` proc). Records and dynamic arrays are unaffected.
-- **String-literal concat in a comparison** `x = 'a' + 'b'` segfaults —
-  [[bug-string-literal-concat-compare-segfault]]. Keep the literal on one line, or
-  assign the concat to a var first. (Assignment `v := 'a'+'b'` is fine.)
 - **Aggregate-member array as a var/const param** (a 2D-array row `p[i]`, or an
   array-typed record field `p.a`) segfaults —
   [[bug-aggregate-member-array-as-var-param]]. Keep each sub-array a standalone
@@ -73,3 +67,24 @@ now in `done/`, so the workaround can be removed and the idiomatic form restored
   **chess slice 2** (search + eval through `EvalTerms[i](pos)`); the demo was left
   blocked, not worked around, so nothing to revert — just resumable when chess is
   picked back up.
+
+## Reverted 2026-06-25 (sis fixes, workarounds removed + re-tested)
+
+- [[bug-not-on-int64-is-boolean]] **fixed (v71)** — reverted the `-x-1` /  `-b`
+  bitwise-complement workaround back to plain `not` in `lib/rtl/x25519.pas`,
+  `lib/rtl/ed25519.pas` (`Asr64`, `Sel25519`) and `lib/rtl/sha512.pas` (Ch).
+  Re-tested: `lib_x25519` (6), `lib_sha512` (3), `lib_ed25519` (3) all green.
+- [[bug-bare-read-write-in-method-hits-intrinsic]] **fixed (v71)** — reverted the
+  `Self.Read`/`Self.Write` qualification in `lib/rtl/classes.pas` (`TStream`) to
+  bare `Read`/`Write`. Re-tested: `lib_classes` (21) green.
+- [[bug-managed-length-via-pointer-deref]] **fixed (v71)** — no Track B code
+  carried a workaround (it was a compiler-internal find); landmine note dropped.
+- [[bug-string-literal-concat-compare-segfault]] **fixed (v73)** — `x = 'a'+'b'`
+  comparison no longer crashes (re-tested). The `lib_sha256`/`lib_aesgcm` expected
+  hex literals were kept one-line; that form is fine, so nothing to revert.
+- [[bug-fixed-array-assignment-no-copy]] **fixed (v72) for the general case** —
+  every isolated `array :=` pattern (local↔local, ↔ var/const param, 16-elem)
+  copies correctly. BUT reverting `lib/rtl/aesgcm.pas`'s `BlkCopy` to plain `:=`
+  still **segfaults** in the GCM path (`aes-ecb` passes, `gcm-tc1` cores) and I
+  could **not** minimally reproduce it. So `aesgcm` keeps `BlkCopy` for now (see
+  the table above); the unit's behaviour is unchanged and `lib_aesgcm` stays green.

@@ -2,6 +2,7 @@
 
 - **Type:** feature
 - **Status:** backlog
+- **Track:** C (C frontend)
 - **Owner:** —
 - **Opened:** 2026-06-06 (from todo.md §2c — "the real goal")
 

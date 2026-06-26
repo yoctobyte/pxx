@@ -1681,6 +1681,15 @@ begin
         EmitNode64Xtensa(IRA[node]);             { value -> a2:a3 }
         EmitAsmXtensa(['movi a8, -1', 'xor a2, a2, a8', 'xor a3, a3, a8']);
       end
+      else if TypeIsOrdinal(IntToTypeKind(IRTk[node])) and
+              (IntToTypeKind(IRTk[node]) <> tyBoolean) then
+      begin
+        { 32-bit integer/ordinal: bitwise complement (mirror i386/aarch64), not a
+          boolean flip. }
+        IREmitNodeXtensa(IRA[node]);
+        xtensa_movi(reg_xtensa_a8, -1);
+        xtensa_xor(reg_xtensa_a2, reg_xtensa_a2, reg_xtensa_a8);
+      end
       else
       begin
         IREmitNodeXtensa(IRA[node]);

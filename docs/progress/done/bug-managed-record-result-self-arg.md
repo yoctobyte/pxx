@@ -80,3 +80,61 @@ is the loudest (immediate segfault). Once fixed, the temp-binding in
   all targets; no segfault (materialise the call result into a temp before
   releasing/overwriting `Result`, or stop aliasing the result slot with an arg).
 - Regression test (record-with-dynamic-array and record-with-AnsiString).
+
+## Diagnosis (2026-06-25) — partly improved, residual is flaky heap corruption
+
+Re-tested on the current compiler (post pin v72). The loudest forms from the
+repro now PASS in isolation:
+- `Result := Add(Result, Make(5))` (dynamic-array field self-arg) → 15 OK.
+- the AnsiString-field self-arg (`Result := Cat(Result, MkS('cd'))`) → OK.
+- single- and double-nested call-args (`Add(Make(3), Add(Make(4), Make(5)))`)
+  and balanced (`Add(Add(..),Add(..))`) → 12 / 10 OK.
+
+So the intervening managed-string work (v67 SetLength-on-field, v71
+Length-via-deref) closed the simple cases. **The bug is NOT gone**, but it is now
+**flaky / heap-layout-sensitive**, not a deterministic self-arg segfault:
+
+- Program mixing an AnsiString-managed-record self-arg function AND a
+  dynamic-array-managed-record nested-return function, calling them in sequence
+  (`s := ViaResultS; … r := Nested;`), **segfaults** in one arrangement
+  (test/b3b shape) yet in a near-identical arrangement merely **drops the second
+  function's output** (the `writeln(r.d[0])` prints nothing) and exits 0. Same
+  source logic, different allocation order → crash vs silent wrong result.
+
+That signature = a heap/ARC corruption (double-free or release of a
+still-referenced handle) in the **hidden return-slot lifetime**, latent until a
+specific malloc/free sequence reuses the corrupted block. The fix is the one the
+acceptance already names — materialise a managed-record call result into a temp
+before it can alias/overwrite a slot that is also a live input — but it must be
+applied to the **general hidden-result-pointer path**, not just the literal
+`Result := F(Result,…)` self-arg, and verified against the mixed-allocation
+repro (deterministic crash) plus a cross run. Substantial ARC work; Track B's
+"bind managed-return calls to a temp first" workaround (bignum.pas, bigmath.pas)
+stands until then.
+
+Minimal deterministic repro to drive the fix (segfaults): the `b3b` shape —
+a `record d: AnsiString` self-arg accumulator function called first, then a
+`record d: array of Integer` function whose body is
+`Result := Add(Make(3), Add(Make(4), Make(5)))`, both printed in `main`.
+
+## Resolution (2026-06-26, Track A — commit 65d7fb56, pin v75)
+
+Root cause was NOT the hidden return-slot aliasing the ticket guessed. The
+hidden result dest is a fresh scratch; the assignment uses ARC-correct
+IR_COPY_REC_MANAGED. The real bug: passing a managed-field record **by value as
+a call arg** materializes it into a temp (ir.inc IRLowerCallArg `needTemp`
+path), filled with IR_COPY_REC_MANAGED — which RELEASES the dest's old managed
+fields before copying. That temp is allocated during IR lowering, AFTER the
+prologue zero-init pass, so its fields held stack garbage → the release freed a
+bogus handle (double-free / heap corruption). Surfaced only when one arg is a
+managed-record-returning call (`Add(Make(1), Result)` / `Add(Result, Make(5))`);
+a plain lvalue arg (`Add(Result, localVar)`) needs no temp and was fine — which
+is why `Result`-as-arg looked like the trigger but was a red herring.
+
+Fix: mark the temp `SymIsHiddenArgTemp` when the record has managed fields, so
+codegen nil-inits it before the body (mirrors the hidden aggregate-result temp
+in IRAppendCall). The release then no-ops on nil.
+
+Verified: dyn-array-field and AnsiString-field repros, looped, valgrind-clean;
+`make test` green incl cross; self-host byte-identical; pinned v75. Track B can
+drop the bind-to-temp workaround in bignum.pas / chacha20poly1305.pas on rebuild.

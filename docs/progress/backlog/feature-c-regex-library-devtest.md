@@ -2,6 +2,7 @@
 
 - **Type:** feature (C frontend / RTL candidate)
 - **Status:** backlog
+- **Track:** C (C frontend)
 - **Owner:** —
 - **Opened:** 2026-06-20
 - **Relation:** exercises `feature-c-source-frontend`; eventual destination is

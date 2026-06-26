@@ -20,13 +20,11 @@ implementation
 type
   TGf = array[0..15] of Int64;
 
-{ arithmetic (sign-preserving) shift right — Pascal shr is logical.
-  Bitwise complement is written -x-1, not `not x`: `not` on Int64 miscompiles to a
-  boolean result (bug-not-on-int64-is-boolean). }
+{ arithmetic (sign-preserving) shift right — Pascal shr is logical. }
 function Asr64(x: Int64; n: Integer): Int64;
 begin
   if x >= 0 then Asr64 := x shr n
-  else Asr64 := -(((-x - 1) shr n)) - 1;
+  else Asr64 := not ((not x) shr n);
 end;
 
 procedure Car25519(var o: TGf);
@@ -46,7 +44,7 @@ end;
 procedure Sel25519(var p, q: TGf; b: Int64);
 var t, c: Int64; i: Integer;
 begin
-  c := -b;                 { = bitwise not(b-1); Int64 `not` miscompiles }
+  c := not (b - 1);        { 0 when b=0, all-ones when b=1 }
   for i := 0 to 15 do
   begin
     t := c and (p[i] xor q[i]);

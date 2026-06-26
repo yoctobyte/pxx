@@ -177,6 +177,33 @@ const
   AN_SET_CONST_REF = 66; { named set constant used as a value: ASTIVal = Data[]
                            offset of the baked 32-byte mask. Lowers to IR_SET_LIT
                            (same blob-address value a set literal yields). }
+  AN_INCDEC        = 69; { C pre/post increment/decrement. Left = lvalue;
+                           ASTIVal = +1 / -1 (scaled by element size for a
+                           pointer); ASTSOffset = 1 for postfix (yield OLD value),
+                           0 for prefix (yield NEW value). Lowers via the
+                           evaluate-lvalue-address-once primitive. }
+  AN_COMPOUND_ASSIGN = 70; { C assignment expression yielding a value. Left =
+                           lvalue, Right = rhs, ASTIVal = the binop token
+                           (tkPlus/tkMinus/tkStar/tkSlash...) for `+=` etc, or
+                           Ord(tkAssign) for a plain value-bearing `=`/`:=`
+                           (right-assoc, so `a = b = c` nests on the Right). The
+                           lvalue address is computed ONCE; yields the stored
+                           value. }
+  AN_COMMA         = 68; { C comma operator `(a, b)`: evaluate Left for its side
+                           effects (value discarded), yield Right's value.
+                           Right-nested for `(a,b,c)`. ASTTk = Right's type. Only
+                           produced by the C frontend and Pascal's parenthesised
+                           comma form (a syntax error otherwise) — never in
+                           compiler source, so self-host stays byte-identical. }
+  AN_TERNARY       = 67; { value-bearing conditional expression `c ? a : b`
+                           (C frontend) / `if c then a else b` expression form.
+                           Left = condition; Right = AN_PAIR(then-arm, else-arm).
+                           ASTTk = result type. Short-circuit: only the selected
+                           arm is evaluated. Lowers to JUMP_IF_FALSE/labels with
+                           each arm stored into one hidden temp, yielding a load
+                           (see ir.inc). Pascal's own parser only emits it for the
+                           explicit if-expression; never in compiler source, so
+                           self-host stays byte-identical. }
   AN_METACLASS_NEW = 65; { metaclass-dispatched construction `classRefVar.Create(..)`:
                            Left = AN_ARG chain of explicit ctor args (NO Self);
                            Right = classref value node (yields the RTTI blob ptr);
@@ -184,27 +211,12 @@ const
                            ctor VMT slot (-1 if non-virtual). Allocates the DYNAMIC
                            class (size=[cref+16], vmt=[cref+24]) then runs the
                            virtual ctor through the stamped VMT. }
-  AN_TERNARY       = 67; { C conditional `cond ? a : b`: Left = cond; Right =
-                           AN_PAIR(then, else); ASTTk = result type (then-branch).
-                           Lowers (target-independent) to a hidden temp + branches:
-                           only the taken branch is evaluated. }
-  AN_SWITCH        = 68; { C `switch (sel) { body }`: Left = selector expr; Right =
-                           AN_BLOCK body whose statement SEQ contains AN_CASE /
-                           AN_DEFAULT marker nodes. Lowered to a dispatch (compare
+  AN_SWITCH        = 71; { C `switch (sel) { body }`: Left = selector expr; Right =
+                           AN_BLOCK body whose statement SEQ contains AN_CASE (17) /
+                           AN_DEFAULT (48) marker nodes — shared with the Pascal
+                           case/default node kinds. Lowered to a dispatch (compare
                            selector vs each case, jump to its label) + the body in
                            order (fallthrough), with a break-only scope. }
-  AN_CASE          = 69; { `case CONST:` marker inside a switch body. ASTIVal =
-                           constant value; ASTSOffset = the IR label assigned at
-                           lowering (dispatch target). }
-  AN_DEFAULT       = 70; { `default:` marker inside a switch body. ASTSOffset =
-                           the IR label assigned at lowering. }
-  AN_COMMA         = 71; { C comma EXPRESSION `(a, b)`: Left evaluated for side
-                           effects and discarded, Right yields the value. ASTTk =
-                           Right's type. (Statement-level comma uses AN_BLOCK.) }
-  AN_INCDEC        = 72; { C `++`/`--` as a VALUE. Left = a read of the lvalue
-                           (old value), Right = the AN_ASSIGN `lv = lv +/- 1`
-                           (does the scaled store), ASTSLen = 1 prefix / 0 postfix.
-                           Yields the new (prefix) or old (postfix) value. }
 
   { Inline-asm operand kinds }
   AOP_NONE = 0;
@@ -421,6 +433,8 @@ type
     tkInteger_T, tkBoolean_T, tkChar_T, tkString_T, tkReal_T, tkLongWord_T,
     tkAssign, tkEq, tkNeq, tkLt, tkLe, tkGt, tkGe,
     tkPlus, tkMinus, tkStar, tkSlash,
+    tkPlusPlus, tkMinusMinus,                 { ++ / -- (C inc/dec; new in pxx) }
+    tkPlusEq, tkMinusEq, tkStarEq, tkSlashEq, { += -= *= /= compound assignment }
     tkLParen, tkRParen, tkLBrack, tkRBrack,
     tkSemicolon, tkColon, tkComma, tkDot, tkDotDot, tkAt, tkCaret,
     tkBreak, tkContinue, tkOverload,
@@ -915,6 +929,10 @@ var
   ErrorIdent : AnsiString;
   WarnCount : Integer;     { number of non-fatal warnings emitted via Warn }
   WarnAsError : Boolean;   { -Werror: promote the next Warn to a fatal Error }
+  WarnSelfResult : Boolean; { --warn-self-result: warn when a paramless function's
+                             bare own name is read as a value (FPC = its Result,
+                             but often a mistaken `Name()` self-recursion). Off by
+                             default — the compiler's own source uses the idiom. }
   LastExprTk : TTypeKind;
   InInterface : Boolean;
   { Declaration pre-scan (whole-section forward visibility): pass 1 registers

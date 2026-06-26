@@ -2,6 +2,7 @@
 
 - **Type:** feature
 - **Status:** backlog
+- **Track:** C (C frontend)
 - **Opened:** 2026-06-17
 - **Blocked-by:** feature-cross-target-feature-parity
 - **Priority:** next major frontend after the cross-target language work lands

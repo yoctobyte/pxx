@@ -20,7 +20,7 @@ unit http;
 interface
 
 uses net, asyncnet, dns, dns_async, dns_config, dns_wire_core, sysutils,
-     tls, scheduler, platform;
+     tls, scheduler, platform, zlib, hashing, base64;
 
 type
   THttpResponse = record
@@ -29,6 +29,14 @@ type
     Reason:  AnsiString;   { e.g. 'OK' }
     Headers: AnsiString;   { raw header block (no status line, no final CRLF) }
     Body:    AnsiString;
+  end;
+
+  THttpRequest = record
+    Method:  AnsiString;   { e.g. 'GET' }
+    Path:    AnsiString;   { request target up to '?', '/' if empty }
+    Query:   AnsiString;   { part after '?', '' if none }
+    Headers: AnsiString;   { raw header block }
+    Body:    AnsiString;   { everything past the header block }
   end;
 
 { --- pure helpers (no I/O) --- }
@@ -74,6 +82,14 @@ function HttpResponseHeader(const resp: THttpResponse; const name: AnsiString): 
 { Decode a chunked-transfer-encoded body to its plain bytes. }
 function HttpDechunk(const body: AnsiString): AnsiString;
 
+{ Decompress a body per Content-Encoding (gzip / deflate; identity and empty
+  pass through). An unknown or malformed encoding returns the body unchanged. }
+function HttpDecodeContent(const encoding, body: AnsiString): AnsiString;
+
+{ 'Authorization: Basic <base64(user:pass)>' header line (CRLF-terminated) —
+  drop into the extraHeaders argument of HttpExec / HttpConnExec. }
+function HttpBasicAuth(const user, pass: AnsiString): AnsiString;
+
 { Resolve a (possibly relative) Location against a base URL: an absolute
   http(s):// location is returned as-is; an absolute-path '/x' keeps the base
   scheme+host+port; anything else resolves against the base path's directory. }
@@ -89,9 +105,60 @@ function HttpUrlDecode(const s: AnsiString): AnsiString;
   application/x-www-form-urlencoded bodies. }
 function HttpQueryAdd(const q, name, value: AnsiString): AnsiString;
 
+{ Read back from an `a=1&b=2` query/form string: HttpQueryGet returns the first
+  value for name (percent-decoded, '' if absent or empty); HttpQueryHas reports
+  presence (distinguishes a present-but-empty field from an absent one). Names are
+  matched after percent-decoding. }
+function HttpQueryGet(const query, name: AnsiString): AnsiString;
+function HttpQueryHas(const query, name: AnsiString): Boolean;
+
+{ --- multipart/form-data builder (pure; for file/field uploads) ---
+  Usage: pick a boundary, concatenate one Part per field/file, finish with
+  HttpMultipartEnd, and POST with HttpMultipartContentType in extraHeaders:
+    b    := HttpMultipartBoundary;
+    body := HttpMultipartField(b, 'name', 'value')
+          + HttpMultipartFile(b, 'avatar', 'me.png', 'image/png', pngBytes)
+          + HttpMultipartEnd(b);
+    HttpExec('POST', url, HttpMultipartContentType(b), body); }
+function HttpMultipartBoundary: AnsiString;
+function HttpMultipartContentType(const boundary: AnsiString): AnsiString;
+function HttpMultipartField(const boundary, name, value: AnsiString): AnsiString;
+function HttpMultipartFile(const boundary, name, filename, contentType, data: AnsiString): AnsiString;
+function HttpMultipartEnd(const boundary: AnsiString): AnsiString;
+
+{ --- minimal cookie jar (pure) ---
+  A jar is a plain "name=value; name2=value2" string (the Cookie request header
+  value). HttpCookieSet replaces or appends one pair; HttpCookieUpdate merges a
+  single Set-Cookie value (its leading name=value, attributes ignored);
+  HttpCookieFromResponse merges every Set-Cookie header of a response;
+  HttpCookieHeader renders the 'Cookie: …' request line (empty jar → ''). This
+  tracks name=value only — Domain/Path/Expires/Secure scoping is not modelled. }
+function HttpCookieSet(const jar, name, value: AnsiString): AnsiString;
+function HttpCookieUpdate(const jar, setCookieValue: AnsiString): AnsiString;
+function HttpCookieFromResponse(const jar: AnsiString; const resp: THttpResponse): AnsiString;
+function HttpCookieHeader(const jar: AnsiString): AnsiString;
+
 { Parse a raw response into resp (status line + headers + body). Applies
   Transfer-Encoding: chunked decoding, else trims the body to Content-Length. }
 procedure HttpParseResponse(const raw: AnsiString; var resp: THttpResponse);
+
+{ --- server-side helpers (pure) ---
+  HttpParseRequest splits a raw request (request line + headers + body);
+  HttpRequestHeader is a case-insensitive header lookup over it; HttpBuildResponse
+  formats a reply and computes Content-Length automatically (no hand-counting). }
+function HttpParseRequest(const raw: AnsiString; var req: THttpRequest): Boolean;
+function HttpRequestHeader(const req: THttpRequest; const name: AnsiString): AnsiString;
+function HttpBuildResponse(status: Integer; const reason, extraHeaders, body: AnsiString): AnsiString;
+
+{ Per-connection serve loop: on an accepted socket cfd, read one length-aware
+  request (headers + Content-Length body), dispatch it to handler (which returns a
+  full response string — build it with HttpBuildResponse), send the reply, and
+  repeat over keep-alive until the peer closes or maxRequests is reached
+  (maxRequests <= 0 = unlimited). async selects the reactor (call from a coroutine)
+  vs blocking I/O. The caller owns accept and closing cfd. }
+type
+  THttpHandler = function(const req: THttpRequest): AnsiString;
+procedure HttpServeConn(cfd: Integer; handler: THttpHandler; maxRequests: Integer; async: Boolean);
 
 { --- blocking transport --- }
 
@@ -148,14 +215,35 @@ function HttpPostAsync(const url, contentType, body: AnsiString): THttpResponse;
 { Async GET following up to maxRedirects 3xx Location hops (absolute URLs). }
 function HttpGetFollowAsync(const url: AnsiString; maxRedirects: Integer): THttpResponse;
 
-{ --- async connection pool ---
-  HttpGetPooledAsync transparently reuses a live keep-alive connection to the
-  same host:port from a process-global pool, opening a fresh one only when none
-  is available (then keeping it for next time). Single-flow (coroutine) use only
-  — not concurrency-safe across simultaneously-running coroutines. HttpPoolClose
-  closes and drops every pooled connection. }
+{ --- connection pool (concurrency-safe across coroutines) ---
+  HttpGetPooled / HttpGetPooledAsync transparently reuse a live keep-alive
+  connection to the same host:port:scheme from a process-global pool, opening a
+  fresh one only when no free one is available (then keeping it for next time).
+  Each in-flight request reserves its slot (InUse), so two coroutines hitting the
+  same host never share a socket; exec runs on a local copy written back by slot
+  index, so another coroutine's pool growth can't dangle a `var` across a reactor
+  yield. HttpPoolClose closes and drops every pooled connection. }
+function HttpGetPooled(const url: AnsiString): THttpResponse;
 function HttpGetPooledAsync(const url: AnsiString): THttpResponse;
 procedure HttpPoolClose;
+
+{ Idle eviction: close every free (not-InUse) connection idle for >= maxIdleMs
+  (monotonic). Call periodically from the reactor flow. }
+procedure HttpPoolEvictIdle(maxIdleMs: Int64);
+{ Number of live (still-open) pooled connections — observability / tests. }
+function HttpPoolCount: Integer;
+{ Per-host:port:scheme cap on idle pooled connections (0 = unlimited). On release
+  a connection beyond the cap is closed rather than kept. }
+procedure HttpPoolSetMaxPerHost(n: Integer);
+
+{ Explicit acquire/exec/release — pin one connection across several requests,
+  concurrency-safe. Acquire reserves a live free slot (or opens fresh), returning
+  a slot handle (>= 0) or -1 on connect failure. Exec sends one keep-alive
+  request on the handle. Release frees the slot (closing it if it died). }
+function HttpPoolAcquire(const host: AnsiString; port: Integer; isTls, async: Boolean): Integer;
+function HttpPoolSlotExec(handle: Integer;
+  const method, path, extraHeaders, body: AnsiString; async: Boolean): THttpResponse;
+procedure HttpPoolReleaseSlot(handle: Integer);
 
 implementation
 
@@ -213,6 +301,16 @@ begin
   r := r + CRLF;          { end of headers }
   if body <> '' then r := r + body;
   Result := r;
+end;
+
+{ Add a default Accept-Encoding to the caller's extra headers unless they already
+  set one — so the transport advertises the codecs HttpDecodeContent handles. }
+function HttpWithAcceptEncoding(const extraHeaders: AnsiString): AnsiString;
+begin
+  if Pos('accept-encoding:', LowerCase(extraHeaders)) > 0 then
+    Result := extraHeaders
+  else
+    Result := extraHeaders + 'Accept-Encoding: gzip, deflate' + CRLF;
 end;
 
 function HttpHeaderValue(const headers, name: AnsiString): AnsiString;
@@ -380,6 +478,143 @@ begin
   if q <> '' then Result := q + '&' + Result;
 end;
 
+function HttpQueryGet(const query, name: AnsiString): AnsiString;
+var i, start, n, eq: Integer; seg, segName: AnsiString;
+begin
+  Result := '';
+  n := Length(query); start := 1;
+  while start <= n + 1 do
+  begin
+    i := start;
+    while (i <= n) and (query[i] <> '&') do Inc(i);
+    seg := Copy(query, start, i - start);
+    if seg <> '' then
+    begin
+      eq := Pos('=', seg);
+      if eq > 0 then segName := Copy(seg, 1, eq - 1) else segName := seg;
+      if HttpUrlDecode(segName) = name then
+      begin
+        if eq > 0 then Result := HttpUrlDecode(Copy(seg, eq + 1, Length(seg)));
+        Exit;
+      end;
+    end;
+    start := i + 1;
+  end;
+end;
+
+function HttpQueryHas(const query, name: AnsiString): Boolean;
+var i, start, n, eq: Integer; seg, segName: AnsiString;
+begin
+  Result := False;
+  n := Length(query); start := 1;
+  while start <= n + 1 do
+  begin
+    i := start;
+    while (i <= n) and (query[i] <> '&') do Inc(i);
+    seg := Copy(query, start, i - start);
+    if seg <> '' then
+    begin
+      eq := Pos('=', seg);
+      if eq > 0 then segName := Copy(seg, 1, eq - 1) else segName := seg;
+      if HttpUrlDecode(segName) = name then begin Result := True; Exit; end;
+    end;
+    start := i + 1;
+  end;
+end;
+
+var gMpCounter: Integer;
+
+function HttpMultipartBoundary: AnsiString;
+var ms: Integer;
+begin
+  Inc(gMpCounter);
+  ms := Integer(PalMonotonicMillis and $7FFFFFFF);
+  Result := '----frank2Boundary' + IntToStr(ms) + 'x' + IntToStr(gMpCounter);
+end;
+
+function HttpMultipartContentType(const boundary: AnsiString): AnsiString;
+begin
+  Result := 'Content-Type: multipart/form-data; boundary=' + boundary + CRLF;
+end;
+
+function HttpMultipartField(const boundary, name, value: AnsiString): AnsiString;
+begin
+  Result := '--' + boundary + CRLF
+          + 'Content-Disposition: form-data; name="' + name + '"' + CRLF
+          + CRLF + value + CRLF;
+end;
+
+function HttpMultipartFile(const boundary, name, filename, contentType, data: AnsiString): AnsiString;
+begin
+  Result := '--' + boundary + CRLF
+          + 'Content-Disposition: form-data; name="' + name + '"; filename="' + filename + '"' + CRLF
+          + 'Content-Type: ' + contentType + CRLF
+          + CRLF + data + CRLF;
+end;
+
+function HttpMultipartEnd(const boundary: AnsiString): AnsiString;
+begin
+  Result := '--' + boundary + '--' + CRLF;
+end;
+
+function HttpCookieSet(const jar, name, value: AnsiString): AnsiString;
+var res, seg, segName: AnsiString; i, start, n, eq: Integer; replaced: Boolean;
+begin
+  res := ''; replaced := False;
+  n := Length(jar); start := 1;
+  while start <= n + 1 do
+  begin
+    i := start;
+    while (i <= n) and (jar[i] <> ';') do Inc(i);
+    seg := Trim(Copy(jar, start, i - start));
+    if seg <> '' then
+    begin
+      eq := Pos('=', seg);
+      if eq > 0 then segName := Trim(Copy(seg, 1, eq - 1)) else segName := seg;
+      if segName = name then begin seg := name + '=' + value; replaced := True; end;
+      if res <> '' then res := res + '; ';
+      res := res + seg;
+    end;
+    start := i + 1;
+  end;
+  if not replaced then
+  begin
+    if res <> '' then res := res + '; ';
+    res := res + name + '=' + value;
+  end;
+  Result := res;
+end;
+
+function HttpCookieUpdate(const jar, setCookieValue: AnsiString): AnsiString;
+var nv, name, value: AnsiString; eq, semi: Integer;
+begin
+  Result := jar;
+  semi := Pos(';', setCookieValue);
+  if semi > 0 then nv := Copy(setCookieValue, 1, semi - 1) else nv := setCookieValue;
+  nv := Trim(nv);
+  eq := Pos('=', nv);
+  if eq <= 0 then Exit;
+  name := Trim(Copy(nv, 1, eq - 1));
+  value := Trim(Copy(nv, eq + 1, Length(nv)));
+  if name = '' then Exit;
+  Result := HttpCookieSet(jar, name, value);
+end;
+
+function HttpCookieFromResponse(const jar: AnsiString; const resp: THttpResponse): AnsiString;
+var hdrs: THttpHeaders; i: Integer;
+begin
+  Result := jar;
+  hdrs := HttpResponseHeaders(resp);
+  for i := 0 to hdrs.Count - 1 do
+    if LowerCase(HttpHeaderName(hdrs, i)) = 'set-cookie' then
+      Result := HttpCookieUpdate(Result, HttpHeaderVal(hdrs, i));
+end;
+
+function HttpCookieHeader(const jar: AnsiString): AnsiString;
+begin
+  if Trim(jar) = '' then Result := '' else Result := 'Cookie: ' + jar + CRLF;
+end;
+
 function HttpDechunk(const body: AnsiString): AnsiString;
 var
   pos, n, sz: Integer;
@@ -406,6 +641,35 @@ begin
   Result := outp;
 end;
 
+function HttpDecodeContent(const encoding, body: AnsiString): AnsiString;
+var enc, e: AnsiString; src, dst: TByteArray; i: Integer; ok: Boolean;
+begin
+  Result := body;
+  enc := LowerCase(Trim(encoding));
+  if (enc = '') or (enc = 'identity') or (body = '') then Exit;
+
+  SetLength(src, Length(body));
+  for i := 1 to Length(body) do src[i - 1] := Byte(body[i]);
+
+  ok := False;
+  if enc = 'gzip' then
+    ok := InflateGzip(src, dst, e)
+  else if enc = 'deflate' then
+  begin
+    ok := InflateZlib(src, dst, e);              { spec: RFC1950 zlib-wrapped }
+    if not ok then ok := InflateRawBytes(src, dst, e);   { lenient: raw deflate }
+  end;
+  if not ok then Exit;                            { unknown/failed → unchanged }
+
+  SetLength(Result, Length(dst));
+  for i := 0 to Length(dst) - 1 do Result[i + 1] := AnsiChar(dst[i]);
+end;
+
+function HttpBasicAuth(const user, pass: AnsiString): AnsiString;
+begin
+  Result := 'Authorization: Basic ' + Base64EncodeStr(user + ':' + pass) + CRLF;
+end;
+
 function HttpResolveUrl(const base, location: AnsiString): AnsiString;
 var host, path, scheme, authority: AnsiString; port, i: Integer; isTls: Boolean;
 begin
@@ -429,7 +693,7 @@ begin
 end;
 
 procedure HttpParseResponse(const raw: AnsiString; var resp: THttpResponse);
-var i, n, lineEnd, sp1, sp2, sep, cl: Integer; statusLine, code, te, clv: AnsiString;
+var i, n, lineEnd, sp1, sp2, sep, cl: Integer; statusLine, code, te, clv, ce: AnsiString;
 begin
   resp.Ok := False; resp.Status := 0; resp.Reason := '';
   resp.Headers := ''; resp.Body := '';
@@ -493,7 +757,80 @@ begin
     end;
   end;
 
+  { Content-Encoding: gzip / deflate — decompress once framing yielded the body. }
+  ce := HttpHeaderValue(resp.Headers, 'Content-Encoding');
+  if ce <> '' then resp.Body := HttpDecodeContent(ce, resp.Body);
+
   resp.Ok := resp.Status > 0;
+end;
+
+function HttpParseRequest(const raw: AnsiString; var req: THttpRequest): Boolean;
+var n, lineEnd, sp1, sp2, sep, q, i: Integer; target: AnsiString;
+begin
+  req.Method := ''; req.Path := '/'; req.Query := '';
+  req.Headers := ''; req.Body := '';
+  Result := False;
+  n := Length(raw);
+  if n = 0 then Exit;
+
+  { request line up to first CRLF }
+  lineEnd := 1;
+  while (lineEnd < n) and not ((raw[lineEnd] = #13) and (raw[lineEnd + 1] = #10)) do
+    Inc(lineEnd);
+
+  { 'METHOD target HTTP/1.1' -> method, target between the first two spaces }
+  sp1 := 0; sp2 := 0;
+  for i := 1 to lineEnd - 1 do
+    if raw[i] = ' ' then
+    begin
+      if sp1 = 0 then sp1 := i
+      else if sp2 = 0 then sp2 := i;
+    end;
+  if sp1 = 0 then Exit;
+  req.Method := Copy(raw, 1, sp1 - 1);
+  if sp2 > 0 then target := Copy(raw, sp1 + 1, sp2 - sp1 - 1)
+  else target := Copy(raw, sp1 + 1, lineEnd - 1 - sp1);
+
+  q := Pos('?', target);
+  if q > 0 then
+  begin
+    req.Path := Copy(target, 1, q - 1);
+    req.Query := Copy(target, q + 1, Length(target));
+  end
+  else
+    req.Path := target;
+  if req.Path = '' then req.Path := '/';
+
+  { headers/body split at CRLFCRLF }
+  sep := 0;
+  for i := 1 to n - 3 do
+    if (raw[i] = #13) and (raw[i + 1] = #10) and
+       (raw[i + 2] = #13) and (raw[i + 3] = #10) then
+    begin sep := i; break; end;
+  if sep > 0 then
+  begin
+    if lineEnd + 2 <= sep - 1 then
+      req.Headers := Copy(raw, lineEnd + 2, sep - (lineEnd + 2));
+    req.Body := Copy(raw, sep + 4, n);
+  end
+  else
+    req.Headers := Copy(raw, lineEnd + 2, n);
+
+  Result := req.Method <> '';
+end;
+
+function HttpRequestHeader(const req: THttpRequest; const name: AnsiString): AnsiString;
+begin
+  Result := HttpHeaderValue(req.Headers, name);
+end;
+
+function HttpBuildResponse(status: Integer; const reason, extraHeaders, body: AnsiString): AnsiString;
+var r: AnsiString;
+begin
+  r := 'HTTP/1.1 ' + IntToStr(status) + ' ' + reason + CRLF;
+  if extraHeaders <> '' then r := r + extraHeaders;
+  r := r + 'Content-Length: ' + IntToStr(Length(body)) + CRLF + CRLF;
+  Result := r + body;
 end;
 
 function HttpResolve(const host: AnsiString; var ip: LongWord): Boolean;
@@ -639,7 +976,7 @@ begin
     NetClose(sock); Exit;             { https requested but no/failed TLS backend }
   end;
 
-  req := HttpBuildRequest(method, host, path, extraHeaders, body);
+  req := HttpBuildRequest(method, host, path, HttpWithAcceptEncoding(extraHeaders), body);
   if not HttpSendAll(sock, tlsc, isTls, False, @req[1], Length(req)) then
   begin
     if isTls then TlsClose(tlsc);
@@ -816,7 +1153,7 @@ begin
 
   { keep-alive request: like HttpBuildRequest but Connection: keep-alive. }
   req := method + ' ' + path + ' HTTP/1.1' + CRLF + 'Host: ' + conn.Host + CRLF +
-         'Connection: keep-alive' + CRLF + extraHeaders;
+         'Connection: keep-alive' + CRLF + HttpWithAcceptEncoding(extraHeaders);
   if body <> '' then req := req + 'Content-Length: ' + IntToStr(Length(body)) + CRLF;
   req := req + CRLF;
   if body <> '' then req := req + body;
@@ -893,6 +1230,60 @@ begin
   Result := HttpConnExecCore(conn, 'GET', path, '', '', True);
 end;
 
+procedure HttpServeConn(cfd: Integer; handler: THttpHandler; maxRequests: Integer; async: Boolean);
+var
+  buf: array[0..4095] of Byte;
+  data, headerBlock, resp: AnsiString;
+  req: THttpRequest;
+  got: Int64;
+  oldLen, hdrEnd, bodyStart, clen, reqLen, k: Integer;
+  alive: Boolean;
+begin
+  data := ''; k := 0; alive := True;
+  while alive and ((maxRequests <= 0) or (k < maxRequests)) do
+  begin
+    { read until the full header block is buffered }
+    hdrEnd := HttpFindHeaderEnd(data);
+    while hdrEnd = 0 do
+    begin
+      got := HttpRecvSome(cfd, nil, False, async, @buf[0], 4096);
+      if got <= 0 then begin alive := False; Break; end;
+      oldLen := Length(data);
+      SetLength(data, oldLen + Integer(got));
+      Move(buf[0], data[oldLen + 1], Integer(got));
+      hdrEnd := HttpFindHeaderEnd(data);
+    end;
+    if not alive then Break;
+
+    headerBlock := Copy(data, 1, hdrEnd - 1);
+    bodyStart := hdrEnd + 4;
+    clen := StrToIntDef(HttpHeaderValue(headerBlock, 'Content-Length'), 0);
+
+    { read until the declared body is fully buffered }
+    while (Length(data) - (bodyStart - 1)) < clen do
+    begin
+      got := HttpRecvSome(cfd, nil, False, async, @buf[0], 4096);
+      if got <= 0 then begin alive := False; Break; end;
+      oldLen := Length(data);
+      SetLength(data, oldLen + Integer(got));
+      Move(buf[0], data[oldLen + 1], Integer(got));
+    end;
+
+    reqLen := (bodyStart - 1) + clen;
+    if Length(data) < reqLen then reqLen := Length(data);   { short close }
+    HttpParseRequest(Copy(data, 1, reqLen), req);
+    data := Copy(data, reqLen + 1, Length(data));           { keep any surplus }
+
+    resp := handler(req);
+    if not HttpSendAll(cfd, nil, False, async, @resp[1], Length(resp)) then alive := False;
+
+    { honour an explicit Connection: close from the client }
+    if Pos('close', LowerCase(HttpHeaderValue(headerBlock, 'Connection'))) > 0 then
+      alive := False;
+    Inc(k);
+  end;
+end;
+
 function HttpResolveAsync(const host: AnsiString; var ip: LongWord): Boolean;
 var ips: TDnsIpv4Array; cnt: Integer;
 begin
@@ -949,7 +1340,7 @@ begin
     TcpClose(fd); Exit;                        { https requested but no/failed TLS backend }
   end;
 
-  req := HttpBuildRequest(method, host, path, extraHeaders, body);
+  req := HttpBuildRequest(method, host, path, HttpWithAcceptEncoding(extraHeaders), body);
   if not HttpSendAll(fd, tlsc, isTls, True, @req[1], Length(req)) then
   begin
     if isTls then TlsClose(tlsc);
@@ -1001,49 +1392,150 @@ begin
   end;
 end;
 
+type
+  THttpPoolSlot = record
+    Conn:     THttpConnection;
+    InUse:    Boolean;       { reserved by an in-flight request — never shared }
+    LastUsed: Int64;         { PalMonotonicMillis at last release — idle eviction }
+  end;
 var
-  gPool: array of THttpConnection;
+  gPool: array of THttpPoolSlot;
+  gMaxPerHost: Integer;          { 0 = unlimited (BSS-zeroed default) }
 
-function HttpPoolFind(const host: AnsiString; port: Integer; isTls: Boolean): Integer;
+procedure HttpPoolSetMaxPerHost(n: Integer);
+begin
+  gMaxPerHost := n;
+end;
+
+{ Reserve a free, live slot to host:port:scheme (mark InUse). -1 if none free. }
+function HttpPoolReserve(const host: AnsiString; port: Integer; isTls: Boolean): Integer;
 var i: Integer;
 begin
   Result := -1;
   for i := 0 to Length(gPool) - 1 do
-    if gPool[i].Alive and (gPool[i].Port = port) and (gPool[i].Host = host)
-       and (gPool[i].IsTls = isTls) then
-    begin Result := i; Exit; end;
+    if (not gPool[i].InUse) and gPool[i].Conn.Alive
+       and (gPool[i].Conn.Port = port) and (gPool[i].Conn.Host = host)
+       and (gPool[i].Conn.IsTls = isTls) then
+    begin
+      gPool[i].InUse := True;
+      Result := i; Exit;
+    end;
 end;
 
-function HttpGetPooledAsync(const url: AnsiString): THttpResponse;
-var
-  host, path: AnsiString;
-  port, idx, n: Integer;
-  isTls: Boolean;
+function HttpPoolAcquire(const host: AnsiString; port: Integer; isTls, async: Boolean): Integer;
+var idx, i, n: Integer; c: THttpConnection;
+begin
+  idx := HttpPoolReserve(host, port, isTls);     { a live free slot, now InUse }
+  if idx >= 0 then begin Result := idx; Exit; end;
+
+  if async then c := HttpConnectAsync(host, port, isTls)
+  else           c := HttpConnect(host, port, isTls);
+  if not c.Alive then begin HttpConnClose(c); Result := -1; Exit; end;
+
+  { park the fresh connection in a dead free slot, else append — reserved InUse }
+  for i := 0 to Length(gPool) - 1 do
+    if (not gPool[i].InUse) and (not gPool[i].Conn.Alive) then
+    begin
+      gPool[i].Conn := c; gPool[i].InUse := True;
+      gPool[i].LastUsed := PalMonotonicMillis;
+      Result := i; Exit;
+    end;
+  n := Length(gPool);
+  SetLength(gPool, n + 1);            { gPool is a global — SetLength OK }
+  gPool[n].Conn := c; gPool[n].InUse := True;
+  gPool[n].LastUsed := PalMonotonicMillis;
+  Result := n;
+end;
+
+function HttpPoolSlotExec(handle: Integer;
+  const method, path, extraHeaders, body: AnsiString; async: Boolean): THttpResponse;
+var c: THttpConnection;
+begin
+  Result.Ok := False; Result.Status := 0; Result.Reason := '';
+  Result.Headers := ''; Result.Body := '';
+  if (handle < 0) or (handle >= Length(gPool)) then Exit;
+  c := gPool[handle].Conn;             { local copy — survives a reactor yield even
+                                         if another coroutine grows gPool }
+  Result := HttpConnExecCore(c, method, path, extraHeaders, body, async);
+  gPool[handle].Conn := c;             { write the updated state back by index }
+  gPool[handle].LastUsed := PalMonotonicMillis;
+end;
+
+{ Count free (not-InUse) live conns to the same host:port:scheme as slot h. }
+function HttpPoolFreeToHost(h: Integer): Integer;
+var i: Integer;
+begin
+  Result := 0;
+  for i := 0 to Length(gPool) - 1 do
+    if (not gPool[i].InUse) and gPool[i].Conn.Alive
+       and (gPool[i].Conn.Port = gPool[h].Conn.Port)
+       and (gPool[i].Conn.Host = gPool[h].Conn.Host)
+       and (gPool[i].Conn.IsTls = gPool[h].Conn.IsTls) then
+      Inc(Result);
+end;
+
+procedure HttpPoolReleaseSlot(handle: Integer);
+begin
+  if (handle < 0) or (handle >= Length(gPool)) then Exit;
+  gPool[handle].InUse := False;
+  gPool[handle].LastUsed := PalMonotonicMillis;
+  if not gPool[handle].Conn.Alive then
+    HttpConnClose(gPool[handle].Conn)   { dead — free the fd; slot reusable }
+  else if (gMaxPerHost > 0) and (HttpPoolFreeToHost(handle) > gMaxPerHost) then
+    HttpConnClose(gPool[handle].Conn);  { over the per-host cap — don't keep it }
+end;
+
+function HttpGetPooledCore(const url: AnsiString; async: Boolean): THttpResponse;
+var host, path: AnsiString; port, h: Integer; isTls: Boolean;
 begin
   Result.Ok := False; Result.Status := 0; Result.Reason := '';
   Result.Headers := ''; Result.Body := '';
   if not HttpParseUrl(url, host, port, path, isTls) then Exit;
 
-  { reuse a live connection to this host:port(:scheme) if one is pooled }
-  idx := HttpPoolFind(host, port, isTls);
-  if idx >= 0 then
-  begin
-    Result := HttpConnExecCore(gPool[idx], 'GET', path, '', '', True);
-    if Result.Ok then Exit;          { reused successfully }
-    { else the connection had died — leave it (Alive=False, skipped) and open a fresh one }
-  end;
+  h := HttpPoolAcquire(host, port, isTls, async);
+  if h < 0 then Exit;                  { connect failed }
+  Result := HttpPoolSlotExec(h, 'GET', path, '', '', async);
 
-  n := Length(gPool);
-  SetLength(gPool, n + 1);            { gPool is a global — SetLength OK }
-  gPool[n] := HttpConnectAsync(host, port, isTls);
-  Result := HttpConnExecCore(gPool[n], 'GET', path, '', '', True);
+  { a pooled connection the server had silently dropped: retry once, fresh }
+  if (not Result.Ok) and (not gPool[h].Conn.Alive) then
+  begin
+    HttpPoolReleaseSlot(h);            { closes the dead one, frees the slot }
+    h := HttpPoolAcquire(host, port, isTls, async);   { opens fresh (dead skipped) }
+    if h < 0 then Exit;
+    Result := HttpPoolSlotExec(h, 'GET', path, '', '', async);
+  end;
+  HttpPoolReleaseSlot(h);
+end;
+
+function HttpGetPooled(const url: AnsiString): THttpResponse;
+begin Result := HttpGetPooledCore(url, False); end;
+
+function HttpGetPooledAsync(const url: AnsiString): THttpResponse;
+begin Result := HttpGetPooledCore(url, True); end;
+
+procedure HttpPoolEvictIdle(maxIdleMs: Int64);
+var i: Integer; now: Int64;
+begin
+  now := PalMonotonicMillis;
+  for i := 0 to Length(gPool) - 1 do
+    if (not gPool[i].InUse) and gPool[i].Conn.Alive
+       and ((now - gPool[i].LastUsed) >= maxIdleMs) then
+      HttpConnClose(gPool[i].Conn);   { mark dead; the slot is reused later }
+end;
+
+function HttpPoolCount: Integer;
+var i: Integer;
+begin
+  Result := 0;
+  for i := 0 to Length(gPool) - 1 do
+    if gPool[i].Conn.Alive then Inc(Result);
 end;
 
 procedure HttpPoolClose;
 var i: Integer;
 begin
   for i := 0 to Length(gPool) - 1 do
-    HttpConnClose(gPool[i]);
+    HttpConnClose(gPool[i].Conn);
   SetLength(gPool, 0);
 end;
 

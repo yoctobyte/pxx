@@ -123,37 +123,19 @@ end;
 function ParseCUnary: Integer; forward;
 function ParseCPostfix: Integer; forward;
 
-{ Build `lv = lv (+|-) 1` as an AN_ASSIGN. The read side is a clone of the
-  lvalue so the assignment's lvalue and rvalue nodes do not alias. Used for
-  both prefix and postfix `++`/`--`; in statement / for-post context the
-  pre-vs-post value distinction is irrelevant, so both lower identically. }
+{ Build the shared-IR AN_INCDEC value node (master shape): Left = the lvalue
+  (address computed once at lowering), ASTIVal = +1/-1 (the lowering scales by
+  element size for a pointer), ASTSOffset = 1 for postfix (yield OLD value) / 0
+  for prefix (yield NEW). The pointed-at record for `(p++)->field` is derived from
+  the lvalue (Left) by CNodePtrElemRec, not carried on the node. }
 function CMakeIncDec(lv: Integer; isInc, isPre: Boolean): Integer;
-var one, binop, asn, node, rd: Integer;
+var node: Integer;
 begin
-  rd := CloneAST(lv);
-  one := AllocNode(AN_INT_LIT);
-  ASTIVal[one] := 1;
-  ASTTk[one] := Ord(tyInteger);
-  binop := AllocNode(AN_BINOP);
-  if isInc then ASTIVal[binop] := Ord(tkPlus) else ASTIVal[binop] := Ord(tkMinus);
-  ASTLeft[binop] := rd;          { read of lv (clone) — scales for pointers }
-  ASTRight[binop] := one;
-  ASTTk[binop] := ASTTk[lv];
-  asn := AllocNode(AN_ASSIGN);
-  ASTLeft[asn] := lv;
-  ASTRight[asn] := binop;
-  ASTTk[asn] := ASTTk[lv];
-  { Wrap so the result is a usable VALUE (old for postfix, new for prefix) — e.g.
-    `(p++)->f`, `x = a[i++]`. The AN_ASSIGN does the scaled store; AN_INCDEC reads
-    the old value (a fresh clone) and yields old/new. }
   node := AllocNode(AN_INCDEC);
-  ASTLeft[node] := CloneAST(lv);
-  ASTRight[node] := asn;
-  if isPre then ASTSLen[node] := 1 else ASTSLen[node] := 0;
+  ASTLeft[node] := lv;
+  if isInc then ASTIVal[node] := 1 else ASTIVal[node] := -1;
+  if isPre then ASTSOffset[node] := 0 else ASTSOffset[node] := 1;
   ASTTk[node] := ASTTk[lv];
-  { Carry the pointed-at record (like a pointer-arith binop) so `(p++)->field`
-    resolves — lua's `s2v(top.p++)`. }
-  if CNodeIsPointer(lv) then ASTSOffset[node] := CNodePtrElemRec(lv);
   Result := node;
 end;
 
@@ -456,8 +438,10 @@ begin
     Result := Syms[ASTIVal[node]].PtrElemRec
   else if ASTKind[node] = AN_FIELD then
     Result := RecFieldPtrElemRec(ResolveNodeRec(ASTLeft[node]), GetASTIdentName(node))
-  else if (ASTKind[node] = AN_BINOP) or (ASTKind[node] = AN_INCDEC) then
-    Result := ASTSOffset[node]
+  else if ASTKind[node] = AN_BINOP then
+    Result := ASTSOffset[node]      { pointer-arith binop carries the elem rec }
+  else if ASTKind[node] = AN_INCDEC then
+    Result := CNodePtrElemRec(ASTLeft[node])   { `p++`: elem rec from the lvalue }
   else if ASTKind[node] = AN_ASSIGN then
     Result := CNodePtrElemRec(ASTLeft[node]);
 end;

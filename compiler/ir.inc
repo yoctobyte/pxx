@@ -1243,6 +1243,16 @@ begin
     LastTypeRecId := argRecId;
     tmpSym := AllocVar('', tyRecord);
     LastTypeRecId := savedLastTypeRecId;
+    { A managed-field record temp is filled by IR_COPY_REC_MANAGED below, which
+      RELEASES the destination's old managed fields before copying. This temp is
+      allocated during IR lowering, after the parser's prologue zero-init pass,
+      so without a nil-init its fields hold stack garbage and the release frees a
+      bogus handle (double-free / heap corruption — crashes when the arg is a
+      managed-record value, e.g. `f(g(x), …)` with g returning a managed record).
+      Mark it so codegen nil-inits its full extent before the body, exactly like
+      the hidden aggregate-result temp in IRAppendCall. }
+    if RecordHasManagedFields(argRecId) then
+      SymIsHiddenArgTemp[tmpSym] := True;
 
     tmpAddr := IRAppend(IR_LEA, tmpSym, -1, -1, 0, Ord(tyPointer));
 
@@ -2077,7 +2087,7 @@ begin
       castTk := IntToTypeKind(ASTTk[node]);
       if (castTk = tyString) or (castTk = tyAnsiString) then
       begin
-        if IsNodePChar(ASTLeft[node]) then
+        if IsNodePChar(ASTLeft[node]) and not CProgramMode then
         begin
           procIdx := FindProc('PCharToString');
           if procIdx < 0 then Error('compiler error: PCharToString helper not found');
@@ -2332,13 +2342,16 @@ begin
 
     AN_BINOP:
     begin
-      { ESP has no frozen-string concat path, and in managed-string mode the
-        only `tyString + tyString` operands are string literals (a `String` var
-        is tyAnsiString). Fold `'a' + 'b'` to a single interned literal here so
-        no runtime concat is needed. ESP-gated so hosted/cross IR — and thus the
-        byte-identical self-host — is unchanged. }
-      if ((TargetArch = TARGET_XTENSA) or (TargetArch = TARGET_RISCV32)) and
-         (Integer(ASTIVal[node]) = Ord(tkPlus)) and
+      { Fold a compile-time concat of two string/char literals (`'a' + 'b'`) to a
+        single interned literal — constant folding, target-independent. Besides
+        avoiding a runtime concat, this is the correctness fix for
+        bug-string-literal-concat-compare-segfault: a literal-concat appearing as
+        a comparison operand (`x = 'a' + 'b'`) otherwise fed the runtime
+        string-concat result into the hand-emitted string-compare path and
+        crashed. A folded single literal behaves exactly like writing the literal
+        on one line (the known-good form), so assignment and comparison agree.
+        ESP needs it regardless (no frozen-string concat path). }
+      if (Integer(ASTIVal[node]) = Ord(tkPlus)) and
          IsConstStrLitNode(ASTLeft[node]) and IsConstStrLitNode(ASTRight[node]) then
       begin
         foldStr := ConstStrLitValue(ASTLeft[node]) + ConstStrLitValue(ASTRight[node]);
@@ -2348,7 +2361,14 @@ begin
           TokChars[TokCharLen] := foldStr[foldK];
           Inc(TokCharLen);
         end;
-        Result := IRAppend(IR_CONST_STR, foldOff, Length(foldStr), -1, 0, ASTTk[node]);
+        { Tag the folded result tyString — a plain one-line literal's kind — not
+          ASTTk[node]. The surrounding expression may be tyAnsiString (e.g. a
+          Concat-synthesised `+` chain in managed mode); emitting the literal as
+          tyAnsiString would make downstream managed paths treat this static
+          literal pointer as a heap handle and release it -> crash at scope exit
+          (regressed test_concat_intrinsic). As tyString it behaves exactly like
+          any other string literal and is coerced to managed on use. }
+        Result := IRAppend(IR_CONST_STR, foldOff, Length(foldStr), -1, 0, Ord(tyString));
         Exit;
       end;
 
@@ -2604,7 +2624,7 @@ begin
       begin
       if (lhsTk = tyString) or (lhsTk = tyAnsiString) then
       begin
-        if IsNodePChar(ASTRight[node]) then
+        if IsNodePChar(ASTRight[node]) and not CProgramMode then
         begin
           procIdx := FindProc('PCharToString');
           if procIdx < 0 then Error('compiler error: PCharToString helper not found');
@@ -2752,6 +2772,32 @@ begin
         value := IRLowerAST(ASTRight[node]);
         Result := IRAppend(IR_STORE_SYM, ASTIVal[ASTLeft[node]], value, -1, 0,
                            ASTTk[ASTLeft[node]]);
+      end
+      else if (ASTKind[ASTLeft[node]] = AN_IDENT) and
+              (ASTIVal[ASTLeft[node]] >= 0) and
+              Syms[ASTIVal[ASTLeft[node]]].IsArray and
+              (Syms[ASTIVal[ASTLeft[node]]].ArrLen >= 0) and
+              (SymArrNDims[ASTIVal[ASTLeft[node]]] <= 1) and
+              (SymElemDynDepth[ASTIVal[ASTLeft[node]]] = 0) and
+              (Syms[ASTIVal[ASTLeft[node]]].ElemType <> tyAnsiString) and
+              (Syms[ASTIVal[ASTLeft[node]]].ElemType <> tyString) and
+              not ((Syms[ASTIVal[ASTLeft[node]]].ElemType = tyRecord) and
+                   RecordHasManagedFields(Syms[ASTIVal[ASTLeft[node]]].ElemRecName)) and
+              rhsIsLValue then
+      begin
+        { Whole static-array assignment (`b := a`). The scalar store path below
+          moves only one element's width, leaving the rest of `b` as garbage
+          (bug-fixed-array-assignment-no-copy). Copy the full ArrLen*elemSize
+          via IR_COPY_REC, mirroring the whole-record path and the static-array
+          arg-copy idiom above. Managed-element arrays (string / managed-record
+          elements) need per-element ARC and are left to the scalar path. }
+        i := ASTIVal[ASTLeft[node]];
+        if Syms[i].ElemType = tyRecord then elemSize := RecSize(Syms[i].ElemRecName)
+        else elemSize := TypeSize(Syms[i].ElemType);
+        leftAddr := IRLowerAddress(ASTLeft[node]);
+        right := IRLowerAddress(ASTRight[node]);
+        Result := IRAppend(IR_COPY_REC, leftAddr, right, -1,
+                           Syms[i].ArrLen * elemSize, Ord(tyRecord));
       end
       else if (ASTKind[ASTLeft[node]] <> AN_IDENT) and
               (NodeDynDepth(ASTLeft[node]) > 0) then
@@ -3376,57 +3422,111 @@ begin
       Result := IRAppend(IR_BLOCK, first, endLabelNode, -1, 0, 0);
     end;
 
-    AN_TERNARY:
+    AN_INCDEC:
     begin
-      { C `cond ? a : b` as a value-producing expression. Evaluate only the taken
-        branch and store it into a hidden temp; the result is a load of that temp.
-        Target-independent — uses only IR_JUMP_IF_FALSE / labels / store / load. }
-      pairNode := ASTRight[node];
-      ternTmp := AllocVar('', IntToTypeKind(ASTTk[node]));
-      elseLabel := IRNewLabel;
-      endLabel := IRNewLabel;
-      condNode := IRLowerAST(ASTLeft[node]);
-      IRAppend(IR_JUMP_IF_FALSE, elseLabel, condNode, -1, 0, 0);
-      value := IRLowerAST(ASTLeft[pairNode]);          { then-branch }
-      IRAppend(IR_STORE_SYM, ternTmp, value, -1, 0, ASTTk[node]);
-      IRAppend(IR_JUMP, endLabel, -1, -1, 0, 0);
-      IRAppend(IR_LABEL, -1, -1, -1, elseLabel, 0);
-      value := IRLowerAST(ASTRight[pairNode]);         { else-branch }
-      IRAppend(IR_STORE_SYM, ternTmp, value, -1, 0, ASTTk[node]);
-      IRAppend(IR_LABEL, -1, -1, -1, endLabel, 0);
-      Result := IRAppend(IR_LOAD_SYM, ternTmp, -1, -1, 0, ASTTk[node]);
+      { Pre/post ++/--. Evaluate the lvalue ADDRESS exactly once into a hidden
+        pointer temp (so `a[i++]++` bumps i once), load the current value, stash
+        the OLD value, store old±delta, and yield old (postfix) or the new stored
+        value (prefix). Pointer operands step by element size. }
+      left := ASTLeft[node];
+      if not IsASTLValue(left) then Error('++/-- operand is not an lvalue');
+      argTk := IntToTypeKind(ASTTk[left]);
+      if argTk = tyUnknown then argTk := tyInteger;
+      if argTk = tyPointer then foldK := ASTIVal[node] * IRPointerStride(left)
+      else foldK := ASTIVal[node];
+      varIdx := AllocVar('', tyPointer);                 { paddr = &lvalue, once }
+      IRAppend(IR_STORE_SYM, varIdx, IRLowerAddress(left), -1, 0, Ord(tyPointer));
+      slot := AllocVar('', argTk);                       { old value }
+      IRAppend(IR_STORE_SYM, slot,
+        IRAppend(IR_LOAD_MEM, IRAppend(IR_LOAD_SYM, varIdx, -1, -1, 0, Ord(tyPointer)),
+                 -1, -1, 0, Ord(argTk)), -1, 0, Ord(argTk));
+      IRAppend(IR_STORE_MEM, IRAppend(IR_LOAD_SYM, varIdx, -1, -1, 0, Ord(tyPointer)),
+        IRAppend(IR_BINOP, IRAppend(IR_LOAD_SYM, slot, -1, -1, 0, Ord(argTk)),
+                 IRAppend(IR_CONST_INT, -1, -1, -1, foldK, Ord(argTk)),
+                 Ord(tkPlus), 0, Ord(argTk)), -1, 0, Ord(argTk));
+      if ASTSOffset[node] = 1 then
+        Result := IRAppend(IR_LOAD_SYM, slot, -1, -1, 0, Ord(argTk))   { postfix: old }
+      else
+        Result := IRAppend(IR_LOAD_MEM, IRAppend(IR_LOAD_SYM, varIdx, -1, -1, 0, Ord(tyPointer)),
+                           -1, -1, 0, Ord(argTk));                     { prefix: new }
+    end;
+
+    AN_COMPOUND_ASSIGN:
+    begin
+      { Value-bearing assignment `lv = rhs` and compound `lv OP= rhs`. Lvalue
+        address computed ONCE; for compound, current = *paddr, new = current OP
+        rhs; store and yield the stored value (so `a = b = c` chains via the
+        Right being another AN_COMPOUND_ASSIGN). }
+      left := ASTLeft[node];
+      if not IsASTLValue(left) then Error('assignment target is not an lvalue');
+      argTk := IntToTypeKind(ASTTk[left]);
+      if argTk = tyUnknown then argTk := tyInteger;
+      varIdx := AllocVar('', tyPointer);
+      IRAppend(IR_STORE_SYM, varIdx, IRLowerAddress(left), -1, 0, Ord(tyPointer));
+      right := IRLowerAST(ASTRight[node]);
+      if ASTIVal[node] = Ord(tkAssign) then
+        value := right
+      else
+        value := IRAppend(IR_BINOP,
+          IRAppend(IR_LOAD_MEM, IRAppend(IR_LOAD_SYM, varIdx, -1, -1, 0, Ord(tyPointer)),
+                   -1, -1, 0, Ord(argTk)),
+          right, ASTIVal[node], 0, Ord(argTk));
+      slot := AllocVar('', argTk);                       { stored value, yielded }
+      IRAppend(IR_STORE_SYM, slot, value, -1, 0, Ord(argTk));
+      IRAppend(IR_STORE_MEM, IRAppend(IR_LOAD_SYM, varIdx, -1, -1, 0, Ord(tyPointer)),
+               IRAppend(IR_LOAD_SYM, slot, -1, -1, 0, Ord(argTk)), -1, 0, Ord(argTk));
+      Result := IRAppend(IR_LOAD_SYM, slot, -1, -1, 0, Ord(argTk));
     end;
 
     AN_COMMA:
     begin
-      { C comma expression `(a, b)`: evaluate `a` for side effects (kept as a
-        statement so it is not pruned), then yield `b`'s value. }
-      last := IRLowerAST(ASTLeft[node]);
-      IRMarkStatementNode(last);
+      { C comma operator: evaluate Left for its side effects (discard the value),
+        yield Right. Right-nested, so each Left peels one operand off the front. }
+      IRMarkStatementNode(IRLowerAST(ASTLeft[node]));
       Result := IRLowerAST(ASTRight[node]);
     end;
 
-    AN_INCDEC:
+    AN_TERNARY:
     begin
-      { C `++`/`--` as a value. ASTRight is the AN_ASSIGN `lv = lv +/- 1` (it does
-        the scaled store); ASTLeft is a read of the lvalue. Prefix yields the new
-        value (assign, then read); postfix yields the old value (read into a temp,
-        then assign). }
-      if ASTSLen[node] = 1 then
-      begin
-        last := IRLowerAST(ASTRight[node]);     { lv = lv +/- 1 }
-        IRMarkStatementNode(last);
-        Result := IRLowerAST(ASTLeft[node]);    { new value }
-      end
-      else
-      begin
-        ternTmp := AllocVar('', IntToTypeKind(ASTTk[node]));
-        value := IRLowerAST(ASTLeft[node]);     { old value }
-        IRAppend(IR_STORE_SYM, ternTmp, value, -1, 0, ASTTk[node]);
-        last := IRLowerAST(ASTRight[node]);     { lv = lv +/- 1 }
-        IRMarkStatementNode(last);
-        Result := IRAppend(IR_LOAD_SYM, ternTmp, -1, -1, 0, ASTTk[node]);
-      end;
+      { Value-bearing conditional `c ? a : b` / `if c then a else b`. Mirror the
+        AN_IF control flow but store each arm into one hidden temp and yield a
+        load of it — so the selected arm's side effects run (short-circuit) and
+        the expression has a value. Scalar/ordinal/pointer/float result types
+        (what C ternary and the if-expression yield); a managed-arm form would
+        need the retain/release assign path and is deferred (slice 2). }
+      pairNode := ASTRight[node];
+      argTk := IntToTypeKind(ASTTk[node]);
+      if argTk = tyUnknown then argTk := tyInteger;
+      { A string-literal arm types as frozen tyString, which has inline [N]
+        storage and no usable handle slot for a temp. Carry the result as a
+        managed AnsiString instead — the per-arm assignment coerces the frozen
+        literal into the managed temp, and the load yields a real handle. }
+      if argTk = tyString then argTk := tyAnsiString;
+      if argTk = tyRecord then LastTypeRecId := ResolveNodeRec(ASTLeft[pairNode]);
+      varIdx := AllocVar('', argTk);
+      if argTk = tyRecord then Syms[varIdx].RecName := LastTypeRecId;
+      { Managed/aggregate result temp: the per-arm AN_ASSIGN delegation below
+        releases the dest's old managed fields before copy, so the temp must be
+        nil-inited (allocated post-prologue) — same rule as other hidden temps. }
+      if (argTk = tyAnsiString) or (argTk = tyString) or TypeIsAggregate(argTk) then
+        SymIsHiddenArgTemp[varIdx] := True;
+      elseLabel := IRNewLabel;
+      endLabel := IRNewLabel;
+      condNode := IRLowerAST(ASTLeft[node]);
+      first := IRAppend(IR_JUMP_IF_FALSE, elseLabel, condNode, -1, 0, 0);
+      { Each arm: lower `temp := arm` through the ordinary assignment path so
+        scalar, string (ARC), and record (managed copy) results all work and the
+        selected arm's side effects run (short-circuit). }
+      lhsNode := AllocNode(AN_IDENT); ASTIVal[lhsNode] := varIdx; ASTTk[lhsNode] := Ord(argTk);
+      argNode := AllocNode(AN_ASSIGN); ASTLeft[argNode] := lhsNode; ASTRight[argNode] := ASTLeft[pairNode];
+      IRMarkStatementNode(IRLowerAST(argNode));
+      IRAppend(IR_JUMP, endLabel, -1, -1, 0, 0);
+      IRAppend(IR_LABEL, -1, -1, -1, elseLabel, 0);
+      lhsNode := AllocNode(AN_IDENT); ASTIVal[lhsNode] := varIdx; ASTTk[lhsNode] := Ord(argTk);
+      argNode := AllocNode(AN_ASSIGN); ASTLeft[argNode] := lhsNode; ASTRight[argNode] := ASTRight[pairNode];
+      IRMarkStatementNode(IRLowerAST(argNode));
+      IRAppend(IR_LABEL, -1, -1, -1, endLabel, 0);
+      Result := IRAppend(IR_LOAD_SYM, varIdx, -1, -1, 0, Ord(argTk));
     end;
 
     AN_SWITCH:

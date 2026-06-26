@@ -30,6 +30,23 @@ begin
   SayBool('replace-first', StringReplace('a.b.c', '.', '-', []) = 'a-b.c');
   SayBool('replace-ci', StringReplace('aXbXc', 'x', '_', [rfIgnoreCase, rfReplaceAll]) = 'a_b_c');
   SayBool('replace-nomatch', StringReplace('abc', 'z', '_', [rfReplaceAll]) = 'abc');
+  SayBool('replace-grow', StringReplace('a.b', '.', '<>', [rfReplaceAll]) = 'a<>b');
+  SayBool('replace-delete', StringReplace('a-b-c', '-', '', [rfReplaceAll]) = 'abc');
+  SayBool('replace-multi', StringReplace('xAByAB', 'AB', 'Z', [rfReplaceAll]) = 'xZyZ');
+  SayBool('replace-first-rest', StringReplace('a.b.c', '.', '-', []) = 'a-b.c');
 
   SayBool('quoted', QuotedStr('it''s') = '''it''''s''');
+
+  { case-fold + Copy + Pad (SetLength/Move rewrites — lock in behaviour) }
+  SayBool('upper', UpperCase('aB3z') = 'AB3Z');
+  SayBool('lower', LowerCase('aB3Z') = 'ab3z');
+  SayBool('upper-empty', UpperCase('') = '');
+  SayBool('copy-mid', Copy('abcdef', 2, 3) = 'bcd');
+  SayBool('copy-clamp', Copy('abc', 2, 99) = 'bc');
+  SayBool('copy-oob', Copy('abc', 9, 2) = '');
+  SayBool('copy-zero', Copy('abc', 2, 0) = '');
+  SayBool('padleft', PadLeft('42', 5, '0') = '00042');
+  SayBool('padright', PadRight('42', 5, '.') = '42...');
+  SayBool('padleft-empty', PadLeft('', 3, 'x') = 'xxx');
+  SayBool('pad-nogrow', PadLeft('toolong', 3, ' ') = 'toolong');
 end.

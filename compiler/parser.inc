@@ -1007,6 +1007,25 @@ begin
   Result := acc;
 end;
 
+{ A single leading subscript on an >=2-D fixed array selects a whole sub-array
+  (row): `m[i]` of `array[a..b, c..d] of T` is the row `array[c..d] of T` at
+  byte offset (i-lo0)*span1*..*span_{nd-1} elements. Build that flat element
+  index so the ordinary element-stride AN_INDEX lands on the row's first
+  element; its address is then the row base (what a `var`/`const` array param or
+  whole-row reference needs). NDInfo* must be filled (NodeArrNDInfo). }
+function BuildPartialNDRowIndex(rowIdxNode: Integer): Integer;
+var d, trailing, loLit, diff, spanLit: Integer;
+begin
+  trailing := 1;
+  for d := 1 to NDInfoNDims - 1 do trailing := trailing * NDInfoSpan[d];
+  loLit := AllocNode(AN_INT_LIT); ASTIVal[loLit] := NDInfoLo[0]; ASTTk[loLit] := Ord(tyInteger);
+  diff := AllocNode(AN_BINOP); ASTIVal[diff] := Ord(tkMinus);
+  ASTLeft[diff] := rowIdxNode; ASTRight[diff] := loLit; ASTTk[diff] := Ord(tyInteger);
+  spanLit := AllocNode(AN_INT_LIT); ASTIVal[spanLit] := trailing; ASTTk[spanLit] := Ord(tyInteger);
+  Result := AllocNode(AN_BINOP); ASTIVal[Result] := Ord(tkStar);
+  ASTLeft[Result] := diff; ASTRight[Result] := spanLit; ASTTk[Result] := Ord(tyInteger);
+end;
+
 { If `node` is an N-D fixed array reference (a SymArrNDims ident or an
   UFldArrNDims record field), fill NDInfo* and return True. Lets m[..] and
   r.m[..] share one path. }
@@ -1457,6 +1476,14 @@ begin
         end;
         Expect(tkRBrack, ']');
         alreadyResolved := True;
+      end
+      else if isND then
+      begin
+        { Partial: a single leading subscript on an N-D fixed array names a whole
+          row (sub-array). Scale it to the row's first-element flat index so the
+          element-stride AN_INDEX yields the row base address. }
+        ASTRight[indexNode] := BuildPartialNDRowIndex(CurASTNode);
+        Expect(tkRBrack, ']');
       end
       else
       begin
@@ -3096,6 +3123,44 @@ begin
     begin
       node := AllocNode(AN_INT_LIT); ASTIVal[node] := 0; ASTTk[node] := Ord(tyPointer); CurASTNode := node; Next; LastExprTk := tyPointer;
     end;
+    tkPlusPlus, tkMinusMinus:
+    begin
+      { Prefix `++lv` / `--lv`: bump first, yield the NEW value. Operand must be
+        an lvalue (parsed as a factor so postfix/suffixes still bind). }
+      bitNot := CurTok.Kind = tkPlusPlus; Next;   { bitNot reused as isIncrement }
+      ParseFactor;
+      node := AllocNode(AN_INCDEC);
+      ASTLeft[node] := CurASTNode;
+      if bitNot then ASTIVal[node] := 1 else ASTIVal[node] := -1;
+      ASTSOffset[node] := 0;   { prefix → new value }
+      ASTTk[node] := ASTTk[CurASTNode];
+      CurASTNode := node; LastExprTk := IntToTypeKind(ASTTk[node]);
+    end;
+    tkIf:
+    begin
+      { Conditional EXPRESSION `if c then a else b` (the value-bearing form the C
+        frontend's ternary `c ? a : b` lowers to). Reached only in expression
+        position: a statement-leading `if` is parsed by ParseStatementAST before
+        any factor, so this never shadows the if-statement. `else` is mandatory —
+        an expression must yield a value. Arms are full expressions; parenthesize
+        when embedding in a larger one. Result type = the then-arm's type. }
+      Next;                          { consume 'if' }
+      ParseExpr; left := CurASTNode; { condition }
+      Expect(tkThen, 'then');
+      ParseExpr; identNode := CurASTNode; tk := LastExprTk;  { then-arm }
+      Expect(tkElse, 'else');
+      ParseExpr; addrNode := CurASTNode;                     { else-arm }
+      { A frozen string-literal arm types as tyString; carry the result as a
+        managed AnsiString (managed-default) so it has a real handle downstream
+        (writeln arg, assignment) — the IR per-arm assign coerces the literal. }
+      if tk = tyString then tk := tyAnsiString;
+      valNode := AllocNode(AN_PAIR);
+      ASTLeft[valNode] := identNode; ASTRight[valNode] := addrNode;
+      node := AllocNode(AN_TERNARY);
+      ASTLeft[node] := left; ASTRight[node] := valNode;
+      ASTTk[node] := Ord(tk);
+      CurASTNode := node; LastExprTk := tk;
+    end;
     tkDefault:
     begin
       node := AllocNode(AN_DEFAULT);
@@ -3194,7 +3259,28 @@ begin
     end;
     tkLParen:
     begin
-      Next; if PyExprMode then PyParseBoolExpr else ParseExpr; Expect(tkRParen, ')');
+      Next; if PyExprMode then PyParseBoolExpr else ParseExpr;
+      { C comma operator `(a, b, ...)`: each operand but the last is evaluated for
+        its side effects then discarded; the value is the last. A parenthesised
+        comma list is otherwise a syntax error in pxx, so this is conflict-free
+        and reads identically to C. Skipped in Python mode (there `(a, b)` is a
+        tuple). Right-nested AN_COMMA so lowering discards each Left in turn. }
+      if (not PyExprMode) and (CurTok.Kind = tkComma) then
+      begin
+        node := CurASTNode;
+        while Eat(tkComma) do
+        begin
+          ParseExpr;
+          valNode := AllocNode(AN_COMMA);
+          ASTLeft[valNode] := node;
+          ASTRight[valNode] := CurASTNode;
+          ASTTk[valNode] := ASTTk[CurASTNode];
+          node := valNode;
+        end;
+        CurASTNode := node;
+        LastExprTk := IntToTypeKind(ASTTk[node]);
+      end;
+      Expect(tkRParen, ')');
       { Postfix suffix on a parenthesised expression: `(p)^`, `(p+k)^`, `(r).f`,
         `(a)[i]`. Without this the `^`/`.`/`[` were left dangling and the grouped
         value was used as-is (e.g. `(p)^` returned the pointer, not the pointee). }
@@ -3400,6 +3486,16 @@ begin
          ((ASTKind[left] = AN_CALL) and
           ((Integer(ASTIVal[left]) = -Ord(tkInteger_T)) or
            (Integer(ASTIVal[left]) = -Ord(tkLongWord_T)))) or
+         { A user function call whose DECLARED return type is a non-boolean
+           ordinal is authoritative (unlike the node's ASTTk, which PXX sometimes
+           mistags). This trusts `not f()` for an Int64/Integer-returning f
+           (e.g. C const-eval `~CEvalConstPrimary()`) as bitwise, while a
+           Boolean-returning f (RetType = tyBoolean, e.g. `not Eat(..)`) still
+           falls through to logical. }
+         ((ASTKind[left] = AN_CALL) and (Integer(ASTIVal[left]) >= 0) and
+          (Integer(ASTIVal[left]) < ProcCount) and
+          TypeIsOrdinal(Procs[Integer(ASTIVal[left])].RetType) and
+          (Procs[Integer(ASTIVal[left])].RetType <> tyBoolean)) or
          ((ASTKind[left] = AN_BINOP) and opIsArith));
       if bitNot then
       begin
@@ -4705,6 +4801,17 @@ begin
           sites in the frontend were pre-hardened to explicit `F()` (commit
           c87785d) before this flip, so self-host stays byte-identical. Trailing
           `.field`/`[i]`/`^` resolve via ParseLValueAST. }
+        { Opt-in footgun diagnostic (--warn-self-result): for a PARAMETERLESS
+          function, a bare own-name value read is the Result, but a
+          recursive-descent author usually meant `Name()`. Self-host-invisible
+          (the rule is the same in seed and self-host), so it silently miscompiles
+          user code — surface the ambiguity. Only paramless (with-params bare name
+          can't be a call, so it is unambiguously Result). See
+          bug-paramless-self-recursion-silent-result-read. }
+        if WarnSelfResult and (Procs[CurProc].ParamCount = 0) then
+          Warn('bare own name ''' + name + ''' reads the result of parameterless '
+            + 'function ' + Procs[CurProc].Name + '; write ' + name
+            + '() for a recursive call, or Result to read the result');
         Next;
         CurASTNode := ParseLValueAST(Procs[CurProc].RetSymIdx, TokPos - 2);
         LastExprTk := IntToTypeKind(ASTTk[CurASTNode]);
@@ -5006,6 +5113,19 @@ begin
     end;
     else Error('expected expression');
   end;
+  { Postfix `lv++` / `lv--` on the parsed factor (must be an lvalue): yields the
+    OLD value, bumps after. tkPlusPlus/tkMinusMinus are new tokens never produced
+    for existing source, so this is inert for non-C code (self-host byte-identical). }
+  while CurTok.Kind in [tkPlusPlus, tkMinusMinus] do
+  begin
+    node := AllocNode(AN_INCDEC);
+    ASTLeft[node] := CurASTNode;
+    if CurTok.Kind = tkPlusPlus then ASTIVal[node] := 1 else ASTIVal[node] := -1;
+    ASTSOffset[node] := 1;   { postfix → old value }
+    ASTTk[node] := ASTTk[CurASTNode];
+    CurASTNode := node; LastExprTk := IntToTypeKind(ASTTk[node]);
+    Next;
+  end;
 end;
 
 function FloatBinopResultTk(ltk, rtk: TTypeKind): TTypeKind;
@@ -5194,6 +5314,30 @@ begin
     right := CurASTNode;
     node := AllocNode(AN_BINOP); ASTIVal[node] := Ord(op); ASTLeft[node] := left; ASTRight[node] := right;
     ASTTk[node] := Ord(tyBoolean); CurASTNode := node;
+  end;
+  { Compound assignment expression `lv += rhs` (and -= *= /=), right-associative
+    so `a += b += c` nests on the Right and each yields its stored value. The
+    tokens are new to pxx (no existing source produces them) so this tail is inert
+    for non-C code → self-host byte-identical. The lvalue check is done at IR
+    lowering (where IsASTLValue is visible), which also rejects `a++ += x`. The
+    plain value-bearing `=` (op = tkAssign) is produced by the C frontend; the
+    node + lowering handle it as the trivial store-and-yield subset of this. }
+  if CurTok.Kind in [tkPlusEq, tkMinusEq, tkStarEq, tkSlashEq] then
+  begin
+    op := CurTok.Kind; Next;
+    left := CurASTNode;
+    ParseExpr;                 { right-assoc: RHS may itself be a compound assign }
+    right := CurASTNode;
+    node := AllocNode(AN_COMPOUND_ASSIGN);
+    ASTLeft[node] := left; ASTRight[node] := right;
+    case op of
+      tkPlusEq:  ASTIVal[node] := Ord(tkPlus);
+      tkMinusEq: ASTIVal[node] := Ord(tkMinus);
+      tkStarEq:  ASTIVal[node] := Ord(tkStar);
+      else       ASTIVal[node] := Ord(tkSlash);
+    end;
+    ASTTk[node] := ASTTk[left];
+    CurASTNode := node;
   end;
 end;
 
@@ -7355,13 +7499,28 @@ begin
       if (CurProc >= 0) and Procs[CurProc].IsFunc and
          (Tokens[TokPos].Kind in [tkAssign, tkDot, tkLBrack, tkCaret]) and
          CaseEqual(CurTok.SVal, LastDotName(Procs[CurProc].Name)) then
+      begin
         { Assigning the function result by its own name, where that name is an
-          intrinsic keyword (Read/Write/Readln/Writeln). The bare-own-name result
-          path miscompiles for a VIRTUAL method of this name (returns garbage), so
-          reject it with a clear message instead of silently mis-storing. Use
-          `Result := ...`, which is correct in every case.
-          See bug-virtual-keyword-name-result. }
-        Error('assign the result of a Read/Write method via "Result := ..." (bare own-name result is unsupported for intrinsic-named methods)')
+          intrinsic keyword (Read/Write/Readln/Writeln). Build the same
+          AN_ASSIGN(Result, expr) as the non-keyword own-name path in the tkIdent
+          case. See bug-virtual-keyword-name-result. }
+        Next;   { consume the keyword-name token }
+        if CurTok.Kind = tkAssign then
+        begin
+          Expect(tkAssign, ':=');
+          valNode := AllocNode(AN_IDENT);
+          ASTIVal[valNode] := Procs[CurProc].RetSymIdx;
+        end
+        else
+        begin
+          valNode := ParseLValueAST(Procs[CurProc].RetSymIdx, TokPos - 2);
+          Expect(tkAssign, ':=');
+        end;
+        ParseExpr;
+        node := AllocNode(AN_ASSIGN);
+        ASTLeft[node] := valNode;
+        ASTRight[node] := CurASTNode;
+      end
       else if (CurProc >= 0) and (CurSelfClass >= REC_UCLASS_BASE) and
               (Tokens[TokPos].Kind = tkLParen) and
               (FindUMeth(CurSelfClass - REC_UCLASS_BASE, CurTok.SVal) >= 0) then
@@ -8911,6 +9070,40 @@ begin
           Next;                 { consume the alias name }
           tk := elemTk;
           elemResolved := True;
+        end
+        else if (ai >= 0) and (not ArrTypeIsDyn[ai]) then
+        begin
+          { A FIXED array whose element is a FIXED named-array type
+            (`array[0..2] of TG`, `TG = array[0..3] of T`): same flat layout as
+            `array[0..2,0..3] of T` — merge TG's dims into the outer list, like
+            the anonymous-nested form. Without this ParseTypeKind drops TG's
+            dimension and the element stride collapses to the base type's size. }
+          if ArrTypeNDims[ai] >= 2 then
+          begin
+            for di := 0 to ArrTypeNDims[ai] - 1 do
+            begin
+              if ndCnt >= MAX_ARR_DIMS then Error('too many array dimensions');
+              ndDimLo[ndCnt]   := ArrTypeDimLo[ai * MAX_ARR_DIMS + di];
+              ndDimSpan[ndCnt] := ArrTypeDimSpan[ai * MAX_ARR_DIMS + di];
+              Inc(ndCnt);
+            end;
+          end
+          else
+          begin
+            if ndCnt >= MAX_ARR_DIMS then Error('too many array dimensions');
+            ndDimLo[ndCnt]   := ArrTypeLo[ai];
+            ndDimSpan[ndCnt] := ArrTypeHi[ai] - ArrTypeLo[ai] + 1;
+            Inc(ndCnt);
+          end;
+          isArrND := True;
+          flatLen := 1;
+          for di := 0 to ndCnt - 1 do flatLen := flatLen * ndDimSpan[di];
+          arrLo := 0; arrHi := flatLen - 1;
+          elemTk := IntToTypeKind(ArrTypeElemTk[ai]);
+          LastTypeRecId := ArrTypeElemRec[ai];
+          tk := elemTk;
+          elemResolved := True;
+          Next;                 { consume the named array type }
         end;
       end;
       if not elemResolved then
@@ -10094,6 +10287,36 @@ begin
                 fRec := ArrTypeElemRec[fAi];
                 Next;   { consume the named array type }
               end
+              else if (fAi >= 0) and (not ArrTypeIsDyn[fAi]) then
+              begin
+                { Named FIXED-array type field (`a: TG`, `TG = array[..] of T`):
+                  make it a real array field (1-D or flattened N-D) so a.x[i]
+                  indexes with the right stride. Without this ParseTypeKind drops
+                  TG's dimension and the field collapses to a single base element
+                  (corrupting r.field[i] and r.field passed as a var array arg). }
+                isArr := True;
+                fTk := IntToTypeKind(ArrTypeElemTk[fAi]);
+                fRec := ArrTypeElemRec[fAi];
+                if ArrTypeNDims[fAi] >= 2 then
+                begin
+                  fNDims := ArrTypeNDims[fAi];
+                  arrLen := 1;
+                  for tdi := 0 to fNDims - 1 do
+                  begin
+                    tdDimLo[tdi]   := ArrTypeDimLo[fAi * MAX_ARR_DIMS + tdi];
+                    tdDimSpan[tdi] := ArrTypeDimSpan[fAi * MAX_ARR_DIMS + tdi];
+                    arrLen := arrLen * tdDimSpan[tdi];
+                  end;
+                end
+                else
+                begin
+                  fNDims := 1;
+                  tdDimLo[0]   := ArrTypeLo[fAi];
+                  tdDimSpan[0] := ArrTypeHi[fAi] - ArrTypeLo[fAi] + 1;
+                  arrLen := tdDimSpan[0];
+                end;
+                Next;   { consume the named array type }
+              end
               else
               begin
                 fTk := ParseTypeKind;
@@ -10320,6 +10543,36 @@ begin
                 fRec := ArrTypeElemRec[fAi];
                 Next;   { consume the named array type }
               end
+              else if (fAi >= 0) and (not ArrTypeIsDyn[fAi]) then
+              begin
+                { Named FIXED-array type field (`a: TG`, `TG = array[..] of T`):
+                  make it a real array field (1-D or flattened N-D) so a.x[i]
+                  indexes with the right stride. Without this ParseTypeKind drops
+                  TG's dimension and the field collapses to a single base element
+                  (corrupting r.field[i] and r.field passed as a var array arg). }
+                isArr := True;
+                fTk := IntToTypeKind(ArrTypeElemTk[fAi]);
+                fRec := ArrTypeElemRec[fAi];
+                if ArrTypeNDims[fAi] >= 2 then
+                begin
+                  fNDims := ArrTypeNDims[fAi];
+                  arrLen := 1;
+                  for tdi := 0 to fNDims - 1 do
+                  begin
+                    tdDimLo[tdi]   := ArrTypeDimLo[fAi * MAX_ARR_DIMS + tdi];
+                    tdDimSpan[tdi] := ArrTypeDimSpan[fAi * MAX_ARR_DIMS + tdi];
+                    arrLen := arrLen * tdDimSpan[tdi];
+                  end;
+                end
+                else
+                begin
+                  fNDims := 1;
+                  tdDimLo[0]   := ArrTypeLo[fAi];
+                  tdDimSpan[0] := ArrTypeHi[fAi] - ArrTypeLo[fAi] + 1;
+                  arrLen := tdDimSpan[0];
+                end;
+                Next;   { consume the named array type }
+              end
               else
               begin
                 fTk := ParseTypeKind;
@@ -10513,7 +10766,41 @@ begin
             tMoreDims := (CurTok.Kind = tkArray) and (Tokens[TokPos].Kind = tkLBrack);
             if tMoreDims then Next;   { consume 'array'; loop head consumes '[' }
           end;
-          aElemTk := ParseTypeKind;
+          { A FIXED named-array type as the element (`array[a..b] of TG`,
+            `TG = array[c..d] of T`) has the SAME flat layout as `array[a..b,
+            c..d] of T` — merge TG's dimensions into the outer list, exactly as
+            the anonymous-nested form above does. Without this, ParseTypeKind
+            resolves TG to its bare base element and the inner dimension is lost
+            (the element stride collapses to the base type's size, corrupting
+            p[i][j]). TG is already flattened in its own ArrType entry, so one
+            merge covers arbitrary nesting depth. }
+          fAi := -1;
+          if CurTok.Kind = tkIdent then fAi := FindArrayType(CurTok.SVal);
+          if (fAi >= 0) and (not ArrTypeIsDyn[fAi]) then
+          begin
+            if ArrTypeNDims[fAi] >= 2 then
+            begin
+              for tdi := 0 to ArrTypeNDims[fAi] - 1 do
+              begin
+                if tdCnt >= MAX_ARR_DIMS then Error('too many array dimensions');
+                tdDimLo[tdCnt]   := ArrTypeDimLo[fAi * MAX_ARR_DIMS + tdi];
+                tdDimSpan[tdCnt] := ArrTypeDimSpan[fAi * MAX_ARR_DIMS + tdi];
+                Inc(tdCnt);
+              end;
+            end
+            else
+            begin
+              if tdCnt >= MAX_ARR_DIMS then Error('too many array dimensions');
+              tdDimLo[tdCnt]   := ArrTypeLo[fAi];
+              tdDimSpan[tdCnt] := ArrTypeHi[fAi] - ArrTypeLo[fAi] + 1;
+              Inc(tdCnt);
+            end;
+            aElemTk := IntToTypeKind(ArrTypeElemTk[fAi]);
+            LastTypeRecId := ArrTypeElemRec[fAi];
+            Next;   { consume the named array type }
+          end
+          else
+            aElemTk := ParseTypeKind;
           if tdCnt = 1 then
           begin aLo := tdDimLo[0]; aHi := tdDimLo[0] + tdDimSpan[0] - 1; end
           else

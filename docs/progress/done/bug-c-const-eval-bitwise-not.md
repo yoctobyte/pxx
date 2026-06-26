@@ -2,6 +2,7 @@
 
 - **Type:** bug
 - **Track:** C (C frontend)
+- **Track:** D (C frontend) — root fixed by Track A
 - **Opened:** 2026-06-25
 - **Found-by:** Slice A (lexer operator fidelity) fixture work.
 
@@ -53,3 +54,13 @@ once fixed; today it is omitted from the Slice A fixture to keep it green.
   Self-host byte-identical; fixture `test/cbitnot_b11.c` (=6). The general
   `not <AN_CALL Int64-result>`=boolean typing quirk is left for the
   `bug-esp-not-always-boolean` family.
+## Resolution (2026-06-26, Track A — commit on master, pin v79)
+Root fixed at source: the Pascal front-end now types `not <ordinal-returning
+call>` as bitwise (parser.inc tkNot trusts an AN_CALL whose proc RetType is a
+non-boolean ordinal; a Boolean RetType stays logical). The compiler's own
+`Result := not CEvalConstPrimary()` (Int64 return) therefore folds `~0` to -1,
+`~5` to -6, `~0 & 255` to 255 — no cparser.inc XOR workaround needed. Verified
+on Pascal (`not Int64Fn` = -1, boolean fn stays logical); self-host
+byte-identical; make test green. Track C: rebuild feat/cfront on pin v79 and the
+`~`-bearing enum fixture should match gcc; this ticket can be confirmed-closed
+there.

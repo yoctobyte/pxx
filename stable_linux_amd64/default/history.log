@@ -69,3 +69,11 @@
 2026-06-25T10:44:25Z  v69  252c129335722fd4b6cc56842afff497330152e220457412d4d32eda1e239ade  c57bc6baa434be2136aa22a94c52fb4e34254bb8  docs(progress): cdecl indirect calls done (x86-64) in dynlib-loader ticket
 2026-06-25T11:59:40Z  v70  c1857172a5b63eb572be504f1714f045c3169f4a3d07b3411ddb8225a2ea2f59  30e052b77e50dc5f12a9af4949d1fa0a4370d95e  feat(parser): indexed proc-value indirect call arr[i](args)
 2026-06-25T13:45:02Z  v71  29fc4f95b2ee6cc7a87aa2f59db271d0b88db0f5ede47a97203d278b3b47fd39  9b3c316bfffb5e655fdfc62dc25ab1086c89e51b  docs(tickets): xvfb real-window GUI smoke (B) + arm32 writeln(LongWord) bug (A)
+2026-06-25T14:31:53Z  v72  74afa2d8c740fddb4998e1f8fd7eaa138332f768d494b41420190ec84cd4efe9  aa72ed61f5aed2001ef20034972d7353623b7d44  docs(tickets): close bug-fixed-array-assignment-no-copy [A]
+2026-06-25T15:05:58Z  v73  700f8b8b302f8828ebe47ac0cc15b83c7cbb76a5dd55295021b22dd62b6cb04e  50922674e2333471e5dfed8f24baf508eee47599  docs(tickets): diagnose b2 (array-of-aggregate-element) + b3 (flaky managed-return heap corruption) [A]
+2026-06-25T18:58:35Z  v74  d2435bac06b0f9546fdf84bbf8f6aac3b0a0ca922605ff1175ec471ce55bfbcf  8a8e48a574f902cec54e7546c3545f7502868d84  docs(progress): close bug-aggregate-member-array-as-var-param (A) + regen board
+2026-06-26T04:27:54Z  v75  15281bd2d3d7b67d713e7c6c950ac5e7df83277e3c78de37a7da7df4b2fc6a57  65d7fb56520b8ce7b962589b9ff45ad8a4b5c867  fix(ir): nil-init managed-record by-value arg temp before COPY_REC_MANAGED
+2026-06-26T04:59:51Z  v76  96247090b13ae66119c1f28a8d966caaa260148eb05f616d1dfc3cc856de0f8b  01a9217315f9be5a0b50efce2966d149a8533d6c  feat(ir): AN_TERNARY value-bearing conditional expression (slice 1)
+2026-06-26T05:13:21Z  v77  3878181e8d5f7fbdb2f3aeb8862b73a915705bfab5581657ec6b473ce37d832e  86d868875157d6387260c9a3bb2ffcc382a60d97  feat(ir): AN_COMMA — C comma operator (slice 3)
+2026-06-26T05:35:50Z  v78  ad6d3ca6590781e05f94e9495ae69236be58def42167578366688fc2fff707e0  0c8595e0bcf8e369de9891384701607423f31d6f  feat(ir): AN_INCDEC + AN_COMPOUND_ASSIGN — value-bearing assign & ++/-- (slice 2)
+2026-06-26T06:08:47Z  v79  2a4b6e331d4edf745ea845291dd30b08a2055ea14faf574217f853da30a361d3  ae8f7578760abafec80da252578460ef0a4b4926  fix(parser): not <ordinal-returning call> is bitwise, not boolean

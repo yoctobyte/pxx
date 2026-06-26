@@ -9,13 +9,26 @@ begin
   if b then writeln(tag, '=ok') else writeln(tag, '=FAIL');
 end;
 
+function GzipHelloWorld: AnsiString;
+{ gzip member for 'hello world' (Python gzip, mtime=0) as a binary string. }
+const b: array[0..30] of Integer = (
+  31, 139, 8, 0, 0, 0, 0, 0, 2, 255, 203, 72, 205, 201, 201, 87, 40, 207,
+  47, 202, 73, 1, 0, 133, 17, 74, 13, 11, 0, 0, 0);
+var i: Integer;
+begin
+  SetLength(Result, 31);
+  for i := 0 to 30 do Result[i + 1] := AnsiChar(b[i]);
+end;
+
 var
   host, path: AnsiString;
   port: Integer;
   isTls, okUrl: Boolean;
   req: AnsiString;
   resp: THttpResponse;
+  sreq: THttpRequest;
   hdrs: THttpHeaders;
+  gz, raw2: AnsiString;
 begin
   { URL parse: host + path. }
   okUrl := HttpParseUrl('http://example.com/index.html', host, port, path, isTls);
@@ -116,4 +129,76 @@ begin
   SayBool('query1', HttpQueryAdd('', 'a', '1') = 'a=1');
   SayBool('query2', HttpQueryAdd(HttpQueryAdd('', 'a', '1'), 'b', '2 3') = 'a=1&b=2%203');
   SayBool('query-enc', HttpQueryAdd('', 'q', 'a&b') = 'q=a%26b');
+
+  { Content-Encoding decoding (gzip/deflate; identity + unknown pass through). }
+  gz := GzipHelloWorld;
+  SayBool('ce-identity', HttpDecodeContent('identity', 'abc') = 'abc');
+  SayBool('ce-empty',    HttpDecodeContent('', 'abc') = 'abc');
+  SayBool('ce-gzip',     HttpDecodeContent('gzip', gz) = 'hello world');
+  SayBool('ce-unknown',  HttpDecodeContent('br', gz) = gz);
+  { full response: HttpParseResponse decompresses a gzip body in place. }
+  raw2 := 'HTTP/1.1 200 OK'#13#10 + 'Content-Encoding: gzip'#13#10 +
+          'Content-Length: 31'#13#10#13#10 + gz;
+  HttpParseResponse(raw2, resp);
+  SayBool('ce-resp-gzip', resp.Body = 'hello world');
+
+  { Basic auth header line (base64 of user:pass). }
+  SayBool('basic-auth',
+    HttpBasicAuth('user', 'pass') = 'Authorization: Basic dXNlcjpwYXNz'#13#10);
+
+  { multipart/form-data builder (deterministic with a fixed boundary 'BND'). }
+  SayBool('mp-ctype',
+    HttpMultipartContentType('BND') = 'Content-Type: multipart/form-data; boundary=BND'#13#10);
+  SayBool('mp-field',
+    HttpMultipartField('BND', 'k', 'v') =
+    '--BND'#13#10'Content-Disposition: form-data; name="k"'#13#10#13#10'v'#13#10);
+  SayBool('mp-file',
+    HttpMultipartFile('BND', 'f', 'a.txt', 'text/plain', 'hi') =
+    '--BND'#13#10'Content-Disposition: form-data; name="f"; filename="a.txt"'#13#10 +
+    'Content-Type: text/plain'#13#10#13#10'hi'#13#10);
+  SayBool('mp-end', HttpMultipartEnd('BND') = '--BND--'#13#10);
+  SayBool('mp-boundary-uniq', HttpMultipartBoundary <> HttpMultipartBoundary);
+
+  { Cookie jar: set/append/replace, Set-Cookie merge, render. }
+  SayBool('cookie-set',     HttpCookieSet('', 'a', '1') = 'a=1');
+  SayBool('cookie-append',  HttpCookieSet('a=1', 'b', '2') = 'a=1; b=2');
+  SayBool('cookie-replace', HttpCookieSet('a=1; b=2', 'a', '9') = 'a=9; b=2');
+  SayBool('cookie-update',  HttpCookieUpdate('a=1', 'b=2; Path=/; HttpOnly') = 'a=1; b=2');
+  SayBool('cookie-header',  HttpCookieHeader('a=1; b=2') = 'Cookie: a=1; b=2'#13#10);
+  SayBool('cookie-empty',   HttpCookieHeader('') = '');
+  HttpParseResponse('HTTP/1.1 200 OK'#13#10 +
+    'Set-Cookie: sid=abc; Path=/'#13#10 +
+    'Set-Cookie: theme=dark'#13#10'Content-Length: 0'#13#10#13#10, resp);
+  SayBool('cookie-from-resp',
+    HttpCookieFromResponse('', resp) = 'sid=abc; theme=dark');
+
+  { Server-side: parse request, lookup header, build response (auto Content-Length). }
+  SayBool('req-parse',
+    HttpParseRequest('GET /search?q=cats HTTP/1.1'#13#10 +
+      'Host: x'#13#10'Accept: */*'#13#10#13#10, sreq));
+  SayBool('req-method',  sreq.Method = 'GET');
+  SayBool('req-path',    sreq.Path = '/search');
+  SayBool('req-query',   sreq.Query = 'q=cats');
+  SayBool('req-hdr',     HttpRequestHeader(sreq, 'host') = 'x');
+  SayBool('req-postbody',
+    HttpParseRequest('POST /u HTTP/1.1'#13#10'Content-Length: 2'#13#10#13#10'hi', sreq) and
+    (sreq.Method = 'POST') and (sreq.Body = 'hi'));
+  SayBool('build-resp',
+    HttpBuildResponse(200, 'OK', 'X: 1'#13#10, 'hello') =
+    'HTTP/1.1 200 OK'#13#10'X: 1'#13#10'Content-Length: 5'#13#10#13#10'hello');
+  SayBool('build-resp-empty',
+    HttpBuildResponse(404, 'Not Found', '', '') =
+    'HTTP/1.1 404 Not Found'#13#10'Content-Length: 0'#13#10#13#10);
+
+  { Query/form read-back (percent-decoded, present-empty vs absent). }
+  SayBool('query-get',     HttpQueryGet('a=1&b=2%203&c=4', 'b') = '2 3');
+  SayBool('query-get-1st', HttpQueryGet('x=1&x=2', 'x') = '1');
+  SayBool('query-get-miss', HttpQueryGet('a=1', 'z') = '');
+  SayBool('query-decname',  HttpQueryGet('a%20b=ok', 'a b') = 'ok');
+  SayBool('query-has',      HttpQueryHas('a=1&flag&b=2', 'flag'));
+  SayBool('query-has-empty', HttpQueryHas('a=', 'a') and (HttpQueryGet('a=', 'a') = ''));
+  SayBool('query-has-miss', not HttpQueryHas('a=1', 'z'));
+  { round-trips the builder. }
+  SayBool('query-roundtrip',
+    HttpQueryGet(HttpQueryAdd(HttpQueryAdd('', 'n', 'a&b'), 'm', 'x y'), 'n') = 'a&b');
 end.

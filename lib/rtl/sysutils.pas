@@ -212,21 +212,18 @@ begin
 end;
 
 function Copy(const s: AnsiString; index, count: Integer): AnsiString;
-var i, n, last: Integer; r: AnsiString;
+var n, last, len: Integer;
 begin
   n := Length(s);
   if index < 1 then index := 1;
   if count < 0 then count := 0;
   last := index + count - 1;
   if last > n then last := n;
-  r := '';
-  i := index;
-  while i <= last do
-  begin
-    r := r + s[i];
-    i := i + 1;
-  end;
-  Result := r;
+  len := last - index + 1;
+  if len <= 0 then begin Result := ''; Exit; end;
+  { build the result once — SetLength + a single Move, not char-by-char append }
+  SetLength(Result, len);
+  Move(s[index], Result[1], len);
 end;
 
 function Trim(const s: AnsiString): AnsiString;
@@ -355,29 +352,27 @@ begin
 end;
 
 function UpperCase(const s: AnsiString): AnsiString;
-var i: Integer; r: AnsiString; c: Char;
+var i: Integer; c: Char;
 begin
-  r := '';
+  SetLength(Result, Length(s));        { size once, index-assign — not O(n^2) append }
   for i := 1 to Length(s) do
   begin
     c := s[i];
     if (c >= 'a') and (c <= 'z') then c := Chr(Ord(c) - 32);
-    r := r + c;
+    Result[i] := c;
   end;
-  Result := r;
 end;
 
 function LowerCase(const s: AnsiString): AnsiString;
-var i: Integer; r: AnsiString; c: Char;
+var i: Integer; c: Char;
 begin
-  r := '';
+  SetLength(Result, Length(s));
   for i := 1 to Length(s) do
   begin
     c := s[i];
     if (c >= 'A') and (c <= 'Z') then c := Chr(Ord(c) + 32);
-    r := r + c;
+    Result[i] := c;
   end;
-  Result := r;
 end;
 
 function Pos(const substr, s: AnsiString): Integer;
@@ -503,23 +498,25 @@ begin
 end;
 
 function PadLeft(const s: AnsiString; len: Integer; ch: Char): AnsiString;
-var r: AnsiString; i, n: Integer;
+var n, pad: Integer;
 begin
   n := Length(s);
   if n >= len then begin Result := s; Exit; end;
-  r := '';
-  for i := 1 to len - n do r := r + ch;
-  Result := r + s;
+  pad := len - n;
+  SetLength(Result, len);
+  FillChar(Result[1], pad, Ord(ch));         { pad chars, then the original }
+  if n > 0 then Move(s[1], Result[pad + 1], n);
 end;
 
 function PadRight(const s: AnsiString; len: Integer; ch: Char): AnsiString;
-var r: AnsiString; i, n: Integer;
+var n, pad: Integer;
 begin
   n := Length(s);
   if n >= len then begin Result := s; Exit; end;
-  r := s;
-  for i := 1 to len - n do r := r + ch;
-  Result := r;
+  pad := len - n;
+  SetLength(Result, len);
+  if n > 0 then Move(s[1], Result[1], n);    { original, then pad chars }
+  FillChar(Result[n + 1], pad, Ord(ch));
 end;
 
 procedure Delete(var s: AnsiString; index, count: Integer);
@@ -607,42 +604,58 @@ begin
   Result := True;
 end;
 
+{ pat matches src at 1-based pos (no allocation, unlike Copy(src,pos,plen)=pat). }
+function StrMatchAt(const src, pat: AnsiString; pos, plen, slen: Integer): Boolean;
+var j: Integer;
+begin
+  StrMatchAt := False;
+  if pos + plen - 1 > slen then Exit;
+  for j := 1 to plen do
+    if src[pos + j - 1] <> pat[j] then Exit;
+  StrMatchAt := True;
+end;
+
 function StringReplace(const S, OldPattern, NewPattern: AnsiString; Flags: TReplaceFlags): AnsiString;
 var
-  src, pat, r: AnsiString;
-  i, plen, slen: Integer;
-  all, ci, matched: Boolean;
+  src, pat: AnsiString;
+  i, plen, slen, nlen, count, outPos, done: Integer;
+  all: Boolean;
 begin
   plen := Length(OldPattern);
   if plen = 0 then begin Result := S; Exit; end;
   all := rfReplaceAll in Flags;
-  ci := rfIgnoreCase in Flags;
-  if ci then begin src := LowerCase(S); pat := LowerCase(OldPattern); end
+  if rfIgnoreCase in Flags then begin src := LowerCase(S); pat := LowerCase(OldPattern); end
   else begin src := S; pat := OldPattern; end;
   slen := Length(S);
-  r := '';
-  i := 1;
+  nlen := Length(NewPattern);
+
+  { pass 1: count matches so the result is sized exactly (no O(n^2) append) }
+  count := 0; i := 1;
   while i <= slen do
-  begin
-    matched := (i + plen - 1 <= slen) and (Copy(src, i, plen) = pat);
-    if matched then
+    if StrMatchAt(src, pat, i, plen, slen) then
     begin
-      r := r + NewPattern;
+      Inc(count); i := i + plen;
+      if not all then i := slen + 1;        { only the first match counts }
+    end
+    else Inc(i);
+  if count = 0 then begin Result := S; Exit; end;
+
+  { pass 2: fill — NewPattern at each (replaced) match, else copy the char }
+  SetLength(Result, slen + count * (nlen - plen));
+  outPos := 1; i := 1; done := 0;
+  while i <= slen do
+    if (all or (done = 0)) and StrMatchAt(src, pat, i, plen, slen) then
+    begin
+      if nlen > 0 then Move(NewPattern[1], Result[outPos], nlen);
+      outPos := outPos + nlen;
       i := i + plen;
-      if not all then
-      begin
-        r := r + Copy(S, i, slen - i + 1);
-        Result := r;
-        Exit;
-      end;
+      Inc(done);
     end
     else
     begin
-      r := r + S[i];
-      Inc(i);
+      Result[outPos] := S[i];
+      Inc(outPos); Inc(i);
     end;
-  end;
-  Result := r;
 end;
 
 function QuotedStr(const s: AnsiString): AnsiString;

@@ -87,6 +87,7 @@ function PalStatAt(dirHandle: Integer; path: PChar; var info: TPalFileStat): Int
 
 function PalSocket(domain, kind, proto: Integer): Integer;
 function PalSetSocketReuseAddr(handle, enabled: Integer): Integer;
+function PalSetSockOpt(handle, level, optname: Integer; valPtr: Pointer; valLen: Integer): Integer;
 function PalSetSocketNonBlocking(handle, enabled: Integer): Integer;
 function PalBindIpv4(handle: Integer; hostAddr: LongWord; port: Integer): Integer;
 function PalConnectIpv4(handle: Integer; hostAddr: LongWord; port: Integer): Integer;
@@ -224,6 +225,11 @@ end;
 function PalSetSocketReuseAddr(handle, enabled: Integer): Integer;
 begin
   Result := PalBackendSetSocketReuseAddr(handle, enabled);
+end;
+
+function PalSetSockOpt(handle, level, optname: Integer; valPtr: Pointer; valLen: Integer): Integer;
+begin
+  Result := PalBackendSetSockOpt(handle, level, optname, valPtr, valLen);
 end;
 
 function PalSetSocketNonBlocking(handle, enabled: Integer): Integer;
