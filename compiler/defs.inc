@@ -177,6 +177,18 @@ const
   AN_SET_CONST_REF = 66; { named set constant used as a value: ASTIVal = Data[]
                            offset of the baked 32-byte mask. Lowers to IR_SET_LIT
                            (same blob-address value a set literal yields). }
+  AN_INCDEC        = 69; { C pre/post increment/decrement. Left = lvalue;
+                           ASTIVal = +1 / -1 (scaled by element size for a
+                           pointer); ASTSOffset = 1 for postfix (yield OLD value),
+                           0 for prefix (yield NEW value). Lowers via the
+                           evaluate-lvalue-address-once primitive. }
+  AN_COMPOUND_ASSIGN = 70; { C assignment expression yielding a value. Left =
+                           lvalue, Right = rhs, ASTIVal = the binop token
+                           (tkPlus/tkMinus/tkStar/tkSlash...) for `+=` etc, or
+                           Ord(tkAssign) for a plain value-bearing `=`/`:=`
+                           (right-assoc, so `a = b = c` nests on the Right). The
+                           lvalue address is computed ONCE; yields the stored
+                           value. }
   AN_COMMA         = 68; { C comma operator `(a, b)`: evaluate Left for its side
                            effects (value discarded), yield Right's value.
                            Right-nested for `(a,b,c)`. ASTTk = Right's type. Only
@@ -415,6 +427,8 @@ type
     tkInteger_T, tkBoolean_T, tkChar_T, tkString_T, tkReal_T, tkLongWord_T,
     tkAssign, tkEq, tkNeq, tkLt, tkLe, tkGt, tkGe,
     tkPlus, tkMinus, tkStar, tkSlash,
+    tkPlusPlus, tkMinusMinus,                 { ++ / -- (C inc/dec; new in pxx) }
+    tkPlusEq, tkMinusEq, tkStarEq, tkSlashEq, { += -= *= /= compound assignment }
     tkLParen, tkRParen, tkLBrack, tkRBrack,
     tkSemicolon, tkColon, tkComma, tkDot, tkDotDot, tkAt, tkCaret,
     tkBreak, tkContinue, tkOverload,

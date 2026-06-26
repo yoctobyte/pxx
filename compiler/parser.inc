@@ -3123,6 +3123,19 @@ begin
     begin
       node := AllocNode(AN_INT_LIT); ASTIVal[node] := 0; ASTTk[node] := Ord(tyPointer); CurASTNode := node; Next; LastExprTk := tyPointer;
     end;
+    tkPlusPlus, tkMinusMinus:
+    begin
+      { Prefix `++lv` / `--lv`: bump first, yield the NEW value. Operand must be
+        an lvalue (parsed as a factor so postfix/suffixes still bind). }
+      bitNot := CurTok.Kind = tkPlusPlus; Next;   { bitNot reused as isIncrement }
+      ParseFactor;
+      node := AllocNode(AN_INCDEC);
+      ASTLeft[node] := CurASTNode;
+      if bitNot then ASTIVal[node] := 1 else ASTIVal[node] := -1;
+      ASTSOffset[node] := 0;   { prefix → new value }
+      ASTTk[node] := ASTTk[CurASTNode];
+      CurASTNode := node; LastExprTk := IntToTypeKind(ASTTk[node]);
+    end;
     tkIf:
     begin
       { Conditional EXPRESSION `if c then a else b` (the value-bearing form the C
@@ -5079,6 +5092,19 @@ begin
     end;
     else Error('expected expression');
   end;
+  { Postfix `lv++` / `lv--` on the parsed factor (must be an lvalue): yields the
+    OLD value, bumps after. tkPlusPlus/tkMinusMinus are new tokens never produced
+    for existing source, so this is inert for non-C code (self-host byte-identical). }
+  while CurTok.Kind in [tkPlusPlus, tkMinusMinus] do
+  begin
+    node := AllocNode(AN_INCDEC);
+    ASTLeft[node] := CurASTNode;
+    if CurTok.Kind = tkPlusPlus then ASTIVal[node] := 1 else ASTIVal[node] := -1;
+    ASTSOffset[node] := 1;   { postfix → old value }
+    ASTTk[node] := ASTTk[CurASTNode];
+    CurASTNode := node; LastExprTk := IntToTypeKind(ASTTk[node]);
+    Next;
+  end;
 end;
 
 function FloatBinopResultTk(ltk, rtk: TTypeKind): TTypeKind;
@@ -5267,6 +5293,30 @@ begin
     right := CurASTNode;
     node := AllocNode(AN_BINOP); ASTIVal[node] := Ord(op); ASTLeft[node] := left; ASTRight[node] := right;
     ASTTk[node] := Ord(tyBoolean); CurASTNode := node;
+  end;
+  { Compound assignment expression `lv += rhs` (and -= *= /=), right-associative
+    so `a += b += c` nests on the Right and each yields its stored value. The
+    tokens are new to pxx (no existing source produces them) so this tail is inert
+    for non-C code → self-host byte-identical. The lvalue check is done at IR
+    lowering (where IsASTLValue is visible), which also rejects `a++ += x`. The
+    plain value-bearing `=` (op = tkAssign) is produced by the C frontend; the
+    node + lowering handle it as the trivial store-and-yield subset of this. }
+  if CurTok.Kind in [tkPlusEq, tkMinusEq, tkStarEq, tkSlashEq] then
+  begin
+    op := CurTok.Kind; Next;
+    left := CurASTNode;
+    ParseExpr;                 { right-assoc: RHS may itself be a compound assign }
+    right := CurASTNode;
+    node := AllocNode(AN_COMPOUND_ASSIGN);
+    ASTLeft[node] := left; ASTRight[node] := right;
+    case op of
+      tkPlusEq:  ASTIVal[node] := Ord(tkPlus);
+      tkMinusEq: ASTIVal[node] := Ord(tkMinus);
+      tkStarEq:  ASTIVal[node] := Ord(tkStar);
+      else       ASTIVal[node] := Ord(tkSlash);
+    end;
+    ASTTk[node] := ASTTk[left];
+    CurASTNode := node;
   end;
 end;
 

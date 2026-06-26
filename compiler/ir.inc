@@ -3355,6 +3355,62 @@ begin
       Result := IRAppend(IR_BLOCK, first, endLabelNode, -1, 0, 0);
     end;
 
+    AN_INCDEC:
+    begin
+      { Pre/post ++/--. Evaluate the lvalue ADDRESS exactly once into a hidden
+        pointer temp (so `a[i++]++` bumps i once), load the current value, stash
+        the OLD value, store old±delta, and yield old (postfix) or the new stored
+        value (prefix). Pointer operands step by element size. }
+      left := ASTLeft[node];
+      if not IsASTLValue(left) then Error('++/-- operand is not an lvalue');
+      argTk := IntToTypeKind(ASTTk[left]);
+      if argTk = tyUnknown then argTk := tyInteger;
+      if argTk = tyPointer then foldK := ASTIVal[node] * IRPointerStride(left)
+      else foldK := ASTIVal[node];
+      varIdx := AllocVar('', tyPointer);                 { paddr = &lvalue, once }
+      IRAppend(IR_STORE_SYM, varIdx, IRLowerAddress(left), -1, 0, Ord(tyPointer));
+      slot := AllocVar('', argTk);                       { old value }
+      IRAppend(IR_STORE_SYM, slot,
+        IRAppend(IR_LOAD_MEM, IRAppend(IR_LOAD_SYM, varIdx, -1, -1, 0, Ord(tyPointer)),
+                 -1, -1, 0, Ord(argTk)), -1, 0, Ord(argTk));
+      IRAppend(IR_STORE_MEM, IRAppend(IR_LOAD_SYM, varIdx, -1, -1, 0, Ord(tyPointer)),
+        IRAppend(IR_BINOP, IRAppend(IR_LOAD_SYM, slot, -1, -1, 0, Ord(argTk)),
+                 IRAppend(IR_CONST_INT, -1, -1, -1, foldK, Ord(argTk)),
+                 Ord(tkPlus), 0, Ord(argTk)), -1, 0, Ord(argTk));
+      if ASTSOffset[node] = 1 then
+        Result := IRAppend(IR_LOAD_SYM, slot, -1, -1, 0, Ord(argTk))   { postfix: old }
+      else
+        Result := IRAppend(IR_LOAD_MEM, IRAppend(IR_LOAD_SYM, varIdx, -1, -1, 0, Ord(tyPointer)),
+                           -1, -1, 0, Ord(argTk));                     { prefix: new }
+    end;
+
+    AN_COMPOUND_ASSIGN:
+    begin
+      { Value-bearing assignment `lv = rhs` and compound `lv OP= rhs`. Lvalue
+        address computed ONCE; for compound, current = *paddr, new = current OP
+        rhs; store and yield the stored value (so `a = b = c` chains via the
+        Right being another AN_COMPOUND_ASSIGN). }
+      left := ASTLeft[node];
+      if not IsASTLValue(left) then Error('assignment target is not an lvalue');
+      argTk := IntToTypeKind(ASTTk[left]);
+      if argTk = tyUnknown then argTk := tyInteger;
+      varIdx := AllocVar('', tyPointer);
+      IRAppend(IR_STORE_SYM, varIdx, IRLowerAddress(left), -1, 0, Ord(tyPointer));
+      right := IRLowerAST(ASTRight[node]);
+      if ASTIVal[node] = Ord(tkAssign) then
+        value := right
+      else
+        value := IRAppend(IR_BINOP,
+          IRAppend(IR_LOAD_MEM, IRAppend(IR_LOAD_SYM, varIdx, -1, -1, 0, Ord(tyPointer)),
+                   -1, -1, 0, Ord(argTk)),
+          right, ASTIVal[node], 0, Ord(argTk));
+      slot := AllocVar('', argTk);                       { stored value, yielded }
+      IRAppend(IR_STORE_SYM, slot, value, -1, 0, Ord(argTk));
+      IRAppend(IR_STORE_MEM, IRAppend(IR_LOAD_SYM, varIdx, -1, -1, 0, Ord(tyPointer)),
+               IRAppend(IR_LOAD_SYM, slot, -1, -1, 0, Ord(argTk)), -1, 0, Ord(argTk));
+      Result := IRAppend(IR_LOAD_SYM, slot, -1, -1, 0, Ord(argTk));
+    end;
+
     AN_COMMA:
     begin
       { C comma operator: evaluate Left for its side effects (discard the value),
