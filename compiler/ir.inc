@@ -1225,7 +1225,12 @@ begin
   if (argTk = tyRecord) and not argIsWholeArray then
   begin
     argRecId := ResolveNodeRec(argAST);
-    if isRefArg then
+    if CProgramMode then
+      { C struct-by-value: a record param is by-ref ABI (8-byte pointer slot),
+        so ALWAYS copy the record to a temp and pass &temp — true by-value with
+        correct field access for any size. C-mode-gated -> Pascal byte-identical. }
+      needTemp := True
+    else if isRefArg then
     begin
       if not IsASTLValue(argAST) then
         needTemp := True;

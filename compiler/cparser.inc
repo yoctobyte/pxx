@@ -2053,6 +2053,7 @@ var
   pdepths: array[0..15] of Integer;
   pelemtk: array[0..15] of Integer;   { pointed-at TTypeKind ordinal per pointer param }
   pelemrec: array[0..15] of Integer;
+  precid: array[0..15] of Integer;    { record id per tyRecord param (for isRef field access) }
   pprocsig: array[0..15] of Integer;  { fn-pointer signature Procs[] index per param, else -1 }
   savedSC, savedFS, node, savedCurProc: Integer;
   vaSaveSym, vaSaveRec: Integer;
@@ -2127,6 +2128,7 @@ begin
         pdepths[nparams] := CTypePtrDepth;
         pelemtk[nparams] := CTypeElemTk;
         pelemrec[nparams] := CTypeElemRec;
+        precid[nparams] := CTypeBaseRec;     { record id for a tyRecord param }
         pprocsig[nparams] := CTypeProcSig;   { fn-pointer param: callable in the body }
         if CurTok.Kind = tkIdent then
         begin
@@ -2239,7 +2241,17 @@ begin
   { Allocate parameter slots }
   for i := 0 to nparams-1 do
   begin
-    idx := AllocParam(pnames[i], ptypes[i], False, False);
+    { A C record param is by-value but passed via the by-ref ABI (an 8-byte
+      pointer slot the callee derefs); the caller copies the record to a temp and
+      passes &temp (IRLowerCallArg), giving true by-value with correct field
+      access for records of ANY size (the inline 8-byte slot could not hold >8B). }
+    if ptypes[i] = tyRecord then
+    begin
+      LastTypeRecId := precid[i];
+      idx := AllocParam(pnames[i], ptypes[i], True, False);
+    end
+    else
+      idx := AllocParam(pnames[i], ptypes[i], False, False);
     Procs[procIdx].Params[i].SymIdx := idx;
     { Thread a pointer parameter's pointed-at type so `*p`, `p[i]`, and pointer
       arithmetic inside the body know the element stride/width. }
