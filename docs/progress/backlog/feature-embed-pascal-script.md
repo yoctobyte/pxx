@@ -46,6 +46,14 @@ Two wins at once:
 small script end-to-end (compile → execute → observe output) under a smoke.
 Stretch: host↔script binding of a hand-registered function.
 
+## License compliance (we honour it)
+
+If we ship a demo or test app built on Pascal Script, we **follow the license and
+give the attribution** — a visible "made using RemObjects Pascal Script" line (and
+where to find it) in the app's aboutbox / docs / README, and we keep the upstream
+notice in any vendored source. Fair trade for a free engine; bake the credit line
+into the demo from the start, not as an afterthought.
+
 ## Open questions
 
 - How much of Pascal Script leans on Delphi-only RTTI vs manual registration

@@ -51,6 +51,13 @@ Phase 1: `$(PXX_STABLE)` builds the DWScript core and runs a script. Phase 2: a
 host class is reachable from a script purely via the RTTI exposer (no manual
 registration), proving pxx's extended RTTI is walkable.
 
+## License compliance (we honour it)
+
+If we ship a demo or test app on DWScript, we **follow MPL 1.1 and give the
+attribution** — credit DWScript in the app's credits, include or link its source,
+and if we patch any DWScript unit, publish those changes (file-level copyleft).
+Fair trade; bake the credit + source link into the demo from the start.
+
 ## Risk / note
 
 This is a deep target — likely the single richest source of Track A language +
