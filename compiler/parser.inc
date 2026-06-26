@@ -13399,6 +13399,22 @@ begin
     end;
   end;
 
+  { The including UNIT's own directory first, Pascal-only (.pas/.pp). A unit's
+    sibling `uses` should bind to the Pascal unit next to it, never to an
+    unrelated C header of the same base name reachable via a -I include root —
+    e.g. lib/rtl/pxxcio's `uses math` must find lib/rtl/math.pas, NOT a
+    -Ilib/crtl/include/math.h. Restricted to .pas/.pp so a C `uses "foo.c"`
+    still resolves through the normal chain. }
+  if (Length(UnitContent) = 0) and (CurUnitDir <> '') and (CurUnitDir <> SourceFileDir) then
+  begin
+    ConcatThree(CurUnitDir, lo, '.pas', path);
+    LoadFile(path, UnitContent);
+    if Length(UnitContent) = 0 then
+    begin
+      ConcatThree(CurUnitDir, lo, '.pp', path);
+      LoadFile(path, UnitContent);
+    end;
+  end;
   if Length(UnitContent) = 0 then
   begin
     ConcatThree(SourceFileDir, lo, '.pas', path);

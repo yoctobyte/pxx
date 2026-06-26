@@ -2101,6 +2101,53 @@ end;
             (idempotent).
   Entry stub (x86-64, matching the pre-existing convention): save rsp, `call
   main`, then exit_group(eax) so main's int return becomes the process code. }
+{ Emit the C setjmp/longjmp primitives as raw machine-code stubs and register
+  them as __pxx_setjmp/__pxx_longjmp (BodyAddr = stub). lua's error model rides
+  setjmp/longjmp; libc's crash here (the jmp_buf arrives NULL through the import),
+  so provide them directly. jmp_buf is `long[16]` in setjmp.h, so the C arg decays
+  to the buffer ADDRESS in rdi. Layout: [0]=rbx [8]=rbp [16]=r12 [24]=r13 [32]=r14
+  [40]=r15 [48]=caller-rsp [56]=return-addr. setjmp returns 0 the first time and
+  the longjmp value when jumped to; longjmp restores and resumes the setjmp call
+  site. x86-64 only (the desktop lua/sqlite path). }
+procedure EmitCSetjmpStubs;
+var sjIdx, ljIdx: Integer;
+    pn: array[0..1] of AnsiString; pt: array[0..1] of TTypeKind;
+begin
+  if TargetArch <> TARGET_X86_64 then Exit;
+  pn[0] := 'env'; pt[0] := tyPointer;
+  sjIdx := RegisterProc('__pxx_setjmp', True, tyInteger, 1, pn, pt);
+  Procs[sjIdx].BodyAddr := CodeLen;
+  EmitB($48); EmitB($89); EmitB($5F); EmitB($00);              { mov [rdi+0], rbx }
+  EmitB($48); EmitB($89); EmitB($6F); EmitB($08);              { mov [rdi+8], rbp }
+  EmitB($4C); EmitB($89); EmitB($67); EmitB($10);              { mov [rdi+16], r12 }
+  EmitB($4C); EmitB($89); EmitB($6F); EmitB($18);              { mov [rdi+24], r13 }
+  EmitB($4C); EmitB($89); EmitB($77); EmitB($20);              { mov [rdi+32], r14 }
+  EmitB($4C); EmitB($89); EmitB($7F); EmitB($28);              { mov [rdi+40], r15 }
+  EmitB($48); EmitB($8D); EmitB($44); EmitB($24); EmitB($08);  { lea rax, [rsp+8] }
+  EmitB($48); EmitB($89); EmitB($47); EmitB($30);              { mov [rdi+48], rax }
+  EmitB($48); EmitB($8B); EmitB($04); EmitB($24);              { mov rax, [rsp] }
+  EmitB($48); EmitB($89); EmitB($47); EmitB($38);              { mov [rdi+56], rax }
+  EmitB($31); EmitB($C0);                                      { xor eax, eax }
+  EmitB($C3);                                                  { ret }
+
+  pn[0] := 'env'; pt[0] := tyPointer; pn[1] := 'val'; pt[1] := tyInteger;
+  ljIdx := RegisterProc('__pxx_longjmp', False, tyInteger, 2, pn, pt);
+  Procs[ljIdx].BodyAddr := CodeLen;
+  EmitB($48); EmitB($8B); EmitB($5F); EmitB($00);              { mov rbx, [rdi+0] }
+  EmitB($48); EmitB($8B); EmitB($6F); EmitB($08);              { mov rbp, [rdi+8] }
+  EmitB($4C); EmitB($8B); EmitB($67); EmitB($10);              { mov r12, [rdi+16] }
+  EmitB($4C); EmitB($8B); EmitB($6F); EmitB($18);              { mov r13, [rdi+24] }
+  EmitB($4C); EmitB($8B); EmitB($77); EmitB($20);              { mov r14, [rdi+32] }
+  EmitB($4C); EmitB($8B); EmitB($7F); EmitB($28);              { mov r15, [rdi+40] }
+  EmitB($48); EmitB($8B); EmitB($67); EmitB($30);              { mov rsp, [rdi+48] }
+  EmitB($48); EmitB($8B); EmitB($4F); EmitB($38);              { mov rcx, [rdi+56] }
+  EmitB($89); EmitB($F0);                                      { mov eax, esi  (val) }
+  EmitB($85); EmitB($C0);                                      { test eax, eax }
+  EmitB($75); EmitB($02);                                      { jnz +2 }
+  EmitB($FF); EmitB($C0);                                      { inc eax  (0 -> 1) }
+  EmitB($FF); EmitB($E1);                                      { jmp rcx }
+end;
+
 procedure ParseCProgram;
 var firstIdx, callPatch, mainIdx: Integer;
 begin
@@ -2125,6 +2172,10 @@ begin
   if (not NoDefaultRtl) and
      (TargetArch <> TARGET_XTENSA) and (TargetArch <> TARGET_RISCV32) then
     ParseUsesUnit('pxxcio');
+
+  { setjmp/longjmp primitives (lua's error model). After the entry stub, before
+    any C body, so __pxx_setjmp/__pxx_longjmp resolve as bodied procs. }
+  EmitCSetjmpStubs;
 
   firstIdx := TokPos - 1;
   CProgramMode := True;

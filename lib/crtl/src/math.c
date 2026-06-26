@@ -41,37 +41,28 @@ double atan(double x)            { return ArcTan(x); }
 
 double fabs(double x) { return x < 0.0 ? -x : x; }
 
-/* frexp: x = m * 2^e, 0.5 <= |m| < 1. Decompose via the double's bit fields. */
+/* frexp: x = m * 2^e with 0.5 <= |m| < 1. Loop form (no bit reinterpret — the C
+   `*(unsigned long*)&double` punning path is unreliable here). */
 double frexp(double x, int *e) {
-  unsigned long bits = *(unsigned long *)&x;
-  int exp = (int)((bits >> 52) & 0x7FF);
-  double m;
-  if (x == 0.0 || exp == 0x7FF) { *e = 0; return x; }   /* 0/inf/nan */
-  if (exp == 0) {                                        /* subnormal: normalise */
-    x = x * 18014398509481984.0;                         /* 2^54 */
-    bits = *(unsigned long *)&x;
-    exp = (int)((bits >> 52) & 0x7FF) - 54;
-  }
-  *e = exp - 1022;
-  bits = (bits & 0x800FFFFFFFFFFFFFUL) | 0x3FE0000000000000UL;   /* exp -> [0.5,1) */
-  m = *(double *)&bits;
-  return m;
+  int n = 0;
+  double a = x < 0.0 ? -x : x;
+  if (x == 0.0) { *e = 0; return 0.0; }
+  while (a >= 1.0) { a = a * 0.5; n++; }
+  while (a <  0.5) { a = a * 2.0; n--; }
+  *e = n;
+  return x < 0.0 ? -a : a;
 }
 
-/* ldexp: x * 2^e. */
+/* ldexp: x * 2^e by repeated doubling/halving (e bounded by the float range). */
 double ldexp(double x, int e) {
-  while (e >  1000) { x = x * 8.98846567431158e307;   e -= 1023; }
-  while (e < -1000) { x = x * 2.2250738585072014e-308; e += 1022; }
-  {
-    unsigned long bits = ((unsigned long)(e + 1023) & 0x7FF) << 52;
-    double p = *(double *)&bits;
-    return x * p;
-  }
+  while (e > 0) { x = x * 2.0; e--; }
+  while (e < 0) { x = x * 0.5; e++; }
+  return x;
 }
 
 double modf(double x, double *ip) {
   double i;
-  if (x < 0.0) { i = -(double)((long)(-x)); } else { i = (double)((long)x); }
+  if (x < 0.0) i = -(double)((long)(-x)); else i = (double)((long)x);
   *ip = i;
   return x - i;
 }
