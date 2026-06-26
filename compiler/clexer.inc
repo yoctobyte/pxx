@@ -192,6 +192,30 @@ begin
   end;
 end;
 
+{ Scan the fractional/exponent/suffix tail of a C float literal that begins at
+  numStart (SrcPos is positioned at the `.` or `e`/`E`), and emit a tkFloat whose
+  IVal carries the IEEE-754 double bit pattern (matching the Pascal lexer). }
+procedure CLexFloatTail(numStart: Integer);
+var fs: AnsiString; valEnd: Integer;
+begin
+  if (SrcPos <= Length(Source)) and (Source[SrcPos] = '.') then
+  begin
+    Inc(SrcPos);
+    while (SrcPos <= Length(Source)) and (Source[SrcPos] in ['0'..'9']) do Inc(SrcPos);
+  end;
+  if (SrcPos <= Length(Source)) and (Source[SrcPos] in ['e','E']) then
+  begin
+    Inc(SrcPos);
+    if (SrcPos <= Length(Source)) and (Source[SrcPos] in ['+','-']) then Inc(SrcPos);
+    while (SrcPos <= Length(Source)) and (Source[SrcPos] in ['0'..'9']) do Inc(SrcPos);
+  end;
+  valEnd := SrcPos;   { value text ends before any f/F/l/L suffix }
+  if (SrcPos <= Length(Source)) and (Source[SrcPos] in ['f','F','l','L']) then Inc(SrcPos);
+  fs := Copy(Source, numStart, valEnd - numStart);
+  CurTok.Kind := tkFloat;
+  CurTok.IVal := StrToDoubleBits(fs);
+end;
+
 procedure CLexOne;
 var
 {$ifdef FPC}
@@ -202,6 +226,7 @@ var
   s: AnsiString;
   n: Int64;
   done: Boolean;
+  numStart, valEnd: Integer;
 begin
   CSkipSpace;
   CurTok.Line := SrcLine; CurTok.SVal := ''; CurTok.IVal := 0;
@@ -224,9 +249,19 @@ begin
 
   if c in ['1'..'9'] then
   begin
+    numStart := SrcPos;
     n := 0;
     while (SrcPos <= Length(Source)) and (Source[SrcPos] in ['0'..'9']) do
       begin n := n * 10 + (Ord(Source[SrcPos]) - 48); Inc(SrcPos); end;
+    { Float literal: a `.` after the digits (`1.5`, `2.`), or an exponent
+      `e`/`E` followed by digits or a sign (`1e308`, `1e-3`). }
+    if ((SrcPos <= Length(Source)) and (Source[SrcPos] = '.')) or
+       ((SrcPos <= Length(Source)) and (Source[SrcPos] in ['e','E']) and
+        (SrcPos < Length(Source)) and (Source[SrcPos+1] in ['0'..'9','+','-'])) then
+    begin
+      CLexFloatTail(numStart);
+      Exit;
+    end;
     { consume an integer suffix (u/U/l/L, e.g. UL/LL/ULL) — else it dangles as a
       separate identifier token and breaks const expressions like `MAX/sizeof(t)` }
     while (SrcPos <= Length(Source)) and (Source[SrcPos] in ['u','U','l','L']) do Inc(SrcPos);
@@ -236,7 +271,17 @@ begin
   { 0, 0x hex, or 0 alone }
   if c = '0' then
   begin
+    numStart := SrcPos;
     Inc(SrcPos);
+    { `0.5` / `0e3` — a float beginning with 0 (but not `0x` hex) }
+    if (SrcPos <= Length(Source)) and
+       ((Source[SrcPos] = '.') or
+        ((Source[SrcPos] in ['e','E']) and (SrcPos < Length(Source)) and
+         (Source[SrcPos+1] in ['0'..'9','+','-']))) then
+    begin
+      CLexFloatTail(numStart);
+      Exit;
+    end;
     if (SrcPos <= Length(Source)) and
        ((Source[SrcPos] = 'x') or (Source[SrcPos] = 'X')) then
     begin

@@ -384,6 +384,8 @@ test-core: $(COMPILER)
 	/tmp/cmacro_paste_b3226; test "$$?" = "42"
 	./$(COMPILER) test/cgoto_label_b33.c /tmp/cgoto_label_b3326
 	/tmp/cgoto_label_b3326; test "$$?" = "42"
+	./$(COMPILER) test/cfloat_literal_b34.c /tmp/cfloat_literal_b3426
+	/tmp/cfloat_literal_b3426; test "$$?" = "42"
 	./$(COMPILER) -Itest/cinc/inc test/cinc/cinc_main.c /tmp/cinc_main26
 	test "$$(/tmp/cinc_main26)" = "$$(printf 'local-ok\ninc-ok')"
 	./$(COMPILER) test/test_declared_directive.pas /tmp/test_declared_directive26

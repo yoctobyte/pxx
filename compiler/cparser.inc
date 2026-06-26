@@ -192,6 +192,15 @@ begin
       Next;
       Result := node;
     end;
+    tkFloat:
+    begin
+      { float literal — IVal carries the IEEE-754 double bit pattern (clexer) }
+      node := AllocNode(AN_FLOAT_LIT);
+      ASTIVal[node] := CurTok.IVal;
+      ASTTk[node] := Ord(tyDouble);
+      Next;
+      Result := node;
+    end;
     tkString:
     begin
       node := AllocNode(AN_STR_LIT);
