@@ -2,6 +2,41 @@
 
 - **Type:** feature (track-C milestone path)
 - **Status:** backlog (active arc — lua core **29/34 files parse clean (85%)**; see logs)
+- **Session 2026-06-26 round 17 (Track A+C combined) — C STDIO RUNS LIBC-FREE
+  VIA THE PASCAL PAL; printf formatting works.** Five commits, all gate-green +
+  self-host byte-identical:
+  - **libc-free byte sink** (39f00929): new `lib/rtl/pxxcio.pas` exports
+    `__pxx_write`/`__pxx_read` wrapping `PalWrite`/`PalRead` (cross-platform PAL,
+    posix/ESP-IDF). ParseCProgram auto-pulls it for every C program (guarded like
+    the Pascal default-RTL pull), emitted after the entry stub. cparser extern
+    decl: a prototype resolving to an already-bodied proc stays internal (binds
+    to the Pascal wrapper, not a libc import). Closes the
+    track-a-c-stdio-needs-pascal-import-and-data-relocs blockers #1 (C imports +
+    links a Pascal routine) and #2 (libc-free byte sink). The chosen design is
+    RTL-reuse, NOT a raw-syscall intrinsic and NOT libc COPY-reloc.
+  - **address-of-global static init** (a28e17e3): `FILE *stdout = &__crtl_stdout`
+    (blocker #3) — PendingInit gains an address-of-sym variant (Elem=-2, target
+    sym in Val) emitting `p:=@g` at main entry. Also fixed C `stderr` colliding
+    with the Pascal `StdErr` const (a C global now shadows a CI-only const hit).
+  - **ternary string-literal segfault** (1bf28aaf): ir.inc AN_TERNARY tyString
+    arm now stays a `tyPointer` in CProgramMode (not managed AnsiString). This
+    was THE printf-engine keystone — stdio.c's `(k=='X')?"0X":"0x"` corrupted
+    `__crtl_vformat`'s frame -> snprintf re-entered ~7400x to stack overflow.
+  - **double vararg** (56de8d5b): float `va_arg` routes through the GP helper
+    (the internal all-GP variadic convention saves floats in the GP area, never
+    the FP area). `va_arg(ap,double)` now receives the value.
+  - RESULT: `fwrite`/`fputs`/`puts`/`fputc` (lua's `lua_writestring` path) AND
+    `printf`/`fprintf` `%d/%x/%s/%c/%p` + width/precision all run libc-free
+    (statically linked, no NEEDED libc) and match gcc.
+  - **REMAINING for running lua with IO:** (a) `%f`/`%g` decimal formatting —
+    the vararg double arrives, but the engine's float->decimal MATH is blocked by
+    **bug-c-float-int-cast-and-spill**: `(int)42.5`==0 (C numeric float<->int cast
+    is a bit-reinterpret AN_PTR_CAST, must route to a real cvttsd2si/cvtsi2sd
+    conversion — per-backend, Track A) AND a computed double subtract/compare in
+    a loop spills wrong (xmm liveness across branches, Track A). (b) **global
+    array-of-struct init** (luaL_Reg registration tables) — blocker #4, still
+    BSS-zeroed; Track A. lua not staged in this checkout (gitignored vendor src)
+    — re-fetch lua-5.4.7 to retest end-to-end.
 - **Session 2026-06-26 round 16 (Track C), gate-green + byte-identical, lua 27 ->
   29:** inline anonymous struct/union as a TYPE (f5ef8ec) — `struct { .. }` /
   `union { .. }` with an inline body in type position (global var / param / field)
