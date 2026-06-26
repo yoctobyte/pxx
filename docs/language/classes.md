@@ -115,10 +115,108 @@ Rex says Woof
 `a` is typed `TAnimal` but holds a `TDog`; `a.Speak` resolves to `TDog.Speak`
 through the virtual method table.
 
-## Interfaces
+## Interfaces (CORBA-style)
 
-PXX also supports interfaces (reference-counted abstract contracts a class can
-implement). Cast with `as` and test with `is`.
+PXX supports CORBA-style interfaces on all targets, matching the behavior of Free Pascal's `{$interfaces corba}` mode.
+
+### Key Characteristics
+
+- **No automatic reference counting**: Unlike COM-style interfaces, CORBA-style interfaces in PXX do not perform automatic reference counting (ARC). There is no implicit `_AddRef` or `_Release` call, and the compiler does not automatically free implementing class instances when interface references go out of scope. You must manage the lifecycle of the underlying class instances manually.
+- **Fat pointers**: An interface value is represented internally as a two-word fat pointer containing:
+  1. A pointer to the interface method table (IMT).
+  2. A pointer to the underlying class instance.
+- **Interface inheritance**: Interfaces can inherit from other interfaces. A class implementing a derived interface must implement all methods of that interface and its ancestors.
+- **Implicit coercion**: A class instance can be assigned directly to an interface variable of an interface it implements, or passed to a routine parameter expecting that interface. The compiler performs the coercion automatically.
+- **Checked casting & type checks**:
+  - Use `obj is IMyInterface` to check if a class instance implements an interface.
+  - Use `obj as IMyInterface` to cast a class instance to an interface. A failed cast traps at runtime.
+  - Comparing interface values (`iface1 = iface2`) or comparing against `nil` (`iface1 = nil`) is fully supported.
+  - Interface-to-class casting is not supported.
+
+### Interfaces Example
+
+The following example compiles and runs on the pinned compiler:
+
+```pascal
+program interfaces_demo;
+
+type
+  IReadable = interface
+    function ReadStr: string;
+  end;
+
+  IWritable = interface
+    procedure WriteStr(const S: string);
+  end;
+
+  // Interface inheritance
+  IDocument = interface(IReadable)
+    function GetTitle: string;
+  end;
+
+  // TDocument implements IDocument (and implicitly IReadable) and IWritable
+  TDocument = class(IDocument, IWritable)
+  private
+    FTitle: string;
+    FContent: string;
+  public
+    constructor Create(const ATitle: string);
+    function ReadStr: string;
+    function GetTitle: string;
+    procedure WriteStr(const S: string);
+  end;
+
+constructor TDocument.Create(const ATitle: string);
+begin
+  FTitle := ATitle;
+  FContent := '';
+end;
+
+function TDocument.ReadStr: string;
+begin
+  Result := FContent;
+end;
+
+function TDocument.GetTitle: string;
+begin
+  Result := FTitle;
+end;
+
+procedure TDocument.WriteStr(const S: string);
+begin
+  FContent := S;
+end;
+
+var
+  doc: TDocument;
+  reader: IReadable;
+  writer: IWritable;
+begin
+  doc := TDocument.Create('PXX Design Manual');
+
+  // Implicit coercion on assignment
+  writer := doc;
+  writer.WriteStr('CORBA-style interfaces are lightweight.');
+
+  // Checked casting via 'as'
+  reader := doc as IReadable;
+  writeln(doc.GetTitle, ': ', reader.ReadStr);
+
+  // Type checking via 'is'
+  if doc is IDocument then
+    writeln('doc implements IDocument');
+
+  // Clean up the class instance manually
+  doc.Free;
+end.
+```
+
+Output:
+
+```
+PXX Design Manual: CORBA-style interfaces are lightweight.
+doc implements IDocument
+```
 
 ## Next
 

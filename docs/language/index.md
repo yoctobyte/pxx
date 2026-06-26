@@ -20,6 +20,9 @@ language surface as the compiler actually accepts it.
   arrays, enumerations.
 - [Classes & interfaces](./classes.md) — fields, methods, virtual/override,
   constructors, properties.
+- [Generics](./generics.md) — generic functions, generic classes, and explicit
+  named specialization.
+- [Exceptions](./exceptions.md) — try/except/finally blocks, raising, and unwinding.
 - [PXX dialect](./dialect.md) — extensions and deliberate PXX-specific surface.
 - [FPC compatibility](./fpc-compatibility.md) — what matches FPC, what does not,
   and how to write portable code.
@@ -27,4 +30,4 @@ language surface as the compiler actually accepts it.
 ## Planned
 
 - Properties in depth — indexed (array) and `default` properties.
-- Generics, exceptions, sets, variants.
+- Sets, variants.
