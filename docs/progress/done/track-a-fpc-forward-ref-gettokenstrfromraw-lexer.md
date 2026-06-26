@@ -1,4 +1,5 @@
 # FPC bootstrap: GetTokenStrFromRaw used in lexer.inc before its parser.inc definition
+- **Status:** DONE (2026-06-26, Track A, pin v81)
 
 - **Type:** bug (Track A — shared lexer/parser include-order; FPC single-pass
   compliance). Surfaced on `feat/cfront`.
@@ -42,3 +43,6 @@ so no reseed beyond the normal pin.
 ## Acceptance
 `make bootstrap` and `make test-fpc` compile clean; self-host still
 byte-identical.
+
+## Resolution (2026-06-26, Track A)
+Moved `GetTokenStrFromRaw` from parser.inc to lexer.inc (after AppendChar, outside the FPC/pxx ifdef), ahead of its lexer.inc diagnostic use and the parser.inc uses. FPC cold-start (`make bootstrap`) and self-host both green; behaviour-neutral; re-pinned v81.
