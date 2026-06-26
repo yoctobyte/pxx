@@ -411,14 +411,8 @@ procedure ParseOperatorDef; forward;
 procedure ParseNestedRoutine; forward;
 procedure FlushPendingNestedProcs; forward;
 
-function GetTokenStrFromRaw(off, len: Integer): AnsiString;
-var s: AnsiString; i: Integer;
-begin
-  s := '';
-  for i := 0 to len - 1 do
-    AppendChar(s, TokChars[off + i]);
-  Result := s;
-end;
+{ GetTokenStrFromRaw moved up to lexer.inc (before its lexer.inc use) for FPC
+  declaration-order; see there. }
 
 function FindClassVar(ci: Integer; const name: AnsiString): Integer;
 { Class-variable lookup by (class ci, name), walking up the parent chain so a

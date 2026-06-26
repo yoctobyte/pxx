@@ -267,6 +267,19 @@ begin
 end;
 {$endif}
 
+{ Token text from the TokChars pool (off, len). Defined here in lexer.inc —
+  before its lexer.inc diagnostic use and the parser.inc uses — so FPC's
+  declaration-before-use is satisfied (the pxx self-host prescan is order-
+  agnostic, so it built either way). Moved up from parser.inc. }
+function GetTokenStrFromRaw(off, len: Integer): AnsiString;
+var s: AnsiString; i: Integer;
+begin
+  s := '';
+  for i := 0 to len - 1 do
+    AppendChar(s, TokChars[off + i]);
+  Result := s;
+end;
+
 {$ifdef FPC}
 function StrToDoubleBits(const s: AnsiString): Int64;
 var d: Double; code: Integer;
