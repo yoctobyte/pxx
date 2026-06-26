@@ -135,6 +135,39 @@ begin
 end;
 ```
 
+## Variants
+
+PXX supports a built-in `Variant` type. A `Variant` can hold values of different types dynamically (such as integers, characters, real numbers, booleans, and strings) and can change its type at runtime through reassignment.
+
+### Key Characteristics
+
+- **Dynamic Typing**: Assigning a value to a `Variant` boxes the value and updates the variant's internal type tag.
+- **Automatic Conversion**: PXX automatically converts between compatible types during assignment or operations.
+- **Operations**: You can perform arithmetic (`+`, `-`, `*`, `/`, `div`, `mod`) and comparisons (`=`, `<`, `>`, etc.) directly on `Variant` variables. The operation resolves dynamically based on the operand types at runtime.
+- **String Support**: Variants can hold managed Pascal strings (`AnsiString`) and support concatenation and comparison.
+
+> [!NOTE]
+> In this dialect, boolean values stored in a `Variant` print as `0` for `False` and `1` for `True` when using `writeln`.
+
+```pascal
+var
+  v, w: Variant;
+begin
+  v := 42;      { v holds Integer }
+  writeln(v);   { prints 42 }
+  
+  v := 'Q';     { v now holds Char }
+  writeln(v);   { prints Q }
+  
+  v := 3.14;    { v now holds Double }
+  writeln(v);   { prints 3.14 }
+  
+  v := 'hello ';
+  w := 'world';
+  writeln(v + w); { prints "hello world" }
+end;
+```
+
 ## Putting it together
 
 ```pascal
@@ -156,6 +189,7 @@ var
   p: TPoint;
   ptr: ^Integer;
   letters: TCharSet;
+  v: Variant;
 begin
   i := -42;
   b := 255;
@@ -175,6 +209,9 @@ begin
   letters := ['a', 'b', 'c'];
   letters := letters + ['d'] - ['a'];
   
+  // Variant demo
+  v := 'variant string';
+  
   writeln(i, ' ', b, ' ', f:0:1, ' ', Ord(c));
   writeln(s, ' len=', Length(s));
   writeln(fixed[2], ' ', dyn[1], ' ', Length(dyn));
@@ -182,6 +219,7 @@ begin
   writeln('ptr^: ', ptr^);
   if 'b' in letters then writeln('b in set');
   if not ('a' in letters) then writeln('a not in set');
+  writeln('v: ', v);
 end.
 ```
 
@@ -195,6 +233,7 @@ pxx len=3
 ptr^: 100
 b in set
 a not in set
+v: variant string
 ```
 
 ## Next

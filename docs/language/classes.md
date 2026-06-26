@@ -55,12 +55,89 @@ type
 
 ## Properties
 
-A `property` exposes a field through `read`/`write` accessors (a field name or a
-method). Read-only properties omit `write`. Indexed (`array`) and `default`
-properties are also supported.
+Properties expose class fields or methods using an intuitive, field-like syntax while maintaining encapsulation. In PXX, properties can be backed directly by fields or by getter/setter methods.
+
+### Field-Backed vs. Method-Backed Properties
+
+- **Field-Backed**: Backed directly by a private or protected field. Reading or writing to the property directly accesses the field.
+- **Method-Backed**: Backed by a getter function and/or a setter procedure. The getter must return the property type; the setter must accept the property type as its last parameter.
 
 ```pascal
-property Name: string read FName;
+type
+  TWidget = class
+  private
+    FValue: Integer;
+    function GetValue: Integer;
+    procedure SetValue(AValue: Integer);
+  public
+    // Field-backed property (read-only in this case)
+    property RawValue: Integer read FValue;
+    
+    // Method-backed property
+    property Value: Integer read GetValue write SetValue;
+  end;
+```
+
+### Indexed (Array) Properties
+
+Indexed properties act like arrays but are backed by getter and setter methods that accept one or more index parameters. They are declared with index specifications inside brackets.
+
+- **Declaration**: `property Name[Index: Type]: Type read Getter write Setter;`
+- The getter method must accept the index parameters as its first arguments.
+- The setter method must accept the index parameters as its first arguments, followed by the value to write.
+
+```pascal
+type
+  TIntArray = class
+  private
+    FItems: array of Integer;
+    function GetItem(Index: Integer): Integer;
+    procedure SetItem(Index: Integer; Value: Integer);
+  public
+    // Single-index property
+    property Items[Index: Integer]: Integer read GetItem write SetItem;
+  end;
+```
+
+Multi-index properties are also supported:
+
+```pascal
+type
+  TGrid = class
+  private
+    function GetCell(Row, Col: Integer): Integer;
+    procedure SetCell(Row, Col: Integer; Value: Integer);
+  public
+    // Multi-index property
+    property Cells[Row, Col: Integer]: Integer read GetCell write SetCell;
+  end;
+```
+
+### Default Properties
+
+If an indexed property is marked with the `default;` directive, it becomes the **default property** of the class. This allows you to index the class instance directly, omitting the property name entirely.
+
+- A class can have at most one default property.
+- The default property must be an indexed property.
+
+```pascal
+type
+  TList = class
+  private
+    FItems: array of string;
+    function GetItem(Index: Integer): string;
+    procedure SetItem(Index: Integer; const Value: string);
+  public
+    property Items[Index: Integer]: string read GetItem write SetItem; default;
+  end;
+...
+var
+  L: TList;
+begin
+  L := TList.Create;
+  L[0] := 'hello';       { equivalent to L.Items[0] := 'hello' }
+  writeln(L[0]);         { equivalent to writeln(L.Items[0]) }
+end;
 ```
 
 ## Full example

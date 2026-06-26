@@ -17,17 +17,12 @@ language surface as the compiler actually accepts it.
 - [Pascal basics](./pascal-basics.md) — program structure, declarations,
   statements, routines, and units.
 - [Types](./types.md) — ordinals, floats, strings, records, dynamic and fixed
-  arrays, enumerations.
+  arrays, enumerations, sets, pointers, and variants.
 - [Classes & interfaces](./classes.md) — fields, methods, virtual/override,
-  constructors, properties.
+  constructors, and properties (including indexed and default properties).
 - [Generics](./generics.md) — generic functions, generic classes, and explicit
   named specialization.
 - [Exceptions](./exceptions.md) — try/except/finally blocks, raising, and unwinding.
 - [PXX dialect](./dialect.md) — extensions and deliberate PXX-specific surface.
 - [FPC compatibility](./fpc-compatibility.md) — what matches FPC, what does not,
   and how to write portable code.
-
-## Planned
-
-- Properties in depth — indexed (array) and `default` properties.
-- Sets, variants.
