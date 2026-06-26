@@ -1258,7 +1258,20 @@ begin
       if CurTok.Kind = tkAssign then
       begin
         Next;
-        initExpr := ParseCExpr;
+        if CurTok.Kind = tkBegin then
+        begin
+          { Aggregate initializer `= { ... }` on a non-array local (e.g.
+            `static const expdesc ef = {VKINT, {0}, ...}`): not yet materialised,
+            balanced-brace skip so inner commas/braces don't end it early. }
+          arrLen := 0;   { reuse as brace depth }
+          repeat
+            if CurTok.Kind = tkBegin then Inc(arrLen)
+            else if CurTok.Kind = tkEnd then Dec(arrLen);
+            Next;
+          until (arrLen = 0) or (CurTok.Kind = tkEOF);
+        end
+        else
+          initExpr := ParseCExpr;
       end;
       if initExpr >= 0 then
       begin
