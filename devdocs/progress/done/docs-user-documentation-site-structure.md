@@ -2,7 +2,7 @@
 
 - **Type:** docs
 - **Track:** D
-- **Status:** working
+- **Status:** done
 - **Owner:** Codex (Track D)
 - **Opened:** 2026-06-26 (user documentation track)
 
@@ -49,3 +49,4 @@ its own `index.md` to order chapters within that topic.
   compilation, and cross-language notes.
 - 2026-06-26 — Renamed public website docs from `docs/` to `docs/` and moved the
   previous internal docs tree to `devdocs/`.
+- 2026-06-26 — resolved, commit 9362fb47.

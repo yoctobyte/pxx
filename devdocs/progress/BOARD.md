@@ -8,11 +8,9 @@ lives in git, not in a timestamp._
 
 _none_
 
-## working (1)
+## working (0)
 
-| Ticket | Track | Type | Summary | Blocked-by |
-| --- | --- | --- | --- | --- |
-| docs-user-documentation-site-structure | D | docs | User documentation site structure and first content pass | — |
+_none_
 
 ## unfinished (4)
 
@@ -131,7 +129,7 @@ _none_
 | feature-mimic-fpc | B | feature | `mimic FPC` compatibility mode | — |
 | feature-string-model-tyfixedstring | B | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (301)
+## done (302)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -274,6 +272,7 @@ _none_
 | chore-qemu-test-env | A | chore | QEMU cross-target test environment | — |
 | chore-repin-new-intrinsics | A | chore | chore: re-pin stable to expose the new System intrinsics to Track B | — |
 | chore-stable-binary-single-file-no-version-churn | A | chore | Stable binary: fixed-name overwrite (kill `vN` churn + the dangling-symlink trap) | — |
+| docs-user-documentation-site-structure | D | docs | User documentation site structure and first content pass | — |
 | feature-aarch64-asm-emitter | A | feature | AArch64 text-assembler (`EmitAsmA64`) for cleaner ARM64 codegen | — |
 | feature-abs-sqr-intrinsics | A | feature | `Abs` / `Sqr` System intrinsics missing | — |
 | feature-adventure-scene-asset-pipeline | B | feature | Adventure scene asset pipeline | feature-image-ascii-renderer-library |
