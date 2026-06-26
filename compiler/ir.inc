@@ -2476,7 +2476,25 @@ begin
       end
       else
       begin
-        if ((ASTIVal[node] = Ord(tkPlus)) or (ASTIVal[node] = Ord(tkMinus))) and
+        if (ASTIVal[node] = Ord(tkMinus)) and
+           (IntToTypeKind(ASTTk[ASTLeft[node]]) = tyPointer) and
+           (IntToTypeKind(ASTTk[ASTRight[node]]) = tyPointer) then
+        begin
+          { Pointer difference `p - q` = (address_p - address_q) / sizeof(element)
+            (C ptrdiff). Both operands are pointers; subtract addresses then divide
+            by the element stride. }
+          left := IRLowerAST(ASTLeft[node]);
+          right := IRLowerAST(ASTRight[node]);
+          Result := IRAppend(IR_BINOP, left, right, Ord(tkMinus), 0, Ord(tyInt64));
+          elemSize := IRPointerStride(ASTLeft[node]);
+          if elemSize > 1 then
+          begin
+            item := IRAppend(IR_CONST_INT, -1, -1, -1, elemSize, Ord(tyInt64));
+            { tkDiv = integer division (tkSlash is the float `/` path) }
+            Result := IRAppend(IR_BINOP, Result, item, Ord(tkDiv), 0, Ord(tyInt64));
+          end;
+        end
+        else if ((ASTIVal[node] = Ord(tkPlus)) or (ASTIVal[node] = Ord(tkMinus))) and
            (IntToTypeKind(ASTTk[ASTLeft[node]]) = tyPointer) and
            TypeIsOrdinal(IntToTypeKind(ASTTk[ASTRight[node]])) then
         begin

@@ -400,6 +400,8 @@ test-core: $(COMPILER)
 	/tmp/cmacro_stringize_b4026; test "$$?" = "42"
 	./$(COMPILER) test/cagg_init_local_b41.c /tmp/cagg_init_local_b4126
 	/tmp/cagg_init_local_b4126; test "$$?" = "42"
+	./$(COMPILER) test/cptr_diff_b42.c /tmp/cptr_diff_b4226
+	/tmp/cptr_diff_b4226; test "$$?" = "42"
 	./$(COMPILER) -Itest/cinc/inc test/cinc/cinc_main.c /tmp/cinc_main26
 	test "$$(/tmp/cinc_main26)" = "$$(printf 'local-ok\ninc-ok')"
 	./$(COMPILER) test/test_declared_directive.pas /tmp/test_declared_directive26
