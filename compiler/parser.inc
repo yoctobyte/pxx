@@ -3123,6 +3123,31 @@ begin
     begin
       node := AllocNode(AN_INT_LIT); ASTIVal[node] := 0; ASTTk[node] := Ord(tyPointer); CurASTNode := node; Next; LastExprTk := tyPointer;
     end;
+    tkIf:
+    begin
+      { Conditional EXPRESSION `if c then a else b` (the value-bearing form the C
+        frontend's ternary `c ? a : b` lowers to). Reached only in expression
+        position: a statement-leading `if` is parsed by ParseStatementAST before
+        any factor, so this never shadows the if-statement. `else` is mandatory —
+        an expression must yield a value. Arms are full expressions; parenthesize
+        when embedding in a larger one. Result type = the then-arm's type. }
+      Next;                          { consume 'if' }
+      ParseExpr; left := CurASTNode; { condition }
+      Expect(tkThen, 'then');
+      ParseExpr; identNode := CurASTNode; tk := LastExprTk;  { then-arm }
+      Expect(tkElse, 'else');
+      ParseExpr; addrNode := CurASTNode;                     { else-arm }
+      { A frozen string-literal arm types as tyString; carry the result as a
+        managed AnsiString (managed-default) so it has a real handle downstream
+        (writeln arg, assignment) — the IR per-arm assign coerces the literal. }
+      if tk = tyString then tk := tyAnsiString;
+      valNode := AllocNode(AN_PAIR);
+      ASTLeft[valNode] := identNode; ASTRight[valNode] := addrNode;
+      node := AllocNode(AN_TERNARY);
+      ASTLeft[node] := left; ASTRight[node] := valNode;
+      ASTTk[node] := Ord(tk);
+      CurASTNode := node; LastExprTk := tk;
+    end;
     tkDefault:
     begin
       node := AllocNode(AN_DEFAULT);

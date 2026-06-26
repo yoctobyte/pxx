@@ -177,6 +177,15 @@ const
   AN_SET_CONST_REF = 66; { named set constant used as a value: ASTIVal = Data[]
                            offset of the baked 32-byte mask. Lowers to IR_SET_LIT
                            (same blob-address value a set literal yields). }
+  AN_TERNARY       = 67; { value-bearing conditional expression `c ? a : b`
+                           (C frontend) / `if c then a else b` expression form.
+                           Left = condition; Right = AN_PAIR(then-arm, else-arm).
+                           ASTTk = result type. Short-circuit: only the selected
+                           arm is evaluated. Lowers to JUMP_IF_FALSE/labels with
+                           each arm stored into one hidden temp, yielding a load
+                           (see ir.inc). Pascal's own parser only emits it for the
+                           explicit if-expression; never in compiler source, so
+                           self-host stays byte-identical. }
   AN_METACLASS_NEW = 65; { metaclass-dispatched construction `classRefVar.Create(..)`:
                            Left = AN_ARG chain of explicit ctor args (NO Self);
                            Right = classref value node (yields the RTTI blob ptr);

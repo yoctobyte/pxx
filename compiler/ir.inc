@@ -3355,6 +3355,49 @@ begin
       Result := IRAppend(IR_BLOCK, first, endLabelNode, -1, 0, 0);
     end;
 
+    AN_TERNARY:
+    begin
+      { Value-bearing conditional `c ? a : b` / `if c then a else b`. Mirror the
+        AN_IF control flow but store each arm into one hidden temp and yield a
+        load of it — so the selected arm's side effects run (short-circuit) and
+        the expression has a value. Scalar/ordinal/pointer/float result types
+        (what C ternary and the if-expression yield); a managed-arm form would
+        need the retain/release assign path and is deferred (slice 2). }
+      pairNode := ASTRight[node];
+      argTk := IntToTypeKind(ASTTk[node]);
+      if argTk = tyUnknown then argTk := tyInteger;
+      { A string-literal arm types as frozen tyString, which has inline [N]
+        storage and no usable handle slot for a temp. Carry the result as a
+        managed AnsiString instead — the per-arm assignment coerces the frozen
+        literal into the managed temp, and the load yields a real handle. }
+      if argTk = tyString then argTk := tyAnsiString;
+      if argTk = tyRecord then LastTypeRecId := ResolveNodeRec(ASTLeft[pairNode]);
+      varIdx := AllocVar('', argTk);
+      if argTk = tyRecord then Syms[varIdx].RecName := LastTypeRecId;
+      { Managed/aggregate result temp: the per-arm AN_ASSIGN delegation below
+        releases the dest's old managed fields before copy, so the temp must be
+        nil-inited (allocated post-prologue) — same rule as other hidden temps. }
+      if (argTk = tyAnsiString) or (argTk = tyString) or TypeIsAggregate(argTk) then
+        SymIsHiddenArgTemp[varIdx] := True;
+      elseLabel := IRNewLabel;
+      endLabel := IRNewLabel;
+      condNode := IRLowerAST(ASTLeft[node]);
+      first := IRAppend(IR_JUMP_IF_FALSE, elseLabel, condNode, -1, 0, 0);
+      { Each arm: lower `temp := arm` through the ordinary assignment path so
+        scalar, string (ARC), and record (managed copy) results all work and the
+        selected arm's side effects run (short-circuit). }
+      lhsNode := AllocNode(AN_IDENT); ASTIVal[lhsNode] := varIdx; ASTTk[lhsNode] := Ord(argTk);
+      argNode := AllocNode(AN_ASSIGN); ASTLeft[argNode] := lhsNode; ASTRight[argNode] := ASTLeft[pairNode];
+      IRMarkStatementNode(IRLowerAST(argNode));
+      IRAppend(IR_JUMP, endLabel, -1, -1, 0, 0);
+      IRAppend(IR_LABEL, -1, -1, -1, elseLabel, 0);
+      lhsNode := AllocNode(AN_IDENT); ASTIVal[lhsNode] := varIdx; ASTTk[lhsNode] := Ord(argTk);
+      argNode := AllocNode(AN_ASSIGN); ASTLeft[argNode] := lhsNode; ASTRight[argNode] := ASTRight[pairNode];
+      IRMarkStatementNode(IRLowerAST(argNode));
+      IRAppend(IR_LABEL, -1, -1, -1, endLabel, 0);
+      Result := IRAppend(IR_LOAD_SYM, varIdx, -1, -1, 0, Ord(argTk));
+    end;
+
     AN_WHILE:
     begin
       startLabel := IRNewLabel;
