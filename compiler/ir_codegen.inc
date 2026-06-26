@@ -1409,7 +1409,7 @@ var left, right, valNode, symIdx, si, nextJmp2, pNil: Integer;
     itemNode, trueCount, nextJmp, falseJmp: Integer;
     trueJumps: array[0..127] of Integer;
     raiseClass: Integer;
-    intIdx, sseIdx, nArgs, mStack, padBytes, extIdx, restoreOff: Integer;
+    intIdx, sseIdx, nArgs, mStack, padBytes, extIdx, restoreOff, vaPopN: Integer;
     argIsSse: array[0..15] of Boolean;
     argIsStack: array[0..15] of Boolean;
     argRegIdx: array[0..15] of Integer;
@@ -3031,13 +3031,31 @@ begin
               argNode := IRB[argNode];
               Inc(i);
             end;
+            nArgs := i;   { args actually pushed (== ParamCount unless variadic) }
+            { A variadic callee receives MORE args than declared params; pop all
+              of them (up to 6) into SysV registers so its register-save prologue
+              captures every variadic arg. nArgs == ParamCount for every
+              non-variadic call, so Pascal / non-variadic codegen is unchanged. }
+            if (procIdx >= 0) and ProcVariadic[procIdx] then
+            begin
+              vaPopN := nArgs; if vaPopN > 6 then vaPopN := 6;
+              for i := vaPopN - 1 downto 0 do
+                case i of
+                  0: EmitB($5F); { pop rdi }
+                  1: EmitB($5E); { pop rsi }
+                  2: EmitB($5A); { pop rdx }
+                  3: EmitB($59); { pop rcx }
+                  4: begin EmitB($41); EmitB($58); end; { pop r8 }
+                  5: begin EmitB($41); EmitB($59); end; { pop r9 }
+                end;
+            end
             { More than 6 params: all-stack internal convention — leave the
               left-to-right pushes in place for the callee (which reads
               [rbp+16+(n-1-i)*8]) and clean up after the call. The register
               pop loop below has no case arm past r9, so it used to pop the
               wrong (topmost) args into the registers and leak the rest
               (bug-many-param-call-corruption). }
-            if Procs[procIdx].ParamCount <= 6 then
+            else if Procs[procIdx].ParamCount <= 6 then
               for i := Procs[procIdx].ParamCount - 1 downto 0 do
                 case i of
                   0: EmitB($5F); { pop rdi }
@@ -3053,7 +3071,15 @@ begin
               EmitB($49); EmitB($89); EmitB($C2);     { mov r10, rax }
             end;
             EmitCallProc(procIdx);
-            if Procs[procIdx].ParamCount > 6 then
+            if (procIdx >= 0) and ProcVariadic[procIdx] then
+            begin
+              if nArgs > 6 then
+              begin
+                EmitB($48); EmitB($81); EmitB($C4);   { add rsp, (nArgs-6)*8 }
+                EmitI32((nArgs - 6) * 8);
+              end;
+            end
+            else if Procs[procIdx].ParamCount > 6 then
             begin
               EmitB($48); EmitB($81); EmitB($C4);     { add rsp, n*8 }
               EmitI32(Procs[procIdx].ParamCount * 8);
