@@ -1862,6 +1862,23 @@ begin
           Next;
         until (depth = 0) or (CurTok.Kind = tkEOF);
       end
+      else if (not wasArr) and (idx >= 0) and (baseTk <> tyRecord) and
+              (baseTk <> tyPointer) and TypeIsOrdinal(baseTk) and
+              (CurTok.Kind = tkInteger) and (Tokens[TokPos].Kind in [tkComma, tkSemicolon]) and
+              (PendingInitCount < MAX_PENDING_INITS) then
+      begin
+        { Scalar ordinal global `T x = <int literal>;` -> a direct PendingInit
+          assign (no field offset, so the by-name emission path is unaffected),
+          run at the start of main. Anything more complex falls through to skip. }
+        PendingInitSym[PendingInitCount]  := idx;
+        PendingInitElem[PendingInitCount] := -1;
+        PendingInitFOff[PendingInitCount] := -1;
+        PendingInitFLen[PendingInitCount] := 0;
+        PendingInitVal[PendingInitCount]  := CurTok.IVal;
+        PendingInitTk[PendingInitCount]   := Ord(baseTk);
+        Inc(PendingInitCount);
+        Next;
+      end
       else
         while (CurTok.Kind <> tkComma) and (CurTok.Kind <> tkSemicolon) and
               (CurTok.Kind <> tkEOF) do Next;
