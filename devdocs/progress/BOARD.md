@@ -29,24 +29,23 @@ _none_
 | --- | --- | --- | --- | --- |
 | feature-c-runtime-library | C | feature | C runtime/library layer (`lib/crtl`) plus direct C-library packages | feature-c-source-frontend |
 
-## backlog (62)
+## backlog (61)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
 | bug-c-addr-of-unsupported-ir | A | bug | C `&` of certain operands lowers to IR_UNSUPPORTED (codegen crash) | — |
-| bug-c-float-int-cast-and-spill | A | bug | C: int<->float numeric cast + computed-double spill across branches | — |
 | bug-c-libc-data-symbol-stdio | A | bug | C stdio must ride pxx syscalls (libc-free), not import libc | — |
 | bug-c-sizeof-string-literal | C | bug | C `sizeof("string literal")` returns pointer size, not array size | — |
 | bug-paramless-self-recursion-silent-result-read | A | bug | Paramless self-recursion reads own Result silently — no diagnostic | — |
 | chore-inc-to-units | A | chore | `.inc` → real `.pas` units refactor | — |
 | chore-runtime-emission-size | A | chore | Finer runtime-support emission (code size) | — |
 | feature-arm32-large-aggregate-result | A | feature | arm32: support record function results larger than 4 param words (sret) | — |
+| feature-cdecl-indirect-cross-targets | A | feature | Port cdecl indirect calls (dynamic library loading) to the other targets | — |
 | feature-c-header-import-complex | C | feature | Import C headers for complex libraries (glib/GTK-grade) | — |
+| feature-copy-intrinsic | B | feature | `Copy` as a generic overloaded intrinsic (string + dynarray families) | — |
 | feature-c-regex-library-devtest | C | feature | C regex library dev-test import | — |
 | feature-c-source-frontend | C | feature | C source frontend — compile C function bodies (statements + expressions) | feature-cross-target-feature-parity |
 | feature-c-varargs-design | A | feature | C varargs (va_list / va_start / va_arg) — implementation design | — |
-| feature-cdecl-indirect-cross-targets | A | feature | Port cdecl indirect calls (dynamic library loading) to the other targets | — |
-| feature-copy-intrinsic | B | feature | `Copy` as a generic overloaded intrinsic (string + dynarray families) | — |
 | feature-demo-chess | B | feature | Flagship demo — chess engine (real-world app + cross-target oracle + benchmark) | — |
 | feature-demo-mandelbrot-gui-threaded | B | feature | Demo — GUI Mandelbrot, multithreaded tiled zoom | — |
 | feature-demo-mandelbrot | B | feature | Demo — zoomable Mandelbrot explorer | — |
@@ -59,8 +58,8 @@ _none_
 | feature-eliah-shell | B | feature | feature: Eliah shell — perspective-based IDE (one window, splitter-tree layout) | — |
 | feature-embed-dwscript-rtti | B | feature | DWScript — compile under pxx + RTTI auto-bind (scripting stress test) | — |
 | feature-embed-pascal-script | B | feature | RemObjects Pascal Script — compile under pxx (embeddable scripting) | — |
-| feature-esp-peripheral-callback-api | B | feature | ESP32 peripheral callback API (timer / GPIO / ADC) — the user-facing "interrupt" | — |
 | feature-esp32-idf-xtensa | A | feature | ESP-IDF integration: Xtensa (ESP32-S2/S3) — QEMU + real hardware | — |
+| feature-esp-peripheral-callback-api | B | feature | ESP32 peripheral callback API (timer / GPIO / ADC) — the user-facing "interrupt" | — |
 | feature-flexcolumn-directive | A | feature | `flexcolumn` calling-convention directive | chore-inc-to-units |
 | feature-gui-real-window-xvfb-smoke | B | feature | feature — real-window auto-closing GUI smoke (solitaire / eliah) + xvfb in gui-test | — |
 | feature-ilja-tui | B | feature | Ilja — TUI (ANSI) face | feature-eliah-m1-designer |
@@ -72,8 +71,8 @@ _none_
 | feature-move-fillchar-intrinsics | B | feature | Move / FillChar as compiler intrinsics (future optimization) | — |
 | feature-net-lib-cross-target | A | feature | net lib cross-target build matrix — i386 + arm32 backend gaps | — |
 | feature-networking | B | feature | Networking runtime | — |
-| feature-nil-python-frontend | A | feature | Nil Python frontend (`.npy`) | — |
 | feature-nilpy-idf-import | A | feature | nilpy includes anything from ESP-IDF and it just works | feature-c-source-frontend, feature-esp32-idf-xtensa |
+| feature-nil-python-frontend | A | feature | Nil Python frontend (`.npy`) | — |
 | feature-object-reference-type | A | feature | `object` — a rooted object-reference type | — |
 | feature-optimization-levels | A | feature | Optimization levels (`-O0/-O1/-O2/-O3/-Os`) + pass framework | — |
 | feature-pal-esp-lwip-sockaddr-readback | B | feature | PAL esp/lwIP: getsockname & recvfrom return an unfilled (zero) sockaddr | — |
@@ -84,9 +83,9 @@ _none_
 | feature-release-packaging | B | feature | Release packaging, reproducibility manifest, and `release.sh` | — |
 | feature-synapse-compile-check | B | feature | Synapse library — proper compile check (Track B) | feature-mimic-fpc |
 | feature-threadsafe-io-serialization | A | feature | Statement-level I/O serialization under threads | feature-unified-heap-allocator |
+| feature-tls13-from-scratch | B | feature | TLS 1.3 from scratch — syscall-only (Pascal handshake + kTLS bulk) | — |
 | feature-tls-provider-abstraction | B | feature | TLS provider abstraction — pluggable backends (OpenSSL + handrolled) | — |
 | feature-tls-system-trust-store | B | feature | Chain-to-system-trust-store (/etc/ssl/certs) for the TLS client | — |
-| feature-tls13-from-scratch | B | feature | TLS 1.3 from scratch — syscall-only (Pascal handshake + kTLS bulk) | — |
 | feature-toolchain-cli-ux | A | feature | Toolchain CLI / user tooling (install, config, discovery, doctor, selfcheck) | — |
 | feature-writeln-as-library | B | feature | write/writeln as a library function (via `array of const` + variadic sugar) | — |
 | feature-xtensa-stack-args-over-6-words | A | feature | xtensa: support calls/definitions with more than 6 parameter words | — |
@@ -130,7 +129,7 @@ _none_
 | feature-mimic-fpc | B | feature | `mimic FPC` compatibility mode | — |
 | feature-string-model-tyfixedstring | B | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (299)
+## done (300)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -145,35 +144,36 @@ _none_
 | bug-bare-read-write-in-method-hits-intrinsic | A | bug | Bare `Read`/`Write` inside a method resolves to the console intrinsic, not the method | — |
 | bug-builtin-val-miscompiles | A | bug | Builtin `Val` mis-lowers — wrong error code + segfault | — |
 | bug-builtin-write-case-sensitive | A | bug | Builtin write/writeln matched case-sensitively (only lowercase resolves) | — |
+| bug-cardinal-expr-promotion | A | bug | bug: cardinal/longword binary-op promotes to uint64 (FPC: int64) | — |
+| bug-cardinal-expr-promotion-shr-orphan | A | bug | bug: cardinal/signed 32-bit expression width (orphan addendum) | — |
+| bug-case-insensitive-incomplete-builtins-funcs | A | bug | bug: case-insensitivity incomplete — builtins + function calls still case-sensitive | — |
 | bug-c-const-cast-in-array-dim | A | bug | C: `(type)` cast inside a constant expression (array dimension) | — |
 | bug-c-const-eval-bitwise-not | C | bug | C const-eval: `~` (bitwise NOT) yields wrong value | — |
 | bug-c-double-vararg | A | bug | C: double passed as a variadic arg reads 0 | — |
 | bug-c-field-of-call-result | C | bug | C: `f()->field` — field/index of a pointer-returning call result | — |
 | bug-c-field-on-pointer-arithmetic | C | bug | C: `(p + i)->field` (field on a computed pointer) fails / Unsupported | — |
-| bug-c-large-record-byval-param | A | bug | C: large (>16-byte) record passed by value gives garbage in the callee | — |
-| bug-c-nested-anon-union-struct | A | bug | C: nested/anonymous struct-or-union member makes the whole struct opaque | — |
-| bug-c-packed-aligned-ignored | A | bug | C `__attribute__((packed))` / `aligned` ignored → field-offset drift | — |
-| bug-c-postincrement-as-rvalue | C | bug | C: post-increment/decrement used as a VALUE (`(p++)->f`, `x = a[i++]`) | — |
-| bug-c-quoted-include-search-path | A | bug | C quoted includes do not search the including file directory | — |
-| bug-c-string-literal-to-pointer-prefix | C | bug | C: string literal assigned to a `char *` points at the Pascal length-prefix | — |
-| bug-c-struct-pointer-index-stride | C | bug | C: `p[i]` / `p+i` on a struct pointer uses the wrong element stride | — |
-| bug-cardinal-expr-promotion-shr-orphan | A | bug | bug: cardinal/signed 32-bit expression width (orphan addendum) | — |
-| bug-cardinal-expr-promotion | A | bug | bug: cardinal/longword binary-op promotes to uint64 (FPC: int64) | — |
-| bug-case-insensitive-incomplete-builtins-funcs | A | bug | bug: case-insensitivity incomplete — builtins + function calls still case-sensitive | — |
+| bug-c-float-int-cast-and-spill | A | bug | C: int<->float numeric cast + computed-double spill across branches | — |
 | bug-char-literal-concat-in-const-expr | A | bug | Char-literal concatenation in a const expression fails (`const T = #65 + #66`) | — |
 | bug-char-literal-in-const-expr | A | bug | Char literal in a constant expression: `ConstEval` rejected `'a'` | — |
+| bug-c-large-record-byval-param | A | bug | C: large (>16-byte) record passed by value gives garbage in the callee | — |
+| bug-c-nested-anon-union-struct | A | bug | C: nested/anonymous struct-or-union member makes the whole struct opaque | — |
 | bug-codegen-nested-index-load-width-pressure | A | bug | Codegen miscompiles nested integer-array index load width under register pressure | — |
 | bug-compiler-hang-on-nested-if-in-begin | A | bug | bug: compiler hangs (infinite loop) on a method with a nested if/else inside a begin block | — |
 | bug-compiler-tmyclass-hardcoded-clash | A | bug | Hardcoded 'TMyClass' name clash in compiler type resolution | — |
 | bug-conditional-directive-miscount-synautil | A | bug | Spurious "unterminated conditional directive" on synautil + jedi.inc | — |
 | bug-const-byref-record-param-temp | A | bug | Can't pass a function-result temporary to a const/by-ref record param | — |
+| bug-consteval-precedence | A | bug | bug: constant-expression evaluation ignores operator precedence | — |
 | bug-const-expr-shl-shr-not-folded | A | bug | `shl` / `shr` in a constant expression not accepted | — |
 | bug-const-managed-record-param-byref-crash | A | bug | const record param with a managed (dynarray) field crashes by-ref on i386 + aarch64 | — |
 | bug-const-open-array-managed-elem-length | A | bug | `const`/value open-array of a managed element loses its length (High = -1) | — |
 | bug-const-section-before-constructor | A | bug | bug: const section before constructor/destructor not terminated | — |
 | bug-const-string-index-miscompiles | A | bug | Indexing a string constant miscompiles (`const RAMP='...'; RAMP[i]`) | — |
-| bug-consteval-precedence | A | bug | bug: constant-expression evaluation ignores operator precedence | — |
+| bug-c-packed-aligned-ignored | A | bug | C `__attribute__((packed))` / `aligned` ignored → field-offset drift | — |
+| bug-c-postincrement-as-rvalue | C | bug | C: post-increment/decrement used as a VALUE (`(p++)->f`, `x = a[i++]`) | — |
+| bug-c-quoted-include-search-path | A | bug | C quoted includes do not search the including file directory | — |
 | bug-cross-gate-masked-failures | A | bug | bug: cross gates red on two pre-existing tests (were masked behind ArgStr) | — |
+| bug-c-string-literal-to-pointer-prefix | C | bug | C: string literal assigned to a `char *` points at the Pascal length-prefix | — |
+| bug-c-struct-pointer-index-stride | C | bug | C: `p[i]` / `p+i` on a struct pointer uses the wrong element stride | — |
 | bug-dynarray-in-record-corrupt | A | bug | Dynamic array as a record field is corrupted (value return + var-param assign) | — |
 | bug-dynarray-managed-record-field-reassign | A | bug | bug: assigning a local dynamic-array-of-managed-record to a field drops/frees the elements | — |
 | bug-dynarray-whole-var-assign-cross | A | bug | Whole dynamic-array variable assignment (`b := a`) unsupported on i386 + aarch64 | — |
@@ -189,9 +189,9 @@ _none_
 | bug-generic-class-methods-in-program | A | bug | Generic class METHOD bodies break in a program (work in a unit) | — |
 | bug-hex-char-code-literal | A | bug | `#$NN` / `#%NN` / `#&NN` char-code literals broken (hex/bin/oct escape) | — |
 | bug-i386-arm32-int64-conformance | A | bug | bug: i386/arm32 diverge on Int64 via fn-return / record-field / mixed ops | — |
-| bug-impl-prescan-codegen-regression | A | bug | Unit impl-section pre-scan silently miscompiles routines (zlib decode broken) | — |
 | bug-implicit-self-dynarray-length | A | bug | `Length` on implicit-`Self` dynamic-array field fails in methods | — |
 | bug-implicit-textfile-unit-method-local | A | bug | Implicit textfile import misses method-local `Text` in units | — |
+| bug-impl-prescan-codegen-regression | A | bug | Unit impl-section pre-scan silently miscompiles routines (zlib decode broken) | — |
 | bug-import-class-sibling-call-corrupts-resolution | A | bug | bug: importing a unit whose class calls a sibling method corrupts the importer's name resolution | — |
 | bug-ir-unsupported-call-lvalue | A | bug | bug: "Unsupported linear node Kind=10" — AN_CALL in lvalue-address position | — |
 | bug-keywords-case-sensitive | A | bug | Capitalized keywords not recognized (case-sensitive keyword table) | — |
@@ -225,22 +225,22 @@ _none_
 | bug-plain-byvalue-record-param-temp | A | bug | Plain (non-`const`) by-value record param >8B rejects a temporary argument | — |
 | bug-pointer-cast-custom-alias | A | bug | Pointer cast on custom Char pointer aliases fails to skip string length prefix | — |
 | bug-pointer-deref-not-accepted-as-var-arg | A | bug | A pointer dereference `p^` is rejected as a `var`/by-ref argument | — |
-| bug-proc-local-managed-record-uninit | A | bug | Proc-local managed record not zero-initialised on entry → first-call miscompute | — |
-| bug-proc-typed-call-const-record-arg | A | bug | bug: indirect call through a proc-typed value with a `const record` arg miscompiles | — |
 | bug-procedure-typed-procvalue | A | bug | `@Proc` / proc-value of a `procedure`-typed routine rejected ("unexpected token") | — |
+| bug-proc-local-managed-record-uninit | A | bug | Proc-local managed record not zero-initialised on entry → first-call miscompute | — |
 | bug-procptr-record-field-call | A | bug | Calling a procedural-pointer record/class field (`v.Run(args)`) | — |
+| bug-proc-typed-call-const-record-arg | A | bug | bug: indirect call through a proc-typed value with a `const record` arg miscompiles | — |
 | bug-r-directive-toggle-treated-as-resource | A | bug | `{$R-}` / `{$R+}` range-check toggle misread as a resource directive | — |
 | bug-read-preserves-line-remainder | A | bug | `read` consumes a whole line like `readln` | — |
 | bug-read-write-reserved-as-method-names | A | bug | `Read` / `Write` can't be used as method names (reserved) | — |
 | bug-record-byvalue-arg-truncation | A | bug | By-value record args >8 bytes truncate (and operator operand edges) | — |
 | bug-record-fn-codegen-crash | A | bug | Context-sensitive runtime crash: record-returning fn with nested loops over dynarray fields | — |
 | bug-rtti-offset-static-array | A | bug | RTTI offset corruption when class/record definitions contain large static arrays | — |
-| bug-set-of-char-const-corrupts-char-codegen | A | bug | A `set of char` typed constant corrupts `Ord(char-var)` codegen | — |
 | bug-setlength-array-element | A | bug | bug: SetLength rejects an indexed array element as target | — |
 | bug-setlength-dynarray-function-result | A | bug | SetLength rejects dynamic-array function result | — |
 | bug-setlength-ir-string-in-complex-method | A | bug | `SetLength expects a string variable in IR codegen` on a valid array SetLength | — |
 | bug-setlength-nested-dynarray-field | A | bug | SetLength on a nested sub-array slot through a record field | — |
 | bug-setlength-record-field-via-var-param | A | bug | SetLength on a record string/array field via a `var` parameter fails codegen | — |
+| bug-set-of-char-const-corrupts-char-codegen | A | bug | A `set of char` typed constant corrupts `Ord(char-var)` codegen | — |
 | bug-shl-signed-integer-width | A | bug | bug: `shl` on a 32-bit Integer does not wrap at 32-bit width | — |
 | bug-shr-signed-integer-width | A | bug | `shr` on a negative 32-bit Integer shifts at 64-bit width (miscompile) | — |
 | bug-stack-corruption-inline-string-concat | A | bug | Stack frame corruption on inline string concatenation assignments | — |
@@ -257,8 +257,8 @@ _none_
 | bug-untyped-float-const | A | bug | Untyped float const `const X = 1.5;` rejected (and `Single(expr)` value cast) | — |
 | bug-untyped-params-in-methods | A | bug | Untyped parameters not accepted in class methods (work in standalone procs) | — |
 | bug-v36-pinned-binary-missing | A | bug | Pinned v36 binary is missing from git — `pinned` symlink dangles | — |
-| bug-var-open-array-fixed-arg-length | A | bug | `var`/`out` open-array param: fixed-array argument passes a wrong length | — |
 | bug-variant-record-no-overlap | A | bug | bug: variant record (case fields) do not share storage | — |
+| bug-var-open-array-fixed-arg-length | A | bug | `var`/`out` open-array param: fixed-array argument passes a wrong length | — |
 | bug-virtual-keyword-name-result | A | bug | Bare own-name result of a VIRTUAL intrinsic-named method miscompiles | — |
 | bug-whole-record-copy-main-body-noop | A | bug | Latent: whole-record array-element copy in main-program body emits store no-ops | — |
 | bug-widgetset-virtual-arg-corruption | A | bug | bug: new virtual method on TWidgetSet miscompiles its object argument | — |
@@ -289,8 +289,8 @@ _none_
 | feature-conditional-declared-directive | A | feature | `{$IF DECLARED(...)}` conditional directive support | — |
 | feature-const-eval-typecast-int64 | A | feature | ConstEval: typed casts + 64-bit folding in const initializers | — |
 | feature-const-set-literal | A | feature | Set literal in a `const` declaration (`const S = [1,2,3]`) | — |
-| feature-cross-bootstrap-selfhost | A | feature | Cross self-host bootstrap (compiler.pas → byte-identical under QEMU) | feature-cross-selfhost-aarch64, feature-cross-selfhost-arm32, feature-cross-selfhost-i386 |
 | feature-cross-bootstrap | A | feature | Cross-architecture compiler bootstrap (AArch64/ARM32 → byte-identical self-compile) | — |
+| feature-cross-bootstrap-selfhost | A | feature | Cross self-host bootstrap (compiler.pas → byte-identical under QEMU) | feature-cross-selfhost-aarch64, feature-cross-selfhost-arm32, feature-cross-selfhost-i386 |
 | feature-cross-codegen-gaps | A | feature | Cross-target codegen gaps (deferred v1 shortcuts) | — |
 | feature-cross-compiler-probe-walls | A | feature | Cross compiler.pas probe walls | — |
 | feature-cross-exceptions | A | feature | Exception runtime on cross targets (i386 / ARM32 / AArch64) | — |
@@ -336,14 +336,14 @@ _none_
 | feature-empty-class-shorthand | A | feature | Empty class descendant shorthand | — |
 | feature-enum-explicit-values | A | feature | feature: enumerated type with explicit ordinal values | — |
 | feature-eof-stdin-builtin | A | feature | `Eof` (standard input) not recognized | — |
-| feature-esp-float | B | feature | ESP float wiring (xtensa + riscv32 float value model) | — |
-| feature-esp-int64-arith | A | feature | 64-bit integer arithmetic for the ESP backends (riscv32 + xtensa) | — |
-| feature-esp-isa-baseline-softfallback | A | feature | ESP ISA baseline + software fallbacks for older parts | — |
 | feature-esp32-bare-boot | A | feature | ESP32 bare-metal boot profile (no IDF) | — |
 | feature-esp32-idf-riscv32 | A | feature | ESP-IDF integration: riscv32 (ESP32-C3) end-to-end | feature-elf-rel-writer |
 | feature-esp32-isr-iram | B | feature | ESP32: Compiler-Directed ISR and IRAM Support | — |
 | feature-esp32-managed-features | A | feature | ESP32 managed-feature port (xtensa + riscv32, qemu-validated) | — |
 | feature-esp32-managed-strings | A | feature | ESP32 managed strings (tyAnsiString runtime on xtensa + riscv32) | — |
+| feature-esp-float | B | feature | ESP float wiring (xtensa + riscv32 float value model) | — |
+| feature-esp-int64-arith | A | feature | 64-bit integer arithmetic for the ESP backends (riscv32 + xtensa) | — |
+| feature-esp-isa-baseline-softfallback | A | feature | ESP ISA baseline + software fallbacks for older parts | — |
 | feature-exception-base-class | B | feature | Built-in / RTL `Exception` base class | — |
 | feature-explicit-typecasts | A | feature | Explicit type-casts (`Char`/`Boolean`/`String` and a general `TypeName(expr)`) | — |
 | feature-extended-alias-or-reject | A | feature | Extended: formalize as Double alias (or reject) | — |
@@ -360,8 +360,8 @@ _none_
 | feature-image-ascii-renderer-library | B | feature | Image to ANSI ASCII renderer library | feature-rtl-image-bitmap-library, feature-terminal-ansi-library |
 | feature-indexed-array-properties | B | feature | Indexed (array) properties + `default` — `property Items[i]: T read G write P` | — |
 | feature-indexed-proc-value-call | A | feature | Indexed / element proc-value call: `arr[i](args)` | — |
-| feature-int-to-float-assign | A | feature | Integer → Float assignment / coercion missing the int→float conversion | — |
 | feature-interface-refcounting | A | feature | Interface reference counting (IInterface / ARC) | — |
+| feature-int-to-float-assign | A | feature | Integer → Float assignment / coercion missing the int→float conversion | — |
 | feature-json-library | B | feature | JSON library — parser + serializer (with a roundtrip test app) | — |
 | feature-language-gaps-from-demos | A | feature | Language gaps surfaced by the demo apps (sudoku / sieve / chess) | — |
 | feature-lazycasing-c-imports | A | feature | `{$LAZYCASING ON/OFF}` for C imports only | feature-compiler-warnings |
@@ -445,19 +445,18 @@ _none_
 ## Ready (no unmet blocker)
 
 - [A] bug-c-addr-of-unsupported-ir
-- [A] bug-c-float-int-cast-and-spill
 - [A] bug-c-libc-data-symbol-stdio
 - [C] bug-c-sizeof-string-literal
 - [A] bug-paramless-self-recursion-silent-result-read
 - [A] chore-inc-to-units
 - [A] chore-runtime-emission-size
 - [A] feature-arm32-large-aggregate-result
+- [A] feature-cdecl-indirect-cross-targets
 - [C] feature-c-header-import-complex
+- [B] feature-copy-intrinsic
 - [C] feature-c-regex-library-devtest
 - [C] feature-c-source-frontend
 - [A] feature-c-varargs-design
-- [A] feature-cdecl-indirect-cross-targets
-- [B] feature-copy-intrinsic
 - [B] feature-demo-chess
 - [B] feature-demo-mandelbrot-gui-threaded
 - [B] feature-demo-mandelbrot
@@ -470,8 +469,8 @@ _none_
 - [B] feature-eliah-shell
 - [B] feature-embed-dwscript-rtti
 - [B] feature-embed-pascal-script
-- [B] feature-esp-peripheral-callback-api
 - [A] feature-esp32-idf-xtensa
+- [B] feature-esp-peripheral-callback-api
 - [B] feature-gui-real-window-xvfb-smoke
 - [B] feature-ilja-tui
 - [A] feature-inline-asm-depth
@@ -492,9 +491,9 @@ _none_
 - [B] feature-real-dynlib-loader
 - [B] feature-release-packaging
 - [A] feature-threadsafe-io-serialization
+- [B] feature-tls13-from-scratch
 - [B] feature-tls-provider-abstraction
 - [B] feature-tls-system-trust-store
-- [B] feature-tls13-from-scratch
 - [A] feature-toolchain-cli-ux
 - [B] feature-writeln-as-library
 - [A] feature-xtensa-stack-args-over-6-words

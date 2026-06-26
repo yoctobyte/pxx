@@ -41,6 +41,19 @@ begin
      (opTok = Ord(tkLe)) or (opTok = Ord(tkGt)) or (opTok = Ord(tkGe)) or
      (opTok = Ord(tkAnd)) or (opTok = Ord(tkOr)) then
     Result := Ord(tyBoolean)
+  else if TypeIsFloat(IntToTypeKind(ASTTk[l])) or TypeIsFloat(IntToTypeKind(ASTTk[r])) then
+  begin
+    { Float arithmetic (`d+1`, `a*b`, …): the result is float, NOT integer —
+      otherwise the BINOP was tagged tyInteger and the backend INTEGER-added the
+      two IEEE bit patterns, producing a garbage near-infinity double. Promote to
+      the wider operand type (Extended > Double > Single). }
+    if (IntToTypeKind(ASTTk[l]) = tyExtended) or (IntToTypeKind(ASTTk[r]) = tyExtended) then
+      Result := Ord(tyExtended)
+    else if (IntToTypeKind(ASTTk[l]) = tyDouble) or (IntToTypeKind(ASTTk[r]) = tyDouble) then
+      Result := Ord(tyDouble)
+    else
+      Result := Ord(tySingle);
+  end
   else if (IntToTypeKind(ASTTk[l]) = tyInt64) or (IntToTypeKind(ASTTk[r]) = tyInt64) then
     Result := Ord(tyInt64)
   else
