@@ -84,6 +84,57 @@ dyn[0] := 1;
 writeln(Length(dyn));   { 2 }
 ```
 
+## Pointers and Typed Pointers
+
+PXX supports low-level pointer operations, including typed pointers, address-of operations, and pointer arithmetic:
+
+- **Declaration**: Declare a typed pointer using `^T` where `T` is the target type.
+- **Address-of (`@`)**: Get the address of a variable or routine using the `@` operator.
+- **Dereferencing (`^`)**: Access the value pointed to by a pointer using the `^` suffix.
+- **Pointer Arithmetic**: Add or subtract integers to/from pointers to traverse memory.
+- **C Interop (`PChar`)**: The `PChar` type represents a pointer to a null-terminated string, useful for passing strings to C libraries. PXX automatically marshals Pascal strings to C `const char*` when calling C imports.
+
+> [!IMPORTANT]
+> When writing portable code for both 32-bit and 64-bit targets, use `^NativeInt` instead of `^Int64` for pointer-sized integer storage. A write to `^Int64` is always 8 bytes and will overrun a 4-byte slot on 32-bit platforms.
+
+```pascal
+var
+  x: Integer;
+  p: ^Integer;
+begin
+  x := 42;
+  p := @x;      { p points to x }
+  p^ := 100;    { dereference and assign }
+  writeln(x);   { prints 100 }
+end;
+```
+
+## Sets
+
+Sets in PXX represent a collection of values of the same ordinal type (such as bytes, characters, or enumerations). A set is backed internally by a 32-byte bitset, supporting up to 256 elements.
+
+### Set Operations
+
+- **Union (`+`)**: Combines elements of both sets.
+- **Difference (`-`)**: Removes elements of the second set from the first.
+- **Intersection (`*`)**: Keeps only elements present in both sets.
+- **Membership (`in`)**: Checks if an element is in the set.
+- **Comparisons (`<=`, `>=`)**: Checks subset and superset relationships.
+
+```pascal
+type
+  TCharSet = set of Char;
+var
+  letters: TCharSet;
+begin
+  letters := ['a', 'b', 'c'];
+  if 'b' in letters then
+    writeln('b is present');
+    
+  letters := letters + ['d'] - ['a']; { ['b', 'c', 'd'] }
+end;
+```
+
 ## Putting it together
 
 ```pascal
@@ -93,6 +144,7 @@ type
   TPoint = record
     X, Y: Integer;
   end;
+  TCharSet = set of Char;
 var
   i: Integer;
   b: Byte;
@@ -102,6 +154,8 @@ var
   fixed: array[1..3] of Integer;
   dyn: array of Integer;
   p: TPoint;
+  ptr: ^Integer;
+  letters: TCharSet;
 begin
   i := -42;
   b := 255;
@@ -112,20 +166,35 @@ begin
   SetLength(dyn, 2);
   dyn[0] := 1; dyn[1] := 2;
   p.X := 7; p.Y := 9;
+  
+  // Pointer demo
+  ptr := @i;
+  ptr^ := 100;
+  
+  // Set demo
+  letters := ['a', 'b', 'c'];
+  letters := letters + ['d'] - ['a'];
+  
   writeln(i, ' ', b, ' ', f:0:1, ' ', Ord(c));
   writeln(s, ' len=', Length(s));
   writeln(fixed[2], ' ', dyn[1], ' ', Length(dyn));
   writeln(p.X, ',', p.Y);
+  writeln('ptr^: ', ptr^);
+  if 'b' in letters then writeln('b in set');
+  if not ('a' in letters) then writeln('a not in set');
 end.
 ```
 
 Output:
 
 ```
--42 255 3.5 1
+100 255 3.5 1
 pxx len=3
 20 2 2
 7,9
+ptr^: 100
+b in set
+a not in set
 ```
 
 ## Next
