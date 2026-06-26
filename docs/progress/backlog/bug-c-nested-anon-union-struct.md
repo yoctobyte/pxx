@@ -36,3 +36,24 @@ chains, so the resolver mostly works once `name` has a real record type). Keep t
 opaque fallback only for genuinely unsupported bodies (bitfields). Verify
 `o.u.p` / `o.u.p->f` / `&(o.u.p + i)->f` and union overlap vs gcc, and confirm
 self-host byte-identical (C-frontend-only).
+
+## Attempt 1 + the real obstacle (2026-06-26, reverted)
+Implemented nested-aggregate layout in ParseCStructInto (AddUClass sub-record,
+recurse with the right isUnion, add the member as a tyRecord field declRec=sub) +
+relaxed CStructBodyIsSimple to allow nested braces. Anonymous nested STRUCTs then
+worked (`o.in.b`), but UNIONs and any struct with a field AFTER the nested
+aggregate collided. The OBSTACLE is the CONTIGUOUS field model: FindUField scans
+`[UClsFBase[ci], UClsFBase[ci] + UClsFCount[ci])`. Laying out the sub-record
+APPENDS its fields to the shared UFld pool BETWEEN the parent's earlier and later
+fields, so the parent's span (e.g. tag, a, x, u, n) exceeds its count (3) and
+`[base, base+3)` misses the trailing fields -> collisions. Debug confirmed the
+sub-record size/offsets are correct; only the pool layout breaks.
+
+Real fix options: (a) buffer the parent's member descriptors and append ALL of the
+parent's UFld entries contiguously AFTER its sub-records are laid out (two-pass
+inside ParseCStructInto) — most localized; (b) give each record an explicit
+field-index list instead of a contiguous [base,count) range; (c) lay sub-record
+fields into a separate region. Until then a struct with a nested anonymous
+aggregate stays opaque (current behaviour). LANDMINE hit during the attempt: a
+literal brace in a Pascal source COMMENT opens a nested comment (compiler.pas has
+NESTEDCOMMENTS ON) and eats source — keep braces out of comment prose.
