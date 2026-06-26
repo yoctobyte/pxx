@@ -1877,6 +1877,34 @@ begin
   Result := node;
 end;
 
+{ True iff the brace initializer at CurTok (the open brace) holds ONLY a flat list
+  of integer literals + commas — no nested braces, no identifiers/macros/strings.
+  The per-field PendingInit materialiser walks fields positionally and stops at the
+  first close brace; a nested union/struct init (lua Node/TValue, whose body opens
+  with another brace) would desync the walk on the inner brace, record wrong field
+  offsets, and end at the inner close brace — leaving the outer decl misparsed (a
+  pre-main crash). So only a flat all-integer struct is materialised; anything
+  richer zero-inits + balanced skips. Non-consuming (scans Tokens from the inner
+  token). }
+function CBraceIsFlatIntInit: Boolean;
+var j, depth: Integer;
+begin
+  Result := True;
+  depth := 1;            { already inside the outer open-brace = CurTok }
+  j := TokPos;           { Tokens at TokPos = first token after CurTok }
+  while (depth > 0) and (j < TokCount) do
+  begin
+    case Tokens[j].Kind of
+      tkBegin: begin Result := False; Exit; end;   { nested aggregate -> not flat }
+      tkEnd:   Dec(depth);
+      tkComma, tkInteger, tkMinus, tkPlus: ;       { allowed }
+    else
+      begin Result := False; Exit; end;            { ident/macro/string/enum/etc }
+    end;
+    Inc(j);
+  end;
+end;
+
 { A top-level global variable definition: <type> name (, name)* ;
   Allocated as zero-initialised BSS (CurProc<0 => skGlobal). Increment-1 scope:
   the slot is reserved and any initialiser is skipped (C zero-inits globals; a
@@ -1934,7 +1962,7 @@ begin
         recBase := UClsFBase[recId - REC_UCLASS_BASE];
       if (CurTok.Kind = tkBegin) and (baseTk = tyRecord) and (not wasArr) and
          (idx >= 0) and (recBase >= 0) and
-         (UClsFCount[recId - REC_UCLASS_BASE] >= 1) then
+         (UClsFCount[recId - REC_UCLASS_BASE] >= 1) and CBraceIsFlatIntInit then
       begin
         Next;   { consume the opening brace }
         fldI := 0;
