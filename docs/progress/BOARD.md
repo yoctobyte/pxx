@@ -29,7 +29,7 @@ _none_
 | --- | --- | --- | --- | --- |
 | feature-c-runtime-library | C | feature | C runtime/library layer (`lib/crtl`) plus direct C-library packages | feature-c-source-frontend |
 
-## backlog (62)
+## backlog (64)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -58,6 +58,8 @@ _none_
 | feature-eliah-ai-command-rail | B | feature | feature: Eliah AI command rail + console pane | — |
 | feature-eliah-component-tabbar | B | feature | feature: Eliah tabbed component bar (Lazarus-style, with icons) | — |
 | feature-eliah-shell | B | feature | feature: Eliah shell — perspective-based IDE (one window, splitter-tree layout) | — |
+| feature-embed-dwscript-rtti | B | feature | DWScript — compile under pxx + RTTI auto-bind (scripting stress test) | — |
+| feature-embed-pascal-script | B | feature | RemObjects Pascal Script — compile under pxx (embeddable scripting) | — |
 | feature-esp32-idf-xtensa | A | feature | ESP-IDF integration: Xtensa (ESP32-S2/S3) — QEMU + real hardware | — |
 | feature-esp-peripheral-callback-api | B | feature | ESP32 peripheral callback API (timer / GPIO / ADC) — the user-facing "interrupt" | — |
 | feature-flexcolumn-directive | A | feature | `flexcolumn` calling-convention directive | chore-inc-to-units |
@@ -466,6 +468,8 @@ _none_
 - [B] feature-eliah-ai-command-rail
 - [B] feature-eliah-component-tabbar
 - [B] feature-eliah-shell
+- [B] feature-embed-dwscript-rtti
+- [B] feature-embed-pascal-script
 - [A] feature-esp32-idf-xtensa
 - [B] feature-esp-peripheral-callback-api
 - [B] feature-gui-real-window-xvfb-smoke
