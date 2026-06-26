@@ -36,7 +36,7 @@ _none_
 | bug-c-addr-of-unsupported-ir | A | bug | C `&` of certain operands lowers to IR_UNSUPPORTED (codegen crash) | — |
 | bug-c-double-vararg | A | bug | C: double passed as a variadic arg reads 0 | — |
 | bug-c-float-int-cast-and-spill | A | bug | C: int<->float numeric cast + computed-double spill across branches | — |
-| bug-c-libc-data-symbol-stdio | A | bug | C: libc data symbols (stdout/stderr/stdin) not imported -> print/IO broken | — |
+| bug-c-libc-data-symbol-stdio | A | bug | C stdio must ride pxx syscalls (libc-free), not import libc | — |
 | bug-c-sizeof-string-literal | C | bug | C `sizeof("string literal")` returns pointer size, not array size | — |
 | bug-paramless-self-recursion-silent-result-read | A | bug | Paramless self-recursion reads own Result silently — no diagnostic | — |
 | chore-inc-to-units | A | chore | `.inc` → real `.pas` units refactor | — |
