@@ -1,4 +1,4 @@
-# docs/site — public documentation (Track D)
+# Public documentation conventions
 
 This tree is the **user-facing documentation**, published to the project website
 straight from git: the site pulls this repo and renders `docs/site/`. There is no
@@ -22,7 +22,7 @@ ticket in `docs/progress/backlog`, don't fix code.
   ---
   ```
 - **One H1 per page** (the rendered title may come from front-matter instead).
-- **Relative links** between pages (`./getting-started.md`) so they resolve both
+- **Relative links** between pages (`./getting-started/`) so they resolve both
   on GitHub and on the published site.
 - **Every code block that claims to work must actually compile and run** on the
   pinned compiler (`stable_linux_amd64/default/pinned`). Paste real output. A doc
@@ -35,9 +35,13 @@ ticket in `docs/progress/backlog`, don't fix code.
 ```
 docs/site/
   index.md            landing / overview
-  getting-started.md  install + first program
-  language/           language reference (types, classes, properties, …)
+  install/            installation and setup
+  getting-started/    first program and next steps
+  features/           user-visible feature overview
+  language/           language reference (Pascal basics, dialect, compatibility)
+  targets/            native/cross targets and interop
   library/            RTL / standard library reference
+  reference/          CLI/configuration/reference material
   guides/             tutorials / how-tos
   assets/             images and other static files
 ```

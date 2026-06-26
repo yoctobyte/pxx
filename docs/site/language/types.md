@@ -1,6 +1,6 @@
 ---
 title: Types
-order: 21
+order: 42
 ---
 
 # Types

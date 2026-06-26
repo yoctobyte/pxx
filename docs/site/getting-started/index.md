@@ -1,37 +1,12 @@
 ---
 title: Getting started
-order: 10
+order: 20
 ---
 
 # Getting started
 
-## Install
-
-A fresh checkout already ships a working compiler (the pinned stable binary), so
-the fastest path needs no toolchain at all:
-
-```sh
-git clone <repo> pxx && cd pxx
-./install.sh
-```
-
-`install.sh` verifies the compiler, drops a ready-to-use `./pxx` wrapper in the
-project root (compiler + all library roots on the search path), and offers — all
-opt-in — to put `pxx` on your PATH, fetch external libraries (Synapse), install
-the ESP32 toolchain, build the Eliah IDE, and launch the demos. Run `./demos.sh`
-any time to build and run the example apps.
-
-### Building from source (optional)
-
-To rebuild the compiler yourself, PXX is seeded from Free Pascal (FPC) once, then
-self-hosts:
-
-```sh
-make bootstrap      # FPC builds pxx, then pxx rebuilds itself to a fixed point
-```
-
-This produces `compiler/pascal26`. You only need FPC for this first bootstrap
-(`sudo apt install fpc` on Debian/Ubuntu).
+Start here after [installing PXX](../install/). This section walks through the
+smallest useful program, then points to language, library, and target docs.
 
 ## Your first program
 
@@ -54,6 +29,9 @@ Hello, world!
 ```
 
 PXX writes a complete Linux ELF executable directly — no `as`, no `ld`.
+
+See [First program](./first-program.md) for the same example with a short
+explanation of the source layout and compiler arguments.
 
 ## Debugging with gdb
 
@@ -85,5 +63,6 @@ Run cross binaries under QEMU user-mode (see the repo's `tools/run_target.sh`).
 
 ## Next
 
-- [Language reference](./language/)
-- [Standard library](./library/)
+- [Language](../language/)
+- [Standard library](../library/)
+- [Targets](../targets/)

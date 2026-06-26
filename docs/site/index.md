@@ -10,6 +10,10 @@ linker** — it emits final Linux ELF executables directly, with no external
 assembler or linker in the path — and it compiles itself. Everything down to the
 runtime and the ELF bytes is its own code, no toolchain dependencies.
 
+> PXX is early experimental software. Do not use programs compiled by PXX for
+> security-sensitive, safety-sensitive, financial, legal, medical, or public
+> network-facing work.
+
 ## Highlights
 
 - **Self-hosting.** The compiler is written in its own dialect and reproduces
@@ -24,11 +28,14 @@ runtime and the ELF bytes is its own code, no toolchain dependencies.
 
 ## Where to go next
 
-- [Getting started](./getting-started.md) — install and compile your first
-  program.
-- [Language reference](./language/) — types, classes, properties, and the rest
-  of the dialect.
+- [Install](./install/) — set up the pinned compiler and `pxx` wrapper.
+- [Getting started](./getting-started/) — compile and run your first program.
+- [Features](./features/) — what PXX can do today.
+- [Language](./language/) — Pascal basics, the PXX dialect, and FPC
+  compatibility notes.
+- [Targets](./targets/) — native, cross, ESP32, and cross-language output.
 - [Standard library](./library/) — the RTL and PCL units.
+- [Reference](./reference/) — command line, configuration, limits, and glossary.
 
 > These docs are published directly from the project's git repository. Found a
 > mistake? The source lives in `docs/site/` — edits there flow to the site.

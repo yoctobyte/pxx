@@ -127,9 +127,11 @@ ln -sfn "$PWD/stable_linux_amd64/default/latest" "$HOME/.local/bin/pxx"
 
 ## Documentation
 
-- [Documentation index](docs/README.md)
-- [Command line](docs/cli.md)
-- [Dialect](docs/dialect.md)
+- [Public documentation](docs/site/index.md) — install, getting started, language,
+  features, targets, library, and reference pages.
+- [Repository documentation index](docs/README.md)
+- [Legacy command line](docs/cli.md)
+- [Legacy dialect notes](docs/dialect/README.md)
 - [Not implemented](docs/not-implemented.md)
 - [Not stable](docs/not-stable.md)
 - [Developer docs](docs/developer/README.md)

@@ -1,6 +1,6 @@
 ---
 title: Language reference
-order: 20
+order: 40
 ---
 
 # Language reference
@@ -14,10 +14,15 @@ language surface as the compiler actually accepts it.
 
 ## Pages
 
+- [Pascal basics](./pascal-basics.md) — program structure, declarations,
+  statements, routines, and units.
 - [Types](./types.md) — ordinals, floats, strings, records, dynamic and fixed
   arrays, enumerations.
 - [Classes & interfaces](./classes.md) — fields, methods, virtual/override,
   constructors, properties.
+- [PXX dialect](./dialect.md) — extensions and deliberate PXX-specific surface.
+- [FPC compatibility](./fpc-compatibility.md) — what matches FPC, what does not,
+  and how to write portable code.
 
 ## Planned
 

@@ -13,7 +13,13 @@ These pages are deliberately short. PXX compiles a subset of Object Pascal, so
 These docs only record where PXX *differs* from FPC: what is not implemented,
 what is not yet stable, and the dialect extras PXX adds.
 
-## User docs
+## Public user docs
+
+The website-oriented public docs live under [`site/`](site/index.md). Start
+there for install, getting started, language, feature, target, library, and
+reference pages.
+
+## Legacy user notes
 
 - [Command Line](cli.md) — how to invoke the compiler.
 - [Dialect](dialect/README.md) — PXX-specific language features and switches
