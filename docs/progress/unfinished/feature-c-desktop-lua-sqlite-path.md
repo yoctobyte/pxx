@@ -644,3 +644,21 @@ gap rather than bloating this ticket.
   most], (2) `__builtin_offsetof` [Track C, small], (3) `switch/case` [Track A],
   (4) re-survey, then `setjmp/longjmp` [Track A] + multi-file linking (no upstream
   amalgamation; build a one-unit include shim or add object linking) for M4.
+
+## 2026-06-26 — BREAKTHROUGH: varargs done; lua compiles + links as a whole
+- **C varargs implemented** (commits ~76-79): ProcVariadic detection, hidden
+  __va_save register-save area + additive variadic-gated prologue, stdarg.h with
+  pure-C __pxx_va_* helpers, __builtin_va_start/va_arg/va_end desugaring, and the
+  IR_CALL excess-arg fix (pop all pushed args into SysV regs, not just
+  ParamCount). Self-host byte-identical throughout. Int/long/pointer/string
+  varargs verified == gcc.
+- **lua core parse: 29 -> 33/34** (lapi/lauxlib/ldebug/lobject now parse; only
+  luac.c left, on an unrelated "Unsupported linear node" codegen gap).
+- **lua TEST-COMPILES AS A WHOLE** via amalgamation (one TU = every core .c +
+  lua.c): a 744 KB dynamic ELF, DT_NEEDED libc.so.6 + libm.so.6, all 86 libc/libm
+  imports resolve (commit 80 defaults C externs to libc/libm sonames). Recipe in
+  library_candidates/lua/BUILD-pxx.md.
+- **Remaining for a RUNNING lua** (3 filed/known): bug-c-large-record-byval-param
+  (24-byte va_list by value -> luaO_pushvfstring segfault at startup),
+  bug-c-double-vararg (%f reads 0), and luac.c's codegen node. No multi-file
+  linker needed — amalgamation covers it.
