@@ -1995,6 +1995,17 @@ begin
   EmitB($B8); EmitI32(231);
   EmitB($0F); EmitB($05);
 
+  { Auto-pull the C IO bridge (pxxcio) so the stdio veneer's
+    `extern __pxx_write`/`__pxx_read` resolve to bodied Pascal procs over the
+    cross-platform PAL — libc-free, one shared IO path with Pascal. Emitted AFTER
+    the entry stub (which is the ELF entry at code offset 0 and never falls
+    through — it exit_group's), so the unit bodies sit after it, reached only via
+    call. Guarded like the Pascal default-RTL pull: skip on bare-metal ESP and
+    when default RTL is opted out. }
+  if (not NoDefaultRtl) and
+     (TargetArch <> TARGET_XTENSA) and (TargetArch <> TARGET_RISCV32) then
+    ParseUsesUnit('pxxcio');
+
   firstIdx := TokPos - 1;
   CProgramMode := True;
 
@@ -2194,8 +2205,12 @@ begin
     { Pure declaration (prototype). Mark external EXCEPT in a C-program pass 2,
       where pass 1 already settled linkage (a prototype + a later local
       definition => internal); re-marking here, before that definition is
-      recompiled, would make an intervening caller emit an external call. }
-    if not (CProgramMode and not CHeaderMode) then
+      recompiled, would make an intervening caller emit an external call. Also
+      EXCEPT when the name already resolves to a bodied proc (BodyAddr>=0): an
+      auto-pulled Pascal unit (pxxcio's __pxx_write/__pxx_read) supplied the
+      definition, so the C `extern` is just a forward view of it — keep it
+      internal, not a dynamic libc import. }
+    if (not (CProgramMode and not CHeaderMode)) and (Procs[procIdx].BodyAddr < 0) then
     begin
       ProcExternal[procIdx] := True;
       if CurrentCLibrary <> '' then ProcLibrary[procIdx] := InternStr(CurrentCLibrary)
