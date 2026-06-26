@@ -29,13 +29,14 @@ _none_
 | --- | --- | --- | --- | --- |
 | feature-c-runtime-library | C | feature | C runtime/library layer (`lib/crtl`) plus direct C-library packages | feature-c-source-frontend |
 
-## backlog (58)
+## backlog (59)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
 | bug-c-addr-of-unsupported-ir | A | bug | C `&` of certain operands lowers to IR_UNSUPPORTED (codegen crash) | — |
 | bug-c-double-vararg | A | bug | C: double passed as a variadic arg reads 0 | — |
 | bug-c-float-int-cast-and-spill | A | bug | C: int<->float numeric cast + computed-double spill across branches | — |
+| bug-c-libc-data-symbol-stdio | A | bug | C: libc data symbols (stdout/stderr/stdin) not imported -> print/IO broken | — |
 | bug-c-sizeof-string-literal | C | bug | C `sizeof("string literal")` returns pointer size, not array size | — |
 | bug-paramless-self-recursion-silent-result-read | A | bug | Paramless self-recursion reads own Result silently — no diagnostic | — |
 | chore-inc-to-units | A | chore | `.inc` → real `.pas` units refactor | — |
@@ -439,6 +440,7 @@ _none_
 - [A] bug-c-addr-of-unsupported-ir
 - [A] bug-c-double-vararg
 - [A] bug-c-float-int-cast-and-spill
+- [A] bug-c-libc-data-symbol-stdio
 - [C] bug-c-sizeof-string-literal
 - [A] bug-paramless-self-recursion-silent-result-read
 - [A] chore-inc-to-units

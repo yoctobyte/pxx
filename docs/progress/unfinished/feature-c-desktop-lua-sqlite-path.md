@@ -669,3 +669,12 @@ gap rather than bloating this ticket.
   (24-byte va_list by value -> luaO_pushvfstring segfault at startup),
   bug-c-double-vararg (%f reads 0), and luac.c's codegen node. No multi-file
   linker needed — amalgamation covers it.
+
+## 2026-06-26 (cont) — struct-by-value fixed; lua RUNS non-IO code
+- bug-c-large-record-byval-param CLOSED: C struct-by-value params of any size
+  (isRef pointer slot + caller copy, CProgramMode-gated, byte-identical). va_list
+  passing now works (was the luaO_pushvfstring segfault).
+- pxx-compiled lua now COMPILES + LINKS + RUNS non-IO Lua (rc 0). `print`/IO
+  still segfaults -> bug-c-libc-data-symbol-stdio (stdout/stderr/stdin are libc
+  DATA symbols, not imported; need a COPY relocation). That + bug-c-double-vararg
+  + global-array-init are the remaining run blockers.
