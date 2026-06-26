@@ -1986,6 +1986,30 @@ begin
           pnames[nparams] := 'arg0';
           pnames[nparams][4] := Chr(Ord('0') + nparams);
         end;
+        { C array parameter `T name[...]` decays to a pointer `T *name` (lua
+          ltable `computesizes(unsigned int nums[], ...)`). Consume the bracket
+          dimension(s) and retype the param as pointer-to-element. }
+        if CurTok.Kind = tkLBrack then
+        begin
+          while CurTok.Kind = tkLBrack do
+          begin
+            sz := 0;   { reuse as bracket depth }
+            repeat
+              if CurTok.Kind = tkLBrack then Inc(sz)
+              else if CurTok.Kind = tkRBrack then Dec(sz);
+              Next;
+            until (sz = 0) or (CurTok.Kind = tkEOF);
+          end;
+          if pdepths[nparams] = 0 then
+          begin
+            pelemtk[nparams] := Ord(ptypes[nparams]);
+            pelemrec[nparams] := CTypeBaseRec;
+          end
+          else
+            pelemtk[nparams] := Ord(tyPointer);   { `T *name[]` -> pointer-to-pointer }
+          ptypes[nparams] := tyPointer;
+          pdepths[nparams] := 1;
+        end;
         Inc(nparams);
       end;
     end
