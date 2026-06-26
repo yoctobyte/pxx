@@ -433,8 +433,6 @@ type
     tkInteger_T, tkBoolean_T, tkChar_T, tkString_T, tkReal_T, tkLongWord_T,
     tkAssign, tkEq, tkNeq, tkLt, tkLe, tkGt, tkGe,
     tkPlus, tkMinus, tkStar, tkSlash,
-    tkPlusPlus, tkMinusMinus,                 { ++ / -- (C inc/dec; new in pxx) }
-    tkPlusEq, tkMinusEq, tkStarEq, tkSlashEq, { += -= *= /= compound assignment }
     tkLParen, tkRParen, tkLBrack, tkRBrack,
     tkSemicolon, tkColon, tkComma, tkDot, tkDotDot, tkAt, tkCaret,
     tkBreak, tkContinue, tkOverload,
