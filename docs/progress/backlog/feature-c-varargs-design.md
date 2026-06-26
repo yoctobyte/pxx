@@ -67,3 +67,37 @@ printf-style consumer == gcc for int/long/ptr/char AND double args, and a va_lis
 passed into a second function (lua's pattern). Then re-survey lua: lapi/lauxlib/
 ldebug/lobject should reach parse-clean (29 -> 33). Linking/amalgamation remains
 separate.
+
+## Implementation progress (2026-06-26) — foundation laid + architecture proven
+COMMITTED (safe, compiler unchanged -> self-host byte-identical):
+- `lib/crtl/include/stdarg.h`: the 24-byte System V `va_list` struct + the
+  `va_start`/`va_arg`/`va_end`/`va_copy` macros over `__builtin_va_*`.
+- `__pxx_va_arg_gp` / `__pxx_va_arg_fp` helpers IN THE HEADER, in plain C: the
+  whole gp_offset/fp_offset/overflow walk. PROVEN to compile and run under pxx
+  (=42 reading three int slots from a register-save area). This is the key
+  finding: the intricate part of va_arg needs NO special codegen.
+
+So the codegen surface collapses to a MINIMAL, well-scoped remainder:
+1. FRONTEND (Track C): a `ProcVariadic` flag (set when a trailing `...` param is
+   seen, counting named GP/XMM params); and in ParseCPrimary's call path intercept
+   the three builtins and DESUGAR them to existing AST:
+   - `__builtin_va_arg(ap, type)` -> `*(type*)( __pxx_va_arg_gp(&ap) )` for
+     integer/pointer types, `__pxx_va_arg_fp` for float/double. (Parse the type
+     arg like sizeof; choose gp vs fp by TypeIsFloat.)
+   - `__builtin_va_start(ap, last)` -> field stores:
+       ap.reg_save_area = &__va_save;  ap.overflow_arg_area = <first stack arg>;
+       ap.gp_offset = numNamedGP*8;    ap.fp_offset = 48 + numNamedXMM*16;
+     where `__va_save` is a hidden 176-byte local declared in the variadic
+     function. (&__va_save is plain C — no intrinsic.)
+   - `__builtin_va_end(ap)` -> no-op (0).
+2. BACKEND (Track A, ADDITIVE, gated to ProcVariadic, x86-64 only): right after the
+   prologue, store the 6 GP arg regs (rdi,rsi,rdx,rcx,r8,r9) at &__va_save+0..40 and
+   the 8 XMM regs at +48..+168. ~14 `mov`/`movsd` instructions. The frame just
+   needs the 176-byte `__va_save` local reserved (the frontend declares it, so the
+   frame sizing is automatic); the only special emission is the register stores.
+   The `overflow_arg_area` (first stack arg, rbp+16) only matters for >6-GP-arg
+   calls; lua's errors stay under that, but set it via a tiny lea for correctness.
+
+Net: va_arg logic = done (C helper). va_start = field stores + one address-of a
+local (frontend). Only the register-save store sequence is new backend codegen,
+and it's purely additive/gated, so the self-host gate stays byte-identical.
