@@ -14,11 +14,23 @@ Pass `--target=` to select a non-default CPU target:
 ```
 
 Linux cross-target executables can be run with QEMU user-mode when the matching
-runtime support is installed. The repository helper is:
+runtime support is installed. Install the QEMU runners if needed:
+
+```sh
+tools/install_qemu.sh
+```
+
+Then run through the repository helper:
 
 ```sh
 tools/run_target.sh aarch64 ./hello.a64
+tools/run_target.sh arm32 ./hello.arm
 ```
+
+Static syscall-only PXX binaries do not need a target sysroot for normal
+cross-target smoke runs. Binaries that deliberately use external C libraries may
+need a guest dynamic loader and libc; `tools/run_target.sh` honors
+`QEMU_LD_PREFIX` and `PXX_CROSS_SYSROOT` for those cases.
 
 ESP32 flows use target-specific helpers and may require vendor tooling:
 

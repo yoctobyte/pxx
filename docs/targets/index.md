@@ -9,20 +9,30 @@ PXX can emit native and cross-target output from the same compiler invocation.
 
 ## Supported target names
 
-| Target | Main use |
-| --- | --- |
-| `x86_64` | Native Linux executable output on x86-64. |
-| `i386` | 32-bit Linux ELF output. |
-| `aarch64` | 64-bit ARM Linux ELF output. |
-| `arm32` | 32-bit ARM Linux ELF output. |
-| `riscv32` | ESP32-C3 / embedded RISC-V output. |
-| `xtensa` | ESP32-S2/S3 / embedded Xtensa output. |
+| Target | Output | Typical run path |
+| --- | --- | --- |
+| `x86_64` | Native Linux ELF executable. | Run directly on x86-64 Linux. |
+| `i386` | 32-bit Linux ELF executable. | Run directly on hosts with i386 support, or via `qemu-i386`. |
+| `aarch64` | 64-bit ARM Linux ELF executable. | Run via `qemu-aarch64` on non-ARM hosts. |
+| `arm32` | 32-bit ARM Linux ELF executable. | Run via `qemu-arm` on non-ARM hosts. |
+| `riscv32` | ESP32-C3 / embedded RISC-V output. | Use ESP32 helpers and vendor tooling. |
+| `xtensa` | ESP32-S2/S3 / embedded Xtensa output. | Use ESP32 helpers and vendor tooling. |
 
 Use `--target=ARCH` before the source file:
 
 ```sh
 ./pxx --target=aarch64 hello.pas hello.a64
 ```
+
+For Linux cross-target executables, `tools/run_target.sh` chooses the right QEMU
+user-mode runner when the host cannot execute the file directly.
+
+```sh
+tools/run_target.sh aarch64 ./hello.a64
+```
+
+For ESP32 targets, start with the board-specific examples under
+`examples/esp32/`.
 
 ## Pages
 
