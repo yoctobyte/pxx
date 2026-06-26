@@ -1781,9 +1781,11 @@ end;
   non-zero constant/runtime initialiser is a follow-up). Re-running across the
   two driver passes is idempotent — a name already present is not re-allocated. }
 procedure ParseCGlobalVarDecl;
-var baseTk: TTypeKind; name: AnsiString; depth: Integer;
+var baseTk: TTypeKind; name: AnsiString; depth, idx, recBase, fldI, fOff, fTk, fSz: Integer;
+    recId: Integer; wasArr: Boolean; initV: Int64;
 begin
   baseTk := ParseCDeclType;
+  recId := CTypeBaseRec;
   while True do
   begin
     if CurTok.Kind <> tkIdent then Break;
@@ -1792,8 +1794,10 @@ begin
       brackets with balanced nesting; the size may be a complex macro, so don't
       evaluate it — the slot is not a real array yet, but the decl no longer
       cascades (previously the dangling `[` broke later parsing). }
+    wasArr := False;
     while CurTok.Kind = tkLBrack do
     begin
+      wasArr := True;
       depth := 0;
       repeat
         if CurTok.Kind = tkLBrack then Inc(depth)
@@ -1804,12 +1808,50 @@ begin
     { A struct-typed global needs its record id recorded (AllocVar reads the
       global LastTypeRecId for tyRecord) so field access `gg.f` resolves the
       offset — without this the field always landed at offset 0. }
-    if baseTk = tyRecord then LastTypeRecId := CTypeBaseRec;
-    if FindSym(name) < 0 then AllocVar(name, baseTk);
+    if baseTk = tyRecord then LastTypeRecId := recId;
+    idx := FindSym(name);
+    if idx < 0 then idx := AllocVar(name, baseTk);
     if CurTok.Kind = tkAssign then
     begin
       Next;
-      if CurTok.Kind = tkBegin then
+      { Materialise a non-array struct/union global brace-initializer as per-field
+        PendingInit writes (constant values only) — so e.g. lstrlib's nativeendian
+        union initializer reads correctly at runtime instead of zero. Arrays and
+        non-constant inits fall through to the skip path (a documented follow-up). }
+      recBase := -1;
+      if (recId >= REC_UCLASS_BASE) and UClsIsRecord[recId - REC_UCLASS_BASE] then
+        recBase := UClsFBase[recId - REC_UCLASS_BASE];
+      { Materialise only a UNION-LIKE record (every field at offset 0, or a single
+        field) — write the FIRST constant value to offset 0. lstrlib's nativeendian
+        `union {int dummy; char little} = {1}` needs exactly this. Multi-field
+        STRUCTs fall through to skip: the PendingInit emission resolves a field by
+        NAME (not the stored byte offset), so non-zero field offsets can't yet be
+        materialised, and writing them all to offset 0 would be a silent miscompile
+        — so don't (no worse than the prior zero-init). }
+      if (CurTok.Kind = tkBegin) and (baseTk = tyRecord) and (not wasArr) and
+         (idx >= 0) and (recBase >= 0) and
+         (UClsFCount[recId - REC_UCLASS_BASE] >= 1) and
+         ((UClsFCount[recId - REC_UCLASS_BASE] = 1) or (UFldOff_[recBase + 1] = 0)) and
+         (Tokens[TokPos].Kind = tkInteger) and (PendingInitCount < MAX_PENDING_INITS) then
+      begin
+        Next;   { consume the opening brace }
+        fTk := UFldTk[recBase]; fSz := TypeSize(IntToTypeKind(fTk));
+        initV := CurTok.IVal;
+        PendingInitSym[PendingInitCount]  := idx;
+        PendingInitElem[PendingInitCount] := -1;
+        PendingInitFOff[PendingInitCount] := 0;
+        PendingInitFLen[PendingInitCount] := fSz;
+        PendingInitVal[PendingInitCount]  := initV;
+        PendingInitTk[PendingInitCount]   := fTk;
+        Inc(PendingInitCount);
+        depth := 1;   { skip the rest of the brace body (balanced) }
+        repeat
+          if CurTok.Kind = tkBegin then Inc(depth)
+          else if CurTok.Kind = tkEnd then Dec(depth);
+          Next;
+        until (depth = 0) or (CurTok.Kind = tkEOF);
+      end
+      else if CurTok.Kind = tkBegin then
       begin
         { `= { ... }` aggregate initializer: skip with BALANCED braces so inner
           commas (`{{"a",f},{"b",g}}`) don't end it early. }
@@ -2217,10 +2259,15 @@ begin
     end;
   end;
   
+  { Constant global initializers (struct/union brace inits recorded as PendingInit
+    during pass 1) run once at the start of `main`, before user code — the C
+    analogue of the Pascal program's pre-body CompilePendingGlobalInits. }
+  if name = 'main' then CompilePendingGlobalInits;
+
   { Parse & Compile Body }
   node := ParseCBlockAST;
   CompileAST(node);
-  
+
   { Epilogue }
   EmitProcEpilog(Procs[procIdx].RetSymIdx);
   PatchProcPrologue(patchPos, FrameSize);
