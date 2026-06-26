@@ -59,7 +59,7 @@ I/O are available without importing a unit just to initialize the runtime.
 
 | Unit | Area |
 | --- | --- |
-| `ansiterm`, `ansirender`, `screen`, `lineedit`, `menu` | Terminal UI helpers. |
+| [`ansiterm`, `ansirender`, `screen`, `lineedit`, `menu`](./terminal-ui.md) | Terminal UI helpers. |
 | `forms`, `controls`, `stdctrls`, `extctrls`, `dialogs`, `menus` | PCL component-library units. |
 | `gtk3`, `gtk3widgets`, `glarea`, `graphics` | GTK/OpenGL-backed GUI pieces used by demos and the Eliah IDE. |
 
