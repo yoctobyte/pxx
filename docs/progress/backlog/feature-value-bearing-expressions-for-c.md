@@ -1,7 +1,7 @@
 # feature: value-bearing expression nodes for the C frontend (ternary + side-effecting exprs)
 
 - **Type:** feature (shared AST/IR — language model)
-- **Status:** backlog (slice 1 DONE 2026-06-26, pin v76; slices 2/3 open)
+- **Status:** backlog (slices 1+3 DONE 2026-06-26, pin v77; slice 2 open)
 - **Track:** A (compiler core / shared lowering)
 - **Opened:** 2026-06-26
 - **Found-by:** Track A analysis prompted by the C frontend
@@ -95,4 +95,18 @@ after rebasing on pin v76.
 
 Slices 2 (value-bearing assignment + pre/post ++/--) and 3 (comma operator)
 remain open — they need the side-effect-hoisting pass and are the real scope
+question. Not started.
+
+## Slice 3 landed (2026-06-26, Track A — commit pending, pin v77)
+
+`AN_COMMA` added — `(a, b, ...)` evaluates each operand for side effects, yields
+the last. Done standalone (no slice 2 needed): same append-side-effect-then-yield
+trick as AN_TERNARY (lower Left as a discarded statement, yield Right). Parser
+splices it in ParseFactor's tkLParen path; a parenthesised comma list was a
+syntax error before, so conflict-free and identical to C. Guarded out of Python
+mode (tuples). Verified value/side-effects/grouping/nesting/regress (calls, sets,
+index, casts); make test green incl cross; self-host byte-identical.
+
+Only slice 2 (value-bearing assignment `x=y`, chained `a=b=c`, pre/post ++/--)
+remains — the side-effect-hoisting / evaluate-lvalue-once pass, the real scope
 question. Not started.
