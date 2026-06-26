@@ -40,7 +40,7 @@ esp32c3 lwIP loopback socket smoke: PASS
 recvfrom + loopback delivery. The address **read-back** diagnostics
 (`bound-port` / `peer-port`) currently print `0` — lwIP returns an unfilled
 sockaddr from `getsockname` / `recvfrom` here; tracked by
-`docs/progress/backlog/feature-pal-esp-lwip-sockaddr-readback.md`. They are not
+`devdocs/progress/backlog/feature-pal-esp-lwip-sockaddr-readback.md`. They are not
 gated so the smoke reflects the proven plumbing.
 
 ## Notes

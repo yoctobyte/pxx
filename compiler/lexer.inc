@@ -573,7 +573,7 @@ begin
     NOT the platform names, so a new platform degrades gracefully by declaring
     its own capability subset. posix (hosted) = all capabilities; esp (bare)
     = minimal (no filesystem / sockets / threads / dynamic linking yet).
-    See docs/progress/*/feature-platform-abstraction-layer.md. }
+    See devdocs/progress/*/feature-platform-abstraction-layer.md. }
   if TargetPlatform = PLATFORM_ESP then
   begin
     name := 'PXX_PLATFORM_ESP';

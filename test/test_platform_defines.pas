@@ -3,7 +3,7 @@ program test_platform_defines;
   Compiled twice by test-core: default (posix) and --platform=esp. The platform
   is set by the compiler, not the source — this program just reports which of
   the PXX_PLATFORM_* / PXX_HAS_* defines are active. See
-  docs/progress/*/feature-platform-abstraction-layer.md. }
+  devdocs/progress/*/feature-platform-abstraction-layer.md. }
 begin
 {$ifdef PXX_PLATFORM_POSIX}
   writeln('platform=posix');

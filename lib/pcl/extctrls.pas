@@ -108,7 +108,7 @@ begin
   { Talk to gtk directly here (like graphics.pas) rather than through a
     WidgetSet method: adding new virtual methods to TWidgetSet currently
     miscompiles their object argument — see
-    docs/progress/backlog/bug-widgetset-virtual-arg-corruption.md. gtk
+    devdocs/progress/backlog/bug-widgetset-virtual-arg-corruption.md. gtk
     orientation: 0 = horizontal (side-by-side, vertical handle), 1 = vertical. }
   if FVertical then orient := 1 else orient := 0;
   Self.Handle := gtk_paned_new(orient);

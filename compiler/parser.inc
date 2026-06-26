@@ -12198,7 +12198,7 @@ begin
   if isInterrupt and (TargetArch <> TARGET_RISCV32) and (TargetArch <> TARGET_XTENSA) then
     Error('interrupt directive: raw hardware-vector codegen implemented for riscv32 (esp32c3) and xtensa Call0 (esp32s3) only. Use `iram;` for an IDF-registered ISR.');
   if isInterrupt and (TargetArch = TARGET_XTENSA) and (XtensaABI = XTENSA_ABI_WINDOWED) then
-    Error('interrupt directive on xtensa requires Call0 (build with --xtensa-abi=call0, or --esp-profile=bare). A windowed raw-vector ISR is out of scope by design: bare-metal cannot boot windowed, and under IDF you do not install a raw vector -- register a normal callback via esp_intr_alloc and mark it `iram;` (FreeRTOS spills the windows for you). See docs/progress/done/feature-esp32-isr-iram.');
+    Error('interrupt directive on xtensa requires Call0 (build with --xtensa-abi=call0, or --esp-profile=bare). A windowed raw-vector ISR is out of scope by design: bare-metal cannot boot windowed, and under IDF you do not install a raw vector -- register a normal callback via esp_intr_alloc and mark it `iram;` (FreeRTOS spills the windows for you). See devdocs/progress/done/feature-esp32-isr-iram.');
   { `iram;` places the body in .iram1.text on ESP; on other targets (e.g. the
     x86-64 oracle build of a shared test) it is an accepted no-op. }
   ProcIram[procIdx] := isIram and ((TargetArch = TARGET_XTENSA) or (TargetArch = TARGET_RISCV32));
@@ -12788,7 +12788,7 @@ begin
         in a GPR); i386 and arm32 narrow in the CALLER before the 4-byte push
         (ir_codegen386.inc / ir_codegen_arm32.inc). Looks innocent and local, but
         a float-ABI change must touch the matching site on every target — see
-        docs/progress/done/feature-single-first-class.md. }
+        devdocs/progress/done/feature-single-first-class.md. }
       case i of
         0: begin EmitB($48); EmitB($89); EmitB($F8); end; { mov rax, rdi }
         1: begin EmitB($48); EmitB($89); EmitB($F0); end; { mov rax, rsi }

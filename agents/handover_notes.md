@@ -1,7 +1,7 @@
 # Handover Notes: Pure-Pascal Heap Allocator — DELIVERED
 
 Status: **done** (2026-06-06, commits `2a3b2f6` + `f6de004`). Kept as a record;
-durable tracking lives in `docs/progress/` (`feature-unified-heap-allocator` in
+durable tracking lives in `devdocs/progress/` (`feature-unified-heap-allocator` in
 `done/`, `feature-allocator-quality` follow-up in `backlog/`).
 
 ## What shipped

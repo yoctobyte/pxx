@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Progress-board helper for docs/progress/.
+# Progress-board helper for devdocs/progress/.
 #
 # Priority is derived from dependency edges, not labels:
 #   - a ticket is READY when every slug in its `Blocked-by:` line is in done/
@@ -10,7 +10,7 @@
 #        tools/progress.sh claim <slug> <owner>
 #        tools/progress.sh resolve <slug> <commit>
 #   ready --track B  list ready Track-B tickets only
-#   board-md  regenerate the committed docs/progress/BOARD.md (run after changes)
+#   board-md  regenerate the committed devdocs/progress/BOARD.md (run after changes)
 #   check     validate the board; fails on a stale BOARD.md
 #   claim     git-mv a ticket to working/, stamp Status/Owner (no commit)
 #   resolve   git-mv a ticket to done/, stamp Status + a Log line (no commit)
@@ -18,7 +18,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-PROG="$ROOT/docs/progress"
+PROG="$ROOT/devdocs/progress"
 [ -d "$PROG" ] || { echo "no $PROG" >&2; exit 1; }
 # Self-heal the canonical status dirs. Git does not track empty directories, so
 # a status dir with no tickets (e.g. unfinished/) disappears on a fresh checkout.
@@ -352,9 +352,9 @@ cmd_check() {
 
   # 4. BOARD.md must be present and match a fresh render (it's committed).
   if [ ! -f "$PROG/BOARD.md" ]; then
-    echo "NO-BOARD: docs/progress/BOARD.md missing — run: tools/progress.sh board-md"; problems=1
+    echo "NO-BOARD: devdocs/progress/BOARD.md missing — run: tools/progress.sh board-md"; problems=1
   elif ! diff -q <(render_board_md) "$PROG/BOARD.md" >/dev/null; then
-    echo "STALE-BOARD: docs/progress/BOARD.md out of date — run: tools/progress.sh board-md"; problems=1
+    echo "STALE-BOARD: devdocs/progress/BOARD.md out of date — run: tools/progress.sh board-md"; problems=1
   fi
 
   if [ "$problems" -eq 0 ]; then

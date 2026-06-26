@@ -15,7 +15,7 @@
 #
 # Versioning: semver tags vMAJOR.MINOR.PATCH[-CHANNEL.N], CHANNEL in alpha<beta<rc.
 # The maintainer never hand-types a version — it is computed from the last tag and
-# chosen from a menu. See docs/progress/backlog/feature-release-packaging.md.
+# chosen from a menu. See devdocs/progress/backlog/feature-release-packaging.md.
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -155,7 +155,7 @@ last_tag() {
 suggest_codename() {
   # next pool entry whose initial isn't already used by an existing tag's notes;
   # cheap heuristic: count existing release codenames recorded in the ledger.
-  local ledger="$REPO_ROOT/docs/release-notes/CODENAMES"
+  local ledger="$REPO_ROOT/devdocs/release-notes/CODENAMES"
   local used=0
   [[ -f "$ledger" ]] && used="$(grep -c . "$ledger" 2>/dev/null || echo 0)"
   echo "${CODENAME_POOL[$(( used % ${#CODENAME_POOL[@]} ))]}"
@@ -220,7 +220,7 @@ main() {
   if [[ -n "$BUILD_FOR" ]]; then
     # NB: keep the `|| true` — a missing/empty CODENAMES makes grep exit non-zero,
     # which under `set -euo pipefail` would silently kill the script (exit 2).
-    local cn; cn="$(grep -F "$BUILD_FOR " "$REPO_ROOT/docs/release-notes/CODENAMES" 2>/dev/null | awk '{print $2}' | head -1 || true)"
+    local cn; cn="$(grep -F "$BUILD_FOR " "$REPO_ROOT/devdocs/release-notes/CODENAMES" 2>/dev/null | awk '{print $2}' | head -1 || true)"
     echo "==> build-for: $BUILD_FOR (codename ${cn:-none})"
     run_gate
     build_dist "$BUILD_FOR" "${cn:-unnamed}"
@@ -351,7 +351,7 @@ included source — no separate packages to fetch.
     compiler/pxx-<arch>   prebuilt binaries: x86_64, i386, aarch64, arm32
     lib/                  RTL + PCL libraries (compiled from source)
     examples/             sample programs
-    docs/                 user documentation (CLI, dialect, release notes, …)
+    docs/                 public user documentation
     Makefile, tools/      build + verification system
     MANIFEST.sha256       SHA-256 of each prebuilt binary (reproducible)
     setup.sh, selfcheck.sh  install + reproduce helpers
@@ -411,14 +411,14 @@ publish() {
   read -rp "PUBLISH $tag (codename $codename)? type the tag to confirm: " confirm || true
   [[ "$confirm" == "$tag" ]] || die "confirmation mismatch — aborted"
 
-  mkdir -p "$REPO_ROOT/docs/release-notes"
-  echo "$tag $codename" >> "$REPO_ROOT/docs/release-notes/CODENAMES"
+  mkdir -p "$REPO_ROOT/devdocs/release-notes"
+  echo "$tag $codename" >> "$REPO_ROOT/devdocs/release-notes/CODENAMES"
 
   if [[ $LOCAL -eq 1 ]]; then
     have gh || die "--local needs the gh CLI"
-    # Prefer a hand-authored body at docs/release-notes/<tag>.md; fall back to
+    # Prefer a hand-authored body at devdocs/release-notes/<tag>.md; fall back to
     # GitHub's auto-generated notes when none is prepared.
-    local notes_args=(--generate-notes) nf="$REPO_ROOT/docs/release-notes/$tag.md"
+    local notes_args=(--generate-notes) nf="$REPO_ROOT/devdocs/release-notes/$tag.md"
     [[ -f "$nf" ]] && { notes_args=(--notes-file "$nf"); echo "==> release body: $nf"; }
     gh release create "$tag" "$DIST/pxx-$tag.tar.gz" "$DIST/pxx-$tag/MANIFEST.sha256" \
       --title "PXX $tag — $codename" "${notes_args[@]}"

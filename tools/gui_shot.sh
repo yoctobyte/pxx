@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # gui_shot.sh — capture a screenshot of a PCL/GTK app on a private Xvfb display,
 # never touching the real screen (:0). Solves the foreground-grab + flaky-capture
-# pain documented in docs/developer/gui-testing.md.
+# pain documented in devdocs/developer/gui-testing.md.
 #
 # Usage:
 #   tools/gui_shot.sh OUT.png CMD [ARGS...]

@@ -13,16 +13,8 @@
 # side instead of conflicting; the content self-heals the next time the board is
 # regenerated. One-time local setup (per checkout, not committable):
 #     git config merge.ours.driver true
-docs/progress/BOARD.md merge=ours
+devdocs/progress/BOARD.md merge=ours
 
-docs/progress/        export-ignore
-docs/dev/             export-ignore
-docs/developer/       export-ignore
-docs/historic/        export-ignore
-docs/lore/            export-ignore
-docs/naming-poll.md       export-ignore
-docs/naming-poll-final.md export-ignore
-docs/naming-round1.md     export-ignore
 agents/               export-ignore
 thesises/             export-ignore
 library_candidates/   export-ignore

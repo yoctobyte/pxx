@@ -26,7 +26,7 @@ unit lfmload;
   lines and unknown widget types (mapped to wkPanel) are tolerated.
 
   Implemented as a class rather than nested routines because the pinned compiler
-  does not yet support nested routines (docs/progress/backlog/
+  does not yet support nested routines (devdocs/progress/backlog/
   feature-nested-routines). The class is the natural carrier for the parse state
   anyway (open-object stack + current node). }
 

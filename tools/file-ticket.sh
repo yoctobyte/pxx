@@ -1,5 +1,5 @@
 #!/bin/sh
-# file-ticket.sh — land a docs/progress ticket onto master so EVERY track sees
+# file-ticket.sh — land a devdocs/progress ticket onto master so EVERY track sees
 # it, without disturbing your current branch/worktree.
 #
 # Why: tickets buried on a feature branch are invisible to sister agents working
@@ -10,8 +10,8 @@
 #   tools/file-ticket.sh <ticket.md> [<more.md> ...]
 #
 # Each path may be absolute or relative to CWD. If a path contains
-# "docs/progress/<bucket>/", that bucket (backlog/unfinished/working/...) is
-# preserved on master; otherwise the file lands in docs/progress/backlog/.
+# "devdocs/progress/<bucket>/", that bucket (backlog/unfinished/working/...) is
+# preserved on master; otherwise the file lands in devdocs/progress/backlog/.
 #
 # Safe by design: operates in a throwaway worktree off origin/master, never
 # touches your checkout, uses pull --rebase before pushing, and scoped commits.
@@ -33,8 +33,8 @@ for f in "$@"; do
   [ -f "$src" ] || { echo "file-ticket: not found: $f" >&2; exit 1; }
   src=$(readlink -f "$src")
   case "$f" in
-    *docs/progress/*) rel="docs/progress/${f##*docs/progress/}" ;;
-    *)                rel="docs/progress/backlog/$(basename "$f")" ;;
+    *devdocs/progress/*) rel="devdocs/progress/${f##*devdocs/progress/}" ;;
+    *)                rel="devdocs/progress/backlog/$(basename "$f")" ;;
   esac
   SRCS="$SRCS$src
 "
@@ -74,7 +74,7 @@ added=$(git diff --cached --name-only | tr '\n' ' ')
 # Best-effort BOARD refresh (skip silently if generator absent).
 if [ -x tools/progress.sh ]; then
   tools/progress.sh board-md >/dev/null 2>&1 || true
-  git add docs/progress/BOARD.md >/dev/null 2>&1 || true
+  git add devdocs/progress/BOARD.md >/dev/null 2>&1 || true
 fi
 
 git commit -q -m "docs(tickets): sync ticket(s) to master

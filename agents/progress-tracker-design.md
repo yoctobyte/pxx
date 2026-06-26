@@ -1,8 +1,8 @@
 # Progress tracker — design notes
 
-Design and rationale for the `docs/progress/` board. The terse operating rules
+Design and rationale for the `devdocs/progress/` board. The terse operating rules
 live in `AGENTS.md` (loads every session) and the file-format spec lives in
-`docs/progress/README.md`. **This file is the "why".** Other agents are invited
+`devdocs/progress/README.md`. **This file is the "why".** Other agents are invited
 to review and push back on it.
 
 Status: adopted 2026-06-06. Small board (~25 tickets), mostly single-agent today,
@@ -24,9 +24,9 @@ Everything an item needs is expressed without a database:
 
 | Axis | Encoded as | Filter |
 | --- | --- | --- |
-| **Status** | which folder | `ls docs/progress/<folder>` |
-| **Type** | filename prefix (`bug-`, `feature-`, `test-`, `chore-`, `docs-`, `idea-`) | `git ls-files 'docs/progress/*/bug-*'` |
-| **Topic** | slug substring | `git ls-files 'docs/progress/*/*managed*'` |
+| **Status** | which folder | `ls devdocs/progress/<folder>` |
+| **Type** | filename prefix (`bug-`, `feature-`, `test-`, `chore-`, `docs-`, `idea-`) | `git ls-files 'devdocs/progress/*/bug-*'` |
+| **Topic** | slug substring | `git ls-files 'devdocs/progress/*/*managed*'` |
 | **Priority** | dependency edges (derived) | `tools/progress.sh` |
 
 One ticket = one file. Moving the file (`git mv`) is the only state change.
@@ -116,7 +116,7 @@ script is disposable.
 - ✅ `progress.sh check` — flags dangling `Blocked-by` slugs, dependency cycles,
   ownerless `working/`, and commit-less `done/`. Built 2026-06-06.
 - ✅ `progress.sh board-md` — renders a kanban grid + ready/leverage to
-  `docs/progress/BOARD.md`. Built 2026-06-06. **Committed** (decision 2026-06-06):
+  `devdocs/progress/BOARD.md`. Built 2026-06-06. **Committed** (decision 2026-06-06):
   its git history is a sane progress overview over time. To make that safe the
   render is deterministic (no timestamp — git supplies dates) and
   `progress.sh check` fails on a stale or missing `BOARD.md`, so the committed
@@ -130,7 +130,7 @@ See `discussion/progress-tracker.md` for the review thread behind these.
 
 ## For reviewing agents
 
-If you change this system, update `docs/progress/README.md` (format),
+If you change this system, update `devdocs/progress/README.md` (format),
 `AGENTS.md` (rules), and this file (rationale) together, and keep
 `tools/progress.sh` in step. Disagreements welcome — leave them as an `idea-`
 ticket on the board itself.

@@ -70,11 +70,11 @@ with a model that can own structure.
   only). Line numbers drift between regens — verify a line before editing.
 - The `.inc` files are `{$include}`d into one unit: symbols share a single flat
   namespace (a name has one definition project-wide).
-- `docs/` is short **user** docs; **developer** docs live under `docs/developer/`
-  (index: `docs/developer/README.md`). Current work & design context:
-  `docs/developer/project-state.md`, `docs/developer/todo.md`, and active
-  `docs/developer/plan-*.md`. Completed handovers archived under
-  `docs/developer/historic/`.
+- `docs/` is short **user** docs; **developer** docs live under `devdocs/developer/`
+  (index: `devdocs/developer/README.md`). Current work & design context:
+  `devdocs/developer/project-state.md`, `devdocs/developer/todo.md`, and active
+  `devdocs/developer/plan-*.md`. Completed handovers archived under
+  `devdocs/developer/historic/`.
 
 ## Build & verify (non-negotiable)
 - This is a **self-hosting** compiler. Any change that alters emitted code must pass
@@ -100,11 +100,11 @@ with a model that can own structure.
   possible. Handovers are a good model: short, dated, attributable, and easy
   for the next agent to find without cluttering the repository root.
 
-## Progress tracker (`docs/progress/`)
+## Progress tracker (`devdocs/progress/`)
 - One board of tickets (bugs/features/tests/chores). **Status = folder**, **type
   = filename prefix** (`bug-`, `feature-`, `test-`, …). One ticket per `.md`,
   appendable `## Log`. `git mv` between folders is the only state change. Docs
-  only → skip the self-host gate. Spec: `docs/progress/README.md`.
+  only → skip the self-host gate. Spec: `devdocs/progress/README.md`.
 - Folders: `backlog/` (or `urgent/`) → `working/` → `done/`, plus `blocked/`
   (needs-user / can't-repro) and `rejected/`.
 - **Claim before working:** `git mv` to `working/` and set `Owner` in the same
@@ -117,14 +117,14 @@ with a model that can own structure.
   WIP-limited (~3) human override. Compute it: `tools/progress.sh`. When you spot
   "X before Y", add `Blocked-by` to Y — landing X makes Y ready automatically.
 - After any board change, regenerate the committed snapshot:
-  `tools/progress.sh board-md` (then commit `docs/progress/BOARD.md` with it).
+  `tools/progress.sh board-md` (then commit `devdocs/progress/BOARD.md` with it).
   `tools/progress.sh check` fails on a stale board, dangling slugs, or cycles.
 - Design + rationale (why folders/filenames/edges, tradeoffs, multi-agent
   semantics): `agents/progress-tracker-design.md`. Format spec:
-  `docs/progress/README.md`.
+  `devdocs/progress/README.md`.
 - Record + state, not a clean DB — duplicate/stale tickets tolerated, prefer
   parking to losing info. No separate index; written status stays in
-  `docs/developer/project-state.md` / `docs/developer/todo.md`.
+  `devdocs/developer/project-state.md` / `devdocs/developer/todo.md`.
 
 ## Landmines (cost real time)
 - **Don't add fields to `TSymbol` / `TParam` / `TProc`.** Their byte layout is

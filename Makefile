@@ -1217,7 +1217,7 @@ test-core: $(COMPILER)
 	@echo "=== progress board check (non-fatal) ==="
 	@./tools/progress.sh check || echo "WARNING: progress board stale or invalid — run 'tools/progress.sh board-md' (non-fatal)"
 
-# Validate the docs/progress board: stale BOARD.md, dangling Blocked-by slugs,
+# Validate the devdocs/progress board: stale BOARD.md, dangling Blocked-by slugs,
 # dependency cycles, ownerless working/, commit-less done/. Fatal when run
 # directly; only advisory inside 'make test' (above).
 progress-check:
@@ -2203,7 +2203,7 @@ stabilize: test
 	@# single, in-place-overwritten `stable_latest` binary. VERSION stays a
 	@# monotonic counter for reporting/provenance; history.log carries date + sha +
 	@# source commit per checkpoint. See
-	@# docs/progress/.../chore-stable-binary-single-file-no-version-churn.md.
+	@# devdocs/progress/.../chore-stable-binary-single-file-no-version-churn.md.
 	@NV=$$(( $$(cat $(STABLE_DEFAULT_DIR)/VERSION 2>/dev/null || echo 0) + 1 )); \
 	 echo $$NV > $(STABLE_DEFAULT_DIR)/VERSION; \
 	 cp /tmp/pascal26-s5 $(STABLE_DEFAULT_DIR)/stable_latest; \
@@ -2313,8 +2313,8 @@ distclean: clean
 # demo-app work is decoupled from compiler churn. NEITHER target is the
 # authoritative gate -- that stays `make test` + self-host fixedpoint. They are
 # discovery/smoke harnesses: when they surface missing or bugged library or
-# language support, file a ticket (docs/progress/backlog) rather than treating
-# the red as a hard CI failure. See docs/dev/parallel-tracks.md.
+# language support, file a ticket (devdocs/progress/backlog) rather than treating
+# the red as a hard CI failure. See devdocs/dev/parallel-tracks.md.
 # ============================================================================
 
 # Guard + report which stable the library track is pinned to.
@@ -2361,7 +2361,7 @@ pin:
 	@# isolation hole where track A's uncommitted edits in compiler/builtin/**
 	@# (its own lane) leaked into track B's pinned compiles. lib/rtl + lib/pcl are
 	@# deliberately NOT frozen -- they are track B's own editable lane, which B
-	@# expects live. See docs/progress/backlog/bug-pinned-stable-reads-live-builtin-rtl.md.
+	@# expects live. See devdocs/progress/backlog/bug-pinned-stable-reads-live-builtin-rtl.md.
 	@rm -rf $(STABLE_DEFAULT_DIR)/builtin
 	@mkdir -p $(STABLE_DEFAULT_DIR)/builtin
 	@cp compiler/builtin/*.pas $(STABLE_DEFAULT_DIR)/builtin/

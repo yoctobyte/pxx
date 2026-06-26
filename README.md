@@ -127,14 +127,14 @@ ln -sfn "$PWD/stable_linux_amd64/default/latest" "$HOME/.local/bin/pxx"
 
 ## Documentation
 
-- [Public documentation](site/index.md) — install, getting started, language,
+- [Public documentation](docs/index.md) — install, getting started, language,
   features, targets, library, and reference pages.
-- [Repository documentation index](docs/README.md)
-- [Legacy command line](docs/cli.md)
-- [Legacy dialect notes](docs/dialect/README.md)
-- [Not implemented](docs/not-implemented.md)
-- [Not stable](docs/not-stable.md)
-- [Developer docs](docs/developer/README.md)
+- [Internal documentation index](devdocs/README.md)
+- [Legacy command line](devdocs/cli.md)
+- [Legacy dialect notes](devdocs/dialect/README.md)
+- [Not implemented](devdocs/not-implemented.md)
+- [Not stable](devdocs/not-stable.md)
+- [Developer docs](devdocs/developer/README.md)
 - [Agent instructions](agents/AGENTS.md) — guidelines and workflow for AI agents working on this repo.
 
 ## Repository Layout
@@ -144,7 +144,8 @@ ln -sfn "$PWD/stable_linux_amd64/default/latest" "$HOME/.local/bin/pxx"
 - `compiler/` - compiler source, the checked-in seed, and `builtin/` (the
   compiler-specific runtime unit auto-included into compiled programs: heap
   allocator, `Str`/`Val`, variant helpers).
-- `docs/` - public docs, project state, plans, and historic handovers.
+- `docs/` - public website documentation.
+- `devdocs/` - project state, plans, progress tickets, and historic handovers.
 - `lib/` - Pascal library units used by tests and demos (`rtl/`, `pcl/`).
 - `stable_linux_amd64/` - stable/recovery compiler binaries. The default channel
   uses managed `AnsiString`; historical managed/frozen channels may remain for

@@ -1,6 +1,6 @@
 #!/usr/bin/env sh
 # Install the QEMU user-mode emulators used by the cross-target test
-# environment (see docs/progress/*/chore-qemu-test-env.md and
+# environment (see devdocs/progress/*/chore-qemu-test-env.md and
 # tools/run_target.sh). Needs sudo.
 #
 # qemu-user runs a single foreign-architecture Linux binary by translating

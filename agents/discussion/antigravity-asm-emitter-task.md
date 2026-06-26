@@ -5,7 +5,7 @@ anything. Read `agents/AGENTS.md` (access restrictions + navigation) first.
 
 ## Hard guardrails (the ban was about these — do not break them)
 
-- **One ticket only:** `docs/progress/backlog/feature-rv32-asm-emitter.md`.
+- **One ticket only:** `devdocs/progress/backlog/feature-rv32-asm-emitter.md`.
   Claim it (set Owner + Status, add a Log line), then work only it.
 - **Do not roam.** Touch only: `compiler/asmtext_rv32.inc` (new),
   `compiler/asmtext.inc` (only to share existing `AsmText*` helpers), the one

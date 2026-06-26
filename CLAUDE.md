@@ -3,7 +3,7 @@
 PXX / pascal26: a self-hosting Pascal-dialect compiler (FPC-seeded), with its own
 RTL, multiple backends (x86-64 default IR; i386 / aarch64 / arm32 / xtensa /
 riscv cross targets), and a Nil-Python frontend. The authoritative source of
-project state is `docs/progress/BOARD.md` (regenerate with `tools/progress.sh
+project state is `devdocs/progress/BOARD.md` (regenerate with `tools/progress.sh
 board-md`).
 
 ## Four parallel agents — figure out which one you are
@@ -27,11 +27,11 @@ language). **At session start, infer your track from the request:**
   existed only while C was destabilizing; now C *is* part of the compiler, so it
   lives on `master` like everyone else, protected by the same pin boundary (B/D
   build on `pinned`, not HEAD).
-- **Track D — documentation (user / website).** `docs/site/**` — the user-facing
+- **Track D — documentation (user / website).** `docs/**` — the user-facing
   docs the website pulls straight from git and publishes (getting-started,
   language reference, tutorials, install, the public landing copy). Prose only:
   **never** touches `compiler/**` or `lib/**`. NOT the internal dev docs
-  (`docs/dev/**`) or the agent board (`docs/progress/**`) — those belong to A/B.
+  (`devdocs/dev/**`) or the agent board (`devdocs/progress/**`) — those belong to A/B.
   Works on `master`.
 
 If genuinely ambiguous, **ask: "Track A (compiler), B (libraries/demos), C (C
@@ -40,7 +40,7 @@ about rebuilding the compiler and where they work.
 
 Full protocol, including the stable-binary boundary, the lib-test/demos
 discovery→ticket loop, and shared-checkout coordination, is in
-**`docs/dev/parallel-tracks.md`**. Read it before starting your track.
+**`devdocs/dev/parallel-tracks.md`**. Read it before starting your track.
 
 ### Track A in one line
 Own `compiler/**` (shared internals: AST, IR, symtab, backends, ABI, ELF). Gate
@@ -52,7 +52,7 @@ stabilize` alone does NOT move B's ground.
 ### Track B in one line
 Build everything with `$(PXX_STABLE)` (= `stable_linux_amd64/default/pinned`);
 never rebuild the compiler. `make lib-test` (green smoke) / `make demos`
-(dashboard). Compiler/language gaps → file a ticket in `docs/progress/backlog`.
+(dashboard). Compiler/language gaps → file a ticket in `devdocs/progress/backlog`.
 
 ### Track C in one line
 Own the C-frontend files (`clexer`/`cparser`/`cpreproc`, C→IR lowering,
@@ -74,10 +74,10 @@ hand off) → here, file → self-resolve. Drop back to file-and-hand-off the mo
 the agent is single-track again.
 
 ### Track D in one line
-Own `docs/site/**` (Markdown the website publishes verbatim from git). No build,
+Own `docs/**` (Markdown the website publishes verbatim from git). No build,
 no compiler, no `lib/**`. Gate = docs stay internally consistent and examples
 compile against `$(PXX_STABLE)` (never rebuild). A compiler/library gap found
-while documenting → file a ticket in `docs/progress/backlog`, don't fix code.
+while documenting → file a ticket in `devdocs/progress/backlog`, don't fix code.
 Verify code snippets by compiling them; don't invent behaviour.
 
 ## Workflow norms (all tracks)
@@ -97,7 +97,7 @@ Verify code snippets by compiling them; don't invent behaviour.
   known-broken or mid-refactor state, and don't push another agent's in-flight
   uncommitted work — only what you committed.
 - Tickets live in
-  `docs/progress/{urgent,working,unfinished,backlog,blocked,done,rejected}/`;
+  `devdocs/progress/{urgent,working,unfinished,backlog,blocked,done,rejected}/`;
   regenerate `BOARD.md` after moving them. `working/` is a **live lock** — a
   ticket sits there only while an agent is actively on it. When work halts with
   the ticket incomplete (e.g. parked waiting on another fix), move it to

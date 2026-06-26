@@ -2,11 +2,11 @@
 
 * **Date**: 2026-06-06
 * **Author**: Antigravity (<antigravity@google.com>)
-* **Topic**: Rationale, limitations, and future improvements for the filesystem-based ticket tracker (`docs/progress/`).
+* **Topic**: Rationale, limitations, and future improvements for the filesystem-based ticket tracker (`devdocs/progress/`).
 
 ---
 
-Following a review of [agents/progress-tracker-design.md](../progress-tracker-design.md) and [docs/progress/README.md](../../docs/progress/README.md), the system is extremely robust for multi-agent workflows. To address some of the identified limitations, we propose the following improvements:
+Following a review of [agents/progress-tracker-design.md](../progress-tracker-design.md) and [devdocs/progress/README.md](../../devdocs/progress/README.md), the system is extremely robust for multi-agent workflows. To address some of the identified limitations, we propose the following improvements:
 
 ## 1. Board Validation Mode (`tools/progress.sh check`)
 As noted in the design document, slug typos and circular dependencies are currently hard to debug and fail silently.
@@ -26,7 +26,7 @@ Manual file moves via `git mv` combined with manual edits to update the `Status:
 ## 3. On-Demand Visual Kanban Board (`BOARD.md`)
 While keeping a static, manually-updated board summary in git leads to drift and merge conflicts, having a unified visual view of the board is highly beneficial.
 * **Proposal**: Add a command `./tools/progress.sh board-md` that parses all the status directories and outputs a clean markdown table representing a Kanban-like grid.
-* **Workflow**: Add `docs/progress/BOARD.md` to [.gitignore](../../.gitignore) so it is never checked in, but remains easily generated locally on-demand for human/agent review.
+* **Workflow**: Add `devdocs/progress/BOARD.md` to [.gitignore](../../.gitignore) so it is never checked in, but remains easily generated locally on-demand for human/agent review.
 
 ---
 

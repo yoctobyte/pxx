@@ -368,7 +368,7 @@ const
 
   { Compile targets. x86-64 is the native/self-host target; others are
     cross-only and grow op-by-op (unsupported constructs error, never
-    mis-compile). See docs/progress/*/feature-target-i386.md. }
+    mis-compile). See devdocs/progress/*/feature-target-i386.md. }
   TARGET_X86_64 = 0;
   TARGET_I386   = 1;
   TARGET_AARCH64 = 2;
@@ -380,7 +380,7 @@ const
   { Platform / OS axis — independent of the CPU axis above. posix = hosted
     (syscalls, fd IO, sockets, dlopen); esp = bare-metal esp32 (MMIO, no
     filesystem/sockets yet). Do NOT derive platform from CPU: aarch64 can be
-    posix or bare. See docs/progress/*/feature-platform-abstraction-layer.md. }
+    posix or bare. See devdocs/progress/*/feature-platform-abstraction-layer.md. }
   PLATFORM_POSIX = 0;
   PLATFORM_ESP   = 1;
   { Bytes reserved below the windowed locals frame for the constant-sp
@@ -937,7 +937,7 @@ var
     every top-level routine header (and all types/consts/vars) with bodies
     skipped, so a routine may call another declared later (and mutual recursion
     needs no `forward`). Pass 2 replays the recorded subroutine spans to emit the
-    bodies. See docs/progress/*/feature-declaration-prescan. }
+    bodies. See devdocs/progress/*/feature-declaration-prescan. }
   PreScanPass : Boolean;        { True while registering headers (pass 1) }
   GenericMethodBuffered : Boolean; { set by ParseSubroutine when it consumed a generic
     class-method impl (`procedure TBox.Meth` for a template TBox) via

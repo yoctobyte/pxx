@@ -36,11 +36,11 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           TAG="${{ inputs.tag }}"
-          # Prefer a hand-authored body at docs/release-notes/<tag>.md; else auto.
+          # Prefer a hand-authored body at devdocs/release-notes/<tag>.md; else auto.
           NOTES=(--generate-notes)
-          if [ -f "docs/release-notes/$TAG.md" ]; then
-            NOTES=(--notes-file "docs/release-notes/$TAG.md")
-            echo "release body: docs/release-notes/$TAG.md"
+          if [ -f "devdocs/release-notes/$TAG.md" ]; then
+            NOTES=(--notes-file "devdocs/release-notes/$TAG.md")
+            echo "release body: devdocs/release-notes/$TAG.md"
           fi
           gh release create "$TAG" \
             "dist/pxx-$TAG.tar.gz" "dist/pxx-$TAG/MANIFEST.sha256" \

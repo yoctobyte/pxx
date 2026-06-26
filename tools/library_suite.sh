@@ -137,7 +137,7 @@ run_discovery() {
   probe_compile demo_adventure \
     "Track A/B boundary: expose Text/Assign default surface and dispatch ReadLn/WriteLn(file, ...) to PAL-backed textfile RTL" \
     "$ROOT/examples/adventure/adventure.pas"
-  say "(discovery is non-gating; GAP lines should map to docs/progress tickets)"
+  say "(discovery is non-gating; GAP lines should map to devdocs/progress tickets)"
 }
 
 compiler_check

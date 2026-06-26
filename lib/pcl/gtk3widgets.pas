@@ -629,7 +629,7 @@ begin
 
   { PChar of an empty AnsiString now yields a static #0 pointer (never nil), so
     gtk_*_set_text sees a valid empty C string with no guard — see
-    docs/progress/done/bug-pchar-empty-managed-string-nil.md. }
+    devdocs/progress/done/bug-pchar-empty-managed-string-nil.md. }
   p := PChar(AText);
 
   className := GetInstanceClassName(Pointer(AControl));
