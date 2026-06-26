@@ -412,6 +412,8 @@ test-core: $(COMPILER)
 	/tmp/cunion_global_init_b4626; test "$$?" = "42"
 	./$(COMPILER) test/cglobal_scalar_init_b47.c /tmp/cglobal_scalar_init_b4726
 	/tmp/cglobal_scalar_init_b4726; test "$$?" = "42"
+	./$(COMPILER) test/cstruct_global_init_b48.c /tmp/cstruct_global_init_b4826
+	/tmp/cstruct_global_init_b4826; test "$$?" = "42"
 	./$(COMPILER) -Itest/cinc/inc test/cinc/cinc_main.c /tmp/cinc_main26
 	test "$$(/tmp/cinc_main26)" = "$$(printf 'local-ok\ninc-ok')"
 	./$(COMPILER) test/test_declared_directive.pas /tmp/test_declared_directive26

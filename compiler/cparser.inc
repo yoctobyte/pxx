@@ -1816,40 +1816,38 @@ begin
       Next;
       { Materialise a non-array struct/union global brace-initializer as per-field
         PendingInit writes (constant values only) — so e.g. lstrlib's nativeendian
-        union initializer reads correctly at runtime instead of zero. Arrays and
-        non-constant inits fall through to the skip path (a documented follow-up). }
+        union and small struct globals read correctly at runtime instead of zero.
+        Arrays and non-constant inits fall through to the skip path. The PendingInit
+        emission resolves a field by NAME, so FOff/FLen carry the field's NAME
+        reference (UFldNOff/UFldNLen), which name-resolves to the correct byte
+        offset for every field (unions: all at offset 0; structs: each distinct). }
       recBase := -1;
       if (recId >= REC_UCLASS_BASE) and UClsIsRecord[recId - REC_UCLASS_BASE] then
         recBase := UClsFBase[recId - REC_UCLASS_BASE];
-      { Materialise only a UNION-LIKE record (every field at offset 0, or a single
-        field) — write the FIRST constant value to offset 0. lstrlib's nativeendian
-        `union {int dummy; char little} = {1}` needs exactly this. Multi-field
-        STRUCTs fall through to skip: the PendingInit emission resolves a field by
-        NAME (not the stored byte offset), so non-zero field offsets can't yet be
-        materialised, and writing them all to offset 0 would be a silent miscompile
-        — so don't (no worse than the prior zero-init). }
       if (CurTok.Kind = tkBegin) and (baseTk = tyRecord) and (not wasArr) and
          (idx >= 0) and (recBase >= 0) and
-         (UClsFCount[recId - REC_UCLASS_BASE] >= 1) and
-         ((UClsFCount[recId - REC_UCLASS_BASE] = 1) or (UFldOff_[recBase + 1] = 0)) and
-         (Tokens[TokPos].Kind = tkInteger) and (PendingInitCount < MAX_PENDING_INITS) then
+         (UClsFCount[recId - REC_UCLASS_BASE] >= 1) then
       begin
         Next;   { consume the opening brace }
-        fTk := UFldTk[recBase]; fSz := TypeSize(IntToTypeKind(fTk));
-        initV := CurTok.IVal;
-        PendingInitSym[PendingInitCount]  := idx;
-        PendingInitElem[PendingInitCount] := -1;
-        PendingInitFOff[PendingInitCount] := 0;
-        PendingInitFLen[PendingInitCount] := fSz;
-        PendingInitVal[PendingInitCount]  := initV;
-        PendingInitTk[PendingInitCount]   := fTk;
-        Inc(PendingInitCount);
-        depth := 1;   { skip the rest of the brace body (balanced) }
-        repeat
-          if CurTok.Kind = tkBegin then Inc(depth)
-          else if CurTok.Kind = tkEnd then Dec(depth);
-          Next;
-        until (depth = 0) or (CurTok.Kind = tkEOF);
+        fldI := 0;
+        while (CurTok.Kind <> tkEnd) and (CurTok.Kind <> tkEOF) do
+        begin
+          if (fldI < UClsFCount[recId - REC_UCLASS_BASE]) and (CurTok.Kind = tkInteger) and
+             (Tokens[TokPos].Kind in [tkComma, tkEnd]) and (PendingInitCount < MAX_PENDING_INITS) then
+          begin
+            PendingInitSym[PendingInitCount]  := idx;
+            PendingInitElem[PendingInitCount] := -1;
+            PendingInitFOff[PendingInitCount] := UFldNOff[recBase + fldI];  { field NAME ref }
+            PendingInitFLen[PendingInitCount] := UFldNLen[recBase + fldI];
+            PendingInitVal[PendingInitCount]  := CurTok.IVal;
+            PendingInitTk[PendingInitCount]   := UFldTk[recBase + fldI];
+            Inc(PendingInitCount);
+            Inc(fldI); Next; Eat(tkComma);
+          end
+          else
+            Next;   { non-constant / nested / overflow field: skip without materialising }
+        end;
+        Eat(tkEnd);
       end
       else if CurTok.Kind = tkBegin then
       begin
