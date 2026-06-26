@@ -28,3 +28,10 @@ at the local-array dim; compare the two call sites). Then handle `(type)expr` on
 in CEvalConstPrimary. Note a SEPARATE token-based struct-field array-dim evaluator
 at cparser.inc ~2591 only reads tkInteger and must also learn casts/`/`. Common:
 lua MAXABITS / cast_int / luaM_limitN array sizes.
+
+## Resolution
+- 2026-06-26 — FIXED. Root was the bare-funcname=Result landmine: the new
+  cast branch wrote `Result := CEvalConstPrimary` WITHOUT parens, so inside
+  CEvalConstPrimary that read the function`s own Result (0) instead of recursing,
+  leaving the operand unfolded. `CEvalConstPrimary()` with parens fixes it.
+  Fixture cconst_cast_b39.c (=42); lua ltable now parses.

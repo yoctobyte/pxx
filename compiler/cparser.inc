@@ -2219,8 +2219,23 @@ begin
   Result := 0;
   if CurTok.Kind = tkLParen then
   begin
-    Next; Result := CEvalConstExpr;
-    if CurTok.Kind = tkRParen then Next;
+    Next;
+    if IsCTypeTok then
+    begin
+      { cast `(type)expr` in a constant expression — the integer value is
+        unchanged for const-folding (lua's cast_int(...) = ((int)(...))). Skip the
+        cast type tokens to the matching `)`, then fold the operand. NOTE the `()`
+        on the recursive call: bare `CEvalConstPrimary` would read this function's
+        own Result, not recurse. }
+      while (CurTok.Kind <> tkRParen) and (CurTok.Kind <> tkEOF) do Next;
+      if CurTok.Kind = tkRParen then Next;
+      Result := CEvalConstPrimary();
+    end
+    else
+    begin
+      Result := CEvalConstExpr;
+      if CurTok.Kind = tkRParen then Next;
+    end;
   end
   else if CurTok.Kind = tkMinus then begin Next; Result := -CEvalConstPrimary(); end
   else if CurTok.Kind = tkPlus then begin Next; Result := CEvalConstPrimary(); end
