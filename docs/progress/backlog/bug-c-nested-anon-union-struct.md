@@ -1,0 +1,38 @@
+# C: nested/anonymous struct-or-union member makes the whole struct opaque
+
+- **Type:** bug (HIGH impact — silent miscompile) — Track C / layout
+- **Opened:** 2026-06-26
+- **Found-by:** lua ldo `setobjs2s(L, ci->func.p + i, ...)` reduced to
+  `struct O { union { T *p; long x; } u; }; o.u.p` -> garbage / IR_UNSUPPORTED.
+
+## Symptom
+A struct that CONTAINS a nested anonymous struct/union member is laid out as an
+opaque pointer, so every field access on it reads the wrong place:
+```c
+struct O { union { int *p; long x; } u; };
+... o.u.p ...        /* gcc: the pointer; pxx: truncated garbage (e.g. 139) */
+```
+`CStructBodyIsSimple` (cparser.inc ~2446) deliberately returns False for "nested/
+anonymous struct or union bodies (a second brace)" and falls back to an opaque
+pointer (to avoid silently-wrong offsets). Plain pointer/scalar members and
+nested-struct-BY-TAG (`struct Foo bar;`) work; only an inline `{ ... }` body bails.
+A top-level union, and a struct whose nested aggregate is a NAMED type, both work.
+
+## Why it matters
+lua's core structs use nested unions/structs pervasively: `TValue` holds
+`Value value_` (Value is a union), `CallInfo` has `union { ... } u;` and a
+`union { ... } func`-ish field, `GCUnion`, `Node`/`TKey`, etc. So those structs go
+opaque and field access silently miscompiles. It blocks ldo/ltm at codegen and is
+a latent silent miscompile in several files that currently "parse clean".
+
+## Fix direction
+Teach ParseCStructInto to lay out a nested anonymous aggregate member
+`struct|union { ... } name;` as a nested record field: create a sub-record for the
+anon body (UNION = every member at offset 0, size = max member size; STRUCT =
+sequential), make `name` a field of that record type at the current offset, and
+advance by the sub-record size (aligned). Then `outer.name.member` resolves
+through the sub-record (the existing nested-struct-by-tag path already does field
+chains, so the resolver mostly works once `name` has a real record type). Keep the
+opaque fallback only for genuinely unsupported bodies (bitfields). Verify
+`o.u.p` / `o.u.p->f` / `&(o.u.p + i)->f` and union overlap vs gcc, and confirm
+self-host byte-identical (C-frontend-only).
