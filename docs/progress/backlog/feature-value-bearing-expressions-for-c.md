@@ -1,7 +1,7 @@
 # feature: value-bearing expression nodes for the C frontend (ternary + side-effecting exprs)
 
 - **Type:** feature (shared AST/IR — language model)
-- **Status:** backlog
+- **Status:** backlog (slice 1 DONE 2026-06-26, pin v76; slices 2/3 open)
 - **Track:** A (compiler core / shared lowering)
 - **Opened:** 2026-06-26
 - **Found-by:** Track A analysis prompted by the C frontend
@@ -80,3 +80,19 @@ yield `b`. Trivial once slice 2's mechanism exists; otherwise a tiny standalone
   safety net), pins; only then does the C frontend (own branch) target them.
 - Slice 1 is the recommended standalone landing. Slice 2 is the one to scope
   carefully before starting — it is the actual "is this a rabbit hole" question.
+
+## Slice 1 landed (2026-06-26, Track A — commit 01a92173, pin v76)
+
+`AN_TERNARY` added (defs.inc) + parser `if c then a else b` expression form
+(ParseFactor tkIf) + IR lowering (mirrors AN_IF, each arm stored into one hidden
+temp via the AN_ASSIGN path, yields a load; short-circuit preserved). Frozen
+string-literal arms carried as managed AnsiString. Verified int/bool/char/
+pointer/string arms, short-circuit, nesting, ternary in writeln / call arg / RHS;
+valgrind-clean; make test green incl cross; self-host byte-identical (Pascal
+compiler source emits no ternary, so the node is a pure addition with a built-in
+safety net). C frontend (feat/cfront) can now lower `c ? a : b` onto AN_TERNARY
+after rebasing on pin v76.
+
+Slices 2 (value-bearing assignment + pre/post ++/--) and 3 (comma operator)
+remain open — they need the side-effect-hoisting pass and are the real scope
+question. Not started.
