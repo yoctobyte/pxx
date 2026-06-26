@@ -1,7 +1,7 @@
 # feature: value-bearing expression nodes for the C frontend (ternary + side-effecting exprs)
 
 - **Type:** feature (shared AST/IR — language model)
-- **Status:** backlog (slices 1+3 DONE 2026-06-26, pin v77; slice 2 open)
+- **Status:** DONE (all slices, 2026-06-26, pin v78)
 - **Track:** A (compiler core / shared lowering)
 - **Opened:** 2026-06-26
 - **Found-by:** Track A analysis prompted by the C frontend
@@ -110,3 +110,27 @@ index, casts); make test green incl cross; self-host byte-identical.
 Only slice 2 (value-bearing assignment `x=y`, chained `a=b=c`, pre/post ++/--)
 remains — the side-effect-hoisting / evaluate-lvalue-once pass, the real scope
 question. Not started.
+
+## Slice 2 landed — ticket COMPLETE (2026-06-26, Track A — commit 0c8595e0, pin v78)
+
+AN_INCDEC (++/--) + AN_COMPOUND_ASSIGN (`+= -= *= /=`, and plain value-bearing
+`=`/chained `a=b=c` for the C frontend). Core primitive: evaluate the lvalue
+ADDRESS exactly ONCE into a hidden pointer temp, then load/modify/store through
+it — so `a[i++] += 1` bumps i once and postfix yields the old value. No new IR
+ops. New lexer tokens `++ -- += -= *= /=` (Pascal lexer only; inert for existing
+source → byte-identical). Prefix/postfix in ParseFactor, compound tail in
+ParseExpr; lvalue check at IR lowering (rejects `a++ += x`). Pointer ++ scales by
+element size. Verified incl lvalue-once, chaining, illegal-lvalue rejection,
+pointer arithmetic; valgrind-clean; make test green incl cross; self-host
+byte-identical.
+
+Statement-level forms (`x++;`, `x += 5;`) are intentionally NOT added to the
+Pascal statement parser (delicate := dispatch, byte-identical risk) — the C
+frontend wraps these as expression-statements on its own side, and Pascal tests
+use expression position. If a Pascal statement surface is wanted later, it is a
+separate small ticket.
+
+All three value-bearing gaps (ternary, comma, assignment/inc-dec) are now closed.
+Pascal is a C superset at the expression/statement-model level for these. The C
+frontend (feat/cfront) lowers `?:`, `,`, `=`/`+=`/`++` onto AN_TERNARY / AN_COMMA
+/ AN_COMPOUND_ASSIGN / AN_INCDEC after rebasing on pin v78.

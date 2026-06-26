@@ -29,7 +29,7 @@ _none_
 | --- | --- | --- | --- | --- |
 | feature-c-runtime-library | B | feature | C runtime/library layer (`lib/crtl`) plus direct C-library packages | feature-c-source-frontend |
 
-## backlog (58)
+## backlog (57)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -85,7 +85,6 @@ _none_
 | feature-tls-provider-abstraction | B | feature | TLS provider abstraction — pluggable backends (OpenSSL + handrolled) | — |
 | feature-tls-system-trust-store | B | feature | Chain-to-system-trust-store (/etc/ssl/certs) for the TLS client | — |
 | feature-toolchain-cli-ux | A | feature | Toolchain CLI / user tooling (install, config, discovery, doctor, selfcheck) | — |
-| feature-value-bearing-expressions-for-c | A | feature | feature: value-bearing expression nodes for the C frontend (ternary + side-effecting exprs) | — |
 | feature-writeln-as-library | B | feature | write/writeln as a library function (via `array of const` + variadic sugar) | — |
 | feature-xtensa-stack-args-over-6-words | A | feature | xtensa: support calls/definitions with more than 6 parameter words | — |
 | feature-zero-init-contract | A | feature | Zero-init contract — one library-owned managed-slot zeroing guarantee | — |
@@ -126,7 +125,7 @@ _none_
 | feature-mimic-fpc | B | feature | `mimic FPC` compatibility mode | — |
 | feature-string-model-tyfixedstring | B | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (281)
+## done (282)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -404,6 +403,7 @@ _none_
 | feature-typed-instruction-encoders | A | feature | Typed instruction encoders for codegen | — |
 | feature-unified-heap-allocator | A | feature | Unified syscall-free heap allocator | — |
 | feature-untyped-parameters | B | feature | Untyped `var` / `const` / `out` parameters | — |
+| feature-value-bearing-expressions-for-c | A | feature | feature: value-bearing expression nodes for the C frontend (ternary + side-effecting exprs) | — |
 | feature-xtensa-asm-emitter | A | feature | Xtensa text-assembler (`EmitAsmXtensa`) for ESP32 | — |
 | feature-xtensa-windowed-abi | A | feature | Xtensa windowed ABI codegen variant (for ESP-IDF interop) | — |
 | fix-sat-dpll-needs-parens-after-paramless-flip | B | fix | sat DPLL: bare paramless recursion needs `DPLL()` after the paramless flip | — |
@@ -471,7 +471,6 @@ _none_
 - [B] feature-tls-provider-abstraction
 - [B] feature-tls-system-trust-store
 - [A] feature-toolchain-cli-ux
-- [A] feature-value-bearing-expressions-for-c
 - [B] feature-writeln-as-library
 - [A] feature-xtensa-stack-args-over-6-words
 - [A] feature-zero-init-contract

@@ -75,3 +75,4 @@
 2026-06-26T04:27:54Z  v75  15281bd2d3d7b67d713e7c6c950ac5e7df83277e3c78de37a7da7df4b2fc6a57  65d7fb56520b8ce7b962589b9ff45ad8a4b5c867  fix(ir): nil-init managed-record by-value arg temp before COPY_REC_MANAGED
 2026-06-26T04:59:51Z  v76  96247090b13ae66119c1f28a8d966caaa260148eb05f616d1dfc3cc856de0f8b  01a9217315f9be5a0b50efce2966d149a8533d6c  feat(ir): AN_TERNARY value-bearing conditional expression (slice 1)
 2026-06-26T05:13:21Z  v77  3878181e8d5f7fbdb2f3aeb8862b73a915705bfab5581657ec6b473ce37d832e  86d868875157d6387260c9a3bb2ffcc382a60d97  feat(ir): AN_COMMA — C comma operator (slice 3)
+2026-06-26T05:35:50Z  v78  ad6d3ca6590781e05f94e9495ae69236be58def42167578366688fc2fff707e0  0c8595e0bcf8e369de9891384701607423f31d6f  feat(ir): AN_INCDEC + AN_COMPOUND_ASSIGN — value-bearing assign & ++/-- (slice 2)
