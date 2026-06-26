@@ -177,6 +177,12 @@ const
   AN_SET_CONST_REF = 66; { named set constant used as a value: ASTIVal = Data[]
                            offset of the baked 32-byte mask. Lowers to IR_SET_LIT
                            (same blob-address value a set literal yields). }
+  AN_COMMA         = 68; { C comma operator `(a, b)`: evaluate Left for its side
+                           effects (value discarded), yield Right's value.
+                           Right-nested for `(a,b,c)`. ASTTk = Right's type. Only
+                           produced by the C frontend and Pascal's parenthesised
+                           comma form (a syntax error otherwise) — never in
+                           compiler source, so self-host stays byte-identical. }
   AN_TERNARY       = 67; { value-bearing conditional expression `c ? a : b`
                            (C frontend) / `if c then a else b` expression form.
                            Left = condition; Right = AN_PAIR(then-arm, else-arm).

@@ -3355,6 +3355,14 @@ begin
       Result := IRAppend(IR_BLOCK, first, endLabelNode, -1, 0, 0);
     end;
 
+    AN_COMMA:
+    begin
+      { C comma operator: evaluate Left for its side effects (discard the value),
+        yield Right. Right-nested, so each Left peels one operand off the front. }
+      IRMarkStatementNode(IRLowerAST(ASTLeft[node]));
+      Result := IRLowerAST(ASTRight[node]);
+    end;
+
     AN_TERNARY:
     begin
       { Value-bearing conditional `c ? a : b` / `if c then a else b`. Mirror the

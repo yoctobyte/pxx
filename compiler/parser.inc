@@ -3246,7 +3246,28 @@ begin
     end;
     tkLParen:
     begin
-      Next; if PyExprMode then PyParseBoolExpr else ParseExpr; Expect(tkRParen, ')');
+      Next; if PyExprMode then PyParseBoolExpr else ParseExpr;
+      { C comma operator `(a, b, ...)`: each operand but the last is evaluated for
+        its side effects then discarded; the value is the last. A parenthesised
+        comma list is otherwise a syntax error in pxx, so this is conflict-free
+        and reads identically to C. Skipped in Python mode (there `(a, b)` is a
+        tuple). Right-nested AN_COMMA so lowering discards each Left in turn. }
+      if (not PyExprMode) and (CurTok.Kind = tkComma) then
+      begin
+        node := CurASTNode;
+        while Eat(tkComma) do
+        begin
+          ParseExpr;
+          valNode := AllocNode(AN_COMMA);
+          ASTLeft[valNode] := node;
+          ASTRight[valNode] := CurASTNode;
+          ASTTk[valNode] := ASTTk[CurASTNode];
+          node := valNode;
+        end;
+        CurASTNode := node;
+        LastExprTk := IntToTypeKind(ASTTk[node]);
+      end;
+      Expect(tkRParen, ')');
       { Postfix suffix on a parenthesised expression: `(p)^`, `(p+k)^`, `(r).f`,
         `(a)[i]`. Without this the `^`/`.`/`[` were left dangling and the grouped
         value was used as-is (e.g. `(p)^` returned the pointer, not the pointee). }
