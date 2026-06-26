@@ -15,7 +15,7 @@ programs can use these units without passing extra `-Fu` flags.
 
 | Unit | Area |
 | --- | --- |
-| `sysutils` | String and conversion helpers such as `IntToStr`, plus common utility routines. |
+| [`sysutils`](./sysutils.md) | Standard utilities, including string conversions, formatting, file paths, and memory helpers. |
 | [`classes` & `streams`](./core.md) | Object, list, and stream infrastructure (lists, string lists, memory streams) for FPC-style code. |
 | `textfile` | Pascal text-file support. |
 | `math` | Numeric helpers. |
