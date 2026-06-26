@@ -406,6 +406,8 @@ test-core: $(COMPILER)
 	/tmp/cassign_value_b4326; test "$$?" = "42"
 	./$(COMPILER) test/cnested_union_b44.c /tmp/cnested_union_b4426
 	/tmp/cnested_union_b4426; test "$$?" = "42"
+	./$(COMPILER) test/canon_agg_global_b45.c /tmp/canon_agg_global_b4526
+	/tmp/canon_agg_global_b4526; test "$$?" = "42"
 	./$(COMPILER) -Itest/cinc/inc test/cinc/cinc_main.c /tmp/cinc_main26
 	test "$$(/tmp/cinc_main26)" = "$$(printf 'local-ok\ninc-ok')"
 	./$(COMPILER) test/test_declared_directive.pas /tmp/test_declared_directive26

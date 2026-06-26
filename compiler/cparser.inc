@@ -17,6 +17,7 @@ function ParseCCommaExpr: Integer; forward;
 function ParseCSwitchAST: Integer; forward;
 function CNodeIsPointer(node: Integer): Boolean; forward;
 function CNodePtrElemRec(node: Integer): Integer; forward;
+procedure ParseCStructInto(ci: Integer; isUnion: Boolean); forward;
 
 { ===== C expression compiler (Slice B) =====
   A real recursive-descent C expression parser at C precedence, replacing the
@@ -892,6 +893,31 @@ begin
   Result := rec;
 end;
 
+{ Lay out an inline struct/union body `{ ... }` (CurTok at the brace) into a
+  record, used for `struct|union [tag] { ... }` in a TYPE position. `rec` is the
+  tag's record (>= REC_UCLASS_BASE) or REC_NONE for an anonymous body; on return
+  it holds the laid-out record id. }
+procedure CParseInlineAggBody(var rec: Integer; isUnion: Boolean);
+var d: Integer;
+begin
+  if (rec < REC_UCLASS_BASE) and (UClsCount < MAX_UCLASS - 1) then
+  begin
+    rec := REC_UCLASS_BASE + AddUClass(0, 0);
+    UClsIsRecord[rec - REC_UCLASS_BASE] := True;
+  end;
+  if rec >= REC_UCLASS_BASE then
+    ParseCStructInto(rec - REC_UCLASS_BASE, isUnion)
+  else
+  begin
+    d := 0;   { no record headroom: skip the body with balanced braces }
+    repeat
+      if CurTok.Kind = tkBegin then Inc(d)
+      else if CurTok.Kind = tkEnd then Dec(d);
+      Next;
+    until (d = 0) or (CurTok.Kind = tkEOF);
+  end;
+end;
+
 procedure AddCTypedefEx(const name: AnsiString; tk: TTypeKind; elemTk, rec: Integer);
 var idx, i: Integer;
 begin
@@ -993,15 +1019,12 @@ begin
       tkCFloat:    begin base := tySingle; isFloatTy := True; sawBase := True; Next; end;
       tkCDouble:   begin base := tyDouble; isFloatTy := True; sawBase := True; Next; end;
       tkCBool:     begin base := tyUInt8; sawBase := True; Next; end;
-      tkRecord:    { 'struct' [tag] — tag reference in type position }
+      tkRecord:    { 'struct' [tag] [inline body] in type position }
         begin
           Next;
-          if CurTok.Kind = tkIdent then
-          begin
-            base := tyRecord; baseRec := FindOrForwardCTag(CurTok.SVal);
-            isAggBase := True; sawBase := True; Next;
-          end
-          else begin base := tyRecord; isAggBase := True; sawBase := True; end;
+          base := tyRecord; isAggBase := True; sawBase := True;
+          if CurTok.Kind = tkIdent then begin baseRec := FindOrForwardCTag(CurTok.SVal); Next; end;
+          if CurTok.Kind = tkBegin then CParseInlineAggBody(baseRec, False);
         end;
       tkIdent:
         begin
@@ -1011,12 +1034,9 @@ begin
           if (not sawBase) and (CurTok.SVal = 'union') then
           begin
             Next;
-            if CurTok.Kind = tkIdent then
-            begin
-              base := tyRecord; baseRec := FindOrForwardCTag(CurTok.SVal); Next;
-            end
-            else base := tyRecord;
-            isAggBase := True; sawBase := True;
+            base := tyRecord; isAggBase := True; sawBase := True;
+            if CurTok.Kind = tkIdent then begin baseRec := FindOrForwardCTag(CurTok.SVal); Next; end;
+            if CurTok.Kind = tkBegin then CParseInlineAggBody(baseRec, True);
           end
           else if (not sawBase) and (CurTok.SVal = 'enum') then
           begin
@@ -2915,11 +2935,25 @@ end;
   a function/variable typed by the struct (`struct Tag *get();`). CurTok is the
   struct/union keyword, so Tokens[TokPos] is the token after it. }
 function IsBareStructDecl: Boolean;
-var i: Integer;
+var i, depth: Integer;
 begin
   i := TokPos;
   if (i < TokCount) and (Tokens[i].Kind = tkIdent) then Inc(i);  { skip tag }
-  Result := (i < TokCount) and (Tokens[i].Kind in [tkBegin, tkSemicolon]);
+  if i >= TokCount then begin Result := False; Exit; end;
+  if Tokens[i].Kind = tkSemicolon then begin Result := True; Exit; end;  { `struct Tag;` forward }
+  if Tokens[i].Kind <> tkBegin then begin Result := False; Exit; end;    { `struct Tag x` etc. }
+  { Scan past the balanced body; a `;` right after it is a bare type definition,
+    but an identifier (a variable) means this is a struct-typed GLOBAL/var decl
+    (`struct { ... } g;`) that must route to ParseCGlobalVarDecl, not ParseCStructDecl. }
+  depth := 0;
+  while i < TokCount do
+  begin
+    if Tokens[i].Kind = tkBegin then Inc(depth)
+    else if Tokens[i].Kind = tkEnd then
+    begin Dec(depth); if depth = 0 then begin Inc(i); Break; end; end;
+    Inc(i);
+  end;
+  Result := (i < TokCount) and (Tokens[i].Kind = tkSemicolon);
 end;
 
 { Bare `struct/union [Tag] { body };` (definition) or `struct Tag;` (forward).
