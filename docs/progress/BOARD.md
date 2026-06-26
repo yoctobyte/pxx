@@ -29,7 +29,7 @@ _none_
 | --- | --- | --- | --- | --- |
 | feature-c-runtime-library | B | feature | C runtime/library layer (`lib/crtl`) plus direct C-library packages | feature-c-source-frontend |
 
-## backlog (61)
+## backlog (62)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -52,6 +52,7 @@ _none_
 | feature-copy-intrinsic | B | feature | `Copy` as a generic overloaded intrinsic (string + dynarray families) | — |
 | feature-c-regex-library-devtest | A | feature | C regex library dev-test import | — |
 | feature-c-source-frontend | A | feature | C source frontend — compile C function bodies (statements + expressions) | feature-cross-target-feature-parity |
+| feature-c-varargs-design | A | feature | C varargs (va_list / va_start / va_arg) — implementation design | — |
 | feature-demo-chess | B | feature | Flagship demo — chess engine (real-world app + cross-target oracle + benchmark) | — |
 | feature-demo-mandelbrot-gui-threaded | B | feature | Demo — GUI Mandelbrot, multithreaded tiled zoom | — |
 | feature-demo-mandelbrot | B | feature | Demo — zoomable Mandelbrot explorer | — |
@@ -448,6 +449,7 @@ _none_
 - [B] feature-copy-intrinsic
 - [A] feature-c-regex-library-devtest
 - [A] feature-c-source-frontend
+- [A] feature-c-varargs-design
 - [B] feature-demo-chess
 - [B] feature-demo-mandelbrot-gui-threaded
 - [B] feature-demo-mandelbrot
