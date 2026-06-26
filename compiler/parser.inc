@@ -14081,9 +14081,29 @@ begin
     else
       target := identNode;
 
-    valNode := AllocNode(AN_INT_LIT);
-    ASTIVal[valNode] := PendingInitVal[i];
-    ASTTk[valNode] := PendingInitTk[i];
+    if PendingInitElem[i] = -2 then
+    begin
+      { Address-of-global pointer init (`T *p = &g;`, the C frontend's std-stream
+        `FILE *stdout = &__crtl_stdout` pattern). The value is the runtime address
+        of another global, not a constant — emit `p := @g` (AN_ADDR of the target
+        sym, index in PendingInitVal). Runs at main entry before any user code, so
+        the pointer is live before it is read. }
+      valNode := AllocNode(AN_IDENT);
+      ASTIVal[valNode] := PendingInitVal[i];
+      ASTTk[valNode] := Ord(Syms[PendingInitVal[i]].TypeKind);
+      target := AllocNode(AN_ADDR);
+      ASTLeft[target] := valNode;
+      ASTTk[target] := Ord(tyPointer);
+      valNode := target;
+      { re-point: assignment target is the pointer sym, value is the address }
+      target := identNode;
+    end
+    else
+    begin
+      valNode := AllocNode(AN_INT_LIT);
+      ASTIVal[valNode] := PendingInitVal[i];
+      ASTTk[valNode] := PendingInitTk[i];
+    end;
 
     assignNode := AllocNode(AN_ASSIGN);
     ASTLeft[assignNode] := target;

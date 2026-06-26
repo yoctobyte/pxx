@@ -1741,8 +1741,13 @@ begin
     Exit;
   end;
 
-  { printf(...) — args still ignored beyond the format string (libc work). }
-  if (CurTok.Kind = tkIdent) and (CurTok.SVal = 'printf') then
+  { printf(...) as a statement. Prefer a REAL printf if one is linked (the crtl
+    stdio veneer over the PAL byte sink — full format engine); only when no
+    printf proc is defined does the literal-only AN_WRITE stub apply (a bare C
+    program with no crtl: at least the format string still prints). Letting it
+    fall through to the expression path makes `name(args)` resolve via FindProc
+    to the veneer. }
+  if (CurTok.Kind = tkIdent) and (CurTok.SVal = 'printf') and (FindProc('printf') < 0) then
   begin
     Result := ParseCPrintfAST;
     Exit;
@@ -1826,7 +1831,7 @@ end;
   two driver passes is idempotent — a name already present is not re-allocated. }
 procedure ParseCGlobalVarDecl;
 var baseTk: TTypeKind; name: AnsiString; depth, idx, recBase, fldI, fOff, fTk, fSz: Integer;
-    recId: Integer; wasArr: Boolean; initV: Int64;
+    recId, initSymIdx: Integer; wasArr: Boolean; initV: Int64;
 begin
   baseTk := ParseCDeclType;
   recId := CTypeBaseRec;
@@ -1854,6 +1859,12 @@ begin
       offset — without this the field always landed at offset 0. }
     if baseTk = tyRecord then LastTypeRecId := recId;
     idx := FindSym(name);
+    { A C global must not bind to a Pascal predefined const that only matches
+      case-insensitively (e.g. C `stderr` vs the builtin `StdErr` = fd 2):
+      assigning its initializer would hit "cannot assign to constant", and C
+      names are case-sensitive anyway. Shadow it with a fresh exact-case global
+      (the exact-case FindSym pass then resolves uses to the variable). }
+    if (idx >= 0) and (Syms[idx].Kind = skConst) then idx := -1;
     if idx < 0 then idx := AllocVar(name, baseTk);
     if CurTok.Kind = tkAssign then
     begin
@@ -1920,6 +1931,34 @@ begin
         PendingInitTk[PendingInitCount]   := Ord(baseTk);
         Inc(PendingInitCount);
         Next;
+      end
+      else if (not wasArr) and (idx >= 0) and (baseTk = tyPointer) and
+              (CurTok.Kind = tkAmp) and (Tokens[TokPos].Kind = tkIdent) and
+              (PendingInitCount < MAX_PENDING_INITS) then
+      begin
+        { Pointer global initialised to the address of another global:
+          `T *p = &g;` — the C frontend's std-stream `FILE *stdout =
+          &__crtl_stdout` pattern. Record a PendingInit that stores @g into p at
+          main entry (Elem = -2 sentinel = address-of-sym; target sym index in
+          Val). Only when g is an already-known global and the init is exactly
+          `&g` (the token after the name ends the declarator); anything else
+          skips, as before. }
+        Next;                       { consume '&' -> CurTok = target ident }
+        initSymIdx := FindSym(CurTok.SVal);
+        if (initSymIdx >= 0) and (Tokens[TokPos].Kind in [tkComma, tkSemicolon]) then
+        begin
+          PendingInitSym[PendingInitCount]  := idx;
+          PendingInitElem[PendingInitCount] := -2;     { address-of-sym sentinel }
+          PendingInitFOff[PendingInitCount] := -1;
+          PendingInitFLen[PendingInitCount] := 0;
+          PendingInitVal[PendingInitCount]  := initSymIdx;
+          PendingInitTk[PendingInitCount]   := Ord(tyPointer);
+          Inc(PendingInitCount);
+          Next;                     { consume target ident }
+        end
+        else
+          while (CurTok.Kind <> tkComma) and (CurTok.Kind <> tkSemicolon) and
+                (CurTok.Kind <> tkEOF) do Next;
       end
       else
         while (CurTok.Kind <> tkComma) and (CurTok.Kind <> tkSemicolon) and
