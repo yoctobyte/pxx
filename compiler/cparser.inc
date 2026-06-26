@@ -702,6 +702,8 @@ end;
 function ParseCPostfix: Integer;
 var node, idxExpr, inode, dnode, fnode, baseFld, recId, fldOff, fldLen: Integer;
     argHead, argTail, argNode, valNode, sig, calleeNode2: Integer;
+    rowStride, strideLit, mulNode: Integer;
+    ndimsF, flatNode, spanD, ndi: Integer;
     done: Boolean; fieldName: AnsiString;
 begin
   node := ParseCPrimary;
@@ -713,11 +715,69 @@ begin
       Next;
       idxExpr := ParseCExpr;
       Expect(tkRBrack, ']');
-      inode := AllocNode(AN_INDEX);
-      ASTLeft[inode] := node;
-      ASTRight[inode] := idxExpr;
-      ASTTk[inode] := CNodePointeeTk(node);
-      node := inode;
+      if (ASTKind[node] = AN_FIELD) and
+         (RecFieldArrNDims(ResolveNodeRec(ASTLeft[node]), GetASTIdentName(node)) >= 2) then
+      begin
+        { Multidim array struct field `T m[A][B]..`. The generic per-subscript
+          AN_INDEX path mis-strides the outer index (CNodePointeeTk(AN_FIELD)
+          defaults to Integer -> 4-byte outer stride), so handle the whole
+          subscript run here:
+          - FULL index `m[i][j]..` (one subscript per dimension): flatten to a
+            single AN_INDEX(field, Horner(i,j,..)) — the field-base AN_INDEX
+            strides by the real element size, so the address is correct.
+          - PARTIAL index `m[i]` (fewer subscripts than dims): C array decay to
+            the ROW ADDRESS `&field + i*rowStride` as a raw pointer value, so
+            `T** p = m[i]` gets the row and a later `p[j]` indexes it. }
+        ndimsF := RecFieldArrNDims(ResolveNodeRec(ASTLeft[node]), GetASTIdentName(node));
+        baseFld := node;            { remember the AN_FIELD for stride/row queries }
+        flatNode := idxExpr; ndi := 1;
+        while (CurTok.Kind = tkLBrack) and (ndi < ndimsF) do
+        begin
+          Next;
+          { flat := flat*span[ndi] + nextIdx  (Horner, element units) }
+          spanD := RecFieldArrDimSpanAt(ResolveNodeRec(ASTLeft[baseFld]), GetASTIdentName(baseFld), ndi);
+          strideLit := AllocNode(AN_INT_LIT); ASTIVal[strideLit] := spanD; ASTTk[strideLit] := Ord(tyInteger);
+          mulNode := AllocNode(AN_BINOP); ASTIVal[mulNode] := Ord(tkStar);
+          ASTLeft[mulNode] := flatNode; ASTRight[mulNode] := strideLit; ASTTk[mulNode] := Ord(tyInteger);
+          idxExpr := ParseCExpr;
+          Expect(tkRBrack, ']');
+          inode := AllocNode(AN_BINOP); ASTIVal[inode] := Ord(tkPlus);
+          ASTLeft[inode] := mulNode; ASTRight[inode] := idxExpr; ASTTk[inode] := Ord(tyInteger);
+          flatNode := inode;
+          Inc(ndi);
+        end;
+        if ndi >= ndimsF then
+        begin
+          { full index: one flat AN_INDEX, element stride from the field type }
+          inode := AllocNode(AN_INDEX);
+          ASTLeft[inode] := baseFld;
+          ASTRight[inode] := flatNode;
+          ASTTk[inode] := Ord(RecFieldType(ResolveNodeRec(ASTLeft[baseFld]), GetASTIdentName(baseFld)));
+          node := inode;
+        end
+        else
+        begin
+          { partial index -> row pointer. rowStride = product(remaining spans)*elem.
+            Tag operands tyInt64 so the add is raw 64-bit (no pointer-stride scale);
+            the AN_FIELD value decays to its address as the base. }
+          rowStride := RecFieldRowStride(ResolveNodeRec(ASTLeft[baseFld]), GetASTIdentName(baseFld));
+          ASTTk[baseFld] := Ord(tyInt64);
+          strideLit := AllocNode(AN_INT_LIT); ASTIVal[strideLit] := rowStride; ASTTk[strideLit] := Ord(tyInt64);
+          mulNode := AllocNode(AN_BINOP); ASTIVal[mulNode] := Ord(tkStar);
+          ASTLeft[mulNode] := flatNode; ASTRight[mulNode] := strideLit; ASTTk[mulNode] := Ord(tyInt64);
+          inode := AllocNode(AN_BINOP); ASTIVal[inode] := Ord(tkPlus);
+          ASTLeft[inode] := baseFld; ASTRight[inode] := mulNode; ASTTk[inode] := Ord(tyPointer);
+          node := inode;
+        end;
+      end
+      else
+      begin
+        inode := AllocNode(AN_INDEX);
+        ASTLeft[inode] := node;
+        ASTRight[inode] := idxExpr;
+        ASTTk[inode] := CNodePointeeTk(node);
+        node := inode;
+      end;
     end
     else if CurTok.Kind = tkDot then      { `.` field, or `->` (also tkDot) }
     begin
@@ -1210,8 +1270,13 @@ begin
     end;
     if CTypePtrDepth >= 2 then
     begin
+      { Pointer-to-pointer: the immediate element is itself a pointer (stride =
+        pointer size), but KEEP the base record so `T** p; p[i]->field` resolves
+        — ResolveNodeRec consults PtrElemRec at the AN_DEREF(AN_INDEX) (two-level)
+        point. Was REC_NONE, which dropped the struct (lua's
+        `TString **p = G(L)->strcache[i]; getstr(p[j])`). }
       CTypeElemTk := Ord(tyPointer);
-      CTypeElemRec := REC_NONE;
+      CTypeElemRec := baseRec;
     end;
     Result := tyPointer;
     CTypeIsVoid := False;
@@ -2999,6 +3064,9 @@ var
     the parent's fields and break the contiguous range. }
   bfNOff, bfNLen, bfOff, bfTk, bfRec, bfElemTk, bfElemRec, bfProcSig, bfArrLen: array[0..MAX_BF-1] of Integer;
   bfIsArr: array[0..MAX_BF-1] of Boolean;
+  bfNDims: array[0..MAX_BF-1] of Integer;
+  bfDimSpan: array[0..MAX_BF*MAX_ARR_DIMS-1] of Integer;
+  fldNDims, dimVal, ndi: Integer;
 begin
   Next; { consume the opening brace }
   curOff := 0;
@@ -3095,14 +3163,22 @@ begin
         fnLen := Tokens[TokPos-1].SLen;
         Next;
 
-        isArr := False; arrLen := 1;
+        isArr := False; arrLen := 1; fldNDims := 0;
         while CurTok.Kind = tkLBrack do
         begin
           Next;
-          if CurTok.Kind = tkInteger then begin arrLen := arrLen * CurTok.IVal; Next; end;
+          dimVal := 1;
+          if CurTok.Kind = tkInteger then begin dimVal := CurTok.IVal; arrLen := arrLen * CurTok.IVal; Next; end;
           while (CurTok.Kind <> tkRBrack) and (CurTok.Kind <> tkEOF) do Next;
           Eat(tkRBrack);
           isArr := True;
+          { record per-dim span so a multidim field supports partial-index row
+            decay (`field[i]` -> row address) in the C frontend. }
+          if fldNDims < MAX_ARR_DIMS then
+          begin
+            bfDimSpan[bfCount * MAX_ARR_DIMS + fldNDims] := dimVal;
+            Inc(fldNDims);
+          end;
         end;
 
         if declStars > 0 then
@@ -3136,6 +3212,7 @@ begin
           bfTk[bfCount] := declTk; bfRec[bfCount] := declRec;
           bfElemTk[bfCount] := declElemTk; bfElemRec[bfCount] := declElemRec;
           bfIsArr[bfCount] := isArr; bfArrLen[bfCount] := arrLen;
+          bfNDims[bfCount] := fldNDims;
           if (declStars = 0) then bfProcSig[bfCount] := fldProcSig else bfProcSig[bfCount] := -1;
           Inc(bfCount);
         end;
@@ -3170,6 +3247,15 @@ begin
     UFldIsArray[UFldCount-1] := bfIsArr[k];
     UFldArrLen[UFldCount-1] := bfArrLen[k];
     if bfProcSig[k] >= 0 then UFldProcSig[UFldCount-1] := bfProcSig[k];
+    if bfNDims[k] >= 2 then
+    begin
+      UFldArrNDims[UFldCount-1] := bfNDims[k];
+      for ndi := 0 to bfNDims[k] - 1 do
+      begin
+        UFldArrDimLo[(UFldCount-1) * MAX_ARR_DIMS + ndi]   := 0;
+        UFldArrDimSpan[(UFldCount-1) * MAX_ARR_DIMS + ndi] := bfDimSpan[k * MAX_ARR_DIMS + ndi];
+      end;
+    end;
   end;
   UClsSize_[ci] := AlignTo(curOff, maxAlign);
   UClsAlign[ci] := maxAlign;

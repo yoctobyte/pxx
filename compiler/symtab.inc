@@ -942,6 +942,45 @@ begin
   end;
 end;
 
+function RecFieldArrDimSpanAt(rec: Integer; const field: AnsiString; d: Integer): Integer;
+{ Span (element count) of dimension `d` of a multidim array field; 1 if unknown. }
+var fi: Integer; field2: AnsiString;
+begin
+  Result := 1; field2 := field;
+  if (rec >= REC_UCLASS_BASE) and (BuiltinRecFieldCount(rec) = 0) then
+  begin
+    fi := FindUField(rec - REC_UCLASS_BASE, field2);
+    if (fi >= 0) and (d >= 0) and (d < UFldArrNDims[fi]) then
+      Result := UFldArrDimSpan[fi * MAX_ARR_DIMS + d];
+  end;
+end;
+
+function RecFieldRowStride(rec: Integer; const field: AnsiString): Integer;
+{ Byte stride of one OUTER-dimension row of a multidimensional array field
+  (product of the inner dim spans * element size); 0 if the field is not a
+  recorded multidim array. Used by the C frontend's partial-index row decay:
+  `field[i]` (single subscript of an `[N][M]..` field) yields the row address
+  `&field + i*RowStride`. }
+var fi, d, inner: Integer; field2: AnsiString; etk: TTypeKind;
+begin
+  Result := 0; field2 := field;
+  if (rec >= REC_UCLASS_BASE) and (BuiltinRecFieldCount(rec) = 0) then
+  begin
+    fi := FindUField(rec - REC_UCLASS_BASE, field2);
+    if (fi >= 0) and (UFldArrNDims[fi] >= 2) then
+    begin
+      inner := 1;
+      for d := 1 to UFldArrNDims[fi] - 1 do
+        inner := inner * UFldArrDimSpan[fi * MAX_ARR_DIMS + d];
+      etk := IntToTypeKind(UFldTk[fi]);
+      if etk = tyRecord then
+        Result := inner * RecSize(UFldRec_[fi])
+      else
+        Result := inner * TypeSize(etk);
+    end;
+  end;
+end;
+
 procedure BuiltinLayoutAssert(ok: Boolean; const msg: AnsiString);
 begin
   if not ok then

@@ -2,6 +2,14 @@
 
 - **Type:** bug (Track A/C — C frontend multidim array field + shared-IR index model).
 - **Found:** 2026-06-26 lua bring-up (`luaS_new` / `g->strcache[i]`).
+- **Status: DONE** (round 20, same session). C array fields record
+  `UFldArrNDims`/spans (`cparser.inc` field parse + `symtab.inc`
+  `RecFieldRowStride`/`RecFieldArrDimSpanAt`); `ParseCPostfix` flattens a FULL
+  multidim field index to one `AN_INDEX(field, Horner)` (real element stride) and
+  decays a PARTIAL index to the row address. Related blocker also fixed: `T** p`
+  (double-pointer-to-struct) dropped its record id so `p[i]->field` failed —
+  `ParseCDeclType` now keeps the base record in `PtrElemRec`. Both self-host
+  byte-identical. lua resolves `getstr(p[j])` in `luaS_new`.
 
 ## Symptom
 A single index into a 2-D array struct field returns the *element value* at

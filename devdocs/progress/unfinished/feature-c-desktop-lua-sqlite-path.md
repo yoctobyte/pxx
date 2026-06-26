@@ -2,6 +2,24 @@
 
 - **Type:** feature (track-C milestone path)
 - **Status:** backlog (active arc — lua core **29/34 files parse clean (85%)**; see logs)
+- **Session 2026-06-26 round 20 (Track A+C) — 2D array struct field + double-pointer
+  struct record; gate-green + self-host byte-identical.** Two fixes that close the
+  `luaS_new` / `strcache` blocker filed last round:
+  - **Multidim array struct field** (`cparser.inc` + `symtab.inc`): C array fields
+    now record `UFldArrNDims`/per-dim spans. A FULL index `m[i][j]` flattens to one
+    `AN_INDEX(field, Horner(i,j))` with the real element stride (the old per-subscript
+    path mis-strided the outer index — `CNodePointeeTk(AN_FIELD)` defaulted to
+    Integer/4-byte, a *compressed-but-injective* layout that round-tripped by luck on
+    low addresses). A PARTIAL index `m[i]` decays to the ROW ADDRESS `&field +
+    i*rowStride` as a raw pointer, so `T** p = m[i]` works. Closes
+    `bug-c-multidim-array-field-partial-row`.
+  - **Double-pointer-to-struct keeps its record** (`cparser.inc` ParseCDeclType):
+    `T** p` had `PtrElemRec = REC_NONE`, so `p[i]->field` resolved against no record
+    (offset 0). Now the base record is retained (immediate element stays a pointer
+    for stride; the resolver consults `PtrElemRec` at the `AN_DEREF(AN_INDEX)` two-
+    level point). lua's `getstr(p[j]) == p[j]->contents` now resolves.
+  RESULT: lua runs past string interning + strcache; `luaS_new` resolves. Crash now
+  deeper inside `luaT_init` (next thread — re-instrument the boot path).
 - **Session 2026-06-26 round 19 (Track A+C) — lua runs past STRING INTERNING into
   luaT_init; 3 compiler fixes (commit d84d9164), gate-green + self-host
   byte-identical.** The round-18 `internshrstr` crash was `getshrstr(ts) ==
