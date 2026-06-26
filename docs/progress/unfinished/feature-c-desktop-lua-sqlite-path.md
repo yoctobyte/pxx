@@ -1,7 +1,27 @@
 # C desktop path — compile real portable C (tiny-regex → lua → sqlite)
 
 - **Type:** feature (track-C milestone path)
-- **Status:** backlog (active arc — lua core **27/34 files parse clean (79%)**; see logs)
+- **Status:** backlog (active arc — lua core **29/34 files parse clean (85%)**; see logs)
+- **Session 2026-06-26 round 16 (Track C), gate-green + byte-identical, lua 27 ->
+  29:** inline anonymous struct/union as a TYPE (f5ef8ec) — `struct { .. }` /
+  `union { .. }` with an inline body in type position (global var / param / field)
+  was not laid out (the body dangled, the var stayed opaque); ParseCDeclType now
+  lays it out as a record via CParseInlineAggBody, and IsBareStructDecl correctly
+  treats `struct { .. } g;` as a VARIABLE decl (route to ParseCGlobalVarDecl), not
+  a bare type decl. Unblocked lparser + lstrlib (parse). The C frontend's
+  parse/preprocessor/struct-layout surface is now COMPLETE for the lua core.
+  **The sole remaining core parse blocker is VARARGS** (lapi/lauxlib/ldebug/lobject
+  — `va_arg(ap, type)` / `va_start` / `va_list`): System V AMD64 va_list ABI =
+  variadic prologue register-save area + va_arg lowering (gp_offset/overflow) +
+  the `al`-register call convention. The parse half is Track C, the codegen half is
+  the shared backend (Track A) and risks the byte-identical self-host gate. luac is
+  a SEPARATE tool (not the interpreter core). TWO remaining correctness gaps beyond
+  parse: (1) global `= { .. }` initializer DATA is still skipped (pre-existing;
+  affects ALL initialised globals — lparser priority[] / lstrlib nativeendian read
+  zero at runtime; fix = PendingInit-based materialisation, pure Track C); (2)
+  multi-file LINKING (combine 34 objects into one executable) — infrastructure the
+  single-file C frontend lacks. So: parse is ~done, but a runnable Lua needs
+  varargs codegen (Track A) + global-init data + linking.
 - **Session 2026-06-26 rounds 14-15 (Track C), gate-green + byte-identical, lua
   25 -> 27:** C assignment-as-value (call arg / chained / `(p=x)->field`; ldo's
   `isLua(ci = ci->previous)`), and the big one — **nested anonymous union/struct
