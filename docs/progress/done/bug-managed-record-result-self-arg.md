@@ -116,3 +116,25 @@ Minimal deterministic repro to drive the fix (segfaults): the `b3b` shape —
 a `record d: AnsiString` self-arg accumulator function called first, then a
 `record d: array of Integer` function whose body is
 `Result := Add(Make(3), Add(Make(4), Make(5)))`, both printed in `main`.
+
+## Resolution (2026-06-26, Track A — commit 65d7fb56, pin v75)
+
+Root cause was NOT the hidden return-slot aliasing the ticket guessed. The
+hidden result dest is a fresh scratch; the assignment uses ARC-correct
+IR_COPY_REC_MANAGED. The real bug: passing a managed-field record **by value as
+a call arg** materializes it into a temp (ir.inc IRLowerCallArg `needTemp`
+path), filled with IR_COPY_REC_MANAGED — which RELEASES the dest's old managed
+fields before copying. That temp is allocated during IR lowering, AFTER the
+prologue zero-init pass, so its fields held stack garbage → the release freed a
+bogus handle (double-free / heap corruption). Surfaced only when one arg is a
+managed-record-returning call (`Add(Make(1), Result)` / `Add(Result, Make(5))`);
+a plain lvalue arg (`Add(Result, localVar)`) needs no temp and was fine — which
+is why `Result`-as-arg looked like the trigger but was a red herring.
+
+Fix: mark the temp `SymIsHiddenArgTemp` when the record has managed fields, so
+codegen nil-inits it before the body (mirrors the hidden aggregate-result temp
+in IRAppendCall). The release then no-ops on nil.
+
+Verified: dyn-array-field and AnsiString-field repros, looped, valgrind-clean;
+`make test` green incl cross; self-host byte-identical; pinned v75. Track B can
+drop the bind-to-temp workaround in bignum.pas / chacha20poly1305.pas on rebuild.

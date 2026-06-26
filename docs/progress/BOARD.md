@@ -29,14 +29,13 @@ _none_
 | --- | --- | --- | --- | --- |
 | feature-c-runtime-library | B | feature | C runtime/library layer (`lib/crtl`) plus direct C-library packages | feature-c-source-frontend |
 
-## backlog (58)
+## backlog (57)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
 | bug-arm32-writeln-longword-high-bit | A | bug | bug: arm32 `writeln(LongWord)` mangles a value with the high bit set | — |
 | bug-c-const-eval-bitwise-not | A | bug | C const-eval: `~` (bitwise NOT) yields wrong value | — |
 | bug-esp-not-always-boolean | A | bug | bug: `not` on an integer is boolean-only on ESP (riscv32 / xtensa) | — |
-| bug-managed-record-result-self-arg | A | bug | bug: function Result of a managed-field record, passed as a call arg in its own reassignment, segfaults | — |
 | bug-paramless-self-recursion-silent-result-read | A | bug | Paramless self-recursion reads own Result silently — no diagnostic | — |
 | bug-virtual-keyword-name-result | A | bug | Bare own-name result of a VIRTUAL intrinsic-named method miscompiles | — |
 | chore-inc-to-units | A | chore | `.inc` → real `.pas` units refactor | — |
@@ -126,7 +125,7 @@ _none_
 | feature-mimic-fpc | B | feature | `mimic FPC` compatibility mode | — |
 | feature-string-model-tyfixedstring | B | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (280)
+## done (281)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -185,6 +184,7 @@ _none_
 | bug-low-missing-high-wrong-nonzero-array | A | bug | bug: Low() missing; High() wrong on non-zero-based arrays | — |
 | bug-managed-byref-string-param-store | A | bug | Managed by-ref AnsiString params: store-through-var no-ops / segfaults | — |
 | bug-managed-length-via-pointer-deref | A | bug | bug: managed Length(ps^) / Length(rec.pf^) returns garbage (all targets) | — |
+| bug-managed-record-result-self-arg | A | bug | bug: function Result of a managed-field record, passed as a call arg in its own reassignment, segfaults | — |
 | bug-managed-to-frozen-string-assign-crash | A | bug | Assigning a managed string (tyAnsiString) into a frozen `string` (tyString) miscompiles → segfault | — |
 | bug-many-param-call-corruption | A | bug | Self-hosted x86-64 backend miscompiles calls with many parameters | — |
 | bug-metaclass-new-getclass-vmt | A | bug | bug: metaclass construction via GetClass stamps a non-canonical VMT | — |
@@ -424,7 +424,6 @@ _none_
 - [A] bug-arm32-writeln-longword-high-bit
 - [A] bug-c-const-eval-bitwise-not
 - [A] bug-esp-not-always-boolean
-- [A] bug-managed-record-result-self-arg
 - [A] bug-paramless-self-recursion-silent-result-read
 - [A] bug-virtual-keyword-name-result
 - [A] chore-inc-to-units
