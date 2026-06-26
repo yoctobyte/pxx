@@ -16,8 +16,7 @@ programs can use these units without passing extra `-Fu` flags.
 | Unit | Area |
 | --- | --- |
 | `sysutils` | String and conversion helpers such as `IntToStr`, plus common utility routines. |
-| `classes` | Object and collection infrastructure for FPC-style code. |
-| `streams` | Stream abstractions. |
+| [`classes` & `streams`](./core.md) | Object, list, and stream infrastructure (lists, string lists, memory streams) for FPC-style code. |
 | `textfile` | Pascal text-file support. |
 | `math` | Numeric helpers. |
 | `typinfo` | RTTI inspection helpers. |
@@ -30,7 +29,7 @@ I/O are available without importing a unit just to initialize the runtime.
 
 | Unit | Area |
 | --- | --- |
-| `json` | JSON parser / serializer support. |
+| [`json`](./json.md) | JSON parser / serializer support. |
 | `httpjson` | HTTP helpers for JSON payloads. |
 | `base64` | Base64 encoding and decoding. |
 | `png` / `image` | Image decoding and simple bitmap support. |

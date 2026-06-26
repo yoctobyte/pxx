@@ -29,7 +29,7 @@ _none_
 | --- | --- | --- | --- | --- |
 | feature-c-runtime-library | C | feature | C runtime/library layer (`lib/crtl`) plus direct C-library packages | feature-c-source-frontend |
 
-## backlog (62)
+## backlog (63)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -38,6 +38,7 @@ _none_
 | bug-c-sizeof-string-literal | C | bug | C `sizeof("string literal")` returns pointer size, not array size | — |
 | bug-multi-interface-method-corruption | A | bug | Memory/String corruption when calling methods on secondary interfaces | — |
 | bug-paramless-self-recursion-silent-result-read | A | bug | Paramless self-recursion reads own Result silently — no diagnostic | — |
+| bug-sizeof-variable-unsupported | A | bug | SizeOf intrinsic does not support variable or expression operands | — |
 | chore-inc-to-units | A | chore | `.inc` → real `.pas` units refactor | — |
 | chore-runtime-emission-size | A | chore | Finer runtime-support emission (code size) | — |
 | feature-arm32-large-aggregate-result | A | feature | arm32: support record function results larger than 4 param words (sret) | — |
@@ -450,6 +451,7 @@ _none_
 - [C] bug-c-sizeof-string-literal
 - [A] bug-multi-interface-method-corruption
 - [A] bug-paramless-self-recursion-silent-result-read
+- [A] bug-sizeof-variable-unsupported
 - [A] chore-inc-to-units
 - [A] chore-runtime-emission-size
 - [A] feature-arm32-large-aggregate-result

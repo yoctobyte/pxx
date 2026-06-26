@@ -2,6 +2,7 @@
 
 - **Type:** bug
 - **Status:** backlog
+- **Track:** A (compiler)
 - **Owner:** —
 - **Opened:** 2026-06-26 (discovered during Track D documentation validation)
 
