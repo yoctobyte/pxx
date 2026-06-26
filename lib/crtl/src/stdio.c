@@ -9,15 +9,13 @@
  * fd-write primitive the platform (PAL / Pascal RTL) provides — see
  * track-a-c-stdio-needs-pascal-import-and-data-relocs.
  *
- * STATUS (2026-06-26, feat/cfront): this file is the C-side deliverable. It is
- * correct C but does not yet RUN on the current compiler — three frontend /
- * codegen blockers gate it, each filed:
- *   - va_arg of any non-int type -> "invalid symbol in lea"
- *     (track-c-va-arg-nonint-lea) — blocks every %s/%x/%p/%ld read.
- *   - %f/%e/%g read 0 (bug-c-double-vararg).
- *   - the stdin/stdout/stderr objects + __pxx_write need the Pascal-import /
- *     data-reloc work (track-a-c-stdio-needs-pascal-import-and-data-relocs).
- * Engine logic is written so it is immediately exercisable once those land.
+ * STATUS (2026-06-26, master): RUNS libc-free on the current compiler. The byte
+ * sink (__pxx_write/__pxx_read) resolves to the Pascal PAL via lib/rtl/pxxcio.pas;
+ * stdout/stderr/stdin are real FILE objects. printf/snprintf %d/%i/%u/%x/%o/%p/
+ * %c/%s/%f/%e/%g + flags/width/precision all match gcc stdout. The gating
+ * blockers (va_arg-nonint, double-vararg, data-reloc, ternary-string-literal,
+ * float-cast/arith) are all closed. %f/%g use a no-libm decimal engine
+ * (__crtl_ftoa/__crtl_gtoa); magnitudes beyond ~1.8e18 lose low integer digits.
  */
 
 #include <stdarg.h>
@@ -65,6 +63,109 @@ static int __crtl_utoa(char *out, unsigned long v, int base, int upper) {
     }
   }
   for (i = 0; i < n; i++) out[i] = tmp[n - 1 - i];
+  return n;
+}
+
+/* IEEE double -> decimal in fixed ('f') notation with `prec` fraction digits.
+   Returns the length written. Handles sign, nan, inf. Magnitude beyond ~1.8e18
+   loses the low integer digits (no bignum) — fine for typical printf use. */
+static int __crtl_ftoa(char *out, double v, int prec) {
+  int n = 0, i, dig, neg = 0;
+  unsigned long ip;
+  double frac, scale;
+  if (v != v) { out[0] = 'n'; out[1] = 'a'; out[2] = 'n'; return 3; }
+  if (v < 0.0) { neg = 1; v = -v; }
+  if (v > 1.7976931348623157e308) {
+    if (neg) out[n++] = '-';
+    out[n++] = 'i'; out[n++] = 'n'; out[n++] = 'f';
+    return n;
+  }
+  scale = 1.0;
+  for (i = 0; i < prec; i++) scale = scale * 10.0;
+  v = v + 0.5 / scale;                 /* round half up at the last kept digit */
+  ip = (unsigned long)v;
+  frac = v - (double)ip;
+  if (neg) out[n++] = '-';
+  n += __crtl_utoa(out + n, ip, 10, 0);
+  if (prec > 0) {
+    out[n++] = '.';
+    for (i = 0; i < prec; i++) {
+      frac = frac * 10.0;
+      dig = (int)frac;
+      if (dig > 9) dig = 9;
+      if (dig < 0) dig = 0;
+      out[n++] = (char)('0' + dig);
+      frac = frac - (double)dig;
+    }
+  }
+  return n;
+}
+
+/* IEEE double -> 'g' notation: `prec` significant digits, shortest of %e/%f with
+   trailing zeros stripped (the C %g rules lua's "%.14g" relies on). Returns the
+   length written. */
+static int __crtl_gtoa(char *out, double v, int prec, int upper, int force_exp) {
+  int n = 0, i, e, neg = 0, dotpos;
+  double a;
+  char digits[40];
+  int nd;
+  if (v != v) { out[0] = 'n'; out[1] = 'a'; out[2] = 'n'; return 3; }
+  if (prec <= 0) prec = 1;
+  if (v < 0.0) { neg = 1; a = -v; } else a = v;
+  if (a > 1.7976931348623157e308) {
+    if (neg) out[n++] = '-';
+    out[n++] = 'i'; out[n++] = 'n'; out[n++] = 'f';
+    return n;
+  }
+  /* decimal exponent e = floor(log10(a)) by scaling (no libm) */
+  e = 0;
+  if (a != 0.0) {
+    while (a >= 10.0) { a = a / 10.0; e++; }
+    while (a <  1.0) { a = a * 10.0; e--; }
+  }
+  /* a is now in [1,10); round at the last significant digit before extraction
+     (add half a ULP at position prec-1), re-normalising if it carries to >=10.
+     This both rounds (gcc parity) and absorbs the 0.999999 scaling drift. */
+  {
+    double ru = 0.5;
+    for (i = 1; i < prec; i++) ru = ru / 10.0;
+    a = a + ru;
+    if (a >= 10.0) { a = a / 10.0; e++; }
+  }
+  for (i = 0; i < prec; i++) {
+    int d = (int)a;
+    if (d > 9) d = 9; if (d < 0) d = 0;
+    digits[i] = (char)('0' + d);
+    a = (a - (double)d) * 10.0;
+  }
+  nd = prec;
+  if (neg) out[n++] = '-';
+  if (force_exp || e < -4 || e >= prec) {
+    /* exponential: d.dddde±XX. %g strips trailing mantissa zeros; %e keeps them. */
+    if (!force_exp) while (nd > 1 && digits[nd - 1] == '0') nd--;
+    out[n++] = digits[0];
+    if (nd > 1) { out[n++] = '.'; for (i = 1; i < nd; i++) out[n++] = digits[i]; }
+    out[n++] = upper ? 'E' : 'e';
+    if (e < 0) { out[n++] = '-'; e = -e; } else out[n++] = '+';
+    if (e < 10) out[n++] = '0';
+    n += __crtl_utoa(out + n, (unsigned long)e, 10, 0);
+  } else {
+    /* fixed: place the decimal point after digit index e */
+    dotpos = e + 1;                     /* digits before the point */
+    /* strip trailing zeros that fall after the decimal point */
+    while (nd > dotpos && nd > 1 && digits[nd - 1] == '0') nd--;
+    if (dotpos <= 0) {
+      out[n++] = '0'; out[n++] = '.';
+      for (i = 0; i < -dotpos; i++) out[n++] = '0';
+      for (i = 0; i < nd; i++) out[n++] = digits[i];
+    } else {
+      for (i = 0; i < nd; i++) {
+        if (i == dotpos) out[n++] = '.';
+        out[n++] = digits[i];
+      }
+      for (; i < dotpos; i++) out[n++] = '0';   /* integer pad if nd < dotpos */
+    }
+  }
   return n;
 }
 
@@ -124,6 +225,7 @@ static int __crtl_vformat(char *buf, size_t cap, const char *fmt, va_list ap) {
 
     char num[32];
     char one[2];
+    char fbuf[64];
     const char *s = 0;
     int nl = 0;          /* significant length of s */
     int neg = 0;
@@ -164,11 +266,21 @@ static int __crtl_vformat(char *buf, size_t cap, const char *fmt, va_list ap) {
     } else if (k == '%') {
       one[0] = '%'; one[1] = 0; s = one; nl = 1;
     } else if (k == 'f' || k == 'F' || k == 'e' || k == 'E' || k == 'g' || k == 'G') {
-      /* float formatting: reads a double vararg. BLOCKED by bug-c-double-vararg
-         (the double's bits are not in the GP save area yet) — emits a
-         placeholder so the field still consumes its arg and width. */
-      (void)va_arg(ap, double);
-      s = "<float>"; nl = 7;
+      /* float: read the double vararg (now arrives via the GP save area) and
+         render. %f fixed (default prec 6); %g significant digits (default 6),
+         shortest of %e/%f with trailing zeros stripped — the form lua's
+         "%.14g" needs. %e shares the g path with a forced exponent prec. */
+      double dv = va_arg(ap, double);
+      if (k == 'g' || k == 'G') {
+        nl = __crtl_gtoa(fbuf, dv, prec < 0 ? 6 : (prec == 0 ? 1 : prec), k == 'G', 0);
+      } else if (k == 'e' || k == 'E') {
+        /* %e: always exponential, prec+1 significant digits so the mantissa shows
+           exactly `prec` fraction digits. */
+        nl = __crtl_gtoa(fbuf, dv, (prec < 0 ? 6 : prec) + 1, k == 'E', 1);
+      } else {
+        nl = __crtl_ftoa(fbuf, dv, prec < 0 ? 6 : prec);
+      }
+      s = fbuf;
     } else {
       /* unknown conversion: emit verbatim */
       if (o + 1 < cap) buf[o] = '%'; o++;

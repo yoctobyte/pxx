@@ -84,7 +84,17 @@ function CMakeBinop(cTok, l, r: Integer): Integer;
 var node, ivalOp: Integer;
 begin
   ivalOp := cTok;
-  if cTok = Ord(tkSlash) then ivalOp := Ord(tkDiv)        { C `/` on ints = div }
+  if cTok = Ord(tkSlash) then
+  begin
+    { C `/` is integer division on ints (-> tkDiv) but REAL division on floats.
+      The backend's float arithmetic path keys on tkSlash (divsd); keep tkSlash
+      when either operand is float, else `0.5/scale` integer-divided the IEEE bit
+      patterns into garbage. }
+    if TypeIsFloat(IntToTypeKind(ASTTk[l])) or TypeIsFloat(IntToTypeKind(ASTTk[r])) then
+      ivalOp := Ord(tkSlash)
+    else
+      ivalOp := Ord(tkDiv);
+  end
   else if cTok = Ord(tkShr) then ivalOp := Ord(tkIdent)   { shr encoded as tkIdent }
   else if cTok = Ord(tkAmp) then ivalOp := Ord(tkAnd)     { bitwise AND }
   else if cTok = Ord(tkPipe) then ivalOp := Ord(tkOr);    { bitwise OR }
