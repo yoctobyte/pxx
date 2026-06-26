@@ -31,7 +31,7 @@ At the start of a session, infer the track from the user's request:
   **Works on `master`** (merged at v80; the old `feat/cfront` worktree is retired).
 - **Track D — docs/website.** Signals: user documentation, getting-started /
   install / tutorial / language-reference prose, the website / landing copy,
-  `docs/site/**`, "document feature X", "write the docs for". Prose only — no
+  `site/**`, "document feature X", "write the docs for". Prose only — no
   code changes. Works on `master`.
 
 If the request is genuinely ambiguous, **ask**: "Am I on track A (compiler), B
@@ -181,9 +181,9 @@ C"). Then:
 
 ## Track D — documentation (user / website)
 
-Owns: `docs/site/**` — the **user-facing** documentation, authored as Markdown and
+Owns: `site/**` — the **user-facing** documentation, authored as Markdown and
 **published to the website straight from git** (the site pulls the repo and
-renders `docs/site/`; no separate docs repo, no generated artifacts checked in by
+renders `site/`; no separate docs repo, no generated artifacts checked in by
 D). Typical content: getting-started, install, language reference, the standard
 library / RTL reference, tutorials, FAQ, and the public landing copy.
 
@@ -194,7 +194,7 @@ Strict boundaries:
   `$(PXX_STABLE)` to verify they work, nothing more.
 - **Not the internal docs.** `docs/dev/**` (this file, design notes) and
   `docs/progress/**` (the agent board / tickets) are A/B/C territory, not website
-  material. D stays in `docs/site/**`.
+  material. D stays in `site/**`.
 - **Verify, don't invent.** Every code snippet in the docs should actually compile
   and run on the pinned compiler — paste real output, don't guess behaviour. A
   doc example is a mini conformance test.
@@ -204,7 +204,7 @@ Strict boundaries:
   Document what *is*, note the gap, move on.
 
 D's "gate" is light: internal consistency (no dead links, examples compile), and
-the published tree under `docs/site/` builds whatever static-site generator the
+the published tree under `site/` builds whatever static-site generator the
 website uses (kept generator-agnostic — plain Markdown + front-matter so any of
 mkdocs / Docusaurus / Hugo / a custom puller can render it).
 
@@ -233,7 +233,7 @@ rules below are for that shared `master` checkout:
 - **Stay in your lane's files.** A → `compiler/**` (shared internals); B →
   `lib/**`, `examples/**`, `test/lib_*`; C → `compiler/c{lexer,parser,preproc}.inc`
   + C→IR lowering, `lib/crtl`, C tests (but shared `compiler/**` internals are
-  A's — file a Track A ticket); D → `docs/site/**`. File overlap is then near
+  A's — file a Track A ticket); D → `site/**`. File overlap is then near
   zero. The shared `Makefile` is fenced per track.
 - **`git pull --rebase` before you push**, and push promptly after committing —
   the other agent may have pushed in between. Resolve in your own files.

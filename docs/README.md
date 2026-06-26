@@ -15,7 +15,7 @@ what is not yet stable, and the dialect extras PXX adds.
 
 ## Public user docs
 
-The website-oriented public docs live under [`site/`](site/index.md). Start
+The website-oriented public docs live under [`../site/`](../site/index.md). Start
 there for install, getting started, language, feature, target, library, and
 reference pages.
 

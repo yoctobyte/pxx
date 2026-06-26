@@ -1,13 +1,13 @@
 # Public documentation conventions
 
 This tree is the **user-facing documentation**, published to the project website
-straight from git: the site pulls this repo and renders `docs/site/`. There is no
+straight from git: the site pulls this repo and renders `site/`. There is no
 separate docs repo and no generated output committed here — just authored
 Markdown.
 
 ## Owned by Track D
 
-Per `docs/dev/parallel-tracks.md`, Track D owns `docs/site/**` and nothing else.
+Per `docs/dev/parallel-tracks.md`, Track D owns `site/**` and nothing else.
 Prose only — no `compiler/**`, no `lib/**`. A gap found while writing → file a
 ticket in `docs/progress/backlog`, don't fix code.
 
@@ -28,12 +28,12 @@ ticket in `docs/progress/backlog`, don't fix code.
   pinned compiler (`stable_linux_amd64/default/pinned`). Paste real output. A doc
   example is a mini conformance test — if it stops compiling, the docs are wrong
   or the compiler regressed (file a ticket).
-- Assets (images, etc.) go in `docs/site/assets/`.
+- Assets (images, etc.) go in `site/assets/`.
 
 ## Layout
 
 ```
-docs/site/
+site/
   index.md            landing / overview
   install/            installation and setup
   getting-started/    first program and next steps

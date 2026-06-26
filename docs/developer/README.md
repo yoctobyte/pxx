@@ -33,7 +33,7 @@ User-facing documents:
 - [Rainy Afternoon Backlog](rainy-afternoon.md) - compact list of known non-critical bugs, limitations, and optional cleanup work.
 - [Project State Audit](project-state.md) - dated compact inventory of verified support, confirmed bugs, missing Pascal features, design debt, and the latest benchmark snapshot.
 - [Public Documentation Conventions](public-docs.md) - Track D ownership,
-  website import layout, and authoring rules for `docs/site/**`.
+  website import layout, and authoring rules for `site/**`.
 - [Anomaly: non-reproducible miscompile (2026-06-02)](anomaly_2026-06-02_2000.md) - forensic record of a one-off, self-cleared, deterministic-toolchain miscompile; suspected hardware bit flip. Evidence in [`anomaly-evidence-2026-06-02/`](anomaly-evidence-2026-06-02/).
 
 Navigation:

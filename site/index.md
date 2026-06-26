@@ -38,4 +38,4 @@ runtime and the ELF bytes is its own code, no toolchain dependencies.
 - [Reference](./reference/) — command line, configuration, limits, and glossary.
 
 > These docs are published directly from the project's git repository. Found a
-> mistake? The source lives in `docs/site/` — edits there flow to the site.
+> mistake? The source lives in `site/` — edits there flow to the site.

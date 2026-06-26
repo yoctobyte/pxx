@@ -43,7 +43,7 @@ its own `index.md` to order chapters within that topic.
 - 2026-06-26 — Included progress-board usability in Track D scope: `check` should
   validate current board structure without blocking documentation work on old
   ticket hygiene debt.
-- 2026-06-26 — Began public docs structure pass in `docs/site`: added topic
+- 2026-06-26 — Began public docs structure pass in `site`: added topic
   folders for install, getting-started, features, targets, and reference, and
   added first-pass pages for Pascal basics, dialect, FPC compatibility, cross
   compilation, and cross-language notes.
