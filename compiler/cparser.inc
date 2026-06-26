@@ -249,8 +249,14 @@ begin
         if CTypePtrDepth > 0 then vt := tyPointer;
         Expect(tkRParen, ')');
         addrNode := CVaListAddr(apNode);
-        if (vt = tySingle) or (vt = tyDouble) then helper := FindProc('__pxx_va_arg_fp')
-        else helper := FindProc('__pxx_va_arg_gp');
+        { The INTERNAL C variadic call convention pushes every arg (including a
+          double, which the value model carries in rax) and pops it into a GP
+          register, so the callee's prologue saves ALL varargs — float included —
+          into the GP save area; the FP save area is never filled. C variadic
+          functions are only ever called this way (libc-free), so va_arg of a
+          float must read the GP area too. Using the FP helper read the unused FP
+          slots and returned 0 (bug-c-double-vararg, %f/%g rendered 0). }
+        helper := FindProc('__pxx_va_arg_gp');
         argNode := AllocNode(AN_ARG); ASTLeft[argNode] := addrNode; ASTRight[argNode] := -1;
         callNode := AllocNode(AN_CALL); ASTIVal[callNode] := helper;
         ASTTk[callNode] := Ord(tyPointer); ASTLeft[callNode] := argNode;
