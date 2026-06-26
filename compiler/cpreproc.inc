@@ -459,7 +459,7 @@ end;
 
 procedure CPExpandFunction(mi: Integer; const src: AnsiString;
   argCount, level: Integer; var dst: AnsiString);
-var p, last, a, b, ai, argBase, argP, k, savedSlot: Integer;
+var p, last, a, b, ai, argBase, argP, k, savedSlot, q: Integer;
 begin
   if DebugTrace then writeln('C preprocessor: expand function #', mi, ' level=', level);
   argBase := level * 16;
@@ -478,6 +478,33 @@ begin
       p := p + 2;
       while (p <= last) and (CPrepChars[p] in [' ', #9]) do Inc(p);
       Continue;
+    end;
+    { Stringize `#param` -> a string literal of the parameter's RAW (unexpanded)
+      argument text, e.g. lua's `#t` for a type name. Only fires when a parameter
+      name follows; a bare `#` otherwise falls through as a normal char. }
+    if CPrepChars[p] = '#' then
+    begin
+      q := p + 1;
+      while (q <= last) and (CPrepChars[q] in [' ', #9]) do Inc(q);
+      a := q;
+      while (q <= last) and CPIsIdentChar(CPrepChars[q]) do Inc(q);
+      b := q - 1;
+      if b >= a then
+      begin
+        ai := CPParamIndex(mi, a, b - a + 1);
+        if (ai >= 0) and (ai < argCount) then
+        begin
+          AppendChar(dst, '"');
+          for k := CPArgStart[argBase + ai] to CPArgEnd[argBase + ai] do
+          begin
+            if (src[k] = '"') or (src[k] = '\') then AppendChar(dst, '\');
+            AppendChar(dst, src[k]);
+          end;
+          AppendChar(dst, '"');
+          p := q;
+          Continue;
+        end;
+      end;
     end;
     if CPIsIdentStart(CPrepChars[p]) then
     begin
