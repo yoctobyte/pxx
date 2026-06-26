@@ -1,7 +1,26 @@
 # C desktop path — compile real portable C (tiny-regex → lua → sqlite)
 
 - **Type:** feature (track-C milestone path)
-- **Status:** backlog (active arc — lua core **25/34 files parse clean (74%)**; see logs)
+- **Status:** backlog (active arc — lua core **27/34 files parse clean (79%)**; see logs)
+- **Session 2026-06-26 rounds 14-15 (Track C), gate-green + byte-identical, lua
+  25 -> 27:** C assignment-as-value (call arg / chained / `(p=x)->field`; ldo's
+  `isLua(ci = ci->previous)`), and the big one — **nested anonymous union/struct
+  member layout** (ffb1a73). A struct containing an inline `union {..}` / `struct
+  {..}` member was laid out as an opaque pointer -> field access read garbage; lua
+  CallInfo/GCUnion/TValue use nested unions pervasively, so this was a WIDESPREAD
+  silent miscompile and the emergent root behind ldo/ltm. Fixed by laying the
+  nested body out as a sub-record AND buffering the parent's field descriptors,
+  appending them to the UFld pool contiguously after the sub-records (the obstacle
+  was the contiguous [base,count) FindUField model). Unblocked ldo + ltm. The
+  parse/preprocessor/struct-layout layer is now essentially complete. REMAINING 7
+  files, all substantial features: (A) **varargs** `__builtin_va_start` / `va_arg`
+  / `va_list` — lapi, lauxlib, ldebug, lobject (System V AMD64 va_list ABI; Track
+  A / codegen). (B) **global-array DATA materialisation** + anon-struct array
+  element — lparser (`static const struct {lu_byte left,right;} priority[] = {..}`
+  then `priority[op].left`), lstrlib; need the `{..}` initializer laid into the
+  data segment as a real sized array. (C) luac — a SEPARATE tool (the bytecode
+  compiler, not the interpreter core); `#define S(x) (int)(x),SS(x)` (comma macro
+  expanding to a printf arg list) hits AN_COMMA in IRLowerAddress; low priority.
 - **Session 2026-06-26 rounds 11-13 (Track C), gate-green + byte-identical, lua
   22 -> 25:** object-macro-alias-of-function-macro re-expansion (unblocked lvm);
   `(type)` cast in constant expressions (ltable — root was the bare-funcname=Result
