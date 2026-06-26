@@ -34,3 +34,15 @@ is written this way already.
 
 ## Acceptance
 The repro prints `ABCDEF` and exits 0.
+
+## DONE 2026-06-26 (Track A+C combined)
+Fixed in `ir.inc` AN_TERNARY lowering: the `tyString -> tyAnsiString` retag now
+has a `CProgramMode` branch — in C a string-literal arm is carried as a plain
+`tyPointer` (the per-arm assign stores the literal's address, the load yields the
+`char*`), only Pascal routes through the managed AnsiString temp. CProgramMode
+gated, so Pascal self-compile is byte-identical. Both repros pass (`0X`,
+`ABCDEF`). This was THE blocker for the entire crtl printf engine — stdio.c's
+`prefix = (k=='X') ? "0X" : "0x"` (NOT actually avoided as this ticket claimed)
+corrupted `__crtl_vformat`'s frame, making snprintf re-enter ~7400x to stack
+overflow. With it fixed, printf `%d/%x/%s/%c/%p` + width/precision all render ==
+gcc. (Remaining printf gap: `%f`/`%g` = bug-c-double-vararg.)

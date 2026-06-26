@@ -3503,10 +3503,19 @@ begin
       argTk := IntToTypeKind(ASTTk[node]);
       if argTk = tyUnknown then argTk := tyInteger;
       { A string-literal arm types as frozen tyString, which has inline [N]
-        storage and no usable handle slot for a temp. Carry the result as a
-        managed AnsiString instead — the per-arm assignment coerces the frozen
-        literal into the managed temp, and the load yields a real handle. }
-      if argTk = tyString then argTk := tyAnsiString;
+        storage and no usable handle slot for a temp. In Pascal (managed-default)
+        carry the result as a managed AnsiString — the per-arm assignment coerces
+        the frozen literal into the managed temp and the load yields a real
+        handle. In C a string literal is a frozen `char*` address, NOT a managed
+        AnsiString; routing it through the ARC assign path builds a garbage
+        handle the consumer derefs -> crash (the printf `(k=='X')?"0X":"0x"`
+        segfault). So in C mode carry the arm as a plain pointer: the per-arm
+        assignment stores the literal's address and the load yields the char*. }
+      if argTk = tyString then
+      begin
+        if CProgramMode then argTk := tyPointer
+        else argTk := tyAnsiString;
+      end;
       if argTk = tyRecord then LastTypeRecId := ResolveNodeRec(ASTLeft[pairNode]);
       varIdx := AllocVar('', argTk);
       if argTk = tyRecord then Syms[varIdx].RecName := LastTypeRecId;
