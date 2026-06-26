@@ -29,7 +29,7 @@ _none_
 | --- | --- | --- | --- | --- |
 | feature-c-runtime-library | C | feature | C runtime/library layer (`lib/crtl`) plus direct C-library packages | feature-c-source-frontend |
 
-## backlog (59)
+## backlog (60)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -92,6 +92,7 @@ _none_
 | feature-zero-init-contract | A | feature | Zero-init contract — one library-owned managed-slot zeroing guarantee | — |
 | meta-track-b-compiler-wishlist | B | meta | Track-B wishlist — compiler features most wanted to unblock libraries + demos | — |
 | track-a-c-frontend-shared-ir-touchpoints | A | track | C frontend — shared-IR touch points that belong to Track A | — |
+| track-a-c-stdio-needs-pascal-import-and-data-relocs | A | track | C stdio (printf family) blocked — needs Pascal import + global data relocs | — |
 
 ## rainy-day (19)
 
@@ -493,6 +494,7 @@ _none_
 - [A] feature-zero-init-contract
 - [B] meta-track-b-compiler-wishlist
 - [A] track-a-c-frontend-shared-ir-touchpoints
+- [A] track-a-c-stdio-needs-pascal-import-and-data-relocs
 
 ## Leverage (tickets each one unblocks)
 
