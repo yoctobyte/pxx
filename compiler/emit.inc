@@ -594,7 +594,7 @@ begin
   EmitGlobRef(BSS_INTBUF + INTBUF_SIZE);
   
   loopStart := CodeLen;
-  EmitI32($E714F210);  { sdiv r4, r0, r2 }
+  EmitI32($E734F210);  { udiv r4, r0, r2 (divides the non-negative magnitude) }
   EmitI32($E0050294);  { mul r5, r4, r2 }
   EmitI32($E0405005);  { sub r5, r0, r5 }
   EmitI32($E1A00004);  { mov r0, r4 }
@@ -627,7 +627,7 @@ begin
   EmitGlobRef(BSS_INTBUF + INTBUF_SIZE);
   
   loopStart := CodeLen;
-  EmitI32($E714F210);  { sdiv r4, r0, r2 }
+  EmitI32($E734F210);  { udiv r4, r0, r2 (unsigned write) }
   EmitI32($E0050294);  { mul r5, r4, r2 }
   EmitI32($E0405005);  { sub r5, r0, r5 }
   EmitI32($E1A00004);  { mov r0, r4 }
@@ -680,7 +680,7 @@ begin
   EmitGlobRef(BSS_INTBUF + INTBUF_SIZE);
   
   loopStart := CodeLen;
-  EmitI32($E714F210);  { sdiv r4, r0, r2 }
+  EmitI32($E734F210);  { udiv r4, r0, r2 (divides the non-negative magnitude) }
   EmitI32($E0050294);  { mul r5, r4, r2 }
   EmitI32($E0405005);  { sub r5, r0, r5 }
   EmitI32($E1A00004);  { mov r0, r4 }
@@ -754,7 +754,7 @@ begin
   EmitGlobRef(BSS_INTBUF + INTBUF_SIZE);
   
   loopStart := CodeLen;
-  EmitI32($E714F210);  { sdiv r4, r0, r2 }
+  EmitI32($E734F210);  { udiv r4, r0, r2 (unsigned write) }
   EmitI32($E0050294);  { mul r5, r4, r2 }
   EmitI32($E0405005);  { sub r5, r0, r5 }
   EmitI32($E1A00004);  { mov r0, r4 }

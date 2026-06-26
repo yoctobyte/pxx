@@ -1714,6 +1714,9 @@ test-arm32: $(COMPILER)
 	./$(COMPILER) --target=arm32 test/test_not_int64_expr.pas /tmp/test_arm32_not64
 	./$(COMPILER) test/test_not_int64_expr.pas /tmp/test_arm32_not64_x64
 	test "$$(tools/run_target.sh arm32 /tmp/test_arm32_not64)" = "$$(/tmp/test_arm32_not64_x64)"
+	./$(COMPILER) --target=arm32 test/test_uint32_write.pas /tmp/test_arm32_u32w
+	./$(COMPILER) test/test_uint32_write.pas /tmp/test_arm32_u32w_x64
+	test "$$(tools/run_target.sh arm32 /tmp/test_arm32_u32w)" = "$$(/tmp/test_arm32_u32w_x64)"
 	./$(COMPILER) -dPXX_MANAGED_STRING --target=arm32 test/test_cross_record_array_store.pas /tmp/test_arm32_rec_arr_store
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_cross_record_array_store.pas /tmp/test_arm32_rec_arr_store_x64
 	test "$$(tools/run_target.sh arm32 /tmp/test_arm32_rec_arr_store)" = "$$(/tmp/test_arm32_rec_arr_store_x64)"
