@@ -8,11 +8,9 @@ lives in git, not in a timestamp._
 
 _none_
 
-## working (1)
+## working (0)
 
-| Ticket | Track | Type | Summary | Blocked-by |
-| --- | --- | --- | --- | --- |
-| feature-own-net-http-lib | B | feature | Own networking library — native HTTP client (+ sockets, async) | — |
+_none_
 
 ## unfinished (4)
 
@@ -132,7 +130,7 @@ _none_
 | feature-mimic-fpc | B | feature | `mimic FPC` compatibility mode | — |
 | feature-string-model-tyfixedstring | B | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (296)
+## done (297)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -380,6 +378,7 @@ _none_
 | feature-nested-anonymous-fixed-array | A | feature | Anonymous nested fixed array `array[..] of array[..] of T` | — |
 | feature-nested-routines | A | feature | feature: nested (local) functions and procedures | — |
 | feature-open-array-constructor-arg | A | feature | feature: array constructor `[...]` as an open-array argument | — |
+| feature-own-net-http-lib | B | feature | Own networking library — native HTTP client (+ sockets, async) | — |
 | feature-pal-file-stat-metadata | B | feature | PAL file stat metadata | — |
 | feature-pal-network-datagram-poll-errno | B | feature | PAL network: datagrams, readiness polling, and exact errno semantics | — |
 | feature-parallel-tracks-stable-compiler | A | feature | Parallel tracks: pin libraries/demos to a "stable" compiler | — |

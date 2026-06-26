@@ -1,7 +1,7 @@
 # Own networking library — native HTTP client (+ sockets, async)
 
 - **Type:** feature (library) — our own net stack, independent of Synapse
-- **Status:** working (Track B — client feature-complete for common use: pool
+- **Status:** done
   (concurrent+cap), gzip/deflate, Accept-Encoding, base64+Basic auth, multipart,
   cookie jar, all e2e-proven; next: example/demo app)
 - **Owner:** — (**Track B** — `lib/rtl`, `$(PXX_STABLE)`)
@@ -280,3 +280,6 @@ client fetches with `HttpGetJsonAsync` and reads typed fields; pure
 The native lib offers: blocking + async HTTP GET/POST against real servers,
 Content-Length/chunked framing, a clean address/socket layer, all smoked under
 `make lib-test`. TLS tracked but may land separately.
+
+## Log
+- 2026-06-26 — resolved, commit d02bec5.
