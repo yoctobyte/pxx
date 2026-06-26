@@ -67,15 +67,25 @@ Scalar/struct/union global init already works; an **address-of-global static
 initializer** (needs an ELF data relocation) does not. Blocks the standard
 `FILE *stdout = &__stdout_obj;` definition of the std streams.
 
-### 4. Global array (-of-struct) initializer ignored → BSS-zeroed
+### 4. Global array initializer ignored → BSS-zeroed (ANY element type)
+Every initialized global **array** drops its data and lands in BSS zeroed — not
+just arrays of struct. Scalar-element too:
 ```c
-typedef struct { const char *name; int val; } Reg;
-static const Reg tbl[] = { {"a",10}, {"b",20}, {0,0} };
-int main(void){ return tbl[0].val + tbl[1].val; }   /* returns 0; want 30 */
+static int counts[4] = { 10, 20, 30, 40 };
+int main(void){ return counts[0] + counts[3]; }   /* returns 0; want 50 */
 ```
-The array lands in BSS (`bss=24B`), initializer data dropped. This is lua's
-static `luaL_Reg` registration-table pattern. Scalar/struct/union global init
-work; **array-of-aggregate** init does not.
+```c
+struct KV { const char *name; int v; };
+static struct KV tbl[] = { {"a",1}, {"b",2}, {"c",3} };
+int main(void){ return tbl[0].v + tbl[2].v; }       /* returns 0; want 4 */
+```
+(`bss=12B`/`24B`, `data` holds only the string literals.) Reading a `.name`
+pointer back out then segfaults on the zeroed slot. This is lua's static
+`luaL_Reg` registration-table pattern. SINGLE scalar/struct/union global init
+work; an **array** initializer does not, regardless of element type. The
+existing `test/cglobal_array_init_b28.c` only checks brace-skip *parse* survival
+(returns 42 from a local) — it never reads the global array data, so the gap is
+unguarded.
 
 ### 5. (already filed) `bug-c-double-vararg` — `%f` reads 0
 printf `%f`/`%g` need the double-in-vararg fix. Engine code will be correct C;
