@@ -526,7 +526,8 @@ end;
 
 { Unary prefix: `- + ! ~ * &`, sizeof, and casts `(type)expr`. }
 function ParseCUnary: Integer;
-var node, operand, castElemTk, castElemRec, castDepth: Integer; castTk: TTypeKind;
+var node, operand, castElemTk, castElemRec, castDepth, argSeq: Integer;
+    castTk, opTk: TTypeKind;
 begin
   { sizeof }
   if (CurTok.Kind = tkIdent) and (CurTok.SVal = 'sizeof') then
@@ -544,6 +545,29 @@ begin
     castElemRec := CTypeElemRec;
     Expect(tkRParen, ')');
     operand := ParseCUnary();
+    { A NUMERIC float<->int cast must CONVERT, not bit-reinterpret: `(int)1.5`==1,
+      `(double)i`==(double)i. AN_PTR_CAST only retags, so it left the IEEE bits
+      and read them as an integer (-> 0). Route through the existing cross-target
+      float intrinsics: -203 Trunc (float->int, toward zero = C cast semantics)
+      and -206 Int (int->float, cvtsi2sd). Pointer casts, same-class and
+      float<->float casts keep the reinterpret/retag path below. }
+    opTk := IntToTypeKind(ASTTk[operand]);
+    if (castDepth = 0) and (not TypeIsFloat(castTk)) and TypeIsOrdinal(castTk)
+       and TypeIsFloat(opTk) then
+    begin
+      node := AllocNode(AN_CALL); ASTIVal[node] := -203;   { Trunc: float -> int }
+      argSeq := AllocNode(AN_ARG); ASTLeft[argSeq] := operand;
+      ASTLeft[node] := argSeq; ASTTk[node] := Ord(castTk);
+      Result := node; Exit;
+    end
+    else if (castDepth = 0) and TypeIsFloat(castTk)
+            and TypeIsOrdinal(opTk) and (not TypeIsFloat(opTk)) then
+    begin
+      node := AllocNode(AN_CALL); ASTIVal[node] := -206;   { Int: int -> float }
+      argSeq := AllocNode(AN_ARG); ASTLeft[argSeq] := operand;
+      ASTLeft[node] := argSeq; ASTTk[node] := Ord(castTk);
+      Result := node; Exit;
+    end;
     node := AllocNode(AN_PTR_CAST);
     ASTLeft[node] := operand;
     ASTIVal[node] := -1;            { numeric / pointer reinterpret-retag }
