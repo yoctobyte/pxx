@@ -1,7 +1,27 @@
 # C desktop path — compile real portable C (tiny-regex → lua → sqlite)
 
 - **Type:** feature (track-C milestone path)
-- **Status:** backlog (active arc — lua core **22/34 files parse clean (65%)**; see logs)
+- **Status:** backlog (active arc — lua core **25/34 files parse clean (74%)**; see logs)
+- **Session 2026-06-26 rounds 11-13 (Track C), gate-green + byte-identical, lua
+  22 -> 25:** object-macro-alias-of-function-macro re-expansion (unblocked lvm);
+  `(type)` cast in constant expressions (ltable — root was the bare-funcname=Result
+  landmine: `Result := CEvalConstPrimary` needed `()`); `#` stringize operator
+  (lundump); aggregate initializer `= {...}` on a non-array local (lcode); and the
+  pointer-pointer subtraction codegen fix (ptrdiff — was a silent miscompile;
+  tkDiv not tkSlash). Fixtures b38-b42. The PARSE/PREPROCESSOR layer is now
+  essentially complete; the 9 remaining files are blocked on three deeper things:
+  (A) **varargs** `__builtin_va_start` / `va_arg` / `va_list` — lapi, lauxlib,
+  ldebug, lobject (System V AMD64 va_list ABI: variadic prologue saves the
+  register-save area, va_arg walks gp_offset/overflow_arg_area; Track A / codegen).
+  (B) **global array DATA materialisation** + anonymous-struct member access —
+  lparser (`static const struct {lu_byte left,right;} priority[] = {...}` indexed
+  `priority[op].left`), lstrlib; globals are not yet real arrays with their
+  initializer data laid into the data segment (the brackets/init are skipped).
+  (C) **IRLowerAddress of rvalue/compound** in the VM/GC core — ldo (AN_ASSIGN),
+  ltm (AN_BINOP, the emergent setobj block over `&(p++)->val`/`&(p+i)->val`), luac
+  (AN_COMMA); several are address-of-rvalue (verify vs gcc, some UB). These are
+  feature/codegen work, partly Track A (varargs), spanning multiple sessions —
+  not the isolated parse fixes that took the core 0 -> 74%.
 - **Session 2026-06-26 rounds 7-10 (Track C), all gate-green + byte-identical,
   lua 14 -> 22:** f()->field on pointer-returning calls + global-struct record id
   (silent miscompile — global struct fields were all offset 0); `##` token-paste +
