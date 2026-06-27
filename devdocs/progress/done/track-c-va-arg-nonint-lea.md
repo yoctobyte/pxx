@@ -2,9 +2,11 @@
 
 - **Type:** bug (Track C — C frontend desugar in `cparser.inc`; the failing
   guard is shared `ir.inc`).
+- **Status:** done
 - **Found:** 2026-06-26 writing the `lib/crtl` printf engine. Blocks the entire
   printf family: every `%s` (char*), `%x`/`%u` (unsigned), `%p` (void*) and
   `%ld` (long) needs a non-`int` `va_arg`.
+- **Closed:** 2026-06-27
 
 ## Symptom
 `va_arg(ap, T)` compiles only for `T == int`. Every other scalar type fails at
@@ -54,3 +56,11 @@ is shared `ir.inc` and belongs to Track A — confirm which during the fix.)
 ## Acceptance
 `va_arg(ap, T)` works for `int`, `unsigned`, `long`, and any pointer type;
 `lib/crtl/src/stdio.c` `snprintf("%s/%x/%p", ...)` renders correctly.
+
+## Resolution
+
+- 2026-06-27 audit — **DONE / no longer reproducible.** Solved as a side effect
+  of later Lua/stdio varargs work. Current `compiler/pascal26` compiles and runs
+  the old `va_arg(ap, long)` repro, returning `5`, and a combined probe covering
+  `unsigned int`, `char *`, and `void *` returns `42`. No `invalid symbol in lea`
+  error remains.

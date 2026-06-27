@@ -1,12 +1,14 @@
 # C stdio must ride pxx syscalls (libc-free), not import libc
 
 - **Type:** library work (Track C — lib/crtl, C frontend builtins). NOT Track A.
+- **Status:** done
 - **Found:** 2026-06-26 getting pxx-compiled lua to RUN. Reframed after review:
   pxx does stdio via direct SYSCALLS (like Pascal), never libc. File/console IO
   must STAY libc-free. (Earlier "import libc stdout via COPY relocation" framing
   was WRONG — discard it.)
+- **Closed:** 2026-06-27
 
-## State
+## Original State
 - `printf` already works: the C frontend intercepts the name -> `AN_WRITE` (a
   write syscall, cparser.inc ~1230). No libc.
 - `fwrite` / `fputs` / `fputc` / `puts` / `stdout` / `stderr` / `stdin` do NOT
@@ -48,5 +50,11 @@ __pxx_write + a from-scratch stdio.c. No duplication, no second IO path.
    So __pxx_write etc. dispatch to the active PAL (PXX_PLATFORM_*), exactly like
    Pascal's IO already does — C and Pascal share ONE platform IO layer.
 
-Last run blockers after this: bug-c-double-vararg (%f in number formatting),
-global ARRAY initializer data (lua's static luaL_Reg tables).
+## Resolution
+
+- 2026-06-27 audit — **DONE / no longer reproducible.** Solved by the later
+  `pxxcio` PAL bridge and C stdio work. Current `compiler/pascal26` builds and
+  runs `test/cfile_stdio_b87.c` and `test/csocket_loopback_b88.c`; both return
+  `42`. `readelf -d` on those binaries reports no `NEEDED libc.so.6` entry.
+- The pinned Track B compiler still lags this behavior; that is tracked
+  separately by `chore-repin-c-stdio-pal-bridge`.

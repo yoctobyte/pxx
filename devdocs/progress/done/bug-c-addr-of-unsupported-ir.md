@@ -1,8 +1,10 @@
 # C `&` of certain operands lowers to IR_UNSUPPORTED (codegen crash)
 
 - **Type:** bug
+- **Status:** done
 - **Track:** A (shared IR / codegen) — surfaced by Track C lua import
 - **Opened:** 2026-06-25
+- **Closed:** 2026-06-27
 - **Found-by:** lua core import (lmem.c, ldebug.c) after the `(*expr)(args)`
   indirect-call parse fix (e4a991a) let those files parse past the allocator.
 
@@ -51,6 +53,12 @@ wraps it again. Same shape in lmem.c (innerTk=5) and ldebug.c (innerTk=1).
   arrow-field base (`AN_ADDR(AN_INDEX(AN_FIELD(AN_DEREF …)))`) still hits
   IRLowerAddress's fallthrough (the value-base `&s.v[0]` works). Separate
   IRLowerAddress case needed for AN_INDEX over an arrow-field array.
+- 2026-06-27 audit — **DONE / no longer reproducible.** Solved as a side effect
+  of later Lua C-frontend debugging work. Current `compiler/pascal26` compiles
+  the old Lua standalone probes far enough to report only `main function not
+  found`; no `IR_UNSUPPORTED`, `Unsupported linear node`, or `AN_ADDR` failure is
+  emitted for `lmem.c` or `ldebug.c`. The full Lua gate also passes via
+  `make test-lua`.
 
 ## Repro
 
@@ -61,10 +69,7 @@ Not yet reduced to a minimal case — surfaces only inside the full lua headers
 plus an instrumented print of the AN_ADDR operand kind at the IRLowerAddress
 fallthrough will pin the exact construct.
 
-## Next step
+## Resolution
 
-Instrument the `IR_UNSUPPORTED` emission in `IRLowerAddress` to print
-`ASTKind[ASTLeft[node]]` (the inner operand), identify the `&` form, and add the
-missing `IRLowerAddress` case. Likely candidates: `&` of a call result, `&` of a
-cast/deref chain, or `&` of a parenthesized expression the C frontend builds
-slightly differently than the Pascal one.
+Closed by verification rather than a targeted patch: the old failure is no
+longer observable on current HEAD after the subsequent Lua C-frontend fixes.

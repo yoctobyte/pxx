@@ -78,3 +78,6 @@ self-host fixedpoint OK (g2 == g3)
 - 2026-06-27 — Extended from Track B `crtl` socket work. Current generated
   compiler passes `test/csocket_loopback_b88.c`; pinned v81 compiles it but
   produces a runtime unresolved `__pxx_socket`.
+- 2026-06-27 audit — Still open. Current `compiler/pascal26` passes both
+  `test/cfile_stdio_b87.c` and `test/csocket_loopback_b88.c`; pinned stable still
+  fails at runtime with unresolved `__pxx_write` / `__pxx_socket`.

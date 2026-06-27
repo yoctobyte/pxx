@@ -34,6 +34,10 @@ ok: /tmp/bug_ssize_return
 Segmentation fault (core dumped)
 ```
 
+Re-verified 2026-06-27 audit: still open. Current `compiler/pascal26` builds the
+repro with `-Ilib/crtl/include`, but the resulting executable exits `139`
+(`SIGSEGV`) before reaching the `return 42` path.
+
 The same ABI spelled directly as `long sendx(...)` runs correctly. The `crtl`
 socket implementation therefore spells the `send`/`recv`/`sendto`/`recvfrom`
 definitions with direct `long` return types, while the public headers can still

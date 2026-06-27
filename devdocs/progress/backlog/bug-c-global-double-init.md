@@ -23,6 +23,9 @@ int main(void) { return i; }                                       /* -> 42 OK *
 Live-verified 2026-06-27 on HEAD (after the double-value-model fixes): the
 double global reads 0, the int global reads 42.
 
+Re-verified 2026-06-27 audit: still open. Current `compiler/pascal26` compiles
+the `static double g = 3.14` high-byte repro and it exits `0`; expected `0x40`.
+
 ## Likely root area
 
 C global/static initializer emission (`cparser.inc` global-var path +

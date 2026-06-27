@@ -3,7 +3,9 @@
 - **Type:** Track A (shared compiler internals: cross-language linking, ELF
   data relocations, global initializer lowering). Raised by Track C (C frontend,
   worktree `feat/cfront`) while building the `lib/crtl` stdio veneer for lua.
+- **Status:** done
 - **Opened:** 2026-06-26
+- **Closed:** 2026-06-27
 - **Goal it unblocks:** pxx-compiled lua RUNS with output. lua's print path is
   `lua_writestring` → `fwrite(s,1,n,stdout)` and number formatting →
   `snprintf("%.14g",...)`. The printf/snprintf **formatting engine** is pure C
@@ -103,3 +105,19 @@ blocked at runtime until that lands. See `bug-c-double-vararg.md`.
   fixed so the standard definition works.
 - A C global `array-of-struct` initializer reaches the program (blocker #4).
 - Resulting lua exe prints with **no `NEEDED libc.so.6`** for IO.
+
+## Resolution
+
+- 2026-06-27 audit — **DONE / no longer reproducible as a blocking ticket.**
+  Solved as a side effect of later Lua/C stdio work and the `pxxcio` bridge.
+  Current `compiler/pascal26` builds/runs `test/cfile_stdio_b87.c` and
+  `test/csocket_loopback_b88.c`; both return `42`, and `readelf -d` shows no
+  `NEEDED libc.so.6`.
+- The old data-reloc/global-array blockers also pass on current HEAD:
+  `F *p = &obj; return p->fd;` returns `7`; `static int counts[4] =
+  {10,20,30,40}` returns `50`; an initialized global array of structs returns
+  `4`.
+- Remaining related work is no longer this compiler-blocker ticket: pinned
+  stable still needs a re-pin (`chore-repin-c-stdio-pal-bridge`), and any broad
+  "C can import arbitrary Pascal units" design should be tracked as feature work
+  if needed beyond the `pxxcio` bridge.

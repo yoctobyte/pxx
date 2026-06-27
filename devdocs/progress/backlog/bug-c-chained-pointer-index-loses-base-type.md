@@ -54,3 +54,9 @@ Assign the intermediate pointer first:
 char *p = argv[1];
 if (p[0] != 'a') return 2;
 ```
+
+## Audit
+
+- 2026-06-27 — Still open. Current `compiler/pascal26` reproduces the direct
+  chained-index bug: compiling and running the `argv[1][0] != 'a'` probe with
+  `ab` exits `2`; the explicit `char *p = argv[1]` workaround still works.
