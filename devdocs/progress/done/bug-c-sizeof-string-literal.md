@@ -33,3 +33,13 @@ Value bug, not a parse error (the program compiles, the constant is just wrong),
 so it does not by itself block parsing — but lua/sqlite use
 `sizeof(string)/sizeof(char)` in buffer-size const expressions, so a wrong value
 can cascade. Lower priority than the parse-blocking `unexpected token` tail.
+
+## RESOLVED — 2026-06-27 (Track A+C, fbeb978f)
+
+`ParseCSizeof` got a `tkString` case: `sizeof("lit")` = decoded byte length
+(`Tokens[TokPos-1].SLen`) + 1 (NUL), instead of falling through to the pointer-size
+default. Was breaking ALL lua colon-method OOP — `new_localvarliteral(ls,"self")`
+registers the implicit `self` param with length `sizeof("self")-1`; the pointer
+default made that 7 not 4, so `self` got a garbage name and resolved as a nil
+global. Front-end only, self-host byte-identical. Test `csizeof_string_literal_b86`.
+Found via the new `make test-lua` complex-app suite.

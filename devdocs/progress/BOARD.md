@@ -27,14 +27,13 @@ _none_
 | --- | --- | --- | --- | --- |
 | feature-c-runtime-library | C | feature | C runtime/library layer (`lib/crtl`) plus direct C-library packages | feature-c-source-frontend |
 
-## backlog (68)
+## backlog (67)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
 | bug-c-addr-of-unsupported-ir | A | bug | C `&` of certain operands lowers to IR_UNSUPPORTED (codegen crash) | — |
 | bug-c-global-double-init | A | bug | C: global `double`/`float` initializer stored as 0 | — |
 | bug-c-libc-data-symbol-stdio | A | bug | C stdio must ride pxx syscalls (libc-free), not import libc | — |
-| bug-c-sizeof-string-literal | C | bug | C `sizeof("string literal")` returns pointer size, not array size | — |
 | bug-c-vararg-overflow-area | A | bug | C: 6+ variadic args (overflow area) segfault | — |
 | bug-fpc-seed-helper-ordering-after-lua-c-frontend | A | bug | FPC seed build fails after Lua C frontend helper additions | — |
 | bug-i386-float-byval-param | A | bug | i386 backend: by-value float (Double) parameter unsupported | — |
@@ -134,7 +133,7 @@ _none_
 | feature-mimic-fpc | B | feature | `mimic FPC` compatibility mode | — |
 | feature-string-model-tyfixedstring | B | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (304)
+## done (305)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -162,6 +161,7 @@ _none_
 | bug-c-packed-aligned-ignored | A | bug | C `__attribute__((packed))` / `aligned` ignored → field-offset drift | — |
 | bug-c-postincrement-as-rvalue | C | bug | C: post-increment/decrement used as a VALUE (`(p++)->f`, `x = a[i++]`) | — |
 | bug-c-quoted-include-search-path | A | bug | C quoted includes do not search the including file directory | — |
+| bug-c-sizeof-string-literal | C | bug | C `sizeof("string literal")` returns pointer size, not array size | — |
 | bug-c-string-literal-to-pointer-prefix | C | bug | C: string literal assigned to a `char *` points at the Pascal length-prefix | — |
 | bug-c-struct-pointer-index-stride | C | bug | C: `p[i]` / `p+i` on a struct pointer uses the wrong element stride | — |
 | bug-cardinal-expr-promotion-shr-orphan | A | bug | bug: cardinal/signed 32-bit expression width (orphan addendum) | — |
@@ -456,7 +456,6 @@ _none_
 - [A] bug-c-addr-of-unsupported-ir
 - [A] bug-c-global-double-init
 - [A] bug-c-libc-data-symbol-stdio
-- [C] bug-c-sizeof-string-literal
 - [A] bug-c-vararg-overflow-area
 - [A] bug-fpc-seed-helper-ordering-after-lua-c-frontend
 - [A] bug-i386-float-byval-param
