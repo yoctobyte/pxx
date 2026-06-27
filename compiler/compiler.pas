@@ -85,6 +85,8 @@ begin
   DumpIR := False;
   DumpCpp := False;
   NoStdInc := False;
+  CUseSystemLibs := False;
+  CrtlSrcPulledCount := 0;
   WarnSelfResult := False;
   DumpRTTI := False;
   TargetArch := TARGET_X86_64;
@@ -125,6 +127,14 @@ begin
     else if option = '--dump-cpp' then
     begin
       DumpCpp := True;
+      Inc(i);
+    end
+    else if option = '--system-libs' then
+    begin
+      { Opt out of the libc-free crtl auto-pull: resolve C library functions as
+        real shared-library externs (DT_NEEDED libc/libm) instead, the way a
+        normal toolchain links them. }
+      CUseSystemLibs := True;
       Inc(i);
     end
     else if (option = '-nostdinc') or (option = '--nostdinc') then

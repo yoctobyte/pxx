@@ -1292,9 +1292,99 @@ begin
   Inc(PasUnitDirCount);
 end;
 
+{ 1-based index of the first occurrence of `sub` in `s`, else 0. }
+function CPFindSub(const s, sub: AnsiString): Integer;
+var i, j, n, m: Integer; ok: Boolean;
+begin
+  Result := 0;
+  n := Length(s); m := Length(sub);
+  if (m = 0) or (m > n) then Exit;
+  for i := 1 to n - m + 1 do
+  begin
+    ok := True;
+    for j := 1 to m do
+      if s[i + j - 1] <> sub[j] then begin ok := False; Break; end;
+    if ok then begin Result := i; Exit; end;
+  end;
+end;
+
+{ If `hdr` is a crtl include header (path contains `crtl/include/` and ends
+  `.h`), build the sibling impl path `crtl/src/<name>.c` into `src` and return
+  True. The auto-pull "link" target — see CrtlSrcPulled in defs.inc. }
+function CPCrtlSrcOf(const hdr: AnsiString; var src: AnsiString): Boolean;
+var idx, i, n: Integer;
+begin
+  Result := False;
+  src := '';
+  n := Length(hdr);
+  if (n < 2) or (hdr[n] <> 'h') or (hdr[n-1] <> '.') then Exit;
+  idx := CPFindSub(hdr, 'crtl/include/');
+  if idx = 0 then Exit;
+  { prefix up to (not including) 'crtl/include/' }
+  for i := 1 to idx - 1 do AppendChar(src, hdr[i]);
+  AppendString(src, 'crtl/src/');
+  { the part after 'crtl/include/', with the trailing '.h' rewritten to '.c' }
+  for i := idx + 13 to n - 1 do AppendChar(src, hdr[i]);   { 13 = Length('crtl/include/') }
+  AppendChar(src, 'c');
+  Result := True;
+end;
+
+{ True if `path` is a crtl impl source (`.../crtl/src/<name>.c`). Such a file is
+  pulled at most once per compile whether reached by the auto-pull or by an
+  explicit `#include "...c"` (a unity build like lua's runner.c), so the two
+  never double-define the same functions. }
+function CPIsCrtlSrcPath(const path: AnsiString): Boolean;
+var n: Integer;
+begin
+  n := Length(path);
+  Result := (n >= 2) and (path[n] = 'c') and (path[n-1] = '.') and
+            (CPFindSub(path, 'crtl/src/') > 0);
+end;
+
+{ True if this crtl impl path was already pulled in this compile. }
+function CPCrtlSrcPulled(const src: AnsiString): Boolean;
+var i: Integer;
+begin
+  Result := False;
+  for i := 0 to CrtlSrcPulledCount - 1 do
+    if CrtlSrcPulled[i] = src then begin Result := True; Exit; end;
+end;
+
+{ Record a crtl impl path as pulled (dedup register). }
+procedure CPMarkCrtlSrcPulled(const src: AnsiString);
+begin
+  if CrtlSrcPulledCount < MAX_C_INCLUDE_DIRS then
+  begin
+    CrtlSrcPulled[CrtlSrcPulledCount] := src;
+    Inc(CrtlSrcPulledCount);
+  end;
+end;
+
+{ After a crtl `<header>` is processed, auto-pull its sibling `src/<name>.c`
+  impl once (the missing link step). `depth`/`hdrPath` are the just-processed
+  header's include slot and resolved path; the impl reuses the same depth slot
+  (the header's buffer is already consumed). No-op under --system-libs, when the
+  header is not a crtl header, when the impl file is absent, or when already
+  pulled. The impl's own `#include <name.h>` re-resolves the header (guarded,
+  empty) and finds the impl already pulled, so there is no recursion. }
+procedure CPAutoPullCrtlImpl(depth: Integer; const hdrPath: AnsiString);
+var src, srcDir: AnsiString;
+begin
+  if CUseSystemLibs then Exit;
+  if not CPCrtlSrcOf(hdrPath, src) then Exit;
+  if CPCrtlSrcPulled(src) then Exit;
+  CPrepPath := src;
+  CPLoadInclude(depth);
+  if CPIncludeLength(depth) = 0 then Exit;   { no sibling impl — pure-header module }
+  CPMarkCrtlSrcPulled(src);
+  if DebugTrace then writeln('C preprocessor: auto-pull crtl impl ', src);
+  srcDir := GetFilePath(src);
+  CPProcessInclude(depth, srcDir);
+end;
+
 procedure CPInclude(const line: AnsiString; p, last, depth: Integer;
   const baseDir: AnsiString);
-var a, b, k: Integer;
+var a, b, k: Integer; hdrResolved: AnsiString;
 begin
   if depth >= MAX_CPREP_INCLUDES then Error('C include nesting overflow');
   while (p <= last) and (line[p] in [' ', #9]) do Inc(p);
@@ -1446,7 +1536,24 @@ begin
       Error('C include file not found');
     end;
     if DebugTrace then writeln('C preprocessor: include ', CPrepPath);
-    CPProcessInclude(depth, GetFilePath(CPrepPath));
+    hdrResolved := CPrepPath;   { capture before CPProcessInclude / the auto-pull mutate CPrepPath }
+    if CPIsCrtlSrcPath(CPrepPath) then
+    begin
+      { An explicit `#include "...c"` of a crtl impl (a unity build like lua's
+        runner.c). Process it once and record it, so a later `<header>` auto-pull
+        does not include the same impl again and double-define its functions. }
+      if not CPCrtlSrcPulled(CPrepPath) then
+      begin
+        CPMarkCrtlSrcPulled(CPrepPath);
+        CPProcessInclude(depth, GetFilePath(CPrepPath));
+      end;
+    end
+    else
+    begin
+      CPProcessInclude(depth, GetFilePath(CPrepPath));
+      { pxx has no link step: a crtl `<header>` also pulls its libc-free impl. }
+      CPAutoPullCrtlImpl(depth, hdrResolved);
+    end;
   end;
 end;
 

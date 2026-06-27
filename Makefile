@@ -540,6 +540,8 @@ test-core: $(COMPILER)
 	/tmp/cglobal_fnptr_array_b10926; test "$$?" = "42"
 	./$(COMPILER) test/cpreproc_if_arith_b110.c /tmp/cpreproc_if_arith_b11026
 	/tmp/cpreproc_if_arith_b11026; test "$$?" = "42"
+	./$(COMPILER) test/cauto_pull_crtl_math_b111.c /tmp/cauto_pull_crtl_math_b11126
+	/tmp/cauto_pull_crtl_math_b11126; test "$$?" = "42"
 	./$(COMPILER) -Itest/cinc/inc test/cinc/cinc_main.c /tmp/cinc_main26
 	test "$$(/tmp/cinc_main26)" = "$$(printf 'local-ok\ninc-ok')"
 	./$(COMPILER) test/test_declared_directive.pas /tmp/test_declared_directive26

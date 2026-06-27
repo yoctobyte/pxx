@@ -1084,6 +1084,18 @@ var
   CIncludeDirs    : array[0..MAX_C_INCLUDE_DIRS-1] of AnsiString;
   CIncludeDirCount: Integer;
 
+  { Auto-pull of pxx's own libc-free C runtime (lib/crtl). When a crtl `<header>`
+    resolves, the compiler also pulls its sibling `lib/crtl/src/<name>.c` impl —
+    pxx has no separate link step, so this IS the "link": a C program that
+    `#include <math.h>` gets fabs/sqrt's libc-free bodies (bridged to the Pascal
+    RTL) with no DT_NEEDED, instead of an unresolved libm extern. Each impl is
+    pulled at most once (CrtlSrcPulled dedup, also breaks the cycle where the impl
+    re-includes its own header). `--system-libs` opts the whole program back to
+    real shared-library externs (today's libm/libc DT_NEEDED behaviour). }
+  CUseSystemLibs   : Boolean;
+  CrtlSrcPulled    : array[0..MAX_C_INCLUDE_DIRS-1] of AnsiString;
+  CrtlSrcPulledCount : Integer;
+
   { Ordered Pascal-unit (`uses`) search roots from `-Fu<dir>` (FPC-style) and
     `-I<dir>`. Searched in LoadUnit after the including file's own directory and
     before the compiler-anchored builtin/RTL/LCL dirs — so a project or
