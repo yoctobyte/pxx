@@ -877,6 +877,17 @@ var
   CTypeProcSig : Integer;    { fn-pointer typedef signature Procs[] index of the last ParseCDeclType (CTypePtrDepth=0), else -1 }
   CTypeFnPtrName : AnsiString; { fn-pointer declarator name `ret (*Name)(..)` captured by the last ParseCDeclType, else '' }
   CTypeFnPtrNameOff, CTypeFnPtrNameLen : Integer; { token-char off/len of CTypeFnPtrName (for struct-member field registration) }
+  CTypeFnRetIsFunc : Boolean; { last ParseCDeclType saw `ret (*Name(params))(...)`: a real function returning a fn pointer, not a fn-pointer variable }
+  CTypeFnRetParamCount : Integer;
+  CTypeFnRetPTypes : array[0..15] of TTypeKind;
+  CTypeFnRetPNames : array[0..15] of AnsiString;
+  CTypeFnRetPDepths : array[0..15] of Integer;
+  CTypeFnRetPBaseTk : array[0..15] of Integer;
+  CTypeFnRetPBaseRec : array[0..15] of Integer;
+  CTypeFnRetPElemTk : array[0..15] of Integer;
+  CTypeFnRetPElemRec : array[0..15] of Integer;
+  CTypeFnRetPRecId : array[0..15] of Integer;
+  CTypeFnRetPProcSig : array[0..15] of Integer;
   CHeaderMode : Boolean; { parsing C in header/FFI mode }
   CProgramMode : Boolean; { compiling a C .c program (vs importing a header):
     a `{...}` function body is a LOCAL definition (internal), so the pass-1

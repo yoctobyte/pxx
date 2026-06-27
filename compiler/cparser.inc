@@ -1521,9 +1521,14 @@ var
   base, fpRet, fpPType: TTypeKind;
   fpName: AnsiString;
   fpNameOff, fpNameLen: Integer;   { name token off/len, kept local — a recursive ParseCDeclType (params) resets the globals }
-  fpNParams, fpSig: Integer;
+  fpNParams, fpSig, fnRetNParams, pi: Integer;
   fpPTypes: array[0..15] of TTypeKind;
   fpPNames: array[0..15] of AnsiString;
+  fnRetPTypes: array[0..15] of TTypeKind;
+  fnRetPNames: array[0..15] of AnsiString;
+  fnRetPDepths, fnRetPBaseTk, fnRetPBaseRec, fnRetPElemTk, fnRetPElemRec: array[0..15] of Integer;
+  fnRetPRecId, fnRetPProcSig: array[0..15] of Integer;
+  fnRetIsFunc: Boolean;
 begin
   isUnsigned := False; isSigned := False; isFloatTy := False; isVoid := False;
   sawBase := False; isTypedef := False; isAggBase := False;
@@ -1532,6 +1537,8 @@ begin
   CTypeProcSig := -1;
   CTypeFnPtrName := '';
   CTypeFnPtrNameOff := 0; CTypeFnPtrNameLen := 0;
+  CTypeFnRetIsFunc := False;
+  CTypeFnRetParamCount := 0;
   loop := True;
   while loop do
   begin
@@ -1677,6 +1684,8 @@ begin
     Result := tyPointer;
     CTypeIsVoid := False;
     fpName := '';
+    fnRetIsFunc := False;
+    fnRetNParams := 0;
     { first group `(*name)` — collapse to Pointer, capturing the declarator name }
     depth := 0;
     repeat
@@ -1691,6 +1700,62 @@ begin
           Keep in locals: the recursive ParseCDeclType for the params resets the
           CTypeFnPtrName* globals. }
         fpNameOff := Tokens[TokPos-1].SOffset; fpNameLen := Tokens[TokPos-1].SLen;
+        if Tokens[TokPos].Kind = tkLParen then
+        begin
+          { Function returning a function pointer: `ret (*Name(params))(...)`.
+            The params inside the first group belong to the real function Name,
+            not to the returned function pointer. Capture them for
+            ParseCSubroutine, then let the outer group consume its closing `)`. }
+          fnRetIsFunc := True;
+          Next;                         { consume name -> CurTok is '(' }
+          Next;                         { consume function param-list '(' }
+          while (CurTok.Kind <> tkRParen) and (CurTok.Kind <> tkEOF) do
+          begin
+            if CurTok.Kind = tkDot then
+            begin
+              { variadic marker; ParseCSubroutine does not need it for sqlite's
+                fn-returning-fnptr shape, so just consume it. }
+              Next;
+            end
+            else if IsCTypeTok then
+            begin
+              fpPType := ParseCDeclType();
+              if CTypeIsVoid then
+              begin
+                { `(void)` empty parameter list }
+              end
+              else if fnRetNParams <= 15 then
+              begin
+                fnRetPTypes[fnRetNParams] := fpPType;
+                fnRetPDepths[fnRetNParams] := CTypePtrDepth;
+                fnRetPBaseTk[fnRetNParams] := CTypePtrBaseTk;
+                fnRetPBaseRec[fnRetNParams] := CTypePtrBaseRec;
+                fnRetPElemTk[fnRetNParams] := CTypeElemTk;
+                fnRetPElemRec[fnRetNParams] := CTypeElemRec;
+                fnRetPRecId[fnRetNParams] := CTypeBaseRec;
+                fnRetPProcSig[fnRetNParams] := CTypeProcSig;
+                if CTypeFnPtrName <> '' then
+                  fnRetPNames[fnRetNParams] := CTypeFnPtrName
+                else if CurTok.Kind = tkIdent then
+                begin
+                  fnRetPNames[fnRetNParams] := CurTok.SVal;
+                  Next;
+                end
+                else
+                begin
+                  fnRetPNames[fnRetNParams] := 'arg0';
+                  fnRetPNames[fnRetNParams][4] := Chr(Ord('0') + fnRetNParams);
+                end;
+                Inc(fnRetNParams);
+              end;
+            end
+            else
+              Next;
+            Eat(tkComma);
+          end;
+          Eat(tkRParen);
+          Continue;
+        end;
       end;
       Next;
     until (depth = 0) or (CurTok.Kind = tkEOF);
@@ -1739,6 +1804,23 @@ begin
       CTypeFnPtrName := fpName;
       CTypeFnPtrNameOff := fpNameOff;  { assign AFTER the param recursion that reset the globals }
       CTypeFnPtrNameLen := fpNameLen;
+      if fnRetIsFunc then
+      begin
+        CTypeFnRetIsFunc := True;
+        CTypeFnRetParamCount := fnRetNParams;
+        for pi := 0 to fnRetNParams - 1 do
+        begin
+          CTypeFnRetPTypes[pi] := fnRetPTypes[pi];
+          CTypeFnRetPNames[pi] := fnRetPNames[pi];
+          CTypeFnRetPDepths[pi] := fnRetPDepths[pi];
+          CTypeFnRetPBaseTk[pi] := fnRetPBaseTk[pi];
+          CTypeFnRetPBaseRec[pi] := fnRetPBaseRec[pi];
+          CTypeFnRetPElemTk[pi] := fnRetPElemTk[pi];
+          CTypeFnRetPElemRec[pi] := fnRetPElemRec[pi];
+          CTypeFnRetPRecId[pi] := fnRetPRecId[pi];
+          CTypeFnRetPProcSig[pi] := fnRetPProcSig[pi];
+        end;
+      end;
     end;
   end;
 end;
@@ -3116,8 +3198,13 @@ var savedPos: Integer;
 begin
   savedPos := TokPos - 1;          { index of the current token }
   ParseCDeclType;
-  if CurTok.Kind = tkIdent then Next;
-  Result := (CurTok.Kind = tkLParen);
+  if CTypeFnRetIsFunc then
+    Result := True
+  else
+  begin
+    if CurTok.Kind = tkIdent then Next;
+    Result := (CurTok.Kind = tkLParen);
+  end;
   TokPos := savedPos; Next;        { rewind }
 end;
 
@@ -3302,7 +3389,7 @@ var
   pprocsig: array[0..15] of Integer;  { fn-pointer signature Procs[] index per param, else -1 }
   savedSC, savedFS, node, savedCurProc: Integer;
   vaSaveSym, vaSaveRec, vaOverflowSym: Integer;
-  parenName, isVariadic, wasNewProc: Boolean;
+  parenName, isVariadic, wasNewProc, fnRetIsFunc: Boolean;
 begin
   { Default DT_NEEDED soname for an external with no explicit library: math
     functions are in libm.so.6 on glibc, everything else in libc.so.6. }
@@ -3326,27 +3413,49 @@ begin
   retRecId := REC_NONE;
   if retType = tyRecord then retRecId := CTypeBaseRec;
   if CTypeIsVoid then retType := tyInteger; { void return: value slot unused }
+  fnRetIsFunc := CTypeFnRetIsFunc;
+  if fnRetIsFunc then
+  begin
+    name := CTypeFnPtrName;
+    nparams := CTypeFnRetParamCount;
+    isVariadic := False;
+    for i := 0 to nparams - 1 do
+    begin
+      ptypes[i] := CTypeFnRetPTypes[i];
+      pnames[i] := CTypeFnRetPNames[i];
+      pdepths[i] := CTypeFnRetPDepths[i];
+      pbasetk[i] := CTypeFnRetPBaseTk[i];
+      pbaserec[i] := CTypeFnRetPBaseRec[i];
+      pelemtk[i] := CTypeFnRetPElemTk[i];
+      pelemrec[i] := CTypeFnRetPElemRec[i];
+      precid[i] := CTypeFnRetPRecId[i];
+      pprocsig[i] := CTypeFnRetPProcSig[i];
+    end;
+  end;
 
   { A parenthesized declarator name `(name)(params)` — lua.h declares its whole
     API this way (`LUA_API int (lua_gettop) (lua_State *L);`). Unwrap the redundant
     parens so the name + param list parse normally. Distinct from `(*name)(...)`
     (a function pointer), which ParseCDeclType already consumes. }
   parenName := False;
-  if (CurTok.Kind = tkLParen) and
+  if (not fnRetIsFunc) and (CurTok.Kind = tkLParen) and
      (Tokens[TokPos].Kind = tkIdent) and (Tokens[TokPos+1].Kind = tkRParen) then
   begin
     parenName := True;
     Next;   { consume '(' — CurTok is now the name }
   end;
 
-  if CurTok.Kind <> tkIdent then
+  if (not fnRetIsFunc) and (CurTok.Kind <> tkIdent) then
   begin
     while (CurTok.Kind <> tkSemicolon) and (CurTok.Kind <> tkEOF) do Next;
     Eat(tkSemicolon);
     Exit;
   end;
-  name := CurTok.SVal;
-  Next;
+  if not fnRetIsFunc then
+  begin
+    name := CurTok.SVal;
+    Next;
+  end;
   extLib := 'libc.so.6';
   if (name = 'pow') or (name = 'sqrt') or (name = 'fmod') or (name = 'floor') or
      (name = 'ceil') or (name = 'fabs') or (name = 'sin') or (name = 'cos') or
@@ -3354,93 +3463,96 @@ begin
      (name = 'atan2') or (name = 'exp') or (name = 'log') or (name = 'frexp') or
      (name = 'ldexp') or (name = 'sinh') or (name = 'cosh') or (name = 'tanh') then
     extLib := 'libm.so.6';
-  if parenName then Eat(tkRParen);   { consume the ')' wrapping the name }
+  if (not fnRetIsFunc) and parenName then Eat(tkRParen);   { consume the ')' wrapping the name }
 
-  if CurTok.Kind <> tkLParen then
+  if (not fnRetIsFunc) and (CurTok.Kind <> tkLParen) then
   begin
     while (CurTok.Kind <> tkSemicolon) and (CurTok.Kind <> tkEOF) do Next;
     Eat(tkSemicolon);
     Exit;
   end;
-  Expect(tkLParen, '(');
-  nparams := 0;
-  isVariadic := False;
-  while (CurTok.Kind <> tkRParen) and (CurTok.Kind <> tkEOF) do
+  if not fnRetIsFunc then
   begin
-    if CurTok.Kind = tkDot then isVariadic := True;   { `...` lexes to three tkDot }
-    if IsCTypeTok then
+    Expect(tkLParen, '(');
+    nparams := 0;
+    isVariadic := False;
+    while (CurTok.Kind <> tkRParen) and (CurTok.Kind <> tkEOF) do
     begin
-      ptype := ParseCDeclType;
-      if CTypeIsVoid then
+      if CurTok.Kind = tkDot then isVariadic := True;   { `...` lexes to three tkDot }
+      if IsCTypeTok then
       begin
-        { `(void)` empty parameter list — no actual parameter }
-      end
-      else if nparams <= 15 then
-      begin
-        ptypes[nparams] := ptype;
-        pdepths[nparams] := CTypePtrDepth;
-        pbasetk[nparams] := CTypePtrBaseTk;
-        pbaserec[nparams] := CTypePtrBaseRec;
-        pelemtk[nparams] := CTypeElemTk;
-        pelemrec[nparams] := CTypeElemRec;
-        precid[nparams] := CTypeBaseRec;     { record id for a tyRecord param }
-        pprocsig[nparams] := CTypeProcSig;   { fn-pointer param: callable in the body }
-        if CTypeFnPtrName <> '' then
+        ptype := ParseCDeclType;
+        if CTypeIsVoid then
         begin
-          { Inline function-pointer parameter `RET (*name)(params)` — ParseCDeclType
-            consumed the whole declarator and captured the name, so the ident-read
-            below would miss it and the param would be registered as `argN`, leaving
-            a body reference to `name` undeclared (sqlite3ThreadCreate's xTask).
-            ParseCDeclType folds the fn-ptr into tyPointer with CTypeProcSig set. }
-          pnames[nparams] := CTypeFnPtrName;
+          { `(void)` empty parameter list — no actual parameter }
         end
-        else if CurTok.Kind = tkIdent then
+        else if nparams <= 15 then
         begin
-          pnames[nparams] := CurTok.SVal;
-          Next;
-        end
-        else
-        begin
-          pnames[nparams] := 'arg0';
-          pnames[nparams][4] := Chr(Ord('0') + nparams);
-        end;
-        { C array parameter `T name[...]` decays to a pointer `T *name` (lua
-          ltable `computesizes(unsigned int nums[], ...)`). Consume the bracket
-          dimension(s) and retype the param as pointer-to-element. }
-        if CurTok.Kind = tkLBrack then
-        begin
-          while CurTok.Kind = tkLBrack do
+          ptypes[nparams] := ptype;
+          pdepths[nparams] := CTypePtrDepth;
+          pbasetk[nparams] := CTypePtrBaseTk;
+          pbaserec[nparams] := CTypePtrBaseRec;
+          pelemtk[nparams] := CTypeElemTk;
+          pelemrec[nparams] := CTypeElemRec;
+          precid[nparams] := CTypeBaseRec;     { record id for a tyRecord param }
+          pprocsig[nparams] := CTypeProcSig;   { fn-pointer param: callable in the body }
+          if CTypeFnPtrName <> '' then
           begin
-            sz := 0;   { reuse as bracket depth }
-            repeat
-              if CurTok.Kind = tkLBrack then Inc(sz)
-              else if CurTok.Kind = tkRBrack then Dec(sz);
-              Next;
-            until (sz = 0) or (CurTok.Kind = tkEOF);
-          end;
-          if pdepths[nparams] = 0 then
+            { Inline function-pointer parameter `RET (*name)(params)` — ParseCDeclType
+              consumed the whole declarator and captured the name, so the ident-read
+              below would miss it and the param would be registered as `argN`, leaving
+              a body reference to `name` undeclared (sqlite3ThreadCreate's xTask).
+              ParseCDeclType folds the fn-ptr into tyPointer with CTypeProcSig set. }
+            pnames[nparams] := CTypeFnPtrName;
+          end
+          else if CurTok.Kind = tkIdent then
           begin
-            pelemtk[nparams] := Ord(ptypes[nparams]);
-            pelemrec[nparams] := CTypeBaseRec;
-            pbasetk[nparams] := Ord(ptypes[nparams]);
-            pbaserec[nparams] := CTypeBaseRec;
-            pdepths[nparams] := 1;
+            pnames[nparams] := CurTok.SVal;
+            Next;
           end
           else
           begin
-            pelemtk[nparams] := Ord(tyPointer);   { `T *name[]` -> pointer-to-pointer }
-            Inc(pdepths[nparams]);
+            pnames[nparams] := 'arg0';
+            pnames[nparams][4] := Chr(Ord('0') + nparams);
           end;
-          ptypes[nparams] := tyPointer;
+          { C array parameter `T name[...]` decays to a pointer `T *name` (lua
+            ltable `computesizes(unsigned int nums[], ...)`). Consume the bracket
+            dimension(s) and retype the param as pointer-to-element. }
+          if CurTok.Kind = tkLBrack then
+          begin
+            while CurTok.Kind = tkLBrack do
+            begin
+              sz := 0;   { reuse as bracket depth }
+              repeat
+                if CurTok.Kind = tkLBrack then Inc(sz)
+                else if CurTok.Kind = tkRBrack then Dec(sz);
+                Next;
+              until (sz = 0) or (CurTok.Kind = tkEOF);
+            end;
+            if pdepths[nparams] = 0 then
+            begin
+              pelemtk[nparams] := Ord(ptypes[nparams]);
+              pelemrec[nparams] := CTypeBaseRec;
+              pbasetk[nparams] := Ord(ptypes[nparams]);
+              pbaserec[nparams] := CTypeBaseRec;
+              pdepths[nparams] := 1;
+            end
+            else
+            begin
+              pelemtk[nparams] := Ord(tyPointer);   { `T *name[]` -> pointer-to-pointer }
+              Inc(pdepths[nparams]);
+            end;
+            ptypes[nparams] := tyPointer;
+          end;
+          Inc(nparams);
         end;
-        Inc(nparams);
-      end;
-    end
-    else
-      Next;
-    Eat(tkComma);
+      end
+      else
+        Next;
+      Eat(tkComma);
+    end;
+    Expect(tkRParen, ')');
   end;
-  Expect(tkRParen, ')');
   
   isFunc := True; { In C, everything is a function }
   
@@ -3792,9 +3904,10 @@ end;
 function CEvalConstOffsetofAddress: Int64;
 var parenDepth, recId: Integer;
     fieldName, savedFnPtrName: AnsiString;
-    savedIsVoid: Boolean;
+    savedIsVoid, savedFnRetIsFunc: Boolean;
     savedPtrDepth, savedElemTk, savedElemRec, savedPtrBaseTk, savedPtrBaseRec: Integer;
     savedBaseRec, savedProcSig, savedFnPtrNameOff, savedFnPtrNameLen: Integer;
+    savedFnRetParamCount: Integer;
 begin
   Result := 0;
   recId := REC_NONE;
@@ -3818,6 +3931,8 @@ begin
         savedFnPtrName := CTypeFnPtrName;
         savedFnPtrNameOff := CTypeFnPtrNameOff;
         savedFnPtrNameLen := CTypeFnPtrNameLen;
+        savedFnRetIsFunc := CTypeFnRetIsFunc;
+        savedFnRetParamCount := CTypeFnRetParamCount;
         ParseCDeclType;
         recId := CTypeBaseRec;
         CTypeIsVoid := savedIsVoid;
@@ -3831,6 +3946,8 @@ begin
         CTypeFnPtrName := savedFnPtrName;
         CTypeFnPtrNameOff := savedFnPtrNameOff;
         CTypeFnPtrNameLen := savedFnPtrNameLen;
+        CTypeFnRetIsFunc := savedFnRetIsFunc;
+        CTypeFnRetParamCount := savedFnRetParamCount;
         if CurTok.Kind = tkRParen then
         begin
           Next;

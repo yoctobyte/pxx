@@ -528,6 +528,8 @@ test-core: $(COMPILER)
 	/tmp/cternary_pointer_array_index_b10326; test "$$?" = "42"
 	./$(COMPILER) test/coffsetof_constexpr_array_b104.c /tmp/coffsetof_constexpr_array_b10426
 	/tmp/coffsetof_constexpr_array_b10426; test "$$?" = "42"
+	./$(COMPILER) test/cfn_return_fnptr_b105.c /tmp/cfn_return_fnptr_b10526
+	/tmp/cfn_return_fnptr_b10526; test "$$?" = "42"
 	./$(COMPILER) -Itest/cinc/inc test/cinc/cinc_main.c /tmp/cinc_main26
 	test "$$(/tmp/cinc_main26)" = "$$(printf 'local-ok\ninc-ok')"
 	./$(COMPILER) test/test_declared_directive.pas /tmp/test_declared_directive26

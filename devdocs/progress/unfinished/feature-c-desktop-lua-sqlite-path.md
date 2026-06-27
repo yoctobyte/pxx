@@ -180,6 +180,35 @@ while expecting `]`.
   is a function pointer. Filed
   [[bug-c-function-returning-function-pointer-prototype-sqlite]].
 
+## M5 update (2026-06-27, session 11): functions returning function pointers
+
+SQLite's `sqlite3OsDlSym` declaration is a real function returning a function
+pointer:
+
+```c
+static void (*sqlite3OsDlSym(sqlite3_vfs *, void *, const char *))(void);
+```
+
+The C frontend's function-pointer declarator support covered variables,
+parameters, fields, typedefs, and casts, but collapsed `ret (*fn(params))(...)`
+into the same bucket as a function-pointer variable declaration. The top-level
+scanner then skipped it, so later calls to `sqlite3OsDlSym(...)` were
+undeclared.
+
+- **FIX 12 (this commit) — register `ret (*fn(params))(...)` as a function.**
+  `ParseCDeclType` now distinguishes `ret (*var)(args)` from
+  `ret (*fn(params))(args)` and passes the real function's name + parameter
+  metadata to `ParseCSubroutine`. `CTopLevelIsFunc` routes that shape through the
+  subroutine path. Test `cfn_return_fnptr_b105`.
+- **Verification:** `make compiler/pascal26` self-host byte-identical; b95, b97,
+  and b105 pass.
+- **sqlite rerun:** sqlite advances to
+  `pascal26:33764: error: @ on external routine not supported; wrap it in a
+  local routine ()`. The triggering source is `x =
+  (void(*(*)(void*,const char*))(void))dlsym;` in `unixDlSym`, where `dlsym` is
+  a libc import used as a function-pointer value. Filed
+  [[bug-c-external-function-address-dlsym-sqlite]].
+
 - **Session 2026-06-27d (Track A+C) — control flow + lexer fixed; lua runs real
   programs.** Two more fixes (self-host byte-identical, `make test` green):
   - **FIX 5 (`62c88498`) — global ordinal array with constant-EXPRESSION
