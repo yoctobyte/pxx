@@ -29,7 +29,7 @@ PXX_STABLE ?= $(STABLE_DEFAULT_DIR)/pinned
 PXXFLAGS   :=
 FROZEN_PXXFLAGS := -uPXX_MANAGED_STRING
 
-.PHONY: all bootstrap bootstrap-check fpc-check test-fpc seed-from-stable test test-core test-asm-emit test-debug-g test-nilpy qemu-env-check test-i386 test-aarch64 test-arm32 test-emit-obj stabilize check-stable selfcheck revert benchmark benchmark-compiler-runtime benchmark-check clean distclean symbols \
+.PHONY: all bootstrap bootstrap-check fpc-check test-fpc seed-from-stable test test-core test-asm-emit test-debug-g test-nilpy qemu-env-check test-lua test-i386 test-aarch64 test-arm32 test-emit-obj stabilize check-stable selfcheck revert benchmark benchmark-compiler-runtime benchmark-check clean distclean symbols \
         bootstrap-managed bootstrap-frozen test-managed test-frozen stabilize-managed stabilize-frozen check-stable-managed revert-managed test-nilpy-managed test-nilpy-frozen \
         pxx-stable-check pin lib-test library-suite library-suite-green library-suite-discovery gui-test demos c-interop-devtest tls-openssl-devtest tls13-handshake-devtest \
         progress-check cross-bootstrap cross-bootstrap-aarch64 cross-bootstrap-arm32 cross-bootstrap-i386 test-esp-bare test-esp-softfloat
@@ -2140,6 +2140,36 @@ test-float-determinism: $(COMPILER)
 	  echo "$$a float-determinism: OK (checksum=3745966)"; \
 	done
 	@echo "test-float-determinism: x86_64 + i386 + aarch64 + arm32 all checksum=3745966"
+
+# Lua integration suite (feature-c-source-frontend smoke). DISTINCT from `make
+# test`: the base gate carries no 3rd-party dependency. Compiles the lua 5.4
+# core+stdlib (from library_candidates/lua/src — gitignored scratch, fetch it
+# there) into a stdin runner and checks each test/lua/*.lua against its committed
+# .expected stdout. Skips gracefully when the lua tree is absent. Exercises the
+# C frontend end-to-end on real portable C (OOP/metatables, closures, coroutines,
+# string lib, the float value model) — coverage the micro-tests cannot reach
+# (e.g. sizeof("self") breaking colon-method OOP was invisible to them).
+LUA_SRC := library_candidates/lua/src
+test-lua: $(COMPILER)
+	@if [ ! -f "$(LUA_SRC)/lua.h" ]; then \
+	  echo "test-lua: SKIP — no lua tree at $(LUA_SRC) (fetch lua 5.4 there to run)"; \
+	  exit 0; \
+	fi; \
+	echo "compiling lua runner ..."; \
+	./$(COMPILER) -g -Ilib/crtl/include -Ilib/crtl/src -I$(LUA_SRC) test/lua/runner.c /tmp/pxx_lua_runner || exit 1; \
+	fail=0; for p in test/lua/*.lua; do \
+	  exp="$${p%.lua}.expected"; \
+	  /tmp/pxx_lua_runner < $$p 2>/dev/null > /tmp/pxx_lua_got.txt; \
+	  if diff -u "$$exp" /tmp/pxx_lua_got.txt > /tmp/pxx_lua_diff.txt; then \
+	    echo "test-lua: PASS $$(basename $$p)"; \
+	  else \
+	    echo "test-lua: FAIL $$(basename $$p)"; \
+	    head -12 /tmp/pxx_lua_diff.txt; \
+	    fail=1; \
+	  fi; \
+	done; \
+	test "$$fail" = "0" || { echo "test-lua: FAILURES"; exit 1; }; \
+	echo "test-lua: all lua programs match expected"
 
 # Relocatable .o emission for the esp32-idf profile (feature-elf-rel-writer).
 # Host-only checks via binutils readelf; if the ESP cross toolchains are
