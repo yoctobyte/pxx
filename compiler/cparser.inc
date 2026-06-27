@@ -847,7 +847,25 @@ begin
       si := FindSym(CurTok.SVal);
       if si >= 0 then
       begin
-        if Syms[si].IsArray then sz := Syms[si].ArrLen * TypeSize(Syms[si].ElemType)
+        if Tokens[TokPos].Kind = tkLBrack then
+        begin
+          { `sizeof(arr[i])` / `sizeof(p[i])` — the size of ONE element, not the
+            whole array. Without this, the ubiquitous `ArraySize(x)` idiom
+            `sizeof(x)/sizeof(x[0])` folded to 1 (whole/whole), so e.g. sqlite's
+            built-in-extension loop ran a single iteration. }
+          if Syms[si].IsArray then
+          begin
+            if Syms[si].ElemType = tyRecord then sz := RecSize(Syms[si].ElemRecName)
+            else sz := TypeSize(Syms[si].ElemType);
+          end
+          else if Syms[si].TypeKind = tyPointer then
+          begin
+            if Syms[si].PtrElemTk = tyRecord then sz := RecSize(Syms[si].PtrElemRec)
+            else sz := TypeSize(Syms[si].PtrElemTk);
+          end
+          else sz := TypeSize(Syms[si].TypeKind);
+        end
+        else if Syms[si].IsArray then sz := Syms[si].ArrLen * TypeSize(Syms[si].ElemType)
         else if Syms[si].TypeKind = tyRecord then sz := RecSize(Syms[si].RecName)
         else sz := TypeSize(Syms[si].TypeKind);
       end;
@@ -1045,6 +1063,10 @@ begin
   callee := inner;
   if ASTKind[inner] = AN_IDENT then
     Result := SymProcSig[ASTIVal[inner]]
+  else if (ASTKind[inner] = AN_INDEX) and (ASTKind[ASTLeft[inner]] = AN_IDENT) then
+    { `arr[i](args)` — call through an element of a function-pointer array; the
+      array sym carries the per-element call signature in SymElemProcSig. }
+    Result := SymElemProcSig[ASTIVal[ASTLeft[inner]]]
   else if ASTKind[inner] = AN_PTR_CAST then
     Result := ASTRight[inner]   { cast to a fn-pointer type carries its callee sig (>=0), else -1 }
   else if ASTKind[inner] = AN_FIELD then
@@ -1542,6 +1564,7 @@ var
   base, fpRet, fpPType: TTypeKind;
   fpName: AnsiString;
   fpNameOff, fpNameLen: Integer;   { name token off/len, kept local — a recursive ParseCDeclType (params) resets the globals }
+  fpArrLen: Integer;               { array dimension of `(*name[N])` — kept local, restored after the param recursion resets the global }
   fpNParams, fpSig, fnRetNParams, pi: Integer;
   fpPTypes: array[0..15] of TTypeKind;
   fpPNames: array[0..15] of AnsiString;
@@ -1558,6 +1581,7 @@ begin
   CTypeProcSig := -1;
   CTypeFnPtrName := '';
   CTypeFnPtrNameOff := 0; CTypeFnPtrNameLen := 0;
+  CTypeFnPtrArrLen := -2;
   CTypeFnRetIsFunc := False;
   CTypeFnRetParamCount := 0;
   loop := True;
@@ -1705,6 +1729,7 @@ begin
     Result := tyPointer;
     CTypeIsVoid := False;
     fpName := '';
+    fpArrLen := -2;
     fnRetIsFunc := False;
     fnRetNParams := 0;
     { first group `(*name)` — collapse to Pointer, capturing the declarator name }
@@ -1777,6 +1802,17 @@ begin
           Eat(tkRParen);
           Continue;
         end;
+      end
+      else if (CurTok.Kind = tkLBrack) and (fpName <> '') then
+      begin
+        { Array-of-function-pointer declarator `ret (*name[N])(params)` — capture
+          the dimension so the var/global is registered as an ARRAY of callable
+          pointers (sqlite's sqlite3BuiltinExtensions[]). `[]` = unbounded (sized
+          from its initializer); `[N]` = fixed. The trailing Next below consumes
+          the closing ']'. }
+        Next;                          { consume '[' }
+        if CurTok.Kind = tkRBrack then fpArrLen := -1
+        else fpArrLen := CEvalConstExpr;
       end;
       Next;
     until (depth = 0) or (CurTok.Kind = tkEOF);
@@ -1825,6 +1861,7 @@ begin
       CTypeFnPtrName := fpName;
       CTypeFnPtrNameOff := fpNameOff;  { assign AFTER the param recursion that reset the globals }
       CTypeFnPtrNameLen := fpNameLen;
+      CTypeFnPtrArrLen := fpArrLen;    { ditto: `(*name[N])` dimension, clobbered by the param recursion }
       if fnRetIsFunc then
       begin
         CTypeFnRetIsFunc := True;
@@ -2796,6 +2833,156 @@ var baseTk: TTypeKind; name: AnsiString; depth, idx, recBase, fldI, fOff, fTk, f
 begin
   baseTk := ParseCDeclType;
   recId := CTypeBaseRec;
+  { Inline function-pointer (array) global `ret (*name[N])(params) [= {..}];`
+    (sqlite's sqlite3BuiltinExtensions[]). ParseCDeclType already consumed the
+    whole declarator — the name into CTypeFnPtrName and any `[..]` into
+    CTypeFnPtrArrLen — so the name-reading loop below would Break on the `=`/`;`
+    and never register the global, leaving every `name[i]` reference folding to a
+    bare 0. Register it here (array of callable pointers when bracketed, else a
+    scalar callable pointer) and materialise the brace initializer as
+    per-element proc-address PendingInits. }
+  if (CTypeFnPtrName <> '') and (baseTk = tyPointer) then
+  begin
+    { Guard on baseTk = tyPointer: a real inline fn-ptr declarator collapses to a
+      pointer, whereas a struct/union global whose LAST member is a fn pointer
+      (`struct { void (*f)(void); } g;`) leaves CTypeFnPtrName set as leftover but
+      yields baseTk = tyRecord — that must fall through to the normal var loop. }
+    name := CTypeFnPtrName;
+    procIdx := CTypeProcSig;             { the fn-ptr call signature }
+    wasArr := (CTypeFnPtrArrLen >= -1);
+    nArrElems := 0;
+    if (CurTok.Kind = tkAssign) and (Tokens[TokPos].Kind = tkBegin) then
+    begin
+      Next; Next;                        { consume assign and opening brace }
+      while (CurTok.Kind <> tkEnd) and (CurTok.Kind <> tkEOF) do
+      begin
+        if nArrElems > 255 then begin nArrElems := -1; Break; end;
+        if (CurTok.Kind = tkIdent) and (FindProc(CurTok.SVal) >= 0) then
+        begin
+          arrKind[nArrElems] := 3;       { proc address }
+          arrSym[nArrElems] := FindProc(CurTok.SVal);
+          Next;
+        end
+        else if CConsumeCastProcInit(idx) then
+        begin
+          arrKind[nArrElems] := 3;       { (cast)proc — same proc-address form }
+          arrSym[nArrElems] := idx;
+        end
+        else if CurTok.Kind = tkIdent then
+        begin
+          { NULL or another resolvable global pointer; otherwise a null slot. }
+          idx := FindSym(CurTok.SVal);
+          if (idx >= 0) and (CurTok.SVal <> 'NULL') then
+          begin arrKind[nArrElems] := 2; arrSym[nArrElems] := idx; end
+          else begin arrKind[nArrElems] := 1; arrSym[nArrElems] := 0; end;
+          Next;
+        end
+        else if CurTok.Kind = tkInteger then
+        begin
+          arrKind[nArrElems] := 1; arrSym[nArrElems] := CurTok.IVal; Next;
+        end
+        else
+        begin
+          arrKind[nArrElems] := 1; arrSym[nArrElems] := 0;
+          CSkipCInitElement;
+        end;
+        Inc(nArrElems);
+        if CurTok.Kind = tkComma then begin Next; Continue; end;
+        Break;
+      end;
+      if nArrElems >= 0 then Eat(tkEnd)
+      else
+      begin
+        depth := 1;
+        while (depth > 0) and (CurTok.Kind <> tkEOF) do
+        begin
+          if CurTok.Kind = tkBegin then Inc(depth)
+          else if CurTok.Kind = tkEnd then Dec(depth);
+          Next;
+        end;
+        nArrElems := 0;
+      end;
+    end
+    else if CurTok.Kind = tkAssign then
+    begin
+      { scalar initializer `= expr;` — record a single proc address if it is a
+        bare function name, else skip to the terminator (zero default). }
+      Next;
+      if (CurTok.Kind = tkIdent) and (FindProc(CurTok.SVal) >= 0) then
+      begin
+        arrKind[0] := 3; arrSym[0] := FindProc(CurTok.SVal); nArrElems := 1; Next;
+      end
+      else
+        while (CurTok.Kind <> tkSemicolon) and (CurTok.Kind <> tkEOF) do Next;
+    end;
+    arrLen := CTypeFnPtrArrLen;
+    if wasArr then
+    begin
+      if arrLen < 1 then
+      begin
+        if nArrElems > 0 then arrLen := nArrElems else arrLen := 1;
+      end
+      else if nArrElems > arrLen then arrLen := nArrElems;
+    end;
+    idx := FindSym(name);
+    if (idx >= 0) and (Syms[idx].Kind = skConst) then idx := -1;
+    if idx < 0 then
+    begin
+      if wasArr then idx := AllocArray(name, tyPointer, 0, arrLen - 1)
+      else idx := AllocVar(name, tyPointer);
+    end;
+    if idx >= 0 then
+    begin
+      { An ARRAY of callable pointers carries its ELEMENT signature in
+        SymElemProcSig (the `arr[i](args)` channel) — NOT SymProcSig, which would
+        mark the array variable itself as a proc value and make codegen resolve
+        `arr` to a code address (corrupt indexing). A SCALAR fn pointer is itself
+        callable, so it takes SymProcSig plus the scalar pointee metadata. }
+      if wasArr then
+      begin
+        if procIdx >= 0 then SymElemProcSig[idx] := procIdx;
+      end
+      else
+      begin
+        if procIdx >= 0 then SymProcSig[idx] := procIdx;
+        Syms[idx].PtrElemTk := tyUnknown;
+        Syms[idx].PtrElemRec := REC_NONE;
+        SymPtrDepth[idx] := 1;
+      end;
+    end;
+    for ei := 0 to nArrElems - 1 do
+    begin
+      if (idx >= 0) and (PendingInitCount < MAX_PENDING_INITS) then
+      begin
+        PendingInitSym[PendingInitCount]  := idx;
+        if wasArr then PendingInitElem[PendingInitCount] := ei
+        else PendingInitElem[PendingInitCount] := -1;
+        PendingInitFLen[PendingInitCount] := 0;
+        PendingInitTk[PendingInitCount]   := Ord(tyPointer);
+        if arrKind[ei] = 3 then
+        begin
+          PendingInitFOff[PendingInitCount] := -1;
+          PendingInitKind[PendingInitCount] := 2;          { proc address -> AN_PROCADDR }
+          PendingInitVal[PendingInitCount]  := arrSym[ei];
+        end
+        else if arrKind[ei] = 2 then
+        begin
+          PendingInitFOff[PendingInitCount] := -4;          { address of named global }
+          PendingInitKind[PendingInitCount] := 0;
+          PendingInitVal[PendingInitCount]  := arrSym[ei];
+        end
+        else
+        begin
+          PendingInitFOff[PendingInitCount] := -1;          { NULL / integer literal }
+          PendingInitKind[PendingInitCount] := 0;
+          PendingInitVal[PendingInitCount]  := arrSym[ei];
+        end;
+        Inc(PendingInitCount);
+      end;
+    end;
+    Eat(tkSemicolon);
+    Exit;
+  end;
   while True do
   begin
     if CurTok.Kind <> tkIdent then Break;

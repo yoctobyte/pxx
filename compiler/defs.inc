@@ -877,6 +877,7 @@ var
   CTypeProcSig : Integer;    { fn-pointer typedef signature Procs[] index of the last ParseCDeclType (CTypePtrDepth=0), else -1 }
   CTypeFnPtrName : AnsiString; { fn-pointer declarator name `ret (*Name)(..)` captured by the last ParseCDeclType, else '' }
   CTypeFnPtrNameOff, CTypeFnPtrNameLen : Integer; { token-char off/len of CTypeFnPtrName (for struct-member field registration) }
+  CTypeFnPtrArrLen : Integer; { array length of an inline fn-ptr-ARRAY declarator `ret (*Name[N])(..)`: -2 = not an array, -1 = `[]` unbounded, >=0 = sized }
   CTypeFnRetIsFunc : Boolean; { last ParseCDeclType saw `ret (*Name(params))(...)`: a real function returning a fn pointer, not a fn-pointer variable }
   CTypeFnRetParamCount : Integer;
   CTypeFnRetPTypes : array[0..15] of TTypeKind;

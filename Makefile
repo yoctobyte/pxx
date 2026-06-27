@@ -536,6 +536,8 @@ test-core: $(COMPILER)
 	/tmp/clocal_static_const_2d_init_b10726; test "$$?" = "42"
 	./$(COMPILER) -Ilib/crtl/include test/cva_arg_local_fnptr_typedef_b108.c /tmp/cva_arg_local_fnptr_typedef_b10826
 	/tmp/cva_arg_local_fnptr_typedef_b10826; test "$$?" = "42"
+	./$(COMPILER) test/cglobal_fnptr_array_b109.c /tmp/cglobal_fnptr_array_b10926
+	/tmp/cglobal_fnptr_array_b10926; test "$$?" = "42"
 	./$(COMPILER) -Itest/cinc/inc test/cinc/cinc_main.c /tmp/cinc_main26
 	test "$$(/tmp/cinc_main26)" = "$$(printf 'local-ok\ninc-ok')"
 	./$(COMPILER) test/test_declared_directive.pas /tmp/test_declared_directive26
