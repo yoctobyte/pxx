@@ -470,6 +470,8 @@ test-core: $(COMPILER)
 	/tmp/cglobal_scalar_strptr_b7526; test "$$?" = "42"
 	./$(COMPILER) test/cderef_arrow_field_b76.c /tmp/cderef_arrow_field_b7626
 	/tmp/cderef_arrow_field_b7626; test "$$?" = "42"
+	./$(COMPILER) test/cglobal_constexpr_array_init_b77.c /tmp/cglobal_constexpr_array_init_b7726
+	/tmp/cglobal_constexpr_array_init_b7726; test "$$?" = "42"
 	./$(COMPILER) -Itest/cinc/inc test/cinc/cinc_main.c /tmp/cinc_main26
 	test "$$(/tmp/cinc_main26)" = "$$(printf 'local-ok\ninc-ok')"
 	./$(COMPILER) test/test_declared_directive.pas /tmp/test_declared_directive26

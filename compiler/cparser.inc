@@ -2210,10 +2210,18 @@ begin
           end;
         end;
       tkInteger, tkMinus, tkPlus, tkStar, tkSlash, tkMod, tkShl, tkShr, tkAmp,
-      tkXor, tkPipe:
-        if depth = 1 then sawValue := True;      { allowed flat const expr token }
+      tkXor, tkPipe, tkLParen, tkRParen, tkNot, tkIdent:
+        { Allowed flat constant-expression tokens. An element may be a full
+          integer constant expression — parens, shifts, bitwise ops, and
+          identifiers that name enum/macro constants (e.g. lua's
+          `luaP_opmodes[] = { opmode(...), ... }`, which expands to
+          `(((0)<<7)|...|(iABC))`). The materializer folds each element with
+          CEvalConstExpr, so anything it can fold is fine here; tkBegin (nested
+          aggregate) and tkString (pointer-array) still bail to their own paths. }
+        if depth = 1 then sawValue := True;
+      tkString: begin Result := -1; Exit; end;     { string init -> pointer path }
     else
-      begin Result := -1; Exit; end;              { ident/macro/string/enum/etc }
+      begin Result := -1; Exit; end;
     end;
     Inc(j);
   end;
