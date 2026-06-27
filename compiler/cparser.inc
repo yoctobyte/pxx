@@ -869,7 +869,7 @@ end;
 
 { Unary prefix: `- + ! ~ * &`, sizeof, and casts `(type)expr`. }
 function ParseCUnary: Integer;
-var node, operand, castElemTk, castElemRec, castDepth, argSeq: Integer;
+var node, operand, castElemTk, castElemRec, castDepth, argSeq, castProcSig: Integer;
     castTk, opTk: TTypeKind; isVoidCast: Boolean;
 begin
   { sizeof }
@@ -886,9 +886,10 @@ begin
     castDepth := CTypePtrDepth;
     castElemTk := CTypeElemTk;
     castElemRec := CTypeElemRec;
+    castProcSig := CTypeProcSig;   { fn-pointer cast `(ret(*)(params))e`: callable value }
     isVoidCast := CTypeIsVoid and (CTypePtrDepth = 0);
     Expect(tkRParen, ')');
-    operand := ParseCUnary();
+    operand := ParseCUnary();   { recurses — clobbers the CType* globals, so castProcSig was captured above }
     { `(void)expr` evaluates expr for its side effects and discards the value.
       Return the operand unwrapped so a void-cast call statement (e.g. the lua
       API macro `lua_pushglobaltable` = `((void)lua_rawgeti(...))`) keeps its
@@ -921,6 +922,7 @@ begin
     node := AllocNode(AN_PTR_CAST);
     ASTLeft[node] := operand;
     ASTIVal[node] := -1;            { numeric / pointer reinterpret-retag }
+    ASTRight[node] := castProcSig;  { >=0 iff cast to a fn-pointer type: callee sig for CNodeProcSig }
     if castDepth > 0 then
     begin
       RegisterPtrAlias(0, 0, castElemTk, castElemRec, 0, 0);
@@ -1021,6 +1023,8 @@ begin
   callee := inner;
   if ASTKind[inner] = AN_IDENT then
     Result := SymProcSig[ASTIVal[inner]]
+  else if ASTKind[inner] = AN_PTR_CAST then
+    Result := ASTRight[inner]   { cast to a fn-pointer type carries its callee sig (>=0), else -1 }
   else if ASTKind[inner] = AN_FIELD then
   begin
     recId := ResolveNodeRec(ASTLeft[inner]);
@@ -1698,12 +1702,18 @@ begin
       end;
       Eat(tkRParen);
     end;
+    { Register the call signature whether or not the declarator carried a name.
+      A NAMED form `ret (*name)(params)` threads CTypeFnPtrName onto the
+      typedef/var/field/param; an ABSTRACT form `ret (*)(params)` has no name but
+      still needs CTypeProcSig set so a cast to a function-pointer type
+      (`((int(*)(const char*,int,int))p)(args)` — sqlite's osOpen syscall-table
+      idiom) yields a callable value. }
+    fpSig := RegisterProc('$cfnptr', True, fpRet, fpNParams, fpPNames, fpPTypes);
+    Procs[fpSig].BodyAddr := -1;
+    ProcCdecl[fpSig] := True;          { C ABI (System V) for the indirect call }
+    CTypeProcSig := fpSig;             { caller threads this onto the typedef/var/field/cast }
     if fpName <> '' then
     begin
-      fpSig := RegisterProc('$cfnptr', True, fpRet, fpNParams, fpPNames, fpPTypes);
-      Procs[fpSig].BodyAddr := -1;
-      ProcCdecl[fpSig] := True;        { C ABI (System V) for the indirect call }
-      CTypeProcSig := fpSig;           { caller threads this onto the typedef/var/field }
       CTypeFnPtrName := fpName;
       CTypeFnPtrNameOff := fpNameOff;  { assign AFTER the param recursion that reset the globals }
       CTypeFnPtrNameLen := fpNameLen;
@@ -3302,7 +3312,16 @@ begin
         pelemrec[nparams] := CTypeElemRec;
         precid[nparams] := CTypeBaseRec;     { record id for a tyRecord param }
         pprocsig[nparams] := CTypeProcSig;   { fn-pointer param: callable in the body }
-        if CurTok.Kind = tkIdent then
+        if CTypeFnPtrName <> '' then
+        begin
+          { Inline function-pointer parameter `RET (*name)(params)` — ParseCDeclType
+            consumed the whole declarator and captured the name, so the ident-read
+            below would miss it and the param would be registered as `argN`, leaving
+            a body reference to `name` undeclared (sqlite3ThreadCreate's xTask).
+            ParseCDeclType folds the fn-ptr into tyPointer with CTypeProcSig set. }
+          pnames[nparams] := CTypeFnPtrName;
+        end
+        else if CurTok.Kind = tkIdent then
         begin
           pnames[nparams] := CurTok.SVal;
           Next;
@@ -3984,12 +4003,16 @@ begin
     end
     else if depth >= 1 then
     begin
-      { Bitfields can't be laid out (wrong following offsets) -> opaque fallback.
-        struct/union/enum keywords are now OK as field types (`struct Tag *next`,
-        `enum E e`) because ParseCDeclType resolves a tag reference; an INLINE
-        anonymous aggregate body is still rejected via the nested-brace check
-        above. }
-      if Tokens[i].Kind = tkColon then begin Result := False; Exit; end;
+      { Named bit-fields `name : width` are now laid out (as a full storage unit
+        per field — see ParseCStructInto), so they no longer force the opaque
+        fallback. An ANONYMOUS bit-field (`T : width`, padding / `:0` alignment)
+        has no name token before the colon and ParseCStructInto cannot model it,
+        so still reject those. struct/union/enum keywords are OK as field types
+        (`struct Tag *next`, `enum E e`) because ParseCDeclType resolves a tag
+        reference; an INLINE anonymous aggregate body is rejected via the
+        nested-brace check above. }
+      if (Tokens[i].Kind = tkColon) and (Tokens[i-1].Kind <> tkIdent) then
+        begin Result := False; Exit; end;
     end;
     Inc(i);
   end;
@@ -4157,6 +4180,21 @@ begin
         fnOff := Tokens[TokPos-1].SOffset;
         fnLen := Tokens[TokPos-1].SLen;
         Next;
+
+        { Named bit-field `T name : width` — bit-packing is not modelled; the
+          field is laid out as a full storage unit of its base type. That gives
+          offsets that differ from the C ABI but are self-consistent for
+          pxx-compiled C (which only ever accesses a bit-field by name, never by
+          reinterpreting its storage), and — crucially — it keeps the enclosing
+          struct laid out as a record instead of an opaque pointer, so sibling
+          fn-pointer members (sqlite3.xProgress, reached via the nested
+          bit-field struct `init`) stay registered and callable. Discard width.
+          A bit-field is never an array, so the bracket loop below is skipped. }
+        if CurTok.Kind = tkColon then
+        begin
+          Next;
+          CEvalConstExpr;
+        end;
 
         isArr := False; arrLen := 1; fldNDims := 0;
         while CurTok.Kind = tkLBrack do
