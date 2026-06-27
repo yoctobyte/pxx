@@ -27,11 +27,13 @@ _none_
 | --- | --- | --- | --- | --- |
 | feature-c-runtime-library | C | feature | C runtime/library layer (`lib/crtl`) plus direct C-library packages | feature-c-source-frontend |
 
-## backlog (68)
+## backlog (70)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
 | bug-c-addr-of-global-array-element-const-index-wrong-offset | A | bug | C: `&global_array[const]` global pointer initializer computes wrong offset | — |
+| bug-c-crtl-missing-unistd-syscalls | A | bug | C: crtl headers miss libc syscall prototypes (fsync, …) | — |
+| bug-c-global-struct-array-fnptr-cast-init | A | bug | C: global struct-array initializer with a fn-ptr cast field stores garbage | — |
 | bug-c-sizeof-array-yields-element-size | A | bug | C: `sizeof(array)` yields element size, not total array size | — |
 | bug-capital-write-undefined-in-compiler-selfbuild | A | bug | Capital `Write`/`WriteLn` rejected in some contexts (compiler self-build), works standalone | — |
 | bug-i386-float-byval-param | A | bug | i386 backend: by-value float (Double) parameter unsupported | — |
@@ -475,6 +477,8 @@ _none_
 ## Ready (no unmet blocker)
 
 - [A] bug-c-addr-of-global-array-element-const-index-wrong-offset
+- [A] bug-c-crtl-missing-unistd-syscalls
+- [A] bug-c-global-struct-array-fnptr-cast-init
 - [A] bug-c-sizeof-array-yields-element-size
 - [A] bug-capital-write-undefined-in-compiler-selfbuild
 - [A] bug-i386-float-byval-param

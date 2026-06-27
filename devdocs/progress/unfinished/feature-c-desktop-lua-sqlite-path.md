@@ -1056,3 +1056,36 @@ The `-Ilib/crtl/include` requirement is resolved — [[feature-c-default-crtl-in
 ## M5 update: fn-ptr struct member (layout + call) DONE
 
 Inline `RET (*name)(params)` struct members now lay out + call correctly (both [[bug-c-function-pointer-struct-member]] and [[bug-c-call-inline-function-pointer-struct-member]] done). sqlite passes the `xAltLocaltime` call; **next wall:** `pascal26:20679: error: expected C expression`.
+
+## M5 update (2026-06-27, session 4): four fn-ptr/bit-field walls cleared
+
+Banked, each with a regression test, self-host byte-identical, full `make test`
+green. sqlite advances 20679 -> 26103 -> 30088 -> 31615.
+
+1. **fn-ptr LOCAL variable** `RET (*name)(params) = init;` (was pascal26:20679).
+   [[bug-c-function-pointer-local-variable]] DONE. ParseCLocalDeclAST allocates
+   the local under CTypeFnPtrName as a callable pointer. test cfnptr_local_b95.
+2. **fn-ptr PARAMETER** `RET (*name)(params)` (sqlite3ThreadCreate's xTask, was
+   25444 "call to undeclared function: xTask"). ParseCSubroutine read the param
+   name via the ident-read, which ParseCDeclType had already consumed -> param
+   registered as `argN`, body's `xTask` undeclared. Now uses CTypeFnPtrName.
+3. **bit-fields** (was 26103). A struct with a bit-field — incl. via the nested
+   `struct sqlite3InitInfo {...:1;} init;` — fell back to an opaque pointer,
+   dropping every field incl. sibling fn-ptrs, so `db->xProgress(...)` couldn't
+   resolve. Now laid out as full storage units; only anonymous bit-fields still
+   opaque. test cstruct_bitfield_b96.
+4. **call through fn-ptr CAST** `((RET(*)(params))e)(args)` (was 30088). sqlite's
+   syscall-table `osOpen == ((int(*)(...))aSyscall[0].pCurrent)` in an
+   if-condition. Abstract `(*)(params)` declarators now get a CTypeProcSig; the
+   AN_PTR_CAST carries it (ASTRight) and CNodeProcSig reads it -> indirect
+   C-ABI call. test cfnptr_cast_call_b97.
+
+**Next wall:** `pascal26:31615: error: call to undeclared function: fsync` — a
+libc syscall sqlite calls expecting `<unistd.h>` to declare it; pxx's crtl
+headers don't. Filed [[bug-c-crtl-missing-unistd-syscalls]].
+
+**Runtime wall banked for later:** a GLOBAL struct-array initializer with a
+fn-ptr cast field (`aSyscall[0].pCurrent = (syscall_ptr)posixOpen` at file
+scope) stores garbage -> segfault on the indirect call; runtime-assigned works.
+Filed [[bug-c-global-struct-array-fnptr-cast-init]]. sqlite's aSyscall table will
+hit this once it links.
