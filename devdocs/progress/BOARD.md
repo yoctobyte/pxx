@@ -27,7 +27,7 @@ _none_
 | --- | --- | --- | --- | --- |
 | feature-c-runtime-library | C | feature | C runtime/library layer (`lib/crtl`) plus direct C-library packages | feature-c-source-frontend |
 
-## backlog (70)
+## backlog (71)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -48,6 +48,7 @@ _none_
 | feature-c-header-import-complex | C | feature | Import C headers for complex libraries (glib/GTK-grade) | — |
 | feature-c-regex-library-devtest | C | feature | C regex library dev-test import | — |
 | feature-c-source-frontend | C | feature | C source frontend — compile C function bodies (statements + expressions) | feature-cross-target-feature-parity |
+| feature-c-system-libs-granular-opt-out | A | feature | C: granular `--system-libs` opt-out for the magic-link model | — |
 | feature-c-varargs-design | A | feature | C varargs (va_list / va_start / va_arg) — implementation design | — |
 | feature-cdecl-indirect-cross-targets | A | feature | Port cdecl indirect calls (dynamic library loading) to the other targets | — |
 | feature-copy-intrinsic | B | feature | `Copy` as a generic overloaded intrinsic (string + dynarray families) | — |
@@ -506,6 +507,7 @@ _none_
 - [C] feature-c-header-import-complex
 - [C] feature-c-regex-library-devtest
 - [C] feature-c-source-frontend
+- [A] feature-c-system-libs-granular-opt-out
 - [A] feature-c-varargs-design
 - [A] feature-cdecl-indirect-cross-targets
 - [B] feature-copy-intrinsic
