@@ -1,10 +1,14 @@
 # crtl: `fopen`/`fclose`/`fseek`/`ftell` declared but not defined (no file open)
 
-- **Type:** bug / feature gap (lib/crtl — Track C)
+- **Type:** bug / feature gap (lib/crtl — **Track B**, library implementation)
 - **Status:** backlog
 - **Found / Opened:** 2026-06-27 (Track A+C, while building the `make test-lua`
   suite — the runner had to read the program from stdin because there is no way
   to open a file)
+- **Track note:** the cfront *compiler* (clexer/cparser/cpreproc, C→IR) is Track
+  C, but *implementing* crtl library functions (fopen, string/io routines) is
+  library-author work = **Track B**, same as writing lib/rtl or lib/pcl. Grey
+  area, but filling in a runtime function body belongs to B.
 
 ## Symptom
 
