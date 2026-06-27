@@ -4849,11 +4849,25 @@ begin
       else
         Result := REC_NONE;
     end
+    else if ASTKind[baseNode] = AN_ADDR then
+      Result := ResolveNodeRec(ASTLeft[baseNode])
     else if ASTKind[baseNode] = AN_INDEX then
     begin
       innerNode := ASTLeft[baseNode];
       if ASTKind[innerNode] = AN_IDENT then
         Result := Syms[ASTIVal[innerNode]].PtrElemRec
+      else if ASTKind[innerNode] = AN_FIELD then
+      begin
+        baseRec := ResolveNodeRec(ASTLeft[innerNode]);
+        fieldName := GetASTIdentName(innerNode);
+        fIdx := -1;
+        if baseRec >= REC_UCLASS_BASE then
+          fIdx := FindUField(baseRec - REC_UCLASS_BASE, fieldName);
+        if fIdx >= 0 then
+          Result := UFldPtrElemRec[fIdx]
+        else
+          Result := REC_NONE;
+      end
       else
         Result := REC_NONE;
     end

@@ -654,6 +654,23 @@ begin
       Result := IRAppend(IR_INDEX, baseAddr, indexNode, 0, elemSize, Ord(tk));
       Exit;
     end;
+    { C array-of-pointer indexing followed by another subscript:
+      `names[0][1]`. The base `names[0]` is a pointer VALUE stored inside an
+      array slot; using IRLowerAddress(base) would index from the slot address
+      itself. Load the pointer value, then index the pointed-to element type. }
+    if CProgramMode and (ASTKind[baseNode] = AN_INDEX) and
+       (IntToTypeKind(ASTTk[baseNode]) = tyPointer) then
+    begin
+      indexNode := IRLowerAST(ASTRight[node]);
+      tk := IntToTypeKind(ASTTk[node]);
+      if tk = tyRecord then
+        elemSize := RecSize(ResolveNodeRec(node))
+      else
+        elemSize := TypeSize(tk);
+      baseAddr := IRLowerAST(baseNode);
+      Result := IRAppend(IR_INDEX, baseAddr, indexNode, 0, elemSize, ASTTk[node]);
+      Exit;
+    end;
     { Nested dynamic-array indexing: base is a nested dyn array (depth>=2) or a
       sub-array element (an AN_INDEX whose value is still a dyn array). The base
       handle is wrapped in IR_DYNUNIQUE, which loads the data pointer on a read
@@ -876,21 +893,47 @@ begin
     Result := IRAppend(IR_CALL, procIdx, firstArg, classIdx, 0, tk);
 end;
 
+function IRNodePointerBase(node: Integer): Boolean;
+begin
+  Result := IntToTypeKind(ASTTk[node]) = tyPointer;
+  if CProgramMode and not Result and
+     (IntToTypeKind(ASTTk[node]) <> tyInt64) then
+    Result := CNodeDecaysToPointer(node);
+end;
+
 function IRPointerStride(node: Integer): Integer;
-var elemTk: TTypeKind; recId, aliasIdx: Integer;
+var elemTk: TTypeKind; recId, aliasIdx: Integer; fieldName: AnsiString;
 begin
   elemTk := tyUnknown;
   recId := REC_NONE;
   if ASTKind[node] = AN_IDENT then
   begin
-    elemTk := Syms[ASTIVal[node]].PtrElemTk;
-    recId := Syms[ASTIVal[node]].PtrElemRec;
+    if Syms[ASTIVal[node]].IsArray and (Syms[ASTIVal[node]].ArrLen <> -1) then
+    begin
+      elemTk := Syms[ASTIVal[node]].ElemType;
+      recId := Syms[ASTIVal[node]].ElemRecName;
+    end
+    else
+    begin
+      elemTk := Syms[ASTIVal[node]].PtrElemTk;
+      recId := Syms[ASTIVal[node]].PtrElemRec;
+    end;
   end
   else if ASTKind[node] = AN_FIELD then
   begin
     recId := ResolveNodeRec(ASTLeft[node]);
-    elemTk := RecFieldPtrElemTk(recId, GetASTIdentName(node));
-    recId := RecFieldPtrElemRec(recId, GetASTIdentName(node));
+    fieldName := GetASTIdentName(node);
+    if CProgramMode and RecFieldIsArray(recId, fieldName) and
+       (RecFieldDynDepth(recId, fieldName) = 0) then
+    begin
+      elemTk := RecFieldType(recId, fieldName);
+      recId := ResolveNodeRec(node);
+    end
+    else
+    begin
+      elemTk := RecFieldPtrElemTk(recId, fieldName);
+      recId := RecFieldPtrElemRec(recId, fieldName);
+    end;
   end
   else if ASTKind[node] = AN_PTR_CAST then
   begin
@@ -903,7 +946,7 @@ begin
   end
   else if ASTKind[node] = AN_BINOP then
   begin
-    if IntToTypeKind(ASTTk[ASTLeft[node]]) = tyPointer then
+    if IRNodePointerBase(ASTLeft[node]) then
       Result := IRPointerStride(ASTLeft[node])
     else
       Result := IRPointerStride(ASTRight[node]);
@@ -1636,7 +1679,7 @@ var left, right, seq, item, value, outNode, first, last, leftAddr, argNode, argV
     slTargetAST, slCountAST, slRootSym, slDepth, slTargetAddr, slCountNode: Integer;
     slFldRec, slFldDepth, slFldBaseRec: Integer; slFldName: AnsiString; slFldBaseTk: TTypeKind;
     helperPi, wrapperArg, wrapperCall: Integer;
-    lhsTk, castTk: TTypeKind;
+    lhsTk, lhsStoreTk, castTk: TTypeKind;
     vrCount, vrTmp, vrIdent, vrCountLit, vrArg1, vrArg2, vrSlCall: Integer;
     vrIdxLit, vrIndex, vrTag, elemAddr, vrSavedRecId, vrBoxSym: Integer;
     vrElemTk: TTypeKind;
@@ -2513,8 +2556,8 @@ begin
       else
       begin
         if (ASTIVal[node] = Ord(tkMinus)) and
-           (IntToTypeKind(ASTTk[ASTLeft[node]]) = tyPointer) and
-           (IntToTypeKind(ASTTk[ASTRight[node]]) = tyPointer) then
+           IRNodePointerBase(ASTLeft[node]) and
+           IRNodePointerBase(ASTRight[node]) then
         begin
           { Pointer difference `p - q` = (address_p - address_q) / sizeof(element)
             (C ptrdiff). Both operands are pointers; subtract addresses then divide
@@ -2531,7 +2574,7 @@ begin
           end;
         end
         else if ((ASTIVal[node] = Ord(tkPlus)) or (ASTIVal[node] = Ord(tkMinus))) and
-           (IntToTypeKind(ASTTk[ASTLeft[node]]) = tyPointer) and
+           IRNodePointerBase(ASTLeft[node]) and
            TypeIsOrdinal(IntToTypeKind(ASTTk[ASTRight[node]])) then
         begin
           left := IRLowerAST(ASTLeft[node]);
@@ -2546,7 +2589,7 @@ begin
         end
         else if (ASTIVal[node] = Ord(tkPlus)) and
                 TypeIsOrdinal(IntToTypeKind(ASTTk[ASTLeft[node]])) and
-                (IntToTypeKind(ASTTk[ASTRight[node]]) = tyPointer) then
+                IRNodePointerBase(ASTRight[node]) then
         begin
           left := IRLowerAST(ASTRight[node]);
           right := IRLowerAST(ASTLeft[node]);
@@ -2588,6 +2631,16 @@ begin
         varIdx := ASTIVal[ASTLeft[node]];
         if (varIdx >= 0) and (varIdx < SymCount) then
           lhsTk := Syms[varIdx].TypeKind;
+      end;
+      lhsStoreTk := lhsTk;
+      if ASTKind[ASTLeft[node]] = AN_FIELD then
+      begin
+        slFldRec := ResolveNodeRec(ASTLeft[ASTLeft[node]]);
+        slFldName := GetASTIdentName(ASTLeft[node]);
+        if slFldRec <> REC_NONE then
+          lhsStoreTk := RecFieldType(slFldRec, slFldName);
+        if (lhsTk = tyUnknown) or (lhsTk = tyAuto) then
+          lhsTk := lhsStoreTk;
       end;
       if ASTKind[ASTRight[node]] = AN_DEFAULT then
       begin
@@ -2632,7 +2685,7 @@ begin
           else
           begin
             leftAddr := IRLowerAddress(ASTLeft[node]);
-            Result := IRAppend(IR_STORE_MEM, leftAddr, value, -1, 0, ASTTk[ASTLeft[node]]);
+            Result := IRAppend(IR_STORE_MEM, leftAddr, value, -1, 0, Ord(lhsStoreTk));
           end;
         end;
       end
@@ -2913,9 +2966,9 @@ begin
         else
         begin
           leftAddr := IRLowerAddress(ASTLeft[node]);
-          Result := IRAppend(IR_STORE_MEM, leftAddr, value, -1, 0, ASTTk[ASTLeft[node]]);
+          Result := IRAppend(IR_STORE_MEM, leftAddr, value, -1, 0, Ord(lhsStoreTk));
           if CProgramMode then
-            Result := IRAppend(IR_LOAD_MEM, leftAddr, -1, -1, 0, ASTTk[ASTLeft[node]]);
+            Result := IRAppend(IR_LOAD_MEM, leftAddr, -1, -1, 0, Ord(lhsStoreTk));
         end;
       end;
       end;

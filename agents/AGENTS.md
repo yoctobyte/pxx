@@ -99,6 +99,9 @@ with a model that can own structure.
 - Agents should keep agent-to-agent coordination notes under `agents/` when
   possible. Handovers are a good model: short, dated, attributable, and easy
   for the next agent to find without cluttering the repository root.
+- Native crash/debug tooling on this system is documented in
+  `agents/debug-tools.md` (gdb/ptrace, coredumpctl, gdbserver, strace/ltrace,
+  elfutils, heaptrack, rr caveat).
 
 ## Progress tracker (`devdocs/progress/`)
 - One board of tickets (bugs/features/tests/chores). **Status = folder**, **type

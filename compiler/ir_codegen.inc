@@ -2880,9 +2880,9 @@ begin
         procIdx := IRA[node];
         if procIdx >= 0 then
         begin
-          if ProcExternal[procIdx] then
+          if ProcExternal[procIdx] or ProcCdecl[procIdx] then
           begin
-            { External C call — SysV AMD64 ABI. Integer/pointer args fill
+            { C call — SysV AMD64 ABI. Integer/pointer args fill
               rdi,rsi,rdx,rcx,r8,r9; floating args fill xmm0..xmm7 (the two
               classes are counted independently); further args of each class
               spill to the stack, pushed right-to-left so the leftmost stack
@@ -2895,9 +2895,13 @@ begin
               argNode := IRB[argNode];
             end;
             intIdx := 0; sseIdx := 0; mStack := 0;
-            for i := 0 to Procs[procIdx].ParamCount - 1 do
+            for i := 0 to nArgs - 1 do
             begin
-              if TypeIsFloat(Procs[procIdx].Params[i].TypeKind) then
+              if i < Procs[procIdx].ParamCount then
+                tk := Procs[procIdx].Params[i].TypeKind
+              else
+                tk := IntToTypeKind(IRTk[argNodeArr[i]]);
+              if TypeIsFloat(tk) then
               begin
                 argIsSse[i] := True;
                 if sseIdx < 8 then
@@ -2912,7 +2916,6 @@ begin
                 else begin argIsStack[i] := True; Inc(mStack); end;
               end;
             end;
-            extIdx := RegisterExternal(procIdx);
             { Align the stack and reserve the outgoing stack-arg area in one
               self-contained sequence (EmitCallProc's realign path cannot be
               used here — it would move rsp away from the stack args). Save the
@@ -2933,11 +2936,15 @@ begin
             else
               padBytes := 0;
             { Stack args, right-to-left (leftmost ends at the lowest address). }
-            for i := Procs[procIdx].ParamCount - 1 downto 0 do
+            for i := nArgs - 1 downto 0 do
               if argIsStack[i] then
               begin
+                if i < Procs[procIdx].ParamCount then
+                  tk := Procs[procIdx].Params[i].TypeKind
+                else
+                  tk := IntToTypeKind(IRTk[argNodeArr[i]]);
                 if (IntToTypeKind(IRTk[argNodeArr[i]]) = tyVariant) and
-                   (TypeIsOrdinal(Procs[procIdx].Params[i].TypeKind) or TypeIsFloat(Procs[procIdx].Params[i].TypeKind)) then
+                   (TypeIsOrdinal(tk) or TypeIsFloat(tk)) then
                 begin
                   EmitLoadVariantAddress(argNodeArr[i]);
                   EmitB($48); EmitB($8B); EmitB($40); EmitB($08); { mov rax, [rax+8] }
@@ -2948,11 +2955,15 @@ begin
               end;
             { Register args: push right-to-left, then pop left-to-right into the
               target registers (each arg evaluated once, no register clobber). }
-            for i := Procs[procIdx].ParamCount - 1 downto 0 do
+            for i := nArgs - 1 downto 0 do
               if not argIsStack[i] then
               begin
+                if i < Procs[procIdx].ParamCount then
+                  tk := Procs[procIdx].Params[i].TypeKind
+                else
+                  tk := IntToTypeKind(IRTk[argNodeArr[i]]);
                 if (IntToTypeKind(IRTk[argNodeArr[i]]) = tyVariant) and
-                   (TypeIsOrdinal(Procs[procIdx].Params[i].TypeKind) or TypeIsFloat(Procs[procIdx].Params[i].TypeKind)) then
+                   (TypeIsOrdinal(tk) or TypeIsFloat(tk)) then
                 begin
                   EmitLoadVariantAddress(argNodeArr[i]);
                   EmitB($48); EmitB($8B); EmitB($40); EmitB($08); { mov rax, [rax+8] }
@@ -2961,15 +2972,19 @@ begin
                   IREmitNode(argNodeArr[i]);
                 EmitB($50); { push rax }
               end;
-            for i := 0 to Procs[procIdx].ParamCount - 1 do
+            for i := 0 to nArgs - 1 do
               if not argIsStack[i] then
               begin
+                if i < Procs[procIdx].ParamCount then
+                  tk := Procs[procIdx].Params[i].TypeKind
+                else
+                  tk := IntToTypeKind(IRTk[argNodeArr[i]]);
                 if argIsSse[i] then
                 begin
                   EmitB($58); { pop rax }
                   EmitB($66); EmitB($48); EmitB($0F); EmitB($6E);
                   EmitB($C0 + argRegIdx[i] * 8);           { movq xmm[n], rax }
-                  if Procs[procIdx].Params[i].TypeKind = tySingle then
+                  if tk = tySingle then
                   begin
                     EmitB($F2); EmitB($0F); EmitB($5A);
                     EmitB($C0 + argRegIdx[i] * 9);          { cvtsd2ss xmm[n],xmm[n] }
@@ -2989,7 +3004,13 @@ begin
               unconditionally (0 for all-integer calls) so variadic callees
               such as printf read the correct count. }
             EmitB($B8); EmitI32(sseIdx); { mov eax, sseIdx }
-            EmitExternalIndirectCall(extIdx);
+            if ProcExternal[procIdx] then
+            begin
+              extIdx := RegisterExternal(procIdx);
+              EmitExternalIndirectCall(extIdx);
+            end
+            else
+              EmitCallProc(procIdx);
             { Restore the caller's rsp from the saved slot, which sits
               padBytes + mStack*8 above the current (post-call) rsp. }
             restoreOff := padBytes + mStack * 8;

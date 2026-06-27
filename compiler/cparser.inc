@@ -16,6 +16,7 @@ function ParseCCommaStmt: Integer; forward;
 function ParseCCommaExpr: Integer; forward;
 function ParseCSwitchAST: Integer; forward;
 function CNodeIsPointer(node: Integer): Boolean; forward;
+function CNodeDecaysToPointer(node: Integer): Boolean; forward;
 function CNodePtrElemRec(node: Integer): Integer; forward;
 procedure ParseCStructInto(ci: Integer; isUnion: Boolean); forward;
 
@@ -115,9 +116,9 @@ begin
     IR already scales the offset by element size). }
   if (cTok = Ord(tkPlus)) or (cTok = Ord(tkMinus)) then
   begin
-    if CNodeIsPointer(l) then
+    if CNodeDecaysToPointer(l) then
     begin ASTTk[node] := Ord(tyPointer); ASTSOffset[node] := CNodePtrElemRec(l); end
-    else if (cTok = Ord(tkPlus)) and CNodeIsPointer(r) then
+    else if (cTok = Ord(tkPlus)) and CNodeDecaysToPointer(r) then
     begin ASTTk[node] := Ord(tyPointer); ASTSOffset[node] := CNodePtrElemRec(r); end;
   end;
   Result := node;
@@ -187,6 +188,7 @@ function CVaListAddr(apNode: Integer): Integer;
 begin
   Result := AllocNode(AN_ADDR);
   ASTLeft[Result] := apNode;
+  ASTIVal[Result] := ResolveNodeRec(apNode);
   ASTTk[Result] := Ord(tyPointer);
 end;
 
@@ -420,6 +422,7 @@ end;
 { Pointed-at / element TTypeKind ordinal of a pointer or array node, used to tag
   AN_DEREF / AN_INDEX results. Defaults to Integer for shapes not yet modelled. }
 function CNodePointeeTk(node: Integer): Integer;
+var recId: Integer; fieldName: AnsiString;
 begin
   Result := Ord(tyInteger);
   if node < 0 then Exit;
@@ -430,8 +433,35 @@ begin
     else if Syms[ASTIVal[node]].TypeKind = tyPointer then
       Result := Ord(Syms[ASTIVal[node]].PtrElemTk);
   end
+  else if ASTKind[node] = AN_FIELD then
+  begin
+    recId := ResolveNodeRec(ASTLeft[node]);
+    fieldName := GetASTIdentName(node);
+    if RecFieldIsArray(recId, fieldName) then
+      Result := Ord(RecFieldType(recId, fieldName))
+    else if RecFieldType(recId, fieldName) = tyPointer then
+      Result := Ord(RecFieldPtrElemTk(recId, fieldName));
+  end
+  else if ASTKind[node] = AN_CALL then
+  begin
+    if (ASTIVal[node] >= 0) and
+       (Procs[ASTIVal[node]].RetType = tyPointer) then
+      Result := ProcRetPtrElemTk[ASTIVal[node]];
+  end
   else if ASTKind[node] = AN_INDEX then
-    Result := ASTTk[node];
+  begin
+    if IntToTypeKind(ASTTk[node]) = tyPointer then
+    begin
+      if ASTKind[ASTLeft[node]] = AN_IDENT then
+        Result := Ord(Syms[ASTIVal[ASTLeft[node]]].PtrElemTk)
+      else if ASTKind[ASTLeft[node]] = AN_FIELD then
+        Result := Ord(RecFieldPtrElemTk(ResolveNodeRec(ASTLeft[ASTLeft[node]]), GetASTIdentName(ASTLeft[node])))
+      else
+        Result := ASTTk[node];
+    end
+    else
+      Result := ASTTk[node];
+  end;
 end;
 
 { True when a node denotes a pointer value, so `.`/`->` (both lex to tkDot in C)
@@ -452,23 +482,83 @@ begin
   else if ASTKind[node] = AN_CALL then
     { a function returning a pointer — `f()->field` must deref the result }
     Result := IntToTypeKind(ASTTk[node]) = tyPointer
+  else if ASTKind[node] = AN_TERNARY then
+    Result := IntToTypeKind(ASTTk[node]) = tyPointer
+  else if ASTKind[node] = AN_ADDR then
+    Result := True
   else if ASTKind[node] = AN_ASSIGN then
     { `(p = x)->field`: the assignment yields the (pointer) LHS value }
     Result := CNodeIsPointer(ASTLeft[node]);
 end;
 
+function CNodeDecaysToPointer(node: Integer): Boolean;
+var recId: Integer; fieldName: AnsiString;
+begin
+  Result := CNodeIsPointer(node);
+  if Result or (node < 0) then Exit;
+  if ASTKind[node] = AN_IDENT then
+    Result := Syms[ASTIVal[node]].IsArray and (Syms[ASTIVal[node]].ArrLen <> -1)
+  else if ASTKind[node] = AN_FIELD then
+  begin
+    recId := ResolveNodeRec(ASTLeft[node]);
+    fieldName := GetASTIdentName(node);
+    Result := RecFieldIsArray(recId, fieldName) and
+              (RecFieldDynDepth(recId, fieldName) = 0);
+  end;
+end;
+
 { Pointed-at record id of a pointer-valued node, for `(p+i)->field` resolution.
   Pointer-arithmetic binops / `p++` carry it on ASTSOffset. }
 function CNodePtrElemRec(node: Integer): Integer;
+var baseNode, recId: Integer; fieldName: AnsiString;
 begin
   Result := REC_NONE;
   if node < 0 then Exit;
   if ASTKind[node] = AN_IDENT then
-    Result := Syms[ASTIVal[node]].PtrElemRec
+  begin
+    if Syms[ASTIVal[node]].IsArray then
+      Result := Syms[ASTIVal[node]].ElemRecName
+    else
+      Result := Syms[ASTIVal[node]].PtrElemRec;
+  end
   else if ASTKind[node] = AN_FIELD then
-    Result := RecFieldPtrElemRec(ResolveNodeRec(ASTLeft[node]), GetASTIdentName(node))
+  begin
+    recId := ResolveNodeRec(ASTLeft[node]);
+    fieldName := GetASTIdentName(node);
+    if RecFieldIsArray(recId, fieldName) then
+      Result := ResolveNodeRec(node)
+    else
+      Result := RecFieldPtrElemRec(recId, fieldName);
+  end
+  else if ASTKind[node] = AN_ADDR then
+  begin
+    if ASTIVal[node] > 0 then
+      Result := ASTIVal[node]
+    else
+      Result := ResolveNodeRec(ASTLeft[node]);
+  end
+  else if ASTKind[node] = AN_INDEX then
+  begin
+    baseNode := ASTLeft[node];
+    if ASTKind[baseNode] = AN_IDENT then
+      Result := Syms[ASTIVal[baseNode]].PtrElemRec
+    else if ASTKind[baseNode] = AN_FIELD then
+    begin
+      recId := ResolveNodeRec(ASTLeft[baseNode]);
+      fieldName := GetASTIdentName(baseNode);
+      Result := RecFieldPtrElemRec(recId, fieldName);
+    end;
+  end
   else if ASTKind[node] = AN_BINOP then
     Result := ASTSOffset[node]      { pointer-arith binop carries the elem rec }
+  else if ASTKind[node] = AN_TERNARY then
+    Result := ASTSOffset[node]
+  else if ASTKind[node] = AN_CALL then
+  begin
+    if (ASTIVal[node] >= 0) and
+       (Procs[ASTIVal[node]].RetType = tyPointer) then
+      Result := ProcRetPtrElemRec[ASTIVal[node]];
+  end
   else if ASTKind[node] = AN_INCDEC then
     Result := CNodePtrElemRec(ASTLeft[node])   { `p++`: elem rec from the lvalue }
   else if ASTKind[node] = AN_ASSIGN then
@@ -594,7 +684,12 @@ begin
     node := AllocNode(AN_PTR_CAST);
     ASTLeft[node] := operand;
     ASTIVal[node] := -1;            { numeric / pointer reinterpret-retag }
-    if castDepth > 0 then ASTTk[node] := Ord(tyPointer)
+    if castDepth > 0 then
+    begin
+      RegisterPtrAlias(0, 0, castElemTk, castElemRec, 0, 0);
+      ASTIVal[node] := AliasCount - 1;
+      ASTTk[node] := Ord(tyPointer);
+    end
     else ASTTk[node] := Ord(castTk);
     Result := node;
     Exit;
@@ -615,6 +710,7 @@ begin
       operand := ParseCUnary();
       node := AllocNode(AN_ADDR);
       ASTLeft[node] := operand;
+      ASTIVal[node] := ResolveNodeRec(operand);
       ASTTk[node] := Ord(tyPointer);
       Result := node;
     end;
@@ -796,8 +892,7 @@ begin
         { A computed pointer (e.g. `(p+i)->f`, `(p++)->f`) has no symbol/field for
           ResolveNodeRec to walk, so carry the element record on the deref
           (ResolveNodeRec honours ASTIVal[AN_DEREF] > 0). }
-        if ((ASTKind[node] = AN_BINOP) or (ASTKind[node] = AN_INCDEC) or
-            (ASTKind[node] = AN_ASSIGN)) and (CNodePtrElemRec(node) > 0) then
+        if CNodePtrElemRec(node) > 0 then
           ASTIVal[dnode] := CNodePtrElemRec(node);
         baseFld := dnode;
       end;
@@ -905,6 +1000,14 @@ begin
     ASTLeft[node] := left;        { condition }
     ASTRight[node] := pair;
     ASTTk[node] := ASTTk[thenE];  { result type follows the then-branch }
+    if CProgramMode and (CNodeDecaysToPointer(thenE) or CNodeDecaysToPointer(elseE)) then
+    begin
+      ASTTk[node] := Ord(tyPointer);
+      if CNodeDecaysToPointer(thenE) then
+        ASTSOffset[node] := CNodePtrElemRec(thenE)
+      else
+        ASTSOffset[node] := CNodePtrElemRec(elseE);
+    end;
     left := node;
   end;
   case CurTok.Kind of
@@ -1149,7 +1252,7 @@ end;
 function ParseCDeclType: TTypeKind;
 var
   isUnsigned, isSigned, isFloatTy, isVoid, loop, sawBase, isTypedef, isAggBase: Boolean;
-  shortCount, longCount, tdIdx, depth, baseRec: Integer;
+  shortCount, longCount, tdIdx, depth, baseRec, tdElemTk, tdElemRec: Integer;
   base, fpRet, fpPType: TTypeKind;
   fpName: AnsiString;
   fpNParams, fpSig: Integer;
@@ -1159,6 +1262,7 @@ begin
   isUnsigned := False; isSigned := False; isFloatTy := False; isVoid := False;
   sawBase := False; isTypedef := False; isAggBase := False;
   shortCount := 0; longCount := 0; base := tyInt32; baseRec := REC_NONE;
+  tdElemTk := Ord(tyUnknown); tdElemRec := REC_NONE;
   CTypeProcSig := -1;
   CTypeFnPtrName := '';
   loop := True;
@@ -1209,6 +1313,8 @@ begin
             begin
               base := IntToTypeKind(CTypedefTk[tdIdx]);
               baseRec := CTypedefRec[tdIdx];
+              tdElemTk := CTypedefElemTk[tdIdx];
+              tdElemRec := CTypedefRec[tdIdx];
               CTypeProcSig := CTypedefProcSig[tdIdx]; { fn-pointer typedef carries a call signature }
               sawBase := True; isTypedef := True;
               Next;
@@ -1254,6 +1360,11 @@ begin
   CTypeElemTk := Ord(tyUnknown);
   CTypeElemRec := REC_NONE;
   CTypeBaseRec := baseRec;
+  if isTypedef and (Result = tyPointer) then
+  begin
+    CTypeElemTk := tdElemTk;
+    CTypeElemRec := tdElemRec;
+  end;
   if CurTok.Kind = tkStar then
   begin
     CTypeProcSig := -1;           { `FnPtrTypedef *` = pointer-to-fn-ptr, not directly callable }
@@ -1395,7 +1506,7 @@ begin
     recover the pre-star scalar base; each later declarator gets its own stars.
     A pointer from a *literal* star (elemTk known) is redistributable; a pointer
     from a typedef (no star) is the whole type and applies to every sibling. }
-  hadStar := (baseTk = tyPointer) and (elemTkOrd <> Ord(tyUnknown));
+  hadStar := (baseTk = tyPointer) and (CTypePtrDepth > 0);
   if hadStar then begin scalarTk := IntToTypeKind(elemTkOrd); scalarRec := elemRec; end
   else begin scalarTk := baseTk; scalarRec := CTypeBaseRec; end;
   declTk := baseTk; declElemTk := elemTkOrd; declElemRec := elemRec; declProcSig := procSig;
@@ -2040,6 +2151,8 @@ end;
 procedure ParseCGlobalVarDecl;
 var baseTk: TTypeKind; name: AnsiString; depth, idx, recBase, fldI, fOff, fTk, fSz: Integer;
     recId, initSymIdx: Integer; wasArr: Boolean; initV: Int64;
+    arrLen, dimCount, nArrElems, ei: Integer;
+    arrOffs, arrLens: array[0..255] of Integer;
 begin
   baseTk := ParseCDeclType;
   recId := CTypeBaseRec;
@@ -2047,20 +2160,79 @@ begin
   begin
     if CurTok.Kind <> tkIdent then Break;
     name := CurTok.SVal; Next;
-    { Global array dimension(s) `T name[...]` (lua's luaL_Reg tables). Skip the
-      brackets with balanced nesting; the size may be a complex macro, so don't
-      evaluate it — the slot is not a real array yet, but the decl no longer
-      cascades (previously the dangling `[` broke later parsing). }
+    { Global array dimension(s). Pointer arrays with string-literal initializers
+      are materialized below; other arrays still mostly serve as parse/layout
+      anchors for now. }
     wasArr := False;
+    arrLen := 0;
+    dimCount := 0;
     while CurTok.Kind = tkLBrack do
     begin
       wasArr := True;
-      depth := 0;
-      repeat
-        if CurTok.Kind = tkLBrack then Inc(depth)
-        else if CurTok.Kind = tkRBrack then Dec(depth);
+      Inc(dimCount);
+      Next;
+      if dimCount = 1 then
+      begin
+        if CurTok.Kind = tkRBrack then arrLen := -1
+        else arrLen := CEvalConstExpr;
+        Expect(tkRBrack, ']');
+      end
+      else
+      begin
+        depth := 1;
+        while (depth > 0) and (CurTok.Kind <> tkEOF) do
+        begin
+          if CurTok.Kind = tkLBrack then Inc(depth)
+          else if CurTok.Kind = tkRBrack then Dec(depth);
+          Next;
+        end;
+      end;
+    end;
+    nArrElems := 0;
+    if (CurTok.Kind = tkAssign) and wasArr and (baseTk = tyPointer) and
+       (Tokens[TokPos].Kind = tkBegin) then
+    begin
+      Next; Next;  { consume assignment and opening initializer token }
+      while (CurTok.Kind <> tkEnd) and (CurTok.Kind <> tkEOF) do
+      begin
+        if (nArrElems > 255) or (CurTok.Kind <> tkString) then
+        begin
+          nArrElems := -1;
+          Break;
+        end;
+        arrOffs[nArrElems] := Tokens[TokPos - 1].SOffset;
+        arrLens[nArrElems] := Tokens[TokPos - 1].SLen;
         Next;
-      until (depth = 0) or (CurTok.Kind = tkEOF);
+        while CurTok.Kind = tkString do
+        begin
+          arrLens[nArrElems] := arrLens[nArrElems] + Tokens[TokPos - 1].SLen;
+          Next;
+        end;
+        Inc(nArrElems);
+        if CurTok.Kind = tkComma then begin Next; Continue; end;
+        Break;
+      end;
+      if nArrElems >= 0 then
+        Expect(tkEnd, '}')
+      else
+      begin
+        depth := 1;
+        while (depth > 0) and (CurTok.Kind <> tkEOF) do
+        begin
+          if CurTok.Kind = tkBegin then Inc(depth)
+          else if CurTok.Kind = tkEnd then Dec(depth);
+          Next;
+        end;
+        nArrElems := 0;
+      end;
+    end;
+    if wasArr then
+    begin
+      if arrLen < 1 then
+      begin
+        if nArrElems > 0 then arrLen := nArrElems else arrLen := 1;
+      end
+      else if nArrElems > arrLen then arrLen := nArrElems;
     end;
     { A struct-typed global needs its record id recorded (AllocVar reads the
       global LastTypeRecId for tyRecord) so field access `gg.f` resolves the
@@ -2073,7 +2245,31 @@ begin
       names are case-sensitive anyway. Shadow it with a fresh exact-case global
       (the exact-case FindSym pass then resolves uses to the variable). }
     if (idx >= 0) and (Syms[idx].Kind = skConst) then idx := -1;
-    if idx < 0 then idx := AllocVar(name, baseTk);
+    if idx < 0 then
+    begin
+      if wasArr then
+        idx := AllocArray(name, baseTk, 0, arrLen - 1)
+      else
+        idx := AllocVar(name, baseTk);
+    end;
+    if (idx >= 0) and (baseTk = tyPointer) then
+    begin
+      Syms[idx].PtrElemTk := IntToTypeKind(CTypeElemTk);
+      Syms[idx].PtrElemRec := CTypeElemRec;
+    end;
+    for ei := 0 to nArrElems - 1 do
+    begin
+      if PendingInitCount < MAX_PENDING_INITS then
+      begin
+        PendingInitSym[PendingInitCount]  := idx;
+        PendingInitElem[PendingInitCount] := ei;
+        PendingInitFOff[PendingInitCount] := -3;  { string literal span }
+        PendingInitFLen[PendingInitCount] := arrLens[ei];
+        PendingInitVal[PendingInitCount]  := arrOffs[ei];
+        PendingInitTk[PendingInitCount]   := Ord(tyPointer);
+        Inc(PendingInitCount);
+      end;
+    end;
     if CurTok.Kind = tkAssign then
     begin
       Next;
@@ -2356,6 +2552,7 @@ var
   name, extLib: AnsiString;
   isFunc: Boolean;
   nparams, procIdx, i, idx, patchPos, sz, gli: Integer;
+  intIdx, sseIdx, stackOff: Integer;
   retPtrElemTk, retPtrElemRec: Integer;
   ptypes: array[0..15] of TTypeKind;
   pnames: array[0..15] of AnsiString;
@@ -2376,7 +2573,8 @@ begin
     on a typed-pointer result resolve the element. }
   retPtrElemTk := Ord(tyUnknown);
   retPtrElemRec := REC_NONE;
-  if (retType = tyPointer) and (CTypePtrDepth > 0) then
+  if (retType = tyPointer) and
+     ((CTypePtrDepth > 0) or (CTypeElemTk <> Ord(tyUnknown))) then
   begin
     retPtrElemTk := CTypeElemTk;
     retPtrElemRec := CTypeElemRec;
@@ -2489,6 +2687,7 @@ begin
   if procIdx < 0 then
     procIdx := RegisterProc(name, isFunc, retType, nparams, pnames, ptypes);
   ProcVariadic[procIdx] := isVariadic;
+  ProcCdecl[procIdx] := True;
   ProcNamedGP[procIdx] := nparams;   { lua's variadic fns take only GP named params (L, fmt) }
   for i := 0 to nparams - 1 do
     ProcParamPtrDepth[procIdx * 16 + i] := pdepths[i];
@@ -2621,16 +2820,78 @@ begin
     EmitB($F2); EmitB($0F); EmitB($11); EmitB($BD); EmitI32(Syms[vaSaveSym].Offset + 160);  { xmm7 }
   end;
 
-  { Copy registers to stack params }
+  { Copy SysV argument locations to local parameter slots. Integer and SSE
+    classes have independent register counts; overflow args are 8-byte stack
+    slots starting at [rbp+16]. }
+  intIdx := 0;
+  sseIdx := 0;
+  stackOff := 16;
   for i := 0 to nparams-1 do
   begin
     idx := Procs[procIdx].Params[i].SymIdx;
     sz := ParamSize(idx);
-    if i < 4 then
+    if TypeIsFloat(ptypes[i]) and (not Syms[idx].IsRef) and (not Syms[idx].IsArray) then
+    begin
+      if sseIdx < 8 then
+      begin
+        if ptypes[i] = tySingle then EmitB($F3) else EmitB($F2);
+        EmitB($0F); EmitB($11);
+        case sseIdx of
+          0: EmitB($85);
+          1: EmitB($8D);
+          2: EmitB($95);
+          3: EmitB($9D);
+          4: EmitB($A5);
+          5: EmitB($AD);
+          6: EmitB($B5);
+          7: EmitB($BD);
+        end;
+        EmitI32(Syms[idx].Offset);
+        Inc(sseIdx);
+        Continue;
+      end
+      else
+      begin
+        EmitB($48); EmitB($8B); EmitB($85); EmitI32(stackOff); { mov rax, [rbp+stackOff] }
+        Inc(stackOff, 8);
+        if ptypes[i] = tySingle then
+        begin
+          EmitB($66); EmitB($48); EmitB($0F); EmitB($6E); EmitB($C0); { movq xmm0, rax }
+          EmitB($F2); EmitB($0F); EmitB($5A); EmitB($C0);             { cvtsd2ss xmm0, xmm0 }
+          EmitB($F3); EmitB($0F); EmitB($11); EmitB($85); EmitI32(Syms[idx].Offset); { movss [rbp+off], xmm0 }
+          Continue;
+        end;
+      end;
+    end
+    else if intIdx >= 6 then
+    begin
+      EmitB($48); EmitB($8B); EmitB($85); EmitI32(stackOff); { mov rax, [rbp+stackOff] }
+      Inc(stackOff, 8);
+      if sz = 1 then
+      begin
+        EmitB($88); EmitB($85);                   { mov [rbp+off], al }
+      end
+      else if sz = 2 then
+      begin
+        EmitB($66); EmitB($89); EmitB($85);       { mov [rbp+off], ax }
+      end
+      else if sz = 4 then
+      begin
+        EmitB($89); EmitB($85);                   { mov [rbp+off], eax }
+      end
+      else
+      begin
+        EmitB($48); EmitB($89); EmitB($85);       { mov [rbp+off], rax }
+      end;
+      EmitI32(Syms[idx].Offset);
+      Continue;
+    end;
+
+    if intIdx < 4 then
     begin
       if sz = 1 then
       begin
-        if (i = 0) or (i = 1) then EmitB($40); { REX prefix for dil, sil }
+        if (intIdx = 0) or (intIdx = 1) then EmitB($40); { REX prefix for dil, sil }
         EmitB($88);
       end
       else if sz = 2 then
@@ -2646,7 +2907,7 @@ begin
         EmitB($48); EmitB($89);
       end;
 
-      case i of
+      case intIdx of
         0: EmitB($BD);   { rdi }
         1: EmitB($B5);   { rsi }
         2: EmitB($95);   { rdx }
@@ -2654,7 +2915,7 @@ begin
       end;
       EmitI32(Syms[idx].Offset);
     end
-    else if i = 4 then
+    else if intIdx = 4 then
     begin
       if sz = 1 then
       begin
@@ -2674,7 +2935,7 @@ begin
       end;
       EmitI32(Syms[idx].Offset);
     end
-    else if i = 5 then
+    else if intIdx = 5 then
     begin
       if sz = 1 then
       begin
@@ -2694,6 +2955,7 @@ begin
       end;
       EmitI32(Syms[idx].Offset);
     end;
+    Inc(intIdx);
   end;
   
   { Constant global initializers (struct/union brace inits recorded as PendingInit

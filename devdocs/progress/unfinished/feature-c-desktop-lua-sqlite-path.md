@@ -2,6 +2,34 @@
 
 - **Type:** feature (track-C milestone path)
 - **Status:** backlog (active arc — lua core **29/34 files parse clean (85%)**; see logs)
+- **Session 2026-06-27 (Track C) — Lua startup reaches `F:open-done`; current
+  failure is post-startup runaway stack/error formatting, not the earlier bad
+  allocator pointer.** Verified `HEAD == origin/master == 66494acb` before edits;
+  working tree already contained local compiler/test changes from the Lua C
+  frontend bring-up. Compile still succeeds with:
+  `./compiler/pascal26 -g -Ilib/crtl/include -Ilib/crtl/src -Ilibrary_candidates/lua/src library_candidates/lua/src/pxx_hostamalg.c /tmp/luah_pxx`.
+  Runtime with normal stack still exits 139 after stderr `B C D E F:open-done`;
+  runtime with `ulimit -s unlimited` times out after the same markers. gdb shows
+  the normal-stack crash at stack guard in the `addnum2buff` /
+  `luaO_pushvfstring` formatting path, so the next bug is likely an infinite
+  loop/recursion or bad error path after libraries open.
+  - Fixed C fixed-array decay in pointer arithmetic (`nodes + 2`) and pointer
+    increment/decrement stride through array-decay metadata.
+  - Fixed partial 2-D row decay double scaling for `G(L)->strcache[i]`: the row
+    address path emits a raw byte offset and must not be scaled again as element
+    index arithmetic.
+  - Fixed pointer typedef metadata for declarations such as
+    `typedef StackValue *StkId; StkId o; o++`, preserving element record/stride.
+  - Fixed C pointer/null ternary typing so
+    `return (*p == NULL) ? NULL : p` does not truncate the pointer through an
+    integer hidden temp.
+  - Added/passed focused tests `b61`-`b64`:
+    `cptr_array_decay_stride_b61.c`, `cfield_2d_row_decay_b62.c`,
+    `ctypedef_ptr_stride_b63.c`, `cternary_ptr_null_b64.c`. Earlier `b51`-`b60`
+    remain part of the local Lua bring-up test set.
+  - New debug-tool note for future agents: `agents/debug-tools.md`. ptrace/gdb
+    now works and was decisive; `rr` is installed but currently blocked by
+    `perf_event_paranoid=4`.
 - **Session 2026-06-26 round 20 (Track A+C) — 2D array struct field + double-pointer
   struct record; gate-green + self-host byte-identical.** Two fixes that close the
   `luaS_new` / `strcache` blocker filed last round:

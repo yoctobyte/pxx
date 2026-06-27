@@ -153,7 +153,7 @@ test-nilpy: $(COMPILER)
 	! ./$(COMPILER) test/test_nilpy_slash_fail.npy /tmp/test_nilpy_slash_fail26 > /tmp/test_nilpy_slash_fail.log 2>&1
 	grep -q "unsupported operator /; use // for integer division" /tmp/test_nilpy_slash_fail.log
 	./$(COMPILER) test/test_nilpy_string_variant.npy /tmp/test_nilpy_string_variant26
-	test "$$(/tmp/test_nilpy_string_variant26)" = "$$(printf '5\napple\n1\n0\n0\n1\n1\n1\n0\n0\n1\n1\n0\n1\n0\n0\nhello world\nhello potato\ngreen world')"
+	test "$$(/tmp/test_nilpy_string_variant26)" = "$$(printf '5\napple\nTrue\nFalse\nFalse\nTrue\nTrue\nTrue\nFalse\nFalse\nTrue\nTrue\nFalse\nTrue\nFalse\nFalse\nhello world\nhello potato\ngreen world')"
 	! ./$(COMPILER) test/test_nilpy_missing_param_annotation_fail.npy /tmp/test_nilpy_missing_param_annotation_fail26 > /tmp/test_nilpy_missing_param_annotation_fail.log 2>&1
 	grep -q "unexpected token" /tmp/test_nilpy_missing_param_annotation_fail.log
 	! ./$(COMPILER) test/test_nilpy_missing_result_annotation_fail.npy /tmp/test_nilpy_missing_result_annotation_fail26 > /tmp/test_nilpy_missing_result_annotation_fail.log 2>&1
@@ -418,6 +418,34 @@ test-core: $(COMPILER)
 	/tmp/cvarargs_int_b4926; test "$$?" = "42"
 	./$(COMPILER) -Ilib/crtl/include test/crecord_byval_param_b50.c /tmp/crecord_byval_param_b5026
 	/tmp/crecord_byval_param_b5026; test "$$?" = "42"
+	./$(COMPILER) test/cstatic_ptr_array_b51.c /tmp/cstatic_ptr_array_b5126
+	/tmp/cstatic_ptr_array_b5126; test "$$?" = "42"
+	./$(COMPILER) test/cfield_ptr_array_b52.c /tmp/cfield_ptr_array_b5226
+	/tmp/cfield_ptr_array_b5226; test "$$?" = "42"
+	./$(COMPILER) test/cunion_ptr_chain_b53.c /tmp/cunion_ptr_chain_b5326
+	/tmp/cunion_ptr_chain_b5326; test "$$?" = "42"
+	./$(COMPILER) test/cptrptr_clear_chain_b54.c /tmp/cptrptr_clear_chain_b5426
+	/tmp/cptrptr_clear_chain_b5426; test "$$?" = "42"
+	./$(COMPILER) test/coffsetof_array_field_b55.c /tmp/coffsetof_array_field_b5526
+	/tmp/coffsetof_array_field_b5526; test "$$?" = "42"
+	./$(COMPILER) test/cfnptr_four_args_b56.c /tmp/cfnptr_four_args_b5626
+	/tmp/cfnptr_four_args_b5626; test "$$?" = "42"
+	./$(COMPILER) test/cunion_field_offsets_b57.c /tmp/cunion_field_offsets_b5726
+	/tmp/cunion_field_offsets_b5726; test "$$?" = "42"
+	./$(COMPILER) test/cfield_ptr_null_store_b58.c /tmp/cfield_ptr_null_store_b5826
+	/tmp/cfield_ptr_null_store_b5826; test "$$?" = "42"
+	./$(COMPILER) test/cfixed_seven_args_b59.c /tmp/cfixed_seven_args_b5926
+	/tmp/cfixed_seven_args_b5926; test "$$?" = "42"
+	./$(COMPILER) test/cfn_ret_ptrptr_b60.c /tmp/cfn_ret_ptrptr_b6026
+	/tmp/cfn_ret_ptrptr_b6026; test "$$?" = "42"
+	./$(COMPILER) test/cptr_array_decay_stride_b61.c /tmp/cptr_array_decay_stride_b6126
+	/tmp/cptr_array_decay_stride_b6126; test "$$?" = "42"
+	./$(COMPILER) test/cfield_2d_row_decay_b62.c /tmp/cfield_2d_row_decay_b6226
+	/tmp/cfield_2d_row_decay_b6226; test "$$?" = "42"
+	./$(COMPILER) test/ctypedef_ptr_stride_b63.c /tmp/ctypedef_ptr_stride_b6326
+	/tmp/ctypedef_ptr_stride_b6326; test "$$?" = "42"
+	./$(COMPILER) test/cternary_ptr_null_b64.c /tmp/cternary_ptr_null_b6426
+	/tmp/cternary_ptr_null_b6426; test "$$?" = "42"
 	./$(COMPILER) -Itest/cinc/inc test/cinc/cinc_main.c /tmp/cinc_main26
 	test "$$(/tmp/cinc_main26)" = "$$(printf 'local-ok\ninc-ok')"
 	./$(COMPILER) test/test_declared_directive.pas /tmp/test_declared_directive26

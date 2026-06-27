@@ -5023,12 +5023,12 @@ begin
           ASTLeft[wrapperArg] := node;
           wrapperCall := AllocNode(AN_CALL);
           ASTIVal[wrapperCall] := helperPi;
-          ASTTk[wrapperCall] := Ord(tyString);
+          ASTTk[wrapperCall] := Ord(Procs[helperPi].RetType);
           ASTLeft[wrapperCall] := wrapperArg;
           node := wrapperCall;
 
           CurASTNode := node;
-          LastExprTk := tyString;
+          LastExprTk := Procs[helperPi].RetType;
         end
         else
         begin
@@ -14129,6 +14129,16 @@ begin
       valNode := target;
       { re-point: assignment target is the pointer sym, value is the address }
       target := identNode;
+    end
+    else if PendingInitFOff[i] = -3 then
+    begin
+      { C pointer-array string initializer, e.g. char-star array from strings.
+        PendingInitVal/FLen carry the raw token-string span; assignment lowering
+        applies the C string-literal-to-char-pointer +8 adjustment. }
+      valNode := AllocNode(AN_STR_LIT);
+      ASTSOffset[valNode] := PendingInitVal[i];
+      ASTSLen[valNode] := PendingInitFLen[i];
+      ASTTk[valNode] := Ord(tyString);
     end
     else
     begin
