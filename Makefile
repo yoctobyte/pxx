@@ -514,6 +514,8 @@ test-core: $(COMPILER)
 	/tmp/cstruct_bitfield_b9626; test "$$?" = "42"
 	./$(COMPILER) test/cfnptr_cast_call_b97.c /tmp/cfnptr_cast_call_b9726
 	/tmp/cfnptr_cast_call_b9726; test "$$?" = "42"
+	./$(COMPILER) test/cglobal_struct_array_fnptr_cast_b98.c /tmp/cglobal_struct_array_fnptr_cast_b9826
+	/tmp/cglobal_struct_array_fnptr_cast_b9826; test "$$?" = "42"
 	./$(COMPILER) -Itest/cinc/inc test/cinc/cinc_main.c /tmp/cinc_main26
 	test "$$(/tmp/cinc_main26)" = "$$(printf 'local-ok\ninc-ok')"
 	./$(COMPILER) test/test_declared_directive.pas /tmp/test_declared_directive26

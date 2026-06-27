@@ -43,6 +43,28 @@
   - Also still open (minor): unsigned integer LITERAL suffix (`5u`) tagged signed
     (lexer consumes suffix but records no unsignedness) — needs a token flag;
     lua unaffected (bounds use unsigned vars).
+
+## M5 update (2026-06-27, session 5): global fn-ptr cast initializer fixed
+
+Banked the in-lane sqlite runtime wall. A file-scope struct-array initializer
+with a function-pointer cast field, e.g. sqlite's syscall table shape
+`{ "open", (syscall_ptr)posixOpen, ... }`, now records the casted function name
+as the same proc-address PendingInit used by a bare function-name initializer.
+
+- **FIX 5 (this commit) — global struct-array fn-ptr cast field init.**
+  `ParseCGlobalVarDecl`'s aggregate walker already handled pointer fields
+  initialized from a bare function identifier (`PendingInitKind=2`), but
+  `(typedef_fnptr)function_name` fell into the skip path and left the field
+  zero/garbage. Added `CConsumeCastProcInit` to recognize the cast wrapper and
+  record the proc address. Test `cglobal_struct_array_fnptr_cast_b98`.
+- **Verification:** `make compiler/pascal26` self-host byte-identical; b97 still
+  passes; b98 passes.
+- **sqlite rerun:** `./compiler/pascal26 -Ilibrary_candidates/sqlite
+  library_candidates/sqlite/sqlite3.c /tmp/sqlite3` now reaches the existing
+  header wall: `pascal26:31615: error: call to undeclared function: fsync ()`.
+  [[bug-c-crtl-missing-unistd-syscalls]] is now the next active wall; user has
+  explicitly allowed taking this Track B/CRTL header ticket.
+
 - **Session 2026-06-27d (Track A+C) — control flow + lexer fixed; lua runs real
   programs.** Two more fixes (self-host byte-identical, `make test` green):
   - **FIX 5 (`62c88498`) — global ordinal array with constant-EXPRESSION

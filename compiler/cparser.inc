@@ -2528,6 +2528,42 @@ begin
   if depth <> 0 then Result := -1;
 end;
 
+function CConsumeCastProcInit(var procIdx: Integer): Boolean;
+{ Consume a global aggregate initializer element of the form
+  `(fn_pointer_type)function_name`. File-scope struct-array initializers use the
+  lightweight PendingInit recorder rather than the expression parser, so this
+  recognizes the cast wrapper and reuses the existing proc-address PendingInit
+  kind used by bare function names. }
+var openIdx, j, depth, procTok, afterTok: Integer;
+begin
+  Result := False;
+  procIdx := -1;
+  if CurTok.Kind <> tkLParen then Exit;
+
+  openIdx := TokPos - 1;
+  j := openIdx + 1;
+  depth := 1;
+  while (j < TokCount) and (depth > 0) do
+  begin
+    if Tokens[j].Kind = tkLParen then Inc(depth)
+    else if Tokens[j].Kind = tkRParen then Dec(depth);
+    Inc(j);
+  end;
+  if depth <> 0 then Exit;
+
+  procTok := j;       { first token after the cast's closing ')' }
+  afterTok := j + 1;
+  if (procTok >= TokCount) or (Tokens[procTok].Kind <> tkIdent) then Exit;
+  if (afterTok < TokCount) and not (Tokens[afterTok].Kind in [tkComma, tkEnd]) then Exit;
+
+  procIdx := FindProc(GetTokenStr(procTok));
+  if procIdx < 0 then Exit;
+
+  TokPos := afterTok;
+  Next;               { CurTok now points at the delimiter after the function name }
+  Result := True;
+end;
+
 procedure CSkipCInitElement;
 var depth: Integer;
 begin
@@ -2835,6 +2871,21 @@ begin
                   end
                   else
                     CSkipCInitElement;
+                end
+                else if (fTk = Ord(tyPointer)) and CConsumeCastProcInit(procIdx) then
+                begin
+                  if PendingInitCount < MAX_PENDING_INITS then
+                  begin
+                    PendingInitSym[PendingInitCount]  := idx;
+                    PendingInitElem[PendingInitCount] := ei;
+                    PendingInitFOff[PendingInitCount] := UFldNOff[recBase + fldI];
+                    PendingInitFLen[PendingInitCount] := UFldNLen[recBase + fldI];
+                    PendingInitVal[PendingInitCount]  := procIdx;
+                    PendingInitValAux[PendingInitCount] := 0;
+                    PendingInitTk[PendingInitCount]   := fTk;
+                    PendingInitKind[PendingInitCount] := 2;
+                    Inc(PendingInitCount);
+                  end;
                 end
                 else if TypeIsOrdinal(IntToTypeKind(fTk)) and (CurTok.Kind <> tkBegin) then
                 begin

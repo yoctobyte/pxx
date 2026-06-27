@@ -27,13 +27,12 @@ _none_
 | --- | --- | --- | --- | --- |
 | feature-c-runtime-library | C | feature | C runtime/library layer (`lib/crtl`) plus direct C-library packages | feature-c-source-frontend |
 
-## backlog (70)
+## backlog (69)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
 | bug-c-addr-of-global-array-element-const-index-wrong-offset | A | bug | C: `&global_array[const]` global pointer initializer computes wrong offset | — |
 | bug-c-crtl-missing-unistd-syscalls | A | bug | C: crtl headers miss libc syscall prototypes (fsync, …) | — |
-| bug-c-global-struct-array-fnptr-cast-init | A | bug | C: global struct-array initializer with a fn-ptr cast field stores garbage | — |
 | bug-c-sizeof-array-yields-element-size | A | bug | C: `sizeof(array)` yields element size, not total array size | — |
 | bug-capital-write-undefined-in-compiler-selfbuild | A | bug | Capital `Write`/`WriteLn` rejected in some contexts (compiler self-build), works standalone | — |
 | bug-i386-float-byval-param | A | bug | i386 backend: by-value float (Double) parameter unsupported | — |
@@ -136,7 +135,7 @@ _none_
 | feature-mimic-fpc | B | feature | `mimic FPC` compatibility mode | — |
 | feature-string-model-tyfixedstring | B | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (324)
+## done (325)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -165,6 +164,7 @@ _none_
 | bug-c-function-pointer-local-variable | A | bug | C: function-pointer local variable declaration not parsed | — |
 | bug-c-function-pointer-struct-member | A | bug | C: function-pointer struct member is silently dropped (layout + call + parse) | — |
 | bug-c-global-double-init | A | bug | C: global `double`/`float` initializer stored as 0 | — |
+| bug-c-global-struct-array-fnptr-cast-init | A | bug | C: global struct-array initializer with a fn-ptr cast field stores garbage | — |
 | bug-c-large-record-byval-param | A | bug | C: large (>16-byte) record passed by value gives garbage in the callee | — |
 | bug-c-libc-data-symbol-stdio | A | bug | C stdio must ride pxx syscalls (libc-free), not import libc | — |
 | bug-c-main-argc-argv-not-wired | A | bug | C `main(argc, argv)` gets real argc/argv | — |
@@ -478,7 +478,6 @@ _none_
 
 - [A] bug-c-addr-of-global-array-element-const-index-wrong-offset
 - [A] bug-c-crtl-missing-unistd-syscalls
-- [A] bug-c-global-struct-array-fnptr-cast-init
 - [A] bug-c-sizeof-array-yields-element-size
 - [A] bug-capital-write-undefined-in-compiler-selfbuild
 - [A] bug-i386-float-byval-param
