@@ -1,7 +1,7 @@
 # FPC seed build fails after Lua C frontend helper additions
 
 - **Type:** bug
-- **Status:** backlog
+- **Status:** done
 - **Owner:** unassigned
 - **Found / Opened:** 2026-06-27 during Track C Lua compiler stability check
 
@@ -100,3 +100,4 @@ provides it earlier; two `forward;` for one routine is an FPC error.
   remove `cparser.inc:19` dup). Companion strict-mode flag filed as
   [[feature-require-forward-strict-mode]]. Not fixed yet (no-fix-now, ticket
   only).
+- 2026-06-27 - FIXED + verified. forwards.inc (FPC-gated) + two `;` in CompilePendingGlobalInits. `make bootstrap` green end-to-end, `make test` self-host byte-identical. Strict-mode enforcement = separate [[feature-require-forward-strict-mode]].

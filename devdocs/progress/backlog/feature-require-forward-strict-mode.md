@@ -1,4 +1,4 @@
-# `--require-forward` — opt-in FPC-strict declaration ordering (no auto-forward)
+# `--strict` — opt-in standard-Pascal / FPC-parity mode (umbrella)
 
 - **Type:** feature (parser architecture / FPC-compat) — Track A
 - **Status:** backlog
@@ -9,6 +9,40 @@
   early-warning for [[bug-fpc-seed-helper-ordering-after-lua-c-frontend]]
   (forwards forgotten → seed breaks, only caught at `make bootstrap`). Folds into
   [[feature-mimic-fpc]].
+
+## Decision (2026-06-27) — single umbrella, not a switch zoo
+
+PXX has accreted several leniencies vs standard Pascal (forward auto-resolve;
+optional statement separators; more will surface as the FPC seed peels back, each
+masked wall = one more leniency). Do **not** grow one flag per nag. Wrap them in
+**one** name: `--strict` (+ `{$MODE STRICT}` / `{$STRICT ON}`), default **off**,
+which `--mimic-fpc` turns on. Internally sets the umbrella define `PXX_STRICT`
+(and per-check defines like `PXX_REQUIRE_FORWARD`, `PXX_REQUIRE_SEPARATOR`).
+
+Sub-checks under the umbrella (grow this list as walls surface):
+- **require-forward** — no pre-scan auto-forward; FPC's four visibility rules
+  (def-above / `forward;` / interface / class-method) enforced.
+- **require-separator** — mandatory statement separator `;` (no tolerated
+  missing `;` before a keyword-led statement).
+- *(future: const/type-before-use ordering, extra-`;`-before-`else`, etc.)*
+
+### Default matrix (user call, 2026-06-27)
+
+- **forwards: open by default** — auto-resolve stays PXX's relaxed default;
+  enforced only under `--strict`. It is type-safe leniency (ordering only).
+- **separators: standard-compliant** — our own source must not rely on missing
+  `;` (FPC seeds us; FPC is strict). Whether PXX *errors* on a missing `;` by
+  default vs only under `--strict` is the one open knob — see Open question.
+- **`--strict`: enforces all of the above** for anyone wanting full parity.
+
+### Open question
+
+Should `require-separator` be ON by default (PXX errors on missing `;` always,
+since separator-leniency can *silently change semantics* — mask a dropped
+statement / mis-attach control flow), or only under `--strict` (consistent with
+forwards being opt-in)? Lean: at minimum, **warn** when tolerating a missing `;`
+even outside `--strict` (forward-tolerance can stay silent; separator-tolerance
+should nag). Decide at build time.
 
 ## Problem
 
@@ -122,3 +156,11 @@ ordering signal without that.)
   (1) forwards.inc FPC-gated [other ticket], (2) this strict flag, (3) folded
   into mimic-fpc but standalone, (4) bonus self-compat self-test. No-fix-now,
   ticket only.
+- 2026-06-27 - Reframed to a single `--strict` **umbrella** (user call): one name
+  wraps require-forward + require-separator + future checks, default off,
+  mimic-fpc implies. Default matrix: forwards open-default, separators
+  standard-compliant. NOTE: this feature (the *flag/enforcement*) is still
+  unbuilt; but the **source** is now FPC-seed-clean — `make bootstrap` goes green
+  after forwards.inc + two missing `;` in `CompilePendingGlobalInits`
+  (parser.inc). So the umbrella's job narrows to *guarding* that cleanliness,
+  not first achieving it.
