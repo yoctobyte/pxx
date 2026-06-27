@@ -26,7 +26,7 @@ const
   MAX_PAS_UNIT_DIRS  = 64;    { user `-Fu`/`-I` Pascal unit search roots }
   MAX_CPREP_ARGS = 4096;
   STRING_CAP  = 8388608;      { 8 MB }
-  MAX_TOKENS  = 524288;
+  MAX_TOKENS  = 2097152;
   MAX_AST     = 524288;
   MAX_IR      = 131072;
   MAX_DWARF      = 1048576;   { DWARF -g: byte buffer for all .debug_* section content }
