@@ -2919,6 +2919,10 @@ begin
 
   { mov [BSS_INITIAL_RSP], rsp }
   EmitB($48); EmitB($89); EmitB($24); EmitB($25); EmitGlobRef(BSS_INITIAL_RSP);
+  { seed C main(argc, argv) from the Linux initial stack: [argc][argv0]... }
+  EmitB($48); EmitB($8B); EmitB($04); EmitB($25); EmitGlobRef(BSS_INITIAL_RSP); { mov rax, [BSS_INITIAL_RSP] }
+  EmitB($8B); EmitB($38);                                                       { mov edi, [rax] }
+  EmitB($48); EmitB($8D); EmitB($70); EmitB($08);                               { lea rsi, [rax+8] }
   { call main (rel32, patched once main's body address is known) }
   EmitB($E8); callPatch := CodeLen; EmitI32(0);
   { mov edi, eax ; mov eax, 231 (exit_group) ; syscall }

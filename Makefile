@@ -496,6 +496,8 @@ test-core: $(COMPILER)
 	/tmp/csocket_loopback_b8826; test "$$?" = "42"
 	./$(COMPILER) test/ctypedef_alias_fnptr_field_b89.c /tmp/ctypedef_alias_fnptr_field_b8926
 	/tmp/ctypedef_alias_fnptr_field_b8926; test "$$?" = "42"
+	./$(COMPILER) test/cmain_argv_b90.c /tmp/cmain_argv_b9026
+	/tmp/cmain_argv_b9026 ab xyz; test "$$?" = "42"
 	./$(COMPILER) -Itest/cinc/inc test/cinc/cinc_main.c /tmp/cinc_main26
 	test "$$(/tmp/cinc_main26)" = "$$(printf 'local-ok\ninc-ok')"
 	./$(COMPILER) test/test_declared_directive.pas /tmp/test_declared_directive26

@@ -27,16 +27,17 @@ _none_
 | --- | --- | --- | --- | --- |
 | feature-c-runtime-library | C | feature | C runtime/library layer (`lib/crtl`) plus direct C-library packages | feature-c-source-frontend |
 
-## backlog (70)
+## backlog (71)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
 | bug-c-addr-of-unsupported-ir | A | bug | C `&` of certain operands lowers to IR_UNSUPPORTED (codegen crash) | — |
+| bug-c-chained-pointer-index-loses-base-type | A | bug | C chained pointer indexing loses base type | — |
 | bug-c-global-double-init | A | bug | C: global `double`/`float` initializer stored as 0 | — |
 | bug-c-libc-data-symbol-stdio | A | bug | C stdio must ride pxx syscalls (libc-free), not import libc | — |
-| bug-c-main-argc-argv-not-wired | A | bug | C `main(argc, argv)` gets argc 0 | — |
 | bug-c-typedef-return-corrupts-entry | C | bug | C: typedef return type can corrupt program entry call | — |
 | bug-c-vararg-overflow-area | A | bug | C: 6+ variadic args (overflow area) segfault | — |
+| bug-fpc-bootstrap-compiler-source-not-clean | A | bug | FPC bootstrap no longer compiles compiler source | — |
 | bug-fpc-seed-helper-ordering-after-lua-c-frontend | A | bug | FPC seed build fails after Lua C frontend helper additions | — |
 | bug-i386-float-byval-param | A | bug | i386 backend: by-value float (Double) parameter unsupported | — |
 | bug-multi-interface-method-corruption | A | bug | Memory/String corruption when calling methods on secondary interfaces | — |
@@ -136,7 +137,7 @@ _none_
 | feature-mimic-fpc | B | feature | `mimic FPC` compatibility mode | — |
 | feature-string-model-tyfixedstring | B | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (308)
+## done (309)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -160,6 +161,7 @@ _none_
 | bug-c-field-on-pointer-arithmetic | C | bug | C: `(p + i)->field` (field on a computed pointer) fails / Unsupported | — |
 | bug-c-float-int-cast-and-spill | A | bug | C: int<->float numeric cast + computed-double spill across branches | — |
 | bug-c-large-record-byval-param | A | bug | C: large (>16-byte) record passed by value gives garbage in the callee | — |
+| bug-c-main-argc-argv-not-wired | A | bug | C `main(argc, argv)` gets real argc/argv | — |
 | bug-c-multidim-array-field-partial-row | A | bug | C: 2D array struct field — partial-index row decay broken | — |
 | bug-c-nested-anon-union-struct | A | bug | C: nested/anonymous struct-or-union member makes the whole struct opaque | — |
 | bug-c-packed-aligned-ignored | A | bug | C `__attribute__((packed))` / `aligned` ignored → field-offset drift | — |
@@ -460,11 +462,12 @@ _none_
 ## Ready (no unmet blocker)
 
 - [A] bug-c-addr-of-unsupported-ir
+- [A] bug-c-chained-pointer-index-loses-base-type
 - [A] bug-c-global-double-init
 - [A] bug-c-libc-data-symbol-stdio
-- [A] bug-c-main-argc-argv-not-wired
 - [C] bug-c-typedef-return-corrupts-entry
 - [A] bug-c-vararg-overflow-area
+- [A] bug-fpc-bootstrap-compiler-source-not-clean
 - [A] bug-fpc-seed-helper-ordering-after-lua-c-frontend
 - [A] bug-i386-float-byval-param
 - [A] bug-multi-interface-method-corruption
