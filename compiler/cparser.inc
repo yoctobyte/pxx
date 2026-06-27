@@ -1494,6 +1494,7 @@ var
   shortCount, longCount, tdIdx, depth, baseRec, tdElemTk, tdElemRec: Integer;
   base, fpRet, fpPType: TTypeKind;
   fpName: AnsiString;
+  fpNameOff, fpNameLen: Integer;   { name token off/len, kept local — a recursive ParseCDeclType (params) resets the globals }
   fpNParams, fpSig: Integer;
   fpPTypes: array[0..15] of TTypeKind;
   fpPNames: array[0..15] of AnsiString;
@@ -1658,7 +1659,12 @@ begin
       else if (CurTok.Kind = tkIdent) and (fpName = '') then
       begin
         fpName := CurTok.SVal;
-        CTypeFnPtrNameOff := CurTok.SOffset; CTypeFnPtrNameLen := CurTok.SLen;
+        { CurTok.SOffset/SLen are NOT maintained by Next (it only fills
+          Kind/IVal/Line/SVal) — read the live token-char ref from Tokens[]. The
+          name is the current token, i.e. Tokens[TokPos-1] (Next pre-increments).
+          Keep in locals: the recursive ParseCDeclType for the params resets the
+          CTypeFnPtrName* globals. }
+        fpNameOff := Tokens[TokPos-1].SOffset; fpNameLen := Tokens[TokPos-1].SLen;
       end;
       Next;
     until (depth = 0) or (CurTok.Kind = tkEOF);
@@ -1699,6 +1705,8 @@ begin
       ProcCdecl[fpSig] := True;        { C ABI (System V) for the indirect call }
       CTypeProcSig := fpSig;           { caller threads this onto the typedef/var/field }
       CTypeFnPtrName := fpName;
+      CTypeFnPtrNameOff := fpNameOff;  { assign AFTER the param recursion that reset the globals }
+      CTypeFnPtrNameLen := fpNameLen;
     end;
   end;
 end;
