@@ -1021,3 +1021,30 @@ sqlite 3.46.0 amalgamation fetched + wired into `tools/install_lib_candidates.sh
 
 lua remains functional (incl. float). Cross/ESP coverage of C+lua filed as
 [[feature-c-cross-target-feature-coverage]].
+
+## M5 (sqlite) — session 3 (2026-06-27): lea wall was operator error
+
+The "invalid symbol in lea" wall (session 2) was **not a compiler bug** — sqlite
+was compiled **without `-Ilib/crtl/include`**, so `<stdarg.h>` resolved to the
+system header and `va_arg` did not hit pxx's `__builtin_va_arg` desugar (the
+already-fixed [[track-c-va-arg-nonint-lea]] shape). Rejected the ticket.
+
+Tooling added: **`--dump-cpp`** flag (prints the C-preprocessed source and exits)
+— invaluable for this; used it to confirm `azCompileOpt[]` is all clean strings.
+
+With `-Ilib/crtl/include` sqlite advances much further, to:
+
+- **Next wall:** `pascal26:19490: error: unexpected token` near `sqlite3Config` /
+  `int (*xAltLocaltime)(const void*,void*)` — a **function-pointer struct field**
+  (member of `struct Sqlite3Config`). Likely pxx can't parse a function-pointer
+  member declaration `T (*name)(args)` inside a struct. NEXT TASK.
+
+Real bugs banked from the investigation (independent of the false alarm):
+- [[bug-c-sizeof-array-yields-element-size]] — `sizeof(arr)` = element size.
+- [[bug-c-addr-of-global-array-element-const-index-wrong-offset]] — `&g[const]`
+  wrong offset (7/221 vs 204).
+- [[bug-capital-write-undefined-in-compiler-selfbuild]] — capital `Write` gap.
+
+LESSON / possible feature: C compiles require `-Ilib/crtl/include`. Consider
+auto-prepending pxx's crtl include dir for `.c` inputs (cf. the Pascal
+default-PAL-dir behaviour), so real C programs build without the manual `-I`.

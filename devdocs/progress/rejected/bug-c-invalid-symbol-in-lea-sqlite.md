@@ -105,3 +105,26 @@ literal in an address-of.
   IR_LEA(-1), node at azCompileOpt[] init (~line 22225). Minimal repro still
   elusive (macro-expansion-specific). Separate offset bug found:
   [[bug-c-addr-of-global-array-element-const-index-wrong-offset]].
+
+## REJECTED (2026-06-27, session 3) — not a bug, missing `-Ilib/crtl/include`
+
+Root cause: sqlite was compiled **without** `-Ilib/crtl/include`, so
+`#include <stdarg.h>` resolved to the **system** header whose `va_arg` does not
+map to pxx's `__builtin_va_arg` desugar. That is the *exact* shape of the
+already-fixed [[track-c-va-arg-nonint-lea]] (`va_arg` -> `*(T*)__pxx_va_arg(&ap)`,
+IRLowerAddress of an int-literal). The Makefile C tests all pass `-Ilib/crtl/
+include`; my manual sqlite invocations did not.
+
+With `-Ilib/crtl/include`:
+- `test/cvarargs_int_b49.c` passes (42).
+- sqlite **advances past** the lea crash to a new, genuine wall:
+  `pascal26:19490: error: unexpected token` near `sqlite3Config` /
+  `int (*xAltLocaltime)(const void*,void*)` — a function-pointer struct field.
+
+So this ticket is **rejected** (operator error). The real findings from the
+investigation are kept: [[bug-c-addr-of-global-array-element-const-index-wrong-offset]],
+[[bug-c-sizeof-array-yields-element-size]], the `--dump-cpp` flag, and the new
+function-pointer-struct-field wall (see [[feature-c-desktop-lua-sqlite-path]] M5).
+
+LESSON: C compiles need `-Ilib/crtl/include` for pxx's crtl headers. Consider
+auto-adding it for `.c` inputs (filed as a note in the M5 log).
