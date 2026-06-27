@@ -807,9 +807,9 @@ var
   SymSetEnumId : array[0..MAX_SYMS-1] of Integer; { set var: element enum type index for `set of TEnum`, else -1. Drives `for e in set` range }
   SymSetElemTk : array[0..MAX_SYMS-1] of Integer; { set var: element TTypeKind ordinal (tyChar/tyInteger/enum-as-integer), else 0 }
   SymStrCap : array[0..MAX_SYMS-1] of Integer; { frozen fixed-string capacity (max chars) for tyFixedString/tyShortString slots; 0 = use the kind default (DEFAULT_STR_CAP) }
-  SymCPtrDepth : array[0..MAX_SYMS-1] of Integer; { C pointer depth for typed pointers: char** = 2. 0 = unknown/not a C pointer. }
-  SymCPtrBaseTk : array[0..MAX_SYMS-1] of Integer; { C pointer ultimate base TTypeKind ordinal (char for char**), tyUnknown if unset. }
-  SymCPtrBaseRec : array[0..MAX_SYMS-1] of Integer; { C pointer ultimate base record id, REC_NONE if unset. }
+  SymPtrDepth : array[0..MAX_SYMS-1] of Integer; { typed pointer depth: P^^ / char** = 2. 0 = unknown/not a pointer. }
+  SymPtrBaseTk : array[0..MAX_SYMS-1] of Integer; { typed pointer ultimate base TTypeKind ordinal, tyUnknown if unset. }
+  SymPtrBaseRec : array[0..MAX_SYMS-1] of Integer; { typed pointer ultimate base record id, REC_NONE if unset. }
   { 2-D fixed array flattened to 1-D storage: m[i,j] / m[i][j] index as
     (i-lo1)*span2 + (j-lo2). Default False/0 (single-dimension array). }
   { N-D fixed array flattened to 1-D storage; element [i0..iN-1] linearises to
@@ -928,6 +928,9 @@ var
                            type; REC_NONE until then }
   LastTypePointerElemTk : TTypeKind;
   LastTypePointerElemRec : Integer;
+  LastTypePointerDepth : Integer;
+  LastTypePointerBaseTk : Integer;
+  LastTypePointerBaseRec : Integer;
   LastTypeProcSig : Integer;  { set by ParseTypeKind when a name resolves to a procedural type: signature proc index, else -1 }
   ErrorIdent : AnsiString;
   WarnCount : Integer;     { number of non-fatal warnings emitted via Warn }
@@ -1443,6 +1446,9 @@ var
   AliasTk      : array[0..MAX_TYPEALIAS-1] of Integer;  { resolved TTypeKind ordinal }
   AliasElemTk  : array[0..MAX_TYPEALIAS-1] of Integer;  { pointer element TTypeKind ordinal }
   AliasElemRec : array[0..MAX_TYPEALIAS-1] of Integer;  { pointer element record/class id }
+  AliasPtrDepth : array[0..MAX_TYPEALIAS-1] of Integer; { pointer alias depth, 0 for non-pointer/unknown }
+  AliasPtrBaseTk : array[0..MAX_TYPEALIAS-1] of Integer; { pointer alias ultimate base TTypeKind ordinal }
+  AliasPtrBaseRec : array[0..MAX_TYPEALIAS-1] of Integer; { pointer alias ultimate base record/class id }
   AliasProcSig : array[0..MAX_TYPEALIAS-1] of Integer;  { procedural-type alias: signature proc index (Procs[] entry, BodyAddr=-1); -1 = not a proc type }
   AliasTargetNOff : array[0..MAX_TYPEALIAS-1] of Integer;
   AliasTargetNLen : array[0..MAX_TYPEALIAS-1] of Integer;

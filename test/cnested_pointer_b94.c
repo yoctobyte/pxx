@@ -10,6 +10,8 @@ int main(int argc, char **argv) {
   int *p1 = &x;
   int **p2 = &p1;
   int ***p3 = &p2;
+  int ****p4 = &p3;
+  int *****p5 = &p4;
   struct Pair s;
   struct Pair *sp1 = &s;
   struct Pair **sp2 = &sp1;
@@ -27,10 +29,11 @@ int main(int argc, char **argv) {
   ***p3 = ***p3 + 1;
   if (x != 42) return 8;
   if (***p3 != 42) return 9;
+  if (*****p5 != 42) return 10;
 
   (**sp2).a = 11;
   (*sp1).b = 31;
-  if ((**sp2).a + (**sp2).b != 42) return 10;
+  if ((**sp2).a + (**sp2).b != 42) return 11;
 
   return 42;
 }

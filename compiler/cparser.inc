@@ -474,10 +474,10 @@ begin
   if ASTKind[node] = AN_IDENT then
   begin
     if Syms[ASTIVal[node]].IsArray then
-      Result := SymCPtrDepth[ASTIVal[node]]
+      Result := SymPtrDepth[ASTIVal[node]]
     else if Syms[ASTIVal[node]].TypeKind = tyPointer then
     begin
-      Result := SymCPtrDepth[ASTIVal[node]];
+      Result := SymPtrDepth[ASTIVal[node]];
       if Result = 0 then Result := 1;
     end;
   end
@@ -486,7 +486,7 @@ begin
     if IntToTypeKind(ASTTk[node]) = tyPointer then
     begin
       if (ASTKind[ASTLeft[node]] = AN_IDENT) and Syms[ASTIVal[ASTLeft[node]]].IsArray then
-        Result := SymCPtrDepth[ASTIVal[ASTLeft[node]]]
+        Result := SymPtrDepth[ASTIVal[ASTLeft[node]]]
       else
       begin
         Result := CNodePtrDepth(ASTLeft[node]) - 1;
@@ -519,7 +519,7 @@ begin
   Result := Ord(tyUnknown);
   if node < 0 then Exit;
   if ASTKind[node] = AN_IDENT then
-    Result := SymCPtrBaseTk[ASTIVal[node]]
+    Result := SymPtrBaseTk[ASTIVal[node]]
   else if ASTKind[node] = AN_INDEX then
   begin
     baseNode := ASTLeft[node];
@@ -575,7 +575,7 @@ begin
       Result := Ord(Syms[ASTIVal[node]].ElemType)
     else if Syms[ASTIVal[node]].TypeKind = tyPointer then
     begin
-      depth := SymCPtrDepth[ASTIVal[node]];
+      depth := SymPtrDepth[ASTIVal[node]];
       if depth >= 2 then
         Result := Ord(tyPointer)
       else
@@ -1819,9 +1819,9 @@ begin
       begin
         Syms[idx].PtrElemTk := IntToTypeKind(declElemTk);
         Syms[idx].PtrElemRec := declElemRec;
-        SymCPtrDepth[idx] := declPtrDepth;
-        SymCPtrBaseTk[idx] := declBaseTk;
-        SymCPtrBaseRec[idx] := declBaseRec;
+        SymPtrDepth[idx] := declPtrDepth;
+        SymPtrBaseTk[idx] := declBaseTk;
+        SymPtrBaseRec[idx] := declBaseRec;
       end;
       for ei := 0 to nArrElems - 1 do
       begin
@@ -1863,9 +1863,9 @@ begin
       begin
         Syms[idx].PtrElemTk := IntToTypeKind(declElemTk);
         Syms[idx].PtrElemRec := declElemRec;
-        SymCPtrDepth[idx] := declPtrDepth;
-        SymCPtrBaseTk[idx] := declBaseTk;
-        SymCPtrBaseRec[idx] := declBaseRec;
+        SymPtrDepth[idx] := declPtrDepth;
+        SymPtrBaseTk[idx] := declBaseTk;
+        SymPtrBaseRec[idx] := declBaseRec;
         if declProcSig >= 0 then SymProcSig[idx] := declProcSig;  { fn-pointer var: callable }
       end;
       initExpr := -1;
@@ -2652,9 +2652,9 @@ begin
     begin
       Syms[idx].PtrElemTk := IntToTypeKind(CTypeElemTk);
       Syms[idx].PtrElemRec := CTypeElemRec;
-      SymCPtrDepth[idx] := CTypePtrDepth;
-      SymCPtrBaseTk[idx] := CTypePtrBaseTk;
-      SymCPtrBaseRec[idx] := CTypePtrBaseRec;
+      SymPtrDepth[idx] := CTypePtrDepth;
+      SymPtrBaseTk[idx] := CTypePtrBaseTk;
+      SymPtrBaseRec[idx] := CTypePtrBaseRec;
     end;
     for ei := 0 to nArrElems - 1 do
     begin
@@ -3405,9 +3405,9 @@ begin
     begin
       Syms[idx].PtrElemTk := IntToTypeKind(pelemtk[i]);
       Syms[idx].PtrElemRec := pelemrec[i];
-      SymCPtrDepth[idx] := pdepths[i];
-      SymCPtrBaseTk[idx] := pbasetk[i];
-      SymCPtrBaseRec[idx] := pbaserec[i];
+      SymPtrDepth[idx] := pdepths[i];
+      SymPtrBaseTk[idx] := pbasetk[i];
+      SymPtrBaseRec[idx] := pbaserec[i];
       if pprocsig[i] >= 0 then SymProcSig[idx] := pprocsig[i];  { fn-pointer param: callable }
     end;
   end;

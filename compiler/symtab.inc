@@ -106,6 +106,9 @@ begin
   AliasTk[AliasCount] := Ord(tyPointer);
   AliasElemTk[AliasCount] := elemTk;
   AliasElemRec[AliasCount] := elemRec;
+  AliasPtrDepth[AliasCount] := 0;
+  AliasPtrBaseTk[AliasCount] := Ord(tyUnknown);
+  AliasPtrBaseRec[AliasCount] := REC_NONE;
   AliasTargetNOff[AliasCount] := targetNOff;
   AliasTargetNLen[AliasCount] := targetNLen;
   AliasProcSig[AliasCount] := -1;
@@ -120,6 +123,9 @@ begin
   AliasTk[AliasCount] := tk;
   AliasElemTk[AliasCount] := tk;
   AliasElemRec[AliasCount] := rec;
+  AliasPtrDepth[AliasCount] := 0;
+  AliasPtrBaseTk[AliasCount] := Ord(tyUnknown);
+  AliasPtrBaseRec[AliasCount] := REC_NONE;
   AliasTargetNOff[AliasCount] := 0;
   AliasTargetNLen[AliasCount] := 0;
   AliasProcSig[AliasCount] := -1;
@@ -137,6 +143,9 @@ begin
   AliasTk[AliasCount] := Ord(tyRecord);
   AliasElemTk[AliasCount] := Ord(tyRecord);
   AliasElemRec[AliasCount] := methodRec;
+  AliasPtrDepth[AliasCount] := 0;
+  AliasPtrBaseTk[AliasCount] := Ord(tyUnknown);
+  AliasPtrBaseRec[AliasCount] := REC_NONE;
   AliasTargetNOff[AliasCount] := 0;
   AliasTargetNLen[AliasCount] := 0;
   AliasProcSig[AliasCount] := sigPi;
@@ -155,6 +164,9 @@ begin
   AliasTk[AliasCount] := Ord(tyPointer);
   AliasElemTk[AliasCount] := Ord(tyUnknown);
   AliasElemRec[AliasCount] := REC_NONE;
+  AliasPtrDepth[AliasCount] := 1;
+  AliasPtrBaseTk[AliasCount] := Ord(tyUnknown);
+  AliasPtrBaseRec[AliasCount] := REC_NONE;
   AliasTargetNOff[AliasCount] := 0;
   AliasTargetNLen[AliasCount] := 0;
   AliasProcSig[AliasCount] := sigPi;
@@ -195,6 +207,9 @@ begin
   AliasTk[AliasCount] := Ord(tySet);
   AliasElemTk[AliasCount] := elemEnumId;
   AliasElemRec[AliasCount] := REC_NONE;
+  AliasPtrDepth[AliasCount] := 0;
+  AliasPtrBaseTk[AliasCount] := Ord(tyUnknown);
+  AliasPtrBaseRec[AliasCount] := REC_NONE;
   AliasTargetNOff[AliasCount] := 0;
   AliasTargetNLen[AliasCount] := 0;
   AliasProcSig[AliasCount] := -1;
@@ -223,6 +238,9 @@ begin
   AliasTk[AliasCount] := Ord(tyPointer);
   AliasElemTk[AliasCount] := Ord(tyClass);
   AliasElemRec[AliasCount] := classRec;
+  AliasPtrDepth[AliasCount] := 1;
+  AliasPtrBaseTk[AliasCount] := Ord(tyClass);
+  AliasPtrBaseRec[AliasCount] := classRec;
   AliasProcSig[AliasCount] := -1;
   Inc(AliasCount);
 end;
@@ -1569,9 +1587,9 @@ begin
   SymSetEnumId[SymCount] := -1;
   SymSetElemTk[SymCount] := 0;
   SymStrCap[SymCount] := 0;
-  SymCPtrDepth[SymCount] := 0;
-  SymCPtrBaseTk[SymCount] := Ord(tyUnknown);
-  SymCPtrBaseRec[SymCount] := REC_NONE;
+  SymPtrDepth[SymCount] := 0;
+  SymPtrBaseTk[SymCount] := Ord(tyUnknown);
+  SymPtrBaseRec[SymCount] := REC_NONE;
   if TypeIsFrozenString(tk) and (tk <> tyString) then
     SymStrCap[SymCount] := LastTypeStrCap;
   SymRTTIOff[SymCount] := -1;
@@ -1590,6 +1608,9 @@ begin
   begin
     Syms[SymCount].PtrElemTk := LastTypePointerElemTk;
     Syms[SymCount].PtrElemRec := LastTypePointerElemRec;
+    SymPtrDepth[SymCount] := LastTypePointerDepth;
+    SymPtrBaseTk[SymCount] := LastTypePointerBaseTk;
+    SymPtrBaseRec[SymCount] := LastTypePointerBaseRec;
   end;
 
   if tk = tyAuto then
@@ -1664,9 +1685,9 @@ begin
   SymSetEnumId[SymCount] := -1;
   SymSetElemTk[SymCount] := 0;
   SymStrCap[SymCount] := 0;
-  SymCPtrDepth[SymCount] := 0;
-  SymCPtrBaseTk[SymCount] := Ord(tyUnknown);
-  SymCPtrBaseRec[SymCount] := REC_NONE;
+  SymPtrDepth[SymCount] := 0;
+  SymPtrBaseTk[SymCount] := Ord(tyUnknown);
+  SymPtrBaseRec[SymCount] := REC_NONE;
   if TypeIsFrozenString(tk) and (tk <> tyString) then
     SymStrCap[SymCount] := LastTypeStrCap;
   SymRTTIOff[SymCount] := -1;
@@ -1682,6 +1703,9 @@ begin
   begin
     Syms[SymCount].PtrElemTk := LastTypePointerElemTk;
     Syms[SymCount].PtrElemRec := LastTypePointerElemRec;
+    SymPtrDepth[SymCount] := LastTypePointerDepth;
+    SymPtrBaseTk[SymCount] := LastTypePointerBaseTk;
+    SymPtrBaseRec[SymCount] := LastTypePointerBaseRec;
   end;
 
   if isRef or isArray or (tk = tyString) or (tk = tyRecord) or (tk = tyVariant) or (tk = tySet) or (tk = tyClass) or (tk = tyPointer) then
@@ -1749,9 +1773,9 @@ begin
   SymSetEnumId[SymCount] := -1;
   SymSetElemTk[SymCount] := 0;
   SymStrCap[SymCount] := 0;
-  SymCPtrDepth[SymCount] := 0;
-  SymCPtrBaseTk[SymCount] := Ord(tyUnknown);
-  SymCPtrBaseRec[SymCount] := REC_NONE;
+  SymPtrDepth[SymCount] := 0;
+  SymPtrBaseTk[SymCount] := Ord(tyUnknown);
+  SymPtrBaseRec[SymCount] := REC_NONE;
   if (elemType = tyFixedString) or (elemType = tyShortString) then
     SymStrCap[SymCount] := LastTypeStrCap;
   SymIsHiddenArgTemp[SymCount] := False;
@@ -1767,6 +1791,9 @@ begin
   begin
     Syms[SymCount].PtrElemTk := LastTypePointerElemTk;
     Syms[SymCount].PtrElemRec := LastTypePointerElemRec;
+    SymPtrDepth[SymCount] := LastTypePointerDepth;
+    SymPtrBaseTk[SymCount] := LastTypePointerBaseTk;
+    SymPtrBaseRec[SymCount] := LastTypePointerBaseRec;
   end;
 
   if CurProc < 0 then
@@ -1811,9 +1838,9 @@ begin
   SymSetEnumId[SymCount] := -1;
   SymSetElemTk[SymCount] := 0;
   SymStrCap[SymCount] := 0;
-  SymCPtrDepth[SymCount] := 0;
-  SymCPtrBaseTk[SymCount] := Ord(tyUnknown);
-  SymCPtrBaseRec[SymCount] := REC_NONE;
+  SymPtrDepth[SymCount] := 0;
+  SymPtrBaseTk[SymCount] := Ord(tyUnknown);
+  SymPtrBaseRec[SymCount] := REC_NONE;
   if (elemType = tyFixedString) or (elemType = tyShortString) then
     SymStrCap[SymCount] := LastTypeStrCap;
   SymIsHiddenArgTemp[SymCount] := False;
@@ -1829,6 +1856,9 @@ begin
   begin
     Syms[SymCount].PtrElemTk := LastTypePointerElemTk;
     Syms[SymCount].PtrElemRec := LastTypePointerElemRec;
+    SymPtrDepth[SymCount] := LastTypePointerDepth;
+    SymPtrBaseTk[SymCount] := LastTypePointerBaseTk;
+    SymPtrBaseRec[SymCount] := LastTypePointerBaseRec;
   end;
   if CurProc < 0 then
   begin
@@ -5019,7 +5049,7 @@ end;
 
 procedure ResolvePendingPointerAliases;
 var
-  i, ci: Integer;
+  i, ci, targetAlias: Integer;
   targetName: AnsiString;
 begin
   for i := 0 to AliasCount - 1 do
@@ -5035,6 +5065,21 @@ begin
         else
           AliasElemTk[i] := Ord(tyClass);
         AliasElemRec[i] := REC_UCLASS_BASE + ci;
+        if AliasPtrDepth[i] = 1 then
+        begin
+          AliasPtrBaseTk[i] := AliasElemTk[i];
+          AliasPtrBaseRec[i] := AliasElemRec[i];
+        end;
+      end
+      else
+      begin
+        targetAlias := FindTypeAlias(targetName);
+        if (targetAlias >= 0) and (AliasTk[targetAlias] = Ord(tyPointer)) and
+           (AliasPtrDepth[targetAlias] > 0) and (AliasElemTk[i] = Ord(tyPointer)) then
+        begin
+          AliasPtrBaseTk[i] := AliasPtrBaseTk[targetAlias];
+          AliasPtrBaseRec[i] := AliasPtrBaseRec[targetAlias];
+        end;
       end;
     end;
   end;

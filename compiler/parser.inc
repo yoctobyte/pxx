@@ -1078,6 +1078,7 @@ function ParseLValueAST(idx: Integer; identTokIdx: Integer): Integer;
 var
   node, indexNode, fieldNode, prevTok, recName, i: Integer;
   baseNode, baseRec, fIdx, aliasIdx, firstIdxNode: Integer;
+  remDepth, ptrBaseTk, ptrBaseRec: Integer;
   isND: Boolean; nIdx: Integer; alreadyResolved: Boolean;
   tk: TTypeKind;
   fieldName: AnsiString;
@@ -1294,10 +1295,19 @@ begin
       ASTLeft[indexNode] := node;
       if tk = tyPointer then
       begin
+        remDepth := 0;
+        ptrBaseTk := Ord(tyUnknown);
+        ptrBaseRec := REC_NONE;
         if ASTKind[node] = AN_IDENT then
         begin
           tk := Syms[ASTIVal[node]].PtrElemTk;
           recName := Syms[ASTIVal[node]].PtrElemRec;
+          if SymPtrDepth[ASTIVal[node]] > 0 then
+          begin
+            remDepth := SymPtrDepth[ASTIVal[node]] - 1;
+            ptrBaseTk := SymPtrBaseTk[ASTIVal[node]];
+            ptrBaseRec := SymPtrBaseRec[ASTIVal[node]];
+          end;
         end
         else if ASTKind[node] = AN_FIELD then
         begin
@@ -1332,11 +1342,48 @@ begin
             recName := REC_NONE;
           end;
         end
+        else if ASTKind[node] = AN_DEREF then
+        begin
+          if ASTSOffset[node] > 0 then
+          begin
+            remDepth := ASTSOffset[node] - 1;
+            ptrBaseTk := ASTSLen[node];
+            ptrBaseRec := ASTIVal[node];
+            if remDepth >= 1 then
+            begin
+              tk := tyPointer;
+              recName := ptrBaseRec;
+            end
+            else if ptrBaseTk <> Ord(tyUnknown) then
+            begin
+              tk := IntToTypeKind(ptrBaseTk);
+              recName := ptrBaseRec;
+            end
+            else
+            begin
+              tk := tyUnknown;
+              recName := REC_NONE;
+            end;
+          end
+          else
+          begin
+            tk := tyInteger;
+            recName := REC_NONE;
+          end;
+        end
         else
         begin
           tk := tyInteger;
           recName := REC_NONE;
         end;
+        if remDepth >= 1 then
+        begin
+          tk := tyPointer;
+          recName := ptrBaseRec;
+        end;
+        ASTSOffset[indexNode] := remDepth;
+        ASTSLen[indexNode] := ptrBaseTk;
+        if ptrBaseRec > 0 then ASTIVal[indexNode] := ptrBaseRec;
       end
       else
         Error('dereferenced value is not a pointer');
@@ -8724,10 +8771,14 @@ end;
 
 function ParseTypeKind: TTypeKind;
 var lo: AnsiString; elemTk: TTypeKind; aliasIdx, ci: Integer;
+    childDepth, childBaseTk, childBaseRec: Integer;
 begin
   LastTypeRecId := REC_NONE;
   LastTypePointerElemTk := tyUnknown;
   LastTypePointerElemRec := REC_NONE;
+  LastTypePointerDepth := 0;
+  LastTypePointerBaseTk := Ord(tyUnknown);
+  LastTypePointerBaseRec := REC_NONE;
   LastTypeProcSig := -1;
   LastTypeEnumId := -1;
   LastTypeStrCap := 0;
@@ -8736,8 +8787,23 @@ begin
     begin
       Next;
       elemTk := ParseTypeKind();
+      childDepth := LastTypePointerDepth;
+      childBaseTk := LastTypePointerBaseTk;
+      childBaseRec := LastTypePointerBaseRec;
       LastTypePointerElemTk := elemTk;
       LastTypePointerElemRec := LastTypeRecId;
+      if (elemTk = tyPointer) and (childDepth > 0) then
+      begin
+        LastTypePointerDepth := childDepth + 1;
+        LastTypePointerBaseTk := childBaseTk;
+        LastTypePointerBaseRec := childBaseRec;
+      end
+      else
+      begin
+        LastTypePointerDepth := 1;
+        LastTypePointerBaseTk := Ord(elemTk);
+        LastTypePointerBaseRec := LastTypeRecId;
+      end;
       Result := tyPointer;
       Exit;
     end;
@@ -8914,6 +8980,9 @@ begin
               begin
                 LastTypePointerElemTk := IntToTypeKind(AliasElemTk[aliasIdx]);
                 LastTypePointerElemRec := AliasElemRec[aliasIdx];
+                LastTypePointerDepth := AliasPtrDepth[aliasIdx];
+                LastTypePointerBaseTk := AliasPtrBaseTk[aliasIdx];
+                LastTypePointerBaseRec := AliasPtrBaseRec[aliasIdx];
                 LastTypeProcSig := AliasProcSig[aliasIdx];
                 Result := tyPointer;
               end
@@ -10739,6 +10808,18 @@ begin
         targetNLen := Tokens[TokPos-1].SLen;
         fTk := ParseTypeKind;
         RegisterPtrAlias(tnOff, tnLen, Ord(fTk), LastTypeRecId, targetNOff, targetNLen);
+        if fTk = tyPointer then
+        begin
+          AliasPtrDepth[AliasCount-1] := LastTypePointerDepth + 1;
+          AliasPtrBaseTk[AliasCount-1] := LastTypePointerBaseTk;
+          AliasPtrBaseRec[AliasCount-1] := LastTypePointerBaseRec;
+        end
+        else
+        begin
+          AliasPtrDepth[AliasCount-1] := 1;
+          AliasPtrBaseTk[AliasCount-1] := Ord(fTk);
+          AliasPtrBaseRec[AliasCount-1] := LastTypeRecId;
+        end;
         Eat(tkSemicolon);
       end
       else if CaseEqual(CurTok.SVal, 'set') then

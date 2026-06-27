@@ -105,6 +105,9 @@ deep write+read).
 
 - 2026-06-27 — C half fixed as a side effect of
   `bug-c-chained-pointer-index-loses-base-type`: `test/cnested_pointer_b94.c`
-  now covers scalar `***p` and struct fields through `**`. The shared ticket
-  stays open because the Pascal `P^^^` repro still fails at compile time with
-  `dereferenced value is not a pointer`.
+  covers scalar `***p` / `*****p` and struct fields through `**`.
+- 2026-06-27 — Pascal side fixed by promoting pointer depth/base metadata from
+  C-only symbol state to shared typed-pointer symbol/alias state and carrying the
+  remaining depth on `AN_DEREF` nodes. Added `test/test_pointer_deref_depth.pas`,
+  covering `P^^^`, `P^^^^`, record fields through `^^`, and forward record
+  pointer aliases.
