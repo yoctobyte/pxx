@@ -79,3 +79,49 @@ Repro harness: `library_candidates/lua/src/pxx_hostamalg.c` `runchunk` chunks
 (build per `BUILD-pxx.md`); standalone `/tmp/dbl.c`. Shared float ABI/codegen →
 Track A; gate = `make test` + self-host byte-identical + cross float determinism
 guard.
+
+## RESOLVED — 2026-06-27 (Track A+C)
+
+Five distinct fixes; pxx-compiled lua now does floats end to end
+(`print(3.14)`, `1.5+2.5`=4.0, `2^10`=1024, `7/2`=3.5, `string.format('%.2f',
+3.14159)`=3.14, `math.sqrt(16)`=4.0, float comparisons drive control flow).
+Each has a `test/c*_b8N.c` (returns 42) wired into the Makefile C-regression block.
+
+1. **Typed pointer-cast deref load width** (`cparser.inc` CNodePointeeTk): added an
+   `AN_PTR_CAST` case reading the cast's type-alias element kind. `*(long*)&d`
+   (and `*(double*)p`) had defaulted to tyInteger -> 4-byte load, dropping the
+   high 32 bits. Test `cptrcast_deref_double_b81`.
+2. **Aggregate (struct/union with double) returned by value** (`cparser.inc`
+   sets ProcRetRecId + the hidden aggregate-dest local + LastTypeRecId for a
+   tyRecord return; new shared `EmitAggregateDestStash` in `symtab.inc` called by
+   both Pascal (`parser.inc`) and C; `ir_codegen.inc` cdecl path loads the hidden
+   dest into r10 for an internal aggregate-returning C call). Was a SEGFAULT (the
+   Result slot was 0-sized and the dest pointer never stashed). Test
+   `caggregate_double_return_b82`.
+3. **`va_arg(double)`** (`cparser.inc` picks `__pxx_va_arg_fp` for a float type;
+   `lib/crtl/include/stdarg.h` fp helper now reads the FP save area, offset 48
+   step 16). The earlier "everything pushed GP" model mismatched the actual SysV
+   call+prologue (floats ride XMM -> FP save area). Test `cvararg_double_b83`.
+4. **`*(&local) = <double>` store width** (`cparser.inc` CNodePointeeTk AN_ADDR
+   case = the operand's own type). lua's `tonumber` macro
+   `(1) ? (*(np) = (o)->n, 1) : 0` with `np = &local` truncated to a 4-byte
+   store. THIS was the actual `print(3.14)` blocker. Test
+   `cderef_addr_local_store_b84`.
+5. **C extern binding to a Pascal float routine kept cdecl** (`cparser.inc`: only
+   mark `ProcCdecl`/`ProcVariadic`/`ProcNamedGP` when the proc is NEWLY
+   C-registered, not when FindProc bound the extern to an existing Pascal proc).
+   `sqrt`/`exp`/`sin`/`ln` resolve case-insensitively to the RTL routines; the C
+   extern had re-marked them cdecl, so the call passed doubles in XMM while the
+   Pascal prologue read them from GP -> `sqrt(16)->0`, `ln(2)->junk`,
+   `pow(2,10)=exp(10*ln2)->exp(0)=1`. Test `cfloat_pascal_bridge_b85`.
+
+Gate: `make test` green + self-host byte-identical (all five are front-end /
+C-only or byte-identical refactors; the ir_codegen.inc r10 store only fires for a
+cdecl aggregate-returning call, of which a Pascal self-build has none).
+
+Out of scope, filed separately:
+- `bug-i386-float-byval-param` — pre-existing i386 backend gap (mandelbrot won't
+  cross-compile to i386; clean compiler fails identically). x86-64/aarch64/arm32
+  float-determinism all green.
+- lua `print(true)` / `print(1<2)` render EMPTY — a boolean->string bridge gap,
+  independent of floats (the comparison itself is correct: `if 1.5<2.5` works).

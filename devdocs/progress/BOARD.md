@@ -32,11 +32,11 @@ _none_
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
 | bug-c-addr-of-unsupported-ir | A | bug | C `&` of certain operands lowers to IR_UNSUPPORTED (codegen crash) | — |
-| bug-c-double-value-model | A | bug | C `double` value model broken — lua floats all garbage | — |
 | bug-c-libc-data-symbol-stdio | A | bug | C stdio must ride pxx syscalls (libc-free), not import libc | — |
 | bug-c-sizeof-string-literal | C | bug | C `sizeof("string literal")` returns pointer size, not array size | — |
 | bug-c-vararg-overflow-area | A | bug | C: 6+ variadic args (overflow area) segfault | — |
 | bug-fpc-seed-helper-ordering-after-lua-c-frontend | A | bug | FPC seed build fails after Lua C frontend helper additions | — |
+| bug-i386-float-byval-param | A | bug | i386 backend: by-value float (Double) parameter unsupported | — |
 | bug-multi-interface-method-corruption | A | bug | Memory/String corruption when calling methods on secondary interfaces | — |
 | bug-object-ref-array-identity-in-method | A | bug | Object-reference array identity lookup fails in Eliah palette icon handler | — |
 | bug-paramless-self-recursion-silent-result-read | A | bug | Paramless self-recursion reads own Result silently — no diagnostic | — |
@@ -133,7 +133,7 @@ _none_
 | feature-mimic-fpc | B | feature | `mimic FPC` compatibility mode | — |
 | feature-string-model-tyfixedstring | B | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (303)
+## done (304)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -150,6 +150,7 @@ _none_
 | bug-builtin-write-case-sensitive | A | bug | Builtin write/writeln matched case-sensitively (only lowercase resolves) | — |
 | bug-c-const-cast-in-array-dim | A | bug | C: `(type)` cast inside a constant expression (array dimension) | — |
 | bug-c-const-eval-bitwise-not | C | bug | C const-eval: `~` (bitwise NOT) yields wrong value | — |
+| bug-c-double-value-model | A | bug | C `double` value model broken — lua floats all garbage | — |
 | bug-c-double-vararg | A | bug | C: double passed as a variadic arg reads 0 | — |
 | bug-c-field-of-call-result | C | bug | C: `f()->field` — field/index of a pointer-returning call result | — |
 | bug-c-field-on-pointer-arithmetic | C | bug | C: `(p + i)->field` (field on a computed pointer) fails / Unsupported | — |
@@ -452,11 +453,11 @@ _none_
 ## Ready (no unmet blocker)
 
 - [A] bug-c-addr-of-unsupported-ir
-- [A] bug-c-double-value-model
 - [A] bug-c-libc-data-symbol-stdio
 - [C] bug-c-sizeof-string-literal
 - [A] bug-c-vararg-overflow-area
 - [A] bug-fpc-seed-helper-ordering-after-lua-c-frontend
+- [A] bug-i386-float-byval-param
 - [A] bug-multi-interface-method-corruption
 - [A] bug-object-ref-array-identity-in-method
 - [A] bug-paramless-self-recursion-silent-result-read
