@@ -84,6 +84,27 @@ declaration policy change.
   `pLockingStyle posixIoMethods defined`. Filed
   [[bug-c-preprocessor-defined-expression-sqlite]].
 
+## M5 update (2026-06-27, session 7): preprocessor directive-join fixed
+
+The presumed `defined(...)` wall was a directive-joining bug, not a missing
+`defined` evaluator. `CPProcessText` joined normal C lines with unbalanced
+parentheses across following physical lines, including lines that began with
+`#if` / `#endif`. sqlite's valid conditional fragment inside
+`if( pLockingStyle == &posixIoMethods ... )` became one invalid C line containing
+`#if defined(__APPLE__)`.
+
+- **FIX 7 (this commit) — don't join C continuation lines across directives.**
+  When the next physical line starts with `#`, the preprocessor now emits the
+  current source line, processes the directive immediately, and lets conditional
+  state handle following lines. Test `cpreproc_defined_directive_join_b100`
+  covers both sqlite's shape and `X && defined(Y)` / `!defined(Y)`.
+- **Verification:** `make compiler/pascal26` self-host byte-identical; b100
+  passes; `--dump-cpp` shows the `pLockingStyle == &posixIoMethods` condition no
+  longer contains the `#if defined(...)` text.
+- **sqlite rerun:** sqlite now advances to
+  `pascal26:33288: error: call to undeclared function: getpid ()`. Filed
+  [[bug-c-crtl-missing-getpid]].
+
 - **Session 2026-06-27d (Track A+C) — control flow + lexer fixed; lua runs real
   programs.** Two more fixes (self-host byte-identical, `make test` green):
   - **FIX 5 (`62c88498`) — global ordinal array with constant-EXPRESSION

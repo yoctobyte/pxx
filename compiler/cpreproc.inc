@@ -1403,13 +1403,14 @@ begin
 end;
 
 procedure CPProcessText(const src, baseDir: AnsiString; depth: Integer);
-var pos, p: Integer; inComment: Boolean; cont: AnsiString;
+var pos, p, q: Integer; inComment, emitted: Boolean; cont: AnsiString;
 begin
   pos := 1;
   inComment := False;
   while pos <= Length(src) do
   begin
     CPReadLine(src, pos, inComment, CPrepLine);
+    emitted := False;
     p := 1;
     while p <= Length(CPrepLine) do
     begin
@@ -1424,9 +1425,31 @@ begin
       while (pos <= Length(src)) and (CPLineParenDepth(CPrepLine) > 0) do
       begin
         CPReadLine(src, pos, inComment, cont);
-        CPrepLine := CPrepLine + ' ' + cont;
+        q := 1;
+        while q <= Length(cont) do
+        begin
+          if not (cont[q] in [' ', #9]) then Break;
+          Inc(q);
+        end;
+        if (q <= Length(cont)) and (cont[q] = '#') then
+        begin
+          if CPActive then
+          begin
+            CPExpandRange(CPrepLine, 1, Length(CPrepLine), 0, CPrepOut);
+            AppendChar(CPrepOut, #10);
+          end;
+          CPDirective(cont, q, Length(cont), depth, baseDir);
+          emitted := True;
+          Break;
+        end
+        else
+          CPrepLine := CPrepLine + ' ' + cont;
       end;
-    if p <= Length(CPrepLine) then
+    if emitted then
+    begin
+      { Already emitted the source line and consumed one directive line. }
+    end
+    else if p <= Length(CPrepLine) then
     begin
       if CPrepLine[p] = '#' then
         CPDirective(CPrepLine, p, Length(CPrepLine), depth, baseDir)

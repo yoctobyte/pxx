@@ -32,7 +32,7 @@ _none_
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
 | bug-c-addr-of-global-array-element-const-index-wrong-offset | A | bug | C: `&global_array[const]` global pointer initializer computes wrong offset | — |
-| bug-c-preprocessor-defined-expression-sqlite | A | bug | C: preprocessor `defined(...)` expression leaks into sqlite token stream | — |
+| bug-c-crtl-missing-getpid | B | bug | C: crtl `unistd.h` misses `getpid` | — |
 | bug-c-sizeof-array-yields-element-size | A | bug | C: `sizeof(array)` yields element size, not total array size | — |
 | bug-capital-write-undefined-in-compiler-selfbuild | A | bug | Capital `Write`/`WriteLn` rejected in some contexts (compiler self-build), works standalone | — |
 | bug-i386-float-byval-param | A | bug | i386 backend: by-value float (Double) parameter unsupported | — |
@@ -135,7 +135,7 @@ _none_
 | feature-mimic-fpc | B | feature | `mimic FPC` compatibility mode | — |
 | feature-string-model-tyfixedstring | B | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (326)
+## done (327)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -173,6 +173,7 @@ _none_
 | bug-c-nested-anon-union-struct | A | bug | C: nested/anonymous struct-or-union member makes the whole struct opaque | — |
 | bug-c-packed-aligned-ignored | A | bug | C `__attribute__((packed))` / `aligned` ignored → field-offset drift | — |
 | bug-c-postincrement-as-rvalue | C | bug | C: post-increment/decrement used as a VALUE (`(p++)->f`, `x = a[i++]`) | — |
+| bug-c-preprocessor-defined-expression-sqlite | A | bug | C: preprocessor `defined(...)` expression leaks into sqlite token stream | — |
 | bug-c-quoted-include-search-path | A | bug | C quoted includes do not search the including file directory | — |
 | bug-c-sizeof-string-literal | C | bug | C `sizeof("string literal")` returns pointer size, not array size | — |
 | bug-c-string-literal-to-pointer-prefix | C | bug | C: string literal assigned to a `char *` points at the Pascal length-prefix | — |
@@ -478,7 +479,7 @@ _none_
 ## Ready (no unmet blocker)
 
 - [A] bug-c-addr-of-global-array-element-const-index-wrong-offset
-- [A] bug-c-preprocessor-defined-expression-sqlite
+- [B] bug-c-crtl-missing-getpid
 - [A] bug-c-sizeof-array-yields-element-size
 - [A] bug-capital-write-undefined-in-compiler-selfbuild
 - [A] bug-i386-float-byval-param
