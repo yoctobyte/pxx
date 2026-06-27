@@ -1052,3 +1052,7 @@ default-PAL-dir behaviour), so real C programs build without the manual `-I`.
 ## M5 update: default crtl include path DONE
 
 The `-Ilib/crtl/include` requirement is resolved — [[feature-c-default-crtl-include-path]] auto-searches pxx's crtl headers for `.c` inputs (ExeDir+CWD anchored), `-nostdinc` opts out. sqlite + the C tests now build with no manual `-I`. The real M5 wall is the function-pointer struct field (xAltLocaltime) — NEXT.
+
+## M5 update: fn-ptr struct member (layout + call) DONE
+
+Inline `RET (*name)(params)` struct members now lay out + call correctly (both [[bug-c-function-pointer-struct-member]] and [[bug-c-call-inline-function-pointer-struct-member]] done). sqlite passes the `xAltLocaltime` call; **next wall:** `pascal26:20679: error: expected C expression`.

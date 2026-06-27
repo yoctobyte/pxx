@@ -62,3 +62,19 @@ cast/comparison context for the sqlite line.
 - 2026-06-27 - Split from the layout ticket once registration landed. Typedef
   path works; inline path mis-lowers (36/85). Diagnosis points at the inline
   branch's field setup vs the normal declarator path.
+
+## DONE 2026-06-27
+
+Root: the inline-member name's token off/len was captured into the
+CTypeFnPtrName* globals during the `(*name)` scan, but ParseCDeclType recurses to
+parse the parameter list and that recursion resets those globals — so the field
+registered with off/len 0, FindUField(name) missed, and the access fell back to
+offset-0 / tyInteger / no proc sig (8-byte address truncated to 4, call never
+lowered). Fix: keep the off/len in locals and assign the globals after the param
+recursion (mirroring fpName). Same root as the layout ticket — the registration
+was right, the name reference was clobbered.
+
+c.fp(41) / p->fp(41) / (*c.fp)(41) all return 42; typedef path unchanged.
+Regression test `test/cfnptr_struct_member.c`. Full gate green, byte-identical.
+sqlite advances past the xAltLocaltime call to its next wall
+(`pascal26:20679: expected C expression`).
