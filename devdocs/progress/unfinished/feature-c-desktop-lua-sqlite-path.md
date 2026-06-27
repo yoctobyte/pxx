@@ -240,6 +240,37 @@ resolved value as an expression.
   block-scope `static const u8 trans[8][8] = { ... };`. Filed
   [[bug-c-local-static-const-multidim-array-init-sqlite]].
 
+## M5 update (2026-06-27, session 13): local static 2D initializer
+
+SQLite's `sqlite3_complete` uses a block-scope transition table:
+
+```c
+static const u8 trans[8][8] = {
+  { 1, 0, 2, 3, 4, 2, 2, 2, },
+  ...
+};
+state = trans[state][token];
+```
+
+The local declaration parser consumed only the first `[]`, leaving the second
+dimension in the statement stream. After dimension parsing, the nested brace
+rows also needed flattening, and chained symbol subscripts needed to lower to one
+flat N-D index.
+
+- **FIX 14 (this commit) — local C multidimensional ordinal arrays.**
+  `ParseCLocalDeclAST` now consumes all local array dimensions, allocates
+  flattened row-major storage, records `SymArrNDims` metadata, and flattens
+  nested brace initializers for ordinal arrays. `ParseCPostfix` now folds
+  `a[i][j]` on symbol-backed N-D arrays through the existing `BuildFlatNDIndex`
+  helper. Test `clocal_static_const_2d_init_b107`.
+- **Verification:** `make compiler/pascal26` self-host byte-identical; b107
+  passes.
+- **sqlite rerun:** sqlite advances past `sqlite3_complete` and now reaches
+  `pascal26:140250: error: unexpected token ()` at
+  `LOGFUNC_t xLog = __builtin_va_arg(ap, LOGFUNC_t);`, where `LOGFUNC_t` is a
+  block-scope function-pointer typedef. Filed
+  [[bug-c-va-arg-local-fnptr-typedef-sqlite]].
+
 - **Session 2026-06-27d (Track A+C) — control flow + lexer fixed; lua runs real
   programs.** Two more fixes (self-host byte-identical, `make test` green):
   - **FIX 5 (`62c88498`) — global ordinal array with constant-EXPRESSION

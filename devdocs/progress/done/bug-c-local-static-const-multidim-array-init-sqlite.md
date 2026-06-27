@@ -1,11 +1,12 @@
 # C: local static const multidimensional array initializer in sqlite
 
 - **Type:** bug (C frontend / local static initializer) — Track C
-- **Status:** backlog
-- **Owner:** unassigned
+- **Status:** done
+- **Owner:** Track CA
 - **Found / Opened:** 2026-06-27, M5 sqlite bring-up
   ([[feature-c-desktop-lua-sqlite-path]]), after external function-address
   values were fixed.
+- **Closed:** 2026-06-27
 
 ## Symptom
 
@@ -47,9 +48,32 @@ begins. This looks like a missing block-scope `static const` multidimensional
 array materialization path, distinct from earlier file-scope and record-field
 multidimensional array fixes.
 
-## Acceptance
+## Fix
 
-- Block-scope `static const` multidimensional arrays with nested brace
-  initializers parse and materialize correctly.
-- Add a focused regression using sqlite's `u8 trans[8][8]` shape.
-- sqlite advances past `sqlite3_complete`.
+`ParseCLocalDeclAST` now consumes all bracket dimensions for block-scope C array
+declarations, allocates multidimensional arrays as flattened row-major storage,
+and records the usual `SymArrNDims`/`SymArrDimSpan` metadata. Nested brace
+initializers for ordinal multidimensional arrays are flattened in encounter
+order and emitted as declaration-time element assignments.
+
+The C postfix parser now recognizes chained subscripts on symbol-backed
+multidimensional arrays and lowers `a[i][j]` to a single `AN_INDEX` with the
+existing flat N-D index helper.
+
+## Regression
+
+Added `test/clocal_static_const_2d_init_b107.c`, wired into `make test-core`.
+
+## Result
+
+sqlite advances past `sqlite3_complete` and now stops at:
+
+```text
+Expected: ), but got: LOGFUNC_t (Kind: 1, Line: 140250)
+  near: xLog  __builtin_va_arg  ap  >>> LOGFUNC_t
+pascal26:140250: error: unexpected token ()
+```
+
+The new wall is `__builtin_va_arg(ap, LOGFUNC_t)` where `LOGFUNC_t` is a
+block-scope function-pointer typedef. Filed
+[[bug-c-va-arg-local-fnptr-typedef-sqlite]].

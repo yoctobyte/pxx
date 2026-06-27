@@ -1064,7 +1064,7 @@ function ParseCPostfix: Integer;
 var node, idxExpr, inode, dnode, fnode, baseFld, recId, fldOff, fldLen: Integer;
     argHead, argTail, argNode, valNode, sig, calleeNode2: Integer;
     rowStride, strideLit, mulNode: Integer;
-    ndimsF, flatNode, spanD, ndi: Integer;
+    ndimsF, flatNode, spanD, ndi, nIdx: Integer;
     done: Boolean; fieldName: AnsiString;
 begin
   node := ParseCPrimary;
@@ -1076,7 +1076,28 @@ begin
       Next;
       idxExpr := ParseCExpr;
       Expect(tkRBrack, ']');
-      if (ASTKind[node] = AN_FIELD) and
+      if (ASTKind[node] = AN_IDENT) and NodeArrNDInfo(node) and
+         (CurTok.Kind = tkLBrack) then
+      begin
+        { Local/global multidimensional C array `a[i][j]`: flatten the chained
+          subscripts to one AN_INDEX over the row-major storage. }
+        NDIdxNode[0] := idxExpr;
+        nIdx := 1;
+        while (CurTok.Kind = tkLBrack) and (nIdx < NDInfoNDims) do
+        begin
+          Next;
+          NDIdxNode[nIdx] := ParseCExpr;
+          Inc(nIdx);
+          Expect(tkRBrack, ']');
+        end;
+        if nIdx <> NDInfoNDims then Error('wrong number of array subscripts');
+        inode := AllocNode(AN_INDEX);
+        ASTLeft[inode] := node;
+        ASTRight[inode] := BuildFlatNDIndex(nIdx);
+        ASTTk[inode] := Ord(Syms[ASTIVal[node]].ElemType);
+        node := inode;
+      end
+      else if (ASTKind[node] = AN_FIELD) and
          (RecFieldArrNDims(ResolveNodeRec(ASTLeft[node]), GetASTIdentName(node)) >= 2) then
       begin
         { Multidim array struct field `T m[A][B]..`. The generic per-subscript
@@ -1865,7 +1886,9 @@ var baseTk, declTk, scalarTk: TTypeKind;
     hadStar: Boolean;
     name: AnsiString;
     inode, idxLit, ei, nArrElems, brDepth: Integer;
+    dimCount, dimVal, flatLen, di: Integer;
     arrElems: array[0..255] of Integer;
+    dimSpan: array[0..MAX_ARR_DIMS-1] of Integer;
 begin
   baseTk := ParseCDeclType;   { specifiers + first declarator's pointer suffix }
   { Capture the pointer element type/record now — ParseCExpr below must not
@@ -1927,12 +1950,34 @@ begin
     name := CurTok.SVal; Next;
     if CurTok.Kind = tkLBrack then
     begin
-      { fixed array  T name[N]  — N is a constant expression (literal/enum/macro);
-        an unsized `[]` (arrLen=-1) is sized from the initializer below. }
-      Next;
-      if CurTok.Kind = tkRBrack then arrLen := -1
-      else arrLen := CEvalConstExpr;
-      Expect(tkRBrack, ']');
+      { fixed array  T name[N][M]...  — dimensions are constant expressions.
+        Storage is flattened row-major for >=2 dimensions and tagged with
+        SymArrNDims so chained indexing can rebuild the flat element index. An
+        unsized 1-D `[]` (arrLen=-1) is sized from the initializer below. }
+      dimCount := 0;
+      flatLen := 1;
+      while CurTok.Kind = tkLBrack do
+      begin
+        Next;
+        if CurTok.Kind = tkRBrack then dimVal := -1
+        else dimVal := CEvalConstExpr;
+        Expect(tkRBrack, ']');
+        if dimCount >= MAX_ARR_DIMS then Error('too many C array dimensions');
+        dimSpan[dimCount] := dimVal;
+        Inc(dimCount);
+      end;
+      if dimCount = 1 then
+        arrLen := dimSpan[0]
+      else
+      begin
+        flatLen := 1;
+        for di := 0 to dimCount - 1 do
+        begin
+          if dimSpan[di] < 1 then dimSpan[di] := 1;
+          flatLen := flatLen * dimSpan[di];
+        end;
+        arrLen := flatLen;
+      end;
       { An array of structs needs the element record id so AllocArray sizes the
         slot by RecSize, not a default — `struct V a[N]; a[i].f` was using the
         wrong stride. }
@@ -1947,7 +1992,35 @@ begin
         over-long lists fall back to the balanced-brace skip below. }
       nArrElems := 0;
       if (CurTok.Kind = tkAssign) and (declTk <> tyRecord) and
-         (Tokens[TokPos].Kind = tkBegin) then
+         (Tokens[TokPos].Kind = tkBegin) and (dimCount >= 2) and
+         (declTk <> tyPointer) and TypeIsOrdinal(declTk) then
+      begin
+        Next; Next;   { consume the assign then the open brace }
+        brDepth := 1;
+        while (brDepth > 0) and (CurTok.Kind <> tkEOF) do
+        begin
+          if CurTok.Kind = tkBegin then
+          begin
+            Inc(brDepth);
+            Next;
+          end
+          else if CurTok.Kind = tkEnd then
+          begin
+            Dec(brDepth);
+            Next;
+          end
+          else if CurTok.Kind = tkComma then
+            Next
+          else
+          begin
+            if nArrElems > 255 then Error('too many C array initializer elements');
+            arrElems[nArrElems] := ParseCExpr;
+            Inc(nArrElems);
+          end;
+        end;
+      end
+      else if (CurTok.Kind = tkAssign) and (declTk <> tyRecord) and
+         (Tokens[TokPos].Kind = tkBegin) and (dimCount <= 1) then
       begin
         Next; Next;   { consume the assign then the open brace }
         while (CurTok.Kind <> tkEnd) and (CurTok.Kind <> tkEOF) do
@@ -1975,8 +2048,17 @@ begin
       begin
         if nArrElems > 0 then arrLen := nArrElems else arrLen := 1;
       end
-      else if nArrElems > arrLen then arrLen := nArrElems;
+      else if (dimCount <= 1) and (nArrElems > arrLen) then arrLen := nArrElems;
       idx := AllocArray(name, declTk, 0, arrLen - 1);
+      if dimCount >= 2 then
+      begin
+        SymArrNDims[idx] := dimCount;
+        for di := 0 to dimCount - 1 do
+        begin
+          SymArrDimLo[idx * MAX_ARR_DIMS + di] := 0;
+          SymArrDimSpan[idx * MAX_ARR_DIMS + di] := dimSpan[di];
+        end;
+      end;
       if declTk = tyPointer then
       begin
         Syms[idx].PtrElemTk := IntToTypeKind(declElemTk);

@@ -532,6 +532,8 @@ test-core: $(COMPILER)
 	/tmp/cfn_return_fnptr_b10526; test "$$?" = "42"
 	./$(COMPILER) test/cexternal_func_addr_b106.c /tmp/cexternal_func_addr_b10626
 	/tmp/cexternal_func_addr_b10626; test "$$?" = "42"
+	./$(COMPILER) test/clocal_static_const_2d_init_b107.c /tmp/clocal_static_const_2d_init_b10726
+	/tmp/clocal_static_const_2d_init_b10726; test "$$?" = "42"
 	./$(COMPILER) -Itest/cinc/inc test/cinc/cinc_main.c /tmp/cinc_main26
 	test "$$(/tmp/cinc_main26)" = "$$(printf 'local-ok\ninc-ok')"
 	./$(COMPILER) test/test_declared_directive.pas /tmp/test_declared_directive26
