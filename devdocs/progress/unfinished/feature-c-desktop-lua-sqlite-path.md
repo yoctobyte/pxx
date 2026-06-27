@@ -1,7 +1,44 @@
 # C desktop path — compile real portable C (tiny-regex → lua → sqlite)
 
 - **Type:** feature (track-C milestone path)
-- **Status:** backlog (active arc — lua core **29/34 files parse clean (85%)**; see logs)
+- **Status:** backlog (active arc — **pxx-compiled lua RUNS control flow,
+  recursion, string lib; only the 3-value generic-for protocol remains**).
+- **Session 2026-06-27d (Track A+C) — control flow + lexer fixed; lua runs real
+  programs.** Two more fixes (self-host byte-identical, `make test` green):
+  - **FIX 5 (`62c88498`) — global ordinal array with constant-EXPRESSION
+    elements was zero-initialized.** `CBraceFlatIntInitCountAt` (cparser.inc)
+    bailed on the first `tkLParen`/`tkIdent`, so an init list whose elements were
+    const expressions (parens, shifts, enum/macro constants) fell through to
+    BSS-zero. The materializer already folds with `CEvalConstExpr`; only the gate
+    was too strict — relaxed to accept const-expr tokens (still bail on tkBegin /
+    tkString). This was lua's `const lu_byte luaP_opmodes[] = { opmode(...), ...}`
+    (each elem = `(((mm)<<7)|...|(iABC))`). Zeroed → `getOpMode`/`testTMode`
+    returned 0 for every opcode → `getjumpcontrol` mis-identified jump controls →
+    `negatecondition`'s `SETARG_k` cleared bit 15 of fresh `OP_JMP`s, corrupting
+    their sJ offset and crashing lua's compiler on every real conditional. (This
+    was the exact bit-15 corruption traced in 27c.) Test b77. **Unblocked
+    if/else + while.**
+  - **FIX 6 (`e6459310`) — C lexer didn't decode `\a \b \f \v` escapes**, falling
+    through to the literal letter (`'\f'` == `'f'` == 102, not 12). lua's lexer
+    `case '\f':` then matched the letter `f`, eating the leading `f` of every Lua
+    identifier starting with it: `"for"` lexed as `"or"` → reserved table → TK_OR
+    → all numeric for-loops broke (the "near 'or'"/"near '='" errors). Added
+    \a=7 \b=8 \f=12 \v=11 (+ cross-quote) to both clexer escape handlers
+    (clexer.inc string @~318, char @~348). Test b78. **Unblocked for / false /
+    function.**
+  - **VERIFIED WORKING** (pxx-compiled lua, `luaL_dostring`): `print`, int
+    arithmetic, `if/else`, `while`, **numeric `for`** (sum 1..10 = 55),
+    **recursion** (fib(20) = 6765), table set/get/constructor/`#`,
+    **`string.gmatch`** generic-for, `string.format` (`%d %s %x`). 10 stdlibs open.
+  - **NEXT BLOCKER — 3-value generic-for protocol (`ipairs`/`pairs`).**
+    `for i,v in ipairs({8,9}) do … end` → runtime `bad argument #2 to 'for
+    iterator' (number expected, got nil)`; `pairs` → `#1 … (table expected, got
+    string)`. The generic-for `f(s, ctl)` call passes the wrong values as the
+    state `s` / control `ctl` registers — they're shifted/garbage. `gmatch` works
+    because its closure ignores s/ctl. So it's the OP_TFORCALL/OP_TFORLOOP
+    register setup (lparser `forlist`/`forbody` or lvm) miscompiled by pxx — a
+    register-window / call-arg layout bug, distinct from the prior fixes. Also
+    still open: float `2^8`/`%f` garbage (known float gap).
 - **Session 2026-06-27c (Track A+C) — pxx-compiled lua RUNS real Lua.** Committed
   `b00ecae5`. The GC allgc-cycle blocker from 27b was the `(*p)->field`
   double-deref bug: **FIX 4** — `*p` (an `AN_DEREF` whose value is a pointer,
@@ -33,6 +70,27 @@
     lua `lcode.c` jump-patch + `lparser.c` `ifstat/whilestat/enterblock` under
     pxx to find which op corrupts. Likely another pointer/struct-on-C-stack
     codegen bug (BlockCnt linked via `fs->bl`, or a Proto/jump-list issue).
+    - **DEEP TRACE (27c, narrowed to one bit).** For `if 3>2 then return 1 else
+      return 2 end`, the compiled `code[]` is: `0:OP_EQI 1:OP_LOADI 2:? 3:OP_JMP
+      4:OP_LOADI 5:? 6:OP_JMP`. The false-jump list head = pc 3. `code[3]` is a
+      fresh `OP_JMP` whose offset should be `NO_JUMP=-1` but reads **-257**;
+      `code[6]` (also OP_JMP) correctly reads -1. getjump(3) → -253 (=4+(-257)) →
+      patchlistaux walks to pc -253 → `fixjump`/`getjump` OOB → segfault.
+      Comparing raw words: `code[3]` = `0x7FFF7F38`, but a correct
+      `CREATE_sJ(OP_JMP, NO_JUMP+OFFSET_sJ=0xFFFFFE, k=0)` = `0x7FFFFF38`. **Only
+      bit 15 differs** (cleared). Bit 15 = `POS_k` (= POS_A+SIZE_A+1? no: POS_k=15)
+      and is *inside* the 25-bit sJ field (sJ bit 8 = value 256; -257 vs -1 is
+      exactly a 256 delta). So a single bit (POS_k/sJ-bit-8) of this JMP is
+      getting cleared. **RULED OUT:** `CREATE_sJ(*,0xFFFFFE,0)` round-trips to -1
+      in isolation (opcode value doesn't matter); expdesc union layout is correct
+      (sz=24, t@16, f@20, no overlap). **Odd clue:** instrumenting `luaK_code`'s
+      write to dump any `i` with `GET_OPCODE(i)==56` did **NOT** fire for these
+      JMPs — so the JMP is either NOT created via the normal `luaK_code` path, or
+      is born with non-56 opcode bits and acquires op 56 + a cleared bit-15 later
+      (a stray write to `code[3]`, e.g. a mis-targeted `SETARG_*`/`fixjump`, or a
+      `luaM_growvector` realloc copy issue). NEXT: bisect who writes `code[3]`
+      between birth and the patch — instrument every `fs->f->code[pc] = …` /
+      `SETARG_sJ`/`SETARG_k` for pc==3.
   - **Also still open:** float `2^8` / `%f` print garbage (known float gap,
     separate from control flow).
   - **Harness:** `pxx_hostamalg.c` `main` now runs a list of `luaL_dostring`
