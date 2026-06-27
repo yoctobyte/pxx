@@ -1,7 +1,7 @@
 # FPC bootstrap no longer compiles compiler source
 
 - **Type:** bug (Track A / bootstrap hygiene)
-- **Status:** backlog
+- **Status:** done
 - **Owner:** —
 - **Found / Opened:** 2026-06-27, while validating an unrelated C entry fix.
 
@@ -46,3 +46,7 @@ by FPC 3.2.2:
 - The self-host fixedpoint remains byte-identical after the cleanup.
 - Add or keep a gate that catches accidental FPC-incompatible compiler-source
   edits when bootstrap hygiene matters.
+
+## Resolution
+
+- 2026-06-27 - DUP of [[bug-fpc-seed-helper-ordering-after-lua-c-frontend]] (filed same day, same two root errors: `TypeSize` forward + missing `;` in `CompilePendingGlobalInits`). Fixed there in commit 3263ec1f: `forwards.inc` (FPC-gated) + two statement separators. `make bootstrap` green end-to-end; self-host byte-identical. The "add a gate" acceptance item → [[feature-require-forward-strict-mode]] (the `--strict` umbrella).
