@@ -33,7 +33,6 @@ _none_
 | --- | --- | --- | --- | --- |
 | bug-c-addr-of-global-array-element-const-index-wrong-offset | A | bug | C: `&global_array[const]` global pointer initializer computes wrong offset | — |
 | bug-c-sizeof-array-yields-element-size | A | bug | C: `sizeof(array)` yields element size, not total array size | — |
-| bug-c-sqlite-math-libm-not-linked | A | bug | C: sqlite math functions (`fabs`, …) get no libm DT_NEEDED | — |
 | bug-capital-write-undefined-in-compiler-selfbuild | A | bug | Capital `Write`/`WriteLn` rejected in some contexts (compiler self-build), works standalone | — |
 | bug-i386-float-byval-param | A | bug | i386 backend: by-value float (Double) parameter unsupported | — |
 | bug-multi-interface-method-corruption | A | bug | Memory/String corruption when calling methods on secondary interfaces | — |
@@ -99,6 +98,7 @@ _none_
 | feature-xtensa-stack-args-over-6-words | A | feature | xtensa: support calls/definitions with more than 6 parameter words | — |
 | feature-zero-init-contract | A | feature | Zero-init contract — one library-owned managed-slot zeroing guarantee | — |
 | meta-track-b-compiler-wishlist | B | meta | Track-B wishlist — compiler features most wanted to unblock libraries + demos | — |
+| task-sqlite-libc-free-runtime-bringup | B | task | sqlite libc-free runtime: pull crtl math/string + the OS/VFS bridge | — |
 | track-a-c-frontend-shared-ir-touchpoints | A | track | C frontend — shared-IR touch points that belong to Track A | — |
 
 ## rainy-day (19)
@@ -490,7 +490,6 @@ _none_
 
 - [A] bug-c-addr-of-global-array-element-const-index-wrong-offset
 - [A] bug-c-sizeof-array-yields-element-size
-- [A] bug-c-sqlite-math-libm-not-linked
 - [A] bug-capital-write-undefined-in-compiler-selfbuild
 - [A] bug-i386-float-byval-param
 - [A] bug-multi-interface-method-corruption
@@ -553,6 +552,7 @@ _none_
 - [A] feature-xtensa-stack-args-over-6-words
 - [A] feature-zero-init-contract
 - [B] meta-track-b-compiler-wishlist
+- [B] task-sqlite-libc-free-runtime-bringup
 - [A] track-a-c-frontend-shared-ir-touchpoints
 
 ## Leverage (tickets each one unblocks)
