@@ -1,7 +1,7 @@
 # crtl: `fopen`/`fclose`/`fseek`/`ftell` declared but not defined (no file open)
 
 - **Type:** bug / feature gap (lib/crtl — **Track B**, library implementation)
-- **Status:** backlog
+- **Status:** done
 - **Found / Opened:** 2026-06-27 (Track A+C, while building the `make test-lua`
   suite — the runner had to read the program from stdin because there is no way
   to open a file)
@@ -51,3 +51,15 @@ arc). Extend the same way:
 
 Gate: a `crtl` C test that writes a temp file, reopens it, reads it back; plus
 `make test-lua` still green.
+
+## Log
+
+- 2026-06-27 — Implemented in working tree (commit pending): `pxxcio` now bridges
+  `__pxx_open`/`__pxx_close`/`__pxx_seek`/`__pxx_remove`/`__pxx_rename` to PAL;
+  `lib/crtl/src/stdio.c` defines `fopen`/`freopen`/`fclose`/`fseek`/`ftell`/
+  `rewind`, POSIX `read`/`write`/`close`/`lseek`, `remove`/`rename`, a small
+  static stream pool, and a minimal `errno`. Regression:
+  `test/cfile_stdio_b87.c` writes, seeks, reopens, reads, rewinds, closes, and
+  removes a temp file. Verified with
+  `/tmp/pascal26-build -Ilib/crtl/include -Ilib/crtl/src test/cfile_stdio_b87.c
+  /tmp/cfile_stdio_b87_build && /tmp/cfile_stdio_b87_build` returning 42.

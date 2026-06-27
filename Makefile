@@ -490,6 +490,10 @@ test-core: $(COMPILER)
 	/tmp/cfloat_pascal_bridge_b8526; test "$$?" = "42"
 	./$(COMPILER) test/csizeof_string_literal_b86.c /tmp/csizeof_string_literal_b8626
 	/tmp/csizeof_string_literal_b8626; test "$$?" = "42"
+	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src test/cfile_stdio_b87.c /tmp/cfile_stdio_b8726
+	/tmp/cfile_stdio_b8726; test "$$?" = "42"
+	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src test/csocket_loopback_b88.c /tmp/csocket_loopback_b8826
+	/tmp/csocket_loopback_b8826; test "$$?" = "42"
 	./$(COMPILER) -Itest/cinc/inc test/cinc/cinc_main.c /tmp/cinc_main26
 	test "$$(/tmp/cinc_main26)" = "$$(printf 'local-ok\ninc-ok')"
 	./$(COMPILER) test/test_declared_directive.pas /tmp/test_declared_directive26

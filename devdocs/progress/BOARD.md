@@ -27,14 +27,14 @@ _none_
 | --- | --- | --- | --- | --- |
 | feature-c-runtime-library | C | feature | C runtime/library layer (`lib/crtl`) plus direct C-library packages | feature-c-source-frontend |
 
-## backlog (68)
+## backlog (69)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
 | bug-c-addr-of-unsupported-ir | A | bug | C `&` of certain operands lowers to IR_UNSUPPORTED (codegen crash) | — |
-| bug-c-crtl-fopen-missing | B | bug | crtl: `fopen`/`fclose`/`fseek`/`ftell` declared but not defined (no file open) | — |
 | bug-c-global-double-init | A | bug | C: global `double`/`float` initializer stored as 0 | — |
 | bug-c-libc-data-symbol-stdio | A | bug | C stdio must ride pxx syscalls (libc-free), not import libc | — |
+| bug-c-typedef-return-corrupts-entry | C | bug | C: typedef return type can corrupt program entry call | — |
 | bug-c-vararg-overflow-area | A | bug | C: 6+ variadic args (overflow area) segfault | — |
 | bug-fpc-seed-helper-ordering-after-lua-c-frontend | A | bug | FPC seed build fails after Lua C frontend helper additions | — |
 | bug-i386-float-byval-param | A | bug | i386 backend: by-value float (Double) parameter unsupported | — |
@@ -43,6 +43,7 @@ _none_
 | bug-paramless-self-recursion-silent-result-read | A | bug | Paramless self-recursion reads own Result silently — no diagnostic | — |
 | bug-pointer-deref-depth-over-2 | A | bug | Pointer dereference collapses past depth 2 (Pascal `P^^^` / C `***p`) | — |
 | chore-inc-to-units | A | chore | `.inc` → real `.pas` units refactor | — |
+| chore-repin-c-stdio-pal-bridge | A/C | chore | Re-pin stable for C stdio/socket PAL bridge | — |
 | chore-runtime-emission-size | A | chore | Finer runtime-support emission (code size) | — |
 | feature-arm32-large-aggregate-result | A | feature | arm32: support record function results larger than 4 param words (sret) | — |
 | feature-c-header-import-complex | C | feature | Import C headers for complex libraries (glib/GTK-grade) | — |
@@ -134,7 +135,7 @@ _none_
 | feature-mimic-fpc | B | feature | `mimic FPC` compatibility mode | — |
 | feature-string-model-tyfixedstring | B | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (305)
+## done (307)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -151,6 +152,7 @@ _none_
 | bug-builtin-write-case-sensitive | A | bug | Builtin write/writeln matched case-sensitively (only lowercase resolves) | — |
 | bug-c-const-cast-in-array-dim | A | bug | C: `(type)` cast inside a constant expression (array dimension) | — |
 | bug-c-const-eval-bitwise-not | C | bug | C const-eval: `~` (bitwise NOT) yields wrong value | — |
+| bug-c-crtl-fopen-missing | B | bug | crtl: `fopen`/`fclose`/`fseek`/`ftell` declared but not defined (no file open) | — |
 | bug-c-double-value-model | A | bug | C `double` value model broken — lua floats all garbage | — |
 | bug-c-double-vararg | A | bug | C: double passed as a variadic arg reads 0 | — |
 | bug-c-field-of-call-result | C | bug | C: `f()->field` — field/index of a pointer-returning call result | — |
@@ -291,6 +293,7 @@ _none_
 | feature-bignum-library | B | feature | Bignum library — arbitrary-precision integers (deterministic test app) | — |
 | feature-binary-integer-literals | A | feature | feature: binary integer literals (`%1010`) | — |
 | feature-bochan-eduth | B | feature | bochan + eduth — headless test driver + validator for garin | — |
+| feature-c-crtl-socket-pal-bridge | B | feature | crtl: BSD socket wrappers over PAL IPv4 sockets | — |
 | feature-class-is-as | A | feature | `is` / `as` / `Supports` — runtime class type-tests | — |
 | feature-class-variables | A | feature | feature: class variables (`class var`) | — |
 | feature-compiler-search-path-pcl | A | feature | feature-compiler-search-path-pcl (Track A) | — |
@@ -455,9 +458,9 @@ _none_
 ## Ready (no unmet blocker)
 
 - [A] bug-c-addr-of-unsupported-ir
-- [B] bug-c-crtl-fopen-missing
 - [A] bug-c-global-double-init
 - [A] bug-c-libc-data-symbol-stdio
+- [C] bug-c-typedef-return-corrupts-entry
 - [A] bug-c-vararg-overflow-area
 - [A] bug-fpc-seed-helper-ordering-after-lua-c-frontend
 - [A] bug-i386-float-byval-param
@@ -466,6 +469,7 @@ _none_
 - [A] bug-paramless-self-recursion-silent-result-read
 - [A] bug-pointer-deref-depth-over-2
 - [A] chore-inc-to-units
+- [A/C] chore-repin-c-stdio-pal-bridge
 - [A] chore-runtime-emission-size
 - [A] feature-arm32-large-aggregate-result
 - [C] feature-c-header-import-complex

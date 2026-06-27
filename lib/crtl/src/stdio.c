@@ -20,11 +20,32 @@
 
 #include <stdarg.h>
 #include <stddef.h>
+#include <errno.h>
+
+#ifndef EOF
+#define EOF (-1)
+#endif
+#ifndef SEEK_SET
+#define SEEK_SET 0
+#endif
+#ifndef SEEK_CUR
+#define SEEK_CUR 1
+#endif
+#ifndef SEEK_END
+#define SEEK_END 2
+#endif
 
 /* libc-free byte sink: write `n` bytes of `buf` to fd. Provided by the platform
    (posix syscall / ESP-IDF) the same way Pascal's RTL IO is. */
 extern long __pxx_write(int fd, const void *buf, unsigned long n);
 extern long __pxx_read(int fd, void *buf, unsigned long n);
+extern int __pxx_open(const char *path, int flags, int mode);
+extern int __pxx_close(int fd);
+extern long __pxx_seek(int fd, long offset, int whence);
+extern int __pxx_remove(const char *path);
+extern int __pxx_rename(const char *oldPath, const char *newPath);
+
+int errno;
 
 /* ---- FILE + the standard streams ------------------------------------------ */
 
@@ -32,16 +53,29 @@ struct PxxCrtlFile {
   int fd;
   int err;
   int eof;
+  int heap;
 };
 typedef struct PxxCrtlFile FILE;
 
-static FILE __crtl_stdin  = { 0, 0, 0 };
-static FILE __crtl_stdout = { 1, 0, 0 };
-static FILE __crtl_stderr = { 2, 0, 0 };
+static FILE __crtl_stdin  = { 0, 0, 0, 0 };
+static FILE __crtl_stdout = { 1, 0, 0, 0 };
+static FILE __crtl_stderr = { 2, 0, 0, 0 };
+static FILE __crtl_files[16];
 
 FILE *stdin  = &__crtl_stdin;
 FILE *stdout = &__crtl_stdout;
 FILE *stderr = &__crtl_stderr;
+
+static FILE *__crtl_alloc_file(void) {
+  int i;
+  for (i = 0; i < 16; i++) {
+    if (!__crtl_files[i].heap) {
+      __crtl_files[i].heap = 1;
+      return &__crtl_files[i];
+    }
+  }
+  return 0;
+}
 
 /* ---- format engine -------------------------------------------------------- */
 
@@ -462,6 +496,108 @@ char *fgets(char *s, int n, FILE *stream) {
   s[i] = 0;
   return s;
 }
+
+/* ---- file open / positioning --------------------------------------------- */
+
+#define CRTL_O_RDONLY 0
+#define CRTL_O_WRONLY 1
+#define CRTL_O_RDWR   2
+#define CRTL_O_CREAT  64
+#define CRTL_O_TRUNC  512
+#define CRTL_O_APPEND 1024
+
+static int __crtl_mode_flags(const char *mode, int *flags) {
+  int plus = 0;
+  const char *p;
+  if (!mode || !mode[0]) return -1;
+  for (p = mode + 1; *p; p++) if (*p == '+') plus = 1;
+  if (mode[0] == 'r') {
+    *flags = plus ? CRTL_O_RDWR : CRTL_O_RDONLY;
+    return 0;
+  }
+  if (mode[0] == 'w') {
+    *flags = (plus ? CRTL_O_RDWR : CRTL_O_WRONLY) | CRTL_O_CREAT | CRTL_O_TRUNC;
+    return 0;
+  }
+  if (mode[0] == 'a') {
+    *flags = (plus ? CRTL_O_RDWR : CRTL_O_WRONLY) | CRTL_O_CREAT | CRTL_O_APPEND;
+    return 0;
+  }
+  return -1;
+}
+
+FILE *fopen(const char *path, const char *mode) {
+  int flags, fd;
+  FILE *f;
+  if (__crtl_mode_flags(mode, &flags) < 0) { errno = EINVAL; return 0; }
+  fd = __pxx_open(path, flags, 438);
+  if (fd < 0) { errno = -fd; return 0; }
+  f = __crtl_alloc_file();
+  if (!f) { __pxx_close(fd); errno = ENOMEM; return 0; }
+  f->fd = fd;
+  f->err = 0;
+  f->eof = 0;
+  return f;
+}
+
+FILE *freopen(const char *path, const char *mode, FILE *stream) {
+  int flags, fd;
+  if (!stream) { errno = EINVAL; return 0; }
+  if (__crtl_mode_flags(mode, &flags) < 0) { errno = EINVAL; return 0; }
+  fd = __pxx_open(path, flags, 438);
+  if (fd < 0) { errno = -fd; stream->err = 1; return 0; }
+  if (stream->fd >= 0) __pxx_close(stream->fd);
+  stream->fd = fd;
+  stream->err = 0;
+  stream->eof = 0;
+  return stream;
+}
+
+int fclose(FILE *stream) {
+  int rc;
+  if (!stream) { errno = EINVAL; return -1; }
+  rc = __pxx_close(stream->fd);
+  stream->fd = -1;
+  stream->err = 0;
+  stream->eof = 0;
+  if (stream->heap) stream->heap = 0;
+  if (rc < 0) { errno = -rc; return -1; }
+  return 0;
+}
+
+int fseek(FILE *stream, long off, int whence) {
+  long r;
+  if (!stream) { errno = EINVAL; return -1; }
+  r = __pxx_seek(stream->fd, off, whence);
+  if (r < 0) { errno = -r; stream->err = 1; return -1; }
+  stream->eof = 0;
+  return 0;
+}
+
+long ftell(FILE *stream) {
+  long r;
+  if (!stream) { errno = EINVAL; return -1; }
+  r = __pxx_seek(stream->fd, 0, SEEK_CUR);
+  if (r < 0) { errno = -r; stream->err = 1; return -1; }
+  return r;
+}
+
+void rewind(FILE *stream) {
+  if (stream) {
+    if (__pxx_seek(stream->fd, 0, SEEK_SET) < 0) stream->err = 1;
+    else stream->eof = 0;
+  }
+}
+
+FILE *tmpfile(void) { errno = EINVAL; return 0; }
+char *tmpnam(char *s) { (void)s; errno = EINVAL; return 0; }
+int remove(const char *path) { int rc = __pxx_remove(path); if (rc < 0) { errno = -rc; return -1; } return 0; }
+int rename(const char *oldp, const char *newp) { int rc = __pxx_rename(oldp, newp); if (rc < 0) { errno = -rc; return -1; } return 0; }
+
+int close(int fd) { int rc = __pxx_close(fd); if (rc < 0) { errno = -rc; return -1; } return 0; }
+long lseek(int fd, long offset, int whence) { long r = __pxx_seek(fd, offset, whence); if (r < 0) { errno = -r; return -1; } return r; }
+long read(int fd, void *buf, unsigned long count) { long r = __pxx_read(fd, buf, count); if (r < 0) { errno = -r; return -1; } return r; }
+long write(int fd, const void *buf, unsigned long count) { long r = __pxx_write(fd, buf, count); if (r < 0) { errno = -r; return -1; } return r; }
 
 /* ---- buffering / status (unbuffered model: no-ops) ------------------------ */
 
