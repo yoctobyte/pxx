@@ -2,6 +2,59 @@
 
 - **Type:** feature (track-C milestone path)
 - **Status:** backlog (active arc — lua core **29/34 files parse clean (85%)**; see logs)
+- **Session 2026-06-27b (Track A+C) — lua now runs through ALL of
+  `luaL_openlibs` and executes the script; next blocker is a GC allgc
+  linked-list cycle.** Committed `57e3e73b` (3 front-end fixes, self-host
+  byte-identical, `make test` + `make test-nilpy` green). Build/run recipe
+  unchanged (`pxx_hostamalg.c` → `/tmp/luah_pxx /tmp/t.lua`).
+  - **FIX 1 — global `const char *[]` init dropped the whole array** when any
+    element was not a plain string literal. The C-frontend array-of-pointer
+    scan (`ParseCGlobalVarDecl`, cparser.inc ~2319) aborted (`nArrElems:=-1`) on
+    the first non-`tkString` element, leaving every slot NULL — so lua's
+    `luaT_typenames_` (which holds the array-name `udatatypename` among string
+    literals) was all-NULL and `luaT_objtypename` returned `(null)`. Now an
+    identifier element lowers to the **address of that global** (new PendingInit
+    encoding `FOff=-4`, materialized as `arr[i] := @g` in parser.inc
+    `CompilePendingGlobalInits`); an integer/`NULL` element lowers to its literal
+    pointer bits (`FOff=-1`). Test `cglobal_strptr_array_decay_b73`.
+  - **FIX 2 — `(void)expr;` / `((void)expr);` statements were silently dropped.**
+    The cast lowering wrapped the operand in an `AN_PTR_CAST` retag tagged void,
+    which codegen pruned as a dead value — so lua's `lua_pushglobaltable`
+    (`= ((void)lua_rawgeti(...))`) was a **no-op**, leaving a string on the stack
+    where the globals table was expected → `attempt to index a string value`
+    PANIC at the first `luaL_requiref`. Now a void cast (depth 0) returns the
+    operand unwrapped, preserving the call side effect (ParseCUnary, cparser.inc
+    ~700). Test `cvoid_cast_call_stmt_b74`. **This was THE keystone** — it
+    unblocked the entire `_G`/base-lib load.
+  - **FIX 3 — scalar `const char *p = "literal";` globals stayed NULL.** Only
+    `T *p = &g;` was handled; a string-literal initializer fell through to the
+    skip path. Added a scalar string-literal branch (cparser.inc ~2653,
+    reuses `FOff=-3` string-span with `Elem=-1`; adjacent literals concatenate).
+    lua's `const char *const CLIBS = "_CLIBS"` was NULL → `lua_getfield(registry,
+    CLIBS)` dereffed a null key → segfault in `createclibstable`. Test
+    `cglobal_scalar_strptr_b75`.
+  - **NEXT BLOCKER — GC `allgc` list cycle at first `__gc` finalizer.** Tracing
+    `luaC_checkfinalizer` (lgc.c): on the **first** call (registering the CLIBS
+    table's `__gc` metatable, from `lua_setmetatable` in `createclibstable`) the
+    search loop `for (p=&g->allgc; *p!=o; p=&(*p)->next){}` never terminates
+    (>=200000 nodes, no NULL, `o` never matched) -> hang. **Later** finalizer
+    registrations (package/string/... libs) terminate normally. So `g->allgc` is
+    cyclic/corrupt specifically at that point, or the CLIBS table GCObject is not
+    linked into `allgc`. Strongly smells like a GCObject `CommonHeader.next`
+    link/offset bug or a `luaC_newobj`/`correctpointers` codegen issue — a NEW,
+    distinct bug from the global-init/cast cluster. (A temporary guarded `break`
+    in the loop let lua run to completion but with heap corruption, printing a
+    garbled string — proves the rest of the pipeline works once past this.)
+  - **MINOR gap noted (cosmetic):** `static const char ud[] = "userdata"` and
+    `char buf[] = "hello"` — a char ARRAY initialized FROM a string literal — is
+    not filled (stays zero/empty). Only 3 such globals in lua core
+    (`udatatypename`, `lua_ident`, `Output` in unlinked luac.c), all error-message
+    / version strings, so non-blocking. Fix would emit per-byte PendingInits for
+    a `wasArr` char/byte base with a `tkString` initializer.
+  - **Local lua scratch (gitignored `library_candidates/`) still has debug
+    markers** in lstate/lauxlib/lapi/lbaselib/loadlib/linit.c (`B C D E`,
+    `req:`, `ob*`, `P*`, `cc*`, etc.). lgc.c restored clean. Strip before any
+    "clean run" timing.
 - **Session 2026-06-27 (Track C) — Lua startup reaches `F:open-done`; current
   failure is post-startup runaway stack/error formatting, not the earlier bad
   allocator pointer.** Verified `HEAD == origin/master == 66494acb` before edits;
