@@ -55,8 +55,20 @@ begin
     else
       Result := Ord(tySingle);
   end
+  { Integer usual-arithmetic-conversion result, preserving SIGNEDNESS so the IR
+    lowering picks signed vs unsigned compares/division/shifts correctly. C
+    promotes unsigned char/short to signed int, so only unsigned int (tyUInt32)
+    and unsigned long/long-long (tyUInt64) keep an unsigned result. Rank order:
+    unsigned 64 > signed 64 > unsigned 32 > signed 32. Without this an inline
+    `i - 1u` (unsigned) was tagged signed, so `(i - 1u) < asize` compiled to a
+    SIGNED compare (lua `findindex` looped forever in `pairs`). }
+  else if (IntToTypeKind(ASTTk[l]) = tyUInt64) or (IntToTypeKind(ASTTk[r]) = tyUInt64) then
+    Result := Ord(tyUInt64)
   else if (IntToTypeKind(ASTTk[l]) = tyInt64) or (IntToTypeKind(ASTTk[r]) = tyInt64) then
     Result := Ord(tyInt64)
+  else if (IntToTypeKind(ASTTk[l]) = tyUInt32) or (IntToTypeKind(ASTTk[r]) = tyUInt32) or
+          (IntToTypeKind(ASTTk[l]) = tyNativeUInt) or (IntToTypeKind(ASTTk[r]) = tyNativeUInt) then
+    Result := Ord(tyUInt32)
   else
     Result := Ord(tyInteger);
 end;

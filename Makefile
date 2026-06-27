@@ -476,6 +476,8 @@ test-core: $(COMPILER)
 	/tmp/cchar_escapes_b7826; test "$$?" = "42"
 	./$(COMPILER) test/csizeof_deref_ptr_b79.c /tmp/csizeof_deref_ptr_b7926
 	/tmp/csizeof_deref_ptr_b7926; test "$$?" = "42"
+	./$(COMPILER) test/cunsigned_arith_compare_b80.c /tmp/cunsigned_arith_compare_b8026
+	/tmp/cunsigned_arith_compare_b8026; test "$$?" = "42"
 	./$(COMPILER) -Itest/cinc/inc test/cinc/cinc_main.c /tmp/cinc_main26
 	test "$$(/tmp/cinc_main26)" = "$$(printf 'local-ok\ninc-ok')"
 	./$(COMPILER) test/test_declared_directive.pas /tmp/test_declared_directive26
