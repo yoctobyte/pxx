@@ -65,6 +65,25 @@ as the same proc-address PendingInit used by a bare function-name initializer.
   [[bug-c-crtl-missing-unistd-syscalls]] is now the next active wall; user has
   explicitly allowed taking this Track B/CRTL header ticket.
 
+## M5 update (2026-06-27, session 6): CRTL unistd fsync/sysconf prototypes
+
+Took the now-authorized CRTL header wall. Added sqlite-needed declarations to
+`lib/crtl/include/unistd.h`: `fsync`, `sysconf`, `_SC_PAGESIZE`, and
+`_SC_PAGE_SIZE`. This is the faithful header-side fix; no C89 implicit
+declaration policy change.
+
+- **FIX 6 (this commit) — missing unistd prototypes for sqlite.**
+  Header prototypes now register libc extern imports for `fsync` and
+  `sysconf`. Test `crtl_unistd_fsync_b99` verifies the header resolves both
+  names and that `_SC_PAGE_SIZE` aliases `_SC_PAGESIZE`.
+- **Verification:** b99 passes.
+- **sqlite rerun:** sqlite advances past `fsync` at 31615 and
+  `sysconf(_SC_PAGESIZE)` at 42642, then stops at a separate preprocessor
+  conditional wall:
+  `pascal26:32926: error: unexpected token` with context
+  `pLockingStyle posixIoMethods defined`. Filed
+  [[bug-c-preprocessor-defined-expression-sqlite]].
+
 - **Session 2026-06-27d (Track A+C) — control flow + lexer fixed; lua runs real
   programs.** Two more fixes (self-host byte-identical, `make test` green):
   - **FIX 5 (`62c88498`) — global ordinal array with constant-EXPRESSION

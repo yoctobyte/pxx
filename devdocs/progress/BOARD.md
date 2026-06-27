@@ -32,7 +32,7 @@ _none_
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
 | bug-c-addr-of-global-array-element-const-index-wrong-offset | A | bug | C: `&global_array[const]` global pointer initializer computes wrong offset | — |
-| bug-c-crtl-missing-unistd-syscalls | A | bug | C: crtl headers miss libc syscall prototypes (fsync, …) | — |
+| bug-c-preprocessor-defined-expression-sqlite | A | bug | C: preprocessor `defined(...)` expression leaks into sqlite token stream | — |
 | bug-c-sizeof-array-yields-element-size | A | bug | C: `sizeof(array)` yields element size, not total array size | — |
 | bug-capital-write-undefined-in-compiler-selfbuild | A | bug | Capital `Write`/`WriteLn` rejected in some contexts (compiler self-build), works standalone | — |
 | bug-i386-float-byval-param | A | bug | i386 backend: by-value float (Double) parameter unsupported | — |
@@ -135,7 +135,7 @@ _none_
 | feature-mimic-fpc | B | feature | `mimic FPC` compatibility mode | — |
 | feature-string-model-tyfixedstring | B | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (325)
+## done (326)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -156,6 +156,7 @@ _none_
 | bug-c-const-cast-in-array-dim | A | bug | C: `(type)` cast inside a constant expression (array dimension) | — |
 | bug-c-const-eval-bitwise-not | C | bug | C const-eval: `~` (bitwise NOT) yields wrong value | — |
 | bug-c-crtl-fopen-missing | B | bug | crtl: `fopen`/`fclose`/`fseek`/`ftell` declared but not defined (no file open) | — |
+| bug-c-crtl-missing-unistd-syscalls | A | bug | C: crtl headers miss libc syscall prototypes (fsync, …) | — |
 | bug-c-double-value-model | A | bug | C `double` value model broken — lua floats all garbage | — |
 | bug-c-double-vararg | A | bug | C: double passed as a variadic arg reads 0 | — |
 | bug-c-field-of-call-result | C | bug | C: `f()->field` — field/index of a pointer-returning call result | — |
@@ -477,7 +478,7 @@ _none_
 ## Ready (no unmet blocker)
 
 - [A] bug-c-addr-of-global-array-element-const-index-wrong-offset
-- [A] bug-c-crtl-missing-unistd-syscalls
+- [A] bug-c-preprocessor-defined-expression-sqlite
 - [A] bug-c-sizeof-array-yields-element-size
 - [A] bug-capital-write-undefined-in-compiler-selfbuild
 - [A] bug-i386-float-byval-param
