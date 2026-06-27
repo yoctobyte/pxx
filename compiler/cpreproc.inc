@@ -325,51 +325,185 @@ end;
 function CPExprUnary: Int64;
 begin
   CPSkipExprSpace;
-  if (CPExprPos <= CPExprEnd) and (CPExprText[CPExprPos] = '!') then
+  if (CPExprPos <= CPExprEnd) and (CPExprText[CPExprPos] = '!') and
+     not ((CPExprPos < CPExprEnd) and (CPExprText[CPExprPos + 1] = '=')) then
   begin
     Inc(CPExprPos);
     if CPExprUnary() = 0 then Result := 1 else Result := 0;
+  end
+  else if (CPExprPos <= CPExprEnd) and (CPExprText[CPExprPos] = '~') then
+  begin
+    Inc(CPExprPos);
+    Result := not CPExprUnary();
+  end
+  else if (CPExprPos <= CPExprEnd) and (CPExprText[CPExprPos] = '-') then
+  begin
+    Inc(CPExprPos);
+    Result := -CPExprUnary();
+  end
+  else if (CPExprPos <= CPExprEnd) and (CPExprText[CPExprPos] = '+') then
+  begin
+    Inc(CPExprPos);
+    Result := CPExprUnary();
   end
   else
     Result := CPExprAtom;
 end;
 
-function CPExprCompare: Int64;
-var left, right: Int64; op1, op2: Char;
+{ The C `#if` constant-expression grammar, high precedence (innermost) to low:
+  unary -> * / % -> + - -> << >> -> < <= > >= -> == != -> & -> ^ -> | -> && -> ||.
+  Each level parses the next-higher level then folds its own left-associative
+  operators. Without the arithmetic/bitwise/shift levels, `defined(A)+defined(B)
+  ==0` (sqlite's SQLITE_SYSTEM_MALLOC auto-select) and `FLAGS&MASK` / `1<<n`
+  directives mis-evaluated — the trailing operators were silently dropped. }
+function CPExprMul: Int64;
+var v: Int64; op: Char;
 begin
-  left := CPExprUnary;
+  Result := CPExprUnary;
   CPSkipExprSpace;
-  if CPExprPos <= CPExprEnd then
+  while (CPExprPos <= CPExprEnd) and (CPExprText[CPExprPos] in ['*', '/', '%']) do
+  begin
+    op := CPExprText[CPExprPos];
+    Inc(CPExprPos);
+    v := CPExprUnary;
+    if op = '*' then Result := Result * v
+    else if op = '/' then begin if v <> 0 then Result := Result div v else Result := 0; end
+    else begin if v <> 0 then Result := Result mod v else Result := 0; end;
+    CPSkipExprSpace;
+  end;
+end;
+
+function CPExprAdd: Int64;
+var v: Int64; op: Char;
+begin
+  Result := CPExprMul;
+  CPSkipExprSpace;
+  { A leading-position `+`/`-` was handled by CPExprUnary; here both sides exist. }
+  while (CPExprPos <= CPExprEnd) and (CPExprText[CPExprPos] in ['+', '-']) do
+  begin
+    op := CPExprText[CPExprPos];
+    Inc(CPExprPos);
+    v := CPExprMul;
+    if op = '+' then Result := Result + v else Result := Result - v;
+    CPSkipExprSpace;
+  end;
+end;
+
+function CPExprShift: Int64;
+var v: Int64; op: Char;
+begin
+  Result := CPExprAdd;
+  CPSkipExprSpace;
+  while (CPExprPos < CPExprEnd) and
+        (((CPExprText[CPExprPos] = '<') and (CPExprText[CPExprPos + 1] = '<')) or
+         ((CPExprText[CPExprPos] = '>') and (CPExprText[CPExprPos + 1] = '>'))) do
+  begin
+    op := CPExprText[CPExprPos];
+    Inc(CPExprPos); Inc(CPExprPos);
+    v := CPExprAdd;
+    if op = '<' then Result := Result shl v else Result := Result shr v;
+    CPSkipExprSpace;
+  end;
+end;
+
+function CPExprRel: Int64;
+var right: Int64; op1, op2: Char;
+begin
+  Result := CPExprShift;
+  CPSkipExprSpace;
+  { `<` / `<=` / `>` / `>=`, but a `<<`/`>>` belongs to the shift operand already
+    consumed below us — guard against grabbing one half of it. }
+  while (CPExprPos <= CPExprEnd) and (CPExprText[CPExprPos] in ['<', '>']) do
   begin
     op1 := CPExprText[CPExprPos];
     op2 := #0;
     if CPExprPos < CPExprEnd then op2 := CPExprText[CPExprPos + 1];
-    if (op1 in ['=', '!', '<', '>']) then
-    begin
-      Inc(CPExprPos);
-      if op2 = '=' then Inc(CPExprPos);
-      right := CPExprUnary;
-      if (op1 = '=') and (op2 = '=') then begin if left = right then left := 1 else left := 0; end
-      else if (op1 = '!') and (op2 = '=') then begin if left <> right then left := 1 else left := 0; end
-      else if (op1 = '<') and (op2 = '=') then begin if left <= right then left := 1 else left := 0; end
-      else if (op1 = '>') and (op2 = '=') then begin if left >= right then left := 1 else left := 0; end
-      else if op1 = '<' then begin if left < right then left := 1 else left := 0; end
-      else if op1 = '>' then begin if left > right then left := 1 else left := 0; end;
-    end;
+    if op2 = op1 then Break;        { `<<` / `>>` — not relational }
+    Inc(CPExprPos);
+    if op2 = '=' then Inc(CPExprPos);
+    right := CPExprShift;
+    if (op1 = '<') and (op2 = '=') then begin if Result <= right then Result := 1 else Result := 0; end
+    else if (op1 = '>') and (op2 = '=') then begin if Result >= right then Result := 1 else Result := 0; end
+    else if op1 = '<' then begin if Result < right then Result := 1 else Result := 0; end
+    else begin if Result > right then Result := 1 else Result := 0; end;
+    CPSkipExprSpace;
   end;
-  Result := left;
+end;
+
+function CPExprEq: Int64;
+var right: Int64; op1, op2: Char;
+begin
+  Result := CPExprRel;
+  CPSkipExprSpace;
+  while (CPExprPos < CPExprEnd) and
+        ((CPExprText[CPExprPos] in ['=', '!']) and (CPExprText[CPExprPos + 1] = '=')) do
+  begin
+    op1 := CPExprText[CPExprPos];
+    op2 := CPExprText[CPExprPos + 1];
+    Inc(CPExprPos); Inc(CPExprPos);
+    right := CPExprRel;
+    if op1 = '=' then begin if Result = right then Result := 1 else Result := 0; end
+    else begin if Result <> right then Result := 1 else Result := 0; end;
+    CPSkipExprSpace;
+  end;
+end;
+
+function CPExprBitAnd: Int64;
+var v: Int64;
+begin
+  Result := CPExprEq;
+  CPSkipExprSpace;
+  { single `&` only — `&&` belongs to the logical level above. }
+  while (CPExprPos <= CPExprEnd) and (CPExprText[CPExprPos] = '&') and
+        not ((CPExprPos < CPExprEnd) and (CPExprText[CPExprPos + 1] = '&')) do
+  begin
+    Inc(CPExprPos);
+    v := CPExprEq;
+    Result := Result and v;
+    CPSkipExprSpace;
+  end;
+end;
+
+function CPExprBitXor: Int64;
+var v: Int64;
+begin
+  Result := CPExprBitAnd;
+  CPSkipExprSpace;
+  while (CPExprPos <= CPExprEnd) and (CPExprText[CPExprPos] = '^') do
+  begin
+    Inc(CPExprPos);
+    v := CPExprBitAnd;
+    Result := Result xor v;
+    CPSkipExprSpace;
+  end;
+end;
+
+function CPExprBitOr: Int64;
+var v: Int64;
+begin
+  Result := CPExprBitXor;
+  CPSkipExprSpace;
+  { single `|` only — `||` belongs to the logical level above. }
+  while (CPExprPos <= CPExprEnd) and (CPExprText[CPExprPos] = '|') and
+        not ((CPExprPos < CPExprEnd) and (CPExprText[CPExprPos + 1] = '|')) do
+  begin
+    Inc(CPExprPos);
+    v := CPExprBitXor;
+    Result := Result or v;
+    CPSkipExprSpace;
+  end;
 end;
 
 function CPExprAnd: Int64;
 var v: Int64;
 begin
-  Result := CPExprCompare;
+  Result := CPExprBitOr;
   CPSkipExprSpace;
   while (CPExprPos < CPExprEnd) and (CPExprText[CPExprPos] = '&') and
         (CPExprText[CPExprPos + 1] = '&') do
   begin
     Inc(CPExprPos); Inc(CPExprPos);
-    v := CPExprCompare;
+    v := CPExprBitOr;
     if (Result <> 0) and (v <> 0) then Result := 1 else Result := 0;
     CPSkipExprSpace;
   end;
