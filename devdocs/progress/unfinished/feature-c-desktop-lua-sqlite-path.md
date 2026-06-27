@@ -1,8 +1,48 @@
 # C desktop path — compile real portable C (tiny-regex → lua → sqlite)
 
 - **Type:** feature (track-C milestone path)
-- **Status:** backlog (active arc — **pxx-compiled lua RUNS control flow,
-  recursion, string lib; only the 3-value generic-for protocol remains**).
+- **Status:** backlog (active arc — **pxx-compiled lua is FUNCTIONAL: runs
+  control flow, recursion, closures, generic-for, string lib, table.sort,
+  metatables + operator overloading, pcall/error. Only floating-point remains
+  broken.**).
+- **Session 2026-06-27e (Track A+C) — generic-for fixed; lua essentially
+  complete (minus float).** Two more fixes (self-host byte-identical, `make
+  test` green):
+  - **FIX 7 (`cf53d915`) — `sizeof(*p)` returned the pointer size (8), not the
+    pointed-at type size.** The `sizeof` operand starting with `*` fell through
+    to the default. Added a `tkStar` branch (ParseCSizeof) resolving the pointee
+    size (record→RecSize(PtrElemRec), else TypeSize(PtrElemTk)). lua's
+    `OP_TFORCALL` does `memcpy(ra+4, ra, 3*sizeof(*ra))` (ra a 16-byte
+    StackValue*); with sizeof mis-sized to 8 it copied 24 of 48 bytes, dropping
+    the generic-for state+control → `ipairs`/`pairs` "bad argument to 'for
+    iterator'". Test b79.
+  - **FIX 8 (`5071599f`) — integer arithmetic dropped unsignedness.**
+    `CBinResultTk` collapsed every non-float/non-Int64 result to signed
+    `tyInteger`, so an inline `i - 1u` was tagged signed and `(i - 1u) < asize`
+    compiled to a SIGNED compare (0xFFFFFFFF read as -1 → wrongly `< asize`).
+    Now follows C usual-arith-conversions (unsigned64 > signed64 > unsigned32 >
+    signed32; char/short promote to signed int). This was lua's `findindex`
+    bounds test `i - 1u < asize`, which looped `pairs` forever. Test b80.
+  - **VERIFIED WORKING** (pxx-compiled lua, comprehensive): numeric for / while /
+    if-else, recursion (fib(25)=75025), **closures + upvalues**, **varargs**
+    (`{...}`), **`ipairs`/`pairs`** generic-for, string methods
+    (`:upper/:len/:sub/:gsub`), **`table.sort` + `table.concat`**, **metatables
+    + `__index`/`__add` operator overloading**, **`pcall`/`error`**,
+    `string.format` (integer/string/hex), `string.gmatch`. All 10 stdlibs open.
+  - **ONLY REMAINING GAP — floating point.** Every float op yields the same
+    garbage denormal `3.95e-323` (≈ bit pattern 8): `print(3.14)`, `1.5+2.5`,
+    `2^10`, `%.2f`, `math.sqrt`, float compares all wrong. The double VALUE is
+    stored correctly in memory (a union `.n` read shows `0x40091EB851…` for
+    3.14), but probing shows `*(long*)&dbl` reads only 32 bits (pointer-cast
+    deref width), and a struct-by-value return containing a `double` segfaults —
+    so the C-frontend float handling (double through casts / by-value
+    aggregates / the lua_Number TValue union read-write) is the multi-faceted
+    remaining workstream. Ties to the long-standing float gaps
+    (`bug-c-float-int-cast-and-spill`, `%f` math). Distinct from everything
+    fixed this arc; pick up here next.
+  - Also still open (minor): unsigned integer LITERAL suffix (`5u`) tagged signed
+    (lexer consumes suffix but records no unsignedness) — needs a token flag;
+    lua unaffected (bounds use unsigned vars).
 - **Session 2026-06-27d (Track A+C) — control flow + lexer fixed; lua runs real
   programs.** Two more fixes (self-host byte-identical, `make test` green):
   - **FIX 5 (`62c88498`) — global ordinal array with constant-EXPRESSION
