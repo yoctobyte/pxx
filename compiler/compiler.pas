@@ -83,6 +83,7 @@ begin
   DebugInfo := False;
   DbgMainTokEnd := MAX_TOKENS;
   DumpIR := False;
+  DumpCpp := False;
   WarnSelfResult := False;
   DumpRTTI := False;
   TargetArch := TARGET_X86_64;
@@ -118,6 +119,11 @@ begin
     else if option = '--dump-ir' then
     begin
       DumpIR := True;
+      Inc(i);
+    end
+    else if option = '--dump-cpp' then
+    begin
+      DumpCpp := True;
       Inc(i);
     end
     else if option = '-g' then
@@ -452,6 +458,7 @@ begin
   else if isC then
   begin
     CPreprocess(Source, SourceFileDir);
+    if DumpCpp then begin write(Source); Halt(0); end;
     CLexAll;
     TokPos := 0;
     Next;
