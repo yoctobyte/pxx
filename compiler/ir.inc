@@ -2234,6 +2234,16 @@ begin
           right := IRAppend(IR_CONST_INT, -1, -1, -1, 0, ASTTk[node]);
           Result := IRAppend(IR_BINOP, Result, right, Ord(tkPlus), 0, ASTTk[node]);
         end
+        else if CProgramMode and TypeIsOrdinal(castTk) and
+                TypeIsOrdinal(IntToTypeKind(IRTk[Result])) and
+                (IRTk[Result] <> ASTTk[node]) then
+        begin
+          { Do not retag a width-sensitive load in place. `(int)byte_field`
+            must load one byte and then widen the value; changing the load node
+            to Integer makes codegen read four bytes from the byte field. }
+          right := IRAppend(IR_CONST_INT, -1, -1, -1, 0, ASTTk[node]);
+          Result := IRAppend(IR_BINOP, Result, right, Ord(tkPlus), 0, ASTTk[node]);
+        end
         else
           IRTk[Result] := ASTTk[node];
       end;

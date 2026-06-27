@@ -446,6 +446,28 @@ test-core: $(COMPILER)
 	/tmp/ctypedef_ptr_stride_b6326; test "$$?" = "42"
 	./$(COMPILER) test/cternary_ptr_null_b64.c /tmp/cternary_ptr_null_b6426
 	/tmp/cternary_ptr_null_b6426; test "$$?" = "42"
+	./$(COMPILER) test/cchar_ptr_arith_deref_b65.c /tmp/cchar_ptr_arith_deref_b6526
+	/tmp/cchar_ptr_arith_deref_b6526; test "$$?" = "42"
+	./$(COMPILER) test/cstruct_field_constexpr_array_b66.c /tmp/cstruct_field_constexpr_array_b6626
+	/tmp/cstruct_field_constexpr_array_b6626; test "$$?" = "42"
+	./$(COMPILER) test/cunion_ptr_field_expr_b67.c /tmp/cunion_ptr_field_expr_b6726
+	/tmp/cunion_ptr_field_expr_b6726; test "$$?" = "42"
+	./$(COMPILER) test/cglobal_uchar_array_init_b68.c /tmp/cglobal_uchar_array_init_b6826
+	/tmp/cglobal_uchar_array_init_b6826; test "$$?" = "42"
+	./$(COMPILER) test/cglobal_nested_struct_init_b69.c /tmp/cglobal_nested_struct_init_b6926
+	/tmp/cglobal_nested_struct_init_b6926; test "$$?" = "42"
+	./$(COMPILER) test/cuchar_struct_field_load_b70.c /tmp/cuchar_struct_field_load_b7026
+	/tmp/cuchar_struct_field_load_b7026; test "$$?" = "42"
+	./$(COMPILER) test/cternary_int_promotion_b71.c /tmp/cternary_int_promotion_b7126
+	/tmp/cternary_int_promotion_b7126; test "$$?" = "42"
+	./$(COMPILER) test/cglobal_reg_array_init_b72.c /tmp/cglobal_reg_array_init_b7226
+	/tmp/cglobal_reg_array_init_b7226; test "$$?" = "42"
+	./$(COMPILER) test/cglobal_strptr_array_decay_b73.c /tmp/cglobal_strptr_array_decay_b7326
+	/tmp/cglobal_strptr_array_decay_b7326; test "$$?" = "42"
+	./$(COMPILER) test/cvoid_cast_call_stmt_b74.c /tmp/cvoid_cast_call_stmt_b7426
+	/tmp/cvoid_cast_call_stmt_b7426; test "$$?" = "42"
+	./$(COMPILER) test/cglobal_scalar_strptr_b75.c /tmp/cglobal_scalar_strptr_b7526
+	/tmp/cglobal_scalar_strptr_b7526; test "$$?" = "42"
 	./$(COMPILER) -Itest/cinc/inc test/cinc/cinc_main.c /tmp/cinc_main26
 	test "$$(/tmp/cinc_main26)" = "$$(printf 'local-ok\ninc-ok')"
 	./$(COMPILER) test/test_declared_directive.pas /tmp/test_declared_directive26

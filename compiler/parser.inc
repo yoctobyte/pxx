@@ -14083,7 +14083,7 @@ end;
 procedure CompilePendingGlobalInits;
 { Emit the recorded constant global-var initializers as assignments, at the
   current code position (just before `main begin`). }
-var i, identNode, valNode, idxLit, target, assignNode: Integer;
+var i, identNode, valNode, idxLit, target, assignNode, lenVal, innerAddr: Integer;
 begin
   for i := 0 to PendingInitCount - 1 do
   begin
@@ -14091,16 +14091,9 @@ begin
     ASTIVal[identNode] := PendingInitSym[i];
     ASTTk[identNode] := Ord(Syms[PendingInitSym[i]].TypeKind);
 
-    if PendingInitFOff[i] >= 0 then
-    begin
-      { Record typed-const field: `sym.field := value`. }
-      target := AllocNode(AN_FIELD);
-      ASTLeft[target] := identNode;
-      ASTSOffset[target] := PendingInitFOff[i];
-      ASTSLen[target] := PendingInitFLen[i];
-      ASTTk[target] := PendingInitTk[i];
-    end
-    else if PendingInitElem[i] >= 0 then
+    target := identNode;
+
+    if PendingInitElem[i] >= 0 then
     begin
       idxLit := AllocNode(AN_INT_LIT);
       ASTIVal[idxLit] := PendingInitElem[i];
@@ -14110,8 +14103,18 @@ begin
       ASTRight[target] := idxLit;
       ASTTk[target] := PendingInitTk[i];
     end
-    else
-      target := identNode;
+
+    if PendingInitFOff[i] >= 0 then
+    begin
+      { Record typed-const field: `sym.field := value`; when Elem is also set,
+        this becomes `sym[elem].field := value`. }
+      valNode := AllocNode(AN_FIELD);
+      ASTLeft[valNode] := target;
+      ASTSOffset[valNode] := PendingInitFOff[i];
+      ASTSLen[valNode] := PendingInitFLen[i];
+      target := valNode;
+      ASTTk[target] := PendingInitTk[i];
+    end
 
     if PendingInitElem[i] = -2 then
     begin
@@ -14130,15 +14133,37 @@ begin
       { re-point: assignment target is the pointer sym, value is the address }
       target := identNode;
     end
-    else if PendingInitFOff[i] = -3 then
+    else if PendingInitFOff[i] = -4 then
+    begin
+      { C pointer-array element initialized to the address of a named global
+        (a `char[]` array name decaying to `char*`, or `&g`). Value index in
+        PendingInitVal is the target sym; emit `arr[ei] := @g`. The array
+        element target was already built above (Elem >= 0 => AN_INDEX). }
+      valNode := AllocNode(AN_IDENT);
+      ASTIVal[valNode] := PendingInitVal[i];
+      ASTTk[valNode] := Ord(Syms[PendingInitVal[i]].TypeKind);
+      innerAddr := AllocNode(AN_ADDR);
+      ASTLeft[innerAddr] := valNode;
+      ASTTk[innerAddr] := Ord(tyPointer);
+      valNode := innerAddr;
+    end
+    else if (PendingInitFOff[i] = -3) or (PendingInitKind[i] = 1) then
     begin
       { C pointer-array string initializer, e.g. char-star array from strings.
         PendingInitVal/FLen carry the raw token-string span; assignment lowering
         applies the C string-literal-to-char-pointer +8 adjustment. }
       valNode := AllocNode(AN_STR_LIT);
       ASTSOffset[valNode] := PendingInitVal[i];
-      ASTSLen[valNode] := PendingInitFLen[i];
+      if PendingInitFOff[i] = -3 then lenVal := PendingInitFLen[i]
+      else lenVal := PendingInitValAux[i];
+      ASTSLen[valNode] := lenVal;
       ASTTk[valNode] := Ord(tyString);
+    end
+    else if PendingInitKind[i] = 2 then
+    begin
+      valNode := AllocNode(AN_PROCADDR);
+      ASTIVal[valNode] := PendingInitVal[i];
+      ASTTk[valNode] := Ord(tyPointer);
     end
     else
     begin

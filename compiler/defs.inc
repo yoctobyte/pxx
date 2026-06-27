@@ -1202,6 +1202,8 @@ var
   PendingInitSym  : array[0..MAX_PENDING_INITS-1] of Integer;  { target symbol }
   PendingInitElem : array[0..MAX_PENDING_INITS-1] of Integer;  { array index, or -1 for a scalar }
   PendingInitVal  : array[0..MAX_PENDING_INITS-1] of Int64;    { constant value }
+  PendingInitValAux: array[0..MAX_PENDING_INITS-1] of Integer; { string length / spare }
+  PendingInitKind : array[0..MAX_PENDING_INITS-1] of Integer;  { 0=int, 1=string literal, 2=proc addr }
   PendingInitTk   : array[0..MAX_PENDING_INITS-1] of Integer;  { value type kind }
   { Record typed-const field: source span of the field name, so the emitter builds
     `sym.field := value` instead of `sym[elem]`. SOff = -1 when not a field. }

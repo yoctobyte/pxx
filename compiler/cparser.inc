@@ -61,6 +61,37 @@ begin
     Result := Ord(tyInteger);
 end;
 
+function CIntegerPromoteTk(tk: TTypeKind): TTypeKind;
+begin
+  Result := tk;
+  if TypeIsOrdinal(tk) and (TypeSize(tk) < TypeSize(tyInteger)) then
+    Result := tyInteger;
+end;
+
+function CTernaryResultTk(thenE, elseE: Integer): Integer;
+var tTk, eTk: TTypeKind;
+begin
+  tTk := IntToTypeKind(ASTTk[thenE]);
+  eTk := IntToTypeKind(ASTTk[elseE]);
+  if TypeIsFloat(tTk) or TypeIsFloat(eTk) then
+  begin
+    if (tTk = tyExtended) or (eTk = tyExtended) then Result := Ord(tyExtended)
+    else if (tTk = tyDouble) or (eTk = tyDouble) then Result := Ord(tyDouble)
+    else Result := Ord(tySingle);
+  end
+  else if TypeIsOrdinal(tTk) and TypeIsOrdinal(eTk) then
+  begin
+    tTk := CIntegerPromoteTk(tTk);
+    eTk := CIntegerPromoteTk(eTk);
+    if tTk = eTk then Result := Ord(tTk)
+    else if (tTk = tyUInt64) or (eTk = tyUInt64) then Result := Ord(tyUInt64)
+    else if (tTk = tyInt64) or (eTk = tyInt64) then Result := Ord(tyInt64)
+    else Result := Ord(tyInteger);
+  end
+  else
+    Result := ASTTk[thenE];
+end;
+
 { Build an AN_BINOP from a C operator token and two operand nodes. cTok is the
   raw C lexer token kind (CurTok.Kind ordinal). }
 { Wrap an expression in `(e != 0)` so a logical operand becomes a true 0/1
@@ -461,7 +492,18 @@ begin
     end
     else
       Result := ASTTk[node];
-  end;
+  end
+  else if ASTKind[node] = AN_BINOP then
+  begin
+    if CNodeIsPointer(ASTLeft[node]) then
+      Result := CNodePointeeTk(ASTLeft[node])
+    else if CNodeIsPointer(ASTRight[node]) then
+      Result := CNodePointeeTk(ASTRight[node]);
+  end
+  else if ASTKind[node] = AN_INCDEC then
+    Result := CNodePointeeTk(ASTLeft[node])
+  else if ASTKind[node] = AN_ASSIGN then
+    Result := CNodePointeeTk(ASTLeft[node]);
 end;
 
 { True when a node denotes a pointer value, so `.`/`->` (both lex to tkDot in C)
@@ -640,7 +682,7 @@ end;
 { Unary prefix: `- + ! ~ * &`, sizeof, and casts `(type)expr`. }
 function ParseCUnary: Integer;
 var node, operand, castElemTk, castElemRec, castDepth, argSeq: Integer;
-    castTk, opTk: TTypeKind;
+    castTk, opTk: TTypeKind; isVoidCast: Boolean;
 begin
   { sizeof }
   if (CurTok.Kind = tkIdent) and (CurTok.SVal = 'sizeof') then
@@ -656,8 +698,15 @@ begin
     castDepth := CTypePtrDepth;
     castElemTk := CTypeElemTk;
     castElemRec := CTypeElemRec;
+    isVoidCast := CTypeIsVoid and (CTypePtrDepth = 0);
     Expect(tkRParen, ')');
     operand := ParseCUnary();
+    { `(void)expr` evaluates expr for its side effects and discards the value.
+      Return the operand unwrapped so a void-cast call statement (e.g. the lua
+      API macro `lua_pushglobaltable` = `((void)lua_rawgeti(...))`) keeps its
+      call and is not pruned as a dead retag node. A `void *` cast (depth > 0)
+      is a real pointer cast and stays on the retag path below. }
+    if isVoidCast then begin Result := operand; Exit; end;
     { A NUMERIC float<->int cast must CONVERT, not bit-reinterpret: `(int)1.5`==1,
       `(double)i`==(double)i. AN_PTR_CAST only retags, so it left the IEEE bits
       and read them as an integer (-> 0). Route through the existing cross-target
@@ -999,7 +1048,7 @@ begin
     node := AllocNode(AN_TERNARY);
     ASTLeft[node] := left;        { condition }
     ASTRight[node] := pair;
-    ASTTk[node] := ASTTk[thenE];  { result type follows the then-branch }
+    ASTTk[node] := CTernaryResultTk(thenE, elseE);
     if CProgramMode and (CNodeDecaysToPointer(thenE) or CNodeDecaysToPointer(elseE)) then
     begin
       ASTTk[node] := Ord(tyPointer);
@@ -2124,22 +2173,103 @@ end;
   pre-main crash). So only a flat all-integer struct is materialised; anything
   richer zero-inits + balanced skips. Non-consuming (scans Tokens from the inner
   token). }
-function CBraceIsFlatIntInit: Boolean;
-var j, depth: Integer;
+function CBraceFlatIntInitCountAt(openIdx: Integer): Integer;
+var j, depth: Integer; sawValue: Boolean;
 begin
-  Result := True;
-  depth := 1;            { already inside the outer open-brace = CurTok }
-  j := TokPos;           { Tokens at TokPos = first token after CurTok }
+  Result := 0;
+  depth := 1;
+  sawValue := False;
+  j := openIdx + 1;
   while (depth > 0) and (j < TokCount) do
   begin
     case Tokens[j].Kind of
-      tkBegin: begin Result := False; Exit; end;   { nested aggregate -> not flat }
-      tkEnd:   Dec(depth);
-      tkComma, tkInteger, tkMinus, tkPlus: ;       { allowed }
+      tkBegin: begin Result := -1; Exit; end;   { nested aggregate -> not flat }
+      tkEnd:
+        begin
+          if (depth = 1) and sawValue then Inc(Result);
+          Dec(depth);
+        end;
+      tkComma:
+        begin
+          if depth = 1 then
+          begin
+            if sawValue then Inc(Result);
+            sawValue := False;
+          end;
+        end;
+      tkInteger, tkMinus, tkPlus, tkStar, tkSlash, tkMod, tkShl, tkShr, tkAmp,
+      tkXor, tkPipe:
+        if depth = 1 then sawValue := True;      { allowed flat const expr token }
     else
-      begin Result := False; Exit; end;            { ident/macro/string/enum/etc }
+      begin Result := -1; Exit; end;              { ident/macro/string/enum/etc }
     end;
     Inc(j);
+  end;
+  if depth <> 0 then Result := -1;
+end;
+
+function CBraceIsFlatIntInit: Boolean;
+begin
+  Result := CBraceFlatIntInitCountAt(TokPos - 1) >= 0;
+end;
+
+function CBraceTopLevelInitCountAt(openIdx: Integer): Integer;
+var j, depth: Integer; sawValue: Boolean;
+begin
+  Result := 0;
+  depth := 1;
+  sawValue := False;
+  j := openIdx + 1;
+  while (depth > 0) and (j < TokCount) do
+  begin
+    case Tokens[j].Kind of
+      tkBegin:
+        begin
+          if depth = 1 then sawValue := True;
+          Inc(depth);
+        end;
+      tkEnd:
+        begin
+          if depth = 1 then
+          begin
+            if sawValue then Inc(Result);
+            Dec(depth);
+          end
+          else
+            Dec(depth);
+        end;
+      tkComma:
+        if depth = 1 then
+        begin
+          if sawValue then Inc(Result);
+          sawValue := False;
+        end;
+    else
+      if depth = 1 then sawValue := True;
+    end;
+    Inc(j);
+  end;
+  if depth <> 0 then Result := -1;
+end;
+
+procedure CSkipCInitElement;
+var depth: Integer;
+begin
+  depth := 0;
+  while (CurTok.Kind <> tkEOF) do
+  begin
+    if (depth = 0) and ((CurTok.Kind = tkComma) or (CurTok.Kind = tkEnd)) then Exit;
+    if CurTok.Kind = tkBegin then
+      Inc(depth)
+    else if CurTok.Kind = tkEnd then
+    begin
+      if depth = 0 then Exit;
+      Dec(depth);
+      Next;
+      if depth = 0 then Exit;
+      Continue;
+    end;
+    Next;
   end;
 end;
 
@@ -2150,9 +2280,9 @@ end;
   two driver passes is idempotent — a name already present is not re-allocated. }
 procedure ParseCGlobalVarDecl;
 var baseTk: TTypeKind; name: AnsiString; depth, idx, recBase, fldI, fOff, fTk, fSz: Integer;
-    recId, initSymIdx: Integer; wasArr: Boolean; initV: Int64;
-    arrLen, dimCount, nArrElems, ei: Integer;
-    arrOffs, arrLens: array[0..255] of Integer;
+    recId, initSymIdx, procIdx: Integer; wasArr: Boolean; initV: Int64;
+    arrLen, dimCount, nArrElems, flatInitCount, ei: Integer;
+    arrOffs, arrLens, arrKind, arrSym: array[0..255] of Integer;
 begin
   baseTk := ParseCDeclType;
   recId := CTypeBaseRec;
@@ -2195,18 +2325,51 @@ begin
       Next; Next;  { consume assignment and opening initializer token }
       while (CurTok.Kind <> tkEnd) and (CurTok.Kind <> tkEOF) do
       begin
-        if (nArrElems > 255) or (CurTok.Kind <> tkString) then
+        if nArrElems > 255 then begin nArrElems := -1; Break; end;
+        if CurTok.Kind = tkString then
+        begin
+          { string-literal element (kind 0): record the token span }
+          arrKind[nArrElems] := 0;
+          arrOffs[nArrElems] := Tokens[TokPos - 1].SOffset;
+          arrLens[nArrElems] := Tokens[TokPos - 1].SLen;
+          Next;
+          while CurTok.Kind = tkString do
+          begin
+            arrLens[nArrElems] := arrLens[nArrElems] + Tokens[TokPos - 1].SLen;
+            Next;
+          end;
+        end
+        else if CurTok.Kind = tkIdent then
+        begin
+          { identifier element: `NULL` -> null pointer (kind 1); otherwise the
+            name of a global (a `char[]` array decaying to `char*`, or another
+            pointer) -> store its address (kind 2). A name we cannot resolve
+            falls back to the whole-array skip path. }
+          if CurTok.SVal = 'NULL' then
+          begin
+            arrKind[nArrElems] := 1;
+            arrSym[nArrElems] := 0;
+          end
+          else
+          begin
+            arrSym[nArrElems] := FindSym(CurTok.SVal);
+            if arrSym[nArrElems] < 0 then begin nArrElems := -1; Break; end;
+            arrKind[nArrElems] := 2;
+          end;
+          Next;
+        end
+        else if CurTok.Kind = tkInteger then
+        begin
+          { integer-literal element (kind 1): typically `0`/NULL terminator in a
+            `char *[]` table. Store the literal value as the pointer bits. }
+          arrKind[nArrElems] := 1;
+          arrSym[nArrElems] := CurTok.IVal;
+          Next;
+        end
+        else
         begin
           nArrElems := -1;
           Break;
-        end;
-        arrOffs[nArrElems] := Tokens[TokPos - 1].SOffset;
-        arrLens[nArrElems] := Tokens[TokPos - 1].SLen;
-        Next;
-        while CurTok.Kind = tkString do
-        begin
-          arrLens[nArrElems] := arrLens[nArrElems] + Tokens[TokPos - 1].SLen;
-          Next;
         end;
         Inc(nArrElems);
         if CurTok.Kind = tkComma then begin Next; Continue; end;
@@ -2230,7 +2393,21 @@ begin
     begin
       if arrLen < 1 then
       begin
-        if nArrElems > 0 then arrLen := nArrElems else arrLen := 1;
+        if nArrElems > 0 then arrLen := nArrElems
+        else if (CurTok.Kind = tkAssign) and (Tokens[TokPos].Kind = tkBegin) and
+                (baseTk <> tyRecord) and (baseTk <> tyPointer) and
+                TypeIsOrdinal(baseTk) then
+        begin
+          flatInitCount := CBraceFlatIntInitCountAt(TokPos);
+          if flatInitCount > 0 then arrLen := flatInitCount else arrLen := 1;
+        end
+        else if (CurTok.Kind = tkAssign) and (Tokens[TokPos].Kind = tkBegin) and
+                (baseTk = tyRecord) then
+        begin
+          flatInitCount := CBraceTopLevelInitCountAt(TokPos);
+          if flatInitCount > 0 then arrLen := flatInitCount else arrLen := 1;
+        end
+        else arrLen := 1;
       end
       else if nArrElems > arrLen then arrLen := nArrElems;
     end;
@@ -2263,10 +2440,26 @@ begin
       begin
         PendingInitSym[PendingInitCount]  := idx;
         PendingInitElem[PendingInitCount] := ei;
-        PendingInitFOff[PendingInitCount] := -3;  { string literal span }
-        PendingInitFLen[PendingInitCount] := arrLens[ei];
-        PendingInitVal[PendingInitCount]  := arrOffs[ei];
         PendingInitTk[PendingInitCount]   := Ord(tyPointer);
+        PendingInitKind[PendingInitCount] := 0;
+        if arrKind[ei] = 0 then
+        begin
+          PendingInitFOff[PendingInitCount] := -3;  { string literal span }
+          PendingInitFLen[PendingInitCount] := arrLens[ei];
+          PendingInitVal[PendingInitCount]  := arrOffs[ei];
+        end
+        else if arrKind[ei] = 2 then
+        begin
+          PendingInitFOff[PendingInitCount] := -4;  { address of named global }
+          PendingInitFLen[PendingInitCount] := 0;
+          PendingInitVal[PendingInitCount]  := arrSym[ei];
+        end
+        else
+        begin
+          PendingInitFOff[PendingInitCount] := -1;  { NULL / integer literal }
+          PendingInitFLen[PendingInitCount] := 0;
+          PendingInitVal[PendingInitCount]  := arrSym[ei];
+        end;
         Inc(PendingInitCount);
       end;
     end;
@@ -2283,28 +2476,157 @@ begin
       recBase := -1;
       if (recId >= REC_UCLASS_BASE) and UClsIsRecord[recId - REC_UCLASS_BASE] then
         recBase := UClsFBase[recId - REC_UCLASS_BASE];
-      if (CurTok.Kind = tkBegin) and (baseTk = tyRecord) and (not wasArr) and
+      if (CurTok.Kind = tkBegin) and wasArr and (baseTk <> tyRecord) and
+         (baseTk <> tyPointer) and TypeIsOrdinal(baseTk) and
+         (idx >= 0) and CBraceIsFlatIntInit then
+      begin
+        Next;   { consume the opening brace }
+        ei := 0;
+        while (CurTok.Kind <> tkEnd) and (CurTok.Kind <> tkEOF) do
+        begin
+          initV := CEvalConstExpr;
+          if (ei < arrLen) and (PendingInitCount < MAX_PENDING_INITS) then
+          begin
+            PendingInitSym[PendingInitCount]  := idx;
+            PendingInitElem[PendingInitCount] := ei;
+            PendingInitFOff[PendingInitCount] := -1;
+            PendingInitFLen[PendingInitCount] := 0;
+            PendingInitVal[PendingInitCount]  := initV;
+            PendingInitTk[PendingInitCount]   := Ord(baseTk);
+            Inc(PendingInitCount);
+          end;
+          Inc(ei);
+          Eat(tkComma);
+        end;
+        Eat(tkEnd);
+      end
+      else if (CurTok.Kind = tkBegin) and wasArr and (baseTk = tyRecord) and
          (idx >= 0) and (recBase >= 0) and
-         (UClsFCount[recId - REC_UCLASS_BASE] >= 1) and CBraceIsFlatIntInit then
+         (UClsFCount[recId - REC_UCLASS_BASE] >= 1) then
+      begin
+        Next;   { consume the outer opening brace }
+        ei := 0;
+        while (CurTok.Kind <> tkEnd) and (CurTok.Kind <> tkEOF) do
+        begin
+          if CurTok.Kind = tkBegin then
+          begin
+            Next;   { consume element opening brace }
+            fldI := 0;
+            while (CurTok.Kind <> tkEnd) and (CurTok.Kind <> tkEOF) do
+            begin
+              if (ei < arrLen) and (fldI < UClsFCount[recId - REC_UCLASS_BASE]) then
+              begin
+                fTk := UFldTk[recBase + fldI];
+                if (fTk = Ord(tyPointer)) and (CurTok.Kind = tkString) and
+                   (PendingInitCount < MAX_PENDING_INITS) then
+                begin
+                  PendingInitSym[PendingInitCount]  := idx;
+                  PendingInitElem[PendingInitCount] := ei;
+                  PendingInitFOff[PendingInitCount] := UFldNOff[recBase + fldI];
+                  PendingInitFLen[PendingInitCount] := UFldNLen[recBase + fldI];
+                  PendingInitVal[PendingInitCount]  := Tokens[TokPos - 1].SOffset;
+                  PendingInitValAux[PendingInitCount] := Tokens[TokPos - 1].SLen;
+                  PendingInitTk[PendingInitCount]   := fTk;
+                  PendingInitKind[PendingInitCount] := 1;
+                  Inc(PendingInitCount);
+                  Next;
+                  while CurTok.Kind = tkString do
+                  begin
+                    PendingInitValAux[PendingInitCount - 1] :=
+                      PendingInitValAux[PendingInitCount - 1] + Tokens[TokPos - 1].SLen;
+                    Next;
+                  end;
+                end
+                else if (fTk = Ord(tyPointer)) and (CurTok.Kind = tkIdent) then
+                begin
+                  procIdx := FindProc(CurTok.SVal);
+                  if (procIdx >= 0) and (PendingInitCount < MAX_PENDING_INITS) then
+                  begin
+                    PendingInitSym[PendingInitCount]  := idx;
+                    PendingInitElem[PendingInitCount] := ei;
+                    PendingInitFOff[PendingInitCount] := UFldNOff[recBase + fldI];
+                    PendingInitFLen[PendingInitCount] := UFldNLen[recBase + fldI];
+                    PendingInitVal[PendingInitCount]  := procIdx;
+                    PendingInitValAux[PendingInitCount] := 0;
+                    PendingInitTk[PendingInitCount]   := fTk;
+                    PendingInitKind[PendingInitCount] := 2;
+                    Inc(PendingInitCount);
+                    Next;
+                  end
+                  else
+                    CSkipCInitElement;
+                end
+                else if TypeIsOrdinal(IntToTypeKind(fTk)) and (CurTok.Kind <> tkBegin) then
+                begin
+                  initV := CEvalConstExpr;
+                  if (CurTok.Kind in [tkComma, tkEnd]) and (PendingInitCount < MAX_PENDING_INITS) then
+                  begin
+                    PendingInitSym[PendingInitCount]  := idx;
+                    PendingInitElem[PendingInitCount] := ei;
+                    PendingInitFOff[PendingInitCount] := UFldNOff[recBase + fldI];
+                    PendingInitFLen[PendingInitCount] := UFldNLen[recBase + fldI];
+                    PendingInitVal[PendingInitCount]  := initV;
+                    PendingInitValAux[PendingInitCount] := 0;
+                    PendingInitTk[PendingInitCount]   := fTk;
+                    PendingInitKind[PendingInitCount] := 0;
+                    Inc(PendingInitCount);
+                  end
+                  else
+                    CSkipCInitElement;
+                end
+                else
+                  CSkipCInitElement;
+              end
+              else
+                CSkipCInitElement;
+              Inc(fldI);
+              Eat(tkComma);
+            end;
+            Eat(tkEnd);
+          end
+          else
+            CSkipCInitElement;
+          Inc(ei);
+          Eat(tkComma);
+        end;
+        Eat(tkEnd);
+      end
+      else if (CurTok.Kind = tkBegin) and (baseTk = tyRecord) and (not wasArr) and
+         (idx >= 0) and (recBase >= 0) and
+         (UClsFCount[recId - REC_UCLASS_BASE] >= 1) then
       begin
         Next;   { consume the opening brace }
         fldI := 0;
         while (CurTok.Kind <> tkEnd) and (CurTok.Kind <> tkEOF) do
         begin
-          if (fldI < UClsFCount[recId - REC_UCLASS_BASE]) and (CurTok.Kind = tkInteger) and
-             (Tokens[TokPos].Kind in [tkComma, tkEnd]) and (PendingInitCount < MAX_PENDING_INITS) then
+          if fldI < UClsFCount[recId - REC_UCLASS_BASE] then
           begin
-            PendingInitSym[PendingInitCount]  := idx;
-            PendingInitElem[PendingInitCount] := -1;
-            PendingInitFOff[PendingInitCount] := UFldNOff[recBase + fldI];  { field NAME ref }
-            PendingInitFLen[PendingInitCount] := UFldNLen[recBase + fldI];
-            PendingInitVal[PendingInitCount]  := CurTok.IVal;
-            PendingInitTk[PendingInitCount]   := UFldTk[recBase + fldI];
-            Inc(PendingInitCount);
-            Inc(fldI); Next; Eat(tkComma);
+            fTk := UFldTk[recBase + fldI];
+            if CurTok.Kind = tkBegin then
+              CSkipCInitElement
+            else if TypeIsOrdinal(IntToTypeKind(fTk)) then
+            begin
+              initV := CEvalConstExpr;
+              if (CurTok.Kind in [tkComma, tkEnd]) and (PendingInitCount < MAX_PENDING_INITS) then
+              begin
+                PendingInitSym[PendingInitCount]  := idx;
+                PendingInitElem[PendingInitCount] := -1;
+                PendingInitFOff[PendingInitCount] := UFldNOff[recBase + fldI];  { field NAME ref }
+                PendingInitFLen[PendingInitCount] := UFldNLen[recBase + fldI];
+                PendingInitVal[PendingInitCount]  := initV;
+                PendingInitTk[PendingInitCount]   := fTk;
+                Inc(PendingInitCount);
+              end
+              else
+                CSkipCInitElement;
+            end
+            else
+              CSkipCInitElement;
           end
           else
-            Next;   { non-constant / nested / overflow field: skip without materialising }
+            CSkipCInitElement;   { overflow field: skip without materialising }
+          Inc(fldI);
+          Eat(tkComma);
         end;
         Eat(tkEnd);
       end
@@ -2335,6 +2657,30 @@ begin
         PendingInitTk[PendingInitCount]   := Ord(baseTk);
         Inc(PendingInitCount);
         Next;
+      end
+      else if (not wasArr) and (idx >= 0) and (baseTk = tyPointer) and
+              (CurTok.Kind = tkString) and
+              (PendingInitCount < MAX_PENDING_INITS) then
+      begin
+        { Scalar `char *p = "literal";` (e.g. lua's `const char *const CLIBS =
+          "_CLIBS"`). Store the string-literal address into p at main entry
+          (FOff = -3 string-span sentinel, Elem = -1 scalar). The assignment
+          lowering applies the C string-literal +8 char-pointer adjustment. }
+        PendingInitSym[PendingInitCount]  := idx;
+        PendingInitElem[PendingInitCount] := -1;
+        PendingInitFOff[PendingInitCount] := -3;
+        PendingInitFLen[PendingInitCount] := Tokens[TokPos - 1].SLen;
+        PendingInitVal[PendingInitCount]  := Tokens[TokPos - 1].SOffset;
+        PendingInitTk[PendingInitCount]   := Ord(tyPointer);
+        PendingInitKind[PendingInitCount] := 0;
+        Inc(PendingInitCount);
+        Next;
+        while CurTok.Kind = tkString do
+        begin
+          PendingInitFLen[PendingInitCount - 1] :=
+            PendingInitFLen[PendingInitCount - 1] + Tokens[TokPos - 1].SLen;
+          Next;
+        end;
       end
       else if (not wasArr) and (idx >= 0) and (baseTk = tyPointer) and
               (CurTok.Kind = tkAmp) and (Tokens[TokPos].Kind = tkIdent) and
@@ -3400,14 +3746,23 @@ begin
       begin
         baseScalarTk := CTypeElemTk;
         baseElemRec := CTypeElemRec;
+        baseElemTk := baseScalarTk;
       end
       else
       begin
         baseScalarTk := Ord(fTk);
-        baseElemRec := REC_NONE;
+        if fTk = tyPointer then
+        begin
+          baseElemTk := CTypeElemTk;
+          baseElemRec := CTypeElemRec;
+        end
+        else
+        begin
+          baseElemTk := Ord(tyUnknown);
+          baseElemRec := REC_NONE;
+        end;
       end;
       baseRecId := CTypeBaseRec;
-      baseElemTk := baseScalarTk;
 
       firstDecl := True;
       repeat
@@ -3430,8 +3785,9 @@ begin
         begin
           Next;
           dimVal := 1;
-          if CurTok.Kind = tkInteger then begin dimVal := CurTok.IVal; arrLen := arrLen * CurTok.IVal; Next; end;
-          while (CurTok.Kind <> tkRBrack) and (CurTok.Kind <> tkEOF) do Next;
+          if CurTok.Kind <> tkRBrack then
+            dimVal := CEvalConstExpr;
+          arrLen := arrLen * dimVal;
           Eat(tkRBrack);
           isArr := True;
           { record per-dim span so a multidim field supports partial-index row
@@ -3459,7 +3815,16 @@ begin
         else
         begin
           declTk := baseScalarTk; declRec := REC_NONE;
-          declElemTk := Ord(tyUnknown); declElemRec := REC_NONE;
+          if IntToTypeKind(baseScalarTk) = tyPointer then
+          begin
+            declElemTk := baseElemTk;
+            declElemRec := baseElemRec;
+          end
+          else
+          begin
+            declElemTk := Ord(tyUnknown);
+            declElemRec := REC_NONE;
+          end;
           sz := TypeSize(IntToTypeKind(baseScalarTk));
           al := TypeAlign(IntToTypeKind(baseScalarTk));
         end;
