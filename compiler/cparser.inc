@@ -518,6 +518,13 @@ begin
     Result := RecFieldType(ResolveNodeRec(ASTLeft[node]), GetASTIdentName(node)) = tyPointer
   else if ASTKind[node] = AN_INDEX then
     Result := IntToTypeKind(ASTTk[node]) = tyPointer
+  else if ASTKind[node] = AN_DEREF then
+    { `*p` where p is `T**`: the deref is itself a pointer value, so `(*p)->f`
+      is a real C `->` (deref then field), not a `.` on an embedded record.
+      ParseCUnary tags AN_DEREF with the pointee type (CNodePointeeTk). Without
+      this, `(*p)->f` mis-lowered to a field of the slot holding `*p` (it read /
+      addressed `p`'s own storage instead of `*p`'s target). }
+    Result := IntToTypeKind(ASTTk[node]) = tyPointer
   else if (ASTKind[node] = AN_BINOP) or (ASTKind[node] = AN_INCDEC) then
     { pointer arithmetic / `p++` keeps a pointer type (CMakeBinop / CMakeIncDec) }
     Result := IntToTypeKind(ASTTk[node]) = tyPointer
@@ -603,6 +610,11 @@ begin
   end
   else if ASTKind[node] = AN_INCDEC then
     Result := CNodePtrElemRec(ASTLeft[node])   { `p++`: elem rec from the lvalue }
+  else if ASTKind[node] = AN_DEREF then
+    { `*p` where p is `T**`: *p is a `T*` whose pointed-at record is the same
+      base record recorded on p. Needed so `(*p)->field` resolves non-zero field
+      offsets (without it the record was unknown and every field landed at 0). }
+    Result := CNodePtrElemRec(ASTLeft[node])
   else if ASTKind[node] = AN_ASSIGN then
     Result := CNodePtrElemRec(ASTLeft[node]);
 end;
