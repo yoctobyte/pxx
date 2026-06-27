@@ -27,13 +27,14 @@ _none_
 | --- | --- | --- | --- | --- |
 | feature-c-runtime-library | C | feature | C runtime/library layer (`lib/crtl`) plus direct C-library packages | feature-c-source-frontend |
 
-## backlog (69)
+## backlog (70)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
 | bug-c-addr-of-unsupported-ir | A | bug | C `&` of certain operands lowers to IR_UNSUPPORTED (codegen crash) | — |
 | bug-c-global-double-init | A | bug | C: global `double`/`float` initializer stored as 0 | — |
 | bug-c-libc-data-symbol-stdio | A | bug | C stdio must ride pxx syscalls (libc-free), not import libc | — |
+| bug-c-main-argc-argv-not-wired | A | bug | C `main(argc, argv)` gets argc 0 | — |
 | bug-c-typedef-return-corrupts-entry | C | bug | C: typedef return type can corrupt program entry call | — |
 | bug-c-vararg-overflow-area | A | bug | C: 6+ variadic args (overflow area) segfault | — |
 | bug-fpc-seed-helper-ordering-after-lua-c-frontend | A | bug | FPC seed build fails after Lua C frontend helper additions | — |
@@ -135,7 +136,7 @@ _none_
 | feature-mimic-fpc | B | feature | `mimic FPC` compatibility mode | — |
 | feature-string-model-tyfixedstring | B | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (307)
+## done (308)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -167,6 +168,7 @@ _none_
 | bug-c-sizeof-string-literal | C | bug | C `sizeof("string literal")` returns pointer size, not array size | — |
 | bug-c-string-literal-to-pointer-prefix | C | bug | C: string literal assigned to a `char *` points at the Pascal length-prefix | — |
 | bug-c-struct-pointer-index-stride | C | bug | C: `p[i]` / `p+i` on a struct pointer uses the wrong element stride | — |
+| bug-c-typedef-record-alias-loses-rec-id | A | bug | C typedef alias to struct loses record id | — |
 | bug-cardinal-expr-promotion-shr-orphan | A | bug | bug: cardinal/signed 32-bit expression width (orphan addendum) | — |
 | bug-cardinal-expr-promotion | A | bug | bug: cardinal/longword binary-op promotes to uint64 (FPC: int64) | — |
 | bug-case-insensitive-incomplete-builtins-funcs | A | bug | bug: case-insensitivity incomplete — builtins + function calls still case-sensitive | — |
@@ -460,6 +462,7 @@ _none_
 - [A] bug-c-addr-of-unsupported-ir
 - [A] bug-c-global-double-init
 - [A] bug-c-libc-data-symbol-stdio
+- [A] bug-c-main-argc-argv-not-wired
 - [C] bug-c-typedef-return-corrupts-entry
 - [A] bug-c-vararg-overflow-area
 - [A] bug-fpc-seed-helper-ordering-after-lua-c-frontend

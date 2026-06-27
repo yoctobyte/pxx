@@ -4161,13 +4161,19 @@ begin
     nmOff := Tokens[TokPos-1].SOffset;
     nmLen := Tokens[TokPos-1].SLen;
     nm := CurTok.SVal; Next;
-    { Carry the pointed-at type for a pointer typedef (e.g. typedef char *PStr),
-      so a Pascal/nilpy var of that type is a typed pointer (deref/index). The
-      PtrAlias makes it resolvable by Pascal's type parser (FindTypeAlias). }
-    if (tk = tyPointer) and (CTypePtrDepth > 0) then
+    { Preserve metadata when aliasing typedefs. `typedef S Stream;` must keep the
+      record id from S, otherwise `Stream *p; p->field` resolves as REC_NONE and
+      all field offsets collapse to 0. Pointer aliases likewise keep their
+      pointed-at type even when aliasing an existing pointer typedef rather than
+      spelling a fresh `*` here. }
+    if (tk = tyRecord) then
+      AddCTypedefEx(nm, tk, Ord(tyUnknown), CTypeBaseRec)
+    else if tk = tyPointer then
     begin
       AddCTypedefEx(nm, tk, CTypeElemTk, CTypeElemRec);
-      RegisterPtrAlias(nmOff, nmLen, CTypeElemTk, CTypeElemRec, 0, 0);
+      if CTypeProcSig >= 0 then CTypedefProcSig[FindCTypedef(nm)] := CTypeProcSig;
+      if (CTypePtrDepth > 0) or (CTypeElemTk <> Ord(tyUnknown)) then
+        RegisterPtrAlias(nmOff, nmLen, CTypeElemTk, CTypeElemRec, 0, 0);
     end
     else
       AddCTypedef(nm, tk);

@@ -494,6 +494,8 @@ test-core: $(COMPILER)
 	/tmp/cfile_stdio_b8726; test "$$?" = "42"
 	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src test/csocket_loopback_b88.c /tmp/csocket_loopback_b8826
 	/tmp/csocket_loopback_b8826; test "$$?" = "42"
+	./$(COMPILER) test/ctypedef_alias_fnptr_field_b89.c /tmp/ctypedef_alias_fnptr_field_b8926
+	/tmp/ctypedef_alias_fnptr_field_b8926; test "$$?" = "42"
 	./$(COMPILER) -Itest/cinc/inc test/cinc/cinc_main.c /tmp/cinc_main26
 	test "$$(/tmp/cinc_main26)" = "$$(printf 'local-ok\ninc-ok')"
 	./$(COMPILER) test/test_declared_directive.pas /tmp/test_declared_directive26
@@ -2148,7 +2150,7 @@ test-float-determinism: $(COMPILER)
 # Lua integration suite (feature-c-source-frontend smoke). DISTINCT from `make
 # test`: the base gate carries no 3rd-party dependency. Compiles the lua 5.4
 # core+stdlib (from library_candidates/lua/src — gitignored scratch, fetch it
-# there) into a stdin runner and checks each test/lua/*.lua against its committed
+# there) into a file-loading runner and checks each test/lua/*.lua against its committed
 # .expected stdout. Skips gracefully when the lua tree is absent. Exercises the
 # C frontend end-to-end on real portable C (OOP/metatables, closures, coroutines,
 # string lib, the float value model) — coverage the micro-tests cannot reach
@@ -2163,7 +2165,8 @@ test-lua: $(COMPILER)
 	./$(COMPILER) -g -Ilib/crtl/include -Ilib/crtl/src -I$(LUA_SRC) test/lua/runner.c /tmp/pxx_lua_runner || exit 1; \
 	fail=0; for p in test/lua/*.lua; do \
 	  exp="$${p%.lua}.expected"; \
-	  /tmp/pxx_lua_runner < $$p 2>/dev/null > /tmp/pxx_lua_got.txt; \
+	  cp "$$p" /tmp/pxx_lua_input.lua; \
+	  /tmp/pxx_lua_runner 2>/dev/null > /tmp/pxx_lua_got.txt; \
 	  if diff -u "$$exp" /tmp/pxx_lua_got.txt > /tmp/pxx_lua_diff.txt; then \
 	    echo "test-lua: PASS $$(basename $$p)"; \
 	  else \

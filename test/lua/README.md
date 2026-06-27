@@ -4,8 +4,9 @@ End-to-end check that the pxx **C frontend** compiles and runs real portable C:
 the [Lua 5.4](https://www.lua.org/) interpreter, built libc-free against `lib/crtl`.
 It exercises ground the `test/c*_b*.c` micro-tests cannot reach — full programs
 using OOP/metatables, closures, coroutines, the string library, and the float
-value model. (Example payoff: `sizeof("self")` returning the pointer size silently
-broke *all* colon-method OOP; no micro-test caught it, a real program did.)
+value model, with the runner itself and `files.lua` covering Lua's C stdio file
+path. (Example payoff: `sizeof("self")` returning the pointer size silently broke
+*all* colon-method OOP; no micro-test caught it, a real program did.)
 
 ## Distinct from the base gate
 
@@ -15,9 +16,10 @@ absent, so it never blocks a normal build.
 
 ## Layout
 
-- `runner.c` — committed. Amalgamates `lib/crtl` + the Lua core/stdlib and runs a
-  program read from **stdin** (crtl has no `fopen` yet). Diagnostic markers some
-  Lua sources print go to stderr; the suite compares **stdout** only.
+- `runner.c` — committed. Amalgamates `lib/crtl` + the Lua core/stdlib and runs
+  the program copied to `/tmp/pxx_lua_input.lua` via `luaL_loadfile`, exercising
+  Lua's `fopen`/`fread` path. Diagnostic markers some Lua sources print go to
+  stderr; the suite compares **stdout** only.
 - `*.lua` — committed test programs.
 - `*.expected` — committed reference stdout (matches stock Lua 5.4).
 

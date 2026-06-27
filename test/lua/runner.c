@@ -1,8 +1,9 @@
 /* pxx lua test-suite runner (used by `make test-lua`, NOT the base gate).
  * Amalgamates crtl + the lua core/lib from library_candidates/lua/src (gitignored
- * 3rd-party scratch) and runs a lua program read from stdin. The suite stays
- * distinct from `make test` so the base gate carries no 3rd-party dependency;
- * test-lua skips gracefully when the lua tree is absent.
+ * 3rd-party scratch) and runs the lua program at PXX_LUA_SCRIPT. C argv is not
+ * wired yet, so the Makefile copies each case to that fixed path. The suite
+ * stays distinct from `make test` so the base gate carries no 3rd-party
+ * dependency; test-lua skips gracefully when the lua tree is absent.
  * Diagnostic markers some lua sources emit go to stderr (fd 2); the suite checks
  * stdout only, so they do not affect results. */
 #include "ctype.c"
@@ -44,26 +45,17 @@
 #include "lutf8lib.c"
 #include "linit.c"
 
-extern long __pxx_read(int, void *, unsigned long);
+#define PXX_LUA_SCRIPT "/tmp/pxx_lua_input.lua"
+
 extern long __pxx_write(int, const void *, unsigned long);
 static unsigned long slen(const char *s){ unsigned long n=0; while(s[n]) n++; return n; }
 static void emit(const char *s){ __pxx_write(2, s, slen(s)); }
 
 int main(void) {
-  static char buf[1 << 20];          /* 1 MB max program */
-  long total = 0, r;
   lua_State *L;
-  for (;;) {
-    r = __pxx_read(0, buf + total, sizeof(buf) - 1 - total);
-    if (r <= 0) break;
-    total += r;
-    if (total >= (long)sizeof(buf) - 1) break;
-  }
-  buf[total] = 0;
-  if (total <= 0) { emit("EMPTY-STDIN\n"); return 2; }
   L = luaL_newstate();
   luaL_openlibs(L);
-  if (luaL_loadbuffer(L, buf, (unsigned long)total, "=prog") != 0) {
+  if (luaL_loadfile(L, PXX_LUA_SCRIPT) != 0) {
     emit("LOAD-ERR "); { const char *e=lua_tostring(L,-1); if(e) emit(e); } emit("\n"); return 4;
   }
   if (lua_pcall(L, 0, 0, 0) != 0) {
