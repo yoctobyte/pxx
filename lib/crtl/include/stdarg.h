@@ -20,12 +20,14 @@ typedef struct __pxx_va_elem va_list;
 typedef struct __pxx_va_save { char bytes[176]; } __pxx_va_save;
 
 /* va_start, in plain C: seed the control block. ngp = number of named GP params
-   already consumed (so the first variadic GP arg is read next). */
-static void __pxx_va_start_impl(struct __pxx_va_elem *ap, void *save, unsigned int ngp) {
+   already consumed (so the first variadic GP arg is read next). overflow points
+   at the first caller stack slot past the six GP registers. */
+static void __pxx_va_start_impl(struct __pxx_va_elem *ap, void *save,
+                                unsigned int ngp, void *overflow) {
   ap->gp_offset = ngp * 8;
   ap->fp_offset = 48;
   ap->reg_save_area = save;
-  ap->overflow_arg_area = save;   /* lua stays under 6 GP args -> never used */
+  ap->overflow_arg_area = overflow;
 }
 
 /* va_arg gp/fp/overflow walk, in plain C. Returns the address of the next

@@ -240,7 +240,7 @@ end;
   call with an AN_ARG chain). }
 function ParseCPrimary: Integer;
 var node, idx, procIdx, argHead, argTail, argNode, valNode, calleeNode: Integer;
-    apNode, addrNode, callNode, helper, a2, a3: Integer;
+    apNode, addrNode, callNode, helper, a2, a3, a4: Integer;
     vt: TTypeKind;
     name: AnsiString;
 begin
@@ -335,7 +335,7 @@ begin
       end
       else if (name = '__builtin_va_start') and (CurTok.Kind = tkLParen) then
       begin
-        { __builtin_va_start(ap, last) -> __pxx_va_start_impl(&ap, &__va_save, NGP) }
+        { __builtin_va_start(ap, last) -> __pxx_va_start_impl(&ap, &__va_save, NGP, __va_overflow) }
         Next;
         apNode := ParseCExpr; Eat(tkComma);
         valNode := ParseCExpr;   { `last` named param — discarded }
@@ -347,10 +347,13 @@ begin
         a3 := AllocNode(AN_INT_LIT);
         if CurProc >= 0 then ASTIVal[a3] := ProcNamedGP[CurProc] else ASTIVal[a3] := 0;
         ASTTk[a3] := Ord(tyInteger);
+        idx := FindSym('__va_overflow');
+        a4 := AllocNode(AN_IDENT); ASTIVal[a4] := idx; ASTTk[a4] := Ord(tyPointer);
         helper := FindProc('__pxx_va_start_impl');
         argNode := AllocNode(AN_ARG); ASTLeft[argNode] := addrNode;
         calleeNode := AllocNode(AN_ARG); ASTLeft[calleeNode] := node; ASTRight[argNode] := calleeNode;
-        valNode := AllocNode(AN_ARG); ASTLeft[valNode] := a3; ASTRight[calleeNode] := valNode; ASTRight[valNode] := -1;
+        valNode := AllocNode(AN_ARG); ASTLeft[valNode] := a3; ASTRight[calleeNode] := valNode;
+        apNode := AllocNode(AN_ARG); ASTLeft[apNode] := a4; ASTRight[valNode] := apNode; ASTRight[apNode] := -1;
         callNode := AllocNode(AN_CALL); ASTIVal[callNode] := helper;
         ASTTk[callNode] := Ord(tyPointer); ASTLeft[callNode] := argNode;
         Result := callNode; Exit;
@@ -3042,7 +3045,7 @@ var
   precid: array[0..15] of Integer;    { record id per tyRecord param (for isRef field access) }
   pprocsig: array[0..15] of Integer;  { fn-pointer signature Procs[] index per param, else -1 }
   savedSC, savedFS, node, savedCurProc: Integer;
-  vaSaveSym, vaSaveRec: Integer;
+  vaSaveSym, vaSaveRec, vaOverflowSym: Integer;
   parenName, isVariadic, wasNewProc: Boolean;
 begin
   { Default DT_NEEDED soname for an external with no explicit library: math
@@ -3289,10 +3292,11 @@ begin
   if TypeIsAggregate(retType) then
     ProcAggregateDestSym[procIdx] := AllocVar('', tyPointer);
 
-  { Variadic: reserve a 176-byte register-save area as a hidden local `__va_save`.
-    The prologue stores the incoming GP+XMM arg registers here; va_start points
-    reg_save_area at it; va_arg reads from it. }
+  { Variadic: reserve a 176-byte register-save area as a hidden local `__va_save`
+    plus `__va_overflow`, the caller stack overflow pointer. The prologue stores
+    incoming GP+XMM arg registers in __va_save and rbp+16 in __va_overflow. }
   vaSaveSym := -1;
+  vaOverflowSym := -1;
   if ProcVariadic[procIdx] then
   begin
     vaSaveRec := FindCTag('__pxx_va_save');
@@ -3300,6 +3304,7 @@ begin
     begin
       LastTypeRecId := vaSaveRec;
       vaSaveSym := AllocVar('__va_save', tyRecord);
+      vaOverflowSym := AllocVar('__va_overflow', tyPointer);
     end;
   end;
 
@@ -3314,6 +3319,8 @@ begin
     to variadic functions, so non-variadic / Pascal codegen is unchanged. }
   if vaSaveSym >= 0 then
   begin
+    EmitB($48); EmitB($8D); EmitB($85); EmitI32(16);                          { lea rax, [rbp+16] }
+    EmitB($48); EmitB($89); EmitB($85); EmitI32(Syms[vaOverflowSym].Offset);   { mov [rbp+o], rax }
     EmitB($48); EmitB($89); EmitB($BD); EmitI32(Syms[vaSaveSym].Offset + 0);    { mov [rbp+o], rdi }
     EmitB($48); EmitB($89); EmitB($B5); EmitI32(Syms[vaSaveSym].Offset + 8);    { rsi }
     EmitB($48); EmitB($89); EmitB($95); EmitI32(Syms[vaSaveSym].Offset + 16);   { rdx }

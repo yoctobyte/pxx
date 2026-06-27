@@ -38,3 +38,9 @@ the libc-free stdio milestone (engine + <=5-vararg calls match gcc).
 - 2026-06-27 — Still open, but the symptom improved from segfault to wrong value.
   Current `compiler/pascal26` compiles/runs a six-vararg `printf`; it exits `42`
   and prints `1 2 3 4 5 4292415` instead of `1 2 3 4 5 6`.
+- 2026-06-27 — Fixed. Variadic prologues now reserve a hidden `__va_overflow`
+  pointer, initialize it to `[rbp+16]`, and pass it into `__pxx_va_start_impl`
+  so `va_arg` switches from `reg_save_area` to the real caller stack overflow
+  area after the six GP registers are exhausted. Added
+  `test/cvararg_overflow_b93.c`, which verifies both six-argument `printf`
+  output and direct 7/8-int `va_arg` overflow reads.
