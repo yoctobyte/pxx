@@ -3000,6 +3000,17 @@ begin
                     5: begin EmitB($41); EmitB($59); end; { pop r9 }
                   end;
               end;
+            { Internal C function returning an aggregate (struct/union by value):
+              pass the caller's hidden destination in r10, matching the pxx
+              indirect-result convention its prologue stashes (EmitAggregateDestStash)
+              and epilogue fills. External libc aggregate returns (true SysV sret)
+              are not modelled here. Evaluate the dest into r10 before AL is set
+              and the call is made; arg registers are already loaded above. }
+            if (not ProcExternal[procIdx]) and TypeIsAggregate(Procs[procIdx].RetType) then
+            begin
+              IREmitNode(IRC[node]);                  { rax = hidden destination }
+              EmitB($49); EmitB($89); EmitB($C2);     { mov r10, rax }
+            end;
             { Variadic ABI: AL = number of vector registers used. Set
               unconditionally (0 for all-integer calls) so variadic callees
               such as printf read the correct count. }

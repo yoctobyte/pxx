@@ -317,14 +317,16 @@ begin
         if CTypePtrDepth > 0 then vt := tyPointer;
         Expect(tkRParen, ')');
         addrNode := CVaListAddr(apNode);
-        { The INTERNAL C variadic call convention pushes every arg (including a
-          double, which the value model carries in rax) and pops it into a GP
-          register, so the callee's prologue saves ALL varargs — float included —
-          into the GP save area; the FP save area is never filled. C variadic
-          functions are only ever called this way (libc-free), so va_arg of a
-          float must read the GP area too. Using the FP helper read the unused FP
-          slots and returned 0 (bug-c-double-vararg, %f/%g rendered 0). }
-        helper := FindProc('__pxx_va_arg_gp');
+        { SysV AMD64 variadic ABI: integer/pointer args arrive in the GP regs and
+          floats in the XMM regs; the variadic prologue saves both classes into
+          __va_save (GP at +0, XMM/FP at +48). va_arg(double) therefore reads the
+          FP save area, va_arg(int/ptr) the GP area. (An earlier model pushed every
+          arg through GP and read floats from gp too; that mismatched the actual
+          SysV call+prologue and made %f/%g render 0 — bug-c-double-vararg.) }
+        if TypeIsFloat(vt) then
+          helper := FindProc('__pxx_va_arg_fp')
+        else
+          helper := FindProc('__pxx_va_arg_gp');
         argNode := AllocNode(AN_ARG); ASTLeft[argNode] := addrNode; ASTRight[argNode] := -1;
         callNode := AllocNode(AN_CALL); ASTIVal[callNode] := helper;
         ASTTk[callNode] := Ord(tyPointer); ASTLeft[callNode] := argNode;
@@ -465,10 +467,34 @@ end;
 { Pointed-at / element TTypeKind ordinal of a pointer or array node, used to tag
   AN_DEREF / AN_INDEX results. Defaults to Integer for shapes not yet modelled. }
 function CNodePointeeTk(node: Integer): Integer;
-var recId: Integer; fieldName: AnsiString;
+var recId, inner: Integer; fieldName: AnsiString;
 begin
   Result := Ord(tyInteger);
   if node < 0 then Exit;
+  if ASTKind[node] = AN_ADDR then
+  begin
+    { `*(&x)` — the deref of an address-of yields x's own type. Without this the
+      pointee defaulted to tyInteger and a `*(&d) = expr` store of an 8-byte
+      double (lua's `tonumber` macro: `*(n) = fltvalue(o)` with n = &local)
+      truncated to a 4-byte store, dropping the high 32 bits of every float. }
+    inner := ASTLeft[node];
+    if inner < 0 then
+      Result := Ord(tyInteger)
+    else if (ASTKind[inner] = AN_IDENT) and not Syms[ASTIVal[inner]].IsArray then
+      Result := Ord(Syms[ASTIVal[inner]].TypeKind)
+    else if ASTKind[inner] = AN_FIELD then
+    begin
+      recId := ResolveNodeRec(ASTLeft[inner]);
+      fieldName := GetASTIdentName(inner);
+      if not RecFieldIsArray(recId, fieldName) then
+        Result := Ord(RecFieldType(recId, fieldName))
+      else
+        Result := ASTTk[inner];
+    end
+    else
+      Result := ASTTk[inner];
+    Exit;
+  end;
   if ASTKind[node] = AN_IDENT then
   begin
     if Syms[ASTIVal[node]].IsArray then
@@ -490,6 +516,15 @@ begin
     if (ASTIVal[node] >= 0) and
        (Procs[ASTIVal[node]].RetType = tyPointer) then
       Result := ProcRetPtrElemTk[ASTIVal[node]];
+  end
+  else if ASTKind[node] = AN_PTR_CAST then
+  begin
+    { `*(T*)expr`: the cast carries the pointed-at type in its type-alias slot
+      (castDepth>0 -> ASTIVal = alias idx, AliasElemTk = T). Without this the
+      deref defaulted to tyInteger and a `*(long*)&d` / `*(double*)p` load read
+      only 4 bytes — narrowing every 8-byte double moved through a pointer cast. }
+    if (IntToTypeKind(ASTTk[node]) = tyPointer) and (ASTIVal[node] >= 0) then
+      Result := AliasElemTk[ASTIVal[node]];
   end
   else if ASTKind[node] = AN_INDEX then
   begin
@@ -2948,7 +2983,7 @@ var
   isFunc: Boolean;
   nparams, procIdx, i, idx, patchPos, sz, gli: Integer;
   intIdx, sseIdx, stackOff: Integer;
-  retPtrElemTk, retPtrElemRec: Integer;
+  retPtrElemTk, retPtrElemRec, retRecId: Integer;
   ptypes: array[0..15] of TTypeKind;
   pnames: array[0..15] of AnsiString;
   pdepths: array[0..15] of Integer;
@@ -2958,7 +2993,7 @@ var
   pprocsig: array[0..15] of Integer;  { fn-pointer signature Procs[] index per param, else -1 }
   savedSC, savedFS, node, savedCurProc: Integer;
   vaSaveSym, vaSaveRec: Integer;
-  parenName, isVariadic: Boolean;
+  parenName, isVariadic, wasNewProc: Boolean;
 begin
   { Default DT_NEEDED soname for an external with no explicit library: math
     functions are in libm.so.6 on glibc, everything else in libc.so.6. }
@@ -2974,6 +3009,13 @@ begin
     retPtrElemTk := CTypeElemTk;
     retPtrElemRec := CTypeElemRec;
   end;
+  { An aggregate return type (`struct S f(...)`) carries its record id in
+    CTypeBaseRec; capture it before param parsing overwrites CTypeBaseRec, so the
+    proc records ProcRetRecId and the hidden Result slot is sized to the record
+    (without it the slot was 0/garbage-sized and a by-value struct/union return —
+    e.g. lua's `union { double n; long i; }` setobj path — segfaulted). }
+  retRecId := REC_NONE;
+  if retType = tyRecord then retRecId := CTypeBaseRec;
   if CTypeIsVoid then retType := tyInteger; { void return: value slot unused }
 
   { A parenthesized declarator name `(name)(params)` — lua.h declares its whole
@@ -3079,15 +3121,27 @@ begin
   
   { Register or locate Proc }
   procIdx := FindProc(name);
-  if procIdx < 0 then
+  wasNewProc := procIdx < 0;
+  if wasNewProc then
     procIdx := RegisterProc(name, isFunc, retType, nparams, pnames, ptypes);
-  ProcVariadic[procIdx] := isVariadic;
-  ProcCdecl[procIdx] := True;
-  ProcNamedGP[procIdx] := nparams;   { lua's variadic fns take only GP named params (L, fmt) }
+  { A C extern can bind by name to an existing PASCAL proc (case-insensitive
+    FindProc): lua's <math.h> `sqrt`/`exp`/`sin`/... resolve to the RTL math
+    routines. Such a proc keeps its Pascal internal calling convention — marking
+    it cdecl here would route the call through the SysV path (floats in XMM) while
+    the Pascal prologue reads its params from GP registers, so every double arg
+    arrived garbage (sqrt(16)->0, ln(2)->junk). Only a genuinely new C-declared
+    proc is cdecl. }
+  if wasNewProc then
+  begin
+    ProcVariadic[procIdx] := isVariadic;
+    ProcCdecl[procIdx] := True;
+    ProcNamedGP[procIdx] := nparams;   { variadic C fns take only GP named params (L, fmt) }
+  end;
   for i := 0 to nparams - 1 do
     ProcParamPtrDepth[procIdx * 16 + i] := pdepths[i];
   ProcRetPtrElemTk[procIdx] := retPtrElemTk;
   ProcRetPtrElemRec[procIdx] := retPtrElemRec;
+  if retType = tyRecord then ProcRetRecId[procIdx] := retRecId;
 
   { If it is just a declaration (ends with ';'), we are done! }
   while (CurTok.Kind <> tkSemicolon) and (CurTok.Kind <> tkBegin) and
@@ -3171,9 +3225,19 @@ begin
   end;
   
   { Return value slot }
+  if retType = tyRecord then LastTypeRecId := retRecId;
   AllocVar('Result', retType);
   Procs[procIdx].RetSymIdx := SymCount - 1;
   Syms[SymCount-1].Kind := skLocal;
+
+  { Aggregate (struct/union by value) return: allocate the hidden destination
+    pointer local, exactly like a Pascal record-returning routine. The prologue
+    stashes the caller's dest pointer here (EmitAggregateDestStash) and the
+    epilogue copies Result into it; the caller's cdecl call path loads it into
+    the indirect-result register. Without this a by-value struct/union return
+    (lua's TValue union) wrote Result to a garbage pointer and segfaulted. }
+  if TypeIsAggregate(retType) then
+    ProcAggregateDestSym[procIdx] := AllocVar('', tyPointer);
 
   { Variadic: reserve a 176-byte register-save area as a hidden local `__va_save`.
     The prologue stores the incoming GP+XMM arg registers here; va_start points
@@ -3192,6 +3256,7 @@ begin
   { Prologue }
   patchPos := EmitProcPrologue;
   Procs[procIdx].FramePatch := patchPos;
+  EmitAggregateDestStash(procIdx);
 
   { Variadic register-save prologue (System V): store the 6 GP + 8 XMM arg
     registers into __va_save so va_arg can read the variadic args. Registers are

@@ -478,6 +478,16 @@ test-core: $(COMPILER)
 	/tmp/csizeof_deref_ptr_b7926; test "$$?" = "42"
 	./$(COMPILER) test/cunsigned_arith_compare_b80.c /tmp/cunsigned_arith_compare_b8026
 	/tmp/cunsigned_arith_compare_b8026; test "$$?" = "42"
+	./$(COMPILER) test/cptrcast_deref_double_b81.c /tmp/cptrcast_deref_double_b8126
+	/tmp/cptrcast_deref_double_b8126; test "$$?" = "42"
+	./$(COMPILER) test/caggregate_double_return_b82.c /tmp/caggregate_double_return_b8226
+	/tmp/caggregate_double_return_b8226; test "$$?" = "42"
+	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src test/cvararg_double_b83.c /tmp/cvararg_double_b8326
+	/tmp/cvararg_double_b8326; test "$$?" = "42"
+	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src test/cderef_addr_local_store_b84.c /tmp/cderef_addr_local_store_b8426
+	/tmp/cderef_addr_local_store_b8426; test "$$?" = "42"
+	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src test/cfloat_pascal_bridge_b85.c /tmp/cfloat_pascal_bridge_b8526
+	/tmp/cfloat_pascal_bridge_b8526; test "$$?" = "42"
 	./$(COMPILER) -Itest/cinc/inc test/cinc/cinc_main.c /tmp/cinc_main26
 	test "$$(/tmp/cinc_main26)" = "$$(printf 'local-ok\ninc-ok')"
 	./$(COMPILER) test/test_declared_directive.pas /tmp/test_declared_directive26

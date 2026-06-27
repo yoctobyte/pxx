@@ -42,11 +42,19 @@ static void *__pxx_va_arg_gp(struct __pxx_va_elem *ap) {
   return addr;
 }
 
-/* pxx's internal call convention passes every variadic arg (integer AND double)
-   in the GP registers (push rax), so a double's bits land in the GP save area —
-   read floats from gp_offset too, not a separate XMM area. */
+/* SysV AMD64: floating variadic args arrive in XMM0..7, saved to the FP region
+   of the save area (offset 48, one 16-byte slot each). Read from fp_offset and
+   advance by 16; past the 8 XMM slots (offset 176) spill to the overflow area. */
 static void *__pxx_va_arg_fp(struct __pxx_va_elem *ap) {
-  return __pxx_va_arg_gp(ap);
+  void *addr;
+  if (ap->fp_offset < 176) {
+    addr = (char *)ap->reg_save_area + ap->fp_offset;
+    ap->fp_offset = ap->fp_offset + 16;
+  } else {
+    addr = ap->overflow_arg_area;
+    ap->overflow_arg_area = (char *)ap->overflow_arg_area + 8;
+  }
+  return addr;
 }
 
 /* va_start/va_arg/va_end are handled by the frontend (it knows the save-area
