@@ -488,6 +488,8 @@ test-core: $(COMPILER)
 	/tmp/cderef_addr_local_store_b8426; test "$$?" = "42"
 	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src test/cfloat_pascal_bridge_b85.c /tmp/cfloat_pascal_bridge_b8526
 	/tmp/cfloat_pascal_bridge_b8526; test "$$?" = "42"
+	./$(COMPILER) test/csizeof_string_literal_b86.c /tmp/csizeof_string_literal_b8626
+	/tmp/csizeof_string_literal_b8626; test "$$?" = "42"
 	./$(COMPILER) -Itest/cinc/inc test/cinc/cinc_main.c /tmp/cinc_main26
 	test "$$(/tmp/cinc_main26)" = "$$(printf 'local-ok\ninc-ok')"
 	./$(COMPILER) test/test_declared_directive.pas /tmp/test_declared_directive26

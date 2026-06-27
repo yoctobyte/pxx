@@ -708,6 +708,17 @@ begin
         end;
       end;
     end
+    else if CurTok.Kind = tkString then
+    begin
+      { `sizeof("lit")` is the char-array size = decoded byte length + 1 (NUL),
+        NOT the default pointer size. lua's `new_localvarliteral(ls,v)` registers
+        a hidden local of length `sizeof(v)-1`; with the pointer-size default,
+        `sizeof("self")-1` was 7 not 4, so the colon-method `self` parameter was
+        registered under a 7-char garbage name and every `self` reference inside
+        the body resolved to a nil global. The string token carries its decoded
+        length in SLen (escapes already folded). }
+      sz := Tokens[TokPos - 1].SLen + 1;
+    end
     else if CurTok.Kind = tkIdent then
     begin
       si := FindSym(CurTok.SVal);
