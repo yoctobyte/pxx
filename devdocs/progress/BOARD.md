@@ -27,7 +27,7 @@ _none_
 | --- | --- | --- | --- | --- |
 | feature-c-runtime-library | C | feature | C runtime/library layer (`lib/crtl`) plus direct C-library packages | feature-c-source-frontend |
 
-## backlog (65)
+## backlog (66)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -56,6 +56,7 @@ _none_
 | feature-dynamic-compiler-tables | A | feature | Dynamic compiler tables — kill the fixed `array[0..MAX_*]` ceilings (+ dynarray dogfood) | — |
 | feature-dynamic-include-paths-config | A | feature | Dynamic Include Paths, Configuration Files, and System Scanner | — |
 | feature-dynamic-soname-discovery | A | feature | Dynamic soname discovery (no execve) | — |
+| feature-dynarray-torture-test | A | feature | Dynamic-array torture test — make dynarray trustable | — |
 | feature-eliah-ai-command-rail | B | feature | feature: Eliah AI command rail + console pane | — |
 | feature-eliah-component-tabbar | B | feature | feature: Eliah tabbed component bar (Lazarus-style, with icons) | — |
 | feature-eliah-shell | B | feature | feature: Eliah shell — perspective-based IDE (one window, splitter-tree layout) | — |
@@ -491,6 +492,7 @@ _none_
 - [A] feature-dynamic-compiler-tables
 - [A] feature-dynamic-include-paths-config
 - [A] feature-dynamic-soname-discovery
+- [A] feature-dynarray-torture-test
 - [B] feature-eliah-ai-command-rail
 - [B] feature-eliah-component-tabbar
 - [B] feature-eliah-shell
