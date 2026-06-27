@@ -27,12 +27,11 @@ _none_
 | --- | --- | --- | --- | --- |
 | feature-c-runtime-library | C | feature | C runtime/library layer (`lib/crtl`) plus direct C-library packages | feature-c-source-frontend |
 
-## backlog (66)
+## backlog (65)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
 | bug-c-chained-pointer-index-loses-base-type | A | bug | C chained pointer indexing loses base type | — |
-| bug-c-typedef-return-corrupts-entry | C | bug | C: typedef return type can corrupt program entry call | — |
 | bug-c-vararg-overflow-area | A | bug | C: 6+ variadic args (overflow area) segfault | — |
 | bug-fpc-bootstrap-compiler-source-not-clean | A | bug | FPC bootstrap no longer compiles compiler source | — |
 | bug-fpc-seed-helper-ordering-after-lua-c-frontend | A | bug | FPC seed build fails after Lua C frontend helper additions | — |
@@ -132,7 +131,7 @@ _none_
 | feature-mimic-fpc | B | feature | `mimic FPC` compatibility mode | — |
 | feature-string-model-tyfixedstring | B | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (314)
+## done (315)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -169,6 +168,7 @@ _none_
 | bug-c-string-literal-to-pointer-prefix | C | bug | C: string literal assigned to a `char *` points at the Pascal length-prefix | — |
 | bug-c-struct-pointer-index-stride | C | bug | C: `p[i]` / `p+i` on a struct pointer uses the wrong element stride | — |
 | bug-c-typedef-record-alias-loses-rec-id | A | bug | C typedef alias to struct loses record id | — |
+| bug-c-typedef-return-corrupts-entry | C | bug | C: typedef return type can corrupt program entry call | — |
 | bug-cardinal-expr-promotion-shr-orphan | A | bug | bug: cardinal/signed 32-bit expression width (orphan addendum) | — |
 | bug-cardinal-expr-promotion | A | bug | bug: cardinal/longword binary-op promotes to uint64 (FPC: int64) | — |
 | bug-case-insensitive-incomplete-builtins-funcs | A | bug | bug: case-insensitivity incomplete — builtins + function calls still case-sensitive | — |
@@ -462,7 +462,6 @@ _none_
 ## Ready (no unmet blocker)
 
 - [A] bug-c-chained-pointer-index-loses-base-type
-- [C] bug-c-typedef-return-corrupts-entry
 - [A] bug-c-vararg-overflow-area
 - [A] bug-fpc-bootstrap-compiler-source-not-clean
 - [A] bug-fpc-seed-helper-ordering-after-lua-c-frontend

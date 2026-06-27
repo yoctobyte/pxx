@@ -500,6 +500,8 @@ test-core: $(COMPILER)
 	/tmp/cmain_argv_b9026 ab xyz; test "$$?" = "42"
 	./$(COMPILER) test/cglobal_float_init_b91.c /tmp/cglobal_float_init_b9126
 	/tmp/cglobal_float_init_b9126; test "$$?" = "42"
+	./$(COMPILER) -Ilib/crtl/include test/ctypedef_sys_ssize_b92.c /tmp/ctypedef_sys_ssize_b9226
+	/tmp/ctypedef_sys_ssize_b9226; test "$$?" = "42"
 	./$(COMPILER) -Itest/cinc/inc test/cinc/cinc_main.c /tmp/cinc_main26
 	test "$$(/tmp/cinc_main26)" = "$$(printf 'local-ok\ninc-ok')"
 	./$(COMPILER) test/test_declared_directive.pas /tmp/test_declared_directive26

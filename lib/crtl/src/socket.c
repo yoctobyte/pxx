@@ -43,12 +43,12 @@ static int __crtl_sock_fail(int rc) {
   return rc;
 }
 
-static long __crtl_sock_fail_long(long rc) {
+static ssize_t __crtl_sock_fail_long(long rc) {
   if (rc < 0) {
     errno = (int)(-rc);
     return -1;
   }
-  return rc;
+  return (ssize_t)rc;
 }
 
 static int __crtl_sockaddr_in(const struct sockaddr *addr, unsigned long *host, int *port) {
@@ -107,17 +107,17 @@ int accept(int sockfd, struct sockaddr *addr, socklen_t *addrlen) {
   return fd;
 }
 
-long send(int sockfd, const void *buf, size_t len, int flags) {
+ssize_t send(int sockfd, const void *buf, size_t len, int flags) {
   (void)flags;
   return __crtl_sock_fail_long(__pxx_send(sockfd, buf, (int)len));
 }
 
-long recv(int sockfd, void *buf, size_t len, int flags) {
+ssize_t recv(int sockfd, void *buf, size_t len, int flags) {
   (void)flags;
   return __crtl_sock_fail_long(__pxx_recv(sockfd, buf, (int)len));
 }
 
-long sendto(int sockfd, const void *buf, size_t len, int flags,
+ssize_t sendto(int sockfd, const void *buf, size_t len, int flags,
                const struct sockaddr *dest_addr, socklen_t addrlen) {
   unsigned long host;
   int port;
@@ -127,7 +127,7 @@ long sendto(int sockfd, const void *buf, size_t len, int flags,
   return __crtl_sock_fail_long(__pxx_sendto_ipv4(sockfd, buf, (int)len, host, port));
 }
 
-long recvfrom(int sockfd, void *buf, size_t len, int flags,
+ssize_t recvfrom(int sockfd, void *buf, size_t len, int flags,
                  struct sockaddr *src_addr, socklen_t *addrlen) {
   unsigned long host;
   int port;
