@@ -644,6 +644,23 @@ begin
       tk := ParseCDeclType;
       sz := CTypeSizeBytes(tk);
     end
+    else if CurTok.Kind = tkStar then
+    begin
+      { `sizeof(*p)` -> size of the pointed-at type, not the pointer. Without
+        this the operand fell through to the default pointer size, so e.g. lua's
+        `memcpy(ra+4, ra, 3*sizeof(*ra))` (ra a StackValue*) copied 3*8 instead
+        of 3*16 bytes and dropped the generic-for state/control values. }
+      Next;  { consume '*' }
+      if CurTok.Kind = tkIdent then
+      begin
+        si := FindSym(CurTok.SVal);
+        if (si >= 0) and (Syms[si].TypeKind = tyPointer) then
+        begin
+          if Syms[si].PtrElemTk = tyRecord then sz := RecSize(Syms[si].PtrElemRec)
+          else sz := TypeSize(Syms[si].PtrElemTk);
+        end;
+      end;
+    end
     else if CurTok.Kind = tkIdent then
     begin
       si := FindSym(CurTok.SVal);
