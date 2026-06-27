@@ -67,3 +67,41 @@ counter, not the offending construct. Do not trust it.
   cleared the token-overflow wall). Characterized as a genuine bad-sym IR_LEA,
   not capacity; simple string-array repro negative; position stale. Needs
   instrumentation — parked for a focused debug session.
+
+## Diagnosis (2026-06-27, session 2)
+
+Instrumented the IR_LEA verifier and `IRLowerAddress` (reverted after). Chain:
+
+- `IRLowerAddress` (`ir.inc:587`) is called on an **`AN_INT_LIT` (value 0,
+  ASTTk=tyInteger)** node → no lvalue case matches → falls through to
+  `IR_UNSUPPORTED` (`ir.inc:878`). The caller wraps that result in `IR_LEA` with
+  sym = **-1** (0xffffffff) → `IRVerify` (`ir.inc:296`) rejects it.
+- Verifier dump at failure: `IRA=-1`, `SymCount=0x24c (588)`, `iridx=0x2f`; IR
+  context shows `IR_UNSUPPORTED(a=AN_INT_LIT)` then `IR_ARG` then the bad
+  `IR_LEA`. So it is a function/init body taking the address of an integer
+  literal.
+- The offending node's `ASTLine = 22225`, inside the **`sqlite3azCompileOpt[]`**
+  `const char * const []` global array initializer (def line 21934). That array
+  is densely `#ifdef`-guarded; with no `-D` defines most entries vanish and the
+  survivors use `CTIMEOPT_VAL(...)` stringify + adjacent string-literal
+  concatenation (e.g. `"COMPILER=gcc-" __VERSION__`, `"THREADSAFE=" CTIMEOPT_VAL
+  (THREADSAFE)`). One surviving element is being lowered as an **integer literal
+  0** instead of a `char*`, and the global array-pointer-init path then takes its
+  address.
+
+### Not yet reduced
+
+Isolated repros that did NOT trigger it: plain string-concat element
+(`{"A=" "B"}`), stringify of a numeric macro, a `0`/null element in a `char*[]`,
+`&global[const]`. So the trigger is specific to pxx's expansion of a surviving
+azCompileOpt entry. **Next probe:** dump pxx's preprocessed view of that array
+(no `-E`/preprocess-dump flag exists — add one, or instrument `cpreproc`), or log
+`IRLowerAddress`'s caller to capture the parent expression that wraps an int
+literal in an address-of.
+
+## Log
+
+- 2026-06-27 (s2) - Traced to `IRLowerAddress(AN_INT_LIT 0)` -> IR_UNSUPPORTED ->
+  IR_LEA(-1), node at azCompileOpt[] init (~line 22225). Minimal repro still
+  elusive (macro-expansion-specific). Separate offset bug found:
+  [[bug-c-addr-of-global-array-element-const-index-wrong-offset]].

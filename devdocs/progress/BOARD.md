@@ -27,10 +27,11 @@ _none_
 | --- | --- | --- | --- | --- |
 | feature-c-runtime-library | C | feature | C runtime/library layer (`lib/crtl`) plus direct C-library packages | feature-c-source-frontend |
 
-## backlog (66)
+## backlog (67)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
+| bug-c-addr-of-global-array-element-const-index-wrong-offset | A | bug | C: `&global_array[const]` global pointer initializer computes wrong offset | — |
 | bug-c-invalid-symbol-in-lea-sqlite | A | bug | C: `invalid symbol in lea` lowering sqlite amalgamation | — |
 | bug-i386-float-byval-param | A | bug | i386 backend: by-value float (Double) parameter unsupported | — |
 | bug-multi-interface-method-corruption | A | bug | Memory/String corruption when calling methods on secondary interfaces | — |
@@ -467,6 +468,7 @@ _none_
 
 ## Ready (no unmet blocker)
 
+- [A] bug-c-addr-of-global-array-element-const-index-wrong-offset
 - [A] bug-c-invalid-symbol-in-lea-sqlite
 - [A] bug-i386-float-byval-param
 - [A] bug-multi-interface-method-corruption
