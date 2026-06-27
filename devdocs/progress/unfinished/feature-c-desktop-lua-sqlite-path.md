@@ -123,6 +123,34 @@ Two small sqlite-advance fixes:
   `Unsupported linear node in IR codegen! Kind=10 ... IRA=67`; `IRA=67` is
   `AN_TERNARY`. Filed [[bug-c-sqlite-unsupported-ternary-ir]].
 
+## M5 update (2026-06-27, session 9): ternary pointer-array indexing
+
+SQLite's unsupported `AN_TERNARY` IR wall reduced to:
+
+```c
+MemPage *pOld = (nNew>nOld ? apNew : apOld)[nOld-1];
+```
+
+Both ternary arms are local arrays of `MemPage *`; C decays the selected arm to
+a pointer value, then indexes that value. The old IR address path tried to take
+the address of the `AN_TERNARY` expression itself and emitted
+`IR_UNSUPPORTED`.
+
+- **FIX 10 (this commit) — computed pointer-value indexing.** In C mode,
+  `IRLowerAddress(AN_INDEX)` now handles computed pointer bases such as ternary,
+  call, assignment, and inc/dec expressions by using `IRLowerAST(base)` as the
+  base pointer value and `IRPointerStride(base)` for scaling. The C parser now
+  preserves pointer depth/base/pointee metadata through pointer-valued ternary
+  nodes so downstream indexing and `->` field resolution keep the right type.
+  Test `cternary_pointer_array_index_b103`.
+- **Verification:** `make compiler/pascal26` self-host byte-identical; b103
+  passes.
+- **sqlite rerun:** sqlite now advances past the btree `balance_nonroot`
+  ternary and stops at an `offsetof`-style array bound:
+  `char saveBuf[(sizeof(Parse)-((size_t)&(((Parse *)0)->sLastToken)))];`
+  with `pascal26:91408: error: unexpected token`. Filed
+  [[bug-c-sqlite-offsetof-style-field-address-array-bound]].
+
 - **Session 2026-06-27d (Track A+C) — control flow + lexer fixed; lua runs real
   programs.** Two more fixes (self-host byte-identical, `make test` green):
   - **FIX 5 (`62c88498`) — global ordinal array with constant-EXPRESSION

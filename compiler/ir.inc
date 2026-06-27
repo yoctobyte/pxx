@@ -671,6 +671,22 @@ begin
       Result := IRAppend(IR_INDEX, baseAddr, indexNode, 0, elemSize, ASTTk[node]);
       Exit;
     end;
+    { Computed pointer-value indexing, e.g. C `(cond ? a : b)[i]`. The base
+      expression yields the pointer value; taking IRLowerAddress(base) would ask
+      for the address of a non-lvalue expression such as AN_TERNARY. }
+    if CProgramMode and
+       (ASTKind[baseNode] <> AN_IDENT) and
+       (ASTKind[baseNode] <> AN_FIELD) and
+       (ASTKind[baseNode] <> AN_PTR_CAST) and
+       (ASTKind[baseNode] <> AN_INDEX) and
+       IRNodePointerBase(baseNode) then
+    begin
+      indexNode := IRLowerAST(ASTRight[node]);
+      elemSize := IRPointerStride(baseNode);
+      baseAddr := IRLowerAST(baseNode);
+      Result := IRAppend(IR_INDEX, baseAddr, indexNode, 0, elemSize, ASTTk[node]);
+      Exit;
+    end;
     { Nested dynamic-array indexing: base is a nested dyn array (depth>=2) or a
       sub-array element (an AN_INDEX whose value is still a dyn array). The base
       handle is wrapped in IR_DYNUNIQUE, which loads the data pointer on a read
@@ -950,6 +966,30 @@ begin
       Result := IRPointerStride(ASTLeft[node])
     else
       Result := IRPointerStride(ASTRight[node]);
+    Exit;
+  end
+  else if ASTKind[node] = AN_TERNARY then
+  begin
+    if (ASTRight[node] >= 0) and IRNodePointerBase(ASTLeft[ASTRight[node]]) then
+      Result := IRPointerStride(ASTLeft[ASTRight[node]])
+    else if (ASTRight[node] >= 0) and IRNodePointerBase(ASTRight[ASTRight[node]]) then
+      Result := IRPointerStride(ASTRight[ASTRight[node]]);
+    Exit;
+  end
+  else if ASTKind[node] = AN_CALL then
+  begin
+    if (ASTIVal[node] >= 0) and
+       (Procs[ASTIVal[node]].RetType = tyPointer) then
+      elemTk := IntToTypeKind(ProcRetPtrElemTk[ASTIVal[node]]);
+  end
+  else if ASTKind[node] = AN_INCDEC then
+  begin
+    Result := IRPointerStride(ASTLeft[node]);
+    Exit;
+  end
+  else if ASTKind[node] = AN_ASSIGN then
+  begin
+    Result := IRPointerStride(ASTLeft[node]);
     Exit;
   end;
   if elemTk = tyRecord then

@@ -509,6 +509,13 @@ begin
     if CNodeIsPointer(ASTLeft[node]) then Result := CNodePtrDepth(ASTLeft[node])
     else if CNodeIsPointer(ASTRight[node]) then Result := CNodePtrDepth(ASTRight[node]);
   end
+  else if ASTKind[node] = AN_TERNARY then
+  begin
+    if (ASTRight[node] >= 0) and CNodeDecaysToPointer(ASTLeft[ASTRight[node]]) then
+      Result := CNodePtrDepth(ASTLeft[ASTRight[node]])
+    else if (ASTRight[node] >= 0) and CNodeDecaysToPointer(ASTRight[ASTRight[node]]) then
+      Result := CNodePtrDepth(ASTRight[ASTRight[node]]);
+  end
   else if ASTKind[node] = AN_INCDEC then
     Result := CNodePtrDepth(ASTLeft[node])
   else if ASTKind[node] = AN_ASSIGN then
@@ -533,6 +540,13 @@ begin
   begin
     if CNodeIsPointer(ASTLeft[node]) then Result := CNodePtrBaseTk(ASTLeft[node])
     else if CNodeIsPointer(ASTRight[node]) then Result := CNodePtrBaseTk(ASTRight[node]);
+  end
+  else if ASTKind[node] = AN_TERNARY then
+  begin
+    if (ASTRight[node] >= 0) and CNodeDecaysToPointer(ASTLeft[ASTRight[node]]) then
+      Result := CNodePtrBaseTk(ASTLeft[ASTRight[node]])
+    else if (ASTRight[node] >= 0) and CNodeDecaysToPointer(ASTRight[ASTRight[node]]) then
+      Result := CNodePtrBaseTk(ASTRight[ASTRight[node]]);
   end
   else if ASTKind[node] = AN_INCDEC then
     Result := CNodePtrBaseTk(ASTLeft[node])
@@ -648,6 +662,13 @@ begin
       Result := CNodePointeeTk(ASTLeft[node])
     else if CNodeIsPointer(ASTRight[node]) then
       Result := CNodePointeeTk(ASTRight[node]);
+  end
+  else if ASTKind[node] = AN_TERNARY then
+  begin
+    if (ASTRight[node] >= 0) and CNodeDecaysToPointer(ASTLeft[ASTRight[node]]) then
+      Result := CNodePointeeTk(ASTLeft[ASTRight[node]])
+    else if (ASTRight[node] >= 0) and CNodeDecaysToPointer(ASTRight[ASTRight[node]]) then
+      Result := CNodePointeeTk(ASTRight[ASTRight[node]]);
   end
   else if ASTKind[node] = AN_INCDEC then
     Result := CNodePointeeTk(ASTLeft[node])
