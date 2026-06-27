@@ -3789,6 +3789,81 @@ end;
   Unknown/unsupported tokens evaluate to 0 rather than derailing.
   (CEvalConstExpr is forward-declared at the top of the C parser.) }
 
+function CEvalConstOffsetofAddress: Int64;
+var parenDepth, recId: Integer;
+    fieldName, savedFnPtrName: AnsiString;
+    savedIsVoid: Boolean;
+    savedPtrDepth, savedElemTk, savedElemRec, savedPtrBaseTk, savedPtrBaseRec: Integer;
+    savedBaseRec, savedProcSig, savedFnPtrNameOff, savedFnPtrNameLen: Integer;
+begin
+  Result := 0;
+  recId := REC_NONE;
+  parenDepth := 0;
+  while CurTok.Kind <> tkEOF do
+  begin
+    if CurTok.Kind = tkLParen then
+    begin
+      Next;
+      Inc(parenDepth);
+      if IsCTypeTok then
+      begin
+        savedIsVoid := CTypeIsVoid;
+        savedPtrDepth := CTypePtrDepth;
+        savedElemTk := CTypeElemTk;
+        savedElemRec := CTypeElemRec;
+        savedPtrBaseTk := CTypePtrBaseTk;
+        savedPtrBaseRec := CTypePtrBaseRec;
+        savedBaseRec := CTypeBaseRec;
+        savedProcSig := CTypeProcSig;
+        savedFnPtrName := CTypeFnPtrName;
+        savedFnPtrNameOff := CTypeFnPtrNameOff;
+        savedFnPtrNameLen := CTypeFnPtrNameLen;
+        ParseCDeclType;
+        recId := CTypeBaseRec;
+        CTypeIsVoid := savedIsVoid;
+        CTypePtrDepth := savedPtrDepth;
+        CTypeElemTk := savedElemTk;
+        CTypeElemRec := savedElemRec;
+        CTypePtrBaseTk := savedPtrBaseTk;
+        CTypePtrBaseRec := savedPtrBaseRec;
+        CTypeBaseRec := savedBaseRec;
+        CTypeProcSig := savedProcSig;
+        CTypeFnPtrName := savedFnPtrName;
+        CTypeFnPtrNameOff := savedFnPtrNameOff;
+        CTypeFnPtrNameLen := savedFnPtrNameLen;
+        if CurTok.Kind = tkRParen then
+        begin
+          Next;
+          Dec(parenDepth);
+        end;
+      end;
+    end
+    else if CurTok.Kind = tkRParen then
+    begin
+      if parenDepth > 0 then Dec(parenDepth);
+      Next;
+    end
+    else if CurTok.Kind = tkDot then
+    begin
+      Next;
+      if CurTok.Kind = tkIdent then
+      begin
+        fieldName := CurTok.SVal;
+        if recId <> REC_NONE then Result := RecFieldOffset(recId, fieldName);
+        Next;
+      end;
+      while (parenDepth > 0) and (CurTok.Kind = tkRParen) do
+      begin
+        Dec(parenDepth);
+        Next;
+      end;
+      Exit;
+    end
+    else
+      Next;
+  end;
+end;
+
 function CEvalConstPrimary: Int64;
 var idx: Integer;
 begin
@@ -3816,6 +3891,7 @@ begin
   else if CurTok.Kind = tkMinus then begin Next; Result := -CEvalConstPrimary(); end
   else if CurTok.Kind = tkPlus then begin Next; Result := CEvalConstPrimary(); end
   else if CurTok.Kind = tkNot then begin Next; Result := CEvalConstPrimary() xor (-1); end  { ~ : bitwise NOT (xor -1 sidesteps the `not <call>`=boolean typing quirk) }
+  else if CurTok.Kind = tkAmp then begin Next; Result := CEvalConstOffsetofAddress(); end
   else if CurTok.Kind = tkInteger then begin Result := CurTok.IVal; Next; end
   else if (CurTok.Kind = tkIdent) and (CurTok.SVal = 'sizeof') then
     { `sizeof(type|expr)` in a constant expression (e.g. array dimension

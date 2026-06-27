@@ -151,6 +151,35 @@ the address of the `AN_TERNARY` expression itself and emitted
   with `pascal26:91408: error: unexpected token`. Filed
   [[bug-c-sqlite-offsetof-style-field-address-array-bound]].
 
+## M5 update (2026-06-27, session 10): offsetof-style const array bound
+
+SQLite's next wall was the macro-expanded `offsetof(Parse,sLastToken)` in an
+automatic array bound:
+
+```c
+char saveBuf[(sizeof(Parse)-((size_t)&(((Parse *)0)->sLastToken)))];
+```
+
+`CEvalConstExpr` already folded `sizeof(...)` in array dimensions, but unary
+`&` was unsupported in the constant-expression folder. It returned `0` without
+consuming the field-address tokens, so the declarator still saw `sLastToken`
+while expecting `]`.
+
+- **FIX 11 (this commit) — fold macro-expanded offsetof field addresses.**
+  `CEvalConstPrimary` now handles unary `&` for the narrow `offsetof` macro
+  shape `&(((T *)0)->field)`, resolves `T` through `ParseCDeclType`, and returns
+  `RecFieldOffset(T, field)` while restoring the parser's CType globals. Test
+  `coffsetof_constexpr_array_b104`.
+- **Verification:** `make compiler/pascal26` self-host byte-identical; b20,
+  b55, and b104 pass.
+- **sqlite rerun:** sqlite advances to
+  `pascal26:105031: error: call to undeclared function: sqlite3OsDlSym ()`.
+  The preprocessed source has declarations and a definition of
+  `static void (*sqlite3OsDlSym(sqlite3_vfs *, void *, const char *))(void);`,
+  so the likely next wall is parsing/registering a C function whose return type
+  is a function pointer. Filed
+  [[bug-c-function-returning-function-pointer-prototype-sqlite]].
+
 - **Session 2026-06-27d (Track A+C) — control flow + lexer fixed; lua runs real
   programs.** Two more fixes (self-host byte-identical, `make test` green):
   - **FIX 5 (`62c88498`) — global ordinal array with constant-EXPRESSION

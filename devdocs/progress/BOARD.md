@@ -32,8 +32,8 @@ _none_
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
 | bug-c-addr-of-global-array-element-const-index-wrong-offset | A | bug | C: `&global_array[const]` global pointer initializer computes wrong offset | — |
+| bug-c-function-returning-function-pointer-prototype-sqlite | A | bug | C: function returning function pointer prototype not registered | — |
 | bug-c-sizeof-array-yields-element-size | A | bug | C: `sizeof(array)` yields element size, not total array size | — |
-| bug-c-sqlite-offsetof-style-field-address-array-bound | A | bug | C: sqlite offsetof-style field address in array bound | — |
 | bug-capital-write-undefined-in-compiler-selfbuild | A | bug | Capital `Write`/`WriteLn` rejected in some contexts (compiler self-build), works standalone | — |
 | bug-i386-float-byval-param | A | bug | i386 backend: by-value float (Double) parameter unsupported | — |
 | bug-multi-interface-method-corruption | A | bug | Memory/String corruption when calling methods on secondary interfaces | — |
@@ -135,7 +135,7 @@ _none_
 | feature-mimic-fpc | B | feature | `mimic FPC` compatibility mode | — |
 | feature-string-model-tyfixedstring | B | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (330)
+## done (331)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -177,6 +177,7 @@ _none_
 | bug-c-preprocessor-defined-expression-sqlite | A | bug | C: preprocessor `defined(...)` expression leaks into sqlite token stream | — |
 | bug-c-quoted-include-search-path | A | bug | C quoted includes do not search the including file directory | — |
 | bug-c-sizeof-string-literal | C | bug | C `sizeof("string literal")` returns pointer size, not array size | — |
+| bug-c-sqlite-offsetof-style-field-address-array-bound | A | bug | C: sqlite offsetof-style field address in array bound | — |
 | bug-c-sqlite-unsupported-ternary-ir | A | bug | C: sqlite hits unsupported `AN_TERNARY` during IR lowering | — |
 | bug-c-string-literal-to-pointer-prefix | C | bug | C: string literal assigned to a `char *` points at the Pascal length-prefix | — |
 | bug-c-struct-pointer-index-stride | C | bug | C: `p[i]` / `p+i` on a struct pointer uses the wrong element stride | — |
@@ -482,8 +483,8 @@ _none_
 ## Ready (no unmet blocker)
 
 - [A] bug-c-addr-of-global-array-element-const-index-wrong-offset
+- [A] bug-c-function-returning-function-pointer-prototype-sqlite
 - [A] bug-c-sizeof-array-yields-element-size
-- [A] bug-c-sqlite-offsetof-style-field-address-array-bound
 - [A] bug-capital-write-undefined-in-compiler-selfbuild
 - [A] bug-i386-float-byval-param
 - [A] bug-multi-interface-method-corruption

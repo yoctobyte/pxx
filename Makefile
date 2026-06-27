@@ -526,6 +526,8 @@ test-core: $(COMPILER)
 	/tmp/cternary_middle_comma_b10226; test "$$?" = "42"
 	./$(COMPILER) test/cternary_pointer_array_index_b103.c /tmp/cternary_pointer_array_index_b10326
 	/tmp/cternary_pointer_array_index_b10326; test "$$?" = "42"
+	./$(COMPILER) test/coffsetof_constexpr_array_b104.c /tmp/coffsetof_constexpr_array_b10426
+	/tmp/coffsetof_constexpr_array_b10426; test "$$?" = "42"
 	./$(COMPILER) -Itest/cinc/inc test/cinc/cinc_main.c /tmp/cinc_main26
 	test "$$(/tmp/cinc_main26)" = "$$(printf 'local-ok\ninc-ok')"
 	./$(COMPILER) test/test_declared_directive.pas /tmp/test_declared_directive26
