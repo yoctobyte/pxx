@@ -16,7 +16,8 @@ function ParseCCommaStmt: Integer; forward;
 function ParseCCommaExpr: Integer; forward;
 function ParseCSwitchAST: Integer; forward;
 function CNodeIsPointer(node: Integer): Boolean; forward;
-function CNodeDecaysToPointer(node: Integer): Boolean; forward;
+{ CNodeDecaysToPointer forward moved to forwards.inc (must sit above ir.inc:901,
+  which calls it; this spot is below that use — too late for the FPC seed). }
 function CNodePtrElemRec(node: Integer): Integer; forward;
 procedure ParseCStructInto(ci: Integer; isUnion: Boolean); forward;
 

@@ -39,6 +39,12 @@ procedure AsmI64(v: Int64); forward;
 {$include x64enc.inc}
 {$include rv32enc.inc}
 {$include xtensaenc.inc}
+{ Forward decls needed by the single-pass FPC seed (and --require-forward).
+  PXX_NEED_FORWARDS := FPC or PXX_REQUIRE_FORWARD. PXX without it prescans and
+  skips this; placed before symtab.inc so it is above every use it covers. }
+{$ifdef FPC}{$define PXX_NEED_FORWARDS}{$endif}
+{$ifdef PXX_REQUIRE_FORWARD}{$define PXX_NEED_FORWARDS}{$endif}
+{$ifdef PXX_NEED_FORWARDS}{$include forwards.inc}{$endif}
 {$include symtab.inc}
 {$include exception_emit.inc}
 {$include coroutine_emit.inc}

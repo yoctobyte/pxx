@@ -14141,7 +14141,7 @@ begin
       ASTLeft[target] := identNode;
       ASTRight[target] := idxLit;
       ASTTk[target] := PendingInitTk[i];
-    end
+    end;
 
     if PendingInitFOff[i] >= 0 then
     begin
@@ -14153,7 +14153,7 @@ begin
       ASTSLen[valNode] := PendingInitFLen[i];
       target := valNode;
       ASTTk[target] := PendingInitTk[i];
-    end
+    end;
 
     if PendingInitElem[i] = -2 then
     begin
