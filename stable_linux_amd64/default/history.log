@@ -80,3 +80,4 @@
 2026-06-26T11:46:32Z  v80  7c365fe5d88838c33465ef89117e2061d91b73571a4082f46233ba34bdb076d9  afae3f1a234d62b3302877cdab8b6e8fe0a0729c  merge: feat/cfront -> master — C frontend lands (Track A re-pin event)
 2026-06-26T11:53:20Z  v81  3a905da77649fb1b17288342b531dc5b77fe147bbe5de9ec8bd36866197f3b6c  003a0a669891ec3e47320b9f27cbd4c069cde76e  fix(lexer): move GetTokenStrFromRaw ahead of its use (FPC decl-order)
 2026-06-27T12:42:28Z  v82  5d819b331ff2abc81db4f3f22640d0575fe44698fb5e33ebe7da54395b4cbe65  50e1373030e95fe8a9a6409927ed9f51760cccb7  fix(cfront): set vararg overflow area
+2026-06-27T13:25:53Z  v83  08bdcf25d73e85dd7ad9315361d8bd1477db4f6ae62f2e79297e4cf90bb557a3  93f1b82635cd89238532adb12f3bcff82694c69a  fix(parser): preserve pointer deref depth
