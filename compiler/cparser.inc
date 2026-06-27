@@ -1504,6 +1504,7 @@ begin
   tdElemTk := Ord(tyUnknown); tdElemRec := REC_NONE;
   CTypeProcSig := -1;
   CTypeFnPtrName := '';
+  CTypeFnPtrNameOff := 0; CTypeFnPtrNameLen := 0;
   loop := True;
   while loop do
   begin
@@ -1654,7 +1655,11 @@ begin
     repeat
       if CurTok.Kind = tkLParen then Inc(depth)
       else if CurTok.Kind = tkRParen then Dec(depth)
-      else if (CurTok.Kind = tkIdent) and (fpName = '') then fpName := CurTok.SVal;
+      else if (CurTok.Kind = tkIdent) and (fpName = '') then
+      begin
+        fpName := CurTok.SVal;
+        CTypeFnPtrNameOff := CurTok.SOffset; CTypeFnPtrNameLen := CurTok.SLen;
+      end;
       Next;
     until (depth = 0) or (CurTok.Kind = tkEOF);
     { second group `(params)` — capture param types to build a call signature }
@@ -4047,6 +4052,30 @@ begin
     begin
       fTk := ParseCDeclType;
       fldProcSig := CTypeProcSig;   { fn-pointer typedef field signature, if any }
+      if CTypeFnPtrName <> '' then
+      begin
+        { Inline function-pointer member `RET (*name)(params);` — ParseCDeclType
+          consumed the whole declarator and captured the name + call signature.
+          Register it as an 8-byte pointer field; the normal name-reading loop
+          below would Break (the name token is already consumed). }
+        if isUnion then thisOff := 0 else thisOff := AlignTo(curOff, TARGET_PTR_SIZE);
+        if bfCount < MAX_BF then
+        begin
+          bfNOff[bfCount] := CTypeFnPtrNameOff; bfNLen[bfCount] := CTypeFnPtrNameLen;
+          bfOff[bfCount] := thisOff;
+          bfTk[bfCount] := Ord(tyPointer); bfRec[bfCount] := REC_NONE;
+          bfElemTk[bfCount] := Ord(tyUnknown); bfElemRec[bfCount] := REC_NONE;
+          bfIsArr[bfCount] := False; bfArrLen[bfCount] := 1; bfNDims[bfCount] := 0;
+          bfProcSig[bfCount] := fldProcSig;
+          Inc(bfCount);
+        end;
+        if isUnion then begin if TARGET_PTR_SIZE > curOff then curOff := TARGET_PTR_SIZE; end
+        else curOff := thisOff + TARGET_PTR_SIZE;
+        if TARGET_PTR_SIZE > maxAlign then maxAlign := TARGET_PTR_SIZE;
+        Eat(tkSemicolon);
+      end
+      else
+      begin
       { Recover the base scalar/struct before pointer folding, so comma
         declarators with differing pointer levels (`int *a, b`) are correct. }
       if CTypePtrDepth > 0 then
@@ -4164,6 +4193,7 @@ begin
         firstDecl := False;
       until not Eat(tkComma);
       Eat(tkSemicolon);
+      end;  { close the non-fn-pointer-member else }
     end
     else
       Next;  { skip attributes / unknown tokens }

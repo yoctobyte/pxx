@@ -876,6 +876,7 @@ var
   CTypeBaseRec : Integer;    { record id of the base type before any pointer suffix, else REC_NONE }
   CTypeProcSig : Integer;    { fn-pointer typedef signature Procs[] index of the last ParseCDeclType (CTypePtrDepth=0), else -1 }
   CTypeFnPtrName : AnsiString; { fn-pointer declarator name `ret (*Name)(..)` captured by the last ParseCDeclType, else '' }
+  CTypeFnPtrNameOff, CTypeFnPtrNameLen : Integer; { token-char off/len of CTypeFnPtrName (for struct-member field registration) }
   CHeaderMode : Boolean; { parsing C in header/FFI mode }
   CProgramMode : Boolean; { compiling a C .c program (vs importing a header):
     a `{...}` function body is a LOCAL definition (internal), so the pass-1
