@@ -2,6 +2,44 @@
 
 - **Type:** feature (track-C milestone path)
 - **Status:** backlog (active arc — lua core **29/34 files parse clean (85%)**; see logs)
+- **Session 2026-06-27c (Track A+C) — pxx-compiled lua RUNS real Lua.** Committed
+  `b00ecae5`. The GC allgc-cycle blocker from 27b was the `(*p)->field`
+  double-deref bug: **FIX 4** — `*p` (an `AN_DEREF` whose value is a pointer,
+  e.g. `p` of type `T**`) was not recognized as a pointer base, so `(*p)->f`
+  lowered as a `.` on the lvalue `*p` and applied the field offset to the slot
+  holding `*p` (read/addressed `p`'s own storage); non-zero field offsets
+  collapsed to 0. Added `AN_DEREF` cases to **`CNodeIsPointer`** (deref is a
+  pointer iff its pointee tag = tyPointer) and **`CNodePtrElemRec`** (elem rec =
+  the inner pointer's base record). That fixed lua's GC list-walk
+  `for (p=&g->allgc; *p!=o; p=&(*p)->next){}` (was the infinite loop in
+  `luaC_checkfinalizer`). Test `cderef_arrow_field_b76`. Self-host byte-identical.
+  - **WORKS now** (verified via a `luaL_dostring` harness in `pxx_hostamalg.c`,
+    one TU): `print`, integer arithmetic (`+ - * // ^int`), string concat `..`,
+    `string.format` (`%d %s %x`), table constructor + index + `#`, `tostring`,
+    `math.floor/max`, `if`-without-`else`, `do … end`, multiple sequential
+    chunks. `luaL_openlibs` loads all 10 stdlibs clean.
+  - **NEXT BLOCKER — lua's own bytecode compiler crashes on real conditionals.**
+    `if … else … end`, `while cond do … end`, `for i=…` all fail. Precise: the
+    failure is at **`luaL_loadstring` (COMPILE time)**, not run — `if 3>2 then a
+    else b end` segfaults inside lua's parser/`lcode` before execution. `while
+    false do end` (constant-folded cond) compiles+runs but leaves latent state
+    corruption that segfaults the NEXT `loadstring`. Constructs that work share
+    "no real jump back-patch"; the broken ones all go through
+    `luaK_patchlist`/`luaK_concat`/`patchtestreg` (jump-list patching) +
+    `enterblock`/`leaveblock`. **Ruled OUT:** instruction arg encoding —
+    `GETARG/SETARG_sBx`, `GETARG/SETARG_sJ`, `CREATE_sJ`, and the `NO_JUMP=-1`
+    sentinel all round-trip correctly in isolation (tested 0/±small/±large at the
+    real `POS_sJ=7,SIZE_sJ=25` / `POS_Bx=15,SIZE_Bx=17`). So next: instrument
+    lua `lcode.c` jump-patch + `lparser.c` `ifstat/whilestat/enterblock` under
+    pxx to find which op corrupts. Likely another pointer/struct-on-C-stack
+    codegen bug (BlockCnt linked via `fs->bl`, or a Proto/jump-list issue).
+  - **Also still open:** float `2^8` / `%f` print garbage (known float gap,
+    separate from control flow).
+  - **Harness:** `pxx_hostamalg.c` `main` now runs a list of `luaL_dostring`
+    chunks via `runchunk` (load/`L`, call/`C` markers). pxx C `main` gets **no
+    argv** (argc=0) and lua **file IO returns empty** (fopen/fread non-functional),
+    so iterate via `dostring` chunks + rebuild, not a script file. Debug
+    `__pxx_write` markers remain in gitignored lua scratch.
 - **Session 2026-06-27b (Track A+C) — lua now runs through ALL of
   `luaL_openlibs` and executes the script; next blocker is a GC allgc
   linked-list cycle.** Committed `57e3e73b` (3 front-end fixes, self-host
