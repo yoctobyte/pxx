@@ -472,6 +472,8 @@ test-core: $(COMPILER)
 	/tmp/cderef_arrow_field_b7626; test "$$?" = "42"
 	./$(COMPILER) test/cglobal_constexpr_array_init_b77.c /tmp/cglobal_constexpr_array_init_b7726
 	/tmp/cglobal_constexpr_array_init_b7726; test "$$?" = "42"
+	./$(COMPILER) test/cchar_escapes_b78.c /tmp/cchar_escapes_b7826
+	/tmp/cchar_escapes_b7826; test "$$?" = "42"
 	./$(COMPILER) -Itest/cinc/inc test/cinc/cinc_main.c /tmp/cinc_main26
 	test "$$(/tmp/cinc_main26)" = "$$(printf 'local-ok\ninc-ok')"
 	./$(COMPILER) test/test_declared_directive.pas /tmp/test_declared_directive26

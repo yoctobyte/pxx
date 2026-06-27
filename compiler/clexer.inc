@@ -319,8 +319,13 @@ begin
             'n': AppendChar(s, #10);
             't': AppendChar(s, #9);
             'r': AppendChar(s, #13);
+            'a': AppendChar(s, #7);
+            'b': AppendChar(s, #8);
+            'f': AppendChar(s, #12);
+            'v': AppendChar(s, #11);
             '\': AppendChar(s, '\');
             '"': AppendChar(s, '"');
+            '''': AppendChar(s, '''');
             '0': AppendChar(s, #0);
             else  AppendChar(s, Source[SrcPos]);
           end;
@@ -349,8 +354,13 @@ begin
           'n': CurTok.IVal := 10;
           't': CurTok.IVal := 9;
           'r': CurTok.IVal := 13;
+          'a': CurTok.IVal := 7;
+          'b': CurTok.IVal := 8;
+          'f': CurTok.IVal := 12;
+          'v': CurTok.IVal := 11;
           '\': CurTok.IVal := Ord('\');
           '''': CurTok.IVal := Ord('''');
+          '"': CurTok.IVal := Ord('"');
           '0': CurTok.IVal := 0;
           else  CurTok.IVal := Ord(Source[SrcPos]);
         end;
