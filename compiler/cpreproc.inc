@@ -1119,6 +1119,29 @@ begin
   Inc(CIncludeDirCount);
 end;
 
+{ Auto-register pxx's own C headers (lib/crtl/include) as a default `<>` search
+  root, like a real C compiler searching its own freestanding/hosted headers.
+  Anchored to the compiler binary (ExeDir = <root>/compiler/) so it resolves
+  regardless of CWD; falls back CWD-relative when ExeDir is empty (bare name).
+  These map <stdarg.h> etc to pxx's __builtin_va_* helpers — without them the
+  /usr/include fallback grabs host headers with the wrong ABI. Appended AFTER
+  user -I roots (registered at option-parse time), so -I still wins. Suppressed
+  by -nostdinc. }
+procedure AddDefaultCIncludeDirs;
+var d: AnsiString;
+begin
+  if NoStdInc then Exit;
+  { ExeDir-anchored (installed/normal: ExeDir = <root>/compiler/) ... }
+  if ExeDir <> '' then
+  begin
+    ConcatThree(ExeDir, '../lib/crtl/include/', '', d);
+    AddCIncludeDir(d);
+  end;
+  { ... and CWD-relative (run from repo root), like the Pascal PAL dir auto-add.
+    Both are appended after user -I, so -I still wins; harmless if absent. }
+  AddCIncludeDir('lib/crtl/include/');
+end;
+
 { Register a Pascal-unit (`uses`) search root (`-Fu`, also fed by `-I`).
   Normalised to a trailing '/'. Deduped so `-I` + `-Fu` of the same dir, or a
   repeated flag, do not bloat the list. }
@@ -1163,10 +1186,12 @@ begin
       CPLoadInclude(depth);
       Inc(k);
     end;
-    { 3. Host system fallbacks. Only for a native (x86_64) build: these are the
-         host's headers, wrong for any cross target — our libraries are meant to
-         be cross-platform and must resolve from project/-I roots, not /usr. }
-    if (CPIncludeLength(depth) = 0) and (TargetArch = TARGET_X86_64) then
+    { 3. Host system fallbacks. Only for a native (x86_64) build, and only when
+         -nostdinc is not set: these are the host's headers, wrong for any cross
+         target — our libraries are meant to be cross-platform and must resolve
+         from project/-I roots or pxx's own crtl headers, not /usr. -nostdinc
+         disables both this fallback and the default crtl search. }
+    if (CPIncludeLength(depth) = 0) and (TargetArch = TARGET_X86_64) and (not NoStdInc) then
     begin
     if CPIncludeLength(depth) = 0 then
     begin

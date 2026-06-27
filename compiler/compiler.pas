@@ -84,6 +84,7 @@ begin
   DbgMainTokEnd := MAX_TOKENS;
   DumpIR := False;
   DumpCpp := False;
+  NoStdInc := False;
   WarnSelfResult := False;
   DumpRTTI := False;
   TargetArch := TARGET_X86_64;
@@ -124,6 +125,11 @@ begin
     else if option = '--dump-cpp' then
     begin
       DumpCpp := True;
+      Inc(i);
+    end
+    else if (option = '-nostdinc') or (option = '--nostdinc') then
+    begin
+      NoStdInc := True;
       Inc(i);
     end
     else if option = '-g' then
@@ -457,6 +463,7 @@ begin
   end
   else if isC then
   begin
+    AddDefaultCIncludeDirs;   { pxx's crtl headers on the default <> path (unless -nostdinc) }
     CPreprocess(Source, SourceFileDir);
     if DumpCpp then begin write(Source); Halt(0); end;
     CLexAll;

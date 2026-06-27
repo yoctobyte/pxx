@@ -731,6 +731,7 @@ var
   DebugTrace : Boolean;
   DumpIR : Boolean;
   DumpCpp : Boolean;  { --dump-cpp: print the C-preprocessed source to stdout and exit }
+  NoStdInc : Boolean;  { -nostdinc: do not auto-search pxx's crtl headers nor the /usr/include host fallback }
   StrictOverload : Boolean;
   DelphiMode : Boolean;  { {$mode delphi}: relaxes a bare function name bound to a procedural-value target to take its address (@F-optional). PXX's dialect is otherwise one objfpc-ish superset; this is the one behavioural delta. Default off. }
   ThreadSafeMode : Boolean;
