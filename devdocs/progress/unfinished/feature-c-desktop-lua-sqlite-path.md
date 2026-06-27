@@ -271,6 +271,38 @@ flat N-D index.
   block-scope function-pointer typedef. Filed
   [[bug-c-va-arg-local-fnptr-typedef-sqlite]].
 
+## M5 update (2026-06-27, session 14): local typedef in va_arg
+
+SQLite works around compilers that reject function-pointer types directly inside
+`va_arg` by declaring a block-scope typedef:
+
+```c
+case 16: {
+  typedef void(*LOGFUNC_t)(void*,int,const char*);
+  LOGFUNC_t xLog = __builtin_va_arg(ap, LOGFUNC_t);
+  ...
+}
+```
+
+The file-scope typedef parser already registered function-pointer typedefs, and
+`__builtin_va_arg` already parses its second argument with `ParseCDeclType`.
+The missing piece was that block-scope `typedef` declarations were not treated
+as declarations/statements, so `LOGFUNC_t` was never registered.
+
+- **FIX 15 (this commit) — block-scope typedef statements.**
+  `ParseCStatementAST` now recognizes local `typedef`, calls `ParseCTypedef`,
+  and emits an empty statement node. That reuses the existing function-pointer
+  typedef metadata path, so `va_arg(ap, LOGFUNC_t)` parses as a pointer-sized
+  value with a callable signature. Test `cva_arg_local_fnptr_typedef_b108`.
+- **Verification:** `make compiler/pascal26` self-host byte-identical; b108
+  passes.
+- **sqlite rerun:** sqlite advances past `sqlite3_config` case 16 and now reaches
+  `Unsupported linear node in IR codegen! Kind=10 ... IRA=1` at
+  `return openDatabase(zFilename, ppDb, 0x00000002 | 0x00000004, 0);`.
+  `IRA=1` is `AN_INT_LIT`; the likely issue is literal `0` passed to the
+  `const char *zVfs` parameter being lowered as an address instead of a null
+  pointer value. Filed [[bug-c-null-pointer-literal-call-arg-sqlite]].
+
 - **Session 2026-06-27d (Track A+C) — control flow + lexer fixed; lua runs real
   programs.** Two more fixes (self-host byte-identical, `make test` green):
   - **FIX 5 (`62c88498`) — global ordinal array with constant-EXPRESSION

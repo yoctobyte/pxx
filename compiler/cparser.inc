@@ -2443,6 +2443,17 @@ begin
     Exit;
   end;
 
+  { block-scope typedef declaration. C typedefs are compile-time only; register
+    the alias and emit an empty statement node. }
+  if (CurTok.Kind = tkIdent) and (CurTok.SVal = 'typedef') then
+  begin
+    ParseCTypedef;
+    node := AllocNode(AN_BLOCK);
+    ASTLeft[node] := -1;
+    Result := node;
+    Exit;
+  end;
+
   { local variable declaration }
   if IsCTypeTok then
   begin

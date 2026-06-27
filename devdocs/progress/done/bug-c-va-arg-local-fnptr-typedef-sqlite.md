@@ -1,11 +1,12 @@
 # C: va_arg with local function-pointer typedef in sqlite
 
 - **Type:** bug (C frontend / typedef / varargs builtin) — Track C
-- **Status:** backlog
-- **Owner:** unassigned
+- **Status:** done
+- **Owner:** Track CA
 - **Found / Opened:** 2026-06-27, M5 sqlite bring-up
   ([[feature-c-desktop-lua-sqlite-path]]), after local static multidimensional
   array initializers were fixed.
+- **Closed:** 2026-06-27
 
 ## Symptom
 
@@ -41,10 +42,37 @@ Likely area: block-scope `typedef void (*Name)(...)` registration and/or
 `ParseCDeclType` recognition of procedural typedef aliases inside the
 `__builtin_va_arg` type argument.
 
-## Acceptance
+## Fix
 
-- `__builtin_va_arg(ap, LocalFnPtrTypedef)` parses and yields a pointer-sized
-  value.
-- Add a focused regression using a block-scope function-pointer typedef passed
-  as the `va_arg` type argument.
-- sqlite advances past `sqlite3_config` case 16.
+`ParseCStatementAST` now recognizes block-scope `typedef` declarations, routes
+them through the existing `ParseCTypedef` registration path, and emits an empty
+statement node because typedefs have no runtime effect.
+
+This lets `typedef void (*LOGFUNC_t)(...)` inside a `case` block register the
+function-pointer typedef before `__builtin_va_arg(ap, LOGFUNC_t)` parses its
+type argument with `ParseCDeclType`.
+
+## Regression
+
+Added `test/cva_arg_local_fnptr_typedef_b108.c`, wired into `make test-core`.
+
+## Result
+
+sqlite advances past `sqlite3_config` case 16 and now stops at:
+
+```text
+Unsupported linear node in IR codegen! Kind=10 node=749 IRA=1 IRB=-1 IRC=-1 IRIVal=0
+pascal26:142434: error: Unsupported linear node in IR codegen ()
+```
+
+The current source is:
+
+```c
+int sqlite3_open(const char *zFilename, sqlite3 **ppDb){
+  return openDatabase(zFilename, ppDb, 0x00000002 | 0x00000004, 0);
+}
+```
+
+`IRA=1` is `AN_INT_LIT`; the likely issue is lowering literal `0` as an
+addressable argument for the `const char *zVfs` parameter instead of as a null
+pointer value. Filed [[bug-c-null-pointer-literal-call-arg-sqlite]].
