@@ -105,6 +105,24 @@ parentheses across following physical lines, including lines that began with
   `pascal26:33288: error: call to undeclared function: getpid ()`. Filed
   [[bug-c-crtl-missing-getpid]].
 
+## M5 update (2026-06-27, session 8): getpid + ternary middle comma
+
+Two small sqlite-advance fixes:
+
+- **FIX 8 (this commit) — `unistd.h` declares `getpid`.** Added
+  `int getpid(void);` to the CRTL header so sqlite's unix VFS resolves the libc
+  import. Test `crtl_unistd_getpid_b101`.
+- **FIX 9 (this commit) — ternary middle arm allows comma expression.** C's
+  `?:` middle arm is a full expression, so sqlite's macro-expanded
+  `cond ? (store), 1 : call` must parse the comma as part of the true arm. The
+  parser now uses `ParseCCommaExpr` for the middle arm. Test
+  `cternary_middle_comma_b102`.
+- **Verification:** `make compiler/pascal26` self-host byte-identical; b101 and
+  b102 pass.
+- **sqlite rerun:** sqlite now advances to
+  `Unsupported linear node in IR codegen! Kind=10 ... IRA=67`; `IRA=67` is
+  `AN_TERNARY`. Filed [[bug-c-sqlite-unsupported-ternary-ir]].
+
 - **Session 2026-06-27d (Track A+C) — control flow + lexer fixed; lua runs real
   programs.** Two more fixes (self-host byte-identical, `make test` green):
   - **FIX 5 (`62c88498`) — global ordinal array with constant-EXPRESSION

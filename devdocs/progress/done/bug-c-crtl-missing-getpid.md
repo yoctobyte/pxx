@@ -1,11 +1,12 @@
 # C: crtl `unistd.h` misses `getpid`
 
 - **Type:** bug / gap (CRTL headers) — Track B/C boundary
-- **Status:** backlog
-- **Owner:** unassigned
+- **Status:** done
+- **Owner:** Track CA
 - **Found / Opened:** 2026-06-27, M5 sqlite bring-up
   ([[feature-c-desktop-lua-sqlite-path]]), after the sqlite preprocessor
   `defined(...)` wall was fixed.
+- **Closed:** 2026-06-27
 
 ## Symptom
 
@@ -32,7 +33,15 @@ int getpid(void);
 The existing C header import path should register it as a libc extern import,
 matching `fsync` / `sysconf`.
 
+## Fix
+
+Added `int getpid(void);` to `lib/crtl/include/unistd.h`.
+
+## Regression
+
+Added `test/crtl_unistd_getpid_b101.c`, wired into `make test-core`.
+
 ## Acceptance
 
 - sqlite advances past `getpid` at 33288.
-- A small CRTL header smoke covers `getpid`.
+- b101 covers `getpid`.

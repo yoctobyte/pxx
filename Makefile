@@ -520,6 +520,10 @@ test-core: $(COMPILER)
 	/tmp/crtl_unistd_fsync_b9926; test "$$?" = "42"
 	./$(COMPILER) test/cpreproc_defined_directive_join_b100.c /tmp/cpreproc_defined_directive_join_b10026
 	/tmp/cpreproc_defined_directive_join_b10026; test "$$?" = "42"
+	./$(COMPILER) -Ilib/crtl/include test/crtl_unistd_getpid_b101.c /tmp/crtl_unistd_getpid_b10126
+	/tmp/crtl_unistd_getpid_b10126; test "$$?" = "42"
+	./$(COMPILER) test/cternary_middle_comma_b102.c /tmp/cternary_middle_comma_b10226
+	/tmp/cternary_middle_comma_b10226; test "$$?" = "42"
 	./$(COMPILER) -Itest/cinc/inc test/cinc/cinc_main.c /tmp/cinc_main26
 	test "$$(/tmp/cinc_main26)" = "$$(printf 'local-ok\ninc-ok')"
 	./$(COMPILER) test/test_declared_directive.pas /tmp/test_declared_directive26

@@ -5,6 +5,7 @@ function ParseCStatementAST: Integer; forward;
 procedure SkipBraceBlock; forward;
 procedure ParseCSubroutine; forward;
 function ParseCExpr: Integer; forward;
+function ParseCCommaExpr: Integer; forward;
 function CEvalConstExpr: Int64; forward;
 procedure ParseCTypedef; forward;
 procedure ParseCEnumDecl; forward;
@@ -1233,7 +1234,7 @@ begin
   if CurTok.Kind = tkQuestion then
   begin
     Next;
-    thenE := ParseCExpr();        { middle: a full expression }
+    thenE := ParseCCommaExpr();   { middle: C `expression`, so comma is allowed }
     Expect(tkColon, ':');
     elseE := ParseCExpr();        { else: right-associative }
     pair := AllocNode(AN_PAIR);

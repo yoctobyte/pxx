@@ -32,8 +32,8 @@ _none_
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
 | bug-c-addr-of-global-array-element-const-index-wrong-offset | A | bug | C: `&global_array[const]` global pointer initializer computes wrong offset | — |
-| bug-c-crtl-missing-getpid | B | bug | C: crtl `unistd.h` misses `getpid` | — |
 | bug-c-sizeof-array-yields-element-size | A | bug | C: `sizeof(array)` yields element size, not total array size | — |
+| bug-c-sqlite-unsupported-ternary-ir | A | bug | C: sqlite hits unsupported `AN_TERNARY` during IR lowering | — |
 | bug-capital-write-undefined-in-compiler-selfbuild | A | bug | Capital `Write`/`WriteLn` rejected in some contexts (compiler self-build), works standalone | — |
 | bug-i386-float-byval-param | A | bug | i386 backend: by-value float (Double) parameter unsupported | — |
 | bug-multi-interface-method-corruption | A | bug | Memory/String corruption when calling methods on secondary interfaces | — |
@@ -135,7 +135,7 @@ _none_
 | feature-mimic-fpc | B | feature | `mimic FPC` compatibility mode | — |
 | feature-string-model-tyfixedstring | B | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (327)
+## done (329)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -156,6 +156,7 @@ _none_
 | bug-c-const-cast-in-array-dim | A | bug | C: `(type)` cast inside a constant expression (array dimension) | — |
 | bug-c-const-eval-bitwise-not | C | bug | C const-eval: `~` (bitwise NOT) yields wrong value | — |
 | bug-c-crtl-fopen-missing | B | bug | crtl: `fopen`/`fclose`/`fseek`/`ftell` declared but not defined (no file open) | — |
+| bug-c-crtl-missing-getpid | B | bug | C: crtl `unistd.h` misses `getpid` | — |
 | bug-c-crtl-missing-unistd-syscalls | A | bug | C: crtl headers miss libc syscall prototypes (fsync, …) | — |
 | bug-c-double-value-model | A | bug | C `double` value model broken — lua floats all garbage | — |
 | bug-c-double-vararg | A | bug | C: double passed as a variadic arg reads 0 | — |
@@ -178,6 +179,7 @@ _none_
 | bug-c-sizeof-string-literal | C | bug | C `sizeof("string literal")` returns pointer size, not array size | — |
 | bug-c-string-literal-to-pointer-prefix | C | bug | C: string literal assigned to a `char *` points at the Pascal length-prefix | — |
 | bug-c-struct-pointer-index-stride | C | bug | C: `p[i]` / `p+i` on a struct pointer uses the wrong element stride | — |
+| bug-c-ternary-middle-comma | A | bug | C: ternary middle arm rejects comma expression | — |
 | bug-c-typedef-record-alias-loses-rec-id | A | bug | C typedef alias to struct loses record id | — |
 | bug-c-typedef-return-corrupts-entry | C | bug | C: typedef return type can corrupt program entry call | — |
 | bug-c-vararg-overflow-area | A | bug | C: 6+ variadic args (overflow area) segfault | — |
@@ -479,8 +481,8 @@ _none_
 ## Ready (no unmet blocker)
 
 - [A] bug-c-addr-of-global-array-element-const-index-wrong-offset
-- [B] bug-c-crtl-missing-getpid
 - [A] bug-c-sizeof-array-yields-element-size
+- [A] bug-c-sqlite-unsupported-ternary-ir
 - [A] bug-capital-write-undefined-in-compiler-selfbuild
 - [A] bug-i386-float-byval-param
 - [A] bug-multi-interface-method-corruption
