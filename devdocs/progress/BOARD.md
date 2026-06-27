@@ -27,12 +27,11 @@ _none_
 | --- | --- | --- | --- | --- |
 | feature-c-runtime-library | C | feature | C runtime/library layer (`lib/crtl`) plus direct C-library packages | feature-c-source-frontend |
 
-## backlog (67)
+## backlog (66)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
 | bug-c-chained-pointer-index-loses-base-type | A | bug | C chained pointer indexing loses base type | — |
-| bug-c-global-double-init | A | bug | C: global `double`/`float` initializer stored as 0 | — |
 | bug-c-typedef-return-corrupts-entry | C | bug | C: typedef return type can corrupt program entry call | — |
 | bug-c-vararg-overflow-area | A | bug | C: 6+ variadic args (overflow area) segfault | — |
 | bug-fpc-bootstrap-compiler-source-not-clean | A | bug | FPC bootstrap no longer compiles compiler source | — |
@@ -133,7 +132,7 @@ _none_
 | feature-mimic-fpc | B | feature | `mimic FPC` compatibility mode | — |
 | feature-string-model-tyfixedstring | B | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (313)
+## done (314)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -157,6 +156,7 @@ _none_
 | bug-c-field-of-call-result | C | bug | C: `f()->field` — field/index of a pointer-returning call result | — |
 | bug-c-field-on-pointer-arithmetic | C | bug | C: `(p + i)->field` (field on a computed pointer) fails / Unsupported | — |
 | bug-c-float-int-cast-and-spill | A | bug | C: int<->float numeric cast + computed-double spill across branches | — |
+| bug-c-global-double-init | A | bug | C: global `double`/`float` initializer stored as 0 | — |
 | bug-c-large-record-byval-param | A | bug | C: large (>16-byte) record passed by value gives garbage in the callee | — |
 | bug-c-libc-data-symbol-stdio | A | bug | C stdio must ride pxx syscalls (libc-free), not import libc | — |
 | bug-c-main-argc-argv-not-wired | A | bug | C `main(argc, argv)` gets real argc/argv | — |
@@ -462,7 +462,6 @@ _none_
 ## Ready (no unmet blocker)
 
 - [A] bug-c-chained-pointer-index-loses-base-type
-- [A] bug-c-global-double-init
 - [C] bug-c-typedef-return-corrupts-entry
 - [A] bug-c-vararg-overflow-area
 - [A] bug-fpc-bootstrap-compiler-source-not-clean

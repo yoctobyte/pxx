@@ -498,6 +498,8 @@ test-core: $(COMPILER)
 	/tmp/ctypedef_alias_fnptr_field_b8926; test "$$?" = "42"
 	./$(COMPILER) test/cmain_argv_b90.c /tmp/cmain_argv_b9026
 	/tmp/cmain_argv_b9026 ab xyz; test "$$?" = "42"
+	./$(COMPILER) test/cglobal_float_init_b91.c /tmp/cglobal_float_init_b9126
+	/tmp/cglobal_float_init_b9126; test "$$?" = "42"
 	./$(COMPILER) -Itest/cinc/inc test/cinc/cinc_main.c /tmp/cinc_main26
 	test "$$(/tmp/cinc_main26)" = "$$(printf 'local-ok\ninc-ok')"
 	./$(COMPILER) test/test_declared_directive.pas /tmp/test_declared_directive26

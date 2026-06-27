@@ -2376,6 +2376,7 @@ end;
 procedure ParseCGlobalVarDecl;
 var baseTk: TTypeKind; name: AnsiString; depth, idx, recBase, fldI, fOff, fTk, fSz: Integer;
     recId, initSymIdx, procIdx: Integer; wasArr: Boolean; initV: Int64;
+    negFloat: Boolean; signMask: Int64;
     arrLen, dimCount, nArrElems, flatInitCount, ei: Integer;
     arrOffs, arrLens, arrKind, arrSym: array[0..255] of Integer;
 begin
@@ -2752,6 +2753,40 @@ begin
         PendingInitTk[PendingInitCount]   := Ord(baseTk);
         Inc(PendingInitCount);
         Next;
+      end
+      else if (not wasArr) and (idx >= 0) and TypeIsFloat(baseTk) and
+              ((CurTok.Kind = tkFloat) or
+               ((CurTok.Kind = tkMinus) and (Tokens[TokPos].Kind = tkFloat)) or
+               ((CurTok.Kind = tkPlus) and (Tokens[TokPos].Kind = tkFloat))) and
+              (PendingInitCount < MAX_PENDING_INITS) then
+      begin
+        { Scalar float global `double x = 3.14;` / `float y = -1.5;`.
+          Float tokens carry IEEE-754 double bits; replay as AN_FLOAT_LIT at
+          main-entry init so normal assignment lowering narrows tySingle slots. }
+        negFloat := False;
+        if CurTok.Kind = tkMinus then begin negFloat := True; Next; end
+        else if CurTok.Kind = tkPlus then Next;
+        if Tokens[TokPos].Kind in [tkComma, tkSemicolon] then
+        begin
+          initV := CurTok.IVal;
+          if negFloat then
+          begin
+            signMask := 1; signMask := signMask shl 63;
+            initV := initV xor signMask;
+          end;
+          PendingInitSym[PendingInitCount]  := idx;
+          PendingInitElem[PendingInitCount] := -1;
+          PendingInitFOff[PendingInitCount] := -1;
+          PendingInitFLen[PendingInitCount] := 0;
+          PendingInitVal[PendingInitCount]  := initV;
+          PendingInitTk[PendingInitCount]   := Ord(baseTk);
+          PendingInitKind[PendingInitCount] := 3;
+          Inc(PendingInitCount);
+          Next;
+        end
+        else
+          while (CurTok.Kind <> tkComma) and (CurTok.Kind <> tkSemicolon) and
+                (CurTok.Kind <> tkEOF) do Next;
       end
       else if (not wasArr) and (idx >= 0) and (baseTk = tyPointer) and
               (CurTok.Kind = tkString) and
