@@ -1005,3 +1005,19 @@ gap rather than bloating this ticket.
   still segfaults -> bug-c-libc-data-symbol-stdio (stdout/stderr/stdin are libc
   DATA symbols, not imported; need a COPY relocation). That + bug-c-double-vararg
   + global-array-init are the remaining run blockers.
+
+## M5 (sqlite) — kickoff 2026-06-27
+
+sqlite 3.46.0 amalgamation fetched + wired into `tools/install_lib_candidates.sh`
+(`sqlite` target, pinned SHA, gitignored vendor). First-compile walls:
+
+- **Wall 1 (capacity, cleared):** `token overflow` — `MAX_TOKENS` 512K too small
+  for the 257k-line TU. Bumped to 2M. Tracked in
+  [[chore-sqlite-static-capacity-bumps]]; proper fix [[feature-dynamic-compiler-tables]].
+- **Wall 2 (open bug):** `invalid symbol in lea` (`ir.inc:296` verifier) — an
+  `IR_LEA` with an out-of-range sym index. Not capacity (SymCount guarded), not
+  the plain string-pointer-array path (repro negative), reported line stale.
+  Filed [[bug-c-invalid-symbol-in-lea-sqlite]] — next focused debug task.
+
+lua remains functional (incl. float). Cross/ESP coverage of C+lua filed as
+[[feature-c-cross-target-feature-coverage]].

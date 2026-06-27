@@ -86,3 +86,7 @@ surface as a self-host or cross divergence. Free, brutal, deterministic coverage
   ceiling pattern; user flagged the dynarray conversion as both the right fix and
   a self-host dynarray-correctness stress test. Future work — not blocking the
   sqlite arc (which proceeds on the static bump for now).
+- 2026-06-27 - User decision: **static arrays are fine for now** (accept the RAM
+  cost); dynarray conversion is explicitly **later**. Interim static bumps
+  tracked in [[chore-sqlite-static-capacity-bumps]]. This ticket stays backlog as
+  the eventual proper fix + dynarray dogfood.

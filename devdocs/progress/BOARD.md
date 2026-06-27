@@ -27,10 +27,11 @@ _none_
 | --- | --- | --- | --- | --- |
 | feature-c-runtime-library | C | feature | C runtime/library layer (`lib/crtl`) plus direct C-library packages | feature-c-source-frontend |
 
-## backlog (63)
+## backlog (65)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
+| bug-c-invalid-symbol-in-lea-sqlite | A | bug | C: `invalid symbol in lea` lowering sqlite amalgamation | — |
 | bug-i386-float-byval-param | A | bug | i386 backend: by-value float (Double) parameter unsupported | — |
 | bug-multi-interface-method-corruption | A | bug | Memory/String corruption when calling methods on secondary interfaces | — |
 | bug-object-ref-array-identity-in-method | A | bug | Object-reference array identity lookup fails in Eliah palette icon handler | — |
@@ -38,6 +39,7 @@ _none_
 | chore-inc-to-units | A | chore | `.inc` → real `.pas` units refactor | — |
 | chore-repin-c-stdio-pal-bridge | A/C | chore | Re-pin stable for C stdio/socket PAL bridge | — |
 | chore-runtime-emission-size | A | chore | Finer runtime-support emission (code size) | — |
+| chore-sqlite-static-capacity-bumps | A | chore | sqlite arc — interim static capacity bumps | — |
 | feature-arm32-large-aggregate-result | A | feature | arm32: support record function results larger than 4 param words (sret) | — |
 | feature-c-cross-target-feature-coverage | A | feature | C frontend + lua — cross-target / ESP feature coverage | — |
 | feature-c-header-import-complex | C | feature | Import C headers for complex libraries (glib/GTK-grade) | — |
@@ -464,6 +466,7 @@ _none_
 
 ## Ready (no unmet blocker)
 
+- [A] bug-c-invalid-symbol-in-lea-sqlite
 - [A] bug-i386-float-byval-param
 - [A] bug-multi-interface-method-corruption
 - [A] bug-object-ref-array-identity-in-method
@@ -471,6 +474,7 @@ _none_
 - [A] chore-inc-to-units
 - [A/C] chore-repin-c-stdio-pal-bridge
 - [A] chore-runtime-emission-size
+- [A] chore-sqlite-static-capacity-bumps
 - [A] feature-arm32-large-aggregate-result
 - [A] feature-c-cross-target-feature-coverage
 - [C] feature-c-header-import-complex
