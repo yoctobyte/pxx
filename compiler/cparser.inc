@@ -1762,6 +1762,40 @@ begin
   ptrBaseTk := CTypePtrBaseTk;
   ptrBaseRec := CTypePtrBaseRec;
   procSig := CTypeProcSig;    { fn-pointer typedef signature, if any }
+  if CTypeFnPtrName <> '' then
+  begin
+    { Inline function-pointer local `RET (*name)(params) [= init];` —
+      ParseCDeclType consumed the whole declarator and captured the name + call
+      signature. The name-reading loop below would Break (the name token is
+      already consumed), so allocate the local here as an 8-byte callable
+      pointer and parse the optional initializer. Mirrors the ParseCStructInto
+      inline fn-ptr member branch. (Capture the name now: a cast inside the
+      initializer expression re-runs ParseCDeclType and resets the global.) }
+    name := CTypeFnPtrName;
+    idx := AllocVar(name, tyPointer);
+    Syms[idx].PtrElemTk := tyUnknown;
+    Syms[idx].PtrElemRec := REC_NONE;
+    SymPtrDepth[idx] := 1;
+    SymPtrBaseTk[idx] := Ord(tyUnknown);
+    SymPtrBaseRec[idx] := REC_NONE;
+    if procSig >= 0 then SymProcSig[idx] := procSig;
+    head := -1; tail := -1;
+    if CurTok.Kind = tkAssign then
+    begin
+      Next;
+      initExpr := ParseCExpr;
+      idn := AllocNode(AN_IDENT); ASTIVal[idn] := idx; ASTTk[idn] := Ord(tyPointer);
+      asn := AllocNode(AN_ASSIGN); ASTLeft[asn] := idn; ASTRight[asn] := initExpr;
+      ASTTk[asn] := Ord(tyPointer);
+      seq := AllocNode(AN_SEQ); ASTLeft[seq] := asn; ASTRight[seq] := -1;
+      head := seq; tail := seq;
+    end;
+    Eat(tkSemicolon);
+    blk := AllocNode(AN_BLOCK);
+    ASTLeft[blk] := head;
+    Result := blk;
+    Exit;
+  end;
   { Multi-declarator support `T *a, b, *c;`: the `*` binds to each declarator, not
     the base. ParseCDeclType folded the FIRST declarator's star into baseTk, so
     recover the pre-star scalar base; each later declarator gets its own stars.

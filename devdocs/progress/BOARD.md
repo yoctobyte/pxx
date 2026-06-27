@@ -27,12 +27,11 @@ _none_
 | --- | --- | --- | --- | --- |
 | feature-c-runtime-library | C | feature | C runtime/library layer (`lib/crtl`) plus direct C-library packages | feature-c-source-frontend |
 
-## backlog (69)
+## backlog (68)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
 | bug-c-addr-of-global-array-element-const-index-wrong-offset | A | bug | C: `&global_array[const]` global pointer initializer computes wrong offset | — |
-| bug-c-function-pointer-local-variable | A | bug | C: function-pointer local variable declaration not parsed | — |
 | bug-c-sizeof-array-yields-element-size | A | bug | C: `sizeof(array)` yields element size, not total array size | — |
 | bug-capital-write-undefined-in-compiler-selfbuild | A | bug | Capital `Write`/`WriteLn` rejected in some contexts (compiler self-build), works standalone | — |
 | bug-i386-float-byval-param | A | bug | i386 backend: by-value float (Double) parameter unsupported | — |
@@ -135,7 +134,7 @@ _none_
 | feature-mimic-fpc | B | feature | `mimic FPC` compatibility mode | — |
 | feature-string-model-tyfixedstring | B | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (323)
+## done (324)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -161,6 +160,7 @@ _none_
 | bug-c-field-of-call-result | C | bug | C: `f()->field` — field/index of a pointer-returning call result | — |
 | bug-c-field-on-pointer-arithmetic | C | bug | C: `(p + i)->field` (field on a computed pointer) fails / Unsupported | — |
 | bug-c-float-int-cast-and-spill | A | bug | C: int<->float numeric cast + computed-double spill across branches | — |
+| bug-c-function-pointer-local-variable | A | bug | C: function-pointer local variable declaration not parsed | — |
 | bug-c-function-pointer-struct-member | A | bug | C: function-pointer struct member is silently dropped (layout + call + parse) | — |
 | bug-c-global-double-init | A | bug | C: global `double`/`float` initializer stored as 0 | — |
 | bug-c-large-record-byval-param | A | bug | C: large (>16-byte) record passed by value gives garbage in the callee | — |
@@ -475,7 +475,6 @@ _none_
 ## Ready (no unmet blocker)
 
 - [A] bug-c-addr-of-global-array-element-const-index-wrong-offset
-- [A] bug-c-function-pointer-local-variable
 - [A] bug-c-sizeof-array-yields-element-size
 - [A] bug-capital-write-undefined-in-compiler-selfbuild
 - [A] bug-i386-float-byval-param
