@@ -8,7 +8,7 @@
 # and gets a PROVENANCE.md recording it.
 #
 # Usage:
-#   tools/install_lib_candidates.sh [all|lua|tiny-regex-c|freebsd-regex] ...
+#   tools/install_lib_candidates.sh [all|lua|tiny-regex-c|freebsd-regex|sqlite] ...
 #   FORCE=1 tools/install_lib_candidates.sh lua      # re-fetch even if present
 #
 # Default target is `all`.
@@ -28,6 +28,11 @@ TINYREGEX_COMMIT="f2632c6d9ed25272987471cdb8b70395c2460bdb"
 
 FREEBSD_URL="https://github.com/freebsd/freebsd-src"
 FREEBSD_COMMIT="22d66952555c86a5b7d1d499b48906c3a5f4c13d"
+
+SQLITE_VERSION="3.46.0"
+SQLITE_ZIP="sqlite-amalgamation-3460000"
+SQLITE_URL="https://www.sqlite.org/2024/${SQLITE_ZIP}.zip"
+SQLITE_SHA256="712a7d09d2a22652fb06a49af516e051979a3984adb067da86760e60ed51a7f5"
 
 say() { printf '%s\n' "==> $*"; }
 die() { printf '%s\n' "error: $*" >&2; exit 1; }
@@ -124,17 +129,45 @@ EOF
   say "freebsd-regex -> $DEST/freebsd-regex"
 }
 
+fetch_sqlite() {
+  if present sqlite; then say "sqlite present (FORCE=1 to re-fetch) — skip"; return 0; fi
+  command -v curl >/dev/null 2>&1 || die "curl required for sqlite"
+  command -v unzip >/dev/null 2>&1 || die "unzip required for sqlite"
+  say "fetching sqlite-${SQLITE_VERSION} amalgamation"
+  tmp="$(mktemp -d)"
+  curl -fsSL "$SQLITE_URL" -o "$tmp/sqlite.zip"
+  if command -v sha256sum >/dev/null 2>&1; then
+    got="$(sha256sum "$tmp/sqlite.zip" | cut -d' ' -f1)"
+    [ "$got" = "$SQLITE_SHA256" ] || die "sqlite sha256 mismatch: got $got want $SQLITE_SHA256"
+  fi
+  unzip -o -q "$tmp/sqlite.zip" -d "$tmp"
+  rm -rf "$DEST/sqlite"; mkdir -p "$DEST/sqlite"
+  cp -a "$tmp/${SQLITE_ZIP}/." "$DEST/sqlite/"   # flatten the amalgamation subdir
+  rm -rf "$tmp"
+  cat > "$DEST/sqlite/PROVENANCE.md" <<EOF
+# SQLite Candidate
+Upstream: https://www.sqlite.org/
+Version: ${SQLITE_VERSION} amalgamation (${SQLITE_URL})
+SHA256: ${SQLITE_SHA256}
+Files: sqlite3.c, sqlite3.h, sqlite3ext.h, shell.c
+Installed by tools/install_lib_candidates.sh. Vendor source — gitignored, never committed.
+License: public domain (see sqlite3.c header).
+EOF
+  say "sqlite -> $DEST/sqlite"
+}
+
 guard_ignored
 mkdir -p "$DEST"
 
 [ "$#" -eq 0 ] && set -- all
 for t in "$@"; do
   case "$t" in
-    all)           fetch_lua; fetch_tiny_regex; fetch_freebsd_regex ;;
+    all)           fetch_lua; fetch_tiny_regex; fetch_freebsd_regex; fetch_sqlite ;;
     lua)           fetch_lua ;;
     tiny-regex-c)  fetch_tiny_regex ;;
     freebsd-regex) fetch_freebsd_regex ;;
-    *) die "unknown candidate '$t' (want: all|lua|tiny-regex-c|freebsd-regex)" ;;
+    sqlite)        fetch_sqlite ;;
+    *) die "unknown candidate '$t' (want: all|lua|tiny-regex-c|freebsd-regex|sqlite)" ;;
   esac
 done
 say "done. library_candidates/ stays gitignored — nothing entered the repo."

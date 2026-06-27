@@ -27,7 +27,7 @@ _none_
 | --- | --- | --- | --- | --- |
 | feature-c-runtime-library | C | feature | C runtime/library layer (`lib/crtl`) plus direct C-library packages | feature-c-source-frontend |
 
-## backlog (62)
+## backlog (63)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -51,6 +51,7 @@ _none_
 | feature-demo-mandelbrot | B | feature | Demo — zoomable Mandelbrot explorer | — |
 | feature-demo-raytracer | B | feature | Demo — CPU ray tracer | — |
 | feature-dns-resolver-library | B | feature | DNS resolver library (`dns.pas`) with selectable backends | — |
+| feature-dynamic-compiler-tables | A | feature | Dynamic compiler tables — kill the fixed `array[0..MAX_*]` ceilings (+ dynarray dogfood) | — |
 | feature-dynamic-include-paths-config | A | feature | Dynamic Include Paths, Configuration Files, and System Scanner | — |
 | feature-dynamic-soname-discovery | A | feature | Dynamic soname discovery (no execve) | — |
 | feature-eliah-ai-command-rail | B | feature | feature: Eliah AI command rail + console pane | — |
@@ -483,6 +484,7 @@ _none_
 - [B] feature-demo-mandelbrot
 - [B] feature-demo-raytracer
 - [B] feature-dns-resolver-library
+- [A] feature-dynamic-compiler-tables
 - [A] feature-dynamic-include-paths-config
 - [A] feature-dynamic-soname-discovery
 - [B] feature-eliah-ai-command-rail
