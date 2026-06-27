@@ -807,6 +807,9 @@ var
   SymSetEnumId : array[0..MAX_SYMS-1] of Integer; { set var: element enum type index for `set of TEnum`, else -1. Drives `for e in set` range }
   SymSetElemTk : array[0..MAX_SYMS-1] of Integer; { set var: element TTypeKind ordinal (tyChar/tyInteger/enum-as-integer), else 0 }
   SymStrCap : array[0..MAX_SYMS-1] of Integer; { frozen fixed-string capacity (max chars) for tyFixedString/tyShortString slots; 0 = use the kind default (DEFAULT_STR_CAP) }
+  SymCPtrDepth : array[0..MAX_SYMS-1] of Integer; { C pointer depth for typed pointers: char** = 2. 0 = unknown/not a C pointer. }
+  SymCPtrBaseTk : array[0..MAX_SYMS-1] of Integer; { C pointer ultimate base TTypeKind ordinal (char for char**), tyUnknown if unset. }
+  SymCPtrBaseRec : array[0..MAX_SYMS-1] of Integer; { C pointer ultimate base record id, REC_NONE if unset. }
   { 2-D fixed array flattened to 1-D storage: m[i,j] / m[i][j] index as
     (i-lo1)*span2 + (j-lo2). Default False/0 (single-dimension array). }
   { N-D fixed array flattened to 1-D storage; element [i0..iN-1] linearises to
@@ -866,6 +869,8 @@ var
   CTypePtrDepth : Integer;   { pointer-star count of the last ParseCDeclType (0 = not a pointer) }
   CTypeElemTk : Integer;     { pointed-at TTypeKind ordinal when CTypePtrDepth>0 (tyPointer for depth>=2) }
   CTypeElemRec : Integer;    { pointed-at record id when the element is a struct, else REC_NONE }
+  CTypePtrBaseTk : Integer;  { ultimate pointed-at base TTypeKind ordinal when CTypePtrDepth>0 }
+  CTypePtrBaseRec : Integer; { ultimate pointed-at base record id when CTypePtrDepth>0 }
   CTypeBaseRec : Integer;    { record id of the base type before any pointer suffix, else REC_NONE }
   CTypeProcSig : Integer;    { fn-pointer typedef signature Procs[] index of the last ParseCDeclType (CTypePtrDepth=0), else -1 }
   CTypeFnPtrName : AnsiString; { fn-pointer declarator name `ret (*Name)(..)` captured by the last ParseCDeclType, else '' }

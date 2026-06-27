@@ -60,3 +60,8 @@ if (p[0] != 'a') return 2;
 - 2026-06-27 — Still open. Current `compiler/pascal26` reproduces the direct
   chained-index bug: compiling and running the `argv[1][0] != 'a'` probe with
   `ab` exits `2`; the explicit `char *p = argv[1]` workaround still works.
+- 2026-06-27 — Fixed. C pointer declarations now preserve both immediate pointer
+  element metadata and ultimate base metadata/depth, so `char **argv` indexes
+  first with pointer stride and then with char stride. Added
+  `test/cnested_pointer_b94.c` covering direct `argv[1][0]`, local `char **`
+  indexing, scalar `***p`, and struct field access through `**`.

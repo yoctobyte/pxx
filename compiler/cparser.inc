@@ -467,10 +467,81 @@ begin
   end;
 end;
 
+function CNodePtrDepth(node: Integer): Integer;
+begin
+  Result := 0;
+  if node < 0 then Exit;
+  if ASTKind[node] = AN_IDENT then
+  begin
+    if Syms[ASTIVal[node]].IsArray then
+      Result := SymCPtrDepth[ASTIVal[node]]
+    else if Syms[ASTIVal[node]].TypeKind = tyPointer then
+    begin
+      Result := SymCPtrDepth[ASTIVal[node]];
+      if Result = 0 then Result := 1;
+    end;
+  end
+  else if ASTKind[node] = AN_INDEX then
+  begin
+    if IntToTypeKind(ASTTk[node]) = tyPointer then
+    begin
+      if (ASTKind[ASTLeft[node]] = AN_IDENT) and Syms[ASTIVal[ASTLeft[node]]].IsArray then
+        Result := SymCPtrDepth[ASTIVal[ASTLeft[node]]]
+      else
+      begin
+        Result := CNodePtrDepth(ASTLeft[node]) - 1;
+        if Result < 1 then Result := 1;
+      end;
+    end;
+  end
+  else if ASTKind[node] = AN_DEREF then
+  begin
+    if IntToTypeKind(ASTTk[node]) = tyPointer then
+    begin
+      Result := CNodePtrDepth(ASTLeft[node]) - 1;
+      if Result < 1 then Result := 1;
+    end;
+  end
+  else if ASTKind[node] = AN_BINOP then
+  begin
+    if CNodeIsPointer(ASTLeft[node]) then Result := CNodePtrDepth(ASTLeft[node])
+    else if CNodeIsPointer(ASTRight[node]) then Result := CNodePtrDepth(ASTRight[node]);
+  end
+  else if ASTKind[node] = AN_INCDEC then
+    Result := CNodePtrDepth(ASTLeft[node])
+  else if ASTKind[node] = AN_ASSIGN then
+    Result := CNodePtrDepth(ASTLeft[node]);
+end;
+
+function CNodePtrBaseTk(node: Integer): Integer;
+var baseNode: Integer;
+begin
+  Result := Ord(tyUnknown);
+  if node < 0 then Exit;
+  if ASTKind[node] = AN_IDENT then
+    Result := SymCPtrBaseTk[ASTIVal[node]]
+  else if ASTKind[node] = AN_INDEX then
+  begin
+    baseNode := ASTLeft[node];
+    Result := CNodePtrBaseTk(baseNode);
+  end
+  else if ASTKind[node] = AN_DEREF then
+    Result := CNodePtrBaseTk(ASTLeft[node])
+  else if ASTKind[node] = AN_BINOP then
+  begin
+    if CNodeIsPointer(ASTLeft[node]) then Result := CNodePtrBaseTk(ASTLeft[node])
+    else if CNodeIsPointer(ASTRight[node]) then Result := CNodePtrBaseTk(ASTRight[node]);
+  end
+  else if ASTKind[node] = AN_INCDEC then
+    Result := CNodePtrBaseTk(ASTLeft[node])
+  else if ASTKind[node] = AN_ASSIGN then
+    Result := CNodePtrBaseTk(ASTLeft[node]);
+end;
+
 { Pointed-at / element TTypeKind ordinal of a pointer or array node, used to tag
   AN_DEREF / AN_INDEX results. Defaults to Integer for shapes not yet modelled. }
 function CNodePointeeTk(node: Integer): Integer;
-var recId, inner: Integer; fieldName: AnsiString;
+var recId, inner, depth, baseTk: Integer; fieldName: AnsiString;
 begin
   Result := Ord(tyInteger);
   if node < 0 then Exit;
@@ -503,7 +574,13 @@ begin
     if Syms[ASTIVal[node]].IsArray then
       Result := Ord(Syms[ASTIVal[node]].ElemType)
     else if Syms[ASTIVal[node]].TypeKind = tyPointer then
-      Result := Ord(Syms[ASTIVal[node]].PtrElemTk);
+    begin
+      depth := SymCPtrDepth[ASTIVal[node]];
+      if depth >= 2 then
+        Result := Ord(tyPointer)
+      else
+        Result := Ord(Syms[ASTIVal[node]].PtrElemTk);
+    end;
   end
   else if ASTKind[node] = AN_FIELD then
   begin
@@ -533,10 +610,30 @@ begin
   begin
     if IntToTypeKind(ASTTk[node]) = tyPointer then
     begin
-      if ASTKind[ASTLeft[node]] = AN_IDENT then
+      depth := CNodePtrDepth(node);
+      baseTk := CNodePtrBaseTk(node);
+      if depth >= 2 then
+        Result := Ord(tyPointer)
+      else if baseTk <> Ord(tyUnknown) then
+        Result := baseTk
+      else if ASTKind[ASTLeft[node]] = AN_IDENT then
         Result := Ord(Syms[ASTIVal[ASTLeft[node]]].PtrElemTk)
-      else if ASTKind[ASTLeft[node]] = AN_FIELD then
-        Result := Ord(RecFieldPtrElemTk(ResolveNodeRec(ASTLeft[ASTLeft[node]]), GetASTIdentName(ASTLeft[node])))
+      else
+        Result := ASTTk[node];
+    end
+    else
+      Result := ASTTk[node];
+  end
+  else if ASTKind[node] = AN_DEREF then
+  begin
+    if IntToTypeKind(ASTTk[node]) = tyPointer then
+    begin
+      depth := CNodePtrDepth(node);
+      baseTk := CNodePtrBaseTk(node);
+      if depth >= 2 then
+        Result := Ord(tyPointer)
+      else if baseTk <> Ord(tyUnknown) then
+        Result := baseTk
       else
         Result := ASTTk[node];
     end
@@ -841,6 +938,8 @@ begin
       node := AllocNode(AN_DEREF);
       ASTLeft[node] := operand;
       ASTTk[node] := CNodePointeeTk(operand);
+      if CNodePtrElemRec(operand) > 0 then
+        ASTIVal[node] := CNodePtrElemRec(operand);
       Result := node;
     end;
     tkAmp:    { &x address-of }
@@ -1498,6 +1597,8 @@ begin
   CTypePtrDepth := 0;
   CTypeElemTk := Ord(tyUnknown);
   CTypeElemRec := REC_NONE;
+  CTypePtrBaseTk := Ord(tyUnknown);
+  CTypePtrBaseRec := REC_NONE;
   CTypeBaseRec := baseRec;
   if isTypedef and (Result = tyPointer) then
   begin
@@ -1509,6 +1610,8 @@ begin
     CTypeProcSig := -1;           { `FnPtrTypedef *` = pointer-to-fn-ptr, not directly callable }
     CTypeElemTk := Ord(Result);   { the pointed-at scalar/typedef kind at depth 1 }
     CTypeElemRec := baseRec;      { ...and its record id, if it is a struct }
+    CTypePtrBaseTk := Ord(Result);
+    CTypePtrBaseRec := baseRec;
     while CurTok.Kind = tkStar do
     begin
       Inc(CTypePtrDepth);
@@ -1628,7 +1731,9 @@ function ParseCLocalDeclAST: Integer;
 var baseTk, declTk, scalarTk: TTypeKind;
     head, tail, seq, asn, idn, initExpr, blk, idx: Integer;
     elemTkOrd, elemRec, arrLen, procSig: Integer;
+    ptrDepth, ptrBaseTk, ptrBaseRec: Integer;
     declElemTk, declElemRec, declProcSig, declPtr, scalarRec: Integer;
+    declPtrDepth, declBaseTk, declBaseRec: Integer;
     hadStar: Boolean;
     name: AnsiString;
     inode, idxLit, ei, nArrElems, brDepth: Integer;
@@ -1639,6 +1744,9 @@ begin
     clobber the CType* globals (it does not run ParseCDeclType). }
   elemTkOrd := CTypeElemTk;
   elemRec := CTypeElemRec;
+  ptrDepth := CTypePtrDepth;
+  ptrBaseTk := CTypePtrBaseTk;
+  ptrBaseRec := CTypePtrBaseRec;
   procSig := CTypeProcSig;    { fn-pointer typedef signature, if any }
   { Multi-declarator support `T *a, b, *c;`: the `*` binds to each declarator, not
     the base. ParseCDeclType folded the FIRST declarator's star into baseTk, so
@@ -1646,9 +1754,10 @@ begin
     A pointer from a *literal* star (elemTk known) is redistributable; a pointer
     from a typedef (no star) is the whole type and applies to every sibling. }
   hadStar := (baseTk = tyPointer) and (CTypePtrDepth > 0);
-  if hadStar then begin scalarTk := IntToTypeKind(elemTkOrd); scalarRec := elemRec; end
+  if hadStar then begin scalarTk := IntToTypeKind(ptrBaseTk); scalarRec := ptrBaseRec; end
   else begin scalarTk := baseTk; scalarRec := CTypeBaseRec; end;
   declTk := baseTk; declElemTk := elemTkOrd; declElemRec := elemRec; declProcSig := procSig;
+  declPtrDepth := ptrDepth; declBaseTk := ptrBaseTk; declBaseRec := ptrBaseRec;
   head := -1; tail := -1;
   while True do
   begin
@@ -1710,6 +1819,9 @@ begin
       begin
         Syms[idx].PtrElemTk := IntToTypeKind(declElemTk);
         Syms[idx].PtrElemRec := declElemRec;
+        SymCPtrDepth[idx] := declPtrDepth;
+        SymCPtrBaseTk[idx] := declBaseTk;
+        SymCPtrBaseRec[idx] := declBaseRec;
       end;
       for ei := 0 to nArrElems - 1 do
       begin
@@ -1751,6 +1863,9 @@ begin
       begin
         Syms[idx].PtrElemTk := IntToTypeKind(declElemTk);
         Syms[idx].PtrElemRec := declElemRec;
+        SymCPtrDepth[idx] := declPtrDepth;
+        SymCPtrBaseTk[idx] := declBaseTk;
+        SymCPtrBaseRec[idx] := declBaseRec;
         if declProcSig >= 0 then SymProcSig[idx] := declProcSig;  { fn-pointer var: callable }
       end;
       initExpr := -1;
@@ -1791,6 +1906,9 @@ begin
       if declPtr > 0 then
       begin
         declTk := tyPointer;
+        declPtrDepth := declPtr;
+        declBaseTk := Ord(scalarTk);
+        declBaseRec := scalarRec;
         if declPtr = 1 then begin declElemTk := Ord(scalarTk); declElemRec := scalarRec; end
         else begin declElemTk := Ord(tyPointer); declElemRec := REC_NONE; end;
         declProcSig := -1;
@@ -1799,6 +1917,7 @@ begin
       begin
         { sibling with no star, base had a redistributable star: plain scalar }
         declTk := scalarTk; declElemTk := Ord(tyUnknown); declElemRec := scalarRec;
+        declPtrDepth := 0; declBaseTk := Ord(tyUnknown); declBaseRec := REC_NONE;
         declProcSig := -1;
       end
       else
@@ -1806,6 +1925,7 @@ begin
         { base carries no redistributable star (plain/typedef): siblings get the
           same full base type + metadata }
         declTk := baseTk; declElemTk := elemTkOrd; declElemRec := elemRec;
+        declPtrDepth := ptrDepth; declBaseTk := ptrBaseTk; declBaseRec := ptrBaseRec;
         declProcSig := procSig;
       end;
       Continue;
@@ -2532,6 +2652,9 @@ begin
     begin
       Syms[idx].PtrElemTk := IntToTypeKind(CTypeElemTk);
       Syms[idx].PtrElemRec := CTypeElemRec;
+      SymCPtrDepth[idx] := CTypePtrDepth;
+      SymCPtrBaseTk[idx] := CTypePtrBaseTk;
+      SymCPtrBaseRec[idx] := CTypePtrBaseRec;
     end;
     for ei := 0 to nArrElems - 1 do
     begin
@@ -3040,6 +3163,8 @@ var
   ptypes: array[0..15] of TTypeKind;
   pnames: array[0..15] of AnsiString;
   pdepths: array[0..15] of Integer;
+  pbasetk: array[0..15] of Integer;
+  pbaserec: array[0..15] of Integer;
   pelemtk: array[0..15] of Integer;   { pointed-at TTypeKind ordinal per pointer param }
   pelemrec: array[0..15] of Integer;
   precid: array[0..15] of Integer;    { record id per tyRecord param (for isRef field access) }
@@ -3123,6 +3248,8 @@ begin
       begin
         ptypes[nparams] := ptype;
         pdepths[nparams] := CTypePtrDepth;
+        pbasetk[nparams] := CTypePtrBaseTk;
+        pbaserec[nparams] := CTypePtrBaseRec;
         pelemtk[nparams] := CTypeElemTk;
         pelemrec[nparams] := CTypeElemRec;
         precid[nparams] := CTypeBaseRec;     { record id for a tyRecord param }
@@ -3155,11 +3282,16 @@ begin
           begin
             pelemtk[nparams] := Ord(ptypes[nparams]);
             pelemrec[nparams] := CTypeBaseRec;
+            pbasetk[nparams] := Ord(ptypes[nparams]);
+            pbaserec[nparams] := CTypeBaseRec;
+            pdepths[nparams] := 1;
           end
           else
+          begin
             pelemtk[nparams] := Ord(tyPointer);   { `T *name[]` -> pointer-to-pointer }
+            Inc(pdepths[nparams]);
+          end;
           ptypes[nparams] := tyPointer;
-          pdepths[nparams] := 1;
         end;
         Inc(nparams);
       end;
@@ -3273,6 +3405,9 @@ begin
     begin
       Syms[idx].PtrElemTk := IntToTypeKind(pelemtk[i]);
       Syms[idx].PtrElemRec := pelemrec[i];
+      SymCPtrDepth[idx] := pdepths[i];
+      SymCPtrBaseTk[idx] := pbasetk[i];
+      SymCPtrBaseRec[idx] := pbaserec[i];
       if pprocsig[i] >= 0 then SymProcSig[idx] := pprocsig[i];  { fn-pointer param: callable }
     end;
   end;

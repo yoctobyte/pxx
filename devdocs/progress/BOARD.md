@@ -27,11 +27,10 @@ _none_
 | --- | --- | --- | --- | --- |
 | feature-c-runtime-library | C | feature | C runtime/library layer (`lib/crtl`) plus direct C-library packages | feature-c-source-frontend |
 
-## backlog (64)
+## backlog (63)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
-| bug-c-chained-pointer-index-loses-base-type | A | bug | C chained pointer indexing loses base type | — |
 | bug-fpc-bootstrap-compiler-source-not-clean | A | bug | FPC bootstrap no longer compiles compiler source | — |
 | bug-fpc-seed-helper-ordering-after-lua-c-frontend | A | bug | FPC seed build fails after Lua C frontend helper additions | — |
 | bug-i386-float-byval-param | A | bug | i386 backend: by-value float (Double) parameter unsupported | — |
@@ -130,7 +129,7 @@ _none_
 | feature-mimic-fpc | B | feature | `mimic FPC` compatibility mode | — |
 | feature-string-model-tyfixedstring | B | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## done (316)
+## done (317)
 
 | Ticket | Track | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- |
@@ -146,6 +145,7 @@ _none_
 | bug-builtin-val-miscompiles | A | bug | Builtin `Val` mis-lowers — wrong error code + segfault | — |
 | bug-builtin-write-case-sensitive | A | bug | Builtin write/writeln matched case-sensitively (only lowercase resolves) | — |
 | bug-c-addr-of-unsupported-ir | A | bug | C `&` of certain operands lowers to IR_UNSUPPORTED (codegen crash) | — |
+| bug-c-chained-pointer-index-loses-base-type | A | bug | C chained pointer indexing loses base type | — |
 | bug-c-const-cast-in-array-dim | A | bug | C: `(type)` cast inside a constant expression (array dimension) | — |
 | bug-c-const-eval-bitwise-not | C | bug | C const-eval: `~` (bitwise NOT) yields wrong value | — |
 | bug-c-crtl-fopen-missing | B | bug | crtl: `fopen`/`fclose`/`fseek`/`ftell` declared but not defined (no file open) | — |
@@ -461,7 +461,6 @@ _none_
 
 ## Ready (no unmet blocker)
 
-- [A] bug-c-chained-pointer-index-loses-base-type
 - [A] bug-fpc-bootstrap-compiler-source-not-clean
 - [A] bug-fpc-seed-helper-ordering-after-lua-c-frontend
 - [A] bug-i386-float-byval-param

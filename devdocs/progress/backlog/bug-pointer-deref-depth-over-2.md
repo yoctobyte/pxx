@@ -100,3 +100,11 @@ deep write+read).
 
 ## Repro fixtures (kept)
 `/tmp/ptri.pas` (Pascal depth-3), `/tmp/cdeep.c` (C depth-5 + struct via `**`).
+
+## Audit
+
+- 2026-06-27 — C half fixed as a side effect of
+  `bug-c-chained-pointer-index-loses-base-type`: `test/cnested_pointer_b94.c`
+  now covers scalar `***p` and struct fields through `**`. The shared ticket
+  stays open because the Pascal `P^^^` repro still fails at compile time with
+  `dereferenced value is not a pointer`.

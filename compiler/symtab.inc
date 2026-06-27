@@ -1569,6 +1569,9 @@ begin
   SymSetEnumId[SymCount] := -1;
   SymSetElemTk[SymCount] := 0;
   SymStrCap[SymCount] := 0;
+  SymCPtrDepth[SymCount] := 0;
+  SymCPtrBaseTk[SymCount] := Ord(tyUnknown);
+  SymCPtrBaseRec[SymCount] := REC_NONE;
   if TypeIsFrozenString(tk) and (tk <> tyString) then
     SymStrCap[SymCount] := LastTypeStrCap;
   SymRTTIOff[SymCount] := -1;
@@ -1661,6 +1664,9 @@ begin
   SymSetEnumId[SymCount] := -1;
   SymSetElemTk[SymCount] := 0;
   SymStrCap[SymCount] := 0;
+  SymCPtrDepth[SymCount] := 0;
+  SymCPtrBaseTk[SymCount] := Ord(tyUnknown);
+  SymCPtrBaseRec[SymCount] := REC_NONE;
   if TypeIsFrozenString(tk) and (tk <> tyString) then
     SymStrCap[SymCount] := LastTypeStrCap;
   SymRTTIOff[SymCount] := -1;
@@ -1743,6 +1749,9 @@ begin
   SymSetEnumId[SymCount] := -1;
   SymSetElemTk[SymCount] := 0;
   SymStrCap[SymCount] := 0;
+  SymCPtrDepth[SymCount] := 0;
+  SymCPtrBaseTk[SymCount] := Ord(tyUnknown);
+  SymCPtrBaseRec[SymCount] := REC_NONE;
   if (elemType = tyFixedString) or (elemType = tyShortString) then
     SymStrCap[SymCount] := LastTypeStrCap;
   SymIsHiddenArgTemp[SymCount] := False;
@@ -1802,6 +1811,9 @@ begin
   SymSetEnumId[SymCount] := -1;
   SymSetElemTk[SymCount] := 0;
   SymStrCap[SymCount] := 0;
+  SymCPtrDepth[SymCount] := 0;
+  SymCPtrBaseTk[SymCount] := Ord(tyUnknown);
+  SymCPtrBaseRec[SymCount] := REC_NONE;
   if (elemType = tyFixedString) or (elemType = tyShortString) then
     SymStrCap[SymCount] := LastTypeStrCap;
   SymIsHiddenArgTemp[SymCount] := False;
