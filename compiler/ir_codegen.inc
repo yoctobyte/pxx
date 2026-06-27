@@ -1436,11 +1436,14 @@ begin
 
     IR_PROCADDR:
       begin
-        { @proc → mov rax, <absolute code address>, patched at finalize.
-          External routines have no link-time address (resolved into the GOT
-          by the dynamic linker); pass an internal wrapper instead. }
+        { @proc -> load a function-pointer value. Internal routines use a
+          finalized code-address fixup; imported routines load from the dynamic
+          GOT on supported targets. }
         if ProcExternal[IRA[node]] then
-          Error('@ on external routine not supported; wrap it in a local routine');
+        begin
+          EmitExternalProcAddr(IRA[node]);
+          Exit;
+        end;
         EmitB($48); EmitB($B8); { mov rax, imm64 }
         if ProcAddrFixCount >= MAX_CALLFIX then Error('proc addr fixup overflow');
         ProcAddrFix[ProcAddrFixCount].CodePos := CodeLen;

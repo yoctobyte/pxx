@@ -209,6 +209,37 @@ undeclared.
   a libc import used as a function-pointer value. Filed
   [[bug-c-external-function-address-dlsym-sqlite]].
 
+## M5 update (2026-06-27, session 12): external function address values
+
+SQLite's `unixDlSym` stores the imported libc routine `dlsym` in a function
+pointer variable before calling through it:
+
+```c
+void (*(*x)(void*,const char*))(void);
+x = (void(*(*)(void*,const char*))(void))dlsym;
+return (*x)(p, zSym);
+```
+
+The C frontend already represented the bare function name as a proc-address
+node, but x86-64 codegen rejected `@` on external routines because external
+calls normally jump through a dynamic GOT slot without exposing that slot's
+resolved value as an expression.
+
+- **FIX 13 (this commit) — load external proc addresses from the dynamic GOT.**
+  `IR_PROCADDR` now permits imported routines on x86-64. `EmitExternalProcAddr`
+  registers/reuses the external's GOT slot and emits a patched
+  `mov rax, qword ptr [absolute address]`, sharing the existing dynamic-call
+  fixup table. Non-x86-64 targets keep the old explicit rejection until their
+  backends grow equivalent address-load sequences. Test
+  `cexternal_func_addr_b106`.
+- **Verification:** `make compiler/pascal26` self-host byte-identical; b106
+  passes; full `make test` passes including fixed-point self-host and
+  threadsafe self-host.
+- **sqlite rerun:** sqlite advances past `unixDlSym` and now reaches
+  `pascal26:139609: error: expected C expression ()` in `sqlite3_complete` at a
+  block-scope `static const u8 trans[8][8] = { ... };`. Filed
+  [[bug-c-local-static-const-multidim-array-init-sqlite]].
+
 - **Session 2026-06-27d (Track A+C) — control flow + lexer fixed; lua runs real
   programs.** Two more fixes (self-host byte-identical, `make test` green):
   - **FIX 5 (`62c88498`) — global ordinal array with constant-EXPRESSION

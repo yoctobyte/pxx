@@ -4619,6 +4619,24 @@ begin
   EmitI32(0);
 end;
 
+{ Load the resolved address of an external routine into rax. Reuses the dynamic
+  GOT slot/fixup table used by external calls; x86-64 encodes `mov rax,[abs32]`.
+  Other backends still reject this until they grow an equivalent address-load
+  sequence. }
+procedure EmitExternalProcAddr(procIdx: Integer);
+var extIdx: Integer;
+begin
+  if TargetArch <> TARGET_X86_64 then
+    Error('@ on external routine not supported on this target');
+  extIdx := RegisterExternal(procIdx);
+  if DynCallCount >= MAX_CALLFIX then Error('external call fixup overflow');
+  EmitB($48); EmitB($8B); EmitB($04); EmitB($25); { mov rax, qword ptr [absolute address] }
+  DynCallCodePos[DynCallCount] := CodeLen;
+  DynCallExtIdx[DynCallCount] := extIdx;
+  Inc(DynCallCount);
+  EmitI32(0);
+end;
+
 { aarch64 external call through the GOT slot. The slot's absolute VA (< 2^32
   under ET_EXEC) is built into x16 with movz/movk — both imm16 fields are patched
   by the writeELF DynCall pass (PatchDynCallSites) — then the resolved pointer is
