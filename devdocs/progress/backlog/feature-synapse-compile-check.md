@@ -282,3 +282,19 @@ repro from synacode's `Decode4to3Ex` / MD5 path would sharpen the Track A ticket
 
 Two leaf units down (compile); the rest gated on directive-miscount /
 qualified-const, and full synacode correctness on the const-codegen runtime bugs.
+
+### Re-probe 2026-06-28 (v83) — prior Track A gates cleared; two new bugs found
+
+All previously open Track A blockers are now in `done/`:
+[[bug-conditional-directive-miscount-synautil]], [[bug-unit-qualified-constant-not-resolved]],
+[[bug-set-of-char-const-corrupts-char-codegen]], [[bug-proc-typed-call-const-record-arg]].
+
+Fresh probe at v83 with `--mimic-fpc`:
+
+| unit | state |
+|------|-------|
+| `synafpc`, `synacode` | **compile OK** (unchanged) |
+| `synautil`/`synaip`/`asn1util`/`synachar` | **[[bug-chr-builtin-shadows-param-name]]** (Track A, new) — `CountOfChar(…; Chr: char)`: `Chr` treated as built-in, rejected as param name |
+| `synsock`/`blcksock`/`httpsend` | **[[bug-consteval-named-type-cast]]** (Track A, new) — `ssfpc.inc`: `INVALID_SOCKET = TSocket(NOT(0))` fails ConstEval |
+
+Both bugs filed 2026-06-28. When Track A fixes them, re-probe to find the next wall.
